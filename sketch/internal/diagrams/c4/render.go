@@ -1,4 +1,4 @@
-// Ported from pele src/diagrams/c4/render.ts at 4eff76f98c73b6817800a05773517f35832e4e92.
+// Ported from pele src/diagrams/c4/render.ts at 8aff183be57021b533f319a29341a529be934b08.
 
 package c4
 
@@ -169,8 +169,19 @@ func draw(db *C4Db, _ types.Config, options types.RenderOptions, tight bool, gap
 	}
 
 	// Every line is drawn before any label is placed, so that labels can keep off the arrowheads.
+	var casings strings.Builder
 	var edgesOut strings.Builder
 	trim := svg.MarkerTrim("arrow_point")
+	var fills []svg.Fill
+	for _, group := range order {
+		if group == root {
+			continue
+		}
+		shape := userStyle(group.boundary.bgColor, "", "").Shape
+		if svg.Paints(shape) {
+			fills = append(fills, svg.Fill{Box: [4]float64{group.x, group.y, group.x + group.w, group.y + group.h}, Shape: shape})
+		}
+	}
 	lanes := newLanes()
 	for _, group := range order {
 		if group != root {
@@ -186,10 +197,6 @@ func draw(db *C4Db, _ types.Config, options types.RenderOptions, tight bool, gap
 		a := ends[index*2]
 		b := ends[index*2+1]
 		style := userStyle("", rel.lineColor, "")
-		color := "var(--_l)"
-		if style.Stroke != "" {
-			color = svg.Esc(style.Stroke)
-		}
 		startArrow := rel.typ == "birel" || rel.typ == "rel_b"
 		endArrow := rel.typ != "rel_b"
 		reverse := a != b && pairs[b][a]
@@ -212,7 +219,30 @@ func draw(db *C4Db, _ types.Config, options types.RenderOptions, tight bool, gap
 		if endArrow && careful {
 			taken = append(taken, r.ex-ARROW, r.ey-ARROW, r.ex+ARROW, r.ey+ARROW)
 		}
-		svg.WriteStrings(&edgesOut, `<g class="pele-edge" data-id="`, svg.EscText(rel.from+"-"+rel.to), `"`, style.Line, `><path d="`, r.d, `"/>`)
+		over, onFills := svg.OverFills(r.d, []float64{r.sx, r.sy, r.ex, r.ey}, fills, style.Line, nil)
+		color := over
+		if color == "" {
+			color = "var(--_l)"
+			if style.Stroke != "" {
+				color = svg.Esc(style.Stroke)
+			}
+		}
+		if onFills && over == "" {
+			startType, endType := "none", "none"
+			if startArrow {
+				startType = "arrow_point"
+			}
+			if endArrow {
+				endType = "arrow_point"
+			}
+			path := svg.EdgePath{D: r.d, Sx: r.sx, Sy: r.sy, Sdx: r.sdx, Sdy: r.sdy, Ex: r.ex, Ey: r.ey, Edx: r.edx, Edy: r.edy}
+			casings.WriteString(svg.EdgeCasing(path, startType, endType, style.Line, false))
+		}
+		stroke := ""
+		if over != "" {
+			stroke = ` stroke="` + over + `"`
+		}
+		svg.WriteStrings(&edgesOut, `<g class="pele-edge" data-id="`, svg.EscText(rel.from+"-"+rel.to), `"`, stroke, style.Line, `><path d="`, r.d, `"/>`)
 		if startArrow {
 			svg.WriteMarker(&edgesOut, "arrow_point", r.sx, r.sy, r.sdx, r.sdy, color)
 		}
@@ -359,13 +389,15 @@ func draw(db *C4Db, _ types.Config, options types.RenderOptions, tight bool, gap
 		if group != root {
 			boundary := group.boundary
 			style := userStyle(boundary.bgColor, boundary.borderColor, boundary.fontColor)
+			color := svg.InkFill(style, "") + style.Text
+			muted := svg.InkFill(style, "var(--_m)") + style.Text
 			x := group.x + group.headX
 			y := group.y + HEAD_TOP
-			t := common.LeftLabelSvg(group.labels[0], x, y, ` class="pele-cluster-label" font-weight="var(--_hw)"`+style.Text)
+			t := common.LeftLabelSvg(group.labels[0], x, y, ` class="pele-cluster-label" font-weight="var(--_hw)"`+color)
 			y += group.labels[0].Height
-			t += common.LeftLabelSvg(group.labels[1], x, y, ` class="pele-c4-type" font-size="`+js.Num(small)+`" fill="var(--_m)"`+style.Text)
+			t += common.LeftLabelSvg(group.labels[1], x, y, ` class="pele-c4-type" font-size="`+js.Num(small)+`"`+muted)
 			y += group.labels[1].Height
-			t += common.LeftLabelSvg(group.labels[2], x, y, ` class="pele-c4-descr" font-size="`+js.Num(small)+`" fill="var(--_m)"`+style.Text)
+			t += common.LeftLabelSvg(group.labels[2], x, y, ` class="pele-c4-descr" font-size="`+js.Num(small)+`"`+muted)
 			kind := "boundary"
 			dash := ` stroke-dasharray="6 4"`
 			if boundary.nodeType != "" {
@@ -400,17 +432,18 @@ func draw(db *C4Db, _ types.Config, options types.RenderOptions, tight bool, gap
 			} else if form == "cyl" {
 				dy = cylRy(w) / 2
 			}
-			muted := ` fill="var(--_m)"` + style.Text
+			color := svg.InkFill(style, "") + style.Text
+			muted := svg.InkFill(style, "var(--_m)") + style.Text
 			y := dy - node.textH/2
 			nodeText.Reset()
 			nodeText.WriteString(svg.DrawShape(form, w, h, ` fill="var(`+fill+`)"`+stroke+style.Shape, stroke+style.Line))
 			nodeText.WriteString(svg.LabelSvg(labels[0], dx, y+labels[0].Height/2, ` class="pele-c4-type" font-size="`+js.Num(small-1)+`"`+muted, nil))
 			y += labels[0].Height
-			nodeText.WriteString(svg.LabelSvg(labels[1], dx, y+labels[1].Height/2, ` class="pele-label" font-weight="var(--_hw)"`+style.Text, nil))
+			nodeText.WriteString(svg.LabelSvg(labels[1], dx, y+labels[1].Height/2, ` class="pele-label" font-weight="var(--_hw)"`+color, nil))
 			y += labels[1].Height
 			nodeText.WriteString(svg.LabelSvg(labels[2], dx, y+labels[2].Height/2, ` class="pele-c4-techn" font-size="`+js.Num(small)+`"`+muted, nil))
 			y += labels[2].Height + 4
-			nodeText.WriteString(svg.LabelSvg(labels[3], dx, y+labels[3].Height/2, ` class="pele-c4-descr" font-size="`+js.Num(small)+`"`+style.Text, nil))
+			nodeText.WriteString(svg.LabelSvg(labels[3], dx, y+labels[3].Height/2, ` class="pele-c4-descr" font-size="`+js.Num(small)+`"`+color, nil))
 			ext := ""
 			if external {
 				ext = " pele-c4-external"
@@ -447,6 +480,7 @@ func draw(db *C4Db, _ types.Config, options types.RenderOptions, tight bool, gap
 	if clusters.Len() > 0 {
 		svg.WriteStrings(&body, `<g class="pele-clusters">`, clusters.String(), `</g>`)
 	}
+	body.WriteString(svg.CasingsSvg(casings.String()))
 	if edgesOut.Len() > 0 {
 		svg.WriteStrings(&body, `<g class="pele-edges" fill="none" stroke="var(--_l)" stroke-linecap="round">`, edgesOut.String(), `</g>`)
 	}

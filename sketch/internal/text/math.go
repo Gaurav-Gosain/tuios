@@ -1,4 +1,4 @@
-// Ported from pele src/text/math.ts at 4eff76f98c73b6817800a05773517f35832e4e92.
+// Ported from pele src/text/math.ts at 8aff183be57021b533f319a29341a529be934b08.
 //
 // pele keeps the resolver of the render in progress in module state. The port
 // carries it on the measurer instead (WithMath), as it does the icons, so that

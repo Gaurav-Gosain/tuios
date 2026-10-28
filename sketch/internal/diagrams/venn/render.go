@@ -1,9 +1,10 @@
-// Ported from pele src/diagrams/venn/render.ts at 4eff76f98c73b6817800a05773517f35832e4e92.
+// Ported from pele src/diagrams/venn/render.ts at 8aff183be57021b533f319a29341a529be934b08.
 
 package venn
 
 import (
 	"math"
+	"slices"
 	"strings"
 
 	"tuios.dev/sketch/internal/js"
@@ -36,6 +37,8 @@ type Region struct {
 	lines []regionLine
 	style svg.ResolvedStyle
 	size  float64
+	// across tells whether its text is written across other circles.
+	across bool
 }
 
 // keyOf is one key for a list of set ids. Ids may hold any character but a double quote, so a
@@ -158,10 +161,11 @@ func renderVenn(model *VennDb, _ types.Config, options types.RenderOptions) type
 		}
 		spot := findSpot(circles, inside, outside)
 		// A region that other circles cover, or all but cover, is written across them instead.
-		if spot.margin < float64(circles[smallest].r*0.2) {
+		across := len(outside) > 0 && spot.margin < float64(circles[smallest].r*0.2)
+		if across {
 			spot = findSpot(circles, inside, nil)
 		}
-		region := &Region{sets: sets, inside: inside, spot: spot, style: style, size: subset.size}
+		region := &Region{sets: sets, inside: inside, spot: spot, style: style, size: subset.size, across: across}
 		if hasText && label != "" {
 			fontSize := small
 			if len(sets) == 1 {
@@ -276,6 +280,29 @@ func renderVenn(model *VennDb, _ types.Config, options types.RenderOptions) type
 	}
 	content.WriteString(`</g>`)
 
+	var painted []*Region
+	for _, r := range order {
+		if len(r.sets) > 1 && r.style.Shape != "" {
+			painted = append(painted, r)
+		}
+	}
+	// The fill under a region's text is the last overlap drawn over all of it, or its own circle when the style sets an opacity.
+	under := func(region *Region) string {
+		if region.across {
+			return ""
+		}
+		fill := ""
+		if len(region.sets) == 1 && (strings.Contains(region.style.Shape, `"fill-opacity:`) || strings.Contains(region.style.Shape, `;fill-opacity:`)) {
+			fill = region.style.Shape
+		}
+		for _, other := range painted {
+			if !slices.ContainsFunc(other.sets, func(id string) bool { return !slices.Contains(region.sets, id) }) {
+				fill = other.style.Shape
+			}
+		}
+		return fill
+	}
+
 	var overlaps, labels strings.Builder
 	smallText, tinyText := js.Num(small), js.Num(tiny)
 	for _, region := range order {
@@ -299,17 +326,29 @@ func renderVenn(model *VennDb, _ types.Config, options types.RenderOptions) type
 		}
 		x := float64(region.spot.x*scale) + ox
 		y := float64(region.spot.y*scale) + oy - total/2
+		fill := under(region)
 		svg.WriteStrings(&labels, `<g class="pele-venn-region" data-id="`, id, `">`)
 		for _, line := range region.lines {
+			own := region.style.Text
+			if line.hasID {
+				own = styleOf(line.id).Text
+			}
+			color := svg.Ink(fill, own)
 			var attrs string
 			if !line.hasID {
 				attrs = ` class="pele-label"`
 				if line.size != size {
 					attrs += ` font-size="` + smallText + `"`
 				}
-				attrs += region.style.Text
+				if color != "" {
+					attrs += ` fill="` + color + `"`
+				}
+				attrs += own
 			} else {
-				attrs = ` class="pele-venn-text" data-id="` + svg.EscText(line.id) + `" font-size="` + tinyText + `" fill="var(--_m)"` + styleOf(line.id).Text
+				if color == "" {
+					color = "var(--_m)"
+				}
+				attrs = ` class="pele-venn-text" data-id="` + svg.EscText(line.id) + `" font-size="` + tinyText + `" fill="` + color + `"` + own
 			}
 			labels.WriteString(svg.LabelSvg(line.label, x, y+line.label.Height/2, attrs, nil))
 			y += line.label.Height

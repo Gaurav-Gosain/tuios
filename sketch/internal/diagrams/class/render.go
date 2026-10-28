@@ -1,4 +1,4 @@
-// Ported from pele src/diagrams/class/render.ts at 4eff76f98c73b6817800a05773517f35832e4e92.
+// Ported from pele src/diagrams/class/render.ts at 8aff183be57021b533f319a29341a529be934b08.
 
 package class
 
@@ -82,12 +82,15 @@ type End struct {
 	after bool
 }
 
-func memberLine(member *ClassMember, measurer text.TextMeasurer, size float64) Line {
+func memberLine(member *ClassMember, measurer text.TextMeasurer, size float64, mono bool) Line {
 	display, _ := member.GetDisplayDetails()
 	txt := js.Trim(text.DecodeEntities(display))
 	style := 0
 	if member.Classifier == "*" {
 		style = text.Italic
+	}
+	if mono {
+		style |= text.Mono
 	}
 	return Line{text: txt, width: measurer.Width(txt, size, style), classifier: member.Classifier}
 }
@@ -141,6 +144,9 @@ func draw(db *ClassDb, config types.Config, options types.RenderOptions, turned 
 		hierarchical = false
 	}
 	graph := buildClassGraph(db, hierarchical)
+	monospaced := options.HasMonospace(types.MonospaceMembers)
+	// Explicit class fonts override monospace.
+	mono := func(style svg.ResolvedStyle) bool { return monospaced && !svg.Declares(style.Text, "font-family") }
 	hideEmpty := false
 	if v, ok := conf["hideEmptyMembersBox"].(bool); ok && v {
 		hideEmpty = true
@@ -310,10 +316,10 @@ func draw(db *ClassDb, config types.Config, options types.RenderOptions, turned 
 		}
 		var attributes, methods []Line
 		for _, m := range cls.Members {
-			attributes = append(attributes, memberLine(m, measurer, memberSize))
+			attributes = append(attributes, memberLine(m, measurer, memberSize, mono(style)))
 		}
 		for _, m := range cls.Methods {
-			methods = append(methods, memberLine(m, measurer, memberSize))
+			methods = append(methods, memberLine(m, measurer, memberSize, mono(style)))
 		}
 		inner := label.Width
 		annotationsH := 0.0
@@ -824,6 +830,11 @@ func draw(db *ClassDb, config types.Config, options types.RenderOptions, turned 
 		lineHeight := js.Round(memberSize * 1.5)
 		var body strings.Builder
 		body.WriteString(`<rect x="` + num(left) + `" y="` + num(top) + `" width="` + num(w) + `" height="` + num(h) + `" fill="var(--_s)" stroke="var(--_b)"` + svg.Rounded(style.Shape) + `/>`)
+		ink := svg.InkFill(style, "")
+		muted := ink
+		if muted == "" {
+			muted = ` fill="var(--_m)"`
+		}
 		first := top + view.titleH
 		second := first + view.attributesH
 		if h > view.titleH {
@@ -836,11 +847,11 @@ func draw(db *ClassDb, config types.Config, options types.RenderOptions, turned 
 		y := top + TITLE_PAD
 		for _, annotation := range view.annotations {
 			if annotation.label == nil {
-				body.WriteString(`<text class="pele-annotation" x="0" y="` + num(y+tinyHeight/2+float64(tiny*0.35)) + `" text-anchor="middle" font-size="` + js.Num(tiny) + `" fill="var(--_m)">` + svg.Esc(annotation.text) + `</text>`)
+				svg.WriteStrings(&body, `<text class="pele-annotation" x="0" y="`, num(y+tinyHeight/2+float64(tiny*0.35)), `" text-anchor="middle" font-size="`, js.Num(tiny), `"`, muted, `>`, svg.Esc(annotation.text), `</text>`)
 				y += tinyHeight
 			} else {
 				h := math.Max(tinyHeight, annotation.label.Height)
-				body.WriteString(svg.LabelSvg(*annotation.label, 0, y+h/2, ` class="pele-annotation" font-size="`+js.Num(tiny)+`" fill="var(--_m)"`, options.Icons))
+				body.WriteString(svg.LabelSvg(*annotation.label, 0, y+h/2, ` class="pele-annotation" font-size="`+js.Num(tiny)+`"`+muted, options.Icons))
 				y += h
 			}
 		}
@@ -848,7 +859,7 @@ func draw(db *ClassDb, config types.Config, options types.RenderOptions, turned 
 		if view.fontSize != size {
 			titleSize = ` font-size="` + num(view.fontSize) + `"`
 		}
-		body.WriteString(svg.LabelSvg(view.label, 0, (y+first-TITLE_PAD)/2, ` class="pele-label"`+titleSize+` font-weight="var(--_hw)"`+style.Text, icons))
+		body.WriteString(svg.LabelSvg(view.label, 0, (y+first-TITLE_PAD)/2, ` class="pele-label"`+titleSize+` font-weight="var(--_hw)"`+ink+style.Text, icons))
 		lines := func(out *strings.Builder, list []Line, kind string, from float64) {
 			baseline := from + SECTION_PAD + lineHeight/2 + float64(memberSize*0.35)
 			for _, line := range list {
@@ -870,7 +881,11 @@ func draw(db *ClassDb, config types.Config, options types.RenderOptions, turned 
 			}
 		}
 		if len(view.attributes) > 0 || len(view.methods) > 0 {
-			body.WriteString(`<g class="pele-members" font-size="` + js.Num(memberSize) + `">`)
+			family := ""
+			if mono(style) {
+				family = ` font-family="` + svg.FONT_MONO + `"`
+			}
+			svg.WriteStrings(&body, `<g class="pele-members" font-size="`, js.Num(memberSize), `"`, ink, family, `>`)
 			lines(&body, view.attributes, "attribute", first)
 			lines(&body, view.methods, "method", second)
 			body.WriteString(`</g>`)

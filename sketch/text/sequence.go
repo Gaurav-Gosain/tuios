@@ -53,6 +53,18 @@ func drawSequence(l *sketch.Layout, opt Options) (*canvas, error) {
 			sy = math.Max(sy, float64(len(n.Label)+2)/n.H)
 		}
 	}
+	// A block's frame keeps a row of its own between the messages around it.
+	// Since pele 1.11 a message can sit as little as a few units from a block
+	// edge, which rounds onto the same row and hides the arrow head.
+	for _, b := range l.Blocks {
+		for _, m := range l.Messages {
+			for _, gap := range [2]float64{b.Top - m.Y, m.Y - b.Bottom} {
+				if gap > 0 {
+					sy = math.Max(sy, 1/gap)
+				}
+			}
+		}
+	}
 	sy = math.Max(sy, sx*0.45)
 	col := func(x float64) int { return int(math.Round(x * sx)) }
 	row := func(y float64) int { return int(math.Round(y * sy)) }

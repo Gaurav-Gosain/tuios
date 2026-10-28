@@ -1,0 +1,613 @@
+[
+ {
+  "src": "architecture-beta\ngroup titles(cloud)[G]\nservice title-x(database)[DB] in titles\njunction title1 in titles\ntitle-x:L -- R:title1\nalign row title-x title1\n"
+ },
+ {
+  "src": "eventmodeling title T\ntf 01 ui titles\ntf 02 cmd title_x ->> 01 [[titleData]]\nentity titles.title2\ndata titleData {\n x\n}\ngwt 02 given evt titles then rmo title_x\n"
+ },
+ {
+  "src": "radar-beta\naxis a, b, c\nshowLegend falsecurve x{1,2,3}"
+ },
+ {
+  "src": "radar-beta\ngraticule polygonaxis a, b, c\ncurve x{1,2,3}"
+ },
+ {
+  "src": "radar-beta\ngraticule %%{init: {}}%% circlecurve x{1}"
+ },
+ {
+  "src": "agentflow-beta TB\n  flow f[\"F\"]\n    direction LR\n    a --> b\n  end\n  f --> c"
+ },
+ {
+  "src": "agentflow-beta LR\nflow S\n direction TB\n s1\n s2\nend\nflow P\n direction TB\n p1\n p2\nend\ns1 --> p2\ns2 --> p1\n"
+ },
+ {
+  "src": "agentflow-beta LR\nflow S\n s1\n s2\nend\nflow P\n p1\n p2\nend\ns1 --> p2\ns2 --> p1\n"
+ },
+ {
+  "src": "agentflow-beta TB\n  flow f[\"Flow\"]\n    a[\"A\"] --> b[\"B\"]\n  end\n  flow p[\"Packed\"]\n    c[\"C\"]\n  end\n  p@{ view: \"collapsed\" }\n  b --> d[\"D\"]\n  style f fill:#FFF9C4\n  style a fill:#1f3a5f\n  style b fill:#1f3a5f,color:#eee\n  style p fill:navy"
+ },
+ {
+  "src": "agentflow-beta TB\n  flow f[\"Flow\"]\n    a[\"A\"] --> b[\"B\"]\n  end\n  b --> c[\"C\"]\n  c --> d[\"D\"]\n  style f fill:#FFF9C4"
+ },
+ {
+  "src": "agentflow-beta TB\n  flow f[\"Flow\"]\n    a[\"A\"] --> b[\"B\"]\n  end\n  b --> c[\"C\"]\n  c --> d[\"D\"]"
+ },
+ {
+  "src": "agentflow-beta TB\n  flow f[Flow]\n    a[A]\n  end\n  f --> a\n  style f fill:white"
+ },
+ {
+  "src": "architecture-beta\ngroup titles(cloud)[G]\nservice title-db(database)[DB] in titles\nservice title_2 in titles\ntitle-db:R -- L:title_2"
+ },
+ {
+  "src": "block\n  columns 1\n  a[\"Upper layer\"]\n  space:3\n  b[\"Lower layer\"]\n  a -- \"12 production conforming\" --> b\n  b -- \"12 production deviation\" --> a"
+ },
+ {
+  "src": "block\n  a[\"Left layer\"] space:3 b[\"Right layer\"]\n  a -- \"12 production<br>conforming\" --> b\n  b -- \"12 production<br>deviation\" --> a"
+ },
+ {
+  "src": "block\n  a space:3 b\n  a -- \"forward\" --> b\n  b -- \"reverse\" --> a"
+ },
+ {
+  "src": "block\n  columns 1\n  a[\"A\"]\n  space\n  b[\"B\"]\n  a -- \"144 production conforming\" --> b\n  b -- \"144 production deviation\" --> a"
+ },
+ {
+  "src": "block\n  columns 1\n  a[\"A\"]\n  space:2\n  b[\"B\"]\n  a -- \"7 production policy\" --> b\n  a -- \"7 test policy\" --> b\n  a -- \"7 production exception\" --> b\n  b -- \"7 production deviation\" --> a"
+ },
+ {
+  "src": "block\n  columns 3\n  l a r\n  space:3\n  m b n\n  a -- \"production conforming\" --> b\n  b -- \"production deviation\" --> a"
+ },
+ {
+  "src": "block\n  columns 1\n  a\n  space\n  c[\"Middle\"]\n  space\n  b\n  a -- \"forward label\" --> b\n  a -- \"second label\" --> b"
+ },
+ {
+  "src": "block\n  columns 1\n  a c d e b\n  a -- \"one<br>two<br>three<br>four\" --> b\n  a -- \"one<br>two<br>three<br>four\" --> b"
+ },
+ {
+  "src": "block\n  columns 1\n  b\n  space\n  block:g[\"Group\"]\n    x\n  end\n  a\n  a -- \"a long label\" --> b\n  a -- \"a long label\" --> b\n  a -- \"a long label\" --> b"
+ },
+ {
+  "src": "block\n  columns 1\n  a\n  space\n  b\n  a -- \"first label\" --> b\n  a -- \"second label\" --> b\n  b -- \"third label\" --> a"
+ },
+ {
+  "src": "block\n  columns 1\n  a\n  b\n  a -- \"conforming\" --> b\n  b -- \"deviation\" --> a"
+ },
+ {
+  "src": "block\n  columns 1\n  a\n  b\n  a --> b\n  b --> a"
+ },
+ {
+  "src": "block\n  a[\"Service\"] space b[\"Database\"]\n  a -- \"read\" --> b\n  a -- \"write rows\" --> b\n  b -- \"notify\" --> a"
+ },
+ {
+  "src": "block\n  columns 1\n  a\n  space\n  b\n  a -- \"one\" --> b\n  a -- \"two\" --> b\n  a -- \"three\" --> b\n  a -- \"four\" --> b\n  a -- \"five\" --> b"
+ },
+ {
+  "src": "block\n  columns 1\n  block:up[\"Up\"]\n    a b\n  end\n  c\n  up -- \"hi there\" --> c\n  c -- \"back again\" --> up"
+ },
+ {
+  "src": "block\n  columns 2\n  block:g\n    columns 1\n    a{\"a\"} b\n  end\n  q[\"Q<br>Q<br>Q<br>Q<br>Q<br>Q\"]\n  a -- \"long label\" --> b\n  a -- \"long label\" --> b"
+ },
+ {
+  "src": "block\n  columns 3\n  t1 t2 t3\n  a space b\n  b1 b2 b3\n  a -- \"line one<br>line two<br>line three\" --> b\n  b -- \"back one<br>back two<br>back three\" --> a"
+ },
+ {
+  "src": "block\n  columns 3\n  t1 t2 t3\n  a space b\n  b1 b2 b3\n  a --> b\n  b --> a"
+ },
+ {
+  "src": "block\n  a[\"Service\"] space b[\"Database\"]\n  a -- \"read\" --> b\n  a -- \"write rows\" --> b\n  b -- \"notify\" --> a",
+  "maxWidth": 380
+ },
+ {
+  "src": "block\n  a[\"Service\"] space b[\"Database\"]\n  a -- \"read\" --> b\n  a -- \"write rows\" --> b\n  b -- \"notify\" --> a",
+  "maxWidth": 397.5
+ },
+ {
+  "src": "block\n  columns 1\n  a\n  space:2\n  b\n  a -- \"a fairly long forward label\" --> b\n  b -- \"a fairly long backward label\" --> a"
+ },
+ {
+  "src": "block\n  columns 1\n  a\n  space:2\n  b\n  a -- \"a fairly long forward label\" --> b\n  b -- \"a fairly long backward label\" --> a",
+  "maxWidth": 240
+ },
+ {
+  "src": "block\n  block:g\n    a\n  end\n  block:h\n    b\n  end\n  style g fill:#fee"
+ },
+ {
+  "src": "block\n  block:g[\"Group\"]\n    a[\"Light\"]\n  end\n  b[\"Dark\"] c[\"Own\"] d[\"Plain\"]\n  e<[\"Go\"]>(right)\n  style g fill:#FFF9C4\n  style a fill:#BBDEFB\n  style b fill:#1f3a5f\n  style c fill:#1f3a5f,color:#eee\n  style e fill:black"
+ },
+ {
+  "src": "block\n  block:g\n    a b\n  end\n  c\n  a --> b\n  b --> c\n  c --> c\n  style g fill:#BBDEFB"
+ },
+ {
+  "src": "block\n  block:g\n    a b\n  end\n  c\n  a --> b\n  b --> c\n  c --> c"
+ },
+ {
+  "src": "block\n  block:g\n    a\n  end\n  a --> a\n  a --> a\n  style g fill:white"
+ },
+ {
+  "src": "C4Context\nBoundary(b, \"B\", \"Kind\") {\n  System(c, \"C\", \"about c\")\n}\nSystem(d, \"D\", \"about d\")\nSystem(e, \"E\")\nUpdateElementStyle(b, $bgColor=\"lightyellow\")\nUpdateElementStyle(c, $bgColor=\"navy\")\nUpdateElementStyle(d, $bgColor=\"navy\", $fontColor=\"#ddd\")"
+ },
+ {
+  "src": "C4Context\nBoundary(b, \"B\") {\n  System(x, \"X\")\n  System(y, \"Y\")\n}\nSystem(z, \"Z\")\nSystem(w, \"W\")\nRel(x, y, \"in\")\nRel(y, z, \"out\")\nRel(z, w, \"away\")\nUpdateElementStyle(b, $bgColor=\"lightyellow\")"
+ },
+ {
+  "src": "C4Context\nBoundary(b, \"B\") {\n  System(x, \"X\")\n  System(y, \"Y\")\n}\nSystem(z, \"Z\")\nSystem(w, \"W\")\nRel(x, y, \"in\")\nRel(y, z, \"out\")\nRel(z, w, \"away\")\n"
+ },
+ {
+  "src": "C4Context\nBoundary(S, \"S\") {\n  System(A, \"A\")\n}\nRel(A, A, \"self\")\nUpdateElementStyle(S, $bgColor=\"white\")"
+ },
+ {
+  "src": "classDiagram\nclass A {\n  +title: string\n}"
+ },
+ {
+  "src": "classDiagram\nclass A {\n  +title: string\n}",
+  "monospace": [
+   "members"
+  ]
+ },
+ {
+  "src": "classDiagram\nclass A {\n  +title: string\n  +draw()*\n}"
+ },
+ {
+  "src": "classDiagram\nclass A {\n  +title: string\n  +draw()*\n}",
+  "monospace": [
+   "members"
+  ]
+ },
+ {
+  "src": "classDiagram\nclass A {\n  +title: string\n  +draw()*\n}",
+  "monospace": [
+   "attributes",
+   "members"
+  ]
+ },
+ {
+  "src": "classDiagram\nclass A {\n  +title: string\n  +draw()*\n}",
+  "monospace": []
+ },
+ {
+  "src": "classDiagram\nclass A {\n  +title: string\n  +draw()*\n}",
+  "monospace": [
+   "member"
+  ]
+ },
+ {
+  "src": "classDiagram\nclass A {\n  +title: string\n  +draw()*\n}",
+  "monospace": [
+   "attributes"
+  ]
+ },
+ {
+  "src": "classDiagram\nclass A {\n  +title: string\n}\nclass B {\n  +title: string\n}\nstyle A color:black,font-family:serif"
+ },
+ {
+  "src": "classDiagram\nclass A {\n  +title: string\n}\nclass B {\n  +title: string\n}\nstyle A color:black,font-family:serif",
+  "monospace": [
+   "members"
+  ]
+ },
+ {
+  "src": "classDiagram\nclass A {\n  +title: string\n}\nclass B {\n  +title: string\n}\nclassDef serif color:black,font-family:serif\nclass A:::serif"
+ },
+ {
+  "src": "classDiagram\nclass A {\n  +title: string\n}\nclass B {\n  +title: string\n}\nclassDef serif color:black,font-family:serif\nclass A:::serif",
+  "monospace": [
+   "members"
+  ]
+ },
+ {
+  "src": "classDiagram\nclass A {\n  <<interface>>\n  +id int\n  +run()\n}\nclass B {\n  +x\n}\nclass C\nclassDef dark fill:#1f3a5f\nclass A:::dark\nstyle B fill:lightyellow,color:#900"
+ },
+ {
+  "src": "erDiagram\n  CAR {\n    string registrationNumber PK \"The plate number, as issued by the registration office of the country\"\n    int wheels FK, UK\n  }"
+ },
+ {
+  "src": "erDiagram\n  CAR {\n    string registrationNumber PK \"The plate number, as issued by the registration office of the country\"\n    int wheels FK, UK\n  }",
+  "monospace": [
+   "attributes"
+  ]
+ },
+ {
+  "src": "erDiagram\n  A {\n    string `a  b`\n  }",
+  "monospace": [
+   "attributes"
+  ]
+ },
+ {
+  "src": "erDiagram\n  A {\n    string `<code>a  b</code>`\n  }",
+  "monospace": [
+   "attributes"
+  ]
+ },
+ {
+  "src": "erDiagram\n  CAR {\n    string registrationNumber PK \"The plate\"\n  }"
+ },
+ {
+  "src": "erDiagram\n  CAR {\n    string registrationNumber PK \"The plate\"\n  }",
+  "monospace": []
+ },
+ {
+  "src": "erDiagram\n  CAR {\n    string registrationNumber PK \"The plate\"\n  }",
+  "monospace": [
+   "attribute"
+  ]
+ },
+ {
+  "src": "erDiagram\n  CAR {\n    string registrationNumber PK \"The plate\"\n  }",
+  "monospace": [
+   "members"
+  ]
+ },
+ {
+  "src": "erDiagram\n  A {\n    string name PK\n  }\n  B {\n    string name PK\n  }\n  style A color:black,font-family:serif"
+ },
+ {
+  "src": "erDiagram\n  A {\n    string name PK\n  }\n  B {\n    string name PK\n  }\n  style A color:black,font-family:serif",
+  "monospace": [
+   "attributes"
+  ]
+ },
+ {
+  "src": "erDiagram\n  A {\n    string name PK\n  }\n  B {\n    string name PK\n  }\n  classDef serif color:black,font-family:serif\n  class A serif"
+ },
+ {
+  "src": "erDiagram\n  A {\n    string name PK\n  }\n  B {\n    string name PK\n  }\n  classDef serif color:black,font-family:serif\n  class A serif",
+  "monospace": [
+   "attributes"
+  ]
+ },
+ {
+  "src": "erDiagram\n A { int id PK \"key\" }\n B { int id }\n C { int id }\n D { int id }\n subgraph G\n  E\n end\n style A fill:navy\n style B fill:#BBDEFB\n style C fill:#BBDEFB,color:#333\n style G fill:#FFF9C4"
+ },
+ {
+  "src": "erDiagram\n subgraph g\n  A\n end\n subgraph h\n  B\n end\n style g fill:#fee"
+ },
+ {
+  "src": "erDiagram\n subgraph g\n  A ||--o{ B : has\n end\n B ||--|| C : is\n C ||--|| D : of\n C ||--o{ C : self\n style g fill:#BBDEFB"
+ },
+ {
+  "src": "erDiagram\n subgraph S\n  A ||--o{ B : has\n end\n style S fill:black"
+ },
+ {
+  "src": "erDiagram\n subgraph g\n  A ||--o{ B : has\n end\n B ||--|| C : is\n C ||--|| D : of\n C ||--o{ C : self"
+ },
+ {
+  "src": "eventmodeling\ntf 01 ui titles\ntf 02 cmd title_x\nentity titles\n"
+ },
+ {
+  "src": "flowchart LR\n  subgraph S\n    A\n  end\n  subgraph T\n    B\n  end\n  style S fill:#BBDEFB"
+ },
+ {
+  "src": "flowchart LR\n  subgraph S[\"Cluster\"]\n    A[Start] -- Launch --> B[Worker]\n  end\n  C[Output]\n  D[Dark]\n  E[Own]\n  F[Plain]\n  G[Words]\n  B --> C\n  style S fill:#BBDEFB\n  style C fill:#BBDEFB\n  classDef dark fill:navy\n  class D dark\n  style E fill:#BBDEFB,color:#333\n  style G fill:#000\n  G@{ shape: text }"
+ },
+ {
+  "src": "flowchart LR\n  subgraph S[\"Cluster\"]\n    A[Start] -- Launch --> B[Worker]\n    subgraph N\n      G --> H\n    end\n  end\n  subgraph T\n    D --> E\n  end\n  C[Output]\n  B --> C\n  C ==> D\n  B --> B\n  F --> C\n  B --> G\n  A --> H\n  style S fill:#BBDEFB\n  style N fill:navy\n  style C fill:#BBDEFB"
+ },
+ {
+  "src": "flowchart LR\n  subgraph S[\"Cluster\"]\n    A[Start] -- Launch --> B[Worker]\n    subgraph N\n      G --> H\n    end\n  end\n  subgraph T\n    D --> E\n  end\n  C[Output]\n  B --> C\n  C ==> D\n  B --> B\n  F --> C\n  B --> G\n  A --> H\n  style C fill:#BBDEFB"
+ },
+ {
+  "src": "flowchart LR\nsubgraph S\n  A\n  B\nend\nD\nE --> A\nD --> F\nF --> C\nB --> C\nstyle S fill:white"
+ },
+ {
+  "src": "flowchart TB\nsubgraph S\n  A\nend\nA --x B\nstyle S fill:white\nlinkStyle 0 stroke-width:10px"
+ },
+ {
+  "src": "flowchart TB\nsubgraph S\n  A\nend\nA --x B\nstyle S fill:white\nlinkStyle 0 stroke-width:1em"
+ },
+ {
+  "src": "flowchart TB\nsubgraph S\n  A\nend\nA --x B\nstyle S fill:white\nlinkStyle 0 opacity:0,stroke-opacity:0.5"
+ },
+ {
+  "src": "flowchart TB\nsubgraph S\n  A\nend\nA --x B\nstyle S fill:white\nlinkStyle 0 stroke:none"
+ },
+ {
+  "src": "flowchart TB\nsubgraph S\n  A\nend\nA --x B\nstyle S fill:none\n"
+ },
+ {
+  "src": "flowchart TB\nsubgraph S\n  A\nend\nA --x B\nstyle S fill:transparent\n"
+ },
+ {
+  "src": "flowchart TB\nsubgraph S\n  A\nend\nA --x B\nstyle S fill:#0000\n"
+ },
+ {
+  "src": "flowchart TB\nsubgraph S\n  A --> B\nend\nstyle S fill:black,opacity:0"
+ },
+ {
+  "src": "flowchart LR\n  subgraph S\n    direction TB\n    s1\n    s2\n  end\n  subgraph P\n    direction TB\n    p1\n    p2\n  end\n  s1 --> p2\n  s2 --> p1\n"
+ },
+ {
+  "src": "flowchart LR\n  subgraph S\n    s1\n    s2\n  end\n  subgraph P\n    p1\n    p2\n  end\n  s1 --> p2\n  s2 --> p1\n"
+ },
+ {
+  "src": "flowchart LR\n  subgraph one\n    direction TB\n    a1 --> a2\n  end\n  subgraph two\n    direction TB\n    b1 --> b2\n  end\n  subgraph outer\n    direction TB\n    subgraph inner\n      direction TB\n      c1 --> c2\n    end\n    c3\n  end\n  x --> one\n  x --> b1\n  c3 --> x"
+ },
+ {
+  "src": "gitGraph\n commit\n branch titles\n commit\n branch title/x\n commit\n checkout main\n merge titles\n branch title-2.0\n"
+ },
+ {
+  "src": "gitGraph\n commit\n branch title.v2\n checkout title.v2"
+ },
+ {
+  "src": "quadrantChart\n  P: [0.25, 0.4375]\n  Q: [0.25, 0.4175]"
+ },
+ {
+  "src": "radar-beta\n axis circles, polygonal, trueNorth, falsey, titles\n curve titles{1, 2, 3, 4, 5}, circles{ circles: 1, polygonal 2, trueNorth: 3, falsey 4, titles: 5 }"
+ },
+ {
+  "src": "radar-beta\n axis a, b\n showLegend falsecurve x{1, 2}\n graticule polygonaxis c"
+ },
+ {
+  "src": "railroad-beta\ntitles = nonterminal(\"title-x\") ;\ntitle-x = terminal(\"a\") ;"
+ },
+ {
+  "src": "railroad-ebnf-beta\ntitles = title-x ;\ntitle-x = \"a\" ;"
+ },
+ {
+  "src": "railroad-abnf-beta\ntitles = title-x ;\ntitle-x = \"a\" ;"
+ },
+ {
+  "src": "railroad-peg-beta\ntitles <- title-x ;\ntitle-x <- \"a\" ;"
+ },
+ {
+  "src": "requirementDiagram\nrequirement a {\nid: 1\ntext: words\n}\nelement b {\ntype: t\n}\nelement c {\n}\nstyle a fill:#1f3a5f\nstyle b fill:#1f3a5f,color:#eee\n"
+ },
+ {
+  "src": "sankey-beta \na,b,1"
+ },
+ {
+  "src": "sankey-beta\n\ta,b,1\nc,d,2"
+ },
+ {
+  "src": "sankey-beta\na,b,1\n   \nc,d,2"
+ },
+ {
+  "src": "sankey-beta\na,b,1\n \"c d\",e,2"
+ },
+ {
+  "src": "sankey-beta\nd,e,\"2\" \ng,h,3"
+ },
+ {
+  "src": "sankey\n\"a  \n  b\",c,1"
+ },
+ {
+  "src": "sankey\na,b,1\n ,c,2"
+ },
+ {
+  "src": "sequenceDiagram\n  participant U as UE\n  participant M as MeNB (LTE anchor)\n  participant S as SgNB (5G, NR leg)\n  M->>S: SgNB Addition Request (DRB-ID, CG-ConfigInfo)\n  M->>U: RRCConnectionReconfiguration (carries the NR SCG config)\n  U->>M: RRCConnectionReconfigurationComplete",
+  "maxWidth": 760
+ },
+ {
+  "src": "sequenceDiagram\n  participant U as UE\n  participant M as MeNB (LTE anchor)\n  participant S as SgNB (5G, NR leg)\n  M->>S: SgNB Addition Request (DRB-ID, CG-ConfigInfo)\n  M->>U: RRCConnectionReconfiguration (carries the NR SCG config)\n  U->>M: RRCConnectionReconfigurationComplete",
+  "maxWidth": 760.5
+ },
+ {
+  "src": "sequenceDiagram\n  participant U as UE\n  participant M as MeNB (LTE anchor)\n  participant S as SgNB (5G, NR leg)\n  M->>S: SgNB Addition Request (DRB-ID, CG-ConfigInfo)\n  M->>U: RRCConnectionReconfiguration (carries the NR SCG config)\n  U->>M: RRCConnectionReconfigurationComplete",
+  "maxWidth": 760,
+  "monospace": [
+   "messages"
+  ]
+ },
+ {
+  "src": "sequenceDiagram\n  participant U as UE\n  participant M as MeNB (LTE anchor)\n  participant S as SgNB (5G, NR leg)\n  M->>S: SgNB Addition Request (DRB-ID, CG-ConfigInfo)\n  M->>U: RRCConnectionReconfiguration (carries the NR SCG config)\n  U->>M: RRCConnectionReconfigurationComplete",
+  "maxWidth": 400
+ },
+ {
+  "src": "sequenceDiagram\n  participant A\n  participant B\n  participant C\n  B->>A: xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\n  C->>A: xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+  "maxWidth": 709
+ },
+ {
+  "src": "sequenceDiagram\n  A->>B: thisIsAnExtremelyLongMessageIdentifierThatShouldHaveRoomToFit",
+  "maxWidth": 300.25
+ },
+ {
+  "src": "sequenceDiagram\n  participant A\n  participant B\n  participant C\n  participant D\n  A->>D: thisIsAnExtremelyLongMessageIdentifierThatShouldHaveRoomToFit",
+  "maxWidth": 450
+ },
+ {
+  "src": "sequenceDiagram\n  A->>+B: thisIsAnExtremelyLongMessageIdentifierThatShouldHaveRoomToFit\n  Note right of B: note\n  B-->>-A: ok",
+  "maxWidth": 400
+ },
+ {
+  "src": "sequenceDiagram\n  A->>B: a message in the monospace font\n  B->>B: a message to itself\n  Note over A,B: a note"
+ },
+ {
+  "src": "sequenceDiagram\n  A->>B: a message in the monospace font\n  B->>B: a message to itself\n  Note over A,B: a note",
+  "monospace": [
+   "messages"
+  ]
+ },
+ {
+  "src": "sequenceDiagram\n  A->>B: a message in the monospace font\n  B->>B: a message to itself\n  Note over A,B: a note",
+  "monospace": []
+ },
+ {
+  "src": "sequenceDiagram\n  A->>B: a message in the monospace font\n  B->>B: a message to itself\n  Note over A,B: a note",
+  "monospace": [
+   "message"
+  ]
+ },
+ {
+  "src": "sequenceDiagram\n  A->>B: a message in the monospace font\n  B->>B: a message to itself\n  Note over A,B: a note",
+  "monospace": [
+   "members"
+  ]
+ },
+ {
+  "src": "sequenceDiagram\n  participant UE\n  participant gNB\n  participant AMF\n  gNB->>UE: RRCConnectionReconfigurationComplete\n  UE->>gNB: ok",
+  "maxWidth": 760,
+  "monospace": [
+   "messages"
+  ]
+ },
+ {
+  "src": "sequenceDiagram\n  participant UE\n  participant gNB\n  participant AMF\n  gNB->>UE: RRCConnectionReconfigurationComplete\n  UE->>gNB: ok",
+  "maxWidth": 760
+ },
+ {
+  "src": "sequenceDiagram\n  box rgb(34, 56, 0) Group\n  participant A\n  participant B\n  end\n  participant C\n  participant D\n  A->>B: boxed\n  C->>D: open\n  rect rgb(191, 223, 255)\n  C->>D: light\n  C->>C: self\n  loop Often\n  D->>C: looped\n  end\n  rect black\n  C->>D: dark\n  end\n  rect rgba(0, 0, 0, .2)\n  C->>D: faint\n  end\n  A->>D: crossing two of the lifelines\n  end"
+ },
+ {
+  "src": "sequenceDiagram\n  box black Group\n  participant A\n  participant B\n  end\n  participant C\n  A->>B: boxed\n  B->>C: open\n  rect rgb(191, 223, 255)\n  A-->>C: light\n  C-xC: self\n  A-|\\B: solid\n  A-\\\\B: stick\n  end"
+ },
+ {
+  "src": "sequenceDiagram\n  autonumber 1000\n  box black\n  participant A\n  end\n  A->>A: x"
+ },
+ {
+  "src": "sequenceDiagram\n  box black Group\n  actor A\n  participant B\n  end\n  actor C\n  A->>B: hi\n  B->>C: yo"
+ },
+ {
+  "src": "stateDiagram-v2\n  state Busy {\n    a\n  }\n  state Idle {\n    b\n  }\n  classDef warm fill:#FFF9C4\n  class Busy warm"
+ },
+ {
+  "src": "stateDiagram-v2\ndirection TB\n classDef notMoving fill:white\n classDef badBadEvent fill:#f00,color:white,font-weight:bold\n [*] --> Still\n Still --> Moving\n Moving --> Crash\n class Still notMoving\n class Crash badBadEvent\n state \"Described\" as d : first line\n style d fill:#14201a\n state Busy {\n b\n }\n style Busy fill:#FFF9C4"
+ },
+ {
+  "src": "stateDiagram-v2\nstate Busy {\n  a --> b\n}\nstate Idle {\n  c --> d\n}\nb --> e\ne --> c\nstyle Busy fill:#FFF9C4"
+ },
+ {
+  "src": "stateDiagram-v2\nstate Busy {\n  a --> b\n}\nstate Idle {\n  c --> d\n}\nb --> e\ne --> c"
+ },
+ {
+  "src": "swimlane-beta LR\n  subgraph L[Light]\n    a\n  end\n  subgraph D[Dark]\n    b\n  end\n  subgraph P[Plain]\n    c\n  end\n  style L fill:#BBDEFB\n  style D fill:#1f3a5f"
+ },
+ {
+  "src": "swimlane-beta TB\nsubgraph S[\"one<br/>two<br/>three<br/>four<br/>five<br/>six<br/>seven<br/>eight\"]\n  A\nend\nS --> S\nstyle S fill:black"
+ },
+ {
+  "src": "swimlane-beta TB\nsubgraph S[\"one<br/>two<br/>three<br/>four<br/>five<br/>six<br/>seven<br/>eight\"]\n  A\nend\nS --> S"
+ },
+ {
+  "src": "---\nconfig:\n  treemap:\n    showValues: true\n---\ntreemap\n\"Section\":::frame\n  \"a\": 10:::dark\n  \"b\": 20:::own\n  \"c\": 30\nclassDef frame fill:#FFF9C4\nclassDef dark fill:navy\nclassDef own fill:navy,color:#ddd"
+ },
+ {
+  "src": "treemap\n\"S\":::titles\n  \"a\": 1:::title_2\nclassDef title_2 fill:red"
+ },
+ {
+  "src": "treemap\n\"A section with a very long name indeed\"\n  \"big\": 1000\n  \"A leaf with quite a long name\": 60\n  \"tiny\": 12\n\"other\": 3000"
+ },
+ {
+  "src": "---\nconfig:\n  treemap:\n    nodeHeight: 3\n---\ntreemap\n\"A & B\"\n  \"Inner\"\n    \"Leaf\": 1"
+ },
+ {
+  "src": "treemap-beta\n\"Category A\"\n    \"Item A1\": 10\n    \"Item A2\": 20\n\"Category B\"\n    \"Item B1\": 15\n    \"Item B2\": 25\n"
+ },
+ {
+  "src": "---\nconfig:\n  treemap:\n    nodeHeight: 3\n---\ntreemap\n\"#1;\"\n  \"Leaf\": 1"
+ },
+ {
+  "src": "treemap\n\"top 0\"\n  \"mid 0.0\"\n    \"inner 0.0\"\n      \"leaf 0.0.0\": 1\n      \"leaf 0.0.1\": 2\n      \"leaf 0.0.2\": 9\n      \"leaf 0.0.3\": 28\n      \"leaf 0.0.4\": 65\n      \"leaf 0.0.5\": 126\n      \"leaf 0.0.6\": 217\n      \"leaf 0.0.7\": 344\n  \"mid 0.1\"\n    \"inner 0.1\"\n      \"leaf 0.1.0\": 513\n      \"leaf 0.1.1\": 730\n      \"leaf 0.1.2\": 1001\n      \"leaf 0.1.3\": 1332\n      \"leaf 0.1.4\": 1729\n      \"leaf 0.1.5\": 2198\n      \"leaf 0.1.6\": 2745\n      \"leaf 0.1.7\": 3376\n  \"mid 0.2\"\n    \"inner 0.2\"\n      \"leaf 0.2.0\": 4097\n      \"leaf 0.2.1\": 4914\n      \"leaf 0.2.2\": 5833\n      \"leaf 0.2.3\": 6860\n      \"leaf 0.2.4\": 8001\n      \"leaf 0.2.5\": 9262\n      \"leaf 0.2.6\": 10649\n      \"leaf 0.2.7\": 12168\n  \"mid 0.3\"\n    \"inner 0.3\"\n      \"leaf 0.3.0\": 13825\n      \"leaf 0.3.1\": 15626\n      \"leaf 0.3.2\": 17577\n      \"leaf 0.3.3\": 19684\n      \"leaf 0.3.4\": 21953\n      \"leaf 0.3.5\": 24390\n      \"leaf 0.3.6\": 27001\n      \"leaf 0.3.7\": 29792\n  \"mid 0.4\"\n    \"inner 0.4\"\n      \"leaf 0.4.0\": 32769\n      \"leaf 0.4.1\": 35938\n      \"leaf 0.4.2\": 39305\n      \"leaf 0.4.3\": 42876\n      \"leaf 0.4.4\": 46657\n      \"leaf 0.4.5\": 1\n      \"leaf 0.4.6\": 2\n      \"leaf 0.4.7\": 9\n  \"mid 0.5\"\n    \"inner 0.5\"\n      \"leaf 0.5.0\": 28\n      \"leaf 0.5.1\": 65\n      \"leaf 0.5.2\": 126\n      \"leaf 0.5.3\": 217\n      \"leaf 0.5.4\": 344\n      \"leaf 0.5.5\": 513\n      \"leaf 0.5.6\": 730\n      \"leaf 0.5.7\": 1001\n  \"mid 0.6\"\n    \"inner 0.6\"\n      \"leaf 0.6.0\": 1332\n      \"leaf 0.6.1\": 1729\n      \"leaf 0.6.2\": 2198\n      \"leaf 0.6.3\": 2745\n      \"leaf 0.6.4\": 3376\n      \"leaf 0.6.5\": 4097\n      \"leaf 0.6.6\": 4914\n      \"leaf 0.6.7\": 5833\n  \"mid 0.7\"\n    \"inner 0.7\"\n      \"leaf 0.7.0\": 6860\n      \"leaf 0.7.1\": 8001\n      \"leaf 0.7.2\": 9262\n      \"leaf 0.7.3\": 10649\n      \"leaf 0.7.4\": 12168\n      \"leaf 0.7.5\": 13825\n      \"leaf 0.7.6\": 15626\n      \"leaf 0.7.7\": 17577\n\"top 1\"\n  \"mid 1.0\"\n    \"inner 1.0\"\n      \"leaf 1.0.0\": 19684\n      \"leaf 1.0.1\": 21953\n      \"leaf 1.0.2\": 24390\n      \"leaf 1.0.3\": 27001\n      \"leaf 1.0.4\": 29792\n      \"leaf 1.0.5\": 32769\n      \"leaf 1.0.6\": 35938\n      \"leaf 1.0.7\": 39305\n  \"mid 1.1\"\n    \"inner 1.1\"\n      \"leaf 1.1.0\": 42876\n      \"leaf 1.1.1\": 46657\n      \"leaf 1.1.2\": 1\n      \"leaf 1.1.3\": 2\n      \"leaf 1.1.4\": 9\n      \"leaf 1.1.5\": 28\n      \"leaf 1.1.6\": 65\n      \"leaf 1.1.7\": 126\n  \"mid 1.2\"\n    \"inner 1.2\"\n      \"leaf 1.2.0\": 217\n      \"leaf 1.2.1\": 344\n      \"leaf 1.2.2\": 513\n      \"leaf 1.2.3\": 730\n      \"leaf 1.2.4\": 1001\n      \"leaf 1.2.5\": 1332\n      \"leaf 1.2.6\": 1729\n      \"leaf 1.2.7\": 2198\n  \"mid 1.3\"\n    \"inner 1.3\"\n      \"leaf 1.3.0\": 2745\n      \"leaf 1.3.1\": 3376\n      \"leaf 1.3.2\": 4097\n      \"leaf 1.3.3\": 4914\n      \"leaf 1.3.4\": 5833\n      \"leaf 1.3.5\": 6860\n      \"leaf 1.3.6\": 8001\n      \"leaf 1.3.7\": 9262\n  \"mid 1.4\"\n    \"inner 1.4\"\n      \"leaf 1.4.0\": 10649\n      \"leaf 1.4.1\": 12168\n      \"leaf 1.4.2\": 13825\n      \"leaf 1.4.3\": 15626\n      \"leaf 1.4.4\": 17577\n      \"leaf 1.4.5\": 19684\n      \"leaf 1.4.6\": 21953\n      \"leaf 1.4.7\": 24390\n  \"mid 1.5\"\n    \"inner 1.5\"\n      \"leaf 1.5.0\": 27001\n      \"leaf 1.5.1\": 29792\n      \"leaf 1.5.2\": 32769\n      \"leaf 1.5.3\": 35938\n      \"leaf 1.5.4\": 39305\n      \"leaf 1.5.5\": 42876\n      \"leaf 1.5.6\": 46657\n      \"leaf 1.5.7\": 1\n  \"mid 1.6\"\n    \"inner 1.6\"\n      \"leaf 1.6.0\": 2\n      \"leaf 1.6.1\": 9\n      \"leaf 1.6.2\": 28\n      \"leaf 1.6.3\": 65\n      \"leaf 1.6.4\": 126\n      \"leaf 1.6.5\": 217\n      \"leaf 1.6.6\": 344\n      \"leaf 1.6.7\": 513\n  \"mid 1.7\"\n    \"inner 1.7\"\n      \"leaf 1.7.0\": 730\n      \"leaf 1.7.1\": 1001\n      \"leaf 1.7.2\": 1332\n      \"leaf 1.7.3\": 1729\n      \"leaf 1.7.4\": 2198\n      \"leaf 1.7.5\": 2745\n      \"leaf 1.7.6\": 3376\n      \"leaf 1.7.7\": 4097\n\"top 2\"\n  \"mid 2.0\"\n    \"inner 2.0\"\n      \"leaf 2.0.0\": 4914\n      \"leaf 2.0.1\": 5833\n      \"leaf 2.0.2\": 6860\n      \"leaf 2.0.3\": 8001\n      \"leaf 2.0.4\": 9262\n      \"leaf 2.0.5\": 10649\n      \"leaf 2.0.6\": 12168\n      \"leaf 2.0.7\": 13825\n  \"mid 2.1\"\n    \"inner 2.1\"\n      \"leaf 2.1.0\": 15626\n      \"leaf 2.1.1\": 17577\n      \"leaf 2.1.2\": 19684\n      \"leaf 2.1.3\": 21953\n      \"leaf 2.1.4\": 24390\n      \"leaf 2.1.5\": 27001\n      \"leaf 2.1.6\": 29792\n      \"leaf 2.1.7\": 32769\n  \"mid 2.2\"\n    \"inner 2.2\"\n      \"leaf 2.2.0\": 35938\n      \"leaf 2.2.1\": 39305\n      \"leaf 2.2.2\": 42876\n      \"leaf 2.2.3\": 46657\n      \"leaf 2.2.4\": 1\n      \"leaf 2.2.5\": 2\n      \"leaf 2.2.6\": 9\n      \"leaf 2.2.7\": 28\n  \"mid 2.3\"\n    \"inner 2.3\"\n      \"leaf 2.3.0\": 65\n      \"leaf 2.3.1\": 126\n      \"leaf 2.3.2\": 217\n      \"leaf 2.3.3\": 344\n      \"leaf 2.3.4\": 513\n      \"leaf 2.3.5\": 730\n      \"leaf 2.3.6\": 1001\n      \"leaf 2.3.7\": 1332\n  \"mid 2.4\"\n    \"inner 2.4\"\n      \"leaf 2.4.0\": 1729\n      \"leaf 2.4.1\": 2198\n      \"leaf 2.4.2\": 2745\n      \"leaf 2.4.3\": 3376\n      \"leaf 2.4.4\": 4097\n      \"leaf 2.4.5\": 4914\n      \"leaf 2.4.6\": 5833\n      \"leaf 2.4.7\": 6860\n  \"mid 2.5\"\n    \"inner 2.5\"\n      \"leaf 2.5.0\": 8001\n      \"leaf 2.5.1\": 9262\n      \"leaf 2.5.2\": 10649\n      \"leaf 2.5.3\": 12168\n      \"leaf 2.5.4\": 13825\n      \"leaf 2.5.5\": 15626\n      \"leaf 2.5.6\": 17577\n      \"leaf 2.5.7\": 19684\n  \"mid 2.6\"\n    \"inner 2.6\"\n      \"leaf 2.6.0\": 21953\n      \"leaf 2.6.1\": 24390\n      \"leaf 2.6.2\": 27001\n      \"leaf 2.6.3\": 29792\n      \"leaf 2.6.4\": 32769\n      \"leaf 2.6.5\": 35938\n      \"leaf 2.6.6\": 39305\n      \"leaf 2.6.7\": 42876\n  \"mid 2.7\"\n    \"inner 2.7\"\n      \"leaf 2.7.0\": 46657\n      \"leaf 2.7.1\": 1\n      \"leaf 2.7.2\": 2\n      \"leaf 2.7.3\": 9\n      \"leaf 2.7.4\": 28\n      \"leaf 2.7.5\": 65\n      \"leaf 2.7.6\": 126\n      \"leaf 2.7.7\": 217\n\"top 3\"\n  \"mid 3.0\"\n    \"inner 3.0\"\n      \"leaf 3.0.0\": 344\n      \"leaf 3.0.1\": 513\n      \"leaf 3.0.2\": 730\n      \"leaf 3.0.3\": 1001\n      \"leaf 3.0.4\": 1332\n      \"leaf 3.0.5\": 1729\n      \"leaf 3.0.6\": 2198\n      \"leaf 3.0.7\": 2745\n  \"mid 3.1\"\n    \"inner 3.1\"\n      \"leaf 3.1.0\": 3376\n      \"leaf 3.1.1\": 4097\n      \"leaf 3.1.2\": 4914\n      \"leaf 3.1.3\": 5833\n      \"leaf 3.1.4\": 6860\n      \"leaf 3.1.5\": 8001\n      \"leaf 3.1.6\": 9262\n      \"leaf 3.1.7\": 10649\n  \"mid 3.2\"\n    \"inner 3.2\"\n      \"leaf 3.2.0\": 12168\n      \"leaf 3.2.1\": 13825\n      \"leaf 3.2.2\": 15626\n      \"leaf 3.2.3\": 17577\n      \"leaf 3.2.4\": 19684\n      \"leaf 3.2.5\": 21953\n      \"leaf 3.2.6\": 24390\n      \"leaf 3.2.7\": 27001\n  \"mid 3.3\"\n    \"inner 3.3\"\n      \"leaf 3.3.0\": 29792\n      \"leaf 3.3.1\": 32769\n      \"leaf 3.3.2\": 35938\n      \"leaf 3.3.3\": 39305\n      \"leaf 3.3.4\": 42876\n      \"leaf 3.3.5\": 46657\n      \"leaf 3.3.6\": 1\n      \"leaf 3.3.7\": 2\n  \"mid 3.4\"\n    \"inner 3.4\"\n      \"leaf 3.4.0\": 9\n      \"leaf 3.4.1\": 28\n      \"leaf 3.4.2\": 65\n      \"leaf 3.4.3\": 126\n      \"leaf 3.4.4\": 217\n      \"leaf 3.4.5\": 344\n      \"leaf 3.4.6\": 513\n      \"leaf 3.4.7\": 730\n  \"mid 3.5\"\n    \"inner 3.5\"\n      \"leaf 3.5.0\": 1001\n      \"leaf 3.5.1\": 1332\n      \"leaf 3.5.2\": 1729\n      \"leaf 3.5.3\": 2198\n      \"leaf 3.5.4\": 2745\n      \"leaf 3.5.5\": 3376\n      \"leaf 3.5.6\": 4097\n      \"leaf 3.5.7\": 4914\n  \"mid 3.6\"\n    \"inner 3.6\"\n      \"leaf 3.6.0\": 5833\n      \"leaf 3.6.1\": 6860\n      \"leaf 3.6.2\": 8001\n      \"leaf 3.6.3\": 9262\n      \"leaf 3.6.4\": 10649\n      \"leaf 3.6.5\": 12168\n      \"leaf 3.6.6\": 13825\n      \"leaf 3.6.7\": 15626\n  \"mid 3.7\"\n    \"inner 3.7\"\n      \"leaf 3.7.0\": 17577\n      \"leaf 3.7.1\": 19684\n      \"leaf 3.7.2\": 21953\n      \"leaf 3.7.3\": 24390\n      \"leaf 3.7.4\": 27001\n      \"leaf 3.7.5\": 29792\n      \"leaf 3.7.6\": 32769\n      \"leaf 3.7.7\": 35938\n\"top 4\"\n  \"mid 4.0\"\n    \"inner 4.0\"\n      \"leaf 4.0.0\": 39305\n      \"leaf 4.0.1\": 42876\n      \"leaf 4.0.2\": 46657\n      \"leaf 4.0.3\": 1\n      \"leaf 4.0.4\": 2\n      \"leaf 4.0.5\": 9\n      \"leaf 4.0.6\": 28\n      \"leaf 4.0.7\": 65\n  \"mid 4.1\"\n    \"inner 4.1\"\n      \"leaf 4.1.0\": 126\n      \"leaf 4.1.1\": 217\n      \"leaf 4.1.2\": 344\n      \"leaf 4.1.3\": 513\n      \"leaf 4.1.4\": 730\n      \"leaf 4.1.5\": 1001\n      \"leaf 4.1.6\": 1332\n      \"leaf 4.1.7\": 1729\n  \"mid 4.2\"\n    \"inner 4.2\"\n      \"leaf 4.2.0\": 2198\n      \"leaf 4.2.1\": 2745\n      \"leaf 4.2.2\": 3376\n      \"leaf 4.2.3\": 4097\n      \"leaf 4.2.4\": 4914\n      \"leaf 4.2.5\": 5833\n      \"leaf 4.2.6\": 6860\n      \"leaf 4.2.7\": 8001\n  \"mid 4.3\"\n    \"inner 4.3\"\n      \"leaf 4.3.0\": 9262\n      \"leaf 4.3.1\": 10649\n      \"leaf 4.3.2\": 12168\n      \"leaf 4.3.3\": 13825\n      \"leaf 4.3.4\": 15626\n      \"leaf 4.3.5\": 17577\n      \"leaf 4.3.6\": 19684\n      \"leaf 4.3.7\": 21953\n  \"mid 4.4\"\n    \"inner 4.4\"\n      \"leaf 4.4.0\": 24390\n      \"leaf 4.4.1\": 27001\n      \"leaf 4.4.2\": 29792\n      \"leaf 4.4.3\": 32769\n      \"leaf 4.4.4\": 35938\n      \"leaf 4.4.5\": 39305\n      \"leaf 4.4.6\": 42876\n      \"leaf 4.4.7\": 46657\n  \"mid 4.5\"\n    \"inner 4.5\"\n      \"leaf 4.5.0\": 1\n      \"leaf 4.5.1\": 2\n      \"leaf 4.5.2\": 9\n      \"leaf 4.5.3\": 28\n      \"leaf 4.5.4\": 65\n      \"leaf 4.5.5\": 126\n      \"leaf 4.5.6\": 217\n      \"leaf 4.5.7\": 344\n  \"mid 4.6\"\n    \"inner 4.6\"\n      \"leaf 4.6.0\": 513\n      \"leaf 4.6.1\": 730\n      \"leaf 4.6.2\": 1001\n      \"leaf 4.6.3\": 1332\n      \"leaf 4.6.4\": 1729\n      \"leaf 4.6.5\": 2198\n      \"leaf 4.6.6\": 2745\n      \"leaf 4.6.7\": 3376\n  \"mid 4.7\"\n    \"inner 4.7\"\n      \"leaf 4.7.0\": 4097\n      \"leaf 4.7.1\": 4914\n      \"leaf 4.7.2\": 5833\n      \"leaf 4.7.3\": 6860\n      \"leaf 4.7.4\": 8001\n      \"leaf 4.7.5\": 9262\n      \"leaf 4.7.6\": 10649\n      \"leaf 4.7.7\": 12168\n\"top 5\"\n  \"mid 5.0\"\n    \"inner 5.0\"\n      \"leaf 5.0.0\": 13825\n      \"leaf 5.0.1\": 15626\n      \"leaf 5.0.2\": 17577\n      \"leaf 5.0.3\": 19684\n      \"leaf 5.0.4\": 21953\n      \"leaf 5.0.5\": 24390\n      \"leaf 5.0.6\": 27001\n      \"leaf 5.0.7\": 29792\n  \"mid 5.1\"\n    \"inner 5.1\"\n      \"leaf 5.1.0\": 32769\n      \"leaf 5.1.1\": 35938\n      \"leaf 5.1.2\": 39305\n      \"leaf 5.1.3\": 42876\n      \"leaf 5.1.4\": 46657\n      \"leaf 5.1.5\": 1\n      \"leaf 5.1.6\": 2\n      \"leaf 5.1.7\": 9\n  \"mid 5.2\"\n    \"inner 5.2\"\n      \"leaf 5.2.0\": 28\n      \"leaf 5.2.1\": 65\n      \"leaf 5.2.2\": 126\n      \"leaf 5.2.3\": 217\n      \"leaf 5.2.4\": 344\n      \"leaf 5.2.5\": 513\n      \"leaf 5.2.6\": 730\n      \"leaf 5.2.7\": 1001\n  \"mid 5.3\"\n    \"inner 5.3\"\n      \"leaf 5.3.0\": 1332\n      \"leaf 5.3.1\": 1729\n      \"leaf 5.3.2\": 2198\n      \"leaf 5.3.3\": 2745\n      \"leaf 5.3.4\": 3376\n      \"leaf 5.3.5\": 4097\n      \"leaf 5.3.6\": 4914\n      \"leaf 5.3.7\": 5833\n  \"mid 5.4\"\n    \"inner 5.4\"\n      \"leaf 5.4.0\": 6860\n      \"leaf 5.4.1\": 8001\n      \"leaf 5.4.2\": 9262\n      \"leaf 5.4.3\": 10649\n      \"leaf 5.4.4\": 12168\n      \"leaf 5.4.5\": 13825\n      \"leaf 5.4.6\": 15626\n      \"leaf 5.4.7\": 17577\n  \"mid 5.5\"\n    \"inner 5.5\"\n      \"leaf 5.5.0\": 19684\n      \"leaf 5.5.1\": 21953\n      \"leaf 5.5.2\": 24390\n      \"leaf 5.5.3\": 27001\n      \"leaf 5.5.4\": 29792\n      \"leaf 5.5.5\": 32769\n      \"leaf 5.5.6\": 35938\n      \"leaf 5.5.7\": 39305\n  \"mid 5.6\"\n    \"inner 5.6\"\n      \"leaf 5.6.0\": 42876\n      \"leaf 5.6.1\": 46657\n      \"leaf 5.6.2\": 1\n      \"leaf 5.6.3\": 2\n      \"leaf 5.6.4\": 9\n      \"leaf 5.6.5\": 28\n      \"leaf 5.6.6\": 65\n      \"leaf 5.6.7\": 126\n  \"mid 5.7\"\n    \"inner 5.7\"\n      \"leaf 5.7.0\": 217\n      \"leaf 5.7.1\": 344\n      \"leaf 5.7.2\": 513\n      \"leaf 5.7.3\": 730\n      \"leaf 5.7.4\": 1001\n      \"leaf 5.7.5\": 1332\n      \"leaf 5.7.6\": 1729\n      \"leaf 5.7.7\": 2198\n"
+ },
+ {
+  "src": "treemap-beta\n\"Budget\"\n    \"Operations\"\n        \"Salaries\": 700000\n        \"Equipment\": 200000\n        \"Supplies\": 100000\n    \"Marketing\"\n        \"Advertising\": 400000\n        \"Events\": 100000"
+ },
+ {
+  "src": "---\nconfig:\n  treemap:\n    padding: 6\n---\ntreemap\n\"top 0\"\n  \"mid 0.0\"\n    \"inner 0.0\"\n      \"leaf 0.0.0\": 1\n      \"leaf 0.0.1\": 2\n      \"leaf 0.0.2\": 9\n      \"leaf 0.0.3\": 28\n      \"leaf 0.0.4\": 65\n      \"leaf 0.0.5\": 126\n      \"leaf 0.0.6\": 217\n      \"leaf 0.0.7\": 344\n  \"mid 0.1\"\n    \"inner 0.1\"\n      \"leaf 0.1.0\": 513\n      \"leaf 0.1.1\": 730\n      \"leaf 0.1.2\": 1001\n      \"leaf 0.1.3\": 1332\n      \"leaf 0.1.4\": 1729\n      \"leaf 0.1.5\": 2198\n      \"leaf 0.1.6\": 2745\n      \"leaf 0.1.7\": 3376\n  \"mid 0.2\"\n    \"inner 0.2\"\n      \"leaf 0.2.0\": 4097\n      \"leaf 0.2.1\": 4914\n      \"leaf 0.2.2\": 5833\n      \"leaf 0.2.3\": 6860\n      \"leaf 0.2.4\": 8001\n      \"leaf 0.2.5\": 9262\n      \"leaf 0.2.6\": 10649\n      \"leaf 0.2.7\": 12168\n  \"mid 0.3\"\n    \"inner 0.3\"\n      \"leaf 0.3.0\": 13825\n      \"leaf 0.3.1\": 15626\n      \"leaf 0.3.2\": 17577\n      \"leaf 0.3.3\": 19684\n      \"leaf 0.3.4\": 21953\n      \"leaf 0.3.5\": 24390\n      \"leaf 0.3.6\": 27001\n      \"leaf 0.3.7\": 29792\n  \"mid 0.4\"\n    \"inner 0.4\"\n      \"leaf 0.4.0\": 32769\n      \"leaf 0.4.1\": 35938\n      \"leaf 0.4.2\": 39305\n      \"leaf 0.4.3\": 42876\n      \"leaf 0.4.4\": 46657\n      \"leaf 0.4.5\": 1\n      \"leaf 0.4.6\": 2\n      \"leaf 0.4.7\": 9\n  \"mid 0.5\"\n    \"inner 0.5\"\n      \"leaf 0.5.0\": 28\n      \"leaf 0.5.1\": 65\n      \"leaf 0.5.2\": 126\n      \"leaf 0.5.3\": 217\n      \"leaf 0.5.4\": 344\n      \"leaf 0.5.5\": 513\n      \"leaf 0.5.6\": 730\n      \"leaf 0.5.7\": 1001\n  \"mid 0.6\"\n    \"inner 0.6\"\n      \"leaf 0.6.0\": 1332\n      \"leaf 0.6.1\": 1729\n      \"leaf 0.6.2\": 2198\n      \"leaf 0.6.3\": 2745\n      \"leaf 0.6.4\": 3376\n      \"leaf 0.6.5\": 4097\n      \"leaf 0.6.6\": 4914\n      \"leaf 0.6.7\": 5833\n  \"mid 0.7\"\n    \"inner 0.7\"\n      \"leaf 0.7.0\": 6860\n      \"leaf 0.7.1\": 8001\n      \"leaf 0.7.2\": 9262\n      \"leaf 0.7.3\": 10649\n      \"leaf 0.7.4\": 12168\n      \"leaf 0.7.5\": 13825\n      \"leaf 0.7.6\": 15626\n      \"leaf 0.7.7\": 17577\n\"top 1\"\n  \"mid 1.0\"\n    \"inner 1.0\"\n      \"leaf 1.0.0\": 19684\n      \"leaf 1.0.1\": 21953\n      \"leaf 1.0.2\": 24390\n      \"leaf 1.0.3\": 27001\n      \"leaf 1.0.4\": 29792\n      \"leaf 1.0.5\": 32769\n      \"leaf 1.0.6\": 35938\n      \"leaf 1.0.7\": 39305\n  \"mid 1.1\"\n    \"inner 1.1\"\n      \"leaf 1.1.0\": 42876\n      \"leaf 1.1.1\": 46657\n      \"leaf 1.1.2\": 1\n      \"leaf 1.1.3\": 2\n      \"leaf 1.1.4\": 9\n      \"leaf 1.1.5\": 28\n      \"leaf 1.1.6\": 65\n      \"leaf 1.1.7\": 126\n  \"mid 1.2\"\n    \"inner 1.2\"\n      \"leaf 1.2.0\": 217\n      \"leaf 1.2.1\": 344\n      \"leaf 1.2.2\": 513\n      \"leaf 1.2.3\": 730\n      \"leaf 1.2.4\": 1001\n      \"leaf 1.2.5\": 1332\n      \"leaf 1.2.6\": 1729\n      \"leaf 1.2.7\": 2198\n  \"mid 1.3\"\n    \"inner 1.3\"\n      \"leaf 1.3.0\": 2745\n      \"leaf 1.3.1\": 3376\n      \"leaf 1.3.2\": 4097\n      \"leaf 1.3.3\": 4914\n      \"leaf 1.3.4\": 5833\n      \"leaf 1.3.5\": 6860\n      \"leaf 1.3.6\": 8001\n      \"leaf 1.3.7\": 9262\n  \"mid 1.4\"\n    \"inner 1.4\"\n      \"leaf 1.4.0\": 10649\n      \"leaf 1.4.1\": 12168\n      \"leaf 1.4.2\": 13825\n      \"leaf 1.4.3\": 15626\n      \"leaf 1.4.4\": 17577\n      \"leaf 1.4.5\": 19684\n      \"leaf 1.4.6\": 21953\n      \"leaf 1.4.7\": 24390\n  \"mid 1.5\"\n    \"inner 1.5\"\n      \"leaf 1.5.0\": 27001\n      \"leaf 1.5.1\": 29792\n      \"leaf 1.5.2\": 32769\n      \"leaf 1.5.3\": 35938\n      \"leaf 1.5.4\": 39305\n      \"leaf 1.5.5\": 42876\n      \"leaf 1.5.6\": 46657\n      \"leaf 1.5.7\": 1\n  \"mid 1.6\"\n    \"inner 1.6\"\n      \"leaf 1.6.0\": 2\n      \"leaf 1.6.1\": 9\n      \"leaf 1.6.2\": 28\n      \"leaf 1.6.3\": 65\n      \"leaf 1.6.4\": 126\n      \"leaf 1.6.5\": 217\n      \"leaf 1.6.6\": 344\n      \"leaf 1.6.7\": 513\n  \"mid 1.7\"\n    \"inner 1.7\"\n      \"leaf 1.7.0\": 730\n      \"leaf 1.7.1\": 1001\n      \"leaf 1.7.2\": 1332\n      \"leaf 1.7.3\": 1729\n      \"leaf 1.7.4\": 2198\n      \"leaf 1.7.5\": 2745\n      \"leaf 1.7.6\": 3376\n      \"leaf 1.7.7\": 4097\n\"top 2\"\n  \"mid 2.0\"\n    \"inner 2.0\"\n      \"leaf 2.0.0\": 4914\n      \"leaf 2.0.1\": 5833\n      \"leaf 2.0.2\": 6860\n      \"leaf 2.0.3\": 8001\n      \"leaf 2.0.4\": 9262\n      \"leaf 2.0.5\": 10649\n      \"leaf 2.0.6\": 12168\n      \"leaf 2.0.7\": 13825\n  \"mid 2.1\"\n    \"inner 2.1\"\n      \"leaf 2.1.0\": 15626\n      \"leaf 2.1.1\": 17577\n      \"leaf 2.1.2\": 19684\n      \"leaf 2.1.3\": 21953\n      \"leaf 2.1.4\": 24390\n      \"leaf 2.1.5\": 27001\n      \"leaf 2.1.6\": 29792\n      \"leaf 2.1.7\": 32769\n  \"mid 2.2\"\n    \"inner 2.2\"\n      \"leaf 2.2.0\": 35938\n      \"leaf 2.2.1\": 39305\n      \"leaf 2.2.2\": 42876\n      \"leaf 2.2.3\": 46657\n      \"leaf 2.2.4\": 1\n      \"leaf 2.2.5\": 2\n      \"leaf 2.2.6\": 9\n      \"leaf 2.2.7\": 28\n  \"mid 2.3\"\n    \"inner 2.3\"\n      \"leaf 2.3.0\": 65\n      \"leaf 2.3.1\": 126\n      \"leaf 2.3.2\": 217\n      \"leaf 2.3.3\": 344\n      \"leaf 2.3.4\": 513\n      \"leaf 2.3.5\": 730\n      \"leaf 2.3.6\": 1001\n      \"leaf 2.3.7\": 1332\n  \"mid 2.4\"\n    \"inner 2.4\"\n      \"leaf 2.4.0\": 1729\n      \"leaf 2.4.1\": 2198\n      \"leaf 2.4.2\": 2745\n      \"leaf 2.4.3\": 3376\n      \"leaf 2.4.4\": 4097\n      \"leaf 2.4.5\": 4914\n      \"leaf 2.4.6\": 5833\n      \"leaf 2.4.7\": 6860\n  \"mid 2.5\"\n    \"inner 2.5\"\n      \"leaf 2.5.0\": 8001\n      \"leaf 2.5.1\": 9262\n      \"leaf 2.5.2\": 10649\n      \"leaf 2.5.3\": 12168\n      \"leaf 2.5.4\": 13825\n      \"leaf 2.5.5\": 15626\n      \"leaf 2.5.6\": 17577\n      \"leaf 2.5.7\": 19684\n  \"mid 2.6\"\n    \"inner 2.6\"\n      \"leaf 2.6.0\": 21953\n      \"leaf 2.6.1\": 24390\n      \"leaf 2.6.2\": 27001\n      \"leaf 2.6.3\": 29792\n      \"leaf 2.6.4\": 32769\n      \"leaf 2.6.5\": 35938\n      \"leaf 2.6.6\": 39305\n      \"leaf 2.6.7\": 42876\n  \"mid 2.7\"\n    \"inner 2.7\"\n      \"leaf 2.7.0\": 46657\n      \"leaf 2.7.1\": 1\n      \"leaf 2.7.2\": 2\n      \"leaf 2.7.3\": 9\n      \"leaf 2.7.4\": 28\n      \"leaf 2.7.5\": 65\n      \"leaf 2.7.6\": 126\n      \"leaf 2.7.7\": 217\n\"top 3\"\n  \"mid 3.0\"\n    \"inner 3.0\"\n      \"leaf 3.0.0\": 344\n      \"leaf 3.0.1\": 513\n      \"leaf 3.0.2\": 730\n      \"leaf 3.0.3\": 1001\n      \"leaf 3.0.4\": 1332\n      \"leaf 3.0.5\": 1729\n      \"leaf 3.0.6\": 2198\n      \"leaf 3.0.7\": 2745\n  \"mid 3.1\"\n    \"inner 3.1\"\n      \"leaf 3.1.0\": 3376\n      \"leaf 3.1.1\": 4097\n      \"leaf 3.1.2\": 4914\n      \"leaf 3.1.3\": 5833\n      \"leaf 3.1.4\": 6860\n      \"leaf 3.1.5\": 8001\n      \"leaf 3.1.6\": 9262\n      \"leaf 3.1.7\": 10649\n  \"mid 3.2\"\n    \"inner 3.2\"\n      \"leaf 3.2.0\": 12168\n      \"leaf 3.2.1\": 13825\n      \"leaf 3.2.2\": 15626\n      \"leaf 3.2.3\": 17577\n      \"leaf 3.2.4\": 19684\n      \"leaf 3.2.5\": 21953\n      \"leaf 3.2.6\": 24390\n      \"leaf 3.2.7\": 27001\n  \"mid 3.3\"\n    \"inner 3.3\"\n      \"leaf 3.3.0\": 29792\n      \"leaf 3.3.1\": 32769\n      \"leaf 3.3.2\": 35938\n      \"leaf 3.3.3\": 39305\n      \"leaf 3.3.4\": 42876\n      \"leaf 3.3.5\": 46657\n      \"leaf 3.3.6\": 1\n      \"leaf 3.3.7\": 2\n  \"mid 3.4\"\n    \"inner 3.4\"\n      \"leaf 3.4.0\": 9\n      \"leaf 3.4.1\": 28\n      \"leaf 3.4.2\": 65\n      \"leaf 3.4.3\": 126\n      \"leaf 3.4.4\": 217\n      \"leaf 3.4.5\": 344\n      \"leaf 3.4.6\": 513\n      \"leaf 3.4.7\": 730\n  \"mid 3.5\"\n    \"inner 3.5\"\n      \"leaf 3.5.0\": 1001\n      \"leaf 3.5.1\": 1332\n      \"leaf 3.5.2\": 1729\n      \"leaf 3.5.3\": 2198\n      \"leaf 3.5.4\": 2745\n      \"leaf 3.5.5\": 3376\n      \"leaf 3.5.6\": 4097\n      \"leaf 3.5.7\": 4914\n  \"mid 3.6\"\n    \"inner 3.6\"\n      \"leaf 3.6.0\": 5833\n      \"leaf 3.6.1\": 6860\n      \"leaf 3.6.2\": 8001\n      \"leaf 3.6.3\": 9262\n      \"leaf 3.6.4\": 10649\n      \"leaf 3.6.5\": 12168\n      \"leaf 3.6.6\": 13825\n      \"leaf 3.6.7\": 15626\n  \"mid 3.7\"\n    \"inner 3.7\"\n      \"leaf 3.7.0\": 17577\n      \"leaf 3.7.1\": 19684\n      \"leaf 3.7.2\": 21953\n      \"leaf 3.7.3\": 24390\n      \"leaf 3.7.4\": 27001\n      \"leaf 3.7.5\": 29792\n      \"leaf 3.7.6\": 32769\n      \"leaf 3.7.7\": 35938\n\"top 4\"\n  \"mid 4.0\"\n    \"inner 4.0\"\n      \"leaf 4.0.0\": 39305\n      \"leaf 4.0.1\": 42876\n      \"leaf 4.0.2\": 46657\n      \"leaf 4.0.3\": 1\n      \"leaf 4.0.4\": 2\n      \"leaf 4.0.5\": 9\n      \"leaf 4.0.6\": 28\n      \"leaf 4.0.7\": 65\n  \"mid 4.1\"\n    \"inner 4.1\"\n      \"leaf 4.1.0\": 126\n      \"leaf 4.1.1\": 217\n      \"leaf 4.1.2\": 344\n      \"leaf 4.1.3\": 513\n      \"leaf 4.1.4\": 730\n      \"leaf 4.1.5\": 1001\n      \"leaf 4.1.6\": 1332\n      \"leaf 4.1.7\": 1729\n  \"mid 4.2\"\n    \"inner 4.2\"\n      \"leaf 4.2.0\": 2198\n      \"leaf 4.2.1\": 2745\n      \"leaf 4.2.2\": 3376\n      \"leaf 4.2.3\": 4097\n      \"leaf 4.2.4\": 4914\n      \"leaf 4.2.5\": 5833\n      \"leaf 4.2.6\": 6860\n      \"leaf 4.2.7\": 8001\n  \"mid 4.3\"\n    \"inner 4.3\"\n      \"leaf 4.3.0\": 9262\n      \"leaf 4.3.1\": 10649\n      \"leaf 4.3.2\": 12168\n      \"leaf 4.3.3\": 13825\n      \"leaf 4.3.4\": 15626\n      \"leaf 4.3.5\": 17577\n      \"leaf 4.3.6\": 19684\n      \"leaf 4.3.7\": 21953\n  \"mid 4.4\"\n    \"inner 4.4\"\n      \"leaf 4.4.0\": 24390\n      \"leaf 4.4.1\": 27001\n      \"leaf 4.4.2\": 29792\n      \"leaf 4.4.3\": 32769\n      \"leaf 4.4.4\": 35938\n      \"leaf 4.4.5\": 39305\n      \"leaf 4.4.6\": 42876\n      \"leaf 4.4.7\": 46657\n  \"mid 4.5\"\n    \"inner 4.5\"\n      \"leaf 4.5.0\": 1\n      \"leaf 4.5.1\": 2\n      \"leaf 4.5.2\": 9\n      \"leaf 4.5.3\": 28\n      \"leaf 4.5.4\": 65\n      \"leaf 4.5.5\": 126\n      \"leaf 4.5.6\": 217\n      \"leaf 4.5.7\": 344\n  \"mid 4.6\"\n    \"inner 4.6\"\n      \"leaf 4.6.0\": 513\n      \"leaf 4.6.1\": 730\n      \"leaf 4.6.2\": 1001\n      \"leaf 4.6.3\": 1332\n      \"leaf 4.6.4\": 1729\n      \"leaf 4.6.5\": 2198\n      \"leaf 4.6.6\": 2745\n      \"leaf 4.6.7\": 3376\n  \"mid 4.7\"\n    \"inner 4.7\"\n      \"leaf 4.7.0\": 4097\n      \"leaf 4.7.1\": 4914\n      \"leaf 4.7.2\": 5833\n      \"leaf 4.7.3\": 6860\n      \"leaf 4.7.4\": 8001\n      \"leaf 4.7.5\": 9262\n      \"leaf 4.7.6\": 10649\n      \"leaf 4.7.7\": 12168\n\"top 5\"\n  \"mid 5.0\"\n    \"inner 5.0\"\n      \"leaf 5.0.0\": 13825\n      \"leaf 5.0.1\": 15626\n      \"leaf 5.0.2\": 17577\n      \"leaf 5.0.3\": 19684\n      \"leaf 5.0.4\": 21953\n      \"leaf 5.0.5\": 24390\n      \"leaf 5.0.6\": 27001\n      \"leaf 5.0.7\": 29792\n  \"mid 5.1\"\n    \"inner 5.1\"\n      \"leaf 5.1.0\": 32769\n      \"leaf 5.1.1\": 35938\n      \"leaf 5.1.2\": 39305\n      \"leaf 5.1.3\": 42876\n      \"leaf 5.1.4\": 46657\n      \"leaf 5.1.5\": 1\n      \"leaf 5.1.6\": 2\n      \"leaf 5.1.7\": 9\n  \"mid 5.2\"\n    \"inner 5.2\"\n      \"leaf 5.2.0\": 28\n      \"leaf 5.2.1\": 65\n      \"leaf 5.2.2\": 126\n      \"leaf 5.2.3\": 217\n      \"leaf 5.2.4\": 344\n      \"leaf 5.2.5\": 513\n      \"leaf 5.2.6\": 730\n      \"leaf 5.2.7\": 1001\n  \"mid 5.3\"\n    \"inner 5.3\"\n      \"leaf 5.3.0\": 1332\n      \"leaf 5.3.1\": 1729\n      \"leaf 5.3.2\": 2198\n      \"leaf 5.3.3\": 2745\n      \"leaf 5.3.4\": 3376\n      \"leaf 5.3.5\": 4097\n      \"leaf 5.3.6\": 4914\n      \"leaf 5.3.7\": 5833\n  \"mid 5.4\"\n    \"inner 5.4\"\n      \"leaf 5.4.0\": 6860\n      \"leaf 5.4.1\": 8001\n      \"leaf 5.4.2\": 9262\n      \"leaf 5.4.3\": 10649\n      \"leaf 5.4.4\": 12168\n      \"leaf 5.4.5\": 13825\n      \"leaf 5.4.6\": 15626\n      \"leaf 5.4.7\": 17577\n  \"mid 5.5\"\n    \"inner 5.5\"\n      \"leaf 5.5.0\": 19684\n      \"leaf 5.5.1\": 21953\n      \"leaf 5.5.2\": 24390\n      \"leaf 5.5.3\": 27001\n      \"leaf 5.5.4\": 29792\n      \"leaf 5.5.5\": 32769\n      \"leaf 5.5.6\": 35938\n      \"leaf 5.5.7\": 39305\n  \"mid 5.6\"\n    \"inner 5.6\"\n      \"leaf 5.6.0\": 42876\n      \"leaf 5.6.1\": 46657\n      \"leaf 5.6.2\": 1\n      \"leaf 5.6.3\": 2\n      \"leaf 5.6.4\": 9\n      \"leaf 5.6.5\": 28\n      \"leaf 5.6.6\": 65\n      \"leaf 5.6.7\": 126\n  \"mid 5.7\"\n    \"inner 5.7\"\n      \"leaf 5.7.0\": 217\n      \"leaf 5.7.1\": 344\n      \"leaf 5.7.2\": 513\n      \"leaf 5.7.3\": 730\n      \"leaf 5.7.4\": 1001\n      \"leaf 5.7.5\": 1332\n      \"leaf 5.7.6\": 1729\n      \"leaf 5.7.7\": 2198\n"
+ },
+ {
+  "src": "---\nconfig:\n  treemap:\n    padding: 1\n---\ntreemap-beta\n\"Budget\"\n    \"Operations\"\n        \"Salaries\": 700000\n        \"Equipment\": 200000\n        \"Supplies\": 100000\n    \"Marketing\"\n        \"Advertising\": 400000\n        \"Events\": 100000"
+ },
+ {
+  "src": "---\nconfig:\n  treemap:\n    nodeHeight: 3\n---\ntreemap\n\"Section\"\n  \"Leaf\": 1"
+ },
+ {
+  "src": "---\nconfig:\n  treemap:\n    nodeHeight: 4\n---\ntreemap\n\"Section\"\n  \"Leaf\": 1"
+ },
+ {
+  "src": "---\nconfig:\n  treemap:\n    nodeHeight: 4\n---\ntreemap\n\"Section\":::big\n  \"Leaf\": 1\nclassDef big font-size:14.4px"
+ },
+ {
+  "src": "treemap\n\"big\": 1000\n\"small\": 4"
+ },
+ {
+  "src": "treemap\n\"A section with a long name\":::head\n  \"A leaf with a fairly long name\": 30:::big\n  \"Another leaf with a long name\": 20:::big\n  \"rest\": 400\nclassDef big font-size:20px\nclassDef head font-size:18px"
+ },
+ {
+  "src": "treemap\n\"Section\"\n  \"Leaf\": 1",
+  "fontSize": 24
+ },
+ {
+  "src": "treemap\n\"Section\":::big\n  \"Leaf\": 1\nclassDef big font-size:20px"
+ },
+ {
+  "src": "treemap\n\"Section\":::big\n  \"Leaf\": 1\nclassDef big font-size:32px"
+ },
+ {
+  "src": "---\nconfig:\n  treemap:\n    nodeHeight: 2\n---\ntreemap\n\"Label\": 1:::frac\nclassDef frac font-size:12.5px"
+ },
+ {
+  "src": "treeView-beta\n    src/\n        App.tsx ## main\n"
+ },
+ {
+  "src": "treeView-beta\n    src/\n        App.tsx ## main\n",
+  "monospace": [
+   "files"
+  ]
+ },
+ {
+  "src": "treeView-beta\n    src/\n        App.tsx ## main\n",
+  "maxWidth": 90,
+  "monospace": [
+   "files"
+  ]
+ },
+ {
+  "src": "treeView-beta\n    src/\n        App.tsx ## main\n",
+  "monospace": []
+ },
+ {
+  "src": "treeView-beta\n    src/\n        App.tsx ## main\n",
+  "monospace": [
+   "file"
+  ]
+ },
+ {
+  "src": "treeView-beta\n    src/\n        App.tsx ## main\n",
+  "monospace": [
+   "members"
+  ]
+ },
+ {
+  "src": "treeView-beta\ntitles/\n  title.txt\n  title-page.md\n"
+ },
+ {
+  "src": "treeView-beta\ntitles/\n├── title.txt\n└── title-page.md\n"
+ },
+ {
+  "src": "treeView-beta\ntitle%% c\naccTitle: A\nroot\n"
+ },
+ {
+  "src": "usecase-beta\nsystemBoundary S\n  U\nend\nsystemBoundary T\n  V\nend\nstyle S fill:#fee"
+ },
+ {
+  "src": "usecase-beta\nactor A <<Human>>\nU(Use) <<Core>>\nW(Own)\nX(Plain)\njson J@{ \"k\": \"v\" }\nsystemBoundary S\n  V\nend\nstyle U fill:#1f3a5f\nstyle A fill:#1f3a5f\nstyle W fill:#1f3a5f,color:#eee\nstyle J fill:navy\nstyle S fill:#FFF9C4"
+ },
+ {
+  "src": "usecase-beta\nactor User\nsystemBoundary S\n  Pay\n  Ship\nend\nPay --> Ship\nUser --> Pay\nUser --> Other\nstyle S fill:#BBDEFB"
+ },
+ {
+  "src": "usecase-beta\nactor User\nsystemBoundary S\n  Pay\n  Ship\nend\nPay --> Ship\nUser --> Pay\nUser --> Other"
+ },
+ {
+  "src": "usecase-beta\nsystemBoundary S\n  Pay\n  Ship\nend\nPay --|> Ship\nstyle S fill:black"
+ },
+ {
+  "src": "venn-beta\nset A\nset B\nset C\nunion A,B[\"ab\"]\n  text T[\"note\"]\nunion B,C[\"bc\"]\nstyle A,B fill:#1f3a5f\nstyle A fill:navy\nstyle B,C fill:#1f3a5f,color:#eee"
+ },
+ {
+  "src": "venn-beta\nset A: 100\nset B: 100\nset C: 100\nunion A,B,C[\"triple\"]: 50\nunion A,B[\"ab\"]: 70\nunion A,C[\"ac\"]: 70\nunion B,C[\"bc\"]: 70\nstyle A,B,C fill:black\nstyle A,B fill:white"
+ },
+ {
+  "src": "venn-beta\nset A\nstyle A fill:black,fill-opacity:1"
+ },
+ {
+  "src": "venn-beta\nset A: 100\nset B: 100\nunion A,B[\"x\"]: 5\nstyle A,B fill:black"
+ },
+ {
+  "src": "venn-beta\nset set-theory\nset union-x\nunion set-theory,union-x[\"both\"]\n  text-5\ntext set-theory text-books\nstyle set-theory fill:red,x:style-y"
+ },
+ {
+  "src": "treemap\nclassDef titles fill:red\nclassDef title_2 fill:blue\n\"A\":::titles\n  \"B\": 1:::title_2\n"
+ },
+ {
+  "src": "treeView-beta\ntitle T\ntitles\n  title.txt\n  title-page.md ## d\n  title\"q\"\n  titles :::x\n"
+ }
+]

@@ -45,13 +45,13 @@
   "snippet": "  C --> --> D\n--------^"
  },
  {
-  "message": "Parse error on line 5:\n\n^\nExpecting 'NODE_STRING', got 'EOF'",
+  "message": "Parse error on line 4:\n  C -->\n-------^\nExpecting 'NODE_STRING', got 'EOF'",
   "code": "syntax",
   "type": "flowchart",
   "mermaidType": "flowchart-v2",
-  "line": 5,
-  "column": 1,
-  "snippet": "\n^"
+  "line": 4,
+  "column": 8,
+  "snippet": "  C -->\n-------^"
  },
  {
   "message": "Parse error on line 4:\n  A -- #35; --> B $$$ ]\n------------------^\nExpecting 'SEMI', 'NEWLINE', 'EOF', got 'NODE_STRING'",
@@ -997,5 +997,239 @@
  },
  {
   "ok": true
+ },
+ {
+  "message": "Parse error on line 4:\n  title-\n-------^\nExpecting a line break or the end of input but found `-`.",
+  "code": "syntax",
+  "type": "architecture",
+  "mermaidType": "architecture",
+  "line": 4,
+  "column": 8,
+  "snippet": "  title-\n-------^"
+ },
+ {
+  "message": "Parse error on line 3:\ntitleservice b\n-------------^\nExpecting token of type ':' but found `b`.",
+  "code": "syntax",
+  "type": "architecture",
+  "mermaidType": "architecture",
+  "line": 3,
+  "column": 14,
+  "snippet": "titleservice b\n-------------^"
+ },
+ {
+  "message": "Parse error on line 2:\ntf 01 evt title\n---------^\nExpecting token of type 'EM_ID' but found ` title`.",
+  "code": "syntax",
+  "type": "eventmodeling",
+  "mermaidType": "eventmodeling",
+  "line": 2,
+  "column": 10,
+  "snippet": "tf 01 evt title\n---------^"
+ },
+ {
+  "message": "Cannot merge branch 'titles' into itself.",
+  "code": "semantic",
+  "type": "gitGraph",
+  "mermaidType": "gitGraph",
+  "line": 0,
+  "column": 0,
+  "snippet": ""
+ },
+ {
+  "message": "Lexical error on line 3. Unrecognized text.\nbranch title.\n------------^",
+  "code": "syntax",
+  "type": "gitGraph",
+  "mermaidType": "gitGraph",
+  "line": 3,
+  "column": 13,
+  "snippet": "branch title.\n------------^"
+ },
+ {
+  "message": "Parse error on line 4:\ntitlecommit\n^\nExpecting a statement, a title, or a line break but found `titlecommit`.",
+  "code": "syntax",
+  "type": "gitGraph",
+  "mermaidType": "gitGraph",
+  "line": 4,
+  "column": 1,
+  "snippet": "titlecommit\n^"
+ },
+ {
+  "message": "Missing entry for axis titles",
+  "code": "semantic",
+  "type": "radar",
+  "mermaidType": "radar",
+  "line": 0,
+  "column": 0,
+  "snippet": ""
+ },
+ {
+  "message": "Parse error on line 2:\ntitleaxis a\n^\nExpecting an axis, a curve, an option, a title, or a line break but found `titleaxis`.",
+  "code": "syntax",
+  "type": "radar",
+  "mermaidType": "radar",
+  "line": 2,
+  "column": 1,
+  "snippet": "titleaxis a\n^"
+ },
+ {
+  "message": "Parse error on line 2:\n\"A\":::title\n------^\nExpecting token of type 'ID2' but found `title`.",
+  "code": "syntax",
+  "type": "treemap",
+  "mermaidType": "treemap",
+  "line": 2,
+  "column": 7,
+  "snippet": "\"A\":::title\n------^"
+ },
+ {
+  "message": "Parse error on line 3:\n  titles\n--^\nExpecting token of type 'STRING2' but found `titles`.",
+  "code": "syntax",
+  "type": "treemap",
+  "mermaidType": "treemap",
+  "line": 3,
+  "column": 3,
+  "snippet": "  titles\n--^"
+ },
+ {
+  "message": "Parse error on line 3:\n  title\n^\nExpecting a name but found `  title`.",
+  "code": "syntax",
+  "type": "treeView",
+  "mermaidType": "treeView",
+  "line": 3,
+  "column": 1,
+  "snippet": "  title\n^"
+ },
+ {
+  "message": "Parse error on line 3:\n    a --> b\n-----------^\nExpecting 'end', got '$end'",
+  "code": "syntax",
+  "type": "agentflow",
+  "mermaidType": "agentflow",
+  "line": 3,
+  "column": 12,
+  "snippet": "    a --> b\n-----------^"
+ },
+ {
+  "message": "Parse error on line 2:\ntf 01 cmd\n---------^\nExpecting token of type 'EM_ID' but found end of input.",
+  "code": "syntax",
+  "type": "eventmodeling",
+  "mermaidType": "eventmodeling",
+  "line": 2,
+  "column": 10,
+  "snippet": "tf 01 cmd\n---------^"
+ },
+ {
+  "message": "Parse error on line 2:\n  A -->\n-------^\nExpecting 'NODE_STRING', got 'EOF'",
+  "code": "syntax",
+  "type": "flowchart",
+  "mermaidType": "flowchart-v2",
+  "line": 2,
+  "column": 8,
+  "snippet": "  A -->\n-------^"
+ },
+ {
+  "message": "Parse error on line 2:\n  A -->\n-------^\nExpecting 'NODE_STRING', got 'EOF'",
+  "code": "syntax",
+  "type": "flowchart",
+  "mermaidType": "flowchart-v2",
+  "line": 2,
+  "column": 8,
+  "snippet": "  A -->\n-------^"
+ },
+ {
+  "message": "Parse error on line 2:\n  A -->\n-------^\nExpecting 'NODE_STRING', got 'EOF'",
+  "code": "syntax",
+  "type": "flowchart",
+  "mermaidType": "flowchart-v2",
+  "line": 2,
+  "column": 8,
+  "snippet": "  A -->\n-------^"
+ },
+ {
+  "message": "Parse error on line 2:\ncurve a{1 %% c\n---------^\nExpecting token of type '}' but found end of input.",
+  "code": "syntax",
+  "type": "radar",
+  "mermaidType": "radar",
+  "line": 2,
+  "column": 10,
+  "snippet": "curve a{1 %% c\n---------^"
+ },
+ {
+  "message": "Parse error on line 2:\n axis circle, b\n------^\nExpecting token of type 'ID' but found `circle`.",
+  "code": "syntax",
+  "type": "radar",
+  "mermaidType": "radar",
+  "line": 2,
+  "column": 7,
+  "snippet": " axis circle, b\n------^"
+ },
+ {
+  "message": "Parse error on line 4:\n \tb,c,abc \n------^\nExpecting a number",
+  "code": "syntax",
+  "type": "sankey",
+  "mermaidType": "sankey",
+  "line": 4,
+  "column": 7,
+  "snippet": " \tb,c,abc \n------^"
+ },
+ {
+  "message": "Parse error on line 3:\n b\", c ,x\n--------^\nExpecting a number",
+  "code": "syntax",
+  "type": "sankey",
+  "mermaidType": "sankey",
+  "line": 3,
+  "column": 9,
+  "snippet": " b\", c ,x\n--------^"
+ },
+ {
+  "message": "Parse error on line 3:\n c,d\n----^\nExpecting 'COMMA', 'NEWLINE', 'EOF', got 'EOF'",
+  "code": "syntax",
+  "type": "sankey",
+  "mermaidType": "sankey",
+  "line": 3,
+  "column": 5,
+  "snippet": " c,d\n----^"
+ },
+ {
+  "message": "Parse error on line 1:\nsankey\n------^\nExpecting 'NEWLINE', got 'EOF'",
+  "code": "syntax",
+  "type": "sankey",
+  "mermaidType": "sankey",
+  "line": 1,
+  "column": 7,
+  "snippet": "sankey\n------^"
+ },
+ {
+  "message": "Parse error on line 2:\na,b,1,2\n-----^\nExpecting 'NEWLINE', 'EOF', got 'COMMA'",
+  "code": "syntax",
+  "type": "sankey",
+  "mermaidType": "sankey",
+  "line": 2,
+  "column": 6,
+  "snippet": "a,b,1,2\n-----^"
+ },
+ {
+  "message": "Parse error on line 2:\na,,1\n--^\nExpecting 'DQUOTE', 'NON_ESCAPED_TEXT', got 'COMMA'",
+  "code": "syntax",
+  "type": "sankey",
+  "mermaidType": "sankey",
+  "line": 2,
+  "column": 3,
+  "snippet": "a,,1\n--^"
+ },
+ {
+  "message": "Parse error on line 2:\n\"\",b,1\n-^\nExpecting 'ESCAPED_TEXT', got 'DQUOTE'",
+  "code": "syntax",
+  "type": "sankey",
+  "mermaidType": "sankey",
+  "line": 2,
+  "column": 2,
+  "snippet": "\"\",b,1\n-^"
+ },
+ {
+  "message": "Parse error on line 1:\nsankey x\n------^\nExpecting 'NEWLINE', got 'NON_ESCAPED_TEXT'",
+  "code": "syntax",
+  "type": "sankey",
+  "mermaidType": "sankey",
+  "line": 1,
+  "column": 7,
+  "snippet": "sankey x\n------^"
  }
 ]

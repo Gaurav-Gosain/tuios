@@ -1,4 +1,4 @@
-// Ported from pele src/diagrams/flowchart/render.ts at 4eff76f98c73b6817800a05773517f35832e4e92.
+// Ported from pele src/diagrams/flowchart/render.ts at 8aff183be57021b533f319a29341a529be934b08.
 
 package flowchart
 
@@ -40,6 +40,8 @@ type FlowVariant interface {
 	Layout(nodes []*layout.CNode, edges []*layout.CEdge, dir layout.Dir, opt layout.LayeredOptions, tight bool) layout.CompoundResult
 	// DrawGroup returns false where the variant does not draw groups itself.
 	DrawGroup(c *layout.CNode, label text.Label, style svg.ResolvedStyle, classes string, id string, dir layout.Dir, icons text.IconResolver) (string, bool)
+	// FilledBox is the part of a DrawGroup group that takes its fill, as [left, top, right, bottom].
+	FilledBox(c *layout.CNode, dir layout.Dir) [4]float64
 }
 
 func assetSize(value *float64, fallback float64) float64 {
@@ -257,6 +259,16 @@ func draw(db *FlowDb, config types.Config, options types.RenderOptions, variant 
 			}
 		}
 	}
+	layout.InheritCrossedDirections(cnodes, len(graph.Edges), func(i int) (int, int) {
+		src, dst := -1, -1
+		if k, ok := index[graph.Edges[i].Start]; ok {
+			src = k
+		}
+		if k, ok := index[graph.Edges[i].End]; ok {
+			dst = k
+		}
+		return src, dst
+	})
 
 	rootDir := layout.Dir("TB")
 	if !turned {
@@ -382,6 +394,7 @@ func draw(db *FlowDb, config types.Config, options types.RenderOptions, variant 
 	}
 
 	var clusters, struckTitles, nodesOut strings.Builder
+	var fills []svg.Fill
 	// A node takes about 270 bytes of markup and an edge about 200.
 	nodesOut.Grow(len(views) * 272)
 	for i, view := range views {
@@ -393,21 +406,32 @@ func draw(db *FlowDb, config types.Config, options types.RenderOptions, variant 
 		id := svg.EscText(node.ID)
 		if c.IsGroup && variant != nil && c.Parent < 0 {
 			if out, ok := variant.DrawGroup(c, view.label, view.style, classes, id, rootDir, icons); ok {
+				if svg.Paints(view.style.Shape) {
+					fills = append(fills, svg.Fill{Box: variant.FilledBox(c, rootDir), Shape: view.style.Shape})
+				}
 				clusters.WriteString(out)
 				continue
 			}
 		}
 		if c.IsGroup {
+			if svg.Paints(view.style.Shape) {
+				fills = append(fills, svg.Fill{Box: [4]float64{x - c.W/2, y - c.H/2, x + c.W/2, y + c.H/2}, Shape: view.style.Shape})
+			}
 			titleX := svg.ClusterTitleX(c, view.label.Width, crossings, groupPad)
 			titleY := y - c.H/2 + 8 + view.label.Height/2
-			titleAttrs := ` class="pele-cluster-label" fill="var(--_m)"` + view.style.Text
 			struck := svg.TitleCrossed(c, view.label.Width, titleX, crossings)
+			// A title drawn over the edges sits on a halo in the theme's colors.
+			titleFill := ` fill="var(--_m)"`
+			if !struck {
+				titleFill = svg.InkFill(view.style, "var(--_m)")
+			}
+			titleAttrs := ` class="pele-cluster-label"` + titleFill + view.style.Text
 			if struck {
 				struckTitles.WriteString(svg.StruckTitle(view.label, titleX, titleY, titleAttrs, id, parents, i, icons))
 			}
 			clusters.WriteString(`<g class="pele-cluster` + classes + `" data-id="` + id + `">` +
 				`<rect x="` + svg.Num(x-c.W/2) + `" y="` + svg.Num(y-c.H/2) + `" width="` + svg.Num(c.W) + `" height="` + svg.Num(c.H) +
-				`" fill="var(--_a)" fill-opacity="0.5" stroke="var(--_b)"` + svg.Rounded(view.style.Shape) + `/>`)
+				`" fill="var(--_a)"` + halfOpacity(view.style.Shape) + ` stroke="var(--_b)"` + svg.Rounded(view.style.Shape) + `/>`)
 
 			if !struck {
 				clusters.WriteString(svg.LabelSvg(view.label, titleX, titleY, titleAttrs, icons))
@@ -419,6 +443,7 @@ func draw(db *FlowDb, config types.Config, options types.RenderOptions, variant 
 		w := view.w
 		h := view.h
 		var innerSvg string
+		ink := ""
 		if node.Img != "" {
 			aw := assetSize(node.AssetWidth, 80)
 			ah := assetSize(node.AssetHeight, 80)
@@ -469,9 +494,12 @@ func draw(db *FlowDb, config types.Config, options types.RenderOptions, variant 
 				`" width="` + svg.Num(glyph) + `" height="` + svg.Num(glyph) + `" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">` + markup + `</svg>`
 		} else {
 			innerSvg = svg.DrawShape(view.shape, w, h, SHAPE_ATTRS+view.style.Shape, LINE_ATTRS+view.style.Line)
+			if svg.ShapeFilled(view.shape) {
+				ink = svg.InkFill(view.style, "")
+			}
 		}
 
-		label := svg.LabelSvg(view.label, 0, view.dy, ` class="pele-label"`+view.style.Text, icons)
+		label := svg.LabelSvg(view.label, 0, view.dy, ` class="pele-label"`+ink+view.style.Text, icons)
 		// / internal-link(?: |$)/ on classes + " ".
 		internal := strings.Contains(classes+" ", " internal-link ")
 		if internal && deref(node.Label) != "" && !(options.Links != nil && !*options.Links) {
@@ -523,7 +551,7 @@ func draw(db *FlowDb, config types.Config, options types.RenderOptions, variant 
 		reach.Add(ce.Dst, svg.EndSide(ce.Route, len(ce.Route)-3, cnodes[ce.Dst]), drawn[i].ArrowTypeEnd)
 	}
 
-	var edgesOut, labelsOut strings.Builder
+	var casings, edgesOut, labelsOut strings.Builder
 	edgesOut.Grow(len(cedges) * 208)
 	loopSeen := map[int]int{}
 	for i, ce := range cedges {
@@ -555,9 +583,17 @@ func draw(db *FlowDb, config types.Config, options types.RenderOptions, variant 
 				svg.InsetRoute(route, len(route)-3, svg.ShapeView{Shape: views[ce.Dst].shape, W: views[ce.Dst].w, H: views[ce.Dst].h}, cnodes[ce.Dst])
 				path = svg.RoutePath(route, edge.Curve, svg.MarkerTrim(startType), svg.MarkerTrim(endType), leaves, arrives)
 			}
-			color := "var(--_l)"
-			if style != nil && style.Stroke != "" {
-				color = svg.Esc(style.Stroke)
+			line := ""
+			if style != nil {
+				line = style.Line
+			}
+			over, onFill := svg.OverFills(path.D, []float64{path.Sx, path.Sy, path.Ex, path.Ey}, fills, line, path.Tokens)
+			color := over
+			if color == "" {
+				color = "var(--_l)"
+				if style != nil && style.Stroke != "" {
+					color = svg.Esc(style.Stroke)
+				}
 			}
 			attrs := ""
 			switch deref(edge.Thickness) {
@@ -567,11 +603,14 @@ func draw(db *FlowDb, config types.Config, options types.RenderOptions, variant 
 				attrs += ` stroke-dasharray="3 4"`
 			}
 			classes := svg.ClassNames(withoutEdgeClasses(edge.Classes))
-			line := ""
-			if style != nil {
-				line = style.Line
+			if onFill && over == "" {
+				casings.WriteString(svg.EdgeCasing(path, startType, endType, line, deref(edge.Thickness) == "thick"))
 			}
-			svg.WriteStrings(&edgesOut, `<g class="pele-edge`, classes, `" data-id="`, svg.EscText(edge.ID), `"`, line, `><path d="`, path.D, `"`, attrs, `/>`)
+			overAttr := ""
+			if over != "" {
+				overAttr = ` stroke="` + over + `"`
+			}
+			svg.WriteStrings(&edgesOut, `<g class="pele-edge`, classes, `" data-id="`, svg.EscText(edge.ID), `"`, overAttr, line, `><path d="`, path.D, `"`, attrs, `/>`)
 			svg.WriteMarker(&edgesOut, startType, path.Sx, path.Sy, path.Sdx, path.Sdy, color)
 			svg.WriteMarker(&edgesOut, endType, path.Ex, path.Ey, path.Edx, path.Edy, color)
 			edgesOut.WriteString(`</g>`)
@@ -593,6 +632,9 @@ func draw(db *FlowDb, config types.Config, options types.RenderOptions, variant 
 	content = append(content, svg.LabelSvg(title, width/2, pad+title.Height/2, ` class="pele-title" font-weight="var(--_tw)"`, nil))
 	if clusters.Len() > 0 {
 		content = append(content, `<g class="pele-clusters">`, clusters.String(), `</g>`)
+	}
+	if casings.Len() > 0 {
+		content = append(content, svg.CasingsSvg(casings.String()))
 	}
 	if edgesOut.Len() > 0 {
 		content = append(content, `<g class="pele-edges" fill="none" stroke="var(--_l)" stroke-linecap="round">`, edgesOut.String(), `</g>`)
@@ -628,4 +670,13 @@ func draw(db *FlowDb, config types.Config, options types.RenderOptions, variant 
 		rendered.Geometry = g
 	}
 	return rendered
+}
+
+// halfOpacity is the fill-opacity of a group's wash: none where the author sets the fill, which
+// is then drawn at full opacity.
+func halfOpacity(shape string) string {
+	if svg.SetsFill(shape) {
+		return ""
+	}
+	return ` fill-opacity="0.5"`
 }

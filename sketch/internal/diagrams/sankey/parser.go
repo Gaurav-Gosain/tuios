@@ -1,4 +1,4 @@
-// Ported from pele src/diagrams/sankey/parser.ts at 4eff76f98c73b6817800a05773517f35832e4e92.
+// Ported from pele src/diagrams/sankey/parser.ts at 8aff183be57021b533f319a29341a529be934b08.
 
 package sankey
 
@@ -23,37 +23,90 @@ func isBlank(c rune) bool {
 		c == 0x202f || c == 0x205f || c == 0x3000 || c == 0xfeff
 }
 
-// prepareTextForParsing is Mermaid's sankeyUtils: strip blanks at both ends of the text, then collapse
-// runs of line breaks so that no row is empty. Its first step is a regex that rescans every run of
-// blanks; this does the same in one pass.
-// When st is not nil it records the edits of each step, so an offset maps back to text.
-func prepareTextForParsing(text string, st *[][]types.Edit) string {
-	start, end := 0, len(text)
-	for start < end {
-		r, size := utf8.DecodeRuneInString(text[start:end])
-		if !isBlank(r) {
-			break
-		}
-		start += size
-	}
-	for end > start {
-		r, size := utf8.DecodeLastRuneInString(text[start:end])
+// trimRows strips blanks at the end of the text and at the start and end of each row, outside
+// quoted fields. It lists each run it removes in edits.
+func trimRows(text string, edits *[]types.Edit) string {
+	end := len(text)
+	for end > 0 {
+		r, size := utf8.DecodeLastRuneInString(text[:end])
 		if !isBlank(r) {
 			break
 		}
 		end -= size
 	}
-	sliced := text[start:end]
+	at := func(i int) rune {
+		if i < 0 || i >= len(text) {
+			return -1
+		}
+		r, _ := utf8.DecodeRuneInString(text[i:])
+		return r
+	}
+	var out strings.Builder
+	kept := 0
+	quoted := false
+	for i := 0; i < end; {
+		c, size := utf8.DecodeRuneInString(text[i:])
+		switch {
+		case quoted:
+			if c == '"' {
+				if at(i+1) == '"' {
+					i++
+				} else {
+					quoted = false
+				}
+			}
+			i += size
+		case c == '"':
+			quoted = true
+			i++
+		case isBlank(c):
+			j := i + size
+			for {
+				r := at(j)
+				if r < 0 || !isBlank(r) {
+					break
+				}
+				j += utf8.RuneLen(r)
+			}
+			p := -1
+			if i > 0 {
+				p = int(text[i-1])
+			}
+			q := at(j)
+			// Preserve blank first fields, which Mermaid accepts as empty names.
+			if i == 0 || q == 10 || q == 13 || ((p == 10 || p == 13) && q != 44) {
+				out.WriteString(text[kept:i])
+				*edits = append(*edits, types.Edit{From: i, To: j})
+				kept = j
+			}
+			i = j
+		default:
+			i += size
+		}
+	}
+	if end < len(text) {
+		*edits = append(*edits, types.Edit{From: end, To: len(text)})
+	}
+	out.WriteString(text[kept:end])
+	return out.String()
+}
+
+// prepareTextForParsing is Mermaid's sankeyUtils, but unlike it, it also trims row edges
+// outside quoted fields. Then it collapses runs of line breaks so that no row is empty.
+// When st is not nil it records the edits of each step, so an offset maps back to text.
+func prepareTextForParsing(text string, st *[][]types.Edit) string {
+	var edits []types.Edit
+	rows := trimRows(text, &edits)
 	var breaks *[]types.Edit
 	if st != nil {
 		breaks = &[]types.Edit{}
 	}
-	collapsed := collapseBreaks(sliced, breaks)
+	collapsed := collapseBreaks(rows, breaks)
 	trimmed := js.Trim(collapsed)
 	if st != nil {
 		lead := len(collapsed) - len(js.TrimStart(collapsed))
 		*st = append(*st,
-			[]types.Edit{{From: 0, To: start}, {From: end, To: len(text)}},
+			edits,
 			*breaks,
 			[]types.Edit{{From: 0, To: lead}, {From: lead + len(trimmed), To: len(collapsed)}})
 	}

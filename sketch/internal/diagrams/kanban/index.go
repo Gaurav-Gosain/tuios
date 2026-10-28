@@ -1,4 +1,4 @@
-// Ported from pele src/diagrams/kanban/index.ts at 4eff76f98c73b6817800a05773517f35832e4e92.
+// Ported from pele src/diagrams/kanban/index.ts at 8aff183be57021b533f319a29341a529be934b08.
 
 // Package kanban draws Mermaid's kanban board: columns of cards, each card with an
 // optional ticket, assignee, priority and icon.

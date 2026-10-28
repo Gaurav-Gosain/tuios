@@ -1,4 +1,4 @@
-// Ported from pele src/diagrams/usecase/lexer.ts at 4eff76f98c73b6817800a05773517f35832e4e92.
+// Ported from pele src/diagrams/usecase/lexer.ts at 8aff183be57021b533f319a29341a529be934b08.
 //
 // The port reads UTF-8 bytes. Every character the lexer tells apart is ASCII; any other
 // character is a run of bytes of 0x80 and above, which the lexer reads as pele reads a

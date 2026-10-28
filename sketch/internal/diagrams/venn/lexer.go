@@ -1,4 +1,4 @@
-// Ported from pele src/diagrams/venn/lexer.ts at 4eff76f98c73b6817800a05773517f35832e4e92.
+// Ported from pele src/diagrams/venn/lexer.ts at 8aff183be57021b533f319a29341a529be934b08.
 //
 // Offsets are byte offsets. pele reads UTF-16 code units; every test here is of an ASCII
 // character, so a byte stands for a unit, except where JavaScript white space outside ASCII
@@ -255,7 +255,8 @@ func (l *VennLexer) next() int {
 				}
 			}
 			for _, kw := range KEYWORDS {
-				if l.keyword(i, kw.word) {
+				// A hyphen continues a name, as in `set-theory`.
+				if l.keyword(i, kw.word) && l.charAt(i+len(kw.word)) != 45 {
 					return l.token(kw.typ, i+len(kw.word))
 				}
 			}

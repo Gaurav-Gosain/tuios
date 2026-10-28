@@ -1,4 +1,4 @@
-// Ported from pele src/diagrams/treeview/render.ts at 4eff76f98c73b6817800a05773517f35832e4e92.
+// Ported from pele src/diagrams/treeview/render.ts at 8aff183be57021b533f319a29341a529be934b08.
 
 package treeview
 
@@ -79,6 +79,11 @@ func draw(model *TreeViewModel, config types.Config, options types.RenderOptions
 	}
 	pad := types.Or(options.Padding, 8)
 	icons := iconConfig(config)
+	mono := options.HasMonospace(types.MonospaceFiles)
+	family := ""
+	if mono {
+		family = ` font-family="` + svg.FONT_MONO + `"`
+	}
 	maxWidth := types.Or(options.MaxWidth, 320)
 
 	s := treeSettings(config)
@@ -151,6 +156,9 @@ func draw(model *TreeViewModel, config types.Config, options types.RenderOptions
 		style := 0
 		if node.nodeType == "directory" {
 			style = text.Bold
+		}
+		if mono {
+			style |= text.Mono
 		}
 		var literal, description *text.Label
 		if tight {
@@ -303,9 +311,9 @@ func draw(model *TreeViewModel, config types.Config, options types.RenderOptions
 			weight = ` font-weight="var(--_hw)"`
 		}
 		if row.label != nil {
-			body.WriteString(common.LeftLabelSvg(*row.label, inset+row.labelX, top+row.top+paddingY, ` class="pele-label"`+weight))
+			body.WriteString(common.LeftLabelSvg(*row.label, inset+row.labelX, top+row.top+paddingY, ` class="pele-label"`+weight+family))
 		} else if row.text != "" {
-			svg.WriteStrings(&body, `<text class="pele-label" x="`, svg.Num(inset+row.labelX), `" y="`, svg.Num(cy+baseline), `"`, weight, ` xml:space="preserve">`, svg.Esc(row.text), `</text>`)
+			svg.WriteStrings(&body, `<text class="pele-label" x="`, svg.Num(inset+row.labelX), `" y="`, svg.Num(cy+baseline), `"`, weight, family, ` xml:space="preserve">`, svg.Esc(row.text), `</text>`)
 		}
 		if row.description != nil {
 			lh := 0.0

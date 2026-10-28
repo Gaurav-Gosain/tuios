@@ -1,4 +1,4 @@
-// Ported from pele src/diagrams/gantt/axis.ts at 4eff76f98c73b6817800a05773517f35832e4e92.
+// Ported from pele src/diagrams/gantt/axis.ts at 8aff183be57021b533f319a29341a529be934b08.
 //
 // pele's Calendar is an object of closures, and `every` wraps one in another. The port
 // keeps a Calendar as a struct: the unit and the step say which floor and offset apply.

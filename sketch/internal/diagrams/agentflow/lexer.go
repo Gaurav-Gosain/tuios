@@ -1,4 +1,4 @@
-// Ported from pele src/diagrams/agentflow/lexer.ts at 4eff76f98c73b6817800a05773517f35832e4e92.
+// Ported from pele src/diagrams/agentflow/lexer.ts at 8aff183be57021b533f319a29341a529be934b08.
 //
 // pele reads UTF-16 code units with charCodeAt. The port reads the UTF-8 bytes:
 // code() decodes the character at a byte offset, and where pele steps one unit

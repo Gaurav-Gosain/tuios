@@ -1,4 +1,4 @@
-// Ported from pele src/core.ts and src/index.ts at 4eff76f98c73b6817800a05773517f35832e4e92.
+// Ported from pele src/core.ts and src/index.ts at 8aff183be57021b533f319a29341a529be934b08.
 //
 // mount() and enableZoom() are browser only and are not ported. pele throws a
 // PeleError; the port panics with one inside and returns it as an error here.
@@ -35,6 +35,18 @@ const (
 
 // RenderOptions are pele's render options. A nil pointer is an option left unset.
 type RenderOptions = types.RenderOptions
+
+// MonospacePart names a part of a diagram that RenderOptions.Monospace sets in the monospace
+// font: MonospaceMembers, MonospaceAttributes, MonospaceFiles or MonospaceMessages.
+type MonospacePart = types.MonospacePart
+
+// The parts that RenderOptions.Monospace takes.
+const (
+	MonospaceMembers    = types.MonospaceMembers
+	MonospaceAttributes = types.MonospaceAttributes
+	MonospaceFiles      = types.MonospaceFiles
+	MonospaceMessages   = types.MonospaceMessages
+)
 
 // MathMarkup is a typeset $$...$$ expression that a MathResolver gives: SVG
 // (or HTML) markup and its size in pixels.

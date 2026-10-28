@@ -1,4 +1,4 @@
-// Ported from pele src/layout/compound.ts at 4eff76f98c73b6817800a05773517f35832e4e92.
+// Ported from pele src/layout/compound.ts at 8aff183be57021b533f319a29341a529be934b08.
 
 package layout
 
@@ -514,6 +514,44 @@ func RouteCrossings(nodes []*CNode, edges []*CEdge, style Style) int {
 		}
 	}
 	return total
+}
+
+// InheritCrossedDirections matches Mermaid: groups crossed by edges inherit their parent's
+// direction. `end` gives the node indices of edge i, -1 for none, for n edges.
+func InheritCrossedDirections(nodes []*CNode, n int, end func(i int) (src, dst int)) {
+	// Only a group with a direction of its own can lose it; most diagrams have none.
+	directed := false
+	for _, c := range nodes {
+		if c.Dir != "" {
+			directed = true
+			break
+		}
+	}
+	if !directed {
+		return
+	}
+	// inside reports whether g is an ancestor of node i.
+	inside := func(i, g int) bool {
+		for p, steps := nodes[i].Parent, 0; p >= 0 && steps <= len(nodes); p, steps = nodes[p].Parent, steps+1 {
+			if p == g {
+				return true
+			}
+		}
+		return false
+	}
+	for i := range n {
+		src, dst := end(i)
+		if src < 0 || dst < 0 || src == dst {
+			continue
+		}
+		for _, pair := range [2][2]int{{src, dst}, {dst, src}} {
+			for p, steps := nodes[pair[0]].Parent, 0; p >= 0 && steps <= len(nodes); p, steps = nodes[p].Parent, steps+1 {
+				if !inside(pair[1], p) {
+					nodes[p].Dir = ""
+				}
+			}
+		}
+	}
 }
 
 func ShiftLayout(nodes []*CNode, edges []*CEdge, ox, oy float64) {

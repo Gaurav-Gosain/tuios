@@ -1,4 +1,4 @@
-// Ported from pele src/diagrams/requirement/render.ts at 4eff76f98c73b6817800a05773517f35832e4e92.
+// Ported from pele src/diagrams/requirement/render.ts at 8aff183be57021b533f319a29341a529be934b08.
 
 package requirement
 
@@ -410,6 +410,11 @@ func draw(model *RequirementDb, _ types.Config, options types.RenderOptions, tur
 	for i := range views {
 		view := &views[i]
 		w, h, style := view.w, view.h, view.style
+		color := svg.InkFill(style, "")
+		muted := color
+		if muted == "" {
+			muted = ` fill="var(--_m)"`
+		}
 		left := -w / 2
 		top := -h / 2
 		kindClass := "pele-element"
@@ -430,8 +435,8 @@ func draw(model *RequirementDb, _ types.Config, options types.RenderOptions, tur
 		svg.WriteNum(&nodesOut, h)
 		svg.WriteStrings(&nodesOut, `" fill="var(--_s)" stroke="var(--_b)"`, svg.Rounded(style.Shape), `/>`,
 
-			svg.LabelSvg(view.kind, 0, top+PAD_Y+view.kind.Height/2, ` class="pele-stereotype" font-size="`+js.Num(view.kind.Size)+`" fill="var(--_m)"`+style.Text, nil),
-			svg.LabelSvg(view.name, 0, top+PAD_Y+view.kind.Height+view.name.Height/2, ` class="pele-label" font-size="`+js.Num(view.name.Size)+`" font-weight="var(--_hw)"`+style.Text, nil))
+			svg.LabelSvg(view.kind, 0, top+PAD_Y+view.kind.Height/2, ` class="pele-stereotype" font-size="`+js.Num(view.kind.Size)+`"`+muted+style.Text, nil),
+			svg.LabelSvg(view.name, 0, top+PAD_Y+view.kind.Height+view.name.Height/2, ` class="pele-label" font-size="`+js.Num(view.name.Size)+`" font-weight="var(--_hw)"`+color+style.Text, nil))
 		if len(view.rows) > 0 {
 			divider := top + view.headHeight
 			nodesOut.WriteString(`<path class="pele-divider" d="M`)
@@ -443,8 +448,8 @@ func draw(model *RequirementDb, _ types.Config, options types.RenderOptions, tur
 			svg.WriteStrings(&nodesOut, `" stroke="var(--_b)"`, style.Line, `/><g class="pele-fields" font-size="`, js.Num(view.rows[0].key.Size), `">`)
 			y := divider + PAD_Y
 			for _, row := range view.rows {
-				startText(&nodesOut, row.key, left+PAD_X, y, ` class="pele-field" fill="var(--_m)"`+style.Text)
-				startText(&nodesOut, row.value, left+PAD_X+view.keyWidth+COLUMN_GAP, y, ` class="pele-value"`+style.Text)
+				startText(&nodesOut, row.key, left+PAD_X, y, ` class="pele-field"`+muted+style.Text)
+				startText(&nodesOut, row.value, left+PAD_X+view.keyWidth+COLUMN_GAP, y, ` class="pele-value"`+color+style.Text)
 				y += row.height + ROW_GAP
 			}
 			nodesOut.WriteString(`</g>`)

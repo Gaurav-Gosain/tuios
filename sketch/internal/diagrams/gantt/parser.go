@@ -1,4 +1,4 @@
-// Ported from pele src/diagrams/gantt/parser.ts at 4eff76f98c73b6817800a05773517f35832e4e92.
+// Ported from pele src/diagrams/gantt/parser.ts at 8aff183be57021b533f319a29341a529be934b08.
 //
 // GanttBuilder is the GanttDb itself here. pele's WEEKDAYS here is the lexer's DAYS, the same
 // list, as dates.go has a WEEKDAYS of its own.

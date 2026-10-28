@@ -1,4 +1,4 @@
-// Ported from pele tests/render/sankey.test.ts at 4eff76f98c73b6817800a05773517f35832e4e92:
+// Ported from pele tests/render/sankey.test.ts at 8aff183be57021b533f319a29341a529be934b08:
 // the parse cases v1.9.0 added. The drawings are covered by testdata/extra/sankey-1-9.json.
 
 package sketch

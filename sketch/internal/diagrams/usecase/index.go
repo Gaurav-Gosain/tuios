@@ -1,4 +1,4 @@
-// Ported from pele src/diagrams/usecase/index.ts at 4eff76f98c73b6817800a05773517f35832e4e92.
+// Ported from pele src/diagrams/usecase/index.ts at 8aff183be57021b533f319a29341a529be934b08.
 
 // Package usecase draws use case diagrams: actors, use cases, notes and JSON tables,
 // in system boundaries, joined by associations, includes, extends and generalizations.

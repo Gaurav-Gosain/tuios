@@ -1,4 +1,4 @@
-// Ported from pele src/diagrams/railroad/common.ts at 4eff76f98c73b6817800a05773517f35832e4e92.
+// Ported from pele src/diagrams/railroad/common.ts at 8aff183be57021b533f319a29341a529be934b08.
 
 package railroad
 
@@ -82,17 +82,27 @@ func toCommentOrLineEnd(src string, q int) int {
 	return end
 }
 
-// /title(?:[\t ][^\n\r]*?(?=%%)|[\t ][^\n\r]*|)/y
-func matchTitle(src string, p int) int {
-	if !strings.HasPrefix(src[p:], "title") {
-		return -1
-	}
-	q := p + 5
-	if q < len(src) && (src[q] == ' ' || src[q] == '\t') {
-		return toCommentOrLineEnd(src, q+1)
-	}
-	return q
+// title is /title(?:[\t ][^\n\r]*?(?=%%)|[\t ][^\n\r]*|(?!rest))/y: `rest` reports whether a name
+// suffix starts at q, so `title` does not split longer names.
+func title(rest func(c byte) bool) *common.TokenType {
+	return &common.TokenType{Name: "TITLE", First: "t", Match: func(src string, p int) int {
+		if !strings.HasPrefix(src[p:], "title") {
+			return -1
+		}
+		q := p + 5
+		if q < len(src) && (src[q] == ' ' || src[q] == '\t') {
+			return toCommentOrLineEnd(src, q+1)
+		}
+		if q < len(src) && rest(src[q]) {
+			return -1
+		}
+		return q
+	}}
 }
+
+// titleWordRest is [\w-] and titleAbnfRest [A-Za-z0-9-].
+func titleWordRest(c byte) bool { return common.IsWord(int(c)) || c == '-' }
+func titleAbnfRest(c byte) bool { return c != '_' && titleWordRest(c) }
 
 // /accTitle[\t ]*:(?:[^\n\r]*?(?=%%)|[^\n\r]*)/y
 func matchAccTitle(src string, p int) int {
@@ -109,7 +119,6 @@ func matchAccTitle(src string, p int) int {
 	return toCommentOrLineEnd(src, q+1)
 }
 
-var TITLE = &common.TokenType{Name: "TITLE", Match: matchTitle, First: "t"}
 var ACC_TITLE = &common.TokenType{Name: "ACC_TITLE", Match: matchAccTitle, First: "a"}
 var ACC_DESCR = &common.TokenType{Name: "ACC_DESCR", Scanner: accDescrScanner, First: "a"}
 

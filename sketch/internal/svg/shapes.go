@@ -1,4 +1,4 @@
-// Ported from pele src/svg/shapes.ts at 4eff76f98c73b6817800a05773517f35832e4e92.
+// Ported from pele src/svg/shapes.ts at 8aff183be57021b533f319a29341a529be934b08.
 
 package svg
 
@@ -39,6 +39,8 @@ type shapeDef struct {
 	inset   insetFn
 	span    spanFn
 	noLabel bool
+	// Ignores style fills.
+	bare bool
 }
 
 // Kept clear at each end of a straight side, for the corner.
@@ -320,6 +322,7 @@ var shapes = map[string]*shapeDef{
 		},
 	},
 	"text": {
+		bare: true,
 		span: flat,
 		size: func(tw, th float64) ShapeSize { return ShapeSize{tw + 8, th + 8, 0} },
 		draw: func(w, h float64, _, _ string) string { return rect(w, h, ` fill="none" stroke="none"`, "") },
@@ -631,18 +634,21 @@ var shapes = map[string]*shapeDef{
 		},
 	},
 	"brace": {
+		bare: true,
 		size: func(tw, th float64) ShapeSize { return ShapeSize{tw + 2*PAD_X + 12, th + 2*PAD_Y, 0} },
 		draw: func(w, h float64, _, line string) string {
 			return rect(w, h, ` fill="none" stroke="none"`, "") + brace(-w/2+12, h, -1, line)
 		},
 	},
 	"brace-r": {
+		bare: true,
 		size: func(tw, th float64) ShapeSize { return ShapeSize{tw + 2*PAD_X + 12, th + 2*PAD_Y, 0} },
 		draw: func(w, h float64, _, line string) string {
 			return rect(w, h, ` fill="none" stroke="none"`, "") + brace(w/2-12, h, 1, line)
 		},
 	},
 	"braces": {
+		bare: true,
 		size: func(tw, th float64) ShapeSize { return ShapeSize{tw + 2*PAD_X + 24, th + 2*PAD_Y, 0} },
 		draw: func(w, h float64, _, line string) string {
 			return rect(w, h, ` fill="none" stroke="none"`, "") + brace(-w/2+12, h, -1, line) + brace(w/2-12, h, 1, line)
@@ -832,6 +838,12 @@ func ShapeSpan(shape string, w, h float64, sideways bool) float64 {
 func ShapeHasLabel(shape string) bool {
 	d, ok := shapes[shape]
 	return !ok || !d.noLabel
+}
+
+// ShapeFilled reports whether a shape takes a style's fill.
+func ShapeFilled(shape string) bool {
+	d, ok := shapes[shape]
+	return !ok || !d.bare
 }
 
 // EndSide is the side of a node's layout box that a route end lies on: 0 top, 1 right, 2 bottom, 3 left, or -1 for none.

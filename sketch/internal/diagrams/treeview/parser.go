@@ -1,4 +1,4 @@
-// Ported from pele src/diagrams/treeview/parser.ts at 4eff76f98c73b6817800a05773517f35832e4e92.
+// Ported from pele src/diagrams/treeview/parser.ts at 8aff183be57021b533f319a29341a529be934b08.
 
 package treeview
 
@@ -199,7 +199,7 @@ var TREEVIEW_TOKENS = []*common.TokenType{
 	}(),
 	common.AccDescr(""),
 	common.ACC_TITLE,
-	common.TITLE,
+	common.TitleBefore(titleRest),
 	{Name: "CLASS_ANNOTATION", Match: matchClassAnnotation},
 	{Name: "ICON_ANNOTATION", Match: matchIconAnnotation},
 	{Name: "DESC_ANNOTATION", Match: matchDescAnnotation},
@@ -293,4 +293,9 @@ func parseTreeView(src string) *TreeViewAst {
 		ast.nodes = append(ast.nodes, node)
 	}
 	return ast
+}
+
+// titleRest is the lookahead (?!%%)[^\n\r]: more of the line, not a comment.
+func titleRest(src string, q int) bool {
+	return q < len(src) && src[q] != '\n' && src[q] != '\r' && !strings.HasPrefix(src[q:], "%%")
 }

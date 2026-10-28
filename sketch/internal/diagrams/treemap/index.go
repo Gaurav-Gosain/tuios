@@ -1,4 +1,4 @@
-// Ported from pele src/diagrams/treemap/index.ts at 4eff76f98c73b6817800a05773517f35832e4e92.
+// Ported from pele src/diagrams/treemap/index.ts at 8aff183be57021b533f319a29341a529be934b08.
 
 // Package treemap draws Mermaid's treemap: sections and leaves as nested rectangles,
 // each as large as its value, laid out as a squarified treemap.

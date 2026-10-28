@@ -1,4 +1,4 @@
-// Ported from pele src/diagrams/er/render.ts at 4eff76f98c73b6817800a05773517f35832e4e92.
+// Ported from pele src/diagrams/er/render.ts at 8aff183be57021b533f319a29341a529be934b08.
 
 package er
 
@@ -66,6 +66,7 @@ type NodeView struct {
 	cols    []float64
 	rowSize float64
 	keySize float64
+	mono    int
 	// Whether self-relationships loop out of the bottom side rather than the right.
 	below bool
 }
@@ -78,14 +79,15 @@ type Loop struct {
 }
 
 // Writes a measured label starting at x, with the baseline of its first line at y.
-func textLeft(label text.Label, x, y float64, attrs string, icons svg.IconResolver) string {
+func textLeft(label text.Label, x, y float64, attrs string, icons svg.IconResolver, mono int) string {
 	num := svg.Num
 	lines := label.Lines
 	if len(lines) == 0 {
 		return ""
 	}
-	if len(lines) == 1 && len(lines[0]) == 1 && lines[0][0].Icon == "" && lines[0][0].Math == nil && lines[0][0].Style == 0 {
-		return `<text` + attrs + ` x="` + num(x) + `" y="` + num(y) + `">` + svg.Esc(lines[0][0].Text) + `</text>`
+	// The short form collapses repeated spaces in monospace text.
+	if len(lines) == 1 && len(lines[0]) == 1 && lines[0][0].Icon == "" && lines[0][0].Math == nil && lines[0][0].Style == mono && !(mono != 0 && strings.Contains(lines[0][0].Text, "  ")) {
+		return `<text` + svg.TextStyle(attrs, mono) + ` x="` + num(x) + `" y="` + num(y) + `">` + svg.Esc(lines[0][0].Text) + `</text>`
 	}
 	shared := svg.SharedStyle(label)
 	shift := float64(label.Size * 0.35)
@@ -162,6 +164,7 @@ func renderEr(db *ErDb, config types.Config, options types.RenderOptions) types.
 func draw(db *ErDb, config types.Config, options types.RenderOptions, turned bool) types.Rendered {
 	num := svg.Num
 	graph := buildErGraph(db)
+	monospaced := options.HasMonospace(types.MonospaceAttributes)
 	size := types.Or(options.FontSize, 16)
 	smallSize := js.Round(size * 0.875)
 	measurer := options.Measurer
@@ -251,6 +254,10 @@ func draw(db *ErDb, config types.Config, options types.RenderOptions, turned boo
 		if style.Italic {
 			base |= text.Italic
 		}
+		mono := 0
+		if monospaced && !svg.Declares(style.Text, "font-family") {
+			mono = text.Mono
+		}
 		nameSize := size
 		rowSize := smallSize
 		keySize := js.Round(size * 0.75)
@@ -271,7 +278,7 @@ func draw(db *ErDb, config types.Config, options types.RenderOptions, turned boo
 		// Loops leave by a side the layout keeps free of other edges: the right when ranks run down,
 		// the bottom when they run across.
 		below := len(own) > 0 && !node.isGroup && horizontal(i)
-		view := &NodeView{node: node, style: style, label: label, rowSize: rowSize, keySize: keySize, below: below}
+		view := &NodeView{node: node, style: style, label: label, rowSize: rowSize, keySize: keySize, mono: mono, below: below}
 		reach := 0.0
 		bands := 0.0
 		for _, loop := range own {
@@ -317,9 +324,9 @@ func draw(db *ErDb, config types.Config, options types.RenderOptions, turned boo
 				widths := [4]float64{}
 				for _, attribute := range node.attributes {
 					cells := Cells{
-						text.LayoutLabel(cellText(attribute.typ), true, measurer, rowSize, NO_WRAP, base),
-						text.LayoutLabel(cellText(attribute.name), true, measurer, rowSize, NO_WRAP, base),
-						text.LayoutLabel(strings.Join(attribute.keys, ", "), false, measurer, keySize, NO_WRAP, base),
+						text.LayoutLabel(cellText(attribute.typ), true, measurer, rowSize, NO_WRAP, base|mono),
+						text.LayoutLabel(cellText(attribute.name), true, measurer, rowSize, NO_WRAP, base|mono),
+						text.LayoutLabel(strings.Join(attribute.keys, ", "), false, measurer, keySize, NO_WRAP, base|mono),
 						text.LayoutLabel(cellText(attribute.comment), true, measurer, rowSize, COMMENT_WRAP, base),
 					}
 					h := rowLine
@@ -441,6 +448,7 @@ func draw(db *ErDb, config types.Config, options types.RenderOptions, turned boo
 	}
 
 	var clusters, nodesOut strings.Builder
+	var fills []svg.Fill
 	// An entity takes about 700 bytes of markup and a relationship about 400.
 	nodesOut.Grow(len(views) * 704)
 	for i, view := range views {
@@ -453,9 +461,16 @@ func draw(db *ErDb, config types.Config, options types.RenderOptions, turned boo
 			x := c.X - c.W/2
 			y := c.Y - c.H/2
 			titleX := svg.ClusterTitleX(c, view.label.Width, crossings, GROUP_PAD)
+			if svg.Paints(view.style.Shape) {
+				fills = append(fills, svg.Fill{Box: [4]float64{x, y, x + c.W, y + c.H}, Shape: view.style.Shape})
+			}
+			fillOpacity := ` fill-opacity="0.5"`
+			if svg.SetsFill(view.style.Shape) {
+				fillOpacity = ""
+			}
 			clusters.WriteString(`<g class="pele-cluster` + classes + `" data-id="` + svg.EscText(node.id) + `">` +
-				`<rect x="` + num(x) + `" y="` + num(y) + `" width="` + num(c.W) + `" height="` + num(c.H) + `" fill="var(--_a)" fill-opacity="0.5" stroke="var(--_b)"` + svg.Rounded(view.style.Shape) + `/>` +
-				svg.LabelSvg(view.label, titleX, y+8+view.label.Height/2, ` class="pele-cluster-label" fill="var(--_m)"`+view.style.Text, icons) +
+				`<rect x="` + num(x) + `" y="` + num(y) + `" width="` + num(c.W) + `" height="` + num(c.H) + `" fill="var(--_a)"` + fillOpacity + ` stroke="var(--_b)"` + svg.Rounded(view.style.Shape) + `/>` +
+				svg.LabelSvg(view.label, titleX, y+8+view.label.Height/2, ` class="pele-cluster-label"`+svg.InkFill(view.style, "var(--_m)")+view.style.Text, icons) +
 				`</g>`)
 			continue
 		}
@@ -465,12 +480,17 @@ func draw(db *ErDb, config types.Config, options types.RenderOptions, turned boo
 		x0 := -w / 2
 		y0 := -h / 2
 		txt := view.style.Text
+		color := svg.InkFill(view.style, "")
+		muted := color
+		if muted == "" {
+			muted = ` fill="var(--_m)"`
+		}
 		shape := `x="` + num(x0) + `" y="` + num(y0) + `" width="` + num(w) + `" height="` + num(h) + `"`
 		nameY := 0.0
 		if len(view.rows) > 0 {
 			nameY = y0 + view.headH/2
 		}
-		name := svg.LabelSvg(view.label, 0, nameY, ` class="pele-label"`+txt, icons)
+		name := svg.LabelSvg(view.label, 0, nameY, ` class="pele-label"`+color+txt, icons)
 		display := node.alias
 		if display == "" {
 			display = node.label
@@ -511,13 +531,21 @@ func draw(db *ErDb, config types.Config, options types.RenderOptions, turned boo
 					}
 				}
 				baseline := y + ROW_PAD/2.0 + rowLine/2 + float64(view.rowSize*0.35)
-				cells.WriteString(textLeft(row.cells[0], x0+view.cols[0], baseline, ` class="pele-er-type" fill="var(--_m)"`+txt, icons) +
-					textLeft(row.cells[1], x0+view.cols[1], baseline, ` class="pele-er-name"`+txt, icons) +
-					textLeft(row.cells[2], x0+view.cols[2], baseline, ` class="pele-er-keys" font-size="`+js.Num(view.keySize)+`" fill="var(--_m)"`+txt, icons) +
-					textLeft(row.cells[3], x0+view.cols[3], baseline, ` class="pele-er-comment" fill="var(--_m)"`+txt, icons))
+				svg.WriteStrings(&cells, textLeft(row.cells[0], x0+view.cols[0], baseline, ` class="pele-er-type"`+muted+txt, icons, view.mono),
+					textLeft(row.cells[1], x0+view.cols[1], baseline, ` class="pele-er-name"`+color+txt, icons, view.mono),
+					textLeft(row.cells[2], x0+view.cols[2], baseline, ` class="pele-er-keys" font-size="`+js.Num(view.keySize)+`"`+muted+txt, icons, view.mono),
+					textLeft(row.cells[3], x0+view.cols[3], baseline, ` class="pele-er-comment"`+muted+txt, icons, 0))
 				y += row.h
 			}
 			dividerY := num(y0 + view.headH)
+			// Keep row shading light on light fills and dark on dark fills to preserve text contrast.
+			tone := svg.Ink(view.style.Shape, "")
+			shade := "var(--_bg)"
+			if tone == svg.ON_LIGHT {
+				shade = svg.ON_DARK
+			} else if tone == svg.ON_DARK {
+				shade = svg.ON_LIGHT
+			}
 			opacity := ""
 			if strings.Contains(view.style.Shape, "fill:") {
 				opacity = ` opacity="0.6"`
@@ -525,7 +553,7 @@ func draw(db *ErDb, config types.Config, options types.RenderOptions, turned boo
 			body = `<rect ` + shape + svg.Rounded(BOX_ATTRS+view.style.Shape) + `/>` +
 				// Over a fill the diagram chose, the shading is a tint of that fill. The opacity is on the
 				// group because the two parts of the last row overlap.
-				`<g class="pele-er-stripes" fill="var(--_bg)"` + opacity + `>` + stripes.String() + `</g>` +
+				`<g class="pele-er-stripes" fill="` + shade + `"` + opacity + `>` + stripes.String() + `</g>` +
 				`<path class="pele-er-divider" d="M` + num(x0) + `,` + dividerY + `H` + num(x0+w) + `" stroke="` + lineColor + `"/>` +
 				`<rect ` + shape + ` fill="none" stroke="var(--_b)"` + svg.Rounded(view.style.Line) + `/>` +
 
@@ -556,7 +584,7 @@ func draw(db *ErDb, config types.Config, options types.RenderOptions, turned boo
 		}
 	}
 
-	var edgesOut, labelsOut strings.Builder
+	var edgesOut, casings, labelsOut strings.Builder
 	edgesOut.Grow(len(cedges) * 400)
 	for i, ce := range cedges {
 		edge := drawn[i]
@@ -612,6 +640,22 @@ func draw(db *ErDb, config types.Config, options types.RenderOptions, turned boo
 			start = erMarker(edge.arrowTypeStart, path.Sx, path.Sy, path.Sdx, path.Sdy)
 			end = erMarker(edge.arrowTypeEnd, path.Ex, path.Ey, path.Edx, path.Edy)
 		}
+		under, onFills := svg.FillUnder(d, nil, fills, nil)
+		over, overOk := "", onFills
+		if under != nil {
+			over = svg.EdgeInk(under, "")
+		}
+		if overOk && over == "" {
+			casings.WriteString(svg.Casing(d, start+end, "", false))
+		}
+		if under != nil && over != "" {
+			start = svg.HollowOn(start, under)
+			end = svg.HollowOn(end, under)
+		}
+		stroke := ""
+		if over != "" {
+			stroke = ` stroke="` + over + `"`
+		}
 		dashed := edge.pattern == "dashed"
 		kind := "identifying"
 		dash := ""
@@ -619,11 +663,8 @@ func draw(db *ErDb, config types.Config, options types.RenderOptions, turned boo
 			kind = "non-identifying"
 			dash = ` stroke-dasharray="4 3"`
 		}
-		edgesOut.WriteString(`<g class="pele-edge pele-er-` + kind + `" data-id="` + svg.EscText(edge.id) + `">` +
-			`<path d="` + d + `"` + dash + `/>` +
-			start +
-			end +
-			`</g>`)
+		svg.WriteStrings(&edgesOut, `<g class="pele-edge pele-er-`, kind, `" data-id="`, svg.EscText(edge.id), `"`, stroke, `>`,
+			`<path d="`, d, `"`, dash, `/>`, start, end, `</g>`)
 		if label.Width > 0 {
 			labelsOut.WriteString(svg.EdgeLabelSvg(edge.id, label, ce.LabelX, ce.LabelY, "", icons))
 		}
@@ -633,6 +674,9 @@ func draw(db *ErDb, config types.Config, options types.RenderOptions, turned boo
 	content = append(content, svg.LabelSvg(title, width/2, pad+title.Height/2, ` class="pele-title" font-weight="var(--_tw)"`, nil))
 	if clusters.Len() > 0 {
 		content = append(content, `<g class="pele-clusters">`, clusters.String(), `</g>`)
+	}
+	if casings.Len() > 0 {
+		content = append(content, svg.CasingsSvg(casings.String()))
 	}
 	if edgesOut.Len() > 0 {
 		content = append(content, `<g class="pele-edges" fill="none" stroke="var(--_l)" stroke-linecap="round">`, edgesOut.String(), `</g>`)

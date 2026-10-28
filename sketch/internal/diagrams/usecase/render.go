@@ -1,4 +1,4 @@
-// Ported from pele src/diagrams/usecase/render.ts at 4eff76f98c73b6817800a05773517f35832e4e92.
+// Ported from pele src/diagrams/usecase/render.ts at 8aff183be57021b533f319a29341a529be934b08.
 
 package usecase
 
@@ -238,11 +238,15 @@ func trim(typ string) float64 {
 	return svg.MarkerTrim(typ)
 }
 
-func mark(typ string, x, y, dx, dy float64, color string) string {
+// mark draws a marker; stroke "" leaves the filled markers unstroked.
+func mark(typ string, x, y, dx, dy float64, color, stroke string) string {
 	if typ == "extension" {
 		return extension(x, y, dx, dy, color)
 	}
-	return svg.Marker(typ, x, y, dx, dy, color)
+	if stroke == "" {
+		stroke = "none"
+	}
+	return svg.MarkerStroke(typ, x, y, dx, dy, color, stroke)
 }
 
 func figure(view *View, icons text.IconResolver) string {
@@ -547,6 +551,7 @@ func draw(model *UsecaseModel, config types.Config, options types.RenderOptions,
 	attachEnds(cedges, cnodes, views)
 
 	var clusters, nodesOut strings.Builder
+	var fills []svg.Fill
 	for i := range views {
 		view := &views[i]
 		c := cnodes[i]
@@ -555,14 +560,26 @@ func draw(model *UsecaseModel, config types.Config, options types.RenderOptions,
 		id := svg.EscText(node.id)
 		textAttrs := view.style.Text
 		shape := view.style.Shape
+		color := svg.InkFill(view.style, "")
+		muted := color
+		if muted == "" {
+			muted = ` fill="var(--_m)"`
+		}
 		w := view.w
 		h := view.h
 
 		if view.kind == kBoundary {
 			x := c.X - c.W/2
 			y := c.Y - c.H/2
-			box := ` fill="var(--_a)" fill-opacity="0.5" stroke="var(--_b)"` + shape
-			titleAttrs := ` class="pele-cluster-label" fill="var(--_m)"` + textAttrs
+			if svg.Paints(shape) {
+				fills = append(fills, svg.Fill{Box: [4]float64{x, y, x + c.W, y + c.H}, Shape: shape})
+			}
+			fillOpacity := ` fill-opacity="0.5"`
+			if svg.SetsFill(shape) {
+				fillOpacity = ""
+			}
+			box := ` fill="var(--_a)"` + fillOpacity + ` stroke="var(--_b)"` + shape
+			titleAttrs := ` class="pele-cluster-label"` + muted + textAttrs
 			var body string
 			if node.boundaryType == "package" {
 				tabW := math.Min(view.label.Width+2*TAB_PAD+8, c.W)
@@ -599,13 +616,13 @@ func draw(model *UsecaseModel, config types.Config, options types.RenderOptions,
 			for _, row := range view.rows {
 				key, value := row[0], row[1]
 				rowH := math.Max(math.Max(key.Height, value.Height), js.Round(small*1.5)) + ROW_PAD
-				cells.WriteString(svg.LabelSvg(key, x0+CELL_PAD+key.Width/2, y+rowH/2, ` class="pele-json-key" fill="var(--_m)"`, icons))
-				cells.WriteString(leftLabel(value, x0+view.keyW+CELL_PAD, y+rowH/2, ` class="pele-json-value"`+textAttrs, icons))
+				cells.WriteString(svg.LabelSvg(key, x0+CELL_PAD+key.Width/2, y+rowH/2, ` class="pele-json-key"`+muted, icons))
+				cells.WriteString(leftLabel(value, x0+view.keyW+CELL_PAD, y+rowH/2, ` class="pele-json-value"`+color+textAttrs, icons))
 				y += rowH
 			}
 			body = `<rect x="` + svg.Num(x0) + `" y="` + svg.Num(-h/2) + `" width="` + svg.Num(w) + `" height="` + svg.Num(h) + `"` + svg.Rounded(SHAPE_ATTRS+shape) + `/>` +
 				`<path class="pele-json-lines" d="` + lines + `" fill="none" stroke="var(--_b)"` + view.style.Line + `/>` +
-				svg.LabelSvg(view.label, 0, -h/2+view.headH/2, ` class="pele-label" font-weight="var(--_hw)"`+textAttrs, icons) +
+				svg.LabelSvg(view.label, 0, -h/2+view.headH/2, ` class="pele-label" font-weight="var(--_hw)"`+color+textAttrs, icons) +
 				`<g font-size="` + js.Num(small) + `">` + cells.String() + `</g>`
 		default:
 			labelY := view.stereotype.Height / 2
@@ -641,8 +658,8 @@ func draw(model *UsecaseModel, config types.Config, options types.RenderOptions,
 				noteSize = ` font-size="` + js.Num(small) + `"`
 			}
 			body = outline +
-				svg.LabelSvg(view.stereotype, 0, -view.label.Height/2, stereotypeAttrs, icons) +
-				svg.LabelSvg(view.label, 0, labelY, ` class="pele-label"`+noteSize+textAttrs, icons)
+				svg.LabelSvg(view.stereotype, 0, -view.label.Height/2, ` class="pele-stereotype" font-size="`+js.Num(tiny)+`"`+muted, icons) +
+				svg.LabelSvg(view.label, 0, labelY, ` class="pele-label"`+noteSize+color+textAttrs, icons)
 		}
 		svg.WriteStrings(&nodesOut, `<g class="pele-node `, kind, classes, `" data-id="`, id, `" transform="translate(`, svg.Num(c.X), `,`, svg.Num(c.Y), `)">`, body, `</g>`)
 	}
@@ -652,7 +669,7 @@ func draw(model *UsecaseModel, config types.Config, options types.RenderOptions,
 		geo = geometry(views, cnodes, width, height)
 	}
 
-	var edgesOut, labelsOut strings.Builder
+	var casings, edgesOut, labelsOut strings.Builder
 	loopSeen := map[int]int{}
 	for i, ce := range cedges {
 		edge := drawn[i]
@@ -722,9 +739,25 @@ func draw(model *UsecaseModel, config types.Config, options types.RenderOptions,
 			st, et := trim(startType), trim(endType)
 			path = svg.RoutePath(ce.Route, "", st, et, svg.DefaultReach(st), svg.DefaultReach(et))
 		}
-		color := "var(--_l)"
-		if style != nil && style.Stroke != "" {
-			color = svg.Esc(style.Stroke)
+		line := ""
+		if style != nil {
+			line = style.Line
+		}
+		under, onFills := svg.FillUnder(path.D, []float64{path.Sx, path.Sy, path.Ex, path.Ey}, fills, path.Tokens)
+		over, overOk := "", onFills
+		if under != nil {
+			over = svg.EdgeInk(under, line)
+		}
+		color := over
+		if color == "" {
+			color = "var(--_l)"
+			if style != nil && style.Stroke != "" {
+				color = svg.Esc(style.Stroke)
+			}
+		}
+		if overOk && over == "" {
+			bg := "var(--_bg)"
+			casings.WriteString(svg.Casing(path.D, mark(startType, path.Sx, path.Sy, path.Sdx, path.Sdy, bg, bg)+mark(endType, path.Ex, path.Ey, path.Edx, path.Edy, bg, bg), line, false))
 		}
 		// Mermaid animates these dashes. A still picture keeps the dashes.
 		dashes := ""
@@ -736,16 +769,20 @@ func draw(model *UsecaseModel, config types.Config, options types.RenderOptions,
 		case edge.animate:
 			dashes = "9 5"
 		}
-		line := ""
-		if style != nil {
-			line = style.Line
+		marks := mark(startType, path.Sx, path.Sy, path.Sdx, path.Sdy, color, "") + mark(endType, path.Ex, path.Ey, path.Edx, path.Edy, color, "")
+		if under != nil && over != "" {
+			marks = svg.HollowOn(marks, under)
 		}
-		svg.WriteStrings(&edgesOut, `<g class="pele-edge pele-`, edge.relationshipType, svg.ClassNames(trimRelationship(edge.classes)), `" data-id="`, svg.EscText(edge.id), `"`, line, `>`,
+		stroke := ""
+		if over != "" {
+			stroke = ` stroke="` + over + `"`
+		}
+		svg.WriteStrings(&edgesOut, `<g class="pele-edge pele-`, edge.relationshipType, svg.ClassNames(trimRelationship(edge.classes)), `" data-id="`, svg.EscText(edge.id), `"`, stroke, line, `>`,
 			`<path d="`, path.D, `"`)
 		if dashes != "" {
 			svg.WriteStrings(&edgesOut, ` stroke-dasharray="`, dashes, `"`)
 		}
-		svg.WriteStrings(&edgesOut, `/>`, mark(startType, path.Sx, path.Sy, path.Sdx, path.Sdy, color), mark(endType, path.Ex, path.Ey, path.Edx, path.Edy, color), `</g>`)
+		svg.WriteStrings(&edgesOut, `/>`, marks, `</g>`)
 		semantic := edge.relationshipType == "include" || edge.relationshipType == "extend"
 		if label.Width > 0 {
 			attrs := ""
@@ -776,6 +813,9 @@ func draw(model *UsecaseModel, config types.Config, options types.RenderOptions,
 	parts := []string{svg.LabelSvg(title, width/2, pad+title.Height/2, ` class="pele-title" font-weight="var(--_tw)"`, nil)}
 	if clusters.Len() > 0 {
 		parts = append(parts, `<g class="pele-clusters">`, clusters.String(), `</g>`)
+	}
+	if casings.Len() > 0 {
+		parts = append(parts, svg.CasingsSvg(casings.String()))
 	}
 	if edgesOut.Len() > 0 {
 		parts = append(parts, `<g class="pele-edges" fill="none" stroke="var(--_l)" stroke-linecap="round">`, edgesOut.String(), `</g>`)

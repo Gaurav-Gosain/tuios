@@ -2,7 +2,7 @@ package sketch
 
 // Ported from pele tests/render/{sequence,state,class,er,gantt,mindmap,xychart,timeline,quadrant,journey,kanban,git,sankey,block,architecture,requirement,c4,packet,radar,treemap,info,treeview,ishikawa,cynefin,eventmodeling,venn,wardley,railroad,usecase,agentflow}-security.test.ts,
 // the inert parts of tests/render/pie.test.ts and tests/render/swimlane.test.ts, and tests/support/corpus.ts at
-// 4eff76f98c73b6817800a05773517f35832e4e92. The template lists are in
+// 8aff183be57021b533f319a29341a529be934b08. The template lists are in
 // security_templates_test.go, written by scripts/security-templates.py.
 
 import (

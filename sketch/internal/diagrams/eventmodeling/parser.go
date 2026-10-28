@@ -1,4 +1,4 @@
-// Ported from pele src/diagrams/eventmodeling/parser.ts at 4eff76f98c73b6817800a05773517f35832e4e92.
+// Ported from pele src/diagrams/eventmodeling/parser.ts at 8aff183be57021b533f319a29341a529be934b08.
 
 package eventmodeling
 
@@ -209,7 +209,7 @@ func buildTokens() []*common.TokenType {
 		&common.TokenType{Name: "EM_DATA_BLOCK", Match: matchBlock},
 		common.AccDescr("EM_ACC_DESCR"),
 		renamed(common.ACC_TITLE, "EM_ACC_TITLE"),
-		renamed(common.TITLE, "EM_TITLE"),
+		renamed(common.TitleBefore(common.WordNext), "EM_TITLE"),
 		&common.TokenType{Name: "EM_WS", Match: matchSpace, Hidden: true},
 		renamed(common.YAML, "EM_YAML"),
 		renamed(common.DIRECTIVE, "EM_DIRECTIVE"),

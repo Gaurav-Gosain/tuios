@@ -1,4 +1,4 @@
-// Ported from pele src/diagrams/sequence/render.ts at 4eff76f98c73b6817800a05773517f35832e4e92.
+// Ported from pele src/diagrams/sequence/render.ts at 8aff183be57021b533f319a29341a529be934b08.
 
 package sequence
 
@@ -191,27 +191,27 @@ func option(conf types.Config, key string, fallback float64) float64 {
 	return fallback
 }
 
-func half(x, y, dir, up float64, stick bool) string {
+func half(x, y, dir, up float64, stick bool, color string) string {
 	bx := svg.Num(x - float64(dir*svg.ARROW))
 	if stick {
 		return `<path class="pele-marker" d="M` + svg.Num(x) + `,` + svg.Num(y) + `L` + bx + `,` + svg.Num(y+float64(up*5)) + `"/>`
 	}
-	return `<path class="pele-marker" d="M` + svg.Num(x) + `,` + svg.Num(y) + `L` + bx + `,` + svg.Num(y+float64(up*4.5)) + `V` + svg.Num(y) + `Z" fill="var(--_l)" stroke="none"/>`
+	return `<path class="pele-marker" d="M` + svg.Num(x) + `,` + svg.Num(y) + `L` + bx + `,` + svg.Num(y+float64(up*4.5)) + `V` + svg.Num(y) + `Z" fill="` + color + `" stroke="none"/>`
 }
 
 // head draws the head whose tip is at (x, y) and points along dir. `up` is the side a half head sits on.
-func head(typ int, x, y, dir, up float64) string {
+func head(typ int, x, y, dir, up float64, color string) string {
 	switch typ {
 	case Head_Arrow:
-		return svg.Marker("arrow_point", x, y, dir, 0, "var(--_l)")
+		return svg.Marker("arrow_point", x, y, dir, 0, color)
 	case Head_Cross:
-		return svg.Marker("arrow_cross", x, y, dir, 0, "var(--_l)")
+		return svg.Marker("arrow_cross", x, y, dir, 0, color)
 	case Head_Open:
 		return `<path class="pele-marker" d="M` + svg.Num(x-float64(dir*svg.ARROW)) + `,` + svg.Num(y-4.5) + `L` + svg.Num(x) + `,` + svg.Num(y) + `L` + svg.Num(x-float64(dir*svg.ARROW)) + `,` + svg.Num(y+4.5) + `" stroke-linejoin="round"/>`
 	case Head_HalfSolid:
-		return half(x, y, dir, up, false)
+		return half(x, y, dir, up, false, color)
 	case Head_HalfStick:
-		return half(x, y, dir, up, true)
+		return half(x, y, dir, up, true, color)
 	}
 	return ""
 }
@@ -227,7 +227,7 @@ func trim(typ int) float64 {
 }
 
 func renderSequence(db *SeqDb, config types.Config, options types.RenderOptions) types.Rendered {
-	return common.Tighten(options, func(tight bool) types.Rendered { return draw(db, config, options, tight) })
+	return common.Tighten(options, func(tight bool) types.Rendered { return draw(db, config, options, tight, 0, true) })
 }
 
 func deref(s *string) string {
@@ -237,7 +237,14 @@ func deref(s *string) string {
 	return *s
 }
 
-func draw(db *SeqDb, config types.Config, options types.RenderOptions, tight bool) types.Rendered {
+// monoMeasurer measures text in the monospace font.
+type monoMeasurer struct{ text.TextMeasurer }
+
+func (m monoMeasurer) Width(t string, s float64, style int) float64 {
+	return m.TextMeasurer.Width(t, s, style|text.Mono)
+}
+
+func draw(db *SeqDb, config types.Config, options types.RenderOptions, tight bool, hold float64, byNeed bool) types.Rendered {
 	conf, _ := config["sequence"].(map[string]any)
 	if conf == nil {
 		conf = types.Config{}
@@ -248,6 +255,11 @@ func draw(db *SeqDb, config types.Config, options types.RenderOptions, tight boo
 	measurer := options.Measurer
 	if measurer == nil {
 		measurer = text.DefaultMeasurer(options.FontFamily, options.FontFamilyMono)
+	}
+	monospaced := options.HasMonospace(types.MonospaceMessages)
+	messageMeasurer := measurer
+	if monospaced {
+		messageMeasurer = monoMeasurer{measurer}
 	}
 	icons := options.Icons
 	pad := types.Or(options.Padding, 8)
@@ -295,16 +307,22 @@ func draw(db *SeqDb, config types.Config, options types.RenderOptions, tight boo
 	count := len(messages)
 	showNumbers, _ := conf["showSequenceNumbers"].(bool)
 	numbering := numberMessages(messages, showNumbers)
-	textLabel := func(raw string, fontSize float64, wrap bool, width float64, base int) text.Label {
+	textBy := func(raw string, fontSize float64, wrap bool, width float64, by text.TextMeasurer) text.Label {
 		max := inf
 		if tight || wrap {
 			max = width
 		}
-		label := text.LayoutLabel(raw, false, measurer, fontSize, max, base)
+		label := text.LayoutLabel(raw, false, by, fontSize, max, 0)
 		if tight {
-			return common.BreakLabel(label, measurer, math.Max(120, width))
+			return common.BreakLabel(label, by, math.Max(120, width))
 		}
 		return label
+	}
+	textLabel := func(raw string, fontSize float64, wrap bool, width float64) text.Label {
+		return textBy(raw, fontSize, wrap, width, measurer)
+	}
+	messageText := func(raw string, wrap bool, width float64) text.Label {
+		return textBy(raw, small, wrap, width, messageMeasurer)
 	}
 
 	var used map[string]bool
@@ -338,7 +356,7 @@ func draw(db *SeqDb, config types.Config, options types.RenderOptions, tight boo
 			continue
 		}
 		kind := actorKind(actor.Type)
-		label := textLabel(actor.Description, size, actor.Wrap, wrapW, 0)
+		label := textLabel(actor.Description, size, actor.Wrap, wrapW)
 		createAt := -1
 		if created, ok := db.CreatedActors[id]; ok {
 			createAt = nextLine[min(created, count)]
@@ -394,6 +412,23 @@ func draw(db *SeqDb, config types.Config, options types.RenderOptions, tight boo
 	}
 
 	views := make([]*view, count)
+	sized := make([]map[float64]text.Label, count)
+	sizedText := func(i int, room float64) text.Label {
+		known := sized[i]
+		if known == nil {
+			if room == wrapW {
+				return views[i].label
+			}
+			known = map[float64]text.Label{wrapW: views[i].label}
+			sized[i] = known
+		}
+		label, ok := known[room]
+		if !ok {
+			label = messageText(messages[i].Message, true, room)
+			known[room] = label
+		}
+		return label
+	}
 	for i, m := range messages {
 		if m.From == nil || m.To == nil || m.Numbering != nil {
 			continue
@@ -404,7 +439,7 @@ func draw(db *SeqDb, config types.Config, options types.RenderOptions, tight boo
 			continue
 		}
 		if m.Type == LINETYPE_NOTE {
-			label := textLabel(m.Message, small, m.Wrap, wrapW, 0)
+			label := textLabel(m.Message, small, m.Wrap, wrapW)
 			w := label.Width + float64(2*notePad)
 			if m.Placement == PLACEMENT_LEFTOF {
 				need(a-1, a, w+2*NOTE_GAP+ACT_W)
@@ -418,7 +453,7 @@ func draw(db *SeqDb, config types.Config, options types.RenderOptions, tight boo
 			}
 			views[i] = &view{kind: V_Note, a: a, b: b, label: label, w: w}
 		} else if isLineMessage(m.Type) {
-			label := textLabel(m.Message, small, m.Wrap, wrapW, 0)
+			label := messageText(m.Message, m.Wrap, wrapW)
 			badge := badgeWidth(i)
 			if a == b {
 				need(a, a+1, SELF_W+8+label.Width+16+ACT_W+badge)
@@ -452,7 +487,7 @@ func draw(db *SeqDb, config types.Config, options types.RenderOptions, tight boo
 		if box != nil && run != nil && run.box == box && run.last == i-1 {
 			run.last = i
 		} else if box != nil {
-			runs = append(runs, &boxRun{box: box, first: i, last: i, title: textLabel(deref(box.Name), small, box.Wrap, wrapW, 0)})
+			runs = append(runs, &boxRun{box: box, first: i, last: i, title: textLabel(deref(box.Name), small, box.Wrap, wrapW)})
 		}
 	}
 
@@ -526,7 +561,6 @@ func draw(db *SeqDb, config types.Config, options types.RenderOptions, tight boo
 			gaps[run.last] += run.grow
 		}
 	}
-	place()
 
 	minX := inf
 	maxX := math.Inf(-1)
@@ -538,127 +572,233 @@ func draw(db *SeqDb, config types.Config, options types.RenderOptions, tight boo
 			maxX = x1
 		}
 	}
-	for _, col := range cols {
-		extend(col.x-col.size.W/2, col.x+col.size.W/2)
+	boxEdges := func(run *boxRun) (float64, float64) {
+		return cols[run.first].x - cols[run.first].size.W/2 - boxPad - run.grow, cols[run.last].x + cols[run.last].size.W/2 + boxPad + run.grow
 	}
-	for _, run := range runs {
-		extend(cols[run.first].x-cols[run.first].size.W/2-boxPad-run.grow, cols[run.last].x+cols[run.last].size.W/2+boxPad+run.grow)
-	}
-
-	// Horizontal extents of every block, from what it holds.
 	frames := make([]*seqFrame, count)
-	var open []*seqFrame
-	spanAll := func() (float64, float64) {
-		if last < 0 {
-			return 0, 120
+	layout := func() {
+		place()
+		minX = inf
+		maxX = math.Inf(-1)
+		for _, col := range cols {
+			extend(col.x-col.size.W/2, col.x+col.size.W/2)
 		}
-		return cols[0].x - framePad, cols[last].x + framePad
+		for _, run := range runs {
+			extend(boxEdges(run))
+		}
+
+		// Horizontal extents of every block, from what it holds.
+		var open []*seqFrame
+		spanAll := func() (float64, float64) {
+			if last < 0 {
+				return 0, 120
+			}
+			return cols[0].x - framePad, cols[last].x + framePad
+		}
+		for i, m := range messages {
+			typ := m.Type
+			frameKind, isFrame := FRAME_KIND[typ]
+			v := views[i]
+			if isFrame {
+				fr := &seqFrame{kind: frameKind, x0: inf, x1: math.Inf(-1), title: NO_LABEL, dividers: []int{i}}
+				if frameKind == "rect" && m.Numbering == nil {
+					fr.fill = m.Message
+				}
+				frames[i] = fr
+				open = append(open, fr)
+			} else if typ == LINETYPE_ALT_ELSE || typ == LINETYPE_PAR_AND || typ == LINETYPE_CRITICAL_OPTION {
+				if len(open) > 0 {
+					top := open[len(open)-1]
+					top.dividers = append(top.dividers, i)
+				}
+			} else if typ == LINETYPE_LOOP_END || typ == LINETYPE_ALT_END || typ == LINETYPE_OPT_END || typ == LINETYPE_PAR_END ||
+				typ == LINETYPE_CRITICAL_END || typ == LINETYPE_BREAK_END || typ == LINETYPE_RECT_END {
+				if len(open) == 0 {
+					continue
+				}
+				fr := open[len(open)-1]
+				open = open[:len(open)-1]
+				frames[i] = fr
+				if fr.x0 > fr.x1 {
+					fr.x0, fr.x1 = spanAll()
+				}
+				if fr.kind != "rect" {
+					fr.tabW = measurer.Width(fr.kind, tiny, text.Bold) + 14
+					// A block grows to the right to give its texts up to FRAME_TEXT of width before they wrap.
+					for k, d := range fr.dividers {
+						raw := messages[d].Message
+						tab := 0.0
+						if k == 0 {
+							tab = fr.tabW + 8
+						}
+						room := fr.x1 - fr.x0 - 16 - tab
+						label := NO_LABEL
+						if raw != "" {
+							limit := float64(FRAME_TEXT)
+							if tight {
+								limit = math.Min(FRAME_TEXT, wrapW)
+							}
+							label = textLabel("["+raw+"]", small, true, math.Max(room, limit))
+						}
+						if label.Width > room {
+							fr.x1 += label.Width - room
+						}
+						if k == 0 {
+							fr.title = label
+						} else {
+							fr.dividerLabels = append(fr.dividerLabels, label)
+						}
+					}
+				}
+				extend(fr.x0, fr.x1)
+				if len(open) > 0 {
+					parent := open[len(open)-1]
+					parent.x0 = math.Min(parent.x0, fr.x0-frameNest)
+					parent.x1 = math.Max(parent.x1, fr.x1+frameNest)
+				}
+			} else if v != nil {
+				a := cols[v.a]
+				b := cols[v.b]
+				var x0, x1 float64
+				if v.kind == V_Note {
+					if m.Placement == PLACEMENT_LEFTOF {
+						v.x = a.x - NOTE_GAP - v.w
+					} else if m.Placement == PLACEMENT_RIGHTOF {
+						v.x = a.x + NOTE_GAP
+					} else if v.a == v.b {
+						v.x = a.x - v.w/2
+					} else {
+						lo := math.Min(a.x, b.x) - noteOver
+						hi := math.Max(a.x, b.x) + noteOver
+						if tight || m.Wrap {
+							v.label = textLabel(m.Message, small, true, math.Max(wrapW, hi-lo-float64(2*notePad)))
+						}
+						v.w = math.Max(hi-lo, v.label.Width+float64(2*notePad))
+						v.x = (lo + hi - v.w) / 2
+					}
+					x0 = v.x
+					x1 = v.x + v.w
+				} else if v.kind == V_Self {
+					x0 = a.x
+					x1 = a.x + ACT_W + SELF_W + 8 + v.label.Width + badgeWidth(i)
+				} else {
+					x0 = math.Min(a.x, b.x)
+					x1 = math.Max(a.x, b.x)
+					if tight || m.Wrap {
+						v.label = sizedText(i, math.Max(wrapW, x1-x0-float64(2*msgPad)-ACT_W))
+					}
+					if b.createAt == i {
+						if b.x > a.x {
+							x1 += b.size.W / 2
+						} else {
+							x0 -= b.size.W / 2
+						}
+					}
+				}
+				extend(x0, x1)
+				if len(open) > 0 {
+					fr := open[len(open)-1]
+					fr.x0 = math.Min(fr.x0, x0-framePad)
+					fr.x1 = math.Max(fr.x1, x1+framePad)
+				}
+			}
+		}
 	}
-	for i, m := range messages {
-		typ := m.Type
-		frameKind, isFrame := FRAME_KIND[typ]
-		v := views[i]
-		if isFrame {
-			fr := &seqFrame{kind: frameKind, x0: inf, x1: math.Inf(-1), title: NO_LABEL, dividers: []int{i}}
-			if frameKind == "rect" && m.Numbering == nil {
-				fr.fill = m.Message
-			}
-			frames[i] = fr
-			open = append(open, fr)
-		} else if typ == LINETYPE_ALT_ELSE || typ == LINETYPE_PAR_AND || typ == LINETYPE_CRITICAL_OPTION {
-			if len(open) > 0 {
-				top := open[len(open)-1]
-				top.dividers = append(top.dividers, i)
-			}
-		} else if typ == LINETYPE_LOOP_END || typ == LINETYPE_ALT_END || typ == LINETYPE_OPT_END || typ == LINETYPE_PAR_END ||
-			typ == LINETYPE_CRITICAL_END || typ == LINETYPE_BREAK_END || typ == LINETYPE_RECT_END {
-			if len(open) == 0 {
+	layout()
+
+	// Widen gaps only if it reduces message wrapping.
+	grown := false
+	uneven := false
+	if tight && options.MaxWidth != nil {
+		spare := math.Floor(*options.MaxWidth) - math.Ceil(maxX-minX+float64(2*pad)) - hold
+		stretch := make([]int32, len(cols))
+		want := make([]float64, len(gaps))
+		var wrapped []int
+		lines := 0
+		for i := 0; spare > 0 && i < len(views); i++ {
+			v := views[i]
+			if v == nil || v.kind != V_Line {
 				continue
 			}
-			fr := open[len(open)-1]
-			open = open[:len(open)-1]
-			frames[i] = fr
-			if fr.x0 > fr.x1 {
-				fr.x0, fr.x1 = spanAll()
+			natural := messageText(messages[i].Message, false, inf)
+			if len(v.label.Lines) <= len(natural.Lines) {
+				continue
 			}
-			if fr.kind != "rect" {
-				fr.tabW = measurer.Width(fr.kind, tiny, text.Bold) + 14
-				// A block grows to the right to give its texts up to FRAME_TEXT of width before they wrap.
-				for k, d := range fr.dividers {
-					raw := messages[d].Message
-					tab := 0.0
-					if k == 0 {
-						tab = fr.tabW + 8
-					}
-					room := fr.x1 - fr.x0 - 16 - tab
-					label := NO_LABEL
-					if raw != "" {
-						limit := float64(FRAME_TEXT)
-						if tight {
-							limit = math.Min(FRAME_TEXT, wrapW)
-						}
-						label = textLabel("["+raw+"]", small, true, math.Max(room, limit), 0)
-					}
-					if label.Width > room {
-						fr.x1 += label.Width - room
-					}
-					if k == 0 {
-						fr.title = label
-					} else {
-						fr.dividerLabels = append(fr.dividerLabels, label)
-					}
-				}
+			wrapped = append(wrapped, i)
+			lines += len(v.label.Lines)
+			lo := min(v.a, v.b)
+			hi := max(v.a, v.b)
+			stretch[lo]++
+			stretch[hi]--
+			short := (natural.Width - (cols[hi].x - cols[lo].x - float64(2*msgPad) - ACT_W)) / float64(hi-lo)
+			for g := lo; g < hi; g++ {
+				want[g] = math.Max(want[g], short)
 			}
-			extend(fr.x0, fr.x1)
-			if len(open) > 0 {
-				parent := open[len(open)-1]
-				parent.x0 = math.Min(parent.x0, fr.x0-frameNest)
-				parent.x1 = math.Max(parent.x1, fr.x1+frameNest)
-			}
-		} else if v != nil {
-			a := cols[v.a]
-			b := cols[v.b]
-			var x0, x1 float64
-			if v.kind == V_Note {
-				if m.Placement == PLACEMENT_LEFTOF {
-					v.x = a.x - NOTE_GAP - v.w
-				} else if m.Placement == PLACEMENT_RIGHTOF {
-					v.x = a.x + NOTE_GAP
-				} else if v.a == v.b {
-					v.x = a.x - v.w/2
-				} else {
-					lo := math.Min(a.x, b.x) - noteOver
-					hi := math.Max(a.x, b.x) + noteOver
-					if tight || m.Wrap {
-						v.label = textLabel(m.Message, small, true, math.Max(wrapW, hi-lo-float64(2*notePad)), 0)
-					}
-					v.w = math.Max(hi-lo, v.label.Width+float64(2*notePad))
-					v.x = (lo + hi - v.w) / 2
-				}
-				x0 = v.x
-				x1 = v.x + v.w
-			} else if v.kind == V_Self {
-				x0 = a.x
-				x1 = a.x + ACT_W + SELF_W + 8 + v.label.Width + badgeWidth(i)
+		}
+		var active int32
+		crossed := 0.0
+		for i := range gaps {
+			active += stretch[i]
+			if active > 0 {
+				stretch[i] = 1
 			} else {
-				x0 = math.Min(a.x, b.x)
-				x1 = math.Max(a.x, b.x)
-				if tight || m.Wrap {
-					v.label = textLabel(m.Message, small, true, math.Max(wrapW, x1-x0-float64(2*msgPad)-ACT_W), 0)
+				stretch[i] = 0
+			}
+			crossed += float64(stretch[i])
+		}
+		if crossed > 0 {
+			before := slices.Clone(gaps)
+			spread := func(share func(g int) float64) []int {
+				for g := range gaps {
+					gaps[g] = before[g] + share(g)
 				}
-				if b.createAt == i {
-					if b.x > a.x {
-						x1 += b.size.W / 2
-					} else {
-						x0 -= b.size.W / 2
-					}
+				layout()
+				counts := make([]int, len(wrapped))
+				for k, i := range wrapped {
+					counts[k] = len(views[i].label.Lines)
+				}
+				return counts
+			}
+			sum := func(counts []int) int {
+				t := 0
+				for _, n := range counts {
+					t += n
+				}
+				return t
+			}
+			even := func(g int) float64 { return float64(float64(stretch[g])*spare) / crossed }
+			counts := spread(even)
+			missing := 0.0
+			for _, w := range want {
+				missing += w
+			}
+			// Allow for rounding error.
+			needsShare := func(g int) float64 { return float64(want[g]*(spare-0.01)) / missing }
+			// Reducing wrapping requires at least one gap wider than the even split.
+			some := false
+			for g := range gaps {
+				if needsShare(g) > even(g) {
+					some = true
+					break
 				}
 			}
-			extend(x0, x1)
-			if len(open) > 0 {
-				fr := open[len(open)-1]
-				fr.x0 = math.Min(fr.x0, x0-framePad)
-				fr.x1 = math.Max(fr.x1, x1+framePad)
+			if byNeed && crossed > 1 && missing > 0 && some {
+				first := counts
+				counts = spread(needsShare)
+				uneven = sum(counts) < sum(first)
+				for k, n := range counts {
+					if n > first[k] {
+						uneven = false
+					}
+				}
+				if !uneven {
+					counts = spread(even)
+				}
+			}
+			grown = sum(counts) < lines
+			if !grown {
+				copy(gaps, before)
+				layout()
 			}
 		}
 	}
@@ -704,14 +844,63 @@ func draw(db *SeqDb, config types.Config, options types.RenderOptions, tight boo
 		}
 		return lo < len(xs) && xs[lo] < x1
 	}
-	backed := func(label text.Label, cx, cy float64, attrs string) string {
+	var stack []*seqFrame
+	inks := map[string]string{}
+	// inkOf is "" for TS undefined.
+	inkOf := func(fill string) string {
+		if fill == "" {
+			return ""
+		}
+		color, ok := inks[fill]
+		if !ok {
+			color = svg.Ink(svg.ResolveStyle([]string{"fill:" + fill}).Shape, "")
+			inks[fill] = color
+		}
+		return color
+	}
+	inkOn := func(fill string) string {
+		color := inkOf(fill)
+		if color != "" {
+			return ` fill="` + color + `"`
+		}
+		return ""
+	}
+	// Prefer the innermost rect's fill, then a containing box's.
+	fillUnder := func(l, r float64) string {
+		for k := len(stack) - 1; k >= 0; k-- {
+			if stack[k].kind == "rect" {
+				return stack[k].fill
+			}
+		}
+		for _, run := range runs {
+			x0, x1 := boxEdges(run)
+			if l >= x0 && r <= x1 {
+				return run.box.Fill
+			}
+		}
+		return ""
+	}
+	under := func(l, r float64) string { return inkOn(fillUnder(l, r)) }
+	backed := func(label text.Label, cx, cy float64, frame bool) string {
 		if label.Width == 0 {
 			return ""
 		}
 		l := cx - label.Width/2
+		plate := crosses(l, l+label.Width)
 		back := ""
-		if crosses(l, l+label.Width) {
+		if plate {
 			back = `<rect x="` + svg.Num(l-3) + `" y="` + svg.Num(cy-label.Height/2+2) + `" width="` + svg.Num(label.Width+6) + `" height="` + svg.Num(label.Height-4) + `" rx="3" fill="var(--_bg)" stroke="none"/>`
+		}
+		fill := ""
+		if !plate {
+			fill = under(l, l+label.Width)
+		}
+		attrs := fill
+		if frame {
+			if fill == "" {
+				fill = ` fill="var(--_m)"`
+			}
+			attrs = ` class="pele-frame-label"` + fill + ` stroke="none"`
 		}
 		return back + svg.LabelSvg(label, cx, cy, attrs, icons)
 	}
@@ -759,12 +948,16 @@ func draw(db *SeqDb, config types.Config, options types.RenderOptions, tight boo
 		if c, ok := col.actor.Properties["class"].(string); ok {
 			cls = svg.ClassNames(c)
 		}
+		figureInk := ""
+		if isFigure(col.kind) && col.actor.Box != nil {
+			figureInk = inkOn(col.actor.Box.Fill)
+		}
 		f := ""
 		if footer {
 			f = " pele-actor-footer"
 		}
 		return `<g class="pele-node pele-actor pele-actor-` + col.kind + f + cls + `" data-id="` + svg.EscText(col.id) + `">` +
-			drawActor(col.kind, col.x, top, col.size, col.label, icons) + `</g>`
+			drawActor(col.kind, col.x, top, col.size, col.label, icons, figureInk) + `</g>`
 	}
 	badge := func(i int, cx, cy, w float64) string {
 		return `<g class="pele-sequence-number"><rect x="` + svg.Num(cx-w/2) + `" y="` + svg.Num(cy-BADGE_H/2) + `" width="` + svg.Num(w) + `" height="16" rx="8" fill="var(--_l)" stroke="none"/><text x="` +
@@ -778,7 +971,6 @@ func draw(db *SeqDb, config types.Config, options types.RenderOptions, tight boo
 	headOf := func(h int, at bool) bool { return at && h != Head_None }
 
 	y := headBottom + 6
-	var stack []*seqFrame
 	for i, m := range messages {
 		typ := m.Type
 		v := views[i]
@@ -827,12 +1019,12 @@ func draw(db *SeqDb, config types.Config, options types.RenderOptions, tight boo
 				for k, dy := range fr.dividerY {
 					label := fr.dividerLabels[k]
 					inner += `<path d="M` + x + `,` + svg.Num(dy) + `H` + svg.Num(fr.x1) + `"` + DASH + `/>` +
-						backed(label, fr.x0+8+label.Width/2, dy+2+label.Height/2, ` class="pele-frame-label" fill="var(--_m)" stroke="none"`)
+						backed(label, fr.x0+8+label.Width/2, dy+2+label.Height/2, true)
 				}
 				inner += `<rect x="` + x + `" y="` + svg.Num(fr.top) + `" width="` + svg.Num(fr.tabW) + `" height="20" fill="var(--_s)"` + svg.ROUNDED + `/>` +
 					`<text class="pele-frame-kind" x="` + svg.Num(fr.x0+fr.tabW/2) + `" y="` + svg.Num(fr.top+TAB_H/2+float64(tiny*0.35)) +
 					`" text-anchor="middle" font-size="` + js.Num(tiny) + `" font-weight="var(--_hw)" fill="var(--_m)" stroke="none">` + fr.kind + `</text>` +
-					backed(fr.title, fr.x0+fr.tabW+8+fr.title.Width/2, fr.top+math.Max(TAB_H, fr.title.Height)/2, ` class="pele-frame-label" fill="var(--_m)" stroke="none"`)
+					backed(fr.title, fr.x0+fr.tabW+8+fr.title.Width/2, fr.top+math.Max(TAB_H, fr.title.Height)/2, true)
 				framesOut.WriteString(`<g class="pele-frame pele-frame-` + fr.kind + `">` + inner + `</g>`)
 			}
 			if geo {
@@ -901,8 +1093,10 @@ func draw(db *SeqDb, config types.Config, options types.RenderOptions, tight boo
 			cc := m.CentralConnection
 			circleTo := cc == LINETYPE_CENTRAL_CONNECTION || cc == LINETYPE_CENTRAL_CONNECTION_DUAL
 			circleFrom := cc == LINETYPE_CENTRAL_CONNECTION_REVERSE || cc == LINETYPE_CENTRAL_CONNECTION_DUAL
+			line := ""
+			color := "var(--_l)"
 			circle := func(cx, cy float64) string {
-				return `<circle class="pele-central" cx="` + svg.Num(cx) + `" cy="` + svg.Num(cy) + `" r="4" fill="var(--_l)" stroke="none"/>`
+				return `<circle class="pele-central" cx="` + svg.Num(cx) + `" cy="` + svg.Num(cy) + `" r="4" fill="` + color + `" stroke="none"/>`
 			}
 			tailAtEnd := st.atStart && !st.atEnd
 			headTrim := trim(st.head)
@@ -921,6 +1115,10 @@ func draw(db *SeqDb, config types.Config, options types.RenderOptions, tight boo
 					x1 = a.x + CENTRAL_R
 				}
 				out := math.Max(x0, x1) + SELF_W + bw/2
+				line = inkOf(fillUnder(a.x, out))
+				if line != "" {
+					color = line
+				}
 				if circleFrom {
 					inner += circle(a.x, top)
 				}
@@ -939,10 +1137,10 @@ func draw(db *SeqDb, config types.Config, options types.RenderOptions, tight boo
 				// The loop leaves to the right and comes back heading left, which turns a half head over.
 				heads := ""
 				if st.atStart {
-					heads += head(st.head, x0, top, -1, up)
+					heads += head(st.head, x0, top, -1, up, color)
 				}
 				if st.atEnd {
-					heads += head(st.head, x1, bottom, -1, -up)
+					heads += head(st.head, x1, bottom, -1, -up, color)
 				}
 				fromX := x0
 				if st.atStart {
@@ -963,7 +1161,7 @@ func draw(db *SeqDb, config types.Config, options types.RenderOptions, tight boo
 				inner = `<path d="` + d + `"` + attrs + `/>` + heads + inner
 				extend(a.x, out+8+label.Width)
 				if label.Width > 0 {
-					labelsOut.WriteString(`<g class="pele-edge-label" data-id="i` + svg.EscText(m.ID) + `">` + svg.LabelSvg(label, out+8+label.Width/2, (top+bottom)/2, "", icons) + `</g>`)
+					svg.WriteStrings(&labelsOut, `<g class="pele-edge-label" data-id="i`, svg.EscText(m.ID), `">`, svg.LabelSvg(label, out+8+label.Width/2, (top+bottom)/2, under(out+8, out+8+label.Width), icons), `</g>`)
 				}
 				if geo {
 					gMessages = append(gMessages, types.GeoMessage{From: v.a, To: v.b, Y: top, Y2: bottom, X0: x0, X1: x1, Self: true, Dotted: st.dotted,
@@ -978,6 +1176,10 @@ func draw(db *SeqDb, config types.Config, options types.RenderOptions, tight boo
 					dir = 1
 				}
 				creating := b.createAt == i
+				line = inkOf(fillUnder(math.Min(a.x, b.x), math.Max(a.x, b.x)))
+				if line != "" {
+					color = line
+				}
 				lift := 6.0
 				if label.Height > 0 {
 					lift = label.Height + 2
@@ -1033,10 +1235,10 @@ func draw(db *SeqDb, config types.Config, options types.RenderOptions, tight boo
 				}
 				heads := ""
 				if st.atStart {
-					heads += head(st.head, x0, lineY, -dir, up*dir)
+					heads += head(st.head, x0, lineY, -dir, up*dir, color)
 				}
 				if st.atEnd {
-					heads += head(st.head, x1, lineY, dir, up*dir)
+					heads += head(st.head, x1, lineY, dir, up*dir, color)
 				}
 				from := x0
 				if st.atStart {
@@ -1057,7 +1259,7 @@ func draw(db *SeqDb, config types.Config, options types.RenderOptions, tight boo
 						cx = r - msgPad - label.Width/2
 					}
 					extend(cx-label.Width/2, cx+label.Width/2)
-					labelsOut.WriteString(`<g class="pele-edge-label" data-id="i` + svg.EscText(m.ID) + `">` + backed(label, cx, lineY-4-label.Height/2, "") + `</g>`)
+					svg.WriteStrings(&labelsOut, `<g class="pele-edge-label" data-id="i`, svg.EscText(m.ID), `">`, backed(label, cx, lineY-4-label.Height/2, false), `</g>`)
 				}
 				if geo {
 					gm := types.GeoMessage{From: v.a, To: v.b, Y: lineY, X0: x0, X1: x1, Dotted: st.dotted,
@@ -1078,7 +1280,11 @@ func draw(db *SeqDb, config types.Config, options types.RenderOptions, tight boo
 					y = lineY + b.size.H/2 - 6
 				}
 			}
-			svg.WriteStrings(&edgesOut, `<g class="pele-edge pele-message" data-id="i`, svg.EscText(m.ID), `">`, inner, `</g>`)
+			stroke := ""
+			if line != "" {
+				stroke = ` stroke="` + line + `"`
+			}
+			svg.WriteStrings(&edgesOut, `<g class="pele-edge pele-message" data-id="i`, svg.EscText(m.ID), `"`, stroke, `>`, inner, `</g>`)
 			y = math.Max(y, lineY)
 			if a.destroyAt == i {
 				y = math.Max(y, destroy(a, lineY))
@@ -1121,8 +1327,7 @@ func draw(db *SeqDb, config types.Config, options types.RenderOptions, tight boo
 
 	var boxesOut strings.Builder
 	for _, run := range runs {
-		x0 := cols[run.first].x - cols[run.first].size.W/2 - boxPad - run.grow
-		x1 := cols[run.last].x + cols[run.last].size.W/2 + boxPad + run.grow
+		x0, x1 := boxEdges(run)
 		fill := ""
 		if run.box.Fill != "transparent" {
 			fill = svg.ResolveStyle([]string{"fill:" + run.box.Fill}).Shape
@@ -1135,10 +1340,14 @@ func draw(db *SeqDb, config types.Config, options types.RenderOptions, tight boo
 		if fill == "" {
 			opacity = ` fill-opacity="0.5"`
 		}
+		boxInk := inkOn(run.box.Fill)
+		if boxInk == "" {
+			boxInk = ` fill="var(--_m)"`
+		}
 		boxesOut.WriteString(`<g class="pele-cluster pele-box"` + dataID + `>` +
 			`<rect x="` + svg.Num(x0) + `" y="0" width="` + svg.Num(x1-x0) + `" height="` + svg.Num(bottom+boxPad) + `" fill="var(--_a)" stroke="var(--_b)"` + svg.Rounded(opacity+fill) + `/>` +
 
-			svg.LabelSvg(run.title, (x0+x1)/2, boxPad/2+2+run.title.Height/2, ` class="pele-cluster-label" fill="var(--_m)"`, icons) +
+			svg.LabelSvg(run.title, (x0+x1)/2, boxPad/2+2+run.title.Height/2, ` class="pele-cluster-label"`+boxInk, icons) +
 			`</g>`)
 	}
 	if len(runs) > 0 {
@@ -1168,6 +1377,18 @@ func draw(db *SeqDb, config types.Config, options types.RenderOptions, tight boo
 	}
 
 	width := math.Ceil(maxX - minX + float64(2*pad))
+	// Retry with equal shares or room for activation notes and rounding.
+	if grown && width > *options.MaxWidth {
+		next := hold
+		if !uneven {
+			if hold > 0 {
+				next = inf
+			} else {
+				next = width - math.Floor(*options.MaxWidth)
+			}
+		}
+		return draw(db, config, options, tight, next, false)
+	}
 	height := math.Ceil(bottom - minY + float64(2*pad))
 	smallStr := js.Num(small)
 	content := make([]string, 0, 32)
@@ -1200,7 +1421,11 @@ func draw(db *SeqDb, config types.Config, options types.RenderOptions, tight boo
 		content = append(content, `<g class="pele-destroys" fill="none" stroke="var(--_l)" stroke-width="1.5" stroke-linecap="round">`, crossesOut.String(), `</g>`)
 	}
 	if labelsOut.Len() > 0 {
-		content = append(content, `<g class="pele-edge-labels" font-size="`+smallStr+`">`, labelsOut.String(), `</g>`)
+		family := ""
+		if monospaced {
+			family = ` font-family="` + svg.FONT_MONO + `"`
+		}
+		content = append(content, `<g class="pele-edge-labels" font-size="`+smallStr+`"`+family+`>`, labelsOut.String(), `</g>`)
 	}
 	if notesOut.Len() > 0 {
 		content = append(content, `<g class="pele-notes" font-size="`+smallStr+`" fill="var(--_a)" stroke="var(--_b)">`, notesOut.String(), `</g>`)

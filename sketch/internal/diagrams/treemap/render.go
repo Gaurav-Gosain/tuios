@@ -1,9 +1,10 @@
-// Ported from pele src/diagrams/treemap/render.ts at 4eff76f98c73b6817800a05773517f35832e4e92.
+// Ported from pele src/diagrams/treemap/render.ts at 8aff183be57021b533f319a29341a529be934b08.
 
 package treemap
 
 import (
 	"math"
+	"slices"
 	"strings"
 
 	"tuios.dev/sketch/internal/diagrams/common"
@@ -14,8 +15,35 @@ import (
 )
 
 const HEADER = 28
+const SHORT_HEADER = 18
 const SIDE = 6
 const LINE = 1.25
+
+func titlePart(raw string) string { return js.Trim(svg.Esc(js.Trim(text.DecodeEntities(raw)))) }
+
+func leafCount(roots []*TreemapNode) int {
+	count := 0
+	stack := slices.Clone(roots)
+	for len(stack) > 0 {
+		node := stack[len(stack)-1]
+		stack = stack[:len(stack)-1]
+		if node.section {
+			stack = append(stack, node.children...)
+		} else if !math.IsNaN(node.value) && !math.IsInf(node.value, 0) && node.value > 0 {
+			count++
+		}
+	}
+	return count
+}
+
+// corners caps corners at a quarter of a small box's shorter side; 4px is the default radius.
+func corners(attrs string, b *Box) string {
+	limit := math.Min(b.w, b.h) / 4
+	if limit < 4 {
+		return strings.Replace(svg.Rounded(attrs), "rx:var(--_r)", "rx:min(var(--_r),"+svg.Num(limit)+"px)", 1)
+	}
+	return svg.Rounded(attrs)
+}
 
 func option(config types.Config, key string, fallback, min, max float64) float64 {
 	section, _ := config["treemap"].(map[string]any)
@@ -56,7 +84,14 @@ func renderTreemap(model *TreemapModel, config types.Config, options types.Rende
 		spec = s
 	}
 	format := formatter(spec)
-	boxes := layoutTreemap(model.roots, width, height, Insets{gap: option(config, "padding", 4, 0, 200), header: HEADER, side: SIDE})
+	// Reduce gaps and insets as average leaf area shrinks.
+	crowd := math.Min(1, math.Max(0, math.Log10((width*height)/math.Max(1, float64(leafCount(model.roots)))/800)))
+	boxes := layoutTreemap(model.roots, width, height, Insets{
+		gap:    option(config, "padding", js.Round(2+float64(2*crowd)), 0, 200),
+		header: HEADER,
+		short:  SHORT_HEADER,
+		side:   js.Round(3 + float64(3*crowd)),
+	})
 
 	title := text.LayoutLabel(model.title, false, measurer, size, common.TitleRoom(options), text.Bold)
 	titleHeight := 0.0
@@ -90,65 +125,137 @@ func renderTreemap(model *TreemapModel, config types.Config, options types.Rende
 			geo.Boxes = append(geo.Boxes, types.GeoTreeBox{X: b.x, Y: b.y, W: b.w, H: b.h, Label: name, Value: value, Section: node.section, Depth: depth})
 		}
 		t.Reset()
+		// Include headerless ancestors in tooltips because their children cover them.
+		own := titlePart(node.name)
+		var path []string
+		if own != "" {
+			path = append(path, own)
+		}
+		for p := b.parent; p != nil && !p.headed; p = p.parent {
+			if section := titlePart(p.node.name); section != "" {
+				path = slices.Insert(path, 0, section)
+			}
+		}
+		full := strings.Join(path, " › ")
+		// tooltip takes the text drawn in the box, if any.
+		tooltip := func(drawn string, ok bool) string {
+			if full == "" || (ok && drawn == name && full == own) {
+				return ""
+			}
+			return "<title>" + full + "</title>"
+		}
+		rect := func(w *strings.Builder) {
+			svg.WriteStrings(w, `<rect x="`, svg.Num(x), `" y="`, svg.Num(y), `" width="`, svg.Num(b.w), `" height="`, svg.Num(b.h), `" fill="`, color, `"`)
+		}
+		// Inline font sizes override SVG attributes, so truncate instead of shrinking.
+		fixed := style.FontSize
+		textStyle := 0
+		if style.Bold {
+			textStyle |= text.Bold
+		}
+		if style.Italic {
+			textStyle |= text.Italic
+		}
+		ink := svg.InkFill(style, "")
 
 		if node.section {
-			if b.h >= HEADER {
+			drawn, drawnOK := "", false
+			if b.headed {
+				short := b.header < HEADER
+				labelSize := tiny
+				if !short {
+					labelSize = small
+				}
+				valueSize := tiny
+				if fixed != 0 {
+					labelSize, valueSize = fixed, fixed
+				}
 				room := b.w - 2*SIDE - 4
 				valueWidth := 0.0
 				if value != "" {
-					valueWidth = measurer.Width(value, tiny, 0)
+					valueWidth = measurer.Width(value, valueSize, textStyle)
 				}
-				withValue := valueWidth > 0 && room-valueWidth-12 >= 3*small
+				withValue := !short && valueWidth > 0 && room-valueWidth-12 >= float64(3*labelSize)
 				max := room
 				if withValue {
 					max = room - valueWidth - 12
 				}
-				label, ok := common.FitText(name, max, small, small, measurer, text.Bold)
-				baseline := y + HEADER/2 + 1
-				if ok {
-					svg.WriteStrings(&t, `<text x="`, svg.Num(x+SIDE+2), `" y="`, svg.Num(baseline+float64(small*0.35)), `" font-weight="var(--_hw)"`, style.Text, `>`, svg.Esc(label.Text), `</text>`)
+				var label common.Fitted
+				ok := false
+				if float64(labelSize*LINE) < b.header {
+					label, ok = common.FitText(name, max, labelSize, labelSize, measurer, textStyle|text.Bold)
 				}
-				if withValue {
-					svg.WriteStrings(&t, `<text class="pele-value" x="`, svg.Num(x+b.w-SIDE-2), `" y="`, svg.Num(baseline+float64(tiny*0.35)), `" font-size="`, js.Num(tiny),
-						`" text-anchor="end" fill="var(--_m)"`, style.Text, `>`, svg.Esc(value), `</text>`)
+				baseline := y + b.header/2 + 1
+				drawn, drawnOK = label.Text, ok
+				if ok {
+					sizeAttr := ""
+					if short {
+						sizeAttr = ` font-size="` + js.Num(labelSize) + `"`
+					}
+					svg.WriteStrings(&t, `<text x="`, svg.Num(x+SIDE+2), `" y="`, svg.Num(baseline+float64(labelSize*0.35)), `" font-weight="var(--_hw)"`, sizeAttr, ink, style.Text, `>`, svg.Esc(label.Text), `</text>`)
+				}
+				if withValue && float64(valueSize*LINE) <= HEADER {
+					valueInk := ink
+					if valueInk == "" {
+						valueInk = ` fill="var(--_m)"`
+					}
+					svg.WriteStrings(&t, `<text class="pele-value" x="`, svg.Num(x+b.w-SIDE-2), `" y="`, svg.Num(baseline+float64(valueSize*0.35)), `" font-size="`, js.Num(tiny),
+						`" text-anchor="end"`, valueInk, style.Text, `>`, svg.Esc(value), `</text>`)
 				}
 			}
-			// A section is a tint of its color, unless a class gives it a fill of its own.
+			// A section is a tint of its color, unless a class gives it a fill of its own. Headerless
+			// sections draw no box, so their children blend into the grid.
 			tint := ` fill-opacity="0.12"`
 			if hasFill(style.Shape) {
 				tint = ""
 			}
-			svg.WriteStrings(&sections, `<g class="pele-node pele-section`, svg.ClassNames(node.classSelector), `" data-id="`, svg.EscText(node.name), `">`,
-				`<rect x="`, svg.Num(x), `" y="`, svg.Num(y), `" width="`, svg.Num(b.w), `" height="`, svg.Num(b.h), `" fill="`, color, `"`,
-				svg.Rounded(tint+` stroke="`+color+`"`+style.Shape), `/>`, t.String(), `</g>`)
+			svg.WriteStrings(&sections, `<g class="pele-node pele-section`, svg.ClassNames(node.classSelector), `" data-id="`, svg.EscText(node.name), `">`, tooltip(drawn, drawnOK))
+			if b.headed {
+				rect(&sections)
+				svg.WriteStrings(&sections, corners(tint+` stroke="`+color+`"`+style.Shape, b), `/>`)
+			} else {
+				svg.WriteStrings(&sections, `<rect x="`, svg.Num(x), `" y="`, svg.Num(y), `" width="`, svg.Num(b.w), `" height="`, svg.Num(b.h), `" fill="none"/>`)
+			}
+			svg.WriteStrings(&sections, t.String(), `</g>`)
 			continue
 		}
 
 		room := b.w - 8
-		tallest := math.Min(size, math.Floor((b.h-4)/LINE))
+		smallest := least
+		var tallest float64
+		if fixed == 0 {
+			tallest = math.Min(size, math.Floor((b.h-4)/LINE))
+		} else {
+			smallest = fixed
+			if float64(fixed*LINE) <= b.h-4 {
+				tallest = fixed
+			}
+		}
 		var label common.Fitted
 		ok := false
-		if tallest >= least {
-			label, ok = common.FitText(name, room, tallest, least, measurer, 0)
+		if tallest >= smallest {
+			label, ok = common.FitText(name, room, tallest, smallest, measurer, textStyle)
 		}
 		if ok {
 			cx := svg.Num(x + b.w/2)
 			cy := y + b.h/2
 			valueSize := math.Max(least, js.Round(label.Size*0.8))
+			if fixed != 0 {
+				valueSize = fixed
+			}
 			lines := (label.Size + valueSize) * LINE
-			if value != "" && lines <= b.h-4 && measurer.Width(value, valueSize, 0) <= room {
+			if value != "" && lines <= b.h-4 && measurer.Width(value, valueSize, textStyle) <= room {
 				first := cy - lines/2 + (label.Size*LINE)/2
 				second := cy + lines/2 - (valueSize*LINE)/2
-				svg.WriteStrings(&t, `<text x="`, cx, `" y="`, svg.Num(first+float64(label.Size*0.35)), `" font-size="`, svg.Num(label.Size), `"`, style.Text, `>`, svg.Esc(label.Text), `</text>`,
-					`<text class="pele-value" x="`, cx, `" y="`, svg.Num(second+float64(valueSize*0.35)), `" font-size="`, svg.Num(valueSize), `"`, style.Text, `>`, svg.Esc(value), `</text>`)
+				svg.WriteStrings(&t, `<text x="`, cx, `" y="`, svg.Num(first+float64(label.Size*0.35)), `" font-size="`, svg.Num(label.Size), `"`, ink, style.Text, `>`, svg.Esc(label.Text), `</text>`,
+					`<text class="pele-value" x="`, cx, `" y="`, svg.Num(second+float64(valueSize*0.35)), `" font-size="`, svg.Num(valueSize), `"`, ink, style.Text, `>`, svg.Esc(value), `</text>`)
 			} else {
-				svg.WriteStrings(&t, `<text x="`, cx, `" y="`, svg.Num(cy+float64(label.Size*0.35)), `" font-size="`, svg.Num(label.Size), `"`, style.Text, `>`, svg.Esc(label.Text), `</text>`)
+				svg.WriteStrings(&t, `<text x="`, cx, `" y="`, svg.Num(cy+float64(label.Size*0.35)), `" font-size="`, svg.Num(label.Size), `"`, ink, style.Text, `>`, svg.Esc(label.Text), `</text>`)
 			}
 		}
-		svg.WriteStrings(&leaves, `<g class="pele-node pele-leaf`, svg.ClassNames(node.classSelector), `" data-id="`, svg.EscText(node.name), `">`,
-			`<rect x="`, svg.Num(x), `" y="`, svg.Num(y), `" width="`, svg.Num(b.w), `" height="`, svg.Num(b.h), `" fill="`, color, `"`,
-			svg.Rounded(style.Shape), `/>`, t.String(), `</g>`)
-
+		svg.WriteStrings(&leaves, `<g class="pele-node pele-leaf`, svg.ClassNames(node.classSelector), `" data-id="`, svg.EscText(node.name), `">`, tooltip(label.Text, ok))
+		rect(&leaves)
+		svg.WriteStrings(&leaves, corners(style.Shape, b), `/>`, t.String(), `</g>`)
 	}
 
 	totalWidth := math.Ceil(math.Max(width, title.Width) + float64(2*pad))

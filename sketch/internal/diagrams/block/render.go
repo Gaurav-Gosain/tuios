@@ -1,4 +1,4 @@
-// Ported from pele src/diagrams/block/render.ts at 4eff76f98c73b6817800a05773517f35832e4e92.
+// Ported from pele src/diagrams/block/render.ts at 8aff183be57021b533f319a29341a529be934b08.
 
 package block
 
@@ -21,6 +21,7 @@ const (
 	LINE_ATTRS  = ` stroke="var(--_b)"`
 	// OBSTACLE_BUDGET: checking every edge against every block is quadratic, so large diagrams route without it.
 	OBSTACLE_BUDGET = 2_000_000
+	LABEL_GAP       = 4
 )
 
 // SQRT1_2 is Math.SQRT1_2.
@@ -103,6 +104,10 @@ type View struct {
 	bw float64
 	bh float64
 }
+
+// Box is pele's Box: a position and size as drawn. Here a title's box is a View with only those set,
+// so obstacles and titles share one list.
+type Box = View
 
 type Route struct {
 	edge *Block
@@ -443,6 +448,19 @@ func loopPath(v *View, k int, startTrim, endTrim float64) svg.EdgePath {
 var SPOTS = [...]float64{0.5, 0.3, 0.7, 0.15, 0.85}
 
 // labelSpot picks the point on a leg where a label of the given size covers no block other than the two it joins.
+func covers(x, y, w, h float64, s, t *View, obstacles []*Box, check bool) bool {
+	if !check {
+		return false
+	}
+	for _, v := range obstacles {
+		if v != s && v != t && math.Abs(x-v.x) < (w+v.bw)/2 && math.Abs(y-v.y) < (h+v.bh)/2 {
+			return true
+		}
+	}
+	return false
+}
+
+// labelSpot picks the point on a leg where a label of the given size covers no block other than the two it joins.
 func labelSpot(p []float64, at int, w, h float64, s, t *View, obstacles []*View, check bool) float64 {
 	if !check {
 		return 0.5
@@ -450,18 +468,150 @@ func labelSpot(p []float64, at int, w, h float64, s, t *View, obstacles []*View,
 	for _, spot := range SPOTS {
 		x := p[at] + float64((p[at+2]-p[at])*spot)
 		y := p[at+1] + float64((p[at+3]-p[at+1])*spot)
-		clear := true
-		for _, v := range obstacles {
-			if v != s && v != t && math.Abs(x-v.x) < (w+v.bw)/2 && math.Abs(y-v.y) < (h+v.bh)/2 {
-				clear = false
-				break
-			}
-		}
-		if clear {
+		if !covers(x, y, w, h, s, t, obstacles, check) {
 			return spot
 		}
 	}
 	return 0.5
+}
+
+// stackLabels stacks overlapping labels along their shared line, if they fit between its markers and cover no other block or title.
+// Returns the extra length needed to fit the labels.
+func stackLabels(stack []int, routes []Route, legs [][]float64, s, t *View, obstacles []*Box, check bool) float64 {
+	vertical := legs[stack[0]][0] == legs[stack[0]][2]
+	lo := math.Inf(-1)
+	hi := math.Inf(1)
+	need := float64(-LABEL_GAP)
+	crowded := false
+	for a := range stack {
+		leg := legs[stack[a]]
+		if vertical {
+			if leg[0] != leg[2] {
+				return 0
+			}
+			lo = math.Max(lo, math.Min(leg[1], leg[3]))
+			hi = math.Min(hi, math.Max(leg[1], leg[3]))
+		} else {
+			if leg[1] != leg[3] {
+				return 0
+			}
+			lo = math.Max(lo, math.Min(leg[0], leg[2]))
+			hi = math.Min(hi, math.Max(leg[0], leg[2]))
+		}
+		p := &routes[stack[a]]
+		if vertical {
+			need += p.label.Height + LABEL_GAP
+		} else {
+			need += p.label.Width + 8 + LABEL_GAP
+		}
+		for b := 0; b < a; b++ {
+			q := &routes[stack[b]]
+			if math.Abs(p.lx-q.lx) < (p.label.Width+q.label.Width)/2+8 && math.Abs(p.ly-q.ly) < (p.label.Height+q.label.Height)/2 {
+				crowded = true
+			}
+		}
+	}
+	if !crowded {
+		return 0
+	}
+	if need > hi-lo-2*svg.ARROW {
+		return need - (hi - lo - 2*svg.ARROW)
+	}
+	along := make([]float64, 0, len(stack))
+	next := (lo + hi - need) / 2
+	for _, i := range stack {
+		label, lx, ly := routes[i].label, routes[i].lx, routes[i].ly
+		size := label.Width + 8
+		if vertical {
+			size = label.Height
+		}
+		at := next + size/2
+		x, y := at, ly
+		if vertical {
+			x, y = lx, at
+		}
+		if covers(x, y, label.Width+8, label.Height, s, t, obstacles, check) {
+			return 0
+		}
+		along = append(along, at)
+		next += size + LABEL_GAP
+	}
+	for k, i := range stack {
+		if vertical {
+			routes[i].ly = along[k]
+		} else {
+			routes[i].lx = along[k]
+		}
+	}
+	return 0
+}
+
+// gapsKey names one gap list for widen's base. pele keys the map by the array itself. Not in pele.
+type gapsKey struct {
+	box      *View
+	vertical bool
+}
+
+// widen widens the gap in the blocks' nearest shared container.
+// `base` keeps the gaps as they were when the labels were measured.
+func widen(parents []*View, s, t *View, vertical bool, short float64, base map[gapsKey][]float64) bool {
+	parentOf := func(v *View) *View {
+		if v.index >= len(parents) {
+			return nil
+		}
+		return parents[v.index]
+	}
+	chain := map[*View]bool{}
+	for v := s; v != nil; v = parentOf(v) {
+		chain[v] = true
+	}
+	var tb *View
+	box := t
+	for box != nil && !chain[box] {
+		tb = box
+		box = parentOf(box)
+	}
+	if box == nil || tb == nil || box == s {
+		return false
+	}
+	sb := s
+	for parentOf(sb) != box {
+		sb = parentOf(sb)
+	}
+	var at int
+	var gaps *[]float64
+	if vertical {
+		if sb.row == tb.row {
+			return false
+		}
+		at = max(sb.row, tb.row) - 1
+		if box.rowGaps == nil {
+			box.rowGaps = []float64{}
+		}
+		gaps = &box.rowGaps
+	} else {
+		l, r := tb, sb
+		if sb.col < tb.col {
+			l, r = sb, tb
+		}
+		if r.col < l.col+l.span {
+			return false
+		}
+		at = int(r.col - 1)
+		if box.colGaps == nil {
+			box.colGaps = []float64{}
+		}
+		gaps = &box.colGaps
+	}
+	key := gapsKey{box, vertical}
+	if _, ok := base[key]; !ok {
+		base[key] = append([]float64{}, (*gaps)...)
+	}
+	for len(*gaps) <= at {
+		*gaps = append(*gaps, 0)
+	}
+	(*gaps)[at] = math.Max((*gaps)[at], gapAt(base[key], at)+short)
+	return true
 }
 
 func renderBlock(model *BlockDb, config types.Config, options types.RenderOptions) types.Rendered {
@@ -600,6 +750,7 @@ func draw(model *BlockDb, config types.Config, options types.RenderOptions, tigh
 	root.nw = 0
 	root.nh = 0
 	order := []*View{root}
+	parents := []*View{nil}
 	byId := map[string]*View{}
 	for i := 0; i < len(order); i++ {
 		parent := order[i]
@@ -610,6 +761,7 @@ func draw(model *BlockDb, config types.Config, options types.RenderOptions, tigh
 			v := view(child, len(order))
 			v.parent = i
 			parent.children = append(parent.children, &v.Cell)
+			parents = append(parents, parent)
 			order = append(order, v)
 			if v.kind != Space {
 				byId[child.id] = v
@@ -617,33 +769,52 @@ func draw(model *BlockDb, config types.Config, options types.RenderOptions, tigh
 		}
 	}
 
-	contentWidth, contentHeight := layout(&root.Cell, gap)
-
 	var obstacles []*View
+	var titles []*Box
+	// Layout keeps the widest a container has been, so each run starts from the widths it needs.
+	widths := make([]float64, len(order))
 	for _, v := range order {
-		if v.kind == Leaf && isFixed(v.shape) {
-			v.bw = v.nw
-			v.bh = v.nh
-		} else if v.kind == Arrow {
-			v.bw = v.nw
-			if v.span > 1 {
-				v.bw = v.w
-			}
-			v.bh = v.nh
-		} else {
-			v.bw = v.w
-			v.bh = v.h
-			if v.kind == Leaf && isWide(v.shape) {
-				v.bh = v.nh
-			}
-		}
-		if v.kind == Leaf && v.shape == "cyl" {
-			v.dy = math.Min(12, math.Max(6, v.bw/14)) / 2
-		}
-		if v.kind == Leaf || v.kind == Arrow {
-			obstacles = append(obstacles, v)
-		}
+		widths[v.index] = v.nw
 	}
+	place := func() (float64, float64) {
+		for _, v := range order {
+			v.nw = widths[v.index]
+		}
+		contentWidth, contentHeight := layout(&root.Cell, gap)
+		obstacles = obstacles[:0]
+		titles = titles[:0]
+		for _, v := range order {
+			if v.kind == Leaf && isFixed(v.shape) {
+				v.bw = v.nw
+				v.bh = v.nh
+			} else if v.kind == Arrow {
+				v.bw = v.nw
+				if v.span > 1 {
+					v.bw = v.w
+				}
+				v.bh = v.nh
+			} else {
+				v.bw = v.w
+				v.bh = v.h
+				if v.kind == Leaf && isWide(v.shape) {
+					v.bh = v.nh
+				}
+			}
+			if v.kind == Leaf && v.shape == "cyl" {
+				v.dy = math.Min(12, math.Max(6, v.bw/14)) / 2
+			}
+			if v.kind == Leaf || v.kind == Arrow {
+				obstacles = append(obstacles, v)
+			} else if v.head > 0 {
+				title := &Box{bw: v.label.Width, bh: v.label.Height}
+				title.x = v.x
+				title.y = v.y - v.h/2 + (v.head+gap)/2 + 2
+				titles = append(titles, title)
+			}
+		}
+		return contentWidth, contentHeight
+	}
+	contentWidth, contentHeight := place()
 
 	// Edges between the same two blocks are spread apart instead of drawn on top of each other.
 	pairs := map[int]int{}
@@ -668,12 +839,112 @@ func draw(model *BlockDb, config types.Config, options types.RenderOptions, tigh
 		drawn = append(drawn, edge)
 	}
 	check := len(drawn)*len(obstacles) <= OBSTACLE_BUDGET
-	seen := map[int]int{}
 	routes := make([]Route, 0, len(drawn))
+	// stacks is pele's Map; stackKeys keeps its insertion order.
+	stacks := map[int][]int{}
+	var stackKeys []int
+	legs := make([][]float64, len(drawn))
+	route := func() {
+		seen := map[int]int{}
+		routes = routes[:0]
+		clear(stacks)
+		stackKeys = stackKeys[:0]
+		for i := range drawn {
+			s, t := ends[i][0], ends[i][1]
+			key := pairKey(s, t)
+			total, ok := pairs[key]
+			if !ok {
+				total = 1
+			}
+			k := seen[key]
+			seen[key] = k + 1
+			label := text.LayoutLabel(drawn[i].label, false, measurer, edgeSize, WRAP, 0)
+			var points []float64
+			var lx, ly float64
+			if s == t {
+				px, py, r, _, _ := loopArc(s, k+1)
+				lx = px + r + 6 + label.Width/2
+				ly = py - r/2
+			} else {
+				step := 14.0
+				if labelled[key] {
+					step = js.Round(edgeSize*1.5) + 2
+				}
+				points = routeEdge(s, t, float64((float64(k)-float64(total-1)/2)*step), obstacles, check)
+				n := len(points)
+				// The label goes on the longer leg.
+				firstLeg := math.Abs(points[2]-points[0]) + math.Abs(points[3]-points[1])
+				lastLeg := math.Abs(points[n-2]-points[n-4]) + math.Abs(points[n-1]-points[n-3])
+				at := 0
+				if n == 6 && lastLeg > firstLeg {
+					at = 2
+				}
+				spot := 0.5
+				if label.Width > 0 {
+					spot = labelSpot(points, at, label.Width+8, label.Height, s, t, obstacles, check)
+				}
+				lx = points[at] + float64((points[at+2]-points[at])*spot)
+				ly = points[at+1] + float64((points[at+3]-points[at+1])*spot)
+				if label.Width > 0 && total > 1 {
+					legs[i] = append([]float64(nil), points[at:at+4]...)
+					if _, ok := stacks[key]; !ok {
+						stackKeys = append(stackKeys, key)
+					}
+					stacks[key] = append(stacks[key], i)
+				}
+			}
+			loop := 0
+			if s == t {
+				loop = k + 1
+			}
+			routes = append(routes, Route{edge: drawn[i], points: points, loop: loop, label: label, lx: lx, ly: ly})
+		}
+	}
+
+	settle := func(grow bool) bool {
+		route()
+		var blocked []*Box
+		if check {
+			blocked = append(append(blocked, obstacles...), titles...)
+		}
+		base := map[gapsKey][]float64{}
+		grown := false
+		for _, key := range stackKeys {
+			stack := stacks[key]
+			if len(stack) < 2 {
+				continue
+			}
+			s, t := ends[stack[0]][0], ends[stack[0]][1]
+			short := stackLabels(stack, routes, legs, s, t, blocked, check)
+			vertical := legs[stack[0]][0] == legs[stack[0]][2]
+			// Keep columns narrow to fit the host in tight layouts.
+			if grow && short > 0 && (vertical || !tight) && widen(parents, s, t, vertical, math.Ceil(short), base) {
+				grown = true
+			}
+		}
+		return grown
+	}
+	overlap := func() float64 {
+		area := 0.0
+		for i := range routes {
+			p := &routes[i]
+			for j := i + 1; j < len(routes); j++ {
+				q := &routes[j]
+				pw := (p.label.Width + 8) / 2
+				qw := (q.label.Width + 8) / 2
+				w := math.Min(p.lx+pw, q.lx+qw) - math.Max(p.lx-pw, q.lx-qw)
+				h := math.Min(p.ly+p.label.Height/2, q.ly+q.label.Height/2) - math.Max(p.ly-p.label.Height/2, q.ly-q.label.Height/2)
+				if p.label.Width > 0 && q.label.Width > 0 && w > 0 && h > 0 {
+					area += float64(w * h)
+				}
+			}
+		}
+		return area
+	}
 	minX := 0.0
 	minY := 0.0
-	maxX := contentWidth
-	maxY := contentHeight
+	maxX := 0.0
+	maxY := 0.0
 	grow := func(x, y, w, h float64) {
 		if x-w/2 < minX {
 			minX = x - w/2
@@ -688,53 +959,50 @@ func draw(model *BlockDb, config types.Config, options types.RenderOptions, tigh
 			maxY = y + h/2
 		}
 	}
-	for i := range drawn {
-		s, t := ends[i][0], ends[i][1]
-		key := pairKey(s, t)
-		total, ok := pairs[key]
-		if !ok {
-			total = 1
-		}
-		k := seen[key]
-		seen[key] = k + 1
-		label := text.LayoutLabel(drawn[i].label, false, measurer, edgeSize, WRAP, 0)
-		var points []float64
-		var lx, ly float64
-		if s == t {
-			px, py, r, _, _ := loopArc(s, k+1)
-			grow(px, py, float64(2*r)+2, float64(2*r)+2)
-			lx = px + r + 6 + label.Width/2
-			ly = py - r/2
-		} else {
-			step := 14.0
-			if labelled[key] {
-				step = js.Round(edgeSize*1.5) + 2
+	// bound finds the drawing's extent and gives its width.
+	bound := func() float64 {
+		minX = 0
+		minY = 0
+		maxX = contentWidth
+		maxY = contentHeight
+		for i := range routes {
+			route := &routes[i]
+			if route.loop > 0 {
+				px, py, r, _, _ := loopArc(ends[i][0], route.loop)
+				grow(px, py, float64(2*r)+2, float64(2*r)+2)
 			}
-			points = routeEdge(s, t, float64((float64(k)-float64(total-1)/2)*step), obstacles, check)
-			n := len(points)
-			// The label goes on the longer leg.
-			firstLeg := math.Abs(points[2]-points[0]) + math.Abs(points[3]-points[1])
-			lastLeg := math.Abs(points[n-2]-points[n-4]) + math.Abs(points[n-1]-points[n-3])
-			at := 0
-			if n == 6 && lastLeg > firstLeg {
-				at = 2
+			if route.label.Width > 0 {
+				grow(route.lx, route.ly, route.label.Width+8, route.label.Height)
 			}
-			spot := 0.5
-			if label.Width > 0 {
-				spot = labelSpot(points, at, label.Width+8, label.Height, s, t, obstacles, check)
-			}
-			lx = points[at] + float64((points[at+2]-points[at])*spot)
-			ly = points[at+1] + float64((points[at+3]-points[at+1])*spot)
 		}
-		if label.Width > 0 {
-			grow(lx, ly, label.Width+8, label.Height)
-		}
-		loop := 0
-		if s == t {
-			loop = k + 1
-		}
-		routes = append(routes, Route{edge: drawn[i], points: points, loop: loop, label: label, lx: lx, ly: ly})
+		return maxX - minX
 	}
+	if settle(len(drawn)*len(drawn) <= OBSTACLE_BUDGET) {
+		before := overlap()
+		narrow := bound()
+		// A container stretched by its row gives some of a new gap back, so the gap may take a few rounds.
+		grown := true
+		for round := 0; round < 3 && grown; round++ {
+			contentWidth, contentHeight = place()
+			grown = settle(round < 2)
+		}
+		// The drawing only grows if that leaves less of the labels covering each other, and within maxWidth.
+		wide := bound()
+		room := math.Inf(1)
+		if options.MaxWidth != nil && *options.MaxWidth > 0 {
+			room = *options.MaxWidth
+		}
+		if overlap() > before-1 || (wide > narrow && math.Ceil(wide+float64(2*pad)) > room) {
+			for _, v := range order {
+				v.rowGaps = nil
+				v.colGaps = nil
+			}
+			contentWidth, contentHeight = place()
+			settle(false)
+		}
+	}
+
+	bound()
 
 	titleRoom := 4000.0
 	if tight {
@@ -756,6 +1024,7 @@ func draw(model *BlockDb, config types.Config, options types.RenderOptions, tigh
 	height := math.Ceil(maxY - minY + titleHeight + float64(2*pad))
 
 	var clusters, nodes strings.Builder
+	var fills []svg.Fill
 	for i := 1; i < len(order); i++ {
 		v := order[i]
 		if v.kind == Space {
@@ -765,6 +1034,9 @@ func draw(model *BlockDb, config types.Config, options types.RenderOptions, tigh
 		id := svg.EscText(v.block.id)
 		if v.kind == Composite {
 			top := v.y - v.h/2
+			if svg.Paints(v.style.Shape) {
+				fills = append(fills, svg.Fill{Box: [4]float64{v.x - v.w/2, top, v.x + v.w/2, top + v.h}, Shape: v.style.Shape})
+			}
 			svg.WriteStrings(&clusters, `<g class="pele-cluster`, classes, `" data-id="`, id, `"><rect x="`)
 			svg.WriteNum(&clusters, v.x-v.w/2)
 			clusters.WriteString(`" y="`)
@@ -773,9 +1045,12 @@ func draw(model *BlockDb, config types.Config, options types.RenderOptions, tigh
 			svg.WriteNum(&clusters, v.w)
 			clusters.WriteString(`" height="`)
 			svg.WriteNum(&clusters, v.h)
-			svg.WriteStrings(&clusters, `" fill="var(--_a)" fill-opacity="0.5" stroke="var(--_b)"`, svg.Rounded(v.style.Shape), `/>`,
-
-				svg.LabelSvg(v.label, v.x, top+(v.head+gap)/2+2, ` class="pele-cluster-label" fill="var(--_m)"`+v.style.Text, icons),
+			opacity := ` fill-opacity="0.5"`
+			if svg.SetsFill(v.style.Shape) {
+				opacity = ""
+			}
+			svg.WriteStrings(&clusters, `" fill="var(--_a)"`, opacity, ` stroke="var(--_b)"`, svg.Rounded(v.style.Shape), `/>`,
+				svg.LabelSvg(v.label, v.x, top+(v.head+gap)/2+2, ` class="pele-cluster-label"`+svg.InkFill(v.style, "var(--_m)")+v.style.Text, icons),
 				`</g>`)
 			continue
 		}
@@ -794,10 +1069,14 @@ func draw(model *BlockDb, config types.Config, options types.RenderOptions, tigh
 		} else {
 			nodes.WriteString(svg.DrawShape(v.shape, v.bw, v.bh, SHAPE_ATTRS+v.style.Shape, LINE_ATTRS+v.style.Line))
 		}
-		svg.WriteStrings(&nodes, svg.LabelSvg(v.label, v.dx, v.dy, ` class="pele-label"`+v.style.Text, icons), `</g>`)
+		ink := ""
+		if arrow || svg.ShapeFilled(v.shape) {
+			ink = svg.InkFill(v.style, "")
+		}
+		svg.WriteStrings(&nodes, svg.LabelSvg(v.label, v.dx, v.dy, ` class="pele-label"`+ink+v.style.Text, icons), `</g>`)
 	}
 
-	var edges, labels strings.Builder
+	var casings, edges, labels strings.Builder
 	for i := range routes {
 		route := &routes[i]
 		edge, points := route.edge, route.points
@@ -813,8 +1092,16 @@ func draw(model *BlockDb, config types.Config, options types.RenderOptions, tigh
 			}
 			path = trace(points, svg.MarkerTrim(startType), svg.MarkerTrim(endType))
 		}
+		over, onFill := svg.OverFills(path.D, []float64{path.Sx, path.Sy, path.Ex, path.Ey}, fills, "", nil)
+		if onFill && over == "" {
+			casings.WriteString(svg.EdgeCasing(path, startType, endType, "", edge.thickness == "thick"))
+		}
 		id := svg.EscText(edge.id)
-		svg.WriteStrings(&edges, `<g class="pele-edge" data-id="`, id, `"><path d="`, path.D, `"`)
+		svg.WriteStrings(&edges, `<g class="pele-edge" data-id="`, id, `"`)
+		if over != "" {
+			svg.WriteStrings(&edges, ` stroke="`, over, `"`)
+		}
+		svg.WriteStrings(&edges, `><path d="`, path.D, `"`)
 		if edge.thickness == "thick" {
 			edges.WriteString(` stroke-width="2.5"`)
 		}
@@ -822,8 +1109,12 @@ func draw(model *BlockDb, config types.Config, options types.RenderOptions, tigh
 			edges.WriteString(` stroke-dasharray="3 4"`)
 		}
 		edges.WriteString(`/>`)
-		svg.WriteMarker(&edges, startType, path.Sx, path.Sy, path.Sdx, path.Sdy, "var(--_l)")
-		svg.WriteMarker(&edges, endType, path.Ex, path.Ey, path.Edx, path.Edy, "var(--_l)")
+		markerColor := over
+		if markerColor == "" {
+			markerColor = "var(--_l)"
+		}
+		svg.WriteMarker(&edges, startType, path.Sx, path.Sy, path.Sdx, path.Sdy, markerColor)
+		svg.WriteMarker(&edges, endType, path.Ex, path.Ey, path.Edx, path.Edy, markerColor)
 		edges.WriteString(`</g>`)
 		if route.label.Width > 0 {
 			x := route.lx + ox
@@ -836,6 +1127,7 @@ func draw(model *BlockDb, config types.Config, options types.RenderOptions, tigh
 	if clusters.Len() > 0 {
 		parts = append(parts, `<g class="pele-clusters">`, clusters.String(), `</g>`)
 	}
+	parts = append(parts, svg.CasingsSvg(casings.String()))
 	if edges.Len() > 0 {
 		parts = append(parts, `<g class="pele-edges" fill="none" stroke="var(--_l)" stroke-linecap="round">`, edges.String(), `</g>`)
 	}

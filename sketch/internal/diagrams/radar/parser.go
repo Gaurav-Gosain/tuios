@@ -1,4 +1,4 @@
-// Ported from pele src/diagrams/radar/parser.ts at 4eff76f98c73b6817800a05773517f35832e4e92.
+// Ported from pele src/diagrams/radar/parser.ts at 8aff183be57021b533f319a29341a529be934b08.
 //
 // pele keeps the state of matchNumber and matchAccDescr in module variables and resets them
 // for each text. Here they are scanners, which the tokenizer makes once per text.
@@ -164,6 +164,22 @@ func either(words ...string) common.Scanner {
 	}
 }
 
+var nameRest = common.RunEndsIn("-", "")
+
+// optionValue gives way to a longer name, except right after its option, as in `graticule polygonaxis`.
+func optionValue(match common.Scanner, option int) func(src string, at, previous int) int {
+	return func(src string, at, previous int) int {
+		end := match(src, at)
+		if end < 0 || previous == option {
+			return end
+		}
+		if nameRest(src, end) {
+			return -1
+		}
+		return end
+	}
+}
+
 const wordChars = "-_0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
 
 var ID = &common.TokenType{Name: "ID", Match: matchID, First: wordChars[1:]}
@@ -196,11 +212,11 @@ var RADAR_TOKENS = []*common.TokenType{
 	mark("]"),
 	mark("{"),
 	mark("}"),
-	{Name: "GRATICULE", Match: either("circle", "polygon"), First: "cp"},
-	{Name: "BOOLEAN", Match: either("true", "false"), First: "tf"},
+	{Name: "GRATICULE", MatchAfter: optionValue(either("circle", "polygon"), T_graticule), First: "cp"},
+	{Name: "BOOLEAN", MatchAfter: optionValue(either("true", "false"), T_showLegend), First: "tf"},
 	{Name: common.ACC_DESCR.Name, Scanner: newAccDescrScanner, First: common.ACC_DESCR.First},
 	common.ACC_TITLE,
-	common.TITLE,
+	common.TitleBefore(common.RunEndsIn("-", "")),
 	{Name: "NUMBER", Scanner: newNumberScanner, First: "0123456789"},
 	common.STRING,
 	ID,

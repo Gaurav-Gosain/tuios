@@ -1,4 +1,4 @@
-// Ported from pele src/svg/edges.ts at 4eff76f98c73b6817800a05773517f35832e4e92.
+// Ported from pele src/svg/edges.ts at 8aff183be57021b533f319a29341a529be934b08.
 
 package svg
 
@@ -15,15 +15,21 @@ import (
 const ARROW = 8
 
 type EdgePath struct {
-	D   string
-	Sx  float64
-	Sy  float64
-	Sdx float64
-	Sdy float64
-	Ex  float64
-	Ey  float64
-	Edx float64
-	Edy float64
+	D string
+	// Tokens is D as pathTokens reads it, or nil to read D. pele's routePath keeps them so a
+	// fill check need not parse D; the port leaves them out, which saves an allocation for
+	// every edge, and reads D back only for a diagram with fills. The numbers are the same:
+	// pele's tokens hold the value num() writes, rounded to hundredths, which is what the
+	// reader reads back.
+	Tokens []float64
+	Sx     float64
+	Sy     float64
+	Sdx    float64
+	Sdy    float64
+	Ex     float64
+	Ey     float64
+	Edx    float64
+	Edy    float64
 }
 
 // Marker types are Mermaid's: arrow_point, arrow_circle, arrow_cross; anything else draws nothing.
@@ -253,10 +259,12 @@ func RoutePath(route []float64, curve string, startTrim, endTrim, startReach, en
 			d = append(d, ' ')
 			d = appendPoint(d, atX, atY)
 		} else {
+			c1x, c1y := x-float64(ux*before*(1-HANDLE)), y-float64(uy*before*(1-HANDLE))
+			c2x, c2y := x+float64(vx*after*(1-HANDLE)), y+float64(vy*after*(1-HANDLE))
 			d = append(d, 'C')
-			d = appendPoint(d, x-float64(ux*before*(1-HANDLE)), y-float64(uy*before*(1-HANDLE)))
+			d = appendPoint(d, c1x, c1y)
 			d = append(d, ' ')
-			d = appendPoint(d, x+float64(vx*after*(1-HANDLE)), y+float64(vy*after*(1-HANDLE)))
+			d = appendPoint(d, c2x, c2y)
 			d = append(d, ' ')
 			d = appendPoint(d, atX, atY)
 		}
@@ -287,12 +295,24 @@ func MarkerTrim(typ string) float64 {
 // Marker draws a marker whose tip is at (x, y), pointing along (dx, dy).
 func Marker(typ string, x, y, dx, dy float64, color string) string {
 	var b strings.Builder
-	WriteMarker(&b, typ, x, y, dx, dy, color)
+	WriteMarkerStroke(&b, typ, x, y, dx, dy, color, "none")
+	return b.String()
+}
+
+// MarkerStroke is Marker with a stroke on the filled markers.
+func MarkerStroke(typ string, x, y, dx, dy float64, color, stroke string) string {
+	var b strings.Builder
+	WriteMarkerStroke(&b, typ, x, y, dx, dy, color, stroke)
 	return b.String()
 }
 
 // WriteMarker writes Marker(typ, x, y, dx, dy, color) to b.
 func WriteMarker(b *strings.Builder, typ string, x, y, dx, dy float64, color string) {
+	WriteMarkerStroke(b, typ, x, y, dx, dy, color, "none")
+}
+
+// WriteMarkerStroke writes MarkerStroke(typ, x, y, dx, dy, color, stroke) to b.
+func WriteMarkerStroke(b *strings.Builder, typ string, x, y, dx, dy float64, color, stroke string) {
 	nx := -dy
 	ny := dx
 	switch typ {
@@ -306,13 +326,13 @@ func WriteMarker(b *strings.Builder, typ string, x, y, dx, dy float64, color str
 		writePoint(b, bx+float64(nx*half), by+float64(ny*half))
 		b.WriteByte('L')
 		writePoint(b, bx-float64(nx*half), by-float64(ny*half))
-		WriteStrings(b, `Z" fill="`, color, `" stroke="none"/>`)
+		WriteStrings(b, `Z" fill="`, color, `" stroke="`, stroke, `"/>`)
 	case "arrow_circle":
 		b.WriteString(`<circle class="pele-marker" cx="`)
 		WriteNum(b, x-float64(dx*4))
 		b.WriteString(`" cy="`)
 		WriteNum(b, y-float64(dy*4))
-		WriteStrings(b, `" r="3.5" fill="`, color, `" stroke="none"/>`)
+		WriteStrings(b, `" r="3.5" fill="`, color, `" stroke="`, stroke, `"/>`)
 	case "arrow_cross":
 		cx := x - float64(dx*4)
 		cy := y - float64(dy*4)

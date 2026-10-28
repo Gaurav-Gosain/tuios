@@ -1,4 +1,4 @@
-// Ported from pele src/diagrams/swimlane/index.ts at 4eff76f98c73b6817800a05773517f35832e4e92.
+// Ported from pele src/diagrams/swimlane/index.ts at 8aff183be57021b533f319a29341a529be934b08.
 
 // Package swimlane draws swimlane diagrams: flowcharts whose top-level subgraphs are
 // lanes that run the length of the diagram.
@@ -67,7 +67,7 @@ func (variant) DrawGroup(c *layout.CNode, label text.Label, style svg.ResolvedSt
 	if sideways {
 		cx, cy = left+c.PadTop/2, c.Y
 	}
-	txt := svg.LabelSvg(label, cx, cy, ` class="pele-cluster-label" fill="var(--_m)"`+style.Text, icons)
+	txt := svg.LabelSvg(label, cx, cy, ` class="pele-cluster-label"`+svg.InkFill(style, "var(--_m)")+style.Text, icons)
 	bw, bh := c.W, c.PadTop
 	if sideways {
 		bw, bh = c.PadTop, c.H
@@ -102,6 +102,16 @@ func (variant) DrawGroup(c *layout.CNode, label text.Label, style svg.ResolvedSt
 	}
 	b.WriteString(`</g>`)
 	return b.String(), true
+}
+
+// FilledBox is the part of a lane that takes its fill, as [left, top, right, bottom]: the title band.
+func (variant) FilledBox(c *layout.CNode, dir layout.Dir) [4]float64 {
+	left := c.X - c.W/2
+	top := c.Y - c.H/2
+	if dir == "LR" || dir == "RL" {
+		return [4]float64{left, top, left + c.PadTop, top + c.H}
+	}
+	return [4]float64{left, top, left + c.W, top + c.PadTop}
 }
 
 // Swimlane is the swimlane diagram type: a flowchart whose top-level subgraphs are lanes,

@@ -1,4 +1,4 @@
-// Ported from pele src/diagrams/agentflow/parser.ts at 4eff76f98c73b6817800a05773517f35832e4e92.
+// Ported from pele src/diagrams/agentflow/parser.ts at 8aff183be57021b533f319a29341a529be934b08.
 
 package agentflow
 
@@ -106,9 +106,18 @@ func parseAgentflow(source string, db *AgentflowDb) {
 	var pendingData *string
 	dataFrom, dataTo := 0, 0
 
+	trailing := func(t int) bool { return t == T_COMMENT || t == T_NEWLINE || t == T_SPACE || t == T_EOF }
 	fail := func(expected string) {
 		t := typesT[i]
 		at := starts[i]
+		if t == T_EOF || t == T_END {
+			// Comments are tokens here, so skip trailing ones.
+			k := i
+			for k > 0 && trailing(typesT[k-1]) {
+				k--
+			}
+			at = len(js.TrimEnd(src[:starts[k]]))
+		}
 		if src != source {
 			var edits []types.Edit
 			trimBraceTrail(source, &edits)

@@ -1,4 +1,4 @@
-// Ported from pele src/diagrams/git/parser.ts at 4eff76f98c73b6817800a05773517f35832e4e92.
+// Ported from pele src/diagrams/git/parser.ts at 8aff183be57021b533f319a29341a529be934b08.
 //
 // The two sticky regular expressions are hand matchers: INT has a lookahead.
 
@@ -158,7 +158,7 @@ var GIT_TOKENS = []*common.TokenType{
 	// token on its own, so the first failure is final.
 	with(common.ACC_DESCR, func(t *common.TokenType) { t.Opener = openAccDescr }),
 	common.ACC_TITLE,
-	common.TITLE,
+	common.TitleBefore(common.RunEndsIn("-./", "-")),
 	{Name: "INT", Match: matchInt, First: "0123456789"},
 	common.STRING,
 	common.NEWLINE,

@@ -1,4 +1,4 @@
-// Ported from pele src/diagrams/sequence/actors.ts at 4eff76f98c73b6817800a05773517f35832e4e92.
+// Ported from pele src/diagrams/sequence/actors.ts at 8aff183be57021b533f319a29341a529be934b08.
 
 package sequence
 
@@ -87,11 +87,12 @@ func figure(kind string, cx, top float64) string {
 }
 
 // drawActor draws a participant whose bounding box has its top center at (cx, top).
-func drawActor(kind string, cx, top float64, size ActorSize, label text.Label, icons text.IconResolver) string {
+// ink is the fill attribute for a figure's label, which sits on whatever is behind the figure.
+func drawActor(kind string, cx, top float64, size ActorSize, label text.Label, icons text.IconResolver, ink string) string {
 	w, h := size.W, size.H
 	const txt = ` class="pele-label"`
 	if isFigure(kind) {
-		return figure(kind, cx, top) + svg.LabelSvg(label, cx, top+GLYPH+GLYPH_GAP+label.Height/2, txt, icons)
+		return figure(kind, cx, top) + svg.LabelSvg(label, cx, top+GLYPH+GLYPH_GAP+label.Height/2, txt+ink, icons)
 	}
 	left := cx - w/2
 	if kind == "collections" {

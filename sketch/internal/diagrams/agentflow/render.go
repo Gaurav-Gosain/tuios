@@ -1,4 +1,4 @@
-// Ported from pele src/diagrams/agentflow/render.ts at 4eff76f98c73b6817800a05773517f35832e4e92.
+// Ported from pele src/diagrams/agentflow/render.ts at 8aff183be57021b533f319a29341a529be934b08.
 
 package agentflow
 
@@ -65,10 +65,8 @@ func numberOption(config types.Config, key string, fallback float64) float64 {
 	return fallback
 }
 
-// hasFill is /[";]fill:/.test(shape).
-func hasFill(shape string) bool {
-	return strings.Contains(shape, `"fill:`) || strings.Contains(shape, `;fill:`)
-}
+// hasFill is setsFill: /[";]fill:/.test(shape).
+func hasFill(shape string) bool { return svg.SetsFill(shape) }
 
 // tints caches tint, by slot, wash and fill.
 type tints map[int]string
@@ -259,6 +257,16 @@ func draw(db *AgentflowDb, config types.Config, options types.RenderOptions, tur
 			}
 		}
 	}
+	layout.InheritCrossedDirections(cnodes, len(graph.Edges), func(i int) (int, int) {
+		src, dst := -1, -1
+		if k, ok := index[graph.Edges[i].Start]; ok {
+			src = k
+		}
+		if k, ok := index[graph.Edges[i].End]; ok {
+			dst = k
+		}
+		return src, dst
+	})
 
 	rootDir := layout.Direction(deref(db.Direction))
 	if turned {
@@ -472,6 +480,7 @@ func draw(db *AgentflowDb, config types.Config, options types.RenderOptions, tur
 
 	tinted := tints{}
 	var clusters, nodesOut strings.Builder
+	var fills []svg.Fill
 	nodesOut.Grow(len(views) * 320)
 	for i := range views {
 		view := &views[i]
@@ -486,10 +495,13 @@ func draw(db *AgentflowDb, config types.Config, options types.RenderOptions, tur
 			slot = *node.ColorIndex
 		}
 		if c.IsGroup {
+			if svg.Paints(view.style.Shape) {
+				fills = append(fills, svg.Fill{Box: [4]float64{x - c.W/2, y - c.H/2, x + c.W/2, y + c.H/2}, Shape: view.style.Shape})
+			}
 			titleX := svg.ClusterTitleX(c, view.label.Width, crossings, GROUP_PAD)
 			svg.WriteStrings(&clusters, `<g class="pele-cluster pele-flow`, classes, `" data-id="`, id, `"><rect x="`, svg.Num(x-c.W/2), `" y="`, svg.Num(y-c.H/2),
 				`" width="`, svg.Num(c.W), `" height="`, svg.Num(c.H), `"`, svg.Rounded(tinted.of(slot, "0.06", view.style)+view.style.Shape), `/>`,
-				svg.LabelSvg(view.label, titleX, y-c.H/2+8+view.label.Height/2, ` class="pele-cluster-label" fill="var(--_m)"`+view.style.Text, icons), `</g>`)
+				svg.LabelSvg(view.label, titleX, y-c.H/2+8+view.label.Height/2, ` class="pele-cluster-label"`+svg.InkFill(view.style, "var(--_m)")+view.style.Text, icons), `</g>`)
 			continue
 		}
 
@@ -519,7 +531,11 @@ func draw(db *AgentflowDb, config types.Config, options types.RenderOptions, tur
 			shape = svg.DrawShape(view.shape, w, h, tinted.of(kslot, "0.14", view.style)+view.style.Shape, ` stroke="`+svg.SeriesColor(kslot)+`"`+view.style.Line)
 		}
 
-		label := svg.LabelSvg(view.label, 0, view.dy, ` class="pele-label"`+view.style.Text, icons)
+		ink := ""
+		if view.shape == COLLAPSED || svg.ShapeFilled(view.shape) {
+			ink = svg.InkFill(view.style, "")
+		}
+		label := svg.LabelSvg(view.label, 0, view.dy, ` class="pele-label"`+ink+view.style.Text, icons)
 		// / internal-link(?: |$)/ on classes + " ".
 		internal := strings.Contains(classes+" ", " internal-link ")
 		if internal && deref(node.Label) != "" && !(options.Links != nil && !*options.Links) {
@@ -553,7 +569,7 @@ func draw(db *AgentflowDb, config types.Config, options types.RenderOptions, tur
 		geo = geometry(views, cnodes, width, height)
 	}
 
-	var edgesOut, labelsOut strings.Builder
+	var casings, edgesOut, labelsOut strings.Builder
 	edgesOut.Grow((len(cedges) + len(held)) * 200)
 	put := func(edge *GraphEdge, label text.Label, path svg.EdgePath, x, y float64, src, dst int, route []float64) {
 		var style *svg.ResolvedStyle
@@ -562,9 +578,17 @@ func draw(db *AgentflowDb, config types.Config, options types.RenderOptions, tur
 			style = &s
 		}
 		endType := edge.ArrowTypeEnd
-		color := "var(--_l)"
-		if style != nil && style.Stroke != "" {
-			color = svg.Esc(style.Stroke)
+		line := ""
+		if style != nil {
+			line = style.Line
+		}
+		over, onFill := svg.OverFills(path.D, []float64{path.Ex, path.Ey}, fills, line, path.Tokens)
+		color := over
+		if color == "" {
+			color = "var(--_l)"
+			if style != nil && style.Stroke != "" {
+				color = svg.Esc(style.Stroke)
+			}
 		}
 		dotted := edge.Thickness == "dotted"
 		kind := "sequence"
@@ -573,11 +597,14 @@ func draw(db *AgentflowDb, config types.Config, options types.RenderOptions, tur
 		} else if endType == "arrow_cross" {
 			kind = "failure"
 		}
-		line := ""
-		if style != nil {
-			line = style.Line
+		if onFill && over == "" {
+			casings.WriteString(svg.EdgeCasing(path, "none", endType, line, false))
 		}
-		svg.WriteStrings(&edgesOut, `<g class="pele-edge pele-edge-`, kind, svg.ClassNames(trimEdgeClasses(edge.Classes)), `" data-id="`, svg.EscText(edge.ID), `"`, line, `><path d="`, path.D, `"`)
+		overAttr := ""
+		if over != "" {
+			overAttr = ` stroke="` + over + `"`
+		}
+		svg.WriteStrings(&edgesOut, `<g class="pele-edge pele-edge-`, kind, svg.ClassNames(trimEdgeClasses(edge.Classes)), `" data-id="`, svg.EscText(edge.ID), `"`, overAttr, line, `><path d="`, path.D, `"`)
 		if dotted {
 			edgesOut.WriteString(` stroke-dasharray="3 4"`)
 		}
@@ -631,6 +658,9 @@ func draw(db *AgentflowDb, config types.Config, options types.RenderOptions, tur
 	parts := []string{svg.LabelSvg(title, width/2, pad+title.Height/2, ` class="pele-title" font-weight="var(--_tw)"`, nil)}
 	if clusters.Len() > 0 {
 		parts = append(parts, `<g class="pele-clusters">`, clusters.String(), `</g>`)
+	}
+	if casings.Len() > 0 {
+		parts = append(parts, svg.CasingsSvg(casings.String()))
 	}
 	if edgesOut.Len() > 0 {
 		parts = append(parts, `<g class="pele-edges" fill="none" stroke="var(--_l)" stroke-linecap="round">`, edgesOut.String(), `</g>`)

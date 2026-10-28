@@ -1,4 +1,4 @@
-// Ported from pele src/diagrams/common/tokens.ts at 4eff76f98c73b6817800a05773517f35832e4e92.
+// Ported from pele src/diagrams/common/tokens.ts at 8aff183be57021b533f319a29341a529be934b08.
 //
 // The port reads UTF-8 bytes, and offsets are byte offsets. pele's sticky regular
 // expressions use lookaround, which Go's regexp lacks, so each pattern is a hand matcher
@@ -40,6 +40,9 @@ type TokenType struct {
 	// Matches in place of the pattern, for a pattern that would rescan text from every position
 	// and needs no memory between calls. Returns the end of the match, or -1.
 	Match Scanner
+	// MatchAfter matches in place of the pattern for a pattern that depends on the token before
+	// it. `previous` is the last visible token's type index, or -1 at the start.
+	MatchAfter func(src string, at, previous int) int
 }
 
 type Scanner func(src string, at int) int
@@ -101,6 +104,8 @@ type tokenizer struct {
 	types    []*TokenType
 	dead     []bool
 	scanners []Scanner
+	// The last visible token's type index, or -1 at the start.
+	previous int
 }
 
 func (z *tokenizer) match(k, p int) int {
@@ -108,6 +113,9 @@ func (z *tokenizer) match(k, p int) int {
 		return -1
 	}
 	typ := z.types[k]
+	if typ.MatchAfter != nil {
+		return typ.MatchAfter(z.src, p, z.previous)
+	}
 	if typ.Match != nil {
 		return typ.Match(z.src, p)
 	}
@@ -138,7 +146,7 @@ func Tokenize(src string, tokenTypes []*TokenType, diagram string) Tokens {
 	} else {
 		tb = &table{}
 	}
-	z := &tokenizer{src: src, types: tokenTypes, dead: make([]bool, len(tokenTypes)), scanners: make([]Scanner, len(tokenTypes))}
+	z := &tokenizer{src: src, types: tokenTypes, dead: make([]bool, len(tokenTypes)), scanners: make([]Scanner, len(tokenTypes)), previous: -1}
 	n := len(src)
 
 	p := 0
@@ -168,6 +176,7 @@ scan:
 			}
 			if !tokenTypes[kind].Hidden {
 				kinds = append(kinds, kind)
+				z.previous = kind
 				starts = append(starts, p)
 				ends = append(ends, end)
 			}
@@ -290,6 +299,50 @@ func matchTitle(src string, p int) int {
 		return toCommentOrLineEnd(src, q+1)
 	}
 	return q
+}
+
+// TitleBefore is TITLE that is no title when the keyword runs on into a longer name: `rest`
+// reports whether a name suffix starts at q, so `title` does not split longer names.
+func TitleBefore(rest func(src string, q int) bool) *TokenType {
+	return &TokenType{Name: "TITLE", First: "\t t", Match: func(src string, p int) int {
+		q := blanks(src, p)
+		if !strings.HasPrefix(src[q:], "title") {
+			return -1
+		}
+		q += len("title")
+		if c := byteAt(src, q); c == ' ' || c == '\t' {
+			return toCommentOrLineEnd(src, q+1)
+		}
+		if rest(src, q) {
+			return -1
+		}
+		return q
+	}}
+}
+
+// IsWord reports whether c is in JavaScript's \w: an ASCII letter, digit or underscore.
+func IsWord(c int) bool {
+	return c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9' || c == '_'
+}
+
+// WordNext is the lookahead \w at q.
+func WordNext(src string, q int) bool { return IsWord(byteAt(src, q)) }
+
+// RunEndsIn is the lookahead `[in]*[end]`: the longest run of `in` characters from q holds one
+// that `end` takes. Each set holds \w and the listed punctuation.
+func RunEndsIn(in, end string) func(src string, q int) bool {
+	takes := func(set string, c int) bool {
+		return IsWord(c) || c >= 0 && c < 128 && strings.IndexByte(set, byte(c)) >= 0
+	}
+	return func(src string, q int) bool {
+		for c := byteAt(src, q); takes(in, c); c = byteAt(src, q) {
+			if takes(end, c) {
+				return true
+			}
+			q++
+		}
+		return false
+	}
 }
 
 // /"([^"\\]|\\.)*"|'([^'\\]|\\.)*'/y
@@ -686,9 +739,21 @@ func (r *Reader) Fail(expected string) {
 	if r.Kind() != -1 {
 		found = "`" + r.Text(r.I) + "`"
 	}
-	at := r.I
-	if at >= len(r.Kinds) {
-		at = len(r.Kinds) - 1
+	i := r.I
+	if i >= len(r.Kinds) {
+		i = len(r.Kinds) - 1
 	}
-	panic(types.SyntaxError(r.Diagram, r.Tokens.Src, r.Tokens.Starts[at], "Expecting "+expected+" but found "+found+".", false))
+	src, starts, ends := r.Tokens.Src, r.Tokens.Starts, r.Tokens.Ends
+	at := starts[i]
+	if r.Kind() == -1 {
+		// Locate EOF errors after the last token, before trailing line breaks and hidden comments.
+		k := i
+		for k > 0 && js.Trim(src[starts[k-1]:ends[k-1]]) == "" {
+			k--
+		}
+		if k > 0 {
+			at = ends[k-1]
+		}
+	}
+	panic(types.SyntaxError(r.Diagram, src, at, "Expecting "+expected+" but found "+found+".", false))
 }

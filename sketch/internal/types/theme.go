@@ -32,6 +32,10 @@ func SafeFamilies(list string) bool {
 type Theme struct {
 	Bg, Fg, Muted, Line, Surface, SurfaceAlt, Border, Accent, Critical color.Color
 	Series                                                             [8]color.Color
+	// FgOnLight and FgOnDark are the text colours on a fill the diagram sets
+	// itself, such as a classDef fill: FgOnLight on a light fill and FgOnDark
+	// on a dark one. nil keeps pele's fallbacks, #1f1f1f and #fff.
+	FgOnLight, FgOnDark color.Color
 	// Font and FontMono are CSS font family lists. "" keeps the fallback, and
 	// so does a list that pele's font check refuses, such as one with ";".
 	Font, FontMono string
@@ -67,6 +71,8 @@ func (t *Theme) Vars() [][2]string {
 	}
 	add("--pele-bg", t.Bg)
 	add("--pele-fg", t.Fg)
+	add("--pele-fg-on-light", t.FgOnLight)
+	add("--pele-fg-on-dark", t.FgOnDark)
 	add("--pele-muted", t.Muted)
 	add("--pele-line", t.Line)
 	add("--pele-surface", t.Surface)

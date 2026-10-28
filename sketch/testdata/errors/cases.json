@@ -375,5 +375,83 @@
  },
  {
   "src": "---\ntitle: T\n---\n%%{init: {\"wrap\": true}}%%\n%% a comment\ntreeView-beta\n  #quot;x#quot;\n\n  @@@ : ; ]"
+ },
+ {
+  "src": "architecture-beta\nservice a\n  title\n  title-\n"
+ },
+ {
+  "src": "architecture-beta\nservice a\ntitleservice b\n"
+ },
+ {
+  "src": "eventmodeling\ntf 01 evt title\n"
+ },
+ {
+  "src": "gitGraph\ncommit\nbranch titles\ncheckout titles\ncommit\nbranch title/x order: 2\nswitch title/x\nmerge titles\nbranch title.v2\nbranch title-\n"
+ },
+ {
+  "src": "gitGraph\ncommit\nbranch title.\n"
+ },
+ {
+  "src": "gitGraph\ncommit\n  title\ntitlecommit\n"
+ },
+ {
+  "src": "radar-beta\naxis circles, trueNorth, titles, polygon-x\ncurve falsey{circles: 1, trueNorth 2}, titles{1}"
+ },
+ {
+  "src": "radar-beta\ntitleaxis a"
+ },
+ {
+  "src": "treemap\n\"A\":::title\n"
+ },
+ {
+  "src": "treemap\n\"A\"\n  titles\n"
+ },
+ {
+  "src": "treeView-beta\n  a\n  title\n  b\n"
+ },
+ {
+  "src": "agentflow-beta TB\n  flow f[\"F\"]\n    a --> b\n\n%% trailing\n"
+ },
+ {
+  "src": "eventmodeling\ntf 01 cmd\n%% a comment line\n\n"
+ },
+ {
+  "src": "flowchart LR\n  A -->"
+ },
+ {
+  "src": "flowchart LR\n  A -->\n"
+ },
+ {
+  "src": "flowchart LR\n  A -->\n%% A comment\n\n"
+ },
+ {
+  "src": "radar-beta\ncurve a{1 %% c\n"
+ },
+ {
+  "src": "radar-beta\n axis circle, b"
+ },
+ {
+  "src": "sankey \n\t a,b,1 \n  \n \tb,c,abc "
+ },
+ {
+  "src": "sankey\n \"a \n b\", c ,x"
+ },
+ {
+  "src": "sankey\n a,b,1 \n c,d"
+ },
+ {
+  "src": "sankey\n"
+ },
+ {
+  "src": "sankey\na,b,1,2\n"
+ },
+ {
+  "src": "sankey\na,,1\n"
+ },
+ {
+  "src": "sankey\n\"\",b,1\n"
+ },
+ {
+  "src": "sankey x\na,b,1\n"
  }
 ]

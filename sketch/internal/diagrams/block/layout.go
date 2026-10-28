@@ -1,4 +1,4 @@
-// Ported from pele src/diagrams/block/layout.ts at 4eff76f98c73b6817800a05773517f35832e4e92.
+// Ported from pele src/diagrams/block/layout.ts at 8aff183be57021b533f319a29341a529be934b08.
 
 package block
 
@@ -25,6 +25,9 @@ type Cell struct {
 	row     int
 	cols    float64
 	heights []float64
+	// Extra space after each row or column. nil is pele's shared NO_GAPS.
+	rowGaps []float64
+	colGaps []float64
 	x       float64
 	y       float64
 	w       float64
@@ -97,7 +100,7 @@ func measure(box *Cell, gap, inset float64) {
 			tallest = child.nh
 		}
 	}
-	height := float64(len(heights)-1) * gap
+	height := float64(float64(len(heights)-1)*gap) + total(box.rowGaps)
 	for row := range heights {
 		if heights[row] < 0 {
 			heights[row] = tallest
@@ -106,16 +109,24 @@ func measure(box *Cell, gap, inset float64) {
 	}
 	box.cols = cols
 	box.heights = heights
-	box.nw = math.Max(box.nw, float64(cols*cw)+float64((cols-1)*gap)+float64(2*inset))
+	box.nw = math.Max(box.nw, float64(cols*cw)+float64((cols-1)*gap)+total(box.colGaps)+float64(2*inset))
 	box.nh = height + float64(2*inset) + box.head
 }
 
 // arrange gives each child its cell, sharing out any room the container has beyond what it needs.
 func arrange(box *Cell, gap, inset float64) {
-	cols, heights := box.cols, box.heights
+	cols, heights, rowGaps, colGaps := box.cols, box.heights, box.rowGaps, box.colGaps
 	rows := float64(len(heights))
-	cw := (box.w - float64(2*inset) - float64((cols-1)*gap)) / cols
-	room := box.h - float64(2*inset) - box.head - float64((rows-1)*gap)
+	cw := (box.w - float64(2*inset) - float64((cols-1)*gap) - total(colGaps)) / cols
+	room := box.h - float64(2*inset) - box.head - float64((rows-1)*gap) - total(rowGaps)
+	var offsets []float64
+	if len(colGaps) > 0 {
+		sum := 0.0
+		for col := 0; col < int(cols); col++ {
+			offsets = append(offsets, sum)
+			sum += gapAt(colGaps, col)
+		}
+	}
 	needed := 0.0
 	for _, height := range heights {
 		needed += height
@@ -131,13 +142,30 @@ func arrange(box *Cell, gap, inset float64) {
 	row := 0
 	for _, child := range box.children {
 		for ; row < child.row; row++ {
-			top += float64(heights[row]*scale) + share + gap
+			top += float64(heights[row]*scale) + share + gap + gapAt(rowGaps, row)
 		}
-		child.w = float64(cw*child.span) + float64(gap*(child.span-1))
+		before := gapAt(offsets, int(child.col))
+		child.w = float64(cw*child.span) + float64(gap*(child.span-1)) + gapAt(offsets, int(child.col+child.span-1)) - before
 		child.h = float64(heights[row]*scale) + share
-		child.x = left + float64(child.col*(cw+gap)) + child.w/2
+		child.x = left + float64(child.col*(cw+gap)) + before + child.w/2
 		child.y = top + child.h/2
 	}
+}
+
+func total(gaps []float64) float64 {
+	sum := 0.0
+	for _, gap := range gaps {
+		sum += gap
+	}
+	return sum
+}
+
+// gapAt is TS `gaps[i] ?? 0`: a gap past the end of the list, or a hole in it, is 0. Not in pele.
+func gapAt(gaps []float64, i int) float64 {
+	if i < 0 || i >= len(gaps) {
+		return 0
+	}
+	return gaps[i]
 }
 
 // layout lays out a tree of cells in place. The root has no border, so its grid starts at the origin.

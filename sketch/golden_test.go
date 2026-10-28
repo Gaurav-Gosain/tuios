@@ -214,13 +214,14 @@ func TestGoldenExtra(t *testing.T) {
 			t.Fatal(err)
 		}
 		var cases []struct {
-			Src      string   `json:"src"`
-			MaxWidth float64  `json:"maxWidth"`
-			FontSize *float64 `json:"fontSize"`
-			Padding  *float64 `json:"padding"`
-			IDPrefix *string  `json:"idPrefix"`
-			AutoDir  *bool    `json:"autoDirection"`
-			Math     bool     `json:"math"`
+			Src      string          `json:"src"`
+			MaxWidth float64         `json:"maxWidth"`
+			FontSize *float64        `json:"fontSize"`
+			Padding  *float64        `json:"padding"`
+			IDPrefix *string         `json:"idPrefix"`
+			AutoDir  *bool           `json:"autoDirection"`
+			Mono     []MonospacePart `json:"monospace"`
+			Math     bool            `json:"math"`
 		}
 		if err := json.Unmarshal(data, &cases); err != nil {
 			t.Fatalf("%s: %v", f, err)
@@ -239,6 +240,7 @@ func TestGoldenExtra(t *testing.T) {
 			opts.Padding = c.Padding
 			opts.IDPrefix = c.IDPrefix
 			opts.AutoDirection = c.AutoDir
+			opts.Monospace = c.Mono
 			if c.Math {
 				opts.Math = goldenMath
 			}

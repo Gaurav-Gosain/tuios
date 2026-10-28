@@ -1,4 +1,4 @@
-// Ported from pele src/diagrams/railroad/ir.ts at 4eff76f98c73b6817800a05773517f35832e4e92.
+// Ported from pele src/diagrams/railroad/ir.ts at 8aff183be57021b533f319a29341a529be934b08.
 
 package railroad
 
@@ -58,7 +58,7 @@ func IR_TOKENS() []*common.TokenType {
 			literal("("),
 			literal(","),
 			literal(")"),
-			TITLE,
+			title(titleWordRest),
 			ACC_TITLE,
 			ACC_DESCR,
 			id,

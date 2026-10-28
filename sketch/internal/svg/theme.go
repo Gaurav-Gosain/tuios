@@ -1,4 +1,4 @@
-// Ported from pele src/svg/theme.ts at 4eff76f98c73b6817800a05773517f35832e4e92.
+// Ported from pele src/svg/theme.ts at 8aff183be57021b533f319a29341a529be934b08.
 
 package svg
 
@@ -24,6 +24,14 @@ const RADIUS = "var(--pele-radius,4px)"
 // Use CSS for rx variables to support older browsers. Put the default first so
 // diagram styles can override it.
 const ROUNDED = ` style="rx:var(--_r)"`
+
+// SetsFill reports whether a shape style from ResolveStyle sets a fill: /[";]fill:/.
+func SetsFill(shape string) bool { return Declares(shape, "fill") }
+
+// Declares reports whether a style sets prop: /[";]prop:/.
+func Declares(style, prop string) bool {
+	return strings.Contains(style, `"`+prop+`:`) || strings.Contains(style, `;`+prop+`:`)
+}
 
 // Rounded returns the attributes of a rectangle with the corner radius
 // in their style, or in a style of its own.

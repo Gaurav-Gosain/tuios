@@ -1,4 +1,4 @@
-// Ported from pele src/diagrams/gantt/render.ts at 4eff76f98c73b6817800a05773517f35832e4e92.
+// Ported from pele src/diagrams/gantt/render.ts at 8aff183be57021b533f319a29341a529be934b08.
 //
 // pele's `text` is textSetting here, as the package text is imported. Dates are read in
 // options.Location, or in the host's zone when it is nil.

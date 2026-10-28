@@ -1,4 +1,4 @@
-// Ported from pele src/types.ts at 4eff76f98c73b6817800a05773517f35832e4e92.
+// Ported from pele src/types.ts at 8aff183be57021b533f319a29341a529be934b08.
 //
 // Optional options are pointers where pele tells `undefined` from a value.
 
@@ -7,6 +7,7 @@
 package types
 
 import (
+	"slices"
 	"time"
 
 	"tuios.dev/sketch/internal/text"
@@ -32,15 +33,35 @@ type MathMarkup = text.MathMarkup
 // MathResolver typesets TeX. TeX excludes the $$ delimiters; font size is in pixels.
 type MathResolver = text.MathResolver
 
+// MonospacePart names a part of a diagram that RenderOptions.Monospace can set in the
+// monospace font.
+type MonospacePart string
+
+// The parts that RenderOptions.Monospace takes.
+const (
+	MonospaceMembers    MonospacePart = "members"
+	MonospaceAttributes MonospacePart = "attributes"
+	MonospaceFiles      MonospacePart = "files"
+	MonospaceMessages   MonospacePart = "messages"
+)
+
+// HasMonospace reports whether Monospace lists part.
+func (o RenderOptions) HasMonospace(part MonospacePart) bool {
+	return slices.Contains(o.Monospace, part)
+}
+
 type RenderOptions struct {
 	Measurer text.TextMeasurer
 	// The fonts labels are measured in, and drawn in where the page sets no --pele-font or
 	// --pele-font-mono.
 	FontFamily     string
 	FontFamilyMono string
-	FontSize       *float64
-	IDPrefix       *string
-	Responsive     *bool
+	// Monospace lists the parts of a diagram that are measured and drawn in the monospace font:
+	// "members" (class), "attributes" (ER), "files" (tree view) and "messages" (sequence).
+	Monospace  []MonospacePart
+	FontSize   *float64
+	IDPrefix   *string
+	Responsive *bool
 	// The width the host has for the diagram, in pixels. A type that can draw itself narrower
 	// does, so that its text is not shrunk with it.
 	MaxWidth *float64

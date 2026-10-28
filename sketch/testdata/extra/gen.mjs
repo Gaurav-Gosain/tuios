@@ -1,6 +1,7 @@
 // Writes the extra goldens: pele's SVG for every case of each JSON file here.
 // A case is {"src": "...", "maxWidth": 200, "fontSize": 13.5, "padding": 7,
-// "idPrefix": "p1", "autoDirection": false, "math": true}; all but src are optional. A case with math is drawn with fakeMath as the math resolver.
+// "idPrefix": "p1", "autoDirection": false, "monospace": ["members"], "math": true}; all but src
+// are optional. A case with math is drawn with fakeMath as the math resolver.
 // Usage: TZ=Asia/Dubai node gen.mjs PELE_DIR OUT_DIR
 import { readFileSync, readdirSync, writeFileSync } from 'node:fs';
 
@@ -32,6 +33,7 @@ for (const file of readdirSync(dir).filter((f) => f.endsWith('.json')).sort()) {
     if (c.padding !== undefined) opts.padding = c.padding;
     if (c.idPrefix !== undefined) opts.idPrefix = c.idPrefix;
     if (c.autoDirection !== undefined) opts.autoDirection = c.autoDirection;
+    if (c.monospace !== undefined) opts.monospace = c.monospace;
     if (c.math) opts.math = fakeMath;
     writeFileSync(`${out}/${name}-${String(i).padStart(3, '0')}.svg`, render(c.src, opts).svg);
     n++;

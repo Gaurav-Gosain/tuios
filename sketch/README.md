@@ -6,7 +6,7 @@ It is a port of [pele](https://github.com/obsidianmd/pele), the Mermaid
 renderer by [kepano](https://github.com/kepano) of
 [Obsidian](https://obsidian.md), under the MIT licence. The layout, the
 shapes, the safety rules and the test corpus are pele's work. The port
-follows pele v1.10.0, commit `4eff76f98c73b6817800a05773517f35832e4e92`.
+follows pele v1.12.0, commit `8aff183be57021b533f319a29341a529be934b08`.
 [LICENSE](LICENSE) has the notice of pele and of the port.
 [raster/fonts/NOTICE](raster/fonts/NOTICE) has the licences of the fonts that
 sketch/raster draws text in: Arimo (SIL Open Font License 1.1) and Go Mono.
@@ -82,7 +82,9 @@ other than http, https, mailto or tel.
 cover, such as Chinese and Japanese labels that wrap, and the label tags,
 break hints, class rows, sankey gradients, state curves and quadrant labels of
 pele v1.9.0, and the comments, bare titles, sankey values and chart bounds of
-pele v1.10.0. They match too.
+pele v1.10.0, and the new tests of pele v1.10.1 to v1.12.0: text colours on
+fills, casings, the `monospace` option, wrapped messages, treemap spacing and
+block edge labels. They match too.
 `testdata/errors` holds sources that pele refuses, and the error pele gives for
 each: the message, the code, and the line, column and snippet in the source as
 written. sketch gives the same errors.
@@ -115,6 +117,15 @@ if err != nil {
 }
 os.WriteFile("out.svg", []byte(svg.Data), 0o644)
 ```
+
+`RenderOptions.Monospace` lists the parts that are measured and drawn in the
+monospace font: `MonospaceMembers` (class), `MonospaceAttributes` (ER),
+`MonospaceFiles` (tree view) and `MonospaceMessages` (sequence).
+
+A label on a fill that the diagram sets with `style`, `classDef`, or a
+sequence `rect` or `box` uses `--pele-fg-on-light` or `--pele-fg-on-dark`,
+whichever contrasts more with the fill. `Theme.FgOnLight` and `Theme.FgOnDark`
+set them.
 
 `svg.Type` is pele's name for the diagram type, such as `flowchart`.
 `svg.MermaidType` is the name Mermaid gives it, such as `flowchart-v2` for

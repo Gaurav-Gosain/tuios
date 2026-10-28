@@ -1,4 +1,4 @@
-// Ported from pele src/errors.ts at 4eff76f98c73b6817800a05773517f35832e4e92.
+// Ported from pele src/errors.ts at 8aff183be57021b533f319a29341a529be934b08.
 
 package types
 
@@ -7,7 +7,10 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"unicode/utf8"
 	"unsafe"
+
+	"tuios.dev/sketch/internal/js"
 )
 
 type PeleErrorCode string
@@ -162,7 +165,19 @@ func Written(src string, offset int) (string, int) {
 
 // Locate finds the line and column of a byte offset. Columns count UTF-16 units, as pele's do.
 func Locate(src string, offset int) Location {
-	src, offset = Written(src, offset)
+	// Keep EOF errors on the last content line.
+	if end := len(js.TrimEnd(src)); end > 0 && offset >= end {
+		_, size := utf8.DecodeLastRuneInString(src[:end])
+		src, offset = Written(src, end-size)
+		if offset < len(src) {
+			_, size = utf8.DecodeRuneInString(src[offset:])
+			offset += size
+		} else {
+			offset++
+		}
+	} else {
+		src, offset = Written(src, offset)
+	}
 	if offset > len(src) {
 		offset = len(src)
 	}

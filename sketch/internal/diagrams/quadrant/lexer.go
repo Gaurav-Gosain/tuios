@@ -1,4 +1,4 @@
-// Ported from pele src/diagrams/quadrant/lexer.ts at 4eff76f98c73b6817800a05773517f35832e4e92.
+// Ported from pele src/diagrams/quadrant/lexer.ts at 8aff183be57021b533f319a29341a529be934b08.
 //
 // As in the other lexers, the port reads UTF-8 bytes: code() decodes the character at a
 // byte offset, and a step past a character that may not be ASCII steps the whole

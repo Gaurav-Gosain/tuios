@@ -1,4 +1,4 @@
-// Ported from pele src/diagrams/state/render.ts at 4eff76f98c73b6817800a05773517f35832e4e92.
+// Ported from pele src/diagrams/state/render.ts at 8aff183be57021b533f319a29341a529be934b08.
 
 package state
 
@@ -635,6 +635,7 @@ func draw(db *StateDb, config types.Config, options types.RenderOptions, turned 
 	}
 
 	var clusters, dividers, nodesOut, notesOut strings.Builder
+	var fills []svg.Fill
 	// A state takes about 230 bytes of markup and a transition about 300.
 	nodesOut.Grow(len(cnodes) * 232)
 	// Draws the dashed lines between the regions among a composite's members.
@@ -711,21 +712,29 @@ func draw(db *StateDb, config types.Config, options types.RenderOptions, turned 
 		y := c.Y + pad
 		w := v.w
 		h := v.h
-		labelAttrs := ` class="pele-label"` + style.Text
+		ink := svg.InkFill(*style, "")
+		labelAttrs := ` class="pele-label"` + ink + style.Text
 		var body string
 
 		switch v.kind {
 		case K_Composite:
 			left := x - c.W/2
 			top := y - c.H/2
-			body = rect(left, top, c.W, c.H, ` rx="`+js.Int(CORNER)+`" fill="var(--_a)" fill-opacity="0.5" stroke="var(--_b)"`+style.Shape)
+			if svg.Paints(style.Shape) {
+				fills = append(fills, svg.Fill{Box: [4]float64{left, top, left + c.W, top + c.H}, Shape: style.Shape})
+			}
+			wash := ` fill-opacity="0.5"`
+			if svg.SetsFill(style.Shape) {
+				wash = ""
+			}
+			body = rect(left, top, c.W, c.H, ` rx="`+js.Int(CORNER)+`" fill="var(--_a)"`+wash+` stroke="var(--_b)"`+style.Shape)
 			if v.titleH > 0 {
 				body += `<path d="M` + svg.Num(left) + `,` + svg.Num(top+v.titleH) + `H` + svg.Num(left+c.W) + `"` + RULE + style.Line + `/>` +
 					svg.LabelSvg(
 						v.label,
 						titleX(c, v.label.Width, crossings)+pad,
 						top+v.titleH/2,
-						` class="pele-cluster-label"`+style.Text,
+						` class="pele-cluster-label"`+ink+style.Text,
 						icons,
 					)
 			}
@@ -759,7 +768,7 @@ func draw(db *StateDb, config types.Config, options types.RenderOptions, turned 
 			var lines strings.Builder
 			lines.WriteString(body)
 			for _, line := range v.lines {
-				lines.WriteString(svg.LabelSvg(line, 0, at+line.Height/2, ` class="pele-state-description" font-size="`+js.Num(small)+`"`+style.Text, icons))
+				lines.WriteString(svg.LabelSvg(line, 0, at+line.Height/2, ` class="pele-state-description" font-size="`+js.Num(small)+`"`+ink+style.Text, icons))
 				at += line.Height
 			}
 			body = lines.String()
@@ -822,7 +831,7 @@ func draw(db *StateDb, config types.Config, options types.RenderOptions, turned 
 		reach.Add(ce.Dst, svg.EndSide(ce.Route, len(ce.Route)-3, cnodes[ce.Dst]), "arrow_point")
 	}
 
-	var edgesOut, labelsOut strings.Builder
+	var casings, edgesOut, labelsOut strings.Builder
 	edgesOut.Grow(len(cedges) * 304)
 	loopSeen := make([]int, states)
 	loopText := make([]float64, states)
@@ -932,15 +941,30 @@ func draw(db *StateDb, config types.Config, options types.RenderOptions, turned 
 			}
 			path = svg.RoutePath(route, curve, 0, svg.MarkerTrim(endType), leaves, arrives)
 		}
+		over, onFill := svg.OverFills(path.D, []float64{path.Ex, path.Ey}, fills, "", path.Tokens)
+		if onFill && over == "" {
+			casings.WriteString(svg.EdgeCasing(path, "none", endType, "", false))
+		}
 		edgesOut.WriteString(`<g class="pele-edge `)
-		if note {
-			edgesOut.WriteString(`pele-note-edge" stroke="var(--_b)" stroke-dasharray="3 4`)
-		} else {
+		switch {
+		case note:
+			stroke := over
+			if stroke == "" {
+				stroke = "var(--_b)"
+			}
+			svg.WriteStrings(&edgesOut, `pele-note-edge" stroke="`, stroke, `" stroke-dasharray="3 4`)
+		case over != "":
+			svg.WriteStrings(&edgesOut, `pele-transition" stroke="`, over)
+		default:
 			edgesOut.WriteString(`pele-transition`)
+		}
+		color := over
+		if color == "" {
+			color = "var(--_l)"
 		}
 		edgesOut.WriteString(`" data-id="` + svg.EscText(edge.ID) + `">` +
 			`<path d="` + path.D + `"/>` +
-			svg.Marker(endType, path.Ex, path.Ey, path.Edx, path.Edy, "var(--_l)") +
+			svg.Marker(endType, path.Ex, path.Ey, path.Edx, path.Edy, color) +
 			`</g>`)
 		if l.Width > 0 {
 			x := ce.LabelX + pad
@@ -955,6 +979,9 @@ func draw(db *StateDb, config types.Config, options types.RenderOptions, turned 
 	}
 	if dividers.Len() > 0 {
 		content = append(content, `<g class="pele-dividers" stroke-dasharray="4 4"`+RULE+`>`, dividers.String(), `</g>`)
+	}
+	if casings.Len() > 0 {
+		content = append(content, svg.CasingsSvg(casings.String()))
 	}
 	if edgesOut.Len() > 0 {
 		content = append(content, `<g class="pele-edges" fill="none" stroke="var(--_l)" stroke-linecap="round">`, edgesOut.String(), `</g>`)

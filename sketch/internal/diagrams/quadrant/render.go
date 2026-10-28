@@ -1,4 +1,4 @@
-// Ported from pele src/diagrams/quadrant/render.ts at 4eff76f98c73b6817800a05773517f35832e4e92.
+// Ported from pele src/diagrams/quadrant/render.ts at 8aff183be57021b533f319a29341a529be934b08.
 
 package quadrant
 
@@ -123,6 +123,10 @@ func renderQuadrant(model *QuadrantDb, config types.Config, options types.Render
 	taken := []float64{left + tileW, top, left + w - tileW, top + h, left, top + tileH, left + w, top + h - tileH}
 	isClear := func(from int, x0, y0, x1, y1 float64) bool {
 		for k := from; k < len(taken); k += 4 {
+			// Empty quadrant labels must not block point labels.
+			if taken[k] >= taken[k+2] || taken[k+1] >= taken[k+3] {
+				continue
+			}
 			if x0 < taken[k+2] && x1 > taken[k] && y0 < taken[k+3] && y1 > taken[k+1] {
 				return false
 			}

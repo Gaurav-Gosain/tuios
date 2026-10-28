@@ -12,7 +12,7 @@ import (
 // lazyPatterns is how many patterns sketch's packages declare. A package that
 // drops out of this test binary would take its patterns out of the check, so
 // the count is exact. Change it when a pattern is added or removed.
-const lazyPatterns = 116
+const lazyPatterns = 124
 
 // Patterns compile on first use. A pattern that does not compile would panic
 // only on the input that reaches it, so compile them all here.

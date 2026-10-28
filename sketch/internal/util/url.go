@@ -1,4 +1,4 @@
-// Ported from pele src/util/url.ts at 4eff76f98c73b6817800a05773517f35832e4e92.
+// Ported from pele src/util/url.ts at 8aff183be57021b533f319a29341a529be934b08.
 //
 // `new URL()` is approximated for http and https: the scheme and host are
 // lowercased and an empty path becomes "/". decodeURIComponent is ported as is.
@@ -8,6 +8,7 @@ package util
 import (
 	"math"
 	"net/url"
+	"slices"
 	"strconv"
 	"strings"
 	"unicode/utf8"
@@ -104,21 +105,21 @@ func decode(uri string) string {
 	return uri
 }
 
-// SanitizeUrl follows the algorithm of @braintree/sanitize-url, which Mermaid applies to click targets.
-func SanitizeUrl(u string) string {
-	if u == "" {
-		return BLANK
+// unwrap removes the control characters, entity codes and escapes that could hide a scheme, and
+// with `percent`, percent escapes too. ok is false for a URL wrapped too many times to be a real one.
+func unwrap(u string, percent bool) (out string, ok bool) {
+	out = js.Trim(u)
+	if percent {
+		out = decode(out)
 	}
-	decoded := decode(js.Trim(u))
 	rounds := 0
 	for {
-		// Each round peels one layer of encoding. A URL wrapped this many times is not a real one.
 		rounds++
 		if rounds > 32 {
-			return BLANK
+			return "", false
 		}
-		decoded = reCtrl.ReplaceAllString(decoded, "")
-		decoded = reHTMLEntities.ReplaceAllStringFunc(decoded, func(m string) string {
+		out = reCtrl.ReplaceAllString(out, "")
+		out = reHTMLEntities.ReplaceAllStringFunc(out, func(m string) string {
 			sub := reHTMLEntities.FindStringSubmatch(m)
 			// String.fromCharCode(dec): the number mod 2^16, or 0 for one that is not a number.
 			n := js.Number(sub[1])
@@ -135,28 +136,38 @@ func SanitizeUrl(u string) string {
 			}
 			return string(rune(code))
 		})
-		decoded = reHTMLCtrlEntity.ReplaceAllString(decoded, "")
-		decoded = reCtrl.ReplaceAllString(decoded, "")
-		decoded = js.Trim(reWSEscape.ReplaceAllString(decoded, ""))
-		decoded = decode(decoded)
-		more := reCtrl.MatchString(decoded) || reHTMLEntities.MatchString(decoded) ||
-			reHTMLCtrlEntity.MatchString(decoded) || reWSEscape.MatchString(decoded)
+		out = reHTMLCtrlEntity.ReplaceAllString(out, "")
+		out = reCtrl.ReplaceAllString(out, "")
+		out = js.Trim(reWSEscape.ReplaceAllString(out, ""))
+		if percent {
+			out = decode(out)
+		}
+		more := reCtrl.MatchString(out) || reHTMLEntities.MatchString(out) ||
+			reHTMLCtrlEntity.MatchString(out) || reWSEscape.MatchString(out)
 		if !more {
-			break
+			return out, true
 		}
 	}
+}
 
-	if decoded == "" {
+// SanitizeUrl refuses what @braintree/sanitize-url refuses, the check Mermaid applies to click
+// targets. Unlike it, it keeps percent escapes, so `file=A%26B` still names the note `A&B`.
+func SanitizeUrl(u string) string {
+	if u == "" {
+		return BLANK
+	}
+	decoded, ok := unwrap(u, true)
+	kept, ok2 := unwrap(u, false)
+	if !ok || !ok2 || decoded == "" || kept == "" {
 		return BLANK
 	}
 	if decoded[0] == '.' || decoded[0] == '/' {
-		return decoded
+		return kept
 	}
 
-	trimmed := js.TrimStart(decoded)
-	scheme := reScheme.FindString(trimmed)
+	scheme := reScheme.FindString(js.TrimStart(decoded))
 	if scheme == "" {
-		return decoded
+		return kept
 	}
 
 	protocol := js.Trim(strings.ToLower(scheme))
@@ -164,7 +175,7 @@ func SanitizeUrl(u string) string {
 		return BLANK
 	}
 
-	normalized := strings.ReplaceAll(trimmed, "\\", "/")
+	normalized := strings.ReplaceAll(js.TrimStart(kept), "\\", "/")
 	if protocol == "mailto:" || strings.Contains(protocol, "://") {
 		return normalized
 	}
@@ -196,19 +207,19 @@ var (
 
 // Stricter than Mermaid, which lets any scheme but three through: a diagram in a shared note
 // could otherwise open a local file, a network share, or another application.
-func allow(u string, schemes []string) (string, bool) {
+func allowed(u string, schemes []string) bool {
 	if reNetworkPath.MatchString(u) {
-		return "", false
+		return false
 	}
 	scheme := reSchemeName.FindStringSubmatch(u)
-	if scheme == nil {
+	return scheme == nil || slices.Contains(schemes, strings.ToLower(scheme[1]))
+}
+
+// allow checks the decoded URL too, for an app that decodes the href before opening it.
+func allow(u string, schemes []string) (string, bool) {
+	decoded, ok := unwrap(u, true)
+	if ok && allowed(u, schemes) && allowed(decoded, schemes) {
 		return u, true
-	}
-	name := strings.ToLower(scheme[1])
-	for _, s := range schemes {
-		if s == name {
-			return u, true
-		}
 	}
 	return "", false
 }

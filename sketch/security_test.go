@@ -1,7 +1,7 @@
 package sketch
 
 // Ported from pele tests/support/inert.ts, tests/support/xml.ts and the flowchart
-// part of tests/render/security.test.ts, and the internal links of tests/util/url.test.ts, at 4eff76f98c73b6817800a05773517f35832e4e92.
+// part of tests/render/security.test.ts, and the internal links of tests/util/url.test.ts, at 8aff183be57021b533f319a29341a529be934b08.
 
 import (
 	"errors"
@@ -157,7 +157,7 @@ var (
 		"fill", "fill-opacity", "opacity", "stroke", "stroke-width", "stroke-dasharray", "stroke-linecap", "stroke-linejoin",
 		"role", "aria-roledescription", "aria-labelledby", "aria-describedby", "id", "data-id", "data-icon", "data-href",
 		"transform", "x", "y", "rx", "ry", "r", "cx", "cy", "d", "points", "text-anchor", "xml:space",
-		"href", "target", "rel", "preserveAspectRatio",
+		"href", "target", "rel", "preserveAspectRatio", "pointer-events",
 		// <sub>, <sup>, <u> and <ins> in labels, and sankey gradients (pele 1.9.0).
 		"baseline-shift", "text-decoration", "gradientUnits", "x1", "x2", "offset", "stop-color")
 	styleProps = setOf("fill", "fill-opacity", "stroke", "stroke-width", "stroke-dasharray", "stroke-dashoffset", "stroke-linecap",
@@ -515,6 +515,24 @@ func TestInternalLinkHref(t *testing.T) {
 	for _, name := range []string{"javascript:alert(1)", "java\ufffescript:alert(1)", `\\nevil.example`, "\t/\\nevil.example", "/\t/evil.example"} {
 		if util.InternalLink(name, about) {
 			t.Errorf("%q: linked", name)
+		}
+	}
+}
+
+// TestPercentEscapes: SanitizeUrl keeps percent escapes, as pele 1.12.0 does, and an escape
+// still cannot hide a scheme or a network path.
+func TestPercentEscapes(t *testing.T) {
+	for _, u := range []string{"obsidian://open?vault=V&file=A%26B%23C", "https://example.com/?q=a%26b", "mailto:a@example.com?subject=a%20b", "Note%20name", "./a%23b.html"} {
+		if got := util.SanitizeUrl(u); got != u {
+			t.Errorf("%q: got %q", u, got)
+		}
+	}
+	if got := util.SanitizeUrl("%6A%61%76%61%73%63%72%69%70%74:alert(1)"); got != "about:blank" {
+		t.Errorf("an escaped javascript: scheme gives %q", got)
+	}
+	for _, u := range []string{"fi%6ce:///etc/passwd", "%2F%2Fevil.example/share", "obs%69dian://open"} {
+		if got, ok := util.LinkUrl(util.SanitizeUrl(u), RenderOptions{}); ok {
+			t.Errorf("%q: linked as %q", u, got)
 		}
 	}
 }

@@ -1,4 +1,4 @@
-// Ported from pele src/diagrams/usecase/types.ts at 4eff76f98c73b6817800a05773517f35832e4e92.
+// Ported from pele src/diagrams/usecase/types.ts at 8aff183be57021b533f319a29341a529be934b08.
 //
 // Spans are byte offsets into the source, where pele's are UTF-16 offsets. Every place
 // that shows an offset to the reader turns it into UTF-16 units first. An optional text
