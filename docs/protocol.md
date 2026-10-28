@@ -6345,7 +6345,17 @@ at the end of a name dropped, and a write to a folder that *holds* one of them (
 `~/.config`, say) is refused too, so a link cannot carry a denied folder out
 and back: `~/.ssh`, `~/.gnupg`, `~/.aws`, `~/.azure`, `~/.kube`, `~/.docker`,
 `~/.netrc`, `~/.git-credentials`, `~/.config/git`, `~/.config/gh`,
-`~/.config/gcloud`, `~/.password-store`, `~/.claude`, `~/.codex`, the shell
+`~/.config/gcloud`, `~/.password-store`, `~/.claude`, `~/.claude.json`,
+`~/.codex`, the config folders of the agent harnesses tuios installs hooks,
+plugins or extensions into, which name commands the tool runs (Gemini CLI and
+Antigravity's `~/.gemini`, `~/.config/opencode`, `~/.config/amp`,
+`~/.copilot`, `~/.config/crush`, `~/.cursor`, Devin's `~/.config/devin` and
+on Windows `AppData/Roaming/devin`, `~/.factory`, `~/.grok`, Hermes's
+`~/.hermes` and on Windows `AppData/Local/hermes`, `~/.config/kilo`,
+`~/.kimi-code`, `~/.pi/agent`, `~/.omp/agent`, `~/.qoder`, `~/.qwen`), the
+sops age keys (`~/.config/sops/age` and its macOS and Windows forms), atuin's
+key, session, history and config (`~/.local/share/atuin`, `~/.config/atuin`),
+Ollama's key (`~/.ollama/id_ed25519`), Gemini CLI's `~/.gemini/.env`, the shell
 start files (`.profile`, `.bashrc`, `.bashrc.d`, `.bash_profile`,
 `.bash_login`, `.bash_logout`, `.zshenv`, `.zprofile`, `.zshrc`, `.zlogin`,
 `.zlogout`, `.cshrc`, `.tcshrc`, `.kshrc`, `.mkshrc`, `.xprofile`, `.xsession`,
@@ -6365,17 +6375,24 @@ list above that can hold a secret (`~/.ssh` except a `*.pub` key, `~/.gnupg`,
 `~/.aws`, `~/.azure`, `~/.config/gcloud`, `~/.kube`, `~/.netrc`,
 `~/.git-credentials`, `~/.gitconfig`, `~/.config/git`, `~/.password-store`,
 the shell start files, `~/.config/systemd`, `~/.config/environment.d`,
-`.pam_environment`, the PowerShell profiles, and tuios's own config, state and
-data), and also `~/.docker/config.json`,
+`.pam_environment`, the PowerShell profiles, `~/.claude.json`, the sops age
+keys, atuin's folders, Ollama's key, `~/.gemini/.env`, and tuios's own config,
+state and data), and also `~/.docker/config.json`,
 `~/.config/gh/hosts.yml`, `~/Library/Keychains`, the
-Claude and Codex credential files, the package and database credentials
-(`.npmrc`, `.pypirc`, `.gem/credentials`, `.cargo/credentials`,
+Claude and Codex credential files, the logins of other agent tools (Gemini
+CLI's `oauth_creds.json` and `mcp-oauth-tokens.json`, opencode's `auth.json`
+and `mcp-auth.json`, Qwen Code's `oauth_creds.json`, Kilo's `auth.json`, Pi's
+`auth.json`, Amp's `secrets.json`, the Copilot CLI's `~/.copilot/config.json`),
+Cursor's MCP servers (`~/.cursor/mcp.json`, whose env often holds API keys),
+the cloud and tunnel CLI credentials (`~/.oci`, doctl's and ngrok's config
+folders on Linux, macOS and Windows, and `~/.ngrok2`), the package and database
+credentials (`.npmrc`, `.pypirc`, `.gem/credentials`, `.cargo/credentials`,
 `.vault-token`, `.pgpass`, `.my.cnf`, the Terraform credentials,
 `~/.config/rclone`, `~/.config/hub`, `~/.config/op`), `~/.local/share/keyrings`,
 shell and program histories, browser profiles (also the snap Firefox and
 Chromium profiles and every flatpak's `~/.var/app`), mail and chat state
-(Thunderbird, Signal, Discord, Slack, Telegram), the VS Code state folder,
-crypto wallets (Bitcoin, Electrum, Ethereum, Monero, Litecoin, Solana,
+(Thunderbird, Signal, Discord, Slack, Telegram), the VS Code and Cursor state
+folders, crypto wallets (Bitcoin, Electrum, Ethereum, Monero, Litecoin, Solana,
 Exodus), password managers,
 the Windows credential stores and DPAPI keys,
 `/proc` (every process's environment and memory), and the daemon's socket
@@ -6386,7 +6403,8 @@ elsewhere is allowed, so a copy out works, unless the machine's
 `files_read_roots` is set: then a read must be under one of those folders or
 under a write root, and the refusal names the setting. The read deny list
 also holds the shell and program histories (`.bash_history`, `.zsh_history`,
-fish's history and others) and the browser and password manager profiles.
+zsh's history under `~/.local/share` and `~/.local/state`, fish's history and
+others) and the browser and password manager profiles.
 
 A read over a link opens the file, then checks the path the system has for
 the open file against the same rules. A rename between the check and the open

@@ -2649,10 +2649,12 @@ files_roots = ["~/Downloads/tuios", "~/dev"]
 
 A path is absolute or starts with `~`. `files_roots = ["~"]` lets the machine
 write anywhere in your home folder; the deny list below still holds inside
-every root, so even then it cannot touch `~/.ssh` or a shell start file. A
-write outside the roots is refused, and the refusal says where writes may land
-and which setting to change. A reload that widens `files_roots`, like one that
-widens `allow`, waits for `tuios config apply`.
+every root, so even then it cannot touch `~/.ssh`, a shell start file, or the
+config folders of the agent harnesses tuios integrates (Claude Code, Codex,
+Gemini CLI, opencode, Cursor and the others), which name commands those tools
+run. A write outside the roots is refused, and the refusal says where writes
+may land and which setting to change. A reload that widens `files_roots`, like
+one that widens `allow`, waits for `tuios config apply`.
 
 **The mode of a file a link writes.** A file that another machine writes here
 gets the sender's permission bits under this machine's umask, as `cp` and
@@ -2660,7 +2662,10 @@ gets the sender's permission bits under this machine's umask, as `cp` and
 stay, so a script stays runnable. This holds for a paired device too.
 
 **Where a link may read: `files_read_roots`.** Unset, a machine with `files`
-reads any file you can read, apart from the read deny list: keys, credentials,
+reads any file you can read, apart from the read deny list: keys, credentials
+(also the logins of agent tools such as Gemini CLI, opencode, Qwen Code, Kilo,
+Pi, Amp and the Copilot CLI, Cursor's MCP servers, the sops age keys, atuin's
+key and history, Ollama's key, and the OCI, doctl and ngrok credentials),
 shell start files, `~/.gitconfig`, keyrings, shell histories, browser profiles,
 `/proc` and tuios's own state. A
 deny list can never name every secret on a machine. Set `files_read_roots` to
