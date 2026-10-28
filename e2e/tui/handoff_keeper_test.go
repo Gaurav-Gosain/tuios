@@ -2,6 +2,7 @@ package tuie2e
 
 import (
 	"encoding/json"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"regexp"
@@ -28,8 +29,9 @@ import (
 
 // keeperProcesses is every keeper process of the daemon under base, as
 // "pid ppid stat command". A keeper's command line names the previous binary,
-// which is kept under base. ps reads untruncated command lines with -ww, on
-// macOS and Linux alike.
+// which is kept under base, except on Linux, where its environment does (see
+// keeperEnvHas). ps reads untruncated command lines with -ww, on macOS and
+// Linux alike.
 func keeperProcesses(t *testing.T, base string) []string {
 	t.Helper()
 	raw, err := exec.Command("ps", "-A", "-ww", "-o", "pid=,ppid=,stat=,command=").Output()
@@ -38,11 +40,26 @@ func keeperProcesses(t *testing.T, base string) []string {
 	}
 	var out []string
 	for _, line := range strings.Split(string(raw), "\n") {
-		if strings.Contains(line, "handoff-keeper") && strings.Contains(line, base) {
+		if strings.Contains(line, "handoff-keeper") && (strings.Contains(line, base) || keeperEnvHas(line, base)) {
 			out = append(out, strings.TrimSpace(line))
 		}
 	}
 	return out
+}
+
+// keeperEnvHas reports whether the process of a ps line has base in its
+// environment. On Linux a keeper runs the kept binary as /proc/self/fd/N, so
+// its command line names no file under base; its XDG folders do.
+func keeperEnvHas(line, base string) bool {
+	if runtime.GOOS != "linux" {
+		return false
+	}
+	f := strings.Fields(line)
+	if len(f) == 0 {
+		return false
+	}
+	env, err := os.ReadFile("/proc/" + f[0] + "/environ")
+	return err == nil && strings.Contains(string(env), base)
 }
 
 // awaitNoKeeper waits until no keeper of the daemon under base is left, and
@@ -217,7 +234,13 @@ func TestDaemonUpgradeSurvivesACrashOfTheNewImage(t *testing.T) {
 			if after.PID == img.PID || oldAlive {
 				t.Fatalf("ASSERTION: the daemon is pid %d after the crash (was %d, still alive %v): the image that crashed is the one answering", after.PID, img.PID, oldAlive)
 			}
-			if !strings.HasSuffix(exe, string(filepath.Separator)+filepath.Join("handoff", "tuios.prev")) {
+			if runtime.GOOS == "linux" {
+				// The keeper execs the descriptor of the binary the daemon
+				// ran, which it holds, so the image runs that file.
+				if want := resolvedTuios(t); exe != want {
+					t.Errorf("ASSERTION: the daemon runs %s after the crash, want the binary it ran before, %s", exe, want)
+				}
+			} else if !strings.HasSuffix(exe, string(filepath.Separator)+filepath.Join("handoff", "tuios.prev")) {
 				t.Errorf("ASSERTION: the daemon runs %s after the crash, want the kept tuios.prev", exe)
 			}
 			if rec, _ := stats["recovered"].(bool); !rec {
