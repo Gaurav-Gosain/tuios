@@ -43,8 +43,8 @@ func (m *Model) View() tea.View {
 		lines := []string{
 			m.styles().title.Render("tuios tutor"),
 			"",
-			"Learn tuios by doing it. The shell, the files and the agents here",
-			"are a practice copy. Nothing on your computer changes.",
+			// One paragraph, so it wraps at the window's width.
+			"Learn tuios by doing it. The shell, the files and the agents here are a practice copy. Nothing on your computer changes.",
 		}
 		if m.saveErr != "" {
 			lines = append(lines, "", m.styles().warn.Render(m.saveErr))
@@ -439,7 +439,7 @@ func (m *Model) full(text []string, rows []row, keys string) tea.View {
 	// A line too wide for the window wraps by words, each part centred.
 	var lines []string
 	for _, l := range text {
-		lines = append(lines, strings.Split(ansi.Wordwrap(l, max(m.w-2, 10), ""), "\n")...)
+		lines = append(lines, strings.Split(ansi.Wordwrap(l, min(max(m.w-2, 10), 72), ""), "\n")...)
 	}
 	labelW, detailW := 0, 0
 	for _, r := range rows {

@@ -164,6 +164,10 @@ func TestTutorBasics(t *testing.T) {
 	// Run 1: 16 colours, three steps, SIGTERM.
 	term, kids := tutor(80, 24, "TERM=xterm", "COLORTERM=")
 	waitScreen(t, term, "the menu", "tuios tutor", "The basics", "Nothing on your computer changes")
+	// With no progress the track's row is its plain title.
+	if text := term.Screen().Text(); strings.Contains(text, "Continue") || strings.Contains(text, "over") {
+		t.Errorf("a first run's menu offers to continue or start over:\n%s", text)
+	}
 	if len(sandboxes()) != 1 {
 		t.Fatalf("while the tutor runs, TMPDIR holds %v, want its one temp dir", sandboxes())
 	}
@@ -193,8 +197,8 @@ func TestTutorBasics(t *testing.T) {
 
 	// Run 2: truecolor, Continue, the whole track.
 	term, kids = tutor(120, 36, "COLORTERM=truecolor")
-	waitScreen(t, term, "Continue on the menu", "Continue The basics", "3 steps of 9 done")
-	atSizes(term, "menu", false, "Continue The basics")
+	waitScreen(t, term, "Continue on the menu", "Continue the basics", "3 steps of 9 done", "Start the basics over")
+	atSizes(term, "menu", false, "Continue the basics", "Start the basics over")
 	press(term, tuitest.Enter)
 	step(term, 1, "Open a window")
 	// The card sits on the default dark surface. Followed, the Omarchy

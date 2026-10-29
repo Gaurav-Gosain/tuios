@@ -5,6 +5,8 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+	"unicode"
+	"unicode/utf8"
 
 	tea "charm.land/bubbletea/v2"
 
@@ -321,8 +323,9 @@ func (m *Model) rows() []row {
 	}
 	var out []row
 	for _, t := range m.tracks {
-		if done := m.store.doneCount(t.ID); done > 0 && done < len(t.Steps) && !m.trackFinished(t) {
-			out = append(out, row{label: "Continue " + t.Title, detail: plural(done, "step") + " of " + itoa(len(t.Steps)) + " done", do: func() tea.Cmd { return m.start(t) }})
+		if m.inProgress(t) {
+			done := m.store.doneCount(t.ID)
+			out = append(out, row{label: "Continue " + midSentence(t.Title), detail: plural(done, "step") + " of " + itoa(len(t.Steps)) + " done", do: func() tea.Cmd { return m.start(t) }})
 		}
 	}
 	for _, t := range m.tracks {
@@ -333,9 +336,32 @@ func (m *Model) rows() []row {
 		if m.trackFinished(t) {
 			detail += "   done"
 		}
-		out = append(out, row{label: t.Title, detail: detail, do: func() tea.Cmd { return m.start(t) }})
+		label := t.Title
+		if m.inProgress(t) {
+			// The row above continues the track, so this one says it
+			// starts it again.
+			label = "Start " + midSentence(t.Title) + " over"
+		}
+		out = append(out, row{label: label, detail: detail, do: func() tea.Cmd { return m.start(t) }})
 	}
 	return append(out, row{label: "Leave", do: m.leave})
+}
+
+// inProgress reports whether t has steps done on an earlier run and is not
+// finished: the menu offers to continue it.
+func (m *Model) inProgress(t *lessons.Track) bool {
+	done := m.store.doneCount(t.ID)
+	return done > 0 && done < len(t.Steps) && !m.trackFinished(t)
+}
+
+// midSentence is a track's title after a verb: sentence case, so "The
+// basics" reads "the basics".
+func midSentence(title string) string {
+	r, n := utf8.DecodeRuneInString(title)
+	if r == utf8.RuneError {
+		return title
+	}
+	return string(unicode.ToLower(r)) + title[n:]
 }
 
 func (m *Model) trackFinished(t *lessons.Track) bool {
