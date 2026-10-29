@@ -3,6 +3,7 @@ package tuie2e
 import (
 	"bytes"
 	"encoding/base64"
+	"encoding/json"
 	"fmt"
 	"image"
 	"image/png"
@@ -148,7 +149,8 @@ func openCockpitClient(t *testing.T, base string, cols, rows int, env []string) 
 // Negative controls, each recorded in NEGATIVE_CONTROLS.md: with the groups
 // drawn in the rail's state order the order check fails; with a click going
 // to the pane (the agents view's old rule) the click check fails; with the
-// daemon's wake of a settled agent cut, the agent goes back on the shelf.
+// daemon's wake of a settled agent cut, the agent goes back on the shelf;
+// with the settle's carry across a client push cut, the push clears it.
 func TestCockpitGroupsTheFleet(t *testing.T) {
 	term, base, hookOut, exited := startCockpitFleet(t, 200, 55, nil)
 	s := term.Screen()
@@ -379,7 +381,8 @@ func pressFold(t *testing.T, term *tuitest.Terminal, what string, done func(tuit
 }
 
 // cockpitSettleRoundTrip settles an idle agent with D, undoes it with u and
-// settles it again; a second client draws the same shelf; the agent asks a
+// settles it again; a second client draws the same shelf, and its own push of
+// the session's state keeps the settle; the agent asks a
 // question and comes back to Needs you by itself, and once it is at rest
 // again it stays off the shelf, because the daemon cleared the settle.
 func cockpitSettleRoundTrip(t *testing.T, term *tuitest.Terminal, base string) {
@@ -441,6 +444,52 @@ func cockpitSettleRoundTrip(t *testing.T, term *tuitest.Terminal, base string) {
 	inGroup(other, "Settled", "the second client does not draw the settle")
 	saveCockpitFrames(t, other, "cockpit-settled-second-client")
 
+	// The second client pushes the session's state: it leaves the view and
+	// moves the focus to another pane. Its push carries no settle, as no
+	// client's does, and the agent must still be settled after it.
+	before, _ := miscFocusAndSettle(t, base)
+	// esc leaves the reply line first, then closes the view.
+	for range 3 {
+		if !strings.Contains(other.Screen().Text(), "Ready for review") {
+			break
+		}
+		if err := other.SendKeys(tuitest.Esc); err != nil {
+			t.Fatalf("close the second client's view: %v", err)
+		}
+		_ = other.WaitFor(func(s tuitest.Screen) bool { return !strings.Contains(s.Text(), "Ready for review") }, 2*time.Second)
+	}
+	if strings.Contains(other.Screen().Text(), "Ready for review") {
+		t.Fatalf("esc never closed the second client's view\n%s", other.Snapshot())
+	}
+	moved := false
+	for range 3 {
+		if err := other.SendKeys(tuitest.Tab); err != nil {
+			t.Fatalf("press tab: %v", err)
+		}
+		deadline := time.Now().Add(uiTimeout)
+		for time.Now().Before(deadline) {
+			if f, _ := miscFocusAndSettle(t, base); f != before {
+				moved = true
+				break
+			}
+			time.Sleep(100 * time.Millisecond)
+		}
+		if moved {
+			break
+		}
+	}
+	if !moved {
+		t.Fatalf("ASSERTION: tab in the second client never moved the session's focus from %q\n%s", before, other.Snapshot())
+	}
+	if _, settled := miscFocusAndSettle(t, base); !settled {
+		t.Fatalf("ASSERTION: a push from the second client cleared the settle: list-agents says scratch is not settled")
+	}
+	if err := other.SendKeys(tuitest.Ctrl('b'), "i"); err != nil {
+		t.Fatalf("open the cockpit in the second client again: %v", err)
+	}
+	inGroup(other, "Settled", "the second client lost the settle after its own push")
+	inGroup(term, "Settled", "the first client lost the settle after the second client's push")
+
 	// The agent asks: it comes back to Needs you by itself.
 	if out, err := tuiosCLI(t, base, "set-agent-state", "needs_input", "-s", "misc", "-w", "scratch", "--kind", "question", "-m", "Which branch?"); err != nil {
 		t.Fatalf("scratch asks: %v\n%s", err, out)
@@ -454,6 +503,36 @@ func cockpitSettleRoundTrip(t *testing.T, term *tuitest.Terminal, base string) {
 	}
 	inGroup(term, "Idle", "the agent went back on the shelf after it asked")
 	inGroup(other, "Idle", "the second client put the agent back on the shelf after it asked")
+}
+
+// miscFocusAndSettle is the misc session's focused pane, as list-agents
+// --all marks it, and whether scratch is settled there.
+func miscFocusAndSettle(t *testing.T, base string) (focused string, settled bool) {
+	t.Helper()
+	out, err := tuiosCLI(t, base, "list-agents", "--all", "-s", "misc", "--json")
+	if err != nil {
+		t.Fatalf("list-agents: %v\n%s", err, out)
+	}
+	var payload struct {
+		Agents []struct {
+			ID      string `json:"window_id"`
+			Name    string `json:"name"`
+			Focused bool   `json:"focused"`
+			Settled bool   `json:"settled"`
+		} `json:"agents"`
+	}
+	if err := json.Unmarshal([]byte(out), &payload); err != nil {
+		t.Fatalf("list-agents json: %v\n%s", err, out)
+	}
+	for _, a := range payload.Agents {
+		if a.Focused {
+			focused = a.ID
+		}
+		if a.Name == "scratch" {
+			settled = a.Settled
+		}
+	}
+	return focused, settled
 }
 
 // fleetGroupOf is the heading of the fleet group that holds the first row

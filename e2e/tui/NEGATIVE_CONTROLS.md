@@ -7295,16 +7295,20 @@ tests that open the Inbox (137 tests).
 `TestCockpitGroupsTheFleet` also settles the idle agent `scratch` with `D`,
 undoes it with `u` and settles it again, checks that `after-settle` ran twice
 with `person`, opens a second client attached to the agent's session and finds
-`scratch` under Settled there too, makes the agent ask (`needs_input`) and
+`scratch` under Settled there too, has that client close the view and move
+the session's focus with `tab` (a state push that carries no settle), checks
+`list-agents` and both clients still show `scratch` settled, makes the agent ask (`needs_input`) and
 finds it under Needs you, then puts it at rest and finds it under Idle in both
 clients. Frames: `cockpit-settled`, `cockpit-settle-undone`,
 `cockpit-settled-second-client`, `cockpit-settled-asks`. Each control was built
-into its own binary. Run on 2026-10-30 on Linux.
+into its own binary. Run on 2026-10-30 on Linux. The first draft of the test
+did not make the second client push, and the carry control passed it; the
+push step was added for that reason.
 
 | Bug | Fix removed | How | Tests that fail | Verdict |
 |---|---|---|---|---|
 | A settled agent that asked goes back on the shelf once it rests, because the daemon never cleared the settle | `wakeSettledLocked` | The call in `mutateStateLocked` cut | `TestCockpitGroupsTheFleet` ("the agent went back on the shelf after it asked: scratch is in \"Settled\", not \"Idle\"") | **caught** |
-| A client push wipes the settle | the `AgentSettled` carry in `state_merge.go` | `w.AgentSettled = settled[w.ID]` cut | none: the second client pushes no state of the session while the test runs, so the carry is never needed. The carry is kept as the other daemon-owned fields keep theirs | **not caught** |
+| A client push wipes the settle, the bug class of #162 | the `AgentSettled` carry in `state_merge.go` | `w.AgentSettled = settled[w.ID]` cut | `TestCockpitGroupsTheFleet` ("a push from the second client cleared the settle: list-agents says scratch is not settled") | **caught** |
 
 ### Marks and cut approvals
 
