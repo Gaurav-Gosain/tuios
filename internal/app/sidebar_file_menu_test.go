@@ -94,7 +94,7 @@ func TestFileRowMenuOffersWhatTheRowCanDo(t *testing.T) {
 			name: "a file row",
 			open: func() { rightClickFile(t, m, "README.md") },
 			want: []string{
-				"Copy path", "Edit", "Copy", "Cut", "Paste (dim)", "Send to host", "New file or folder",
+				"Copy path", "Edit", "Copy", "Cut", "Paste (dim)", "Send to host", "Paste path in pane", "New file or folder",
 				"Rename", "Delete", "Delete for good", "Sidebar settings",
 			},
 		},
@@ -102,7 +102,7 @@ func TestFileRowMenuOffersWhatTheRowCanDo(t *testing.T) {
 			name: "a folder row",
 			open: func() { rightClickFile(t, m, "apple") },
 			want: []string{
-				"Open folder", "Copy path", "Copy", "Cut", "Paste (dim)", "Send to host", "New file or folder",
+				"Open folder", "Copy path", "Copy", "Cut", "Paste (dim)", "Send to host", "Paste path in pane", "New file or folder",
 				"Rename", "Delete", "Delete for good", "Sidebar settings",
 			},
 		},
@@ -110,7 +110,7 @@ func TestFileRowMenuOffersWhatTheRowCanDo(t *testing.T) {
 			name: "the up row",
 			open: func() { rightClickFile(t, m, "") },
 			want: []string{
-				"Go up", "Copy (dim)", "Cut (dim)", "Paste (dim)", "Send to host (dim)", "New file or folder",
+				"Go up", "Copy (dim)", "Cut (dim)", "Paste (dim)", "Send to host (dim)", "Paste path in pane (dim)", "New file or folder",
 				"Rename (dim)", "Delete (dim)", "Delete for good (dim)", "Sidebar settings",
 			},
 		},
@@ -123,7 +123,7 @@ func TestFileRowMenuOffersWhatTheRowCanDo(t *testing.T) {
 				}
 			},
 			want: []string{
-				"Open (dim)", "Copy (dim)", "Cut (dim)", "Paste (dim)", "Send to host (dim)", "New file or folder",
+				"Open (dim)", "Copy (dim)", "Cut (dim)", "Paste (dim)", "Send to host (dim)", "Paste path in pane (dim)", "New file or folder",
 				"Rename (dim)", "Delete (dim)", "Delete for good (dim)", "Sidebar settings",
 			},
 		},

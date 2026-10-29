@@ -598,6 +598,8 @@ func (m *OS) fileRowMenu(t fileMenuTarget) (string, []ContextMenuItem) {
 		// Send copies the row to another machine, after it asks which one
 		// and which folder there. See transfers_dialog.go.
 		m.item(glyphCopy, "Send to host", "file_send", !hasTarget),
+		// The keyboard and menu form of dragging the row onto a pane.
+		m.item(glyphPaste, "Paste path in pane", "file_insert_path", t.Name == "" || t.Up || m.GetFocusedWindow() == nil),
 		separator(),
 		m.item(glyphNew, "New file or folder", "file_create", !on),
 		m.item(glyphRename, "Rename", "file_rename", !hasTarget),

@@ -425,6 +425,12 @@ func (m *OS) GetCanvas(render bool) *frameCanvas {
 			layers = append(layers, label)
 		}
 
+		// A row of the files section held over the panes names where it
+		// would land. Only drawn while that drag is under way.
+		if label := m.renderFileDragLabel(); label != nil {
+			layers = append(layers, label)
+		}
+
 		// The mark that this client shows only part of the session.
 		if mark := m.renderViewMark(); mark != nil {
 			layers = append(layers, mark)

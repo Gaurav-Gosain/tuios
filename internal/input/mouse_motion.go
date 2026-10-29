@@ -68,6 +68,12 @@ func handleMouseMotion(msg tea.MouseMotionMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		o.SidebarDragMotion(mouse.X, mouse.Y)
 		return o, nil
 	}
+	// A held row of the rail's files section owns the pointer the same way,
+	// on its way to the pane it is dropped on.
+	if o.FileDragActive() {
+		o.FileDragMotion(mouse.X, mouse.Y, mouse.Mod.Contains(tea.ModAlt))
+		return o, nil
+	}
 	if o.SidebarEdgeActive() {
 		o.SidebarEdgeMotion(mouse.X, mouse.Y)
 		return o, nil

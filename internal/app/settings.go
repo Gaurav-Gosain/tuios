@@ -487,6 +487,7 @@ func (m *OS) settingsCategories() []settingsCategory {
 			opt("appearance.sidebar.file_icons"),
 			opt("appearance.sidebar.file_icon_colors"),
 			opt("appearance.sidebar.folder_click"),
+			opt("appearance.sidebar.file_drag"),
 			opt("appearance.sidebar.files_style"),
 			opt("appearance.sidebar.editor"),
 			opt("appearance.sidebar.file_actions"),

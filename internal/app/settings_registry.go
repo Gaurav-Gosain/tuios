@@ -134,6 +134,7 @@ var settingLabels = map[string]string{
 	"appearance.sidebar.file_icons":             "File icons",
 	"appearance.sidebar.file_icon_colors":       "File icon colors",
 	"appearance.sidebar.folder_click":           "Click a folder",
+	"appearance.sidebar.file_drag":              "Drag a file into a pane",
 	"appearance.sidebar.files_style":            "Files style",
 	"appearance.sidebar.file_actions":           "File actions",
 	"appearance.sidebar.group_main":             "Main checkout in sessions tree",

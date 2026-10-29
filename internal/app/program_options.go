@@ -239,7 +239,7 @@ func FilterMouseMotion(model tea.Model, msg tea.Msg) tea.Msg {
 	// and hover in the sidebar band needs motion to track the row under the
 	// pointer. HoverActive keeps one more event flowing after the pointer
 	// leaves the band, which is the event that clears the stale highlight.
-	if m.SidebarDragActive() || m.SidebarEdgeActive() || m.SidebarSplitActive() {
+	if m.SidebarDragActive() || m.SidebarEdgeActive() || m.SidebarSplitActive() || m.FileDragActive() {
 		// A held divider may move outside the rail's old column band;
 		// dropping that motion would leave the width fixed at its old size.
 		return msg

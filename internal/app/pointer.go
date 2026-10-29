@@ -19,6 +19,10 @@ const (
 	// run of pane cells gets while the pointer is on one. It is the only shape
 	// here that comes from content rather than from geometry.
 	PointerPointer PointerShape = "pointer"
+	// PointerCopy and PointerNotAllowed are a file held over a pane that will
+	// take its path, and over one that will not. See file_drop.go.
+	PointerCopy       PointerShape = "copy"
+	PointerNotAllowed PointerShape = "not-allowed"
 )
 
 // SetPointerShape writes an OSC 22 sequence to change the mouse pointer.

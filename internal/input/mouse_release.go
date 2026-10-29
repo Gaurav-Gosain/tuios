@@ -58,6 +58,14 @@ func handleMouseRelease(msg tea.MouseReleaseMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	// Reset pointer shape on release
 	o.ResetPointerShape()
 
+	// A held files row drops on the pane under the pointer, or is a click on
+	// the row when it never left the rail.
+	if o.FileDragActive() {
+		mouse := msg.Mouse()
+		o.FileDragRelease(mouse.X, mouse.Y, mouse.Mod.Contains(tea.ModAlt))
+		return o, o.TakeSidebarCmd()
+	}
+
 	// A rail session's tracked mouse click needs its matching release. The
 	// center pane must not receive a release for a press it never saw.
 	if mouse := msg.Mouse(); mouse.Button != tea.MouseRight {

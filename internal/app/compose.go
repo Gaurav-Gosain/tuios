@@ -346,6 +346,9 @@ func (m *OS) composeLayersIn(canvas *frameCanvas, layers []*lipgloss.Layer, pane
 			if m.dropZoneShown {
 				m.applyDropZone(canvas, cl.layer.GetID())
 			}
+			if m.fileDragRingOn() {
+				m.applyFileDropRing(canvas, cl.layer.GetID())
+			}
 			continue
 		}
 		if !cl.bounds.Overlaps(area) {
@@ -380,6 +383,9 @@ func (m *OS) composeLayersIn(canvas *frameCanvas, layers []*lipgloss.Layer, pane
 		}
 		if m.dropZoneShown {
 			m.applyDropZone(canvas, cl.layer.GetID())
+		}
+		if m.fileDragRingOn() {
+			m.applyFileDropRing(canvas, cl.layer.GetID())
 		}
 		switch id := cl.layer.GetID(); {
 		case fading:

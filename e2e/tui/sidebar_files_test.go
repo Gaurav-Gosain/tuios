@@ -3,6 +3,7 @@ package tuie2e
 import (
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -784,4 +785,334 @@ func gridCellBefore(s tuitest.Screen, row, col int, want string) int {
 		}
 	}
 	return -1
+}
+
+// dropShell is a shell the drag test runs in the pane, and the text a drop of
+// each fixture name must put on its command line.
+type dropShell struct {
+	// name is the program, as the label names it and as PATH finds it.
+	name string
+	// start runs the shell with no user config, and ready is a command whose
+	// output says it is reading input. Both are empty for the pane's own sh.
+	start, ready, readyMark string
+	// printf is the command the drops are appended to. It prints each
+	// argument on a line of its own, in brackets.
+	printf string
+	// quote is the quoted form of a path, as written out by hand for this
+	// shell. It is not the code under test.
+	quote func(path string) string
+}
+
+func posixQuote(p string) string { return "'" + strings.ReplaceAll(p, "'", `'\''`) + "'" }
+
+func dropShells() []dropShell {
+	return []dropShell{
+		{name: "sh", printf: `printf '[%s]\n' `, quote: posixQuote},
+		{name: "bash", start: "PS1='B$ ' bash --norc --noprofile", ready: `echo READY""bash`, readyMark: "READYbash",
+			printf: `printf '[%s]\n' `, quote: posixQuote},
+		{name: "zsh", start: "PS1='Z$ ' zsh -f", ready: `echo READY""zsh`, readyMark: "READYzsh",
+			printf: `printf '[%s]\n' `, quote: posixQuote},
+		// fish reads \' and \\ inside single quotes as escapes, so the POSIX
+		// form of a name with a backslash would lose it.
+		{name: "fish", start: "fish --no-config", ready: `echo READY""fish`, readyMark: "READYfish",
+			printf: `printf '[%s]\n' `, quote: func(p string) string {
+				return "'" + strings.NewReplacer(`\`, `\\`, `'`, `\'`).Replace(p) + "'"
+			}},
+		// nu's single quotes are raw. A name with a quote goes in double
+		// quotes, where \ and " are escaped. ^printf is the external printf.
+		{name: "nu", start: "nu --no-config-file", ready: `echo ("READY" + "nu")`, readyMark: "READYnu",
+			printf: `^printf '[%s]\n' `, quote: func(p string) string {
+				if !strings.Contains(p, "'") {
+					return "'" + p + "'"
+				}
+				return `"` + strings.NewReplacer(`\`, `\\`, `"`, `\"`).Replace(p) + `"`
+			}},
+	}
+}
+
+// TestRailFileDragIntoPane drags rows of the files section onto a shell pane
+// and checks the exact text each drop puts on the command line, in every
+// shell this machine has, then runs the line and checks the shell read back
+// each name as it is on disk.
+//
+// How this could pass wrongly, written down first:
+//   - The drop could paste the name bare. "$(touch pwned)" would then run, so
+//     the test checks no file named pwned exists after each shell.
+//   - The quoting could be POSIX in every shell. fish keeps a backslash only
+//     when it is doubled, so back\slash.txt reads back wrong there, and nu has
+//     no escape for a quote inside single quotes.
+//   - The command line could match the echo of something else. The text is
+//     the whole line from the printf to the last drop, and the output is the
+//     shell's own, in brackets, one name per line.
+//   - The label could name the wrong program. Each drag waits for the label
+//     to name the shell in the pane before it is released.
+//   - A press on a row could stop being a click. The I subtest clicks the row
+//     first, which moves the cursor, and the drop path is not used for it.
+//   - A refused pane could still get the text. The fake ssh echoes what the
+//     terminal sends it, so a paste there would show on screen.
+//
+// NEGATIVE CONTROL: with quoteDropPath answering pastePathText for every
+// dialect, the fish round fails on the first drop, it's a file.txt, whose
+// POSIX form is not the fish form. See NEGATIVE_CONTROLS.md.
+func TestRailFileDragIntoPane(t *testing.T) {
+	// A short folder, so a command line with four paths fits on one row.
+	dir, err := os.MkdirTemp("", "dnd")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(dir) })
+	if dir, err = filepath.EvalSymlinks(dir); err != nil {
+		t.Fatal(err)
+	}
+	names := []string{"it's a file.txt", "$(touch pwned)", `back\slash.txt`}
+	for _, n := range names {
+		if err := os.WriteFile(filepath.Join(dir, n), nil, 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.Mkdir(filepath.Join(dir, "a b"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	// The rows dragged, in order, and the path each one pastes. A folder's
+	// path ends in a slash.
+	rows := append(slices.Clone(names), "a b/")
+	paths := make([]string, len(rows))
+	for i, r := range rows {
+		paths[i] = filepath.Join(dir, r)
+		if strings.HasSuffix(r, "/") {
+			paths[i] += "/"
+		}
+	}
+	// A stand-in for ssh: a program called ssh that holds the terminal.
+	fakeBin := t.TempDir()
+	catPath, err := exec.LookPath("cat")
+	if err != nil {
+		t.Skip("no cat to stand in for ssh")
+	}
+	data, err := os.ReadFile(catPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(fakeBin, "ssh"), data, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	const cols, rowsN = 260, 44
+	term, _ := start(t, startOpts{daemonDefault: true, cols: cols, rows: rowsN})
+	waitBoot(t, term)
+	newWindow(t, term)
+	waitWindowCount(t, term, 1, "opening a shell for the listing")
+	enterTerminalMode(t, term)
+	runInShell(t, term, "cd "+dir+" && printf '\\033]7;file://%s\\033\\\\%s\\n' \"$PWD\" lis\"\"ted", "listed", uiTimeout)
+	runInShell(t, term, "clear; echo CLE\"\"AR", "CLEAR", uiTimeout)
+	leaveTerminalMode(t, term)
+	toggleSidebarViaPalette(t, term)
+	waitForAll(t, term, uiTimeout, "the listing", rows...)
+	art := artifactDir(t)
+	frame := func(name string) {
+		t.Helper()
+		saveArtifact(t, term, art, name)
+		savePNG(t, term.Screen(), shot.XTermPalette(), art, name)
+	}
+
+	// Where each row is on the rail, read once while the pane shows none of
+	// the names, and a cell well inside the pane.
+	at := map[string][2]int{}
+	for _, r := range rows {
+		c, rr, ok := findOnGrid(term.Screen(), r)
+		if !ok {
+			t.Fatalf("no row for %q:\n%s", r, term.Snapshot())
+		}
+		at[r] = [2]int{c, rr}
+	}
+	railCol := at[rows[0]][0]
+	paneCol := cols * 3 / 4
+	if railCol > cols/2 {
+		paneCol = cols / 4
+	}
+	paneRow := rowsN / 2
+
+	// drag carries one row onto the pane, waits for the label to name the
+	// program in it, and releases. shot names a frame taken mid-drag.
+	drag := func(row, program, shot string) {
+		t.Helper()
+		from := at[row]
+		mousePress(t, term, from[0], from[1], tuitest.MouseLeft, 0)
+		steps := 6
+		for i := 1; i <= steps; i++ {
+			mouseMotion(t, term, from[0]+(paneCol-from[0])*i/steps, from[1]+(paneRow-from[1])*i/steps, tuitest.MouseLeft, 0)
+		}
+		want := "(" + program + ")"
+		if err := term.WaitFor(func(s tuitest.Screen) bool {
+			txt := s.Text()
+			return strings.Contains(txt, row) && strings.Contains(txt, want)
+		}, uiTimeout); err != nil {
+			mouseRelease(t, term, paneCol, paneRow, tuitest.MouseLeft, 0)
+			t.Fatalf("the label never named %s for %q: %v\n%s", want, row, err, term.Snapshot())
+		}
+		if shot != "" {
+			frame(shot)
+		}
+		mouseRelease(t, term, paneCol, paneRow, tuitest.MouseLeft, 0)
+	}
+
+	for i, sh := range dropShells() {
+		if sh.start != "" {
+			if _, err := exec.LookPath(sh.name); err != nil {
+				t.Logf("%s is not installed; its round is skipped", sh.name)
+				continue
+			}
+		}
+		t.Run(sh.name, func(t *testing.T) {
+			enterTerminalMode(t, term)
+			if sh.start != "" {
+				if err := term.SendKeys(sh.start, tuitest.Enter); err != nil {
+					t.Fatal(err)
+				}
+				runInShell(t, term, sh.ready, sh.readyMark, 3*uiTimeout)
+			}
+			if sh.start == "" {
+				// sh may have no line editor, and then ctrl+l is a character.
+				runInShell(t, term, "clear; echo CLE\"\"ARED", "CLEARED", uiTimeout)
+			} else {
+				if err := term.SendKeys(tuitest.Ctrl('l')); err != nil {
+					t.Fatal(err)
+				}
+				time.Sleep(300 * time.Millisecond)
+			}
+			if err := term.SendKeys(sh.printf); err != nil {
+				t.Fatal(err)
+			}
+			line := sh.printf
+			for j, r := range rows {
+				name := ""
+				if i == 0 && j == 0 {
+					name = "drag-mid"
+				}
+				drag(r, sh.name, name)
+				line += sh.quote(paths[j]) + " "
+				if err := term.WaitForText(strings.TrimSpace(line), uiTimeout); err != nil {
+					t.Fatalf("after dropping %q the command line is not\n%s\n%v\n%s", r, line, err, term.Snapshot())
+				}
+			}
+			frame("dropped-" + sh.name)
+			// The drop kept terminal mode, so Enter goes to the shell.
+			if err := term.SendKeys(tuitest.Enter); err != nil {
+				t.Fatal(err)
+			}
+			want := make([]string, len(paths))
+			for j, p := range paths {
+				want[j] = "[" + p + "]"
+			}
+			if err := term.WaitFor(func(s tuitest.Screen) bool {
+				for _, w := range want {
+					if !screenHasLine(s, w) {
+						return false
+					}
+				}
+				return true
+			}, uiTimeout); err != nil {
+				t.Fatalf("%s did not read the names back as they are on disk: %v\n%s", sh.name, err, term.Snapshot())
+			}
+			frame("ran-" + sh.name)
+			if _, err := os.Stat(filepath.Join(dir, "pwned")); !os.IsNotExist(err) {
+				t.Fatalf("a dropped name ran as a command in %s: %v", sh.name, err)
+			}
+			if sh.start != "" {
+				if err := term.SendKeys("exit", tuitest.Enter); err != nil {
+					t.Fatal(err)
+				}
+				runInShell(t, term, "echo BACK\"\"sh", "BACKsh", uiTimeout)
+			}
+			leaveTerminalMode(t, term)
+		})
+	}
+
+	// I on a row is the same drop, from the keyboard, on the focused pane.
+	t.Run("key", func(t *testing.T) {
+		enterTerminalMode(t, term)
+		runInShell(t, term, "clear; echo CLE\"\"ARED", "CLEARED", uiTimeout)
+		if err := term.SendKeys(`printf '<%s>\n' `); err != nil {
+			t.Fatal(err)
+		}
+		leaveTerminalMode(t, term)
+		sendKeys(t, term, "s")
+		// A click on the row puts the rail's cursor there, as it did before
+		// rows could be dragged.
+		from := at["$(touch pwned)"]
+		mouseClick(t, term, from[0], from[1], tuitest.MouseLeft, 0)
+		sendKeys(t, term, "I")
+		want := `printf '<%s>\n' ` + posixQuote(paths[1])
+		if err := term.WaitForText(want, uiTimeout); err != nil {
+			t.Fatalf("I did not paste the quoted path: %v\n%s", err, term.Snapshot())
+		}
+		enterTerminalMode(t, term)
+		if err := term.SendKeys(tuitest.Enter); err != nil {
+			t.Fatal(err)
+		}
+		if err := term.WaitFor(func(s tuitest.Screen) bool { return screenHasLine(s, "<"+paths[1]+">") }, uiTimeout); err != nil {
+			t.Fatalf("the shell did not read the name back: %v\n%s", err, term.Snapshot())
+		}
+		frame("key-insert")
+		if _, err := os.Stat(filepath.Join(dir, "pwned")); !os.IsNotExist(err) {
+			t.Fatalf("the name ran as a command: %v", err)
+		}
+		leaveTerminalMode(t, term)
+	})
+
+	// A pane running ssh reads its input on another machine. The drop is
+	// refused with the reason, and nothing is typed.
+	t.Run("ssh refused", func(t *testing.T) {
+		enterTerminalMode(t, term)
+		runInShell(t, term, "clear; PATH="+fakeBin+":$PATH; echo SSH\"\"ON; ssh", "SSHON", uiTimeout)
+		row := "it's a file.txt"
+		from := at[row]
+		mousePress(t, term, from[0], from[1], tuitest.MouseLeft, 0)
+		for i := 1; i <= 6; i++ {
+			mouseMotion(t, term, from[0]+(paneCol-from[0])*i/6, from[1]+(paneRow-from[1])*i/6, tuitest.MouseLeft, 0)
+		}
+		if err := term.WaitForText("This pane runs ssh.", 2*uiTimeout); err != nil {
+			mouseRelease(t, term, paneCol, paneRow, tuitest.MouseLeft, 0)
+			t.Fatalf("the label did not refuse the ssh pane: %v\n%s", err, term.Snapshot())
+		}
+		frame("ssh-refused")
+		mouseRelease(t, term, paneCol, paneRow, tuitest.MouseLeft, 0)
+		time.Sleep(500 * time.Millisecond)
+		if strings.Contains(term.Screen().Text(), dir+"/it") {
+			t.Fatalf("the refused drop typed the path into the ssh pane:\n%s", term.Snapshot())
+		}
+		if err := term.SendKeys(tuitest.Ctrl('c')); err != nil {
+			t.Fatal(err)
+		}
+		leaveTerminalMode(t, term)
+	})
+
+	// esc puts the row down: the release over the pane pastes nothing.
+	t.Run("esc", func(t *testing.T) {
+		enterTerminalMode(t, term)
+		runInShell(t, term, "clear; echo ESC\"\"TEST", "ESCTEST", uiTimeout)
+		row := "a b/"
+		from := at[row]
+		mousePress(t, term, from[0], from[1], tuitest.MouseLeft, 0)
+		for i := 1; i <= 6; i++ {
+			mouseMotion(t, term, from[0]+(paneCol-from[0])*i/6, from[1]+(paneRow-from[1])*i/6, tuitest.MouseLeft, 0)
+		}
+		if err := term.WaitFor(func(s tuitest.Screen) bool {
+			txt := s.Text()
+			return strings.Contains(txt, "a b/ →") || strings.Contains(txt, "a b/ ->")
+		}, uiTimeout); err != nil {
+			t.Fatalf("no label: %v\n%s", err, term.Snapshot())
+		}
+		if err := term.SendKeys(tuitest.Esc); err != nil {
+			t.Fatal(err)
+		}
+		mouseRelease(t, term, paneCol, paneRow, tuitest.MouseLeft, 0)
+		time.Sleep(500 * time.Millisecond)
+		if strings.Contains(term.Screen().Text(), dir+"/a b") {
+			t.Fatalf("a drag put down with esc still pasted:\n%s", term.Snapshot())
+		}
+		leaveTerminalMode(t, term)
+	})
+
+	alive(t, term, "after dragging rows into the pane")
 }

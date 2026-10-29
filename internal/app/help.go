@@ -536,6 +536,7 @@ func generateSidebarBindings(registry *config.KeybindRegistry, s *config.Setting
 		fileRow("file_edit", "Files: edit a text file in the configured editor"),
 		fileRow("file_copy_path", "Files: copy the path of the file or folder"),
 		fileRow("file_send", "Files: send the file or folder to a host"),
+		fileRow("file_insert_path", "Files: paste the path into the focused pane"),
 	)
 
 	// The Copies panel's keys, live while it is open. They are read from

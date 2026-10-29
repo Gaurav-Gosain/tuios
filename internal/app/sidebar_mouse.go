@@ -472,7 +472,11 @@ func (m *OS) sidebarClick(x, y int, right bool) bool {
 	case sidebarRowFileUp:
 		m.queueSidebarCmd(m.FileViewUp())
 	case sidebarRowFileEntry:
-		m.queueSidebarCmd(m.fileViewEnterRow(hit.WindowIndex, hit.WindowID))
+		// A press arms the drag of the row into a pane. The release does
+		// what a click does when the pointer never left the rail.
+		if !m.armFileDrag(hit) {
+			m.queueSidebarCmd(m.fileViewEnterRow(hit.WindowIndex, hit.WindowID))
+		}
 	case sidebarRowDivider:
 		// A press arms the split drag; a second press inside the double-click
 		// window resets the split instead.

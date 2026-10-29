@@ -979,6 +979,11 @@ var optionSpecs = []Option{
 		Accepted:    SidebarFolderClicks, Default: SidebarFolderClickNavigate,
 	},
 	{
+		Path: "appearance.sidebar.file_drag", Type: OptionBool, Section: "sidebar",
+		Description: "Drag a row of the files section into a pane to paste its path",
+		Default:     "true",
+	},
+	{
 		Path: "appearance.sidebar.files_style", Type: OptionString, Section: "sidebar",
 		Description: "How the files section draws: list shows one folder at a time, tree opens folders in place under one root",
 		Accepted:    SidebarFilesStyles, Default: SidebarFilesList,

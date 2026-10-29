@@ -247,6 +247,9 @@ type Settings struct {
 	// SidebarFolderClick is what a click on a folder row does: walk the listing
 	// into it, tell the pane to cd there, or both.
 	SidebarFolderClick string
+	// SidebarFileDrag lets a row of the files section be dragged into a pane
+	// to paste its path.
+	SidebarFileDrag bool
 	// SidebarFilesStyle is how the files section draws: "list", one folder at
 	// a time, or "tree", folders opened in place under one root.
 	SidebarFilesStyle string
@@ -978,6 +981,7 @@ func DefaultSettings() Settings {
 		SidebarFileIcons:            true,
 		SidebarFileIconColors:       true,
 		SidebarFolderClick:          SidebarFolderClickNavigate,
+		SidebarFileDrag:             true,
 		SidebarFilesStyle:           SidebarFilesList,
 		SidebarFileActions:          true,
 		SidebarFileDelete:           SidebarFileDeleteTrash,

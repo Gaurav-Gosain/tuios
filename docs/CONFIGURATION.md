@@ -471,6 +471,19 @@ display = "follow"
 
 `[path_picker]` sets `show_hidden`. With `true`, the path picker (`Alt+;`) shows the names that start with a dot when it opens. The default is `false`. `Alt+H` in the picker shows or hides them. See [KEYBINDINGS.md](KEYBINDINGS.md#pick-a-path).
 
+## Drag a file into a pane
+
+`appearance.sidebar.file_drag` lets you drag a row of the files section onto a
+pane. The pane gets the path, quoted for the shell in the pane. It is on by
+default. `I` on a row does the same for the focused pane, with this option on
+or off. See
+[KEYBINDINGS.md](KEYBINDINGS.md#drag-a-file-into-a-pane).
+
+```toml
+[appearance.sidebar]
+file_drag = false
+```
+
 `[scratch]` sets the size of the box in which `Ctrl+B g` shows the scratch terminal. The old `session` key is no longer used. See [SESSIONS.md](SESSIONS.md#the-scratch-terminal).
 
 `[pip]` sets the size (`width`, `height`, border included, default 40x12) and the first `corner` (default `bottom-right`) of the picture-in-picture view that `p` pins. See [SESSIONS.md](SESSIONS.md#picture-in-picture).

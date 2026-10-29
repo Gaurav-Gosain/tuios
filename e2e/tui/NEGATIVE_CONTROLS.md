@@ -10528,3 +10528,10 @@ The positive half is in the same run: the copy pipe key `p` is still warned abou
 | `y` with marks routed to `InboxResume` instead of `InboxAgentsBulkResume` (`internal/input/inbox_input.go`) | "y with two marks: resumed [e2e-resume-d], want 2 in all" | **caught** |
 | `InboxResume` closes the view and jumps to the pane, as before this change (`internal/app/inbox.go`) | "after y on one row: the view did not stay open on "2 needs you"" | **caught** |
 | `bulkHints` lists every bulk key when only Resume rows are marked (`internal/app/inbox_bulk.go`) | "x did not mark two Resume rows, or the footer offers keys that do nothing for them" | **caught** |
+## A dragged file is quoted for the shell in the pane
+
+`TestRailFileDragIntoPane` drags `it's a file.txt`, `$(touch pwned)`, `back\slash.txt` and the folder `a b/` from the rail's files section onto a pane. It runs the round in sh, then bash, zsh, fish and nu when they are installed. Each drop must put the exact quoted text for that shell on the command line, the shell must print each name back as it is on disk, and no file `pwned` may appear. The control was built into its own binary. Run on 2026-10-29 on Linux with all five shells installed; the unmodified binary passed.
+
+| Control: what was cut | Where it fails | Verdict |
+| --- | --- | --- |
+| `quoteDropPath` answers `pastePathText` (POSIX single quotes) for every shell | `fish`: "after dropping \"it's a file.txt\" the command line is not ...". The subtests after it fail too, because fish is still running in the pane | **caught** |

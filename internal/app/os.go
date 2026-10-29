@@ -806,6 +806,9 @@ type OS struct {
 	// dropLook is the preview's colours and its memo of washed text colours,
 	// kept across a drag's frames. See drop_zone_render.go.
 	dropLook dropLook
+	// fileDrag is a row of the rail's files section held by the pointer, on
+	// its way to a pane. See file_drop.go.
+	fileDrag fileDragState
 	// dropLayout is the map the landing rectangle of an edge drop is laid out
 	// into, kept so that working one out does not allocate a map each time.
 	dropLayout map[int]layout.Rect

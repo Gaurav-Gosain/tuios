@@ -201,6 +201,42 @@ not text. The binding is `file_edit` in `[keybindings.sidebar_files]`.
 of a folder has a Copy path row that does the same. The binding is
 `file_copy_path` in `[keybindings.sidebar_files]`.
 
+`I` pastes the path of the selected file or folder into the focused pane. The
+context menu of a row has a Paste path in pane row that does the same. The
+binding is `file_insert_path` in `[keybindings.sidebar_files]`.
+
+### Drag a file into a pane
+
+You can also drag a row with the mouse. Press a row, move the pointer out of
+the sidebar, and release the button over a pane. The pane gets the path.
+
+- While you drag, a frame shows the pane under the pointer.
+- A label at the pointer shows the name, the pane and the program in the pane.
+- `Esc` cancels the drag.
+- A release over the sidebar, the dock or an empty area does nothing.
+- A click that stays in the sidebar does what a click on the row did before.
+
+After the drop, the pane has the focus and the mode does not change.
+
+tuios quotes the path for the program in the pane. It knows sh, bash, zsh,
+dash, ksh, fish, nu, csh, PowerShell, elvish and cmd. Other programs get POSIX
+single quotes. A folder path ends in `/`. A space follows the path, so you can
+type the next word. Hold `Alt` when you release a folder to type a cd to it.
+The path goes in as a paste. A program that turned on bracketed paste gets it
+as one paste.
+
+tuios does not paste the path in these cases. The label and a dock note say
+why.
+
+- The pane is on another machine.
+- The pane runs ssh or mosh, or its shell reports a folder on another machine.
+- The file is in a listing from another machine.
+- The name holds a line break or a control character.
+- The pane is in copy mode.
+
+A drag never copies or moves the file. To turn the drag off, set
+`appearance.sidebar.file_drag = false`.
+
 When the session runs on another machine, tuios does not check the file on your
 machine. If the editor is not on that machine, no pane opens. tuios shows a
 dock note that names the editor and the machine, so you know what to check.

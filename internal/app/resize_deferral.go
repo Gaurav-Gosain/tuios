@@ -252,6 +252,7 @@ func (m *OS) EndPointerGrabs() {
 	m.accentDragging = false
 	m.accentDrag = accentHitNone
 	m.SidebarDrag = sidebarDragState{}
+	m.fileDrag = fileDragState{}
 	m.dockWorkspaceDrag = dockWorkspaceDragState{}
 	m.CtrlDragPending = false
 	m.CtrlClickLink = ""

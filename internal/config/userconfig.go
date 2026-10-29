@@ -875,6 +875,9 @@ type SidebarConfig struct {
 	// FolderClick is what a click on a folder row does: navigate, cd or both
 	// (default: navigate).
 	FolderClick string `toml:"folder_click"`
+	// FileDrag lets a row of the files section be dragged into a pane to
+	// paste its path (default: true).
+	FileDrag *bool `toml:"file_drag"`
 	// FilesStyle is how the files section draws: list or tree (default:
 	// list). See SidebarFilesStyles.
 	FilesStyle string `toml:"files_style"`
@@ -1953,6 +1956,9 @@ func getDefaultSidebarFilesKeybinds() map[string][]string {
 		// S sends the file or folder to another machine. Capital, because it
 		// starts a copy over a link, and one shift from nothing else here.
 		"file_send": {"S"},
+		// I pastes the path into the focused pane, quoted for its shell: the
+		// keyboard form of dragging the row onto the pane.
+		"file_insert_path": {"I"},
 	}
 }
 
@@ -2708,6 +2714,9 @@ func ApplyAppearanceConfig(cfg *UserConfig, s *Settings) {
 	}
 	if sb.FolderClick != "" {
 		s.SidebarFolderClick = sb.FolderClick
+	}
+	if sb.FileDrag != nil {
+		s.SidebarFileDrag = *sb.FileDrag
 	}
 	// A typo reads as the default, the same contract the other enum options
 	// keep, and the validator says so.

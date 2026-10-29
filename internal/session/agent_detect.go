@@ -1082,3 +1082,26 @@ var errNoAgentDetectChange = agentDetectNoChange{}
 type agentDetectNoChange struct{}
 
 func (agentDetectNoChange) Error() string { return "no agent-detection change" }
+
+// ForegroundProgram is the base name of the program that holds the terminal
+// the shell with pid shellPid runs on: the shell itself while it sits at its
+// prompt, unlike WindowState.ForegroundCmd, which leaves every shell out.
+// "" when it cannot be read, which a caller must treat as not known.
+//
+// The client asks this of a pane on its own machine when it has to know which
+// shell will read what it types, such as the quoting of a dropped path. The
+// process name comes first: a script's argv[0] is its interpreter, and the
+// name is what the person ran.
+func ForegroundProgram(shellPid int) string {
+	info, ok := foregroundProcess(shellPid)
+	if !ok {
+		return ""
+	}
+	if name := agentBaseName(info.comm); name != "" {
+		return name
+	}
+	if len(info.argv) > 0 {
+		return agentBaseName(info.argv[0])
+	}
+	return ""
+}

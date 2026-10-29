@@ -405,6 +405,12 @@ func HandleKeyPress(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	}
 	msg = o.StripHoldModifier(msg)
 
+	// esc puts down a files row held by the pointer. Nothing is dropped.
+	if o.FileDragActive() && msg.String() == "esc" {
+		o.CancelFileDrag()
+		return o, nil
+	}
+
 	// A modifier pressed on its own arrives as a key while tuios asks for every
 	// key as an escape code. Holding Shift for the key after the leader must
 	// not end the prefix, so it goes nowhere while tuios reads keys itself. The

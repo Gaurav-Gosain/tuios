@@ -56,8 +56,9 @@ import (
 // named in sidebar_file_ops.go: create, rename, delete, copy, cut, paste and
 // send. That is the whole set. There is no multi-select and no
 // filter, because yeetui does both far better than twenty-six columns
-// ever will, and it runs in a pane. A drop of files is not the rail's: see
-// DropPaste.
+// ever will, and it runs in a pane. A row can be dragged onto a pane to paste
+// its path there (file_drop.go). A drop of files from the desktop is not the
+// rail's: see DropPaste.
 
 // fileEntry is one row of a listing. Only what the rail draws and what a click
 // needs is kept: the rest of an os.DirEntry costs a stat per file and answers
