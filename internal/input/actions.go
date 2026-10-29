@@ -223,6 +223,8 @@ func (d *ActionDispatcher) registerHandlers() {
 	d.Register("new_session", handleNewSession)
 	d.Register("next_session", handleNextSession)
 	d.Register("prev_session", handlePrevSession)
+	d.Register("next_host", handleNextHost)
+	d.Register("prev_host", handlePrevHost)
 	d.Register("next_agent", handleNextAgent)
 	d.Register("prev_agent", handlePrevAgent)
 
@@ -1194,6 +1196,18 @@ func handleNextSession(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 
 func handlePrevSession(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	o.CycleSession(-1)
+	return o, nil
+}
+
+// handleNextHost and handlePrevHost step to the next or previous machine:
+// this one first, then the [hosts] table, as the rail lists them.
+func handleNextHost(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+	o.CycleHost(1)
+	return o, nil
+}
+
+func handlePrevHost(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+	o.CycleHost(-1)
 	return o, nil
 }
 

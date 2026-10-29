@@ -10482,3 +10482,10 @@ time with `go test -overlay`, each cut read back first:
 | Control: what was cut | Test failure | Verdict |
 | --- | --- | --- |
 | The `layout.Wrap` fallback in `findWindowInDirection` (`internal/app/os_tape_executor.go`) | "pressed left on pane ... focus stayed, want one of ..." | **caught** |
+## next_host lands on the session this client last showed there
+
+`TestRailAttachesARemoteSessionInThisClient` ends with `next_host` and `prev_host` on `alt+.` and `alt+,`. The client goes from `home` to `far-shell` on `build` and back, and a second client attaches `far-other` on `build`. `next_host` then has to land on `far-shell`, and `prev_host` back on `home`. A session made on `build` after that attach must show in the rail first, so the host listing the client holds already names `far-other` as attached. The control was built into its own binary and the test run against it 2 times; the unmodified binary passed. Run on 2026-10-29 on Linux.
+
+| Control: what was cut | Where it fails | Verdict |
+| --- | --- | --- |
+| `rememberShownOn` returns at once, so a step falls back to the attached session | `the rail never marked "far-shell" as the attached session`: the client is on `far-other`, 2 of 2 runs | **caught** |

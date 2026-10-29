@@ -1055,6 +1055,27 @@ func GetCommandPaletteItems(s *config.Settings) []CommandPaletteItem {
 			},
 		},
 		{
+			// The machines in the rail's order, as next_host and prev_host
+			// step through them. Neither has a default key, so the palette
+			// is where a person finds them before binding one.
+			Name:     "Next machine",
+			Bind:     "next_host",
+			Category: "Session",
+			Action: func(m *OS) (*OS, tea.Cmd) {
+				m.CycleHost(1)
+				return m, nil
+			},
+		},
+		{
+			Name:     "Previous machine",
+			Bind:     "prev_host",
+			Category: "Session",
+			Action: func(m *OS) (*OS, tea.Cmd) {
+				m.CycleHost(-1)
+				return m, nil
+			},
+		},
+		{
 			// The agent mailbox: the messages agents leave for each other and
 			// for the person, and the place to answer one.
 			// It was "Mail: open inbox" on prefix+M; the Inbox is its own thing

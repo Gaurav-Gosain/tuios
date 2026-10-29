@@ -836,6 +836,8 @@ var ActionDescriptions = map[string]string{
 	"focus_sidebar":       "Focus sidebar",
 	"next_session":        "Next session",
 	"prev_session":        "Previous session",
+	"next_host":           "Go to the next machine",
+	"prev_host":           "Go to the previous machine",
 	"next_agent":          "Next agent pane, in the rail's order",
 	"prev_agent":          "Previous agent pane, in the rail's order",
 	"switch_session_1":    "Switch to session 1",

@@ -1141,6 +1141,30 @@ next_workspace = ["alt+y"]
 prev_workspace = ["alt+u"]
 ```
 
+## Cycle through machines
+
+The `next_host` and `prev_host` actions go to a session on the next or the
+previous machine. The order is the order of the machine groups in the rail.
+This machine is first, then the machines of the `[hosts]` table. The actions
+wrap at the end. They skip a machine whose link is not up and a machine with
+no session.
+
+On each machine, they go to the session you last showed on that machine. If
+you have not been on that machine, or that session is gone, they go to the
+session that is attached there. If no session is attached, they go to the first
+session in the rail. With no other machine, they show "No other machines".
+
+The actions have no default key. The command palette has the entries "Next
+machine" and "Previous machine". To bind them:
+
+```toml
+[keybindings.window_management]
+next_host = ["alt+."]
+prev_host = ["alt+,"]
+```
+
+Like `next_session`, a chord with Alt or Ctrl also works in terminal mode.
+
 ## Actions for a tmux-style keymap
 
 These actions have no default key. Bind them in any

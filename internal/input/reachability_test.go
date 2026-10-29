@@ -537,6 +537,9 @@ var actionsWithNoDefaultBinding = map[string]string{
 	// surface; a user who wants h/l cycle binds these.
 	"next_workspace": "palette row, user binding",
 	"prev_workspace": "palette row, user binding",
+	// Machine cycling (#896). The rail and the switcher cover it by default.
+	"next_host": "palette row, user binding",
+	"prev_host": "palette row, user binding",
 	// Session jumping ships unbound for the same reason; the switcher and the
 	// rail cover it by default, and opt+N is a user binding.
 	"switch_session_1":   "user binding",

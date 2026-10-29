@@ -151,6 +151,7 @@ func terminalSafeAction(action string) bool {
 		strings.HasPrefix(action, "send_to_workspace_") ||
 		strings.HasPrefix(action, "switch_session_") ||
 		action == "next_session" || action == "prev_session" ||
+		action == "next_host" || action == "prev_host" ||
 		action == "next_agent" || action == "prev_agent"
 }
 

@@ -237,11 +237,25 @@ func railRows(s tuitest.Screen, wants ...string) map[string]int {
 // drawn, with build hoisted to the top of the section and this machine's
 // sessions pushed down into a group of their own, so the clicked row moved out
 // from under the pointer.
+//
+// Then next_host and prev_host, bound to alt+. and alt+, step between the two
+// machines. The step onto build lands on far-shell, the session this client
+// last showed there, while another client is attached to far-other there. A
+// build that does not remember the session lands on far-other.
 func TestRailAttachesARemoteSessionInThisClient(t *testing.T) {
 	base := t.TempDir()
 	remote := remoteMachine(t)
 	ssh := writeFakeSSHTo(t, base, remote)
 	writeOneHostConfig(t, base, tuiosBin)
+	cfg := filepath.Join(base, "XDG_CONFIG_HOME", "tuios", "config.toml")
+	body, err := os.ReadFile(cfg)
+	if err != nil {
+		t.Fatalf("read config: %v", err)
+	}
+	body = append(body, "\n[keybindings.window_management]\nnext_host = [\"alt+.\"]\nprev_host = [\"alt+,\"]\n"...)
+	if err := os.WriteFile(cfg, body, 0o600); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
 	env := []string{"TUIOS_SSH=" + ssh}
 
 	if out, err := tuiosCLI(t, remote, "new", "far-shell", "--detach"); err != nil {
@@ -330,4 +344,31 @@ func TestRailAttachesARemoteSessionInThisClient(t *testing.T) {
 		}
 	}
 	alive(t, term, "after coming back from build")
+
+	// Another client on build holds far-other, so build's attached session is
+	// not the one this client left. far-mark is made after that attach, and
+	// the rail showing it says the host listing in hand is newer than the
+	// attach.
+	if out, err := tuiosCLI(t, remote, "new", "far-other", "--detach"); err != nil {
+		t.Fatalf("create far-other: %v\n%s", err, out)
+	}
+	attachIn(t, remote, "far-other", startOpts{cols: 80, rows: 24})
+	if out, err := tuiosCLI(t, remote, "new", "far-mark", "--detach"); err != nil {
+		t.Fatalf("create far-mark: %v\n%s", err, out)
+	}
+	railShows(t, term, "far-mark")
+
+	// next_host: to build, on the session this client last showed there.
+	if err := term.SendKeys(tuitest.Alt('.')); err != nil {
+		t.Fatalf("press alt+.: %v", err)
+	}
+	waitRailCurrent(t, term, "far-shell")
+	saveFrame(t, term, "next-host")
+	// prev_host: two machines, so it wraps back to this one, on home.
+	if err := term.SendKeys(tuitest.Alt(',')); err != nil {
+		t.Fatalf("press alt+,: %v", err)
+	}
+	waitRailCurrent(t, term, "home")
+	noNestedClient(t, "far-shell")
+	alive(t, term, "after stepping between machines")
 }

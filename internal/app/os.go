@@ -697,6 +697,9 @@ type OS struct {
 	// current workspace and session, for last_workspace and last_session.
 	lastWorkspace int
 	lastSession   lastSession
+	// shownOn is the session this client last showed on each machine, by
+	// machine name, for next_host and prev_host. See host_cycle.go.
+	shownOn map[string]string
 	// AttachedHost is the host DaemonClient reaches its daemon through, or ""
 	// for the daemon on this machine. See SwitchToHostSession.
 	AttachedHost string

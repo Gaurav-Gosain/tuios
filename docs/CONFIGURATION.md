@@ -2686,6 +2686,19 @@ it uses to its log when it starts.
 Like `[hosts]`, the section is not in `list-options`, and `tuios set-config`
 cannot change it.
 
+## Move between machines
+
+The `next_host` and `prev_host` keybind actions go to a session on the next or
+the previous machine: this machine first, then the `[hosts]` table. They have
+no default key. See
+[KEYBINDINGS.md](KEYBINDINGS.md#cycle-through-machines).
+
+```toml
+[keybindings.window_management]
+next_host = ["alt+."]
+prev_host = ["alt+,"]
+```
+
 ## What another machine may do here
 
 A `[hosts.NAME]` table names a machine this one links to. Read on the machine

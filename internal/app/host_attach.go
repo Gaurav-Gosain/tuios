@@ -434,7 +434,8 @@ type lastSession struct {
 }
 
 // leftSession records the session this client was on before a switch that
-// landed, for last_session. It is called from SwitchToSession and
+// landed, for last_session and for next_host and prev_host, which come back
+// to it on that machine. It is called from SwitchToSession and
 // adoptHostClient, the two places every switch ends in, so a switch from the
 // Inbox or into a session just made counts as well as one from the rail.
 // Both ends are named by machine, so a session on another machine is found
@@ -444,6 +445,7 @@ func (m *OS) leftSession(from lastSession) {
 	if from.name == "" || (from.host == m.attachedMachine() && from.name == m.SessionName) {
 		return
 	}
+	m.rememberShownOn(from.host, from.name)
 	m.lastSession = from
 }
 
