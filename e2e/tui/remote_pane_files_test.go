@@ -307,9 +307,10 @@ func TestQuickLookOnAFarFile(t *testing.T) {
 		t.Fatalf("no far.go row:\n%s", term.Snapshot())
 	}
 	mouseClick(t, term, col, row, tuitest.MouseLeft, 0)
+	clickNoteGone(t, term)
 	sendKeys(t, term, " ")
 	railLists(t, term, "space did not show the far file",
-		[]string{"far.go ", "package far", "const Answer = 42", "on build"}, nil)
+		[]string{"far.go ", "package far", "const Answer = 42", "on build"}, []string{"Copied the path."})
 	copiesFrame(t, term, "quick-look-far-go")
 
 	// j: linked.txt, which build reads for this machine only under its rules.

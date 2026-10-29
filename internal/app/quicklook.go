@@ -19,6 +19,7 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/plural"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
+	"tuios.dev/shot/mosaic"
 )
 
 // Quick look: a preview of the file under the rail's files cursor, as
@@ -478,7 +479,7 @@ func (m *OS) quickLookPicture() tea.Cmd {
 	_, _, cols, rows := m.quickLookPicBox(r.img, innerW, bodyH)
 	k := pixelsKey(r.img, cols, rows)
 	if mode == composer.PreviewCells {
-		k = p.cellsKey(r.img, cols, rows)
+		k = quickLookCellsKey(p, r.img, cols, rows)
 	}
 	p.mu.Lock()
 	if p.asked[k] {
@@ -699,7 +700,7 @@ func (m *OS) drawQuickLookPicture(c *ckCanvas, l ckLook, r *quickLookResult, w, 
 		center(mid, "This terminal cannot draw the picture.", false)
 		return quickLookPic{}
 	case composer.PreviewCells:
-		k := p.cellsKey(r.img, cols, rows)
+		k := quickLookCellsKey(p, r.img, cols, rows)
 		p.mu.Lock()
 		pic := p.pics[k]
 		p.mu.Unlock()
@@ -816,4 +817,16 @@ func (m *OS) SidebarCursorOnListing() bool {
 	}
 	row, ok := m.sidebarCursorRow()
 	return ok && (row.Kind == sidebarRowFileEntry || row.Kind == sidebarRowFileUp)
+}
+
+// quickLookCellsKey is the key of a picture drawn as block glyphs in the
+// preview. It takes half blocks whatever glyph set the panes use: a preview
+// is mostly photos and screenshots, and two colours stacked in a cell, each
+// the average of its half, draw a smooth picture where the finer sets pick
+// a shape per cell and turn a gradient into a checker. The colours keep the
+// host's depth, so at 256 colours mosaic still dithers to the palette.
+func quickLookCellsKey(p *replyPreview, img *composer.Image, cols, rows int) previewKey {
+	k := p.cellsKey(img, cols, rows)
+	k.kind = mosaic.Half
+	return k
 }

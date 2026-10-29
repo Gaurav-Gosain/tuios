@@ -10561,11 +10561,12 @@ The combined artifact is `TestHookFromPaneWhoseSessionNameIsGone.json`
 under `TUIOS_E2E_FRAMES`.
 ## Quick look on a rail row
 
-`TestRailQuickLook` opens the preview with `space` on a row of the files section and walks it with `j` and `k`: highlighted Go code, Markdown laid out, a PNG as block glyphs (kitty graphics turned off), a binary file and a text longer than the preview keeps. `space` and `esc` close it, and keys reach the pane once the rail lets go. `TestRailQuickLookKittyPicture` checks the kitty tier: the picture is placed at no more cells than its pixels fill, and taken down on close. `TestQuickLookOnAFarFile` previews a file of a listing on `build`. The two daemons share a disk, so the test tells a far read from a local one by a file with two names, which `build` refuses to read for a linked machine. Each control was built into its own binary. Run on 2026-10-29 on Linux.
+`TestRailQuickLook` opens the preview with `space` on a row of the files section and walks it with `j` and `k`: highlighted Go code, Markdown laid out, a PNG as half blocks at truecolor (kitty graphics turned off), a binary file and a text longer than the preview keeps. `space` and `esc` close it, and keys reach the pane once the rail lets go. The test waits out the note the click on the row leaves, so a note after `space` would fail it, and no frame shows it. `TestRailQuickLookKittyPicture` checks the kitty tier: the picture is placed at no more cells than its pixels fill, and taken down on close. `TestQuickLookOnAFarFile` previews a file of a listing on `build`. The two daemons share a disk, so the test tells a far read from a local one by a file with two names, which `build` refuses to read for a linked machine. Each control was built into its own binary. Run on 2026-10-29 on Linux.
 
 | Control: what was cut | Where it fails | Verdict |
 | --- | --- | --- |
 | `quickLookFetch` returns nil for a file | `TestRailQuickLook`: "space did not show main.go", the panel stays on Reading | **caught** |
 | `quickLookCursorTarget` leaves `host` empty for a far listing | `TestQuickLookOnAFarFile`: "space did not show the far file", no "on build" | **caught** |
 | The same cut, with the "on build" wait passed by a comment in the file that held those words (an earlier draft of the test) | `TestQuickLookOnAFarFile`: "the far machine did not judge the file with two names", linked.txt read locally | **caught** |
+| `quickLookCellsKey` keeps the panes' glyph set (quadrants) | `TestRailQuickLook`: "the picture has 7 quadrant glyphs; the preview draws half blocks" | **caught** |
 | `quickLookPlacement` answers false | `TestRailQuickLookKittyPicture`: "no kitty placement of the picture at its own size was sent" | **caught** |

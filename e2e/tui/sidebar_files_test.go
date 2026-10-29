@@ -1321,15 +1321,17 @@ func quickLookShows(t *testing.T, term *tuitest.Terminal, name, why string, want
 // NEGATIVE CONTROL: with quickLookFetch returning nil for a file, the
 // preview stays on "Reading" and the wait for main.go's content times out.
 func TestRailQuickLook(t *testing.T) {
-	// Block glyphs: the tier a host without kitty graphics gets, and the one
-	// a frame of the grid can show. TestRailQuickLookKittyPicture covers the
-	// other tier.
-	term, _ := quickLookStart(t, "main.go", []string{"TUIOS_KITTY_GRAPHICS=0"}, nil)
+	// Block glyphs at truecolor: the tier a host without kitty graphics
+	// gets, and the one a frame of the grid can show.
+	// TestRailQuickLookKittyPicture covers the other tier.
+	term, _ := quickLookStart(t, "main.go",
+		[]string{"TUIOS_KITTY_GRAPHICS=0", "TERM=xterm-256color", "COLORTERM=truecolor"}, nil)
 
 	// Code: highlighted, with line numbers.
 	sendKeys(t, term, " ")
+	// space opens the preview and does nothing else: no path is copied.
 	quickLookShows(t, term, "quick-look-go", "space did not show main.go",
-		[]string{"main.go ", "package main", "fmt.Println", "8 lines"}, nil)
+		[]string{"main.go ", "package main", "fmt.Println", "8 lines"}, []string{"Copied the path."})
 	s := term.Screen()
 	kc, kr, ok := findOnGrid(s, "package main")
 	if !ok {
@@ -1351,6 +1353,11 @@ func TestRailQuickLook(t *testing.T) {
 		[]string{"pic.png ", "Image", "64 x 32"}, []string{"Quick look notes"})
 	if err := term.WaitFor(func(s tuitest.Screen) bool { return pictureColours(s) >= 8 }, uiTimeout); err != nil {
 		t.Fatalf("ASSERTION: the picture was not drawn as glyphs in colour (%d colours): %v\n%s", pictureColours(term.Screen()), err, term.Snapshot())
+	}
+	// Half blocks only: a finer set picks a shape per cell and draws the
+	// smooth gradient as a checker.
+	if q := quadrantCells(term.Screen()); q > 0 {
+		t.Errorf("ASSERTION: the picture has %d quadrant glyphs; the preview draws half blocks", q)
 	}
 	copiesFrame(t, term, "quick-look-png")
 
@@ -1405,6 +1412,7 @@ func quickLookStart(t *testing.T, first string, env []string, out *lockedBuffer)
 		t.Fatalf("no %s row:\n%s", first, term.Snapshot())
 	}
 	mouseClick(t, term, col, row, tuitest.MouseLeft, 0)
+	clickNoteGone(t, term)
 	return term, dir
 }
 
@@ -1445,6 +1453,31 @@ func TestRailQuickLookKittyPicture(t *testing.T) {
 		t.Fatalf("ASSERTION: closing the preview did not take the picture down: %v", err)
 	}
 	alive(t, term, "after the kitty picture")
+}
+
+// clickNoteGone waits out the note a click on a file row leaves: the click
+// copies the row's path. The frames start clean, and a note seen after
+// that comes from the key under test, not from the click.
+func clickNoteGone(t *testing.T, term *tuitest.Terminal) {
+	t.Helper()
+	if err := term.WaitForText("Copied the path.", uiTimeout); err != nil {
+		t.Fatalf("the click on a file row did not copy its path: %v\n%s", err, term.Snapshot())
+	}
+	railLists(t, term, "the note of the click stayed", nil, []string{"Copied the path."})
+}
+
+// quadrantCells counts the quadrant glyphs on screen (U+2596..U+259F).
+func quadrantCells(s tuitest.Screen) int {
+	n := 0
+	cols, rows := s.Size()
+	for y := range rows {
+		for x := range cols {
+			if r := s.Cell(x, y).Rune; r >= 0x2596 && r <= 0x259f {
+				n++
+			}
+		}
+	}
+	return n
 }
 
 // pictureColours counts the colours of the block glyph cells on screen.
