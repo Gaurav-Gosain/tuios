@@ -254,8 +254,9 @@ type NewWindowOptions struct {
 	extraFiles []*os.File
 	// keepOpen keeps the window after its process exits and writes a line
 	// with the exit status under the last output. See keep_open.go. It is
-	// unexported: only new-window sets it, and the caller's onExit must not
-	// close the window for it to mean anything.
+	// unexported: only new-window and a client's NewWindow with KeepOpen set
+	// it, and the caller's onExit must not close the window for it to mean
+	// anything.
 	keepOpen bool
 	// closeOnExit is new-window's close_on_exit: the daemon closes the
 	// window when its process exits. It is unexported, like keepOpen: the

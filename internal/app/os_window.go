@@ -667,6 +667,12 @@ func (m *OS) AddWindowIn(dir, name string, command ...string) *OS {
 // addDaemonWindow is AddWindowIn in a daemon session. sshFrom names a window
 // the daemon follows into ssh, empty for none; see ssh_split.go.
 func (m *OS) addDaemonWindow(dir, name, sshFrom string, command []string) *OS {
+	return m.addDaemonWindowWith(dir, name, sshFrom, command, false)
+}
+
+// addDaemonWindowWith is addDaemonWindow with keepOpen, which keeps the
+// window after command exits. See ExecuteCommandPayload.KeepOpen.
+func (m *OS) addDaemonWindowWith(dir, name, sshFrom string, command []string, keepOpen bool) *OS {
 	var args []string
 	if name != "" || len(command) > 0 {
 		// The name always travels when a command does, because the args are
@@ -693,7 +699,13 @@ func (m *OS) addDaemonWindow(dir, name, sshFrom string, command []string) *OS {
 	// The size the pane will be placed at, so the daemon starts its process
 	// at it. See newPaneBox. Zero when this client cannot tell.
 	cols, rows, _ := m.newPaneContentSize()
-	if err := m.DaemonClient.SendNewWindowIntentSized(dir, ws, cols, rows, sshFrom, "NewWindow", args...); err != nil {
+	send := func() error {
+		if keepOpen && len(command) > 0 {
+			return m.DaemonClient.SendRunIntent(dir, ws, cols, rows, true, name, command...)
+		}
+		return m.DaemonClient.SendNewWindowIntentSized(dir, ws, cols, rows, sshFrom, "NewWindow", args...)
+	}
+	if err := send(); err != nil {
 		m.LogError("Failed to ask the daemon for a new window: %v", err)
 		m.windowIntentErr = err
 		m.CancelPendingSplit()

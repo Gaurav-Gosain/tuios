@@ -18,6 +18,11 @@ type LauncherConfig struct {
 	// which any installed package can write, into shell code. Only commands
 	// that keep the argv as an argv are safe here.
 	GUICommand string `toml:"gui_command"`
+	// KeepOpen keeps the pane of a program the launcher started after the
+	// program exits, with a line that shows the exit status, as
+	// `tuios new-window --keep-open` does. It needs a daemon session: the
+	// daemon writes the line and keeps the pane.
+	KeepOpen bool `toml:"keep_open"`
 }
 
 // GUIPrefix is GUICommand split into an argv prefix. Double and single quotes

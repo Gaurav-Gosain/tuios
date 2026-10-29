@@ -909,6 +909,17 @@ command that joins its arguments into a shell line, such as `swaymsg exec --`
 or `hyprctl dispatch exec`. With such a command, the text of a desktop entry
 becomes shell code. Any installed package can write a desktop entry.
 
+A program from the launcher closes its pane when it exits. Set
+`launcher.keep_open` to keep the pane. A line under the output shows the exit
+status, as with `tuios new-window --keep-open`. Close the pane when you are
+done with it. The option needs a daemon session. With `--standalone` the pane
+closes as before.
+
+```toml
+[launcher]
+keep_open = true
+```
+
 ## Workspace numbers
 
 A workspace's number is its position. Moving a workspace with

@@ -722,6 +722,7 @@ func (m *OS) settingsCategories() []settingsCategory {
 			opt("scratch.width"),
 			opt("scratch.height"),
 			opt("launcher.gui_command"),
+			opt("launcher.keep_open"),
 			opt("workspaces.return_when_empty"),
 			opt("workspaces.new_window_when_empty"),
 		}),

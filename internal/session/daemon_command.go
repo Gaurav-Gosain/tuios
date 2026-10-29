@@ -148,7 +148,15 @@ func (d *Daemon) handleExecuteCommand(cs *connState, msg *Message) error {
 			return d.sendCommandResult(cs, payload.RequestID, false,
 				"tape scripts need an attached client. A headless daemon has no renderer to run them")
 		}
-		onExit := func(ptyID string) { d.notifyPTYClosed(session.ID, ptyID) }
+		// A kept-open window is not reported closed, which is what makes an
+		// attached client close it. See the new-window verb.
+		keepOpen := payload.KeepOpen && payload.CommandType == "NewWindow" && len(payload.Args) > 1
+		onExit := func(ptyID string) {
+			if keepOpen {
+				return
+			}
+			d.notifyPTYClosed(session.ID, ptyID)
+		}
 		var data map[string]any
 		var err error
 		if payload.FocusIfShown && payload.CommandType == "NewWindow" {
@@ -180,7 +188,7 @@ func (d *Daemon) handleExecuteCommand(cs *connState, msg *Message) error {
 		} else {
 			data, err = d.executeDaemonCommandEnv(session, payload.CommandType, payload.Args, NewWindowOptions{
 				Cwd: payload.Cwd, Workspace: payload.Workspace, Env: newWindowEnv,
-				Cols: payload.Cols, Rows: payload.Rows,
+				Cols: payload.Cols, Rows: payload.Rows, keepOpen: keepOpen,
 			}, onExit)
 		}
 		if err != nil {

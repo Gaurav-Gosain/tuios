@@ -892,6 +892,11 @@ type ExecuteCommandPayload struct {
 	// the request lands. The key still names it. An older daemon ignores it
 	// and reads Workspace.
 	TabKey int `json:"tab_key,omitempty"`
+	// KeepOpen keeps a NewWindow that runs a command after the command
+	// exits, with a line that shows the exit status, as new-window's
+	// keep_open does. See keep_open.go. An older daemon ignores it and
+	// closes the window when the command exits.
+	KeepOpen bool `json:"keep_open,omitempty"`
 }
 
 // CommandResultPayload contains the result of a remote command execution.

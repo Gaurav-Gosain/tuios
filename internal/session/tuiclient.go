@@ -1448,6 +1448,21 @@ func (c *TUIClient) SendNewWindowIntentSized(cwd string, workspace, cols, rows i
 	})
 }
 
+// SendRunIntent asks for a window that runs argv, named name. keepOpen keeps
+// the window after argv exits. See ExecuteCommandPayload.KeepOpen. cwd,
+// workspace, cols and rows are as SendNewWindowIntentSized's.
+func (c *TUIClient) SendRunIntent(cwd string, workspace, cols, rows int, keepOpen bool, name string, argv ...string) error {
+	return c.sendNewWindow(&ExecuteCommandPayload{
+		CommandType: "NewWindow",
+		Args:        append([]string{name}, argv...),
+		Cwd:         cwd,
+		Workspace:   workspace,
+		Cols:        cols,
+		Rows:        rows,
+		KeepOpen:    keepOpen,
+	})
+}
+
 // SendNewWindowFrom asks for a shell on workspace that starts in the
 // directory of the window cwdFrom, or in the session's start directory
 // when that window has none. Empty cwdFrom gives the start directory too.

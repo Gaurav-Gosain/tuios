@@ -124,6 +124,7 @@ var settingLabels = map[string]string{
 	"pip.corner":                          "Picture-in-picture corner",
 	"scratch.height":                      "Scratch height",
 	"launcher.gui_command":                "Launcher GUI command",
+	"launcher.keep_open":                  "Keep launched panes open",
 	"workspaces.return_when_empty":        "Go back from an empty workspace",
 	"workspaces.new_window_when_empty":    "Open a pane on an empty workspace",
 	"paste_buffers.limit":                 "Paste buffers to keep",

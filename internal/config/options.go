@@ -1575,6 +1575,11 @@ var optionSpecs = []Option{
 		Description: "Command that starts a graphical desktop entry instead of a pane. The entry's argv is added to it. Use a command that takes an argv, such as \"tuios-wayland launch --\" or \"niri msg action spawn --\". Do not use one that joins its arguments into a shell line, such as \"swaymsg exec --\" or \"hyprctl dispatch exec\".",
 		Default:     "",
 	},
+	{
+		Path: "launcher.keep_open", Type: OptionBool, Section: "launcher",
+		Description: "Keep the pane of a program the launcher started after the program exits. A line under the output shows the exit status. Needs a daemon session.",
+		Default:     "false",
+	},
 	// [workspaces]. The daemon reads it when it starts and when the file
 	// changes.
 	{
