@@ -476,14 +476,22 @@ func (m *OS) InboxAgentsBulkDismiss() tea.Cmd {
 	return tea.Batch(cmds...)
 }
 
-// bulkItems are the marked agents' Inbox items.
+// bulkItems are the marked agents' Inbox items, and the marked resume
+// offers that have no agent row.
 func (m *OS) bulkItems() []session.AttentionItem {
 	var out []session.AttentionItem
+	seen := map[string]bool{}
 	for _, e := range m.markedAgents() {
 		for _, it := range m.Inbox.Items {
 			if it.Host == e.Host && it.Window == e.WindowID && it.Session == e.SessionID {
 				out = append(out, it)
+				seen[it.ID] = true
 			}
+		}
+	}
+	for _, it := range m.markedResumes() {
+		if !seen[it.ID] {
+			out = append(out, it)
 		}
 	}
 	return out
@@ -533,8 +541,16 @@ func (m *OS) bulkHints() []overlay.Hint {
 	var hints []overlay.Hint
 	// Resume comes first while a marked row offers one: after a restart it
 	// is what the marks are for.
-	if len(m.markedResumes()) > 0 {
+	resumes := len(m.markedResumes())
+	if resumes > 0 {
 		hints = m.keyHints(config.ActionInboxResume, "resume marked")
+	}
+	if resumes > 0 && resumes == m.markedShown() {
+		// Only resume offers are marked: reply, allow, reject and snooze
+		// do nothing for them, so the footer leaves them out.
+		hints = append(hints, m.keyHints(config.ActionInboxDismiss, "dismiss",
+			config.ActionInboxMark, "mark", config.ActionInboxMarkAll, "all or none")...)
+		return append(hints, m.keyHints(config.ActionInboxClose, "close")...)
 	}
 	hints = append(hints, m.keyHints(config.ActionInboxReply, "reply to each")...)
 	hints = append(hints,

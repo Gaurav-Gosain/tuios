@@ -185,9 +185,13 @@ argv = ["echo", "resumed-{session_id}"]
 	}
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
 		text := s.Text()
-		return strings.Contains(text, "2 marked") && strings.Contains(text, "y resume marked")
+		// Only Resume rows are marked, so the footer offers no key that
+		// answers an agent.
+		return strings.Contains(text, "2 marked") && strings.Contains(text, "y resume marked") &&
+			strings.Contains(text, "d dismiss") && !strings.Contains(text, "reply to each") &&
+			!strings.Contains(text, "1 allow") && !strings.Contains(text, "3 reject")
 	}, uiTimeout); err != nil {
-		t.Fatalf("ASSERTION: x did not mark two Resume rows: %v\n%s", err, term.Snapshot())
+		t.Fatalf("ASSERTION: x did not mark two Resume rows, or the footer offers keys that do nothing for them: %v\n%s", err, term.Snapshot())
 	}
 	saveFrame(t, term, "resume-marked")
 	if err := term.SendKeys("y"); err != nil {

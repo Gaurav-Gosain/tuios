@@ -10521,9 +10521,10 @@ time with `go test -overlay`, each cut read back first:
 The positive half is in the same run: the copy pipe key `p` is still warned about at startup, and the doctor still names `H`, `L` and `p`.
 ## Resume rows resume in place, alone, marked or all (#1330)
 
-`TestRestartOffersToResumeTheConversation` restores five agents, each with a Resume row, and the footer must name `* y resume all`. `x` marks two rows and `y` has to resume both. Their hooks then report them working, and their rows must show it in the same open view. `y` alone resumes the row under the cursor, and `*` then `y` resumes the last two. The view stays open through all three. Each control was built into its own binary. Run on 2026-10-29 on Linux.
+`TestRestartOffersToResumeTheConversation` restores five agents, each with a Resume row, and the footer must name `* y resume all`. `x` marks two rows, the footer must offer only the keys that act on Resume rows, and `y` has to resume both. Their hooks then report them working, and their rows must show it in the same open view. `y` alone resumes the row under the cursor, and `*` then `y` resumes the last two. The view stays open through all three. Each control was built into its own binary. Run on 2026-10-29 on Linux.
 
 | Control: what was cut | Where it fails | Verdict |
 | --- | --- | --- |
 | `y` with marks routed to `InboxResume` instead of `InboxAgentsBulkResume` (`internal/input/inbox_input.go`) | "y with two marks: resumed [e2e-resume-d], want 2 in all" | **caught** |
 | `InboxResume` closes the view and jumps to the pane, as before this change (`internal/app/inbox.go`) | "after y on one row: the view did not stay open on "2 needs you"" | **caught** |
+| `bulkHints` lists every bulk key when only Resume rows are marked (`internal/app/inbox_bulk.go`) | "x did not mark two Resume rows, or the footer offers keys that do nothing for them" | **caught** |
