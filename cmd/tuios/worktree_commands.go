@@ -481,6 +481,7 @@ func runWorktreeNew(branch, repo, base, name, agent, host string, clone, detach,
 		RepoRoot      string `json:"repo_root"`
 		CreatedBranch bool   `json:"created_branch"`
 		Cloned        bool   `json:"cloned"`
+		HookError     string `json:"hook_error"`
 	}
 	if err := json.Unmarshal(raw, &res); err != nil {
 		return fmt.Errorf("failed to parse response: %w", err)
@@ -494,6 +495,9 @@ func runWorktreeNew(branch, repo, base, name, agent, host string, clone, detach,
 	}
 	fmt.Printf("%s branch %s in %s%s.\n", verb, res.Branch, res.Path, t.on())
 	fmt.Printf("Created session '%s'%s.\n", res.Session, t.on())
+	if res.HookError != "" {
+		fmt.Fprintf(os.Stderr, "Warning: %s. The worktree and the session are kept.\n", res.HookError)
+	}
 	if detach {
 		if host != "" {
 			fmt.Printf("Attach with 'tuios attach --host %s %s'.\n", host, res.Session)
@@ -865,10 +869,11 @@ func runFan(o fanOptions, wait, jsonOutput bool) error {
 		Agent    string `json:"agent"`
 		Command  string `json:"command"`
 		Sessions []struct {
-			Session string `json:"session"`
-			Branch  string `json:"branch"`
-			Path    string `json:"path"`
-			Command string `json:"command"`
+			Session   string `json:"session"`
+			Branch    string `json:"branch"`
+			Path      string `json:"path"`
+			Command   string `json:"command"`
+			HookError string `json:"hook_error"`
 		} `json:"sessions"`
 	}
 	if err := json.Unmarshal(raw, &res); err != nil {
@@ -882,6 +887,11 @@ func runFan(o fanOptions, wait, jsonOutput bool) error {
 				line += "  " + s.Command
 			}
 			fmt.Println(line)
+		}
+		for _, s := range res.Sessions {
+			if s.HookError != "" {
+				fmt.Fprintf(os.Stderr, "Warning: %s: %s. The worktree and the session are kept.\n", s.Session, s.HookError)
+			}
 		}
 		if t.host != "" {
 			fmt.Printf("Watch them with 'tuios worktree ls --host %s --group %s'. Keep one with 'tuios fan keep %s:<session>', or bring its work here with 'tuios worktree pull %s:<session>'.\n", t.host, res.Group, t.host, t.host)

@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/testutil"
 	"github.com/Gaurav-Gosain/tuitest"
@@ -174,17 +175,72 @@ func railRightClickMakesAWorktree(t *testing.T, startupLayout string, tiled bool
 // Then the third way in, the new_worktree key (leader U): refused from a pane
 // in no repository, and from a pane in the repository it makes the session,
 // groups it under the repository on the rail, and attaches to it.
+//
+// Every create here runs the after-new-worktree hook. It writes a file into
+// the tree after a pause, and a first window that looks for the file must find
+// it, which holds only when the daemon waits for the hook. A branch the hook
+// fails on still gets its session, and the rail says why the hook failed.
 func TestRailWorktreeRefusals(t *testing.T) {
 	base := t.TempDir()
 	killDaemon(t, base)
 	repo := testutil.GitRepo(t)
 	t.Setenv("TUIOS_WORKTREE_DIR", filepath.Join(base, "worktrees"))
+	hook := filepath.Join(base, "worktree-hook.sh")
+	hookBody := `#!/bin/sh
+case "$TUIOS_WORKTREE_BRANCH" in
+feat/broken) echo "copying .env" >&2; echo "cannot copy .env: no such file" >&2; exit 3 ;;
+esac
+sleep 1
+printf '%s|%s|%s|%s|%s|%s\n' "$TUIOS_EVENT" "$TUIOS_SESSION_ID" "$TUIOS_WORKTREE_BRANCH" \
+	"$TUIOS_WORKTREE_CREATED_BRANCH" "$TUIOS_WORKTREE_REPO_ROOT" "$TUIOS_WORKTREE_PATH" > .tuios-hook
+`
+	if err := os.WriteFile(hook, []byte(hookBody), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	writeConfig(t, base, "[hooks]\nafter-new-worktree = \""+hook+"\"\n")
+	// wantHook reads what the hook wrote into one worktree.
+	wantHook := func(session, branch, created string) {
+		t.Helper()
+		dir := filepath.Join(base, "worktrees", "repo", strings.ReplaceAll(branch, "/", "-"))
+		got, err := os.ReadFile(filepath.Join(dir, ".tuios-hook"))
+		if err != nil {
+			t.Fatalf("the hook wrote nothing into the %s worktree: %v", branch, err)
+		}
+		want := strings.Join([]string{"after-new-worktree", session, branch, created, repo, dir}, "|")
+		if strings.TrimSpace(string(got)) != want {
+			t.Errorf("the hook for %s saw\n%s\nwant\n%s", branch, got, want)
+		}
+	}
 
 	if out, err := tuiosCLIIn(t, base, t.TempDir(), "new", "plain", "--detach"); err != nil {
 		t.Fatalf("create the plain session: %v: %s", err, out)
 	}
 	if out, err := tuiosCLI(t, base, "worktree", "new", "feat/one", "--repo", repo, "--detach"); err != nil {
 		t.Fatalf("worktree new feat/one: %v: %s", err, out)
+	}
+	wantHook("repo-feat-one", "feat/one", "1")
+
+	// A branch that exists already, with a first window that reports whether
+	// the hook's file was there when it started.
+	if out, err := exec.Command("git", "-C", repo, "branch", "feat/seen").CombinedOutput(); err != nil {
+		t.Fatalf("make the feat/seen branch: %v: %s", err, out)
+	}
+	if _, err := callVerb(t, base, "new-worktree", map[string]any{
+		"repo": repo, "branch": "feat/seen",
+		"command": []string{"sh", "-c", "if [ -e .tuios-hook ]; then echo HOOK-READY; else echo HOOK-MISSING; fi; exec sleep 600"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	wantHook("repo-feat-seen", "feat/seen", "0")
+	var pane string
+	for deadline := time.Now().Add(uiTimeout); time.Now().Before(deadline); time.Sleep(100 * time.Millisecond) {
+		pane, _ = tuiosCLI(t, base, "capture-pane", "-s", "repo-feat-seen")
+		if strings.Contains(pane, "HOOK-") {
+			break
+		}
+	}
+	if !strings.Contains(pane, "HOOK-READY") {
+		t.Fatalf("the first window started before the hook finished:\n%s", pane)
 	}
 	before := sessionNames(t, base)
 
@@ -315,6 +371,45 @@ func TestRailWorktreeRefusals(t *testing.T) {
 		t.Errorf("the worktree on disk is not on feat/key: %v: %s", err, out)
 	}
 	saveFrame(t, term, "worktree-key-created")
+	wantHook("repo-feat-key", "feat/key", "1")
+
+	// A hook that fails keeps the worktree and the session, and the rail
+	// leads with the hook's exit and the end of its stderr.
+	leaderKey(t, term, "U")
+	if err := term.WaitForText("Worktree of repo", uiTimeout); err != nil {
+		t.Fatalf("the key did not open the dialog: %v\n%s", err, term.Snapshot())
+	}
+	if err := term.SendKeys("feat/broken"); err != nil {
+		t.Fatalf("type the branch: %v", err)
+	}
+	if err := term.SendKeys(tuitest.Enter); err != nil {
+		t.Fatalf("submit the dialog: %v", err)
+	}
+	if err := term.WaitForText("The after-new-worktree hook exited with 3", uiTimeout); err != nil {
+		t.Fatalf("the dock did not say the hook failed: %v\n%s", err, term.Snapshot())
+	}
+	saveFrame(t, term, "worktree-hook-failed")
+	// The dock cuts the message, and a click on it shows the whole of it,
+	// which ends with the last line the hook wrote to stderr.
+	col, row := findOnScreen(t, term, "The after-new-worktree hook")
+	mouseClick(t, term, col, row, tuitest.MouseLeft, 0)
+	if err := term.WaitForText(".env: no such file", uiTimeout); err != nil {
+		t.Fatalf("the message view did not show the hook's stderr: %v\n%s", err, term.Snapshot())
+	}
+	saveFrame(t, term, "worktree-hook-failed-message")
+	if err := term.SendKeys(tuitest.Esc); err != nil {
+		t.Fatalf("close the message view: %v", err)
+	}
+	waitGone(t, term, "the message view", ".env: no such file")
+	if !hasName(sessionNames(t, base), "repo-feat-broken") {
+		t.Errorf("a failed hook lost the session: ls lists %v", sessionNames(t, base))
+	}
+	if _, err := os.Stat(filepath.Join(base, "worktrees", "repo", "feat-broken")); err != nil {
+		t.Errorf("a failed hook lost the worktree: %v", err)
+	}
+	if out, err := tuiosCLI(t, base, "list-hooks", "--json"); err != nil || !strings.Contains(out, "after-new-worktree") || !strings.Contains(out, "cannot copy .env") {
+		t.Errorf("list-hooks does not show the hook and its last error: %v\n%s", err, out)
+	}
 
 	alive(t, term, "after the worktree dialog's refusals and the worktree key")
 }

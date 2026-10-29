@@ -472,8 +472,13 @@ working recipes.
 
 A hook runs a shell command on an event, with `TUIOS_*` variables carrying the
 facts. The daemon runs `after-new-window`, `after-close-window`,
-`after-focus-change`, `after-workspace-switch`, `after-agent-state` and
-`after-command-finished`, so they fire with nobody attached. `after-attach`,
+`after-focus-change`, `after-workspace-switch`, `after-agent-state`,
+`after-command-finished` and `after-new-worktree`, so they fire with nobody
+attached. `after-new-worktree` runs in the new worktree before its first
+window starts, and tuios waits for it (60 seconds at most). It gets
+`TUIOS_WORKTREE_PATH`, `TUIOS_WORKTREE_BRANCH`, `TUIOS_WORKTREE_REPO_ROOT` and
+`TUIOS_WORKTREE_CREATED_BRANCH`. When it fails, the session is kept and the
+result of `new-worktree` or `fan` carries `hook_error`. `after-attach`,
 `after-detach`, `after-resize`, `after-layout-change` and `after-theme-change`
 run in the client. `after-theme-change` gets `TUIOS_THEME`, `TUIOS_THEME_BG`
 and `TUIOS_THEME_LIGHT`.

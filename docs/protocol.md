@@ -3937,6 +3937,12 @@ Response:
  "window_id": "...", "pty_id": "..."}}
 ```
 
+An `after-new-worktree` hook runs in the worktree before the first window
+starts, and the verb waits for it (60 seconds at most). When it fails, the
+worktree, the session and the first window are kept, and the result carries
+`hook_error`: the exit code and the last lines of the hook's stderr. `fan`
+puts the same field on each session it lists. See [HOOKS.md](HOOKS.md).
+
 A session whose first window starts inside a worktree made by hand is recorded
 the same way, by reading the directory. `list-sessions` carries the record as
 `worktree` on the session, and it is what the rail groups by.

@@ -219,6 +219,9 @@ func TestEveryDeclaredEventIsCovered(t *testing.T) {
 		// Fire site: noteThemeChange in theme_hook.go, proved with its payload
 		// by TestAfterThemeChangeHookFiresOncePerPick in e2e/tui.
 		hooks.AfterThemeChange: true,
+		// Daemon only. Fire site: runWorktreeHook in internal/session, proved
+		// with its payload and its wait by TestRailWorktreeRefusals in e2e/tui.
+		hooks.AfterNewWorktree: true,
 	}
 	for _, e := range hooks.AllEvents() {
 		if !covered[e] {

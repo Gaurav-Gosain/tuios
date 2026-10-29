@@ -2,7 +2,7 @@
 
 The docs site has the same reference: https://tuios.dev/docs/hooks
 
-Eleven events, each running a shell command with `TUIOS_*` environment variables carrying the facts. This page lists every event and every variable. Hooks are read once at startup from the `[hooks]` table.
+Twelve events, each running a shell command with `TUIOS_*` environment variables carrying the facts. This page lists every event and every variable. Hooks are read once at startup from the `[hooks]` table.
 
 ## Which side runs a hook
 
@@ -16,6 +16,7 @@ A hook runs on the side that owns the fact it reports.
 | `after-workspace-switch` | daemon | yes |
 | `after-agent-state` | daemon | yes |
 | `after-command-finished` | daemon | yes |
+| `after-new-worktree` | daemon | yes |
 | `after-attach` | client | no |
 | `after-detach` | client | no |
 | `after-resize` | client | no |
@@ -53,6 +54,7 @@ is empty, or 0 for a number, so a script can read all of them:
 | `TUIOS_AGENT_HARNESS`, `TUIOS_AGENT_MESSAGE` | For `after-agent-state`: the harness and the message that came with the state |
 | `TUIOS_COMMAND`, `TUIOS_EXIT_CODE`, `TUIOS_DURATION_MS` | For `after-command-finished`, below |
 | `TUIOS_THEME`, `TUIOS_THEME_BG`, `TUIOS_THEME_LIGHT` | For `after-theme-change`, below |
+| `TUIOS_WORKTREE_PATH`, `TUIOS_WORKTREE_BRANCH`, `TUIOS_WORKTREE_REPO_ROOT`, `TUIOS_WORKTREE_CREATED_BRANCH` | For `after-new-worktree`, below |
 
 `after-agent-state` fires only for the transitions `[notifications.agent]`
 alerts on (`needs_input`, `errored` and `done` by default), after its
@@ -105,6 +107,36 @@ Use it for a tool that does not follow the theme by itself:
 [hooks]
 after-theme-change = "~/.config/tuios/hooks/theme.sh"
 ```
+
+`after-new-worktree` fires when tuios makes a worktree session. This occurs
+for `tuios worktree new`, for "New worktree..." on the rail and for each
+session of `tuios fan`. It runs after `git worktree add` and before the
+session's first window starts. tuios waits for it, so the shell or the agent
+in that window finds what the hook put into the tree. Other clients and
+sessions go on while it runs.
+
+It starts in the worktree's directory and gets these variables:
+
+- `TUIOS_SESSION_ID`: the new session's name.
+- `TUIOS_WORKTREE_PATH`: the worktree's directory.
+- `TUIOS_WORKTREE_BRANCH`: the branch the worktree has checked out.
+- `TUIOS_WORKTREE_REPO_ROOT`: the main checkout the worktree was made from.
+- `TUIOS_WORKTREE_CREATED_BRANCH`: `1` when the branch is new, `0` when it
+  existed.
+
+Use it to copy the ignored files a checkout needs, such as `.env`:
+
+```toml
+[hooks]
+after-new-worktree = 'cp "$TUIOS_WORKTREE_REPO_ROOT/.env" .'
+```
+
+Each command has 60 seconds. tuios stops a command that runs longer, and the
+programs it started. With a list of commands, they run in order, and the first
+one that fails stops the rest. When a command fails or runs out of time, tuios
+keeps the worktree and the session and opens the first window. The rail, `tuios
+worktree new` and `tuios fan` show the exit code and the last lines of the
+command's stderr. The verb result has them in `hook_error`.
 
 The daemon reads the `[hooks]` table when it starts. Restart the daemon with `tuios restart-server` after you change a hook the daemon runs. The daemon does not reload hooks when the file changes.
 

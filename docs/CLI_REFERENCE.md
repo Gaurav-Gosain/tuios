@@ -842,6 +842,11 @@ tuios worktree rm api-feat-retry --stash               # Keep the changes in git
 The session is named `<repo>-<branch>`, with every slash turned into a hyphen.
 Worktrees go under `$XDG_DATA_HOME/tuios/worktrees/<repo>/<branch>`.
 
+An `after-new-worktree` hook runs in the new worktree before its first window
+starts, for example to copy `.env` from the main checkout. See
+[HOOKS.md](HOOKS.md). When the hook fails, `worktree new` prints a warning
+and keeps the worktree and the session.
+
 `worktree rm` refuses a worktree with uncommitted changes and removes nothing.
 `--stash` keeps the changes in git stash as `tuios: <branch>`. `--force`
 discards them, and is the only option that does. The branch is never deleted.

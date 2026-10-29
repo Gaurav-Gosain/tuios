@@ -41,8 +41,9 @@ func TestDockEventAliasesMatchTheValidatedSet(t *testing.T) {
 	for _, event := range hooks.AllEvents() {
 		// Only the daemon follows a shell's OSC 133 marks, so no client ever
 		// sees a command finish and a dock component could not refresh on it.
-		// Accepting the name would be a contract that never fires.
-		if event == hooks.AfterCommandFinished {
+		// Accepting the name would be a contract that never fires. The same
+		// holds for after-new-worktree, which the daemon runs inside the verb.
+		if event == hooks.AfterCommandFinished || event == hooks.AfterNewWorktree {
 			if slices.Contains(valid, string(event)) {
 				t.Errorf("%q is accepted as a dock event, but no client fires it", event)
 			}

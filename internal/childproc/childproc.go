@@ -51,3 +51,9 @@ func CommandContext(ctx context.Context, name string, args ...string) *exec.Cmd 
 	Hide(cmd)
 	return cmd
 }
+
+// OwnGroup starts cmd in a process group of its own and makes its context end
+// that whole group, so a command that started children of its own cannot
+// outlive its deadline through them. A no-op where there are no process
+// groups. cmd must come from CommandContext for the context to apply.
+func OwnGroup(cmd *exec.Cmd) { ownGroup(cmd) }

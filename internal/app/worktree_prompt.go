@@ -339,13 +339,14 @@ func (m *OS) createWorktreeCmd(repoRoot, branch, sessionName string) tea.Cmd {
 	}
 	return func() tea.Msg {
 		var res struct {
-			Session string `json:"session"`
-			Path    string `json:"path"`
+			Session   string `json:"session"`
+			Path      string `json:"path"`
+			HookError string `json:"hook_error"`
 		}
 		if err := callWorktreeVerb(dial, "new-worktree", "create the worktree", params, 5*time.Minute, &res); err != nil {
 			return worktreeCreatedMsg{Err: err}
 		}
-		return worktreeCreatedMsg{Session: res.Session, Path: res.Path}
+		return worktreeCreatedMsg{Session: res.Session, Path: res.Path, HookError: res.HookError}
 	}
 }
 
@@ -378,6 +379,9 @@ type worktreeCreatedMsg struct {
 	Path string
 	// Err is what went wrong, nil on success.
 	Err error
+	// HookError is why the after-new-worktree hook failed, empty when it
+	// succeeded or none is set. The session was made all the same.
+	HookError string
 }
 
 // handleWorktreeCreated says what became of a create: attach to the session it
@@ -396,7 +400,14 @@ func (m *OS) handleWorktreeCreated(msg worktreeCreatedMsg) tea.Cmd {
 	if msg.Path != "" {
 		note += " in " + shortenHome(msg.Path)
 	}
-	m.ShowNotification(note+", attaching.", "info", m.Settings.NotificationDuration)
+	if msg.HookError != "" {
+		// The hook's failure outranks the plain "created": the person has to
+		// know the tree is not set up the way the hook should have left it.
+		// The error leads, because the dock cuts a long message at its end.
+		m.ShowNotification(capitalize(msg.HookError)+". The session '"+msg.Session+"' is kept.", "warning", m.Settings.NotificationDuration*2)
+	} else {
+		m.ShowNotification(note+", attaching.", "info", m.Settings.NotificationDuration)
+	}
 	if err := m.SwitchToSession(msg.Session); err != nil {
 		m.ShowNotification("Could not attach to "+msg.Session+": "+err.Error(), "warning", m.Settings.NotificationDuration*2)
 	} else {

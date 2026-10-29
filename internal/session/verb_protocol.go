@@ -608,6 +608,7 @@ func buildVerbRegistry() map[string]verbEntry {
 				{Name: "window_id", Type: "string", Description: "Id of the first window."},
 				{Name: "pty_id", Type: "string", Description: "Id of the first window's PTY."},
 				{Name: "cloned", Type: "bool", Description: "True when the repository was cloned by this call. Absent otherwise."},
+				{Name: "hook_error", Type: "string", Description: "Why the after-new-worktree hook failed, with the last lines of its stderr. The worktree, the session and the first window are kept. Absent when the hook succeeded or none is set."},
 			},
 			examples: []string{
 				`{"id":1,"verb":"new-worktree","params":{"repo":"/src/api","branch":"feat/retry"}}`,
@@ -684,7 +685,7 @@ func buildVerbRegistry() map[string]verbEntry {
 				{Name: "agent", Type: "string", Description: "The harness id started in the first session, empty for a program no manifest recognises."},
 				{Name: "command", Type: "string", Description: "The command started in the first session."},
 				{Name: "prompt", Type: "string", Description: "The first session's prompt, as given."},
-				{Name: "sessions", Type: "[]object", Description: "One entry per session: session, branch, path, window_id, and the agent (harness id) and command started in it."},
+				{Name: "sessions", Type: "[]object", Description: "One entry per session: session, branch, path, window_id, and the agent (harness id) and command started in it. hook_error is there when that session's after-new-worktree hook failed."},
 				{Name: "total", Type: "int", Description: "How many sessions were started."},
 			},
 			examples: []string{

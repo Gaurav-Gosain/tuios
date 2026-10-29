@@ -16,6 +16,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/Gaurav-Gosain/tuios/internal/hooks"
 	"github.com/Gaurav-Gosain/tuios/internal/plural"
 	"github.com/Gaurav-Gosain/tuios/internal/sessiontree"
 	"github.com/Gaurav-Gosain/tuios/internal/worktree"
@@ -207,6 +208,14 @@ func (d *Daemon) createWorktreeSession(cs *connState, root, branch, base, sessio
 	// session on the window's push already sees it under its repository.
 	_ = sess.SetWorktree(info)
 
+	// The after-new-worktree hook runs before the first window, and the call
+	// waits for it, so what it puts into the tree is there when the shell or
+	// agent starts. Nothing is locked here: CreateSession and SetWorktree have
+	// returned, and a fan's reservation is a name, not a mutex, so other
+	// clients and verbs go on while the hook runs. A hook that fails keeps the
+	// worktree and the session, and its error goes back with the result.
+	hookErr := d.runWorktreeHook(sess.Name(), info, created)
+
 	sessionID := sess.ID
 	onExit := func(ptyID string) { d.notifyPTYClosed(sessionID, ptyID) }
 	win, err := sess.AddDaemonWindowWith(NewWindowOptions{
@@ -221,7 +230,7 @@ func (d *Daemon) createWorktreeSession(cs *connState, root, branch, base, sessio
 			Detail: "Both are kept. Open a window in the session with: tuios new-window -s " + sessionName + " --cwd " + path,
 		})
 	}
-	return map[string]any{
+	out := map[string]any{
 		"session":        sess.Name(),
 		"session_id":     sess.ID,
 		"repo":           info.Repo,
@@ -231,7 +240,42 @@ func (d *Daemon) createWorktreeSession(cs *connState, root, branch, base, sessio
 		"path":           path,
 		"window_id":      win.ID,
 		"pty_id":         win.PTYID,
-	}, nil
+	}
+	if hookErr != "" {
+		out["hook_error"] = hookErr
+	}
+	return out, nil
+}
+
+// worktreeHookTimeout bounds the after-new-worktree hook. Hooks have no
+// timeout option, and a fixed one keeps it that way: a minute covers copying
+// ignored files and a cached install, and stays well inside the five minutes
+// the CLI and the rail wait for the whole verb.
+const worktreeHookTimeout = time.Minute
+
+// runWorktreeHook runs the after-new-worktree hook in the worktree and waits
+// for it. It returns the hook's error for the caller to show, or empty when no
+// hook is set or the hook succeeded.
+func (d *Daemon) runWorktreeHook(sessionName string, info *WorktreeInfo, created bool) string {
+	if d.hooks == nil || !d.hooks.HasEvent(hooks.AfterNewWorktree) {
+		return ""
+	}
+	createdBranch := "0"
+	if created {
+		createdBranch = "1"
+	}
+	err := d.hooks.Run(hooks.AfterNewWorktree, hooks.Context{
+		SessionID:             sessionName,
+		WorktreePath:          info.Path,
+		WorktreeBranch:        info.Branch,
+		WorktreeRepoRoot:      info.RepoRoot,
+		WorktreeCreatedBranch: createdBranch,
+		Dir:                   info.Path,
+	}, worktreeHookTimeout)
+	if err != nil {
+		return err.Error()
+	}
+	return ""
 }
 
 func (d *Daemon) verbNewWorktree(cs *connState, params json.RawMessage) (any, *verbError) {
@@ -764,14 +808,18 @@ func (d *Daemon) verbFan(cs *connState, params json.RawMessage) (any, *verbError
 		windowID := out["window_id"].(string)
 		d.noteStartedBy(cs, windowID)
 		go d.deliverFanPrompt(sess, windowID, launch.harness, prompt, readyTimeout)
-		sessions = append(sessions, map[string]any{
+		row := map[string]any{
 			"session":   out["session"],
 			"branch":    branch,
 			"path":      out["path"],
 			"window_id": windowID,
 			"agent":     launch.harness,
 			"command":   launch.command(),
-		})
+		}
+		if hookErr, ok := out["hook_error"]; ok {
+			row["hook_error"] = hookErr
+		}
+		sessions = append(sessions, row)
 	}
 	// agent, command and prompt name the first session's, which for a fan of
 	// one agent and one prompt is every session's, as they always were. The
