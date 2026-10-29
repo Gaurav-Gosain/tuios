@@ -110,6 +110,12 @@ state. A refusal changes nothing. If the new binary starts and cannot take
 the panes over, the daemon goes back to the binary it was running, with every
 pane, and the command says so.
 
+Run from inside a pane, the upgrade waits for you to confirm it: every
+attached client shows a dialog with the binary's full path, its version and
+the pane that asked. Only a key you press at a client answers it, and No is
+the default. No, Esc, a minute without an answer, or no attached client
+refuses it. A plugin is always refused.
+
 Live upgrades are experimental, macOS and Linux only, and need a daemon from
 a build that has them. 'tuios restart-server' moves any daemon to the newest
 tuios installed, and stops every program in every pane. Use --server NAME to
@@ -194,10 +200,14 @@ func runDaemonUpgrade(out io.Writer, binary string, asJSON bool) error {
 			Fix:   "pass a tuios with --binary, or run '" + killServerCommand() + "' to restart the daemon, which ends running programs.",
 		}
 	}
+	if os.Getenv("TUIOS_PANE_ID") != "" {
+		say("Asking you to confirm the upgrade in the tuios dialog...\n")
+	}
 	say("Checking %s (%s) accepts this daemon's state (handoff v%d)... ", binary, acc.Version, session.HandoffVersion)
 
 	started := time.Now()
-	raw, err = client.CallWithTimeout("daemon-upgrade", map[string]any{"binary": binary}, daemonUpgradeWait)
+	// From a pane the daemon waits for the person's answer before it starts.
+	raw, err = client.CallWithTimeout("daemon-upgrade", map[string]any{"binary": binary}, session.UpgradeConfirmWait+daemonUpgradeWait)
 	_ = client.Close()
 	if err != nil {
 		say("refused\n")

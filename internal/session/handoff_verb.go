@@ -26,24 +26,35 @@ func (d *Daemon) verbDaemonUpgrade(cs *connState, params json.RawMessage) (any, 
 	}
 	// Whatever the caller's grants: the binary named runs as the daemon, which
 	// holds every pane's terminal and the key that signs every pane's token.
-	if !d.mayActAsHuman(cs) {
-		return nil, hintedVerbError(ErrVerbForbidden, "daemon-upgrade is for the person: the caller runs inside a pane of this daemon or is a plugin, and an upgrade is refused there whatever its grants", &VerbHint{
-			Detail: "Nothing was changed. Run tuios daemon upgrade from a terminal outside tuios.",
-		})
+	// A plugin never may. A pane may when the person says yes in a dialog at
+	// an attached client (upgrade_confirm.go).
+	notPerson := hintedVerbError(ErrVerbForbidden, "daemon-upgrade is for the person: the caller runs inside a pane of this daemon or is a plugin, and an upgrade is refused there whatever its grants", &VerbHint{
+		Detail: "Nothing was changed. Run tuios daemon upgrade from a terminal outside tuios, or answer Yes in the dialog tuios shows when a pane asks.",
+	})
+	confirm := !d.mayActAsHuman(cs)
+	if confirm && d.callerIsPlugin(cs) {
+		return nil, notPerson
 	}
 	if p.Binary == "" || !filepath.IsAbs(p.Binary) {
 		return nil, invalidParam("binary", "binary must be the absolute path of a tuios binary")
 	}
-	clients := d.tuiClientCount()
-	run, err := d.prepareHandoff(handoffRequest{binary: p.Binary})
-	if err != nil {
-		code := ErrVerbUpgradeRefused
-		if errors.Is(err, errHandoffBusy) {
-			code = ErrVerbBusy
+	req := handoffRequest{binary: p.Binary}
+	if confirm {
+		// The dialog shows the binary's path and version, so the preflight
+		// runs first, and the upgrade then takes only the file it ran.
+		bin, err := preflightBinary(p.Binary)
+		if err != nil {
+			return nil, upgradeRefusal(err)
 		}
-		return nil, hintedVerbError(code, err.Error(), &VerbHint{
-			Detail: "Nothing was changed. Every pane and client is as it was. " + restartAdvice(),
-		})
+		if !d.confirmUpgrade(cs, bin) {
+			return nil, notPerson
+		}
+		req.binary, req.pinned = bin.path, &bin.file
+	}
+	clients := d.tuiClientCount()
+	run, err := d.prepareHandoff(req)
+	if err != nil {
+		return nil, upgradeRefusal(err)
 	}
 	// commit returns only when the exec failed.
 	cs.takeover = func(*bufio.Reader) { LogError("Live upgrade: %v", run.commit()) }
@@ -60,4 +71,15 @@ func (d *Daemon) verbDaemonUpgrade(cs *connState, params json.RawMessage) (any, 
 		"clients":        clients,
 		"preflight_ms":   int64(run.stats.PreflightMS),
 	}, nil
+}
+
+// upgradeRefusal is the refusal of an upgrade that changed nothing.
+func upgradeRefusal(err error) *verbError {
+	code := ErrVerbUpgradeRefused
+	if errors.Is(err, errHandoffBusy) {
+		code = ErrVerbBusy
+	}
+	return hintedVerbError(code, err.Error(), &VerbHint{
+		Detail: "Nothing was changed. Every pane and client is as it was. " + restartAdvice(),
+	})
 }
