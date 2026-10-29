@@ -221,6 +221,9 @@ func readHandoffManifest(r io.Reader) (*handoffManifest, error) {
 				m.Panes = append(m.Panes, p)
 			}
 		case handoffRecDaemon:
+			// A record from an image without fallback_fd names its binary
+			// by path; left at zero, the field would name stdin.
+			m.Daemon.FallbackFD = -1
 			err = json.Unmarshal(payload, &m.Daemon)
 		case handoffRecEnd:
 			m.Size = read.Load() - int64(br.Buffered())
