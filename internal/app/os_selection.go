@@ -173,18 +173,7 @@ func (m *OS) openScrollbackEditor(msg scrollbackFileMsg) tea.Cmd {
 		return nil
 	}
 	args := append(msg.argv[1:len(msg.argv):len(msg.argv)], editorLineArgs(msg.argv[0], msg.path, msg.line)...)
-	c := exec.Command(msg.argv[0], args...) //nolint:gosec // the person's own editor
-	// The editor gets the terminal, not the writer the frames go through.
-	// ExecProcess hands a command the program's output, which on a local client
-	// is the post-render wrapper, and exec turns a writer that is not a file
-	// into a pipe. An editor whose stdout is a pipe cannot put the terminal in
-	// raw mode: it runs with echo on and reads by the line, so the host's replies
-	// to its startup queries print on the screen as ^[]11;rgb:... text.
-	// Nothing draws a frame while the editor runs, so the order the wrapper
-	// keeps between frames and graphics does not matter here.
-	if prw := m.PostRenderWriter; prw != nil {
-		c.Stdout = prw.File
-	}
+	c := m.editorCommand(exec.Command(msg.argv[0], args...)) //nolint:gosec // the person's own editor
 	dir := msg.dir
 	// SGR-pixel reports go off first: the editor does not expect them, and
 	// the terminal comes back in SGR cells.
