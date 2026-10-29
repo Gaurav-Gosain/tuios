@@ -523,6 +523,12 @@ the tape manager.
 | `alt+backspace`, `ctrl+w`, `ctrl+backspace` | Delete the last word of a typed filter (fixed). `alt+backspace` is `Option+Backspace` on a Mac whose terminal sends Option as Alt |
 | wheel | Scroll the list under the pointer, stopping at the ends (fixed) |
 
+The word keys take a word the way the shell's `Option+Backspace` does: they skip
+the characters at the end that are not part of a word, then take the word. A word
+is letters, digits and `_`, and a blank, `/`, `.` or `-` ends one. So
+`src/dir1/dir2` becomes `src/dir1/`, then `src/`, then nothing. Every short text
+field in tuios takes them, the rename, file and new worktree dialogs among them.
+
 The movement keys are the `[keybindings.lists]` section. Each action takes the
 keys that do it:
 
@@ -595,6 +601,7 @@ One dialog renames a window, a session and a workspace. It opens holding the cur
 | `ctrl+c` | Clear the field, or cancel when it is already empty |
 
 A click on the `clear` hint in the dialog's border clears the field too. In the help's search, `ctrl+u` clears the query.
+
 
 ### Mode keys in the dock
 

@@ -267,19 +267,10 @@ func (m *OS) EffectPickerType(s string) tea.Cmd {
 	return m.EffectPickerRefilter()
 }
 
-// EffectPickerBackspace removes the last character of the query.
-func (m *OS) EffectPickerBackspace() tea.Cmd {
-	if m.EffectPickerQuery == "" {
-		return nil
-	}
-	q := []rune(m.EffectPickerQuery)
-	m.EffectPickerQuery = string(q[:len(q)-1])
-	return m.EffectPickerRefilter()
-}
-
-// EffectPickerClearQuery empties the query.
-func (m *OS) EffectPickerClearQuery() tea.Cmd {
-	m.EffectPickerQuery = ""
+// EffectPickerSetQuery replaces the query and refilters. The input layer applies
+// the shared edit rule (editFilterQuery) and hands the result here.
+func (m *OS) EffectPickerSetQuery(q string) tea.Cmd {
+	m.EffectPickerQuery = q
 	return m.EffectPickerRefilter()
 }
 

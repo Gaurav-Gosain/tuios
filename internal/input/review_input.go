@@ -4,6 +4,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/app"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/textedit"
 )
 
 // handleReviewInput handles a key while the review overlay is open. It owns
@@ -40,6 +41,10 @@ import (
 func handleReviewInput(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	key := msg.String()
 	if o.ReviewEditing() {
+		if textedit.IsWordDeleteKey(key) {
+			o.ReviewEditorDeleteWord()
+			return o, nil
+		}
 		switch key {
 		case "enter":
 			return o, o.ReviewEditorSubmit()

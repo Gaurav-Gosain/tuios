@@ -7,6 +7,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/app"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
+	"github.com/Gaurav-Gosain/tuios/internal/textedit"
 )
 
 // Multi copy mode key handling: one key, every pane of the mode. See
@@ -206,6 +207,10 @@ func handleMultiCopySaveKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		o.CancelMultiCopySave()
 	case key.Code == tea.KeyTab:
 		o.CycleMultiCopyFormat()
+	case textedit.IsWordDeleteKey(msg.String()):
+		// Before backspace: Option+Backspace has the code of backspace.
+		s.Path = textedit.DropLastWord(s.Path)
+		s.Err = ""
 	case key.Code == tea.KeyBackspace:
 		if s.Path != "" {
 			_, size := utf8.DecodeLastRuneInString(s.Path)

@@ -16,6 +16,7 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/federation"
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
+	"github.com/Gaurav-Gosain/tuios/internal/textedit"
 )
 
 // The questions a copy asks: cancel a copy, answer a file that is there,
@@ -177,6 +178,11 @@ func (m *OS) CopyDialogKey(key, text string) tea.Cmd {
 		return nil
 	}
 	if d.kind == copyDialogSendDir {
+		if textedit.IsWordDeleteKey(key) {
+			d.input = textedit.DropLastWord(d.input)
+			d.err = ""
+			return nil
+		}
 		switch key {
 		case "enter":
 			return m.CopyDialogActivate(0)

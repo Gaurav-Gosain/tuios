@@ -413,7 +413,7 @@ func TestEffectPickerFiltersAndRefusesAnEmptyApply(t *testing.T) {
 		t.Error("the query filtered nothing out")
 	}
 
-	_ = m.EffectPickerClearQuery()
+	_ = m.EffectPickerSetQuery("")
 	if len(m.effectPickerItems()) != len(config.ScreensaverEffects) {
 		t.Error("clearing the query did not put the whole list back")
 	}

@@ -10,6 +10,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/gitstate"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
+	"github.com/Gaurav-Gosain/tuios/internal/textedit"
 )
 
 // The rail's worktree dialog: a branch name asked over a repository, and a
@@ -262,6 +263,15 @@ func (m *OS) WorktreePromptType(text string) {
 func (m *OS) WorktreePromptBackspace() {
 	if buf := m.worktreeActiveField(); buf != nil && *buf != "" {
 		*buf = dropLastRune(*buf)
+		m.worktreePrompt.Err = ""
+	}
+}
+
+// WorktreePromptDeleteWord drops the last word of the active field, by the rule
+// of DropLastWord.
+func (m *OS) WorktreePromptDeleteWord() {
+	if buf := m.worktreeActiveField(); buf != nil && *buf != "" {
+		*buf = textedit.DropLastWord(*buf)
 		m.worktreePrompt.Err = ""
 	}
 }

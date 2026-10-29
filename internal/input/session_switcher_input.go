@@ -1,8 +1,6 @@
 package input
 
 import (
-	"unicode/utf8"
-
 	tea "charm.land/bubbletea/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/app"
 )
@@ -67,21 +65,6 @@ func handleSessionSwitcherInput(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cm
 		// A session on another machine opens off the Update goroutine.
 		return o, o.TakeSidebarCmd()
 
-	case "backspace":
-		if o.SessionSwitcherQuery != "" {
-			_, size := utf8.DecodeLastRuneInString(o.SessionSwitcherQuery)
-			o.SessionSwitcherQuery = o.SessionSwitcherQuery[:len(o.SessionSwitcherQuery)-size]
-			o.SessionSwitcherSelected = 0
-			o.SessionSwitcherScroll = 0
-		}
-		return o, nil
-
-	case "ctrl+u":
-		o.SessionSwitcherQuery = ""
-		o.SessionSwitcherSelected = 0
-		o.SessionSwitcherScroll = 0
-		return o, nil
-
 	case "ctrl+r":
 		// Renames the session through the daemon, so the new name is the
 		// one ls lists and attach takes.
@@ -115,12 +98,7 @@ func handleSessionSwitcherInput(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cm
 		// produce, so it takes a space and any typed rune the same way the
 		// palette does. A session called "Payments API" is otherwise unfindable
 		// past its first word.
-		text := msg.Text
-		if keyStr == "space" {
-			text = " "
-		}
-		if text != "" {
-			o.SessionSwitcherQuery += text
+		if changed, _ := editFilterQuery(msg, &o.SessionSwitcherQuery, true); changed {
 			o.SessionSwitcherSelected = 0
 			o.SessionSwitcherScroll = 0
 		}

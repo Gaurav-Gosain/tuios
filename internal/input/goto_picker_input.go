@@ -1,8 +1,6 @@
 package input
 
 import (
-	"unicode/utf8"
-
 	tea "charm.land/bubbletea/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/app"
 )
@@ -26,20 +24,10 @@ func handleGotoPickerInput(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		o.CloseGotoPicker()
 	case "enter":
 		o.GotoPickerActivate()
-	case "backspace":
-		if q := o.GotoPickerQuery(); q != "" {
-			_, size := utf8.DecodeLastRuneInString(q)
-			o.SetGotoPickerQuery(q[:len(q)-size])
-		}
-	case "ctrl+u":
-		o.SetGotoPickerQuery("")
 	default:
-		text := msg.Text
-		if keyStr == "space" {
-			text = " "
-		}
-		if text != "" {
-			o.SetGotoPickerQuery(o.GotoPickerQuery() + text)
+		q := o.GotoPickerQuery()
+		if changed, _ := editFilterQuery(msg, &q, true); changed {
+			o.SetGotoPickerQuery(q)
 		}
 	}
 	return o, nil

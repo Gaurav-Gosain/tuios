@@ -39,17 +39,10 @@ func HandleScrollbackBrowserKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cm
 		case "enter":
 			browser.SearchActive = false
 			return o, nil
-		case "backspace":
-			if len(browser.SearchQuery) > 0 {
-				_, size := utf8.DecodeLastRuneInString(browser.SearchQuery)
-				browser.SetSearch(browser.SearchQuery[:len(browser.SearchQuery)-size])
-			}
-			return o, nil
 		default:
-			// Accept printable characters
-			if len(keyStr) == 1 && keyStr[0] >= 32 && keyStr[0] <= 126 {
-				browser.SetSearch(browser.SearchQuery + keyStr)
-				return o, nil
+			q := browser.SearchQuery
+			if changed, _ := editFilterQuery(msg, &q, false); changed {
+				browser.SetSearch(q)
 			}
 			return o, nil
 		}
@@ -69,7 +62,7 @@ func HandleScrollbackBrowserKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cm
 
 	// Output mode: navigate lines in right pane
 	if browser.OutputMode {
-		return handleBrowserOutputModeKey(keyStr, browser, o)
+		return handleBrowserOutputModeKey(msg, keyStr, browser, o)
 	}
 
 	// Normal mode keybindings
@@ -229,7 +222,7 @@ func OpenScrollbackBrowser(o *app.OS) {
 	o.ShowScrollbackBrowser = true
 }
 
-func handleBrowserOutputModeKey(keyStr string, browser *scrollback.Browser, o *app.OS) (*app.OS, tea.Cmd) {
+func handleBrowserOutputModeKey(msg tea.KeyPressMsg, keyStr string, browser *scrollback.Browser, o *app.OS) (*app.OS, tea.Cmd) {
 	vim := browser.Vim
 	if vim == nil {
 		browser.ExitOutputMode()
@@ -245,15 +238,8 @@ func handleBrowserOutputModeKey(keyStr string, browser *scrollback.Browser, o *a
 		case "enter":
 			vim.Mode = scrollback.VimNormal
 			vim.SearchExecute()
-		case "backspace":
-			if len(vim.SearchQuery) > 0 {
-				_, size := utf8.DecodeLastRuneInString(vim.SearchQuery)
-				vim.SearchQuery = vim.SearchQuery[:len(vim.SearchQuery)-size]
-			}
 		default:
-			if len(keyStr) == 1 && keyStr[0] >= 32 && keyStr[0] <= 126 {
-				vim.SearchQuery += keyStr
-			}
+			editFilterQuery(msg, &vim.SearchQuery, false)
 		}
 		vim.EnsureVisible()
 		return o, nil

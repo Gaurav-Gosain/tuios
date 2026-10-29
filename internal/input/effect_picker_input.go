@@ -22,17 +22,10 @@ func handleEffectPickerInput(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) 
 		o.CancelEffectPicker()
 	case "enter":
 		return o, o.EffectPickerApplySelection()
-	case "backspace":
-		return o, o.EffectPickerBackspace()
-	case "ctrl+u":
-		return o, o.EffectPickerClearQuery()
 	default:
-		if keyStr == "space" {
-			return o, o.EffectPickerType(" ")
-		} else if msg.Text != "" {
-			return o, o.EffectPickerType(msg.Text)
-		} else if len(keyStr) == 1 && keyStr[0] >= 32 && keyStr[0] <= 126 {
-			return o, o.EffectPickerType(keyStr)
+		q := o.EffectPickerQuery
+		if changed, _ := editFilterQuery(msg, &q, true); changed {
+			return o, o.EffectPickerSetQuery(q)
 		}
 	}
 	return o, nil

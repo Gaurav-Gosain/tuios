@@ -8,6 +8,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
+	"github.com/Gaurav-Gosain/tuios/internal/textedit"
 	"github.com/Gaurav-Gosain/tuios/pkg/fuzzy"
 )
 
@@ -385,6 +386,19 @@ func (m *OS) PathPickerBackspace() tea.Cmd {
 		return nil
 	}
 	return m.pathPickerUp()
+}
+
+// PathPickerDeleteWord drops the last word of the query, by the rule of
+// DropLastWord. On an empty query it does nothing: backspace there goes up a
+// folder, and a word key has no folder to take back.
+func (m *OS) PathPickerDeleteWord() tea.Cmd {
+	p := m.pathPicker
+	if p == nil || p.query == "" {
+		return nil
+	}
+	p.query = textedit.DropLastWord(p.query)
+	p.refilter()
+	return nil
 }
 
 // PathPickerTab walks into the folder under the cursor. On a file it completes

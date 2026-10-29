@@ -10,6 +10,7 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/app"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
+	"github.com/Gaurav-Gosain/tuios/internal/textedit"
 )
 
 // HandleCopyModeKey is the main dispatcher for copy mode input
@@ -421,6 +422,17 @@ func handleSearchInput(msg tea.KeyPressMsg, cm *terminal.CopyMode, window *termi
 	key := msg.Key()
 
 	searchPrefix := searchPrompt(cm.SearchBackward)
+
+	// The word chords come first: Option+Backspace has the code of backspace.
+	if textedit.IsWordDeleteKey(msg.String()) {
+		if cm.SearchQuery != "" {
+			cm.SearchQuery = textedit.DropLastWord(cm.SearchQuery)
+			executeSearch(cm, window)
+		}
+		fx.ShowNotification(searchPrefix+cm.SearchQuery, "info", 0)
+		fx.InvalidateCache()
+		return
+	}
 
 	switch key.Code {
 	case tea.KeyEnter, tea.KeyKpEnter:

@@ -14,6 +14,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/listnav"
+	"github.com/Gaurav-Gosain/tuios/internal/textedit"
 )
 
 // # File actions on the rail
@@ -608,6 +609,16 @@ func (m *OS) FilePromptBackspace() {
 	}
 	r := []rune(m.filePrompt.Input)
 	m.filePrompt.Input = string(r[:len(r)-1])
+	m.filePrompt.Err = ""
+}
+
+// FilePromptDeleteWord drops the last word of the field, by the rule of
+// DropLastWord.
+func (m *OS) FilePromptDeleteWord() {
+	if m.filePrompt.Input == "" {
+		return
+	}
+	m.filePrompt.Input = textedit.DropLastWord(m.filePrompt.Input)
 	m.filePrompt.Err = ""
 }
 

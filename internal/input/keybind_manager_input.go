@@ -1,8 +1,6 @@
 package input
 
 import (
-	"unicode/utf8"
-
 	tea "charm.land/bubbletea/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/app"
 )
@@ -100,18 +98,10 @@ func handleKeybindFilterInput(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd)
 		o.KeybindStepTab(-1)
 	case "right":
 		o.KeybindStepTab(1)
-	case "backspace":
-		if q := o.KeybindQuery(); q != "" {
-			_, size := utf8.DecodeLastRuneInString(q)
-			o.KeybindSetQuery(q[:len(q)-size])
-		}
-	case "ctrl+u":
-		o.KeybindSetQuery("")
 	default:
-		if keyStr == "space" {
-			o.KeybindSetQuery(o.KeybindQuery() + " ")
-		} else if msg.Text != "" {
-			o.KeybindSetQuery(o.KeybindQuery() + msg.Text)
+		q := o.KeybindQuery()
+		if changed, _ := editFilterQuery(msg, &q, true); changed {
+			o.KeybindSetQuery(q)
 		}
 	}
 	return o, nil

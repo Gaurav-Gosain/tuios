@@ -1,8 +1,6 @@
 package input
 
 import (
-	"unicode/utf8"
-
 	tea "charm.land/bubbletea/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/app"
 )
@@ -47,20 +45,10 @@ func handleNavigatorInput(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 			o.NavigatorActivateSelected()
 			// A session on another machine opens off the Update goroutine.
 			return o, o.TakeSidebarCmd()
-		case "backspace":
-			if q := o.NavigatorQuery(); q != "" {
-				_, size := utf8.DecodeLastRuneInString(q)
-				o.NavigatorSetQuery(q[:len(q)-size])
-			}
-		case "ctrl+u":
-			o.NavigatorSetQuery("")
 		default:
-			text := msg.Text
-			if key == "space" {
-				text = " "
-			}
-			if text != "" {
-				o.NavigatorSetQuery(o.NavigatorQuery() + text)
+			q := o.NavigatorQuery()
+			if changed, _ := editFilterQuery(msg, &q, true); changed {
+				o.NavigatorSetQuery(q)
 			}
 		}
 		return o, nil

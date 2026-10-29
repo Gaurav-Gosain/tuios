@@ -3,6 +3,7 @@ package input
 import (
 	tea "charm.land/bubbletea/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/app"
+	"github.com/Gaurav-Gosain/tuios/internal/textedit"
 )
 
 // handleOpenPathPicker is the pick_path action: alt+; in terminal mode, and
@@ -28,6 +29,9 @@ func handlePathPickerKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		return o, nil
 	}
 	key := commandKey(msg)
+	if textedit.IsWordDeleteKey(key) {
+		return o, o.PathPickerDeleteWord()
+	}
 	switch key {
 	case "esc", "ctrl+c", "ctrl+g":
 		o.ClosePathPicker()

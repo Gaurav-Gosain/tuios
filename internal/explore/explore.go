@@ -21,6 +21,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
+	"github.com/Gaurav-Gosain/tuios/internal/textedit"
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
 	"github.com/charmbracelet/x/ansi"
 )
@@ -317,6 +318,13 @@ func (m *model) key(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	s := k.String()
 	switch m.focus {
 	case focusSearch:
+		if textedit.IsWordDeleteKey(s) {
+			if m.query != "" {
+				m.query = textedit.DropLastWord(m.query)
+				m.refilter()
+			}
+			return m, nil
+		}
 		switch s {
 		case "esc":
 			m.focus = focusList
@@ -344,6 +352,10 @@ func (m *model) key(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 	case focusEdit:
+		if textedit.IsWordDeleteKey(s) {
+			m.input = textedit.DropLastWord(m.input)
+			return m, nil
+		}
 		switch s {
 		case "esc":
 			m.focus, m.status = focusList, "Nothing was changed."

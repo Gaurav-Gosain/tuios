@@ -2,16 +2,19 @@ package input
 
 import (
 	tea "charm.land/bubbletea/v2"
+
+	"github.com/Gaurav-Gosain/tuios/internal/textedit"
 )
 
 // promptTextKeys is what a rail text prompt does with the keys every text field
-// shares: backspace, ctrl+u, space and typed text. Each prompt handles its own
-// esc, enter and any keys of its own first, then hands the rest here, so the
-// file dialog and the worktree dialog edit text the same way.
+// shares: backspace, the word chords, ctrl+u, space and typed text. Each prompt
+// handles its own esc, enter and any keys of its own first, then hands the rest
+// here, so the file dialog and the worktree dialog edit text the same way.
 type promptTextKeys struct {
-	Backspace func()
-	Clear     func()
-	Type      func(string)
+	Backspace  func()
+	DeleteWord func()
+	Clear      func()
+	Type       func(string)
 }
 
 // handle edits the field for msg. Typed text is the terminal's composed text
@@ -22,6 +25,11 @@ func (p promptTextKeys) handle(msg tea.KeyPressMsg) {
 	switch {
 	case key == "backspace":
 		p.Backspace()
+	case textedit.IsWordDeleteKey(key):
+		// The word chords of a shell, the rename dialog and the filtering
+		// overlays. Option+Backspace arrives as alt+backspace when the
+		// terminal sends Option as Alt.
+		p.DeleteWord()
 	case key == "ctrl+u":
 		p.Clear()
 	case key == "space":

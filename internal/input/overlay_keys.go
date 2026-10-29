@@ -2,7 +2,6 @@ package input
 
 import (
 	"time"
-	"unicode/utf8"
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/app"
@@ -127,24 +126,10 @@ func handleHelpOverlayKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	}
 
 	if o.HelpSearchMode {
-		if key == "backspace" {
-			if len(o.HelpSearchQuery) > 0 {
-				_, size := utf8.DecodeLastRuneInString(o.HelpSearchQuery)
-				o.HelpSearchQuery = o.HelpSearchQuery[:len(o.HelpSearchQuery)-size]
+		if changed, consumed := editFilterQuery(msg, &o.HelpSearchQuery, true); consumed {
+			if changed {
 				o.HelpScrollOffset = 0 // Reset scroll when query changes
 			}
-			return o, nil
-		}
-		if key == "ctrl+u" {
-			o.HelpSearchQuery = ""
-			o.HelpScrollOffset = 0
-			return o, nil
-		}
-
-		// Single printable characters extend the query.
-		if len(key) == 1 && key[0] >= 32 && key[0] <= 126 {
-			o.HelpSearchQuery += key
-			o.HelpScrollOffset = 0 // Reset scroll when query changes
 			return o, nil
 		}
 	}

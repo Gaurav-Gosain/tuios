@@ -12,6 +12,7 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/review"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
+	"github.com/Gaurav-Gosain/tuios/internal/textedit"
 	"github.com/charmbracelet/x/ansi"
 )
 
@@ -1145,6 +1146,19 @@ func (m *OS) ReviewEditorBackspace() {
 	}
 	rs := []rune(ed.draft)
 	ed.draft = string(rs[:len(rs)-1])
+}
+
+// ReviewEditorDeleteWord removes the last word of the editor's text, by the
+// rule of DropLastWord.
+func (m *OS) ReviewEditorDeleteWord() {
+	ed := m.review.editor
+	if ed == nil || ed.draft == "" {
+		return
+	}
+	if m.ProcessingRemoteKeys {
+		ed.automated = true
+	}
+	ed.draft = textedit.DropLastWord(ed.draft)
 }
 
 // ReviewEditorCancel drops what the editor holds.
