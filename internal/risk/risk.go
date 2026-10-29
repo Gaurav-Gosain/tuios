@@ -336,7 +336,7 @@ func outside(path string, call Call) bool {
 		path = run + string(filepath.Separator) + path
 	}
 	if shown, cut := shownPart(path, call); cut {
-		return shownOutside(shown, root)
+		return shownOutside(shown, root, call.resolve)
 	}
 	path = filepath.Clean(path)
 	if slices.Contains(harmlessDevices, path) || strings.HasPrefix(path, "/dev/fd/") {
@@ -431,8 +431,11 @@ func shownPart(path string, call Call) (shown string, cut bool) {
 // next name on the way. An unfinished name that may still become ".." can
 // climb anywhere, so it is never outside for sure.
 //
+// The finished directories are resolved, as root is, so a start written
+// through a link to the root is read as the root.
+//
 // With no root ("") every absolute start is outside.
-func shownOutside(shown, root string) bool {
+func shownOutside(shown, root string, resolve func(string) string) bool {
 	if !strings.HasPrefix(shown, "/") {
 		return false
 	}
@@ -444,6 +447,7 @@ func shownOutside(shown, root string) bool {
 	if name == "" || name == "." || name == ".." {
 		return false
 	}
+	dir = resolve(dir)
 	sep := string(filepath.Separator)
 	switch {
 	case dir == root || strings.HasPrefix(dir, root+sep):

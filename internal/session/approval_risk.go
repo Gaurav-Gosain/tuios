@@ -182,7 +182,7 @@ func planLineCount(plan string) int {
 // every state change. It takes no session lock: the event sink calls it
 // with the state lock held, which is why it does not call windowFolder.
 func approvalRoot(managedWorktree, startDir, agentDir string) string {
-	for _, dir := range []string{managedWorktree, startDir, agentDir} {
+	for _, dir := range []string{resolveAbove(managedWorktree), startDir, agentDir} {
 		if dir = usableFolder(dir); dir != "" {
 			return dir
 		}
@@ -194,8 +194,9 @@ func approvalRoot(managedWorktree, startDir, agentDir string) string {
 // It is the check windowFolder makes for the files grant: the folder as it
 // was recorded, resolved, still a folder that resolves to itself, narrower
 // than the home folder (tooWideFolder) and owned by the daemon's user
-// (ownedByDaemonUser). A managed worktree path is recorded unresolved, so it
-// is cleaned and taken as it is; a link there fails the check.
+// (ownedByDaemonUser). A managed worktree path is recorded unresolved, so the
+// folders above it are resolved first (resolveAbove); a link at the worktree
+// itself fails the check.
 func usableFolder(dir string) string {
 	if dir == "" {
 		return ""
@@ -208,6 +209,18 @@ func usableFolder(dir string) string {
 		return ""
 	}
 	return dir
+}
+
+// resolveAbove resolves the folders above p and keeps its last element as it
+// is. tuios makes a managed worktree under its data folder, which may be
+// reached through a link (on macOS the temp folder is under /var, a link to
+// /private/var), while the worktree itself is a folder tuios made.
+func resolveAbove(p string) string {
+	if p == "" {
+		return ""
+	}
+	p = filepath.Clean(p)
+	return filepath.Join(realPath(filepath.Dir(p)), filepath.Base(p))
 }
 
 // managedWorktreePath is the session's worktree path when tuios made it,

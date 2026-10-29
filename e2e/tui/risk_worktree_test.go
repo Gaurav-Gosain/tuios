@@ -16,6 +16,7 @@ import (
 // riskItem is one Inbox item as list-attention --json prints it.
 type riskItem struct {
 	Session string   `json:"session"`
+	Window  string   `json:"window"`
 	Kind    string   `json:"kind"`
 	Summary string   `json:"summary"`
 	Risk    []string `json:"risk"`
@@ -26,6 +27,12 @@ type riskItem struct {
 // line), so the hook reports needs_input and returns.
 func fireEditHook(t *testing.T, base, session, path string) {
 	t.Helper()
+	fireEditHookIn(t, base, session, "0", path)
+}
+
+// fireEditHookIn is fireEditHook for the window of session that window names.
+func fireEditHookIn(t *testing.T, base, session, window, path string) {
+	t.Helper()
 	payload, err := json.Marshal(map[string]any{
 		"hook_event_name": "PermissionRequest",
 		"session_id":      "e2e-" + session,
@@ -35,7 +42,7 @@ func fireEditHook(t *testing.T, base, session, path string) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	cmd := exec.Command(tuiosBin, "agent-hook", "claude-code", "--session", session, "--window", "0")
+	cmd := exec.Command(tuiosBin, "agent-hook", "claude-code", "--session", session, "--window", window)
 	cmd.Dir = workDirIn(t, base)
 	cmd.Env = append(os.Environ(), "SHELL=/bin/sh")
 	for _, key := range xdgKeys {
@@ -50,6 +57,13 @@ func fireEditHook(t *testing.T, base, session, path string) {
 // waitRiskItem polls list-attention until session has an approval item.
 func waitRiskItem(t *testing.T, base, session string) riskItem {
 	t.Helper()
+	return waitRiskItemIn(t, base, session, "")
+}
+
+// waitRiskItemIn is waitRiskItem for one window, by id, or any window of
+// session when window is "".
+func waitRiskItemIn(t *testing.T, base, session, window string) riskItem {
+	t.Helper()
 	var out string
 	deadline := time.Now().Add(uiTimeout)
 	for time.Now().Before(deadline) {
@@ -59,7 +73,7 @@ func waitRiskItem(t *testing.T, base, session string) riskItem {
 		}
 		if json.Unmarshal([]byte(out), &list) == nil {
 			for _, it := range list.Items {
-				if it.Session == session && it.Kind == "approval" {
+				if it.Session == session && it.Kind == "approval" && (window == "" || it.Window == window) {
 					return it
 				}
 			}
@@ -95,6 +109,12 @@ func shownPrefix(summary string) string {
 // The name is short on purpose: t.TempDir() carries it, and with its random
 // suffix a name of 22 characters or more is a run the redaction replaces,
 // which TestRiskInWorktreeRedacted covers.
+//
+// riskWorktree reaches the worktree through a link, and the line shows the
+// path as the call wrote it, through the link. Negative control: with the
+// shown directories no longer resolved in shownOutside (internal/risk), the
+// rule compares them with the resolved root, and both panes are marked
+// outside the worktree (#1316).
 func TestRiskInWorktree(t *testing.T) {
 	base, root, panes := riskWorktree(t)
 	for _, name := range []string{"out-short", "out-long", "out-key"} {
@@ -146,6 +166,37 @@ func TestRiskInWorktreeRedacted(t *testing.T) {
 	saveRiskItems(t, base, "risk-in-worktree-redacted-items.json")
 }
 
+// TestRiskLinkedRoot is the Edit of a file inside a worktree tuios made, from
+// a pane of the worktree's session that starts outside it, as
+// `tuios new-window --cwd` makes one. The worktree tuios made is the first
+// root a pane is held to, so the Edit is inside. riskWorktree reaches the
+// worktree through a link, as the temp folder is on macOS, and a worktree
+// recorded through a link got no root (#1316): the pane fell back to the
+// folder it started in, and the Edit read as outside the worktree.
+//
+// The name is short, as TestRiskInWorktree's is, so the line shows the
+// folder whole.
+//
+// Negative control: with resolveAbove taken out of approvalRoot, the Edit is
+// marked outside the worktree.
+func TestRiskLinkedRoot(t *testing.T) {
+	base, root, panes := riskWorktree(t)
+	session := panes[0]
+	out, err := tuiosCLI(t, base, "new-window", "-s", session, "--cwd", t.TempDir(), "--json")
+	if err != nil {
+		t.Fatalf("new-window: %v\n%s", err, out)
+	}
+	var win struct {
+		ID string `json:"window_id"`
+	}
+	if err := json.Unmarshal([]byte(out), &win); err != nil || win.ID == "" {
+		t.Fatalf("new-window printed no window id: %v\n%s", err, out)
+	}
+	fireEditHookIn(t, base, session, win.ID, filepath.Join(root, "demo", "greet.py"))
+	checkInsideMark(t, root, session, waitRiskItemIn(t, base, session, win.ID), false)
+	saveRiskItems(t, base, "risk-root-through-a-link-items.json")
+}
+
 // riskWorktree starts a daemon with approvals on for claude-code, makes a
 // worktree on feat/kinder-greeting where tuios puts it by default (under
 // XDG_DATA_HOME), opens a session in it, and reports an Edit of
@@ -153,12 +204,12 @@ func TestRiskInWorktreeRedacted(t *testing.T) {
 // worktree and the panes' sessions.
 func riskWorktree(t *testing.T) (base, root string, panes []string) {
 	t.Helper()
-	// Resolved, as the risk root is: on macOS the temp folder is under /var,
-	// a link to /private/var, and the daemon gives a worktree recorded
-	// through a link no root.
-	tmp := t.TempDir()
-	if resolved, err := filepath.EvalSymlinks(tmp); err == nil {
-		tmp = resolved
+	// Reached through a link, as the temp folder is on macOS (/var is a link
+	// to /private/var): tuios records the worktree through it, and the
+	// worktree must still be the risk root (#1316).
+	tmp := filepath.Join(t.TempDir(), "link")
+	if err := os.Symlink(t.TempDir(), tmp); err != nil {
+		t.Fatalf("link the isolation root: %v", err)
 	}
 	base = riskBase(t, tmp)
 	killDaemon(t, base)
@@ -233,23 +284,28 @@ func riskBase(t *testing.T, tmp string) string {
 func checkInsideMarks(t *testing.T, base, root string, panes []string, redacted bool) {
 	t.Helper()
 	for _, session := range panes {
-		it := waitRiskItem(t, base, session)
-		t.Logf("%s: %q risk %v", session, it.Summary, it.Risk)
-		// The precondition: the line does not show the whole path, and what it
-		// shows stops inside the worktree's own path.
-		shown := shownPrefix(it.Summary)
-		if shown == strings.TrimPrefix(it.Summary, "approve Edit: ") || !strings.HasPrefix(root, shown) {
-			t.Fatalf("precondition: %s's line %q does not stop inside %s", session, it.Summary, root)
-		}
-		if strings.Contains(it.Summary, "***") != redacted {
-			t.Fatalf("precondition: %s's line %q, want redacted %v", session, it.Summary, redacted)
-		}
-		if slices.Contains(it.Risk, "outside the worktree") {
-			t.Errorf("ASSERTION: %s marks an Edit inside its worktree outside the worktree: %v", session, it.Risk)
-		}
-		if !slices.Contains(it.Risk, "cut short") {
-			t.Errorf("%s lost the cut short mark: %v", session, it.Risk)
-		}
+		checkInsideMark(t, root, session, waitRiskItem(t, base, session), redacted)
+	}
+}
+
+// checkInsideMark is checkInsideMarks for one item.
+func checkInsideMark(t *testing.T, root, session string, it riskItem, redacted bool) {
+	t.Helper()
+	t.Logf("%s: %q risk %v", session, it.Summary, it.Risk)
+	// The precondition: the line does not show the whole path, and what it
+	// shows stops inside the worktree's own path.
+	shown := shownPrefix(it.Summary)
+	if shown == strings.TrimPrefix(it.Summary, "approve Edit: ") || !strings.HasPrefix(root, shown) {
+		t.Fatalf("precondition: %s's line %q does not stop inside %s", session, it.Summary, root)
+	}
+	if strings.Contains(it.Summary, "***") != redacted {
+		t.Fatalf("precondition: %s's line %q, want redacted %v", session, it.Summary, redacted)
+	}
+	if slices.Contains(it.Risk, "outside the worktree") {
+		t.Errorf("ASSERTION: %s marks an Edit inside its worktree outside the worktree: %v", session, it.Risk)
+	}
+	if !slices.Contains(it.Risk, "cut short") {
+		t.Errorf("%s lost the cut short mark: %v", session, it.Risk)
 	}
 }
 

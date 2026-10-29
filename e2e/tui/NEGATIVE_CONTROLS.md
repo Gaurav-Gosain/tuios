@@ -10698,3 +10698,12 @@ Run on 2026-10-29 on Linux, each control in its own binary.
 | `CockpitToggleGroup` does not call `saveSidebarState` | `fold`: "Working was not folded in a new client" | **caught** |
 | `cursorable` is `selectable` alone, so a folded heading takes no cursor | `fold`: "F did not open Working"; `fold_working`: the cursor never reaches the heading | **caught** |
 | None (the branch) | Both subtests pass | **guard** |
+## The risk root of a worktree reached through a link (#1316)
+
+`riskWorktree` reaches its isolation root through a symlink on every OS, as the temp folder is on macOS (`/var` is a link to `/private/var`), so tuios records the worktree through it. `TestRiskInWorktree` holds the clipped Inbox line of an Edit inside the worktree to "not outside", and `TestRiskLinkedRoot` does the same from a window of the worktree's session that starts outside the worktree, which only the managed worktree root can hold. Each control was built into its own binary. Run on 2026-10-30 on macOS arm64.
+
+| Control: what was cut | Where it fails | Verdict |
+| --- | --- | --- |
+| The build before this change (upstream main at `92258aafe`) | `TestRiskInWorktree`: "ASSERTION: repo-feat-kinder-greeting marks an Edit inside its worktree outside the worktree: [outside the worktree cut short]", the same for `demo`; `TestRiskLinkedRoot`: the same assertion | **caught** |
+| `resolveAbove` in `approvalRoot` (`internal/session/approval_risk.go`): the managed worktree is taken as recorded, through the link | `TestRiskLinkedRoot`: "ASSERTION: repo-feat-kinder-greeting marks an Edit inside its worktree outside the worktree". `TestRiskInWorktree` passes, since its panes start in the worktree and the start folder is resolved when recorded | **caught** |
+| The `resolve` of the shown directories in `shownOutside` (`internal/risk/risk.go`) | `TestRiskInWorktree`: both panes' Edits marked "outside the worktree" | **caught** |
