@@ -11,6 +11,7 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/app"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/listnav"
+	"github.com/Gaurav-Gosain/tuios/internal/textedit"
 	"github.com/charmbracelet/x/ansi"
 )
 
@@ -783,6 +784,12 @@ func routeKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 // every kind of target it can point at. The editor is deliberately the same one
 // in all three cases.
 func handleRenameMode(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+	// The word chords of a shell and of the composer. Option+Backspace reaches
+	// here as alt+backspace when the terminal sends Option as Alt.
+	if textedit.IsWordDeleteKey(msg.String()) {
+		o.RenameDeleteWord()
+		return o, nil
+	}
 	switch msg.String() {
 	case "enter":
 		// CommitRename is the one rename. A window name is applied here; a
@@ -795,11 +802,6 @@ func handleRenameMode(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		return o, nil
 	case "backspace":
 		o.RenameBackspace()
-		return o, nil
-	case "alt+backspace", "ctrl+w", "ctrl+backspace":
-		// The word chords of a shell and of the composer. Option+Backspace
-		// reaches here as alt+backspace when the terminal sends Option as Alt.
-		o.RenameDeleteWord()
 		return o, nil
 	case "ctrl+u":
 		o.RenameClear()
