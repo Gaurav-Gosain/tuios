@@ -478,7 +478,7 @@ func (d *Daemon) verbNewWindow(cs *connState, params json.RawMessage) (any, *ver
 			"pty_id":    win.PTYID,
 			"exit_code": code,
 		}
-		sig := exitStatus.signal
+		sig := exitStatus.exitSignal()
 		if pty != nil {
 			sig = pty.ExitSignal()
 		}

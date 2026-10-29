@@ -94,9 +94,20 @@ type popupExit struct {
 	once sync.Once
 	done chan struct{}
 	code int
-	// signal is the signal that ended the process, 0 for none. Read only
-	// after done is closed.
+	// signal is the signal that ended the process, 0 for none. Written
+	// before done is closed, so read it only through exitSignal.
 	signal int
+}
+
+// exitSignal returns the signal that ended the process, or 0 when none was
+// kept yet. The receive from done orders the read after the write.
+func (e *popupExit) exitSignal() int {
+	select {
+	case <-e.done:
+		return e.signal
+	default:
+		return 0
+	}
 }
 
 func newPopupExit() *popupExit {
