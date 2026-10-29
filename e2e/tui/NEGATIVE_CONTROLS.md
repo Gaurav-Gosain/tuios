@@ -10541,3 +10541,21 @@ The sh round later failed in CI, where sh is dash, and passed on the machine abo
 | Control: what was cut | Where it fails | Verdict |
 | --- | --- | --- |
 | Each clear waits for the same `CLEARED`, run with sh as dash and a `clear` on `PATH` that sleeps 0.3 s first | `sh`: "the path picker did not type printf '[%s]\n' 'back\slash.txt' in sh", with `$ 'back\slash.txt'` on screen. 3 of 3 runs with a Go 1.27.3 binary and 3 of 3 with Go 1.26.10. The test with a marker per clear passed 3 of 3 with each | **caught** |
+
+## Reports after a session alias is reused
+
+`TestHookFromPaneWhoseSessionNameIsGone/reused_alias` renames the new alpha
+to replacement instead of killing it. The hook must still reach omega, leave
+replacement's pane unchanged, and refuse the same report from outside the
+pane or from a second pane. The `gone` case retains the missing-name guard.
+
+Run on 2026-10-28 on Linux against a clean, unmodified main at 2c6958d23
+and the fixed branch.
+
+| Control | Result | Verdict |
+| --- | --- | --- |
+| Main: alias expansion precedes own-pane recovery, which accepts only missing names | `gone` passes; `reused_alias` fails: `the hook did not reach the pane after its session name became stale` | **caught** |
+| Fixed routing | Both cases pass, including the refusal and unchanged replacement-pane checks | **guard** |
+
+The combined artifact is `TestHookFromPaneWhoseSessionNameIsGone.json`
+under `TUIOS_E2E_FRAMES`.
