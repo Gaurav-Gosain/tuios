@@ -48,6 +48,40 @@ tuios lets a card go on its own when its pane closes, when the agent leaves the
 pane, and when the daemon restarts. The card's history records the reason:
 `pane closed`, `agent left` or `restart`.
 
+## Stages that move on their own
+
+tuios also moves a card when it sees the work move. A plan your agent holds for
+the person moves your cards from `todo` or `doing` to `plan`, and the person
+approving it moves them from `plan` to `doing`. That needs `[agents.approvals]`
+to hold plans for your harness and your pane to be out of view; a plan the
+person keeps planning, or answers in your pane, leaves the card where it is.
+`tuios fan verify` moves the
+fan's cards from `doing` to `verify`, and back to `doing` when the check fails
+in every attempt. A pull request on the worktree's branch moves the cards held
+there, or the fan's, to `review` when it opens and to `shipped` when it merges,
+out of `plan` too, since the pull request shows the plan went through. Closed
+without a merge, it moves them from `review` back to `doing`.
+
+Each move fires only from those stages, so a card you put somewhere else by
+hand stays there. A blocked card and a done card never move on their own.
+Done is always yours to set. The history entry is by `tuios` and names the
+reason. The person can turn this off with `[tasks] auto_stage = false`.
+
+## Hand a card to a fan or a new agent
+
+```sh
+tuios fan 3 --agent claude --task t3 'Add a retry with backoff.'
+tuios start-agent claude --name t4-worker --task t4 --prompt 'Take task t4: tuios task get t4.'
+```
+
+`fan --task` stamps the card with the fan, and with `auto_stage` on moves it
+to `doing`. No pane holds it, since the attempts work on it, and `claim --next`
+skips it while the fan lasts. `--task-session` names the card's session when
+it is not yours. `start-agent --task` claims the card for the new pane as soon
+as the pane exists. Both check the card before they make anything: it must be
+held by no pane (`fan` also takes one your own pane holds), not blocked and
+not done.
+
 ## Hear changes
 
 ```sh
@@ -57,7 +91,7 @@ tuios subscribe -s "$TUIOS_SESSION" --types task-claimed,task-finished,task-chan
 Each event carries the card's row in `task`. `task-claimed` and `task-finished`
 carry the holder's pane in `window`. `task-changed` says what happened in
 `action`: `added`, `staged`, `blocked`, `unblocked`, `released` or `removed`. A
-release tuios made on its own carries the reason in `reason`.
+release or a stage move tuios made on its own carries the reason in `reason`.
 
 `--select 'task:t1'` names the pane that holds `t1`, whatever else it holds.
 `task:*` names every pane that holds a card. `stage:verify` names every pane

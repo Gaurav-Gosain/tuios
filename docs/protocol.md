@@ -243,6 +243,17 @@ for one session, without `all_sessions`; a daemon with no task verbs answers
 `unknown_verb`. In both cases the board says the daemon is too old. A selector
 takes `stage:`.
 
+**Cards move on their own, and fan and start-agent take task.** The daemon
+moves a task card when it records a fact about the card's work, and sends the
+`task-changed` `staged` event with `reason` naming the fact (see
+[Task verbs](#task-verbs)). `fan` takes `task` and `task_session` and stamps
+the card with the fan it makes. `start-agent` takes `task` and claims the card
+for the pane it opens. Both answer with the card's row in `task`, and take
+`human_nonce` for the stamp or the claim. A daemon from before this refuses
+`task` by name with `invalid_params`, so a client can start the agent without
+it and claim after. `claim-task` with `next` skips a card a fan of another
+session works on.
+
 **list-host-sessions rows carry agents.** A remote session row gains
 `agents`, one entry per agent pane: `id`, `title`, `state`, `state_at`,
 `harness`, `message`, `kind`, `meta` and `subagents`, at most 32 a session.
@@ -7186,6 +7197,39 @@ event.
 `release-task` clears the holder and keeps the stage. `block-task` marks a card
 stuck with a reason, keeping its holder and stage, and `clear` lifts the mark.
 
+The daemon also moves a card on its own when it records a fact about the
+card's work, unless `[tasks] auto_stage` is false. Each move fires only when
+the card is in one of the move's stages, never on a blocked or done card, and
+writes a `staged` history entry with `by` `tuios` and `reason`:
+
+| Fact | Cards | From | To | `reason` |
+| --- | --- | --- | --- | --- |
+| A plan hold opens (`request-approval` with `kind` `plan`) | held by the pane | `todo`, `doing` | `plan` | `plan held for approval` |
+| The plan is approved (`reply-approval` with a decision other than `deny`) | held by the pane | `plan` | `doing` | `plan approved` |
+| `verify-fan` starts | stamped with the fan | `doing` | `verify` | `fan check started` |
+| Every attempt's check ended and none passed | stamped with the fan | `verify` | `doing` | `fan check failed in every attempt` |
+| The worktree's pull request is first seen open | held in the worktree's session, or stamped with its fan | `plan`, `doing`, `verify` | `review` | `pull request #N opened` |
+| It is seen merged | the same | `plan`, `doing`, `verify`, `review` | `shipped` | `pull request #N merged` |
+| It is seen closed without a merge | the same | `review` | `doing` | `pull request #N closed without a merge` |
+
+A plan kept planning, or a hold that ends with no answer through tuios (it
+timed out, or its caller went), leaves the card in `plan` until its pull
+request opens, which is proof enough that the plan went through. A pull request
+reaches every card held in the worktree's session, whatever pane holds it,
+and with a fan each attempt's pull request reaches the fan's cards in turn.
+
+A card is stamped with a fan when it is added in one of the fan's sessions, or
+when `fan` is called with `task`. `fan` with `task` writes the fan's `group`
+and `fan_id` onto the card and, with `[tasks] auto_stage` on, moves it from
+`todo` or `plan` to `doing` (reason `fanned out to GROUP`, by the caller). It
+leaves the card with no holder. A fan that stops partway stamps the card once
+one session exists, and says so in the refusal's `detail`.
+`claim-task` with `next` skips a card stamped with a fan of another session
+while that fan has a session. `start-agent` with `task` claims the card for
+the pane it opens, as `claim-task` would, as soon as the pane exists. Both
+check the card, and that the caller may do what `claim-task` needs, before
+they make anything: a refusal names `task` in its hint.
+
 | Verb | What it does | A pane without `admin` | Over a link | Result `type` |
 | --- | --- | --- | --- | --- |
 | `add-task` | Add a card: `title` (required, at most 200 bytes), `prompt` (at most 16 KiB), `stage` (default `todo`) | `task`, own session | `write` | `task_added` |
@@ -7287,7 +7331,7 @@ Event types:
 | `transfer-file` | One file of a copy ended. `action` and `file.state` are `done` (copied and checked), `same` (there already with the same bytes), `skipped` (there and different, left as it was), `conflict` (made there during the copy, left as it was) or `failed`. `file` has `id`, `pane`, `rel`, `state`, `sha256`, `code` and `error`. Opt-in: only a subscription whose `types` names it receives it. Not replayed on a resume. | `action`, `file` |
 | `task-claimed` | A pane took a task card. `task` is the card's row as `list-tasks` gives it, and `window` the pane that took it. See [Task verbs](#task-verbs). | `session`, `window`, `task` |
 | `task-finished` | A task card was marked done. `window` is the pane that held it, empty when none did. | `session`, `window`, `task` |
-| `task-changed` | A task card was `added`, `staged`, `blocked`, `unblocked`, `released` or `removed` (`action`). A release tuios made on its own carries `reason`: `pane closed`, `agent left` or `restart`; a block carries its reason too. `removed` carries the card's last row. | `session`, `action`, `reason`, `task` |
+| `task-changed` | A task card was `added`, `staged`, `blocked`, `unblocked`, `released` or `removed` (`action`). A release tuios made on its own carries `reason`: `pane closed`, `agent left` or `restart`; a stage move it made on its own carries the fact (see [Task verbs](#task-verbs)); a block carries its reason too. `removed` carries the card's last row. | `session`, `action`, `reason`, `task` |
 | `tml-event` | What a person did on a TML surface that its owner hears: an `emit` action in the document, or the close, which is the surface's last event. `tml` has `surface`, `name` (the emit's name, or `close`), `value` (absent when null), `reason` (on a close: `closed`, `program` or `dismissed`) and `version`. `window` is the TML window. Opt-in: only a subscription whose `types` names it receives it, and a `tml-open` with `events` gets the events of its own surface. | `tml` |
 
 ### What fires when

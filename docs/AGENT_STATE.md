@@ -2668,7 +2668,12 @@ history; on a held card the holder's tabs follow it. `enter` goes to the
 holder's pane. `t` takes the card for the pane behind the agents view, when
 the card is in that pane's session. `n` opens the New agent sheet with the
 card's prompt as the task, or its title until the prompt has been read; a
-Start in this folder claims the card for the new pane. The search narrows
+Start in this folder claims the card for the new pane as it opens, and a
+Start in new worktrees stamps the card with the fan, so its checks and pull
+requests move it. Cards also move on their own: a plan held for you and
+approved, a fan check, a pull request
+([CLI_REFERENCE.md](CLI_REFERENCE.md#tuios-task) has the table), unless
+`[tasks] auto_stage` is false. The search narrows
 the cards with their holders, and with no selector it also matches a card's
 id and title. `[tasks] stages` in the config picks the stages the board
 shows ([CONFIGURATION.md](CONFIGURATION.md#the-task-board)). The board

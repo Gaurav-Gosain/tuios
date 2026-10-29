@@ -9841,6 +9841,44 @@ replacement, built and put back before the next.
 The frames are `task-board-200x55`, `task-board-spawn-200x55`,
 `task-board-70x16` and `task-board-stages-200x55`, as text and PNG.
 
+## Cards that move on their own (#1093)
+
+`tasks_auto_test.go` drives the four sources of automatic moves through the
+binary. `TestTaskFollowsAPlanHoldAndItsAnswer` holds a real Claude Code plan
+hook on a pane holding three cards: the card in doing must reach plan, the
+one put in review by hand and the blocked one must stay, the plan kept
+planning from the Inbox must leave it there, and a second plan approved from
+the Inbox must bring it back to doing. `TestTaskFollowsItsFan` runs
+`tuios fan --task t1` from another session: `claim --next` must take t2, a
+check failing in both attempts must move t1 to verify and back to doing, and
+a check passing in one must leave it in verify.
+`TestTaskFollowsItsPullRequest` moves a held card parked in plan to review
+on a pull request found open, to shipped when the poll reads it merged, and
+from review to doing when it reads closed, while a blocked card and one put in
+todo by hand held in the same session stay put, and a second card parked in
+plan goes to shipped with the merge.
+`TestTaskAutoStageCanBeTurnedOff` keeps a card in doing, with no entry by
+tuios, under `[tasks] auto_stage = false` while its holder's plan is held and
+approved, and checks `start-agent --task` claims for the new pane. Run on
+2026-10-29 on macOS on upstream main at `da0fc7b1d`, the plan row on
+2026-10-30 at `cac3ce8fd`. Each control is a text replacement, built and put
+back.
+
+| Control: what was changed | Where it fails | Verdict |
+| --- | --- | --- |
+| The plan hold moves no card (the `autoStage` call in `verbRequestApproval`, `approvals.go`, cut) | "t1 never read [stage plan, plan held for approval]" | **caught** |
+| The approved plan moves no card (`notePlanAnswered` returns at once) | "t1 never read [stage doing, plan approved]" | **caught** |
+| `applies` ignores a block | plan test: "t3 left doing, though it is blocked"; PR test: "t2 left doing, though it is blocked" | **caught** |
+| `nextFreeTask` does not skip a card a live fan works on | "claim --next took t1 add a retry, want t2" | **caught** |
+| `noteFanVerifyEnded` does nothing | "t1 never read [stage doing, fan check started, fan check failed in every attempt]" | **caught** |
+| `notePR` moves no card | "t1 never read [stage review, pull request #7 opened]" | **caught** |
+| `movePROpened` and `movePRMerged` do not start from `plan` (the code before the second review) | "t1 never read [stage review, pull request #7 opened]", with t1 read in plan | **caught** |
+| `DaemonConfigFromUser` does not read `[tasks] auto_stage` | "t1 moved on its own, though auto_stage is off" | **caught** |
+
+The New agent sheet passing `task` to start-agent and fan
+(`cockpit_spawn.go`) has no e2e of its own: `TestTaskBoardGroupsCardsByStage`
+opens the sheet and does not start the agent.
+
 ## Border prominence by mode and on light grounds (discussion #850)
 
 `TestFocusedBorderStandsOutOnTheHostGround` runs on Nord, Catppuccin Mocha

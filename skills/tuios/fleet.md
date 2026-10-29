@@ -101,8 +101,10 @@ it is most often a first-run choice only the person can answer), `sent`,
 `not_sent` or `stalled`. A stalled prompt may sit in the agent's input box: look
 before sending it again. `--wait` blocks until every prompt is sent or given up.
 
-`--agent` takes several agents, comma separated, cycled across the sessions, and
-`--prompt` once per session gives each its own prompt:
+`--task t3` stamps a task card with the fan, so its checks and pull requests
+move the card; `tuios --skill tasks` has the stages. `--agent` takes several
+agents, comma separated, cycled across the sessions, and `--prompt` once per
+session gives each its own prompt:
 
 ```sh
 tuios fan 3 --agent 'claude,codex --model o5,gemini' 'Add a retry with backoff.'

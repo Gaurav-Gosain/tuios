@@ -961,6 +961,8 @@ tuios fan verdict [<host>:]<session> --pick <session> --summary <text> [--reason
 - `--grants <grant>[,<grant>...]`: What every agent may do through tuios, as for `start-agent`
 - `--name <stem>`: The fan's name, which its branches start with. A name that is already a fan in the repository is refused. Omitted, the name comes from the prompt and moves on to a free one
 - `--join <session>`: Add the attempts to the fan of this session, on purpose, instead of starting a new fan. Your pane must reach that session
+- `--task <id>`: The task card the fan works on. It gets the fan's name and holds no pane, so `tuios task claim --next` skips it while the fan lasts. With `[tasks] auto_stage` on it moves to `doing`, and `fan verify` and the attempts' pull requests then move it (see [`tuios task`](#tuios-task)). Needs what `tuios task claim` needs, and the card must be held by no pane but yours, not blocked and not done. Not with `--host`: the card is on this machine
+- `--task-session <name>`: The session of `--task` (default: this pane's session, else the most recently active)
 - `--repo <dir>`, `--base <ref>`, `--wait`, `--json`
 
 **Examples:**
@@ -1071,8 +1073,13 @@ is ready for a prompt.
 
 **Usage:**
 ```bash
-tuios start-agent <agent> [-s [<host>:]<session>] [--name <name>] [--cwd <dir> | --repo <dir> | --clone] [--workspace <n>] [--focus] [--prompt <prompt>] [--ready-timeout <ms>] [--protocol acp|codex] [--env NAME[=VALUE]]... [--grants <grant>[,<grant>...]] [--json] [-- <args>...]
+tuios start-agent <agent> [-s [<host>:]<session>] [--name <name>] [--cwd <dir> | --repo <dir> | --clone] [--workspace <n>] [--focus] [--prompt <prompt>] [--ready-timeout <ms>] [--protocol acp|codex] [--env NAME[=VALUE]]... [--grants <grant>[,<grant>...]] [--task <id>] [--json] [-- <args>...]
 ```
+
+`--task` claims a task card of the session for the new pane as soon as the
+pane exists. The card must be held by no pane, not blocked and not done, and
+the call needs what `tuios task claim` needs. It is checked before anything
+starts, and the session must exist already.
 
 `--grants` says what the agent may do through tuios: `read`, `write`, `fan`,
 `respond`, `admin`, or `none` (see [`tuios pane-grants`](#tuios-pane-grants)).
@@ -2582,6 +2589,32 @@ The stages are `todo`, `plan`, `doing`, `verify`, `review`, `shipped` and
 `done`. `claim` moves a card in `todo` or `plan` to `doing`, and `done` moves
 it to `done` and lets it go.
 
+tuios also moves a card when it records a fact about the card's work, unless
+`[tasks] auto_stage = false` ([CONFIGURATION.md](CONFIGURATION.md#the-task-board)):
+
+| Fact | From | To |
+| --- | --- | --- |
+| A plan held for approval on the pane that holds the card | `todo`, `doing` | `plan` |
+| The plan approved from the Inbox | `plan` | `doing` |
+| `tuios fan verify` starting in the card's fan (`fan --task`) | `doing` | `verify` |
+| Every attempt's check ended and none passed | `verify` | `doing` |
+| A pull request on the branch opened (cards held in the worktree's session, or in its fan) | `plan`, `doing`, `verify` | `review` |
+| The pull request merged | `plan`, `doing`, `verify`, `review` | `shipped` |
+| The pull request closed without a merge | `review` | `doing` |
+
+A move fires only from its stages, so a card put in another stage by hand
+stays there. A blocked card and a done card never move on their own, and done
+is always set by hand. The history entry is by `tuios` and names the fact.
+
+A plan is held only when `[agents.approvals]` holds plans for the harness and
+the pane is not in front of you, so a plan you answer in the pane moves no
+card. A plan kept planning, or a hold that times out, leaves the card in
+`plan` until its pull request opens: the pull request is proof enough that the
+plan went through. A pull request moves every card held in the worktree's session, so a
+second pane there holding an unrelated card moves with the branch. With a fan,
+each attempt's pull request reaches the card: one closing without a merge
+moves it back to `doing` while another may still be open.
+
 **Usage:**
 ```bash
 tuios task add [-p PROMPT] [--stage STAGE] TITLE... [flags]
@@ -2601,7 +2634,7 @@ tuios task rm ID [flags]
 - `--stage <stage>` (`add`, `ls`): The stage it starts in; for `ls`, only the cards in it
 - `--open` (`ls`): Leave out the cards that are done
 - `--all-sessions` (`ls`): List the cards of every session on this machine, with a SESSION column first. Takes no `--session`
-- `--next` (`claim`): Take the oldest card no pane holds that is not blocked or done
+- `--next` (`claim`): Take the oldest card no pane holds that is not blocked or done, and that no fan of another session works on
 - `-w, --window <target>` (`claim`): The pane that takes the card (default: this pane; required outside a pane)
 - `--clear` (`block`): Lift the block
 - `--json`: Output the verb result as JSON
