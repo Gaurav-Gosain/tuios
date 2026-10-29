@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"maps"
 	"slices"
+	"time"
 )
 
 // A workspace's number is its position. Moving a workspace, by the move keys, by
@@ -452,7 +453,13 @@ func (s *Session) notePaneMovesLocked() (map[string]paneAt, bool) {
 // on its own leaves its workspace's place for the next change a person makes;
 // see notePaneMovesLocked for the shell. It runs on the PTY's exit goroutine,
 // before the daemon tells anyone the pane closed.
-func (s *Session) notePaneExitedAlone(ptyID string, shell bool) {
+//
+// A process killed by a signal also holds the saved layout; see
+// holdingCheckpoint.
+func (s *Session) notePaneExitedAlone(ptyID string, shell bool, signal int) {
+	if signal > 0 {
+		s.signalHold.Store(time.Now().Add(signalHoldFor).UnixNano())
+	}
 	s.exitedAloneMu.Lock()
 	defer s.exitedAloneMu.Unlock()
 	if s.exitedAlone == nil {

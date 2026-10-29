@@ -26,6 +26,9 @@ const (
 	// resurrectionDirtyInterval is the longest a structural change waits to be
 	// saved, and so the most a SIGKILL can cost.
 	resurrectionDirtyInterval = 2 * time.Second
+	// signalHoldFor is how long a pane killed by a signal from outside keeps
+	// the saved layout as it was. See Session.holdingCheckpoint.
+	signalHoldFor = 2 * time.Minute
 
 	// ResurrectionVersion is the current on-disk resurrection schema version.
 	// It is bumped only when the schema changes in a way older daemons cannot
@@ -489,4 +492,31 @@ func startPeriodicSaveWith(getState func() *SessionState, dirty, stale *wakeLatc
 		close(stopCh)
 		<-done
 	}
+}
+
+// holdingCheckpoint reports whether a save must leave the saved layout as it
+// is, because a pane's process was killed by a signal from outside in the last
+// signalHoldFor.
+//
+// That is how a shutdown looks from here. The system sends SIGHUP to every
+// shell, each pane closes and an attached client answers with a layout one
+// window smaller, and the daemon's own SIGTERM comes seconds later. Saving
+// those layouts wrote a session with no windows, which the next start
+// discards: every session was lost at every reboot. A person's close does not
+// come here: a pane the daemon closes is not one that exited alone, and a
+// shell that runs exit ends without a signal.
+//
+// A held save raises the stale latch, so the saver writes the layout as it
+// is once the hold ends. That costs a wake only after such a kill.
+func (s *Session) holdingCheckpoint() bool {
+	until := s.signalHold.Load()
+	if until == 0 {
+		return false
+	}
+	if time.Now().UnixNano() < until {
+		s.saveStale.Set()
+		return true
+	}
+	s.signalHold.CompareAndSwap(until, 0)
+	return false
 }

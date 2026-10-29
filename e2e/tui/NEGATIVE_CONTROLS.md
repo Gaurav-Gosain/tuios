@@ -10605,3 +10605,10 @@ against the cut binary; the fixed build passes every subtest.
 | The same build, for the `caps` warning on pills | `TestDockTabsConfigWarnings/bad`: the dock says "2 config problems", not 3 | **caught** |
 
 The positive half is in the same runs: `pill` and `flat` pass on every build. Their styled frames and PNGs from origin/main and from this change are byte for byte the same, so the default strips did not change.
+## The layout survives an OS shutdown
+
+`TestLayoutSurvivesAnOSShutdown` makes a session with three panes and waits until the saved state holds all three. It sends SIGHUP to every shell, waits 5 s and sends SIGTERM to the daemon, as a shutdown does. A new daemon must then restore the session with three windows, and an attach must show three panes. It runs once without a client and once with a client attached. The control is the build of `main` at `172918f06` without the checkpoint hold. Run on 2026-10-29 on Linux.
+
+| Control: what was cut | Where it fails | Verdict |
+| --- | --- | --- |
+| `notePaneExitedAlone` no longer starts the hold, so a save after a pane is killed by a signal writes the smaller layout (`internal/session/workspace_renumber.go`) | `attached`: "session \"reboot-attached\" never appeared in the listing". The client closed each pane, the daemon saved a session with no windows, and the next start discarded it. `detached` passes on both builds, because no client removes the windows | **caught** |
