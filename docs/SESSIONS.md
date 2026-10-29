@@ -542,7 +542,7 @@ BSP tree and the layout mode.
 | Shell processes | Yes, they keep running | Yes, the same processes keep running | No, fresh shells are spawned | No, fresh shells are spawned | No, fresh shells are spawned |
 | Working directories | Yes | Yes | Yes, on Linux and macOS (see below) | Partial: the cwd from the last save | Partial: the cwd from the last save |
 | Screen contents | Yes | Yes, the live screen, alternate screen included | Yes, as history above a divider (see below) | Partial: as of the pane's last save, up to 30 seconds stale | Yes, as for a daemon restart |
-| Scrollback | Yes | Partial: the last 1000 lines | Yes, the last 1000 lines by default | Partial: as of the pane's last save | Yes, as for a daemon restart |
+| Scrollback | Yes | Partial: the last 1000 lines | Partial: the last 1000 lines by default | Partial: as of the pane's last save | Yes, as for a daemon restart |
 | Running programs (vim, tail, a build) | Yes | Yes | No | No | No |
 | Agent conversations (resumable harnesses) | Yes, the agent keeps running | Yes, the agent keeps running | The conversation, not the process: see below | Same | Same |
 | Sidebar shown or hidden | Yes | Yes | Yes | Partial: as of the last save | Partial: as of the last save |

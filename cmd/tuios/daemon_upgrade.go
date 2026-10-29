@@ -23,11 +23,14 @@ import (
 // killServerCommand is the kill-server command for the daemon being upgraded.
 // On a named server it carries --server, since the bare command stops the
 // default daemon.
-func killServerCommand() string {
+func killServerCommand() string { return serverCommand("kill-server") }
+
+// serverCommand is the tuios command sub, for this command's server.
+func serverCommand(sub string) string {
 	if name := serverscope.Name(); name != "" {
-		return "tuios --server " + name + " kill-server"
+		return "tuios --server " + name + " " + sub
 	}
-	return "tuios kill-server"
+	return "tuios " + sub
 }
 
 // adoptFDFlag is the daemon command's flag naming the descriptor a live
@@ -197,7 +200,7 @@ func runDaemonUpgrade(out io.Writer, binary string, asJSON bool) error {
 		return &diagnosticError{
 			What:  fmt.Sprintf("%s cannot take the daemon over: %v.", binary, err),
 			Cause: "it is not a tuios, or a tuios from before live upgrades.",
-			Fix:   "pass a tuios with --binary, or run '" + killServerCommand() + "' to restart the daemon, which ends running programs.",
+			Fix:   "pass a tuios with --binary. To run another tuios, use '" + serverCommand("restart-server") + "'. It stops every program in every pane, and lists them before it asks.",
 		}
 	}
 	if os.Getenv("TUIOS_PANE_ID") != "" {
