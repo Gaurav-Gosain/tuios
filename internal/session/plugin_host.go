@@ -177,11 +177,14 @@ func (h *pluginHost) stop() {
 	h.runner.StopAll(2 * time.Second)
 }
 
-// restart runs the startup commands again after stop, for a daemon whose
-// live upgrade did not go ahead. Their event hooks never stopped following.
+// restart takes plugin commands again after stop, and runs every startup
+// command again, as the new image would have, for a daemon whose live upgrade
+// did not go ahead. Their event hooks never stopped following.
 func (h *pluginHost) restart() {
+	h.runner.Resume()
 	h.mu.Lock()
 	running := h.running
+	clear(h.startedUp)
 	h.mu.Unlock()
 	if running {
 		h.runStartups()

@@ -578,14 +578,19 @@ func TestDaemonUpgradeMeasuresABusyDaemon(t *testing.T) {
 // hook command runs, and while a plugin command runs. Each is a child of the
 // daemon whose output it reads on a pipe the exec would close: the command
 // would die of SIGPIPE on its next write and never be reaped. Each upgrade
-// must be refused, naming what runs. The positive half: once the command has
-// finished, the same upgrade goes through.
+// must be refused, naming what runs. For the plugin, an upgrade that stopped
+// the plugins and was then put back, refused at its commit, must leave the
+// plugin host as it was: commands run, and the startup commands ran again.
+// The positive half: once the command has finished, the same upgrade goes
+// through.
 func TestDaemonUpgradeRefusesWhileHookOrPluginRuns(t *testing.T) {
+	startupLog := filepath.Join(t.TempDir(), "startup.log")
 	for _, tc := range []struct {
-		name   string
-		config func(t *testing.T) string
-		start  func(t *testing.T, base string)
-		refuse string
+		name    string
+		config  func(t *testing.T) string
+		start   func(t *testing.T, base string)
+		refuse  string
+		putBack func(t *testing.T, base string) map[string]any
 	}{
 		{
 			name:   "hook",
@@ -603,7 +608,9 @@ func TestDaemonUpgradeRefusesWhileHookOrPluginRuns(t *testing.T) {
 					t.Fatal(err)
 				}
 				manifest := "id = \"e2e.slow\"\nname = \"E2E slow\"\nversion = \"1.0.0\"\nmin_herdr_version = \"0.9.5\"\n\n" +
-					"[[actions]]\nid = \"wait\"\ntitle = \"Wait\"\ncontexts = [\"pane\"]\ncommand = [\"sh\", \"-c\", \"sleep 4; echo done\"]\n"
+					"[[startup]]\ncommand = [\"sh\", \"-c\", " + strconv.Quote("echo up >> "+startupLog) + "]\n\n" +
+					"[[actions]]\nid = \"wait\"\ntitle = \"Wait\"\ncontexts = [\"pane\"]\ncommand = [\"sh\", \"-c\", \"sleep 4; echo done\"]\n\n" +
+					"[[actions]]\nid = \"now\"\ntitle = \"Now\"\ncontexts = [\"pane\"]\ncommand = [\"echo\", \"ran-after-put-back\"]\n"
 				if err := os.WriteFile(filepath.Join(dir, "herdr-plugin.toml"), []byte(manifest), 0o644); err != nil {
 					t.Fatal(err)
 				}
@@ -615,6 +622,34 @@ func TestDaemonUpgradeRefusesWhileHookOrPluginRuns(t *testing.T) {
 				}
 			},
 			refuse: "a command of plugin e2e.slow is running",
+			putBack: func(t *testing.T, base string) map[string]any {
+				// The commit's preflight refuses a binary replaced during the
+				// hold, after the plugins were stopped, and the run is put back.
+				bin := copyTuios(t)
+				_ = mustCall(t, base, "test-handoff", map[string]any{"binary": bin, "hold_ms": 1500})
+				if err := os.WriteFile(bin+".new", []byte("#!/bin/sh\nexit 1\n"), 0o755); err != nil {
+					t.Fatal(err)
+				}
+				if err := os.Rename(bin+".new", bin); err != nil {
+					t.Fatal(err)
+				}
+				img := helloImage(t, base)
+				var ups int
+				for deadline := time.Now().Add(10 * time.Second); time.Now().Before(deadline); time.Sleep(100 * time.Millisecond) {
+					raw, _ := os.ReadFile(startupLog)
+					if ups = strings.Count(string(raw), "up"); ups >= 2 {
+						break
+					}
+				}
+				out, err := handoffCLI(t, base, 20*time.Second, "plugins", "run", "e2e.slow", "now", "--wait")
+				if err != nil || !strings.Contains(out, "ran-after-put-back") {
+					t.Errorf("ASSERTION: after a put-back the plugin command did not run: %v\n%s", err, out)
+				}
+				if ups != 2 {
+					t.Errorf("ASSERTION: the startup command ran %d times, want once at start and once after the put-back", ups)
+				}
+				return map[string]any{"instance": img.Instance, "startups": ups, "run": out, "run_error": errString(err)}
+			},
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -630,13 +665,20 @@ func TestDaemonUpgradeRefusesWhileHookOrPluginRuns(t *testing.T) {
 			_, refused := callVerb(t, base, "test-handoff", map[string]any{"binary": second})
 			kept := helloImage(t, base)
 			time.Sleep(5 * time.Second)
+			var putBack map[string]any
+			if tc.putBack != nil {
+				putBack = tc.putBack(t, base)
+				if putBack["instance"] != img.Instance {
+					t.Errorf("ASSERTION: the daemon's image changed although the upgrade was put back")
+				}
+			}
 			_, again := callVerb(t, base, "test-handoff", map[string]any{"binary": second})
 			var after daemonImage
 			if again == nil {
 				after = awaitNewImage(t, base, img, 30*time.Second)
 			}
 			writeHandoffArtifact(t, map[string]any{"refusal": errString(refused), "instance_kept": kept.Instance == img.Instance,
-				"after_finish": errString(again), "new_instance": after.Instance})
+				"after_finish": errString(again), "new_instance": after.Instance, "put_back": putBack})
 			if refused == nil || !strings.Contains(refused.Error(), tc.refuse) {
 				t.Errorf("ASSERTION: the upgrade was not refused while the %s ran (want %q): %v", tc.name, tc.refuse, refused)
 			}
