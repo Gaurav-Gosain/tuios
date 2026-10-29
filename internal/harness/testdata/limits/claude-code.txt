@@ -1,0 +1,57 @@
+# harness: claude-code
+# source: from source
+# ref: Claude Code 2.1.312 binary, string table (the text is exact, the layout around it is not captured)
+# today: idle
+---
+ ⎿  You've hit your session limit · resets 11:10am (Australia/Sydney)
+
+────────────────────────────────────────────
+ ❯
+────────────────────────────────────────────
+  ? for shortcuts
+=====
+# harness: claude-code
+# source: from user report
+# ref: t3code ClaudeAdapterV2.test.ts, compaction error taken from a Claude Code result
+# today: idle
+---
+Error during compaction: You've hit your session limit · resets 5:20pm (Europe/Berlin).
+────────────────────────────────────────────
+ ❯
+────────────────────────────────────────────
+  ? for shortcuts
+=====
+# harness: claude-code
+# source: from source
+# ref: Claude Code 2.1.312 binary, auto-resume banner (quota-auto-resume); {when} is filled in at run time
+# today: idle
+---
+ ⎿  Usage limit reached · continuing automatically at 3:00pm · esc to cancel
+
+────────────────────────────────────────────
+ ❯
+────────────────────────────────────────────
+  ? for shortcuts
+=====
+# harness: claude-code
+# source: from source
+# ref: Claude Code 2.1.312 binary, goal pause message
+# today: idle
+---
+ Goal paused · usage limit reached · send a message after it resets to continue
+────────────────────────────────────────────
+ ❯
+────────────────────────────────────────────
+  ? for shortcuts
+=====
+# harness: claude-code
+# source: from source
+# ref: Claude Code 2.1.312 binary, out of credits messages
+# today: idle
+---
+ ⎿  You're out of extra usage
+
+────────────────────────────────────────────
+ ❯
+────────────────────────────────────────────
+  ? for shortcuts

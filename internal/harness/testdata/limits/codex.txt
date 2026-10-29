@@ -1,0 +1,43 @@
+# harness: codex
+# source: from source
+# ref: openai/codex codex-rs/protocol/src/error.rs at 6a6e2fb1f0e9, UsageLimitReachedError Display, unknown plan
+# today: idle
+---
+■ You’ve hit your usage limit. Try again at 7:20 PM.
+
+› Ask Codex to do anything
+
+  ? for shortcuts
+=====
+# harness: codex
+# source: from source
+# ref: openai/codex codex-rs/protocol/src/error.rs at 6a6e2fb1f0e9, Plus plan
+# today: idle
+---
+■ You’ve hit your usage limit. Upgrade to Pro (https://chatgpt.com/explore/pro), visit https://chatgpt.com/settings/usage to purchase more credits or try again at Oct 30th, 2026 9:05 AM.
+
+› Ask Codex to do anything
+
+  ? for shortcuts
+=====
+# harness: codex
+# source: from source
+# ref: openai/codex codex-rs/protocol/src/error.rs at 6a6e2fb1f0e9, Free plan
+# today: idle
+---
+■ You’ve hit your usage limit. Upgrade to Plus to continue using Codex (https://chatgpt.com/explore/plus), or try again at 7:20 PM.
+
+› Ask Codex to do anything
+
+  ? for shortcuts
+=====
+# harness: codex
+# source: from user report
+# ref: t3code SubagentProjection.test.ts, a Codex failure message kept in a fixture
+# today: idle
+---
+■ You've hit your usage limit. Try again Sep 14 at 7:20 PM.
+
+› Ask Codex to do anything
+
+  ? for shortcuts
