@@ -64,6 +64,10 @@ type AgentsConfig struct {
 	// silent: a Go duration ("10m"). Empty means DefaultSilentAfter, and "0"
 	// or "off" turns it off. See SilentAfterDuration.
 	SilentAfter string `toml:"silent_after,omitempty"`
+	// FoldWorking folds the agents view's Working group until the person
+	// opens it. Nil means off. A fold or an open the person made with F or a
+	// click wins over it, and is kept in the client's state file.
+	FoldWorking *bool `toml:"fold_working,omitempty"`
 }
 
 // DefaultSilentAfter is the default of silent_after. A hooked harness reports
@@ -95,6 +99,9 @@ func (a AgentsConfig) SilentAfterDuration() time.Duration {
 // On reports whether the agent features are on. They are unless the file
 // says enabled = false.
 func (a AgentsConfig) On() bool { return a.Enabled == nil || *a.Enabled }
+
+// FoldWorkingOn reports whether the agents view folds Working by default.
+func (a AgentsConfig) FoldWorkingOn() bool { return a.FoldWorking != nil && *a.FoldWorking }
 
 // AgentsOffMessage is the one line a command, a verb or a key prints when it
 // is an agent feature and the agent features are off.

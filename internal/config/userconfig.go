@@ -1747,10 +1747,11 @@ const (
 	ActionInboxHelp        = "inbox_help"
 	ActionInboxMark        = "inbox_mark"
 	ActionInboxMarkAll     = "inbox_mark_all"
-	// The focus\'s tabs, and every line of every thread card.
+	// The focus\'s tabs, every line of every thread card, and the group fold.
 	ActionInboxTabPrev      = "inbox_tab_prev"
 	ActionInboxTabNext      = "inbox_tab_next"
 	ActionInboxExpand       = "inbox_expand"
+	ActionInboxFold         = "inbox_fold"
 	ActionAgentUnread       = "agent_unread"
 	ActionAgentSnooze       = "agent_snooze"
 	ActionAgentReply        = "agent_reply"
@@ -1835,6 +1836,7 @@ func getDefaultInboxKeybinds() map[string][]string {
 		ActionInboxTabPrev:     {"["},
 		ActionInboxTabNext:     {"]"},
 		ActionInboxExpand:      {"e"},
+		ActionInboxFold:        {"F"},
 	}
 }
 
@@ -3852,6 +3854,7 @@ var yieldingDefaults = map[string]bool{
 	"inbox_tab_prev":     true,
 	"inbox_tab_next":     true,
 	"inbox_expand":       true,
+	"inbox_fold":         true,
 	// ctrl+alt+N (ctrl+opt+N on macOS), the first default for
 	// send_to_workspace_N.
 	"send_to_workspace_1": true,

@@ -56,10 +56,17 @@ const cockpitApproval = `{"hook_event_name":"PermissionRequest","session_id":"e2
 // is given.
 func startCockpitFleet(t *testing.T, cols, rows int, env []string) (*tuitest.Terminal, string, *bytes.Buffer, chan error) {
 	t.Helper()
+	return startCockpitFleetWith(t, cols, rows, env, "")
+}
+
+// startCockpitFleetWith is startCockpitFleet with more config before the
+// fleet's own.
+func startCockpitFleetWith(t *testing.T, cols, rows int, env []string, conf string) (*tuitest.Terminal, string, *bytes.Buffer, chan error) {
+	t.Helper()
 	base := t.TempDir()
 	killDaemon(t, base)
 	useShippedLooks(base)
-	writeConfig(t, base, "[agents.approvals]\nenabled = [\"claude-code\"]\nhold_seconds = 300\n")
+	writeConfig(t, base, conf+"[agents.approvals]\nenabled = [\"claude-code\"]\nhold_seconds = 300\n")
 	for _, s := range []string{"home", "api", "docs", "cache", "misc"} {
 		if out, err := tuiosCLI(t, base, "new", s, "--detach"); err != nil {
 			t.Fatalf("create session %s: %v\n%s", s, err, out)
@@ -105,7 +112,13 @@ func startCockpitFleet(t *testing.T, cols, rows int, env []string) (*tuitest.Ter
 	t.Cleanup(func() { _ = hook.Process.Kill() })
 	go func() { exited <- hook.Wait() }()
 	waitForAttention(t, base, nil, "go test ./internal/auth/...")
+	return openCockpitClient(t, base, cols, rows, env), base, &stdout, exited
+}
 
+// openCockpitClient attaches a client to home at cols x rows and opens the
+// cockpit on the fleet.
+func openCockpitClient(t *testing.T, base string, cols, rows int, env []string) *tuitest.Terminal {
+	t.Helper()
 	term := startIn(t, base, startOpts{args: []string{"attach", "home"}, cols: cols, rows: rows, shippedLooks: true, env: env})
 	if err := term.WaitFor(func(s tuitest.Screen) bool { return countWindows(s) == 1 }, bootTimeout); err != nil {
 		t.Fatalf("client never attached: %v\n%s", err, term.Snapshot())
@@ -119,7 +132,7 @@ func startCockpitFleet(t *testing.T, cols, rows int, env []string) (*tuitest.Ter
 	}, uiTimeout); err != nil {
 		t.Fatalf("ASSERTION: the cockpit never showed the four groups: %v\n%s", err, term.Snapshot())
 	}
-	return term, base, &stdout, exited
+	return term
 }
 
 // TestCockpitGroupsTheFleet opens the cockpit on twelve agents. The groups
@@ -202,7 +215,14 @@ func TestCockpitGroupsTheFleet(t *testing.T) {
 
 // TestCockpitNarrowFoldsRows opens the cockpit at 100x30: the fleet's rows are
 // one line and the focus is beside them. At 16 colours the cursor row is
-// reverse video.
+// reverse video. F folds Working from one of its rows and opens it from the
+// folded heading, and a new client opens the view with the fold kept. With
+// [agents] fold_working on, Working opens folded, and a group the person
+// opens stays open when the view opens again.
+//
+// Negative controls, recorded in NEGATIVE_CONTROLS.md: with the fold not
+// saved, the new client check fails; with the folded heading not taking the
+// cursor, F cannot open the group again.
 func TestCockpitNarrowFoldsRows(t *testing.T) {
 	for _, d := range []chromeDepth{{name: "truecolor", env: []string{"TERM=xterm-256color", "COLORTERM=truecolor"}}, chromeDepths[0]} {
 		t.Run(d.name, func(t *testing.T) {
@@ -214,6 +234,140 @@ func TestCockpitNarrowFoldsRows(t *testing.T) {
 			}
 			saveCockpitFrames(t, term, "cockpit-100x30-"+d.name)
 		})
+	}
+
+	// F folds the group of the row under the cursor, F on the folded
+	// heading opens it, and the fold outlives the client.
+	t.Run("fold", func(t *testing.T) {
+		env := []string{"TERM=xterm-256color", "COLORTERM=truecolor"}
+		term, base, _, _ := startCockpitFleet(t, 100, 30, env)
+		cursorTo(t, term, func(line string) bool { return containsAny(line, cockpitWorking...) })
+		pressFold(t, term, "fold Working", workingFolded)
+		saveCockpitFrames(t, term, "cockpit-100x30-folded")
+		// The cursor rests on the folded heading, so F opens it again.
+		pressFold(t, term, "open Working", workingOpen)
+		pressFold(t, term, "fold Working again", workingFolded)
+
+		// A new client opens the view with Working still folded.
+		if err := term.Close(); err != nil {
+			t.Fatalf("close the client: %v", err)
+		}
+		term = openCockpitClient(t, base, 100, 30, env)
+		if err := term.WaitFor(workingFolded, uiTimeout); err != nil {
+			t.Fatalf("ASSERTION: Working was not folded in a new client: %v\n%s", err, term.Snapshot())
+		}
+	})
+
+	// With [agents] fold_working on, the view opens with Working folded.
+	// A fold the person opens stays open when the view opens again.
+	t.Run("fold_working", func(t *testing.T) {
+		env := []string{"TERM=xterm-256color", "COLORTERM=truecolor"}
+		term, _, _, _ := startCockpitFleetWith(t, 100, 30, env, "[agents]\nfold_working = true\n")
+		if err := term.WaitFor(workingFolded, uiTimeout); err != nil {
+			t.Fatalf("ASSERTION: fold_working did not fold Working: %v\n%s", err, term.Snapshot())
+		}
+		saveCockpitFrames(t, term, "cockpit-100x30-fold-working")
+		cursorTo(t, term, func(line string) bool { return strings.Contains(line, "Working") })
+		pressFold(t, term, "open Working", workingOpen)
+		if err := term.SendKeys("q"); err != nil {
+			t.Fatalf("close the view: %v", err)
+		}
+		if err := term.WaitFor(func(s tuitest.Screen) bool { return !strings.Contains(s.Text(), "Ready for review") }, uiTimeout); err != nil {
+			t.Fatalf("the view did not close: %v\n%s", err, term.Snapshot())
+		}
+		if err := term.SendKeys(tuitest.Ctrl('b'), "i"); err != nil {
+			t.Fatalf("open the view again: %v", err)
+		}
+		if err := term.WaitFor(func(s tuitest.Screen) bool {
+			return strings.Contains(s.Text(), "Ready for review") && workingOpen(s)
+		}, uiTimeout); err != nil {
+			t.Fatalf("ASSERTION: Working did not stay open: %v\n%s", err, term.Snapshot())
+		}
+	})
+}
+
+// cockpitWorking are the fleet's working agents, as the narrow fleet
+// column cuts their names.
+var cockpitWorking = []string{"cache-1", "cache-2", "cache-3", "bench-idle", "ws-reconn", "migrate-c"}
+
+// ckFleetCols is the fleet column's width at 100 columns.
+const ckFleetCols = 38
+
+// fleetCol is row r's fleet column.
+func fleetCol(s tuitest.Screen, r int) string {
+	line := []rune(s.Line(r))
+	return string(line[:min(len(line), ckFleetCols)])
+}
+
+// workingFolded reports a folded Working group: its heading with its count,
+// and none of its agents in the fleet column.
+func workingFolded(s tuitest.Screen) bool {
+	_, rows := s.Size()
+	head := false
+	for r := range rows {
+		col := fleetCol(s, r)
+		if containsAny(col, cockpitWorking...) {
+			return false
+		}
+		head = head || strings.Contains(col, "Working  6")
+	}
+	return head
+}
+
+// workingOpen reports an open Working group: every agent in the fleet
+// column.
+func workingOpen(s tuitest.Screen) bool {
+	_, rows := s.Size()
+	seen := 0
+	for _, want := range cockpitWorking {
+		for r := range rows {
+			if strings.Contains(fleetCol(s, r), want) {
+				seen++
+				break
+			}
+		}
+	}
+	return seen == len(cockpitWorking)
+}
+
+// containsAny reports whether s holds any of parts.
+func containsAny(s string, parts ...string) bool {
+	for _, p := range parts {
+		if strings.Contains(s, p) {
+			return true
+		}
+	}
+	return false
+}
+
+// cursorTo presses j until the cursor's fleet row matches want. The cursor
+// row starts with the cursor bar.
+func cursorTo(t *testing.T, term *tuitest.Terminal, want func(line string) bool) {
+	t.Helper()
+	for range 16 {
+		s := term.Screen()
+		_, rows := s.Size()
+		for r := range rows {
+			if col := fleetCol(s, r); strings.HasPrefix(strings.TrimLeft(col, " │"), "▌") && want(col) {
+				return
+			}
+		}
+		if err := term.SendKeys("j"); err != nil {
+			t.Fatalf("press j: %v", err)
+		}
+		time.Sleep(150 * time.Millisecond)
+	}
+	t.Fatalf("the cursor never reached the row\n%s", term.Snapshot())
+}
+
+// pressFold presses F and waits for done.
+func pressFold(t *testing.T, term *tuitest.Terminal, what string, done func(tuitest.Screen) bool) {
+	t.Helper()
+	if err := term.SendKeys("F"); err != nil {
+		t.Fatalf("press F: %v", err)
+	}
+	if err := term.WaitFor(done, uiTimeout); err != nil {
+		t.Fatalf("ASSERTION: F did not %s: %v\n%s", what, err, term.Snapshot())
 	}
 }
 

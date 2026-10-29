@@ -214,10 +214,13 @@ func (m *OS) buildBoardRows(list []sidebarAgentEntry) []ckRow {
 		if len(rows) > 0 {
 			rows = append(rows, ckRow{kind: ckRowGap, group: g, lines: 1, key: "bg:" + stage})
 		}
-		rows = append(rows, ckRow{kind: ckRowHead, group: g, count: len(items), lines: 1, key: "bh:" + stage})
+		head := ckRow{kind: ckRowHead, group: g, agent: -1, count: len(items), lines: 1, key: "bh:" + stage}
 		if ck.stageFolded(g) {
+			head.folded, head.hidden = true, items
+			rows = append(rows, head)
 			continue
 		}
+		rows = append(rows, head)
 		shown := 0
 		for _, r := range items {
 			if ck.oneLine && !ck.boardOpened[stage] && shown >= ckFoldAt {

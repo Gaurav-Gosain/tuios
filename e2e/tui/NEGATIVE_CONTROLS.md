@@ -10681,3 +10681,20 @@ after each step in `cached.txt`, are under `TUIOS_E2E_FRAMES`.
 | `integrationAskSettled` returns true, so the question takes the enter that was in flight | "an enter sent before the question was drawn installed the integration" | **caught** |
 | `jumpToNotifTarget`: the `installFromNotice` call cut, so the notice goes nowhere | "ctrl+b j on the toast opened no question" | **caught** |
 | `IntegrationAskActivate`: Install returns no command | "Install on the question installed nothing" | **caught** |
+
+## Fold a group of the agents view by key
+
+`TestCockpitNarrowFoldsRows/fold` puts the cursor on a Working row with `j`,
+presses `F` to fold Working, `F` on the folded heading to open it, and `F`
+again to fold it. It then closes the client and starts a new one, which must
+open the view with Working folded. `TestCockpitNarrowFoldsRows/fold_working`
+starts with `fold_working = true`, opens Working with `F` on its heading, and
+checks that it stays open when the view opens again.
+
+Run on 2026-10-29 on Linux, each control in its own binary.
+
+| Control: what was cut | Where it fails | Verdict |
+| --- | --- | --- |
+| `CockpitToggleGroup` does not call `saveSidebarState` | `fold`: "Working was not folded in a new client" | **caught** |
+| `cursorable` is `selectable` alone, so a folded heading takes no cursor | `fold`: "F did not open Working"; `fold_working`: the cursor never reaches the heading | **caught** |
+| None (the branch) | Both subtests pass | **guard** |

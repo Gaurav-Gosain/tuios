@@ -633,6 +633,7 @@ func (m *OS) settingsCategories() []settingsCategory {
 			opt("appearance.prefix_repeat_time"),
 			custom("appearance.max_fps", m.maxFPSItem()),
 			opt("appearance.preferred_shell"),
+			opt("agents.fold_working"),
 			opt("pip.width"),
 			opt("pip.height"),
 			opt("pip.corner"),

@@ -39,6 +39,7 @@ func custom(covers string, item settingItem) settingsRow {
 // paths where the derived one reads worse than the name the row has always had.
 var settingLabels = map[string]string{
 	"agents.enabled":                      "Agent features",
+	"agents.fold_working":                 "Fold Working",
 	"appearance.sidebar.editor":           "File editor",
 	"appearance.dock_workspace_label_max": "Workspace label cap",
 	"appearance.dock_mode_icon_window":    "Window mode icon",

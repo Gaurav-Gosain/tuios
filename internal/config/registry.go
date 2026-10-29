@@ -671,6 +671,7 @@ var ActionDescriptions = map[string]string{
 	"inbox_tab_prev":     "Agents view: the focus's tab to the left",
 	"inbox_tab_next":     "Agents view: the focus's tab to the right",
 	"inbox_expand":       "Agents view: show every line of every card in the thread, or fold them again",
+	"inbox_fold":         "Agents view: fold or open the group of the row under the cursor",
 	"inbox_compare":      "Agents view: compare the attempts of the fan under the cursor, ask a judge, keep one",
 	"inbox_board":        "Agents view: show the task board, or the agents again",
 	"inbox_take":         "Agents view: take the card for the focused pane",

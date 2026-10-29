@@ -89,6 +89,11 @@ type sidebarStateFile struct {
 	// shut. A list rather than a map, sorted on the way out, so the file is
 	// stable between writes and a person can read it.
 	ReposCollapsed []string `json:"repos_collapsed,omitempty"`
+	// AgentsFolds is the agents view's group folds the person chose with F
+	// or a click, by group id (ckGroupIDs): true folded, false opened. A
+	// group absent here takes its default, which [agents] fold_working sets
+	// for Working.
+	AgentsFolds map[string]bool `json:"agents_folds,omitempty"`
 	// HostsOrder is the user's drag-defined order of the other machines' groups
 	// in the sessions section, and HostsCollapsed names the machines whose
 	// group is folded shut, sorted for the same reason ReposCollapsed is.
@@ -137,6 +142,7 @@ func (m *OS) loadSidebarState() {
 	m.SidebarAgentFilter, m.SidebarAgentSort = st.AgentsFilter, st.AgentsSort
 	m.SidebarAgentsSeen = st.AgentsSeen
 	m.Inbox.ck.spawnPreset = st.SpawnPreset
+	m.Inbox.ck.ckFoldsFromFile(st.AgentsFolds)
 	if len(st.AgentNoticesDismissed) > 0 {
 		m.agentNoticesDismissed = make(map[string]bool, len(st.AgentNoticesDismissed))
 		for _, k := range st.AgentNoticesDismissed {
@@ -227,6 +233,7 @@ func (m *OS) saveSidebarState() {
 		AgentsSort:            m.SidebarAgentSort,
 		AgentsSeen:            m.SidebarAgentsSeen,
 		SpawnPreset:           m.Inbox.ck.spawnPreset,
+		AgentsFolds:           m.Inbox.ck.ckFoldsToFile(),
 		AgentNoticesDismissed: collapsedRepoList(m.agentNoticesDismissed),
 		Collapsed:             m.SidebarCollapsed,
 		SectionSplit:          m.SidebarSectionSplit,

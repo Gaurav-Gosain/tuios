@@ -1754,6 +1754,7 @@ Inside it:
 | `[` `]` | Switch the focus tabs: Card on the board, Thread, Changes, Artifacts, Checkpoints and Pane |
 | `J` `K` | Scroll the thread, or a long plan waiting for a yes. On the Artifacts tab, move between the artifacts |
 | `e` | Show every line of every card in the thread |
+| `F` | Fold or open the group of the row under the cursor. On a folded heading, `enter` also opens it |
 | `v` | Review the agent's changes |
 | `ctrl+]` | Go to the agent's pane and zoom it. `ctrl+b i` comes back to the same agent |
 | `l` `h`, `right` `left` | On a narrow screen, open the focus and go back to the list |
@@ -1828,7 +1829,7 @@ path, `s` saves a copy, `left` and `right` step through the images, `+` and
 `-` zoom, and `esc` or a click outside the picture closes it.
 
 The mouse works too. A click on a row selects it, and a double-click goes to
-its pane. A click on a group heading folds the group. The buttons on an
+its pane. A click on a group heading folds the group, as `F` does. The buttons on an
 approval card answer it. `+ New agent` opens the New agent sheet, and the search box opens
 the search. The wheel scrolls the list, and over the focus it scrolls the
 card. A search narrows the items with the agents. A selector the search line
@@ -1868,7 +1869,7 @@ These keys are in three sections of their own, rebindable like any other:
 `inbox_write`, `inbox_sort`, `inbox_view_pane`, `inbox_new_agent`,
 `inbox_allow`, `inbox_allow_always`, `inbox_open`, `inbox_back`,
 `inbox_help`, `inbox_mark`, `inbox_mark_all`, `inbox_tab_prev`,
-`inbox_tab_next`, `inbox_expand`, `inbox_compare`, `inbox_artifact`,
+`inbox_tab_next`, `inbox_expand`, `inbox_fold`, `inbox_compare`, `inbox_artifact`,
 `inbox_board`, `inbox_take`),
 `[keybindings.inbox_peek]` (the prompt: `peek_approve`, `peek_approve_always`,
 `peek_deny`, `peek_type`, `peek_read_again`, `peek_go`, `peek_back`) and

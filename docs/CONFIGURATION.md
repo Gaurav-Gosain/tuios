@@ -2437,6 +2437,21 @@ parse reads as `10m`, with a warning. The daemon reads the value when it
 starts and again when the file changes. See
 [Silent agents](AGENT_STATE.md#silent-agents).
 
+## Fold the Working group
+
+The agents view (`ctrl+b i`) can open with the Working group folded. A folded
+group shows its heading, its count and the state mark of each agent in it.
+
+```toml
+[agents]
+fold_working = true   # default false
+```
+
+`F` folds or opens any group in the view. tuios keeps that choice in
+`sidebar.json` in its state folder (`$XDG_STATE_HOME/tuios` on Linux). The
+choice wins over `fold_working`. The settings page has this option on the
+Behavior tab, as "Fold Working".
+
 ## Report pane states to your terminal
 
 When tuios runs in a terminal that reads OSC 7501, the Program Status

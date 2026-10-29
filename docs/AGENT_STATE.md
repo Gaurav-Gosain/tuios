@@ -2589,6 +2589,17 @@ working, needs you, working in a moment does not move it twice. A finished
 turn the agent has already moved on from goes with the agent's state, not
 under Ready for review.
 
+`F` folds the group of the row under the cursor. A folded group shows only
+its heading: its title, its count and the state mark of each row in it, such
+as `Working  6  ◐ ◐ ◐ ◐ ◐ ◐`. The cursor stops on the heading, and `F` or
+`enter` there opens the group again. A click on a heading also folds or opens
+it. A row that changes group, such as an agent that finishes or needs you,
+leaves the folded group and shows in its new group. tuios keeps the folds in
+`sidebar.json` in its state folder (`$XDG_STATE_HOME/tuios` on Linux). They
+stay when you close the view and when you start a new client. To fold
+Working by default, set `fold_working = true` in `[agents]` (see
+[CONFIGURATION.md](CONFIGURATION.md#fold-the-working-group)).
+
 Each row is two lines on a wide screen. The first has the state mark, the
 name, the harness, the session (or the machine, for an agent on another one),
 the size of the diff when the agent reports it as the `diff` meta key,

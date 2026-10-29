@@ -104,11 +104,22 @@ type ckRow struct {
 	key     string
 	// lines is how many lines the row takes.
 	lines int
+	// folded marks the heading of a folded group, and hidden holds the
+	// rows the fold hides, for the marks on the heading and the focus.
+	folded bool
+	hidden []ckRow
 }
 
-// selectable reports whether the cursor can rest on the row.
+// selectable reports whether the row is an agent's, an item's or a card's:
+// a row the keys act on.
 func (r ckRow) selectable() bool {
 	return r.kind == ckRowAgent || r.kind == ckRowItem || r.kind == ckRowCard
+}
+
+// cursorable reports whether the cursor can rest on the row: a selectable
+// row, or the heading of a folded group, so a key can open it again.
+func (r ckRow) cursorable() bool {
+	return r.selectable() || r.kind == ckRowHead && r.folded
 }
 
 // cockpitState is the cockpit's own state, beside the Inbox's.
@@ -125,8 +136,11 @@ type cockpitState struct {
 	scroll int
 	follow bool
 	// folded groups show their heading only; opened ones show every row
-	// when the list folds long groups.
-	folded, opened [ckGroups]bool
+	// when the list folds long groups. foldSet says the person chose the
+	// fold, with F or a click; a group without a choice takes its default
+	// from [agents] fold_working (ckGroupFolded). The choices are kept in
+	// the state file (sidebar_state.go).
+	folded, opened, foldSet [ckGroups]bool
 	// needsOnly is the f filter: the Needs you group alone, which is the
 	// old flat Inbox.
 	needsOnly bool
@@ -286,6 +300,8 @@ type ckRowsKey struct {
 	colH    int
 	oneLine bool
 	minute  int64
+	// foldWorking is [agents] fold_working, which a set-option can change.
+	foldWorking bool
 	// The board's: the cards, and the stages [tasks] shows.
 	cards  uint64
 	board  bool
@@ -342,7 +358,7 @@ func (m *OS) cockpitRows() []ckRow {
 	m.cockpitSettleHold(now)
 	key := ckRowsKey{
 		list: m.Inbox.agents.listAt, inbox: m.Inbox.Gen, gen: ck.rowsGen, colH: ck.colH, arts: m.tml.setGen<<20 + ck.art.gen,
-		oneLine: ck.oneLine, minute: now.Unix() / 60,
+		oneLine: ck.oneLine, minute: now.Unix() / 60, foldWorking: m.ckFoldWorking(),
 		cards: ck.cardsGen, board: ck.board, stages: m.ckStagesShown(),
 	}
 	if ck.rows != nil && ck.rowsAt == key {
@@ -488,10 +504,20 @@ func (m *OS) buildCockpitRows(list []sidebarAgentEntry, now time.Time) []ckRow {
 		if len(rows) > 0 {
 			rows = append(rows, ckRow{kind: ckRowGap, group: g, lines: 1, key: "g:" + strconv.Itoa(g)})
 		}
-		rows = append(rows, ckRow{kind: ckRowHead, group: g, count: n, lines: 1, key: "h:" + strconv.Itoa(g)})
-		if ck.folded[g] {
+		head := ckRow{kind: ckRowHead, group: g, agent: -1, count: n, lines: 1, key: "h:" + strconv.Itoa(g)}
+		if m.ckGroupFolded(g) {
+			// The heading stands for the rows: their marks show on it, and
+			// the cursor can rest on it so a key opens it again.
+			head.folded = true
+			for _, r := range items {
+				if r.selectable() && (r.hasItem || !itemsOnly) {
+					head.hidden = append(head.hidden, r)
+				}
+			}
+			rows = append(rows, head)
 			continue
 		}
+		rows = append(rows, head)
 		shown := 0
 		for _, r := range items {
 			if itemsOnly && !r.hasItem && r.kind != ckRowNote {
@@ -725,7 +751,7 @@ func (m *OS) cockpitClamp() {
 	rows := ck.rows
 	find := func(match func(ckRow) bool) int {
 		for i, r := range rows {
-			if r.selectable() && match(r) {
+			if r.cursorable() && match(r) {
 				return i
 			}
 		}
@@ -756,12 +782,12 @@ func (m *OS) cockpitClamp() {
 	}
 }
 
-// ckNearest is the selectable row nearest idx, -1 when there is none.
+// ckNearest is the cursorable row nearest idx, -1 when there is none.
 func ckNearest(rows []ckRow, idx int) int {
 	idx = min(max(idx, 0), len(rows)-1)
 	for d := range rows {
 		for _, j := range [2]int{idx + d, idx - d} {
-			if j >= 0 && j < len(rows) && rows[j].selectable() {
+			if j >= 0 && j < len(rows) && rows[j].cursorable() {
 				return j
 			}
 		}
@@ -788,7 +814,7 @@ func (m *OS) cockpitSetCursor(i int) {
 func (m *OS) cockpitSelected() (ckRow, bool) {
 	rows := m.cockpitRows()
 	ck := &m.Inbox.ck
-	if ck.idx < 0 || ck.idx >= len(rows) || rows[ck.idx].key != ck.key || !rows[ck.idx].selectable() {
+	if ck.idx < 0 || ck.idx >= len(rows) || rows[ck.idx].key != ck.key || !rows[ck.idx].cursorable() {
 		return ckRow{}, false
 	}
 	return rows[ck.idx], true
@@ -835,7 +861,7 @@ func (m *OS) CockpitMove(delta int) {
 	var sel []int
 	at := -1
 	for i, r := range rows {
-		if r.selectable() {
+		if r.cursorable() {
 			if i == ck.idx {
 				at = len(sel)
 			}
@@ -898,7 +924,7 @@ func (m *OS) CockpitReplyCheck() {
 // cockpitSelectKey puts the cursor on the row with key.
 func (m *OS) cockpitSelectKey(key string) bool {
 	for i, r := range m.cockpitRows() {
-		if r.key == key && r.selectable() {
+		if r.key == key && r.cursorable() {
 			m.cockpitSetCursor(i)
 			m.cockpitTouch()
 			m.cockpitSync()
@@ -934,9 +960,79 @@ func (m *OS) CockpitToggleGroup(g int, more bool) {
 	if more {
 		ck.opened[g] = !ck.opened[g]
 	} else {
-		ck.folded[g] = !ck.folded[g]
+		ck.folded[g] = !m.ckGroupFolded(g)
+		ck.foldSet[g] = true
+		m.saveSidebarState()
 	}
 	m.cockpitTouchRows()
+}
+
+// ckFoldWorking is [agents] fold_working: Working starts folded.
+func (m *OS) ckFoldWorking() bool {
+	return m.UserConfig != nil && m.UserConfig.Agents.FoldWorkingOn()
+}
+
+// ckGroupFolded reports whether group g is folded: the person's choice, or
+// the default, which folds Working when fold_working is on.
+func (m *OS) ckGroupFolded(g int) bool {
+	ck := &m.Inbox.ck
+	if ck.foldSet[g] {
+		return ck.folded[g]
+	}
+	return g == ckWorking && m.ckFoldWorking()
+}
+
+// ckGroupIDs name the groups in the state file. They are not the titles, so
+// a change of a title keeps the folds.
+var ckGroupIDs = [ckGroups]string{"needs", "review", "working", "idle", "earlier", "snoozed"}
+
+// ckFoldsToFile is the person's fold choices as the state file holds them,
+// by group id: true folded, false opened. Nil when there are none.
+func (ck *cockpitState) ckFoldsToFile() map[string]bool {
+	var out map[string]bool
+	for g := range ckGroups {
+		if ck.foldSet[g] {
+			if out == nil {
+				out = map[string]bool{}
+			}
+			out[ckGroupIDs[g]] = ck.folded[g]
+		}
+	}
+	return out
+}
+
+// ckFoldsFromFile sets the fold choices from the state file.
+func (ck *cockpitState) ckFoldsFromFile(folds map[string]bool) {
+	for g, id := range ckGroupIDs {
+		if f, ok := folds[id]; ok {
+			ck.folded[g], ck.foldSet[g] = f, true
+		}
+	}
+}
+
+// CockpitFold is F: it folds or opens the group of the row under the cursor.
+// A fold leaves the cursor on the group's heading, so F again opens it. On
+// the board it folds the stage, as a click on its heading does.
+func (m *OS) CockpitFold() {
+	r, ok := m.cockpitSelected()
+	if !ok {
+		return
+	}
+	m.CockpitToggleGroup(r.group, false)
+	head := "h:" + strconv.Itoa(r.group)
+	if m.Inbox.ck.board {
+		head = "bh:" + session.TaskStages[r.group]
+	}
+	if r.kind != ckRowHead {
+		m.cockpitSelectKey(head)
+	} else {
+		// The heading of an open group takes no cursor: the cursor goes to
+		// the group's first row, next to it.
+		m.cockpitRows()
+		m.cockpitSync()
+	}
+	m.cockpitTouch()
+	m.cockpitReplyFollow()
 }
 
 // CockpitCycleFilter is f: the whole fleet, then every item alone (the old
@@ -1384,6 +1480,9 @@ func (m *OS) CockpitKey(action string) (tea.Cmd, bool) {
 		}
 		m.CockpitTab(d)
 		return nil, true
+	case config.ActionInboxFold:
+		m.CockpitFold()
+		return nil, true
 	case config.ActionInboxExpand:
 		if t := m.cockpitThread(); t != nil {
 			t.expandAll = !t.expandAll
@@ -1436,6 +1535,11 @@ func (m *OS) CockpitKey(action string) (tea.Cmd, bool) {
 		m.CockpitCycleFilter()
 		return nil, true
 	case config.ActionInboxGo:
+		// enter on a folded group's heading opens the group.
+		if r, ok := m.cockpitSelected(); ok && r.kind == ckRowHead {
+			m.CockpitFold()
+			return nil, true
+		}
 		if !m.cockpitWideFocus() && !m.Inbox.threads.open {
 			return m.CockpitOpenFocus(true), true
 		}

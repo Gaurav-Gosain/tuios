@@ -1109,6 +1109,11 @@ var optionSpecs = []Option{
 		Description: "Agents, the Inbox, mail and approvals. Turn off to keep only the multiplexer.",
 		Default:     "true",
 	},
+	{
+		Path: "agents.fold_working", Type: OptionBool, Section: "agents",
+		Description: "Fold the Working group of the agents view. F folds or opens a group, and the view keeps that choice.",
+		Default:     "false",
+	},
 
 	// [daemon]. agent_binaries is absent: it is a list, and a value that arrives
 	// as one string has no unambiguous spelling for a list. respond_from_shell
