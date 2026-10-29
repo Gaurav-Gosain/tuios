@@ -29,9 +29,11 @@ func (d *Daemon) verbDaemonUpgrade(cs *connState, params json.RawMessage) (any, 
 	// A plugin never may. A pane may when the person says yes in a dialog at
 	// an attached client (upgrade_confirm.go).
 	// The CLI prints only the message, so each says what to do as well.
-	notPerson := hintedVerbError(ErrVerbForbidden, "daemon-upgrade is for the person. An upgrade asked for from a pane needs a Yes in the dialog at an attached client, and none came. Nothing was changed. Answer Yes in the dialog, or run tuios daemon upgrade from a terminal outside tuios", &VerbHint{
-		Detail: "The dialog opens on every attached client and shows the binary, its version and the pane that asked. No, Esc, a minute without an answer, or no attached client refuses.",
-	})
+	notPerson := func(why string) *verbError {
+		return hintedVerbError(ErrVerbForbidden, "daemon-upgrade is for the person, and an upgrade asked for from a pane needs their Yes in a dialog at an attached client. Nothing was changed. "+why+".", &VerbHint{
+			Detail: "The dialog opens on every attached client and shows the binary, its version and the pane that asked. From a terminal outside tuios, tuios daemon upgrade needs no dialog.",
+		})
+	}
 	confirm := !d.mayActAsHuman(cs)
 	if confirm && d.callerIsPlugin(cs) {
 		return nil, hintedVerbError(ErrVerbForbidden, "daemon-upgrade is for the person. A plugin cannot upgrade the daemon, and no dialog is shown for one. Nothing was changed. Run tuios daemon upgrade from a terminal outside tuios", &VerbHint{
@@ -49,8 +51,8 @@ func (d *Daemon) verbDaemonUpgrade(cs *connState, params json.RawMessage) (any, 
 		if err != nil {
 			return nil, upgradeRefusal(err)
 		}
-		if !d.confirmUpgrade(cs, bin) {
-			return nil, notPerson
+		if why := d.confirmUpgrade(cs, bin); why != "" {
+			return nil, notPerson(why)
 		}
 		req.binary, req.pinned = bin.path, &bin.file
 	}

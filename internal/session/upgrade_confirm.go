@@ -1,6 +1,7 @@
 package session
 
 import (
+	"fmt"
 	"os"
 	"strconv"
 	"time"
@@ -88,24 +89,27 @@ func (d *Daemon) personClients() int {
 }
 
 // confirmUpgrade asks the person whether the pane on cs may upgrade the
-// daemon to bin, and reports whether they said yes. It returns false at once
-// when no client could answer.
-func (d *Daemon) confirmUpgrade(cs *connState, bin handoffBinary) bool {
+// daemon to bin. It returns "" when they said yes, and otherwise why not, as
+// a sentence that says what to do next, so an agent can tell a No (stop
+// asking) from a dialog that could not be shown (ask the person to attach).
+// It returns at once when no client could answer.
+func (d *Daemon) confirmUpgrade(cs *connState, bin handoffBinary) string {
+	refuse := func(why string) string {
+		LogBasic("Live upgrade from a pane refused: %s", why)
+		return why
+	}
 	if d.personClients() == 0 {
-		LogBasic("Live upgrade from a pane refused: no client is attached to ask")
-		return false
+		return refuse("No client is attached to show the dialog. Ask the person to attach a client, then run the command again")
 	}
 	if !d.agentsEnabled() {
 		// The dialog rides the Inbox, which clients do not watch with the
 		// agent features off.
-		LogBasic("Live upgrade from a pane refused: the agent features are off, so no client shows the dialog")
-		return false
+		return refuse("The agent features are off, so no client shows the dialog. Ask the person to run tuios daemon upgrade from a terminal outside tuios")
 	}
 	if !askLinePrintable(bin.path) || !askLineShown(bin.accepts.Version, askMaxOption) {
 		// What the dialog shows must be what the exec runs, character for
 		// character.
-		LogBasic("Live upgrade from a pane refused: the binary's path or version cannot be shown as it is")
-		return false
+		return refuse("The binary's path or version cannot be shown in the dialog as it is. Ask the person to run tuios daemon upgrade from a terminal outside tuios")
 	}
 	item := AttentionItem{
 		Name:    "a process inside a pane",
@@ -130,7 +134,7 @@ func (d *Daemon) confirmUpgrade(cs *connState, bin handoffBinary) bool {
 	}
 	hold, err := d.attention.openAsk(item, true)
 	if err != nil {
-		return false
+		return refuse(fmt.Sprintf("The dialog could not be opened (%v). Run the command again", err))
 	}
 	LogBasic("Live upgrade to %s asked for by %s: waiting for the person", bin.path, item.Name)
 	timer := time.NewTimer(upgradeConfirmTimeout())
@@ -144,7 +148,17 @@ func (d *Daemon) confirmUpgrade(cs *connState, bin handoffBinary) bool {
 		out, _ = d.attention.closeAsk(hold, askEndShutdown)
 	}
 	LogBasic("Live upgrade to %s: the ask ended %s %s", bin.path, out.Reason, out.Answer)
-	return out.Reason == AskAnswered && out.Answer == upgradeAnswerYes
+	switch {
+	case out.Reason == AskAnswered && out.Answer == upgradeAnswerYes:
+		return ""
+	case out.Reason == AskAnswered:
+		return "The person answered No. Do not ask again unless they ask for the upgrade"
+	case out.Reason == approvalEndTimeout:
+		return fmt.Sprintf("Nobody answered the dialog within %s. Run the command again, and ask the person to choose Yes in the dialog", upgradeConfirmTimeout())
+	case out.Reason == askEndShutdown:
+		return "The daemon is shutting down"
+	}
+	return fmt.Sprintf("The dialog closed without an answer (%s). Run the command again, and ask the person to choose Yes in the dialog", out.Reason)
 }
 
 // closeAsk ends an open question that a waiting call gives up on, and takes
