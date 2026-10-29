@@ -72,6 +72,10 @@ type inboxAgentsState struct {
 	marksGen uint64
 	// sheet is the bulk allow's confirm sheet, nil when it is not up.
 	sheet *bulkSheet
+	// resuming are the resume offers sent to the daemon and not yet gone,
+	// by item id. Their rows say Resuming until the offer closes. A change
+	// moves marksGen, which the frame cache reads.
+	resuming map[string]bool
 	// snooze are the items the snooze picker picks a length for.
 	snooze []string
 }

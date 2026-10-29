@@ -20,7 +20,8 @@ import (
 // left, p passes on held mail, f steps the filter, / searches, m opens the
 // whole mailbox, z snoozes (then 1 to 4 for how long) or wakes a snoozed
 // item, u undoes the last dismiss or snooze, S shows the snoozed items, x
-// marks an agent for a bulk answer, ? opens help, and esc or q closes. The
+// marks an agent or a resume offer for a bulk answer (with marks, y resumes
+// every marked offer), ? opens help, and esc or q closes. The
 // digits are the numbers the prompt shows, so they are not bindings.
 func handleInboxInput(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	// A question that opened the Inbox by itself a moment ago: the key was
@@ -139,6 +140,9 @@ func handleInboxInput(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		}
 		return o, o.InboxDismiss()
 	case config.ActionInboxResume:
+		if marks {
+			return o, o.InboxAgentsBulkResume()
+		}
 		return o, o.InboxResume()
 	case config.ActionInboxPassOn:
 		return o, o.InboxRelease()

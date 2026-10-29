@@ -2621,6 +2621,10 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		m.applyInboxResumed(msg)
 		return m, nil
 
+	case InboxBulkResumedMsg:
+		m.applyInboxBulkResumed(msg)
+		return m, nil
+
 	case InboxReleasedMsg:
 		m.applyInboxReleased(msg)
 		return m, nil

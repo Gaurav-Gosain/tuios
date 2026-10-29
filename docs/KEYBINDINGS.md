@@ -1682,9 +1682,10 @@ Inside it:
 | `s` | Step the order inside each group |
 | `/` | Search. A `key:value` term is a selector, such as `harness:codex` |
 | `d` `z` `u` `S` | Dismiss, snooze, undo, show the snoozed items |
-| `y` `p` `m` | Resume, pass held mail on, open the mailbox |
-| `x` `*` | Mark an agent, or every agent shown, for a bulk answer. A marked row shows a mark, and the header counts the marks |
+| `y` `p` `m` | Resume in place (the view stays open), pass held mail on, open the mailbox |
+| `x` `*` | Mark an agent or a Resume row, or every row shown, for a bulk answer. A marked row shows a mark, and the header counts the marks |
 | `1` `3` with marks | Allow every marked approval once, after a sheet that lists them, or reject them |
+| `y` with marks | Resume every marked Resume row. `*` then `y` resumes them all |
 | `[` `]` | Switch the focus tabs: Card on the board, Thread, Changes, Artifacts, Checkpoints and Pane |
 | `J` `K` | Scroll the thread, or a long plan waiting for a yes. On the Artifacts tab, move between the artifacts |
 | `e` | Show every line of every card in the thread |

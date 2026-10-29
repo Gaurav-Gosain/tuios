@@ -215,6 +215,8 @@ type InboxDismissedMsg struct {
 type InboxResumedMsg struct {
 	Command string
 	Err     error
+	// ID is the offer, whose row shows Resume again when Err is set.
+	ID string
 }
 
 // inboxWatchMsg wraps what the watcher delivers, so Update can re-arm the
@@ -565,6 +567,7 @@ func (m *OS) applyInboxSnapshot(msg InboxSnapshotMsg) {
 	m.applyBoardSnapshot(msg)
 	m.inboxChanged()
 	m.announceResumes(st.Items)
+	m.pruneResuming(st.Items)
 }
 
 // announceResumes says once, in the dock, that a restart left conversations
@@ -592,8 +595,14 @@ func (m *OS) announceResumes(items []session.AttentionItem) {
 	if len(fresh) > 1 {
 		text = strconv.Itoa(len(fresh)) + " agent conversations can be resumed"
 	}
-	text += agentAlertSep() + "open the agents view with " + m.pressFor("prefix_inbox", "the prefix key then i") +
-		", and press " + m.inboxKeyOr(config.ActionInboxResume, "y")
+	text += agentAlertSep() + "open the agents view with " + m.pressFor("prefix_inbox", "the prefix key then i")
+	if len(fresh) > 1 {
+		// Several resume together: every row marked, then one key.
+		text += ", and press " + m.inboxKeyOr(config.ActionInboxMarkAll, "*") + " then " +
+			m.inboxKeyOr(config.ActionInboxResume, "y") + " to resume all"
+	} else {
+		text += ", and press " + m.inboxKeyOr(config.ActionInboxResume, "y")
+	}
 	m.ShowNotificationFrom(text, "info", m.Settings.NotificationDuration,
 		NotifTarget{SessionID: fresh[0].Session, WindowID: fresh[0].Window})
 }
@@ -656,6 +665,7 @@ func (m *OS) applyInboxEvents(msg InboxEventsMsg) tea.Cmd {
 	session.SortAttention(st.Items)
 	m.inboxChanged()
 	m.announceResumes(st.Items)
+	m.pruneResuming(st.Items)
 	return tea.Batch(append(cmds, m.scheduleInboxAlerts(alert))...)
 }
 
@@ -1895,10 +1905,10 @@ func (m *OS) applyInboxReleased(msg InboxReleasedMsg) {
 	m.ShowNotification("Passed on to "+printableTitle(msg.To), "success", m.Settings.NotificationDuration)
 }
 
-// InboxResume answers the selected resume item: it goes to the pane and has
-// the daemon type the conversation's resume command there, so the person
-// watches the agent come back. The item closes when the daemon says the
-// command was typed.
+// InboxResume answers the selected resume item: the daemon types the
+// conversation's resume command into its pane. The view stays open and the
+// row says Resuming until the offer closes, so the person can go on with the
+// next row. enter goes to the pane, as on any row.
 func (m *OS) InboxResume() tea.Cmd {
 	it, ok := m.inboxSelected()
 	if !ok {
@@ -1908,35 +1918,20 @@ func (m *OS) InboxResume() tea.Cmd {
 		m.ShowNotification("y resumes a conversation a restart left. Enter goes to the pane.", "info", m.Settings.NotificationDuration)
 		return nil
 	}
-	if it.Host != "" || m.AttachedHost != "" || m.DaemonClient == nil {
-		m.ShowNotification("That pane is on another machine; attach there to resume it", "info", m.Settings.NotificationDuration)
+	if m.Inbox.agents.resuming[it.ID] {
 		return nil
 	}
-	m.CloseInbox()
-	m.inboxJump(it)
-	build := m.DaemonClient.ClientVersion()
-	sessionName, window := it.Session, it.Window
-	return func() tea.Msg {
-		client, err := session.DialVerbClientAs(build)
-		if err != nil {
-			return InboxResumedMsg{Err: err}
-		}
-		defer func() { _ = client.Close() }()
-		raw, err := client.CallWithTimeout("resume-agent", map[string]any{"session": sessionName, "window": window}, 5*time.Second)
-		if err != nil {
-			return InboxResumedMsg{Err: err}
-		}
-		var res struct {
-			Command string `json:"command"`
-		}
-		_ = json.Unmarshal(raw, &res)
-		return InboxResumedMsg{Command: res.Command}
+	if it.Host != "" || m.AttachedHost != "" || m.DaemonClient == nil {
+		m.ShowNotification("That pane is on another machine. Attach there to resume it", "info", m.Settings.NotificationDuration)
+		return nil
 	}
+	return m.resumeOffers([]session.AttentionItem{it})
 }
 
 // applyInboxResumed says what was typed, or why nothing was.
 func (m *OS) applyInboxResumed(msg InboxResumedMsg) {
 	if msg.Err != nil {
+		m.unmarkResuming(msg.ID)
 		m.ShowNotification("The resume did not go through: "+msg.Err.Error(), "error", m.Settings.NotificationDuration*2)
 		return
 	}

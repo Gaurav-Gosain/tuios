@@ -1,6 +1,7 @@
 package app
 
 import (
+	"encoding/json"
 	"image/color"
 	"slices"
 	"strconv"
@@ -19,7 +20,7 @@ import (
 
 // Acting on many agents at once, in the agents view.
 //
-// x marks the selected agent and * marks every agent shown (or clears the
+// x marks the selected agent (or resume offer) and * marks every agent shown (or clears the
 // marks when all of them are marked). A marked row shows its mark, and a bulk
 // key acts only on the marked agents the fleet shows: a row in a folded group
 // or past a search is left out. Closing the view clears the marks. With
@@ -40,6 +41,9 @@ import (
 //     one.
 //   - d dismisses the marked agents' Inbox items, and z snoozes them after
 //     the length is picked.
+//   - y resumes every marked row that offers a resume, and the view stays
+//     open. A row that offers one has a mark even with no agent row, so the
+//     conversations a restart left can be marked and resumed together.
 //
 // Every one of these acts as the person, with the attach nonce, so a key from
 // send-keys does none of them.
@@ -75,15 +79,19 @@ type bulkAllow struct {
 // InboxAgentsMarks is how many agents are marked.
 func (m *OS) InboxAgentsMarks() int { return len(m.Inbox.agents.marks) }
 
-// InboxAgentsToggleMark marks or unmarks the selected agent, and moves the
-// cursor on.
+// InboxAgentsToggleMark marks or unmarks the selected row, and moves the
+// cursor on. A row is markable when it is an agent's, or when it offers a
+// resume with no agent of its own.
 func (m *OS) InboxAgentsToggleMark() {
-	e, ok := m.cockpitAgent()
+	r, ok := m.cockpitSelected()
+	if !ok {
+		return
+	}
+	k, ok := m.ckMarkKey(r)
 	if !ok {
 		return
 	}
 	a := &m.Inbox.agents
-	k := agentKey(e)
 	a.marksGen++
 	if a.marks[k] {
 		delete(a.marks, k)
@@ -96,16 +104,16 @@ func (m *OS) InboxAgentsToggleMark() {
 	m.CockpitMove(1)
 }
 
-// InboxAgentsMarkAll marks every agent shown, or clears every mark when they
-// are all marked already.
+// InboxAgentsMarkAll marks every markable row shown, or clears every mark
+// when they are all marked already.
 func (m *OS) InboxAgentsMarkAll() {
 	a := &m.Inbox.agents
 	a.marksGen++
 	m.cockpitTouch()
-	list := m.cockpitShownAgents()
-	all := len(list) > 0
-	for _, e := range list {
-		if !a.marks[agentKey(e)] {
+	keys := m.cockpitShownMarkKeys()
+	all := len(keys) > 0
+	for _, k := range keys {
+		if !a.marks[k] {
 			all = false
 			break
 		}
@@ -117,9 +125,50 @@ func (m *OS) InboxAgentsMarkAll() {
 	if a.marks == nil {
 		a.marks = make(map[string]bool)
 	}
-	for _, e := range list {
-		a.marks[agentKey(e)] = true
+	for _, k := range keys {
+		a.marks[k] = true
 	}
+}
+
+// ckMarkKey is the key a row's mark is kept under: its agent's, or for a
+// resume offer with no agent row, the item's. ok is false for a row that
+// cannot be marked.
+func (m *OS) ckMarkKey(r ckRow) (string, bool) {
+	switch {
+	case r.agent >= 0:
+		return agentKey(m.Inbox.ck.agents[r.agent]), true
+	case r.kind == ckRowItem && r.hasItem && r.item.Kind == session.AttentionResume:
+		return "\x01" + r.item.ID, true
+	}
+	return "", false
+}
+
+// markedShown is how many marked rows the fleet shows.
+func (m *OS) markedShown() int {
+	n := 0
+	for _, k := range m.cockpitShownMarkKeys() {
+		if m.Inbox.agents.marks[k] {
+			n++
+		}
+	}
+	return n
+}
+
+// cockpitShownMarkKeys are the mark keys of the rows the fleet shows, in
+// fleet order, each once.
+func (m *OS) cockpitShownMarkKeys() []string {
+	var out []string
+	seen := map[string]bool{}
+	for _, r := range m.cockpitRows() {
+		if !r.selectable() {
+			continue
+		}
+		if k, ok := m.ckMarkKey(r); ok && !seen[k] {
+			seen[k] = true
+			out = append(out, k)
+		}
+	}
+	return out
 }
 
 // markedAgents are the marked agents the fleet shows, in fleet order.
@@ -481,7 +530,13 @@ func (m *OS) bulkSnoozeCmd(params func() map[string]any, words string) tea.Cmd {
 
 // bulkHints are the agents view's keys while agents are marked.
 func (m *OS) bulkHints() []overlay.Hint {
-	hints := m.keyHints(config.ActionInboxReply, "reply to each")
+	var hints []overlay.Hint
+	// Resume comes first while a marked row offers one: after a restart it
+	// is what the marks are for.
+	if len(m.markedResumes()) > 0 {
+		hints = m.keyHints(config.ActionInboxResume, "resume marked")
+	}
+	hints = append(hints, m.keyHints(config.ActionInboxReply, "reply to each")...)
 	hints = append(hints,
 		overlay.Hint{Key: "1", Label: "allow"},
 		overlay.Hint{Key: "3", Label: "reject"},
@@ -489,4 +544,190 @@ func (m *OS) bulkHints() []overlay.Hint {
 	hints = append(hints, m.keyHints(config.ActionInboxDismiss, "dismiss", config.ActionInboxSnooze, "snooze",
 		config.ActionInboxMark, "mark", config.ActionInboxMarkAll, "all or none")...)
 	return append(hints, m.keyHints(config.ActionInboxClose, "close")...)
+}
+
+// InboxBulkResumedMsg is the answer to a resume of more than one offer: how
+// many resumed, and the agents that did not, each with the reason.
+type InboxBulkResumedMsg struct {
+	Resumed int
+	Failed  []string
+	// IDs are the offers that did not resume, whose rows show Resume again.
+	IDs []string
+}
+
+// markedResumes are the resume offers of the marked rows the fleet shows, in
+// fleet order.
+func (m *OS) markedResumes() []session.AttentionItem {
+	a := &m.Inbox.agents
+	var out []session.AttentionItem
+	for _, it := range m.shownResumes() {
+		if a.marks["\x01"+it.ID] || a.marks[agentKey(sidebarAgentEntry{SessionID: it.Session, WindowID: it.Window})] {
+			out = append(out, it)
+		}
+	}
+	return out
+}
+
+// shownResumes are the resume offers the fleet shows, in fleet order, less
+// those already sent.
+func (m *OS) shownResumes() []session.AttentionItem {
+	a := &m.Inbox.agents
+	var out []session.AttentionItem
+	seen := map[string]bool{}
+	for _, r := range m.cockpitRows() {
+		if !r.selectable() || !r.hasItem || r.item.Kind != session.AttentionResume || seen[r.item.ID] || a.resuming[r.item.ID] {
+			continue
+		}
+		seen[r.item.ID] = true
+		out = append(out, r.item)
+	}
+	return out
+}
+
+// InboxAgentsBulkResume resumes every marked row that offers a resume. The
+// view stays open, and the marks clear. With no marked offer it is
+// InboxResume on the row under the cursor.
+func (m *OS) InboxAgentsBulkResume() tea.Cmd {
+	if m.refuseBulkRemote() {
+		return nil
+	}
+	offers := m.markedResumes()
+	if len(offers) == 0 {
+		// The marks are for other answers: y acts on the row under the
+		// cursor, as it does with no marks. The input path synced the
+		// cursor before it called here.
+		return m.InboxResume()
+	}
+	if m.AttachedHost != "" || m.DaemonClient == nil {
+		m.ShowNotification("These panes are on another machine. Attach there to resume them", "info", m.Settings.NotificationDuration)
+		return nil
+	}
+	m.Inbox.agents.marks = nil
+	m.Inbox.agents.marksGen++
+	return m.resumeOffers(offers)
+}
+
+// resumeOffers has the daemon type each offer's resume command into its pane,
+// at most bulkMax. Nothing moves the focus: each row says Resuming until its
+// offer closes, and the agent's row comes back when its pane reports it. An
+// offer on another machine is left out, and the dock says so.
+func (m *OS) resumeOffers(offers []session.AttentionItem) tea.Cmd {
+	type target struct{ id, session, window, who string }
+	var targets []target
+	var skipped []string
+	a := &m.Inbox.agents
+	for _, it := range offers {
+		who := inboxWho(it)
+		switch {
+		case it.Host != "":
+			skipped = append(skipped, who+" (on "+printableTitle(it.Host)+")")
+			continue
+		case len(targets) == bulkMax:
+			skipped = append(skipped, who+" (past "+strconv.Itoa(bulkMax)+")")
+			continue
+		}
+		targets = append(targets, target{id: it.ID, session: it.Session, window: it.Window, who: who})
+		if a.resuming == nil {
+			a.resuming = make(map[string]bool)
+		}
+		a.resuming[it.ID] = true
+	}
+	a.marksGen++
+	if len(skipped) > 0 {
+		m.ShowNotification("Not resumed: "+strings.Join(skipped, ", "), "info", m.Settings.NotificationDuration*2)
+	}
+	if len(targets) == 0 {
+		return nil
+	}
+	build := m.DaemonClient.ClientVersion()
+	return func() tea.Msg {
+		var msg InboxBulkResumedMsg
+		var command string
+		var lastErr error
+		fail := func(t target, err error) {
+			lastErr = err
+			msg.Failed = append(msg.Failed, t.who+" ("+err.Error()+")")
+			msg.IDs = append(msg.IDs, t.id)
+		}
+		client, err := session.DialVerbClientAs(build)
+		if err != nil {
+			for _, t := range targets {
+				fail(t, err)
+			}
+			return msg
+		}
+		defer func() { _ = client.Close() }()
+		for _, t := range targets {
+			raw, err := client.CallWithTimeout("resume-agent", map[string]any{"session": t.session, "window": t.window}, 5*time.Second)
+			if err != nil {
+				fail(t, err)
+				continue
+			}
+			var res struct {
+				Command string `json:"command"`
+			}
+			_ = json.Unmarshal(raw, &res)
+			command = res.Command
+			msg.Resumed++
+		}
+		if len(targets) == 1 {
+			// One offer says what was typed, as it always did.
+			if len(msg.Failed) > 0 {
+				return InboxResumedMsg{Err: lastErr, ID: targets[0].id}
+			}
+			return InboxResumedMsg{Command: command}
+		}
+		return msg
+	}
+}
+
+// applyInboxBulkResumed says how many resumed, and which did not and why.
+func (m *OS) applyInboxBulkResumed(msg InboxBulkResumedMsg) {
+	m.unmarkResuming(msg.IDs...)
+	if len(msg.Failed) > 0 {
+		m.ShowNotification("Not resumed: "+strings.Join(msg.Failed, ", "), "error", m.Settings.NotificationDuration*2)
+		return
+	}
+	words := "Resumed " + strconv.Itoa(msg.Resumed) + " agents"
+	if msg.Resumed == 1 {
+		words = "Resumed 1 agent"
+	}
+	m.ShowNotification(words, "success", m.Settings.NotificationDuration)
+}
+
+// unmarkResuming shows the given offers as Resume again: their resume did
+// not go through.
+func (m *OS) unmarkResuming(ids ...string) {
+	a := &m.Inbox.agents
+	for _, id := range ids {
+		delete(a.resuming, id)
+	}
+	a.marksGen++
+}
+
+// pruneResuming forgets the offers that have closed.
+func (m *OS) pruneResuming(items []session.AttentionItem) {
+	a := &m.Inbox.agents
+	if len(a.resuming) == 0 {
+		return
+	}
+	open := make(map[string]bool, len(items))
+	for _, it := range items {
+		open[it.ID] = true
+	}
+	for id := range a.resuming {
+		if !open[id] {
+			delete(a.resuming, id)
+			a.marksGen++
+		}
+	}
+}
+
+// resumeAllHint is the hint for resuming every offer at once, shown while
+// the fleet shows more than one and nothing is marked.
+func (m *OS) resumeAllHint() []overlay.Hint {
+	if len(m.shownResumes()) < 2 {
+		return nil
+	}
+	return []overlay.Hint{{Key: m.inboxKeyOr(config.ActionInboxMarkAll, "*") + " " + m.inboxKeyOr(config.ActionInboxResume, "y"), Label: "resume all"}}
 }

@@ -2690,8 +2690,9 @@ between them and other agents.
 
 #### Many agents at once
 
-`x` marks the selected agent, and `*` marks every agent shown, or clears
-the marks when all of them are marked. A marked row shows a mark beside the
+`x` marks the selected agent or Resume row, and `*` marks every agent and
+Resume row shown, or clears the marks when all of them are marked. A marked
+row shows a mark beside the
 cursor bar, and the title says how many are marked. A bulk key acts only on
 the marked agents the list shows: one in a folded group, or one the search
 hides, is left out. Closing the view clears the marks. With marks:
@@ -2713,8 +2714,17 @@ hides, is left out. Closing the view clears the marks. With marks:
 - `d` dismisses what the marked agents have in Needs you, and `z` snoozes it for the
   length you pick next. An item that cannot be snoozed, such as a held
   approval, is left out.
+- `y` resumes every marked Resume row: it types each conversation's resume
+  command into its pane. The view stays open, the marks clear, and the dock
+  says how many resumed. A Resume row on another machine is left out.
 
 A key that `send-keys` typed does none of these.
+
+After a restart, each agent to resume is a Resume row, and the footer shows
+`* y resume all` while there is more than one. Press `*` then `y` to resume
+them all. To resume some, mark each with `x` and press `y`. `y` alone
+resumes the row under the cursor. Each row says `Resuming` until its offer
+closes, and the agent's row comes back when the agent reports in.
 
 `ctrl+]` shows the agent's own screen: the view closes, the agent's pane
 gets the focus and is zoomed, and the dock says `Press ctrl+b i to go back to
@@ -2770,14 +2780,14 @@ Inside the agents view:
 | `J` / `K`, `ctrl+d` / `ctrl+u` | Scroll a plan on the card. The wheel over the card does the same. |
 | `1` to `9` | On a question put with `ask-human`, pick that answer. The question and its numbered answers are shown on its card, and the keys work once it has been on screen as it is for 0.4 seconds. See [Questions an agent asks you](#questions-an-agent-asks-you). |
 | `r`, `i`, `tab` | With no approval waiting: reply to the agent, or to mail, whose thread opens with its reply line. |
-| `y` | On a resume row: go to the pane and type the conversation's resume command there. |
+| `y` | On a Resume row: type the conversation's resume command into its pane. The view stays open, and the row says `Resuming` until the agent is back. With marks, resume every marked Resume row. `enter` goes to the pane. |
 | `p` | On a row that says `held for NAME`: pass the mail another machine sent that agent on to it. See [Mail held from another machine](#mail-held-from-another-machine). |
 | `d` | Dismiss the item. The dock says `u` undoes it, and for 10 seconds it does. |
 | `z` | Snooze the item, then `1` 15 minutes, `2` an hour, `3` until 9:00 tomorrow, `4` until it changes. The footer shows the four while it waits for the digit; any other key cancels. On a snoozed item, wake it. See [Snoozing, undo and unread](#snoozing-undo-and-unread). |
 | `u` | Undo the last dismiss or snooze made in the last 10 seconds. Again, the one before. |
 | `S` | Show or hide the snoozed items, muted, under a Snoozed heading at the bottom. |
 | `f` | Show only the items, then one kind of item at a time, then every agent again. |
-| `x` / `*` | Mark the agent, or every agent shown, for a bulk answer. See [Many agents at once](#many-agents-at-once). |
+| `x` / `*` | Mark the agent or Resume row, or every row shown, for a bulk answer. See [Many agents at once](#many-agents-at-once). |
 | `ctrl+]` | Go to the agent's pane and zoom it. `ctrl+b i` comes back to the same agent. |
 | `l` / `h`, `right` / `left` | On a narrow screen, open the focus and go back to the list. |
 | `?` | Open help on its Agents section. |
@@ -3624,7 +3634,7 @@ command that reopens the conversation: `claude --resume <id>`, `codex resume
 
 | Value | What a restore does |
 | --- | --- |
-| `ask` (default) | A Resume row in the Inbox per pane, its summary the exact command. Your client says once, in the dock, that there are conversations to resume. `y` on the row goes to the pane and types the command; `d` dismisses it. |
+| `ask` (default) | A Resume row in the Inbox per pane, its summary the exact command. Your client says once, in the dock, that there are conversations to resume. `y` on the row types the command into its pane, and the agents view stays open; `d` dismisses it. `*` then `y` resumes every row, and `x` marks the rows to resume. |
 | `auto` | Waits for each new shell's prompt signal before typing. Per-pane waits are staggered by 100 ms. A pane whose shell is not at its prompt after 10 seconds gets the Resume row instead. |
 | `off` | Nothing. The id stays on the pane. |
 

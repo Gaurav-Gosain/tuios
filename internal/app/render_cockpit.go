@@ -469,7 +469,7 @@ func (m *OS) drawCockpitHeader(c *ckCanvas, l ckLook, y, top int) {
 		}
 		x = c.text(x, y, 0, ckSeg{t: what, fg: pal.FgDim}) + 3
 	}
-	if n := len(m.markedAgents()); n > 0 {
+	if n := m.markedShown(); n > 0 {
 		x = c.text(x, y, 0, ckSeg{t: strconv.Itoa(n) + " marked", fg: pal.AccentBright, attrs: ckBold}) + 3
 	}
 	// The board's switch: the word names the view a click opens, as the
@@ -875,9 +875,11 @@ func (m *OS) drawFleetRow(c *ckCanvas, l ckLook, r ckRow, cursor, hover bool, x,
 	var e sidebarAgentEntry
 	if r.agent >= 0 {
 		e = ck.agents[r.agent]
-		// A marked agent shows its mark beside the cursor bar, and a click
-		// there marks or unmarks it.
-		if m.Inbox.agents.marks[agentKey(e)] {
+	}
+	// A marked row shows its mark beside the cursor bar, and a click there
+	// marks or unmarks it.
+	if k, ok := m.ckMarkKey(r); ok {
+		if m.Inbox.agents.marks[k] {
 			c.text(x+1, y, 0, ckSeg{t: l.g(ckGlyphMarked), fg: pal.AccentBright, attrs: ckBold})
 		}
 		ck.hits = append(ck.hits, ckHit{x0: x + 1, y0: top + y, x1: x + 2, y1: top + y + 1, kind: ckHitMark, key: r.key})
@@ -1184,6 +1186,10 @@ func (m *OS) ckRowLine2(l ckLook, r ckRow, e sidebarAgentEntry) (verb, rest stri
 		}
 		if r.item.Kind == session.AttentionMail || r.item.Kind == session.AttentionResume {
 			ink = pal.AccentBright
+		}
+		if r.item.Kind == session.AttentionResume && m.Inbox.agents.resuming[r.item.ID] {
+			// Sent to the daemon: the row stays until the offer closes.
+			verb, ink = "Resuming", pal.FgDim
 		}
 		return verb, rest, ink, nil
 	}
@@ -1621,7 +1627,9 @@ func (m *OS) cockpitHints(now time.Time) []overlay.Hint {
 	if m.InboxReasonOpen() {
 		return []overlay.Hint{{Key: overlay.EnterKey(), Label: "send"}, {Key: "esc", Label: "cancel"}}
 	}
-	var hints []overlay.Hint
+	// Resume all comes first while the fleet shows more than one offer:
+	// after a restart it is the one thing to do.
+	hints := m.resumeAllHint()
 	r, ok := m.cockpitSelected()
 	if ok && r.kind == ckRowCard {
 		hints = m.ckCardHints(st.ck.cards[r.card])
@@ -1668,7 +1676,7 @@ func (m *OS) cockpitHints(now time.Time) []overlay.Hint {
 			switch {
 			case r.item.HeldID != 0:
 				hints = append(hints, m.keyHints(config.ActionInboxPassOn, "pass on")...)
-			case r.item.Kind == session.AttentionResume:
+			case r.item.Kind == session.AttentionResume && !m.Inbox.agents.resuming[r.item.ID]:
 				hints = append(hints, m.keyHints(config.ActionInboxResume, "resume")...)
 			}
 			switch {
@@ -2190,6 +2198,9 @@ func (m *OS) drawItemCard(c *ckCanvas, l ckLook, r ckRow, x, w, y0, y1, top int,
 		c.text(x, i, 0, ckSeg{t: "▌", fg: barInk})
 	}
 	verb, _ := ckItemVerb(it)
+	if it.Kind == session.AttentionResume && m.Inbox.agents.resuming[it.ID] {
+		verb = "Resuming"
+	}
 	title := verb
 	switch {
 	case held && it.Kind == session.AttentionPlan:
