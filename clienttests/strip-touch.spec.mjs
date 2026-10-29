@@ -38,15 +38,28 @@ async function boot(page) {
   });
 }
 
+/** A finger's clock for events: each call is one frame, 16 ms, after the one
+ *  before, in seconds since the epoch as CDP takes them. Without a timestamp
+ *  an event's time is when this script got to send it, and each send waits for
+ *  the page to take the one before. A page slow to take the press then put
+ *  the first move past the long press, and a quick drag read as a hold. The
+ *  clock ends at the time it was made, so no event is dated in the future of
+ *  one sent after the gesture without a timestamp. */
+const fingerClock = (events) => {
+  let at = Date.now() / 1000 - (events * 16) / 1000;
+  return () => (at += 0.016);
+};
+
 /** One finger from (x0, y0) to (x1, y1) in steps, as a phone reports it. */
 async function drag(page, x0, y0, x1, y1, steps = 12) {
   const cdp = await page.context().newCDPSession(page);
   const point = (x, y) => [{ x, y, id: 1, radiusX: 4, radiusY: 4, force: 1 }];
-  await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: point(x0, y0) });
+  const at = fingerClock(steps + 2);
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: point(x0, y0), timestamp: at() });
   for (let i = 1; i <= steps; i++) {
-    await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: point(x0 + ((x1 - x0) * i) / steps, y0 + ((y1 - y0) * i) / steps) });
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: point(x0 + ((x1 - x0) * i) / steps, y0 + ((y1 - y0) * i) / steps), timestamp: at() });
   }
-  await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [], timestamp: at() });
   await cdp.detach();
 }
 
@@ -107,15 +120,16 @@ test('a second finger during the drag reaches neither sip nor the lift', async (
   const cdp = await page.context().newCDPSession(page);
   const one = (x) => ({ x, y, id: 1, radiusX: 4, radiusY: 4, force: 1 });
   const two = { x: g.left + 40, y: g.top + 40, id: 2, radiusX: 4, radiusY: 4, force: 1 };
-  await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [one(x0)] });
-  for (let i = 1; i <= 6; i++) await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [one(x0 - i * 10)] });
+  const at = fingerClock(16);
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [one(x0)], timestamp: at() });
+  for (let i = 1; i <= 6; i++) await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [one(x0 - i * 10)], timestamp: at() });
   await page.evaluate(() => { window.__pointer.length = 0; });
   // A second finger lands and lifts while the first is dragging: a tap, if
   // sip saw it. CDP lifts one finger of two with a move that leaves it out.
-  await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [one(x0 - 60), two] });
-  await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [one(x0 - 60)] });
-  for (let i = 7; i <= 12; i++) await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [one(x0 - i * 10)] });
-  await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [one(x0 - 60), two], timestamp: at() });
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [one(x0 - 60)], timestamp: at() });
+  for (let i = 7; i <= 12; i++) await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [one(x0 - i * 10)], timestamp: at() });
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [], timestamp: at() });
   await cdp.detach();
   await page.waitForTimeout(300);
   const rs = await reports(page);
