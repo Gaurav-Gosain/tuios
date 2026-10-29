@@ -28,12 +28,15 @@ func (d *Daemon) verbDaemonUpgrade(cs *connState, params json.RawMessage) (any, 
 	// holds every pane's terminal and the key that signs every pane's token.
 	// A plugin never may. A pane may when the person says yes in a dialog at
 	// an attached client (upgrade_confirm.go).
-	notPerson := hintedVerbError(ErrVerbForbidden, "daemon-upgrade is for the person: the caller runs inside a pane of this daemon or is a plugin, and an upgrade is refused there whatever its grants", &VerbHint{
-		Detail: "Nothing was changed. Run tuios daemon upgrade from a terminal outside tuios, or answer Yes in the dialog tuios shows when a pane asks.",
+	// The CLI prints only the message, so each says what to do as well.
+	notPerson := hintedVerbError(ErrVerbForbidden, "daemon-upgrade is for the person. An upgrade asked for from a pane needs a Yes in the dialog at an attached client, and none came. Nothing was changed. Answer Yes in the dialog, or run tuios daemon upgrade from a terminal outside tuios", &VerbHint{
+		Detail: "The dialog opens on every attached client and shows the binary, its version and the pane that asked. No, Esc, a minute without an answer, or no attached client refuses.",
 	})
 	confirm := !d.mayActAsHuman(cs)
 	if confirm && d.callerIsPlugin(cs) {
-		return nil, notPerson
+		return nil, hintedVerbError(ErrVerbForbidden, "daemon-upgrade is for the person. A plugin cannot upgrade the daemon, and no dialog is shown for one. Nothing was changed. Run tuios daemon upgrade from a terminal outside tuios", &VerbHint{
+			Detail: "From a pane, the upgrade asks the person in a dialog at an attached client instead.",
+		})
 	}
 	if p.Binary == "" || !filepath.IsAbs(p.Binary) {
 		return nil, invalidParam("binary", "binary must be the absolute path of a tuios binary")
