@@ -67,6 +67,42 @@ func TestKeybindsDoctorNamesACopyModeKeyUsedTwice(t *testing.T) {
 		}
 	})
 
+	// At startup only the binding that never runs is a config problem (#1291).
+	// H and L taken from copy mode work as bound, and window mode is still
+	// entered from the leader's exit key, so neither is warned about. The
+	// doctor still names H and L. The copy pipe key in the same config is the
+	// positive half: it must still be warned about, so a log that shows no
+	// config problem at all is not mistaken for the fix.
+	t.Run("startup", func(t *testing.T) {
+		base := t.TempDir()
+		writeConfig(t, base, "[[keybindings.copy_pipe]]\nkey = \"p\"\ncommand = \"cat\"\n\n"+
+			"[keybindings.copy_mode]\ncopy_mode_line_start = [\"H\"]\ncopy_mode_line_end = [\"L\", \"p\"]\n\n"+
+			"[keybindings.mode_control]\nenter_window_mode = []\n\n"+
+			"[keybindings.prefix_mode]\nprefix_exit_mode = [\"ctrl+e\", \"esc\"]\n")
+		probs, text := doctor(t, base)
+		if len(probs) != 3 {
+			t.Errorf("the doctor reports %d copy mode keys, want 3 (H, L and p)\n%+v\n%s", len(probs), probs, text)
+		}
+
+		term := startIn(t, base, startOpts{cols: 160, rows: 40})
+		waitBoot(t, term)
+		if err := term.SendKeys(tuitest.Ctrl('b'), "D", "l"); err != nil {
+			t.Fatalf("open the log viewer: %v", err)
+		}
+		if err := term.WaitForText("copy_mode_line_end] p", uiTimeout); err != nil {
+			t.Fatalf("the log does not warn about the copy pipe key: %v\n%s", err, term.Snapshot())
+		}
+		saveFrame(t, term, "copy-mode-startup-log")
+		screen := term.Screen().Text()
+		// The log viewer cuts long lines, so each warning is told by its
+		// field and key, which come first.
+		for _, unwanted := range []string{"copy_mode_line_start] H", "copy_mode_line_end] L", "enter_window_mode", "config problems"} {
+			if strings.Contains(screen, unwanted) {
+				t.Errorf("the startup log warns %q about a binding that works:\n%s", unwanted, term.Snapshot())
+			}
+		}
+	})
+
 	t.Run("defaults", func(t *testing.T) {
 		base := t.TempDir()
 		writeConfig(t, base, copyCursorConfig)

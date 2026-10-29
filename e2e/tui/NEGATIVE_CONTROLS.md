@@ -10489,3 +10489,13 @@ time with `go test -overlay`, each cut read back first:
 | Control: what was cut | Where it fails | Verdict |
 | --- | --- | --- |
 | `rememberShownOn` returns at once, so a step falls back to the attached session | `the rail never marked "far-shell" as the attached session`: the client is on `far-other`, 2 of 2 runs | **caught** |
+## Startup warns only about copy-mode keys that never run
+
+`TestKeybindsDoctorNamesACopyModeKeyUsedTwice/startup` loads the config from #1291 (copy-mode `H` and `L`, `enter_window_mode = []`, `prefix_exit_mode` on `ctrl+e` and `esc`) plus a copy pipe on `p` that `copy_mode_line_end` also uses. It reads the startup warnings in the log viewer and the doctor's report. Run on 2026-10-29 on Linux against origin/main at `2c6958d23`, the build without the fix.
+
+| Control: what was cut | Where it fails | Verdict |
+| --- | --- | --- |
+| The `Override` skip in `validateCopyModeKeys` | `the startup log warns "copy_mode_line_start] H"` and `"copy_mode_line_end] L"` | **caught** |
+| The exit-mode alternatives for `enter_window_mode` | `the startup log warns "enter_window_mode"` | **caught** |
+
+The positive half is in the same run: the copy pipe key `p` is still warned about at startup, and the doctor still names `H`, `L` and `p`.

@@ -64,6 +64,11 @@ type CopyModeProblem struct {
 	Action  string `json:"action"`
 	Key     string `json:"key"`
 	Problem string `json:"problem"`
+	// Override is a key copy mode reads itself, taken on purpose by the
+	// binding. The binding works, so it is reported by the doctor and not
+	// warned about at startup. A key a copy pipe also uses is not an override:
+	// the binding never runs.
+	Override bool `json:"override,omitempty"`
 }
 
 // CopyModeProblems lists the [keybindings.copy_mode] keys that a copy pipe
@@ -82,7 +87,7 @@ func (k *KeybindingsConfig) CopyModeProblems() []CopyModeProblem {
 				out = append(out, CopyModeProblem{Action: action, Key: key, Problem: fmt.Sprintf(
 					"A [[keybindings.copy_pipe]] entry uses the key %s. The copy pipe runs, and %s does not. Use a different key.", key, action)})
 			case copyModeFixedKey(canon):
-				out = append(out, CopyModeProblem{Action: action, Key: key, Problem: fmt.Sprintf(
+				out = append(out, CopyModeProblem{Action: action, Key: key, Override: true, Problem: fmt.Sprintf(
 					"Copy mode uses the key %s. This binding takes the key from copy mode. Use a different key, for example home or end.", key)})
 			}
 		}
@@ -90,10 +95,14 @@ func (k *KeybindingsConfig) CopyModeProblems() []CopyModeProblem {
 	return out
 }
 
-// validateCopyModeKeys warns about each copy_mode key that another copy-mode
-// key also uses.
+// validateCopyModeKeys warns about each copy_mode key a copy pipe entry also
+// uses, so the binding never runs. A key taken from copy mode's own keys is a
+// choice that works, and only `tuios keybinds doctor` lists it.
 func validateCopyModeKeys(cfg *UserConfig, result *ValidationResult) {
 	for _, p := range cfg.Keybindings.CopyModeProblems() {
+		if p.Override {
+			continue
+		}
 		result.Warnings = append(result.Warnings, ValidationError{Field: "keybindings.copy_mode." + p.Action, Key: p.Key, Message: p.Problem})
 	}
 }

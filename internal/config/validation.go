@@ -170,21 +170,35 @@ func ValidateConfig(cfg *UserConfig) *ValidationResult {
 		})
 	}
 
-	// Check for essential actions that should have keybindings
-	essentialActions := map[string]string{
-		"new_window":          "window_management",
-		"close_window":        "window_management",
-		"enter_terminal_mode": "mode_control",
-		"enter_window_mode":   "mode_control",
-		"quit":                "mode_control",
+	// Check for essential actions that should have keybindings. An action
+	// counts as bound when any key reaches it or another action that does the
+	// same thing: window mode is entered as well from terminal mode's exit key
+	// and the leader's exit key, and a config that clears enter_window_mode for
+	// one of those has lost nothing.
+	essentialActions := []struct {
+		section, action string
+		alternatives    [][2]string
+	}{
+		{section: "window_management", action: "new_window"},
+		{section: "window_management", action: "close_window"},
+		{section: "mode_control", action: "enter_terminal_mode"},
+		{section: "mode_control", action: "enter_window_mode", alternatives: [][2]string{
+			{"prefix_mode", "prefix_exit_mode"},
+			{"terminal_mode", "terminal_exit_mode"},
+		}},
+		{section: "mode_control", action: "quit"},
 	}
 
-	for action, section := range essentialActions {
-		if !hasKeybinding(cfg, section, action) {
+	for _, e := range essentialActions {
+		bound := hasKeybinding(cfg, e.section, e.action)
+		for _, alt := range e.alternatives {
+			bound = bound || hasKeybinding(cfg, alt[0], alt[1])
+		}
+		if !bound {
 			result.Warnings = append(result.Warnings, ValidationError{
-				Field:   section,
-				Key:     action,
-				Message: fmt.Sprintf("Essential action '%s' has no keybinding, so TUIOS may be difficult to use", action),
+				Field:   e.section,
+				Key:     e.action,
+				Message: fmt.Sprintf("Essential action '%s' has no keybinding, so TUIOS may be difficult to use", e.action),
 			})
 		}
 	}
@@ -1041,6 +1055,8 @@ func hasKeybinding(cfg *UserConfig, sectionName, action string) bool {
 		section = cfg.Keybindings.System
 	case "prefix_mode":
 		section = cfg.Keybindings.PrefixMode
+	case "terminal_mode":
+		section = cfg.Keybindings.TerminalMode
 	case "window_prefix":
 		section = cfg.Keybindings.WindowPrefix
 	case "minimize_prefix":
