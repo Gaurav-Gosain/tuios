@@ -40,7 +40,7 @@ exe_glob  = ["**/share/claude/versions/*", "**/claude"]
 [screen]
 enabled   = true
 fold_case = true
-lines     = 8
+lines     = 10
 
 # The permission prompt. Claude Code asks with a question line and then a
 # numbered list whose first entry is Yes, so the two together are the signature:
@@ -105,7 +105,7 @@ choose = "digit"
 
 # The rules below through the MCP task rule are after herdr's claude manifest
 # (github.com/herdrdev/herdr, src/detect/manifests/claude.toml, manifest version
-# 2026.09.11.1, Apache-2.0; see LICENSE-herdr). Case-insensitive text is
+# 2026.10.11.1, herdr commit 9c38bbc, Apache-2.0; see LICENSE-herdr). Case-insensitive text is
 # written as substrings rather than (?i) patterns: a folded substring is a plain
 # search, and a (?i) pattern over a screen of box drawing costs microseconds a
 # scan.
@@ -138,6 +138,31 @@ any_of   = [
 
 # The form can be a question with options of any wording, so it is answered by
 # number, and esc cancels it, as its footer says.
+[screen.rule.answers]
+deny   = { keys = ["esc"] }
+choose = "digit"
+
+# The same form in a named session with a task panel under the name divider.
+# The titled divider is then no longer the last line, so the rule above does
+# not see the form. herdr's live_blocked_form_named_session accepts only a
+# counted task panel after the divider: a count line, marked rows and an
+# optional pending overflow line. Any other line there can be newer output,
+# which makes the form history. The footer must be the whole of one line, and
+# its controls may wrap between words.
+#
+#   Enter to select · ↑/↓ to navigate · Esc to cancel
+#   ─────────────────────────────── My session ─
+#     3 tasks (1 done, 1 in progress, 1 open)
+#     ✔ Read the config
+#     ◼ Write the patch
+#     ◻ Run the tests
+[[screen.rule]]
+state    = "needs_input"
+priority = 25
+kind     = "approval"
+message  = "Waits for an answer on a form."
+regex    = ['(?i)(?:^|\n)[ \t]*enter\s+to\s+(?:confirm|select\s+·\s+(?:(?:tab/arrow|arrow)\s+keys|arrows|↑/↓|↑↓)\s+to\s+navigate)\s+·\s+esc\s+to\s+cancel[ \t]*\n(?:[ \t]*\n)*[ \t]*─{3,}[^\n]*(?:\n(?:[ \t]*\n)*[ \t]+\d+ tasks? \(\d+ done, (?:\d+ in progress, )?\d+ open\)(?:\n[ \t]+[◻◼✔][ \t]+[^\n]+)+(?:\n[ \t]+…[ \t]+\+\d+[ \t]+pending)?)?(?:\n[ \t]*)*\z']
+
 [screen.rule.answers]
 deny   = { keys = ["esc"] }
 choose = "digit"

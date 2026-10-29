@@ -1,0 +1,120 @@
+# Rules after herdr's agent-detection manifest for letta
+# (github.com/herdrdev/herdr, src/detect/manifests/letta.toml, manifest version
+# 2026.08.24.1, herdr commit fc1cb77, Apache-2.0; see LICENSE-herdr).
+# Regenerate a draft with
+#   go run ./internal/harness/herdrconv
+# Not verified against a live pane: Letta Code is not installed on the machine
+# these rules were written on.
+#
+# Letta keeps completed tool rows and spinners in the transcript, so a lone
+# spinner on the screen is no proof of work. The working rules read the status
+# line and the running tool row, and the title spinner.
+#
+# Not ported: herdr's osc_progress_blocked, because no bundled rule reads
+# OSC 9;4 (the daemon's progress mapping covers it). herdr's profile_selector,
+# composer_input and no_live_state_evidence rules hold the state with
+# "unknown", which tuios does not have. A composer with typed text matches no
+# idle rule here, which has the same effect for the idle case.
+# herdr also refuses a non-interactive launch (letta -p, --json and similar)
+# by its arguments. A manifest cannot read arguments beyond argv_path, so such
+# a launch is a harness here until the process-level check can say otherwise.
+
+schema_version = 1
+id             = "letta"
+display_name   = "Letta"
+priority       = 50
+
+# Letta Code ships on npm as @letta-ai/letta-code and runs under Node or Bun
+# with the command name letta.
+[detect]
+comm      = ["letta"]
+argv0     = ["letta"]
+argv_path = ["@letta-ai/letta-code"]
+
+# "letta" is also the name of the Letta server and other software, so the bare
+# name only counts from a Node or Bun launcher or from the package folder.
+[detect.require]
+exe_base = ["node", "nodejs", "bun"]
+exe_glob = ["**/@letta-ai/**"]
+
+[screen]
+enabled   = true
+fold_case = true
+lines     = 20
+
+# herdr rule: command_approval. The command approval form.
+#
+#   Run this command?
+#   ...
+#   Enter to select · Esc to cancel
+[[screen.rule]]
+state    = "needs_input"
+priority = 1200
+kind     = "approval"
+message  = "Waits for approval."
+region   = "bottom_non_empty_lines(20)"
+all      = ["run this command?", "enter to select · esc to cancel"]
+
+# herdr rule: active_status. The status line of a turn, with the interrupt
+# hint or the word interrupting.
+#
+#   Thinking is running… (esc to interrupt · 12s)
+[[screen.rule]]
+state    = "working"
+priority = 850
+message  = "Works on a turn."
+region   = "bottom_non_empty_lines(8)"
+regex    = ['^\s*(?:\S+\s+)+is(?: \S+)*… \((?:esc to interrupt(?: · .*)?|interrupting)\)\s*$']
+
+# herdr rule: running_tool. A tool row that has not finished.
+#
+#   └ Running...
+[[screen.rule]]
+state    = "working"
+priority = 800
+message  = "Runs a tool."
+region   = "bottom_non_empty_lines(8)"
+regex    = ['^\s*(?:└\s*)?Running\.\.\.\s*(?:\(.*\))?$']
+
+# herdr rule: composer_idle. The empty composer, or its placeholder, with no
+# status line and no running tool row.
+#
+#   › Try "explain this codebase"
+[[screen.rule]]
+state     = "idle"
+priority  = 100
+message   = "Waits at its prompt."
+region    = "bottom_non_empty_lines(8)"
+any_of    = [ { regex = ['^\s*›\s*$'] }, { regex = ['^\s*›\s+Try\s+"'] } ]
+not_regex = ['^\s*(?:\S+\s+)+is(?: \S+)*… \((?:esc to interrupt(?: · .*)?|interrupting)\)\s*$', '^\s*(?:└\s*)?Running\.\.\.\s*(?:\(.*\))?$']
+
+# The window title: "[ ! ] Action Required" when a prompt waits, and a braille
+# spinner during a turn.
+[title]
+enabled   = true
+fold_case = true
+
+# herdr rule: osc_title_blocked.
+[[title.rule]]
+state    = "needs_input"
+priority = 10
+kind     = "approval"
+message  = "Letta says an action is required"
+regex    = ['^\[ [!.] \] Action Required(?: \| |$)']
+
+# herdr rule: osc_title_working.
+[[title.rule]]
+state    = "working"
+priority = 5
+message  = "Works on a turn."
+regex    = ['(?:^| )[⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏](?: |$)']
+
+# How a prompt is typed in. Not measured.
+[input]
+submit          = "cr"
+bracketed_paste = true
+source          = "default: Enter sends CR in raw mode; not measured"
+
+[resume]
+argv   = ["letta", "--conversation", "{session_id}"]
+source = "herdr src/agent_resume.rs; not measured"

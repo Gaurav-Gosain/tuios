@@ -16,11 +16,14 @@ exe_glob  = ["**/vendor/*/bin/codex", "**/codex"]
 
 # The screen carries working and idle, and the blocking prompts below, after
 # herdr's codex manifest (github.com/herdrdev/herdr,
-# src/detect/manifests/codex.toml, manifest version 2026.09.22.1, Apache-2.0;
-# see LICENSE-herdr). The title and notifications below still carry most of
+# src/detect/manifests/codex.toml, manifest version 2026.10.11.1, herdr commit
+# 6d697e1, Apache-2.0; see LICENSE-herdr). The title and notifications below still carry most of
 # Codex's blocked state; these rules catch the prompts that paint and go quiet.
 #
-# Not ported: herdr's weak_blocker and its screen working fallback, which read
+# Not ported: herdr's osc_title_idle, which reads any title that is not a
+# spinner as idle. A title proves only that something set one, as the title
+# block below says, so the idle rule stays on the composer. herdr's
+# weak_blocker and its screen working fallback, which read
 # regions cut at Codex's own prompt marker (after_last_prompt_marker and
 # friends); the rules here read the bottom lines instead. herdr's
 # transcript_viewer rule, which holds the state while the transcript pager is
@@ -79,6 +82,11 @@ regex    = ['(?i)(?:do\s+you\s+trust\s+the\s+contents\s+of\s+this\s+directory\?|
 any      = ["press enter to continue", "enter continue · esc back", "1. yes", "1. trust and continue"]
 
 # The update offer at start, which waits for a key before Codex runs.
+#
+#   Update available! 0.150.0 -> 0.151.0
+#   1. Update now
+#   2. Skip until next version
+#   Press enter to continue
 [[screen.rule]]
 state    = "needs_input"
 priority = 30
@@ -86,6 +94,32 @@ kind     = "question"
 message  = "Offers an update and waits."
 all      = ["update available!", "update now"]
 regex    = ['Skip\s+until\s+next\s+version', 'Press enter to continue\s*\z']
+
+# The update chooser of Codex 0.159 and later, which has a different heading
+# and footer. The passive update notice in the history has neither footer.
+#
+#   Update available · 0.159.0 -> 0.160.0
+#   › 1. Update now
+#     2. Skip
+#   enter continue · esc skip
+[[screen.rule]]
+state    = "needs_input"
+priority = 30
+kind     = "question"
+message  = "Offers an update and waits."
+regex    = ['(?i)^\s*update\s+available\s+·', '(?i)enter\s+continue\s+·\s+esc\s+skip\s*\z']
+
+# The file mention popup, which takes keys until a choice or esc. herdr reads
+# it below the prompt marker; here the three tab names are enough.
+#
+#   All Results   Filesystem Only   Plugins
+[[screen.rule]]
+state    = "needs_input"
+priority = 30
+kind     = "question"
+message  = "Waits for a mention choice."
+region   = "bottom_non_empty_lines(8)"
+all      = ["all results", "filesystem only", "plugins"]
 
 # A turn in progress: the status line above the composer carries an elapsed
 # timer and the interrupt hint.

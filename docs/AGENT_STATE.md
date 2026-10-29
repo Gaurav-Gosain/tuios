@@ -142,11 +142,11 @@ tuios gets an agent's state in one of these ways, best first:
 | Antigravity CLI, Devin CLI, Droid, Qoder CLI | session hook, screen | working, needs_input, idle | screen fixtures |
 | Grok CLI, Hermes Agent | session hook, screen, title | working, needs_input, idle | screen fixtures |
 | Cline, Goose, Maki | screen | working, needs_input, idle | screen fixtures |
+| Letta Code | screen, title | working, needs_input, idle | screen fixtures |
 | Aider | process | working, idle | unit |
 | Any program that writes OSC 7501 (a build, a deploy script, `tuios status`) | OSC 7501 | working, needs_input, idle, done, errored | E2E with a script |
 
-An agent that herdr supports through its own hook scripts, such as Letta Code
-or MastraCode, reports to tuios too when you install herdr's integration for it.
+An agent that herdr supports through its own hook scripts, such as MastraCode, reports to tuios too when you install herdr's integration for it.
 Those scripts send herdr's protocol to `HERDR_SOCKET_PATH`.
 
 ## Where to find what

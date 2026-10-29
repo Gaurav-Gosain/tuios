@@ -32,12 +32,13 @@ Esc:unselect │ Tab:scrollback │ Shift+x:dismiss
   Use ← → to choose permission whitelist scope
 =====
 # harness: grok
-# want: working
-# how: derived. Background work counted above the composer, herdr's
-# background_status_working.
+# want: idle
+# how: derived, after herdr's grok manifest 2026.10.05.1: background work
+# counted above the composer does not hold the pane at working.
 ---
   Started the build in the background.
 ○ 2 commands · 1 subagent still running
+Ctrl+.:shortcuts
 =====
 # harness: grok
 # want: working

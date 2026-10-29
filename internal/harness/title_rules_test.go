@@ -48,6 +48,12 @@ var titleCases = []titleCase{
 	{"grok", "grok", "idle"},
 	{"grok", "~/src/grokking", "none"},
 
+	{"letta", "[ ! ] Action Required | letta", "needs_input"},
+	{"letta", "[ . ] Action Required", "needs_input"},
+	{"letta", "⠹ letta", "working"},
+	{"letta", "letta", "none"},
+	{"letta", "~/src/action-required", "none"},
+
 	{"hermes", "⚠️ hermes: approve rm -rf build", "needs_input"},
 	{"hermes", "⏳ hermes: reading files", "working"},
 	{"hermes", "✓ hermes", "idle"},

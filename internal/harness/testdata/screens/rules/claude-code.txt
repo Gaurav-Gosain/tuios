@@ -216,3 +216,38 @@ to cancel
      Enter to select · ↑/↓ to navigate · Esc to cancel
 ⏺ Opening the PR against main.
 ──────────── Showing detailed transcript · ctrl+o to toggle ─
+=====
+# harness: claude-code
+# want: needs_input
+# how: derived. A question form in a named session with a task panel under
+# the titled divider, after herdr's live_blocked_form_named_session (herdr
+# commit 9c38bbc). The divider is not the last line, so only this rule sees
+# the form.
+---
+────────────────────────────────────────────
+ Which branch should the PR target?
+ ❯ main
+   release/2.1
+ Enter to select · ↑/↓ to navigate · Esc to cancel
+──────────────────────────────── My session ─
+  3 tasks (1 done, 1 in progress, 1 open)
+  ✔ Read the config
+  ◼ Write the patch
+  ◻ Run the tests
+=====
+# harness: claude-code
+# want: none
+# how: derived. The same form with a free-form line after the task panel.
+# That line can be newer output, so the form is history (herdr's
+# live_blocked_form_named_session refuses it too).
+---
+────────────────────────────────────────────
+ Which branch should the PR target?
+ ❯ main
+ Enter to select · ↑/↓ to navigate · Esc to cancel
+──────────────────────────────── My session ─
+  3 tasks (1 done, 1 in progress, 1 open)
+  ✔ Read the config
+  ◼ Write the patch
+  ◻ Run the tests
+Opened the PR against main.

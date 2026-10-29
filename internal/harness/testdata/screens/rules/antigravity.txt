@@ -26,12 +26,51 @@ Requesting permission for: run_command
 ⠹ Thinking
 =====
 # harness: antigravity
-# want: working
-# how: derived. The status line counting background tasks, herdr's
-# background_tasks_working.
+# want: none
+# how: derived, after herdr's antigravity manifest 2026.10.05.1: background
+# tasks left running at the prompt do not count as working.
 ---
 > fix the flaky test
   gemini-3-pro · 2 tasks running
+> 
+=====
+# harness: antigravity
+# want: needs_input
+# how: derived. The permission dialog's hint row above the cancel footer,
+# quoted in herdr's antigravity manifest (permission_prompt). The two footer
+# rows alone are enough.
+---
+↑/↓ Navigate · tab Amend · f full diff
+esc to cancel
+=====
+# harness: antigravity
+# want: needs_input
+# how: derived. The question dialog's hint row above the cancel footer,
+# quoted in herdr's antigravity manifest (question_prompt).
+---
+↑/↓ Navigate · enter Select · esc Skip
+esc to cancel
+=====
+# harness: antigravity
+# want: needs_input
+# how: derived. The folder trust dialog, quoted in herdr's antigravity
+# manifest (trust_prompt).
+---
+Do you trust the contents of this project?
+  Yes, I trust this folder
+  No, exit
+↑/↓ Navigate · enter Confirm
+=====
+# harness: antigravity
+# want: working
+# how: derived. "esc to cancel" directly under the prompt box's bottom
+# border, herdr's esc_cancel_footer_working.
+---
+> fix the flaky test
+╭──────────────────────────╮
+│ >                        │
+╰──────────────────────────╯
+─────────────────────────── esc to cancel
 =====
 # harness: antigravity
 # want: none

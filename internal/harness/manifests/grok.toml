@@ -1,14 +1,18 @@
 # Rules after herdr's agent-detection manifest for grok
 # (github.com/herdrdev/herdr, src/detect/manifests/grok.toml, manifest version
-# 2026.09.18.2, Apache-2.0; see LICENSE-herdr). Regenerate a draft with
+# 2026.10.05.1, herdr commit fabcab1, Apache-2.0; see LICENSE-herdr).
+# Regenerate a draft with
 #   go run ./internal/harness/herdrconv
 # herdr's evidence is Grok Build 0.2.101 source and 1.0.34 live pane reads.
 #
-# Not ported: herdr's background_work_chip_working, which reads the top line
-# of the screen, and the tuios tail is read from the bottom. herdr's two
-# osc_progress rules read OSC 9;4 the way its published meaning already does
-# ("4;1;-1" busy, "4;0;0" idle), so the daemon's own progress mapping covers
-# them.
+# Background commands, monitors and subagents left running after Grok returns
+# to its prompt do not count as working, as for Claude and Antigravity. herdr
+# dropped its background_status_working rule for that reason in manifest
+# 2026.10.05.1, and none ships here.
+#
+# Not ported: herdr's two osc_progress rules. They read OSC 9;4 the way its
+# published meaning already does ("4;1;-1" busy, "4;0;0" idle), so the
+# daemon's own progress mapping covers them.
 
 schema_version = 1
 id             = "grok"
@@ -69,17 +73,6 @@ kind     = "approval"
 message  = "Waits for permission."
 all      = ["yes, proceed", "no, reject"]
 any      = ["use ← → to choose permission whitelist scope", "←/→:scope"]
-
-# herdr rule: background_status_working. Background work counted above the
-# composer.
-#
-#   ○ 2 commands · 1 subagent still running
-[[screen.rule]]
-state    = "working"
-priority = 1165
-message  = "Runs background work."
-region   = "bottom_non_empty_lines(12)"
-regex    = ['^\s*[○◎◉]\s+[1-9][0-9]*\s+(?:commands?|monitors?|loops?|subagents?)(?:\s+·\s+[1-9][0-9]*\s+(?:commands?|monitors?|loops?|subagents?))*\s+still running(?:\s+·\s+send a message to interrupt)?\s*$']
 
 # herdr rule: spinner_status_working. The live status line: a braille spinner
 # and the [stop] chip. The startup splash draws its logo in braille, which is

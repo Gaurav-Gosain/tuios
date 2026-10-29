@@ -41,3 +41,34 @@
   3. Skip until next version
 
   Press enter to continue
+=====
+# harness: codex
+# want: needs_input
+# how: derived. The update chooser of Codex 0.159 and later, herdr's
+# startup_update (second form).
+---
+  Update available · 0.159.0 -> 0.160.0
+
+› 1. Update now
+  2. Skip
+
+  enter continue · esc skip
+=====
+# harness: codex
+# want: none
+# how: derived. The passive update notice in the history has neither chooser
+# footer, so it is not a prompt (herdr's startup_update refuses it too).
+---
+  Update available · 0.159.0 -> 0.160.0 · run npm install -g @openai/codex
+› 
+=====
+# harness: codex
+# want: needs_input
+# how: derived. The file mention popup, whose tab names herdr's
+# live_strong_blocker lists.
+---
+› look at @src/ma
+
+  All Results   Filesystem Only   Plugins
+  src/main.go
+  src/model.go

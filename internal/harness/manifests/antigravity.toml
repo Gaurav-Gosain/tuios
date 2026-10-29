@@ -1,10 +1,14 @@
 # Rules after herdr's agent-detection manifest for antigravity
 # (github.com/herdrdev/herdr, src/detect/manifests/antigravity.toml, herdr id
-# "agy", manifest version 2026.06.24.1, Apache-2.0; see LICENSE-herdr).
-# Regenerate a draft with
+# "agy", manifest version 2026.10.05.1, herdr commit fabcab1, Apache-2.0; see
+# LICENSE-herdr). Regenerate a draft with
 #   go run ./internal/harness/herdrconv
+# herdr's evidence is Antigravity CLI 1.2.17 live pane reads and reporter
+# captures from 1.1.28 through 1.2.16.
 # herdr has no idle rule for it, so none ships: an idle Antigravity pane is
-# left to the other tiers.
+# left to the other tiers. Background tasks and subagents left running once
+# the agent is back at its prompt do not count as working, so herdr's
+# background_tasks_working rule is gone and none ships here.
 
 schema_version = 1
 id             = "antigravity"
@@ -27,36 +31,79 @@ exe_glob = ["**/bin/agy"]
 [screen]
 enabled   = true
 fold_case = true
-lines     = 8
+lines     = 12
 
-# herdr rule: permission_prompt. The permission banner with the proceed
-# question, or with the amend-command hints.
+# Dialogs replace the prompt box and end with a key-hint row directly above
+# the "esc to cancel" footer. Some captures hold only the two footer rows, so
+# the dialog rules read those rows and do not need the question text.
+#
+# herdr rule: permission_prompt. The permission dialog's hint row.
+#
+#   ↑/↓ Navigate · tab Amend · ctrl+g edit/expand command
+#   esc to cancel
 [[screen.rule]]
 state    = "needs_input"
 priority = 300
 kind     = "approval"
 message  = "Waits for permission."
+region   = "bottom_non_empty_lines(2)"
+all      = ["navigate", "tab amend"]
+
+# herdr rule: question_prompt. The question dialog's hint row.
+#
+#   ↑/↓ Navigate · enter Select · esc Skip
+[[screen.rule]]
+state    = "needs_input"
+priority = 290
+kind     = "question"
+message  = "Asks you a question."
+region   = "bottom_non_empty_lines(2)"
+all      = ["navigate", "esc skip"]
+
+# herdr rule: trust_prompt. The folder trust dialog.
+#
+#   Do you trust the contents of this project?
+#   Yes, I trust this folder
+#   ↑/↓ Navigate · enter Confirm
+[[screen.rule]]
+state    = "needs_input"
+priority = 280
+kind     = "approval"
+message  = "Asks you to trust the folder."
+region   = "bottom_non_empty_lines(8)"
+all      = ["do you trust the contents of this project?", "yes, i trust this folder", "enter confirm"]
+
+# herdr rule: legacy_permission_prompt. The pre-1.1.28 permission banner with
+# the proceed question, or with the amend-command hints.
+[[screen.rule]]
+state    = "needs_input"
+priority = 270
+kind     = "approval"
+message  = "Waits for permission."
 all      = ["requesting permission for:"]
 any_of   = [ { all = ["do you want to proceed?"] }, { all = ["tab amend", "edit command"] } ]
 
-# herdr rule: spinner_working. A braille spinner in front of a verb ending in
-# -ing.
+# herdr rule: esc_cancel_footer_working. A turn draws "esc to cancel" directly
+# under the prompt box's bottom border.
+#
+#   ─────────────── esc to cancel
+[[screen.rule]]
+state    = "working"
+priority = 110
+message  = "Works on a turn."
+region   = "bottom_non_empty_lines(2)"
+regex    = ['^\s*─{3,}\s*esc to cancel\b']
+
+# herdr rule: spinner_working. A braille spinner in front of a word or a
+# thought summary, above the prompt box.
 #
 #   ⠹ Thinking
 [[screen.rule]]
 state    = "working"
 priority = 100
 message  = "Works on a turn."
-regex    = ['^\s*[\x{2800}-\x{28FF}]+[ \t]+\pL+\w*ing\b']
-
-# herdr rule: background_tasks_working. The status line counting tasks still
-# running.
-[[screen.rule]]
-state    = "working"
-priority = 90
-message  = "Runs background tasks."
-region   = "bottom_non_empty_lines(5)"
-regex    = ['(?i)·[ \t]*[1-9][0-9]*[ \t]+task']
+region   = "bottom_non_empty_lines(12)"
+regex    = ['^\s*[\x{2801}-\x{28FF}]+\s+\S']
 
 # How a prompt is typed in. Not measured: Antigravity is not installed on the
 # machine these values were written on.
