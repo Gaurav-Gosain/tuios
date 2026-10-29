@@ -264,8 +264,17 @@ func InkFill(style ResolvedStyle, fallback string) string {
 	if color == "" {
 		color = fallback
 	}
-	if color == "" {
+	// The attributes a render asks for most are constants, so a render does not
+	// build the same string for every label.
+	switch color {
+	case "":
 		return ""
+	case ON_LIGHT:
+		return ` fill="` + ON_LIGHT + `"`
+	case ON_DARK:
+		return ` fill="` + ON_DARK + `"`
+	case "var(--_m)":
+		return ` fill="var(--_m)"`
 	}
 	return ` fill="` + color + `"`
 }

@@ -105,6 +105,35 @@ func decode(uri string) string {
 	return uri
 }
 
+// strip removes every match of re from s. It returns s itself when nothing
+// matches, because ReplaceAllString copies the string even then, and a URL
+// rarely holds anything to remove.
+func strip(re *lazyre.Regexp, s string) string {
+	if !re.MatchString(s) {
+		return s
+	}
+	return re.ReplaceAllString(s, "")
+}
+
+// entityChar is String.fromCharCode of the code in an entity that reHTMLEntities matches.
+func entityChar(m string) string {
+	sub := reHTMLEntities.FindStringSubmatch(m)
+	// String.fromCharCode(dec): the number mod 2^16, or 0 for one that is not a number.
+	n := js.Number(sub[1])
+	code := 0
+	if !math.IsNaN(n) && !math.IsInf(n, 0) {
+		// ToUint16: the truncated number mod 2^16, done in float64 so a
+		// number past the int64 range does not hit an
+		// implementation-defined conversion.
+		m := math.Mod(math.Trunc(n), 65536)
+		if m < 0 {
+			m += 65536
+		}
+		code = int(m)
+	}
+	return string(rune(code))
+}
+
 // unwrap removes the control characters, entity codes and escapes that could hide a scheme, and
 // with `percent`, percent escapes too. ok is false for a URL wrapped too many times to be a real one.
 func unwrap(u string, percent bool) (out string, ok bool) {
@@ -118,27 +147,13 @@ func unwrap(u string, percent bool) (out string, ok bool) {
 		if rounds > 32 {
 			return "", false
 		}
-		out = reCtrl.ReplaceAllString(out, "")
-		out = reHTMLEntities.ReplaceAllStringFunc(out, func(m string) string {
-			sub := reHTMLEntities.FindStringSubmatch(m)
-			// String.fromCharCode(dec): the number mod 2^16, or 0 for one that is not a number.
-			n := js.Number(sub[1])
-			code := 0
-			if !math.IsNaN(n) && !math.IsInf(n, 0) {
-				// ToUint16: the truncated number mod 2^16, done in float64 so a
-				// number past the int64 range does not hit an
-				// implementation-defined conversion.
-				m := math.Mod(math.Trunc(n), 65536)
-				if m < 0 {
-					m += 65536
-				}
-				code = int(m)
-			}
-			return string(rune(code))
-		})
-		out = reHTMLCtrlEntity.ReplaceAllString(out, "")
-		out = reCtrl.ReplaceAllString(out, "")
-		out = js.Trim(reWSEscape.ReplaceAllString(out, ""))
+		out = strip(reCtrl, out)
+		if reHTMLEntities.MatchString(out) {
+			out = reHTMLEntities.ReplaceAllStringFunc(out, entityChar)
+		}
+		out = strip(reHTMLCtrlEntity, out)
+		out = strip(reCtrl, out)
+		out = js.Trim(strip(reWSEscape, out))
 		if percent {
 			out = decode(out)
 		}

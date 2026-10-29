@@ -518,6 +518,11 @@ func draw(db *ErDb, config types.Config, options types.RenderOptions, turned boo
 				lineColor = svg.Esc(view.style.Stroke)
 			}
 			var stripes, cells strings.Builder
+			// Every row shares these attributes, so they are built once a box.
+			typeAttrs := ` class="pele-er-type"` + muted + txt
+			nameAttrs := ` class="pele-er-name"` + color + txt
+			keysAttrs := ` class="pele-er-keys" font-size="` + js.Num(view.keySize) + `"` + muted + txt
+			commentAttrs := ` class="pele-er-comment"` + muted + txt
 			y := y0 + view.headH
 			for r, row := range view.rows {
 				if r%2 == 0 {
@@ -531,10 +536,10 @@ func draw(db *ErDb, config types.Config, options types.RenderOptions, turned boo
 					}
 				}
 				baseline := y + ROW_PAD/2.0 + rowLine/2 + float64(view.rowSize*0.35)
-				svg.WriteStrings(&cells, textLeft(row.cells[0], x0+view.cols[0], baseline, ` class="pele-er-type"`+muted+txt, icons, view.mono),
-					textLeft(row.cells[1], x0+view.cols[1], baseline, ` class="pele-er-name"`+color+txt, icons, view.mono),
-					textLeft(row.cells[2], x0+view.cols[2], baseline, ` class="pele-er-keys" font-size="`+js.Num(view.keySize)+`"`+muted+txt, icons, view.mono),
-					textLeft(row.cells[3], x0+view.cols[3], baseline, ` class="pele-er-comment"`+muted+txt, icons, 0))
+				svg.WriteStrings(&cells, textLeft(row.cells[0], x0+view.cols[0], baseline, typeAttrs, icons, view.mono),
+					textLeft(row.cells[1], x0+view.cols[1], baseline, nameAttrs, icons, view.mono),
+					textLeft(row.cells[2], x0+view.cols[2], baseline, keysAttrs, icons, view.mono),
+					textLeft(row.cells[3], x0+view.cols[3], baseline, commentAttrs, icons, 0))
 				y += row.h
 			}
 			dividerY := num(y0 + view.headH)
