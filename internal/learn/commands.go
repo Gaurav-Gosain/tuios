@@ -345,7 +345,7 @@ func Actions() map[string]string {
 	return out
 }
 
-// pageSections are the config sections whose options only change how the
+// pageSection reports the config sections whose options only change how the
 // screen looks or how input moves through it.
 //
 // The rest name a host program, a file or folder, the daemon, or startup:
@@ -353,10 +353,16 @@ func Actions() map[string]string {
 // notifications.agent.command, daemon.*. None of them work in a browser tab,
 // where os/exec and the file system fail, but a page has no reason to reach
 // them, and a section added later stays shut until it is listed here.
-var pageSections = map[string]bool{
-	"appearance": true, "dock": true, "sidebar": true, "scrollbar": true,
-	"selection": true, "screensaver": true, "spotlight": true, "pip": true,
-	"hints": true, "panes": true, "scratch": true, "workspaces": true,
+//
+// A switch, not a map: a map is built at package init, in every tuios
+// process, and only the tour reads it.
+func pageSection(name string) bool {
+	switch name {
+	case "appearance", "dock", "sidebar", "scrollbar", "selection", "screensaver",
+		"spotlight", "pip", "hints", "panes", "scratch", "workspaces":
+		return true
+	}
+	return false
 }
 
 // pageSettable reports the registry path the page's set command may change
@@ -376,7 +382,7 @@ func pageSettable(path string) (string, bool) {
 		path = "appearance." + path
 		opt, ok = config.LookupOption(path)
 	}
-	if !ok || !pageSections[opt.Section] || config.ReachesHost(path) {
+	if !ok || !pageSection(opt.Section) || config.ReachesHost(path) {
 		return "", false
 	}
 	return path, true

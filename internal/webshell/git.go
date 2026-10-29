@@ -50,23 +50,27 @@ func (c *checkout) headHash() string {
 	return c.commits[len(c.commits)-1].hash
 }
 
-var repo = &checkout{
-	root:   ProjectDir,
-	branch: "main",
-	head: map[string]string{
-		"go.mod":        helloGoMod,
-		"main.go":       helloMain,
-		"greet.go":      helloGreetHead,
-		"greet_test.go": helloTest,
-		"README.md":     helloReadme,
-	},
-	staged: map[string]bool{},
-	commits: []gitCommit{
-		{hash: "e41d7a2", message: "Initial commit", when: started.Add(-72 * time.Hour)},
-		{hash: "3c9a0f1", message: "Say hello", when: started.Add(-50 * time.Hour)},
-		{hash: "7d2b8e4", message: "Split greet into its own file", when: started.Add(-26 * time.Hour)},
-		{hash: "a1f3c9e", message: "Add a test for greet", when: started.Add(-3 * time.Hour)},
-	},
+var repo *checkout
+
+func initRepo() {
+	repo = &checkout{
+		root:   ProjectDir,
+		branch: "main",
+		head: map[string]string{
+			"go.mod":        helloGoMod,
+			"main.go":       helloMain,
+			"greet.go":      helloGreetHead,
+			"greet_test.go": helloTest,
+			"README.md":     helloReadme,
+		},
+		staged: map[string]bool{},
+		commits: []gitCommit{
+			{hash: "e41d7a2", message: "Initial commit", when: started.Add(-72 * time.Hour)},
+			{hash: "3c9a0f1", message: "Say hello", when: started.Add(-50 * time.Hour)},
+			{hash: "7d2b8e4", message: "Split greet into its own file", when: started.Add(-26 * time.Hour)},
+			{hash: "a1f3c9e", message: "Add a test for greet", when: started.Add(-3 * time.Hour)},
+		},
+	}
 }
 
 // linked are the worktrees made since the tab opened, oldest first. Guarded
@@ -537,6 +541,7 @@ func gitWorktree(s *shell, args []string) int {
 // it. From a linked worktree it is the main checkout too, as on a real
 // machine.
 func RepoRoot(dir string) string {
+	ready()
 	if lockedCheckoutAt(dir) == nil {
 		return ""
 	}
@@ -546,6 +551,7 @@ func RepoRoot(dir string) string {
 // WorktreeAt is the root of the checkout dir is in and its branch, or empty
 // strings outside the repository.
 func WorktreeAt(dir string) (root, branch string) {
+	ready()
 	fsMu.RLock()
 	defer fsMu.RUnlock()
 	if c := checkoutAt(dir); c != nil {
@@ -559,6 +565,7 @@ func WorktreeAt(dir string) (root, branch string) {
 // of the main checkout. It returns the worktree's folder and the session name
 // tuios would give it.
 func NewWorktree(repoRoot, branch string) (path, session string, err error) {
+	ready()
 	branch = strings.TrimSpace(branch)
 	if repoRoot != repo.root {
 		return "", "", fmt.Errorf("%s is not a git repository", prettyPath(repoRoot))

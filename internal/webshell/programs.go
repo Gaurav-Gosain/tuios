@@ -27,7 +27,11 @@ var (
 	logoPalette = []string{"\x1b[38;5;213m", "\x1b[38;5;177m", "\x1b[38;5;141m", "\x1b[38;5;105m", "\x1b[38;5;69m", "\x1b[38;5;39m"}
 )
 
-var started = time.Now()
+var started time.Time
+
+func initStarted() {
+	started = time.Now()
+}
 
 func cmdFastfetch(t *TTY, _ []string) int {
 	uptime := time.Since(started).Round(time.Second).String()
@@ -43,8 +47,8 @@ func cmdFastfetch(t *TTY, _ []string) int {
 func fastfetch(cols int, uptime string) []string {
 	cols = max(cols, 1)
 	info := [][2]string{
-		{"OS", "your browser"},
-		{"Kernel", "WebAssembly"},
+		{"OS", text("your browser")},
+		{"Kernel", text("WebAssembly")},
 		{"Uptime", uptime},
 		{"Shell", "webshell"},
 		{"WM", "tuios"},
@@ -360,7 +364,7 @@ var fortunes = []string{
 }
 
 func cmdFortune(t *TTY, _ []string) int {
-	fortune := fortunes[rand.IntN(len(fortunes))]
+	fortune := text(fortunes[rand.IntN(len(fortunes))])
 	t.Lay(func(cols int) []string { return wrapWords(fortune, cols) })
 	return 0
 }
@@ -456,7 +460,7 @@ func cmdTree(s *shell, args []string, _ string) int {
 func cmdGo(s *shell, args []string, _ string) int {
 	sub := argOr(args, 1, "")
 	if sub == "version" {
-		s.t.Print("go version go1.25 js/wasm\r\n")
+		s.t.Print("go version go1.25 " + text("js/wasm") + "\r\n")
 		return 0
 	}
 	if sub == "" || sub == "help" {

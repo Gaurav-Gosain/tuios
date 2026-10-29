@@ -370,6 +370,16 @@ func (m *OS) kickFlush() {
 	}
 }
 
+// RequestFlush asks for the next frame to be written now, for a host model
+// that draws around this one: tuios tutor's card can change while the panes
+// do not, and a bound program writes no frame nobody asked for. Return the
+// command from the host's Update, and pass the message it makes back to
+// this model's Update.
+func (m *OS) RequestFlush() tea.Cmd {
+	m.kickFlush()
+	return flushCmd
+}
+
 // flushMsg is the request kickFlush made, back on the Update goroutine.
 type flushMsg struct{}
 

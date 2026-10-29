@@ -3102,6 +3102,10 @@ command in authorized_keys to make the policy a boundary:
 	rootCmd.AddCommand(newMermaidCommand())
 	rootCmd.AddCommand(newTMLCommand())
 
+	// The tutor heads the help: it is the first thing a new person needs.
+	rootCmd.AddGroup(&cobra.Group{ID: groupGettingStarted, Title: "getting started"})
+	rootCmd.AddCommand(newTutorCommand())
+
 	addExplorers(rootCmd)
 	rejectUnknownSubcommands(rootCmd)
 	return rootCmd

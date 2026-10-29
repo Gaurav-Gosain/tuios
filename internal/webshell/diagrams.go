@@ -54,7 +54,7 @@ func drawDiagrams(s *shell, cmd string, in []string, valued, bools []string) int
 	}
 	format := strings.ToLower(a.flags["format"] + a.flags["f"])
 	if format != "" && format != "text" || a.flags["out"]+a.flags["o"] != "" {
-		return s.fail(cmd + ": the browser draws text only. Drop the format and out flags.")
+		return s.fail(cmd + ": " + text("the browser draws text only. Drop the format and out flags."))
 	}
 	name, data, ok := s.readSource(cmd, a)
 	if !ok {
@@ -173,7 +173,7 @@ func cmdTplot(s *shell, in []string, _ string) int {
 		return s.fail("tplot: " + err.Error())
 	}
 	if a.has("version") {
-		s.t.Print("tplot (browser demo)\r\n")
+		s.t.Print("tplot (" + text("browser demo") + ")\r\n")
 		return 0
 	}
 	if a.has("help") || a.has("h") || len(a.files) == 0 {
@@ -530,12 +530,16 @@ func withLegend(g *plot.Grid, items []plot.LegendItem, m plot.Mode) *plot.Grid {
 
 // plotSlots maps each role to an ANSI colour slot, as tplot does, so a
 // chart takes the colours of the tuios theme.
-var plotSlots = map[plot.Role]int{
-	plot.Fg: 15, plot.Dim: 7, plot.Mute: 8, plot.Edge: 8, plot.Track: 8,
-	plot.Accent: 5, plot.AccentBright: 13,
-	plot.Success: 10, plot.Error: 9, plot.Warning: 11, plot.Info: 12,
-	plot.Series1: 13, plot.Series2: 12, plot.Series3: 10, plot.Series4: 11, plot.Series5: 9, plot.Series6: 14,
-	plot.Heat1: 4, plot.Heat2: 12, plot.Heat3: 6, plot.Heat4: 5, plot.Heat5: 13,
+var plotSlots map[plot.Role]int
+
+func initPlotSlots() {
+	plotSlots = map[plot.Role]int{
+		plot.Fg: 15, plot.Dim: 7, plot.Mute: 8, plot.Edge: 8, plot.Track: 8,
+		plot.Accent: 5, plot.AccentBright: 13,
+		plot.Success: 10, plot.Error: 9, plot.Warning: 11, plot.Info: 12,
+		plot.Series1: 13, plot.Series2: 12, plot.Series3: 10, plot.Series4: 11, plot.Series5: 9, plot.Series6: 14,
+		plot.Heat1: 4, plot.Heat2: 12, plot.Heat3: 6, plot.Heat4: 5, plot.Heat5: 13,
+	}
 }
 
 // plotSlot is the ANSI slot of a role, or -1. A faded bright colour is its

@@ -60,44 +60,48 @@ type persona struct {
 	first func(r *agentRun, task string) bool
 }
 
-var personas = map[string]*persona{
-	"claude": {
-		name: "claude", harness: AgentHarness, product: "Claude Code", accent: agentOrange,
-		task: "add a dark mode toggle",
-		you:  agentGrey + "> " + reset, say: bold + "●" + reset + " ", result: agentGrey + "  ⎿  " + reset, pick: "❯ ",
-		tool: func(name, target string) string {
-			return green + "●" + reset + " " + bold + name + reset + "(" + target + ")"
+var personas map[string]*persona
+
+func initPersonas() {
+	personas = map[string]*persona{
+		"claude": {
+			name: "claude", harness: AgentHarness, product: "Claude Code", accent: agentOrange,
+			task: "add a dark mode toggle",
+			you:  agentGrey + "> " + reset, say: bold + "●" + reset + " ", result: agentGrey + "  ⎿  " + reset, pick: "❯ ",
+			tool: func(name, target string) string {
+				return green + "●" + reset + " " + bold + name + reset + "(" + target + ")"
+			},
+			spin: func(i, secs int) string {
+				return agentOrange + agentSpinner[i%len(agentSpinner)] + " Thinking…" + reset +
+					agentGrey + " (" + strconv.Itoa(secs) + "s · esc to interrupt)" + reset
+			},
+			first: claudeTurn,
 		},
-		spin: func(i, secs int) string {
-			return agentOrange + agentSpinner[i%len(agentSpinner)] + " Thinking…" + reset +
-				agentGrey + " (" + strconv.Itoa(secs) + "s · esc to interrupt)" + reset
+		"codex": {
+			name: "codex", harness: "codex", product: ">_ OpenAI Codex", accent: agentTeal,
+			task: "add greet tests",
+			you:  bold + "› " + reset, say: "• ", result: agentGrey + "  └ " + reset, pick: "› ",
+			tool: func(name, target string) string { return "• " + bold + name + reset + " " + target },
+			spin: func(i, secs int) string {
+				return agentTeal + "•" + reset + " " + bold + "Working" + reset +
+					agentGrey + " (" + strconv.Itoa(secs) + "s • esc to interrupt)" + reset
+			},
+			first: codexTurn,
 		},
-		first: claudeTurn,
-	},
-	"codex": {
-		name: "codex", harness: "codex", product: ">_ OpenAI Codex", accent: agentTeal,
-		task: "add greet tests",
-		you:  bold + "› " + reset, say: "• ", result: agentGrey + "  └ " + reset, pick: "› ",
-		tool: func(name, target string) string { return "• " + bold + name + reset + " " + target },
-		spin: func(i, secs int) string {
-			return agentTeal + "•" + reset + " " + bold + "Working" + reset +
-				agentGrey + " (" + strconv.Itoa(secs) + "s • esc to interrupt)" + reset
+		"gemini": {
+			name: "gemini", harness: "gemini-cli", product: "✦ Gemini CLI", accent: agentBlue,
+			task: "pick the theme colors",
+			you:  agentBlue + "> " + reset, say: agentBlue + "✦" + reset + " ", result: agentGrey + "    " + reset, pick: "● ",
+			tool: func(name, target string) string {
+				return green + "✔" + reset + " " + bold + name + reset + " " + target
+			},
+			spin: func(i, secs int) string {
+				return agentBlue + brailleSpinner[i%len(brailleSpinner)] + reset + " Thinking…" +
+					agentGrey + " (esc to cancel, " + strconv.Itoa(secs) + "s)" + reset
+			},
+			first: geminiTurn,
 		},
-		first: codexTurn,
-	},
-	"gemini": {
-		name: "gemini", harness: "gemini-cli", product: "✦ Gemini CLI", accent: agentBlue,
-		task: "pick the theme colors",
-		you:  agentBlue + "> " + reset, say: agentBlue + "✦" + reset + " ", result: agentGrey + "    " + reset, pick: "● ",
-		tool: func(name, target string) string {
-			return green + "✔" + reset + " " + bold + name + reset + " " + target
-		},
-		spin: func(i, secs int) string {
-			return agentBlue + brailleSpinner[i%len(brailleSpinner)] + reset + " Thinking…" +
-				agentGrey + " (esc to cancel, " + strconv.Itoa(secs) + "s)" + reset
-		},
-		first: geminiTurn,
-	},
+	}
 }
 
 // agentRun is one agent running in a pane.
@@ -166,7 +170,7 @@ func (r *agentRun) welcome(cols int) []string {
 		ink + "╭" + strings.Repeat("─", w-2) + "╮" + reset,
 		inkBoxLine(ink, w, ink+"✻"+reset+" Welcome to "+bold+r.p.product+reset+" (tuios demo)"),
 		inkBoxLine(ink, w, ""),
-		inkBoxLine(ink, w, agentGrey+"  A pretend agent. Nothing leaves this tab."+reset),
+		inkBoxLine(ink, w, agentGrey+"  A pretend agent. "+text("Nothing leaves this tab.")+reset),
 		ink + "╰" + strings.Repeat("─", w-2) + "╯" + reset,
 	}
 }
@@ -179,11 +183,15 @@ func (r *agentRun) setTitle(task string) {
 
 // titleSkip are the words a title leaves out: the small ones, and the verb
 // most tasks start with.
-var titleSkip = map[string]bool{
-	"a": true, "an": true, "the": true, "to": true, "for": true, "of": true, "and": true, "in": true,
-	"on": true, "with": true, "my": true, "this": true, "that": true, "it": true, "some": true,
-	"add": true, "make": true, "write": true, "fix": true, "pick": true, "update": true, "create": true,
-	"build": true, "change": true, "use": true, "set": true, "please": true,
+var titleSkip map[string]bool
+
+func initTitleSkip() {
+	titleSkip = map[string]bool{
+		"a": true, "an": true, "the": true, "to": true, "for": true, "of": true, "and": true, "in": true,
+		"on": true, "with": true, "my": true, "this": true, "that": true, "it": true, "some": true,
+		"add": true, "make": true, "write": true, "fix": true, "pick": true, "update": true, "create": true,
+		"build": true, "change": true, "use": true, "set": true, "please": true,
+	}
 }
 
 // agentTitle is a short name for a task: its first words that say

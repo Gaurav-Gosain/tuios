@@ -335,12 +335,16 @@ func clip(s string, width int) string {
 	return string(r[:width])
 }
 
-var goKeywords = map[string]bool{
-	"package": true, "import": true, "func": true, "return": true, "if": true,
-	"else": true, "for": true, "range": true, "var": true, "const": true,
-	"type": true, "struct": true, "map": true, "go": true, "defer": true,
-	"switch": true, "case": true, "default": true, "nil": true, "true": true,
-	"false": true, "string": true, "int": true, "error": true,
+var goKeywords map[string]bool
+
+func initGoKeywords() {
+	goKeywords = map[string]bool{
+		"package": true, "import": true, "func": true, "return": true, "if": true,
+		"else": true, "for": true, "range": true, "var": true, "const": true,
+		"type": true, "struct": true, "map": true, "go": true, "defer": true,
+		"switch": true, "case": true, "default": true, "nil": true, "true": true,
+		"false": true, "string": true, "int": true, "error": true,
+	}
 }
 
 // highlight colours one line: Go keywords, strings and comments, Markdown

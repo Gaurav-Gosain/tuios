@@ -12,7 +12,7 @@ import (
 )
 
 // renderDirs are the packages whose non-test files are render code.
-var renderDirs = []string{"internal/app", "internal/overlay", "internal/composer"}
+var renderDirs = []string{"internal/app", "internal/overlay", "internal/composer", "internal/tutor"}
 
 // tokenFiles are the files in renderDirs that define the tokens, and so are
 // where colour literals belong.

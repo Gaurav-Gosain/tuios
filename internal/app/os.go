@@ -1106,6 +1106,10 @@ type OS struct {
 	// OnNotification, when set, hears every message shown in the dock, with
 	// its level. The browser build reports it to the page. Nil everywhere else.
 	OnNotification func(message, level string)
+	// LearnNotes, when set, replaces Learn mode's notes by their default
+	// text. The notes talk about a browser tab; tuios tutor runs in a
+	// terminal. An empty replacement shows no note.
+	LearnNotes map[string]string
 	// learn is what Learn mode reads in place of the disk and git: the fake
 	// shell's files and repository. Nil everywhere else. See
 	// SetLearnBackend.

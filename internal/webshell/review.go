@@ -31,6 +31,7 @@ type Review struct {
 // base, which has to be a branch of the repository or HEAD; then the branch a
 // worktree was made from; then the last commit.
 func ReviewDiff(dir, base string, uncommitted bool) (Review, error) {
+	ready()
 	fsMu.RLock()
 	defer fsMu.RUnlock()
 	c := checkoutAt(dir)

@@ -5,10 +5,26 @@ import (
 	"regexp"
 	"slices"
 	"strings"
+	"sync"
 	"unicode/utf8"
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 )
+
+// The key tables are built on first use, not at package init, so a tuios
+// process that never runs a lesson pays nothing for them.
+var keysOnce sync.Once
+
+func keyTables() {
+	keysOnce.Do(func() {
+		initNamedBytes()
+		initArrowFinal()
+		initChordMods()
+		initNamedChord()
+		modifierKey = regexp.MustCompile(`(^|\+)((left|right)(shift|alt|ctrl|super|hyper|meta)|isolevel[35]shift)$`)
+		shiftOne = regexp.MustCompile(`^shift\+(.)$`)
+	})
+}
 
 // ChordParts splits a chord: "ctrl+b" is ["ctrl", "b"]. "+" alone stays.
 func ChordParts(chord string) []string {
@@ -18,16 +34,25 @@ func ChordParts(chord string) []string {
 	return strings.Split(chord, "+")
 }
 
-var namedBytes = map[string]string{
-	"enter": "\r", "esc": "\x1b", "escape": "\x1b", "tab": "\t", "space": " ",
-	"backspace": "\x7f", "up": "\x1b[A", "down": "\x1b[B", "right": "\x1b[C", "left": "\x1b[D",
+var namedBytes map[string]string
+
+func initNamedBytes() {
+	namedBytes = map[string]string{
+		"enter": "\r", "esc": "\x1b", "escape": "\x1b", "tab": "\t", "space": " ",
+		"backspace": "\x7f", "up": "\x1b[A", "down": "\x1b[B", "right": "\x1b[C", "left": "\x1b[D",
+	}
 }
 
-var arrowFinal = map[string]string{"up": "A", "down": "B", "right": "C", "left": "D"}
+var arrowFinal map[string]string
+
+func initArrowFinal() {
+	arrowFinal = map[string]string{"up": "A", "down": "B", "right": "C", "left": "D"}
+}
 
 // KeyBytes is what "show me" types for a key: the bytes a terminal sends for
 // a chord, or the text itself.
 func KeyBytes(k Key) string {
+	keyTables()
 	if k.Text != "" {
 		return k.Text
 	}
@@ -84,6 +109,7 @@ func KeyBytes(k Key) string {
 // fromMacOption reads "alt+∆" and a bare "∆", the Mac spellings of alt+j,
 // as the chord. The glyphs are config's, the one table tuios keeps.
 func fromMacOption(key string) string {
+	keyTables()
 	glyph := strings.TrimPrefix(key, "alt+")
 	r, size := utf8.DecodeRuneInString(glyph)
 	if size == 0 || size != len(glyph) {
@@ -102,18 +128,22 @@ func IsAltChord(chord string) bool {
 	return slices.Contains(parts[:len(parts)-1], "alt")
 }
 
-var modifierKey = regexp.MustCompile(`(^|\+)((left|right)(shift|alt|ctrl|super|hyper|meta)|isolevel[35]shift)$`)
+var modifierKey *regexp.Regexp
 
 // IsModifierKey reports whether tuios reported a modifier on its own, which
 // comes before the chord it starts.
-func IsModifierKey(key string) bool { return modifierKey.MatchString(key) }
+func IsModifierKey(key string) bool {
+	keyTables()
+	return modifierKey.MatchString(key)
+}
 
-var shiftOne = regexp.MustCompile(`^shift\+(.)$`)
+var shiftOne *regexp.Regexp
 
 // SameChord reports whether the key tuios reported is the chord a step asks
 // for. tuios reports "|" for shift and backslash, case does not matter, and
 // a Mac Option glyph is the alt chord.
 func SameChord(reported, wanted string) bool {
+	keyTables()
 	if reported == wanted {
 		return true
 	}
@@ -128,18 +158,15 @@ func SameChord(reported, wanted string) bool {
 }
 
 var (
-	chordMods  = map[string]bool{"ctrl": true, "alt": true, "shift": true, "super": true}
-	namedChord = map[string]bool{
-		"enter": true, "esc": true, "tab": true, "space": true, "backspace": true,
-		"up": true, "down": true, "left": true, "right": true, "home": true, "end": true,
-		"pgup": true, "pgdown": true, "delete": true, "insert": true,
-	}
+	chordMods  map[string]bool
+	namedChord map[string]bool
 )
 
 // CheckChord reports whether a step's chord is one the engine can match and
 // "show me" can type: modifiers from ctrl, alt, shift and super, each once,
 // then one character or a named key.
 func CheckChord(chord string) error {
+	keyTables()
 	if chord == "" {
 		return fmt.Errorf("an empty key")
 	}
@@ -159,4 +186,16 @@ func CheckChord(chord string) error {
 		return nil
 	}
 	return fmt.Errorf("key %q: %q is not a character or a named key", chord, base)
+}
+
+func initChordMods() {
+	chordMods = map[string]bool{"ctrl": true, "alt": true, "shift": true, "super": true}
+}
+
+func initNamedChord() {
+	namedChord = map[string]bool{
+		"enter": true, "esc": true, "tab": true, "space": true, "backspace": true,
+		"up": true, "down": true, "left": true, "right": true, "home": true, "end": true,
+		"pgup": true, "pgdown": true, "delete": true, "insert": true,
+	}
 }

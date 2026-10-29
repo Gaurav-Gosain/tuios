@@ -13,28 +13,31 @@ type sample struct {
 // samples maps a tuios subcommand to its sample. Aliases share an entry. A
 // key of two words is a subcommand of a group, such as "task add", and a
 // group with any such key has no sample of its own. See sampleFor.
-var samples = map[string]sample{
-	"ls": {"sessions", `╭──────┬─────────┬──────────┬─────────────┬─────────────╮
+var samples map[string]sample
+
+func initSamples() {
+	samples = map[string]sample{
+		"ls": {"sessions", `╭──────┬─────────┬──────────┬─────────────┬─────────────╮
 │ NAME │ WINDOWS │ STATUS   │ CREATED     │ LAST ACTIVE │
 ├──────┼─────────┼──────────┼─────────────┼─────────────┤
 │ work │ 3       │ detached │ 2 hours ago │ 5 mins ago  │
 │ dev  │ 2       │ attached │ 1 day ago   │ just now    │
 ╰──────┴─────────┴──────────┴─────────────┴─────────────╯`},
-	"attach": {"sessions", `Attached to work. Your 3 windows are where you left them.`},
-	"list-agents": {"agent-messaging", `╭──────────┬────────┬─────────────┬─────────────┬────────┬──────┬───────────────────╮
+		"attach": {"sessions", `Attached to work. Your 3 windows are where you left them.`},
+		"list-agents": {"agent-messaging", `╭──────────┬────────┬─────────────┬─────────────┬────────┬──────┬───────────────────╮
 │ ID       │ NAME   │ STATE       │ HARNESS     │ SOURCE │ MAIL │ NOTE              │
 ├──────────┼────────┼─────────────┼─────────────┼────────┼──────┼───────────────────┤
 │ c7be946f │ review │ needs_input │ claude-code │ report │ 1    │ which retry?      │
 │ 29f0307b │ tests  │ working     │ codex       │ report │ 0    │ running the suite │
 ╰──────────┴────────┴─────────────┴─────────────┴────────┴──────┴───────────────────╯`},
-	"send-agent-message": {"agent-messaging", `Sent to review (c7be946f). It is #2 in its inbox.`},
-	"fan": {"worktrees", `Started 3 agents on fan/dark-mode. Each prompt is sent when its agent is ready.
+		"send-agent-message": {"agent-messaging", `Sent to review (c7be946f). It is #2 in its inbox.`},
+		"fan": {"worktrees", `Started 3 agents on fan/dark-mode. Each prompt is sent when its agent is ready.
   web-fan-dark-mode    fan/dark-mode    ~/.local/share/tuios/worktrees/web/fan-dark-mode
   web-fan-dark-mode-2  fan/dark-mode-2  ~/.local/share/tuios/worktrees/web/fan-dark-mode-2
   web-fan-dark-mode-3  fan/dark-mode-3  ~/.local/share/tuios/worktrees/web/fan-dark-mode-3`},
-	"worktree": {"worktrees", `Created branch feat/retry in ~/.local/share/tuios/worktrees/api/feat-retry.
+		"worktree": {"worktrees", `Created branch feat/retry in ~/.local/share/tuios/worktrees/api/feat-retry.
 Created session 'api-feat-retry'.`},
-	"list-verbs": {"control-protocol", `tuios control protocol, version 1
+		"list-verbs": {"control-protocol", `tuios control protocol, version 1
   list-sessions    the sessions on this daemon
   new-window       open a window in a session
   send-text        type into a pane
@@ -43,17 +46,17 @@ Created session 'api-feat-retry'.`},
   set-agent-state  report a pane's agent state
   subscribe        stream events as JSON lines
   ...and more. tuios list-verbs <verb> shows one.`},
-	"list-hooks": {"hooks", `╭───────────────────┬────────┬──────┬──────┬───────────┬────────────────────────╮
+		"list-hooks": {"hooks", `╭───────────────────┬────────┬──────┬──────┬───────────┬────────────────────────╮
 │ EVENT             │ SIDE   │ RUNS │ EXIT │ LAST      │ COMMAND                │
 ├───────────────────┼────────┼──────┼──────┼───────────┼────────────────────────┤
 │ after-new-window  │ daemon │ 4    │ 0    │ 2 min ago │ notify-send 'new pane' │
 │ after-agent-state │ daemon │ 12   │ 0    │ just now  │ ~/bin/ping-phone.sh    │
 ╰───────────────────┴────────┴──────┴──────┴───────────┴────────────────────────╯`},
-	"new":         {"sessions", `Created detached session 'work'. Attach with 'tuios attach work'.`},
-	"move-window": {"sessions#move-a-window-to-another-session", `moved 77072830 from session work to session review, workspace 1`},
-	"note set":    {"sessions", `Set the note of session work: next: run the migration`},
-	"note get":    {"sessions", `next: run the migration`},
-	"restart-server --dry-run": {"daemon-restart", `Daemon now      0.11.1
+		"new":         {"sessions", `Created detached session 'work'. Attach with 'tuios attach work'.`},
+		"move-window": {"sessions#move-a-window-to-another-session", `moved 77072830 from session work to session review, workspace 1`},
+		"note set":    {"sessions", `Set the note of session work: next: run the migration`},
+		"note get":    {"sessions", `next: run the migration`},
+		"restart-server --dry-run": {"daemon-restart", `Daemon now      0.11.1
 After restart   0.11.1   (from /usr/local/bin/tuios)
 This restart starts the same version.
 
@@ -62,7 +65,7 @@ These stop:
 
 These come back:
   Each session, with its layout, its pane history and new shells.`},
-	"hosts": {"remote-hosts", `╭───────┬───────────────┬────────┬─────────┬───────┬──────────┬─────────────────────────┬──────────╮
+		"hosts": {"remote-hosts", `╭───────┬───────────────┬────────┬─────────┬───────┬──────────┬─────────────────────────┬──────────╮
 │ HOST  │ ADDRESS       │ STATUS │ VERSION │ PROTO │ SESSIONS │ LOAD                    │ LAST OK  │
 ├───────┼───────────────┼────────┼─────────┼───────┼──────────┼─────────────────────────┼──────────┤
 │ build │ you@buildbox  │ up     │ 0.11.1  │ 3     │ 3        │ 0.42 on 16 cores, 12 ms │ just now │
@@ -70,13 +73,13 @@ These come back:
 ╰───────┴───────────────┴────────┴─────────┴───────┴──────────┴─────────────────────────┴──────────╯
 
 2 hosts. Attach a session on a host with 'tuios attach --host NAME SESSION'.`},
-	"task add": {"agent-messaging", `Added t1: make the backoff jitter configurable`},
-	"task ls": {"agent-messaging", `ID  STAGE  HOLDER  AGE       TITLE
+		"task add": {"agent-messaging", `Added t1: make the backoff jitter configurable`},
+		"task ls": {"agent-messaging", `ID  STAGE  HOLDER  AGE       TITLE
 t1  doing  api     just now  make the backoff jitter configurable
 t2  todo   -       4m ago    split the retry tests`},
-	"task claim": {"agent-messaging", `t1 make the backoff jitter configurable
+		"task claim": {"agent-messaging", `t1 make the backoff jitter configurable
 Read api/retry.go and add a jitter option, with a test.`},
-	"look list": {"themes", `ID        NAME           AUTHOR
+		"look list": {"themes", `ID        NAME           AUTHOR
 19000270  Neon 84        Gaurav-Gosain
 19000271  Ink            Gaurav-Gosain
 19000272  Gruvbox Max    Gaurav-Gosain
@@ -84,9 +87,10 @@ Read api/retry.go and add a jitter option, with a test.`},
 19000276  Mocha Cozy     Gaurav-Gosain
 19000278  Paper          Gaurav-Gosain
 19000280  Amber CRT      Gaurav-Gosain`},
+	}
 }
 
-func init() {
+func initSampleAliases() {
 	samples["list-sessions"] = samples["ls"]
 	samples["a"] = samples["attach"]
 	samples["new-session"] = samples["new"]
@@ -101,7 +105,11 @@ func init() {
 }
 
 // groups are the subcommands whose samples are per subcommand of their own.
-var groups = map[string]bool{}
+var groups map[string]bool
+
+func initGroups() {
+	groups = map[string]bool{}
+}
 
 // sampleFor finds the sample for tuios args: the subcommand and the word
 // after it first, so tuios task add has its own, then the subcommand alone.

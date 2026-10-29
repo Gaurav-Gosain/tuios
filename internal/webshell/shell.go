@@ -37,7 +37,11 @@ var commands map[string]command
 
 // shellNames are the names a pane asks for when it wants a shell. Typed at the
 // prompt they say you already have one.
-var shellNames = map[string]bool{"sh": true, "bash": true, "zsh": true, "fish": true}
+var shellNames map[string]bool
+
+func initShellNames() {
+	shellNames = map[string]bool{"sh": true, "bash": true, "zsh": true, "fish": true}
+}
 
 // summaries are the lines help prints, in the order it prints them.
 var summaries = [][2]string{
@@ -74,7 +78,7 @@ func say(text string) command {
 	}
 }
 
-func init() {
+func initCommands() {
 	ls := func(s *shell, args []string, _ string) int { return s.ls(args[1:], args[0] != "ls") }
 	cat := func(s *shell, args []string, _ string) int { return s.cat(args[0], args[1:]) }
 	view := func(s *shell, args []string, _ string) int { return cmdView(s, args) }
@@ -173,7 +177,7 @@ func init() {
 		"cowsay":    fromTTY(cmdCowsay),
 		"whoami":    say("guest"),
 		"hostname":  say("tuios"),
-		"uname":     say("tuios js/wasm"),
+		"uname":     say("tuios " + text("js/wasm")),
 		"date": func(s *shell, _ []string, _ string) int {
 			s.t.Print(time.Now().Format(time.UnixDate) + "\r\n")
 			return 0
@@ -199,6 +203,7 @@ type Program struct {
 // full-screen and long-running ones. The browser build offers them in the
 // tuios launcher in place of $PATH.
 func Programs() []Program {
+	ready()
 	return []Program{
 		{"top", "Live process monitor"},
 		{"claude", "A pretend coding agent"},
@@ -233,7 +238,11 @@ func runShell(t *TTY, dir string) int {
 	s := &shell{t: t, cwd: startDir(dir)}
 	t.laid, _ = t.Size()
 	announceCwd(t, s.cwd)
-	greeting := []string{bold + "tuios" + reset, dim + "web" + reset, dim + "shell." + reset, dim + "Type" + reset, bold + "help" + reset}
+	greeting := []string{bold + "tuios" + reset}
+	for w := range strings.FieldsSeq(text("web shell.")) {
+		greeting = append(greeting, dim+w+reset)
+	}
+	greeting = append(greeting, dim+"Type"+reset, bold+"help"+reset)
 	for w := range strings.FieldsSeq("to see what it can do.") {
 		greeting = append(greeting, dim+w+reset)
 	}

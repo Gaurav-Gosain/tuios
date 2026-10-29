@@ -7,6 +7,30 @@ below. Two of them are **not** caught here; that is written down rather than
 papered over, because a suite whose real coverage is unknown is worse than no
 suite.
 
+## tuios tutor keeps out of the person's home
+
+`TestTutorBasics` plants an Omarchy theme, Catppuccin Latte, under the
+test's HOME. A plain tuios in the same root follows it to a light ground,
+which is the positive half. The tutor's card must stay on the dark default
+surface, because the tutor points HOME into its own temp dir before tuios
+starts.
+
+Run on 2026-10-29 on Linux. A build with only the `{"HOME", "home"}` entry
+removed from `sandboxDirs` in `internal/tutor/sandbox.go` failed:
+`the card's ground is {R:220 G:224 B:232}: the tutor took the theme from the
+person's HOME (Catppuccin Latte)`. Nothing writes under HOME in either
+build, so the file check alone could not catch this. The read is what
+shows.
+
+A second control removed only the `XDG_CONFIG_HOME` entry. The file check
+failed: tuios wrote `XDG_CONFIG_HOME/tuios/config.toml` and a `themes`
+folder into the test's config home. With the entry in place those writes
+land in the temp dir and go with it.
+
+The fixed build passes. Repeat from `e2e/tui` with `TUIOS_E2E=1
+TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestTutorBasics$' -v .`.
+`TUIOS_E2E_FRAMES` keeps the frames.
+
 ## Synchronized output holds the native cursor with content
 
 `TestSynchronizedOutputHoldsHostCursor` uses a real daemon, attached client,

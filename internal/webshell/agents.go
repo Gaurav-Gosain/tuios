@@ -96,11 +96,12 @@ type Agent struct {
 
 var (
 	agentsMu sync.Mutex
-	agentsBy = map[string]*Agent{}
+	agentsBy map[string]*Agent
 )
 
 // FindAgent is the pretend agent running in a pane, nil when none is.
 func FindAgent(window string) *Agent {
+	ready()
 	agentsMu.Lock()
 	defer agentsMu.Unlock()
 	return agentsBy[window]
@@ -108,6 +109,7 @@ func FindAgent(window string) *Agent {
 
 // Agents lists the pretend agents running now.
 func Agents() []*Agent {
+	ready()
 	agentsMu.Lock()
 	defer agentsMu.Unlock()
 	out := make([]*Agent, 0, len(agentsBy))
@@ -216,4 +218,8 @@ func (a *Agent) setStatus(t *TTY, toolID, status string) {
 			}
 		}
 	})
+}
+
+func initAgentsBy() {
+	agentsBy = map[string]*Agent{}
 }

@@ -83,6 +83,7 @@ type Pty struct {
 
 // NewPty makes a pty of the given size with nothing running on it.
 func NewPty(cols, rows int) *Pty {
+	ready()
 	p := &Pty{
 		in:      newPipe(),
 		out:     newPipe(),

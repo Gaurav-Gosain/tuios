@@ -433,14 +433,16 @@ func evalCmds(c *cobra.Command, styles Styles) (map[string](map[string]string), 
 }
 
 func evalGroups(c *cobra.Command) (map[string]string, []string) {
-	// make sure the default group is the first
-	ids := []string{""}
+	// Named groups come first, in the order they were added, and the
+	// commands with no group after them: a named group is one a command
+	// asked to stand out in, such as getting started.
+	var ids []string
 	groups := map[string]string{"": "commands"}
 	for _, g := range c.Groups() {
 		groups[g.ID] = g.Title
 		ids = append(ids, g.ID)
 	}
-	return groups, ids
+	return groups, append(ids, "")
 }
 
 func renderGroup(w io.Writer, styles Styles, space int, name string, items iter.Seq2[string, string]) {

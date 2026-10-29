@@ -92,8 +92,11 @@ Things to try here:
 
 // files is the whole fake filesystem. Directories are implied by the paths.
 // Every pane shares it, so a file one pane creates is visible in the others.
-var files = map[string]string{
-	Home + "/README.md": `# Welcome to tuios
+var files map[string]string
+
+func initFiles() {
+	files = map[string]string{
+		Home + "/README.md": `# Welcome to tuios
 
 Everything here runs in your browser: the window manager, this
 shell, all of it. Nothing to install, nothing sent anywhere.
@@ -108,19 +111,19 @@ Things to try:
                        watch tuios drive itself
   help                 everything this shell knows
 `,
-	Home + "/notes.txt": `Things to remember
+		Home + "/notes.txt": `Things to remember
 - Ctrl+B is the prefix key. Press it, let go, then press the next key.
 - Ctrl+B then Esc leaves typing mode, so you can move windows around.
 - i goes back to typing in the window.
 - Ctrl+B then ? shows every key.
 `,
-	Home + "/todo.md": `- [x] open tuios
+		Home + "/todo.md": `- [x] open tuios
 - [ ] open a second window
 - [ ] tile them
 - [ ] switch to workspace 2
 - [ ] let the agent ask for something
 `,
-	Home + "/demo.tape": `# A short tour that tuios plays by itself.
+		Home + "/demo.tape": `# A short tour that tuios plays by itself.
 # Run it with: tuios tape play demo.tape
 Sleep 600ms
 WindowManagementMode
@@ -151,7 +154,7 @@ NextWindow
 Sleep 500ms
 TerminalMode
 `,
-	Home + "/party.tape": `# Three programs, a zoom and a trip to workspace 2, all typed by tuios.
+		Home + "/party.tape": `# Three programs, a zoom and a trip to workspace 2, all typed by tuios.
 # Run it with: tuios tape play party.tape
 WindowManagementMode
 EnableTiling
@@ -189,21 +192,21 @@ Type "fastfetch"
 Enter
 Sleep 300ms
 `,
-	ProjectDir + "/go.mod":        helloGoMod,
-	ProjectDir + "/main.go":       helloMain,
-	ProjectDir + "/greet.go":      helloGreetWork,
-	ProjectDir + "/greet_test.go": helloTest,
-	ProjectDir + "/README.md":     helloReadme,
-	ProjectDir + "/TODO.md":       "- shout at people, but kindly\n",
-	Home + "/projects/website/index.html": `<!doctype html>
+		ProjectDir + "/go.mod":        helloGoMod,
+		ProjectDir + "/main.go":       helloMain,
+		ProjectDir + "/greet.go":      helloGreetWork,
+		ProjectDir + "/greet_test.go": helloTest,
+		ProjectDir + "/README.md":     helloReadme,
+		ProjectDir + "/TODO.md":       "- shout at people, but kindly\n",
+		Home + "/projects/website/index.html": `<!doctype html>
 <title>hi</title>
 <link rel="stylesheet" href="style.css">
 <h1>it works</h1>
 `,
-	Home + "/projects/website/style.css": `h1 { color: hotpink; }
+		Home + "/projects/website/style.css": `h1 { color: hotpink; }
 `,
-	ConfigPath: configText("", "rounded", "default", nil),
-	Home + "/deploy.tml": `<tml version="1" title="Deploy api">
+		ConfigPath: configText("", "rounded", "default", nil),
+		Home + "/deploy.tml": `<tml version="1" title="Deploy api">
   <state>{"envs": ["staging", "production"], "deploy": {"tag": "v1.4.0", "env": "staging"}}</state>
   <form on-submit="close(state.deploy)" pad="1">
     <kv>
@@ -223,7 +226,7 @@ Sleep 300ms
   </form>
 </tml>
 `,
-	Home + "/status.tml": `<tml version="1" title="api status">
+		Home + "/status.tml": `<tml version="1" title="api status">
   <state>{"services": [
       {"name": "api", "state": "up", "p95": "84 ms"},
       {"name": "worker", "state": "up", "p95": "210 ms"},
@@ -244,7 +247,7 @@ flowchart LR
   </col>
 </tml>
 `,
-	Home + "/flow.mmd": `flowchart TD
+		Home + "/flow.mmd": `flowchart TD
   push[git push] --> ci{tests pass?}
   ci -->|yes| stage[deploy to staging]
   ci -->|no| fix[fix and push again]
@@ -253,7 +256,7 @@ flowchart LR
   check -->|yes| prod[deploy to production]
   check -->|no| fix
 `,
-	Home + "/sales.csv": `month,online,store
+		Home + "/sales.csv": `month,online,store
 Jan,42,31
 Feb,47,29
 Mar,55,33
@@ -263,12 +266,17 @@ Jun,72,36
 Jul,80,35
 Aug,77,38
 `,
-	"/etc/motd": "Be kind to your terminal.\n",
+		"/etc/motd": "Be kind to your terminal.\n",
+	}
 }
 
-var fsDirs = map[string]bool{}
+var fsDirs map[string]bool
 
-func init() {
+func initFsDirs() {
+	fsDirs = map[string]bool{}
+}
+
+func initFileDirs() {
 	for p := range files {
 		addParents(p)
 	}
@@ -376,6 +384,7 @@ func configText(theme, border, glyphs string, extra []ConfigLine) string {
 // WriteConfig rewrites the config file to match the looks the tour is
 // showing, so cat config.toml shows what the reader picked.
 func WriteConfig(theme, border, glyphs string, extra ...ConfigLine) {
+	ready()
 	if border == "" {
 		border = "rounded"
 	}
@@ -417,10 +426,14 @@ func remove(p string) bool {
 func filesChanged() { emit(Event{Type: EventFilesChanged}) }
 
 // IsDir reports whether p is a directory of the fake filesystem.
-func IsDir(p string) bool { return isDir(p) }
+func IsDir(p string) bool {
+	ready()
+	return isDir(p)
+}
 
 // IsFile reports whether p is a file of the fake filesystem.
 func IsFile(p string) bool {
+	ready()
 	_, ok := readFile(p)
 	return ok
 }
@@ -429,6 +442,7 @@ func IsFile(p string) bool {
 // section, in place of the disk read a real machine makes. It reads up to
 // limit entries, and capped says there were more.
 func ReadDir(dir string, limit int) (entries []fs.DirEntry, capped bool, err error) {
+	ready()
 	dir = path.Clean(dir)
 	if !isDir(dir) {
 		if IsFile(dir) {

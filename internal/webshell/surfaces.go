@@ -72,8 +72,12 @@ func SetSurfaceHost(fn func(SurfaceRequest) (SurfaceOpened, error)) {
 
 // holders are the programs a pane runs that are not commands: nobody types
 // them, so help, completion and the launcher leave them out.
-var holders = map[string]func(t *TTY) int{
-	"tuios-tml": holdTML,
+var holders map[string]func(t *TTY) int
+
+func initHolders() {
+	holders = map[string]func(t *TTY) int{
+		"tuios-tml": holdTML,
+	}
 }
 
 // holdTML holds the pane of a TML window, as the daemon's placeholder
@@ -425,7 +429,7 @@ func cmdTML(s *shell, in []string, _ string) int {
 		return s.fail("tml: " + err.Error())
 	}
 	if a.has("version") {
-		s.t.Print("tml (browser demo)\r\n")
+		s.t.Print("tml (" + text("browser demo") + ")\r\n")
 		return 0
 	}
 	if a.has("help") || a.has("h") || len(a.files) == 0 {

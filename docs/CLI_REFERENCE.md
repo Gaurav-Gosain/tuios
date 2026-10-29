@@ -8,6 +8,7 @@ This document provides a complete reference for TUIOS command-line interface.
 - [Installation](#installation)
 - [Usage](#usage)
 - [Commands](#commands)
+  - [tuios tutor](#tuios-tutor)
   - [Root Command](#root-command)
   - [Theming](#theming)
     - [Looks: tuios look](#looks-tuios-look)
@@ -110,6 +111,46 @@ tuios [command] [flags]
 ```
 
 ## Commands
+
+### `tuios tutor`
+
+Learn tuios in a few minutes, by doing it. `tuios learn` is the same
+command. The tutor runs a real tuios with a practice shell in this terminal.
+The shell, the files and the agents in it are pretend.
+
+```bash
+tuios tutor            # open the menu: start a track, or continue one
+tuios tutor basics     # open one track at once
+tuios tutor --list     # list the tracks
+tuios tutor --reset    # clear your progress
+```
+
+Nothing on your computer changes:
+
+- The tutor starts no program and does not connect to a running tuios.
+- It reads none of your config, and it uses the shipped keys and theme.
+- While it runs, the home, the XDG folders and TMPDIR point at a temp
+  folder. The tutor removes that folder when it ends, also on SIGTERM.
+- Clipboard writes stay inside the tutor.
+- It keeps your progress in `$XDG_STATE_HOME/tuios/tutor.json`. That is the
+  only file it writes.
+
+In a lesson, a card under the screen shows the step, its keys and a note.
+The keys light up as you press them. After 8 seconds the note turns into a
+hint.
+
+| Key | Does |
+|-----|------|
+| `F2` | Open the menu: continue, back one step, restart, choose a track, leave |
+| `F3` | Show me: the tutor presses the rest of the keys |
+| `F4` | Skip the step |
+| a quit key of tuios | Open the menu |
+
+A click works on every button. Below 80x24 the card is a 2-row strip.
+Below 60x16 the tutor asks for a bigger window and keeps your place.
+
+Run inside a tuios pane, the outer tuios takes `ctrl+b`. Press `ctrl+b`
+then `enter` to give every key to the tutor. `F12` gives the keys back.
 
 ### Root Command
 

@@ -18,7 +18,11 @@ const demoRemote = "https://github.com/you/hello"
 
 // shipPRs are the pull requests tuios ship pr pretended to open, by branch.
 // Guarded by fsMu.
-var shipPRs = map[string]int{}
+var shipPRs map[string]int
+
+func initShipPRs() {
+	shipPRs = map[string]int{}
+}
 
 func tuiosShip(s *shell, args []string) int {
 	sub := argOr(args, 0, "")
@@ -80,7 +84,7 @@ func shipOverview(s *shell, co *checkout) int {
 		out = append(out, "")
 		out = append(out, table(rows, 2, green, cols)...)
 		out = append(out, "")
-		for _, l := range wrapWords("push and pr show what they send and ask first. In this demo nothing leaves the tab.", cols) {
+		for _, l := range wrapWords(text("push and pr show what they send and ask first. In this demo nothing leaves the tab."), cols) {
 			out = append(out, dim+l+reset)
 		}
 		return out
@@ -246,7 +250,7 @@ func shipOutbound(s *shell, co *checkout, pr bool) int {
 			out = append(out, fitLines([]string{"  " + p}, cols)...)
 		}
 		out = append(out, "")
-		for _, l := range wrapWords("This is a demo, so nothing leaves the tab. On a real machine, you say yes, and it prints:", cols) {
+		for _, l := range wrapWords(text("This is a demo, so nothing leaves the tab. On a real machine, you say yes, and it prints:"), cols) {
 			out = append(out, dim+l+reset)
 		}
 		return append(out, fitLines(result, cols)...)
