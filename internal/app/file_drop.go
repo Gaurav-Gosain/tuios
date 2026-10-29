@@ -337,6 +337,17 @@ func paneProgram(w *terminal.Window) string {
 	return strings.ToLower(w.ForegroundCmd)
 }
 
+// paneDialect is how the program in w reads a quoted path. Only a pane on
+// this machine can be asked, through the process table. A pane elsewhere has
+// the daemon's ForegroundCmd, which is empty at a shell prompt, and then gets
+// POSIX quoting.
+func (m *OS) paneDialect(w *terminal.Window) pasteDialect {
+	if m.paneIsLocal(w) {
+		return pasteDialectOf(paneProgram(w))
+	}
+	return pasteDialectOf(strings.ToLower(w.ForegroundCmd))
+}
+
 // pasteDialect is how a program reads a quoted path.
 type pasteDialect int
 
@@ -486,9 +497,13 @@ func (m *OS) renderFileDragLabel() *lipgloss.Layer {
 	return tooltipLayer(label, x, y, renderW, "file-drag-label")
 }
 
-// applyFileDropRing outlines the pane a release would drop on, in the
-// border glyphs the alt-drag of a pane uses for its landing frame. A pane
-// that refuses the drop is outlined in the warning colour.
+// applyFileDropRing outlines the pane a release would drop on: a heavy frame
+// in the accent for a pane that takes the path, in the warning colour for one
+// that refuses it. The heavy glyphs make it read as a target at a glance, and
+// unlike the pane's own border colour they survive every depth. At 16 colours
+// the frame also takes the palette's cursor attributes (reverse video for a
+// target that takes the path, an underline for a refusal), since the accent
+// is only an ANSI slot there.
 func (m *OS) applyFileDropRing(canvas *frameCanvas, id string) {
 	v := m.fileDrag.Verdict
 	if v.Window != id || m.fileDrag.Canceled {
@@ -508,27 +523,40 @@ func (m *OS) applyFileDropRing(canvas *frameCanvas, id string) {
 	if clip.Empty() {
 		return
 	}
-	if theme.Depth() == overlay.Depth16 {
-		drawDropRingReverse(canvas, rect, clip)
-		return
-	}
+	pal := theme.UI()
 	look := m.dropZoneLook()
-	fg := look.ring
+	ink, st := pal.Accent, overlay.RowState{Cursor: true, Focused: true}
 	if v.Refusal != "" {
-		fg = theme.ReadableAt(theme.UI().Warn, look.bg, theme.MarkFloor)
+		ink, st = pal.Warn, overlay.RowState{Cursor: true}
 	}
-	border := dropRingBorder(&m.Settings)
-	ring := uv.Cell{Width: 1, Style: uv.Style{Fg: fg, Bg: look.ringBg}}
+	ring := uv.Cell{Width: 1, Style: uv.Style{Fg: theme.ReadableAt(ink, look.bg, theme.MarkFloor), Bg: look.ringBg, Attrs: uv.AttrBold}}
+	mark := pal.MarkCell(st)
+	border := lipgloss.ThickBorder()
+	if m.Settings.UseASCIIOnly {
+		border = lipgloss.ASCIIBorder()
+	}
 	for y := clip.Min.Y; y < clip.Max.Y && y < len(canvas.Lines); y++ {
 		row := canvas.Lines[y]
 		for x := clip.Min.X; x < clip.Max.X && x < len(row); x++ {
 			if g := dropRingGlyph(&border, rect, x, y); g != "" {
-				ring.Content = g
-				ring.Link = uv.Link{}
-				row.Set(x, &ring)
+				cell := ring
+				cell.Content = g
+				if mark != nil {
+					mark(&cell)
+				}
+				row.Set(x, &cell)
 			}
 		}
 	}
+}
+
+// fileDragHeldKey is the key of the files row a drag is carrying, or "".
+// The rail draws that row as picked up until the drop or the cancel.
+func (m *OS) fileDragHeldKey() string {
+	if d := &m.fileDrag; d.Dragging && !d.Canceled {
+		return d.Hit.WindowID
+	}
+	return ""
 }
 
 // fileDragRingOn reports whether the compose pass has a ring to draw.

@@ -952,8 +952,13 @@ func TestRailFileDragIntoPane(t *testing.T) {
 		}
 		if shot != "" {
 			frame(shot)
+			checkDragLooks(t, term, at, row)
 		}
 		mouseRelease(t, term, paneCol, paneRow, tuitest.MouseLeft, 0)
+		// The row is put down with the drop.
+		if err := term.WaitFor(func(s tuitest.Screen) bool { return !dragRingUp(s) }, uiTimeout); err != nil {
+			t.Fatalf("the target frame stayed up after the drop:\n%s", term.Snapshot())
+		}
 	}
 
 	for i, sh := range dropShells() {
@@ -1017,6 +1022,31 @@ func TestRailFileDragIntoPane(t *testing.T) {
 			frame("ran-" + sh.name)
 			if _, err := os.Stat(filepath.Join(dir, "pwned")); !os.IsNotExist(err) {
 				t.Fatalf("a dropped name ran as a command in %s: %v", sh.name, err)
+			}
+
+			// The path picker types a name by the same quoting rules.
+			if sh.start == "" {
+				runInShell(t, term, "clear; echo CLE\"\"ARED", "CLEARED", uiTimeout)
+			} else {
+				if err := term.SendKeys(tuitest.Ctrl('l')); err != nil {
+					t.Fatal(err)
+				}
+				time.Sleep(300 * time.Millisecond)
+			}
+			sendKeys(t, term, sh.printf, tuitest.Alt(";"))
+			if err := term.WaitForText("╭─ ", uiTimeout); err != nil {
+				t.Fatalf("alt+; did not open the path picker in %s: %v\n%s", sh.name, err, term.Snapshot())
+			}
+			sendKeys(t, term, "back")
+			time.Sleep(300 * time.Millisecond)
+			sendKeys(t, term, tuitest.Enter)
+			picked := sh.printf + sh.quote(`back\slash.txt`)
+			if err := term.WaitForText(picked, uiTimeout); err != nil {
+				t.Fatalf("the path picker did not type %s in %s: %v\n%s", picked, sh.name, err, term.Snapshot())
+			}
+			sendKeys(t, term, tuitest.Enter)
+			if err := term.WaitFor(func(s tuitest.Screen) bool { return screenHasLine(s, `[back\slash.txt]`) }, uiTimeout); err != nil {
+				t.Fatalf("%s did not read the picked name back: %v\n%s", sh.name, err, term.Snapshot())
 			}
 			if sh.start != "" {
 				if err := term.SendKeys("exit", tuitest.Enter); err != nil {
@@ -1115,4 +1145,97 @@ func TestRailFileDragIntoPane(t *testing.T) {
 	})
 
 	alive(t, term, "after dragging rows into the pane")
+}
+
+// dragRingUp reports whether a drop target's frame is on screen: the heavy
+// corner the frame is drawn with, which no pane border uses.
+func dragRingUp(s tuitest.Screen) bool {
+	_, _, ok := dragRingCorner(s)
+	return ok
+}
+
+// dragRingCorner is the cell of the target frame's top-left corner.
+func dragRingCorner(s tuitest.Screen) (int, int, bool) {
+	cols, rows := s.Size()
+	for r := range rows {
+		for c := range cols {
+			if s.Cell(c, r).Content == "┏" {
+				return c, r, true
+			}
+		}
+	}
+	return 0, 0, false
+}
+
+// checkDragLooks holds the mid-drag frame to what a person must see: a heavy
+// frame on the target pane, and the carried row drawn apart from the other
+// rows of the listing.
+func checkDragLooks(t *testing.T, term *tuitest.Terminal, at map[string][2]int, held string) {
+	t.Helper()
+	s := term.Screen()
+	if !dragRingUp(s) {
+		t.Fatalf("no frame on the target pane mid-drag:\n%s", term.Snapshot())
+	}
+	var other string
+	for name := range at {
+		if name != held && !strings.HasSuffix(name, "/") && !strings.HasSuffix(held, "/") {
+			other = name
+			break
+		}
+	}
+	if other == "" {
+		return
+	}
+	h, o := s.Cell(at[held][0], at[held][1]), s.Cell(at[other][0], at[other][1])
+	if h.Fg == o.Fg && h.Bg == o.Bg && h.Underline == o.Underline && h.Reverse == o.Reverse {
+		t.Fatalf("the carried row %q looks like %q mid-drag:\n%s", held, other, term.Snapshot())
+	}
+}
+
+// TestRailFileDragAt16Colours drags a row on a 16 colour terminal, where the
+// accent is only an ANSI slot. The target frame must be in reverse video and
+// the carried row underlined, the palette's cursor attributes at that depth.
+func TestRailFileDragAt16Colours(t *testing.T) {
+	dir := fileViewFixture(t)
+	term, _ := start(t, startOpts{daemonDefault: true, cols: 160, rows: 40, env: []string{"TERM=xterm", "COLORTERM="}})
+	waitBoot(t, term)
+	newWindow(t, term)
+	waitWindowCount(t, term, 1, "opening a shell")
+	enterTerminalMode(t, term)
+	runInShell(t, term, "cd "+dir+" && printf '\\033]7;file://%s\\033\\\\%s\\n' \"$PWD\" lis\"\"ted", "listed", uiTimeout)
+	leaveTerminalMode(t, term)
+	toggleSidebarViaPalette(t, term)
+	waitForAll(t, term, uiTimeout, "the listing", "brief.txt", "zulu/")
+	col, row, _ := findOnGrid(term.Screen(), "brief.txt")
+	paneCol := 120
+	if col > 80 {
+		paneCol = 40
+	}
+	mousePress(t, term, col, row, tuitest.MouseLeft, 0)
+	for i := 1; i <= 6; i++ {
+		mouseMotion(t, term, col+(paneCol-col)*i/6, row+(20-row)*i/6, tuitest.MouseLeft, 0)
+	}
+	if err := term.WaitFor(dragRingUp, uiTimeout); err != nil {
+		mouseRelease(t, term, paneCol, 20, tuitest.MouseLeft, 0)
+		t.Fatalf("no target frame at 16 colours: %v\n%s", err, term.Snapshot())
+	}
+	s := term.Screen()
+	art := artifactDir(t)
+	saveArtifact(t, term, art, "drag-16")
+	savePNG(t, s, shot.XTermPalette(), art, "drag-16")
+	rc, rr, _ := dragRingCorner(s)
+	if !s.Cell(rc, rr).Reverse {
+		t.Errorf("the target frame is not in reverse video at 16 colours:\n%s", term.Snapshot())
+	}
+	if !s.Cell(col, row).Underline {
+		t.Errorf("the carried row is not underlined at 16 colours:\n%s", term.Snapshot())
+	}
+	if err := term.SendKeys(tuitest.Esc); err != nil {
+		t.Fatal(err)
+	}
+	mouseRelease(t, term, paneCol, 20, tuitest.MouseLeft, 0)
+	if err := term.WaitFor(func(s tuitest.Screen) bool { return !dragRingUp(s) && !s.Cell(col, row).Underline }, uiTimeout); err != nil {
+		t.Fatalf("esc left the frame or the mark up:\n%s", term.Snapshot())
+	}
+	alive(t, term, "after a drag at 16 colours")
 }

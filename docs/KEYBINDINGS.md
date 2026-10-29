@@ -210,7 +210,9 @@ binding is `file_insert_path` in `[keybindings.sidebar_files]`.
 You can also drag a row with the mouse. Press a row, move the pointer out of
 the sidebar, and release the button over a pane. The pane gets the path.
 
-- While you drag, a frame shows the pane under the pointer.
+- While you drag, the row in the sidebar looks picked up.
+- A heavy frame in the accent colour shows the pane under the pointer. A pane
+  that does not take the path gets the frame in the warning colour.
 - A label at the pointer shows the name, the pane and the program in the pane.
 - `Esc` cancels the drag.
 - A release over the sidebar, the dock or an empty area does nothing.
@@ -725,6 +727,8 @@ The key was `b` in earlier versions.
 pane. `Ctrl+B .` opens it too. The picker lists the folder that the shell in
 the pane is in. Folders come first, then files. Type to filter the names.
 Press `Enter` to type the path of the selected name at the cursor.
+tuios quotes the path for the shell in the pane, by the same rules as a drag
+from the sidebar. See [Drag a file into a pane](#drag-a-file-into-a-pane).
 
 | Key | What it does |
 | --- | --- |

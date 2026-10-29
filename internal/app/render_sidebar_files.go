@@ -335,6 +335,9 @@ func (m *OS) sidebarFileRow(row fileRowSpec, cw int, pal overlay.Palette, st sid
 		}
 		ink = pal.Fg
 	}
+	if m.fileRowHeld(row) {
+		ink = theme.ReadableAt(pal.Accent, m.sidebarGroundOr(bg), theme.ContrastFloor)
+	}
 
 	gutter := sidebarGutter(false, "", bg, pal, &m.Settings)
 	// The glyph is the one cell on the row allowed an ink of its own. A colour
@@ -393,6 +396,9 @@ func (m *OS) sidebarFileTreeRow(row fileRowSpec, cw int, pal overlay.Palette, st
 			shown += "/"
 		}
 		ink = pal.Fg
+	}
+	if m.fileRowHeld(row) {
+		ink = theme.ReadableAt(pal.Accent, m.sidebarGroundOr(bg), theme.ContrastFloor)
 	}
 	icons := fileIconsOn(s) && s.SidebarShowGlyphs
 	chevron := " "
@@ -478,4 +484,10 @@ func truncPathLeft(path string, w int) string {
 		}
 	}
 	return ell
+}
+
+// fileRowHeld reports whether row is the one a drag is carrying to a pane.
+func (m *OS) fileRowHeld(row fileRowSpec) bool {
+	held := m.fileDragHeldKey()
+	return held != "" && row.Kind == sidebarRowFileEntry && row.Key == held
 }

@@ -204,6 +204,8 @@ func (m *OS) sidebarSignature() uint64 {
 	mixB(m.filesView.Loading)
 	mixI(m.SidebarScrollF)
 	mixU(m.filesView.Gen)
+	// The row a drag carries is drawn picked up.
+	mixS(m.fileDragHeldKey())
 	// The tree: its style, and every open, close and read of an open folder.
 	mixS(m.Settings.SidebarFilesStyle)
 	mixU(m.filesTree.gen)

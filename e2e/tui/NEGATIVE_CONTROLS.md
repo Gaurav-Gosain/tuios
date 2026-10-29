@@ -10530,7 +10530,7 @@ The positive half is in the same run: the copy pipe key `p` is still warned abou
 | `bulkHints` lists every bulk key when only Resume rows are marked (`internal/app/inbox_bulk.go`) | "x did not mark two Resume rows, or the footer offers keys that do nothing for them" | **caught** |
 ## A dragged file is quoted for the shell in the pane
 
-`TestRailFileDragIntoPane` drags `it's a file.txt`, `$(touch pwned)`, `back\slash.txt` and the folder `a b/` from the rail's files section onto a pane. It runs the round in sh, then bash, zsh, fish and nu when they are installed. Each drop must put the exact quoted text for that shell on the command line, the shell must print each name back as it is on disk, and no file `pwned` may appear. The control was built into its own binary. Run on 2026-10-29 on Linux with all five shells installed; the unmodified binary passed.
+`TestRailFileDragIntoPane` drags `it's a file.txt`, `$(touch pwned)`, `back\slash.txt` and the folder `a b/` from the rail's files section onto a pane. It runs the round in sh, then bash, zsh, fish and nu when they are installed. Each drop must put the exact quoted text for that shell on the command line, the shell must print each name back as it is on disk, and no file `pwned` may appear. In each shell the path picker must then type `back\slash.txt` in that shell's form, since it uses the same quoting function. The control was built into its own binary. Run twice on 2026-10-29 on Linux with all five shells installed, the second time after the path picker moved to the same quoting; the unmodified binary passed both times.
 
 | Control: what was cut | Where it fails | Verdict |
 | --- | --- | --- |

@@ -2255,6 +2255,11 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 				st.Cursor = st.Cursor || isCursor(row.Kind, "", row.Key)
 				recordHit(row.Kind, "", row.Key, row.Index, 1)
 			}
+			// The row a drag carries looks picked up: the hover ground, and
+			// at 16 colours its underline, until the drop or the cancel.
+			if m.fileRowHeld(row) {
+				st.Hover = true
+			}
 			if row.Tree {
 				// A tree row's name starts past its guides and marks, and only
 				// the name takes the cursor's underline.

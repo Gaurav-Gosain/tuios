@@ -485,13 +485,17 @@ func (m *OS) PathPickerAccept() {
 			tail += "/"
 		}
 	}
-	text := pathPickerText(p.origin, strings.Join(p.segs, "/"), tail)
-	if text == "" {
-		return
-	}
 	w := m.windowByID(p.windowID)
 	if w == nil {
 		m.ShowNotification("The pane closed before the path was typed.", "warning", m.Settings.NotificationDuration)
+		return
+	}
+	text, refusal := pathPickerText(m.paneDialect(w), p.origin, strings.Join(p.segs, "/"), tail)
+	if refusal != "" {
+		m.ShowNotification(refusal, "warning", m.Settings.NotificationDuration*2)
+		return
+	}
+	if text == "" {
 		return
 	}
 	if err := w.Paste(text); err != nil {
@@ -500,9 +504,11 @@ func (m *OS) PathPickerAccept() {
 }
 
 // pathPickerText is the text typed for a path: the walked steps and the last
-// name below origin, quoted the way a shell reads it back. Under "~" the tilde
-// stays outside the quotes, or the shell would not expand it.
-func pathPickerText(origin, walked, tail string) string {
+// name below origin, quoted the way the pane's shell reads it back, by the
+// rules a dropped file follows (quoteDropPath). Under "~" the tilde stays
+// outside the quotes in the shells that expand it only there. refusal says
+// why the path cannot be typed at all.
+func pathPickerText(d pasteDialect, origin, walked, tail string) (text, refusal string) {
 	rel := walked
 	if tail != "" {
 		if rel != "" {
@@ -512,17 +518,25 @@ func pathPickerText(origin, walked, tail string) string {
 	}
 	switch origin {
 	case "/":
-		return pastePathText("/" + rel)
+		return quoteDropPath(d, "/"+rel)
 	case "~":
 		if rel == "" {
-			return "~/"
+			return "~/", ""
 		}
-		return "~/" + pastePathText(rel)
+		switch d {
+		case dialectPOSIX, dialectFish, dialectCsh:
+			text, refusal = quoteDropPath(d, rel)
+			if refusal != "" {
+				return "", refusal
+			}
+			return "~/" + text, ""
+		}
+		return quoteDropPath(d, "~/"+rel)
 	}
 	if rel == "" {
-		return ""
+		return "", ""
 	}
-	return pastePathText(rel)
+	return quoteDropPath(d, rel)
 }
 
 // PathPickerClick handles a press at a screen cell. A press on a row picks it,
