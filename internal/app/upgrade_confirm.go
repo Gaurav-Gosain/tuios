@@ -80,14 +80,17 @@ func (m *OS) UpgradeConfirmKey(key string) tea.Cmd {
 		// tape's Press) are not the person's, and answer nothing.
 		return nil
 	}
+	// Each key names its row rather than toggling, so no count of move keys
+	// lands on Yes: Up then Enter, a shell's "run that again", stays on No.
 	switch key {
-	case "up", "down", "left", "right", "tab", "shift+tab", "j", "k":
-		st.selected = 1 - st.selected
-		return nil
-	case "esc", "n":
-		return m.upgradeConfirmAnswer(0)
+	case "down", "right", "tab":
+		st.selected = 1
 	case "enter":
 		return m.upgradeConfirmAnswer(st.selected)
+	case "esc", "n":
+		return m.upgradeConfirmAnswer(0)
+	default:
+		st.selected = 0
 	}
 	return nil
 }
@@ -122,13 +125,19 @@ func (m *OS) renderUpgradeConfirm() (string, overlay.Geometry, []overlayRowHit) 
 	body = append(body, overlay.Fill(overlay.Style(bg).Render(" ")+
 		overlay.Style(bg).Foreground(pal.Fg).Bold(true).Render(overlay.Truncate("Upgrade the daemon?", inner)), width, bg))
 	body = append(body, dialogBodyLine("", width, pal.FgDim, bg))
-	text(inboxWho(*it)+" asks to run the daemon as this binary, version "+it.Upgrade.Version+":", pal.Fg)
+	// The title is the pane's own, and says whatever the pane set, so the
+	// pane id and session name the daemon placed it by stand beside it.
+	who := inboxWho(*it)
+	if it.Window != "" {
+		who += " (pane " + shortID(it.Window) + " in session " + printableTitle(it.Session) + ")"
+	}
+	text(who+" asks to run the daemon as this binary, version "+it.Upgrade.Version+":", pal.Fg)
 	for _, l := range breakEvery(it.Upgrade.Binary, inner-2) {
 		body = append(body, dialogBodyLine("  "+l, width, pal.Warn, bg))
 	}
 	body = append(body, dialogBodyLine("", width, pal.FgDim, bg))
 	text("Every pane keeps running. The binary gets every pane's terminal. Say yes only if you asked for it.", pal.FgDim)
-	note := "Choose with the arrow keys and press Enter."
+	note := "Down or Tab moves to Yes, any other key back to No. Enter chooses."
 	if st.sent {
 		note = "Sending your answer..."
 	}

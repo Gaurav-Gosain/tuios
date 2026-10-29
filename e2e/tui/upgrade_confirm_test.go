@@ -125,7 +125,7 @@ func dialogShows(screen, s string) bool {
 	if start < 0 {
 		return false
 	}
-	end := strings.Index(all[start:], squash("Choose with the arrow keys"))
+	end := strings.Index(all[start:], squash("Down or Tab moves to Yes"))
 	if end < 0 {
 		return false
 	}
@@ -167,7 +167,7 @@ func TestPaneUpgradeConfirmedAtTheClient(t *testing.T) {
 	shows := map[string]bool{
 		"path":    dialogShows(screen, r.second),
 		"version": dialogShows(screen, "version "+r.img.Version),
-		"pane":    dialogShows(screen, "agent asks"),
+		"pane":    dialogShows(screen, "agent (pane "+r.agent[:min(8, len(r.agent))]+" in session "+r.sess+") asks"),
 	}
 	pressKeys(t, term, keyDown, keyEnter)
 	code, took := done()
@@ -189,8 +189,9 @@ func TestPaneUpgradeConfirmedAtTheClient(t *testing.T) {
 	}
 }
 
-// TestPaneUpgradeRefusedWithoutYes: Enter on the default row, Esc, and
-// Enter after moving to Yes and back to No each refuse the pane's upgrade
+// TestPaneUpgradeRefusedWithoutYes: Enter on the default row, Esc, Enter
+// after moving to Yes and back to No, and Up then Enter (a shell's "run
+// that again", which a toggle would have turned into Yes) each refuse the pane's upgrade
 // with the refusal for the person, close the dialog, and leave the daemon as
 // it was.
 func TestPaneUpgradeRefusedWithoutYes(t *testing.T) {
@@ -204,6 +205,7 @@ func TestPaneUpgradeRefusedWithoutYes(t *testing.T) {
 		{"default", []string{keyEnter}},
 		{"esc", []string{keyEsc}},
 		{"no", []string{keyDown, keyUp, keyEnter}},
+		{"up", []string{keyUp, keyEnter}},
 	} {
 		done := r.paneUpgrade(t)
 		r.waitDialog(t, term, tc.name)
@@ -211,7 +213,10 @@ func TestPaneUpgradeRefusedWithoutYes(t *testing.T) {
 		code, _ := done()
 		waitNoDialog(t, term, tc.name)
 		r.unchanged(t, tc.name)
-		r.refused(t, code, tc.name)
+		lines := r.refused(t, code, tc.name)
+		if said := strings.Join(strings.Fields(strings.Join(lines, "")), ""); !strings.Contains(said, "ThepersonansweredNo") {
+			t.Errorf("ASSERTION: the refusal after %s does not say the person answered No:\n%s", tc.name, strings.Join(lines, "\n"))
+		}
 		results[tc.name] = code
 	}
 	writeHandoffArtifact(t, map[string]any{"exits": results, "image": r.img, "screen": mustScrollback(t, r.base, r.sess, r.agent)})
@@ -229,6 +234,9 @@ func TestPaneUpgradeTimesOut(t *testing.T) {
 	waitNoDialog(t, term, "the wait ran out")
 	r.unchanged(t, "an unanswered dialog")
 	lines := r.refused(t, code, "the wait running out")
+	if said := strings.Join(strings.Fields(strings.Join(lines, "")), ""); !strings.Contains(said, "Nobodyansweredthedialog") {
+		t.Errorf("ASSERTION: the refusal after the wait does not say nobody answered:\n%s", strings.Join(lines, "\n"))
+	}
 	writeHandoffArtifact(t, map[string]any{"exit": code, "seconds": took.Seconds(), "screen": lines})
 	if took < 3*time.Second {
 		t.Errorf("ASSERTION: the upgrade ended %s after it asked, before the 3 s wait ran out", took)
