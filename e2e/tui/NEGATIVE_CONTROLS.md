@@ -10328,6 +10328,7 @@ origin/main at ecdeec289.
 | The branch before this review (c7fe27eed) | "the client kept its own order after the daemon answered" | **caught** |
 | The reply comparing against the drawn order (`sidebarSessionOrderFor`) | the same | **caught** |
 | The pending move and the daemon's order out of the rail cache key | none: another change (the cursor) redraws the rail in time in every run | **not caught** |
+
 ## Nest mode gives the pane every key, the leader too
 
 `TestNestModeGivesEveryKeyToThePane` in `nest_mode_test.go` attaches a real client in terminal mode with the default keys, with `cat -v` in the pane. ctrl+b enter must make the dock pill say `NEST F12`. ctrl+b, alt+2, ctrl+p and x must then reach `cat -v` as `^B^[2^Px`, with the session on workspace 1, one pane and no palette. F12 must take `NEST F12` off the pill without reaching the pane, and ctrl+b c must then open a second pane. `TestNestModeHandsTheLeaderToANestedTmux` runs a tmux of its own (`-L`, `-f /dev/null`) in the pane: in nest mode ctrl+b c must open the tmux's window `W1` with no tuios pane added, ctrl+b d must print tmux's `[detached`, and after F12 ctrl+b c must open a tuios pane. `TestNestModeIsTheLeaderThenEnterInEveryPreset` runs the tmux, screen and zellij presets: each preset's leader then enter must turn nest mode on, and F12 off. Each control is a build to a separate binary, the source put back before the next. Run on 2026-10-26 on macOS, based on origin/main at 6d122034a.
@@ -10893,7 +10894,9 @@ Not controlled: the window-mode branch of `copyModeFocusKey`, `ctrl+c` in a `V` 
 `{{ repo_path }}/.worktrees/{{ branch | slug }}` with `TUIOS_WORKTREE_DIR` set
 as well, and makes worktrees with `tuios worktree new`: not ignored, ignored
 through `.git/info/exclude`, under a relative template applied with
-`tuios config apply`, and under a template without `{{ branch }}`.
+`tuios config apply`, under `.claude/worktrees/{{ branch | sanitize }}`,
+with the branch `x}}y` under a raw `{{ branch }}`, and under templates with a
+stray `}}` or without `{{ branch }}`.
 `TestFanUsesWorktreePathTemplate` runs `tuios fan 2` with a folder already in
 the way of the first name.
 
@@ -10902,6 +10905,9 @@ the way of the first name.
 | `worktreePathFor` passes `""` to `worktree.PathFor` (`internal/session/verb_worktree.go`) | feat/a lands under `TUIOS_WORKTREE_DIR`; the fan's paths are not under `.worktrees` | **caught** |
 | `UnignoredInRepo` always returns false (`internal/worktree/path.go`) | "no warning for a worktree git does not ignore"; the fan output lacks `Warning: ` | **caught** |
 | `verbFan` passes `""` to `fanBranches` | the fan is refused: `.worktrees/try-retry already exists` | **caught** |
+| The brace check in `RenderPath` run on the rendered path, not the template (`internal/worktree/path.go`) | `worktree new x}}y` is refused | **caught** |
+| `unignoredWorktreeWarning` names the first folder under the repository, not `HoldingDir` (`internal/session/verb_worktree.go`) | "the hint does not name .claude/worktrees" (it names `/.claude/`) | **caught** |
+| `sanitize` dropped from the filters in `RenderPath` | `worktree new feat/e` is refused: `unknown filter "sanitize"` | **caught** |
 
 With `TUIOS_E2E_FRAMES` set, the first test writes `worktree-path.txt` (each
 step's output, `git status --porcelain` and `git worktree list`) and the

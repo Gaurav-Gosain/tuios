@@ -22,7 +22,10 @@ import (
 // Negative controls: with worktreePathFor in internal/session/verb_worktree.go
 // passing "" as the template, feat/a lands under TUIOS_WORKTREE_DIR and this
 // fails at the first path check. With UnignoredInRepo returning false, it
-// fails at "no warning for a worktree git does not ignore".
+// fails at "no warning for a worktree git does not ignore". With the brace
+// check run on the rendered path, x}}y is refused. With the hint naming
+// the first folder under the repository, it names /.claude/. With sanitize
+// unknown, the .claude/worktrees template is refused.
 func TestWorktreePathTemplate(t *testing.T) {
 	base := t.TempDir()
 	killDaemon(t, base)
@@ -113,6 +116,52 @@ func TestWorktreePathTemplate(t *testing.T) {
 	}
 	if !strings.Contains(out, "in "+filepath.Join(repo, ".trees", "repo-feat-c")+".") {
 		t.Fatalf("the relative template did not start at the main checkout:\n%s", out)
+	}
+
+	// worktrunk's name for the filter, and a layout under a folder people
+	// commit files in: the hint names the folder that holds the worktrees,
+	// not .claude.
+	writeConfig(t, base, "[worktree]\npath = \".claude/worktrees/{{ branch | sanitize }}\"\n")
+	if out, err := tuiosCLI(t, base, "config", "apply"); err != nil {
+		t.Fatalf("config apply: %v: %s", err, out)
+	}
+	out, err = tuiosCLI(t, base, "worktree", "new", "feat/e", "--repo", repo, "--detach")
+	record("worktree new feat/e, .claude/worktrees with sanitize", out)
+	if err != nil {
+		t.Fatalf("worktree new feat/e: %v: %s", err, out)
+	}
+	if !strings.Contains(out, "in "+filepath.Join(repo, ".claude", "worktrees", "feat-e")+".") {
+		t.Fatalf("worktree new did not put feat/e in .claude/worktrees/feat-e:\n%s", out)
+	}
+	if !strings.Contains(out, "Add /.claude/worktrees/ to ") {
+		t.Fatalf("the hint does not name .claude/worktrees, the folder that holds the worktrees:\n%s", out)
+	}
+
+	// A branch with }} in its name, which git takes, under a template that
+	// uses the branch as it is. The braces are the branch's, not a mistake in
+	// the template.
+	writeConfig(t, base, "[worktree]\npath = \".worktrees/{{ branch }}\"\n")
+	if out, err := tuiosCLI(t, base, "config", "apply"); err != nil {
+		t.Fatalf("config apply: %v: %s", err, out)
+	}
+	out, err = tuiosCLI(t, base, "worktree", "new", "x}}y", "--repo", repo, "--detach")
+	record("worktree new x}}y, raw branch", out)
+	if err != nil {
+		t.Fatalf("worktree new x}}y: %v: %s", err, out)
+	}
+	if !strings.Contains(out, "in "+filepath.Join(repo, ".worktrees", "x}}y")+".") {
+		t.Fatalf("worktree new did not put x}}y in .worktrees/x}}y:\n%s", out)
+	}
+
+	// A stray }} in the template itself is still a mistake in it.
+	writeConfig(t, base, "[worktree]\npath = \".worktrees/{{ branch }}}}\"\n")
+	if out, err := tuiosCLI(t, base, "config", "apply"); err != nil {
+		t.Fatalf("config apply: %v: %s", err, out)
+	}
+	out, err = tuiosCLI(t, base, "worktree", "new", "feat/f", "--repo", repo, "--detach")
+	record("worktree new feat/f, stray }} in the template", out)
+	if err == nil || !strings.Contains(out, "has a {{ or }} that is not part of") {
+		t.Fatalf("a stray }} in the template was not refused: %v:\n%s", err, out)
 	}
 
 	// A template without {{ branch }} would give every branch one folder:

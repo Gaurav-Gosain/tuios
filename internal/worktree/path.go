@@ -44,10 +44,18 @@ var pathTag = lazyre.New(`\{\{\s*([A-Za-z_]+)\s*(?:\|\s*([A-Za-z_]+)\s*)?\}\}`)
 //	{{ repo }}       its base name
 //	{{ branch }}     the branch, as given
 //
-// "| slug" turns a value into one path component, as Slug does. A leading ~/
-// is the home directory, and a relative result resolves from repo_path. The
-// template has to use branch, or every branch would land in one directory.
+// "| slug" turns a value into one path component, as Slug does. "| sanitize"
+// is another name for it, so a template copied from worktrunk renders. A
+// leading ~/ is the home directory, and a relative result resolves from
+// repo_path. The template has to use branch, or every branch would land in one
+// directory.
 func RenderPath(template, repoRoot, branch string) (string, error) {
+	// The braces are checked in the template, before anything is filled in:
+	// a branch such as a}}b, or a folder with {{ in its name, is a value and
+	// not a mistake in the template.
+	if rest := pathTag().ReplaceAllString(template, ""); strings.Contains(rest, "{{") || strings.Contains(rest, "}}") {
+		return "", fmt.Errorf("%q has a {{ or }} that is not part of a {{ name }} or {{ name | slug }}", template)
+	}
 	var bad error
 	usesBranch := false
 	out := pathTag().ReplaceAllStringFunc(template, func(tag string) string {
@@ -67,18 +75,15 @@ func RenderPath(template, repoRoot, branch string) (string, error) {
 		}
 		switch m[2] {
 		case "":
-		case "slug":
+		case "slug", "sanitize":
 			v = Slug(v)
 		default:
-			bad = errors.Join(bad, fmt.Errorf("unknown filter %q: the one filter is slug", m[2]))
+			bad = errors.Join(bad, fmt.Errorf("unknown filter %q: use slug, or sanitize, its worktrunk name", m[2]))
 		}
 		return v
 	})
 	if bad != nil {
 		return "", bad
-	}
-	if strings.Contains(out, "{{") || strings.Contains(out, "}}") {
-		return "", fmt.Errorf("%q has a {{ or }} that is not part of a {{ name }} or {{ name | slug }}", template)
 	}
 	if !usesBranch {
 		return "", fmt.Errorf("%q does not use {{ branch }}, so every branch would get the same directory", template)
@@ -94,6 +99,24 @@ func RenderPath(template, repoRoot, branch string) (string, error) {
 		out = filepath.Join(repoRoot, out)
 	}
 	return filepath.Clean(out), nil
+}
+
+// branchMark stands in for the branch when HoldingDir renders a template.
+// Slug leaves it as it is.
+const branchMark = "tuios0branch0mark"
+
+// HoldingDir is the folder every branch's worktree goes under: the rendered
+// path up to the first folder that depends on the branch. For
+// ".claude/worktrees/{{ branch | slug }}" it is <repo>/.claude/worktrees.
+func HoldingDir(template, repoRoot string) (string, error) {
+	dir, err := PathFor(template, repoRoot, branchMark)
+	if err != nil {
+		return "", err
+	}
+	for strings.Contains(dir, branchMark) {
+		dir = filepath.Dir(dir)
+	}
+	return dir, nil
 }
 
 // ValidatePathTemplate reports what is wrong with a [worktree] path template,

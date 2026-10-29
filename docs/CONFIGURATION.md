@@ -1903,16 +1903,26 @@ path = "{{ repo_path }}/.worktrees/{{ branch | slug }}"
 | `branch` | The branch, as given |
 
 `| slug` turns a value into one folder name: `feat/retry` becomes
-`feat-retry`. Without it, `{{ branch }}` keeps the slash and makes a folder
-per part. A relative path starts at `repo_path`, so `.worktrees/{{ branch |
-slug }}` is the same as the example above. A leading `~/` is your home
-folder. The template has to use `branch`, or every branch would get the same
-folder. The names are the ones worktrunk's `worktree-path` uses.
+`feat-retry`. Use it on `branch`. Without it, `{{ branch }}` keeps the slash
+and makes a folder per part, so the worktree of `feat/x` lands inside the
+worktree of `feat`, and `tuios worktree rm --force` on `feat` deletes both.
+A relative path starts at `repo_path`, so `.worktrees/{{ branch | slug }}` is
+the same as the example above. A leading `~/` is your home folder. The
+template has to use `branch`, or every branch would get the same folder.
+
+The variables are the ones worktrunk's `worktree-path` uses, and `| sanitize`
+is another name for `| slug`, so a template copied from a worktrunk config
+works as it is. worktrunk's `sanitize` turns only `/` and `\` into `-`, while
+`slug` turns every run of characters other than letters, digits, `.` and `_`
+into one `-`. A branch with other characters, such as `fix--retry` or
+`feat+x`, can get a different folder name from each tool.
 
 When the worktree is inside the repository and git does not ignore it, the
 main checkout lists it as untracked, and `git add -A` there would take it in.
-tuios then warns after it makes the worktree and names the line to add to
-`.gitignore` or `.git/info/exclude`. It never edits those files itself.
+tuios then warns after it makes the worktree and names the folder that holds
+the worktrees, such as `/.claude/worktrees/` for
+`.claude/worktrees/{{ branch | slug }}`, to add to `.gitignore` or
+`.git/info/exclude`. It never edits those files itself.
 
 The daemon makes every worktree, so it reads the setting, when it starts and
 when the file changes. The path is then the same whichever client asked.

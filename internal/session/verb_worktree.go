@@ -157,10 +157,11 @@ func (d *Daemon) worktreeTemplate() string {
 	return ""
 }
 
-// worktreePathFor is where a worktree of root on branch goes. A template that
-// does not render is the config's fault, and the error says where to fix it.
-func (d *Daemon) worktreePathFor(root, branch string) (string, *verbError) {
-	path, err := worktree.PathFor(d.worktreeTemplate(), root, branch)
+// worktreePathFor is where a worktree of root on branch goes by template. A
+// template that does not render is the config's fault, and the error says
+// where to fix it.
+func worktreePathFor(template, root, branch string) (string, *verbError) {
+	path, err := worktree.PathFor(template, root, branch)
 	if err != nil {
 		return "", hintedVerbError(ErrVerbInternal, "[worktree] path in config.toml: "+err.Error(), &VerbHint{
 			Detail: "The [worktree] path template in config.toml cannot place a worktree. Nothing was created. Fix it, or leave it empty for the default folder.",
@@ -176,7 +177,8 @@ func (d *Daemon) worktreePathFor(root, branch string) (string, *verbError) {
 // caller asked for and can still use. The session gets the caller's terminal
 // from its hello, as one made by new-session does.
 func (d *Daemon) createWorktreeSession(cs *connState, root, branch, base, sessionName string, command, env []string, grants *Grants, record func(*WorktreeInfo)) (map[string]any, *verbError) {
-	path, verr := d.worktreePathFor(root, branch)
+	template := d.worktreeTemplate()
+	path, verr := worktreePathFor(template, root, branch)
 	if verr != nil {
 		return nil, verr
 	}
@@ -274,7 +276,7 @@ func (d *Daemon) createWorktreeSession(cs *connState, root, branch, base, sessio
 	if hookErr != "" {
 		out["hook_error"] = hookErr
 	}
-	if warning := unignoredWorktreeWarning(root, path); warning != "" {
+	if warning := unignoredWorktreeWarning(template, root, path); warning != "" {
 		out["warning"] = warning
 	}
 	return out, nil
@@ -283,13 +285,26 @@ func (d *Daemon) createWorktreeSession(cs *connState, root, branch, base, sessio
 // unignoredWorktreeWarning says so when a worktree was put inside its own
 // repository where git does not ignore it, and what to ignore. tuios never
 // edits the ignore files itself: they are the user's.
-func unignoredWorktreeWarning(root, path string) string {
+//
+// The hint names the folder that holds every branch's worktree, so one line
+// covers the next worktree too, and nothing beside that folder is ignored with
+// it: for .claude/worktrees/{{ branch | slug }} it is /.claude/worktrees/, not
+// /.claude/, which holds files people commit.
+func unignoredWorktreeWarning(template, root, path string) string {
 	if !worktree.UnignoredInRepo(root, path) {
 		return ""
 	}
-	rel, _ := filepath.Rel(root, path)
-	top, _, _ := strings.Cut(filepath.ToSlash(rel), "/")
-	return filepath.Join(root, top) + " is inside the repository and git does not ignore it, so the main checkout lists the worktree as untracked. Add /" + top + "/ to .gitignore or .git/info/exclude."
+	rel := ""
+	if dir, err := worktree.HoldingDir(template, root); err == nil {
+		rel, _ = filepath.Rel(root, dir)
+	}
+	// A worktree straight in the main checkout has no folder of its own to
+	// ignore, so the hint names the worktree.
+	if rel == "" || rel == "." || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		rel, _ = filepath.Rel(root, path)
+	}
+	rel = filepath.ToSlash(rel)
+	return filepath.Join(root, rel) + " is inside the repository and git does not ignore it, so the main checkout lists the worktree as untracked. Add /" + rel + "/ to .gitignore or .git/info/exclude."
 }
 
 // worktreeHookTimeout bounds the after-new-worktree hook. Hooks have no
@@ -827,10 +842,11 @@ func (d *Daemon) verbFan(cs *connState, params json.RawMessage) (any, *verbError
 	// The name is held from the check until the call's sessions exist, so
 	// two calls cannot both take it as new.
 	defer release()
-	if _, verr := d.worktreePathFor(root, stem); verr != nil {
+	template := d.worktreeTemplate()
+	if _, verr := worktreePathFor(template, root, stem); verr != nil {
 		return nil, verr
 	}
-	branches := fanBranches(d.worktreeTemplate(), root, stem, p.Count)
+	branches := fanBranches(template, root, stem, p.Count)
 	if len(branches) < p.Count {
 		return nil, invalidParam("name", "could not find "+strconv.Itoa(p.Count)+" free branch names from "+stem)
 	}
