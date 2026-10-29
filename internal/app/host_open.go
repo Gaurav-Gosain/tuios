@@ -47,12 +47,23 @@ type hostOpenPending struct {
 	wasUp bool
 	// signIn says the click already opened the host's Tailscale sign-in.
 	signIn bool
+	// workspace and paneID are what to focus once the session is open: a
+	// navigator row names a workspace or a pane. Zero and empty focus
+	// nothing.
+	workspace int
+	paneID    string
 }
 
 // openRemoteSession attaches a session that lives on another machine, in this
 // client. The connection goes through this machine's daemon over its link,
 // and the session is drawn here with this machine's theme and config.
 func (m *OS) openRemoteSession(host, sessionName string) {
+	m.openRemoteSessionAt(host, sessionName, 0, "")
+}
+
+// openRemoteSessionAt is openRemoteSession that also focuses workspace or
+// paneID once the session is open.
+func (m *OS) openRemoteSessionAt(host, sessionName string, workspace int, paneID string) {
 	m.clearSidebarReturn() // opening the session is where the user asked to end up
 	if m.sessionSwitchHook != nil {
 		// A test records where the switch goes. See switchSession.
@@ -62,7 +73,7 @@ func (m *OS) openRemoteSession(host, sessionName string) {
 		return
 	}
 	m.cancelHostOpen()
-	p := &hostOpenPending{host: host, name: sessionName, gen: m.hostOpenGen, until: time.Now().Add(hostOpenWait)}
+	p := &hostOpenPending{host: host, name: sessionName, gen: m.hostOpenGen, until: time.Now().Add(hostOpenWait), workspace: workspace, paneID: paneID}
 	p.wasUp = m.hostWasUp(host)
 	// The newest request wins. A reconnect to the attached host would pull
 	// the person back when it lands, so it stops here, and starts again if
@@ -251,7 +262,24 @@ func (m *OS) finishHostOpen(msg SessionCreatedMsg) tea.Cmd {
 	m.hostOpen = nil
 	m.adoptHostClient(msg.Client, msg.State, msg.Host)
 	m.applyStartupToUnarranged()
+	if p.workspace > 0 || p.paneID != "" {
+		m.focusSwitchTarget(p.workspace, p.paneID)
+		// A key handler pushes what it changed to the daemon. This runs on
+		// a message, so it pushes the focus itself.
+		m.SyncStateToDaemon()
+	}
 	return nil
+}
+
+// focusSwitchTarget focuses the workspace or the pane a switch was asked to
+// end on. Zero and empty focus nothing.
+func (m *OS) focusSwitchTarget(workspace int, paneID string) {
+	if workspace > 0 && workspace != m.CurrentWorkspace {
+		m.SwitchToWorkspace(workspace)
+	}
+	if paneID != "" {
+		m.focusWindowByID(paneID)
+	}
 }
 
 // hostOpenWaitNote is what the dock and the notice say while a click waits

@@ -377,8 +377,9 @@ func TestTheDaemonSaysWhyALinkDropped(t *testing.T) {
 // word.
 //
 // First a click on the frozen link is replaced by a click on a session here,
-// and the late dial of the first must not pull the person away. Then a
-// click on a session on a link that is frozen and looks up. The
+// and the late dial of the first must not pull the person away. Then the
+// navigator opens a session on the frozen link and must not freeze the
+// screen (#742). Then a click on a session on a link that is frozen and looks up. The
 // click asks the daemon to retry the host, which pings the link, finds it
 // silent, ends it and dials it again. The session opens on the new link. The
 // second half leaves an attached session idle on a frozen link and nobody
@@ -446,8 +447,40 @@ func TestASilentLinkIsFoundAndTheRailStillOpensItsSessions(t *testing.T) {
 	}
 	save("replaced-click.txt")
 
+	// The navigator opens a session on the frozen link the way the rail
+	// does: off the Update goroutine, with the dock saying so (#742). It
+	// used to dial on the Update goroutine, and the screen froze until the
+	// dial failed.
 	freezeTheLink(t)
+	openNavigator(t, term, "far-quiet")
+	sendKeys(t, term, "/")
+	if err := term.SendKeys("far-quiet"); err != nil {
+		t.Fatalf("type the query: %v", err)
+	}
+	if err := term.WaitFor(func(s tuitest.Screen) bool { return strings.Count(s.Text(), "far-quiet") >= 2 }, uiTimeout); err != nil {
+		t.Fatalf("the navigator search never showed far-quiet: %v\n%s", err, term.Snapshot())
+	}
 	start := time.Now()
+	sendKeys(t, term, tuitest.Enter)
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		text := s.Text()
+		return strings.Contains(text, "Connecting to build") || strings.Contains(text, "Reconnecting to build")
+	}, 5*time.Second); err != nil {
+		t.Fatalf("ASSERTION: the navigator froze on a session of a frozen host: %v\n%s", err, term.Snapshot())
+	}
+	save("navigator-waits.txt")
+	if err := term.WaitFor(func(s tuitest.Screen) bool { return railCurrentIs(s, "far-quiet") }, 18*time.Second); err != nil {
+		t.Fatalf("ASSERTION: the session the navigator asked for on a frozen host never opened: %v\n%s", err, term.Snapshot())
+	}
+	t.Logf("the navigator opened the session on a frozen link after %v", time.Since(start).Round(100*time.Millisecond))
+	save("navigator-opened.txt")
+	time.Sleep(insertGuard)
+	clickRailSession(t, term, "elsewhere")
+	waitRailCurrent(t, term, "elsewhere")
+	time.Sleep(insertGuard)
+
+	freezeTheLink(t)
+	start = time.Now()
 	clickRailSession(t, term, "far-quiet")
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
 		text := s.Text()

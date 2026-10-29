@@ -1091,28 +1091,28 @@ func (m *OS) NavigatorActivate(i int) {
 	r := rows[i]
 	s := m.navigator.sessions[r.Session]
 	var paneID string
-	if r.Kind == navRowPane {
+	var workspace int
+	switch r.Kind {
+	case navRowPane:
 		paneID = s.Panes[r.Pane].ID
+	case navRowWorkspace:
+		workspace = r.Workspace
 	}
 	m.CloseNavigator()
 	m.sidebarLeaveForJump()
 	if !s.Current {
-		if s.Host != "" && !m.hostIsUp(s.Host) {
-			m.reportSwitchFailure(&hostUnavailableError{host: s.Host})
+		if s.Host != "" && s.Host != m.attachedMachine() {
+			// Off the Update goroutine and in every link state, as the rail
+			// opens it. The workspace or pane the row names is focused when
+			// the switch lands. See host_open.go.
+			m.openRemoteSessionAt(s.Host, s.Name, workspace, paneID)
 			return
 		}
 		if !m.openSession(s.Host, s.Name) {
 			return
 		}
 	}
-	switch r.Kind {
-	case navRowWorkspace:
-		if r.Workspace > 0 && r.Workspace != m.CurrentWorkspace {
-			m.SwitchToWorkspace(r.Workspace)
-		}
-	case navRowPane:
-		m.focusWindowByID(paneID)
-	}
+	m.focusSwitchTarget(workspace, paneID)
 }
 
 // NavigatorClickFolds folds the session or workspace row i on a click, and

@@ -45,6 +45,8 @@ func handleNavigatorInput(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 			o.NavigatorSearch(false)
 		case "enter":
 			o.NavigatorActivateSelected()
+			// A session on another machine opens off the Update goroutine.
+			return o, o.TakeSidebarCmd()
 		case "backspace":
 			if q := o.NavigatorQuery(); q != "" {
 				_, size := utf8.DecodeLastRuneInString(q)
@@ -76,6 +78,8 @@ func handleNavigatorInput(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		o.CloseNavigator()
 	case "enter":
 		o.NavigatorActivateSelected()
+		// A session on another machine opens off the Update goroutine.
+		return o, o.TakeSidebarCmd()
 	case "/":
 		o.NavigatorSearch(true)
 	case "h", "left":

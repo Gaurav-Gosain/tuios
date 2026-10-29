@@ -10362,3 +10362,12 @@ corner check fails the case of a box's bottom with a title.
 | `Clipped: false` in `riskOfLine` (the control above, run again on macOS) | `TestRiskInWorktree`: "repo-feat-kinder-greeting marks an Edit inside its worktree outside the worktree" | **caught** |
 
 `TestForcedNestedAttachSettles` passing shows the `ps` lookup finds a running nested client, so the refusal tests' check that none is left does not pass by finding nothing.
+## The navigator opens a session on a frozen link without freezing
+
+`TestASilentLinkIsFoundAndTheRailStillOpensItsSessions` freezes the link to the host `build`, then opens one of its sessions from the navigator (#742). Within 5 s of Enter the dock has to say "Connecting to build", and the session has to open within 18 s. `TestNavigatorListsAHostPane` checks that a pane row on another machine is still focused after the switch, which now lands on a message. Run on 2026-10-29 on Linux, based on origin/main at feb2df438.
+
+| Control: what was cut | Where it fails | Verdict |
+| --- | --- | --- |
+| origin/main, where the navigator dials on the Update goroutine | "the navigator froze on a session of a frozen host" | **caught** |
+| The `TakeSidebarCmd` returns in `handleNavigatorInput`, so the retry that pings the link is never sent | "the session the navigator asked for on a frozen host never opened" | **caught** |
+| `SyncStateToDaemon` after the focus in `finishHostOpen` | "enter went to far-shell but did not focus farlog" | **caught** |

@@ -518,6 +518,8 @@ func (m *OS) overlayRowClick(kind string, row overlayRowHit, lx, ly int) tea.Cmd
 		m.NavigatorSelect(row.Idx)
 		if !m.NavigatorClickFolds(row.Idx) {
 			m.NavigatorActivate(row.Idx)
+			// A session on another machine opens off the Update goroutine.
+			return m.TakeSidebarCmd()
 		}
 	case "aggregate":
 		// The picker used to return no hit rows at all, so the one overlay whose
