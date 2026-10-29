@@ -12,21 +12,9 @@ on:
     branches: [main]
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review]
-    paths-ignore:
-      # Files that no Go build, Go test or e2e test reads. A pull request
-      # that changes only these starts none of this workflow's jobs. Main
-      # still runs everything.
-      - "*.md"
-      - "e2e/tui/*.md"
-      - "assets/**"
-      - ".github/ISSUE_TEMPLATE/**"
-      - ".github/PULL_REQUEST_TEMPLATE/**"
-      - ".github/contributors-exclude"
-      - "LICENSE"
-      - "CITATION.cff"
-      # docs/ too: the unit tests of cmd/tuios, internal/config and internal/session read
-      # docs/CLI_REFERENCE.md and others, so go-test.yml keeps running for it.
-      - "docs/**"
+    # No path filter: the shard plan job runs on every pull request, so a
+    # pull request always shows that this workflow started. A change that
+    # reaches no test, such as one to the docs, starts no shard.
   workflow_dispatch:
     inputs:
       skip_if_tested:
@@ -50,7 +38,7 @@ concurrency:
 # E2E_SHARDS times E2E_LANES lanes by the measured times in
 # e2e/tui/shardplan/durations.txt. The shard plan job fails when a lane's
 # estimate is over E2E_LANE_LIMIT, which leaves a wide margin under the 12
-# minute go test timeout. Keep the matrix below in step with E2E_SHARDS.
+# minute go test timeout. The shard plan job makes the matrix from E2E_SHARDS.
 env:
   E2E_SHARDS: "12"
   E2E_LANES: "2"
@@ -96,6 +84,9 @@ jobs:
   shard-plan:
     name: e2e-tui shard plan
     runs-on: ubuntu-latest
+    outputs:
+      shards: ${{ steps.shards.outputs.shards }}
+      total: ${{ steps.shards.outputs.total }}
     # actions: read lets scripts/e2e-select.sh download the newest test map.
     permissions:
       contents: read
@@ -135,6 +126,41 @@ jobs:
           GITHUB_OUTPUT="$RUNNER_TEMP/select.out" ../../scripts/e2e-select.sh > "$RUNNER_TEMP/selected.txt"
           echo "::notice title=e2e-tui selection::$(grep '^mode=' "$RUNNER_TEMP/select.out")"
 
+      # The shards that get a test, by the same plan each shard makes for
+      # itself below. A shard with no test does not start, so a small change
+      # takes two or three runners instead of twelve. When the plan finds no
+      # shard for a selection that holds tests, every shard starts.
+      - name: Choose the shards that run
+        id: shards
+        working-directory: e2e/tui
+        run: |
+          set -euo pipefail
+          mode=$(sed -n 's/^mode=//p' "$RUNNER_TEMP/select.out")
+          go build -o "$RUNNER_TEMP/shardplan" ./shardplan
+          lanes=$((E2E_SHARDS * E2E_LANES))
+          shards=()
+          for shard in $(seq 1 "$E2E_SHARDS"); do
+            case $mode in
+            all) shards+=("$shard"); continue ;;
+            none) continue ;;
+            esac
+            n=0
+            for lane in $(seq 1 "$E2E_LANES"); do
+              v=$(( (shard - 1) * E2E_LANES + lane ))
+              c=$("$RUNNER_TEMP/shardplan" -shards "$lanes" -shard "$v" -fill "$E2E_LANE_FILL" < "$RUNNER_TEMP/selected.txt" | grep -c . || true)
+              n=$((n + c))
+            done
+            [ "$n" -eq 0 ] || shards+=("$shard")
+          done
+          if [ "$mode" = some ] && [ "${#shards[@]}" -eq 0 ]; then
+            echo "::warning title=Shard plan::The selection holds tests but no shard got one, so every shard runs."
+            mapfile -t shards < <(seq 1 "$E2E_SHARDS")
+          fi
+          list=$(IFS=,; echo "${shards[*]:-}")
+          echo "shards=[$list]" >> "$GITHUB_OUTPUT"
+          echo "total=$E2E_SHARDS" >> "$GITHUB_OUTPUT"
+          echo "Shards that run: ${list:-none} of $E2E_SHARDS" | tee -a "$GITHUB_STEP_SUMMARY"
+
   e2e-tui:
     runs-on: ubuntu-latest
     # actions: read lets scripts/e2e-select.sh download the newest test map.
@@ -168,16 +194,18 @@ jobs:
     # hash balances the count of tests, and a few tests take a minute or two.
     # The split is now by measured time, with twelve shards of two lanes near
     # four minutes each.
+    #
+    # The shard plan job names the shards that get a test, and only those
+    # start. Each one still selects and packs its own tests.
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
-    name: e2e-tui (shard ${{ matrix.shard }} of ${{ strategy.job-total }})
-    needs: tested
+        shard: ${{ fromJSON(needs.shard-plan.outputs.shards) }}
+    name: e2e-tui (shard ${{ matrix.shard }} of ${{ needs.shard-plan.outputs.total }})
+    needs: [tested, shard-plan]
     # tested is skipped on a pull request, so the shards must not wait for its
-    # success. A draft skips the shards. The shards do not wait for the shard
-    # plan job either: each one selects and packs its own tests.
-    if: ${{ !cancelled() && (github.event_name != 'pull_request' || !github.event.pull_request.draft) }}
+    # success. A draft skips the shards.
+    if: ${{ !cancelled() && needs.shard-plan.result == 'success' && needs.shard-plan.outputs.shards != '[]' && (github.event_name != 'pull_request' || !github.event.pull_request.draft) }}
     timeout-minutes: 20
     env:
       TESTED_URL: ${{ needs.tested.outputs.url }}
@@ -229,13 +257,9 @@ jobs:
           TUIOS_E2E: "1"
           GH_TOKEN: ${{ github.token }}
           SHARD: ${{ matrix.shard }}
-          SHARDS: ${{ strategy.job-total }}
         run: |
           set -euo pipefail
-          if [ "$SHARDS" != "$E2E_SHARDS" ]; then
-            echo "The matrix has $SHARDS shards and E2E_SHARDS is $E2E_SHARDS. Make them the same." >&2
-            exit 1
-          fi
+          SHARDS=$E2E_SHARDS
           ../../scripts/e2e-select.sh > "$RUNNER_TEMP/selected.txt" 2> "$RUNNER_TEMP/select.log"
           cat "$RUNNER_TEMP/select.log" >&2
           lanes=$((SHARDS * E2E_LANES))

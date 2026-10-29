@@ -7,40 +7,36 @@ name: Lint
 # changed (scripts/check.sh, which `just check` runs locally).
 # The unit test workflow covers gofmt, tidy and vet on linux.
 
+# A pull request and a push to main call this workflow from ci.yml, which
+# runs it when a Go file, an embedded file or a module file changed.
 on:
-  push:
-    branches: [main]
-  pull_request:
-    paths-ignore:
-      # Files that no Go build, Go test or e2e test reads. A pull request
-      # that changes only these starts none of this workflow's jobs. Main
-      # still runs everything.
-      - "*.md"
-      - "e2e/tui/*.md"
-      - "assets/**"
-      - ".github/ISSUE_TEMPLATE/**"
-      - ".github/PULL_REQUEST_TEMPLATE/**"
-      - ".github/contributors-exclude"
-      - "LICENSE"
-      - "CITATION.cff"
-      # docs/ too: the unit tests of cmd/tuios, internal/config and internal/session read
-      # docs/CLI_REFERENCE.md and others, so go-test.yml keeps running for it.
-      - "docs/**"
+  workflow_call:
+    inputs:
+      vet:
+        description: >
+          "false" when only the end-to-end module's Go code changed, which
+          golangci-lint, govulncheck and the cross vet do not read.
+        type: string
+        default: "true"
+      lint_libs:
+        description: >
+          The library folders to lint besides the root module, space
+          separated, "all" or "none". Empty lints all of them.
+        type: string
+        default: all
   workflow_dispatch:
 
 permissions:
   contents: read
 
-concurrency:
-  # A pull request's group is its ref, so a newer push cancels the run in
-  # progress. Every other run (main, the nightly, a manual run) gets a group of
-  # its own and is never cancelled or replaced while it waits.
-  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
-  cancel-in-progress: true
+# No concurrency group here: ci.yml holds the one for pull requests, and a
+# called workflow's github.workflow is the caller's name, so a group here
+# would be shared with the caller's other jobs.
 
 jobs:
   golangci:
     name: golangci-lint
+    if: inputs.vet != 'false'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -61,6 +57,7 @@ jobs:
       # ./... stops at a nested module, so each Go library of this repository
       # is linted from its own folder, with the same .golangci.yml.
       - name: golangci-lint (progstatus)
+        if: inputs.lint_libs == '' || inputs.lint_libs == 'all' || contains(format(' {0} ', inputs.lint_libs), ' progstatus ')
         uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
         with:
           version: v2.14.0
@@ -68,6 +65,7 @@ jobs:
           args: --timeout 10m
 
       - name: golangci-lint (vt)
+        if: inputs.lint_libs == '' || inputs.lint_libs == 'all' || contains(format(' {0} ', inputs.lint_libs), ' vt ')
         uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
         with:
           version: v2.14.0
@@ -75,6 +73,7 @@ jobs:
           args: --timeout 10m
 
       - name: golangci-lint (swatch)
+        if: inputs.lint_libs == '' || inputs.lint_libs == 'all' || contains(format(' {0} ', inputs.lint_libs), ' swatch ')
         uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
         with:
           version: v2.14.0
@@ -82,6 +81,7 @@ jobs:
           args: --timeout 10m
 
       - name: golangci-lint (shot)
+        if: inputs.lint_libs == '' || inputs.lint_libs == 'all' || contains(format(' {0} ', inputs.lint_libs), ' shot ')
         uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
         with:
           version: v2.14.0
@@ -89,6 +89,7 @@ jobs:
           args: --timeout 10m
 
       - name: golangci-lint (tml)
+        if: inputs.lint_libs == '' || inputs.lint_libs == 'all' || contains(format(' {0} ', inputs.lint_libs), ' tml ')
         uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
         with:
           version: v2.14.0
@@ -96,6 +97,7 @@ jobs:
           args: --timeout 10m
 
       - name: golangci-lint (plot)
+        if: inputs.lint_libs == '' || inputs.lint_libs == 'all' || contains(format(' {0} ', inputs.lint_libs), ' plot ')
         uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
         with:
           version: v2.14.0
@@ -103,6 +105,7 @@ jobs:
           args: --timeout 10m
 
       - name: golangci-lint (loom)
+        if: inputs.lint_libs == '' || inputs.lint_libs == 'all' || contains(format(' {0} ', inputs.lint_libs), ' loom ')
         uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
         with:
           version: v2.14.0
@@ -110,6 +113,7 @@ jobs:
           args: --timeout 10m
 
       - name: golangci-lint (sketch)
+        if: inputs.lint_libs == '' || inputs.lint_libs == 'all' || contains(format(' {0} ', inputs.lint_libs), ' sketch ')
         uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
         with:
           version: v2.14.0
@@ -162,7 +166,7 @@ jobs:
           cache-id: sanity
 
       - name: govulncheck
-        if: ${{ !cancelled() }}
+        if: ${{ !cancelled() && inputs.vet != 'false' }}
         run: go run golang.org/x/vuln/cmd/govulncheck@latest ./...
 
       - name: Check the changed files
@@ -188,6 +192,7 @@ jobs:
 
   cross-vet:
     name: go vet (darwin, windows, freebsd, openbsd)
+    if: inputs.vet != 'false'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     # The release targets besides linux, which go-test.yml vets. A test file

@@ -1,0 +1,157 @@
+name: CI
+
+# One workflow for the checks of a pull request and of main, except the
+# end-to-end suite (e2e-tui.yml), which selects its own tests. The changes job
+# reads the diff once and says which jobs the change can affect and which Go
+# packages each test job tests (scripts/ci-changes.sh). Every other job calls
+# a workflow of its own and runs only when the changes job says so. A job it
+# skips reports as skipped, so the run still ends with a result.
+#
+# A pull request runs what its change can reach. A push to main runs every
+# job, except ghostty-vt, learn-web, clienttests, the image build and the
+# Nix vendor hash, which run on main only when the push touched their paths,
+# as they did before. A manual run runs everything.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  # A pull request's group is its ref, so a newer push cancels the run in
+  # progress. Every other run (main, a manual run) gets a group of its own and
+  # is never cancelled or replaced while it waits.
+  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
+  cancel-in-progress: true
+
+jobs:
+  changes:
+    name: changes
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      pkgs: ${{ steps.changes.outputs.pkgs }}
+      ghostty_pkgs: ${{ steps.changes.outputs.ghostty_pkgs }}
+      go: ${{ steps.changes.outputs.go }}
+      vet: ${{ steps.changes.outputs.vet }}
+      lint_libs: ${{ steps.changes.outputs.lint_libs }}
+      unit: ${{ steps.changes.outputs.unit }}
+      app_session: ${{ steps.changes.outputs.app_session }}
+      isolation: ${{ steps.changes.outputs.isolation }}
+      windows: ${{ steps.changes.outputs.windows }}
+      macos: ${{ steps.changes.outputs.macos }}
+      sketch_fma: ${{ steps.changes.outputs.sketch_fma }}
+      pins: ${{ steps.changes.outputs.pins }}
+      lib_alone: ${{ steps.changes.outputs.lib_alone }}
+      ghostty: ${{ steps.changes.outputs.ghostty }}
+      learn_web: ${{ steps.changes.outputs.learn_web }}
+      clienttests: ${{ steps.changes.outputs.clienttests }}
+      docker: ${{ steps.changes.outputs.docker }}
+      nix: ${{ steps.changes.outputs.nix }}
+      binary_size: ${{ steps.changes.outputs.binary_size }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # A pull request checks out the merge of its head into the base, so
+          # HEAD^1 is the base. A push compares with the commit before it,
+          # which may be several commits back.
+          fetch-depth: ${{ github.event_name == 'push' && 50 || 2 }}
+
+      - uses: ./.github/actions/setup-go
+        with:
+          go-version-file: go.mod
+          cache-id: changes
+
+      - name: Choose the jobs and packages this change can affect
+        id: changes
+        env:
+          CHANGES_BEFORE: ${{ github.event.before }}
+        run: |
+          scripts/ci-changes.sh | tee "$RUNNER_TEMP/changes.txt"
+          {
+            echo "### What this change runs"
+            echo
+            echo '```'
+            sed 's/^\(pkgs\|ghostty_pkgs\)=\(.\{300\}\).*/\1=\2 .../' "$RUNNER_TEMP/changes.txt"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  go-test:
+    name: go-test
+    needs: changes
+    if: needs.changes.outputs.unit == 'true' || needs.changes.outputs.app_session == 'true' || needs.changes.outputs.isolation == 'true' || needs.changes.outputs.windows == 'true' || needs.changes.outputs.macos == 'true' || needs.changes.outputs.sketch_fma == 'true'
+    uses: ./.github/workflows/go-test.yml
+    with:
+      pkgs: ${{ needs.changes.outputs.pkgs }}
+      unit: ${{ needs.changes.outputs.unit }}
+      app_session: ${{ needs.changes.outputs.app_session }}
+      isolation: ${{ needs.changes.outputs.isolation }}
+      windows: ${{ needs.changes.outputs.windows }}
+      macos: ${{ needs.changes.outputs.macos }}
+      sketch_fma: ${{ needs.changes.outputs.sketch_fma }}
+
+  lint:
+    name: lint
+    needs: changes
+    if: needs.changes.outputs.go == 'true'
+    uses: ./.github/workflows/lint.yml
+    with:
+      vet: ${{ needs.changes.outputs.vet }}
+      lint_libs: ${{ needs.changes.outputs.lint_libs }}
+
+  libraries:
+    name: libraries
+    needs: changes
+    if: needs.changes.outputs.pins == 'true' || needs.changes.outputs.lib_alone != '[]'
+    uses: ./.github/workflows/libraries.yml
+    with:
+      pins: ${{ needs.changes.outputs.pins }}
+      lib_alone: ${{ needs.changes.outputs.lib_alone }}
+
+  binary-size:
+    name: binary-size
+    needs: changes
+    if: needs.changes.outputs.binary_size == 'true'
+    permissions:
+      contents: read
+      # Read main's size artifacts.
+      actions: read
+      # Post or update the one size comment on the pull request.
+      pull-requests: write
+    uses: ./.github/workflows/binary-size.yml
+
+  ghostty-vt:
+    name: ghostty-vt
+    needs: changes
+    if: needs.changes.outputs.ghostty == 'true'
+    uses: ./.github/workflows/ghostty-vt.yml
+    with:
+      pkgs: ${{ needs.changes.outputs.ghostty_pkgs }}
+
+  learn-web:
+    name: learn-web
+    needs: changes
+    if: needs.changes.outputs.learn_web == 'true'
+    uses: ./.github/workflows/learn-web.yml
+
+  clienttests:
+    name: clienttests
+    needs: changes
+    if: needs.changes.outputs.clienttests == 'true'
+    uses: ./.github/workflows/clienttests.yml
+
+  docker-build:
+    name: docker-build
+    needs: changes
+    if: needs.changes.outputs.docker == 'true'
+    uses: ./.github/workflows/docker-build.yml
+
+  nix-vendor-hash:
+    name: nix-vendor-hash
+    needs: changes
+    if: needs.changes.outputs.nix == 'true'
+    uses: ./.github/workflows/nix-vendor-hash.yml

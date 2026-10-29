@@ -5,22 +5,35 @@ name: Go unit tests
 # packages, so "the full gate is green" in a pull request was a claim by the
 # person who typed it. This is the machine that checks it.
 
+# A pull request and a push to main call this workflow from ci.yml, whose
+# changes job passes the packages to test and which jobs to run. A run of
+# its own, nightly or manual, tests every package: an input left empty means
+# every package and every job.
 on:
-  push:
-    branches: [main]
-  pull_request:
-    paths-ignore:
-      # Files that no Go build, Go test or e2e test reads. A pull request
-      # that changes only these starts none of this workflow's jobs. Main
-      # still runs everything.
-      - "*.md"
-      - "e2e/tui/*.md"
-      - "assets/**"
-      - ".github/ISSUE_TEMPLATE/**"
-      - ".github/PULL_REQUEST_TEMPLATE/**"
-      - ".github/contributors-exclude"
-      - "LICENSE"
-      - "CITATION.cff"
+  workflow_call:
+    inputs:
+      pkgs:
+        description: The import paths to test, space separated, "all" or "none".
+        type: string
+        default: all
+      unit:
+        type: string
+        default: "true"
+      app_session:
+        type: string
+        default: "true"
+      isolation:
+        type: string
+        default: "true"
+      windows:
+        type: string
+        default: "true"
+      macos:
+        type: string
+        default: "true"
+      sketch_fma:
+        type: string
+        default: "true"
   schedule:
     # 03:17 UTC daily, for the race build below.
     - cron: "17 3 * * *"
@@ -29,19 +42,14 @@ on:
 permissions:
   contents: read
 
-# A push to main once cancelled the nightly race build, when the group was the
-# ref alone. Runs outside pull requests now get a group of their own.
-concurrency:
-  # A pull request's group is its ref, so a newer push cancels the run in
-  # progress. Every other run (main, the nightly, a manual run) gets a group of
-  # its own and is never cancelled or replaced while it waits.
-  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
-  cancel-in-progress: true
+# No concurrency group here: ci.yml holds the one for pull requests, and a
+# called workflow's github.workflow is the caller's name, so a group here
+# would be shared with the caller's other jobs.
 
 jobs:
   unit:
     name: go test ./...
-    if: github.event_name != 'schedule'
+    if: github.event_name != 'schedule' && inputs.unit != 'false'
     runs-on: ubuntu-latest
     # Measured on a developer machine: internal/testutil 252 s, internal/app
     # 231 s, everything else under 35 s, about ten minutes if nothing runs in
@@ -121,14 +129,19 @@ jobs:
         # under CI rather than skip.
         run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
 
-      # A pull request tests only the packages its change can affect (see
-      # scripts/go-test-affected.sh). Main, the nightly and a manual run test
-      # every package.
+      # A pull request tests only the packages its change can affect, as the
+      # changes job of ci.yml chose them (scripts/ci-changes.sh). Main, the
+      # nightly and a manual run test every package.
       - name: Choose the packages this change can affect
         id: affected
+        env:
+          PKGS: ${{ inputs.pkgs }}
         run: |
-          # shellcheck disable=SC2086
-          scripts/go-test-affected.sh ./... ./progstatus/... ./vt/... ./swatch/... ./shot/... ./tml/... ./plot/... ./loom/... ./sketch/... > "$RUNNER_TEMP/affected.txt"
+          case ${PKGS:-all} in
+          all) echo all ;;
+          none) ;;
+          *) tr ' ' '\n' <<<"$PKGS" ;;
+          esac > "$RUNNER_TEMP/affected.txt"
           if grep -qx all "$RUNNER_TEMP/affected.txt"; then
             echo "Every package runs." | tee -a "$GITHUB_STEP_SUMMARY"
             echo "pkgs=all" >> "$GITHUB_OUTPUT"
@@ -178,7 +191,7 @@ jobs:
 
   app-session:
     name: go test (internal/app and internal/session)
-    if: github.event_name != 'schedule'
+    if: github.event_name != 'schedule' && inputs.app_session != 'false'
     runs-on: ubuntu-latest
     # The two packages hold no t.Parallel and ran over three minutes each.
     # Their tests mostly wait on a pty, a daemon or a timer: internal/session
@@ -191,9 +204,6 @@ jobs:
 
     steps:
       - uses: actions/checkout@v7
-        with:
-          # HEAD^1 is the base of a pull request (scripts/go-test-affected.sh).
-          fetch-depth: 2
 
       - uses: ./.github/actions/setup-go
         with:
@@ -207,8 +217,13 @@ jobs:
 
       - name: Choose the packages this change can affect
         id: affected
+        env:
+          PKGS: ${{ inputs.pkgs }}
         run: |
-          list=$(scripts/go-test-affected.sh ./internal/app ./internal/session)
+          case ${PKGS:-all} in
+          all) list=all ;;
+          *) list=$(tr ' ' '\n' <<<"$PKGS" | grep -E '/internal/(app|session)$' || true) ;;
+          esac
           if [ "$list" = all ]; then
             pkgs="./internal/app ./internal/session"
           else
@@ -230,7 +245,7 @@ jobs:
 
   isolation:
     name: go test isolation guard
-    if: github.event_name != 'schedule'
+    if: github.event_name != 'schedule' && inputs.isolation != 'false'
     runs-on: ubuntu-latest
     # TestTheSuiteWritesNothingOutsideItsOwnTree runs the suite of
     # ./internal/... ./cmd/... ./pkg/... in a seeded home and fails when a test
@@ -240,9 +255,6 @@ jobs:
 
     steps:
       - uses: actions/checkout@v7
-        with:
-          # HEAD^1 is the base of a pull request (scripts/go-test-affected.sh).
-          fetch-depth: 2
 
       - uses: ./.github/actions/setup-go
         with:
@@ -259,8 +271,13 @@ jobs:
       # change that affects none of them skips the guard.
       - name: Choose the packages the guard runs
         id: affected
+        env:
+          PKGS: ${{ inputs.pkgs }}
         run: |
-          list=$(scripts/go-test-affected.sh ./internal/... ./cmd/... ./pkg/...)
+          case ${PKGS:-all} in
+          all) list=all ;;
+          *) list=$(tr ' ' '\n' <<<"$PKGS" | grep -E '^github.com/Gaurav-Gosain/tuios/(internal|cmd|pkg)/' || true) ;;
+          esac
           if [ "$list" = all ]; then
             echo "run=true" >> "$GITHUB_OUTPUT"
           elif [ -n "$list" ]; then
@@ -279,7 +296,9 @@ jobs:
 
   windows:
     name: go test (windows)
-    if: github.event_name != 'schedule'
+    # The changes job of ci.yml runs it when a package below can be affected
+    # on Windows (GOOS=windows).
+    if: github.event_name != 'schedule' && inputs.windows != 'false'
     runs-on: windows-latest
     # The packages whose Windows code runs only on Windows: the herdr link
     # (hardlink, copy and a running link), the PATHEXT lookup and the job
@@ -327,7 +346,9 @@ jobs:
 
   macos:
     name: go test (macos)
-    if: github.event_name != 'schedule'
+    # The changes job of ci.yml runs it when a package below can be affected
+    # on macOS (GOOS=darwin).
+    if: github.event_name != 'schedule' && inputs.macos != 'false'
     runs-on: macos-latest
     # The opencode reader proves that a socket belongs to this user from the
     # sysctl net.inet.tcp.pcblist_n, which only a real macOS kernel fills.
@@ -365,7 +386,7 @@ jobs:
 
   sketch-fma:
     name: sketch goldens (${{ matrix.name }})
-    if: github.event_name != 'schedule'
+    if: github.event_name != 'schedule' && inputs.sketch_fma != 'false'
     # tuios.dev/sketch promises pele's SVG byte for byte. The Go spec lets the
     # compiler fuse x*y+z into one FMA, which rounds once where JavaScript
     # rounds twice. arm64 fuses, and so does amd64 at GOAMD64=v3. The unit job

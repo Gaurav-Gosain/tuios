@@ -5,65 +5,19 @@ name: Nix vendor hash
 # left `nix run github:Gaurav-Gosain/tuios` failing with a hash mismatch until
 # the next release (#220). This check fails the pull request that changes the
 # dependencies and prints the hash to put in tuios.nix.
+# A pull request and a push to main call this workflow from ci.yml. Its
+# changes job runs it for a change to a go.mod, a go.sum, go.work, or the
+# Nix files.
 on:
-  pull_request:
-    paths:
-      - go.mod
-      - go.sum
-      - go.work
-      - go.work.sum
-      - progstatus/go.mod
-      - vt/go.mod
-      - vt/go.sum
-      - swatch/go.mod
-      - swatch/go.sum
-      - shot/go.mod
-      - shot/go.sum
-      - tml/go.mod
-      - plot/go.mod
-      - plot/go.sum
-      - loom/go.mod
-      - loom/go.sum
-      - sketch/go.mod
-      - sketch/go.sum
-      - tuios.nix
-      - flake.nix
-      - flake.lock
-  push:
-    branches: [main]
-    paths:
-      - go.mod
-      - go.sum
-      - go.work
-      - go.work.sum
-      - progstatus/go.mod
-      - vt/go.mod
-      - vt/go.sum
-      - swatch/go.mod
-      - swatch/go.sum
-      - shot/go.mod
-      - shot/go.sum
-      - tml/go.mod
-      - plot/go.mod
-      - plot/go.sum
-      - loom/go.mod
-      - loom/go.sum
-      - sketch/go.mod
-      - sketch/go.sum
-      - tuios.nix
-      - flake.nix
-      - flake.lock
+  workflow_call:
   workflow_dispatch:
 
 permissions:
   contents: read
 
-concurrency:
-  # A pull request's group is its ref, so a newer push cancels the run in
-  # progress. Every other run (main, the nightly, a manual run) gets a group of
-  # its own and is never cancelled or replaced while it waits.
-  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
-  cancel-in-progress: true
+# No concurrency group here: ci.yml holds the one for pull requests, and a
+# called workflow's github.workflow is the caller's name, so a group here
+# would be shared with the caller's other jobs.
 
 jobs:
   vendor-hash:

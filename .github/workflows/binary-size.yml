@@ -7,36 +7,18 @@ name: Binary size
 # job summary and in one comment on the pull request. docs/perf.md, "Binary
 # size budget", says how the ceiling was set.
 
+# A pull request and a push to main call this workflow from ci.yml, which
+# runs it when a change can reach the tuios binary.
 on:
-  push:
-    branches: [main]
-  pull_request:
-    paths-ignore:
-      # Files that no Go build, Go test or e2e test reads. A pull request
-      # that changes only these starts none of this workflow's jobs. Main
-      # still runs everything.
-      - "*.md"
-      - "e2e/tui/*.md"
-      - "assets/**"
-      - ".github/ISSUE_TEMPLATE/**"
-      - ".github/PULL_REQUEST_TEMPLATE/**"
-      - ".github/contributors-exclude"
-      - "LICENSE"
-      - "CITATION.cff"
-      # docs/ too: the unit tests of cmd/tuios, internal/config and internal/session read
-      # docs/CLI_REFERENCE.md and others, so go-test.yml keeps running for it.
-      - "docs/**"
+  workflow_call:
   workflow_dispatch:
 
 permissions:
   contents: read
 
-concurrency:
-  # A pull request's group is its ref, so a newer push cancels the run in
-  # progress. Every other run (main, the nightly, a manual run) gets a group of
-  # its own and is never cancelled or replaced while it waits.
-  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
-  cancel-in-progress: true
+# No concurrency group here: ci.yml holds the one for pull requests, and a
+# called workflow's github.workflow is the caller's name, so a group here
+# would be shared with the caller's other jobs.
 
 jobs:
   size:
@@ -110,9 +92,13 @@ jobs:
           REPO: ${{ github.repository }}
         run: |
           mkdir -p "$RUNNER_TEMP/main"
-          runs=$(gh run list -R "$REPO" --workflow binary-size.yml --branch main --event push \
-            --status success --limit 10 --json databaseId,headSha \
-            --jq '.[] | "\(.databaseId) \(.headSha)"' 2>/dev/null || true)
+          # ci.yml runs this workflow since it took over the pushes to main.
+          # The runs of binary-size.yml are the ones from before.
+          runs=$(for wf in ci.yml binary-size.yml; do
+            gh run list -R "$REPO" --workflow "$wf" --branch main --event push \
+              --status success --limit 10 --json databaseId,headSha \
+              --jq '.[] | "\(.databaseId) \(.headSha)"' 2>/dev/null || true
+          done)
           while read -r id sha; do
             [ -n "$id" ] || continue
             if gh run download "$id" -R "$REPO" -p 'binary-size-*' -D "$RUNNER_TEMP/main" 2>/dev/null &&

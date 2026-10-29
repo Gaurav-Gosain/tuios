@@ -9,61 +9,22 @@ name: Container image builds
 # This is the publish job without the publishing: the half that catches a
 # broken Dockerfile, on the commits where one could break.
 #
-# The path filter is the Dockerfile and what the build reads from the module
-# rather than every Go file. A break in here is almost always the Dockerfile
-# itself, a moved command, or a dependency that stopped building statically,
-# and running a container build on every internal edit would buy the rest at a
-# price the rest is not worth.
+# The changes job of ci.yml calls this workflow for the Dockerfile and what
+# the build reads from the module, rather than for every Go file. A break in
+# here is almost always the Dockerfile itself, a moved command, or a
+# dependency that stopped building statically, and running a container build
+# on every internal edit would buy the rest at a price the rest is not worth.
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - Dockerfile
-      - .dockerignore
-      - go.mod
-      - go.sum
-      - go.work
-      - go.work.sum
-      - progstatus/**
-      - vt/**
-      - swatch/**
-      - shot/**
-      - tml/**
-      - plot/**
-      - loom/**
-      - sketch/**
-      - cmd/**
-      - .github/workflows/docker-build.yml
-  pull_request:
-    paths:
-      - Dockerfile
-      - .dockerignore
-      - go.mod
-      - go.sum
-      - go.work
-      - go.work.sum
-      - progstatus/**
-      - vt/**
-      - swatch/**
-      - shot/**
-      - tml/**
-      - plot/**
-      - loom/**
-      - sketch/**
-      - cmd/**
-      - .github/workflows/docker-build.yml
+  workflow_call:
   workflow_dispatch:
 
 permissions:
   contents: read
 
-concurrency:
-  # A pull request's group is its ref, so a newer push cancels the run in
-  # progress. Every other run (main, the nightly, a manual run) gets a group of
-  # its own and is never cancelled or replaced while it waits.
-  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
-  cancel-in-progress: true
+# No concurrency group here: ci.yml holds the one for pull requests, and a
+# called workflow's github.workflow is the caller's name, so a group here
+# would be shared with the caller's other jobs.
 
 jobs:
   build:

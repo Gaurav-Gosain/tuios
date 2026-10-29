@@ -5,95 +5,26 @@
 # ships this backend by default and the go-test workflow only covers the
 # pure one. The renderer tests in internal/app failed here for weeks while
 # this job ran only the emulator's own packages.
-#
-# The paths below are every package that imports vt, directly or
-# through another one. A change to one of them can break it on this backend,
-# and the job body already tests them all; the trigger has to see them too.
 name: ghostty-vt
 
+# A pull request and a push to main call this workflow from ci.yml. Its
+# changes job runs it when a package that links vt can be affected, with
+# the build tag on, and passes the packages to test.
 on:
-  push:
-    branches: [main]
-    paths:
-      - "vt/**"
-      - "internal/session/**"
-      - "internal/terminal/**"
-      - "internal/app/**"
-      - "internal/input/**"
-      - "internal/scrollback/**"
-      - "internal/tmuxcompat/**"
-      - "internal/served/**"
-      - "internal/server/**"
-      - "internal/ui/**"
-      - "internal/learn/**"
-      - "internal/cellsize/**"
-      - "internal/ptyspawn/**"
-      - "internal/fuzz/**"
-      - "internal/guibridge/**"
-      - "pkg/tuios/**"
-      - "cmd/tuios/**"
-      - "cmd/tuios-web/**"
-      - "cmd/tuios-fuzz/**"
-      - "scripts/ghostty-lib.sh"
-      - ".github/workflows/ghostty-vt.yml"
-      - ".github/actions/setup-go/**"
-      - "go.mod"
-      - "go.sum"
-      - "go.work"
-      - "go.work.sum"
-      - "progstatus/**"
-      - "swatch/**"
-      - "shot/**"
-      - "tml/**"
-      - "plot/**"
-      - "loom/**"
-      - "sketch/**"
-  pull_request:
-    paths:
-      - "vt/**"
-      - "internal/session/**"
-      - "internal/terminal/**"
-      - "internal/app/**"
-      - "internal/input/**"
-      - "internal/scrollback/**"
-      - "internal/tmuxcompat/**"
-      - "internal/served/**"
-      - "internal/server/**"
-      - "internal/ui/**"
-      - "internal/learn/**"
-      - "internal/cellsize/**"
-      - "internal/ptyspawn/**"
-      - "internal/fuzz/**"
-      - "internal/guibridge/**"
-      - "pkg/tuios/**"
-      - "cmd/tuios/**"
-      - "cmd/tuios-web/**"
-      - "cmd/tuios-fuzz/**"
-      - "scripts/ghostty-lib.sh"
-      - ".github/workflows/ghostty-vt.yml"
-      - ".github/actions/setup-go/**"
-      - "go.mod"
-      - "go.sum"
-      - "go.work"
-      - "go.work.sum"
-      - "progstatus/**"
-      - "swatch/**"
-      - "shot/**"
-      - "tml/**"
-      - "plot/**"
-      - "loom/**"
-      - "sketch/**"
+  workflow_call:
+    inputs:
+      pkgs:
+        description: The import paths to test, space separated, or "all".
+        type: string
+        default: all
   workflow_dispatch:
 
 permissions:
   contents: read
 
-concurrency:
-  # A pull request's group is its ref, so a newer push cancels the run in
-  # progress. Every other run (main, the nightly, a manual run) gets a group of
-  # its own and is never cancelled or replaced while it waits.
-  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
-  cancel-in-progress: true
+# No concurrency group here: ci.yml holds the one for pull requests, and a
+# called workflow's github.workflow is the caller's name, so a group here
+# would be shared with the caller's other jobs.
 
 jobs:
   differential:
@@ -137,12 +68,24 @@ jobs:
           # differential and wire fidelity tests in vt and
           # internal/session, and the renderer, input and CLI tests above them.
           - name: Tests on the ghostty backend
+            env:
+              PKGS: ${{ inputs.pkgs }}
             run: |
               pkgs=$(go list -tags ghostty -test -f '{{.ForTest}} {{join .Deps " "}}' ./... ./vt/... |
                 awk '$1 ~ /^(github.com\/Gaurav-Gosain\/tuios\/|tuios.dev\/vt)/ &&
                      / tuios.dev\/vt( |$)/ {print $1}' |
                 sort -u)
+              # A pull request tests only the ones its change can affect, as
+              # the changes job of ci.yml chose them.
+              case ${PKGS:-all} in
+              all) ;;
+              *) pkgs=$(comm -12 <(echo "$pkgs") <(tr ' ' '\n' <<<"$PKGS" | grep . | sort -u)) ;;
+              esac
               echo "$pkgs"
+              if [ -z "$pkgs" ]; then
+                echo "The change affects no package that links the emulator."
+                exit 0
+              fi
               # internal/session and internal/app take over three minutes each
               # one test after another. scripts/go-test-lanes.sh splits their
               # tests across four go test processes that run side by side.

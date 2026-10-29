@@ -98,6 +98,23 @@ Run `just check --changed` before you mark a pull request ready. It runs
 diff first. `go fix -diff ./...` prints the patches. Fix a finding at the
 root. A `//nolint` needs its reason on the same line.
 
+### What CI runs on a pull request
+
+`.github/workflows/ci.yml` starts with a changes job. The job runs
+`scripts/ci-changes.sh`, which reads the diff and names the jobs and the Go
+packages the change can affect. A package is affected when it changed, or when
+its test binary builds a package that changed. A job that the changes job does
+not name shows as skipped. A change to a module file beyond the library pins,
+to a CI file, or to a path no rule names runs everything. A push to main runs
+every job, except ghostty-vt, learn-web, clienttests, the image build and the
+Nix vendor hash. Those run on main only when the push changed their inputs.
+The e2e suite selects its own tests (see Testing Approach). See what a branch
+runs:
+
+```bash
+CHANGES_BASE=origin/main scripts/ci-changes.sh
+```
+
 ### Browser build (Learn tuios)
 
 `cmd/tuios-wasm` is tuios compiled to WebAssembly for the guided tour at

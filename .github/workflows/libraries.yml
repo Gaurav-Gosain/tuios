@@ -6,40 +6,31 @@ name: Go libraries
 # the versions go.mod pins. This workflow keeps the two in step, and tests each
 # library alone, as an importer gets it.
 
+# A pull request and a push to main call this workflow from ci.yml, which
+# passes whether the pins changed and which "alone" jobs to run.
 on:
-  push:
-    branches: [main]
-  pull_request:
-    paths-ignore:
-      # Files that no Go build, Go test or e2e test reads. A pull request
-      # that changes only these starts none of this workflow's jobs. Main
-      # still runs everything.
-      - "*.md"
-      - "e2e/tui/*.md"
-      - "assets/**"
-      - ".github/ISSUE_TEMPLATE/**"
-      - ".github/PULL_REQUEST_TEMPLATE/**"
-      - ".github/contributors-exclude"
-      - "LICENSE"
-      - "CITATION.cff"
-      # docs/ too: the unit tests of cmd/tuios, internal/config and internal/session read
-      # docs/CLI_REFERENCE.md and others, so go-test.yml keeps running for it.
-      - "docs/**"
+  workflow_call:
+    inputs:
+      pins:
+        type: string
+        default: "true"
+      lib_alone:
+        description: A JSON list of the alone jobs to run, of "vt", "sketch" and "small".
+        type: string
+        default: '["vt","sketch","small"]'
   workflow_dispatch:
 
 permissions:
   contents: read
 
-concurrency:
-  # A pull request's group is its ref, so a newer push cancels the run in
-  # progress. Every other run (main, the nightly, a manual run) gets a group of
-  # its own and is never cancelled or replaced while it waits.
-  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
-  cancel-in-progress: true
+# No concurrency group here: ci.yml holds the one for pull requests, and a
+# called workflow's github.workflow is the caller's name, so a group here
+# would be shared with the caller's other jobs.
 
 jobs:
   pins:
     name: library pins
+    if: inputs.pins != 'false'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -61,7 +52,8 @@ jobs:
         run: scripts/library-pins.sh check
 
   module:
-    name: ${{ matrix.name }} alone
+    name: ${{ matrix.id == 'small' && 'progstatus, swatch, shot, tml, plot and loom' || matrix.id }} alone
+    if: inputs.lib_alone != '[]'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     strategy:
@@ -69,22 +61,9 @@ jobs:
       matrix:
         # vt and sketch take a minute or more each and get a job of their own.
         # The small libraries share one, since each tests in seconds and a job
-        # of its own spent longer on setup than on the library.
-        include:
-          - name: vt
-            id: vt
-            dirs: vt
-            gomod: vt/go.mod
-          - name: sketch
-            id: sketch
-            dirs: sketch
-            gomod: sketch/go.mod
-          - name: progstatus, swatch, shot, tml, plot and loom
-            id: small
-            dirs: progstatus swatch shot tml plot loom
-            # All six ask for go 1.25, and swatch/go.mod names 1.25.0, the
-            # oldest Go any of them allows.
-            gomod: swatch/go.mod
+        # of its own spent longer on setup than on the library. ci.yml passes
+        # only the jobs whose library changed.
+        id: ${{ fromJSON(inputs.lib_alone || '["vt","sketch","small"]') }}
     env:
       # The module as an importer builds it: no workspace, and the oldest Go
       # its go.mod allows.
@@ -95,12 +74,14 @@ jobs:
 
       - uses: ./.github/actions/setup-go
         with:
-          go-version-file: ${{ matrix.gomod }}
+          # All six small libraries ask for go 1.25, and swatch/go.mod names
+          # 1.25.0, the oldest Go any of them allows.
+          go-version-file: ${{ matrix.id == 'small' && 'swatch/go.mod' || format('{0}/go.mod', matrix.id) }}
           cache-id: lib-${{ matrix.id }}
 
       - name: Tidy, vet and test
         env:
-          DIRS: ${{ matrix.dirs }}
+          DIRS: ${{ matrix.id == 'small' && 'progstatus swatch shot tml plot loom' || matrix.id }}
         run: |
           status=0
           for dir in $DIRS; do

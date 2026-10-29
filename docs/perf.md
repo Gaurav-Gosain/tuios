@@ -2321,8 +2321,9 @@ truecolor one.
 
 ### Binary size budget
 
-`.github/workflows/binary-size.yml` runs `scripts/binary-size.sh` on every pull
-request and push to main. It builds tuios the way the release does
+`.github/workflows/binary-size.yml` runs `scripts/binary-size.sh` on every push
+to main, and on every pull request that can change the binary. `ci.yml` calls
+it. It builds tuios the way the release does
 (`CGO_ENABLED=0`, `-trimpath`, `-ldflags "-s -w"`) for linux/amd64 and
 darwin/arm64 with the Go version go.mod names, prints the size, and fails when
 a binary is over the ceiling.

@@ -7,40 +7,19 @@ name: learn-web
 # under internal/ and pkg/ (go list -deps shows 33 of them under GOOS=js), so
 # the filter is those trees as a whole. What it leaves out is what the js build
 # never reads: cmd/tuios, cmd/tuios-web, e2e, docs and the rest of the repo.
+# A pull request and a push to main call this workflow from ci.yml. Its
+# changes job runs it when a package the js/wasm build or its Go tests build
+# can be affected (GOOS=js).
 on:
-  push:
-    branches: [main]
-    paths: &learn-web-paths
-      - "go.mod"
-      - "go.sum"
-      - "go.work"
-      - "go.work.sum"
-      - "progstatus/**"
-      - "vt/**"
-      - "swatch/**"
-      - "shot/**"
-      - "tml/**"
-      - "plot/**"
-      - "loom/**"
-      - "sketch/**"
-      - "internal/**"
-      - "pkg/**"
-      - "cmd/tuios-wasm/**"
-      - ".github/workflows/learn-web.yml"
-      - ".github/actions/setup-go/**"
-  pull_request:
-    paths: *learn-web-paths
+  workflow_call:
   workflow_dispatch:
 
 permissions:
   contents: read
 
-concurrency:
-  # A pull request's group is its ref, so a newer push cancels the run in
-  # progress. Every other run (main, the nightly, a manual run) gets a group of
-  # its own and is never cancelled or replaced while it waits.
-  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
-  cancel-in-progress: true
+# No concurrency group here: ci.yml holds the one for pull requests, and a
+# called workflow's github.workflow is the caller's name, so a group here
+# would be shared with the caller's other jobs.
 
 jobs:
   build:

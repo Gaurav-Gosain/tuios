@@ -4,35 +4,13 @@
 # clients at different sizes.
 name: clienttests
 
-# The paths are the code a browser session runs through: the web server, the
-# window manager and its input, the config, and the tests themselves. The
-# nightly run catches a change outside these paths that still breaks them, such
-# as one in internal/session or a dependency.
+# A pull request and a push to main call this workflow from ci.yml. Its
+# changes job runs it for a change to the code a browser session runs
+# through: a module file, a library, the web server, the window manager and
+# its input, the config, or the tests themselves. The nightly run catches a change outside these paths that
+# still breaks them, such as one in internal/session or a dependency.
 on:
-  pull_request:
-    paths: &clienttests-paths
-      - "go.mod"
-      - "go.sum"
-      - "go.work"
-      - "go.work.sum"
-      - "progstatus/**"
-      - "vt/**"
-      - "swatch/**"
-      - "shot/**"
-      - "tml/**"
-      - "plot/**"
-      - "loom/**"
-      - "sketch/**"
-      - "cmd/tuios-web/**"
-      - "internal/app/**"
-      - "internal/input/**"
-      - "internal/config/**"
-      - "clienttests/**"
-      - ".github/workflows/clienttests.yml"
-      - ".github/actions/setup-go/**"
-  push:
-    branches: [main]
-    paths: *clienttests-paths
+  workflow_call:
   schedule:
     # 05:23 UTC daily, clear of the race build and the fuzz campaign.
     - cron: "23 5 * * *"
@@ -41,12 +19,9 @@ on:
 permissions:
   contents: read
 
-concurrency:
-  # A pull request's group is its ref, so a newer push cancels the run in
-  # progress. Every other run (main, the nightly, a manual run) gets a group of
-  # its own and is never cancelled or replaced while it waits.
-  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
-  cancel-in-progress: true
+# No concurrency group here: ci.yml holds the one for pull requests, and a
+# called workflow's github.workflow is the caller's name, so a group here
+# would be shared with the caller's other jobs.
 
 jobs:
   clienttests:
