@@ -19,6 +19,14 @@ an agent is there and nothing says what it is doing, so `ask-agent` and `fan`
 do not type into it. From inside a pane, a report with no `-s` and no `-w` is
 about that pane. From outside every pane, it lands on the focused window.
 
+A pane that reported `working` and then sends no report for
+`[agents] silent_after` (default `10m`) shows as `unknown` with
+`reason: silent` in `get-agent-state`, `list-agents` and the `agent-state`
+event. Its rail row reads "No report for N min". The state underneath stays
+`working`, so nothing types into the pane. Your next report clears it, even
+one that its `if_state` refuses. Report at each step of a long task, so that
+a long step does not read as a hang.
+
 `get-agent-state` and `list-agents` also report `needs_you` (true for
 `needs_input` and `errored`), `blocked_by` (`approval`, `question` or `auth`,
 from `--kind`), `completion_seq` (turns the pane has finished), `finished_unread`

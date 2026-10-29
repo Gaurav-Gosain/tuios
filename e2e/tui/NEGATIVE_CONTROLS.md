@@ -10617,3 +10617,11 @@ The positive half is in the same runs: `pill` and `flat` pass on every build. Th
 | Control: what was cut | Where it fails | Verdict |
 | --- | --- | --- |
 | `notePaneExitedAlone` no longer starts the hold, so a save after a pane is killed by a signal writes the smaller layout (`internal/session/workspace_renumber.go`) | `attached`: "session \"reboot-attached\" never appeared in the listing". The client closed each pane, the daemon saved a session with no windows, and the next start discarded it. `detached` passes on both builds, because no client removes the windows | **caught** |
+## A hooked agent that stops reporting shows as silent (#898)
+
+`TestHookIntegrationsReportTheTurn` runs with `silent_after = "4s"`. After Qwen's `UserPromptSubmit` the pane sends no report. `get-agent-state` must then say `unknown` with the reason `silent`, and the rail row must read "No report for". A `PostToolUse` that its `if_state` refuses must then show the pane as `working` again. Each control was built into its own binary. Run on 2026-10-29 on Linux.
+
+| Control: what was cut | Where it fails | Verdict |
+| --- | --- | --- |
+| `markSilent` marks no pane (`internal/session/agent_silent.go`) | "qwen silent: the pane is {State:working ...}, want unknown with reason silent" | **caught** |
+| `noteHeardLocked` does not clear the reason (`internal/session/agent_silent.go`) | "qwen PostToolUse after the silence: the pane is {State:unknown ... Reason:silent}, want state working" | **caught** |

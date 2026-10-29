@@ -185,6 +185,10 @@ type agentClaim struct {
 	// when it could not be read. See promptStillShown.
 	promptHold int64
 	holdFg     int
+	// heardAt is when a report from the pane's agent last arrived that did
+	// not set the state, an if_state refusal, as Unix nanoseconds. It counts
+	// against a silence like a report that applied. See agent_silent.go.
+	heardAt int64
 }
 
 // herdrAnchor is one process a herdr claim follows, named by pid and start

@@ -541,6 +541,11 @@ type WindowSummary struct {
 	ID         string `json:"id"`
 	Title      string `json:"title"`
 	AgentState string `json:"agent_state,omitempty"`
+	// AgentReason is why AgentState is what it is when it is not the state
+	// the agent last gave: "silent" for a hooked pane that stopped
+	// reporting, whose AgentState here is unknown. Additive and omitted when
+	// empty. See WindowState.AgentReason.
+	AgentReason string `json:"agent_reason,omitempty"`
 	// AgentStateAt is when the pane entered AgentState (Unix nanoseconds).
 	// Additive and omitted when zero, so an older peer just reads no elapsed time.
 	AgentStateAt int64 `json:"agent_state_at,omitempty"`

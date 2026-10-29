@@ -448,6 +448,9 @@ func (s *Session) applyAgentReport(target string, r AgentReport) (AgentState, bo
 	applied := false
 	var holdAt int64
 	var heldWindow, heldPTY string
+	// heardOnly is an if_state refusal that cleared a silence: the state
+	// changes, so the mutation publishes, and the report is still refused.
+	heardOnly := false
 	err := s.mutateState(func(st *SessionState) error {
 		idx, err := findWindowStateIndex(st.Windows, target)
 		if err != nil {
@@ -481,6 +484,12 @@ func (s *Session) applyAgentReport(target string, r AgentReport) (AgentState, bo
 		prev := w.AgentState
 		if len(r.IfState) > 0 && !slices.Contains(r.IfState, prev) {
 			effective = prev
+			// A conditional report that does not apply is still the agent
+			// speaking, and counts against a silence (agent_silent.go).
+			if s.noteHeardLocked(w, claim, held, r) {
+				heardOnly = true
+				return nil
+			}
 			return errAgentReportRefused(agentRefusedIfState)
 		}
 		if reason := sessionGuard(w, claim, held, s.agentHarnessPIDs[w.ID].pid, s.agentSharedGuards[w.ID], r); reason != "" {
@@ -585,6 +594,9 @@ func (s *Session) applyAgentReport(target string, r AgentReport) (AgentState, bo
 	})
 	if holdAt != 0 {
 		s.notePromptHoldFg(heldWindow, heldPTY, holdAt)
+	}
+	if err == nil && heardOnly {
+		return effective, false, agentRefusedIfState, nil
 	}
 	if errors.Is(err, errAgentClaimHeld) {
 		return effective, false, agentRefusedOutranked, nil

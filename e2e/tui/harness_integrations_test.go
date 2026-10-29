@@ -38,6 +38,7 @@ type agentStateJSON struct {
 	Harness      string `json:"harness_id"`
 	AgentSession string `json:"agent_session_id"`
 	BlockedBy    string `json:"blocked_by"`
+	Reason       string `json:"reason"`
 }
 
 // readAgentState reads a pane's agent state, the zero value when it cannot.
@@ -144,8 +145,18 @@ func windowID(t *testing.T, base, session, name string) string {
 // env is layered over the client's environment.
 func agentSessions(t *testing.T, env ...string) (*tuitest.Terminal, string) {
 	t.Helper()
+	return agentSessionsWith(t, "", env...)
+}
+
+// agentSessionsWith is agentSessions with config.toml written first, when cfg
+// is not empty, so the daemon reads it as it starts.
+func agentSessionsWith(t *testing.T, cfg string, env ...string) (*tuitest.Terminal, string) {
+	t.Helper()
 	base := t.TempDir()
 	killDaemon(t, base)
+	if cfg != "" {
+		writeConfig(t, base, cfg)
+	}
 	for _, name := range []string{"e2e-home", "e2e-agent"} {
 		if out, err := tuiosCLI(t, base, "new", name, "--detach"); err != nil {
 			t.Fatalf("create session %s: %v\n%s", name, err, out)
@@ -165,36 +176,47 @@ func agentSessions(t *testing.T, env ...string) (*tuitest.Terminal, string) {
 // working once it is answered, and done at the end. Until this change all
 // three reported the session id alone, and the pane's state never moved.
 //
-// Negative control: with the Qwen, Copilot and Cursor cases taken out of
+// The Qwen turn also goes silent (#898): with silent_after at four seconds,
+// a working pane that sends no report is shown as unknown with the reason
+// silent, its rail row reads "No report for", and the next report shows the
+// state it reports again. Four seconds is far more than the other steps take
+// between a report and the next, so none of them goes silent.
+//
+// Negative controls: with the Qwen, Copilot and Cursor cases taken out of
 // Translate, the hook maps them as session-only harnesses again and the first
-// working wait fails.
+// working wait fails. With markSilent not marking a pane, the silent wait
+// fails.
 func TestHookIntegrationsReportTheTurn(t *testing.T) {
-	term, base := agentSessions(t)
+	term, base := agentSessionsWith(t, "[appearance.sidebar]\nenabled = true\nsections = \"sessions,agents\"\n\n[agents]\nsilent_after = \"4s\"\n")
 	type step struct {
 		name, payload, state string
+		// silent waits after the step for the pane to go silent, and saves
+		// a frame of its row.
+		silent bool
 	}
 	cases := []struct {
 		harness string
 		steps   []step
 	}{
 		{"qwen", []step{
-			{"SessionStart", `{"hook_event_name":"SessionStart","session_id":"qw-e2e","source":"startup"}`, "idle"},
-			{"UserPromptSubmit", `{"hook_event_name":"UserPromptSubmit","session_id":"qw-e2e","prompt":"fix the build"}`, "working"},
-			{"Notification permission_prompt", `{"hook_event_name":"Notification","session_id":"qw-e2e","message":"Qwen Code needs your permission to use run_shell_command","notification_type":"permission_prompt"}`, "needs_input"},
-			{"PostToolUse", `{"hook_event_name":"PostToolUse","session_id":"qw-e2e","tool_name":"run_shell_command"}`, "working"},
-			{"Stop", `{"hook_event_name":"Stop","session_id":"qw-e2e","stop_hook_active":false,"last_assistant_message":"The build passes."}`, "done"},
+			{"SessionStart", `{"hook_event_name":"SessionStart","session_id":"qw-e2e","source":"startup"}`, "idle", false},
+			{"UserPromptSubmit", `{"hook_event_name":"UserPromptSubmit","session_id":"qw-e2e","prompt":"fix the build"}`, "working", true},
+			{"PostToolUse after the silence", `{"hook_event_name":"PostToolUse","session_id":"qw-e2e","tool_name":"read_file"}`, "working", false},
+			{"Notification permission_prompt", `{"hook_event_name":"Notification","session_id":"qw-e2e","message":"Qwen Code needs your permission to use run_shell_command","notification_type":"permission_prompt"}`, "needs_input", false},
+			{"PostToolUse", `{"hook_event_name":"PostToolUse","session_id":"qw-e2e","tool_name":"run_shell_command"}`, "working", false},
+			{"Stop", `{"hook_event_name":"Stop","session_id":"qw-e2e","stop_hook_active":false,"last_assistant_message":"The build passes."}`, "done", false},
 		}},
 		{"copilot", []step{
-			{"SessionStart", `{"hook_event_name":"SessionStart","session_id":"cp-e2e","source":"startup"}`, "idle"},
-			{"UserPromptSubmit", `{"hook_event_name":"UserPromptSubmit","session_id":"cp-e2e","prompt":"fix the build"}`, "working"},
-			{"notification permission_prompt", `{"sessionId":"cp-e2e","hook_event_name":"Notification","message":"Copilot wants to run git push","notification_type":"permission_prompt"}`, "needs_input"},
-			{"PostToolUse", `{"hook_event_name":"PostToolUse","session_id":"cp-e2e","tool_name":"Bash"}`, "working"},
-			{"Stop", `{"hook_event_name":"Stop","session_id":"cp-e2e","stop_reason":"end_turn","stop_hook_active":false}`, "done"},
+			{"SessionStart", `{"hook_event_name":"SessionStart","session_id":"cp-e2e","source":"startup"}`, "idle", false},
+			{"UserPromptSubmit", `{"hook_event_name":"UserPromptSubmit","session_id":"cp-e2e","prompt":"fix the build"}`, "working", false},
+			{"notification permission_prompt", `{"sessionId":"cp-e2e","hook_event_name":"Notification","message":"Copilot wants to run git push","notification_type":"permission_prompt"}`, "needs_input", false},
+			{"PostToolUse", `{"hook_event_name":"PostToolUse","session_id":"cp-e2e","tool_name":"Bash"}`, "working", false},
+			{"Stop", `{"hook_event_name":"Stop","session_id":"cp-e2e","stop_reason":"end_turn","stop_hook_active":false}`, "done", false},
 		}},
 		{"cursor-agent", []step{
-			{"sessionStart", `{"hook_event_name":"sessionStart","session_id":"cu-e2e","is_background_agent":false}`, "idle"},
-			{"beforeSubmitPrompt", `{"hook_event_name":"beforeSubmitPrompt","conversation_id":"cu-e2e","prompt":"fix the build"}`, "working"},
-			{"stop completed", `{"hook_event_name":"stop","conversation_id":"cu-e2e","status":"completed","loop_count":0}`, "done"},
+			{"sessionStart", `{"hook_event_name":"sessionStart","session_id":"cu-e2e","is_background_agent":false}`, "idle", false},
+			{"beforeSubmitPrompt", `{"hook_event_name":"beforeSubmitPrompt","conversation_id":"cu-e2e","prompt":"fix the build"}`, "working", false},
+			{"stop completed", `{"hook_event_name":"stop","conversation_id":"cu-e2e","status":"completed","loop_count":0}`, "done", false},
 		}},
 	}
 	for _, tc := range cases {
@@ -207,12 +229,47 @@ func TestHookIntegrationsReportTheTurn(t *testing.T) {
 			if out := runHook(t, base, tc.harness, "e2e-agent", win, s.payload); out != "" {
 				t.Fatalf("%s %s: the hook printed %q, want nothing", tc.harness, s.name, out)
 			}
-			waitAgentState(t, base, "e2e-agent", win, s.state, tc.harness, log, tc.harness+" "+s.name)
+			st := waitAgentState(t, base, "e2e-agent", win, s.state, tc.harness, log, tc.harness+" "+s.name)
+			if st.Reason != "" {
+				log.save(t)
+				t.Fatalf("%s %s: the pane has reason %q right after a report, want none", tc.harness, s.name, st.Reason)
+			}
+			if s.silent {
+				waitSilent(t, term, base, win, log, tc.harness+" silent")
+			}
 		}
 		log.save(t)
 	}
 	saveFrame(t, term, "hook-turns-done")
 	alive(t, term, "after three harnesses' turns")
+}
+
+// waitSilent waits for a working pane to go silent: get-agent-state says
+// unknown with the reason silent and the rail row says it has no report.
+// The state underneath stays working, which the step after it checks by the
+// report that brings the pane back.
+func waitSilent(t *testing.T, term *tuitest.Terminal, base, win string, log *stateLog, step string) {
+	t.Helper()
+	deadline := time.Now().Add(uiTimeout)
+	for {
+		st := readAgentState(t, base, "e2e-agent", win)
+		if st.State == "unknown" && st.Reason == "silent" {
+			log.add("%-44s state=%s reason=%s source=%s message=%q", step, st.State, st.Reason, st.Source, st.Message)
+			break
+		}
+		if time.Now().After(deadline) {
+			log.save(t)
+			t.Fatalf("%s: the pane is %+v, want unknown with reason silent", step, st)
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		return strings.Contains(s.Text(), "No report for")
+	}, uiTimeout); err != nil {
+		log.save(t)
+		t.Fatalf("%s: the rail never said the pane sent no report: %v\n%s", step, err, term.Snapshot())
+	}
+	saveFrame(t, term, "hook-turn-silent")
 }
 
 // TestCodexSharedServerKeepsAnotherConversationOffThePane is #852. Codex runs

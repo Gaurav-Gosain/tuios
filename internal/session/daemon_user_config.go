@@ -92,6 +92,8 @@ func DaemonConfigFromUser(uc *config.UserConfig) *DaemonConfig {
 	cfg.RecapTestPatterns = uc.Agents.Recap.Resolved().TestPatterns
 	// The daemon holds every pane's delivery queue, so it bounds them.
 	cfg.QueueMax = uc.Agents.Queue.MaxEntries()
+	// The daemon marks a hooked pane silent, so it reads after how long.
+	cfg.AgentSilentAfter = silentAfterFromConfig(uc.Agents)
 	// The daemon types the wake prompt for mail, so it reads whether to.
 	cfg.MailWakeOff = !uc.Agents.Mail.WakeOn()
 	// The daemon takes every checkpoint, so it reads whether to.

@@ -539,6 +539,9 @@ type sidebarAgentEntry struct {
 	// AgentKind is what sort of block a needs_input pane is on ("approval",
 	// "question"), empty when the source did not say. The need token draws it.
 	AgentKind string
+	// Reason is why State is not the state the agent gave: "silent" for a
+	// hooked pane that stopped reporting. The need token says so.
+	Reason string
 	// Meta is what the pane reported about its agent through set-agent-meta,
 	// in the order the pane holds it. The meta and $key row tokens draw it.
 	Meta []sessiontree.MetaToken
@@ -2755,6 +2758,7 @@ func (m *OS) agentEntries(sessions []sessiontree.Node) []sidebarAgentEntry {
 				StateAt:      win.StateAt,
 				Harness:      win.Harness,
 				Message:      win.Message,
+				Reason:       win.Reason,
 				AgentKind:    win.AgentKind,
 				Meta:         win.Meta,
 				Queued:       win.Queued,

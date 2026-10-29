@@ -22,6 +22,10 @@ type idleWakes struct {
 	// start working through a change to its session's state.
 	stall wakeLatch
 
+	// silent wakes silentMonitor for the same reason: a pane can only start
+	// working, or report again, through a change to its session's state.
+	silent wakeLatch
+
 	// cleanup wakes cleanupLoop. What it releases is left behind by output,
 	// input and resizes, and what it expires is a routed request.
 	cleanup wakeLatch
@@ -41,11 +45,13 @@ type idleWakes struct {
 	stallTicks   atomic.Int64
 	cleanupTicks atomic.Int64
 	listingTicks atomic.Int64
+	silentTicks  atomic.Int64
 }
 
 func (w *idleWakes) init() {
 	w.detect.init()
 	w.stall.init()
+	w.silent.init()
 	w.cleanup.init()
 	w.listing.init()
 	w.listingNow.init()
@@ -70,6 +76,7 @@ func (w *idleWakes) activity() {
 func (w *idleWakes) stateChanged() {
 	w.detect.Set()
 	w.stall.Set()
+	w.silent.Set()
 	w.cleanup.Set()
 	w.listing.Set()
 }

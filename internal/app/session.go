@@ -1348,6 +1348,7 @@ func (m *OS) updateWindowFromState(w *terminal.Window, ws *session.WindowState) 
 		w.SetAltScreen(ws.IsAltScreen)
 	}
 	w.AgentMessage = ws.AgentMessage
+	w.AgentReason = ws.AgentReason
 	w.AgentKind = ws.AgentKind
 	w.AgentHarness = ws.AgentHarness
 	w.StartedBySession, w.StartedByWindow = startedByFromWire(ws.StartedBy)
@@ -1359,7 +1360,10 @@ func (m *OS) updateWindowFromState(w *terminal.Window, ws *session.WindowState) 
 	w.AgentStateAt = ws.AgentStateAt
 	prevSeq := w.AgentCompletionSeq
 	w.AgentCompletionSeq = ws.CompletionSeq
-	if string(ws.AgentState) == w.AgentState && ws.CompletionSeq > prevSeq {
+	// A silent pane is drawn as unknown, the state it is shown as. See
+	// session.WindowState.ShownAgentState.
+	shown := string(ws.ShownAgentState())
+	if shown == w.AgentState && ws.CompletionSeq > prevSeq {
 		// A whole turn fell between two snapshots. See noteAgentTurnWithin.
 		// Inside a sync it waits for the sync's focus. See turnsWithinSync.
 		if m.applyingPeerSync {
@@ -1371,7 +1375,7 @@ func (m *OS) updateWindowFromState(w *terminal.Window, ws *session.WindowState) 
 	// Last, and it adopts AgentState itself: an alert raised from here reads the
 	// message and harness above, which have to be the ones that arrived with the
 	// state rather than the ones it replaced.
-	m.noteAgentState(w, string(ws.AgentState))
+	m.noteAgentState(w, shown)
 	m.markHostProgramStatus()
 	w.ForegroundCmd = ws.ForegroundCmd
 	// The shell's pid, as the daemon that spawned it knows it, and the only
@@ -1479,8 +1483,9 @@ func adoptWindowState(window *terminal.Window, ws session.WindowState) {
 	window.PreMinimizeWidth = ws.PreMinimizeW
 	window.PreMinimizeHeight = ws.PreMinimizeH
 	window.SetAltScreen(ws.IsAltScreen) // also drives mouse event forwarding
-	window.AgentState = string(ws.AgentState)
+	window.AgentState = string(ws.ShownAgentState())
 	window.AgentMessage = ws.AgentMessage
+	window.AgentReason = ws.AgentReason
 	window.AgentKind = ws.AgentKind
 	window.AgentHarness = ws.AgentHarness
 	window.StartedBySession, window.StartedByWindow = startedByFromWire(ws.StartedBy)

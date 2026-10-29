@@ -161,6 +161,13 @@ type WindowState struct {
 	// meaningless in any other state. Daemon-owned like AgentState, and empty in
 	// older state, which reads as "not said".
 	AgentKind string `json:"agent_kind,omitempty"`
+	// AgentReason is why the state a reader is shown differs from AgentState,
+	// empty when it does not. The one value is AgentReasonSilent: a pane whose
+	// hooks reported working and then stopped reporting, shown as unknown
+	// while AgentState stays working underneath (see agent_silent.go). The
+	// next state the daemon sets clears it. Daemon-owned like AgentState.
+	// Additive: an older peer drops it and keeps drawing working.
+	AgentReason string `json:"agent_reason,omitempty"`
 	// AgentStateAt is the unix-nano time AgentState was last set. It is stamped
 	// daemon-side and drives the output-stall heuristic (see applyStallHeuristic).
 	// A title or screen look that reads back its own claim unchanged does not
@@ -3576,6 +3583,7 @@ func (s *Session) mutateStateLocked(fn func(state *SessionState) error) (*Sessio
 		return nil, err
 	}
 	s.noteAgentTurnsLocked(before, time.Now().UnixNano())
+	clearStaleSilenceLocked(before, s.state)
 	clearNowAtRestLocked(before, s.state)
 	s.forgetSubagentsLocked(s.state)
 	pruneDeadLeaves(s.state)
@@ -3844,7 +3852,8 @@ func (s *Session) windowSummaries() []WindowSummary {
 		out = append(out, WindowSummary{
 			ID:            w.ID,
 			Title:         title,
-			AgentState:    string(w.AgentState),
+			AgentState:    string(w.ShownAgentState()),
+			AgentReason:   w.AgentReason,
 			AgentStateAt:  w.AgentStateAt,
 			AgentHarness:  w.AgentHarness,
 			AgentMessage:  w.AgentMessage,

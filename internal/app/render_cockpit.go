@@ -1201,6 +1201,8 @@ func (m *OS) ckRowLine2(l ckLook, r ckRow, e sidebarAgentEntry) (verb, rest stri
 		right = []ckSeg{{t: "ctx " + ctx, fg: pal.FgMute}}
 	}
 	switch {
+	case e.Reason == session.AgentReasonSilent:
+		return "", silentNote(e.StateAt, time.Now()), pal.Warn, right
 	case e.State == "working":
 		if now := ckMeta(e, "now"); now != "" {
 			if tool, target, ok := strings.Cut(now, ": "); ok {

@@ -220,6 +220,7 @@ func retainDaemonExclusive(incoming, canonical *SessionState) {
 		message string
 		harness string
 		at      int64
+		reason  string
 	}
 	agents := make(map[string]agent, len(canonical.Windows))
 	// The kind of a block and the harness's session id are daemon-owned too,
@@ -354,7 +355,7 @@ func retainDaemonExclusive(incoming, canonical *SessionState) {
 			shellPIDs[w.ID] = pid
 		}
 		if w.AgentState != AgentStateNone || w.AgentMessage != "" || w.AgentHarness != "" || w.AgentStateAt != 0 {
-			agents[w.ID] = agent{w.AgentState, w.AgentMessage, w.AgentHarness, w.AgentStateAt}
+			agents[w.ID] = agent{w.AgentState, w.AgentMessage, w.AgentHarness, w.AgentStateAt, w.AgentReason}
 		}
 		if w.AgentKind != "" || w.AgentSessionID != "" || w.AgentSessionHarness != "" {
 			agentIDs[w.ID] = agentIdentity{w.AgentKind, w.AgentSessionID, w.AgentSessionHarness}
@@ -441,6 +442,7 @@ func retainDaemonExclusive(incoming, canonical *SessionState) {
 		w.AgentMessage = a.message
 		w.AgentHarness = a.harness
 		w.AgentStateAt = a.at
+		w.AgentReason = a.reason
 		// Taken from canonical whatever the client sent: no client sets it, so
 		// a value in a client push is an echo of an older state at best.
 		w.AgentMeta = metas[w.ID]

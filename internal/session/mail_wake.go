@@ -206,7 +206,8 @@ func (d *Daemon) noteMailWakeEvent(ev SessionEvent) {
 		w.dropLocked(ev.Window)
 		w.mu.Unlock()
 	case EventAgentState:
-		if ev.State != AgentStateIdle.Name() && ev.State != AgentStateDone.Name() && ev.State != AgentStateUnknown.Name() {
+		// A silent pane is still working underneath: it is not at rest.
+		if ev.Reason == AgentReasonSilent || ev.State != AgentStateIdle.Name() && ev.State != AgentStateDone.Name() && ev.State != AgentStateUnknown.Name() {
 			return
 		}
 		w.mu.Lock()

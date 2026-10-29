@@ -2421,6 +2421,22 @@ when it starts and again when the file changes. A change applies to the next
 pane. [AGENT_STATE.md](AGENT_STATE.md#herdrs-pane-state-protocol) says what is
 accepted.
 
+## Show a hooked agent that stops reporting
+
+A hooked agent reports at each prompt and each tool call. When it sends no
+report for `silent_after`, tuios shows it as `unknown` with the reason
+`silent`, and its row reads "No report for N min":
+
+```toml
+[agents]
+silent_after = "10m"   # default; "0" or "off" turns it off
+```
+
+The value is a Go duration, such as `90s` or `20m`. A value that does not
+parse reads as `10m`, with a warning. The daemon reads the value when it
+starts and again when the file changes. See
+[Silent agents](AGENT_STATE.md#silent-agents).
+
 ## Report pane states to your terminal
 
 When tuios runs in a terminal that reads OSC 7501, the Program Status

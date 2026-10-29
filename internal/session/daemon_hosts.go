@@ -137,6 +137,8 @@ func (d *Daemon) applyUserConfig(cfg *config.UserConfig, byPerson bool) {
 	d.approvalsWaiting.Store(approvalsWait)
 	d.SetRecapTestPatterns(cfg.Agents.Recap.Resolved().TestPatterns)
 	d.SetQueueMax(cfg.Agents.Queue.MaxEntries())
+	// It changes only what a pane is shown as, so a file change applies.
+	d.SetAgentSilentAfter(resolveSilentAfter(silentAfterFromConfig(cfg.Agents)))
 	// A file change only turns the wake off. A process in a pane can write
 	// the file, and the wake types into panes, so turning it on waits for
 	// tuios config apply from outside tuios, or a daemon restart, as a wider

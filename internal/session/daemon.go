@@ -384,6 +384,11 @@ type Daemon struct {
 	// TUIOS_AGENT_STALL_SECONDS environment override.
 	agentStallTimeout time.Duration
 
+	// silent is [agents] silent_after: how long a pane whose hooks reported
+	// working may go without a report before it shows as silent. See
+	// agent_silent.go.
+	silent silentAfter
+
 	// agentDetectInterval is how often the foreground-process auto-detector polls
 	// each pane to mark or clear a running agent. Zero disables auto-detection. It
 	// is resolved once in NewDaemon from config or the TUIOS_AGENT_DETECT_SECONDS
@@ -863,6 +868,9 @@ type DaemonConfig struct {
 	// the TUIOS_AGENT_STALL_SECONDS environment override, then to the default; a
 	// negative value disables the heuristic.
 	AgentStallTimeout time.Duration
+	// AgentSilentAfter is [agents] silent_after. Zero means
+	// config.DefaultSilentAfter and a negative value turns it off.
+	AgentSilentAfter time.Duration
 	// AgentAutoDetect toggles the foreground-process agent auto-detector. Nil
 	// falls back to the TUIOS_AGENT_AUTODETECT environment override, then to
 	// enabled. A non-nil false disables it.
@@ -1001,6 +1009,8 @@ func NewDaemon(cfg *DaemonConfig) *Daemon {
 	d.SetLinkPolicies(cfg.LinkPolicies)
 	d.manager.SetPanePermissions(cfg.Permissions)
 	d.SetQueueMax(cfg.QueueMax)
+	// Stored, not set: the wake latches are made below.
+	d.silent.ns.Store(int64(resolveSilentAfter(cfg.AgentSilentAfter)))
 	d.SetMailWake(!cfg.MailWakeOff)
 	d.SetCheckpoints(cfg.Checkpoints)
 	d.outbox = newHostOutbox(d)
@@ -1313,6 +1323,7 @@ func (d *Daemon) onSessionCreated(s *Session) {
 			Mode:       ev.Mode,
 			Enabled:    ev.Enabled,
 			State:      ev.State,
+			Reason:     ev.Reason,
 			Workspace:  ev.Workspace,
 			Cmdline:    ev.Cmdline,
 			ExitCode:   ev.ExitCode,
@@ -1580,6 +1591,7 @@ func (d *Daemon) serve() {
 	d.startAccepting()
 	go d.cleanupLoop()
 	go d.stallMonitor()
+	go d.silentMonitor()
 	go d.agentMonitor()
 	go d.listingNotifier()
 }

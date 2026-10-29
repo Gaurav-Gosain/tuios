@@ -1,6 +1,9 @@
 package config
 
-import "strings"
+import (
+	"strings"
+	"time"
+)
 
 // The [agents] table: how tuios treats the coding agents in its panes.
 //
@@ -56,6 +59,37 @@ type AgentsConfig struct {
 	// "auto" (the default) asks the terminal at start and reports only when
 	// it answers, and "off" never asks. See docs/PROGRAM_STATUS.md.
 	HostProgramStatus string `toml:"host_program_status,omitempty"`
+	// SilentAfter is how long a pane whose hooks reported working may go
+	// without another report before it shows as unknown with the reason
+	// silent: a Go duration ("10m"). Empty means DefaultSilentAfter, and "0"
+	// or "off" turns it off. See SilentAfterDuration.
+	SilentAfter string `toml:"silent_after,omitempty"`
+}
+
+// DefaultSilentAfter is the default of silent_after. A hooked harness reports
+// at every prompt and every tool call, so the longest quiet stretch of a
+// healthy turn is one tool call or one model reply. Claude Code stops a Bash
+// command after ten minutes at most unless told otherwise, which makes ten
+// minutes the first point at which silence says more about the harness than
+// about the work.
+const DefaultSilentAfter = 10 * time.Minute
+
+// SilentAfterDuration is SilentAfter with its default applied, and zero when
+// it is off. A value that does not parse reads as the default, with a
+// warning from validation.
+func (a AgentsConfig) SilentAfterDuration() time.Duration {
+	v := strings.ToLower(strings.TrimSpace(a.SilentAfter))
+	if v == "off" {
+		return 0
+	}
+	if v == "" {
+		return DefaultSilentAfter
+	}
+	d, err := time.ParseDuration(v)
+	if err != nil {
+		return DefaultSilentAfter
+	}
+	return max(d, 0)
 }
 
 // On reports whether the agent features are on. They are unless the file

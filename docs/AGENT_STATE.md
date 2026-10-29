@@ -227,6 +227,7 @@ may do there; answering prompts is off by default. See
 - [Title rules](#title-rules)
 - [Notification rules](#notification-rules)
 - [The stall heuristic](#the-stall-heuristic)
+- [Silent agents](#silent-agents)
 - [Finished turns](#finished-turns)
 - [Indicator](#indicator)
 - [The rail's agents section](#the-rails-agents-section)
@@ -287,6 +288,9 @@ timer writes it, not `idle`, when the screen tier looked at a quiet pane and
 found nothing: `idle` says nothing needs you, and a pane that went quiet on a
 prompt no rule knows would be lying. A client that predates the state draws no
 glyph for it.
+
+A hooked pane that stops reporting is shown as `unknown` too, with the
+reason `silent`. See [Silent agents](#silent-agents).
 
 `unknown` is a display state and not a ready one. `fan` and `start-agent` wait
 for `idle` or `done`, `ask-agent` also takes `errored` and `none`, and none of
@@ -1964,6 +1968,46 @@ The fallback is strictly secondary to explicit reporting:
 The silence window defaults to 30 seconds. Override it with the
 `TUIOS_AGENT_STALL_SECONDS` environment variable when starting the daemon; set it
 to `0` (or a negative value) to disable the heuristic entirely.
+
+## Silent agents
+
+A harness with hooks reports `working` at each prompt and each tool call. When
+the harness hangs, the reports stop. The pane still shows `working`, and its
+spinner keeps the stall heuristic from seeing the hang.
+
+A pane that reported `working` through a hook, and then sends no report for
+`silent_after`, is shown as `unknown` with the reason `silent`:
+
+- `get-agent-state` and `list-agents` report `state: unknown` and
+  `reason: silent`. `agent_state_at` and `evidence_age_ms` still give the time
+  of the last report.
+- The `agent-state` event reports `unknown` with `reason: silent`.
+- The rail and the Inbox draw the `unknown` mark. The row reads "No report for
+  N min", where N is the time since the last report.
+
+The state that the agent reported stays `working` underneath. `ask-agent`,
+`fan`, the delivery queue and agent mail do not type into the pane, and a
+silence does not end a turn. The herdr socket API still reports the pane as
+working. The next report from the agent shows its state again. A report that
+its `if_state` refuses also counts, because the agent sent it.
+
+Only a pane whose state came from a report has a clock. A pane that the
+detector, a screen rule, an OSC sequence or a transcript holds has no reports
+to miss. The stall heuristic still moves such a pane when its screen stops
+changing. The daemon arms one timer, for the earliest working hooked pane,
+and none while no hooked pane works.
+
+Set the time in `config.toml`:
+
+```toml
+[agents]
+silent_after = "10m"   # a Go duration; "0" or "off" turns it off
+```
+
+The default is 10 minutes. By default, Claude Code stops a Bash command after
+10 minutes at most, so a healthy turn reports at least that often. Set a longer time if
+your agents run long tool calls that send no hooks. The daemon reads the value
+when it starts and again when the file changes.
 
 ## Finished turns
 

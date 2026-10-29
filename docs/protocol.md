@@ -187,6 +187,29 @@ old behaviour. None of them bumps the protocol integer: every field keeps its
 name and type, and a caller that sends nothing new keeps working. What changes
 is an answer, and each entry says which.
 
+**A hooked agent that stops reporting shows as silent.** A pane whose claim
+is a report, and whose state is `working`, may go without a report for
+`[agents] silent_after` (default `10m`). After that, what changes for a
+caller:
+
+- `get-agent-state` and every `list-agents` entry report `state` as `unknown`
+  and gain `reason`: `silent`. `reason` is empty for every other pane.
+  `activity` is `unknown`. `source`, `agent_state_at` and `evidence_age_ms`
+  still describe the last report. `ready` stays false.
+- The `agent-state` event reports `state` `unknown` with `reason` `silent`
+  when the pane goes silent, and the reported state with no reason when the
+  next report comes.
+- A selector's `state:` term matches the shown state, `unknown`.
+- The synced window state keeps `agent_state` `working` and gains
+  `agent_reason`. A session's window summary reports `agent_state` `unknown`
+  and gains `agent_reason`. Both are omitted when empty.
+- `ask-agent`, `fan`, the queue and agent mail still read the pane as
+  `working`, so nothing is typed into it.
+
+The next report from the pane's agent clears it, a report that its
+`if_state` refuses included. The herdr socket API still reports the pane as
+working.
+
 **Asks of one agent take turns.** An `ask-agent` that comes while another
 ask of the same target runs no longer types over it, and no longer fails with
 `not_ready` once `ready_timeout` passes. It waits for its turn, first come

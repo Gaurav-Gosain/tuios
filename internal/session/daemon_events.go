@@ -179,7 +179,9 @@ type streamEvent struct {
 	// so a zero value is always "not applicable" and is omitted.
 	Workspace int    `json:"workspace,omitempty"`
 	Dropped   uint64 `json:"dropped,omitempty"`
-	// Reason says why a gap marker was sent: one of the Gap* constants.
+	// Reason says why a gap marker was sent, one of the Gap* constants, and
+	// on an agent-state event why state is not the state the agent gave:
+	// "silent" for a hooked pane that stopped reporting.
 	Reason string `json:"reason,omitempty"`
 	// BootID names the daemon start that numbered Seq. It is on every event
 	// and on every gap marker.
@@ -230,15 +232,18 @@ type streamEvent struct {
 // before publishing to the hub. Window/PTYID are filled in by the per-PTY emitter
 // or the window op that raises the event.
 type SessionEvent struct {
-	Type      string
-	Window    string
-	PTYID     string
-	Title     string
-	Body      string
-	Bytes     int
-	Mode      string
-	Enabled   bool
-	State     string
+	Type    string
+	Window  string
+	PTYID   string
+	Title   string
+	Body    string
+	Bytes   int
+	Mode    string
+	Enabled bool
+	State   string
+	// Reason is why an agent-state event's State is not the state the agent
+	// gave: AgentReasonSilent, or empty. See agent_silent.go.
+	Reason    string
 	Workspace int
 	// The command fields of the prompt and command events. See streamEvent.
 	Cmdline    string

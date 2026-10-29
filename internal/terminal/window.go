@@ -443,6 +443,10 @@ type Window struct {
 	AgentState string
 	// AgentMessage is the optional short note reported with AgentState.
 	AgentMessage string
+	// AgentReason is why AgentState is not the state the agent gave:
+	// "silent" for a hooked pane that stopped reporting, whose AgentState is
+	// then unknown. Empty otherwise.
+	AgentReason string
 	// AgentKind is what sort of block a needs_input state is ("approval",
 	// "question"), as the daemon recorded it, empty when the source did not
 	// say. The rail draws it as the row's need word.

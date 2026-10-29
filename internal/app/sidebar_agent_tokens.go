@@ -288,6 +288,9 @@ func sidebarTokenDefaultLook(tk sidebarAgentToken) config.SidebarTokenLook {
 // no elapsed token. How long a pane has been waiting on you is the one figure
 // a row that needs you must not lose.
 func (m *OS) sidebarAgentNeedText(e sidebarAgentEntry, variant int, now time.Time) string {
+	if e.Reason == session.AgentReasonSilent {
+		return silentNote(e.StateAt, now)
+	}
 	word, _ := sidebarAgentNeed(e.State, e.DoneSeen, e.AgentKind, e.Message)
 	if sidebarAgentGroup(e.State, e.DoneSeen) != sidebarGroupNeedsYou {
 		return word
@@ -304,6 +307,23 @@ func (m *OS) sidebarAgentNeedText(e sidebarAgentEntry, variant int, now time.Tim
 	default:
 		return word + " " + wait
 	}
+}
+
+// silentNote is the need of a silent row: how long the agent has sent no
+// report, from its last one. A rail row redraws when its age crosses a
+// minute (agentElapsedBucket), so it counts in whole minutes.
+func silentNote(lastReport int64, now time.Time) string {
+	d := now.Sub(time.Unix(0, lastReport))
+	switch {
+	case lastReport <= 0:
+		return "No report"
+	case d < time.Minute:
+		// The rail writes a fresh age as "<1m" too.
+		return "No report for <1 min"
+	case d < 2*time.Hour:
+		return "No report for " + strconv.Itoa(int(d.Minutes())) + " min"
+	}
+	return "No report for " + strconv.Itoa(int(d.Hours())) + " h"
 }
 
 // sidebarNoteToken reports the tokens that only ever draw on a row's second

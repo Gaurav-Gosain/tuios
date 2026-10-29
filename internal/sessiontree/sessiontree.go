@@ -82,6 +82,9 @@ type Node struct {
 	// files"), empty when it reported none. Never rolled up, for the same
 	// reason Harness is not.
 	Message string
+	// Reason is why AgentState is not the state the agent gave: "silent"
+	// for a hooked pane that stopped reporting. Never rolled up.
+	Reason string
 	// AgentKind is what sort of block a needs_input pane is on: "approval",
 	// "question", or empty when the source did not say. Meaningless in any
 	// other state, and never rolled up.
@@ -217,6 +220,9 @@ type WindowInput struct {
 	Harness string
 	// Message is the note the pane reported with its state, empty for none.
 	Message string
+	// Reason is why AgentState is not the state the agent gave, empty when
+	// it is.
+	Reason string
 	// AgentKind is what sort of block a needs_input pane is on ("approval",
 	// "question"), empty when the source did not say.
 	AgentKind string
@@ -389,6 +395,7 @@ func BuildSession(s SessionInput) Node {
 			StateAt:      w.StateAt,
 			Harness:      w.Harness,
 			Message:      w.Message,
+			Reason:       w.Reason,
 			AgentKind:    w.AgentKind,
 			Meta:         w.Meta,
 			Queued:       w.Queued,

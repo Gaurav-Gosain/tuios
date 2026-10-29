@@ -31,6 +31,12 @@ type lifecycleWindow struct {
 	workspace  int
 	minimized  bool
 	agentState AgentState
+	// shownState and agentReason are what a reader is shown: unknown with
+	// the reason silent for a hooked pane that stopped reporting, the state
+	// itself otherwise. The agent-state event reports them. See
+	// agent_silent.go.
+	shownState  AgentState
+	agentReason string
 	// agentHarness and agentMessage ride the snapshot only so the hook a
 	// transition raises can name them. The lifecycle events themselves do not
 	// report them and neither field alone raises an event.
@@ -103,6 +109,8 @@ func snapshotLifecycle(state *SessionState) lifecycleSnapshot {
 			workspace:     w.Workspace,
 			minimized:     w.Minimized,
 			agentState:    w.AgentState,
+			shownState:    w.ShownAgentState(),
+			agentReason:   w.AgentReason,
 			agentHarness:  w.AgentHarness,
 			agentMessage:  w.AgentMessage,
 			agentStateAt:  w.AgentStateAt,
@@ -202,14 +210,19 @@ func diffLifecycle(before, after lifecycleSnapshot) []SessionEvent {
 		// the foreground detector all set it, and every one already runs inside
 		// a state mutation. The event carries the wire spelling, so a pane
 		// ceasing to be an agent says "none" rather than vanishing silently.
-		if w.agentState != prev.agentState {
+		// A pane going silent, or reporting again after it, changes only the
+		// shown state, and is an agent-state event all the same.
+		if w.agentState != prev.agentState || w.shownState != prev.shownState {
 			events = append(events, SessionEvent{
 				Type:          EventAgentState,
 				Window:        w.id,
 				PTYID:         w.ptyID,
-				State:         w.agentState.Name(),
+				State:         w.shownState.Name(),
+				Reason:        w.agentReason,
 				hookTitle:     w.displayTitle(),
 				hookWorkspace: w.workspace,
+				// The state the agent left, not the one shown: a checkpoint
+				// is taken for a turn that ends after a silence too.
 				hookPrevState: prev.agentState.Name(),
 				hookHarness:   w.agentHarness,
 				hookMessage:   w.agentMessage,
