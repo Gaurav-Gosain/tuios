@@ -550,6 +550,9 @@ type sidebarAgentEntry struct {
 	// DraftHeld is true while the person's draft in the input box holds that
 	// queue. The agents view says so on the row.
 	DraftHeld bool
+	// Settled marks an agent the person put away: the agents view draws it
+	// on the Settled shelf until it needs the person again.
+	Settled bool
 	// Subagents is how many subagents the pane's agent is running, which the
 	// subagents row token draws.
 	Subagents int
@@ -2766,6 +2769,7 @@ func (m *OS) agentEntries(sessions []sessiontree.Node) []sidebarAgentEntry {
 				Meta:         win.Meta,
 				Queued:       win.Queued,
 				DraftHeld:    win.DraftHeld,
+				Settled:      win.Settled,
 				Subagents:    win.Subagents,
 				Children:     win.SubagentList,
 				Program:      win.Program,

@@ -222,6 +222,9 @@ func TestEveryDeclaredEventIsCovered(t *testing.T) {
 		// Daemon only. Fire site: runWorktreeHook in internal/session, proved
 		// with its payload and its wait by TestRailWorktreeRefusals in e2e/tui.
 		hooks.AfterNewWorktree: true,
+		// Daemon only. Fire site: fireSettleHook in internal/session, proved
+		// with its payload by TestCockpitGroupsTheFleet in e2e/tui.
+		hooks.AfterSettle: true,
 	}
 	for _, e := range hooks.AllEvents() {
 		if !covered[e] {

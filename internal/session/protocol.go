@@ -582,6 +582,10 @@ type WindowSummary struct {
 	// DraftHeld is WindowState.AgentDraftHeld. Additive and omitted when
 	// false, which is what an older peer sends.
 	DraftHeld bool `json:"agent_draft_held,omitempty"`
+	// AgentSettled is WindowState.AgentSettled, so the agents view of a
+	// client watching another session draws the agent on the Settled shelf
+	// too. Additive and omitted when false, which is what an older peer sends.
+	AgentSettled bool `json:"agent_settled,omitempty"`
 	// Subagents is how many subagents the pane's agent is running, so a rail
 	// watching another session can say so. Additive and omitted when zero,
 	// which is what an older peer sends.

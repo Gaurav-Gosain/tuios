@@ -53,6 +53,10 @@ const (
 	// copy running in the background would race the shell or agent the first
 	// window starts there.
 	AfterNewWorktree Event = "after-new-worktree"
+	// AfterSettle fires when an agent is settled: put away on the agents
+	// view's Settled shelf. The daemon fires it, so it runs with nobody
+	// attached. It does not fire when the agent comes back.
+	AfterSettle Event = "after-settle"
 )
 
 // AllEvents returns all valid hook event names.
@@ -62,6 +66,7 @@ func AllEvents() []Event {
 		AfterWorkspaceSwitch, AfterAttach, AfterDetach,
 		AfterLayoutChange, AfterResize, AfterAgentState,
 		AfterCommandFinished, AfterThemeChange, AfterNewWorktree,
+		AfterSettle,
 	}
 }
 
@@ -122,6 +127,9 @@ type Context struct {
 	WorktreeBranch        string
 	WorktreeRepoRoot      string
 	WorktreeCreatedBranch string
+	// SettleReason says what settled the agent on an after-settle: person
+	// for the D key or mark-attention settle. Empty for every other event.
+	SettleReason string
 	// Dir is the working directory the command starts in. Empty runs it in
 	// the process's own, which is what every event but after-new-worktree has.
 	Dir string
@@ -394,6 +402,7 @@ func executeHook(cmdStr string, ctx Context, timeout time.Duration) hookResult {
 		fmt.Sprintf("TUIOS_WORKTREE_BRANCH=%s", ctx.WorktreeBranch),
 		fmt.Sprintf("TUIOS_WORKTREE_REPO_ROOT=%s", ctx.WorktreeRepoRoot),
 		fmt.Sprintf("TUIOS_WORKTREE_CREATED_BRANCH=%s", ctx.WorktreeCreatedBranch),
+		fmt.Sprintf("TUIOS_SETTLE_REASON=%s", ctx.SettleReason),
 	)
 
 	// Stdout stays discarded: a hook is run for its side effects and nothing

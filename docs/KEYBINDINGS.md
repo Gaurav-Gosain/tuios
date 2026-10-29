@@ -1718,8 +1718,9 @@ runs the same search from a shell.
 
 Everything waiting for you, and every agent tuios knows of, is one full-screen
 view on `ctrl+b i`. It was the Inbox panel. The agents are grouped by what
-each needs from you: Needs you, Ready for review, Working, Idle, Earlier. What
-the Inbox held is the Needs you group. See
+each needs from you: Needs you, Ready for review, Working, Idle, Settled. What
+the Inbox held is the Needs you group. Settled holds the agents you put away
+with `D` and the agents at rest for more than an hour. See
 [AGENT_STATE.md](AGENT_STATE.md#the-agents-view) for what goes in it.
 
 | Keys | What it does |
@@ -1747,6 +1748,7 @@ Inside it:
 | `s` | Step the order inside each group |
 | `/` | Search. A `key:value` term is a selector, such as `harness:codex` |
 | `d` `z` `u` `S` | Dismiss, snooze, undo, show the snoozed items |
+| `D` | Settle the agent: put it away until it needs you. It goes to Settled, and its finished turn closes. `D` on a settled agent takes it off the shelf, and `u` undoes a settle within 10 seconds. With marks, settle every marked agent. The Settle button in the focus header does the same |
 | `y` `p` `m` | Resume in place (the view stays open), pass held mail on, open the mailbox |
 | `x` `*` | Mark an agent or a Resume row, or every row shown, for a bulk answer. A marked row shows a mark, and the header counts the marks |
 | `1` `3` with marks | Allow every marked approval once, after a sheet that lists them, or reject them |
@@ -1946,7 +1948,8 @@ not offered and do what an unbound key does: after `ctrl+b` in terminal mode,
 | `ctrl+b A` | anywhere | Open the Agents tab of the settings page, where you install, update and uninstall each harness's integration |
 | `v` | agents view | Review the changes in the item's pane |
 | `z`, then `1` to `4` | agents view | Snooze the item: 15 minutes, 1 hour, until 9:00 tomorrow, or until it changes; any other key cancels. On a snoozed item, wake it |
-| `u` | agents view | Undo the last dismiss or snooze, within 10 seconds |
+| `u` | agents view | Undo the last dismiss, snooze or settle, within 10 seconds |
+| `D` | agents view | Settle the agent, or every marked one. Put away until it needs you |
 | `S` | agents view | Show or hide snoozed items |
 | `R` | agents view | Reject a held approval, or keep a plan planning, with a reason you type (`r` and `3` stay the plain reject) |
 | `n` | agents view | Start a new agent |
@@ -1954,7 +1957,7 @@ not offered and do what an unbound key does: after `ctrl+b` in terminal mode,
 | `J`, `K`, `ctrl+d`, `ctrl+u` | agents view | Scroll the card, such as a long plan |
 | `u` | rail agent row | Mark the pane's finished turn unread, for every client (not the pane in front of you) |
 | `z` | rail agent row | Snooze what needs you in the pane: the agents view opens on it with the four lengths |
-| `enter` | rail `+N at rest` line | Show the agent rows folded as at rest, until the rail lets go of the keyboard (after a click with the rail not focused, until a click outside the rail or a pane is focused) |
+| `enter` | rail `+N at rest` line | Show the agent rows folded as at rest, settled agents included, until the rail lets go of the keyboard (after a click with the rail not focused, until a click outside the rail or a pane is focused) |
 | `r` | agents view, on a finished or errored item | Reply to the agent: the editor under the thread, queued with `enter` and typed when the agent is at rest |
 | `r` | rail agent row | Reply to the agent, the same line in the agents view; refused while the pane waits on a prompt |
 | `v` | rail agent row | Review the pane's changes |

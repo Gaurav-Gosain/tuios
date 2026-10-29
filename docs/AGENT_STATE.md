@@ -2581,8 +2581,9 @@ Working  6 ───────────────────────
 
 The list has five groups, in this order: Needs you (approvals, questions,
 plans, mail for you, errors and resume rows), Ready for review (a finished
-turn you have not looked at), Working, Idle, and Earlier (at rest for more
-than an hour). Inside a group the oldest wait comes first. A snoozed item
+turn you have not looked at), Working, Idle, and Settled (agents you put away,
+and agents at rest for more than an hour; see
+[Settling an agent](#settling-an-agent)). Inside a group the oldest wait comes first. A snoozed item
 shows under Snoozed when `S` shows them. A row moves to a new group only once
 the agent has been in the new state for 0.4 seconds, so a hook that flips
 working, needs you, working in a moment does not move it twice. A finished
@@ -3445,6 +3446,40 @@ None of it costs anything without agents: the one timer that wakes snoozed
 items exists only while something is snoozed with a time, the fold reads
 the state stamps the rail already has, and a focus change between plain
 shells records nothing.
+
+### Settling an agent
+
+When you are done with an agent's work and want it out of view without
+ending it, settle it. `D` in the agents view puts the agent under the cursor
+on the Settled shelf, or every marked agent. The Settle button in the focus
+header does the same. Its finished turn closes, as a dismiss closes it. The
+agent keeps running in its pane.
+
+A settled agent comes back by itself when it needs you:
+
+- it asks a question or waits on an approval,
+- it reports an error,
+- it finishes a turn,
+- it sends you mail,
+- it leaves the pane.
+
+It then goes to the group its state gives it, and it stays off the shelf
+until you settle it again. `D` on a settled agent takes it off the shelf, and
+`u` undoes a settle for 10 seconds, finished turn included. An agent that
+needs you now is not settled: answer it or dismiss its item first.
+
+An agent at rest for more than an hour goes to Settled too, as Earlier did
+before. That needs no settle and no timer: the agents view compares the time
+of the state with the clock it already ticks while it is open.
+
+The settle is the daemon's, a field on the pane (`agent_settled` in the
+window state, `settled` in `list-agents` and `get-agent-state`). Every client
+draws the same shelf: a second terminal, `tuios-web`, and the agents view of
+another machine linked with `tuios hosts`. The rail folds a settled agent
+into its `+N at rest` line. Only the person can settle, with
+`mark-attention` `settle` and `unsettle` and the attach nonce, as for a
+snooze. The `after-settle` hook runs a command for each settle (see
+[HOOKS.md](HOOKS.md)), for example to clean the agent's build files.
 
 ### Risk rules
 

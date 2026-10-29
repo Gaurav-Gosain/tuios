@@ -7290,6 +7290,22 @@ The fixed build passes them, every `TestInbox*`, `TestAskHuman*`,
 `TestChromeLooksAndFooters`, `TestEveryOverlayOwnsItsGround` and the other
 tests that open the Inbox (137 tests).
 
+### Settle (`D`, `u`, the Settled shelf)
+
+`TestCockpitGroupsTheFleet` also settles the idle agent `scratch` with `D`,
+undoes it with `u` and settles it again, checks that `after-settle` ran twice
+with `person`, opens a second client attached to the agent's session and finds
+`scratch` under Settled there too, makes the agent ask (`needs_input`) and
+finds it under Needs you, then puts it at rest and finds it under Idle in both
+clients. Frames: `cockpit-settled`, `cockpit-settle-undone`,
+`cockpit-settled-second-client`, `cockpit-settled-asks`. Each control was built
+into its own binary. Run on 2026-10-30 on Linux.
+
+| Bug | Fix removed | How | Tests that fail | Verdict |
+|---|---|---|---|---|
+| A settled agent that asked goes back on the shelf once it rests, because the daemon never cleared the settle | `wakeSettledLocked` | The call in `mutateStateLocked` cut | `TestCockpitGroupsTheFleet` ("the agent went back on the shelf after it asked: scratch is in \"Settled\", not \"Idle\"") | **caught** |
+| A client push wipes the settle | the `AgentSettled` carry in `state_merge.go` | `w.AgentSettled = settled[w.ID]` cut | none: the second client pushes no state of the session while the test runs, so the carry is never needed. The carry is kept as the other daemon-owned fields keep theirs | **not caught** |
+
 ### Marks and cut approvals
 
 `TestCockpitBulkActsOnlyOnSeenMarks` marks the agent that holds the approval,

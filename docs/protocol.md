@@ -210,6 +210,22 @@ The next report from the pane's agent clears it, a report that its
 `if_state` refuses included. The herdr socket API still reports the pane as
 working.
 
+**An agent can be settled.** `mark-attention` takes the actions `settle` and
+`unsettle`, which name a pane with `session` and `window` (see
+[mark-attention](#mark-attention)). What changes for an existing caller:
+
+- `get-agent-state` and every `list-agents` entry gain `settled`. The synced
+  window state and the session listing's window rows gain `agent_settled`,
+  omitted when false and taken from the daemon's own state on every client
+  push. A row of another machine's agents (`list-hosts` with agents) carries
+  that host's `settled`, display only.
+- The daemon clears the settle in the change that makes the agent need the
+  person: it goes to `needs_input`, `errored` or `none`, it finishes a turn
+  (`completion_seq` goes up), or it sends the person mail.
+- A `settle` closes the pane's open `finished` item with the reason
+  `dismissed`, as `dismiss-attention` does, and marks the turn seen.
+- The hook event `after-settle` exists (see [HOOKS.md](HOOKS.md)).
+
 **Asks of one agent take turns.** An `ask-agent` that comes while another
 ask of the same target runs no longer types over it, and no longer fails with
 `not_ready` once `ready_timeout` passes. It waits for its turn, first come
@@ -5642,12 +5658,14 @@ Response:
 
 ### mark-attention
 
-Snooze an Inbox item, wake it, mark a finished pane unread, or restore an item
-dismissed or snoozed in the last 10 seconds, for the person.
+Snooze an Inbox item, wake it, mark a finished pane unread, restore an item
+dismissed or snoozed in the last 10 seconds, or settle an agent, for the
+person.
 
-Params: `action` (required: `snooze`, `wake`, `unread` or `restore`), `id`, or
-`session`, `window` and `kind` to name the item by what it is about (`unread`
-needs only `session` and `window`), `human_nonce` (required, as for
+Params: `action` (required: `snooze`, `wake`, `unread`, `restore`, `settle`
+or `unsettle`), `id`, or `session`, `window` and `kind` to name the item by
+what it is about (`unread`, `settle` and `unsettle` need only `session` and
+`window`), `human_nonce` (required, as for
 [dismiss-attention](#dismiss-attention)). With `snooze`, exactly one of
 `until` (unix milliseconds, within the next year), `for_ms` (at most a year)
 and `until_change` (true).
@@ -5674,6 +5692,17 @@ and `until_change` (true).
   back over a newer item about the same thing. The check and the reopen are
   one step: a transition that arrives during a restore lands after it and
   closes the restored item as it would any other.
+- `settle` puts the agent in the pane on the Settled shelf: the window
+  state's `agent_settled` is true until the agent needs the person again
+  (it goes to `needs_input`, `errored` or `none`, finishes a turn, or sends
+  the person mail) or until `unsettle`. It closes the pane's open `finished`
+  item as a dismiss does, and the answer names that item as `id`. A pane
+  with no agent, a pane on `needs_input`, and a pane with any other open
+  item are `invalid_params`. A settle that changes the pane runs the
+  `after-settle` hook with `TUIOS_SETTLE_REASON=person`.
+- `unsettle` takes the agent off the shelf. With `id`, the item `settle`
+  closed, it also restores that item as `restore` does, and the answer names
+  it as `id` when it came back.
 
 An item of a linked host is snoozed on this daemon only, like a dismiss:
 nothing on the host changes, and the item wakes when the host changes it or
@@ -5697,6 +5726,10 @@ Response:
 
 ```json
 {"result": {"type": "attention_marked", "id": "17", "action": "snooze", "snoozed_until": 1790146542055373000}}
+```
+
+```json
+{"result": {"type": "attention_marked", "id": "21", "action": "settle", "session": "work", "window": "w-3"}}
 ```
 
 ### peek-prompt
@@ -6983,7 +7016,7 @@ them:
 | `compare-fan` | One row per attempt of a fan: branch, agent, state, changes, last check | `read`, own fan group | `list` | no |
 | `verify-fan` | Run one check with `sh -c` in a window named `verify` in every attempt; the window holds no grants | `fan`, own fan group | `open` and `write` | no |
 | `keep-fan` | Keep one attempt and remove the others, refusing a dirty one without `stash` or `force` | refused | `write` | admin or the person |
-| `mark-attention` | Snooze, wake, mark unread or restore an Inbox item | refused | `respond` | yes: `human_nonce` from a live attach, never from inside a pane |
+| `mark-attention` | Snooze, wake, mark unread or restore an Inbox item, or settle an agent | refused | `respond` | yes: `human_nonce` from a live attach, never from inside a pane |
 | `agent-activity` | The pane's ring of hook events, and a recap of it, marked `untrusted` | `read`, own session and fan group | `list` | no |
 | `queue-prompt` | Queue a message, typed when the agent comes to rest and never over a prompt | `write`, and a typing verb as for `send-review`; checked again against the caller's grants when typed | `write` | "by the person" only with a live `human_nonce` |
 | `list-queued` | The messages waiting in a pane's queue | `read` | `list` | no |

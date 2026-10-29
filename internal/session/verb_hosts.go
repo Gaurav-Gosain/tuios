@@ -119,6 +119,9 @@ type remoteAgentPane struct {
 	Kind      string           `json:"kind,omitempty"`
 	Meta      []AgentMetaToken `json:"meta,omitempty"`
 	Subagents int              `json:"subagents,omitempty"`
+	// Settled is the host's settle of the agent, so the agents view here
+	// draws it on the Settled shelf too.
+	Settled bool `json:"settled,omitempty"`
 }
 
 // Bounds of a host's agent panes as a listing passes them on: about 600 bytes
@@ -163,7 +166,8 @@ func agentPanes(windows []WindowSummary) []remoteAgentPane {
 			break
 		}
 		p := remoteAgentPane{ID: w.ID, Title: clip(w.Title), State: clip(w.AgentState), StateAt: w.AgentStateAt,
-			Harness: clip(w.AgentHarness), Message: clip(w.AgentMessage), Kind: clip(w.AgentKind), Subagents: max(w.Subagents, 0)}
+			Harness: clip(w.AgentHarness), Message: clip(w.AgentMessage), Kind: clip(w.AgentKind), Subagents: max(w.Subagents, 0),
+			Settled: w.AgentSettled}
 		for _, t := range w.AgentMeta {
 			if len(p.Meta) == remoteAgentMetaMax {
 				break

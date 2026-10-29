@@ -2237,6 +2237,8 @@ func (d *Daemon) verbGetAgentState(cs *connState, params json.RawMessage) (any, 
 		// draft_held is true while the person's draft in the input box
 		// holds the next queued message.
 		"draft_held": w.AgentDraftHeld,
+		// settled says the person put the agent away (agent_settle.go).
+		"settled": w.AgentSettled,
 		// subagents is how many subagents the pane's agent is running, as
 		// its hooks reported them; meta's subagents key says the same in
 		// words.

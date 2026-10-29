@@ -29,6 +29,7 @@ func clearLiveAgent(w *WindowState) {
 	// below says ran in a process that is gone.
 	w.AgentQueued = 0
 	w.AgentDraftHeld = false
+	w.AgentSettled = false
 	w.AgentSubagents = 0
 	w.AgentSubagentList = nil
 	w.ForegroundCmd = ""

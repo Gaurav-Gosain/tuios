@@ -468,6 +468,9 @@ type Window struct {
 	// AgentDraftHeld is true while the person's draft in the agent's input
 	// box holds the next queued message, as the daemon synced it.
 	AgentDraftHeld bool
+	// AgentSettled marks an agent the person put away on the Settled shelf,
+	// as the daemon synced it.
+	AgentSettled bool
 	// AgentSubagents is how many subagents the pane's agent is running, as the
 	// daemon synced it. Zero for none, and from a daemon that counts none.
 	AgentSubagents int

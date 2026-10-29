@@ -557,15 +557,16 @@ func (d *Daemon) verbMarkAttention(cs *connState, params json.RawMessage) (any, 
 		return nil, verr
 	}
 	if !slices.Contains(markAttentionActions, p.Action) {
-		return nil, invalidParam("action", "action is one of snooze, wake, unread and restore", markAttentionActions...)
+		return nil, invalidParam("action", "action is one of snooze, wake, unread, restore, settle and unsettle", markAttentionActions...)
 	}
-	if p.ID == "" && (p.Window == "" || (p.Kind == "" && p.Action != "unread")) {
+	settle := p.Action == "settle" || p.Action == "unsettle"
+	if p.ID == "" && !settle && (p.Window == "" || (p.Kind == "" && p.Action != "unread")) {
 		return nil, invalidParam("id", "name the item with id, or with session, window and kind")
 	}
 	if !d.humanNonceHeld(p.HumanNonce, cs) {
 		return nil, hintedVerbError(ErrVerbNotHuman, "mark-attention is for the person at an attached client", &VerbHint{
 			Param:  "human_nonce",
-			Detail: "Only a client attached right now can snooze, wake, mark unread or restore an Inbox item, by passing the nonce its attach reply carried. An agent cannot change what the person reads.",
+			Detail: "Only a client attached right now can snooze, wake, mark unread, restore or settle, by passing the nonce its attach reply carried. An agent cannot change what the person reads.",
 		})
 	}
 	if p.Action != "snooze" && (p.Until != 0 || p.ForMS != 0 || p.UntilChange) {
@@ -575,6 +576,8 @@ func (d *Daemon) verbMarkAttention(cs *connState, params json.RawMessage) (any, 
 		return nil, invalidParam("kind", "kind is an attention kind", AttentionKindNames...)
 	}
 	switch p.Action {
+	case "settle", "unsettle":
+		return d.markAttentionSettle(cs, p)
 	case "unread":
 		return d.markAttentionUnread(cs, p)
 	case "restore":

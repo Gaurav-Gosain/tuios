@@ -154,6 +154,7 @@ func StateFingerprint(s *SessionState) uint64 {
 		} else {
 			num(0)
 		}
+		flag(w.AgentSettled)
 		num(w.AgentSubagents)
 		num(len(w.AgentSubagentList))
 		for _, sa := range w.AgentSubagentList {

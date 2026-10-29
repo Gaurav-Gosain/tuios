@@ -66,7 +66,11 @@ func startCockpitFleetWith(t *testing.T, cols, rows int, env []string, conf stri
 	base := t.TempDir()
 	killDaemon(t, base)
 	useShippedLooks(base)
-	writeConfig(t, base, conf+"[agents.approvals]\nenabled = [\"claude-code\"]\nhold_seconds = 300\n")
+	// after-settle writes each settle to a file, so a test can see the
+	// daemon ran it.
+	settleLog := filepath.Join(base, "settled.log")
+	writeConfig(t, base, conf+"[agents.approvals]\nenabled = [\"claude-code\"]\nhold_seconds = 300\n"+
+		"[hooks]\nafter-settle = 'printf \"%s %s\\\\n\" \"$TUIOS_WINDOW_NAME\" \"$TUIOS_SETTLE_REASON\" >> "+settleLog+"'\n")
 	for _, s := range []string{"home", "api", "docs", "cache", "misc"} {
 		if out, err := tuiosCLI(t, base, "new", s, "--detach"); err != nil {
 			t.Fatalf("create session %s: %v\n%s", s, err, out)
@@ -138,14 +142,15 @@ func openCockpitClient(t *testing.T, base string, cols, rows int, env []string) 
 // TestCockpitGroupsTheFleet opens the cockpit on twelve agents. The groups
 // come in the order of what each needs from the person, the approval's row
 // says the verb and the command, a click selects a row and leaves the cockpit
-// open, a answers the approval from the card, and a double-click goes to the
-// pane.
+// open, a answers the approval from the card, D settles an agent (see
+// cockpitSettleRoundTrip), and a double-click goes to the pane.
 //
 // Negative controls, each recorded in NEGATIVE_CONTROLS.md: with the groups
 // drawn in the rail's state order the order check fails; with a click going
-// to the pane (the agents view's old rule) the click check fails.
+// to the pane (the agents view's old rule) the click check fails; with the
+// daemon's wake of a settled agent cut, the agent goes back on the shelf.
 func TestCockpitGroupsTheFleet(t *testing.T) {
-	term, _, hookOut, exited := startCockpitFleet(t, 200, 55, nil)
+	term, base, hookOut, exited := startCockpitFleet(t, 200, 55, nil)
 	s := term.Screen()
 	order := []string{"Needs you", "Ready for review", "Working", "Idle"}
 	last := -1
@@ -201,6 +206,8 @@ func TestCockpitGroupsTheFleet(t *testing.T) {
 	if !strings.Contains(hookOut.String(), `"behavior":"allow"`) {
 		t.Fatalf("ASSERTION: the hook did not get an allow: %q", hookOut.String())
 	}
+
+	cockpitSettleRoundTrip(t, term, base)
 
 	// A double-click goes to the pane and closes the cockpit.
 	row, col = findText(t, term, "docs-cli")
@@ -369,6 +376,99 @@ func pressFold(t *testing.T, term *tuitest.Terminal, what string, done func(tuit
 	if err := term.WaitFor(done, uiTimeout); err != nil {
 		t.Fatalf("ASSERTION: F did not %s: %v\n%s", what, err, term.Snapshot())
 	}
+}
+
+// cockpitSettleRoundTrip settles an idle agent with D, undoes it with u and
+// settles it again; a second client draws the same shelf; the agent asks a
+// question and comes back to Needs you by itself, and once it is at rest
+// again it stays off the shelf, because the daemon cleared the settle.
+func cockpitSettleRoundTrip(t *testing.T, term *tuitest.Terminal, base string) {
+	t.Helper()
+	settle := func() {
+		t.Helper()
+		row := fleetRowWith(term.Screen(), "scratch")
+		if row < 0 {
+			t.Fatalf("ASSERTION: scratch has no row\n%s", term.Snapshot())
+		}
+		col := strings.Index(string([]rune(term.Screen().Line(row))[:56]), "scratch")
+		mouseClick(t, term, len([]rune(term.Screen().Line(row)[:col])), row, tuitest.MouseLeft, 0)
+		time.Sleep(500 * time.Millisecond)
+		if err := term.SendKeys("D"); err != nil {
+			t.Fatalf("press D: %v", err)
+		}
+	}
+	inGroup := func(term *tuitest.Terminal, group, what string) {
+		t.Helper()
+		if err := term.WaitFor(func(s tuitest.Screen) bool { return fleetGroupOf(s, "scratch") == group }, uiTimeout); err != nil {
+			t.Fatalf("ASSERTION: %s: scratch is in %q, not %q: %v\n%s", what, fleetGroupOf(term.Screen(), "scratch"), group, err, term.Snapshot())
+		}
+	}
+	settle()
+	inGroup(term, "Settled", "D did not settle it")
+	saveCockpitFrames(t, term, "cockpit-settled")
+	if err := term.SendKeys("u"); err != nil {
+		t.Fatalf("press u: %v", err)
+	}
+	inGroup(term, "Idle", "u did not undo the settle")
+	saveCockpitFrames(t, term, "cockpit-settle-undone")
+	settle()
+	inGroup(term, "Settled", "D did not settle it again")
+
+	// The hook ran for each settle, as the person's.
+	deadline := time.Now().Add(uiTimeout)
+	var log []byte
+	for time.Now().Before(deadline) {
+		log, _ = os.ReadFile(filepath.Join(base, "settled.log"))
+		if strings.Count(string(log), "scratch person\n") == 2 {
+			break
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	if got := strings.Count(string(log), "scratch person\n"); got != 2 {
+		t.Fatalf("ASSERTION: after-settle ran %d times for two settles, want 2: %q", got, log)
+	}
+
+	// A second client, attached to the agent's own session, draws the same
+	// shelf, and its pushes of that session keep the settle.
+	other := startIn(t, base, startOpts{args: []string{"attach", "misc"}, cols: 200, rows: 55, shippedLooks: true})
+	if err := other.WaitFor(func(s tuitest.Screen) bool { return countWindows(s) >= 1 }, bootTimeout); err != nil {
+		t.Fatalf("the second client never attached: %v\n%s", err, other.Snapshot())
+	}
+	windowManagementMode(t, other)
+	if err := other.SendKeys(tuitest.Ctrl('b'), "i"); err != nil {
+		t.Fatalf("open the cockpit in the second client: %v", err)
+	}
+	inGroup(other, "Settled", "the second client does not draw the settle")
+	saveCockpitFrames(t, other, "cockpit-settled-second-client")
+
+	// The agent asks: it comes back to Needs you by itself.
+	if out, err := tuiosCLI(t, base, "set-agent-state", "needs_input", "-s", "misc", "-w", "scratch", "--kind", "question", "-m", "Which branch?"); err != nil {
+		t.Fatalf("scratch asks: %v\n%s", err, out)
+	}
+	inGroup(term, "Needs you", "a settled agent that asks did not come back")
+	saveCockpitFrames(t, term, "cockpit-settled-asks")
+	// Answered and at rest again, it is off the shelf: the daemon cleared
+	// the settle, so neither client puts it back.
+	if out, err := tuiosCLI(t, base, "set-agent-state", "idle", "-s", "misc", "-w", "scratch"); err != nil {
+		t.Fatalf("scratch rests: %v\n%s", err, out)
+	}
+	inGroup(term, "Idle", "the agent went back on the shelf after it asked")
+	inGroup(other, "Idle", "the second client put the agent back on the shelf after it asked")
+}
+
+// fleetGroupOf is the heading of the fleet group that holds the first row
+// with want, empty when there is none.
+func fleetGroupOf(s tuitest.Screen, want string) string {
+	row := fleetRowWith(s, want)
+	for r := row - 1; r >= 0 && row >= 0; r-- {
+		line := strings.TrimSpace(string([]rune(s.Line(r))[:min(len([]rune(s.Line(r))), 56)]))
+		for _, g := range []string{"Needs you", "Ready for review", "Working", "Idle", "Settled", "Snoozed"} {
+			if strings.HasPrefix(strings.TrimLeft(line, "▾▸› "), g) {
+				return g
+			}
+		}
+	}
+	return ""
 }
 
 // fleetRowWith is the first row whose fleet column, the first 56 cells,

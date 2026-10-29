@@ -120,6 +120,7 @@ type FederationAgent struct {
 	Kind      string                  `json:"kind"`
 	Meta      []sessiontree.MetaToken `json:"meta"`
 	Subagents int                     `json:"subagents"`
+	Settled   bool                    `json:"settled"`
 }
 
 // FederationHostsMsg carries a fresh snapshot back to the Update goroutine.

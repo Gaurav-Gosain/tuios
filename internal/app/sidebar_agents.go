@@ -194,9 +194,18 @@ const sidebarAgentFoldMin = 2
 // least the threshold, not the focused pane, with nothing queued for it and
 // no subagents at work. A row that needs the person, a finished turn not yet
 // seen and a working agent never fold, and neither does a row whose agent
-// ended its turn with subagents still running: the work is not at rest.
+// ended its turn with subagents still running: the work is not at rest. A
+// row the person settled folds at once, unless it works or needs them.
 func sidebarAgentRests(e sidebarAgentEntry, threshold time.Duration, now time.Time) bool {
-	if threshold <= 0 || e.Fold > 0 || e.Focused || e.Queued > 0 || e.StateAt <= 0 {
+	if threshold <= 0 || e.Fold > 0 || e.Focused || e.Queued > 0 {
+		return false
+	}
+	// A settled agent the person put away folds at once, unless it works.
+	if e.Settled {
+		g := sidebarAgentGroup(e.State, e.DoneSeen)
+		return g != sidebarGroupNeedsYou && g != sidebarGroupWorking
+	}
+	if e.StateAt <= 0 {
 		return false
 	}
 	if e.Subagents > 0 {

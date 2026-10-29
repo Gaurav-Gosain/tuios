@@ -61,7 +61,10 @@ While that machine's link is down it ends in `[unreachable, seen 5m ago]`.
   something new when there is something new; repeating the same report does
   not. `tuios list-attention --snoozed` shows what is snoozed.
 - The person sees every agent in one full-screen agents view (ctrl+b i),
-  grouped by what each needs: Needs you, Ready for review, Working, Idle.
+  grouped by what each needs: Needs you, Ready for review, Working, Idle,
+  Settled. The person can settle you (put you away until you need them).
+  You come back by yourself when you ask, fail, finish a turn or mail them.
+  `list-agents` shows `settled`. You cannot settle yourself or another agent.
   Your row shows your state, how long you have been in it, and what you do
   now. Report your state as it changes; that view is drawn from it.
 - Your finished turn's row shows a recap of what you did (turns, files,

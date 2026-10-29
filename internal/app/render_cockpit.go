@@ -440,7 +440,7 @@ func (m *OS) drawCockpitHeader(c *ckCanvas, l ckLook, y, top int) {
 		{l.ckStateMark("needs_input", ckGlyphNeeds), pal.Attention, counts[ckNeeds], "needs you"},
 		{l.ckStateMark("working", ckGlyphWorking), pal.Busy, counts[ckWorking], "working"},
 		{l.ckStateMark("done", ckGlyphReview), pal.Success, counts[ckReview], "to review"},
-		{l.ckStateMark("idle", ckGlyphIdle), pal.FgMute, counts[ckIdle] + counts[ckEarlier], "idle"},
+		{l.ckStateMark("idle", ckGlyphIdle), pal.FgMute, counts[ckIdle] + counts[ckSettled], "idle"},
 	}
 	// The counts say their words when the row has room for them beside the
 	// search and the button, and only their marks otherwise.
@@ -939,7 +939,7 @@ func (m *OS) drawFleetRow(c *ckCanvas, l ckLook, r ckRow, cursor, hover bool, x,
 	g, gInk := m.ckRowMark(l, r, e)
 	nameInk := pal.Fg
 	down := e.Host != "" && m.ckLinkDown(e.Host)
-	if r.group == ckIdle || r.group == ckEarlier || r.group == ckSnoozed || r.item.Stale || down {
+	if r.group == ckIdle || r.group == ckSettled || r.group == ckSnoozed || r.item.Stale || down {
 		nameInk = pal.FgDim
 	}
 	if down {
@@ -1725,6 +1725,9 @@ func (m *OS) cockpitHints(now time.Time) []overlay.Hint {
 			goLabel = "open"
 		}
 		hints = append(hints, m.keyHints(config.ActionInboxGo, goLabel)...)
+		if label := m.settleLabel(r); label != "" {
+			hints = append(hints, m.keyHints(config.ActionInboxSettle, label)...)
+		}
 		if r.hasItem && inboxPeekable(r.item) && r.item.RequestID == "" {
 			hints = append(hints, m.keyHints(config.ActionInboxPeek, "peek")...)
 		}
@@ -1860,9 +1863,10 @@ func (m *OS) drawFocus(c *ckCanvas, l ckLook, x, y, w, y1, top int, now time.Tim
 		hx = c.text(hx, y, right, ckSeg{t: "   " + harness, fg: pal.FgDim})
 	}
 	if model := ckMeta(e, "model"); model != "" {
-		c.text(hx, y, right, ckSeg{t: " · " + model, fg: pal.FgMute})
+		hx = c.text(hx, y, right, ckSeg{t: " · " + model, fg: pal.FgMute})
 	}
-	m.drawStatePill(c, l, r, e, right, y)
+	pill := m.drawStatePill(c, l, r, e, right, y)
+	m.drawSettleButton(c, l, r, hx, pill, y, top)
 	// The second line: branch, machine, folder, diff, context and cost. A
 	// line too long for the focus cuts the folder from the left first, then
 	// drops whole fields from the right: a field is never cut in half.
@@ -2135,7 +2139,7 @@ func (m *OS) ckApprovalLines(it session.AttentionItem, where string, width int, 
 }
 
 // drawStatePill draws the focus header's state, its word beside its colour.
-func (m *OS) drawStatePill(c *ckCanvas, l ckLook, r ckRow, e sidebarAgentEntry, right, y int) {
+func (m *OS) drawStatePill(c *ckCanvas, l ckLook, r ckRow, e sidebarAgentEntry, right, y int) int {
 	pal := l.pal
 	g, ink := l.ckMark(e.State, e.DoneSeen)
 	words, bg := sidebarStateWords(e.State), l.panel
@@ -2160,10 +2164,14 @@ func (m *OS) drawStatePill(c *ckCanvas, l ckLook, r ckRow, e sidebarAgentEntry, 
 		words, bg = "error", l.warnTint
 	}
 	if r.agent < 0 && !r.hasItem {
-		return
+		return right
+	}
+	if e.Settled && r.group == ckSettled {
+		words = "settled"
 	}
 	x := c.textR(right, y, ckSeg{t: " " + g + " " + words + " ", fg: overlay.Readable(ink, bg), bg: bg, attrs: ckBold})
 	c.mark(pal, x, y, right-x, 1, ckOn)
+	return x
 }
 
 // drawItemCard draws the card of what the row's item asks, at the bottom of

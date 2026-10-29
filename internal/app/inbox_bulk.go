@@ -557,7 +557,7 @@ func (m *OS) bulkHints() []overlay.Hint {
 		overlay.Hint{Key: "1", Label: "allow"},
 		overlay.Hint{Key: "3", Label: "reject"},
 	)
-	hints = append(hints, m.keyHints(config.ActionInboxDismiss, "dismiss", config.ActionInboxSnooze, "snooze",
+	hints = append(hints, m.keyHints(config.ActionInboxDismiss, "dismiss", config.ActionInboxSnooze, "snooze", config.ActionInboxSettle, "settle",
 		config.ActionInboxMark, "mark", config.ActionInboxMarkAll, "all or none")...)
 	return append(hints, m.keyHints(config.ActionInboxClose, "close")...)
 }

@@ -63,6 +63,9 @@ var sessionSideHooks = func() map[hooks.Event]bool {
 	// after-new-worktree comes from no stream event: createWorktreeSession
 	// runs it itself and waits for it. The worktree is the daemon's fact.
 	set[hooks.AfterNewWorktree] = true
+	// after-settle comes from no stream event either: settleAgent fires it
+	// (agent_settle.go). The settle is the daemon's fact.
+	set[hooks.AfterSettle] = true
 	return set
 }()
 

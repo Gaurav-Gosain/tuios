@@ -242,7 +242,7 @@ func generateAgentBindings(registry *config.KeybindRegistry, s *config.Settings)
 		config.ActionInboxBoard, config.ActionInboxTake,
 		config.ActionInboxDismiss, config.ActionInboxResume, config.ActionInboxPassOn, config.ActionInboxFilter,
 		config.ActionInboxSelect, config.ActionInboxMailbox, config.ActionInboxReview, config.ActionInboxSnooze,
-		config.ActionInboxUndo, config.ActionInboxShowSnoozed, config.ActionInboxMark, config.ActionInboxMarkAll,
+		config.ActionInboxSettle, config.ActionInboxUndo, config.ActionInboxShowSnoozed, config.ActionInboxMark, config.ActionInboxMarkAll,
 		config.ActionInboxViewPane, config.ActionInboxOpen, config.ActionInboxBack,
 		config.ActionInboxTabPrev, config.ActionInboxTabNext, config.ActionInboxExpand, config.ActionInboxFold,
 		config.ActionInboxDetailDown, config.ActionInboxDetailUp,

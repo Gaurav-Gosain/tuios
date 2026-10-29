@@ -2861,7 +2861,7 @@ func windowSummariesAgree(a, b WindowSummary) bool {
 		a.AgentKind == b.AgentKind && a.AgentReason == b.AgentReason &&
 		a.CompletionSeq == b.CompletionSeq &&
 		slices.Equal(a.AgentMeta, b.AgentMeta) &&
-		a.AgentQueued == b.AgentQueued && a.DraftHeld == b.DraftHeld && a.Subagents == b.Subagents &&
+		a.AgentQueued == b.AgentQueued && a.DraftHeld == b.DraftHeld && a.AgentSettled == b.AgentSettled && a.Subagents == b.Subagents &&
 		slices.Equal(a.SubagentList, b.SubagentList) &&
 		slices.Equal(a.ProgramStatus, b.ProgramStatus) &&
 		a.ForegroundCmd == b.ForegroundCmd && a.Workspace == b.Workspace &&

@@ -218,6 +218,14 @@ type WindowState struct {
 	// like AgentQueued. Additive: false, which is what an older daemon sends,
 	// means nothing is held.
 	AgentDraftHeld bool `json:"agent_draft_held,omitempty"`
+	// AgentSettled marks an agent the person put away: the agents view draws
+	// it on the Settled shelf until it needs the person again. Only
+	// mark-attention settle and unsettle set it, and the daemon clears it when
+	// the agent asks, errors, finishes a turn, sends the person mail or leaves
+	// the pane (see agent_settle.go). Daemon-owned like AgentQueued and never
+	// set by a client. Additive: false, which is what an older daemon sends,
+	// means not settled.
+	AgentSettled bool `json:"agent_settled,omitempty"`
 	// AgentSubagents is how many subagents the pane's agent is running, as its
 	// hooks reported them (see agent_subagents.go). Daemon-owned like
 	// AgentQueued and never set by a client. Additive: zero, which is what an
@@ -3599,6 +3607,7 @@ func (s *Session) mutateStateLocked(fn func(state *SessionState) error) (*Sessio
 	s.noteAgentTurnsLocked(before, time.Now().UnixNano())
 	clearStaleSilenceLocked(before, s.state)
 	clearNowAtRestLocked(before, s.state)
+	wakeSettledLocked(before, s.state)
 	s.forgetSubagentsLocked(s.state)
 	pruneDeadLeaves(s.state)
 	// A daemon-side mutation is exactly what a client sync must not undo, so it
@@ -3876,6 +3885,7 @@ func (s *Session) windowSummaries() []WindowSummary {
 			AgentMeta:     w.AgentMeta,
 			AgentQueued:   w.AgentQueued,
 			DraftHeld:     w.AgentDraftHeld,
+			AgentSettled:  w.AgentSettled,
 			Subagents:     w.AgentSubagents,
 			SubagentList:  w.AgentSubagentList,
 			ProgramStatus: w.ProgramStatus,

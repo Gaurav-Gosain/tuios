@@ -51,6 +51,7 @@ var InboxWorkActions = map[string]bool{
 	config.ActionInboxReview:      true,
 	config.ActionInboxSnooze:      true,
 	config.ActionInboxUndo:        true,
+	config.ActionInboxSettle:      true,
 	config.ActionInboxShowSnoozed: true,
 	config.ActionInboxDenyReason:  true,
 	config.ActionInboxDetailDown:  true,
@@ -68,6 +69,8 @@ func (m *OS) InboxWorkAction(action string) (cmd tea.Cmd, handled bool) {
 		return m.InboxSnooze()
 	case config.ActionInboxUndo:
 		return m.InboxUndo()
+	case config.ActionInboxSettle:
+		return m.InboxSettle()
 	case config.ActionInboxShowSnoozed:
 		return m.InboxToggleSnoozed()
 	case config.ActionInboxDenyReason:

@@ -485,8 +485,9 @@ working recipes.
 A hook runs a shell command on an event, with `TUIOS_*` variables carrying the
 facts. The daemon runs `after-new-window`, `after-close-window`,
 `after-focus-change`, `after-workspace-switch`, `after-agent-state`,
-`after-command-finished` and `after-new-worktree`, so they fire with nobody
-attached. `after-new-worktree` runs in the new worktree before its first
+`after-command-finished`, `after-new-worktree` and `after-settle`, so they
+fire with nobody attached. `after-settle` fires when the person settles an
+agent, with `TUIOS_SETTLE_REASON`. `after-new-worktree` runs in the new worktree before its first
 window starts, and tuios waits for it (60 seconds at most). It gets
 `TUIOS_WORKTREE_PATH`, `TUIOS_WORKTREE_BRANCH`, `TUIOS_WORKTREE_REPO_ROOT` and
 `TUIOS_WORKTREE_CREATED_BRANCH`. When it fails, the session is kept and the

@@ -2,7 +2,7 @@
 
 The docs site has the same reference: https://tuios.dev/docs/hooks
 
-Twelve events, each running a shell command with `TUIOS_*` environment variables carrying the facts. This page lists every event and every variable. Hooks are read once at startup from the `[hooks]` table.
+Thirteen events, each running a shell command with `TUIOS_*` environment variables carrying the facts. This page lists every event and every variable. Hooks are read once at startup from the `[hooks]` table.
 
 ## Which side runs a hook
 
@@ -17,6 +17,7 @@ A hook runs on the side that owns the fact it reports.
 | `after-agent-state` | daemon | yes |
 | `after-command-finished` | daemon | yes |
 | `after-new-worktree` | daemon | yes |
+| `after-settle` | daemon | yes |
 | `after-attach` | client | no |
 | `after-detach` | client | no |
 | `after-resize` | client | no |
@@ -54,7 +55,8 @@ is empty, or 0 for a number, so a script can read all of them:
 | `TUIOS_AGENT_HARNESS`, `TUIOS_AGENT_MESSAGE` | For `after-agent-state`: the harness and the message that came with the state |
 | `TUIOS_COMMAND`, `TUIOS_EXIT_CODE`, `TUIOS_DURATION_MS` | For `after-command-finished`, below |
 | `TUIOS_THEME`, `TUIOS_THEME_BG`, `TUIOS_THEME_LIGHT` | For `after-theme-change`, below |
-| `TUIOS_WORKTREE_PATH`, `TUIOS_WORKTREE_BRANCH`, `TUIOS_WORKTREE_REPO_ROOT`, `TUIOS_WORKTREE_CREATED_BRANCH` | For `after-new-worktree`, below |
+| `TUIOS_WORKTREE_PATH`, `TUIOS_WORKTREE_BRANCH`, `TUIOS_WORKTREE_REPO_ROOT`, `TUIOS_WORKTREE_CREATED_BRANCH` | For `after-new-worktree`, below. `after-settle` gets the first three for an agent in a worktree session |
+| `TUIOS_SETTLE_REASON` | For `after-settle`: what settled the agent, below |
 
 `after-agent-state` fires only for the transitions `[notifications.agent]`
 alerts on (`needs_input`, `errored` and `done` by default), after its
@@ -137,6 +139,30 @@ one that fails stops the rest. When a command fails or runs out of time, tuios
 keeps the worktree and the session and opens the first window. The rail, `tuios
 worktree new` and `tuios fan` show the exit code and the last lines of the
 command's stderr. The verb result has them in `hook_error`.
+
+`after-settle` fires when an agent is settled: put away on the Settled shelf
+of the agents view, with `D` or with `mark-attention` `settle`. It fires once
+for each settle, also with nobody attached. It does not fire when the agent
+comes back, or for an agent that moves to Settled after an hour at rest.
+tuios does not stop the agent or close its pane. Do that in the hook if you
+want it.
+
+The command starts in the session's worktree when tuios made one, else in the
+folder the pane started in. It gets these variables:
+
+- `TUIOS_SESSION_ID`, `TUIOS_WINDOW_ID`, `TUIOS_WINDOW_NAME` and
+  `TUIOS_WORKSPACE`: the agent's pane.
+- `TUIOS_SETTLE_REASON`: `person` for a settle you made.
+- `TUIOS_WORKTREE_PATH`, `TUIOS_WORKTREE_BRANCH` and
+  `TUIOS_WORKTREE_REPO_ROOT`: the worktree, for an agent in a worktree
+  session. Empty otherwise.
+
+Use it to free the disk space of an agent you are done with:
+
+```toml
+[hooks]
+after-settle = '[ -n "$TUIOS_WORKTREE_PATH" ] && cargo clean'
+```
 
 The daemon reads the `[hooks]` table when it starts. Restart the daemon with `tuios restart-server` after you change a hook the daemon runs. The daemon does not reload hooks when the file changes.
 

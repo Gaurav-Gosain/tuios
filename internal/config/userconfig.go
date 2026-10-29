@@ -1725,6 +1725,9 @@ const (
 	ActionInboxShowSnoozed = "inbox_show_snoozed"
 	ActionInboxDenyReason  = "inbox_deny_reason"
 	ActionInboxNewAgent    = "inbox_new_agent"
+	// ActionInboxSettle settles the selected agent, or every marked one: it
+	// goes to the Settled shelf until it needs the person again.
+	ActionInboxSettle = "inbox_settle"
 	// ActionInboxCompare opens the comparison of the attempts of the fan
 	// under the cursor.
 	ActionInboxCompare = "inbox_compare"
@@ -1818,6 +1821,7 @@ func getDefaultInboxKeybinds() map[string][]string {
 		ActionInboxSnooze:      {"z"},
 		ActionInboxUndo:        {"u"},
 		ActionInboxShowSnoozed: {"S"},
+		ActionInboxSettle:      {"D"},
 		ActionInboxDenyReason:  {"R"},
 		ActionInboxNewAgent:    {"n"},
 		ActionInboxCompare:     {"c"},

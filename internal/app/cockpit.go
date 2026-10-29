@@ -40,16 +40,17 @@ const (
 	ckReview
 	ckWorking
 	ckIdle
-	ckEarlier
+	ckSettled
 	ckSnoozed
 	ckGroups
 )
 
 // ckGroupTitles names each group, as its heading says it.
-var ckGroupTitles = [ckGroups]string{"Needs you", "Ready for review", "Working", "Idle", "Earlier", "Snoozed"}
+var ckGroupTitles = [ckGroups]string{"Needs you", "Ready for review", "Working", "Idle", "Settled", "Snoozed"}
 
-// ckEarlierAfter is how long an agent rests before it sinks to Earlier.
-const ckEarlierAfter = time.Hour
+// ckSettleAfter is how long an agent rests before it goes to Settled by
+// itself. The person settles one at once with D (cockpit_settle.go).
+const ckSettleAfter = time.Hour
 
 // ckFoldAt is how many rows a group keeps when the list is taller than its
 // column. Needs you never folds.
@@ -471,9 +472,14 @@ func (m *OS) buildCockpitRows(list []sidebarAgentEntry, now time.Time) []ckRow {
 		case sidebarGroupWorking:
 			g = ckWorking
 		default:
-			if e.StateAt > 0 && now.Sub(time.Unix(0, e.StateAt)) > ckEarlierAfter {
-				g = ckEarlier
+			if e.StateAt > 0 && now.Sub(time.Unix(0, e.StateAt)) > ckSettleAfter {
+				g = ckSettled
 			}
+		}
+		// A settled agent stays on the shelf whatever it does, until the
+		// daemon takes it off because it needs the person.
+		if e.Settled && g != ckNeeds {
+			g = ckSettled
 		}
 		if g != ckNeeds && m.ckArtifactNew(e, true) {
 			// A popup the person has not seen in this view waits for them,
@@ -546,7 +552,7 @@ func (m *OS) buildCockpitRows(list []sidebarAgentEntry, now time.Time) []ckRow {
 			if r.agent >= 0 {
 				e = list[r.agent]
 			}
-			if g == ckIdle || g == ckEarlier || g == ckSnoozed || r.kind == ckRowNote || r.attempt || !m.ckHasLine2(r, e) {
+			if g == ckIdle || g == ckSettled || g == ckSnoozed || r.kind == ckRowNote || r.attempt || !m.ckHasLine2(r, e) {
 				r.lines = 1
 			}
 			ck.tall += r.lines
@@ -1243,6 +1249,9 @@ func (m *OS) cockpitAction(action string) tea.Cmd {
 	case "review":
 		m.cockpitSync()
 		cmd, _ := m.InboxReview()
+		return cmd
+	case "settle":
+		cmd, _ := m.InboxSettle()
 		return cmd
 	default:
 		if strings.HasPrefix(action, "cmp:") {
