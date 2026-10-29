@@ -293,11 +293,11 @@ func (d *Daemon) admitTaskParam(cs *connState, verb, session, id, nonce string, 
 	}
 	sess, verr := d.resolveVerbSession(cs, sp.Session)
 	if verr != nil {
-		return nil, verr
+		return nil, refused(verr)
 	}
 	caller, verr := d.taskCallerOf(cs, verb, sess, nonce)
 	if verr != nil {
-		return nil, verr
+		return nil, refused(verr)
 	}
 	var tk TaskState
 	if !sess.anyTask(func(t *TaskState) bool {
