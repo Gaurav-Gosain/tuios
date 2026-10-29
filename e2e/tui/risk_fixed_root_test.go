@@ -37,8 +37,9 @@ import (
 func TestRiskRootIsTheStartFolder(t *testing.T) {
 	// The folders are at a short path with a short name: t.TempDir() carries
 	// the test's name and a random suffix, a run the line redacts to "***",
-	// and a line that hides part of its path cannot be read as outside.
-	up, err := os.MkdirTemp("", "r")
+	// and a line that hides part of its path cannot be read as outside. They
+	// are under /tmp, since the temp folder on macOS is long by itself.
+	up, err := os.MkdirTemp("/tmp", "r")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -48,7 +49,7 @@ func TestRiskRootIsTheStartFolder(t *testing.T) {
 	}
 	// The isolation root is short too. The harness gives the daemon and
 	// the panes its HOME (xdgKeys), so that is the home folder here.
-	base, err := os.MkdirTemp("", "b")
+	base, err := os.MkdirTemp("/tmp", "b")
 	if err != nil {
 		t.Fatal(err)
 	}

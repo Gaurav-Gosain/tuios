@@ -153,7 +153,14 @@ func TestRiskInWorktreeRedacted(t *testing.T) {
 // worktree and the panes' sessions.
 func riskWorktree(t *testing.T) (base, root string, panes []string) {
 	t.Helper()
-	base = riskBase(t, t.TempDir())
+	// Resolved, as the risk root is: on macOS the temp folder is under /var,
+	// a link to /private/var, and the daemon gives a worktree recorded
+	// through a link no root.
+	tmp := t.TempDir()
+	if resolved, err := filepath.EvalSymlinks(tmp); err == nil {
+		tmp = resolved
+	}
+	base = riskBase(t, tmp)
 	killDaemon(t, base)
 	dir := filepath.Join(xdgDir(base, "XDG_CONFIG_HOME"), "tuios")
 	if err := os.MkdirAll(dir, 0o700); err != nil {
@@ -272,9 +279,10 @@ func TestRiskLineClipOnlyAtEnd(t *testing.T) {
 	killDaemon(t, base)
 	// The root is a linked worktree, so that the pane's root is known from
 	// its first state, and at a short path, so that a line can hold it whole
-	// and still be clipped after it: t.TempDir() is long.
+	// and still be clipped after it: t.TempDir() is long, and so is the temp
+	// folder on macOS.
 	repo := testutil.GitRepo(t)
-	dir, err := os.MkdirTemp("", "p")
+	dir, err := os.MkdirTemp("/tmp", "p")
 	if err != nil {
 		t.Fatal(err)
 	}

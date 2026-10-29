@@ -10353,3 +10353,12 @@ corner check fails the case of a box's bottom with a title.
 | Control: what was cut | Where it fails | Verdict |
 | --- | --- | --- |
 | The pre-zoom origin in `findWindowInDirection`, so the box is the origin, as before the fix | `the prefix arrow left the zoom behind: focused 0, zoomed 0`, both runs | **caught** |
+## The nested-attach and risk tests on macOS
+
+`TestNestedAttachThroughScriptIsRefused` and `TestForcedNestedAttachSettles` found the nested client by reading `/proc`, which macOS does not have, and the first ran `script` with util-linux flags, which BSD `script` refuses ("illegal option -- f"). `tuiosProcessesUnder` now asks `ps -axwwE` where there is no `/proc`, and the script test uses BSD `script`'s form off Linux. `TestRiskInWorktree` and `TestRiskInWorktreeRedacted` took the worktree's root from `t.TempDir()`, which on macOS is under `/var`, a link to `/private/var`: the daemon gives a worktree recorded through a link no risk root, so every cut path read as outside. The root is now resolved first. `TestRiskRootIsTheStartFolder` and `TestRiskLineClipOnlyAtEnd` need folders short enough for a line to show whole, and the macOS temp folder alone is about 50 runes, so their short folders are made under `/tmp`. Each test is unchanged on Linux. Run on 2026-10-29 on macOS arm64.
+
+| Control: what was cut | Where it fails | Verdict |
+| --- | --- | --- |
+| `Clipped: false` in `riskOfLine` (the control above, run again on macOS) | `TestRiskInWorktree`: "repo-feat-kinder-greeting marks an Edit inside its worktree outside the worktree" | **caught** |
+
+`TestForcedNestedAttachSettles` passing shows the `ps` lookup finds a running nested client, so the refusal tests' check that none is left does not pass by finding nothing.

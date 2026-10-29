@@ -6,6 +6,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"strconv"
 	"strings"
 	"testing"
@@ -89,31 +90,63 @@ func waitSessionSize(t *testing.T, base string) (int, int) {
 // test's isolation root base count: the e2e workflow runs several go test
 // processes on one machine, and their clients carry the same flags.
 func tuiosProcessesUnder(outer *tuitest.Terminal, base, marker string) []int {
-	entries, _ := os.ReadDir("/proc")
 	var pids []int
-	for _, e := range entries {
-		pid, err := strconv.Atoi(e.Name())
-		if err != nil || pid == outer.Pid() {
+	for _, p := range listProcesses() {
+		if p.pid == outer.Pid() || !strings.HasPrefix(p.command, tuiosBin+" ") || !strings.Contains(p.command, marker) {
 			continue
 		}
-		raw, err := os.ReadFile("/proc/" + e.Name() + "/cmdline")
+		if !strings.Contains(p.env, "="+base+string(filepath.Separator)) {
+			continue
+		}
+		pids = append(pids, p.pid)
+	}
+	return pids
+}
+
+// process is one running process: its command line, and its environment.
+type process struct {
+	pid          int
+	command, env string
+}
+
+// listProcesses reads every process from /proc. Without /proc, as on macOS,
+// it asks ps, whose -E prints each process's environment after its command
+// line. The two cannot be told apart there, so both fields hold the whole
+// line.
+func listProcesses() []process {
+	entries, err := os.ReadDir("/proc")
+	if err != nil {
+		out, err := exec.Command("ps", "-axwwE", "-o", "pid=,command=").Output()
+		if err != nil {
+			return nil
+		}
+		var ps []process
+		for line := range strings.Lines(string(out)) {
+			pidField, rest, _ := strings.Cut(strings.TrimSpace(line), " ")
+			if pid, err := strconv.Atoi(pidField); err == nil {
+				ps = append(ps, process{pid: pid, command: rest, env: rest})
+			}
+		}
+		return ps
+	}
+	var ps []process
+	for _, e := range entries {
+		pid, err := strconv.Atoi(e.Name())
 		if err != nil {
 			continue
 		}
-		args := strings.Split(strings.TrimRight(string(raw), "\x00"), "\x00")
-		if len(args) == 0 || args[0] != tuiosBin {
+		cmdline, err := os.ReadFile("/proc/" + e.Name() + "/cmdline")
+		if err != nil {
 			continue
 		}
-		if !strings.Contains(strings.Join(args, " "), marker) {
-			continue
-		}
-		env, err := os.ReadFile("/proc/" + e.Name() + "/environ")
-		if err != nil || !strings.Contains(string(env), "="+base+string(filepath.Separator)) {
-			continue
-		}
-		pids = append(pids, pid)
+		env, _ := os.ReadFile("/proc/" + e.Name() + "/environ")
+		ps = append(ps, process{
+			pid:     pid,
+			command: strings.ReplaceAll(strings.TrimRight(string(cmdline), "\x00"), "\x00", " "),
+			env:     string(env),
+		})
 	}
-	return pids
+	return ps
 }
 
 // nestExit matches the exit status the pane echoes after a nested command.
@@ -196,7 +229,13 @@ func TestNestedAttachThroughScriptIsRefused(t *testing.T) {
 		t.Skip("script is not installed")
 	}
 	outer, base := nestedSetup(t)
-	cmd := "script -qfec '" + tuiosBin + " attach " + nestSession + " --no-animations' /dev/null"
+	inner := tuiosBin + " attach " + nestSession + " --no-animations"
+	// util-linux takes the command as -c, BSD script as the arguments after
+	// the file.
+	cmd := "script -qfec '" + inner + "' /dev/null"
+	if runtime.GOOS != "linux" {
+		cmd = "script -q /dev/null " + inner
+	}
 	assertRefused(t, outer, base, cmd, "--no-animations")
 }
 
