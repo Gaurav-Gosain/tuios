@@ -698,6 +698,11 @@ func (d *Daemon) verbPopup(cs *connState, params json.RawMessage) (any, *verbErr
 	}
 	win, bverr, err := d.addWindowFor(cs, "popup", sess, opts, onExit)
 	if bverr != nil {
+		// Nothing started, so this is the only write end: closing it ends
+		// the read and releases the hold.
+		if opts.stdout != nil {
+			_ = opts.stdout.Close()
+		}
 		return nil, bverr
 	}
 	// The process holds its own copy of the write end once it has started,
