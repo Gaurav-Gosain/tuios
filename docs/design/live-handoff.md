@@ -552,9 +552,16 @@ Scope:
 - Federation, plugins, ssh-follow and hooks stopped and started.
 - `unknown_verb` from an older daemon explained.
 
+- An upgrade from inside a pane is confirmed by the person (`internal/session/upgrade_confirm.go`). The binary runs as the daemon, so a pane does not get one by asking, but someone who works entirely inside tuios has no terminal outside it. The daemon runs the preflight, then puts an ask (the `ask-human` machinery) with the answers No and Yes, marked with the binary's full path and version, and blocks the call for up to 60 s. Every attached client shows it as a modal dialog (`internal/app/upgrade_confirm.go`) naming the pane, the path and the version, with No under the cursor.
+  - The proof of a person is the ask's: `answer-ask` takes only a live attach nonce, issued to a process outside every pane, and an upgrade's ask takes none over a link. The client adds that only a key pressed there answers it: keys `send-keys` or a tape put through the client, a paste and a click answer nothing, and keys in the first half second are dropped.
+  - The first answer closes the ask, and the close takes the dialog off every other client. No, Esc, the wait running out, the ask dismissed or superseded, no client that could answer, and the agent features off refuse with the refusal a pane always got.
+  - Yes upgrades to the file the preflight ran and the person saw: a file put at the path since is refused, at the start of the handoff and again before the exec.
+  - A plugin and a non-human link are refused without a dialog. A caller outside every pane needs none.
+
 E2E tests:
 - `TestAttachedClientIsToldToReattach`. Control: no `MsgDaemonUpgrading`, so the generic daemon-lost text appears.
 - `TestFederationLinkRedialsAfterUpgrade`, through the existing federation rig.
+- `e2e/tui/upgrade_confirm_test.go`: a pane's upgrade confirmed at the client, refused by default, Esc and No, by the wait running out, with no client, and against keys that are not the person's; two clients; a plugin; and an upgrade from outside every pane. Controls in `e2e/tui/NEGATIVE_CONTROLS.md`.
 
 ### Later: clients follow, versions span, completeness
 
