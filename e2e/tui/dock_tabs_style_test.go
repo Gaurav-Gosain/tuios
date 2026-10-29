@@ -1,11 +1,13 @@
 package tuie2e
 
 import (
+	"slices"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/Gaurav-Gosain/tuitest"
+	"tuios.dev/shot"
 )
 
 // TestDockTabsFlatStyle drives [dock.tabs] through the real binary. The
@@ -19,7 +21,8 @@ import (
 // buildDockWorkspaceTabs removed (`&& (!flat || m.dockTabs().ShowAdd)`), the "flat" case fails with a
 // "+" on the row; with the style gate in dockTab removed, it fails with caps.
 // The "pill" and "show_add" cases are the positive halves: they prove a "+"
-// can be on this row to be absent from it.
+// can be on this row to be absent from it. "flat_caps" is a flat strip with
+// caps = true, so it has no "+" and the caps of a pill.
 func TestDockTabsFlatStyle(t *testing.T) {
 	const format = "dock_workspace_tab_format = \"{icon}\"\n"
 	for _, tc := range []struct {
@@ -30,6 +33,7 @@ func TestDockTabsFlatStyle(t *testing.T) {
 	}{
 		{"flat", "[appearance]\n" + format + "[dock.tabs]\nstyle = \"flat\"\nnumber_glyphs = [\"one\", \"two\"]\n", true, false},
 		{"show_add", "[appearance]\n" + format + "[dock.tabs]\nstyle = \"flat\"\nshow_add = true\nnumber_glyphs = [\"one\", \"two\"]\n", true, true},
+		{"flat_caps", "[appearance]\n" + format + "[dock.tabs]\nstyle = \"flat\"\ncaps = true\nnumber_glyphs = [\"one\", \"two\"]\n", false, false},
 		{"pill", "[appearance]\n" + format + "[dock.tabs]\nnumber_glyphs = [\"one\", \"two\"]\n", false, true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -51,7 +55,7 @@ func TestDockTabsFlatStyle(t *testing.T) {
 				t.Fatalf("%s: flat tab drawn with caps %q\n%s", tc.name, caps, row)
 			}
 			if !tc.flat && len(caps) < 4 {
-				t.Fatalf("%s: pill tabs lost their caps %q\n%s", tc.name, caps, row)
+				t.Fatalf("%s: the tabs lost their caps %q\n%s", tc.name, caps, row)
 			}
 		})
 	}
@@ -262,26 +266,29 @@ func TestDockTabsFlatColourFallbacks(t *testing.T) {
 
 // TestDockTabsConfigWarnings: a [dock.tabs] with an unknown style and a value
 // that is not a colour is reported at load, one problem each, and a valid one
-// is not. The count is what the notification says. The valid case writes a
+// is not. caps = true on the pill style is a problem too: pills always have
+// caps, so the key does nothing there. The count is what the notification says. The valid case writes a
 // colour in each form: hex, a slot name, a role and an ANSI index.
 //
 // Negative controls: with the `validateDockColors(result, "dock.tabs", ...)`
 // call removed from validateDock the bad case says "1 config problem"; with the
-// style check removed it says "1 config problem" as well. The valid case is
+// style check removed it says "1 config problem" as well; with the caps check
+// removed it says "2 config problems". The valid case is
 // the positive half: the same keys, spelled right, raise nothing.
 func TestDockTabsConfigWarnings(t *testing.T) {
 	t.Run("bad", func(t *testing.T) {
 		base := t.TempDir()
-		writeConfig(t, base, "[dock.tabs]\nstyle = \"round\"\nactive_bg = \"lime\"\n")
+		writeConfig(t, base, "[dock.tabs]\nstyle = \"round\"\nactive_bg = \"lime\"\ncaps = true\n")
 		term := startIn(t, base, startOpts{cols: 120, rows: 30})
-		if err := term.WaitForText("2 config problems", bootTimeout); err != nil {
-			t.Fatalf("a bad style and a bad colour were not both reported: %v\n%s", err, term.Snapshot())
+		if err := term.WaitForText("3 config problems", bootTimeout); err != nil {
+			t.Fatalf("a bad style, a bad colour and caps on pills were not all reported: %v\n%s", err, term.Snapshot())
 		}
 	})
 	t.Run("valid", func(t *testing.T) {
 		base := t.TempDir()
 		writeConfig(t, base, "[dock.tabs]\nstyle = \"flat\"\nactive_bg = \"#a7c080\"\n"+
-			"inactive_fg = \"bright_black\"\nseparator_fg = \"muted\"\nactive_fg = \"231\"\n")
+			"inactive_fg = \"bright_black\"\nseparator_fg = \"muted\"\nactive_fg = \"231\"\n"+
+			"caps = true\nactive_underline = false\n")
 		term := startIn(t, base, startOpts{cols: 120, rows: 30})
 		if err := term.WaitForText("1:0", bootTimeout); err != nil {
 			t.Fatalf("the dock never drew: %v\n%s", err, term.Snapshot())
@@ -333,4 +340,102 @@ func TestDockTabAttentionInk(t *testing.T) {
 		t.Fatalf("tab 1 never took attention_fg while its pane waited: %v\n%s", err, term.SnapshotStyled())
 	}
 	saveArtifact(t, term, artifactDir(t), "attention")
+}
+
+// TestDockTabsCapsAndColours: [dock.tabs] caps puts rounded ends on flat tabs,
+// each drawn in its own tab's ground; the pill style takes the [dock.tabs]
+// colours; and active_underline says whether the current tab is underlined,
+// whatever the style. The colours are hex so the cells can be read exactly.
+//
+// Each case saves a frame. The "pill" and "flat" cases set no new key: their
+// styled frames are the ones compared against a build from before the keys
+// existed, to show the default strip did not change.
+//
+// Negative controls: with flatWorkspaceTab returning the tab without capTab,
+// "flat_caps" fails with no cap beside the tabs; with workspacePill reading no
+// [dock.tabs] colour, "pill_colours" fails on the current tab's ground; with
+// the underline hard-coded on the active pill again, "pill_colours" fails on
+// the underline. "pill" and "flat_underline" are the positive halves of the
+// underline check.
+func TestDockTabsCapsAndColours(t *testing.T) {
+	const (
+		head    = "[appearance]\ndock_workspace_tab_format = \"{icon}\"\n[dock.tabs]\nnumber_glyphs = [\"AA\", \"BB\"]\n"
+		colours = "active_bg = \"#bd93f9\"\nactive_fg = \"#282a36\"\ninactive_bg = \"#44475a\"\ninactive_fg = \"#f8f8f2\"\n"
+	)
+	type rgb struct{ r, g, b uint8 }
+	activeBg, activeFg, inactiveBg := rgb{0xbd, 0x93, 0xf9}, rgb{0x28, 0x2a, 0x36}, rgb{0x44, 0x47, 0x5a}
+	is := func(c tuitest.Color, want rgb) bool {
+		return c.Kind == tuitest.ColorRGB && c.R == want.r && c.G == want.g && c.B == want.b
+	}
+	for _, tc := range []struct {
+		name, tabs string
+		coloured   bool // the tabs carry the colours above
+		capped     bool // each tab has a cap either side
+		underline  bool // the current tab is underlined
+	}{
+		{"pill", "", false, true, true},
+		{"flat", "style = \"flat\"\n", false, false, false},
+		{"flat_caps", "style = \"flat\"\ncaps = true\nactive_bold = true\n" + colours, true, true, false},
+		{"pill_colours", "active_underline = false\n" + colours, true, true, false},
+		{"flat_underline", "style = \"flat\"\nactive_underline = true\n" + colours, true, false, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			base := t.TempDir()
+			writeConfig(t, base, head+tc.tabs)
+			term := startIn(t, base, startOpts{cols: 100, rows: 12, env: []string{"COLORTERM=truecolor"}})
+			if err := term.WaitFor(func(s tuitest.Screen) bool {
+				return strings.Contains(dockRow(s), "AA")
+			}, bootTimeout); err != nil {
+				t.Fatalf("the dock never drew: %v\n%s", err, term.Snapshot())
+			}
+			twoWorkspacesAt(t, term, "BB")
+			s := term.Screen()
+			y, row := dockRowIndex(s), dockRow(s)
+			a, b := pillColumn(row, "AA"), pillColumn(row, "BB")
+			label := s.Cell(a, y)
+			if tc.coloured && (!is(label.Bg, activeBg) || !is(label.Fg, activeFg)) {
+				t.Errorf("the current tab is not drawn in active_fg on active_bg: fg %+v bg %+v\n%s", label.Fg, label.Bg, row)
+			}
+			if tc.coloured && !is(s.Cell(b, y).Bg, inactiveBg) {
+				t.Errorf("the other tab is not on inactive_bg: %+v\n%s", s.Cell(b, y).Bg, row)
+			}
+			if label.Underline != tc.underline {
+				t.Errorf("the current tab underlined = %v, want %v\n%s", label.Underline, tc.underline, term.SnapshotStyled())
+			}
+			// A tab is " AA ": its caps sit a column outside the padding.
+			for _, c := range []struct {
+				col    int
+				ground rgb
+			}{{a - 2, activeBg}, {a + 3, activeBg}, {b - 2, inactiveBg}, {b + 3, inactiveBg}} {
+				cell := s.Cell(c.col, y)
+				capped := slices.Contains(dockCapGlyphs, cell.Content)
+				if capped != tc.capped {
+					t.Errorf("column %d holds %q, want a cap = %v\n%s", c.col, cell.Content, tc.capped, row)
+					continue
+				}
+				if capped && tc.coloured && !is(cell.Fg, c.ground) {
+					t.Errorf("the cap at column %d is %+v, not its tab's ground\n%s", c.col, cell.Fg, row)
+				}
+			}
+			dir := artifactDir(t)
+			saveArtifact(t, term, dir, "dock")
+			savePNG(t, s, shot.XTermPalette(), dir, "dock")
+		})
+	}
+}
+
+// twoWorkspacesAt is twoWorkspaces for a strip whose labels are not the
+// workspace numbers: it waits until the dock draws the second label.
+func twoWorkspacesAt(t *testing.T, term *tuitest.Terminal, second string) {
+	t.Helper()
+	newWindow(t, term)
+	sendKeys(t, term, tuitest.Ctrl('b'), "w", "2")
+	if err := term.WaitFor(func(s tuitest.Screen) bool { return strings.Contains(dockRow(s), second) }, uiTimeout); err != nil {
+		t.Fatalf("workspace 2 never reached the dock: %v\n%s", err, term.Snapshot())
+	}
+	newWindow(t, term)
+	sendKeys(t, term, tuitest.Ctrl('b'), "w", "1")
+	if err := term.WaitFor(func(s tuitest.Screen) bool { return strings.Contains(dockRow(s), "1:1") }, uiTimeout); err != nil {
+		t.Fatalf("workspace 1 never came back with its window: %v\n%s", err, term.Snapshot())
+	}
 }

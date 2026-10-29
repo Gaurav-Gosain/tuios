@@ -78,14 +78,18 @@ var lookFileKeys = map[string]lookFileKey{
 	},
 	"dock.tabs.separator":    tabMarkKey("Text between two flat tabs. Empty is one blank column."),
 	"dock.tabs.separator_fg": tabColourKey("Colour of the text between two flat tabs"),
-	"dock.tabs.active_fg":    tabColourKey("Text colour of the flat tab of the current workspace"),
-	"dock.tabs.active_bg":    tabColourKey("Background colour of the flat tab of the current workspace"),
-	"dock.tabs.active_bold":  {Type: OptionBool, Description: "Draw the flat tab of the current workspace in bold", Default: "false"},
-	"dock.tabs.inactive_fg":  tabColourKey("Text colour of the flat tabs of the other workspaces"),
-	"dock.tabs.inactive_bg":  tabColourKey("Background colour of the flat tabs of the other workspaces"),
-	"dock.tabs.inactive_bold": {
-		Type: OptionBool, Description: "Draw the flat tabs of the other workspaces in bold", Default: "false",
+	"dock.tabs.active_fg":    tabColourKey("Text colour of the tab of the current workspace"),
+	"dock.tabs.active_bg":    tabColourKey("Background colour of the tab of the current workspace"),
+	"dock.tabs.active_bold":  {Type: OptionBool, Description: "Draw the flat tab of the current workspace in bold. A pill is always bold.", Default: "false"},
+	"dock.tabs.active_underline": {
+		Type: OptionBool, Description: "Underline the tab of the current workspace. Unset underlines a pill and not a flat tab.",
 	},
+	"dock.tabs.inactive_fg": tabColourKey("Text colour of the tabs of the other workspaces"),
+	"dock.tabs.inactive_bg": tabColourKey("Background colour of the tabs of the other workspaces"),
+	"dock.tabs.inactive_bold": {
+		Type: OptionBool, Description: "Draw the tabs of the other workspaces in bold", Default: "false",
+	},
+	"dock.tabs.caps": {Type: OptionBool, Description: "Draw rounded ends on each flat tab, in the colour of the tab", Default: "false"},
 	"dock.tabs.number_glyphs": {
 		Type:        LookList,
 		Description: "What {icon} in appearance.dock_workspace_tab_format shows for each workspace, the first item for workspace 1. A workspace past the end shows its number.",

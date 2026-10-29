@@ -312,6 +312,11 @@ func lookFileValue(cfg *UserConfig, path string, spec lookFileKey) (any, error) 
 	}
 	if field.Kind() == reflect.Pointer {
 		if field.IsNil() {
+			// A key with no fixed default, such as active_underline,
+			// follows another key while unset: there is nothing to write.
+			if spec.Default == "" && spec.Type == OptionBool {
+				return nil, nil
+			}
 			return lookDefaultValue(spec)
 		}
 		field = field.Elem()

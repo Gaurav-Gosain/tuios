@@ -150,9 +150,11 @@ const (
 )
 
 // DockTabsConfig is [dock.tabs]. With style left empty (or "pill") the strip
-// draws its rounded pills as it always has and the other fields are ignored;
-// "flat" draws each tab as a coloured run of text, the tabs joined by
-// Separator, the way a tmux status line draws its window list.
+// draws its rounded pills; "flat" draws each tab as a coloured run of text, the
+// tabs joined by Separator, the way a tmux status line draws its window list.
+// The colours, InactiveBold and ActiveUnderline apply to both styles. Caps,
+// Separator, ShowAdd and ActiveBold are for flat tabs only: a pill always has
+// its caps and its "+", and its current tab is always bold.
 type DockTabsConfig struct {
 	Style string `toml:"style,omitempty"`
 
@@ -166,6 +168,14 @@ type DockTabsConfig struct {
 	InactiveFg   string `toml:"inactive_fg,omitempty"`
 	InactiveBg   string `toml:"inactive_bg,omitempty"`
 	InactiveBold bool   `toml:"inactive_bold,omitempty"`
+
+	// ActiveUnderline underlines the current workspace's tab. Unset follows
+	// the style: a pill is underlined, a flat tab is not.
+	ActiveUnderline *bool `toml:"active_underline,omitempty"`
+
+	// Caps draws the rounded ends a pill has on each flat tab, in the tab's
+	// own ground. The glyphs and their fallbacks are the pills' own.
+	Caps bool `toml:"caps,omitempty"`
 
 	// NumberGlyphs is what {icon} in appearance.dock_workspace_tab_format
 	// prints for each workspace: the first entry stands for workspace 1, and
@@ -193,6 +203,14 @@ type DockTabsConfig struct {
 
 // Flat reports whether the strip draws flat tabs.
 func (t DockTabsConfig) Flat() bool { return strings.TrimSpace(t.Style) == DockTabStyleFlat }
+
+// Underlined reports whether the current workspace's tab is underlined.
+func (t DockTabsConfig) Underlined() bool {
+	if t.ActiveUnderline != nil {
+		return *t.ActiveUnderline
+	}
+	return !t.Flat()
+}
 
 // Icon is what {icon} prints for workspace n.
 func (t DockTabsConfig) Icon(n int) string {
@@ -528,6 +546,12 @@ func validateDock(cfg *UserConfig, result *ValidationResult) {
 		})
 	}
 	t := cfg.Dock.Tabs
+	if t.Caps && !t.Flat() {
+		result.Warnings = append(result.Warnings, ValidationError{
+			Field: "dock.tabs", Key: "caps",
+			Message: "caps applies to flat tabs only. A pill always has caps. Set style = \"flat\" to use it",
+		})
+	}
 	validateDockColors(result, "dock.tabs", map[string]string{
 		"separator_fg": t.SeparatorFg, "active_fg": t.ActiveFg, "active_bg": t.ActiveBg,
 		"inactive_fg": t.InactiveFg, "inactive_bg": t.InactiveBg,

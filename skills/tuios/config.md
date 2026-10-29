@@ -221,7 +221,10 @@ whole name and lets the strip scroll.
 `{index}`, `{name}`, `{icon}` and `{zoom}` are the format's placeholders. The
 last two read `number_glyphs` (the first entry is workspace 1) and
 `zoom_marker` from the `[dock.tabs]` table. That table also switches the strip
-from pills to flat tabs (`style = "flat"`).
+from pills to flat tabs (`style = "flat"`). Its colours apply to both styles.
+`caps = true` puts rounded ends on flat tabs. `active_underline` turns the
+underline on the current tab on or off. When it is not set, only a pill has
+the underline.
 
 The options `list-options` prints are scalars, and spacing and composition are
 set with them like any other. Colour and shape are names from an open set, each standing for a

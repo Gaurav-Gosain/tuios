@@ -21,8 +21,8 @@ func TestWorkspaceStripInkClearsTheContrastFloor(t *testing.T) {
 		fg, bg color.Color
 		before float64
 	}{
-		{"a pill at rest", workspacePillFg(false, pal), pal.Panel, 2.19},
-		{"the current pill", workspacePillFg(true, pal), pal.Panel, 2.76},
+		{"a pill at rest", workspacePillFg(false, pal, pal.Panel), pal.Panel, 2.19},
+		{"the current pill", workspacePillFg(true, pal, pal.Panel), pal.Panel, 2.76},
 		{"an overflow arrow", dockStripArrowFg(pal), pal.Canvas, 2.60},
 	} {
 		if got := theme.ContrastRatio(tc.fg, tc.bg); got < theme.ContrastFloor {

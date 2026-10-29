@@ -12,8 +12,8 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
 )
 
-// workspacePillFg is the ink one pill state is drawn in, over the Panel step
-// every pill rests on.
+// workspacePillFg is the ink one pill state is drawn in, over the ground the
+// pill rests on: the Panel step unless [dock.tabs] sets one.
 //
 // Both states go through theme.Readable, so the strip is legible by
 // measurement rather than by whichever theme it was last looked at under. At
@@ -22,11 +22,11 @@ import (
 // which the quiet tier's move up the ramp lifts to 3.71:1 without making it text.
 // Active is the accent, which follows the terminal theme and so cannot be
 // trusted on its own; Charple alone measures 2.76:1 on Panel.
-func workspacePillFg(active bool, pal overlay.Palette) color.Color {
+func workspacePillFg(active bool, pal overlay.Palette, ground color.Color) color.Color {
 	if active {
-		return theme.Readable(pal.Accent, pal.Panel)
+		return theme.Readable(pal.Accent, ground)
 	}
-	return theme.Readable(pal.FgDim, pal.Panel)
+	return theme.Readable(pal.FgDim, ground)
 }
 
 // dockStripArrowFg is the ink the overflow arrows are drawn in. They wear no
@@ -50,44 +50,68 @@ func dockStripArrowFg(pal overlay.Palette) color.Color {
 // element. Both states measure workspacePillWidth(label), so the strip does not
 // reflow as the current workspace moves along it.
 //
+// [dock.tabs] colours override the ground and the ink of each state, and
+// active_underline can drop the underline. With none of them set the pill is
+// the one described above.
+//
 // The label is passed in rather than derived: the tab that carries it also
 // carries the width the hit rectangle was cut to, and the two must be the same
 // string.
-func workspacePill(label string, active, dragged bool, pal overlay.Palette, s *config.Settings, ink color.Color) string {
+func workspacePill(label string, active, dragged bool, t *config.DockTabsConfig, pal overlay.Palette, s *config.Settings, ink color.Color) string {
+	fg, ground := tabColor(t.InactiveFg, &pal), tabColor(t.InactiveBg, &pal)
+	if active {
+		fg, ground = tabColor(t.ActiveFg, &pal), tabColor(t.ActiveBg, &pal)
+	}
+	if ground == nil {
+		ground = pal.Panel
+	}
+	if fg == nil {
+		fg = workspacePillFg(active, pal, ground)
+	}
 	// A picked-up pill comes up onto Surface, the same step the rail lifts a
 	// dragged row onto, so the gesture reads the same wherever it is made. It is
 	// a ground change and not an ink one, which leaves the accent free to go on
 	// saying which workspace is current while it is the one being moved.
-	ground := pal.Panel
 	if dragged {
 		ground = pal.Surface
 	}
-	fg := workspacePillFg(active, pal)
 	if ink != nil {
 		fg = ink
 	}
 	body := sidebarStyle(ground, fg)
 	if active {
-		body = body.Bold(true).Underline(true)
+		body = body.Bold(true)
+		if t.Underlined() {
+			body = body.Underline(true)
+		}
+	} else if t.InactiveBold {
+		body = body.Bold(true)
 	}
 	// The caps take the fill's colour as their foreground, which is how a half
 	// circle reads as the rounded end of the pill rather than as a glyph beside
-	// it. ASCII has none, and styling nothing still costs the frame the escape
-	// sequences around it.
+	// it.
+	return capTab(body.Render(" "+label+" "), ground, s)
+}
+
+// capTab puts the dock's workspace caps either side of a rendered tab, drawn in
+// the tab's ground. ASCII has none, and styling nothing still costs the frame
+// the escape sequences around it.
+//
+// At 16 colours the pill's fill is the terminal's own ground, and a flat tab
+// with no background has none either, so there is no colour for a cap to take:
+// drawn in the default ink it would read as a bracket round the label. The caps
+// become blanks of the same width, so the strip's geometry and its hit boxes do
+// not change with the depth or the colours.
+func capTab(tab string, ground color.Color, s *config.Settings) string {
 	lc, rc := s.GetDockWorkspaceCapLeft(), s.GetDockWorkspaceCapRight()
-	pill := body.Render(" " + label + " ")
 	if lc == "" && rc == "" {
-		return pill
+		return tab
 	}
-	// At 16 colours the fill is the terminal's own ground, so there is no
-	// colour for a cap to take: drawn in the default ink it would read as a
-	// bracket round the label. The caps become blanks of the same width, so
-	// the strip's geometry and its hit boxes do not change with the depth.
-	if overlay.IsNoColor(ground) {
-		return strings.Repeat(" ", lipgloss.Width(lc)) + pill + strings.Repeat(" ", lipgloss.Width(rc))
+	if ground == nil || overlay.IsNoColor(ground) {
+		return strings.Repeat(" ", lipgloss.Width(lc)) + tab + strings.Repeat(" ", lipgloss.Width(rc))
 	}
 	caps := lipgloss.NewStyle().Foreground(ground)
-	return caps.Render(lc) + pill + caps.Render(rc)
+	return caps.Render(lc) + tab + caps.Render(rc)
 }
 
 // tabColor is a configured [dock.tabs] colour on the dock's palette, or nil
@@ -107,7 +131,20 @@ func tabColor(s string, pal *overlay.Palette) color.Color {
 // accent ground is the slot drawn in reverse video, the same thing overlay.Chip
 // does there. A picked-up tab comes up onto Surface, the same lift a dragged
 // pill gets.
-func flatWorkspaceTab(label string, active, dragged bool, t *config.DockTabsConfig, pal overlay.Palette, ink color.Color) string {
+//
+// With caps on, the tab takes the pills' rounded ends in its own ground (see
+// capTab), and active_underline underlines the current tab.
+func flatWorkspaceTab(label string, active, dragged bool, t *config.DockTabsConfig, pal overlay.Palette, s *config.Settings, ink color.Color) string {
+	tab, ground := flatTabBody(label, active, dragged, t, pal, ink)
+	if !t.Caps {
+		return tab
+	}
+	return capTab(tab, ground, s)
+}
+
+// flatTabBody is a flat tab without its caps, and the ground it is drawn on:
+// nil when the tab has no background of its own.
+func flatTabBody(label string, active, dragged bool, t *config.DockTabsConfig, pal overlay.Palette, ink color.Color) (string, color.Color) {
 	fg, bg, bold := tabColor(t.InactiveFg, &pal), tabColor(t.InactiveBg, &pal), t.InactiveBold
 	if ink != nil {
 		fg = ink
@@ -126,7 +163,11 @@ func flatWorkspaceTab(label string, active, dragged bool, t *config.DockTabsConf
 		// does, so it is bold with it.
 		bold = true
 		if fg == nil && theme.Depth() == overlay.Depth16 {
-			return st.Bold(true).Foreground(pal.Accent).Reverse(true).Render(" " + label + " ")
+			st = st.Bold(true).Foreground(pal.Accent).Reverse(true)
+			if t.Underlined() {
+				st = st.Underline(true)
+			}
+			return st.Render(" " + label + " "), nil
 		}
 		bg = pal.Accent
 	}
@@ -143,10 +184,13 @@ func flatWorkspaceTab(label string, active, dragged bool, t *config.DockTabsConf
 		}
 	}
 	st = st.Bold(bold).Foreground(fg)
+	if active && t.Underlined() {
+		st = st.Underline(true)
+	}
 	if bg != nil {
 		st = st.Background(bg)
 	}
-	return st.Render(" " + label + " ")
+	return st.Render(" " + label + " "), bg
 }
 
 // groundOr is c, or fallback when c is unset.
@@ -179,9 +223,9 @@ func (m *OS) dockTab(t *config.DockTabsConfig, label string, active, dragged, at
 		ink = tabColor(t.AttentionFg, &pal)
 	}
 	if t.Flat() {
-		return flatWorkspaceTab(label, active, dragged, t, pal, ink)
+		return flatWorkspaceTab(label, active, dragged, t, pal, &m.Settings, ink)
 	}
-	return workspacePill(label, active, dragged, pal, &m.Settings, ink)
+	return workspacePill(label, active, dragged, t, pal, &m.Settings, ink)
 }
 
 // renderDockWorkspaceStrip draws the strip starting at column startX and records

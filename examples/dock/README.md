@@ -98,7 +98,9 @@ zoom_marker   = " [ ]"
 `style = "flat"` draws the `workspaces` component as a tmux-like window list
 instead of pills. `number_glyphs` and `zoom_marker` feed the `{icon}` and
 `{zoom}` placeholders of `appearance.dock_workspace_tab_format`. With no
-colours set, the current tab sits on the theme's accent. `attention_fg`,
+colours set, the current tab sits on the theme's accent. `caps = true` gives
+flat tabs rounded ends, and the colours apply to pills too.
+`active_underline` turns the underline on the current tab on or off. `attention_fg`,
 `bell_marker` and `activity_marker` mark a workspace out of view whose pane
 waits for you, rang the bell or printed. Attached to a daemon, the daemon
 reports the first bell and the first output of such a pane, once. The full

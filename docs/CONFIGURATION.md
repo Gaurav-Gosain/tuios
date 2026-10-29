@@ -1192,7 +1192,8 @@ default. Set it to `false` for flat pills:
 dock_pill_caps = false
 ```
 
-Under ASCII glyphs the workspace tabs have no caps. The rail's pills do not
+Under ASCII glyphs the workspace tabs have no caps. The option also controls
+the ends that `[dock.tabs] caps` puts on flat tabs. The rail's pills do not
 change with this option.
 
 ## Mode pill icons
@@ -1644,6 +1645,8 @@ inactive_fg   = "#4f5b58"
 number_glyphs = ["I", "II", "III"]  # {icon}: the first entry is workspace 1; past the end prints the number
 zoom_marker   = " [ ]"        # {zoom} on the current workspace while a pane is zoomed
 show_add      = false         # keep the trailing "+" tab in the flat style
+caps          = false         # rounded ends on each flat tab
+active_underline = false      # underline the current tab
 ```
 
 Colours take any [colour value](#colour-values). The colours are overrides:
@@ -1651,6 +1654,44 @@ a flat strip with none set puts the current tab on the theme's accent, in
 bold, and draws the others in dim text on the bar's own ground, so it still
 shows where you are. A value that is not a colour is ignored, with a
 warning, as if it were unset.
+
+The four tab colours (`active_fg`, `active_bg`, `inactive_fg`, `inactive_bg`)
+and `inactive_bold` also apply to pills. A pill with no colour set keeps the
+theme's look. The current pill is always bold, so `active_bold` is for flat
+tabs only.
+
+`active_underline` underlines the tab of the current workspace. When it is not
+set, a pill is underlined and a flat tab is not.
+
+`caps = true` gives each flat tab the rounded ends of a pill. Each end has the
+colour of its tab's background. A tab with no background gets a blank column
+in place of each end, so the tabs keep their width. The ends use the pills'
+glyphs: there are none under ASCII glyphs or with
+`appearance.dock_pill_caps = false`. Pills always have ends, so `caps` with
+the pill style gives a warning.
+
+Flat tabs with your own colours and rounded ends:
+
+```toml
+[dock.tabs]
+style       = "flat"
+caps        = true
+active_bg   = "magenta"
+active_fg   = "bg"
+active_bold = true
+inactive_bg = "bright_black"
+inactive_fg = "fg"
+```
+
+Pills with your own colours and no underline:
+
+```toml
+[dock.tabs]
+active_bg        = "magenta"
+active_fg        = "bg"
+inactive_bg      = "bright_black"
+active_underline = false
+```
 Besides `{index}` and `{name}`, the tab format takes `{icon}` and `{zoom}`.
 `{index}` is the workspace's number, which is its position: dragging a tab to
 another place, or moving the workspace with `move_workspace_left` and

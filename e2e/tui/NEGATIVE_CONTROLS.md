@@ -10592,3 +10592,16 @@ against the cut binary; the fixed build passes every subtest.
 | `startCPUProfile` in the daemon's RunE | `daemon`: `ASSERTION: daemon --cpuprofile /tmp/TestCPUProfileWrittenByLongRunningCommandsdaemon3744679393/001/cpu.prof wrote no profile: open /tmp/TestCPUProfileWrittenByLongRunningCommandsdaemon3744679393/001/cpu.prof: no such file or directory` | **caught** |
 | `startCPUProfile` in `runDaemonSessionOn` | `bare tuios`: `ASSERTION: bare tuios --cpuprofile /tmp/TestCPUProfileWrittenByLongRunningCommandsbare_tuios1589251332/001/cpu.prof wrote no profile: open /tmp/TestCPUProfileWrittenByLongRunningCommandsbare_tuios1589251332/001/cpu.prof: no such file or directory` | **caught** |
 | `startCPUProfile` in `runLocal` (its deferred stop kept) | `standalone`: `ASSERTION: standalone --cpuprofile /tmp/TestCPUProfileWrittenByLongRunningCommandsstandalone2986448861/001/cpu.prof wrote no profile: open /tmp/TestCPUProfileWrittenByLongRunningCommandsstandalone2986448861/001/cpu.prof: no such file or directory` | **caught** |
+## Dock tabs: caps on flat tabs, pill colours, active underline (#1340)
+
+`TestDockTabsCapsAndColours` draws two workspaces in five strips: the default pill, the default flat strip, flat with `caps = true` and colours, pill with colours and `active_underline = false`, and flat with `active_underline = true`. It reads each cap's glyph and ink, the tabs' grounds and the current tab's underline. `TestDockTabsFlatStyle/flat_caps` counts the caps on a flat strip with `caps = true`. Each control was built into its own binary. Run on 2026-10-29 on Linux.
+
+| Control: what was cut | Where it fails | Verdict |
+| --- | --- | --- |
+| `flatWorkspaceTab` returns the tab without `capTab` | `flat_caps`: "column 5 holds " ", want a cap = true" | **caught** |
+| `workspacePill` reads no `[dock.tabs]` colour | `pill_colours`: "the current tab is not drawn in active_fg on active_bg" | **caught** |
+| The underline on the current pill is hard-coded again | `pill_colours`: "the current tab underlined = true, want false" | **caught** |
+| The build before this change (origin/main at `cac3ce8fd`) | `TestDockTabsFlatStyle/flat_caps`, `flat_caps`, `pill_colours`, `flat_underline` | **caught** |
+| The same build, for the `caps` warning on pills | `TestDockTabsConfigWarnings/bad`: the dock says "2 config problems", not 3 | **caught** |
+
+The positive half is in the same runs: `pill` and `flat` pass on every build. Their styled frames and PNGs from origin/main and from this change are byte for byte the same, so the default strips did not change.

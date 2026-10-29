@@ -155,9 +155,9 @@ func (m *OS) dockTabs() config.DockTabsConfig {
 
 // dockTabWidth is the column span of a tab carrying label: a pill's (see
 // workspacePillWidth), or a flat tab's label and its column of padding either
-// side.
+// side. A flat tab with caps is as wide as a pill.
 func (m *OS) dockTabWidth(t *config.DockTabsConfig, label string) int {
-	if t.Flat() {
+	if t.Flat() && !t.Caps {
 		return lipgloss.Width(label) + 2
 	}
 	return workspacePillWidth(label, &m.Settings)
