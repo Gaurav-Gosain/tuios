@@ -43,7 +43,7 @@ fi
 changed=$(git diff --no-renames --name-only "$base" HEAD) || all
 [ -n "$changed" ] || exit 0
 
-if grep -qE '^\.github/workflows/(ci|go-test)\.yml$|^\.github/actions/|^scripts/(ci-changes|go-test-affected|go-test-lanes|retry-flaky)\.sh$' <<<"$changed"; then
+if grep -qE '^\.github/workflows/(ci|go-test)\.yml$|^\.github/actions/|^scripts/(ci-changes|go-test-affected|go-test-lanes|go-test-lanes-test|retry-flaky)\.sh$' <<<"$changed"; then
 	all
 fi
 

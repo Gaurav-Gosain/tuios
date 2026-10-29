@@ -122,6 +122,11 @@ jobs:
           done
           exit $status
 
+      - name: Lane script selections
+        # scripts/go-test-lanes.sh must skip a split package that a pull
+        # request did not select. This runs it against a fake go.
+        run: scripts/go-test-lanes-test.sh
+
       - name: Allow user namespaces
         # TestOwnerForgetsAnEmptiedGroup (internal/herdrplugin) reuses a pid on
         # purpose, which needs a pid namespace of its own. Ubuntu 24.04 lets

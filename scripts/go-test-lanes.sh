@@ -28,6 +28,9 @@
 # scripts/retry-flaky.sh reads it as one go test run. The exit status is 0
 # only when every process passed.
 #
+# A SPLIT package that PATTERN does not select runs no lane. If no package is
+# left to test, the script says so and exits 0.
+#
 # Build tags go through GOFLAGS (GOFLAGS=-tags=ghostty), so go list and every
 # go test process see them.
 set -euo pipefail
@@ -59,15 +62,15 @@ patterns=("$@")
 work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
 
-# The import paths of the split packages, and of every other package.
+# The import paths of the split packages, and of every other package. go list
+# fails on a SPLIT name that is not a package, which stops the script.
 go list "${split[@]}" | sort -u >"$work/split"
 go list "${patterns[@]}" | sort -u >"$work/all"
 comm -23 "$work/all" "$work/split" >"$work/rest"
-if [ "$(comm -12 "$work/all" "$work/split" | wc -l)" -ne "$(wc -l <"$work/split")" ]; then
-	echo "go-test-lanes.sh: a SPLIT package is not among the patterns" >&2
-	exit 2
-fi
-mapfile -t splitpkgs <"$work/split"
+# A split package the patterns do not name was not selected (a pull request
+# tests only the packages its change can reach), so it runs no lane.
+comm -12 "$work/all" "$work/split" >"$work/picked"
+mapfile -t splitpkgs <"$work/picked"
 mapfile -t restpkgs <"$work/rest"
 [ "$only" != rest ] || splitpkgs=()
 [ "$only" != split ] || restpkgs=()
@@ -103,6 +106,12 @@ if [ "${#restpkgs[@]}" -gt 0 ]; then
 	n=$((n + 1))
 	go test "${flags[@]}" "${restpkgs[@]}" >"$work/out$n" 2>&1 &
 	procs+=("$n:$!")
+fi
+
+if [ "${#procs[@]}" -eq 0 ]; then
+	echo "go-test-lanes.sh: no package to test" >&2
+	: >"$log"
+	exit 0
 fi
 
 status=0

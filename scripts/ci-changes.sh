@@ -113,7 +113,7 @@ while IFS= read -r p; do
 	# the rest never run on a pull request.
 	.github/workflows/e2e-tui.yml | .github/workflows/e2e-tui-map.yml | .github/workflows/fuzz.yml | .github/workflows/release.yml | .github/workflows/docker-publish.yml | .github/workflows/update-nix.yml | .github/workflows/contributors.yml | .github/workflows/star-history.yml | .github/workflows/issue-labeler.yml) pkg=no ;;
 	.github/*) everything "$p changed" ;;
-	scripts/ci-changes.sh | scripts/go-test-affected.sh | scripts/go-test-lanes.sh | scripts/retry-flaky.sh) everything "$p changed" ;;
+	scripts/ci-changes.sh | scripts/go-test-affected.sh | scripts/go-test-lanes.sh | scripts/go-test-lanes-test.sh | scripts/retry-flaky.sh) everything "$p changed" ;;
 	scripts/library-pins.sh) f[pins]=1 f[go]=1 pkg=no ;;
 	scripts/binary-size.sh | scripts/binary-size-report.sh) f[binary_size]=1 pkg=no ;;
 	scripts/check.sh) f[go]=1 pkg=no ;;
