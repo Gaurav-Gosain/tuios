@@ -252,7 +252,7 @@ action names yourself in `[keybindings]`:
 
 | Palette command | Action name | What it does |
 |---|---|---|
-| Scroll: Cycle Column Width | `scroll_cycle_width` | Cycles the focused column through 33%, 50%, 55%, 67% and 90% (and 100% when `appearance.scroll_column_max` is 100) of the screen width |
+| Scroll: Cycle Column Width | `scroll_cycle_width` | Cycles the focused column through the widths in `appearance.scroll_column_presets`. With no list, the widths are 33%, 50%, 55%, 67% and 90% (and 100% when `appearance.scroll_column_max` is 100) of the screen width |
 | Scroll: Maximize Column Width | `scroll_maximize` | Widens the focused column to the configured ceiling, the widest the strip will give it |
 | Scroll: Stack Window Below (consume) | `scroll_consume` | Pulls the window from the next column into the focused column, stacking it below |
 | Scroll: Split to New Column (expel) | `scroll_expel` | Pushes the bottom window of the focused column out into its own new column |
@@ -271,6 +271,17 @@ between them.
 A new column is `appearance.scroll_column_width` percent of the screen wide.
 The default of 55% is deliberately over half, so two columns never quite fit
 side by side and the strip reads as something you scroll.
+
+`appearance.scroll_column_presets` sets the widths that `scroll_cycle_width`
+steps through, as percents of the screen. It works like niri's
+`preset-column-widths`. A width larger than `appearance.scroll_column_max` is
+skipped:
+
+```toml
+[appearance]
+scroll_column_max = 100
+scroll_column_presets = [50, 67, 100]
+```
 
 ### Shared borders
 

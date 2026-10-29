@@ -1123,6 +1123,34 @@ them, and ignore these options. `startup.session` uses the daemon even when
 local session. Both options are on the settings page, in the Startup section.
 See [SESSIONS.md](SESSIONS.md#start-session-and-start-pane).
 
+## Scrolling layout
+
+These options shape the scrolling layout. See
+[LAYOUT_MODES.md](LAYOUT_MODES.md#scrolling-layout).
+
+| Option | What it does | Values | Default |
+|---|---|---|---|
+| `appearance.scroll_column_width` | The width of a new column, as a percent of the screen | 20 to `scroll_column_max` | 55 |
+| `appearance.scroll_column_max` | The largest width a column can have, as a percent of the screen | 20-100 | 90 |
+| `appearance.scroll_column_presets` | The widths that `scroll_cycle_width` steps through, as percents of the screen | a list of 1-100 | empty (33, 50, 55, 67, 90 and 100) |
+
+`scroll_cycle_width` sets the focused column to the next width in the list
+that is larger than the current width. After the largest width, it goes back
+to the smallest. tuios sorts the list. It skips a width that is larger than
+`scroll_column_max`. It ignores a value that is not from 1 to 100 and shows a
+config warning. This example cycles a column through a half, two thirds and the
+full screen:
+
+```toml
+[appearance]
+scroll_column_width = 50
+scroll_column_max = 100
+scroll_column_presets = [50, 67, 100]
+```
+
+A change to the list applies when tuios reloads the config. The settings page
+does not show this option. Edit it in `config.toml`.
+
 ## Drop preview
 
 While you drag a tiled pane in BSP, tuios shows where the pane would land if you let go. See [LAYOUT_MODES.md](LAYOUT_MODES.md). The preview is a frame in the accent colour, drawn with the same border characters as the panes. With `fill`, the area inside the frame gets one tint, and the text under it fades into that tint. On a 16-colour terminal the frame is reverse video and the area inside stays as it is. Two options shape that preview:

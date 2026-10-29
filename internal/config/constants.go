@@ -782,6 +782,23 @@ const (
 	ScrollColumnWidthDefault = 55
 )
 
+// ScrollColumnPresetFractions turns appearance.scroll_column_presets into the
+// widths scroll_cycle_width steps through, as fractions of the screen. A value
+// at or below zero, or above ScrollColumnWidthCeiling, is dropped (validation
+// warns about it), and the rest are sorted and deduplicated, because the cycle
+// walks the list upward and wraps to its first entry. Nil means "use the
+// built-in presets", which is what an empty or wholly invalid list gets.
+func ScrollColumnPresetFractions(percents []int) []float64 {
+	var out []float64
+	for _, p := range percents {
+		if p > 0 && p <= ScrollColumnWidthCeiling {
+			out = append(out, float64(p)/100)
+		}
+	}
+	slices.Sort(out)
+	return slices.Compact(out)
+}
+
 // How far one wheel event walks the scrolling layout's strip, in cells.
 //
 // It is a flat number of cells rather than a fraction of the visible width

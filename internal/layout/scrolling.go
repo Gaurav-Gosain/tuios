@@ -70,11 +70,16 @@ type ScrollingLayout struct {
 	ZoomProportion float64
 }
 
+// DefaultPresetWidths are the widths CycleWidth steps through when
+// appearance.scroll_column_presets sets none. Callers share it, so nothing may
+// write to it.
+var DefaultPresetWidths = []float64{0.333, 0.5, 0.55, 0.667, 0.9, 1.0}
+
 // NewScrollingLayout creates a new scrolling layout with sensible defaults.
 func NewScrollingLayout() *ScrollingLayout {
 	return &ScrollingLayout{
 		DefaultWidth: 0.55,
-		PresetWidths: []float64{0.333, 0.5, 0.55, 0.667, 0.9, 1.0},
+		PresetWidths: DefaultPresetWidths,
 		ZoomedCol:    -1,
 	}
 }

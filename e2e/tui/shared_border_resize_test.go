@@ -560,3 +560,86 @@ func TestScrollingDividerClickKeepsAProportionalColumn(t *testing.T) {
 	})
 	saveArtifact(t, term, dir, "after-resize")
 }
+
+// TestScrollingCycleWidthPresets is issue #1232: appearance.scroll_column_presets
+// sets the widths scroll_cycle_width steps through. A preset above
+// scroll_column_max is skipped, and a config reload changes the list on the
+// live strip.
+//
+// How this could pass wrongly, written down first:
+//   - The built-in presets also hold 50, so the first press proves little on
+//     its own. The second press wants 75, which no built-in preset is near.
+//   - 100 could be offered and then capped to 90. The third press wants the
+//     wrap back to 50, which only a skipped 100 gives.
+//   - A reload could leave the strip on the old list. After it the press from
+//     50 wants 60, where the old list gives 75 and the built-in one 55.
+//
+// NEGATIVE CONTROL: without the PresetWidths line in
+// GetOrCreateScrollingLayout, the second press lands on the built-in 55.
+func TestScrollingCycleWidthPresets(t *testing.T) {
+	base := t.TempDir()
+	const name = "sbpresets"
+	keys := "\n[keybindings.global]\nscroll_cycle_width = [\"f9\"]\n"
+	term := scrollingSession(t, base, name, "scroll_column_width = 40\nscroll_column_presets = [50, 75, 100]\n"+keys, 3)
+	dir := artifactDir(t)
+
+	opening := waitForSettledGeometryIn(t, base, name, 3)
+	w40 := 0
+	for _, r := range opening {
+		w40 = max(w40, r.Width)
+	}
+	saveArtifact(t, term, dir, "opening")
+
+	// widest waits for the widest column to reach percent of the screen,
+	// measured against the 40 percent the columns open at.
+	widest := func(percent int, what string) {
+		t.Helper()
+		want := w40 * percent / 40
+		waitForShape(t, base, name, 3, what, func(rects []winRect) error {
+			w := 0
+			for _, r := range rects {
+				w = max(w, r.Width)
+			}
+			if w < want-2 || w > want+2 {
+				return fmt.Errorf("the widest column is %d cells, want about %d (%d%%)", w, want, percent)
+			}
+			return nil
+		})
+	}
+	press := func() {
+		t.Helper()
+		if err := term.SendKeys(tuitest.F9); err != nil {
+			t.Fatalf("press f9: %v", err)
+		}
+	}
+
+	press()
+	widest(50, "the first press")
+	press()
+	widest(75, "the second press")
+	saveArtifact(t, term, dir, "at-75")
+	press()
+	widest(50, "the third press, past the 100 preset the cap skips")
+
+	saveConfigLikeAnEditor(t, base, "[startup]\nopen_default_window = true\ntiled = true\nlayout = \"scrolling\"\n"+
+		"[appearance]\nscroll_column_width = 40\nscroll_column_presets = [60]\n"+keys)
+	// The reload has no frame of its own to wait for, so press until the
+	// column moves, within the watch timeout.
+	deadline := time.Now().Add(configWatchTimeout)
+	for {
+		press()
+		rects := waitForSettledGeometryIn(t, base, name, 3)
+		w := 0
+		for _, r := range rects {
+			w = max(w, r.Width)
+		}
+		if want := w40 * 60 / 40; w >= want-2 && w <= want+2 {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("after the reload the widest column is %d cells, want about %d (60%%)\n%s", w, w40*60/40, describeRects(rects))
+		}
+		time.Sleep(500 * time.Millisecond)
+	}
+	saveArtifact(t, term, dir, "after-reload")
+}

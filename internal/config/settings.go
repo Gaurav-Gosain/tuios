@@ -753,6 +753,13 @@ type Settings struct {
 	// the floor.
 	ScrollColumnMax int
 
+	// ScrollColumnPresets are the widths scroll_cycle_width steps through, as
+	// ascending fractions of the screen, from appearance.scroll_column_presets.
+	// Nil means the scrolling layout's built-in presets. Presets above
+	// ScrollColumnMax are skipped by the cycle, not here, so raising the cap
+	// live brings them back.
+	ScrollColumnPresets []float64
+
 	// ZoomSize is how much of the content region a zoomed pane takes, as a
 	// percent. 100, the default, is the whole of it.
 	//

@@ -465,6 +465,7 @@ func validateAppearanceEnums(cfg *UserConfig, result *ValidationResult) {
 	validateBorderColors(cfg, result)
 	validateSelectionColors(cfg, result)
 	validateScrollbar(cfg, result)
+	validateScrollColumnPresets(cfg, result)
 	validateDockModeIcons(cfg, result)
 	validateBackgrounds(cfg, result)
 	warnColours(result, "appearance", "The cursor row keeps the theme's background",
@@ -689,6 +690,22 @@ func validateDockModeIcons(cfg *UserConfig, result *ValidationResult) {
 			Key:   icon.key,
 			Message: fmt.Sprintf("%q is not a usable icon. Use at most %d cells and no control characters. The dock shows the default icon",
 				*icon.value, DockModeIconMaxWidth),
+		})
+	}
+}
+
+// validateScrollColumnPresets warns about a column width preset outside 1 to
+// 100 percent. ScrollColumnPresetFractions drops it, and the cycle steps
+// through the rest.
+func validateScrollColumnPresets(cfg *UserConfig, result *ValidationResult) {
+	for _, p := range cfg.Appearance.ScrollColumnPresets {
+		if p > 0 && p <= ScrollColumnWidthCeiling {
+			continue
+		}
+		result.Warnings = append(result.Warnings, ValidationError{
+			Field:   "appearance",
+			Key:     "scroll_column_presets",
+			Message: fmt.Sprintf("%d is not a width from 1 to %d percent. tuios ignores it", p, ScrollColumnWidthCeiling),
 		})
 	}
 }

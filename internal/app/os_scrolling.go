@@ -75,6 +75,13 @@ func (m *OS) GetOrCreateScrollingLayout() *layout.ScrollingLayout {
 	sl.Gap = m.separatorGap()
 	sl.DefaultWidth = m.ScrollColumnWidthFraction()
 	sl.MaxProportion = float64(m.Settings.GetScrollColumnMax()) / 100
+	// The presets are per client like the cap, so a config reload reaches a
+	// live strip here too. Both slices are shared and only read: no allocation
+	// on this path.
+	sl.PresetWidths = layout.DefaultPresetWidths
+	if len(m.Settings.ScrollColumnPresets) > 0 {
+		sl.PresetWidths = m.Settings.ScrollColumnPresets
+	}
 	// A zoom on the strip is one column widened past the cap the others are
 	// held to. The strip is already a camera, wider than the screen and showing
 	// what it cannot fit at the edges, so a second camera over it would be two

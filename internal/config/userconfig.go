@@ -468,14 +468,18 @@ type AppearanceConfig struct {
 	// because that is what a settings stepper and a CLI argument can carry: the
 	// option registry holds ints, and "50" is a value a person types. The model
 	// keeps the master ratio as the fraction the tilers want.
-	MasterRatio       int    `toml:"master_ratio"`        // Master pane width in the master-stack layout, percent of the screen (default: 50)
-	ScrollColumnWidth int    `toml:"scroll_column_width"` // New column width in the scrolling layout, percent of the screen (default: 55)
-	ScrollColumnMax   int    `toml:"scroll_column_max"`   // Highest that width may be set to, percent of the screen (default: 90, up to 100)
-	ZoomSize          int    `toml:"zoom_size"`           // How much of the screen a zoomed pane takes, percent (default: 95)
-	PanelPadding      int    `toml:"panel_padding"`       // Columns of surface padding inside every overlay panel (default: 2)
-	ClockFormat       string `toml:"clock_format"`        // Go time layout the clock overlay is drawn with (default: 15:04)
-	DimUnfocused      int    `toml:"dim_unfocused"`       // Percent an unfocused pane's content is carried toward its own ground (default: 0)
-	DimMultifocus     bool   `toml:"dim_multifocus"`      // Dim the panes in the multifocus set too (default: false)
+	MasterRatio       int `toml:"master_ratio"`        // Master pane width in the master-stack layout, percent of the screen (default: 50)
+	ScrollColumnWidth int `toml:"scroll_column_width"` // New column width in the scrolling layout, percent of the screen (default: 55)
+	ScrollColumnMax   int `toml:"scroll_column_max"`   // Highest that width may be set to, percent of the screen (default: 90, up to 100)
+	// ScrollColumnPresets are the widths scroll_cycle_width steps through, in
+	// percent of the screen, like niri's preset-column-widths. Empty keeps the
+	// built-in 33, 50, 55, 67, 90 and 100.
+	ScrollColumnPresets []int  `toml:"scroll_column_presets,omitempty"` // Widths scroll_cycle_width steps through, percent of the screen (default: built-in presets)
+	ZoomSize            int    `toml:"zoom_size"`                       // How much of the screen a zoomed pane takes, percent (default: 95)
+	PanelPadding        int    `toml:"panel_padding"`                   // Columns of surface padding inside every overlay panel (default: 2)
+	ClockFormat         string `toml:"clock_format"`                    // Go time layout the clock overlay is drawn with (default: 15:04)
+	DimUnfocused        int    `toml:"dim_unfocused"`                   // Percent an unfocused pane's content is carried toward its own ground (default: 0)
+	DimMultifocus       bool   `toml:"dim_multifocus"`                  // Dim the panes in the multifocus set too (default: false)
 
 	// DimForeground is a pointer because it defaults to true.
 	DimForeground *bool `toml:"dim_foreground"` // Let dim_unfocused dim the pane's text too, not only its background (default: true)
@@ -2918,6 +2922,9 @@ func ApplyAppearanceConfig(cfg *UserConfig, s *Settings) {
 	s.ThemeTransitionMs = clampPercent(cfg.Appearance.ThemeTransitionMs, ThemeTransitionMsMin, ThemeTransitionMsMax, ThemeTransitionMsDefault)
 	s.ScrollColumnMax = clampPercent(cfg.Appearance.ScrollColumnMax, ScrollColumnWidthMin, ScrollColumnWidthCeiling, ScrollColumnWidthMax)
 	s.ScrollColumnWidth = clampPercent(cfg.Appearance.ScrollColumnWidth, ScrollColumnWidthMin, s.ScrollColumnMax, ScrollColumnWidthDefault)
+	// Assigned unconditionally, so a reload that removes the list goes back to
+	// the built-in presets.
+	s.ScrollColumnPresets = ScrollColumnPresetFractions(cfg.Appearance.ScrollColumnPresets)
 	s.DimUnfocused = min(max(cfg.Appearance.DimUnfocused, 0), DimUnfocusedMax)
 	// DimForeground defaults to true, so it is a pointer: an unset key has to
 	// read as on, and only an explicit false turns it off.
