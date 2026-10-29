@@ -9164,10 +9164,10 @@ TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios \
 `e2e/tui/upgrade_confirm_test.go`. A pane's `tuios daemon upgrade` asks the person in a dialog on every attached client (`internal/session/upgrade_confirm.go`, `internal/app/upgrade_confirm.go`). Each test writes `handoff.json` and the client's screens under `artifactDir`.
 
 - `TestPaneUpgradeConfirmedAtTheClient`: the dialog names the pane (`agent`), the copy's full path and its version; Down then Enter at the client upgrades the daemon to the copy with its pid kept, and the pane's command exits 0.
-- `TestPaneUpgradeRefusedWithoutYes`: Enter on the default row, Esc, and Down, Up, Enter each refuse with "daemon-upgrade is for the person", close the dialog and leave the image as it was.
-- `TestPaneUpgradeTimesOut`: with `TUIOS_TEST_UPGRADE_CONFIRM_MS=3000` and no answer, the upgrade is refused no sooner than 3 s and the dialog closes.
+- `TestPaneUpgradeRefusedWithoutYes`: Enter on the default row, Esc, Down, Up, Enter, and Up, Enter each refuse with "daemon-upgrade is for the person" and "The person answered No", close the dialog and leave the image as it was. Up then Enter is what a shell takes for "run the last command again".
+- `TestPaneUpgradeTimesOut`: with `TUIOS_TEST_UPGRADE_CONFIRM_MS=3000` and no answer, the upgrade is refused no sooner than 3 s, saying "Nobody answered the dialog", and the dialog closes.
 - `TestDaemonUpgradeFromAPaneIsRefused` (PR 5): with no client attached the pane's upgrade is refused in under 30 s, not after the 60 s wait.
-- `TestPaneUpgradeTakesOnlyKeysAtTheClient`: with the dialog up, the other pane printing `j`, Enter, Down and `Yes`; `tuios send-keys -s <session> "j Enter"`; a tape's `Press j Enter`; a bracketed paste of `j` and Enter; and `tuios call answer-ask` with Yes from the other pane each leave the dialog open and the image unchanged. `j` moves to Yes, so any one of them that got through would upgrade the daemon. Esc then refuses.
+- `TestPaneUpgradeTakesOnlyKeysAtTheClient`: with the dialog up, the other pane printing `j`, Enter, Down and `Yes`; `tuios send-keys -s <session> "j Enter"`; a tape's `Press j Enter`; a bracketed paste of `j` and Enter; and `tuios call answer-ask` with Yes from the other pane each leave the dialog open and the image unchanged. Each ends in Enter, so any one of them that got through would answer the dialog and close it (the controls below ran when `j` still moved to Yes, and so upgraded the daemon). Esc then refuses.
 - `TestPaneUpgradeFirstAnswerWins`: two clients show the dialog. Esc on the first closes it on the second, and Down, Enter typed there right after upgrades nothing.
 - `TestPluginUpgradeRefusedWithoutADialog`: a herdr plugin's command runs `tuios daemon upgrade` with a client attached; it is refused with "daemon-upgrade is for the person" and the client never shows the dialog.
 - `TestOutsideUpgradeNeedsNoDialog`: with a client attached, an upgrade from outside every pane goes through and the client never shows the dialog.
@@ -9192,6 +9192,22 @@ TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios \
   go test -count=1 -run '^(TestPaneUpgrade|TestPluginUpgradeRefusedWithoutADialog|TestOutsideUpgradeNeedsNoDialog|TestDaemonUpgradeFromAPaneIsRefused)' .
 ```
 
+#### Review fixes: the dialog keys and the put-back
+
+Run on 2026-10-30 on macOS arm64 (Darwin 27, Go 1.26.10) against `pr/live-handoff-4`, one build carrying both controls, one run:
+
+| Control | How | Test that fails | Verdict |
+| --- | --- | --- | --- |
+| Every move key toggles the cursor | the `UpgradeConfirmKey` switch put back to `st.selected = 1 - st.selected` for Up, Down, Left, Right, Tab, Shift+Tab, `j` and `k` | `TestPaneUpgradeRefusedWithoutYes`: "up upgraded the daemon ({PID:91298 Instance:5301f1a9-…} then {PID:91298 Instance:77391964-…})" | **caught** |
+| A put-back leaves the plugin host stopped | `h.runner.Resume()` and `clear(h.startedUp)` cut from `pluginHost.restart` | `TestDaemonUpgradeRefusesWhileHookOrPluginRuns/plugin`: "after a put-back the plugin command did not run: exit status 1", "the startup command ran 1 times, want once at start and once after the put-back" | **caught** |
+| A put-back leaves the host pumps ended | the pump restart cut from `hostFleet.start` | none | **not run** |
+
+The put-back is a commit refused by its second preflight: `test-handoff` with `hold_ms`, and the binary replaced by a shell script during the hold, after the plugins, the links and the host pumps were stopped. The host pumps have no rig here: the fleet's start after stop is kept on reading `hostFleet.stop`, which ends each pump and keeps its host, and `reconcile`, which starts a pump only for a name it does not have.
+
+```sh
+TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios \
+  go test -count=1 -run '^(TestPaneUpgradeRefusedWithoutYes|TestDaemonUpgradeRefusesWhileHookOrPluginRuns)$' .
+```
 ## Deleting a worktree from the close-confirmation dialog
 
 `TestSidebarCloseDeletesWorktree` takes the third row of the close dialog on
