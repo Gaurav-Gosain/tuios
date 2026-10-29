@@ -74,6 +74,9 @@ const handoffWorkers = 8
 type handoffRequest struct {
 	// binary is the image to exec. The preflight runs it first.
 	binary string
+	// pinned, when set, is the file the person confirmed binary as. A file
+	// put there since is refused, not run.
+	pinned *fileID
 	// holdAfterWrite and inWindow are for tests: a wait after the manifest
 	// is written, and a function run while the descriptors are exposed.
 	holdAfterWrite time.Duration
@@ -177,6 +180,10 @@ func (d *Daemon) prepareHandoff(req handoffRequest) (*handoffRun, error) {
 		return nil, err
 	}
 	run.stats.PreflightMS = msSince(t0)
+	if req.pinned != nil && run.bin.file != *req.pinned {
+		d.handoffMu.Unlock()
+		return nil, errBinaryReplaced(run.bin.path)
+	}
 	if err := run.prepare(); err != nil {
 		run.putBack()
 		d.handoffMu.Unlock()
@@ -479,6 +486,11 @@ func (r *handoffRun) commit() error {
 	// A binary replaced since the preflight is a file the preflight did not
 	// run: run it again, and pay its first exec here rather than after it.
 	if !r.bin.stillThere() {
+		if r.req.pinned != nil {
+			r.putBack()
+			d.handoffMu.Unlock()
+			return errBinaryReplaced(r.bin.path)
+		}
 		bin, err := preflightBinary(r.bin.path)
 		if err != nil {
 			r.putBack()

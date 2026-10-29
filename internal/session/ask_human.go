@@ -552,6 +552,13 @@ func (d *Daemon) verbAnswerAsk(cs *connState, params json.RawMessage) (any, *ver
 			Detail: "Nothing was answered. Only a client attached right now can answer a question, by passing the nonce its attach reply carried. An agent never can.",
 		})
 	}
+	if cs != nil && cs.viaLink && d.attention.askIsUpgrade(p.RequestID) {
+		// A key on another machine is not a key at this one, whoever the
+		// hub says pressed it.
+		return nil, hintedVerbError(ErrVerbNotHuman, "a live upgrade is confirmed only at a client attached on this machine", &VerbHint{
+			Detail: "Nothing was answered. Answer it in the dialog of a client attached to this machine.",
+		})
+	}
 	askSession, _ := d.attention.askSession(p.RequestID)
 	by, ok := d.humanNonceFor(p.HumanNonce, d.sessionIDOf(askSession), cs)
 	if !ok {

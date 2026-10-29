@@ -140,6 +140,12 @@ func (b handoffBinary) stillThere() bool {
 
 var errNotAnExecutable = errors.New("not a regular executable file")
 
+// errBinaryReplaced refuses a confirmed binary whose file changed after the
+// person said yes to it.
+func errBinaryReplaced(path string) error {
+	return fmt.Errorf("%s was replaced after the upgrade to it was confirmed. Ask again to upgrade to the file there now", path)
+}
+
 // statFileID is the device and inode of the executable at path.
 func statFileID(path string) (fileID, error) {
 	info, err := os.Stat(path)
