@@ -583,11 +583,19 @@ func (m *OS) markTransferSeen(id string) {
 	m.transfers.seen[id] = true
 }
 
-// transferPlace names a machine of a copy for the person: the host, or "this
-// machine".
+// transferPlace names a machine of a copy for the person: the host, or this
+// machine's name with "(this machine)" after it.
 func transferPlace(host string) string {
 	if host == "" || host == federation.LocalHostName {
-		return "this machine"
+		return thisMachineLabel()
+	}
+	return printableTitle(host)
+}
+
+// transferPlaceShort is transferPlace without the hint, for a panel row.
+func transferPlaceShort(host string) string {
+	if host == "" || host == federation.LocalHostName {
+		return thisMachineShort()
 	}
 	return printableTitle(host)
 }

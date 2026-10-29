@@ -196,7 +196,7 @@ func TestCopiesShowInTheDockRailAndPanel(t *testing.T) {
 	// The panel lists it, and p pauses the bytes.
 	openCopies(t, term)
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
-		return containsAll(s.Text(), "big.bin", "this machine -> build")
+		return containsAll(s.Text(), "big.bin", strings.TrimSuffix(thisMachineRow(), " (this machine)")+" -> build")
 	}, uiTimeout); err != nil {
 		t.Fatalf("ASSERTION: the panel does not list the copy: %v\n%s", err, term.Snapshot())
 	}

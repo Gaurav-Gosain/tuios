@@ -103,7 +103,7 @@ func TestFromAnotherMachineTheRowsAreThatMachinesHosts(t *testing.T) {
 	if it, ok := byLabel["build"]; !ok || it.Name != "" || !it.Up {
 		t.Errorf("ASSERTION: the session's own machine is not a plain window row: %+v", items)
 	}
-	if it, ok := byLabel["this machine"]; !ok || it.Name != "beta" || !it.Up {
+	if it, ok := byLabel[thisMachineLabel()]; !ok || it.Name != "beta" || !it.Up {
 		t.Errorf("ASSERTION: this machine is not listed by build's name for it: %+v", items)
 	}
 	if _, ok := byLabel["workstation"]; ok {
@@ -112,7 +112,7 @@ func TestFromAnotherMachineTheRowsAreThatMachinesHosts(t *testing.T) {
 	if it, ok := byLabel["gpu"]; !ok || it.Up {
 		t.Errorf("ASSERTION: build's down link is not listed as down: %+v", items)
 	}
-	if cmd := m.ChooseHostForNewWindow(byLabel["this machine"]); cmd == nil {
+	if cmd := m.ChooseHostForNewWindow(byLabel[thisMachineLabel()]); cmd == nil {
 		t.Error("ASSERTION: a pick of this machine from build asked build for nothing")
 	}
 }
@@ -129,13 +129,13 @@ func TestFromAnotherMachineThisMachineNeedsALinkBack(t *testing.T) {
 		Hosts: []federation.HostReport{{Host: "beta", Status: federation.StatusUp}},
 	}})
 	for _, it := range m.buildHostPickerItems() {
-		if it.Label == "this machine" {
+		if it.Label == thisMachineLabel() {
 			t.Fatalf("ASSERTION: this machine is offered with no link back from build: %+v", it)
 		}
 	}
 	// A session is still made here: the session picker keeps the row.
 	m.HostPickerPurpose = HostPickerNewSession
-	if items := m.buildHostPickerItems(); items[0].Label != "this machine" || !items[0].Up {
+	if items := m.buildHostPickerItems(); items[0].Label != thisMachineLabel() || !items[0].Up {
 		t.Error("ASSERTION: the session picker refuses this machine from build")
 	}
 }
@@ -150,7 +150,7 @@ func TestFromAnotherMachineThisMachineNeedsALinkBack(t *testing.T) {
 func TestFromAnotherMachineAPickChecksThatMachinesLink(t *testing.T) {
 	m := pickerOS(t)
 	attachedTo(t, m)
-	if cmd := m.ChooseHostForNewWindow(HostPickerItem{Name: "beta", Label: "this machine", Up: true}); cmd == nil {
+	if cmd := m.ChooseHostForNewWindow(HostPickerItem{Name: "beta", Label: thisMachineLabel(), Up: true}); cmd == nil {
 		t.Errorf("ASSERTION: a pick of a machine build reaches was refused: %+v", m.Notifications)
 	}
 	if cmd := m.ChooseHostForNewWindow(HostPickerItem{Name: "gpu", Label: "gpu", Up: true}); cmd != nil {

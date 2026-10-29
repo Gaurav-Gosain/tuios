@@ -439,7 +439,7 @@ func TestAPaneInAGlobalSessionRunsOnThePickedMachine(t *testing.T) {
 		t.Fatalf("the client never attached: %v\n%s", err, term.Snapshot())
 	}
 
-	rows := []string{"this machine", "alpha", "beta"}
+	rows := []string{thisMachineRow(), "alpha", "beta"}
 	wants := []string{"here", "alpha", "beta"}
 	// 54 is every path, row and way of choosing three times over, and it puts
 	// eighteen panes on each machine, which is past what a link used to carry.
@@ -532,4 +532,15 @@ func cliWithin(t *testing.T, base string, env []string, args ...string) (string,
 	cmd.Env = append(cmd.Env, env...)
 	out, err := cmd.CombinedOutput()
 	return string(out), err
+}
+
+// thisMachineRow is the label the pickers give this machine: its host name
+// up to the first dot, then "(this machine)" (#1281).
+func thisMachineRow() string {
+	h, err := os.Hostname()
+	if err != nil || h == "" {
+		return "this machine"
+	}
+	h, _, _ = strings.Cut(h, ".")
+	return h + " (this machine)"
 }

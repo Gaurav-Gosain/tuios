@@ -196,7 +196,7 @@ func (m *OS) attachedWindowItems() []HostPickerItem {
 		}
 		it := HostPickerItem{Name: r.Host, Label: r.Host, Detail: detail, Up: up}
 		if r.Host == view.Here {
-			it.Label = "this machine"
+			it.Label = thisMachineLabel()
 			items = append(items, it)
 			continue
 		}

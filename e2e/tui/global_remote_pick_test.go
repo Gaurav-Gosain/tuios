@@ -103,7 +103,7 @@ func openNewSessionPicker(t *testing.T, term *tuitest.Terminal, byDock bool) {
 // machine's daemon and nowhere else.
 func TestTheSessionPickerMakesTheSessionWhereItWasAskedFor(t *testing.T) {
 	f := startGlobalFleet(t)
-	rows := []string{"this machine", "global"}
+	rows := []string{thisMachineRow(), "global"}
 	loops := pickLoops(16)
 	var wrong []string
 	for i := range loops {
@@ -167,7 +167,7 @@ func TestAPaneInAGlobalSessionOnAnotherMachineRunsOnThePickedMachine(t *testing.
 func TestFromAlphaThisMachineIsAlphasBeta(t *testing.T) {
 	f := startGlobalFleetWith(t, map[string]string{"beta": "someone@herebox"})
 	remoteGlobalPicks(t, f, "beta",
-		[]string{"alpha", "this machine"}, []string{"alpha", "here"}, []string{"beta"})
+		[]string{"alpha", thisMachineRow()}, []string{"alpha", "here"}, []string{"beta"})
 }
 
 // TestFromAlphaAHostOnlyThisMachineKnowsIsNotOffered: alpha has no entry for
@@ -177,7 +177,7 @@ func TestFromAlphaThisMachineIsAlphasBeta(t *testing.T) {
 func TestFromAlphaAHostOnlyThisMachineKnowsIsNotOffered(t *testing.T) {
 	f := startGlobalFleetWith(t, map[string]string{"home": "someone@herebox"})
 	remoteGlobalPicks(t, f, "home",
-		[]string{"alpha", "this machine"}, []string{"alpha", "here"}, []string{"beta", "home"})
+		[]string{"alpha", thisMachineRow()}, []string{"alpha", "here"}, []string{"beta", "home"})
 }
 
 // remoteGlobalPicks makes a global session on alpha, attaches it from this

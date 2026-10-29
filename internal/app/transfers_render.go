@@ -272,9 +272,9 @@ func (m *OS) renderTransfers() (string, overlay.Geometry, []overlayRowHit) {
 	})
 }
 
-// transferRoute is "this machine -> build": where a copy goes from and to.
+// transferRoute is "laptop -> build": where a copy goes from and to.
 func transferRoute(row session.TransferRow) string {
-	return transferPlace(row.Src.Host) + " -> " + transferPlace(row.Dst.Host)
+	return transferPlaceShort(row.Src.Host) + " -> " + transferPlaceShort(row.Dst.Host)
 }
 
 // transferStatus is the right-hand part of a panel row, and its ink.

@@ -59,7 +59,7 @@ func (m *OS) buildHostPickerItems() []HostPickerItem {
 	}
 	items := []HostPickerItem{{
 		Name:   "",
-		Label:  "this machine",
+		Label:  thisMachineLabel(),
 		Detail: "local",
 		Up:     true,
 	}}

@@ -377,7 +377,7 @@ func (m *OS) applyImagePasted(msg ImagePastedMsg) {
 		m.ShowNotification("The image was saved but its path was not pasted: "+err.Error(), "error", m.Settings.NotificationDuration*2)
 		return
 	}
-	where := "this machine"
+	where := thisMachineLabel()
 	if msg.Host != "" {
 		where = msg.Host
 	}
