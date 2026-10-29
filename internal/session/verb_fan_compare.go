@@ -514,9 +514,10 @@ func (d *Daemon) startFanVerify(sess *Session, dir, command string, env []string
 	}
 
 	var (
-		argv   []string
-		r, w   *os.File
-		extras []*os.File
+		argv    []string
+		r, w    *os.File
+		extras  []*os.File
+		release = func() {}
 	)
 	if runtime.GOOS == "windows" {
 		// No descriptor passes to a console process, so the window's own exit
@@ -529,6 +530,12 @@ func (d *Daemon) startFanVerify(sess *Session, dir, command string, env []string
 		}
 		extras = []*os.File{w}
 		argv = []string{"/bin/sh", "-c", fanVerifyScript, "tuios-verify", command}
+		// Held before the window starts. A handoff that asks after this is
+		// refused, and one that asked before holds paneLife, so the window
+		// cannot start until it is over. Held only once the window was in, a
+		// handoff could take paneLife in between, carry the window, and close
+		// the pipe the check reports on with the exec.
+		release = d.pipes.hold("a fan check is running in session " + sess.Name())
 	}
 	none := Grants(0)
 	sessionID := sess.ID
@@ -547,6 +554,7 @@ func (d *Daemon) startFanVerify(sess *Session, dir, command string, env []string
 		_ = w.Close()
 	}
 	if err != nil {
+		release()
 		if r != nil {
 			_ = r.Close()
 		}
@@ -560,7 +568,6 @@ func (d *Daemon) startFanVerify(sess *Session, dir, command string, env []string
 
 	status := make(chan *int, 1)
 	if r != nil {
-		release := d.pipes.hold("a fan check is running in session " + sess.Name())
 		go func() {
 			defer release()
 			status <- readVerifyStatus(r, sess, win.PTYID)

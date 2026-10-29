@@ -208,8 +208,9 @@ func (r *handoffRun) prepare() error {
 	r.undo = append(r.undo, d.manager.paneLife.Unlock)
 	// A pane started between the two is in now, and its gate shuts too.
 	shutAll()
-	// Asked again with no pane able to start: a check or a popup that
-	// started after the first answer holds a pipe by now.
+	// Asked again with no pane able to start: a check or a popup takes its
+	// pipe hold before it waits on paneLife, so one asked for after the first
+	// answer holds a pipe by now.
 	if err := d.handoffRefusal(); err != nil {
 		return err
 	}
