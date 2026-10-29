@@ -1,0 +1,268 @@
+{
+  "$schema": "../lessons.schema.json",
+  "id": "cockpit",
+  "title": "The agents view",
+  "blurb": "Answer, reply to and start agents from one view.",
+  "audience": "Agent herders",
+  "group": "agents",
+  "minutes": 5,
+  "surfaces": [
+    "web"
+  ],
+  "next": [
+    "automation",
+    "power-moves"
+  ],
+  "setup": [
+    {
+      "command": "newWindow",
+      "until": {
+        "on": "window.open"
+      }
+    },
+    {
+      "command": "mode",
+      "args": [
+        "terminal"
+      ]
+    },
+    {
+      "command": "type",
+      "args": [
+        "claude\r"
+      ],
+      "until": {
+        "on": "shell.start",
+        "where": {
+          "data.command": "claude"
+        }
+      },
+      "wait": 300
+    },
+    {
+      "command": "newWindow",
+      "until": {
+        "on": "window.open"
+      }
+    },
+    {
+      "command": "type",
+      "args": [
+        "gemini\r"
+      ],
+      "until": {
+        "on": "shell.start",
+        "where": {
+          "data.command": "gemini"
+        }
+      },
+      "wait": 300
+    },
+    {
+      "command": "newWindow",
+      "until": {
+        "on": "window.open"
+      }
+    },
+    {
+      "command": "type",
+      "args": [
+        "codex\r"
+      ],
+      "until": {
+        "on": "shell.start",
+        "where": {
+          "data.command": "codex"
+        }
+      },
+      "wait": 300
+    },
+    {
+      "command": "newWindow",
+      "until": {
+        "on": "window.open"
+      }
+    }
+  ],
+  "coach": {
+    "greet": [
+      "Three agents are at work. Let us answer them all from one view.",
+      "Hi. One agent asks, one waits, one is done. You handle all three."
+    ],
+    "finish": [
+      "You ran a whole team of agents from one view. Nice work."
+    ]
+  },
+  "steps": [
+    {
+      "id": "elsewhere",
+      "title": "Go do something else",
+      "note": "Three agents work in the other panes. They keep working while you are away.",
+      "keys": [
+        "ctrl+b",
+        "w",
+        "2"
+      ],
+      "done": {
+        "changed": "workspace",
+        "to": 2
+      },
+      "hint": "ctrl+b, then w, then 2.",
+      "learned": "switch workspace"
+    },
+    {
+      "id": "open",
+      "title": "Open the agents view",
+      "note": "Every agent on every workspace, grouped by what it needs from you.",
+      "keys": [
+        "ctrl+b",
+        "i"
+      ],
+      "done": {
+        "opened": "agents"
+      },
+      "hint": "ctrl+b, then i. The agents that need you are at the top.",
+      "learned": "agents view"
+    },
+    {
+      "id": "changes",
+      "title": "Read the edit first",
+      "note": "claude wants to edit style.css. ] goes to the next tab: the changes of its turn.",
+      "keys": [
+        "]"
+      ],
+      "done": {
+        "on": "agents.tab",
+        "where": {
+          "data.to": "changes"
+        }
+      },
+      "hint": "Press ]. [ goes back to the thread.",
+      "learned": "focus tabs"
+    },
+    {
+      "id": "allow",
+      "title": "Allow the edit",
+      "note": "Press a to allow it once. Press shift+a to always allow it. Press r to reject it, or shift+r to give a reason.",
+      "keys": [
+        "a"
+      ],
+      "done": {
+        "on": "agent",
+        "where": {
+          "data.harness": "claude-code",
+          "data.to": "working"
+        }
+      },
+      "hint": "Press a. claude goes back to work.",
+      "learned": "allow"
+    },
+    {
+      "id": "peek",
+      "title": "Peek at the question",
+      "note": "g goes to the top row: gemini asks which colours to use. Space reads its question.",
+      "keys": [
+        "g",
+        "space"
+      ],
+      "done": {
+        "opened": "peek"
+      },
+      "hint": "Press g, then space.",
+      "learned": "peek"
+    },
+    {
+      "id": "answer",
+      "title": "Pick an answer",
+      "note": "The number of an option answers. tuios presses it in gemini's pane.",
+      "keys": [
+        "2"
+      ],
+      "done": {
+        "on": "agent",
+        "where": {
+          "data.harness": "gemini-cli",
+          "data.to": "working"
+        }
+      },
+      "hint": "Press 2 for Tokyo Night.",
+      "learned": "answer"
+    },
+    {
+      "id": "reply",
+      "title": "Reply to a finished agent",
+      "note": "codex is done and waits at the top. r writes to it, and enter sends.",
+      "keys": [
+        "g",
+        "r",
+        {
+          "text": "add a test for an empty name"
+        },
+        "enter"
+      ],
+      "done": {
+        "on": "agent",
+        "where": {
+          "data.harness": "codex",
+          "data.to": "working"
+        }
+      },
+      "hint": "Press g, then r. Type the reply and press enter.",
+      "learned": "reply"
+    },
+    {
+      "id": "new",
+      "title": "Start three attempts",
+      "note": "An attempt is one agent that tries the task. Several attempts of one task make a fan. n opens the New agent sheet, + adds an attempt.",
+      "keys": [
+        "n",
+        {
+          "text": "add a footer"
+        },
+        "shift+tab",
+        "shift+tab",
+        "shift+tab",
+        "+",
+        "+",
+        "enter"
+      ],
+      "done": {
+        "seq": [
+          {
+            "opened": "newAgent"
+          },
+          {
+            "times": 3,
+            "of": {
+              "on": "window.open"
+            }
+          }
+        ]
+      },
+      "hint": "Press n and type the task. Press shift+tab three times to reach Attempts, + twice, then enter.",
+      "learned": "new agent"
+    },
+    {
+      "id": "compare",
+      "title": "Compare, then open one",
+      "note": "shift+g goes to the last row, an attempt. c shows the attempts of the fan side by side. Enter opens the one under the cursor.",
+      "keys": [
+        "G",
+        "c",
+        "enter"
+      ],
+      "done": {
+        "seq": [
+          {
+            "opened": "compare"
+          },
+          {
+            "closed": "agents"
+          }
+        ]
+      },
+      "hint": "Press shift+g, then c. Wait for the attempts to finish, then press enter.",
+      "learned": "compare"
+    }
+  ]
+}

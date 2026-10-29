@@ -1,0 +1,232 @@
+{
+  "$schema": "../lessons.schema.json",
+  "id": "pane-tricks",
+  "title": "Pane tricks",
+  "blurb": "A scratch pane, a pane in the corner, numbers, hints and the spotlight.",
+  "audience": "Busy screens",
+  "group": "everyday",
+  "minutes": 4,
+  "surfaces": [
+    "web"
+  ],
+  "next": [
+    "your-keys",
+    "power-moves"
+  ],
+  "setup": [
+    {
+      "command": "newWindow",
+      "until": {
+        "on": "window.open"
+      }
+    },
+    {
+      "command": "mode",
+      "args": [
+        "terminal"
+      ]
+    },
+    {
+      "command": "type",
+      "args": [
+        "rain\r"
+      ],
+      "until": {
+        "on": "shell.start",
+        "where": {
+          "data.command": "rain"
+        }
+      }
+    },
+    {
+      "command": "newWindow",
+      "until": {
+        "on": "window.open"
+      }
+    },
+    {
+      "command": "type",
+      "args": [
+        "cd projects/hello && git log --oneline\r"
+      ],
+      "until": {
+        "on": "shell.command",
+        "where": {
+          "data.command": "cd"
+        }
+      }
+    },
+    {
+      "command": "action",
+      "args": [
+        "select_window_1"
+      ]
+    }
+  ],
+  "coach": {
+    "greet": [
+      "A busy screen? These small tools keep it calm.",
+      "Hi. A scratch pane, a corner pane and the spotlight. Let us try them."
+    ],
+    "finish": [
+      "Scratch, pin, numbers, hints and the spotlight. Your screen is tidy now."
+    ]
+  },
+  "steps": [
+    {
+      "id": "scratch",
+      "title": "Open a scratch pane",
+      "note": "A pane that floats over the rest, for a quick job.",
+      "keys": [
+        "ctrl+b",
+        "g"
+      ],
+      "done": {
+        "opened": "scratch"
+      },
+      "hint": "Hold ctrl and tap b, let go, then g.",
+      "learned": "scratch pane"
+    },
+    {
+      "id": "scratch-hide",
+      "title": "Hide it, keep it",
+      "note": "The same keys hide it. It keeps running for next time.",
+      "keys": [
+        "ctrl+b",
+        "g"
+      ],
+      "done": {
+        "closed": "scratch"
+      },
+      "hint": "ctrl+b, then g again.",
+      "learned": "hide scratch"
+    },
+    {
+      "id": "pin",
+      "title": "Pin a pane",
+      "note": "p in window mode pins the pane you are on, the rain.",
+      "keys": [
+        "ctrl+b",
+        "esc",
+        "p"
+      ],
+      "done": {
+        "on": "pip",
+        "where": {
+          "data.to": {
+            "truthy": true
+          }
+        }
+      },
+      "hint": "ctrl+b, then esc for window mode. Then p.",
+      "learned": "pin a pane"
+    },
+    {
+      "id": "pip",
+      "title": "Watch it from another pane",
+      "note": "The pinned pane shows in a small corner window.",
+      "keys": [
+        "tab"
+      ],
+      "needs": "window",
+      "done": {
+        "on": "window.focus",
+        "where": {
+          "state.pip": {
+            "truthy": true,
+            "differs": "data.to"
+          }
+        }
+      },
+      "hint": "Press tab. The rain keeps falling in the corner.",
+      "learned": "picture in picture"
+    },
+    {
+      "id": "unpin",
+      "title": "Unpin it",
+      "note": "p again puts it away.",
+      "keys": [
+        "p"
+      ],
+      "needs": "window",
+      "done": {
+        "on": "pip",
+        "where": {
+          "data.to": {
+            "truthy": false
+          }
+        }
+      },
+      "hint": "Press p.",
+      "learned": "unpin"
+    },
+    {
+      "id": "labels",
+      "title": "Jump by number",
+      "note": "Every pane gets a big number. Type one to go there.",
+      "keys": [
+        "ctrl+b",
+        "Q",
+        "1"
+      ],
+      "done": {
+        "seq": [
+          {
+            "opened": "paneLabels"
+          },
+          {
+            "on": "window.focus"
+          }
+        ]
+      },
+      "hint": "ctrl+b, then shift+q. Then press 1 for the rain.",
+      "learned": "pane numbers"
+    },
+    {
+      "id": "hints",
+      "title": "Copy what you see",
+      "note": "Hints put a letter on each hash, path and link. Type it to copy.",
+      "keys": [
+        "ctrl+b",
+        "2",
+        "ctrl+b",
+        "F",
+        "a"
+      ],
+      "done": {
+        "seq": [
+          {
+            "opened": "hints"
+          },
+          {
+            "closed": "hints"
+          }
+        ]
+      },
+      "hint": "ctrl+b 2 goes to the git log. ctrl+b F shows the letters. Press a.",
+      "learned": "hints"
+    },
+    {
+      "id": "spotlight",
+      "title": "Light up one pane",
+      "note": "The spotlight dims the rest of the screen. Good for a demo.",
+      "keys": [
+        "ctrl+b",
+        "B",
+        "esc"
+      ],
+      "done": {
+        "seq": [
+          {
+            "opened": "spotlight"
+          },
+          {
+            "closed": "spotlight"
+          }
+        ]
+      },
+      "hint": "ctrl+b, then shift+b. Look, then esc turns it off.",
+      "learned": "spotlight"
+    }
+  ]
+}

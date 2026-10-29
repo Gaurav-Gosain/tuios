@@ -22,6 +22,7 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/input"
 	"github.com/Gaurav-Gosain/tuios/internal/learn"
+	"github.com/Gaurav-Gosain/tuios/internal/learn/lessons"
 	"github.com/Gaurav-Gosain/tuios/internal/ptyspawn"
 	"github.com/Gaurav-Gosain/tuios/internal/webshell"
 )
@@ -116,8 +117,7 @@ func main() {
 		cols, rows = v.Index(0).Int(), v.Index(1).Int()
 	}
 
-	// The shipped defaults with the tour's own looks pinned, so a change to a
-	// default does not move the screen the lessons describe.
+	// The shipped defaults, the screen a person sees after installing tuios.
 	cfg := learn.Config()
 	app.SetInputHandler(input.HandleInput)
 	config.ApplyAppearanceConfig(cfg, &config.Global)
@@ -145,9 +145,26 @@ func main() {
 		// takes the message.
 		go prog.Send(msg)
 	}
-	model := learn.New(osModel, func(e learn.Event) { bridge.emit(e.ToMap()) }, send)
-
 	inputPipe := newInputPipe()
+	// The lesson engine: it sets each step's scene and checks the person's
+	// progress, and the page draws the lesson.* events it sends.
+	var model *learn.Model
+	tutor, err := learn.NewLessons(lessons.SurfaceWeb, learn.LessonHooks{
+		Emit: func(e learn.Event) { bridge.emit(e.ToMap()) },
+		// The lesson's own goroutines call this, never a js.Func, so it may
+		// block, and two calls reach the program in order.
+		Send:  func(msg tea.Msg) { prog.Send(msg) },
+		Input: func(s string) { inputPipe.write([]byte(s)) },
+		State: func() map[string]any { return model.State().ToMap() },
+	})
+	if err != nil {
+		// The lessons are checked by the lint, so this is a broken build.
+		panic(err)
+	}
+	model = learn.New(osModel, func(e learn.Event) {
+		bridge.emit(e.ToMap())
+		tutor.Observe(e)
+	}, send)
 	// The transport's own options: the page's input, the output writer, and
 	// the size, the three things sip's MakeOptions supplies for a served
 	// session. The size has to be an option: with no TTY to ask, Bubble Tea
@@ -236,6 +253,30 @@ func main() {
 	}))
 	api.Set("unavailable", js.FuncOf(func(_ js.Value, _ []js.Value) any {
 		return js.ValueOf(stringMap(app.LearnUnavailableActions()))
+	}))
+	lessonsJSON, _ := lessons.JSON()
+	api.Set("lessons", js.FuncOf(func(_ js.Value, _ []js.Value) any {
+		return string(lessonsJSON)
+	}))
+	api.Set("lesson", js.FuncOf(func(_ js.Value, args []js.Value) any {
+		if len(args) == 0 {
+			return "lesson: no command"
+		}
+		strs := make([]string, len(args))
+		for i, a := range args {
+			strs[i] = a.String()
+		}
+		out, err := tutor.Command(strs[0], strs[1:]...)
+		if err != nil {
+			return err.Error()
+		}
+		if out == nil {
+			return nil
+		}
+		return js.ValueOf(out)
+	}))
+	api.Set("lessonState", js.FuncOf(func(_ js.Value, _ []js.Value) any {
+		return js.ValueOf(tutor.State())
 	}))
 	api.Set("commands", js.FuncOf(func(_ js.Value, _ []js.Value) any {
 		out := make([]any, len(learn.Commands))

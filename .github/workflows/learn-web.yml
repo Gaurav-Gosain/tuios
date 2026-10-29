@@ -47,7 +47,7 @@ jobs:
       # processes at once fail on the dpkg lock.
       - parallel:
           - name: Tests of the browser build's Go side
-            run: go test -count=1 ./internal/webshell/ ./internal/learn/
+            run: go test -count=1 ./internal/webshell/ ./internal/learn/...
 
           - name: Build
             run: cmd/tuios-wasm/build.sh learn-web
@@ -61,6 +61,20 @@ jobs:
         run: |
           PLAYWRIGHT_CORE="$RUNNER_TEMP/pw/node_modules/playwright-core/index.mjs" \
             node cmd/tuios-wasm/smoke.mjs learn-web "$RUNNER_TEMP/smoke.png"
+
+      # The basics track, every step by show me through the lesson engine,
+      # with a frame per step.
+      - name: Lesson smoke test in headless Chromium
+        run: |
+          PLAYWRIGHT_CORE="$RUNNER_TEMP/pw/node_modules/playwright-core/index.mjs" \
+            node cmd/tuios-wasm/smoke-lessons.mjs learn-web "$RUNNER_TEMP/lesson-frames" basics
+
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: lesson-frames
+          path: ${{ runner.temp }}/lesson-frames/
+          if-no-files-found: ignore
 
       - uses: actions/upload-artifact@v7
         with:

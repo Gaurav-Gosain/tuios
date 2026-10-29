@@ -1,0 +1,184 @@
+{
+  "$schema": "../lessons.schema.json",
+  "id": "basics",
+  "title": "The basics",
+  "blurb": "Windows, typing, the leader key and help. From zero.",
+  "audience": "New here",
+  "group": "start",
+  "minutes": 4,
+  "surfaces": [
+    "web",
+    "terminal"
+  ],
+  "next": [
+    "layouts",
+    "power-moves"
+  ],
+  "coach": {
+    "greet": [
+      "Hi, I am Tilly. We start from zero, one key at a time.",
+      "Hello. I live in a terminal too. Let us open your first window."
+    ],
+    "finish": [
+      "That is the basics. You can drive tuios now.",
+      "Windows, modes, the leader key and help. All yours."
+    ]
+  },
+  "steps": [
+    {
+      "id": "open-window",
+      "title": "Open a window",
+      "note": "You start in window mode. Keys move windows.",
+      "keys": [
+        "n"
+      ],
+      "needs": "window",
+      "done": {
+        "on": "window.open"
+      },
+      "hint": "Press n. You start in window mode, where n opens a window.",
+      "learned": "new window",
+      "web": {
+        "hint": "Click the dark area first, then press n."
+      }
+    },
+    {
+      "id": "start-typing",
+      "title": "Start typing in it",
+      "note": "i flips to typing mode. Watch the badge.",
+      "keys": [
+        "i"
+      ],
+      "needs": "window",
+      "done": {
+        "changed": "mode",
+        "to": "terminal"
+      },
+      "hint": "Press i. The badge turns green and says TYPING.",
+      "learned": "typing mode"
+    },
+    {
+      "id": "run-neofetch",
+      "title": "Say hi to the shell",
+      "note": "Your keys go to the program now.",
+      "keys": [
+        {
+          "text": "fastfetch"
+        },
+        "enter"
+      ],
+      "needs": "terminal",
+      "done": {
+        "ran": "fastfetch"
+      },
+      "hint": "Type fastfetch and press enter.",
+      "learned": "run a command"
+    },
+    {
+      "id": "split",
+      "title": "Split with the leader key",
+      "note": "ctrl+b, let go, then a key. It works in any mode.",
+      "keys": [
+        "ctrl+b",
+        "|"
+      ],
+      "done": {
+        "via": [
+          "prefix_split_vertical"
+        ],
+        "then": {
+          "on": "window.open"
+        }
+      },
+      "hint": "Hold ctrl, tap b, let go. A menu pops up. Now press | (shift and backslash).",
+      "learned": "split"
+    },
+    {
+      "id": "window-mode",
+      "title": "Back to window mode",
+      "note": "ctrl+b, then esc. The badge flips back.",
+      "keys": [
+        "ctrl+b",
+        "esc"
+      ],
+      "done": {
+        "changed": "mode",
+        "to": "window"
+      },
+      "hint": "ctrl+b, let go, then esc.",
+      "learned": "window mode"
+    },
+    {
+      "id": "hop",
+      "title": "Hop between windows",
+      "note": "The bright border follows you.",
+      "keys": [
+        "tab"
+      ],
+      "needs": "window",
+      "done": {
+        "on": "window.focus",
+        "where": {
+          "data.to": {
+            "truthy": true
+          }
+        }
+      },
+      "hint": "In window mode, tab moves to the next window.",
+      "learned": "next window"
+    },
+    {
+      "id": "close",
+      "title": "Close one",
+      "note": "No prompt, no fuss.",
+      "keys": [
+        "x"
+      ],
+      "needs": "window",
+      "done": {
+        "on": "window.close"
+      },
+      "hint": "In window mode, x closes the window with the bright border.",
+      "learned": "close"
+    },
+    {
+      "id": "help",
+      "title": "Every key, one page",
+      "note": "Forgot a key? It is in here.",
+      "keys": [
+        "?",
+        "esc"
+      ],
+      "needs": "window",
+      "done": {
+        "seq": [
+          {
+            "opened": "help"
+          },
+          {
+            "closed": "help"
+          }
+        ]
+      },
+      "hint": "Press ? to open help. Look around, then esc to close it.",
+      "learned": "help"
+    },
+    {
+      "id": "palette",
+      "title": "Or just search for it",
+      "note": "The command palette runs anything by name.",
+      "keys": [
+        "ctrl+p",
+        {
+          "text": "zoom"
+        },
+        "enter"
+      ],
+      "done": {
+        "zoomed": true
+      },
+      "hint": "ctrl+p opens the palette. Type zoom and press enter.",
+      "learned": "command palette"
+    }
+  ]
+}

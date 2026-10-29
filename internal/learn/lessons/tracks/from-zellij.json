@@ -1,0 +1,282 @@
+{
+  "$schema": "../lessons.schema.json",
+  "id": "from-zellij",
+  "title": "Coming from zellij",
+  "blurb": "Turn on the zellij keys, then use them: panes, tabs, floats, search.",
+  "audience": "zellij users",
+  "group": "start",
+  "minutes": 5,
+  "surfaces": [
+    "web",
+    "terminal"
+  ],
+  "next": [
+    "your-keys",
+    "layouts"
+  ],
+  "setup": [
+    {
+      "command": "newWindow",
+      "until": {
+        "on": "window.open"
+      }
+    },
+    {
+      "command": "mode",
+      "args": [
+        "window"
+      ]
+    }
+  ],
+  "coach": {
+    "greet": [
+      "Hi. One key turns on the zellij keys. Then panes, tabs and floats.",
+      "Coming from zellij? ctrl+g and lock mode are here too."
+    ],
+    "finish": [
+      "Done. Your zellij keys, locked and ready."
+    ]
+  },
+  "steps": [
+    {
+      "id": "preset",
+      "title": "Pick the zellij keys",
+      "note": "U opens the keybind presets. zellij is the fourth row.",
+      "keys": [
+        "U",
+        "down",
+        "down",
+        "down",
+        "enter"
+      ],
+      "needs": "window",
+      "done": {
+        "on": "keys",
+        "where": {
+          "data.to.preset": "zellij"
+        }
+      },
+      "hint": "Press shift+u. Press down three times to zellij, then enter.",
+      "learned": "zellij preset"
+    },
+    {
+      "id": "locked",
+      "title": "Locked, like zellij",
+      "note": "i starts typing. Every key now goes to the program, except ctrl+g.",
+      "keys": [
+        "i",
+        {
+          "text": "top"
+        },
+        "enter"
+      ],
+      "done": {
+        "on": "shell.start",
+        "where": {
+          "data.command": "top"
+        }
+      },
+      "hint": "Press i, type top and press enter. The lock in the dock means locked.",
+      "learned": "lock mode"
+    },
+    {
+      "id": "split-right",
+      "title": "Split right",
+      "note": "ctrl+g opens the menu. p is the pane menu, r splits right.",
+      "keys": [
+        "ctrl+g",
+        "p",
+        "r"
+      ],
+      "done": {
+        "via": [
+          "split_vertical"
+        ],
+        "then": {
+          "on": "window.open"
+        }
+      },
+      "hint": "Hold ctrl and tap g, let go. Then p, then r.",
+      "learned": "split right"
+    },
+    {
+      "id": "split-down",
+      "title": "Split down",
+      "note": "Same menu, d for down.",
+      "keys": [
+        "ctrl+g",
+        "p",
+        "d"
+      ],
+      "done": {
+        "via": [
+          "split_horizontal"
+        ],
+        "then": {
+          "on": "window.open"
+        }
+      },
+      "hint": "ctrl+g, then p, then d.",
+      "learned": "split down"
+    },
+    {
+      "id": "focus",
+      "title": "Move between panes",
+      "note": "h, j, k and l move. The menu stays open for more moves. Esc closes it.",
+      "keys": [
+        "ctrl+g",
+        "p",
+        "k",
+        "esc"
+      ],
+      "done": {
+        "via": [
+          "terminal_focus_left",
+          "terminal_focus_right",
+          "terminal_focus_up",
+          "terminal_focus_down"
+        ],
+        "then": {
+          "on": "window.focus"
+        }
+      },
+      "hint": "ctrl+g, then p, then k to move up. Esc when you are done.",
+      "learned": "move focus"
+    },
+    {
+      "id": "fullscreen",
+      "title": "Fullscreen, then back",
+      "note": "f in the pane menu, as in zellij.",
+      "keys": [
+        "ctrl+g",
+        "p",
+        "f",
+        "ctrl+g",
+        "p",
+        "f"
+      ],
+      "done": {
+        "seq": [
+          {
+            "zoomed": true
+          },
+          {
+            "zoomed": false
+          }
+        ]
+      },
+      "hint": "ctrl+g, p, f fills the screen. Do it again to put it back.",
+      "learned": "fullscreen"
+    },
+    {
+      "id": "float",
+      "title": "Float a pane",
+      "note": "e in the pane menu. Drag its title bar with the mouse to move it.",
+      "keys": [
+        "ctrl+g",
+        "p",
+        "e"
+      ],
+      "done": {
+        "on": "window.float",
+        "where": {
+          "data.floating": true
+        }
+      },
+      "hint": "ctrl+g, then p, then e.",
+      "learned": "floating pane"
+    },
+    {
+      "id": "tabs",
+      "title": "A new tab",
+      "note": "A zellij tab is a tuios workspace. t is the tab menu, n makes one.",
+      "keys": [
+        "ctrl+g",
+        "t",
+        "n"
+      ],
+      "done": {
+        "via": [
+          "new_workspace"
+        ],
+        "then": {
+          "on": "workspace"
+        }
+      },
+      "hint": "ctrl+g, then t, then n. The dock shows the new tab.",
+      "learned": "new tab"
+    },
+    {
+      "id": "search",
+      "title": "Scroll and search",
+      "note": "s is scroll mode, here copy mode. / searches, q leaves.",
+      "keys": [
+        "ctrl+g",
+        "s",
+        "/",
+        {
+          "text": "tuios"
+        },
+        "enter",
+        "q"
+      ],
+      "done": {
+        "seq": [
+          {
+            "opened": "copyMode"
+          },
+          {
+            "opened": "search"
+          },
+          {
+            "closed": "copyMode"
+          }
+        ]
+      },
+      "hint": "ctrl+g, then s. Then / and tuios and enter. q leaves.",
+      "learned": "search"
+    },
+    {
+      "id": "sessions",
+      "title": "Sessions and detach",
+      "keys": [
+        "ctrl+g",
+        "d"
+      ],
+      "setup": [
+        {
+          "command": "newWindow",
+          "args": [
+            "sessions"
+          ],
+          "until": {
+            "on": "window.open"
+          }
+        },
+        {
+          "command": "action",
+          "args": [
+            "toggle_zoom"
+          ],
+          "until": {
+            "zoomed": true
+          }
+        },
+        {
+          "command": "type",
+          "args": [
+            "tuios ls\r"
+          ]
+        }
+      ],
+      "hint": "",
+      "explainer": {
+        "art": "detach",
+        "body": "ctrl+g d detaches, as in zellij, and a daemon keeps it all running. ctrl+g o is the session manager. Put preset = \"zellij\" under [keybindings] to keep these keys.",
+        "href": "/docs/sessions",
+        "linkText": "How sessions work"
+      },
+      "learned": "detach"
+    }
+  ]
+}

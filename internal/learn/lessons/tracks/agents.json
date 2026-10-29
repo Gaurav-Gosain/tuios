@@ -1,0 +1,191 @@
+{
+  "$schema": "../lessons.schema.json",
+  "id": "agents",
+  "title": "Agents",
+  "blurb": "Run coding agents side by side and never miss a question.",
+  "audience": "Agent herders",
+  "group": "agents",
+  "minutes": 4,
+  "surfaces": [
+    "web"
+  ],
+  "next": [
+    "cockpit",
+    "automation"
+  ],
+  "setup": [
+    {
+      "command": "newWindow",
+      "args": [
+        "agent"
+      ],
+      "until": {
+        "on": "window.open"
+      }
+    },
+    {
+      "command": "mode",
+      "args": [
+        "terminal"
+      ]
+    }
+  ],
+  "coach": {
+    "greet": [
+      "Agents live in panes here. I will show you how to keep an eye on them.",
+      "Hi. Let us start an agent and check on it from elsewhere."
+    ],
+    "finish": [
+      "Now you can run agents and still get your own work done."
+    ]
+  },
+  "steps": [
+    {
+      "id": "rail",
+      "title": "Open the rail",
+      "note": "Every agent shows up here, with what it is doing.",
+      "keys": [
+        "ctrl+b",
+        "b"
+      ],
+      "done": {
+        "opened": "sidebar"
+      },
+      "hint": "ctrl+b, then b. The rail opens on the right.",
+      "learned": "rail"
+    },
+    {
+      "id": "start",
+      "title": "Start an agent",
+      "note": "A pretend Claude Code. It runs nowhere but here.",
+      "keys": [
+        {
+          "text": "claude"
+        },
+        "enter"
+      ],
+      "needs": "terminal",
+      "done": {
+        "agent": "working"
+      },
+      "hint": "Type claude and press enter. Watch the rail.",
+      "learned": "run an agent",
+      "web": {
+        "note": "A pretend Claude Code. It never leaves this tab."
+      }
+    },
+    {
+      "id": "elsewhere",
+      "title": "Go do something else",
+      "note": "It will ask you something soon. You will know.",
+      "keys": [
+        "ctrl+b",
+        "w",
+        "2"
+      ],
+      "done": {
+        "changed": "workspace",
+        "to": 2
+      },
+      "hint": "ctrl+b, then w, then 2. Keep an eye on the rail and the dock.",
+      "learned": "switch workspace"
+    },
+    {
+      "id": "jump",
+      "title": "Jump to the question",
+      "note": "The rail turns orange and the dock rings. ctrl+b j takes you there.",
+      "keys": [
+        "ctrl+b",
+        "j"
+      ],
+      "done": {
+        "on": "window.focus",
+        "where": {
+          "window(data.to).agent": {
+            "truthy": true
+          }
+        }
+      },
+      "hint": "Wait for the orange mark, then ctrl+b, then j.",
+      "learned": "jump to alert"
+    },
+    {
+      "id": "approve",
+      "title": "Say yes",
+      "note": "y approves. The mark turns green when it is done.",
+      "keys": [
+        "y"
+      ],
+      "needs": "terminal",
+      "setup": [
+        {
+          "command": "mode",
+          "args": [
+            "terminal"
+          ]
+        }
+      ],
+      "done": {
+        "agent": "done"
+      },
+      "hint": "Press y, or enter on Yes.",
+      "learned": "approve"
+    },
+    {
+      "id": "mail",
+      "title": "Agents that talk",
+      "keys": [
+        "ctrl+b",
+        "M"
+      ],
+      "setup": [
+        {
+          "command": "newWindow",
+          "args": [
+            "real machine"
+          ],
+          "until": {
+            "on": "window.open"
+          }
+        },
+        {
+          "command": "action",
+          "args": [
+            "toggle_zoom"
+          ],
+          "until": {
+            "zoomed": true
+          }
+        },
+        {
+          "command": "type",
+          "args": [
+            "tuios list-agents\r"
+          ]
+        }
+      ],
+      "hint": "",
+      "explainer": {
+        "art": "mail",
+        "body": "On a real machine agents find each other with tuios list-agents and mail each other. ctrl+b M opens the mail between them.",
+        "href": "/docs/agent-messaging",
+        "linkText": "Agent messaging"
+      },
+      "learned": "mail"
+    },
+    {
+      "id": "view",
+      "title": "Every agent in one view",
+      "note": "ctrl+b i opens the agents view. The next track, The agents view, shows what it does.",
+      "keys": [
+        "ctrl+b",
+        "i"
+      ],
+      "done": {
+        "opened": "agents"
+      },
+      "hint": "ctrl+b, then i. esc closes it.",
+      "learned": "agents view"
+    }
+  ]
+}

@@ -1,0 +1,268 @@
+{
+  "$schema": "lessons.schema.json",
+  "version": 1,
+  "groups": [
+    {
+      "id": "start",
+      "title": "Start here"
+    },
+    {
+      "id": "everyday",
+      "title": "Every day"
+    },
+    {
+      "id": "agents",
+      "title": "Agents"
+    },
+    {
+      "id": "build",
+      "title": "Build and ship"
+    },
+    {
+      "id": "yours",
+      "title": "Make it yours"
+    }
+  ],
+  "tracks": [
+    "basics",
+    "from-tmux",
+    "from-zellij",
+    "layouts",
+    "workspaces",
+    "power-moves",
+    "pane-tricks",
+    "agents",
+    "cockpit",
+    "automation",
+    "surfaces",
+    "review",
+    "ship",
+    "your-keys",
+    "make-it-yours",
+    "sessions"
+  ],
+  "coach": {
+    "greet": [
+      "Hi, I am Tilly. Let us learn this together.",
+      "Hello. {steps} short steps, and I will be right here."
+    ],
+    "finish": [
+      "Track done. Take a bow.",
+      "Every step, done. I am proud of you.",
+      "That is the whole track. Come back for another when you like."
+    ],
+    "hintedLead": [
+      "Got it.",
+      "There you go.",
+      "You worked it out."
+    ],
+    "reactions": {
+      "open": [
+        "A fresh window, all yours.",
+        "New window. Every session starts like that.",
+        "There it is. A shell of your own."
+      ],
+      "split": [
+        "Nice split.",
+        "Clean split. Two panes, one screen.",
+        "Split. My face works the same way."
+      ],
+      "close": [
+        "Closed, and the rest made room.",
+        "Tidy. One less window to think about.",
+        "Gone. Nothing else moved."
+      ],
+      "focus": [
+        "Nice hop. Watch the bright border follow you.",
+        "Focus moved. You are over there now.",
+        "Smooth. No mouse needed."
+      ],
+      "zoom": [
+        "Zoom in, zoom out. Handy for a closer look.",
+        "Full screen and back again.",
+        "Zoom is the quickest way to focus on one thing."
+      ],
+      "minimize": [
+        "Tucked away in the dock.",
+        "Minimized, not closed."
+      ],
+      "move": [
+        "Moved. The layout keeps up.",
+        "Everything shifted into place.",
+        "That window found a new spot."
+      ],
+      "swap": [
+        "Swapped. Same panes, new seats.",
+        "Nice swap."
+      ],
+      "rotate": [
+        "Rotated. The split turned on its side.",
+        "A quarter turn for the layout."
+      ],
+      "resize": [
+        "Resized. The rest made room.",
+        "A little bigger here, a little smaller there."
+      ],
+      "float": [
+        "Floating. It sits above the tiles now.",
+        "That one floats free."
+      ],
+      "rename": [
+        "Named. Easier to find later."
+      ],
+      "workspace": [
+        "Workspace {n}. A whole new desk.",
+        "Hello from workspace {n}.",
+        "Workspace {n}. Your other windows are safe where you left them."
+      ],
+      "send": [
+        "Sent to workspace {n}, and you followed it.",
+        "Packed up and moved to workspace {n}."
+      ],
+      "tiling": [
+        "Tiles snapped into place.",
+        "Tiling does the arranging for you."
+      ],
+      "layout": [
+        "{layout}. Same windows, new shape.",
+        "Switched to {layout}.",
+        "{layout} suits you."
+      ],
+      "theme": [
+        "New colours. Looks good.",
+        "Nice pick.",
+        "Fresh paint."
+      ],
+      "look": [
+        "Small change, different feel.",
+        "Looking sharp.",
+        "Very you."
+      ],
+      "help": [
+        "Help is always one key away.",
+        "Now you know where the answers live."
+      ],
+      "palette": [
+        "The palette finds any action by name.",
+        "Type what you want, press enter. That is the palette."
+      ],
+      "launcher": [
+        "The launcher opens programs fast.",
+        "Launched. No typing paths needed."
+      ],
+      "copy": [
+        "Copy mode, like vim. Your hands already know it.",
+        "Found it. Search works in any pane."
+      ],
+      "scrollback": [
+        "Scrollback, with every command marked.",
+        "Your whole history, one key away."
+      ],
+      "settings": [
+        "Settings live here. Nothing to edit by hand.",
+        "That is where the knobs are."
+      ],
+      "sidebar": [
+        "The rail shows every session at a glance.",
+        "There is the rail. Everything in one list."
+      ],
+      "switcher": [
+        "Every workspace at once.",
+        "The switcher. Pick a desk, any desk."
+      ],
+      "screensaver": [
+        "Nice screen saver. I like that one.",
+        "Pretty, right?"
+      ],
+      "typing": [
+        "Typing mode. Your keys go to the shell now.",
+        "Green badge. The shell is listening."
+      ],
+      "windowMode": [
+        "Back in window mode. Keys move windows again.",
+        "Window mode. Your keys drive tuios."
+      ],
+      "menu": [
+        "The menu shows what each key does.",
+        "That menu is there whenever you forget a key."
+      ],
+      "command": [
+        "The shell says hi back.",
+        "{command} ran in a real pane.",
+        "Nice. That ran just like on your machine."
+      ],
+      "tape": [
+        "The tape played itself. That was tuios driving.",
+        "All scripted. You just watched a tape."
+      ],
+      "agentWorking": [
+        "Your agent is working. You are free to wander.",
+        "The agent is on it."
+      ],
+      "agentDone": [
+        "The agent finished. You approved it from right here.",
+        "Done, and you never lost your place."
+      ],
+      "agent": [
+        "The agent is moving along."
+      ],
+      "showkeys": [
+        "Showkeys is on. Handy when you share your screen.",
+        "Now everyone watching can see your keys."
+      ],
+      "yank": [
+        "Yanked. It is on your clipboard.",
+        "Copied, vim style."
+      ],
+      "explainer": [
+        "Good to know.",
+        "Worth trying once tuios is on your machine.",
+        "That one needs a real machine. Now you know where to look."
+      ],
+      "skipped": [
+        "Skipped. You can come back to it any time.",
+        "No problem. On to the next one."
+      ],
+      "generic": [
+        "Nice.",
+        "You got it.",
+        "That is the one.",
+        "Smooth."
+      ]
+    },
+    "nudges": {
+      "idle": [
+        "Take your time. The hint on the card has the next key.",
+        "No rush. The glowing key is the one to press.",
+        "Still with you. Click the terminal first if keys do nothing."
+      ],
+      "wrongKeys": [
+        "Close. Check the order of the keys on the card.",
+        "Not that one. The hint on the card will help."
+      ],
+      "wrongModeWindow": [
+        "You are typing into the shell. ctrl+b, then esc, gets you to window mode."
+      ],
+      "wrongModeTerminal": [
+        "You are in window mode. Press i to type into the shell."
+      ],
+      "showMe": [
+        "Want a demo? Show me does it slowly, then it is your turn.",
+        "Stuck is fine. Show me will play the keys for you."
+      ],
+      "altBlocked": [
+        "Your Option chords are not reaching tuios. Something outside the browser may be taking them. The note on the card explains."
+      ],
+      "noWindow": [
+        "There is no window to work with. Press n for a new one."
+      ]
+    },
+    "poke": [
+      "That tickles.",
+      "My eyes are two panes and my mouth is a prompt.",
+      "You are doing fine.",
+      "Show me is there any time you want a demo.",
+      "Three esc presses take you out of the terminal."
+    ]
+  }
+}

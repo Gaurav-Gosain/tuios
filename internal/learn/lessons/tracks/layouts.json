@@ -1,0 +1,247 @@
+{
+  "$schema": "../lessons.schema.json",
+  "id": "layouts",
+  "title": "Layouts",
+  "blurb": "Tiles, a master and a stack, a scrolling strip, and floats.",
+  "audience": "Tidy minds",
+  "group": "everyday",
+  "minutes": 5,
+  "surfaces": [
+    "web",
+    "terminal"
+  ],
+  "next": [
+    "workspaces",
+    "power-moves"
+  ],
+  "setup": [
+    {
+      "command": "newWindow",
+      "until": {
+        "on": "window.open"
+      }
+    },
+    {
+      "command": "newWindow",
+      "until": {
+        "on": "window.open"
+      }
+    },
+    {
+      "command": "mode",
+      "args": [
+        "window"
+      ]
+    }
+  ],
+  "coach": {
+    "greet": [
+      "Layouts are my favourite part. My face is one.",
+      "Hi. Let us move some tiles around."
+    ],
+    "finish": [
+      "You shaped every layout there is. My face approves."
+    ]
+  },
+  "steps": [
+    {
+      "id": "preselect",
+      "title": "Choose where it lands",
+      "note": "alt and h, j, k or l picks the side. Then n.",
+      "keys": [
+        "alt+j",
+        "n"
+      ],
+      "needs": "window",
+      "done": {
+        "seq": [
+          {
+            "on": "action",
+            "where": {
+              "data.name": {
+                "prefix": "preselect_"
+              }
+            }
+          },
+          {
+            "on": "window.open"
+          }
+        ]
+      },
+      "hint": "Hold alt (option on a Mac), tap j, let go. Then n. The new window opens below.",
+      "learned": "preselect",
+      "terminal": {
+        "hint": "Hold alt, tap j, let go. Then n. On a Mac, set Option as Meta in your terminal first."
+      }
+    },
+    {
+      "id": "rotate",
+      "title": "Rotate the split",
+      "note": "Side by side becomes stacked, and back.",
+      "keys": [
+        "R"
+      ],
+      "needs": "window",
+      "done": {
+        "via": [
+          "rotate_split"
+        ],
+        "then": {
+          "moved": true
+        }
+      },
+      "hint": "Press shift+r.",
+      "learned": "rotate"
+    },
+    {
+      "id": "swap",
+      "title": "Swap two windows",
+      "note": "shift+h, shift+j, shift+k and shift+l push the window that way.",
+      "keys": [
+        "H"
+      ],
+      "needs": "window",
+      "done": {
+        "via": [
+          "swap_left",
+          "swap_right",
+          "swap_up",
+          "swap_down"
+        ],
+        "then": {
+          "moved": true
+        }
+      },
+      "hint": "shift+h swaps left. Try shift+l if nothing is to the left.",
+      "learned": "swap"
+    },
+    {
+      "id": "master",
+      "title": "Master and stack",
+      "note": "One big window on the left, the rest stacked on the right.",
+      "keys": [
+        "ctrl+p",
+        {
+          "text": "master-stack"
+        },
+        "enter"
+      ],
+      "done": {
+        "changed": "layout",
+        "to": "master-stack"
+      },
+      "hint": "ctrl+p opens the palette. Type master-stack and press enter.",
+      "learned": "master-stack"
+    },
+    {
+      "id": "ratio",
+      "title": "Grow the master",
+      "note": "> grows it, < shrinks it.",
+      "keys": [
+        ">",
+        ">"
+      ],
+      "needs": "window",
+      "done": {
+        "via": [
+          "resize_master_grow",
+          "resize_master_shrink"
+        ],
+        "then": {
+          "moved": true
+        }
+      },
+      "hint": "> is shift and the period key.",
+      "learned": "master ratio"
+    },
+    {
+      "id": "scrolling",
+      "title": "The scrolling strip",
+      "note": "Columns on an endless strip. New ones slide in, nothing shrinks.",
+      "keys": [
+        "ctrl+p",
+        {
+          "text": "scrolling"
+        },
+        "enter"
+      ],
+      "done": {
+        "changed": "layout",
+        "to": "scrolling"
+      },
+      "hint": "ctrl+p, type scrolling, press enter.",
+      "learned": "scrolling"
+    },
+    {
+      "id": "column-width",
+      "title": "Widen a column",
+      "note": "The strip scrolls to keep it in view.",
+      "keys": [
+        ">",
+        ">"
+      ],
+      "needs": "window",
+      "done": {
+        "via": [
+          "resize_master_grow",
+          "resize_master_shrink"
+        ],
+        "then": {
+          "moved": true
+        }
+      },
+      "hint": "> widens the column, < narrows it.",
+      "learned": "column width"
+    },
+    {
+      "id": "zoom",
+      "title": "Zoom in, then out",
+      "keys": [
+        "z",
+        "z"
+      ],
+      "needs": "window",
+      "done": {
+        "seq": [
+          {
+            "zoomed": true
+          },
+          {
+            "zoomed": false
+          }
+        ]
+      },
+      "hint": "z zooms the window. z again puts it back.",
+      "learned": "zoom"
+    },
+    {
+      "id": "float",
+      "title": "Let them float, then snap",
+      "note": "t turns tiling off. h and l snap to a half. Floating windows can overlap, and the snapped one sits on top.",
+      "keys": [
+        "t",
+        "h"
+      ],
+      "needs": "window",
+      "done": {
+        "seq": [
+          {
+            "changed": "tiling",
+            "to": false
+          },
+          {
+            "via": [
+              "snap_left",
+              "snap_right"
+            ],
+            "then": {
+              "moved": true
+            }
+          }
+        ]
+      },
+      "hint": "t floats every window. Then h snaps this one to the left half. Drag them with the mouse too.",
+      "learned": "float and snap"
+    }
+  ]
+}

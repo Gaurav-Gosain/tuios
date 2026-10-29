@@ -57,6 +57,11 @@ for face in Regular Bold; do
 	cp "$woff2" "$out/fonts/"
 done
 
+# The lessons, the same bytes tuios.lessons() returns. The docs site's hub
+# reads them without loading the wasm, and checks the hash in manifest.json
+# against the engine it loads.
+go run ./cmd/tuios-wasm/lessonsjson >"$out/lessons.json"
+
 if [ -d "$here/web" ]; then
 	cp -R "$here/web/." "$out/"
 fi
@@ -79,6 +84,7 @@ if [ "$raw" = 0 ]; then
 fi
 {
 	printf '{\n  "version": "%s",\n  "commit": "%s",\n' "$version" "$commit"
+	printf '  "lessons": "%s",\n' "$(sha "$out/lessons.json")"
 	printf '  "wasm": {"raw": %s, "gzip": %s, "brotli": %s},\n' \
 		"$rawsize" "$(size "$out/tuios.wasm.gz")" "$(size "$out/tuios.wasm.br")"
 	printf '  "files": {\n'

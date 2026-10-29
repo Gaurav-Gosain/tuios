@@ -10,6 +10,7 @@
 package learn
 
 import (
+	"reflect"
 	"strconv"
 	"sync"
 
@@ -60,6 +61,7 @@ const (
 	EventReviewNote      = "review.note"
 	EventReviewSend      = "review.send"
 	EventWorktree        = webshell.EventWorktree
+	EventCopyYank        = "copy.yank"
 )
 
 // Event is one thing that happened, as the page receives it.
@@ -268,8 +270,42 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 	m.report()
 	m.surfaces.sweep()
+	switch msg.(type) {
+	case tea.KeyPressMsg, tea.MouseReleaseMsg:
+		cmd = m.watchClipboard(cmd)
+	}
 	return m, cmd
 }
+
+// watchClipboard reports a clipboard write in cmd as a copy.yank event. A
+// yank in copy mode or the scrollback browser writes the clipboard through
+// tea.SetClipboard, whose message type Bubble Tea keeps to itself, so the
+// write is known by that type's name once the command has run.
+func (m *Model) watchClipboard(cmd tea.Cmd) tea.Cmd {
+	if cmd == nil {
+		return nil
+	}
+	return func() tea.Msg {
+		msg := cmd()
+		switch v := msg.(type) {
+		case tea.BatchMsg:
+			out := make(tea.BatchMsg, len(v))
+			for i, c := range v {
+				out[i] = m.watchClipboard(c)
+			}
+			return out
+		case nil:
+			return nil
+		}
+		if t := reflect.TypeOf(msg); t.Name() == "setClipboardMsg" && t.PkgPath() == clipboardPkg && t.Kind() == reflect.String {
+			m.emit(Event{Type: EventCopyYank, Data: map[string]any{"chars": len([]rune(reflect.ValueOf(msg).String()))}})
+		}
+		return msg
+	}
+}
+
+// clipboardPkg is Bubble Tea's import path, where setClipboardMsg lives.
+var clipboardPkg = reflect.TypeFor[tea.BatchMsg]().PkgPath()
 
 // report emits one event per change since the last Update.
 func (m *Model) report() {

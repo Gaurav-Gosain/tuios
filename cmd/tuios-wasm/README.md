@@ -11,6 +11,7 @@ server. Every pane runs a small fake shell (`internal/webshell`), and
 cmd/tuios-wasm/build.sh out/      # build the files the docs site needs
 node cmd/tuios-wasm/serve.mjs out/ 8765   # then open http://127.0.0.1:8765
 node cmd/tuios-wasm/smoke.mjs out/        # headless Chromium check
+node cmd/tuios-wasm/smoke-lessons.mjs out/ frames/ basics  # a track by show me, a frame per step
 ```
 
 `build.sh` writes:
@@ -22,8 +23,9 @@ node cmd/tuios-wasm/smoke.mjs out/        # headless Chromium check
 | `webterm.js`, `webterm.css`, `xterm.css` | the renderer, sip's xterm.js bundle |
 | `webterm-vtgl.js` | the vtgl renderer, which the page loads only for `?renderer=vtgl`. Only a sip that ships it as its own file has it |
 | `fonts/*.woff2` | JetBrains Mono Nerd Font, regular and bold |
-| `manifest.json` | the tuios commit, the sizes and the sha256 of every file |
-| `index.html` | a demo page with a five-step track, for trying a change |
+| `lessons.json` | every lesson, the same bytes `tuios.lessons()` returns. A page that lists tracks reads it without loading the wasm |
+| `manifest.json` | the tuios commit, the sizes and the sha256 of every file. `lessons` is the sha256 of `lessons.json` |
+| `index.html` | a demo page with a five-step track, for trying a change. `?track=basics` runs a track of the lessons instead |
 
 Pass `--raw` to keep `tuios.wasm` as well, which `serve.mjs` falls back to.
 
@@ -50,6 +52,9 @@ frame.
 | `tuios.actions()` | every keybinding action name mapped to its description |
 | `tuios.unavailable()` | the actions Learn mode turns off, mapped to the note each shows |
 | `tuios.commands()` | the command names `tuios.command` accepts |
+| `tuios.lessons()` | every lesson as a JSON string. See [Lessons](#lessons) |
+| `tuios.lesson(cmd, ...args)` | run a lesson command, below. Returns `null`, an error message as a string, or for `log` the events |
+| `tuios.lessonState()` | the running lesson, as the `lesson.*` events describe it |
 | `tuios.stop()` | end the program. The promise `go.run` returned resolves, and no event is sent. Drop every reference to the API and to the `Go` object after it, so the browser can free the memory. A call to the API after it throws an error |
 
 After `tuios.stop()`, the timers that the Go runtime set can still fire.
@@ -96,7 +101,7 @@ Events come in a fixed order for one key press: `key` first, then any
 | `tiling` | `{from, to}` | tiling on (`true`) or off |
 | `layout` | `{from, to}` | the layout mode: `"bsp"`, `"master-stack"` or `"scrolling"` |
 | `theme` | `{from, to}` | the theme id, such as `"catppuccin_mocha"` |
-| `setting` | `{name, from, to}` | a look changed. `name` is `"glyphs"` (the glyph set, `"default"` for the shipped one), `"borderStyle"` (such as `"rounded"`), or the config path of one of the looks below. Values are strings, as `tuios get-config` prints them, and an enum left unset reads as its default |
+| `setting` | `{name, from, to}` | a look changed. `name` is `"glyphs"` (the glyph set, `"default"` for the shipped one), `"borderStyle"` (such as `"rounded"`), `"showkeys"` (the showkeys overlay, `ctrl+b D k`: `"true"` or `"false"`), or the config path of one of the looks below. Values are strings, as `tuios get-config` prints them, and an enum left unset reads as its default |
 | `themeEdit` | `{changed}` | the theme editor's draft changed: `changed` is `true` once a colour differs from the saved theme, and `false` again after an undo, a save or a close |
 | `overlay.open` | `{name}` | an overlay opened. Names below |
 | `overlay.close` | `{name}` | an overlay closed |
@@ -111,6 +116,7 @@ Events come in a fixed order for one key press: `key` first, then any
 | `review.note` | `{action, path?, line?, text?, notes}` | a review note was saved. `action` is `"add"`, `"edit"` or `"remove"`. `notes` is how many notes the review holds now |
 | `review.send` | `{notes}` | `S` in the review marked this many notes as sent. Nothing leaves the tab: the dock says what `S` does on a real machine |
 | `worktree` | `{repo, branch, path}` | a worktree of the fake repository was made, with `ctrl+b U` |
+| `copy.yank` | `{chars}` | a yank in copy mode or the scrollback browser wrote the clipboard. `chars` is its length in characters. It comes after the key's other events |
 | `tml.open` | `{surface, windowId, title, owner, target}` | `tuios tml show` opened a TML surface. `target` is `"popup"` or `"pane"`. `owner` names the pane that ran the command, as the window's frame does |
 | `tml.input` | `{surface, state}` | the person changed the surface's state: a key, a click or typed text in a field that binds a state path. `state` is the whole state after it |
 | `tml.place` | `{surface, windowId, target}` | the person moved the surface to a popup or a pane (`ctrl+b t f`). A `window.float` event follows |
@@ -155,6 +161,81 @@ The looks a `setting` event names by config path:
 `appearance.dock_mode_pill`. tuios reads them again after a key, a mouse
 press, a command or a tape step, so a change shows in the event that follows
 that input.
+
+## Lessons
+
+The lessons are data in `internal/learn/lessons`: `tracks.json` lists the
+tracks in order with the hub's groups and the coach's shared lines, and
+`tracks/<id>.json` is one track. `lessons.schema.json` describes both.
+`tuios.lessons()` returns them joined into one document:
+
+```js
+{
+  version: 1,
+  groups: [{ id: "start", title: "Start here" }, ...],
+  coach: { greet, finish, hintedLead, reactions: { split: [...] }, nudges: { idle: [...] }, poke },
+  tracks: [{
+    id, title, blurb, audience, group, minutes,
+    surfaces: ["web", "terminal"],   // where the track is ready
+    next: ["layouts"], setup: [...], coach: { greet: [...], finish: [...] },
+    steps: [{ id, title, note, keys: ["ctrl+b", "|", { text: "ls" }], needs, setup,
+              done: { ... },         // the rule, below
+              hint, showMe, explainer: { art, body, href, linkText }, learned, try,
+              web: { title?, note?, hint? }, terminal: { ... } }]  // words for one surface
+  }]
+}
+```
+
+The coach's lines may hold `{name}` slots the page fills: `{n}` (the
+workspace), `{layout}`, `{command}`, `{steps}`, `{clean}` and `{total}`.
+
+A step's `done` is a rule, matched against the events above:
+
+| Rule | Done when |
+|---|---|
+| `{"on": T, "where": {...}}` | an event of type `T`, with each `where` path holding |
+| `{"changed": T, "to": V}` | a `T` event whose `data.to` is `V` |
+| `{"opened": N}`, `{"closed": N}` | the overlay `N` opened or closed |
+| `{"ran": C}` | the shell ran command `C` and knew it |
+| `{"ranLine": RE}` | the shell ran a line that matches |
+| `{"agent": S}` | a pane's agent moved to state `S` |
+| `{"via": [A, ...], "then": R}` | `R`, caused by one of these actions. An entry may be `{"prefix": "workspace_prefix_move_"}` |
+| `{"any": [R, ...]}`, `{"seq": [R, ...]}` | one of them, or each in turn |
+| `{"times": N, "of": R}` | `R`, `N` times |
+| `{"zoomed": B}`, `{"moved": true}` | a zoom in or out, or a settled move |
+| `{"notified": RE}`, `{"setting": N}` | a dock note that matches, or the look `N` changed |
+
+A `where` path is `data.x`, `state.x`, deeper such as `data.to.preset`, or
+`window(data.to).agent`: a field of the window in `state.windowList` whose id
+is at the inner path. Its value is a literal, or an object of checks that
+must all hold: `prefix`, `suffix`, `match` (a pattern), `truthy` (true or
+false), `not` (a value it must not be) and `differs` (a path whose value it
+must not equal). Patterns are RE2, which JavaScript reads too. A setup entry
+may name an `until` rule: the next entry waits for that event, up to 3
+seconds.
+
+The lesson engine runs in tuios. The page starts a lesson, draws the
+`lesson.*` events, and sends the commands below. It keeps no step logic.
+
+| Command | Arguments | What it does |
+|---|---|---|
+| `start` | `track`, `from?` | reset the screen, set the track's scene and start it. With `from`, the steps before it are played at speed first, for a resumed lesson |
+| `showMe` | | type the rest of the step's keys, and count the step as hinted |
+| `skip` | | play the step's keys at speed, and move on as skipped after 2.5 seconds if they did not finish it. An explainer is skipped at once |
+| `next` | | the person read the explainer step: done |
+| `back` | | go back one step and set its scene again |
+| `stop` | | end the lesson |
+| `log` | `"on"`, `"off"` or `"get"` | keep the events the engine was fed, and return them with `get`. For tests and the key debug panel |
+
+| Event | Data | When |
+|---|---|---|
+| `lesson.start` | `{track, title, total, from}` | the track's scene is set |
+| `lesson.step` | `{track, index, total, id, title, note, keys, needs, hint, learned, try, explainer?}` | a step's scene is set and its card can show. The words are the web's |
+| `lesson.keys` | `{index, pressed, wrong, wrongMode}` | a key lit or cleared the step's keycaps: `pressed` caps are lit |
+| `lesson.hint` | `{index, level, altBlocked, noWindow, nudge}` | the hint ladder moved. `level` is 0, 1 (the hint) or 2 (offer show me). `altBlocked`: the next key is an alt chord that never arrived, so something outside tuios may take it. `noWindow`: the step needs a window and there is none. `nudge` is the coach's reason to speak, `""` for none: `idle`, `wrongKeys`, `wrongModeWindow`, `wrongModeTerminal`, `showMe`, `altBlocked` or `noWindow` |
+| `lesson.press` | `{chord, down}` | show me holds or lets go of a key, for a keycap to light |
+| `lesson.done` | `{index, id, result, results, finished, lastAction, learned, explainer, event?}` | the step is done. `result` is `"clean"`, `"hinted"` or `"skipped"`. `event` is `{type, data}` of the event that finished it, which the coach reacts to |
+| `lesson.finish` | `{track, results, seconds}` | the last step is done |
 
 ## State
 
@@ -222,7 +303,10 @@ races a key. An unknown command or a bad argument does nothing.
 
 ## Learn mode
 
-The browser build runs in Learn mode (`app.OSOptions.LearnMode`):
+The browser build runs in Learn mode (`app.OSOptions.LearnMode`), with the
+shipped defaults: the screen a person sees after installing tuios. The dock
+and the window titles are at the top, and the rail is on the right. A lesson
+starts with `reset`, which closes the rail.
 
 - Nothing quits. The quit keys, the quit menu, Ctrl+C in window mode and any
   other quit show a note in the dock instead, and every pane stays open.

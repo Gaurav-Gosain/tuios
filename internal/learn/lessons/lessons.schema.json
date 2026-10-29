@@ -1,0 +1,170 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://tuios.dev/schemas/lessons.json",
+  "title": "tuios lessons",
+  "description": "tracks.json, or one tracks/<id>.json file. See cmd/tuios-wasm/README.md.",
+  "oneOf": [{ "$ref": "#/$defs/index" }, { "$ref": "#/$defs/track" }],
+  "$defs": {
+    "lines": { "type": "array", "items": { "type": "string" } },
+    "index": {
+      "type": "object",
+      "required": ["version", "groups", "tracks", "coach"],
+      "additionalProperties": false,
+      "properties": {
+        "$schema": { "type": "string" },
+        "version": { "const": 1 },
+        "groups": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["id", "title"],
+            "additionalProperties": false,
+            "properties": { "id": { "type": "string" }, "title": { "type": "string" } }
+          }
+        },
+        "tracks": { "type": "array", "items": { "type": "string" } },
+        "coach": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "greet": { "$ref": "#/$defs/lines" },
+            "finish": { "$ref": "#/$defs/lines" },
+            "hintedLead": { "$ref": "#/$defs/lines" },
+            "reactions": { "type": "object", "additionalProperties": { "$ref": "#/$defs/lines" } },
+            "nudges": { "type": "object", "additionalProperties": { "$ref": "#/$defs/lines" } },
+            "poke": { "$ref": "#/$defs/lines" }
+          }
+        }
+      }
+    },
+    "track": {
+      "type": "object",
+      "required": ["id", "title", "blurb", "audience", "group", "minutes", "surfaces", "steps"],
+      "additionalProperties": false,
+      "properties": {
+        "$schema": { "type": "string" },
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "blurb": { "type": "string" },
+        "audience": { "type": "string" },
+        "group": { "type": "string" },
+        "minutes": { "type": "integer" },
+        "surfaces": { "type": "array", "items": { "enum": ["web", "terminal"] } },
+        "next": { "type": "array", "items": { "type": "string" } },
+        "setup": { "type": "array", "items": { "$ref": "#/$defs/setup" } },
+        "coach": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": { "greet": { "$ref": "#/$defs/lines" }, "finish": { "$ref": "#/$defs/lines" } }
+        },
+        "steps": { "type": "array", "items": { "$ref": "#/$defs/step" } }
+      }
+    },
+    "setup": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "command": { "type": "string" },
+        "args": { "type": "array", "items": { "type": "string" } },
+        "input": { "type": "string" },
+        "until": { "$ref": "#/$defs/rule" },
+        "wait": { "type": "integer", "description": "Milliseconds. Prefer until." }
+      }
+    },
+    "words": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": { "title": { "type": "string" }, "note": { "type": "string" }, "hint": { "type": "string" } }
+    },
+    "key": {
+      "oneOf": [
+        { "type": "string", "description": "A chord in tuios's notation, such as ctrl+b" },
+        { "type": "object", "required": ["text"], "additionalProperties": false, "properties": { "text": { "type": "string" } } }
+      ]
+    },
+    "step": {
+      "type": "object",
+      "required": ["id", "title", "keys", "hint"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "note": { "type": "string" },
+        "keys": { "type": "array", "items": { "$ref": "#/$defs/key" } },
+        "needs": { "enum": ["window", "terminal"] },
+        "setup": { "type": "array", "items": { "$ref": "#/$defs/setup" } },
+        "done": { "$ref": "#/$defs/rule" },
+        "hint": { "type": "string" },
+        "showMe": { "type": "string" },
+        "explainer": {
+          "type": "object",
+          "required": ["art", "body", "href", "linkText"],
+          "additionalProperties": false,
+          "properties": {
+            "art": { "type": "string" },
+            "body": { "type": "string" },
+            "href": { "type": "string" },
+            "linkText": { "type": "string" }
+          }
+        },
+        "learned": { "type": "string" },
+        "try": { "type": "string" },
+        "web": { "$ref": "#/$defs/words" },
+        "terminal": { "$ref": "#/$defs/words" }
+      }
+    },
+    "check": {
+      "description": "A literal, or checks that must all hold.",
+      "oneOf": [
+        { "type": ["string", "number", "boolean", "null"] },
+        {
+          "type": "object",
+          "minProperties": 1,
+          "additionalProperties": false,
+          "properties": {
+            "prefix": { "type": "string" },
+            "suffix": { "type": "string" },
+            "match": { "type": "string", "description": "An RE2 pattern" },
+            "truthy": { "type": "boolean" },
+            "not": {},
+            "differs": { "type": "string", "description": "A path" }
+          }
+        }
+      ]
+    },
+    "rule": {
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": false,
+      "properties": {
+        "on": { "type": "string" },
+        "where": { "type": "object", "additionalProperties": { "$ref": "#/$defs/check" } },
+        "changed": { "type": "string" },
+        "to": {},
+        "opened": { "type": "string" },
+        "closed": { "type": "string" },
+        "ran": { "type": "string" },
+        "ranLine": { "type": "string" },
+        "agent": { "type": "string" },
+        "via": {
+          "type": "array",
+          "items": {
+            "oneOf": [
+              { "type": "string" },
+              { "type": "object", "required": ["prefix"], "additionalProperties": false, "properties": { "prefix": { "type": "string" } } }
+            ]
+          }
+        },
+        "then": { "$ref": "#/$defs/rule" },
+        "any": { "type": "array", "items": { "$ref": "#/$defs/rule" } },
+        "seq": { "type": "array", "items": { "$ref": "#/$defs/rule" } },
+        "times": { "type": "integer", "minimum": 1 },
+        "of": { "$ref": "#/$defs/rule" },
+        "zoomed": { "type": "boolean" },
+        "moved": { "const": true },
+        "notified": { "type": "string" },
+        "setting": { "type": "string" }
+      }
+    }
+  }
+}

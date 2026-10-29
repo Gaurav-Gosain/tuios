@@ -1,0 +1,345 @@
+{
+  "$schema": "../lessons.schema.json",
+  "id": "make-it-yours",
+  "title": "Look and feel",
+  "blurb": "Themes, a theme editor, glyphs, borders, titles and a screen saver.",
+  "audience": "Ricers",
+  "group": "yours",
+  "minutes": 5,
+  "surfaces": [
+    "web"
+  ],
+  "next": [
+    "sessions",
+    "power-moves"
+  ],
+  "setup": [
+    {
+      "command": "newWindow",
+      "args": [
+        "fastfetch"
+      ],
+      "until": {
+        "on": "window.open"
+      }
+    },
+    {
+      "command": "mode",
+      "args": [
+        "terminal"
+      ]
+    },
+    {
+      "command": "type",
+      "args": [
+        "fastfetch\r"
+      ],
+      "until": {
+        "on": "shell.command",
+        "where": {
+          "data.command": "fastfetch"
+        }
+      }
+    },
+    {
+      "command": "newWindow",
+      "args": [
+        "top"
+      ],
+      "until": {
+        "on": "window.open"
+      }
+    },
+    {
+      "command": "type",
+      "args": [
+        "top\r"
+      ],
+      "until": {
+        "on": "shell.start",
+        "where": {
+          "data.command": "top"
+        }
+      }
+    },
+    {
+      "command": "mode",
+      "args": [
+        "window"
+      ]
+    }
+  ],
+  "coach": {
+    "greet": [
+      "Let us make tuios look like yours. Colours first.",
+      "Hi. Themes, an editor, glyphs and borders. Pick what you like."
+    ],
+    "finish": [
+      "It looks like yours now. One line shares it with a friend."
+    ]
+  },
+  "steps": [
+    {
+      "id": "theme",
+      "title": "Try on a theme",
+      "note": "Type to filter, arrows to browse. Watch top change colour.",
+      "keys": [
+        "ctrl+p",
+        {
+          "text": "theme"
+        },
+        "enter",
+        {
+          "text": "nord"
+        },
+        "enter"
+      ],
+      "done": {
+        "seq": [
+          {
+            "opened": "themePicker"
+          },
+          {
+            "on": "theme"
+          },
+          {
+            "closed": "themePicker"
+          }
+        ]
+      },
+      "hint": "ctrl+p, type theme, enter. In the picker type nord, or browse with the arrows. Enter keeps it.",
+      "learned": "themes"
+    },
+    {
+      "id": "editor",
+      "title": "Open the theme editor",
+      "note": "ctrl+f shows only the dark themes. ctrl+e edits the theme under the cursor.",
+      "keys": [
+        "ctrl+p",
+        {
+          "text": "theme"
+        },
+        "enter",
+        "ctrl+f",
+        {
+          "text": "nord"
+        },
+        "ctrl+e"
+      ],
+      "done": {
+        "opened": "themeEditor"
+      },
+      "hint": "Open the theme picker again. ctrl+f, then type nord. ctrl+e opens the editor.",
+      "learned": "theme editor"
+    },
+    {
+      "id": "colour",
+      "title": "Change the accent colour",
+      "note": "Enter opens the colour picker. The arrows move the colour. Enter keeps it.",
+      "keys": [
+        "enter",
+        "right",
+        "right",
+        "up",
+        "up",
+        "enter"
+      ],
+      "done": {
+        "on": "themeEdit",
+        "where": {
+          "data.changed": true
+        }
+      },
+      "hint": "The cursor is on Accent. Press enter, then the arrow keys, then enter again.",
+      "learned": "edit a colour"
+    },
+    {
+      "id": "drop",
+      "title": "Drop the change",
+      "note": "On your machine, ctrl+s saves it as your own theme. Here, esc twice drops it.",
+      "keys": [
+        "esc",
+        "esc"
+      ],
+      "done": {
+        "closed": "themeEditor"
+      },
+      "hint": "Press esc. The dock asks first. Press esc again.",
+      "learned": "close the editor"
+    },
+    {
+      "id": "glyphs",
+      "title": "Pick heavy glyphs",
+      "note": "ctrl+b , opens the settings. / searches them. Glyphs are the shapes of frames and marks.",
+      "keys": [
+        "ctrl+b",
+        ",",
+        "/",
+        {
+          "text": "glyph"
+        },
+        "enter",
+        {
+          "text": "heavy"
+        },
+        "enter"
+      ],
+      "done": {
+        "on": "overlay.close",
+        "where": {
+          "data.name": "glyphPicker",
+          "state.glyphs": {
+            "truthy": true,
+            "not": "default"
+          }
+        }
+      },
+      "hint": "ctrl+b, then the comma key. Press / and type glyph. Enter opens the glyph picker. Type heavy and press enter.",
+      "learned": "settings"
+    },
+    {
+      "id": "borders",
+      "title": "Draw borders with them",
+      "note": "Set Border style to glyphs and the frames turn heavy.",
+      "keys": [
+        "esc",
+        "/",
+        {
+          "text": "border style"
+        },
+        "left"
+      ],
+      "done": {
+        "setting": "borderStyle"
+      },
+      "hint": "Esc clears the search. Press / and type border style. Left picks glyphs.",
+      "learned": "border style"
+    },
+    {
+      "id": "title",
+      "title": "Change the title style",
+      "note": "A title is a pill, a tab or plain text on the border.",
+      "keys": [
+        "esc",
+        "/",
+        {
+          "text": "title style"
+        },
+        "right"
+      ],
+      "done": {
+        "setting": "appearance.window_title_style"
+      },
+      "hint": "Esc clears the search. Press / and type title style. Right picks the next style.",
+      "learned": "title style"
+    },
+    {
+      "id": "row",
+      "title": "Mark the rail's current row",
+      "note": "The rail is open on the right. Current row sets how it marks where you are.",
+      "keys": [
+        "esc",
+        "/",
+        {
+          "text": "current row"
+        },
+        "right",
+        "esc",
+        "esc"
+      ],
+      "setup": [
+        {
+          "command": "action",
+          "args": [
+            "prefix_toggle_sidebar"
+          ],
+          "until": {
+            "opened": "sidebar"
+          }
+        }
+      ],
+      "done": {
+        "seq": [
+          {
+            "setting": "appearance.sidebar.row_style"
+          },
+          {
+            "closed": "settings"
+          }
+        ]
+      },
+      "hint": "Press / and type current row. Right picks the next style. Esc twice closes the page.",
+      "learned": "rail row style"
+    },
+    {
+      "id": "screensaver",
+      "title": "Start the screen saver",
+      "note": "It kicks in by itself when you step away. Give it a few seconds, then any key wakes it.",
+      "keys": [
+        "S",
+        "esc"
+      ],
+      "needs": "window",
+      "done": {
+        "seq": [
+          {
+            "opened": "screensaver"
+          },
+          {
+            "closed": "screensaver"
+          }
+        ]
+      },
+      "hint": "Press shift+s. Enjoy it, then press any key.",
+      "learned": "screen saver"
+    },
+    {
+      "id": "config",
+      "title": "Keep it forever",
+      "note": "Your picks, saved in one file.",
+      "keys": [
+        "i",
+        {
+          "text": "cat .config/tuios/config.toml"
+        },
+        "enter"
+      ],
+      "setup": [
+        {
+          "command": "action",
+          "args": [
+            "select_window_1"
+          ]
+        }
+      ],
+      "done": {
+        "ran": "cat"
+      },
+      "hint": "Press i to type, then cat .config/tuios/config.toml and enter.",
+      "learned": "config file"
+    },
+    {
+      "id": "share",
+      "title": "Share your theme",
+      "note": "One line holds the whole theme. Paste it in a chat.",
+      "keys": [
+        {
+          "text": "tuios theme share nord"
+        },
+        "enter"
+      ],
+      "needs": "terminal",
+      "done": {
+        "on": "shell.command",
+        "where": {
+          "data.line": {
+            "match": "^tuios theme share\\b"
+          },
+          "data.exitCode": 0
+        }
+      },
+      "hint": "Type tuios theme share nord and press enter.",
+      "learned": "theme share"
+    }
+  ]
+}

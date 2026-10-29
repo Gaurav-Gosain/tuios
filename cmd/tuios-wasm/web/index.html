@@ -36,6 +36,14 @@
   li.current { color: var(--text); border-color: var(--accent); }
   li.done { color: var(--ok); border-color: #2c4a2c; }
   li.done::before { content: "\2713  "; }
+  #card { display: none; margin-bottom: 14px; }
+  #card.on { display: block; }
+  #card h2 { margin: 4px 0 6px; font-size: 16px; }
+  #card p { margin: 6px 0; color: var(--muted); font-size: 13px; }
+  #card .hint { color: var(--text); }
+  #card kbd.lit { border-color: var(--accent); color: var(--accent); }
+  #card button { margin: 8px 6px 0 0; background: none; color: var(--text); border: 1px solid var(--line);
+    border-radius: 6px; padding: 4px 10px; font: inherit; cursor: pointer; }
   kbd { font: 12px ui-monospace, monospace; background: #232336; border: 1px solid #36364f;
     border-bottom-width: 2px; border-radius: 5px; padding: 1px 6px; color: var(--text); }
   #log { font: 11px ui-monospace, monospace; color: var(--muted); white-space: pre-wrap; margin: 0;
@@ -49,6 +57,14 @@
 </main>
 <aside>
   <h1>Learn <span>tuios</span></h1>
+  <div id="card">
+    <small id="count"></small>
+    <h2 id="title"></h2>
+    <p id="note"></p>
+    <p id="keys"></p>
+    <p id="hint" class="hint"></p>
+    <button id="showme">Show me</button><button id="skip">Skip</button><button id="next">Got it</button>
+  </div>
   <ol id="steps"></ol>
   <pre id="log"></pre>
 </aside>
@@ -83,6 +99,52 @@ const steps = [
 ];
 let current = 0;
 const list = document.getElementById('steps');
+
+// ?track=ID runs a track of the lessons tuios embeds (tuios.lessons()), with
+// the lesson engine in tuios: the page draws the lesson.* events and sends
+// tuios.lesson commands. smoke-lessons.mjs drives it.
+const trackId = new URLSearchParams(location.search).get('track');
+const card = { step: null, pressed: 0, level: 0, results: [] };
+function renderCard() {
+  const s = card.step;
+  const el = (id) => document.getElementById(id);
+  el('card').classList.toggle('on', !!s);
+  if (!s) return;
+  el('count').textContent = `${s.track}: step ${s.index + 1} of ${s.total}`;
+  el('title').textContent = s.title;
+  el('note').textContent = s.explainer ? s.explainer.body : s.note;
+  el('keys').innerHTML = s.keys.map((k, i) =>
+    `<kbd class="${i < card.pressed ? 'lit' : ''}">${typeof k === 'string' ? k : k.text}</kbd>`).join(' ');
+  el('hint').textContent = card.level > 0 && !s.explainer ? s.hint : '';
+  el('next').style.display = s.explainer ? '' : 'none';
+  el('showme').style.display = s.explainer ? 'none' : '';
+}
+function onLessonEvent(e) {
+  const d = e.data || {};
+  switch (e.type) {
+    case 'lesson.start':
+      steps.length = 0;
+      for (let i = 0; i < d.total; i++) steps.push({ html: '', done: () => false });
+      current = d.from;
+      break;
+    case 'lesson.step':
+      card.step = d; card.pressed = 0; card.level = 0;
+      if (steps[d.index]) steps[d.index].html = d.title;
+      break;
+    case 'lesson.keys': card.pressed = d.pressed; break;
+    case 'lesson.hint': card.level = d.level; break;
+    case 'lesson.done':
+      current = d.index + 1;
+      celebrate(d.finished);
+      break;
+    case 'lesson.finish': card.step = null; break;
+  }
+  renderSteps();
+  renderCard();
+}
+for (const [id, cmd] of [['showme', 'showMe'], ['skip', 'skip'], ['next', 'next']]) {
+  document.getElementById(id).addEventListener('click', () => { tuios.lesson(cmd); webterm.focus(); });
+}
 function renderSteps() {
   list.innerHTML = steps.map((s, i) =>
     `<li class="${i < current ? 'done' : i === current ? 'current' : ''}">${s.html}</li>`).join('');
@@ -100,6 +162,11 @@ function onEvent(e) {
   if (e.type !== 'key') {
     log.textContent = `${e.type} ${JSON.stringify(e.data || {})}\n` + log.textContent.slice(0, 4000);
   }
+  if (e.type.startsWith('lesson.')) {
+    onLessonEvent(e);
+    return;
+  }
+  if (trackId) return;
   if (current < steps.length && steps[current].done(e)) {
     current++;
     renderSteps();
@@ -199,6 +266,10 @@ function loadVtgl() {
         requestAnimationFrame(() => requestAnimationFrame(() => {
           mark('firstFrame');
           document.getElementById('boot').classList.add('gone');
+          if (trackId) {
+            const err = api.lesson('start', trackId);
+            if (err) console.error(err);
+          }
         }));
       }
       if (tap) tap.push(bytes);

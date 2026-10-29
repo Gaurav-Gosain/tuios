@@ -1,0 +1,188 @@
+{
+  "$schema": "../lessons.schema.json",
+  "id": "automation",
+  "title": "Automation",
+  "blurb": "Tapes that drive tuios, a JSON protocol, and hooks.",
+  "audience": "Scripters",
+  "group": "build",
+  "minutes": 4,
+  "surfaces": [
+    "web"
+  ],
+  "next": [
+    "agents",
+    "power-moves"
+  ],
+  "setup": [
+    {
+      "command": "newWindow",
+      "until": {
+        "on": "window.open"
+      }
+    },
+    {
+      "command": "mode",
+      "args": [
+        "terminal"
+      ]
+    }
+  ],
+  "coach": {
+    "greet": [
+      "Tapes let tuios drive itself. Let us watch one play.",
+      "Hi. A little scripting, and then a party."
+    ],
+    "finish": [
+      "You made tuios drive itself. That was fun to watch."
+    ]
+  },
+  "steps": [
+    {
+      "id": "read",
+      "title": "Read a tape",
+      "note": "A tape is a script of keys and commands.",
+      "keys": [
+        {
+          "text": "cat demo.tape"
+        },
+        "enter"
+      ],
+      "needs": "terminal",
+      "done": {
+        "ranLine": "^cat\\s+demo\\.tape"
+      },
+      "hint": "Type cat demo.tape and press enter.",
+      "learned": "tape files"
+    },
+    {
+      "id": "play",
+      "title": "Press play",
+      "note": "Hands off. tuios types it all.",
+      "keys": [
+        {
+          "text": "tuios tape play demo.tape"
+        },
+        "enter"
+      ],
+      "needs": "terminal",
+      "done": {
+        "on": "tape.finish"
+      },
+      "hint": "Type tuios tape play demo.tape and press enter. Then watch.",
+      "learned": "play a tape"
+    },
+    {
+      "id": "list",
+      "title": "Find more tapes",
+      "keys": [
+        {
+          "text": "tuios tape list"
+        },
+        "enter"
+      ],
+      "needs": "terminal",
+      "done": {
+        "ranLine": "^tuios\\s+tape\\s+(list|ls)"
+      },
+      "hint": "Type tuios tape list and press enter.",
+      "learned": "list tapes"
+    },
+    {
+      "id": "party",
+      "title": "Play the party tape",
+      "note": "Three programs, a zoom and a trip to workspace 2.",
+      "keys": [
+        {
+          "text": "tuios tape play party.tape"
+        },
+        "enter"
+      ],
+      "needs": "terminal",
+      "done": {
+        "on": "tape.finish"
+      },
+      "hint": "Type tuios tape play party.tape and press enter.",
+      "learned": "tapes"
+    },
+    {
+      "id": "protocol",
+      "title": "Drive it with JSON",
+      "keys": [
+        {
+          "text": "tuios list-verbs"
+        }
+      ],
+      "setup": [
+        {
+          "command": "newWindow",
+          "args": [
+            "real machine"
+          ],
+          "until": {
+            "on": "window.open"
+          }
+        },
+        {
+          "command": "action",
+          "args": [
+            "toggle_zoom"
+          ],
+          "until": {
+            "zoomed": true
+          }
+        },
+        {
+          "command": "type",
+          "args": [
+            "tuios list-verbs\r"
+          ]
+        }
+      ],
+      "hint": "",
+      "explainer": {
+        "art": "protocol",
+        "body": "The daemon speaks JSON lines on its socket. Open windows, type, read panes and wait for output from any script. tuios list-verbs lists it all.",
+        "href": "/docs/control-protocol",
+        "linkText": "The control protocol"
+      },
+      "learned": "control protocol"
+    },
+    {
+      "id": "hooks",
+      "title": "Run a command on events",
+      "keys": [
+        {
+          "text": "tuios list-hooks"
+        }
+      ],
+      "setup": [
+        {
+          "command": "type",
+          "args": [
+            "clear\r"
+          ],
+          "until": {
+            "on": "shell.command",
+            "where": {
+              "data.command": "clear"
+            }
+          }
+        },
+        {
+          "command": "type",
+          "args": [
+            "tuios list-hooks\r"
+          ]
+        }
+      ],
+      "hint": "",
+      "explainer": {
+        "art": "hooks",
+        "body": "Hooks run your shell commands when a window opens, focus moves, or an agent finishes. Put them in [hooks] in your config.",
+        "href": "/docs/hooks",
+        "linkText": "Hooks"
+      },
+      "learned": "hooks"
+    }
+  ]
+}

@@ -1,0 +1,297 @@
+{
+  "$schema": "../lessons.schema.json",
+  "id": "from-tmux",
+  "title": "Coming from tmux",
+  "blurb": "Turn on the tmux keys. Your fingers already know the rest.",
+  "audience": "tmux users",
+  "group": "start",
+  "minutes": 5,
+  "surfaces": [
+    "web",
+    "terminal"
+  ],
+  "next": [
+    "your-keys",
+    "workspaces"
+  ],
+  "setup": [
+    {
+      "command": "newWindow",
+      "until": {
+        "on": "window.open"
+      }
+    },
+    {
+      "command": "mode",
+      "args": [
+        "window"
+      ]
+    }
+  ],
+  "coach": {
+    "greet": [
+      "Coming from tmux? First we turn on your own keys.",
+      "Hi. ctrl+b leads here too, and the tmux preset does the rest."
+    ],
+    "finish": [
+      "Done. Your tmux keys work here, and window mode is a bonus."
+    ]
+  },
+  "steps": [
+    {
+      "id": "preset",
+      "title": "Pick the tmux keys",
+      "note": "U opens the keybind presets. tmux is the second row.",
+      "keys": [
+        "U",
+        "down",
+        "enter"
+      ],
+      "needs": "window",
+      "done": {
+        "on": "keys",
+        "where": {
+          "data.to.preset": "tmux"
+        }
+      },
+      "hint": "Press shift+u. Press down once to tmux, then enter.",
+      "learned": "tmux preset"
+    },
+    {
+      "id": "split-right",
+      "title": "Split right",
+      "note": "Same as tmux. Each split makes a new pane.",
+      "keys": [
+        "ctrl+b",
+        "%"
+      ],
+      "done": {
+        "via": [
+          "prefix_split_vertical"
+        ],
+        "then": {
+          "on": "window.open"
+        }
+      },
+      "hint": "Hold ctrl and tap b, let go, then % (shift+5).",
+      "learned": "split right"
+    },
+    {
+      "id": "split-down",
+      "title": "Split down",
+      "note": "Same as tmux.",
+      "keys": [
+        "ctrl+b",
+        "\""
+      ],
+      "done": {
+        "via": [
+          "prefix_split_horizontal"
+        ],
+        "then": {
+          "on": "window.open"
+        }
+      },
+      "hint": "ctrl+b, then \" (shift and the quote key).",
+      "learned": "split down"
+    },
+    {
+      "id": "move",
+      "title": "Move between panes",
+      "note": "Same arrows as tmux. One ctrl+b covers a few arrows in a row.",
+      "keys": [
+        "ctrl+b",
+        "left"
+      ],
+      "done": {
+        "via": [
+          "terminal_focus_left",
+          "terminal_focus_right",
+          "terminal_focus_up",
+          "terminal_focus_down"
+        ],
+        "then": {
+          "on": "window.focus"
+        }
+      },
+      "hint": "ctrl+b, then any arrow key.",
+      "learned": "move focus"
+    },
+    {
+      "id": "display-panes",
+      "title": "Jump by number",
+      "note": "ctrl+b q shows a number on each pane. Type one to go there.",
+      "keys": [
+        "ctrl+b",
+        "q",
+        "2"
+      ],
+      "done": {
+        "seq": [
+          {
+            "opened": "paneLabels"
+          },
+          {
+            "on": "window.focus"
+          }
+        ]
+      },
+      "hint": "ctrl+b, then q. Big numbers show. Press 2.",
+      "learned": "pane numbers"
+    },
+    {
+      "id": "zoom",
+      "title": "Zoom in, then out",
+      "note": "Same as tmux.",
+      "keys": [
+        "ctrl+b",
+        "z",
+        "ctrl+b",
+        "z"
+      ],
+      "done": {
+        "seq": [
+          {
+            "zoomed": true
+          },
+          {
+            "zoomed": false
+          }
+        ]
+      },
+      "hint": "ctrl+b z zooms. Do it again to unzoom.",
+      "learned": "zoom"
+    },
+    {
+      "id": "new-window",
+      "title": "A new workspace",
+      "note": "tuios calls a tmux window a workspace. Each workspace has its own panes.",
+      "keys": [
+        "ctrl+b",
+        "c"
+      ],
+      "done": {
+        "via": [
+          "new_workspace"
+        ],
+        "then": {
+          "on": "workspace"
+        }
+      },
+      "hint": "ctrl+b, then c. The dock shows the new workspace.",
+      "learned": "new window"
+    },
+    {
+      "id": "workspace",
+      "title": "Back to the last one",
+      "note": "ctrl+b p goes to the previous workspace, as in tmux.",
+      "keys": [
+        "ctrl+b",
+        "p"
+      ],
+      "done": {
+        "changed": "workspace",
+        "to": 1
+      },
+      "hint": "ctrl+b, then p. Your panes wait on workspace 1.",
+      "learned": "previous window"
+    },
+    {
+      "id": "copy-mode",
+      "title": "Copy mode, vim keys built in",
+      "note": "tmux used emacs keys unless you set mode-keys vi.",
+      "keys": [
+        "ctrl+b",
+        "[",
+        "/",
+        {
+          "text": "tuios"
+        },
+        "enter",
+        "q"
+      ],
+      "done": {
+        "seq": [
+          {
+            "opened": "copyMode"
+          },
+          {
+            "opened": "search"
+          },
+          {
+            "closed": "copyMode"
+          }
+        ]
+      },
+      "hint": "ctrl+b [ enters copy mode. / searches, enter jumps to the match, q leaves.",
+      "learned": "copy mode"
+    },
+    {
+      "id": "window-mode",
+      "title": "Meet window mode",
+      "note": "New: a mode with no prefix. Single keys move panes. i types into the pane, ctrl+b esc comes back.",
+      "keys": [
+        "i",
+        "ctrl+b",
+        "esc"
+      ],
+      "needs": "window",
+      "done": {
+        "seq": [
+          {
+            "changed": "mode",
+            "to": "terminal"
+          },
+          {
+            "changed": "mode",
+            "to": "window"
+          }
+        ]
+      },
+      "hint": "Press i. The badge says TYPING. Then ctrl+b and esc, and it says WINDOWS.",
+      "learned": "window mode"
+    },
+    {
+      "id": "detach",
+      "title": "Detach, same as ever",
+      "keys": [
+        "ctrl+b",
+        "d"
+      ],
+      "setup": [
+        {
+          "command": "newWindow",
+          "args": [
+            "sessions"
+          ],
+          "until": {
+            "on": "window.open"
+          }
+        },
+        {
+          "command": "action",
+          "args": [
+            "toggle_zoom"
+          ],
+          "until": {
+            "zoomed": true
+          }
+        },
+        {
+          "command": "type",
+          "args": [
+            "tuios ls\r"
+          ]
+        }
+      ],
+      "hint": "",
+      "explainer": {
+        "art": "detach",
+        "body": "ctrl+b d detaches, like tmux. A daemon keeps every pane running. tuios ls lists sessions, and ctrl+b s switches between them. Put preset = \"tmux\" under [keybindings] to keep these keys.",
+        "href": "/docs/sessions",
+        "linkText": "Sessions and attach"
+      },
+      "learned": "detach"
+    }
+  ]
+}

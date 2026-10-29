@@ -1,0 +1,387 @@
+{
+  "$schema": "../lessons.schema.json",
+  "id": "sessions",
+  "title": "Sessions and machines",
+  "blurb": "Sessions that outlive the terminal, other machines, and your phone.",
+  "audience": "Power users",
+  "group": "yours",
+  "minutes": 5,
+  "surfaces": [
+    "web"
+  ],
+  "next": [
+    "agents",
+    "automation"
+  ],
+  "setup": [
+    {
+      "command": "newWindow",
+      "args": [
+        "api"
+      ],
+      "until": {
+        "on": "window.open"
+      }
+    },
+    {
+      "command": "newWindow",
+      "args": [
+        "notes"
+      ],
+      "until": {
+        "on": "window.open"
+      }
+    },
+    {
+      "command": "action",
+      "args": [
+        "toggle_zoom"
+      ],
+      "until": {
+        "zoomed": true
+      }
+    },
+    {
+      "command": "mode",
+      "args": [
+        "terminal"
+      ]
+    }
+  ],
+  "coach": {
+    "greet": [
+      "Sessions keep your work when the terminal closes. Let us look around.",
+      "Hi. One rail for every session, every machine and your phone."
+    ],
+    "finish": [
+      "Your work outlives the terminal now, on every machine you have."
+    ]
+  },
+  "steps": [
+    {
+      "id": "detach",
+      "title": "Sessions outlive the terminal",
+      "keys": [
+        "ctrl+b",
+        "d"
+      ],
+      "setup": [
+        {
+          "command": "type",
+          "args": [
+            "clear\r"
+          ],
+          "until": {
+            "on": "shell.command",
+            "where": {
+              "data.command": "clear"
+            }
+          }
+        },
+        {
+          "command": "type",
+          "args": [
+            "tuios new -d work\r"
+          ]
+        }
+      ],
+      "hint": "",
+      "explainer": {
+        "art": "detach",
+        "body": "A session holds your workspaces and panes. The daemon keeps it running after you close the terminal. ctrl+b d detaches, and tuios attach work brings it back.",
+        "href": "/docs/sessions",
+        "linkText": "Sessions"
+      },
+      "learned": "sessions"
+    },
+    {
+      "id": "list",
+      "title": "List your sessions",
+      "note": "The demo prints what a real machine shows. There, ctrl+b S switches between them.",
+      "keys": [
+        {
+          "text": "tuios ls"
+        },
+        "enter"
+      ],
+      "needs": "terminal",
+      "setup": [
+        {
+          "command": "mode",
+          "args": [
+            "terminal"
+          ]
+        },
+        {
+          "command": "type",
+          "args": [
+            "clear\r"
+          ],
+          "until": {
+            "on": "shell.command",
+            "where": {
+              "data.command": "clear"
+            }
+          }
+        }
+      ],
+      "done": {
+        "ranLine": "^tuios (ls|list-sessions)\\b"
+      },
+      "hint": "Type tuios ls and press enter.",
+      "learned": "list sessions"
+    },
+    {
+      "id": "rail",
+      "title": "Find sessions in the rail",
+      "note": "The demo has one session, local. On your machine, every session is here.",
+      "keys": [
+        "ctrl+b",
+        "b"
+      ],
+      "done": {
+        "opened": "sidebar"
+      },
+      "hint": "ctrl+b, then b. The rail opens on the right.",
+      "learned": "rail"
+    },
+    {
+      "id": "goto",
+      "title": "Go to anything",
+      "note": "One list of agents, sessions, workspaces and panes. Type to filter.",
+      "keys": [
+        "ctrl+b",
+        "G",
+        {
+          "text": "api"
+        },
+        "enter"
+      ],
+      "done": {
+        "seq": [
+          {
+            "opened": "goto"
+          },
+          {
+            "on": "window.focus",
+            "where": {
+              "data.title": "api"
+            }
+          }
+        ]
+      },
+      "hint": "ctrl+b, then shift+g. Type api and press enter.",
+      "learned": "go to"
+    },
+    {
+      "id": "move",
+      "title": "Move a window elsewhere",
+      "keys": [
+        {
+          "text": "tuios move-window"
+        }
+      ],
+      "setup": [
+        {
+          "command": "action",
+          "args": [
+            "prefix_toggle_sidebar"
+          ],
+          "until": {
+            "opened": "sidebar"
+          }
+        },
+        {
+          "command": "type",
+          "args": [
+            "clear\r"
+          ],
+          "until": {
+            "on": "shell.command",
+            "where": {
+              "data.command": "clear"
+            }
+          }
+        },
+        {
+          "command": "type",
+          "args": [
+            "tuios move-window -s work -w build --to-session review\r"
+          ]
+        }
+      ],
+      "hint": "",
+      "explainer": {
+        "art": "clients",
+        "body": "tuios move-window sends a window to another session. The program in it keeps running, with its scrollback.",
+        "href": "/docs/sessions#move-a-window-to-another-session",
+        "linkText": "Move a window"
+      },
+      "learned": "move window"
+    },
+    {
+      "id": "note",
+      "title": "Leave a note for later",
+      "keys": [
+        "ctrl+b",
+        "I"
+      ],
+      "setup": [
+        {
+          "command": "type",
+          "args": [
+            "clear\r"
+          ],
+          "until": {
+            "on": "shell.command",
+            "where": {
+              "data.command": "clear"
+            }
+          }
+        },
+        {
+          "command": "type",
+          "args": [
+            "tuios note set next: run the migration\r"
+          ]
+        }
+      ],
+      "hint": "",
+      "explainer": {
+        "art": "detach",
+        "body": "A return note says what comes next. Press ctrl+b, then shift+i, to write one for the session. The dock shows it when you come back.",
+        "href": "/docs/sessions",
+        "linkText": "Sessions"
+      },
+      "learned": "return note"
+    },
+    {
+      "id": "restart",
+      "title": "Restart the daemon",
+      "keys": [
+        {
+          "text": "tuios restart-server"
+        }
+      ],
+      "setup": [
+        {
+          "command": "type",
+          "args": [
+            "clear\r"
+          ],
+          "until": {
+            "on": "shell.command",
+            "where": {
+              "data.command": "clear"
+            }
+          }
+        },
+        {
+          "command": "type",
+          "args": [
+            "tuios restart-server --dry-run\r"
+          ]
+        }
+      ],
+      "hint": "",
+      "explainer": {
+        "art": "detach",
+        "body": "A new tuios needs a new daemon. --dry-run shows what stops and what comes back. Each session comes back with its layout and pane history.",
+        "href": "/docs/daemon-restart",
+        "linkText": "Restart the daemon"
+      },
+      "learned": "restart"
+    },
+    {
+      "id": "hosts",
+      "title": "Your other machines",
+      "keys": [
+        {
+          "text": "tuios hosts"
+        }
+      ],
+      "setup": [
+        {
+          "command": "type",
+          "args": [
+            "clear\r"
+          ],
+          "until": {
+            "on": "shell.command",
+            "where": {
+              "data.command": "clear"
+            }
+          }
+        },
+        {
+          "command": "type",
+          "args": [
+            "tuios hosts\r"
+          ]
+        }
+      ],
+      "hint": "",
+      "explainer": {
+        "art": "remote",
+        "body": "tuios hosts add links another machine over ssh. Its sessions and agents show in your rail, and a pane can run there.",
+        "href": "/docs/remote-hosts",
+        "linkText": "Remote hosts"
+      },
+      "learned": "hosts"
+    },
+    {
+      "id": "phones",
+      "title": "Your phone and the browser",
+      "keys": [
+        {
+          "text": "tuios-web"
+        }
+      ],
+      "hint": "",
+      "explainer": {
+        "art": "clients",
+        "body": "tuios-web shows your sessions in a browser, on a phone too. Web Push tells your phone when an agent needs you.",
+        "href": "/docs/phones",
+        "linkText": "Phones"
+      },
+      "learned": "phones"
+    },
+    {
+      "id": "tasks",
+      "title": "Hand out work as cards",
+      "keys": [
+        {
+          "text": "tuios task add"
+        }
+      ],
+      "setup": [
+        {
+          "command": "type",
+          "args": [
+            "clear\r"
+          ],
+          "until": {
+            "on": "shell.command",
+            "where": {
+              "data.command": "clear"
+            }
+          }
+        },
+        {
+          "command": "type",
+          "args": [
+            "tuios task add -p 'Add a jitter option, with a test' make the backoff jitter configurable\r"
+          ]
+        }
+      ],
+      "hint": "",
+      "explainer": {
+        "art": "agents",
+        "body": "A task card is one piece of work in a session. An agent takes the oldest open card with tuios task claim --next. The card moves from todo to done.",
+        "href": "/docs/agent-messaging",
+        "linkText": "Agents that talk"
+      },
+      "learned": "task cards"
+    }
+  ]
+}

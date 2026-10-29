@@ -1,0 +1,173 @@
+{
+  "$schema": "../lessons.schema.json",
+  "id": "your-keys",
+  "title": "Your keys, your way",
+  "blurb": "Presets for tmux, screen and zellij, actions by name, every key.",
+  "audience": "Keyboard owners",
+  "group": "yours",
+  "minutes": 4,
+  "surfaces": [
+    "web"
+  ],
+  "next": [
+    "make-it-yours",
+    "power-moves"
+  ],
+  "setup": [
+    {
+      "command": "newWindow",
+      "until": {
+        "on": "window.open"
+      }
+    },
+    {
+      "command": "mode",
+      "args": [
+        "window"
+      ]
+    }
+  ],
+  "coach": {
+    "greet": [
+      "Your keys, your rules. Let us try a few presets.",
+      "Hi. Keys from tmux, screen or zellij, one menu away."
+    ],
+    "finish": [
+      "Any preset, any action by name. The keys are yours now."
+    ]
+  },
+  "steps": [
+    {
+      "id": "presets",
+      "title": "Open the keybind presets",
+      "note": "Each preset gives you the keys of another multiplexer.",
+      "keys": [
+        "U"
+      ],
+      "needs": "window",
+      "done": {
+        "opened": "presets"
+      },
+      "hint": "Press shift+u.",
+      "learned": "presets"
+    },
+    {
+      "id": "screen",
+      "title": "Try the screen keys",
+      "note": "The panel says which keys your programs lose. Screen's leader is ctrl+a.",
+      "keys": [
+        "down",
+        "down",
+        "enter"
+      ],
+      "done": {
+        "on": "keys",
+        "where": {
+          "data.to.preset": "screen"
+        }
+      },
+      "hint": "Press down twice to screen, then enter.",
+      "learned": "screen preset"
+    },
+    {
+      "id": "split",
+      "title": "Split the screen way",
+      "note": "ctrl+a, then shift+s, as in screen.",
+      "keys": [
+        "ctrl+a",
+        "S"
+      ],
+      "done": {
+        "via": [
+          "prefix_split_horizontal"
+        ],
+        "then": {
+          "on": "window.open"
+        }
+      },
+      "hint": "Hold ctrl and tap a, let go. Then shift+s.",
+      "learned": "split, screen keys"
+    },
+    {
+      "id": "next",
+      "title": "Hop with tab",
+      "note": "ctrl+a, then tab moves to the next region.",
+      "keys": [
+        "ctrl+a",
+        "tab"
+      ],
+      "done": {
+        "via": [
+          "prefix_next_window"
+        ],
+        "then": {
+          "on": "window.focus"
+        }
+      },
+      "hint": "ctrl+a, then tab.",
+      "learned": "next pane, screen keys"
+    },
+    {
+      "id": "back",
+      "title": "Back to the tuios keys",
+      "note": "Every preset is a row in the palette too.",
+      "keys": [
+        "ctrl+p",
+        {
+          "text": "preset"
+        },
+        "enter",
+        "up",
+        "up",
+        "enter"
+      ],
+      "done": {
+        "on": "keys",
+        "where": {
+          "data.to.preset": "tuios"
+        }
+      },
+      "hint": "ctrl+p, type preset, enter. Up twice to tuios, then enter.",
+      "learned": "switch presets"
+    },
+    {
+      "id": "by-name",
+      "title": "Run any action by name",
+      "note": "In the palette, # searches every action and shows its keys.",
+      "keys": [
+        "ctrl+p",
+        {
+          "text": "#zoom"
+        },
+        "enter"
+      ],
+      "done": {
+        "zoomed": true
+      },
+      "hint": "ctrl+p, type #zoom, then enter on Toggle zoom.",
+      "learned": "actions by name"
+    },
+    {
+      "id": "every-key",
+      "title": "Every key in one list",
+      "note": "Search it with /. Esc closes it.",
+      "keys": [
+        "ctrl+b",
+        "k",
+        "esc"
+      ],
+      "done": {
+        "seq": [
+          {
+            "opened": "keybinds"
+          },
+          {
+            "closed": "keybinds"
+          }
+        ]
+      },
+      "hint": "ctrl+b, then k. Look around, then esc.",
+      "learned": "keybinds list"
+    }
+  ]
+}

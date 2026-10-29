@@ -2,6 +2,7 @@ package learn
 
 import (
 	"sort"
+	"strconv"
 	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/app"
@@ -55,6 +56,9 @@ const (
 const (
 	SettingGlyphs      = "glyphs"
 	SettingBorderStyle = "borderStyle"
+	// SettingShowKeys is the showkeys overlay (ctrl+b D k), "true" or
+	// "false".
+	SettingShowKeys = "showkeys"
 )
 
 // lookPaths are the config options a lesson can check for a change, beyond
@@ -192,6 +196,7 @@ type Snapshot struct {
 	Windows    []windowSnap // every workspace, in the app's order
 	Glyphs     string       // the glyph set, "default" for the shipped one
 	Border     string       // the border style, such as "rounded"
+	ShowKeys   bool         // the showkeys overlay is on
 	Keys       keysSnap
 	PiP        string // the window picture-in-picture shows, "" for none
 	// Agents is the agents view's cursor while it is open.
@@ -222,6 +227,7 @@ func take(o *app.OS) Snapshot {
 		Overlays:  map[string]bool{},
 		Glyphs:    o.Settings.GlyphSet,
 		Border:    o.Settings.BorderStyle,
+		ShowKeys:  o.ShowKeys,
 		Moving:    len(o.Animations) > 0,
 		Keys:      keysSnap{Preset: config.PresetTuios, Leader: o.Settings.LeaderKey, Lock: o.Settings.Lock},
 		PiP:       o.PiPWindowID(),
@@ -488,6 +494,9 @@ func diff(prev, now Snapshot) []Event {
 	}
 	if prev.Border != now.Border {
 		add(EventSetting, "", map[string]any{"name": SettingBorderStyle, "from": prev.Border, "to": now.Border})
+	}
+	if prev.ShowKeys != now.ShowKeys {
+		add(EventSetting, "", map[string]any{"name": SettingShowKeys, "from": strconv.FormatBool(prev.ShowKeys), "to": strconv.FormatBool(now.ShowKeys)})
 	}
 	for i, path := range lookPaths {
 		if prev.Looks[i] != now.Looks[i] {

@@ -1,0 +1,247 @@
+{
+  "$schema": "../lessons.schema.json",
+  "id": "workspaces",
+  "title": "Workspaces",
+  "blurb": "Nine desktops in one terminal, and a side rail that shows it all.",
+  "audience": "Many projects",
+  "group": "everyday",
+  "minutes": 4,
+  "surfaces": [
+    "web",
+    "terminal"
+  ],
+  "next": [
+    "agents",
+    "power-moves"
+  ],
+  "setup": [
+    {
+      "command": "newWindow",
+      "until": {
+        "on": "window.open"
+      }
+    },
+    {
+      "command": "newWindow",
+      "until": {
+        "on": "window.open"
+      }
+    },
+    {
+      "command": "mode",
+      "args": [
+        "window"
+      ]
+    }
+  ],
+  "coach": {
+    "greet": [
+      "Nine workspaces, all yours. Let us visit one.",
+      "Hi. Time to spread out a little."
+    ],
+    "finish": [
+      "Nine desks and you know your way around all of them."
+    ]
+  },
+  "steps": [
+    {
+      "id": "visit",
+      "title": "Visit workspace 2",
+      "note": "Your two windows wait on workspace 1.",
+      "keys": [
+        "ctrl+b",
+        "w",
+        "2"
+      ],
+      "done": {
+        "changed": "workspace",
+        "to": 2
+      },
+      "hint": "ctrl+b, then w, then 2. The dock at the top shows where you are.",
+      "learned": "switch workspace"
+    },
+    {
+      "id": "fill",
+      "title": "Make it yours",
+      "note": "Each workspace has its own windows and layout.",
+      "keys": [
+        "n"
+      ],
+      "needs": "window",
+      "done": {
+        "on": "window.open",
+        "where": {
+          "data.workspace": 2
+        }
+      },
+      "hint": "In window mode, n opens a window here.",
+      "learned": "new window"
+    },
+    {
+      "id": "back",
+      "title": "Jump straight back",
+      "note": "alt and a number skips the prefix.",
+      "keys": [
+        "alt+1"
+      ],
+      "done": {
+        "changed": "workspace",
+        "to": 1
+      },
+      "hint": "Hold alt (option on a Mac) and press 1. ctrl+b w 1 does the same.",
+      "learned": "alt+number",
+      "web": {
+        "hint": "Hold alt (option on a Mac) and press 1. If the browser takes it, ctrl+b w 1 does the same."
+      },
+      "terminal": {
+        "hint": "Hold alt and press 1. On a Mac, set Option as Meta in your terminal. ctrl+b w 1 does the same."
+      }
+    },
+    {
+      "id": "send-stay",
+      "title": "Send a window, stay here",
+      "note": "ctrl+alt and a number sends the window away. You stay put.",
+      "keys": [
+        "ctrl+alt+2"
+      ],
+      "done": {
+        "on": "window.workspace",
+        "where": {
+          "data.to": 2
+        }
+      },
+      "hint": "Hold ctrl and alt (option on a Mac), then press 2. The window leaves, and you stay on workspace 1.",
+      "learned": "send and stay",
+      "terminal": {
+        "hint": "Hold ctrl and alt, then press 2. On a Mac, set Option as Meta in your terminal first."
+      }
+    },
+    {
+      "id": "send",
+      "title": "Send a window and follow",
+      "note": "In the workspace menu, shift and a number moves the window, and you go with it.",
+      "keys": [
+        "ctrl+b",
+        "w",
+        "#"
+      ],
+      "done": {
+        "via": [
+          {
+            "prefix": "workspace_prefix_move_"
+          }
+        ],
+        "then": {
+          "on": "workspace"
+        }
+      },
+      "hint": "ctrl+b, w, then shift+3, which is #.",
+      "learned": "move window"
+    },
+    {
+      "id": "rail",
+      "title": "Open the rail",
+      "note": "Sessions, windows, agents and files, at a glance.",
+      "keys": [
+        "ctrl+b",
+        "b"
+      ],
+      "done": {
+        "opened": "sidebar"
+      },
+      "hint": "ctrl+b, then b. The rail opens on the right.",
+      "learned": "rail"
+    },
+    {
+      "id": "walk-rail",
+      "title": "Walk the rail",
+      "note": "s steps in. j and k move, enter jumps there.",
+      "keys": [
+        "s",
+        "j",
+        "j",
+        "enter"
+      ],
+      "needs": "window",
+      "done": {
+        "seq": [
+          {
+            "on": "action",
+            "where": {
+              "data.name": "focus_sidebar"
+            }
+          },
+          {
+            "on": "workspace"
+          }
+        ]
+      },
+      "hint": "Press s. j twice lands on the first window, the one marked w1. Enter takes you there.",
+      "learned": "rail keys"
+    },
+    {
+      "id": "switcher",
+      "title": "See every workspace",
+      "note": "A picker with a preview of each one.",
+      "keys": [
+        "ctrl+b",
+        "W",
+        "enter"
+      ],
+      "done": {
+        "seq": [
+          {
+            "opened": "workspaceSwitcher"
+          },
+          {
+            "closed": "workspaceSwitcher"
+          }
+        ]
+      },
+      "hint": "ctrl+b, then shift+w. Arrows pick one, enter goes there.",
+      "learned": "workspace switcher"
+    },
+    {
+      "id": "remote",
+      "title": "Every session, every machine",
+      "keys": [
+        "ctrl+b",
+        "S"
+      ],
+      "setup": [
+        {
+          "command": "newWindow",
+          "args": [
+            "sessions"
+          ],
+          "until": {
+            "on": "window.open"
+          }
+        },
+        {
+          "command": "action",
+          "args": [
+            "toggle_zoom"
+          ],
+          "until": {
+            "zoomed": true
+          }
+        },
+        {
+          "command": "type",
+          "args": [
+            "tuios ls\r"
+          ]
+        }
+      ],
+      "hint": "",
+      "explainer": {
+        "art": "remote",
+        "body": "On your machine the rail lists every session, and sessions on your other machines too. ctrl+b S switches between them.",
+        "href": "/docs/session-rail",
+        "linkText": "The session rail"
+      },
+      "learned": "sessions"
+    }
+  ]
+}
