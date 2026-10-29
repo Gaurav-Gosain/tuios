@@ -74,7 +74,7 @@
     "words": {
       "type": "object",
       "additionalProperties": false,
-      "properties": { "title": { "type": "string" }, "note": { "type": "string" }, "hint": { "type": "string" } }
+      "properties": { "title": { "type": "string" }, "note": { "type": "string" }, "hint": { "type": "string" }, "waiting": { "type": "string" } }
     },
     "key": {
       "oneOf": [
@@ -93,6 +93,8 @@
         "keys": { "type": "array", "items": { "$ref": "#/$defs/key" } },
         "needs": { "enum": ["window", "terminal"] },
         "setup": { "type": "array", "items": { "$ref": "#/$defs/setup" } },
+        "after": { "type": "array", "items": { "$ref": "#/$defs/rule" }, "description": "Events the step waits on first, counted from the start of the lesson" },
+        "waiting": { "type": "string", "description": "What the card says until the after events came" },
         "done": { "$ref": "#/$defs/rule" },
         "hint": { "type": "string" },
         "showMe": { "type": "string" },

@@ -36,8 +36,7 @@
         "where": {
           "data.command": "claude"
         }
-      },
-      "wait": 300
+      }
     },
     {
       "command": "newWindow",
@@ -55,8 +54,7 @@
         "where": {
           "data.command": "gemini"
         }
-      },
-      "wait": 300
+      }
     },
     {
       "command": "newWindow",
@@ -74,8 +72,7 @@
         "where": {
           "data.command": "codex"
         }
-      },
-      "wait": 300
+      }
     },
     {
       "command": "newWindow",
@@ -118,6 +115,23 @@
         "ctrl+b",
         "i"
       ],
+      "after": [
+        {
+          "on": "agent",
+          "where": {
+            "data.harness": "claude-code",
+            "data.to": "needs_input"
+          }
+        },
+        {
+          "on": "agent",
+          "where": {
+            "data.harness": "gemini-cli",
+            "data.to": "needs_input"
+          }
+        }
+      ],
+      "waiting": "Wait for claude and gemini to ask. Their panes turn orange.",
       "done": {
         "opened": "agents"
       },
@@ -147,6 +161,16 @@
       "keys": [
         "a"
       ],
+      "after": [
+        {
+          "on": "agent",
+          "where": {
+            "data.harness": "claude-code",
+            "data.to": "needs_input"
+          }
+        }
+      ],
+      "waiting": "Wait for claude to ask to edit style.css.",
       "done": {
         "on": "agent",
         "where": {

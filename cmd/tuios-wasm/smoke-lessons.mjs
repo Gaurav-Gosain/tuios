@@ -66,13 +66,11 @@ try {
       seen = step.i + 1;
       // Let the card and the scene settle, as a reader would read the card.
       await page.waitForTimeout(400);
-      // A step can wait on the scene, such as an agent that asks after a few
-      // seconds. A reader waits for it and asks again, and so does this.
-      let fin = null;
-      for (let tries = 0; !fin && tries < 4; tries++) {
-        await page.evaluate((cmd) => window.tuios.lesson(cmd), step.data.explainer ? 'next' : 'showMe');
-        fin = await waitLesson('lesson.done', `(d) => d.index === ${i}`, seen, 8000).catch(() => null);
-      }
+      // One show me per step. A step that waits on the scene, such as an
+      // agent that asks after a few seconds, says so in its after events,
+      // and show me waits for them.
+      await page.evaluate((cmd) => window.tuios.lesson(cmd), step.data.explainer ? 'next' : 'showMe');
+      const fin = await waitLesson('lesson.done', `(d) => d.index === ${i}`, seen, 60000).catch(() => null);
       if (!fin) {
         failures.push(`${track}: step ${i} (${step.data.id}) was not done by show me`);
         await page.screenshot({ path: path.join(out, track, `${String(i + 1).padStart(2, '0')}-${step.data.id}-stuck.png`) });

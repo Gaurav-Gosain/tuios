@@ -115,7 +115,7 @@ function renderCard() {
   el('note').textContent = s.explainer ? s.explainer.body : s.note;
   el('keys').innerHTML = s.keys.map((k, i) =>
     `<kbd class="${i < card.pressed ? 'lit' : ''}">${typeof k === 'string' ? k : k.text}</kbd>`).join(' ');
-  el('hint').textContent = card.level > 0 && !s.explainer ? s.hint : '';
+  el('hint').textContent = card.waiting ? s.waiting : card.level > 0 && !s.explainer ? s.hint : '';
   el('next').style.display = s.explainer ? '' : 'none';
   el('showme').style.display = s.explainer ? 'none' : '';
 }
@@ -128,11 +128,11 @@ function onLessonEvent(e) {
       current = d.from;
       break;
     case 'lesson.step':
-      card.step = d; card.pressed = 0; card.level = 0;
+      card.step = d; card.pressed = 0; card.level = 0; card.waiting = false;
       if (steps[d.index]) steps[d.index].html = d.title;
       break;
     case 'lesson.keys': card.pressed = d.pressed; break;
-    case 'lesson.hint': card.level = d.level; break;
+    case 'lesson.hint': card.level = d.level; card.waiting = d.waiting; break;
     case 'lesson.done':
       current = d.index + 1;
       celebrate(d.finished);

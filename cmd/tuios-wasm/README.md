@@ -214,13 +214,18 @@ must not equal). Patterns are RE2, which JavaScript reads too. A setup entry
 may name an `until` rule: the next entry waits for that event, up to 3
 seconds.
 
+A step may name `after` rules, events it depends on, such as an agent
+asking, with a `waiting` line for the card. Each must have happened since
+the lesson started. Until then `lesson.hint` says `waiting`, the hint ladder
+does not start, and show me waits for them before it plays the keys.
+
 The lesson engine runs in tuios. The page starts a lesson, draws the
 `lesson.*` events, and sends the commands below. It keeps no step logic.
 
 | Command | Arguments | What it does |
 |---|---|---|
 | `start` | `track`, `from?` | reset the screen, set the track's scene and start it. With `from`, the steps before it are played at speed first, for a resumed lesson |
-| `showMe` | | type the rest of the step's keys, and count the step as hinted |
+| `showMe` | | type the rest of the step's keys, and count the step as hinted. A step that waits on its `after` events is played once they came |
 | `skip` | | play the step's keys at speed, and move on as skipped after 2.5 seconds if they did not finish it. An explainer is skipped at once |
 | `next` | | the person read the explainer step: done |
 | `back` | | go back one step and set its scene again |
@@ -230,9 +235,9 @@ The lesson engine runs in tuios. The page starts a lesson, draws the
 | Event | Data | When |
 |---|---|---|
 | `lesson.start` | `{track, title, total, from}` | the track's scene is set |
-| `lesson.step` | `{track, index, total, id, title, note, keys, needs, hint, learned, try, explainer?}` | a step's scene is set and its card can show. The words are the web's |
+| `lesson.step` | `{track, index, total, id, title, note, keys, needs, hint, waiting, learned, try, explainer?}` | a step's scene is set and its card can show. The words are the web's |
 | `lesson.keys` | `{index, pressed, wrong, wrongMode}` | a key lit or cleared the step's keycaps: `pressed` caps are lit |
-| `lesson.hint` | `{index, level, altBlocked, noWindow, nudge}` | the hint ladder moved. `level` is 0, 1 (the hint) or 2 (offer show me). `altBlocked`: the next key is an alt chord that never arrived, so something outside tuios may take it. `noWindow`: the step needs a window and there is none. `nudge` is the coach's reason to speak, `""` for none: `idle`, `wrongKeys`, `wrongModeWindow`, `wrongModeTerminal`, `showMe`, `altBlocked` or `noWindow` |
+| `lesson.hint` | `{index, level, altBlocked, noWindow, nudge, waiting}` | the hint ladder moved. `waiting`: the step's `after` events have not all come, so the card shows the step's `waiting` line, not the hint. `level` is 0, 1 (the hint) or 2 (offer show me). `altBlocked`: the next key is an alt chord that never arrived, so something outside tuios may take it. `noWindow`: the step needs a window and there is none. `nudge` is the coach's reason to speak, `""` for none: `idle`, `wrongKeys`, `wrongModeWindow`, `wrongModeTerminal`, `showMe`, `altBlocked` or `noWindow` |
 | `lesson.press` | `{chord, down}` | show me holds or lets go of a key, for a keycap to light |
 | `lesson.done` | `{index, id, result, results, finished, lastAction, learned, explainer, event?}` | the step is done. `result` is `"clean"`, `"hinted"` or `"skipped"`. `event` is `{type, data}` of the event that finished it, which the coach reacts to |
 | `lesson.finish` | `{track, results, seconds}` | the last step is done |

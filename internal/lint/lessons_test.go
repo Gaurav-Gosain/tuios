@@ -131,6 +131,9 @@ func TestLessonsMatchTheApp(t *testing.T) {
 			if s.Done != nil {
 				checkRule(where, s.Done)
 			}
+			for _, r := range s.After {
+				checkRule(where+" after", r)
+			}
 			for _, k := range s.Keys {
 				if k.Text == "" {
 					if err := lessons.CheckChord(k.Chord); err != nil {
@@ -148,7 +151,7 @@ func TestLessonsMatchTheApp(t *testing.T) {
 				continue
 			}
 			for _, o := range []*lessons.Override{s.Web, s.Terminal} {
-				if o != nil && o.Title == "" && o.Note == "" && o.Hint == "" {
+				if o != nil && o.Title == "" && o.Note == "" && o.Hint == "" && o.Waiting == "" {
 					t.Errorf("%s: an empty surface override", where)
 				}
 			}
@@ -160,13 +163,13 @@ func TestLessonsMatchTheApp(t *testing.T) {
 	for _, tr := range f.Tracks {
 		texts := []string{tr.Title, tr.Blurb, tr.Audience}
 		for _, s := range tr.Steps {
-			texts = append(texts, s.Title, s.Note, s.Hint, s.Learned)
+			texts = append(texts, s.Title, s.Note, s.Hint, s.Learned, s.Waiting)
 			if s.Explainer != nil {
 				texts = append(texts, s.Explainer.Body)
 			}
 			for _, o := range []*lessons.Override{s.Web, s.Terminal} {
 				if o != nil {
-					texts = append(texts, o.Title, o.Note, o.Hint)
+					texts = append(texts, o.Title, o.Note, o.Hint, o.Waiting)
 				}
 			}
 		}

@@ -41,6 +41,9 @@ type Lesson struct {
 	AltSeen  bool
 	Results  []Result
 	Ctx      Ctx
+	// happened marks, per step, which of its After events came, counted
+	// from the start of the lesson.
+	happened [][]bool
 
 	Started, StepStarted time.Time
 	// Active is the last time the person made progress, for the hint timer.
@@ -50,7 +53,46 @@ type Lesson struct {
 
 // Start begins a track.
 func Start(t *Track, now time.Time) *Lesson {
-	return &Lesson{Track: t, Ctx: NewCtx(nil), Started: now, StepStarted: now, Active: now}
+	l := &Lesson{Track: t, Ctx: NewCtx(nil), Started: now, StepStarted: now, Active: now}
+	l.happened = make([][]bool, len(t.Steps))
+	for i, s := range t.Steps {
+		l.happened[i] = make([]bool, len(s.After))
+	}
+	return l
+}
+
+// Observe takes every event of the lesson, also the ones Feed never sees,
+// such as a setup's or one between steps, and marks the After events of
+// the steps still to come. It reports whether the current step just became
+// ready.
+func (l *Lesson) Observe(e Event, now time.Time) bool {
+	before := l.Ready()
+	for i := max(l.Index, 0); i < len(l.Track.Steps); i++ {
+		for j, r := range l.Track.Steps[i].After {
+			if !l.happened[i][j] && r.Match(e, &Ctx{Mem: map[string]int{}}) {
+				l.happened[i][j] = true
+			}
+		}
+	}
+	if !before && l.Ready() {
+		// The hint ladder starts once there is something to do.
+		l.Active = now
+		return true
+	}
+	return false
+}
+
+// Ready reports whether every After event of the current step came.
+func (l *Lesson) Ready() bool {
+	if l.Index < 0 || l.Index >= len(l.happened) {
+		return true
+	}
+	for _, ok := range l.happened[l.Index] {
+		if !ok {
+			return false
+		}
+	}
+	return true
 }
 
 // Step is the current step, or nil once the track is done.
@@ -213,6 +255,9 @@ func RestartAt(keys []Key, pressed int, key string) int {
 
 // HintLevel is 0 for no hint, 1 for the hint, 2 for the hint and "show me".
 func (l *Lesson) HintLevel(now time.Time) int {
+	if !l.Ready() {
+		return 0
+	}
 	idle := now.Sub(l.Active)
 	switch {
 	case idle >= ShowMeAfter:

@@ -41,6 +41,8 @@ const (
 	// skipLimit is how long skip lets "show me" try before moving on.
 	skipLimit = 2500 * time.Millisecond
 	hintTick  = 250 * time.Millisecond
+	// readyLimit is the longest show me waits for a step's After events.
+	readyLimit = time.Minute
 )
 
 // LessonHooks connect a Lessons to the program it teaches.
@@ -118,6 +120,10 @@ func (r *Lessons) Observe(e Event) {
 		r.mu.Unlock()
 		return
 	}
+	// Every event counts toward a step's After events, also a setup's.
+	if l.Observe(le, now) && r.shown == l.Index {
+		out = append(out, r.hintEvent(now, true)...)
+	}
 	if e.Type == EventKey && !r.settingUp {
 		r.settleUntil = time.Time{}
 	}
@@ -125,6 +131,7 @@ func (r *Lessons) Observe(e Event) {
 	// the step's that just finished.
 	if r.settingUp || now.Before(r.settleUntil) {
 		r.mu.Unlock()
+		r.emit(out...)
 		return
 	}
 	if r.logging {
@@ -470,14 +477,31 @@ func (r *Lessons) play(g int, fast bool) {
 		return
 	}
 	r.playing = true
-	index, pressed := l.Index, l.Pressed
-	step := *l.Step()
+	index := l.Index
 	r.mu.Unlock()
 	defer func() {
 		r.mu.Lock()
 		r.playing = false
 		r.mu.Unlock()
 	}()
+	// A step that waits on an event, such as an agent asking, is played
+	// once it came: the keys before it would do nothing.
+	for end := time.Now().Add(readyLimit); ; time.Sleep(100 * time.Millisecond) {
+		r.mu.Lock()
+		gone := r.gen != g || r.lesson.Index != index
+		ready := r.lesson.Ready()
+		r.mu.Unlock()
+		if gone {
+			return
+		}
+		if ready || time.Now().After(end) {
+			break
+		}
+	}
+	r.mu.Lock()
+	pressed := r.lesson.Pressed
+	step := *r.lesson.Step()
+	r.mu.Unlock()
 	pace := func(slow, quick time.Duration) {
 		if fast {
 			time.Sleep(quick)
@@ -595,8 +619,14 @@ func (r *Lessons) tick(g int) {
 func (r *Lessons) hintData(now time.Time) map[string]any {
 	l := r.lesson
 	step := l.Step()
-	out := map[string]any{"level": 0, "altBlocked": false, "noWindow": false, "nudge": ""}
+	out := map[string]any{"level": 0, "altBlocked": false, "noWindow": false, "nudge": "", "waiting": false}
 	if r.phase != "running" || step == nil || step.Explainer != nil || r.shown != l.Index || r.settingUp {
+		return out
+	}
+	if !l.Ready() {
+		// The step waits on something to happen first: the card says
+		// what, and there is nothing to hint yet.
+		out["waiting"] = true
 		return out
 	}
 	level := l.HintLevel(now)
@@ -614,7 +644,7 @@ func (r *Lessons) hintEvent(now time.Time, force bool) []Event {
 		return nil
 	}
 	d := r.hintData(now)
-	key := fmt.Sprint(d["level"], d["altBlocked"], d["noWindow"], d["nudge"], r.lesson.Index)
+	key := fmt.Sprint(d["level"], d["altBlocked"], d["noWindow"], d["nudge"], d["waiting"], r.lesson.Index)
 	if key == r.lastHint && !force {
 		return nil
 	}
@@ -647,7 +677,7 @@ func (r *Lessons) stepEvent() Event {
 	data := map[string]any{
 		"track": l.Track.ID, "index": l.Index, "total": len(l.Track.Steps),
 		"id": s.ID, "title": s.Title, "note": s.Note, "keys": keys, "needs": s.Needs,
-		"hint": s.Hint, "learned": s.Learned, "try": s.Try,
+		"hint": s.Hint, "waiting": s.Waiting, "learned": s.Learned, "try": s.Try,
 	}
 	if e := s.Explainer; e != nil {
 		data["explainer"] = map[string]any{"art": e.Art, "body": e.Body, "href": e.Href, "linkText": e.LinkText}

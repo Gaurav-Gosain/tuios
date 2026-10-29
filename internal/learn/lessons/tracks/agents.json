@@ -98,6 +98,12 @@
         "ctrl+b",
         "j"
       ],
+      "after": [
+        {
+          "agent": "needs_input"
+        }
+      ],
+      "waiting": "Wait for the agent to ask. The rail turns orange when it does.",
       "done": {
         "on": "window.focus",
         "where": {

@@ -153,9 +153,10 @@ type Explainer struct {
 
 // Override holds a step's words for one surface.
 type Override struct {
-	Title string `json:"title,omitempty"`
-	Note  string `json:"note,omitempty"`
-	Hint  string `json:"hint,omitempty"`
+	Title   string `json:"title,omitempty"`
+	Note    string `json:"note,omitempty"`
+	Hint    string `json:"hint,omitempty"`
+	Waiting string `json:"waiting,omitempty"`
 }
 
 // Step is one thing to do.
@@ -168,8 +169,14 @@ type Step struct {
 	// wrong mode nudge.
 	Needs string  `json:"needs,omitempty"`
 	Setup []Setup `json:"setup,omitempty"`
-	Done  *Rule   `json:"done,omitempty"`
-	Hint  string  `json:"hint"`
+	// After are events the step depends on, such as an agent asking. Each
+	// must have happened since the lesson started before the step can be
+	// done: until then show me waits and the card says Waiting.
+	After []*Rule `json:"after,omitempty"`
+	// Waiting is what the card says while an After event has not come.
+	Waiting string `json:"waiting,omitempty"`
+	Done    *Rule  `json:"done,omitempty"`
+	Hint    string `json:"hint"`
 	// ShowMe is what "show me" types, when the keys' own bytes are not it.
 	ShowMe    string     `json:"showMe,omitempty"`
 	Explainer *Explainer `json:"explainer,omitempty"`
@@ -198,6 +205,9 @@ func (s Step) For(surface string) Step {
 	}
 	if o.Hint != "" {
 		s.Hint = o.Hint
+	}
+	if o.Waiting != "" {
+		s.Waiting = o.Waiting
 	}
 	return s
 }
@@ -361,6 +371,14 @@ func (t *Track) check() error {
 			if err := s.Done.compile(); err != nil {
 				return fmt.Errorf("step %s: %w", s.ID, err)
 			}
+		}
+		for _, r := range s.After {
+			if err := r.compile(); err != nil {
+				return fmt.Errorf("step %s after: %w", s.ID, err)
+			}
+		}
+		if (len(s.After) > 0) != (strings.TrimSpace(s.Waiting) != "") {
+			return fmt.Errorf("step %s: after and waiting go together", s.ID)
 		}
 	}
 	return nil
