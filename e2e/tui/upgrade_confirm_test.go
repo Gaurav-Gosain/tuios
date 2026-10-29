@@ -245,10 +245,11 @@ func TestPaneUpgradeTimesOut(t *testing.T) {
 
 // TestPaneUpgradeTakesOnlyKeysAtTheClient: while the dialog is up, nothing
 // that is not a key pressed at the client answers it: the other pane printing
-// the keys of Yes, send-keys and a tape's Press of j (which moves to Yes) and
-// Enter through the client, a bracketed paste of them, and answer-ask called from the other pane. The
-// dialog stays, the daemon is unchanged, and Esc then refuses. Each attempt
-// says yes, so a single one that got through would upgrade the daemon.
+// the keys of Yes, send-keys and a tape's Press of j and Enter through the
+// client, a bracketed paste of them, and answer-ask called from the other
+// pane. The dialog stays, the daemon is unchanged, and Esc then refuses. Each
+// attempt ends in Enter, so a single one that got through would answer the
+// dialog and close it.
 func TestPaneUpgradeTakesOnlyKeysAtTheClient(t *testing.T) {
 	r := newConfirmRig(t, "e2e-confirm-keys")
 	term := r.attach(t)
