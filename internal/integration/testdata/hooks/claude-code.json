@@ -92,7 +92,7 @@
   {
     "name": "Notification permission_prompt",
     "payload": {"session_id": "sess-1", "hook_event_name": "Notification", "notification_type": "permission_prompt", "message": "Claude needs your permission to use Bash"},
-    "want": {"state": "needs_input", "kind": "approval", "message": "Claude needs your permission to use Bash", "agent_session_id": "sess-1"}
+    "want": {"state": "needs_input", "kind": "approval", "message": "Claude needs your permission to use Bash", "agent_session_id": "sess-1", "if_state": "none,working,idle,done,errored,unknown"}
   },
   {
     "name": "Notification elicitation_dialog",
@@ -137,7 +137,7 @@
   {
     "name": "Notification untyped permission (older Claude Code)",
     "payload": {"session_id": "sess-1", "hook_event_name": "Notification", "message": "Claude needs your permission to use Bash"},
-    "want": {"state": "needs_input", "kind": "approval", "message": "Claude needs your permission to use Bash", "agent_session_id": "sess-1"}
+    "want": {"state": "needs_input", "kind": "approval", "message": "Claude needs your permission to use Bash", "agent_session_id": "sess-1", "if_state": "none,working,idle,done,errored,unknown"}
   },
   {
     "name": "Notification untyped idle (older Claude Code)",
@@ -208,6 +208,21 @@
     "name": "subagent PreToolUse",
     "payload": {"session_id": "sess-1", "hook_event_name": "PreToolUse", "agent_id": "a1", "agent_type": "Explore", "tool_name": "Read", "tool_input": {"file_path": "go.mod"}},
     "want": {"agent_session_id": "sess-1", "activity": {"event": "subagent_update", "agent_id": "a1", "tool": "Read", "target": "go.mod"}}
+  },
+  {
+    "name": "subagent PermissionRequest",
+    "payload": {"session_id": "sess-1", "hook_event_name": "PermissionRequest", "agent_id": "a1", "agent_type": "general-purpose", "tool_name": "Bash", "tool_input": {"command": "go test ./..."}},
+    "want": {"state": "needs_input", "kind": "approval", "message": "approve Bash: go test ./...", "agent_session_id": "sess-1", "subagent_id": "a1"}
+  },
+  {
+    "name": "subagent PostToolUse",
+    "payload": {"session_id": "sess-1", "hook_event_name": "PostToolUse", "agent_id": "a1", "agent_type": "general-purpose", "tool_name": "Read", "tool_input": {"file_path": "go.mod"}, "tool_response": {}},
+    "want": {"state": "working", "agent_session_id": "sess-1", "if_state": "needs_input", "if_subagent_id": "a1", "activity": {"event": "subagent_update", "agent_id": "a1", "tool": "Read", "target": "go.mod", "ok": true}}
+  },
+  {
+    "name": "subagent PermissionDenied",
+    "payload": {"session_id": "sess-1", "hook_event_name": "PermissionDenied", "agent_id": "a1", "agent_type": "general-purpose", "tool_name": "Bash", "tool_input": {"command": "go test ./..."}},
+    "want": {"state": "working", "agent_session_id": "sess-1", "if_state": "needs_input", "if_subagent_id": "a1"}
   },
   {
     "name": "subagent Notification",

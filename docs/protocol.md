@@ -5086,6 +5086,13 @@ The optional hook fields:
   or events.
 - `if_state`: comma-separated states. The report applies only while the window
   is in one of them.
+- `subagent_id`: with `needs_input` only, the subagent whose prompt the pane
+  shows, 1 to 128 letters, digits, `_`, `.`, `:`, `@` or `-`. Omitted, the
+  prompt is the pane's own agent's. Held in daemon memory.
+- `if_subagent_id`: the report applies only while the window is on a
+  `needs_input` that named this `subagent_id`, and is otherwise refused with
+  `if_state`. A subagent's hook clears the prompt it raised with it, and
+  leaves one the main agent or another subagent raised.
 - `harness_pid`: the pid of the harness process that ran the hook. Read only
   with `agent_session_id`, and held in daemon memory. It lets a new session
   from the same harness process pass the nested-session guard below. When it

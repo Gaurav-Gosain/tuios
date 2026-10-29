@@ -10878,3 +10878,12 @@ the runs with the real programs.
 | None (the branch) | The three tests pass | **guard** |
 
 Not controlled: the window-mode branch of `copyModeFocusKey`, `ctrl+c` in a `V` selection in single copy mode, and the `ctrl+c` entry in the multi copy legend. The multi copy test presses `ctrl+c` in a `V` selection, and that path shares the case above.
+## A subagent's prompt clears when the subagent goes on
+
+`TestSubagentApprovalClearsWhenTheSubagentGoesOn` drives a subagent's `PermissionRequest` and the main agent's `permission_prompt` Notification through the real `tuios agent-hook claude-code`, in both orders, then the subagent's `PostToolUse`, another subagent's, a `PermissionDenied`, and a subagent's `PostToolUse` under the main agent's own prompt. Each control was built into its own binary. Run on 2026-10-30 on macOS arm64.
+
+| Control: what was cut | Where it fails | Verdict |
+| --- | --- | --- |
+| The build before this change (upstream main at `92258aafe`) | "subagent A ran the tool it asked for: the pane is needs_input ("Claude needs your permission to use Bash"), want working" | **caught** |
+| The `if_subagent_id` check in `applyAgentReport` (`internal/session/agent_state.go`) | "subagent B ran a tool: the pane is working (""), want needs_input" | **caught** |
+| The `if_state` on the `permission_prompt` Notification (`internal/integration/hook_claude.go`) | "subagent A ran the tool it asked for: the pane is needs_input ("Claude needs your permission to use Bash"), want working": the Notification took the subagent's prompt over | **caught** |

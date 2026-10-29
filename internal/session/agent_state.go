@@ -163,6 +163,16 @@ type AgentReport struct {
 	// is one of these right now. It is how a hook says "clear the block once
 	// the tool ran" without also turning a finished pane back to working.
 	IfState []AgentState
+	// Subagent is the subagent a needs_input report waits on, empty when the
+	// prompt is the pane's own agent's. A harness that runs subagents shows
+	// their prompts as its own, and only the subagent's next event says the
+	// prompt was answered.
+	Subagent string
+	// IfSubagent, when not empty, applies the report only if the window waits
+	// on that subagent's prompt. It is how a subagent's hook clears the prompt
+	// it raised without clearing one the main agent or another subagent
+	// raised meanwhile.
+	IfSubagent string
 	// foreignPane says the harness that ran the hook does not run in the pane
 	// the report names. The verb handler sets it from harnessOutsidePane, and
 	// the report is then refused with foreign_pane before anything else is
@@ -492,6 +502,10 @@ func (s *Session) applyAgentReport(target string, r AgentReport) (AgentState, bo
 			}
 			return errAgentReportRefused(agentRefusedIfState)
 		}
+		if r.IfSubagent != "" && (!held || claim.subagent != r.IfSubagent) {
+			effective = prev
+			return errAgentReportRefused(agentRefusedIfState)
+		}
 		if reason := sessionGuard(w, claim, held, s.agentHarnessPIDs[w.ID].pid, s.agentSharedGuards[w.ID], r); reason != "" {
 			effective = prev
 			return errAgentReportRefused(reason)
@@ -521,6 +535,9 @@ func (s *Session) applyAgentReport(target string, r AgentReport) (AgentState, bo
 		// the harness pid: that agent has gone.
 		next.sawProcess = claim.sawProcess && r.State != AgentStateNone
 		next.identity = identityAfterReport(claim, r, next.harness)
+		if r.State == AgentStateNeedsInput {
+			next.subagent = r.Subagent
+		}
 		switch {
 		case override:
 			next.blocker = true

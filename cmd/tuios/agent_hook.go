@@ -631,14 +631,18 @@ func reportHookEvent(out agentHookOutcome, client verbCaller, hio agentHookIO) a
 	if r.State != "" {
 		res, dropped, err := reportHook(client, out.Session, out.Window, out.Harness, out.HarnessPID, r)
 		out.Unsupported = dropped
-		if err != nil {
+		switch {
+		case errors.Is(err, errConditionUnsupported):
+			out.Error = err.Error()
+		case err != nil:
 			out.Error = err.Error()
 			return out
+		default:
+			out.Applied, out.State, out.Reason = &res.Applied, res.State, res.Reason
+			out.ActivityRecorded = res.ActivityRecorded
+			out.TranscriptRefused = res.TranscriptRefused
+			out.StatusLineFlushed = flushAtTurnEnd(out, res, client, hio)
 		}
-		out.Applied, out.State, out.Reason = &res.Applied, res.State, res.Reason
-		out.ActivityRecorded = res.ActivityRecorded
-		out.TranscriptRefused = res.TranscriptRefused
-		out.StatusLineFlushed = flushAtTurnEnd(out, res, client, hio)
 	}
 	if alone != nil {
 		res, err := reportHookActivity(client, out.Session, out.Window, out.Harness, out.HarnessPID, r.SessionID, *alone)
@@ -781,7 +785,7 @@ type hookReportResult struct {
 // the ones every daemon takes. activity is the hook event for the pane's
 // activity ring; a daemon from before it drops it, and the report goes
 // without it.
-var hookFields = []string{"kind", "agent_session_id", "transcript_path", "transcript_leaf", "if_state", "harness_pid", "activity", "agent_cwd", "session_start"}
+var hookFields = []string{"kind", "agent_session_id", "transcript_path", "transcript_leaf", "if_state", "subagent_id", "if_subagent_id", "harness_pid", "activity", "agent_cwd", "session_start"}
 
 // setAgentStateParams asks the daemon which params its set-agent-state takes.
 //
@@ -839,6 +843,11 @@ func requireIfState(client verbCaller) error {
 	return nil
 }
 
+// errConditionUnsupported is reportHook's error for a report whose condition
+// the daemon predates, which is not sent. What else the event reports still
+// goes.
+var errConditionUnsupported = errors.New("the daemon predates if_subagent_id, so the subagent's report was not sent. It works once the daemon restarts")
+
 // reportHook sends one report. The hook fields go only to a daemon whose
 // set-agent-state lists them, and the ones it does not are returned as
 // dropped. A report with if_state is not sent at all to a daemon without it,
@@ -860,6 +869,8 @@ func reportHook(client verbCaller, sess, window, harness string, harnessPID int,
 		"agent_session_id": r.SessionID,
 		"transcript_path":  r.TranscriptPath,
 		"if_state":         r.IfState,
+		"subagent_id":      r.SubagentID,
+		"if_subagent_id":   r.IfSubagentID,
 		"agent_cwd":        r.Cwd,
 	} {
 		if v != "" {
@@ -896,6 +907,11 @@ func reportHook(client verbCaller, sess, window, harness string, harnessPID int,
 		}
 		if r.IfState != "" && !known["if_state"] {
 			return hookReportResult{}, dropped, errors.New("the daemon predates if_state, so a conditional report was not sent")
+		}
+		if r.IfSubagentID != "" && !known["if_subagent_id"] {
+			// Sent without it, a subagent's report would clear the main
+			// agent's prompt as well.
+			return hookReportResult{}, dropped, errConditionUnsupported
 		}
 	}
 	raw, err := client.Call("set-agent-state", params)

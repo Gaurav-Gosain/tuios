@@ -189,6 +189,9 @@ type agentClaim struct {
 	// not set the state, an if_state refusal, as Unix nanoseconds. It counts
 	// against a silence like a report that applied. See agent_silent.go.
 	heardAt int64
+	// subagent is the subagent the needs_input this claim holds waits on.
+	// See AgentReport.Subagent.
+	subagent string
 }
 
 // herdrAnchor is one process a herdr claim follows, named by pid and start

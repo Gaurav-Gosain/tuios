@@ -19,6 +19,7 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/federation"
 	"github.com/Gaurav-Gosain/tuios/internal/harness"
+	"github.com/Gaurav-Gosain/tuios/internal/integration"
 	"github.com/Gaurav-Gosain/tuios/internal/transcriptview"
 	"github.com/google/uuid"
 	"tuios.dev/vt"
@@ -1541,6 +1542,8 @@ func (d *Daemon) setAgentState(cs *connState, params json.RawMessage, ownPane bo
 		TranscriptPath string  `json:"transcript_path"`
 		TranscriptLeaf *string `json:"transcript_leaf"`
 		IfState        string  `json:"if_state"`
+		SubagentID     string  `json:"subagent_id"`
+		IfSubagentID   string  `json:"if_subagent_id"`
 		HarnessPID     int     `json:"harness_pid"`
 		// SessionStart marks a conversation's SessionStart. See
 		// AgentReport.SessionStart.
@@ -1598,6 +1601,17 @@ func (d *Daemon) setAgentState(cs *connState, params json.RawMessage, ownPane bo
 			return nil, invalidParam("kind", "kind describes a needs_input state, and this report is "+state.Name())
 		}
 	}
+	if p.SubagentID != "" {
+		if !integration.ValidSubagentID(p.SubagentID) {
+			return nil, invalidParam("subagent_id", "subagent_id is 1 to "+strconv.Itoa(integration.SubagentIDMax)+" letters, digits, '_', '.', ':', '@' or '-'")
+		}
+		if state != AgentStateNeedsInput {
+			return nil, invalidParam("subagent_id", "subagent_id names the subagent a needs_input state waits on, and this report is "+state.Name())
+		}
+	}
+	if p.IfSubagentID != "" && !integration.ValidSubagentID(p.IfSubagentID) {
+		return nil, invalidParam("if_subagent_id", "if_subagent_id is 1 to "+strconv.Itoa(integration.SubagentIDMax)+" letters, digits, '_', '.', ':', '@' or '-'")
+	}
 	var ifState []AgentState
 	for name := range strings.SplitSeq(p.IfState, ",") {
 		name = strings.TrimSpace(name)
@@ -1640,6 +1654,8 @@ func (d *Daemon) setAgentState(cs *connState, params json.RawMessage, ownPane bo
 		SessionID:  p.AgentSessionID,
 		HarnessPID: p.HarnessPID,
 		IfState:    ifState,
+		Subagent:   p.SubagentID,
+		IfSubagent: p.IfSubagentID,
 
 		// Only a report with a session id records its harness pid, so only
 		// that one needs the ancestry walk.

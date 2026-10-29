@@ -155,6 +155,11 @@ type Report struct {
 	// IfState is a comma-separated state list: the report applies only when
 	// the pane is in one of them.
 	IfState string `json:"if_state,omitempty"`
+	// SubagentID, on a needs_input report, is the subagent whose prompt it
+	// is, and IfSubagentID makes a report apply only while the pane waits on
+	// that subagent's prompt. A subagent's hook clears its own prompt with it.
+	SubagentID   string `json:"subagent_id,omitempty"`
+	IfSubagentID string `json:"if_subagent_id,omitempty"`
 	// Activity is the hook event itself, for the pane's activity ring: what
 	// was asked, which tool ran on what and how it ended, and what a turn
 	// ended with. An event StateActivity takes rides the state report, sent

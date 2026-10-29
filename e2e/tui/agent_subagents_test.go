@@ -246,3 +246,96 @@ func TestSubagentCountOnARestingRow(t *testing.T) {
 	saveFrame(t, term, "subagents-cleared")
 	alive(t, term, "after the subagents came and went")
 }
+
+// TestSubagentApprovalClearsWhenTheSubagentGoesOn drives a subagent's
+// permission prompt through the real `tuios agent-hook claude-code`, the way
+// Claude Code sends it: a PermissionRequest with the subagent's agent_id, and
+// a permission_prompt Notification with none, in either order. Once the
+// person answers, only the subagent's own PostToolUse says so, since the main
+// agent is still waiting on it. The pane has to leave needs_input then, and
+// not before:
+//
+//   - the subagent's PostToolUse after either order takes the pane back to
+//     working;
+//   - another subagent's PostToolUse leaves the prompt up, and so does the
+//     subagent's when the prompt up is the main agent's own;
+//   - a PermissionDenied of the subagent clears its prompt as well.
+//
+// It leaves a log of every hook's decision and the pane's state at each step.
+//
+// Negative control: against the base commit, the PostToolUse of the subagent
+// leaves the pane on needs_input and the first check after it fails. With the
+// if_subagent_id check taken out of applyAgentReport, the other subagent's
+// PostToolUse clears the prompt. With the if_state taken off the
+// permission_prompt Notification, the Notification takes the subagent's
+// prompt over and its PostToolUse no longer clears it.
+func TestSubagentApprovalClearsWhenTheSubagentGoesOn(t *testing.T) {
+	log := &stateLog{name: "subagent-approval"}
+	defer log.save(t)
+	base := t.TempDir()
+	killDaemon(t, base)
+	if out, err := tuiosCLI(t, base, "new", "e2e-lead", "--detach"); err != nil {
+		t.Fatalf("create e2e-lead: %v\n%s", err, out)
+	}
+	dir := workDirIn(t, base)
+	hook := func(payload string) {
+		t.Helper()
+		explained, err := subagentHook(base, dir, "e2e-lead", payload)
+		log.add("%s", explained)
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	expect := func(step, want string) {
+		t.Helper()
+		st := readAgentState(t, base, "e2e-lead", "0")
+		log.add("%-48s state=%s message=%q", step, st.State, st.Message)
+		if st.State != want {
+			t.Fatalf("%s: the pane is %s (%q), want %s", step, st.State, st.Message, want)
+		}
+	}
+	const (
+		subA      = "a3f09c2e71d4b5a68"
+		subB      = "a71d4b5a683f09c2e"
+		ask       = `{"hook_event_name":"PermissionRequest","session_id":"lead-1","agent_id":"%s","agent_type":"general-purpose","tool_name":"Bash","tool_input":{"command":"go test ./..."}}`
+		notify    = `{"hook_event_name":"Notification","session_id":"lead-1","notification_type":"permission_prompt","message":"Claude needs your permission to use Bash"}`
+		ran       = `{"hook_event_name":"PostToolUse","session_id":"lead-1","agent_id":"%s","agent_type":"general-purpose","tool_name":"Bash","tool_input":{"command":"go test ./..."},"tool_response":{"stdout":"ok"}}`
+		denied    = `{"hook_event_name":"PermissionDenied","session_id":"lead-1","agent_id":"%s","agent_type":"general-purpose","tool_name":"Bash","tool_input":{"command":"go test ./..."}}`
+		mainAsk   = `{"hook_event_name":"PermissionRequest","session_id":"lead-1","tool_name":"Bash","tool_input":{"command":"make deploy"}}`
+		startSubs = `{"hook_event_name":"SubagentStart","session_id":"lead-1","agent_id":"%s","agent_type":"general-purpose"}`
+	)
+	hook(`{"hook_event_name":"SessionStart","session_id":"lead-1","source":"startup"}`)
+	hook(`{"hook_event_name":"UserPromptSubmit","session_id":"lead-1","prompt":"run the tests in two agents"}`)
+	hook(fmt.Sprintf(startSubs, subA))
+	hook(fmt.Sprintf(startSubs, subB))
+	expect("two subagents at work", "working")
+
+	// The request, then the notification.
+	hook(fmt.Sprintf(ask, subA))
+	hook(notify)
+	expect("subagent A asks, request first", "needs_input")
+	hook(fmt.Sprintf(ran, subB))
+	expect("subagent B ran a tool", "needs_input")
+	hook(fmt.Sprintf(ran, subA))
+	expect("subagent A ran the tool it asked for", "working")
+
+	// The notification, then the request.
+	hook(notify)
+	hook(fmt.Sprintf(ask, subA))
+	expect("subagent A asks, notification first", "needs_input")
+	hook(fmt.Sprintf(ran, subA))
+	expect("subagent A ran the tool it asked for", "working")
+
+	// A denial ends the prompt too.
+	hook(fmt.Sprintf(ask, subB))
+	expect("subagent B asks", "needs_input")
+	hook(fmt.Sprintf(denied, subB))
+	expect("subagent B was denied", "working")
+
+	// The main agent's own prompt is not the subagent's to clear.
+	hook(mainAsk)
+	hook(notify)
+	expect("the main agent asks", "needs_input")
+	hook(fmt.Sprintf(ran, subA))
+	expect("subagent A ran a tool under the main prompt", "needs_input")
+}

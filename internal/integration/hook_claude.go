@@ -30,8 +30,13 @@ import (
 //	SessionEnd            none
 //	SubagentStart         no state: a subagent started, see claudeSubagent
 //	SubagentStop          no state: a subagent stopped
-//	PreToolUse, PostToolUse, PostToolUseFailure with agent_id
+//	PreToolUse with agent_id
 //	                      no state: a tool call inside a subagent
+//	PermissionRequest with agent_id
+//	                      needs_input, kind approval, naming the subagent
+//	PostToolUse, PostToolUseFailure, PermissionDenied with agent_id
+//	                      working, only if the pane is in needs_input on
+//	                      that subagent's prompt
 //	any other event with agent_id: nothing
 //
 // Eight of them also carry activity for the pane's ring, read from the fields
@@ -88,10 +93,19 @@ import (
 // to be the only signal. The Post* events are what clears a block once it is
 // answered: before them nothing moved a pane off needs_input until the turn
 // ended.
+//
+// A subagent's prompt is shown as the main agent's, and its Notification
+// carries no agent_id. While the main agent waits on the subagent, only the
+// subagent's own events say the prompt was answered, so its PermissionRequest
+// names it, and its Post* events clear only a prompt that named it.
 
 // claudeClearsBlock is the if_state for an event that means a block was
 // answered. It must not turn a finished or idle pane back to working.
 const claudeClearsBlock = "needs_input"
+
+// claudeNotBlocked is the if_state for a prompt that names no subagent and
+// so must leave a prompt already up as it is.
+const claudeNotBlocked = "none,working,idle,done,errored,unknown"
 
 func translateClaude(in Input, p fields) Decision {
 	event := eventName(in, p)
@@ -112,7 +126,9 @@ func translateClaude(in Input, p fields) Decision {
 		switch event {
 		case "SubagentStart", "SubagentStop":
 			return claudeSubagent(event, p)
-		case "PreToolUse", "PostToolUse", "PostToolUseFailure":
+		case "PermissionRequest":
+			return claudeSubagentAsk(event, p)
+		case "PreToolUse", "PostToolUse", "PostToolUseFailure", "PermissionDenied":
 			return claudeSubagentTool(event, p)
 		}
 		return skip(ClaudeCode, event, "subagent event")
@@ -235,7 +251,9 @@ func claudeNotification(event string, p fields) Decision {
 	}
 	switch kind {
 	case "permission_prompt":
-		return send(ClaudeCode, event, identity(Report{State: "needs_input", Kind: "approval", Message: Clip(msg)}, p))
+		// It names no subagent, and comes after the PermissionRequest it is
+		// about, so it must not take a subagent's prompt over.
+		return send(ClaudeCode, event, identity(Report{State: "needs_input", Kind: "approval", Message: Clip(msg), IfState: claudeNotBlocked}, p))
 	case "elicitation_dialog", "elicitation_url_dialog", "agent_needs_input":
 		return send(ClaudeCode, event, identity(Report{State: "needs_input", Kind: "question", Message: Clip(msg)}, p))
 	case "idle_prompt":
@@ -325,15 +343,31 @@ func claudeSpawnResult(event string, p fields) (Activity, bool) {
 	return u, true
 }
 
+// claudeSubagentAsk reports a subagent's PermissionRequest: the pane's agent
+// waits on the subagent's prompt.
+func claudeSubagentAsk(event string, p fields) Decision {
+	id := p.str("agent_id")
+	if !ValidSubagentID(id) {
+		return skip(ClaudeCode, event, "agent_id is not an id tuios keeps: 1 to 128 letters, digits, '_', '.', ':', '@' or '-'")
+	}
+	msg := "approve " + ToolSummary(p.str("tool_name"), p.obj("tool_input"))
+	return send(ClaudeCode, event, Report{State: "needs_input", Kind: "approval", Message: msg, SubagentID: id, SessionID: p.str("session_id")})
+}
+
 // claudeSubagentTool reports a tool call inside a subagent, which Claude Code
 // fires with the subagent's agent_id: a subagent_update with the tool and
 // what it acts on, and on a Post event how the call ended. A subagent that
 // launches one of its own sends the spawn hint on the same update, so the
-// nested subagent is named when it starts.
+// nested subagent is named when it starts. A Post event, and a PermissionDenied,
+// also clear the prompt the subagent raised, if the pane is still on it.
 func claudeSubagentTool(event string, p fields) Decision {
 	id := p.str("agent_id")
 	if !ValidSubagentID(id) {
 		return skip(ClaudeCode, event, "agent_id is not an id tuios keeps: 1 to 128 letters, digits, '_', '.', ':', '@' or '-'")
+	}
+	answered := Report{SessionID: p.str("session_id"), State: "working", IfState: claudeClearsBlock, IfSubagentID: id}
+	if event == "PermissionDenied" {
+		return send(ClaudeCode, event, answered)
 	}
 	a := toolActivity(ActivityTool, p)
 	if a == nil {
@@ -350,7 +384,11 @@ func claudeSubagentTool(event string, p fields) Decision {
 	case "PostToolUseFailure":
 		a.OK = new(false)
 	}
-	return send(ClaudeCode, event, Report{SessionID: p.str("session_id"), Activity: a})
+	if event == "PreToolUse" {
+		return send(ClaudeCode, event, Report{SessionID: p.str("session_id"), Activity: a})
+	}
+	answered.Activity = a
+	return send(ClaudeCode, event, answered)
 }
 
 // claudeBackgroundTasks reads the background_tasks list that Stop and

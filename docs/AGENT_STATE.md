@@ -4120,7 +4120,7 @@ and when the pane is not a pane id, the hook prints nothing.
 | `UserPromptSubmit`, `PreToolUse` | `working` |
 | `PermissionRequest` | `needs_input`, kind `approval`, message `approve <tool>: <command or path>`, or `plan: <the plan's title>` for `ExitPlanMode`. With approvals on, then waits for an answer from the Inbox (see [Approvals from the Inbox](#approvals-from-the-inbox) and [Plans](#plans)) |
 | `PostToolUse`, `PostToolUseFailure`, `PermissionDenied`, `ElicitationResult` | `working`, only if the pane is `needs_input` |
-| `Notification` `permission_prompt` | `needs_input`, kind `approval` |
+| `Notification` `permission_prompt` | `needs_input`, kind `approval`, unless the pane is already `needs_input`: it names no subagent, and comes after the `PermissionRequest` it is about |
 | `Notification` `elicitation_dialog`, `elicitation_url_dialog`, `agent_needs_input` | `needs_input`, kind `question` |
 | `Notification` `idle_prompt` | `idle`, only if the pane is `working` or `unknown` |
 | `Notification` `auth_success` and the rest | nothing |
@@ -4128,7 +4128,9 @@ and when the pane is not a pane id, the hook prints nothing.
 | `StopFailure` | `errored`, message `stopped on <error_type>` |
 | `SessionEnd` | `none` |
 | `SubagentStart`, `SubagentStop` with `agent_id` | no state: a `subagent_start` or `subagent_stop` activity with `agent_id` and `agent_type`, the stop with the first line of `last_assistant_message`, sent with `report-agent-activity`, which moves the pane's `subagents` count and list (see [Each subagent](#each-subagent)). An `agent_id` that is not 1 to 128 letters, digits, `_`, `.`, `:`, `@` or `-` reports nothing |
-| `PreToolUse`, `PostToolUse`, `PostToolUseFailure` with `agent_id` | no state: a `subagent_update` with the subagent's tool call, sent with `report-agent-activity` |
+| `PreToolUse`, `PostToolUse`, `PostToolUseFailure` with `agent_id` | a `subagent_update` with the subagent's tool call, sent with `report-agent-activity`. The two Post events also report `working`, only if the pane is `needs_input` on that subagent's prompt |
+| `PermissionRequest` with `agent_id` | `needs_input`, kind `approval`, naming the subagent (`subagent_id`). Claude Code shows a subagent's prompt as the main agent's, and only the subagent's own events say it was answered |
+| `PermissionDenied` with `agent_id` | `working`, only if the pane is `needs_input` on that subagent's prompt |
 | `PreToolUse` of `Agent`, `PostToolUse` and `PostToolUseFailure` of `Agent`, `PreToolUse` of `TaskStop`, `Stop`, `SubagentStop` | their report as in this table, then one `subagent_update` for each subagent the event names: the launch's description and type, the subagent's id and tool count, its failure, a stop asked for, or each entry of `background_tasks` |
 | any other event with `agent_id` | nothing |
 
