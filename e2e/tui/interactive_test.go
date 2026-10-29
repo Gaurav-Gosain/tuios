@@ -1,6 +1,7 @@
 package tuie2e
 
 import (
+	"encoding/json"
 	"fmt"
 	"strings"
 	"testing"
@@ -254,6 +255,88 @@ func TestZoomToggle(t *testing.T) {
 		}
 	}
 	alive(t, term, "after zoom toggling")
+}
+
+// TestZoomFollowsDirectionalFocus moves the focus off a zoomed pane with the
+// direction keys, and the zoom has to go with it (#1305).
+//
+// A zoom of the whole region is a box of the pane's own. The direction keys
+// looked for a neighbour beside that box, which covers every other pane, so
+// they found none: the focus stayed and the zoom stayed. A camera zoom, of
+// part of the screen, worked, which is why the runs here are the two box
+// zooms: zoom_size 100, and zoom_borderless at the default size.
+//
+// The state is read from the daemon, not the frame, so a focus that moved
+// under a zoom that stayed is told apart from a focus that never moved.
+func TestZoomFollowsDirectionalFocus(t *testing.T) {
+	runs := []struct{ name, cfg string }{
+		{"full", "zoom_size = 100\n"},
+		{"borderless", "zoom_borderless = true\n"},
+	}
+	for _, r := range runs {
+		t.Run(r.name, func(t *testing.T) {
+			base := t.TempDir()
+			writeConfig(t, base, "[startup]\ntiled = true\n[appearance]\n"+r.cfg)
+			if out, err := tuiosCLI(t, base, "new", "zoomfocus", "--detach"); err != nil {
+				t.Fatalf("create session: %v: %s", err, out)
+			}
+			term := attachIn(t, base, "zoomfocus", startOpts{})
+			newWindow(t, term)
+			newWindow(t, term)
+			waitWindowCount(t, term, 3, "three panes")
+
+			// focused and zoomed are the indexes the daemon reports, -1 for none.
+			state := func() (focused, zoomed int) {
+				out, err := tuiosCLI(t, base, "list-windows", "--json", "-s", "zoomfocus")
+				if err != nil {
+					t.Fatalf("list-windows: %v: %s", err, out)
+				}
+				var list struct{ Windows []map[string]any }
+				if err := json.Unmarshal([]byte(out), &list.Windows); err != nil {
+					if err := json.Unmarshal([]byte(out), &list); err != nil {
+						t.Fatalf("read list-windows: %v: %s", err, out)
+					}
+				}
+				focused, zoomed = -1, -1
+				for i, w := range list.Windows {
+					if w["focused"] == true {
+						focused = i
+					}
+					if w["zoomed"] == true {
+						zoomed = i
+					}
+				}
+				return focused, zoomed
+			}
+			waitState := func(why string, ok func(focused, zoomed int) bool) int {
+				t.Helper()
+				deadline := time.Now().Add(uiTimeout)
+				for {
+					f, z := state()
+					if ok(f, z) {
+						return f
+					}
+					if time.Now().After(deadline) {
+						t.Fatalf("%s: focused %d, zoomed %d\n%s", why, f, z, term.Snapshot())
+					}
+					time.Sleep(50 * time.Millisecond)
+				}
+			}
+
+			// The leftmost pane, zoomed.
+			sendKeys(t, term, tuitest.Ctrl('b'), tuitest.Left)
+			sendKeys(t, term, "z")
+			first := waitState("the zoom never came on", func(f, z int) bool { return f >= 0 && z == f })
+
+			// The prefix arrow, then the window-mode key back: each moves the
+			// focus, and the zoom follows it.
+			sendKeys(t, term, tuitest.Ctrl('b'), tuitest.Right)
+			waitState("the prefix arrow left the zoom behind", func(f, z int) bool { return f != first && z == f })
+			sendKeys(t, term, "h")
+			waitState("the window-mode key left the zoom behind", func(f, z int) bool { return f == first && z == f })
+			saveArtifact(t, term, artifactDir(t), "zoom-returned")
+		})
+	}
 }
 
 // TestResizeKeepsPaneContent resizes the terminal underneath tuios, which

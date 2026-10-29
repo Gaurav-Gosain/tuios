@@ -1483,6 +1483,14 @@ func (m *OS) findWindowInDirection(from *terminal.Window, side layout.Side) int 
 		index = append(index, i)
 	}
 	origin := layout.Rect{X: from.X, Y: from.Y, W: from.Width, H: from.Height}
+	// A pane zoomed to a box of its own covers the region, so no pane lies
+	// beside it and every direction found nothing: the focus never left it and
+	// the zoom never followed. Its slot in the layout is where it sits among
+	// the others. Under a camera the layout places it, so its rectangle is
+	// already that.
+	if from.Zoomed && !m.zoomUsesLayout(from) && from.PreZoomWidth > 0 && from.PreZoomHeight > 0 {
+		origin = layout.Rect{X: from.PreZoomX, Y: from.PreZoomY, W: from.PreZoomWidth, H: from.PreZoomHeight}
+	}
 	if n := layout.Neighbour(origin, cands, side, !m.AutoTiling); n >= 0 {
 		return index[n]
 	}

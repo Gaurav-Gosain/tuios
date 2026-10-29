@@ -10346,3 +10346,10 @@ fixture of wrapped prose with a draft (rule 6, needs_input instead of idle).
 Reading the whole tail when the titled line has no rule above it fails the
 answered-form fixture (rule 3, needs_input instead of none). Dropping the
 corner check fails the case of a box's bottom with a title.
+## The zoom follows a direction key off a box zoom
+
+`TestZoomFollowsDirectionalFocus` zooms the leftmost of three tiled panes in a daemon session, presses the prefix right arrow, then the window-mode `h`, and reads the focused and zoomed pane from `list-windows`. The runs are the two box zooms: `zoom_size = 100`, and `zoom_borderless` at the default size. Run on 2026-10-29 on Linux against origin/main at `2c6958d23`, the build without the fix.
+
+| Control: what was cut | Where it fails | Verdict |
+| --- | --- | --- |
+| The pre-zoom origin in `findWindowInDirection`, so the box is the origin, as before the fix | `the prefix arrow left the zoom behind: focused 0, zoomed 0`, both runs | **caught** |
