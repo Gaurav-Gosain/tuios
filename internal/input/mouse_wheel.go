@@ -34,6 +34,11 @@ func handleMouseWheel(msg tea.MouseWheelMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		return o, nil
 	}
 
+	// Quick look scrolls its text under the pointer.
+	if wm := msg.Mouse(); !horizontal && o.QuickLookWheel(wm.X, wm.Y, msg.Button == tea.MouseWheelUp) {
+		return o, nil
+	}
+
 	// Scroll the floating overlay panel under the cursor (help, settings,
 	// palette, theme picker, session/layout lists).
 	if o.OverlayActive() {

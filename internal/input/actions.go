@@ -72,6 +72,9 @@ const (
 	sidebarActFileSend = "file_send"
 	// sidebarActFileInsertPath pastes the row's path into the focused pane.
 	sidebarActFileInsertPath = "file_insert_path"
+	// sidebarActFileQuickLook opens and closes the preview of the row. It
+	// reads and changes nothing, so it is live while file actions are off.
+	sidebarActFileQuickLook = "file_quick_look"
 	// jump_1..jump_9 are matched by prefix; see HandleSidebarKey.
 	sidebarActJumpPrefix = "jump_"
 )
@@ -281,7 +284,7 @@ func (d *ActionDispatcher) registerHandlers() {
 		sidebarActFileCreate, sidebarActFileRename, sidebarActFileDelete,
 		sidebarActFileDeleteAll, sidebarActFileCopy, sidebarActFileCut,
 		sidebarActFilePaste, sidebarActFileOpen, sidebarActFileEdit,
-		sidebarActFileCopyPath, sidebarActFileSend, sidebarActFileInsertPath,
+		sidebarActFileCopyPath, sidebarActFileSend, sidebarActFileInsertPath, sidebarActFileQuickLook,
 	} {
 		d.Register(action, makeSidebarFileHandler(action))
 	}

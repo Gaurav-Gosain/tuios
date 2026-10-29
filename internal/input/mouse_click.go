@@ -61,6 +61,12 @@ func handleMouseClick(msg tea.MouseClickMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		return o, nil
 	}
 
+	// Quick look keeps a press on its panel, and closes for a press anywhere
+	// else, which then goes on to what it was aimed at.
+	if o.QuickLookMouseClick(X, Y) {
+		return o, nil
+	}
+
 	// Floating overlay panels (help, settings, palette, theme picker) consume
 	// clicks before they can reach the window layer: select a tab/row/control,
 	// grab the title bar or right-drag to move, or click away to dismiss.

@@ -39,6 +39,9 @@ func (m *OS) flushReplyPreviewForFrame() {
 			}
 		}
 	}
+	if pl, ok := m.quickLookPlacement(); ok && m.replyPixelsReady() {
+		want = append(want, pl)
+	}
 	if p == nil || (len(want) == 0 && len(p.shown) == 0) {
 		return
 	}

@@ -12,6 +12,7 @@ import (
 	"image/jpeg"
 	"image/png"
 	"io"
+	"io/fs"
 	"net/http"
 	"os"
 	"os/exec"
@@ -111,57 +112,82 @@ func (d *Daemon) verbFilePreview(cs *connState, params json.RawMessage) (any, *v
 	if err != nil && fi == nil {
 		return nil, fileError("preview", path, err)
 	}
+	ctx, cancel := context.WithTimeout(d.ctx, previewToolTimeout)
+	defer cancel()
+	return previewOpened(ctx, f, fi, err, path, maxPx, page), nil
+}
+
+// PreviewLocalFile makes the preview of a file on this machine, in this
+// process, as file-preview makes it in the daemon: the same kinds, caps and
+// tools. The rail's quick look calls it for a file on the client's own
+// machine when no daemon serves the client. path is absolute.
+func PreviewLocalFile(ctx context.Context, path string, maxPx int) (map[string]any, error) {
+	if maxPx <= 0 {
+		maxPx = previewMaxPx
+	}
+	maxPx = min(maxPx, previewMaxPxLimit)
+	f, fi, err := openRegular(path)
+	if err != nil && fi == nil {
+		return nil, err
+	}
+	ctx, cancel := context.WithTimeout(ctx, previewToolTimeout)
+	defer cancel()
+	return previewOpened(ctx, f, fi, err, path, maxPx, 1), nil
+}
+
+// previewOpened is the preview of the file f, opened through openRegular.
+// openErr is openRegular's refusal of a file that is not regular, whose
+// fi then says what it is; f is nil then. It closes f.
+func previewOpened(ctx context.Context, f *os.File, fi fs.FileInfo, openErr error, path string, maxPx, page int) map[string]any {
 	out := map[string]any{
 		"path":  path,
 		"name":  filepath.Base(path),
 		"size":  fi.Size(),
 		"mtime": fi.ModTime().UnixMilli(),
 	}
-	if err != nil {
+	if openErr != nil {
 		// openRegular refused it and said what it is, without reading it.
 		// A named pipe would hold the preview until something wrote to it,
 		// and a device has no end. Neither is opened past that.
 		if fi.IsDir() {
 			out["kind"] = "dir"
-			return out, nil
+			return out
 		}
 		out["kind"] = "binary"
 		out["note"] = "This is a pipe, a device or a socket. It has no preview."
-		return out, nil
+		return out
 	}
 	defer func() { _ = f.Close() }()
 	ext := strings.ToLower(filepath.Ext(path))
-	ctx, cancel := context.WithTimeout(d.ctx, previewToolTimeout)
-	defer cancel()
 
 	switch {
 	case previewImageExt[ext]:
 		if err := previewImage(ctx, f, ext, fi.Size(), maxPx, out); err != nil {
 			describeBinary(f, out, err.Error())
 		}
-		return out, nil
+		return out
 	case ext == ".svg":
 		if fi.Size() <= previewSVGMax {
 			if b, err := readAllOf(f, previewSVGMax); err == nil {
 				out["kind"] = "svg"
 				out["text"] = string(b)
-				return out, nil
+				return out
 			}
 		}
 		describeBinary(f, out, "The drawing is too large to show.")
-		return out, nil
+		return out
 	case ext == ".pdf":
 		previewPDF(ctx, f, fi.Size(), maxPx, page, out)
-		return out, nil
+		return out
 	case previewVideoExt[ext]:
 		previewVideo(ctx, f, maxPx, out)
-		return out, nil
+		return out
 	}
 	if previewText(f, fi.Size(), out) {
-		return out, nil
+		return out
 	}
 	describeBinary(f, out, "")
-	return out, nil
+	return out
 }
 
 // readAllOf reads at most limit bytes of f from its start.

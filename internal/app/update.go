@@ -1220,6 +1220,11 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		m.applyReplyPreview(msg)
 		return m, nil
 
+	case quickLookMsg:
+		cmd := m.applyQuickLook(msg)
+		m.renderSkipped = false
+		return m, cmd
+
 	case ckCheckpointsMsg:
 		m.applyCheckpoints(msg)
 		return m, nil
@@ -2236,7 +2241,7 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		// every guest answers with land in ViewportResizeSettledMsg instead.
 		// An open image view needs its picture at the new size, and a side
 		// column the new width hides lets its live pane go.
-		if cmd := tea.Batch(m.CockpitImagePicture(), m.cockpitLiveFollow()); cmd != nil {
+		if cmd := tea.Batch(m.CockpitImagePicture(), m.cockpitLiveFollow(), m.QuickLookSync()); cmd != nil {
 			return m, tea.Batch(settle, cmd)
 		}
 		return m, settle

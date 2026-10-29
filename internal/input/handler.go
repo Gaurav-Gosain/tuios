@@ -248,6 +248,9 @@ func HandleInput(msg tea.Msg, o *app.OS) (tea.Model, tea.Cmd) {
 	// Focus landing on a pane that finished turns while the person was
 	// away has the dock say what it did. A nil check when it did not.
 	cmd = tea.Batch(cmd, o.AgentRecapFetch())
+	// Quick look follows the rail's cursor, and closes when the rail lets go
+	// of the keyboard. A bool check while it is closed.
+	cmd = tea.Batch(cmd, o.QuickLookSync())
 	// A click or a key may have allowed a pane's clipboard write.
 	cmd = tea.Batch(cmd, o.ClipboardApprovalCmd())
 

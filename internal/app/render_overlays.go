@@ -405,6 +405,13 @@ func (m *OS) renderOverlays() []*lipgloss.Layer {
 		layers = m.placeOverlayPanel(layers, "sessionclose", content, geo, rows)
 	}
 
+	// Quick look sits under every dialog: it follows the rail's cursor and
+	// takes no key, so a dialog opened from the rail has to draw over it.
+	if m.quickLook.open {
+		content, x, y := m.renderQuickLook()
+		layers = append(layers, lipgloss.NewLayer(content).X(x).Y(y).Z(config.ZIndexLogs).ID(overlayKindQuickLook))
+	}
+
 	if m.FilePromptOpen() {
 		content, geo, rows := m.renderFileDialog()
 		layers = m.placeOverlayPanel(layers, "filedialog", content, geo, rows)

@@ -260,6 +260,31 @@ the copy gets the name `name (from HOST).ext`. The context menu of a row has a
 Send to host row that does the same. The binding is `file_send` in
 `[keybindings.sidebar_files]`.
 
+`Space` shows a quick look preview of the selected row. The preview opens over
+the panes and shows:
+
+- code with syntax colours and line numbers,
+- Markdown as formatted text,
+- a picture, a PDF page or a film frame,
+- the names in a folder.
+
+A file that is not text shows its type and size. A long text shows its first
+5000 lines, and the preview says so. Turn the mouse wheel over the preview to
+scroll it.
+
+`Up` and `Down` (or `j` and `k`) move the cursor to the next row, and the preview
+shows that row. `Space` or `Esc` closes the preview. A click outside it closes
+it too. The preview takes no other key: every other key goes to the sidebar.
+When the sidebar loses keyboard focus, the preview closes.
+
+For a listing on another machine, that machine reads the file and sends the
+preview. Its host policy must allow `files`. The binding is `file_quick_look`
+in `[keybindings.sidebar_files]`.
+
+A picture uses Kitty graphics when the terminal supports them. Other terminals
+get block characters. At 16 colours the preview names the picture and does not
+draw it.
+
 `Ctrl+B f` searches file names below the directory of the focused pane. It also
 works while you type in a pane. `Ctrl+F` searches below the folder that the
 sidebar shows, while the sidebar has focus.

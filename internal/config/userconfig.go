@@ -1959,6 +1959,9 @@ func getDefaultSidebarFilesKeybinds() map[string][]string {
 		// I pastes the path into the focused pane, quoted for its shell: the
 		// keyboard form of dragging the row onto the pane.
 		"file_insert_path": {"I"},
+		// space previews the row, as Finder and yazi do. Free in the rail:
+		// nothing else in the rail's scope takes it.
+		"file_quick_look": {"space"},
 	}
 }
 

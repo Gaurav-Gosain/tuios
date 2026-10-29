@@ -1,11 +1,17 @@
 package tuie2e
 
 import (
+	"bytes"
 	"fmt"
+	"image"
+	"image/color"
+	"image/png"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -1251,4 +1257,207 @@ func TestRailFileDragAt16Colours(t *testing.T) {
 		t.Fatalf("esc left the frame or the mark up:\n%s", term.Snapshot())
 	}
 	alive(t, term, "after a drag at 16 colours")
+}
+
+// quickLookFixture is a folder with one file of each kind quick look draws:
+// code, Markdown, a picture, a file that is not text, and a text longer than
+// the preview keeps. The names sort in the order the test walks them.
+func quickLookFixture(t *testing.T) string {
+	t.Helper()
+	dir := t.TempDir()
+	var long strings.Builder
+	for i := range 6000 {
+		fmt.Fprintf(&long, "row %d\n", i+1)
+	}
+	img := image.NewRGBA(image.Rect(0, 0, 64, 32))
+	for y := range 32 {
+		for x := range 64 {
+			img.Set(x, y, color.RGBA{uint8(x * 4), uint8(y * 8), 160, 255})
+		}
+	}
+	var pic bytes.Buffer
+	if err := png.Encode(&pic, img); err != nil {
+		t.Fatal(err)
+	}
+	for name, body := range map[string]string{
+		"big.txt":  long.String(),
+		"blob.bin": "\x00\x01\x02\x03binary",
+		"main.go":  "package main\n\nimport \"fmt\"\n\n// main says hello.\nfunc main() {\n\tfmt.Println(\"hello\")\n}\n",
+		"notes.md": "# Quick look notes\n\nSome **bold** words.\n\n- first point\n- second point\n",
+		"pic.png":  pic.String(),
+	} {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	return dir
+}
+
+// quickLookShows waits for every marker in want to be on screen and none in
+// not, and saves the frame under name.
+func quickLookShows(t *testing.T, term *tuitest.Terminal, name, why string, want, not []string) {
+	t.Helper()
+	railLists(t, term, why, want, not)
+	copiesFrame(t, term, name)
+}
+
+// TestRailQuickLook is idea 5 of the files plan: space on a row of the
+// rail's files section shows the file, the preview follows j and k, and
+// space or esc closes it.
+//
+// How this could pass wrongly, written down first:
+//   - The text could be on screen in the pane. Nothing the test waits for
+//     is printed in the pane: the shell only cds.
+//   - The code could be drawn plain. The keyword "package" and the name
+//     after it must be drawn in two different colours.
+//   - The Markdown could be drawn as its source. The heading must show
+//     without its "#", and the bold word without its stars.
+//   - The picture could be a blank box. The box must hold block glyphs in
+//     more than a few colours.
+//   - j could reopen the preview rather than move it, or move the rail's
+//     cursor and leave the preview behind. Each step names the new file in
+//     the panel's title and shows that file's content.
+//
+// NEGATIVE CONTROL: with quickLookFetch returning nil for a file, the
+// preview stays on "Reading" and the wait for main.go's content times out.
+func TestRailQuickLook(t *testing.T) {
+	// Block glyphs: the tier a host without kitty graphics gets, and the one
+	// a frame of the grid can show. TestRailQuickLookKittyPicture covers the
+	// other tier.
+	term, _ := quickLookStart(t, "main.go", []string{"TUIOS_KITTY_GRAPHICS=0"}, nil)
+
+	// Code: highlighted, with line numbers.
+	sendKeys(t, term, " ")
+	quickLookShows(t, term, "quick-look-go", "space did not show main.go",
+		[]string{"main.go ", "package main", "fmt.Println", "8 lines"}, nil)
+	s := term.Screen()
+	kc, kr, ok := findOnGrid(s, "package main")
+	if !ok {
+		t.Fatalf("no code on screen:\n%s", term.Snapshot())
+	}
+	if kw, name := s.Cell(kc, kr).Fg, s.Cell(kc+len("package "), kr).Fg; kw == name {
+		t.Errorf("ASSERTION: the keyword and the name are the same colour %+v: the code is not highlighted", kw)
+	}
+
+	// j: the next file, Markdown, laid out.
+	sendKeys(t, term, "j")
+	quickLookShows(t, term, "quick-look-md", "j did not move the preview to notes.md",
+		[]string{"notes.md ", "Quick look notes", "Markdown", "first point"},
+		[]string{"# Quick look", "**bold**", "package main"})
+
+	// j: the picture, as block glyphs on this terminal.
+	sendKeys(t, term, "j")
+	quickLookShows(t, term, "quick-look-png", "j did not move the preview to pic.png",
+		[]string{"pic.png ", "Image", "64 x 32"}, []string{"Quick look notes"})
+	if err := term.WaitFor(func(s tuitest.Screen) bool { return pictureColours(s) >= 8 }, uiTimeout); err != nil {
+		t.Fatalf("ASSERTION: the picture was not drawn as glyphs in colour (%d colours): %v\n%s", pictureColours(term.Screen()), err, term.Snapshot())
+	}
+	copiesFrame(t, term, "quick-look-png")
+
+	// k three times: past notes.md and main.go to the file that is not text.
+	sendKeys(t, term, "k", "k", "k")
+	quickLookShows(t, term, "quick-look-binary", "the preview of a binary file",
+		[]string{"blob.bin ", "This file is not text. It has no preview."}, []string{"64 x 32"})
+	sendKeys(t, term, "k")
+	quickLookShows(t, term, "quick-look-long", "the preview of a long file",
+		[]string{"big.txt ", "Showing the first 5000 lines.", "row 1"}, nil)
+
+	// space closes; space opens again; esc closes and keeps the rail.
+	sendKeys(t, term, " ")
+	railLists(t, term, "space did not close the preview", nil, []string{"Showing the first"})
+	sendKeys(t, term, " ")
+	railLists(t, term, "space did not open the preview again", []string{"Showing the first 5000 lines."}, nil)
+	sendKeys(t, term, tuitest.Esc)
+	railLists(t, term, "esc did not close the preview", nil, []string{"Showing the first"})
+	sendKeys(t, term, " ")
+	railLists(t, term, "after esc the rail lost the keyboard", []string{"Showing the first 5000 lines."}, nil)
+
+	// The preview takes no key from the pane: once the rail lets go, keys
+	// reach the shell, and the preview is gone.
+	sendKeys(t, term, tuitest.Esc, tuitest.Esc)
+	railLists(t, term, "leaving the rail did not close the preview", nil, []string{"Showing the first"})
+	enterTerminalMode(t, term)
+	runInShell(t, term, "echo typed-$((40+2))", "typed-42", uiTimeout)
+	alive(t, term, "after quick look")
+}
+
+// quickLookStart lists the quick look fixture in the rail, gives the rail
+// the keyboard and puts its cursor on the row named first.
+func quickLookStart(t *testing.T, first string, env []string, out *lockedBuffer) (*tuitest.Terminal, string) {
+	t.Helper()
+	dir := quickLookFixture(t)
+	opts := startOpts{cols: 140, rows: 40, env: env}
+	if out != nil {
+		opts.out = out
+	}
+	term, _ := start(t, opts)
+	waitBoot(t, term)
+	newWindow(t, term)
+	waitWindowCount(t, term, 1, "opening a shell for the listing")
+	enterTerminalMode(t, term)
+	runInShell(t, term, "cd "+dir+" && printf '\\033]7;file://%s\\033\\\\%s\\n' \"$PWD\" lis\"\"ted", "listed", uiTimeout)
+	leaveTerminalMode(t, term)
+	toggleSidebarViaPalette(t, term)
+	waitForAll(t, term, uiTimeout, "the listing", "main.go", "notes.md", "pic.png")
+	sendKeys(t, term, "s")
+	col, row, ok := findOnGrid(term.Screen(), first)
+	if !ok {
+		t.Fatalf("no %s row:\n%s", first, term.Snapshot())
+	}
+	mouseClick(t, term, col, row, tuitest.MouseLeft, 0)
+	return term, dir
+}
+
+// kittyPlaceRe is a kitty placement of a picture the previews uploaded.
+var kittyPlaceRe = regexp.MustCompile(`\x1b_Ga=p,i=(\d+),p=\d+,c=(\d+),r=(\d+),`)
+
+// TestRailQuickLookKittyPicture is the picture on a host with kitty graphics,
+// which the test terminal says it has: the picture is uploaded and placed in
+// the panel, at no more cells than its own pixels fill, and taken down when
+// the preview closes.
+//
+// NEGATIVE CONTROL: with quickLookPlacement answering false, no placement is
+// sent and the wait times out.
+func TestRailQuickLookKittyPicture(t *testing.T) {
+	out := &lockedBuffer{}
+	term, _ := quickLookStart(t, "pic.png", nil, out)
+	sendKeys(t, term, " ")
+	railLists(t, term, "space did not show pic.png", []string{"pic.png ", "64 x 32"}, nil)
+	var id string
+	deadline := time.Now().Add(uiTimeout)
+	for id == "" {
+		for _, m := range kittyPlaceRe.FindAllStringSubmatch(out.String(), -1) {
+			cols, _ := strconv.Atoi(m[2])
+			rows, _ := strconv.Atoi(m[3])
+			// 64 x 32 pixels: a few cells at any cell size, never the panel.
+			if cols > 0 && cols <= 16 && rows > 0 && rows <= 8 {
+				id = m[1]
+			}
+		}
+		if id == "" && time.Now().After(deadline) {
+			t.Fatalf("ASSERTION: no kitty placement of the picture at its own size was sent\n%s", term.Snapshot())
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	sendKeys(t, term, " ")
+	unplace := "\x1b_Ga=d,d=i,i=" + id + ","
+	if err := term.WaitFor(func(tuitest.Screen) bool { return strings.Contains(out.String(), unplace) }, uiTimeout); err != nil {
+		t.Fatalf("ASSERTION: closing the preview did not take the picture down: %v", err)
+	}
+	alive(t, term, "after the kitty picture")
+}
+
+// pictureColours counts the colours of the block glyph cells on screen.
+func pictureColours(s tuitest.Screen) int {
+	seen := map[tuitest.Color]bool{}
+	cols, rows := s.Size()
+	for y := range rows {
+		for x := range cols {
+			c := s.Cell(x, y)
+			if c.Rune >= 0x2580 && c.Rune <= 0x259f || c.Rune >= 0x1fb00 && c.Rune <= 0x1fbff {
+				seen[c.Fg], seen[c.Bg] = true, true
+			}
+		}
+	}
+	return len(seen)
 }

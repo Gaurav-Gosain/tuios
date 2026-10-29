@@ -182,6 +182,10 @@ question about the screen. Do not change them unless the person asks.
 - In the rail's files section, `Y` or the folder menu's Copy path copies a
   path to the person's clipboard. `I`, or a drag of a row onto a pane,
   pastes the path into that pane, quoted for its shell.
+- In the rail's files section, `space` shows a preview of the row: code,
+  Markdown, a picture, a PDF page or a folder. `j` and `k` move it to the
+  next row. `space` or `esc` closes it. A row of a listing on another machine
+  is read on that machine, and needs the `files` grant there.
 - When the last pane on the workspace on screen closes, the session shows
   the workspace the person came from: the one that ran `xpanes`, else the
   ones shown before, else the lowest with panes. `workspaces.return_when_empty

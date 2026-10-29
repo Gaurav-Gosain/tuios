@@ -48,6 +48,21 @@ func handleSidebarKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		o.ExitSidebarFocus()
 		return o, nil
 	}
+	// Quick look first. Its key opens the preview on a row of the listing and
+	// closes it from any row, and esc closes it before esc leaves the rail.
+	// Every other key goes on to the rail, so the preview takes nothing from
+	// it: j and k still move the cursor, and the preview follows them (see
+	// QuickLookSync, run after every input).
+	if act := lookupAction(o, msg, o.KeybindRegistry.GetSidebarFilesAction); act == sidebarActFileQuickLook &&
+		(o.QuickLookOpen() || o.SidebarCursorOnListing()) {
+		noteRailAction(o, act)
+		return o, o.SidebarQuickLook()
+	}
+	if key == "esc" && o.QuickLookOpen() {
+		o.CloseQuickLook()
+		return o, nil
+	}
+
 	// The files section's own keys are consulted first, and only while the
 	// cursor is on a row of the listing. Three of them share a key with a rail
 	// binding that already exists (r renames, x kills, a was free), so the row
@@ -292,6 +307,8 @@ func handleSidebarFileAction(action string, o *app.OS) tea.Cmd {
 		return o.SidebarFileSend()
 	case sidebarActFileInsertPath:
 		o.SidebarFileInsert()
+	case sidebarActFileQuickLook:
+		return o.SidebarQuickLook()
 	}
 	return nil
 }

@@ -257,3 +257,67 @@ func filesForAnSSHShell(t *testing.T, term *tuitest.Terminal) {
 	saveArtifact(t, term, artifactDir(t), "ssh-ended")
 	alive(t, term, "after a shell moved to another machine and back")
 }
+
+// TestQuickLookOnAFarFile is quick look on a row of a listing on another
+// machine: the far daemon reads the file and sends the preview over the link.
+//
+// The two machines share a disk in this harness, so a preview read on this
+// machine would show the same text. The far machine's link rules tell the
+// two apart: it refuses to read a file with more than one name for a linked
+// machine, and this machine reads it. linked.txt has two names, so its
+// preview must be that refusal.
+//
+// NEGATIVE CONTROL: with quickLookCursorTarget leaving host empty for a far
+// listing, the panel does not say "on build" and the first wait times out.
+// Past that wait, linked.txt would show its text in place of the refusal.
+func TestQuickLookOnAFarFile(t *testing.T) {
+	base := t.TempDir()
+	remote := remoteMachine(t)
+	writeRemoteConfig(t, remote, relayFilesPolicy)
+	ssh := writeFakeSSHTo(t, base, remote)
+	writeOneHostConfig(t, base, tuiosBin)
+	env := []string{"TUIOS_SSH=" + ssh}
+	top, _ := farFolders(t, remote)
+	if err := os.WriteFile(filepath.Join(top, "far.go"), []byte("package far\n\n// Answer is far away.\nconst Answer = 42\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(top, "linked.txt"), []byte("two names\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Link(filepath.Join(top, "linked.txt"), filepath.Join(top, "other-name.txt")); err != nil {
+		t.Fatal(err)
+	}
+
+	if out, err := tuiosCLI(t, remote, "new", "far-shell", "--detach"); err != nil {
+		t.Fatalf("create the far session: %v\n%s", err, out)
+	}
+	term := startIn(t, base, startOpts{args: []string{"new", "home"}, env: env, cols: 140, rows: 40})
+	waitBoot(t, term)
+	waitForHostListing(t, base, func(s string) bool {
+		return containsAll(s, "build", "up")
+	}, "the daemon never reported build up")
+	if out, err := tuiosCLIEnv(t, base, env, "new-window", "faraway", "-s", "home", "--host", "build"); err != nil {
+		t.Fatalf("create a window on build: %v\n%s", err, out)
+	}
+	toggleSidebarViaPalette(t, term)
+	railLists(t, term, "the files list never showed the far folder", []string{"far.go", "linked.txt"}, nil)
+	sendKeys(t, term, "s")
+	col, row, ok := findOnGrid(term.Screen(), "far.go")
+	if !ok {
+		t.Fatalf("no far.go row:\n%s", term.Snapshot())
+	}
+	mouseClick(t, term, col, row, tuitest.MouseLeft, 0)
+	sendKeys(t, term, " ")
+	railLists(t, term, "space did not show the far file",
+		[]string{"far.go ", "package far", "const Answer = 42", "on build"}, nil)
+	copiesFrame(t, term, "quick-look-far-go")
+
+	// j: linked.txt, which build reads for this machine only under its rules.
+	sendKeys(t, term, "j")
+	railLists(t, term, "the far machine did not judge the file with two names",
+		[]string{"linked.txt ", "links),"}, []string{"two names", "package far"})
+	copiesFrame(t, term, "quick-look-far-refused")
+	sendKeys(t, term, " ")
+	railLists(t, term, "space did not close the far preview", nil, []string{"on build"})
+	alive(t, term, "after quick look on a far file")
+}
