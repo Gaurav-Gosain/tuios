@@ -81,8 +81,11 @@ func preflightBinary(path string) (handoffBinary, error) {
 	cmd.Stdout, cmd.Stderr = &out, &errOut
 	started := time.Now()
 	if err := cmd.Run(); err != nil {
-		detail := clip(bytes.TrimSpace(errOut.Bytes()), 200)
-		return handoffBinary{}, fmt.Errorf("%s does not run as a tuios that can take this daemon's state: %v %s", abs, err, detail)
+		why := err.Error()
+		if detail := clip(bytes.TrimSpace(errOut.Bytes()), 200); len(detail) > 0 {
+			why += " " + string(detail)
+		}
+		return handoffBinary{}, fmt.Errorf("%s does not run as a tuios that can take this daemon's state: %s. Check that the path names a tuios binary that runs on this machine", abs, why)
 	}
 	took := time.Since(started)
 	var acc HandoffAccepts
@@ -98,7 +101,7 @@ func preflightBinary(path string) (handoffBinary, error) {
 	}
 	after, err := statFileID(abs)
 	if err != nil || after != before {
-		return handoffBinary{}, fmt.Errorf("%s was replaced while it was being checked", abs)
+		return handoffBinary{}, fmt.Errorf("%s was replaced while it was being checked. Run the upgrade again when the install has finished", abs)
 	}
 	return handoffBinary{path: abs, file: after, accepts: acc, duration: took}, nil
 }

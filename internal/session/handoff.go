@@ -42,8 +42,16 @@ const (
 	MinHandoffVersion = 2
 )
 
-// ErrHandoffUnsupported is a platform with no live handoff.
-var ErrHandoffUnsupported = errors.New("live upgrade is not supported on this platform. To run another tuios, use 'tuios restart-server'. It stops every program in every pane, and lists them before it asks")
+// ErrHandoffUnsupported is a platform with no live handoff. Its message is
+// built when it is shown, so the restart-server it names carries the --server
+// of the daemon or command that returns it.
+var ErrHandoffUnsupported error = handoffUnsupported{}
+
+type handoffUnsupported struct{}
+
+func (handoffUnsupported) Error() string {
+	return "live upgrade is not supported on this platform. " + restartAdvice()
+}
 
 var (
 	errHandoffBusy     = errors.New("a live upgrade is already running")
