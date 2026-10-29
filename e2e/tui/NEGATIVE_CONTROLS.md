@@ -10650,9 +10650,10 @@ after each step in `cached.txt`, are under `TUIOS_E2E_FRAMES`.
 
 ## Install an integration from its notice
 
-`TestAgentsIntegrationNoticeOncePerRun` ends in a home where Claude Code runs with no integration. The toast must show `ctrl+b j` right after the state. A click on its text must say "Installed in ~/.claude/settings.json.", the file must hold the current hooks, `tuios integration status` must read them as current, and a second Claude Code pane must get no toast. Each control was built into its own binary. Run on 2026-10-29 on Linux.
+`TestAgentsIntegrationNoticeOncePerRun` ends in a home where Claude Code runs with no integration. The toast must show `ctrl+b j` right after the state. The key opens a question that names the file. A first client sends `ctrl+b j` and enter in one write: the enter was on its way before the question was drawn, so the file must stay without hooks. Esc must close the question and write nothing. A second client clicks the toast, then Install. The result must say "Installed in ~/.claude/settings.json.", the file must hold the current hooks, `tuios integration status` must read them as current, and a second Claude Code pane must get no toast. Each control was built into its own binary. Run on 2026-10-30 on Linux.
 
 | Control: what was cut | Where it fails | Verdict |
 | --- | --- | --- |
-| `jumpToNotifTarget`: the `installFromNotice` call cut, so the notice goes nowhere | "the click on the toast installed nothing" | **caught** |
-| `mouse_click.go`: `TakeNotifCmd` not returned, so the install command is parked and never runs | "the click on the toast installed nothing" | **caught** |
+| `integrationAskSettled` returns true, so the question takes the enter that was in flight | "an enter sent before the question was drawn installed the integration" | **caught** |
+| `jumpToNotifTarget`: the `installFromNotice` call cut, so the notice goes nowhere | "ctrl+b j on the toast opened no question" | **caught** |
+| `IntegrationAskActivate`: Install returns no command | "Install on the question installed nothing" | **caught** |

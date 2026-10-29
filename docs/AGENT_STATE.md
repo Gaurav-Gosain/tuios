@@ -3877,9 +3877,11 @@ the files tuios already changed and the ones it did not. The result or the error
 When a pane runs a harness whose integration is out of date, or not installed
 where it could be, tuios shows one notice for that harness, such as "Claude
 Code integration is not installed. ctrl+b j installs it in
-~/.claude/settings.json." Press that key, or click the text of the notice, to
-install or update the integration. This does what the Agents tab does, and
-the result names the file it wrote. Restart the harness in its pane to make it
+~/.claude/settings.json." Press that key, or click the text of the notice. A
+dialog asks "Install the Claude Code integration? This adds hooks to
+~/.claude/settings.json." Choose Install to install or update the
+integration, or press esc for Not now. Install does what the Agents tab
+does, and the result names the file it wrote. Restart the harness in its pane to make it
 report its state. The notice comes once per harness each time the client
 starts. Click the right end of the notice to dismiss it for good: it does not
 come back until the state or the version changes. Esc clears it for this run

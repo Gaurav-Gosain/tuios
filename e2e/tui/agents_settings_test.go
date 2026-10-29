@@ -365,8 +365,9 @@ const integrationNotice = "Claude Code integration is out of date."
 // and waits for the toast that names the fix. It dismisses the toast, starts a
 // second claude pane, and watches for the toast for some seconds: it does not
 // come back. The palette entry then opens the Agents tab. Last, in a home with
-// no integration, a click on the toast installs it: the file holds the hooks,
-// and the toast does not come back for a second pane.
+// no integration, the toast opens a question that names the file: esc writes
+// nothing, Install writes the hooks, and the toast does not come back for a
+// second pane.
 func TestAgentsIntegrationNoticeOncePerRun(t *testing.T) {
 	base, _ := agentsPageFixture(t, false)
 	term := attachIn(t, base, "agents", startOpts{cols: 120, rows: 40, shippedLooks: true})
@@ -466,40 +467,120 @@ func TestAgentsIntegrationNoticeOncePerRun(t *testing.T) {
 // noticeNotInstalled is the toast for a Claude Code with no integration.
 const noticeNotInstalled = "Claude Code integration is not installed."
 
+// The question the toast opens, and the file it names.
+const (
+	installQuestion = "Install the Claude Code integration?"
+	installEffect   = "This adds hooks to ~/.claude/settings.json."
+)
+
+// waitInstallNotice waits for the toast on term and checks that the key
+// follows the state. The dock may cut the verb and the file, never the key.
+func waitInstallNotice(t *testing.T, term *tuitest.Terminal) {
+	t.Helper()
+	if err := term.WaitForText(noticeNotInstalled, uiTimeout); err != nil {
+		t.Fatalf("no toast for the missing integration: %v\n%s", err, term.Snapshot())
+	}
+	if s := term.Screen(); !strings.Contains(s.Line(findRow(s, noticeNotInstalled)), noticeNotInstalled+" ctrl+b j") {
+		t.Fatalf("ASSERTION: the toast does not name the key that installs\n%s", term.Snapshot())
+	}
+}
+
+// noHooksIn fails when the file holds tuios's hooks.
+func noHooksIn(t *testing.T, settings, why string) {
+	t.Helper()
+	data, err := os.ReadFile(settings)
+	if err != nil && !os.IsNotExist(err) {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(data), "agent-hook") {
+		t.Fatalf("ASSERTION: %s:\n%s", why, data)
+	}
+}
+
 // installFromTheNotice is the last part of
 // TestAgentsIntegrationNoticeOncePerRun: a home where Claude Code runs with no
-// integration. The toast names the key and the file. A click on its text
-// installs the integration, as the Agents tab does, and the result names the
-// file. The file on disk is read for the hooks and the CLI's status for the
-// version, so a toast that only said "installed" cannot pass. A second claude
-// pane then gets no toast, because nothing is left to install.
+// integration. The toast names the key and the file.
+//
+// The key is the jump key people press from habit, so it only opens a
+// question. The first client presses ctrl+b j and enter in one write, as a
+// habit would: the enter was on its way before the question was drawn, so it
+// must answer nothing. Esc then closes the question and the file stays as it
+// was. A second client gets the toast again, a click on its text opens the
+// same question, and a click on Install installs the integration, as the
+// Agents tab does. The file on disk is read for the hooks and the CLI's status
+// for the version, so a toast that only said "installed" cannot pass. A
+// second claude pane then gets no toast, because nothing is left to install.
 func installFromTheNotice(t *testing.T) {
 	base, settings := agentsFixtureWith(t, agentsFixture{none: true})
 	if st := claudeIntegrationVersion(t, base); st.Installed {
 		t.Fatalf("the fixture has an integration: %+v", st)
 	}
-	term := attachIn(t, base, "agents", startOpts{cols: 120, rows: 40, shippedLooks: true})
+	dir := artifactDir(t)
+	first := attachIn(t, base, "agents", startOpts{cols: 120, rows: 40, shippedLooks: true})
 	if out, err := tuiosCLI(t, base, "send-text", "-s", "agents", "claude\n"); err != nil {
 		t.Fatalf("start the stand-in: %v\n%s", err, out)
 	}
 	waitClaudePanes(t, base, 1)
-	if err := term.WaitForText(noticeNotInstalled, uiTimeout); err != nil {
-		t.Fatalf("no toast for the missing integration: %v\n%s", err, term.Snapshot())
-	}
-	// The dock may cut the verb and the file, never the key: it comes right
-	// after the state.
-	if s := term.Screen(); !strings.Contains(s.Line(findRow(s, noticeNotInstalled)), noticeNotInstalled+" ctrl+b j") {
-		t.Fatalf("ASSERTION: the toast does not name the key that installs\n%s", term.Snapshot())
-	}
-	dir := artifactDir(t)
-	railShot(t, term, "agents-notice-install")
+	waitInstallNotice(t, first)
+	railShot(t, first, "agents-notice-install")
 
-	// A click on the text of the toast, which the dock may cut.
+	// The key and an enter right behind it.
+	if err := first.SendKeys(tuitest.Ctrl('b'), "j", tuitest.Enter); err != nil {
+		t.Fatal(err)
+	}
+	if err := first.WaitForText(installQuestion, uiTimeout); err != nil {
+		noHooksIn(t, settings, "an enter sent before the question was drawn installed the integration")
+		t.Fatalf("ASSERTION: ctrl+b j on the toast opened no question: %v\n%s", err, first.Snapshot())
+	}
+	time.Sleep(time.Second)
+	if !strings.Contains(first.Screen().Text(), installEffect) {
+		t.Fatalf("ASSERTION: the question does not name the file, or the enter in flight closed it\n%s", first.Snapshot())
+	}
+	noHooksIn(t, settings, "an enter sent before the question was drawn installed the integration")
+	railShot(t, first, "agents-notice-ask")
+	if err := first.SendKeys(tuitest.Esc); err != nil {
+		t.Fatal(err)
+	}
+	if err := first.WaitFor(func(s tuitest.Screen) bool { return !strings.Contains(s.Text(), installQuestion) }, uiTimeout); err != nil {
+		t.Fatalf("esc did not close the question: %v\n%s", err, first.Snapshot())
+	}
+	time.Sleep(time.Second)
+	noHooksIn(t, settings, "esc on the question wrote the file")
+	if st := claudeIntegrationVersion(t, base); st.Installed {
+		t.Fatalf("ASSERTION: esc on the question installed the integration: %+v", st)
+	}
+	if err := first.Close(); err != nil {
+		t.Logf("close the first client: %v", err)
+	}
+
+	// A new client shows the toast again. A click on its text, which the
+	// dock may cut, opens the same question.
+	term := attachIn(t, base, "agents", startOpts{cols: 120, rows: 40, shippedLooks: true})
+	waitInstallNotice(t, term)
 	s := term.Screen()
 	row := findRow(s, noticeNotInstalled)
 	mouseClick(t, term, strings.Index(s.Line(row), noticeNotInstalled)+2, row, tuitest.MouseLeft, 0)
+	if err := term.WaitForText(installEffect, uiTimeout); err != nil {
+		t.Fatalf("ASSERTION: the click on the toast opened no question: %v\n%s", err, term.Snapshot())
+	}
+	// The question takes no answer for half a second after it opens.
+	time.Sleep(time.Second)
+	noHooksIn(t, settings, "the click on the toast wrote the file before the question was answered")
+	// The Install row is the first line under the file that says Install.
+	s = term.Screen()
+	row = -1
+	for r := findRow(s, installEffect) + 1; r > 0 && r < 40; r++ {
+		if strings.Contains(s.Line(r), "Install") {
+			row = r
+			break
+		}
+	}
+	if row < 0 {
+		t.Fatalf("the question has no Install row\n%s", term.Snapshot())
+	}
+	mouseClick(t, term, strings.Index(s.Line(row), "Install")+2, row, tuitest.MouseLeft, 0)
 	if err := term.WaitForText("Installed in ~/.claude/settings.json.", uiTimeout); err != nil {
-		t.Fatalf("ASSERTION: the click on the toast installed nothing: %v\n%s", err, term.Snapshot())
+		t.Fatalf("ASSERTION: Install on the question installed nothing: %v\n%s", err, term.Snapshot())
 	}
 	railShot(t, term, "agents-notice-installed")
 	data, err := os.ReadFile(settings)

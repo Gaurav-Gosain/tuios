@@ -176,7 +176,7 @@ func (m *OS) renderDockNotifTooltip() *lipgloss.Layer {
 	} else if isRestartNotice(msg.Target) {
 		hint = "Click to restart the daemon. Press esc for later."
 	} else if isInstallNotice(msg.Target) {
-		hint = "Click to write the file it names."
+		hint = "Click to install it. tuios asks you first."
 	}
 	hint = overlay.Truncate(hint, textW)
 	rows = append(rows, dim.Render(pad+hint+strings.Repeat(" ", max(textW-lipgloss.Width(hint), 0))+pad))

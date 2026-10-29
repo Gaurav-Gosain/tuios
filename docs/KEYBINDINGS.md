@@ -627,7 +627,7 @@ no space in it, such as a long path, is cut where the room ends.
 | Keys | Where | What it does |
 |---|---|---|
 | `ctrl+b N` | anywhere | Show the last message from a pane, or the last message that was too long for the dock, also after it went from the dock |
-| `ctrl+b j` | anywhere | Go to the pane of the newest message. On an agent integration notice, install the integration |
+| `ctrl+b j` | anywhere | Go to the pane of the newest message. On an agent integration notice, ask to install the integration |
 | `j`, `k`, `up`, `down`, wheel | message view | Scroll one line |
 | `ctrl+d`, `ctrl+u`, `space`, `pgdown`, `pgup` | message view | Scroll half a page |
 | `g`, `G`, `home`, `end` | message view | Go to the first or last line |

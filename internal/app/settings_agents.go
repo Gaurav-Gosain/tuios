@@ -296,9 +296,9 @@ func (m *OS) agentIntegrationNotice(st integration.Status) string {
 	return st.Name + " integration is not installed. " + how
 }
 
-// installFromNotice installs or updates a harness's integration from its
-// notice. It runs the Agents tab's action, so both say the same result. The
-// command waits in notifPendingCmd for the key or the click to return.
+// installFromNotice opens the question that installs or updates a harness's
+// integration from its notice. A yes runs the Agents tab's action, so both
+// say the same result.
 func (m *OS) installFromNotice(id string) {
 	if m.refuseAgentsOff() {
 		return
@@ -324,7 +324,7 @@ func (m *OS) installFromNotice(id string) {
 	if st.State() == integration.StateOutOfDate {
 		verb = agentUpdate
 	}
-	m.notifPendingCmd = m.runAgentAction(st, verb)
+	m.openIntegrationAsk(st, verb)
 }
 
 // OpenAgentsSettings opens the settings page on the Agents tab. The prefix

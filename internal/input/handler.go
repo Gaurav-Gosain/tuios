@@ -580,6 +580,12 @@ func routeKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	if o.PluginApprovalOpen() {
 		return o, o.PluginApprovalKey(msg.String(), msg.Text)
 	}
+	// The integration question owns every key the same way, so the key
+	// that opened it, pressed again from habit, cannot answer it. See
+	// app/integration_confirm.go.
+	if o.IntegrationAskOpen() {
+		return o, o.IntegrationAskKey(msg.String())
+	}
 
 	// A copy's question and the Copies panel, the same way: the rail and
 	// the dock open them, and their keys must reach them. The question is
@@ -947,7 +953,7 @@ func handleMessageViewKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		return o, o.CopyMessageView()
 	case "enter":
 		o.MessageViewActivate()
-		return o, o.TakeNotifCmd()
+		return o, nil
 	case "ctrl+u":
 		o.MessageViewPage(-1)
 		return o, nil

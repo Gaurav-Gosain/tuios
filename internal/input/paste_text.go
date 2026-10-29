@@ -59,7 +59,7 @@ func textFieldPaste(o *app.OS) func(string) tea.Cmd {
 		return typed(o.FilePromptType)
 	case o.WorktreePromptOpen():
 		return typed(o.WorktreePromptType)
-	case o.PluginApprovalOpen():
+	case o.PluginApprovalOpen(), o.IntegrationAskOpen():
 		return nil
 	case o.CopyDialogOpen():
 		return typed(o.CopyDialogPaste)

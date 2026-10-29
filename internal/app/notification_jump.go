@@ -4,8 +4,6 @@ import (
 	"slices"
 	"time"
 
-	tea "charm.land/bubbletea/v2"
-
 	"github.com/Gaurav-Gosain/tuios/internal/federation"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 )
@@ -83,7 +81,7 @@ func (m *OS) jumpToNotifTarget(t NotifTarget) {
 		m.OpenDaemonRestart()
 		return
 	}
-	// An integration notice is answered with the install.
+	// An integration notice is answered with the question that installs.
 	if t.AgentInstall != "" {
 		m.installFromNotice(t.AgentInstall)
 		return
@@ -214,9 +212,8 @@ func isClipboardAsk(t *NotifTarget) bool { return t != nil && t.ClipboardAsk != 
 func isRestartNotice(t *NotifTarget) bool { return t != nil && t.DaemonRestart }
 
 // isInstallNotice reports whether a target is an integration notice. A click
-// on it installs even when the dock cut its text, so the mouse alone can take
-// it: the key is in the part the dock draws first, hovering shows the file it
-// names, and the result names the file again.
+// on it opens its question even when the dock cut its text: the question
+// names the file again.
 func isInstallNotice(t *NotifTarget) bool { return t != nil && t.AgentInstall != "" }
 
 // sameDrawnNotification reports whether a is the message b was drawn from,
@@ -236,12 +233,4 @@ func (m *OS) drawnCopy(n Notification) Notification {
 		n.Target = &t
 	}
 	return n
-}
-
-// TakeNotifCmd returns and clears the command the last activated message
-// produced. The key, the click and the message view drain it on their way out.
-func (m *OS) TakeNotifCmd() tea.Cmd {
-	cmd := m.notifPendingCmd
-	m.notifPendingCmd = nil
-	return cmd
 }

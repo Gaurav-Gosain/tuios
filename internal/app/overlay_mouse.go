@@ -229,6 +229,8 @@ func (m *OS) overlayRowHover(kind string, idx int) {
 		m.CopyDialogSelect(idx)
 	case overlayKindPluginApproval:
 		m.PluginApprovalSelect(idx)
+	case overlayKindIntegrationAsk:
+		m.IntegrationAskSelect(idx)
 	case "navigator":
 		m.NavigatorSelect(idx)
 	case "aggregate":
@@ -512,6 +514,8 @@ func (m *OS) overlayRowClick(kind string, row overlayRowHit, lx, ly int) tea.Cmd
 		return m.CopyDialogActivate(row.Idx)
 	case overlayKindPluginApproval:
 		return m.PluginApprovalActivate(row.Idx)
+	case overlayKindIntegrationAsk:
+		return m.IntegrationAskActivate(row.Idx)
 	case "navigator":
 		// A click on a session or a workspace row folds it, and a click on
 		// a pane goes to it, as enter does.
@@ -654,6 +658,9 @@ func (m *OS) closeOverlay(kind string) {
 	case overlayKindPluginApproval:
 		// Click-away is not now: the plugin keeps waiting.
 		m.ClosePluginApproval()
+	case overlayKindIntegrationAsk:
+		// Click-away is not now: nothing is written.
+		m.CloseIntegrationAsk()
 	case "worktreeprompt":
 		// Click-away cancels, matching Esc: nothing was asked yet, so nothing
 		// is lost.
