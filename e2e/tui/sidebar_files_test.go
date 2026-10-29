@@ -903,8 +903,21 @@ func TestRailFileDragIntoPane(t *testing.T) {
 	newWindow(t, term)
 	waitWindowCount(t, term, 1, "opening a shell for the listing")
 	enterTerminalMode(t, term)
+	// clearPane clears the screen in the shell. Each call waits for a
+	// marker of its own. A marker an earlier clear left on screen ends the
+	// wait at once, and the keys typed next reach the shell while clear
+	// still runs. When sh is dash, as on Debian and Ubuntu, there is no line
+	// editor: the terminal echoes those keys, clear erases them from the
+	// screen, and the command line on screen never matches.
+	clears := 0
+	clearPane := func(t *testing.T) {
+		t.Helper()
+		clears++
+		m := fmt.Sprintf("CLEARED%d", clears)
+		runInShell(t, term, "clear; echo "+splitMarker(m), m, uiTimeout)
+	}
 	runInShell(t, term, "cd "+dir+" && printf '\\033]7;file://%s\\033\\\\%s\\n' \"$PWD\" lis\"\"ted", "listed", uiTimeout)
-	runInShell(t, term, "clear; echo CLE\"\"AR", "CLEAR", uiTimeout)
+	clearPane(t)
 	leaveTerminalMode(t, term)
 	toggleSidebarViaPalette(t, term)
 	waitForAll(t, term, uiTimeout, "the listing", rows...)
@@ -978,7 +991,7 @@ func TestRailFileDragIntoPane(t *testing.T) {
 			}
 			if sh.start == "" {
 				// sh may have no line editor, and then ctrl+l is a character.
-				runInShell(t, term, "clear; echo CLE\"\"ARED", "CLEARED", uiTimeout)
+				clearPane(t)
 			} else {
 				if err := term.SendKeys(tuitest.Ctrl('l')); err != nil {
 					t.Fatal(err)
@@ -1026,7 +1039,7 @@ func TestRailFileDragIntoPane(t *testing.T) {
 
 			// The path picker types a name by the same quoting rules.
 			if sh.start == "" {
-				runInShell(t, term, "clear; echo CLE\"\"ARED", "CLEARED", uiTimeout)
+				clearPane(t)
 			} else {
 				if err := term.SendKeys(tuitest.Ctrl('l')); err != nil {
 					t.Fatal(err)
@@ -1061,7 +1074,7 @@ func TestRailFileDragIntoPane(t *testing.T) {
 	// I on a row is the same drop, from the keyboard, on the focused pane.
 	t.Run("key", func(t *testing.T) {
 		enterTerminalMode(t, term)
-		runInShell(t, term, "clear; echo CLE\"\"ARED", "CLEARED", uiTimeout)
+		clearPane(t)
 		if err := term.SendKeys(`printf '<%s>\n' `); err != nil {
 			t.Fatal(err)
 		}

@@ -10535,3 +10535,9 @@ The positive half is in the same run: the copy pipe key `p` is still warned abou
 | Control: what was cut | Where it fails | Verdict |
 | --- | --- | --- |
 | `quoteDropPath` answers `pastePathText` (POSIX single quotes) for every shell | `fish`: "after dropping \"it's a file.txt\" the command line is not ...". The subtests after it fail too, because fish is still running in the pane | **caught** |
+
+The sh round later failed in CI, where sh is dash, and passed on the machine above, where sh is bash. Both clears in the round waited for `CLEARED`, and the first clear left it on screen. The second wait ended at once, so the printf keys reached sh while `clear` still ran. dash has no line editor: the terminal echoed the first key, `clear` erased it, and the screen showed `rintf` where the test waited for `printf`. bash reads typed-ahead keys through readline and shows them again, so it hid the race. Each clear now waits for a marker of its own, `CLEARED1`, `CLEARED2` and so on.
+
+| Control: what was cut | Where it fails | Verdict |
+| --- | --- | --- |
+| Each clear waits for the same `CLEARED`, run with sh as dash and a `clear` on `PATH` that sleeps 0.3 s first | `sh`: "the path picker did not type printf '[%s]\n' 'back\slash.txt' in sh", with `$ 'back\slash.txt'` on screen. 3 of 3 runs with a Go 1.27.3 binary and 3 of 3 with Go 1.26.10. The test with a marker per clear passed 3 of 3 with each | **caught** |
