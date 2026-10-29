@@ -143,20 +143,25 @@ func (p *prevBinary) fd() int {
 	return int(p.open.Fd()) //nolint:gosec // a descriptor number
 }
 
+// restartAdvice is what to do when a live upgrade is not possible.
+func restartAdvice() string {
+	return "To run another tuios, use '" + tuiosCmd("restart-server") + "'. It stops every program in every pane, and lists them before it asks."
+}
+
 // checkPrevBinary says whether the kept binary is still the one kept.
 func (d *Daemon) checkPrevBinary() (*prevBinary, error) {
 	d.prevMu.Lock()
 	prev := d.prev
 	d.prevMu.Unlock()
 	if prev == nil {
-		return nil, errors.New("this daemon kept no copy of its binary to fall back to (see the daemon log); restart it with 'tuios kill-server' to upgrade")
+		return nil, errors.New("this daemon kept no copy of its binary to fall back to, so it cannot upgrade live. The daemon log says why. " + restartAdvice())
 	}
 	if prev.open != nil {
 		return prev, nil
 	}
 	id, err := statFileID(prev.path)
 	if err != nil || id != prev.file {
-		return nil, fmt.Errorf("the copy of this daemon's binary kept for a fallback, %s, has changed; restart it with 'tuios kill-server' to upgrade", prev.path)
+		return nil, fmt.Errorf("the copy of this daemon's binary kept for a fallback, %s, has changed since the daemon started, so a failed upgrade would have nothing to return to. The upgrade is refused. %s", prev.path, restartAdvice())
 	}
 	if prev.sum != nil {
 		f, err := os.Open(prev.path)
@@ -167,7 +172,7 @@ func (d *Daemon) checkPrevBinary() (*prevBinary, error) {
 		_, err = io.Copy(h, f)
 		_ = f.Close()
 		if err != nil || !bytes.Equal(h.Sum(nil), prev.sum) {
-			return nil, fmt.Errorf("the copy of this daemon's binary kept for a fallback, %s, has changed; restart it with 'tuios kill-server' to upgrade", prev.path)
+			return nil, fmt.Errorf("the copy of this daemon's binary kept for a fallback, %s, has changed since the daemon started, so a failed upgrade would have nothing to return to. The upgrade is refused. %s", prev.path, restartAdvice())
 		}
 	}
 	return prev, nil

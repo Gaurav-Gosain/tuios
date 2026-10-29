@@ -39,7 +39,7 @@ const (
 )
 
 // ErrHandoffUnsupported is a platform with no live handoff.
-var ErrHandoffUnsupported = errors.New("live upgrade is not supported on this platform. 'tuios kill-server' restarts the daemon, which ends running programs")
+var ErrHandoffUnsupported = errors.New("live upgrade is not supported on this platform. To run another tuios, use 'tuios restart-server'. It stops every program in every pane, and lists them before it asks")
 
 var (
 	errHandoffBusy     = errors.New("a live upgrade is already running")

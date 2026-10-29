@@ -93,8 +93,8 @@ func preflightBinary(path string) (handoffBinary, error) {
 		return handoffBinary{}, fmt.Errorf("%s is built for %s, and this daemon runs on %s. Upgrade to a tuios built for %s", abs, acc.OS, runtime.GOOS, runtime.GOOS)
 	}
 	if HandoffVersion < acc.Handoff[0] || HandoffVersion > acc.Handoff[1] {
-		return handoffBinary{}, fmt.Errorf("%s (%s) cannot read this daemon's state (handoff v%d, it reads v%d to v%d)",
-			abs, acc.Version, HandoffVersion, acc.Handoff[0], acc.Handoff[1])
+		return handoffBinary{}, fmt.Errorf("%s (%s) cannot read this daemon's state. This daemon writes handoff v%d, and that binary reads v%d to v%d. Upgrade live to a tuios that reads v%d. %s",
+			abs, acc.Version, HandoffVersion, acc.Handoff[0], acc.Handoff[1], HandoffVersion, restartAdvice())
 	}
 	after, err := statFileID(abs)
 	if err != nil || after != before {
