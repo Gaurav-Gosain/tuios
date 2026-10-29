@@ -10803,3 +10803,46 @@ The fake Claude also starts with `--dangerously-skip-permissions`, a flag the ma
 | The Preview row in `fileRowMenu` (`internal/app/contextmenu_build.go`) | "ASSERTION: the files menu has no Preview row" | **caught** |
 | The menu branch in `SidebarQuickLook` (`internal/app/quicklook.go`), so Preview shows the cursor row | "ASSERTION: Preview did not show the row the menu was opened on" | **caught** |
 | None (the branch) | Passes | **guard** |
+## Drag and drop between panes
+
+`TestDnDBetweenPanes` drives a real tuios against two panes running the
+`dndpeer` protocol peer, which reads messages as yazi reads them: a drop over
+the protocol, a drop on a pane without it, text alone (`DNDPEER_OFFER=text`)
+dropped on a reader without bracketed paste and then on the same reader with
+it on, a drop on a fish pane of a path with a quote in it (skipped without
+fish), a gesture the program ignores, a board with `[panes] drag_and_drop`
+off, and a drop back into the source pane.
+`TestDnDRegistrationOutlivesTheClient` starts the peers, then either replaces
+the client with `attach -d` and drags in the new one, or attaches a second
+client before the peers start and drags in the first.
+`TestDnDRefusesPanesOnAnotherMachine` attaches with `--host` to a session on
+a second daemon, and `TestDnDRefusesAPaneHostedElsewhere` opens a pane on
+that daemon inside a local session (`new-window --host`), and drags both
+ways. Run on 2026-10-29 on Linux with Go 1.27.3, based on `7709625`.
+
+Each control cuts the line that wires the feature in, not the function it
+calls.
+
+| Control: what was cut | Test failure | Verdict |
+| --- | --- | --- |
+| `internal/input/mouse_motion.go`, the `o.DnDMotion(...)` call, so no motion reaches the drag | every subtest of `TestDnDBetweenPanes` but the one with the switch off ("the drag label is not on screen mid-drag", "the target never got the drop data", "the pane never got the paste", "the source never saw the first gesture", "the source never heard the drag end") and both of `TestDnDRegistrationOutlivesTheClient` | **caught** |
+| the same, for the subtest with the switch off | passes: with nothing reaching the drag, nothing happens, which is what it asserts | **guard**, by design |
+| `internal/app/dnd.go`, `[panes] drag_and_drop` dropped from `dndOn`, so the feature is always on | `.../with_drag_and_drop_off...`: "with drag and drop off the source was offered a drag, or had its query answered" and "the target heard of the protocol" | **caught** |
+| `internal/app/dnd.go`, `paneIsLocal` dropped from `dndPaneLocal`, so every pane takes part | `TestDnDRefusesPanesOnAnotherMachine`: "a pane on another machine was offered a drag" and "was made a drop target"; `TestDnDRefusesAPaneHostedElsewhere`: "a drop onto a pane hosted elsewhere was not cancelled" and "a pane hosted elsewhere took part in a drag" | **caught** |
+| `internal/app/session.go`, both `m.takeDaemonDnD(...)` calls, so a late client takes no registration from the daemon | `.../a_client_attached_after_the_programs_started`: "the target never got the drop data" | **caught** |
+| `internal/app/dnd.go`, the `dndShared` gates in `dndRefuse` and on the `t=q` answer, so every client answers for itself | `.../two_clients_attached`: "the source got 3 answers to its query, want 1" (the daemon's and both clients'), and "a client that did not make the drag answered for it" | **caught** |
+| `internal/session/session.go`, the `pty.dnd.note(data)` call in the daemon's `PrivateOSC`, so the daemon neither records nor answers | both registration subtests ("the target never got the drop data", "the source got 0 answers to its query, want 1") and `TestDnDRefusesPanesOnAnotherMachine` ("want 1 (the far daemon's)") | **caught** |
+| the MIME list sent with the first move only, not with every move | `source_to_target_over_the_protocol` and the ignored-gesture subtest: the peer refuses every move after the first, no drop comes; both registration subtests the same | **caught** |
+| a new press leaves a gesture the program ignored as the current drag | the ignored-gesture subtest: "the target never got the drop data of the second gesture" | **caught** |
+| the position keys left out at zero (`t=e:x=4` without `y=0`, a move without `o`), as before the encoder wrote them | the protocol subtest, the fallback subtest and both registration subtests: the peers drop such a message, as yazi does | **caught** |
+| `internal/app/dnd_drag.go`, the bracketed paste refusal in `dndJudge`, so the hover does not refuse text | `.../dropped_text_goes_only_into_a_pane_with_bracketed_paste_on`: "the label does not say why the pane refuses the text". The text still does not arrive: `dndPasteFallback` checks the mode again with the data in hand | **caught** |
+| the same, and the check in `dndPasteFallback` too | the same subtest: "a text drop on a pane without bracketed paste was not refused" and the pane without bracketed paste got `"line one\nline two"` | **caught** |
+| `internal/app/file_drop.go`, `judgeDropPaths` quoting every pane as POSIX instead of for its program | `.../a_drop_on_a_fish_pane_is_quoted_for_fish`: the fish pane shows `'…/it'\''s here.txt'` where `'…/it\'s here.txt'` is expected | **caught** |
+
+The subtests each control leaves passing are its positive half: under every
+control the other subtests of the same fixture pass, and on the build with
+the code in place every test above passes.
+
+Repeat with `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run
+'TestDnD' -v .` from `e2e/tui`. `TUIOS_E2E_YAZI` and `TUIOS_E2E_KITTEN` add
+the runs with the real programs.
