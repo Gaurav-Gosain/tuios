@@ -195,6 +195,16 @@ type StartupConfig struct {
 	// bare "tuios" whose daemon will not start runs standalone for that one run
 	// and says so, so this never leaves the user without a terminal.
 	Daemon bool `toml:"daemon"`
+	// Session is the session a bare "tuios" attaches to, made when it is gone,
+	// as "tuios attach NAME -c" does. Empty keeps the old choice: the most
+	// recent session. A name needs the daemon, so a set Session takes the
+	// daemon route even with Daemon off; --standalone and TUIOS_NO_DAEMON=1
+	// still win. Any subcommand names its own session and ignores this.
+	Session string `toml:"session"`
+	// Window is the pane a bare "tuios" focuses in Session before it attaches,
+	// by id or name as "tuios focus-window" resolves it. It needs Session. A
+	// name no pane has leaves the focus where it was and creates nothing.
+	Window string `toml:"window"`
 }
 
 // TapeConfig holds settings for per-directory project tapes (.tuios.tape).

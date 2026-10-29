@@ -29,6 +29,11 @@ import (
 // session is new or not. A popup that runs tuios attach can use it.
 var attachTerminalMode bool
 
+// attachFocusWindow is the pane runAttach focuses before the client starts:
+// startup.window, set only by a bare "tuios". Every subcommand leaves it
+// empty, so the config never moves the focus of an attach someone typed.
+var attachFocusWindow string
+
 func runAttach(sessionName string, createIfMissing bool) error {
 	// First of all, because the refusal is the whole answer: a client in a pane
 	// of the session it asks for sizes the session by its own pane (#235).
@@ -68,7 +73,30 @@ func runAttach(sessionName string, createIfMissing bool) error {
 		return err
 	}
 
+	if attachFocusWindow != "" && sessionName != "" {
+		focusBeforeAttach(sessionName, attachFocusWindow)
+	}
+
 	return runDaemonSession(sessionName, createIfMissing)
+}
+
+// focusBeforeAttach focuses a pane in a session before the client attaches,
+// through the focus-window verb, so a name resolves as "tuios focus-window -s
+// SESSION NAME" resolves it, workspace switch included. It is best effort: a
+// session that does not exist yet, or a name no pane has, leaves the focus
+// where it was and the attach goes ahead. Nothing is created.
+func focusBeforeAttach(sessionName, window string) {
+	client, err := dialVerb()
+	if err != nil {
+		return
+	}
+	defer func() { _ = client.Close() }()
+	if _, err := client.Call("focus-window", map[string]any{
+		"session": sessionName,
+		"window":  window,
+	}); err != nil {
+		log.Printf("startup.window: cannot focus %q in session %q: %v", window, sessionName, err)
+	}
 }
 
 // reportSavedSessionsBeforeStart says what is about to be brought back, and

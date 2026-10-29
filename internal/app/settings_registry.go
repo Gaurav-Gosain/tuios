@@ -159,6 +159,8 @@ var settingLabels = map[string]string{
 	"appearance.focus_follows_mouse_pause":      "Key that pauses focus follows mouse",
 	"startup.tiled":                             "Start tiled",
 	"startup.daemon":                            "Daemon by default",
+	"startup.session":                           "Start session",
+	"startup.window":                            "Start pane",
 
 	// The [notifications] rows sit under one tab, where a row called "Duration"
 	// or "Sound" does not say which of the three durations or whose sound.

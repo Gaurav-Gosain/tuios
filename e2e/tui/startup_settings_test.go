@@ -129,3 +129,71 @@ func TestStartupDefaultsPreserved(t *testing.T) {
 	}
 	alive(t, term, "after default boot")
 }
+
+// TestStartupSessionAndWindow covers startup.session and startup.window: a
+// bare "tuios" attaches to the named session and focuses the named pane on
+// its workspace, makes the session when it is gone, and attaches with the
+// focus unchanged when no pane has the name. daemon = false proves that a
+// start session takes the daemon route by itself.
+func TestStartupSessionAndWindow(t *testing.T) {
+	base := t.TempDir()
+	killDaemon(t, base)
+	writeConfig(t, base, "[startup]\ndaemon = false\nsession = \"home\"\nwindow = \"start\"\n")
+	if out, err := tuiosCLI(t, base, "new", "home", "--detach"); err != nil {
+		t.Fatalf("new home: %v\n%s", err, out)
+	}
+	if out, err := tuiosCLI(t, base, "new", "other", "--detach"); err != nil {
+		t.Fatalf("new other: %v\n%s", err, out)
+	}
+	out, err := tuiosCLI(t, base, "new-window", "-s", "home", "--workspace", "2", "--no-focus", "--print-id", "start")
+	if err != nil {
+		t.Fatalf("new-window start: %v\n%s", err, out)
+	}
+	startID := strings.TrimSpace(out)
+	if got := currentWorkspace(t, base, "home"); got != 1 {
+		t.Fatalf("home shows workspace %d before the attach, want 1", got)
+	}
+
+	term := startIn(t, base, startOpts{daemonDefault: true})
+	if err := term.WaitForText(" start ", bootTimeout); err != nil {
+		t.Fatalf("a bare tuios does not show the pane named start: %v\n%s", err, term.Snapshot())
+	}
+	waitAttached(t, base, "home")
+	if got := focusedWindowID(t, base, "home"); got != startID {
+		t.Errorf("ASSERTION: the focused pane of home is %q, want the pane named start %q", got, startID)
+	}
+	if got := currentWorkspace(t, base, "home"); got != 2 {
+		t.Errorf("ASSERTION: home shows workspace %d after a bare tuios, want 2, the workspace of start", got)
+	}
+	saveFrame(t, term, "startup-session-window")
+
+	// The session is gone: a bare tuios makes it. The pane name matches
+	// nothing there, so the attach goes ahead and no pane is made.
+	writeConfig(t, base, "[startup]\nsession = \"fresh\"\nwindow = \"nope\"\n")
+	second := startIn(t, base, startOpts{daemonDefault: true})
+	waitBoot(t, second)
+	waitAttached(t, base, "fresh")
+	if out, err := tuiosCLI(t, base, "list-windows", "-s", "fresh", "--json"); err != nil || strings.Contains(out, `"nope"`) {
+		t.Errorf("ASSERTION: fresh has a pane named nope or cannot list: %v\n%s", err, out)
+	}
+	saveFrame(t, second, "startup-session-made")
+}
+
+// waitAttached waits until tuios ls says session name has a client.
+func waitAttached(t *testing.T, base, name string) {
+	t.Helper()
+	rows := waitForRows(t, base, func(rows []lsRow) bool {
+		for _, r := range rows {
+			if r.Name == name && r.Attached {
+				return true
+			}
+		}
+		return false
+	})
+	for _, r := range rows {
+		if r.Name == name && r.Attached {
+			return
+		}
+	}
+	t.Fatalf("session %q has no client: %+v", name, rows)
+}

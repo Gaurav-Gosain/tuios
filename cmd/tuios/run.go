@@ -97,7 +97,13 @@ func runLocal() error {
 	// wants, and a session already running is a separate process this cannot
 	// reach, so the setting never disturbs one.
 	if useDaemonByDefault(userConfig) {
-		err := runAttach("", true)
+		// startup.session names the session a bare "tuios" opens, made when it
+		// is gone, as "tuios attach NAME -c" does. Empty keeps the most recent.
+		name := userConfig.Startup.Session
+		if name != "" {
+			attachFocusWindow = userConfig.Startup.Window
+		}
+		err := runAttach(name, true)
 		// A daemon that will not start must not leave the user with no
 		// terminal. This route was not asked for on the command line: it is
 		// what the shipped default does, so the standalone session it replaced
@@ -309,5 +315,6 @@ func useDaemonByDefault(cfg *config.UserConfig) bool {
 	if standaloneMode || os.Getenv("TUIOS_NO_DAEMON") == "1" {
 		return false
 	}
-	return cfg != nil && cfg.Startup.Daemon
+	// A start session lives in the daemon, so naming one asks for it.
+	return cfg != nil && (cfg.Startup.Daemon || cfg.Startup.Session != "")
 }

@@ -675,6 +675,8 @@ func (m *OS) settingsCategories() []settingsCategory {
 			opt("startup.layout"),
 			opt("startup.start_in_terminal_mode"),
 			opt("startup.daemon"),
+			opt("startup.session"),
+			opt("startup.window"),
 		}),
 	}
 

@@ -122,6 +122,10 @@ tuios
 tuios --standalone
 ```
 
+With `startup.session` set, a plain `tuios` attaches to that session and makes
+it if it is gone. `startup.window` also focuses one pane in it. See
+[SESSIONS.md](SESSIONS.md#start-session-and-start-pane).
+
 **Flags:**
 
 `tuios --help` is the authoritative list. These are the flags it shows today:

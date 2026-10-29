@@ -79,6 +79,36 @@ An install that already has a config file keeps what that file says. The
 `[startup]` booleans are only read from the file, so `tuios` on an existing
 machine goes on doing what it did.
 
+### Start session and start pane
+
+By default, `tuios` attaches to the most recent session. To open the same
+session every time, set `startup.session`. To also focus one pane in it, set
+`startup.window` to the name or id of that pane:
+
+```toml
+[startup]
+session = "home"
+window = "start"
+```
+
+- `tuios` then does what `tuios attach home -c` does. It attaches to `home`,
+  and makes the session if it is gone.
+- Before it attaches, `tuios` focuses the pane named `start`, as
+  `tuios focus-window -s home start` does. It switches to the workspace of
+  that pane.
+- When no pane has that name, `tuios` attaches and the focus does not change.
+  It does not make a pane.
+- `startup.window` needs `startup.session`. Without a session it does nothing.
+- A start session needs the daemon, so `startup.session` uses the daemon
+  even when `startup.daemon` is `false`. `--standalone` and
+  `TUIOS_NO_DAEMON=1` still run a local session.
+- The options change a plain `tuios` only. `tuios attach`, `tuios new` and
+  every other command use the session you give them.
+
+To make the session start in a folder, make it once with
+`tuios new home --cwd ~/some/folder --detach`. Give a pane its name with
+`tuios set-window -s home --name start`.
+
 A daemon session lives in a separate `tuios` daemon process. The daemon owns the
 shell processes (PTYs) and runs a terminal emulator for each one, so output keeps
 being parsed whether or not anyone is watching. A client is only a viewer: it

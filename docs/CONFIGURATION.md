@@ -1090,6 +1090,28 @@ With `center`, the grid is off, so `master_grid` has no effect. The first pane
 of the workspace is the master. To make another pane the master, focus it and
 press `Ctrl+B L Enter`.
 
+## Start session and start pane
+
+Two `[startup]` options choose where a plain `tuios` opens. Both are empty by
+default.
+
+| Option | What it does | Default |
+|---|---|---|
+| `startup.session` | The session that `tuios` attaches to. tuios makes the session if it is gone, as `tuios attach NAME -c` does. Empty attaches to the most recent session | empty |
+| `startup.window` | The pane, by name or id, that `tuios` focuses in `startup.session` before it attaches. When no pane has that name, the focus does not change. It needs `startup.session` | empty |
+
+```toml
+[startup]
+session = "home"
+window = "start"
+```
+
+`tuios attach`, `tuios new` and every other command use the session you give
+them, and ignore these options. `startup.session` uses the daemon even when
+`startup.daemon` is `false`. `--standalone` and `TUIOS_NO_DAEMON=1` still run a
+local session. Both options are on the settings page, in the Startup section.
+See [SESSIONS.md](SESSIONS.md#start-session-and-start-pane).
+
 ## Drop preview
 
 While you drag a tiled pane in BSP, tuios shows where the pane would land if you let go. See [LAYOUT_MODES.md](LAYOUT_MODES.md). The preview is a frame in the accent colour, drawn with the same border characters as the panes. With `fill`, the area inside the frame gets one tint, and the text under it fades into that tint. On a 16-colour terminal the frame is reverse video and the area inside stays as it is. Two options shape that preview:
