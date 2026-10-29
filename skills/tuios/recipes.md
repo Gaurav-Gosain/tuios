@@ -72,6 +72,74 @@ For an agent that runs now and is busy, `tuios queue` types the text as its
 next prompt when it comes to rest. Do not use `send-text` for either case: it
 types at once, into whatever runs in the pane.
 
+## Keep the machine awake while agents work
+
+The daemon runs `after-agent-state` with nobody attached. A hook can hold the
+machine awake while any agent works and let go when none works. The hook fires
+only for states that `[notifications.agent.states]` lists, so turn on
+`working` and `idle` as well:
+
+```toml
+[hooks]
+after-agent-state = ["sh ~/.config/tuios/hooks/awake.sh"]
+
+[notifications.agent.states]
+working = true
+idle = true
+```
+
+These states also raise alerts. Keep `[notify]` and phone hooks off them, or
+test `TUIOS_AGENT_STATE` in those scripts.
+
+```sh
+#!/bin/sh
+# ~/.config/tuios/hooks/awake.sh
+pidfile="${XDG_RUNTIME_DIR:-/tmp}/tuios-awake.pid"
+working=$(tuios list-agents --all-sessions --json | jq '[.agents[] | select(.state=="working")] | length')
+running=0
+[ -s "$pidfile" ] && kill -0 "$(cat "$pidfile")" 2>/dev/null && running=1
+if [ "$working" -gt 0 ] && [ "$running" = 0 ]; then
+  case "$(uname)" in
+    Darwin) caffeinate -i & echo $! > "$pidfile" ;;
+    *) systemd-inhibit --what=idle:sleep --who=tuios --why='An agent works' sleep infinity & echo $! > "$pidfile" ;;
+  esac
+elif [ "$working" = 0 ] && [ "$running" = 1 ]; then
+  kill "$(cat "$pidfile")"
+  rm -f "$pidfile"
+fi
+```
+
+The daemon reads `[hooks]` when it starts. Run `tuios restart-server` after
+you edit it, then `tuios list-hooks` to check that the hook ran. Use full
+paths in the script when `tuios` or `jq` is not on the daemon's `PATH`.
+
+## Run an agent on a schedule
+
+`start-agent` returns once the agent is at its prompt. `--prompt` gives it the
+job. A cron line can start one each morning, and the agent's question or
+result lands in the Inbox (`tuios --skill inbox`). A session that does not
+exist is created:
+
+```sh
+# crontab -e
+0 7 * * 1-5  tuios start-agent -s nightly claude --name triage --prompt 'List the open issues labeled bug and rank them.'
+```
+
+The daemon must run. For a machine named in `tuios hosts`, use `-s
+HOST:SESSION`.
+
+To give a running agent its next job, queue the prompt. It is typed when the
+agent next comes to rest:
+
+```sh
+30 7 * * 1-5  tuios queue -s nightly -w triage 'Then draft a reply for the top issue.'
+```
+
+With systemd, put the same command in a `.service` file and start it from a
+`.timer` file with `OnCalendar=Mon..Fri 07:00`. Write the full path of
+`tuios` in `ExecStart=`. The prompt is typed as the person, so keep it short
+and keep secrets out of it.
+
 ## A sessionizer
 
 Open a project as a session: pick a folder, and switch to its session, made in

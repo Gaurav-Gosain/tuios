@@ -182,7 +182,7 @@ The guide is [docs/AGENT_STATE.md](docs/AGENT_STATE.md).
 - **MCP Server**: `tuios mcp` serves the same surface as MCP tools, read-only and held to the agent's own session unless you say otherwise
 - **tmux Shim**: `tuios tmux-shim` runs tools that drive tmux, such as Claude Code agent teams, with their panes opened as tuios panes
 - **Session Stash**: `tuios stash put` keeps a file for the session, so another agent can still open it
-- **Agent Skill**: `tuios --skill` prints the short guide an agent in a pane reads to drive tuios, and `tuios --skill TOPIC` the rest, recipes included
+- **Agent Skill**: `tuios --skill` prints the short guide an agent in a pane reads to drive tuios, and `tuios --skill TOPIC` the rest, recipes included. To move your tmux, zellij or herdr settings over, tell your agent: "Run `tuios --skill config` and move my tmux settings over."
 
 ### Machines
 - **Hosts**: `tuios hosts add` names another machine, reached over ssh. `tuios hosts tailnet` lists the machines on a Tailscale tailnet

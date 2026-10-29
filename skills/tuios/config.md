@@ -1,5 +1,9 @@
 # Configuration, appearance, the dock, hooks and keybindings
 
+When the person asks you to move their tmux, screen or zellij settings over,
+read "Keys of tmux, screen or zellij" below. Run `tuios keybinds preset
+tmux`, then `tuios keybinds cheatsheet tmux` to show what moved.
+
 ## Options
 
 Everything scalar is settable at runtime. Find the option rather than guessing
