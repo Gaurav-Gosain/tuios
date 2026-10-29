@@ -63,8 +63,11 @@ reason in `notes`). Without a terminal, `--restart` also needs `--yes`. Do not
 pass either unless the person asked to move the daemons. Each row of `--json`
 has `restart_needed` and `restart_command`, and `daemon.sessions[].busy` lists
 the panes a restart would end. From a pane of this machine's daemon, `--local
---restart` installs and leaves that daemon with a note: it refuses an upgrade
-from its own panes, and a restart would end the pane.
+--restart` only upgrades that daemon live, and never restarts it: a restart
+would end the pane. The daemon asks the person in a dialog at their client,
+and waits up to a minute. Do not try to answer it yourself. Without their Yes
+the binary is installed, the daemon keeps the old version, and the row's note
+says so.
 
 A host behind Tailscale SSH in check mode waits for the person to sign in in
 a browser. Its link reports `tailscale_check` with `approval_url` (the table of

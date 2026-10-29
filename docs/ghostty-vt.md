@@ -58,7 +58,8 @@ install look like it did nothing:
   it is moved. Pass `--upgrade-server` to have the script run
   `tuios daemon upgrade`, which moves it to the new build with every program
   in your panes still running (experimental; a daemon that cannot be
-  upgraded live is left as it is, and the script says why).
+  upgraded live is left as it is, and the script says why. Run from one
+  of its panes, the upgrade waits for your Yes in the tuios dialog).
   `--kill-server` has it run `tuios kill-server` instead, and
   `--keep-server` tells you and leaves it alone; with none of them, it asks.
   Stopping the daemon ends the programs in your panes; each session's layout
