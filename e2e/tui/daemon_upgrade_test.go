@@ -274,11 +274,13 @@ func TestDaemonUpgradeRefusalNamesTheServer(t *testing.T) {
 }
 
 // TestDaemonUpgradeFromAPaneIsRefused runs `tuios daemon upgrade` from a pane
-// under the default open mode, where every pane holds admin. The binary named
-// would run as the daemon, which holds every pane's terminal and the key that
-// signs every pane's token, so a process inside a pane is refused whatever
-// its grants, as apply-config is. The daemon's image must not change, and the
-// same upgrade from outside every pane must go through.
+// under the default open mode, where every pane holds admin, with no client
+// attached. The binary named would run as the daemon, which holds every pane's
+// terminal and the key that signs every pane's token, so a pane's upgrade
+// needs the person to say yes at an attached client (upgrade_confirm_test.go),
+// and with none attached it is refused at once, whatever the pane's grants.
+// The daemon's image must not change, and the same upgrade from outside every
+// pane must go through.
 func TestDaemonUpgradeFromAPaneIsRefused(t *testing.T) {
 	base := t.TempDir()
 	startHandoffDaemon(t, base)
@@ -286,14 +288,19 @@ func TestDaemonUpgradeFromAPaneIsRefused(t *testing.T) {
 	win := newCommandWindow(t, base, sess, "agent", false, "sh")
 	img := helloImage(t, base)
 	second := copyTuios(t)
+	started := time.Now()
 	_ = mustCall(t, base, "send-text", map[string]any{"session": sess, "window": win,
 		"text": tuiosBin + " daemon upgrade --binary " + second + "; echo UP_EXIT=$?\n"})
-	m := waitHandoffPane(t, base, sess, win, regexp.MustCompile(`UP_EXIT=(\d+)`), 60*time.Second)
+	m := waitHandoffPane(t, base, sess, win, regexp.MustCompile(`UP_EXIT=(\d+)`), 90*time.Second)
+	took := time.Since(started)
 	lines := mustScrollback(t, base, sess, win)
 	after := helloImage(t, base)
 	res, out, err := daemonUpgrade(t, base, second)
-	writeHandoffArtifact(t, map[string]any{"exit": m[1], "screen": lines, "before": img, "after": after,
+	writeHandoffArtifact(t, map[string]any{"exit": m[1], "seconds": took.Seconds(), "screen": lines, "before": img, "after": after,
 		"from_outside": res, "from_outside_err": errString(err)})
+	if took > 30*time.Second {
+		t.Errorf("ASSERTION: with no client attached the pane's upgrade took %s to be refused, as if it waited for an answer", took)
+	}
 	if after.Instance != img.Instance || after.PID != img.PID {
 		t.Fatalf("ASSERTION: a pane upgraded the daemon (%+v then %+v)", img, after)
 	}
