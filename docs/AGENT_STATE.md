@@ -4526,6 +4526,37 @@ message is typed when:
   typing time is when the Enter went out, so a turn that ends while the daemon
   still watches for the agent to take the message counts.
 
+**Your draft comes first.** An agent at rest is also where you write your
+next prompt. A message is not typed while either is true:
+
+- you typed into the pane less than 3 seconds ago. Focus and mouse reports do
+  not count;
+- the harness's input box holds text. The `[prompt_box]` block of its
+  manifest says what the empty box looks like (see below), and the daemon
+  reads the box with faint text left out, so a placeholder or a suggested
+  prompt does not count as a draft.
+
+While your draft holds a message, the agents view shows "Waits: your draft is
+in the prompt box" on the agent's row, and `get-agent-state` reports
+`draft_held`. Send or clear the draft, and the message is typed 3 seconds
+after your last key. A draft that holds a message for 10 minutes opens a
+question in the Inbox, and the row moves to Needs you. Nothing is dropped for
+waiting. Claude Code and Codex have a `[prompt_box]` block. Every other
+harness gets the 3 second pause only. Nothing polls: while a message waits,
+output from the pane and your keys arm the next look.
+
+```toml
+[prompt_box]
+region = "prompt_box"                          # a screen region, as for a rule
+empty  = ['\A[\s\x{00A0}]*(?:❯[\s\x{00A0}]*)?\z']   # the region with no draft
+source = "measured on Claude Code 2.1.280"
+```
+
+`empty` matches the region's lines with the blank ones dropped, joined with
+newlines. Anchor each pattern with `\A` and `\z`. The fixtures under
+`internal/harness/testdata/screens` with a `# box:` line hold each block to
+an empty box and a draft.
+
 A harness whose rules cannot show working (Aider, Crush, or a pane with no
 harness) may sit on `unknown` before and after it takes a message, so no
 state change marks the next rest. For such a pane a rest after a typed message
@@ -4554,7 +4585,9 @@ Inbox reply sends when it holds a paste block, can carry up to 8 MiB of
 pasted text, and the queues hold at most 32 MiB a pane and 128 MiB in all.
 
 **The count.** Each pane's window state carries `agent_queued`, the length of
-its queue, and `get-agent-state` and `list-agents` report it as `queued`. It
+its queue, and `get-agent-state` and `list-agents` report it as `queued`.
+`agent_draft_held`, reported as `draft_held`, is true while your draft holds
+the queue. It
 is daemon-owned, like the agent state: a client never sets it.
 
 **Who may do what.** Who queued a message is decided by the daemon from the

@@ -1,4 +1,5 @@
 # harness: codex
+# box: empty
 # want: idle
 # how: derived. The Codex composer at rest, in the shape herdr's codex
 # manifest reads: the "›" marker at column zero and the footer under it.

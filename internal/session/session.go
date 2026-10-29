@@ -213,6 +213,11 @@ type WindowState struct {
 	// AgentMeta and never set by a client. Additive: zero, which is what an
 	// older daemon sends, means nothing is queued. See verb_queue.go.
 	AgentQueued int `json:"agent_queued,omitempty"`
+	// AgentDraftHeld is true while the person's draft in the agent's input
+	// box holds the next queued message (agent_queue_draft.go). Daemon-owned
+	// like AgentQueued. Additive: false, which is what an older daemon sends,
+	// means nothing is held.
+	AgentDraftHeld bool `json:"agent_draft_held,omitempty"`
 	// AgentSubagents is how many subagents the pane's agent is running, as its
 	// hooks reported them (see agent_subagents.go). Daemon-owned like
 	// AgentQueued and never set by a client. Additive: zero, which is what an
@@ -1127,6 +1132,15 @@ type PTY struct {
 	// is written on the PTY read goroutine and read by the daemon's output-stall
 	// heuristic, so it is an atomic rather than guarded by a lock.
 	lastOutput atomic.Int64
+
+	// humanKeyAt is the unix-nano time a person last typed into this pane
+	// through a client, focus and mouse reports left out. The delivery queue
+	// waits for it to be queueTypingQuiet old. draftWatch, when set, runs on
+	// every output chunk and every such key: the queue sets it while a draft
+	// holds its next entry, so a change in the box re-arms the look. See
+	// agent_queue_draft.go.
+	humanKeyAt atomic.Int64
+	draftWatch atomic.Pointer[func()]
 
 	// lastAgentProbe is the unix-nano time of the last output-driven agent-exit
 	// probe. It throttles the /proc read the probe does so a busy pane does not
@@ -3861,6 +3875,7 @@ func (s *Session) windowSummaries() []WindowSummary {
 			CompletionSeq: w.CompletionSeq,
 			AgentMeta:     w.AgentMeta,
 			AgentQueued:   w.AgentQueued,
+			DraftHeld:     w.AgentDraftHeld,
 			Subagents:     w.AgentSubagents,
 			SubagentList:  w.AgentSubagentList,
 			ProgramStatus: w.ProgramStatus,
@@ -5135,6 +5150,9 @@ func (p *PTY) readOutput() {
 			// anything that can block, so a demotion decision is made against when
 			// output actually arrived.
 			p.lastOutput.Store(time.Now().UnixNano())
+			if f := p.draftWatch.Load(); f != nil {
+				(*f)()
+			}
 
 			// Raise a control-plane output-activity event. This is a lightweight
 			// signal (byte count only, no content) that drives wait-for-output and

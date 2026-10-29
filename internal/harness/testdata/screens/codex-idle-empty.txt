@@ -1,0 +1,14 @@
+# harness: codex
+# box: empty
+# want: idle
+# how: derived. codex-idle.txt as the daemon reads it on a live screen, with
+# the faint placeholder left out: the marker alone above the footer.
+---
+• Ran go test ./internal/harness/
+  └ ok  	github.com/Gaurav-Gosain/tuios/internal/harness	0.014s
+
+• All tests pass.
+
+›
+
+  ? for shortcuts                                                   98% context left

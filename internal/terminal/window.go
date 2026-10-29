@@ -465,6 +465,9 @@ type Window struct {
 	// AgentQueued is how many messages wait in the pane's delivery queue, as the
 	// daemon synced it. Zero for none, and from a daemon that has no queue.
 	AgentQueued int
+	// AgentDraftHeld is true while the person's draft in the agent's input
+	// box holds the next queued message, as the daemon synced it.
+	AgentDraftHeld bool
 	// AgentSubagents is how many subagents the pane's agent is running, as the
 	// daemon synced it. Zero for none, and from a daemon that counts none.
 	AgentSubagents int

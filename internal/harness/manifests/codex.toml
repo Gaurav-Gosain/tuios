@@ -210,6 +210,15 @@ dir    = "{home}/.codex/sessions"
 glob   = "*/*/*/rollout-*.jsonl"
 verify = ["cwd"]
 
+# The composer with nothing typed in it: the "›" marker, maybe a placeholder,
+# and the footer under it. Codex draws its placeholder faint, and the daemon
+# leaves faint cells out before this reads the screen. The placeholders are
+# listed too, for a screen read as text alone.
+[prompt_box]
+region = "tail"
+empty  = ['(?:\A|\n)›[\s\x{00A0}]*(?:Explain this codebase|Summarize recent commits|Implement \{feature\}|Find and fix a bug in @filename|Write tests for @filename|Improve documentation in @filename|Run /review on my current changes|Use /skills to list available skills)?(?:\n[^\n]*(?:\? for shortcuts|context left)[^\n]*)?\z']
+source = "derived from the placeholders in codex-rs chatwidget.rs and herdr's codex manifest; not measured"
+
 [input]
 submit          = "cr"
 bracketed_paste = true

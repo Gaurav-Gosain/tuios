@@ -20,7 +20,10 @@ type screenFixture struct {
 	file    string
 	harness string
 	want    string // a state, or "none" for no rule matching
-	screen  []string
+	// box is what the fixture's input box holds, "empty" or "draft", and
+	// "" for a fixture that does not say.
+	box    string
+	screen []string
 }
 
 // fixtureSeparator splits the fixtures of one file.
@@ -70,6 +73,11 @@ func parseScreenFixture(t *testing.T, name, chunk string) screenFixture {
 			fx.harness = strings.TrimSpace(val)
 		case "want":
 			fx.want = strings.TrimSpace(val)
+		case "box":
+			fx.box = strings.TrimSpace(val)
+			if fx.box != "empty" && fx.box != "draft" {
+				t.Errorf("%s: box must be empty or draft, not %q", name, fx.box)
+			}
 		case "how":
 			if !strings.HasPrefix(strings.TrimSpace(val), "measured") && !strings.HasPrefix(strings.TrimSpace(val), "derived") {
 				t.Errorf("%s: how must start with measured or derived", name)
@@ -116,6 +124,68 @@ func TestScreenFixtures(t *testing.T) {
 				t.Errorf("classified as %s (rule %d), want %s\ntail:\n%s", got, rule, fx.want, strings.Join(tail, "\n"))
 			}
 		})
+	}
+}
+
+// TestBoxFixtures holds every [prompt_box] block to the screens that say what
+// their input box holds, and every block to at least one screen of each kind:
+// an empty-box rule that never sees a draft cannot be told from one that
+// accepts everything.
+func TestBoxFixtures(t *testing.T) {
+	r := testRegistry(t)
+	seen := map[string]map[string]bool{}
+	for _, fx := range loadScreenFixtures(t) {
+		if fx.box == "" {
+			continue
+		}
+		t.Run(fx.file, func(t *testing.T) {
+			if !r.HasBoxRule(fx.harness) {
+				t.Fatalf("%s has no [prompt_box] block to read the box with", fx.harness)
+			}
+			tail := fixtureTail(fx.screen, r.ScreenLines(fx.harness))
+			draft, known := r.BoxDraft(fx.harness, tail, nil)
+			if !known {
+				t.Fatalf("no box found, want %s\ntail:\n%s", fx.box, strings.Join(tail, "\n"))
+			}
+			if got := map[bool]string{true: "draft", false: "empty"}[draft]; got != fx.box {
+				t.Errorf("the box reads %s, want %s\ntail:\n%s", got, fx.box, strings.Join(tail, "\n"))
+			}
+			if seen[fx.harness] == nil {
+				seen[fx.harness] = map[string]bool{}
+			}
+			seen[fx.harness][fx.box] = true
+		})
+	}
+	for _, id := range r.IDs() {
+		if !r.HasBoxRule(id) {
+			continue
+		}
+		for _, kind := range []string{"empty", "draft"} {
+			if !seen[id][kind] {
+				t.Errorf("%s [prompt_box] has no fixture whose box is %s", id, kind)
+			}
+		}
+	}
+}
+
+// TestBoxDraftLeavesFaintTextOut: a placeholder or a suggestion is drawn
+// faint, and the daemon hands BoxDraft the screen with those cells blank. The
+// box then reads empty, where the same screen as plain text reads a draft.
+func TestBoxDraftLeavesFaintTextOut(t *testing.T) {
+	r := testRegistry(t)
+	tail := []string{"─────", "❯ Try \"fix lint errors\"", "─────", "  ? for shortcuts"}
+	shown := []string{"─────", "❯", "─────", "  ? for shortcuts"}
+	if draft, known := r.BoxDraft("claude-code", tail, nil); !known || !draft {
+		t.Errorf("plain text: draft %v known %v, want a draft", draft, known)
+	}
+	if draft, known := r.BoxDraft("claude-code", tail, shown); !known || draft {
+		t.Errorf("faint left out: draft %v known %v, want an empty box", draft, known)
+	}
+	if _, known := r.BoxDraft("gemini-cli", tail, nil); known {
+		t.Errorf("gemini-cli has no [prompt_box] block and must not judge a box")
+	}
+	if _, known := r.BoxDraft("claude-code", []string{"no box here"}, nil); known {
+		t.Errorf("a screen with no box must not be judged")
 	}
 }
 

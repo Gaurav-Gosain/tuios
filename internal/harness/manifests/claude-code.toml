@@ -269,6 +269,15 @@ region    = "prompt_box"
 regex     = ['^\s*❯']
 not_regex = ['^\s*❯\s*\d+\.', '(?i)esc to cancel|enter to select|to navigate']
 
+# The input box with nothing typed in it: the prompt character alone. The idle
+# rule above also matches "❯ half a sentence", so this is what tells the queue
+# the person has no draft there. A placeholder or a suggested next prompt is
+# drawn faint, and the daemon leaves faint cells out before this reads the box.
+[prompt_box]
+region = "prompt_box"
+empty  = ['\A[\s\x{00A0}]*(?:❯[\s\x{00A0}]*)?\z']
+source = "measured on Claude Code 2.1.280: an empty box and one holding typed text"
+
 # The window title. Claude Code puts a spinner there while a turn runs and a ✳
 # when it is at rest: "✳ Claude Code" was measured on 2.1.280. Braille covers
 # older releases and the half circles newer ones, after herdr.

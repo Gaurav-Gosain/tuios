@@ -2234,6 +2234,9 @@ func (d *Daemon) verbGetAgentState(cs *connState, params json.RawMessage) (any, 
 		"meta": agentMetaMap(w.AgentMeta, time.Now().UnixNano()),
 		// queued is how many messages wait in the pane's delivery queue.
 		"queued": w.AgentQueued,
+		// draft_held is true while the person's draft in the input box
+		// holds the next queued message.
+		"draft_held": w.AgentDraftHeld,
 		// subagents is how many subagents the pane's agent is running, as
 		// its hooks reported them; meta's subagents key says the same in
 		// words.

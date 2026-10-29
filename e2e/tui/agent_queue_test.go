@@ -1,11 +1,14 @@
 package tuie2e
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/Gaurav-Gosain/tuitest"
+	"tuios.dev/shot"
 )
 
 // TestQueuedMessageIsTypedWhenTheAgentRests drives the delivery queue against
@@ -14,9 +17,21 @@ import (
 // nothing reaches the pane. When the pane reports idle the message is typed
 // into it, where the attached client shows it, and the queue is empty again.
 //
+// Then the same pane runs a stand-in for Claude Code's input box, and the
+// person types half a prompt into it while the agent rests. A message queued
+// then waits: the agents view says "Waits: your draft is in the prompt box",
+// and once the draft has held it long enough the row moves to Needs you. The
+// person clears the box, and the message is typed only after three seconds
+// with no key from the person. Frames of each step are saved under
+// artifactDir.
+//
 // Negative control: with the noteQueueEvent call taken out of the session
-// event sink, the message is never typed and the wait for it times out.
+// event sink, the message is never typed and the wait for it times out. With
+// holdLocked in deliverQueued always reporting nothing held, the second
+// message is typed into the draft and the test fails on that.
 func TestQueuedMessageIsTypedWhenTheAgentRests(t *testing.T) {
+	// The draft's move to Needs you takes ten minutes in use.
+	t.Setenv("TUIOS_E2E_DRAFT_SURFACE_MS", "9000")
 	term, base := attachClientBase(t)
 	const marker = "queued-reply-7f3a"
 
@@ -59,6 +74,143 @@ func TestQueuedMessageIsTypedWhenTheAgentRests(t *testing.T) {
 		time.Sleep(200 * time.Millisecond)
 	}
 	alive(t, term, "after the queued message was typed")
+
+	queueWaitsForTheDraft(t, term, base)
+}
+
+// draftBoxScript is the stand-in agent: a box drawn the way Claude Code draws
+// its input box, between two rules, that shows what is typed into it. Enter
+// moves the line above the box as "sent: ...", and Ctrl+U clears the box.
+const draftBoxScript = `stty -icanon -echo min 1 2>/dev/null
+draft=""
+sent=""
+rule=$(printf '\342\224\200%.0s' $(seq 1 40))
+draw() {
+	printf '\033[H\033[2J'
+	printf 'fakebox ready\n%s\n%s\n\342\235\257 %s\n%s\n  ? for shortcuts\n' "$sent" "$rule" "$draft" "$rule"
+}
+draw
+while IFS= read -r -n1 -d '' c; do
+	case "$c" in
+	$'\r' | $'\n') sent="sent: $draft"; draft="" ;;
+	$'\x15') draft="" ;;
+	$'\x7f') draft="${draft%?}" ;;
+	*) draft="$draft$c" ;;
+	esac
+	draw
+done
+`
+
+// queueWaitsForTheDraft is the draft half of
+// TestQueuedMessageIsTypedWhenTheAgentRests.
+func queueWaitsForTheDraft(t *testing.T, term *tuitest.Terminal, base string) {
+	const marker, draft = "queued-after-draft-5c1e", "half a thought"
+	cli := func(what string, args ...string) string {
+		t.Helper()
+		out, err := tuiosCLI(t, base, args...)
+		if err != nil {
+			t.Fatalf("%s: %v\n%s", what, err, out)
+		}
+		return out
+	}
+	script := filepath.Join(t.TempDir(), "box.sh")
+	if err := os.WriteFile(script, []byte(draftBoxScript), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cli("start the stand-in agent", "send-text", "-s", "e2e-ctrlp", "bash "+script+"\n")
+	if err := term.WaitForText("fakebox ready", uiTimeout); err != nil {
+		t.Fatalf("the stand-in agent never drew its box: %v\n%s", err, term.Snapshot())
+	}
+	// A turn ends: the agent is at rest, with its box empty.
+	cli("set working", "set-agent-state", "-s", "e2e-ctrlp", "working", "--harness", "claude-code")
+	cli("set idle", "set-agent-state", "-s", "e2e-ctrlp", "idle", "--harness", "claude-code")
+
+	enterTerminalMode(t, term)
+	if err := term.Type(draft); err != nil {
+		t.Fatal(err)
+	}
+	if err := term.WaitForText("❯ "+draft, uiTimeout); err != nil {
+		t.Fatalf("the draft never reached the box: %v\n%s", err, term.Snapshot())
+	}
+	cli("queue behind the draft", "queue", "-s", "e2e-ctrlp", "echo", marker)
+
+	deadline := time.Now().Add(uiTimeout)
+	for !strings.Contains(strings.ReplaceAll(cli("get-agent-state", "get-agent-state", "-s", "e2e-ctrlp", "--json"), " ", ""), `"draft_held":true`) {
+		if strings.Contains(term.Screen().Text(), marker) {
+			t.Fatalf("ASSERTION: the queued message was typed into the person's draft\n%s", term.Snapshot())
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("the daemon never marked the queue as held by the draft\n%s", term.Snapshot())
+		}
+		time.Sleep(200 * time.Millisecond)
+	}
+	if err := term.SendKeys(tuitest.Ctrl('b'), "i"); err != nil {
+		t.Fatal(err)
+	}
+	// The row reads "Waits:" and the reason, on one line or two by the layout.
+	const waits = "your draft is in the prompt box"
+	showsWait := func(s tuitest.Screen) bool {
+		text := s.Text()
+		return strings.Contains(text, "Waits:") && strings.Contains(text, waits)
+	}
+	if err := term.WaitFor(showsWait, uiTimeout); err != nil {
+		t.Fatalf("the agents view never said the draft holds the queue: %v\n%s", err, term.Snapshot())
+	}
+	dir := artifactDir(t)
+	saveArtifact(t, term, dir, "agent-queue-draft-waits")
+	savePNG(t, term.Screen(), shot.XTermPalette(), dir, "agent-queue-draft-waits")
+	if strings.Contains(term.Screen().Text(), marker) {
+		t.Fatalf("ASSERTION: the queued message was typed into the person's draft\n%s", term.Snapshot())
+	}
+
+	// Held long enough, the row moves to Needs you.
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		return showsWait(s) && strings.Contains(s.Text(), "1 needs you")
+	}, 20*time.Second); err != nil {
+		t.Fatalf("the held draft never moved to Needs you: %v\n%s", err, term.Snapshot())
+	}
+	saveArtifact(t, term, dir, "agent-queue-draft-needs-you")
+	savePNG(t, term.Screen(), shot.XTermPalette(), dir, "agent-queue-draft-needs-you")
+	if strings.Contains(term.Screen().Text(), marker) {
+		t.Fatalf("ASSERTION: the queued message was typed into the person's draft\n%s", term.Snapshot())
+	}
+
+	if err := term.SendKeys(tuitest.Esc); err != nil {
+		t.Fatal(err)
+	}
+	if err := term.WaitFor(func(s tuitest.Screen) bool { return !strings.Contains(s.Text(), waits) }, uiTimeout); err != nil {
+		t.Fatalf("the agents view never closed: %v\n%s", err, term.Snapshot())
+	}
+	// The person clears the box. The message waits for three quiet seconds.
+	cleared := time.Now()
+	if err := term.SendKeys(tuitest.Ctrl('u')); err != nil {
+		t.Fatal(err)
+	}
+	if err := term.WaitForText("sent: echo "+marker, uiTimeout); err != nil {
+		t.Fatalf("the queued message was never typed after the draft was cleared: %v\n%s", err, term.Snapshot())
+	}
+	if took := time.Since(cleared); took < 2500*time.Millisecond {
+		t.Errorf("the message was typed %s after the person's last key, want at least the 3 s quiet", took)
+	}
+	if strings.Contains(term.Screen().Text(), draft) {
+		t.Errorf("the draft is still on the screen after the person cleared it\n%s", term.Snapshot())
+	}
+	saveArtifact(t, term, dir, "agent-queue-draft-typed")
+	savePNG(t, term.Screen(), shot.XTermPalette(), dir, "agent-queue-draft-typed")
+	// The agent takes it, which is what the prompt gate waits for.
+	cli("set working", "set-agent-state", "-s", "e2e-ctrlp", "working", "--harness", "claude-code")
+	deadline = time.Now().Add(uiTimeout)
+	for {
+		out := cli("queue ls", "queue", "ls", "-s", "e2e-ctrlp")
+		if strings.Contains(out, "Nothing is queued") {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("the typed message stayed queued: %q", out)
+		}
+		time.Sleep(200 * time.Millisecond)
+	}
+	alive(t, term, "after the message was typed behind the draft")
 }
 
 // TestNarrowRailKeepsTheAgentNameBesideAQueue: on the rail an 80 column

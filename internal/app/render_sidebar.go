@@ -547,6 +547,9 @@ type sidebarAgentEntry struct {
 	Meta []sessiontree.MetaToken
 	// Queued is how many messages wait in the pane's delivery queue.
 	Queued int
+	// DraftHeld is true while the person's draft in the input box holds that
+	// queue. The agents view says so on the row.
+	DraftHeld bool
 	// Subagents is how many subagents the pane's agent is running, which the
 	// subagents row token draws.
 	Subagents int
@@ -2762,6 +2765,7 @@ func (m *OS) agentEntries(sessions []sessiontree.Node) []sidebarAgentEntry {
 				AgentKind:    win.AgentKind,
 				Meta:         win.Meta,
 				Queued:       win.Queued,
+				DraftHeld:    win.DraftHeld,
 				Subagents:    win.Subagents,
 				Children:     win.SubagentList,
 				Program:      win.Program,

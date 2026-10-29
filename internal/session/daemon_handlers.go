@@ -702,6 +702,7 @@ func (d *Daemon) handleInput(cs *connState, msg *Message) error {
 			// person's use comes as MsgSessionUsed. See session_used.go.
 			session.TouchActive()
 			cs.lastInput.Store(time.Now().UnixNano())
+			pty.noteHumanKey(data)
 		} else {
 			debugLog("[DEBUG] PTY %s not found for input", shortID(ptyID))
 		}

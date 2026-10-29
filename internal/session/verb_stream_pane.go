@@ -687,6 +687,7 @@ func (ps *paneStream) writeInput() {
 				continue
 			}
 			ps.cs.lastInput.Store(time.Now().UnixNano())
+			ps.pty.noteHumanKey(data)
 		}
 	}
 }

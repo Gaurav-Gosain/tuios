@@ -2522,6 +2522,9 @@ the message, the way `fan` waits for its first prompt. A message the agent
 shows no sign of taking is marked `stalled`, is never typed again, and opens a
 question in the Inbox; it holds the messages behind it until the agent next
 works or you drop it, and the next message is then typed at the next rest.
+A message also waits while you type into the pane, and while the agent's
+input box holds your draft. See
+[Queued messages](AGENT_STATE.md#queued-messages).
 
 A pane holds at most `[agents.queue] max` messages (8 by default) of at most
 16 KiB each. A reply from the Inbox with a long paste can carry more, as a

@@ -1,4 +1,5 @@
 # harness: claude-code
+# box: draft
 # want: idle
 # how: measured. Claude Code 2.1.280 with "hello there" typed and not sent.
 # Typing is not work: the agent is still waiting for the turn to start.

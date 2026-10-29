@@ -28,6 +28,7 @@ func clearLiveAgent(w *WindowState) {
 	// count names messages nobody holds any more. The subagents the count
 	// below says ran in a process that is gone.
 	w.AgentQueued = 0
+	w.AgentDraftHeld = false
 	w.AgentSubagents = 0
 	w.AgentSubagentList = nil
 	w.ForegroundCmd = ""

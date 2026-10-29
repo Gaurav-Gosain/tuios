@@ -150,6 +150,14 @@ type paneQueue struct {
 	bytes int
 	// timer is the pending look at the pane, nil when none is armed.
 	timer *time.Timer
+	// draftSince is when a look first found the person's draft in the box,
+	// in Unix nanoseconds, 0 while no draft holds the queue. surface fires
+	// once it has held for queueDraftSurface. watched is the pane whose
+	// output and keys re-arm the look while the person's typing or draft
+	// holds the next entry. See agent_queue_draft.go.
+	draftSince int64
+	surface    *time.Timer
+	watched    *PTY
 }
 
 // typedStamp is when the last queued entry was typed into a pane, in Unix
@@ -390,10 +398,12 @@ func (d *Daemon) queuePrompt(sess *Session, target WindowState, e *queueEntry) (
 }
 
 // armLocked schedules a look at the pane after wait, replacing one already
-// armed. It holds mu.
+// armed. The pane's one timer is reset rather than replaced: a held pane
+// re-arms on every chunk of output. It holds mu.
 func (q *agentQueues) armLocked(d *Daemon, window string, pq *paneQueue, wait time.Duration) {
 	if pq.timer != nil {
-		pq.timer.Stop()
+		pq.timer.Reset(wait)
+		return
 	}
 	pq.timer = time.AfterFunc(wait, func() { d.deliverQueued(window) })
 }
@@ -421,6 +431,7 @@ func (q *agentQueues) removeLocked(window string, pq *paneQueue, drop func(*queu
 		if pq.timer != nil {
 			pq.timer.Stop()
 		}
+		q.unholdLocked(pq)
 		if q.panes[window] == pq {
 			delete(q.panes, window)
 		}
@@ -458,12 +469,17 @@ func (d *Daemon) publishQueued(windows ...string) {
 				return err
 			}
 			n := d.queue.count(window)
-			if st.Windows[idx].AgentQueued == n {
+			held := d.queue.draftHeld(window)
+			if st.Windows[idx].AgentQueued == n && st.Windows[idx].AgentDraftHeld == held {
 				return errQueueUnchanged
 			}
 			st.Windows[idx].AgentQueued = n
+			st.Windows[idx].AgentDraftHeld = held
 			return nil
 		})
+		if !d.queue.draftHeld(window) {
+			d.attention.closeHeldPrompt(sess.Name(), window, DraftHeldSummary)
+		}
 	}
 }
 
@@ -604,6 +620,10 @@ func (d *Daemon) deliverQueued(window string) {
 		return
 	}
 	rest := d.readPaneRest(sess, target)
+	var gate draftGate
+	if rest.ready {
+		gate = d.readDraftGate(sess, target)
+	}
 
 	q.mu.Lock()
 	pq := q.panes[window]
@@ -629,6 +649,16 @@ func (d *Daemon) deliverQueued(window string) {
 			q.armLocked(d, window, pq, wait)
 		}
 		q.mu.Unlock()
+		return
+	}
+	// The person is typing, or has a draft in the box. See
+	// agent_queue_draft.go.
+	held, changed := q.holdLocked(d, window, pq, gate, time.Now())
+	if held {
+		q.mu.Unlock()
+		if changed {
+			d.publishQueued(window)
+		}
 		return
 	}
 	e := pq.entries[0]

@@ -239,7 +239,8 @@ func retainDaemonExclusive(incoming, canonical *SessionState) {
 	// a pane, and no client sets it, so canonical wins like the meta. So does
 	// the subagent count, which only the pane's hooks move.
 	queued := make(map[string]int)
-	var subagents map[string]int // most sessions have none
+	var draftHeld map[string]bool // set only while a draft holds a queue
+	var subagents map[string]int  // most sessions have none
 	var subagentLists map[string][]SubagentInfo
 	// The popup mark, requested size and dim override are stamped once, when
 	// the daemon creates the window, and nothing ever changes them. So canonical
@@ -366,6 +367,12 @@ func retainDaemonExclusive(incoming, canonical *SessionState) {
 		if w.AgentQueued != 0 {
 			queued[w.ID] = w.AgentQueued
 		}
+		if w.AgentDraftHeld {
+			if draftHeld == nil {
+				draftHeld = make(map[string]bool)
+			}
+			draftHeld[w.ID] = true
+		}
 		if w.AgentSubagents != 0 {
 			if subagents == nil {
 				subagents = make(map[string]int)
@@ -447,6 +454,7 @@ func retainDaemonExclusive(incoming, canonical *SessionState) {
 		// a value in a client push is an echo of an older state at best.
 		w.AgentMeta = metas[w.ID]
 		w.AgentQueued = queued[w.ID]
+		w.AgentDraftHeld = draftHeld[w.ID]
 		w.AgentSubagents = subagents[w.ID]
 		w.AgentSubagentList = subagentLists[w.ID]
 		w.ProgramStatus = programStatus[w.ID]

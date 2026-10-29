@@ -10707,3 +10707,10 @@ Run on 2026-10-29 on Linux, each control in its own binary.
 | The build before this change (upstream main at `92258aafe`) | `TestRiskInWorktree`: "ASSERTION: repo-feat-kinder-greeting marks an Edit inside its worktree outside the worktree: [outside the worktree cut short]", the same for `demo`; `TestRiskLinkedRoot`: the same assertion | **caught** |
 | `resolveAbove` in `approvalRoot` (`internal/session/approval_risk.go`): the managed worktree is taken as recorded, through the link | `TestRiskLinkedRoot`: "ASSERTION: repo-feat-kinder-greeting marks an Edit inside its worktree outside the worktree". `TestRiskInWorktree` passes, since its panes start in the worktree and the start folder is resolved when recorded | **caught** |
 | The `resolve` of the shown directories in `shownOutside` (`internal/risk/risk.go`) | `TestRiskInWorktree`: both panes' Edits marked "outside the worktree" | **caught** |
+## A queued message waits for the person's draft
+
+`TestQueuedMessageIsTypedWhenTheAgentRests` runs a stand-in for Claude Code's input box in the pane, under the `claude-code` harness. The agent rests, the person types `half a thought` into the box, and a message is queued. The daemon must report `draft_held`, the agents view must say "Waits:" and "your draft is in the prompt box", and after the surface time the row must move to Needs you. At no point may the message reach the screen. The person then clears the box, and the message must be typed no sooner than 2.5 s after that key. The control was built into its own binary. Run on 2026-10-29 on Linux.
+
+| Control: what was cut | Where it fails | Verdict |
+| --- | --- | --- |
+| `holdLocked` in `deliverQueued` answers nothing held (`internal/session/agent_queue.go`) | "ASSERTION: the queued message was typed into the person's draft", with `sent: half a thoughtecho queued-after-draft-5c1e` on screen | **caught** |

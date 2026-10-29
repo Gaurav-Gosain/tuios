@@ -1,0 +1,13 @@
+# harness: claude-code
+# box: draft
+# want: idle
+# how: derived. claude-code-idle-typed.txt with the draft on the second line
+# of the box, as Ctrl+J leaves it: the first line holds the prompt character
+# alone.
+---
+                                                                                ◐ medium · /effort
+────────────────────────────────────────────────────────────────────────────────────────────────────
+❯
+  hello there
+────────────────────────────────────────────────────────────────────────────────────────────────────
+  ⏵⏵ auto mode on (shift+tab to cycle)

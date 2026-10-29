@@ -1268,6 +1268,11 @@ func (m *OS) ckRowLine2(l ckLook, r ckRow, e sidebarAgentEntry) (verb, rest stri
 	case sidebarAttention(e.State):
 		return capitalize(agentRowStateWords(e)), printableTitle(e.Message), pal.Attention, right
 	}
+	if e.DraftHeld {
+		// A queued message waits for the person's draft. See
+		// agent_queue_draft.go in internal/session.
+		return ckDraftVerb, session.DraftHeldSummary, pal.Attention, right
+	}
 	wt := m.ckWorktreeOf(e)
 	br := wt.branch
 	if pr := ckPRSegs(l, e.PR, wt.failed); pr != nil {
@@ -1329,6 +1334,9 @@ func ckItemVerb(it session.AttentionItem) (verb, rest string) {
 	case session.AttentionPlan:
 		return "Plan", inboxPlanRowText(it)
 	case session.AttentionQuestion, session.AttentionAsk:
+		if it.Summary == session.DraftHeldSummary {
+			return ckDraftVerb, sum
+		}
 		return "Asks", sum
 	case session.AttentionMail:
 		if it.HeldID != 0 {
@@ -1344,6 +1352,10 @@ func ckItemVerb(it session.AttentionItem) (verb, rest string) {
 	}
 	return capitalize(inboxKindWords(it)), sum
 }
+
+// ckDraftVerb fronts the row of an agent whose queue the person's draft holds:
+// "Waits: your draft is in the prompt box".
+const ckDraftVerb = "Waits:"
 
 // ckWorktree is what the cockpit shows of an agent's worktree session.
 type ckWorktree struct {
@@ -1468,7 +1480,7 @@ func (m *OS) ckHasLine2(r ckRow, e sidebarAgentEntry) bool {
 		return true
 	case e.State == "working":
 		return ckMeta(e, "now") != "" || e.Message != "" || e.Subagents > 0
-	case sidebarAttention(e.State):
+	case sidebarAttention(e.State), e.DraftHeld:
 		return true
 	}
 	return m.ckBranch(e) != "" || e.PR != "" || e.Message != "" || (r.hasItem && r.item.Summary != "")

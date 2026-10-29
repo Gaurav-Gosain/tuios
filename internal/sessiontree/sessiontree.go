@@ -95,6 +95,9 @@ type Node struct {
 	// Queued is how many messages wait in the pane's delivery queue to be
 	// typed when its agent comes to rest. Never rolled up.
 	Queued int
+	// DraftHeld is true while the person's draft in the input box holds the
+	// pane's queue. Never rolled up.
+	DraftHeld bool
 	// Subagents is how many subagents the pane's agent is running. On a
 	// session node it belongs to the window that won the roll-up, like
 	// DoneSeen, so the session's mark says "waiting" when that pane is at
@@ -231,6 +234,8 @@ type WindowInput struct {
 	Meta []MetaToken
 	// Queued is how many messages wait in the pane's delivery queue.
 	Queued int
+	// DraftHeld is true while the person's draft holds that queue.
+	DraftHeld bool
 	// Subagents is how many subagents the pane's agent is running.
 	Subagents int
 	// SubagentList is the pane's subagents themselves, in start order. Nil
@@ -399,6 +404,7 @@ func BuildSession(s SessionInput) Node {
 			AgentKind:    w.AgentKind,
 			Meta:         w.Meta,
 			Queued:       w.Queued,
+			DraftHeld:    w.DraftHeld,
 			Subagents:    w.Subagents,
 			SubagentList: w.SubagentList,
 			Program:      w.Program,

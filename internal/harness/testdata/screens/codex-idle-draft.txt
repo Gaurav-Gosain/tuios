@@ -1,0 +1,15 @@
+# harness: codex
+# box: draft
+# want: idle
+# how: derived. codex-idle.txt with a two-line draft in the composer in place
+# of the placeholder. A draft is not work: the agent still waits at its prompt.
+---
+• Ran go test ./internal/harness/
+  └ ok  	github.com/Gaurav-Gosain/tuios/internal/harness	0.014s
+
+• All tests pass.
+
+› also check the windows build
+  before you push
+
+  ? for shortcuts                                                   98% context left

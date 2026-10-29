@@ -1,4 +1,5 @@
 # harness: claude-code
+# box: empty
 # want: idle
 # how: measured. Claude Code 2.1.280 just started, in a 100x30 pane, read with
 # tmux capture-pane. One footer line specific to the capturing environment
