@@ -157,8 +157,23 @@ func (f *hostFleet) start(ctx context.Context) {
 	f.mu.Lock()
 	f.ctx = ctx
 	f.started = true
+	// A start after stop, for a live upgrade that was put back, finds the
+	// hosts it had, with their pumps ended. Each follows on from where its
+	// stream was.
+	for _, h := range f.hosts {
+		f.pump(h)
+	}
 	f.mu.Unlock()
 	f.reconcile(f.d.federation.Table().Names(), nil)
+}
+
+// pump starts h's pump. f.mu is held.
+func (f *hostFleet) pump(h *fleetHost) {
+	ctx, cancel := context.WithCancel(f.ctx)
+	h.cancel = cancel
+	f.wg.Go(func() {
+		f.run(ctx, h)
+	})
 }
 
 // stop ends every pump and waits for them.
@@ -210,12 +225,9 @@ func (f *hostFleet) reconcile(names, reset []string) {
 		if _, ok := f.hosts[name]; ok {
 			continue
 		}
-		ctx, cancel := context.WithCancel(f.ctx)
-		h := &fleetHost{name: name, cancel: cancel, wake: make(chan struct{}, 1)}
+		h := &fleetHost{name: name, wake: make(chan struct{}, 1)}
 		f.hosts[name] = h
-		f.wg.Go(func() {
-			f.run(ctx, h)
-		})
+		f.pump(h)
 	}
 	f.mu.Unlock()
 	for _, name := range dropped {
