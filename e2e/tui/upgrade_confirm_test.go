@@ -222,6 +222,47 @@ func TestPaneUpgradeRefusedWithoutYes(t *testing.T) {
 	writeHandoffArtifact(t, map[string]any{"exits": results, "image": r.img, "screen": mustScrollback(t, r.base, r.sess, r.agent)})
 }
 
+// TestPaneUpgradeRefusesAFileChangedAfterTheDialog: while the dialog shows
+// the copy, its last byte is written over in place with the same byte and
+// its modification time set back, so the path, the inode, the size and the
+// modification time are what the person was shown. Only the change time
+// moved. Yes must then refuse the upgrade, since the file the person
+// confirmed is not the one that would run.
+func TestPaneUpgradeRefusesAFileChangedAfterTheDialog(t *testing.T) {
+	r := newConfirmRig(t, "e2e-confirm-changed")
+	term := r.attach(t)
+	done := r.paneUpgrade(t)
+	r.waitDialog(t, term, "changed")
+	info, err := os.Stat(r.second)
+	if err != nil {
+		t.Fatal(err)
+	}
+	f, err := os.OpenFile(r.second, os.O_RDWR, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	last := make([]byte, 1)
+	if _, err := f.ReadAt(last, info.Size()-1); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.WriteAt(last, info.Size()-1); err != nil {
+		t.Fatal(err)
+	}
+	_ = f.Close()
+	if err := os.Chtimes(r.second, info.ModTime(), info.ModTime()); err != nil {
+		t.Fatal(err)
+	}
+	pressKeys(t, term, keyDown, keyEnter)
+	code, _ := done()
+	waitNoDialog(t, term, "a Yes for a changed file")
+	r.unchanged(t, "a Yes for a file changed after the dialog opened")
+	lines := mustScrollback(t, r.base, r.sess, r.agent)
+	writeHandoffArtifact(t, map[string]any{"exit": code, "screen": lines})
+	if said := strings.Join(strings.Fields(strings.Join(lines, "")), ""); code == "0" || !strings.Contains(said, "waschangedaftertheupgradetoitwasconfirmed") {
+		t.Errorf("ASSERTION: a Yes for a file changed in place after the dialog opened was not refused as changed (exit %s):\n%s", code, strings.Join(lines, "\n"))
+	}
+}
+
 // TestPaneUpgradeTimesOut: nobody answers, and once the wait (3 s here, under
 // TUIOS_TEST_UPGRADE_CONFIRM_MS) runs out the upgrade is refused and the
 // dialog closes on the client.
