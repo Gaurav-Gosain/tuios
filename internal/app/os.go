@@ -1749,6 +1749,9 @@ type OS struct {
 	// pluginApproval is the dialog that asks the person about a native
 	// plugin that waits for approval. See plugin_approval.go.
 	pluginApproval pluginApprovalState
+	// upgradeConfirm is the dialog that asks the person whether a pane may
+	// upgrade the daemon. See upgrade_confirm.go.
+	upgradeConfirm upgradeConfirmState
 	// pressingTapeKeys is true while a tape's Press runs keys through the
 	// input handler (PressKeys). Those keys are not the person's: the
 	// plugin approval dialog ignores them.

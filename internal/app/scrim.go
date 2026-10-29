@@ -102,6 +102,7 @@ var modalOverlays = [...]modalOverlay{
 	{id: overlayKindCopyDialog, open: func(m *OS) bool { return m.CopyDialogOpen() }, scrim: true},
 	{id: overlayKindPluginApproval, open: func(m *OS) bool { return m.PluginApprovalOpen() }, scrim: true},
 	{id: overlayKindIntegrationAsk, open: func(m *OS) bool { return m.IntegrationAskOpen() }, scrim: true},
+	{id: overlayKindUpgradeConfirm, open: func(m *OS) bool { return m.UpgradeConfirmOpen() }, scrim: true},
 	{id: "help", open: func(m *OS) bool { return m.ShowHelp }, scrim: true},
 	{id: "tape-manager", open: func(m *OS) bool { return m.ShowTapeManager }, scrim: true},
 	{id: "tape-review", open: func(m *OS) bool { return m.ShowTapeReview }, scrim: true},

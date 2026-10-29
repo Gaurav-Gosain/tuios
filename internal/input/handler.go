@@ -497,6 +497,12 @@ func routeAfterEsc(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 // the mode. It is the part of HandleKeyPress after the gestures that own the
 // whole screen, and the screenshot chord replays a held leader through it.
 func routeKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+	// The upgrade dialog outranks everything: it asks whether a binary may
+	// run as the daemon, and no key meant for anything else may answer it.
+	// See app/upgrade_confirm.go.
+	if o.UpgradeConfirmOpen() {
+		return o, o.UpgradeConfirmKey(msg.String())
+	}
 	// The paste key, while a one-line field owns the keyboard, pastes into
 	// the field. See paste_text.go.
 	if cmd, ok := pasteKeyIntoTextField(msg, o); ok {

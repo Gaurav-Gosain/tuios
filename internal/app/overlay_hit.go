@@ -43,7 +43,7 @@ type overlayPanelHit struct {
 // row opens each of them over the panel too. The guard against a fourth is
 // TestEveryOverlayKindHasAPlaceInTheStack, which reads eachOverlayGate itself
 // rather than a second copy of this list.
-var overlayKindOrder = []string{"help", "palette", "launcher", "session", "goto", "navigator", "agentmail", "inbox", "workspace", overlayKindBuffers, overlayKindTransfers, "layout", "hostpicker", "aggregate", "settings", "keybinds", "themepicker", "themeeditor", "presetpicker", "glyphpicker", "effectpicker", "dockeditor", "sectioneditor", "accent", "screenshot", "quit", "sessionclose", overlayKindRestart, "filedialog", overlayKindCopyDialog, "worktreeprompt", overlayKindPluginApproval, overlayKindIntegrationAsk, overlayKindLogs, overlayKindMessage}
+var overlayKindOrder = []string{"help", "palette", "launcher", "session", "goto", "navigator", "agentmail", "inbox", "workspace", overlayKindBuffers, overlayKindTransfers, "layout", "hostpicker", "aggregate", "settings", "keybinds", "themepicker", "themeeditor", "presetpicker", "glyphpicker", "effectpicker", "dockeditor", "sectioneditor", "accent", "screenshot", "quit", "sessionclose", overlayKindRestart, "filedialog", overlayKindCopyDialog, "worktreeprompt", overlayKindPluginApproval, overlayKindIntegrationAsk, overlayKindLogs, overlayKindMessage, overlayKindUpgradeConfirm}
 
 // overlayGate pairs a draggable overlay kind with whether it is shown.
 type overlayGate struct {
@@ -92,6 +92,7 @@ func (m *OS) eachOverlayGate(yield func(kind string, open bool) bool) {
 		{"worktreeprompt", m.WorktreePromptOpen()},
 		{overlayKindPluginApproval, m.PluginApprovalOpen()},
 		{overlayKindIntegrationAsk, m.IntegrationAskOpen()},
+		{overlayKindUpgradeConfirm, m.UpgradeConfirmOpen()},
 		{overlayKindLogs, m.ShowLogs},
 		{overlayKindMessage, m.msgView.open},
 	}
