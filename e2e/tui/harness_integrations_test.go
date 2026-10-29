@@ -751,13 +751,23 @@ func (d *pluginDriver) waitAck(t *testing.T, ack string) {
 // TestOpenCodeV2PluginReportsOnlyItsSession exercises the installed plugin and
 // real daemon across the V2 client boundary. The shared server publishes other
 // panes' and subagents' events too; neither may finish this pane's turn.
+//
+// Each report is a process of its own. The plugin's session.created, sent as
+// it loads, goes through a hook that is slow to start, the way a loaded
+// machine makes one. The busy status right after it must still land second.
+// A plugin that starts its reports together leaves the pane idle.
 func TestOpenCodeV2PluginReportsOnlyItsSession(t *testing.T) {
 	term, base := agentSessions(t)
 	if out, err := tuiosCLI(t, base, "new-window", "opencode-v2", "-s", "e2e-agent", "--no-focus"); err != nil {
 		t.Fatalf("new-window: %v\n%s", err, out)
 	}
 	win := windowID(t, base, "e2e-agent", "opencode-v2")
-	d := startPlugin(t, base, "opencode-v2", "e2e-agent", win)
+	slow := filepath.Join(t.TempDir(), "slow-created")
+	script := "#!/bin/sh\ninput=$(cat)\ncase $input in *'\"session.created\"'*) sleep 0.6 ;; esac\nprintf '%s' \"$input\" | exec '" + tuiosBin + "' \"$@\"\n"
+	if err := os.WriteFile(slow, []byte(script), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	d := startPlugin(t, base, "opencode-v2", "e2e-agent", win, slow)
 	log := &stateLog{name: "opencode-v2-session-isolation"}
 	steps := []struct {
 		typeName string

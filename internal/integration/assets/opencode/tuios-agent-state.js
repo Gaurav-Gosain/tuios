@@ -73,19 +73,39 @@ function report(event, sessionID, extra) {
   run(ARGS, payloadFor(event, sessionID, extra));
 }
 
-// run starts tuios with args and input on its stdin, and does not wait.
+// Reports leave one at a time, in the order of their events: each starts when
+// the one before has exited. Two hook processes started together race to the
+// daemon, and the later event can land first. A session.created that lost to
+// the busy status after it left a working pane idle, and an idle status that
+// lost to the next busy one left a finished pane working.
+let sending = Promise.resolve();
+// A report that has not exited by then is ended, so one stuck hook cannot
+// hold back every report after it.
+const REPORT_LIMIT_MS = 5000;
+
+// after runs start once every report queued before it has been sent.
+function after(start) {
+  sending = sending.then(start).catch(() => {});
+}
+
+// run queues tuios with args and input on its stdin, and does not wait.
 function run(args, input) {
-  try {
-    const child = spawn(TUIOS, args, {
-      stdio: ["pipe", "ignore", "ignore"],
-      windowsHide: true,
-    });
-    child.on("error", () => {});
-    child.stdin.on("error", () => {});
-    child.stdin.end(input);
-  } catch {
-    // A report that cannot be sent must never break opencode.
-  }
+  after(() => new Promise((resolve) => {
+    try {
+      const child = spawn(TUIOS, args, {
+        stdio: ["pipe", "ignore", "ignore"],
+        windowsHide: true,
+        timeout: REPORT_LIMIT_MS,
+      });
+      child.on("error", resolve);
+      child.on("close", resolve);
+      child.stdin.on("error", () => {});
+      child.stdin.end(input);
+    } catch {
+      // A report that cannot be sent must never break opencode.
+      resolve();
+    }
+  }));
 }
 
 // noteUsage takes an assistant message's model and cost.
@@ -151,39 +171,45 @@ function ask(event, sessionID, extra, signal) {
       done(null);
       return;
     }
-    try {
-      child = spawn(TUIOS, ARGS, {
-        stdio: ["pipe", "pipe", "ignore"],
-        windowsHide: true,
-      });
-    } catch {
-      done(null);
-      return;
-    }
     signal?.addEventListener("abort", abort, { once: true });
-    timer = setTimeout(() => {
+    // The request goes out after the reports before it, so it cannot land
+    // ahead of the busy status of its own turn. The reports after it do not
+    // wait for the person's answer: they wait only for its start.
+    after(() => {
+      if (settled) return;
       try {
-        child.kill();
-      } catch {}
-      done(null);
-    }, HOLD_LIMIT_MS);
-    child.on("error", () => done(null));
-    child.stdin.on("error", () => {});
-    child.stdout.on("error", () => {});
-    child.stdout.on("data", (chunk) => {
-      if (out.length < 65536) out += chunk;
+        child = spawn(TUIOS, ARGS, {
+          stdio: ["pipe", "pipe", "ignore"],
+          windowsHide: true,
+        });
+      } catch {
+        done(null);
+        return;
+      }
+      timer = setTimeout(() => {
+        try {
+          child.kill();
+        } catch {}
+        done(null);
+      }, HOLD_LIMIT_MS);
+      child.on("error", () => done(null));
+      child.stdin.on("error", () => {});
+      child.stdout.on("error", () => {});
+      child.stdout.on("data", (chunk) => {
+        if (out.length < 65536) out += chunk;
+      });
+      child.on("close", () => {
+        try {
+          const value = JSON.parse(out.trim());
+          if (value && REPLIES.includes(value.reply)) {
+            done(value);
+            return;
+          }
+        } catch {}
+        done(null);
+      });
+      child.stdin.end(payloadFor(event, sessionID, extra));
     });
-    child.on("close", () => {
-      try {
-        const value = JSON.parse(out.trim());
-        if (value && REPLIES.includes(value.reply)) {
-          done(value);
-          return;
-        }
-      } catch {}
-      done(null);
-    });
-    child.stdin.end(payloadFor(event, sessionID, extra));
   });
 }
 
