@@ -650,6 +650,11 @@ func (m *OS) applyInboxEvents(msg InboxEventsMsg) tea.Cmd {
 			} else {
 				st.Items = append(st.Items, *it)
 			}
+			// An upgrade's confirm is its own dialog (syncUpgradeConfirm),
+			// which is alert enough.
+			if it.Upgrade != nil {
+				continue
+			}
 			// A question about the pane in front of the person opens the
 			// Inbox on it, which is the popup: it needs no alert.
 			if ev.Action == session.AttentionOpened && m.inboxPopAsk(*it) {
@@ -694,6 +699,7 @@ func (m *OS) inboxChanged() {
 	m.Inbox.Gen++
 	m.clampInboxSelection()
 	m.sidebarCache.invalidate()
+	m.syncUpgradeConfirm()
 }
 
 // inboxAttached reports whether an item is in the session this client is
@@ -1375,6 +1381,10 @@ func (m *OS) InboxAnswerAsk(n int) tea.Cmd {
 		return nil
 	}
 	if m.refuseRemoteAnswer("An answer") {
+		return nil
+	}
+	if it.Upgrade != nil {
+		m.ShowNotification("A live upgrade is answered in its own dialog, which every client attached here shows", "info", m.Settings.NotificationDuration)
 		return nil
 	}
 	if n < 1 || n > len(it.Options) {
