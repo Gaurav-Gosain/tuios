@@ -871,7 +871,7 @@ var ActionDescriptions = map[string]string{
 	ActionCopyModeSearchBackward: "Enter copy mode and search backward",
 	ActionCopyModeLineStart:      "Copy mode: go to the start of the line",
 	ActionCopyModeFirstNonBlank:  "Copy mode: go to the first nonblank character of the line",
-	ActionCopyModeLineEnd:        "Copy mode: go to the last character of the line",
+	ActionCopyModeLineEnd:        "Copy mode: go to the last nonblank character of the line",
 
 	// Session lifecycle (context menu rows; no default keybinding)
 	"settings_sidebar":  "Sidebar settings",

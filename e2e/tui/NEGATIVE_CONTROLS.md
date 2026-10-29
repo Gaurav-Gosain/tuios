@@ -2688,6 +2688,24 @@ positive half runs the defaults and wants no copy mode problem.
 | The report never carries the problems | `Report`: `CopyModeProblems` set to nil | `TestKeybindsDoctorNamesACopyModeKeyUsedTwice/clashes` | **caught** |
 | The bound rows at the end of the section | `generateCopyModeBindings` appends them, as before | `TestHelpListsHomeAndEndWithTheLineKeys` | **caught** |
 
+### $ and ^ stop on the line's text (#980)
+
+`TestCopyModeHomeAndEnd` also prints an indented line above its line. `$`
+must stop on the last `l` of `END-tail`, not on the blank padding out to the
+pane edge. `^`, pressed from the last word of the indented line, must stop on
+the `I` of `INDENT`, not on column zero as `0` does. Both expected columns
+come from where the text sits in the screen line. Run on 2026-10-29 on Linux,
+based on origin/main at `feb2df438`.
+
+| Control | How | Tests that fail | Verdict |
+| --- | --- | --- | --- |
+| The released behaviour | build origin/main (`feb2df438`) | `TestCopyModeHomeAndEnd` ("$ put the copy cursor on column 88, want column 56, the last l of END-tail") | **caught** |
+| `^` goes to column zero | `handleNormalInput`: `^` sets `cm.CursorX = 0`, as before | `TestCopyModeHomeAndEnd` ("^ put the copy cursor on column 31, want column 35, the I of INDENT") | **caught** |
+
+The positive half is the fixed build: `TestCopyModeHomeAndEnd` and
+`TestCopyModeEndRebinds` pass. `End` and `$` still reach the same column, so
+the `Home` and `End` checks above keep their meaning.
+
 ## A copy trims the whitespace it covers (#516)
 
 `copy_whitespace_test.go` prints indented lines and reads each copy off the

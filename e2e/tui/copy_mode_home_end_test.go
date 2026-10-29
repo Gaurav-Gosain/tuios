@@ -24,6 +24,12 @@ import (
 //   - The binding could be ignored and the keys fixed. The rebound case moves
 //     End to ctrl+e and requires End to stop moving the cursor (the negative
 //     half) and ctrl+e to move it (the positive half).
+//
+// $ and ^ stop on the line's text (#980): $ on the last nonblank character,
+// not the blank padding out to the pane edge, and ^ on the first nonblank
+// character of an indented line, not column zero as 0 does. The expected
+// columns come from where the text sits in the screen line, so a $ that went
+// to the pane edge, or a ^ that did what 0 does, lands elsewhere.
 
 const homeEndLine = "HOME-start middle END-tail"
 
@@ -66,9 +72,23 @@ func toMiddle(t *testing.T, term *tuitest.Terminal, row int) int {
 	return col
 }
 
+// indentLine is an indented line for ^, printed above homeEndLine.
+const indentLine = "    INDENT-text rest"
+
+// screenCol returns the column of the first cell of needle on row, plus off.
+func screenCol(t *testing.T, term *tuitest.Terminal, row int, needle string, off int) int {
+	t.Helper()
+	line := term.Screen().Line(row)
+	before, _, ok := strings.Cut(line, needle)
+	if !ok {
+		t.Fatalf("row %d does not hold %q: %q", row, needle, line)
+	}
+	return len([]rune(before)) + off
+}
+
 func TestCopyModeHomeAndEnd(t *testing.T) {
 	term, out := startWhitespaceClient(t, false)
-	runInShell(t, term, homeEndCmd, "END-tail", shellTimeout)
+	runInShell(t, term, "clear; printf '%s\\n' '"+indentLine+"'; "+strings.TrimPrefix(homeEndCmd, "clear; "), "END-tail", shellTimeout)
 	time.Sleep(300 * time.Millisecond)
 	row := lastRowWith(term.Screen(), homeEndLine)
 	if row < 0 {
@@ -86,6 +106,9 @@ func TestCopyModeHomeAndEnd(t *testing.T) {
 	mid = toMiddle(t, term, row)
 	sendEach(t, term, "$")
 	dollar := copyCursorMoved(t, term, row, mid, "$")
+	if want := screenCol(t, term, row, homeEndLine, len(homeEndLine)-1); dollar != want {
+		t.Fatalf("$ put the copy cursor on column %d, want column %d, the last l of END-tail", dollar, want)
+	}
 
 	// Home and End reach the same columns.
 	mid = toMiddle(t, term, row)
@@ -111,6 +134,27 @@ func TestCopyModeHomeAndEnd(t *testing.T) {
 	sendEach(t, term, "v", tuitest.End, "y")
 	if got, want := rawWrite(t, term, out, from, "v End y"), "middle END-tail"; got != want {
 		t.Fatalf("v End y copied %q, want %q", got, want)
+	}
+
+	// ^ on the indented line goes to its first nonblank character, from the
+	// last word of the line.
+	irow := lastRowWith(term.Screen(), indentLine)
+	if irow < 0 {
+		t.Fatalf("the indented line is not on the screen\n%s", term.Snapshot())
+	}
+	rest := screenCol(t, term, irow, "rest", 0)
+	if err := term.SendKeys("?rest", tuitest.Enter); err != nil {
+		t.Fatalf("search: %v", err)
+	}
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		r, c, ok := copyCursorCell(s)
+		return ok && r == irow && c == rest
+	}, uiTimeout); err != nil {
+		t.Fatalf("the search did not land on row %d column %d\n%s", irow, rest, term.Snapshot())
+	}
+	sendEach(t, term, "^")
+	if got, want := copyCursorMoved(t, term, irow, rest, "^"), screenCol(t, term, irow, "INDENT", 0); got != want {
+		t.Fatalf("^ put the copy cursor on column %d, want column %d, the I of INDENT", got, want)
 	}
 	alive(t, term, "after Home and End in copy mode")
 }
