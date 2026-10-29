@@ -125,11 +125,14 @@ func (d *Daemon) followRenamedSession(verb string, params json.RawMessage) json.
 // one pane on this machine, so the caller, placed in that pane by its token or
 // by its process, is answered as it was before the name went.
 //
-// A session name that resolves is never rewritten here, so a call naming a
-// session that exists, the pane's or another, is checked as it is sent. A
-// placement read from the caller's environment does not count, since a
-// process can set that itself. The verbs in renameNotFollowed are left as
-// sent, as followRenamedSession leaves them.
+// A reused name can also become another session's alias after that session is
+// renamed. Follow the verified own pane before followRenamedSession expands
+// that alias, so it cannot redirect the pane's reports into the other session.
+//
+// A live session name is never rewritten here, so an explicitly named session
+// is checked as sent. A placement read from the caller's environment does not
+// count, since a process can set that itself. The verbs in renameNotFollowed
+// are left as sent, as followRenamedSession leaves them.
 func (d *Daemon) followOwnPane(cs *connState, verb string, params json.RawMessage) json.RawMessage {
 	if renameNotFollowed[verb] || cs == nil || cs.viaLink || cs.paneOnly || len(params) == 0 {
 		return params
@@ -141,7 +144,7 @@ func (d *Daemon) followOwnPane(cs *connState, verb string, params json.RawMessag
 	if json.Unmarshal(params, &named) != nil || named.Session == "" || named.Window == "" {
 		return params
 	}
-	if s, _ := d.manager.ResolveSession(named.Session); s != nil {
+	if s, renamed := d.manager.ResolveSession(named.Session); s != nil && !renamed {
 		return params
 	}
 	holder := d.sessionHoldingWindow(named.Window)

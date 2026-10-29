@@ -2903,15 +2903,15 @@ func (d *Daemon) admitVerb(cs *connState, verb string, params json.RawMessage) (
 	// that restricted itself is held to that too, before anything,
 	// forwarding included, sees the call. See pane_grants.go and
 	// conn_scope.go.
+	// Follow the pane's own stale session name before a rename alias can
+	// expand it to another session. See session_rename.go.
+	params = d.followOwnPane(cs, verb, params)
 	// A session named by a name it was renamed from is named by its current
 	// one from here on. See session_rename.go.
 	params = d.followRenamedSession(verb, params)
 	// A window moved out of the session named goes to the one it is in now.
 	// See window_move_session.go.
 	params = d.followMovedWindow(params)
-	// A pane's own call naming a session that is gone goes to the pane's
-	// session. See session_rename.go.
-	params = d.followOwnPane(cs, verb, params)
 	granted, verr := d.checkGrants(cs, verb, params)
 	if verr != nil {
 		return verbEntry{}, nil, verr
