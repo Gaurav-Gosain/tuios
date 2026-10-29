@@ -170,6 +170,14 @@ type TUIClient struct {
 	// PTY closed handlers, called when a PTY process exits
 	ptyClosedHandlers   map[string]func()
 	ptyClosedHandlersMu sync.RWMutex
+	// ptyClosedEarly are PTYs whose close arrived before a handler was
+	// registered for them, oldest first, guarded by ptyClosedHandlersMu. A
+	// program that exits at once can end before the state push that brings
+	// its window is applied: the close is read on the connection's goroutine
+	// and the window is placed later on the UI goroutine. OnPTYClosed for one
+	// of these runs its handler at once, or the window would stay open with
+	// nothing in it. Bounded by ptyClosedEarlyMax.
+	ptyClosedEarly []string
 
 	// ptyResizeHandlers is told the size the daemon's emulator took, at the
 	// point in the output stream it took it. Registered alongside the output
@@ -1028,11 +1036,27 @@ func (c *TUIClient) OnPTYResized(ptyID string, handler func(width, height int)) 
 }
 
 // OnPTYClosed registers a handler to be called when the PTY process exits.
+//
+// When the PTY closed before this call, handler runs at once, on the caller's
+// goroutine. See ptyClosedEarly.
 func (c *TUIClient) OnPTYClosed(ptyID string, handler func()) {
 	c.ptyClosedHandlersMu.Lock()
+	if i := slices.Index(c.ptyClosedEarly, ptyID); i >= 0 {
+		c.ptyClosedEarly = slices.Delete(c.ptyClosedEarly, i, i+1)
+		c.ptyClosedHandlersMu.Unlock()
+		if handler != nil {
+			handler()
+		}
+		return
+	}
 	c.ptyClosedHandlers[ptyID] = handler
 	c.ptyClosedHandlersMu.Unlock()
 }
+
+// ptyClosedEarlyMax bounds ptyClosedEarly. A close with no handler is also
+// the reply to a close this client asked for, and those are never claimed,
+// so the oldest entries go.
+const ptyClosedEarlyMax = 32
 
 // OnRemoteCommand registers a handler for remote commands from the CLI.
 // The handler should execute the command and return an error if it fails.
@@ -1873,10 +1897,18 @@ func (c *TUIClient) handleMessage(msg *Message) {
 		if err := msg.ParsePayload(&payload); err != nil {
 			return
 		}
-		// Get the closed handler before removing
-		c.ptyClosedHandlersMu.RLock()
-		closedHandler := c.ptyClosedHandlers[payload.PTYID]
-		c.ptyClosedHandlersMu.RUnlock()
+		// Get the closed handler before removing. With none yet, the close
+		// is kept for the window that has not been placed. See
+		// ptyClosedEarly.
+		c.ptyClosedHandlersMu.Lock()
+		closedHandler, registered := c.ptyClosedHandlers[payload.PTYID]
+		if !registered && !slices.Contains(c.ptyClosedEarly, payload.PTYID) {
+			if len(c.ptyClosedEarly) >= ptyClosedEarlyMax {
+				c.ptyClosedEarly = slices.Delete(c.ptyClosedEarly, 0, 1)
+			}
+			c.ptyClosedEarly = append(c.ptyClosedEarly, payload.PTYID)
+		}
+		c.ptyClosedHandlersMu.Unlock()
 
 		// Remove handlers
 		c.ptyHandlersMu.Lock()

@@ -26,7 +26,9 @@ type windowExitQueue struct {
 //
 // Both callers are OnPTYClosed handlers, which the daemon client runs on its
 // read loop: the one goroutine that also carries pane output and every
-// round-trip response. A send that blocks there does not delay one window's
+// round-trip response. (A PTY that closed before its window was placed runs
+// the handler on the Update goroutine instead, where a blocking send would
+// deadlock: the same reason not to block.) A send that blocks there does not delay one window's
 // teardown, it stops the client outright.
 //
 // A larger WindowExitChan would only move the number, since killing a session
