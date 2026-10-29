@@ -6,6 +6,8 @@ import (
 	"slices"
 	"strings"
 	"unicode/utf8"
+
+	"github.com/Gaurav-Gosain/tuios/internal/config"
 )
 
 // ChordParts splits a chord: "ctrl+b" is ["ctrl", "b"]. "+" alone stays.
@@ -79,21 +81,16 @@ func KeyBytes(k Key) string {
 	return out
 }
 
-// macOption maps what Option and a key types on a US Mac to the key, for a
-// chord that reaches tuios as the composed glyph.
-var macOption = map[string]string{
-	"å": "a", "∫": "b", "ç": "c", "∂": "d", "´": "e", "ƒ": "f", "©": "g", "˙": "h",
-	"ˆ": "i", "∆": "j", "˚": "k", "¬": "l", "µ": "m", "˜": "n", "ø": "o", "π": "p",
-	"œ": "q", "®": "r", "ß": "s", "†": "t", "¨": "u", "√": "v", "∑": "w", "≈": "x",
-	"¥": "y", "Ω": "z", "¡": "1", "™": "2", "£": "3", "¢": "4", "∞": "5", "§": "6",
-	"¶": "7", "•": "8", "ª": "9", "º": "0",
-}
-
-// fromMacOption: "alt+∆" and a bare "∆" are the Mac spellings of alt+j.
+// fromMacOption reads "alt+∆" and a bare "∆", the Mac spellings of alt+j,
+// as the chord. The glyphs are config's, the one table tuios keeps.
 func fromMacOption(key string) string {
 	glyph := strings.TrimPrefix(key, "alt+")
-	if base, ok := macOption[glyph]; ok {
-		return "alt+" + base
+	r, size := utf8.DecodeRuneInString(glyph)
+	if size == 0 || size != len(glyph) {
+		return key
+	}
+	if chord, ok := config.MacOSOptionChord(r); ok {
+		return chord
 	}
 	return key
 }
