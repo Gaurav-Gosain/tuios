@@ -68,8 +68,8 @@ const failuresBeforeGivingUp = 3
 type Request struct {
 	// Cue selects the sound.
 	Cue Cue
-	// File replaces the embedded asset with a file of the user's own. An empty
-	// or unreadable path falls back to the embedded cue, so a typo in config
+	// File replaces the built-in cue with a file of the user's own. An empty
+	// or unreadable path falls back to the built-in cue, so a typo in config
 	// costs the custom sound rather than all sound.
 	File string
 	// Cooldown is the shortest gap between two audible cues. Zero plays every
@@ -181,7 +181,7 @@ func playWith(p player, file string) bool {
 	return cmd.Run() == nil
 }
 
-// spill writes an embedded cue to a file a player can open, once per cue per
+// spill writes a cue to a file a player can open, once per cue per
 // process. Players take a path, not a stream, and a fresh temp file per alert
 // would be a write and an unlink for every sound.
 func spill(cache map[Cue]string, c Cue) (string, error) {
@@ -193,7 +193,7 @@ func spill(cache map[Cue]string, c Cue) (string, error) {
 		return "", err
 	}
 	path := filepath.Join(dir, cueFiles[c])
-	if err := os.WriteFile(path, cueAssets[c], 0o600); err != nil {
+	if err := os.WriteFile(path, renderWAV(cueNotes[c]), 0o600); err != nil {
 		return "", err
 	}
 	cache[c] = path
