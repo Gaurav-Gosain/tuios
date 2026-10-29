@@ -71,6 +71,10 @@ type Job struct {
 	Env []string
 	// Timeout kills the process group after this long. Zero is no timeout.
 	Timeout time.Duration
+	// Release, when set, is called once: when the run ends and nothing it
+	// started is left, or when Start refuses the job. It drops herdr's lease
+	// on the plugin's install (HoldLease).
+	Release func()
 }
 
 // Runner runs plugin commands and keeps their log.
@@ -144,6 +148,10 @@ func ResolveProgram(program, root string) (string, *Error) {
 // stdout and stderr kept up to OutputCap each. A start refused by a bound
 // is logged as failed and returned as an error.
 func (r *Runner) Start(j Job) (LogEntry, *Error) {
+	lease := func() {}
+	if j.Release != nil {
+		lease = sync.OnceFunc(j.Release)
+	}
 	now := time.Now().UnixMilli()
 	r.mu.Lock()
 	r.next++
@@ -154,6 +162,7 @@ func (r *Runner) Start(j Job) (LogEntry, *Error) {
 		e.Stdout, e.Stderr = &empty, &empty
 		r.pushLocked(e)
 		r.mu.Unlock()
+		lease()
 		return e, errf(code, "%s", msg)
 	}
 	switch {
@@ -339,6 +348,7 @@ func (r *Runner) Start(j Job) (LogEntry, *Error) {
 		group.release()
 		r.mu.Unlock()
 		release()
+		lease()
 	}()
 	return e, nil
 }

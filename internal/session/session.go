@@ -3959,7 +3959,7 @@ func (s *Session) buildEnvFor(windowID string, workspace int, restored bool, ext
 	env = append(env, "COLORTERM="+colorTerm)
 	kitty, sixel := s.GraphicsCapabilities()
 	env = append(env, "TERM_PROGRAM="+guestenv.TermProgramFor(command, kitty, sixel))
-	env = append(env, "TERM_PROGRAM_VERSION=0.1.0")
+	env = append(env, "TERM_PROGRAM_VERSION="+guestenv.TermProgramVersion())
 	env = append(env, "TUIOS_SESSION="+s.Name())
 	// TUIOS_HOST names the machine this pane runs on. A pane is always local
 	// to the daemon that made it, so this is the daemon's own hostname, on

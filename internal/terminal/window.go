@@ -20,6 +20,7 @@ import (
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/debuglog"
+	"github.com/Gaurav-Gosain/tuios/internal/guestenv"
 	"github.com/Gaurav-Gosain/tuios/internal/ptyspawn"
 	"github.com/Gaurav-Gosain/tuios/internal/sessiontree"
 	"tuios.dev/vt"
@@ -846,8 +847,8 @@ func NewWindowIn(dir, id, title string, x, y, width, height, z int, exitChan cha
 		cmd.Env = append(guestBaseEnv(),
 			"TERM="+termType,
 			"COLORTERM="+colorTerm,
-			"TERM_PROGRAM="+guestTermProgram(command), // Terminal identity guests can act on
-			"TERM_PROGRAM_VERSION=0.1.0",              // Version for compatibility checking
+			"TERM_PROGRAM="+guestTermProgram(command),             // Terminal identity guests can act on
+			"TERM_PROGRAM_VERSION="+guestenv.TermProgramVersion(), // Version for compatibility checking
 			"TUIOS_WINDOW_ID="+id,
 			guestKittyAnimation(), // whether a=f frame edits reach the host
 		)

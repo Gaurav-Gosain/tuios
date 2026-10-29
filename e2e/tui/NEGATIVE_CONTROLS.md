@@ -1493,6 +1493,9 @@ person enables it.
 | The warning for a `plugin_action` key that no plugin has | `validateCommands`: the `validatePluginActionKeys` call cut | `TestHerdrPluginPalette` (never shows "1 config problem") | **caught** |
 | A plugin's pane tags another pane with metadata, as herdr-sidebar tags its preview panes | `herdrPane`: the `pluginPaneMetadataTarget` branch made `ok && false` | `TestHerdrPluginPanes` ("the plugin pane could not tag the pane it was opened from", with `a pane may report only for itself`) | **caught** |
 | A bare action id prefers the enabled plugin | `FindAction`: the enabled-only return cut | `TestHerdrPluginPalette` (run-1.env never holds the key's run: the id is ambiguous) | **caught** |
+| A command from a herdr install holds the install's `.in-use` lease while it runs | `pluginHost.run`: the `HoldLease` call replaced by a release that does nothing | `TestHerdrPluginActions` ("herdr's cleanup got the lease of an install whose plugin command runs") | **caught** |
+| The lease goes when the run ends | `Runner.Start`: the `lease()` call at the end of the run cut | `TestHerdrPluginActions` ("the lease is still held after the command ended") | **caught** |
+| The whole lease change | the binary from `origin/main` (`172918f0`) | `TestHerdrPluginActions` (the lease is free while the command runs) | **caught** |
 
 ## send-keys in the pane's keyboard mode
 
@@ -6675,6 +6678,7 @@ alone.
 | --- | --- | --- |
 | Unmodified main | `the pane inherited NO_COLOR=[1] CLICOLOR=[0] FORCE_COLOR=[0] CODEX_THREAD_ID=[outer-thread] CODEX_CI=[1] CODEX_SHELL=[1] CLAUDECODE=[1] CLAUDE_CODE_SESSION_ID=[outer-session]`; the hook skipped the pane's Codex as `nested Codex session`, and the agent state stayed `none` | every variable reads unset, and the state reads `idle` |
 | Cut the filter at the daemon's call site, `env := guestenv.WithoutHostMultiplexer(os.Environ())` in `buildEnvFor` replaced by `os.Environ()` | the same three failures | as above |
+| `TERM_PROGRAM_VERSION` was the fixed `0.1.0`: the binary from `origin/main` (`172918f0`), run on Linux | `the pane has TERM_PROGRAM_VERSION=[0.1.0], want the build version [dev]` | the pane reads the version `tuios --version` prints, and not the caller's `9.9.9-outer` |
 
 The positive halves are in the same fixture. The command that starts the
 daemon also passes `CODEX_HOME`, `CLAUDE_CONFIG_DIR` and an ordinary variable,

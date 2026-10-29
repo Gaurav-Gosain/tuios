@@ -3,7 +3,29 @@
 // path build a guest environment, and they must agree on what they advertise.
 package guestenv
 
-import "strings"
+import (
+	"strings"
+	"sync/atomic"
+)
+
+// buildVersion is the version TERM_PROGRAM_VERSION names. The main package
+// sets it once, before the first pane starts.
+var buildVersion atomic.Pointer[string]
+
+// SetBuildVersion records the build version, the one tuios --version prints.
+func SetBuildVersion(v string) {
+	v = strings.TrimSpace(v)
+	buildVersion.Store(&v)
+}
+
+// TermProgramVersion is the TERM_PROGRAM_VERSION value: the build version, or
+// "dev" when none was set.
+func TermProgramVersion() string {
+	if v := buildVersion.Load(); v != nil && *v != "" {
+		return *v
+	}
+	return "dev"
+}
 
 // TermProgram returns the TERM_PROGRAM value for a guest process, given the
 // graphics capabilities tuios can actually forward to the host terminal.

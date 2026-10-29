@@ -16,6 +16,7 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/cliflags"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/fang"
+	"github.com/Gaurav-Gosain/tuios/internal/guestenv"
 	"github.com/Gaurav-Gosain/tuios/internal/herdrplugin"
 	"github.com/Gaurav-Gosain/tuios/internal/serverscope"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
@@ -70,6 +71,8 @@ func main() {
 	app.SetBuildStamp(version, commit)
 	// XTVERSION names the build to the programs in a pane.
 	vt.SetBuildVersion(version)
+	// TERM_PROGRAM_VERSION names it to the programs in a pane too.
+	guestenv.SetBuildVersion(version)
 
 	// The server a pane's daemon was started for reaches every tuios run in
 	// that pane through TUIOS_SERVER, the tmux and herdr links included, so it

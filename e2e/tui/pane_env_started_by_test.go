@@ -3,6 +3,7 @@ package tuie2e
 import (
 	"encoding/json"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -26,6 +27,9 @@ import (
 // The daemon's environment still reaches the panes. Only the variables that
 // describe the one command that started it are cut. CODEX_HOME and
 // CLAUDE_CONFIG_DIR name the person's folders, not a session, and stay.
+//
+// TERM_PROGRAM_VERSION is tuios's own: the build version tuios --version
+// prints, never the value of the terminal the caller ran in.
 //
 // How this could pass wrongly, written down first:
 //   - A daemon started earlier with another environment could answer. The
@@ -73,6 +77,8 @@ func TestPanesDoNotInheritTheAgentThatStartedTheDaemon(t *testing.T) {
 		"CLAUDECODE=1", "CLAUDE_CODE_SESSION_ID=outer-session",
 		"CODEX_HOME=" + codexHome, "CLAUDE_CONFIG_DIR=" + claudeDir,
 		"TUIOS_E2E_CALLER_KEPT=kept",
+		// The terminal the agent ran in. The pane names tuios's build.
+		"TERM_PROGRAM_VERSION=9.9.9-outer",
 	}
 	removed := []string{
 		"NO_COLOR", "CLICOLOR", "FORCE_COLOR",
@@ -88,7 +94,16 @@ func TestPanesDoNotInheritTheAgentThatStartedTheDaemon(t *testing.T) {
 		t.Fatalf("create the session: %v\n%s", err, out)
 	}
 
-	names := append(append([]string{}, removed...), "CODEX_HOME", "CLAUDE_CONFIG_DIR", "TUIOS_E2E_CALLER_KEPT")
+	// TERM_PROGRAM_VERSION is the build version, the word after "tuios
+	// version" in what tuios --version prints, and never the caller's.
+	version, err := exec.Command(tuiosBin, "--version").Output()
+	fields := strings.Fields(strings.TrimPrefix(string(version), "tuios version "))
+	if err != nil || len(fields) == 0 || !strings.HasPrefix(string(version), "tuios version ") {
+		t.Fatalf("tuios --version: %v\n%s", err, version)
+	}
+	buildVersion := fields[0]
+
+	names := append(append([]string{}, removed...), "CODEX_HOME", "CLAUDE_CONFIG_DIR", "TUIOS_E2E_CALLER_KEPT", "TERM_PROGRAM_VERSION")
 	cmd := `printf 'VAR %s=[%s] END\n'`
 	for _, name := range names {
 		cmd += ` ` + name + ` "${` + name + `-unset}"`
@@ -129,6 +144,10 @@ func TestPanesDoNotInheritTheAgentThatStartedTheDaemon(t *testing.T) {
 				"its panes, or the removed variables below read unset for the wrong reason\n%s",
 				name, got[name], want, pane)
 		}
+	}
+	if got["TERM_PROGRAM_VERSION"] != buildVersion {
+		t.Errorf("the pane has TERM_PROGRAM_VERSION=[%s], want the build version [%s]\n%s",
+			got["TERM_PROGRAM_VERSION"], buildVersion, pane)
 	}
 	var leaked []string
 	for _, name := range removed {

@@ -300,9 +300,16 @@ func TestHerdrPluginTrustAndHooks(t *testing.T) {
 // herdrPluginCall branch cut from herdrAPICall, both runs fail as
 // unsupported; with cmd.Dir cut from Runner.Start, the cwd check fails;
 // with the grant check cut from herdrPluginLogList, the read-only pane
-// reads the log.
+// reads the log; with the HoldLease call cut from pluginHost.run, herdr's
+// cleanup gets the lease of the running install.
+//
+// The last part runs a plugin from an install herdr 0.9.4 and later make,
+// with herdr's .in-use marker. While its action runs, an exclusive flock on
+// the marker without waiting, which is how herdr's cleanup asks before it
+// deletes an old install, is refused. Before the run and after it, it is
+// taken, so the daemon holds the lease only while the command runs.
 func TestHerdrPluginActions(t *testing.T) {
-	_, base := pluginClient(t, pluginsConfig(t, []string{"e2e.actions"}, "actions"))
+	_, base := pluginClient(t, pluginsConfig(t, []string{"e2e.actions", herdrLeaseID}, "actions"))
 	const id = "e2e.actions"
 	root := pluginFixture(t, "actions")
 	crushPanes(t, base, "w1")
@@ -376,6 +383,106 @@ func TestHerdrPluginActions(t *testing.T) {
 		if st.code != 1 || !strings.Contains(st.err, "forbidden") || strings.Contains(st.out, "hello from e2e.actions") {
 			t.Errorf("plugin %s from a read-only pane: exit %d, stdout %q, stderr %q; want herdr's forbidden error", name, st.code, st.out, st.err)
 		}
+	}
+
+	checkHerdrInstallLease(t, base)
+}
+
+// herdrLeaseID is the plugin checkHerdrInstallLease installs as herdr does.
+const herdrLeaseID = "e2e.lease"
+
+// checkHerdrInstallLease makes an install as herdr plugin install makes it,
+// github-installations/<plugin>/<install>/checkout with an .in-use marker
+// beside the checkout, lists it in herdr's plugins.json, and runs its action.
+// While the action runs, herdr's cleanup cannot get the marker's lock.
+func checkHerdrInstallLease(t *testing.T, base string) {
+	t.Helper()
+	herdrDir := filepath.Join(xdgDir(base, "XDG_CONFIG_HOME"), "herdr")
+	install := filepath.Join(herdrDir, "plugins", "github-installations", herdrLeaseID, "4242-0")
+	checkout := filepath.Join(install, "checkout")
+	if err := os.MkdirAll(checkout, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	manifest := `id = "` + herdrLeaseID + `"
+name = "E2E lease"
+version = "1.0.0"
+min_herdr_version = "0.9.5"
+
+[[actions]]
+id = "hold"
+title = "Hold"
+contexts = ["pane"]
+command = ["sh", "-c", "touch \"$HERDR_PLUGIN_STATE_DIR/held\"; while [ ! -e \"$HERDR_PLUGIN_STATE_DIR/go\" ]; do sleep 0.1; done; echo released"]
+`
+	if err := os.WriteFile(filepath.Join(checkout, "herdr-plugin.toml"), []byte(manifest), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	marker := filepath.Join(install, ".in-use")
+	if err := os.WriteFile(marker, nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	reg, _ := json.Marshal([]map[string]any{{
+		"plugin_id": herdrLeaseID, "manifest_path": filepath.Join(checkout, "herdr-plugin.toml"),
+		"plugin_root": checkout, "source": map[string]any{"kind": "github", "managed_path": checkout},
+	}})
+	if err := os.WriteFile(filepath.Join(herdrDir, "plugins.json"), reg, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	// cleanupLock is herdr's reclaim: an exclusive flock without waiting.
+	// It reports whether the lock was taken, and drops it at once.
+	cleanupLock := func() bool {
+		f, err := os.OpenFile(marker, os.O_RDWR, 0)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer f.Close()
+		err = syscall.Flock(int(f.Fd()), syscall.LOCK_EX|syscall.LOCK_NB)
+		if err != nil && err != syscall.EWOULDBLOCK {
+			t.Fatalf("flock %s: %v", marker, err)
+		}
+		return err == nil
+	}
+	if !cleanupLock() {
+		t.Fatal("the install's lease is held before its plugin runs")
+	}
+
+	if out, err := tuiosCLI(t, base, "plugins", "run", herdrLeaseID, "hold"); err != nil {
+		t.Fatalf("plugins run %s hold: %v\n%s", herdrLeaseID, err, out)
+	}
+	waitFile := func(p string) {
+		deadline := time.Now().Add(2 * uiTimeout)
+		for {
+			if _, err := os.Stat(p); err == nil {
+				return
+			}
+			if time.Now().After(deadline) {
+				out, _ := tuiosCLI(t, base, "plugins", "log")
+				t.Fatalf("%s never appeared. Plugin log:\n%s", p, out)
+			}
+			time.Sleep(100 * time.Millisecond)
+		}
+	}
+	waitFile(filepath.Join(pluginState(base, herdrLeaseID), "held"))
+	held := cleanupLock()
+	if err := os.WriteFile(filepath.Join(pluginState(base, herdrLeaseID), "go"), nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if held {
+		t.Fatal("herdr's cleanup got the lease of an install whose plugin command runs")
+	}
+
+	deadline := time.Now().Add(uiTimeout)
+	for !cleanupLock() {
+		if time.Now().After(deadline) {
+			out, _ := tuiosCLI(t, base, "plugins", "log")
+			t.Fatalf("the lease is still held after the command ended. Plugin log:\n%s", out)
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	logs, _ := herdrCall(t, base, "plugin.log.list", map[string]any{"plugin_id": herdrLeaseID})["logs"].([]any)
+	if len(logs) != 1 || logs[0].(map[string]any)["status"] != "succeeded" {
+		t.Fatalf("the held run did not end as succeeded: %v", logs)
 	}
 }
 

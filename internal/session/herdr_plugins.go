@@ -733,14 +733,25 @@ func (d *Daemon) herdrPluginPaneOpen(cs *connState, params json.RawMessage) (any
 			}
 		}
 	}
-	onExit := func(ptyID string) {
-		d.notifyPTYClosed(sess.ID, ptyID)
-		d.closeWindowOfPTY(sess, ptyID, false)
-	}
 	if _, err := os.Stat(cwd); err != nil {
 		return nil, herdrErr("plugin_pane_open_failed", "cannot start the pane in "+echoName(cwd)+": "+err.Error())
 	}
+	// The pane's program holds herdr's lease on the install it runs from
+	// until it exits, as a plugin command does (pluginHost.run).
+	lease, lerr := herdrplugin.HoldLease(dirs.HerdrConfig, e.Plugin.PluginRoot)
+	if lerr != nil {
+		LogBasic("Warning: a pane of plugin %s runs without herdr's install lease: %v", e.ID, lerr)
+	}
+	release := sync.OnceFunc(lease)
+	onExit := func(ptyID string) {
+		release()
+		d.notifyPTYClosed(sess.ID, ptyID)
+		d.closeWindowOfPTY(sess, ptyID, false)
+	}
 	win, bverr, err := d.addWindowFor(cs, "plugin.pane.open", sess, opts, onExit)
+	if bverr != nil || err != nil {
+		release()
+	}
 	if bverr != nil {
 		return nil, herdrErr("plugin_pane_open_failed", bverr.Message)
 	}

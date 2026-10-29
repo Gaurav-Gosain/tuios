@@ -322,7 +322,13 @@ func (h *pluginHost) run(p *herdrplugin.Plugin, actionID, event string, argv []s
 			env = append(env, kv[0]+"="+kv[1])
 		}
 	}
-	return h.runner.Start(herdrplugin.Job{Plugin: p, ActionID: actionID, Event: event, Command: argv, Env: env, Timeout: timeout})
+	// A plugin herdr installed keeps its files while the command runs:
+	// herdr deletes an old install only when no one holds its lease.
+	release, err := herdrplugin.HoldLease(dirs.HerdrConfig, p.PluginRoot)
+	if err != nil {
+		LogBasic("Warning: plugin %s runs without herdr's install lease: %v", p.PluginID, err)
+	}
+	return h.runner.Start(herdrplugin.Job{Plugin: p, ActionID: actionID, Event: event, Command: argv, Env: env, Timeout: timeout, Release: release})
 }
 
 // baseEnv is what every plugin process and plugin pane gets: herdr's plugin
