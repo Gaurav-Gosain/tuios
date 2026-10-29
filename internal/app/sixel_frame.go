@@ -220,6 +220,12 @@ func (sp *SixelPassthrough) nativeBytesLocked(out []byte) []byte {
 			next[r] = true
 			continue
 		}
+		if !f.damage.grounded(r) {
+			// The host does not show this rectangle's frame yet: the
+			// renderer wrote an older one. Sent with the write that
+			// puts its blanks there. See hostDamage.
+			continue
+		}
 		seq, ready := sp.sixelCropLocked(r)
 		if !ready {
 			// Being encoded off this goroutine; sent when it is done.

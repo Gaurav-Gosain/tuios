@@ -20,6 +20,14 @@ import (
 // which at worst leaves a picture missing until the next change, and never
 // leaves one where it should not be: that is the text's job, and the text is
 // always drawn.
+//
+// It also keeps which host cells hold the concealed blank an image sits on
+// (ground), through the renderer's scrolls and inserts. A rectangle is sent
+// only onto cells that hold it. bubbletea can write a frame older than the
+// rectangles the passthrough holds (see FrameBytes), and an image sent onto
+// that older text is moved with it by the renderer's next scroll, to rows
+// whose text did not change and so is never rewritten. That left a second
+// copy of the image over text (#1304).
 type hostDamage struct {
 	w, h     int
 	x, y     int
@@ -32,6 +40,10 @@ type hostDamage struct {
 	rows     [][]uint64
 	any      bool
 	allDirty bool
+	// ground is the cells that hold a concealed blank on the host, and
+	// conceal whether the renderer's current SGR conceals.
+	ground  [][]bool
+	conceal bool
 }
 
 func (d *hostDamage) resize(w, h int) {
@@ -41,9 +53,11 @@ func (d *hostDamage) resize(w, h int) {
 	d.w, d.h = w, h
 	d.top, d.bot = 0, max(0, h-1)
 	d.rows = make([][]uint64, h)
+	d.ground = make([][]bool, h)
 	words := (w + 63) / 64
 	for i := range d.rows {
 		d.rows[i] = make([]uint64, words)
+		d.ground[i] = make([]bool, w)
 	}
 	d.x, d.y = min(d.x, max(0, w-1)), min(d.y, max(0, h-1))
 	d.allDirty = true
@@ -79,6 +93,149 @@ func (d *hostDamage) markRows(y0, y1 int) {
 	}
 }
 
+// put records that cells x0..x1 of row y were written: with a character
+// when concealed says so, or erased.
+func (d *hostDamage) put(y, x0, x1 int, concealed bool) {
+	d.mark(y, x0, x1)
+	if y < 0 || y >= d.h {
+		return
+	}
+	for x := max(0, x0); x < min(d.w, x1); x++ {
+		d.ground[y][x] = concealed
+	}
+}
+
+// erase records that cells x0..x1 of row y were erased.
+func (d *hostDamage) erase(y, x0, x1 int) { d.put(y, x0, x1, false) }
+
+// eraseRows records that rows y0..y1 were erased.
+func (d *hostDamage) eraseRows(y0, y1 int) {
+	for y := max(0, y0); y <= min(y1, d.h-1); y++ {
+		d.erase(y, 0, d.w)
+	}
+}
+
+// eraseAll records that the whole screen was erased.
+func (d *hostDamage) eraseAll() {
+	d.allDirty = true
+	for _, r := range d.ground {
+		clear(r)
+	}
+}
+
+// scroll moves rows top..bot up by n, or down for a negative n, as the
+// host does: the rows that come in are blank. Every row of the region is
+// damage, as before.
+func (d *hostDamage) scroll(top, bot, n int) {
+	top, bot = max(0, top), min(bot, d.h-1)
+	if top > bot || n == 0 {
+		return
+	}
+	d.markRows(top, bot)
+	span := bot - top + 1
+	if n >= span || -n >= span {
+		for y := top; y <= bot; y++ {
+			clear(d.ground[y])
+		}
+		return
+	}
+	if n > 0 {
+		for y := top; y <= bot-n; y++ {
+			copy(d.ground[y], d.ground[y+n])
+		}
+		for y := bot - n + 1; y <= bot; y++ {
+			clear(d.ground[y])
+		}
+		return
+	}
+	n = -n
+	for y := bot; y >= top+n; y-- {
+		copy(d.ground[y], d.ground[y-n])
+	}
+	for y := top; y < top+n; y++ {
+		clear(d.ground[y])
+	}
+}
+
+// shiftRow moves the cells of row y from x on by n columns, right for a
+// positive n (ICH) and left for a negative one (DCH). The cells that come in
+// are blank.
+func (d *hostDamage) shiftRow(y, x, n int) {
+	d.mark(y, x, d.w)
+	if y < 0 || y >= d.h || x >= d.w {
+		return
+	}
+	row := d.ground[y][max(0, x):]
+	switch {
+	case n >= len(row) || -n >= len(row):
+		clear(row)
+	case n > 0:
+		copy(row[n:], row)
+		clear(row[:n])
+	case n < 0:
+		copy(row, row[-n:])
+		clear(row[len(row)+n:])
+	}
+}
+
+// grounded reports whether every cell of r holds the concealed blank an
+// image sits on.
+func (d *hostDamage) grounded(r sixelRect) bool {
+	if d.h == 0 || d.w == 0 {
+		// Nothing followed yet: no frame was fed.
+		return true
+	}
+	for y := r.y; y < r.y+r.rows(); y++ {
+		if y < 0 || y >= d.h {
+			return false
+		}
+		for x := r.x; x < r.x+r.cols(); x++ {
+			if x < 0 || x >= d.w || !d.ground[y][x] {
+				return false
+			}
+		}
+	}
+	return true
+}
+
+// sgr follows the conceal attribute through one SGR sequence.
+func (d *hostDamage) sgr() {
+	params := d.parser.Params()
+	if len(params) == 0 {
+		d.conceal = false
+		return
+	}
+	for i := 0; i < len(params); i++ {
+		v := params[i].Param(0)
+		switch v {
+		case 0:
+			d.conceal = false
+		case 8:
+			d.conceal = true
+		case 28:
+			d.conceal = false
+		case 38, 48, 58:
+			// An extended colour. Its arguments are not attributes.
+			if params[i].HasMore() {
+				for i+1 < len(params) && params[i].HasMore() {
+					i++
+				}
+				continue
+			}
+			if i+1 < len(params) {
+				switch params[i+1].Param(0) {
+				case 5:
+					i += 2
+				case 2:
+					i += 4
+				default:
+					i++
+				}
+			}
+		}
+	}
+}
+
 // hit reports whether any cell of r was written.
 func (d *hostDamage) hit(r sixelRect) bool {
 	if d.allDirty {
@@ -109,7 +266,7 @@ func (d *hostDamage) clampCursor() {
 // lineFeed moves down a row, scrolling the region when at its bottom.
 func (d *hostDamage) lineFeed() {
 	if d.y == d.bot {
-		d.markRows(d.top, d.bot)
+		d.scroll(d.top, d.bot, 1)
 		return
 	}
 	d.y = min(d.y+1, d.h-1)
@@ -136,7 +293,7 @@ func (d *hostDamage) feed(p []byte) {
 				d.x = 0
 				d.lineFeed()
 			}
-			d.mark(d.y, d.x, d.x+width)
+			d.put(d.y, d.x, d.x+width, d.conceal)
 			d.x += width
 			d.lastW = width
 			continue
@@ -173,12 +330,13 @@ func (d *hostDamage) feed(p []byte) {
 				d.lineFeed()
 			case 'M':
 				if d.y == d.top {
-					d.markRows(d.top, d.bot)
+					d.scroll(d.top, d.bot, -1)
 				} else {
 					d.y = max(0, d.y-1)
 				}
 			case 'c':
-				d.allDirty = true
+				d.eraseAll()
+				d.conceal = false
 				d.x, d.y, d.top, d.bot = 0, 0, 0, d.h-1
 			}
 		}
@@ -204,7 +362,7 @@ func (d *hostDamage) csi() {
 			for i := range len(d.parser.Params()) {
 				switch raw(i) {
 				case 47, 1047, 1049:
-					d.allDirty = true
+					d.eraseAll()
 				}
 			}
 		}
@@ -236,35 +394,47 @@ func (d *hostDamage) csi() {
 	case 'J':
 		switch raw(0) {
 		case 0:
-			d.mark(d.y, d.x, d.w)
-			d.markRows(d.y+1, d.h-1)
+			d.erase(d.y, d.x, d.w)
+			d.eraseRows(d.y+1, d.h-1)
 		case 1:
-			d.markRows(0, d.y-1)
-			d.mark(d.y, 0, d.x+1)
+			d.eraseRows(0, d.y-1)
+			d.erase(d.y, 0, d.x+1)
 		default:
-			d.allDirty = true
+			d.eraseAll()
 		}
 	case 'K':
 		switch raw(0) {
 		case 0:
-			d.mark(d.y, d.x, d.w)
+			d.erase(d.y, d.x, d.w)
 		case 1:
-			d.mark(d.y, 0, d.x+1)
+			d.erase(d.y, 0, d.x+1)
 		default:
-			d.mark(d.y, 0, d.w)
+			d.erase(d.y, 0, d.w)
 		}
 	case 'X':
-		d.mark(d.y, d.x, d.x+param(0, 1))
+		d.erase(d.y, d.x, d.x+param(0, 1))
 	case 'b':
 		n := param(0, 1) * max(1, d.lastW)
-		d.mark(d.y, d.x, d.x+n)
+		d.put(d.y, d.x, d.x+n, d.conceal)
 		d.x += n
-	case '@', 'P':
-		d.mark(d.y, d.x, d.w)
-	case 'L', 'M':
-		d.markRows(d.y, d.bot)
-	case 'S', 'T':
-		d.markRows(d.top, d.bot)
+	case '@':
+		d.shiftRow(d.y, d.x, param(0, 1))
+	case 'P':
+		d.shiftRow(d.y, d.x, -param(0, 1))
+	case 'L':
+		if d.y >= d.top && d.y <= d.bot {
+			d.scroll(d.y, d.bot, -param(0, 1))
+		}
+	case 'M':
+		if d.y >= d.top && d.y <= d.bot {
+			d.scroll(d.y, d.bot, param(0, 1))
+		}
+	case 'S':
+		d.scroll(d.top, d.bot, param(0, 1))
+	case 'T':
+		d.scroll(d.top, d.bot, -param(0, 1))
+	case 'm':
+		d.sgr()
 	case 'r':
 		d.top, d.bot = param(0, 1)-1, param(1, d.h)-1
 		if d.top >= d.bot || d.bot >= d.h {

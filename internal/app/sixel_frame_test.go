@@ -73,7 +73,7 @@ func TestSixelFrameFindsImageAndClips(t *testing.T) {
 	if r.x != 3 || r.y != 3 || r.r0 != 0 || r.c0 != 0 || r.rows() != 3 || r.cols() != 38 {
 		t.Fatalf("rect = %+v, want 38x3 at 3,3 from image 0,0", r)
 	}
-	out := string(m.GraphicsFrameBytes(nil))
+	out := string(m.GraphicsFrameBytes(groundBytes(rects)))
 	if !strings.Contains(out, "\x1b[4;4H\x1bP") {
 		t.Fatalf("host was not sent a sixel at row 4 col 4: %q", out[:min(80, len(out))])
 	}
@@ -94,8 +94,16 @@ func TestSixelFrameFindsImageAndClips(t *testing.T) {
 	if again := m.GraphicsFrameBytes([]byte("\x1b[1;1Hx")); len(again) != 0 {
 		t.Fatalf("a write outside the image had it sent again")
 	}
-	if again := m.GraphicsFrameBytes([]byte("\x1b[5;10H\x1b[3X")); len(again) == 0 {
-		t.Fatalf("an erase inside the image did not have it sent again")
+	if again := m.GraphicsFrameBytes([]byte("\x1b[5;10H\x1b[8m   \x1b[m")); len(again) == 0 {
+		t.Fatalf("a rewrite of blanks inside the image did not have it sent again")
+	}
+	// An erase inside it means the host does not show its frame: it is sent
+	// once its blanks are back.
+	if again := m.GraphicsFrameBytes([]byte("\x1b[5;10H\x1b[3X")); len(again) != 0 {
+		t.Fatalf("the image was sent over cells that hold no blank for it")
+	}
+	if again := m.GraphicsFrameBytes([]byte("\x1b[5;10H\x1b[8m   \x1b[m")); len(again) == 0 {
+		t.Fatalf("the image was not sent once its blanks were back")
 	}
 
 	// A popup over the image cuts it.
@@ -152,6 +160,75 @@ func TestSixelRectsAroundAPopup(t *testing.T) {
 
 // TestHostDamage checks the renderer's output is read into the cells it
 // wrote: text, erases, a repeat, and a whole-screen redraw.
+// groundBytes is what the renderer writes for rects: the concealed blanks
+// an image sits on.
+func groundBytes(rects []sixelRect) []byte {
+	var b []byte
+	for _, r := range rects {
+		for y := r.y; y < r.y+r.rows(); y++ {
+			b = appendCUP(b, y, r.x)
+			b = append(b, "\x1b[3;8m"...)
+			b = append(b, strings.Repeat(" ", r.cols())...)
+			b = append(b, "\x1b[m"...)
+		}
+	}
+	return b
+}
+
+// TestSixelWaitsForItsFrame is #1304, a deterministic race regression.
+// bubbletea can write a frame older than the rectangles the passthrough holds.
+// An image sent onto that older text was moved up by the renderer's next
+// scroll, to rows whose text did not change, and stayed there over the text.
+// The image has to wait for the write that puts its blanks on the host, and
+// the blanks have to be followed through the renderer's scrolls.
+func TestSixelWaitsForItsFrame(t *testing.T) {
+	m, win := sixelOS(t, sixelNative)
+	win.WriteOutput([]byte("top\r\n"))
+	win.WriteOutput(sixelTestImage(10, 2))
+	win.MarkContentDirty()
+	rects := m.testFrame()
+	if len(rects) != 1 || rects[0].y != 3 {
+		t.Fatalf("rects = %+v, want one on row 3", rects)
+	}
+	r := rects[0]
+
+	// The older frame: text where the image will be, two rows down from
+	// where the next frame's scroll puts it.
+	older := []byte("\x1b[4;4Hline-a    \x1b[5;4Hline-b    ")
+	if out := m.GraphicsFrameBytes(older); strings.Contains(string(out), "\x1bP") {
+		t.Fatalf("ASSERTION: the image was sent onto a frame that holds text in its cells: %q", out[:min(60, len(out))])
+	}
+
+	// The frame it belongs to scrolls the screen up two rows and writes the
+	// blanks. The image goes out with it.
+	scroll := append([]byte("\x1b[1;29r\x1b[29;1H\n\n\x1b[r"), groundBytes(rects)...)
+	if out := string(m.GraphicsFrameBytes(scroll)); !strings.Contains(out, "\x1b[4;4H\x1bP") {
+		t.Fatalf("ASSERTION: the image was not sent with the frame that holds its blanks: %q", out[:min(60, len(out))])
+	}
+
+	// The blanks follow a scroll: two rows up, the rectangle two rows up
+	// is on its blanks and the old place is not.
+	var d hostDamage
+	d.resize(100, 30)
+	d.feed(groundBytes(rects))
+	d.feed([]byte("\x1b[1;29r\x1b[29;1H\n\n\x1b[r"))
+	up := r
+	up.y -= 2
+	if !d.grounded(up) || d.grounded(r) {
+		t.Errorf("after a scroll of two rows: grounded at %d = %v, at %d = %v; want true, false", up.y, d.grounded(up), r.y, d.grounded(r))
+	}
+	// An insert of a line above moves them back down, and SGR 28 writes
+	// text that is not a blank for an image.
+	d.feed([]byte("\x1b[1;1H\x1b[2L"))
+	if !d.grounded(r) {
+		t.Errorf("an insert of two lines did not move the blanks down")
+	}
+	d.feed([]byte("\x1b[4;4H\x1b[8;28;38;2;8;8;8mx"))
+	if d.grounded(r) {
+		t.Errorf("a character written with conceal off still counts as a blank for the image")
+	}
+}
+
 func TestHostDamage(t *testing.T) {
 	var d hostDamage
 	d.resize(20, 5)

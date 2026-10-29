@@ -10378,3 +10378,13 @@ corner check fails the case of a box's bottom with a title.
 | Control: what was cut | Where it fails | Verdict |
 | --- | --- | --- |
 | origin/main, where keys go to the pane while the buffer is read | the shell runs `echo CHOSEN-` alone and `pbalpha42` lands on the next prompt, 3 of 3 runs | **caught** |
+## A sixel image waits for the frame that holds its blanks
+
+`TestSixelAtTheBottomKeepsItsLastRow` caught #1304 twice in CI and never in 290 runs on one machine, so it is not a control on its own. The race is covered by `TestSixelWaitsForItsFrame` in `internal/app`, a deterministic race regression: the passthrough holds the rectangles of a newer frame while the renderer writes an older one with text in those cells, and the next write scrolls the screen and writes the blanks. Run on 2026-10-29 on Linux, based on origin/main at feb2df438.
+
+| Control: what was cut | Where it fails | Verdict |
+| --- | --- | --- |
+| The `grounded` check in `nativeBytesLocked` | "the image was sent onto a frame that holds text in its cells" | **caught** by the unit test |
+| origin/main, e2e | `TestSixelAtTheBottomKeepsItsLastRow` passed 290 of 290 runs on one machine (#1304) | **not caught here**, CI only |
+
+With the fix, every sixel test in this package passed, among them `TestSixelRealPrograms` (chafa, timg, lsix, yazi), and `TestSixelAtTheBottomKeepsItsLastRow` with `TestSixelScrollsWithThePane` passed 10 of 10.
