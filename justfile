@@ -116,6 +116,8 @@ _backup:
 # Uses `tuios hosts sync`. With no names it syncs every host in the [hosts]
 # table. Each old daemon is upgraded live, which keeps the programs in its
 # panes, or else restarted, which ends them; the report says which and why.
+# From a pane, this machine's daemon is only upgraded live, after a Yes in the
+# tuios dialog.
 # Install here and on hosts, upgrade old daemons live (else restart)
 [group('deploy')]
 deploy *hosts: build
@@ -129,13 +131,24 @@ deploy-hosts *hosts: build
 # Upgrades the daemon live to the tuios on PATH, keeping every pane's program.
 # Where it cannot (an old daemon, a refusal), it says why and restarts it,
 # which ends them; layouts come back with new shells. A tuios without live
-# upgrades only restarts.
+# upgrades only restarts. From a pane of the daemon, the upgrade waits for a
+# Yes in the tuios dialog, and the daemon is never restarted: that would end
+# the pane.
 # Move the live daemon onto the installed tuios (live, else restart)
 [group('deploy')]
 restart:
     #!/usr/bin/env bash
     set -euo pipefail
     bin=$(command -v tuios)
+    if [ -n "${TUIOS_PANE_ID:-}" ]; then
+        if ! "$bin" daemon upgrade --binary "$bin"; then
+            echo "The daemon still runs the old version. This runs in one of its panes, so it was not restarted." >&2
+            echo "Run just restart again and answer Yes in the tuios dialog, or run it from a terminal outside tuios." >&2
+            exit 1
+        fi
+        "$bin" --version | head -1
+        exit 0
+    fi
     case "$("$bin" daemon upgrade --help 2>&1 || true)" in
         *or-restart*) "$bin" daemon upgrade --binary "$bin" --or-restart ;;
         *) "$bin" kill-server || true; "$bin" start-server ;;

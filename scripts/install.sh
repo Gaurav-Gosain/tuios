@@ -19,7 +19,8 @@
 #   --upgrade-server   upgrade a running daemon live to the new build, without
 #                      asking. Every program in its panes keeps running. When it
 #                      cannot be upgraded live, it is left running and the
-#                      reason is printed (experimental)
+#                      reason is printed. From one of its panes, the upgrade
+#                      waits for a Yes in the tuios dialog (experimental)
 #   --kill-server      stop a running daemon after installing, without asking
 #   --keep-server      leave a running daemon alone, without asking
 #   -h, --help         show this text
@@ -251,13 +252,23 @@ if pid=$(daemon_pid); then
             # Never a restart here: nobody asked for one. A daemon that cannot
             # be upgraded live keeps running the previous build, and the
             # command has said why.
+            # From one of its panes the daemon asks for a Yes in the tuios
+            # dialog first, and a restart would end the pane this runs in.
             if ! TUIOS_SERVER='' "$dest" daemon upgrade --binary "$dest"; then
-                note "The daemon (pid $pid) was not upgraded live, and still runs the previous
+                if [ -n "${TUIOS_PANE_ID:-}" ]; then
+                    note "The new build is installed. The daemon (pid $pid) was not upgraded live,
+and still runs the previous build with every program in its panes. The lines
+above say why. This runs in one of its panes, so it was not restarted. Run
+    tuios daemon upgrade
+and answer Yes in the tuios dialog, or run it from a terminal outside tuios."
+                else
+                    note "The daemon (pid $pid) was not upgraded live, and still runs the previous
 build with every program in its panes. The lines above say why. To move it
 anyway, run:
     tuios daemon upgrade --or-restart
 That restarts it when it cannot be upgraded live, which ends the programs
 running in your panes."
+                fi
             fi
             ;;
         *)

@@ -174,8 +174,10 @@ lists the sessions and the panes with a running program that a restart would
 end on each host. Then it asks you to agree. Without a terminal, add --yes. A
 daemon with no sessions is moved without a question. A daemon with the new
 version is never touched. Run in a pane of this machine's daemon, --local
-installs and leaves that daemon: it refuses an upgrade from its own panes,
-and a restart would end the pane.
+upgrades that daemon live only once you answer Yes in the tuios dialog on an
+attached client. No, a minute without an answer, or no attached client
+leaves it running the old version. It is never restarted, because a restart
+would end the pane the command runs in.
 
 If Tailscale SSH asks you to approve a login, sync shows the link to open.
 On a terminal, sync asks to wait for the approvals. Each host continues when
@@ -330,6 +332,10 @@ func runHostsSync(opts syncOptions) error {
 
 	// 3. Apply.
 	if !opts.dryRun {
+		if slices.ContainsFunc(targets, func(t *syncTarget) bool { return t.LiveOnly && !t.Failed }) {
+			fmt.Fprintln(opts.errOut, "This command runs in a pane of this machine's daemon, so its upgrade asks you first.")
+			fmt.Fprintln(opts.errOut, "Answer Yes in the tuios dialog on an attached client. It waits up to a minute.")
+		}
 		forEachTarget(targets, func(t *syncTarget) {
 			if t.Failed {
 				return
