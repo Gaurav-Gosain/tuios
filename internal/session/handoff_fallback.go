@@ -112,7 +112,7 @@ func (f *adoptFallback) reexec(why error) bool {
 	path, fds := f.path, f.fds
 	f.mu.Unlock()
 	if path == "" {
-		LogError("Live upgrade: no fallback, the manifest was not read (%v). The panes end with this process", why)
+		LogError("Live upgrade: no fallback, the manifest names no binary to fall back to (%v). The panes end with this process", why)
 		return true
 	}
 	if os.Getenv(handoffFallbackEnv) != "" {
