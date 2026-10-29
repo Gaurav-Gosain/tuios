@@ -121,6 +121,7 @@ func (d *Daemon) applyUserConfig(cfg *config.UserConfig, byPerson bool) {
 	d.manager.SetPreferredShell(cfg.Appearance.PreferredShell)
 	d.manager.SetHerdrProtocol(cfg.Agents.HerdrProtocol)
 	d.manager.SetReturnWhenEmpty(cfg.Workspaces.ReturnsWhenEmpty())
+	d.manager.SetDragAndDrop(cfg.Panes.DragAndDrop)
 	if d.buffers != nil {
 		d.buffers.SetLimits(cfg.PasteBuffers.Resolved())
 	}

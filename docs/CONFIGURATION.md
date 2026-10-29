@@ -469,6 +469,8 @@ display = "follow"
 
 `[panes]` also sets `navigator_layout`, the layout the pane navigator (`Ctrl+B /`) opens in: `tree`, `flat` or `cards`. The default is `tree`. Press `v` in the navigator to change the layout. `navigator_search = true` opens it ready to type a search, and `esc` with nothing typed closes it. See [KEYBINDINGS.md](KEYBINDINGS.md#the-pane-navigator).
 
+`[panes] drag_and_drop = true` turns on drag and drop between panes over the kitty drag and drop protocol (OSC 72). A program that speaks it, such as yazi 26.9 or later, can drag files from its pane: hold the left button on a file in terminal mode and carry it to another pane. A pane whose program speaks the protocol takes the drop itself. Any other pane gets the paths as a paste, by the rules of [dragging a file into a pane](#drag-a-file-into-a-pane) below: quoted for the shell in the pane, and refused, with the reason in the label, when that pane could not use a path on this machine. The same rules hold the pane the drag starts from. Dropped text, as against paths, goes only into a pane whose program turned bracketed paste on. tuios reads no file for either side and refuses a drop back into the pane the drag came from. The default is `false`. The protocol is kitty's and still settling, so the switch is off until it is asked for.
+
 `[path_picker]` sets `show_hidden`. With `true`, the path picker (`Alt+;`) shows the names that start with a dot when it opens. The default is `false`. `Alt+H` in the picker shows or hides them. See [KEYBINDINGS.md](KEYBINDINGS.md#pick-a-path).
 
 ## Drag a file into a pane

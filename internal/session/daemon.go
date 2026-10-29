@@ -868,6 +868,10 @@ type DaemonConfig struct {
 	PasteBufferLimit    int
 	PasteBufferMaxBytes int
 	PasteBuffersOff     bool
+	// DragAndDrop is [panes] drag_and_drop: the daemon records what a pane's
+	// program says about drag and drop and answers its query only when on.
+	// See dnd_registration.go.
+	DragAndDrop bool
 	// AgentStallTimeout overrides how long a pane may report working with no
 	// output before the stall heuristic demotes it to idle. Zero falls back to
 	// the TUIOS_AGENT_STALL_SECONDS environment override, then to the default; a
@@ -1035,6 +1039,7 @@ func NewDaemon(cfg *DaemonConfig) *Daemon {
 	d.manager.SetPreferredShell(cfg.PreferredShell)
 	d.manager.SetHerdrProtocol(cfg.HerdrProtocol)
 	d.manager.SetReturnWhenEmpty(!cfg.StayOnEmptyWorkspace)
+	d.manager.SetDragAndDrop(cfg.DragAndDrop)
 	d.agentDetectInterval = resolveAgentDetectInterval(cfg.AgentAutoDetect, cfg.AgentDetectInterval)
 	d.agentsOff.Store(cfg.AgentsOff)
 	d.wakes.init()

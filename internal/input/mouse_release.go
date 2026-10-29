@@ -58,6 +58,15 @@ func handleMouseRelease(msg tea.MouseReleaseMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	// Reset pointer shape on release
 	o.ResetPointerShape()
 
+	// The release of a drag between panes is the drop, wherever it lands: a
+	// drop on a rail session pane is refused, but the drag has to end here
+	// rather than stay started until the next motion without a button. The
+	// source program does not see the release, as it would not under kitty.
+	// See dnd_drag.go.
+	if mouse := msg.Mouse(); o.DnDRelease(mouse.X, mouse.Y) {
+		return o, nil
+	}
+
 	// A held files row drops on the pane under the pointer, or is a click on
 	// the row when it never left the rail.
 	if o.FileDragActive() {

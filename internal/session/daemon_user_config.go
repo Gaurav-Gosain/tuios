@@ -77,6 +77,7 @@ func DaemonConfigFromUser(uc *config.UserConfig) *DaemonConfig {
 	// The daemon holds the paste buffers every client shares.
 	cfg.PasteBufferLimit, cfg.PasteBufferMaxBytes = uc.PasteBuffers.Resolved()
 	cfg.PasteBuffersOff = cfg.PasteBufferLimit == 0
+	cfg.DragAndDrop = uc.Panes.DragAndDrop
 	// The daemon runs the hooks for the facts it owns, so a session with
 	// nobody attached still runs them. The client keeps the hooks that need a
 	// terminal.

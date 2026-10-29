@@ -1299,6 +1299,7 @@ func (m *OS) updateWindowFromState(w *terminal.Window, ws *session.WindowState) 
 	w.SetTitle(ws.Title)
 	adoptWindowHost(w, ws.Host)
 	m.takeDaemonCwd(w, ws)
+	m.takeDaemonDnD(w, ws)
 	w.HostLink = ws.HostLink
 	w.CustomName = ws.CustomName
 	if adoptGeometry {
@@ -1533,6 +1534,7 @@ func (m *OS) newWindowFromState(ws *session.WindowState) *terminal.Window {
 	}
 	adoptWindowHost(window, ws.Host)
 	m.takeDaemonCwd(window, ws)
+	m.takeDaemonDnD(window, ws)
 	window.HostLink = ws.HostLink
 
 	caps := m.hostCaps()
@@ -1578,6 +1580,7 @@ func (m *OS) createWindowFromSync(ws *session.WindowState) *terminal.Window {
 // owns.
 func (m *OS) closeWindowFromSync(w *terminal.Window) {
 	m.clearNvimNavigation(w.ID)
+	m.dndWindowClosed(w.ID)
 	m.pipSourceClosed(w)
 	if m.DaemonClient != nil && w.PTYID != "" {
 		m.unsubscribeFromPTY(w)

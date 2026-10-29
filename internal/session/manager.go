@@ -47,6 +47,9 @@ type Manager struct {
 	// stayOnEmpty is workspaces.return_when_empty turned off. The zero value
 	// is the default, on. Every session reads it through ReturnWhenEmpty.
 	stayOnEmpty atomic.Bool
+	// dragAndDrop is [panes] drag_and_drop. Every session reads it through
+	// DragAndDrop. See dnd_registration.go.
+	dragAndDrop atomic.Bool
 	// sshAgentFollow is [daemon] ssh_agent = "follow": a new pane gets
 	// SSH_AUTH_SOCK naming its session's agent link. See ssh_agent_follow.go.
 	sshAgentFollow atomic.Bool
@@ -171,6 +174,12 @@ func (m *Manager) SetReturnWhenEmpty(on bool) {
 func (m *Manager) ReturnWhenEmpty() bool {
 	return !m.stayOnEmpty.Load()
 }
+
+// SetDragAndDrop sets panes.drag_and_drop for every session.
+func (m *Manager) SetDragAndDrop(on bool) { m.dragAndDrop.Store(on) }
+
+// DragAndDrop is what SetDragAndDrop last set, false when nothing did.
+func (m *Manager) DragAndDrop() bool { return m.dragAndDrop.Load() }
 
 // PreferredShell is what SetPreferredShell last set, or "".
 func (m *Manager) PreferredShell() string {
@@ -307,6 +316,9 @@ func (m *Manager) CreateSession(name string, cfg *SessionConfig, width, height i
 	}
 	if cfg.ReturnWhenEmpty == nil {
 		cfg.ReturnWhenEmpty = m.ReturnWhenEmpty
+	}
+	if cfg.DragAndDrop == nil {
+		cfg.DragAndDrop = m.DragAndDrop
 	}
 	if cfg.HerdrEnv == nil {
 		cfg.HerdrEnv = m.HerdrEnv

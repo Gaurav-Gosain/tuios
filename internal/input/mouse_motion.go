@@ -48,6 +48,14 @@ func handleMouseMotion(msg tea.MouseMotionMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		o.EndPointerGrabs()
 	}
 
+	// A drag between panes over OSC 72 owns the pointer once the source
+	// program started it: the pane under the pointer hears of it through the
+	// protocol, not as mouse motion. Before that, this only watches for the
+	// gesture and the motion goes on to the pane. See dnd_drag.go.
+	if o.DnDMotion(mouse.X, mouse.Y, mouse.Button) {
+		return o, nil
+	}
+
 	// An open context menu tracks the pointer, so the row that would run on a
 	// click is the row the cursor is on. It also stops here rather than falling
 	// through: the pane underneath is behind a modal menu and has no business

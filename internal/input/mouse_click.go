@@ -426,6 +426,11 @@ func handleMouseClick(msg tea.MouseClickMsg, o *app.OS) (*app.OS, tea.Cmd) {
 				}
 				// Send to the terminal (uses PTY for daemon windows)
 				sendMouseToWindow(o, clickedWindow, adjustedMouse)
+				// A left press in a pane whose program offers drags arms the
+				// drag gesture; the press itself still went to the program.
+				if mouse.Button == tea.MouseLeft {
+					o.DnDNotePress(clickedWindow, X, Y, termX, termY)
+				}
 				return o, nil
 			}
 		}

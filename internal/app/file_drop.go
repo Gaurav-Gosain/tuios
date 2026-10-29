@@ -21,9 +21,11 @@ import (
 // quoted for the program that reads it. This file is the drop path that both
 // use: what the pane under the pointer is, whether it may take the path, the
 // text it gets, the outline and the label drawn while the gesture is held,
-// and the paste itself. A drop of files from the desktop (PR #1307) is meant
-// to call the same three functions, dropTargetAt, judgeDrop and deliverDrop,
-// so a path is quoted and refused by one set of rules whatever carried it.
+// and the paste itself. A drag between panes over the kitty drag and drop
+// protocol (dnd_drag.go) goes through the same functions, dropTargetAt,
+// paneTakesDrop, judgeDropPaths and deliverDrop, and draws the same ring and
+// label, so a path is quoted and refused by one set of rules whatever carried
+// it.
 //
 // It costs nothing at idle. The state is one struct, armed by a press on a
 // listing row and cleared by the release, and motion reaches tuios only while
@@ -139,14 +141,7 @@ func (m *OS) FileDragMotion(x, y int, alt bool) {
 	case w.ID != d.Verdict.Window:
 		d.Verdict = m.judgeDrop(w, d.Src)
 	}
-	switch {
-	case d.Verdict.Window == "":
-		m.SetPointerShape(PointerGrabbing)
-	case d.Verdict.Refusal != "":
-		m.SetPointerShape(PointerNotAllowed)
-	default:
-		m.SetPointerShape(PointerCopy)
-	}
+	m.dropPointer(d.Verdict)
 }
 
 // FileDragRelease ends the gesture. A drag drops the row on the pane under
@@ -226,44 +221,108 @@ func (m *OS) dropTargetAt(x, y int) *terminal.Window {
 // judgeDrop works out what a drop of src on w does: the text it pastes, or
 // why it pastes nothing.
 func (m *OS) judgeDrop(w *terminal.Window, src dropSource) dropVerdict {
-	v := dropVerdict{Window: w.ID, Pane: pipPaneName(w)}
 	if src.Host != "" {
-		v.Refusal = "The file is on " + src.Host + ". tuios cannot paste a path from another machine yet."
-		return v
-	}
-	if !m.paneIsLocal(w) {
-		host := w.Host
-		if host == "" {
-			host = m.AttachedHost
-		}
-		v.Refusal = "This pane is on " + host + ". The file is on this machine."
-		return v
-	}
-	if w.CwdHost != "" {
-		v.Refusal = "The shell in this pane is on " + w.CwdHost + ". The file is not there."
-		return v
-	}
-	v.Program = paneProgram(w)
-	if remoteShellPrograms[v.Program] {
-		v.Refusal = "This pane runs " + v.Program + ". The file is not on that machine."
-		return v
-	}
-	if w.CopyModeVisible() {
-		v.Refusal = "This pane is in copy mode. Exit copy mode first."
-		return v
+		return dropVerdict{Window: w.ID, Pane: pipPaneName(w),
+			Refusal: "The file is on " + src.Host + ". tuios cannot paste a path from another machine yet."}
 	}
 	path := src.Path
 	if src.Dir && filepath.Separator == '/' && !strings.HasSuffix(path, "/") {
 		// A folder ends in a slash, so the next word typed can be a name in it.
 		path += "/"
 	}
-	text, refusal := quoteDropPath(pasteDialectOf(v.Program), path)
-	if refusal != "" {
-		v.Refusal = refusal
+	return m.judgeDropPaths(w, []string{path})
+}
+
+// paneTakesDrop is the one rule for whether a pane may take a path on this
+// machine, whatever carried it: the pane's shell runs here, reports no other
+// host, is not ssh or the like, and is not in copy mode. It returns the
+// program that reads the paste, and the refusal when there is one.
+func (m *OS) paneTakesDrop(w *terminal.Window) (program, refusal string) {
+	if !m.paneIsLocal(w) {
+		host := w.Host
+		if host == "" {
+			host = m.AttachedHost
+		}
+		return "", "This pane is on " + host + ". The file is on this machine."
+	}
+	if w.CwdHost != "" {
+		return "", "The shell in this pane is on " + w.CwdHost + ". The file is not there."
+	}
+	program = paneProgram(w)
+	if remoteShellPrograms[program] {
+		return program, "This pane runs " + program + ". The file is not on that machine."
+	}
+	if w.CopyModeVisible() {
+		return program, "This pane is in copy mode. Exit copy mode first."
+	}
+	return program, ""
+}
+
+// judgeDropPaths is the verdict of dropping paths on this machine on w: the
+// pane's rules, then each path quoted for the program that reads it. One
+// path that cannot be quoted refuses the whole drop, with its reason. With
+// no paths yet, the verdict is the pane's alone, and Text is empty.
+func (m *OS) judgeDropPaths(w *terminal.Window, paths []string) dropVerdict {
+	v := dropVerdict{Window: w.ID, Pane: pipPaneName(w)}
+	v.Program, v.Refusal = m.paneTakesDrop(w)
+	if v.Refusal != "" || len(paths) == 0 {
 		return v
 	}
-	v.Text = text + " "
+	d := pasteDialectOf(v.Program)
+	quoted := make([]string, 0, len(paths))
+	for _, p := range paths {
+		text, refusal := quoteDropPath(d, p)
+		if refusal != "" {
+			v.Refusal = refusal
+			return v
+		}
+		quoted = append(quoted, text)
+	}
+	v.Text = strings.Join(quoted, " ") + " "
 	return v
+}
+
+// activeDropVerdict is the verdict of whichever drag is held: a row of the
+// files section, or a drag between panes once its program started it. ok is
+// false when neither is.
+func (m *OS) activeDropVerdict() (v dropVerdict, ok bool) {
+	if d := &m.fileDrag; d.Dragging && !d.Canceled {
+		return d.Verdict, true
+	}
+	if d := m.dndDrag; d != nil && d.phase == dndStarted {
+		return d.verdict, true
+	}
+	return dropVerdict{}, false
+}
+
+// dropPointer sets the pointer shape for a verdict: grabbing over no pane,
+// not allowed over a pane that refuses, copy over one that takes the drop.
+func (m *OS) dropPointer(v dropVerdict) {
+	switch {
+	case v.Window == "":
+		m.SetPointerShape(PointerGrabbing)
+	case v.Refusal != "":
+		m.SetPointerShape(PointerNotAllowed)
+	default:
+		m.SetPointerShape(PointerCopy)
+	}
+}
+
+// dropArrow is the arrow between what is dropped and where in a label.
+func (m *OS) dropArrow() string {
+	if m.Settings.UseASCIIOnly {
+		return " -> "
+	}
+	return " → "
+}
+
+// dropTargetText names where a verdict lands: the pane and its program.
+func dropTargetText(v dropVerdict) string {
+	pane := v.Pane
+	if v.Program != "" {
+		pane += " (" + v.Program + ")"
+	}
+	return pane
 }
 
 // deliverDrop carries out a verdict: it pastes the text into the pane and
@@ -464,19 +523,11 @@ func (m *OS) fileDragLabel() string {
 	case v.Refusal != "":
 		return name + "  " + v.Refusal
 	}
-	arrow := " → "
-	if m.Settings.UseASCIIOnly {
-		arrow = " -> "
-	}
 	what := name
 	if d.Alt && d.Src.Dir {
 		what = "cd " + name
 	}
-	pane := v.Pane
-	if v.Program != "" {
-		pane += " (" + v.Program + ")"
-	}
-	return what + arrow + pane
+	return what + m.dropArrow() + dropTargetText(v)
 }
 
 // renderFileDragLabel is the label's layer, or nil when no drag is under way.
@@ -484,29 +535,36 @@ func (m *OS) renderFileDragLabel() *lipgloss.Layer {
 	if !m.fileDrag.Dragging || m.fileDrag.Canceled {
 		return nil
 	}
+	return m.renderDropLabel(m.fileDragLabel(), m.fileDrag.Verdict.Refusal != "", "file-drag-label")
+}
+
+// renderDropLabel is the layer of a drag's label at the pointer, in the
+// warning colour when the drop is refused. The pointer is in screen cells,
+// which is where the label goes whatever frame the drag's events are in.
+func (m *OS) renderDropLabel(text string, refused bool, id string) *lipgloss.Layer {
 	pal := theme.UI()
 	renderW := m.GetRenderWidth()
-	label := tooltipLabel(sanitizeLinkText(m.fileDragLabel()), max(renderW-2, 1), pal)
-	if m.fileDrag.Verdict.Refusal != "" {
-		label = tooltipLabel(sanitizeLinkText(m.fileDragLabel()), max(renderW-2, 1), overlay.Palette{Surface: pal.Surface, Fg: theme.ReadableAt(pal.Warn, pal.Surface, theme.ContrastFloor)})
+	if refused {
+		pal = overlay.Palette{Surface: pal.Surface, Fg: theme.ReadableAt(pal.Warn, pal.Surface, theme.ContrastFloor)}
 	}
+	label := tooltipLabel(sanitizeLinkText(text), max(renderW-2, 1), pal)
 	x, y := m.LastMouseX+2, m.LastMouseY+1
 	if y >= m.viewReserve().Top+m.ViewUsableHeight() {
 		y = m.LastMouseY - 1
 	}
-	return tooltipLayer(label, x, y, renderW, "file-drag-label")
+	return tooltipLayer(label, x, y, renderW, id)
 }
 
-// applyFileDropRing outlines the pane a release would drop on: a heavy frame
-// in the accent for a pane that takes the path, in the warning colour for one
-// that refuses it. The heavy glyphs make it read as a target at a glance, and
-// unlike the pane's own border colour they survive every depth. At 16 colours
-// the frame also takes the palette's cursor attributes (reverse video for a
-// target that takes the path, an underline for a refusal), since the accent
-// is only an ANSI slot there.
-func (m *OS) applyFileDropRing(canvas *frameCanvas, id string) {
-	v := m.fileDrag.Verdict
-	if v.Window != id || m.fileDrag.Canceled {
+// applyDropRing outlines the pane a release would drop on, for whichever
+// drag is held: a heavy frame in the accent for a pane that takes the drop,
+// in the warning colour for one that refuses it. The heavy glyphs make it
+// read as a target at a glance, and unlike the pane's own border colour they
+// survive every depth. At 16 colours the frame also takes the palette's
+// cursor attributes (reverse video for a target that takes the drop, an
+// underline for a refusal), since the accent is only an ANSI slot there.
+func (m *OS) applyDropRing(canvas *frameCanvas, id string) {
+	v, ok := m.activeDropVerdict()
+	if !ok || v.Window != id {
 		return
 	}
 	w := m.windowByID(id)
@@ -559,7 +617,8 @@ func (m *OS) fileDragHeldKey() string {
 	return ""
 }
 
-// fileDragRingOn reports whether the compose pass has a ring to draw.
-func (m *OS) fileDragRingOn() bool {
-	return m.fileDrag.Dragging && m.fileDrag.Verdict.Window != ""
+// dropRingOn reports whether the compose pass has a ring to draw.
+func (m *OS) dropRingOn() bool {
+	v, ok := m.activeDropVerdict()
+	return ok && v.Window != ""
 }

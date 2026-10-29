@@ -402,6 +402,7 @@ func (m *OS) Init() tea.Cmd {
 		listenCwdChangeUntil(m.stopSignal(), m.ensureCwdChangeChan()),
 		listenForFileChange(m.stopSignal(), m.fileWatchChan(), time.Time{}),
 		listenNvimNavigationUntil(m.stopSignal(), m.ensureNvimNavigationChan()),
+		listenDnDUntil(m.stopSignal(), m.ensureDnDInbox()),
 	}
 
 	// Ask an SSH client's terminal whether it draws sixel. See sixel_probe.go.
@@ -1668,6 +1669,11 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 	case NvimNavigationMsg:
 		m.onNvimNavigation(msg)
 		return m, listenNvimNavigationUntil(m.stopSignal(), m.PendingNvimNavigation)
+	case dndWakeMsg:
+		// A pane's program sent drag and drop messages. See dnd.go.
+		m.handleDnDWake()
+		m.renderSkipped = false
+		return m, listenDnDUntil(m.stopSignal(), m.ensureDnDInbox())
 
 	case fileListMsg:
 		// A directory read that finished on its own goroutine. The handler drops

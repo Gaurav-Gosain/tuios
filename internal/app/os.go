@@ -1252,6 +1252,11 @@ type OS struct {
 	PendingNvimNavigation chan NvimNavigationMsg
 	nvimNavigators        map[string]bool
 	pendingNvimNavigation *pendingNvimNavigation
+	// Drag and drop between panes over OSC 72. See dnd.go.
+	dndIn    *dndInbox
+	dndPanes map[string]*dndPane
+	dndPress *dndPress
+	dndDrag  *dndDrag
 	// tapeDetect holds the project-tape detection state (trust store, session
 	// memory of handled directories, debounce bookkeeping, and the current
 	// passive indicator). See tape_detect.go.

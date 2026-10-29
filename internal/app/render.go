@@ -431,6 +431,11 @@ func (m *OS) GetCanvas(render bool) *frameCanvas {
 			layers = append(layers, label)
 		}
 
+		// The label of a drag between panes, at the pointer. See dnd_drag.go.
+		if label := m.renderDnDLabel(); label != nil {
+			layers = append(layers, label)
+		}
+
 		// The mark that this client shows only part of the session.
 		if mark := m.renderViewMark(); mark != nil {
 			layers = append(layers, mark)

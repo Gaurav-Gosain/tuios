@@ -238,6 +238,7 @@ tuios/
 │   ├── release/            # Finds published releases and verifies a downloaded binary (tuios update)
 │   ├── netutil/            # Small network helpers the servers share
 │   ├── memtrim/            # Gives the heap a burst left behind back to the OS once the process settles
+│   ├── dnd/                # The kitty drag and drop protocol (OSC 72) on the wire: parse, join chunks, write
 │   ├── harness/            # Agent harness manifests and detection
 │   ├── herdrplugin/        # herdr plugins: manifest, discovery, the command runner (the host is internal/session/plugin_host.go)
 │   ├── integration/        # Wires harness hooks, plugins and MCP entries (tuios integration)

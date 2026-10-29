@@ -170,6 +170,12 @@ func FilterMouseMotion(model tea.Model, msg tea.Msg) tea.Msg {
 		return msg
 	}
 
+	// A drag between panes over OSC 72 follows the pointer, and the press
+	// before it waits for the pointer to move. See dnd.go.
+	if m.DnDActive() {
+		return msg
+	}
+
 	// A ctrl-click on pane content is a grab waiting for the pointer to move
 	// far enough to become a drag, and the handler that commits it can only
 	// cover it, and the link clause below passes only motion over a link, so it

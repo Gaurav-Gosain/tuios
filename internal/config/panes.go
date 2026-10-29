@@ -25,6 +25,12 @@ type PanesConfig struct {
 	// type, so prefix / then the name finds a pane (default: false, the list).
 	// esc with nothing typed then closes it.
 	NavigatorSearch bool `toml:"navigator_search"`
+	// DragAndDrop turns on drag and drop between panes over the kitty drag
+	// and drop protocol (OSC 72): a program that speaks it, such as yazi,
+	// can drag files to another pane, and a pane whose program does not
+	// speak it gets the paths as a paste (default: false). Panes on another
+	// machine take no part either way.
+	DragAndDrop bool `toml:"drag_and_drop"`
 }
 
 // The pane navigator's layouts.

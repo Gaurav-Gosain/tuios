@@ -7,6 +7,8 @@ import (
 	"image/color"
 	"io"
 
+	"github.com/Gaurav-Gosain/tuios/internal/dnd"
+
 	"log"
 	"maps"
 	"os"
@@ -147,6 +149,14 @@ type WindowState struct {
 	// stored. A client lists no files for such a pane, because Cwd is not a
 	// folder on any disk it can reach.
 	CwdHost string `json:"cwd_host,omitempty"`
+	// DnDAccepts and DnDOffers say the pane's program registered for drag
+	// and drop (OSC 72): it takes drops, or offers drags. DnDID is the
+	// multiplexer id it used. A live fact like CwdHost: a client that
+	// attached after the program started never saw the registration. See
+	// dnd_registration.go.
+	DnDAccepts bool `json:"dnd_accepts,omitempty"`
+	DnDOffers  bool `json:"dnd_offers,omitempty"`
+	DnDID      int  `json:"dnd_id,omitempty"`
 	// Unplaced marks a window the daemon created whose X/Y/Width/Height are a
 	// nominal box rather than a position anyone chose. The daemon has no viewport
 	// and cannot place a window; a client that receives an unplaced window puts it
@@ -1233,6 +1243,9 @@ type PTY struct {
 	// place is where the shell is: its directory from OSC 7 (seeded from the
 	// spawn directory) and the git branch there. See session_place.go.
 	place placeRecord
+	// dnd is what the program said about drag and drop. See
+	// dnd_registration.go.
+	dnd dndRegistration
 	// marks is the emulator's OSC 133 marker list, kept for its origin: a
 	// command's prompt row is stored against it. See shell_commands.go.
 	marks *vt.SemanticMarkerList
@@ -1728,6 +1741,11 @@ func (s *Session) SetGraphicsCapabilities(kitty, sixel bool) {
 // nested tuios then took the refusal for keys and typed it into its pane.
 func (s *Session) SetKittyAnimation(ok bool) { s.kittyAnimation.Store(ok) }
 
+// dragAndDrop reports whether [panes] drag_and_drop is on for this session.
+func (s *Session) dragAndDrop() bool {
+	return s.config != nil && s.config.DragAndDrop != nil && s.config.DragAndDrop()
+}
+
 // SetSixelAdvertised records whether a sixel image a pane draws will be shown:
 // true while any attached client's terminal draws sixel or kitty graphics,
 // since a client with kitty and no sixel is sent the picture as a kitty image.
@@ -1788,6 +1806,10 @@ type SessionConfig struct {
 	// stamps it with its own getter, so a config reload reaches every
 	// session. Nil means on.
 	ReturnWhenEmpty func() bool
+	// DragAndDrop reports whether [panes] drag_and_drop is on, read each
+	// time so a reload applies. Off, the daemon neither records what a
+	// pane's program says about drag and drop nor answers its query.
+	DragAndDrop func() bool
 	// HerdrEnv returns the herdr protocol variables a pane with the given
 	// window id that runs the given command is started with, nil for none.
 	// See Manager.HerdrEnv.
@@ -2670,6 +2692,19 @@ func (s *Session) installPTY(ctx context.Context, cancel context.CancelFunc, id 
 		// An OSC 7501 report, or a full reset: stored at once, in order with
 		// the prompt marks, and handed on by the vtWriter after the write.
 		ProgramStatus: pty.noteProgramStatus,
+		// A drag and drop registration is kept for the clients that attach
+		// later, and a query is answered here, once. Not for a pane on
+		// another machine: the daemon that runs its program answers there,
+		// and an answer from here would be a second one. See
+		// dnd_registration.go.
+		PrivateOSC: func(cmd int, data []byte) {
+			if cmd != dnd.Code || sp.host != "" || !s.dragAndDrop() {
+				return
+			}
+			if reply := pty.dnd.note(data); reply != nil {
+				terminal.WriteResponse(reply)
+			}
+		},
 	})
 
 	// DA1 and XTSMGRAPHICS answer from what the attached clients can show.
@@ -2932,6 +2967,9 @@ func (s *Session) fillLiveFacts(state *SessionState) {
 		w := &state.Windows[i]
 		place := live[w.PTYID].place
 		w.CwdHost = place.elsewhere
+		// The drag and drop registration is live too, and the daemon's alone.
+		dnd := live[w.PTYID].dnd
+		w.DnDAccepts, w.DnDOffers, w.DnDID = dnd.accepts, dnd.offers, dnd.id
 		switch {
 		case place.cwd != "":
 			w.Cwd = place.cwd
@@ -3004,6 +3042,7 @@ type placeFact struct {
 type paneFact struct {
 	title string
 	place placeFact
+	dnd   dndRegistrationFact
 }
 
 // livePaneFacts is each pane's live facts by PTY id, in one pass over the
@@ -3019,13 +3058,14 @@ func (s *Session) livePaneFacts() map[string]paneFact {
 	for id, pty := range s.ptys {
 		var fact paneFact
 		fact.title = pty.Title()
+		fact.dnd = pty.dnd.fact()
 		if _, remote := pty.pty.(*remotePane); !remote {
 			fact.place = placeFact{cwd: pty.place.announcedCwd(), elsewhere: pty.place.Elsewhere()}
 			if fact.place.cwd == "" {
 				fact.place.seed = pty.place.Cwd()
 			}
 		}
-		if fact != (paneFact{}) {
+		if fact.title != "" || fact.place != (placeFact{}) || fact.dnd.accepts || fact.dnd.offers {
 			out[id] = fact
 		}
 	}
