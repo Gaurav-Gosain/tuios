@@ -1,8 +1,11 @@
 # harness: codex
 # box: draft
 # want: idle
-# how: derived. codex-idle.txt with a two-line draft in the composer in place
-# of the placeholder. A draft is not work: the agent still waits at its prompt.
+# how: derived from openai/codex rust-v0.165.0 (360319d8dee6): the composer
+# and footer as codex-rs/tui/src/bottom_pane/snapshots/
+# codex_tui__bottom_pane__chat_composer__tests__footer_collapse_empty_mode_cycle_with_context.snap
+# draw them, under a short transcript. A two-line draft
+# in place of the placeholder. A draft is not work: the agent still waits.
 ---
 • Ran go test ./internal/harness/
   └ ok  	github.com/Gaurav-Gosain/tuios/internal/harness	0.014s
@@ -12,4 +15,4 @@
 › also check the windows build
   before you push
 
-  ? for shortcuts                                                   98% context left
+  ? for shortcuts                        100% context left

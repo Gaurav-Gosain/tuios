@@ -181,6 +181,17 @@ func TestBoxDraftLeavesFaintTextOut(t *testing.T) {
 	if draft, known := r.BoxDraft("claude-code", tail, shown); !known || draft {
 		t.Errorf("faint left out: draft %v known %v, want an empty box", draft, known)
 	}
+	// Codex draws its placeholder dim (chat_composer.rs:4952 at
+	// rust-v0.165.0). A placeholder a later release adds is not in the
+	// manifest's list, and still reads as empty once the faint cells go.
+	codex := []string{"• All tests pass.", "› Ask Codex to fix the build", "  ? for shortcuts"}
+	codexShown := []string{"• All tests pass.", "›", "  ? for shortcuts"}
+	if draft, known := r.BoxDraft("codex", codex, nil); !known || !draft {
+		t.Errorf("codex, plain text: draft %v known %v, want a draft", draft, known)
+	}
+	if draft, known := r.BoxDraft("codex", codex, codexShown); !known || draft {
+		t.Errorf("codex, faint left out: draft %v known %v, want an empty box", draft, known)
+	}
 	if _, known := r.BoxDraft("gemini-cli", tail, nil); known {
 		t.Errorf("gemini-cli has no [prompt_box] block and must not judge a box")
 	}

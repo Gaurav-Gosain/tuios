@@ -1,0 +1,17 @@
+# harness: codex
+# box: draft
+# want: none
+# how: derived from openai/codex rust-v0.165.0 (360319d8dee6): the composer
+# and footer as codex-rs/tui/src/bottom_pane/snapshots/
+# codex_tui__bottom_pane__chat_composer__tests__footer_collapse_plan_queue_message_without_context.snap
+# draw them, under a short transcript. A one-line
+# draft over the footer that offers to queue it.
+---
+• Ran go test ./internal/harness/
+  └ ok  	github.com/Gaurav-Gosain/tuios/internal/harness	0.014s
+
+• All tests pass.
+
+› Test
+
+  tab to queue message · Plan mode

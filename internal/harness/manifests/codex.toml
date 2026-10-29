@@ -210,14 +210,25 @@ dir    = "{home}/.codex/sessions"
 glob   = "*/*/*/rollout-*.jsonl"
 verify = ["cwd"]
 
-# The composer with nothing typed in it: the "›" marker, maybe a placeholder,
-# and the footer under it. Codex draws its placeholder faint, and the daemon
-# leaves faint cells out before this reads the screen. The placeholders are
-# listed too, for a screen read as text alone.
+# The composer with nothing typed in it: the prompt glyph alone, or with its
+# placeholder, and at most the one footer line under it. The glyph is "›",
+# and "»" at Ultra effort. A composer in shell mode shows "!", which Codex
+# itself counts as typed input, so it is a draft here too. The placeholder is
+# drawn dim (Span::dim, SGR 2), and the daemon leaves faint cells out before
+# this reads the screen. The two placeholders are listed too, for a screen
+# read as text alone. Any footer counts: it reads "? for shortcuts", the
+# mode, the model or the context left, by what is set.
+#
+# Source, at rust-v0.165.0 (openai/codex 360319d8dee6):
+#   codex-rs/tui/src/chatwidget.rs:2101-2102   PLACEHOLDER, SIDE_PLACEHOLDER
+#   codex-rs/tui/src/bottom_pane/chat_composer.rs:4890-4893, 4952
+#       the glyph ("›" bold, dim while input is off) and the dim placeholder
+#   codex-rs/tui/src/bottom_pane/effort_ignition.rs:105-109   "»" at Ultra
+#   codex-rs/tui/src/bottom_pane/chat_composer.rs:1162   shell mode is not empty
 [prompt_box]
 region = "tail"
-empty  = ['(?:\A|\n)›[\s\x{00A0}]*(?:Explain this codebase|Summarize recent commits|Implement \{feature\}|Find and fix a bug in @filename|Write tests for @filename|Improve documentation in @filename|Run /review on my current changes|Use /skills to list available skills)?(?:\n[^\n]*(?:\? for shortcuts|context left)[^\n]*)?\z']
-source = "derived from the placeholders in codex-rs chatwidget.rs and herdr's codex manifest; not measured"
+empty  = ['(?:\A|\n)[›»][ \x{00A0}]*(?:Ask Codex to do anything|Ask a follow-up question)?[ \x{00A0}]*(?:\n[^\n]*)?\z']
+source = "read from openai/codex rust-v0.165.0 (360319d8dee6) and its composer snapshots; not measured on a live screen"
 
 [input]
 submit          = "cr"

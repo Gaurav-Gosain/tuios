@@ -1,0 +1,17 @@
+# harness: codex
+# box: empty
+# want: idle
+# how: derived from openai/codex rust-v0.165.0 (360319d8dee6): the composer
+# and footer as codex-rs/tui/src/bottom_pane/snapshots/
+# codex_tui__bottom_pane__chat_composer__tests__footer_collapse_plan_empty_mode_cycle_with_context.snap
+# draw them, under a short transcript. The side
+# placeholder (SIDE_PLACEHOLDER) over the plan mode footer: any footer counts.
+---
+• Ran go test ./internal/harness/
+  └ ok  	github.com/Gaurav-Gosain/tuios/internal/harness	0.014s
+
+• All tests pass.
+
+› Ask a follow-up question
+
+  Plan mode (⇧tab to cycle)              100% context left
