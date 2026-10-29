@@ -123,17 +123,17 @@ func (m *Model) lessonView() tea.View {
 
 // lessonState is what the card draws, read from the lesson engine.
 type lessonState struct {
-	phase                     string
-	shown, total, pressed     int
-	level                     int
-	nudge                     string
-	waiting                   bool
-	results                   []string
-	step                      *lessons.Step
-	explainer                 bool
-	booting                   bool
-	hasLesson                 bool
-	wrongMode, noWindow, altB bool
+	phase                 string
+	shown, total, pressed int
+	level                 int
+	nudge                 string
+	waiting               bool
+	results               []string
+	step                  *lessons.Step
+	explainer             bool
+	booting               bool
+	hasLesson             bool
+	noWindow, altB        bool
 }
 
 func (m *Model) lessonState() lessonState {

@@ -2,6 +2,7 @@ package tuie2e
 
 import (
 	"io/fs"
+	"maps"
 	"net"
 	"os"
 	"path/filepath"
@@ -497,11 +498,7 @@ func (w *childWatch) scan() {
 func (w *childWatch) seen() map[int]string {
 	w.mu.Lock()
 	defer w.mu.Unlock()
-	out := map[int]string{}
-	for k, v := range w.kids {
-		out[k] = v
-	}
-	return out
+	return maps.Clone(w.kids)
 }
 
 func (w *childWatch) halt() { w.once.Do(func() { close(w.quit) }) }
