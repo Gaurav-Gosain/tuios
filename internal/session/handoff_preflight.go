@@ -56,8 +56,21 @@ type handoffBinary struct {
 	duration time.Duration
 }
 
-// fileID names a file by device and inode.
-type fileID struct{ dev, ino uint64 }
+// fileID names a file by device and inode, and pins its content by size,
+// modification and change time. A rename over the path changes the inode; a
+// write in place keeps it, but changes the size or a time. The change time
+// cannot be set back without root, where it is read.
+type fileID struct {
+	dev, ino     uint64
+	size         int64
+	mtime, ctime int64
+}
+
+// withoutChange is f without its change time.
+func (f fileID) withoutChange() fileID {
+	f.ctime = 0
+	return f
+}
 
 // preflightBinary runs path's handoff-accepts and checks it reads the
 // manifest this build writes.
@@ -143,10 +156,10 @@ var errNotAnExecutable = errors.New("not a regular executable file")
 // errBinaryReplaced refuses a confirmed binary whose file changed after the
 // person said yes to it.
 func errBinaryReplaced(path string) error {
-	return fmt.Errorf("%s was replaced after the upgrade to it was confirmed. Ask again to upgrade to the file there now", path)
+	return fmt.Errorf("%s was changed after the upgrade to it was confirmed. Ask again to upgrade to the file there now", path)
 }
 
-// statFileID is the device and inode of the executable at path.
+// statFileID is the identity of the executable at path.
 func statFileID(path string) (fileID, error) {
 	info, err := os.Stat(path)
 	if err != nil {

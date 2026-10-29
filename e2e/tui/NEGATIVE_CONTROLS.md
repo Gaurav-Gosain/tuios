@@ -9030,6 +9030,7 @@ TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios \
 
 - `TestPaneUpgradeConfirmedAtTheClient`: the dialog names the pane (`agent`), the copy's full path and its version; Down then Enter at the client upgrades the daemon to the copy with its pid kept, and the pane's command exits 0.
 - `TestPaneUpgradeRefusedWithoutYes`: Enter on the default row, Esc, Down, Up, Enter, and Up, Enter each refuse with "daemon-upgrade is for the person" and "The person answered No", close the dialog and leave the image as it was. Up then Enter is what a shell takes for "run the last command again".
+- `TestPaneUpgradeRefusesAFileChangedAfterTheDialog`: while the dialog is open the copy's last byte is written over in place with the same byte and its modification time set back, so only its change time moves; Yes is refused with "was changed after the upgrade to it was confirmed".
 - `TestPaneUpgradeTimesOut`: with `TUIOS_TEST_UPGRADE_CONFIRM_MS=3000` and no answer, the upgrade is refused no sooner than 3 s, saying "Nobody answered the dialog", and the dialog closes.
 - `TestDaemonUpgradeFromAPaneIsRefused` (PR 5): with no client attached the pane's upgrade is refused in under 30 s, not after the 60 s wait.
 - `TestPaneUpgradeTakesOnlyKeysAtTheClient`: with the dialog up, the other pane printing `j`, Enter, Down and `Yes`; `tuios send-keys -s <session> "j Enter"`; a tape's `Press j Enter`; a bracketed paste of `j` and Enter; and `tuios call answer-ask` with Yes from the other pane each leave the dialog open and the image unchanged. Each ends in Enter, so any one of them that got through would answer the dialog and close it (the controls below ran when `j` still moved to Yes, and so upgraded the daemon). Esc then refuses.
@@ -9059,19 +9060,20 @@ TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios \
 
 #### Review fixes: the dialog keys and the put-back
 
-Run on 2026-10-30 on macOS arm64 (Darwin 27, Go 1.26.10) against `pr/live-handoff-4`, one build carrying both controls, one run:
+Run on 2026-10-30 on macOS arm64 (Darwin 27, Go 1.26.10) against `pr/live-handoff-4`, one build carrying the first two controls and one for the third, one run each:
 
 | Control | How | Test that fails | Verdict |
 | --- | --- | --- | --- |
 | Every move key toggles the cursor | the `UpgradeConfirmKey` switch put back to `st.selected = 1 - st.selected` for Up, Down, Left, Right, Tab, Shift+Tab, `j` and `k` | `TestPaneUpgradeRefusedWithoutYes`: "up upgraded the daemon ({PID:91298 Instance:5301f1a9-…} then {PID:91298 Instance:77391964-…})" | **caught** |
 | A put-back leaves the plugin host stopped | `h.runner.Resume()` and `clear(h.startedUp)` cut from `pluginHost.restart` | `TestDaemonUpgradeRefusesWhileHookOrPluginRuns/plugin`: "after a put-back the plugin command did not run: exit status 1", "the startup command ran 1 times, want once at start and once after the put-back" | **caught** |
+| A file changed in place after the dialog runs | `fileIDOf` back to device and inode only (size and times zeroed) | `TestPaneUpgradeRefusesAFileChangedAfterTheDialog`: "a Yes for a file changed after the dialog opened upgraded the daemon ({PID:3002 Instance:066ec880-…} then {PID:3002 Instance:0df50cdf-…})" | **caught** |
 | A put-back leaves the host pumps ended | the pump restart cut from `hostFleet.start` | none | **not run** |
 
 The put-back is a commit refused by its second preflight: `test-handoff` with `hold_ms`, and the binary replaced by a shell script during the hold, after the plugins, the links and the host pumps were stopped. The host pumps have no rig here: the fleet's start after stop is kept on reading `hostFleet.stop`, which ends each pump and keeps its host, and `reconcile`, which starts a pump only for a name it does not have.
 
 ```sh
 TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios \
-  go test -count=1 -run '^(TestPaneUpgradeRefusedWithoutYes|TestDaemonUpgradeRefusesWhileHookOrPluginRuns)$' .
+  go test -count=1 -run '^(TestPaneUpgradeRefusedWithoutYes|TestDaemonUpgradeRefusesWhileHookOrPluginRuns|TestPaneUpgradeRefusesAFileChangedAfterTheDialog)$' .
 ```
 ## Deleting a worktree from the close-confirmation dialog
 
