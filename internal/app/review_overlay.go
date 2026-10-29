@@ -506,17 +506,12 @@ func (m *OS) reviewLoadCmd(q reviewQuery, probeFan bool) tea.Cmd {
 	}
 	return func() tea.Msg {
 		msg := ReviewDiffMsg{Gen: gen, Query: q, ProbeFan: probeFan}
-		raw, err := call("review-diff", params, reviewDiffTimeout)
+		res, err := reviewDiffCall(call, params)
 		if err != nil {
 			msg.Err = err
 			return msg
 		}
-		var res reviewDiffResult
-		if err := json.Unmarshal(raw, &res); err != nil {
-			msg.Err = err
-			return msg
-		}
-		msg.Diff = &res
+		msg.Diff = res
 		if probeFan && q.Against == "" {
 			// A pane outside every fan answers with a refusal, which says
 			// only that there is nothing to compare.
@@ -529,6 +524,20 @@ func (m *OS) reviewLoadCmd(q reviewQuery, probeFan bool) tea.Cmd {
 		}
 		return msg
 	}
+}
+
+// reviewDiffCall makes one review-diff call: the diff the overlay shows, or
+// an index diff for the stage marks.
+func reviewDiffCall(call inboxVerbCall, params map[string]any) (*reviewDiffResult, error) {
+	raw, err := call("review-diff", params, reviewDiffTimeout)
+	if err != nil {
+		return nil, err
+	}
+	var res reviewDiffResult
+	if err := json.Unmarshal(raw, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
 }
 
 // reload reads the current diff again.

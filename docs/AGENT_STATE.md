@@ -4953,8 +4953,8 @@ working files stay as the agent left them. While the overlay is open it reads
 the staged and unstaged diffs (`review-diff` with `index`), and a hunk header
 shows `staged` or `partly staged`. It reads them again after each key, and
 not while the overlay is closed. The overlay shows the diff against the base,
-so a key stages exactly the lines of the hunk shown, whatever hunks git makes
-of them. The keys are in `[keybindings.review]`. See
+so a key stages only the lines of the hunk shown. When git splits them into two
+hunks of the index, one key stages one part and the next key the rest. The keys are in `[keybindings.review]`. See
 [KEYBINDINGS.md](KEYBINDINGS.md#the-review-overlay).
 
 For a pane in a fan, `w` shows the compare view: one row per attempt with its

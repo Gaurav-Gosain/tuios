@@ -12,6 +12,7 @@ import (
 
 	"github.com/Gaurav-Gosain/tuios/internal/testutil"
 	"github.com/Gaurav-Gosain/tuitest"
+	"tuios.dev/shot"
 )
 
 // The review overlay, end to end through the binary a person runs: a fan of
@@ -587,9 +588,12 @@ func TestReviewFileKeysFollowTheirBindings(t *testing.T) {
 //     line by line, and the other two changes must be absent.
 //   - Undo could do nothing and the next step still pass. Each z is checked
 //     against the cached diff it must give back.
+//   - partly staged could never be drawn. The last hunk is staged, one more
+//     of its lines is changed in the working file, and after r its header
+//     must say partly staged.
 //
-// The frames are saved under artifactDir, and the cached diff after each step
-// is in cached.txt there.
+// The frames, as text and PNG, are saved under artifactDir, and the cached
+// diff after each step is in cached.txt there.
 //
 // Negative control (NEGATIVE_CONTROLS.md): with reviewIndexToWork returning
 // the index line as it is, the wait for the staged mark times out.
@@ -691,6 +695,7 @@ func TestReviewOverlayStagesAHunk(t *testing.T) {
 	waitScreen(t, term, "the stage was not reported", "Hunk staged", "d unstage", "z undo")
 	cached("a on the middle hunk", "-line 15", "+LINE 15")
 	saveArtifact(t, term, dir, "review-stage-hunk")
+	savePNG(t, term.Screen(), shot.XTermPalette(), dir, "review-stage-hunk")
 
 	sendKeys(t, term, "d")
 	marks("d on the middle hunk")
@@ -708,10 +713,30 @@ func TestReviewOverlayStagesAHunk(t *testing.T) {
 	marks("A on the file", "-1,", "-12,", "-25,")
 	cached("A on the file", "+added at the top", "-line 15", "+LINE 15", "-line 28", "+LINE 28")
 	saveArtifact(t, term, dir, "review-stage-file")
+	savePNG(t, term.Screen(), shot.XTermPalette(), dir, "review-stage-file")
 
 	sendKeys(t, term, "D")
 	marks("D on the file")
 	cached("D on the file")
+
+	// Stage the last hunk, then change one more of its lines in the working
+	// file: after r the hunk is partly staged, and d takes the staged part
+	// out again.
+	sendKeys(t, term, "]", "a")
+	marks("a on the last hunk", "-25,")
+	cached("a on the last hunk", "-line 28", "+LINE 28")
+	changed[29] = "LINE 29"
+	work = strings.Join(changed, "\n") + "\n"
+	if err := os.WriteFile(file, []byte(work), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	sendKeys(t, term, "r")
+	waitScreen(t, term, "the last hunk never read as partly staged", "LINE 29", "partly staged")
+	marks("r after a change in the last hunk", "-25,")
+	savePNG(t, term.Screen(), shot.XTermPalette(), dir, "review-partly-staged")
+	sendKeys(t, term, "d")
+	marks("d on the partly staged hunk")
+	cached("d on the partly staged hunk")
 
 	sendKeys(t, term, tuitest.Esc)
 	if err := term.WaitFor(func(s tuitest.Screen) bool {

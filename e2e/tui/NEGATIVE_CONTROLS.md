@@ -10632,7 +10632,8 @@ The positive half is in the same runs: `pill` and `flat` pass on every build. Th
 change. The first hunk adds a line, so the middle hunk sits one line lower in
 the working file than in the index. `]` and `a` stage the middle hunk, `d`
 unstages it, `z` twice undoes both, and `A` and `D` stage and unstage the whole
-file. After each key the test waits for `git diff --cached -U0` to hold exactly
+file. Then `]` `a` stage the last hunk, the test changes one more of its lines,
+and after `r` the header says `partly staged`, which `d` clears. After each key the test waits for `git diff --cached -U0` to hold exactly
 the expected lines, and for the hunk headers that say `staged` to be exactly
 the expected ones.
 
@@ -10641,7 +10642,8 @@ Run on 2026-10-29 on Linux against the branch `feat/review-stage-hunk`.
 | Control: what was cut | Where it fails | Verdict |
 | --- | --- | --- |
 | `reviewIndexToWork` returns the index line as it is, so the staged diff is not carried into the working file | `a on the middle hunk: the staged hunks are not ["-12,"]`. The cached diff held the hunk, and no header said `staged` | **caught** |
-| The branch as it is | Every step passes in about 2 s | **guard** |
+| The branch as it is | Every step passes in about 3 s | **guard** |
 
-The frames `review-stage-hunk` and `review-stage-file`, and the cached diff
+The frames `review-stage-hunk`, `review-stage-file` and `review-partly-staged`
+(text and PNG), and the cached diff
 after each step in `cached.txt`, are under `TUIOS_E2E_FRAMES`.

@@ -2037,8 +2037,9 @@ except the hunk and file motions and the stage keys, which are in
 A stage key changes only the index of the pane's worktree. The working files
 do not change. A hunk header shows `staged` when the index holds all of the
 hunk, and `partly staged` when it holds some of it. `a` stages only the lines of
-the hunk you see, also when the diff is against the base and git splits the
-change in other places. The keys do nothing in a comparison of two attempts.
+the hunk you see. When git splits those lines into two hunks of the index, the
+first `a` stages one part and the hunk shows `partly staged`. Press `a` again
+to stage the rest. The keys do nothing in a comparison of two attempts.
 
 In the note line and the other one-line prompts every printable key is text,
 a paste is typed as one line, `enter` saves and `esc` drops.

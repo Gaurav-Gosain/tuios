@@ -916,9 +916,9 @@ func (d reviewDraw) rowBody(row reviewRow, st overlay.RowState) string {
 		// it reads at every depth.
 		var stage reviewSeg
 		switch d.m.review.reviewHunkMark(d.file, row.hunk) {
-		case reviewHunkStaged:
+		case reviewInIndex:
 			stage = reviewSeg{overlay.Readable(pal.Success, bg), "staged ", true}
-		case reviewHunkPartly:
+		case reviewInIndex | reviewInWork:
 			stage = reviewSeg{overlay.Readable(pal.Warning, bg), "partly staged ", true}
 		}
 		left := rest
