@@ -1,10 +1,10 @@
 package app
 
 import (
-	"cmp"
 	"encoding/json"
 	"errors"
 	"slices"
+	"sort"
 	"strconv"
 	"time"
 
@@ -610,7 +610,8 @@ func (m *OS) JumpToNewestFinished() (tea.Cmd, bool) {
 	}
 	// Newest first: an item's seq is the revision of its last change, which
 	// for a finished turn is the turn finishing.
-	slices.SortFunc(done, func(a, b session.AttentionItem) int { return cmp.Compare(b.Seq, a.Seq) })
+	// sort.Slice, not slices.SortFunc: see docs/perf.md, "Where the bytes go".
+	sort.Slice(done, func(i, j int) bool { return done[i].Seq > done[j].Seq })
 	walk := &st.life.walk
 	next := 0
 	if walk.at.IsZero() || time.Since(walk.at) >= inboxCycleWindow || done[0].Seq > walk.newest {

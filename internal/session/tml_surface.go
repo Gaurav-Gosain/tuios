@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"slices"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -1162,7 +1163,8 @@ func (d *Daemon) verbTMLList(cs *connState, params json.RawMessage) (any, *verbE
 		}
 		list = append(list, map[string]any{"surface": s.id, "window_id": s.windowID, "title": s.title, "owner": s.owner, "version": s.version})
 	}
-	slices.SortFunc(list, func(a, b map[string]any) int { return strings.Compare(a["surface"].(string), b["surface"].(string)) })
+	// sort.Slice, not slices.SortFunc: see docs/perf.md, "Where the bytes go".
+	sort.Slice(list, func(i, j int) bool { return list[i]["surface"].(string) < list[j]["surface"].(string) })
 	return map[string]any{"type": "tml_list", "session": sess.Name(), "surfaces": list}, nil
 }
 

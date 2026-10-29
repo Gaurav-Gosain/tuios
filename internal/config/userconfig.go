@@ -9,6 +9,7 @@ import (
 	"log"
 	"reflect"
 	"slices"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -3767,8 +3768,10 @@ func fillMissingKeybinds(cfg, defaultCfg *UserConfig) {
 	}
 	// The drops come out of a map walk; sorted, the report reads the same on
 	// every run.
-	slices.SortFunc(dropped, func(a, b RetiredKeybind) int {
-		return cmp.Or(cmp.Compare(a.Section, b.Section), cmp.Compare(a.Action, b.Action), cmp.Compare(a.Keys[0], b.Keys[0]))
+	// sort.Slice, not slices.SortFunc: see docs/perf.md, "Where the bytes go".
+	sort.Slice(dropped, func(i, j int) bool {
+		a, b := dropped[i], dropped[j]
+		return cmp.Or(cmp.Compare(a.Section, b.Section), cmp.Compare(a.Action, b.Action), cmp.Compare(a.Keys[0], b.Keys[0])) < 0
 	})
 	cfg.RetiredKeybinds = append(cfg.RetiredKeybinds, dropped...)
 }

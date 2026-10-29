@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"slices"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -199,7 +200,8 @@ func (m *OS) ckArtifacts(e sidebarAgentEntry) []ckArtifact {
 		}
 		fresh = append(fresh, ckArtifact{ID: v.id, Kind: session.ArtifactTML, Title: v.title, At: v.at.UnixNano(), Surface: v.id, Open: true})
 	}
-	slices.SortFunc(fresh, func(a, b ckArtifact) int { return int(b.At - a.At) })
+	// sort.Slice, not slices.SortFunc: see docs/perf.md, "Where the bytes go".
+	sort.Slice(fresh, func(i, j int) bool { return fresh[i].At > fresh[j].At })
 	out := append(fresh, listed...)
 	for i := range out {
 		// A surface this client holds is open, whatever the list read.

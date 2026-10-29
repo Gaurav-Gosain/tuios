@@ -6,6 +6,7 @@ import (
 	"errors"
 	"image/color"
 	"slices"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -54,8 +55,10 @@ func sortCards(cards []session.TaskRow) {
 		n, _ := strconv.ParseUint(strings.TrimPrefix(id, "t"), 10, 64)
 		return n
 	}
-	slices.SortFunc(cards, func(a, b session.TaskRow) int {
-		return cmp.Or(strings.Compare(a.Session, b.Session), cmp.Compare(num(a.ID), num(b.ID)))
+	// sort.Slice, not slices.SortFunc: see docs/perf.md, "Where the bytes go".
+	sort.Slice(cards, func(i, j int) bool {
+		a, b := cards[i], cards[j]
+		return cmp.Or(strings.Compare(a.Session, b.Session), cmp.Compare(num(a.ID), num(b.ID))) < 0
 	})
 }
 

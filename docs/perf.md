@@ -2339,6 +2339,26 @@ each target, from that comment or from a local run of `scripts/binary-size.sh`
 on main and on the branch. If the cost is large, say what grew and why it is
 worth the bytes.
 
+#### Where the bytes go
+
+Measured on main at add25c5d (Go 1.26.10, linux/amd64, release flags):
+48,521,378 bytes. Machine code is 24.8 MB and the function table (`.gopclntab`)
+is 15.8 MB, so each byte of code costs about 1.6 bytes of file. Read-only data
+is 6.3 MB. All embedded files together are 0.6 MB, and every large one is
+already compressed. `go tool nm -size` on a build without `-s -w` gives the
+size of each function.
+
+A generic sort links one copy of the sort for each element type it sorts.
+`slices.SortFunc` on a slice of structs costs 15 to 21 KB of code for each
+struct type, and `slices.SortStableFunc` about 6 KB. `sort.Slice` and
+`sort.SliceStable` are linked once. They give the same order as the generic
+sorts, and `sort.Slice` is as fast for a list of a few hundred elements. On a
+path that runs once per action, sort a slice of structs with `sort.Slice`. Keep
+the generic sort on the render path, on a path that runs once per key, and for
+a list that can hold thousands of elements, where `sort.Slice` measured 10 to
+40% slower. `sort.SliceStable` is about 1.6 times slower than
+`slices.SortStableFunc`.
+
 The per-target budgets below are history. Every pull request had to edit them,
 so every landing made the open pull requests rebase on a conflict in
 `scripts/binary-size.sh`.
