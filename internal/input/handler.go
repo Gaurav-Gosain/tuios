@@ -355,7 +355,7 @@ func shouldShowQuitDialog(o *app.OS) bool {
 // intent Update reports the user's own quit as an unexpected termination.
 func quitSession(o *app.OS) (*app.OS, tea.Cmd) {
 	o.QuitSession()
-	return o, tea.Quit
+	return o, o.QuitCmd()
 }
 
 // requestQuit is what a quit keybinding does. In a daemon session it always

@@ -14,6 +14,35 @@ import (
 // [tea.KeyboardEnhancementsMsg]. Terminals that speak none of this ignore the
 // sequence, so there is nothing to fall back from.
 func (m *OS) keyboardEnhancements() tea.KeyboardEnhancements {
+	if m.quitting {
+		return m.lastKeyboardEnhancements
+	}
+	enhancements := m.wantedKeyboardEnhancements()
+	m.lastKeyboardEnhancements = enhancements
+	return enhancements
+}
+
+// QuitCmd is the command that ends the client, and the one every quit goes
+// through. It also stops the view from changing what it asks the terminal for.
+//
+// Bubble Tea sends a query for the new flags (ESC [ ? u) with the next frame
+// whenever they change, and closing the quit menu changes them. A quit starts
+// by cancelling the input reader, and only then stops the renderer, whose timer
+// can still flush a frame in between. The host answers the query at once, and
+// nobody reads the answer, so the shell the client returns to prints the end of
+// it as typed text: "5u". The last frame before the quit carries no change, so
+// it carries no query.
+//
+// Learn mode never quits, so it keeps its flags moving.
+func (m *OS) QuitCmd() tea.Cmd {
+	if !m.LearnMode {
+		m.quitting = true
+	}
+	return tea.Quit
+}
+
+// wantedKeyboardEnhancements is what the focus and the mode call for now.
+func (m *OS) wantedKeyboardEnhancements() tea.KeyboardEnhancements {
 	enhancements := tea.KeyboardEnhancements{
 		// Alternate-key reporting adds the PC-101 key behind whatever character
 		// the layout produced. That is what lets a chord be recognised when the

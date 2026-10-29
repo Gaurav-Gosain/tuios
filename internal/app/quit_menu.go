@@ -185,7 +185,7 @@ func (m *OS) QuitMenuActivate(idx int) tea.Cmd {
 		return m.OpenSessionClose()
 	case QuitKillAndQuit, QuitStandalone:
 		m.QuitSession()
-		return tea.Quit
+		return m.QuitCmd()
 	}
 	return nil // QuitCancel
 }
@@ -203,7 +203,7 @@ func (m *OS) DetachClient() tea.Cmd {
 	m.SyncStateToDaemon()
 	m.FireDetached()
 	// Deliberately no Cleanup: the session outlives this client.
-	return tea.Quit
+	return m.QuitCmd()
 }
 
 // KillSessionGoNext switches this client to next and only then kills the
@@ -219,7 +219,7 @@ func (m *OS) KillSessionGoNext(next string) tea.Cmd {
 	oldLabel := m.SessionLabel(old)
 	if next == "" || m.SwitchToSession(next) != nil {
 		m.QuitSession()
-		return tea.Quit
+		return m.QuitCmd()
 	}
 	if m.DaemonClient != nil {
 		if err := m.DaemonClient.KillSessionByName(old); err != nil {

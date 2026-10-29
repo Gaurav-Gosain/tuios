@@ -378,7 +378,7 @@ func (m *OS) handleRestartMsg(msg tea.Msg) tea.Cmd {
 			return nil
 		}
 		m.ExitReason = ExitRestarted
-		return tea.Quit
+		return m.QuitCmd()
 	}
 	return nil
 }
@@ -396,7 +396,7 @@ func (m *OS) failRestart(what, fix string) {
 func (m *OS) quitAfterRestartFailure() tea.Cmd {
 	m.RestartFailure = &RestartFailure{What: m.restart.err, Fix: m.restart.fix}
 	m.ExitReason = ExitRestartFailed
-	return tea.Quit
+	return m.QuitCmd()
 }
 
 // noteRestartDisconnect takes a lost connection while a restart runs. It

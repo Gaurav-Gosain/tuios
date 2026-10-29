@@ -1740,7 +1740,7 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		// client is in now.
 		if m.SessionName == msg.Name {
 			m.QuitSession()
-			return m, tea.Quit
+			return m, m.QuitCmd()
 		}
 		m.KillOtherSession(msg.Name)
 		return m, nil
@@ -2767,7 +2767,7 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 				return m, listen
 			}
 			m.ExitReason = ExitHostLost
-			return m, tea.Quit
+			return m, m.QuitCmd()
 		}
 		// The daemon on this machine may be restarting: wait a moment for
 		// the new one, and attach to the session it restored.
@@ -2780,7 +2780,7 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		if !m.QuitRequested {
 			m.ExitReason = ExitDaemonLost
 		}
-		return m, tea.Quit
+		return m, m.QuitCmd()
 
 	case daemonReconnectTickMsg:
 		return m, m.handleDaemonReconnectTick(msg)
@@ -2823,7 +2823,7 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		if m.DaemonClient != nil && m.DaemonClient.DetachedReason() != "" {
 			m.ExitReason = ExitDetached
 		}
-		return m, tea.Quit
+		return m, m.QuitCmd()
 
 	case omarchyFollowMsg:
 		m.applyOmarchyPalette(msg.palette)

@@ -312,7 +312,7 @@ func (m *OS) SessionCloseActivate(idx int) tea.Cmd {
 		return nil
 	}
 	m.QuitSession()
-	return tea.Quit
+	return m.QuitCmd()
 }
 
 // KillOtherSession ends a session this client is not attached to, by identity.

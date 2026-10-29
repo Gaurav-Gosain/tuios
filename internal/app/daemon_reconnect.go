@@ -166,7 +166,7 @@ func (m *OS) handleDaemonReconnectResult(msg daemonReconnectResultMsg) tea.Cmd {
 		m.daemonReconnect = nil
 		m.daemonWaiting.Store(false)
 		m.ExitReason = ExitDaemonLost
-		return tea.Quit
+		return m.QuitCmd()
 	}
 	return m.daemonReconnectWait()
 }

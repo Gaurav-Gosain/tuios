@@ -1051,6 +1051,11 @@ type OS struct {
 	paneRequests map[int]paneRequest
 	// Keyboard enhancement support (Kitty protocol)
 	KeyboardEnhancementsEnabled bool // True when terminal supports keyboard enhancements
+	// quitting is set when the client has decided to end. See QuitCmd.
+	quitting bool
+	// lastKeyboardEnhancements is what the last frame asked the terminal for,
+	// which a quitting client keeps asking for. See QuitCmd.
+	lastKeyboardEnhancements tea.KeyboardEnhancements
 	// KeyboardFlags is the flag set the host answered the enhancement query
 	// with, so tuios knows what it actually got rather than what it asked for.
 	// Zero means the terminal never answered, which is not the same as a refusal.
