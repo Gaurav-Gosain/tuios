@@ -42,7 +42,7 @@ func (d *Daemon) verbDaemonUpgrade(cs *connState, params json.RawMessage) (any, 
 			code = ErrVerbBusy
 		}
 		return nil, hintedVerbError(code, err.Error(), &VerbHint{
-			Detail: "Nothing was changed: every pane and client is as it was. 'tuios kill-server' restarts the daemon instead, which ends running programs.",
+			Detail: "Nothing was changed. Every pane and client is as it was. " + restartAdvice(),
 		})
 	}
 	// commit returns only when the exec failed.
