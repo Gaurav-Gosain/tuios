@@ -39,7 +39,7 @@ func registerGiltTheme() {
 	}
 	tint.Register(t)
 	col := func(hex string) color.Color { return AsColor(c(hex)) }
-	registerChrome(t.ID, &Chrome{
+	ch := &Chrome{
 		Accent:       col("#D4AF37"),
 		AccentBright: col("#F4E6A6"),
 		Success:      col("#7FA37A"),
@@ -49,5 +49,9 @@ func registerGiltTheme() {
 		Surface:      col("#181B20"),
 		Canvas:       col("#050607"),
 		Panel:        col("#090A0C"),
-	})
+	}
+	// The ink tiers are measured on the ramp. A theme file and Omarchy derive
+	// them when they are read. Without this the palette's inks are nil.
+	ch.deriveRamp()
+	registerChrome(t.ID, ch)
 }

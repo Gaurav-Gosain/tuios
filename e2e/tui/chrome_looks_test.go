@@ -44,6 +44,10 @@ var (
 	lookDark   = chromeLook{name: "dark"}
 	lookLatte  = chromeLook{name: "latte", theme: "catppuccin_latte", light: true}
 	lookGruvbx = chromeLook{name: "gruvbox_light", theme: "gruvbox_light", light: true}
+	// Gilt names its whole neutral ramp in code rather than in a theme file.
+	// Its chrome once skipped the ink tiers derived from that ramp, and the
+	// Inbox crashed on the nil foreground (#1309).
+	lookGilt = chromeLook{name: "gilt", theme: "gilt"}
 )
 
 // chromeRun is one client: a look, a depth and a size.
@@ -85,6 +89,7 @@ func chromeRuns() []chromeRun {
 		chromeRun{lookDark, chromeDepths[0], 120, 40},
 		chromeRun{lookDark, chromeDepths[2], 80, 24},
 		chromeRun{lookLatte, chromeDepths[1], 80, 24},
+		chromeRun{lookGilt, chromeDepths[2], 120, 40},
 	)
 	return runs
 }
