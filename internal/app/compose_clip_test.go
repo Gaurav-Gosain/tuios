@@ -2,9 +2,11 @@ package app
 
 import (
 	"image"
+	"math"
 	"math/rand"
 	"strings"
 	"testing"
+	"time"
 
 	"charm.land/lipgloss/v2"
 )
@@ -114,7 +116,14 @@ func BenchmarkBlitClipped(b *testing.B) {
 // TestBlitClippedBudget holds blitClipped to the cost of blit. A clipped pane
 // is drawn on every frame of a session view, and the cell-by-cell copy cost
 // three times as much as blit. The budget is a ratio of the two, measured on
-// the same machine in the same run, so a loaded machine slows both.
+// the same machine in the same run.
+//
+// The two are timed in short samples that take turns, and each side keeps its
+// fastest sample. CI runs this package beside other test processes, and timing
+// all of one side before all of the other let a burst of their load land on
+// one side only: blitClipped read 2.0 to 2.4 times blit on runners where it is
+// 1.0 on an idle machine. Load only ever adds time, so the fastest of many
+// short samples is the cost with the least load in it, for both sides alike.
 func TestBlitClippedBudget(t *testing.T) {
 	if testing.Short() {
 		t.Skip("timing budget")
@@ -123,24 +132,52 @@ func TestBlitClippedBudget(t *testing.T) {
 		t.Skip("timings are not meaningful under -race")
 	}
 	cl, canvas, clip := clippedPaneLayer(t)
-	best := func(fn func()) float64 {
-		var ns float64
-		for i := range 2 {
-			r := testing.Benchmark(func(b *testing.B) {
-				for b.Loop() {
-					fn()
-				}
-			})
-			if v := float64(r.NsPerOp()); i == 0 || v < ns {
-				ns = v
-			}
-		}
-		return ns
-	}
-	clipped := best(func() { cl.blitClipped(canvas, 0, 0, clip) })
-	plain := best(func() { cl.blit(canvas, 0, 0) })
+	clipped, plain := fastestInTurns(
+		func() { cl.blitClipped(canvas, 0, 0, clip) },
+		func() { cl.blit(canvas, 0, 0) },
+	)
 	t.Logf("blitClipped %.0f ns/op, blit %.0f ns/op, ratio %.2f", clipped, plain, clipped/plain)
 	if clipped > 2*plain {
 		t.Errorf("blitClipped costs %.1fx blit, want at most 2x", clipped/plain)
 	}
+}
+
+// fastestInTurns times a and b in turns, a short sample of each per round,
+// and returns the fastest sample of each in ns per call. The order inside a
+// round alternates, so neither side always runs on a cache the other warmed.
+func fastestInTurns(a, b func()) (nsA, nsB float64) {
+	const rounds = 40
+	// Calls per sample: enough that a sample outlasts the timer's grain, few
+	// enough that a sample often fits between two bursts of other load.
+	calls := 1
+	for calls < 1<<20 {
+		start := time.Now()
+		for range calls {
+			a()
+		}
+		if time.Since(start) >= 2*time.Millisecond {
+			break
+		}
+		calls *= 2
+	}
+	sample := func(fn func()) float64 {
+		start := time.Now()
+		for range calls {
+			fn()
+		}
+		return float64(time.Since(start).Nanoseconds()) / float64(calls)
+	}
+	nsA, nsB = math.Inf(1), math.Inf(1)
+	for round := range rounds {
+		first, second := a, b
+		if round%2 == 1 {
+			first, second = b, a
+		}
+		x, y := sample(first), sample(second)
+		if round%2 == 1 {
+			x, y = y, x
+		}
+		nsA, nsB = min(nsA, x), min(nsB, y)
+	}
+	return nsA, nsB
 }
