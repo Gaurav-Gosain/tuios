@@ -86,6 +86,62 @@ func Neighbour(from Rect, cands []Rect, side Side, fallback bool) int {
 	return best
 }
 
+// Wrap picks the rectangle focus wraps to when Neighbour finds nothing toward
+// side in a tiled layout, and returns its index in cands, or -1. Focus leaves
+// the layout at one edge and comes back in at the other: of the candidates that
+// lie the other way and face from, the one farthest that way wins. Its far edge
+// is the edge of the layout, so in a tiled layout it is a pane on that edge.
+//
+// Ties go as in Neighbour: one sharing two or more cells with from beats one
+// sharing a single cell, then the one whose centre is closest to from's across
+// the axis wins, then the one sharing the most, then the earlier index.
+//
+// A candidate must lie the other way by the rule Neighbour uses for its side,
+// so a pane beside from that only shares a border cell with it never counts. A
+// pane that spans the whole layout on the axis of travel has nothing to wrap to.
+//
+// The tmux shim wraps in internal/tmuxcompat by tmux's own rule (edges that
+// meet, ties to the pane focused last) and does not call this.
+func Wrap(from Rect, cands []Rect, side Side) int {
+	back := opposite(side)
+	f := towardRight(from, back)
+	best := -1
+	var bestKey [5]int
+	for i, raw := range cands {
+		c := towardRight(raw, back)
+		if c.X <= f.X || c.X+c.W <= f.X+f.W {
+			continue
+		}
+		overlap := min(c.Y+c.H, f.Y+f.H) - max(c.Y, f.Y)
+		if overlap < 1 {
+			continue
+		}
+		offset := abs((2*c.Y + c.H) - (2*f.Y + f.H))
+		thin := 0
+		if overlap == 1 {
+			thin = 1
+		}
+		// The far edge first: the larger it is, the farther the candidate.
+		key := [5]int{-(c.X + c.W), thin, offset, -overlap, i}
+		if best < 0 || slices.Compare(key[:], bestKey[:]) < 0 {
+			best, bestKey = i, key
+		}
+	}
+	return best
+}
+
+func opposite(side Side) Side {
+	switch side {
+	case SideLeft:
+		return SideRight
+	case SideRight:
+		return SideLeft
+	case SideUp:
+		return SideDown
+	}
+	return SideUp
+}
+
 // towardRight turns a rectangle so that stepping toward side becomes stepping
 // right: X is the axis of travel and grows in that direction, Y is across it.
 func towardRight(r Rect, side Side) Rect {

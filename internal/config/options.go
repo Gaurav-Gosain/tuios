@@ -257,6 +257,11 @@ var optionSpecs = []Option{
 		Default:     "false",
 	},
 	{
+		Path: "appearance.focus_wrap", Type: OptionBool, Section: "appearance",
+		Description: "A focus key at the edge of a tiled layout moves to the pane on the far side",
+		Default:     "false",
+	},
+	{
 		Path: "appearance.focus_follows_mouse", Type: OptionBool, Section: "appearance",
 		Description: "Focus the pane under the cursor as the mouse moves",
 		Default:     "false",

@@ -155,8 +155,9 @@ func (d *ActionDispatcher) registerPrefixHandlers() {
 // direction. It runs the same geometry the FocusDirection tape command does
 // rather than a second rule: the nearest pane whose facing edge lies that way
 // and whose span overlaps this one's, ties going to the earlier pane. At the
-// edge of the layout there is no such pane and focus stays put; it does not
-// wrap.
+// edge of the layout there is no such pane and focus stays put, unless
+// appearance.focus_wrap is on: then a tiled layout wraps to the pane on the
+// far side (see findWindowInDirection).
 //
 // The scrolling layout is one strip of columns, and left and right step along
 // it with its own navigation, which returns to the window a column was last on.

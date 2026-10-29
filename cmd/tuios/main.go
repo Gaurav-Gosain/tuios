@@ -1458,7 +1458,10 @@ direction, and print the pane that ended up with it.
 
 Pass exactly one of the window argument, --relative or --direction. Naming a
 window switches to its workspace. --direction needs an attached client. The
-other two forms work on a detached session.`,
+other two forms work on a detached session.
+
+With appearance.focus_wrap on, --direction wraps at the edge of a tiled
+layout to the pane on the far side.`,
 		Example: `  # Focus a pane by name
   tuios focus-window build
 

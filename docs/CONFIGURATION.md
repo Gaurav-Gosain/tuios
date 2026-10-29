@@ -374,6 +374,31 @@ nvim_navigation = true
 See [KEYBINDINGS.md](KEYBINDINGS.md#neovim-pane-navigation) for the matching
 focus-key mappings and protocol behaviour.
 
+## Wrap focus at the edge
+
+`appearance.focus_wrap` is `false` by default. Set it to `true` to wrap
+directional focus at the edge of a tiled layout, as tmux `select-pane` does:
+
+```toml
+[appearance]
+focus_wrap = true
+```
+
+When no pane is in that direction, focus goes to the pane on the far side that
+faces the focused pane. If more than one pane is on the far side, tuios picks
+by the rule of a normal focus move. A pane that fills the layout in that
+direction keeps focus.
+
+The option applies to every directional focus move in a tiled layout:
+
+- The focus keys in window mode, in terminal mode and after the prefix.
+- The Neovim navigator hand-back, when `nvim_navigation` is on.
+- `tuios focus-window --direction` and the `FocusDirection` tape command.
+
+In the scrolling layout, up and down wrap inside the column. Left and right
+move along the strip and do not wrap. With tiling off, focus does not wrap.
+The tmux shim always wraps, as tmux does, and does not read this option.
+
 `persist_scrollback` in `[daemon]` (default `true`) saves each pane's history with its session. After a daemon restart or a reboot, the restored pane shows that history above a dim divider, and the new shell starts under it. `persist_scrollback_lines` (default 1000) and `persist_scrollback_kb` (default 2048) set the most lines and the most KiB one pane saves. The files hold what your panes printed, secrets included. Set `persist_scrollback = false` to stop this. The next time the daemon starts, it deletes the history it saved before. See [SESSIONS.md](SESSIONS.md#pane-history).
 
 `window_size` in `[daemon]` sets the size of a session that has more than one client. The names are the names of the tmux `window-size` option. See [SESSIONS.md](SESSIONS.md#session-size-with-more-than-one-client).

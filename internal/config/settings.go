@@ -538,6 +538,11 @@ type Settings struct {
 	// Set via appearance.nvim_navigation config.
 	NvimNavigation bool
 
+	// FocusWrap lets a directional focus key in a tiled layout wrap to the far
+	// side of the layout when no pane lies that way. It is off by default.
+	// Set via appearance.focus_wrap config.
+	FocusWrap bool
+
 	// FocusFollowsMouse focuses the pane under the cursor as the mouse moves over
 	// it, without a click and without entering terminal mode. It is a divisive
 	// window-manager habit, so it defaults off and users opt in.

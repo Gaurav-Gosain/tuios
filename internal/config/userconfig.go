@@ -364,6 +364,7 @@ type AppearanceConfig struct {
 	ScrollLines              int                     `toml:"scroll_lines"`                 // Lines scrolled per mouse wheel notch (default: 3, min: 1, max: 50)
 	CopyOnSelect             *bool                   `toml:"copy_on_select"`               // Copy a mouse selection to the clipboard on release (default: true)
 	NvimNavigation           *bool                   `toml:"nvim_navigation"`              // Let the Neovim navigator plugin hand terminal focus keys back to TUIOS (default: false)
+	FocusWrap                *bool                   `toml:"focus_wrap"`                   // A focus key at the edge of a tiled layout moves to the pane on the far side (default: false)
 	FocusFollowsMouse        *bool                   `toml:"focus_follows_mouse"`          // Focus the pane under the cursor as the mouse moves (default: false)
 	FocusFollowsMousePause   string                  `toml:"focus_follows_mouse_pause"`    // The key that pauses focus_follows_mouse while held: ctrl, alt, off (default: off)
 	AltDrag                  *bool                   `toml:"alt_drag"`                     // Alt + left-drag moves a pane (default: true)
@@ -1146,6 +1147,7 @@ func DefaultConfig() *UserConfig {
 				OSC52Write: OSC52WriteFocused,
 			},
 			NvimNavigation: new(false),
+			FocusWrap:      new(false),
 			Sidebar: SidebarConfig{
 				// A fresh pointer per call, so a caller that flips it in place
 				// cannot change the next DefaultConfig.
@@ -3031,6 +3033,9 @@ func ApplyAppearanceConfig(cfg *UserConfig, s *Settings) {
 	}
 	if cfg.Appearance.NvimNavigation != nil {
 		s.NvimNavigation = *cfg.Appearance.NvimNavigation
+	}
+	if cfg.Appearance.FocusWrap != nil {
+		s.FocusWrap = *cfg.Appearance.FocusWrap
 	}
 
 	// FocusFollowsMouse defaults to false; a pointer so turning it off in the

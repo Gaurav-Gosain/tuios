@@ -10475,3 +10475,10 @@ time with `go test -overlay`, each cut read back first:
 | The cut of the count line to the panel | `TestWhichKeyOnTinyScreens`: a line wider than the panel at 10x6 and 5x1 | **caught** |
 | One row of room under a dock that takes every row | `TestWhichKeyUnderADockThatTakesEveryRow`: a 30-row menu at 80x1 | **caught** |
 | Keeping a layout with no columns | `TestWhichKeyKeepsALayoutWithNoColumns` | **caught** |
+## Focus wraps at the edge of a tiled layout
+
+`TestDirectionalFocusWrapBSP` turns on `appearance.focus_wrap`, tiles four panes, and presses each prefix arrow that has no neighbour from each pane. Focus has to land on a pane on the far edge that shares at least two cells with the old pane, or stay where nothing is on the far side. It then checks `tuios focus-window --direction left` from the left edge. The control was built into its own binary. Run on 2026-10-29 on Linux.
+
+| Control: what was cut | Test failure | Verdict |
+| --- | --- | --- |
+| The `layout.Wrap` fallback in `findWindowInDirection` (`internal/app/os_tape_executor.go`) | "pressed left on pane ... focus stayed, want one of ..." | **caught** |

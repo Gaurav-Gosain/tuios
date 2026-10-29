@@ -232,7 +232,17 @@ func keysOf(m map[string]bool) []string {
 // layout is a palette search that picks a tiling scheme, or empty for BSP.
 func tiledPanes(t *testing.T, session, layout string, n int) (*tuitest.Terminal, string) {
 	t.Helper()
-	term, base := start(t, startOpts{cols: 160, rows: 48, args: []string{"new", session}})
+	return tiledPanesWith(t, session, layout, "", n)
+}
+
+// tiledPanesWith is tiledPanes with a config file written before tuios starts.
+func tiledPanesWith(t *testing.T, session, layout, config string, n int) (*tuitest.Terminal, string) {
+	t.Helper()
+	base := t.TempDir()
+	if config != "" {
+		writeConfig(t, base, config)
+	}
+	term := startIn(t, base, startOpts{cols: 160, rows: 48, args: []string{"new", session}})
 	killDaemon(t, base)
 	waitBoot(t, term)
 	for range n {
@@ -277,4 +287,129 @@ func TestDirectionalFocusPrefixArrowsBSP(t *testing.T) {
 		{"right", []any{tuitest.Ctrl('b'), tuitest.Right}},
 	}
 	walkEveryDirection(t, term, base, "dirprefix", arrows, 4)
+}
+
+// Issue #895: with appearance.focus_wrap on, a focus key at the edge of a
+// tiled layout goes to the pane on the far side that faces the focused pane,
+// as tmux select-pane does. The test presses every direction that has no
+// neighbour from every pane, with the prefix arrows, and checks where focus lands
+// against a rule worked out here from the rectangles: a pane on the far edge
+// of the layout that shares at least two cells with the old one across the
+// axis. Where no pane qualifies (up or down from a full-height pane), focus
+// must stay. The CLI's focus-window --direction takes the same path and is
+// checked once at the end.
+//
+// NEGATIVE CONTROL: with the layout.Wrap fallback removed from
+// findWindowInDirection, the first edge press fails with "focus stayed".
+func TestDirectionalFocusWrapBSP(t *testing.T) {
+	const session = "dirwrap"
+	term, base := tiledPanesWith(t, session, "", "[appearance]\nfocus_wrap = true\n", 4)
+	waitForSettledGeometryIn(t, base, session, 4)
+	layout, _ := focusedLayout(t, base, session)
+
+	// The prefix arrows reach the focus action from any mode.
+	arrows := []focusKey{
+		{"left", []any{tuitest.Ctrl('b'), tuitest.Left}},
+		{"down", []any{tuitest.Ctrl('b'), tuitest.Down}},
+		{"up", []any{tuitest.Ctrl('b'), tuitest.Up}},
+		{"right", []any{tuitest.Ctrl('b'), tuitest.Right}},
+	}
+	wrapped := 0
+	for _, from := range layout {
+		for _, k := range arrows {
+			if len(touchingNeighbours(from.winRect, layout, k.name)) > 0 {
+				continue
+			}
+			if out, err := tuiosCLI(t, base, "focus-window", "-s", session, from.ID); err != nil {
+				t.Fatalf("focus-window %s: %v\n%s", from.ID[:8], err, out)
+			}
+			if _, now := focusedLayout(t, base, session); now != from.ID {
+				t.Fatalf("focus-window %s left focus on %s", from.ID[:8], now)
+			}
+			want := farSide(from.winRect, layout, k.name)
+			send(t, term, k.keys...)
+			if len(want) == 0 {
+				time.Sleep(time.Second)
+				if _, got := focusedLayout(t, base, session); got != from.ID {
+					t.Fatalf("pressed %s on pane %s at %+v with nothing on the far side: focus went to %s\n%s",
+						k.name, from.ID[:8], from.winRect, got[:8], term.Snapshot())
+				}
+				continue
+			}
+			got := waitFocusChange(t, base, session, from.ID)
+			if got == from.ID {
+				t.Fatalf("pressed %s on pane %s at %+v: focus stayed, want one of %v\n%s",
+					k.name, from.ID[:8], from.winRect, keysOf(want), term.Snapshot())
+			}
+			if !want[got] {
+				t.Fatalf("pressed %s on pane %s at %+v: focus went to %s, want one of %v\n%s",
+					k.name, from.ID[:8], from.winRect, got[:8], keysOf(want), term.Snapshot())
+			}
+			wrapped++
+		}
+	}
+	if wrapped == 0 {
+		t.Fatal("no edge press wrapped; the layout has no edge to test")
+	}
+
+	// The CLI: from a pane on the left edge, --direction left wraps too.
+	for _, from := range layout {
+		want := farSide(from.winRect, layout, "left")
+		if len(touchingNeighbours(from.winRect, layout, "left")) > 0 || len(want) == 0 {
+			continue
+		}
+		if out, err := tuiosCLI(t, base, "focus-window", "-s", session, from.ID); err != nil {
+			t.Fatalf("focus-window %s: %v\n%s", from.ID[:8], err, out)
+		}
+		if out, err := tuiosCLI(t, base, "focus-window", "-s", session, "--direction", "left"); err != nil {
+			t.Fatalf("focus-window --direction left from the left edge: %v\n%s", err, out)
+		}
+		if _, got := focusedLayout(t, base, session); !want[got] {
+			t.Fatalf("focus-window --direction left from %s went to %s, want one of %v", from.ID[:8], got[:8], keysOf(want))
+		}
+		break
+	}
+	saveArtifact(t, term, artifactDir(t), "focus-wrap")
+}
+
+// farSide is the set of panes focus may wrap to from from when dir has no
+// neighbour: the panes whose edge lies on the far edge of the layout, on the
+// side opposite dir, and that share at least two cells with from across the
+// axis. Two cells of slack cover a shared border and a gap.
+func farSide(from winRect, all []focusedRect, dir string) map[string]bool {
+	overlap := func(a0, a1, b0, b1 int) int { return min(a1, b1) - max(a0, b0) }
+	minX, minY, maxX, maxY := from.X, from.Y, from.X+from.Width, from.Y+from.Height
+	for _, r := range all {
+		minX, minY = min(minX, r.X), min(minY, r.Y)
+		maxX, maxY = max(maxX, r.X+r.Width), max(maxY, r.Y+r.Height)
+	}
+	near := func(v, want int) bool { return v >= want-2 && v <= want+2 }
+	out := map[string]bool{}
+	for _, r := range all {
+		w := r.winRect
+		if w.ID == from.ID {
+			continue
+		}
+		rows := overlap(w.Y, w.Y+w.Height, from.Y, from.Y+from.Height) >= 2
+		cols := overlap(w.X, w.X+w.Width, from.X, from.X+from.Width) >= 2
+		switch dir {
+		case "left":
+			if near(w.X+w.Width, maxX) && w.X > from.X && rows {
+				out[w.ID] = true
+			}
+		case "right":
+			if near(w.X, minX) && w.X+w.Width < from.X+from.Width && rows {
+				out[w.ID] = true
+			}
+		case "up":
+			if near(w.Y+w.Height, maxY) && w.Y > from.Y && cols {
+				out[w.ID] = true
+			}
+		case "down":
+			if near(w.Y, minY) && w.Y+w.Height < from.Y+from.Height && cols {
+				out[w.ID] = true
+			}
+		}
+	}
+	return out
 }
