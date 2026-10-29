@@ -4362,7 +4362,8 @@ count; omit for the whole hunk), `context` (the context of that diff, default
 ```
 
 It is the person's tool: refused on a restricted connection, `admin` for a
-pane, `write` over a link. A `human_nonce` that is given must be live.
+pane, `write` over a link. A `human_nonce` that is given must be live. The
+review overlay calls it with the keys `a`, `d`, `A`, `D` and `z`.
 
 ### review-note
 

@@ -911,10 +911,28 @@ func (d reviewDraw) rowBody(row reviewRow, st overlay.RowState) string {
 			bg = reviewCursorTint(bg, pal, st)
 		}
 		head, ctx := reviewSplitHeader(reviewText(d.file.Hunks[row.hunk].Header))
-		return markCell(bg) + reviewPaint([]reviewSeg{
+		// How much of the hunk is in the index, from the index diffs read
+		// while the overlay is open, at the right end of the row. Words, so
+		// it reads at every depth.
+		var stage reviewSeg
+		switch d.m.review.reviewHunkMark(d.file, row.hunk) {
+		case reviewHunkStaged:
+			stage = reviewSeg{overlay.Readable(pal.Success, bg), "staged ", true}
+		case reviewHunkPartly:
+			stage = reviewSeg{overlay.Readable(pal.Warning, bg), "partly staged ", true}
+		}
+		left := rest
+		if stage.text != "" {
+			left = max(rest-ansi.StringWidth(stage.text)-2, 0)
+		}
+		line := reviewPaint([]reviewSeg{
 			{overlay.Readable(pal.Info, bg), " " + head, false},
 			{overlay.Readable(pal.FgDim, bg), ctx, false},
-		}, rest, bg)
+		}, left, bg)
+		if stage.text != "" {
+			line += reviewPaint([]reviewSeg{{stage.fg, "  " + stage.text, true}}, rest-left, bg)
+		}
+		return markCell(bg) + line
 	case reviewRowLine:
 		if d.split {
 			return d.splitLine(row, st, markCell)
@@ -1135,6 +1153,7 @@ func (m *OS) reviewKeyHints() []overlay.Hint {
 		} else {
 			add("c", "note")
 		}
+		m.reviewStageHints(add)
 	}
 	if n := r.unsentNotes(); n > 0 && !against {
 		add("S", "send "+reviewCount(n, "note"))

@@ -894,6 +894,11 @@ var ActionDescriptions = map[string]string{
 	ActionReviewPrevHunk:         "Review: previous hunk, going back into the previous file",
 	ActionReviewNextFile:         "Review: next file",
 	ActionReviewPrevFile:         "Review: previous file",
+	ActionReviewStageHunk:        "Review: stage the hunk under the cursor",
+	ActionReviewUnstageHunk:      "Review: unstage the hunk under the cursor",
+	ActionReviewStageFile:        "Review: stage the whole file",
+	ActionReviewUnstageFile:      "Review: unstage the whole file",
+	ActionReviewUndoStage:        "Review: undo the last stage or unstage",
 
 	// Session lifecycle (context menu rows; no default keybinding)
 	"settings_sidebar":  "Sidebar settings",

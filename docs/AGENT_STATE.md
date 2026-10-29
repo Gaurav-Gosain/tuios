@@ -4945,6 +4945,18 @@ from a note has its control characters left out. The keys are listed in
 dock, so the dock's newest message since it opened (a note refused, notes
 queued, an attempt kept) is shown above its keys as well.
 
+You can keep the good hunks of a change and leave the rest. `a` stages the hunk
+under the cursor and `d` unstages it. `A` and `D` do the same for the whole
+file, and `z` undoes the last of them. Each key is a `review-stage` call with
+your attach nonce, so only the index of the pane's worktree changes, and the
+working files stay as the agent left them. While the overlay is open it reads
+the staged and unstaged diffs (`review-diff` with `index`), and a hunk header
+shows `staged` or `partly staged`. It reads them again after each key, and
+not while the overlay is closed. The overlay shows the diff against the base,
+so a key stages exactly the lines of the hunk shown, whatever hunks git makes
+of them. The keys are in `[keybindings.review]`. See
+[KEYBINDINGS.md](KEYBINDINGS.md#the-review-overlay).
+
 For a pane in a fan, `w` shows the compare view: one row per attempt with its
 agent and state, the files and lines it changed against the fan's base
 (`compare-fan`), and its last check (a `verify-fan` result, else the exit of

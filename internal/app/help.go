@@ -263,6 +263,11 @@ func generateAgentBindings(registry *config.KeybindRegistry, s *config.Settings)
 	review(config.ActionReviewPrevHunk, "Review: previous hunk")
 	review(config.ActionReviewNextFile, "Review: next file")
 	review(config.ActionReviewPrevFile, "Review: previous file")
+	review(config.ActionReviewStageHunk, "Review: stage the hunk under the cursor")
+	review(config.ActionReviewUnstageHunk, "Review: unstage the hunk under the cursor")
+	review(config.ActionReviewStageFile, "Review: stage the whole file")
+	review(config.ActionReviewUnstageFile, "Review: unstage the whole file")
+	review(config.ActionReviewUndoStage, "Review: undo the last stage or unstage")
 	// The overlay's other keys are its own and not bindings, like the
 	// scrollback browser's. See review_input.go.
 	add([]string{"c", "C"}, "Review: a note on the line, or on the whole hunk")

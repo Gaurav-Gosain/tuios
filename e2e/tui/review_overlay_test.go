@@ -2,12 +2,15 @@ package tuie2e
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/Gaurav-Gosain/tuios/internal/testutil"
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
@@ -445,8 +448,10 @@ func TestReviewNarrowSplitNoticeGoesWithTheSplit(t *testing.T) {
 	saveArtifact(t, term, artifactDir(t), "review-unified-again")
 }
 
-// TestReviewFooterKeepsItsRightMargin opens the split view at 120 columns,
-// where its keys fill the footer to within a cell. The footer kept a cell of
+// TestReviewFooterKeepsItsRightMargin opens the split view at 116 columns,
+// where its keys fill the footer to within a cell, and one more cell of room
+// would let them fill it to the edge. The width moves with the keys the
+// footer offers: it was 120 columns before the stage key joined them. The footer kept a cell of
 // margin on the left only, so a strip that fitted to the cell ran into the
 // frame: "esc close│". The frame is saved under artifactDir.
 //
@@ -462,7 +467,7 @@ func TestReviewNarrowSplitNoticeGoesWithTheSplit(t *testing.T) {
 func TestReviewFooterKeepsItsRightMargin(t *testing.T) {
 	base, repo := fanFixture(t)
 	session := reviewFan(t, base, repo, "fm")
-	term := attachIn(t, base, session, startOpts{cols: 120, rows: 40})
+	term := attachIn(t, base, session, startOpts{cols: 116, rows: 40})
 	sendKeys(t, term, tuitest.Ctrl('b'), "v")
 	waitScreen(t, term, "the review never opened", "Review", "M README", "s split")
 	sendKeys(t, term, "s")
@@ -563,4 +568,155 @@ func TestReviewFileKeysFollowTheirBindings(t *testing.T) {
 		t.Fatalf("esc did not close the review: %v\n%s", err, term.Snapshot())
 	}
 	alive(t, term, "after the rebound review keys")
+}
+
+// TestReviewOverlayStagesAHunk stages one hunk of three from the review
+// overlay, unstages it, undoes both steps, and stages and unstages the whole
+// file, all with the overlay's keys on a plain repository. After each step
+// git diff --cached holds exactly the lines of what the key named, the hunk
+// headers say which hunks are staged, and the working file keeps its bytes.
+//
+// How this could pass wrongly, written down first:
+//   - The mark could be drawn on every hunk, or on none. The test counts the
+//     header rows that say staged and requires the one of the middle hunk.
+//   - The mark could be read from the staged diff without carrying its lines
+//     into the working file. The first hunk adds a line, so the middle hunk
+//     sits one line lower in the working file than in the index, and a mark
+//     read without that step is never drawn.
+//   - The key could stage more than the hunk. The cached diff is compared
+//     line by line, and the other two changes must be absent.
+//   - Undo could do nothing and the next step still pass. Each z is checked
+//     against the cached diff it must give back.
+//
+// The frames are saved under artifactDir, and the cached diff after each step
+// is in cached.txt there.
+//
+// Negative control (NEGATIVE_CONTROLS.md): with reviewIndexToWork returning
+// the index line as it is, the wait for the staged mark times out.
+func TestReviewOverlayStagesAHunk(t *testing.T) {
+	base := t.TempDir()
+	killDaemon(t, base)
+	repo := testutil.GitRepo(t)
+	dir := artifactDir(t)
+
+	var lines []string
+	for i := 1; i <= 30; i++ {
+		lines = append(lines, fmt.Sprintf("line %02d", i))
+	}
+	file := filepath.Join(repo, "list.txt")
+	if err := os.WriteFile(file, []byte(strings.Join(lines, "\n")+"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	testutil.Git(t, repo, "add", "list.txt")
+	testutil.Git(t, repo, "commit", "-q", "-m", "list")
+
+	// Hunk 1 adds a line after line 01, hunk 2 changes line 15 and hunk 3
+	// changes line 28.
+	changed := slices.Clone(lines)
+	changed[14] = "LINE 15"
+	changed[27] = "LINE 28"
+	changed = slices.Insert(changed, 1, "added at the top")
+	work := strings.Join(changed, "\n") + "\n"
+	if err := os.WriteFile(file, []byte(work), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	var log strings.Builder
+	t.Cleanup(func() {
+		if err := os.WriteFile(filepath.Join(dir, "cached.txt"), []byte(log.String()), 0o644); err != nil {
+			t.Logf("save the cached diffs: %v", err)
+		}
+	})
+	// cached waits for git diff --cached to hold exactly want, its added and
+	// removed lines in order, and checks the working file kept its bytes.
+	cached := func(step string, want ...string) {
+		t.Helper()
+		var got []string
+		deadline := time.Now().Add(uiTimeout)
+		for {
+			out := testutil.Git(t, repo, "diff", "--cached", "-U0")
+			got = got[:0]
+			for l := range strings.SplitSeq(out, "\n") {
+				if (strings.HasPrefix(l, "+") || strings.HasPrefix(l, "-")) && !strings.HasPrefix(l, "+++") && !strings.HasPrefix(l, "---") {
+					got = append(got, l)
+				}
+			}
+			if slices.Equal(got, want) {
+				fmt.Fprintf(&log, "## %s\n%s\n\n", step, out)
+				break
+			}
+			if time.Now().After(deadline) {
+				t.Fatalf("%s: git diff --cached holds %q, want %q", step, got, want)
+			}
+			time.Sleep(200 * time.Millisecond)
+		}
+		if got := readFile(t, file); got != work {
+			t.Fatalf("%s: list.txt changed in the working tree:\n%s", step, got)
+		}
+	}
+	var term *tuitest.Terminal
+	// marks waits for the hunk headers that say staged to be exactly want,
+	// each named by the start of its old side.
+	marks := func(step string, want ...string) {
+		t.Helper()
+		if err := term.WaitFor(func(s tuitest.Screen) bool {
+			var got []string
+			for l := range strings.SplitSeq(s.Text(), "\n") {
+				if !strings.Contains(l, "@@") || !strings.Contains(l, " staged") {
+					continue
+				}
+				for _, w := range []string{"-1,", "-12,", "-25,"} {
+					if strings.Contains(l, "@@ "+w) {
+						got = append(got, w)
+					}
+				}
+			}
+			return slices.Equal(got, want)
+		}, uiTimeout); err != nil {
+			t.Fatalf("%s: the staged hunks are not %q: %v\n%s", step, want, err, term.Snapshot())
+		}
+	}
+
+	if out, err := tuiosCLIIn(t, base, repo, "new", "rs", "--detach"); err != nil {
+		t.Fatalf("new session in the repository: %v: %s", err, out)
+	}
+	term = attachIn(t, base, "rs", startOpts{})
+	sendKeys(t, term, tuitest.Ctrl('b'), "v")
+	waitScreen(t, term, "the review never opened", "Review", "list.txt", "LINE 15", "a stage")
+	cached("before any key")
+
+	// The cursor starts on the first hunk. ] moves to the middle one.
+	sendKeys(t, term, "]", "a")
+	marks("a on the middle hunk", "-12,")
+	waitScreen(t, term, "the stage was not reported", "Hunk staged", "d unstage", "z undo")
+	cached("a on the middle hunk", "-line 15", "+LINE 15")
+	saveArtifact(t, term, dir, "review-stage-hunk")
+
+	sendKeys(t, term, "d")
+	marks("d on the middle hunk")
+	cached("d on the middle hunk")
+
+	sendKeys(t, term, "z")
+	marks("z after d", "-12,")
+	cached("z after d", "-line 15", "+LINE 15")
+
+	sendKeys(t, term, "z")
+	marks("z after a")
+	cached("z after a")
+
+	sendKeys(t, term, "A")
+	marks("A on the file", "-1,", "-12,", "-25,")
+	cached("A on the file", "+added at the top", "-line 15", "+LINE 15", "-line 28", "+LINE 28")
+	saveArtifact(t, term, dir, "review-stage-file")
+
+	sendKeys(t, term, "D")
+	marks("D on the file")
+	cached("D on the file")
+
+	sendKeys(t, term, tuitest.Esc)
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		return !strings.Contains(s.Text(), "esc close")
+	}, uiTimeout); err != nil {
+		t.Fatalf("esc did not close the review: %v\n%s", err, term.Snapshot())
+	}
 }

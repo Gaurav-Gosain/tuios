@@ -2005,7 +2005,8 @@ active theme's colours, added and removed lines sit on green and red grounds,
 and the words that changed in a changed line are marked. It owns every key
 while it is open, in either mode.
 The keys are the overlay's own, not bindings, like the scrollback browser's,
-except the hunk and file motions, which are in `[keybindings.review]`:
+except the hunk and file motions and the stage keys, which are in
+`[keybindings.review]`:
 
 | Keys | What it does |
 | --- | --- |
@@ -2014,6 +2015,10 @@ except the hunk and file motions, which are in `[keybindings.review]`:
 | `g` / `G` | First or last line |
 | `]` / `[` | Next or previous hunk, going on into the next or previous file (`review_next_hunk`, `review_prev_hunk`) |
 | `}` / `{` | Next or previous file (`review_next_file`, `review_prev_file`) |
+| `a` | Stage the hunk under the cursor (`review_stage_hunk`) |
+| `d` | Unstage the hunk under the cursor (`review_unstage_hunk`) |
+| `A` / `D` | Stage or unstage the whole file (`review_stage_file`, `review_unstage_file`) |
+| `z` | Undo the last stage or unstage (`review_undo_stage`) |
 | `s` | One column, or the old and new sides next to each other where the diff column is wide enough (about 120 columns of screen) |
 | `h` / `l`, `left` / `right` | Scroll the code sideways |
 | `tab` | Focus the file list or the diff |
@@ -2028,6 +2033,12 @@ except the hunk and file motions, which are in `[keybindings.review]`:
 | `w` | The compare view, for a pane in a fan |
 | `r` | Read the diff again |
 | `esc`, `q` | Close (from a review opened in the compare view, go back to it) |
+
+A stage key changes only the index of the pane's worktree. The working files
+do not change. A hunk header shows `staged` when the index holds all of the
+hunk, and `partly staged` when it holds some of it. `a` stages only the lines of
+the hunk you see, also when the diff is against the base and git splits the
+change in other places. The keys do nothing in a comparison of two attempts.
 
 In the note line and the other one-line prompts every printable key is text,
 a paste is typed as one line, `enter` saves and `esc` drops.
@@ -2063,8 +2074,8 @@ against the fan's base and its last check:
 | `esc`, `q`, `w` | Back to the review |
 
 A key from `send-keys` or a tape may move around the review but never acts as
-you: a note it typed is not saved, and `S`, `x`, `V` and the keep
-confirmation refuse it. See
+you: a note it typed is not saved, and `S`, `x`, `V`, the stage keys and the
+keep confirmation refuse it. See
 [Reviewing an agent's changes](AGENT_STATE.md#reviewing-an-agents-changes).
 
 ## Other keyboard layouts

@@ -2584,7 +2584,17 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 
 	case ReviewDiffMsg:
 		m.applyReviewDiff(msg)
+		if msg.Err == nil && msg.Gen == m.review.gen && m.review.open {
+			return m, m.reviewIndexCmd()
+		}
 		return m, nil
+
+	case ReviewIndexMsg:
+		m.applyReviewIndex(msg)
+		return m, nil
+
+	case ReviewStagedMsg:
+		return m, m.applyReviewStaged(msg)
 
 	case ReviewNotesMsg:
 		m.applyReviewNotes(msg)

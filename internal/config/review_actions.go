@@ -6,8 +6,8 @@ import (
 	"slices"
 )
 
-// The review overlay's hunk and file motions, the keys a config can bind in
-// [keybindings.review]. They are live only while the review overlay is open
+// The review overlay's hunk and file motions and its stage keys, the keys a
+// config can bind in [keybindings.review]. They are live only while the review overlay is open
 // and no note is being typed. Its other keys are its own and are not
 // bindings. ] [ } { need Option on some layouts, AZERTY among them, where
 // Option is often the Alt that tuios reads (#585).
@@ -16,16 +16,29 @@ const (
 	ActionReviewPrevHunk = "review_prev_hunk"
 	ActionReviewNextFile = "review_next_file"
 	ActionReviewPrevFile = "review_prev_file"
+	// The stage keys: the hunk under the cursor or the whole file into the
+	// index or out of it, and the last of them undone.
+	ActionReviewStageHunk   = "review_stage_hunk"
+	ActionReviewUnstageHunk = "review_unstage_hunk"
+	ActionReviewStageFile   = "review_stage_file"
+	ActionReviewUnstageFile = "review_unstage_file"
+	ActionReviewUndoStage   = "review_undo_stage"
 )
 
-// getDefaultReviewKeybinds returns the review overlay's bindable keys, the
-// ones it has always used.
+// getDefaultReviewKeybinds returns the review overlay's bindable keys.
 func getDefaultReviewKeybinds() map[string][]string {
 	return map[string][]string{
 		ActionReviewNextHunk: {"]"},
 		ActionReviewPrevHunk: {"["},
 		ActionReviewNextFile: {"}"},
 		ActionReviewPrevFile: {"{"},
+		// s, S and u were the overlay's own keys before staging came, so
+		// stage is a (git add), unstage d, and undo z.
+		ActionReviewStageHunk:   {"a"},
+		ActionReviewUnstageHunk: {"d"},
+		ActionReviewStageFile:   {"A"},
+		ActionReviewUnstageFile: {"D"},
+		ActionReviewUndoStage:   {"z"},
 	}
 }
 
