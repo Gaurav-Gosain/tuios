@@ -74,44 +74,43 @@ types at once, into whatever runs in the pane.
 
 ## Keep the machine awake while agents work
 
-The daemon runs `after-agent-state` with nobody attached. A hook can hold the
-machine awake while any agent works and let go when none works. The hook fires
-only for states that `[notifications.agent.states]` lists, so turn on
-`working` and `idle` as well:
-
-```toml
-[hooks]
-after-agent-state = ["sh ~/.config/tuios/hooks/awake.sh"]
-
-[notifications.agent.states]
-working = true
-idle = true
-```
-
-These states also raise alerts. Keep `[notify]` and phone hooks off them, or
-test `TUIOS_AGENT_STATE` in those scripts.
+A hook only fires for the states that `[notifications.agent.states]` alerts on,
+so a hook cannot see every change without raising alerts. Use the event stream
+instead. `tuios subscribe` sends one line for each agent state change and
+raises no alert. This script holds `systemd-inhibit` (Linux) or `caffeinate`
+(macOS) while any agent works, and lets go when none works:
 
 ```sh
 #!/bin/sh
-# ~/.config/tuios/hooks/awake.sh
-pidfile="${XDG_RUNTIME_DIR:-/tmp}/tuios-awake.pid"
-working=$(tuios list-agents --all-sessions --json | jq '[.agents[] | select(.state=="working")] | length')
-running=0
-[ -s "$pidfile" ] && kill -0 "$(cat "$pidfile")" 2>/dev/null && running=1
-if [ "$working" -gt 0 ] && [ "$running" = 0 ]; then
-  case "$(uname)" in
-    Darwin) caffeinate -i & echo $! > "$pidfile" ;;
-    *) systemd-inhibit --what=idle:sleep --who=tuios --why='An agent works' sleep infinity & echo $! > "$pidfile" ;;
-  esac
-elif [ "$working" = 0 ] && [ "$running" = 1 ]; then
-  kill "$(cat "$pidfile")"
-  rm -f "$pidfile"
-fi
+# ~/.config/tuios/awake.sh
+holder=
+
+watch() {
+  trap '[ -n "$holder" ] && kill "$holder"' EXIT
+  while read -r _; do
+    n=$(tuios list-agents --all-sessions --json | jq '[.agents[] | select(.state == "working")] | length')
+    if [ "$n" -gt 0 ] && [ -z "$holder" ]; then
+      case "$(uname)" in
+        Darwin) caffeinate -i & ;;
+        *) systemd-inhibit --what=idle:sleep --who=tuios --why='An agent works' sleep infinity & ;;
+      esac
+      holder=$!
+    elif [ "$n" = 0 ] && [ -n "$holder" ]; then
+      kill "$holder"
+      holder=
+    fi
+  done
+}
+
+while true; do
+  tuios subscribe --types agent-state | watch
+  sleep 5
+done
 ```
 
-The daemon reads `[hooks]` when it starts. Run `tuios restart-server` after
-you edit it, then `tuios list-hooks` to check that the hook ran. Use full
-paths in the script when `tuios` or `jq` is not on the daemon's `PATH`.
+Run it from your login, for example `sh ~/.config/tuios/awake.sh &` or a
+systemd user service. The outer loop connects again after a daemon restart.
+`systemd-inhibit --list` shows a `tuios` row while an agent works.
 
 ## Run an agent on a schedule
 
@@ -125,8 +124,8 @@ exist is created:
 0 7 * * 1-5  tuios start-agent -s nightly claude --name triage --prompt 'List the open issues labeled bug and rank them.'
 ```
 
-The daemon must run. For a machine named in `tuios hosts`, use `-s
-HOST:SESSION`.
+The daemon must run. Cron has a short `PATH`: write the full path of `tuios`
+and of the agent. For a machine named in `tuios hosts`, use `-s HOST:SESSION`.
 
 To give a running agent its next job, queue the prompt. It is typed when the
 agent next comes to rest:
