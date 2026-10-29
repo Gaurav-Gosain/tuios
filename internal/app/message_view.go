@@ -116,6 +116,9 @@ func (m *OS) notifSourceName(t *NotifTarget) string {
 	if t.Thread != 0 {
 		return "Agent mail"
 	}
+	if t.AgentInstall != "" {
+		return ""
+	}
 	if w := m.windowByID(t.WindowID); w != nil {
 		if name := printableTitle(m.railTitleShown(w)); name != "" {
 			return name
@@ -225,8 +228,12 @@ func (m *OS) messageViewHints() []overlay.Hint {
 		{Key: "j/k", Label: "scroll"},
 		{Key: "y", Label: "copy"},
 	}
-	if m.msgView.entry.goesSomewhere() {
-		hints = append(hints, overlay.Hint{Key: "enter", Label: "go to source"})
+	if e := m.msgView.entry; e.goesSomewhere() {
+		label := "go to source"
+		if e.Target.AgentInstall != "" {
+			label = "install"
+		}
+		hints = append(hints, overlay.Hint{Key: "enter", Label: label})
 	}
 	return append(hints, overlay.Hint{Key: "esc", Label: "close"})
 }

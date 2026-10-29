@@ -10647,3 +10647,12 @@ Run on 2026-10-29 on Linux against the branch `feat/review-stage-hunk`.
 The frames `review-stage-hunk`, `review-stage-file` and `review-partly-staged`
 (text and PNG), and the cached diff
 after each step in `cached.txt`, are under `TUIOS_E2E_FRAMES`.
+
+## Install an integration from its notice
+
+`TestAgentsIntegrationNoticeOncePerRun` ends in a home where Claude Code runs with no integration. The toast must show `ctrl+b j` right after the state. A click on its text must say "Installed in ~/.claude/settings.json.", the file must hold the current hooks, `tuios integration status` must read them as current, and a second Claude Code pane must get no toast. Each control was built into its own binary. Run on 2026-10-29 on Linux.
+
+| Control: what was cut | Where it fails | Verdict |
+| --- | --- | --- |
+| `jumpToNotifTarget`: the `installFromNotice` call cut, so the notice goes nowhere | "the click on the toast installed nothing" | **caught** |
+| `mouse_click.go`: `TakeNotifCmd` not returned, so the install command is parked and never runs | "the click on the toast installed nothing" | **caught** |

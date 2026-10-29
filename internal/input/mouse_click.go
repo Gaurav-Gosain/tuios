@@ -179,7 +179,7 @@ func handleMouseClick(msg tea.MouseClickMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		// ahead of the dock items: its body jumps to the pane the message came
 		// from, its right-hand end dismisses.
 		if o.NotificationClick(X, Y) {
-			return o, nil
+			return o, o.TakeNotifCmd()
 		}
 		// The spotlight chip turns the beam off. It is the way out a person
 		// who does not know the key can see.

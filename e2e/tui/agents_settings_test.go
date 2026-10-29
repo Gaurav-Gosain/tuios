@@ -57,6 +57,9 @@ type agentsFixture struct {
 	command string
 	// aged marks the install as one the previous version wrote.
 	aged bool
+	// none leaves the integration out: Claude Code runs here, with nothing
+	// installed.
+	none bool
 }
 
 // agentsFixtureWith is agentsPageFixture with the install chosen.
@@ -95,6 +98,13 @@ func agentsFixtureWith(t *testing.T, o agentsFixture) (string, string) {
 	if err := os.MkdirAll(filepath.Join(home, ".claude"), 0o700); err != nil {
 		t.Fatal(err)
 	}
+	settings := filepath.Join(home, ".claude", "settings.json")
+	if o.none {
+		if out, err := tuiosCLI(t, base, "new", "agents", "--detach"); err != nil {
+			t.Fatalf("create the session: %v\n%s", err, out)
+		}
+		return base, settings
+	}
 	install := []string{"integration", "install", "claude-code"}
 	if o.command != "" {
 		install = append(install, "--command", o.command)
@@ -102,7 +112,6 @@ func agentsFixtureWith(t *testing.T, o agentsFixture) (string, string) {
 	if out, err := tuiosCLI(t, base, install...); err != nil {
 		t.Fatalf("install the integration: %v\n%s", err, out)
 	}
-	settings := filepath.Join(home, ".claude", "settings.json")
 	data, err := os.ReadFile(settings)
 	if err != nil {
 		t.Fatal(err)
@@ -262,7 +271,7 @@ func TestAgentsSettingsUpdatesAndUninstalls(t *testing.T) {
 	if err := term.SendKeys(tuitest.Enter); err != nil {
 		t.Fatal(err)
 	}
-	if err := term.WaitForText("Claude Code integration is updated in", uiTimeout); err != nil {
+	if err := term.WaitForText("Updated in ~/.claude/settings.json.", uiTimeout); err != nil {
 		t.Fatalf("the update said nothing: %v\n%s", err, term.Snapshot())
 	}
 	waitAgentsRow(t, term, "Claude Code", "the row does not say installed after the update", "installed")
@@ -355,7 +364,9 @@ const integrationNotice = "Claude Code integration is out of date."
 // TestAgentsIntegrationNoticeOncePerRun starts the stand-in claude in a pane
 // and waits for the toast that names the fix. It dismisses the toast, starts a
 // second claude pane, and watches for the toast for some seconds: it does not
-// come back. The palette entry then opens the tab the toast names.
+// come back. The palette entry then opens the Agents tab. Last, in a home with
+// no integration, a click on the toast installs it: the file holds the hooks,
+// and the toast does not come back for a second pane.
 func TestAgentsIntegrationNoticeOncePerRun(t *testing.T) {
 	base, _ := agentsPageFixture(t, false)
 	term := attachIn(t, base, "agents", startOpts{cols: 120, rows: 40, shippedLooks: true})
@@ -367,7 +378,7 @@ func TestAgentsIntegrationNoticeOncePerRun(t *testing.T) {
 	if err := term.WaitForText(integrationNotice, uiTimeout); err != nil {
 		t.Fatalf("no toast for the out of date integration: %v\n%s", err, term.Snapshot())
 	}
-	if !strings.Contains(term.Screen().Text(), "Open Settings, Agents") {
+	if !strings.Contains(term.Screen().Text(), integrationNotice+" ctrl+b j updates it") {
 		// The dock may cut a long message. The full text is in the log.
 		t.Logf("the toast is cut on screen:\n%s", term.Snapshot())
 	}
@@ -448,6 +459,80 @@ func TestAgentsIntegrationNoticeOncePerRun(t *testing.T) {
 		t.Fatal(err)
 	}
 	waitAgentsRow(t, term, "Claude Code", "the palette entry did not open the tab", "out of date")
+
+	installFromTheNotice(t)
+}
+
+// noticeNotInstalled is the toast for a Claude Code with no integration.
+const noticeNotInstalled = "Claude Code integration is not installed."
+
+// installFromTheNotice is the last part of
+// TestAgentsIntegrationNoticeOncePerRun: a home where Claude Code runs with no
+// integration. The toast names the key and the file. A click on its text
+// installs the integration, as the Agents tab does, and the result names the
+// file. The file on disk is read for the hooks and the CLI's status for the
+// version, so a toast that only said "installed" cannot pass. A second claude
+// pane then gets no toast, because nothing is left to install.
+func installFromTheNotice(t *testing.T) {
+	base, settings := agentsFixtureWith(t, agentsFixture{none: true})
+	if st := claudeIntegrationVersion(t, base); st.Installed {
+		t.Fatalf("the fixture has an integration: %+v", st)
+	}
+	term := attachIn(t, base, "agents", startOpts{cols: 120, rows: 40, shippedLooks: true})
+	if out, err := tuiosCLI(t, base, "send-text", "-s", "agents", "claude\n"); err != nil {
+		t.Fatalf("start the stand-in: %v\n%s", err, out)
+	}
+	waitClaudePanes(t, base, 1)
+	if err := term.WaitForText(noticeNotInstalled, uiTimeout); err != nil {
+		t.Fatalf("no toast for the missing integration: %v\n%s", err, term.Snapshot())
+	}
+	// The dock may cut the verb and the file, never the key: it comes right
+	// after the state.
+	if s := term.Screen(); !strings.Contains(s.Line(findRow(s, noticeNotInstalled)), noticeNotInstalled+" ctrl+b j") {
+		t.Fatalf("ASSERTION: the toast does not name the key that installs\n%s", term.Snapshot())
+	}
+	dir := artifactDir(t)
+	railShot(t, term, "agents-notice-install")
+
+	// A click on the text of the toast, which the dock may cut.
+	s := term.Screen()
+	row := findRow(s, noticeNotInstalled)
+	mouseClick(t, term, strings.Index(s.Line(row), noticeNotInstalled)+2, row, tuitest.MouseLeft, 0)
+	if err := term.WaitForText("Installed in ~/.claude/settings.json.", uiTimeout); err != nil {
+		t.Fatalf("ASSERTION: the click on the toast installed nothing: %v\n%s", err, term.Snapshot())
+	}
+	railShot(t, term, "agents-notice-installed")
+	data, err := os.ReadFile(settings)
+	if err != nil {
+		t.Fatalf("ASSERTION: the install wrote no %s: %v", settings, err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "settings-after-install.json"), data, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	st := claudeIntegrationVersion(t, base)
+	if !strings.Contains(string(data), "agent-hook") || !strings.Contains(string(data), "--integration "+itoa(st.WantVersion)) {
+		t.Fatalf("ASSERTION: the file does not hold the v%d hooks:\n%s", st.WantVersion, data)
+	}
+	if !st.Installed || !st.Current || st.Path != settings {
+		t.Fatalf("ASSERTION: the CLI does not read the installed integration as current: %+v", st)
+	}
+
+	// A second Claude Code pane: nothing is left to install.
+	if out, err := tuiosCLI(t, base, "new-window", "-s", "agents"); err != nil {
+		t.Fatalf("new window: %v\n%s", err, out)
+	}
+	if out, err := tuiosCLI(t, base, "send-text", "-s", "agents", "claude\n"); err != nil {
+		t.Fatalf("start the second stand-in: %v\n%s", err, out)
+	}
+	waitClaudePanes(t, base, 2)
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		if strings.Contains(term.Screen().Text(), noticeNotInstalled) {
+			t.Fatalf("ASSERTION: the toast came back after the install\n%s", term.Snapshot())
+		}
+		time.Sleep(200 * time.Millisecond)
+	}
+	alive(t, term, "after the install from the toast")
 }
 
 // TestAgentsSettingsHiddenWithAgentsOff: with [agents] enabled = false the
@@ -568,7 +653,7 @@ func TestAgentsSettingsKeepsTheCommandPath(t *testing.T) {
 		if err := term.SendKeys(tuitest.Enter); err != nil {
 			t.Fatal(err)
 		}
-		if err := term.WaitForText("Claude Code integration is updated in", uiTimeout); err != nil {
+		if err := term.WaitForText("Updated in ~/.claude/settings.json.", uiTimeout); err != nil {
 			t.Fatalf("the update said nothing: %v\n%s", err, term.Snapshot())
 		}
 		data, err := os.ReadFile(settings)

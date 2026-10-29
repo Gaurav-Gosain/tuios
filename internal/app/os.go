@@ -1722,6 +1722,9 @@ type OS struct {
 	// sidebarPendingCmd is the command the last rail gesture produced, parked
 	// because SidebarClick answers a bool. Drained by the click handler.
 	sidebarPendingCmd tea.Cmd
+	// notifPendingCmd is the command activating a message produced, parked
+	// because the activation paths answer a bool. See TakeNotifCmd.
+	notifPendingCmd tea.Cmd
 	// SidebarPeek is the session the terminals section is previewing while the
 	// pointer or the rail cursor rests on its row. Gesture-scoped runtime state
 	// like the marquee: never persisted, cleared by the same motion stream that
@@ -2153,6 +2156,10 @@ type NotifTarget struct {
 	// DaemonRestart marks the version notice: activating it opens the
 	// restart dialog. See warnOnBuildMismatch.
 	DaemonRestart bool
+	// AgentInstall names the harness of an integration notice: activating
+	// the message installs or updates that integration, the way the Agents
+	// tab's action row does. See installFromNotice.
+	AgentInstall string
 	// ClipboardVersion counts the changes to that ask's text. It is part of
 	// the target, so a message drawn with one text is not the same message as
 	// one holding another. See clickVisibleNotification.

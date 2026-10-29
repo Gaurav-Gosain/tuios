@@ -412,7 +412,7 @@ func handlePrefixJumpNotif(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	if !o.JumpToNotification() {
 		o.ShowNotification("No message to jump to", "info", o.Settings.NotificationDuration)
 	}
-	return o, nil
+	return o, o.TakeNotifCmd()
 }
 
 // handlePrefixLastMessage opens the newest message the dock showed in the

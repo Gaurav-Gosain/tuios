@@ -4,6 +4,8 @@ import (
 	"slices"
 	"time"
 
+	tea "charm.land/bubbletea/v2"
+
 	"github.com/Gaurav-Gosain/tuios/internal/federation"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 )
@@ -79,6 +81,11 @@ func (m *OS) jumpToNotifTarget(t NotifTarget) {
 	// The version notice is answered with the restart dialog.
 	if t.DaemonRestart {
 		m.OpenDaemonRestart()
+		return
+	}
+	// An integration notice is answered with the install.
+	if t.AgentInstall != "" {
+		m.installFromNotice(t.AgentInstall)
 		return
 	}
 	// A message about mail lands on the thread, where the reply is, rather than
@@ -188,7 +195,7 @@ func (m *OS) clickVisibleNotification() {
 		return
 	}
 	m.Notifications = m.Notifications[:n-1]
-	if m.notifHit.Cut && !isClipboardAsk(visible.Target) && !isRestartNotice(visible.Target) {
+	if m.notifHit.Cut && !isClipboardAsk(visible.Target) && !isRestartNotice(visible.Target) && !isInstallNotice(visible.Target) {
 		m.notifHoverEnd()
 		m.openMessageView(m.notificationEntry(visible))
 		return
@@ -205,6 +212,12 @@ func isClipboardAsk(t *NotifTarget) bool { return t != nil && t.ClipboardAsk != 
 // it opens the restart dialog even when the dock cut its text: the dialog
 // says it all again.
 func isRestartNotice(t *NotifTarget) bool { return t != nil && t.DaemonRestart }
+
+// isInstallNotice reports whether a target is an integration notice. A click
+// on it installs even when the dock cut its text, so the mouse alone can take
+// it: the key is in the part the dock draws first, hovering shows the file it
+// names, and the result names the file again.
+func isInstallNotice(t *NotifTarget) bool { return t != nil && t.AgentInstall != "" }
 
 // sameDrawnNotification reports whether a is the message b was drawn from,
 // with the same text and the same target.
@@ -223,4 +236,12 @@ func (m *OS) drawnCopy(n Notification) Notification {
 		n.Target = &t
 	}
 	return n
+}
+
+// TakeNotifCmd returns and clears the command the last activated message
+// produced. The key, the click and the message view drain it on their way out.
+func (m *OS) TakeNotifCmd() tea.Cmd {
+	cmd := m.notifPendingCmd
+	m.notifPendingCmd = nil
+	return cmd
 }

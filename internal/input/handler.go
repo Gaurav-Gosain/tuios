@@ -947,7 +947,7 @@ func handleMessageViewKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		return o, o.CopyMessageView()
 	case "enter":
 		o.MessageViewActivate()
-		return o, nil
+		return o, o.TakeNotifCmd()
 	case "ctrl+u":
 		o.MessageViewPage(-1)
 		return o, nil
