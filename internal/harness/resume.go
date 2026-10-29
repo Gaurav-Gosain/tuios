@@ -3,6 +3,7 @@ package harness
 import (
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 )
 
@@ -29,6 +30,19 @@ type Resume struct {
 	Argv []string `toml:"argv"`
 	// Source is where the command came from, in words.
 	Source string `toml:"source"`
+
+	// KeepFlags and KeepOptions are the flags of the command line the person
+	// started the harness with that a resume carries over: a flag on its own
+	// (--dangerously-skip-permissions), and an option that takes one value
+	// (--model, --permission-mode). Everything else on that command line is
+	// left behind, a prompt, a one-shot flag such as --print and the
+	// harness's own resume flag included. An allow list rather than a deny
+	// list, because a flag tuios does not know may start a second
+	// conversation or run a prompt again.
+	KeepFlags   []string `toml:"keep_flags"`
+	KeepOptions []string `toml:"keep_options"`
+	// KeepSource is where the flag names came from, in words.
+	KeepSource string `toml:"keep_source"`
 }
 
 // ResumePlaceholder is the token part a resume command's session id replaces.
@@ -37,6 +51,13 @@ const ResumePlaceholder = "{session_id}"
 // maxResumeTokens bounds a resume command. Every real one is two or three
 // tokens; the bound only stops a manifest from typing a paragraph.
 const maxResumeTokens = 16
+
+// maxKeptTokens bounds the flags a resume carries over, values included, and
+// maxKeepNames the names a manifest may list.
+const (
+	maxKeptTokens = 16
+	maxKeepNames  = 32
+)
 
 // MaxResumeSessionID bounds an id a resume command takes. It matches the limit
 // set-agent-state and set-agent-session put on a reported id.
@@ -109,7 +130,82 @@ func (r *Resume) normalize() error {
 	if !holds {
 		return errors.New("argv does not hold " + ResumePlaceholder + ", so it would not name the conversation")
 	}
+	r.KeepSource = strings.TrimSpace(r.KeepSource)
+	if n := len(r.KeepFlags) + len(r.KeepOptions); n > maxKeepNames {
+		return fmt.Errorf("keep_flags and keep_options name %d flags, limit %d", n, maxKeepNames)
+	}
+	seen := map[string]bool{}
+	for _, name := range slices.Concat(r.KeepFlags, r.KeepOptions) {
+		if err := r.checkKeepName(name, seen); err != nil {
+			return err
+		}
+	}
 	return nil
+}
+
+// checkKeepName refuses a kept flag name that is not one plain flag, that is
+// listed twice, or that the resume command itself spells: a kept --resume
+// would name a second conversation.
+func (r *Resume) checkKeepName(name string, seen map[string]bool) error {
+	if len(name) < 2 || name[0] != '-' || name == "--" || strings.Contains(name, "=") || !safeResumeToken(name) {
+		return fmt.Errorf("kept flag %q: a flag is - or -- and then letters, digits and _ . / : + -", name)
+	}
+	if seen[name] {
+		return fmt.Errorf("kept flag %q is listed twice", name)
+	}
+	seen[name] = true
+	for _, tok := range r.Argv {
+		if flag, _, _ := strings.Cut(tok, "="); flag == name {
+			return fmt.Errorf("kept flag %q is the resume command's own flag", name)
+		}
+	}
+	return nil
+}
+
+// keptValue reports whether v can follow a kept option: one token every shell
+// reads as itself, not starting with "-", so it cannot be read as a flag.
+func keptValue(v string) bool {
+	return v != "" && len(v) <= MaxResumeSessionID && v[0] != '-' && safeResumeToken(v)
+}
+
+// keep returns the flags of argv this block carries over, in order, each
+// option as two tokens (--model opus, whether it was written --model=opus or
+// not). An option whose value a shell would not read as itself is left out.
+// Reading stops at "--", after which everything is an argument. nil when
+// nothing is kept.
+func (r *Resume) keep(argv []string) []string {
+	if len(r.KeepFlags) == 0 && len(r.KeepOptions) == 0 {
+		return nil
+	}
+	var out []string
+	for i := 0; i < len(argv) && len(out) < maxKeptTokens; i++ {
+		tok := argv[i]
+		if tok == "--" {
+			break
+		}
+		if len(tok) < 2 || tok[0] != '-' {
+			continue
+		}
+		if slices.Contains(r.KeepFlags, tok) {
+			out = append(out, tok)
+			continue
+		}
+		name, value, inline := strings.Cut(tok, "=")
+		if !slices.Contains(r.KeepOptions, name) {
+			continue
+		}
+		if !inline {
+			if i+1 >= len(argv) {
+				break
+			}
+			i++
+			value = argv[i]
+		}
+		if keptValue(value) && len(out)+2 <= maxKeptTokens {
+			out = append(out, name, value)
+		}
+	}
+	return out
 }
 
 // ErrNoResume says a harness has no [resume] block, or is not known.
@@ -124,10 +220,24 @@ func (r *Registry) CanResume(id string) bool {
 	return m != nil && len(m.Resume.Argv) > 0
 }
 
+// KeptFlags returns the flags of argv, the command line a process of harness
+// id was started with, that its manifest keeps across a resume. nil for a
+// harness that keeps none, or is not known.
+func (r *Registry) KeptFlags(id string, argv []string) []string {
+	m := r.Lookup(id)
+	if m == nil {
+		return nil
+	}
+	return m.Resume.keep(argv)
+}
+
 // ResumeArgv builds the command that reopens conversation sessionID of harness
-// id. It fails with ErrNoResume for a harness without a resume command and
-// with ErrBadResumeID for an id ValidResumeSessionID refuses.
-func (r *Registry) ResumeArgv(id, sessionID string) ([]string, error) {
+// id, followed by the kept flags the harness was started with (KeptFlags).
+// The flags are read through the manifest's allow list again, so a list that
+// changed since they were stored is the one that applies. It fails with
+// ErrNoResume for a harness without a resume command and with ErrBadResumeID
+// for an id ValidResumeSessionID refuses.
+func (r *Registry) ResumeArgv(id, sessionID string, flags []string) ([]string, error) {
 	m := r.Lookup(id)
 	if m == nil || len(m.Resume.Argv) == 0 {
 		return nil, ErrNoResume
@@ -135,11 +245,12 @@ func (r *Registry) ResumeArgv(id, sessionID string) ([]string, error) {
 	if !ValidResumeSessionID(sessionID) {
 		return nil, ErrBadResumeID
 	}
-	out := make([]string, len(m.Resume.Argv))
+	kept := m.Resume.keep(flags)
+	out := make([]string, len(m.Resume.Argv), len(m.Resume.Argv)+len(kept))
 	for i, tok := range m.Resume.Argv {
 		out[i] = strings.ReplaceAll(tok, ResumePlaceholder, sessionID)
 	}
-	return out, nil
+	return append(out, kept...), nil
 }
 
 // ResumeCommandLine is argv as it is typed into a shell. Every token passed

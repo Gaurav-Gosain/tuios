@@ -26,12 +26,20 @@ import (
 // The restart is restart-server, which has to name the agent in its plan
 // before it stops anything.
 //
+// One of the five is a fake Claude Code, a script named claude on PATH that
+// prints its arguments. It is started with --permission-mode plan --model
+// sonnet and with one-shot flags and a prompt. The resume command the restore
+// offers, and the command line the resumed process gets from y, must carry
+// the two kept flags and none of the rest.
+//
 // Negative control: with the restore's conversation ids not put back after
 // its state push (daemon_resurrect.go), the Inbox still lists the offer but
 // resume-agent finds no conversation on the pane, and the dry run fails.
 // With addResumable not called by list-windows, the plan names no agent.
 // With y not routed to InboxAgentsBulkResume while rows are marked
-// (inbox_input.go), y with two marks resumes one.
+// (inbox_input.go), y with two marks resumes one. With the kept flags not
+// noted by the detection poll (agent_detect.go), or not put back after the
+// restore's state push (daemon_resurrect.go), the Claude offer has no flags.
 func TestRestartOffersToResumeTheConversation(t *testing.T) {
 	base := t.TempDir()
 	killDaemon(t, base)
@@ -54,12 +62,43 @@ argv = ["echo", "resumed-{session_id}"]
 		t.Fatal(err)
 	}
 
+	// The fake Claude: started fresh it prints its arguments and stays, as
+	// an agent does; started on a conversation it prints them, then the line
+	// the echoers print, and exits. PATH holds it and the system only, so the
+	// resume never reaches a real claude.
+	bin := filepath.Join(base, "bin")
+	if err := os.MkdirAll(bin, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	fakeClaude := "#!/bin/sh\nprintf 'claude-argv:'; printf ' %s' \"$@\"; printf '\\n'\n" +
+		"if [ \"$1\" = --resume ]; then echo \"resumed-$2\"; exit 0; fi\nsleep 600\n"
+	if err := os.WriteFile(filepath.Join(bin, "claude"), []byte(fakeClaude), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", strings.Join([]string{bin, "/usr/bin", "/bin"}, string(os.PathListSeparator)))
+
 	// Five agents, each with its own conversation: two are picked with x and
 	// resumed with y, one is resumed alone with y, and * then y resumes the
-	// last two.
+	// last two. e2e-resume-c is the fake Claude.
+	const claudeSession = "e2e-resume-c"
 	convs := map[string]string{
-		"e2e-resume": "5f1c-9a3d", "e2e-resume-b": "b2c4-7e10", "e2e-resume-c": "c3d5-8f21",
+		"e2e-resume": "5f1c-9a3d", "e2e-resume-b": "b2c4-7e10", claudeSession: "c3d5-8f21",
 		"e2e-resume-d": "d4e6-9a32", "e2e-resume-e": "e5f7-0b43",
+	}
+	harnessOf := func(name string) string {
+		if name == claudeSession {
+			return "claude-code"
+		}
+		return "echoer"
+	}
+	// The command each offer types: the echo, or claude on the conversation
+	// with the two kept flags and nothing else from its command line.
+	claudeResume := "claude --resume " + convs[claudeSession] + " --permission-mode plan --model sonnet"
+	commandOf := func(name string) string {
+		if name == claudeSession {
+			return claudeResume
+		}
+		return "echo resumed-" + convs[name]
 	}
 	for name, conv := range convs {
 		if out, err := tuiosCLI(t, base, "new", name, "--detach"); err != nil {
@@ -67,9 +106,25 @@ argv = ["echo", "resumed-{session_id}"]
 		}
 		// The agent is live when the state is saved, as a hook reports it: a
 		// restore offers a resume only for an agent that was running then.
-		if out, err := tuiosCLI(t, base, "set-agent-state", "-s", name, "working", "--harness", "echoer", "--agent-session-id", conv); err != nil {
+		if out, err := tuiosCLI(t, base, "set-agent-state", "-s", name, "working", "--harness", harnessOf(name), "--agent-session-id", conv); err != nil {
 			t.Fatalf("record the conversation of %s: %v\n%s", name, err, out)
 		}
+	}
+	// The person starts Claude with the flags they want, a one-shot flag or
+	// two and a prompt. The detector reads its command line, and the resume
+	// the pane would type now keeps the flags the manifest lists.
+	mustCLI(t, base, "send-text", "-s", claudeSession, "claude --permission-mode plan --model sonnet -p --continue fix-the-bug\n")
+	waitCapture(t, base, claudeSession, "", "claude-argv: --permission-mode plan --model sonnet -p --continue fix-the-bug")
+	deadline := time.Now().Add(uiTimeout)
+	for {
+		out, err := tuiosCLI(t, base, "resume-agent", "-s", claudeSession, "--dry-run")
+		if err == nil && strings.TrimSpace(out) == claudeResume {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("ASSERTION: the running Claude's resume does not keep its flags: %v\n%s", err, out)
+		}
+		time.Sleep(100 * time.Millisecond)
 	}
 	// restart-server names the agent before it asks, from the daemon's own
 	// reading of the pane.
@@ -91,12 +146,12 @@ argv = ["echo", "resumed-{session_id}"]
 		waitForSessionInfo(t, base, name)
 	}
 
-	deadline := time.Now().Add(uiTimeout)
+	deadline = time.Now().Add(uiTimeout)
 	for {
 		out, _ := tuiosCLI(t, base, "list-attention")
 		all := strings.Contains(out, "Resume")
-		for _, conv := range convs {
-			all = all && strings.Contains(out, "echo resumed-"+conv)
+		for name := range convs {
+			all = all && strings.Contains(out, commandOf(name))
 		}
 		if all {
 			break
@@ -205,7 +260,7 @@ argv = ["echo", "resumed-{session_id}"]
 		if slices.Contains(left, name) {
 			continue
 		}
-		mustCLI(t, base, "set-agent-state", "-s", name, "working", "--harness", "echoer", "--agent-session-id", convs[name])
+		mustCLI(t, base, "set-agent-state", "-s", name, "working", "--harness", harnessOf(name), "--agent-session-id", convs[name])
 	}
 	stayed("2 working", "after the resumed agents reported in")
 	saveFrame(t, term, "resume-marked-done")
@@ -240,6 +295,14 @@ argv = ["echo", "resumed-{session_id}"]
 		t.Fatalf("resume every row: %v", err)
 	}
 	waitRan(5, "* then y")
+	// The Claude that y started got the two kept flags and nothing else: the
+	// line is matched whole, so a one-shot flag or the prompt fails it.
+	resumedArgv := "claude-argv: --resume " + convs[claudeSession] + " --permission-mode plan --model sonnet"
+	if out := mustCLI(t, base, "capture-pane", "-s", claudeSession); !slices.ContainsFunc(strings.Split(out, "\n"), func(l string) bool {
+		return strings.TrimSpace(l) == resumedArgv
+	}) {
+		t.Fatalf("ASSERTION: the resumed Claude did not get exactly its kept flags, want %q:\n%s", resumedArgv, out)
+	}
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
 		text := s.Text()
 		return strings.Contains(text, "New agent") && !strings.Contains(text, "echo resumed-") && !strings.Contains(text, " marked ")

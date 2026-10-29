@@ -10734,3 +10734,12 @@ Run on 2026-10-29 on Linux, each control in its own binary.
 | Control: what was cut | Where it fails | Verdict |
 | --- | --- | --- |
 | `holdLocked` in `deliverQueued` answers nothing held (`internal/session/agent_queue.go`) | "ASSERTION: the queued message was typed into the person's draft", with `sent: half a thoughtecho queued-after-draft-5c1e` on screen | **caught** |
+## Resume keeps the person's flags
+
+`TestRestartOffersToResumeTheConversation` now runs a fake Claude Code, a script named `claude` on PATH that prints its arguments, in one of the five panes. It is started with `--permission-mode plan --model sonnet -p --continue fix-the-bug`. Before the restart, `resume-agent --dry-run` must print `claude --resume <id> --permission-mode plan --model sonnet` exactly. After the restart, the Inbox offer must show that command, and the process `y` starts must print exactly `--resume <id> --permission-mode plan --model sonnet` as its arguments. Each control was built into its own binary. Run on 2026-10-30 on Linux.
+
+| Control: what was cut | Where it fails | Verdict |
+| --- | --- | --- |
+| `detectionPass` does not store the kept flags (agent_detect.go) | "the running Claude's resume does not keep its flags" | **caught** |
+| The restore does not put `AgentFlags` back after its state push (daemon_resurrect.go) | "the resumed Claude did not get exactly its kept flags": the Inbox offer still names them, and `y` types the command without them | **caught** |
+| No allow list: `KeptFlags` keeps every argument and `ResumeArgv` appends them all (resume.go) | "the running Claude's resume does not keep its flags": the command carries `-p --continue fix-the-bug` | **caught** |

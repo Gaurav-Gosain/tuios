@@ -46,6 +46,19 @@ func debugLog(format string, args ...any) {
 	}
 }
 
+// KeptFlags are the flags of an agent's command line that its manifest keeps
+// across a resume (harness.Resume.KeepFlags and KeepOptions), such as
+// --model opus, and the harness they were read from: a resume of any other
+// harness ignores them. The detector reads them on the poll that already
+// reads the agent's process, and replaces them each time it sees the harness
+// again, so an agent started with no kept flags clears them. A value is
+// replaced whole and never changed in place, since copies of a window share
+// it.
+type KeptFlags struct {
+	Harness string   `json:"harness"`
+	Flags   []string `json:"flags,omitempty"`
+}
+
 // WindowState represents the serializable state of a window.
 type WindowState struct {
 	ID           string `json:"id"`
@@ -202,6 +215,11 @@ type WindowState struct {
 	// AgentSessionID. Empty in state written before it existed, and a resume
 	// then falls back to AgentHarness.
 	AgentSessionHarness string `json:"agent_session_harness,omitempty"`
+	// AgentFlags are the flags the pane's agent was started with that its
+	// manifest keeps across a resume. Kept when the agent exits, like
+	// AgentSessionID. Daemon-owned. A pointer, because WindowState is copied
+	// by value all over the daemon and this is rarely set.
+	AgentFlags *KeptFlags `json:"agent_flags,omitempty"`
 	// AgentMeta is what the pane reported about its agent through
 	// set-agent-meta (model, context, cost, a summary), in the order the keys
 	// first arrived. Daemon-owned like AgentState, display only, and cleared

@@ -36,9 +36,11 @@ import (
 //     still unsafe then gets the ask item instead.
 //   - off: neither. The id stays on the window, so resume-agent still works.
 //
-// The command is built from the harness manifest's [resume] template and the
-// stored id, and from nothing else: no saved command line, prompt or
-// environment is replayed. The id is held to a character set every shell reads
+// The command is built from the harness manifest's [resume] template, the
+// stored id, and the flags of the agent's own command line that the
+// manifest's allow list keeps (AgentFlags, values held to the same character
+// set as the id), and from nothing else: no prompt, other flag or environment
+// is replayed. The id is held to a character set every shell reads
 // as one plain argument (harness.ValidResumeSessionID), so an id a pane
 // reported cannot turn into a second command. And the command is typed only
 // into a pane whose own shell holds the terminal's foreground, so it never
@@ -97,6 +99,15 @@ func resumeHarnessOf(w WindowState) string {
 	return w.AgentHarness
 }
 
+// resumeFlagsOf is the kept flags of a window's agent when they were read from
+// harness hid, the one being resumed, and nil otherwise.
+func resumeFlagsOf(w WindowState, hid string) []string {
+	if w.AgentFlags == nil || w.AgentFlags.Harness != hid {
+		return nil
+	}
+	return w.AgentFlags.Flags
+}
+
 // agentWasLive reports whether a saved window had an agent in it when the state
 // was written: an agent state or a harness attribution. Both are cleared when
 // the agent leaves the pane (see scanAgentDetection) and the conversation id
@@ -122,7 +133,7 @@ func (d *Daemon) resumeOfferFor(sessionName string, w WindowState) (resumeOffer,
 		return resumeOffer{}, false
 	}
 	hid := resumeHarnessOf(w)
-	argv, err := d.agentMatcher.registry.ResumeArgv(hid, w.AgentSessionID)
+	argv, err := d.agentMatcher.registry.ResumeArgv(hid, w.AgentSessionID, resumeFlagsOf(w, hid))
 	if err != nil {
 		return resumeOffer{}, false
 	}
@@ -282,7 +293,7 @@ func (d *Daemon) planResume(sess *Session, target string) (resumePlan, error) {
 		return resumePlan{window: w}, errResumeNothing
 	}
 	hid := resumeHarnessOf(w)
-	argv, err := d.agentMatcher.registry.ResumeArgv(hid, w.AgentSessionID)
+	argv, err := d.agentMatcher.registry.ResumeArgv(hid, w.AgentSessionID, resumeFlagsOf(w, hid))
 	if err != nil {
 		return resumePlan{window: w, harness: hid, sessionID: w.AgentSessionID}, err
 	}

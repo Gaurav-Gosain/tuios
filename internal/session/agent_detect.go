@@ -146,6 +146,9 @@ type detection struct {
 	// visited lists the group members that were read, in the order they were
 	// read, whether or not one of them matched.
 	visited []foregroundInfo
+	// flags are the flags of proc's command line that harness's manifest
+	// keeps across a resume. Only identifyKept reads them.
+	flags []string
 }
 
 // identifyDetail names the harness a pane's foreground process is running,
@@ -173,6 +176,19 @@ func (m agentMatcher) identifyDetail(info foregroundInfo) (detection, bool) {
 		return hinted, true
 	}
 	return d, false
+}
+
+// identifyKept is identifyDetail plus the flags the matched process was
+// started with that its manifest keeps across a resume. Only the detection
+// poll calls it, which reads the process anyway; the path that runs on a
+// pane's output does not pay for it. A process named by the TUIOS_AGENT hint
+// is a wrapper, so its command line is not the harness's and is not read.
+func (m agentMatcher) identifyKept(info foregroundInfo) (detection, bool) {
+	d, ok := m.identifyDetail(info)
+	if ok && d.tier == identityManifest && m.registry != nil {
+		d.flags = m.registry.KeptFlags(d.harness, d.proc.argv)
+	}
+	return d, ok
 }
 
 // matchHint attributes a pane to the harness its foreground process's
@@ -760,6 +776,17 @@ func (s *Session) detectionPass(st *SessionState, readings map[string]detectRead
 		}
 		det := r.det
 		detected := running && r.isAgent
+		// The kept flags ride the same poll: the command line was read to
+		// find the agent. They are noted whoever owns the claim, since a
+		// hooked harness reports its own state and this is still its
+		// process, and they change only when the harness or its flags do.
+		if detected && det.tier == identityManifest && det.harness != "" &&
+			(w.AgentFlags == nil || w.AgentFlags.Harness != det.harness || !slices.Equal(w.AgentFlags.Flags, det.flags)) {
+			if write {
+				w.AgentFlags = &KeptFlags{Harness: det.harness, Flags: det.flags}
+			}
+			out.labels++
+		}
 		// A pane back at its shell has no harness left to protect, so the
 		// shared-server guard forgets its conversations. The stored
 		// AgentSessionID stays, for a later resume. A guard armed after the

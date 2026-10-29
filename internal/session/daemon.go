@@ -1156,7 +1156,7 @@ func (d *Daemon) onSessionCreated(s *Session) {
 				// comes from a fresh look: the foreground detector, then the
 				// screen tier.
 				if d.agentDetectInterval > 0 {
-					s.scanAgentDetection(d.foregroundResolver(s), d.agentMatcher.identifyDetail, nil)
+					s.scanAgentDetection(d.foregroundResolver(s), d.agentMatcher.identifyKept, nil)
 				}
 				if reg := d.agentMatcher.registry; reg != nil {
 					s.scanPaneForAgent(ev.PTYID, reg)
@@ -2532,7 +2532,7 @@ func (d *Daemon) agentDetectScan() bool {
 			pty := sess.GetPTY(ptyID)
 			return pty == nil || pty.detectScanDue(now, quietTicks)
 		}
-		sess.scanAgentDetection(d.foregroundResolver(sess), d.agentMatcher.identifyDetail, due)
+		sess.scanAgentDetection(d.foregroundResolver(sess), d.agentMatcher.identifyKept, due)
 		// The transcript joins ride this tick rather than one of their
 		// own. It runs only for a pane already known to be running a
 		// harness that has a transcript and that has no join yet, so a

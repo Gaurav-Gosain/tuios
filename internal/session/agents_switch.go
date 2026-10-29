@@ -270,7 +270,7 @@ func (d *Daemon) rescanAgents() {
 		if d.agentsOff.Load() {
 			return
 		}
-		sess.scanAgentDetection(d.foregroundResolver(sess), d.agentMatcher.identifyDetail, nil)
+		sess.scanAgentDetection(d.foregroundResolver(sess), d.agentMatcher.identifyKept, nil)
 		if reg != nil {
 			for _, w := range sess.GetState().Windows {
 				if w.PTYID != "" {

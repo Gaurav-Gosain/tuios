@@ -253,6 +253,7 @@ func (d *Daemon) restoreSessionOffers(state *SessionState) (*Session, []resumeOf
 			// would name one this machine does not have.
 			w.AgentSessionID = ""
 			w.AgentSessionHarness = ""
+			w.AgentFlags = nil
 		}
 
 		// The window as it was saved, for the resume offer, which asks whether
@@ -404,6 +405,7 @@ func (d *Daemon) restoreSessionOffers(state *SessionState) (*Session, []resumeOf
 				if saved, ok := ids[st.Windows[i].ID]; ok {
 					st.Windows[i].AgentSessionID = saved.AgentSessionID
 					st.Windows[i].AgentSessionHarness = saved.AgentSessionHarness
+					st.Windows[i].AgentFlags = saved.AgentFlags
 				}
 			}
 			return nil

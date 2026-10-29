@@ -240,3 +240,10 @@ images_source   = "a paste that is one image path attaches it (chat_composer.rs)
 [resume]
 argv   = ["codex", "resume", "{session_id}"]
 source = "codex resume <SESSION_ID>; herdr src/agent_resume.rs"
+# codex resume takes the same options as codex itself: ResumeCommand flattens
+# TuiCli in codex-rs/cli/src/main.rs. The names are from SharedCliOptions in
+# codex-rs/utils/cli/src/shared_options.rs and TuiCli in
+# codex-rs/tui/src/cli.rs. In Codex -p is --profile, not a one-shot print.
+keep_options = ["--model", "-m", "--profile", "-p", "--sandbox", "-s", "--ask-for-approval", "-a", "--local-provider"]
+keep_flags   = ["--dangerously-bypass-approvals-and-sandbox", "--yolo", "--approve-for-me", "--oss", "--search"]
+keep_source  = "openai/codex at b5c5d46: shared_options.rs, tui/src/cli.rs, cli/src/main.rs"

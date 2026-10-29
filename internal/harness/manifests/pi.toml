@@ -79,3 +79,7 @@ glob   = "*/*.jsonl"
 [resume]
 argv   = ["pi", "--session", "{session_id}"]
 source = "pi --help: --session <path|id> opens by file path, exact ID, or partial ID"
+# From pi --help (pi 0.73.1). -p/--print, messages, -c/--continue and
+# -r/--resume are left behind. pi's --mode is its output mode, so it stays too.
+keep_options = ["--provider", "--model", "--thinking"]
+keep_source  = "pi --help, pi 0.73.1"

@@ -3777,6 +3777,42 @@ nothing from the old command line, its prompt or its environment is replayed.
 A pane that ran on another machine comes back on this one without its id,
 since the conversation is on that machine.
 
+#### Kept flags
+
+A resumed agent keeps the flags you started it with, when its manifest lists
+them. Start Claude Code with `claude --permission-mode plan --model opus`, and
+the resume command is `claude --resume <id> --permission-mode plan --model
+opus`. A prompt, a one-shot flag such as `-p` and the harness's own resume
+flag are never kept.
+
+tuios reads the flags from the agent's command line on the detection poll
+that already reads that process. It does this on Linux and macOS. On another
+platform a resume has no kept flags. A value that is not one plain shell
+token, such as `opus[1m]`, is left out with its flag. Values have the same
+character set as the id.
+
+| Harness | Kept options (take a value) | Kept flags | Source |
+| --- | --- | --- | --- |
+| Claude Code | `--model`, `--permission-mode`, `--effort`, `--agent`, `--fallback-model` | `--dangerously-skip-permissions`, `--allow-dangerously-skip-permissions`, `--chrome`, `--no-chrome`, `--ide` | `claude --help`, 2.1.312 |
+| Codex | `--model`/`-m`, `--profile`/`-p`, `--sandbox`/`-s`, `--ask-for-approval`/`-a`, `--local-provider` | `--dangerously-bypass-approvals-and-sandbox`, `--yolo`, `--approve-for-me`, `--oss`, `--search` | openai/codex source: `codex resume` takes the options of `codex` |
+| Copilot | `--model`, `--reasoning-effort`, `--agent`, `--mode` | `--allow-all-tools`, `--allow-all-paths`, `--allow-all-urls`, `--allow-all`, `--yolo`, `--autopilot`, `--plan`, `--experimental` | `copilot --help`, 1.0.98 |
+| opencode | | `--auto` | `opencode --help`, 2.2.0 |
+| pi | `--provider`, `--model`, `--thinking` | | `pi --help`, 0.73.1 |
+
+Every other harness keeps no flags. In Codex `-p` is `--profile`, so it is
+kept there. Add a list to your own manifest:
+
+```toml
+[resume]
+argv         = ["myagent", "--resume", "{session_id}"]
+keep_options = ["--model"]
+keep_flags   = ["--yolo"]
+keep_source  = "myagent --help"
+```
+
+A kept name is `-` or `--` and then letters, digits and `_ . / : + -`. A
+manifest that lists its own resume flag fails to load.
+
 ## Harness integrations
 
 A harness with a hooks system reports its own state, which outranks everything

@@ -26,7 +26,7 @@ func TestResumeArgvBuildsTheCommand(t *testing.T) {
 		{"pi", []string{"pi", "--session", "3f2a-9c"}},
 		{"qoder", []string{"qodercli", "--resume", "3f2a-9c"}},
 	} {
-		got, err := r.ResumeArgv(tc.harness, "3f2a-9c")
+		got, err := r.ResumeArgv(tc.harness, "3f2a-9c", nil)
 		if err != nil || !slices.Equal(got, tc.want) {
 			t.Errorf("%s: ResumeArgv = %q, %v; want %q", tc.harness, got, err, tc.want)
 		}
@@ -37,10 +37,10 @@ func TestResumeArgvBuildsTheCommand(t *testing.T) {
 	if r.CanResume("aider") {
 		t.Error("aider has no resume command and CanResume says it does")
 	}
-	if _, err := r.ResumeArgv("aider", "x"); !errors.Is(err, ErrNoResume) {
+	if _, err := r.ResumeArgv("aider", "x", nil); !errors.Is(err, ErrNoResume) {
 		t.Errorf("a harness without [resume] built a command: %v", err)
 	}
-	if _, err := r.ResumeArgv("no-such-harness", "x"); !errors.Is(err, ErrNoResume) {
+	if _, err := r.ResumeArgv("no-such-harness", "x", nil); !errors.Is(err, ErrNoResume) {
 		t.Errorf("an unknown harness built a command: %v", err)
 	}
 }
@@ -77,7 +77,7 @@ func TestResumeRefusesAnIdAShellWouldRead(t *testing.T) {
 		if ValidResumeSessionID(id) {
 			t.Errorf("ValidResumeSessionID(%q) = true", id)
 		}
-		if argv, err := r.ResumeArgv("claude-code", id); !errors.Is(err, ErrBadResumeID) {
+		if argv, err := r.ResumeArgv("claude-code", id, nil); !errors.Is(err, ErrBadResumeID) {
 			t.Errorf("ResumeArgv(claude-code, %q) = %q, %v; want ErrBadResumeID", id, argv, err)
 		}
 	}
@@ -120,6 +120,26 @@ argv = ["xagent --resume", "{session_id}"]`, "token 0"},
 argv = ["xagent", "", "{session_id}"]`, "token 1"},
 		{"another placeholder", `[resume]
 argv = ["xagent", "{cwd}", "{session_id}"]`, "token 1"},
+		{"kept flags", `[resume]
+argv = ["xagent", "--resume={session_id}"]
+keep_flags = ["--yolo"]
+keep_options = ["--model", "-m"]`, ""},
+		{"kept resume flag", `[resume]
+argv = ["xagent", "--resume={session_id}"]
+keep_options = ["--resume"]`, "own flag"},
+		{"kept flag with a value", `[resume]
+argv = ["xagent", "--resume", "{session_id}"]
+keep_options = ["--model=opus"]`, "--model=opus"},
+		{"kept flag is not a flag", `[resume]
+argv = ["xagent", "--resume", "{session_id}"]
+keep_flags = ["model"]`, "model"},
+		{"kept flag with a metacharacter", `[resume]
+argv = ["xagent", "--resume", "{session_id}"]
+keep_flags = ["--a;b"]`, "--a;b"},
+		{"kept flag twice", `[resume]
+argv = ["xagent", "--resume", "{session_id}"]
+keep_flags = ["--yolo"]
+keep_options = ["--yolo"]`, "twice"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			_, err := parseManifest(tc.name+".toml", []byte(head+tc.body))
@@ -130,5 +150,35 @@ argv = ["xagent", "{cwd}", "{session_id}"]`, "token 1"},
 				t.Fatalf("parse error = %v, want one naming %q", err, tc.wantErr)
 			}
 		})
+	}
+}
+
+// TestResumeKeepsOnlyListedFlags is the security half of kept flags: a value
+// from the agent's command line is typed into a shell with the resume command,
+// so a value a shell would read as anything but one plain argument, or as a
+// flag, is never kept, and only the flags the manifest lists are.
+func TestResumeKeepsOnlyListedFlags(t *testing.T) {
+	r, _ := Load()
+	started := []string{
+		"/usr/bin/node", "/opt/claude/cli.js",
+		"--permission-mode", "plan", "--model=opus", "-p", "--print", "--continue",
+		"--resume", "old-id", "--dangerously-skip-permissions", "--effort", "--yolo",
+		"--agent", "a;rm", "--fallback-model", "$(id)", "fix the bug",
+		"--", "--model", "sonnet",
+	}
+	want := []string{"--permission-mode", "plan", "--model", "opus", "--dangerously-skip-permissions"}
+	if got := r.KeptFlags("claude-code", started); !slices.Equal(got, want) {
+		t.Fatalf("KeptFlags = %q, want %q", got, want)
+	}
+	argv, err := r.ResumeArgv("claude-code", "3f2a-9c", started)
+	if err != nil || !slices.Equal(argv, append([]string{"claude", "--resume", "3f2a-9c"}, want...)) {
+		t.Fatalf("ResumeArgv = %q, %v", argv, err)
+	}
+	// The same flags under another harness's list keep only what it names.
+	if got := r.KeptFlags("pi", started); !slices.Equal(got, []string{"--model", "opus"}) {
+		t.Fatalf("pi KeptFlags = %q", got)
+	}
+	if got := r.KeptFlags("aider", started); got != nil {
+		t.Fatalf("a harness with no list kept %q", got)
 	}
 }

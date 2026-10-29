@@ -253,7 +253,7 @@ func resumableAgents(sessionName string, live map[string]string) []syncAgent {
 			continue
 		}
 		h := cmp.Or(w.AgentSessionHarness, w.AgentHarness)
-		if _, err := reg.ResumeArgv(h, w.AgentSessionID); err != nil {
+		if _, err := reg.ResumeArgv(h, w.AgentSessionID, nil); err != nil {
 			continue
 		}
 		out = append(out, syncAgent{Window: name, Harness: h})

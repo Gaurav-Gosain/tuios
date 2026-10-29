@@ -85,3 +85,7 @@ images_source   = "measured on opencode 1.19.3: a path pasted on its own became 
 [resume]
 argv   = ["opencode", "--session", "{session_id}"]
 source = "opencode --help: -s, --session continues a session by id; herdr src/agent_resume.rs"
+# From opencode --help (opencode 2.2.0). --prompt, -c/--continue and
+# -s/--session are left behind.
+keep_flags  = ["--auto"]
+keep_source = "opencode --help, opencode 2.2.0"
