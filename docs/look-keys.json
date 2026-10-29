@@ -853,22 +853,28 @@
     {
       "path": "dock.tabs.active_bg",
       "type": "string",
-      "description": "Background colour of the flat tab of the current workspace",
+      "description": "Background colour of the tab of the current workspace",
       "default": "",
       "color": true
     },
     {
       "path": "dock.tabs.active_bold",
       "type": "bool",
-      "description": "Draw the flat tab of the current workspace in bold",
+      "description": "Draw the flat tab of the current workspace in bold. A pill is always bold.",
       "default": "false"
     },
     {
       "path": "dock.tabs.active_fg",
       "type": "string",
-      "description": "Text colour of the flat tab of the current workspace",
+      "description": "Text colour of the tab of the current workspace",
       "default": "",
       "color": true
+    },
+    {
+      "path": "dock.tabs.active_underline",
+      "type": "bool",
+      "description": "Underline the tab of the current workspace. Unset underlines a pill and not a flat tab.",
+      "default": ""
     },
     {
       "path": "dock.tabs.activity_marker",
@@ -892,22 +898,28 @@
       "max_bytes": 32
     },
     {
+      "path": "dock.tabs.caps",
+      "type": "bool",
+      "description": "Draw rounded ends on each flat tab, in the colour of the tab",
+      "default": "false"
+    },
+    {
       "path": "dock.tabs.inactive_bg",
       "type": "string",
-      "description": "Background colour of the flat tabs of the other workspaces",
+      "description": "Background colour of the tabs of the other workspaces",
       "default": "",
       "color": true
     },
     {
       "path": "dock.tabs.inactive_bold",
       "type": "bool",
-      "description": "Draw the flat tabs of the other workspaces in bold",
+      "description": "Draw the tabs of the other workspaces in bold",
       "default": "false"
     },
     {
       "path": "dock.tabs.inactive_fg",
       "type": "string",
-      "description": "Text colour of the flat tabs of the other workspaces",
+      "description": "Text colour of the tabs of the other workspaces",
       "default": "",
       "color": true
     },
