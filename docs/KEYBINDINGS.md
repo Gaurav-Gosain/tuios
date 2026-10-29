@@ -1979,7 +1979,9 @@ review_next_file = ["N"]
 review_prev_file = ["P"]
 ```
 
-The footer and the help overlay show the keys as they are bound.
+The footer and the help overlay show the keys as they are bound. tuios warns
+when a `review` key is one of the overlay's own keys, and
+`tuios keybinds doctor` lists it under REVIEW KEYS.
 
 The compare view lists the attempts of the fan, with what each changed
 against the fan's base and its last check:

@@ -474,3 +474,93 @@ func TestReviewFooterKeepsItsRightMargin(t *testing.T) {
 		t.Fatalf("the footer does not end in a cell of margin before the frame: %q\n%s", line, term.Snapshot())
 	}
 }
+
+// TestReviewFileKeysFollowTheirBindings binds review_next_file to n and
+// review_prev_file to q in [keybindings.review] (#585), opens a review of
+// two changed files, and moves between them with the bound keys. The doctor
+// names q, which the overlay reads itself, and nothing else.
+//
+// How this could pass wrongly, written down first:
+//   - The second file could already be shown. The test waits for the first
+//     file's diff and requires the second's to be absent before n.
+//   - The default } could still work next to n. } is pressed first, and the
+//     first file must still be shown half a second later.
+//   - n could move by a hunk, not a file. Each file has one hunk, so the
+//     next hunk is in the next file too. n is checked against the footer,
+//     which names the action bound to it.
+//   - q could close the overlay as before. The test requires q to bring the
+//     first file back with the overlay still open, and esc to close it.
+func TestReviewFileKeysFollowTheirBindings(t *testing.T) {
+	base, repo := fanFixture(t)
+	writeConfig(t, base, "[keybindings.review]\nreview_next_file = [\"n\"]\nreview_prev_file = [\"q\"]\n")
+
+	out, err := tuiosCLI(t, base, "keybinds", "doctor", "--json")
+	if err != nil {
+		t.Fatalf("keybinds doctor --json: %v\n%s", err, out)
+	}
+	var rep struct {
+		ReviewProblems []struct {
+			Action string `json:"action"`
+			Key    string `json:"key"`
+		} `json:"review_problems"`
+	}
+	if err := json.Unmarshal([]byte(out[strings.Index(out, "{"):]), &rep); err != nil {
+		t.Fatalf("keybinds doctor --json is not JSON: %v\n%s", err, out)
+	}
+	if p := rep.ReviewProblems; len(p) != 1 || p[0].Action != "review_prev_file" || p[0].Key != "q" {
+		t.Fatalf("the doctor reports %+v, want review_prev_file on q only", p)
+	}
+	text, err := tuiosCLI(t, base, "keybinds", "doctor")
+	if err != nil {
+		t.Fatalf("keybinds doctor: %v\n%s", err, text)
+	}
+	for _, want := range []string{"1 review key used twice", "REVIEW KEYS", "[review.review_prev_file]"} {
+		if !strings.Contains(text, want) {
+			t.Errorf("the text report does not show %q:\n%s", want, text)
+		}
+	}
+
+	session, path := reviewFanAt(t, base, repo, "rk")
+	if err := os.WriteFile(filepath.Join(path, "README"), []byte("hello\nretry three times\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(path, "ZETA"), []byte("zeta line\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	const first, second = "retry three times", "zeta line"
+	shows := func(want, not string) func(tuitest.Screen) bool {
+		return func(s tuitest.Screen) bool {
+			text := s.Text()
+			return strings.Contains(text, want) && !strings.Contains(text, not)
+		}
+	}
+
+	term := attachIn(t, base, session, startOpts{})
+	sendKeys(t, term, tuitest.Ctrl('b'), "v")
+	waitScreen(t, term, "the review never opened", "Review", "2 files", "README", "ZETA", "n next file")
+	if err := term.WaitFor(shows(first, second), uiTimeout); err != nil {
+		t.Fatalf("the review did not open on README alone: %v\n%s", err, term.Snapshot())
+	}
+
+	sendKeys(t, term, "}")
+	time.Sleep(500 * time.Millisecond)
+	if !shows(first, second)(term.Screen()) {
+		t.Fatalf("} moved to the next file after review_next_file was bound to n\n%s", term.Snapshot())
+	}
+	sendKeys(t, term, "n")
+	if err := term.WaitFor(shows(second, first), uiTimeout); err != nil {
+		t.Fatalf("n did not move to the next file: %v\n%s", err, term.Snapshot())
+	}
+	saveFrame(t, term, "review-rebound-next-file")
+	sendKeys(t, term, "q")
+	if err := term.WaitFor(shows(first, second), uiTimeout); err != nil {
+		t.Fatalf("q did not move back to the first file: %v\n%s", err, term.Snapshot())
+	}
+	sendKeys(t, term, tuitest.Esc)
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		return !strings.Contains(s.Text(), "n next file")
+	}, uiTimeout); err != nil {
+		t.Fatalf("esc did not close the review: %v\n%s", err, term.Snapshot())
+	}
+	alive(t, term, "after the rebound review keys")
+}

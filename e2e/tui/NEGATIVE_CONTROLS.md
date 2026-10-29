@@ -9090,6 +9090,26 @@ After review: under `hidden`, a frame that is a surface's only edge falls back t
 |---|---|---|---|---|
 | A 16-colour panel loses its only edge under hidden | `panelFrame(pal)` at the `Panel.Render` frame site | Calls `dialogFrame()` again | `/hidden-16` (`got tl=" " … want tl="╭" tr="╮" bl="╰" br="╯" top="─" side="│"`) | **caught** |
 
+## The review overlay's file keys follow their bindings (#585)
+
+`TestReviewFileKeysFollowTheirBindings` binds `review_next_file` to `n` and
+`review_prev_file` to `q` in `[keybindings.review]`. `keybinds doctor` must
+name `q` and nothing else, in its JSON and in its text. The test then opens
+a review of two changed files. `}` must leave the first file shown, `n` must
+show the second, `q` must bring the first back with the overlay still open,
+and `esc` must close it. Run on 2026-10-29 on Linux, based on origin/main at
+`feb2df438`.
+
+| Control | How | Tests that fail | Verdict |
+| --- | --- | --- | --- |
+| The released behaviour | build origin/main (`feb2df438`) | `TestReviewFileKeysFollowTheirBindings` ("the doctor reports [], want review_prev_file on q only") | **caught** |
+| The doctor never sees the clash | `ReviewProblems` returns nil | the same | **caught** |
+| `}` stays a fixed key | `handleReviewInput` runs `ReviewFile(1)` on `}` before the binding lookup | `TestReviewFileKeysFollowTheirBindings` ("} moved to the next file after review_next_file was bound to n") | **caught** |
+
+The positive half is the fixed build: the test passes. The reachability
+table in `internal/input` still presses every default review key in both
+modes.
+
 ## Review leaves out large untracked files
 
 `TestReviewDoesNotReadLargeUntrackedFiles` sets `max_untracked_mb = 1` and
