@@ -579,7 +579,7 @@ The new binary is run once first and must say it reads this daemon's state; a re
 
 Attached clients are dropped. A tuios client says the daemon was upgraded and that the programs are still running, and exits; run `tuios attach <session>` to continue. Copy-mode state and input mode start fresh, as for any attach. Each pane carries the last 1000 lines of its history; deeper history is not carried.
 
-The daemon refuses an upgrade while it holds something it cannot hand over: a pane hosted for another machine or one running on another machine, a running `tuios fan verify` check, or a popup capturing its output. It is refused on Windows, where `tuios kill-server` restarts the daemon and ends the programs.
+The daemon refuses an upgrade while it holds something it cannot hand over: a pane hosted for another machine or one running on another machine, a running `tuios fan verify` check, or a popup capturing its output. It is refused on Windows, where `tuios restart-server` moves the daemon to another build and stops every program in every pane.
 
 The command, its output and everything it keeps and ends are in [CLI_REFERENCE.md](CLI_REFERENCE.md#tuios-daemon-upgrade). The design is in [design/live-handoff.md](design/live-handoff.md).
 

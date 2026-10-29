@@ -111,8 +111,9 @@ the panes over, the daemon goes back to the binary it was running, with every
 pane, and the command says so.
 
 Live upgrades are experimental, macOS and Linux only, and need a daemon from
-a build that has them. 'tuios kill-server' restarts any daemon instead, which
-ends running programs. Use --server NAME to upgrade a named daemon.`,
+a build that has them. 'tuios restart-server' moves any daemon to the newest
+tuios installed, and stops every program in every pane. Use --server NAME to
+upgrade a named daemon.`,
 		Example: `  tuios daemon upgrade
   tuios daemon upgrade --binary ~/bin/tuios-next
   tuios --server test daemon upgrade --binary ./tuios`,
