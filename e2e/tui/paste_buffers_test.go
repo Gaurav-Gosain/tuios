@@ -3,6 +3,7 @@ package tuie2e
 import (
 	"encoding/json"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 
@@ -132,7 +133,9 @@ func waitBufferCount(t *testing.T, base string, n int, what string) pbListing {
 // never prints. With the choose_buffer Register line cut, the chooser never
 // opens. With the bracketed wrap cut from verbPasteBuffer, the marks never
 // show with bracketed paste on. With daemonBuffers in the shim always false,
-// the shim's set-buffer never reaches the daemon.
+// the shim's set-buffer never reaches the daemon. With the hold in
+// holdKeyForPaste cut, the Enter typed after the chooser's Enter runs
+// "echo CHOSEN-" alone (#1016).
 func TestPasteBuffersKeepYanksAndPasteThem(t *testing.T) {
 	base := t.TempDir()
 	term := startPasteBufferClient(t, base, "")
@@ -207,23 +210,36 @@ func TestPasteBuffersKeepYanksAndPasteThem(t *testing.T) {
 		t.Fatal(err)
 	}
 	time.Sleep(insertGuard)
+	// The client reads the chosen buffer from the daemon after the chooser
+	// closes. An Enter typed right after the chooser's Enter must still come
+	// after the paste, as in tmux (#1016). The daemon is stopped across both
+	// keys, so the read is slow on every run: a client that sends the second
+	// Enter on ahead runs "echo CHOSEN-" alone.
+	daemon := daemonPID(t, base)
+	if err := syscall.Kill(daemon, syscall.SIGSTOP); err != nil {
+		t.Fatalf("stop the daemon: %v", err)
+	}
+	stopped := true
+	resume := func() {
+		if stopped {
+			stopped = false
+			_ = syscall.Kill(daemon, syscall.SIGCONT)
+		}
+	}
+	t.Cleanup(resume)
 	if err := term.SendKeys(tuitest.Enter); err != nil {
 		t.Fatal(err)
 	}
 	if err := term.WaitFor(func(s tuitest.Screen) bool { return !strings.Contains(s.Text(), "Paste buffers") }, uiTimeout); err != nil {
 		t.Fatalf("the chooser did not close after enter\n%s", term.Snapshot())
 	}
-	// The chooser closes before the paste lands: the client reads the
-	// buffer from the daemon first. An Enter sent before the text is on the
-	// line runs "echo CHOSEN-" alone, and the text goes to the next prompt.
-	if err := term.WaitFor(func(s tuitest.Screen) bool { return strings.Contains(s.Text(), "echo CHOSEN-pbalpha42") }, uiTimeout); err != nil {
-		t.Fatalf("the chooser did not put the older buffer on the line: %v\n%s", err, term.Snapshot())
-	}
 	if err := term.SendKeys(tuitest.Enter); err != nil {
 		t.Fatal(err)
 	}
+	time.Sleep(500 * time.Millisecond)
+	resume()
 	if err := term.WaitFor(func(s tuitest.Screen) bool { return screenHasLine(s, "CHOSEN-pbalpha42") }, shellTimeout); err != nil {
-		t.Fatalf("the chooser did not paste the older buffer: %v\n%s", err, term.Snapshot())
+		t.Fatalf("ASSERTION: the Enter typed after the chooser's Enter ran the line before the paste: %v\n%s", err, term.Snapshot())
 	}
 	saveFrame(t, term, "paste-buffers-pasted")
 

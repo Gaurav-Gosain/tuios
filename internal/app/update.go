@@ -2043,12 +2043,19 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 			shakeCmd = m.noteShakeMotion(mm, time.Now())
 		}
 
+		// A key typed while a paste reads its buffer waits for the paste.
+		// See pasteHold.
+		input := m.fixHostKeyMods(msg)
+		if m.holdKeyForPaste(input) {
+			return m, shakeCmd
+		}
+
 		// Delegate to the registered input handler
 		handler := getInputHandler()
 		if handler == nil {
 			return m, tea.Batch(shakeCmd, m.armScreensaver())
 		}
-		newModel, cmd := handler(m.fixHostKeyMods(msg), m)
+		newModel, cmd := handler(input, m)
 		if shakeCmd != nil {
 			cmd = tea.Batch(cmd, shakeCmd)
 		}
@@ -2394,7 +2401,12 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		return m, nil
 
 	case PasteBufferFetchedMsg:
-		return m, m.handlePasteBufferFetched(msg)
+		cmd := m.handlePasteBufferFetched(msg)
+		if msg.held {
+			// The paste is in, or failed, so the keys typed after it go now.
+			cmd = tea.Batch(cmd, m.releasePasteHold())
+		}
+		return m, cmd
 
 	case PasteBuffersLoadedMsg:
 		m.handlePasteBuffersLoaded(msg)

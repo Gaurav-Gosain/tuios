@@ -1430,6 +1430,9 @@ type OS struct {
 	// buffersDaemonOld is set when the daemon answered unknown_verb to a
 	// buffer verb: it is too old, and pasteBufs keeps the buffers instead.
 	buffersDaemonOld bool
+	// pasteHold holds the keys typed while a paste reads its buffer from
+	// the daemon. See holdKeyForPaste.
+	pasteHold pasteHold
 	// Aggregate view overlay (all windows across workspaces)
 	ShowAggregateView     bool
 	AggregateViewQuery    string

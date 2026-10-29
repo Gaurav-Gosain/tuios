@@ -10371,3 +10371,10 @@ corner check fails the case of a box's bottom with a title.
 | origin/main, where the navigator dials on the Update goroutine | "the navigator froze on a session of a frozen host" | **caught** |
 | The `TakeSidebarCmd` returns in `handleNavigatorInput`, so the retry that pings the link is never sent | "the session the navigator asked for on a frozen host never opened" | **caught** |
 | `SyncStateToDaemon` after the focus in `finishHostOpen` | "enter went to far-shell but did not focus farlog" | **caught** |
+## A key typed after the chooser's Enter comes after the paste
+
+`TestPasteBuffersKeepYanksAndPasteThem` stops the daemon with SIGSTOP, presses Enter in the paste buffer chooser, presses Enter again, and resumes the daemon 0.5 s later (#1016). The read of the buffer is then slow on every run, and the shell has to print `CHOSEN-pbalpha42`. Run on 2026-10-29 on Linux, based on origin/main at feb2df438. The fixed binary passed 3 of 3 runs.
+
+| Control: what was cut | Where it fails | Verdict |
+| --- | --- | --- |
+| origin/main, where keys go to the pane while the buffer is read | the shell runs `echo CHOSEN-` alone and `pbalpha42` lands on the next prompt, 3 of 3 runs | **caught** |
