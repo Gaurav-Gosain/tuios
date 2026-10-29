@@ -2,7 +2,7 @@ module github.com/Gaurav-Gosain/tuios
 
 go 1.26.8
 
-toolchain go1.26.10
+toolchain go1.27.3
 
 require (
 	charm.land/bubbletea/v2 v2.0.10

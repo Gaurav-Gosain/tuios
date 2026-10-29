@@ -1,6 +1,6 @@
 { pkgs, ... }:
 
-pkgs.buildGoModule rec {
+pkgs.buildGo127Module rec {
   pname = "tuios";
   version = "v0.11.1";
 
@@ -15,8 +15,10 @@ pkgs.buildGoModule rec {
 
   # The build sandbox has no network, so Go cannot fetch a newer toolchain
   # there: the nixpkgs Go must be at least the go line in go.mod (1.26.8).
-  # The pinned nixpkgs has 1.26.10. "local" makes a Go that is too old fail
-  # with that plain message instead of a failed download.
+  # buildGo127Module builds with go_1_27, which is 1.27.3 in the pinned
+  # nixpkgs, the same Go as the toolchain line. The default go there is still
+  # 1.26. "local" makes a Go that is too old fail with that plain message
+  # instead of a failed download.
   env.GOTOOLCHAIN = "local";
 
   # The checks run the cmd/tuios tests, and some of them call git to check

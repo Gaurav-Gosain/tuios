@@ -21,6 +21,7 @@
           shellcheck.enable = true; # lints shell scripts https://github.com/koalaman/shellcheck
           # Golang
           gofmt.enable = true;
+          gofmt.package = pkgs.go_1_27; # the Go of the toolchain line in go.mod
         };
 
         settings.global.excludes = [

@@ -15,8 +15,10 @@
           meta.description = "Golang development environment";
           packages =
             builtins.attrValues {
+              # The toolchain line in go.mod. The default go in nixpkgs is
+              # still 1.26.
+              go = pkgs.go_1_27;
               inherit (pkgs)
-                go
                 gomodifytags
                 gopls
                 gore
