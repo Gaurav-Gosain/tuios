@@ -675,6 +675,9 @@ func buildVerbRegistry() map[string]verbEntry {
 				{Name: "join", Type: "string", Description: "A session of an existing fan to add the attempts to. The caller must reach that session. Omit to start a new fan."},
 				{Name: "ready_timeout", Type: "int", Description: "Milliseconds to wait for each agent to be ready before giving up on its prompt.", Default: "600000"},
 				{Name: "env", Type: "object", Description: "Environment variables for every agent, name to value, on top of the daemon's. PATH in it is where the programs are looked up, so an agent the caller can run is found. The tuios CLI sends its PATH. TUIOS_ names, TMUX and TMUX_PANE are refused, and a call from another machine may not pass env at all. Not saved: a restored pane starts with the daemon's environment."},
+				{Name: "task", Type: "string", Description: "A task card the fan works on, such as t3. The card gets the fan's group and fan_id, and moves from todo or plan to doing. It keeps no holder, since the fan's attempts work on it, and claim-task next skips it while the fan has a session. A fan check and the attempts' pull requests then move it (see [tasks] auto_stage). The caller needs what claim-task needs, and the card must be held by no pane but the caller's, not blocked and not done, checked before anything is made."},
+				{Name: "task_session", Type: "string", Description: "The session of task. Omit for the caller's own session, or outside every pane the most recently active one."},
+				{Name: "human_nonce", Type: "string", Description: "With task: the attached client's nonce, so the stamp is the person's (by human)."},
 				grantsParam,
 			}, repoSourceParams...),
 			returns: []verbParam{
@@ -687,6 +690,8 @@ func buildVerbRegistry() map[string]verbEntry {
 				{Name: "prompt", Type: "string", Description: "The first session's prompt, as given."},
 				{Name: "sessions", Type: "[]object", Description: "One entry per session: session, branch, path, window_id, and the agent (harness id) and command started in it. hook_error is there when that session's after-new-worktree hook failed."},
 				{Name: "total", Type: "int", Description: "How many sessions were started."},
+				{Name: "task", Type: "object", Description: "With task: the card as stamped, as list-tasks gives a row."},
+				{Name: "task_note", Type: "string", Description: "With task: why nothing was stamped, when the card was removed while the fan was made."},
 			},
 			examples: []string{
 				`{"id":1,"verb":"fan","params":{"count":3,"agent":"claude","prompt":"Add a retry to the client.","repo":"/src/api"}}`,
@@ -743,6 +748,8 @@ func buildVerbRegistry() map[string]verbEntry {
 				{Name: "ready_timeout", Type: "int", Description: "Milliseconds to wait for the agent to be ready.", Default: "120000"},
 				{Name: "env", Type: "object", Description: "Environment variables for the agent, name to value, on top of the daemon's; PATH in it is where the program is looked up. The rules are fan's."},
 				{Name: "protocol", Type: "string", Description: "Run the agent headless over a structured protocol instead of in its own TUI: acp (the Agent Client Protocol, for an agent command such as \"opencode acp\") or codex (the Codex app-server; app-server is added to the codex command). The pane runs tuios agent-proto, which shows the conversation as a transcript and reports the agent's state itself; the pane is ready on that report alone. Its permission requests are answered in the pane or, for a request one line shows whole, from the Inbox without [agents.approvals]. Omit for the agent's own TUI.", Accepted: agentproto.Protocols},
+				{Name: "task", Type: "string", Description: "A task card of the session, such as t3, for the new pane to work on: it is claimed for the pane as soon as the pane exists, before the wait. The caller needs what claim-task needs, and the card must be held by no pane, not blocked and not done, checked before anything is started. The session must exist already."},
+				{Name: "human_nonce", Type: "string", Description: "With task: the attached client's nonce, so the claim is the person's (by human)."},
 				grantsParam,
 			}, repoSourceParams...),
 			returns: []verbParam{
@@ -766,6 +773,8 @@ func buildVerbRegistry() map[string]verbEntry {
 				{Name: "reason", Type: "string", Description: "Why it is not ready, when it is not."},
 				{Name: "prompt_status", Type: "string", Description: "With prompt: sent, stalled or not_sent."},
 				{Name: "prompt_note", Type: "string", Description: "Why a prompt was not sent or looks stalled."},
+				{Name: "task", Type: "object", Description: "With task: the card as claimed for the pane, as list-tasks gives a row."},
+				{Name: "task_note", Type: "string", Description: "With task: why the card was not claimed after all, such as another pane taking it while the pane opened."},
 			},
 			examples: []string{
 				`{"id":1,"verb":"start-agent","params":{"session":"work","agent":"claude","name":"reviewer","cwd":"/src/api"}}`,

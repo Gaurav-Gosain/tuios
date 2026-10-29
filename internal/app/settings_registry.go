@@ -40,6 +40,7 @@ func custom(covers string, item settingItem) settingsRow {
 var settingLabels = map[string]string{
 	"agents.enabled":                      "Agent features",
 	"agents.fold_working":                 "Fold Working",
+	"tasks.auto_stage":                    "Move task cards",
 	"appearance.sidebar.editor":           "File editor",
 	"appearance.dock_workspace_label_max": "Workspace label cap",
 	"appearance.dock_mode_icon_window":    "Window mode icon",

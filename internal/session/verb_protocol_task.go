@@ -63,7 +63,7 @@ func taskVerbs() map[string]verbEntry {
 			params:      []verbParam{sessionParam, id},
 			returns: slices.Concat(row, []verbParam{
 				{Name: "prompt", Type: "string", Description: "The prompt, as added."},
-				{Name: "history", Type: "[]object", Description: "Every change, oldest first, at most 100 (the first is kept): action (added, claimed, finished, staged, blocked, unblocked, released), by, at, stage, holder and reason. A release the daemon made has by tuios and reason pane closed, agent left or restart."},
+				{Name: "history", Type: "[]object", Description: "Every change, oldest first, at most 100 (the first is kept): action (added, claimed, finished, staged, blocked, unblocked, released), by, at, stage, holder and reason. A release the daemon made has by tuios and reason pane closed, agent left or restart. A stage the daemon moved on its own ([tasks] auto_stage) has by tuios and a reason naming the fact: plan held for approval, agent working, fan check started, fan check failed in every attempt, or the pull request opened, merged or closed."},
 			}),
 			examples: []string{
 				`{"id":1,"verb":"get-task","params":{"session":"work","id":"t1"}}`,
@@ -71,7 +71,7 @@ func taskVerbs() map[string]verbEntry {
 			handler: (*Daemon).verbGetTask,
 		},
 		"claim-task": {
-			description: "Take a task card for a pane: the card id, or with next the oldest card no pane holds that is not blocked or done. A card in todo or plan moves to doing. The pick and the take are one step, so two panes claiming next at once take two cards. A pane claims only for itself unless it holds admin; outside a pane, name the window. The card is released when its pane closes, its agent leaves the pane, or the daemon restarts.",
+			description: "Take a task card for a pane: the card id, or with next the oldest card no pane holds that is not blocked or done, and that no fan of another session works on (fan with task). A card in todo or plan moves to doing. The pick and the take are one step, so two panes claiming next at once take two cards. A pane claims only for itself unless it holds admin; outside a pane, name the window. The card is released when its pane closes, its agent leaves the pane, or the daemon restarts.",
 			params: []verbParam{
 				sessionParam,
 				{Name: "id", Type: "string", Description: "The card to take. Not with next."},
@@ -96,7 +96,7 @@ func taskVerbs() map[string]verbEntry {
 			handler: (*Daemon).verbFinishTask,
 		},
 		"set-task-stage": {
-			description: "Move a task card to a stage by hand. A move to done is a finish: the holder lets the card go, its block is lifted, and task-finished is sent. A move to the stage the card is in changes nothing." + ownership,
+			description: "Move a task card to a stage by hand. The daemon also moves cards on its own ([tasks] auto_stage), only from the stages each fact moves a card from, so a card put in another stage by hand stays there. A move to done is a finish: the holder lets the card go, its block is lifted, and task-finished is sent. A move to the stage the card is in changes nothing." + ownership,
 			params: []verbParam{
 				sessionParam,
 				id,

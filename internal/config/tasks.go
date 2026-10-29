@@ -22,12 +22,19 @@ const (
 var TaskStages = []string{TaskStageTodo, TaskStagePlan, TaskStageDoing, TaskStageVerify, TaskStageReview, TaskStageShipped, TaskStageDone}
 
 // TasksConfig is the [tasks] table: how the task board in the agents view
-// looks.
+// looks, and whether the daemon moves cards on its own.
 type TasksConfig struct {
 	// Stages are the stages the board shows, always in TaskStages order.
 	// Empty shows every stage.
 	Stages []string `toml:"stages,omitempty"`
+	// AutoStage moves a card when the daemon records a fact about its work:
+	// a plan held, its agent working, a fan check, a pull request. Nil means
+	// on.
+	AutoStage *bool `toml:"auto_stage,omitempty"`
 }
+
+// AutoStageOn reports whether the daemon moves cards on its own.
+func (c TasksConfig) AutoStageOn() bool { return c.AutoStage == nil || *c.AutoStage }
 
 // Shows reports whether the board shows stage. A list that names no known
 // stage shows every one.

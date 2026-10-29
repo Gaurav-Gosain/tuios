@@ -657,6 +657,9 @@ func (d *Daemon) verbFan(cs *connState, params json.RawMessage) (any, *verbError
 		ReadyTimeout int               `json:"ready_timeout"`
 		Env          map[string]string `json:"env"`
 		Grants       []string          `json:"grants"`
+		Task         string            `json:"task"`
+		TaskSession  string            `json:"task_session"`
+		HumanNonce   string            `json:"human_nonce"`
 	}
 	if verr := decodeParams(params, &p); verr != nil {
 		return nil, verr
@@ -666,6 +669,17 @@ func (d *Daemon) verbFan(cs *connState, params json.RawMessage) (any, *verbError
 	grants, verr := d.launchGrants(cs, p.Grants)
 	if verr != nil {
 		return nil, verr
+	}
+	// The card the fan works on, checked before anything is made, so a
+	// refused stamp costs no worktree. See task_auto.go.
+	var task *taskParam
+	if p.TaskSession != "" && p.Task == "" {
+		return nil, invalidParam("task_session", "task_session names the session of task, so it takes a task")
+	}
+	if p.Task != "" {
+		if task, verr = d.admitTaskParam(cs, "fan", p.TaskSession, p.Task, p.HumanNonce, true); verr != nil {
+			return nil, verr
+		}
 	}
 	// One prompt for every session, or one per session: prompts sets the
 	// count when count is left out.
@@ -779,6 +793,20 @@ func (d *Daemon) verbFan(cs *connState, params json.RawMessage) (any, *verbError
 	}
 
 	sessions := make([]map[string]any, 0, p.Count)
+	// stamp writes the fan onto the card once a session of it exists, and
+	// returns a line saying what became of the card.
+	stamp := func(out map[string]any) string {
+		if task == nil || len(sessions) == 0 {
+			return ""
+		}
+		if row, ok := d.stampFan(task, stem, fanID); ok {
+			out["task"] = row
+			return "Task card " + task.id + " is stamped with the fan."
+		}
+		note := "Task card " + task.id + " was removed while the fan was made, so nothing was stamped."
+		out["task_note"] = note
+		return note
+	}
 	for i, branch := range branches {
 		launch, prompt := launches[i%len(launches)], promptFor(i)
 		out, verr := d.createWorktreeSession(cs, root, branch, strings.TrimSpace(p.Base), "", launch.argv, env, grants, func(info *WorktreeInfo) {
@@ -801,6 +829,9 @@ func (d *Daemon) verbFan(cs *connState, params json.RawMessage) (any, *verbError
 				}
 				verr.Hint.Available = names
 				verr.Message = "fan stopped at " + branch + ": " + verr.Message + " Sessions already started are kept."
+				if note := stamp(map[string]any{}); note != "" {
+					verr.Hint.Detail = strings.TrimSpace(verr.Hint.Detail + " " + note)
+				}
 			}
 			return nil, verr
 		}
@@ -839,6 +870,7 @@ func (d *Daemon) verbFan(cs *connState, params json.RawMessage) (any, *verbError
 	if cloned {
 		out["cloned"] = true
 	}
+	stamp(out)
 	return out, nil
 }
 

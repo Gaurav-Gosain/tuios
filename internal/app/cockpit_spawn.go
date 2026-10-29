@@ -4,6 +4,7 @@ import (
 	"cmp"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -1042,8 +1043,24 @@ func (m *OS) spawnStart() tea.Cmd {
 		m.ShowNotification("Starting "+s.agents[s.agent].cmd+" in a new worktree"+where+".", "info", m.Settings.NotificationDuration)
 	}
 	call, nonce, card := m.inboxCaller(), m.inboxNonce(), s.card
-	if verb != "start-agent" || host != "" {
+	if host != "" {
 		card = nil
+	}
+	taskID := ""
+	if card != nil {
+		taskID = card.id
+	}
+	// The daemon takes the card in the call: start-agent claims it for the
+	// pane it opens, and fan stamps it with the fan it makes. A card of
+	// another session than the one the agent starts in is claimed after, as
+	// before, or not at all for a fan.
+	switch {
+	case card == nil:
+	case verb == "fan":
+		params["task"], params["task_session"], params["human_nonce"] = card.id, card.session, nonce
+		card = nil
+	case params["session"] == card.session:
+		params["task"], params["human_nonce"] = card.id, nonce
 	}
 	build := ""
 	if m.DaemonClient != nil {
@@ -1064,6 +1081,26 @@ func (m *OS) spawnStart() tea.Cmd {
 			}
 		}
 		raw, err := call(verb, params, spawnStartTimeout)
+		// A daemon from before the task parameter refuses it by name, and a
+		// card that cannot be taken refuses the call. The agent starts
+		// either way, and the card is claimed after, which says why it was
+		// not taken.
+		var callErr *session.VerbCallError
+		leftOut := ""
+		if err != nil && params["task"] != nil && errors.As(err, &callErr) && taskParamRefused(callErr) {
+			// admitTaskParam's message starts with the verb and names
+			// the card; the started line names both already.
+			leftOut = strings.TrimPrefix(callErr.Message, verb+" with task: ")
+			if rest, ok := strings.CutPrefix(leftOut, "task card "+taskID+" "); ok {
+				leftOut = "it " + rest
+			}
+			delete(params, "task")
+			delete(params, "task_session")
+			delete(params, "human_nonce")
+			raw, err = call(verb, params, spawnStartTimeout)
+		} else if params["task"] != nil && verb == "start-agent" {
+			card = nil
+		}
 		if err != nil {
 			return spawnStartedMsg{sheet: s, err: err}
 		}
@@ -1072,17 +1109,31 @@ func (m *OS) spawnStart() tea.Cmd {
 			Total                   int
 			Ready                   bool
 			Group                   string
-			PromptStatus            string `json:"prompt_status"`
-			PromptNote              string `json:"prompt_note"`
-			WindowID                string `json:"window_id"`
+			PromptStatus            string           `json:"prompt_status"`
+			PromptNote              string           `json:"prompt_note"`
+			WindowID                string           `json:"window_id"`
+			Task                    *session.TaskRow `json:"task"`
+			TaskNote                string           `json:"task_note"`
 		}
 		_ = json.Unmarshal(raw, &res)
 		held := spawnClaim(call, nonce, card, res.Session, res.WindowID)
 		switch {
+		case res.Task != nil && verb == "start-agent":
+			held = " It holds " + res.Task.ID + "."
+		case res.Task != nil:
+			held = " They work on " + res.Task.ID + "."
+		case res.TaskNote != "":
+			held = " " + printableTitle(res.TaskNote)
+		case leftOut != "" && verb == "fan":
+			// A fan claims nothing after, so this is the one place the
+			// person hears the card was left out.
+			held = " " + taskID + " was left out: " + printableTitle(leftOut)
+		}
+		switch {
 		case verb == "fan" && res.Total > 1:
-			return spawnStartedMsg{sheet: s, text: fmt.Sprintf("Started %d agents on %s%s.", res.Total, res.Group, where)}
+			return spawnStartedMsg{sheet: s, text: fmt.Sprintf("Started %d agents on %s%s.", res.Total, res.Group, where) + held}
 		case verb == "fan":
-			return spawnStartedMsg{sheet: s, text: "Started " + what + where + ". The task is typed when the agent is ready."}
+			return spawnStartedMsg{sheet: s, text: "Started " + what + where + ". The task is typed when the agent is ready." + held}
 		case !res.Ready && res.Reason != "":
 			return spawnStartedMsg{sheet: s, warn: true, text: "Started " + what + " in " + res.Session + where + ". It is not ready: " + res.Reason + held}
 		case res.PromptStatus != "" && res.PromptStatus != session.PromptSent:
@@ -1191,4 +1242,18 @@ func (m *OS) spawnClick(x, y int) tea.Cmd {
 		s.list = false
 	}
 	return nil
+}
+
+// taskParamRefused reports whether a refusal names one of the parameters the
+// sheet sends for a card. An older daemon names whichever unknown one it read
+// first.
+func taskParamRefused(err *session.VerbCallError) bool {
+	if err.Hint == nil {
+		return false
+	}
+	switch err.Hint.Param {
+	case "task", "task_session", "human_nonce":
+		return true
+	}
+	return false
 }

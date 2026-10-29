@@ -1701,6 +1701,9 @@ type Session struct {
 	// hostShown reports whether the session is on a screen. See
 	// SetHostShownProbe.
 	hostShown atomic.Pointer[func() bool]
+	// taskAuto reports whether cards move on their own. See
+	// SetTaskAutoProbe.
+	taskAuto atomic.Pointer[func() bool]
 }
 
 // SetGraphicsCapabilities records the graphics protocols tuios can forward to

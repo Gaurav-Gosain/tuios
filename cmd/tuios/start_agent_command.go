@@ -14,7 +14,7 @@ import (
 
 // newStartAgentCommand builds `tuios start-agent`.
 func newStartAgentCommand() *cobra.Command {
-	var sessionName, name, cwd, repo, prompt, protocol string
+	var sessionName, name, cwd, repo, prompt, protocol, task string
 	var env, grants []string
 	var workspace, readyTimeout int
 	var focus, clone, jsonOutput bool
@@ -63,7 +63,12 @@ added to the codex command). The pane shows the conversation as a transcript
 you type prompts into, and reports the agent's state itself. A permission the
 agent asks for is answered in the pane with a number key, or from the Inbox
 when one line shows the whole request, with no [agents.approvals] needed. See
-tuios agent-proto --help.`,
+tuios agent-proto --help.
+
+--task claims a task card of the session for the new pane as soon as it
+exists, so the board shows who works on it while the agent loads. The card
+must be held by no pane, not blocked and not done, and you need what tuios
+task claim needs. It is checked before anything starts.`,
 		Example: `  # A reviewer beside you, addressed by name afterwards
   tuios start-agent claude --name reviewer
   tuios ask-agent -w reviewer 'review the diff on this branch'
@@ -76,6 +81,9 @@ tuios agent-proto --help.`,
 
   # Claude Code on host build, in its checkout of this repository
   tuios start-agent -s build:api claude --prompt 'Profile the build.' -- --model opus
+
+  # An agent for task card t3, which it holds from the start
+  tuios start-agent claude --name t3-worker --task t3 --prompt 'Take task t3: tuios task get t3.'
 
   # An ACP agent, headless, answered from the Inbox
   tuios start-agent --protocol acp 'opencode acp' --name helper --prompt 'Summarise the TODOs.'`,
@@ -95,7 +103,7 @@ tuios agent-proto --help.`,
 			return runStartAgent(startAgentOptions{
 				session: sessionName, agent: positional[0], args: extra, name: name, cwd: cwd, repo: repo, prompt: prompt, protocol: protocol,
 				env: callerEnv, explicitEnv: len(env) > 0, workspace: workspace, readyTimeout: readyTimeout, focus: focus, clone: clone,
-				grants: grants,
+				grants: grants, task: task,
 			}, jsonOutput)
 		},
 	}
@@ -107,6 +115,7 @@ tuios agent-proto --help.`,
 	cmd.Flags().IntVar(&workspace, "workspace", 0, "The workspace to open the pane on (default: the current one)")
 	cmd.Flags().BoolVar(&focus, "focus", false, "Focus the new pane")
 	cmd.Flags().StringVar(&prompt, "prompt", "", "A first prompt, typed once the agent is ready")
+	cmd.Flags().StringVar(&task, "task", "", "A task card of the session, such as t3, to claim for the new pane")
 	cmd.Flags().StringVar(&protocol, "protocol", "", "Run the agent headless over acp or codex (the Codex app-server) instead of in its own TUI")
 	_ = cmd.RegisterFlagCompletionFunc("protocol", cobra.FixedCompletions([]string{"acp", "codex"}, cobra.ShellCompDirectiveNoFileComp))
 	cmd.Flags().IntVar(&readyTimeout, "ready-timeout", 0, "Milliseconds to wait for the agent to be ready (default 120000)")
@@ -123,8 +132,10 @@ type startAgentOptions struct {
 	session, agent, name, cwd, repo, prompt string
 	// protocol is --protocol, empty for the agent's own TUI.
 	protocol string
-	args     []string
-	env      map[string]string
+	// task is --task, the card to claim for the new pane.
+	task string
+	args []string
+	env  map[string]string
 	// explicitEnv says the person passed --env. Without it the env holds
 	// only the PATH the CLI adds on its own.
 	explicitEnv             bool
@@ -193,7 +204,7 @@ func runStartAgent(o startAgentOptions, jsonOutput bool) error {
 	maps.Copy(params, place)
 	// A daemon older than protocol refuses the parameter by name, so an old
 	// daemon never starts the agent in its TUI when a protocol was asked for.
-	for k, v := range map[string]string{"name": o.name, "prompt": o.prompt, "protocol": o.protocol} {
+	for k, v := range map[string]string{"name": o.name, "prompt": o.prompt, "protocol": o.protocol, "task": o.task} {
 		if v != "" {
 			params[k] = v
 		}
@@ -243,6 +254,10 @@ func runStartAgent(o startAgentOptions, jsonOutput bool) error {
 		Reason         string `json:"reason"`
 		PromptStatus   string `json:"prompt_status"`
 		PromptNote     string `json:"prompt_note"`
+		Task           *struct {
+			ID string `json:"id"`
+		} `json:"task"`
+		TaskNote string `json:"task_note"`
 	}
 	if err := json.Unmarshal(raw, &res); err != nil {
 		return fmt.Errorf("failed to parse response: %w", err)
@@ -259,6 +274,12 @@ func runStartAgent(o startAgentOptions, jsonOutput bool) error {
 			fmt.Printf("Cloned the repository to %s%s.\n", plainLine(res.Cwd), t.on())
 		}
 		who := fmt.Sprintf("%s (%s)", orNone(plainLine(res.Name)), shortWindowID(res.WindowID))
+		switch {
+		case res.Task != nil:
+			fmt.Printf("%s holds task %s.\n", who, plainLine(res.Task.ID))
+		case res.TaskNote != "":
+			fmt.Println(plainLine(res.TaskNote))
+		}
 		if res.Ready {
 			fmt.Printf("%s is ready: it reads %s%s.\n", who, plainLine(res.ReadyBy), t.on())
 		} else {

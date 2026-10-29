@@ -462,6 +462,8 @@ func (d *Daemon) verbVerifyFan(cs *connState, params json.RawMessage) (any, *ver
 			Detail: skippedDetail(skipped),
 		})
 	}
+	// The cards the fan works on move to verify. See task_auto.go.
+	d.autoStageFan(info.FanID, moveVerifyStarted, taskReasonVerifyStarted)
 	out := map[string]any{
 		"type":     "fan_verify_started",
 		"group":    info.Group,
@@ -657,6 +659,9 @@ func (d *Daemon) watchFanVerify(sess *Session, run *fanVerifyRun, rec *FanVerify
 	if !current {
 		return
 	}
+	// The last check to end, with none passed, sends the fan's cards back
+	// to doing. See task_auto.go.
+	d.noteFanVerifyEnded(sess)
 	if !keptOpen {
 		// A passed check's window has already ended on its own; closing it
 		// here takes it out of a session no client is attached to. A timed

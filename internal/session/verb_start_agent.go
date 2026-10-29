@@ -55,6 +55,8 @@ func (d *Daemon) verbStartAgent(cs *connState, params json.RawMessage) (any, *ve
 		Env          map[string]string `json:"env"`
 		Protocol     string            `json:"protocol"`
 		Grants       []string          `json:"grants"`
+		Task         string            `json:"task"`
+		HumanNonce   string            `json:"human_nonce"`
 	}
 	if verr := decodeParams(params, &p); verr != nil {
 		return nil, verr
@@ -134,6 +136,18 @@ func (d *Daemon) verbStartAgent(cs *connState, params json.RawMessage) (any, *ve
 		return nil, verr
 	}
 	sess := d.findTargetSession(cs, name)
+	// The card the new pane is to work on, checked before anything is made.
+	// It is a card of the session the pane opens in, so that session has to
+	// exist already. See task_auto.go.
+	var task *taskParam
+	if p.Task != "" {
+		if sess == nil {
+			return nil, invalidParam("task", "task names a card of the session the agent starts in, and session "+echoName(name)+" does not exist yet")
+		}
+		if task, verr = d.admitTaskParam(cs, "start-agent", sess.Name(), p.Task, p.HumanNonce, false); verr != nil {
+			return nil, verr
+		}
+	}
 	created := false
 	if sess == nil {
 		if name == "" {
@@ -187,6 +201,17 @@ func (d *Daemon) verbStartAgent(cs *connState, params json.RawMessage) (any, *ve
 		return nil, newWindowErr(err, sess, p.Workspace)
 	}
 	d.noteStartedBy(cs, win.ID)
+	// The card is the new pane's from the start, before the wait, so the
+	// board shows who works on it while the agent loads.
+	var taskRow *TaskRow
+	taskNote := ""
+	if task != nil {
+		if row, verr := d.claimForPane(task, win.ID); verr != nil {
+			taskNote = "Task card " + task.id + " was not claimed: " + verr.Message
+		} else {
+			taskRow = &row
+		}
+	}
 	if p.Protocol != "" {
 		markMu.Lock()
 		if !exited {
@@ -221,6 +246,11 @@ func (d *Daemon) verbStartAgent(cs *connState, params json.RawMessage) (any, *ve
 	}
 	if p.Protocol != "" {
 		out["protocol"] = p.Protocol
+	}
+	if taskRow != nil {
+		out["task"] = *taskRow
+	} else if taskNote != "" {
+		out["task_note"] = taskNote
 	}
 	if w.ID != "" {
 		out["name"] = windowLabelOf(w)

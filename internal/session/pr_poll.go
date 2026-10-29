@@ -189,11 +189,11 @@ func (d *Daemon) runPRPoll() {
 			cancel()
 			switch {
 			case errors.Is(err, ghpr.ErrNoPR):
-				t.sess.setWorktreePR(t.root, nil)
+				d.notePR(t.sess, t.root, nil)
 			case err != nil:
 				LogBasic("Reading the pull request of %s in %s failed: %v", t.branch, t.root, err)
 			default:
-				t.sess.setWorktreePR(t.root, &pr)
+				d.notePR(t.sess, t.root, &pr)
 			}
 		}
 		timer.Reset(every)
@@ -203,7 +203,7 @@ func (d *Daemon) runPRPoll() {
 // recordPR keeps pr on the session's worktree record when the record is the
 // work tree at root, and starts the poll for an open one.
 func (d *Daemon) recordPR(sess *Session, root string, pr *ghpr.PR) {
-	if sess.setWorktreePR(root, pr) && pr != nil && !pr.Final() {
+	if d.notePR(sess, root, pr) && pr != nil && !pr.Final() {
 		d.kickPRPoll()
 	}
 }
@@ -213,20 +213,23 @@ var errPRSame = errors.New("pull request unchanged")
 
 // setWorktreePR replaces the pull request on the session's worktree record
 // when the record is the work tree at root. It reports whether it changed,
-// and writes nothing when it did not, so a poll that reads the same state
+// and the state the record's pull request had before, empty for none. It
+// writes nothing when nothing changed, so a poll that reads the same state
 // costs no state version and no broadcast.
-func (s *Session) setWorktreePR(root string, pr *ghpr.PR) bool {
+func (s *Session) setWorktreePR(root string, pr *ghpr.PR) (changed bool, was string) {
 	// The path is resolved outside the state lock: canonRoot reads the
 	// file system.
 	wt := s.Worktree()
 	if wt == nil || canonRoot(wt.Path) != root || wt.PR.Same(pr) {
-		return false
+		return false, ""
 	}
 	path := wt.Path
-	changed := false
 	_ = s.mutateState(func(st *SessionState) error {
 		if st.Worktree == nil || st.Worktree.Path != path || st.Worktree.PR.Same(pr) {
 			return errPRSame
+		}
+		if old := st.Worktree.PR; old != nil {
+			was = old.State
 		}
 		if pr != nil {
 			cp := *pr
@@ -236,5 +239,5 @@ func (s *Session) setWorktreePR(root string, pr *ghpr.PR) bool {
 		changed = true
 		return nil
 	})
-	return changed
+	return changed, was
 }

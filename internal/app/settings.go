@@ -737,6 +737,7 @@ func (m *OS) settingsCategories() []settingsCategory {
 			opt("daemon.agent_autodetect"),
 			opt("daemon.agent_detect_seconds"),
 			opt("daemon.resume_agents"),
+			opt("tasks.auto_stage"),
 		}), daemon.Items[2:]...)...)
 	}
 	// The restart row leads the tab, where a person who came to the daemon's

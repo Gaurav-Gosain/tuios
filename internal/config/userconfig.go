@@ -108,8 +108,8 @@ type UserConfig struct {
 	// panes. Outside the option registry for the same reason as the tables
 	// above. See agents.go.
 	Agents AgentsConfig `toml:"agents,omitempty"`
-	// Tasks is the [tasks] table: which stages the task board shows. See
-	// tasks.go.
+	// Tasks is the [tasks] table: which stages the task board shows, and
+	// whether the daemon moves cards on its own. See tasks.go.
 	Tasks TasksConfig `toml:"tasks,omitempty"`
 	// Notify is the [notify] table: push notifications for the Inbox, sent
 	// by the daemon. Outside the option registry for the same reason as

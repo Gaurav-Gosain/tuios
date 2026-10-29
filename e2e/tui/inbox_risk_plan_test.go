@@ -53,13 +53,19 @@ func startHeldHook(t *testing.T, base, payload string) *heldHook {
 // in window management mode.
 func approvalsClient(t *testing.T) (string, *tuitest.Terminal) {
 	t.Helper()
+	return approvalsClientWith(t, "")
+}
+
+// approvalsClientWith is approvalsClient with extra appended to the config.
+func approvalsClientWith(t *testing.T, extra string) (string, *tuitest.Terminal) {
+	t.Helper()
 	base := t.TempDir()
 	killDaemon(t, base)
 	dir := filepath.Join(xdgDir(base, "XDG_CONFIG_HOME"), "tuios")
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		t.Fatalf("mkdir config: %v", err)
 	}
-	body := "[agents.approvals]\nenabled = [\"claude-code\"]\nhold_seconds = 60\n"
+	body := "[agents.approvals]\nenabled = [\"claude-code\"]\nhold_seconds = 60\n" + extra
 	if err := os.WriteFile(filepath.Join(dir, "config.toml"), []byte(body), 0o600); err != nil {
 		t.Fatalf("write config: %v", err)
 	}

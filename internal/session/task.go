@@ -169,16 +169,65 @@ func (tk *TaskState) release(by, reason string, now int64) {
 	tk.note(TaskEvent{Action: TaskActionReleased, By: by, At: now, Holder: holder, Stage: tk.Stage, Reason: reason})
 }
 
+// workable refuses a card no pane may start on: one held by a pane other
+// than window, one that is done, and one that is blocked.
+func (tk *TaskState) workable(window string) *verbError {
+	switch {
+	case tk.Holder != "" && tk.Holder != window:
+		return hintedVerbError(ErrVerbTaskHeld, "task card "+tk.ID+" is held by window "+shortWindowID(tk.Holder), &VerbHint{
+			Command: "tuios task claim --next",
+			Detail:  "Nothing was claimed. Take another card with next, or wait for task-changed released.",
+		})
+	case tk.Stage == TaskStageDone:
+		return invalidParam("id", "task card "+tk.ID+" is done, so there is nothing to claim")
+	case tk.Blocked != nil:
+		return hintedVerbError(ErrVerbInvalidParams, "task card "+tk.ID+" is blocked: "+tk.Blocked.Reason, &VerbHint{
+			Param:   "id",
+			Command: "tuios task block " + tk.ID + " --clear",
+			Detail:  "Nothing was claimed. Clear the block first.",
+		})
+	}
+	return nil
+}
+
+// take gives the card to window, moving it from todo or plan to doing. It
+// reports false when window holds it already, and the refusal when the card
+// is not there to take (workable).
+func (tk *TaskState) take(window, by string, now int64) (bool, *verbError) {
+	if tk.Holder == window {
+		return false, nil
+	}
+	if verr := tk.workable(window); verr != nil {
+		return false, verr
+	}
+	tk.Holder, tk.HeldAt = window, now
+	if tk.Stage == TaskStageTodo || tk.Stage == TaskStagePlan {
+		tk.setStage(TaskStageDoing, now)
+	}
+	tk.note(TaskEvent{Action: TaskActionClaimed, By: by, At: now, Stage: tk.Stage, Holder: window})
+	return true, nil
+}
+
 // taskIndex is the index of the card id in tasks, or -1.
 func taskIndex(tasks []TaskState, id string) int {
 	return slices.IndexFunc(tasks, func(tk TaskState) bool { return tk.ID == id })
 }
 
 // nextFreeTask is the index of the card claim-task next takes: the oldest
-// one no pane holds, not blocked and not done. Cards are appended as they are
-// added, so the first free one is the oldest. -1 when there is none.
-func nextFreeTask(tasks []TaskState) int {
-	return slices.IndexFunc(tasks, func(tk TaskState) bool {
+// one no pane holds, not blocked and not done. A card a live fan works on
+// from outside it (fan task=) is skipped too: its attempts hold it, though no
+// one pane does. liveFans names the fans that still have a session. Cards are
+// appended as they are added, so the first free one is the oldest. -1 when
+// there is none.
+func nextFreeTask(st *SessionState, liveFans map[string]bool) int {
+	own := ""
+	if st.Worktree != nil {
+		own = st.Worktree.FanID
+	}
+	return slices.IndexFunc(st.Tasks, func(tk TaskState) bool {
+		if tk.FanID != "" && tk.FanID != own && liveFans[tk.FanID] {
+			return false
+		}
 		return tk.Holder == "" && tk.Blocked == nil && tk.Stage != TaskStageDone
 	})
 }

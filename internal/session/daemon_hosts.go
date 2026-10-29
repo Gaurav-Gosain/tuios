@@ -150,6 +150,9 @@ func (d *Daemon) applyUserConfig(cfg *config.UserConfig, byPerson bool) {
 	}
 	d.SetMailWake(wake)
 	d.SetCheckpoints(cfg.Agents.Checkpoints)
+	// Moving cards types nothing and runs nothing, so a file change applies
+	// either way.
+	d.taskAutoOff.Store(!cfg.Tasks.AutoStageOn())
 	// A new notification destination waits like a new host does.
 	d.notify.reload(cfg.Notify, byPerson)
 	perms := PanePermissionsFromConfig(cfg.Agents.Permissions)

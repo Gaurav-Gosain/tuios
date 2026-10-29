@@ -404,6 +404,11 @@ type Daemon struct {
 	// written by a config reload, so it is atomic.
 	agentsOff atomic.Bool
 
+	// taskAutoOff is [tasks] auto_stage = false: no card moves on its own.
+	// See task_auto.go. It is read under session state locks and written by
+	// a config reload, so it is atomic.
+	taskAutoOff atomic.Bool
+
 	// wakes are the latches the background loops sleep on at idle. See
 	// idle_wakes.go.
 	wakes idleWakes
@@ -955,6 +960,9 @@ type DaemonConfig struct {
 	// MailWakeOff is [agents.mail] wake = false: an agent at rest is not
 	// told about its mail by a typed prompt. See mail_wake.go.
 	MailWakeOff bool
+	// TaskAutoStageOff is [tasks] auto_stage = false: the daemon moves no
+	// card on its own. See task_auto.go.
+	TaskAutoStageOff bool
 	// Checkpoints is [agents.checkpoints]: whether a pane's work tree is
 	// saved when its agent finishes a turn, and how many are kept. The zero
 	// value is on with the default keep. See checkpoints.go.
@@ -1012,6 +1020,7 @@ func NewDaemon(cfg *DaemonConfig) *Daemon {
 	// Stored, not set: the wake latches are made below.
 	d.silent.ns.Store(int64(resolveSilentAfter(cfg.AgentSilentAfter)))
 	d.SetMailWake(!cfg.MailWakeOff)
+	d.taskAutoOff.Store(cfg.TaskAutoStageOff)
 	d.SetCheckpoints(cfg.Checkpoints)
 	d.outbox = newHostOutbox(d)
 	// The socket path is read through a closure rather than copied, because the
@@ -1133,6 +1142,7 @@ func (d *Daemon) onSessionCreated(s *Session) {
 		d.broadcastStateSync(sessionID, state, "update", "")
 	})
 	s.SetHostShownProbe(func() bool { return d.sessionShown(sessionID) })
+	s.SetTaskAutoProbe(func() bool { return !d.taskAutoOff.Load() })
 	// A pane's first output or bell since its subscriptions changed. See
 	// pane_marks.go.
 	s.SetPaneMarkSink(func(ptyID, windowID string, mark uint32) {

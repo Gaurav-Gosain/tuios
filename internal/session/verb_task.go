@@ -451,6 +451,10 @@ func (d *Daemon) verbClaimTask(cs *connState, params json.RawMessage) (any, *ver
 		row    TaskRow
 		window string
 	)
+	var live map[string]bool
+	if p.Next {
+		live = d.liveFans()
+	}
 	err := sess.mutateState(func(st *SessionState) error {
 		idx, err := findWindowStateIndex(st.Windows, name)
 		if err != nil {
@@ -466,7 +470,7 @@ func (d *Daemon) verbClaimTask(cs *connState, params json.RawMessage) (any, *ver
 		}
 		var i int
 		if p.Next {
-			if i = nextFreeTask(st.Tasks); i < 0 {
+			if i = nextFreeTask(st, live); i < 0 {
 				verr = hintedVerbError(ErrVerbNoTask, "no open task card to take in session "+echoName(sess.Name()), &VerbHint{
 					Verb:    "list-tasks",
 					Command: "tuios task ls --open",
@@ -479,33 +483,9 @@ func (d *Daemon) verbClaimTask(cs *connState, params json.RawMessage) (any, *ver
 			return errTaskRefused
 		}
 		tk := &st.Tasks[i]
-		switch {
-		case tk.Holder == window:
-			row = taskRow(sess, st, tk)
-			return nil
-		case tk.Holder != "":
-			verr = hintedVerbError(ErrVerbTaskHeld, "task card "+tk.ID+" is held by window "+shortWindowID(tk.Holder), &VerbHint{
-				Command: "tuios task claim --next",
-				Detail:  "Nothing was claimed. Take another card with next, or wait for task-changed released.",
-			})
-			return errTaskRefused
-		case tk.Stage == TaskStageDone:
-			verr = invalidParam("id", "task card "+tk.ID+" is done, so there is nothing to claim")
-			return errTaskRefused
-		case tk.Blocked != nil:
-			verr = hintedVerbError(ErrVerbInvalidParams, "task card "+tk.ID+" is blocked: "+tk.Blocked.Reason, &VerbHint{
-				Param:   "id",
-				Command: "tuios task block " + tk.ID + " --clear",
-				Detail:  "Nothing was claimed. Clear the block first.",
-			})
+		if _, verr = tk.take(window, caller.by, time.Now().UnixNano()); verr != nil {
 			return errTaskRefused
 		}
-		now := time.Now().UnixNano()
-		tk.Holder, tk.HeldAt = window, now
-		if tk.Stage == TaskStageTodo || tk.Stage == TaskStagePlan {
-			tk.setStage(TaskStageDoing, now)
-		}
-		tk.note(TaskEvent{Action: TaskActionClaimed, By: caller.by, At: now, Stage: tk.Stage, Holder: window})
 		row = taskRow(sess, st, tk)
 		return nil
 	})

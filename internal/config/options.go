@@ -1115,6 +1115,13 @@ var optionSpecs = []Option{
 		Default:     "false",
 	},
 
+	// [tasks]. The daemon reads it when it starts and when the file changes.
+	{
+		Path: "tasks.auto_stage", Type: OptionBool, Section: "agents",
+		Description: "Move task cards on their own when tuios sees their work move: a plan held and then approved, a fan check, a pull request. Off leaves every stage to you.",
+		Default:     "true",
+	},
+
 	// [daemon]. agent_binaries is absent: it is a list, and a value that arrives
 	// as one string has no unambiguous spelling for a list. respond_from_shell
 	// is absent too: it grants acting as the person, and set-option is a verb
