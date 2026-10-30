@@ -31,6 +31,11 @@ linters:
         - charm.land/lipgloss/v2.Print
         - charm.land/lipgloss/v2.Printf
         - charm.land/lipgloss/v2.Println
+        # These writes never fail. errcheck leaves the same methods of
+        # strings.Builder alone, and this type only moves them out of line.
+        - (*github.com/Gaurav-Gosain/tuios/internal/textbuf.Builder).WriteByte
+        - (*github.com/Gaurav-Gosain/tuios/internal/textbuf.Builder).WriteRune
+        - (*github.com/Gaurav-Gosain/tuios/internal/textbuf.Builder).WriteString
 
     govet:
       enable-all: true
