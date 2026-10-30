@@ -96,7 +96,7 @@ func (d *Daemon) closeClientsForHandoff(version string) {
 			if id, verb, ok := cs.verbCall.take(); ok {
 				_ = d.writeVerbError(cs, id, verb, hintedVerbError(ErrVerbDaemonUpgrading,
 					"the daemon is being upgraded live, and this call ended with the image that was running it", &VerbHint{
-						Detail: "Every pane keeps running. Call again: the new image answers it.",
+						Detail: "Every pane keeps running. A call that reads or waits can be made again: the new image answers it. A call that changes something may have partly run, so check what it did before calling again.",
 					}))
 			}
 		})

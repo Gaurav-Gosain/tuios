@@ -20,11 +20,6 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// killServerCommand is the kill-server command for the daemon being upgraded.
-// On a named server it carries --server, since the bare command stops the
-// default daemon.
-func killServerCommand() string { return serverCommand("kill-server") }
-
 // serverCommand is the tuios command sub, for this command's server.
 func serverCommand(sub string) string {
 	if name := serverscope.Name(); name != "" {
@@ -219,7 +214,7 @@ func runDaemonUpgrade(out io.Writer, binary string, asJSON bool) error {
 			return &diagnosticError{
 				What:  fmt.Sprintf("The daemon (%s, pid %d) predates live upgrades.", before.Version, before.PID),
 				Cause: "it is from a build that cannot hand its panes over.",
-				Fix:   "run '" + killServerCommand() + "' and start it again, which ends running programs. The next upgrade can be live.",
+				Fix:   "run '" + serverCommand("restart-server") + "', which stops every program in every pane, and lists them before it asks. The next upgrade can be live.",
 			}
 		}
 		if errors.As(err, &verr) {
