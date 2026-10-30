@@ -268,6 +268,15 @@ func (m *OS) showNotification(message, notifType, agentState string, duration ti
 		return
 	}
 
+	// A message below notifications.level is only logged. A warning or an
+	// error was logged above.
+	if shown && notifSeverityRank(notifType) < notifLevelRank(m.Settings.NotificationLevel) {
+		if notifSeverityRank(notifType) < 2 {
+			m.appendLog(LogMessage{Time: time.Now(), Level: "INFO", Message: message, Source: source})
+		}
+		return
+	}
+
 	// An info or a success message is logged when the dock shows it. It used
 	// to be logged only with verbose logging on, so a message that went by
 	// too fast to read was nowhere to be found afterwards. The ones the dock

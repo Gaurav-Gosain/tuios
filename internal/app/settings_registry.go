@@ -175,6 +175,7 @@ var settingLabels = map[string]string{
 	"notifications.error_sticky":                 "Errors wait for esc",
 	"notifications.bell":                         "Pane bell",
 	"notifications.style":                        "Message style",
+	"notifications.level":                        "Messages shown",
 	"notifications.agent.enabled":                "Agent alerts",
 	"notifications.agent.notify":                 "Agent alert on the desktop",
 	"notifications.agent.dock":                   "Agent alert in the dock",

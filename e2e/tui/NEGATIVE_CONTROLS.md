@@ -10966,3 +10966,12 @@ The `refit` control depends on which client's resize reaches the daemon last. Th
 | The bridge's state carries shared borders on, in place of `SessionSharedBorders` (`internal/app/session.go`) | "the terminal client stayed attached while the bridge came and went", with PTY `38 48` where it wants `36 46` | **caught** |
 | The same box branch in the `SessionResizeMsg` case (`internal/app/update.go`) | The same failure in the same size case, with PTY `37 47` where it wants `36 46` | **caught** |
 | The `NoRail` check in `sidebarOpsOn` (`internal/app/sidebar_mouse.go`) | "the terminal client shows no rail after the bridge made the session" | **caught** |
+## notifications.level keeps info messages off the dock (#1361)
+
+`TestNotificationLevelKeepsInfoOffTheDock` sets `notifications.level = "warning"`, raises a warning (`clear_scrollback` with no pane open) and an info message (toggling tiling), and opens the log viewer. The control was built into its own binary. Run on 2026-10-30 on macOS arm64.
+
+| Control: what was cut | Where it fails | Verdict |
+| --- | --- | --- |
+| The level check in `showNotification` (`internal/app/os_notify.go`) | "ASSERTION: the dock shows an info message under level warning" | **caught** |
+
+The positive half is in the same run: the warning reaches the dock on both builds.

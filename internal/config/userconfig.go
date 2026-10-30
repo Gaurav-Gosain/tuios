@@ -152,6 +152,10 @@ type NotificationsConfig struct {
 	// NotificationStyles.
 	Style string `toml:"style"`
 
+	// Level is the least severe message the dock shows: info, warning or
+	// error. See NotificationLevels.
+	Level string `toml:"level"`
+
 	// Agent is the [notifications.agent] table: what happens when a pane's
 	// agent state changes. See agent_alerts.go.
 	Agent AgentAlertsConfig `toml:"agent"`
@@ -1616,6 +1620,7 @@ func DefaultConfig() *UserConfig {
 	// Written out so the file shows the key and its default.
 	cfg.Notifications.Bell = BellToast
 	cfg.Notifications.Style = NotificationStyleFull
+	cfg.Notifications.Level = NotificationLevelInfo
 	return cfg
 }
 
@@ -3326,6 +3331,10 @@ func ApplyNotificationConfig(cfg *UserConfig, s *Settings) {
 	s.NotificationStyle = NotificationStyleFull
 	if slices.Contains(NotificationStyles, cfg.Notifications.Style) {
 		s.NotificationStyle = cfg.Notifications.Style
+	}
+	s.NotificationLevel = NotificationLevelInfo
+	if slices.Contains(NotificationLevels, cfg.Notifications.Level) {
+		s.NotificationLevel = cfg.Notifications.Level
 	}
 }
 

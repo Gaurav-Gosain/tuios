@@ -51,6 +51,10 @@ type Settings struct {
 	// that wants a quieter screen sets it to NotificationStylePlain.
 	NotificationStyle string
 
+	// NotificationLevel is notifications.level: the least severe message the
+	// dock shows. A message below it goes to the log viewer only.
+	NotificationLevel string
+
 	// NormalFPS is the normal refresh rate during regular operation.
 	// Set via appearance.max_fps config (default 60, up to MaxFPSCap).
 	NormalFPS int
@@ -936,6 +940,17 @@ const (
 // NotificationStyles is what notifications.style accepts.
 var NotificationStyles = []string{NotificationStyleFull, NotificationStylePlain}
 
+// The notifications.level values, least severe first. info shows every
+// message, success included.
+const (
+	NotificationLevelInfo    = "info"
+	NotificationLevelWarning = "warning"
+	NotificationLevelError   = "error"
+)
+
+// NotificationLevels is every notifications.level value.
+var NotificationLevels = []string{NotificationLevelInfo, NotificationLevelWarning, NotificationLevelError}
+
 // NotificationsPlain reports whether a dock message is drawn without its cap
 // and countdown.
 func (s *Settings) NotificationsPlain() bool {
@@ -950,6 +965,7 @@ func DefaultSettings() Settings {
 		NotificationErrorSticky:     true,
 		Bell:                        BellToast,
 		NotificationStyle:           NotificationStyleFull,
+		NotificationLevel:           NotificationLevelInfo,
 		NormalFPS:                   DefaultFPS,
 		UseASCIIOnly:                false,
 		Motion:                      MotionFull,

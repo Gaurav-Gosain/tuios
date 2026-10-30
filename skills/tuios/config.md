@@ -97,7 +97,9 @@ up. The default is 2. `notifications.warning_duration` (default 8) and
 errors. Any value from 1 to 3600 is valid, and 0 uses the default.
 `notifications.style` sets how a message looks: `full` (the default) has a
 coloured bar on its left and a line above it that counts down, and `plain`
-shows the icon and the text only. Change these only when the person asks.
+shows the icon and the text only. `notifications.level` is the least severe
+message the dock shows: `info` (the default), `warning` or `error`. The rest go
+to the log viewer only. Change these only when the person asks.
 
 `daemon.window_size` sets the size of a session with more than one client:
 `latest` (the default), the client that last had input, `smallest`, or

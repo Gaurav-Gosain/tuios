@@ -1199,6 +1199,11 @@ var optionSpecs = []Option{
 		Description: "How a dock message looks: full shows a side bar and a countdown line, plain shows the icon and the text only",
 		Accepted:    NotificationStyles, Default: NotificationStyleFull,
 	},
+	{
+		Path: "notifications.level", Type: OptionString, Section: "notifications",
+		Description: "The least severe message the dock shows: info shows every message, warning only warnings and errors, error only errors. The rest go to the log viewer",
+		Accepted:    NotificationLevels, Default: NotificationLevelInfo,
+	},
 
 	// [notifications.agent]. The sounds table is absent: its two keys are paths
 	// to files, which no accepted set or range can check.
