@@ -16,7 +16,7 @@
 #   lint       golangci-lint with .golangci.yml (staticcheck, errcheck, govet,
 #              ineffassign, unused, gosec); the CI version unless
 #              GOLANGCI_LINT names another command
-#   tuioslint  the internal/lint tests (colour literals, child processes)
+#   tuioslint  the internal/lint tests (colour literals, child processes, quits)
 #   vuln       govulncheck, for each module in the scope
 #   fix        the go fix modernizers, one line per finding (report);
 #              go fix -diff ./... prints them as patches

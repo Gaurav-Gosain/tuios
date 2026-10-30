@@ -9,4 +9,12 @@
 // A deliberate exception carries a comment on its line or the line above:
 //
 //	//tuios:allow-color <reason>
+//
+// The quit check (quit_test.go) rejects a bare tea.Quit in internal/app and
+// internal/input. A quit goes through OS.QuitCmd, which keeps the keyboard flags
+// still as the client quits, so the last frame sends no query whose answer would
+// reach the shell as stray text. A deliberate exception carries a comment on its
+// line or the line above:
+//
+//	//tuios:allow-quit <reason>
 package lint
