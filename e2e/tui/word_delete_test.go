@@ -147,23 +147,29 @@ func TestOptionBackspaceDeletesAWordInTheCommandPalette(t *testing.T) {
 //     press must take "dir1" and keep "src/".
 //   - The key could be taken before the box sees it, which only the real client
 //     shows.
+//   - Copy-mode search switches on the key's code, where Option+Backspace has
+//     the code of backspace. A word case put after the backspace case would take
+//     one character, and the copy-mode row would show "/src.dir1.dir" where it
+//     requires "/src.dir1.". It is the box this ordering can break again.
 //
-// Copy-mode search is not here: it draws no query on screen to read. The
-// navigator stands in for it.
+// Copy-mode search draws its prompt, "/" and the query, on the pane's last row.
+// The pane is untiled for it: with tiling on, Ctrl+B [ does not enter copy mode
+// in this harness.
 func TestWordKeysDeleteAWordInTheOtherBoxes(t *testing.T) {
 	for _, tc := range []struct {
 		name         string
 		open         []any
 		typed        string
 		first, again string // on screen after one word key, and after two
+		config       string
 	}{
-		{"go-to picker", []any{tuitest.Ctrl('b'), "G"}, "src/dir1/dir2", "src/dir1/", "src/"},
-		{"navigator", []any{tuitest.Ctrl('b'), "/", "/"}, "src/dir1/dir2", "src/dir1/", "src/"},
+		{"go-to picker", []any{tuitest.Ctrl('b'), "G"}, "src/dir1/dir2", "src/dir1/", "src/", ""},
 		// "/" turns the help's search off, so its query has dots in it.
-		{"help search", []any{tuitest.Ctrl('b'), "?", "/"}, "src.dir1.dir2", "src.dir1.", "src."},
+		{"help search", []any{tuitest.Ctrl('b'), "?", "/"}, "src.dir1.dir2", "src.dir1.", "src.", ""},
 		// "/" walks the path picker into a folder and never reaches its query, so
 		// the query there has dots in it.
-		{"path picker", []any{tuitest.Alt(";")}, "src.dir1.dir2", "src.dir1.", "src."},
+		{"path picker", []any{tuitest.Alt(";")}, "src.dir1.dir2", "src.dir1.", "src.", ""},
+		{"copy-mode search", []any{tuitest.Ctrl('b'), "[", "/"}, "src.dir1.dir2", "/src.dir1.", "/src.", "[startup]\ntiled = false\n"},
 	} {
 		for _, key := range []struct {
 			name string
@@ -173,7 +179,11 @@ func TestWordKeysDeleteAWordInTheOtherBoxes(t *testing.T) {
 			{"ctrl+w", tuitest.Ctrl('w')},
 		} {
 			t.Run(tc.name+"/"+key.name, func(t *testing.T) {
-				term, _ := start(t, startOpts{})
+				base := t.TempDir()
+				if tc.config != "" {
+					writeConfig(t, base, tc.config)
+				}
+				term := startIn(t, base, startOpts{})
 				waitBoot(t, term)
 				newWindow(t, term)
 				enterTerminalMode(t, term) // the path picker types into the focused pane
