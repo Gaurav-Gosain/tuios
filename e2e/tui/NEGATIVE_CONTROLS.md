@@ -11217,3 +11217,12 @@ Run on 2026-10-31 on Linux against builds from this branch, on `0e1679cfb`. Each
 | `ckStageTitle(r.group)` in `drawFoldFocus` becomes `ckStageTitle(0)`, so there is no crash and the title is wrong | "the focus title is \"   Todo  1\", want Done and its count" | **caught** |
 
 The frame is `task-board-done-focus-200x55` under `TUIOS_E2E_FRAMES`, in the test's folder. Repeat from `e2e/tui` with `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestTaskBoardGroupsCardsByStage$' -v .`.
+### A transcript under CLAUDE_CONFIG_DIR (#1390)
+
+`TestTranscriptPathFollowsClaudeConfigDir` in `agent_transcript_review_test.go`. On 2026-10-31 the control below was built into a binary and the test was run against it on macOS. The same test passed on the branch build.
+
+The positive halves: a hook with `CLAUDE_CONFIG_DIR` set joins its profile's file, and a hook with the variable set still joins a file under `~/.claude/projects`. The refusals that hold on the fixed build: the profile's file from a hook without the variable, a path outside both folders, and a link in the profile's folder that leads out.
+
+| Control: what was cut | Test | Result |
+| --- | --- | --- |
+| `joinReportedTranscript` passes no environment to `transcriptPathAllowed`, so only the daemon's folder is checked, as before | `TestTranscriptPathFollowsClaudeConfigDir` | **caught**: "a hook with CLAUDE_CONFIG_DIR naming its profile's file: refused" |
