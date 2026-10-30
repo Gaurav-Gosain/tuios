@@ -159,11 +159,11 @@ func (m *OS) InboxPeek() tea.Cmd {
 		return nil
 	}
 	if it.Host != "" || m.AttachedHost != "" {
-		m.ShowNotification("That prompt is on another machine: tuios peek-prompt -w HOST:SESSION:WINDOW reads it", "info", m.Settings.NotificationDuration)
+		m.ShowNotification("That prompt is on another machine: tuios peek-prompt -w HOST:SESSION:WINDOW reads it", "warning", m.Settings.NotificationDuration)
 		return nil
 	}
 	if m.DaemonClient == nil && m.Inbox.call == nil {
-		m.ShowNotification("Reading a prompt needs a client attached to this machine's daemon", "info", m.Settings.NotificationDuration)
+		m.ShowNotification("Reading a prompt needs a client attached to this machine's daemon", "warning", m.Settings.NotificationDuration)
 		return nil
 	}
 	m.Inbox.peekGen++

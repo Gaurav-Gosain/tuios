@@ -33,7 +33,7 @@ func (m *OS) InboxSettle() (tea.Cmd, bool) {
 		return nil, false
 	}
 	if r.agent < 0 {
-		m.ShowNotification("Only an agent can be settled. Dismiss or snooze this row.", "info", m.Settings.NotificationDuration)
+		m.ShowNotification("Only an agent can be settled. Dismiss or snooze this row.", "warning", m.Settings.NotificationDuration)
 		return nil, true
 	}
 	e := m.Inbox.ck.agents[r.agent]
@@ -98,11 +98,11 @@ func (m *OS) bulkSettleCmd() tea.Cmd {
 		cmds = append(cmds, m.settleCmd(e, "settle", ""))
 	}
 	if len(cmds) == 0 {
-		m.ShowNotification("None of the marked agents can be settled. An agent that needs you is answered first.", "info", m.Settings.NotificationDuration)
+		m.ShowNotification("None of the marked agents can be settled. An agent that needs you is answered first.", "warning", m.Settings.NotificationDuration)
 		return nil
 	}
 	if left > 0 {
-		m.ShowNotification("An agent that needs you is not settled. Answer it first.", "info", m.Settings.NotificationDuration)
+		m.ShowNotification("An agent that needs you is not settled. Answer it first.", "warning", m.Settings.NotificationDuration)
 	}
 	m.Inbox.agents.marks = nil
 	m.Inbox.agents.marksGen++

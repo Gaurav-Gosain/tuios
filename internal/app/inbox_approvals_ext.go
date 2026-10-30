@@ -210,7 +210,7 @@ func (m *OS) InboxDenyReason() (tea.Cmd, bool) {
 		return nil, false
 	}
 	if !it.DenyMessage {
-		m.ShowNotification("This agent takes no reason with a reject. 3 rejects it", "info", m.Settings.NotificationDuration)
+		m.ShowNotification("This agent takes no reason with a reject. 3 rejects it", "warning", m.Settings.NotificationDuration)
 		return nil, true
 	}
 	m.Inbox.approvals.armed = inboxArmed{}
@@ -293,7 +293,7 @@ func (m *OS) InboxReasonSend() tea.Cmd {
 	}
 	it, _ := m.inboxSelected()
 	if !inboxShowsWhole(it) || !m.inboxAnswerSettled(it, time.Now()) {
-		m.ShowNotification("This prompt just changed. Read it, then answer", "info", m.Settings.NotificationDuration)
+		m.ShowNotification("This prompt just changed. Read it, then answer", "warning", m.Settings.NotificationDuration)
 		return nil
 	}
 	text, ok := r.ed.Submit()

@@ -1107,7 +1107,7 @@ func (m *OS) CockpitAnswerLetter(key string) (tea.Cmd, bool) {
 		// A say so, as the digits do, instead of doing nothing in silence.
 		// r keeps its other meaning there: it replies.
 		if key != "r" && m.cockpitUnheldApproval() {
-			m.ShowNotification(inboxNotHeldWords, "info", m.Settings.NotificationDuration)
+			m.ShowNotification(inboxNotHeldWords, "warning", m.Settings.NotificationDuration)
 			return nil, true
 		}
 		return nil, false

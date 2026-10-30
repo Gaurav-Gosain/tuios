@@ -228,7 +228,7 @@ func (m *OS) InboxAgentsBulkReply() tea.Cmd {
 		targets = append(targets, replyTarget{session: e.SessionID, window: e.WindowID, who: who})
 	}
 	if len(skipped) > 0 {
-		m.ShowNotification("Not in this reply: "+strings.Join(skipped, ", "), "info", m.Settings.NotificationDuration*2)
+		m.ShowNotification("Not in this reply: "+strings.Join(skipped, ", "), "warning", m.Settings.NotificationDuration*2)
 	}
 	if len(targets) == 0 {
 		return nil
@@ -291,7 +291,7 @@ func (m *OS) InboxAgentsBulkDeny() tea.Cmd {
 	}
 	held := m.bulkHeld()
 	if len(held) == 0 {
-		m.ShowNotification("No marked agent waits on an approval", "info", m.Settings.NotificationDuration)
+		m.ShowNotification("No marked agent waits on an approval", "warning", m.Settings.NotificationDuration)
 		return nil
 	}
 	var cmds []tea.Cmd
@@ -319,7 +319,7 @@ func (m *OS) InboxAgentsBulkAllow() {
 		sheet.allow = append(sheet.allow, bulkAllow{item: it, key: inboxShownKey(it)})
 	}
 	if len(sheet.allow) == 0 && len(sheet.held) == 0 {
-		m.ShowNotification("No marked agent waits on an approval", "info", m.Settings.NotificationDuration)
+		m.ShowNotification("No marked agent waits on an approval", "warning", m.Settings.NotificationDuration)
 		return
 	}
 	m.Inbox.agents.sheet = sheet
@@ -342,7 +342,7 @@ func (m *OS) InboxAgentsSheetKey(key string) tea.Cmd {
 		return nil
 	}
 	if sheet.at.IsZero() || time.Since(sheet.at) < inboxAnswerSettle {
-		m.ShowNotification("The list just appeared. Read it, then press enter", "info", m.Settings.NotificationDuration)
+		m.ShowNotification("The list just appeared. Read it, then press enter", "warning", m.Settings.NotificationDuration)
 		return nil
 	}
 	a.sheet = nil
@@ -364,7 +364,7 @@ func (m *OS) InboxAgentsSheetKey(key string) tea.Cmd {
 		a.marksGen++
 	}
 	if changed > 0 {
-		m.ShowNotification(strconv.Itoa(changed)+" changed after the list showed them and were not allowed. Look at them again", "info", m.Settings.NotificationDuration*2)
+		m.ShowNotification(strconv.Itoa(changed)+" changed after the list showed them and were not allowed. Look at them again", "warning", m.Settings.NotificationDuration*2)
 	}
 	return tea.Batch(cmds...)
 }
@@ -468,7 +468,7 @@ func (m *OS) InboxAgentsBulkDismiss() tea.Cmd {
 		}
 	}
 	if len(cmds) == 0 {
-		m.ShowNotification("The marked agents have nothing that needs you", "info", m.Settings.NotificationDuration)
+		m.ShowNotification("The marked agents have nothing that needs you", "warning", m.Settings.NotificationDuration)
 		return nil
 	}
 	m.Inbox.agents.marks = nil
@@ -511,7 +511,7 @@ func (m *OS) InboxAgentsBulkSnooze() {
 		}
 	}
 	if len(a.snooze) == 0 {
-		m.ShowNotification("The marked agents have nothing to snooze", "info", m.Settings.NotificationDuration)
+		m.ShowNotification("The marked agents have nothing to snooze", "warning", m.Settings.NotificationDuration)
 		return
 	}
 	m.Inbox.life.pickFor = bulkSnoozeID
@@ -615,7 +615,7 @@ func (m *OS) InboxAgentsBulkResume() tea.Cmd {
 		return m.InboxResume()
 	}
 	if m.AttachedHost != "" || m.DaemonClient == nil {
-		m.ShowNotification("These panes are on another machine. Attach there to resume them", "info", m.Settings.NotificationDuration)
+		m.ShowNotification("These panes are on another machine. Attach there to resume them", "warning", m.Settings.NotificationDuration)
 		return nil
 	}
 	m.Inbox.agents.marks = nil
@@ -650,7 +650,7 @@ func (m *OS) resumeOffers(offers []session.AttentionItem) tea.Cmd {
 	}
 	a.marksGen++
 	if len(skipped) > 0 {
-		m.ShowNotification("Not resumed: "+strings.Join(skipped, ", "), "info", m.Settings.NotificationDuration*2)
+		m.ShowNotification("Not resumed: "+strings.Join(skipped, ", "), "warning", m.Settings.NotificationDuration*2)
 	}
 	if len(targets) == 0 {
 		return nil

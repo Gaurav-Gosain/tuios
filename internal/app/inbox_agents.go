@@ -328,7 +328,7 @@ func (m *OS) InboxAgentsReply() tea.Cmd {
 	}
 	if e.Host != "" {
 		if e.State == "needs_input" {
-			m.ShowNotification(who+" is waiting on a prompt. Answer it first.", "info", m.Settings.NotificationDuration)
+			m.ShowNotification(who+" is waiting on a prompt. Answer it first.", "warning", m.Settings.NotificationDuration)
 			return nil
 		}
 		m.openHostReply(e.Host, e.SessionID, e.WindowID, who, ctx)

@@ -281,7 +281,7 @@ func (m *OS) inboxCanMark(what string) bool {
 		return true
 	}
 	if m.DaemonClient == nil || m.AttachedHost != "" {
-		m.ShowNotification(what+" needs a client attached to this machine's daemon", "info", m.Settings.NotificationDuration)
+		m.ShowNotification(what+" needs a client attached to this machine's daemon", "warning", m.Settings.NotificationDuration)
 		return false
 	}
 	return true
@@ -481,7 +481,7 @@ func (m *OS) InboxSnoozeKey(key string) tea.Cmd {
 		}
 		it, ok := m.inboxItem(id)
 		if !ok {
-			m.ShowNotification("That item is gone", "info", m.Settings.NotificationDuration)
+			m.ShowNotification("That item is gone", "warning", m.Settings.NotificationDuration)
 			return nil
 		}
 		if closeAfter {
@@ -516,7 +516,7 @@ func (m *OS) InboxUndo() (tea.Cmd, bool) {
 	now := time.Now()
 	life.undo = slices.DeleteFunc(life.undo, func(u inboxUndoEntry) bool { return now.Sub(u.at) >= inboxUndoWindow })
 	if len(life.undo) == 0 {
-		m.ShowNotification("Nothing to undo: a dismiss, a snooze or a settle can be undone for 10 seconds", "info", m.Settings.NotificationDuration)
+		m.ShowNotification("Nothing to undo: a dismiss, a snooze or a settle can be undone for 10 seconds", "warning", m.Settings.NotificationDuration)
 		return nil, true
 	}
 	if !m.inboxCanMark("Undoing") {
@@ -537,7 +537,7 @@ func (m *OS) InboxToggleSnoozed() (tea.Cmd, bool) {
 	}
 	life := &m.Inbox.life
 	if !life.ShowSnoozed && len(life.Snoozed) == 0 {
-		m.ShowNotification("Nothing is snoozed", "info", m.Settings.NotificationDuration)
+		m.ShowNotification("Nothing is snoozed", "warning", m.Settings.NotificationDuration)
 		return nil, true
 	}
 	life.ShowSnoozed = !life.ShowSnoozed
@@ -682,11 +682,11 @@ func (m *OS) railPane(sessionID, windowID string) (state string, seq uint64, lab
 func (m *OS) SidebarAgentUnread(sessionID, windowID string) (tea.Cmd, bool) {
 	state, seq, label, ok := m.railPane(sessionID, windowID)
 	if !ok {
-		m.ShowNotification("That pane is on another machine; attach there to mark it unread", "info", m.Settings.NotificationDuration)
+		m.ShowNotification("That pane is on another machine; attach there to mark it unread", "warning", m.Settings.NotificationDuration)
 		return nil, true
 	}
 	if seq == 0 && state != "done" {
-		m.ShowNotification(printableTitle(label)+" has not finished a turn yet", "info", m.Settings.NotificationDuration)
+		m.ShowNotification(printableTitle(label)+" has not finished a turn yet", "warning", m.Settings.NotificationDuration)
 		return nil, true
 	}
 	if state != "done" && state != "idle" && state != "unknown" {
@@ -694,7 +694,7 @@ func (m *OS) SidebarAgentUnread(sessionID, windowID string) (tea.Cmd, bool) {
 		return nil, true
 	}
 	if w := m.GetFocusedWindow(); w != nil && w.ID == windowID && (sessionID == "" || sessionID == m.sidebarCurrentSessionID()) {
-		m.ShowNotification("This pane is in front of you, so it reads as seen. Mark it from another pane.", "info", m.Settings.NotificationDuration)
+		m.ShowNotification("This pane is in front of you, so it reads as seen. Mark it from another pane.", "warning", m.Settings.NotificationDuration)
 		return nil, true
 	}
 	changed := false
@@ -740,7 +740,7 @@ func (m *OS) SidebarAgentSnooze(sessionID, windowID string) (tea.Cmd, bool) {
 		}
 	}
 	if found == nil {
-		m.ShowNotification("Nothing needs you in this pane, so there is nothing to snooze", "info", m.Settings.NotificationDuration)
+		m.ShowNotification("Nothing needs you in this pane, so there is nothing to snooze", "warning", m.Settings.NotificationDuration)
 		return nil, true
 	}
 	if why := inboxSnoozeRefusal(*found); why != "" {

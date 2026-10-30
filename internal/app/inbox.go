@@ -773,7 +773,7 @@ func (m *OS) InboxPopSettling() bool {
 	if !m.ShowInbox || st.poppedAt.IsZero() || time.Since(st.poppedAt) >= inboxAnswerSettle {
 		return false
 	}
-	m.ShowNotification("A question just appeared. Read it, then answer", "info", m.Settings.NotificationDuration)
+	m.ShowNotification("A question just appeared. Read it, then answer", "warning", m.Settings.NotificationDuration)
 	return true
 }
 
@@ -1378,19 +1378,19 @@ func (m *OS) InboxAnswerAsk(n int) tea.Cmd {
 		return nil
 	}
 	if n < 1 || n > len(it.Options) {
-		m.ShowNotification("This question takes 1 to "+strconv.Itoa(len(it.Options)), "info", m.Settings.NotificationDuration)
+		m.ShowNotification("This question takes 1 to "+strconv.Itoa(len(it.Options)), "warning", m.Settings.NotificationDuration)
 		return nil
 	}
 	if !inboxShowsWhole(it) {
-		m.ShowNotification("This question has characters this terminal cannot show, so it is not answered here", "info", m.Settings.NotificationDuration)
+		m.ShowNotification("This question has characters this terminal cannot show, so it is not answered here", "warning", m.Settings.NotificationDuration)
 		return nil
 	}
 	if m.inboxCut(it) {
-		m.ShowNotification("This question cannot be shown whole here. Enter answers it in the pane", "info", m.Settings.NotificationDuration)
+		m.ShowNotification("This question cannot be shown whole here. Enter answers it in the pane", "warning", m.Settings.NotificationDuration)
 		return nil
 	}
 	if !m.inboxAnswerSettled(it, time.Now()) {
-		m.ShowNotification("This question just appeared. Read it, then answer", "info", m.Settings.NotificationDuration)
+		m.ShowNotification("This question just appeared. Read it, then answer", "warning", m.Settings.NotificationDuration)
 		return nil
 	}
 	return m.inboxAnswerAskCmd(it, it.Options[n-1])
@@ -1412,7 +1412,7 @@ type InboxAskAnsweredMsg struct {
 // which is what lets the daemon take the answer as the person's.
 func (m *OS) inboxAnswerAskCmd(it session.AttentionItem, answer string) tea.Cmd {
 	if m.DaemonClient == nil || m.AttachedHost != "" || it.Host != "" {
-		m.ShowNotification("Answering needs a client attached to this machine's daemon", "info", m.Settings.NotificationDuration)
+		m.ShowNotification("Answering needs a client attached to this machine's daemon", "warning", m.Settings.NotificationDuration)
 		return nil
 	}
 	nonce := m.DaemonClient.HumanNonce()
@@ -1461,11 +1461,11 @@ func (m *OS) applyInboxAskAnswered(msg InboxAskAnsweredMsg) {
 	case msg.Err != nil:
 		m.ShowNotification("The answer did not go through: "+msg.Err.Error(), "error", m.Settings.NotificationDuration*2)
 	case !msg.Applied && msg.Reason == inboxReplyChanged:
-		m.ShowNotification(msg.Name+" is asking something else now, so nothing was answered. Read it again", "info", m.Settings.NotificationDuration*2)
+		m.ShowNotification(msg.Name+" is asking something else now, so nothing was answered. Read it again", "warning", m.Settings.NotificationDuration*2)
 	case !msg.Applied && msg.Standing != "":
-		m.ShowNotification(msg.Name+" was already answered: "+printableTitle(msg.Standing), "info", m.Settings.NotificationDuration)
+		m.ShowNotification(msg.Name+" was already answered: "+printableTitle(msg.Standing), "warning", m.Settings.NotificationDuration)
 	case !msg.Applied:
-		m.ShowNotification(msg.Name+"'s question ended before the answer: "+strings.ReplaceAll(msg.Reason, "_", " "), "info", m.Settings.NotificationDuration)
+		m.ShowNotification(msg.Name+"'s question ended before the answer: "+strings.ReplaceAll(msg.Reason, "_", " "), "warning", m.Settings.NotificationDuration)
 	default:
 		m.ShowNotification(msg.Name+": "+printableTitle(msg.Answer), "success", m.Settings.NotificationDuration)
 	}
@@ -1485,19 +1485,19 @@ func (m *OS) InboxReplyApproval(decision string) tea.Cmd {
 		return nil
 	}
 	if !inboxHeld(it) {
-		m.ShowNotification(inboxNotHeldWords, "info", m.Settings.NotificationDuration)
+		m.ShowNotification(inboxNotHeldWords, "warning", m.Settings.NotificationDuration)
 		return nil
 	}
 	if !slices.Contains(it.Options, decision) {
-		m.ShowNotification("This prompt does not offer "+inboxDecisionWords(decision), "info", m.Settings.NotificationDuration)
+		m.ShowNotification("This prompt does not offer "+inboxDecisionWords(decision), "warning", m.Settings.NotificationDuration)
 		return nil
 	}
 	if !inboxShowsWhole(it) || m.inboxCut(it) {
-		m.ShowNotification("This prompt cannot be shown whole here. Enter answers it in the pane", "info", m.Settings.NotificationDuration)
+		m.ShowNotification("This prompt cannot be shown whole here. Enter answers it in the pane", "warning", m.Settings.NotificationDuration)
 		return nil
 	}
 	if !m.inboxAnswerSettled(it, time.Now()) {
-		m.ShowNotification("This prompt just changed. Read it, then answer", "info", m.Settings.NotificationDuration)
+		m.ShowNotification("This prompt just changed. Read it, then answer", "warning", m.Settings.NotificationDuration)
 		return nil
 	}
 	// A risky allow takes a second press, and a plan is approved only once
@@ -1584,7 +1584,7 @@ func (m *OS) inboxReplyCmd(it session.AttentionItem, decision string) tea.Cmd {
 // digest of the plan they read (inboxReplyExtras).
 func (m *OS) inboxReplyCmdWith(it session.AttentionItem, decision, message string) tea.Cmd {
 	if (m.DaemonClient == nil && m.Inbox.call == nil) || m.AttachedHost != "" {
-		m.ShowNotification("Answering needs a client attached to this machine's daemon", "info", m.Settings.NotificationDuration)
+		m.ShowNotification("Answering needs a client attached to this machine's daemon", "warning", m.Settings.NotificationDuration)
 		return nil
 	}
 	nonce := m.inboxNonce()
@@ -1638,9 +1638,9 @@ func (m *OS) applyInboxApprovalReplied(msg InboxApprovalRepliedMsg) {
 		}
 		m.ShowNotification("The answer did not go through: "+msg.Err.Error()+". Answer in the pane", "error", m.Settings.NotificationDuration*2)
 	case !msg.Applied && msg.Reason == inboxReplyChanged:
-		m.ShowNotification(msg.Name+" is asking about something else now, so nothing was answered. Read it again", "info", m.Settings.NotificationDuration*2)
+		m.ShowNotification(msg.Name+" is asking about something else now, so nothing was answered. Read it again", "warning", m.Settings.NotificationDuration*2)
 	case !msg.Applied:
-		m.ShowNotification(msg.Name+" was already answered: "+inboxDecisionWords(msg.Standing), "info", m.Settings.NotificationDuration)
+		m.ShowNotification(msg.Name+" was already answered: "+inboxDecisionWords(msg.Standing), "warning", m.Settings.NotificationDuration)
 	case msg.Decision != session.ApprovalAsk:
 		m.ShowNotification(msg.Name+": "+inboxDecisionWords(msg.Decision), "success", m.Settings.NotificationDuration)
 	}

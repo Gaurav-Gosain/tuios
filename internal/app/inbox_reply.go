@@ -223,7 +223,7 @@ func (m *OS) openInboxReply(sessionID, windowID, who, context string, closeAfter
 	// is refused like one on a prompt, as its row reads.
 	if state, seq, _, ok := m.railPane(sessionID, windowID); ok {
 		if drawn, _ := m.railAgentState(windowID, state, seq); drawn == "needs_input" {
-			m.ShowNotification(who+" is waiting on a prompt. Answer it first ("+m.inboxKeyOr(config.ActionInboxPeek, "space")+" to peek).", "info", m.Settings.NotificationDuration)
+			m.ShowNotification(who+" is waiting on a prompt. Answer it first ("+m.inboxKeyOr(config.ActionInboxPeek, "space")+" to peek).", "warning", m.Settings.NotificationDuration)
 			return false
 		}
 	}
@@ -350,7 +350,7 @@ func (m *OS) SidebarAgentReply(sessionID, windowID string) (tea.Cmd, bool) {
 	}
 	state, _, label, ok := m.railPane(sessionID, windowID)
 	if !ok {
-		m.ShowNotification("That pane is on another machine. Attach there to reply", "info", m.Settings.NotificationDuration)
+		m.ShowNotification("That pane is on another machine. Attach there to reply", "warning", m.Settings.NotificationDuration)
 		return nil, true
 	}
 	who := printableTitle(label)
@@ -859,7 +859,7 @@ func (m *OS) applyInboxQueueDropped(msg InboxQueueDroppedMsg) {
 		return
 	}
 	if msg.ID == "" {
-		m.ShowNotification("Nothing queued for "+msg.Who+" can be dropped: a message being typed cannot be taken back", "info", m.Settings.NotificationDuration)
+		m.ShowNotification("Nothing queued for "+msg.Who+" can be dropped: a message being typed cannot be taken back", "warning", m.Settings.NotificationDuration)
 		return
 	}
 	st := &m.Inbox.reply
