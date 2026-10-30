@@ -32,6 +32,8 @@ var personVerbs = map[string]bool{
 	"queue-prompt":          true,
 	"cancel-queued":         true,
 	"send-agent-message":    true,
+	// The conversation a pane's agent had: a client reads it to show it.
+	"agent-transcript": true,
 	// The review verbs the GUI writes with: a note and a send are the
 	// person's only with the nonce, and review-stage checks a nonce it is
 	// given.
