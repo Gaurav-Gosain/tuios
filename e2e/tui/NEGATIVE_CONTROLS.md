@@ -11034,8 +11034,12 @@ The frames of the review opened on the file list and of the empty review are
 `TUIOS_E2E_FRAMES`.
 ## queue-prompt client_id
 
-Run on 2026-10-30 on Linux against a build from this branch.
+Run on 2026-10-30 on Linux against builds from this branch. Each control fails `TestQueuedMessageWithAClientIDIsQueuedOnce`.
 
 | Control: what was cut | Where it fails | Verdict |
 | --- | --- | --- |
-| The dedupe in `verbQueuePrompt`, so every call runs `queuePrompt` | `TestQueuedMessageWithAClientIDIsQueuedOnce`: the second call makes entry q2 and has no `duplicate` | The test catches it |
+| The dedupe in `verbQueuePrompt`: every call runs `queuePrompt` | The second call makes entry q2, with no `duplicate` | The test catches it |
+| `queueDedupAge` at an hour | Two hours later the send queues again | The test catches it |
+| The origin's kind, peer and window in the key | The same id from a linked machine is called a duplicate | The test catches it |
+| The origin in the key replaced by the entry's `by` | The phone's send with a nonce queues again | The test catches it |
+| Removing the old slot of an expired id from `order` | The id sent again past its age queues again after 254 more ids | The test catches it |

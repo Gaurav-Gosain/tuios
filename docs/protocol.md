@@ -189,8 +189,8 @@ is an answer, and each entry says which.
 
 **The new verb [list-routes](#list-routes)** lists this machine's addresses.
 
-**queue-prompt takes `client_id`.** A second call with the same `client_id` for
-the same pane queues nothing and answers `duplicate: true`. A call without it
+**queue-prompt takes `client_id`.** A second call from the same sender with the
+same `client_id` for the same pane queues nothing and answers `duplicate: true`. A call without it
 works as before.
 
 **A hooked agent that stops reporting shows as silent.** A pane whose claim
@@ -7108,8 +7108,12 @@ required without `parts`), `parts`, `human_nonce`, `from`.
 `client_id` is the client's own name for the message, at most 128 bytes. A
 phone that lost the answer sends the message again with the same `client_id`,
 and the daemon queues nothing and answers as the first time, with
-`duplicate: true`. The daemon keeps each one for an hour, in memory, per pane.
-It does not go with `host`. A daemon older than `client_id` refuses the param
+`duplicate: true`. Use a random id. An id counts for one sender and one pane:
+the sender is the kind of caller and, for a link, the machine, or for a pane,
+the pane. Two machines whose links give no name count as one sender. The daemon
+keeps the last 256 ids across all panes for 7 days, in memory. A daemon restart
+forgets them, so a message sent again after a restart is queued again. It does
+not go with `host`. A daemon older than `client_id` refuses the param
 with `invalid_params`, so ask `list-verbs` before sending it.
 
 `host` names a machine from `[hosts]`: the message is for a pane there. This

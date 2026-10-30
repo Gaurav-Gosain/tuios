@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/harness"
@@ -126,9 +125,9 @@ func (d *Daemon) verbQueuePrompt(cs *connState, params json.RawMessage) (any, *v
 		repeat bool
 	)
 	if p.ClientID != "" {
-		// After the nonce check above, and per pane, so a caller learns
-		// nothing about another pane's messages.
-		res, repeat, verr = d.queueDedup.once(target.ID+"\x00"+p.ClientID, time.Now(), func() (queuedResult, *verbError) {
+		// After the nonce check above, and per sender and pane, so a caller
+		// learns nothing about another's messages.
+		res, repeat, verr = d.queueDedup.once(newQueueDedupKey(e.origin, target.ID, p.ClientID), queueDedupNow(), func() (queuedResult, *verbError) {
 			return d.queuePrompt(sess, target, e)
 		})
 	} else {

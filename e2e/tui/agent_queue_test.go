@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -269,21 +270,62 @@ func TestNarrowRailKeepsTheAgentNameBesideAQueue(t *testing.T) {
 }
 
 // TestQueuedMessageWithAClientIDIsQueuedOnce is the phone's send again after a
-// lost answer: two queue-prompt calls with one client_id leave one entry, and
-// the second answers as the first did. When the agent rests, the message is
-// typed once.
+// lost answer: two queue-prompt calls with one client_id leave one entry, the
+// second answers as the first did, and the message is typed once.
 //
-// Negative control: with the dedupe in verbQueuePrompt replaced by a plain
-// queuePrompt, the second call makes a second entry and the test fails there.
+// The id belongs to its sender: the same id from a linked machine or from
+// another one is a message of its own, and a machine that sends again on a new
+// connection with a nonce it did not have is still the same sender. It lasts
+// through an outage of hours, and past 7 days it is forgotten. An id sent again
+// past that takes one place in the bound, so the ids that follow do not push
+// out the new entry early. A file moves the daemon's clock for the dedupe.
+//
+// Negative controls: each is recorded in NEGATIVE_CONTROLS.md. With the dedupe
+// in verbQueuePrompt replaced by a plain queuePrompt, the second call makes a
+// second entry. With queueDedupAge at an hour, the send two hours later queues
+// again. With the sender out of the key, the link's first send is called a
+// duplicate. With the entry's by in the key, the send with a nonce queues
+// again. With the old slot left in order, the last send queues again.
 func TestQueuedMessageWithAClientIDIsQueuedOnce(t *testing.T) {
-	_, base := attachClientBase(t)
-	const marker = "client-id-once-c41d"
-	if out, err := tuiosCLI(t, base, "set-agent-state", "-s", "e2e-ctrlp", "working"); err != nil {
-		t.Fatalf("set-agent-state working: %v\n%s", err, out)
+	const session = "e2e-client-id"
+	base := t.TempDir()
+	skew := filepath.Join(base, "dedup-skew-hours")
+	if err := os.WriteFile(skew, []byte("0"), 0o600); err != nil {
+		t.Fatal(err)
 	}
-	send := func() map[string]any {
+	t.Setenv("TUIOS_E2E_QUEUE_DEDUP_SKEW", skew)
+	moveClock := func(hours int) {
 		t.Helper()
-		params := fmt.Sprintf(`{"session":"e2e-ctrlp","text":"echo %s","client_id":"phone-msg-1"}`, marker)
+		if err := os.WriteFile(skew, []byte(strconv.Itoa(hours)), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	killDaemon(t, base)
+	dir := filepath.Join(xdgDir(base, "XDG_CONFIG_HOME"), "tuios")
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	cfg := "[hosts.phone]\nallow = [\"list\", \"write\", \"respond\"]\n\n[hosts.viewer]\nallow = [\"list\", \"write\"]\n"
+	if err := os.WriteFile(filepath.Join(dir, "config.toml"), []byte(cfg), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if out, err := tuiosCLI(t, base, "new", session, "--detach"); err != nil {
+		t.Fatalf("create the session: %v\n%s", err, out)
+	}
+	working := func() {
+		t.Helper()
+		if out, err := tuiosCLI(t, base, "set-agent-state", "-s", session, "working"); err != nil {
+			t.Fatalf("set-agent-state working: %v\n%s", err, out)
+		}
+	}
+	working()
+
+	// From this machine's shell.
+	const marker = "client-id-once-c41d"
+	const id = "phone-msg-1"
+	shellSend := func() map[string]any {
+		t.Helper()
+		params := fmt.Sprintf(`{"session":%q,"text":"echo %s","client_id":%q}`, session, marker, id)
 		out, err := tuiosCLI(t, base, "call", "queue-prompt", params)
 		if err != nil {
 			t.Fatalf("queue-prompt: %v\n%s", err, out)
@@ -294,38 +336,102 @@ func TestQueuedMessageWithAClientIDIsQueuedOnce(t *testing.T) {
 		}
 		return res
 	}
-	first := send()
+	first := shellSend()
 	if _, dup := first["duplicate"]; dup {
 		t.Fatalf("the first call says duplicate: %v", first)
 	}
-	second := send()
+	second := shellSend()
 	if second["duplicate"] != true || second["id"] != first["id"] {
 		t.Fatalf("the second call = %v, want duplicate with the id of %v", second, first)
 	}
-	out, err := tuiosCLI(t, base, "queue", "ls", "-s", "e2e-ctrlp")
+	out, err := tuiosCLI(t, base, "queue", "ls", "-s", session)
 	if err != nil {
 		t.Fatalf("queue ls: %v\n%s", err, out)
 	}
 	if n := strings.Count(out, "echo "+marker); n != 1 {
 		t.Fatalf("queue ls shows the message %d times, want once:\n%s", n, out)
 	}
-	if out, err := tuiosCLI(t, base, "set-agent-state", "-s", "e2e-ctrlp", "idle"); err != nil {
+	if out, err := tuiosCLI(t, base, "set-agent-state", "-s", session, "idle"); err != nil {
 		t.Fatalf("set-agent-state idle: %v\n%s", err, out)
 	}
 	deadline := time.Now().Add(15 * time.Second)
 	for {
-		out, _ := tuiosCLI(t, base, "capture-pane", "-s", "e2e-ctrlp")
+		out, _ := tuiosCLI(t, base, "capture-pane", "-s", session)
 		if strings.Contains(out, "echo "+marker) {
 			time.Sleep(2 * time.Second)
-			out, _ = tuiosCLI(t, base, "capture-pane", "-s", "e2e-ctrlp")
+			out, _ = tuiosCLI(t, base, "capture-pane", "-s", session)
 			if n := strings.Count(out, "echo "+marker); n != 1 {
 				t.Fatalf("the message was typed %d times:\n%s", n, out)
 			}
-			return
+			break
 		}
 		if time.Now().After(deadline) {
 			t.Fatalf("the message was never typed:\n%s", out)
 		}
 		time.Sleep(200 * time.Millisecond)
+	}
+	working()
+
+	// The same id from other senders is another message.
+	linkSend := func(c *linkStream, text, msgID, nonce string) map[string]any {
+		t.Helper()
+		params := map[string]any{"session": session, "text": text, "client_id": msgID}
+		if nonce != "" {
+			params["human_nonce"] = nonce
+		}
+		res, verr := c.call(t, "queue-prompt", params)
+		if verr != nil {
+			t.Fatalf("queue-prompt over the link: %v", verr)
+		}
+		return res
+	}
+	phone := startLinkAs(t, base, "phone").open(t, true)
+	fromPhone := linkSend(phone, "from the phone", id, "")
+	if fromPhone["duplicate"] == true {
+		t.Fatalf("the same id from a linked machine is called a duplicate: %v", fromPhone)
+	}
+	viewer := startLinkAs(t, base, "viewer").open(t, true)
+	if res := linkSend(viewer, "from the viewer", id, ""); res["duplicate"] == true {
+		t.Fatalf("the same id from a second linked machine is called a duplicate: %v", res)
+	}
+
+	// The phone again, on a new connection, now with a nonce: the same sender.
+	again := startLinkAs(t, base, "phone").open(t, true)
+	pres, verr := again.call(t, "attach-presence", nil)
+	if verr != nil {
+		t.Fatalf("attach-presence: %v", verr)
+	}
+	nonce := pres["human_nonce"].(string)
+	if res := linkSend(again, "from the phone", id, nonce); res["duplicate"] != true || res["id"] != fromPhone["id"] {
+		t.Fatalf("the phone's send with a nonce = %v, want a duplicate of %v", res, fromPhone)
+	}
+
+	// Through an outage of hours the id still holds, and past 7 days it is gone.
+	moveClock(2)
+	if res := shellSend(); res["duplicate"] != true {
+		t.Fatalf("two hours later the send queued again: %v", res)
+	}
+	moveClock(6 * 24)
+	if res := shellSend(); res["duplicate"] != true {
+		t.Fatalf("six days later the send queued again: %v", res)
+	}
+	moveClock(8 * 24)
+	if res := shellSend(); res["duplicate"] == true {
+		t.Fatalf("eight days later the send is still a duplicate: %v", res)
+	}
+
+	// That send took one place in the bound. The bound holds 256 and these
+	// three ids come first: the phone's, the viewer's and the shell's. With
+	// 254 more, 257 ids push out one, the phone's. An old slot left behind for
+	// the shell's id would be first in line, and pushing it out would delete
+	// the entry just made.
+	for i := range 254 {
+		res := linkSend(again, "another message", fmt.Sprintf("other-%d", i), nonce)
+		if _, verr := again.call(t, "cancel-queued", map[string]any{"session": session, "id": res["id"], "human_nonce": nonce}); verr != nil {
+			t.Fatalf("cancel-queued: %v", verr)
+		}
+	}
+	if res := shellSend(); res["duplicate"] != true {
+		t.Fatalf("the id sent again past its age lost its place early: %v", res)
 	}
 }
