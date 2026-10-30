@@ -69,6 +69,8 @@ type wireState struct {
 }
 
 type wireWindow struct {
+	Queued     *int   `json:"queued"`
+	Settled    bool   `json:"settled"`
 	ID         string `json:"id"`
 	PTY        string `json:"pty"`
 	Kind       string `json:"kind"`
@@ -902,6 +904,38 @@ func TestGUIBridgeAction(t *testing.T) {
 			t.Errorf("action %s: ok=%v error=%q, want a refusal that says why", name, r.OK, r.Error)
 		}
 	}
+}
+
+// TestGUIBridgeAgentFacts: the state says at once what the daemon sends no
+// fleet event for, so a renderer shows a settle and a queued message when they
+// happen, not at the next slow fleet read.
+func TestGUIBridgeAgentFacts(t *testing.T) {
+	base := t.TempDir()
+	b := startBridge(t, base, "gb", 120, 40)
+	id := b.tiledPanes(1)[0]
+	mustCLI(t, base, "set-agent-state", "-s", "gb", "-w", id, "working", "--harness", "claude-code")
+	window := func(s *wireState) *wireWindow {
+		for i := range s.Windows {
+			if s.Windows[i].ID == id {
+				return &s.Windows[i]
+			}
+		}
+		return nil
+	}
+	b.waitState(func(s *wireState) bool { w := window(s); return w != nil && w.Queued != nil && *w.Queued == 0 }, "queued says 0 with nothing queued")
+	if r := b.verb("queue-prompt", map[string]any{"session": "gb", "window": id, "text": "next"}); !r.OK {
+		t.Fatalf("queue-prompt: %s %s", r.Code, r.Error)
+	}
+	b.waitState(func(s *wireState) bool { w := window(s); return w != nil && w.Queued != nil && *w.Queued == 1 }, "queued says 1 after queue-prompt")
+	mustCLI(t, base, "set-agent-state", "-s", "gb", "-w", id, "idle", "--harness", "claude-code")
+	if r := b.verb("mark-attention", map[string]any{"session": "gb", "window": id, "action": "settle"}); !r.OK {
+		t.Fatalf("settle: %s %s", r.Code, r.Error)
+	}
+	b.waitState(func(s *wireState) bool { w := window(s); return w != nil && w.Settled }, "settled after mark-attention settle")
+	if r := b.verb("mark-attention", map[string]any{"session": "gb", "window": id, "action": "unsettle"}); !r.OK {
+		t.Fatalf("unsettle: %s %s", r.Code, r.Error)
+	}
+	b.waitState(func(s *wireState) bool { w := window(s); return w != nil && !w.Settled }, "not settled after unsettle")
 }
 
 // TestGUIBridgeKeybinds: the keybinds event carries the user's own leader and

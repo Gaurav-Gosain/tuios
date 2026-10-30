@@ -10991,3 +10991,13 @@ A follow-up commit adds `TestNotificationLevelErrorStillLogsAWarning`. This cont
 | Control: what was cut | Where it fails | Verdict |
 | --- | --- | --- |
 | The rule that a warning always goes to the log: `showNotification` skips it when `log_hidden` is false | `TestNotificationLevelErrorStillLogsAWarning`: "ASSERTION: the log viewer does not list the warning" | **caught** |
+
+## The bridge says the agent facts in its state
+
+`TestGUIBridgeAgentFacts` queues a message for a pane and settles it through the bridge's verb proxy, and waits for each change in the next state event.
+
+Run on 2026-10-30 on Linux.
+
+| Control: what was cut | Where it fails | Verdict |
+| --- | --- | --- |
+| The four fields in the window export (`internal/guibridge/bridge.go`) | "queued says 0 with nothing queued" | **caught** |

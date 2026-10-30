@@ -305,6 +305,16 @@ type Window struct {
 	Harness string `json:"harness,omitempty"`
 	// AgentAt is when the pane entered its agent state, in Unix milliseconds.
 	AgentAt int64 `json:"agent_at,omitempty"`
+	// Reason is why Agent is not the state the agent gave, such as "silent".
+	// Queued counts the messages that wait in the pane's queue, and DraftHeld
+	// says the person's draft in the prompt box holds them. Settled marks an
+	// agent on the Settled shelf. The daemon sends no fleet event for these,
+	// so a renderer reads them here to show a change at once. Queued is always
+	// sent, so its presence says the bridge has these fields.
+	Reason    string `json:"agent_reason,omitempty"`
+	Queued    int    `json:"queued"`
+	DraftHeld bool   `json:"draft_held,omitempty"`
+	Settled   bool   `json:"settled,omitempty"`
 	// Repo and Branch describe the git checkout the pane's folder is in.
 	Repo   string `json:"repo,omitempty"`
 	Branch string `json:"branch,omitempty"`
@@ -999,7 +1009,7 @@ func (m *model) export() {
 			Workspace: w.Workspace, X: w.X, Y: w.Y, W: w.Width, H: w.Height, Z: w.Z,
 			Border: w.BorderOffset(), Minimized: w.Minimized, Floating: w.IsFloating,
 			Zoomed: w.Zoomed, Agent: w.AgentState, AgentMsg: w.AgentMessage, AgentKind: w.AgentKind,
-			Cwd: cwd, Host: w.Host, Foreground: w.ForegroundCmd, Harness: w.AgentHarness, AgentAt: w.AgentStateAt / int64(time.Millisecond),
+			Cwd: cwd, Host: w.Host, Foreground: w.ForegroundCmd, Harness: w.AgentHarness, Reason: w.AgentReason, Queued: w.AgentQueued, DraftHeld: w.AgentDraftHeld, Settled: w.AgentSettled, AgentAt: w.AgentStateAt / int64(time.Millisecond),
 			Repo: repo, Branch: branch, StartedBy: startedByRef(w.StartedBySession, w.StartedByWindow),
 		})
 	}
