@@ -5,6 +5,7 @@ import (
 	"slices"
 	"time"
 
+	"github.com/Gaurav-Gosain/tuios/internal/sortx"
 	"tuios.dev/progstatus"
 	"tuios.dev/vt"
 )
@@ -98,7 +99,7 @@ type handoffCommand struct {
 func (p *PTY) handoffCapture() (*TerminalState, handoffLive) {
 	state := p.GetTerminalStatePacked(handoffHistoryRows, 0)
 	live := handoffLive{Title: p.Title(), Place: p.place.handoffState(), ProgStatus: p.progStatus.Records()}
-	slices.SortFunc(live.ProgStatus, func(a, b progstatus.Record) int { return cmp.Compare(a.Seq, b.Seq) })
+	sortx.SortFunc(live.ProgStatus, func(a, b progstatus.Record) int { return cmp.Compare(a.Seq, b.Seq) })
 
 	dropped, origin := 0, 0
 	if state != nil {

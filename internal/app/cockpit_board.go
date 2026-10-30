@@ -17,6 +17,7 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
+	"github.com/Gaurav-Gosain/tuios/internal/sortx"
 	"github.com/Gaurav-Gosain/tuios/pkg/fuzzy"
 )
 
@@ -207,7 +208,7 @@ func (m *OS) buildBoardRows(list []sidebarAgentEntry) []ckRow {
 		if len(items) == 0 {
 			continue
 		}
-		slices.SortStableFunc(items, func(a, b ckRow) int {
+		sortx.ShortStableFunc(items, func(a, b ckRow) int {
 			return cmp.Or(cmp.Compare(rank(a), rank(b)), cmp.Compare(ck.cards[a.card].StageAt, ck.cards[b.card].StageAt))
 		})
 		stage := session.TaskStages[g]

@@ -15,6 +15,7 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/crashexit"
 	"github.com/Gaurav-Gosain/tuios/internal/federation"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
+	"github.com/Gaurav-Gosain/tuios/internal/sortx"
 )
 
 // The copies between machines on the client: a mirror of the daemon's
@@ -437,7 +438,7 @@ func (m *OS) applyTransfersSnapshot(msg transfersSnapshotMsg) {
 
 // sortTransferRows puts the newest copy first.
 func sortTransferRows(rows []session.TransferRow) {
-	slices.SortStableFunc(rows, func(a, b session.TransferRow) int {
+	sortx.SortStableFunc(rows, func(a, b session.TransferRow) int {
 		if c := cmp.Compare(b.Created, a.Created); c != 0 {
 			return c
 		}

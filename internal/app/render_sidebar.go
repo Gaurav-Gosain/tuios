@@ -15,6 +15,7 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/sessiontree"
+	"github.com/Gaurav-Gosain/tuios/internal/sortx"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
 	"github.com/charmbracelet/x/ansi"
@@ -2962,7 +2963,7 @@ func (m *OS) sidebarFooter(variant, cw int, pal overlay.Palette,
 	// corners, so which of them is built first depends on which side the rail is
 	// on, and recording them in construction order put the outer one's rectangle
 	// before the inner one's on a left-hand rail.
-	slices.SortFunc(items, func(a, b placed) int { return a.zone.X0 - b.zone.X0 })
+	sortx.ShortStableFunc(items, func(a, b placed) int { return a.zone.X0 - b.zone.X0 })
 
 	zones := make([]sidebarFooterZone, 0, len(items))
 	for _, it := range items {

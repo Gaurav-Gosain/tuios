@@ -46,6 +46,13 @@ func TestSameOrderAsSlices(t *testing.T) {
 			if !slices.Equal(want, got) {
 				t.Fatalf("SortStableFunc: seed %d, n %d: order differs from slices.SortStableFunc", seed, n)
 			}
+
+			want, got = items(n, seed), items(n, seed)
+			slices.SortStableFunc(want, byKey)
+			ShortStableFunc(got, byKey)
+			if !slices.Equal(want, got) {
+				t.Fatalf("ShortStableFunc: seed %d, n %d: order differs from slices.SortStableFunc", seed, n)
+			}
 		}
 	}
 }

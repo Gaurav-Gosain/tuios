@@ -8,6 +8,7 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/layout"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
+	"github.com/Gaurav-Gosain/tuios/internal/sortx"
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
 	"github.com/Gaurav-Gosain/tuios/pkg/fuzzy"
 )
@@ -1564,7 +1565,7 @@ func groupPaletteItems(items []CommandPaletteItem) []CommandPaletteItem {
 		}
 	}
 	out := slices.Clone(items)
-	slices.SortStableFunc(out, func(a, b CommandPaletteItem) int { return rank[a.Category] - rank[b.Category] })
+	sortx.SortStableFunc(out, func(a, b CommandPaletteItem) int { return rank[a.Category] - rank[b.Category] })
 	return out
 }
 

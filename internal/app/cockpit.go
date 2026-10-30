@@ -14,6 +14,7 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/diffview"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/sessiontree"
+	"github.com/Gaurav-Gosain/tuios/internal/sortx"
 	"github.com/Gaurav-Gosain/tuios/pkg/fuzzy"
 	"tuios.dev/loom"
 )
@@ -693,7 +694,7 @@ func (m *OS) ckGatherFans(items []ckRow, list []sidebarAgentEntry) []ckRow {
 				tries = append(tries, a)
 			}
 		}
-		slices.SortStableFunc(tries, func(a, b ckRow) int {
+		sortx.ShortStableFunc(tries, func(a, b ckRow) int {
 			return ckFanOrder(m.ckAgentSession(list[a.agent]), m.ckAgentSession(list[b.agent]))
 		})
 		tries[len(tries)-1].last = true

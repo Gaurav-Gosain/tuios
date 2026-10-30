@@ -30,3 +30,16 @@ func SortFunc[S ~[]E, E any](s S, cmp func(a, b E) int) {
 func SortStableFunc[S ~[]E, E any](s S, cmp func(a, b E) int) {
 	sort.SliceStable(s, func(i, j int) bool { return cmp(s[i], s[j]) < 0 })
 }
+
+// ShortStableFunc sorts s like slices.SortStableFunc, by plain insertion. Each
+// element type costs a few hundred bytes of code where the slices function
+// costs about 10 KB, and it does not allocate, so it suits a render path. It
+// takes time quadratic in len(s): use it only on a list that stays short, tens
+// of elements.
+func ShortStableFunc[S ~[]E, E any](s S, cmp func(a, b E) int) {
+	for i := 1; i < len(s); i++ {
+		for j := i; j > 0 && cmp(s[j], s[j-1]) < 0; j-- {
+			s[j], s[j-1] = s[j-1], s[j]
+		}
+	}
+}

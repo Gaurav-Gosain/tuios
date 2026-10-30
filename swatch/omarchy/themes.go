@@ -3,7 +3,7 @@ package omarchy
 import (
 	"os"
 	"path/filepath"
-	"slices"
+	"sort"
 
 	"tuios.dev/swatch"
 )
@@ -67,14 +67,6 @@ func ThemesIn(dirs ...string) []Theme {
 			out = append(out, Theme{ID: id, Dir: themeDir})
 		}
 	}
-	slices.SortFunc(out, func(a, b Theme) int {
-		switch {
-		case a.ID < b.ID:
-			return -1
-		case a.ID > b.ID:
-			return 1
-		}
-		return 0
-	})
+	sort.Slice(out, func(i, j int) bool { return out[i].ID < out[j].ID })
 	return out
 }

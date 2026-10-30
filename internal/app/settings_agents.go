@@ -13,6 +13,7 @@ import (
 
 	"github.com/Gaurav-Gosain/tuios/internal/integration"
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
+	"github.com/Gaurav-Gosain/tuios/internal/sortx"
 )
 
 // The Agents section of the settings page.
@@ -452,7 +453,7 @@ func agentsInOrder(all []integration.Status) []integration.Status {
 		}
 		return 1
 	}
-	slices.SortStableFunc(out, func(a, b integration.Status) int { return cmp.Compare(here(a), here(b)) })
+	sortx.SortStableFunc(out, func(a, b integration.Status) int { return cmp.Compare(here(a), here(b)) })
 	return out
 }
 

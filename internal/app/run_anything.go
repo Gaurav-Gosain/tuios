@@ -6,6 +6,7 @@ import (
 	"time"
 
 	tea "charm.land/bubbletea/v2"
+	"github.com/Gaurav-Gosain/tuios/internal/sortx"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 	"github.com/Gaurav-Gosain/tuios/pkg/applist"
 )
@@ -94,7 +95,7 @@ func (m *OS) applyPathApps(entries []applist.Entry) {
 // stableSortByBoost orders items by launch history, strongest first, keeping
 // the input order between equal ones.
 func stableSortByBoost(items []LauncherItem, hist *applist.Frecency) {
-	slices.SortStableFunc(items, func(a, b LauncherItem) int {
+	sortx.SortStableFunc(items, func(a, b LauncherItem) int {
 		return hist.Boost(b.Entry.Name) - hist.Boost(a.Entry.Name)
 	})
 }

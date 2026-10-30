@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/composer"
+	"github.com/Gaurav-Gosain/tuios/internal/sortx"
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
@@ -1124,7 +1125,7 @@ func (m *OS) inboxRows() []inboxRow {
 		if len(items) > 0 {
 			// Two kinds can share a group, each sorted oldest first by the
 			// daemon; the group as a whole is kept oldest first too.
-			slices.SortStableFunc(items, func(a, b inboxRow) int { return cmp.Compare(a.item.Since, b.item.Since) })
+			sortx.ShortStableFunc(items, func(a, b inboxRow) int { return cmp.Compare(a.item.Since, b.item.Since) })
 			rows = append(rows, inboxRow{heading: inboxGroupTitle(group), count: len(items)})
 			rows = append(rows, items...)
 		}

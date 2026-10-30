@@ -21,6 +21,7 @@ package progstatus
 import (
 	"encoding/base64"
 	"slices"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -635,7 +636,9 @@ func (s *Store) Records() []Record {
 		out = append(out, *rec)
 	}
 	s.mu.Unlock()
-	slices.SortFunc(out, func(a, b Record) int { return strings.Compare(a.ID, b.ID) })
+	// sort.Slice, because a generic sort links one copy of pdqsort for each
+	// struct type, about 30 KB in the file, and a store holds 256 records at most.
+	sort.Slice(out, func(i, j int) bool { return out[i].ID < out[j].ID })
 	InheritApp(out)
 	return out
 }
