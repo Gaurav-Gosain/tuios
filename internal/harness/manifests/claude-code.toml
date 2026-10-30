@@ -330,11 +330,16 @@ any      = ["waiting for your input"]
 # hook the daemon searches this directory and believes a file only when the
 # fields named in verify match the pane, refusing when two files both match.
 #
+# {claude_config} is $CLAUDE_CONFIG_DIR, else ~/.claude, as Claude Code finds
+# its own folder. A path the hook reports is checked against the folder the
+# hook's own environment names, so panes on two profiles both join; the search
+# reads the daemon's environment.
+#
 # The reader takes stop_reason and nothing else. See internal/transcript for why
 # that is a property of the types rather than a promise.
 [transcript]
 reader = "claude-code-jsonl"
-dir    = "{home}/.claude/projects/{cwd:dashes}"
+dir    = "{claude_config}/projects/{cwd:dashes}"
 glob   = "*.jsonl"
 verify = ["cwd", "version"]
 

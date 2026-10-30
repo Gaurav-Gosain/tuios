@@ -6859,8 +6859,12 @@ says why in `transcript_refused`:
 
 - A process in a pane names a file only for its own pane.
 - The file is under the harness's transcript folder. For Claude Code that is
-  `~/.claude/projects`. A symbolic link that leads out of the folder does
-  not count.
+  `~/.claude/projects`, or `$CLAUDE_CONFIG_DIR/projects`, and for Codex
+  `~/.codex/sessions`, or `$CODEX_HOME/sessions`. The variable is read from
+  the environment of the process that sends the report, which is the hook
+  Claude Code or Codex runs, so each pane follows the profile its agent
+  started with. The default folder is accepted as well. A symbolic link that
+  leads out of the folder does not count.
 - The file name matches the harness's pattern (`*.jsonl`).
 - The file is a regular file. The daemon opens it without waiting and checks
   it again on each read, so a FIFO or a link put in its place is not read.
