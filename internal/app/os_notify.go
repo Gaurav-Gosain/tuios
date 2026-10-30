@@ -274,26 +274,21 @@ func (m *OS) showNotification(message, notifType, agentState string, duration ti
 	// level: [notifications.agent] and [notifications.mail] decide those, and
 	// someone who quiets tuios's own notices still wants to hear an agent
 	// finish.
-	if shown && target == nil && notifSeverityRank(notifType) < notifLevelRank(m.Settings.NotificationLevel) {
-		if notifSeverityRank(notifType) < 2 && m.Settings.NotificationLogHidden {
-			m.appendLog(LogMessage{Time: time.Now(), Level: "INFO", Message: message, Source: source})
-		}
-		return
-	}
+	belowLevel := target == nil && notifSeverityRank(notifType) < notifLevelRank(m.Settings.NotificationLevel)
 
 	// An info or a success message is logged when the dock shows it. It used
 	// to be logged only with verbose logging on, so a message that went by
 	// too fast to read was nowhere to be found afterwards. The ones the dock
 	// does not show (copy mode's state marks, such as "VISUAL") stay out of
 	// the log unless it is verbose, or they would fill it.
-	if notifSeverityRank(notifType) < 2 {
+	if notifSeverityRank(notifType) < 2 && (!belowLevel || m.Settings.NotificationLogHidden) {
 		if shown {
 			m.appendLog(LogMessage{Time: time.Now(), Level: "INFO", Message: message, Source: source})
 		} else {
 			m.LogInfo("%s", message)
 		}
 	}
-	if !shown {
+	if !shown || belowLevel {
 		return
 	}
 

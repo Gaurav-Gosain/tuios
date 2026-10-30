@@ -192,3 +192,36 @@ func TestNotificationLevelShowsWhyAKeyDidNothing(t *testing.T) {
 	}
 	saveCockpitFrames(t, term, "notification-level-refusal")
 }
+
+// TestNotificationLevelErrorStillLogsAWarning sets notifications.level to error
+// and notifications.log_hidden to false. The dock does not show a warning at
+// that level, and the log viewer still lists it: a warning always goes to the
+// log, whatever the switch says.
+//
+// Negative control: with the warning's log line skipped when log_hidden is off,
+// the log viewer does not list it and the test fails.
+func TestNotificationLevelErrorStillLogsAWarning(t *testing.T) {
+	const warning = "No pane is open"
+	base := t.TempDir()
+	writeConfig(t, base, "[notifications]\nlevel = \"error\"\nlog_hidden = false\n\n[keybindings.global]\nclear_scrollback = [\"ctrl+g\"]\n")
+	term := startIn(t, base, startOpts{cols: 120, rows: 40})
+	waitBoot(t, term)
+
+	if err := term.SendKeys(tuitest.Ctrl('g')); err != nil {
+		t.Fatalf("send ctrl+g: %v", err)
+	}
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		if strings.Contains(term.Screen().Text(), warning) {
+			t.Fatalf("ASSERTION: the dock shows a warning under level error\n%s", term.Snapshot())
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	if err := term.SendKeys(tuitest.Ctrl('b'), "D", "l"); err != nil {
+		t.Fatalf("open the log viewer: %v", err)
+	}
+	if err := term.WaitForText(warning, uiTimeout); err != nil {
+		t.Fatalf("ASSERTION: the log viewer does not list the warning: %v\n%s", err, term.Snapshot())
+	}
+	saveArtifact(t, term, artifactDir(t), "notification-level-error-log")
+}

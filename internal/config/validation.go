@@ -341,6 +341,7 @@ func validateNotificationsConfig(cfg *UserConfig, result *ValidationResult) {
 	check("error_duration", cfg.Notifications.ErrorDuration)
 	warnEnum(result, "notifications", "bell", cfg.Notifications.Bell, BellModes, BellToast)
 	warnEnum(result, "notifications", "style", cfg.Notifications.Style, NotificationStyles, NotificationStyleFull)
+	warnEnum(result, "notifications", "level", cfg.Notifications.Level, NotificationLevels, NotificationLevelInfo)
 
 	agent := &cfg.Notifications.Agent
 	if _, _, err := ParseQuietHours(agent.QuietHours); err != nil {

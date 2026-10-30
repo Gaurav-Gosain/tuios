@@ -1201,12 +1201,12 @@ var optionSpecs = []Option{
 	},
 	{
 		Path: "notifications.level", Type: OptionString, Section: "notifications",
-		Description: "The least severe message the dock shows: info shows every message, warning only warnings and errors, error only errors. The rest go to the log viewer",
+		Description: "The least severe tuios message the dock shows: info shows every message, warning only warnings and errors, error only errors. Agent and pane alerts do not use this level",
 		Accepted:    NotificationLevels, Default: NotificationLevelInfo,
 	},
 	{
 		Path: "notifications.log_hidden", Type: OptionBool, Section: "notifications",
-		Description: "Keep the messages below notifications.level in the log viewer. Off, they are dropped. Warnings and errors are always logged",
+		Description: "Put messages below notifications.level in the log viewer. When off, they go nowhere. Warnings and errors always go to the log",
 		Default:     "true",
 	},
 
