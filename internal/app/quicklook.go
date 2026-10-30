@@ -7,6 +7,7 @@ import (
 	"errors"
 	"io/fs"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -31,6 +32,10 @@ import (
 // is not a mode. Every key it does not use goes to the rail as before, and
 // the preview closes when the rail lets go of the keyboard, when the cursor
 // leaves the files section, or on a click outside it.
+//
+// The files menu's Preview is the same preview with a way in from anywhere: it
+// gives the rail the keyboard, moves the cursor to the row, and closing gives
+// the keyboard back if the rail did not have it before.
 //
 // The content comes from the machine the file is on. A file of a listing on
 // another machine goes to that machine's file-preview verb over the link,
@@ -125,12 +130,9 @@ type quickLookState struct {
 	fetching bool
 	res      *quickLookResult
 	scroll   int
-	// pinned says the preview shows a row picked from the files menu, which
-	// need not be the cursor row. anchor is the cursor row at that moment:
-	// the preview keeps its row until the cursor leaves anchor, and then
-	// follows the cursor as usual.
-	pinned bool
-	anchor quickLookTarget
+	// borrowed says the files menu's Preview took the keyboard for the rail.
+	// Closing the preview gives it back. See CloseQuickLook.
+	borrowed bool
 	// box is the panel on the screen in the last frame, for the mouse.
 	box overlay.Rect
 	// pic is where the picture went in the last frame.
@@ -165,8 +167,8 @@ func (m *OS) QuickLookOpen() bool { return m.quickLook.open }
 // SidebarQuickLook opens the preview of the row under the files cursor, or
 // closes it when it is up.
 func (m *OS) SidebarQuickLook() tea.Cmd {
-	// From the files menu: the row the menu was opened on, which a
-	// right-click does not move the cursor to. See fileMenuTarget.
+	// From the files menu: the row the menu was opened on, which need not be
+	// the cursor row. See fileMenuTarget.
 	if f := m.menuFile; f.Active() && f.Name != "" && !f.Up {
 		return m.quickLookMenu(f)
 	}
@@ -186,21 +188,35 @@ func (m *OS) SidebarQuickLook() tea.Cmd {
 	return m.quickLookShow(t)
 }
 
-// quickLookMenu opens the preview on the files menu's row and pins it there
-// while the cursor stays where it is.
+// quickLookMenu opens the preview on the files menu's row. The preview follows
+// the rail's cursor and reads keys through the rail, so the row takes both: the
+// rail gets the keyboard, and the cursor moves to the row.
 func (m *OS) quickLookMenu(f fileMenuTarget) tea.Cmd {
 	if !m.filesOn() {
 		return nil
 	}
-	if !m.SidebarFocused {
-		m.EnterSidebarFocus()
-	}
 	t := quickLookTarget{path: filepath.Join(f.Dir, f.Name), name: f.Name, dir: f.IsDir}
 	m.quickLookPlace(&t)
+	// The listing can change between the right-click and the pick.
+	row := slices.IndexFunc(m.SidebarNav, func(r sidebarNavRow) bool {
+		got, ok := m.quickLookRowTarget(r)
+		return ok && got == t
+	})
+	if row < 0 {
+		m.ShowNotification("The file is not in the list now.", "info", m.Settings.NotificationDuration)
+		return nil
+	}
 	ql := &m.quickLook
+	if !m.SidebarFocused {
+		ql.borrowed = true
+	}
+	if !m.SidebarFocused || m.SidebarFocusOnSecondary() {
+		m.EnterSidebarFocus()
+		// Focus can ask the next frame to put the cursor on the session.
+		m.sidebarFollowSession = ""
+	}
+	m.sidebarSetCursor(row)
 	ql.open = true
-	ql.anchor, _ = m.quickLookCursorTarget()
-	ql.pinned = true
 	return m.quickLookShow(t)
 }
 
@@ -219,14 +235,24 @@ func (m *OS) quickLookPlace(t *quickLookTarget) {
 	}
 }
 
-// CloseQuickLook closes the preview. A read still out finishes and is
-// dropped.
+// CloseQuickLook closes the preview for a key or a click. When Preview took the
+// keyboard for the rail, the rail gives it back here, the way it does when esc
+// leaves it, so the pane the person was typing in has the keys again.
 func (m *OS) CloseQuickLook() {
+	borrowed := m.quickLook.borrowed
+	m.dropQuickLook()
+	if borrowed {
+		m.ExitSidebarFocus()
+	}
+}
+
+// dropQuickLook takes the preview down and leaves the rail's focus alone. A
+// read still out finishes and is dropped.
+func (m *OS) dropQuickLook() {
 	ql := &m.quickLook
 	ql.open = false
 	ql.target = quickLookTarget{}
-	ql.pinned = false
-	ql.anchor = quickLookTarget{}
+	ql.borrowed = false
 	ql.res = nil
 	ql.scroll = 0
 	ql.box = overlay.Rect{}
@@ -243,18 +269,12 @@ func (m *OS) QuickLookSync() tea.Cmd {
 		return nil
 	}
 	if !m.SidebarFocused || m.SidebarFocusOnSecondary() || !m.filesOn() {
-		m.CloseQuickLook()
+		m.dropQuickLook()
 		return nil
 	}
 	t, ok := m.quickLookCursorTarget()
-	if ql.pinned {
-		if ok && t == ql.anchor {
-			return m.quickLookPicture()
-		}
-		ql.pinned = false
-	}
 	if !ok {
-		m.CloseQuickLook()
+		m.dropQuickLook()
 		return nil
 	}
 	if t != ql.target {
@@ -270,6 +290,12 @@ func (m *OS) quickLookCursorTarget() (quickLookTarget, bool) {
 	if !ok {
 		return quickLookTarget{}, false
 	}
+	return m.quickLookRowTarget(row)
+}
+
+// quickLookRowTarget is what a rail row shows, when it is a row of the files
+// section.
+func (m *OS) quickLookRowTarget(row sidebarNavRow) (quickLookTarget, bool) {
 	switch row.Kind {
 	case sidebarRowFileUp:
 		return quickLookTarget{up: true, name: ".."}, true
@@ -279,12 +305,11 @@ func (m *OS) quickLookCursorTarget() (quickLookTarget, bool) {
 	}
 	var dir string
 	var e fileEntry
+	var ok bool
 	if m.filesTreeOn() {
 		dir, e, ok = m.fileTreeEntry(row.WindowID)
 	} else if i := row.WindowIndex; i >= 0 && i < len(m.filesView.Entries) {
 		dir, e, ok = m.filesView.Dir, m.filesView.Entries[i], true
-	} else {
-		ok = false
 	}
 	if !ok {
 		return quickLookTarget{}, false

@@ -11067,3 +11067,21 @@ The browser and its help modal drew `lipgloss.RoundedBorder()` whatever `appeara
 | The browser keeps the rounded frame under `double` | `overlay.EdgeBorder()` on the browser's box in `renderScrollbackBrowser` | Put back to `lipgloss.RoundedBorder()` | `TestScrollbackBrowserFollowsBorderStyle/double` (`the scrollback browser under double at {x0:0 x1:119 y0:0 y1:39}: got tl="╭" tr="╮" bl="╰" br="╯" top="─" side="│", want tl="╔" tr="╗" bl="╚" br="╝" top="═" side="║"`) | **caught** |
 | The help modal keeps the rounded frame under `double` | `overlay.EdgeBorder()` on the modal in `overlayBrowserHelp` | Put back to `lipgloss.RoundedBorder()` | `TestScrollbackBrowserFollowsBorderStyle/double` (`the browser's help modal under double at {x0:37 x1:82 y0:9 y1:30}: got tl="╭" tr="╮" bl="╰" br="╯" top="─" side="│", want tl="╔" …`) | **caught** |
 | The browser loses its frame under `hidden` | The rounded fallback `edgeFrame` gives a blank frame | `EdgeBorder` built from `dialogFrame()` instead of `edgeFrame()` | `TestScrollbackBrowserFollowsBorderStyle/hidden` (`the scrollback browser never opened with a frame found from its text`; the browser's title and rows are on screen with no frame round them). `/double` passes, as it should: there the two agree | **caught** |
+
+## The files menu's Preview from any focus
+
+`TestRailQuickLook` now starts with the keyboard in a pane, before the rail has had it. It right-clicks `main.go` and picks Preview. The preview must show `main.go` and stay open, `j` must move it to `notes.md`, and after `esc` the keys must reach the shell. Later in the test, Preview runs from the focused rail, where `esc` must leave the keyboard with the rail. This replaces the check in "The files menu previews the row it was opened on", where `j` went on from the old cursor row. Each control was built into its own binary. Run on 2026-10-30 on Linux.
+
+```bash
+go build -o /tmp/tuios ./cmd/tuios
+cd e2e/tui && TUIOS_E2E=1 TUIOS_E2E_BIN=/tmp/tuios go test -count=1 -run '^TestRailQuickLook$' .
+```
+
+| Control: what was cut | Where it fails | Verdict |
+| --- | --- | --- |
+| The whole fix: a build of origin/main before it | "ASSERTION: Preview from a pane did not show the row the menu was opened on" | **caught** |
+| `m.sidebarSetCursor(row)` in `quickLookMenu` (`internal/app/quicklook.go`) | The same step | **caught** |
+| `m.EnterSidebarFocus()` in `quickLookMenu` | The same step | **caught** |
+| `m.sidebarFollowSession = ""` in `quickLookMenu`, so the next frame puts the cursor on the session row | The same step | **caught** |
+| `ql.borrowed = true` in `quickLookMenu`, so `esc` leaves the rail with the keyboard | `command "echo back-$((40+4))" never produced "back-44"` | **caught** |
+| The `!m.SidebarFocused` check on `ql.borrowed`, so Preview always gives the keyboard back | "ASSERTION: after Preview and esc the rail lost the keyboard" | **caught** |

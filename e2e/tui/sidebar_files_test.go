@@ -1324,8 +1324,29 @@ func TestRailQuickLook(t *testing.T) {
 	// Block glyphs at truecolor: the tier a host without kitty graphics
 	// gets, and the one a frame of the grid can show.
 	// TestRailQuickLookKittyPicture covers the other tier.
-	term, _ := quickLookStart(t, "main.go",
+	term, _ := quickLookListed(t,
 		[]string{"TUIOS_KITTY_GRAPHICS=0", "TERM=xterm-256color", "COLORTERM=truecolor"}, nil)
+
+	// The files menu's Preview from a pane, before the rail ever had the
+	// keyboard. The cursor has no file row to come back to, so this is the
+	// case where the preview used to close in the frame it opened.
+	enterTerminalMode(t, term)
+	// clear keeps the fixture's path out of the frame.
+	runInShell(t, term, "clear; echo ready-$((40+5))", "ready-45", uiTimeout)
+	quickLookMenuPreview(t, term, "main.go")
+	quickLookShows(t, term, "quick-look-menu-from-pane", "Preview from a pane did not show the row the menu was opened on",
+		[]string{"main.go ", "package main", "8 lines"}, []string{"Copy path"})
+	// The rail has the keyboard and its cursor is on the row: j goes on from it.
+	sendKeys(t, term, "j")
+	quickLookShows(t, term, "quick-look-menu-from-pane-follow", "after Preview from a pane, j did not move the preview",
+		[]string{"notes.md ", "Quick look notes"}, []string{"package main"})
+	// esc closes it and gives the keyboard back: the next keys reach the shell,
+	// with no key to enter terminal mode again.
+	sendKeys(t, term, tuitest.Esc)
+	railLists(t, term, "esc did not close the preview", nil, []string{"Quick look notes"})
+	runInShell(t, term, "echo back-$((40+4))", "back-44", uiTimeout)
+	leaveTerminalMode(t, term)
+	quickLookFocusRail(t, term, "main.go")
 
 	// Code: highlighted, with line numbers.
 	sendKeys(t, term, " ")
@@ -1379,33 +1400,27 @@ func TestRailQuickLook(t *testing.T) {
 	sendKeys(t, term, " ")
 	railLists(t, term, "after esc the rail lost the keyboard", []string{"Showing the first 5000 lines."}, nil)
 
-	// The files menu's Preview row shows the row the menu was opened on,
-	// which is not the cursor row: the cursor stays on big.txt.
+	// The files menu's Preview row shows the row the menu was opened on, and
+	// the cursor moves there from big.txt.
 	sendKeys(t, term, tuitest.Esc)
 	railLists(t, term, "esc did not close the preview", nil, []string{"Showing the first"})
-	mc, mr, ok := findOnGrid(term.Screen(), "main.go")
-	if !ok {
-		t.Fatalf("no main.go row:\n%s", term.Snapshot())
-	}
-	mouseClick(t, term, mc, mr, tuitest.MouseRight, 0)
-	railLists(t, term, "the files menu has no Preview row", []string{"Preview", "Copy path"}, nil)
-	copiesFrame(t, term, "quick-look-menu")
-	pc, pr, ok := findOnGrid(term.Screen(), "Preview")
-	if !ok {
-		t.Fatalf("no Preview row:\n%s", term.Snapshot())
-	}
-	mouseClick(t, term, pc, pr, tuitest.MouseLeft, 0)
+	quickLookMenuPreview(t, term, "main.go")
 	quickLookShows(t, term, "quick-look-menu-preview", "Preview did not show the row the menu was opened on",
 		[]string{"main.go ", "package main", "8 lines"}, []string{"Showing the first", "Preview"})
-	// Back on the keyboard, the preview follows the cursor again.
+	// Back on the keyboard, the preview follows the cursor from that row.
 	sendKeys(t, term, "j")
 	quickLookShows(t, term, "quick-look-menu-follow", "after Preview, j did not move the preview",
-		[]string{"blob.bin ", "This file is not text."}, []string{"package main"})
+		[]string{"notes.md ", "Quick look notes"}, []string{"package main"})
+	// The rail had the keyboard before Preview, so esc leaves it there.
+	sendKeys(t, term, tuitest.Esc)
+	railLists(t, term, "esc did not close the preview", nil, []string{"Quick look notes"})
+	sendKeys(t, term, " ")
+	railLists(t, term, "after Preview and esc the rail lost the keyboard", []string{"Quick look notes"}, nil)
 
 	// The preview takes no key from the pane: once the rail lets go, keys
 	// reach the shell, and the preview is gone.
 	sendKeys(t, term, tuitest.Esc, tuitest.Esc)
-	railLists(t, term, "leaving the rail did not close the preview", nil, []string{"Showing the first"})
+	railLists(t, term, "leaving the rail did not close the preview", nil, []string{"Quick look notes"})
 	enterTerminalMode(t, term)
 	runInShell(t, term, "echo typed-$((40+2))", "typed-42", uiTimeout)
 	alive(t, term, "after quick look")
@@ -1414,6 +1429,32 @@ func TestRailQuickLook(t *testing.T) {
 // quickLookStart lists the quick look fixture in the rail, gives the rail
 // the keyboard and puts its cursor on the row named first.
 func quickLookStart(t *testing.T, first string, env []string, out *lockedBuffer) (*tuitest.Terminal, string) {
+	t.Helper()
+	term, dir := quickLookListed(t, env, out)
+	quickLookFocusRail(t, term, first)
+	return term, dir
+}
+
+// quickLookMenuPreview right-clicks the row named name and picks Preview.
+func quickLookMenuPreview(t *testing.T, term *tuitest.Terminal, name string) {
+	t.Helper()
+	col, row, ok := findOnGrid(term.Screen(), name)
+	if !ok {
+		t.Fatalf("no %s row:\n%s", name, term.Snapshot())
+	}
+	mouseClick(t, term, col, row, tuitest.MouseRight, 0)
+	railLists(t, term, "the files menu has no Preview row", []string{"Preview", "Copy path"}, nil)
+	copiesFrame(t, term, "quick-look-menu")
+	col, row, ok = findOnGrid(term.Screen(), "Preview")
+	if !ok {
+		t.Fatalf("no Preview row:\n%s", term.Snapshot())
+	}
+	mouseClick(t, term, col, row, tuitest.MouseLeft, 0)
+}
+
+// quickLookListed lists the quick look fixture in the rail and leaves the
+// keyboard with the panes, in window mode. The rail has not had it yet.
+func quickLookListed(t *testing.T, env []string, out *lockedBuffer) (*tuitest.Terminal, string) {
 	t.Helper()
 	dir := quickLookFixture(t)
 	opts := startOpts{cols: 140, rows: 40, env: env}
@@ -1429,6 +1470,13 @@ func quickLookStart(t *testing.T, first string, env []string, out *lockedBuffer)
 	leaveTerminalMode(t, term)
 	toggleSidebarViaPalette(t, term)
 	waitForAll(t, term, uiTimeout, "the listing", "main.go", "notes.md", "pic.png")
+	return term, dir
+}
+
+// quickLookFocusRail gives the rail the keyboard and puts its cursor on the
+// row named first.
+func quickLookFocusRail(t *testing.T, term *tuitest.Terminal, first string) {
+	t.Helper()
 	sendKeys(t, term, "s")
 	col, row, ok := findOnGrid(term.Screen(), first)
 	if !ok {
@@ -1436,7 +1484,6 @@ func quickLookStart(t *testing.T, first string, env []string, out *lockedBuffer)
 	}
 	mouseClick(t, term, col, row, tuitest.MouseLeft, 0)
 	clickNoteGone(t, term)
-	return term, dir
 }
 
 // kittyPlaceRe is a kitty placement of a picture the previews uploaded.
