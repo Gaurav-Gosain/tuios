@@ -9080,7 +9080,7 @@ TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios \
 Run on 2026-10-31 on macOS arm64 (Darwin 27, Go 1.27.3) against `pr/live-handoff-4`, one build per control, one run each:
 
 - `TestPaneUpgradeRefusedWithoutYes` gains Tab, Enter, which a shell's completion types: `cd pro<Tab><Enter>` after the settle delay must not say yes.
-- `TestPaneUpgradeRunsNoFileWithoutADialog`: a pane calls the `daemon-upgrade` verb directly (the CLI runs the binary itself first, in the pane, where it may), naming a script that leaves a mark when run. With no client attached, and with `[agents] enabled = false` and a client attached, it must be refused with the reason and the mark must not exist.
+- `TestPaneUpgradeRunsNoFileWithoutADialog`: a pane calls the `daemon-upgrade` verb directly (the CLI runs the binary itself first, in the pane, where it may), naming a script that leaves a mark when run. With no client attached, with only a client attached under `TUIOS_VIEW_ONLY=1` (as `tuios-web --read-only` attaches), and with `[agents] enabled = false` and a client attached, it must be refused within 30 s with the reason, and the mark must not exist.
 - `TestPaneUpgradeRefusesAnAnswerFromTheGUIBridge`: with the dialog up, a `tuios gui-bridge` attached to the session sends `answer-ask` with Yes from its renderer, once plainly and once with `upgrade_dialog: true`. The bridge adds its client's nonce to both. Each must be refused with `not_human`, leave the dialog open and the image unchanged; Esc at the client then refuses.
 
 | Control | How | Test that fails | Verdict |
@@ -9089,6 +9089,7 @@ Run on 2026-10-31 on macOS arm64 (Darwin 27, Go 1.27.3) against `pr/live-handoff
 | The bridge passes the renderer's `upgrade_dialog` on | `upgrade_dialog` no longer dropped in `guibridge.verbParams` | `TestPaneUpgradeRefusesAnAnswerFromTheGUIBridge`: "the bridge's answer-ask (upgrade_dialog) upgraded the daemon" | **caught** |
 | Tab moves to Yes | `"tab"` put back beside Down and Right in `UpgradeConfirmKey` | `TestPaneUpgradeRefusedWithoutYes`: "tab upgraded the daemon" | **caught** |
 | The preflight runs the pane's file before the checks | `handoff_verb.go` back to the preflight first, with the no-client and agents-off checks only in `confirmUpgrade` | `TestPaneUpgradeRunsNoFileWithoutADialog/no-client` and `/agents-off`: "the daemon ran the pane's file with no dialog to show" | **caught** |
+| A view-only client counts as one that could answer | `!cs.viewOnly` cut from `personClients` | `TestPaneUpgradeRunsNoFileWithoutADialog/view-only`: "the daemon ran the pane's file with no dialog to show", and the call waited for an answer no key could give | **caught** |
 
 The pin taken before the checks has no control: a file swapped between it and the preflight needs the swap inside that window, the same limit as the pin between Yes and the exec above.
 
