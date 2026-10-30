@@ -108,15 +108,13 @@ func TestPipeYankPutsTheOutputOnTheClipboard(t *testing.T) {
 	}
 }
 
-// A command with no output, a failure and a timeout leave the selection on
-// the clipboard.
+// A failure and a timeout leave the selection on the clipboard.
 func TestCopyPipeFallsBackToTheSelection(t *testing.T) {
 	m := pipeOS(t)
 	cases := []struct {
 		msg  CopyPipeDoneMsg
 		note string
 	}{
-		{CopyPipeDoneMsg{Label: "send", Selection: "raw"}, "send wrote no output. Copied the selection (3 chars)."},
 		{CopyPipeDoneMsg{Label: "send", Selection: "raw", Err: &copyPipeExitError{code: 2, stderr: "refused"}},
 			"send failed with exit code 2: refused. Copied the selection (3 chars)."},
 		{CopyPipeDoneMsg{Label: "send", Selection: "raw", Err: errCopyPipeTimeout},

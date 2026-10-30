@@ -85,6 +85,7 @@ func copyModeLegend(state terminal.CopyModeState) []overlay.Hint {
 			{Key: "v", Label: "visual"},
 			{Key: "y", Label: "yank", Priority: overlay.HintEssential},
 			{Key: "q/esc", Label: "quit", Priority: overlay.HintEssential},
+			{Key: "ctrl+c", Label: "quit", Priority: overlay.HintOptional},
 		}
 	case terminal.CopyModeSearch:
 		return []overlay.Hint{
@@ -92,6 +93,7 @@ func copyModeLegend(state terminal.CopyModeState) []overlay.Hint {
 			{Key: "n/N", Label: "next"},
 			{Key: overlay.EnterKey(), Label: "done", Priority: overlay.HintEssential},
 			{Key: "esc", Label: "cancel"},
+			{Key: "ctrl+c", Label: "quit", Priority: overlay.HintOptional},
 		}
 	case terminal.CopyModeVisualChar:
 		return []overlay.Hint{
@@ -100,12 +102,14 @@ func copyModeLegend(state terminal.CopyModeState) []overlay.Hint {
 			{Key: "%", Label: "bracket", Priority: overlay.HintOptional},
 			{Key: "y", Label: "yank", Priority: overlay.HintEssential},
 			{Key: "esc", Label: "cancel"},
+			{Key: "ctrl+c", Label: "quit", Priority: overlay.HintOptional},
 		}
 	case terminal.CopyModeVisualLine:
 		return []overlay.Hint{
 			{Key: "jk", Label: "extend"},
 			{Key: "y", Label: "yank", Priority: overlay.HintEssential},
 			{Key: "esc", Label: "cancel"},
+			{Key: "ctrl+c", Label: "quit", Priority: overlay.HintOptional},
 		}
 	}
 	return nil

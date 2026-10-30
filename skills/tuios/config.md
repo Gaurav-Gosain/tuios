@@ -664,9 +664,11 @@ cancel = true
 description = "flatten"
 ```
 
-When the command writes nothing, fails or runs past 10 seconds, the clipboard
-gets the plain selection, and a failure shows the exit code and the first
-line of stderr on the dock. The command runs on the machine of the tuios
+When the command exits 0 and writes nothing, tuios leaves the clipboard and
+the paste buffers alone, so a command that sets the clipboard itself (such as
+`tmux-copy-it`) wins, as in tmux. When it fails or runs past 10 seconds, the
+clipboard gets the plain selection, and the dock shows the exit code and the
+first line of stderr. The command runs on the machine of the tuios
 client, with the command-key variables (`TUIOS_SESSION`,
 `TUIOS_ACTIVE_PANE_ID`, `TUIOS_ACTIVE_PANE_CWD`). In multi copy mode it runs
 once, on the text `y` copies in the current format.

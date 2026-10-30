@@ -423,6 +423,7 @@ shows `MULTI 2/3`: the search found text in 2 of the 3 panes.
 | `n` / `N` | Go to the next or previous match in each pane |
 | `v` / `V` | Start a character or line selection in every pane that has a match |
 | `Esc` | End the selection. A second `Esc`, or `q`, leaves copy mode in every pane |
+| `Ctrl+C` | Leave copy mode in every pane. Nothing is copied |
 | `y` | Copy the selection of each pane to the clipboard, as one block |
 | `Y` | Save the selection of each pane to a file |
 | `Tab` | Change the format: plain, markdown, json |
@@ -456,7 +457,8 @@ the current format, one time for all panes. See
 
 `Y` opens a prompt at the bottom of the focused pane. The default path is
 `~/tuios-copy-<date>-<time>.<ext>`, with `txt`, `md` or `json` for the format.
-Type or paste a path. Press `Enter` to save, or press `Esc` to cancel.
+Type or paste a path. Press `Enter` to save, or press `Esc` to cancel. Press
+`Ctrl+C` to cancel and leave copy mode.
 
 - A relative path starts in the directory of the focused pane, when its shell
   reports one. Otherwise it starts in your home directory. The line above the

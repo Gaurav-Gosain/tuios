@@ -288,6 +288,16 @@ var copyLegendItems = []legendItem{
 	{key: "y", label: "yank"},
 	{key: "ctrl+g", label: "edit"},
 	{key: "q/esc", label: "quit"},
+	{key: "ctrl+c", short: []string{"^c"}, label: "quit"},
+}
+
+// copySearchLegendItems is copy mode's legend at the search prompt.
+var copySearchLegendItems = []legendItem{
+	{key: "type", label: "search"},
+	{key: "n/N", label: "next"},
+	{key: "enter", short: []string{"↵"}, label: "done"},
+	{key: "esc", label: "cancel"},
+	{key: "ctrl+c", short: []string{"^c"}, label: "quit"},
 }
 
 // copyVisualLegendItems is copy mode's legend with a selection started by v.
@@ -297,6 +307,7 @@ var copyVisualLegendItems = []legendItem{
 	{key: "%", label: "bracket"},
 	{key: "y", label: "yank"},
 	{key: "esc", label: "cancel"},
+	{key: "ctrl+c", short: []string{"^c"}, label: "quit"},
 }
 
 // TestCopyModeLegend enters copy mode at 60, 80 and 200 columns, then starts
@@ -334,7 +345,22 @@ func TestCopyModeLegend(t *testing.T) {
 				t.Fatalf("send esc: %v", err)
 			}
 			waitLegendRow(t, term, "esc did not end the selection", func(r string) bool {
-				return strings.Contains(r, "quit")
+				return strings.Contains(r, "quit") && !strings.Contains(r, "cancel")
+			})
+
+			if err := term.SendKeys("/"); err != nil {
+				t.Fatalf("send /: %v", err)
+			}
+			row = waitLegendRow(t, term, "no search legend on the dock", func(r string) bool {
+				return strings.Contains(r, "done") && strings.Contains(r, "cancel")
+			})
+			saveArtifact(t, term, dir, "copy-search")
+			checkLegend(t, row, copySearchLegendItems, []string{"enter"}, size.cols >= 80, size.cols >= 200)
+			if err := term.SendKeys("\x1b"); err != nil {
+				t.Fatalf("send esc: %v", err)
+			}
+			waitLegendRow(t, term, "esc did not close the search prompt", func(r string) bool {
+				return strings.Contains(r, "quit") && !strings.Contains(r, "cancel")
 			})
 			if err := term.SendKeys("q"); err != nil {
 				t.Fatalf("send q: %v", err)

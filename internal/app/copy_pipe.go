@@ -23,15 +23,22 @@ import (
 // The command runs with sh -c, as a shell command key does: on the machine
 // that runs this client (for the SSH and web servers, the server), in the
 // focused pane's folder, with the command-key variables. The selection is its
-// stdin. The clipboard gets its stdout, or the selection itself when the
-// command writes nothing, fails or runs too long. tmux's copy-pipe always puts
-// the selection in a buffer and hands the command a copy, so a command that
-// only sends the text somewhere (a socket, a file) still leaves the selection
-// to paste. Here the stdout wins when there is one, because the point of a
-// flatten or a jq filter is to paste its result.
+// stdin. The clipboard gets its stdout, and the selection is kept as a paste
+// buffer, because the point of a flatten or a jq filter is to paste its
+// result.
+//
+// A command that exits 0 and writes nothing is taken to have put the text
+// where it wants it itself: tmux-copy-it, for one, sets the clipboard and the
+// tmux buffer and prints nothing. tmux writes the selection first and runs
+// the command after, so the command's own write wins there. Here the
+// clipboard and the paste buffers are left alone for it, so its write wins
+// here too. A command that fails or runs too long has done nothing anyone
+// can rely on, so the clipboard and a buffer get the plain selection.
 //
 // The clipboard is written once, when the command ends, so a clipboard
-// manager records one entry and never the raw text then the result.
+// manager records one entry and never the raw text then the result. The
+// buffer is saved then too, for the same reason: a buffer saved before the
+// command ran would land after a buffer the command set itself.
 //
 // The command runs in a tea.Cmd, off the update loop, and is stopped after
 // CopyPipeTimeout. Its process group goes with it where there is one.
@@ -63,7 +70,8 @@ var errCopyPipeTooLarge = errors.New("output too large")
 
 // Yank puts a copy-mode selection on the clipboard: through
 // appearance.selection.copy_command when it is set, else as it is. It also
-// keeps the selection as a paste buffer (paste_buffers.go).
+// keeps the selection as a paste buffer (paste_buffers.go), unless a
+// copy_command exits 0 with no output (handleCopyPipeDone).
 func (m *OS) Yank(text string) tea.Cmd {
 	if text == "" {
 		return nil
@@ -83,12 +91,10 @@ func (m *OS) PipeYank(text, command, label string) tea.Cmd {
 	m.CancelPendingCopy()
 	dir := m.scratchDir()
 	argv := commandArgv(command, m.commandEnv(dir))
-	// The buffer keeps the selection, as tmux's copy-pipe does, whatever the
-	// command makes of it.
-	return tea.Batch(m.SaveToPasteBuffers(text), func() tea.Msg {
+	return func() tea.Msg {
 		out, err := copyPipeRunner(argv, dir, text, CopyPipeTimeout)
 		return CopyPipeDoneMsg{Label: label, Selection: text, Output: copyPipeOutput(out, text), Err: err}
-	})
+	}
 }
 
 // copyPipeOutput is the text the clipboard gets from a command's stdout. A
@@ -105,20 +111,22 @@ func copyPipeOutput(out, selection string) string {
 	return strings.TrimSuffix(out, "\n")
 }
 
-// handleCopyPipeDone puts the result of a copy command on the clipboard and
-// says what happened.
+// handleCopyPipeDone puts the result of a copy command on the clipboard,
+// keeps the selection as a paste buffer, and says what happened. A command
+// that succeeds with no output gets neither: it wrote them itself, if it
+// meant to.
 func (m *OS) handleCopyPipeDone(msg CopyPipeDoneMsg) tea.Cmd {
 	d := m.Settings.NotificationDuration
 	switch {
 	case msg.Err != nil:
 		m.ShowNotification(copyPipeFailure(msg.Label, msg.Err)+fmt.Sprintf(" Copied the selection (%d chars).", len(msg.Selection)), "error", 2*d)
-		return m.clipboardWriteCmd(msg.Selection)
+		return tea.Batch(m.clipboardWriteCmd(msg.Selection), m.SaveToPasteBuffers(msg.Selection))
 	case msg.Output == "":
-		m.ShowNotification(fmt.Sprintf("%s wrote no output. Copied the selection (%d chars).", msg.Label, len(msg.Selection)), "info", d)
-		return m.clipboardWriteCmd(msg.Selection)
+		m.ShowNotification(msg.Label+" wrote no output. The clipboard is unchanged.", "info", d)
+		return nil
 	default:
 		m.ShowNotification(fmt.Sprintf("Copied %d chars from %s.", len(msg.Output), msg.Label), "success", d)
-		return m.clipboardWriteCmd(msg.Output)
+		return tea.Batch(m.clipboardWriteCmd(msg.Output), m.SaveToPasteBuffers(msg.Selection))
 	}
 }
 

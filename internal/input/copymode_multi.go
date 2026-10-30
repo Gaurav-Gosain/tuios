@@ -31,7 +31,7 @@ import (
 // pick, which is the one thing parking exists to prevent.
 var parkedCopyKeys = map[string]bool{
 	"/": true, "?": true, "n": true, "N": true, "ctrl+l": true,
-	"q": true, "esc": true, "i": true,
+	"q": true, "esc": true, "i": true, "ctrl+c": true,
 }
 
 func handleMultiCopyKey(msg tea.KeyPressMsg, o *app.OS, focused *terminal.Window) (*app.OS, tea.Cmd) {
@@ -205,6 +205,10 @@ func handleMultiCopySaveKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		}
 	case key.Code == tea.KeyEscape:
 		o.CancelMultiCopySave()
+	case commandKey(msg) == "ctrl+c":
+		// Ctrl+C leaves copy mode from every state, this prompt too.
+		o.ExitMultiCopyMode()
+		o.ShowNotification("Left copy mode", "info", o.Settings.NotificationDuration)
 	case key.Code == tea.KeyTab:
 		o.CycleMultiCopyFormat()
 	case textedit.IsWordDeleteKey(msg.String()):

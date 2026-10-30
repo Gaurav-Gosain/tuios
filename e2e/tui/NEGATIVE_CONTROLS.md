@@ -10846,3 +10846,35 @@ the code in place every test above passes.
 Repeat with `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run
 'TestDnD' -v .` from `e2e/tui`. `TUIOS_E2E_YAZI` and `TUIOS_E2E_KITTEN` add
 the runs with the real programs.
+
+## Copy mode keys from discussion #281
+
+`TestCopyPipeKeys` adds a copy pipe on `X` whose command writes its own value to a file, sets a paste buffer with `tuios set-buffer`, and prints nothing, as `tmux-copy-it` does. The clipboard must get no write, the newest buffer must stay the command's, and the key must add exactly one buffer. A copy pipe on `x` exits 3, and the plain selection must reach the clipboard and the newest buffer. `TestCopyModeCtrlCAndFocusKeys` binds `alt+h` and `alt+l` to the terminal-mode focus keys, and `ctrl+u` and `ctrl+c` to a focus key as well. It presses `alt+h` in copy mode, runs a command in the left pane, presses `alt+l` and finds the copy cursor where it was. `ctrl+u` and `ctrl+b` must move the copy cursor and leave focus alone. `ctrl+c` must leave copy mode from normal mode, a selection, the search prompt and a pending `f`, and from multi copy mode in normal mode, a selection, the search prompt, a search with no match and the save prompt, with no clipboard write. `TestCopyModeLegend` reads `ctrl+c` off the dock in normal mode, the search prompt and a selection. Each control was built into its own binary. Run on 2026-10-30 on Linux.
+
+| Control: what was cut | Where it fails | Verdict |
+| --- | --- | --- |
+| The build before this change (main at `7a23dc4fe`) | `TestCopyModeCtrlCAndFocusKeys`: "alt+h in copy mode left focus on ..., want the left pane ..." | **caught** |
+| `handleCopyPipeDone` copies the selection when the output is empty (`internal/app/copy_pipe.go`) | `TestCopyPipeKeys`: "the silent pipe wrote the clipboard over the command's value: ["pipe-three"]" | **caught** |
+| `PipeYank` saves the selection to a buffer before the command runs | `TestCopyPipeKeys`: "the silent pipe left 2 new buffers, want 1, the command's own" | **caught** |
+| The dock message of an empty output | `TestCopyPipeKeys`: "no dock message for the silent pipe" | **caught** |
+| The clipboard write of a failing command | `TestCopyPipeKeys`: "x: nothing reached the clipboard" | **caught** |
+| The paste buffer of a failing command | `TestCopyPipeKeys`: "after the failing pipe the newest buffer is "set-by-the-command", want the selection "pipe-three"" | **caught** |
+| `ctrl+c` in normal mode (`dispatchCopyModeKey`) | `TestCopyModeCtrlCAndFocusKeys`: "ctrl+c in normal mode did not leave copy mode" | **caught** |
+| `ctrl+c` in a `v` selection | `TestCopyModeCtrlCAndFocusKeys`: "ctrl+c in a selection did not leave copy mode" | **caught** |
+| `ctrl+c` at the search prompt | `TestCopyModeCtrlCAndFocusKeys`: "ctrl+c at the search prompt did not leave copy mode" | **caught** |
+| `ctrl+c` after `f` | `TestCopyModeCtrlCAndFocusKeys`: "ctrl+c after f did not leave copy mode" | **caught** |
+| `ctrl+c` in a selection yanks, then leaves | `TestCopyModeCtrlCAndFocusKeys`: "ctrl+c in a selection copied ["ght"]" | **caught** |
+| `ctrl+c` in `parkedCopyKeys` (`internal/input/copymode_multi.go`) | `TestCopyModeCtrlCAndFocusKeys`: "ctrl+c with every pane parked did not leave multi copy mode" | **caught** |
+| The `ctrl+c` case in `handleMultiCopySaveKey` | `TestCopyModeCtrlCAndFocusKeys`: "ctrl+c at the save prompt did not leave multi copy mode" | **caught** |
+| The save prompt check in `copyModeFocusKey` | `TestCopyModeCtrlCAndFocusKeys`: "a focus key at the save prompt moved focus to ..." | **caught** |
+| The `copyModeFocusKey` call in `HandleCopyModeKey` | `TestCopyModeCtrlCAndFocusKeys`: "alt+h in copy mode left focus on ..., want the left pane ..." | **caught** |
+| The focus key also leaves copy mode in the old pane | `TestCopyModeCtrlCAndFocusKeys`: "back on the right pane: no copy cursor on screen" | **caught** |
+| The fixed key check in `copyModeFocusKey` | `TestCopyModeCtrlCAndFocusKeys`: "ctrl+u did not move the copy cursor up from row 3" | **caught** |
+| `ctrl+c` in `copyModeFixedKeys` (`internal/config/copy_mode_actions.go`) | `TestCopyModeCtrlCAndFocusKeys`: "ctrl+c in normal mode did not leave copy mode" | **caught** |
+| `ctrl+b` as page up in normal mode | `TestCopyModeCtrlCAndFocusKeys`: "ctrl+b did not page the copy cursor up from row 22" | **caught** |
+| `ctrl+c quit` in the normal legend (`internal/app/mode_legend.go`) | `TestCopyModeLegend`: "the dock has room for every key and lost "ctrl+c" "quit"" | **caught** |
+| `ctrl+c quit` in the search legend | `TestCopyModeLegend`: same message, at the search prompt | **caught** |
+| `ctrl+c quit` in the visual legend | `TestCopyModeLegend`: same message, in a selection | **caught** |
+| None (the branch) | The three tests pass | **guard** |
+
+Not controlled: the window-mode branch of `copyModeFocusKey`, `ctrl+c` in a `V` selection in single copy mode, and the `ctrl+c` entry in the multi copy legend. The multi copy test presses `ctrl+c` in a `V` selection, and that path shares the case above.

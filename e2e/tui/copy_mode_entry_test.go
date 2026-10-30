@@ -245,3 +245,299 @@ func TestCopyModeSearchColumnInScrollback(t *testing.T) {
 		}
 	}
 }
+
+// copyModeLeaveConfig binds alt+h and alt+l to the terminal-mode focus keys,
+// as tmux users do with M-h and M-l (discussion #281). ctrl+u and ctrl+c also
+// focus the left pane, and copy mode reads both itself.
+const copyModeLeaveConfig = copyCursorConfig + `
+[keybindings.terminal_mode]
+terminal_focus_left = ["alt+h", "ctrl+u", "ctrl+c"]
+terminal_focus_right = ["alt+l"]
+`
+
+// Ctrl+C leaves copy mode from normal mode, a selection, the search prompt and
+// a pending f/t, in single and multi copy mode, and copies nothing, as in
+// tmux's vi mode. A bound focus key moves focus out of a pane in copy mode, and
+// that pane stays in copy mode, as tmux does. A focus key that copy mode reads
+// itself keeps its copy-mode meaning, and Ctrl+B stays page up.
+//
+// How this could pass wrongly, written down first:
+//   - Focus could look moved when copy mode ate the key. The new pane's shell
+//     must run a command, which a pane in copy mode never does.
+//   - The old pane could have left copy mode and the cursor found again on
+//     a new entry. No key enters copy mode between the focus moves, and the
+//     cursor must be on the row and column it was on.
+//   - Ctrl+C in a selection could yank and then leave. Each clipboard write
+//     is counted, and none may follow it.
+//   - A clashing key could look kept because the focus had not moved yet. The
+//     copy cursor must move first, which shows the key was read, and focus is
+//     read after that.
+//   - Ctrl+C at a prompt could look handled when the key that opened the
+//     prompt did nothing. The search text and the save prompt are on screen
+//     before the key goes in.
+//
+// Negative control: NEGATIVE_CONTROLS.md lists one cut per state and per key
+// rule, each with the check that catches it.
+func TestCopyModeCtrlCAndFocusKeys(t *testing.T) {
+	const session = "cmleave"
+	base := t.TempDir()
+	writeConfig(t, base, copyModeLeaveConfig)
+	out := &lockedBuffer{}
+	term := startIn(t, base, startOpts{cols: 160, rows: 45, args: []string{"new", session}, env: copyColorOpts.env, out: out})
+	waitBoot(t, term)
+	for range 2 {
+		newWindow(t, term)
+	}
+	waitWindowCount(t, term, 2, "copy mode leave setup")
+	enableTiling(t, term)
+	rects, right := focusedLayout(t, base, session)
+	left := ""
+	for _, r := range rects {
+		if r.ID != right {
+			left = r.ID
+		}
+	}
+	if right == "" || left == "" {
+		t.Fatalf("want two panes with one focused, got %+v", rects)
+	}
+	enterTerminalMode(t, term)
+	runInShell(t, term, `printf 'right-%s\n' pane`, "right-pane", shellTimeout)
+	time.Sleep(300 * time.Millisecond)
+
+	// alt+h from copy mode focuses the left pane, which takes typing.
+	if err := term.SendKeys(tuitest.Ctrl('b'), "["); err != nil {
+		t.Fatalf("send prefix+[: %v", err)
+	}
+	row, col := waitCopyCursor(t, term, "prefix+[")
+	if err := term.SendKeys(tuitest.Alt('h')); err != nil {
+		t.Fatalf("send alt+h: %v", err)
+	}
+	if got := waitFocusChange(t, base, session, right); got != left {
+		t.Fatalf("alt+h in copy mode left focus on %s, want the left pane %s\n%s", got, left, term.Snapshot())
+	}
+	runInShell(t, term, `echo `+splitMarker("LEFTTYPED"), "LEFTTYPED", shellTimeout)
+	saveFrame(t, term, "copy-mode-focus-left")
+
+	// alt+l goes back. The right pane is still in copy mode, where it was.
+	if err := term.SendKeys(tuitest.Alt('l')); err != nil {
+		t.Fatalf("send alt+l: %v", err)
+	}
+	if got := waitFocusChange(t, base, session, left); got != right {
+		t.Fatalf("alt+l left focus on %s, want the right pane %s\n%s", got, right, term.Snapshot())
+	}
+	if r, c := waitCopyCursor(t, term, "back on the right pane"); r != row || c != col {
+		t.Fatalf("the copy cursor is at %d,%d, want %d,%d where the pane left it\n%s", r, c, row, col, term.Snapshot())
+	}
+
+	// ctrl+u is bound to a focus key, and copy mode reads it, so it moves the
+	// copy cursor and the focus stays.
+	if err := term.SendKeys(tuitest.Ctrl('u')); err != nil {
+		t.Fatalf("send ctrl+u: %v", err)
+	}
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		r, _, ok := copyCursorCell(s)
+		return ok && r < row
+	}, uiTimeout); err != nil {
+		t.Fatalf("ctrl+u did not move the copy cursor up from row %d\n%s", row, term.Snapshot())
+	}
+	if _, got := focusedLayout(t, base, session); got != right {
+		t.Fatalf("ctrl+u in copy mode moved focus to %s, want it to stay on %s\n%s", got, right, term.Snapshot())
+	}
+
+	// ctrl+b is page up, and the next key is a copy-mode key. No prefix opens.
+	if err := term.SendKeys(tuitest.Ctrl('d')); err != nil {
+		t.Fatalf("send ctrl+d: %v", err)
+	}
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		r, _, ok := copyCursorCell(s)
+		return ok && r > row
+	}, uiTimeout); err != nil {
+		t.Fatalf("ctrl+d did not move the copy cursor below row %d\n%s", row, term.Snapshot())
+	}
+	low, _ := waitCopyCursor(t, term, "after ctrl+d")
+	if err := term.SendKeys(tuitest.Ctrl('b')); err != nil {
+		t.Fatalf("send ctrl+b: %v", err)
+	}
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		r, _, ok := copyCursorCell(s)
+		return ok && r < low
+	}, uiTimeout); err != nil {
+		t.Fatalf("ctrl+b did not page the copy cursor up from row %d\n%s", low, term.Snapshot())
+	}
+	if err := term.SendKeys(tuitest.Left); err != nil {
+		t.Fatalf("send left: %v", err)
+	}
+	time.Sleep(300 * time.Millisecond)
+	if _, got := focusedLayout(t, base, session); got != right {
+		t.Fatalf("ctrl+b and left moved focus to %s, want it to stay on %s\n%s", got, right, term.Snapshot())
+	}
+
+	// ctrl+c from normal mode leaves copy mode.
+	if err := term.SendKeys(tuitest.Ctrl('c')); err != nil {
+		t.Fatalf("send ctrl+c: %v", err)
+	}
+	waitNoCopyCursor(t, term, "ctrl+c in normal mode")
+
+	// ctrl+c from a selection leaves copy mode and copies nothing.
+	if err := term.SendKeys(tuitest.Ctrl('b'), "["); err != nil {
+		t.Fatalf("send prefix+[: %v", err)
+	}
+	waitCopyCursor(t, term, "prefix+[ again")
+	from := len(clipboardWrites(out))
+	for _, k := range []string{"k", "v", "l", "l"} {
+		if err := term.SendKeys(k); err != nil {
+			t.Fatalf("send %s: %v", k, err)
+		}
+		time.Sleep(150 * time.Millisecond)
+	}
+	if err := term.WaitForText("hjkl extend", uiTimeout); err != nil {
+		t.Fatalf("v did not start a selection: %v\n%s", err, term.Snapshot())
+	}
+	waitCopyCursor(t, term, "in the selection")
+	if err := term.SendKeys(tuitest.Ctrl('c')); err != nil {
+		t.Fatalf("send ctrl+c: %v", err)
+	}
+	waitNoCopyCursor(t, term, "ctrl+c in a selection")
+	time.Sleep(clipboardSettle)
+	if writes := clipboardSince(out, from); len(writes) != 0 {
+		t.Fatalf("ctrl+c in a selection copied %q", writes)
+	}
+	runInShell(t, term, `echo `+splitMarker("RIGHTTYPED"), "RIGHTTYPED", shellTimeout)
+
+	enterCopy := func(what string) {
+		t.Helper()
+		if err := term.SendKeys(tuitest.Ctrl('b'), "["); err != nil {
+			t.Fatalf("send prefix+[: %v", err)
+		}
+		waitCopyCursor(t, term, what)
+	}
+
+	// ctrl+c from the search prompt leaves copy mode.
+	enterCopy("prefix+[ for the search prompt")
+	if err := term.SendKeys("/zqzq"); err != nil {
+		t.Fatalf("type a search: %v", err)
+	}
+	if err := term.WaitForText("/zqzq", uiTimeout); err != nil {
+		t.Fatalf("the search prompt did not open: %v\n%s", err, term.Snapshot())
+	}
+	if err := term.SendKeys(tuitest.Ctrl('c')); err != nil {
+		t.Fatalf("send ctrl+c: %v", err)
+	}
+	waitNoCopyCursor(t, term, "ctrl+c at the search prompt")
+
+	// ctrl+c from a pending f leaves copy mode.
+	enterCopy("prefix+[ for f")
+	if err := term.SendKeys("f"); err != nil {
+		t.Fatalf("send f: %v", err)
+	}
+	time.Sleep(300 * time.Millisecond)
+	if err := term.SendKeys(tuitest.Ctrl('c')); err != nil {
+		t.Fatalf("send ctrl+c: %v", err)
+	}
+	waitNoCopyCursor(t, term, "ctrl+c after f")
+	runInShell(t, term, `echo `+splitMarker("AFTERPENDING"), "AFTERPENDING", shellTimeout)
+
+	// Multi copy mode, both panes. Each ctrl+c leaves it in both.
+	leaveTerminalMode(t, term)
+	togglePaletteMultifocus(t, term)
+	if err := term.SendKeys(tuitest.Tab); err != nil {
+		t.Fatalf("send tab: %v", err)
+	}
+	time.Sleep(300 * time.Millisecond)
+	togglePaletteMultifocus(t, term)
+	if err := term.WaitForText("Multifocus: 2 windows", uiTimeout); err != nil {
+		t.Fatalf("the multifocus set never held two panes: %v\n%s", err, term.Snapshot())
+	}
+	enterTerminalMode(t, term)
+	enterMulti := func(what string) {
+		t.Helper()
+		if err := term.SendKeys(tuitest.Ctrl('b'), "["); err != nil {
+			t.Fatalf("send prefix+[: %v", err)
+		}
+		if err := term.WaitForText("MULTI 2", uiTimeout); err != nil {
+			t.Fatalf("%s: prefix+[ did not enter multi copy mode: %v\n%s", what, err, term.Snapshot())
+		}
+	}
+	leaveMulti := func(what string) {
+		t.Helper()
+		if err := term.SendKeys(tuitest.Ctrl('c')); err != nil {
+			t.Fatalf("send ctrl+c: %v", err)
+		}
+		if err := term.WaitFor(func(s tuitest.Screen) bool { return !strings.Contains(s.Text(), "MULTI") }, uiTimeout); err != nil {
+			t.Fatalf("ctrl+c %s did not leave multi copy mode\n%s", what, term.Snapshot())
+		}
+		waitNoCopyCursor(t, term, "ctrl+c "+what)
+	}
+
+	enterMulti("normal mode")
+	leaveMulti("in multi normal mode")
+
+	enterMulti("a selection")
+	from = len(clipboardWrites(out))
+	if err := term.SendKeys("V"); err != nil {
+		t.Fatalf("send V: %v", err)
+	}
+	time.Sleep(300 * time.Millisecond)
+	leaveMulti("in a multi selection")
+	time.Sleep(clipboardSettle)
+	if writes := clipboardSince(out, from); len(writes) != 0 {
+		t.Fatalf("ctrl+c in a multi selection copied %q", writes)
+	}
+
+	enterMulti("the search prompt")
+	if err := term.SendKeys("/zqzq"); err != nil {
+		t.Fatalf("type a search: %v", err)
+	}
+	if err := term.WaitForText("/zqzq", uiTimeout); err != nil {
+		t.Fatalf("the multi search prompt did not open: %v\n%s", err, term.Snapshot())
+	}
+	leaveMulti("at the multi search prompt")
+
+	// A search that no pane matched parks every pane, and they still leave.
+	enterMulti("a search with no match")
+	if err := term.SendKeys("/zqzq", tuitest.Enter); err != nil {
+		t.Fatalf("search: %v", err)
+	}
+	if err := term.WaitForText("found in 0 of 2 panes", uiTimeout); err != nil {
+		t.Fatalf("the search did not report 0 of 2 panes: %v\n%s", err, term.Snapshot())
+	}
+	leaveMulti("with every pane parked")
+
+	// The save prompt takes a bound focus key as text, so focus stays, and
+	// ctrl+c leaves from there too.
+	enterMulti("the save prompt")
+	if err := term.SendKeys("V"); err != nil {
+		t.Fatalf("send V: %v", err)
+	}
+	time.Sleep(300 * time.Millisecond)
+	if err := term.SendKeys("Y"); err != nil {
+		t.Fatalf("send Y: %v", err)
+	}
+	if err := term.WaitForText("Save to:", uiTimeout); err != nil {
+		t.Fatalf("Y did not open the save prompt: %v\n%s", err, term.Snapshot())
+	}
+	_, before := focusedLayout(t, base, session)
+	if err := term.SendKeys(tuitest.Alt('h'), tuitest.Alt('l')); err != nil {
+		t.Fatalf("send the focus keys: %v", err)
+	}
+	time.Sleep(300 * time.Millisecond)
+	if _, got := focusedLayout(t, base, session); got != before {
+		t.Fatalf("a focus key at the save prompt moved focus to %s, want it to stay on %s\n%s", got, before, term.Snapshot())
+	}
+	if !strings.Contains(term.Screen().Text(), "Save to:") {
+		t.Fatalf("a focus key closed the save prompt\n%s", term.Snapshot())
+	}
+	leaveMulti("at the save prompt")
+	alive(t, term, "after ctrl+c")
+}
+
+// waitNoCopyCursor waits until no copy cursor is drawn.
+func waitNoCopyCursor(t *testing.T, term *tuitest.Terminal, what string) {
+	t.Helper()
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		_, _, ok := copyCursorCell(s)
+		return !ok
+	}, uiTimeout); err != nil {
+		t.Fatalf("%s did not leave copy mode\n%s", what, term.Snapshot())
+	}
+}

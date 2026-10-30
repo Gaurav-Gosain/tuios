@@ -127,11 +127,11 @@ func validateCopyPipes(cfg *UserConfig, result *ValidationResult) {
 }
 
 // copyModeOwnKey reports whether key is one that copy mode needs to leave,
-// select or search: q, esc, v, V, / and ?, and the digits of a count. y is not
-// in the list: an entry on y replaces the plain yank on purpose.
+// select or search: q, esc, ctrl+c, v, V, / and ?, and the digits of a count.
+// y is not in the list: an entry on y replaces the plain yank on purpose.
 func copyModeOwnKey(key string) bool {
 	switch key {
-	case "q", "esc", "v", "V", "/", "?":
+	case "q", "esc", "ctrl+c", "v", "V", "/", "?":
 		return true
 	}
 	return len(key) == 1 && key[0] >= '0' && key[0] <= '9'

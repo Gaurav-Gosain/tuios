@@ -72,12 +72,14 @@ func (m *OS) copyModeHelp(focused *terminal.Window) []overlay.Hint {
 			{Key: "v/V", Label: "select"},
 			yank, save, format,
 			{Key: "q/esc", Label: "quit", Priority: overlay.HintEssential},
+			{Key: "ctrl+c", Label: "quit", Priority: overlay.HintOptional},
 		}
 	}
 	return []overlay.Hint{
 		{Key: "hjkl", Label: "extend", Priority: overlay.HintOptional},
 		yank, save, format,
 		{Key: "esc", Label: "cancel"},
+		{Key: "ctrl+c", Label: "quit", Priority: overlay.HintOptional},
 	}
 }
 

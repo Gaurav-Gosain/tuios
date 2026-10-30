@@ -1191,7 +1191,8 @@ copy_entry = "cursor"
 ```
 
 `copy_command` is a command that gets each yank in copy mode on stdin. The
-clipboard gets what the command writes to stdout. When the value is empty,
+clipboard gets what the command writes to stdout. When the command exits 0
+and writes nothing, the clipboard does not change. When the value is empty,
 the default, `y` copies the selection as it is. See
 [Pipe a yank through a command](KEYBINDINGS.md#pipe-a-yank-through-a-command).
 

@@ -50,11 +50,12 @@ var copyModeFixedKeys = map[string]bool{
 	"pgup": true, "pgdown": true, "ctrl+l": true,
 	"/": true, "?": true, "n": true, "N": true,
 	"v": true, "V": true, "o": true, "y": true, "Y": true, "c": true,
-	"i": true, "q": true, "esc": true, "tab": true,
+	"i": true, "q": true, "esc": true, "ctrl+c": true, "tab": true,
 }
 
-// copyModeFixedKey reports whether copy mode reads key itself.
-func copyModeFixedKey(key string) bool {
+// CopyModeFixedKey reports whether copy mode reads key itself. A focus key
+// on one of them keeps its copy-mode meaning while a pane is in copy mode.
+func CopyModeFixedKey(key string) bool {
 	return copyModeFixedKeys[key] || len(key) == 1 && key[0] >= '0' && key[0] <= '9'
 }
 
@@ -86,7 +87,7 @@ func (k *KeybindingsConfig) CopyModeProblems() []CopyModeProblem {
 			case piped:
 				out = append(out, CopyModeProblem{Action: action, Key: key, Problem: fmt.Sprintf(
 					"A [[keybindings.copy_pipe]] entry uses the key %s. The copy pipe runs, and %s does not. Use a different key.", key, action)})
-			case copyModeFixedKey(canon):
+			case CopyModeFixedKey(canon):
 				out = append(out, CopyModeProblem{Action: action, Key: key, Override: true, Problem: fmt.Sprintf(
 					"Copy mode uses the key %s. This binding takes the key from copy mode. Use a different key, for example home or end.", key)})
 			}

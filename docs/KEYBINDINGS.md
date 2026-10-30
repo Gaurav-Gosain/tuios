@@ -1364,6 +1364,8 @@ in the middle row, set `appearance.selection.copy_entry` to `center`.
 | `n` | Go to the next match in the direction of the last search |
 | `N` | Go to the next match in the opposite direction |
 | `Esc` in the search prompt | Cancel the search and move the cursor back |
+| `q` or `Esc` | Leave copy mode. In a selection, `Esc` and `q` only end the selection |
+| `Ctrl+C` | Leave copy mode from normal mode, a selection, the search prompt or `f`/`t`. Nothing is copied |
 
 The prompt shows `/` or `?` to show the direction. The search starts at the
 copy cursor. When no match is found in that direction, the search continues
@@ -1396,6 +1398,27 @@ copy mode uses `Ctrl+B` for page up. In copy mode, `/` and `?` open the same
 prompts.
 
 When a search finds more than 1000 matches, the prompt shows `1000+`.
+
+### Focus keys in copy mode
+
+The `terminal_focus_left`, `terminal_focus_right`, `terminal_focus_up` and
+`terminal_focus_down` keys also work in copy mode. In window mode, the
+window-mode focus keys work. Focus moves to the next pane. The old pane stays
+in copy mode, as in tmux. When you go back to it, the copy cursor is where you
+left it.
+
+A focus key that copy mode also uses keeps its copy mode action. For example,
+`h` moves the copy cursor, and `alt+left` moves focus. This example binds
+`alt+h` and `alt+l` as in tmux:
+
+```toml
+[keybindings.terminal_mode]
+terminal_focus_left = ["alt+h"]
+terminal_focus_right = ["alt+l"]
+```
+
+A key under the leader does not work in copy mode, because copy mode uses
+`Ctrl+B` for page up. `Ctrl+B` and then an arrow key does not move focus there.
 
 ### Line start and line end
 
@@ -1556,10 +1579,14 @@ The command runs with `sh -c`. It gets the selection on stdin. The clipboard
 gets what the command writes to stdout. When the selection does not end with
 a new line, tuios removes one new line from the end of the output.
 
+When the command stops with exit code 0 and writes nothing, tuios does not
+change the clipboard or the paste buffers. The dock shows a message. Use this
+for a command that sets the clipboard itself, such as `tmux-copy-it`, or that
+sends the text to a socket or a file. tmux does the same: the write of the
+command stays.
+
 The clipboard gets the selection itself in these cases:
 
-- The command writes nothing. Use this for a command that sends the text to a
-  socket or a file.
 - The command stops with an exit code that is not 0. The dock shows the exit
   code and the first line of stderr.
 - The command runs for more than 10 seconds. tuios stops the command and the
@@ -1568,7 +1595,8 @@ The clipboard gets the selection itself in these cases:
 tuios waits until the command closes its stdout. `xclip` starts a process that
 stays open after `xclip` stops, and keeps stdout open. tuios then waits 1
 second more. To prevent the wait, send the stdout of `xclip` to `/dev/null`.
-This example also puts each yank in the X primary selection:
+This example puts each yank in the X primary selection. The command writes
+nothing, so the clipboard does not change:
 
 ```toml
 [appearance.selection]
@@ -1586,7 +1614,7 @@ The fields of a `[[keybindings.copy_pipe]]` entry:
 - `description` names the entry in the dock messages. It is optional.
 
 The entry takes its key from copy mode. An entry on `y` replaces the plain
-yank. Copy mode does not use `p` or `P`. When an entry takes `q`, `Esc`, `v`, `V`, `/`,
+yank. Copy mode does not use `p` or `P`. When an entry takes `q`, `Esc`, `Ctrl+C`, `v`, `V`, `/`,
 `?` or a digit, tuios shows a warning when it loads the config. When no text is selected, the key
 shows a message and runs nothing. While you type a search, the key goes into
 the search.

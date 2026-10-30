@@ -1,6 +1,9 @@
 package tuie2e
 
 import (
+	"fmt"
+	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -9,7 +12,9 @@ import (
 
 // Copy-pipe keys against the real binary (discussion #281): three lines
 // selected in copy mode, piped through tr by a [[keybindings.copy_pipe]] key,
-// and the clipboard write read off the wire as OSC 52.
+// and the clipboard write read off the wire as OSC 52. Then a command that
+// sets the paste buffer and its own clipboard (a file here) and prints
+// nothing, as tmux-copy-it does: tuios must leave both alone.
 //
 // How this could pass wrongly, written down first:
 //   - The clipboard could hold the plain selection. The want has no new line,
@@ -18,6 +23,18 @@ import (
 //     and reads only the new one.
 //   - Copy mode could look kept when it was left and entered again. The copy
 //     cursor must stay on the row where the selection ended.
+//   - The silent command's checks could pass because it never ran. Its file
+//     and its buffer must hold its value before anything is read.
+//   - A late clipboard write or buffer could come after the checks. Both are
+//     read after a settle, and the buffers are counted, not only the newest.
+//
+//   - A failing command could look handled by the error message alone. The
+//     plain selection must reach the clipboard and the newest paste buffer.
+//
+// Negative control: with handleCopyPipeDone copying the selection when the
+// output is empty, as before, the silent key puts "pipe-three" on the
+// clipboard. With the selection saved to a buffer before the command runs,
+// as before, the silent key adds two buffers. See NEGATIVE_CONTROLS.md.
 
 const copyPipeConfig = copyCursorConfig + `
 [[keybindings.copy_pipe]]
@@ -29,7 +46,27 @@ description = "flatten"
 key = "P"
 command = "tr '\n' ','"
 cancel = true
+
+[[keybindings.copy_pipe]]
+key = "x"
+command = "echo refused >&2; exit 3"
+description = "broken"
 `
+
+// silentPipeValue is what the silent copy pipe writes to its file and its
+// paste buffer.
+const silentPipeValue = "set-by-the-command"
+
+// silentPipeConfig is a [[keybindings.copy_pipe]] entry on X whose command
+// writes its own clipboard (a file) and paste buffer, and prints nothing.
+func silentPipeConfig(file string) string {
+	return fmt.Sprintf(`
+[[keybindings.copy_pipe]]
+key = "X"
+command = "printf %%s %[1]s > '%[2]s' && '%[3]s' set-buffer %[1]s"
+description = "silent"
+`, silentPipeValue, file, tuiosBin)
+}
 
 // pipeWrite waits for the one clipboard write after from, and returns it.
 func pipeWrite(t *testing.T, term *tuitest.Terminal, out *lockedBuffer, from int, what string) string {
@@ -51,9 +88,12 @@ func pipeWrite(t *testing.T, term *tuitest.Terminal, out *lockedBuffer, from int
 
 func TestCopyPipeKeys(t *testing.T) {
 	base := t.TempDir()
-	writeConfig(t, base, copyPipeConfig)
+	silentFile := filepath.Join(base, "silent-clipboard")
+	writeConfig(t, base, copyPipeConfig+silentPipeConfig(silentFile))
 	out := &lockedBuffer{}
-	term := startIn(t, base, startOpts{out: out, env: copyColorOpts.env})
+	// A daemon session, so the paste buffers are the daemon's and the
+	// command's set-buffer reaches the same ones.
+	term := startIn(t, base, startOpts{out: out, env: copyColorOpts.env, args: []string{"new", "pipe"}})
 	waitBoot(t, term)
 	newWindow(t, term)
 	enterTerminalMode(t, term)
@@ -98,6 +138,53 @@ func TestCopyPipeKeys(t *testing.T) {
 		t.Fatalf("after p the copy cursor is on row %d, want row %d of pipe-three\n%s", r, three, term.Snapshot())
 	}
 	t.Logf("after p:\n%s", term.Snapshot())
+
+	// A command that sets the clipboard and the buffer itself and prints
+	// nothing: tuios writes neither, so the command's values stay.
+	from = len(clipboardWrites(out))
+	buffersBefore := len(listBuffers(t, base).Buffers)
+	for _, k := range []string{"V", "X"} {
+		if err := term.SendKeys(k); err != nil {
+			t.Fatalf("send %s: %v", k, err)
+		}
+		time.Sleep(150 * time.Millisecond)
+	}
+	if err := term.WaitForText("silent wrote no output. The clipboard is unchanged.", uiTimeout); err != nil {
+		t.Fatalf("no dock message for the silent pipe: %v\n%s", err, term.Snapshot())
+	}
+	waitForFileText(t, silentFile, func(s string) bool { return s == silentPipeValue }, "the silent pipe never wrote its file")
+	if got := mustCLI(t, base, "show-buffer"); got != silentPipeValue {
+		t.Fatalf("the newest buffer is %q, want the command's %q", got, silentPipeValue)
+	}
+	time.Sleep(clipboardSettle + 500*time.Millisecond)
+	if writes := clipboardSince(out, from); len(writes) != 0 {
+		t.Fatalf("the silent pipe wrote the clipboard over the command's value: %q", writes)
+	}
+	if got := mustCLI(t, base, "show-buffer"); got != silentPipeValue {
+		t.Fatalf("after a settle the newest buffer is %q, want the command's %q", got, silentPipeValue)
+	}
+	if n := len(listBuffers(t, base).Buffers); n != buffersBefore+1 {
+		t.Fatalf("the silent pipe left %d new buffers, want 1, the command's own", n-buffersBefore)
+	}
+
+	// A command that fails: the error on the dock, and the plain selection
+	// on the clipboard and in the newest buffer.
+	from = len(clipboardWrites(out))
+	for _, k := range []string{"V", "x"} {
+		if err := term.SendKeys(k); err != nil {
+			t.Fatalf("send %s: %v", k, err)
+		}
+		time.Sleep(150 * time.Millisecond)
+	}
+	if got, want := strings.TrimRight(pipeWrite(t, term, out, from, "x"), "\n"), "pipe-three"; got != want {
+		t.Fatalf("the failing pipe copied %q, want the selection %q", got, want)
+	}
+	if err := term.WaitForText("broken failed with exit code 3: refused.", uiTimeout); err != nil {
+		t.Fatalf("no dock message for the failing pipe: %v\n%s", err, term.Snapshot())
+	}
+	if got, want := strings.TrimRight(mustCLI(t, base, "show-buffer"), "\n"), "pipe-three"; got != want {
+		t.Fatalf("after the failing pipe the newest buffer is %q, want the selection %q", got, want)
+	}
 
 	// copy-pipe-and-cancel: the result on the clipboard, and copy mode ends.
 	from = len(clipboardWrites(out))

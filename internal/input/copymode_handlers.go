@@ -39,6 +39,10 @@ func HandleCopyModeKey(msg tea.KeyPressMsg, o *app.OS, window *terminal.Window) 
 		return m, cmd
 	}
 
+	if cmd, ok := copyModeFocusKey(msg, o, window); ok {
+		return o, cmd
+	}
+
 	// Multi copy mode drives every pane of the multifocus set with this key.
 	// See copymode_multi.go.
 	if o.MultiCopy.Has(window.ID) {
@@ -55,6 +59,44 @@ func HandleCopyModeKey(msg tea.KeyPressMsg, o *app.OS, window *terminal.Window) 
 	return fx.apply(o, window)
 }
 
+// copyModeFocusKey moves focus for a key bound to a focus action, and
+// reports whether it did. The pane stays in copy mode, as a pane does in tmux
+// when select-pane leaves it. In terminal mode the terminal_mode focus keys
+// count, and in window mode the window-mode ones, as they do outside copy
+// mode. A key copy mode reads itself, a copy pipe key and a copy_mode binding
+// keep their copy-mode meaning, and the search prompt, the multi copy save
+// prompt and a pending f/t character take every key as text. The leader is not
+// checked: Ctrl+B is copy mode's page up.
+func copyModeFocusKey(msg tea.KeyPressMsg, o *app.OS, window *terminal.Window) (tea.Cmd, bool) {
+	cm := window.CopyMode
+	if o.KeybindRegistry == nil || cm.State == terminal.CopyModeSearch || cm.PendingCharSearch {
+		return nil, false
+	}
+	if o.MultiCopy.Has(window.ID) && o.MultiCopy.Save != nil {
+		return nil, false
+	}
+	if config.CopyModeFixedKey(msg.String()) || config.CopyModeFixedKey(commandKey(msg)) {
+		return nil, false
+	}
+	if _, ok := copyPipeKey(msg, o, cm); ok || copyModeAction(msg, o) != "" {
+		return nil, false
+	}
+	var action string
+	if o.Mode == app.TerminalMode {
+		action = lookupAction(o, msg, o.KeybindRegistry.GetTerminalModeAction)
+		if !isTerminalFocusAction(action) {
+			return nil, false
+		}
+	} else {
+		action = lookupAction(o, msg, o.KeybindRegistry.GetAction)
+		if !isTerminalFocusAction(action) && action != "focus_up" && action != "focus_down" {
+			return nil, false
+		}
+	}
+	_, cmd, ok := dispatchAction(action, msg, o)
+	return cmd, ok
+}
+
 // copyModeAction is the [keybindings.copy_mode] action msg is bound to, or "".
 func copyModeAction(msg tea.KeyPressMsg, o *app.OS) string {
 	return lookupAction(o, msg, overlayKeys(o).GetCopyModeAction)
@@ -69,6 +111,15 @@ func dispatchCopyModeKey(msg tea.KeyPressMsg, action string, window *terminal.Wi
 	defer window.RUnlockIO()
 
 	if action != "" && runCopyModeAction(action, cm, window, fx) {
+		return
+	}
+
+	// Ctrl+C leaves copy mode from every state, the search prompt and a
+	// pending f/t character too, and copies nothing, as in tmux's vi mode.
+	if commandKey(msg) == "ctrl+c" {
+		cm.PendingCharSearch = false
+		fx.ExitCopyMode()
+		fx.ShowNotification("Left copy mode", "info", s.NotificationDuration)
 		return
 	}
 

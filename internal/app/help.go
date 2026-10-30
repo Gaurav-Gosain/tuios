@@ -663,6 +663,7 @@ func copyModeKeys(leader string) []HelpBinding {
 		{Keys: []string{"o"}, Description: "Other end of selection", Category: "Copy Mode"},
 		{Keys: []string{"y, c"}, Description: "Yank to clipboard", Category: "Copy Mode"},
 		{Keys: []string{"i, q, Esc"}, Description: "Exit copy mode", Category: "Copy Mode"},
+		{Keys: []string{"ctrl+c"}, Description: "Exit copy mode from any state. Nothing is copied", Category: "Copy Mode"},
 	}
 }
 

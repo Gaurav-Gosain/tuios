@@ -71,7 +71,7 @@ The action has no default key. Run it from the command palette, or bind it:
 
 ```toml
 [keybindings.prefix_mode]
-hints_all_panes = ["A"]
+hints_all_panes = ["Y"]
 ```
 
 To make `Ctrl+B F` put labels on all panes, set `hints.all_panes`:
