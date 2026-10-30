@@ -7584,7 +7584,10 @@ restart must say the new version and the session that came back.
 `restart-server`, whose plan must name the agent that can resume.
 `TestRestartServerFromAPaneLeavesADaemon` runs `restart-server --yes` in a
 pane of the daemon it restarts: the pane's terminal closes under it, and a
-daemon must hold the session again, restored.
+daemon must hold the session again, restored. Since 2026-10-30 a client of
+the second build is attached through the restart. It shows the version notice
+for the old daemon, reattaches by itself, and the notice must be gone once the
+reattach line has timed out.
 
 The controls were run on 2026-10-18 on branch `feat/restart-server`.
 
@@ -7595,6 +7598,7 @@ The controls were run on 2026-10-18 on branch `feat/restart-server`.
 | The version after the restart is the old daemon's | `runRestart`: `rep.After` from the plan's daemon, not the new daemon's hello | `TestRestartServerMovesTheDaemonToTheNewBuild` ("the restart does not say \"The daemon restarted on e2e-sync-next.\"") | **caught** |
 | The sessions after the restart are not read | `runRestart`: `rep.Back = nil` | `TestRestartServerMovesTheDaemonToTheNewBuild` ("the restart does not say \"This session came back: e2e-restart.\"") | **caught** |
 | list-windows marks no agent | `verbListWindows`: the `addResumable` call cut | `TestRestartOffersToResumeTheConversation` ("restart-server --dry-run does not list the agent that can resume") | **caught** |
+| The version notice outlives the restart (Linux, 2026-10-30) | `resumeOnNewDaemon`: the `clearRestartNotice` call cut | `TestRestartServerMovesTheDaemonToTheNewBuild` ("the version notice for the old daemon is still on the dock after restart-server", with "The daemon runs dev. ctrl+b j restarts it." on the dock) | **caught** |
 
 ## The restart from the app
 

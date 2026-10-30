@@ -12,6 +12,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/Gaurav-Gosain/tuitest"
 )
 
 // tuios hosts sync, against fake hosts.
@@ -446,12 +448,19 @@ func TestHostsSyncRestartWithYes(t *testing.T) {
 // The restart has to leave a daemon of the new build that holds the session,
 // restored, and the command has to say so.
 //
+// A client of the new build is attached through it, so its dock shows the
+// version notice for the old daemon. After the restart it reattaches to a
+// daemon of its own build, and the notice has to be gone, also once the
+// reattach line has timed out.
+//
 // Negative controls, recorded in NEGATIVE_CONTROLS.md:
 //   - With writeSessionCost not called, the plan does not name sleep.
 //   - With the version after the restart taken from the old daemon instead
 //     of the new daemon's hello, the done line names the old build.
 //   - With the session list after the restart not read, the done line names
 //     no session.
+//   - With clearRestartNotice not called on the reattach, the version notice
+//     for the old daemon comes back once the reattach line times out.
 func TestRestartServerMovesTheDaemonToTheNewBuild(t *testing.T) {
 	const name = "e2e-restart"
 	next := syncNextBinary(t)
@@ -463,6 +472,15 @@ func TestRestartServerMovesTheDaemonToTheNewBuild(t *testing.T) {
 	}
 	if out, err := tuiosCLI(t, base, "send-text", "-s", name, "sleep 300\n"); err != nil {
 		t.Fatalf("start a program in the pane: %v\n%s", err, out)
+	}
+	var term *tuitest.Terminal
+	withBinary("", func() {
+		tuiosBin = next
+		term = attachIn(t, base, name, startOpts{cols: 120, rows: 40})
+	})
+	const notice = "The daemon runs dev."
+	if err := term.WaitForText(notice, bootTimeout); err != nil {
+		t.Fatalf("ASSERTION: the client of the new build never showed the version notice: %v\n%s", err, term.Snapshot())
 	}
 	var plan string
 	withBinary("", func() {
@@ -528,6 +546,25 @@ func TestRestartServerMovesTheDaemonToTheNewBuild(t *testing.T) {
 	if info := waitForSessionInfo(t, base, name); !info.Restored {
 		t.Errorf("ASSERTION: the session is not marked restored, so no new daemon holds it")
 	}
+
+	// The client reattached to a daemon of its own build. The notice about
+	// the old daemon is sticky, so it would come back after the reattach line.
+	const reattached = "The daemon restarted. tuios reattached."
+	if err := term.WaitForText(reattached, bootTimeout); err != nil {
+		t.Fatalf("ASSERTION: the client did not reattach after restart-server: %v\n%s", err, term.Snapshot())
+	}
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		return !strings.Contains(s.Text(), reattached)
+	}, uiTimeout); err != nil {
+		t.Fatalf("the reattach line never timed out: %v\n%s", err, term.Snapshot())
+	}
+	time.Sleep(500 * time.Millisecond)
+	screen := term.Snapshot()
+	saveSyncArtifact(t, "restart-client-screen", screen)
+	if strings.Contains(screen, notice) {
+		t.Errorf("ASSERTION: the version notice for the old daemon is still on the dock after restart-server:\n%s", screen)
+	}
+	alive(t, term, "after restart-server")
 }
 
 // TestRestartServerFromAPaneLeavesADaemon runs `tuios restart-server --yes`

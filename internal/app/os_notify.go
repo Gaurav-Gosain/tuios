@@ -410,6 +410,21 @@ func (m *OS) ClearNotification(message string) bool {
 	return removed
 }
 
+// clearRestartNotice takes the version notice off the dock. It names the
+// build of the daemon the client was attached to, so it has to leave when that
+// daemon does: a restart from the command line ends the mismatch and leaves
+// the sticky notice behind otherwise.
+func (m *OS) clearRestartNotice() {
+	kept := m.Notifications[:0]
+	for _, n := range m.Notifications {
+		if !isRestartNotice(n.Target) {
+			kept = append(kept, n)
+		}
+	}
+	clear(m.Notifications[len(kept):])
+	m.Notifications = kept
+}
+
 // dismissVisibleNotification pops the message the block is currently drawing,
 // revealing whatever was queued behind it. This is the granularity esc never
 // had: the mouse addresses one message at a time, so the +N counter doubles as
