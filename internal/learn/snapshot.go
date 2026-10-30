@@ -425,9 +425,7 @@ func (s Snapshot) reviewMap() any {
 // diff lists the events that take prev to now, in a fixed order.
 func diff(prev, now Snapshot) []Event {
 	var out []Event
-	add := func(typ, windowID string, data map[string]any) {
-		out = append(out, Event{Type: typ, WindowID: windowID, Data: data})
-	}
+	add := func(typ, windowID string, data map[string]any) { appendEvent(&out, typ, windowID, data) }
 	if prev.Mode != now.Mode {
 		add(EventMode, "", map[string]any{"from": prev.Mode, "to": now.Mode})
 	}
@@ -581,4 +579,11 @@ func moves(rest, now Snapshot) []Event {
 		out = append(out, Event{Type: EventWindowMove, WindowID: w.ID, Data: data})
 	}
 	return out
+}
+
+// appendEvent is out of line, because diff adds an event at dozens of places.
+//
+//go:noinline
+func appendEvent(out *[]Event, typ, windowID string, data map[string]any) {
+	*out = append(*out, Event{Type: typ, WindowID: windowID, Data: data})
 }

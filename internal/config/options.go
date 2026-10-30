@@ -1655,6 +1655,8 @@ func Options() []Option {
 }
 
 // LookupOption returns the option a dotted path names.
+//
+//go:noinline
 func LookupOption(path string) (Option, bool) {
 	opt, ok := optionsByPath[path]
 	return opt, ok

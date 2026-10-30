@@ -11,6 +11,8 @@ type Integer interface {
 
 // Count returns n and the noun, with an s added when n is not 1. The noun is
 // given in the singular.
+//
+//go:noinline
 func Count[N Integer](n N, noun string) string {
 	return CountAs(n, noun, noun+"s")
 }

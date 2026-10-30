@@ -1436,6 +1436,8 @@ func (m *OS) ckBranch(e sidebarAgentEntry) string {
 }
 
 // ckWorktreeOf is the agent's worktree session, zero when it is not in one.
+//
+//go:noinline
 func (m *OS) ckWorktreeOf(e sidebarAgentEntry) ckWorktree {
 	if m.LearnMode && e.Host == "" {
 		// The tour's attempts are panes of its one session.

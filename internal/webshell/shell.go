@@ -831,6 +831,8 @@ func (s *shell) echo(args []string, line string) int {
 }
 
 // fail prints msg in red and returns status 1, for a command to return.
+//
+//go:noinline
 func (s *shell) fail(msg string) int {
 	s.t.Print(red + msg + reset + "\r\n")
 	return 1

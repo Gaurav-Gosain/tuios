@@ -46,6 +46,8 @@ func UseNerdFonts() bool {
 // fragment on a panel row must carry that row's background, otherwise a bare
 // foreground style emits an ANSI reset that punches a transparent hole through
 // the solid fill when the panel is composited over other content.
+//
+//go:noinline
 func Style(bg color.Color) lipgloss.Style {
 	return lipgloss.NewStyle().Background(bg)
 }

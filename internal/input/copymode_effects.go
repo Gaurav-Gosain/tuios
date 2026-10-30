@@ -52,6 +52,8 @@ type copyModeNotification struct {
 // ShowNotification queues a notification. Notifications are applied in call
 // order, matching the append semantics of OS.ShowNotification, so a handler
 // that notifies and then clears still ends up with both entries.
+//
+//go:noinline
 func (fx *copyModeEffects) ShowNotification(message, notifType string, duration time.Duration) {
 	fx.notifications = append(fx.notifications, copyModeNotification{
 		message:  message,

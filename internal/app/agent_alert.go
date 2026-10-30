@@ -121,6 +121,8 @@ func (m *OS) flushDueAgentAlerts(now time.Time) {
 }
 
 // windowByID finds a live window by id, or nil.
+//
+//go:noinline
 func (m *OS) windowByID(id string) *terminal.Window {
 	for _, w := range m.Windows {
 		if w != nil && w.ID == id {

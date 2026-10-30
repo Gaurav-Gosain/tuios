@@ -32,12 +32,7 @@ var Commands = []string{
 // error. See cmd/tuios-wasm/README.md for each command.
 func (m *Model) RunCommand(name string, args ...string) tea.Cmd {
 	o := m.OS
-	arg := func(i int) string {
-		if i < len(args) {
-			return args[i]
-		}
-		return ""
-	}
+	arg := func(i int) string { return argAt(args, i) }
 	switch name {
 	case "notify":
 		level := arg(1)
@@ -395,4 +390,15 @@ func (m *Model) setTheme(name string) {
 	if err := m.OS.SetTheme(name); err == nil && m.OS.UserConfig != nil {
 		_ = config.SetOptionValue(m.OS.UserConfig, "appearance.theme", name)
 	}
+}
+
+// argAt is args[i], or empty past the end. Out of line, because the command
+// switch reads an argument at dozens of places.
+//
+//go:noinline
+func argAt(args []string, i int) string {
+	if i < len(args) {
+		return args[i]
+	}
+	return ""
 }

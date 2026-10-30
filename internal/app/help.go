@@ -184,23 +184,30 @@ func isReviewHelpBinding(b HelpBinding) bool {
 // means different things, and the Inbox's own keys were in no section.
 const HelpCategoryAgents = "Agents"
 
+// appendHelpBinding adds a row for keys, without the blank ones, when any are
+// left. It is out of line because the generators below call it at dozens of
+// places.
+//
+//go:noinline
+func appendHelpBinding(bindings *[]HelpBinding, keys []string, desc, cat string) {
+	var live []string
+	for _, k := range keys {
+		if k = strings.TrimSpace(k); k != "" {
+			live = append(live, k)
+		}
+	}
+	if len(live) > 0 {
+		*bindings = append(*bindings, HelpBinding{Keys: live, Description: desc, Category: cat})
+	}
+}
+
 // generateAgentBindings lists the Agents section. Every key is read from the
 // config, chord included, so a rebound key shows as it is bound.
 func generateAgentBindings(registry *config.KeybindRegistry, s *config.Settings) []HelpBinding {
 	const cat = HelpCategoryAgents
 	presses := config.PressesByAction(registry)
 	var bindings []HelpBinding
-	add := func(keys []string, desc string) {
-		var live []string
-		for _, k := range keys {
-			if k = strings.TrimSpace(k); k != "" {
-				live = append(live, k)
-			}
-		}
-		if len(live) > 0 {
-			bindings = append(bindings, HelpBinding{Keys: live, Description: desc, Category: cat})
-		}
-	}
+	add := func(keys []string, desc string) { appendHelpBinding(&bindings, keys, desc, cat) }
 	for _, action := range []string{"prefix_inbox", "prefix_next_attention", "prefix_next_finished", "prefix_review", "prefix_mail", "prefix_jump_notif", "prefix_agents_settings"} {
 		desc := config.ActionDescriptions[action]
 		add(presses[action], desc)

@@ -381,6 +381,8 @@ func (m *OS) bspZoomCanvas(tree *layout.BSPTree, bounds layout.Rect, layouts map
 // that: the drag sets geometry per motion event, the animation stamps its own
 // back over all of it on the next tick, and the layout jumps to wherever the
 // old transition had got to.
+//
+//go:noinline
 func (m *OS) CancelSnapAnimation(win *terminal.Window) {
 	for i := len(m.Animations) - 1; i >= 0; i-- {
 		if m.Animations[i].Window == win && m.Animations[i].Type == ui.AnimationSnap {

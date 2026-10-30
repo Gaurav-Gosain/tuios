@@ -347,10 +347,12 @@ func ContextJSONOutput(event, text string) string {
 	return string(out) + "\n"
 }
 
+//go:noinline
 func skip(harness, event, why string) Decision {
 	return Decision{Harness: harness, Event: event, Skip: why}
 }
 
+//go:noinline
 func send(harness, event string, r Report) Decision {
 	return Decision{Harness: harness, Event: event, Report: &r}
 }
