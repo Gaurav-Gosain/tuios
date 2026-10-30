@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
@@ -122,7 +123,7 @@ func TestDaemonUpgradeCommandKeepsPanes(t *testing.T) {
 	writeHandoffArtifact(t, map[string]any{"text": text, "json": res, "json_output": jsonOut, "json_error": errString(jsonErr), "waiting_call": waited,
 		"pid_before": img.PID, "pid_after": after.PID, "executable_after": exe, "panes_before": before, "panes_after": afterPIDs})
 
-	for _, want := range []string{"accepts this daemon's state (handoff v1)... ok", "Paused 2 panes", "pid " + strconv.Itoa(img.PID) + " kept", "Upgraded in", "2 panes and their programs kept"} {
+	for _, want := range []string{"accepts this daemon's state (handoff v" + strconv.Itoa(session.HandoffVersion) + ")... ok", "Paused 2 panes", "pid " + strconv.Itoa(img.PID) + " kept", "Upgraded in", "2 panes and their programs kept"} {
 		if !strings.Contains(text, want) {
 			t.Errorf("ASSERTION: the command's report lacks %q:\n%s", want, text)
 		}
