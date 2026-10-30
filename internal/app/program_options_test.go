@@ -97,6 +97,13 @@ func TestEveryProgramTakesTheSharedOptions(t *testing.T) {
 				(name == "WithInput" || name == "WithWindowSize" || name == "WithFilter") {
 				return true
 			}
+			// The tutor reads the terminal through an input that also takes
+			// the keys "show me" types, and it runs a wrapper model, so its
+			// filter turns a quit into the tutor's menu and then calls
+			// FilterLearnMode and FilterMouseMotion on the OS inside.
+			if path == "internal/tutor/tutor.go" && (name == "WithInput" || name == "WithFilter") {
+				return true
+			}
 			// The GUI bridge is a transport with no terminal at all: its
 			// input is frames from a renderer, its size is the renderer's
 			// grid, and nothing is drawn.

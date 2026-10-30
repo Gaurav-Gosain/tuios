@@ -188,10 +188,11 @@ func Run(opts Options) error {
 		m.scr = scrMenu
 	}
 
+	// No WithWindowSize: stdout is the terminal, and Bubble Tea reads the
+	// size off it at start and on every resize.
 	prog = tea.NewProgram(m, append(app.ProgramOptions(),
 		tea.WithInput(in),
 		tea.WithOutput(os.Stdout),
-		tea.WithWindowSize(w, h),
 		// Last, so it replaces the filter ProgramOptions set: that one only
 		// knows *app.OS.
 		tea.WithFilter(filter),
