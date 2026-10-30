@@ -103,7 +103,7 @@ func detachedEvent(o *app.OS) *Detached {
 	case app.ExitDaemonLost:
 		return &Detached{Reason: "daemon_lost", Message: "The connection to the tuios daemon closed."}
 	case app.ExitDaemonUpgraded:
-		return &Detached{Reason: "daemon_upgraded", Message: "The tuios daemon was upgraded. Every program is still running. Attach again to continue."}
+		return &Detached{Reason: "daemon_upgraded", Message: "The tuios daemon is being upgraded. Every program is still running. Attach again to continue."}
 	case app.ExitHostLost:
 		return &Detached{Reason: "host_lost", Message: "The link to " + o.AttachedHost + " closed."}
 	case app.ExitNestedRefused:

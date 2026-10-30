@@ -114,7 +114,9 @@ func (m *OS) ExitNotice() string {
 			"Connect again after the daemon starts."
 
 	case ExitDaemonUpgraded:
-		return "The daemon was upgraded to " + m.upgradedTo() + ".\n" +
+		// Said as the old image hands over, before the exec: it stays true if
+		// the exec fails and the daemon goes on as it was.
+		return "The daemon is being upgraded to " + m.upgradedTo() + ".\n" +
 			"Your programs are still running.\n" +
 			"Connect again to continue."
 
