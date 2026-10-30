@@ -2714,6 +2714,16 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 			if sizeChanged {
 				m.ShowNotification(fmt.Sprintf("Session size: %dx%d (%d clients)", msg.Width, msg.Height, msg.ClientCount), "info", 2*time.Second)
 			}
+		} else if m.DaemonClient.SessionSizedBySelf() {
+			// The box stayed and this client sets the size now. No retile
+			// runs, and the client before it can have left PTYs at sizes of its
+			// own: a renderer takes its insets off each pane. The daemon
+			// ignores a size a PTY already has.
+			for _, w := range m.Windows {
+				if w.DaemonMode && w.DaemonResizeFunc != nil {
+					_ = w.DaemonResizeFunc(w.ContentWidth(), w.ContentHeight())
+				}
+			}
 		}
 		// The layout just worked out from this answer is pushed, whoever
 		// caused it, unless this client already pushed one for it. Nothing

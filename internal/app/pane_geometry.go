@@ -26,7 +26,11 @@ import (
 // the change: retile, repaint, and a state push so the session's other clients
 // adopt it.
 func (m *OS) SetSharedBordersSetting(v bool) {
-	m.SharedBorders = v
+	if m.OwnPaneBorders {
+		m.SessionSharedBorders = v
+	} else {
+		m.SharedBorders = v
+	}
 	m.Settings.SharedBorders = v
 	m.lastConfigSharedBorders = v
 	m.setAppearance(func(a *config.AppearanceConfig) { a.SharedBorders = new(v) })
@@ -110,8 +114,12 @@ func (m *OS) adoptPaneGeometry(state *session.SessionState) bool {
 		return false
 	}
 	pg := state.PaneGeometry
-	changed := m.SharedBorders != pg.SharedBorders || m.PaneGap != pg.PaneGap
-	m.SharedBorders = pg.SharedBorders
+	shared := pg.SharedBorders
+	if m.OwnPaneBorders {
+		m.SessionSharedBorders, shared = pg.SharedBorders, true
+	}
+	changed := m.SharedBorders != shared || m.PaneGap != pg.PaneGap
+	m.SharedBorders = shared
 	m.PaneGap = pg.PaneGap
 	// Zero is a peer that has not said (state written before the field existed)
 	// and leaves this client on its own configured width, which is the

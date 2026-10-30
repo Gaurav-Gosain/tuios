@@ -222,8 +222,12 @@ func (m *OS) BuildSessionState() *session.SessionState {
 	// The pane geometry inputs travel with the session because they are inputs
 	// to every client's layout arithmetic. Always sent, never nil: nil on the
 	// wire means a client too old to say, and this one can.
+	sharedBorders := m.SharedBorders
+	if m.OwnPaneBorders {
+		sharedBorders = m.SessionSharedBorders
+	}
 	state.PaneGeometry = &session.PaneGeometryState{
-		SharedBorders:     m.SharedBorders,
+		SharedBorders:     sharedBorders,
 		PaneGap:           m.PaneGap,
 		ScrollColumnWidth: m.ScrollColumnWidth,
 	}

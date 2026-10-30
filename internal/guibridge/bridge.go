@@ -452,6 +452,10 @@ func Run(opts Options) error {
 	osModel.SnapshotScrollback = max(opts.Scrollback, 0)
 	osModel.WireDaemonClient(client)
 	osModel.RestoreAttachedSession(state)
+	// The renderer's window opening is the person turning to the session,
+	// as each later resize is. A session that kept the size of a client
+	// that has left takes the renderer's size now, with no key typed.
+	reportResize(client)
 
 	// The model swaps its daemon client when it dials a dropped host link
 	// again. Input, the person nonce and the detach must use the one in
@@ -470,6 +474,7 @@ func Run(opts Options) error {
 	out.onResync = func() { program.Send(resyncMsg{}) }
 	out.mu.Unlock()
 	m.program = program
+	streams.program.Store(program)
 	osModel.BindProgram(program)
 
 	// The renderer has a truecolor display whatever this process's stdout
@@ -526,6 +531,7 @@ func newModel(opts app.OSOptions) *app.OS {
 	app.SetInputHandler(input.HandleInput)
 	seed := config.AppearanceFrom(userConfig, chromeOverrides)
 	seed.SidebarEnabled = false
+	sessionBorders := config.AppearanceFrom(userConfig, config.Overrides{}).SharedBorders
 	opts.KeybindRegistry = config.NewKeybindRegistry(userConfig)
 	opts.UserConfig = userConfig
 	opts.Settings = &seed
@@ -535,6 +541,12 @@ func newModel(opts app.OSOptions) *app.OS {
 	// their sizes. A zoom of part of the screen would resize them for every
 	// client of the session.
 	o.FullZoom = true
+	// The renderer draws its own sidebar and frames, and gives the guest the
+	// whole tile. Both stay this model's own: the session keeps the rail and
+	// the shared borders its terminal clients chose.
+	o.NoRail = true
+	o.OwnPaneBorders = true
+	o.SessionSharedBorders = sessionBorders
 	return o
 }
 
@@ -730,6 +742,8 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.gitArmed = false
 	} else if c, ok := msg.(cmdMsg); ok {
 		cmd = m.handle(Command(c))
+	} else if r, ok := msg.(ptyResizedMsg); ok {
+		m.refit(r)
 	} else {
 		if _, ok := msg.(app.HostsChangedMsg); ok {
 			select {
@@ -1030,6 +1044,8 @@ type tap struct {
 	mu     sync.Mutex
 	resume map[string]int64
 	from   map[string]int64
+	// program gets a ptyResizedMsg for each resize, once it runs.
+	program atomic.Pointer[tea.Program]
 }
 
 func (t *tap) Snapshot(ptyID string, state *session.TerminalState) {
@@ -1062,6 +1078,46 @@ func (t *tap) Resized(ptyID string, width, height int) {
 	b = binary.BigEndian.AppendUint16(b, uint16(width))
 	b = binary.BigEndian.AppendUint16(b, uint16(height))
 	t.out.Frame(KindResize, b)
+	// Sent from a goroutine of its own: the daemon client can call this on
+	// the model's goroutine, and Send blocks until Update takes the message.
+	if p := t.program.Load(); p != nil {
+		go p.Send(ptyResizedMsg{pty: ptyID, cols: width, rows: height})
+	}
+}
+
+// ptyResizedMsg says the daemon resized a pane's PTY, by this client or by
+// another one.
+type ptyResizedMsg struct {
+	pty        string
+	cols, rows int
+}
+
+// refit gives a pane back the size this bridge lays it out at, when another
+// client of the session resized its PTY. Only the renderer takes its insets
+// off each pane, so a terminal client that lays the panes out gives every
+// guest the whole rectangle, and the renderer then draws a grid larger than
+// its tile. While this client sets the session's size its layout is the one
+// in force, so it says its size again. In any other case it says nothing.
+// Another client's sizes stand while it sets the size. And when no one client
+// sets it, two bridges with different insets would each answer the other, and
+// resize the pane without end.
+func (m *model) refit(r ptyResizedMsg) {
+	if !m.client.Load().SessionSizedBySelf() {
+		return
+	}
+	for _, w := range m.os.Windows {
+		if w == nil || w.PTYID != r.pty {
+			continue
+		}
+		if cols, rows := w.AnnouncedSize(); cols == r.cols && rows == r.rows {
+			return
+		}
+		// The PTY has the size the daemon reports, whatever this window last
+		// announced. Recording it makes Resize send the layout's size again.
+		w.SeedAnnouncedSize(r.cols, r.rows)
+		w.Resize(w.Width, w.Height)
+		return
+	}
 }
 
 func appendID(b []byte, id string) []byte {
@@ -1127,13 +1183,15 @@ func reportInput(c *session.TUIClient) {
 }
 
 // reportResize makes this client the latest one under window_size latest
-// when the renderer's window changes size. A terminal client does not count
-// a resize, because its terminal can change size with nobody at it. The
-// renderer's window is the session's whole view, and its size changes when the
-// person opens it or drags it larger. Without this, a session whose last
-// client with input has left keeps that client's size, and the renderer
-// shows a small layout in a large window until someone types in a pane. It
-// is not use of the session (ReportUsed): that stays with input.
+// when the renderer attaches or its window changes size. A terminal client
+// counts neither one (see window_size.go). The renderer counts both, because a
+// person who opens the window or drags it larger expects the panes to fill it.
+// Without this, a session whose last client with input has left keeps that
+// client's size, and the renderer shows a small layout in a large window until
+// someone types in a pane. The cost is that a compositor that retiles the
+// window, with nobody at it, takes the session from a terminal client in use
+// once that client's hold has passed. It is not use of the session
+// (ReportUsed): that stays with input.
 func reportResize(c *session.TUIClient) {
 	if c == nil {
 		return

@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
 	"sync"
@@ -76,6 +77,7 @@ type wireWindow struct {
 	Y          int    `json:"y"`
 	W          int    `json:"w"`
 	H          int    `json:"h"`
+	Border     int    `json:"border"`
 	Floating   bool   `json:"floating"`
 	Popup      bool   `json:"popup"`
 	Repo       string `json:"repo"`
@@ -188,8 +190,10 @@ type guiBridge struct {
 	// VT bytes, for wave 4 (gui_bridge_wave4_test.go).
 	outputs   map[string][]byte
 	snapBytes map[string][]byte
-	closed    bool
-	req       int64
+	// resizes counts the RESIZE frames, one for each PTY resize of any pane.
+	resizes int
+	closed  bool
+	req     int64
 	// log is every command sent and every result, kept as the test's
 	// artifact.
 	log []string
@@ -353,6 +357,12 @@ func (b *guiBridge) read(r io.Reader) {
 			}
 			b.outputs[pty] = append(b.outputs[pty], body[1+int(body[0]):]...)
 			b.cond.Broadcast()
+			b.mu.Unlock()
+			continue
+		}
+		if hdr[4] == 4 {
+			b.mu.Lock()
+			b.resizes++
 			b.mu.Unlock()
 			continue
 		}
@@ -971,6 +981,13 @@ func TestGUIBridgeKeybinds(t *testing.T) {
 	if !menuHas("", "prefix_window") || len(kb.Menus["window"]) == 0 {
 		t.Errorf("the which-key menus are missing rows: %v", kb.Menus[""])
 	}
+	// A renderer in a typed language can reject null where it reads a list,
+	// and drop the whole event with the keys in it.
+	for name, groups := range kb.Menus {
+		if groups == nil {
+			t.Errorf("menu %q is null, want a list", name)
+		}
+	}
 	gui := false
 	for _, r := range kb.Rows {
 		if r.Scope == "gui" {
@@ -1077,6 +1094,23 @@ func TestGUIBridgeInputTakesTheSession(t *testing.T) {
 	if err := term.WaitForText("Part of session", shellTimeout); err != nil {
 		t.Errorf("the terminal client does not show a part of the larger session: %v\n%s", err, term.Snapshot())
 	}
+
+	// A command the renderer runs itself, such as a click that moves the focus,
+	// is the person using the renderer too.
+	time.Sleep(1500 * time.Millisecond)
+	for deadline := time.Now().Add(shellTimeout); time.Now().Before(deadline); time.Sleep(300 * time.Millisecond) {
+		_ = term.SendKeys(tuitest.Alt(tuitest.Esc))
+		b.mu.Lock()
+		small := b.state != nil && b.state.SessionSize.Cols <= 80
+		b.mu.Unlock()
+		if small {
+			break
+		}
+	}
+	st = b.waitState(func(s *wireState) bool { return s.SessionSize.Cols <= 80 }, "the session at the terminal client's size again")
+	time.Sleep(1500 * time.Millisecond)
+	b.send(map[string]any{"cmd": "focus", "window": st.Focused})
+	b.waitState(func(s *wireState) bool { return s.SessionSize.Cols == 160 }, "the session back at the bridge's size after a focus command")
 	b.saveLog("input-takes-the-session")
 }
 
@@ -1136,6 +1170,304 @@ func TestGUIBridgeResizeTakesTheSession(t *testing.T) {
 		return s.SessionSize == wireSize{Cols: 170, Rows: 52}
 	}, "the session at the bridge's new size after its window grew")
 	b.saveLog("resize-takes-the-session")
+}
+
+// TestGUIBridgeFillsATerminalSession: a terminal client makes the session at
+// 97x40 and leaves. Its config shows the rail and turns shared borders off,
+// as a person's own config may, and both are session state. The bridge then
+// attaches at 170x52 and nobody types. The session takes the bridge's size at
+// the attach, and the panes are laid out over all of it with no border, so
+// each guest gets its whole rectangle: the renderer draws its own sidebar and
+// frames. Without these, every pane's PTY is narrower than the tile the
+// renderer shows it in.
+func TestGUIBridgeFillsATerminalSession(t *testing.T) {
+	base := t.TempDir()
+	writeConfig(t, base, "[startup]\ntiled = true\n\n[appearance]\nshared_borders = false\n\n[appearance.sidebar]\nenabled = true\nposition = \"right\"\nwidth = 24\n")
+	term := startIn(t, base, startOpts{cols: 97, rows: 40, args: []string{"new", "gb"}})
+	// The config written above opens no pane at startup, so the client opens
+	// on its welcome card. n opens a pane, and is the client's own input.
+	if err := term.WaitForText("new window", bootTimeout); err != nil {
+		t.Fatalf("the terminal client never drew its welcome card: %v\n%s", err, term.Snapshot())
+	}
+	_ = term.SendKeys("n")
+	if err := term.WaitFor(func(s tuitest.Screen) bool { return countWindows(s) >= 1 }, bootTimeout); err != nil {
+		t.Fatalf("the terminal client never drew its pane: %v\n%s", err, term.Snapshot())
+	}
+	_ = term.SendKeys(tuitest.Alt(tuitest.Esc))
+	time.Sleep(500 * time.Millisecond)
+	_ = term.Close()
+	time.Sleep(1500 * time.Millisecond)
+
+	// The renderer keeps 20 px across and 40 px down of each pane's slot for
+	// its own frame. The slot is the pane's cells and one gap cell, so the
+	// guest gets one column and one row less than the pane: (w+1)-2 and (h+1)-2.
+	b := startBridgeWith(t, base, bridgeOpts{args: []string{"--session", "gb", "--cell-width", "10", "--cell-height", "20", "--insets", "40,10,10,0"}, cols: 170, rows: 52, keepDaemon: true, name: "gb"})
+	paneFills := func(what string) {
+		t.Helper()
+		st := b.waitState(func(s *wireState) bool {
+			tr := s.Trees[fmt.Sprint(s.Workspace)]
+			return s.SessionSize == wireSize{Cols: 170, Rows: 52} && tr != nil && tr.Bounds.W == 170
+		}, "the panes laid out over the whole 170x52 session "+what)
+		for _, w := range st.Windows {
+			if w.Minimized || w.Floating || w.PTY == "" {
+				continue
+			}
+			if w.Border != 0 {
+				t.Errorf("%s: pane %s has a border of %d cells, so its guest is smaller than its tile", what, w.ID, w.Border)
+			}
+			// The guest's own word for its size. Asked again until it
+			// matches, because the resize and the keys reach the daemon on
+			// separate paths, and a guest asked first answers with its old size.
+			marker := fmt.Sprintf("SIZE-%d-%d", w.H-1, w.W-1)
+			said := regexp.MustCompile(`SIZE-\d+-\d+`)
+			last := ""
+			for deadline := time.Now().Add(shellTimeout); last != marker && time.Now().Before(deadline); {
+				b.mu.Lock()
+				delete(b.outputs, w.PTY)
+				b.mu.Unlock()
+				b.input(w.PTY, "echo SIZE-$(stty size | tr ' ' -)\r")
+				time.Sleep(500 * time.Millisecond)
+				b.mu.Lock()
+				if got := said.FindAll(b.outputs[w.PTY], -1); len(got) > 0 {
+					last = string(got[len(got)-1])
+				}
+				b.mu.Unlock()
+			}
+			if last != marker {
+				t.Errorf("%s: pane %s is %dx%d, its guest should get %s, and it says %q", what, w.ID, w.W, w.H, marker, last)
+			}
+		}
+	}
+	paneFills("at the attach, with no input")
+	b.tiledPanes(2)
+	paneFills("with two panes")
+
+	// A terminal client that is still attached lays the panes out too, and
+	// gives each guest its whole rectangle. Once the renderer has the session
+	// back, the bridge gives the panes its own sizes again.
+	_, st := smallClientTakesTheSession(t, b, base, "gb")
+	time.Sleep(1500 * time.Millisecond)
+	b.input(st.Windows[0].PTY, "\r")
+	// A new pane moves the rectangles. The bridge resizes the PTYs first, and
+	// the terminal client second, when the bridge's state reaches it. So the
+	// terminal client's sizes are the last ones the daemon has, and only the
+	// bridge saying its own again can put them right.
+	b.tiledPanes(3)
+	paneFills("with a terminal client still attached")
+	b.saveLog("fills-a-terminal-session")
+}
+
+// paneBoxes reads every pane of session as a daemon client sees it: the box, and
+// the PTY's real size from outside the pane. It returns "" until every pane
+// answers.
+func paneBoxes(t *testing.T, base, session string) string {
+	t.Helper()
+	out, err := tuiosCLI(t, base, "ls", "--json")
+	if err != nil {
+		return ""
+	}
+	var list []struct {
+		Name    string `json:"name"`
+		Windows []struct {
+			ID string `json:"id"`
+		} `json:"windows"`
+	}
+	if json.Unmarshal([]byte(out), &list) != nil {
+		return ""
+	}
+	var rows []string
+	for _, s := range list {
+		if s.Name != session {
+			continue
+		}
+		for _, w := range s.Windows {
+			out, err := tuiosCLI(t, base, "get-window", w.ID, "-s", session, "--json")
+			if err != nil {
+				return ""
+			}
+			var g struct {
+				X, Y, Width, Height int
+				TTY                 string `json:"tty"`
+				Shell               int    `json:"shell_pgid"`
+			}
+			if json.Unmarshal([]byte(out), &g) != nil {
+				return ""
+			}
+			if g.TTY == "" {
+				if g.TTY, err = os.Readlink(fmt.Sprintf("/proc/%d/fd/0", g.Shell)); err != nil {
+					return ""
+				}
+			}
+			size, err := exec.Command("stty", "-F", g.TTY, "size").Output()
+			if err != nil {
+				return ""
+			}
+			rows = append(rows, fmt.Sprintf("box %dx%d at %d,%d pty %s", g.Width, g.Height, g.X, g.Y, strings.TrimSpace(string(size))))
+		}
+	}
+	sort.Strings(rows)
+	return strings.Join(rows, "; ")
+}
+
+// waitPaneBoxes waits until paneBoxes returns want, and returns what it read
+// last.
+func waitPaneBoxes(t *testing.T, base, session, want string) string {
+	t.Helper()
+	got := ""
+	for deadline := time.Now().Add(shellTimeout); time.Now().Before(deadline); time.Sleep(300 * time.Millisecond) {
+		if got = paneBoxes(t, base, session); got == want {
+			break
+		}
+	}
+	return got
+}
+
+// TestGUIBridgeLeavesATerminalSessionAsItWas: a renderer leaves no lasting
+// change in a session. A terminal client whose config shows the rail and turns
+// shared borders off has two panes. The bridge lays them out without either
+// while it has the session. After it leaves, the terminal client must have the
+// same boxes and the same PTY sizes. It runs with the terminal client away while
+// the bridge has the session, and with it attached, where the two must also
+// settle with no resize war. Under window_size latest, the attached client takes
+// its size back with its next input.
+func TestGUIBridgeLeavesATerminalSessionAsItWas(t *testing.T) {
+	for _, tc := range []struct {
+		name       string
+		cols, rows int
+	}{{"larger bridge", 170, 52}, {"same size", 120, 40}} {
+		t.Run(tc.name, func(t *testing.T) {
+			base := t.TempDir()
+			writeConfig(t, base, "[startup]\ntiled = true\n\n[appearance]\nshared_borders = false\n\n[appearance.sidebar]\nenabled = true\nposition = \"right\"\nwidth = 24\n")
+			term := startIn(t, base, startOpts{cols: 120, rows: 40, args: []string{"new", "gb"}})
+			if err := term.WaitForText("new window", bootTimeout); err != nil {
+				t.Fatalf("the terminal client never drew its welcome card: %v\n%s", err, term.Snapshot())
+			}
+			_ = term.SendKeys("n")
+			if err := term.WaitFor(func(s tuitest.Screen) bool { return countWindows(s) >= 1 }, bootTimeout); err != nil {
+				t.Fatalf("the terminal client never drew its pane: %v\n%s", err, term.Snapshot())
+			}
+			_ = term.SendKeys("n")
+			if err := term.WaitFor(func(s tuitest.Screen) bool { return countWindows(s) >= 2 }, bootTimeout); err != nil {
+				t.Fatalf("the terminal client never drew its second pane: %v\n%s", err, term.Snapshot())
+			}
+			time.Sleep(time.Second)
+			before := paneBoxes(t, base, "gb")
+			if before == "" || !strings.Contains(before, ";") {
+				t.Fatalf("could not read two panes: %q", before)
+			}
+			bridge := func() *guiBridge {
+				return startBridgeWith(t, base, bridgeOpts{args: []string{"--session", "gb", "--cell-width", "10", "--cell-height", "20", "--insets", "40,10,10,0"}, cols: tc.cols, rows: tc.rows, keepDaemon: true, name: "gb"})
+			}
+			hasSession := func(b *guiBridge) {
+				t.Helper()
+				b.waitState(func(s *wireState) bool {
+					tr := s.Trees[fmt.Sprint(s.Workspace)]
+					return s.SessionSize == wireSize{Cols: tc.cols, Rows: tc.rows} && tr != nil && tr.Bounds.W == tc.cols
+				}, "the panes laid out over the whole session")
+			}
+
+			_ = term.Close()
+			time.Sleep(1500 * time.Millisecond)
+			b := bridge()
+			hasSession(b)
+			_ = b.in.Close()
+			b.waitFor(func() bool { return b.closed }, shellTimeout, "the bridge to leave")
+			time.Sleep(500 * time.Millisecond)
+			term = startIn(t, base, startOpts{cols: 120, rows: 40, args: []string{"attach", "gb"}})
+			if got := waitPaneBoxes(t, base, "gb", before); got != before {
+				t.Errorf("the terminal client came back after the bridge left:\n got %s\nwant %s", got, before)
+			}
+
+			// The session's rail reserve counts a client of the session's own
+			// size, so here the panes may stop short of the bridge's edge in
+			// the same size case. Nothing may be left behind, and nothing may
+			// fight.
+			b = bridge()
+			b.waitState(func(s *wireState) bool {
+				return s.SessionSize == wireSize{Cols: tc.cols, Rows: tc.rows}
+			}, "the session at the bridge's size")
+			time.Sleep(time.Second)
+			b.mu.Lock()
+			seen := b.resizes
+			b.mu.Unlock()
+			time.Sleep(time.Second)
+			b.mu.Lock()
+			seen = b.resizes - seen
+			b.mu.Unlock()
+			if seen > 0 {
+				t.Errorf("the panes' PTYs were resized %d times in one second with both clients attached", seen)
+			}
+			_ = b.in.Close()
+			b.waitFor(func() bool { return b.closed }, shellTimeout, "the bridge to leave")
+			time.Sleep(500 * time.Millisecond)
+			_ = term.SendKeys(tuitest.Alt(tuitest.Esc))
+			if got := waitPaneBoxes(t, base, "gb", before); got != before {
+				t.Errorf("the terminal client stayed attached while the bridge came and went:\n got %s\nwant %s", got, before)
+			}
+		})
+	}
+}
+
+// TestGUIBridgeLeavesTheRailAlone: a bridge makes the session, so it is the first
+// client, and it leaves. It draws no rail of its own, and that must not hide the
+// rail for a terminal client whose config shows one.
+func TestGUIBridgeLeavesTheRailAlone(t *testing.T) {
+	base := t.TempDir()
+	writeConfig(t, base, "[startup]\ntiled = true\n\n[appearance.sidebar]\nenabled = true\nposition = \"right\"\nwidth = 24\n")
+	b := startBridge(t, base, "gb", 170, 52)
+	b.tiledPanes(1)
+	_ = b.in.Close()
+	b.waitFor(func() bool { return b.closed }, shellTimeout, "the bridge to leave")
+	term := startIn(t, base, startOpts{cols: 120, rows: 40, args: []string{"attach", "gb"}})
+	if err := term.WaitForText("sessions", bootTimeout); err != nil {
+		t.Errorf("the terminal client shows no rail after the bridge made the session: %v\n%s", err, term.Snapshot())
+	}
+}
+
+// TestGUIBridgeAttachTakesTheSession: a terminal client has the session and is
+// idle, still attached. A renderer attaches and nobody types. The session takes
+// the renderer's size, so its panes fill the window it just opened.
+func TestGUIBridgeAttachTakesTheSession(t *testing.T) {
+	base := t.TempDir()
+	first := startBridge(t, base, "gb", 160, 50)
+	first.tiledPanes(1)
+	smallClientTakesTheSession(t, first, base, "gb")
+	_ = first.in.Close()
+	// Past the terminal client's hold (latestHold).
+	time.Sleep(1500 * time.Millisecond)
+	b := startBridgeWith(t, base, bridgeOpts{args: []string{"--session", "gb"}, cols: 170, rows: 52, keepDaemon: true, name: "gb-second"})
+	b.waitState(func(s *wireState) bool {
+		return s.SessionSize == wireSize{Cols: 170, Rows: 52}
+	}, "the session at the size of the bridge that just attached")
+}
+
+// TestGUIBridgesLeaveAPaneAlone: under window_size smallest, one bridge has the
+// session's height and another its width, so no one client sets the session's
+// size. Each takes different insets off a pane. Neither may say its size again
+// when the other resizes the PTY, or the two resize the pane without end, and
+// its program redraws on each one.
+func TestGUIBridgesLeaveAPaneAlone(t *testing.T) {
+	base := t.TempDir()
+	writeConfig(t, base, "[startup]\ntiled = true\n\n[daemon]\nwindow_size = \"smallest\"\n")
+	a := startBridgeWith(t, base, bridgeOpts{args: []string{"--session", "gb", "--cell-width", "9", "--cell-height", "20", "--insets", "38,16,16,16"}, cols: 170, rows: 40, name: "gb"})
+	a.tiledPanes(1)
+	c := startBridgeWith(t, base, bridgeOpts{args: []string{"--session", "gb", "--cell-width", "10", "--cell-height", "18", "--insets", "6,2,2,2"}, cols: 120, rows: 52, keepDaemon: true, name: "gb-other"})
+	a.send(map[string]any{"cmd": "resize", "cols": 171, "rows": 40, "cell_width": 9, "cell_height": 20, "insets": []int{38, 16, 16, 16}})
+	c.send(map[string]any{"cmd": "resize", "cols": 119, "rows": 52, "cell_width": 10, "cell_height": 18, "insets": []int{6, 2, 2, 2}})
+	a.waitState(func(s *wireState) bool {
+		return s.SessionSize == wireSize{Cols: 119, Rows: 40}
+	}, "the session at the width of one bridge and the height of the other")
+	time.Sleep(time.Second)
+	count := func() int {
+		a.mu.Lock()
+		defer a.mu.Unlock()
+		return a.resizes
+	}
+	before := count()
+	time.Sleep(time.Second)
+	if n := count() - before; n > 0 {
+		t.Errorf("the pane's PTY was resized %d times in one second with nothing changing", n)
+	}
 }
 
 // TestGUIBridgeSessionName: a switch made from inside the session moves the
@@ -1309,7 +1641,14 @@ func TestGUIBridgeZoomKeepsHiddenPanes(t *testing.T) {
 	if !strings.Contains(string(data), "zoom_size = 100") {
 		t.Fatalf("the pinned config does not set zoom_size = 100; this edit assumes it does")
 	}
-	writeConfigAtomically(t, cfg, []byte(strings.Replace(string(data), "zoom_size = 100", "zoom_size = 95", 1)))
+	// Shared borders on, so the session's terminal client and the bridge work
+	// out the same rectangles, and a resize of a hidden pane can only be the
+	// bridge's zoom. With shared borders off, a terminal client retiles at its
+	// own rectangles on the zoom, and the bridge then says its sizes again.
+	if strings.Contains(string(data), "\nshared_borders") {
+		t.Fatalf("the pinned config already sets shared_borders; this edit assumes it does not")
+	}
+	writeConfigAtomically(t, cfg, []byte(strings.Replace(string(data), "zoom_size = 100", "zoom_size = 95\nshared_borders = true", 1)))
 	// The terminal client reads its own, with a zoom of the whole screen, so
 	// any resize of a hidden pane comes from the bridge.
 	termHome := filepath.Join(base, "term-config")

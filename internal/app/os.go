@@ -122,6 +122,25 @@ type OS struct {
 	// bridge) sets it, so a zoom there resizes the zoomed pane alone.
 	FullZoom bool
 
+	// NoRail keeps this model from taking any columns for a rail, and from
+	// reading or writing whether the session shows one. A renderer that draws
+	// its own sidebar (the GUI bridge) sets it. A rail its terminal clients
+	// show would take columns from panes the renderer draws whole, and a rail
+	// this model hid would stay hidden for them.
+	NoRail bool
+
+	// OwnPaneBorders lays the panes out with shared borders on this client
+	// only. Pane geometry is session state, and a terminal client with
+	// shared_borders off gives each guest two columns and two rows less than
+	// its rectangle. A renderer that draws its own frames (the GUI bridge)
+	// sets it to give the guest the whole rectangle, and sends
+	// SessionSharedBorders in its state, so the session keeps the setting it had.
+	OwnPaneBorders bool
+
+	// SessionSharedBorders is the session's shared borders setting while
+	// OwnPaneBorders is on. It starts as this client's config says.
+	SessionSharedBorders bool
+
 	// frameRate drives the program's frame ticker from NormalFPS and finds the
 	// display's rate for max_fps = "auto". See frame_rate.go.
 	frameRate frameRate

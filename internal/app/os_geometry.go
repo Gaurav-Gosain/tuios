@@ -396,7 +396,7 @@ func (m *OS) sidebarWidthPreference() int {
 // the footer stepper can ask what a width would actually get it before offering
 // the step. GetSidebarWidth is this with the configured preference.
 func (m *OS) sidebarWidthFor(prefer int) int {
-	if !m.Settings.SidebarEnabled || m.Settings.SidebarPosition == "hidden" {
+	if m.NoRail || !m.Settings.SidebarEnabled || m.Settings.SidebarPosition == "hidden" {
 		return 0
 	}
 	return sidebarResponsiveWidth(prefer, m.GetRenderWidth())
@@ -406,7 +406,7 @@ func (m *OS) sidebarWidthFor(prefer int) int {
 // after the original rail and the pane floor. Without an explicit enabled
 // override, a second rail cannot appear merely because a table was written.
 func (m *OS) secondarySidebarWidth() int {
-	if m.UserConfig == nil {
+	if m.NoRail || m.UserConfig == nil {
 		return 0
 	}
 	var cfg *config.SidebarEdgeConfig

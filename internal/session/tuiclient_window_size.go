@@ -107,6 +107,18 @@ func (c *TUIClient) SessionSizedByOther() bool {
 	return owner != nil && self != nil && owner.client != "" && *self != "" && owner.client != *self
 }
 
+// SessionSizedBySelf reports whether the daemon said that this client sets the
+// session's size. It is false when another client sets it, when no one client
+// does (under smallest, with one client setting the width and another the
+// height), and when the daemon has not said.
+func (c *TUIClient) SessionSizedBySelf() bool {
+	if c == nil {
+		return false
+	}
+	owner, self := c.sizedBy.Load(), c.selfID.Load()
+	return owner != nil && self != nil && *self != "" && owner.client == *self
+}
+
 // noteSizePolicy records the session's window_size policy, from an attach
 // reply. Empty, from a daemon that does not say it, records it as unknown.
 func (c *TUIClient) noteSizePolicy(policy string) {

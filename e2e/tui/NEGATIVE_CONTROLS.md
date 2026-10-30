@@ -10919,3 +10919,50 @@ second writes `fan.txt`.
 | Control: what was cut | Where it fails | Verdict |
 | --- | --- | --- |
 | `reportResize` is not called on the resize command (`internal/guibridge/bridge.go`) | "bridge never showed the session at the bridge's new size after its window grew", with `session_size` 80x24 and `client_size` 170x52 | **caught** |
+
+## A renderer's panes fill their tiles in a terminal client's session
+
+`TestGUIBridgeFillsATerminalSession` writes a config that shows the rail and turns shared borders off. A 97x40 terminal client makes the session, opens a pane and leaves. A bridge with pixel insets then attaches at 170x52, and nobody types. The panes must be laid out over the whole session with no border, and each guest's `stty size` must be the tile less the renderer's insets. The test checks this at the attach, with two panes, and again after an 80x24 terminal client attaches, takes the session with input, and the bridge takes it back while that client stays attached. Each control was built into its own binary. Run on 2026-10-30 on Linux.
+
+| Control: what was cut | Where it fails | Verdict |
+| --- | --- | --- |
+| `o.NoRail = true` in `newModel` (`internal/guibridge/bridge.go`) | "bridge never showed the panes laid out over the whole 170x52 session at the attach, with no input": the tree is 24 columns short, the rail the terminal client showed | **caught** |
+| `o.OwnPaneBorders = true` in `newModel` | "pane ... has a border of 1 cells", and the guest says `SIZE-49-167` for a 170x52 pane | **caught** |
+| `m.refit(r)` on `ptyResizedMsg` | "with a terminal client still attached: pane ... is 85x52, its guest should get SIZE-51-84, and it says SIZE-52-85" | **caught sometimes** |
+
+The `refit` control depends on which client's resize reaches the daemon last. The test adds a pane to make the terminal client last, and the two paths can still cross. It failed 2 of 4 repeated runs. A pass of this test does not prove that `refit` works.
+
+## A renderer that attaches takes the session
+
+`TestGUIBridgeAttachTakesTheSession` starts a bridge and an 80x24 terminal client that takes the session with its own input. The first bridge leaves and the terminal client stays, idle. A second bridge attaches at 170x52, and nobody types. The session must take 170x52. The control was built into its own binary. Run on 2026-10-30 on Linux.
+
+| Control: what was cut | Where it fails | Verdict |
+| --- | --- | --- |
+| The `reportResize(client)` call at the attach in `Run` (`internal/guibridge/bridge.go`) | "bridge never showed the session at the size of the bridge that just attached" | **caught** |
+
+## Two renderers leave a pane alone
+
+`TestGUIBridgesLeaveAPaneAlone` runs two bridges on one session under `window_size = smallest`. One has the session's width and the other has its height, so no one client sets the size. They take different insets off the pane. The pane's PTY must have no resize in one settled second. The control was built into its own binary. Run on 2026-10-30 on Linux.
+
+| Control: what was cut | Where it fails | Verdict |
+| --- | --- | --- |
+| `refit` checks `SessionSizedByOther` in place of `SessionSizedBySelf` (`internal/guibridge/bridge.go`) | "the pane's PTY was resized 12839 times in one second with nothing changing" | **caught** |
+
+## The bridge counts what the renderer runs, and sends no null menu
+
+`TestGUIBridgeInputTakesTheSession` now also has the terminal client take the session a second time. The bridge then gets a `focus` command, with no key typed. The session must return to the bridge's size. `TestGUIBridgeKeybinds` checks that no which-key menu is null. Each control was built into its own binary. Run on 2026-10-30 on Linux.
+
+| Control: what was cut | Where it fails | Verdict |
+| --- | --- | --- |
+| The `reportInput` case for `action`, `focus` and `workspace` in `handle` (`internal/guibridge/bridge.go`) | "bridge never showed the session back at the bridge's size after a focus command" | **caught** |
+| The empty list in `exportKeybinds`, so a prefix with no keys sends null (`internal/guibridge/keybinds.go`) | "menu \"tuios\" is null, want a list" | **caught** |
+
+## A renderer leaves a session as it was
+
+`TestGUIBridgeLeavesATerminalSessionAsItWas` starts a terminal client with two panes, the rail on and shared borders off, and reads each pane's box and PTY size. The PTY size comes from `stty -F` outside the pane. A bridge with insets attaches and leaves, with the terminal client away. A second bridge attaches and leaves, with the terminal client attached, and the PTYs must have no resize in one settled second. After each one, the terminal client must have the same boxes and PTY sizes. It runs with a larger bridge and with a bridge of the same size. `TestGUIBridgeLeavesTheRailAlone` has a bridge make the session and leave, and a terminal client must then show its rail. Each control was built into its own binary. Run on 2026-10-30 on Linux.
+
+| Control: what was cut | Where it fails | Verdict |
+| --- | --- | --- |
+| The bridge's state carries shared borders on, in place of `SessionSharedBorders` (`internal/app/session.go`) | "the terminal client stayed attached while the bridge came and went", with PTY `38 48` where it wants `36 46` | **caught** |
+| The same box branch in the `SessionResizeMsg` case (`internal/app/update.go`) | The same failure in the same size case, with PTY `37 47` where it wants `36 46` | **caught** |
+| The `NoRail` check in `sidebarOpsOn` (`internal/app/sidebar_mouse.go`) | "the terminal client shows no rail after the bridge made the session" | **caught** |
