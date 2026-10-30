@@ -10985,3 +10985,9 @@ The positive half is in the same run: the warning reaches the dock on both build
 | `InboxUndo`'s "Nothing to undo" notice raised as info (`internal/app/inbox_lifecycle.go`) | `TestNotificationLevelShowsWhyAKeyDidNothing`: "ASSERTION: under level warning the dock does not say why u did nothing" | **caught** |
 
 The first control fails at the pane's message, before the agent's alert; both reach the dock through the same check.
+
+A follow-up commit adds `TestNotificationLevelErrorStillLogsAWarning`. This control was run on 2026-10-30 on Linux against the final code, in its own binary. The cuts in the section above also failed again on Linux.
+
+| Control: what was cut | Where it fails | Verdict |
+| --- | --- | --- |
+| The rule that a warning always goes to the log: `showNotification` skips it when `log_hidden` is false | `TestNotificationLevelErrorStillLogsAWarning`: "ASSERTION: the log viewer does not list the warning" | **caught** |
