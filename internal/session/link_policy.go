@@ -56,20 +56,36 @@ const linkPolicyVerb = "link-peer"
 // machine's own links: they need config.LinkRelayCapabilities.
 const capRelay = "*"
 
+// linkCaps is what a verb or a message needs on a link connection. An array
+// rather than a slice, because the compiler lays a map of arrays of constants
+// out as data. A map of slices is about 28 KB of code that runs at every start
+// of every tuios command, for a table only a link connection reads.
+type linkCaps [3]string
+
+// list is the capabilities, without the unused places of the array.
+func (c linkCaps) list() []string {
+	for i, name := range c {
+		if name == "" {
+			return c[:i]
+		}
+	}
+	return c[:]
+}
+
 // verbCapabilities is what each verb needs on a link connection. An empty list
 // needs nothing.
-var verbCapabilities = map[string][]string{
-	"hello":      nil,
-	"list-verbs": nil,
-	"list-keys":  nil,
-	"link-peer":  nil,
+var verbCapabilities = map[string]linkCaps{
+	"hello":      {},
+	"list-verbs": {},
+	"list-keys":  {},
+	"link-peer":  {},
 	// restrict-connection only gives up authority on the calling
 	// connection, so it needs nothing.
-	"restrict-connection": nil,
+	"restrict-connection": {},
 	// pane-grants only reports; over a link it says no pane grants apply.
 	// set-pane-grants is refused over a link by its handler whatever the
 	// policy, and needs every capability here as well.
-	"pane-grants":     nil,
+	"pane-grants":     {},
 	"set-pane-grants": {capRelay},
 	// apply-config is refused over a link by its handler as well.
 	"apply-config": {capRelay},
@@ -180,7 +196,7 @@ var verbCapabilities = map[string][]string{
 	"tml-get":       {capRelay},
 	"tml-list":      {capRelay},
 	"artifact-list": {capRelay},
-	"tml-validate":  nil,
+	"tml-validate":  {},
 	"open-pane":     {config.LinkAllowOpen},
 	"resize-pane":   {config.LinkAllowOpen},
 	"close-pane":    {config.LinkAllowOpen},
@@ -329,10 +345,10 @@ var verbCapabilities = map[string][]string{
 }
 
 // msgCapabilities is what each binary message needs on a link connection.
-var msgCapabilities = map[MessageType][]string{
-	MsgHello:             nil,
-	MsgDetach:            nil,
-	MsgPing:              nil,
+var msgCapabilities = map[MessageType]linkCaps{
+	MsgHello:             {},
+	MsgDetach:            {},
+	MsgPing:              {},
 	MsgList:              {config.LinkAllowList},
 	MsgSubscribePTY:      {config.LinkAllowList},
 	MsgUnsubscribePTY:    {config.LinkAllowList},
@@ -404,7 +420,7 @@ func (d *Daemon) checkLinkVerb(cs *connState, verb string) *verbError {
 	if !known {
 		return linkForbidden(d, cs, verb, nil, "this verb has no link policy, so it is refused over a link")
 	}
-	return d.checkLinkCaps(cs, verb, caps)
+	return d.checkLinkCaps(cs, verb, caps.list())
 }
 
 // checkLinkMessage is checkLinkVerb for a binary message.
@@ -419,7 +435,7 @@ func (d *Daemon) checkLinkMessage(cs *connState, t MessageType) *verbError {
 	if !known {
 		return linkForbidden(d, cs, fmt.Sprintf("message %d", t), nil, "this message has no link policy, so it is refused over a link")
 	}
-	return d.checkLinkCaps(cs, fmt.Sprintf("message %d", t), caps)
+	return d.checkLinkCaps(cs, fmt.Sprintf("message %d", t), caps.list())
 }
 
 // linkFromPane refuses a link connection dialled from inside a pane of this

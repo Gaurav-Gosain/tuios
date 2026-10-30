@@ -61,7 +61,7 @@ func TestAgentWorkVerbsAreClassifiedAsThePlanSays(t *testing.T) {
 		if got := grantKind(row.verb); got != row.scope {
 			t.Errorf("%s needs %v from a pane, want %v", row.verb, got, row.scope)
 		}
-		if got := verbCapabilities[row.verb]; !slices.Equal(got, row.link) {
+		if got := verbCapabilities[row.verb].list(); !slices.Equal(got, row.link) {
 			t.Errorf("%s needs %v over a link, want %v", row.verb, got, row.link)
 		}
 		if typingVerbs[row.verb] != row.typing {

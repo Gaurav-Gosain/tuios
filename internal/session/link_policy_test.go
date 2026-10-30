@@ -47,7 +47,7 @@ func TestEveryVerbHasALinkPolicy(t *testing.T) {
 		}
 	}
 	for verb, caps := range verbCapabilities {
-		for _, c := range caps {
+		for _, c := range caps.list() {
 			if c != capRelay && !slices.Contains(config.LinkCapabilities, c) {
 				t.Errorf("verb %s needs %q, which is not a capability", verb, c)
 			}
@@ -763,7 +763,7 @@ func TestNoLowClassVerbTakesAPathOrReturnsAFile(t *testing.T) {
 	high := []string{config.LinkAllowFiles, config.LinkAllowWrite, config.LinkAllowOpen, config.LinkAllowRespond}
 	seen := map[string]bool{}
 	for verb, caps := range verbCapabilities {
-		if slices.ContainsFunc(expandRelay(caps), func(c string) bool { return slices.Contains(high, c) }) {
+		if slices.ContainsFunc(expandRelay(caps.list()), func(c string) bool { return slices.Contains(high, c) }) {
 			continue
 		}
 		entry := verbRegistry()[verb]
@@ -774,7 +774,7 @@ func TestNoLowClassVerbTakesAPathOrReturnsAFile(t *testing.T) {
 			key := verb + "." + p.Name
 			seen[key] = true
 			if checked[key] == "" {
-				t.Errorf("ASSERTION: %s takes %q, which looks like a path on this machine, and a link reaches it with %v", verb, p.Name, caps)
+				t.Errorf("ASSERTION: %s takes %q, which looks like a path on this machine, and a link reaches it with %v", verb, p.Name, caps.list())
 			}
 		}
 		for _, r := range entry.returns {
@@ -784,7 +784,7 @@ func TestNoLowClassVerbTakesAPathOrReturnsAFile(t *testing.T) {
 			key := verb + "." + r.Name
 			seen[key] = true
 			if checked[key] == "" {
-				t.Errorf("ASSERTION: %s returns %q, which can carry a file's bytes, and a link reaches it with %v", verb, r.Name, caps)
+				t.Errorf("ASSERTION: %s returns %q, which can carry a file's bytes, and a link reaches it with %v", verb, r.Name, caps.list())
 			}
 		}
 	}
