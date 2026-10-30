@@ -70,13 +70,14 @@ func (d *Daemon) callerIsPlugin(cs *connState) bool {
 }
 
 // personClients is how many attached clients could answer for the person:
-// local, with a process outside every pane.
+// local, taking input, with a process outside every pane. A view-only client,
+// such as tuios-web --read-only, sends no keys, so it cannot answer.
 func (d *Daemon) personClients() int {
 	var attached []*connState
 	d.clientsMu.RLock()
 	for _, cs := range d.clients {
 		cs.mu.Lock()
-		if cs.attached && cs.isTUIClient && !cs.viaLink {
+		if cs.attached && cs.isTUIClient && !cs.viaLink && !cs.viewOnly {
 			attached = append(attached, cs)
 		}
 		cs.mu.Unlock()
