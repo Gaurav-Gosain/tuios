@@ -20,7 +20,7 @@ import (
 
 	"github.com/Gaurav-Gosain/tuios/internal/composer"
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
-	xdraw "golang.org/x/image/draw"
+	"tuios.dev/shot"
 	"tuios.dev/shot/mosaic"
 )
 
@@ -319,7 +319,7 @@ func boxScale(src image.Image, w, h int) *image.RGBA {
 		// Made larger, a box of one source pixel per target pixel is a
 		// nearest-pixel blow-up: hard steps that block glyphs then draw as
 		// a checker. Bilinear keeps a gradient smooth.
-		xdraw.BiLinear.Scale(dst, dst.Bounds(), src, b, xdraw.Src, nil)
+		shot.ScaleBilinear(dst, dst.Bounds(), src, b, false)
 		return dst
 	}
 	for y := range dst.Bounds().Dy() {

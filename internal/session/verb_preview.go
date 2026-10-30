@@ -24,7 +24,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/Gaurav-Gosain/tuios/internal/childproc"
-	"golang.org/x/image/draw"
+	"tuios.dev/shot"
 )
 
 // file-preview: what Quick Look shows, made on the machine the file is on.
@@ -417,7 +417,7 @@ func jpegFrame(r io.ReaderAt) (progressive bool, comps int) {
 	return true, comps
 }
 
-// fit scales img down to at most maxPx on its long side. ApproxBiLinear
+// fit scales img down to at most maxPx on its long side. A bilinear scale
 // samples the source in place; CatmullRom built a float buffer of the
 // destination's width by the source's height, 358 MB for a 9000 x 7000
 // picture at 1600 px.
@@ -435,7 +435,7 @@ func fit(img image.Image, maxPx int) image.Image {
 		h = maxPx
 	}
 	dst := image.NewRGBA(image.Rect(0, 0, w, h))
-	draw.ApproxBiLinear.Scale(dst, dst.Bounds(), img, b, draw.Src, nil)
+	shot.ScaleBilinear(dst, dst.Bounds(), img, b, false)
 	return dst
 }
 

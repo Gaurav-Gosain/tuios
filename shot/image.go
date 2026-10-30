@@ -4,10 +4,9 @@ import (
 	"bytes"
 	"encoding/base64"
 	"image"
+	"image/draw"
 	"image/png"
 	"math"
-
-	xdraw "golang.org/x/image/draw"
 )
 
 // Image is a picture drawn on the grid, such as one a program shows with the
@@ -126,7 +125,7 @@ func drawPNGImages(dst *image.RGBA, g *Grid, l layout, below bool) {
 		if to.Empty() {
 			continue
 		}
-		xdraw.ApproxBiLinear.Scale(canvas, to, img.Pixels, c.src, xdraw.Over, nil)
+		ScaleBilinear(canvas, to, img.Pixels, c.src, true)
 	}
 }
 
@@ -137,7 +136,7 @@ func imageDataURI(pixels image.Image, src image.Rectangle) (string, bool) {
 	// A copy rather than SubImage: asking for SubImage through an interface
 	// links the method of every image type in the standard library.
 	part := image.NewNRGBA(image.Rect(0, 0, src.Dx(), src.Dy()))
-	xdraw.Copy(part, image.Point{}, pixels, src, xdraw.Src, nil)
+	draw.Draw(part, part.Bounds(), pixels, src.Min, draw.Src)
 	var buf bytes.Buffer
 	enc := png.Encoder{CompressionLevel: png.BestSpeed}
 	if err := enc.Encode(&buf, part); err != nil {
