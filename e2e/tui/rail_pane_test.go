@@ -33,15 +33,18 @@ import (
 //     counter must go on from where it was, not start again at zero.
 
 // railPaneScript prints the size it was given, a counter, and the last line
-// typed into it, redrawn every half second.
-const railPaneScript = `i=0; got=""
+// typed into it, redrawn every half second. bash reads a tty a byte at a
+// time, so the timeout can fire part way through a typed line: read then
+// fails with the bytes so far in part. They are kept for the next read, or
+// "hello" shows as GOT:ello.
+const railPaneScript = `i=0; got=""; buf=""
 while :; do
   printf '\033[H\033[2J'
   printf 'SZ %s\n' "$(stty size)"
   printf 'TICK-%d\n' "$i"
   [ -n "$got" ] && printf 'GOT:%s\n' "$got"
   i=$((i+1))
-  if read -r -t 0.5 line; then got=$line; fi
+  if read -r -t 0.5 part; then got=$buf$part; buf=""; else buf=$buf$part; fi
 done
 `
 
