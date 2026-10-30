@@ -410,6 +410,62 @@ func TestPaneUpgradeRefusesAnAnswerFromTheGUIBridge(t *testing.T) {
 	writeHandoffArtifact(t, map[string]any{"exit": code, "answers": answers, "screen": lines})
 }
 
+// TestPaneUpgradeRunsNoFileWithoutADialog: a pane calls daemon-upgrade
+// directly, naming a script that leaves a mark when it runs. With no client
+// attached, and with the agent features off and a client attached, no dialog
+// can be shown, so the daemon must refuse before its preflight runs the
+// script as its own child. The call goes straight to the verb, since the
+// CLI runs the binary itself first, in the pane, where it may.
+func TestPaneUpgradeRunsNoFileWithoutADialog(t *testing.T) {
+	for _, tc := range []struct {
+		name, refusal string
+		agentsOff     bool
+	}{
+		{"no-client", "No client is attached to show the dialog", false},
+		{"agents-off", "The agent features are off", true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			base := t.TempDir()
+			if tc.agentsOff {
+				writeAgentsConfig(t, base, true)
+			}
+			startHandoffDaemon(t, base)
+			sess := "e2e-confirm-norun-" + tc.name
+			win := newCommandWindow(t, base, sess, "agent", false, "sh")
+			if tc.agentsOff {
+				term := startIn(t, base, startOpts{args: []string{"attach", sess}})
+				if err := term.WaitFor(func(s tuitest.Screen) bool { return countWindows(s) >= 1 }, bootTimeout); err != nil {
+					t.Fatalf("the client never attached: %v\n%s", err, term.Snapshot())
+				}
+			}
+			img := helloImage(t, base)
+			dir := t.TempDir()
+			mark := filepath.Join(dir, "ran")
+			script := filepath.Join(dir, "upgrader")
+			if err := os.WriteFile(script, []byte("#!/bin/sh\necho ran >>"+strconv.Quote(mark)+"\n"), 0o755); err != nil {
+				t.Fatal(err)
+			}
+			out := filepath.Join(dir, "out")
+			_ = mustCall(t, base, "send-text", map[string]any{"session": sess, "window": win,
+				"text": tuiosBin + ` call daemon-upgrade '{"binary":"` + script + `"}' >'` + out + `' 2>&1; echo CALL_EXIT=$?` + "\n"})
+			m := waitHandoffPane(t, base, sess, win, regexp.MustCompile(`CALL_EXIT=(\d+)`), 90*time.Second)
+			said, _ := os.ReadFile(out)
+			_, ranErr := os.Stat(mark)
+			after := helloImage(t, base)
+			writeHandoffArtifact(t, map[string]any{"exit": m[1], "output": string(said), "script_ran": ranErr == nil, "before": img, "after": after})
+			if ranErr == nil {
+				t.Errorf("ASSERTION: the daemon ran the pane's file with no dialog to show (%s):\n%s", tc.name, said)
+			}
+			if m[1] == "0" || !strings.Contains(string(said), tc.refusal) {
+				t.Errorf("ASSERTION: the call was not refused with %q (exit %s):\n%s", tc.refusal, m[1], said)
+			}
+			if after.Instance != img.Instance {
+				t.Fatalf("ASSERTION: the daemon changed (%+v then %+v)", img, after)
+			}
+		})
+	}
+}
+
 // TestPaneUpgradeFirstAnswerWins: two clients show the dialog. One says no;
 // the dialog closes on the other at once, and a yes typed there right after
 // upgrades nothing.
