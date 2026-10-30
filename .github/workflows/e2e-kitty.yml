@@ -1,0 +1,58 @@
+name: e2e-kitty
+
+# The drag and drop bridge against a real kitty under Xvfb: e2e/tui's
+# TestDnDDesktopBridge, which skips without TUIOS_E2E_KITTY. kitty, yazi and
+# an X server are more than the pull request shards install, so this runs on
+# request and once a week.
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "41 4 * * 1"
+
+permissions:
+  contents: read
+
+jobs:
+  e2e-kitty:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/setup-go
+        with:
+          go-version-file: e2e/tui/go.mod
+          cache-id: e2e-kitty
+      - name: Install the display, the pointer and kitty's libraries
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends xvfb xdotool xclip imagemagick \
+            libxcb-xkb1 libxkbcommon-x11-0 libgl1 libegl1 libfontconfig1 fonts-dejavu-core unzip
+      - name: Install kitty
+        run: |
+          curl -fsSL https://sw.kovidgoyal.net/kitty/installer.sh | sh /dev/stdin dest="$RUNNER_TEMP" launch=n
+          "$RUNNER_TEMP/kitty.app/bin/kitty" --version
+      - name: Install yazi
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release download -R sxyazi/yazi -p 'yazi-x86_64-unknown-linux-gnu.zip' -D "$RUNNER_TEMP"
+          unzip -q "$RUNNER_TEMP/yazi-x86_64-unknown-linux-gnu.zip" -d "$RUNNER_TEMP"
+          "$RUNNER_TEMP/yazi-x86_64-unknown-linux-gnu/yazi" --version
+      - name: Build the binary under test
+        run: go build -o "$RUNNER_TEMP/tuios" ./cmd/tuios
+      - name: Run the bridge against kitty
+        working-directory: e2e/tui
+        env:
+          TUIOS_E2E: "1"
+          TUIOS_E2E_BIN: ${{ runner.temp }}/tuios
+          TUIOS_E2E_KITTY: ${{ runner.temp }}/kitty.app/bin/kitty
+          TUIOS_E2E_YAZI: ${{ runner.temp }}/yazi-x86_64-unknown-linux-gnu/yazi
+          TUIOS_E2E_FRAMES: ${{ runner.temp }}/frames
+        run: go test -count=1 -timeout 15m -v -run '^TestDnDDesktopBridge$' .
+      - name: Keep the screenshots, the exchange with kitty and the copied files
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: e2e-kitty-frames
+          path: ${{ runner.temp }}/frames
+          if-no-files-found: ignore
