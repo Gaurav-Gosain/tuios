@@ -575,6 +575,7 @@ func (m *OS) settingsCategories() []settingsCategory {
 			opt("panes.navigator_layout"),
 			opt("panes.navigator_search"),
 			opt("panes.drag_and_drop"),
+			opt("panes.drag_and_drop_desktop"),
 			opt("path_picker.show_hidden"),
 		}),
 	}

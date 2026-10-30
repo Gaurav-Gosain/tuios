@@ -348,8 +348,8 @@ func EncodeData(hdr Command, data []byte) []byte {
 	var out []byte
 	for rest := data; len(rest) > 0; {
 		n := min(len(rest), base64PerChunk)
-		enc := make([]byte, base64.StdEncoding.EncodedLen(n))
-		base64.StdEncoding.Encode(enc, rest[:n])
+		enc := make([]byte, base64.RawStdEncoding.EncodedLen(n))
+		base64.RawStdEncoding.Encode(enc, rest[:n])
 		rest = rest[n:]
 		out = hdr.appendChunk(out, enc, len(rest) > 0)
 	}
