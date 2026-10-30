@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Gaurav-Gosain/tuios/internal/textbuf"
 	"github.com/charmbracelet/x/ansi"
 )
 
@@ -337,7 +338,7 @@ func (s *shell) prompt() {
 // back to where it is in the line. It is drawn outside the log while it
 // changes, and kept with keepLine once it is done.
 func (s *shell) editLine() string {
-	var b strings.Builder
+	var b textbuf.Builder
 	prompt := s.promptText()
 	b.WriteString(markPrompt)
 	b.WriteString(prompt)
@@ -367,7 +368,7 @@ func lastRow(end, cols int) int {
 // place moves the cursor from the end of the line just written to where it
 // is in the line, across the rows a long line wraps over, and records the
 // row it is on.
-func (s *shell) place(b *strings.Builder, prompt string) {
+func (s *shell) place(b *textbuf.Builder, prompt string) {
 	cols, _ := s.t.Size()
 	cols = max(cols, 1)
 	end, at := s.spans(prompt)
@@ -394,7 +395,7 @@ func (s *shell) place(b *strings.Builder, prompt string) {
 }
 
 // csi writes a cursor move of n cells or rows, final naming the direction.
-func csi(b *strings.Builder, n int, final byte) {
+func csi(b *textbuf.Builder, n int, final byte) {
 	b.WriteString("\x1b[")
 	b.WriteString(strconv.Itoa(n))
 	b.WriteByte(final)
@@ -421,7 +422,7 @@ func (s *shell) keepLine() {
 // redraw repaints the line from the prompt, over every row a line longer
 // than the pane wraps onto.
 func (s *shell) redraw() {
-	var b strings.Builder
+	var b textbuf.Builder
 	if s.row > 0 {
 		csi(&b, s.row, 'A')
 	}
@@ -438,7 +439,7 @@ func (s *shell) redraw() {
 // && has each command word coloured.
 func (s *shell) highlighted() string {
 	text := string(s.line)
-	var b strings.Builder
+	var b textbuf.Builder
 	for i, part := range strings.Split(text, "&&") {
 		if i > 0 {
 			b.WriteString("&&")
@@ -936,7 +937,7 @@ func argOr(args []string, i int, def string) string {
 // splitArgs splits on spaces, honouring single and double quotes.
 func splitArgs(line string) []string {
 	var out []string
-	var cur strings.Builder
+	var cur textbuf.Builder
 	var quote rune
 	inWord := false
 	for _, r := range line {

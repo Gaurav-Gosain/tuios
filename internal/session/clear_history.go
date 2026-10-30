@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Gaurav-Gosain/tuios/internal/textbuf"
 	"tuios.dev/vt"
 )
 
@@ -63,7 +64,7 @@ func ClearHistorySequence(t vt.Terminal, screen bool) ([]byte, error) {
 	if t.IsAltScreen() {
 		return nil, errFullScreen
 	}
-	var b strings.Builder
+	var b textbuf.Builder
 	if screen {
 		if n := clearKeepRow(t); n > 0 {
 			pos := t.CursorPosition()

@@ -24,6 +24,7 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/release"
 	"github.com/Gaurav-Gosain/tuios/internal/review"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
+	"github.com/Gaurav-Gosain/tuios/internal/textbuf"
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
 )
@@ -647,7 +648,7 @@ func grantsText(p *herdrplugin.Plugin) string {
 	case len(p.Grants) == 0:
 		return "It can call tuios only for what every pane may do.\n"
 	}
-	var b strings.Builder
+	var b textbuf.Builder
 	b.WriteString("It can call tuios with these grants, in every session:\n")
 	for _, g := range p.Grants {
 		fmt.Fprintf(&b, "  %-6s %s\n", g, herdrplugin.GrantMeaning(g))
@@ -657,7 +658,7 @@ func grantsText(p *herdrplugin.Plugin) string {
 
 // installPlan is what the person approves: facts only.
 func installPlan(p *herdrplugin.Plugin, e herdrplugin.LockEntry, folder string, o installOpts) string {
-	var b strings.Builder
+	var b textbuf.Builder
 	f := func(format string, a ...any) { fmt.Fprintf(&b, format, a...) }
 	f("\nInstall %s %s (%s plugin)\n  from    %s", p.PluginID, shownArgv(p.Version), cmp.Or(p.Format, "herdr"), shownSource(e.Source))
 	if e.Commit != "" {

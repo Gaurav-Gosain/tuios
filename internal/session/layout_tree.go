@@ -5,7 +5,8 @@ import (
 	"fmt"
 	"maps"
 	"strconv"
-	"strings"
+
+	"github.com/Gaurav-Gosain/tuios/internal/textbuf"
 )
 
 // The BSP tree as an op.
@@ -260,7 +261,7 @@ func TreeKey(tree *SerializedBSPTree, name func(int) string) string {
 	if tree == nil || tree.Root == nil {
 		return ""
 	}
-	var b strings.Builder
+	var b textbuf.Builder
 	b.WriteString(strconv.Itoa(tree.AutoScheme))
 	b.WriteByte('/')
 	b.WriteString(strconv.FormatFloat(tree.DefaultRatio, 'g', -1, 64))
@@ -269,7 +270,7 @@ func TreeKey(tree *SerializedBSPTree, name func(int) string) string {
 	return b.String()
 }
 
-func writeTreeKey(b *strings.Builder, n *SerializedBSPNode, name func(int) string) {
+func writeTreeKey(b *textbuf.Builder, n *SerializedBSPNode, name func(int) string) {
 	if n == nil {
 		b.WriteByte('_')
 		return

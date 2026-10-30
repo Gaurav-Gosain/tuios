@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Gaurav-Gosain/tuios/internal/textbuf"
 	uv "github.com/charmbracelet/ultraviolet"
 
 	"tuios.dev/vt"
@@ -116,7 +117,7 @@ func (p *PTY) tailShown(lines int) (tail, shown []string) {
 	}
 	t := p.terminal
 	w, h := t.Width(), t.Height()
-	var plain, faintless strings.Builder
+	var plain, faintless textbuf.Builder
 	for y := h - 1; y >= 0 && len(tail) < lines; y-- {
 		plain.Reset()
 		faintless.Reset()

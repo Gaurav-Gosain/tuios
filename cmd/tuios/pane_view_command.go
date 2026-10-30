@@ -17,6 +17,7 @@ import (
 	"golang.org/x/term"
 
 	"github.com/Gaurav-Gosain/tuios/internal/session"
+	"github.com/Gaurav-Gosain/tuios/internal/textbuf"
 )
 
 // pane-view shows one tuios pane in the terminal it runs in, with no tuios
@@ -257,7 +258,7 @@ func readKeys(in *os.File, keys chan<- []byte) {
 // answers and which says whether it draws sixel. The answers come back in
 // order, so DA1's marks the end.
 var paneViewProbeQuery = func() string {
-	var b strings.Builder
+	var b textbuf.Builder
 	b.WriteString("\x1b]10;?\x1b\\\x1b]11;?\x1b\\\x1b]12;?\x1b\\")
 	for i := range 16 {
 		fmt.Fprintf(&b, "\x1b]4;%d;?\x1b\\", i)

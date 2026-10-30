@@ -2,9 +2,9 @@ package webshell
 
 import (
 	"fmt"
-	"strings"
 
 	"github.com/Gaurav-Gosain/tuios/internal/linediff"
+	"github.com/Gaurav-Gosain/tuios/internal/textbuf"
 )
 
 // diffOp is one line of a line diff: kept, removed from a, or added from b.
@@ -99,7 +99,7 @@ func (h opHunk) header() string {
 // unifiedHunks renders a diff as unified hunks with three lines of context,
 // coloured the way git colours them. It returns "" when nothing changed.
 func unifiedHunks(ops []diffOp) string {
-	var b strings.Builder
+	var b textbuf.Builder
 	line := func(parts ...string) {
 		for _, p := range parts {
 			b.WriteString(p)

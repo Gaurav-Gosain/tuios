@@ -6,6 +6,7 @@ import (
 	"unicode"
 
 	"github.com/Gaurav-Gosain/tuios/internal/hints"
+	"github.com/Gaurav-Gosain/tuios/internal/textbuf"
 )
 
 // HintsConfig is the [hints] section: what hints mode looks for on a pane and
@@ -85,7 +86,7 @@ func (h HintsConfig) LabelAlphabet() string { return hints.NormalizeAlphabet(h.A
 // droppedAlphabet is every character of an alphabet that labels cannot use:
 // anything but a to z (upper case counts as its lower case letter).
 func droppedAlphabet(a string) string {
-	var b strings.Builder
+	var b textbuf.Builder
 	for _, r := range a {
 		if l := unicode.ToLower(r); l < 'a' || l > 'z' {
 			b.WriteRune(r)

@@ -7,6 +7,7 @@ import (
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/harness"
+	"github.com/Gaurav-Gosain/tuios/internal/textbuf"
 )
 
 // A queued message in parts.
@@ -92,7 +93,7 @@ func checkParts(parts []queuePart, typedMax int) (string, int, *verbError) {
 	if len(parts) > queueMaxParts {
 		return "", 0, queuePartsError("parts holds " + strconv.Itoa(len(parts)) + " parts, and a message takes at most " + strconv.Itoa(queueMaxParts))
 	}
-	var shown strings.Builder
+	var shown textbuf.Builder
 	size, blocks, images, typed := 0, 0, 0, 0
 	blank := true
 	for i := range parts {
@@ -252,7 +253,7 @@ func (d *Daemon) composeQueued(sess *Session, target WindowState, e *queueEntry)
 	// can tell a paste from typing.
 	ownPaste := profile.Images == harness.ImagesPathPaste && bracketed
 	var pastes []string
-	var b strings.Builder
+	var b textbuf.Builder
 	held := map[string]bool{}
 	for i := range e.parts {
 		p := &e.parts[i]
@@ -334,7 +335,7 @@ func groupDigits(n int) string {
 // partsText is the text parts and paste parts joined, and whether any part is
 // an image.
 func partsText(parts []queuePart) (text string, images bool) {
-	var b strings.Builder
+	var b textbuf.Builder
 	for _, p := range parts {
 		if p.Kind == queuePartImage {
 			images = true
@@ -349,7 +350,7 @@ func partsText(parts []queuePart) (text string, images bool) {
 // returns the text with each in its place as a label that names its file, and
 // the paths, in order.
 func (d *Daemon) fileParts(parts []queuePart) (string, []string, error) {
-	var b strings.Builder
+	var b textbuf.Builder
 	held := map[string]bool{}
 	var paths []string
 	for i := range parts {

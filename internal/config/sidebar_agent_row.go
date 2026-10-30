@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/Gaurav-Gosain/tuios/internal/textbuf"
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
 )
 
@@ -461,7 +462,7 @@ func parseRule(token string, n int, table map[string]any, problem func(string, .
 // fingerprint writes the spec out in a fixed order, so two specs that draw the
 // same rows fold to the same string.
 func (s *SidebarAgentRowSpec) fingerprint() string {
-	var b strings.Builder
+	var b textbuf.Builder
 	b.WriteString(strings.Join(s.Tokens, ","))
 	names := make([]string, 0, len(s.Styles))
 	for name := range s.Styles {

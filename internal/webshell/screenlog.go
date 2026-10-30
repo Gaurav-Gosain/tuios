@@ -3,6 +3,8 @@ package webshell
 import (
 	"strings"
 	"sync"
+
+	"github.com/Gaurav-Gosain/tuios/internal/textbuf"
 )
 
 // screenLog keeps what the shell printed on the main screen, so the shell
@@ -127,7 +129,7 @@ func (l *screenLog) replay(cols int) string {
 	l.mu.Lock()
 	blocks := append([]logBlock(nil), l.blocks...)
 	l.mu.Unlock()
-	var b strings.Builder
+	var b textbuf.Builder
 	for _, blk := range blocks {
 		if blk.lay == nil {
 			b.WriteString(blk.raw)

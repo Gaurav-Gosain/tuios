@@ -5,6 +5,8 @@ import (
 	"strings"
 	"time"
 	"unicode/utf8"
+
+	"github.com/Gaurav-Gosain/tuios/internal/textbuf"
 )
 
 // Scripted coding agents in the style of Claude Code, Codex and Gemini CLI.
@@ -441,7 +443,7 @@ func (r *agentRun) menu(kind, summary string, lines, options []string, approval 
 	sel, drawn := 0, 0
 	draw := func() {
 		cols, _ := t.Size()
-		var b strings.Builder
+		var b textbuf.Builder
 		if drawn > 0 {
 			b.WriteString("\x1b[")
 			b.WriteString(strconv.Itoa(drawn))
@@ -846,7 +848,7 @@ func baseName(p string) string {
 
 // stripEscapes removes the CSI escapes from s.
 func stripEscapes(s string) string {
-	var b strings.Builder
+	var b textbuf.Builder
 	for i := 0; i < len(s); i++ {
 		if s[i] == 0x1b {
 			j := i + 1
@@ -877,7 +879,7 @@ func padVisible(s string, width int) string {
 		return s + strings.Repeat(" ", width-n)
 	}
 	// Cut: walk the runes, copying escapes whole, until width cells are out.
-	var b strings.Builder
+	var b textbuf.Builder
 	cells := 0
 	for i := 0; i < len(s) && cells < width; {
 		if s[i] == 0x1b {

@@ -7,6 +7,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/Gaurav-Gosain/tuios/internal/textbuf"
 )
 
 // Format names. Each is the reader a harness manifest names in its
@@ -428,7 +430,7 @@ func planText(v any) string {
 	if s, ok := v.(string); ok {
 		return s
 	}
-	var b strings.Builder
+	var b textbuf.Builder
 	for _, t := range todoItems(v) {
 		b.WriteString("- ")
 		b.WriteString(t.Text)
@@ -627,7 +629,7 @@ func hunkHeader(line string) (old, nw, oldN, newN int, ok bool) {
 func parseApplyPatch(s string) []filePatch {
 	var out []filePatch
 	var cur *filePatch
-	var old, nw strings.Builder
+	var old, nw textbuf.Builder
 	var adding, inChunk bool
 	flush := func() {
 		if cur != nil && inChunk {

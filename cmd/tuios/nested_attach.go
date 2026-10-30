@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/Gaurav-Gosain/tuios/internal/session"
+	"github.com/Gaurav-Gosain/tuios/internal/textbuf"
 )
 
 // attachForce is tuios attach --force: attach even from a pane of the session.
@@ -45,7 +46,7 @@ func explainNestedAttach(nested *session.NestedAttachError, names []string) erro
 			others = append(others, n)
 		}
 	}
-	var b strings.Builder
+	var b textbuf.Builder
 	fmt.Fprintf(&b, "You are inside session %q.", nested.Session)
 	if len(others) > 0 {
 		fmt.Fprintf(&b, " Other sessions: %s.", strings.Join(truncateList(others, 12), ", "))

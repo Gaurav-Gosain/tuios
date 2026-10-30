@@ -11,6 +11,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/Gaurav-Gosain/tuios/internal/textbuf"
 )
 
 // Control mode (tmux -C and -CC).
@@ -656,7 +658,7 @@ func layoutChecksum(layout string) uint16 {
 func parseCommandLine(line string) ([][]string, error) {
 	var cmds [][]string
 	var words []string
-	var word strings.Builder
+	var word textbuf.Builder
 	inWord := false
 	endWord := func() {
 		if inWord {

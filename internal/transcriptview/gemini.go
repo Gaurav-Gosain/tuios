@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"encoding/json"
 	"strings"
+
+	"github.com/Gaurav-Gosain/tuios/internal/textbuf"
 )
 
 // A Gemini CLI chat, as packages/core/src/services/chatRecordingService.ts
@@ -157,7 +159,7 @@ func genaiResponseText(v any) string {
 	if !ok {
 		items = []any{v}
 	}
-	var b strings.Builder
+	var b textbuf.Builder
 	for _, it := range items {
 		if b.Len() > rawTextMax {
 			break

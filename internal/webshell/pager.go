@@ -7,6 +7,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/Gaurav-Gosain/tuios/internal/linediff"
+	"github.com/Gaurav-Gosain/tuios/internal/textbuf"
 )
 
 // A read-only file viewer that behaves enough like less and vim for a tour:
@@ -254,7 +255,7 @@ func (v *viewer) draw() {
 	if v.vim {
 		gutter = len(strconv.Itoa(len(v.lines))) + 2
 	}
-	var b strings.Builder
+	var b textbuf.Builder
 	b.WriteString("\x1b[H")
 	lang := path.Ext(v.name)
 	for r := range body {
@@ -384,7 +385,7 @@ func highlight(ext, line, search string) string {
 }
 
 func highlightGo(line string) string {
-	var b strings.Builder
+	var b textbuf.Builder
 	i := 0
 	for i < len(line) {
 		c := line[i]

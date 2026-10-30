@@ -7,6 +7,8 @@ import (
 	"strings"
 	"time"
 	"unicode/utf8"
+
+	"github.com/Gaurav-Gosain/tuios/internal/textbuf"
 )
 
 // logo is the full fastfetch logo. smallLogo stands in for it in a pane too
@@ -113,7 +115,7 @@ func fastfetch(cols int, uptime string) []string {
 
 	// Eight swatches, three cells each when they fit.
 	sw := max(min(cols/8, 3), 1)
-	var b strings.Builder
+	var b textbuf.Builder
 	for c := range min(8, cols/sw) {
 		fmt.Fprintf(&b, "\x1b[4%dm%s", c, strings.Repeat(" ", sw))
 	}
@@ -142,7 +144,7 @@ func cmdColors(t *TTY, _ []string) int {
 // colors lays the palette out for a pane cols cells wide.
 func colors(cols int) []string {
 	var lines []string
-	var b strings.Builder
+	var b textbuf.Builder
 	endLine := func() {
 		lines = append(lines, b.String()+reset)
 		b.Reset()
@@ -231,7 +233,7 @@ func cmdTop(t *TTY, _ []string) int {
 	}
 	cpus := make([]float64, 8)
 	return fullscreen(t, func(cols, rows, tick int) string {
-		var b strings.Builder
+		var b textbuf.Builder
 		up := time.Since(started).Round(time.Second)
 		b.WriteString(bold)
 		b.WriteString("top")
@@ -321,7 +323,7 @@ func cmdRain(t *TTY, _ []string) int {
 				speeds[i] = 0.3 + rand.Float64()*0.9
 			}
 		}
-		var b strings.Builder
+		var b textbuf.Builder
 		for x := 0; x < cols; x += 2 {
 			head := int(drops[x])
 			for k := range 8 {

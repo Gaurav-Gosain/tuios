@@ -16,6 +16,7 @@ import (
 	"charm.land/lipgloss/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
+	"github.com/Gaurav-Gosain/tuios/internal/textbuf"
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
 	"github.com/Gaurav-Gosain/tuios/internal/units"
 	"github.com/charmbracelet/colorprofile"
@@ -285,7 +286,7 @@ func jsonSafe(line string) string {
 	if !strings.ContainsFunc(line, func(r rune) bool { return r == 0x7f || (r >= 0x80 && r <= 0x9f) }) {
 		return line
 	}
-	var b strings.Builder
+	var b textbuf.Builder
 	for _, r := range line {
 		if r == 0x7f || (r >= 0x80 && r <= 0x9f) {
 			fmt.Fprintf(&b, `\u%04x`, r)
@@ -306,7 +307,7 @@ func shown(s string) string {
 	if !strings.ContainsFunc(s, func(r rune) bool { return r == utf8.RuneError || unsafeRune(r) }) {
 		return s
 	}
-	var b strings.Builder
+	var b textbuf.Builder
 	for i := 0; i < len(s); {
 		r, n := utf8.DecodeRuneInString(s[i:])
 		switch {
@@ -612,7 +613,7 @@ func (f *follower) clear() {
 	if f.out != outTerminal || f.drawn == 0 {
 		return
 	}
-	var b strings.Builder
+	var b textbuf.Builder
 	fmt.Fprintf(&b, "\r\x1b[%dA", f.drawn)
 	for range f.drawn {
 		b.WriteString("\x1b[2K\n")
@@ -668,7 +669,7 @@ func (f *follower) draw(final bool) {
 	for i, l := range lines {
 		lines[i] = overlay.Truncate(l, f.width-1)
 	}
-	var b strings.Builder
+	var b textbuf.Builder
 	if f.drawn > 0 {
 		fmt.Fprintf(&b, "\r\x1b[%dA", f.drawn)
 	}
@@ -938,7 +939,7 @@ func commas(n int) string {
 	if n < 0 {
 		return s
 	}
-	var b strings.Builder
+	var b textbuf.Builder
 	for i, c := range s {
 		if i > 0 && (len(s)-i)%3 == 0 {
 			b.WriteByte(',')

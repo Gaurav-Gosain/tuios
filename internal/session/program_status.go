@@ -10,6 +10,7 @@ import (
 
 	"github.com/Gaurav-Gosain/tuios/internal/harness"
 	"github.com/Gaurav-Gosain/tuios/internal/invisible"
+	"github.com/Gaurav-Gosain/tuios/internal/textbuf"
 	"tuios.dev/progstatus"
 	"tuios.dev/vt"
 )
@@ -186,7 +187,7 @@ func programStatusText(s string) string {
 	if s == "" {
 		return ""
 	}
-	var b strings.Builder
+	var b textbuf.Builder
 	b.Grow(len(s))
 	for _, r := range s {
 		if r == utf8.RuneError || progstatus.IsControl(r) || invisible.Rune(r) {

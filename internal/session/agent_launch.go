@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/lazyre"
+	"github.com/Gaurav-Gosain/tuios/internal/textbuf"
 )
 
 // Starting an agent: what fan and start-agent share.
@@ -72,7 +73,7 @@ func (l agentLaunch) command() string { return strings.Join(l.argv, " ") }
 func splitAgentWords(s string) ([]string, error) {
 	var (
 		words   []string
-		cur     strings.Builder
+		cur     textbuf.Builder
 		inWord  bool
 		quote   rune
 		escaped bool

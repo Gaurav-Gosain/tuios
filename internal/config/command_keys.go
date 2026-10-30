@@ -8,6 +8,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/Gaurav-Gosain/tuios/internal/herdrplugin"
+	"github.com/Gaurav-Gosain/tuios/internal/textbuf"
 )
 
 // Command keybindings: [[keybindings.command]] entries that bind a key to a
@@ -173,7 +174,7 @@ func commandSlug(s string) string { return commandSlugN(s, commandSlugMax) }
 
 // commandSlugN is commandSlug cut at max bytes, or not cut when max is 0.
 func commandSlugN(s string, max int) string {
-	var b strings.Builder
+	var b textbuf.Builder
 	dash := false
 	for _, r := range strings.ToLower(strings.TrimSpace(s)) {
 		switch {

@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"strings"
 	"unicode"
+
+	"github.com/Gaurav-Gosain/tuios/internal/textbuf"
 )
 
 // PanesConfig is the [panes] section: how display_panes labels the panes on
@@ -87,7 +89,7 @@ func fillMissingPanes(cfg, defaultCfg *UserConfig) {
 // given. It returns the default when fewer than two keys are left, because
 // one key cannot tell two panes apart.
 func NormalizePaneLabelKeys(keys string) string {
-	var b strings.Builder
+	var b textbuf.Builder
 	for _, r := range strings.ToLower(keys) {
 		if !paneLabelKey(r) || strings.ContainsRune(b.String(), r) {
 			continue
@@ -125,7 +127,7 @@ func validatePanes(cfg *UserConfig, result *ValidationResult) {
 	}
 	// Count the keys a label can use here rather than compare with the
 	// default: "1234567890!" keeps the default's keys and drops one.
-	var kept strings.Builder
+	var kept textbuf.Builder
 	for _, r := range strings.ToLower(keys) {
 		if paneLabelKey(r) && !strings.ContainsRune(kept.String(), r) {
 			kept.WriteRune(r)
@@ -140,7 +142,7 @@ func validatePanes(cfg *UserConfig, result *ValidationResult) {
 		})
 		return
 	}
-	var dropped strings.Builder
+	var dropped textbuf.Builder
 	for _, r := range keys {
 		if !paneLabelKey(unicode.ToLower(r)) {
 			dropped.WriteRune(r)

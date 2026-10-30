@@ -16,6 +16,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/Gaurav-Gosain/tuios/internal/textbuf"
 )
 
 // The --pprof server. It answers the requests net/http/pprof answers that
@@ -249,7 +251,7 @@ func pprofSeconds(q url.Values, def int) time.Duration {
 func pprofIndex() string {
 	profiles := pprof.Profiles()
 	sort.Slice(profiles, func(i, j int) bool { return profiles[i].Name() < profiles[j].Name() })
-	var b strings.Builder
+	var b textbuf.Builder
 	b.WriteString("count\tprofile\n")
 	for _, p := range profiles {
 		fmt.Fprintf(&b, "%d\t%s\n", p.Count(), p.Name())
@@ -271,7 +273,7 @@ func pprofReply(w io.Writer, status int, ctype, body string) {
 // pprofStream writes a profile. It is gathered into memory first so a
 // failure can still be answered with an error status.
 func pprofStream(w io.Writer, ctype string, write func(io.Writer) error) {
-	var buf strings.Builder
+	var buf textbuf.Builder
 	if err := write(&buf); err != nil {
 		pprofReply(w, 500, "text/plain", err.Error()+"\n")
 		return

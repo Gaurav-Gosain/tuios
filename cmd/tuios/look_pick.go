@@ -20,6 +20,7 @@ import (
 	"github.com/pelletier/go-toml/v2"
 
 	"github.com/Gaurav-Gosain/tuios/internal/listnav"
+	"github.com/Gaurav-Gosain/tuios/internal/textbuf"
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
 )
 
@@ -327,7 +328,7 @@ func (p *lookPicker) View() tea.View {
 		nameW = max(nameW, ansi.StringWidth(lookNameShown(l)))
 		authorW = max(authorW, ansi.StringWidth(l.Author))
 	}
-	var b strings.Builder
+	var b textbuf.Builder
 	b.WriteString("Choose a look. Enter applies it. Esc closes the list.\n\n")
 	end := min(p.scroll+p.visible(), len(p.looks))
 	for i := p.scroll; i < end; i++ {
@@ -346,7 +347,7 @@ func (p *lookPicker) View() tea.View {
 
 // lookSwatches draws each colour as two cells of that background.
 func lookSwatches(colors []string) string {
-	var b strings.Builder
+	var b textbuf.Builder
 	for _, c := range colors {
 		b.WriteString(lipgloss.NewStyle().Background(lipgloss.Color(c)).Render("  "))
 	}

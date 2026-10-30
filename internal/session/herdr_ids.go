@@ -3,6 +3,8 @@ package session
 import (
 	"strconv"
 	"strings"
+
+	"github.com/Gaurav-Gosain/tuios/internal/textbuf"
 )
 
 // herdr ids for tuios objects.
@@ -34,7 +36,7 @@ const herdrHexLen = 12
 
 // herdrHex is the first herdrHexLen hex digits of a UUID, dashes dropped.
 func herdrHex(uuid string) string {
-	var b strings.Builder
+	var b textbuf.Builder
 	for i := 0; i < len(uuid) && b.Len() < herdrHexLen; i++ {
 		if c := uuid[i]; c != '-' {
 			b.WriteByte(c)

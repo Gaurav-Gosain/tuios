@@ -1,6 +1,6 @@
 package config
 
-import "strings"
+import "github.com/Gaurav-Gosain/tuios/internal/textbuf"
 
 // LauncherConfig is the [launcher] section.
 type LauncherConfig struct {
@@ -37,7 +37,7 @@ func (l LauncherConfig) GUIPrefix() []string {
 func splitWords(s string) []string {
 	var (
 		out   []string
-		cur   strings.Builder
+		cur   textbuf.Builder
 		quote rune
 		have  bool
 	)

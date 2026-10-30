@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Gaurav-Gosain/tuios/internal/textbuf"
 	"github.com/charmbracelet/x/ansi"
 )
 
@@ -93,7 +94,7 @@ func (e *expander) expand(s string) string {
 		e.miss("format loop limit")
 		return ""
 	}
-	var b strings.Builder
+	var b textbuf.Builder
 	for i := 0; i < len(s); i++ {
 		c := s[i]
 		if c != '#' || i+1 >= len(s) {
@@ -464,7 +465,7 @@ func prettyTime(t, now time.Time) string {
 // quoteShell escapes the characters a shell reads specially, as tmux's
 // format_quote_shell does.
 func quoteShell(s string) string {
-	var b strings.Builder
+	var b textbuf.Builder
 	for i := 0; i < len(s); i++ {
 		if strings.IndexByte("|&;<>()$`\\\"'*?[# =%", s[i]) >= 0 {
 			b.WriteByte('\\')
@@ -522,7 +523,7 @@ func compare(m *modifier, left, right string) string {
 // globRegexp turns an fnmatch pattern (no FNM_PATHNAME, so * matches /) into
 // a regular expression.
 func globRegexp(glob string) string {
-	var b strings.Builder
+	var b textbuf.Builder
 	for i := 0; i < len(glob); i++ {
 		switch c := glob[i]; c {
 		case '*':
@@ -574,7 +575,7 @@ func regsub(pattern, with, text string, icase bool) string {
 	if err != nil {
 		return text
 	}
-	var b strings.Builder
+	var b textbuf.Builder
 	start, last, end := 0, 0, len(text)
 	empty := false
 	for start <= end {
@@ -606,7 +607,7 @@ func regsub(pattern, with, text string, icase bool) string {
 
 // regsubExpand writes with for one match: \N is group N when that group
 // matched something, and a backslash before anything else is dropped.
-func regsubExpand(b *strings.Builder, with, text string, m []int) {
+func regsubExpand(b *textbuf.Builder, with, text string, m []int) {
 	for i := 0; i < len(with); i++ {
 		if with[i] == '\\' {
 			i++
@@ -628,7 +629,7 @@ func regsubExpand(b *strings.Builder, with, text string, m []int) {
 // formatUnescape is tmux's format_unescape: the escapes outside nested
 // #{...} lose their "#".
 func formatUnescape(s string) string {
-	var b strings.Builder
+	var b textbuf.Builder
 	brackets := 0
 	for i := 0; i < len(s); i++ {
 		if s[i] == '#' && i+1 < len(s) && s[i+1] == '{' {

@@ -17,6 +17,7 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/lazyre"
 	"github.com/Gaurav-Gosain/tuios/internal/risk"
 	"github.com/Gaurav-Gosain/tuios/internal/sortx"
+	"github.com/Gaurav-Gosain/tuios/internal/textbuf"
 )
 
 // The Inbox: one daemon-owned queue of everything waiting for the person.
@@ -1265,7 +1266,7 @@ func attentionMaySecret(s string) bool {
 // attentionText is text an agent reported, made safe to show and to keep: one
 // line, no control characters, likely secrets masked, at most limit bytes.
 func attentionText(s string, limit int) string {
-	var b strings.Builder
+	var b textbuf.Builder
 	b.Grow(min(len(s), limit+8))
 	space := false
 	for _, r := range s {

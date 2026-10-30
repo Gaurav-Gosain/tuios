@@ -6,6 +6,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/Gaurav-Gosain/tuios/internal/textbuf"
 	uv "github.com/charmbracelet/ultraviolet"
 	"tuios.dev/vt"
 )
@@ -462,7 +463,7 @@ func readTerminalLines(term vt.Terminal, c, d vt.SemanticMarker) ([]string, bool
 		})
 	}
 	for abs := max(from, sbLen); abs <= to; abs++ {
-		var b strings.Builder
+		var b textbuf.Builder
 		y := abs - sbLen
 		for x := 0; x < width; x++ {
 			cell := term.MainCellAt(x, y)

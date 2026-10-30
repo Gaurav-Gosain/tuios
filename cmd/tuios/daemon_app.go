@@ -32,6 +32,7 @@ import (
 	"runtime"
 	"strings"
 
+	"github.com/Gaurav-Gosain/tuios/internal/textbuf"
 	"github.com/spf13/cobra"
 )
 
@@ -336,7 +337,7 @@ func writeDaemonAppAgent(agent, app string) error {
 	if err := os.MkdirAll(filepath.Dir(agent), 0o700); err != nil {
 		return err
 	}
-	var esc strings.Builder
+	var esc textbuf.Builder
 	for _, r := range app {
 		switch r {
 		case '&':

@@ -5,6 +5,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/Gaurav-Gosain/tuios/internal/textbuf"
 )
 
 // Mail notices: the one line that tells an agent it has unread mail.
@@ -193,7 +195,7 @@ func mailSenderName(m AgentMessage) string {
 // safeNoticeName keeps the letters, digits, spaces and the marks . _ - : @ of
 // s, joins runs of spaces, and cuts the result to mailNoticeMaxName runes.
 func safeNoticeName(s string) string {
-	var b strings.Builder
+	var b textbuf.Builder
 	n := 0
 	space := false
 	for _, r := range s {
@@ -253,7 +255,7 @@ func mailNoticeText(s mailSummary, session, window string) string {
 	if s.unread == 0 {
 		return ""
 	}
-	var b strings.Builder
+	var b textbuf.Builder
 	b.WriteString("You have ")
 	b.WriteString(strconv.Itoa(s.unread))
 	if s.unread == 1 {

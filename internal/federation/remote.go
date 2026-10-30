@@ -2,6 +2,8 @@ package federation
 
 import (
 	"strings"
+
+	"github.com/Gaurav-Gosain/tuios/internal/textbuf"
 )
 
 // Finding tuios on the far side.
@@ -99,7 +101,7 @@ const linkCommandLimit = 512
 // all read such a string literally. `case` is kept out of command
 // substitutions, which older dash releases fail to parse there.
 func remoteProbeScript(announce bool) string {
-	var b strings.Builder
+	var b textbuf.Builder
 	write := func(s string) {
 		if b.Len() > 0 {
 			b.WriteString("; ")

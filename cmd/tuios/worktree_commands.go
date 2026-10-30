@@ -15,6 +15,7 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/harness"
 	"github.com/Gaurav-Gosain/tuios/internal/plural"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
+	"github.com/Gaurav-Gosain/tuios/internal/textbuf"
 	"github.com/Gaurav-Gosain/tuios/internal/worktree"
 	"github.com/spf13/cobra"
 )
@@ -692,7 +693,7 @@ type removedWorktree struct {
 
 // sentences says what was removed, what was kept, and where the changes went.
 func (r removedWorktree) sentences() string {
-	var b strings.Builder
+	var b textbuf.Builder
 	if r.Gone {
 		fmt.Fprintf(&b, "%s\n", r.Note)
 	} else {

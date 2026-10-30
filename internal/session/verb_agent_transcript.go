@@ -7,6 +7,7 @@ import (
 	"strings"
 	"unicode"
 
+	"github.com/Gaurav-Gosain/tuios/internal/textbuf"
 	"github.com/Gaurav-Gosain/tuios/internal/transcript"
 	"github.com/Gaurav-Gosain/tuios/internal/transcriptview"
 	"github.com/charmbracelet/x/ansi"
@@ -216,7 +217,7 @@ func transcriptText(s string) string {
 		return (unicode.IsControl(r) && r != '\n' && r != '\t') || isBidiControl(r)
 	}) < 0
 	if !clean {
-		var b strings.Builder
+		var b textbuf.Builder
 		b.Grow(len(s))
 		for _, r := range s {
 			if (unicode.IsControl(r) && r != '\n' && r != '\t') || isBidiControl(r) {

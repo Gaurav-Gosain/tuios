@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/childproc"
+	"github.com/Gaurav-Gosain/tuios/internal/textbuf"
 
 	"github.com/Gaurav-Gosain/tuios/internal/plural"
 	"github.com/Gaurav-Gosain/tuios/internal/sortx"
@@ -276,7 +277,7 @@ func checkpointMessage(n int, root string, m CheckpointMeta) string {
 	if label != "" {
 		subject += ": " + label
 	}
-	var b strings.Builder
+	var b textbuf.Builder
 	b.WriteString(subject)
 	b.WriteString("\n\n")
 	fmt.Fprintf(&b, "Kind: %s\n", m.Kind)
@@ -370,7 +371,7 @@ func DeleteCheckpoints(ctx context.Context, dir string, cps []Checkpoint) error 
 	if len(cps) == 0 {
 		return nil
 	}
-	var b strings.Builder
+	var b textbuf.Builder
 	for _, cp := range cps {
 		if !strings.HasPrefix(cp.Ref, CheckpointRefPrefix) {
 			return fmt.Errorf("%q is not a checkpoint ref", cp.Ref)

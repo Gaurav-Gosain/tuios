@@ -14,6 +14,7 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/fang"
 	"github.com/Gaurav-Gosain/tuios/internal/plural"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
+	"github.com/Gaurav-Gosain/tuios/internal/textbuf"
 	"github.com/charmbracelet/colorprofile"
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
@@ -48,7 +49,7 @@ type diagnosticError struct {
 }
 
 func (e *diagnosticError) Error() string {
-	var b strings.Builder
+	var b textbuf.Builder
 	b.WriteString(e.What)
 	if e.Cause != "" {
 		b.WriteString("\nMost likely cause: ")

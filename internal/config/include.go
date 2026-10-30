@@ -14,6 +14,7 @@ import (
 	"github.com/pelletier/go-toml/v2"
 
 	"github.com/Gaurav-Gosain/tuios/internal/sortx"
+	"github.com/Gaurav-Gosain/tuios/internal/textbuf"
 )
 
 // A config split over several files.
@@ -598,7 +599,7 @@ func collectLeaves(m map[string]any, prefix []string, out *[][]string) {
 
 // displayKey writes a path the way a person would type it.
 func displayKey(p []string) string {
-	var b strings.Builder
+	var b textbuf.Builder
 	for i, seg := range p {
 		if name, key, ok := elemOf(seg); ok {
 			id := name

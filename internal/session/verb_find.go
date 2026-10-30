@@ -11,6 +11,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/Gaurav-Gosain/tuios/internal/sortx"
+	"github.com/Gaurav-Gosain/tuios/internal/textbuf"
 	uv "github.com/charmbracelet/ultraviolet"
 	"tuios.dev/vt"
 )
@@ -134,7 +135,7 @@ func (p *PTY) scanLines(deadline time.Time, fn func(row int, line string) bool) 
 	sbLen := term.ScrollbackLen()
 	width, height := term.Width(), term.Height()
 	screen := make([]string, 0, height)
-	var b strings.Builder
+	var b textbuf.Builder
 	for y := range height {
 		b.Reset()
 		for x := 0; x < width; x++ {

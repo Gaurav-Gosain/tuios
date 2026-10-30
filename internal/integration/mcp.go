@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/Gaurav-Gosain/tuios/internal/lazyre"
+	"github.com/Gaurav-Gosain/tuios/internal/textbuf"
 )
 
 // MCP registration: the entry that makes a harness start tuios mcp.
@@ -407,7 +408,7 @@ func mcpTOMLBlock(tuios string, write bool) string {
 	for i, a := range args {
 		quoted[i] = tomlString(a)
 	}
-	var b strings.Builder
+	var b textbuf.Builder
 	b.WriteString(mcpTOMLBegin + "\n")
 	b.WriteString("[mcp_servers." + MCPServerName + "]\n")
 	b.WriteString("command = ")

@@ -79,6 +79,7 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/herdrplugin"
 	"github.com/Gaurav-Gosain/tuios/internal/integration"
 	"github.com/Gaurav-Gosain/tuios/internal/procinfo"
+	"github.com/Gaurav-Gosain/tuios/internal/textbuf"
 )
 
 // herdrMaxRequest bounds one request line, as herdr's 1 MiB cap does. A
@@ -581,7 +582,7 @@ func herdrHarness(agent string) string {
 	if id, ok := integration.Canonical(agent); ok {
 		return id
 	}
-	var b strings.Builder
+	var b textbuf.Builder
 	for _, r := range strings.ToLower(strings.TrimSpace(agent)) {
 		if b.Len() >= 32 {
 			break

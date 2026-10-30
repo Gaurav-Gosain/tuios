@@ -6,6 +6,8 @@ import (
 	"strings"
 	"time"
 	"unicode"
+
+	"github.com/Gaurav-Gosain/tuios/internal/textbuf"
 )
 
 // CommandType represents the type of a tape command
@@ -334,7 +336,7 @@ func init() {
 // keymap name uses are dropped, so "ToggleTiling", "toggletiling" and
 // "toggle_tiling" are one key.
 func commandKey(name string) string {
-	var b strings.Builder
+	var b textbuf.Builder
 	for _, r := range name {
 		if r == '_' || r == '-' || r == ' ' {
 			continue

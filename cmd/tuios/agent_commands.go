@@ -15,6 +15,7 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/invisible"
 	"github.com/Gaurav-Gosain/tuios/internal/plural"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
+	"github.com/Gaurav-Gosain/tuios/internal/textbuf"
 )
 
 // This file holds the CLI half of the cross-agent surface: who is here, leaving
@@ -34,7 +35,7 @@ import (
 // is what says the layout is the sender's.
 func plainText(s string) string {
 	s = invisible.Strip(s)
-	var b strings.Builder
+	var b textbuf.Builder
 	b.Grow(len(s))
 	for _, r := range s {
 		switch {

@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/Gaurav-Gosain/tuios/internal/invisible"
+	"github.com/Gaurav-Gosain/tuios/internal/textbuf"
 )
 
 // UntrustedOpen and UntrustedClose fence text another program wrote: a mail
@@ -50,7 +51,7 @@ func UntrustedBodyLines(body, gutter string) []string {
 // newline at the end. The caller cleans body of control characters first;
 // invisible characters are removed here from who and body both.
 func UntrustedFence(who, body string) string {
-	var b strings.Builder
+	var b textbuf.Builder
 	fmt.Fprintf(&b, UntrustedOpen, strings.ReplaceAll(invisible.Strip(who), "\n", " "))
 	for _, l := range UntrustedBodyLines(body, UntrustedGutter) {
 		b.WriteString("\n")

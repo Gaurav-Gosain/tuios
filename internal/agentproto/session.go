@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Gaurav-Gosain/tuios/internal/textbuf"
 	"github.com/charmbracelet/x/ansi"
 )
 
@@ -70,7 +71,7 @@ type Session struct {
 	running bool
 	ready   bool
 	queued  string
-	reply   strings.Builder
+	reply   textbuf.Builder
 	perms   []*Permission
 	shownAt time.Time
 	hold    context.CancelFunc

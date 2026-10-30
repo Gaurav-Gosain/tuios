@@ -41,6 +41,7 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/federation"
 	"github.com/Gaurav-Gosain/tuios/internal/pathroot"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
+	"github.com/Gaurav-Gosain/tuios/internal/textbuf"
 )
 
 // tuios pair: a phone adds this machine by scanning a QR code.
@@ -1596,7 +1597,7 @@ func renderQR(text string, colour bool) string {
 		}
 		return code.Black(x, y)
 	}
-	var b strings.Builder
+	var b textbuf.Builder
 	for y := 0; y < n; y += 2 {
 		for x := range n {
 			top, bottom := dark(x, y), y+1 < n && dark(x, y+1)

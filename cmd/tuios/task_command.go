@@ -10,6 +10,7 @@ import (
 	"text/tabwriter"
 
 	"github.com/Gaurav-Gosain/tuios/internal/session"
+	"github.com/Gaurav-Gosain/tuios/internal/textbuf"
 	"github.com/spf13/cobra"
 )
 
@@ -288,7 +289,7 @@ func newTaskGetCommand() *cobra.Command {
 
 // describeTask is what task get prints.
 func describeTask(r taskRow, on string) string {
-	var b strings.Builder
+	var b textbuf.Builder
 	fmt.Fprintf(&b, "%s%s: %s\n", plainLine(r.ID), on, plainLine(r.Title))
 	fmt.Fprintf(&b, "  stage   %s\n", plainLine(r.Stage))
 	fmt.Fprintf(&b, "  holder  %s\n", r.holderLabel())

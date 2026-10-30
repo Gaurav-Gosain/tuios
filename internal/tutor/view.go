@@ -12,6 +12,7 @@ import (
 
 	"github.com/Gaurav-Gosain/tuios/internal/learn/lessons"
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
+	"github.com/Gaurav-Gosain/tuios/internal/textbuf"
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
 )
 
@@ -254,7 +255,7 @@ func (m *Model) bar(ls lessonState, width int) string {
 	if m.ascii {
 		done, todo = "=", "-"
 	}
-	var b strings.Builder
+	var b textbuf.Builder
 	for i := range n {
 		cells := (i+1)*width/n - i*width/n
 		seg := todo
@@ -358,7 +359,7 @@ func (m *Model) buttons(ls lessonState, y int) (string, int) {
 	if ls.explainer {
 		list[1] = button{key: "enter", label: "go on", do: func() tea.Cmd { _, _ = m.lessons.Command("next"); return nil }}
 	}
-	var b strings.Builder
+	var b textbuf.Builder
 	x := 1
 	b.WriteString(s.text.Render(" "))
 	for i, bt := range list {

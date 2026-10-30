@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/plural"
+	"github.com/Gaurav-Gosain/tuios/internal/textbuf"
 )
 
 // This file detects the one failure that has no good error message anywhere
@@ -88,7 +89,7 @@ type ProtocolMismatchError struct {
 }
 
 func (e *ProtocolMismatchError) Error() string {
-	var b strings.Builder
+	var b textbuf.Builder
 	b.WriteString("The running TUIOS daemon does not speak this client's control protocol")
 
 	switch {

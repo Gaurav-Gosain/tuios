@@ -23,6 +23,7 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/sortx"
 	"github.com/Gaurav-Gosain/tuios/internal/tape"
+	"github.com/Gaurav-Gosain/tuios/internal/textbuf"
 	"github.com/google/uuid"
 	"github.com/spf13/cobra"
 	"tuios.dev/shot"
@@ -1685,7 +1686,7 @@ func agentRefusalText(reason string) string {
 // set-agent-meta call, in argument order, which the rail keeps. "key=" removes
 // the key.
 func agentMetaTokensJSON(args []string) (json.RawMessage, error) {
-	var b strings.Builder
+	var b textbuf.Builder
 	b.WriteByte('{')
 	for i, arg := range args {
 		key, value, ok := strings.Cut(arg, "=")

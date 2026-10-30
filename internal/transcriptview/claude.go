@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/linediff"
+	"github.com/Gaurav-Gosain/tuios/internal/textbuf"
 )
 
 // The Claude Code record, as far as a conversation needs it. A user record's
@@ -87,7 +88,7 @@ func (c *ccResultContent) UnmarshalJSON(b []byte) error {
 		Text string `json:"text"`
 	}
 	_ = json.Unmarshal(b, &parts)
-	var sb strings.Builder
+	var sb textbuf.Builder
 	for _, p := range parts {
 		if sb.Len() > 0 {
 			sb.WriteByte('\n')

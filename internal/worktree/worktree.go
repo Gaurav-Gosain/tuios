@@ -27,6 +27,7 @@ import (
 	"strings"
 
 	"github.com/Gaurav-Gosain/tuios/internal/childproc"
+	"github.com/Gaurav-Gosain/tuios/internal/textbuf"
 
 	"github.com/Gaurav-Gosain/tuios/internal/gitstate"
 	"github.com/Gaurav-Gosain/tuios/internal/lazyre"
@@ -407,7 +408,7 @@ func Diff(path string, stat bool) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	var b strings.Builder
+	var b textbuf.Builder
 	b.WriteString(diff)
 	if u := strings.TrimSpace(untracked); u != "" {
 		if b.Len() > 0 && !strings.HasSuffix(diff, "\n") {

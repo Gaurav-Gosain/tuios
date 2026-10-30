@@ -6,6 +6,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/Gaurav-Gosain/tuios/internal/textbuf"
 )
 
 // The judge of a fan: an agent judge-fan starts to read the attempts and
@@ -304,7 +306,7 @@ func fanJudgeSession(info *WorktreeInfo) string {
 // fanJudgePrompt is the judge's first prompt: the task, the attempts by
 // letter, and how to read them and report.
 func fanJudgePrompt(info *WorktreeInfo, siblings []*Session) string {
-	var b strings.Builder
+	var b textbuf.Builder
 	b.WriteString("You judge a fan of ")
 	b.WriteString(strconv.Itoa(len(siblings)))
 	b.WriteString(" attempts at one task. Do not change any file.")

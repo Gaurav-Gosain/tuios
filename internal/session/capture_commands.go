@@ -4,6 +4,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/Gaurav-Gosain/tuios/internal/textbuf"
 	"tuios.dev/vt"
 )
 
@@ -143,7 +144,7 @@ func captureCommands(rows []string, blocks []commandBlock, count, ceiling int) (
 		parts[i], sizes[i] = part, len(part)
 	}
 	budgets := commandBudgets(sizes, max(ceiling, 3*len(blocks)))
-	var sb strings.Builder
+	var sb textbuf.Builder
 	for i, b := range blocks {
 		kept, cut := trimMiddle(parts[i], budgets[i])
 		omitted += cut

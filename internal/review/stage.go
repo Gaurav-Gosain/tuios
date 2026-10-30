@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/Gaurav-Gosain/tuios/internal/childproc"
+	"github.com/Gaurav-Gosain/tuios/internal/textbuf"
 	"github.com/Gaurav-Gosain/tuios/internal/worktree"
 )
 
@@ -184,7 +185,7 @@ func SelectionPatch(f *File, h *Hunk, sel []int, unstage bool) (string, error) {
 	if len(picked) == 0 {
 		return "", errors.New("the selection holds no added or removed line")
 	}
-	var body strings.Builder
+	var body textbuf.Builder
 	oldCount, newCount := 0, 0
 	// ended is the side a line without its newline closed: ' ' for both.
 	// After it a side that ended takes no more lines, or git apply would
@@ -252,7 +253,7 @@ func SelectionPatch(f *File, h *Hunk, sel []int, unstage bool) (string, error) {
 		newStart = start - 1
 	}
 
-	var p strings.Builder
+	var p textbuf.Builder
 	a, b := quotePatchPath("a/"+f.Path), quotePatchPath("b/"+f.Path)
 	fmt.Fprintf(&p, "diff --git %s %s\n", a, b)
 	if f.indexLacks(unstage) {
@@ -279,7 +280,7 @@ func quotePatchPath(p string) string {
 	if !strings.ContainsFunc(p, func(r rune) bool { return r < 0x20 || r == 0x7f || r == '"' || r == '\\' || r == ' ' }) {
 		return p
 	}
-	var b strings.Builder
+	var b textbuf.Builder
 	b.WriteByte('"')
 	for i := 0; i < len(p); i++ {
 		c := p[i]
@@ -421,7 +422,7 @@ func SetIndexEntries(ctx context.Context, dir string, entries []IndexEntry) erro
 		return err
 	}
 	zero := strings.Repeat("0", len(empty))
-	var in strings.Builder
+	var in textbuf.Builder
 	for _, e := range entries {
 		if e.Absent {
 			fmt.Fprintf(&in, "0 %s\t%s\x00", zero, e.Path)

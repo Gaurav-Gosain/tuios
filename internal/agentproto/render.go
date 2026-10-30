@@ -9,6 +9,7 @@ import (
 
 	"github.com/Gaurav-Gosain/tuios/internal/integration"
 	"github.com/Gaurav-Gosain/tuios/internal/invisible"
+	"github.com/Gaurav-Gosain/tuios/internal/textbuf"
 )
 
 // The transcript: what the pane shows of the conversation.
@@ -50,7 +51,7 @@ func clean(s string) string {
 		return s
 	}
 	s = invisible.Strip(s)
-	var b strings.Builder
+	var b textbuf.Builder
 	b.Grow(len(s))
 	for _, r := range strings.ToValidUTF8(s, string(utf8.RuneError)) {
 		// invisible.Strip has removed every invisible character it does
@@ -113,7 +114,7 @@ func newRenderer() *renderer {
 }
 
 // lineStart ends a line left open, so what follows starts on its own.
-func (r *renderer) lineStart(b *strings.Builder) {
+func (r *renderer) lineStart(b *textbuf.Builder) {
 	if r.midLine {
 		b.WriteString("\n")
 		r.midLine = false
@@ -121,7 +122,7 @@ func (r *renderer) lineStart(b *strings.Builder) {
 }
 
 // block writes whole lines.
-func (r *renderer) block(b *strings.Builder, s string) {
+func (r *renderer) block(b *textbuf.Builder, s string) {
 	r.lineStart(b)
 	r.thought = false
 	b.WriteString(s)
@@ -132,7 +133,7 @@ func (r *renderer) block(b *strings.Builder, s string) {
 
 // text renders one event. It returns the text to write, with \n line breaks.
 func (r *renderer) event(ev Event) string {
-	var b strings.Builder
+	var b textbuf.Builder
 	switch e := ev.(type) {
 	case Text:
 		s := clean(e.Text)
@@ -199,7 +200,7 @@ func toolLabel(t Tool) string {
 	return title
 }
 
-func (r *renderer) tool(b *strings.Builder, t Tool) {
+func (r *renderer) tool(b *textbuf.Builder, t Tool) {
 	prev := r.tools[t.ID]
 	diffs := diffKey(t.Diffs)
 	if prev.status == t.Status && prev.diffs == diffs {
@@ -226,8 +227,8 @@ func (r *renderer) tool(b *strings.Builder, t Tool) {
 	r.tools[t.ID] = toolShown{status: t.Status, diffs: diffs}
 }
 
-func (r *renderer) planBlock(b *strings.Builder, p Plan) {
-	var s strings.Builder
+func (r *renderer) planBlock(b *textbuf.Builder, p Plan) {
+	var s textbuf.Builder
 	s.WriteString(sgrBold + "plan" + sgrReset + "\n")
 	for _, e := range p.Entries {
 		mark := "[ ]"
@@ -252,7 +253,7 @@ func (r *renderer) planBlock(b *strings.Builder, p Plan) {
 
 // prompt is the person's prompt as the transcript shows it.
 func (r *renderer) prompt(text string) string {
-	var b strings.Builder
+	var b textbuf.Builder
 	r.lineStart(&b)
 	b.WriteString("\n")
 	lines := strings.Split(clean(text), "\n")
@@ -275,7 +276,7 @@ func (r *renderer) prompt(text string) string {
 // permission is a permission request as the pane shows it: what is asked,
 // its context and diffs, and the keys that answer it.
 func (r *renderer) permission(p *Permission) string {
-	var b strings.Builder
+	var b textbuf.Builder
 	r.lineStart(&b)
 	r.thought = false
 	b.WriteString("\n")
@@ -338,7 +339,7 @@ func optionKeys(p *Permission) string {
 
 // answered is the line under a permission once it is answered.
 func (r *renderer) answered(p *Permission, i int, how string) string {
-	var b strings.Builder
+	var b textbuf.Builder
 	label := "cancelled"
 	if i >= 0 && i < len(p.Options) {
 		label = oneLine(p.Options[i].Label)
@@ -349,7 +350,7 @@ func (r *renderer) answered(p *Permission, i int, how string) string {
 
 // turnEnd is the line a turn ends with.
 func (r *renderer) turnEnd(res TurnResult) string {
-	var b strings.Builder
+	var b textbuf.Builder
 	switch res.Stop {
 	case StopFailed, StopRefused:
 		msg := "turn " + res.Stop
@@ -369,7 +370,7 @@ func (r *renderer) turnEnd(res TurnResult) string {
 
 // line is a line of the client's own, dimmed.
 func (r *renderer) line(s string) string {
-	var b strings.Builder
+	var b textbuf.Builder
 	r.block(&b, sgrDim+s+sgrReset)
 	return b.String()
 }

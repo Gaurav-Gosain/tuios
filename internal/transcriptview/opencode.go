@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/childproc"
+	"github.com/Gaurav-Gosain/tuios/internal/textbuf"
 	"github.com/Gaurav-Gosain/tuios/internal/transcript"
 )
 
@@ -470,7 +471,7 @@ func openCodeDBSig() string {
 			names = append(names, db)
 		}
 	}
-	var b strings.Builder
+	var b textbuf.Builder
 	found := false
 	for _, db := range names {
 		for _, p := range []string{db, db + "-wal"} {

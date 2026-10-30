@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/Gaurav-Gosain/tuios/internal/lazyre"
+	"github.com/Gaurav-Gosain/tuios/internal/textbuf"
 )
 
 // fileFormat is how tuios's part of one file is written, found and removed.
@@ -352,7 +353,7 @@ const (
 
 // tomlString quotes s as a TOML basic string.
 func tomlString(s string) string {
-	var b strings.Builder
+	var b textbuf.Builder
 	b.WriteByte('"')
 	for _, r := range s {
 		switch r {
@@ -380,7 +381,7 @@ func tomlString(s string) string {
 
 func (tomlBlock) block(t *Target, tuios string) string {
 	cmd := HookCommand(tuios, t.ID, t.Version)
-	var b strings.Builder
+	var b textbuf.Builder
 	b.WriteString(tomlBlockBegin + "\n")
 	for _, ev := range t.Events {
 		fmt.Fprintf(&b, "[[hooks]]\nevent = %s\ncommand = %s\ntimeout = %d\n\n", tomlString(ev.Name), tomlString(cmd), ev.Timeout)

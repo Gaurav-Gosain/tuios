@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/Gaurav-Gosain/tuios/internal/textbuf"
 	"tuios.dev/plot"
 	"tuios.dev/sketch"
 	sketchtext "tuios.dev/sketch/text"
@@ -587,7 +588,7 @@ func renderGrid(g *plot.Grid, color bool) []string {
 	var out []string
 	for y := 0; y < g.H; y++ {
 		cur := ""
-		var line strings.Builder
+		var line textbuf.Builder
 		for x := 0; x < g.W; x++ {
 			c := g.At(x, y)
 			if c.Width == 0 {

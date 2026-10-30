@@ -8,6 +8,7 @@ import (
 	"unicode"
 	"unicode/utf8"
 
+	"github.com/Gaurav-Gosain/tuios/internal/textbuf"
 	"github.com/charmbracelet/x/ansi"
 	"tuios.dev/vt"
 )
@@ -49,7 +50,7 @@ func (m keyMods) xterm() int {
 
 // prefix is how the modifiers read in a canonical name, in a fixed order.
 func (m keyMods) prefix() string {
-	var b strings.Builder
+	var b textbuf.Builder
 	if m.ctrl {
 		b.WriteString("ctrl+")
 	}

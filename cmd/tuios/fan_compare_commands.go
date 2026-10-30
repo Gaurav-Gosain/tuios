@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/textbuf"
 
 	"github.com/Gaurav-Gosain/tuios/internal/plural"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
@@ -110,7 +111,7 @@ func runFanCompare(target string, changes, jsonOutput bool) error {
 // renderFanCompare draws compare-fan as aligned lines, the way a person reads
 // a short list, and the two commands that come next.
 func renderFanCompare(res fanCompareResult, on string, now time.Time) string {
-	var b strings.Builder
+	var b textbuf.Builder
 	fmt.Fprintf(&b, "%s in %s%s, %d %s against %s\n", res.Group, res.Repo, on, len(res.Rows), plural.Word(len(res.Rows), "attempt", "attempts"), res.Base)
 	cells := make([][]string, 0, len(res.Rows))
 	for _, r := range res.Rows {

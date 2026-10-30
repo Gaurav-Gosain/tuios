@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/Gaurav-Gosain/tuios/internal/linediff"
+	"github.com/Gaurav-Gosain/tuios/internal/textbuf"
 )
 
 // Diffs in the transcript. Codex sends a unified diff, which is shown as it is;
@@ -40,7 +41,7 @@ func renderDiffs(diffs []Diff) string {
 	for _, d := range diffs {
 		lines = append(lines, diffLines(d)...)
 	}
-	var b strings.Builder
+	var b textbuf.Builder
 	shown := lines
 	if len(shown) > maxDiffLines {
 		shown = shown[:maxDiffLines]

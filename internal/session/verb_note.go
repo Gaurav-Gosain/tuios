@@ -3,9 +3,10 @@ package session
 import (
 	"encoding/json"
 	"fmt"
-	"strings"
 	"unicode"
 	"unicode/utf8"
+
+	"github.com/Gaurav-Gosain/tuios/internal/textbuf"
 )
 
 // Return notes.
@@ -24,7 +25,7 @@ const NoteMaxBytes = 200
 // control characters are dropped, runs of spaces fold to one, the ends are
 // trimmed, and the result is cut to NoteMaxBytes on a rune boundary.
 func CleanNote(s string) string {
-	var b strings.Builder
+	var b textbuf.Builder
 	b.Grow(min(len(s), NoteMaxBytes))
 	space := false
 	for _, r := range s {

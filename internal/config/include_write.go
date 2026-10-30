@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	"github.com/Gaurav-Gosain/tuios/internal/pathroot"
+	"github.com/Gaurav-Gosain/tuios/internal/textbuf"
 	"github.com/pelletier/go-toml/v2"
 )
 
@@ -560,7 +561,7 @@ func (lc *LayeredConfig) Holders(key []string) []ConfigLayer {
 // writes. The include key, when there is one, goes first, where a person
 // reading the file looks for it.
 func marshalTable(values map[string]any) ([]byte, error) {
-	var buf strings.Builder
+	var buf textbuf.Builder
 	if inc, ok := values[IncludeKey]; ok {
 		buf.WriteString(IncludeKey)
 		buf.WriteString(" = ")
@@ -646,7 +647,7 @@ func scanIncludeLine(data []byte) string {
 // daemon on, unless another file of the config already sets them. include is
 // a line to keep, such as an include list, or "".
 func FirstRunConfig(path, include string) []byte {
-	var sb strings.Builder
+	var sb textbuf.Builder
 	sb.WriteString(configFileHeader(path))
 	if include != "" {
 		sb.WriteString(include)

@@ -7,6 +7,8 @@ import (
 	"sync/atomic"
 	"unicode"
 	"unicode/utf8"
+
+	"github.com/Gaurav-Gosain/tuios/internal/textbuf"
 )
 
 // maxFunctionKey is the highest function key Bubble Tea names (KeyF63). A
@@ -116,7 +118,7 @@ func CanonicalKey(key string) string {
 		}
 		have[name] = true
 	}
-	var sb strings.Builder
+	var sb textbuf.Builder
 	sb.Grow(len(lower))
 	for _, name := range modifierOrder {
 		if have[name] {

@@ -14,6 +14,7 @@ import (
 
 	"github.com/pelletier/go-toml/v2"
 
+	"github.com/Gaurav-Gosain/tuios/internal/textbuf"
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
 )
 
@@ -761,7 +762,7 @@ func (lk *Look) render(source string) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	var b strings.Builder
+	var b textbuf.Builder
 	b.WriteString(lookHeadMark + "\"tuios look apply\" wrote this file.\n")
 	b.WriteString("# \"tuios look remove\" deletes it. The next apply replaces it.\n")
 	b.WriteString("# config.toml wins over this file. Change settings there.\n")

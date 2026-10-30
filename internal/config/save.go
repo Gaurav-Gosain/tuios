@@ -7,10 +7,10 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
 	"sync"
 	"sync/atomic"
 
+	"github.com/Gaurav-Gosain/tuios/internal/textbuf"
 	"github.com/adrg/xdg"
 	"github.com/pelletier/go-toml/v2"
 )
@@ -152,7 +152,7 @@ func renderConfigFile(cfg *UserConfig, configPath string) ([]byte, error) {
 		return nil, fmt.Errorf("failed to marshal config: %w", err)
 	}
 
-	var sb strings.Builder
+	var sb textbuf.Builder
 	sb.WriteString(configFileHeader(configPath))
 	if _, err := sb.Write(data); err != nil {
 		return nil, fmt.Errorf("failed to write config data: %w", err)

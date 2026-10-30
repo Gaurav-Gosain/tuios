@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"strings"
 	"time"
+
+	"github.com/Gaurav-Gosain/tuios/internal/textbuf"
 )
 
 // Recorder records user interactions as tape commands
@@ -300,7 +302,7 @@ func (r *Recorder) GetCommands() []Command {
 
 // String returns the tape content as a formatted string
 func (r *Recorder) String(header string) string {
-	var sb strings.Builder
+	var sb textbuf.Builder
 
 	if header != "" {
 		// Add header with timestamp

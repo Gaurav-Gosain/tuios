@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/harness"
+	"github.com/Gaurav-Gosain/tuios/internal/textbuf"
 )
 
 // Peek and respond: read the prompt an agent is blocked on, and answer it,
@@ -231,7 +232,7 @@ func promptID(w WindowState, hid string, p harness.Prompt) string {
 // printableLine keeps a screen line's indentation and drops what a terminal
 // would act on, cut to maxPromptLineRunes.
 func printableLine(s string) string {
-	var b strings.Builder
+	var b textbuf.Builder
 	n := 0
 	for _, r := range s {
 		if r < 0x20 || (r >= 0x7f && r < 0xa0) {

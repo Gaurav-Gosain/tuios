@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/Gaurav-Gosain/tuios/internal/childproc"
+	"github.com/Gaurav-Gosain/tuios/internal/textbuf"
 )
 
 // Comparing the attempts of a fan: how much each one changed against its
@@ -158,7 +159,7 @@ func StageAll(ctx context.Context, dir string, env, specs, exclude []string) err
 	for _, p := range exclude {
 		skip[filepath.ToSlash(p)] = true
 	}
-	var in strings.Builder
+	var in textbuf.Builder
 	seen := map[string]bool{}
 	for p := range strings.SplitSeq(out, "\x00") {
 		// A path that ends in a slash is a repository inside the work tree

@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
+	"github.com/Gaurav-Gosain/tuios/internal/textbuf"
 	"tuios.dev/shot"
 )
 
@@ -253,7 +254,7 @@ func ResolveSGR(content string, palette [16]color.Color) string {
 	if !strings.Contains(content, "\x1b[") {
 		return content
 	}
-	var b strings.Builder
+	var b textbuf.Builder
 	b.Grow(len(content) + 32)
 	for i := 0; i < len(content); {
 		if content[i] != 0x1b || i+1 >= len(content) || content[i+1] != '[' {

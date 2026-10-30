@@ -10,6 +10,8 @@ import (
 	"time"
 	"unicode"
 	"unicode/utf8"
+
+	"github.com/Gaurav-Gosain/tuios/internal/textbuf"
 )
 
 // Agent metadata is a short list of key and value pairs a pane reports about
@@ -107,7 +109,7 @@ func ValidAgentMetaKey(k string) bool {
 // space fold to one, the ends are trimmed, and the result is cut to
 // AgentMetaMaxValue characters. It reports whether it cut anything.
 func CleanAgentMetaValue(v string) (string, bool) {
-	var b strings.Builder
+	var b textbuf.Builder
 	b.Grow(len(v))
 	space := false
 	n := 0

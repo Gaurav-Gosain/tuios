@@ -23,6 +23,7 @@ import (
 	"tuios.dev/sketch"
 
 	"github.com/Gaurav-Gosain/tuios/internal/mermaid"
+	"github.com/Gaurav-Gosain/tuios/internal/textbuf"
 )
 
 // liveScreen is the full-screen view of tuios mermaid --watch and --demo: the
@@ -86,7 +87,7 @@ func (s *liveScreen) paint(full bool) {
 	s.mu.Unlock()
 	sa, _ := s.layout()
 	bg := sgr(false, s.th.Bg)
-	var b strings.Builder
+	var b textbuf.Builder
 	b.WriteString("\x1b[?2026h\x1b[?25l")
 	if full {
 		for r := 1; r <= s.rows; r++ {
@@ -164,7 +165,7 @@ var mermaidKeywords = []string{"flowchart", "graph", "subgraph", "end", "classDe
 func highlight(line string, th *sketch.Theme) string {
 	fg, muted := sgr(true, th.Fg), sgr(true, th.Muted)
 	key, str, num := sgr(true, th.Accent), sgr(true, th.Series[3]), sgr(true, th.Series[2])
-	var b strings.Builder
+	var b textbuf.Builder
 	rs := []rune(line)
 	label := false
 	for i := 0; i < len(rs); {

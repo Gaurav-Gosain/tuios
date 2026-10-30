@@ -15,6 +15,7 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/pathroot"
 	"github.com/Gaurav-Gosain/tuios/internal/serverscope"
+	"github.com/Gaurav-Gosain/tuios/internal/textbuf"
 	"github.com/adrg/xdg"
 	"golang.org/x/text/unicode/norm"
 )
@@ -492,7 +493,7 @@ func foldKey(p string) string {
 		p = trimWindowsNames(p)
 	}
 	p = norm.NFD.String(p)
-	var b strings.Builder
+	var b textbuf.Builder
 	b.Grow(len(p))
 	for _, r := range p {
 		switch r {

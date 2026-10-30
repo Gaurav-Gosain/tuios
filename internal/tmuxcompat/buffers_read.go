@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/Gaurav-Gosain/tuios/internal/sortx"
+	"github.com/Gaurav-Gosain/tuios/internal/textbuf"
 )
 
 // show-buffer, save-buffer and list-buffers: the paste buffers read back.
@@ -155,7 +156,7 @@ func bufferSample(data string) string {
 	if cut {
 		data = data[:width]
 	}
-	var b strings.Builder
+	var b textbuf.Builder
 	for i := 0; i < len(data); i++ {
 		switch c := data[i]; {
 		case c == '\\':

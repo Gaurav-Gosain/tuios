@@ -13,6 +13,7 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/ghpr"
 	"github.com/Gaurav-Gosain/tuios/internal/plural"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
+	"github.com/Gaurav-Gosain/tuios/internal/textbuf"
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
 )
@@ -206,7 +207,7 @@ type shipMergeResult struct {
 
 // sentences says what a merge did.
 func (r shipMergeResult) sentences() string {
-	var b strings.Builder
+	var b textbuf.Builder
 	switch {
 	case r.UpToDate:
 		fmt.Fprintf(&b, "%s already has every commit of %s. Nothing was merged.\n", plainLine(r.Into), plainLine(r.Branch))

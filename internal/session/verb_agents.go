@@ -12,6 +12,7 @@ import (
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/harness"
+	"github.com/Gaurav-Gosain/tuios/internal/textbuf"
 )
 
 // This file implements the cross-agent verbs: who is here (list-agents), leaving
@@ -1332,7 +1333,7 @@ type askOrigin struct {
 // sender: printable characters only, cut to limit. It is what keeps a claim
 // from carrying a control sequence into a terminal that prints it.
 func printableClaim(s string, limit int) string {
-	var b strings.Builder
+	var b textbuf.Builder
 	for _, r := range s {
 		if r < 0x20 || (r >= 0x7f && r < 0xa0) {
 			continue

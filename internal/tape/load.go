@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/Gaurav-Gosain/tuios/internal/lazyre"
+	"github.com/Gaurav-Gosain/tuios/internal/textbuf"
 )
 
 // maxSourceDepth bounds how deep Source lines may nest, which also stops a
@@ -51,7 +52,7 @@ func LoadFile(path string) (*Script, error) {
 		return nil, err
 	}
 	s := &Script{}
-	var text strings.Builder
+	var text textbuf.Builder
 	abs, _ := filepath.Abs(path)
 	s.inline(&text, string(data), "", filepath.Dir(path), []string{abs})
 	s.Text = text.String()
@@ -76,7 +77,7 @@ func LoadFile(path string) (*Script, error) {
 // with the lines of the file it names. file is the name the errors give
 // content ("" for the loaded tape), dir is where its Source paths are
 // relative to, and stack holds the files being read, outermost first.
-func (s *Script) inline(text *strings.Builder, content, file, dir string, stack []string) {
+func (s *Script) inline(text *textbuf.Builder, content, file, dir string, stack []string) {
 	lines := strings.Split(content, "\n")
 	if n := len(lines); n > 0 && lines[n-1] == "" {
 		lines = lines[:n-1]
@@ -127,7 +128,7 @@ type sourceErr struct {
 }
 
 // add appends one line of text and remembers where it came from.
-func (s *Script) add(text *strings.Builder, line, file string, n int) {
+func (s *Script) add(text *textbuf.Builder, line, file string, n int) {
 	text.WriteString(line)
 	text.WriteByte('\n')
 	s.origins = append(s.origins, lineOrigin{file: file, line: n})

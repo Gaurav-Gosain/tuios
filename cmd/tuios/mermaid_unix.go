@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Gaurav-Gosain/tuios/internal/textbuf"
 	"golang.org/x/sys/unix"
 )
 
@@ -23,7 +24,7 @@ func windowPixels(f *os.File) (pw, ph, cols, rows int, ok bool) {
 // reply ends them, or until the time is up.
 func readAnswer(in *os.File, wait time.Duration) (string, error) {
 	deadline := time.Now().Add(wait)
-	var got strings.Builder
+	var got textbuf.Builder
 	buf := make([]byte, 256)
 	for {
 		left := time.Until(deadline)

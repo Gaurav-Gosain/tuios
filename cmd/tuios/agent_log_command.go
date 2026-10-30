@@ -14,6 +14,7 @@ import (
 
 	"github.com/Gaurav-Gosain/tuios/internal/plural"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
+	"github.com/Gaurav-Gosain/tuios/internal/textbuf"
 )
 
 // `tuios agent-log`: what the agent in a pane has been doing, read from the
@@ -222,7 +223,7 @@ func agentLogDetail(e agentLogEntry) string {
 		}
 		return "started (" + plainLine(e.Text) + ")"
 	}
-	var b strings.Builder
+	var b textbuf.Builder
 	switch {
 	case e.Tool != "" && e.Target != "":
 		b.WriteString(plainLine(e.Tool))

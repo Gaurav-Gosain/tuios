@@ -14,6 +14,7 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/federation"
 	"github.com/Gaurav-Gosain/tuios/internal/plural"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
+	"github.com/Gaurav-Gosain/tuios/internal/textbuf"
 	"github.com/Gaurav-Gosain/tuios/internal/units"
 	"github.com/spf13/cobra"
 )
@@ -552,7 +553,7 @@ func writeHostTest(w io.Writer, r federation.HostReport, starting bool) error {
 // remember what they called a machine, and only the Host names are read: no key
 // file and no known_hosts is ever opened. See internal/federation's sshalias.go.
 func addrHelp() string {
-	var b strings.Builder
+	var b textbuf.Builder
 	b.WriteString("An address is anything ssh understands, for example user@machine.")
 	if aliases := federation.ReadSSHAliases(federation.UserSSHConfigPath()); len(aliases) > 0 {
 		b.WriteString("\nYour ssh config names these machines:\n  ")
@@ -636,7 +637,7 @@ func describeConfigApplied(raw []byte) string {
 	if err := json.Unmarshal(raw, &res); err != nil {
 		return "The daemon applied config.toml.\n"
 	}
-	var b strings.Builder
+	var b textbuf.Builder
 	b.WriteString("The daemon applied config.toml.\n")
 	if len(res.Changes) == 0 {
 		b.WriteString("Nothing changed.\n")

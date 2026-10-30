@@ -10,6 +10,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/Gaurav-Gosain/tuios/internal/textbuf"
 	"github.com/Gaurav-Gosain/tuios/internal/winpath"
 )
 
@@ -113,7 +114,7 @@ func (d Dirs) EnsureUserDirs(pluginID string) error {
 // plugin_config_path_component makes it: [a-z0-9._-] kept, every other byte
 // %XX, so two ids never share a folder.
 func PathComponent(id string) string {
-	var b strings.Builder
+	var b textbuf.Builder
 	for i := 0; i < len(id); i++ {
 		c := id[i]
 		if c >= 'a' && c <= 'z' || c >= '0' && c <= '9' || c == '.' || c == '_' || c == '-' {

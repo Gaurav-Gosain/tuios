@@ -2,9 +2,10 @@ package tape
 
 import (
 	"strconv"
-	"strings"
 	"unicode"
 	"unicode/utf8"
+
+	"github.com/Gaurav-Gosain/tuios/internal/textbuf"
 )
 
 // Lexer tokenizes .tape file input
@@ -83,7 +84,7 @@ func (l *Lexer) skipComment() {
 
 // readString reads a quoted string (single, double, or backtick)
 func (l *Lexer) readString(quote byte) string {
-	var sb strings.Builder
+	var sb textbuf.Builder
 	l.readChar() // skip opening quote
 
 	for l.ch != quote && l.ch != 0 {
@@ -144,7 +145,7 @@ func (l *Lexer) readString(quote byte) string {
 // is how %q spells a byte that is not valid UTF-8, and \u and \U a rune. It
 // leaves the lexer on the last digit and reports false, consuming nothing,
 // when the digits are not all there or \u and \U name no valid rune.
-func (l *Lexer) readHexEscape(sb *strings.Builder) bool {
+func (l *Lexer) readHexEscape(sb *textbuf.Builder) bool {
 	n := map[byte]int{'x': 2, 'u': 4, 'U': 8}[l.ch]
 	if l.nextPos+n > len(l.input) {
 		return false
@@ -169,7 +170,7 @@ func (l *Lexer) readHexEscape(sb *strings.Builder) bool {
 
 // readIdentifier reads an identifier or keyword
 func (l *Lexer) readIdentifier() string {
-	var sb strings.Builder
+	var sb textbuf.Builder
 	// After its first character a word may hold dots and dashes, so a config
 	// path (appearance.border_style), a file name (lib.tape) and a value
 	// such as even-horizontal or tokyo-night are each one word.
@@ -182,7 +183,7 @@ func (l *Lexer) readIdentifier() string {
 
 // readNumberWithDecimal reads a number literal including decimals
 func (l *Lexer) readNumberWithDecimal() string {
-	var sb strings.Builder
+	var sb textbuf.Builder
 	for isDigit(l.ch) {
 		sb.WriteByte(l.ch)
 		l.readChar()
@@ -201,7 +202,7 @@ func (l *Lexer) readNumberWithDecimal() string {
 
 // readRegex reads a regex pattern /pattern/
 func (l *Lexer) readRegex() string {
-	var sb strings.Builder
+	var sb textbuf.Builder
 	l.readChar() // skip opening /
 
 	for l.ch != '/' && l.ch != 0 {
@@ -301,7 +302,7 @@ func (l *Lexer) NextToken() Token {
 
 			// Check if it's a duration (has a letter after the number)
 			if unicode.IsLetter(rune(l.ch)) {
-				var sb strings.Builder
+				var sb textbuf.Builder
 				sb.WriteString(num)
 				// Consume alternating unit/number runs so compound Go durations
 				// like 1m30s tokenize as a single duration rather than splitting.

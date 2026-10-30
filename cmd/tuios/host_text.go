@@ -1,10 +1,10 @@
 package main
 
 import (
-	"strings"
 	"unicode/utf8"
 
 	"github.com/Gaurav-Gosain/tuios/internal/invisible"
+	"github.com/Gaurav-Gosain/tuios/internal/textbuf"
 )
 
 // Text another machine wrote reaches this terminal from a capture of a pane
@@ -24,7 +24,7 @@ func hostStyledText(s string) string {
 	// Escape sequences are ASCII, so removing invisible characters first
 	// cannot break one.
 	s = invisible.Strip(s)
-	var b strings.Builder
+	var b textbuf.Builder
 	b.Grow(len(s))
 	for i := 0; i < len(s); {
 		c := s[i]

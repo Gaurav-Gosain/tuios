@@ -8,6 +8,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/Gaurav-Gosain/tuios/internal/textbuf"
 )
 
 // fsMu guards files, fsDirs and the fake git repository. Every pane shares
@@ -335,7 +337,7 @@ type ConfigLine struct {
 // own colours, and "default" glyphs are the shipped set, so neither is
 // written. Each extra line goes under the table its path names.
 func configText(theme, border, glyphs string, extra []ConfigLine) string {
-	var b strings.Builder
+	var b textbuf.Builder
 	b.WriteString("[appearance]\n")
 	if theme != "" {
 		b.WriteString(`theme = "`)

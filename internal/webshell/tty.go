@@ -2,8 +2,9 @@ package webshell
 
 import (
 	"fmt"
-	"strings"
 	"sync"
+
+	"github.com/Gaurav-Gosain/tuios/internal/textbuf"
 )
 
 // Event is something a guest did that a guided tour may want to know about,
@@ -120,7 +121,7 @@ func (t *TTY) Print(s string) {
 func (t *TTY) Lay(lay func(cols int) []string) {
 	cols, _ := t.Size()
 	t.log.layout(lay)
-	var b strings.Builder
+	var b textbuf.Builder
 	for _, l := range lay(cols) {
 		b.WriteString(l)
 		b.WriteString("\r\n")

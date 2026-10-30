@@ -12,6 +12,7 @@ import (
 
 	"github.com/Gaurav-Gosain/tuios/internal/atomicfile"
 	"github.com/Gaurav-Gosain/tuios/internal/sortx"
+	"github.com/Gaurav-Gosain/tuios/internal/textbuf"
 )
 
 // show-environment and set-environment.
@@ -212,7 +213,7 @@ func (s *Shim) showEnvironment(name string, args []string) (string, []string, er
 // escapeDoubleQuoted escapes the characters POSIX reads inside double quotes
 // ($ ` " and \), as tmux's show-environment -s does.
 func escapeDoubleQuoted(v string) string {
-	var b strings.Builder
+	var b textbuf.Builder
 	for i := 0; i < len(v); i++ {
 		if strings.IndexByte("$`\"\\", v[i]) >= 0 {
 			b.WriteByte('\\')

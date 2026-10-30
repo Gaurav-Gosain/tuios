@@ -10,6 +10,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/textbuf"
 )
 
 // The delivery queue: messages for the agent in a pane, typed as a prompt the
@@ -861,7 +862,7 @@ func (a *attentionStore) openQueueStalled(sessionName string, w WindowState) {
 func queuePreview(text string) string {
 	line, _, cut := strings.Cut(strings.TrimSpace(text), "\n")
 	line = strings.TrimSpace(line)
-	var b strings.Builder
+	var b textbuf.Builder
 	n := 0
 	for _, r := range line {
 		if r < 0x20 || (r >= 0x7f && r < 0xa0) || r == utf8.RuneError {

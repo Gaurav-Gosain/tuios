@@ -3,6 +3,7 @@ package session
 import (
 	"strings"
 
+	"github.com/Gaurav-Gosain/tuios/internal/textbuf"
 	"github.com/charmbracelet/x/ansi"
 	"tuios.dev/vt"
 )
@@ -56,7 +57,7 @@ func unwrapRows(term vt.Terminal, lines []string, first int, main bool) []string
 		return known && w, term.RowPadded(abs - sbLen)
 	}
 	out := make([]string, 0, len(lines))
-	var cur strings.Builder
+	var cur textbuf.Builder
 	for i, line := range lines {
 		cur.WriteString(line)
 		if i < len(lines)-1 {

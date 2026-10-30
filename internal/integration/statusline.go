@@ -9,6 +9,8 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+
+	"github.com/Gaurav-Gosain/tuios/internal/textbuf"
 )
 
 // Status line feed: the model, context use and cost a harness shows the
@@ -222,7 +224,7 @@ func managedStatusLine(cmd string) (program string, version int, then string, ok
 // expands nothing. It is enough to read back what shellWord wrote.
 func splitWords(s string) ([]string, error) {
 	var words []string
-	var cur strings.Builder
+	var cur textbuf.Builder
 	inWord := false
 	for i := 0; i < len(s); i++ {
 		c := s[i]

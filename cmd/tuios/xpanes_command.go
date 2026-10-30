@@ -16,6 +16,7 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/layout"
 	"github.com/Gaurav-Gosain/tuios/internal/lazyre"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
+	"github.com/Gaurav-Gosain/tuios/internal/textbuf"
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
 )
@@ -620,7 +621,7 @@ func xpanesSummary(r xpanesResult) string {
 	if n == 1 {
 		noun = "pane"
 	}
-	var b strings.Builder
+	var b textbuf.Builder
 	fmt.Fprintf(&b, "Opened %d %s on workspace %d of session %s.", n, noun, r.Workspace, r.Session)
 	if r.Arranged {
 		fmt.Fprintf(&b, " The layout is %s.", r.Layout)

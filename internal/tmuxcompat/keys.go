@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+
+	"github.com/Gaurav-Gosain/tuios/internal/textbuf"
 )
 
 // send-keys: tmux key names to the bytes a terminal sends for them.
@@ -123,7 +125,7 @@ func keyBytes(arg string) (string, bool) {
 // sendKeysText builds the text send-keys writes for its arguments. literal is
 // -l; hex is -H, where every argument is a hex byte.
 func sendKeysText(args []string, literal, hex bool) (string, error) {
-	var b strings.Builder
+	var b textbuf.Builder
 	for _, a := range args {
 		switch {
 		case hex:

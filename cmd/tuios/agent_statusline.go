@@ -22,6 +22,7 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/atomicfile"
 	"github.com/Gaurav-Gosain/tuios/internal/integration"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
+	"github.com/Gaurav-Gosain/tuios/internal/textbuf"
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
 )
@@ -423,7 +424,7 @@ func warned(context string) bool {
 // digits, '-' and '_' becomes '_', so a name cannot leave the directory.
 func statusLineStampName(sessionName, window string) string {
 	safe := func(s string) string {
-		var b strings.Builder
+		var b textbuf.Builder
 		for _, r := range s {
 			switch {
 			case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r >= '0' && r <= '9', r == '-', r == '_':

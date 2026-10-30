@@ -8,6 +8,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/Gaurav-Gosain/tuios/internal/sortx"
+	"github.com/Gaurav-Gosain/tuios/internal/textbuf"
 )
 
 // QuoteMax is how many characters of a quoted line the message carries.
@@ -92,7 +93,7 @@ func SortNotes(notes []Note) {
 func Compose(m Message) string {
 	notes := slices.Clone(m.Notes)
 	SortNotes(notes)
-	var b strings.Builder
+	var b textbuf.Builder
 	b.WriteString("Review notes on your changes")
 	if m.Base != "" {
 		fmt.Fprintf(&b, " (vs %s)", oneLine(m.Base, 80))
@@ -133,7 +134,7 @@ func (m Message) authorName(by string) string {
 
 // location is where a note is, as its entry's first line says it.
 func location(n Note, clean func(string) string) string {
-	var b strings.Builder
+	var b textbuf.Builder
 	b.WriteString(oneLine(n.Path, 200))
 	if n.IsHunk() {
 		os, ol, ns, nl, err := ParseHunkHeader(n.HunkHeader)
@@ -181,7 +182,7 @@ func hunkRange(header string) string {
 // oneLine is s with its control characters left out and its runs of white
 // space made one space, cut to limit characters with "..." after a cut.
 func oneLine(s string, limit int) string {
-	var b strings.Builder
+	var b textbuf.Builder
 	space := false
 	n := 0
 	cut := false
@@ -220,7 +221,7 @@ func oneLine(s string, limit int) string {
 // control character left out, a tab made a space, trailing blanks trimmed.
 // Nothing in it can end the bracketed paste the message is typed in.
 func CleanText(s string) string {
-	var b strings.Builder
+	var b textbuf.Builder
 	for _, r := range s {
 		switch {
 		case r == '\n':

@@ -10,6 +10,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/Gaurav-Gosain/tuios/internal/federation"
+	"github.com/Gaurav-Gosain/tuios/internal/textbuf"
 )
 
 // Editing the [hosts] table in the file, one table at a time.
@@ -324,7 +325,7 @@ func samePath(a, b []string) bool {
 // set are written, so a host added with nothing but an address gets a two-line
 // table rather than a table full of zeroes.
 func renderHostBlock(name string, h HostConfig) string {
-	var b strings.Builder
+	var b textbuf.Builder
 	b.WriteString("[hosts.")
 	b.WriteString(tomlKey(name))
 	b.WriteString("]\n")
@@ -404,7 +405,7 @@ func tomlKey(name string) string {
 // not Go's: a byte outside the printable range is written as \uXXXX, the only
 // short escape TOML has for one.
 func tomlString(s string) string {
-	var b strings.Builder
+	var b textbuf.Builder
 	b.WriteByte('"')
 	for _, r := range s {
 		switch r {
@@ -491,7 +492,7 @@ func AddLinkPolicyInFile(path, name string, allow []string) (WriteNote, error) {
 	if _, _, found := findTableBlock(lines, []string{"hosts", name}); found {
 		return note, ErrHostTableExists
 	}
-	var b strings.Builder
+	var b textbuf.Builder
 	b.WriteString("[hosts.")
 	b.WriteString(tomlKey(name))
 	b.WriteString("]\n")

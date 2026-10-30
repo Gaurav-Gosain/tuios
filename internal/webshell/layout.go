@@ -3,6 +3,7 @@ package webshell
 import (
 	"strings"
 
+	"github.com/Gaurav-Gosain/tuios/internal/textbuf"
 	"github.com/charmbracelet/x/ansi"
 )
 
@@ -40,7 +41,7 @@ func columns(items []string, cols int) []string {
 		}
 		lines := make([]string, nrows)
 		for r := range nrows {
-			var b strings.Builder
+			var b textbuf.Builder
 			for c := range ncols {
 				i := c*nrows + r
 				if i >= len(items) {
