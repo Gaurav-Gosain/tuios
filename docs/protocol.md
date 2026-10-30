@@ -187,6 +187,8 @@ old behaviour. None of them bumps the protocol integer: every field keeps its
 name and type, and a caller that sends nothing new keeps working. What changes
 is an answer, and each entry says which.
 
+**The new verb [list-routes](#list-routes)** lists this machine's addresses.
+
 **A hooked agent that stops reporting shows as silent.** A pane whose claim
 is a report, and whose state is `working`, may go without a report for
 `[agents] silent_after` (default `10m`). After that, what changes for a
@@ -3409,6 +3411,23 @@ when the connection closes, or when the connection calls
 
 Link capability: `list`. The verbs that use the nonce need their own
 capability, for example `respond` for `reply-approval`.
+
+### list-routes
+
+List the addresses this machine has now. A phone asks after it connects and
+keeps them as more routes to the same machine, so it can reach the machine from
+another network. The phone still checks the ssh host key on every route.
+
+Takes no params. Over a link it needs `list`.
+
+```json
+{"id": 1, "result": {"type": "route_list", "routes": [{"host": "studio.example.ts.net", "kind": "tailnet"}, {"host": "192.168.1.20", "kind": "lan"}]}}
+```
+
+`kind` is `tailnet`, `lan` or `public`. The list has at most three LAN
+addresses and leaves out loopback and the interfaces of containers and VPNs.
+`host` has no port: the ssh port is the one the phone already uses. An older
+daemon answers `unknown_verb`.
 
 ### register-push
 

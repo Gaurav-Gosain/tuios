@@ -749,60 +749,10 @@ func pairSameFile(a, b string) bool {
 // without --listen-all.
 func discoverPairAddrs(machines []federation.TailnetMachine) []pairAddr {
 	var out []pairAddr
-	for _, m := range machines {
-		if !m.Self || m.IP == "" {
-			continue
-		}
-		adv := m.DNSName
-		if adv == "" {
-			adv = m.IP
-		}
-		out = append(out, pairAddr{advertise: adv, bind: m.IP})
-	}
-	_, cgnat, _ := net.ParseCIDR("100.64.0.0/10")
-	ifaces, _ := net.Interfaces()
-	lan := 0
-	for _, ifc := range ifaces {
-		if ifc.Flags&net.FlagUp == 0 || ifc.Flags&net.FlagLoopback != 0 || pairSkipInterface(ifc.Name) {
-			continue
-		}
-		addrs, _ := ifc.Addrs()
-		for _, a := range addrs {
-			ipn, ok := a.(*net.IPNet)
-			if !ok {
-				continue
-			}
-			ip := ipn.IP.To4()
-			if ip == nil || ip.IsLinkLocalUnicast() || cgnat.Contains(ip) || lan >= pairLANLimit {
-				continue
-			}
-			out = append(out, pairAddr{advertise: ip.String(), bind: ip.String(), public: pairPublicIP(ip)})
-			lan++
-		}
+	for _, a := range federation.LocalAddrs(machines, pairLANLimit) {
+		out = append(out, pairAddr{advertise: a.Host, bind: a.Bind, public: a.Public})
 	}
 	return out
-}
-
-// pairPublicIP reports whether ip can be reached from the internet: a global
-// unicast address that is not private (RFC 1918, fc00::/7) and not in the
-// shared range tailnets use (100.64.0.0/10).
-func pairPublicIP(ip net.IP) bool {
-	if ip == nil || !ip.IsGlobalUnicast() || ip.IsPrivate() {
-		return false
-	}
-	_, cgnat, _ := net.ParseCIDR("100.64.0.0/10")
-	return !cgnat.Contains(ip)
-}
-
-// pairSkipInterface leaves out the interfaces of containers, VMs and VPNs: a
-// phone cannot reach them, and each address makes the code bigger.
-func pairSkipInterface(name string) bool {
-	for _, p := range []string{"docker", "br-", "veth", "virbr", "podman", "cni", "flannel", "tailscale", "utun", "zt", "vmnet", "vboxnet", "lxc", "lxd"} {
-		if strings.HasPrefix(name, p) {
-			return true
-		}
-	}
-	return false
 }
 
 // listensEverywhere reports whether --listen names the unspecified address,
@@ -825,7 +775,7 @@ func listensEverywhere(listen string) bool {
 // plain HTTP, and the internet has no reason to reach it.
 func openPairListeners(listen string, listenAll bool, found []pairAddr, discover func() []pairAddr, stderr io.Writer) ([]net.Listener, []string, error) {
 	if listen != "" {
-		if host, _, err := net.SplitHostPort(listen); err == nil && !listenAll && pairPublicIP(net.ParseIP(host)) {
+		if host, _, err := net.SplitHostPort(listen); err == nil && !listenAll && federation.PublicIP(net.ParseIP(host)) {
 			return nil, nil, fmt.Errorf("--listen %s is a public address. Give a private or tailnet address of this machine, or add --listen-all", listen)
 		}
 		l, err := net.Listen("tcp", listen)
@@ -838,7 +788,7 @@ func openPairListeners(listen string, listenAll bool, found []pairAddr, discover
 		// Check the address that was bound, not the text. A host such as
 		// "0" or a name that resolves to 0.0.0.0 binds every interface too,
 		// and a name can resolve to a public address.
-		if !listenAll && pairPublicIP(ip) {
+		if !listenAll && federation.PublicIP(ip) {
 			_ = l.Close()
 			return nil, nil, fmt.Errorf("--listen %s is a public address. Give a private or tailnet address of this machine, or add --listen-all", listen)
 		}

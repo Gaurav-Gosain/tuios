@@ -784,6 +784,14 @@ func buildVerbRegistry() map[string]verbEntry {
 			},
 			handler: (*Daemon).verbStartAgent,
 		},
+		"list-routes": {
+			description: "List the addresses this machine has now, so a phone paired on one network can reach it from another.",
+			returns: []verbParam{
+				{Name: "routes", Type: "[]object", Description: "host (a name or an IP, without a port) and kind (tailnet, lan or public), the tailnet name first."},
+			},
+			examples: []string{`{"id":1,"verb":"list-routes"}`},
+			handler:  (*Daemon).verbListRoutes,
+		},
 		"list-hosts": {
 			description: "List the machines named in the [hosts] config table, with the state of each link.",
 			returns: []verbParam{

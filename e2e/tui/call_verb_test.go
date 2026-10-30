@@ -55,6 +55,13 @@ func TestCallVerb(t *testing.T) {
 		t.Fatalf("ASSERTION: list-sessions through call is not the daemon's result: %s", out)
 	}
 
+	// list-routes answers with this machine's addresses, never loopback.
+	if out, err := tuiosCLI(t, base, "call", "list-routes"); err != nil {
+		t.Fatalf("ASSERTION: list-routes failed: %v: %s", err, out)
+	} else if !strings.Contains(out, `"route_list"`) || strings.Contains(out, "127.0.0.1") {
+		t.Fatalf("ASSERTION: list-routes answered %s", out)
+	}
+
 	if out, err := tuiosCLI(t, base, "call", "new-window", `{"session":"callme","name":"through-call"}`); err != nil {
 		t.Fatalf("ASSERTION: new-window through call failed: %v: %s", err, out)
 	}

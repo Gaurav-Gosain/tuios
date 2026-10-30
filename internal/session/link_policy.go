@@ -96,6 +96,7 @@ var verbCapabilities = map[string]linkCaps{
 	"list-clients":         {config.LinkAllowList},
 	"list-worktrees":       {config.LinkAllowList},
 	"list-hosts":           {config.LinkAllowList},
+	"list-routes":          {config.LinkAllowList},
 	"list-host-sessions":   {config.LinkAllowList},
 	"list-host-agents":     {config.LinkAllowList},
 	"session-info":         {config.LinkAllowList},
