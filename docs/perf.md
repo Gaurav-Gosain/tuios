@@ -2389,6 +2389,22 @@ a list that can hold thousands of elements, where `sort.Slice` measured 10 to
 40% slower. `sort.SliceStable` is about 1.6 times slower than
 `slices.SortStableFunc`.
 
+An inlined helper costs its bytes at each call site, and the file carries about
+1.6 bytes for each byte of code. To find one, run `go tool objdump` on a build
+without `-s -w` and add up the bytes per source line. A short line with a large
+total is a helper inlined at many sites. `overlay.Style` was the largest: 441
+call sites, each with a copy of `lipgloss.Style`. It now carries
+`//go:noinline`. A helper that runs once per action, or that returns a large
+struct, should carry it too.
+
+A map literal of slices compiles to code that runs at every start. A map literal
+of arrays of constants compiles to data. `verbCapabilities` uses this form.
+
+`internal/tarpack` packs text that a package reads rarely, and unpacks it on
+first use. Lessons take 357 us and 283 KB of short-lived memory on the first
+read. Plugin files take 207 us and 139 KB. Neither runs unless the tutor, Learn
+mode or an integration command runs.
+
 The per-target budgets below are history. Every pull request had to edit them,
 so every landing made the open pull requests rebase on a conflict in
 `scripts/binary-size.sh`.

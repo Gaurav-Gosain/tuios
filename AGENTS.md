@@ -127,8 +127,9 @@ contract are in [cmd/tuios-wasm/README.md](cmd/tuios-wasm/README.md).
 The lessons are data in `internal/learn/lessons`: `tracks.json` and one
 `tracks/<id>.json` per track, with a rule per step that says when it is done.
 The lesson engine there is the only one, and the page draws its `lesson.*`
-events. Edit a track there, never in tuios-docs. The `tuioslint` gate checks
-every action, overlay, event and key a lesson names, so a rename that breaks
+events. Edit a track there, never in tuios-docs, then run `go generate
+./internal/learn/lessons`, which packs the files into the archive the binary
+embeds. The `tuioslint` gate checks every action, overlay, event and key a lesson names, so a rename that breaks
 a lesson fails the change that renames it.
 
 ```bash

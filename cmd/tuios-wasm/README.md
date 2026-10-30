@@ -166,7 +166,9 @@ that input.
 
 The lessons are data in `internal/learn/lessons`: `tracks.json` lists the
 tracks in order with the hub's groups and the coach's shared lines, and
-`tracks/<id>.json` is one track. `lessons.schema.json` describes both.
+`tracks/<id>.json` is one track. `lessons.schema.json` describes both. After
+an edit, run `go generate ./internal/learn/lessons`. The binary embeds the
+archive it writes, `lessons.tar.gz`.
 `tuios.lessons()` returns them joined into one document:
 
 ```js
