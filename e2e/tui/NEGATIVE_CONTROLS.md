@@ -11109,6 +11109,8 @@ cd e2e/tui && TUIOS_E2E=1 TUIOS_E2E_BIN=/tmp/tuios go test -count=1 \
 | `TitleLabel` keeps the marks in front of the title | `⠂ Fix the test` gives `claude` | **caught** |
 | The title is ranked above the custom name | "the custom name never reached the rail" | **caught** |
 | `gemini-cli` leaves the status-only list | "a row took Gemini CLI's status for a name" | **caught** |
+| `isPaneDefaultTitle` is not checked | "an agent with no title has no row with the program's name": the row reads `Terminal 8bf1c038`. `TestCrushPermissionAnsweredFromTheInbox` also fails, at "the rail row" | **caught** |
+| A state sync writes the title on a watched pane, as before | Two lanes on two cores: "the anchor title never reached the rail", in 3 of 3 runs | **caught** |
 | `looksLikePath` is not checked | `user@host:~/dev/SENTINEL` reaches the row | **caught** |
 | `disambiguate` appends the position on every row, as before | "a row does not carry the start of its window id": `claude 1` to `claude 6` | **caught** |
 | `agentRowUnnamed` is true for every agent | "two agents with one name do not show their positions" | **caught** |

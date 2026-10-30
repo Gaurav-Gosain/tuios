@@ -1300,7 +1300,15 @@ func (m *OS) updateWindowFromState(w *terminal.Window, ws *session.WindowState) 
 	sizeChanged := adoptGeometry && (w.Width != ws.Width || w.Height != ws.Height)
 
 	// Update all properties
-	w.SetTitle(ws.Title)
+	//
+	// A watched pane's title comes from its own output, which this client reads
+	// as it arrives. A sync was built earlier, so its title can be older: it put
+	// the last title back, and the pane kept it until the program set another.
+	// A state change sends a sync, so a title that changed the agent's state
+	// lost this race often. Only a pane this client does not watch takes it.
+	if !w.DaemonMode || w.PTYID == "" || !m.SubscribedPTYs[w.PTYID] {
+		w.SetTitle(ws.Title)
+	}
 	adoptWindowHost(w, ws.Host)
 	m.takeDaemonCwd(w, ws)
 	m.takeDaemonDnD(w, ws)

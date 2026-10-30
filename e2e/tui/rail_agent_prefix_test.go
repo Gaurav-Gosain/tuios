@@ -361,6 +361,11 @@ func (r titleAgentRig) title(t *testing.T, session, window, title string) {
 //     different anchor title, and the anchor has to leave the rail.
 //   - A row's name is also on the dock and the pane's border, so only the rail's
 //     columns are read.
+//   - The second line of a row names the harness, so a program's name is on the
+//     rail whatever the label says. Rows are read by the end of the first line.
+//   - A state change sends a state sync, and a sync once put the last title back.
+//     A title that changes the state is followed straight away by an anchor, so
+//     that race is in the test. It needs two lanes on two cores to show.
 //   - Two rows with the same name would pass a Contains check on one of them.
 //     The suffix test reads each row by the id of its own pane.
 //   - A row that shows the spinner would pass a check for the name after it.
@@ -432,13 +437,25 @@ func TestRailNamesAnAgentByItsTitle(t *testing.T) {
 		}
 	}
 	rowsOf := func() []string { return railAgentRows(term.Screen(), railCol) }
+	// A row's first line ends in its name, after its state mark. The second line
+	// names the harness on every row, so a Contains check on "pi" says nothing.
+	hasName := func(want string) func(tuitest.Screen) bool {
+		return func(s tuitest.Screen) bool {
+			for _, row := range railAgentRows(s, railCol) {
+				if strings.HasSuffix(row, " "+want) {
+					return true
+				}
+			}
+			return false
+		}
+	}
 
 	// Each program starts with an anchor, so that its first title has to change
 	// something the test can see.
 	for i, p := range programs {
 		rig.run(t, session, ids[i], p.program, rig.script, p.harness)
-		// No title yet, because the shell here sets none.
-		if err := term.WaitFor(hasRow(p.program), uiTimeout); err != nil {
+		// No title yet: the pane still has the one tuios gave it, "Terminal <id>".
+		if err := term.WaitFor(hasName(p.program), uiTimeout); err != nil {
 			t.Fatalf("%s: an agent with no title has no row with the program's name: %v\nrows: %q", p.program, err, rowsOf())
 		}
 		if p.harness == "gemini-cli" {
@@ -456,7 +473,7 @@ func TestRailNamesAnAgentByItsTitle(t *testing.T) {
 				time.Sleep(100 * time.Millisecond)
 			}
 			time.Sleep(500 * time.Millisecond)
-			if hasRow("SENTINEL")(term.Screen()) || !hasRow(p.program)(term.Screen()) {
+			if hasRow("SENTINEL")(term.Screen()) || !hasName(p.program)(term.Screen()) {
 				t.Fatalf("a row took Gemini CLI's status for a name\nrows: %q", rowsOf())
 			}
 			continue
@@ -473,7 +490,7 @@ func TestRailNamesAnAgentByItsTitle(t *testing.T) {
 				want = p.program
 			}
 			if err := term.WaitFor(func(s tuitest.Screen) bool {
-				return !hasRow(anchor)(s) && hasRow(want)(s)
+				return !hasRow(anchor)(s) && hasName(want)(s)
 			}, uiTimeout); err != nil {
 				t.Fatalf("%s title %q: want a row with %q: %v\nrows: %q", p.program, step.title, want, err, rowsOf())
 			}

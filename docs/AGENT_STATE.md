@@ -2154,6 +2154,7 @@ it:
 | The title is | Example |
 | --- | --- |
 | Empty | |
+| The title of a new pane | `Terminal 8bf1c038` |
 | The program's name or its default | `claude`, `✳ Claude Code`, `OpenCode` |
 | A status | `Action Required - codex`, `Plugin confirmation needed - amp - ~/src` |
 | What a shell wrote | `~/src/app - fish`, `user@host:~/src`, `crush ~/src/app` |

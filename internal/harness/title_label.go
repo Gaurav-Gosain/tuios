@@ -34,8 +34,9 @@ import (
 // TitleLabel returns the part of a harness's window title that names the agent,
 // with its state marks taken off, or "" when the title says nothing a program
 // name would not: it is empty, it is the program's own name or its default, or
-// it only reports status, or it is what a shell left there. program is the
-// pane's foreground command, which may be empty.
+// it only reports status, it is what a shell left there, or it is the title
+// tuios gives a new pane. program is the pane's foreground command, which may be
+// empty.
 //
 // Spinner frames of one title give one label, so the row does not move on them.
 func TitleLabel(harnessID, program, title string) string {
@@ -87,7 +88,7 @@ func TitleLabel(harnessID, program, title string) string {
 			return ""
 		}
 	}
-	if t == "" || t == "π" || is(t) || isShellName(t) || looksLikePath(t) {
+	if t == "" || t == "π" || is(t) || isShellName(t) || looksLikePath(t) || isPaneDefaultTitle(t) {
 		return ""
 	}
 	// "crush ~/src/app" and "claude -n name", which is how a shell's preexec
@@ -176,9 +177,27 @@ func lastSegment(s string) string {
 	return s
 }
 
+// isPaneDefaultTitle is the title a pane has until its program sets one:
+// "Terminal 8bf1c038", the start of the window id. A program that sets no title
+// leaves this in place for as long as it runs.
+func isPaneDefaultTitle(s string) bool {
+	id, ok := strings.CutPrefix(s, "Terminal ")
+	if !ok || len(id) != 8 {
+		return false
+	}
+	for i := range len(id) {
+		if !(id[i] >= '0' && id[i] <= '9' || id[i] >= 'a' && id[i] <= 'f') {
+			return false
+		}
+	}
+	return true
+}
+
+// isShellName also takes "shell", which is what the daemon's listing says for a
+// pane with no title.
 func isShellName(s string) bool {
 	switch strings.TrimPrefix(s, "-") {
-	case "sh", "bash", "zsh", "fish", "dash", "ksh", "csh", "tcsh", "nu", "pwsh", "elvish", "xonsh":
+	case "shell", "sh", "bash", "zsh", "fish", "dash", "ksh", "csh", "tcsh", "nu", "pwsh", "elvish", "xonsh":
 		return true
 	}
 	return false
