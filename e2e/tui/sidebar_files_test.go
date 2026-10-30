@@ -1379,6 +1379,29 @@ func TestRailQuickLook(t *testing.T) {
 	sendKeys(t, term, " ")
 	railLists(t, term, "after esc the rail lost the keyboard", []string{"Showing the first 5000 lines."}, nil)
 
+	// The files menu's Preview row shows the row the menu was opened on,
+	// which is not the cursor row: the cursor stays on big.txt.
+	sendKeys(t, term, tuitest.Esc)
+	railLists(t, term, "esc did not close the preview", nil, []string{"Showing the first"})
+	mc, mr, ok := findOnGrid(term.Screen(), "main.go")
+	if !ok {
+		t.Fatalf("no main.go row:\n%s", term.Snapshot())
+	}
+	mouseClick(t, term, mc, mr, tuitest.MouseRight, 0)
+	railLists(t, term, "the files menu has no Preview row", []string{"Preview", "Copy path"}, nil)
+	copiesFrame(t, term, "quick-look-menu")
+	pc, pr, ok := findOnGrid(term.Screen(), "Preview")
+	if !ok {
+		t.Fatalf("no Preview row:\n%s", term.Snapshot())
+	}
+	mouseClick(t, term, pc, pr, tuitest.MouseLeft, 0)
+	quickLookShows(t, term, "quick-look-menu-preview", "Preview did not show the row the menu was opened on",
+		[]string{"main.go ", "package main", "8 lines"}, []string{"Showing the first", "Preview"})
+	// Back on the keyboard, the preview follows the cursor again.
+	sendKeys(t, term, "j")
+	quickLookShows(t, term, "quick-look-menu-follow", "after Preview, j did not move the preview",
+		[]string{"blob.bin ", "This file is not text."}, []string{"package main"})
+
 	// The preview takes no key from the pane: once the rail lets go, keys
 	// reach the shell, and the preview is gone.
 	sendKeys(t, term, tuitest.Esc, tuitest.Esc)

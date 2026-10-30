@@ -579,6 +579,11 @@ func (m *OS) fileRowMenu(t fileMenuTarget) (string, []ContextMenuItem) {
 	forever.Warn = true
 
 	rows := []ContextMenuItem{open}
+	// Preview only reads, so it is gated the way Open is. The ".." row names
+	// the folder above, which quick look has nothing to show for.
+	if t.Name != "" && !t.Up {
+		rows = append(rows, m.item(glyphPalette, "Preview", "file_quick_look", !canOpen))
+	}
 	if t.Name != "" && !t.IsDir && !t.Up {
 		rows = append(rows, m.item(glyphFile, "Edit", "file_edit", !canOpen))
 	}

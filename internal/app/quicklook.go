@@ -125,6 +125,12 @@ type quickLookState struct {
 	fetching bool
 	res      *quickLookResult
 	scroll   int
+	// pinned says the preview shows a row picked from the files menu, which
+	// need not be the cursor row. anchor is the cursor row at that moment:
+	// the preview keeps its row until the cursor leaves anchor, and then
+	// follows the cursor as usual.
+	pinned bool
+	anchor quickLookTarget
 	// box is the panel on the screen in the last frame, for the mouse.
 	box overlay.Rect
 	// pic is where the picture went in the last frame.
@@ -159,6 +165,11 @@ func (m *OS) QuickLookOpen() bool { return m.quickLook.open }
 // SidebarQuickLook opens the preview of the row under the files cursor, or
 // closes it when it is up.
 func (m *OS) SidebarQuickLook() tea.Cmd {
+	// From the files menu: the row the menu was opened on, which a
+	// right-click does not move the cursor to. See fileMenuTarget.
+	if f := m.menuFile; f.Active() && f.Name != "" && !f.Up {
+		return m.quickLookMenu(f)
+	}
 	if m.quickLook.open {
 		m.CloseQuickLook()
 		return nil
@@ -175,12 +186,47 @@ func (m *OS) SidebarQuickLook() tea.Cmd {
 	return m.quickLookShow(t)
 }
 
+// quickLookMenu opens the preview on the files menu's row and pins it there
+// while the cursor stays where it is.
+func (m *OS) quickLookMenu(f fileMenuTarget) tea.Cmd {
+	if !m.filesOn() {
+		return nil
+	}
+	if !m.SidebarFocused {
+		m.EnterSidebarFocus()
+	}
+	t := quickLookTarget{path: filepath.Join(f.Dir, f.Name), name: f.Name, dir: f.IsDir}
+	m.quickLookPlace(&t)
+	ql := &m.quickLook
+	ql.open = true
+	ql.anchor, _ = m.quickLookCursorTarget()
+	ql.pinned = true
+	return m.quickLookShow(t)
+}
+
+// quickLookPlace sets the machine t is on, or why it cannot be read.
+func (m *OS) quickLookPlace(t *quickLookTarget) {
+	switch {
+	case m.filesView.Host != "" && m.AttachedHost != "":
+		t.refuse = "tuios cannot show a file on a host that you reach through another host."
+	case m.filesView.Host != "":
+		t.host = m.filesView.Host
+	case m.AttachedHost != "":
+		t.host = m.AttachedHost
+	}
+	if m.learnFiles() {
+		t.refuse = "Quick look is not in this demo."
+	}
+}
+
 // CloseQuickLook closes the preview. A read still out finishes and is
 // dropped.
 func (m *OS) CloseQuickLook() {
 	ql := &m.quickLook
 	ql.open = false
 	ql.target = quickLookTarget{}
+	ql.pinned = false
+	ql.anchor = quickLookTarget{}
 	ql.res = nil
 	ql.scroll = 0
 	ql.box = overlay.Rect{}
@@ -201,6 +247,12 @@ func (m *OS) QuickLookSync() tea.Cmd {
 		return nil
 	}
 	t, ok := m.quickLookCursorTarget()
+	if ql.pinned {
+		if ok && t == ql.anchor {
+			return m.quickLookPicture()
+		}
+		ql.pinned = false
+	}
 	if !ok {
 		m.CloseQuickLook()
 		return nil
@@ -238,17 +290,7 @@ func (m *OS) quickLookCursorTarget() (quickLookTarget, bool) {
 		return quickLookTarget{}, false
 	}
 	t := quickLookTarget{path: filepath.Join(dir, e.Name), name: e.Name, dir: e.Dir}
-	switch {
-	case m.filesView.Host != "" && m.AttachedHost != "":
-		t.refuse = "tuios cannot show a file on a host that you reach through another host."
-	case m.filesView.Host != "":
-		t.host = m.filesView.Host
-	case m.AttachedHost != "":
-		t.host = m.AttachedHost
-	}
-	if m.learnFiles() {
-		t.refuse = "Quick look is not in this demo."
-	}
+	m.quickLookPlace(&t)
 	return t, true
 }
 

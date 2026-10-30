@@ -10755,3 +10755,13 @@ The fake Claude also starts with `--dangerously-skip-permissions`, a flag the ma
 | --- | --- | --- |
 | `applyResumeOffers` types a risky offer in auto mode (agent_resume.go) | `TestAutoResumeLeavesApprovalsOffToThePerson`: "no Resume row names approvals off for the risky agent", the agent was resumed | **caught** |
 | `keep_risky` removed from the Claude Code manifest | `TestRestartOffersToResumeTheConversation`: "the running Claude's resume does not keep its flags", the dry run has no warning; `TestAutoResumeLeavesApprovalsOffToThePerson`: no Resume row | **caught** |
+
+## The files menu previews the row it was opened on
+
+`TestRailQuickLook` leaves the rail cursor on `big.txt`, right-clicks `main.go`, and picks Preview. The preview must show `main.go` with its code, and must not show `big.txt`. Then `j` must move the preview with the cursor again. Each control was built into its own binary. Run on 2026-10-30 on Linux.
+
+| Control: what was cut | Where it fails | Verdict |
+| --- | --- | --- |
+| The Preview row in `fileRowMenu` (`internal/app/contextmenu_build.go`) | "ASSERTION: the files menu has no Preview row" | **caught** |
+| The menu branch in `SidebarQuickLook` (`internal/app/quicklook.go`), so Preview shows the cursor row | "ASSERTION: Preview did not show the row the menu was opened on" | **caught** |
+| None (the branch) | Passes | **guard** |
