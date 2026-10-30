@@ -29,6 +29,7 @@ const (
 	keyUp              = "\x1b[A"
 	keyEnter           = "\r"
 	keyEsc             = "\x1b"
+	keyTab             = "\t"
 )
 
 // confirmRig is a daemon with a session of two shell panes: agent, which
@@ -125,7 +126,7 @@ func dialogShows(screen, s string) bool {
 	if start < 0 {
 		return false
 	}
-	end := strings.Index(all[start:], squash("Down or Tab moves to Yes"))
+	end := strings.Index(all[start:], squash("Down moves to Yes"))
 	if end < 0 {
 		return false
 	}
@@ -190,8 +191,9 @@ func TestPaneUpgradeConfirmedAtTheClient(t *testing.T) {
 }
 
 // TestPaneUpgradeRefusedWithoutYes: Enter on the default row, Esc, Enter
-// after moving to Yes and back to No, and Up then Enter (a shell's "run
-// that again", which a toggle would have turned into Yes) each refuse the pane's upgrade
+// after moving to Yes and back to No, Up then Enter (a shell's "run
+// that again", which a toggle would have turned into Yes), and Tab then Enter
+// (a shell's completion) each refuse the pane's upgrade
 // with the refusal for the person, close the dialog, and leave the daemon as
 // it was.
 func TestPaneUpgradeRefusedWithoutYes(t *testing.T) {
@@ -206,6 +208,7 @@ func TestPaneUpgradeRefusedWithoutYes(t *testing.T) {
 		{"esc", []string{keyEsc}},
 		{"no", []string{keyDown, keyUp, keyEnter}},
 		{"up", []string{keyUp, keyEnter}},
+		{"tab", []string{keyTab, keyEnter}},
 	} {
 		done := r.paneUpgrade(t)
 		r.waitDialog(t, term, tc.name)

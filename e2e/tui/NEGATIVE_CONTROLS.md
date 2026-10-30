@@ -9075,20 +9075,22 @@ The put-back is a commit refused by its second preflight: `test-handoff` with `h
 TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios \
   go test -count=1 -run '^(TestPaneUpgradeRefusedWithoutYes|TestDaemonUpgradeRefusesWhileHookOrPluginRuns|TestPaneUpgradeRefusesAFileChangedAfterTheDialog)$' .
 ```
-#### Second review: an answer only from the dialog
+#### Second review: an answer only from the dialog, and no Tab
 
 Run on 2026-10-31 on macOS arm64 (Darwin 27, Go 1.27.3) against `pr/live-handoff-4`, one build per control, one run each:
 
+- `TestPaneUpgradeRefusedWithoutYes` gains Tab, Enter, which a shell's completion types: `cd pro<Tab><Enter>` after the settle delay must not say yes.
 - `TestPaneUpgradeRefusesAnAnswerFromTheGUIBridge`: with the dialog up, a `tuios gui-bridge` attached to the session sends `answer-ask` with Yes from its renderer, once plainly and once with `upgrade_dialog: true`. The bridge adds its client's nonce to both. Each must be refused with `not_human`, leave the dialog open and the image unchanged; Esc at the client then refuses.
 
 | Control | How | Test that fails | Verdict |
 | --- | --- | --- | --- |
 | A nonce alone answers an upgrade ask | the `!p.UpgradeDialog` refusal cut from `verbAnswerAsk` | `TestPaneUpgradeRefusesAnAnswerFromTheGUIBridge`: "the bridge's answer-ask (plain) upgraded the daemon" | **caught** |
 | The bridge passes the renderer's `upgrade_dialog` on | `upgrade_dialog` no longer dropped in `guibridge.verbParams` | `TestPaneUpgradeRefusesAnAnswerFromTheGUIBridge`: "the bridge's answer-ask (upgrade_dialog) upgraded the daemon" | **caught** |
+| Tab moves to Yes | `"tab"` put back beside Down and Right in `UpgradeConfirmKey` | `TestPaneUpgradeRefusedWithoutYes`: "tab upgraded the daemon" | **caught** |
 
 ```sh
 TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios \
-  go test -count=1 -run '^TestPaneUpgradeRefusesAnAnswerFromTheGUIBridge$' .
+  go test -count=1 -run '^(TestPaneUpgradeRefusesAnAnswerFromTheGUIBridge|TestPaneUpgradeRefusedWithoutYes)$' .
 ```
 
 ## Deleting a worktree from the close-confirmation dialog

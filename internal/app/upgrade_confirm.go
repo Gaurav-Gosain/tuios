@@ -82,8 +82,10 @@ func (m *OS) UpgradeConfirmKey(key string) tea.Cmd {
 	}
 	// Each key names its row rather than toggling, so no count of move keys
 	// lands on Yes: Up then Enter, a shell's "run that again", stays on No.
+	// Tab is not a move: a shell completes on it, so a line typed through the
+	// settle delay, such as cd pro<Tab><Enter>, would say yes.
 	switch key {
-	case "down", "right", "tab":
+	case "down", "right":
 		st.selected = 1
 	case "enter":
 		return m.upgradeConfirmAnswer(st.selected)
@@ -137,7 +139,7 @@ func (m *OS) renderUpgradeConfirm() (string, overlay.Geometry, []overlayRowHit) 
 	}
 	body = append(body, dialogBodyLine("", width, pal.FgDim, bg))
 	text("Every pane keeps running. The binary gets every pane's terminal. Say yes only if you asked for it.", pal.FgDim)
-	note := "Down or Tab moves to Yes, any other key back to No. Enter chooses."
+	note := "Down moves to Yes, any other key back to No. Enter chooses."
 	if st.sent {
 		note = "Sending your answer..."
 	}
