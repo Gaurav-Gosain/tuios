@@ -268,7 +268,9 @@ func TestDaemonUpgradeRefusesAndChangesNothing(t *testing.T) {
 		img := helloImage(t, base)
 		pids := panePIDs(t, base, sess)
 		_, err := callVerb(t, base, "test-handoff", map[string]any{"binary": bin})
-		if err == nil || !strings.Contains(err.Error(), "does not run as a tuios") {
+		// A build without handoff-accepts fails to run it; one that reads
+		// another handoff version says so.
+		if err == nil || !strings.Contains(err.Error(), "does not run as a tuios") && !strings.Contains(err.Error(), "cannot read this daemon's state") {
 			t.Errorf("ASSERTION: an upgrade to %s (%s) was not refused by the preflight: %v", bin, name, err)
 		}
 		after := helloImage(t, base)
@@ -702,8 +704,10 @@ func TestDaemonUpgradeEndsWhenFallbackExecFails(t *testing.T) {
 
 // TestDaemonUpgradePreflightRefusals asks for upgrades the preflight must
 // refuse, each with a message that says what is wrong and what to do: a tuios
-// its group can write, a program that runs but prints no answer, and one that
-// answers for another system. The daemon's image must not change.
+// its group can write, a program that runs but prints no answer, one that
+// answers for another system, and tuios builds that read another handoff
+// version than this daemon writes. The daemon's image and every pane's process
+// must not change.
 func TestDaemonUpgradePreflightRefusals(t *testing.T) {
 	script := func(t *testing.T, body string) string {
 		path := filepath.Join(t.TempDir(), "fake-tuios")
@@ -743,22 +747,46 @@ func TestDaemonUpgradePreflightRefusals(t *testing.T) {
 		{"another system", func(t *testing.T) string {
 			return script(t, `echo '{"handoff":[1,1],"os":"`+other+`"}'`)
 		}, "is built for " + other + ", and this daemon runs on " + runtime.GOOS + ". Upgrade to a tuios built for " + runtime.GOOS},
+		// Version 1 is what v0.11.1 wrote, with a gob daemon record, and what
+		// main wrote with a JSON one under the same number. A build that
+		// reads only 1 must not be handed this daemon's records.
+		{"reads only handoff v1", func(t *testing.T) string {
+			return script(t, `echo '{"handoff":[1,1],"version":"0.11.1","os":"`+runtime.GOOS+`"}'`)
+		}, "cannot read this daemon's state. This daemon writes handoff v" + strconv.Itoa(session.HandoffVersion) + ", and that binary reads v1 to v1"},
+		{"reads only a newer handoff", func(t *testing.T) string {
+			v := strconv.Itoa(session.HandoffVersion + 1)
+			return script(t, `echo '{"handoff":[`+v+`,`+v+`],"version":"9.9.9","os":"`+runtime.GOOS+`"}'`)
+		}, "cannot read this daemon's state. This daemon writes handoff v" + strconv.Itoa(session.HandoffVersion)},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			base := t.TempDir()
 			startHandoffDaemon(t, base)
 			newCommandWindow(t, base, "e2e-preflight", "anchor", false, "sh", "-c", "exec sleep 600")
+			pids := panePIDs(t, base, "e2e-preflight")
 			img := helloImage(t, base)
 			bin := tc.binary(t)
 			_, err := callVerb(t, base, "test-handoff", map[string]any{"binary": bin})
 			time.Sleep(time.Second)
 			after := helloImage(t, base)
-			writeHandoffArtifact(t, map[string]any{"binary": bin, "refusal": errString(err), "instance_kept": after.Instance == img.Instance})
+			afterPIDs := panePIDs(t, base, "e2e-preflight")
+			writeHandoffArtifact(t, map[string]any{"binary": bin, "refusal": errString(err), "instance_kept": after.Instance == img.Instance,
+				"panes_before": pids, "panes_after": afterPIDs})
 			if err == nil || !strings.Contains(err.Error(), tc.want) {
 				t.Errorf("ASSERTION: the upgrade to %s was not refused with %q: %v", bin, tc.want, err)
 			}
+			if err != nil && !strings.Contains(err.Error(), "restart-server") && strings.Contains(tc.want, "handoff v") {
+				t.Errorf("ASSERTION: the version refusal does not say to restart instead: %v", err)
+			}
 			if after.Instance != img.Instance || after.PID != img.PID {
 				t.Errorf("ASSERTION: a refused upgrade changed the daemon: %+v then %+v", img, after)
+			}
+			if len(pids) == 0 {
+				t.Fatalf("no pane before the upgrade")
+			}
+			for id, pid := range pids {
+				if afterPIDs[id] != pid || !processAlive(pid) {
+					t.Errorf("ASSERTION: a refused upgrade ended window %s: pid %d before, %d after", id, pid, afterPIDs[id])
+				}
 			}
 		})
 	}

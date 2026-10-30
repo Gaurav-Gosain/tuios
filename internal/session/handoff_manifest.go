@@ -240,7 +240,7 @@ func readHandoffManifest(r io.Reader) (*handoffManifest, error) {
 // checkHandoffVersion refuses a manifest this build cannot read.
 func checkHandoffVersion(v int) error {
 	if v < MinHandoffVersion || v > HandoffVersion {
-		return fmt.Errorf("handoff manifest version %d, this build reads %d to %d", v, MinHandoffVersion, HandoffVersion)
+		return fmt.Errorf("the previous daemon wrote handoff v%d, and this tuios reads v%d to v%d, so it cannot take over the panes. %s", v, MinHandoffVersion, HandoffVersion, restartAdvice())
 	}
 	return nil
 }

@@ -33,9 +33,13 @@ import (
 // HandoffVersion is the manifest version this build writes, and
 // MinHandoffVersion the oldest it reads. A change to what a record means, or
 // to a field a record carries, moves HandoffVersion.
+//
+// Version 1 is two formats: v0.11.1 wrote the daemon record as gob, and later
+// builds wrote it as JSON under the same number. Version 2 is the JSON one,
+// and no build reads version 1 any more.
 const (
-	HandoffVersion    = 1
-	MinHandoffVersion = 1
+	HandoffVersion    = 2
+	MinHandoffVersion = 2
 )
 
 // ErrHandoffUnsupported is a platform with no live handoff.
