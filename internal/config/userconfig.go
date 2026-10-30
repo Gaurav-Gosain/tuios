@@ -156,6 +156,10 @@ type NotificationsConfig struct {
 	// error. See NotificationLevels.
 	Level string `toml:"level"`
 
+	// LogHidden keeps a message below Level in the log viewer (default
+	// true). Off, it is dropped. Warnings and errors are logged either way.
+	LogHidden *bool `toml:"log_hidden"`
+
 	// Agent is the [notifications.agent] table: what happens when a pane's
 	// agent state changes. See agent_alerts.go.
 	Agent AgentAlertsConfig `toml:"agent"`
@@ -3335,6 +3339,10 @@ func ApplyNotificationConfig(cfg *UserConfig, s *Settings) {
 	s.NotificationLevel = NotificationLevelInfo
 	if slices.Contains(NotificationLevels, cfg.Notifications.Level) {
 		s.NotificationLevel = cfg.Notifications.Level
+	}
+	s.NotificationLogHidden = true
+	if cfg.Notifications.LogHidden != nil {
+		s.NotificationLogHidden = *cfg.Notifications.LogHidden
 	}
 }
 

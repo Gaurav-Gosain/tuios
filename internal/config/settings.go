@@ -55,6 +55,10 @@ type Settings struct {
 	// dock shows. A message below it goes to the log viewer only.
 	NotificationLevel string
 
+	// NotificationLogHidden is notifications.log_hidden: whether an info or
+	// success message below NotificationLevel still goes to the log viewer.
+	NotificationLogHidden bool
+
 	// NormalFPS is the normal refresh rate during regular operation.
 	// Set via appearance.max_fps config (default 60, up to MaxFPSCap).
 	NormalFPS int
@@ -966,6 +970,7 @@ func DefaultSettings() Settings {
 		Bell:                        BellToast,
 		NotificationStyle:           NotificationStyleFull,
 		NotificationLevel:           NotificationLevelInfo,
+		NotificationLogHidden:       true,
 		NormalFPS:                   DefaultFPS,
 		UseASCIIOnly:                false,
 		Motion:                      MotionFull,

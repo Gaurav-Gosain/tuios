@@ -99,7 +99,8 @@ errors. Any value from 1 to 3600 is valid, and 0 uses the default.
 coloured bar on its left and a line above it that counts down, and `plain`
 shows the icon and the text only. `notifications.level` is the least severe
 message the dock shows: `info` (the default), `warning` or `error`. The rest go
-to the log viewer only. Change these only when the person asks.
+to the log viewer only, or nowhere with `notifications.log_hidden = false`.
+Messages from panes, agents and mail are not held to the level. Change these only when the person asks.
 
 `daemon.window_size` sets the size of a session with more than one client:
 `latest` (the default), the client that last had input, `smallest`, or

@@ -656,6 +656,7 @@ func (m *OS) settingsCategories() []settingsCategory {
 		opt("notifications.bell"),
 		opt("notifications.style"),
 		opt("notifications.level"),
+		opt("notifications.log_hidden"),
 	}
 	// The agent alerts, under their heading row. With the agent features
 	// off both go, heading and all.

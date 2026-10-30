@@ -1204,6 +1204,11 @@ var optionSpecs = []Option{
 		Description: "The least severe message the dock shows: info shows every message, warning only warnings and errors, error only errors. The rest go to the log viewer",
 		Accepted:    NotificationLevels, Default: NotificationLevelInfo,
 	},
+	{
+		Path: "notifications.log_hidden", Type: OptionBool, Section: "notifications",
+		Description: "Keep the messages below notifications.level in the log viewer. Off, they are dropped. Warnings and errors are always logged",
+		Default:     "true",
+	},
 
 	// [notifications.agent]. The sounds table is absent: its two keys are paths
 	// to files, which no accepted set or range can check.

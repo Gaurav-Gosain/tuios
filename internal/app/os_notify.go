@@ -268,10 +268,14 @@ func (m *OS) showNotification(message, notifType, agentState string, duration ti
 		return
 	}
 
-	// A message below notifications.level is only logged. A warning or an
-	// error was logged above.
-	if shown && notifSeverityRank(notifType) < notifLevelRank(m.Settings.NotificationLevel) {
-		if notifSeverityRank(notifType) < 2 {
+	// A message below notifications.level is only logged, and with
+	// notifications.log_hidden off not even that. A warning or an error was
+	// logged above. A message from a pane, an agent or mail is not held to the
+	// level: [notifications.agent] and [notifications.mail] decide those, and
+	// someone who quiets tuios's own notices still wants to hear an agent
+	// finish.
+	if shown && target == nil && notifSeverityRank(notifType) < notifLevelRank(m.Settings.NotificationLevel) {
+		if notifSeverityRank(notifType) < 2 && m.Settings.NotificationLogHidden {
 			m.appendLog(LogMessage{Time: time.Now(), Level: "INFO", Message: message, Source: source})
 		}
 		return

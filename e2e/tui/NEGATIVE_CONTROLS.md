@@ -10975,3 +10975,13 @@ The `refit` control depends on which client's resize reaches the daemon last. Th
 | The level check in `showNotification` (`internal/app/os_notify.go`) | "ASSERTION: the dock shows an info message under level warning" | **caught** |
 
 The positive half is in the same run: the warning reaches the dock on both builds.
+
+`TestNotificationLevelLetsPanesAndAgentsThrough`, `TestNotificationLogHiddenOffKeepsTheLogClean` and `TestNotificationLevelShowsWhyAKeyDidNothing` cover the review follow-ups: a message from a pane or an agent is not held to the level, `notifications.log_hidden = false` keeps a hidden message out of the log, and the Inbox notices for a key that did nothing are warnings. Each control was built into its own binary. Run on 2026-10-30 on macOS arm64.
+
+| Control: what was cut | Where it fails | Verdict |
+| --- | --- | --- |
+| `target == nil` in the level check in `showNotification` | `TestNotificationLevelLetsPanesAndAgentsThrough`: "ASSERTION: a pane's message never reached the dock under level warning" | **caught** |
+| `m.Settings.NotificationLogHidden` in the level check in `showNotification` | `TestNotificationLogHiddenOffKeepsTheLogClean`: "ASSERTION: the log viewer lists an info message the level hid, with log_hidden off" | **caught** |
+| `InboxUndo`'s "Nothing to undo" notice raised as info (`internal/app/inbox_lifecycle.go`) | `TestNotificationLevelShowsWhyAKeyDidNothing`: "ASSERTION: under level warning the dock does not say why u did nothing" | **caught** |
+
+The first control fails at the pane's message, before the agent's alert; both reach the dock through the same check.
