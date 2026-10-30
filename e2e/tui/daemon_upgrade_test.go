@@ -171,7 +171,7 @@ func TestAttachedClientIsToldToReattach(t *testing.T) {
 	var said string
 	for _, line := range strings.Split(string(logBytes), "\n") {
 		line = strings.TrimSpace(line)
-		if strings.HasPrefix(line, "The daemon was upgraded") || strings.Contains(line, "connection to the TUIOS daemon was lost") {
+		if strings.HasPrefix(line, "The daemon is being upgraded") || strings.Contains(line, "connection to the TUIOS daemon was lost") {
 			said = line
 		}
 	}
@@ -180,7 +180,7 @@ func TestAttachedClientIsToldToReattach(t *testing.T) {
 	if !strings.Contains(text, "1 attached client was told to attach again") {
 		t.Errorf("ASSERTION: the upgrade did not count the attached client:\n%s", text)
 	}
-	if !strings.HasPrefix(said, "The daemon was upgraded to") ||
+	if !strings.HasPrefix(said, "The daemon is being upgraded to") ||
 		!strings.Contains(said, "Your programs are still running") ||
 		!strings.Contains(said, "tuios attach "+sess) {
 		t.Errorf("ASSERTION: the client said %q as it exited, want that the daemon was upgraded and how to attach again\nlog tail:\n%s", said, tailMessage(string(logBytes)))

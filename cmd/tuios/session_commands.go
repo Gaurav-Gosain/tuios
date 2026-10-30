@@ -669,7 +669,7 @@ func runDaemonSessionOn(host, sessionName string, createNew bool) error {
 		if to == "" {
 			to = "a new version"
 		}
-		fmt.Printf("The daemon was upgraded to %s. Your programs are still running. Run 'tuios attach %s' to continue.\n", to, exitSession)
+		fmt.Printf("The daemon is being upgraded to %s. Your programs are still running. Run 'tuios attach %s' to continue.\n", to, exitSession)
 		return nil
 	}
 

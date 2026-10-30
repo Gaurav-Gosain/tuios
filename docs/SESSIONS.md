@@ -577,7 +577,7 @@ tuios --server test daemon upgrade --binary ./tuios
 
 The new binary is run once first and must say it reads this daemon's state; a refusal changes nothing. The daemon then pauses every pane, writes down what each holds, and execs the new binary, which takes the panes over. The pause is well under a second, and a program writing output during it waits and loses nothing. If the new binary cannot take the panes over, the daemon goes back to the binary it was running, with every pane, and the command says so.
 
-Attached clients are dropped. A tuios client says the daemon was upgraded and that the programs are still running, and exits; run `tuios attach <session>` to continue. Copy-mode state and input mode start fresh, as for any attach. Each pane carries the last 1000 lines of its history; deeper history is not carried.
+Attached clients are dropped. A tuios client says the daemon is being upgraded and that the programs are still running, and exits; run `tuios attach <session>` to continue. Copy-mode state and input mode start fresh, as for any attach. Each pane carries the last 1000 lines of its history; deeper history is not carried.
 
 The daemon refuses an upgrade while it holds something it cannot hand over: a pane hosted for another machine or one running on another machine, a running `tuios fan verify` check, or a popup capturing its output. It is refused on Windows, where `tuios restart-server` moves the daemon to another build and stops every program in every pane.
 

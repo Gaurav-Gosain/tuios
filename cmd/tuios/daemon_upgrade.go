@@ -106,7 +106,7 @@ func daemonUpgradeCommand() *cobra.Command {
 
 Every pane's program keeps running, with the same process, the same terminal
 and the same screen, and the daemon keeps its pid. Attached clients are told
-the daemon was upgraded and exit; attach again to continue.
+the daemon is being upgraded and exit; attach again to continue.
 
 The new binary is run once first and must say it can take this daemon's
 state. A refusal changes nothing. If the new binary starts and cannot take
