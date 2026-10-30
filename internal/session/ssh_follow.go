@@ -31,9 +31,12 @@ import (
 //     --ssh, --client and --server are refused for the same reason.
 //   - A line with an option that is not a session (-G, -V, -Q, -O) is not
 //     followed, and neither is a line with an option this file does not know.
-//   - The client must have been started by the pane's shell, through shells
-//     and known wrappers only. ssh run by scp, rsync, git or sftp is a
-//     transfer, not a login, and is not followed.
+//   - The client must have been started by the pane's shell. ssh run by scp,
+//     rsync, git, sftp or sshfs is a transfer, not a login, and is not
+//     followed. Through shells and known wrappers (sshpass, autossh) any
+//     session line is followed. Through any other program (a person's own
+//     helper, such as `tt ssh box`) only an interactive login is: no remote
+//     command, and none of -s, -N, -T or -W.
 //   - Only a process owned by the user the daemon runs as is read.
 //
 // What is kept and what is dropped from a line that is followed:
@@ -86,10 +89,13 @@ var lookPath = exec.LookPath
 // adds that ssh needs is the agent socket (keychain, gpg-agent, an
 // ssh-agent started in the pane), so SSH_AUTH_SOCK is taken from the client
 // being followed when it names a socket this user owns.
-func SSHFollowArgv(shellPID int, reportHost, reportDir string) (argv, env []string, ok bool) {
-	login, ok := findRemoteLogin(shellPID)
+//
+// why, when a client is there and is not followed, says why in a line for
+// the person. It is empty when the pane runs no client.
+func SSHFollowArgv(shellPID int, reportHost, reportDir string) (argv, env []string, why string, ok bool) {
+	login, ok, _, why := findRemoteClient(shellPID)
 	if !ok {
-		return nil, nil, false
+		return nil, nil, why, false
 	}
 	dir := ""
 	if reportHost != "" && login.reportMatches(reportHost) {
@@ -100,7 +106,7 @@ func SSHFollowArgv(shellPID int, reportHost, reportDir string) (argv, env []stri
 			env = []string{"SSH_AUTH_SOCK=" + resolved}
 		}
 	}
-	return login.argv(dir), env, true
+	return login.argv(dir), env, "", true
 }
 
 // ownedSocket reports whether path is an absolute path to a Unix socket, not
@@ -166,26 +172,20 @@ func safeFolder(dir string, me int) bool {
 	return fi.Mode().Perm()&0o022 == 0 || fi.Mode()&os.ModeSticky != 0
 }
 
-// findRemoteLogin finds the ssh or mosh client in the foreground of the pane
-// whose shell is shellPID: the group leader first, then the members under it.
-// The first client found decides: when it is not one to follow, nothing is.
-func findRemoteLogin(shellPID int) (remoteLogin, bool) {
-	login, ok, _ := findRemoteClient(shellPID)
-	return login, ok
-}
-
-// findRemoteClient is findRemoteLogin, and also says whether an ssh or mosh
-// client was seen in the foreground at all, followed or not. A client that
-// is there and cannot be read (an option this file does not know, -F, a
-// wrapper it does not trust) is still a sign the pane is on another machine.
-func findRemoteClient(shellPID int) (login remoteLogin, ok, seen bool) {
+// findRemoteClient finds the ssh or mosh client in the foreground of the
+// pane whose shell is shellPID: the group leader first, then the members
+// under it. The first client found decides: when it is not one to follow,
+// nothing is. seen says whether a client was there at all, followed or not:
+// one that cannot be read (an option this file does not know, -F, a
+// transfer) is still a sign the pane is on another machine. why says, for
+// the person, why a client that was seen is not followed.
+func findRemoteClient(shellPID int) (login remoteLogin, ok, seen bool, why string) {
 	if shellPID <= 0 {
-		return remoteLogin{}, false, false
+		return remoteLogin{}, false, false, ""
 	}
-	uid := os.Geteuid()
 	leader, found := foregroundPGID(shellPID)
 	if !found || leader <= 0 {
-		return remoteLogin{}, false, false
+		return remoteLogin{}, false, false, ""
 	}
 	try := func(pid int) (remoteLogin, bool) {
 		argv := readArgvExact(pid)
@@ -193,58 +193,99 @@ func findRemoteClient(shellPID int) (login remoteLogin, ok, seen bool) {
 			return remoteLogin{}, false
 		}
 		seen = true
-		if !startedByShell(pid, shellPID, uid) {
-			return remoteLogin{}, false
-		}
-		login, ok := parseRemoteLogin(argv)
-		login.pid = pid
-		return login, ok
+		var l remoteLogin
+		l, why = checkRemoteClient(pid, shellPID, argv)
+		return l, why == ""
 	}
 	// The first client seen decides: when it is not one to follow, nothing is.
 	if login, ok = try(leader); ok || seen {
-		return login, ok, seen
+		return login, ok, seen, why
 	}
 	walk := foregroundGroup(leader, sshFollowWalkLimit, sshFollowWalkDepth)
 	if walk == nil {
-		return remoteLogin{}, false, false
+		return remoteLogin{}, false, false, ""
 	}
 	walk(func(info foregroundInfo) bool {
 		login, ok = try(info.pid)
 		return !ok && !seen
 	})
-	return login, ok, seen
+	return login, ok, seen, why
 }
 
-// startedByShell reports whether pid is the pane's shell or was started by it
-// through shells and known wrappers only, with every process on the way owned
-// by uid.
-func startedByShell(pid, shellPID, uid int) bool {
+// The reasons a client that was seen is not followed, as the dock shows them.
+// The reason comes first: the dock cuts a long line short.
+const (
+	sshWhyStart    = "tuios cannot read how the ssh in this pane started. The new pane runs a local shell."
+	sshWhyTransfer = "The ssh in this pane is part of a file transfer. The new pane runs a local shell."
+	sshWhyOptions  = "tuios does not copy an option of the ssh in this pane. The new pane runs a local shell."
+	sshWhyCommand  = "The ssh in this pane runs a remote command. The new pane runs a local shell."
+	sshWhyNoLogin  = "The ssh in this pane does not open a login shell. The new pane runs a local shell."
+)
+
+// checkRemoteClient reads the client pid, whose argv is argv, and returns the
+// line to follow, or why it is not followed.
+func checkRemoteClient(pid, shellPID int, argv []string) (remoteLogin, string) {
+	wrapped, why := clientStart(pid, shellPID, os.Geteuid())
+	if why != "" {
+		return remoteLogin{}, why
+	}
+	login, ok := parseRemoteLogin(argv)
+	if !ok {
+		return remoteLogin{}, sshWhyOptions
+	}
+	// A program this file does not know started the client. It may be a
+	// transfer under another name, so only a line that is a login and
+	// nothing else is followed.
+	if wrapped && login.command {
+		return remoteLogin{}, sshWhyCommand
+	}
+	if wrapped && (login.notLogin || login.tunnel || login.forward) {
+		return remoteLogin{}, sshWhyNoLogin
+	}
+	login.pid = pid
+	return login, ""
+}
+
+// clientStart walks from the client pid up to the pane's shell. Every process
+// on the way must be owned by uid, and none may be a transfer program.
+// wrapped says a program on the way is neither a shell nor a known wrapper.
+func clientStart(pid, shellPID, uid int) (wrapped bool, why string) {
 	for i := range sshAncestryLimit {
 		if pid <= 1 {
-			return false
+			break
 		}
 		ppid, owner, ok := readParentAndOwner(pid)
 		if !ok || owner != uid {
-			return false
+			break
 		}
 		if pid == shellPID {
-			return true
+			return wrapped, ""
 		}
-		if i > 0 && !sshLaunchers[programName(readArgvExact(pid))] {
-			return false
+		if i > 0 {
+			name := programName(readArgvExact(pid))
+			if sshTransfers[name] || strings.HasPrefix(name, "git-") {
+				return false, sshWhyTransfer
+			}
+			wrapped = wrapped || !sshLaunchers[name]
 		}
 		pid = ppid
 	}
-	return false
+	return false, sshWhyStart
 }
 
 // sshLaunchers are the programs that may stand between the pane's shell and
-// the client. Anything else that runs ssh (scp, rsync, git, sftp) runs it for
-// a transfer.
+// a client whose line is followed whatever session it asks for.
 var sshLaunchers = map[string]bool{
 	"sh": true, "bash": true, "dash": true, "zsh": true, "ksh": true,
 	"mksh": true, "fish": true, "tcsh": true, "csh": true,
 	"sshpass": true, "autossh": true, "mosh": true,
+}
+
+// sshTransfers run ssh for a transfer, never for a login. A client under one
+// is not followed, whatever its line says. git's helpers (git-upload-pack,
+// git-remote-ext) are matched by their prefix.
+var sshTransfers = map[string]bool{
+	"scp": true, "sftp": true, "rsync": true, "git": true, "sshfs": true,
 }
 
 // scriptInterpreters are the programs a client script can run under. mosh is a
@@ -321,6 +362,12 @@ type remoteLogin struct {
 	tty bool
 	// forward is -f, -n or -W, or the -o settings that do the same.
 	forward bool
+	// command says the line runs a remote command: words after the
+	// destination, or a RemoteCommand -o that is not none.
+	command bool
+	// notLogin says the line asks for no login shell: -s, -N, -T, or a
+	// SessionType or RequestTTY -o that does the same.
+	notLogin bool
 }
 
 // argv builds the command line for the new pane. dir, when not empty, is the
@@ -563,6 +610,7 @@ func parseSSHArgs(args []string) (remoteLogin, bool) {
 		a := args[i]
 		if l.dest != "" && (terminated || a == "--" || !strings.HasPrefix(a, "-")) {
 			// The remote command starts here, and it is dropped.
+			l.command = l.command || a != "--" || i+1 < len(args)
 			break
 		}
 		if hasControl(a) || (i+1 < len(args) && hasControl(args[i+1]) && takesValue(a)) {
@@ -598,9 +646,13 @@ func parseSSHArgs(args []string) (remoteLogin, bool) {
 						l.forward = true
 					}
 					if c == 'o' {
-						if want, ok := sshTunnelConfig[sshConfigKeyword(val)]; ok && strings.EqualFold(sshConfigValue(val), want) {
+						key, v := sshConfigKeyword(val), sshConfigValue(val)
+						if want, ok := sshTunnelConfig[key]; ok && strings.EqualFold(v, want) {
 							l.forward = true
 						}
+						l.command = l.command || key == "remotecommand" && !strings.EqualFold(v, "none")
+						l.notLogin = l.notLogin || key == "sessiontype" && !strings.EqualFold(v, "default") ||
+							key == "requesttty" && strings.EqualFold(v, "no")
 					}
 					if keep {
 						l.opts = append(l.opts, "-"+string(c), val)
@@ -613,6 +665,8 @@ func parseSSHArgs(args []string) (remoteLogin, bool) {
 				switch c {
 				case 'N':
 					l.tunnel = true
+				case 's', 'T':
+					l.notLogin = true
 				case 'f', 'n':
 					l.forward = true
 				case 't':
@@ -626,6 +680,7 @@ func parseSSHArgs(args []string) (remoteLogin, bool) {
 		}
 		if l.dest != "" {
 			// The remote command starts here.
+			l.command = true
 			break
 		}
 		if a == "" {
@@ -633,6 +688,7 @@ func parseSSHArgs(args []string) (remoteLogin, bool) {
 		}
 		l.dest = a
 		if terminated {
+			l.command = i+1 < len(args)
 			break
 		}
 	}
@@ -746,6 +802,7 @@ func parseMoshArgs(args []string, strict bool) (remoteLogin, bool) {
 				if strict {
 					return remoteLogin{}, false
 				}
+				l.command = i+1 < len(args)
 				break
 			}
 			if i+1 >= len(args) || args[i+1] == "" {
@@ -758,6 +815,7 @@ func parseMoshArgs(args []string, strict bool) (remoteLogin, bool) {
 			if strict && i+2 < len(args) {
 				return remoteLogin{}, false
 			}
+			l.command = i+2 < len(args)
 			break
 		}
 		if len(a) > 1 && a[0] == '-' {
@@ -789,6 +847,7 @@ func parseMoshArgs(args []string, strict bool) (remoteLogin, bool) {
 			if strict {
 				return remoteLogin{}, false
 			}
+			l.command = true
 			break
 		}
 		if a == "" {
@@ -857,18 +916,18 @@ func redactSSHArgv(argv []string) []string {
 // sshFollowArgv is SSHFollowArgv for one of the session's windows, named by
 // id or name. It is false for a window on another machine: its processes are
 // not on this one to read.
-func (s *Session) sshFollowArgv(window string) (argv, env []string, ok bool) {
+func (s *Session) sshFollowArgv(window string) (argv, env []string, why string, ok bool) {
 	state := s.GetState()
 	idx, err := findWindowStateIndex(state.Windows, window)
 	if err != nil {
-		return nil, nil, false
+		return nil, nil, "", false
 	}
 	pty := s.GetPTY(state.Windows[idx].PTYID)
 	if pty == nil || pty.IsExited() {
-		return nil, nil, false
+		return nil, nil, "", false
 	}
 	if _, remote := pty.pty.(*remotePane); remote {
-		return nil, nil, false
+		return nil, nil, "", false
 	}
 	host, dir := pty.place.ElsewhereReport()
 	return SSHFollowArgv(pty.ShellPID(), host, dir)

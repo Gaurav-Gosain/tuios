@@ -1489,8 +1489,10 @@ new_window_follow_ssh = true
 ```
 
 tuios finds ssh in the foreground of the pane. ssh can run from a shell, or
-from `sshpass`, `autossh` or `mosh`. tuios reads only the processes that you
-own in the pane. It runs the `ssh` or `mosh` that it finds on its own `PATH`,
+from `sshpass`, `autossh` or `mosh`. ssh can also run from another program,
+such as your own helper script (`tt ssh box`). tuios then follows only an
+interactive login: an ssh line with no remote command, and with none of `-s`,
+`-N`, `-T` or `-W`. tuios reads only the processes that you own in the pane. It runs the `ssh` or `mosh` that it finds on its own `PATH`,
 with no shell on this machine. It never runs the program that the pane runs.
 
 The new ssh gets the same environment as an ordinary new pane. If the ssh
@@ -1540,7 +1542,11 @@ These ssh lines get an ordinary pane:
   form, made of letters, digits and `._:@[]-`, or a hop that starts with `-`.
 - A mosh destination that starts with `-`.
 - mosh with `--ssh`, `--client` or `--server`.
-- ssh that another program starts, such as `scp`, `rsync`, `git` or `sftp`.
+- ssh that a file transfer starts: `scp`, `rsync`, `git`, `sftp` or `sshfs`.
+- ssh that another program starts, when the line has a remote command, or
+  `-s`, `-N`, `-T` or `-W`.
+
+When a split asks to follow ssh and gets an ordinary pane, the dock says why.
 
 Put a `ProxyCommand` or a `ProxyJump` in `~/.ssh/config` to use it with a
 split. A split with `-J` on the command line is followed.

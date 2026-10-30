@@ -74,7 +74,7 @@ func (e pasteRefusal) Error() string { return e.detail }
 // the paste is written here. A pane on another machine that no single entry
 // is gives a pasteRefusal.
 func (d *Daemon) paneRemoteHost(pty *PTY) (host string, ok bool, err error) {
-	login, read, seen := findRemoteClient(pty.ShellPID())
+	login, read, seen, _ := findRemoteClient(pty.ShellPID())
 	if !seen {
 		return "", false, nil
 	}

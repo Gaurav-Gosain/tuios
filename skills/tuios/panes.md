@@ -136,8 +136,10 @@ open a pane that runs the focused pane's ssh again, to the same host as the
 same user. The new line keeps only the connection options, with no remote
 command. A pane that does not run ssh gets an ordinary pane. So does an ssh
 line with an `-o` option outside a fixed list (`ProxyCommand`,
-`XAuthLocation` and similar), with `-F` or `-E`, or ssh that `scp` or `git`
-started. They are keybinding actions, so `run-command` runs them, and the
+`XAuthLocation` and similar), with `-F` or `-E`, or ssh that `scp`, `rsync`
+or `git` started. ssh that another program started (a helper such as
+`tt ssh box`) is followed only when the line has no remote command and none
+of `-s`, `-N`, `-T` or `-W`. They are keybinding actions, so `run-command` runs them, and the
 same grant rules apply as for any other `run-command`:
 
 ```sh

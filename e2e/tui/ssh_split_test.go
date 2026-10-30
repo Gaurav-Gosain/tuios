@@ -80,6 +80,12 @@ while IFS= read -r line; do eval "$line"; done
 	if err := os.WriteFile(filepath.Join(bin, "scp"), []byte(scp), 0o755); err != nil {
 		t.Fatal(err)
 	}
+	// A person's own helper (discussion #468: `tt ssh time_10`), which runs
+	// ssh as its child and stays its parent.
+	tt := "#!/bin/sh\n\"$@\"\necho TT-DONE\n"
+	if err := os.WriteFile(filepath.Join(bin, "tt"), []byte(tt), 0o755); err != nil {
+		t.Fatal(err)
+	}
 	return bin, runs
 }
 
@@ -320,15 +326,44 @@ func TestSSHSplitFallsBackToAShell(t *testing.T) {
 	alive(t, term, "after the fallback")
 }
 
-// ssh run by a shell inside the pane's shell is found: the pane's foreground
-// is the inner shell, and ssh is under it.
+// ssh run by a program inside the pane's shell is found: the pane's
+// foreground is that program, and ssh is under it. Through a shell any line
+// is followed. Through a helper tuios does not know (discussion #468), only
+// an interactive login is, and the dock says why a split did not follow.
 func TestSSHSplitFindsSSHUnderANestedShell(t *testing.T) {
-	term, _, runs := startSSHSplit(t, "")
-	sshIn(t, term, "sh -c 'ssh -J jump nested@fakehost; true'", 0)
-	pressAndCount(t, term, 2, "split_ssh_vertical", tuitest.Alt('v'))
-	wantArgs(t, term, "split of a nested ssh", sshRunArgs(t, term, runs, 1),
-		[]string{"-J", "jump", "-o", "ControlMaster=no", "nested@fakehost"})
-	alive(t, term, "after the nested split")
+	for _, tc := range []struct {
+		name, cmd string
+		want      []string // nil: not followed
+		notice    string
+	}{
+		{"shell", "sh -c 'ssh -J jump nested@fakehost; true'",
+			[]string{"-J", "jump", "-o", "ControlMaster=no", "nested@fakehost"}, ""},
+		{"helper", "tt ssh -J jump nested@fakehost",
+			[]string{"-J", "jump", "-o", "ControlMaster=no", "nested@fakehost"}, ""},
+		{"helper with a remote command", "tt ssh nested@fakehost uptime", nil,
+			"The ssh in this pane runs a remote command."},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			term, _, runs := startSSHSplit(t, "")
+			sshIn(t, term, tc.cmd, 0)
+			pressAndCount(t, term, 2, "split_ssh_vertical", tuitest.Alt('v'))
+			if tc.want != nil {
+				wantArgs(t, term, "split under "+tc.name, sshRunArgs(t, term, runs, 1), tc.want)
+				alive(t, term, "after the split under "+tc.name)
+				return
+			}
+			if err := term.WaitForText(tc.notice, uiTimeout); err != nil {
+				t.Fatalf("the dock never said why the split did not follow ssh: %v\n%s", err, term.Snapshot())
+			}
+			t.Logf("the notice for %s:\n%s", tc.name, term.Snapshot())
+			enterTerminalMode(t, term)
+			typeUntil(t, term, "echo LOCAL-$((6*7))", "LOCAL-42")
+			if n := sshRunCount(runs); n != 1 {
+				t.Fatalf("a split under %s ran ssh: %d runs, want 1", tc.name, n)
+			}
+			alive(t, term, "after the split under "+tc.name)
+		})
+	}
 }
 
 // A compiled ssh run from the project folder (./ssh) is followed with the ssh

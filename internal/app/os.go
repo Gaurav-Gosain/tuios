@@ -1043,6 +1043,10 @@ type OS struct {
 	// windowIntentErr is why the last window request did not go out, read
 	// once by addWindowInChecked.
 	windowIntentErr error
+	// heldNotice is a daemon notice about a window on its way, such as why a
+	// split did not follow ssh. The sync that brings the window shows it
+	// again after its own count note, which would hide it.
+	heldNotice string
 	// paneRequests is, by workspace, when this client asked the daemon for
 	// the pane a switch to that empty workspace opens. A switch back to the
 	// workspace before the pane arrives asks for nothing more. A sync that

@@ -59,17 +59,22 @@ func (m *OS) newWindowFollowingSSH(src *terminal.Window) {
 		m.addDaemonWindow("", "", src.ID, nil)
 		return
 	}
-	if argv, ok := localSSHArgv(src); ok {
+	argv, why, ok := localSSHArgv(src)
+	if ok {
 		m.AddWindow("", argv...)
 		return
 	}
 	m.AddWindow("")
+	if why != "" {
+		m.ShowNotification(why, "info", m.Settings.NotificationDuration)
+	}
 }
 
-// localSSHArgv is the ssh command line of a pane this client runs itself.
-func localSSHArgv(w *terminal.Window) ([]string, bool) {
+// localSSHArgv is the ssh command line of a pane this client runs itself,
+// or why an ssh it runs is not followed.
+func localSSHArgv(w *terminal.Window) ([]string, string, bool) {
 	if w == nil || w.Cmd == nil || w.Cmd.Process == nil || w.ProcessExited() {
-		return nil, false
+		return nil, "", false
 	}
 	dir := ""
 	if w.CwdHost != "" {
@@ -78,6 +83,6 @@ func localSSHArgv(w *terminal.Window) ([]string, bool) {
 	// A pane this client runs starts with the client's environment, and
 	// AddWindow has no way to add to it, so the agent socket SSHFollowArgv
 	// names is not passed here. The daemon path passes it.
-	argv, _, ok := session.SSHFollowArgv(w.Cmd.Process.Pid, w.CwdHost, dir)
-	return argv, ok
+	argv, _, why, ok := session.SSHFollowArgv(w.Cmd.Process.Pid, w.CwdHost, dir)
+	return argv, why, ok
 }

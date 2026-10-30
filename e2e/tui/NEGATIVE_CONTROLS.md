@@ -1967,6 +1967,11 @@ test: the actions open a pane when no ssh runs.
 | The agent socket folder is not checked | `ownedSocket`: the folder mode check cut | No e2e test. `TestOwnedSocket` (a socket in a folder others can write to was passed). With `Stat` for `Lstat` too, it fails at the link first | **caught by a unit test only** |
 | The allowlist is a refusal list again | `sshValueVerdict`: an unknown keyword refused only when it is `proxycommand` | No e2e test: `TestSSHSplitRefusesALineBreakInAnOption` still fails at the control character check, and `TestSSHSplitRefusesAProxyCommand` at `proxycommand`. `TestParseRemoteLogin` fails 9 cases, `xauth location` and `unknown keyword` among them | **caught by the unit table only** |
 | Only the group leader is read | `findRemoteLogin`: the group walk set to nil | `TestSSHSplitFindsSSHUnderANestedShell` (the fake ssh never ran a run 1) | **caught** |
+| A helper's ssh is not followed (discussion #468) | build origin/main (`50433181`) | `TestSSHSplitFindsSSHUnderANestedShell/helper` (the fake ssh never ran a run 1), `.../helper_with_a_remote_command` (no notice on the dock). `.../shell` passes, which is correct | **caught** |
+| The daemon does not say why | `handleExecuteCommand`: the `notice` send made `if false &&` | `TestSSHSplitFindsSSHUnderANestedShell/helper_with_a_remote_command` (no notice on the dock). `.../helper` passes, which is correct | **caught** |
+| The count note hides the notice | the sync's `heldNotice` flush made `false &&` | `TestSSHSplitFindsSSHUnderANestedShell/helper_with_a_remote_command` (no notice on the dock, 3 runs of 3) | **caught** |
+| A transfer under a helper is followed | `clientStart`: the `sshTransfers` check made `false &&` | No e2e row. `TestCheckRemoteClientThroughAWrapper` (`rsync`, `git`, `scp under a wrapper`) | **caught by a unit test only** |
+| A helper's remote command is followed | `checkRemoteClient`: the `wrapped && login.command` check made `false &&` | No e2e row. `TestCheckRemoteClientThroughAWrapper` (4 remote command cases) | **caught by a unit test only** |
 
 ## The pane navigator (choose_tree) and list-windows --all
 

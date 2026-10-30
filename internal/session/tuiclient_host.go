@@ -116,7 +116,7 @@ func hostCommandAllowed(p *RemoteCommandPayload) bool {
 	switch p.CommandType {
 	case "send_keys":
 		return true
-	case "list_dock_components", "list_hooks", "refresh_dock":
+	case "list_dock_components", "list_hooks", "refresh_dock", "notice":
 		return true
 	case "tape_command":
 		return hostTapeCommandAllowed(tape.CommandType(p.TapeCommand))

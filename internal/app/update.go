@@ -2383,6 +2383,10 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 				}
 				// After the count note, so the dock draws this one.
 				m.flushPiPNote()
+				if note := m.heldNotice; note != "" {
+					m.heldNotice = ""
+					m.ShowNotification(note, "info", m.Settings.NotificationDuration)
+				}
 
 				// A rename by this client or any other arrives on this push, so
 				// an open switcher follows it without being reopened.
@@ -3236,6 +3240,14 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 				_ = m.DaemonClient.SendCommandResult(msg.RequestID, true, "command executed")
 			}
 			return m, tea.Batch(func() tea.Msg { return remoteSwitchSessionMsg{name: name} }, relisten)
+		case "notice":
+			// A line from the daemon for the dock, such as why a split did
+			// not follow ssh. Nothing changed, so nothing is pushed.
+			if len(msg.TapeArgs) > 0 {
+				m.heldNotice = msg.TapeArgs[0]
+				m.ShowNotification(m.heldNotice, "info", m.Settings.NotificationDuration)
+			}
+			return m, relisten
 		case "refresh_dock":
 			// Re-run one component now, or every one when unnamed.
 			name := ""

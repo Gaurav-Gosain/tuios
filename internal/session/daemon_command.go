@@ -122,7 +122,13 @@ func (d *Daemon) handleExecuteCommand(cs *connState, msg *Message) error {
 		// The client asked for a pane on the machine another pane is ssh'd
 		// into. The daemon reads that pane's processes, because it is the side
 		// that owns them. With no ssh client there it is an ordinary window.
-		if argv, env, ok := session.sshFollowArgv(payload.SSHFrom); ok {
+		argv, env, why, ok := session.sshFollowArgv(payload.SSHFrom)
+		if why != "" && cs.isTUIClient {
+			// An ssh runs there and is not followed. The client that asked
+			// says why on its dock.
+			_ = d.sendMessage(cs, MsgRemoteCommand, &RemoteCommandPayload{CommandType: "notice", TapeArgs: []string{why}})
+		}
+		if ok {
 			newWindowEnv = env
 			name := ""
 			if len(payload.Args) == 1 {
