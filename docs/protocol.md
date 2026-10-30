@@ -189,6 +189,10 @@ is an answer, and each entry says which.
 
 **The new verb [list-routes](#list-routes)** lists this machine's addresses.
 
+**queue-prompt takes `client_id`.** A second call with the same `client_id` for
+the same pane queues nothing and answers `duplicate: true`. A call without it
+works as before.
+
 **A hooked agent that stops reporting shows as silent.** A pane whose claim
 is a report, and whose state is `working`, may go without a report for
 `[agents] silent_after` (default `10m`). After that, what changes for a
@@ -7100,6 +7104,13 @@ required without `parts`), `parts`, `human_nonce`, `from`.
 {"id":1,"verb":"queue-prompt","params":{"session":"work","window":"build","text":"make the backoff jitter configurable"}}
 {"id":1,"result":{"type":"prompt_queued","id":"q3","position":1,"queued":1,"delivering":false}}
 ```
+
+`client_id` is the client's own name for the message, at most 128 bytes. A
+phone that lost the answer sends the message again with the same `client_id`,
+and the daemon queues nothing and answers as the first time, with
+`duplicate: true`. The daemon keeps each one for an hour, in memory, per pane.
+It does not go with `host`. A daemon older than `client_id` refuses the param
+with `invalid_params`, so ask `list-verbs` before sending it.
 
 `host` names a machine from `[hosts]`: the message is for a pane there. This
 daemon passes it, with its parts, to that machine's daemon over the link, on

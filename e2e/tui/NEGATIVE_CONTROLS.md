@@ -11032,3 +11032,10 @@ cd e2e/tui && TUIOS_E2E=1 TUIOS_E2E_BIN=/tmp/tuios go test -count=1 \
 The frames of the review opened on the file list and of the empty review are
 `review-opens-on-files` and `review-empty-opens-on-diff` under
 `TUIOS_E2E_FRAMES`.
+## queue-prompt client_id
+
+Run on 2026-10-30 on Linux against a build from this branch.
+
+| Control: what was cut | Where it fails | Verdict |
+| --- | --- | --- |
+| The dedupe in `verbQueuePrompt`, so every call runs `queuePrompt` | `TestQueuedMessageWithAClientIDIsQueuedOnce`: the second call makes entry q2 and has no `duplicate` | The test catches it |

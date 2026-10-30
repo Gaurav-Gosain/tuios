@@ -1,6 +1,8 @@
 package tuie2e
 
 import (
+	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -263,5 +265,67 @@ func TestNarrowRailKeepsTheAgentNameBesideAQueue(t *testing.T) {
 	saveArtifact(t, term, artifactDir(t), "rail-80x24")
 	if row := agentRow(term.Screen()); !strings.Contains(row, "agent") {
 		t.Errorf("the rail cut the agent's name for its queue: %q\n%s", row, term.Snapshot())
+	}
+}
+
+// TestQueuedMessageWithAClientIDIsQueuedOnce is the phone's send again after a
+// lost answer: two queue-prompt calls with one client_id leave one entry, and
+// the second answers as the first did. When the agent rests, the message is
+// typed once.
+//
+// Negative control: with the dedupe in verbQueuePrompt replaced by a plain
+// queuePrompt, the second call makes a second entry and the test fails there.
+func TestQueuedMessageWithAClientIDIsQueuedOnce(t *testing.T) {
+	_, base := attachClientBase(t)
+	const marker = "client-id-once-c41d"
+	if out, err := tuiosCLI(t, base, "set-agent-state", "-s", "e2e-ctrlp", "working"); err != nil {
+		t.Fatalf("set-agent-state working: %v\n%s", err, out)
+	}
+	send := func() map[string]any {
+		t.Helper()
+		params := fmt.Sprintf(`{"session":"e2e-ctrlp","text":"echo %s","client_id":"phone-msg-1"}`, marker)
+		out, err := tuiosCLI(t, base, "call", "queue-prompt", params)
+		if err != nil {
+			t.Fatalf("queue-prompt: %v\n%s", err, out)
+		}
+		var res map[string]any
+		if err := json.Unmarshal([]byte(out), &res); err != nil {
+			t.Fatalf("queue-prompt answer %q: %v", out, err)
+		}
+		return res
+	}
+	first := send()
+	if _, dup := first["duplicate"]; dup {
+		t.Fatalf("the first call says duplicate: %v", first)
+	}
+	second := send()
+	if second["duplicate"] != true || second["id"] != first["id"] {
+		t.Fatalf("the second call = %v, want duplicate with the id of %v", second, first)
+	}
+	out, err := tuiosCLI(t, base, "queue", "ls", "-s", "e2e-ctrlp")
+	if err != nil {
+		t.Fatalf("queue ls: %v\n%s", err, out)
+	}
+	if n := strings.Count(out, "echo "+marker); n != 1 {
+		t.Fatalf("queue ls shows the message %d times, want once:\n%s", n, out)
+	}
+	if out, err := tuiosCLI(t, base, "set-agent-state", "-s", "e2e-ctrlp", "idle"); err != nil {
+		t.Fatalf("set-agent-state idle: %v\n%s", err, out)
+	}
+	deadline := time.Now().Add(15 * time.Second)
+	for {
+		out, _ := tuiosCLI(t, base, "capture-pane", "-s", "e2e-ctrlp")
+		if strings.Contains(out, "echo "+marker) {
+			time.Sleep(2 * time.Second)
+			out, _ = tuiosCLI(t, base, "capture-pane", "-s", "e2e-ctrlp")
+			if n := strings.Count(out, "echo "+marker); n != 1 {
+				t.Fatalf("the message was typed %d times:\n%s", n, out)
+			}
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("the message was never typed:\n%s", out)
+		}
+		time.Sleep(200 * time.Millisecond)
 	}
 }

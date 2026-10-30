@@ -248,6 +248,9 @@ type Daemon struct {
 	// See attention.go.
 	attention *attentionStore
 
+	// queueDedup answers a queue-prompt sent again with the same client_id.
+	queueDedup queueDedup
+
 	// responds serialises the respond verb per window and remembers the last
 	// prompt each window was answered on, so two clients answering the same
 	// prompt get one answer through and the other refused. See verb_respond.go.
