@@ -11001,3 +11001,34 @@ Run on 2026-10-30 on Linux.
 | Control: what was cut | Where it fails | Verdict |
 | --- | --- | --- |
 | The four fields in the window export (`internal/guibridge/bridge.go`) | "queued says 0 with nothing queued" | **caught** |
+## The side a review opens on (issue #1375)
+
+`TestReviewFileKeysFollowTheirBindings` also sets `[review] focus = "files"`,
+opens a review of two files, and requires the footer to name the list's keys
+and `j` and `k` to move between the files. After `tuios set-config
+review.focus sideways` is refused and `tuios set-config review.focus diff` is
+taken on the attached client, the next review must open on the diff, where
+`j` keeps the first file. With the changes then undone, the empty review
+must open on the diff, keep the keys on the list across `r` after `tab`
+moved them there under `focus = "diff"`, and open on the diff again under
+`focus = "files"`.
+
+Run on 2026-10-30 on Linux. The test passes on the fixed build, and each
+control below fails it at the step named:
+
+```bash
+go build -o /tmp/tuios ./cmd/tuios
+cd e2e/tui && TUIOS_E2E=1 TUIOS_E2E_BIN=/tmp/tuios go test -count=1 \
+  -run TestReviewFileKeysFollowTheirBindings .
+```
+
+| Control: what was cut | Where it fails | Verdict |
+| --- | --- | --- |
+| `reviewOpensOnFiles` always returns false (`internal/app/review_overlay.go`) | "the review did not open on the file list with focus = files" | **caught** |
+| `reviewOpensOnFiles` always returns true, so set-config is not read | "the second review did not open on the diff" | **caught** |
+| `applyReviewDiff` keeps the place only when there was a current file, as before | "r moved the keys off the empty list" | **caught** |
+| `applyReviewDiff` opens on the list without checking for files | "the empty review opened on the list with focus = files" | **caught** |
+
+The frames of the review opened on the file list and of the empty review are
+`review-opens-on-files` and `review-empty-opens-on-diff` under
+`TUIOS_E2E_FRAMES`.

@@ -78,6 +78,10 @@ type UserConfig struct {
 	// See worktree.go.
 	Worktree WorktreeConfig `toml:"worktree"`
 
+	// Review is the [review] table: how the review overlay opens. See
+	// review.go.
+	Review ReviewConfig `toml:"review"`
+
 	// YieldedDefaults are the new default bindings left off because the key
 	// was already the user's for another action in the same table. It is
 	// worked out on load and never written. See yieldingDefaults.
@@ -1231,6 +1235,7 @@ func DefaultConfig() *UserConfig {
 		Mermaid:      MermaidConfig{Theme: "tuios", Background: "theme"},
 		Panes:        defaultPanesConfig(),
 		PasteBuffers: defaultPasteBuffersConfig(),
+		Review:       defaultReviewConfig(),
 		Keybindings: KeybindingsConfig{
 			LeaderKey: "ctrl+b",
 			WindowManagement: map[string][]string{
@@ -2282,6 +2287,7 @@ func parseUserConfigOnce(data []byte) (*UserConfig, error) {
 	fillMissingScratch(&cfg, defaultCfg)
 	fillMissingPiP(&cfg, defaultCfg)
 	fillMissingPanes(&cfg, defaultCfg)
+	fillMissingReview(&cfg, defaultCfg)
 	return &cfg, nil
 }
 

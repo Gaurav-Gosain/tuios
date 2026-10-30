@@ -1930,6 +1930,26 @@ Empty is the default. While it is empty, `TUIOS_WORKTREE_DIR` in the daemon's
 environment still moves the default folder (see
 [CLI_REFERENCE.md](CLI_REFERENCE.md#tuios_worktree_dir)).
 
+## Where a review opens
+
+The review overlay (`ctrl+b v`) opens with the keys on the diff. `tab` moves
+them to the file list. `[review] focus` picks the side a review opens on:
+
+```toml
+[review]
+# Which side has the keys when a review opens: "diff" or "files" (default: "diff")
+focus = "files"
+```
+
+It applies to every review that opens, and to an attempt opened from the
+compare view. A review with no changes opens on the diff, which says so. `r`,
+`u` and `b` read the open review again and keep the side that has the keys.
+The setting is on the settings page, in the Behavior section, and
+`tuios set-config review.focus files` applies from the next review. A value
+other than `diff` or `files` reads as `diff`, with a warning when the config
+loads, and `tuios set-config` refuses it. See
+[KEYBINDINGS.md](KEYBINDINGS.md#the-review-overlay).
+
 ## The main checkout in the sessions tree
 
 `appearance.sidebar.group_main` gathers the repository's main checkout under

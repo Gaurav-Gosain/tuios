@@ -1639,6 +1639,13 @@ var optionSpecs = []Option{
 		Description: "Where new worktrees go, as a template of {{ repo_path }}, {{ repo }} and {{ branch }}, with | slug to make one folder name. A relative path starts at repo_path. Empty puts them under $XDG_DATA_HOME/tuios/worktrees",
 		Default:     "", Check: worktree.ValidatePathTemplate,
 	},
+	// [review]. Read each time a review opens.
+	{
+		Path: "review.focus", Type: OptionString, Section: "review",
+		Description: "Which side of the review overlay has the keys when a review opens: the diff or the file list",
+		Accepted:    ReviewFocuses,
+		Default:     ReviewOpenOnDiff,
+	},
 	// Read by the client on each switch, so a change applies at once.
 	{
 		Path: "workspaces.new_window_when_empty", Type: OptionBool, Section: "workspaces",

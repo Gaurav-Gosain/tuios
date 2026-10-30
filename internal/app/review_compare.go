@@ -219,7 +219,7 @@ func (m *OS) ReviewCompareBack() tea.Cmd {
 	r.editor = nil
 	if r.query != c.from {
 		r.query, r.who = c.from, c.fromWho
-		r.clearDiff()
+		r.clearDiff(m.reviewOpensOnFiles())
 		return m.reviewReload()
 	}
 	return nil
@@ -264,7 +264,7 @@ func (m *OS) reviewFromCompare(q reviewQuery, who string) tea.Cmd {
 	r.backToCompare = true
 	r.who = who
 	r.query = q
-	r.clearDiff()
+	r.clearDiff(m.reviewOpensOnFiles())
 	return m.reviewReload()
 }
 

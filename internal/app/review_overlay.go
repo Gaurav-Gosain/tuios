@@ -9,6 +9,7 @@ import (
 	"time"
 
 	tea "charm.land/bubbletea/v2"
+	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/review"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
@@ -266,12 +267,24 @@ func (m *OS) reviewNotify(message, kind string, duration time.Duration) {
 
 // clearDiff forgets the diff shown, for a review of another attempt: the
 // overlay says it is reading rather than show the last attempt's changes
-// under the next one's name.
-func (r *reviewState) clearDiff() {
+// under the next one's name. listFocus is the side a review opens on.
+func (r *reviewState) clearDiff(listFocus bool) {
 	r.diff, r.notes, r.files, r.editor, r.loadErr = nil, nil, nil, nil, ""
 	r.hunks, r.xOff = nil, 0
 	r.index, r.stageMarks = nil, nil
-	r.file, r.cursor, r.scroll, r.listScroll, r.listFocus = 0, 0, 0, 0, false
+	r.resetPlace(listFocus)
+}
+
+// resetPlace puts the cursor on the first file's first row, with the keys on
+// the file list for listFocus and on the diff otherwise.
+func (r *reviewState) resetPlace(listFocus bool) {
+	r.file, r.cursor, r.scroll, r.listScroll, r.listFocus = 0, 0, 0, 0, listFocus
+}
+
+// reviewOpensOnFiles reports whether a review opens with the file list
+// focused (review.focus).
+func (m *OS) reviewOpensOnFiles() bool {
+	return m.UserConfig != nil && m.UserConfig.Review.FocusInUse() == config.ReviewOpenOnFiles
 }
 
 // ReviewDiffMsg is a review-diff answer.
@@ -574,13 +587,13 @@ func (m *OS) applyReviewDiff(msg ReviewDiffMsg) {
 		m.reviewNotify(text, "error", m.Settings.NotificationDuration*2)
 		return
 	}
+	// The same review read again keeps its place and its focus, even with no
+	// file to keep the place in.
+	samePlace := !first && r.diff != nil && r.query == msg.Query
 	prevPath := ""
-	if !first && r.query == msg.Query {
-		if e := r.currentFile(); e != nil {
-			prevPath = e.path
-		}
+	if e := r.currentFile(); samePlace && e != nil {
+		prevPath = e.path
 	}
-	samePlace := prevPath != ""
 	r.pending, r.open, r.loadErr = false, true, ""
 	r.diff = msg.Diff
 	r.hunks, r.stageMarks = nil, nil
@@ -597,7 +610,8 @@ func (m *OS) applyReviewDiff(msg ReviewDiffMsg) {
 	if samePlace {
 		r.file = max(slices.IndexFunc(r.files, func(e reviewFileEntry) bool { return e.path == prevPath }), 0)
 	} else {
-		r.file, r.cursor, r.scroll, r.listScroll, r.listFocus = 0, 0, 0, 0, false
+		// A review with no files opens on the diff, which says why.
+		r.resetPlace(m.reviewOpensOnFiles() && len(r.files) > 0)
 	}
 }
 

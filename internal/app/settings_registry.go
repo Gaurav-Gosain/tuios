@@ -130,6 +130,7 @@ var settingLabels = map[string]string{
 	"workspaces.return_when_empty":        "Go back from an empty workspace",
 	"workspaces.new_window_when_empty":    "Open a pane on an empty workspace",
 	"worktree.path":                       "Worktree folder",
+	"review.focus":                        "Review opens on",
 	"paste_buffers.limit":                 "Paste buffers to keep",
 	"paste_buffers.max_kb":                "Paste buffer size limit",
 

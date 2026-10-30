@@ -496,9 +496,29 @@ func TestReviewFooterKeepsItsRightMargin(t *testing.T) {
 //     which names the action bound to it.
 //   - q could close the overlay as before. The test requires q to bring the
 //     first file back with the overlay still open, and esc to close it.
+//
+// [review] focus = "files" opens the review with the file list focused
+// (#1375), and set-config review.focus diff opens the next one on the diff.
+// How that could pass wrongly:
+//   - The footer could name the list's keys while j still moves the diff.
+//     j must show the second file, which a diff cursor on the first file's
+//     one hunk never does, and k the first again.
+//   - The setting could be read once, at start. set-config changes it on the
+//     attached client, and the next review must open on the diff, where j
+//     keeps the first file.
+//   - set-config could take any word. sideways must be refused.
+//
+// A review with no changes opens on the diff even with focus = "files",
+// since the list is empty and the diff says why, and r keeps the side the
+// person moved the keys to. How that could pass wrongly:
+//   - r could reset the keys to the configured side, which would look kept
+//     whenever the side moved to is the configured one. The check runs with
+//     focus = "diff" and the keys moved to the list.
+//   - The empty review could open on the diff only because focus is "diff".
+//     The last open runs with focus = "files".
 func TestReviewFileKeysFollowTheirBindings(t *testing.T) {
 	base, repo := fanFixture(t)
-	writeConfig(t, base, "[keybindings.review]\nreview_next_file = [\"n\"]\nreview_prev_file = [\"q\"]\n")
+	writeConfig(t, base, "[review]\nfocus = \"files\"\n\n[keybindings.review]\nreview_next_file = [\"n\"]\nreview_prev_file = [\"q\"]\n")
 
 	out, err := tuiosCLI(t, base, "keybinds", "doctor", "--json")
 	if err != nil {
@@ -547,6 +567,24 @@ func TestReviewFileKeysFollowTheirBindings(t *testing.T) {
 	if err := term.WaitFor(shows(first, second), uiTimeout); err != nil {
 		t.Fatalf("the review did not open on README alone: %v\n%s", err, term.Snapshot())
 	}
+	waitScreen(t, term, "the review did not open on the file list with focus = files", "open file", "tab diff")
+	saveFrame(t, term, "review-opens-on-files")
+	sendKeys(t, term, "j")
+	if err := term.WaitFor(shows(second, first), uiTimeout); err != nil {
+		t.Fatalf("j did not move the file list to ZETA: %v\n%s", err, term.Snapshot())
+	}
+	sendKeys(t, term, "k")
+	if err := term.WaitFor(shows(first, second), uiTimeout); err != nil {
+		t.Fatalf("k did not move the file list back to README: %v\n%s", err, term.Snapshot())
+	}
+	onDiff := func(s tuitest.Screen) bool {
+		text := s.Text()
+		return strings.Contains(text, "c note") && !strings.Contains(text, "open file")
+	}
+	sendKeys(t, term, tuitest.Tab)
+	if err := term.WaitFor(onDiff, uiTimeout); err != nil {
+		t.Fatalf("tab did not move the keys to the diff: %v\n%s", err, term.Snapshot())
+	}
 
 	sendKeys(t, term, "}")
 	time.Sleep(500 * time.Millisecond)
@@ -569,6 +607,69 @@ func TestReviewFileKeysFollowTheirBindings(t *testing.T) {
 		t.Fatalf("esc did not close the review: %v\n%s", err, term.Snapshot())
 	}
 	alive(t, term, "after the rebound review keys")
+
+	if out, err := tuiosCLI(t, base, "set-config", "review.focus", "sideways", "-s", session); err == nil {
+		t.Fatalf("set-config took review.focus sideways:\n%s", out)
+	}
+	if out, err := tuiosCLI(t, base, "set-config", "review.focus", "diff", "-s", session); err != nil {
+		t.Fatalf("set-config review.focus diff: %v\n%s", err, out)
+	}
+	sendKeys(t, term, tuitest.Ctrl('b'), "v")
+	waitScreen(t, term, "the review never opened again", "2 files", "n next file")
+	if err := term.WaitFor(onDiff, uiTimeout); err != nil {
+		t.Fatalf("the second review did not open on the diff: %v\n%s", err, term.Snapshot())
+	}
+	if err := term.WaitFor(shows(first, second), uiTimeout); err != nil {
+		t.Fatalf("the second review did not open on README alone: %v\n%s", err, term.Snapshot())
+	}
+	sendKeys(t, term, "j")
+	time.Sleep(500 * time.Millisecond)
+	if !shows(first, second)(term.Screen()) {
+		t.Fatalf("j moved through the files after set-config review.focus diff\n%s", term.Snapshot())
+	}
+	sendKeys(t, term, tuitest.Esc)
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		return !strings.Contains(s.Text(), "n next file")
+	}, uiTimeout); err != nil {
+		t.Fatalf("esc did not close the second review: %v\n%s", err, term.Snapshot())
+	}
+
+	gitOut(t, path, "checkout", "--", "README")
+	if err := os.Remove(filepath.Join(path, "ZETA")); err != nil {
+		t.Fatal(err)
+	}
+	onList := func(s tuitest.Screen) bool { return strings.Contains(s.Text(), "open file") }
+	sendKeys(t, term, tuitest.Ctrl('b'), "v")
+	waitScreen(t, term, "the empty review never opened", "No changes against", "esc close")
+	if err := term.WaitFor(onDiff, uiTimeout); err != nil {
+		t.Fatalf("the empty review did not open on the diff: %v\n%s", err, term.Snapshot())
+	}
+	sendKeys(t, term, tuitest.Tab)
+	if err := term.WaitFor(onList, uiTimeout); err != nil {
+		t.Fatalf("tab did not move the keys to the empty list: %v\n%s", err, term.Snapshot())
+	}
+	sendKeys(t, term, "r")
+	time.Sleep(time.Second)
+	if !onList(term.Screen()) {
+		t.Fatalf("r moved the keys off the empty list\n%s", term.Snapshot())
+	}
+	sendKeys(t, term, tuitest.Esc)
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		return !strings.Contains(s.Text(), "No changes against")
+	}, uiTimeout); err != nil {
+		t.Fatalf("esc did not close the empty review: %v\n%s", err, term.Snapshot())
+	}
+
+	if out, err := tuiosCLI(t, base, "set-config", "review.focus", "files", "-s", session); err != nil {
+		t.Fatalf("set-config review.focus files: %v\n%s", err, out)
+	}
+	sendKeys(t, term, tuitest.Ctrl('b'), "v")
+	waitScreen(t, term, "the empty review never opened again", "No changes against", "esc close")
+	if err := term.WaitFor(onDiff, uiTimeout); err != nil {
+		t.Fatalf("the empty review opened on the list with focus = files: %v\n%s", err, term.Snapshot())
+	}
+	saveFrame(t, term, "review-empty-opens-on-diff")
+	sendKeys(t, term, tuitest.Esc)
 }
 
 // TestReviewOverlayStagesAHunk stages one hunk of three from the review
