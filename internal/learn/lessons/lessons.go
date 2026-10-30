@@ -18,16 +18,25 @@ package lessons
 
 import (
 	"bytes"
-	"embed"
+	_ "embed"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"slices"
 	"strings"
 	"sync"
+
+	"github.com/Gaurav-Gosain/tuios/internal/tarpack"
 )
 
-//go:embed tracks.json tracks/*.json
-var files embed.FS
+//go:generate go run ../../tarpack/gen.go lessons.tar.gz tracks.json tracks
+
+// archive is tracks.json and tracks/*.json. Only Learn mode and the tutor read
+// it, so it stays packed until then. TestArchiveMatchesFiles fails when it and
+// the files differ.
+//
+//go:embed lessons.tar.gz
+var archive []byte
 
 // Version is the format of the lesson files. A change a reader of an older
 // format would misread bumps it.
@@ -244,9 +253,13 @@ func JSON() ([]byte, error) {
 }
 
 func build() (*File, []byte, error) {
-	raw, err := files.ReadFile("tracks.json")
+	files, err := tarpack.Unpack(archive)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, fmt.Errorf("lessons.tar.gz: %w", err)
+	}
+	raw, ok := files["tracks.json"]
+	if !ok {
+		return nil, nil, errors.New("lessons.tar.gz: no tracks.json")
 	}
 	var idx index
 	if err := json.Unmarshal(raw, &idx); err != nil {
@@ -257,9 +270,9 @@ func build() (*File, []byte, error) {
 	}
 	parts := make([]json.RawMessage, 0, len(idx.Tracks))
 	for _, id := range idx.Tracks {
-		b, err := files.ReadFile("tracks/" + id + ".json")
-		if err != nil {
-			return nil, nil, fmt.Errorf("track %s: %w", id, err)
+		b, ok := files["tracks/"+id+".json"]
+		if !ok {
+			return nil, nil, fmt.Errorf("track %s: not in lessons.tar.gz", id)
 		}
 		parts = append(parts, b)
 	}
