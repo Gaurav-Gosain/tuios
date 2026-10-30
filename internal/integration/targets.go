@@ -14,31 +14,41 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"sync"
+
+	"github.com/Gaurav-Gosain/tuios/internal/tarpack"
 )
 
-//go:embed assets/opencode/tuios-agent-state.js
-var openCodePluginTemplate string
+//go:generate go run ../tarpack/gen.go assets.tar.gz assets
 
-//go:embed assets/opencode/index.js
-var openCodeV2IndexTemplate string
+// assetArchive is the files under assets. Only an install or a check of an
+// integration reads them, so they stay packed until then.
+// TestAssetArchiveMatchesFiles fails when it and the files differ.
+//
+//go:embed assets.tar.gz
+var assetArchive []byte
 
-//go:embed assets/opencode/tui.js
-var openCodeV2TuiTemplate string
+// assets unpacks assetArchive. The archive is built into the binary and checked
+// by a test, so a read error is a broken build and panics.
+var assets = sync.OnceValue(func() map[string][]byte {
+	files, err := tarpack.Unpack(assetArchive)
+	if err != nil {
+		panic(fmt.Sprintf("integration: embedded assets: %v", err))
+	}
+	return files
+})
 
-//go:embed assets/amp/tuios-agent-state.ts
-var ampPluginTemplate string
-
-//go:embed assets/pi/tuios-agent-state.ts
-var piExtensionTemplate string
-
-//go:embed assets/omp/tuios-omp-agent-state.ts
-var ompExtensionTemplate string
-
-//go:embed assets/hermes/__init__.py
-var hermesPluginTemplate string
-
-//go:embed assets/hermes/plugin.yaml
-var hermesManifestTemplate string
+// The plugin templates, by their name in assetArchive.
+const (
+	openCodePluginTemplate  = "assets/opencode/tuios-agent-state.js"
+	openCodeV2IndexTemplate = "assets/opencode/index.js"
+	openCodeV2TuiTemplate   = "assets/opencode/tui.js"
+	ampPluginTemplate       = "assets/amp/tuios-agent-state.ts"
+	piExtensionTemplate     = "assets/pi/tuios-agent-state.ts"
+	ompExtensionTemplate    = "assets/omp/tuios-omp-agent-state.ts"
+	hermesPluginTemplate    = "assets/hermes/__init__.py"
+	hermesManifestTemplate  = "assets/hermes/plugin.yaml"
+)
 
 // Env is what the installers read from the machine, so a test can point them
 // at a temporary home.
@@ -152,10 +162,10 @@ func (t *Target) files(env Env) []extraFile {
 
 // renderTemplate fills a plugin template: the program to run, the version,
 // and for the opencode template, which Kilo shares, the harness.
-func renderTemplate(tmpl string) func(t *Target, tuios string) []byte {
+func renderTemplate(name string) func(t *Target, tuios string) []byte {
 	return func(t *Target, tuios string) []byte {
 		cmd, _ := json.Marshal(tuios)
-		out := strings.ReplaceAll(tmpl, "__TUIOS_COMMAND__", string(cmd))
+		out := strings.ReplaceAll(string(assets()[name]), "__TUIOS_COMMAND__", string(cmd))
 		out = strings.ReplaceAll(out, "__TUIOS_VERSION__", strconv.Itoa(t.Version))
 		out = strings.ReplaceAll(out, "__TUIOS_HARNESS__", t.ID)
 		out = strings.ReplaceAll(out, "__TUIOS_NAME__", t.Name)
