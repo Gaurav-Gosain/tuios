@@ -131,7 +131,9 @@ func exportKeybinds(o *app.OS) *Keybinds {
 	}
 	st := config.MenuState{Daemon: true, Minimized: -1}
 	for _, name := range menuNames {
-		var groups []MenuGroup
+		// An empty list, never null: a prefix with no keys still has a menu,
+		// and a renderer may read null as a broken event.
+		groups := []MenuGroup{}
 		for _, g := range config.PrefixMenuGroups(reg, name, st) {
 			mg := MenuGroup{Title: g.Title, Rows: []MenuItem{}}
 			for _, k := range g.Bindings {

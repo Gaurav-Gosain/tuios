@@ -10912,3 +10912,10 @@ the way of the first name.
 With `TUIOS_E2E_FRAMES` set, the first test writes `worktree-path.txt` (each
 step's output, `git status --porcelain` and `git worktree list`) and the
 second writes `fan.txt`.
+## A renderer that grows takes the session back
+
+`TestGUIBridgeResizeTakesTheSession` starts a bridge at 160x50 with two tiled panes. An 80x24 terminal client attaches, takes the session with its own input, and then leaves. The test checks that the session kept the 80x24 size, so the case is real. The bridge then gets a resize to 170x52, with no input through it. The session must take 170x52. The control was built into its own binary. Run on 2026-10-30 on Linux.
+
+| Control: what was cut | Where it fails | Verdict |
+| --- | --- | --- |
+| `reportResize` is not called on the resize command (`internal/guibridge/bridge.go`) | "bridge never showed the session at the bridge's new size after its window grew", with `session_size` 80x24 and `client_size` 170x52 | **caught** |

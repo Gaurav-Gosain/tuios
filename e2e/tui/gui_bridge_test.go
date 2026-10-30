@@ -1051,21 +1051,7 @@ func TestGUIBridgeInputTakesTheSession(t *testing.T) {
 	// had none yet. Alt+Esc is the window manager's own key, so it types
 	// nothing into a shell. It is pressed until the session follows,
 	// because a key that lands before the attach settles is not counted.
-	term := startIn(t, base, startOpts{cols: 80, rows: 24, args: []string{"attach", "gb"}})
-	deadline := time.Now().Add(shellTimeout)
-	for {
-		_ = term.SendKeys(tuitest.Alt(tuitest.Esc))
-		b.mu.Lock()
-		small := b.state != nil && b.state.SessionSize.Cols > 0 && b.state.SessionSize.Cols <= 80
-		b.mu.Unlock()
-		if small || time.Now().After(deadline) {
-			break
-		}
-		time.Sleep(300 * time.Millisecond)
-	}
-	st := b.waitState(func(s *wireState) bool {
-		return s.SessionSize.Cols > 0 && s.SessionSize.Cols <= 80
-	}, "the session at the terminal client's size after its input")
+	term, st := smallClientTakesTheSession(t, b, base, "gb")
 	// The session is smaller than the bridge, so the bridge shows all of
 	// it: no viewport, which is only for a larger session.
 	if st.Viewport != nil {
@@ -1092,6 +1078,64 @@ func TestGUIBridgeInputTakesTheSession(t *testing.T) {
 		t.Errorf("the terminal client does not show a part of the larger session: %v\n%s", err, term.Snapshot())
 	}
 	b.saveLog("input-takes-the-session")
+}
+
+// smallClientTakesTheSession attaches an 80x24 terminal client to session and
+// gives it input until the session takes its size, under window_size latest.
+// Alt+Esc is the window manager's own key, so it types nothing into a shell.
+// It is pressed until the session follows, because a key that lands before
+// the attach settles is not counted.
+func smallClientTakesTheSession(t *testing.T, b *guiBridge, base, session string) (*tuitest.Terminal, *wireState) {
+	t.Helper()
+	term := startIn(t, base, startOpts{cols: 80, rows: 24, args: []string{"attach", session}})
+	deadline := time.Now().Add(shellTimeout)
+	for {
+		_ = term.SendKeys(tuitest.Alt(tuitest.Esc))
+		b.mu.Lock()
+		small := b.state != nil && b.state.SessionSize.Cols > 0 && b.state.SessionSize.Cols <= 80
+		b.mu.Unlock()
+		if small || time.Now().After(deadline) {
+			break
+		}
+		time.Sleep(300 * time.Millisecond)
+	}
+	st := b.waitState(func(s *wireState) bool {
+		return s.SessionSize.Cols > 0 && s.SessionSize.Cols <= 80
+	}, "the session at the terminal client's size after its input")
+	return term, st
+}
+
+// TestGUIBridgeResizeTakesTheSession: a terminal client with input takes the
+// session and then leaves. The daemon keeps its size until a client still
+// attached has input. The renderer's window then grows, and the session takes
+// the bridge's new size with no key typed in the renderer. Without the
+// activity report on resize the session stays at the terminal client's size,
+// and the renderer draws a small layout in a large window.
+func TestGUIBridgeResizeTakesTheSession(t *testing.T) {
+	base := t.TempDir()
+	b := startBridge(t, base, "gb", 160, 50)
+	b.tiledPanes(2)
+	b.waitState(func(s *wireState) bool { return s.SessionSize.Cols == 160 }, "the session at the bridge's own width")
+	term, _ := smallClientTakesTheSession(t, b, base, "gb")
+	// Past the terminal client's hold (latestHold), so only the kept size
+	// stands between the bridge and the session.
+	time.Sleep(1500 * time.Millisecond)
+	_ = term.Close()
+	time.Sleep(1500 * time.Millisecond)
+	b.mu.Lock()
+	var size wireSize
+	if b.state != nil {
+		size = b.state.SessionSize
+	}
+	b.mu.Unlock()
+	if size.Cols == 0 || size.Cols > 80 {
+		t.Fatalf("the session did not keep the terminal client's size after it left, so the case this test covers did not arise: %+v", size)
+	}
+	b.send(map[string]any{"cmd": "resize", "cols": 170, "rows": 52, "cell_width": 9, "cell_height": 18})
+	b.waitState(func(s *wireState) bool {
+		return s.SessionSize == wireSize{Cols: 170, Rows: 52}
+	}, "the session at the bridge's new size after its window grew")
+	b.saveLog("resize-takes-the-session")
 }
 
 // TestGUIBridgeSessionName: a switch made from inside the session moves the

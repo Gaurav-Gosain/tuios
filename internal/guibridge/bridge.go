@@ -770,6 +770,17 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 func (m *model) handle(c Command) tea.Cmd {
 	switch c.Cmd {
+	case "action", "focus", "workspace":
+		// A key or a click the renderer handled itself: the person using
+		// the session, as a terminal client counts its window management
+		// keys (app.OS.reportActivity).
+		reportInput(m.client.Load())
+	case "resize":
+		// The renderer's window changed size, or it sent its first size
+		// after the attach. See reportResize.
+		reportResize(m.client.Load())
+	}
+	switch c.Cmd {
 	case "resize":
 		if c.CellWidth > 0 && c.CellHeight > 0 {
 			for _, w := range m.os.Windows {
@@ -1112,6 +1123,23 @@ func reportInput(c *session.TUIClient) {
 	c.ReportUsed(now)
 	if p := c.SessionWindowSize(); p == "" || p == config.WindowSizeLatest {
 		c.ReportActivity(now)
+	}
+}
+
+// reportResize makes this client the latest one under window_size latest
+// when the renderer's window changes size. A terminal client does not count
+// a resize, because its terminal can change size with nobody at it. The
+// renderer's window is the session's whole view, and its size changes when the
+// person opens it or drags it larger. Without this, a session whose last
+// client with input has left keeps that client's size, and the renderer
+// shows a small layout in a large window until someone types in a pane. It
+// is not use of the session (ReportUsed): that stays with input.
+func reportResize(c *session.TUIClient) {
+	if c == nil {
+		return
+	}
+	if p := c.SessionWindowSize(); p == "" || p == config.WindowSizeLatest {
+		c.ReportActivity(time.Now())
 	}
 }
 
