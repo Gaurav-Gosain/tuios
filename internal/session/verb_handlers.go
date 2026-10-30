@@ -2064,7 +2064,7 @@ func (d *Daemon) joinReportedTranscript(cs *connState, sess *Session, target, ha
 		LogBasic("transcript_path refused for window %s: %s", shortWindowID(w.ID), why)
 		return why
 	}
-	resolved, why := transcriptPathAllowed(reg.TranscriptFor(harnessID), path)
+	resolved, why := transcriptPathAllowed(reg.TranscriptFor(harnessID), path, peerGetenv(cs))
 	if why != "" {
 		LogBasic("transcript_path refused for window %s: %s", shortWindowID(w.ID), why)
 		return why
@@ -2149,18 +2149,40 @@ func paneInSession(pa *paneAuth, sess *Session) bool {
 // cannot lead out of the folder, and a file that exists must be a regular
 // file. Each later open refuses a link or anything but a regular file again
 // (transcript.OpenRegular), so a file swapped after this check is not read.
-func transcriptPathAllowed(tr *harness.Transcript, path string) (string, string) {
-	root := tr.Root()
-	if root == "" {
+//
+// A harness whose folder a variable moves (CLAUDE_CONFIG_DIR, CODEX_HOME)
+// writes where the variable in its own environment says, which can differ
+// from pane to pane. So the folder is also worked out from peer, the
+// environment of the process that sent the report as the kernel holds it,
+// which is the hook running inside the harness. The report itself names no
+// folder.
+func transcriptPathAllowed(tr *harness.Transcript, path string, peer func(string) string) (string, string) {
+	roots := []string{tr.Root()}
+	if peer != nil {
+		if r := tr.RootIn(peer); r != roots[0] {
+			roots = append(roots, r)
+		}
+	}
+	if !slices.ContainsFunc(roots, func(r string) bool { return r != "" }) {
 		return "", "the harness has no transcript folder"
 	}
 	if !filepath.IsAbs(path) {
 		return "", "the transcript path is not absolute"
 	}
-	realRoot := resolveExisting(root)
 	resolved := resolveExisting(filepath.Clean(path))
-	rel, err := filepath.Rel(realRoot, resolved)
-	if err != nil || rel == "." || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+	realRoot := ""
+	for _, root := range roots {
+		if root == "" {
+			continue
+		}
+		r := resolveExisting(root)
+		rel, err := filepath.Rel(r, resolved)
+		if err == nil && rel != "." && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+			realRoot = r
+			break
+		}
+	}
+	if realRoot == "" {
 		return "", "the transcript is not in the harness's transcript folder"
 	}
 	if !tr.MatchesGlob(realRoot, resolved) {
@@ -2170,6 +2192,18 @@ func transcriptPathAllowed(tr *harness.Transcript, path string) (string, string)
 		return "", "the transcript is not a regular file"
 	}
 	return resolved, ""
+}
+
+// peerGetenv reads the environment of the process on cs, as pinPeer read it
+// at accept, or nil when it could not be read.
+func peerGetenv(cs *connState) func(string) string {
+	if cs == nil || !cs.peerEnvOK {
+		return nil
+	}
+	return func(name string) string {
+		v, _ := cs.peerEnv.Get(name)
+		return v
+	}
 }
 
 // resolveExisting resolves the symbolic links of the longest part of path

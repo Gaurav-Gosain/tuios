@@ -203,10 +203,11 @@ regex    = ['\S']
 # its path. Without the hook the daemon takes the rollout whose session_meta
 # names the pane's directory and the start of the pane's Codex. The
 # file is read only to show the conversation in the agent thread. It gives no
-# state: the hooks and the screen rules do that.
+# state: the hooks and the screen rules do that. {codex_home} is $CODEX_HOME,
+# else ~/.codex, read for a reported path from the hook's own environment.
 [transcript]
 reader = "codex-rollout"
-dir    = "{home}/.codex/sessions"
+dir    = "{codex_home}/sessions"
 glob   = "*/*/*/rollout-*.jsonl"
 verify = ["cwd"]
 
