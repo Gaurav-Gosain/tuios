@@ -1717,7 +1717,7 @@ catalog.
 | `host_refused` | The host's link is up and cannot take another connection. |
 | `unknown_pane` | This daemon is not running a pane with that id. |
 | `upgrade_refused` | `daemon-upgrade` did not start: the new binary failed the preflight, the daemon holds something a live upgrade cannot hand over (a pane on another machine, a running fan check, a capturing popup, a hook or a plugin command), or this platform cannot hand off. Nothing was changed. The message says which. |
-| `daemon_upgrading` | A live upgrade replaced the daemon's image while it worked on, or waited in, this call. The connection closes after it. Call again: the new image answers, with the same panes. |
+| `daemon_upgrading` | A live upgrade replaced the daemon's image while it worked on, or waited in, this call. The connection closes after it. A call that reads or waits can be made again: the new image answers, with the same panes. A call that changes something, such as `fan` or `send-text`, may have partly run, so check what it did before calling again. |
 | `internal` | An unexpected server side failure. |
 | `not_worktree` | The session is not in a git worktree, so there is nothing to remove or diff. |
 | `worktree_dirty` | remove-worktree refused: the worktree holds uncommitted changes and neither `stash` nor `force` was passed. Nothing was removed. |

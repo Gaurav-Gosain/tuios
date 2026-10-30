@@ -155,7 +155,7 @@ func (d *Daemon) confirmUpgrade(cs *connState, bin handoffBinary) string {
 	case out.Reason == AskAnswered:
 		return "The person answered No. Do not ask again unless they ask for the upgrade"
 	case out.Reason == approvalEndTimeout:
-		return fmt.Sprintf("Nobody answered the dialog within %s. Run the command again, and ask the person to choose Yes in the dialog", upgradeConfirmTimeout())
+		return fmt.Sprintf("Nobody answered the dialog within %d seconds. Run the command again, and ask the person to choose Yes in the dialog", int(upgradeConfirmTimeout().Round(time.Second)/time.Second))
 	case out.Reason == askEndShutdown:
 		return "The daemon is shutting down"
 	}
