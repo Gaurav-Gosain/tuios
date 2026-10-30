@@ -19,8 +19,11 @@ import (
 // with the binary and its version (AttentionItem.Upgrade). That gives it the
 // ask's proof that a person answered: answer-ask takes only the nonce of a
 // client attached right now, from a process outside every pane
-// (human_sender.go, human_origin.go), and never over a link. The client adds
-// the other half: only a key the person pressed at that client answers it,
+// (human_sender.go, human_origin.go), and never over a link. For an upgrade it
+// also takes only an answer marked upgrade_dialog, which a client sends from
+// its dialog alone and the GUI bridge never passes on, since a nonce proves a
+// client and not a key. The client adds the other half: only a key the person
+// pressed at that client answers it,
 // never one send-keys or a tape put through the client, and never a paste
 // (internal/app/upgrade_confirm.go). The first answer closes the ask, and the
 // close takes the dialog off every other client.

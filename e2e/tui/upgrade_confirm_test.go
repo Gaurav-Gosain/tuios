@@ -357,6 +357,56 @@ func TestPaneUpgradeTakesOnlyKeysAtTheClient(t *testing.T) {
 	writeHandoffArtifact(t, map[string]any{"exit": code, "attempts": attempts, "answer_ask_exit": m[1], "screen": lines})
 }
 
+// TestPaneUpgradeRefusesAnAnswerFromTheGUIBridge: a renderer behind
+// tuios gui-bridge holds an attached client's nonce, since the bridge adds it
+// to every person verb. Its answer-ask with Yes must not answer the dialog,
+// and neither must one that also claims upgrade_dialog, which the bridge
+// drops. The dialog stays, the daemon is unchanged, and Esc at the client
+// then refuses.
+func TestPaneUpgradeRefusesAnAnswerFromTheGUIBridge(t *testing.T) {
+	r := newConfirmRig(t, "e2e-confirm-bridge")
+	term := r.attach(t)
+	b := startBridgeWith(t, r.base, bridgeOpts{args: []string{"--session", r.sess}, cols: 120, rows: 40, keepDaemon: true, name: r.sess})
+	done := r.paneUpgrade(t)
+	r.waitDialog(t, term, "bridge")
+	items := mustCall(t, r.base, "list-attention", map[string]any{})
+	var request string
+	if list, ok := items["items"].([]any); ok {
+		for _, raw := range list {
+			if it, ok := raw.(map[string]any); ok && it["upgrade"] != nil {
+				request, _ = it["request_id"].(string)
+			}
+		}
+	}
+	if request == "" {
+		t.Fatalf("list-attention shows no upgrade ask: %v", items)
+	}
+	answers := map[string]wireVerbResult{}
+	for name, params := range map[string]map[string]any{
+		"plain":          {"request_id": request, "answer": "Yes"},
+		"upgrade_dialog": {"request_id": request, "answer": "Yes", "upgrade_dialog": true},
+	} {
+		res := b.verb("answer-ask", params)
+		answers[name] = res
+		time.Sleep(time.Second)
+		r.unchanged(t, "the bridge's answer-ask ("+name+")")
+		if res.OK || res.Code != "not_human" {
+			t.Errorf("ASSERTION: the bridge's answer-ask (%s) was not refused as not_human: ok=%v code=%s %s", name, res.OK, res.Code, res.Error)
+		}
+		if !strings.Contains(term.Screen().Text(), upgradeDialogTitle) {
+			t.Fatalf("ASSERTION: the dialog closed under the bridge's answer-ask (%s):\n%s", name, term.Snapshot())
+		}
+	}
+	saveArtifact(t, term, r.art, "dialog-after-bridge")
+
+	pressKeys(t, term, keyEsc)
+	code, _ := done()
+	waitNoDialog(t, term, "Esc")
+	r.unchanged(t, "Esc after the bridge's answers")
+	lines := r.refused(t, code, "Esc after the bridge's answers")
+	writeHandoffArtifact(t, map[string]any{"exit": code, "answers": answers, "screen": lines})
+}
+
 // TestPaneUpgradeFirstAnswerWins: two clients show the dialog. One says no;
 // the dialog closes on the other at once, and a yes typed there right after
 // upgrades nothing.

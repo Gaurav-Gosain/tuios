@@ -88,11 +88,14 @@ type verbCaller interface {
 }
 
 // verbParams returns the params the bridge sends for a verb: the renderer's,
-// without any nonce it gave, and with this client's nonce for a person verb.
+// without any nonce or upgrade_dialog it gave, and with this client's nonce
+// for a person verb.
 func verbParams(verb string, in map[string]any, nonce string) (map[string]any, error) {
 	params := make(map[string]any, len(in)+1)
 	for k, v := range in {
-		if k == "human_nonce" {
+		// upgrade_dialog says a key was pressed in a client's upgrade dialog,
+		// which a renderer never is.
+		if k == "human_nonce" || k == "upgrade_dialog" {
 			continue
 		}
 		params[k] = v
