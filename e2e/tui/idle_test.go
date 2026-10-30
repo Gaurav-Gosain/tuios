@@ -155,6 +155,29 @@ func TestIdleCostStaysLow(t *testing.T) {
 			ctxsw: 1200,
 		}, minimizedTMLPatched, nil)
 	})
+	t.Run("agent title on a hidden workspace", func(t *testing.T) {
+		// An agent on a workspace this client does not watch has a title newer
+		// than the one the client froze at. The rail follows the daemon's
+		// listing, and the difference between the two is not work to do.
+		runIdleWindowOpts(t, idleAgentTitleConfig, startOpts{daemonDefault: true}, idleBudget{
+			wire: idleWireBudget,
+			// Two or three measured. The setup's agent report leaves a due time.
+			ticks: 5, work: 1,
+			tickerWakes: 1,
+			ctxsw:       600,
+		}, hiddenAgentTitled, nil)
+	})
+	t.Run("agent spinner in a watched pane", func(t *testing.T) {
+		// The client reads each title, and neither the title bar nor the rail
+		// row changes for a spinner frame. About 800 context switches measured,
+		// the same on a build without the agent's title on the row.
+		runIdleWindowOpts(t, idleAgentTitleConfig, startOpts{daemonDefault: true}, idleBudget{
+			wire:  idleWireBudget,
+			ticks: 2, work: 1,
+			tickerWakes: 1,
+			ctxsw:       2000,
+		}, watchedAgentSpinning, nil)
+	})
 	t.Run("git section", func(t *testing.T) {
 		// The rail's git section reads the focused pane's repository every
 		// 2 s, and each reading composes a frame equal to the last one. That
@@ -201,6 +224,78 @@ func gitRepoPane(t *testing.T, term *tuitest.Terminal, base string) {
 		return railHeaderRow(s, "git") >= 0 && !strings.Contains(s.Text(), "Window management mode")
 	}, uiTimeout); err != nil {
 		t.Fatalf("the git section never showed the repository: %v\n%s", err, term.Snapshot())
+	}
+}
+
+// idleAgentTitleConfig is the rail in a daemon session with a quick detector.
+const idleAgentTitleConfig = `[startup]
+daemon = true
+
+[daemon]
+agent_detect_seconds = 1
+
+[appearance.sidebar]
+enabled = true
+position = "left"
+width = 34
+`
+
+// hiddenAgentTitled opens an agent on workspace 2, which this client does not
+// watch, and gives it a title after the client has stopped watching it.
+func hiddenAgentTitled(t *testing.T, term *tuitest.Terminal, base string) {
+	t.Helper()
+	rig, session, window := agentPane(t, base, "", "--workspace", "2", "--no-focus")
+	rig.title(t, session, window, "✳ hidden-agent-name")
+	waitAgentRow(t, term, "hidden-agent-name")
+}
+
+// watchedAgentSpinning runs an agent whose title's spinner moves through the idle
+// window, in a new focused pane.
+func watchedAgentSpinning(t *testing.T, term *tuitest.Terminal, base string) {
+	t.Helper()
+	agentPane(t, base, "spin")
+	waitAgentRow(t, term, "spinning-agent")
+}
+
+// agentPane opens a pane with args to new-window and starts a stand-in agent in
+// it. A script of "spin" runs the spinner. Any other runs the agent that takes
+// titles from its input.
+func agentPane(t *testing.T, base, script string, args ...string) (titleAgentRig, string, string) {
+	t.Helper()
+	rig := newTitleAgentRig(t, base, "claude")
+	out, err := tuiosCLI(t, base, append([]string{"new-window", "--json"}, args...)...)
+	if err != nil {
+		t.Fatalf("open a pane: %v\n%s", err, out)
+	}
+	var made struct {
+		Session string `json:"session"`
+		ID      string `json:"id"`
+		Window  string `json:"window_id"`
+	}
+	if err := json.Unmarshal([]byte(out), &made); err != nil {
+		t.Fatalf("read new-window: %v\n%s", err, out)
+	}
+	window := made.Window
+	if window == "" {
+		window = made.ID
+	}
+	path := rig.script
+	if script == "spin" {
+		path = rig.spinner
+	}
+	rig.run(t, made.Session, window, "claude", path, "claude-code")
+	return rig, made.Session, window
+}
+
+// waitAgentRow waits for the rail to show name and for the setup's messages to
+// go, so the idle window measures only the agent.
+func waitAgentRow(t *testing.T, term *tuitest.Terminal, name string) {
+	t.Helper()
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		return strings.Contains(s.Text(), name) &&
+			!strings.Contains(s.Text(), "Window created") && !strings.Contains(s.Text(), "Session size")
+	}, 3*uiTimeout); err != nil {
+		t.Fatalf("the rail never showed %s: %v\n%s", name, err, term.Snapshot())
 	}
 }
 

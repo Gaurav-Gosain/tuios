@@ -120,7 +120,7 @@ func (m *OS) unwatchedTitles() map[string]string {
 		// not change what a row says. These windows have no custom name by the
 		// unwatched test above.
 		if s, ok := byID[w.ID]; ok && s.Title != "" {
-			titles[w.ID] = railWindowLabel("", s.ForegroundCmd, s.Title)
+			titles[w.ID] = railWindowLabel("", s.AgentHarness, s.ForegroundCmd, s.Title)
 		}
 	}
 	return titles

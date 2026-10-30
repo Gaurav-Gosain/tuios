@@ -432,19 +432,53 @@ func BuildSession(s SessionInput) Node {
 // command detection answer "which pane is this" for most panes, but a session of
 // bare shells in one directory still resolves to one label repeated, and a list
 // of identical rows cannot do the only job it has. Rows that still collide get
-// their 1-based position appended, which is stable for a given window order and
-// so does not move under the eye between frames.
+// the start of their window id appended. A position would change when an earlier
+// pane closes, so "claude 7" would become another pane's name. The id needs no
+// new state, it is the same after a reattach, and a -t selector accepts it.
 func disambiguate(children []Node) []Node {
 	counts := make(map[string]int, len(children))
 	for _, c := range children {
 		counts[c.Title]++
 	}
+	// Measured against the bare titles, so read them before any row grows.
+	var bare []string
 	for i := range children {
 		if counts[children[i].Title] > 1 {
-			children[i].Title += " " + strconv.Itoa(i+1)
+			if bare == nil {
+				bare = make([]string, len(children))
+				for j := range children {
+					bare[j] = children[j].Title
+				}
+			}
+			children[i].Title += " " + shortRowID(children, bare, i)
 		}
 	}
 	return children
+}
+
+// shortRowIDLen is how much of a window id a repeated row shows: 16 bits of a
+// UUID, in the few cells a rail row has left after its label.
+const shortRowIDLen = 4
+
+// shortRowID is the start of row i's id, grown past shortRowIDLen only when
+// another row with the same label starts the same way. A row with no id, which
+// no real window is, falls back to its position.
+func shortRowID(children []Node, bare []string, i int) string {
+	id := children[i].ID
+	if id == "" {
+		return strconv.Itoa(i + 1)
+	}
+	n := min(shortRowIDLen, len(id))
+	for j := range children {
+		if j == i || bare[j] != bare[i] {
+			continue
+		}
+		other := children[j].ID
+		for n < len(id) && n <= len(other) && id[:n] == other[:n] {
+			n++
+		}
+	}
+	return id[:n]
 }
 
 // Build assembles the full tree, preserving the order the sessions are given.

@@ -11075,6 +11075,25 @@ The browser and its help modal drew `lipgloss.RoundedBorder()` whatever `appeara
 ```bash
 go build -o /tmp/tuios ./cmd/tuios
 cd e2e/tui && TUIOS_E2E=1 TUIOS_E2E_BIN=/tmp/tuios go test -count=1 -run '^TestRailQuickLook$' .
+
+## Rail labels an agent by its title
+
+`TestRailNamesAnAgentByItsTitle` runs stand-in programs that the detector names
+as each harness, and sets the titles each harness writes. A title that says
+nothing must leave the program's name on the row, and an anchor title has to
+leave the rail first, so a title the client never read cannot pass.
+`TestRailRepeatedLabelStaysWithItsPane` opens six panes with one label, and
+requires each row to carry the start of its own window id, before and after the
+first pane closes. `TestIdleCostStaysLow/agent_spinner_in_a_watched_pane` holds
+a spinner in the title of the focused pane to the idle budget.
+
+Run on 2026-10-30 on Linux. The tests pass on the fixed build, and each control
+below fails at the step named:
+
+```bash
+go build -o /tmp/tuios ./cmd/tuios
+cd e2e/tui && TUIOS_E2E=1 TUIOS_E2E_BIN=/tmp/tuios go test -count=1 \
+  -run 'TestRailNamesAnAgentByItsTitle|TestRailRepeatedLabelStaysWithItsPane|TestIdleCostStaysLow/agent' .
 ```
 
 | Control: what was cut | Where it fails | Verdict |
@@ -11085,3 +11104,20 @@ cd e2e/tui && TUIOS_E2E=1 TUIOS_E2E_BIN=/tmp/tuios go test -count=1 -run '^TestR
 | `m.sidebarFollowSession = ""` in `quickLookMenu`, so the next frame puts the cursor on the session row | The same step | **caught** |
 | `ql.borrowed = true` in `quickLookMenu`, so `esc` leaves the rail with the keyboard | `command "echo back-$((40+4))" never produced "back-44"` | **caught** |
 | The `!m.SidebarFocused` check on `ql.borrowed`, so Preview always gives the keyboard back | "ASSERTION: after Preview and esc the rail lost the keyboard" | **caught** |
+| `railWindowLabel` does not ask `harness.TitleLabel`, as before | "the anchor title never reached the rail": the row reads `claude` | **caught** |
+| `TitleLabel` keeps the marks in front of the title | `⠂ Fix the test` gives `claude` | **caught** |
+| The title is ranked above the custom name | "the custom name never reached the rail" | **caught** |
+| `gemini-cli` leaves the status-only list | "a row took Gemini CLI's status for a name" | **caught** |
+| `looksLikePath` is not checked | `user@host:~/dev/SENTINEL` reaches the row | **caught** |
+| `disambiguate` appends the position, as before | "a row does not carry the start of its window id": `claude 1` to `claude 6` | **caught** |
+| `unwatchedTitles` passes no harness | "the title of an unwatched pane never reached the rail" | **caught** |
+| `railWindowLabel` returns the raw title of an agent | The watched pane goes over budget: 40 ticks and 40 renders in the window, 0 and 0 on the fixed build | **caught** |
+
+One claim did not need code. A hidden agent's frozen local title differs from
+the row, so `tickPolledWork` sees drift. A guard against that drift changed
+nothing in `TestIdleCostStaysLow/agent_title_on_a_hidden_workspace`, with or
+without a clock: 2 ticks, 0 renders. The idle gate is not asked while no tick
+is due, so the guard was left out.
+
+The frames are `rail-named-agents`, `rail-repeated-before-close` and
+`rail-repeated-after-close` under `TUIOS_E2E_FRAMES`, in the test's folder.

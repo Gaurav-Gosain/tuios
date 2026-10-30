@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
+	"github.com/Gaurav-Gosain/tuios/internal/harness"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/sessiontree"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
@@ -18,20 +19,33 @@ func windowRowTitle(w *terminal.Window) string {
 	if label, ok := tmlRailLabel(w); ok {
 		return label
 	}
-	return railWindowLabel(w.CustomName, w.ForegroundCmd, w.Title())
+	return railWindowLabel(w.CustomName, w.AgentHarness, w.ForegroundCmd, w.Title())
 }
 
 // railWindowLabel is that label built from the pieces every surface has, live
-// window or wire summary. The user's name wins; then what the pane is running,
-// which is the one part that differs between siblings; then the shell's own
-// title, shortened, because in full it is "<cwd> - <shell>" and reads the same
-// on every pane in one directory. Never blank, so a fresh pane still has a row.
-func railWindowLabel(customName, foregroundCmd, title string) string {
+// window or wire summary. The user's name wins; then the title an agent set
+// about itself, such as the name from claude -n, when it says more than the
+// program's name (harness.TitleLabel); then what the pane is running, which is
+// the one part that differs between shells; then the shell's own title,
+// shortened, because in full it is "<cwd> - <shell>" and reads the same on every
+// pane in one directory. Never blank, so a fresh pane still has a row.
+//
+// This runs per pane on every polled tick. For a pane with no agent it adds one
+// comparison, and for an agent it does not allocate.
+func railWindowLabel(customName, harnessID, foregroundCmd, title string) string {
 	if customName != "" {
 		return customName
 	}
+	if t := harness.TitleLabel(harnessID, foregroundCmd, title); t != "" {
+		return t
+	}
 	if foregroundCmd != "" {
 		return foregroundCmd
+	}
+	if harnessID != "" {
+		// An agent the process table has not named yet. Its spinner must not
+		// reach the row, because each frame would be a new label.
+		title = harness.TrimTitleMarks(title)
 	}
 	if s := shellTitleLabel(title); s != "" {
 		return s
@@ -141,7 +155,7 @@ func (m *OS) foreignSessionInput(client *session.TUIClient, name string) session
 			ID: w.ID,
 			// The daemon folds a custom name into Title and withholds a command
 			// for a named pane, so passing no name here still lets one win.
-			Title:        railWindowLabel("", w.ForegroundCmd, w.Title),
+			Title:        railWindowLabel("", w.AgentHarness, w.ForegroundCmd, w.Title),
 			AgentState:   state,
 			DoneSeen:     seen,
 			StateAt:      w.AgentStateAt,

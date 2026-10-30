@@ -669,7 +669,7 @@ func (m *OS) railPane(sessionID, windowID string) (state string, seq uint64, lab
 	}
 	for _, w := range m.DaemonClient.SessionWindows(sessionID) {
 		if w.ID == windowID {
-			return w.AgentState, w.CompletionSeq, railWindowLabel("", w.ForegroundCmd, w.Title), true
+			return w.AgentState, w.CompletionSeq, railWindowLabel("", w.AgentHarness, w.ForegroundCmd, w.Title), true
 		}
 	}
 	return "", 0, "", false

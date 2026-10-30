@@ -2136,6 +2136,37 @@ never picked an order moves to `you`.
 
 The collapsed strip lists its agents in the same order as the section.
 
+### The name on a row
+
+A pane's row in the rail uses the first of these that the pane has:
+
+1. Its custom name, from `tuios set-window --name` or the rename key.
+2. The title that its agent set, such as the name from `claude -n` or `/rename`.
+3. The program that runs in the pane, such as `claude`.
+4. The last folder in the title of its shell.
+
+The agent's title has no setting. The rail removes the spinner or status mark
+in front of the title, so a spinner frame does not change the row.
+
+The rail skips the title and goes to the program when the title has no name in
+it:
+
+| The title is | Example |
+| --- | --- |
+| Empty | |
+| The program's name or its default | `claude`, `✳ Claude Code`, `OpenCode` |
+| A status | `Action Required - codex`, `Plugin confirmation needed - amp - ~/src` |
+| What a shell wrote | `~/src/app - fish`, `user@host:~/src`, `crush ~/src/app` |
+| The folder after Pi's mark | `π - app` |
+
+Gemini CLI, Qwen Code, Hermes Agent and Kiro CLI write only status in the title.
+Their rows always show the program.
+
+Rows with the same name in one session get the start of the window id after the
+name, such as `claude 41ae`. The id stays with the pane. It does not change when
+another pane closes or when you attach again. A selector accepts it:
+`tuios focus-window 41ae`.
+
 ### What a row says without colour
 
 Colour is never the only signal. Every state has its own glyph (the table
