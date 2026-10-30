@@ -103,7 +103,7 @@ func (m *OS) upgradeConfirmAnswer(idx int) tea.Cmd {
 		return nil
 	}
 	st.sent, st.selected = true, idx
-	return m.inboxAnswerAskCmd(*st.open, upgradeConfirmRows[idx])
+	return m.inboxAnswerAskCmd(*st.open, upgradeConfirmRows[idx], true)
 }
 
 // renderUpgradeConfirm draws the dialog. The binary's path is never cut: it

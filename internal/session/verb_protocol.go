@@ -2567,6 +2567,7 @@ func buildVerbRegistry() map[string]verbEntry {
 				{Name: "answer", Type: "string", Required: true, Description: "One of the item's options."},
 				{Name: "human_nonce", Type: "string", Required: true, Description: "The nonce the daemon issued in an attach reply, for a client attached now over the same kind of connection. The TUI sends its own."},
 				{Name: "question", Type: "string", Description: "The question the answer was picked from. When given and it is not the item's, nothing is answered: applied is false with reason changed. The TUI always sends it."},
+				{Name: "upgrade_dialog", Type: "bool", Description: "The answer is a key pressed in a client's live upgrade dialog. A live upgrade's ask takes only an answer that carries it. The TUI sends it from that dialog alone, and gui-bridge drops it."},
 			},
 			returns: []verbParam{
 				{Name: "request_id", Type: "string", Description: "The question answered."},

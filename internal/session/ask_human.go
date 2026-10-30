@@ -536,6 +536,10 @@ func (d *Daemon) verbAnswerAsk(cs *connState, params json.RawMessage) (any, *ver
 		// Question is the line the answer was picked from. When it is set
 		// and the question says something else, nothing is answered.
 		Question string `json:"question"`
+		// UpgradeDialog says the answer is a key pressed in a client's upgrade
+		// dialog. Only that dialog sends it, and the GUI bridge drops it from
+		// what a renderer sends.
+		UpgradeDialog bool `json:"upgrade_dialog"`
 	}
 	if verr := decodeParams(params, &p); verr != nil {
 		return nil, verr
@@ -552,12 +556,24 @@ func (d *Daemon) verbAnswerAsk(cs *connState, params json.RawMessage) (any, *ver
 			Detail: "Nothing was answered. Only a client attached right now can answer a question, by passing the nonce its attach reply carried. An agent never can.",
 		})
 	}
-	if cs != nil && cs.viaLink && d.attention.askIsUpgrade(p.RequestID) {
-		// A key on another machine is not a key at this one, whoever the
-		// hub says pressed it.
-		return nil, hintedVerbError(ErrVerbNotHuman, "a live upgrade is confirmed only at a client attached on this machine", &VerbHint{
-			Detail: "Nothing was answered. Answer it in the dialog of a client attached to this machine.",
-		})
+	if d.attention.askIsUpgrade(p.RequestID) {
+		if cs != nil && cs.viaLink {
+			// A key on another machine is not a key at this one, whoever the
+			// hub says pressed it.
+			return nil, hintedVerbError(ErrVerbNotHuman, "a live upgrade is confirmed only at a client attached on this machine", &VerbHint{
+				Detail: "Nothing was answered. Answer it in the dialog of a client attached to this machine.",
+			})
+		}
+		if !p.UpgradeDialog {
+			// The nonce proves a client, not a key: a renderer behind the GUI
+			// bridge holds one, and a client that predates the dialog shows
+			// the ask as an ordinary question. Only the dialog takes nothing
+			// but a key the person pressed.
+			return nil, hintedVerbError(ErrVerbNotHuman, "a live upgrade is confirmed only by a key pressed in the upgrade dialog", &VerbHint{
+				Param:  "upgrade_dialog",
+				Detail: "Nothing was answered. Answer it in the dialog that a tuios client attached to this machine shows.",
+			})
+		}
 	}
 	askSession, _ := d.attention.askSession(p.RequestID)
 	by, ok := d.humanNonceFor(p.HumanNonce, d.sessionIDOf(askSession), cs)
