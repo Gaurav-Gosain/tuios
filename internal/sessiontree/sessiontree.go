@@ -58,6 +58,8 @@ const (
 // Node is one row in the tree: a session or a window under it.
 type Node struct {
 	Kind NodeKind
+	// agentUnnamed is WindowInput.AgentUnnamed.
+	agentUnnamed bool
 	// ID is the session name for a session node, or the window ID for a window.
 	ID    string
 	Title string
@@ -224,6 +226,10 @@ type WindowInput struct {
 	StateAt int64
 	// Harness names the agent running in the pane, empty when nothing named one.
 	Harness string
+	// AgentUnnamed marks an agent's row that shows only the program's name,
+	// because its title gave none. Rows like this are the ones a person cannot
+	// tell apart, so a repeated one is suffixed by its window id.
+	AgentUnnamed bool
 	// Message is the note the pane reported with its state, empty for none.
 	Message string
 	// Reason is why AgentState is not the state the agent gave, empty when
@@ -398,6 +404,7 @@ func BuildSession(s SessionInput) Node {
 	for _, w := range s.Windows {
 		children = append(children, Node{
 			Kind:         KindWindow,
+			agentUnnamed: w.AgentUnnamed,
 			ID:           w.ID,
 			Title:        w.Title,
 			AgentState:   w.AgentState,
@@ -432,26 +439,35 @@ func BuildSession(s SessionInput) Node {
 // command detection answer "which pane is this" for most panes, but a session of
 // bare shells in one directory still resolves to one label repeated, and a list
 // of identical rows cannot do the only job it has. Rows that still collide get
-// the start of their window id appended. A position would change when an earlier
-// pane closes, so "claude 7" would become another pane's name. The id needs no
-// new state, it is the same after a reattach, and a -t selector accepts it.
+// their 1-based position appended, which is stable for a given window order and
+// so does not move under the eye between frames.
+//
+// An agent with no name of its own gets the start of its window id instead. A
+// position would change when an earlier pane closes, so "claude 7" would become
+// another agent's row. The id needs no new state, it is the same after a
+// reattach, and a -t selector accepts it.
 func disambiguate(children []Node) []Node {
 	counts := make(map[string]int, len(children))
 	for _, c := range children {
 		counts[c.Title]++
 	}
-	// Measured against the bare titles, so read them before any row grows.
+	// Compared against the bare titles, so read them before any row grows.
 	var bare []string
 	for i := range children {
-		if counts[children[i].Title] > 1 {
-			if bare == nil {
-				bare = make([]string, len(children))
-				for j := range children {
-					bare[j] = children[j].Title
-				}
-			}
-			children[i].Title += " " + shortRowID(children, bare, i)
+		if counts[children[i].Title] <= 1 {
+			continue
 		}
+		if !children[i].agentUnnamed {
+			children[i].Title += " " + strconv.Itoa(i+1)
+			continue
+		}
+		if bare == nil {
+			bare = make([]string, len(children))
+			for j := range children {
+				bare[j] = children[j].Title
+			}
+		}
+		children[i].Title += " " + shortRowID(children, bare, i)
 	}
 	return children
 }

@@ -364,7 +364,8 @@ func (r titleAgentRig) title(t *testing.T, session, window, title string) {
 //   - Two rows with the same name would pass a Contains check on one of them.
 //     The suffix test reads each row by the id of its own pane.
 //   - A row that shows the spinner would pass a check for the name after it.
-//     Each sample also has to be the same row text as the first.
+//     Each sample also has to hold no spinner glyph, and the same text after
+//     the state mark as the first.
 //
 // Negative controls: NEGATIVE_CONTROLS.md, "Rail labels an agent by its title".
 func TestRailNamesAnAgentByItsTitle(t *testing.T) {
@@ -497,16 +498,23 @@ func TestRailNamesAnAgentByItsTitle(t *testing.T) {
 		}
 		return ""
 	}
-	first := rowWith("bob-dol-discover")
+	// The state mark at the front may move, because the spinner is what the title
+	// rules read. The name after it must not.
+	name := func() string {
+		row := rowWith("bob-dol-discover")
+		return row[strings.Index(row, "bob-dol-discover"):]
+	}
+	first := name()
 	for _, frame := range []string{"⠙", "⠹", "⠸", "⠼", "◐", "◓", "✳"} {
 		rig.title(t, session, ids[0], frame+" bob-dol-discover")
 		time.Sleep(300 * time.Millisecond)
-		if got := rowWith("bob-dol-discover"); got != first {
+		row := rowWith("bob-dol-discover")
+		if got := name(); got != first {
 			t.Fatalf("spinner frame %s moved the row: %q, was %q", frame, got, first)
 		}
-	}
-	if strings.ContainsAny(first, "⠋⠙⠹⠸⠼◐◓✳") {
-		t.Fatalf("the row shows the title's spinner: %q", first)
+		if strings.ContainsAny(row, "⠋⠙⠹⠸⠼◐◓✳") {
+			t.Fatalf("the row shows the title's spinner: %q", row)
+		}
 	}
 
 	// A custom name still comes first, and a later title does not take it back.
@@ -527,10 +535,12 @@ func TestRailNamesAnAgentByItsTitle(t *testing.T) {
 // for it. An empty want is the program's own name.
 type titleStep struct{ title, want string }
 
-// TestRailRepeatedLabelStaysWithItsPane closes the first of several panes with
-// one label. The rows of the others must not change, because the suffix belongs
-// to the pane. Before, it was the row's position, and every later row took a new
-// number. A title on a pane this client does not watch still reaches the rail.
+// TestRailRepeatedLabelStaysWithItsPane closes the first of several agents that
+// show only the program. The rows of the others must not change, because the
+// suffix belongs to the pane. Before, it was the row's position, and every later
+// row took a new number. A title on a pane this client does not watch still
+// reaches the rail. Repeated rows of any other kind keep their position: two
+// agents with one name, and two bare shells.
 //
 // Negative controls: NEGATIVE_CONTROLS.md, "Rail labels an agent by its title".
 func TestRailRepeatedLabelStaysWithItsPane(t *testing.T) {
@@ -625,4 +635,54 @@ func TestRailRepeatedLabelStaysWithItsPane(t *testing.T) {
 		t.Fatalf("the title of an unwatched pane never reached the rail: %v\nrows: %q", err, rowsOf(term.Screen()))
 	}
 	saveArtifact(t, term, dir, "rail-unwatched-title")
+
+	// A title gave these two a name, so a position is enough. ids[0] has closed,
+	// so ids[3] and ids[4] are the third and fourth panes.
+	rig.title(t, session, ids[3], "✳ twin")
+	rig.title(t, session, ids[4], "◐ twin")
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		rows := strings.Join(rowsOf(s), "\n")
+		return strings.Contains(rows, "twin 3") && strings.Contains(rows, "twin 4")
+	}, uiTimeout); err != nil {
+		t.Fatalf("two agents with one name do not show their positions: %v\nrows: %q", err, rowsOf(term.Screen()))
+	}
+
+	// Two shells in one folder keep plain numbers. A new shell's title is unique,
+	// so each one writes the title of a shell in that folder. They are the sixth
+	// and seventh of the panes left.
+	known := map[string]bool{}
+	for _, id := range windowIDs(t, base, session) {
+		known[id] = true
+	}
+	for range 2 {
+		if out, err := tuiosCLI(t, base, "new-window", "-s", session, "--no-focus"); err != nil {
+			t.Fatalf("open a shell: %v\n%s", err, out)
+		}
+	}
+	for _, id := range windowIDs(t, base, session) {
+		if known[id] {
+			continue
+		}
+		if out, err := tuiosCLI(t, base, "send-text", "-s", session, "-w", id, `printf '\033]2;~/dev/app - fish\007'`+"\n"); err != nil {
+			t.Fatalf("set the shell's title: %v\n%s", err, out)
+		}
+	}
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		c, r := s.Size()
+		found := 0
+		for y := range r {
+			var b strings.Builder
+			for x := railCol; x < c; x++ {
+				b.WriteString(s.Cell(x, y).Content)
+			}
+			row := strings.TrimRight(b.String(), " ")
+			if strings.HasSuffix(row, " app 6") || strings.HasSuffix(row, " app 7") {
+				found++
+			}
+		}
+		return found == 2
+	}, uiTimeout); err != nil {
+		t.Fatalf("repeated shells do not show plain numbers: %v\n%s", err, term.Snapshot())
+	}
+	railShot(t, term, "rail-repeated-shells")
 }

@@ -2162,10 +2162,13 @@ it:
 Gemini CLI, Qwen Code, Hermes Agent and Kiro CLI write only status in the title.
 Their rows always show the program.
 
-Rows with the same name in one session get the start of the window id after the
-name, such as `claude 41ae`. The id stays with the pane. It does not change when
-another pane closes or when you attach again. A selector accepts it:
-`tuios focus-window 41ae`.
+Rows with the same name in one session get a suffix. An agent that shows only
+the program gets the start of the window id, such as `claude 41ae`. This suffix
+stays with the pane. It does not change when another pane closes or when you
+attach again. A selector accepts it: `tuios focus-window 41ae`.
+
+All other rows get their position in the session, such as `fish 2`. This number
+changes when an earlier pane closes.
 
 ### What a row says without colour
 

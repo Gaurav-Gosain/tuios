@@ -11082,9 +11082,10 @@ cd e2e/tui && TUIOS_E2E=1 TUIOS_E2E_BIN=/tmp/tuios go test -count=1 -run '^TestR
 as each harness, and sets the titles each harness writes. A title that says
 nothing must leave the program's name on the row, and an anchor title has to
 leave the rail first, so a title the client never read cannot pass.
-`TestRailRepeatedLabelStaysWithItsPane` opens six panes with one label, and
-requires each row to carry the start of its own window id, before and after the
-first pane closes. `TestIdleCostStaysLow/agent_spinner_in_a_watched_pane` holds
+`TestRailRepeatedLabelStaysWithItsPane` opens six agents that show only the
+program, and requires each row to carry the start of its own window id, before
+and after the first pane closes. Two agents with one name and two bare shells
+must keep their positions. `TestIdleCostStaysLow/agent_spinner_in_a_watched_pane` holds
 a spinner in the title of the focused pane to the idle budget.
 
 Run on 2026-10-30 on Linux. The tests pass on the fixed build, and each control
@@ -11109,7 +11110,10 @@ cd e2e/tui && TUIOS_E2E=1 TUIOS_E2E_BIN=/tmp/tuios go test -count=1 \
 | The title is ranked above the custom name | "the custom name never reached the rail" | **caught** |
 | `gemini-cli` leaves the status-only list | "a row took Gemini CLI's status for a name" | **caught** |
 | `looksLikePath` is not checked | `user@host:~/dev/SENTINEL` reaches the row | **caught** |
-| `disambiguate` appends the position, as before | "a row does not carry the start of its window id": `claude 1` to `claude 6` | **caught** |
+| `disambiguate` appends the position on every row, as before | "a row does not carry the start of its window id": `claude 1` to `claude 6` | **caught** |
+| `agentRowUnnamed` is true for every agent | "two agents with one name do not show their positions" | **caught** |
+| `disambiguate` appends the window id on every row | "two agents with one name do not show their positions" | **caught** |
+| `disambiguate` appends the window id on rows with no agent | "repeated shells do not show plain numbers" | **caught** |
 | `unwatchedTitles` passes no harness | "the title of an unwatched pane never reached the rail" | **caught** |
 | `railWindowLabel` returns the raw title of an agent | The watched pane goes over budget: 40 ticks and 40 renders in the window, 0 and 0 on the fixed build | **caught** |
 

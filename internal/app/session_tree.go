@@ -53,6 +53,14 @@ func railWindowLabel(customName, harnessID, foregroundCmd, title string) string 
 	return "shell"
 }
 
+// agentRowUnnamed reports whether a row is an agent's and its label fell through
+// to the program, because neither a person nor the title gave a name. label is
+// the label the row shows, which on a debounced row can differ from what the
+// title says now.
+func agentRowUnnamed(customName, harnessID, foregroundCmd, label string) bool {
+	return customName == "" && harnessID != "" && foregroundCmd != "" && label == foregroundCmd
+}
+
 // shellTitleLabel keeps the part of a shell's title that carries information:
 // the last element of the directory it names. "~/dev/tuios - fish" says the
 // same thing in every pane of one repo, where "tuios" at least says which repo,
@@ -89,9 +97,11 @@ func (m *OS) currentSessionInput() sessiontree.SessionInput {
 		}
 		state, seen := m.railAgentState(w.ID, w.AgentState, w.AgentCompletionSeq)
 		message, kind := m.paneAskNote(w.ID, w.AgentMessage, w.AgentKind)
+		title := m.railTitleShown(w)
 		windows = append(windows, sessiontree.WindowInput{
 			ID:           w.ID,
-			Title:        m.railTitleShown(w),
+			Title:        title,
+			AgentUnnamed: agentRowUnnamed(w.CustomName, w.AgentHarness, w.ForegroundCmd, title),
 			AgentState:   state,
 			DoneSeen:     seen,
 			StateAt:      w.AgentStateAt,
@@ -151,11 +161,13 @@ func (m *OS) foreignSessionInput(client *session.TUIClient, name string) session
 		}
 		state, seen := m.railAgentState(w.ID, w.AgentState, w.CompletionSeq)
 		message, kind := m.paneAskNote(w.ID, w.AgentMessage, w.AgentKind)
+		// The daemon folds a custom name into Title and withholds a command for
+		// a named pane, so passing no name here still lets one win.
+		title := railWindowLabel("", w.AgentHarness, w.ForegroundCmd, w.Title)
 		windows = append(windows, sessiontree.WindowInput{
-			ID: w.ID,
-			// The daemon folds a custom name into Title and withholds a command
-			// for a named pane, so passing no name here still lets one win.
-			Title:        railWindowLabel("", w.AgentHarness, w.ForegroundCmd, w.Title),
+			ID:           w.ID,
+			Title:        title,
+			AgentUnnamed: agentRowUnnamed("", w.AgentHarness, w.ForegroundCmd, title),
 			AgentState:   state,
 			DoneSeen:     seen,
 			StateAt:      w.AgentStateAt,
