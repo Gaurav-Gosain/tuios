@@ -115,6 +115,19 @@ binary, `tuios update` fetches the newest release and puts it in place
 that owns the binary, so use that instead; `tuios update` detects which you have
 and prints the right command rather than overwriting it.
 
+**Images on Windows.** The console host built into Windows drops sixel images
+before tuios sees them. To let them through, take `conpty.dll` and
+`OpenConsole.exe` for the architecture of your `tuios.exe` (x64, x86 or arm64)
+from the
+[Microsoft.Windows.Console.ConPTY](https://www.nuget.org/packages/Microsoft.Windows.Console.ConPTY)
+package, at `runtimes/win-<arch>/native/conpty.dll` and
+`build/native/runtimes/<arch>/OpenConsole.exe`, and put both in the folder that
+holds `tuios.exe`. tuios then opens panes through them, as Windows Terminal
+does. Without both files, panes use the built-in ConPTY. The daemon looks for
+the two files when it starts, so run `tuios kill-server` after adding them.
+tuios does not yet detect sixel support in the terminal on Windows, so set
+`TUIOS_SIXEL_GRAPHICS=1` as well.
+
 ### Shell Completions
 
 `tuios completion <shell>` prints a completion script for bash, zsh, fish or

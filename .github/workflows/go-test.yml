@@ -310,7 +310,8 @@ jobs:
     # object for plugin processes, the stop event kill-server sets, the
     # herdr command line the link runs, the opencode socket owner check, the
     # owner and DACL checks of service.json and of the tuios-web password
-    # file, the job object of the opencode export, and the web daemon E2E
+    # file, the job object of the opencode export, the choice between a
+    # conpty.dll beside tuios.exe and the inbox ConPTY, and the web daemon E2E
     # tests.
     # The whole suite has never run on Windows and does not run here.
     timeout-minutes: 15
@@ -344,6 +345,29 @@ jobs:
           for name in TestOpenCodeConnOwner TestOpenCodeServiceDACL TestOpenCodeExportTree TestTCPTableOwner \
             TestPasswordFileDACL TestGrantsOther; do
             if ! grep -q -- "^--- PASS: $name " "$RUNNER_TEMP/owner-tests.log"; then
+              echo "::error::$name did not run and pass"
+              exit 1
+            fi
+          done
+
+      - name: Test the conpty.dll lookup and fallback
+        # spawn_test.go starts /bin/sh, so only the conpty.dll tests of
+        # internal/ptyspawn run here: the lookup reads only the folder of the
+        # executable, and a missing, unloadable or OpenConsole-less DLL falls
+        # back to the inbox ConPTY. TestPaneUsesConPTYDLLWhenPresent and
+        # TestPaneOnConPTYDLLFindsProgramLikeInbox need the
+        # Microsoft.Windows.Console.ConPTY files and are not run.
+        #
+        # Each test named below must print its PASS line, so a rename or a
+        # skip fails the step.
+        shell: bash
+        run: |
+          go test -count=1 -timeout 5m -v \
+            -run "TestConPTYDLLIsNotTakenFromWorkingDirOrPath|TestPaneUsesInboxConPTYWithoutDLL|TestPaneFallsBackToInboxWhenDLLWillNotLoad|TestPaneFallsBackToInboxWithoutOpenConsole" \
+            ./internal/ptyspawn/ | tee "$RUNNER_TEMP/conpty-tests.log"
+          for name in TestConPTYDLLIsNotTakenFromWorkingDirOrPath TestPaneUsesInboxConPTYWithoutDLL \
+            TestPaneFallsBackToInboxWhenDLLWillNotLoad TestPaneFallsBackToInboxWithoutOpenConsole; do
+            if ! grep -q -- "^--- PASS: $name " "$RUNNER_TEMP/conpty-tests.log"; then
               echo "::error::$name did not run and pass"
               exit 1
             fi

@@ -584,6 +584,10 @@ go run ./cmd/tuios tape play examples/demo.tape
   through `ptyspawn.SetWinsize`, which falls back to a plain resize on ConPTY.
   The daemon's platform split is in `internal/session/daemon_unix.go` vs
   `daemon_windows.go` and `manager_unix.go` vs `manager_windows.go`
+- Allocating a pane's pty differs: `internal/ptyspawn/newpty_native.go` vs
+  `newpty_windows.go`. On Windows a pane opens on the `conpty.dll` and
+  `OpenConsole.exe` beside `tuios.exe` when both are there, and on the inbox
+  ConPTY otherwise
 - Workspace keybinds differ: `opt+N` on macOS, `alt+N` on Linux
 - See `internal/config/userconfig.go` → `getDefaultWorkspaceKeybinds()`
 

@@ -12,7 +12,7 @@ import (
 // hostPty has no kernel to ask in the browser build. Every pane there runs on
 // a guest pty, which the wasm entry point installs through NewGuestPty before
 // the first pane opens.
-func hostPty(_, _ int) (xpty.Pty, error) {
+func hostPty(_, _ int, _ func(string, ...any)) (xpty.Pty, error) {
 	return nil, errors.New("no guest pty in this build")
 }
 

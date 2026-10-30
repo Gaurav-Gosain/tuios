@@ -37,7 +37,7 @@ set -uo pipefail
 
 ALL=(./... ./progstatus/... ./vt/... ./swatch/... ./shot/... ./tml/... ./plot/... ./loom/... ./sketch/...)
 LIBS=(progstatus vt swatch shot tml plot loom sketch)
-WINDOWS=(./internal/shimlink/ ./internal/herdrplugin/ ./internal/stopevent/ ./internal/herdrcli/ ./cmd/tuios-web/ ./internal/transcriptview/ ./internal/winacl/)
+WINDOWS=(./internal/shimlink/ ./internal/herdrplugin/ ./internal/stopevent/ ./internal/herdrcli/ ./cmd/tuios-web/ ./internal/transcriptview/ ./internal/winacl/ ./internal/ptyspawn/)
 MACOS=(./internal/transcriptview/ ./internal/herdrplugin/ ./internal/session/)
 WASM=(./cmd/tuios-wasm/... ./internal/webshell/ ./internal/learn/)
 SELF=$(dirname "$0")

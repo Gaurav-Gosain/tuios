@@ -69,12 +69,12 @@ func DirExists(dir string) bool {
 }
 
 // newPty allocates the pty a pane runs on: a guest one when NewGuestPty is
-// set, the kernel's otherwise.
-func newPty(width, height int) (xpty.Pty, error) {
+// set, the kernel's otherwise. logf is Spawn's.
+func newPty(width, height int, logf func(string, ...any)) (xpty.Pty, error) {
 	if NewGuestPty != nil {
 		return NewGuestPty(width, height)
 	}
-	return hostPty(width, height)
+	return hostPty(width, height, logf)
 }
 
 // Spawn allocates a PTY of the given size, builds the command with build,
@@ -86,7 +86,8 @@ func newPty(width, height int) (xpty.Pty, error) {
 // about.
 //
 // logf, when non-nil, gets one line per absorbed refusal, so a retry shows up in
-// whichever log the calling package already writes.
+// whichever log the calling package already writes. On Windows it also gets
+// one line per pane that opens on, or falls back from, a conpty.dll.
 //
 // On success the caller owns both returned values, including closing the PTY.
 // On failure nothing is left open.
@@ -99,7 +100,7 @@ func Spawn(width, height int, build func() *exec.Cmd, logf func(string, ...any))
 // the PTY has none, as on Windows and in the browser.
 func SpawnTTY(width, height int, build func(tty string) *exec.Cmd, logf func(string, ...any)) (xpty.Pty, *exec.Cmd, error) {
 	for attempt := 1; ; attempt++ {
-		pty, err := newPty(width, height)
+		pty, err := newPty(width, height, logf)
 		if err != nil {
 			return nil, nil, fmt.Errorf("failed to create PTY: %w", err)
 		}
