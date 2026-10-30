@@ -168,8 +168,8 @@ type AgentReport struct {
 	// their prompts as its own, and only the subagent's next event says the
 	// prompt was answered.
 	Subagent string
-	// IfSubagent, when not empty, applies the report only if the window waits
-	// on that subagent's prompt. It is how a subagent's hook clears the prompt
+	// IfSubagent, when not empty, applies the report only if the window is on
+	// needs_input and waits on that subagent's prompt. It is how a subagent's hook clears the prompt
 	// it raised without clearing one the main agent or another subagent
 	// raised meanwhile.
 	IfSubagent string
@@ -502,7 +502,10 @@ func (s *Session) applyAgentReport(target string, r AgentReport) (AgentState, bo
 			}
 			return errAgentReportRefused(agentRefusedIfState)
 		}
-		if r.IfSubagent != "" && (!held || claim.subagent != r.IfSubagent) {
+		// Checked against the state as well as the claim, so a report naming
+		// a subagent never applies to a pane that is not waiting on a prompt,
+		// whatever if_state the sender passed.
+		if r.IfSubagent != "" && (prev != AgentStateNeedsInput || !held || claim.subagent != r.IfSubagent) {
 			effective = prev
 			return errAgentReportRefused(agentRefusedIfState)
 		}
