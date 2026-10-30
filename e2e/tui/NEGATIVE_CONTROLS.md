@@ -10743,3 +10743,10 @@ Run on 2026-10-29 on Linux, each control in its own binary.
 | `detectionPass` does not store the kept flags (agent_detect.go) | "the running Claude's resume does not keep its flags" | **caught** |
 | The restore does not put `AgentFlags` back after its state push (daemon_resurrect.go) | "the resumed Claude did not get exactly its kept flags": the Inbox offer still names them, and `y` types the command without them | **caught** |
 | No allow list: `KeptFlags` keeps every argument and `ResumeArgv` appends them all (resume.go) | "the running Claude's resume does not keep its flags": the command carries `-p --continue fix-the-bug` | **caught** |
+
+The fake Claude also starts with `--dangerously-skip-permissions`, a flag the manifest marks in `keep_risky`. The dry run, list-attention, the Inbox row and the row's card must say `Resumes with approvals off (--dangerously-skip-permissions)`, and the card carries the risky badge. `TestAutoResumeLeavesApprovalsOffToThePerson` runs two fake Claudes under `resume_agents = "auto"`, one with the flag. After the restart the other resumes by itself. The one with the flag must wait as a Resume row that names it, and nothing may be typed into its pane. Run on 2026-10-30 on Linux.
+
+| Control: what was cut | Where it fails | Verdict |
+| --- | --- | --- |
+| `applyResumeOffers` types a risky offer in auto mode (agent_resume.go) | `TestAutoResumeLeavesApprovalsOffToThePerson`: "no Resume row names approvals off for the risky agent", the agent was resumed | **caught** |
+| `keep_risky` removed from the Claude Code manifest | `TestRestartOffersToResumeTheConversation`: "the running Claude's resume does not keep its flags", the dry run has no warning; `TestAutoResumeLeavesApprovalsOffToThePerson`: no Resume row | **caught** |

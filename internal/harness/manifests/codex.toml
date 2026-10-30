@@ -247,3 +247,7 @@ source = "codex resume <SESSION_ID>; herdr src/agent_resume.rs"
 keep_options = ["--model", "-m", "--profile", "-p", "--sandbox", "-s", "--ask-for-approval", "-a", "--local-provider"]
 keep_flags   = ["--dangerously-bypass-approvals-and-sandbox", "--yolo", "--approve-for-me", "--oss", "--search"]
 keep_source  = "openai/codex at b5c5d46: shared_options.rs, tui/src/cli.rs, cli/src/main.rs"
+# The kept flags that turn approvals or the sandbox off: the bypass flag and
+# its alias, and the values SandboxModeCliArg::DangerFullAccess and
+# ApprovalModeCliArg::Never (codex-rs/utils/cli/src, kebab-case).
+keep_risky   = ["--dangerously-bypass-approvals-and-sandbox", "--yolo", "--sandbox=danger-full-access", "-s=danger-full-access", "--ask-for-approval=never", "-a=never"]

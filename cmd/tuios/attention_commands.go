@@ -28,10 +28,12 @@ type attentionRow struct {
 	Harness   string `json:"harness"`
 	Name      string `json:"name"`
 	Summary   string `json:"summary"`
-	Since     int64  `json:"since"`
-	Thread    uint64 `json:"thread"`
-	Count     int    `json:"count"`
-	Seen      int    `json:"seen"`
+	// RiskyFlags are, on a resume row, the flags that turn approvals off.
+	RiskyFlags []string `json:"risky_flags"`
+	Since      int64    `json:"since"`
+	Thread     uint64   `json:"thread"`
+	Count      int      `json:"count"`
+	Seen       int      `json:"seen"`
 	// RequestID is set while a harness hook holds the approval for an answer
 	// from the Inbox.
 	RequestID string `json:"request_id"`
@@ -184,6 +186,9 @@ func printAttentionList(w io.Writer, raw json.RawMessage, now time.Time) error {
 		}
 		if it.Count > 1 {
 			summary = strings.TrimSpace(summary + fmt.Sprintf(" (%d)", it.Count))
+		}
+		if warn := session.ResumeWarning(it.RiskyFlags); warn != "" {
+			summary = plainLine(warn) + ": " + summary
 		}
 		if it.Kind == session.AttentionMail && it.Seen > 0 {
 			summary = strings.TrimSpace(summary + fmt.Sprintf(" [%d seen]", it.Seen))

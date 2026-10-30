@@ -3725,7 +3725,7 @@ command that reopens the conversation: `claude --resume <id>`, `codex resume
 | Value | What a restore does |
 | --- | --- |
 | `ask` (default) | A Resume row in the Inbox per pane, its summary the exact command. Your client says once, in the dock, that there are conversations to resume. `y` on the row types the command into its pane, and the agents view stays open; `d` dismisses it. `*` then `y` resumes every row, and `x` marks the rows to resume. |
-| `auto` | Waits for each new shell's prompt signal before typing. Per-pane waits are staggered by 100 ms. A pane whose shell is not at its prompt after 10 seconds gets the Resume row instead. |
+| `auto` | Waits for each new shell's prompt signal before typing. Per-pane waits are staggered by 100 ms. A pane whose shell is not at its prompt after 10 seconds gets the Resume row instead. An agent that resumes with approvals off also gets the Resume row (see [Kept flags](#kept-flags)). |
 | `off` | Nothing. The id stays on the pane. |
 
 Automatic resume uses the new shell's OSC 133 A or B mark, not saved scrollback.
@@ -3800,13 +3800,28 @@ character set as the id.
 | pi | `--provider`, `--model`, `--thinking` | | `pi --help`, 0.73.1 |
 
 Every other harness keeps no flags. In Codex `-p` is `--profile`, so it is
-kept there. Add a list to your own manifest:
+kept there.
+
+Some kept flags turn off approvals or the sandbox. A resume that carries one
+says so wherever the command shows: the Resume row says `Resumes with
+approvals off (--dangerously-skip-permissions)` in the warning colour, and
+its card has the `risky` badge. `tuios resume-agent --dry-run` and `tuios
+list-attention` print the same words. With `daemon.resume_agents = "auto"`,
+tuios does not resume such an agent. It stays a Resume row until you press
+`y`.
+
+| Harness | Flags that turn approvals off |
+| --- | --- |
+| Claude Code | `--dangerously-skip-permissions`, `--allow-dangerously-skip-permissions`, `--permission-mode bypassPermissions` |
+| Codex | `--dangerously-bypass-approvals-and-sandbox`, `--yolo`, `--sandbox`/`-s danger-full-access`, `--ask-for-approval`/`-a never` |
+| Copilot | `--allow-all-tools`, `--allow-all-paths`, `--allow-all-urls`, `--allow-all`, `--yolo`, `--autopilot`, `--mode autopilot` | Add a list to your own manifest:
 
 ```toml
 [resume]
 argv         = ["myagent", "--resume", "{session_id}"]
 keep_options = ["--model"]
 keep_flags   = ["--yolo"]
+keep_risky   = ["--yolo"]          # a flag, or option=value for one value
 keep_source  = "myagent --help"
 ```
 

@@ -207,6 +207,9 @@ func (l ckLook) ckItemMark(it session.AttentionItem) (string, color.Color) {
 	case session.AttentionFinished:
 		return l.ckStateMark("done", ckGlyphReview), l.pal.Success
 	case session.AttentionResume:
+		if len(it.RiskyFlags) > 0 {
+			return l.g(ckGlyphResume), l.pal.Warn
+		}
 		return l.g(ckGlyphResume), l.pal.AccentBright
 	case session.AttentionOutbox:
 		return inboxKindGlyph(it.Kind), l.pal.AccentBright
@@ -1231,6 +1234,10 @@ func (m *OS) ckRowLine2(l ckLook, r ckRow, e sidebarAgentEntry) (verb, rest stri
 		if r.item.Kind == session.AttentionMail || r.item.Kind == session.AttentionResume {
 			ink = pal.AccentBright
 		}
+		if r.item.Kind == session.AttentionResume && len(r.item.RiskyFlags) > 0 {
+			// The resume turns approvals off: the row says so first.
+			ink = pal.Warn
+		}
 		if r.item.Kind == session.AttentionResume && m.Inbox.agents.resuming[r.item.ID] {
 			// Sent to the daemon: the row stays until the offer closes.
 			verb, ink = "Resuming", pal.FgDim
@@ -1346,6 +1353,9 @@ func ckItemVerb(it session.AttentionItem) (verb, rest string) {
 	case session.AttentionErrored:
 		return "Error", sum
 	case session.AttentionResume:
+		if warn := session.ResumeWarning(it.RiskyFlags); warn != "" {
+			return printableTitle(warn), sum
+		}
 		return "Resume", sum
 	case session.AttentionOutbox:
 		return "To send", sum
@@ -2229,6 +2239,12 @@ func (m *OS) drawItemCard(c *ckCanvas, l ckLook, r ckRow, x, w, y0, y1, top int,
 		for _, l := range wrapPlain(printableTitle(it.Summary), inner) {
 			detail = append(detail, "  "+l)
 		}
+		// The card has room for the whole warning the row may cut.
+		if warn := session.ResumeWarning(it.RiskyFlags); warn != "" {
+			for _, l := range wrapPlain(printableTitle(warn), inner) {
+				detail = append(detail, "  "+l)
+			}
+		}
 	}
 	type btn struct{ key, label, action string }
 	var btns []btn
@@ -2321,6 +2337,10 @@ func (m *OS) drawItemCard(c *ckCanvas, l ckLook, r ckRow, x, w, y0, y1, top int,
 		c.text(x, i, 0, ckSeg{t: "▌", fg: barInk})
 	}
 	verb, _ := ckItemVerb(it)
+	if it.Kind == session.AttentionResume {
+		// The warning is in the detail and on the risky badge.
+		verb = "Resume"
+	}
 	if it.Kind == session.AttentionResume && m.Inbox.agents.resuming[it.ID] {
 		verb = "Resuming"
 	}
@@ -2350,7 +2370,7 @@ func (m *OS) drawItemCard(c *ckCanvas, l ckLook, r ckRow, x, w, y0, y1, top int,
 		when = ", snoozed " + inboxSnoozedWhen(it.SnoozedUntil, now)
 	}
 	c.text(tx, ty, x+w-14, ckSeg{t: "   " + inboxWho(it) + when, fg: pal.FgMute})
-	if inboxRisky(it) {
+	if inboxRisky(it) || len(it.RiskyFlags) > 0 {
 		c.textR(x+w-2, ty, ckSeg{t: " risky ", fg: overlay.Readable(pal.Warn, l.warnTint), bg: l.warnTint, attrs: ckBold})
 	}
 	yy := by

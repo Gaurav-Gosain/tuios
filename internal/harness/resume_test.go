@@ -136,6 +136,19 @@ keep_flags = ["model"]`, "model"},
 		{"kept flag with a metacharacter", `[resume]
 argv = ["xagent", "--resume", "{session_id}"]
 keep_flags = ["--a;b"]`, "--a;b"},
+		{"risky marks", `[resume]
+argv = ["xagent", "--resume", "{session_id}"]
+keep_flags = ["--yolo"]
+keep_options = ["--sandbox"]
+keep_risky = ["--yolo", "--sandbox=off"]`, ""},
+		{"risky flag not kept", `[resume]
+argv = ["xagent", "--resume", "{session_id}"]
+keep_flags = ["--yolo"]
+keep_risky = ["--bypass"]`, "--bypass"},
+		{"risky value of a flag", `[resume]
+argv = ["xagent", "--resume", "{session_id}"]
+keep_flags = ["--yolo"]
+keep_risky = ["--yolo=1"]`, "--yolo=1"},
 		{"kept flag twice", `[resume]
 argv = ["xagent", "--resume", "{session_id}"]
 keep_flags = ["--yolo"]
@@ -180,5 +193,25 @@ func TestResumeKeepsOnlyListedFlags(t *testing.T) {
 	}
 	if got := r.KeptFlags("aider", started); got != nil {
 		t.Fatalf("a harness with no list kept %q", got)
+	}
+	// Only the marked flags and values are named as turning approvals off.
+	if got := r.RiskyFlags("claude-code", argv); !slices.Equal(got, []string{"--dangerously-skip-permissions"}) {
+		t.Fatalf("RiskyFlags = %q", got)
+	}
+	for _, tc := range []struct {
+		harness string
+		started []string
+		want    []string
+	}{
+		{"claude-code", []string{"claude", "--permission-mode", "bypassPermissions"}, []string{"--permission-mode bypassPermissions"}},
+		{"claude-code", []string{"claude", "--permission-mode", "plan"}, nil},
+		{"codex", []string{"codex", "-s", "danger-full-access", "--ask-for-approval=never", "-m", "o3"}, []string{"-s danger-full-access", "--ask-for-approval never"}},
+		{"codex", []string{"codex", "--sandbox", "workspace-write", "-a", "on-request"}, nil},
+		{"copilot", []string{"copilot", "--mode", "autopilot", "--allow-all-paths", "--model", "x"}, []string{"--mode autopilot", "--allow-all-paths"}},
+	} {
+		argv, err := r.ResumeArgv(tc.harness, "id-1", tc.started)
+		if got := r.RiskyFlags(tc.harness, argv); err != nil || !slices.Equal(got, tc.want) {
+			t.Errorf("%s %q: RiskyFlags = %q, %v; want %q", tc.harness, tc.started, got, err, tc.want)
+		}
 	}
 }

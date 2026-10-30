@@ -15,6 +15,7 @@ type resumeAgentResult struct {
 	Harness        string `json:"harness"`
 	AgentSessionID string `json:"agent_session_id"`
 	Command        string `json:"command"`
+	Warning        string `json:"warning"`
 	Typed          bool   `json:"typed"`
 }
 
@@ -49,10 +50,13 @@ func printResumeAgent(w io.Writer, raw json.RawMessage) error {
 	}
 	if !res.Typed {
 		fmt.Fprintln(w, res.Command)
-		return nil
+	} else {
+		fmt.Fprintf(w, "Resumed %s conversation %s in %s: %s\n",
+			plainLine(res.Harness), plainLine(res.AgentSessionID), shortWindowID(res.WindowID), res.Command)
 	}
-	fmt.Fprintf(w, "Resumed %s conversation %s in %s: %s\n",
-		plainLine(res.Harness), plainLine(res.AgentSessionID), shortWindowID(res.WindowID), res.Command)
+	if res.Warning != "" {
+		fmt.Fprintln(w, plainLine(res.Warning))
+	}
 	return nil
 }
 

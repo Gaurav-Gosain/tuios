@@ -33,7 +33,9 @@ import (
 //   - auto: the daemon waits for the restored shell's prompt mark and
 //     retries while its terminal is busy, for at most ten seconds. A shell
 //     with no marks may use the existing quiet-output fallback. A pane
-//     still unsafe then gets the ask item instead.
+//     still unsafe then gets the ask item instead. So does an offer whose
+//     kept flags turn approvals off (resumeOffer.risky): that is the
+//     person's call to make again, not the daemon's.
 //   - off: neither. The id stays on the window, so resume-agent still works.
 //
 // The command is built from the harness manifest's [resume] template, the
@@ -87,6 +89,20 @@ type resumeOffer struct {
 	harness   string
 	sessionID string
 	argv      []string
+	// risky are the kept flags in argv that turn off approvals or
+	// sandboxing. An offer with any is never typed without the person.
+	risky []string
+}
+
+// ResumeWarning is what a resume command that carries flags turning off
+// approvals or sandboxing says about them, wherever the command is shown: a
+// Resume row, the agents view's card, list-attention and resume-agent. Empty
+// for none.
+func ResumeWarning(risky []string) string {
+	if len(risky) == 0 {
+		return ""
+	}
+	return "Resumes with approvals off (" + strings.Join(risky, ", ") + ")"
 }
 
 // resumeHarnessOf is the harness a window's conversation id belongs to: the
@@ -145,6 +161,7 @@ func (d *Daemon) resumeOfferFor(sessionName string, w WindowState) (resumeOffer,
 		harness:   hid,
 		sessionID: w.AgentSessionID,
 		argv:      argv,
+		risky:     d.agentMatcher.registry.RiskyFlags(hid, argv),
 	}, true
 }
 
@@ -156,6 +173,12 @@ func (d *Daemon) applyResumeOffers(offers []resumeOffer) {
 		return
 	case resumeModeAuto:
 		for i, o := range offers {
+			if len(o.risky) > 0 {
+				// Approvals off is the person's call to make again, so the
+				// offer waits for them instead of being typed.
+				d.attention.openResume(d.resumeItem(o))
+				continue
+			}
 			go d.autoResume(o, time.Duration(i)*resumeAutoStagger)
 		}
 		return
@@ -169,13 +192,14 @@ func (d *Daemon) applyResumeOffers(offers []resumeOffer) {
 // command itself, so the person sees exactly what y would type.
 func (d *Daemon) resumeItem(o resumeOffer) AttentionItem {
 	return AttentionItem{
-		Kind:      AttentionResume,
-		Session:   o.session,
-		Window:    o.window,
-		Workspace: o.workspace,
-		Harness:   o.harness,
-		Name:      attentionText(o.name, attentionMaxSummary),
-		Summary:   attentionText(harness.ResumeCommandLine(o.argv), attentionMaxSummary),
+		Kind:       AttentionResume,
+		Session:    o.session,
+		Window:     o.window,
+		Workspace:  o.workspace,
+		Harness:    o.harness,
+		Name:       attentionText(o.name, attentionMaxSummary),
+		Summary:    attentionText(harness.ResumeCommandLine(o.argv), attentionMaxSummary),
+		RiskyFlags: o.risky,
 	}
 }
 
@@ -269,6 +293,7 @@ type resumePlan struct {
 	harness   string
 	sessionID string
 	argv      []string
+	risky     []string
 }
 
 // planResume works out the command for a window without typing anything.
@@ -297,7 +322,8 @@ func (d *Daemon) planResume(sess *Session, target string) (resumePlan, error) {
 	if err != nil {
 		return resumePlan{window: w, harness: hid, sessionID: w.AgentSessionID}, err
 	}
-	return resumePlan{window: w, harness: hid, sessionID: w.AgentSessionID, argv: argv}, nil
+	return resumePlan{window: w, harness: hid, sessionID: w.AgentSessionID, argv: argv,
+		risky: d.agentMatcher.registry.RiskyFlags(hid, argv)}, nil
 }
 
 // shellHoldsForeground reports whether a pane's own shell is in the
@@ -378,6 +404,8 @@ func (d *Daemon) verbResumeAgent(cs *connState, params json.RawMessage) (any, *v
 		"agent_session_id": plan.sessionID,
 		"argv":             plan.argv,
 		"command":          harness.ResumeCommandLine(plan.argv),
+		"risky_flags":      plan.risky,
+		"warning":          ResumeWarning(plan.risky),
 		"typed":            !p.DryRun,
 	}, nil
 }

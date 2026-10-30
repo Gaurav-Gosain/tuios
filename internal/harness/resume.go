@@ -41,6 +41,12 @@ type Resume struct {
 	// conversation or run a prompt again.
 	KeepFlags   []string `toml:"keep_flags"`
 	KeepOptions []string `toml:"keep_options"`
+	// KeepRisky marks the kept flags that turn off approvals or sandboxing:
+	// a name from KeepFlags, a name from KeepOptions (any value), or
+	// name=value for one value of an option (--permission-mode=
+	// bypassPermissions). A resume that carries one names it wherever the
+	// command is shown, and is never typed without the person.
+	KeepRisky []string `toml:"keep_risky"`
 	// KeepSource is where the flag names came from, in words.
 	KeepSource string `toml:"keep_source"`
 }
@@ -140,6 +146,15 @@ func (r *Resume) normalize() error {
 			return err
 		}
 	}
+	for _, mark := range r.KeepRisky {
+		name, value, withValue := strings.Cut(mark, "=")
+		switch {
+		case withValue && (!slices.Contains(r.KeepOptions, name) || !keptValue(value)):
+			return fmt.Errorf("keep_risky %q: %s is not in keep_options, or the value is not one plain token", mark, name)
+		case !withValue && !seen[name]:
+			return fmt.Errorf("keep_risky %q is not in keep_flags or keep_options", mark)
+		}
+	}
 	return nil
 }
 
@@ -218,6 +233,38 @@ var ErrBadResumeID = errors.New("the session id cannot be typed safely")
 func (r *Registry) CanResume(id string) bool {
 	m := r.Lookup(id)
 	return m != nil && len(m.Resume.Argv) > 0
+}
+
+// risky returns the flags of kept, the output of keep, that KeepRisky marks,
+// each as it is typed: "--yolo" or "--sandbox danger-full-access".
+func (r *Resume) risky(kept []string) []string {
+	var out []string
+	for i := 0; i < len(kept); i++ {
+		name, show := kept[i], kept[i]
+		if slices.Contains(r.KeepOptions, name) && i+1 < len(kept) {
+			i++
+			show += " " + kept[i]
+			if slices.Contains(r.KeepRisky, name+"="+kept[i]) {
+				out = append(out, show)
+				continue
+			}
+		}
+		if slices.Contains(r.KeepRisky, name) {
+			out = append(out, show)
+		}
+	}
+	return out
+}
+
+// RiskyFlags returns the flags of argv, a command ResumeArgv built for
+// harness id, that turn off approvals or sandboxing (Resume.KeepRisky). nil
+// for none.
+func (r *Registry) RiskyFlags(id string, argv []string) []string {
+	m := r.Lookup(id)
+	if m == nil || len(m.Resume.KeepRisky) == 0 || len(argv) <= len(m.Resume.Argv) {
+		return nil
+	}
+	return m.Resume.risky(argv[len(m.Resume.Argv):])
 }
 
 // KeptFlags returns the flags of argv, the command line a process of harness

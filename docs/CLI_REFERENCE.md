@@ -3061,8 +3061,10 @@ Resume the agent conversation a pane ran before a daemon restart: type the
 harness's resume command, from its manifest's `[resume]` block, with the id a
 hook recorded for the pane (`claude --resume <id>`, `codex resume <id>`). The
 flags the agent was started with that its manifest keeps come after the id,
-such as `claude --resume <id> --permission-mode plan --model opus`. It brings
-back the conversation, not the process. See
+such as `claude --resume <id> --permission-mode plan --model opus`. When a kept
+flag turns approvals off, a second line says so, such as `Resumes with
+approvals off (--dangerously-skip-permissions)`. It brings back the
+conversation, not the process. See
 [Agent state](AGENT_STATE.md#resuming-after-a-restart).
 
 **Usage:**

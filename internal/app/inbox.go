@@ -930,6 +930,9 @@ func inboxKindWords(it session.AttentionItem) string {
 	case session.AttentionMail:
 		return "wrote to you"
 	case session.AttentionResume:
+		if len(it.RiskyFlags) > 0 {
+			return "can resume its conversation with approvals off"
+		}
 		return "can resume its conversation"
 	case session.AttentionOutbox:
 		return "mail waits to be sent"

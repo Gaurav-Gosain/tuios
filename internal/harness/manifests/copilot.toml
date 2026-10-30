@@ -85,3 +85,6 @@ source = "herdr src/agent_resume.rs; not measured"
 keep_options = ["--model", "--reasoning-effort", "--agent", "--mode"]
 keep_flags   = ["--allow-all-tools", "--allow-all-paths", "--allow-all-urls", "--allow-all", "--yolo", "--autopilot", "--plan", "--experimental"]
 keep_source  = "copilot --help, GitHub Copilot CLI 1.0.98"
+# The kept flags that turn approvals off, from copilot --help: the allow-all
+# family ("without confirmation"), --yolo, and autopilot mode.
+keep_risky   = ["--allow-all-tools", "--allow-all-paths", "--allow-all-urls", "--allow-all", "--yolo", "--autopilot", "--mode=autopilot"]

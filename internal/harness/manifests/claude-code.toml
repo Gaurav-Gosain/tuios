@@ -364,3 +364,7 @@ source = "claude --help: -r, --resume [value] resumes a conversation by session 
 keep_options = ["--model", "--permission-mode", "--effort", "--agent", "--fallback-model"]
 keep_flags   = ["--dangerously-skip-permissions", "--allow-dangerously-skip-permissions", "--chrome", "--no-chrome", "--ide"]
 keep_source  = "claude --help, Claude Code 2.1.312"
+# The kept flags that turn approvals off. A resume with one is shown with a
+# warning and is never typed automatically. From claude --help: "Bypass all
+# permission checks", and the bypassPermissions permission mode.
+keep_risky   = ["--dangerously-skip-permissions", "--allow-dangerously-skip-permissions", "--permission-mode=bypassPermissions"]

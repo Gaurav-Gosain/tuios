@@ -28,9 +28,11 @@ import (
 //
 // One of the five is a fake Claude Code, a script named claude on PATH that
 // prints its arguments. It is started with --permission-mode plan --model
-// sonnet and with one-shot flags and a prompt. The resume command the restore
-// offers, and the command line the resumed process gets from y, must carry
-// the two kept flags and none of the rest.
+// sonnet --dangerously-skip-permissions and with one-shot flags and a prompt.
+// The resume command the restore offers, and the command line the resumed
+// process gets from y, must carry the three kept flags and none of the rest.
+// The skip flag turns approvals off, so the dry run, list-attention and the
+// Inbox row must say so.
 //
 // Negative control: with the restore's conversation ids not put back after
 // its state push (daemon_resurrect.go), the Inbox still lists the offer but
@@ -40,6 +42,7 @@ import (
 // (inbox_input.go), y with two marks resumes one. With the kept flags not
 // noted by the detection poll (agent_detect.go), or not put back after the
 // restore's state push (daemon_resurrect.go), the Claude offer has no flags.
+// With keep_risky cut from the Claude manifest, nothing names approvals off.
 func TestRestartOffersToResumeTheConversation(t *testing.T) {
 	base := t.TempDir()
 	killDaemon(t, base)
@@ -93,7 +96,8 @@ argv = ["echo", "resumed-{session_id}"]
 	}
 	// The command each offer types: the echo, or claude on the conversation
 	// with the two kept flags and nothing else from its command line.
-	claudeResume := "claude --resume " + convs[claudeSession] + " --permission-mode plan --model sonnet"
+	claudeResume := "claude --resume " + convs[claudeSession] + " --permission-mode plan --model sonnet --dangerously-skip-permissions"
+	const riskyWarning = "Resumes with approvals off (--dangerously-skip-permissions)"
 	commandOf := func(name string) string {
 		if name == claudeSession {
 			return claudeResume
@@ -113,12 +117,12 @@ argv = ["echo", "resumed-{session_id}"]
 	// The person starts Claude with the flags they want, a one-shot flag or
 	// two and a prompt. The detector reads its command line, and the resume
 	// the pane would type now keeps the flags the manifest lists.
-	mustCLI(t, base, "send-text", "-s", claudeSession, "claude --permission-mode plan --model sonnet -p --continue fix-the-bug\n")
-	waitCapture(t, base, claudeSession, "", "claude-argv: --permission-mode plan --model sonnet -p --continue fix-the-bug")
+	mustCLI(t, base, "send-text", "-s", claudeSession, "claude --permission-mode plan --model sonnet --dangerously-skip-permissions -p --continue fix-the-bug\n")
+	waitUnwrapped(t, base, claudeSession, "claude-argv: --permission-mode plan --model sonnet --dangerously-skip-permissions -p --continue fix-the-bug")
 	deadline := time.Now().Add(uiTimeout)
 	for {
 		out, err := tuiosCLI(t, base, "resume-agent", "-s", claudeSession, "--dry-run")
-		if err == nil && strings.TrimSpace(out) == claudeResume {
+		if err == nil && strings.TrimSpace(out) == claudeResume+"\n"+riskyWarning {
 			break
 		}
 		if time.Now().After(deadline) {
@@ -153,6 +157,7 @@ argv = ["echo", "resumed-{session_id}"]
 		for name := range convs {
 			all = all && strings.Contains(out, commandOf(name))
 		}
+		all = all && strings.Contains(out, riskyWarning+": "+claudeResume)
 		if all {
 			break
 		}
@@ -181,11 +186,34 @@ argv = ["echo", "resumed-{session_id}"]
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
 		text := s.Text()
 		return strings.Contains(text, "5 needs you") && strings.Contains(text, "Resume") && strings.Contains(text, "echo resumed-") &&
-			strings.Contains(text, "* y resume all")
+			strings.Contains(text, "* y resume all") && strings.Contains(text, "Resumes with approvals off")
 	}, uiTimeout); err != nil {
-		t.Fatalf("ASSERTION: the Inbox never listed the offers with the resume all key: %v\n%s", err, term.Snapshot())
+		t.Fatalf("ASSERTION: the Inbox never listed the offers with the resume all key and the approvals warning: %v\n%s", err, term.Snapshot())
 	}
 	saveFrame(t, term, "resume-inbox")
+	// The card of the Claude row has room for the whole warning, and marks
+	// the row risky. j walks to it, and k walks back to where the cursor was.
+	steps := 0
+	for ; steps < len(convs); steps++ {
+		if term.WaitFor(func(s tuitest.Screen) bool {
+			text := s.Text()
+			return strings.Contains(text, riskyWarning) && riskyBadge(text)
+		}, time.Second) == nil {
+			break
+		}
+		if err := term.SendKeys("j"); err != nil {
+			t.Fatalf("move down: %v", err)
+		}
+	}
+	if steps == len(convs) {
+		t.Fatalf("ASSERTION: no card names the whole approvals warning:\n%s", term.Snapshot())
+	}
+	saveFrame(t, term, "resume-risky-card")
+	for range steps {
+		if err := term.SendKeys("k"); err != nil {
+			t.Fatalf("move up: %v", err)
+		}
+	}
 
 	// ran reports whether a session's pane shows the echo's output on a line
 	// of its own, apart from the command.
@@ -297,8 +325,8 @@ argv = ["echo", "resumed-{session_id}"]
 	waitRan(5, "* then y")
 	// The Claude that y started got the two kept flags and nothing else: the
 	// line is matched whole, so a one-shot flag or the prompt fails it.
-	resumedArgv := "claude-argv: --resume " + convs[claudeSession] + " --permission-mode plan --model sonnet"
-	if out := mustCLI(t, base, "capture-pane", "-s", claudeSession); !slices.ContainsFunc(strings.Split(out, "\n"), func(l string) bool {
+	resumedArgv := "claude-argv: --resume " + convs[claudeSession] + " --permission-mode plan --model sonnet --dangerously-skip-permissions"
+	if out := mustCLI(t, base, "capture-pane", "--unwrap", "-s", claudeSession); !slices.ContainsFunc(strings.Split(out, "\n"), func(l string) bool {
 		return strings.TrimSpace(l) == resumedArgv
 	}) {
 		t.Fatalf("ASSERTION: the resumed Claude did not get exactly its kept flags, want %q:\n%s", resumedArgv, out)
@@ -323,6 +351,121 @@ argv = ["echo", "resumed-{session_id}"]
 		time.Sleep(100 * time.Millisecond)
 	}
 	alive(t, term, "after resuming from the Inbox")
+}
+
+// riskyBadge reports whether a screen shows a card titled Resume with the
+// risky badge at the end of its title line.
+func riskyBadge(text string) bool {
+	for line := range strings.SplitSeq(text, "\n") {
+		line = strings.TrimSpace(line)
+		if strings.Contains(line, "Resume   ") && strings.HasSuffix(line, " risky") {
+			return true
+		}
+	}
+	return false
+}
+
+// waitUnwrapped waits for a pane to show text, with the rows the pane wrapped
+// joined, so a long command line is found whole.
+func waitUnwrapped(t *testing.T, base, session, text string) {
+	t.Helper()
+	deadline := time.Now().Add(uiTimeout)
+	for {
+		out, _ := tuiosCLI(t, base, "capture-pane", "--unwrap", "-s", session)
+		if strings.Contains(out, text) {
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("the pane never showed %q:\n%s", text, out)
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+}
+
+// TestAutoResumeLeavesApprovalsOffToThePerson runs two fake Claude Code
+// agents under daemon.resume_agents = "auto": one started with --model, one
+// with --dangerously-skip-permissions too. After a restart the first comes
+// back by itself. The second must not: it waits as a Resume row that says it
+// resumes with approvals off, and nothing is typed into its pane. Its card
+// names the flag in full and carries the risky badge.
+//
+// Negative control: with the risky check cut from applyResumeOffers
+// (agent_resume.go), the second agent is resumed automatically and no Resume
+// row is left. With keep_risky cut from the Claude Code manifest, no row
+// names approvals off.
+func TestAutoResumeLeavesApprovalsOffToThePerson(t *testing.T) {
+	base := t.TempDir()
+	killDaemon(t, base)
+	bin := filepath.Join(base, "bin")
+	if err := os.MkdirAll(bin, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	fakeClaude := "#!/bin/sh\nprintf 'claude-argv:'; printf ' %s' \"$@\"; printf '\\n'\n" +
+		"if [ \"$1\" = --resume ]; then exit 0; fi\nsleep 600\n"
+	if err := os.WriteFile(filepath.Join(bin, "claude"), []byte(fakeClaude), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", strings.Join([]string{bin, "/usr/bin", "/bin"}, string(os.PathListSeparator)))
+	writeConfig(t, base, "[daemon]\nresume_agents = 'auto'\n")
+
+	agents := []struct{ session, conv, flags string }{
+		{"e2e-auto-safe", "a1b2-c3d4", "--model sonnet"},
+		{"e2e-auto-risky", "e5f6-a7b8", "--model sonnet --dangerously-skip-permissions"},
+	}
+	for _, a := range agents {
+		mustCLI(t, base, "new", a.session, "--detach")
+		mustCLI(t, base, "set-agent-state", "-s", a.session, "working", "--harness", "claude-code", "--agent-session-id", a.conv)
+		mustCLI(t, base, "send-text", "-s", a.session, "claude "+a.flags+"\n")
+		waitUnwrapped(t, base, a.session, "claude-argv: "+a.flags)
+		want := "claude --resume " + a.conv + " " + a.flags
+		deadline := time.Now().Add(uiTimeout)
+		for {
+			out, _ := tuiosCLI(t, base, "resume-agent", "-s", a.session, "--dry-run")
+			if strings.HasPrefix(strings.TrimSpace(out), want) {
+				break
+			}
+			if time.Now().After(deadline) {
+				t.Fatalf("the flags of %s were not kept:\n%s", a.session, out)
+			}
+			time.Sleep(100 * time.Millisecond)
+		}
+	}
+	mustCLI(t, base, "restart-server", "--yes")
+
+	// The safe agent comes back by itself.
+	waitUnwrapped(t, base, agents[0].session, "claude-argv: --resume "+agents[0].conv+" --model sonnet")
+	// The risky one waits for the person, and says why.
+	deadline := time.Now().Add(uiTimeout)
+	for {
+		out, _ := tuiosCLI(t, base, "list-attention")
+		if strings.Contains(out, "Resumes with approvals off (--dangerously-skip-permissions): claude --resume "+agents[1].conv) {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("ASSERTION: no Resume row names approvals off for the risky agent:\n%s", out)
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	// Past the point the safe one was typed, and well past the auto stagger:
+	// nothing reached the risky pane.
+	time.Sleep(2 * time.Second)
+	if out := mustCLI(t, base, "capture-pane", "-s", agents[1].session); strings.Contains(out, "claude --resume") {
+		t.Fatalf("ASSERTION: auto mode resumed an agent with approvals off:\n%s", out)
+	}
+	term := startIn(t, base, startOpts{args: []string{"attach", agents[1].session}})
+	if err := term.WaitForText("can resume its", bootTimeout); err != nil {
+		t.Fatalf("the dock did not announce the offer: %v\n%s", err, term.Snapshot())
+	}
+	if err := term.SendKeys(tuitest.Ctrl('b'), "i"); err != nil {
+		t.Fatalf("open the Inbox: %v", err)
+	}
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		text := s.Text()
+		return strings.Contains(text, "Resumes with approvals off (--dangerously-skip-permissions)") && riskyBadge(text)
+	}, uiTimeout); err != nil {
+		t.Fatalf("ASSERTION: the Inbox row does not name approvals off: %v\n%s", err, term.Snapshot())
+	}
+	saveFrame(t, term, "resume-risky-row")
 }
 
 // TestAutoResumeWaitsForShellReadiness checks startup, foreground safety and

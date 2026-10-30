@@ -174,6 +174,9 @@ type AttentionItem struct {
 	// note a finished turn carried, or the mail's subject. Control characters
 	// are removed, likely secrets are masked and it is cut to 160 bytes.
 	Summary string `json:"summary,omitempty"`
+	// RiskyFlags are, on a resume item, the flags in the command that turn
+	// off approvals or sandboxing (see ResumeWarning).
+	RiskyFlags []string `json:"risky_flags,omitempty"`
 	// Options are the answers reply-approval takes for this item, set only
 	// while RequestID is: once, always and deny, or the subset the harness can
 	// honour. See approvals.go.
