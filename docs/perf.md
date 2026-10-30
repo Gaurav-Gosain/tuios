@@ -2397,6 +2397,14 @@ call sites, each with a copy of `lipgloss.Style`. It now carries
 `//go:noinline`. A helper that runs once per action, or that returns a large
 struct, should carry it too.
 
+`strings.Builder` has the same cost. `internal/textbuf` holds the same type with
+`WriteString`, `WriteByte` and `WriteRune` out of line, which saves about 270
+bytes of the file per write. Use it where text is built once per
+action. Keep `strings.Builder` where text is built per cell or per frame, and
+wherever another package's API names `*strings.Builder`. A type assertion to an
+interface that names it fails at run time on `textbuf.Builder`, and the compiler
+does not report this.
+
 A map literal of slices compiles to code that runs at every start. A map literal
 of arrays of constants compiles to data. `verbCapabilities` uses this form.
 
