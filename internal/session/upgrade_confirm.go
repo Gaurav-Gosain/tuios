@@ -101,13 +101,10 @@ func (d *Daemon) confirmUpgrade(cs *connState, bin handoffBinary) string {
 		LogBasic("Live upgrade from a pane refused: %s", why)
 		return why
 	}
-	if d.personClients() == 0 {
-		return refuse("No client is attached to show the dialog. Ask the person to attach a client, then run the command again")
-	}
-	if !d.agentsEnabled() {
-		// The dialog rides the Inbox, which clients do not watch with the
-		// agent features off.
-		return refuse("The agent features are off, so no client shows the dialog. Ask the person to run tuios daemon upgrade from a terminal outside tuios")
+	// Checked again here: the preflight can take seconds, and the last client
+	// can detach while it runs.
+	if why := d.upgradeDialogRefusal(); why != "" {
+		return refuse(why)
 	}
 	if !askLinePrintable(bin.path) || !askLineShown(bin.accepts.Version, askMaxOption) {
 		// What the dialog shows must be what the exec runs, character for
@@ -162,6 +159,20 @@ func (d *Daemon) confirmUpgrade(cs *connState, bin handoffBinary) string {
 		return "The daemon is shutting down"
 	}
 	return fmt.Sprintf("The dialog closed without an answer (%s). Run the command again, and ask the person to choose Yes in the dialog", out.Reason)
+}
+
+// upgradeDialogRefusal says why no dialog could be shown for a pane's upgrade
+// right now, and "" when one can.
+func (d *Daemon) upgradeDialogRefusal() string {
+	if d.personClients() == 0 {
+		return "No client is attached to show the dialog. Ask the person to attach a client, then run the command again"
+	}
+	if !d.agentsEnabled() {
+		// The dialog rides the Inbox, which clients do not watch with the
+		// agent features off.
+		return "The agent features are off, so no client shows the dialog. Ask the person to run tuios daemon upgrade from a terminal outside tuios"
+	}
+	return ""
 }
 
 // closeAsk ends an open question that a waiting call gives up on, and takes

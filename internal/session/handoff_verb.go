@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 )
@@ -45,11 +46,26 @@ func (d *Daemon) verbDaemonUpgrade(cs *connState, params json.RawMessage) (any, 
 	}
 	req := handoffRequest{binary: p.Binary}
 	if confirm {
+		// The preflight runs the pane's file as the daemon's own child, so it
+		// runs only when a dialog could be shown, and only on the file that was
+		// there when the call came: pinned before the checks, and the one the
+		// preflight ran must be it.
+		pin, err := statFileID(p.Binary)
+		if err != nil {
+			return nil, upgradeRefusal(fmt.Errorf("%s: %w", p.Binary, err))
+		}
+		if why := d.upgradeDialogRefusal(); why != "" {
+			LogBasic("Live upgrade from a pane refused: %s", why)
+			return nil, notPerson(why)
+		}
 		// The dialog shows the binary's path and version, so the preflight
-		// runs first, and the upgrade then takes only the file it ran.
+		// runs before it, and the upgrade then takes only the file it ran.
 		bin, err := preflightBinary(p.Binary)
 		if err != nil {
 			return nil, upgradeRefusal(err)
+		}
+		if bin.file != pin {
+			return nil, upgradeRefusal(fmt.Errorf("%s was replaced while it was being checked. Run the upgrade again when the install has finished", bin.path))
 		}
 		if why := d.confirmUpgrade(cs, bin); why != "" {
 			return nil, notPerson(why)
