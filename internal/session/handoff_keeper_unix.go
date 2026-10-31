@@ -19,9 +19,9 @@ import (
 // before it is released: the previous binary, adopting the manifest.
 //
 // The keeper is started before any descriptor loses close-on-exec, and it is
-// given only the ones in hold and its socket: a pane's program never sees any
-// of them. It leads a session of its own, so no signal meant for the daemon's
-// group reaches it.
+// given only the ones in hold, its socket and the daemon's stderr: a pane's
+// program never sees any of them. It leads a session of its own, so no signal
+// meant for the daemon's group reaches it.
 func startKeeper(bin string, hold []int, argv []string) (*handoffKeeper, error) {
 	// Both ends are close-on-exec before any fork can see them, the way the
 	// net package makes a socket.
@@ -43,7 +43,7 @@ func startKeeper(bin string, hold []int, argv []string) (*handoffKeeper, error) 
 	}
 	defer func() { _ = null.Close() }()
 
-	files := []uintptr{null.Fd(), null.Fd(), null.Fd(), uintptr(pair[1])} //nolint:gosec // a descriptor number
+	files := []uintptr{null.Fd(), null.Fd(), keeperStderr(null), uintptr(pair[1])} //nolint:gosec // a descriptor number
 	nums := make([]string, len(hold))
 	for i, fd := range hold {
 		files = append(files, uintptr(fd)) //nolint:gosec // a descriptor number
@@ -62,6 +62,18 @@ func startKeeper(bin string, hold []int, argv []string) (*handoffKeeper, error) 
 		return nil, fmt.Errorf("starting %s: %w", bin, err)
 	}
 	return &handoffKeeper{pid: pid, conn: os.NewFile(uintptr(pair[0]), "handoff-keeper")}, nil //nolint:gosec // a descriptor number
+}
+
+// keeperStderr is the descriptor the keeper gets as its stderr: the daemon's
+// own, which a background daemon has on daemon.log. The keeper passes it on to
+// the image it execs, so a recovered daemon writes a runtime panic where any
+// other daemon does, and an exec the keeper fails to make is reported there
+// too. A daemon whose stderr is closed gives the keeper null.
+func keeperStderr(null *os.File) uintptr {
+	if _, err := unix.FcntlInt(uintptr(unix.Stderr), unix.F_GETFD, 0); err != nil {
+		return null.Fd()
+	}
+	return uintptr(unix.Stderr)
 }
 
 // RunHandoffKeeper is the keeper's whole life. It holds the descriptors it
