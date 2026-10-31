@@ -69,7 +69,9 @@ const (
 	ErrVerbUpgradeRefused = "upgrade_refused"
 	// ErrVerbDaemonUpgrading ends a call the daemon was still working on, or
 	// waiting in, when a live upgrade replaced its image. The connection
-	// closes after it. The new image answers the same call made again.
+	// closes after it. A call that reads or waits can be made again, and the
+	// new image answers it. A call that changes something may have partly
+	// run, so its caller checks what it did before making it again.
 	ErrVerbDaemonUpgrading = "daemon_upgrading"
 
 	// ErrVerbNotReady reports that a cross-agent verb declined to act because
