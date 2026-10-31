@@ -1298,7 +1298,7 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 				}
 			}
 			// Update visual selection end
-			if cm.State == terminal.CopyModeVisualChar || cm.State == terminal.CopyModeVisualLine {
+			if cm.State.InVisual() {
 				scrollbackLen := 0
 				if w.Terminal != nil {
 					scrollbackLen = w.Terminal.ScrollbackLen()

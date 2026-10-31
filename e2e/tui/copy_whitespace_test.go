@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"unicode/utf8"
 
 	"github.com/Gaurav-Gosain/tuitest"
 )
@@ -253,4 +254,164 @@ func TestCopyKeepsSpacesAtASoftWrap(t *testing.T) {
 			alive(t, term, "after the wrapped copy")
 		})
 	}
+}
+
+// blockCmd prints the rows the block cases select. The commands spell every
+// marker with a gap, so only the output holds it.
+const blockCmd = `clear; printf 'BLOCK%sA one two\nBLOCK%sB \344\270\255\346\226\207 x\nBLOCK%sC\nBLOCK%sD     far\n' - - - -`
+
+// blockSelectionConfig gives the selection a ground no other cell has, so the
+// shape on the screen can be read off the cells.
+var blockSelectionConfig = strings.Replace(copyPipeConfig, "[appearance.selection]\n", "[appearance.selection]\nbg = \"#00ff00\"\n", 1)
+
+// TestCopyBlockSelection is ctrl+v in copy mode: the selection draws as a
+// rectangle, and each way of copying it takes one line per row.
+//
+// How these could pass wrongly, written down first:
+//   - The block could be a character selection that happens to give the same
+//     text. Each want has a row where the two differ: a character selection
+//     holds everything between the ends, whole lines in the middle.
+//   - The drawing could be right only where text is. The short row is the row the
+//     rectangle check needs, since the block runs past its end.
+//   - A trailing blank could leak in, or be lost. The short row must have none,
+//     and the row with text past the block must keep its blanks.
+//   - A wide character could be cut. The block's edges fall on it from both sides.
+//
+// Negative controls: with extractVisualText ignoring the block, the first yank
+// holds whole rows. With the render path stopping at each row's text, the
+// rectangle check fails on the short row. With BlockRowSpan not widening, the
+// wide character check fails. See NEGATIVE_CONTROLS.md.
+func TestCopyBlockSelection(t *testing.T) {
+	base := t.TempDir()
+	writeConfig(t, base, blockSelectionConfig)
+	out := &lockedBuffer{}
+	term := startIn(t, base, startOpts{cols: 120, rows: 40, out: out, env: copyColorOpts.env, args: []string{"new", "block"}})
+	killDaemon(t, base)
+	waitBoot(t, term)
+	newWindow(t, term)
+	enterTerminalMode(t, term)
+	runInShell(t, term, blockCmd, "BLOCK-D", shellTimeout)
+	time.Sleep(300 * time.Millisecond)
+
+	top := lastRowWith(term.Screen(), "BLOCK-A")
+	line := term.Screen().Line(top)
+	at := strings.Index(line, "BLOCK-A")
+	if at < 0 {
+		t.Fatalf("no first row on screen\n%s", term.Snapshot())
+	}
+	// A column, not a byte offset: the pane's border comes first.
+	marker := utf8.RuneCountInString(line[:at])
+	selected := func(s tuitest.Screen, col, row int) bool {
+		bg := s.Cell(col, row).Bg
+		return bg.Kind == tuitest.ColorRGB && bg.R == 0 && bg.G == 0xff && bg.B == 0
+	}
+	// startBlock goes to the marker of the first row, moves right to column
+	// left, and starts a block.
+	startBlock := func(left int) {
+		t.Helper()
+		copySearch(t, term, "BLOCK-A", top)
+		keys := make([]any, 0, left+1)
+		for range left {
+			keys = append(keys, "l")
+		}
+		sendEach(t, term, append(keys, tuitest.Ctrl('v'))...)
+		if err := term.WaitForText("o corner", uiTimeout); err != nil {
+			t.Fatalf("ctrl+v did not start a block: %v\n%s", err, term.Snapshot())
+		}
+	}
+	leave := func() {
+		t.Helper()
+		sendEach(t, term, "q")
+		if err := term.WaitFor(func(s tuitest.Screen) bool {
+			_, _, ok := copyCursorCell(s)
+			return !ok
+		}, uiTimeout); err != nil {
+			t.Fatalf("q did not leave copy mode\n%s", term.Snapshot())
+		}
+	}
+
+	// Columns 6 to 9 of four rows. The text is what tmux takes: the short row
+	// stops at its text, the fourth keeps the blanks before its text, and the
+	// wide character that starts on column 8 is whole.
+	startBlock(6)
+	sendEach(t, term, "l", "l", "l", "j", "j", "j")
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		for row := top; row <= top+3; row++ {
+			for col := 6; col <= 9; col++ {
+				// The cursor's own cell has the cursor ground, not the selection's,
+				// and the second column of the wide character is read at its first.
+				if (row == top+3 || row == top+1) && col == 9 {
+					continue
+				}
+				if !selected(s, marker+col, row) {
+					return false
+				}
+			}
+			if selected(s, marker+5, row) || selected(s, marker+10, row) {
+				return false
+			}
+		}
+		return true
+	}, uiTimeout); err != nil {
+		t.Fatalf("the selection is not a rectangle: %v\n%s", err, term.SnapshotStyled())
+	}
+	dir := artifactDir(t)
+	saveArtifact(t, term, dir, "block")
+	savePNG(t, term.Screen(), hostPalette(t, ""), dir, "block")
+	from := len(clipboardWrites(out))
+	sendEach(t, term, "y")
+	if got, want := rawWrite(t, term, out, from, "block y"), "A on\nB 中\nC\nD   "; got != want {
+		t.Fatalf("the block copied %q, want %q", got, want)
+	}
+	leave()
+
+	// o goes to the opposite corner, and the next motion moves that corner.
+	startBlock(6)
+	sendEach(t, term, "l", "l", "l", "j", "j", "j", "o", "l")
+	from = len(clipboardWrites(out))
+	sendEach(t, term, "y")
+	if got, want := rawWrite(t, term, out, from, "block o l y"), " on\n 中\n\n   "; got != want {
+		t.Fatalf("after o and l the block copied %q, want %q", got, want)
+	}
+	leave()
+
+	// The left edge falls on the second column of the wide character on the
+	// second row, and the right edge on the first column of the next one. Both
+	// come whole, and the selection draws over both.
+	startBlock(9)
+	sendEach(t, term, "l", "j")
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		return selected(s, marker+8, top+1)
+	}, uiTimeout); err != nil {
+		t.Fatalf("the selection does not cover a wide character on its edge: %v\n%s", err, term.SnapshotStyled())
+	}
+	from = len(clipboardWrites(out))
+	sendEach(t, term, "y")
+	if got, want := rawWrite(t, term, out, from, "block over wide"), "ne\n中文"; got != want {
+		t.Fatalf("the block over the wide characters copied %q, want %q", got, want)
+	}
+	leave()
+
+	// A copy pipe gets the same rows, and tr shows the newlines were there.
+	startBlock(0)
+	sendEach(t, term, "l", "l", "l", "l", "j", "j", "j")
+	from = len(clipboardWrites(out))
+	sendEach(t, term, "p")
+	if got, want := pipeWrite(t, term, out, from, "block p"), "BLOCK BLOCK BLOCK BLOCK"; got != want {
+		t.Fatalf("the copy pipe got %q, want %q", got, want)
+	}
+	leave()
+
+	// A wrapped line gives one line per row on the screen, unlike v and V.
+	runInShell(t, term, `clear; printf 'WRAP%sS%s\n' - "$(printf 'x%.0s' $(seq 300))"`, "xxxx", shellTimeout)
+	time.Sleep(300 * time.Millisecond)
+	first := lastRowWith(term.Screen(), "WRAP-S")
+	copySearch(t, term, "WRAP-S", first)
+	sendEach(t, term, tuitest.Ctrl('v'), "l", "l", "j")
+	from = len(clipboardWrites(out))
+	sendEach(t, term, "y")
+	if got, want := rawWrite(t, term, out, from, "block over a wrap"), "WRA\nxxx"; got != want {
+		t.Fatalf("the block over a wrapped line copied %q, want %q", got, want)
+	}
+	alive(t, term, "after the block selections")
 }

@@ -30,12 +30,20 @@ func enterVisualLine(cm *terminal.CopyMode, window *terminal.Window) {
 	cm.VisualEnd = terminal.Position{X: endX, Y: absY}
 }
 
+// enterVisualBlock enters a rectangular selection. The anchor is one corner and
+// the cursor is the opposite corner.
+func enterVisualBlock(cm *terminal.CopyMode, window *terminal.Window) {
+	cm.State = terminal.CopyModeVisualBlock
+	cm.VisualStart = terminal.Position{X: cm.CursorX, Y: getAbsoluteY(cm, window)}
+	cm.VisualEnd = cm.VisualStart
+}
+
 // updateVisualEnd updates the visual selection end position
 func updateVisualEnd(cm *terminal.CopyMode, window *terminal.Window) {
 	absY := getAbsoluteY(cm, window)
 
 	switch cm.State {
-	case terminal.CopyModeVisualChar:
+	case terminal.CopyModeVisualChar, terminal.CopyModeVisualBlock:
 		cm.VisualEnd = terminal.Position{X: cm.CursorX, Y: absY}
 	case terminal.CopyModeVisualLine:
 		// For visual line mode, we need to select entire lines
@@ -79,6 +87,9 @@ func updateVisualEnd(cm *terminal.CopyMode, window *terminal.Window) {
 // on to the next, so it is kept whole, spaces at its edge included, and joined
 // to the next row without a newline.
 func extractVisualText(cm *terminal.CopyMode, window *terminal.Window) string {
+	if cm.State == terminal.CopyModeVisualBlock {
+		return extractBlockText(cm, window)
+	}
 	start, end := cm.VisualStart, cm.VisualEnd
 
 	// Normalize selection
@@ -115,6 +126,36 @@ func extractVisualText(cm *terminal.CopyMode, window *terminal.Window) string {
 
 	// Rows below the last printed line are padding too: a drag that runs on
 	// into the empty screen under the output adds no newlines.
+	return strings.TrimRight(text.String(), "\n")
+}
+
+// extractBlockText is the text of a rectangular selection, one line per row of
+// the rectangle, joined by newlines.
+//
+// A blank run is kept while the row has printed text after it, and a row stops
+// at its last printed cell, so a short row does not fill out to the block's right
+// edge. This is what tmux does. A wide character on an edge is taken whole. A row
+// the emulator soft-wrapped still ends its line here: a block is rows on the
+// screen, and tmux joins them only when the block touches the wrap column, which
+// makes the line count depend on where the block's edge fell.
+func extractBlockText(cm *terminal.CopyMode, window *terminal.Window) string {
+	topLeft, bottomRight := terminal.BlockCorners(cm.VisualStart, cm.VisualEnd)
+	var text strings.Builder
+	for y := topLeft.Y; y <= bottomRight.Y; y++ {
+		cells := selectionRowCells(window, y)
+		lo, hi := terminal.BlockRowSpan(topLeft.X, bottomRight.X, func(x int) *uv.Cell {
+			if x < 0 || x >= len(cells) {
+				return nil
+			}
+			return &cells[x]
+		})
+		writeSelectionCells(&text, cells, lo, min(hi, lastPrintedCell(cells)))
+		if y < bottomRight.Y {
+			text.WriteByte('\n')
+		}
+	}
+	// As in a line selection, a block that runs on into the empty screen under
+	// the output adds no newlines.
 	return strings.TrimRight(text.String(), "\n")
 }
 
@@ -274,7 +315,7 @@ func getLineText(_ *terminal.CopyMode, window *terminal.Window, absY int) string
 // to show the cursor.
 func swapVisualEnds(cm *terminal.CopyMode, window *terminal.Window) {
 	cm.VisualStart, cm.VisualEnd = cm.VisualEnd, cm.VisualStart
-	if cm.State == terminal.CopyModeVisualChar {
+	if cm.State == terminal.CopyModeVisualChar || cm.State == terminal.CopyModeVisualBlock {
 		cm.CursorX = cm.VisualEnd.X
 	}
 	// A line selection keeps the cursor column: its ends are whole lines.

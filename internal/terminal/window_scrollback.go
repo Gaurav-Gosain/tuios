@@ -163,8 +163,32 @@ func (w *Window) InImplicitCopyMode() bool {
 // the mouse path deliberately never wrote, so a plainly visible selection
 // presented as no selection at all.
 func (w *Window) HasSelection() bool {
-	return w.InCopyMode() &&
-		(w.CopyMode.State == CopyModeVisualChar || w.CopyMode.State == CopyModeVisualLine)
+	return w.InCopyMode() && w.CopyMode.State.InVisual()
+}
+
+// BlockCorners is the rectangle two corners of a block selection span: its top
+// left and its bottom right, whichever corners the selection holds.
+func BlockCorners(a, b Position) (topLeft, bottomRight Position) {
+	return Position{X: min(a.X, b.X), Y: min(a.Y, b.Y)},
+		Position{X: max(a.X, b.X), Y: max(a.Y, b.Y)}
+}
+
+// BlockRowSpan is the columns a block from left to right covers on one row. A
+// wide character on either edge is taken whole, so the span can be wider than
+// the block. cellAt reads the row, and returns nil past its end.
+func BlockRowSpan(left, right int, cellAt func(x int) *uv.Cell) (lo, hi int) {
+	lo, hi = left, right
+	for lo > 0 {
+		c, prev := cellAt(lo), cellAt(lo-1)
+		if c == nil || prev == nil || c.Width != 0 || c.Content != "" || prev.Width < 2 {
+			break
+		}
+		lo--
+	}
+	if c := cellAt(right); c != nil && c.Width > 1 {
+		hi = right + c.Width - 1
+	}
+	return lo, hi
 }
 
 // ExitCopyMode exits copy mode and returns to normal terminal mode.

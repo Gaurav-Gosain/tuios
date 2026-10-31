@@ -32,6 +32,8 @@ import (
 
 // copyFlash is what was copied and when, for as long as the sweep lasts.
 type copyFlash struct {
+	// Block says Start and End are the corners of a rectangle.
+	Block bool
 	// WindowID is the pane the text came from. The sweep is drawn there and
 	// nowhere else, even though a copy can be made while another pane is
 	// focused.
@@ -54,7 +56,20 @@ func (m *OS) NoteCopyFlash(window *terminal.Window) {
 	if window == nil || !window.HasSelection() || window.CopyMode == nil {
 		return
 	}
+	if window.CopyMode.State == terminal.CopyModeVisualBlock {
+		m.NoteCopyFlashBlock(window, window.CopyMode.VisualStart, window.CopyMode.VisualEnd)
+		return
+	}
 	m.NoteCopyFlashRegion(window, window.CopyMode.VisualStart, window.CopyMode.VisualEnd)
+}
+
+// NoteCopyFlashBlock is NoteCopyFlashRegion for a rectangular selection.
+func (m *OS) NoteCopyFlashBlock(window *terminal.Window, a, b terminal.Position) {
+	topLeft, bottomRight := terminal.BlockCorners(a, b)
+	m.NoteCopyFlashRegion(window, topLeft, bottomRight)
+	if m.copyFlash != nil && window != nil && m.copyFlash.WindowID == window.ID {
+		m.copyFlash.Block = true
+	}
 }
 
 // NoteCopyFlashRegion records a copy of an explicit region of the pane, in
@@ -509,40 +524,80 @@ func copyFlashBoxOf(grid *pool.HighlightGrid, maxY, maxX int) (copyFlashBox, boo
 //
 // textEnd, when given, is the last column holding text on a row of the view,
 // or -1 for a blank row, and no cell past it is marked.
-func fillPaneRegion(grid *pool.HighlightGrid, start, end terminal.Position,
+func fillPaneRegion(grid *pool.HighlightGrid, start, end terminal.Position, block bool,
 	scrollbackLen, scrollbackOffset, maxY, maxX int, textEnd func(y int) int,
 ) {
 	if start.Y > end.Y || (start.Y == end.Y && start.X > end.X) {
 		start, end = end, start
 	}
 	for absY := start.Y; absY <= end.Y; absY++ {
-		var viewportY int
-		if absY < scrollbackLen {
-			if scrollbackOffset <= 0 || absY < scrollbackLen-scrollbackOffset {
-				continue
-			}
-			viewportY = absY - (scrollbackLen - scrollbackOffset)
-		} else {
-			screenY := absY - scrollbackLen
-			viewportY = screenY
-			if scrollbackOffset > 0 {
-				viewportY = scrollbackOffset + screenY
-			}
-		}
-		if viewportY < 0 || viewportY >= maxY {
+		viewportY, ok := paneViewportRow(absY, scrollbackLen, scrollbackOffset, maxY)
+		if !ok {
 			continue
 		}
 		startX, endX := 0, maxX-1
-		if absY == start.Y {
+		if block || absY == start.Y {
 			startX = start.X
 		}
-		if absY == end.Y {
+		if block || absY == end.Y {
 			endX = end.X
 		}
 		if textEnd != nil {
 			endX = min(endX, textEnd(viewportY))
 		}
 		for x := startX; x <= endX && x < maxX; x++ {
+			grid.Set(viewportY, x)
+		}
+	}
+}
+
+// paneViewportRow is the row of the pane's view that shows absolute row absY,
+// and whether the view shows it at all.
+func paneViewportRow(absY, scrollbackLen, scrollbackOffset, maxY int) (int, bool) {
+	var viewportY int
+	if absY < scrollbackLen {
+		if scrollbackOffset <= 0 || absY < scrollbackLen-scrollbackOffset {
+			return 0, false
+		}
+		viewportY = absY - (scrollbackLen - scrollbackOffset)
+	} else {
+		viewportY = absY - scrollbackLen
+		if scrollbackOffset > 0 {
+			viewportY += scrollbackOffset
+		}
+	}
+	return viewportY, viewportY >= 0 && viewportY < maxY
+}
+
+// fillBlockSelection marks a rectangular selection on a grid. Every row is drawn
+// to the same columns, past the end of a short row too, so the selection reads
+// as a rectangle. A wide character on an edge is marked whole, because the copy
+// takes it whole.
+func fillBlockSelection(grid *pool.HighlightGrid, window *terminal.Window, screen cellGrid, a, b terminal.Position,
+	scrollbackLen, maxY, maxX int,
+) {
+	topLeft, bottomRight := terminal.BlockCorners(a, b)
+	for absY := topLeft.Y; absY <= bottomRight.Y; absY++ {
+		viewportY, ok := paneViewportRow(absY, scrollbackLen, window.ScrollbackOffset, maxY)
+		if !ok {
+			continue
+		}
+		var line []uv.Cell
+		if absY < scrollbackLen {
+			line = window.ScrollbackLine(absY)
+		}
+		lo, hi := terminal.BlockRowSpan(topLeft.X, bottomRight.X, func(x int) *uv.Cell {
+			switch {
+			case x < 0:
+				return nil
+			case absY >= scrollbackLen:
+				return screen.CellAt(x, absY-scrollbackLen)
+			case x < len(line):
+				return &line[x]
+			}
+			return nil
+		})
+		for x := lo; x <= hi && x < maxX; x++ {
 			grid.Set(viewportY, x)
 		}
 	}
@@ -578,7 +633,7 @@ func (m *OS) copyFlashGrid(window *terminal.Window, screen cellGrid, scrollbackL
 	textEnd := func(y int) int {
 		return paneRowTextEnd(window, screen, y, maxX, scrollbackLen)
 	}
-	fillPaneRegion(grid, fl.Start, fl.End,
+	fillPaneRegion(grid, fl.Start, fl.End, fl.Block,
 		scrollbackLen, window.ScrollbackOffset, maxY, maxX, textEnd)
 	box, ok := copyFlashBoxOf(grid, maxY, maxX)
 	if !ok {

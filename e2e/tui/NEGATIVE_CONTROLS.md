@@ -22,6 +22,18 @@ tuios save never reached the screen`. A build with `askClientsToApply` cut faile
 `TestWatcherDropsTuiosOwnSave` failed on the first build with `an edit back to the
 first of the quick saves: the watcher delivered nothing`, and
 `TestWatcherDeliversTheFileWhenAskedToApply` failed with the stamp event ignored.
+## Block selection in copy mode
+
+`TestCopyBlockSelection` starts a block with `ctrl+v`, reads the rectangle off the
+cell grounds, and compares what `y` and a copy pipe write, untrimmed.
+
+Run on 2026-10-31 on Linux. Each control fails and the fixed build passes.
+
+| Control | Failure |
+| --- | --- |
+| `extractVisualText` ignores the block | `the block copied "A one two\nBLOCK-B 中文 x\nBLOCK-C\nBLOCK-D   ", want "A on\nB 中\nC\nD   "` |
+| The render path stops at each row's text | `the selection is not a rectangle` |
+| `BlockRowSpan` does not widen | `the selection does not cover a wide character on its edge` |
 
 ## tuios tutor keeps out of the person's home
 

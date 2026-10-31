@@ -500,15 +500,17 @@ func (m *OS) renderTerminal(window *terminal.Window, isFocused bool, inTerminalM
 		}
 	}
 
-	inVisualMode := inCopyMode &&
-		(window.CopyMode.State == terminal.CopyModeVisualChar ||
-			window.CopyMode.State == terminal.CopyModeVisualLine)
+	inVisualMode := inCopyMode && window.CopyMode.State.InVisual()
 
 	if inVisualMode {
 		visualSelection = pool.GetHighlightGrid()
 		visualSelection.Init(maxY, maxX)
 		defer pool.PutHighlightGrid(visualSelection)
-
+	}
+	if inVisualMode && window.CopyMode.State == terminal.CopyModeVisualBlock {
+		fillBlockSelection(visualSelection, window, screen, window.CopyMode.VisualStart, window.CopyMode.VisualEnd,
+			scrollbackLen, maxY, maxX)
+	} else if inVisualMode {
 		start := window.CopyMode.VisualStart
 		end := window.CopyMode.VisualEnd
 
@@ -685,8 +687,11 @@ func (m *OS) renderTerminal(window *terminal.Window, isFocused bool, inTerminalM
 			}
 		}
 
+		// A stream selection stops at each row's text. A block does not: it is a
+		// rectangle on the screen, past the end of a short row too.
 		lineEndX := maxX - 1
-		if inVisualMode && visualSelection != nil && visualSelection.HasRow(y) {
+		if inVisualMode && window.CopyMode.State != terminal.CopyModeVisualBlock &&
+			visualSelection != nil && visualSelection.HasRow(y) {
 			if inScrollbackMode {
 				if sbRow {
 					for i := len(sbLine) - 1; i >= 0; i-- {

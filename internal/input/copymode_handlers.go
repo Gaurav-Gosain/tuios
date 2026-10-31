@@ -126,7 +126,7 @@ func dispatchCopyModeKey(msg tea.KeyPressMsg, action string, window *terminal.Wi
 	switch cm.State {
 	case terminal.CopyModeSearch:
 		handleSearchInput(msg, cm, window, fx, s)
-	case terminal.CopyModeVisualChar, terminal.CopyModeVisualLine:
+	case terminal.CopyModeVisualChar, terminal.CopyModeVisualLine, terminal.CopyModeVisualBlock:
 		handleVisualInput(msg, cm, window, fx, s)
 	case terminal.CopyModeNormal:
 		handleNormalInput(msg, cm, window, fx, s)
@@ -163,7 +163,7 @@ func runCopyModeAction(action string, cm *terminal.CopyMode, window *terminal.Wi
 		cm.PendingCount = 0
 		fx.ShowNotification("", "info", 0)
 	}
-	if cm.State == terminal.CopyModeVisualChar || cm.State == terminal.CopyModeVisualLine {
+	if cm.State.InVisual() {
 		updateVisualEnd(cm, window)
 	}
 	fx.InvalidateCache()
@@ -463,6 +463,11 @@ func handleNormalInput(msg tea.KeyPressMsg, cm *terminal.CopyMode, window *termi
 		fx.InvalidateCache()
 		fx.ShowNotification("VISUAL LINE", "info", 0)
 		return
+	case "ctrl+v":
+		enterVisualBlock(cm, window)
+		fx.InvalidateCache()
+		fx.ShowNotification(visualBlockMessage, "info", 0)
+		return
 	}
 
 	fx.InvalidateCache()
@@ -518,6 +523,9 @@ func handleSearchInput(msg tea.KeyPressMsg, cm *terminal.CopyMode, window *termi
 
 	fx.InvalidateCache()
 }
+
+// visualBlockMessage names a rectangular selection in the dock.
+const visualBlockMessage = "VISUAL BLOCK"
 
 // handleVisualInput handles keys in visual selection mode
 func handleVisualInput(msg tea.KeyPressMsg, cm *terminal.CopyMode, window *terminal.Window, fx *copyModeEffects, s *config.Settings) {
@@ -586,7 +594,11 @@ func handleVisualInput(msg tea.KeyPressMsg, cm *terminal.CopyMode, window *termi
 		text := extractVisualText(cm, window)
 		// The region is taken before the selection ends, because the sweep
 		// is drawn over it after the selection has gone.
-		fx.Flash(cm.VisualStart, cm.VisualEnd)
+		if cm.State == terminal.CopyModeVisualBlock {
+			fx.FlashBlock(cm.VisualStart, cm.VisualEnd)
+		} else {
+			fx.Flash(cm.VisualStart, cm.VisualEnd)
+		}
 		cm.State = terminal.CopyModeNormal
 		fx.ShowNotification(fmt.Sprintf("Yanked %d chars", len(text)), "success", s.NotificationDuration)
 		fx.InvalidateCache()
@@ -750,9 +762,30 @@ func handleVisualInput(msg tea.KeyPressMsg, cm *terminal.CopyMode, window *termi
 
 	// Toggle visual mode (pressing v/V again exits visual mode)
 	case "v":
-		// Exit visual mode and return to normal mode
-		cm.State = terminal.CopyModeNormal
-		fx.ShowNotification("", "info", 0)
+		// Pressing v in a block keeps the two ends as a character selection.
+		// Otherwise it exits visual mode and returns to normal mode.
+		if cm.State == terminal.CopyModeVisualBlock {
+			cm.State = terminal.CopyModeVisualChar
+			fx.ShowNotification("VISUAL", "info", 0)
+		} else {
+			cm.State = terminal.CopyModeNormal
+			fx.ShowNotification("", "info", 0)
+		}
+	case "ctrl+v":
+		// Pressing ctrl+v in a block exits. A character selection keeps its two
+		// ends as corners. A line selection has no columns, so a new block starts
+		// at the cursor.
+		switch cm.State {
+		case terminal.CopyModeVisualBlock:
+			cm.State = terminal.CopyModeNormal
+			fx.ShowNotification("", "info", 0)
+		case terminal.CopyModeVisualChar:
+			cm.State = terminal.CopyModeVisualBlock
+			fx.ShowNotification(visualBlockMessage, "info", 0)
+		default:
+			enterVisualBlock(cm, window)
+			fx.ShowNotification(visualBlockMessage, "info", 0)
+		}
 	case "V":
 		// Pressing V in visual char mode switches to visual line mode
 		// Pressing V in visual line mode exits to normal mode
@@ -785,7 +818,7 @@ func HandleCopyModeMouseDrag(cm *terminal.CopyMode, window *terminal.Window, sta
 
 		// Always exit visual mode first if we're in it, then start fresh
 		// This ensures each click-and-drag creates a new selection
-		if cm.State == terminal.CopyModeVisualChar || cm.State == terminal.CopyModeVisualLine {
+		if cm.State.InVisual() {
 			cm.State = terminal.CopyModeNormal
 		}
 
@@ -814,7 +847,7 @@ func HandleCopyModeMouseDrag(cm *terminal.CopyMode, window *terminal.Window, sta
 // Returns the auto-scroll direction: -1 (up), 0 (none), 1 (down).
 func HandleCopyModeMouseMotion(cm *terminal.CopyMode, window *terminal.Window, mouseX, mouseY int) int {
 	// Only handle if in visual mode
-	if cm.State != terminal.CopyModeVisualChar && cm.State != terminal.CopyModeVisualLine {
+	if !cm.State.InVisual() {
 		return 0
 	}
 

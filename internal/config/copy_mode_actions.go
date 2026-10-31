@@ -49,7 +49,7 @@ var copyModeFixedKeys = map[string]bool{
 	"ctrl+u": true, "ctrl+d": true, "ctrl+b": true, "ctrl+f": true,
 	"pgup": true, "pgdown": true, "ctrl+l": true,
 	"/": true, "?": true, "n": true, "N": true,
-	"v": true, "V": true, "o": true, "y": true, "Y": true, "c": true,
+	"v": true, "V": true, "ctrl+v": true, "o": true, "y": true, "Y": true, "c": true,
 	"i": true, "q": true, "esc": true, "ctrl+c": true, "tab": true,
 }
 

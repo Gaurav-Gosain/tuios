@@ -380,7 +380,7 @@ func TestTheSweepMeasuresTheBlock(t *testing.T) {
 	// One row, so the block's bounds are that row's bounds. A selection over
 	// several rows reaches column zero on every row after the first, which is
 	// what a selection is, so its left edge is zero and says nothing.
-	fillPaneRegion(g, terminal.Position{X: 5, Y: 0}, terminal.Position{X: 20, Y: 0}, 0, 0, 4, 60, nil)
+	fillPaneRegion(g, terminal.Position{X: 5, Y: 0}, terminal.Position{X: 20, Y: 0}, false, 0, 0, 4, 60, nil)
 
 	box, ok := copyFlashBoxOf(g, 4, 60)
 	if !ok {
@@ -418,7 +418,7 @@ func TestAWholeRowSelectionIsSweptOverItsText(t *testing.T) {
 	defer pool.PutHighlightGrid(g)
 	g.Init(4, 60)
 	ends := []int{11, 11, -1, 11}
-	fillPaneRegion(g, terminal.Position{X: 0, Y: 0}, terminal.Position{X: 59, Y: 3}, 0, 0, 4, 60,
+	fillPaneRegion(g, terminal.Position{X: 0, Y: 0}, terminal.Position{X: 59, Y: 3}, false, 0, 0, 4, 60,
 		func(y int) int { return ends[y] })
 
 	box, ok := copyFlashBoxOf(g, 4, 60)

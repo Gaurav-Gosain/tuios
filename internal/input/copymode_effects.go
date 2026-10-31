@@ -34,6 +34,7 @@ type copyModeEffects struct {
 	// flash is the region a yank took, written down before the yank ends the
 	// visual selection it came from. See Flash.
 	flash                bool
+	flashBlock           bool
 	flashStart, flashEnd terminal.Position
 	// action is the [keybindings.copy_mode] action the key ran, for the
 	// recent actions list.
@@ -89,6 +90,12 @@ func (fx *copyModeEffects) Flash(start, end terminal.Position) {
 	fx.flashStart, fx.flashEnd = start, end
 }
 
+// FlashBlock is Flash for a rectangular selection.
+func (fx *copyModeEffects) FlashBlock(start, end terminal.Position) {
+	fx.Flash(start, end)
+	fx.flashBlock = true
+}
+
 // apply runs the queued effects against the real OS and Window. It must be
 // called with the window's I/O lock NOT held.
 //
@@ -113,7 +120,11 @@ func (fx *copyModeEffects) apply(o *app.OS, window *terminal.Window) (*app.OS, t
 		cmd = o.EnterTerminalMode()
 	}
 	if fx.flash && o != nil {
-		o.NoteCopyFlashRegion(window, fx.flashStart, fx.flashEnd)
+		if fx.flashBlock {
+			o.NoteCopyFlashBlock(window, fx.flashStart, fx.flashEnd)
+		} else {
+			o.NoteCopyFlashRegion(window, fx.flashStart, fx.flashEnd)
+		}
 	}
 	if fx.setClipboard {
 		if o != nil && o.Settings.CopyCommand != "" {

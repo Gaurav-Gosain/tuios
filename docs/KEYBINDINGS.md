@@ -1364,8 +1364,20 @@ in the middle row, set `appearance.selection.copy_entry` to `center`.
 | `n` | Go to the next match in the direction of the last search |
 | `N` | Go to the next match in the opposite direction |
 | `Esc` in the search prompt | Cancel the search and move the cursor back |
+| `v` | Start a character selection |
+| `V` | Start a line selection |
+| `Ctrl+V` | Start a block selection. In a block selection, end the selection |
+| `o` | Go to the other end of the selection. In a block selection, go to the opposite corner |
 | `q` or `Esc` | Leave copy mode. In a selection, `Esc` and `q` only end the selection |
 | `Ctrl+C` | Leave copy mode from normal mode, a selection, the search prompt or `f`/`t`. Nothing is copied |
+
+A block selection is a rectangle. The cursor is one corner, and every motion
+moves that corner. `y` writes one line for each row, with a newline between
+rows. A row stops at its last printed character, so a short row is not padded
+to the right edge. Blanks inside a row stay when the row has text after them. A
+wide character on an edge of the block is copied whole. A wrapped line copies
+as one line for each row on the screen. `copy_command` and the copy pipe keys
+get the same text.
 
 The prompt shows `/` or `?` to show the direction. The search starts at the
 copy cursor. When no match is found in that direction, the search continues

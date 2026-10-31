@@ -565,7 +565,14 @@ const (
 	CopyModeVisualChar
 	// CopyModeVisualLine is line-wise visual selection
 	CopyModeVisualLine
+	// CopyModeVisualBlock is a rectangular visual selection
+	CopyModeVisualBlock
 )
+
+// InVisual reports whether the state is one of the visual selections.
+func (s CopyModeState) InVisual() bool {
+	return s == CopyModeVisualChar || s == CopyModeVisualLine || s == CopyModeVisualBlock
+}
 
 // Position represents a 2D coordinate
 type Position struct {

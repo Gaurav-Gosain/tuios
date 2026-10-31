@@ -182,7 +182,7 @@ func finishMouseSelection(o *app.OS, window *terminal.Window) tea.Cmd {
 		return nil
 	}
 
-	inVisual := cm.State == terminal.CopyModeVisualChar || cm.State == terminal.CopyModeVisualLine
+	inVisual := cm.State.InVisual()
 	moved := cm.VisualStart != cm.VisualEnd
 	// A double or triple click is a selection even when it lands on a
 	// one-character word or an empty line, so the counter speaks for it.
