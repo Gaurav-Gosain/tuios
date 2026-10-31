@@ -266,9 +266,10 @@ func (w *chartWidget) measure(s *Surface, _ *box, maxW int) (int, int) {
 	case "gauge", "progress":
 		return min(maxW, max(20, width(w.label)+16)), h
 	case "map":
-		// A map keeps its true shape, so its height follows from the width.
-		// One more row goes to the legend under it.
-		_, rows := plot.Map{Values: w.codes}.Fit(maxW, 1<<16, s.mode)
+		// A map keeps its true shape, so its height follows from the width. One
+		// more row goes to the legend under it. A map is always wider than it
+		// is tall, so the width is a safe bound on the height.
+		_, rows := plot.Map{Values: w.codes}.Fit(maxW, maxW, s.mode)
 		return maxW, rows + w.titleRows() + 1
 	case "sparkline":
 		if w.title != "" && w.height == 1 {
