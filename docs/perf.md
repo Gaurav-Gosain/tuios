@@ -5454,5 +5454,26 @@ The binary grows by 55 KB on macOS and 29 KB on Linux.
 
 ### Measured and deliberately not changed
 
-- A page where one small thing moves still costs a whole frame per paint: 8.2 GB read in 22 s, against 187 MB for the browser in kitty directly, where it sends only the tiles that changed. The browser chooses that way of drawing only for a terminal it names. Forced with `TERMINAL_BROWSER_PRESENT=patched` through tuios the read falls to 99 MB, but the picture is wrong: tuios sizes each patch in whole cells, and kitty scales the patch to fit them.
 - A real kitty 0.49.2 on Linux, with software GL on a headless stage and `/tmp` in memory, showed 0 torn frames in 400 screenshots before and 400 after. The same check finds the tears in the stand-in's frames. kitty's own CPU did not move beyond run-to-run noise: 402% and 398% before, 307% and 394% after.
+
+## 2026-10 tiles through tuios
+
+The browser draws a page from a base image and patches when its terminal says it can. tuios answers yes to `kitty-graphics-patches` over XTGETTCAP. It places such an image at its own pixels: no cell box, and any crop counted in the host's cells.
+
+### Numbers
+
+macOS 27.0.1, arm64, terminal-browser v0.15.3 with the native module from its pull request, one pane in a daemon session, and the stand-in host described above. 26 s runs.
+
+A page where one small square turns:
+
+| | v0.12.0 | shared memory only | tiles | kitty directly |
+|---|---|---|---|---|
+| Presenter | whole frames | whole frames | patches | patches |
+| Bytes the host read | 17.3 GB | 10.1 GB | 182 MB | 205 MB |
+| Bytes on the host's tty | 491 KB | 156 KB | 302 KB | 295 KB |
+| Client CPU | 1.89 s | 2.72 s | 3.34 s | none |
+| Daemon CPU | 0.70 s | 0.47 s | 0.79 s | none |
+
+The page where every pixel changes each frame is the case that costs more. The host reads 16.8 GB and draws 58 frames a second, against 9.9 GB and 60 with whole frames, because tuios replaces a waiting frame only when it is one image. Kitty directly reads about 26 GB there, at 107 frames a second.
+
+The client pays for hashing each patch and for a compose on each write that holds an update: 1.4 s more per 26 s than v0.12.0 on the small page.

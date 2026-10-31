@@ -142,6 +142,12 @@ var termcaps = map[string]termcapValue{
 	"rmxx": {value: "\x1b[29m"},
 }
 
+// AddTermcapBoolean makes XTGETTCAP answer a boolean capability the embedder
+// implements itself. Call it before the first pane starts.
+func AddTermcapBoolean(name string) {
+	termcaps[name] = termcapValue{boolean: true}
+}
+
 // termcapReply answers an XTGETTCAP request: names in hexadecimal, separated
 // by semicolons. Each name gets its own reply, DCS 1 + r name=value ST for one
 // this emulator has and DCS 0 + r ST for one it does not, the forms in xterm's
