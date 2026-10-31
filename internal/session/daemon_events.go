@@ -262,6 +262,9 @@ type SessionEvent struct {
 	// reports the state a session arrived at, and these say what it left, what a
 	// window that is already gone was called, and which agent a transition was
 	// about.
+	// agentQuiet is the window's AgentQuiet. It is unexported, so it stays off
+	// the wire and only the Inbox reads it.
+	agentQuiet        bool
 	hookTitle         string
 	hookWorkspace     int
 	hookPrevState     string

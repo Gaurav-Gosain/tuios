@@ -65,6 +65,10 @@ While that machine's link is down it ends in `[unreachable, seen 5m ago]`.
   Settled. The person can settle you (put you away until you need them).
   You come back by yourself when you ask, fail, finish a turn or mail them.
   `list-agents` shows `settled`. You cannot settle yourself or another agent.
+- A pane marked with `tuios set-agent-quiet -w NAME` is a background worker. It
+  opens no finished, question or errored item, and its state and events do not
+  change. An approval still reaches the person. `list-agents` shows `quiet`, and
+  `--off` clears the mark. It needs the admin grant.
   Your row shows your state, how long you have been in it, and what you do
   now. Report your state as it changes; that view is drawn from it.
 - Your finished turn's row shows a recap of what you did (turns, files,

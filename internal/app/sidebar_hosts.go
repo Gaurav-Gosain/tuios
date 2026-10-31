@@ -121,6 +121,7 @@ type FederationAgent struct {
 	Meta      []sessiontree.MetaToken `json:"meta"`
 	Subagents int                     `json:"subagents"`
 	Settled   bool                    `json:"settled"`
+	Quiet     bool                    `json:"quiet"`
 }
 
 // FederationHostsMsg carries a fresh snapshot back to the Update goroutine.

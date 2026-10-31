@@ -657,6 +657,11 @@ func (a *attentionStore) noteAgentState(sessionName string, ev SessionEvent) {
 
 	switch state {
 	case AgentStateNeedsInput.Name():
+		// A quiet pane's question stays out of the queue. Its approval does not:
+		// a held prompt always reaches a person.
+		if ev.agentQuiet && ev.hookKind != "approval" {
+			break
+		}
 		if a.askShownLocked(sessionName, ev.Window, ev.hookMessage) {
 			// The pane shows its own open ask-human question as its state
 			// (ask_human_state.go). The ask item is the row for it, with
@@ -675,13 +680,16 @@ func (a *attentionStore) noteAgentState(sessionName string, ev SessionEvent) {
 		it.Summary = attentionText(ev.hookMessage, attentionMaxSummary)
 		a.upsertLocked(it)
 	case AgentStateErrored.Name():
+		if ev.agentQuiet {
+			break
+		}
 		it := base
 		it.Kind = AttentionErrored
 		it.Summary = attentionText(ev.hookMessage, attentionMaxSummary)
 		a.upsertLocked(it)
 	}
 
-	if ev.completionSeq > ev.prevCompletionSeq && agentStateFinishes(AgentState(state)) {
+	if !ev.agentQuiet && ev.completionSeq > ev.prevCompletionSeq && agentStateFinishes(AgentState(state)) {
 		it := base
 		it.Kind = AttentionFinished
 		it.Summary = attentionText(ev.hookMessage, attentionMaxSummary)

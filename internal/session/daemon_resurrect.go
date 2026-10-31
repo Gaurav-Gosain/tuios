@@ -30,6 +30,7 @@ func clearLiveAgent(w *WindowState) {
 	w.AgentQueued = 0
 	w.AgentDraftHeld = false
 	w.AgentSettled = false
+	w.AgentQuiet = false
 	w.AgentSubagents = 0
 	w.AgentSubagentList = nil
 	w.ForegroundCmd = ""

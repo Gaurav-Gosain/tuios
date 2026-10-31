@@ -227,6 +227,7 @@ var verbCapabilities = map[string]linkCaps{
 	"focus-window":     {config.LinkAllowWrite},
 	"move-window":      {config.LinkAllowWrite},
 	"set-window":       {config.LinkAllowWrite},
+	"set-agent-quiet":  {config.LinkAllowWrite},
 	"select-workspace": {config.LinkAllowWrite},
 	"set-layout":       {config.LinkAllowWrite},
 	"run-command":      {config.LinkAllowWrite},

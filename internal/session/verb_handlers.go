@@ -2239,6 +2239,7 @@ func (d *Daemon) verbGetAgentState(cs *connState, params json.RawMessage) (any, 
 		// needs_you is the one question a person asks of a pane, answered as a
 		// bool so a consumer does not have to know which states mean it.
 		"needs_you": w.AgentState.NeedsYou(),
+		"quiet":     w.AgentQuiet,
 		"activity":  w.ShownAgentState().Activity(),
 		// ready and blocked_by are the same answers list-agents gives: whether
 		// ask-agent would type at the pane now, and, for a pane on needs_input,

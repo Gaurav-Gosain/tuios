@@ -103,6 +103,8 @@ type Node struct {
 	// Settled marks an agent the person put away on the Settled shelf.
 	// Never rolled up.
 	Settled bool
+	// Quiet marks a pane that keeps out of the Inbox. The row says so.
+	Quiet bool
 	// Subagents is how many subagents the pane's agent is running. On a
 	// session node it belongs to the window that won the roll-up, like
 	// DoneSeen, so the session's mark says "waiting" when that pane is at
@@ -247,6 +249,8 @@ type WindowInput struct {
 	DraftHeld bool
 	// Settled marks an agent the person put away on the Settled shelf.
 	Settled bool
+	// Quiet marks a pane that keeps out of the Inbox. The row says so.
+	Quiet bool
 	// Subagents is how many subagents the pane's agent is running.
 	Subagents int
 	// SubagentList is the pane's subagents themselves, in start order. Nil
@@ -418,6 +422,7 @@ func BuildSession(s SessionInput) Node {
 			Queued:       w.Queued,
 			DraftHeld:    w.DraftHeld,
 			Settled:      w.Settled,
+			Quiet:        w.Quiet,
 			Subagents:    w.Subagents,
 			SubagentList: w.SubagentList,
 			Program:      w.Program,

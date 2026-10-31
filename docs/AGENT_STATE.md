@@ -2034,6 +2034,33 @@ count has moved past that is drawn exactly as an unread `done` pane is, and
 focusing it puts it back to its own state. A turn that ends in the focused pane
 counts as seen.
 
+## Quiet panes
+
+`tuios set-agent-quiet -w NAME` marks a pane as a background worker. Use it when
+a tool runs several agents and reports on them itself.
+
+While a pane is quiet:
+
+- The pane opens no `finished`, `question` or `errored` item in the Inbox.
+- Its open items of those kinds close.
+- The client shows no alert for it.
+- The rail row says `quiet`, and `list-agents` and `get-agent-state` report
+  `quiet: true`.
+
+These do not change:
+
+- The agent state, `completion_seq` and the `agent-state` events.
+- An approval, which still reaches the Inbox and the dock.
+- An item that the queue opens on the pane, such as a stalled message.
+
+`--off` clears the mark. The old items do not open again, and the next
+transition opens its own. The mark goes when the pane closes, and a pane that
+tuios restores after a restart is not quiet.
+
+The verb needs the `admin` grant, so in strict mode an agent cannot hide its own
+questions from you. Calm mode is different: it applies to the whole client, and
+it does not change the Inbox.
+
 ## Indicator
 
 tuios draws a mark for each pane's state. It is the same mark, in the same

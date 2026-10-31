@@ -3085,7 +3085,7 @@ command in authorized_keys to make the policy a boundary:
 		newPeekPromptCommand(), newRespondCommand(), newQueueCommand(), newTaskCommand(), newReviewCommand(), newCheckpointCommand(), newShipCommand())
 	rootCmd.AddCommand(sendTextCmd, newWindowCmd, waitForCmd, newSubscribeCommand(), newRunCommand(), newAskHumanCommand())
 	rootCmd.AddCommand(renameSessionCmd, setSessionNameCmd, setSessionAccentCmd, setSessionSpaceCmd, setSessionOrderCmd, setWorkspaceNameCmd, newNoteCommand())
-	rootCmd.AddCommand(splitWindowCmd, popupCmd, focusWindowCmd, moveWindowCmd, setWindowCmd, newPiPCommand(), newCallCommand(), newPaneViewCommand())
+	rootCmd.AddCommand(splitWindowCmd, popupCmd, focusWindowCmd, moveWindowCmd, setWindowCmd, newSetAgentQuietCommand(), newPiPCommand(), newCallCommand(), newPaneViewCommand())
 	rootCmd.AddCommand(selectWorkspaceCmd, listWorkspacesCmd, setLayoutCmd)
 	rootCmd.AddCommand(listWindowsCmd, getWindowCmd, sessionInfoCmd, listVerbsCmd, listOptionsCmd, listThemesCmd, listGlyphsCmd, importThemeCmd, themeCmd)
 	rootCmd.AddCommand(listDockComponentsCmd, refreshDockCmd, listHooksCmd)

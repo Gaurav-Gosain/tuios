@@ -483,6 +483,9 @@ func (m *OS) sidebarSignature() uint64 {
 		if w.AgentSettled {
 			mixS("settled")
 		}
+		if w.AgentQuiet {
+			mixS("quiet")
+		}
 		if w.AgentSubagents > 0 {
 			mixI(w.AgentSubagents)
 		}

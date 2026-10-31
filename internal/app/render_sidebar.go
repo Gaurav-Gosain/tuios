@@ -554,6 +554,9 @@ type sidebarAgentEntry struct {
 	// Settled marks an agent the person put away: the agents view draws it
 	// on the Settled shelf until it needs the person again.
 	Settled bool
+	// Quiet marks a pane that keeps out of the Inbox. The row says so, because
+	// nothing else tells a person why the pane never shows up there.
+	Quiet bool
 	// Subagents is how many subagents the pane's agent is running, which the
 	// subagents row token draws.
 	Subagents int
@@ -2771,6 +2774,7 @@ func (m *OS) agentEntries(sessions []sessiontree.Node) []sidebarAgentEntry {
 				Queued:       win.Queued,
 				DraftHeld:    win.DraftHeld,
 				Settled:      win.Settled,
+				Quiet:        win.Quiet,
 				Subagents:    win.Subagents,
 				Children:     win.SubagentList,
 				Program:      win.Program,
@@ -3549,6 +3553,9 @@ func (m *OS) sidebarAgentRow(e sidebarAgentEntry, variant, cw int, pal overlay.P
 	}
 
 	plan := m.sidebarAgentTokensFor(e, variant, tall, time.Now())
+	if e.Quiet {
+		plan.After = append(plan.After, sidebarAgentToken{Name: "quiet", Text: "quiet"})
+	}
 	// The row under the cursor or the pointer says how long at any age; the
 	// rest wait for railAgeFloor.
 	if st.lit() && plan.Right.Name == "elapsed" && plan.Right.Text == "" && variant == sidebarVariantFull {

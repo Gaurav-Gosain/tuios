@@ -52,6 +52,23 @@ passes.
 | `noteSharedServerHook` is not called | `reports for a closed pane raised no notice` |
 | `goneHookWait` is 0 | `two quick reports for a closed pane raised the notice` |
 | `closeConfigNotice` is not called | `a report that reached a pane left the notice open` |
+## A quiet pane keeps out of the Inbox
+
+`TestQuietPaneKeepsOutOfTheInbox` types state reports into a real pane's shell,
+with the pane not focused, because a client that has the pane focused closes a
+finished item as soon as it sees it.
+
+Run on 2026-10-31 on Linux. The fixed build passes 3 runs of 3. Each control is one
+edit, and each fails at the step named.
+
+| Control | Failure |
+| --- | --- |
+| `noteAgentState` ignores the mark | `a quiet pane reached the Inbox` |
+| The mark holds back an approval too | `a quiet pane's approval did not reach the Inbox` |
+| `agentAlertQuiet` returns false | `a quiet pane raised an alert named QUIET-TURN` |
+| `set-agent-quiet` is `scopeOpen` | `the pane marked itself quiet` |
+| `closeQuiet` is not called | `going quiet left the item open` |
+| The rail row has no token | `the rail row does not say quiet` |
 
 ## tuios tutor keeps out of the person's home
 
