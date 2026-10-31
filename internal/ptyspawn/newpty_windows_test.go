@@ -167,6 +167,11 @@ func TestPaneOnConPTYDLLFindsProgramLikeInbox(t *testing.T) {
 	}
 	root := os.Getenv("SystemRoot") // C:\Windows
 	vol := filepath.VolumeName(root)
+	// A rooted path names a file on the current drive, and a runner checks
+	// the repository out on D:, so the test runs from the root of the
+	// program's drive. No System32 sits there, so the relative forms still
+	// need cmd.Dir.
+	t.Chdir(vol + `\`)
 	// A cmd.Dir on the program's drive, under which the rooted path joined
 	// as a relative one names nothing.
 	elsewhere := filepath.Join(root, "System32")
