@@ -320,12 +320,15 @@ func expandBase(dir, home string, getenv func(string) string) string {
 // variable's value v with a leading ~ expanded, else home joined with under.
 // A relative value is returned as it is, and Root then gives "" for it, since
 // no path can be checked against a folder that depends on where a process
-// runs.
+// runs. A value with a { in it is refused the same way: Root cuts the path at
+// the first {, which in the value would move the folder up.
 func agentHomeDir(home, v string, under []string) string {
 	v = strings.TrimSpace(v)
 	switch {
 	case v == "":
 		return filepath.Join(append([]string{home}, under...)...)
+	case strings.ContainsRune(v, '{'):
+		return "."
 	case v == "~" || strings.HasPrefix(v, "~/"):
 		return filepath.Join(home, strings.TrimPrefix(v, "~"))
 	}
