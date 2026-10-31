@@ -108,6 +108,7 @@ func TestConform_XTGETTCAP(t *testing.T) {
 		{"the termcap name for colors", query("Co"), ok("Co", "256")},
 		{"RGB is a boolean", query("RGB"), boolean("RGB")},
 		{"Tc is a boolean", query("Tc"), boolean("Tc")},
+		{"an unknown name until the embedder adds it", query("kitty-graphics-patches"), refused},
 		{"Su is a boolean", query("Su"), boolean("Su")},
 		{"Smulx", query("Smulx"), ok("Smulx", "\x1b[4:%p1%dm")},
 		{"Setulc", query("Setulc"), ok("Setulc", "\x1b[58:2:%p1%{65536}%/%d:%p1%{256}%/%{255}%&%d:%p1%{255}%&%d%;m")},
