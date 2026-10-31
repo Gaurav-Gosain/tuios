@@ -90,12 +90,17 @@ func (m *OS) ensureCwdChangeChan() chan CwdChangedMsg {
 // cwd-change channel. The callback fires on the window's PTY writer goroutine,
 // so it only does a non-blocking send; the actual work happens on the Update
 // goroutine where OS state is owned.
+//
+// The window's I/O goroutines already run when this is called, and they read
+// the callback while they hold the IO lock, so it is set under that lock, as
+// installPassthroughs sets the others.
 func (m *OS) setupCwdWatch(window *terminal.Window) {
 	if window == nil {
 		return
 	}
 	ch := m.ensureCwdChangeChan()
 	id := window.ID
+	window.LockIO()
 	window.CwdFunc = func(cwd string) {
 		select {
 		case ch <- CwdChangedMsg{WindowID: id, Cwd: cwd}:
@@ -104,6 +109,7 @@ func (m *OS) setupCwdWatch(window *terminal.Window) {
 			// the next one; it never blocks the PTY reader.
 		}
 	}
+	window.UnlockIO()
 }
 
 // tapeAutorunMode returns the effective tape autorun mode, honoring the
