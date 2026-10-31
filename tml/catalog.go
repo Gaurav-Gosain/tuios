@@ -527,7 +527,6 @@ var table = [...]Component{
 		{Name: "data", Type: TData, Required: true, Doc: "A state array of rows."},
 		{Name: "graphics", Type: TEnum, Enum: []string{"auto", "kitty", "cells", "ascii"}, Doc: "How to draw: auto picks kitty graphics, then cells, then ASCII."},
 		{Name: "log", Type: TBool, Bind: true, Doc: "Shades by the logarithm of the value, so values that span orders of magnitude spread over the shades."},
-		{Name: "role", Type: TRole, Bind: true, Doc: "A theme role colour."},
 		{Name: "title", Type: TString, Bind: true, Doc: "A caption above the chart."},
 		{Name: "unit", Type: TString, Bind: true, Doc: "A prefix for the legend values, such as $."},
 		{Name: "x", Type: TField, Doc: "The ISO 3166-1 alpha-2 country field."},

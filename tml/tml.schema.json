@@ -5757,17 +5757,6 @@
           ],
           "description": "Padding in cells: all, vertical horizontal, or top right bottom left."
         },
-        "role": {
-          "anyOf": [
-            {
-              "$ref": "#/$defs/role"
-            },
-            {
-              "$ref": "#/$defs/binding"
-            }
-          ],
-          "description": "A theme role colour."
-        },
         "show": {
           "description": "Hides the node when false and keeps its space.",
           "type": "string"
