@@ -88,11 +88,15 @@ func TestRenderBudget(t *testing.T) {
 	apply := testing.Benchmark(BenchmarkStoreApply)
 	t.Logf("the patch in tml.Store.Apply:     %d µs/op, %d B/op (not loom's; it copies the 200-row state)", apply.NsPerOp()/1000, apply.AllocedBytesPerOp())
 	const fullBudget, patchBudget = 4_000_000, 100_000 // ns, about 7 times what a desktop measures
-	if ns := full.NsPerOp(); ns > fullBudget {
-		t.Errorf("a full render took %d µs, the budget is %d µs", ns/1000, fullBudget/1000)
-	}
-	if ns := patch.NsPerOp(); ns > patchBudget {
-		t.Errorf("a one-binding patch took %d µs, the budget is %d µs", ns/1000, patchBudget/1000)
+	// The race detector costs far more than the margin in the budgets, so a time
+	// says nothing under it. The work counters below hold the claim either way.
+	if !raceEnabled {
+		if ns := full.NsPerOp(); ns > fullBudget {
+			t.Errorf("a full render took %d µs, the budget is %d µs", ns/1000, fullBudget/1000)
+		}
+		if ns := patch.NsPerOp(); ns > patchBudget {
+			t.Errorf("a one-binding patch took %d µs, the budget is %d µs", ns/1000, patchBudget/1000)
+		}
 	}
 
 	s := mustSurface(t, bigTable())

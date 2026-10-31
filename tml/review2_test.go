@@ -29,8 +29,15 @@ func within(t *testing.T, name string, f func()) {
 	case <-time.After(20 * deadline):
 		t.Fatalf("%s is still running after %v", name, 20*deadline)
 	}
-	if took := time.Since(start); took > deadline {
-		t.Errorf("%s took %v, past the %v deadline", name, took, deadline)
+	// The race detector slows this code by far more than the margin in deadline.
+	// Each case guards against a cost that grows without bound, which takes minutes
+	// or never ends, so it stays caught at ten times the deadline.
+	limit := deadline
+	if raceEnabled {
+		limit = 10 * deadline
+	}
+	if took := time.Since(start); took > limit {
+		t.Errorf("%s took %v, past the %v deadline", name, took, limit)
 	}
 }
 
