@@ -10169,6 +10169,7 @@ The fixed build passes 12 of 12 runs under the same load. The first draft of
 the test waited a fixed 1.5 s and used zsh. The CI runners have no zsh, so no
 pane was made. A draft that made the next pane right after the prompt caught
 only 5 of 48 cases: the client resized the new pane after its prompt.
+
 ### Scrolling, master-stack and automatic empty-workspace panes
 
 The same fixture now covers scrolling and master-stack in daemon and
@@ -10189,8 +10190,9 @@ is outside this observation.
 Run on 2026-10-31, macOS 27.2 arm64, Go 1.27.3. All size values below are
 **rows × columns**, as `stty` reports them. On upstream `3314abf8`, the new
 daemon cases fail; the four standalone cases pass and remain compatibility
-controls. Each wiring control below changes a caller/route in a separate
-`go build -overlay` binary, leaving the helper and working tree intact.
+controls. The two caller/route controls below use separate `go build -overlay`
+binaries, leaving the helper and working tree intact. The table also records
+the stock baseline and an additional adjusted-divider compatibility control.
 
 | Control: what was cut | Where it fails | Verdict |
 | --- | --- | --- |
