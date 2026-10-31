@@ -492,9 +492,20 @@ func TestMathInOtherTypes(t *testing.T) {
 // At most 6,400 expressions are marked, which keeps a quadratic join under the
 // bound of the parsers' test, so the bound here is lower: pushing each piece of
 // TeX source on its own allocates 266 MB for "expressions, untypeset".
+//
+// The bound holds in the plain build, where the worst case is 40 MB. Under the
+// race detector sync.Pool drops one Put in four on purpose, and regexp keeps its
+// backtracker's buffers in a sync.Pool, so most matches allocate them again. A
+// profile puts 1.57 GB of the test's 1.98 GB there and 156 MB in all without
+// race, and the worst case rises to 805 MB. That is the detector's cost, so the
+// race build only checks for what still shows above it, a join that has gone
+// quadratic. The plain sketch job in CI holds the real bound.
 func TestMathLabelsStayLinear(t *testing.T) {
 	const n = 200_000
-	const bound = 128 << 20
+	bound := uint64(128 << 20)
+	if raceEnabled {
+		bound = 1 << 30
+	}
 	none := func(string, float64) (MathMarkup, bool) { return MathMarkup{}, false }
 	some := func(string, float64) (MathMarkup, bool) {
 		return MathMarkup{Markup: "<g/>", Width: 1, Height: 18}, true
