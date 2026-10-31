@@ -1052,6 +1052,9 @@
           "$ref": "#/$defs/line"
         },
         {
+          "$ref": "#/$defs/map"
+        },
+        {
           "$ref": "#/$defs/pie"
         },
         {
@@ -5587,6 +5590,234 @@
       "required": [
         "type",
         "items"
+      ],
+      "type": "object"
+    },
+    "map": {
+      "additionalProperties": false,
+      "description": "Countries shaded by a value.",
+      "properties": {
+        "as": {
+          "description": "The name of the element inside each. Default item.",
+          "pattern": "^[A-Za-z_][A-Za-z0-9_-]*$",
+          "type": "string"
+        },
+        "data": {
+          "anyOf": [
+            {
+              "pattern": "^[A-Za-z_][A-Za-z0-9_]*(\\.[A-Za-z_][A-Za-z0-9_]*|\\[[0-9]+\\])*$",
+              "type": "string"
+            },
+            {
+              "type": "array"
+            }
+          ],
+          "description": "A state array of rows."
+        },
+        "each": {
+          "anyOf": [
+            {
+              "pattern": "^[A-Za-z_][A-Za-z0-9_]*(\\.[A-Za-z_][A-Za-z0-9_]*|\\[[0-9]+\\])*$",
+              "type": "string"
+            },
+            {
+              "type": "array"
+            }
+          ],
+          "description": "Repeats the node once per array element."
+        },
+        "graphics": {
+          "description": "How to draw: auto picks kitty graphics, then cells, then ASCII.",
+          "enum": [
+            "auto",
+            "kitty",
+            "cells",
+            "ascii"
+          ]
+        },
+        "grow": {
+          "description": "Share of free space.",
+          "maximum": 100,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "h": {
+          "anyOf": [
+            {
+              "anyOf": [
+                {
+                  "minimum": 0,
+                  "type": "integer"
+                },
+                {
+                  "pattern": "^([0-9]+|[0-9]+%|fill|fill:[0-9]+)$",
+                  "type": "string"
+                }
+              ]
+            },
+            {
+              "$ref": "#/$defs/binding"
+            }
+          ],
+          "description": "Height: cells, 50%, fill or fill:2."
+        },
+        "id": {
+          "description": "Names the node for patches, focus and events.",
+          "pattern": "^[A-Za-z_][A-Za-z0-9_-]*$",
+          "type": "string"
+        },
+        "if": {
+          "description": "Drops the node when false.",
+          "type": "string"
+        },
+        "key": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "$ref": "#/$defs/binding"
+            }
+          ],
+          "description": "Keeps identity in repeated children."
+        },
+        "log": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "$ref": "#/$defs/binding"
+            }
+          ],
+          "description": "Shades by the logarithm of the value, so values that span orders of magnitude spread over the shades."
+        },
+        "max-h": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "pattern": "^([0-9]+|[0-9]+%|fill|fill:[0-9]+)$",
+              "type": "string"
+            }
+          ],
+          "description": "Largest height."
+        },
+        "max-w": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "pattern": "^([0-9]+|[0-9]+%|fill|fill:[0-9]+)$",
+              "type": "string"
+            }
+          ],
+          "description": "Largest width."
+        },
+        "min-h": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "pattern": "^([0-9]+|[0-9]+%|fill|fill:[0-9]+)$",
+              "type": "string"
+            }
+          ],
+          "description": "Smallest height."
+        },
+        "min-w": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "pattern": "^([0-9]+|[0-9]+%|fill|fill:[0-9]+)$",
+              "type": "string"
+            }
+          ],
+          "description": "Smallest width."
+        },
+        "pad": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "pattern": "^[0-9]+( [0-9]+)?( [0-9]+ [0-9]+)?$",
+              "type": "string"
+            }
+          ],
+          "description": "Padding in cells: all, vertical horizontal, or top right bottom left."
+        },
+        "show": {
+          "description": "Hides the node when false and keeps its space.",
+          "type": "string"
+        },
+        "title": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "$ref": "#/$defs/binding"
+            }
+          ],
+          "description": "A caption above the chart."
+        },
+        "type": {
+          "const": "map"
+        },
+        "unit": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "$ref": "#/$defs/binding"
+            }
+          ],
+          "description": "A prefix for the legend values, such as $."
+        },
+        "w": {
+          "anyOf": [
+            {
+              "anyOf": [
+                {
+                  "minimum": 0,
+                  "type": "integer"
+                },
+                {
+                  "pattern": "^([0-9]+|[0-9]+%|fill|fill:[0-9]+)$",
+                  "type": "string"
+                }
+              ]
+            },
+            {
+              "$ref": "#/$defs/binding"
+            }
+          ],
+          "description": "Width: cells, 50%, fill or fill:2."
+        },
+        "x": {
+          "description": "The ISO 3166-1 alpha-2 country field.",
+          "type": "string"
+        },
+        "y": {
+          "description": "The value field.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type",
+        "data"
       ],
       "type": "object"
     },

@@ -523,6 +523,15 @@ var table = [...]Component{
 		{Name: "x", Type: TField, Doc: "The x field."},
 		{Name: "y", Type: TField, Doc: "The y field, or a comma list for several series."},
 	}},
+	{Name: "map", Group: "chart", Doc: "Countries shaded by a value.", Content: ContentNone, Block: true, Attrs: []AttrSpec{
+		{Name: "data", Type: TData, Required: true, Doc: "A state array of rows."},
+		{Name: "graphics", Type: TEnum, Enum: []string{"auto", "kitty", "cells", "ascii"}, Doc: "How to draw: auto picks kitty graphics, then cells, then ASCII."},
+		{Name: "log", Type: TBool, Bind: true, Doc: "Shades by the logarithm of the value, so values that span orders of magnitude spread over the shades."},
+		{Name: "title", Type: TString, Bind: true, Doc: "A caption above the chart."},
+		{Name: "unit", Type: TString, Bind: true, Doc: "A prefix for the legend values, such as $."},
+		{Name: "x", Type: TField, Doc: "The ISO 3166-1 alpha-2 country field."},
+		{Name: "y", Type: TField, Doc: "The value field."},
+	}},
 	{Name: "pie", Group: "chart", Doc: "Shares of a whole.", Content: ContentNone, Block: true, Attrs: []AttrSpec{
 		{Name: "data", Type: TData, Required: true, Doc: "A state array of rows."},
 		{Name: "graphics", Type: TEnum, Enum: []string{"auto", "kitty", "cells", "ascii"}, Doc: "How to draw: auto picks kitty graphics, then cells, then ASCII."},

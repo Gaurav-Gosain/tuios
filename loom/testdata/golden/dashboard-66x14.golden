@@ -23,10 +23,10 @@
 |addjjjjjjddjjjjjjddjjjjjjddjjjjjjddjjjjjjddjjjjjjddddddddddddddeda|
 |addjjjjjjddjjjjjjddjjjjjjddjjjjjjddjjjjjjddjjjjjjddjjjjjjddddddeda|
 |addddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddeda|
-|addkdccccccccbbgdddddddddddddddddddddddddddddddddddddddddddddddeda|
-|addddkkkkkkkddddddddddddddkkkkddddddddddddddddddddddddddhhhhdjdkda|
-|addlmnnnnnnnnnnnnnnnnmmmmmoooooooooooooommmmmmmmmmmmmmmmmooooodkda|
-|addddeeeeeeeeeeeedddddddddpppppppppppppddddddddddddddddddpppppdkda|
+|addadkkkkkkkkbbgdddddddddddddddddddddddddddddddddddddddddddddddeda|
+|addddlllllllddddddddddddddllllddddddddddddddddddddddddddhhhhdjdlda|
+|addmnoooooooooooooooonnnnnppppppppppppppnnnnnnnnnnnnnnnnnpppppdlda|
+|addddeeeeeeeeeeeedddddddddqqqqqqqqqqqqqddddddddddddddddddqqqqqdlda|
 |aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
 a: fg=accent bg=panel
 b: bg=panel bold
@@ -38,12 +38,13 @@ g: fg=error bg=panel bold
 h: fg=dim bg=panel bold
 i: fg=track bg=panel
 j: fg=accent-bright bg=panel
-k: fg=mute bg=panel
-l: fg=accent bg=surface
-m: bg=surface
-n: fg=dim bg=surface
-o: fg=fg bg=surface bold
-p: fg=fg bg=panel
+k: fg=accent bg=panel bold
+l: fg=mute bg=panel
+m: fg=accent bg=surface
+n: bg=surface
+o: fg=dim bg=surface
+p: fg=fg bg=surface bold
+q: fg=fg bg=panel
 === 256 66x14
 |╭─ go test ./... ────────────────────── from claude in api-auth ─╮|
 |│                                                              ┃ │|
@@ -69,10 +70,10 @@ p: fg=fg bg=panel
 |addjjjjjjddjjjjjjddjjjjjjddjjjjjjddjjjjjjddjjjjjjddddddddddddddeda|
 |addjjjjjjddjjjjjjddjjjjjjddjjjjjjddjjjjjjddjjjjjjddjjjjjjddddddeda|
 |addddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddeda|
-|addkdccccccccbbgdddddddddddddddddddddddddddddddddddddddddddddddeda|
-|addddkkkkkkkddddddddddddddkkkkddddddddddddddddddddddddddhhhhdjdkda|
-|addlmnnnnnnnnnnnnnnnnmmmmmoooooooooooooommmmmmmmmmmmmmmmmooooodkda|
-|addddeeeeeeeeeeeedddddddddpppppppppppppddddddddddddddddddpppppdkda|
+|addadkkkkkkkkbbgdddddddddddddddddddddddddddddddddddddddddddddddeda|
+|addddlllllllddddddddddddddllllddddddddddddddddddddddddddhhhhdjdlda|
+|addmnoooooooooooooooonnnnnppppppppppppppnnnnnnnnnnnnnnnnnpppppdlda|
+|addddeeeeeeeeeeeedddddddddqqqqqqqqqqqqqddddddddddddddddddqqqqqdlda|
 |aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
 a: fg=accent bg=panel
 b: bg=panel bold
@@ -84,12 +85,13 @@ g: fg=error bg=panel bold
 h: fg=dim bg=panel bold
 i: fg=success-tint bg=panel
 j: fg=accent-bright bg=panel
-k: fg=mute bg=panel
-l: fg=accent bg=surface
-m: bg=surface
-n: fg=dim bg=surface
-o: fg=fg bg=surface bold
-p: fg=fg bg=panel
+k: fg=accent bg=panel bold
+l: fg=mute bg=panel
+m: fg=accent bg=surface
+n: bg=surface
+o: fg=dim bg=surface
+p: fg=fg bg=surface bold
+q: fg=fg bg=panel
 === 16 66x14
 |╭─ go test ./... ────────────────────── from claude in api-auth ─╮|
 |│                                                              ┃ │|
@@ -115,10 +117,10 @@ p: fg=fg bg=panel
 |a  iiiiii  iiiiii  iiiiii  iiiiii  iiiiii  iiiiii              d a|
 |a  iiiiii  iiiiii  iiiiii  iiiiii  iiiiii  iiiiii  iiiiii      d a|
 |a                                                              d a|
-|a  h ccccccccbbf                                               d a|
+|a  a jjjjjjjjbbf                                               d a|
 |a    hhhhhhh              hhhh                          gggg i h a|
-|a  ajkkkkkkkkkkkkkkkkjjjjjlllllllllllllljjjjjjjjjjjjjjjjjlllll h a|
-|a    dddddddddddd         mmmmmmmmmmmmm                  mmmmm h a|
+|a  akllllllllllllllllkkkkkmmmmmmmmmmmmmmkkkkkkkkkkkkkkkkkmmmmm h a|
+|a    dddddddddddd         nnnnnnnnnnnnn                  nnnnn h a|
 |aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
 a: fg=accent
 b: bold
@@ -129,10 +131,11 @@ f: fg=error bold
 g: fg=dim bold
 h: fg=mute
 i: fg=accent-bright
-j: reverse
-k: fg=dim reverse
-l: fg=dim bold reverse
-m: fg=fg
+j: fg=accent bold
+k: reverse
+l: fg=dim reverse
+m: fg=dim bold reverse
+n: fg=fg
 === ascii 66x14
 |+- go test ./... ---------------------- from claude in api-auth -+|
 ||                                                              # ||

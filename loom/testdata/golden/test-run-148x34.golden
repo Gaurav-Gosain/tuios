@@ -54,9 +54,9 @@
 |adeeeeeeeeeedddddddddduuussssssssssssssssssssssssssssssssssssssssssssssssssdvvvddddeeeeeddxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxddddddddddddddddddddcdddddda|
 |addddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddeeeeeddyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyddddddddddddddddddddcccdddda|
 |adddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddda|
-|adfdccccccccbbzdddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddda|
-|adddfffffffdddddddddddddddffffdddddddddddddddddddddAAAAdyddfffffdfffffdffffdddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddda|
-|adBijjjjjjjjjjjjjjjjiiiiiiqqqqqqqqqqqqqqiiiiiiiiiiiiqqqqqiiqqqqqCqqqqCqqqCqqqqqCqqqqqqiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiida|
+|adadzzzzzzzzbbAdddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddda|
+|adddfffffffdddddddddddddddffffdddddddddddddddddddddBBBBdyddfffffdfffffdffffdddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddda|
+|adCijjjjjjjjjjjjjjjjiiiiiiqqqqqqqqqqqqqqiiiiiiiiiiiiqqqqqiiqqqqqDqqqqDqqqDqqqqqDqqqqqqiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiida|
 |adddeeeeeeeeeeeeeeeeddddddvvvvvvvvvvvvvvvvddddddddddvvvvvddvvvvvvvvdvvvdvvvdvvvvdvvdddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddda|
 |adddeeeeeeeeeeeeddddddddddvvvvvvvvvvvvvdddddddddddddvvvvvddvvvvvdvvdvvvdvvdvvvdvvvvdvvvvdvvvddddddddddddddddddddddddddddddddddddddddddddddddddddddda|
 |adddeeeeeeeeeeeeddddddddddvvvvvvvvvvvvvvvvvvvdddddddvvvvvddvvvvvdvvvdvvvvdvvddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddda|
@@ -65,18 +65,19 @@
 |adwwwwwwwwwwwwwwwwwwdvvvvvdvvvvdvvvdvvvvvdvvvvvvdxxxxxdxxdxdxxdxxxdxxxxdxxdxxxxxddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddda|
 |adddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddda|
 |adddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddda|
-|adDEDFGGGGGFGGGGGGFddCHCillllillliddCHCillllillilllllliddCHCillllilllllidddddddddddddddddddddddddddddddddddddddddddddddddIdffffdIIIdffffdIIIdfffffda|
+|adEFEGHHHHHGHHHHHHGddDIDillllillliddDIDillllillilllllliddDIDillllilllllidddddddddddddddddddddddddddddddddddddddddddddddddJdffffdJJJdffffdJJJdfffffda|
 |adddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddda|
 |aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
-A: fg=dim bg=panel bold
-B: fg=accent bg=surface
-C: bg=surface bold
-D: bg=accent bold
-E: fg=fg bg=accent bold
-F: bg=accent
-G: fg=fg bg=accent
-H: fg=accent-bright bg=surface bold
-I: fg=accent-bright bg=panel bold
+A: fg=error bg=panel bold
+B: fg=dim bg=panel bold
+C: fg=accent bg=surface
+D: bg=surface bold
+E: bg=accent bold
+F: fg=fg bg=accent bold
+G: bg=accent
+H: fg=fg bg=accent
+I: fg=accent-bright bg=surface bold
+J: fg=accent-bright bg=panel bold
 a: fg=accent bg=panel
 b: bg=panel bold
 c: fg=fg bg=panel bold
@@ -102,7 +103,7 @@ v: fg=fg bg=panel
 w: fg=info bg=panel
 x: fg=warning bg=panel
 y: fg=accent-bright bg=panel
-z: fg=error bg=panel bold
+z: fg=accent bg=panel bold
 === 256 148x34
 |╭─ Test run ───────────────────────────────────────────────────────────────────────────────────────────────────────────── from claude in api-auth ─╮|
 |│                                                                                                                                                  │|
@@ -159,9 +160,9 @@ z: fg=error bg=panel bold
 |adeeeeeeeeeedddddddddduuussssssssssssssssssssssssssssssssssssssssssssssssssdvvvddddeeeeeddxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxddddddddddddddddddddcdddddda|
 |addddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddeeeeeddyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyddddddddddddddddddddcccdddda|
 |adddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddda|
-|adfdccccccccbbzdddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddda|
-|adddfffffffdddddddddddddddffffdddddddddddddddddddddAAAAdyddfffffdfffffdffffdddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddda|
-|adBijjjjjjjjjjjjjjjjiiiiiiqqqqqqqqqqqqqqiiiiiiiiiiiiqqqqqiiqqqqqCqqqqCqqqCqqqqqCqqqqqqiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiida|
+|adadzzzzzzzzbbAdddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddda|
+|adddfffffffdddddddddddddddffffdddddddddddddddddddddBBBBdyddfffffdfffffdffffdddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddda|
+|adCijjjjjjjjjjjjjjjjiiiiiiqqqqqqqqqqqqqqiiiiiiiiiiiiqqqqqiiqqqqqDqqqqDqqqDqqqqqDqqqqqqiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiida|
 |adddeeeeeeeeeeeeeeeeddddddvvvvvvvvvvvvvvvvddddddddddvvvvvddvvvvvvvvdvvvdvvvdvvvvdvvdddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddda|
 |adddeeeeeeeeeeeeddddddddddvvvvvvvvvvvvvdddddddddddddvvvvvddvvvvvdvvdvvvdvvdvvvdvvvvdvvvvdvvvddddddddddddddddddddddddddddddddddddddddddddddddddddddda|
 |adddeeeeeeeeeeeeddddddddddvvvvvvvvvvvvvvvvvvvdddddddvvvvvddvvvvvdvvvdvvvvdvvddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddda|
@@ -170,18 +171,19 @@ z: fg=error bg=panel bold
 |adwwwwwwwwwwwwwwwwwwdvvvvvdvvvvdvvvdvvvvvdvvvvvvdxxxxxdxxdxdxxdxxxdxxxxdxxdxxxxxddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddda|
 |adddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddda|
 |adddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddda|
-|adDEDFGGGGGFGGGGGGFddCHCillllillliddCHCillllillilllllliddCHCillllilllllidddddddddddddddddddddddddddddddddddddddddddddddddIdffffdIIIdffffdIIIdfffffda|
+|adEFEGHHHHHGHHHHHHGddDIDillllillliddDIDillllillilllllliddDIDillllilllllidddddddddddddddddddddddddddddddddddddddddddddddddJdffffdJJJdffffdJJJdfffffda|
 |adddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddda|
 |aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
-A: fg=dim bg=panel bold
-B: fg=accent bg=surface
-C: bg=surface bold
-D: bg=accent bold
-E: fg=fg bg=accent bold
-F: bg=accent
-G: fg=fg bg=accent
-H: fg=accent-bright bg=surface bold
-I: fg=accent-bright bg=panel bold
+A: fg=error bg=panel bold
+B: fg=dim bg=panel bold
+C: fg=accent bg=surface
+D: bg=surface bold
+E: bg=accent bold
+F: fg=fg bg=accent bold
+G: bg=accent
+H: fg=fg bg=accent
+I: fg=accent-bright bg=surface bold
+J: fg=accent-bright bg=panel bold
 a: fg=accent bg=panel
 b: bg=panel bold
 c: fg=fg bg=panel bold
@@ -207,7 +209,7 @@ v: fg=fg bg=panel
 w: fg=info bg=panel
 x: fg=warning bg=panel
 y: fg=accent-bright bg=panel
-z: fg=error bg=panel bold
+z: fg=accent bg=panel bold
 === 16 148x34
 |╭─ Test run ───────────────────────────────────────────────────────────────────────────────────────────────────────────── from claude in api-auth ─╮|
 |│                                                                                                                                                  │|
@@ -264,9 +266,9 @@ z: fg=error bg=panel bold
 |a dddddddddd          ggg                                                   hhh    ddddd  mmmmmmmmmmmmmmmmmmmmmmmmmmmmmm                    c      a|
 |a                                                                                  ddddd  nnnnnnnnnnnnnnnnnnnnnnnnnnnnnn                    ccc    a|
 |a                                                                                                                                                  a|
-|a e ccccccccbbj                                                                                                                                    a|
+|a a oooooooobbj                                                                                                                                    a|
 |a   eeeeeee               eeee                     kkkk n  eeeee eeeee eeee                                                                        a|
-|a aoppppppppppppppppooooooqqqqqqqqqqqqqqooooooooooooqqqqqooqqqqqrqqqqrqqqrqqqqqrqqqqqqoooooooooooooooooooooooooooooooooooooooooooooooooooooooooooo a|
+|a apqqqqqqqqqqqqqqqqpppppprrrrrrrrrrrrrrpppppppppppprrrrrpprrrrrsrrrrsrrrsrrrrrsrrrrrrpppppppppppppppppppppppppppppppppppppppppppppppppppppppppppp a|
 |a   dddddddddddddddd      hhhhhhhhhhhhhhhh          hhhhh  hhhhhhhh hhh hhh hhhh hh                                                                a|
 |a   dddddddddddd          hhhhhhhhhhhhh             hhhhh  hhhhh hh hhh hh hhh hhhh hhhh hhh                                                       a|
 |a   dddddddddddd          hhhhhhhhhhhhhhhhhhh       hhhhh  hhhhh hhh hhhh hh                                                                       a|
@@ -275,7 +277,7 @@ z: fg=error bg=panel bold
 |a llllllllllllllllll hhhhh hhhh hhh hhhhh hhhhhh mmmmm mm m mm mmm mmmm mm mmmmm                                                                   a|
 |a                                                                                                                                                  a|
 |a                                                                                                                                                  a|
-|a rsrrsssssrssssssr  et hhhh hhhe  et hhhh hh hhhhhhe  et hhhh hhhhhe                                                    t eeee ttt eeee ttt eeeee a|
+|a stsstttttstttttts  eu hhhh hhhe  eu hhhh hh hhhhhhe  eu hhhh hhhhhe                                                    u eeee uuu eeee uuu eeeee a|
 |a                                                                                                                                                  a|
 |aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
 a: fg=accent
@@ -292,12 +294,13 @@ k: fg=dim bold
 l: fg=info
 m: fg=warning
 n: fg=accent-bright
-o: reverse
-p: fg=dim reverse
-q: fg=dim bold reverse
-r: bold reverse
-s: fg=accent bold reverse
-t: fg=accent-bright bold
+o: fg=accent bold
+p: reverse
+q: fg=dim reverse
+r: fg=dim bold reverse
+s: bold reverse
+t: fg=accent bold reverse
+u: fg=accent-bright bold
 === ascii 148x34
 |+- Test run ------------------------------------------------------------------------------------------------------------- from claude in api-auth -+|
 ||                                                                                                                                                  ||

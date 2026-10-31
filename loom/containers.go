@@ -16,12 +16,18 @@ type cardWidget struct {
 	modal             bool
 	indent            int // 2, or 0 when the body starts with a cursor margin of its own
 	press             []tml.Action
+	// foldable is true when the document declared fold, so the card can be
+	// folded. A card that cannot fold is not a tab stop: it would take a key
+	// press that does nothing, and a screen of titled panels would otherwise be
+	// a screen of dead stops.
+	foldable bool
 }
 
 func (s *Surface) buildCard(b *box, vars map[string]any) widget {
 	n := b.src
 	w := &cardWidget{title: s.str(n, "title", vars), meta: s.str(n, "meta", vars),
-		role: s.roleOr(n, vars, "accent-bright"), modal: n.Type == "modal", press: s.actionsOf(n, "on-press")}
+		role: s.roleOr(n, vars, "accent-bright"), modal: n.Type == "modal", press: s.actionsOf(n, "on-press"),
+		foldable: n.AttrString("fold") != ""}
 	if f, ok := lookup(s.view.Fold, b); ok {
 		w.folded = f
 	} else {
@@ -82,11 +88,28 @@ func (w *cardWidget) paint(s *Surface, b *box, c *canvas, r Rect) {
 	if w.folded {
 		mark = s.g.foldShut
 	}
-	l := line{{text: mark + " ", st: style{fg: "mute"}}, {text: w.title, st: style{fg: "fg", attrs: attrBold}}}
+	// A card holding the focused box says so. Without it a document with
+	// several tables gives no clue which one the arrow keys reach: every table
+	// draws its own cursor row, and only the focused one takes the keys.
+	markRole, titleRole := "mute", "fg"
+	if holdsFocus(s, b) {
+		markRole, titleRole = "accent", "accent"
+	}
+	l := line{{text: mark + " ", st: style{fg: markRole}}, {text: w.title, st: style{fg: titleRole, attrs: attrBold}}}
 	if w.meta != "" {
 		l = append(l, span{text: "  " + w.meta, st: style{fg: w.role, attrs: attrBold}})
 	}
 	c.drawLine(r.Min.X, r.Min.Y, r.Dx(), l, alignLeft)
+}
+
+// holdsFocus reports whether the focused box is b or sits inside it.
+func holdsFocus(s *Surface, b *box) bool {
+	for f := s.focused(); f != nil; f = f.parent {
+		if f == b {
+			return true
+		}
+	}
+	return false
 }
 
 // frame draws a rounded border on r with a title on the top edge and a
