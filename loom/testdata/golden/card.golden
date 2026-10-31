@@ -14,15 +14,15 @@
 |hbiiiiiiddjjjbbbbbbbbbbbbbbbbbbbbbbbbbbb|
 |bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb|
 |bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb|
-a: fg=accent bg=panel
+a: fg=mute bg=panel
 b: bg=panel
-c: fg=accent bg=panel bold
+c: fg=fg bg=panel bold
 d: bg=panel bold
 e: fg=warning bg=panel bold
 f: fg=fg bg=panel
 g: fg=dim bg=panel
-h: fg=mute bg=panel
-i: fg=fg bg=panel bold
+h: fg=accent bg=panel
+i: fg=accent bg=panel bold
 j: fg=success bg=panel bold
 === 256 40x7
 |▾ Failures  3                           |
@@ -40,15 +40,15 @@ j: fg=success bg=panel bold
 |hbiiiiiiddjjjbbbbbbbbbbbbbbbbbbbbbbbbbbb|
 |bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb|
 |bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb|
-a: fg=accent bg=panel
+a: fg=mute bg=panel
 b: bg=panel
-c: fg=accent bg=panel bold
+c: fg=fg bg=panel bold
 d: bg=panel bold
 e: fg=warning bg=panel bold
 f: fg=fg bg=panel
 g: fg=dim bg=panel
-h: fg=mute bg=panel
-i: fg=fg bg=panel bold
+h: fg=accent bg=panel
+i: fg=accent bg=panel bold
 j: fg=success bg=panel bold
 === 16 40x7
 |▾ Failures  3                           |
@@ -66,14 +66,14 @@ j: fg=success bg=panel bold
 |g hhhhhhcciii                           |
 |                                        |
 |                                        |
-a: fg=accent
-b: fg=accent bold
+a: fg=mute
+b: fg=fg bold
 c: bold
 d: fg=warning bold
 e: fg=fg
 f: fg=dim
-g: fg=mute
-h: fg=fg bold
+g: fg=accent
+h: fg=accent bold
 i: fg=success bold
 === ascii 40x7
 |v Failures  3                           |

@@ -53,7 +53,7 @@ func focusable(s *Surface, b *box) bool {
 	case *tabsWidget:
 		return len(w.ids) > 1
 	case *cardWidget:
-		return !w.modal
+		return !w.modal && w.foldable
 	case *buttonWidget:
 		return !w.disabled
 	case *scrollWidget:

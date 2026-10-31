@@ -16,12 +16,18 @@ type cardWidget struct {
 	modal             bool
 	indent            int // 2, or 0 when the body starts with a cursor margin of its own
 	press             []tml.Action
+	// foldable is true when the document declared fold, so the card can be
+	// folded. A card that cannot fold is not a tab stop: it would take a key
+	// press that does nothing, and a screen of titled panels would otherwise be
+	// a screen of dead stops.
+	foldable bool
 }
 
 func (s *Surface) buildCard(b *box, vars map[string]any) widget {
 	n := b.src
 	w := &cardWidget{title: s.str(n, "title", vars), meta: s.str(n, "meta", vars),
-		role: s.roleOr(n, vars, "accent-bright"), modal: n.Type == "modal", press: s.actionsOf(n, "on-press")}
+		role: s.roleOr(n, vars, "accent-bright"), modal: n.Type == "modal", press: s.actionsOf(n, "on-press"),
+		foldable: n.AttrString("fold") != ""}
 	if f, ok := lookup(s.view.Fold, b); ok {
 		w.folded = f
 	} else {
