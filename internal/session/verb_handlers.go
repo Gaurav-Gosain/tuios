@@ -1516,7 +1516,9 @@ func (d *Daemon) verbSetWorkspaceOrder(cs *connState, params json.RawMessage) (a
 }
 
 func (d *Daemon) verbSetAgentState(cs *connState, params json.RawMessage) (any, *verbError) {
-	return d.setAgentState(cs, params, false)
+	res, verr := d.setAgentState(cs, params, false)
+	d.noteSharedServerHook(params, verr)
+	return res, verr
 }
 
 // setAgentState is set-agent-state. ownPane says the caller is the pane the

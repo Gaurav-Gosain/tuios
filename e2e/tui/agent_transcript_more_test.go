@@ -1,6 +1,7 @@
 package tuie2e
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"maps"
@@ -10,6 +11,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 )
 
 // More of agent-transcript, on the rig TestPersonReadsAgentTranscript builds
@@ -545,5 +547,145 @@ func TestPersonSeesDiffColours(t *testing.T) {
 		E int `json:"e"`
 	}{10, 15}) || len(txt[1].Words) != 1 || txt[1].Words[0].S != 10 || txt[1].Words[0].E != 13 {
 		t.Fatalf("the text file: want no spans and brown and red marked, got %+v", txt)
+	}
+}
+
+// goneHookWaitE2E is internal/session's goneHookWait.
+const goneHookWaitE2E = 10 * time.Second
+
+// TestCodexRolloutJoinsWithoutAHook is issue 1391. Codex's shared app-server was
+// started from a pane that has since closed, so every hook names a window that is
+// gone. A Codex in a live pane still gets its thread by the hookless search, and
+// the Inbox says why the pane hears no hooks. A report that reaches a pane closes
+// that notice.
+//
+// How this could pass wrongly, written down first:
+//   - The join could come from a hook. No hook here names the live pane until the
+//     last step, after the join has been read.
+//   - The notice could come from a single report after a pane closed. The first
+//     report must raise nothing.
+//
+// Negative controls in NEGATIVE_CONTROLS.md.
+func TestCodexRolloutJoinsWithoutAHook(t *testing.T) {
+	r := newATRig(t, "codex-rollout-join", 1)
+	win := r.wins[0]
+
+	stubs := filepath.Join(r.base, "stubs")
+	project := filepath.Join(r.base, "project")
+	for _, dir := range []string{stubs, project} {
+		if err := os.MkdirAll(dir, 0o700); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// The script stays in the foreground, so its process is named codex.
+	if err := os.WriteFile(filepath.Join(stubs, "codex"), []byte("#!/bin/sh\nwhile :; do read -r line; done\n"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	cwd, err := filepath.EvalSymlinks(project)
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := fmt.Sprintf("PATH=%q:$PATH; cd %q; codex\n", stubs, cwd)
+	if out, err := tuiosCLI(t, r.base, "send-text", "-s", transcriptSession, "-w", win, text); err != nil {
+		t.Fatalf("start the stub: %v\n%s", err, out)
+	}
+	deadline := time.Now().Add(uiTimeout)
+	for {
+		out, err := tuiosCLI(t, r.base, "list-agents", "-s", transcriptSession, "--json")
+		if err == nil && strings.Contains(out, `"harness_id": "codex"`) {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("the stub never showed as codex: %v\n%s", err, out)
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+
+	// The rollout of the pane's conversation, started just after the pane's Codex.
+	const thread = "0199aa00-0000-7000-8000-000000000001"
+	start := time.Now().UTC()
+	fixture, err := os.ReadFile(filepath.Join("..", "..", "internal", "transcriptview", "testdata", "codex-rollout.jsonl"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	body := strings.ReplaceAll(string(fixture), `"cwd":"/work/project"`, fmt.Sprintf(`"cwd":%q`, cwd))
+	body = strings.Replace(body, "2026-10-18T09:00:00.000Z", start.Format(time.RFC3339Nano), 2)
+	path := filepath.Join(xdgDir(r.base, "HOME"), ".codex", "sessions", start.Format("2006/01/02"),
+		"rollout-"+start.Format("2006-01-02T15-04-05")+"-"+thread+".jsonl")
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	// The search runs on a backoff, 10 s after the first and then 30 s, so a file
+	// written just after the first search waits for the next.
+	deadline = time.Now().Add(45 * time.Second)
+	for {
+		res, verr := r.ctl.call(t, "agent-transcript", map[string]any{"session": transcriptSession, "window": win, "human_nonce": r.nonce})
+		if verr == nil && len(atEntries(t, res)) > 0 {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("the pane never joined the matching rollout: %v %v", verr, res)
+		}
+		time.Sleep(200 * time.Millisecond)
+	}
+
+	// hook runs Codex's real hook with the environment of the shared server.
+	hook := func(pane string) {
+		t.Helper()
+		cmd := exec.Command(tuiosBin, "agent-hook", "codex")
+		cmd.Dir = workDirIn(t, r.base)
+		cmd.Env = append(os.Environ(), "SHELL=/bin/sh", "TUIOS_SESSION="+transcriptSession, "TUIOS_PANE_ID="+pane)
+		for _, key := range xdgKeys {
+			cmd.Env = append(cmd.Env, key+"="+xdgDir(r.base, key))
+		}
+		cmd.Stdin = bytes.NewReader(hookPayload(path, thread))
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("agent-hook: %v\n%s", err, out)
+		}
+	}
+	const notice = "Codex hooks"
+	inbox := func() string {
+		t.Helper()
+		out, err := tuiosCLI(t, r.base, "list-attention", "--json")
+		if err != nil {
+			t.Fatalf("list-attention: %v\n%s", err, out)
+		}
+		return out
+	}
+	const gonePane = "0123dead-0000-4000-8000-000000000000"
+	first := time.Now()
+	hook(gonePane)
+	if got := inbox(); strings.Contains(got, notice) {
+		t.Fatalf("one report for a closed pane raised the notice:\n%s", got)
+	}
+	// A pane that has just closed can leave a hook or two in flight. Measured from
+	// before the first hook, so a slow runner can only make this pass, never fail.
+	hook(gonePane)
+	if got := inbox(); strings.Contains(got, notice) && time.Since(first) < goneHookWaitE2E {
+		t.Fatalf("two quick reports for a closed pane raised the notice:\n%s", got)
+	}
+	deadline = time.Now().Add(30 * time.Second)
+	for {
+		hook(gonePane)
+		got := inbox()
+		if strings.Contains(got, notice) {
+			if !strings.Contains(got, "hooks name a pane that closed") {
+				t.Fatalf("the notice does not name the problem:\n%s", got)
+			}
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("reports for a closed pane raised no notice:\n%s", got)
+		}
+		time.Sleep(time.Second)
+	}
+
+	hook(win)
+	if got := inbox(); strings.Contains(got, notice) {
+		t.Fatalf("a report that reached a pane left the notice open:\n%s", got)
 	}
 }

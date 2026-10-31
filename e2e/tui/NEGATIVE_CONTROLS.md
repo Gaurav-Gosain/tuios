@@ -35,6 +35,24 @@ Run on 2026-10-31 on Linux. Each control fails and the fixed build passes.
 | The render path stops at each row's text | `the selection is not a rectangle` |
 | `BlockRowSpan` does not widen | `the selection does not cover a wide character on its edge` |
 
+## A Codex rollout joins without a hook
+
+`TestCodexRolloutJoinsWithoutAHook` follows issue 1391. A stub named `codex` runs in
+a pane, a rollout matches it, and Codex's real hook runs with the id of a closed
+pane. The search must join the rollout, and the Inbox must name the problem.
+
+Run on 2026-10-31 on Linux. Linux has `/proc`, so the old read of a process's folder
+works here, and this test passes on a build without that fix. The first control
+stands in for macOS, where that read found nothing. It fails, and the fixed build
+passes.
+
+| Control | Failure |
+| --- | --- |
+| The agent's folder reads as unknown, as it did on macOS | `the pane never joined the matching rollout` |
+| `noteSharedServerHook` is not called | `reports for a closed pane raised no notice` |
+| `goneHookWait` is 0 | `two quick reports for a closed pane raised the notice` |
+| `closeConfigNotice` is not called | `a report that reached a pane left the notice open` |
+
 ## tuios tutor keeps out of the person's home
 
 `TestTutorBasics` plants an Omarchy theme, Catppuccin Latte, under the

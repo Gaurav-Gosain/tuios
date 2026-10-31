@@ -5,12 +5,12 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
-	"strconv"
 	"sync"
 	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/harness"
 	"github.com/Gaurav-Gosain/tuios/internal/procinfo"
+	"github.com/Gaurav-Gosain/tuios/internal/ptyspawn"
 	"github.com/Gaurav-Gosain/tuios/internal/transcript"
 	"github.com/Gaurav-Gosain/tuios/internal/transcriptview"
 )
@@ -681,8 +681,8 @@ func paneAgentIdentity(info foregroundInfo) agentIdentity {
 	if info.pid <= 0 {
 		return id
 	}
-	if target, err := os.Readlink("/proc/" + strconv.Itoa(info.pid) + "/cwd"); err == nil {
-		id.cwd = target
+	if cwd, ok := ptyspawn.ProcessCwd(info.pid); ok {
+		id.cwd = cwd
 	}
 	if info.exe != "" {
 		id.version = filepath.Base(info.exe)

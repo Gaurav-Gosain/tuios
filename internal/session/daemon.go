@@ -404,6 +404,9 @@ type Daemon struct {
 	// agentMatcher decides whether a pane's foreground process is a known agent
 	// CLI. It merges the built-in agent binary names with any the user added.
 	agentMatcher agentMatcher
+	// goneHooks tells a shared server's hooks for a closed pane from a pane that
+	// has just closed. See shared_server_hook.go.
+	goneHooks goneHookNotes
 
 	// agentsOff is [agents] enabled = false: every agent feature is off. See
 	// agents_switch.go. It is read on every tick, verb and output event, and

@@ -4350,6 +4350,12 @@ the one that owns the pane. These filters keep those events off the pane:
   sets the conversation that owns the pane. A report for another conversation
   is refused with `foreign_session`, at rest and mid-turn. It makes no Inbox
   item and no notification. The daemon logs the refusal at debug level.
+- Codex's shared server keeps the `TUIOS_PANE_ID` of the pane that started it.
+  When that pane closes, every hook names a pane that is gone. tuios then shows
+  an Inbox item, `Codex hooks`, after two such reports at least 10 seconds apart.
+  Restart the server from outside tuios to fix it. The item closes on the next
+  report that reaches a pane. Until then the pane takes its state from the screen
+  rules, and the hookless search still finds its rollout for the thread.
 - Another conversation's `SessionStart` takes the pane over, because it looks
   like `/new` or `/resume` in the pane. A `SessionStart` after a compaction
   (source `compact`) is the same conversation and takes nothing over.
