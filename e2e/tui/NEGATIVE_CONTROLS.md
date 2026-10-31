@@ -11231,6 +11231,13 @@ A guest that wraps each shared memory frame in a synchronized update, as termina
 | The `releaseKittyMedium` call in `replaceHeldStreamFrame` | "278 shared memory objects were never sent to the host and never deleted" | **caught** |
 | `firstInUpdate` is always false, so a frame in an update goes back to `a=t` and `a=p` | "283 frames went out as a transmit to be placed later" | **caught** |
 
+`/joined-updates` runs a stand-in that closes one update and opens the next in the same write, so an update is open at every render pass. `/reused-name` sends every frame under one object name. Run on the same day against the same build:
+
+| Control: what was cut | Where it fails | Verdict |
+| --- | --- | --- |
+| The `rec.passes != kp.renderPasses` test in `replaceHeldStreamFrame` | `/joined-updates`: "the host was handed 1 of 150 frames: the stream froze" | **caught**; the fixed build hands over 148 of 150 |
+| The `rec.cmd.FilePath != next.FilePath` test in `replaceHeldStreamFrame` | `/reused-name`: "tuios deleted the object the next frame names: the host cannot read it" | **caught**; its positive half requires that frames were replaced |
+
 `TestKittenIcatDrawsInAPane` asks kitten which medium it would pick, then sends an object in memory mode. Run on 2026-10-31 on macOS 27.0.1 (arm64) with kitty 0.49.2: main fails with "tuios can read shared memory here: true. It offered it: false" and `MEDIUM-FILES` in the pane. The fixed build passes in both modes. The test's shared memory half does not run on a machine with neither `/dev/shm` nor macOS's `shm_open`.
 
 The macOS paths have no test in this package, because `shmstream` writes its objects under `/dev/shm`. They were checked by hand on the same Mac, under a stand-in host, with a guest that streams 80 objects and then opens each name to see what is left:
@@ -11244,5 +11251,7 @@ The macOS paths have no test in this package, because `shmstream` writes its obj
 On main a guest sees shared memory refused and never makes these objects.
 
 `internal/kittyshm` has a unit test of the delete rule on every platform, and of the real calls on macOS: the object reads through its mapping, an object of another size stays, and the frame goes.
+
+`TestProbeSaysNoWhenTheCallsAreGone`, on the same Mac, sets each system call number to one the kernel does not have. Without the `SIGSYS` handling a process dies of that signal. With it, the call returns an error and `Available` says no, so the query refuses `t=s` and a guest falls back as it does on main.
 
 A forced tear does not have a control in this package, since it needs a host that reads late. The measurement is in `docs/perf.md`.

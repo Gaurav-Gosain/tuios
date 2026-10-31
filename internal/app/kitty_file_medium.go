@@ -36,7 +36,7 @@ func (o shmKittyObject) Stat() (os.FileInfo, error) { return o.Object.Stat(), ni
 // a file: an object takes none.
 func openKittyObject(path string, flags int) (kittyObject, error) {
 	if name, ok := kittyShmObject(path); ok {
-		o, err := kittyshm.Open(name)
+		o, err := kittyshm.Open(name, maxPassthroughTransmitBytes)
 		if err != nil {
 			return nil, err
 		}
@@ -47,7 +47,7 @@ func openKittyObject(path string, flags int) (kittyObject, error) {
 
 // kittyShmReadable reports whether tuios can read a shared memory object on
 // this machine, so a guest may be told it can use one.
-func kittyShmReadable() bool { return kittyShmHasPath() || kittyshm.ByName }
+func kittyShmReadable() bool { return kittyShmHasPath() || kittyshm.Available() }
 
 // A kitty graphics command can name a file instead of carrying the image:
 // t=f a file, t=t a temporary file, t=s a POSIX shared memory object. The name
@@ -94,7 +94,7 @@ func (kp *KittyPassthrough) kittyMediumPath(cmd *vt.KittyCommand) (string, bool)
 		// On macOS shared memory has no path: it is opened by name with
 		// shm_open, which tuios can do. The checks below are the ones an open
 		// object can answer.
-		if kittyshm.ByName {
+		if kittyshm.Available() {
 			info, err := kittyshm.Stat(name)
 			if err != nil || !info.Mode().IsRegular() {
 				return "", false

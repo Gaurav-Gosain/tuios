@@ -3,7 +3,7 @@
 // deleted by the guest, because deleting it is the terminal's job once it has
 // read it.
 //
-// Usage: shmstream LOG COUNT FPS DELAYMS same|vary|big|sync
+// Usage: shmstream LOG COUNT FPS DELAYMS same|vary|big|sync|syncjoined|syncreuse
 //
 // Each object's name is appended to LOG as it is advertised, and DONE when the
 // last one is. The log is a file rather than the screen because the pane may
@@ -11,7 +11,9 @@
 // differently. "big" is "vary" with each object one byte longer than the frame
 // the command describes, the way an object that is not the frame looks. "sync"
 // is "vary" with each frame in its own synchronized update, the way
-// terminal-browser sends one.
+// terminal-browser sends one. "syncjoined" closes one update and opens the next
+// in the same write, so an update is open whenever the terminal looks.
+// "syncreuse" is "sync" with one object for every frame.
 package main
 
 import (
@@ -33,10 +35,14 @@ func main() {
 	count, _ := strconv.Atoi(os.Args[2])
 	fps, _ := strconv.Atoi(os.Args[3])
 	delay, _ := strconv.Atoi(os.Args[4])
-	vary := os.Args[5] == "vary" || os.Args[5] == "big" || os.Args[5] == "sync"
+	mode := os.Args[5]
+	vary := mode != "same"
 	open, closeUpdate := "", ""
-	if os.Args[5] == "sync" {
+	switch mode {
+	case "sync", "syncreuse":
 		open, closeUpdate = "\x1b[?2026h", "\x1b[?2026l"
+	case "syncjoined":
+		open = "\x1b[?2026l\x1b[?2026h"
 	}
 	extra := 0
 	if os.Args[5] == "big" {
@@ -71,13 +77,21 @@ func main() {
 			pix[n%len(pix)]++
 		}
 		name := fmt.Sprintf("%s%d-%d", prefix, os.Getpid(), n)
+		if mode == "syncreuse" {
+			name = fmt.Sprintf("%s%d-one", prefix, os.Getpid())
+		}
 		if err := os.WriteFile("/dev/shm/"+name, pix, 0o600); err != nil {
 			fmt.Printf("SHMSTREAM-ERR %v\n", err)
 			return
 		}
-		_, _ = fmt.Fprintln(logf, name)
+		if mode != "syncreuse" || n == 0 {
+			_, _ = fmt.Fprintln(logf, name)
+		}
 		fmt.Printf("%s\x1b[H\x1b_Ga=T,t=s,f=32,s=%d,v=%d,i=1,q=2,C=1;%s\x1b\\%s",
 			open, side, side, base64.StdEncoding.EncodeToString([]byte(name)), closeUpdate)
+	}
+	if mode == "syncjoined" {
+		fmt.Print("\x1b[?2026l")
 	}
 	_, _ = fmt.Fprintln(logf, "DONE")
 }

@@ -885,7 +885,7 @@ func (kp *KittyPassthrough) forwardFileTransmit(cmd *vt.KittyCommand, windowID s
 			kp.pendingOutput = append(kp.pendingOutput, frame...)
 			kp.pendingOutput = append(kp.pendingOutput, "\x1b8"...)
 			if firstInUpdate {
-				kp.replaceHeldStreamFrame(windowID, hostID)
+				kp.replaceHeldStreamFrame(windowID, hostID, cmd)
 				kp.noteHeldStreamFrame(windowID, hostID, guestSerial, len(kp.pendingOutput)-start, cmd, filePath)
 			} else {
 				// Everything queued before it goes first, in the same write, so
@@ -1136,20 +1136,24 @@ func (kp *KittyPassthrough) forwardFileTransmitInline(
 	defer func() { kp.chargePacing(time.Since(prepStarted)) }()
 
 	// plain files are safe to slurp, and only up to the transmit cap.
-	if _, isObject := kittyShmObject(filePath); !isObject {
-		info, err := os.Stat(filePath)
-		if err != nil {
-			kittyPassthroughLog("forwardFileTransmitInline: stat %s failed: %v", filePath, err)
-			return
-		}
-		if !info.Mode().IsRegular() {
-			kittyPassthroughLog("forwardFileTransmitInline: refusing non-regular file %s (mode %v)", filePath, info.Mode())
-			return
-		}
-		if info.Size() > maxPassthroughTransmitBytes {
-			kittyPassthroughLog("forwardFileTransmitInline: refusing oversized file %s (%d bytes)", filePath, info.Size())
-			return
-		}
+	var info os.FileInfo
+	var err error
+	if name, isObject := kittyShmObject(filePath); isObject {
+		info, err = kittyshm.Stat(name)
+	} else {
+		info, err = os.Stat(filePath)
+	}
+	if err != nil {
+		kittyPassthroughLog("forwardFileTransmitInline: stat %s failed: %v", filePath, err)
+		return
+	}
+	if !info.Mode().IsRegular() {
+		kittyPassthroughLog("forwardFileTransmitInline: refusing non-regular file %s (mode %v)", filePath, info.Mode())
+		return
+	}
+	if info.Size() > maxPassthroughTransmitBytes {
+		kittyPassthroughLog("forwardFileTransmitInline: refusing oversized file %s (%d bytes)", filePath, info.Size())
+		return
 	}
 
 	f, err := openKittyObject(filePath, 0)

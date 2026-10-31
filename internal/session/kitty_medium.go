@@ -38,7 +38,7 @@ func releaseUnreadKittyMedium(cmd *vt.KittyCommand) {
 		strings.ContainsRune(name, '/') || strings.ContainsRune(name, 0) {
 		return
 	}
-	if kittyshm.ByName {
+	if kittyshm.Available() {
 		kittyshm.ReleaseFrame(cmd)
 		return
 	}

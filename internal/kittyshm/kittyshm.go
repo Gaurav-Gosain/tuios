@@ -5,19 +5,24 @@
 // reach it. On macOS it is only a name: it is opened with shm_open, deleted
 // with shm_unlink, and a read of the descriptor fails, so its bytes are reached
 // through a mapping. Both calls are plain system calls, and Go reaches them
-// without cgo.
+// without cgo. They are kernel numbers, not libSystem, so Available tries them
+// before tuios offers the medium to anyone.
 //
 // The rules a frame has to pass before it is deleted are the ones
 // vt.KittyMediumIsFrame applies to a file. The name is text the pane printed.
 package kittyshm
 
 import (
+	"errors"
 	"io"
 
 	"tuios.dev/vt"
 )
 
 var _ io.ReadSeekCloser = (*Object)(nil)
+
+// ErrTooLarge is an object past the limit Open was given. It is not mapped.
+var ErrTooLarge = errors.New("the shared memory object is too large")
 
 // FrameBytes is the size in bytes of the frame cmd describes, and false when
 // the command does not tell. It is the rule of vt.KittyMediumIsFrame.
