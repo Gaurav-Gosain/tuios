@@ -1911,7 +1911,7 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 	// anchor above and before the cursor's auto-scroll below, so the three
 	// mechanisms agree on what is on screen and the cursor keeps the last word.
 	// See sidebar_reveal.go.
-	m.sidebarRevealFocus(sessions, terminals, capRows[sidebarSectionTerminals], capRows[sidebarSectionSessions])
+	m.sidebarRevealFocus(sessions, sessionRows, terminals, capRows[sidebarSectionTerminals], capRows[sidebarSectionSessions])
 	if m.sidebarRailFocused() && haveCursorTarget {
 		if sec, idx, ok := m.sidebarCursorIndex(cursorTarget, sessionRows, terminals, agents, files); ok {
 			if rows := capRows[sec]; rows > 0 {

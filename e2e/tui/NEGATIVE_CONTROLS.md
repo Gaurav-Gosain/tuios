@@ -11102,6 +11102,30 @@ The frames are `files-shut`, `files-open`, `files-open-short`, `files-search` an
 go build -o /tmp/tuios ./cmd/tuios
 cd e2e/tui && TUIOS_E2E=1 TUIOS_E2E_BIN=/tmp/tuios go test -count=1 -run '^TestRailQuickLook$' .
 
+## A switch scrolls the sessions section to the grouped row (#1386)
+
+`TestRailRevealsGroupedRow` makes six sessions that the rail draws as nine rows:
+two space headings and a repository row are the extra three. The section shows
+seven rows, so the sessions fit and the rows do not. The test switches to the
+last row, then shrinks the terminal, switches to a middle row, folds the
+repository, switches into it, and last creates a session with a switch.
+
+Run on 2026-10-31 on Linux, each with a Go overlay on one build:
+
+| Removed | The test fails with | Result |
+|---------|---------------------|--------|
+| The whole fix: `sidebar_reveal.go` and `render_sidebar.go` as on main | "a switch to the last row: the sessions section does not show feat/two". The rail ends in `… +2` | **caught** |
+| The index is the place in the session list, and the total is the rows | The same line | **caught** |
+| The index is the row, and the total is the session list | The same line | **caught** |
+| `sidebarAttachedRow` returns -1 for a session in a folded repository | "a switch into the folded repository: the sessions section does not show · repo" | **caught** |
+
+The stand-in for a folded machine has no control. The suite does not fold the
+attached machine's group with this fixture.
+
+The frames are `reveal-before`, `reveal-last-row`, `reveal-middle-row`,
+`reveal-folded` and `reveal-new-session` under `TUIOS_E2E_FRAMES`, in the test's
+folder.
+
 ## Rail labels an agent by its title
 
 `TestRailNamesAnAgentByItsTitle` runs stand-in programs that the detector names

@@ -314,3 +314,115 @@ func TestSidebarGroupsMainCheckout(t *testing.T) {
 
 	alive(t, term, "after grouping the main checkout")
 }
+
+// TestRailRevealsGroupedRow is #1386: a switch scrolls the sessions section to
+// the attached session's own row, counted in the rows the section draws. The
+// rows hold space and repository headings that the session list does not, so
+// the list's index and length are the wrong numbers.
+//
+// The rail draws nine rows for six sessions: aa, top-a, bb, top-b, first, other,
+// repo, feat/one, feat/two. The controls are in NEGATIVE_CONTROLS.md.
+func TestRailRevealsGroupedRow(t *testing.T) {
+	base := t.TempDir()
+	killDaemon(t, base)
+	writeConfig(t, base, "[appearance.sidebar]\nenabled = true\nwidth = 28\nsections = \"sessions:50,terminals:50\"\n")
+	repo := testutil.GitRepo(t)
+	t.Setenv("TUIOS_WORKTREE_DIR", filepath.Join(base, "worktrees"))
+
+	plain := t.TempDir()
+	for _, args := range [][]string{
+		{"new", "top-a", "--detach", "--space", "aa"},
+		{"new", "top-b", "--detach", "--space", "bb"},
+		{"new", "first", "--detach"},
+		{"new", "other", "--detach"},
+		{"worktree", "new", "feat/one", "--repo", repo, "--detach"},
+		{"worktree", "new", "feat/two", "--repo", repo, "--detach"},
+	} {
+		if out, err := tuiosCLIIn(t, base, plain, args...); err != nil {
+			t.Fatalf("tuios %v: %v: %s", args, err, out)
+		}
+	}
+
+	term := startIn(t, base, startOpts{cols: 120, rows: 15, args: []string{"attach", "first"}})
+	if err := term.WaitFor(func(s tuitest.Screen) bool { return countWindows(s) == 1 }, bootTimeout); err != nil {
+		t.Fatalf("the client never attached: %v\n%s", err, term.Snapshot())
+	}
+	windowManagementMode(t, term)
+
+	// inSessions reports whether needle is on a rail row of the sessions section.
+	inSessions := func(s tuitest.Screen, needle string) bool {
+		row := railRowOf(s, needle)
+		return row >= 0 && row < railRowOf(s, "terminals")
+	}
+	clientShows(t, base, "first")
+	current := "first"
+	switchTo := func(session string) {
+		t.Helper()
+		if out, err := tuiosCLI(t, base, "switch-session", "-s", current, session); err != nil {
+			t.Fatalf("switch-session %s: %v: %s", session, err, out)
+		}
+		clientShows(t, base, session)
+		current = session
+	}
+	shows := func(what, needle string) {
+		t.Helper()
+		if err := term.WaitFor(func(s tuitest.Screen) bool { return inSessions(s, needle) }, uiTimeout); err != nil {
+			railShot(t, term, "reveal-failed")
+			t.Fatalf("%s: the sessions section does not show %s: %v\n%s", what, needle, err, term.Snapshot())
+		}
+	}
+
+	// The six sessions fit this section and the nine rows do not, so the list's
+	// length said there was nothing to scroll.
+	if err := term.WaitFor(func(s tuitest.Screen) bool { return inSessions(s, "· repo") }, bootTimeout); err != nil {
+		t.Fatalf("the rail never grouped the sessions: %v\n%s", err, term.Snapshot())
+	}
+	if inSessions(term.Screen(), "feat/two") {
+		t.Fatalf("feat/two is already on the rail, so the rail is too tall to test a reveal\n%s", term.Snapshot())
+	}
+	railShot(t, term, "reveal-before")
+	switchTo("repo-feat-two")
+	shows("a switch to the last row", "feat/two")
+	railShot(t, term, "reveal-last-row")
+
+	// The sessions overflow this section too, so the old reveal did scroll, by
+	// the session's place in the list and not its row.
+	if err := term.Resize(120, 12); err != nil {
+		t.Fatalf("resize: %v", err)
+	}
+	switchTo("top-a")
+	shows("a switch to the top", "top-a")
+	switchTo("other")
+	shows("a switch to the middle", "other")
+	railShot(t, term, "reveal-middle-row")
+
+	// A folded repository draws no row for the session, so the repository's row
+	// stands in for it, and the fold stays as the person left it.
+	switchTo("repo-feat-two")
+	shows("a switch back to the last row", "feat/two")
+	col, row := findOnScreen(t, term, "· repo")
+	mouseClick(t, term, col, row, tuitest.MouseLeft, 0)
+	if err := term.WaitFor(func(s tuitest.Screen) bool { return railRowOf(s, "feat/two") < 0 }, uiTimeout); err != nil {
+		t.Fatalf("the click did not fold the repository: %v\n%s", err, term.Snapshot())
+	}
+	switchTo("top-a")
+	shows("a switch away from the folded repository", "top-a")
+	if inSessions(term.Screen(), "· repo") {
+		t.Fatalf("the repository's row is still on screen, so the switch back tests nothing\n%s", term.Snapshot())
+	}
+	switchTo("repo-feat-two")
+	shows("a switch into the folded repository", "· repo")
+	if railRowOf(term.Screen(), "feat/two") >= 0 {
+		t.Errorf("the switch opened the folded repository\n%s", term.Snapshot())
+	}
+	railShot(t, term, "reveal-folded")
+
+	// A session that a switch creates. The client's list has not heard of it
+	// yet, so its first frame draws it as the last row.
+	if out, err := tuiosCLIIn(t, base, plain, "switch-session", "-s", current, "--create", "--cwd", plain, "newest"); err != nil {
+		t.Fatalf("switch-session --create: %v: %s", err, out)
+	}
+	clientShows(t, base, "newest")
+	shows("a switch to a new session", "newest")
+	railShot(t, term, "reveal-new-session")
+}

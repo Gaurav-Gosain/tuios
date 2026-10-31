@@ -1,6 +1,10 @@
 package app
 
-import "github.com/Gaurav-Gosain/tuios/internal/sessiontree"
+import (
+	"slices"
+
+	"github.com/Gaurav-Gosain/tuios/internal/sessiontree"
+)
 
 // The rail is a map of what is open, and a map that scrolls the place you just
 // went to off its own edge is a list you lose your place in. Focusing a pane
@@ -41,8 +45,9 @@ type sidebarRevealState struct {
 // sidebarRevealFocus scrolls the terminals section to the focused pane and the
 // sessions section to the attached session, each only when that identity has
 // changed since the last frame and the section's offset is still the one the
-// last frame left. rowsT and rowsS are the sections' folds in rows.
-func (m *OS) sidebarRevealFocus(sessions []sessiontree.Node, terminals []sidebarTerminalEntry, rowsT, rowsS int) {
+// last frame left. sessions is the machine's session list and sessionRows the
+// rows the section draws from it. rowsT and rowsS are the sections' folds in rows.
+func (m *OS) sidebarRevealFocus(sessions, sessionRows []sessiontree.Node, terminals []sidebarTerminalEntry, rowsT, rowsS int) {
 	r := m.sidebarReveal
 	focused := m.sidebarFocusedWindowID()
 	attached := m.sidebarCurrentSessionID()
@@ -55,13 +60,43 @@ func (m *OS) sidebarRevealFocus(sessions []sessiontree.Node, terminals []sidebar
 		}
 	}
 	if (!r.Valid || attached != r.SessionID) && (!r.Valid || m.SidebarScrollS == r.ScrollS) {
-		for i, s := range sessions {
-			if s.ID == attached && !isRemoteNode(s) {
-				m.SidebarScrollS = sidebarRevealOffset(m.SidebarScrollS, i, rowsS, len(sessions))
-				break
-			}
+		idx := m.sidebarAttachedRow(sessions, sessionRows, attached)
+		m.SidebarScrollS = sidebarRevealOffset(m.SidebarScrollS, idx, rowsS, len(sessionRows))
+	}
+}
+
+// sidebarAttachedRow is the row in rows that the reveal scrolls to for the
+// attached session, or -1 for none. It is the session's own row when one is
+// drawn. A session in a folded group has none, so the row holding it stands in:
+// its repository's, or its machine's when the machine is folded too. The reveal
+// leaves the fold alone. A person shut that group, and the row they shut it to
+// is where the session now is.
+func (m *OS) sidebarAttachedRow(sessions, rows []sessiontree.Node, attached string) int {
+	isAttached := func(n sessiontree.Node) bool {
+		return n.Kind == sessiontree.KindSession && n.ID == attached && !isRemoteNode(n)
+	}
+	if i := slices.IndexFunc(rows, isAttached); i >= 0 {
+		return i
+	}
+	at := slices.IndexFunc(sessions, isAttached)
+	if at < 0 {
+		return -1
+	}
+	node := sessions[at]
+	if node.Worktree != nil {
+		if i := slices.IndexFunc(rows, func(n sessiontree.Node) bool {
+			return n.Kind == sessiontree.KindRepo && n.ID == node.Worktree.Repo && n.Space == node.Space
+		}); i >= 0 {
+			return i
 		}
 	}
+	host := m.attachedMachine()
+	if isGlobalSessionRow(node) {
+		host = GlobalSessionName
+	}
+	return slices.IndexFunc(rows, func(n sessiontree.Node) bool {
+		return n.Kind == sessiontree.KindHost && n.Host == host
+	})
 }
 
 // sidebarRecordReveal remembers what this frame was drawn for, after the
