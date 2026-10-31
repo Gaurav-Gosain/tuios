@@ -1021,6 +1021,9 @@ func (m *OS) SetTheme(themeName string) error {
 	// Update terminal colors for all windows
 	for _, w := range m.Windows {
 		if w != nil && w.Terminal != nil {
+			// The PTY reader reads the palette while it parses SGR, under
+			// this lock.
+			w.LockIO()
 			if fg, _, cur, pal, ok := theme.EmulatorColors(); ok {
 				w.Terminal.SetThemeColors(
 					fg,
@@ -1032,6 +1035,7 @@ func (m *OS) SetTheme(themeName string) error {
 				// Disable theme colors
 				w.Terminal.SetThemeColors(nil, nil, nil, [16]color.Color{})
 			}
+			w.UnlockIO()
 			w.InvalidateCache()
 		}
 	}
