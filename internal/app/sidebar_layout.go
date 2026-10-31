@@ -110,6 +110,7 @@ var (
 	layoutMu     sync.Mutex
 	layoutSource string
 	layoutParsed []sidebarSectionPlan
+	layoutOpen   []sidebarSectionPlan
 	layoutHas    [sidebarSectionCount]bool
 	layoutValid  bool
 )
@@ -119,6 +120,46 @@ var (
 func sidebarLayoutPlans(s *config.Settings) []sidebarSectionPlan {
 	plans, _ := sidebarLayoutFor(s.SidebarSections)
 	return plans
+}
+
+// sidebarPlans is what this rail draws: the layout, with the files section added
+// while this client has it switched on and the layout leaves it out. The
+// addition is this client's and lasts until the switch goes off. The layout
+// string stays as written, so the section is shut again on the next attach.
+func (m *OS) sidebarPlans() []sidebarSectionPlan {
+	if m.filesView.Show > 0 {
+		_, open, _ := sidebarLayoutEntry(m.Settings.SidebarSections)
+		return open
+	}
+	return sidebarLayoutPlans(&m.Settings)
+}
+
+// sidebarPlansWithFiles is a layout with the files section added where the
+// default layout has it, at the default layout's share: after terminals, or
+// after sessions when the layout has no terminals, or above agents when it has
+// neither. A layout with none of the three gets it at the end, above a trailing
+// spacer, because that spacer is the gap the person asked for at the bottom.
+func sidebarPlansWithFiles(plans []sidebarSectionPlan) []sidebarSectionPlan {
+	index := func(section sidebarSection) int {
+		return slices.IndexFunc(plans, func(p sidebarSectionPlan) bool { return p.Section == section })
+	}
+	at := len(plans)
+	if i := index(sidebarSectionTerminals); i >= 0 {
+		at = i + 1
+	} else if i := index(sidebarSectionSessions); i >= 0 {
+		at = i + 1
+	} else if i := index(sidebarSectionAgents); i >= 0 {
+		at = i
+	} else if at > 0 && plans[at-1].Spacer {
+		at--
+	}
+	share := 0
+	for _, e := range config.ParseSidebarSections(config.SidebarDefaultSections) {
+		if e.Name == "files" {
+			share = e.Share
+		}
+	}
+	return slices.Insert(slices.Clone(plans), at, sidebarSectionPlan{Section: sidebarSectionFiles, Share: share})
 }
 
 // sidebarLayoutHas reports whether the layout names a section at all.
@@ -161,6 +202,13 @@ func sidebarLayoutStacksAbove(plans []sidebarSectionPlan, above, below sidebarSe
 }
 
 func sidebarLayoutFor(source string) ([]sidebarSectionPlan, [sidebarSectionCount]bool) {
+	plans, _, has := sidebarLayoutEntry(source)
+	return plans, has
+}
+
+// sidebarLayoutEntry is a layout's plans, its plans with the files section in
+// them, and which sections it names.
+func sidebarLayoutEntry(source string) ([]sidebarSectionPlan, []sidebarSectionPlan, [sidebarSectionCount]bool) {
 	layoutMu.Lock()
 	defer layoutMu.Unlock()
 	if !layoutValid || layoutSource != source {
@@ -181,9 +229,13 @@ func sidebarLayoutFor(source string) ([]sidebarSectionPlan, [sidebarSectionCount
 			has[section] = true
 			plans = append(plans, sidebarSectionPlan{Section: section, Share: e.Share})
 		}
-		layoutSource, layoutParsed, layoutHas, layoutValid = source, plans, has, true
+		open := plans
+		if !has[sidebarSectionFiles] {
+			open = sidebarPlansWithFiles(plans)
+		}
+		layoutSource, layoutParsed, layoutOpen, layoutHas, layoutValid = source, plans, open, has, true
 	}
-	return layoutParsed, layoutHas
+	return layoutParsed, layoutOpen, layoutHas
 }
 
 // sidebarBudgetLines divides avail lines between the sections of a layout.

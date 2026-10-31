@@ -961,7 +961,7 @@ var optionSpecs = []Option{
 	},
 	{
 		Path: "appearance.sidebar.sections", Type: OptionString, Section: "sidebar",
-		Description: "Section names in the order the rail stacks them, each with an optional percent share. A name left out is a section the rail does not draw, and \"spacer\" is an empty block you may repeat.",
+		Description: "Section names in the order the rail stacks them, each with an optional percent share. A name left out is a section the rail does not draw, and \"spacer\" is an empty block you may repeat. The files control can still open a files section that the list leaves out.",
 		Default:     SidebarDefaultSections,
 	},
 	{

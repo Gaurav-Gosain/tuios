@@ -214,8 +214,9 @@ func (m *OS) filesOn() bool {
 func (m *OS) FileViewDir() string { return m.filesView.Dir }
 
 // filesSectionEnabled reports whether the rail would draw a files section at
-// all: the layout has to name it, the user must not have switched it off, and
-// the rail has to be wide enough to draw a listing in.
+// all: the layout has to name it or this client has to have switched it on, it
+// must not be switched off, and the rail has to be wide enough to draw a listing
+// in.
 func (m *OS) filesSectionEnabled() bool {
 	// The plain bool first, and deliberately. This is asked once per message
 	// from Update, so it is on the idle path of every client; SidebarEnabled is

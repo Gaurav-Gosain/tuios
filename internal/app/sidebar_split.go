@@ -128,7 +128,7 @@ func (m *OS) sidebarSplitEffective() int {
 	if m.SidebarSectionSplit > 0 {
 		return m.SidebarSectionSplit
 	}
-	plans := sidebarLayoutPlans(&m.Settings)
+	plans := m.sidebarPlans()
 	if !sidebarLayoutPins(plans) {
 		return 0
 	}

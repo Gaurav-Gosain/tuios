@@ -336,7 +336,7 @@ func (m *OS) SidebarCursorCollapse() {
 // the sections in the order they are drawn in. A fixed list would have sent the
 // cursor up the rail on a layout that puts the files section above the panes.
 func (m *OS) sidebarStepSection(delta int) {
-	plans := sidebarLayoutPlans(&m.Settings)
+	plans := m.sidebarPlans()
 	here := 0
 	if row, ok := m.sidebarCursorRow(); ok {
 		for i, p := range plans {

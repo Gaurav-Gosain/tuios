@@ -606,7 +606,7 @@
     {
       "path": "appearance.sidebar.sections",
       "type": "string",
-      "description": "Section names in the order the rail stacks them, each with an optional percent share. A name left out is a section the rail does not draw, and \"spacer\" is an empty block you may repeat.",
+      "description": "Section names in the order the rail stacks them, each with an optional percent share. A name left out is a section the rail does not draw, and \"spacer\" is an empty block you may repeat. The files control can still open a files section that the list leaves out.",
       "default": "sessions:25,terminals,files:25,agents:34",
       "items": [
         "sessions",

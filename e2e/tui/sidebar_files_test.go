@@ -1564,3 +1564,168 @@ func pictureColours(s tuitest.Screen) int {
 	}
 	return len(seen)
 }
+
+// TestRailFilesOpenOnDemand is #1385: a layout that leaves files out keeps the
+// section hidden by default, and the footer control and file search open it. It
+// lands where the default layout puts it, after terminals and above agents, and
+// the layout string does not change. The controls are in NEGATIVE_CONTROLS.md.
+func TestRailFilesOpenOnDemand(t *testing.T) {
+	const layout = "sessions:25,terminals,agents:34"
+	dir := fileViewFixture(t)
+	if err := os.WriteFile(filepath.Join(dir, "alpha", "needle.txt"), nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	// More files than the share holds, so the listing ends in a count.
+	for i := range 30 {
+		if err := os.WriteFile(filepath.Join(dir, fmt.Sprintf("extra%02d.txt", i)), nil, 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	cfg := strings.Replace(railConfig(28), "[appearance.sidebar]\n",
+		"[appearance.sidebar]\nsections = \""+layout+"\"\n", 1)
+	term, base := railClient(t, "e2e", cfg, startOpts{cols: 120, rows: 40})
+	// An agent pane for the agents section, and plain panes for the terminals
+	// section, because the rail lists an agent pane only under agents. Seven plain
+	// panes make terminals compete with files for lines, which is when the share
+	// shows.
+	renameWindow(t, term, "WAITING")
+	if out, err := tuiosCLI(t, base, "set-agent-state", "needs_input", "-s", "e2e", "-w", "WAITING"); err != nil {
+		t.Fatalf("set-agent-state: %v\n%s", err, out)
+	}
+	for range 7 {
+		newWindow(t, term)
+	}
+	renameWindow(t, term, "SHELL")
+	enterTerminalMode(t, term)
+	runInShell(t, term, "cd "+dir+" && printf '\\033]7;file://%s\\033\\\\%s\\n' \"$PWD\" lis\"\"ted", "listed", uiTimeout)
+	leaveTerminalMode(t, term)
+
+	// The section is shut, and the footer control is the only "files" on the rail.
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		return railRowOf(s, "agents") >= 0 && railRowOf(s, "alpha/") < 0
+	}, uiTimeout); err != nil {
+		t.Fatalf("the rail never settled with files shut: %v\n%s", err, term.Snapshot())
+	}
+	railShot(t, term, "files-shut")
+
+	clickFiles := func() {
+		t.Helper()
+		col, row, ok := findFooterFiles(term.Screen())
+		if !ok {
+			t.Fatalf("the rail drew no files control:\n%s", term.Snapshot())
+		}
+		mouseClick(t, term, col+1, row, tuitest.MouseLeft, 0)
+	}
+	placed := func(s tuitest.Screen) bool {
+		terminals, listing, agents := railRowOf(s, "terminals"), railRowOf(s, "alpha/"), railRowOf(s, "agents")
+		return terminals >= 0 && terminals < listing && listing < agents
+	}
+	railText := func(s tuitest.Screen) string {
+		_, rows := s.Size()
+		var b strings.Builder
+		for r := range rows {
+			b.WriteString(railLine(s, r))
+			b.WriteByte('\n')
+		}
+		return b.String()
+	}
+
+	clickFiles()
+	if err := term.WaitFor(placed, uiTimeout); err != nil {
+		railShot(t, term, "files-click-failed")
+		t.Fatalf("a click on files did not open the section between terminals and agents: %v\n%s", err, term.Snapshot())
+	}
+	railShot(t, term, "files-open")
+	if out, err := tuiosCLI(t, base, "get-config", "appearance.sidebar.sections", "-s", "e2e"); err != nil || !strings.Contains(out, layout) {
+		t.Errorf("get-config after the click: %v\n%s", err, out)
+	}
+
+	// On a rail short enough that the sections compete for lines, the opened
+	// section draws what the same section draws when the layout names it. That
+	// holds its place and its share to the default layout.
+	if err := term.Resize(120, 20); err != nil {
+		t.Fatalf("resize: %v", err)
+	}
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		_, rows := s.Size()
+		return rows == 20 && placed(s)
+	}, uiTimeout); err != nil {
+		t.Fatalf("the short rail lost the section's place: %v\n%s", err, term.Snapshot())
+	}
+	time.Sleep(insertGuard + 150*time.Millisecond)
+	opened := railText(term.Screen())
+	railShot(t, term, "files-open-short")
+	setLayout := func(sections string) {
+		t.Helper()
+		if out, err := tuiosCLI(t, base, "set-config", "appearance.sidebar.sections", sections, "-s", "e2e"); err != nil {
+			t.Fatalf("set-config %s: %v\n%s", sections, err, out)
+		}
+	}
+	// A layout that looks different first, so the match below is a new frame and
+	// not the frame already on screen.
+	setLayout("sessions:25,agents:34")
+	if err := term.WaitFor(func(s tuitest.Screen) bool { return railRowOf(s, "terminals") < 0 }, uiTimeout); err != nil {
+		t.Fatalf("the rail never took the layout with no terminals: %v\n%s", err, term.Snapshot())
+	}
+	setLayout("sessions:25,terminals,files:25,agents:34")
+	if err := term.WaitFor(func(s tuitest.Screen) bool { return railText(s) == opened }, uiTimeout); err != nil {
+		t.Fatalf("the opened section differs from a section the layout names: %v\nopened:\n%s\nnamed:\n%s", err, opened, railText(term.Screen()))
+	}
+	setLayout(layout)
+	if err := term.Resize(120, 40); err != nil {
+		t.Fatalf("resize: %v", err)
+	}
+	// extra05 only fits on the tall rail, so the footer below is read from the
+	// frame drawn at this height.
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		return placed(s) && railRowOf(s, "extra05") >= 0
+	}, uiTimeout); err != nil {
+		t.Fatalf("the section left its place after the layout came back: %v\n%s", err, term.Snapshot())
+	}
+	time.Sleep(insertGuard)
+
+	clickFiles()
+	if err := term.WaitFor(func(s tuitest.Screen) bool { return railRowOf(s, "alpha/") < 0 }, uiTimeout); err != nil {
+		t.Fatalf("a second click did not hide the section: %v\n%s", err, term.Snapshot())
+	}
+
+	// File search reaches the section the same way.
+	enterTerminalMode(t, term)
+	if err := term.SendKeys(tuitest.Ctrl('b'), "f"); err != nil {
+		t.Fatal(err)
+	}
+	if err := term.WaitForText("Search files", uiTimeout); err != nil {
+		t.Fatalf("file search did not open: %v\n%s", err, term.Snapshot())
+	}
+	if err := term.SendKeys("needle.txt"); err != nil {
+		t.Fatal(err)
+	}
+	if err := term.WaitForText("alpha/needle.txt", uiTimeout); err != nil {
+		t.Fatalf("file search did not find the file: %v\n%s", err, term.Snapshot())
+	}
+	if err := term.SendKeys(tuitest.Enter); err != nil {
+		t.Fatal(err)
+	}
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		return railRowOf(s, "needle.txt") > railRowOf(s, "terminals") && !strings.Contains(s.Text(), "Search files")
+	}, uiTimeout); err != nil {
+		t.Fatalf("file search did not open the section: %v\n%s", err, term.Snapshot())
+	}
+	railShot(t, term, "files-search")
+	if err := term.SendKeys(tuitest.Esc); err != nil {
+		t.Fatal(err)
+	}
+
+	// With no terminals in the layout, the section goes after sessions.
+	if out, err := tuiosCLI(t, base, "set-config", "appearance.sidebar.sections", "sessions:25,agents:34", "-s", "e2e"); err != nil {
+		t.Fatalf("set-config: %v\n%s", err, out)
+	}
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		sessions, listing, agents := railRowOf(s, "sessions"), railRowOf(s, "needle.txt"), railRowOf(s, "agents")
+		return railRowOf(s, "terminals") < 0 && sessions >= 0 && sessions < listing && listing < agents
+	}, uiTimeout); err != nil {
+		t.Fatalf("the section did not go after sessions: %v\n%s", err, term.Snapshot())
+	}
+	railShot(t, term, "files-no-terminals")
+	alive(t, term, "after opening the files section on demand")
+}

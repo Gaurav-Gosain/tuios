@@ -1604,7 +1604,7 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 	// may claim. A section with no rows is dropped whole, header included, so an
 	// empty section costs the rail nothing rather than costing it a label over a
 	// gap.
-	plans := sidebarLayoutPlans(&m.Settings)
+	plans := m.sidebarPlans()
 	// With the terminals section above the sessions one, a peek keeps the height
 	// the section has at rest. The pointer that asked for it is on a session
 	// row, and a peek that resized the section moved that row out from under the

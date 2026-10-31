@@ -11068,6 +11068,32 @@ The browser and its help modal drew `lipgloss.RoundedBorder()` whatever `appeara
 | The help modal keeps the rounded frame under `double` | `overlay.EdgeBorder()` on the modal in `overlayBrowserHelp` | Put back to `lipgloss.RoundedBorder()` | `TestScrollbackBrowserFollowsBorderStyle/double` (`the browser's help modal under double at {x0:37 x1:82 y0:9 y1:30}: got tl="╭" tr="╮" bl="╰" br="╯" top="─" side="│", want tl="╔" …`) | **caught** |
 | The browser loses its frame under `hidden` | The rounded fallback `edgeFrame` gives a blank frame | `EdgeBorder` built from `dialogFrame()` instead of `edgeFrame()` | `TestScrollbackBrowserFollowsBorderStyle/hidden` (`the scrollback browser never opened with a frame found from its text`; the browser's title and rows are on screen with no frame round them). `/double` passes, as it should: there the two agree | **caught** |
 
+## The files control opens a section the layout leaves out (#1385)
+
+`TestRailFilesOpenOnDemand` uses the layout `sessions:25,terminals,agents:34`. It
+reads the rail with files shut, clicks the footer's `files`, and reads the section
+between `terminals` and `agents`. On a short rail it then compares the rail with
+the same rail under the layout `sessions:25,terminals,files:25,agents:34`, which
+must match line for line. A second click hides the section, file search opens it,
+and a layout with no `terminals` has it after `sessions`.
+
+Run on 2026-10-31 on Linux, each with a Go overlay on one build:
+
+| Removed | The test fails with | Result |
+|---------|---------------------|--------|
+| `sidebarPlans` returns the layout alone, as on main | "a click on files did not open the section between terminals and agents" | **caught** |
+| `sidebarPlansWithFiles` appends the section at the end of the layout | The same line | **caught** |
+| `sidebarPlansWithFiles` has no `terminals` anchor | The same line | **caught** |
+| The opened section has no share | "the opened section differs from a section the layout names": `files` shows one row more and `terminals` one row less | **caught** |
+
+One control did not fail. With the `sessions` anchor removed, the layout
+`sessions:25,agents:34` still has the section in the same place, because after
+`sessions` and above `agents` are one position there. So the order of those two
+rules has no test.
+
+The frames are `files-shut`, `files-open`, `files-open-short`, `files-search` and
+`files-no-terminals` under `TUIOS_E2E_FRAMES`, in the test's folder.
+
 ## The files menu's Preview from any focus
 
 `TestRailQuickLook` now starts with the keyboard in a pane, before the rail has had it. It right-clicks `main.go` and picks Preview. The preview must show `main.go` and stay open, `j` must move it to `notes.md`, and after `esc` the keys must reach the shell. Later in the test, Preview runs from the focused rail, where `esc` must leave the keyboard with the rail. This replaces the check in "The files menu previews the row it was opened on", where `j` went on from the old cursor row. Each control was built into its own binary. Run on 2026-10-30 on Linux.

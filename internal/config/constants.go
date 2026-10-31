@@ -478,7 +478,7 @@ func (s *Settings) scaleAnimation(d time.Duration) time.Duration {
 // top, each optionally followed by ":" and the percent of the rail's content
 // lines it may claim. A section with no percent is flexible: it takes whatever
 // the others leave. A name left out of the list is a section the rail does not
-// draw.
+// draw, except that the rail's files control can still open files for one client.
 //
 // The percent is a ceiling, not a reservation. A section only ever claims the
 // lines its own rows can fill, so the three quarters this default spends on

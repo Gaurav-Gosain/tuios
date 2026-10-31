@@ -1979,6 +1979,24 @@ Independent of the option, the daemon now records the main checkout the way
 it records a worktree, so `tuios worktree ls` and the worktree verbs see it
 alongside the worktrees it was split into.
 
+## Keep the files section shut by default
+
+Leave `files` out of `appearance.sidebar.sections` to keep the section shut when
+you attach:
+
+```toml
+[appearance.sidebar]
+sections = "sessions:25,terminals,agents:34"
+```
+
+Click `files` in the rail's footer to open the section. Click it again to close
+it. File search and a click on a folder link also open it.
+
+The section goes after `terminals` with a share of 25, as in the default layout.
+A layout with no `terminals` has it after `sessions`, and a layout with neither
+has it above `agents`. The section stays open for this client until you close it
+or the client exits. The value of `appearance.sidebar.sections` does not change.
+
 ## The files section style
 
 `appearance.sidebar.files_style` sets how the rail's files section shows a
