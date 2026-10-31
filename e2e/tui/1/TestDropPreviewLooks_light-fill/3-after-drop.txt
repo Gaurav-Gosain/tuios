@@ -1,0 +1,40 @@
+╭ ● ● ● ─────────────────────╮╭ ● ● ● ─────────────────────╮╭ ● ● ● ───────────────────────────────────────────────────╮
+│n how to use fish           ││n how to use fish           ││-- tuios: restored from Oct 14 12:36, fresh shell in /tmp/│
+│AGENTS.md@  build.sh*  go.mo││AGENTS.md@  README.md  cmd/ ││TestDropPreviewLookslight-fill2481341129/001/project      │
+│d       logo.png            ││  go.mod       internal/  re││Type help for instructions on how to use fish             │
+│LICENSE     cmd/       insta││lease.tar.gz                ││AGENTS.md@  build.sh*  go.mod       logo.png              │
+│ll.sh*  release.tar.gz      ││LICENSE     build.sh*  docs/││LICENSE     cmd/       install.sh*  release.tar.gz        │
+│README.md   docs/      inter││  install.sh*  logo.png   sc││README.md   docs/      internal/    scripts/              │
+│nal/    scripts/            ││ripts/                      ││total 0                                                   │
+│total 0                     ││total 0                     ││lrwxrwxrwx 1 gaurav gaurav  9 Oct 31 12:32 AGENTS.md -> RE│
+│lrwxrwxrwx 1 gaurav gaurav  ││lrwxrwxrwx 1 gaurav gaurav  ││ADME.md                                                   │
+│9 Oct 31 12:32 AGENTS.md -> ││9 Oct 31 12:32 AGENTS.md -> ││-rw-r--r-- 1 gaurav gaurav  0 Oct 31 12:32 LICENSE        │
+│README.md                   ││README.md                   ││-rw-r--r-- 1 gaurav gaurav  0 Oct 31 12:32 README.md      │
+│-rw-r--r-- 1 gaurav gaurav  ││-rw-r--r-- 1 gaurav gaurav  ││-rwxr-xr-x 1 gaurav gaurav  0 Oct 31 12:32 build.sh*      │
+│0 Oct 31 12:32 LICENSE      ││0 Oct 31 12:32 LICENSE      ││drwx------ 2 gaurav gaurav 40 Oct 31 12:32 cmd/           │
+│-rw-r--r-- 1 gaurav gaurav  ││-rw-r--r-- 1 gaurav gaurav  ││drwx------ 2 gaurav gaurav 40 Oct 31 12:32 docs/          │
+│0 Oct 31 12:32 README.md    ││0 Oct 31 12:32 README.md    ││-rw-r--r-- 1 gaurav gaurav  0 Oct 31 12:32 go.mod         │
+│-rwxr-xr-x 1 gaurav gaurav  ││-rwxr-xr-x 1 gaurav gaurav  ││-rwxr-xr-x 1 gaurav gaurav  0 Oct 31 12:32 install.sh*    │
+│0 Oct 31 12:32 build.sh*    ││0 Oct 31 12:32 build.sh*    ││drwx------ 2 gaurav gaurav 40 Oct 31 12:32 internal/      │
+│drwx------ 2 gaurav gaurav 4││drwx------ 2 gaurav gaurav 4││-rw-r--r-- 1 gaurav gaurav  0 Oct 31 12:32 logo.png       │
+│0 Oct 31 12:32 cmd/         ││0 Oct 31 12:32 cmd/         ││-rw-r--r-- 1 gaurav gaurav  0 Oct 31 12:32 release.tar.gz │
+│drwx------ 2 gaurav gaurav 4││drwx------ 2 gaurav gaurav 4││drwx------ 2 gaurav gaurav 40 Oct 31 12:32 scripts/       │
+│0 Oct 31 12:32 docs/        ││0 Oct 31 12:32 docs/        ││ ~/d/tuios  feat/drop-zones  Go  v1.27.2 12:37  gaurav    │
+│-rw-r--r-- 1 gaurav gaurav  ││-rw-r--r-- 1 gaurav gaurav  ││>                                                         │
+│0 Oct 31 12:32 go.mod       ││0 Oct 31 12:32 go.mod       ││                                                          │
+│-rwxr-xr-x 1 gaurav gaurav  ││-rwxr-xr-x 1 gaurav gaurav  ││                                                          │
+│0 Oct 31 12:32 install.sh*  ││0 Oct 31 12:32 install.sh*  ││                                                          │
+│drwx------ 2 gaurav gaurav 4││drwx------ 2 gaurav gaurav 4││                                                          │
+│0 Oct 31 12:32 internal/    ││0 Oct 31 12:32 internal/    ││                                                          │
+│-rw-r--r-- 1 gaurav gaurav  ││-rw-r--r-- 1 gaurav gaurav  ││                                                          │
+│0 Oct 31 12:32 logo.png     ││0 Oct 31 12:32 logo.png     ││                                                          │
+│-rw-r--r-- 1 gaurav gaurav  ││-rw-r--r-- 1 gaurav gaurav  ││                                                          │
+│0 Oct 31 12:32 release.tar.g││0 Oct 31 12:32 release.tar.g││                                                          │
+│z                           ││z                           ││                                                          │
+│drwx------ 2 gaurav gaurav 4││drwx------ 2 gaurav gaurav 4││                                                          │
+│0 Oct 31 12:32 scripts/     ││0 Oct 31 12:32 scripts/     ││                                                          │
+│… Go  v1.27.2 12:37  gaurav ││… Go  v1.27.2 12:37  gaurav ││                                                          │
+│>                           ││>                           ││                                                          │
+╰─ /tmp/TestDropPreviewL… ─╯╰─ /tmp/TestDropPreviewL… ─╯╰─ /tmp/TestDropPreviewLookslight-fill2481341129/001/p… ─╯
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  V   1   +  1:3                                                                                        +    

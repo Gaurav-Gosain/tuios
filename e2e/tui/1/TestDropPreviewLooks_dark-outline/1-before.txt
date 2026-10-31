@@ -1,0 +1,40 @@
+╭ ● ● ● ───────────────────────────────────────────────────╮╭ ● ● ● ───────────────────────────────────────────────────╮
+│-- tuios: restored from Oct 14 12:36, fresh shell in /tmp/││README.md   docs/      internal/    scripts/              │
+│TestDropPreviewLooksdark-outline561993829/001/project     ││total 0                                                   │
+│Type help for instructions on how to use fish             ││lrwxrwxrwx 1 gaurav gaurav  9 Oct 31 12:32 AGENTS.md -> RE│
+│AGENTS.md@  README.md  cmd/   go.mod       internal/  rele││ADME.md                                                   │
+│ase.tar.gz                                                ││-rw-r--r-- 1 gaurav gaurav  0 Oct 31 12:32 LICENSE        │
+│LICENSE     build.sh*  docs/  install.sh*  logo.png   scri││-rw-r--r-- 1 gaurav gaurav  0 Oct 31 12:32 README.md      │
+│pts/                                                      ││-rwxr-xr-x 1 gaurav gaurav  0 Oct 31 12:32 build.sh*      │
+│total 0                                                   ││drwx------ 2 gaurav gaurav 40 Oct 31 12:32 cmd/           │
+│lrwxrwxrwx 1 gaurav gaurav  9 Oct 31 12:32 AGENTS.md -> RE││drwx------ 2 gaurav gaurav 40 Oct 31 12:32 docs/          │
+│ADME.md                                                   ││-rw-r--r-- 1 gaurav gaurav  0 Oct 31 12:32 go.mod         │
+│-rw-r--r-- 1 gaurav gaurav  0 Oct 31 12:32 LICENSE        ││-rwxr-xr-x 1 gaurav gaurav  0 Oct 31 12:32 install.sh*    │
+│-rw-r--r-- 1 gaurav gaurav  0 Oct 31 12:32 README.md      ││drwx------ 2 gaurav gaurav 40 Oct 31 12:32 internal/      │
+│-rwxr-xr-x 1 gaurav gaurav  0 Oct 31 12:32 build.sh*      ││-rw-r--r-- 1 gaurav gaurav  0 Oct 31 12:32 logo.png       │
+│drwx------ 2 gaurav gaurav 40 Oct 31 12:32 cmd/           ││-rw-r--r-- 1 gaurav gaurav  0 Oct 31 12:32 release.tar.gz │
+│drwx------ 2 gaurav gaurav 40 Oct 31 12:32 docs/          ││drwx------ 2 gaurav gaurav 40 Oct 31 12:32 scripts/       │
+│-rw-r--r-- 1 gaurav gaurav  0 Oct 31 12:32 go.mod         ││ ~/d/tuios  feat/drop-zones  Go  v1.27.2 12:37  gaurav    │
+│-rwxr-xr-x 1 gaurav gaurav  0 Oct 31 12:32 install.sh*    ││>                                                         │
+│drwx------ 2 gaurav gaurav 40 Oct 31 12:32 internal/      │╰─ /tmp/TestDropPreviewLooksdark-outline561993829/001/… ─╯
+│-rw-r--r-- 1 gaurav gaurav  0 Oct 31 12:32 logo.png       │╭ ● ● ● ───────────────────────────────────────────────────╮
+│-rw-r--r-- 1 gaurav gaurav  0 Oct 31 12:32 release.tar.gz ││README.md   docs/      internal/    scripts/              │
+│drwx------ 2 gaurav gaurav 40 Oct 31 12:32 scripts/       ││total 0                                                   │
+│ ~/d/tuios  feat/drop-zones  Go  v1.27.2 12:37  gaurav    ││lrwxrwxrwx 1 gaurav gaurav  9 Oct 31 12:32 AGENTS.md -> RE│
+│>                                                         ││ADME.md                                                   │
+│                                                          ││-rw-r--r-- 1 gaurav gaurav  0 Oct 31 12:32 LICENSE        │
+│                                                          ││-rw-r--r-- 1 gaurav gaurav  0 Oct 31 12:32 README.md      │
+│                                                          ││-rwxr-xr-x 1 gaurav gaurav  0 Oct 31 12:32 build.sh*      │
+│                                                          ││drwx------ 2 gaurav gaurav 40 Oct 31 12:32 cmd/           │
+│                                                          ││drwx------ 2 gaurav gaurav 40 Oct 31 12:32 docs/          │
+│                                                          ││-rw-r--r-- 1 gaurav gaurav  0 Oct 31 12:32 go.mod         │
+│                                                          ││-rwxr-xr-x 1 gaurav gaurav  0 Oct 31 12:32 install.sh*    │
+│                                                          ││drwx------ 2 gaurav gaurav 40 Oct 31 12:32 internal/      │
+│                                                          ││-rw-r--r-- 1 gaurav gaurav  0 Oct 31 12:32 logo.png       │
+│                                                          ││-rw-r--r-- 1 gaurav gaurav  0 Oct 31 12:32 release.tar.gz │
+│                                                          ││drwx------ 2 gaurav gaurav 40 Oct 31 12:32 scripts/       │
+│                                                          ││ ~/d/tuios  feat/drop-zones  Go  v1.27.2 12:37  gaurav    │
+│                                                          ││>                                                         │
+╰─ /tmp/TestDropPreviewLooksdark-outline561993829/001/… ─╯╰─ /tmp/TestDropPreviewLooksdark-outline561993829/001/… ─╯
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  V   1   +  1:3                                                   ▎   Window created (3 total)  +3    +    

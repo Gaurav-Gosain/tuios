@@ -1172,12 +1172,12 @@ While you drag a tiled pane in BSP, tuios shows where the pane would land if you
 
 | Option | What it does | Values | Default |
 |---|---|---|---|
-| `appearance.drop_preview` | What the preview draws. `fill` draws the frame and tints the area inside it, `outline` draws only the frame, and `off` draws nothing | `fill`, `outline`, `off` | `fill` |
+| `appearance.drop_preview` | What the preview draws. `fill` draws the frame and tints the area inside it, `outline` draws only the frame, and `off` draws nothing | `fill`, `outline`, `off` | `outline` |
 | `appearance.drop_preview_delay` | How long the pointer stays on one drop zone before its preview shows. A zone you leave before the delay is never drawn, so carrying a pane across the screen does not flash a zone over every pane on the way | a duration such as `120ms`, or `0` to show it at once | `120ms` |
 
 ```toml
 [appearance]
-drop_preview = "outline"
+drop_preview = "fill"
 drop_preview_delay = "250ms"
 ```
 

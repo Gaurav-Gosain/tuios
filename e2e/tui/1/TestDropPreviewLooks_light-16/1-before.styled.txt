@@ -1,0 +1,260 @@
+╭ ● ● ● ───────────────────────────────────────────────────╮╭ ● ● ● ───────────────────────────────────────────────────╮
+    0-1 fg:1
+    2-2 fg:9
+    3-3 fg:1
+    4-4 fg:3
+    5-5 fg:1
+    6-6 fg:2
+    7-61 fg:1
+    62-62 fg:9
+    63-63 fg:1
+    64-64 fg:3
+    65-65 fg:1
+    66-66 fg:2
+    67-119 fg:1
+│-- tuios: restored from Oct 14 12:36, fresh shell in /tmp/││README.md   docs/      internal/    scripts/              │
+    0-0 fg:1
+    1-58 f
+    59-60 fg:1
+    73-76 b,fg:4
+    84-91 b,fg:4
+    97-103 b,fg:4
+    119-119 fg:1
+│TestDropPreviewLookslight-161608810832/001/project        ││total 0                                                   │
+    0-0 fg:1
+    1-50 f
+    59-60 fg:1
+    119-119 fg:1
+│Type help for instructions on how to use fish             ││lrwxrwxrwx 1 gaurav gaurav  9 Oct 31 12:32 AGENTS.md -> RE│
+    0-0 fg:1
+    6-9 fg:6
+    59-60 fg:1
+    104-112 b,fg:6
+    119-119 fg:1
+│AGENTS.md@  README.md  cmd/   go.mod       internal/  rele││ADME.md                                                   │
+    0-0 fg:1
+    1-9 b,fg:6
+    24-26 b,fg:4
+    44-51 b,fg:4
+    59-60 fg:1
+    119-119 fg:1
+│ase.tar.gz                                                ││-rw-r--r-- 1 gaurav gaurav  0 Oct 31 12:32 LICENSE        │
+    0-0 fg:1
+    59-60 fg:1
+    119-119 fg:1
+│LICENSE     build.sh*  docs/  install.sh*  logo.png   scri││-rw-r--r-- 1 gaurav gaurav  0 Oct 31 12:32 README.md      │
+    0-0 fg:1
+    13-20 b,fg:2
+    24-27 b,fg:4
+    31-40 b,fg:2
+    55-58 b,fg:4
+    59-60 fg:1
+    119-119 fg:1
+│pts/                                                      ││-rwxr-xr-x 1 gaurav gaurav  0 Oct 31 12:32 build.sh*      │
+    0-0 fg:1
+    1-3 b,fg:4
+    59-60 fg:1
+    104-111 b,fg:2
+    119-119 fg:1
+│total 0                                                   ││drwx------ 2 gaurav gaurav 40 Oct 31 12:32 cmd/           │
+    0-0 fg:1
+    59-60 fg:1
+    104-106 b,fg:4
+    119-119 fg:1
+│lrwxrwxrwx 1 gaurav gaurav  9 Oct 31 12:32 AGENTS.md -> RE││drwx------ 2 gaurav gaurav 40 Oct 31 12:32 docs/          │
+    0-0 fg:1
+    44-52 b,fg:6
+    59-60 fg:1
+    104-107 b,fg:4
+    119-119 fg:1
+│ADME.md                                                   ││-rw-r--r-- 1 gaurav gaurav  0 Oct 31 12:32 go.mod         │
+    0-0 fg:1
+    59-60 fg:1
+    119-119 fg:1
+│-rw-r--r-- 1 gaurav gaurav  0 Oct 31 12:32 LICENSE        ││-rwxr-xr-x 1 gaurav gaurav  0 Oct 31 12:32 install.sh*    │
+    0-0 fg:1
+    59-60 fg:1
+    104-113 b,fg:2
+    119-119 fg:1
+│-rw-r--r-- 1 gaurav gaurav  0 Oct 31 12:32 README.md      ││drwx------ 2 gaurav gaurav 40 Oct 31 12:32 internal/      │
+    0-0 fg:1
+    59-60 fg:1
+    104-111 b,fg:4
+    119-119 fg:1
+│-rwxr-xr-x 1 gaurav gaurav  0 Oct 31 12:32 build.sh*      ││-rw-r--r-- 1 gaurav gaurav  0 Oct 31 12:32 logo.png       │
+    0-0 fg:1
+    44-51 b,fg:2
+    59-60 fg:1
+    119-119 fg:1
+│drwx------ 2 gaurav gaurav 40 Oct 31 12:32 cmd/           ││-rw-r--r-- 1 gaurav gaurav  0 Oct 31 12:32 release.tar.gz │
+    0-0 fg:1
+    44-46 b,fg:4
+    59-60 fg:1
+    119-119 fg:1
+│drwx------ 2 gaurav gaurav 40 Oct 31 12:32 docs/          ││drwx------ 2 gaurav gaurav 40 Oct 31 12:32 scripts/       │
+    0-0 fg:1
+    44-47 b,fg:4
+    59-60 fg:1
+    104-110 b,fg:4
+    119-119 fg:1
+│-rw-r--r-- 1 gaurav gaurav  0 Oct 31 12:32 go.mod         ││ ~/d/tuios  feat/drop-zones  Go  v1.27.2 12:37  gaurav    │
+    0-0 fg:1
+    59-60 fg:1
+    61-71 fg:0,bg:12
+    72-88 fg:12,bg:8
+    89-92 fg:0,bg:9
+    93-107 f
+    108-115 fg:0,bg:9
+    119-119 fg:1
+│-rwxr-xr-x 1 gaurav gaurav  0 Oct 31 12:32 install.sh*    ││>                                                         │
+    0-0 fg:1
+    44-53 b,fg:2
+    59-60 fg:1
+    61-62 fg:2
+    119-119 fg:1
+│drwx------ 2 gaurav gaurav 40 Oct 31 12:32 internal/      │╰─ /tmp/TestDropPreviewLookslight-161608810832/001/pro… ─╯
+    0-0 fg:1
+    44-51 b,fg:4
+    59-62 fg:1
+    63-116 fg:15,bg:1
+    117-119 fg:1
+│-rw-r--r-- 1 gaurav gaurav  0 Oct 31 12:32 logo.png       │╭ ● ● ● ───────────────────────────────────────────────────╮
+    0-0 fg:1
+    59-59 fg:1
+    60-61 fg:14
+    62-62 fg:9
+    63-63 fg:14
+    64-64 fg:3
+    65-65 fg:14
+    66-66 fg:2
+    67-119 fg:14
+│-rw-r--r-- 1 gaurav gaurav  0 Oct 31 12:32 release.tar.gz ││README.md   docs/      internal/    scripts/              │
+    0-0 fg:1
+    59-59 fg:1
+    60-60 fg:14
+    73-76 b,fg:4
+    84-91 b,fg:4
+    97-103 b,fg:4
+    119-119 fg:14
+│drwx------ 2 gaurav gaurav 40 Oct 31 12:32 scripts/       ││total 0                                                   │
+    0-0 fg:1
+    44-50 b,fg:4
+    59-59 fg:1
+    60-60 fg:14
+    119-119 fg:14
+│ ~/d/tuios  feat/drop-zones  Go  v1.27.2 12:37  gaurav    ││lrwxrwxrwx 1 gaurav gaurav  9 Oct 31 12:32 AGENTS.md -> RE│
+    0-0 fg:1
+    1-11 fg:0,bg:12
+    12-28 fg:12,bg:8
+    29-32 fg:0,bg:9
+    33-47 f
+    48-55 fg:0,bg:9
+    59-59 fg:1
+    60-60 fg:14
+    104-112 b,fg:6
+    119-119 fg:14
+│>                                                         ││ADME.md                                                   │
+    0-0 fg:1
+    1-2 fg:2
+    59-59 fg:1
+    60-60 fg:14
+    119-119 fg:14
+│                                                          ││-rw-r--r-- 1 gaurav gaurav  0 Oct 31 12:32 LICENSE        │
+    0-0 fg:1
+    59-59 fg:1
+    60-60 fg:14
+    119-119 fg:14
+│                                                          ││-rw-r--r-- 1 gaurav gaurav  0 Oct 31 12:32 README.md      │
+    0-0 fg:1
+    59-59 fg:1
+    60-60 fg:14
+    119-119 fg:14
+│                                                          ││-rwxr-xr-x 1 gaurav gaurav  0 Oct 31 12:32 build.sh*      │
+    0-0 fg:1
+    59-59 fg:1
+    60-60 fg:14
+    104-111 b,fg:2
+    119-119 fg:14
+│                                                          ││drwx------ 2 gaurav gaurav 40 Oct 31 12:32 cmd/           │
+    0-0 fg:1
+    59-59 fg:1
+    60-60 fg:14
+    104-106 b,fg:4
+    119-119 fg:14
+│                                                          ││drwx------ 2 gaurav gaurav 40 Oct 31 12:32 docs/          │
+    0-0 fg:1
+    59-59 fg:1
+    60-60 fg:14
+    104-107 b,fg:4
+    119-119 fg:14
+│                                                          ││-rw-r--r-- 1 gaurav gaurav  0 Oct 31 12:32 go.mod         │
+    0-0 fg:1
+    59-59 fg:1
+    60-60 fg:14
+    119-119 fg:14
+│                                                          ││-rwxr-xr-x 1 gaurav gaurav  0 Oct 31 12:32 install.sh*    │
+    0-0 fg:1
+    59-59 fg:1
+    60-60 fg:14
+    104-113 b,fg:2
+    119-119 fg:14
+│                                                          ││drwx------ 2 gaurav gaurav 40 Oct 31 12:32 internal/      │
+    0-0 fg:1
+    59-59 fg:1
+    60-60 fg:14
+    104-111 b,fg:4
+    119-119 fg:14
+│                                                          ││-rw-r--r-- 1 gaurav gaurav  0 Oct 31 12:32 logo.png       │
+    0-0 fg:1
+    59-59 fg:1
+    60-60 fg:14
+    119-119 fg:14
+│                                                          ││-rw-r--r-- 1 gaurav gaurav  0 Oct 31 12:32 release.tar.gz │
+    0-0 fg:1
+    59-59 fg:1
+    60-60 fg:14
+    119-119 fg:14
+│                                                          ││drwx------ 2 gaurav gaurav 40 Oct 31 12:32 scripts/       │
+    0-0 fg:1
+    59-59 fg:1
+    60-60 fg:14
+    104-110 b,fg:4
+    119-119 fg:14
+│                                                          ││ ~/d/tuios  feat/drop-zones  Go  v1.27.2 12:37  gaurav    │
+    0-0 fg:1
+    59-59 fg:1
+    60-60 fg:14
+    61-71 fg:0,bg:12
+    72-88 fg:12,bg:8
+    89-92 fg:0,bg:9
+    93-107 f
+    108-115 fg:0,bg:9
+    119-119 fg:14
+│                                                          ││>                                                         │
+    0-0 fg:1
+    59-59 fg:1
+    60-60 fg:14
+    61-62 fg:2
+    119-119 fg:14
+╰─ /tmp/TestDropPreviewLookslight-161608810832/001/pro… ─╯╰─ /tmp/TestDropPreviewLookslight-161608810832/001/pro… ─╯
+    0-2 fg:1
+    3-56 fg:15,bg:1
+    57-59 fg:1
+    60-62 fg:14
+    63-116 fg:0,bg:14
+    117-119 fg:14
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+    0-73 fg:7
+    74-88 fg:4
+    89-119 fg:7
+  V    1     +   1:3                                                   ▎   Window created (3 total)  +3    +    
+    0-0 fg:12
+    1-5 b,fg:15,bg:12
+    6-6 fg:12
+    9-9 u,fg:12
+    10-10 b,u,fg:12
+    11-11 u,fg:12
+    19-23 fg:8
+    74-76 fg:4
+    110-115 b
+    116-118 fg:8

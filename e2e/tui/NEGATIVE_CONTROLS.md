@@ -5425,7 +5425,7 @@ Run on 2026-10-14 on macOS. The tests are in `bsp_drop_preview_test.go`: `appear
 | Control: what was cut | Test that fails | Verdict |
 | --- | --- | --- |
 | The `DropPreviewOff` early return in `UpdateDropZone` | `TestDropPreviewOffDrawsNothing` ("cell (0,0), outside the landing rectangle, changed mid-drag": the left-edge zone is drawn); the other three pass, which is their positive half | **caught** |
-| The `DropPreviewOutline` term in `applyDropZone`, so outline fills like fill | `TestDropPreviewOutlineDrawsOnlyTheFrame` ("cell (1,1) inside the landing rectangle {... X:0 Y:0 Width:30 Height:38} is painted mid-drag with the outline-only preview") | **caught** |
+| The `DropPreviewOutline` term in `applyDropZone`, so outline fills like fill | `TestDropPreviewDefaultDrawsOnlyTheFrame` ("cell (1,1) inside the landing rectangle {... X:0 Y:0 Width:30 Height:38} is painted mid-drag with the outline-only preview") | **caught** |
 | The delay in `UpdateDropZone` (`delay` forced to 0, so every zone shows at once) | `TestDropPreviewWaitsForItsDelay` and `TestADropZoneLeftBeforeItsDelayNeverShows` ("cell (0,0), outside the landing rectangle, changed mid-drag": the zone is up in the frame read right after the move) | **caught** |
 | The generation check in `showDropZone`, so a delay armed for a zone the pointer left shows the zone it is on now | `TestADropZoneLeftBeforeItsDelayNeverShows` ("cell (0,0), outside the landing rectangle, changed mid-drag": the left edge's delay running out drew A's middle half the delay early); `TestDropPreviewWaitsForItsDelay` passes, as it should, since it never leaves its zone | **caught** |
 | `m.renderSkipped = false` in `showDropZone` | none | **not caught** |
@@ -5443,9 +5443,17 @@ mirrors a session's layout uses both.
 | This branch | the change | both pass: left puts the new pane at x=0 and the old one at x=60; up puts it at y=0 over y=19; one `layout-changed` for workspace 1 | **guard** |
 | `SplitToward` maps left and up to right and down | mutant | `TestSplitWindowTakesTheNamedSide` fails: the new pane is at x=60 and at y=19 | **caught** |
 | `layoutChanges` call cut from `diffLifecycle` | mutant | `TestLayoutChangedFollowsASplit` fails: no `layout-changed` within 10s on a live subscription | **caught** |
+### BSP drop preview default
+
+Run on 2026-10-31 on Linux. The default for `appearance.drop_preview` is now `outline`.
+
+| Control: what was cut | Test that fails | Verdict |
+| --- | --- | --- |
+| The default in `internal/config/userconfig.go`, put back to `fill` | `TestDropPreviewDefaultDrawsOnlyTheFrame` ("cell (1,1) inside the landing rectangle ... is painted mid-drag with the outline-only preview") | fails as it should |
+
 ### BSP drop preview look
 
-Run on 2026-10-14 on Linux. The preview's frame is the panes' border glyphs, and the fill washes the text under it into one tint. Each control cuts one line of `applyDropZone` or `washDropCell` in `internal/app/drop_zone_render.go`, and runs `TestDropPreviewFillWashesTheZone`, `TestDropPreviewOutlineDrawsOnlyTheFrame` and the `left` and `sibling-left` rows of `TestADropOnAPaneEdgeSplitsIt` against the cut binary. The fixed build passes the whole `Drop|EdgeZones` set.
+Run on 2026-10-14 on Linux. The preview's frame is the panes' border glyphs, and the fill washes the text under it into one tint. Each control cuts one line of `applyDropZone` or `washDropCell` in `internal/app/drop_zone_render.go`, and runs `TestDropPreviewFillWashesTheZone`, `TestDropPreviewDefaultDrawsOnlyTheFrame` and the `left` and `sibling-left` rows of `TestADropOnAPaneEdgeSplitsIt` against the cut binary. The fixed build passes the whole `Drop|EdgeZones` set.
 
 | Control: what was cut | Test that fails | Verdict |
 | --- | --- | --- |

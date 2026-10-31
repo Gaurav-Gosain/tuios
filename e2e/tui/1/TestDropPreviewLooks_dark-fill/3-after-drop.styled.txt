@@ -1,0 +1,325 @@
+╭ ● ● ● ─────────────────────╮╭ ● ● ● ─────────────────────╮╭ ● ● ● ───────────────────────────────────────────────────╮
+    0-1 fg:#AFFFFF
+    2-2 fg:#FF5F57
+    3-3 fg:#AFFFFF
+    4-4 fg:#FEBC2E
+    5-5 fg:#AFFFFF
+    6-6 fg:#28C840
+    7-29 fg:#AFFFFF
+    30-31 fg:#63615D
+    32-32 fg:#FF5F57
+    33-33 fg:#63615D
+    34-34 fg:#FEBC2E
+    35-35 fg:#63615D
+    36-36 fg:#28C840
+    37-61 fg:#63615D
+    62-62 fg:#FF5F57
+    63-63 fg:#63615D
+    64-64 fg:#FEBC2E
+    65-65 fg:#63615D
+    66-66 fg:#28C840
+    67-119 fg:#63615D
+│n how to use fish           ││n how to use fish           ││-- tuios: restored from Oct 14 12:36, fresh shell in /tmp/│
+    0-0 fg:#AFFFFF
+    29-29 fg:#AFFFFF
+    30-30 fg:#63615D
+    59-60 fg:#63615D
+    61-118 f
+    119-119 fg:#63615D
+│AGENTS.md@  build.sh*  go.mo││AGENTS.md@  README.md  cmd/ ││TestDropPreviewLooksdark-fill684358393/001/project        │
+    0-0 fg:#AFFFFF
+    1-9 b,fg:6
+    13-20 b,fg:2
+    29-29 fg:#AFFFFF
+    30-30 fg:#63615D
+    31-39 b,fg:6
+    54-56 b,fg:4
+    59-60 fg:#63615D
+    61-110 f
+    119-119 fg:#63615D
+│d       logo.png            ││  go.mod       internal/  re││Type help for instructions on how to use fish             │
+    0-0 fg:#AFFFFF
+    29-29 fg:#AFFFFF
+    30-30 fg:#63615D
+    46-53 b,fg:4
+    59-60 fg:#63615D
+    66-69 fg:6
+    119-119 fg:#63615D
+│LICENSE     cmd/       insta││lease.tar.gz                ││AGENTS.md@  build.sh*  go.mod       logo.png              │
+    0-0 fg:#AFFFFF
+    13-15 b,fg:4
+    24-28 b,fg:2
+    29-29 fg:#AFFFFF
+    30-30 fg:#63615D
+    59-60 fg:#63615D
+    61-69 b,fg:6
+    73-80 b,fg:2
+    119-119 fg:#63615D
+│ll.sh*  release.tar.gz      ││LICENSE     build.sh*  docs/││LICENSE     cmd/       install.sh*  release.tar.gz        │
+    0-0 fg:#AFFFFF
+    1-5 b,fg:2
+    29-29 fg:#AFFFFF
+    30-30 fg:#63615D
+    43-50 b,fg:2
+    54-57 b,fg:4
+    59-60 fg:#63615D
+    73-75 b,fg:4
+    84-93 b,fg:2
+    119-119 fg:#63615D
+│README.md   docs/      inter││  install.sh*  logo.png   sc││README.md   docs/      internal/    scripts/              │
+    0-0 fg:#AFFFFF
+    13-16 b,fg:4
+    24-28 b,fg:4
+    29-29 fg:#AFFFFF
+    30-30 fg:#63615D
+    33-42 b,fg:2
+    57-58 b,fg:4
+    59-60 fg:#63615D
+    73-76 b,fg:4
+    84-91 b,fg:4
+    97-103 b,fg:4
+    119-119 fg:#63615D
+│nal/    scripts/            ││ripts/                      ││total 0                                                   │
+    0-0 fg:#AFFFFF
+    1-3 b,fg:4
+    9-15 b,fg:4
+    29-29 fg:#AFFFFF
+    30-30 fg:#63615D
+    31-35 b,fg:4
+    59-60 fg:#63615D
+    119-119 fg:#63615D
+│total 0                     ││total 0                     ││lrwxrwxrwx 1 gaurav gaurav  9 Oct 31 12:32 AGENTS.md -> RE│
+    0-0 fg:#AFFFFF
+    29-29 fg:#AFFFFF
+    30-30 fg:#63615D
+    59-60 fg:#63615D
+    104-112 b,fg:6
+    119-119 fg:#63615D
+│lrwxrwxrwx 1 gaurav gaurav  ││lrwxrwxrwx 1 gaurav gaurav  ││ADME.md                                                   │
+    0-0 fg:#AFFFFF
+    29-29 fg:#AFFFFF
+    30-30 fg:#63615D
+    59-60 fg:#63615D
+    119-119 fg:#63615D
+│9 Oct 31 12:32 AGENTS.md -> ││9 Oct 31 12:32 AGENTS.md -> ││-rw-r--r-- 1 gaurav gaurav  0 Oct 31 12:32 LICENSE        │
+    0-0 fg:#AFFFFF
+    16-24 b,fg:6
+    29-29 fg:#AFFFFF
+    30-30 fg:#63615D
+    46-54 b,fg:6
+    59-60 fg:#63615D
+    119-119 fg:#63615D
+│README.md                   ││README.md                   ││-rw-r--r-- 1 gaurav gaurav  0 Oct 31 12:32 README.md      │
+    0-0 fg:#AFFFFF
+    29-29 fg:#AFFFFF
+    30-30 fg:#63615D
+    59-60 fg:#63615D
+    119-119 fg:#63615D
+│-rw-r--r-- 1 gaurav gaurav  ││-rw-r--r-- 1 gaurav gaurav  ││-rwxr-xr-x 1 gaurav gaurav  0 Oct 31 12:32 build.sh*      │
+    0-0 fg:#AFFFFF
+    29-29 fg:#AFFFFF
+    30-30 fg:#63615D
+    59-60 fg:#63615D
+    104-111 b,fg:2
+    119-119 fg:#63615D
+│0 Oct 31 12:32 LICENSE      ││0 Oct 31 12:32 LICENSE      ││drwx------ 2 gaurav gaurav 40 Oct 31 12:32 cmd/           │
+    0-0 fg:#AFFFFF
+    29-29 fg:#AFFFFF
+    30-30 fg:#63615D
+    59-60 fg:#63615D
+    104-106 b,fg:4
+    119-119 fg:#63615D
+│-rw-r--r-- 1 gaurav gaurav  ││-rw-r--r-- 1 gaurav gaurav  ││drwx------ 2 gaurav gaurav 40 Oct 31 12:32 docs/          │
+    0-0 fg:#AFFFFF
+    29-29 fg:#AFFFFF
+    30-30 fg:#63615D
+    59-60 fg:#63615D
+    104-107 b,fg:4
+    119-119 fg:#63615D
+│0 Oct 31 12:32 README.md    ││0 Oct 31 12:32 README.md    ││-rw-r--r-- 1 gaurav gaurav  0 Oct 31 12:32 go.mod         │
+    0-0 fg:#AFFFFF
+    29-29 fg:#AFFFFF
+    30-30 fg:#63615D
+    59-60 fg:#63615D
+    119-119 fg:#63615D
+│-rwxr-xr-x 1 gaurav gaurav  ││-rwxr-xr-x 1 gaurav gaurav  ││-rwxr-xr-x 1 gaurav gaurav  0 Oct 31 12:32 install.sh*    │
+    0-0 fg:#AFFFFF
+    29-29 fg:#AFFFFF
+    30-30 fg:#63615D
+    59-60 fg:#63615D
+    104-113 b,fg:2
+    119-119 fg:#63615D
+│0 Oct 31 12:32 build.sh*    ││0 Oct 31 12:32 build.sh*    ││drwx------ 2 gaurav gaurav 40 Oct 31 12:32 internal/      │
+    0-0 fg:#AFFFFF
+    16-23 b,fg:2
+    29-29 fg:#AFFFFF
+    30-30 fg:#63615D
+    46-53 b,fg:2
+    59-60 fg:#63615D
+    104-111 b,fg:4
+    119-119 fg:#63615D
+│drwx------ 2 gaurav gaurav 4││drwx------ 2 gaurav gaurav 4││-rw-r--r-- 1 gaurav gaurav  0 Oct 31 12:32 logo.png       │
+    0-0 fg:#AFFFFF
+    29-29 fg:#AFFFFF
+    30-30 fg:#63615D
+    59-60 fg:#63615D
+    119-119 fg:#63615D
+│0 Oct 31 12:32 cmd/         ││0 Oct 31 12:32 cmd/         ││-rw-r--r-- 1 gaurav gaurav  0 Oct 31 12:32 release.tar.gz │
+    0-0 fg:#AFFFFF
+    16-18 b,fg:4
+    29-29 fg:#AFFFFF
+    30-30 fg:#63615D
+    46-48 b,fg:4
+    59-60 fg:#63615D
+    119-119 fg:#63615D
+│drwx------ 2 gaurav gaurav 4││drwx------ 2 gaurav gaurav 4││drwx------ 2 gaurav gaurav 40 Oct 31 12:32 scripts/       │
+    0-0 fg:#AFFFFF
+    29-29 fg:#AFFFFF
+    30-30 fg:#63615D
+    59-60 fg:#63615D
+    104-110 b,fg:4
+    119-119 fg:#63615D
+│0 Oct 31 12:32 docs/        ││0 Oct 31 12:32 docs/        ││ ~/d/tuios  feat/drop-zones  Go  v1.27.2 12:37  gaurav    │
+    0-0 fg:#AFFFFF
+    16-19 b,fg:4
+    29-29 fg:#AFFFFF
+    30-30 fg:#63615D
+    46-49 b,fg:4
+    59-60 fg:#63615D
+    61-71 fg:#1A1B26,bg:#7AA2F7
+    72-88 fg:#C0CAF5,bg:#414868
+    89-92 fg:#1A1B26,bg:#F7768E
+    93-107 f
+    108-115 fg:#1A1B26,bg:#E0AF68
+    119-119 fg:#63615D
+│-rw-r--r-- 1 gaurav gaurav  ││-rw-r--r-- 1 gaurav gaurav  ││>                                                         │
+    0-0 fg:#AFFFFF
+    29-29 fg:#AFFFFF
+    30-30 fg:#63615D
+    59-60 fg:#63615D
+    61-62 fg:2
+    119-119 fg:#63615D
+│0 Oct 31 12:32 go.mod       ││0 Oct 31 12:32 go.mod       ││                                                          │
+    0-0 fg:#AFFFFF
+    29-29 fg:#AFFFFF
+    30-30 fg:#63615D
+    59-60 fg:#63615D
+    119-119 fg:#63615D
+│-rwxr-xr-x 1 gaurav gaurav  ││-rwxr-xr-x 1 gaurav gaurav  ││                                                          │
+    0-0 fg:#AFFFFF
+    29-29 fg:#AFFFFF
+    30-30 fg:#63615D
+    59-60 fg:#63615D
+    119-119 fg:#63615D
+│0 Oct 31 12:32 install.sh*  ││0 Oct 31 12:32 install.sh*  ││                                                          │
+    0-0 fg:#AFFFFF
+    16-25 b,fg:2
+    29-29 fg:#AFFFFF
+    30-30 fg:#63615D
+    46-55 b,fg:2
+    59-60 fg:#63615D
+    119-119 fg:#63615D
+│drwx------ 2 gaurav gaurav 4││drwx------ 2 gaurav gaurav 4││                                                          │
+    0-0 fg:#AFFFFF
+    29-29 fg:#AFFFFF
+    30-30 fg:#63615D
+    59-60 fg:#63615D
+    119-119 fg:#63615D
+│0 Oct 31 12:32 internal/    ││0 Oct 31 12:32 internal/    ││                                                          │
+    0-0 fg:#AFFFFF
+    16-23 b,fg:4
+    29-29 fg:#AFFFFF
+    30-30 fg:#63615D
+    46-53 b,fg:4
+    59-60 fg:#63615D
+    119-119 fg:#63615D
+│-rw-r--r-- 1 gaurav gaurav  ││-rw-r--r-- 1 gaurav gaurav  ││                                                          │
+    0-0 fg:#AFFFFF
+    29-29 fg:#AFFFFF
+    30-30 fg:#63615D
+    59-60 fg:#63615D
+    119-119 fg:#63615D
+│0 Oct 31 12:32 logo.png     ││0 Oct 31 12:32 logo.png     ││                                                          │
+    0-0 fg:#AFFFFF
+    29-29 fg:#AFFFFF
+    30-30 fg:#63615D
+    59-60 fg:#63615D
+    119-119 fg:#63615D
+│-rw-r--r-- 1 gaurav gaurav  ││-rw-r--r-- 1 gaurav gaurav  ││                                                          │
+    0-0 fg:#AFFFFF
+    29-29 fg:#AFFFFF
+    30-30 fg:#63615D
+    59-60 fg:#63615D
+    119-119 fg:#63615D
+│0 Oct 31 12:32 release.tar.g││0 Oct 31 12:32 release.tar.g││                                                          │
+    0-0 fg:#AFFFFF
+    29-29 fg:#AFFFFF
+    30-30 fg:#63615D
+    59-60 fg:#63615D
+    119-119 fg:#63615D
+│z                           ││z                           ││                                                          │
+    0-0 fg:#AFFFFF
+    29-29 fg:#AFFFFF
+    30-30 fg:#63615D
+    59-60 fg:#63615D
+    119-119 fg:#63615D
+│drwx------ 2 gaurav gaurav 4││drwx------ 2 gaurav gaurav 4││                                                          │
+    0-0 fg:#AFFFFF
+    29-29 fg:#AFFFFF
+    30-30 fg:#63615D
+    59-60 fg:#63615D
+    119-119 fg:#63615D
+│0 Oct 31 12:32 scripts/     ││0 Oct 31 12:32 scripts/     ││                                                          │
+    0-0 fg:#AFFFFF
+    16-22 b,fg:4
+    29-29 fg:#AFFFFF
+    30-30 fg:#63615D
+    46-52 b,fg:4
+    59-60 fg:#63615D
+    119-119 fg:#63615D
+│… Go  v1.27.2 12:37  gaurav ││… Go  v1.27.2 12:37  gaurav ││                                                          │
+    0-0 fg:#AFFFFF
+    2-5 fg:#1A1B26,bg:#F7768E
+    6-20 f
+    21-28 fg:#1A1B26,bg:#E0AF68
+    29-29 fg:#AFFFFF
+    30-30 fg:#63615D
+    32-35 fg:#1A1B26,bg:#F7768E
+    36-50 f
+    51-58 fg:#1A1B26,bg:#E0AF68
+    59-60 fg:#63615D
+    119-119 fg:#63615D
+│>                           ││>                           ││                                                          │
+    0-0 fg:#AFFFFF
+    1-2 fg:2
+    29-29 fg:#AFFFFF
+    30-30 fg:#63615D
+    31-32 fg:2
+    59-60 fg:#63615D
+    119-119 fg:#63615D
+╰─ /tmp/TestDropPreviewL… ─╯╰─ /tmp/TestDropPreviewL… ─╯╰─ /tmp/TestDropPreviewLooksdark-fill684358393/001/pro… ─╯
+    0-2 fg:#AFFFFF
+    3-26 fg:#201F26,bg:#AFFFFF
+    27-29 fg:#AFFFFF
+    30-32 fg:#63615D
+    33-56 fg:#FFFAF1,bg:#63615D
+    57-62 fg:#63615D
+    63-116 fg:#FFFAF1,bg:#63615D
+    117-119 fg:#63615D
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+    0-119 fg:#3D3B39
+  V   1   +  1:3                                                                                        +    
+    0-0 fg:#5C5CFF
+    1-5 b,fg:#FFFAF1,bg:#5C5CFF
+    6-6 fg:#5C5CFF
+    8-8 fg:#2D2C36
+    9-9 u,fg:#918DFF,bg:#2D2C36
+    10-10 b,u,fg:#918DFF,bg:#2D2C36
+    11-11 u,fg:#918DFF,bg:#2D2C36
+    12-12 fg:#2D2C36
+    14-14 fg:#2D2C36
+    15-17 fg:#BFBCC8,bg:#2D2C36
+    18-18 fg:#2D2C36
+    19-23 fg:#858392
+    110-115 b,fg:#FFFAF1
+    116-118 fg:#8C8A98

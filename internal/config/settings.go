@@ -987,7 +987,7 @@ func DefaultSettings() Settings {
 		ZenMode:                     ZenModeDisabled,
 		Links:                       LinksAll,
 		LinkClick:                   LinkClickBoth,
-		DropPreview:                 DropPreviewFill,
+		DropPreview:                 DropPreviewOutline,
 		DropPreviewDelay:            DefaultDropPreviewDelay,
 		DockbarPosition:             DefaultDockbarPosition,
 		SidebarEnabled:              true,

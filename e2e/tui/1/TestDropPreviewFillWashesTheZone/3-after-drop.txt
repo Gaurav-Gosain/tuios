@@ -1,0 +1,40 @@
+╭ ● ● ● ─────────────────────╮╭ ● ● ● ─────────────────────╮╭ ● ● ● ───────────────────────────────────────────────────╮
+│mber plain                  ││mber plain                  ││rev red bold  green  faint amber plain                    │
+│rev red bold  green  faint a││rev red bold  green  faint a││rev red bold  green  faint amber plain                    │
+│mber plain                  ││mber plain                  ││rev red bold  green  faint amber plain                    │
+│rev red bold  green  faint a││rev red bold  green  faint a││rev red bold  green  faint amber plain                    │
+│mber plain                  ││mber plain                  ││rev red bold  green  faint amber plain                    │
+│rev red bold  green  faint a││rev red bold  green  faint a││rev red bold  green  faint amber plain                    │
+│mber plain                  ││mber plain                  ││rev red bold  green  faint amber plain                    │
+│rev red bold  green  faint a││rev red bold  green  faint a││rev red bold  green  faint amber plain                    │
+│mber plain                  ││mber plain                  ││rev red bold  green  faint amber plain                    │
+│rev red bold  green  faint a││rev red bold  green  faint a││rev red bold  green  faint amber plain                    │
+│mber plain                  ││mber plain                  ││rev red bold  green  faint amber plain                    │
+│rev red bold  green  faint a││rev red bold  green  faint a││rev red bold  green  faint amber plain                    │
+│mber plain                  ││mber plain                  ││rev red bold  green  faint amber plain                    │
+│rev red bold  green  faint a││rev red bold  green  faint a││rev red bold  green  faint amber plain                    │
+│mber plain                  ││mber plain                  ││rev red bold  green  faint amber plain                    │
+│rev red bold  green  faint a││rev red bold  green  faint a││rev red bold  green  faint amber plain                    │
+│mber plain                  ││mber plain                  ││rev red bold  green  faint amber plain                    │
+│rev red bold  green  faint a││rev red bold  green  faint a││rev red bold  green  faint amber plain                    │
+│mber plain                  ││mber plain                  ││rev red bold  green  faint amber plain                    │
+│rev red bold  green  faint a││rev red bold  green  faint a││rev red bold  green  faint amber plain                    │
+│mber plain                  ││mber plain                  ││rev red bold  green  faint amber plain                    │
+│rev red bold  green  faint a││rev red bold  green  faint a││rev red bold  green  faint amber plain                    │
+│mber plain                  ││mber plain                  ││rev red bold  green  faint amber plain                    │
+│rev red bold  green  faint a││rev red bold  green  faint a││rev red bold  green  faint amber plain                    │
+│mber plain                  ││mber plain                  ││rev red bold  green  faint amber plain                    │
+│rev red bold  green  faint a││rev red bold  green  faint a││rev red bold  green  faint amber plain                    │
+│mber plain                  ││mber plain                  ││rev red bold  green  faint amber plain                    │
+│rev red bold  green  faint a││rev red bold  green  faint a││rev red bold  green  faint amber plain                    │
+│mber plain                  ││mber plain                  ││rev red bold  green  faint amber plain                    │
+│rev red bold  green  faint a││rev red bold  green  faint a││rev red bold  green  faint amber plain                    │
+│mber plain                  ││mber plain                  ││rev red bold  green  faint amber plain                    │
+│rev red bold  green  faint a││rev red bold  green  faint a││rev red bold  green  faint amber plain                    │
+│mber plain                  ││mber plain                  ││rev red bold  green  faint amber plain                    │
+│rev red bold  green  faint a││rev red bold  green  faint a││rev red bold  green  faint amber plain                    │
+│mber plain                  ││mber plain                  ││rev red bold  green  faint amber plain                    │
+│sh-5.3$                     ││sh-5.3$                     ││sh-5.3$                                                   │
+╰────────────────────────────╯╰────────────────────────────╯╰──────────────────────────────────────────────────────────╯
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  V   1   +  1:3                                                                                        +    

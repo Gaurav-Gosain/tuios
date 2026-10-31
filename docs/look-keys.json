@@ -216,7 +216,7 @@
       "path": "appearance.drop_preview",
       "type": "string",
       "description": "What a BSP drag shows where the pane would land: a frame with a tint inside, the frame only, or nothing",
-      "default": "fill",
+      "default": "outline",
       "accepted": [
         "fill",
         "outline",

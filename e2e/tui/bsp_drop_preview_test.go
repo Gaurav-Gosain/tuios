@@ -51,11 +51,11 @@ func TestDropPreviewOffDrawsNothing(t *testing.T) {
 	edgeCases[0].check(t, p, got[p.a.ID], got[p.b.ID], got[p.c.ID])
 }
 
-// TestDropPreviewOutlineDrawsOnlyTheFrame is the left-edge drop with the
-// outline-only preview: the landing rectangle's outline is drawn, and the
-// cells inside it keep their ground.
-func TestDropPreviewOutlineDrawsOnlyTheFrame(t *testing.T) {
-	term, base, p := dropBoardWith(t, "drop-preview-outline", chromeDepths[2].env, "drop_preview = 'outline'")
+// TestDropPreviewDefaultDrawsOnlyTheFrame is the left-edge drop with no option
+// set: the default preview draws the landing rectangle's outline, and the cells
+// inside it keep their ground.
+func TestDropPreviewDefaultDrawsOnlyTheFrame(t *testing.T) {
+	term, base, p := dropBoardWith(t, "drop-preview-outline", chromeDepths[2].env, "")
 	d := carry(t, term, p, p.a.X+1, p.a.Y+p.a.Height/2)
 	got := d.drop(t, base)
 	edgeCases[0].check(t, p, got[p.a.ID], got[p.b.ID], got[p.c.ID])
@@ -67,7 +67,7 @@ func TestDropPreviewOutlineDrawsOnlyTheFrame(t *testing.T) {
 // Right after the move nothing is highlighted; after the delay, with no
 // further input, the landing rectangle is.
 func TestDropPreviewWaitsForItsDelay(t *testing.T) {
-	term, base, p := dropBoardWith(t, "drop-preview-delay", chromeDepths[2].env, "drop_preview_delay = '"+previewDelay.String()+"'")
+	term, base, p := dropBoardWith(t, "drop-preview-delay", chromeDepths[2].env, fillPreview+"\ndrop_preview_delay = '"+previewDelay.String()+"'")
 	d := carry(t, term, p, p.a.X+1, p.a.Y+p.a.Height/2)
 	d.checkHighlight(t, nil, false)
 
@@ -85,7 +85,7 @@ func TestDropPreviewWaitsForItsDelay(t *testing.T) {
 // out, and before the middle's has, nothing is highlighted; once the middle's
 // has, all of A is, and the release swaps.
 func TestADropZoneLeftBeforeItsDelayNeverShows(t *testing.T) {
-	term, base, p := dropBoardWith(t, "drop-preview-left", chromeDepths[2].env, "drop_preview_delay = '"+previewDelay.String()+"'")
+	term, base, p := dropBoardWith(t, "drop-preview-left", chromeDepths[2].env, fillPreview+"\ndrop_preview_delay = '"+previewDelay.String()+"'")
 	// carry returns half a second after the pointer reached the edge.
 	d := carry(t, term, p, p.a.X+1, p.a.Y+p.a.Height/2)
 	edgeEntered := time.Now().Add(-500 * time.Millisecond)
@@ -144,7 +144,7 @@ func paintShell(t *testing.T, base string) string {
 // a reverse one, all inside the zone.
 func TestDropPreviewFillWashesTheZone(t *testing.T) {
 	term, base, p := dropBoardPrep(t, "drop-preview-fill", chromeDepths[2].env, func(base string) string {
-		return paintShell(t, base)
+		return fillPreview + "\n" + paintShell(t, base)
 	})
 	d := carry(t, term, p, p.a.X+1, p.a.Y+p.a.Height/2)
 	got := d.drop(t, base)

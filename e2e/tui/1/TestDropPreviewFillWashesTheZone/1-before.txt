@@ -1,0 +1,40 @@
+╭ ● ● ● ───────────────────────────────────────────────────╮╭ ● ● ● ───────────────────────────────────────────────────╮
+│rev red bold  green  faint amber plain                    ││rev red bold  green  faint amber plain                    │
+│rev red bold  green  faint amber plain                    ││rev red bold  green  faint amber plain                    │
+│rev red bold  green  faint amber plain                    ││rev red bold  green  faint amber plain                    │
+│rev red bold  green  faint amber plain                    ││rev red bold  green  faint amber plain                    │
+│rev red bold  green  faint amber plain                    ││rev red bold  green  faint amber plain                    │
+│rev red bold  green  faint amber plain                    ││rev red bold  green  faint amber plain                    │
+│rev red bold  green  faint amber plain                    ││rev red bold  green  faint amber plain                    │
+│rev red bold  green  faint amber plain                    ││rev red bold  green  faint amber plain                    │
+│rev red bold  green  faint amber plain                    ││rev red bold  green  faint amber plain                    │
+│rev red bold  green  faint amber plain                    ││rev red bold  green  faint amber plain                    │
+│rev red bold  green  faint amber plain                    ││rev red bold  green  faint amber plain                    │
+│rev red bold  green  faint amber plain                    ││rev red bold  green  faint amber plain                    │
+│rev red bold  green  faint amber plain                    ││rev red bold  green  faint amber plain                    │
+│rev red bold  green  faint amber plain                    ││rev red bold  green  faint amber plain                    │
+│rev red bold  green  faint amber plain                    ││rev red bold  green  faint amber plain                    │
+│rev red bold  green  faint amber plain                    ││rev red bold  green  faint amber plain                    │
+│rev red bold  green  faint amber plain                    ││sh-5.3$                                                   │
+│rev red bold  green  faint amber plain                    │╰──────────────────────────────────────────────────────────╯
+│rev red bold  green  faint amber plain                    │╭ ● ● ● ───────────────────────────────────────────────────╮
+│rev red bold  green  faint amber plain                    ││rev red bold  green  faint amber plain                    │
+│rev red bold  green  faint amber plain                    ││rev red bold  green  faint amber plain                    │
+│rev red bold  green  faint amber plain                    ││rev red bold  green  faint amber plain                    │
+│rev red bold  green  faint amber plain                    ││rev red bold  green  faint amber plain                    │
+│rev red bold  green  faint amber plain                    ││rev red bold  green  faint amber plain                    │
+│rev red bold  green  faint amber plain                    ││rev red bold  green  faint amber plain                    │
+│rev red bold  green  faint amber plain                    ││rev red bold  green  faint amber plain                    │
+│rev red bold  green  faint amber plain                    ││rev red bold  green  faint amber plain                    │
+│rev red bold  green  faint amber plain                    ││rev red bold  green  faint amber plain                    │
+│rev red bold  green  faint amber plain                    ││rev red bold  green  faint amber plain                    │
+│rev red bold  green  faint amber plain                    ││rev red bold  green  faint amber plain                    │
+│rev red bold  green  faint amber plain                    ││rev red bold  green  faint amber plain                    │
+│rev red bold  green  faint amber plain                    ││rev red bold  green  faint amber plain                    │
+│rev red bold  green  faint amber plain                    ││rev red bold  green  faint amber plain                    │
+│rev red bold  green  faint amber plain                    ││rev red bold  green  faint amber plain                    │
+│rev red bold  green  faint amber plain                    ││rev red bold  green  faint amber plain                    │
+│sh-5.3$                                                   ││sh-5.3$                                                   │
+╰──────────────────────────────────────────────────────────╯╰──────────────────────────────────────────────────────────╯
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  V   1   +  1:3                                                   ▎   Window created (3 total)  +3    +    

@@ -387,7 +387,7 @@ TestDropFilesOnAPaneOnAHost 0.3
 TestDropPreviewFillWashesTheZone 5.8
 TestDropPreviewLooks 0.0
 TestDropPreviewOffDrawsNothing 6.8
-TestDropPreviewOutlineDrawsOnlyTheFrame 5.8
+TestDropPreviewDefaultDrawsOnlyTheFrame 5.8
 TestDropPreviewWaitsForItsDelay 8.8
 TestDualRailClickSwitchesSession 3.4
 TestDualRailCustomSections 0.4

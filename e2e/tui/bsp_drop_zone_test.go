@@ -44,8 +44,13 @@ type dropPanes struct {
 // returns them. env picks the colour depth.
 func dropBoard(t *testing.T, session string, env []string) (*tuitest.Terminal, string, dropPanes) {
 	t.Helper()
-	return dropBoardWith(t, session, env, "")
+	return dropBoardWith(t, session, env, fillPreview)
 }
+
+// fillPreview is the [appearance] line of a board whose checks read the tint.
+// The default preview is the outline, which TestDropPreviewDefaultDrawsOnlyTheFrame
+// holds.
+const fillPreview = "drop_preview = 'fill'"
 
 // dropBoardWith is dropBoard with appearance holding the lines of an
 // [appearance] table, for the drop preview's options.
