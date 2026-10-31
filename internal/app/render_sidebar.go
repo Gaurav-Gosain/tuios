@@ -3080,9 +3080,9 @@ func (m *OS) sidebarSessionRow(node sessiontree.Node, sessionIdx, variant, cw in
 	// behind the mark that says whether the group goes on below it. The branch
 	// is the whole label there, so nothing rides after it. A Named session
 	// keeps its own name there, and the branch rides after it as on any row.
-	grouped := false
-	if label, ok := m.sidebarWorktreeLabel(node); ok {
-		title, grouped = label, true
+	grouped, treeMark := false, ""
+	if mark, label, ok := m.sidebarWorktreeLabel(node); ok {
+		treeMark, title, grouped = mark, label, true
 	}
 	// The branch rides after the name in muted ink, and only when the two fit
 	// together: a name that has to scroll wants every column, and a branch
@@ -3113,7 +3113,10 @@ func (m *OS) sidebarSessionRow(node sessiontree.Node, sessionIdx, variant, cw in
 	for _, f := range figures {
 		s.tokens = append(s.tokens, railToken{Cost: sidebarFigureCost(f), Right: true})
 	}
-	titleW := lipgloss.Width(title)
+	// The tree mark is part of the name's budget and stays out of the marquee
+	// and out of the current row's mark.
+	treeW := lipgloss.Width(treeMark)
+	titleW := treeW + lipgloss.Width(title)
 	// With show_numbers on, the session index leads the name: a muted number,
 	// the one switch_session_N opens, styled like the other chrome the row
 	// carries. Only switch_session_1..9 exist, so a tenth session wears none,
@@ -3131,6 +3134,11 @@ func (m *OS) sidebarSessionRow(node sessiontree.Node, sessionIdx, variant, cw in
 	nameMarked = nameMarked && node.IsCurrent
 	if !nameMarked {
 		capsW = 0
+	} else {
+		var took int
+		treeMark, took = railTreeMarkForCaps(treeMark, &m.Settings)
+		titleW -= took
+		treeW -= took
 	}
 	keep, avail := railRowFitInto(s.keep, titleW, railNameKeep(titleW), s.tokens, sidebarNameAvailIn(cw, 0, indent)-markW-capsW)
 	s.keep = keep
@@ -3142,10 +3150,11 @@ func (m *OS) sidebarSessionRow(node sessiontree.Node, sessionIdx, variant, cw in
 		branch = sidebarStyle(rowBg, nil).Render(" ") + sidebarStyle(rowBg, pal.FgMute).Render(overlay.Truncate(note, room))
 	}
 	right := sidebarJoinFigures(figures[:], keep[1:], sidebarStyle(rowBg, pal.FgMute))
-	shown := m.sidebarMarquee("s:"+node.ID, title, max(avail, 1), st.Cursor)
-	name := mark + sidebarStyle(rowBg, fg).Bold(sidebarAttention(node.AgentState)).Render(shown) + branch
+	shown := m.sidebarMarquee("s:"+node.ID, title, max(avail-treeW, 1), st.Cursor)
+	ink := sidebarStyle(rowBg, fg).Bold(sidebarAttention(node.AgentState))
+	name := mark + ink.Render(treeMark+shown) + branch
 	if nameMarked {
-		name = mark + railCurrentName(shown, tint, rowBg, pal, &m.Settings) + branch
+		name = mark + ink.Render(treeMark) + railCurrentName(shown, tint, rowBg, pal, &m.Settings) + branch
 	}
 
 	gutter := sidebarGutterTinted(node.IsCurrent, node.AgentState, tint, rowBg, pal, &m.Settings)

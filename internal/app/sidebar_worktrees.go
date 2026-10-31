@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"charm.land/lipgloss/v2"
+	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/sessiontree"
@@ -153,9 +154,14 @@ func (m *OS) SidebarToggleRepoCollapsed(repo string) {
 	m.saveSidebarState()
 }
 
-// sidebarWorktreeLabel is the name a worktree session's row shows: its branch,
-// behind the tree mark that says whether the group goes on below it. It
-// reports false for a session that is not a worktree, whose row is unchanged.
+// sidebarWorktreeLabel is the name a worktree session's row shows, its branch,
+// and the tree mark in front of it that says whether the group goes on below.
+// It reports false for a session that is not a worktree, whose row is
+// unchanged.
+//
+// The two come back apart because they are drawn apart: the mark belongs to the
+// tree and stays in its column, and only the name wears the current row's
+// underline or pill, and only the name scrolls.
 //
 // A Named session keeps its own title behind the mark instead, and the branch
 // rides after it like on any other row (#1245): a name a person chose says
@@ -165,24 +171,38 @@ func (m *OS) SidebarToggleRepoCollapsed(repo string) {
 // The branch is laundered like any other title, and the mark is not: the mark
 // is one of ours, chosen by the glyph settings, and already ASCII in the mode
 // that asks for ASCII.
-func (m *OS) sidebarWorktreeLabel(node sessiontree.Node) (string, bool) {
+func (m *OS) sidebarWorktreeLabel(node sessiontree.Node) (mark, label string, ok bool) {
 	if node.Worktree == nil {
-		return "", false
+		return "", "", false
 	}
-	mark := m.Settings.GetRailTreeBranch()
+	mark = m.Settings.GetRailTreeBranch()
 	if node.GroupLast {
 		mark = m.Settings.GetRailTreeLast()
 	}
 	if node.Named {
-		return mark + printableTitle(node.Title), true
+		return mark, printableTitle(node.Title), true
 	}
-	label := printableTitle(node.Worktree.Branch)
+	label = printableTitle(node.Worktree.Branch)
 	if label == "" {
 		// A record with no branch is a detached head the daemon could not name.
 		// The session's own title is better than an empty row.
 		label = printableTitle(node.Title)
 	}
-	return mark + label, true
+	return mark, label, true
+}
+
+// railTreeMarkForCaps makes room for a pill's left cap in the blank the tree
+// mark ends on, and reports the cells it took back. The name then starts on the
+// column its siblings' names start on, so the current row moves nothing on the
+// rail. A cap wider than that blank keeps the mark whole and takes its own cell.
+func railTreeMarkForCaps(mark string, s *config.Settings) (string, int) {
+	if s.GetRailRowStyle() != config.RailRowPill || lipgloss.Width(s.GetWindowPillLeft()) != 1 {
+		return mark, 0
+	}
+	if trimmed, ok := strings.CutSuffix(mark, " "); ok {
+		return trimmed, 1
+	}
+	return mark, 0
 }
 
 // sidebarRepoRow renders one repository's group header.

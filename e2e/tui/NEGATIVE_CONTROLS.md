@@ -11717,3 +11717,15 @@ The positive halves: a hook with `CLAUDE_CONFIG_DIR` set joins its profile's fil
 | `joinReportedTranscript` passes no environment to `transcriptPathAllowed`, so only the daemon's folder is checked, as before | `TestTranscriptPathFollowsClaudeConfigDir` | **caught**: "a hook with CLAUDE_CONFIG_DIR naming its profile's file: refused" |
 | `agentHomeDir` takes a value with a `{` in it, so `RootIn` cuts the path inside the value and `CLAUDE_CONFIG_DIR=<base>/braced/{x` makes the folder `<base>/braced` | `TestTranscriptPathFollowsClaudeConfigDir` | **caught**: "a CLAUDE_CONFIG_DIR with a { naming a file above its projects folder: want transcript_refused", the hook joined `braced/logs/above.jsonl` |
 | `transcriptPathAllowed` does not check that the resolved peer folder still ends in `projects`, so `<any>/projects` linked to another folder counts | `TestTranscriptPathFollowsClaudeConfigDir` | **caught**: "a projects folder that is a link to another folder: want transcript_refused", the hook joined `claude-linked/projects/demo/target.jsonl` |
+
+## The pill on a worktree row
+
+`TestSidebarPillKeepsTreeBars` attaches to the last worktree of a group with `row_style = "pill"` and compares the columns of the tree bars and of the names.
+
+Run on 2026-11-01 on Linux against a build of `origin/main` at `90af97147`, which has no fix:
+
+| Control: what was cut | Where it fails | Verdict |
+| --- | --- | --- |
+| The whole fix | "the current row's bar is in column 4 and its sibling's in column 3", and the same for the names, columns 7 and 6 | caught |
+
+The frame is `rail-pill-tree-bars` under `TUIOS_E2E_FRAMES`, in the test's folder.

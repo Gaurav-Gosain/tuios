@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"unicode/utf8"
 
 	"github.com/Gaurav-Gosain/tuios/internal/testutil"
 	"github.com/Gaurav-Gosain/tuitest"
@@ -41,6 +42,20 @@ func railLineWith(s tuitest.Screen, needle string) int {
 	for r := range rows {
 		if strings.Contains(s.Line(r), needle) {
 			return r
+		}
+	}
+	return -1
+}
+
+// railCellColumn is the screen column of needle on its topmost line, or -1. It
+// counts runes because the pill's cap and the tree bars take several bytes and
+// one cell each.
+func railCellColumn(s tuitest.Screen, needle string) int {
+	_, rows := s.Size()
+	for r := range rows {
+		line := s.Line(r)
+		if c := strings.Index(line, needle); c >= 0 {
+			return utf8.RuneCountInString(line[:c])
 		}
 	}
 	return -1
@@ -171,6 +186,48 @@ func TestSidebarGroupsWorktrees(t *testing.T) {
 	saveFrame(t, term, "rail-worktrees-collapsed")
 
 	alive(t, term, "after folding a worktree group")
+}
+
+// TestSidebarPillKeepsTreeBars attaches to a worktree session with the pill row
+// style (#1399). The pill goes around the name only, so the tree bars of the
+// group stay in one column and the names under them stay in another.
+//
+// Negative control: before the fix the pill wrapped the tree mark too, and its
+// left cap pushed the current row's bar one column right.
+func TestSidebarPillKeepsTreeBars(t *testing.T) {
+	base := t.TempDir()
+	killDaemon(t, base)
+	repo := testutil.GitRepo(t)
+	t.Setenv("TUIOS_WORKTREE_DIR", filepath.Join(base, "worktrees"))
+	writeConfig(t, base, "[appearance.sidebar]\nenabled = true\nrow_style = \"pill\"\n")
+
+	if out, err := tuiosCLIIn(t, base, t.TempDir(), "new", "plain", "--detach"); err != nil {
+		t.Fatalf("create the plain session: %v: %s", err, out)
+	}
+	for _, branch := range []string{"feat/one", "feat/two"} {
+		if out, err := tuiosCLI(t, base, "worktree", "new", branch, "--repo", repo, "--detach"); err != nil {
+			t.Fatalf("worktree new %s: %v: %s", branch, err, out)
+		}
+	}
+
+	term := startIn(t, base, startOpts{args: []string{"attach", "repo-feat-two"}})
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		text := s.Text()
+		return strings.Contains(text, "├─ feat/one") && strings.Contains(text, "feat/two")
+	}, bootTimeout); err != nil {
+		t.Fatalf("the rail never grouped the worktree sessions: %v\n%s", err, term.Snapshot())
+	}
+	if err := term.WaitStable(uiTimeout); err != nil {
+		t.Fatalf("the rail never settled: %v", err)
+	}
+	screen := term.Screen()
+	if branch, last := railCellColumn(screen, "├─"), railCellColumn(screen, "└─"); branch < 0 || branch != last {
+		t.Errorf("the current row's bar is in column %d and its sibling's in column %d\n%s", last, branch, term.Snapshot())
+	}
+	if one, two := railCellColumn(screen, "feat/one"), railCellColumn(screen, "feat/two"); one < 0 || one != two {
+		t.Errorf("the current row's name is in column %d and its sibling's in column %d\n%s", two, one, term.Snapshot())
+	}
+	railShot(t, term, "rail-pill-tree-bars")
 }
 
 // TestSidebarGroupsMainCheckout drives the same grouping with the main
