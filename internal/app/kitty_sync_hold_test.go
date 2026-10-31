@@ -413,3 +413,17 @@ func TestTuiosMoveIsNotHeldBehindAFrameNamingTheImage(t *testing.T) {
 		t.Fatalf("the frame was placed away from the new column: %q", out)
 	}
 }
+
+// A held a=T holds a bitmap the host still has to read, and on macOS and Linux
+// a shared memory object only the host deletes. Hiding the image keeps the
+// transmit and takes the placement away.
+func TestHidingAHeldFrameKeepsItsBitmap(t *testing.T) {
+	frame := "\x1b7\x1b[2;1H\x1b_Ga=T,p=1,C=1,t=s,i=5,f=32,s=8,v=8,q=2;bmFtZQ==\x1b\\\x1b8"
+	other := "\x1b_Ga=T,p=1,C=1,t=s,i=6,f=32,s=8,v=8,q=2;bmFtZQ==\x1b\\"
+	place := "\x1b_Ga=p,i=5,p=1,q=2\x1b\\"
+	got := string(stripKittyPlacements([]byte(frame+other+place), 5, 0, 0))
+	want := "\x1b7\x1b[2;1H\x1b_Ga=t,p=1,C=1,t=s,i=5,f=32,s=8,v=8,q=2;bmFtZQ==\x1b\\\x1b8" + other
+	if got != want {
+		t.Fatalf("got  %q\nwant %q", got, want)
+	}
+}

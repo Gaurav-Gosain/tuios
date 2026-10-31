@@ -3,6 +3,7 @@ package session
 import (
 	"os"
 
+	"github.com/Gaurav-Gosain/tuios/internal/kittyshm"
 	"tuios.dev/vt"
 )
 
@@ -47,13 +48,18 @@ const kittyFileMediumRefusal = "ENOTSUPPORTED:the path would be read on another 
 //     the session from another machine, where the path names nothing, or
 //     names some other file.
 //
-// A shared memory object (t=s) is refused as well on a machine where it has no
-// path, which is macOS: there it is opened by name with shm_open, and Go
-// reaches that only through cgo. tuios can then only hand the name to the
-// host terminal, and a client whose host does not read files on this machine
-// drops the frame. The daemon cannot tell which clients those are, so it never
-// offers the medium there. kitten icat then uses a temporary file, which every
-// client can read or forward.
+// A shared memory object (t=s) is refused as well on a machine where tuios
+// cannot reach one: no /dev/shm, and no shm_open by name as on macOS (see
+// internal/kittyshm). tuios could then only hand the name to the host terminal,
+// and a client whose host does not read files on this machine drops the frame.
+// The daemon cannot tell which clients those are, so it never offers the medium
+// there. kitten icat then uses a temporary file, which every client can read or
+// forward.
+//
+// macOS must not lose the medium for this. A guest that streams frames gives
+// each frame its own object in shared memory. Without it, a guest such as
+// terminal-browser writes frames into a ring of files it reuses, and a host that
+// reads a slot after the guest came round to it again draws a torn frame.
 //
 // kitten icat is the guest this is written for. It probes direct, temporary
 // file and shared memory transmission at once and uses the best medium that
@@ -72,7 +78,7 @@ func (s *Session) kittyQueryResponse(cmd *vt.KittyCommand, remotePane bool) []by
 	case cmd.Medium.IsFile() && (remotePane || s.linkedViewer.Load()):
 		ok = false
 		msg = kittyFileMediumRefusal
-	case cmd.Medium == vt.KittyMediumSharedMemory && !kittySharedMemoryHasPath():
+	case cmd.Medium == vt.KittyMediumSharedMemory && !kittySharedMemoryReachable():
 		ok = false
 		msg = kittySharedMemoryRefusal
 	}
@@ -82,14 +88,18 @@ func (s *Session) kittyQueryResponse(cmd *vt.KittyCommand, remotePane bool) []by
 	return vt.BuildKittyResponse(ok, cmd.ImageID, msg)
 }
 
-// kittySharedMemoryRefusal is the answer to a t=s query on a machine where a
-// shared memory object has no path. See kittyQueryResponse.
+// kittySharedMemoryRefusal is the answer to a t=s query on a machine where tuios
+// cannot reach a shared memory object. See kittyQueryResponse.
 const kittySharedMemoryRefusal = "ENOTSUPPORTED:shared memory is not supported here"
 
-// kittySharedMemoryHasPath reports whether a shared memory object on this
-// machine is a file under /dev/shm, as on Linux. It is a variable so a test can
-// pin the answer on any platform.
-var kittySharedMemoryHasPath = func() bool {
+// kittySharedMemoryReachable reports whether tuios can read a shared memory
+// object on this machine: a file under /dev/shm as on Linux, or an object opened
+// by name as on macOS. It is a variable so a test can pin the answer on any
+// platform.
+var kittySharedMemoryReachable = func() bool {
+	if kittyshm.ByName {
+		return true
+	}
 	info, err := os.Stat("/dev/shm")
 	return err == nil && info.IsDir()
 }
