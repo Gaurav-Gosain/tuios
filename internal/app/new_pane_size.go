@@ -42,9 +42,7 @@ func (m *OS) newPaneBox(placing *terminal.Window) (w, h int, tiled, ok bool) {
 				// A sync can bring an existing column or a stacked pane. Its
 				// box is the adopted strip's, not a fresh default-width column.
 				preview := *sl
-				preview.Gap = m.separatorGap()
-				preview.DefaultWidth = m.ScrollColumnWidthFraction()
-				preview.MaxProportion = float64(m.Settings.GetScrollColumnMax()) / 100
+				m.applyScrollingGeometry(&preview)
 				preview.ZoomedCol, preview.ZoomProportion = -1, 0
 				r := preview.ComputePositions(m.ScrollingViewWidth(), m.PaneHeight(), m.PaneTop())[id]
 				return r.W, r.H, tiled, r.W > 0 && r.H > 0
@@ -56,9 +54,7 @@ func (m *OS) newPaneBox(placing *terminal.Window) (w, h int, tiled, ok bool) {
 		// Each new pane starts a new column; its size does not depend on
 		// where that column is inserted in the strip.
 		sl := layout.NewScrollingLayout()
-		sl.DefaultWidth = m.ScrollColumnWidthFraction()
-		sl.MaxProportion = float64(m.Settings.GetScrollColumnMax()) / 100
-		sl.Gap = m.separatorGap()
+		m.applyScrollingGeometry(sl)
 		sl.AddColumn(-1)
 		r := sl.ComputePositions(m.ScrollingViewWidth(), m.PaneHeight(), m.PaneTop())[-1]
 		return r.W, r.H, tiled, r.W > 0 && r.H > 0

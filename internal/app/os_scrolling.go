@@ -10,6 +10,14 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
 
+// applyScrollingGeometry refreshes the settings shared by the live strip and
+// pane-size predictions, including settings changed after a strip was created.
+func (m *OS) applyScrollingGeometry(sl *layout.ScrollingLayout) {
+	sl.Gap = m.separatorGap()
+	sl.DefaultWidth = m.ScrollColumnWidthFraction()
+	sl.MaxProportion = float64(m.Settings.GetScrollColumnMax()) / 100
+}
+
 // GetOrCreateScrollingLayout returns the scrolling layout for the current workspace.
 func (m *OS) GetOrCreateScrollingLayout() *layout.ScrollingLayout {
 	if m.WorkspaceScrollingLayouts == nil {
@@ -65,16 +73,9 @@ func (m *OS) GetOrCreateScrollingLayout() *layout.ScrollingLayout {
 			}
 		}
 	}
-	// The two geometry inputs the session settles are pushed in on every access
-	// rather than stored once at creation. Both can move under a live layout
-	// (a peer client's setting arriving by state sync, or this client's own
-	// settings row), and a strip built before the change would otherwise keep
-	// laying its columns out with the old arithmetic until something happened
-	// to rebuild it. Every caller reaches the strip through here, so this is the
-	// one place that has to be right.
-	sl.Gap = m.separatorGap()
-	sl.DefaultWidth = m.ScrollColumnWidthFraction()
-	sl.MaxProportion = float64(m.Settings.GetScrollColumnMax()) / 100
+	// Refresh geometry on every access: session sync and settings can change it
+	// without rebuilding the strip.
+	m.applyScrollingGeometry(sl)
 	// The presets are per client like the cap, so a config reload reaches a
 	// live strip here too. Both slices are shared and only read: no allocation
 	// on this path.
