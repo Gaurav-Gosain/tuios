@@ -429,6 +429,12 @@ type AttachPayload struct {
 	// window_size policies it does not count toward the session's size;
 	// under smallest it counts like any client. An older daemon ignores it.
 	ViewOnly bool `json:"view_only,omitzero"`
+	// UpgradeDialog says the client shows a live upgrade's dialog to the
+	// person at it and answers it only with a key they pressed: the tuios
+	// TUI, and not gui-bridge, whose renderer is never a key. Only such a
+	// client counts as one that could answer a pane's upgrade. A client that
+	// predates it sends none, and does not count. See upgrade_confirm.go.
+	UpgradeDialog bool `json:"upgrade_dialog,omitzero"`
 	// Passive displays and accepts input for a pane but does not implement
 	// renderer commands (for example a session shown in a sidebar rail).
 	// Command routing skips it; its viewport does not size the shared session.

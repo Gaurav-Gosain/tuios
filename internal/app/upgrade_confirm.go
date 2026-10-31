@@ -55,13 +55,14 @@ func (m *OS) UpgradeConfirmOpen() bool { return m.upgradeConfirm.open != nil }
 
 // syncUpgradeConfirm opens the dialog on an upgrade ask in the Inbox mirror,
 // and closes it once its ask is gone. A client attached to another machine,
-// or one the daemon issued no nonce, could not answer, so it shows nothing.
+// one the daemon issued no nonce, or one whose attach did not say it shows
+// the dialog (gui-bridge), could not answer, so it shows nothing.
 func (m *OS) syncUpgradeConfirm() {
 	st := &m.upgradeConfirm
 	if st.open != nil && m.inboxIndex(st.open.ID) < 0 {
 		*st = upgradeConfirmState{}
 	}
-	if st.open != nil || m.AttachedHost != "" || m.DaemonClient == nil || m.DaemonClient.HumanNonce() == "" {
+	if st.open != nil || m.AttachedHost != "" || m.DaemonClient == nil || !m.DaemonClient.UpgradeDialog || m.DaemonClient.HumanNonce() == "" {
 		return
 	}
 	for _, it := range m.Inbox.Items {

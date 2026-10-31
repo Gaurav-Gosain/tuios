@@ -413,22 +413,34 @@ func TestPaneUpgradeRefusesAnAnswerFromTheGUIBridge(t *testing.T) {
 // TestPaneUpgradeRunsNoFileWithoutADialog: a pane calls daemon-upgrade
 // directly, naming a script that leaves a mark when it runs. With no client
 // attached, with only a view-only client attached (one that sends no keys,
-// as tuios-web --read-only), and with the agent features off and a client
-// attached, no dialog can be answered, so the daemon must refuse at once,
-// before its preflight runs the script as its own child. The call goes straight to the verb, since the
-// CLI runs the binary itself first, in the pane, where it may.
+// as tuios-web --read-only), with only gui-bridge attached (whose renderer
+// is never a key), with only a client from before the dialog attached
+// (TUIOS_E2E_OLD_BIN; its Inbox offers No and Yes and neither answers), and
+// with the agent features off and a client attached, no dialog can be
+// answered, so the daemon must refuse at once, before its preflight runs the
+// script as its own child. The call goes straight to the verb, since the CLI
+// runs the binary itself first, in the pane, where it may.
 func TestPaneUpgradeRunsNoFileWithoutADialog(t *testing.T) {
+	const noClient = "No client is attached to show the dialog"
 	for _, tc := range []struct {
 		name, refusal string
 		agentsOff     bool
 		// client is the environment of the client attached, nil for none.
 		client []string
+		// bridge attaches gui-bridge, and old a client of TUIOS_E2E_OLD_BIN.
+		bridge, old bool
 	}{
-		{"no-client", "No client is attached to show the dialog", false, nil},
-		{"view-only", "No client is attached to show the dialog", false, []string{"TUIOS_VIEW_ONLY=1"}},
-		{"agents-off", "The agent features are off", true, []string{}},
+		{name: "no-client", refusal: noClient},
+		{name: "view-only", refusal: noClient, client: []string{"TUIOS_VIEW_ONLY=1"}},
+		{name: "bridge-only", refusal: noClient, bridge: true},
+		{name: "old-client", refusal: noClient, old: true},
+		{name: "agents-off", refusal: "The agent features are off", agentsOff: true, client: []string{}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			oldBin := os.Getenv("TUIOS_E2E_OLD_BIN")
+			if tc.old && oldBin == "" {
+				t.Skip("TUIOS_E2E_OLD_BIN is not set")
+			}
 			base := t.TempDir()
 			if tc.agentsOff {
 				writeAgentsConfig(t, base, true)
@@ -436,11 +448,19 @@ func TestPaneUpgradeRunsNoFileWithoutADialog(t *testing.T) {
 			startHandoffDaemon(t, base)
 			sess := "e2e-confirm-norun-" + tc.name
 			win := newCommandWindow(t, base, sess, "agent", false, "sh")
-			if tc.client != nil {
+			if tc.client != nil || tc.old {
+				prev := tuiosBin
+				if tc.old {
+					tuiosBin = oldBin
+				}
 				term := startIn(t, base, startOpts{args: []string{"attach", sess}, env: tc.client})
+				tuiosBin = prev
 				if err := term.WaitFor(func(s tuitest.Screen) bool { return countWindows(s) >= 1 }, bootTimeout); err != nil {
 					t.Fatalf("the client never attached: %v\n%s", err, term.Snapshot())
 				}
+			}
+			if tc.bridge {
+				startBridgeWith(t, base, bridgeOpts{args: []string{"--session", sess}, cols: 120, rows: 40, keepDaemon: true, name: sess})
 			}
 			img := helloImage(t, base)
 			dir := t.TempDir()

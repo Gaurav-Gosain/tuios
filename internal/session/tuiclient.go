@@ -69,6 +69,10 @@ type TUIClient struct {
 	// viewer started with --read-only. It is sent with every attach. See
 	// AttachPayload.ViewOnly.
 	ViewOnly bool
+	// UpgradeDialog says this client shows a live upgrade's dialog and
+	// answers it only with a key the person pressed. It is sent with every
+	// attach. See AttachPayload.UpgradeDialog.
+	UpgradeDialog bool
 	// Kind is the hello's ClientKind: ClientKindSSH or ClientKindWeb for a
 	// client a server runs for a remote viewer, "" for a terminal on this
 	// machine. Set it before Connect.
@@ -620,19 +624,20 @@ func (c *TUIClient) BuildMismatch() (clientBuild, daemonBuild string) {
 func (c *TUIClient) AttachSession(name string, createNew bool, width, height int) (*SessionState, error) {
 	probe := c.nestProbe
 	msg, err := NewMessage(MsgAttach, &AttachPayload{
-		SessionName:  name,
-		CreateNew:    createNew,
-		Width:        width,
-		Height:       height,
-		Reserve:      c.OwnLayoutReserve(),
-		Served:       c.Served,
-		AllowNested:  c.AllowNested,
-		NestProbe:    probe,
-		ViewOnly:     c.viewOnly(),
-		Passive:      c.Passive,
-		Cwd:          c.StartDir,
-		DetachOthers: c.DetachOthers,
-		Reconnect:    c.Reconnect,
+		SessionName:   name,
+		CreateNew:     createNew,
+		Width:         width,
+		Height:        height,
+		Reserve:       c.OwnLayoutReserve(),
+		Served:        c.Served,
+		AllowNested:   c.AllowNested,
+		NestProbe:     probe,
+		ViewOnly:      c.viewOnly(),
+		UpgradeDialog: c.UpgradeDialog,
+		Passive:       c.Passive,
+		Cwd:           c.StartDir,
+		DetachOthers:  c.DetachOthers,
+		Reconnect:     c.Reconnect,
 	})
 	if err != nil {
 		return nil, err
@@ -868,16 +873,17 @@ func (c *TUIClient) SwitchSession(targetName string, width, height int) (*Sessio
 func (c *TUIClient) attachWhileReading(name string, createNew bool, width, height int) (*SessionState, error) {
 	probe := c.nestProbe
 	msg, err := NewMessage(MsgAttach, &AttachPayload{
-		SessionName: name,
-		CreateNew:   createNew,
-		Width:       width,
-		Height:      height,
-		Reserve:     c.OwnLayoutReserve(),
-		Served:      c.Served,
-		AllowNested: c.AllowNested,
-		NestProbe:   probe,
-		ViewOnly:    c.viewOnly(),
-		Passive:     c.Passive,
+		SessionName:   name,
+		CreateNew:     createNew,
+		Width:         width,
+		Height:        height,
+		Reserve:       c.OwnLayoutReserve(),
+		Served:        c.Served,
+		AllowNested:   c.AllowNested,
+		NestProbe:     probe,
+		ViewOnly:      c.viewOnly(),
+		UpgradeDialog: c.UpgradeDialog,
+		Passive:       c.Passive,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("attach encode: %w", err)
