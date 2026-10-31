@@ -9232,6 +9232,23 @@ The pin taken before the checks has no control: a file swapped between it and th
 TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios \
   go test -count=1 -run '^(TestPaneUpgradeRefusesAnAnswerFromTheGUIBridge|TestPaneUpgradeRefusedWithoutYes|TestPaneUpgradeRunsNoFileWithoutADialog)$' .
 ```
+#### Third review: only a client that shows the dialog counts, and the bridge cannot upgrade
+
+Run on 2026-10-31 on macOS arm64 (Darwin 27, Go 1.27.3) against `pr/live-handoff-4`, one build per control, one run each. The old client is v0.12.0 built from its tag:
+
+- `TestPaneUpgradeRunsNoFileWithoutADialog/bridge-only`: only a `tuios gui-bridge` is attached. The pane's direct `daemon-upgrade` must be refused within 30 s with "No client is attached to show the dialog", and the mark must not exist.
+- `TestPaneUpgradeRunsNoFileWithoutADialog/old-client`: only a client of `TUIOS_E2E_OLD_BIN` is attached, which never sends `upgrade_dialog` on its attach. The same refusal, and no mark. It skips when `TUIOS_E2E_OLD_BIN` is not set.
+- `TestPaneUpgradeRefusesAnAnswerFromTheGUIBridge` gains a step: with the dialog up, the renderer calls `daemon-upgrade` with the copy through the bridge. It must be refused with `forbidden` and leave the image unchanged.
+
+| Control | How | Test that fails | Verdict |
+| --- | --- | --- | --- |
+| Any input-taking client counts as one that shows the dialog | `cs.upgradeDialog` cut from `personClients` | `TestPaneUpgradeRunsNoFileWithoutADialog/bridge-only` and `/old-client`: "the daemon ran the pane's file with no dialog to show" | **caught** |
+| The bridge proxies `daemon-upgrade` | the `personOnlyVerbs` refusal cut from `guibridge.runVerb` | `TestPaneUpgradeRefusesAnAnswerFromTheGUIBridge`: "the bridge's daemon-upgrade upgraded the daemon ({PID:63373 Instance:f4e2fd5b-…} then {PID:63373 Instance:419948e0-…})" | **caught** |
+
+```sh
+TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios TUIOS_E2E_OLD_BIN=/path/to/tuios-v0.12.0 \
+  go test -count=1 -run '^(TestPaneUpgradeRefusesAnAnswerFromTheGUIBridge|TestPaneUpgradeRunsNoFileWithoutADialog)$' .
+```
 
 ## Deleting a worktree from the close-confirmation dialog
 
