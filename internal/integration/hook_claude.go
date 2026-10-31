@@ -231,6 +231,11 @@ func translateClaude(in Input, p fields) Decision {
 // the person still sees the turn finished, so it only corrects a pane still
 // showing working after a Stop that never arrived.
 //
+// Claude Code sends nothing when such a prompt goes without a tool running:
+// Esc at a permission menu, or a background agent's question answered in its
+// own view. So a needs_input from a notification is sent as one, and once
+// the pane draws again the screen may take it back.
+//
 // A Claude Code old enough to send no notification_type is read from its
 // message, and only for the two messages it is known to send. Anything else
 // reports nothing, so a notification such as auth_success never reads as
@@ -253,9 +258,9 @@ func claudeNotification(event string, p fields) Decision {
 	case "permission_prompt":
 		// It names no subagent, and comes after the PermissionRequest it is
 		// about, so it must not take a subagent's prompt over.
-		return send(ClaudeCode, event, identity(Report{State: "needs_input", Kind: "approval", Message: Clip(msg), IfState: claudeNotBlocked}, p))
+		return send(ClaudeCode, event, identity(Report{State: "needs_input", Kind: "approval", Message: Clip(msg), IfState: claudeNotBlocked, Notification: true}, p))
 	case "elicitation_dialog", "elicitation_url_dialog", "agent_needs_input":
-		return send(ClaudeCode, event, identity(Report{State: "needs_input", Kind: "question", Message: Clip(msg)}, p))
+		return send(ClaudeCode, event, identity(Report{State: "needs_input", Kind: "question", Message: Clip(msg), Notification: true}, p))
 	case "idle_prompt":
 		return send(ClaudeCode, event, identity(Report{State: "idle", IfState: "working,unknown"}, p))
 	default:

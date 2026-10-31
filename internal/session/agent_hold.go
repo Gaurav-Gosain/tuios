@@ -183,6 +183,23 @@ func (s *Session) dropAgentHold(windowID string) {
 	delete(s.agentHolds, windowID)
 }
 
+// eventClaimWrittenOver reports whether claim, on window windowID, was read
+// from a one-off event and the pane has written since, at wrote. An idle look
+// may then replace it, as any other look may (see eventClaimStale).
+func (s *Session) eventClaimWrittenOver(windowID string, claim agentClaim, wrote int64) bool {
+	if !claim.event {
+		return false
+	}
+	s.stateMu.RLock()
+	defer s.stateMu.RUnlock()
+	for i := range s.state.Windows {
+		if s.state.Windows[i].ID == windowID {
+			return wrote > s.state.Windows[i].AgentStateAt
+		}
+	}
+	return false
+}
+
 // windowAgentState returns the current agent state of a window and whether the
 // window exists.
 func (s *Session) windowAgentState(windowID string) (AgentState, bool) {

@@ -5151,6 +5151,14 @@ The optional hook fields:
   `needs_input` that named this `subagent_id`, and is otherwise refused with
   `if_state`. A subagent's hook clears the prompt it raised with it, and
   leaves one the main agent or another subagent raised.
+- `notification`: true on a report read from a notification the harness sends
+  once and never takes back, such as Claude Code's `Notification` hook. Its
+  state holds until the pane writes again, and from then on a look at the
+  pane's title or screen may replace it, as for a desktop notification the
+  pane sends. Claude Code sends nothing when a prompt goes without a tool
+  running, after Esc at a permission menu or once a background agent's
+  question is answered in its own view, so without this the pane stayed on
+  `needs_input`.
 - `harness_pid`: the pid of the harness process that ran the hook. Read only
   with `agent_session_id`, and held in daemon memory. It lets a new session
   from the same harness process pass the nested-session guard below. When it

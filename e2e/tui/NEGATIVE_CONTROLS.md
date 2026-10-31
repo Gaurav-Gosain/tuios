@@ -11788,3 +11788,14 @@ Run on 2026-11-01 on Linux. Each control is one change to a build of this branch
 The first Inbox assertion passed with its control, because the rail's agents section shows the same message. The assertion now waits for the Inbox to cover the rail, and the control is caught.
 
 The frames are `rail-compact-*` and `rail-drag-*` under the test's artifact folder.
+
+## A Claude Code notification prompt clears when the prompt goes
+
+`TestClaudeNotificationPromptClearsWhenThePromptGoes` runs Claude Code's real hook against a pane that draws Claude Code's screens. A `permission_prompt` notification takes the pane to `needs_input`, which has to hold while the menu is drawn again, and end once the menu is replaced by the empty prompt box, as Esc leaves it. Then an `agent_needs_input` notification, a background agent's question, has to end the same way once the pane draws the empty prompt box. Claude Code sends nothing when either prompt goes without a tool running. The steps and the pane's state after each go to `claude-notification-stale.log` in the test's artifact directory.
+
+Run on 2026-11-01 on macOS arm64, on `upstream/main` at `4c95caa50` plus the branch. The fixed build passes 3 runs of 3. One build per control:
+
+| Control: what was cut | Where it fails | Verdict |
+| --- | --- | --- |
+| The hook sends no `notification`, so the report's claim is not an event | "Esc: the menu gone, the prompt box empty: the pane is still needs_input (\"Claude needs your permission to use Bash\")" | **caught** |
+| `applyIdleVerdict` refuses an idle look under any stronger claim, as before, so only a non-idle look could replace a written-over event claim | "the background agent's question answered: the pane is still needs_input (\"production-setup needs your input\")". The permission case passes, because the menu's own look had already taken the claim | **caught** |

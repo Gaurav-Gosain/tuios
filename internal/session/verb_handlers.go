@@ -1550,6 +1550,9 @@ func (d *Daemon) setAgentState(cs *connState, params json.RawMessage, ownPane bo
 		// SessionStart marks a conversation's SessionStart. See
 		// AgentReport.SessionStart.
 		SessionStart bool `json:"session_start"`
+		// Notification marks a report read from a notification the harness
+		// sends once. See AgentReport.event.
+		Notification bool `json:"notification"`
 		// AgentCwd is the folder the harness reported for its session. The
 		// first one for a session is kept as the agent's start folder. See
 		// noteReportedAgentDir.
@@ -1665,6 +1668,8 @@ func (d *Daemon) setAgentState(cs *connState, params json.RawMessage, ownPane bo
 
 		SessionStart: p.SessionStart,
 		SharedServer: d.agentMatcher.registry.SharedServer(p.Harness),
+
+		event: p.Notification,
 	}
 	report.foreignPane = d.harnessOutsidePane(cs, sess, target, p.HarnessPID)
 	report.harnessGone = p.AgentSessionID != "" && d.harnessLeftPane(cs, sess, target, p.HarnessPID)
