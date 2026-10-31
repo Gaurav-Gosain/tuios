@@ -298,6 +298,9 @@ type PassthroughPlacement struct {
 	ImageCols int
 	Hidden    bool // True when placement is completely out of view
 	DataDirty bool // Image data was re-transmitted, so the placement must be re-sent
+	// Native is an image drawn at its own pixels: the guest gave no cell box,
+	// and its size or offset does not fill whole cells. See nativeScale.
+	Native bool
 
 	// Source clipping parameters (pixels), preserved for re-placement.
 	SourceX      int
@@ -998,17 +1001,48 @@ func (kp *KittyPassthrough) calculateImageCells(cmd *vt.KittyCommand) (rows, col
 			cols = fitCells(float64(rows)*float64(caps.CellHeight)*float64(srcW),
 				float64(srcH)*float64(caps.CellWidth))
 		default:
+			// An offset moves the image inside its first cell, so the cells it
+			// touches count from there.
 			if rows == 0 {
-				rows = fitCells(float64(cmd.Height), float64(caps.CellHeight))
+				rows = fitCells(float64(cmd.Height+max(cmd.YOffset, 0)), float64(caps.CellHeight))
 			}
 			if cols == 0 {
-				cols = fitCells(float64(cmd.Width), float64(caps.CellWidth))
+				cols = fitCells(float64(cmd.Width+max(cmd.XOffset, 0)), float64(caps.CellWidth))
 			}
 		}
 	}
 
 	kittyPassthroughLog("calculateImageCells: result rows=%d, cols=%d", rows, cols)
 	return rows, cols
+}
+
+// nativeScale reports whether an image must be placed with no cell box. tuios
+// keeps a box of whole cells for its clipping, and a box tells the host to scale
+// the image to fill it. An image of 130x60 pixels in cells of 16x34 is drawn 144x68.
+// A browser that draws a page from such patches shows seams.
+//
+// Such a guest says so: it places an image at a pixel offset, or stacks it on a
+// layer. An image with neither keeps its box, which programs that send one picture
+// at the cursor have always had. So do the images of a browser client, whose
+// overlay works in cells, and an image that fills whole cells from a cell's corner,
+// where the box is its own size.
+func (kp *KittyPassthrough) nativeScale(cmd *vt.KittyCommand) bool {
+	if kp.inlineGraphics || cmd.Columns > 0 || cmd.Rows > 0 {
+		return false
+	}
+	if cmd.XOffset <= 0 && cmd.YOffset <= 0 && cmd.ZIndex == 0 {
+		return false
+	}
+	caps := kp.hostCaps()
+	if caps.CellWidth <= 0 || caps.CellHeight <= 0 {
+		return false
+	}
+	w := sourceSpan(cmd.Width, cmd.SourceX, cmd.SourceWidth)
+	h := sourceSpan(cmd.Height, cmd.SourceY, cmd.SourceHeight)
+	if w <= 0 || h <= 0 {
+		return false
+	}
+	return cmd.XOffset > 0 || cmd.YOffset > 0 || w%caps.CellWidth != 0 || h%caps.CellHeight != 0
 }
 
 // maxBoxCells bounds each side of a placement's box. No screen comes near it,

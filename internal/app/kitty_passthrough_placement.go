@@ -842,10 +842,10 @@ func (kp *KittyPassthrough) placeOne(p *PassthroughPlacement) {
 	if p.MaxShowableCols > 0 && p.MaxShowableCols < visibleCols {
 		visibleCols = p.MaxShowableCols
 	}
-	if visibleCols > 0 {
+	if visibleCols > 0 && !p.Native {
 		fmt.Fprintf(&buf, ",c=%d", visibleCols)
 	}
-	if visibleRows > 0 {
+	if visibleRows > 0 && !p.Native {
 		fmt.Fprintf(&buf, ",r=%d", visibleRows)
 	}
 
@@ -894,7 +894,24 @@ func (kp *KittyPassthrough) placeOne(p *PassthroughPlacement) {
 		}
 		return n * cellHeight
 	}
+	offsetX, offsetY := p.XOffset, p.YOffset
 	switch {
+	case isClipping && p.Native:
+		// The host draws these pixels one to one, so a cell is a cell's worth of
+		// pixels on the host. A crop off the left or the top starts at a cell's
+		// corner, where the offset no longer applies.
+		left, top := 0, 0
+		if p.ClipLeft > 0 {
+			left = p.ClipLeft*caps.CellWidth - offsetX
+			offsetX = 0
+		}
+		if p.ClipTop > 0 {
+			top = p.ClipTop*cellHeight - offsetY
+			offsetY = 0
+		}
+		srcW := min(visibleCols*caps.CellWidth-offsetX, spanW-left)
+		srcH := min(visibleRows*cellHeight-offsetY, spanH-top)
+		fmt.Fprintf(&buf, ",x=%d,y=%d,w=%d,h=%d", p.SourceX+left, p.SourceY+top, max(srcW, 0), max(srcH, 0))
 	case isClipping:
 		srcX := p.SourceX + colEdge(p.ClipLeft)
 		srcY := p.SourceY + rowEdge(p.ClipTop)
@@ -935,11 +952,11 @@ func (kp *KittyPassthrough) placeOne(p *PassthroughPlacement) {
 			fmt.Fprintf(&buf, ",h=%d", p.SourceHeight)
 		}
 	}
-	if p.XOffset > 0 {
-		fmt.Fprintf(&buf, ",X=%d", p.XOffset)
+	if offsetX > 0 {
+		fmt.Fprintf(&buf, ",X=%d", offsetX)
 	}
-	if p.YOffset > 0 {
-		fmt.Fprintf(&buf, ",Y=%d", p.YOffset)
+	if offsetY > 0 {
+		fmt.Fprintf(&buf, ",Y=%d", offsetY)
 	}
 	if p.ZIndex != 0 {
 		fmt.Fprintf(&buf, ",z=%d", p.ZIndex)

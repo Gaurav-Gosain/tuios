@@ -11255,3 +11255,19 @@ On main a guest sees shared memory refused and never makes these objects.
 `TestProbeSaysNoWhenTheCallsAreGone`, on the same Mac, sets each system call number to one the kernel does not have. Without the `SIGSYS` handling a process dies of that signal. With it, the call returns an error and `Available` says no, so the query refuses `t=s` and a guest falls back as it does on main.
 
 A forced tear does not have a control in this package, since it needs a host that reads late. The measurement is in `docs/perf.md`.
+
+## Patches drawn at their own pixels
+
+`TestKittyPatchesDrawAtTheirOwnPixels` runs a stand-in that sends two images of 107x63 pixels per frame, each frame in one update: one changes in place at a fixed offset, and one has the same pixels at a new offset and layer each time. Run on 2026-10-31 on Linux. The fixed build passes with 60 draw commands for 30 frames, and none has a cell box.
+
+| Control: what was cut | Where it fails | Verdict |
+| --- | --- | --- |
+| The whole change: the branch before it | "31 of 31 patches were told a cell box, which scales them" | **caught** |
+| `nativeScale` always false | "60 of 60 patches were told a cell box" | **caught** |
+| The `DataDirty` line in the repeat branch of `forwardFileTransmit` | "the last frame's offset and layer never reached the host (X=2, z=32)" | **caught** |
+
+The first version of the fix failed this test by itself: the dimension check in `forwardFileTransmit` deleted a placement whose offset took it into one more cell, and the repeat branch then placed nothing. So that case is covered.
+
+Unit `TestNativePlacementCrop` pins the pixel numbers of a crop off each side.
+
+Measured by hand on macOS 27.0.1 with the browser's native module from the branch, in a pane: a tuios with this change gets patches, 137 MB read in 22 s. tuios v0.12.0 answers no and gets whole frames, 13.9 GB, as before. No variable was set.
