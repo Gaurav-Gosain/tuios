@@ -1010,10 +1010,12 @@ func buildVerbRegistry() map[string]verbEntry {
 			params: []verbParam{
 				{Name: "dir", Type: "string", Required: true, Description: "The directory to watch."},
 				{Name: "timeout", Type: "int", Description: "Milliseconds to wait. Omit for 30 seconds."},
+				{Name: "after", Type: "string", Description: "The names value of the last answer. When the names differ from it, the wait answers at once with changed true."},
 			},
 			returns: []verbParam{
 				{Name: "dir", Type: "string", Description: "The directory watched."},
 				{Name: "changed", Type: "bool", Description: "The names changed before the timeout ended."},
+				{Name: "names", Type: "string", Description: "A short sum of the names in the directory, empty when they cannot be read or there are more than 100000."},
 			},
 			examples: []string{`{"id":1,"verb":"wait-dir","params":{"dir":"/tmp","timeout":1}}`},
 			handler:  (*Daemon).verbWaitDir,

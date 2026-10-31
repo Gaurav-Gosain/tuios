@@ -1,10 +1,12 @@
 package tuie2e
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/Gaurav-Gosain/tuitest"
 	"tuios.dev/shot"
@@ -140,12 +142,16 @@ func TestFilesFollowAPaneInASessionOnAHost(t *testing.T) {
 // machine where the pane is.
 //
 // Negative control: on main the list stays on the start folder after the cd.
+//
+// The far watch starts late on purpose here. The file is removed after the list
+// shows it and before the watch is up, which is the gap that left it on the list.
+// Negative control in NEGATIVE_CONTROLS.md.
 func TestFilesFollowAWindowOnAHost(t *testing.T) {
 	base := t.TempDir()
 	remote := remoteMachine(t)
 	ssh := writeFakeSSHTo(t, base, remote)
 	writeOneHostConfig(t, base, tuiosBin)
-	env := []string{"TUIOS_SSH=" + ssh}
+	env := []string{"TUIOS_SSH=" + ssh, "TUIOS_E2E=1", "TUIOS_E2E_WATCH_START_DELAY_MS=1500"}
 	_, inner := farFolders(t, remote)
 
 	if out, err := tuiosCLI(t, remote, "new", "far-shell", "--detach"); err != nil {
@@ -193,6 +199,36 @@ func TestFilesFollowAWindowOnAHost(t *testing.T) {
 	}
 	savePNG(t, term.Screen(), shot.XTermPalette(), artifactDir(t), "path-picker-far-home")
 	sendKeys(t, term, tuitest.Esc)
+
+	// A change between two waits is the answer to the next wait. The names from
+	// the first answer are older than the new file, so the second answers at once
+	// with changed true. A wait that missed the change sits out its timeout.
+	waitDir := func(params map[string]any) map[string]any {
+		t.Helper()
+		params["dir"] = inner
+		b, _ := json.Marshal(params)
+		out, err := tuiosCLI(t, remote, "call", "wait-dir", string(b))
+		if err != nil {
+			t.Fatalf("wait-dir: %v\n%s", err, out)
+		}
+		var res map[string]any
+		if err := json.Unmarshal([]byte(out), &res); err != nil {
+			t.Fatalf("wait-dir: %v\n%s", err, out)
+		}
+		return res
+	}
+	first := waitDir(map[string]any{"timeout": 1})
+	if first["changed"] != false || first["names"] == "" {
+		t.Fatalf("the first wait-dir: %v", first)
+	}
+	if err := os.WriteFile(filepath.Join(inner, "between-waits.txt"), nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	start := time.Now()
+	second := waitDir(map[string]any{"timeout": 3000, "after": first["names"]})
+	if second["changed"] != true || time.Since(start) >= 3*time.Second {
+		t.Fatalf("a change between two waits was not the answer to the second: %v after %v", second, time.Since(start))
+	}
 	alive(t, term, "after following a far window's folder")
 }
 

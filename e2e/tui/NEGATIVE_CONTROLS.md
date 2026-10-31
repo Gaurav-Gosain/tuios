@@ -92,6 +92,16 @@ Run on 2026-10-31 on Linux. A build that loads the Inbox as a restart does faile
 Summary:OPEN-QUESTION}, after {ID: Kind: Summary:}`. A build with no save before the
 exec failed the same way, because the save was still on its timer. The fixed build
 passes 2 runs of 2.
+## A far folder's change before its watch starts
+
+`TestFilesFollowAWindowOnAHost` holds the far watch back for 1.5 s with
+`TUIOS_E2E_WATCH_START_DELAY_MS`, so the file is removed after the list shows it and
+before the watch is up. Without the hold the race failed five CI runs in three days.
+
+Run on 2026-10-31 on Linux. The fixed build passes 3 runs of 3. With no read when
+the far watch starts, the test failed with the message from CI: `a file removed on
+the far machine stayed on the list`. With `wait-dir` ignoring `after`, it failed
+with `a change between two waits was not the answer to the second`.
 
 ## tuios tutor keeps out of the person's home
 

@@ -3,10 +3,16 @@ package session
 import (
 	"bufio"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
+	"os"
 	"path/filepath"
+	"slices"
+	"strconv"
 	"sync"
 	"time"
 
@@ -31,6 +37,14 @@ import (
 //     folder is on the machine that runs its process, so this daemon asks that
 //     machine with the wait-dir verb, on a connection of its own over the link,
 //     and asks again on the same connection each time one wait ends.
+//
+// A client lists a folder and then asks for the watch. A change in between is in
+// neither, and the rail kept a removed file until the next change. So a watch that
+// has started says once that the folder changed, and the client reads it again.
+// That read costs a listing per watch, and it shows no change when nothing moved.
+// A wait on the far machine also takes the names its last answer saw (after), so
+// a change between two waits is the answer to the next one. A far daemon too old
+// to have this sends no names, and the watch goes on as it did.
 //
 // Nothing polls. A wait on the far machine sleeps in the kernel until the folder
 // changes, and a link connection that carries one costs nothing while it waits.
@@ -118,6 +132,17 @@ func (d *Daemon) handleWatchDir(cs *connState, msg *Message) error {
 	return nil
 }
 
+// watchStartDelayForTest holds back the start of a far watch, so the end-to-end
+// test can make a change land before it with no race. It holds only with
+// TUIOS_E2E=1, and ordinary runs never set it.
+var watchStartDelayForTest = sync.OnceValue(func() time.Duration {
+	if os.Getenv("TUIOS_E2E") != "1" {
+		return 0
+	}
+	ms, _ := strconv.Atoi(os.Getenv("TUIOS_E2E_WATCH_START_DELAY_MS"))
+	return time.Duration(ms) * time.Millisecond
+})
+
 // runLocalDirWatch reports each settled change to dir's names until done.
 func (d *Daemon) runLocalDirWatch(dir string, done <-chan struct{}, notify func()) {
 	events := make(chan struct{}, 1)
@@ -126,6 +151,7 @@ func (d *Daemon) runLocalDirWatch(dir string, done <-chan struct{}, notify func(
 		return
 	}
 	defer w.Close()
+	notify()
 	for {
 		select {
 		case <-done:
@@ -178,22 +204,64 @@ func (d *Daemon) watchRemoteDir(host, dir string, done <-chan struct{}, notify f
 		_ = conn.Close()
 	}()
 	fc := &fleetConn{rw: conn, br: bufio.NewReader(conn)}
-	params := map[string]any{"dir": dir, "timeout": remoteDirWaitMS}
-	for {
+	if delay := watchStartDelayForTest(); delay > 0 {
+		select {
+		case <-time.After(delay):
+		case <-done:
+			return nil
+		}
+	}
+	// The first wait ends at once. It only starts the far side's watch and reads
+	// the names, and the read the notify asks for comes after that.
+	timeout := 1
+	after := ""
+	for first := true; ; first = false {
+		params := map[string]any{"dir": dir, "timeout": timeout}
+		if after != "" {
+			params["after"] = after
+		}
 		raw, err := fc.call("wait-dir", params, remoteDirWaitBudget)
 		if err != nil {
 			return err
 		}
 		var res struct {
-			Changed bool `json:"changed"`
+			Changed bool   `json:"changed"`
+			Names   string `json:"names"`
 		}
 		if err := json.Unmarshal(raw, &res); err != nil {
 			return fmt.Errorf("an answer this build cannot read: %w", err)
 		}
-		if res.Changed {
+		after = res.Names
+		timeout = remoteDirWaitMS
+		if first || res.Changed {
 			notify()
 		}
 	}
+}
+
+// dirNamesMax is the most names dirNamesDigest reads. A folder with more says
+// nothing, and its waits work as they did without one.
+const dirNamesMax = 100_000
+
+// dirNamesDigest is a short sum of the names in dir, or "" when they cannot be
+// read or there are too many. It is what a wait-dir answer hands the next wait.
+func dirNamesDigest(dir string) string {
+	f, err := os.Open(dir) //nolint:gosec // the caller passed the read check for dir
+	if err != nil {
+		return ""
+	}
+	defer func() { _ = f.Close() }()
+	names, err := f.Readdirnames(dirNamesMax + 1)
+	if err != nil && !errors.Is(err, io.EOF) || len(names) > dirNamesMax {
+		return ""
+	}
+	slices.Sort(names)
+	h := sha256.New()
+	for _, n := range names {
+		_, _ = io.WriteString(h, n)
+		_, _ = h.Write([]byte{0})
+	}
+	return hex.EncodeToString(h.Sum(nil)[:16])
 }
 
 // verbWaitDir answers when the names in a directory on this machine change, or
@@ -202,6 +270,8 @@ func (d *Daemon) verbWaitDir(cs *connState, params json.RawMessage) (any, *verbE
 	var p struct {
 		Dir     string `json:"dir"`
 		Timeout int    `json:"timeout"`
+		// After is the names the caller's last answer saw. See the file comment.
+		After string `json:"after"`
 	}
 	if verr := decodeParams(params, &p); verr != nil {
 		return nil, verr
@@ -251,13 +321,18 @@ func (d *Daemon) verbWaitDir(cs *connState, params json.RawMessage) (any, *verbE
 			defer stop()
 		}
 	}
-	unchanged := map[string]any{"dir": dir, "changed": false}
+	// Read with the watch running, so a change is in these names or wakes the wait.
+	names := dirNamesDigest(dir)
+	if p.After != "" && names != "" && names != p.After {
+		return map[string]any{"dir": dir, "changed": true, "names": names}, nil
+	}
+	unchanged := map[string]any{"dir": dir, "changed": false, "names": names}
 	select {
 	case <-events:
 		// Let the burst settle, so the caller reads the folder once. The
 		// change is the answer whatever ends the wait during the settle.
 		dirwatch.AfterBurst(events, d.ctx.Done())
-		return map[string]any{"dir": dir, "changed": true}, nil
+		return map[string]any{"dir": dir, "changed": true, "names": dirNamesDigest(dir)}, nil
 	case <-timer.C:
 		return unchanged, nil
 	case <-gone:
