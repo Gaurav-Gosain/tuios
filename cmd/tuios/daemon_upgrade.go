@@ -218,7 +218,7 @@ func runDaemonUpgrade(out io.Writer, binary string, asJSON bool) error {
 			}
 		}
 		if errors.As(err, &verr) {
-			return &diagnosticError{What: verr.Message + ".", Cause: "the daemon refused the upgrade.", Fix: "nothing was changed. Fix what the message names and run 'tuios daemon upgrade' again."}
+			return &diagnosticError{What: strings.TrimSuffix(verr.Message, ".") + ".", Cause: "the daemon refused the upgrade.", Fix: "nothing was changed. Fix what the message names and run 'tuios daemon upgrade' again."}
 		}
 		return err
 	}

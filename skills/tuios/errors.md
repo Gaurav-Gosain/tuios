@@ -32,7 +32,7 @@ the same information into its messages.
 
 ## What each asks of you
 
-A retry without a change fails the same way, except for `busy`, `too_many_connections`, `timeout` and `daemon_upgrading`. The first two clear when other requests finish or other connections close, and the upgraded daemon answers `daemon_upgrading`.
+A retry without a change fails the same way, except for `busy`, `too_many_connections`, `timeout` and `daemon_upgrading`. The first two clear when other requests finish or other connections close. After `daemon_upgrading` the upgraded daemon answers a call that reads or waits, but a call that changes something may have partly run, so check what it did first (see the table below).
 
 | Code | What to do |
 | --- | --- |
