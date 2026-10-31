@@ -168,3 +168,38 @@ func TestPlacedImageIsNotMagnified(t *testing.T) {
 		})
 	}
 }
+
+// A placement at the image's own pixels has no box to map a source rectangle
+// onto, so a crop is counted in the host's cells, from the offset.
+func TestNativePlacementCrop(t *testing.T) {
+	kp := newTestKittyPassthrough(t)
+	kp.caps = &HostCapabilities{CellWidth: 10, CellHeight: 20}
+
+	place := func(p PassthroughPlacement) string {
+		p.HostImageID, p.PlacementID, p.Native = 5, 9, true
+		p.ImagePixelWidth, p.ImagePixelHeight = 107, 63
+		p.ImageCols, p.Cols, p.Rows = 11, 11, 4
+		kp.pendingOutput = nil
+		kp.placeOne(&p)
+		return string(kp.pendingOutput)
+	}
+	for _, tc := range []struct {
+		name string
+		p    PassthroughPlacement
+		want string
+	}{
+		{"whole", PassthroughPlacement{XOffset: 3, YOffset: 5, MaxShowable: 4, MaxShowableCols: 11}, ",X=3,Y=5,"},
+		{"off the right and the bottom", PassthroughPlacement{XOffset: 3, YOffset: 5, MaxShowable: 2, MaxShowableCols: 5, ClipBottom: 2}, ",x=0,y=0,w=47,h=35,X=3,Y=5,"},
+		{"off the left and the top", PassthroughPlacement{XOffset: 3, YOffset: 5, MaxShowable: 2, MaxShowableCols: 5, ClipLeft: 2, ClipTop: 1}, ",x=17,y=15,w=50,h=40,"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			got := place(tc.p)
+			if !strings.Contains(got, tc.want) {
+				t.Fatalf("got %q, want it to hold %q", got, tc.want)
+			}
+			if strings.Contains(got, ",c=") || strings.Contains(got, ",r=") {
+				t.Fatalf("a cell box scales the image: %q", got)
+			}
+		})
+	}
+}

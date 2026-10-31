@@ -2,6 +2,7 @@ package tuie2e
 
 import (
 	"fmt"
+	"os"
 	"strings"
 	"testing"
 )
@@ -116,4 +117,60 @@ func reportScaleFaults(t *testing.T, faults []scaleFault, total int) {
 	t.Errorf("%d of %d draw commands asked the host to rescale the bitmap "+
 		"(%d of them non-uniformly, which is the stretch):\n%s",
 		len(faults), total, stretched, b.String())
+}
+
+// A guest that names no cell box asks for an image at its own pixels, and a
+// browser draws a page from patches placed that way, each at a pixel offset. A
+// box of whole cells made the host scale each one, and the page showed seams.
+// The stand-in sends two such images per frame: one that changes in place, and
+// one with the same pixels at a new offset and layer, in the same cells, so only
+// the offset and the layer say it moved.
+func TestKittyPatchesDrawAtTheirOwnPixels(t *testing.T) {
+	requireDevShm(t)
+	host := newKittyHost()
+	term, _ := start(t, startOpts{
+		cols: 120, rows: 40,
+		env: []string{"TUIOS_SIXEL_GRAPHICS=0"},
+		out: host,
+	})
+	host.answerProbe(t, term)
+	waitBoot(t, term)
+	newWindow(t, term)
+	enableTiling(t, term)
+	waitWindowCount(t, term, 1, "one pane")
+	enterTerminalMode(t, term)
+	runInShell(t, term, "echo IMAG\"\"EPANE", "IMAGEPANE", shellTimeout)
+
+	const frames = 30
+	names := runShmStream(t, term, frames, 20, 0, "patches")
+	for _, n := range names {
+		_ = os.Remove("/dev/shm/" + n)
+	}
+
+	var draws, boxed []wireCmd
+	lastLayer := fmt.Sprintf("z=%d", 3+frames-1)
+	lastOffset := fmt.Sprintf("X=%d", 1+(frames-1)%2)
+	reached := false
+	for _, c := range wireCmds(host.bytes()) {
+		if c.action != "p" && c.action != "T" || !strings.Contains(c.params, "X=") {
+			continue
+		}
+		draws = append(draws, c)
+		if c.cols != 0 || c.rows != 0 {
+			boxed = append(boxed, c)
+		}
+		if strings.Contains(c.params, lastLayer) && strings.Contains(c.params, lastOffset) {
+			reached = true
+		}
+	}
+	t.Logf("%d draw commands with an offset, %d of %d objects reached the host", len(draws), len(forwardedShmNames(host.bytes())), len(names))
+	if len(draws) < frames {
+		t.Fatalf("only %d draw commands reached the host for %d frames of 2 images", len(draws), frames)
+	}
+	if len(boxed) > 0 {
+		t.Fatalf("%d of %d patches were told a cell box, which scales them: %q", len(boxed), len(draws), boxed[0].params)
+	}
+	if !reached {
+		t.Fatalf("the last frame's offset and layer never reached the host (%s, %s): same pixels at a new place were dropped", lastOffset, lastLayer)
+	}
 }

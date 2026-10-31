@@ -3,7 +3,7 @@
 // deleted by the guest, because deleting it is the terminal's job once it has
 // read it.
 //
-// Usage: shmstream LOG COUNT FPS DELAYMS same|vary|big|sync|syncjoined|syncreuse
+// Usage: shmstream LOG COUNT FPS DELAYMS same|vary|big|sync|syncjoined|syncreuse|patches
 //
 // Each object's name is appended to LOG as it is advertised, and DONE when the
 // last one is. The log is a file rather than the screen because the pane may
@@ -13,7 +13,10 @@
 // is "vary" with each frame in its own synchronized update, the way
 // terminal-browser sends one. "syncjoined" closes one update and opens the next
 // in the same write, so an update is open whenever the terminal looks.
-// "syncreuse" is "sync" with one object for every frame.
+// "syncreuse" is "sync" with one object for every frame. "patches" sends two
+// images of a size that fills no whole cell, each frame in one update, the way
+// the browser sends tiles: a frame that changes in place, and a frame with the
+// same pixels at a new offset and layer each time.
 package main
 
 import (
@@ -26,9 +29,12 @@ import (
 
 const side = 64
 
+// patchW and patchH fill no whole cell in any cell size the harness uses.
+const patchW, patchH = 107, 63
+
 func main() {
 	if len(os.Args) < 6 {
-		fmt.Println("usage: shmstream LOG COUNT FPS DELAYMS same|vary")
+		fmt.Println("usage: shmstream LOG COUNT FPS DELAYMS same|vary|big|sync|patches")
 		os.Exit(2)
 	}
 	logPath := os.Args[1]
@@ -71,6 +77,29 @@ func main() {
 	}
 	tick := time.NewTicker(time.Second / time.Duration(fps))
 	defer tick.Stop()
+	if os.Args[5] == "patches" {
+		put := func(name string, pixels []byte, id, x, y, z int) {
+			if err := os.WriteFile("/dev/shm/"+name, pixels, 0o600); err != nil {
+				fmt.Printf("SHMSTREAM-ERR %v\n", err)
+				return
+			}
+			_, _ = fmt.Fprintln(logf, name)
+			fmt.Printf("\x1b[3;3H\x1b_Ga=T,t=s,f=32,s=%d,v=%d,i=%d,p=1,C=1,X=%d,Y=%d,z=%d,q=2;%s\x1b\\",
+				patchW, patchH, id, x, y, z, base64.StdEncoding.EncodeToString([]byte(name)))
+		}
+		same := make([]byte, patchW*patchH*4)
+		moving := make([]byte, patchW*patchH*4)
+		for n := range count {
+			<-tick.C
+			moving[n%len(moving)]++
+			fmt.Print("\x1b[?2026h")
+			put(fmt.Sprintf("%s%d-a%d", prefix, os.Getpid(), n), moving, 1, 3, 5, 2)
+			put(fmt.Sprintf("%s%d-b%d", prefix, os.Getpid(), n), same, 2, 1+n%2, 2+n%2, 3+n)
+			fmt.Print("\x1b[?2026l")
+		}
+		_, _ = fmt.Fprintln(logf, "DONE")
+		return
+	}
 	for n := range count {
 		<-tick.C
 		if vary {
