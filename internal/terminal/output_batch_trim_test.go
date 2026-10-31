@@ -2,7 +2,9 @@ package terminal
 
 import (
 	"runtime"
+	"slices"
 	"strconv"
+	"sync"
 	"testing"
 	"time"
 )
@@ -56,8 +58,9 @@ func settledLiveHeap(t *testing.T) int64 {
 // floodPanesWithChunks floods every pane the way floodPanes does, with chunks
 // of 16 KiB instead of one line each: the writer takes the first and stops on
 // the lock, the rest queue behind it, and every pane is drained once all the
-// writers are let go. It reports when the first writer was let go.
-func floodPanesWithChunks(t *testing.T, windows []*Window, chunks int) (released time.Time) {
+// writers are let go. It reports when the first pane finished draining, which
+// is the earliest that any pane's writer can have gone idle.
+func floodPanesWithChunks(t *testing.T, windows []*Window, chunks int) (idle time.Time) {
 	t.Helper()
 	releases := make([]func(), len(windows))
 	for i, w := range windows {
@@ -70,14 +73,30 @@ func floodPanesWithChunks(t *testing.T, windows []*Window, chunks int) (released
 			w.WriteOutputAsync(batchTrimChunk(100000 + c*batchTrimLines))
 		}
 	}
-	released = time.Now()
 	for _, release := range releases {
 		release()
 	}
-	for _, w := range windows {
-		drainWithin(t, w, 10*time.Second)
+	// Each pane is waited for on its own, so the time held for a pane is when
+	// that pane drained, not when the panes before it did.
+	drainedAt := make([]time.Time, len(windows))
+	var drains sync.WaitGroup
+	for i, w := range windows {
+		drains.Go(func() {
+			w.DrainPendingOutput()
+			drainedAt[i] = time.Now()
+		})
 	}
-	return released
+	done := make(chan struct{})
+	go func() {
+		drains.Wait()
+		close(done)
+	}()
+	select {
+	case <-done:
+	case <-time.After(10 * time.Second):
+		t.Fatal("DrainPendingOutput had not returned after 10s")
+	}
+	return slices.MinFunc(drainedAt, time.Time.Compare)
 }
 
 // TestFloodedDaemonPanesGiveBackTheirBatchAfterASecond holds what a pane costs
@@ -94,32 +113,53 @@ func TestFloodedDaemonPanesGiveBackTheirBatchAfterASecond(t *testing.T) {
 	const chunks = 15
 	const kept = 150_000
 	const budget = 150_000
-	// The early reading must come well inside the second the batch is kept.
-	const earlyBy = 600 * time.Millisecond
+	// The early reading must come inside the second the batch is kept. That
+	// second starts when a pane has drained, so this clock starts there too.
+	// How long the drain itself takes says nothing about the batch: 240 KiB per
+	// pane took 0.7 to 1.3 s under the race detector on a busy runner.
+	//
+	// The margin to the second is for the time between the writer going idle
+	// and the test seeing that it drained.
+	const earlyBy = 800 * time.Millisecond
 	// It is taken late inside that guard, so a batch let go well before the
 	// second is up fails it, not only one let go at once.
 	const earlyAt = 475 * time.Millisecond
+	// A flood that ran too slowly to read in time proves nothing about the
+	// batch either way, so it is run again. Only a reading made in time decides.
+	const floods = 5
 
 	before := settledLiveHeap(t)
 	windows := make([]*Window, panes)
 	for i := range windows {
 		windows[i] = memoryWindow(t, "batch-"+strconv.Itoa(i), 12, 6, 1)
 	}
-	released := floodPanesWithChunks(t, windows, chunks)
-	drained := time.Now()
-	for i, w := range windows {
-		w.outputQ.mu.Lock()
-		slots := len(w.outputQ.buf)
-		w.outputQ.mu.Unlock()
-		if slots > outputQueueKeep {
-			t.Fatalf("pane %d: the flood grew the queue to %d slots, want it at %d or fewer so only the batch grew",
-				i, slots, outputQueueKeep)
+	var idle, drained time.Time
+	var early int64
+	for flood := 1; ; flood++ {
+		idle = floodPanesWithChunks(t, windows, chunks)
+		drained = time.Now()
+		for i, w := range windows {
+			w.outputQ.mu.Lock()
+			slots := len(w.outputQ.buf)
+			w.outputQ.mu.Unlock()
+			if slots > outputQueueKeep {
+				t.Fatalf("pane %d: the flood grew the queue to %d slots, want it at %d or fewer so only the batch grew",
+					i, slots, outputQueueKeep)
+			}
 		}
-	}
-	time.Sleep(time.Until(released.Add(earlyAt)))
-	early := liveHeap()
-	if took := time.Since(released); took > earlyBy {
-		t.Fatalf("the drain and the first reading took %v, more than the %v the check needs", took, earlyBy)
+		time.Sleep(time.Until(idle.Add(earlyAt)))
+		early = liveHeap()
+		took := time.Since(idle)
+		if took <= earlyBy {
+			break
+		}
+		if flood == floods {
+			t.Fatalf("the first reading came %v after the first pane drained in all %d floods, more than the %v the check needs",
+				took, floods, earlyBy)
+		}
+		t.Logf("flood %d: the first reading came %v after the first pane drained, so this flood decides nothing", flood, took)
+		// Every pane gives its batch back before the next flood.
+		time.Sleep(1500 * time.Millisecond)
 	}
 	time.Sleep(time.Until(drained.Add(1500 * time.Millisecond)))
 	lateAt := time.Since(drained)
@@ -128,7 +168,7 @@ func TestFloodedDaemonPanesGiveBackTheirBatchAfterASecond(t *testing.T) {
 
 	heldEarly := (early - before) / panes
 	heldLate := (late - before) / panes
-	t.Logf("a pane holds %d bytes %v after the release and %d bytes %v after the drain returned",
+	t.Logf("a pane holds %d bytes %v after the first pane drained and %d bytes %v after the last one did",
 		heldEarly, earlyAt, heldLate, lateAt)
 	if heldEarly < kept {
 		t.Fatalf("a pane holds %d bytes shortly after the drain, want the grown batch (at least %d bytes) "+
