@@ -81,6 +81,18 @@ edit, and each fails at the step named.
 `respond` over a link, and `TestACredentialPromptIsALogin` holds the Hermes and Amp
 prompts to `auth`.
 
+## Open prompts across a live handoff
+
+`TestDaemonUpgradeKeepsOpenPrompts` opens a question and an approval, attaches a
+client and runs `test-handoff`. Each item must keep its id, and the client must get
+no new alert.
+
+Run on 2026-10-31 on Linux. A build that loads the Inbox as a restart does failed:
+`the item for OPEN-QUESTION across the handoff: before {ID:1 Kind:question
+Summary:OPEN-QUESTION}, after {ID: Kind: Summary:}`. A build with no save before the
+exec failed the same way, because the save was still on its timer. The fixed build
+passes 2 runs of 2.
+
 ## tuios tutor keeps out of the person's home
 
 `TestTutorBasics` plants an Omarchy theme, Catppuccin Latte, under the

@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/session"
+	"github.com/Gaurav-Gosain/tuitest"
 )
 
 // The live upgrade to another binary: the preflight, the fallback to the
@@ -218,6 +219,87 @@ func screenLinesHave(lines []string, s string) bool {
 		}
 	}
 	return false
+}
+
+// TestDaemonUpgradeKeepsOpenPrompts: a pane on needs_input stays there across a
+// handoff, so its approval or question stays in the Inbox, and it raises no second
+// alert. A pane that left needs_input during the handoff would have no item, which
+// the restart path already covers.
+//
+// How this could pass wrongly: the items could be opened again by a new report.
+// Nothing reports after the first alert, and the id of each item must not change.
+//
+// Negative control in NEGATIVE_CONTROLS.md.
+func TestDaemonUpgradeKeepsOpenPrompts(t *testing.T) {
+	base := t.TempDir()
+	startHandoffDaemon(t, base)
+	second := copyTuios(t)
+	const sess = "e2e-upgrade-prompts"
+	asker := newCommandWindow(t, base, sess, "asker", false, "sh", "-c", `echo pid-$$; exec cat`)
+	approver := newCommandWindow(t, base, sess, "approver", false, "sh", "-c", `echo pid-$$; exec cat`)
+	waitHandoffPane(t, base, sess, asker, regexp.MustCompile(`^pid-\d+`), 10*time.Second)
+	_ = mustCall(t, base, "set-agent-state", map[string]any{"session": sess, "window": asker, "state": "needs_input", "kind": "question", "message": "OPEN-QUESTION"})
+	_ = mustCall(t, base, "set-agent-state", map[string]any{"session": sess, "window": approver, "state": "needs_input", "kind": "approval", "message": "OPEN-APPROVAL"})
+
+	type item struct {
+		ID, Kind, Summary string
+	}
+	items := func() map[string]item {
+		t.Helper()
+		res := mustCall(t, base, "list-attention", map[string]any{})
+		b, _ := json.Marshal(res["items"])
+		var list []item
+		if err := json.Unmarshal(b, &list); err != nil {
+			t.Fatalf("list-attention: %v: %s", err, b)
+		}
+		out := map[string]item{}
+		for _, it := range list {
+			out[it.Summary] = it
+		}
+		return out
+	}
+	before := items()
+	for _, want := range []string{"OPEN-QUESTION", "OPEN-APPROVAL"} {
+		if before[want].ID == "" {
+			t.Fatalf("no item for %s before the handoff: %v", want, before)
+		}
+	}
+
+	host := &lockedBuffer{}
+	term := startIn(t, base, startOpts{cols: 120, rows: 30, out: host, env: copyColorOpts.env, args: []string{"attach", sess}})
+	if err := term.WaitFor(func(s tuitest.Screen) bool { return strings.Contains(s.Text(), "╰") }, bootTimeout); err != nil {
+		t.Fatalf("the client never drew the session: %v\n%s", err, term.Snapshot())
+	}
+	alerts := func() int {
+		return len(regexp.MustCompile("\x1b\\]9;[^\x07]*OPEN-").FindAllString(host.String(), -1))
+	}
+	seen := alerts()
+
+	img := helloImage(t, base)
+	_ = mustCall(t, base, "test-handoff", map[string]any{"binary": second})
+	awaitNewImage(t, base, img, 30*time.Second)
+
+	after := items()
+	for _, want := range []string{"OPEN-QUESTION", "OPEN-APPROVAL"} {
+		if after[want].ID != before[want].ID || after[want].Kind != before[want].Kind {
+			t.Errorf("ASSERTION: the item for %s across the handoff: before %+v, after %+v", want, before[want], after[want])
+		}
+	}
+	// The client is back and has seen the state before this is read.
+	if err := term.WaitFor(func(s tuitest.Screen) bool { return strings.Contains(s.Text(), "╰") }, bootTimeout); err != nil {
+		t.Fatalf("the client lost the session: %v\n%s", err, term.Snapshot())
+	}
+	time.Sleep(time.Second)
+	if got := alerts(); got != seen {
+		t.Errorf("ASSERTION: the handoff raised %d more alerts for prompts already open", got-seen)
+	}
+
+	// The pane moves on, and its item closes as it always did.
+	_ = mustCall(t, base, "set-agent-state", map[string]any{"session": sess, "window": asker, "state": "working"})
+	if got := items(); got["OPEN-QUESTION"].ID != "" {
+		t.Errorf("ASSERTION: the restored item did not close when the pane moved on: %+v", got)
+	}
+	writeHandoffArtifact(t, map[string]any{"before": before, "after": after, "alerts": seen})
 }
 
 // TestDaemonUpgradeRefusesAndChangesNothing asks for an upgrade to binaries

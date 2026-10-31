@@ -447,6 +447,7 @@ func (r *handoffRun) commit() error {
 	if r.req.holdAfterWrite > 0 {
 		time.Sleep(r.req.holdAfterWrite)
 	}
+	d.attention.saveNow()
 	// A binary replaced since the preflight is a file the preflight did not
 	// run: run it again, and pay its first exec here rather than after it.
 	if !r.bin.stillThere() {

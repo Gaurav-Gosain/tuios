@@ -58,6 +58,10 @@ import (
 // unrelated thread next took its id. resume is dropped on load as well, because
 // the restore that follows every start opens it again from the window's
 // recorded conversation, which is where the fact lives.
+//
+// A live handoff is not a restart. The pane's process goes on, and the prompt is
+// still on its screen, so loadHandoff keeps approval, plan and question items for a
+// pane that still waits. Nothing new happened, so they raise no alert.
 
 // Attention kinds. They are wire values: the kind field of an item and the
 // kind filter of list-attention.
@@ -1161,6 +1165,26 @@ func writeAttentionFile(path string, data []byte) {
 	}
 }
 
+// saveNow writes the queue as it stands and goes on saving. A handoff takes it
+// before the exec: a save still on its timer would be lost with this image, and
+// the next one would load a queue from before it.
+func (a *attentionStore) saveNow() {
+	if a == nil {
+		return
+	}
+	a.mu.Lock()
+	if a.saveTimer != nil {
+		a.saveTimer.Stop()
+		a.saveTimer = nil
+	}
+	path := a.path
+	data := a.encodeLocked()
+	a.mu.Unlock()
+	if path != "" {
+		writeAttentionFile(path, data)
+	}
+}
+
 // saveNowAndFreeze writes the queue as it stands and stops saving from then
 // on. It is the daemon's final save, taken before shutdown closes any pane.
 func (a *attentionStore) saveNowAndFreeze() {
@@ -1199,6 +1223,16 @@ func (a *attentionStore) saveNowAndFreeze() {
 // same key. A saved item whose id one of them already holds gets a fresh id,
 // so byKey and items always agree.
 func (a *attentionStore) load(path string, live func(session, window string) bool) {
+	a.loadKeeping(path, live, nil)
+}
+
+// loadHandoff is load after a live handoff. waiting reports whether a pane still
+// waits on a person.
+func (a *attentionStore) loadHandoff(path string, live, waiting func(session, window string) bool) {
+	a.loadKeeping(path, live, waiting)
+}
+
+func (a *attentionStore) loadKeeping(path string, live, waiting func(session, window string) bool) {
 	var f attentionFile
 	data, err := os.ReadFile(path)
 	if err == nil {
@@ -1214,6 +1248,14 @@ func (a *attentionStore) load(path string, live func(session, window string) boo
 			if it.ID == "" || !live(it.Session, it.Window) {
 				continue
 			}
+		case AttentionApproval, AttentionPlan, AttentionQuestion:
+			if waiting == nil || it.ID == "" || !waiting(it.Session, it.Window) {
+				continue
+			}
+			// A hold is a hook's connection, and it did not cross the handoff.
+			// The item stays open as long as the pane is blocked, as it does
+			// when any hold ends.
+			it.RequestID, it.Options, it.AlwaysScope, it.Expires = "", nil, nil, 0
 		default:
 			continue
 		}

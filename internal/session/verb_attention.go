@@ -23,6 +23,16 @@ func (d *Daemon) attentionLive(sessionName, window string) bool {
 	return ok
 }
 
+// attentionWaiting reports whether a pane is on needs_input.
+func (d *Daemon) attentionWaiting(sessionName, window string) bool {
+	sess := d.manager.GetSession(sessionName)
+	if sess == nil {
+		return false
+	}
+	w, ok := findWindowState(sess.GetState(), window)
+	return ok && w.AgentState == AgentStateNeedsInput
+}
+
 // verbListAttention answers the queue, in Inbox order, with the counts per kind
 // and the stream position the answer is current to.
 func (d *Daemon) verbListAttention(_ *connState, params json.RawMessage) (any, *verbError) {
