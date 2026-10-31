@@ -245,6 +245,7 @@ func retainDaemonExclusive(incoming, canonical *SessionState) {
 	// Only mark-attention and the daemon's own wake move the settle, so
 	// canonical wins like the queue.
 	var settled map[string]bool
+	var quiet map[string]bool
 	var subagentLists map[string][]SubagentInfo
 	// The popup mark, requested size and dim override are stamped once, when
 	// the daemon creates the window, and nothing ever changes them. So canonical
@@ -377,6 +378,12 @@ func retainDaemonExclusive(incoming, canonical *SessionState) {
 			}
 			draftHeld[w.ID] = true
 		}
+		if w.AgentQuiet {
+			if quiet == nil {
+				quiet = make(map[string]bool)
+			}
+			quiet[w.ID] = true
+		}
 		if w.AgentSettled {
 			if settled == nil {
 				settled = make(map[string]bool)
@@ -467,6 +474,7 @@ func retainDaemonExclusive(incoming, canonical *SessionState) {
 		w.AgentQueued = queued[w.ID]
 		w.AgentDraftHeld = draftHeld[w.ID]
 		w.AgentSettled = settled[w.ID]
+		w.AgentQuiet = quiet[w.ID]
 		w.AgentSubagents = subagents[w.ID]
 		w.AgentSubagentList = subagentLists[w.ID]
 		w.ProgramStatus = programStatus[w.ID]

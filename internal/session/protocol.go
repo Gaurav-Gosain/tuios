@@ -586,6 +586,10 @@ type WindowSummary struct {
 	// client watching another session draws the agent on the Settled shelf
 	// too. Additive and omitted when false, which is what an older peer sends.
 	AgentSettled bool `json:"agent_settled,omitempty"`
+	// AgentQuiet is WindowState.AgentQuiet, so a client watching another session
+	// draws the mark too. Additive and omitted when false, which is what an older
+	// peer sends.
+	AgentQuiet bool `json:"agent_quiet,omitempty"`
 	// Subagents is how many subagents the pane's agent is running, so a rail
 	// watching another session can say so. Additive and omitted when zero,
 	// which is what an older peer sends.

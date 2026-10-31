@@ -37,6 +37,8 @@ type lifecycleWindow struct {
 	// agent_silent.go.
 	shownState  AgentState
 	agentReason string
+	// agentQuiet rides along so the Inbox can read it off the event.
+	agentQuiet bool
 	// agentHarness and agentMessage ride the snapshot only so the hook a
 	// transition raises can name them. The lifecycle events themselves do not
 	// report them and neither field alone raises an event.
@@ -111,6 +113,7 @@ func snapshotLifecycle(state *SessionState) lifecycleSnapshot {
 			agentState:    w.AgentState,
 			shownState:    w.ShownAgentState(),
 			agentReason:   w.AgentReason,
+			agentQuiet:    w.AgentQuiet,
 			agentHarness:  w.AgentHarness,
 			agentMessage:  w.AgentMessage,
 			agentStateAt:  w.AgentStateAt,
@@ -231,6 +234,7 @@ func diffLifecycle(before, after lifecycleSnapshot) []SessionEvent {
 				hookWorktree:      w.worktree,
 				hookAgentSession:  w.agentSession,
 				hookProgram:       w.program,
+				agentQuiet:        w.agentQuiet,
 				completionSeq:     w.completionSeq,
 				prevCompletionSeq: prev.completionSeq,
 			})
@@ -253,6 +257,7 @@ func diffLifecycle(before, after lifecycleSnapshot) []SessionEvent {
 				hookWorktree:      w.worktree,
 				hookAgentSession:  w.agentSession,
 				hookProgram:       w.program,
+				agentQuiet:        w.agentQuiet,
 				completionSeq:     w.completionSeq,
 				prevCompletionSeq: w.completionSeq,
 			})

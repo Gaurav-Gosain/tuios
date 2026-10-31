@@ -2144,6 +2144,25 @@ func buildVerbRegistry() map[string]verbEntry {
 			examples: []string{`{"id":1,"verb":"resolve-pane","params":{"sid":4242,"pids":[4250,4243,4242]}}`},
 			handler:  (*Daemon).verbResolvePane,
 		},
+		"set-agent-quiet": {
+			description: "Mark a window quiet, or clear the mark. A quiet window opens no finished, question or errored item in the Inbox, and its open items of those kinds close. Its agent state and agent-state events do not change, and an approval still reaches the person. Needs the admin grant.",
+			params: []verbParam{
+				sessionParam,
+				windowParam,
+				{Name: "quiet", Type: "bool", Description: "True marks the window quiet, and false clears the mark. Clearing it does not open the old items again.", Default: "true"},
+			},
+			returns: []verbParam{
+				{Name: "session", Type: "string", Description: "The session that holds the window."},
+				{Name: "window_id", Type: "string", Description: "The window that was marked."},
+				{Name: "quiet", Type: "bool", Description: "Whether the window is now quiet."},
+				{Name: "closed", Type: "int", Description: "How many open Inbox items this call closed."},
+			},
+			examples: []string{
+				`{"id":1,"verb":"set-agent-quiet","params":{"session":"work","window":"build"}}`,
+				`{"id":1,"verb":"set-agent-quiet","params":{"session":"work","window":"build","quiet":false}}`,
+			},
+			handler: (*Daemon).verbSetAgentQuiet,
+		},
 		"set-agent-meta": {
 			description: "Record display metadata about the agent in a window's pane (model, context used, cost, a short summary). The rail draws it under the agent's row. It is display only: it never changes the agent state, a wait, an alert or a message. Keys keep the position they first arrived in. The metadata clears when the agent leaves the pane. A call that sets keys to the values they hold changes nothing and pushes nothing to clients; a TTL is renewed only once less than half of it remains. The keys now and prompt are written by tuios from hook activity and are refused here.",
 			params: []verbParam{
