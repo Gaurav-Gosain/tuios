@@ -4378,11 +4378,12 @@ the one that owns the pane. These filters keep those events off the pane:
   for them. The daemon refuses a report with `foreign_pane` when its
   `harness_pid` is a process that:
   - names the pane in `TUIOS_PANE_ID` in its own environment,
-  - is not the pane's process, not on the pane's terminal and not descended
-    from it,
-  - and has a harness daemon among its ancestors: Claude Code's daemon
-    (`claude daemon`) or the pty host it runs each background session on
-    (`claude --bg-pty-host`).
+  - is not the pane's process and not on the pane's terminal,
+  - and has a harness daemon among its ancestors below the pane's process:
+    Claude Code's daemon (`claude daemon`) or the pty host it runs each
+    background session on (`claude --bg-pty-host`). A background session
+    still descends from the pane when the daemon was started by the claude in
+    that pane, and it is refused all the same.
 
   A daemon is known by its program name and an argument it runs with, so the
   same program in a pane is not one. Leaving the pane is not enough to be

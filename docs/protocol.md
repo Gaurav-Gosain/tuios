@@ -5159,8 +5159,8 @@ Response:
 `if_state` (the condition did not hold), `foreign_pane`, `foreign_session` or
 `foreign_harness`. `foreign_pane` refuses a report whose `harness_pid` is a
 local process that inherited the pane in `TUIOS_PANE_ID` but runs outside it,
-not the pane's process, not on its terminal and not descended from it, under
-a harness daemon: Claude Code's daemon or the pty host of its background
+not the pane's process and not on its terminal, under a harness daemon,
+even one that is itself a child of the pane: Claude Code's daemon or the pty host of its background
 sessions. A harness under anything else that left the pane, such as a tmux
 server or a rootless container's conmon, is taken for the pane that shows
 it. A `harness_pid` that is not

@@ -1701,6 +1701,10 @@ const (
 	// standInServerArgEnv is an argument the server is started with ahead of
 	// the harness's, and drops before it runs the harness.
 	standInServerArgEnv = "TUIOS_E2E_STANDIN_SERVER_ARG"
+	// standInStayEnv, set, keeps the program that started the server running
+	// until the server exits, so the server stays its child, as Claude Code's
+	// daemon stays a child of the claude that started it.
+	standInStayEnv = "TUIOS_E2E_STANDIN_STAY"
 )
 
 // runStandInIfAsked plays the part standInEnv names, and exits, or returns
@@ -1723,6 +1727,9 @@ func runStandInIfAsked() {
 		server := exec.Command(self, args...)
 		server.Env = append(os.Environ(), standInEnv+"=server", standInLauncherEnv+"="+strconv.Itoa(os.Getpid()))
 		server.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
+		if os.Getenv(standInStayEnv) != "" {
+			os.Exit(runStandInChild(server, nil, os.Stdout, os.Stderr))
+		}
 		if err := server.Start(); err != nil {
 			fmt.Fprintln(os.Stderr, err)
 			os.Exit(1)
@@ -1744,7 +1751,10 @@ func runStandInServer() {
 		os.Exit(1)
 	}
 	launcher, _ := strconv.Atoi(os.Getenv(standInLauncherEnv))
-	for deadline := time.Now().Add(10 * time.Second); os.Getppid() == launcher; time.Sleep(10 * time.Millisecond) {
+	if os.Getenv(standInStayEnv) != "" {
+		launcher = 0
+	}
+	for deadline := time.Now().Add(10 * time.Second); launcher > 0 && os.Getppid() == launcher; time.Sleep(10 * time.Millisecond) {
 		if time.Now().After(deadline) {
 			fail(fmt.Errorf("the launcher %d never left", launcher))
 		}
@@ -1902,6 +1912,12 @@ func appliedText(applied *bool) string {
 // In tmux in the pane: the same, with a copy named tmux. Its prompt is taken,
 // as tmux's client shows in the pane.
 //
+// Under a background-session host the pane started: the claude-named server
+// is started from the pane's shell and stays a child of the program that
+// started it, as Claude Code's daemon stays a child of the claude in the pane
+// that started it. The harness descends from the pane but runs on a terminal
+// of its own under the host, and its prompt is refused with foreign_pane.
+//
 // The artifact is agent-report-own-pane.log in the test's artifact directory:
 // each hook's --explain line and the pane's state after it.
 //
@@ -1911,7 +1927,8 @@ func appliedText(applied *bool) string {
 // is refused with foreign_pane. With harnessDaemons emptied, the background
 // session's prompt is applied. With the claimed harness_pid believed over
 // the caller's pid, the set-agent-state that claims the pane's shell is
-// applied.
+// applied. With a harness that descends from the pane taken for the pane, the
+// prompt under the background-session host the pane started is applied.
 func TestAgentReportOnlyFromTheHarnessInThePane(t *testing.T) {
 	base := t.TempDir()
 	killDaemon(t, base)
@@ -2080,11 +2097,11 @@ func TestAgentReportOnlyFromTheHarnessInThePane(t *testing.T) {
 	// the harness it runs on a terminal of its own. The server leaves the
 	// pane, and the harness carries the pane's environment, as the
 	// background session does.
-	inPaneDetached := func(label, server, payload string) hookExplained {
+	inPaneDetached := func(label, server, payload string, env ...string) hookExplained {
 		t.Helper()
 		in, out := files(payload)
 		words := []string{"env"}
-		for _, kv := range detachedEnv(t, in, out) {
+		for _, kv := range append(detachedEnv(t, in, out), env...) {
 			words = append(words, quote(kv))
 		}
 		words = append(words, quote(server), quote(tuiosBin), "agent-hook", "claude-code", "--timeout", "10s", "--explain")
@@ -2121,4 +2138,23 @@ func TestAgentReportOnlyFromTheHarnessInThePane(t *testing.T) {
 	// tmux in the pane: its server leaves the pane the same way.
 	got = inPaneDetached("tmux", tmux, `{"hook_event_name":"UserPromptSubmit","session_id":"mux-1","prompt":"in tmux"}`)
 	checkTaken("tmux", "a prompt", got, "working", "mux-1")
+
+	got = inPaneDetached("tmux", tmux, `{"hook_event_name":"Stop","session_id":"mux-1"}`)
+	checkTaken("tmux", "a Stop", got, "done", "mux-1")
+
+	// A background-session host that a program in the pane started, and that
+	// stays its child: Claude Code's daemon stays a child of the claude in the
+	// pane that started it, so each background session it runs descends from
+	// the pane. The pane is done, so no guard on a running turn stands in the
+	// way. Its prompt is refused, and the pane keeps tmux's state.
+	got = inPaneDetached("bg-child", bgHost, `{"hook_event_name":"UserPromptSubmit","session_id":"phantom-2","prompt":"forked conversation"}`,
+		standInServerArgEnv+"=--bg-pty-host", standInStayEnv+"=1")
+	if got.Applied == nil || *got.Applied || got.Reason != "foreign_pane" {
+		t.Errorf("a prompt from a background session whose daemon the pane started: applied=%s reason=%q, want refused with foreign_pane", appliedText(got.Applied), got.Reason)
+	}
+	st = readAgentState(t, base, session, win)
+	note("  pane after the prompt under bg-child: state=%s harness=%s agent_session_id=%s", st.State, st.Harness, st.AgentSession)
+	if st.State != "done" || st.AgentSession != "mux-1" {
+		t.Errorf("a background session whose daemon the pane started took the pane over: %+v, want done with mux-1", st)
+	}
 }

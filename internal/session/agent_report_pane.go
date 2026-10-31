@@ -48,10 +48,12 @@ var harnessDaemons = []struct{ name, arg string }{
 //   - the harness's own environment names this pane in TUIOS_PANE_ID, so the
 //     pane was inherited, not chosen. agent-hook --window run from outside the
 //     pane is a choice, and it keeps working.
-//   - the harness is not the pane's process, does not share its terminal and
-//     does not descend from it.
-//   - an ancestor of the harness outside the pane is a harness daemon
-//     (harnessDaemons).
+//   - the harness is not the pane's process and does not share its terminal.
+//   - an ancestor of the harness, below the pane's process and off its
+//     terminal, is a harness daemon (harnessDaemons). Descent from the pane
+//     is not enough to keep a report: Claude Code's daemon stays a child of
+//     the claude in the pane that started it, so every background session it
+//     runs descends from that pane.
 //
 // The caller's pid, which the kernel gives, checks the harness_pid it claims:
 // a hook runs under its harness, so the harness is the caller or one of its
@@ -78,10 +80,21 @@ func (d *Daemon) harnessOutsidePane(cs *connState, sess *Session, target string,
 	if id, ok := readEnvVarOf(harnessPID, "TUIOS_PANE_ID"); !ok || id != windowID {
 		return false
 	}
-	if in, known := processInPane(harnessPID, root); !known || in {
+	if harnessPID == root || onPaneTerminal(harnessPID, root) {
 		return false
 	}
 	return harnessDaemonAbove(harnessPID, root)
+}
+
+// onPaneTerminal says whether process pid has the terminal of the pane whose
+// process is root. It is false when either record cannot be read.
+func onPaneTerminal(pid, root int) bool {
+	_, tty, ok := readProcLineage(pid)
+	if !ok || tty == 0 {
+		return false
+	}
+	_, rootTTY, ok := readProcLineage(root)
+	return ok && rootTTY == tty
 }
 
 // harnessLeftPane says whether a hook report about window target of sess
