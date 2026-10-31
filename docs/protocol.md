@@ -6886,19 +6886,21 @@ says why in `transcript_refused`:
 
 - A process in a pane names a file only for its own pane.
 - The file is under the harness's transcript folder. For Claude Code that is
-  `~/.claude/projects`, or `$CLAUDE_CONFIG_DIR/projects`, and for Codex
-  `~/.codex/sessions`, or `$CODEX_HOME/sessions`. The variable is read from
-  the environment of the process that sends the report, which is the hook
-  Claude Code or Codex runs, so each pane follows the profile its agent
-  started with. The default folder is accepted as well. The symbolic links in
+  `~/.claude/projects`, or `$CLAUDE_CONFIG_DIR/projects`, for Codex
+  `~/.codex/sessions`, or `$CODEX_HOME/sessions`, and for Pi
+  `~/.pi/agent/sessions`, or `$PI_CODING_AGENT_DIR/sessions`. The variable is
+  read from the environment of the process that sends the report, which is
+  the hook the agent runs, so each pane follows the profile its agent started
+  with. The default folder is accepted as well. The symbolic links in
   the path are resolved first, so a link in the folder that leads out of it
   does not count. The folder itself may be reached through a link, such as a
   profile folder that is a link, but the one the variable names must still
-  end in `projects` (`sessions` for Codex) once its links are resolved, so a
-  `projects` folder that is a link to another folder does not count. A
+  end in `projects` (`sessions` for Codex and Pi) once its links are
+  resolved, so a `projects` folder that is a link to a folder with another
+  name does not count. A
   relative value, or one with a `{` in it, names no folder. The variable is
   not a boundary: a process in a pane can set it to any folder that has a
-  `projects` folder in it (`sessions` for Codex), and name a file there that
+  `projects` folder in it (`sessions` for Codex and Pi), and name a file there that
   matches the pattern, for its own pane.
 - The file name matches the harness's pattern (`*.jsonl`).
 - The file is a regular file. The daemon opens it without waiting and checks
