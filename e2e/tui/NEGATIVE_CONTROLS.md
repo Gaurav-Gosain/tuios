@@ -10169,6 +10169,50 @@ The fixed build passes 12 of 12 runs under the same load. The first draft of
 the test waited a fixed 1.5 s and used zsh. The CI runners have no zsh, so no
 pane was made. A draft that made the next pane right after the prompt caught
 only 5 of 48 cases: the client resized the new pane after its prompt.
+
+### Scrolling, master-stack and automatic empty-workspace panes
+
+The same fixture now covers scrolling and master-stack in daemon and
+standalone mode, a 100-column master-stack, and stock BSP/master-stack after
+the width keys have moved a divider. It starts tiled in the chosen layout;
+daemon cases also assert the client's reported `layout_mode`, because merely
+writing `startup.layout` while starting floating left the first workspace in
+BSP. The scrolling cases reveal the focused column before reading its frame.
+
+Each newly measured shell's first `stty size` must match the real frame, and
+its trap must log no `SIGWINCH` before the next pane is made. A daemon then
+switches to an empty workspace without a new-window key and waits for its pane
+request to finish before measuring that shell. A deliberate terminal resize
+must produce `SIGWINCH` in the same last shell: a dead trap cannot pass. The
+measurement begins in the shell's rc file, so a resize before that file runs
+is outside this observation.
+
+Run on 2026-10-31, macOS 27.2 arm64, Go 1.27.3. All size values below are
+**rows × columns**, as `stty` reports them. On upstream `3314abf8`, the new
+daemon cases fail; the four standalone cases pass and remain compatibility
+controls. The two caller/route controls below use separate `go build -overlay`
+binaries, leaving the helper and working tree intact. The table also records
+the stock baseline and an additional adjusted-divider compatibility control.
+
+| Control: what was cut | Where it fails | Verdict |
+| --- | --- | --- |
+| Stock upstream `3314abf8`, before the remaining paths are sized | `/daemon-scrolling`: new panes start `43x158`, frame `41x86`, one startup `SIGWINCH` each. `/daemon-master-stack`: `43x158` against `41x78` or `19x78`, one each. Automatic empty-workspace panes fail too: BSP `43x158` against `41x158`, scrolling against `41x86`; the 100-column master case records `28x98` against `26x48` or `12x48` for new panes | **caught** |
+| The `SendNewWindowIntentSized` call in `addDaemonWindowWith` (`internal/app/os_window.go`) replaced by `SendNewWindowIntent`, dropping the size at the actual send | `/daemon-scrolling`: new panes 1–3 start `43x158`, frame `41x86`, and each takes one startup `SIGWINCH`; its independently sized empty-workspace route still passes | **caught** |
+| `Cols: payload.Cols, Rows: payload.Rows` removed from `NewWindowOptions` in `handleExecuteCommand`'s `FocusIfShown` route (`internal/session/daemon_command.go`) | `/daemon`: only the automatic empty-workspace pane starts `43x158`, frame `41x158`, and takes one startup `SIGWINCH`; the ordinary new-window sends still pass | **caught** |
+| A broad `WorkspaceHasCustom` fallback, as in candidate `c708f5972` | `/daemon-bsp-resized` and `/daemon-master-resized`: after the width keys move a divider, all three later panes start `43x158` and take one startup `SIGWINCH`. That flag also marks ordinary divider adjustments, whose live tree/ratios still predict the new pane | **caught** |
+
+The fixed run keeps the default BSP/animation cases and the positive resize
+half in every case. The artifacts are `size.log`, `multiple-panes.png` and
+`resized.png` (plus text/styled captures) under each test's `TUIOS_E2E_FRAMES`
+folder. The two caller controls can be rerun with these subtest selections:
+
+```bash
+TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/control-new-window \
+  go test -count=1 -run '^TestNewPaneShellStartsAtItsSize$/^daemon-scrolling$' ./e2e/tui
+TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/control-workspace \
+  go test -count=1 -run '^TestNewPaneShellStartsAtItsSize$/^daemon$' ./e2e/tui
+```
+
 ## Next and previous agent walk the rail's order
 
 `TestCycleAgentsWalksTheRailOrder` makes two working agents in `alpha` and one in `bravo` waiting on an approval, so the rail's default needs-you order (`bravo/ag-b1`, `alpha/ag-a1`, `alpha/ag-a2`) differs from the order the panes were opened in. It checks the rail draws that order, then presses `alt+shift+j` and `alt+shift+k` in terminal mode from `alpha`'s plain shell, and the leader's `J` and `K`, and after each press reads the attached session from `ls --json` and its focused pane from `list-windows`. Each press moves to the next row, crossing sessions both ways, and next past the last and previous before the first wrap. A line typed at the end runs in the focused pane, so the keys never left terminal mode. Each control was built into its own binary from the feature commit and the test run against it; the unmodified binary passed. Run on 2026-10-27 on macOS.

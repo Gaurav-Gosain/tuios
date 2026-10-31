@@ -180,25 +180,40 @@ func parseWindows(jsonOut string) ([]winRect, bool) {
 // logged. The next pane is made only then.
 //
 // A pane that is split gets a SIGWINCH, which is right: its tile shrank. Only
-// the new pane is held to none. The log is saved as an artifact.
+// the new pane is held to none. A deliberate terminal resize must reach that
+// same trap afterwards, so a dead trap cannot make the assertion pass. The
+// shell's first observed kernel size is compared with the real frame too;
+// a resize before its rc file runs is outside that observation. Call-site
+// negative controls pin the sized requests. Logs and frames are saved as
+// artifacts.
 func TestNewPaneShellStartsAtItsSize(t *testing.T) {
 	const shell = "/bin/bash"
 	if _, err := os.Stat(shell); err != nil {
 		t.Skipf("%s is not installed", shell)
 	}
 	cases := []struct {
-		name       string
-		args       []string
-		animations bool
+		name, layout string
+		args         []string
+		animations   bool
+		cols, rows   int
+		resized      bool
 	}{
-		{"daemon", []string{"new", "winch"}, false},
-		{"daemon-animated", []string{"new", "winch"}, true},
-		{"standalone", nil, false},
-		{"standalone-animated", nil, true},
+		{"daemon", "bsp", []string{"new", "winch"}, false, 160, 45, false},
+		{"daemon-animated", "bsp", []string{"new", "winch"}, true, 160, 45, false},
+		{"standalone", "bsp", nil, false, 160, 45, false},
+		{"standalone-animated", "bsp", nil, true, 160, 45, false},
+		{"daemon-scrolling", "scrolling", []string{"new", "winch"}, false, 160, 45, false},
+		{"standalone-scrolling", "scrolling", nil, false, 160, 45, false},
+		{"daemon-master-stack", "master-stack", []string{"new", "winch"}, false, 160, 45, false},
+		{"standalone-master-stack", "master-stack", nil, false, 160, 45, false},
+		{"daemon-master-narrow", "master-stack", []string{"new", "winch"}, false, 100, 30, false},
+		{"daemon-bsp-resized", "bsp", []string{"new", "winch"}, false, 160, 45, true},
+		{"daemon-master-resized", "master-stack", []string{"new", "winch"}, false, 160, 45, true},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			base := t.TempDir()
+			writeConfig(t, base, fmt.Sprintf("[startup]\ntiled = true\nlayout = %q\n[workspaces]\nnew_window_when_empty = true\n[keybindings.global]\nscroll_focus_right = ['f6']\n", tc.layout))
 			logPath := filepath.Join(base, "size.log")
 			// The trap is set before the start line, so a resize that lands
 			// after the shell logs its start size is never missed.
@@ -207,7 +222,7 @@ func TestNewPaneShellStartsAtItsSize(t *testing.T) {
 			if err := os.WriteFile(filepath.Join(xdgDir(base, "HOME"), ".bashrc"), []byte(rc), 0o600); err != nil {
 				t.Fatal(err)
 			}
-			term := startIn(t, base, startOpts{cols: 160, rows: 45, args: tc.args, animations: tc.animations,
+			term := startIn(t, base, startOpts{cols: tc.cols, rows: tc.rows, args: tc.args, animations: tc.animations,
 				env: []string{"SHELL=" + shell, "BASH_SILENCE_DEPRECATION_WARNING=1"}})
 			if tc.args != nil {
 				killDaemon(t, base)
@@ -251,7 +266,13 @@ func TestNewPaneShellStartsAtItsSize(t *testing.T) {
 			// fix the client resizes a new pane after its first prompt, and a
 			// keypress made at the prompt let that SIGWINCH fall among the
 			// next pane's lines, where it was never judged.
-			awaitTileSize := func(pane, pid string) {
+			awaitTileSize := func(pane, pid string) string {
+				if tc.layout == "scrolling" {
+					// New columns can be only partly visible. Reveal the focused
+					// one without changing its width before measuring its frame.
+					sendKeys(t, term, tuitest.F6)
+				}
+				var size string
 				err := term.WaitForDesc(pane+"'s frame holds the size its shell logged", func(s tuitest.Screen) bool {
 					cols, rows, ok := frameAround(s, "p"+pid+" $")
 					if !ok {
@@ -263,7 +284,8 @@ func TestNewPaneShellStartsAtItsSize(t *testing.T) {
 							last = f[2] + "x" + f[3]
 						}
 					}
-					return last == fmt.Sprintf("%dx%d", rows, cols)
+					size = fmt.Sprintf("%dx%d", rows, cols)
+					return last == size
 				}, uiTimeout)
 				if err != nil {
 					t.Fatalf("%s: %v\nlog:\n%s", pane, err, func() string {
@@ -271,19 +293,47 @@ func TestNewPaneShellStartsAtItsSize(t *testing.T) {
 						return string(data)
 					}())
 				}
+				return size
 			}
 			waitBoot(t, term)
 			newWindow(t, term)
 			enableTiling(t, term)
-			// The first pane was not made into a tiled layout. It is not
-			// judged, but its shell must be up before the next pane is made.
+			if tc.args != nil {
+				out, err := tuiosCLI(t, base, "run-command", "--json", "GetSessionInfo")
+				if err != nil {
+					t.Fatalf("read layout: %v\n%s", err, out)
+				}
+				var info struct {
+					Layout string `json:"layout_mode"`
+				}
+				if err := json.Unmarshal([]byte(out), &info); err != nil || info.Layout != tc.layout {
+					t.Fatalf("measured layout is %q, want %q: %v\n%s", info.Layout, tc.layout, err, out)
+				}
+			}
+			// Establish the first shell before judging subsequent insertions.
 			awaitNewShell("the first pane")
+			if tc.resized {
+				// A divider resize marks the workspace custom, but the stock
+				// tree/ratios still describe where the next pane will go.
+				newWindow(t, term)
+				pid := awaitNewShell("resize setup")
+				awaitTileSize("resize setup", pid)
+				before := waitForSettledGeometry(t, base, 2)
+				sendKeys(t, term, ">", ">")
+				waitForShape(t, base, "winch", 2, "the resized divider", func(after []winRect) error {
+					if sameGeometry(before, after) {
+						return fmt.Errorf("the width keys moved no divider")
+					}
+					return nil
+				})
+				awaitTileSize("after the divider resize", pid)
+			}
 			// Each pane is judged on the log lines from its own keypress to the
 			// next one. The SIGWINCH of the pane it split is the right answer
 			// to the split, and comes from another pid.
 			type pane struct {
-				pid  string
-				from int
+				name, pid, size string
+				from            int
 			}
 			var panes []pane
 			for i := range 3 {
@@ -291,8 +341,20 @@ func TestNewPaneShellStartsAtItsSize(t *testing.T) {
 				newWindow(t, term)
 				name := fmt.Sprintf("new pane %d", i+1)
 				pid := awaitNewShell(name)
-				awaitTileSize(name, pid)
-				panes = append(panes, pane{pid, from})
+				size := awaitTileSize(name, pid)
+				panes = append(panes, pane{name, pid, size, from})
+			}
+			saveArtifact(t, term, artifactDir(t), "multiple-panes")
+			savePNG(t, term.Screen(), hostPalette(t, ""), artifactDir(t), "multiple-panes")
+			if tc.args != nil {
+				// This has its own daemon request, distinct from the new-window
+				// intent above. Ask for nothing manually on the new workspace.
+				from := len(events())
+				sendKeys(t, term, tuitest.Alt("2"))
+				exactlyPanesOn(t, term, base, "winch", 2, 1, "automatic empty-workspace pane")
+				pid := awaitNewShell("empty workspace")
+				size := awaitTileSize("empty workspace", pid)
+				panes = append(panes, pane{"empty workspace", pid, size, from})
 			}
 			all := events()
 			var text strings.Builder
@@ -318,10 +380,34 @@ func TestNewPaneShellStartsAtItsSize(t *testing.T) {
 						winch++
 					}
 				}
-				if winch != 0 {
-					t.Errorf("new pane %d (pid %s) started at %s and took %d SIGWINCH; a new pane's "+
-						"shell must start at its tile's size\n%s", i+1, p.pid, start, winch, text.String())
+				if start != p.size || winch != 0 {
+					t.Errorf("%s (pid %s) started at %s, frame %s, and took %d SIGWINCH; a new pane's "+
+						"shell must start at its tile's size\n%s", p.name, p.pid, start, p.size, winch, text.String())
 				}
+			}
+			// Positive half: this same shell must report a deliberate resize.
+			last := panes[len(panes)-1]
+			from := len(events())
+			if err := term.Resize(tc.cols-8, tc.rows-3); err != nil {
+				t.Fatal(err)
+			}
+			waitForFileText(t, logPath, func(string) bool {
+				for _, f := range events()[from:] {
+					if f[0] == last.pid && f[1] == "WINCH" {
+						return true
+					}
+				}
+				return false
+			}, "the new shell did not report a deliberate terminal resize")
+			awaitTileSize("after terminal resize", last.pid)
+			saveArtifact(t, term, artifactDir(t), "resized")
+			savePNG(t, term.Screen(), hostPalette(t, ""), artifactDir(t), "resized")
+			data, err := os.ReadFile(logPath)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(filepath.Join(artifactDir(t), "size.log"), data, 0o644); err != nil {
+				t.Fatal(err)
 			}
 			alive(t, term, "after opening panes")
 		})

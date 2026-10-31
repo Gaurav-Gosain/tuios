@@ -1494,12 +1494,15 @@ func (c *TUIClient) SendRunIntent(cwd string, workspace, cols, rows int, keepOpe
 // See ExecuteCommandPayload.CwdFrom and FocusIfShown.
 //
 // sshFrom, when set, names the window whose ssh the new one follows, as
-// SendNewWindowIntent's does.
-func (c *TUIClient) SendNewWindowFrom(workspace, tabKey int, cwdFrom, sshFrom string) error {
+// SendNewWindowIntent's does. cols and rows are the content size when the
+// client knows it, as SendNewWindowIntentSized's are; zero keeps the fallback.
+func (c *TUIClient) SendNewWindowFrom(workspace, tabKey, cols, rows int, cwdFrom, sshFrom string) error {
 	return c.sendNewWindow(&ExecuteCommandPayload{
 		CommandType:  "NewWindow",
 		Workspace:    workspace,
 		TabKey:       tabKey,
+		Cols:         cols,
+		Rows:         rows,
 		CwdFrom:      cwdFrom,
 		SSHFrom:      sshFrom,
 		FocusIfShown: true,

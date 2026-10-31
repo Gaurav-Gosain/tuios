@@ -180,6 +180,7 @@ func (d *Daemon) handleExecuteCommand(cs *connState, msg *Message) error {
 				win, err = session.AddDaemonWindowWith(NewWindowOptions{
 					FocusIfShown: true, Cwd: payload.Cwd, Workspace: payload.Workspace, TabKey: payload.TabKey,
 					Name: name, Command: command, Env: newWindowEnv,
+					Cols: payload.Cols, Rows: payload.Rows,
 				}, onExit)
 			}
 			switch {
