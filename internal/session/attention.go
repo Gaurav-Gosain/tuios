@@ -255,6 +255,10 @@ type AttentionItem struct {
 	// digest an answer names so it applies only to the plan that was shown.
 	PlanLines int    `json:"plan_lines,omitempty"`
 	PlanSHA   string `json:"plan_sha,omitempty"`
+	// Upgrade is set on the ask a live upgrade from a pane puts to the person
+	// (upgrade_confirm.go). A client shows it as a dialog of its own, not as
+	// an Inbox question.
+	Upgrade *UpgradeAsk `json:"upgrade,omitempty"`
 
 	// remoteSeq is the Seq the machine the item came from gave it, for an
 	// item mirrored from a linked host. It orders that machine's changes,
@@ -1114,7 +1118,10 @@ func (a *attentionStore) changedLocked() {
 func (a *attentionStore) encodeLocked() []byte {
 	f := attentionFile{Version: 1, NextID: a.nextID, Rev: a.rev, Items: make([]AttentionItem, 0, len(a.items)+len(a.snoozed))}
 	for _, id := range a.sortedIDsLocked() {
-		f.Items = append(f.Items, *a.items[id])
+		// An upgrade's confirm never outlives the call that waits on it.
+		if a.items[id].Upgrade == nil {
+			f.Items = append(f.Items, *a.items[id])
+		}
 	}
 	// A snoozed item is saved with snoozed_until, and load puts it back to
 	// sleep. An older daemon reading the file lists it as open, which is

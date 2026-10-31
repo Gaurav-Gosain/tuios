@@ -159,8 +159,11 @@ func (d *Daemon) checkPrevBinary() (*prevBinary, error) {
 	if prev.open != nil {
 		return prev, nil
 	}
+	// The change time is left out: the kept file is a hard link to the
+	// binary that was running, and an install that replaces that binary
+	// drops the link count, which moves it.
 	id, err := statFileID(prev.path)
-	if err != nil || id != prev.file {
+	if err != nil || id.withoutChange() != prev.file.withoutChange() {
 		return nil, fmt.Errorf("the copy of this daemon's binary kept for a fallback, %s, has changed since the daemon started, so a failed upgrade would have nothing to return to. The upgrade is refused. %s", prev.path, restartAdvice())
 	}
 	if prev.sum != nil {

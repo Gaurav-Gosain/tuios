@@ -61,6 +61,9 @@ func Attach(opts app.OSOptions, ov config.Overrides, version string, caps *sessi
 	// A viewer whose input is dropped sends no input, so under the largest
 	// and latest window_size policies it does not size the session.
 	client.ViewOnly = opts.ViewOnly
+	// The remote viewer's keys reach the model as the person's, so the live
+	// upgrade dialog shows to them and takes their answer.
+	client.UpgradeDialog = true
 	// The hint over a larger client's leftover names this client by what
 	// serves it, since its machine is the server's.
 	client.Kind = session.ClientKindWeb

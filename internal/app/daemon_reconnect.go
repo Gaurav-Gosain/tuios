@@ -81,6 +81,11 @@ func (m *OS) beginDaemonReconnect() tea.Cmd {
 	if bye := m.DaemonClient.Goodbye(); bye != nil && bye.Reason == session.GoodbyeStop {
 		return nil
 	}
+	// A live upgrade dropped this client on purpose: the programs keep
+	// running, and the client exits to say how to attach again.
+	if _, upgraded := m.DaemonClient.UpgradedTo(); upgraded {
+		return nil
+	}
 	since, budget := time.Now(), daemonDropBudget
 	if bye := m.DaemonClient.Goodbye(); bye != nil && bye.Reason == session.GoodbyeRestart {
 		since, budget = bye.At, daemonRestartBudget
@@ -120,8 +125,10 @@ func (m *OS) handleDaemonReconnectTick(msg daemonReconnectTickMsg) tea.Cmd {
 	caps := m.clientCapabilities()
 	reserve := m.ownLayoutReserveForReconnect()
 	agent, display := "", session.ClientDisplay{}
+	upgradeDialog := false
 	if m.DaemonClient != nil {
 		agent, display = m.DaemonClient.SSHAuthSock, m.DaemonClient.Display
+		upgradeDialog = m.DaemonClient.UpgradeDialog
 	}
 	return func() tea.Msg {
 		client := session.NewTUIClient()
@@ -132,6 +139,7 @@ func (m *OS) handleDaemonReconnectTick(msg daemonReconnectTickMsg) tea.Cmd {
 		client.HandshakeTimeout = max(min(daemonDialTimeout, time.Until(end)), time.Millisecond)
 		client.AttachDeadline = end
 		client.SSHAuthSock, client.Display = agent, display
+		client.UpgradeDialog = upgradeDialog
 		client.UseCallerTerm()
 		if err := client.ConnectWithCapabilities(version, width, height, caps); err != nil {
 			_ = client.Close()

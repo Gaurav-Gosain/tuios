@@ -1354,6 +1354,8 @@ you agreed to it." Nothing is changed.
 | "Another restart of the daemon is running." | Wait for it to end. `tuios restart-server --last` shows its steps. |
 | "The restart stopped before it finished." | Run `tuios restart-server --last`, then `tuios ls`. |
 
+A restart ends every program running in a pane. To move the daemon to another build with the programs still running, use [`tuios daemon upgrade`](#tuios-daemon-upgrade) instead.
+
 ### `tuios daemon`
 
 Run the daemon in the foreground (for debugging).
@@ -1398,6 +1400,55 @@ tuios daemon-app uninstall [--path PATH]
 
 When the app is installed, each new daemon starts through it. Set
 `TUIOS_NO_DAEMON_APP=1` to start a daemon directly.
+
+### `tuios daemon upgrade`
+
+Upgrade the running daemon to another tuios binary in place, without ending any pane's program. Every pane's program keeps running with the same pid, the same terminal and the same screen, and the daemon keeps its pid. Live upgrades are experimental, opt-in, and macOS and Linux only.
+
+**Usage:**
+```bash
+tuios daemon upgrade [flags]
+```
+
+**Flags:**
+- `--binary <path>`: The tuios binary to run the daemon as (default: the tuios running the command)
+- `--json`: Print the outcome as one JSON object
+
+**Examples:**
+```bash
+tuios daemon upgrade
+tuios daemon upgrade --binary ~/bin/tuios-next
+tuios --server test daemon upgrade --binary ./tuios   # upgrades only the daemon named test
+```
+
+**Output:**
+```
+Checking /usr/local/bin/tuios (v0.10.1) accepts this daemon's state (handoff v2)... ok
+Paused 4 panes, saved their screens (34.3 KB).
+Starting v0.10.1 in place (pid 8615 kept)...
+Upgraded in 0.06 s. 4 panes and their programs kept.
+```
+
+With attached clients the last line adds how many were told to attach again, such as ` 2 attached clients were told to attach again.` `--json` prints one object with `pid`, `from`, `to`, `binary`, `panes`, `clients`, `seconds`, `fallback`, `instance` and `handoff`, the measurements of the handoff in the shape of `hello`'s `upgrade` field (see [protocol.md](protocol.md#hello)).
+
+**How it runs:**
+1. The binary is run once as `<binary> daemon handoff-accepts`, before anything pauses. A binary that does not run, or reads another handoff version, is refused and nothing changes. A tuios from before live upgrades fails this check.
+2. The daemon pauses every pane and writes its state down. A chatty program blocks in `write()` for the pause and loses nothing; 60 busy panes with 1000 rows of history each pause for about 0.3 s.
+3. Attached clients are told and dropped, and the daemon execs the new binary, which takes the panes over. Calls made during the swap wait in the socket's backlog and the new image answers them.
+
+**What is kept:** sessions and windows as they stand; each pane's screen, the alternate screen with the main one under it, terminal modes (bracketed paste, mouse, kitty keyboard flags), titles and the title stack; the last 1000 rows of history per pane (deeper history is not carried); the folder and branch the shell reported; OSC 133 marks and command history; program status (OSC 7501) and agent state; pane tokens, so `TUIOS_PANE_TOKEN` keeps verifying; agent mailboxes; exit statuses, including a pane that exits during the upgrade; and the event stream's boot id and numbering, so `subscribe`, `stream-pane` and `pane-view` resume.
+
+**What ends:**
+- Attached clients are dropped. A tuios client prints `The daemon is being upgraded to <version>. Your programs are still running. Run 'tuios attach <session>' to continue.` and exits 0. SSH and web clients say to connect again. A client from a build without live upgrades reports the daemon as lost. `tuios pane-view` reconnects on its own.
+- A JSON verb call that was running or waiting (`wait-for`, a waiting popup, `ask-agent`) ends with `daemon_upgrading`. Call it again; the new image answers.
+- Size leases end with their connection. Plugins and links to other machines are stopped and started again by the new image, and links redial.
+- A pane's `close_on_exit` is not carried: after the upgrade, a window whose program exits with no client attached stays open.
+
+**Refusals:** the command exits 1 with `upgrade_refused` and nothing changes when the daemon runs on Windows, is embedded in another program (`tuios-web`, the SSH server), holds panes hosted here for another machine or a window whose process runs on another machine, is running a `tuios fan verify` check, or is running a popup with `capture_stdout`. A second upgrade while one runs is refused as `busy`. Run from inside a pane, the upgrade waits for the person: every attached client shows a dialog with the binary's full path, its version, and the pane that asked by its title, id and session. No is the default, and only a key pressed at a client answers it: Down or Right moves to Yes, any other key, Tab included, moves back to No, and Enter chooses. The first answer closes the dialog on the other clients. No, Esc, 60 seconds without an answer, no client attached that shows the dialog (a view-only client, a `gui-bridge` renderer and a client too old for the dialog do not), or the agent features turned off refuses it with `forbidden` and `daemon-upgrade is for the person`, followed by which of these it was and what to do, and nothing changes. A plugin is refused the same way without a dialog. A daemon from before live upgrades answers `unknown_verb`, and the command says to restart it with `tuios restart-server`, which stops every program in every pane. On Windows, `tuios restart-server` is the way to move to another build.
+
+**Fallback:** at start the daemon keeps the binary it runs at `<state>/handoff/tuios.prev` (a hard link, or a copy across file systems; one per server). If the new binary starts and cannot take the panes over (an error, a panic, or a 30 second watchdog), the daemon execs `tuios.prev`, which takes them back. The command then says the new binary could not take the panes over and the daemon went back to the old version, that every program is still running, to see `tuios logs`, and exits 1.
+
+The design is in [design/live-handoff.md](design/live-handoff.md). What each kind of restart keeps is in [SESSIONS.md](SESSIONS.md#what-survives).
 
 ### Workflow Example
 
@@ -6070,6 +6121,8 @@ binary is untouched.
 **The running daemon** keeps the old build. Sessions you have open go on
 working. To move them to the new build, run `tuios restart-server`. Panes
 are restored; the programs that were running in them are not.
+
+On macOS and Linux, `tuios daemon upgrade` moves the running daemon to the installed build instead, with every pane's program still running. See [`tuios daemon upgrade`](#tuios-daemon-upgrade).
 
 Set `GITHUB_TOKEN` or `GH_TOKEN` to raise the release lookup's rate limit. It is
 never required and no token is created for you.

@@ -69,6 +69,10 @@ type TUIClient struct {
 	// viewer started with --read-only. It is sent with every attach. See
 	// AttachPayload.ViewOnly.
 	ViewOnly bool
+	// UpgradeDialog says this client shows a live upgrade's dialog and
+	// answers it only with a key the person pressed. It is sent with every
+	// attach. See AttachPayload.UpgradeDialog.
+	UpgradeDialog bool
 	// Kind is the hello's ClientKind: ClientKindSSH or ClientKindWeb for a
 	// client a server runs for a remote viewer, "" for a terminal on this
 	// machine. Set it before Connect.
@@ -105,6 +109,9 @@ type TUIClient struct {
 	// nestedRefusal is the daemon's reason when it took this client off its
 	// session for showing the session inside itself. See NestedRefusal.
 	nestedRefusal atomic.Pointer[string]
+	// upgradedTo is the version a live upgrade told this client the daemon
+	// is becoming, nil when none has. See MsgDaemonUpgrading.
+	upgradedTo atomic.Pointer[string]
 	// detachedReason is the daemon's reason when it detached this client
 	// because another client attached or detach-client named it. See
 	// DetachedReason.
@@ -617,19 +624,20 @@ func (c *TUIClient) BuildMismatch() (clientBuild, daemonBuild string) {
 func (c *TUIClient) AttachSession(name string, createNew bool, width, height int) (*SessionState, error) {
 	probe := c.nestProbe
 	msg, err := NewMessage(MsgAttach, &AttachPayload{
-		SessionName:  name,
-		CreateNew:    createNew,
-		Width:        width,
-		Height:       height,
-		Reserve:      c.OwnLayoutReserve(),
-		Served:       c.Served,
-		AllowNested:  c.AllowNested,
-		NestProbe:    probe,
-		ViewOnly:     c.viewOnly(),
-		Passive:      c.Passive,
-		Cwd:          c.StartDir,
-		DetachOthers: c.DetachOthers,
-		Reconnect:    c.Reconnect,
+		SessionName:   name,
+		CreateNew:     createNew,
+		Width:         width,
+		Height:        height,
+		Reserve:       c.OwnLayoutReserve(),
+		Served:        c.Served,
+		AllowNested:   c.AllowNested,
+		NestProbe:     probe,
+		ViewOnly:      c.viewOnly(),
+		UpgradeDialog: c.UpgradeDialog,
+		Passive:       c.Passive,
+		Cwd:           c.StartDir,
+		DetachOthers:  c.DetachOthers,
+		Reconnect:     c.Reconnect,
 	})
 	if err != nil {
 		return nil, err
@@ -865,16 +873,17 @@ func (c *TUIClient) SwitchSession(targetName string, width, height int) (*Sessio
 func (c *TUIClient) attachWhileReading(name string, createNew bool, width, height int) (*SessionState, error) {
 	probe := c.nestProbe
 	msg, err := NewMessage(MsgAttach, &AttachPayload{
-		SessionName: name,
-		CreateNew:   createNew,
-		Width:       width,
-		Height:      height,
-		Reserve:     c.OwnLayoutReserve(),
-		Served:      c.Served,
-		AllowNested: c.AllowNested,
-		NestProbe:   probe,
-		ViewOnly:    c.viewOnly(),
-		Passive:     c.Passive,
+		SessionName:   name,
+		CreateNew:     createNew,
+		Width:         width,
+		Height:        height,
+		Reserve:       c.OwnLayoutReserve(),
+		Served:        c.Served,
+		AllowNested:   c.AllowNested,
+		NestProbe:     probe,
+		ViewOnly:      c.viewOnly(),
+		UpgradeDialog: c.UpgradeDialog,
+		Passive:       c.Passive,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("attach encode: %w", err)
@@ -1892,6 +1901,13 @@ func (c *TUIClient) handleMessage(msg *Message) {
 			resized(payload.Width, payload.Height)
 		}
 
+	case MsgDaemonUpgrading:
+		var payload DaemonUpgradingPayload
+		if err := msg.ParsePayload(&payload); err == nil {
+			v := payload.Version
+			c.upgradedTo.Store(&v)
+		}
+
 	case MsgPTYClosed:
 		var payload ClosePTYPayload
 		if err := msg.ParsePayload(&payload); err != nil {
@@ -2866,4 +2882,13 @@ func windowSummariesAgree(a, b WindowSummary) bool {
 		slices.Equal(a.ProgramStatus, b.ProgramStatus) &&
 		a.ForegroundCmd == b.ForegroundCmd && a.Workspace == b.Workspace &&
 		a.Scratch == b.Scratch && a.Note == b.Note
+}
+
+// UpgradedTo is the version a live upgrade said the daemon was becoming as
+// it closed this client's connection, and whether one did.
+func (c *TUIClient) UpgradedTo() (string, bool) {
+	if v := c.upgradedTo.Load(); v != nil {
+		return *v, true
+	}
+	return "", false
 }

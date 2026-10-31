@@ -652,9 +652,18 @@ type connState struct {
 	// largest and latest it does not count toward the session's size.
 	// Guarded by mu.
 	viewOnly bool
+	// upgradeDialog says the client's attach marked it as one that shows a
+	// live upgrade's dialog and answers it only with a key the person
+	// pressed. Guarded by mu. See upgrade_confirm.go.
+	upgradeDialog bool
 	// passive is a pane viewer without a full renderer command executor.
 	// It does not size the session, but may write to its subscribed PTY. Guarded by mu.
 	passive bool
+
+	// verbCall is the JSON verb this connection is running, so a live
+	// upgrade can answer it before closing the connection. See
+	// handoff_clients.go.
+	verbCall inflightVerb
 
 	// takeover, when a verb sets it, runs after that verb's reply line has been
 	// written and owns the connection from then on; the JSON loop returns

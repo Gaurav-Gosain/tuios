@@ -452,6 +452,13 @@ func (r *Runner) StopAll(wait time.Duration) {
 	}
 }
 
+// Resume takes commands again after StopAll.
+func (r *Runner) Resume() {
+	r.mu.Lock()
+	r.stopped = false
+	r.mu.Unlock()
+}
+
 // cleanEnv drops the variables that would name a pane or a plugin the
 // command does not belong to. The daemon's own environment can carry them
 // when the daemon was started from a pane.

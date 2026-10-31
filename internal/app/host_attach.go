@@ -75,6 +75,8 @@ type hostDial struct {
 	// ViewOnly, so a served or read-only client stays one on the new machine.
 	kind             string
 	served, viewOnly bool
+	// upgradeDialog is the replaced client's UpgradeDialog.
+	upgradeDialog bool
 }
 
 func (m *OS) hostDialFor(host, name string, create, global bool) hostDial {
@@ -84,10 +86,11 @@ func (m *OS) hostDialFor(host, name string, create, global bool) hostDial {
 		version:     m.DaemonClient.ClientVersion(),
 		sshAuthSock: m.DaemonClient.SSHAuthSock,
 		term:        m.DaemonClient.Term, colorTerm: m.DaemonClient.ColorTerm,
-		kind:     m.DaemonClient.Kind,
-		served:   m.DaemonClient.Served,
-		viewOnly: m.DaemonClient.ViewOnly,
-		width:    m.Width, height: m.Height,
+		kind:          m.DaemonClient.Kind,
+		served:        m.DaemonClient.Served,
+		viewOnly:      m.DaemonClient.ViewOnly,
+		upgradeDialog: m.DaemonClient.UpgradeDialog,
+		width:         m.Width, height: m.Height,
 		caps: m.clientCapabilities(),
 	}
 }
@@ -102,6 +105,7 @@ func (d hostDial) open() (*session.TUIClient, *session.SessionState, error) {
 	client.SSHAuthSock = d.sshAuthSock
 	client.Term, client.ColorTerm = d.term, d.colorTerm
 	client.Kind, client.Served, client.ViewOnly = d.kind, d.served, d.viewOnly
+	client.UpgradeDialog = d.upgradeDialog
 	var err error
 	if d.host == federation.LocalHostName {
 		err = client.ConnectWithCapabilities(d.version, d.width, d.height, d.caps)

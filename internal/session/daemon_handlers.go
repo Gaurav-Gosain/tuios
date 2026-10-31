@@ -238,6 +238,7 @@ func (d *Daemon) handleAttach(cs *connState, msg *Message) error {
 	cs.isTUIClient = true
 	cs.attachSeq = d.attachCount.Add(1)
 	cs.viewOnly = payload.ViewOnly
+	cs.upgradeDialog = payload.UpgradeDialog
 	cs.passive = payload.Passive
 	// A client that comes back to a session it was the latest client of, and
 	// that kept its size for it, takes back the input it had when it left: it

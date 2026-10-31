@@ -42,8 +42,16 @@ const (
 	MinHandoffVersion = 2
 )
 
-// ErrHandoffUnsupported is a platform with no live handoff.
-var ErrHandoffUnsupported = errors.New("live upgrade is not supported on this platform. To run another tuios, use 'tuios restart-server'. It stops every program in every pane, and lists them before it asks")
+// ErrHandoffUnsupported is a platform with no live handoff. Its message is
+// built when it is shown, so the restart-server it names carries the --server
+// of the daemon or command that returns it.
+var ErrHandoffUnsupported error = handoffUnsupported{}
+
+type handoffUnsupported struct{}
+
+func (handoffUnsupported) Error() string {
+	return "live upgrade is not supported on this platform. " + restartAdvice()
+}
 
 var (
 	errHandoffBusy     = errors.New("a live upgrade is already running")
@@ -66,6 +74,9 @@ const handoffWorkers = 8
 type handoffRequest struct {
 	// binary is the image to exec. The preflight runs it first.
 	binary string
+	// pinned, when set, is the file the person confirmed binary as. A file
+	// put there since is refused, not run.
+	pinned *fileID
 	// holdAfterWrite and inWindow are for tests: a wait after the manifest
 	// is written, and a function run while the descriptors are exposed.
 	holdAfterWrite time.Duration
@@ -169,6 +180,10 @@ func (d *Daemon) prepareHandoff(req handoffRequest) (*handoffRun, error) {
 		return nil, err
 	}
 	run.stats.PreflightMS = msSince(t0)
+	if req.pinned != nil && run.bin.file != *req.pinned {
+		d.handoffMu.Unlock()
+		return nil, errBinaryReplaced(run.bin.path)
+	}
 	if err := run.prepare(); err != nil {
 		run.putBack()
 		d.handoffMu.Unlock()
@@ -188,6 +203,26 @@ func (r *handoffRun) prepare() error {
 	// New callers wait in the backlog from here on.
 	d.pauseAccepting()
 	r.undo = append(r.undo, d.resumeAccepting)
+
+	// The daemon's other children go before the panes stop. Each would stay
+	// this pid's child across the exec, cut off from the pipes it talks over
+	// and never waited for, and the new image starts its own: a second copy
+	// of every plugin, and an ssh link per host that nothing reads.
+	d.plugins.stop()
+	d.fleet.stop()
+	if d.federation != nil {
+		d.federation.Stop()
+	}
+	if d.hooks != nil {
+		d.hooks.WaitTimeout(hookDrainTimeout)
+	}
+	r.undo = append(r.undo, func() {
+		if d.federation != nil {
+			d.federation.Resume(d.ctx)
+		}
+		d.fleet.start(d.ctx)
+		d.plugins.restart()
+	})
 
 	// The reaps first: a reap in progress runs the pane's exit, which may
 	// close the pane, and that needs paneLife.
@@ -450,6 +485,11 @@ func (r *handoffRun) commit() error {
 	// A binary replaced since the preflight is a file the preflight did not
 	// run: run it again, and pay its first exec here rather than after it.
 	if !r.bin.stillThere() {
+		if r.req.pinned != nil {
+			r.putBack()
+			d.handoffMu.Unlock()
+			return errBinaryReplaced(r.bin.path)
+		}
 		bin, err := preflightBinary(r.bin.path)
 		if err != nil {
 			r.putBack()
@@ -458,7 +498,7 @@ func (r *handoffRun) commit() error {
 		}
 		r.bin = bin
 	}
-	d.closeClientsForHandoff()
+	d.closeClientsForHandoff(r.bin.accepts.Version)
 
 	argv := append([]string{r.bin.path}, d.handoffArgs(int(r.file.Fd()))...) //nolint:gosec // a descriptor number
 	log.Printf("Live upgrade: exec %s with %d panes (manifest %d bytes, stopped %s)", r.bin.path, r.panes, r.manifestBytes, time.Since(r.started).Round(time.Millisecond))
@@ -490,17 +530,6 @@ func (r *handoffRun) putBack() {
 		r.undo[i]()
 	}
 	r.undo = nil
-}
-
-// closeClientsForHandoff drops every client connection, as shutdown does.
-func (d *Daemon) closeClientsForHandoff() {
-	d.clientsMu.Lock()
-	for _, cs := range d.clients {
-		cs.closeDone()
-		_ = cs.conn.Close()
-	}
-	d.clients = make(map[string]*connState)
-	d.clientsMu.Unlock()
 }
 
 // handoffRecord is the session as the next image rebuilds it.

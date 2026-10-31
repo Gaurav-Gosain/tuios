@@ -7,10 +7,13 @@ import (
 	"syscall"
 )
 
-// fileIDOf is the device and inode of a stat result.
+// fileIDOf is the device, inode, size and times of a stat result.
 func fileIDOf(info os.FileInfo) fileID {
 	if st, ok := info.Sys().(*syscall.Stat_t); ok {
-		return fileID{dev: uint64(st.Dev), ino: st.Ino} //nolint:gosec,unconvert // the field's type differs by platform
+		return fileID{
+			dev: uint64(st.Dev), ino: st.Ino, //nolint:gosec,unconvert // the field's type differs by platform
+			size: info.Size(), mtime: info.ModTime().UnixNano(), ctime: changeTime(st),
+		}
 	}
 	return fileID{}
 }
