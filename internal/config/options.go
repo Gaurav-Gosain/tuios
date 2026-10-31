@@ -1589,6 +1589,11 @@ var optionSpecs = []Option{
 		Description: "Drag and drop between panes over the kitty drag and drop protocol (OSC 72)",
 		Default:     "false",
 	},
+	{
+		Path: "panes.drag_and_drop_desktop", Type: OptionBool, Section: "panes",
+		Description: "Bridge drags to and from the desktop through a terminal that speaks the protocol (kitty)",
+		Default:     "false",
+	},
 
 	// [scratch]. Read each time toggle_scratch creates or shows the scratch
 	// terminal. A show resizes the popup to the size in force.

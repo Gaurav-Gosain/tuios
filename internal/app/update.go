@@ -415,6 +415,10 @@ func (m *OS) Init() tea.Cmd {
 	if cmd := m.hostProgramStatusProbe(); cmd != nil {
 		cmds = append(cmds, cmd)
 	}
+	// Ask it whether it speaks the drag and drop protocol. See dnd_host.go.
+	if cmd := m.dndHostProbe(); cmd != nil {
+		cmds = append(cmds, cmd)
+	}
 
 	// Ask the terminal for its own colours where the startup probe could not,
 	// and follow its light and dark switch. See host_colors.go.
@@ -943,6 +947,11 @@ func (m *OS) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	if hc := m.hostProgramStatusAfter(); hc != nil {
 		cmd = tea.Batch(cmd, hc)
 	}
+	// What the drag and drop bridge has for the terminal, whichever message
+	// put it there. See dnd_host.go.
+	if hc := m.dndHostFlush(); hc != nil {
+		cmd = tea.Batch(cmd, hc)
+	}
 	// The View after this message may compose a frame, or move the cursor
 	// for input; flushCmd brings the write back once that frame is stored.
 	if m.frameRate.program != nil && (!m.renderSkipped || isPersonInput(msg) || m.flushWhileIdle(msg)) {
@@ -1132,6 +1141,10 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 	// host_program_status.go.
 	if c, ok := m.handleHostProgramStatusMsg(msg); ok {
 		return m, c
+	}
+	// The terminal's drag and drop messages. See dnd_host.go.
+	if m.handleHostDnD(msg) {
+		return m, nil
 	}
 
 	switch msg := msg.(type) {
