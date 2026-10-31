@@ -534,6 +534,69 @@ func runMoveWindow(sessionName, windowTarget, toSession string, workspace int, f
 	return nil
 }
 
+// newSetAgentQuietCommand creates the command that marks a window quiet.
+func newSetAgentQuietCommand() *cobra.Command {
+	var sessionName, window string
+	var off, jsonOutput bool
+	cmd := &cobra.Command{
+		Use:   "set-agent-quiet",
+		Short: "Keep a pane's finished turns and questions out of the Inbox",
+		Long: `Mark a window quiet, for an agent that works in the background.
+
+A quiet window opens no finished, question or errored item in the Inbox, and it
+raises no alert. Its open items of those kinds close. The agent state, the rail
+glyph, the agent-state events and list-agents do not change. An approval still
+reaches you. The rail row says quiet, and list-agents reports quiet: true.
+
+The mark stays until you clear it or the pane closes. --off clears it, and the
+old items do not open again. This command needs the admin grant.`,
+		Example: `  # Mark a background worker quiet
+  tuios set-agent-quiet -w worker-1
+
+  # Clear the mark
+  tuios set-agent-quiet -w worker-1 --off`,
+		Args: cobra.NoArgs,
+		RunE: func(_ *cobra.Command, _ []string) error {
+			client, err := dialVerb()
+			if err != nil {
+				return err
+			}
+			defer func() { _ = client.Close() }()
+			raw, err := client.Call("set-agent-quiet", map[string]any{
+				"session": sessionName,
+				"window":  window,
+				"quiet":   !off,
+			})
+			if err != nil {
+				return reportVerbError(explainVerbError("set-agent-quiet", err), jsonOutput)
+			}
+			if jsonOutput {
+				return printVerbResult(raw, jsonOutput)
+			}
+			var res struct {
+				WindowID string `json:"window_id"`
+				Quiet    bool   `json:"quiet"`
+				Closed   int    `json:"closed"`
+			}
+			if err := json.Unmarshal(raw, &res); err != nil {
+				return fmt.Errorf("failed to parse response: %w", err)
+			}
+			if !res.Quiet {
+				fmt.Printf("Window %s is not quiet.\n", shortWindowID(res.WindowID))
+				return nil
+			}
+			fmt.Printf("Window %s is quiet. Inbox items closed: %d. An approval still reaches you.\n", shortWindowID(res.WindowID), res.Closed)
+			return nil
+		},
+	}
+	cmd.Flags().StringVarP(&sessionName, "session", "s", "", "Target session (default: this pane's session, else the most recently active)")
+	cmd.Flags().StringVarP(&window, "window", "w", "", "Window to mark by name or ID (default: focused)")
+	cmd.Flags().BoolVar(&off, "off", false, "Clear the mark")
+	cmd.Flags().BoolVar(&jsonOutput, "json", false, "Output result as JSON")
+	_ = cmd.RegisterFlagCompletionFunc("session", completeSessionNames)
+	return cmd
+}
+
 // runSetWindow changes a window's name or its minimized state. Both are
 // pointers because an unset one is left alone, and an empty name is a request
 // to clear it rather than a request to do nothing.

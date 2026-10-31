@@ -1369,6 +1369,7 @@ func (m *OS) updateWindowFromState(w *terminal.Window, ws *session.WindowState) 
 	w.AgentQueued = ws.AgentQueued
 	w.AgentDraftHeld = ws.AgentDraftHeld
 	w.AgentSettled = ws.AgentSettled
+	w.AgentQuiet = ws.AgentQuiet
 	w.AgentSubagents = ws.AgentSubagents
 	w.AgentSubagentList = subagentsFromWire(w.AgentSubagentList, ws.AgentSubagentList)
 	w.ProgramStatus = programStatusFromWire(w.ProgramStatus, ws.ProgramStatus)
@@ -1508,6 +1509,7 @@ func adoptWindowState(window *terminal.Window, ws session.WindowState) {
 	window.AgentQueued = ws.AgentQueued
 	window.AgentDraftHeld = ws.AgentDraftHeld
 	window.AgentSettled = ws.AgentSettled
+	window.AgentQuiet = ws.AgentQuiet
 	window.AgentSubagents = ws.AgentSubagents
 	window.AgentSubagentList = subagentsFromWire(nil, ws.AgentSubagentList)
 	window.ProgramStatus = programStatusFromWire(nil, ws.ProgramStatus)

@@ -51,6 +51,12 @@ func (m *OS) agentAlertPolicy() config.AgentAlertPolicy {
 	return config.ResolveAgentAlerts(&m.UserConfig.Notifications.Agent)
 }
 
+// agentAlertQuiet reports whether a quiet pane keeps this transition to itself.
+// An approval still reaches the person, as it does in the Inbox.
+func agentAlertQuiet(w *terminal.Window, to string) bool {
+	return w.AgentQuiet && (to != "needs_input" || w.AgentKind != "approval")
+}
+
 // considerAgentAlert decides what one transition earns. It runs on the Update
 // goroutine inside the state sync, so it does no I/O beyond the host write,
 // which is a single mutex-guarded Write.
@@ -75,6 +81,9 @@ func (m *OS) considerAgentAlert(w *terminal.Window, from, to string) {
 	// back inside the settle window produces nothing rather than two alerts.
 	delete(m.pendingAgentAlerts, w.ID)
 
+	if agentAlertQuiet(w, to) {
+		return
+	}
 	if !policy.Alerts(to) {
 		return
 	}
@@ -140,6 +149,10 @@ func (m *OS) windowByID(id string) *terminal.Window {
 
 // fireAgentAlert writes the alert to every sink the policy leaves on.
 func (m *OS) fireAgentAlert(w *terminal.Window, from, to string, policy config.AgentAlertPolicy) {
+	// The pane went quiet during the settle.
+	if agentAlertQuiet(w, to) {
+		return
+	}
 	word, sev := agentTransitionNotice(to)
 	if word == "" {
 		return

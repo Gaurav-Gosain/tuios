@@ -242,6 +242,7 @@ func (d *Daemon) agentRows(sess *Session, all bool, unread map[string]int, now i
 			"name":           windowLabelOf(w),
 			"state":          w.ShownAgentState().Name(),
 			"reason":         w.AgentReason,
+			"quiet":          w.AgentQuiet,
 			"message":        w.AgentMessage,
 			"agent_state_at": w.AgentStateAt,
 			"source":         source,
