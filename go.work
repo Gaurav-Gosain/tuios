@@ -19,10 +19,6 @@ replace tuios.dev/plot v0.2.2-0.20261023124927-50c38920e301 => ./plot
 
 replace tuios.dev/tml v0.1.2-0.20261027072011-3140277ea47a => ./tml
 
-replace tuios.dev/loom v0.2.3-0.20261029005926-1017383ad8b9 => ./loom
-
-replace tuios.dev/sketch v0.4.1-0.20261029005919-561c40c6c335 => ./sketch
-
 replace tuios.dev/vt v0.3.3-0.20261030005101-f3383d2005bd => ./vt
 
 replace tuios.dev/progstatus v0.1.2-0.20261030111253-c0f512aa3148 => ./progstatus
@@ -30,3 +26,7 @@ replace tuios.dev/progstatus v0.1.2-0.20261030111253-c0f512aa3148 => ./progstatu
 replace tuios.dev/shot v0.2.2-0.20261030111253-e3068c27991c => ./shot
 
 replace tuios.dev/swatch v0.1.2-0.20261030111253-c0f512aa3148 => ./swatch
+
+replace tuios.dev/loom v0.2.3-0.20261031063707-452bfc53d580 => ./loom
+
+replace tuios.dev/sketch v0.4.1-0.20261031063548-b443ae3ee956 => ./sketch
