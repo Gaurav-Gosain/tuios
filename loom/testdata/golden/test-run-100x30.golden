@@ -44,9 +44,9 @@
 |adeeeeeeeeeeeeeddddmmmmmmmmlllllllllllllllllllllllllldnnndddddddddddddddddddddddddddddddddddddddddda|
 |adeeeeeeeeeeeeeeeddmmmmmllllllllllllllllllllllllllllldnnndddddddddddddddddddddddddddddddddddddddddda|
 |adddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddda|
-|adfdccccccccbbidddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddda|
+|adadrrrrrrrrbbidddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddda|
 |adddfffffffdddddddddddddddffffdddddddddddddddddddddjjjjdqdddddddddddddddddddddddddddddddddddddddddda|
-|adrsttttttttttttttttssssssuuuuuuuuuuuuuussssssssssssuuuuusssssssssssssssssssssssssssssssssssssssssda|
+|adstuuuuuuuuuuuuuuuuttttttvvvvvvvvvvvvvvttttttttttttvvvvvtttttttttttttttttttttttttttttttttttttttttda|
 |adddeeeeeeeeeeeeeeeeddddddnnnnnnnnnnnnnnnnddddddddddnnnnndddddddddddddddddddddddddddddddddddddddddda|
 |adddeeeeeeeeeeeeddddddddddnnnnnnnnnnnnndddddddddddddnnnnndddddddddddddddddddddddddddddddddddddddddda|
 |adddeeeeeeeeeeeeddddddddddnnnnnnnnnnnnnnnnnnndddddddnnnnndddddddddddddddddddddddddddddddddddddddddda|
@@ -57,12 +57,13 @@
 |adddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddda|
 |adddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddda|
 |adddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddda|
-|advwvxyyyyyxyyyyyyxddzAzsBBBBsBBBsddzAzsBBBBsBBsBBBBBBsddddddddddddddddddCdffffdCCCdffffdCCCdfffffda|
+|adwxwyzzzzzyzzzzzzyddABAtCCCCtCCCtddABAtCCCCtCCtCCCCCCtddddddddddddddddddDdffffdDDDdffffdDDDdfffffda|
 |adddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddda|
 |aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
-A: fg=accent-bright bg=surface bold
-B: fg=fg bg=surface
-C: fg=accent-bright bg=panel bold
+A: bg=surface bold
+B: fg=accent-bright bg=surface bold
+C: fg=fg bg=surface
+D: fg=accent-bright bg=panel bold
 a: fg=accent bg=panel
 b: bg=panel bold
 c: fg=fg bg=panel bold
@@ -80,15 +81,15 @@ n: fg=fg bg=panel
 o: fg=info bg=panel
 p: fg=warning bg=panel
 q: fg=accent-bright bg=panel
-r: fg=accent bg=surface
-s: bg=surface
-t: fg=dim bg=surface
-u: fg=fg bg=surface bold
-v: bg=accent bold
-w: fg=fg bg=accent bold
-x: bg=accent
-y: fg=fg bg=accent
-z: bg=surface bold
+r: fg=accent bg=panel bold
+s: fg=accent bg=surface
+t: bg=surface
+u: fg=dim bg=surface
+v: fg=fg bg=surface bold
+w: bg=accent bold
+x: fg=fg bg=accent bold
+y: bg=accent
+z: fg=fg bg=accent
 === 256 100x30
 |╭─ Test run ───────────────────────────────────────────────────────────── from claude in api-auth ─╮|
 |│                                                                                                  │|
@@ -135,9 +136,9 @@ z: bg=surface bold
 |adeeeeeeeeeeeeeddddmmmmmmmmlllllllllllllllllllllllllldnnndddddddddddddddddddddddddddddddddddddddddda|
 |adeeeeeeeeeeeeeeeddmmmmmllllllllllllllllllllllllllllldnnndddddddddddddddddddddddddddddddddddddddddda|
 |adddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddda|
-|adfdccccccccbbidddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddda|
+|adadrrrrrrrrbbidddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddda|
 |adddfffffffdddddddddddddddffffdddddddddddddddddddddjjjjdqdddddddddddddddddddddddddddddddddddddddddda|
-|adrsttttttttttttttttssssssuuuuuuuuuuuuuussssssssssssuuuuusssssssssssssssssssssssssssssssssssssssssda|
+|adstuuuuuuuuuuuuuuuuttttttvvvvvvvvvvvvvvttttttttttttvvvvvtttttttttttttttttttttttttttttttttttttttttda|
 |adddeeeeeeeeeeeeeeeeddddddnnnnnnnnnnnnnnnnddddddddddnnnnndddddddddddddddddddddddddddddddddddddddddda|
 |adddeeeeeeeeeeeeddddddddddnnnnnnnnnnnnndddddddddddddnnnnndddddddddddddddddddddddddddddddddddddddddda|
 |adddeeeeeeeeeeeeddddddddddnnnnnnnnnnnnnnnnnnndddddddnnnnndddddddddddddddddddddddddddddddddddddddddda|
@@ -148,12 +149,13 @@ z: bg=surface bold
 |adddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddda|
 |adddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddda|
 |adddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddda|
-|advwvxyyyyyxyyyyyyxddzAzsBBBBsBBBsddzAzsBBBBsBBsBBBBBBsddddddddddddddddddCdffffdCCCdffffdCCCdfffffda|
+|adwxwyzzzzzyzzzzzzyddABAtCCCCtCCCtddABAtCCCCtCCtCCCCCCtddddddddddddddddddDdffffdDDDdffffdDDDdfffffda|
 |adddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddda|
 |aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
-A: fg=accent-bright bg=surface bold
-B: fg=fg bg=surface
-C: fg=accent-bright bg=panel bold
+A: bg=surface bold
+B: fg=accent-bright bg=surface bold
+C: fg=fg bg=surface
+D: fg=accent-bright bg=panel bold
 a: fg=accent bg=panel
 b: bg=panel bold
 c: fg=fg bg=panel bold
@@ -171,15 +173,15 @@ n: fg=fg bg=panel
 o: fg=info bg=panel
 p: fg=warning bg=panel
 q: fg=accent-bright bg=panel
-r: fg=accent bg=surface
-s: bg=surface
-t: fg=dim bg=surface
-u: fg=fg bg=surface bold
-v: bg=accent bold
-w: fg=fg bg=accent bold
-x: bg=accent
-y: fg=fg bg=accent
-z: bg=surface bold
+r: fg=accent bg=panel bold
+s: fg=accent bg=surface
+t: bg=surface
+u: fg=dim bg=surface
+v: fg=fg bg=surface bold
+w: bg=accent bold
+x: fg=fg bg=accent bold
+y: bg=accent
+z: fg=fg bg=accent
 === 16 100x30
 |╭─ Test run ───────────────────────────────────────────────────────────── from claude in api-auth ─╮|
 |│                                                                                                  │|
@@ -226,9 +228,9 @@ z: bg=surface bold
 |a ddddddddddddd    jjjjjjjj                           kkk                                          a|
 |a ddddddddddddddd  jjjjj                              kkk                                          a|
 |a                                                                                                  a|
-|a e ccccccccbbg                                                                                    a|
+|a a oooooooobbg                                                                                    a|
 |a   eeeeeee               eeee                     hhhh n                                          a|
-|a aoppppppppppppppppooooooqqqqqqqqqqqqqqooooooooooooqqqqqooooooooooooooooooooooooooooooooooooooooo a|
+|a apqqqqqqqqqqqqqqqqpppppprrrrrrrrrrrrrrpppppppppppprrrrrppppppppppppppppppppppppppppppppppppppppp a|
 |a   dddddddddddddddd      kkkkkkkkkkkkkkkk          kkkkk                                          a|
 |a   dddddddddddd          kkkkkkkkkkkkk             kkkkk                                          a|
 |a   dddddddddddd          kkkkkkkkkkkkkkkkkkk       kkkkk                                          a|
@@ -239,7 +241,7 @@ z: bg=surface bold
 |a                                                                                                  a|
 |a                                                                                                  a|
 |a                                                                                                  a|
-|a rsrrsssssrssssssr  et kkkk kkke  et kkkk kk kkkkkke                    t eeee ttt eeee ttt eeeee a|
+|a stsstttttstttttts  eu kkkk kkke  eu kkkk kk kkkkkke                    u eeee uuu eeee uuu eeeee a|
 |a                                                                                                  a|
 |aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
 a: fg=accent
@@ -256,12 +258,13 @@ k: fg=fg
 l: fg=info
 m: fg=warning
 n: fg=accent-bright
-o: reverse
-p: fg=dim reverse
-q: fg=dim bold reverse
-r: bold reverse
-s: fg=accent bold reverse
-t: fg=accent-bright bold
+o: fg=accent bold
+p: reverse
+q: fg=dim reverse
+r: fg=dim bold reverse
+s: bold reverse
+t: fg=accent bold reverse
+u: fg=accent-bright bold
 === ascii 100x30
 |+- Test run ------------------------------------------------------------- from claude in api-auth -+|
 ||                                                                                                  ||

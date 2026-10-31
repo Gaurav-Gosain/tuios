@@ -82,11 +82,28 @@ func (w *cardWidget) paint(s *Surface, b *box, c *canvas, r Rect) {
 	if w.folded {
 		mark = s.g.foldShut
 	}
-	l := line{{text: mark + " ", st: style{fg: "mute"}}, {text: w.title, st: style{fg: "fg", attrs: attrBold}}}
+	// A card holding the focused box says so. Without it a document with
+	// several tables gives no clue which one the arrow keys reach: every table
+	// draws its own cursor row, and only the focused one takes the keys.
+	markRole, titleRole := "mute", "fg"
+	if holdsFocus(s, b) {
+		markRole, titleRole = "accent", "accent"
+	}
+	l := line{{text: mark + " ", st: style{fg: markRole}}, {text: w.title, st: style{fg: titleRole, attrs: attrBold}}}
 	if w.meta != "" {
 		l = append(l, span{text: "  " + w.meta, st: style{fg: w.role, attrs: attrBold}})
 	}
 	c.drawLine(r.Min.X, r.Min.Y, r.Dx(), l, alignLeft)
+}
+
+// holdsFocus reports whether the focused box is b or sits inside it.
+func holdsFocus(s *Surface, b *box) bool {
+	for f := s.focused(); f != nil; f = f.parent {
+		if f == b {
+			return true
+		}
+	}
+	return false
 }
 
 // frame draws a rounded border on r with a title on the top edge and a

@@ -11,17 +11,19 @@
 |bbfffffbfffffbfffffffbbbbbbbbbbbbbbbbbbb|
 |bbgggggbggggbggggbggbbbbbbbbbbbbbbbbbbbb|
 |bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb|
-|abccccccddhhhbbbbbbbbbbbbbbbbbbbbbbbbbbb|
+|hbiiiiiiddjjjbbbbbbbbbbbbbbbbbbbbbbbbbbb|
 |bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb|
 |bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb|
-a: fg=mute bg=panel
+a: fg=accent bg=panel
 b: bg=panel
-c: fg=fg bg=panel bold
+c: fg=accent bg=panel bold
 d: bg=panel bold
 e: fg=warning bg=panel bold
 f: fg=fg bg=panel
 g: fg=dim bg=panel
-h: fg=success bg=panel bold
+h: fg=mute bg=panel
+i: fg=fg bg=panel bold
+j: fg=success bg=panel bold
 === 256 40x7
 |▾ Failures  3                           |
 |  Three tests failed.                   |
@@ -35,17 +37,19 @@ h: fg=success bg=panel bold
 |bbfffffbfffffbfffffffbbbbbbbbbbbbbbbbbbb|
 |bbgggggbggggbggggbggbbbbbbbbbbbbbbbbbbbb|
 |bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb|
-|abccccccddhhhbbbbbbbbbbbbbbbbbbbbbbbbbbb|
+|hbiiiiiiddjjjbbbbbbbbbbbbbbbbbbbbbbbbbbb|
 |bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb|
 |bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb|
-a: fg=mute bg=panel
+a: fg=accent bg=panel
 b: bg=panel
-c: fg=fg bg=panel bold
+c: fg=accent bg=panel bold
 d: bg=panel bold
 e: fg=warning bg=panel bold
 f: fg=fg bg=panel
 g: fg=dim bg=panel
-h: fg=success bg=panel bold
+h: fg=mute bg=panel
+i: fg=fg bg=panel bold
+j: fg=success bg=panel bold
 === 16 40x7
 |▾ Failures  3                           |
 |  Three tests failed.                   |
@@ -59,16 +63,18 @@ h: fg=success bg=panel bold
 |  eeeee eeeee eeeeeee                   |
 |  fffff ffff ffff ff                    |
 |                                        |
-|a bbbbbbccggg                           |
+|g hhhhhhcciii                           |
 |                                        |
 |                                        |
-a: fg=mute
-b: fg=fg bold
+a: fg=accent
+b: fg=accent bold
 c: bold
 d: fg=warning bold
 e: fg=fg
 f: fg=dim
-g: fg=success bold
+g: fg=mute
+h: fg=fg bold
+i: fg=success bold
 === ascii 40x7
 |v Failures  3                           |
 |  Three tests failed.                   |
