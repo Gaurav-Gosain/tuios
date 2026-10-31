@@ -208,7 +208,7 @@ func TestNewPaneShellStartsAtItsSize(t *testing.T) {
 				t.Fatal(err)
 			}
 			term := startIn(t, base, startOpts{cols: 160, rows: 45, args: tc.args, animations: tc.animations,
-				env: []string{"SHELL=" + shell}})
+				env: []string{"SHELL=" + shell, "BASH_SILENCE_DEPRECATION_WARNING=1"}})
 			if tc.args != nil {
 				killDaemon(t, base)
 			}

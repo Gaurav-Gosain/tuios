@@ -8,6 +8,8 @@ import (
 	"os/exec"
 	"path/filepath"
 	"testing"
+
+	"github.com/Gaurav-Gosain/tuios/internal/testutil"
 )
 
 func TestStartTimePinsAProcess(t *testing.T) {
@@ -28,7 +30,7 @@ func TestStartTimePinsAProcess(t *testing.T) {
 }
 
 func TestPeerPIDIsTheDialer(t *testing.T) {
-	sock := filepath.Join(t.TempDir(), "s")
+	sock := filepath.Join(testutil.RuntimeDir(t), "s")
 	ln, err := net.Listen("unix", sock)
 	if err != nil {
 		t.Fatal(err)
