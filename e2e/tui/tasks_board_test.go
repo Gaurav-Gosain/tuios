@@ -100,8 +100,9 @@ func focusedWindow(t *testing.T, base string) (string, string) {
 // card says why. A claim made from the CLI while the board is open moves the
 // row. t takes the free card for the focused pane, n opens the New agent
 // sheet with a card's title as the task, and at a narrow size the rows are one
-// line. The Card tab shows the selected card's history. With [tasks] stages
-// the hidden stages have no head.
+// line. The Card tab shows the selected card's history. The cursor on the
+// folded Done heading shows the fold in the focus, with Done's title. With
+// [tasks] stages the hidden stages have no head.
 //
 // How it could pass wrongly: the CLI listings are read before the board, so a
 // card the daemon never stored fails there and not on the screen; the take is
@@ -111,7 +112,8 @@ func focusedWindow(t *testing.T, base string) (string, string) {
 // the Inbox subscription the CLI claim never shows on the board; with the
 // order inside a stage cut the blocked card is not first; with [tasks] stages
 // ignored the Verify head shows; with list-tasks' all_sessions cut the CLI
-// listing fails.
+// listing fails; with drawFoldFocus reading the group titles first the Done
+// heading shows the crash screen.
 func TestTaskBoardGroupsCardsByStage(t *testing.T) {
 	base := t.TempDir()
 	startTaskBoard(t, base)
@@ -221,6 +223,37 @@ func TestTaskBoardGroupsCardsByStage(t *testing.T) {
 		t.Fatalf("press esc: %v", err)
 	}
 	waitText(t, term, "the board after the sheet", "Doing  3")
+
+	// The cursor is on t4, the row above the folded Done heading. Done is the
+	// seventh stage and there are six agent groups, so the focus must name it
+	// from the stages. The heads show under the sheet too, so wait for the
+	// sheet to close before the key.
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		return !strings.Contains(s.Text(), "Where it works")
+	}, uiTimeout); err != nil {
+		t.Fatalf("ASSERTION: esc did not close the spawn sheet: %v\n%s", err, term.Snapshot())
+	}
+	if err := term.SendKeys("j"); err != nil {
+		t.Fatalf("press j: %v", err)
+	}
+	waitText(t, term, "the focus of the folded Done stage", "The group is folded", boardCards[4])
+	s = term.Screen()
+	if strings.Contains(s.Text(), "tuios hit a bug") {
+		t.Fatalf("ASSERTION: the Done heading shows the crash screen\n%s", term.Snapshot())
+	}
+	folded := []rune(s.Line(rowWith(s, "The group is folded") - 1))
+	if focus := string(folded[min(len(folded), 56):]); !strings.Contains(focus, "Done  1") {
+		t.Errorf("ASSERTION: the focus title is %q, want Done and its count\n%s", focus, term.Snapshot())
+	}
+	saveCockpitFrames(t, term, "task-board-done-focus-200x55")
+	if err := term.SendKeys("k"); err != nil {
+		t.Fatalf("press k: %v", err)
+	}
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		return !strings.Contains(s.Text(), "The group is folded")
+	}, uiTimeout); err != nil {
+		t.Fatalf("ASSERTION: k left the Done heading in the focus: %v\n%s", err, term.Snapshot())
+	}
 
 	// Narrow and short, the rows are one line: the holder beside the title.
 	if err := term.Resize(70, 16); err != nil {

@@ -1806,9 +1806,12 @@ func (m *OS) drawFoldFocus(c *ckCanvas, l ckLook, r ckRow, x, y, w, y1 int) {
 	ck := &m.Inbox.ck
 	pal := l.pal
 	right := x + w
-	title := ckGroupTitles[r.group]
+	// On the board r.group is a stage, and there are more stages than groups.
+	var title string
 	if ck.board {
 		title = ckStageTitle(r.group)
+	} else {
+		title = ckGroupTitles[r.group]
 	}
 	c.text(x, y, right, ckSeg{t: title, fg: pal.Fg, attrs: ckBold}, ckSeg{t: "  " + strconv.Itoa(r.count), fg: pal.FgMute})
 	words := "The group is folded."

@@ -11173,3 +11173,15 @@ Run on 2026-10-31 on Linux, each with a Go overlay on one build:
 
 The frames are `session-keys-rail` and `session-keys-notes` under
 `TUIOS_E2E_FRAMES`, in the test's folder.
+## The folded Done heading on the task board
+
+`drawFoldFocus` read `ckGroupTitles[r.group]` before its board check. On the board `r.group` is a stage. Done is stage 6, and the table has 6 entries, so the cursor on the heading panicked the client. Only Done reached this: it is the one stage past the table, and the one stage that starts folded.
+
+Run on 2026-10-31 on Linux against builds from this branch, on `0e1679cfb`. Each control fails `TestTaskBoardGroupsCardsByStage`, which passes on the fixed build.
+
+| Control: what was cut | Where it fails | Verdict |
+| --- | --- | --- |
+| The whole fix: `drawFoldFocus` as on main | "waiting for the focus of the folded Done stage". The screen shows "tuios hit a bug" and "index out of range [6] with length 6" | **caught** |
+| `ckStageTitle(r.group)` in `drawFoldFocus` becomes `ckStageTitle(0)`, so there is no crash and the title is wrong | "the focus title is \"   Todo  1\", want Done and its count" | **caught** |
+
+The frame is `task-board-done-focus-200x55` under `TUIOS_E2E_FRAMES`, in the test's folder. Repeat from `e2e/tui` with `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestTaskBoardGroupsCardsByStage$' -v .`.
