@@ -197,6 +197,7 @@ func (kp *KittyPassthrough) unholdWindow(windowID string) {
 // it from a drain that follows the pass would send the frame a tick ahead of
 // its placement.
 func (kp *KittyPassthrough) releaseDueHeld(refreshing bool) {
+	kp.renderPasses++
 	now := kp.now()
 	for id, h := range kp.held {
 		open, serial := false, uint64(0)
@@ -253,6 +254,8 @@ type heldStreamFrame struct {
 	size   int
 	cmd    vt.KittyCommand
 	path   string
+	// passes is kp.renderPasses when the frame was held.
+	passes uint64
 }
 
 // noteHeldStreamFrame records the frame just queued for an update, so the next
@@ -261,28 +264,36 @@ func (kp *KittyPassthrough) noteHeldStreamFrame(windowID string, hostID uint32, 
 	if kp.heldFrames == nil {
 		kp.heldFrames = make(map[string]heldStreamFrame)
 	}
-	kp.heldFrames[windowID] = heldStreamFrame{hostID: hostID, serial: serial, size: size, cmd: *cmd, path: path}
+	kp.heldFrames[windowID] = heldStreamFrame{hostID: hostID, serial: serial, size: size, cmd: *cmd, path: path, passes: kp.renderPasses}
 }
 
 // replaceHeldStreamFrame drops the frame a window holds when the next frame of
 // the same image has arrived and that frame is all the window holds. A guest
 // can draw faster than the render loop sends, and every frame the host is sent
 // is a whole bitmap it reads and stores, then replaces before it draws it. The
-// host will not read the dropped object, so tuios deletes it. Callers hold
-// kp.mu.
-func (kp *KittyPassthrough) replaceHeldStreamFrame(windowID string, hostID uint32) {
+// host will not read the dropped object, so tuios deletes it, unless the next
+// frame names the same object.
+//
+// A frame a render pass has already seen is not replaced. A guest that closes
+// one update and opens the next in the same write has an update open at every
+// pass, and each frame would replace the last one for as long as it runs. That
+// frame goes out as a finished update. Callers hold kp.mu.
+func (kp *KittyPassthrough) replaceHeldStreamFrame(windowID string, hostID uint32, next *vt.KittyCommand) {
 	rec, ok := kp.heldFrames[windowID]
 	if !ok {
 		return
 	}
 	delete(kp.heldFrames, windowID)
 	h := kp.held[windowID]
-	if h == nil || h.bypass || rec.hostID != hostID || h.serial != rec.serial || len(h.buf) != rec.size {
+	if h == nil || h.bypass || rec.hostID != hostID || h.serial != rec.serial ||
+		len(h.buf) != rec.size || rec.passes != kp.renderPasses {
 		return
 	}
 	kp.heldBytes -= len(h.buf)
 	delete(kp.held, windowID)
-	releaseKittyMedium(&rec.cmd, rec.path)
+	if rec.cmd.FilePath != next.FilePath {
+		releaseKittyMedium(&rec.cmd, rec.path)
+	}
 }
 
 // names reports whether any kitty command the frame holds names host image

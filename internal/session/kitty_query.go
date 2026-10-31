@@ -97,7 +97,7 @@ const kittySharedMemoryRefusal = "ENOTSUPPORTED:shared memory is not supported h
 // by name as on macOS. It is a variable so a test can pin the answer on any
 // platform.
 var kittySharedMemoryReachable = func() bool {
-	if kittyshm.ByName {
+	if kittyshm.Available() {
 		return true
 	}
 	info, err := os.Stat("/dev/shm")

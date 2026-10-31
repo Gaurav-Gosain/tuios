@@ -3,6 +3,7 @@
 package kittyshm
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"syscall"
@@ -42,7 +43,7 @@ func TestObjectOnThisMachine(t *testing.T) {
 	name := fmt.Sprintf("/tuios-t-%d", os.Getpid())
 	makeObject(t, name, 50*50*4, "frame")
 
-	o, err := Open(name)
+	o, err := Open(name, 1<<20)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -52,6 +53,10 @@ func TestObjectOnThisMachine(t *testing.T) {
 	}
 	if err := o.Close(); err != nil {
 		t.Fatal(err)
+	}
+
+	if _, err := Open(name, 100); !errors.Is(err, ErrTooLarge) {
+		t.Fatalf("an object past the limit opened: %v", err)
 	}
 
 	cmd := func(w, h int) *vt.KittyCommand {
@@ -65,4 +70,27 @@ func TestObjectOnThisMachine(t *testing.T) {
 	if _, err := Stat(name); err == nil {
 		t.Fatal("the frame is still there")
 	}
+}
+
+// A later macOS may drop or move these numbers. The answer is then no, and the
+// process lives. A call the kernel does not have raises SIGSYS.
+func TestProbeSaysNoWhenTheCallsAreGone(t *testing.T) {
+	name := fmt.Sprintf("/tuios-t-p-%d", os.Getpid())
+	if !probe(name) {
+		t.Fatal("the probe says no on a machine where the calls work")
+	}
+	open, unlink := sysShmOpen, sysShmUnlink
+	t.Cleanup(func() { sysShmOpen, sysShmUnlink = open, unlink })
+
+	sysShmOpen = 9999
+	if probe(name) {
+		t.Fatal("the probe says yes with no shm_open")
+	}
+	sysShmOpen, sysShmUnlink = open, 9999
+	if probe(name) {
+		t.Fatal("the probe says yes with no shm_unlink")
+	}
+	// That run could not delete its object.
+	sysShmUnlink = unlink
+	_ = shmUnlink(name)
 }
