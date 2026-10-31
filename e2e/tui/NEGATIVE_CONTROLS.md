@@ -11153,3 +11153,23 @@ is due, so the guard was left out.
 
 The frames are `rail-named-agents`, `rail-repeated-before-close` and
 `rail-repeated-after-close` under `TUIOS_E2E_FRAMES`, in the test's folder.
+
+## Session keys follow the rail's order (#1299)
+
+`TestSessionKeysFollowRail` makes `loose`, `filed` in the space `work`, the
+worktree session `repo-feat-one`, `notes`, and the worktree session
+`repo-feat-two`, in that order. The rail draws `filed`, `loose`, the two
+worktree sessions, `notes`. The test reads the number on each row, then presses
+`switch_session_1`, `next_session`, `switch_session_3`, `next_session` and
+`switch_session_5`.
+
+Run on 2026-10-31 on Linux, each with a Go overlay on one build:
+
+| Removed | The test fails with | Result |
+|---------|---------------------|--------|
+| The whole fix: `session_tree.go` and `sidebar_hosts.go` as on main | "the rail's numbers do not count its rows": the rows read `2 filed`, `1 loose`, `3 feat/one`, `5 feat/two`, `4 notes` | **caught** |
+| `railNeighbourSession` and `railSessionAt` read `localSessionNodes`. The rail's numbers stay fixed | "no client shows session filed" at `switch_session_1` | **caught** |
+| `railNeighbourSession` alone reads `localSessionNodes` | "no client shows session loose" at `next_session` from `filed` | **caught** |
+
+The frames are `session-keys-rail` and `session-keys-notes` under
+`TUIOS_E2E_FRAMES`, in the test's folder.

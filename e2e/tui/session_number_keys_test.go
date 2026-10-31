@@ -2,9 +2,11 @@ package tuie2e
 
 import (
 	"encoding/json"
+	"path/filepath"
 	"testing"
 	"time"
 
+	"github.com/Gaurav-Gosain/tuios/internal/testutil"
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
@@ -113,4 +115,83 @@ rename_workspace = ["f6"]
 		t.Fatalf("alpha's workspace 1 is %q, want no name: the rename went to the wrong session", got)
 	}
 	saveFrame(t, term, "rename-workspace")
+}
+
+// TestSessionKeysFollowRail is #1299: next_session and switch_session_N walk
+// the sessions in the order the rail draws them, and the number beside a row
+// is the key that opens it. A space pulls its sessions above the rest, and a
+// repository pulls its worktree sessions together, so the rail's order differs
+// from the order the sessions were made.
+//
+// The controls are in NEGATIVE_CONTROLS.md.
+func TestSessionKeysFollowRail(t *testing.T) {
+	base := t.TempDir()
+	writeConfig(t, base, `
+[appearance.sidebar]
+enabled = true
+width = 28
+show_numbers = true
+
+[keybindings.window_management]
+switch_session_1 = ["alt+shift+a"]
+switch_session_3 = ["alt+shift+c"]
+switch_session_5 = ["alt+shift+e"]
+`)
+	killDaemon(t, base)
+	repo := testutil.GitRepo(t)
+	t.Setenv("TUIOS_WORKTREE_DIR", filepath.Join(base, "worktrees"))
+
+	// Each plain session starts outside any repository: this suite can run
+	// inside a git worktree of tuios, and a session made there would group too.
+	plain := t.TempDir()
+	for _, args := range [][]string{
+		{"new", "loose", "--detach"},
+		{"new", "filed", "--detach", "--space", "work"},
+		{"worktree", "new", "feat/one", "--repo", repo, "--detach"},
+		{"new", "notes", "--detach"},
+		{"worktree", "new", "feat/two", "--repo", repo, "--detach"},
+	} {
+		if out, err := tuiosCLIIn(t, base, plain, args...); err != nil {
+			t.Fatalf("tuios %v: %v: %s", args, err, out)
+		}
+	}
+
+	term := startIn(t, base, startOpts{cols: 140, rows: 40, args: []string{"attach", "loose"}})
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		return countWindows(s) == 1
+	}, bootTimeout); err != nil {
+		t.Fatalf("client never attached to loose: %v\n%s", err, term.Snapshot())
+	}
+	windowManagementMode(t, term)
+	enterTerminalMode(t, term)
+
+	// The rail draws the space first, then the rest with the repository's
+	// sessions together. The number on each row counts down that order.
+	rows := []string{"1 filed", "2 loose", "3 ", "4 ", "5 notes"}
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		return railRowsIncreasing(spaceRailRows(s, rows...)) &&
+			railRowOf(s, "feat/one") == railRowOf(s, "3 ") &&
+			railRowOf(s, "feat/two") == railRowOf(s, "4 ")
+	}, bootTimeout); err != nil {
+		t.Fatalf("the rail's numbers do not count its rows: %v\n%s", err, term.Snapshot())
+	}
+	railShot(t, term, "session-keys-rail")
+
+	press := func(key tuitest.Key, what, want string) {
+		t.Helper()
+		if err := term.SendKeys(key); err != nil {
+			t.Fatalf("send %s: %v", what, err)
+		}
+		clientShows(t, base, want)
+		if err := term.WaitForText("Session: "+want, uiTimeout); err != nil {
+			t.Fatalf("%s never landed on %s: %v\n%s", what, want, err, term.Snapshot())
+		}
+		time.Sleep(insertGuard + 150*time.Millisecond)
+	}
+	press(tuitest.Alt('A'), "switch_session_1", "filed")
+	press(tuitest.Alt('N'), "next_session from filed", "loose")
+	press(tuitest.Alt('C'), "switch_session_3", "repo-feat-one")
+	press(tuitest.Alt('N'), "next_session from repo-feat-one", "repo-feat-two")
+	press(tuitest.Alt('E'), "switch_session_5", "notes")
+	railShot(t, term, "session-keys-notes")
 }
