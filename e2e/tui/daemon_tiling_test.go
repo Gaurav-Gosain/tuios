@@ -196,16 +196,19 @@ func TestNewPaneShellStartsAtItsSize(t *testing.T) {
 		args         []string
 		animations   bool
 		cols, rows   int
+		resized      bool
 	}{
-		{"daemon", "bsp", []string{"new", "winch"}, false, 160, 45},
-		{"daemon-animated", "bsp", []string{"new", "winch"}, true, 160, 45},
-		{"standalone", "bsp", nil, false, 160, 45},
-		{"standalone-animated", "bsp", nil, true, 160, 45},
-		{"daemon-scrolling", "scrolling", []string{"new", "winch"}, false, 160, 45},
-		{"standalone-scrolling", "scrolling", nil, false, 160, 45},
-		{"daemon-master-stack", "master-stack", []string{"new", "winch"}, false, 160, 45},
-		{"standalone-master-stack", "master-stack", nil, false, 160, 45},
-		{"daemon-master-narrow", "master-stack", []string{"new", "winch"}, false, 100, 30},
+		{"daemon", "bsp", []string{"new", "winch"}, false, 160, 45, false},
+		{"daemon-animated", "bsp", []string{"new", "winch"}, true, 160, 45, false},
+		{"standalone", "bsp", nil, false, 160, 45, false},
+		{"standalone-animated", "bsp", nil, true, 160, 45, false},
+		{"daemon-scrolling", "scrolling", []string{"new", "winch"}, false, 160, 45, false},
+		{"standalone-scrolling", "scrolling", nil, false, 160, 45, false},
+		{"daemon-master-stack", "master-stack", []string{"new", "winch"}, false, 160, 45, false},
+		{"standalone-master-stack", "master-stack", nil, false, 160, 45, false},
+		{"daemon-master-narrow", "master-stack", []string{"new", "winch"}, false, 100, 30, false},
+		{"daemon-bsp-resized", "bsp", []string{"new", "winch"}, false, 160, 45, true},
+		{"daemon-master-resized", "master-stack", []string{"new", "winch"}, false, 160, 45, true},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -309,6 +312,22 @@ func TestNewPaneShellStartsAtItsSize(t *testing.T) {
 			}
 			// Establish the first shell before judging subsequent insertions.
 			awaitNewShell("the first pane")
+			if tc.resized {
+				// A divider resize marks the workspace custom, but the stock
+				// tree/ratios still describe where the next pane will go.
+				newWindow(t, term)
+				pid := awaitNewShell("resize setup")
+				awaitTileSize("resize setup", pid)
+				before := waitForSettledGeometry(t, base, 2)
+				sendKeys(t, term, ">", ">")
+				waitForShape(t, base, "winch", 2, "the resized divider", func(after []winRect) error {
+					if sameGeometry(before, after) {
+						return fmt.Errorf("the width keys moved no divider")
+					}
+					return nil
+				})
+				awaitTileSize("after the divider resize", pid)
+			}
 			// Each pane is judged on the log lines from its own keypress to the
 			// next one. The SIGWINCH of the pane it split is the right answer
 			// to the split, and comes from another pid.

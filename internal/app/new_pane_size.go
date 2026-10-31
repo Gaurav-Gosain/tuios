@@ -19,10 +19,10 @@ import (
 // and a "%" above the prompt in every new pane (#1205). A process started at
 // the size its pane is placed at is never resized while it starts.
 //
-// It covers floating panes and the stock tilers. A zoom, a scratch group or
-// a custom layout places a pane by rules this does not repeat.
+// It covers floating panes and stock tilers, including adjusted dividers.
+// A zoom or scratch group places a pane by rules this does not repeat.
 func (m *OS) newPaneBox(placing *terminal.Window) (w, h int, tiled, ok bool) {
-	if m.InScratchView() || m.daemonWindowIntent || m.WorkspaceHasCustom[m.CurrentWorkspace] {
+	if m.InScratchView() || m.daemonWindowIntent {
 		return 0, 0, false, false
 	}
 	if !m.AutoTiling {
