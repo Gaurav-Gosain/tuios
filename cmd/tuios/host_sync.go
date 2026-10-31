@@ -243,8 +243,8 @@ func newHostsSyncCommand() *cobra.Command {
 		Short: "Install the tuios version of this machine on the hosts in the [hosts] table",
 		Long: `Install the tuios version of this machine on each host in the [hosts] table.
 
-With no names, every host in the table is synced. Name hosts to sync only
-those. Name local, or add --local, to sync this machine too.
+With no names, every host in the table that has an addr is synced. A paired
+phone has no addr, so sync skips it. Name hosts to sync only those. Name local, or add --local, to sync this machine too.
 
 First, sync reads each host over ssh: its system, the tuios on it, the
 version of that tuios, and its daemon. Then it installs where the version is
@@ -494,7 +494,13 @@ func resolveSyncTargets(opts syncOptions) ([]*syncTarget, error) {
 	local := opts.local
 	var names []string
 	if len(opts.hosts) == 0 {
-		names = slices.Sorted(maps.Keys(hosts))
+		// A table with no addr holds only the link policy of a device that
+		// dials in, such as a phone added by tuios pair. Nothing can ssh there.
+		for _, n := range slices.Sorted(maps.Keys(hosts)) {
+			if strings.TrimSpace(hosts[n].Addr) != "" {
+				names = append(names, n)
+			}
+		}
 	} else {
 		for _, n := range opts.hosts {
 			if n == federation.LocalHostName {

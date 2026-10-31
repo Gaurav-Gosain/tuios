@@ -124,6 +124,9 @@ func newSyncFleet(t *testing.T, names []string, down []string) *syncFleet {
 		cfg.WriteString(bin)
 		cfg.WriteString("\"\nconnect_timeout = 5\n\n")
 	}
+	// A paired phone dials in. Its table has only a link policy and no addr, so
+	// a sync of the whole table skips it and does not stop at it.
+	cfg.WriteString("[hosts.phone]\nallow = [\"list\", \"mail\"]\n\n")
 	dir := filepath.Join(f.here, "XDG_CONFIG_HOME", "tuios")
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		t.Fatalf("mkdir config: %v", err)

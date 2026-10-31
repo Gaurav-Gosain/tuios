@@ -11226,3 +11226,11 @@ Run on 2026-10-31 on macOS (arm64). The test passes on the fixed build, 6 runs o
 | Control: what was cut | Where it fails | Verdict |
 | --- | --- | --- |
 | The `NotifyDockEvent` call at the head of `considerAgentAlert` (`internal/app/agent_alert.go`), so the dock hears agent state only through an alert | "the dock cell never read WAIT0 after the answer moved the pane to working": the cell still reads `WAIT1` | **caught** |
+
+### hosts sync and a paired phone
+
+Run on 2026-10-31 on Linux. The fleet in `hosts_sync_test.go` has a `[hosts.phone]` table with no addr, as `tuios pair` writes.
+
+| Control: what was cut | Test that fails | Verdict |
+| --- | --- | --- |
+| The addr check in `resolveSyncTargets`, so the whole table is synced | `TestHostsSync` ("sync printed no JSON": host "phone" was ignored, because it has no addr) | fails as it should |
