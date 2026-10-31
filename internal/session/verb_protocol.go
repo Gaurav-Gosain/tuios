@@ -2145,11 +2145,11 @@ func buildVerbRegistry() map[string]verbEntry {
 			handler:  (*Daemon).verbResolvePane,
 		},
 		"set-agent-quiet": {
-			description: "Mark a window quiet, or clear the mark. A quiet window opens no finished, question or errored item in the Inbox, and its open items of those kinds close. Its agent state and agent-state events do not change, and an approval still reaches the person. Needs the admin grant.",
+			description: "Mark a window quiet, or clear the mark. A quiet window opens no finished, question or errored item in the Inbox, and its open items of those kinds close. A pane that calls this leaves an open question open. Its agent state and agent-state events do not change, and an approval or a login still reaches the person. The window must run an agent. Needs the admin grant.",
 			params: []verbParam{
 				sessionParam,
 				windowParam,
-				{Name: "quiet", Type: "bool", Description: "True marks the window quiet, and false clears the mark. Clearing it does not open the old items again.", Default: "true"},
+				{Name: "quiet", Type: "bool", Description: "True marks the window quiet, and false clears the mark. Clearing it opens no old item, except a question the pane waits on now.", Default: "true"},
 			},
 			returns: []verbParam{
 				{Name: "session", Type: "string", Description: "The session that holds the window."},

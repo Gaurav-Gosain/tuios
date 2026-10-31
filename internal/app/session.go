@@ -1360,6 +1360,7 @@ func (m *OS) updateWindowFromState(w *terminal.Window, ws *session.WindowState) 
 	if !m.SubscribedPTYs[w.PTYID] {
 		w.SetAltScreen(ws.IsAltScreen)
 	}
+	fromState, fromQuiet, fromKind := w.AgentState, w.AgentQuiet, w.AgentKind
 	w.AgentMessage = ws.AgentMessage
 	w.AgentReason = ws.AgentReason
 	w.AgentKind = ws.AgentKind
@@ -1392,6 +1393,7 @@ func (m *OS) updateWindowFromState(w *terminal.Window, ws *session.WindowState) 
 	// message and harness above, which have to be the ones that arrived with the
 	// state rather than the ones it replaced.
 	m.noteAgentState(w, shown)
+	m.noteQuietLifted(w, fromState, fromQuiet, fromKind)
 	m.markHostProgramStatus()
 	w.ForegroundCmd = ws.ForegroundCmd
 	// The shell's pid, as the daemon that spawned it knows it, and the only

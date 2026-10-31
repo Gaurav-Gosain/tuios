@@ -223,11 +223,12 @@ var verbCapabilities = map[string]linkCaps{
 	"remove-worktree": {config.LinkAllowWrite},
 	// bundle-worktree reads a worktree's files out, which write already
 	// reaches through a shell, and list must not.
-	"bundle-worktree":  {config.LinkAllowWrite},
-	"focus-window":     {config.LinkAllowWrite},
-	"move-window":      {config.LinkAllowWrite},
-	"set-window":       {config.LinkAllowWrite},
-	"set-agent-quiet":  {config.LinkAllowWrite},
+	"bundle-worktree": {config.LinkAllowWrite},
+	"focus-window":    {config.LinkAllowWrite},
+	"move-window":     {config.LinkAllowWrite},
+	"set-window":      {config.LinkAllowWrite},
+	// It closes Inbox items, so it needs what dismiss-attention needs too.
+	"set-agent-quiet":  {config.LinkAllowWrite, config.LinkAllowRespond},
 	"select-workspace": {config.LinkAllowWrite},
 	"set-layout":       {config.LinkAllowWrite},
 	"run-command":      {config.LinkAllowWrite},

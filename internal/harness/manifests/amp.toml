@@ -50,6 +50,7 @@ any_of   = [
 [[screen.rule]]
 state    = "needs_input"
 priority = 100
+kind     = "auth"
 all      = ["would you like to log in to amp?", "(y)es"]
 
 # herdr rule: status_footer_working. The status footer under the input names

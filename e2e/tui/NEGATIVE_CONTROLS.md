@@ -68,7 +68,18 @@ edit, and each fails at the step named.
 | `agentAlertQuiet` returns false | `a quiet pane raised an alert named QUIET-TURN` |
 | `set-agent-quiet` is `scopeOpen` | `the pane marked itself quiet` |
 | `closeQuiet` is not called | `going quiet left the item open` |
-| The rail row has no token | `the rail row does not say quiet` |
+| The rail row has no mark | `the rail row does not say quiet` |
+| `noteQuietLifted` is not called | `no alert named QUIET-APPROVE` |
+| An approval that becomes a question stays open | `the Inbox holding QUIET-APPROVE is not false` |
+| `AgentKindReachesPerson` leaves out auth | `the Inbox holding QUIET-LOGIN is not true` |
+| The mark is allowed with no agent | `set-agent-quiet on a pane with no agent` |
+| `--off` raises nothing | `the Inbox holding QUIET-OPEN is not true` |
+| A pane closes an open question | `the Inbox holding LOUD-ASK is not true` |
+| The mark stays when the agent leaves | `the next agent inherited the mark` |
+
+`TestAgentWorkVerbsAreClassifiedAsThePlanSays` holds `set-agent-quiet` to `write` and
+`respond` over a link, and `TestACredentialPromptIsALogin` holds the Hermes and Amp
+prompts to `auth`.
 
 ## tuios tutor keeps out of the person's home
 

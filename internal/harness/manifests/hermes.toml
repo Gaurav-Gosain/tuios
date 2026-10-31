@@ -57,7 +57,7 @@ all_of   = [ { any = ["enter confirm", "enter to confirm", "enter send", "press 
 [[screen.rule]]
 state    = "needs_input"
 priority = 900
-kind     = "question"
+kind     = "auth"
 message  = "Asks for a credential."
 region   = "bottom_non_empty_lines(14)"
 any_of   = [ { any = ["sudo password", "skill setup"] }, { all = ["🔑", "for "] } ]

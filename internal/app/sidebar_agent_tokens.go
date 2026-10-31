@@ -283,6 +283,20 @@ func sidebarTokenDefaultLook(tk sidebarAgentToken) config.SidebarTokenLook {
 	return config.SidebarTokenLook{}
 }
 
+// sidebarQuietMark is what a quiet pane's row says after its name: the word while
+// avail leaves the name its keep, a single letter when it does not, and nothing on
+// a row with no cell to spare. avail is the cells for the name and the mark.
+func sidebarQuietMark(avail, nameW int, sep string) string {
+	word := sep + "quiet"
+	if avail-lipgloss.Width(word) >= railNameKeep(nameW) {
+		return word
+	}
+	if avail >= 3 {
+		return " z"
+	}
+	return ""
+}
+
 // sidebarAgentNeedText is the need token as drawn: the word, and the wait when
 // the identity line is not showing it, which is the narrow rail and a row with
 // no elapsed token. How long a pane has been waiting on you is the one figure

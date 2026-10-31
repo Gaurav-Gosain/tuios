@@ -217,3 +217,26 @@ func TestHerdrManifestsIdentifyTheirProcesses(t *testing.T) {
 		}
 	}
 }
+
+// TestACredentialPromptIsALogin: a pane that asks for a credential cannot move
+// until a person acts, and the answer is typed in the pane. So the rule says auth,
+// which reaches the person from a quiet pane and is not answered from the Inbox.
+func TestACredentialPromptIsALogin(t *testing.T) {
+	r := testRegistry(t)
+	for _, tc := range []struct {
+		harness string
+		tail    []string
+	}{
+		{"hermes", []string{"sudo password for gaurav:"}},
+		{"amp", []string{"Would you like to log in to Amp? [(y)es, (n)o]:"}},
+	} {
+		state, rule, ok := r.Classify(tc.harness, tc.tail)
+		if !ok || state != "needs_input" {
+			t.Errorf("%s: %q read as %q", tc.harness, tc.tail, state)
+			continue
+		}
+		if kind := r.RuleKind(tc.harness, rule); kind != PromptKindAuth {
+			t.Errorf("%s: the credential prompt has kind %q, want auth", tc.harness, kind)
+		}
+	}
+}

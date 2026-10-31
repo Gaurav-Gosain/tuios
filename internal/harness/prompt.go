@@ -16,13 +16,14 @@ import (
 const (
 	PromptKindApproval = "approval"
 	PromptKindQuestion = "question"
-	// PromptKindAuth is a block on a login, a token or a credential. Only an
-	// explicit report names it (OSC 7501 kind=auth, or set-agent-state
-	// kind=auth); no rule guesses it.
+	// PromptKindAuth is a block on a login, a token or a credential. An explicit
+	// report names it (OSC 7501 kind=auth, or set-agent-state kind=auth), or a
+	// rule in its manifest; no rule guesses it. It is answered in the pane, never
+	// from the Inbox, and it reaches the person from a quiet pane.
 	PromptKindAuth = "auth"
 )
 
-var promptKinds = map[string]bool{PromptKindApproval: true, PromptKindQuestion: true}
+var promptKinds = map[string]bool{PromptKindApproval: true, PromptKindQuestion: true, PromptKindAuth: true}
 
 // approvalWords are the words that mark a prompt as a yes-or-no on something the
 // agent proposed rather than a question wanting an answer in words. They are

@@ -38,6 +38,7 @@ var agentWorkVerbTable = []struct {
 	{"verify-fan", scopeLaunch, []string{config.LinkAllowOpen, config.LinkAllowWrite}, false},
 	{"keep-fan", scopeDeny, []string{config.LinkAllowWrite}, false},
 	{"mark-attention", scopeDeny, []string{config.LinkAllowRespond}, false},
+	{"set-agent-quiet", scopeDeny, []string{config.LinkAllowWrite, config.LinkAllowRespond}, false},
 	{"add-task", scopeTask, []string{config.LinkAllowWrite}, false},
 	{"list-tasks", scopeRead, []string{config.LinkAllowList}, false},
 	{"get-task", scopeRead, []string{config.LinkAllowList}, false},

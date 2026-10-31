@@ -1273,7 +1273,12 @@ func (m *OS) ckRowLine2(l ckLook, r ckRow, e sidebarAgentEntry) (verb, rest stri
 		}
 		return "", "working", ink, right
 	case sidebarAttention(e.State):
-		return capitalize(agentRowStateWords(e)), printableTitle(e.Message), pal.Attention, right
+		// A quiet pane has no Inbox item, so its row says why.
+		rest := printableTitle(e.Message)
+		if e.Quiet {
+			rest = strings.TrimSuffix("quiet, not in the Inbox. "+rest, " ")
+		}
+		return capitalize(agentRowStateWords(e)), rest, pal.Attention, right
 	}
 	if e.DraftHeld {
 		// A queued message waits for the person's draft. See
@@ -1873,6 +1878,9 @@ func (m *OS) drawFocus(c *ckCanvas, l ckLook, x, y, w, y1, top int, now time.Tim
 	}
 	right := x + w
 	name, harness, place, _ := m.ckRowFacts(r, e)
+	if r.agent >= 0 && e.Quiet {
+		harness = strings.TrimPrefix(harness+sepWord()+"quiet", sepWord())
+	}
 	hx := c.text(x, y, right, ckSeg{t: name, fg: pal.Fg, attrs: ckBold})
 	if harness != "" {
 		hx = c.text(hx, y, right, ckSeg{t: "   " + harness, fg: pal.FgDim})

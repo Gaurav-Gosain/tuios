@@ -629,6 +629,8 @@ type sidebarTerminalEntry struct {
 	// workspace this client cannot know. Resolved where the session's context is
 	// still in hand, so the row itself does not have to go looking for it.
 	Tag string
+	// Quiet marks a pane that keeps out of the Inbox. The row says so.
+	Quiet bool
 	// Host is the machine the pane's process runs on, empty for this one. A
 	// session can hold panes from several machines, and which one a pane is on
 	// decides what a command typed into it does, so the row says it.
@@ -2656,6 +2658,7 @@ func (m *OS) sidebarTerminals(sessions []sessiontree.Node, sessionID string) []s
 			State:       win.AgentState,
 			DoneSeen:    win.DoneSeen,
 			Subagents:   win.Subagents,
+			Quiet:       win.Quiet,
 			Focused:     win.IsCurrent,
 			Host:        win.Host,
 			WindowIndex: -1,
@@ -3257,11 +3260,17 @@ func (m *OS) sidebarTerminalRow(e sidebarTerminalEntry, cw int, pal overlay.Pale
 	if !nameMarked {
 		capsW = 0
 	}
-	shown := m.sidebarMarquee("t:"+e.WindowID, title, max(sidebarNameAvail(cw, rightW)-capsW, 1), st.lit())
+	nameAvail := sidebarNameAvail(cw, rightW) - capsW
+	quietMark := ""
+	if e.Quiet {
+		quietMark = sidebarQuietMark(nameAvail, lipgloss.Width(title), sidebarAgentSep())
+	}
+	shown := m.sidebarMarquee("t:"+e.WindowID, title, max(nameAvail-lipgloss.Width(quietMark), 1), st.lit())
 	name := sidebarStyle(rowBg, fg).Bold(sidebarAttention(e.State)).Render(shown)
 	if nameMarked {
 		name = railCurrentName(shown, m.terminalRowTint(e, rowBg), rowBg, pal, &m.Settings)
 	}
+	name += sidebarStyle(rowBg, pal.FgMute).Render(quietMark)
 	return sidebarComposeRow(gutter, sidebarGlyph(e.State, e.DoneSeen, e.Subagents, rowBg, pal, &m.Settings), name, right, cw, rowBg)
 }
 
@@ -3553,9 +3562,6 @@ func (m *OS) sidebarAgentRow(e sidebarAgentEntry, variant, cw int, pal overlay.P
 	}
 
 	plan := m.sidebarAgentTokensFor(e, variant, tall, time.Now())
-	if e.Quiet {
-		plan.After = append(plan.After, sidebarAgentToken{Name: "quiet", Text: "quiet"})
-	}
 	// The row under the cursor or the pointer says how long at any age; the
 	// rest wait for railAgeFloor.
 	if st.lit() && plan.Right.Name == "elapsed" && plan.Right.Text == "" && variant == sidebarVariantFull {
@@ -3611,7 +3617,13 @@ func (m *OS) sidebarAgentRow(e sidebarAgentEntry, variant, cw int, pal overlay.P
 	// while nothing else on the row says which agent it is.
 	sep := sidebarAgentSep()
 	nameW := lipgloss.Width(name)
-	label, keep, nameRoom := sidebarAgentFit(&m.railFit, plan.Prefix, plan.After, nameW, label, queued, mail, sep, sidebarNameAvail(cw, 0))
+	// The mark is the row's own reason for never reaching the Inbox, so it comes
+	// off the budget before the tokens do.
+	quietMark := ""
+	if e.Quiet {
+		quietMark = sidebarQuietMark(sidebarNameAvail(cw, 0), nameW, sep)
+	}
+	label, keep, nameRoom := sidebarAgentFit(&m.railFit, plan.Prefix, plan.After, nameW, label, queued, mail, sep, sidebarNameAvail(cw, 0)-lipgloss.Width(quietMark))
 	labelAt, mailAt := len(plan.Prefix)+len(plan.After), len(plan.Prefix)+len(plan.After)+1
 	nameRoom = max(nameRoom, 1)
 	shown := m.sidebarAgentPrefixRun(plan.Prefix, keep[:len(plan.Prefix)], quiet, pal)
@@ -3661,7 +3673,7 @@ func (m *OS) sidebarAgentRow(e sidebarAgentEntry, variant, cw int, pal overlay.P
 	}
 	body := shown +
 		m.sidebarTokenStyle(nameStyle, plan.Name, pal).Render(m.sidebarMarquee("a:"+e.SessionID+"/"+e.WindowID, name, nameRoom, st.Cursor)) +
-		after
+		quiet.Render(quietMark) + after
 	return sidebarComposeRow(gutter,
 		sidebarGlyph(e.State, e.DoneSeen, e.Subagents, rowBg, pal, &m.Settings), body, right, cw, rowBg), lipgloss.Width(body)
 }

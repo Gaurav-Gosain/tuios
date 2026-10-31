@@ -6,6 +6,7 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/hooks"
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
+	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/sessiontree"
 	"github.com/Gaurav-Gosain/tuios/internal/sound"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
@@ -52,9 +53,25 @@ func (m *OS) agentAlertPolicy() config.AgentAlertPolicy {
 }
 
 // agentAlertQuiet reports whether a quiet pane keeps this transition to itself.
-// An approval still reaches the person, as it does in the Inbox.
+// An approval or a login still reaches the person, as it does in the Inbox.
 func agentAlertQuiet(w *terminal.Window, to string) bool {
-	return w.AgentQuiet && (to != "needs_input" || w.AgentKind != "approval")
+	return quietHoldsAlert(w.AgentQuiet, w.AgentKind, to)
+}
+
+func quietHoldsAlert(quiet bool, kind, to string) bool {
+	return quiet && (to != "needs_input" || !session.AgentKindReachesPerson(kind))
+}
+
+// noteQuietLifted raises the alert a sync owes a pane that stayed on needs_input
+// and that the mark no longer holds: its question became an approval, or the
+// mark was cleared while it waits. No state changed, so noteAgentState is silent.
+func (m *OS) noteQuietLifted(w *terminal.Window, fromState string, fromQuiet bool, fromKind string) {
+	if fromState != "needs_input" || w.AgentState != "needs_input" {
+		return
+	}
+	if quietHoldsAlert(fromQuiet, fromKind, "needs_input") && !agentAlertQuiet(w, "needs_input") {
+		m.considerAgentAlert(w, "needs_input", "needs_input")
+	}
 }
 
 // considerAgentAlert decides what one transition earns. It runs on the Update

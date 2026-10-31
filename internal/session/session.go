@@ -3676,6 +3676,7 @@ func (s *Session) mutateStateLocked(fn func(state *SessionState) error) (*Sessio
 	clearStaleSilenceLocked(before, s.state)
 	clearNowAtRestLocked(before, s.state)
 	wakeSettledLocked(before, s.state)
+	clearQuietOfLeftAgentLocked(before, s.state)
 	s.forgetSubagentsLocked(s.state)
 	pruneDeadLeaves(s.state)
 	// A daemon-side mutation is exactly what a client sync must not undo, so it

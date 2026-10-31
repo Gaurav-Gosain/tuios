@@ -2050,16 +2050,27 @@ While a pane is quiet:
 These do not change:
 
 - The agent state, `completion_seq` and the `agent-state` events.
-- An approval, which still reaches the Inbox and the dock.
+- An approval or a login, which still reaches the Inbox and the alerts. A login
+  is `kind=auth`, or a manifest rule such as Hermes's credential prompt.
 - An item that the queue opens on the pane, such as a stalled message.
 
-`--off` clears the mark. The old items do not open again, and the next
-transition opens its own. The mark goes when the pane closes, and a pane that
-tuios restores after a restart is not quiet.
+On a narrow rail the row says `z` in place of `quiet`. In the agents view, the row
+of a quiet pane that waits says that it is not in the Inbox.
 
-The verb needs the `admin` grant, so in strict mode an agent cannot hide its own
-questions from you. Calm mode is different: it applies to the whole client, and
-it does not change the Inbox.
+`--off` clears the mark. The old items do not open again, and the next
+transition opens its own. If the pane waits on a question at that moment, the
+question opens at once with its alert. The mark goes when the agent leaves the
+pane or the pane closes, and a pane that tuios restores after a restart is not
+quiet.
+
+The verb needs an agent in the pane, and the `admin` grant. In strict mode an
+agent cannot hide its own questions from you. In the default mode `open` every
+pane holds `admin`, so a moderator pane can quiet its workers. Mark workers before
+they ask: when a pane calls the verb, an open question stays open. Only you can
+close one this way. Over a link, the verb needs both `write` and `respond`.
+
+Calm mode is different: it applies to the whole client, and it does not change the
+Inbox.
 
 ## Indicator
 

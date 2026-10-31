@@ -286,8 +286,9 @@ var exampleOutcomes = map[string]exampleOutcome{
 	"get-approval#0": {errCode: ErrVerbInvalidParams, why: "no approval is held in the fixture"},
 	// The person's proof comes first, so the nonce the example names is
 	// what refuses it, as for dismiss-attention.
-	"mark-attention#0": {errCode: ErrVerbNotHuman, why: "only a client attached right now may snooze, and none is"},
-	"mark-attention#1": {errCode: ErrVerbNotHuman, why: "only a client attached right now may settle, and none is"},
+	"set-agent-quiet#0": {errCode: ErrVerbInvalidParams, why: "the fixture's pane runs no agent. TestQuietPaneKeepsOutOfTheInbox proves the verb"},
+	"mark-attention#0":  {errCode: ErrVerbNotHuman, why: "only a client attached right now may snooze, and none is"},
+	"mark-attention#1":  {errCode: ErrVerbNotHuman, why: "only a client attached right now may settle, and none is"},
 }
 
 // blockBudget is how long an example marked blocks is waited on before it

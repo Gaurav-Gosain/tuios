@@ -545,11 +545,16 @@ func newSetAgentQuietCommand() *cobra.Command {
 
 A quiet window opens no finished, question or errored item in the Inbox, and it
 raises no alert. Its open items of those kinds close. The agent state, the rail
-glyph, the agent-state events and list-agents do not change. An approval still
-reaches you. The rail row says quiet, and list-agents reports quiet: true.
+glyph, the agent-state events and list-agents do not change. An approval or a
+login still reaches you. The rail row says quiet, and list-agents reports
+quiet: true.
 
-The mark stays until you clear it or the pane closes. --off clears it, and the
-old items do not open again. This command needs the admin grant.`,
+The mark stays until you clear it, the agent leaves the pane or the pane closes.
+A pane that tuios restores after a restart is not quiet. --off clears it. The old items do not open again,
+but a question the pane waits on now opens at once.
+
+This command needs an agent in the pane and the admin grant. A pane that runs it
+leaves an open question open, so mark workers before they ask.`,
 		Example: `  # Mark a background worker quiet
   tuios set-agent-quiet -w worker-1
 

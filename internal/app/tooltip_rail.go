@@ -204,6 +204,10 @@ func sidebarTooltipAgentLabel(e sidebarAgentEntry) string {
 	if age := agentElapsed(e.State, e.StateAt, time.Now()); age != "" {
 		label += " " + age
 	}
+	// The strip has no cell for the mark, so its label says it.
+	if e.Quiet {
+		label += sep + "quiet"
+	}
 	return label
 }
 

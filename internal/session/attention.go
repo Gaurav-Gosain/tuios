@@ -657,10 +657,22 @@ func (a *attentionStore) noteAgentState(sessionName string, ev SessionEvent) {
 
 	switch state {
 	case AgentStateNeedsInput.Name():
-		// A quiet pane's question stays out of the queue. Its approval does not:
-		// a held prompt always reaches a person.
-		if ev.agentQuiet && ev.hookKind != "approval" {
-			break
+		// A quiet pane's question stays out of the queue. An approval or a login
+		// does not, since the pane cannot move until a person acts.
+		if ev.agentQuiet && !AgentKindReachesPerson(ev.hookKind) {
+			key := attentionKey(AttentionQuestion, sessionName, ev.Window, 0)
+			cur, open := a.items[a.byKey[key]]
+			if !open || cur.Kind != AttentionQuestion {
+				// The prompt it replaced has gone. Without this, an approval
+				// followed by a question stayed open and said the wrong thing.
+				if open && cur.Kind == AttentionApproval {
+					a.closeKeyLocked(key, AttentionClosedResolved)
+				}
+				break
+			}
+			// A question item is already open: a login the pane has moved on from,
+			// or a question a pane could not close (see closeQuiet). It follows
+			// what the pane says now, so it does not go stale.
 		}
 		if a.askShownLocked(sessionName, ev.Window, ev.hookMessage) {
 			// The pane shows its own open ask-human question as its state
