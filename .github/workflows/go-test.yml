@@ -350,23 +350,35 @@ jobs:
             fi
           done
 
+      # The repository does not carry conpty.dll and OpenConsole.exe, so the
+      # tests that open a pane on them take the x64 files from a pinned
+      # version of the Microsoft.Windows.Console.ConPTY package.
+      - name: Fetch the ConPTY package
+        shell: bash
+        run: |
+          curl -fsSL -o "$RUNNER_TEMP/conpty.nupkg" \
+            https://api.nuget.org/v3-flatcontainer/microsoft.windows.console.conpty/1.25.260930003/microsoft.windows.console.conpty.1.25.260930003.nupkg
+          unzip -j -d "$RUNNER_TEMP/conpty" "$RUNNER_TEMP/conpty.nupkg" \
+            runtimes/win-x64/native/conpty.dll build/native/runtimes/x64/OpenConsole.exe
+          echo "TUIOS_E2E_CONPTY_DIR=$RUNNER_TEMP/conpty" >> "$GITHUB_ENV"
+
       - name: Test the conpty.dll lookup and fallback
         # spawn_test.go starts /bin/sh, so only the conpty.dll tests of
         # internal/ptyspawn run here: the lookup reads only the folder of the
-        # executable, and a missing, unloadable or OpenConsole-less DLL falls
-        # back to the inbox ConPTY. TestPaneUsesConPTYDLLWhenPresent and
-        # TestPaneOnConPTYDLLFindsProgramLikeInbox need the
-        # Microsoft.Windows.Console.ConPTY files and are not run.
+        # executable, a missing, unloadable or OpenConsole-less DLL falls
+        # back to the inbox ConPTY, and with the package files a pane opens
+        # on the DLL and finds its program as an inbox pane does.
         #
         # Each test named below must print its PASS line, so a rename or a
         # skip fails the step.
         shell: bash
         run: |
           go test -count=1 -timeout 5m -v \
-            -run "TestConPTYDLLIsNotTakenFromWorkingDirOrPath|TestPaneUsesInboxConPTYWithoutDLL|TestPaneFallsBackToInboxWhenDLLWillNotLoad|TestPaneFallsBackToInboxWithoutOpenConsole" \
+            -run "TestConPTYDLLIsNotTakenFromWorkingDirOrPath|TestPaneUsesInboxConPTYWithoutDLL|TestPaneFallsBackToInboxWhenDLLWillNotLoad|TestPaneFallsBackToInboxWithoutOpenConsole|TestPaneUsesConPTYDLLWhenPresent|TestPaneOnConPTYDLLFindsProgramLikeInbox" \
             ./internal/ptyspawn/ | tee "$RUNNER_TEMP/conpty-tests.log"
           for name in TestConPTYDLLIsNotTakenFromWorkingDirOrPath TestPaneUsesInboxConPTYWithoutDLL \
-            TestPaneFallsBackToInboxWhenDLLWillNotLoad TestPaneFallsBackToInboxWithoutOpenConsole; do
+            TestPaneFallsBackToInboxWhenDLLWillNotLoad TestPaneFallsBackToInboxWithoutOpenConsole \
+            TestPaneUsesConPTYDLLWhenPresent TestPaneOnConPTYDLLFindsProgramLikeInbox; do
             if ! grep -q -- "^--- PASS: $name " "$RUNNER_TEMP/conpty-tests.log"; then
               echo "::error::$name did not run and pass"
               exit 1

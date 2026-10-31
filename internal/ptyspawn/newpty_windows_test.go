@@ -21,7 +21,8 @@ import (
 // pane on the inbox ConPTY. Each case is told apart by the pty that comes
 // back and by the log, which is silent when there is no DLL to try. The E2E
 // suite does not run on Windows, so the windows job in go-test.yml runs these
-// as unit tests, all but the two that need the real DLL.
+// as unit tests, with the real DLL from the Microsoft.Windows.Console.ConPTY
+// package for the two that need it.
 //
 // Negative control: cutting the lookup, the fallback, the OpenConsole.exe
 // check or Start's path helpers each fails the test named for it.
