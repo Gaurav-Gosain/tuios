@@ -237,17 +237,24 @@ func (t Transcript) ExpandDir(cwd string) string {
 	if err != nil {
 		return ""
 	}
-	out := expandBase(t.Dir, home)
+	out := expandBase(t.Dir, home, os.Getenv)
 	out = strings.ReplaceAll(out, "{cwd:dashes}", DashPath(cwd))
 	return filepath.Clean(out)
 }
 
 // Root is the folder every transcript of the harness is under, whatever the
 // pane's working directory: Dir up to the last whole path element before the
-// first placeholder other than {home}, with {home} resolved. For Claude Code
-// it is ~/.claude/projects. It is "" when Dir has no such folder or the home
-// is unknown, and then no path a hook reports can be accepted.
-func (t Transcript) Root() string {
+// first placeholder other than a fixed folder's, with those resolved. For
+// Claude Code it is ~/.claude/projects. It is "" when Dir has no such folder
+// or the home is unknown, and then no path a hook reports can be accepted. The
+// variables that move a harness's own folder are read from the daemon's
+// environment.
+func (t Transcript) Root() string { return t.RootIn(os.Getenv) }
+
+// RootIn is Root with the variables that move a harness's own folder
+// (agentHomes) read through getenv, so a caller can check a path against the
+// folder a given process's harness writes to.
+func (t Transcript) RootIn(getenv func(string) string) string {
 	if !t.Enabled() {
 		return ""
 	}
@@ -255,7 +262,7 @@ func (t Transcript) Root() string {
 	if err != nil || home == "" {
 		return ""
 	}
-	dir := expandBase(t.Dir, home)
+	dir := expandBase(t.Dir, home, getenv)
 	if i := strings.IndexByte(dir, '{'); i >= 0 {
 		dir = dir[:i]
 		j := strings.LastIndexAny(dir, `/\`)
@@ -277,12 +284,23 @@ func (t Transcript) Root() string {
 func DashPath(cwd string) string { return strings.ReplaceAll(cwd, "/", "-") }
 
 // knownPlaceholders is what ExpandDir understands.
-var knownPlaceholders = map[string]struct{}{"{home}": {}, "{state}": {}, "{pi_agent}": {}, "{cwd:dashes}": {}}
+var knownPlaceholders = map[string]struct{}{"{home}": {}, "{state}": {}, "{pi_agent}": {}, "{claude_config}": {}, "{codex_home}": {}, "{cwd:dashes}": {}}
+
+// agentHomes are the placeholders for a harness's own folder, each moved by
+// the variable the harness itself reads, else the folder under the home.
+var agentHomes = []struct {
+	placeholder, env string
+	under            []string
+}{
+	{"{pi_agent}", "PI_CODING_AGENT_DIR", []string{".pi", "agent"}},
+	{"{claude_config}", "CLAUDE_CONFIG_DIR", []string{".claude"}},
+	{"{codex_home}", "CODEX_HOME", []string{".codex"}},
+}
 
 // expandBase resolves the placeholders that name a fixed folder: {home};
 // {state}, the XDG state folder ($XDG_STATE_HOME, or ~/.local/state); and
-// {pi_agent}, Pi's agent folder (see piAgentDir).
-func expandBase(dir, home string) string {
+// the agentHomes, read through getenv (see agentHomeDir).
+func expandBase(dir, home string, getenv func(string) string) string {
 	if strings.Contains(dir, "{state}") {
 		state := os.Getenv("XDG_STATE_HOME")
 		if !filepath.IsAbs(state) {
@@ -290,22 +308,27 @@ func expandBase(dir, home string) string {
 		}
 		dir = strings.ReplaceAll(dir, "{state}", state)
 	}
-	if strings.Contains(dir, "{pi_agent}") {
-		dir = strings.ReplaceAll(dir, "{pi_agent}", piAgentDir(home))
+	for _, a := range agentHomes {
+		if strings.Contains(dir, a.placeholder) {
+			dir = strings.ReplaceAll(dir, a.placeholder, agentHomeDir(home, getenv(a.env), a.under))
+		}
 	}
 	return strings.ReplaceAll(dir, "{home}", home)
 }
 
-// piAgentDir is Pi's agent folder, the way Pi itself finds it:
-// $PI_CODING_AGENT_DIR with a leading ~ expanded, else ~/.pi/agent. It reads
-// the daemon's environment, as {state} does. A relative value is returned
-// as it is, and Root then gives "" for it, since no path can be checked
-// against a folder that depends on where the daemon runs.
-func piAgentDir(home string) string {
-	v := strings.TrimSpace(os.Getenv("PI_CODING_AGENT_DIR"))
+// agentHomeDir is a harness's own folder, the way the harness finds it: the
+// variable's value v with a leading ~ expanded, else home joined with under.
+// A relative value is returned as it is, and Root then gives "" for it, since
+// no path can be checked against a folder that depends on where a process
+// runs. A value with a { in it is refused the same way: Root cuts the path at
+// the first {, which in the value would move the folder up.
+func agentHomeDir(home, v string, under []string) string {
+	v = strings.TrimSpace(v)
 	switch {
 	case v == "":
-		return filepath.Join(home, ".pi", "agent")
+		return filepath.Join(append([]string{home}, under...)...)
+	case strings.ContainsRune(v, '{'):
+		return "."
 	case v == "~" || strings.HasPrefix(v, "~/"):
 		return filepath.Join(home, strings.TrimPrefix(v, "~"))
 	}
@@ -315,7 +338,11 @@ func piAgentDir(home string) string {
 // baseless is dir without its fixed-folder placeholders, for the checks of
 // which placeholders a dir names.
 func baseless(dir string) string {
-	return strings.ReplaceAll(strings.ReplaceAll(strings.ReplaceAll(dir, "{home}", ""), "{state}", ""), "{pi_agent}", "")
+	dir = strings.ReplaceAll(strings.ReplaceAll(dir, "{home}", ""), "{state}", "")
+	for _, a := range agentHomes {
+		dir = strings.ReplaceAll(dir, a.placeholder, "")
+	}
+	return dir
 }
 
 // placeholders returns the placeholders a template uses, erroring on one this
