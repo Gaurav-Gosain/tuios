@@ -1672,7 +1672,7 @@ func (m *OS) placeUnplacedWindows(state *session.SessionState, firstSeen []*term
 		x, y, width, height := m.NewWindowPlacement()
 		if w.IsPopup {
 			x, y, width, height = m.popupRect(w)
-		} else if bw, bh, tiled, ok := m.newPaneBox(); ok && w.Workspace == m.CurrentWorkspace && !w.IsFloating {
+		} else if bw, bh, tiled, ok := m.newPaneBox(w); ok && w.Workspace == m.CurrentWorkspace && !w.IsFloating {
 			// The box the layout is about to give it, which is the size
 			// the daemon started its process at when this client asked for
 			// the window. The floating placement box first and the tile
