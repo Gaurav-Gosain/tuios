@@ -11217,3 +11217,12 @@ Run on 2026-10-31 on Linux against builds from this branch, on `0e1679cfb`. Each
 | `ckStageTitle(r.group)` in `drawFoldFocus` becomes `ckStageTitle(0)`, so there is no crash and the title is wrong | "the focus title is \"   Todo  1\", want Done and its count" | **caught** |
 
 The frame is `task-board-done-focus-200x55` under `TUIOS_E2E_FRAMES`, in the test's folder. Repeat from `e2e/tui` with `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestTaskBoardGroupsCardsByStage$' -v .`.
+## A dock cell watching agent state hears every transition
+
+`TestDockAgentCellClearsWhenTheAnswerMovesThePaneOn` draws a dock cell that counts the session's panes on `needs_input`, refreshed on `event:after-agent-state`, with `working` left out of `[notifications.agent.states]`. The pane goes to `needs_input` and the cell has to read `WAIT1`, then the pane goes to `working` and the cell has to read `WAIT0` again.
+
+Run on 2026-10-31 on macOS (arm64). The test passes on the fixed build, 6 runs of 6, and the control fails at the step named:
+
+| Control: what was cut | Where it fails | Verdict |
+| --- | --- | --- |
+| The `NotifyDockEvent` call at the head of `considerAgentAlert` (`internal/app/agent_alert.go`), so the dock hears agent state only through an alert | "the dock cell never read WAIT0 after the answer moved the pane to working": the cell still reads `WAIT1` | **caught** |
