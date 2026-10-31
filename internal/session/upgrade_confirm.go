@@ -70,14 +70,18 @@ func (d *Daemon) callerIsPlugin(cs *connState) bool {
 }
 
 // personClients is how many attached clients could answer for the person:
-// local, taking input, with a process outside every pane. A view-only client,
-// such as tuios-web --read-only, sends no keys, so it cannot answer.
+// local, taking input, showing the dialog, with a process outside every pane.
+// A view-only client, such as tuios-web --read-only, sends no keys, so it
+// cannot answer. Neither can a client whose attach did not say it shows the
+// dialog: gui-bridge, whose renderer is never a key, and a client that
+// predates the dialog, whose Inbox offers No and Yes and sends neither as an
+// answer the ask takes.
 func (d *Daemon) personClients() int {
 	var attached []*connState
 	d.clientsMu.RLock()
 	for _, cs := range d.clients {
 		cs.mu.Lock()
-		if cs.attached && cs.isTUIClient && !cs.viaLink && !cs.viewOnly {
+		if cs.attached && cs.isTUIClient && cs.upgradeDialog && !cs.viaLink && !cs.viewOnly {
 			attached = append(attached, cs)
 		}
 		cs.mu.Unlock()
