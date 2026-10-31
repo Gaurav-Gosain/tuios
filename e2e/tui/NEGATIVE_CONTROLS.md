@@ -11219,10 +11219,12 @@ Run on 2026-10-31 on Linux against builds from this branch, on `0e1679cfb`. Each
 The frame is `task-board-done-focus-200x55` under `TUIOS_E2E_FRAMES`, in the test's folder. Repeat from `e2e/tui` with `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestTaskBoardGroupsCardsByStage$' -v .`.
 ### A transcript under CLAUDE_CONFIG_DIR (#1390)
 
-`TestTranscriptPathFollowsClaudeConfigDir` in `agent_transcript_review_test.go`. On 2026-10-31 the control below was built into a binary and the test was run against it on macOS. The same test passed on the branch build.
+`TestTranscriptPathFollowsClaudeConfigDir` in `agent_transcript_review_test.go`. On 2026-10-31 each control below was built into a binary and the test was run against it on macOS. The same test passed on the branch build.
 
-The positive halves: a hook with `CLAUDE_CONFIG_DIR` set joins its profile's file, and a hook with the variable set still joins a file under `~/.claude/projects`. The refusals that hold on the fixed build: the profile's file from a hook without the variable, a path outside both folders, and a link in the profile's folder that leads out.
+The positive halves: a hook with `CLAUDE_CONFIG_DIR` set joins its profile's file, a hook whose `CLAUDE_CONFIG_DIR` is a link to the profile joins the same file, and a hook with the variable set still joins a file under `~/.claude/projects`. The refusals that hold on the fixed build: the profile's file from a hook without the variable, a path outside both folders, a link in the profile's folder that leads out, a file above the projects folder named through a `{` in the variable, and a file under a `projects` folder that is a link to another folder.
 
 | Control: what was cut | Test | Result |
 | --- | --- | --- |
 | `joinReportedTranscript` passes no environment to `transcriptPathAllowed`, so only the daemon's folder is checked, as before | `TestTranscriptPathFollowsClaudeConfigDir` | **caught**: "a hook with CLAUDE_CONFIG_DIR naming its profile's file: refused" |
+| `agentHomeDir` takes a value with a `{` in it, so `RootIn` cuts the path inside the value and `CLAUDE_CONFIG_DIR=<base>/braced/{x` makes the folder `<base>/braced` | `TestTranscriptPathFollowsClaudeConfigDir` | **caught**: "a CLAUDE_CONFIG_DIR with a { naming a file above its projects folder: want transcript_refused", the hook joined `braced/logs/above.jsonl` |
+| `transcriptPathAllowed` does not check that the resolved peer folder still ends in `projects`, so `<any>/projects` linked to another folder counts | `TestTranscriptPathFollowsClaudeConfigDir` | **caught**: "a projects folder that is a link to another folder: want transcript_refused", the hook joined `claude-linked/projects/demo/target.jsonl` |

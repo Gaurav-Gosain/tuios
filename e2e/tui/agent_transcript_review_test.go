@@ -282,14 +282,19 @@ func TestTranscriptPathRules(t *testing.T) {
 // the environment of the process that sent the report. The report names no
 // folder of its own, so a hook without the variable cannot reach the profile's
 // files, and the rules of TestTranscriptPathRules hold under the profile's
-// folder as under the default one.
+// folder as under the default one. Since the sender picks the folder, a { in
+// the variable cannot move it up, and a projects folder that is a link to
+// another folder does not count, while a profile folder that is a link does.
 //
-// NEGATIVE CONTROL (e2e/tui/NEGATIVE_CONTROLS.md): with transcriptPathAllowed
+// NEGATIVE CONTROLS (e2e/tui/NEGATIVE_CONTROLS.md): with transcriptPathAllowed
 // checking only tr.Root(), as before, the test fails at "a hook with
-// CLAUDE_CONFIG_DIR naming its profile's file".
+// CLAUDE_CONFIG_DIR naming its profile's file"; with agentHomeDir taking a
+// value with a {, at "a CLAUDE_CONFIG_DIR with a { naming a file above its
+// projects folder"; and without the check that the resolved folder keeps its
+// last element, at "a projects folder that is a link to another folder".
 func TestTranscriptPathFollowsClaudeConfigDir(t *testing.T) {
-	r := newATRig(t, "transcript-claude-config-dir.txt", 2)
-	winA, winB := r.wins[0], r.wins[1]
+	r := newATRig(t, "transcript-claude-config-dir.txt", 3)
+	winA, winB, winC := r.wins[0], r.wins[1], r.wins[2]
 	profile := filepath.Join(r.base, "claude-work")
 	projects := filepath.Join(profile, "projects", "demo")
 	if err := os.MkdirAll(projects, 0o700); err != nil {
@@ -331,6 +336,48 @@ func TestTranscriptPathFollowsClaudeConfigDir(t *testing.T) {
 	}
 	refused(winB, link, "a link in the profile's folder that leads out", withProfile)
 
+	// The folder is cut at the first {, so a { in the variable would move it
+	// up to the folder above.
+	braced := filepath.Join(r.base, "braced")
+	above := filepath.Join(braced, "logs", "above.jsonl")
+	if err := os.MkdirAll(filepath.Dir(above), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(above, []byte(atRecord("a1", "ABOVE-TEXT")+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	refused(winB, above, "a CLAUDE_CONFIG_DIR with a { naming a file above its projects folder", "CLAUDE_CONFIG_DIR="+filepath.Join(braced, "{x"))
+
+	// A projects folder that is a link to another folder is not the
+	// profile's, whatever the variable names.
+	linked := filepath.Join(r.base, "claude-linked")
+	target := filepath.Join(r.base, "linked-target")
+	if err := os.MkdirAll(filepath.Join(target, "demo"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(linked, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(target, filepath.Join(linked, "projects")); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(target, "demo", "target.jsonl"), []byte(atRecord("t1", "TARGET-TEXT")+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	refused(winB, filepath.Join(linked, "projects", "demo", "target.jsonl"), "a projects folder that is a link to another folder", "CLAUDE_CONFIG_DIR="+linked)
+
+	// A profile folder that is itself a link is still the profile's.
+	profileLink := filepath.Join(r.base, "claude-work-link")
+	if err := os.Symlink(profile, profileLink); err != nil {
+		t.Fatal(err)
+	}
+	if out := r.joinExplain(winC, filepath.Join(profileLink, "projects", "demo", "work.jsonl"), "l", "CLAUDE_CONFIG_DIR="+profileLink); out["transcript_refused"] != nil {
+		t.Fatalf("a profile folder that is a link: refused: %v", out)
+	}
+	if got := atEntries(t, r.read(winC, nil)); len(got) != 1 || got[0].Text != "WORK-TEXT" {
+		t.Fatalf("the linked profile's transcript: %v", got)
+	}
+
 	// The default folder holds for a hook with the variable too.
 	home := filepath.Join(atProjects(r.base), "demo", "home.jsonl")
 	if err := os.MkdirAll(filepath.Dir(home), 0o700); err != nil {
@@ -345,7 +392,7 @@ func TestTranscriptPathFollowsClaudeConfigDir(t *testing.T) {
 	if got := atEntries(t, r.read(winB, nil)); len(got) != 1 || got[0].Text != "HOME-TEXT" {
 		t.Fatalf("the default folder's transcript: %v", got)
 	}
-	r.art.add("result", "profile file refused without the variable and joined with it; outside and link out refused; default folder still joined")
+	r.art.add("result", "profile file refused without the variable and joined with it; outside, link out, a { in the variable and a linked projects folder refused; linked profile folder and default folder still joined")
 }
 
 // TestTranscriptSharedFileWatch joins two windows to one file, then moves the
