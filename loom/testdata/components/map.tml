@@ -1,0 +1,11 @@
+<!-- 56x22,90x30 -->
+<tml version="1">
+  <state>{"rates": [{"c": "US", "usd": 0.31}, {"c": "CA", "usd": 0.088},
+    {"c": "BR", "usd": 1.13}, {"c": "GB", "usd": 4.31}, {"c": "DE", "usd": 0.26},
+    {"c": "JP", "usd": 0.22}, {"c": "AU", "usd": 3.49}, {"c": "ZA", "usd": 0.667},
+    {"c": "IN", "usd": 0.99}, {"c": "SG", "usd": 0.45}, {"c": "ZZ", "usd": 1}]}</state>
+  <col gap="1">
+    <map data="state.rates" x="c" y="usd" title="Median $/GPU/hr" unit="$" log="true"/>
+    <map data="state.rates" x="c" y="usd"/>
+  </col>
+</tml>
