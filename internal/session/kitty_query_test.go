@@ -13,8 +13,8 @@ import (
 // The rule it holds: direct transmission is always OK, and a medium that sends
 // a path is OK only when the path will be read on the machine it names a file
 // on. Anything else is refused so the guest streams the bytes instead. Shared
-// memory is refused as well where it has no path (macOS), because tuios cannot
-// read it there and a client whose host does not read files drops it (#1236).
+// memory is refused as well where tuios cannot reach an object, because a client
+// whose host does not read files drops it (#1236).
 func TestKittyQueryResponse(t *testing.T) {
 	probes := []struct {
 		name string
@@ -46,9 +46,9 @@ func TestKittyQueryResponse(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			saved := kittySharedMemoryHasPath
-			t.Cleanup(func() { kittySharedMemoryHasPath = saved })
-			kittySharedMemoryHasPath = func() bool { return !tt.noShmPath }
+			saved := kittySharedMemoryReachable
+			t.Cleanup(func() { kittySharedMemoryReachable = saved })
+			kittySharedMemoryReachable = func() bool { return !tt.noShmPath }
 			s := &Session{}
 			s.SetKittyAdvertised(true)
 			s.SetLinkedViewer(tt.linkedViewer)

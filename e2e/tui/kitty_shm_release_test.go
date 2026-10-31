@@ -61,6 +61,63 @@ func TestKittySharedMemoryFramesAreReleased(t *testing.T) {
 		assertReleased(t, left, forwarded)
 	})
 
+	// Frames in synchronized updates, faster than the render loop sends them,
+	// as terminal-browser sends them. The host reads every frame it is handed,
+	// so a frame the next one has replaced is dropped, with nobody left to
+	// read it. What is sent needs no placement after it.
+	for _, daemon := range []bool{false, true} {
+		name := "superseded"
+		if daemon {
+			name = "superseded-daemon"
+		}
+		t.Run(name, func(t *testing.T) {
+			host := newKittyHost()
+			term, base := start(t, startOpts{
+				cols: 120, rows: 40,
+				env:           []string{"TUIOS_SIXEL_GRAPHICS=0"},
+				out:           host,
+				daemonDefault: daemon,
+			})
+			if daemon {
+				killDaemon(t, base)
+			}
+			host.answerProbe(t, term)
+			waitBoot(t, term)
+			newWindow(t, term)
+			enableTiling(t, term)
+			waitWindowCount(t, term, 1, "one pane")
+			enterTerminalMode(t, term)
+			runInShell(t, term, "echo IMAG\"\"EPANE", "IMAGEPANE", shellTimeout)
+
+			names := runShmStream(t, term, 400, 200, 0, "sync")
+			stream := host.bytes()
+			forwarded := forwardedShmNames(stream)
+			left := leftInDevShm(names)
+			counts := map[string]int{}
+			for _, c := range wireCmds(stream) {
+				if c.image != 0 {
+					counts["a="+c.action]++
+				}
+			}
+			t.Logf("%d frames: %d forwarded to the host, %d still in /dev/shm, host commands %v",
+				len(names), len(forwarded), len(left), counts)
+			if len(forwarded) == 0 {
+				t.Fatalf("no frame was forwarded to the host, so nothing here exercised the passthrough")
+			}
+			// 400 frames at 200 a second, and a render loop at 60: most of
+			// them have a newer one behind them before the loop runs.
+			if len(forwarded) > len(names)*3/4 {
+				t.Fatalf("the host was handed %d of %d frames, and it reads each one whole", len(forwarded), len(names))
+			}
+			// The first frames are placed by the refresh pass, the way every
+			// new image is. The rest carry their own placement.
+			if counts["a=t"] > 8 {
+				t.Fatalf("%d frames went out as a transmit to be placed later: %v", counts["a=t"], counts)
+			}
+			assertReleased(t, left, forwarded)
+		})
+	}
+
 	// A daemon pane on a workspace that is not shown has no client reading
 	// it, so the daemon is the last reader of every frame.
 	t.Run("daemon-unwatched", func(t *testing.T) {

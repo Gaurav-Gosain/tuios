@@ -11217,3 +11217,32 @@ Run on 2026-10-31 on Linux against builds from this branch, on `0e1679cfb`. Each
 | `ckStageTitle(r.group)` in `drawFoldFocus` becomes `ckStageTitle(0)`, so there is no crash and the title is wrong | "the focus title is \"   Todo  1\", want Done and its count" | **caught** |
 
 The frame is `task-board-done-focus-200x55` under `TUIOS_E2E_FRAMES`, in the test's folder. Repeat from `e2e/tui` with `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestTaskBoardGroupsCardsByStage$' -v .`.
+
+## Frames in synchronized updates, and shared memory on macOS
+
+A guest that wraps each shared memory frame in a synchronized update, as terminal-browser does, sent the host a whole frame per guest frame, and the host drew about half of them. On macOS tuios also refused shared memory, so the same guest wrote its frames into a ring of files it reuses, and a host that read a slot late drew a torn frame.
+
+`TestKittySharedMemoryFramesAreReleased/superseded` and `/superseded-daemon` run a stand-in that sends 400 frames at 200 a second, each in its own update. Run on 2026-10-31 on Linux, against linux/amd64 builds of this branch. The fixed build hands the host 120 of the 400 frames, as `a=T`, and leaves no object behind.
+
+| Control: what was cut | Where it fails | Verdict |
+| --- | --- | --- |
+| The whole change: main, `b51d765cb` | "the host was handed 400 of 400 frames, and it reads each one whole" (`a=t`: 402, `a=p`: 126) in both cases | **caught** |
+| The `replaceHeldStreamFrame` call in `forwardFileTransmit` | "the host was handed 400 of 400 frames" | **caught** |
+| The `releaseKittyMedium` call in `replaceHeldStreamFrame` | "278 shared memory objects were never sent to the host and never deleted" | **caught** |
+| `firstInUpdate` is always false, so a frame in an update goes back to `a=t` and `a=p` | "283 frames went out as a transmit to be placed later" | **caught** |
+
+`TestKittenIcatDrawsInAPane` asks kitten which medium it would pick, then sends an object in memory mode. Run on 2026-10-31 on macOS 27.0.1 (arm64) with kitty 0.49.2: main fails with "tuios can read shared memory here: true. It offered it: false" and `MEDIUM-FILES` in the pane. The fixed build passes in both modes. The test's shared memory half does not run on a machine with neither `/dev/shm` nor macOS's `shm_open`.
+
+The macOS paths have no test in this package, because `shmstream` writes its objects under `/dev/shm`. They were checked by hand on the same Mac, under a stand-in host, with a guest that streams 80 objects and then opens each name to see what is left:
+
+| Case | fixed | the call in `releaseUnreadKittyMedium` cut | the call in `releaseKittyMedium` cut | `IsFrame` without page rounding |
+| --- | --- | --- | --- | --- |
+| Detached pane, frames differ | 0 left | 80 left | not run | 80 left |
+| Attached, frames repeat | 0 left | 2 left, sent before the client attached | 77 left | 79 left |
+| Attached, frames differ, the host reads and deletes | 0 left | 2 left, the same 2 | 0 left, which is the positive half: the host is the reader | 1 left |
+
+On main a guest sees shared memory refused and never makes these objects.
+
+`internal/kittyshm` has a unit test of the delete rule on every platform, and of the real calls on macOS: the object reads through its mapping, an object of another size stays, and the frame goes.
+
+A forced tear does not have a control in this package, since it needs a host that reads late. The measurement is in `docs/perf.md`.

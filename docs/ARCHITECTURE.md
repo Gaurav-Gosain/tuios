@@ -852,7 +852,9 @@ that a program prints, so tuios checks the path before anything opens it. The
 checks follow the kitty graphics protocol:
 
 - A `t=s` name is one name in `/dev/shm`. A name with `/` in it (after one
-  leading `/`), `.` or `..` is refused.
+  leading `/`), `.` or `..` is refused. macOS has no `/dev/shm`: tuios opens the
+  object by name with `shm_open` and reads it through a mapping
+  (`internal/kittyshm`).
 - A `t=f` or `t=t` path must be absolute.
 - Symlinks are followed, and the checks apply to where they lead. A `t=s` name
   must stay in `/dev/shm`. Nothing in `/proc`, `/sys` or `/dev` is read, except

@@ -8,7 +8,6 @@ import (
 	"image"
 	"image/png"
 	"io"
-	"os"
 	"path/filepath"
 
 	"tuios.dev/vt"
@@ -311,13 +310,13 @@ func kittyMediumPNGSize(path string, offset, size int, zlibbed bool) (w, h int, 
 // openKittyMedium opens the file a file medium names, positioned at offset,
 // and returns how many bytes the medium covers: size bytes, or the rest of the
 // file when size is 0. See readKittyMedium for the checks.
-func openKittyMedium(path string, offset, size int, recheck bool) (*os.File, int64, error) {
+func openKittyMedium(path string, offset, size int, recheck bool) (kittyObject, int64, error) {
 	if recheck {
 		if resolved, err := filepath.EvalSymlinks(path); err != nil || resolved != path || vt.KittySensitivePath(path) {
 			return nil, 0, errors.New("the path changed")
 		}
 	}
-	f, err := os.OpenFile(path, os.O_RDONLY|openNonblock|openNoFollow, 0) // #nosec G304 - checked by kittyMediumPath
+	f, err := openKittyObject(path, openNonblock|openNoFollow)
 	if err != nil {
 		return nil, 0, err
 	}

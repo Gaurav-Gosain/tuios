@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -169,10 +170,11 @@ func TestIcatStyleStreamReachesHost(t *testing.T) {
 // TestKittenIcatDrawsInAPane runs the real kitten icat, when it is installed,
 // in its default file mode and in stream mode.
 //
-// It also asks icat which medium it would pick. Where a shared memory object
-// has no path (macOS), tuios cannot read one and can only hand its name on, so
-// it must not offer shared memory: it did, icat picked it, and a host that does
-// not read files on this machine drew nothing (#1236).
+// It also asks icat which medium it would pick. tuios offers shared memory on
+// Linux, where an object is a file, and on macOS, where it opens one by name.
+// Anywhere else it cannot read one, so it must not offer it: a host that does
+// not read files on this machine would draw nothing (#1236). With the medium
+// offered, icat sends an object and the host is handed its name.
 func TestKittenIcatDrawsInAPane(t *testing.T) {
 	kitten, err := exec.LookPath("kitten")
 	if err != nil {
@@ -195,8 +197,14 @@ func TestKittenIcatDrawsInAPane(t *testing.T) {
 			time.Sleep(time.Second)
 
 			paths, direct := hostTransmits(t, host.bytes())
-			if len(paths) != 1 || paths[0] != path {
-				t.Errorf("file mode: host was handed paths %q, want [%q]", paths, path)
+			// tuios follows symlinks before it hands a path on, and /tmp is one
+			// on macOS.
+			wantPath, err := filepath.EvalSymlinks(path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(paths) != 1 || paths[0] != wantPath {
+				t.Errorf("file mode: host was handed paths %q, want [%q]", paths, wantPath)
 			}
 			if len(direct) != 1 || !bytes.Equal(direct[0], img) {
 				lens := make([]int, len(direct))
@@ -209,8 +217,24 @@ func TestKittenIcatDrawsInAPane(t *testing.T) {
 			// Asked last, with a marker of its own, so it cannot change what
 			// the checks above read.
 			runTagged(t, term, "medium", kitten+" icat --detect-support 2>&1 | tr a-z A-Z | sed 's/^/MEDIUM-/'")
-			if _, err := os.Stat("/dev/shm"); err != nil && strings.Contains(term.Snapshot(), "MEDIUM-MEMORY") {
-				t.Errorf("tuios offered shared memory on a machine where it cannot read it:\n%s", term.Snapshot())
+			_, statErr := os.Stat("/dev/shm")
+			reachable := statErr == nil || runtime.GOOS == "darwin"
+			offered := strings.Contains(term.Snapshot(), "MEDIUM-MEMORY")
+			if offered != reachable {
+				t.Errorf("tuios can read shared memory here: %v. It offered it: %v.\n%s", reachable, offered, term.Snapshot())
+			}
+			if reachable {
+				runToExit(t, term, kitten+" icat --stdin=no --transfer-mode=memory "+path)
+				time.Sleep(time.Second)
+				names := forwardedShmNames(host.bytes())
+				if len(names) != 1 {
+					t.Errorf("memory mode: host was handed shared memory names %v, want one", names)
+				}
+				t.Cleanup(func() {
+					for name := range names {
+						_ = removeShmObject(name)
+					}
+				})
 			}
 		})
 	}
