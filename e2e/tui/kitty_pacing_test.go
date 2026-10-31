@@ -302,12 +302,16 @@ func TestKittyStuckClientDoesNotSlowTheOthers(t *testing.T) {
 // for 150 ms out of every 200. Every client is behind, so the daemon holds the
 // guest in write() instead of reading frames nobody can take.
 //
-// The test reads the time the daemon held the pane, not only the guest's
-// rate. The guest's rate with the client reading is bound by the CPU: on two
-// cores it fell to 68 frames in 3 s, and the burst rate came to 60.3% of it
-// with the pane held. The time held does not depend on how fast the machine
-// is: the client is stopped for 2.25 s of the 3 s, and a pane that is not
-// held is held for none of it.
+// The test reads the time the daemon held the pane, and not the guest's rate.
+// The rate is bound by the CPU. On a busy runner the guest wrote 29 frames in the
+// burst window and 25 in the window before it, with the pane held for 1.2 s,
+// because the guest was slower in the first window for reasons of its own.
+//
+// The time held is bound by the machine too. A hold only happens while the guest
+// is writing, so a guest short of CPU is held for less than the 2.25 s the client
+// is stopped: 851 ms was seen. So the floor is what tells a held pane from one
+// that is not: a pane that is not held is held for none of it, and this is well
+// under the least seen and well over the 123 ms of a reading client.
 func TestKittySlowClientHoldsTheGuest(t *testing.T) {
 	base, client, count := startPacedGuest(t, "b64")
 
@@ -333,13 +337,9 @@ func TestKittySlowClientHoldsTheGuest(t *testing.T) {
 	if guestFree < 6 {
 		t.Fatalf("the guest wrote only %d frames in %s with the client reading", guestFree, window)
 	}
-	if heldFor < window/3 {
+	if heldFor < window/10 {
 		t.Errorf("the daemon held the guest for %s of %s while its only client read in bursts: the pane was not held",
 			heldFor, window)
-	}
-	if guestSlow >= guestFree {
-		t.Errorf("the guest wrote %d frames while its only client read in bursts, %d while it read: the hold cost it nothing",
-			guestSlow, guestFree)
 	}
 	if garbage := base64Rows(client.term.Screen().Text()); len(garbage) > 0 {
 		t.Errorf("image data was printed into the pane as text:\n%s", strings.Join(garbage, "\n"))

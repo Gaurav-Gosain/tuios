@@ -614,9 +614,19 @@ func TestRestartServerFromAPaneLeavesADaemon(t *testing.T) {
 		}
 		time.Sleep(200 * time.Millisecond)
 	}
-	log, err := tuiosCLI(t, base, "restart-server", "--last")
-	saveSyncArtifact(t, "restart-from-pane", log)
-	if err != nil || !strings.Contains(log, "The daemon restarted on ") || !strings.Contains(log, "This session came back: "+name+".") {
-		t.Errorf("ASSERTION: the restart log does not say the restart finished: %v\n%s", err, log)
+	// The worker writes its last lines after the session is back, so the session
+	// showing in the listing does not mean the log is complete. The same deadline
+	// holds: a worker that never writes them still fails here.
+	for {
+		log, err := tuiosCLI(t, base, "restart-server", "--last")
+		if err == nil && strings.Contains(log, "The daemon restarted on ") && strings.Contains(log, "This session came back: "+name+".") {
+			saveSyncArtifact(t, "restart-from-pane", log)
+			break
+		}
+		if time.Now().After(deadline) {
+			saveSyncArtifact(t, "restart-from-pane", log)
+			t.Fatalf("ASSERTION: the restart log does not say the restart finished: %v\n%s", err, log)
+		}
+		time.Sleep(200 * time.Millisecond)
 	}
 }

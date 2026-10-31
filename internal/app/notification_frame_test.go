@@ -138,7 +138,11 @@ func TestNotificationTickComposesOnlyWhenTheBurnMoves(t *testing.T) {
 		return true
 	}
 
-	m.ShowNotification("attached to the session", "info", m.Settings.NotificationDuration)
+	// An hour, so a cell of the burn takes minutes and only age moves it. With the
+	// real duration a cell takes about 100 ms, and a runner that paused for that
+	// long between two ticks moved the burn by itself, so "no cell moved" was false.
+	const hour = time.Hour
+	m.ShowNotification("attached to the session", "info", hour)
 	if !tick() {
 		t.Fatal("the first tick with a new message skipped the frame; it would never be drawn")
 	}
@@ -172,7 +176,7 @@ func TestNotificationTickComposesOnlyWhenTheBurnMoves(t *testing.T) {
 	}
 
 	// A second message takes the block: a new top message, and one queued.
-	m.ShowNotification("a second message", "info", m.Settings.NotificationDuration)
+	m.ShowNotification("a second message", "info", hour)
 	if !tick() {
 		t.Error("the tick after a new message arrived skipped the frame")
 	}

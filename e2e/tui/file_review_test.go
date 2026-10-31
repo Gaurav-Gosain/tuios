@@ -511,12 +511,18 @@ func daemonReadBytes(t *testing.T, base string) int64 {
 
 // TestACancelledCopyStopsReadingItsSource starts a copy of a 16 GiB file
 // (sparse, so it costs no disk) to build over a slow link, and cancels it
-// after a second. The copy hashes its source beside the bytes it sends. Once
+// after a pause and a resume. The copy hashes its source beside the bytes it
+// sends when it resumes. Once
 // the copy is cancelled the daemon must stop reading the file, where it went
 // on hashing all 16 GiB.
+//
+// files_min_free is off on build. It refuses a copy that would leave the disk
+// under 1 GiB, and on a runner with less than 17 GiB free this copy was refused
+// at the start, with nothing to cancel. The slow link writes only a few MiB.
 func TestACancelledCopyStopsReadingItsSource(t *testing.T) {
 	base := t.TempDir()
 	remote := remoteMachine(t)
+	writeRemoteConfig(t, remote, "[hosts.\"*\"]\nfiles_roots = [\"~\"]\nfiles_min_free = \"0\"\n")
 	hubWithFileHost(t, base, remote, writeSlowFakeSSH(t, base, remote, 1<<20, 256<<10))
 
 	src := filepath.Join(base, "sparse.img")
@@ -535,7 +541,14 @@ func TestACancelledCopyStopsReadingItsSource(t *testing.T) {
 		"src": map[string]any{"path": src},
 		"dst": map[string]any{"host": "build", "path": filepath.Join(xdgDir(remote, "HOME"), "sparse.img")},
 	}, &row)
+	// A resume is what hashes the source now. A first run hashes nothing, and this
+	// test passed with the hash ignoring its context until it did this.
 	time.Sleep(time.Second)
+	c.must("transfer-pause", map[string]any{"id": row.ID}, nil)
+	waitTransferState(t, base, row.ID, "paused", 20*time.Second)
+	c.must("transfer-resume", map[string]any{"id": row.ID}, nil)
+	waitTransferState(t, base, row.ID, "running", 20*time.Second)
+	time.Sleep(500 * time.Millisecond)
 	c.must("transfer-cancel", map[string]any{"id": row.ID}, nil)
 	if r := waitTransferEnd(t, base, row.ID, 20*time.Second); r.State != "cancelled" {
 		t.Fatalf("the copy did not cancel: %+v", r)
