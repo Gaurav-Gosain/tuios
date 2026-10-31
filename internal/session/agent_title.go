@@ -198,7 +198,7 @@ func (s *Session) lookAtPane(ptyID string, reg *harness.Registry, look paneLook)
 // when a stronger claim owns the window, since publishing would be refused.
 func (s *Session) applyIdleVerdict(winID, ptyID string, reg *harness.Registry, v agentVerdict, hid string, wrote int64) bool {
 	claim, held := s.agentClaimHeld(winID)
-	if held && claim.source.rank() > v.source.rank() {
+	if held && claim.source.rank() > v.source.rank() && !s.eventClaimWrittenOver(winID, claim, wrote) {
 		s.idle.cancel(winID)
 		return false
 	}
