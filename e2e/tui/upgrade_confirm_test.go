@@ -364,8 +364,10 @@ func TestPaneUpgradeTakesOnlyKeysAtTheClient(t *testing.T) {
 // tuios gui-bridge holds an attached client's nonce, since the bridge adds it
 // to every person verb. Its answer-ask with Yes must not answer the dialog,
 // and neither must one that also claims upgrade_dialog, which the bridge
-// drops. The dialog stays, the daemon is unchanged, and Esc at the client
-// then refuses.
+// drops. Nor may it go around the dialog: the bridge's connection is outside
+// every pane, so the daemon would take daemon-upgrade from it with no dialog,
+// and the bridge refuses the verb. The dialog stays, the daemon is
+// unchanged, and Esc at the client then refuses.
 func TestPaneUpgradeRefusesAnAnswerFromTheGUIBridge(t *testing.T) {
 	r := newConfirmRig(t, "e2e-confirm-bridge")
 	term := r.attach(t)
@@ -399,6 +401,13 @@ func TestPaneUpgradeRefusesAnAnswerFromTheGUIBridge(t *testing.T) {
 		if !strings.Contains(term.Screen().Text(), upgradeDialogTitle) {
 			t.Fatalf("ASSERTION: the dialog closed under the bridge's answer-ask (%s):\n%s", name, term.Snapshot())
 		}
+	}
+	direct := b.verb("daemon-upgrade", map[string]any{"binary": r.second})
+	answers["daemon-upgrade"] = direct
+	time.Sleep(time.Second)
+	r.unchanged(t, "the bridge's daemon-upgrade")
+	if direct.OK || direct.Code != "forbidden" {
+		t.Errorf("ASSERTION: the bridge's daemon-upgrade was not refused as forbidden: ok=%v code=%s %s", direct.OK, direct.Code, direct.Error)
 	}
 	saveArtifact(t, term, r.art, "dialog-after-bridge")
 
