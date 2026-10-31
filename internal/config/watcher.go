@@ -53,9 +53,13 @@ import (
 // save would come back through the watcher as somebody else's edit, and a held
 // arrow key would retile once per repeat for a config already in force. The
 // content is hashed, and two hashes are dropped: the one already in force, and
-// one tuios itself wrote (see selfWrites in save.go). The first also drops the
-// second and third events of an editor's save when the debounce has not merged
-// them.
+// one tuios itself wrote and has not yet seen come back (see selfWrites in
+// save.go). The first also drops the second and third events of an editor's save
+// when the debounce has not merged them.
+//
+// A save is dropped once. Seeing a save come back closes it and every save before
+// it, and delivering an edit closes them all, so an edit that puts the file back
+// to the bytes of an earlier save changes what is in force and is delivered.
 //
 // # What it costs at idle
 //
@@ -119,6 +123,12 @@ type WatcherOptions struct {
 // writes.
 const ThemeReloadStamp = ".reload-themes"
 
+// ConfigApplyStamp is a file in the config directory whose change asks every
+// client's watcher to deliver the config as it stands, even when the watcher
+// thinks it is what is in force. tuios config apply writes it, and the daemon
+// that command has just applied the file to does not follow it.
+const ConfigApplyStamp = ".apply-config"
+
 // Watcher watches the config file for changes and triggers reloads. A config
 // split over several files is watched as a whole: every included file, every
 // file in config.d, and config.d itself, so a drop-in file added or removed is
@@ -138,6 +148,12 @@ type Watcher struct {
 	// file, so a set of files that says what is already in force is not
 	// delivered again.
 	lastHashes map[string][sha256.Size]byte
+	// selfSeen is the newest save of tuios's own that this watcher is done with
+	// (see selfWrites in save.go).
+	selfSeen uint64
+	// applyAsked says ConfigApplyStamp changed, so the next read is delivered
+	// whatever it finds.
+	applyAsked bool
 	// files are the paths whose events count: every file read, and every
 	// included file that was not there.
 	files map[string]bool
@@ -199,6 +215,8 @@ func NewWatcherWithOptions(configPath string, callback ConfigReloadCallback, opt
 
 	// The files as they stand are what the client is already running, so the
 	// first event that finds them unchanged is dropped rather than delivered.
+	// A save from before this watcher is not one it can see come back.
+	cw.selfSeen = lastSelfWrite()
 	if lc, err := LoadLayered(main); err == nil {
 		cw.lastHashes = layerHashes(lc)
 		cw.follow(lc)
@@ -262,6 +280,20 @@ func (cw *Watcher) follow(lc *LayeredConfig) {
 	}
 }
 
+// applyEvent reports whether an event on name is tuios config apply asking for
+// the file to be delivered, and notes the request. The daemon's watcher takes no
+// part: that command has already applied the file to the daemon, in full, and a
+// delivery here would apply it again by the narrower rule for a file change.
+func (cw *Watcher) applyEvent(name string) bool {
+	if cw.opts.DeliverUnchanged || name != filepath.Join(filepath.Dir(cw.path), ConfigApplyStamp) {
+		return false
+	}
+	cw.mu.Lock()
+	cw.applyAsked = true
+	cw.mu.Unlock()
+	return true
+}
+
 // relevant reports whether an event on name can change the config.
 func (cw *Watcher) relevant(name string) bool {
 	if name == cw.dropIn {
@@ -286,6 +318,10 @@ func (cw *Watcher) run() {
 			name := filepath.Clean(event.Name)
 			if cw.assetEvent(name, event) {
 				cw.armAssets()
+				continue
+			}
+			if cw.applyEvent(name) {
+				cw.arm()
 				continue
 			}
 			if !cw.relevant(name) {
@@ -484,12 +520,21 @@ func (cw *Watcher) reload() {
 	default:
 	}
 
+	// Taken before the read. A save noted after this may still be on its way
+	// to the file, and has to stay open for its echo. One noted before it and
+	// renamed after the read is closed by an edit delivered here, and comes back
+	// as one more delivery of what the file really says.
+	newest := lastSelfWrite()
 	lc, err := LoadLayered(cw.path)
 	if errors.Is(err, fs.ErrNotExist) {
 		// A file that is not there right now is an editor mid-save, not a
 		// change. The create that follows brings its own event.
 		return
 	}
+	cw.mu.Lock()
+	asked := cw.applyAsked
+	cw.applyAsked = false
+	cw.mu.Unlock()
 	if err != nil {
 		// A file that does not parse. The running config stands, and the
 		// hashes are not recorded, so the fix is delivered.
@@ -501,13 +546,15 @@ func (cw *Watcher) reload() {
 	sums := layerHashes(lc)
 	cw.mu.Lock()
 	same := maps.Equal(sums, cw.lastHashes) && !cw.opts.DeliverUnchanged
-	self := !cw.opts.DeliverSelfWrites && onlySelfWrites(cw.lastHashes, sums)
+	self, seen := onlySelfWrites(cw.lastHashes, sums, cw.selfSeen)
+	self = self && !cw.opts.DeliverSelfWrites
 	cw.mu.Unlock()
-	if same || self {
+	if (same || self) && !asked {
 		// Either the files say what is already in force, or tuios wrote the
 		// changed ones itself from a settings row. Both are already applied.
 		cw.mu.Lock()
 		cw.lastHashes = sums
+		cw.selfSeen = max(cw.selfSeen, seen)
 		cw.mu.Unlock()
 		return
 	}
@@ -522,29 +569,35 @@ func (cw *Watcher) reload() {
 	}
 	cw.mu.Lock()
 	cw.lastHashes = sums
+	cw.selfSeen = max(cw.selfSeen, newest)
 	cw.mu.Unlock()
 	cw.callback(cfg, nil)
 }
 
 // onlySelfWrites reports whether every file that differs from before is one
-// tuios wrote itself. A file that went away is nobody's save.
-func onlySelfWrites(before, after map[string][sha256.Size]byte) bool {
-	changed := false
+// tuios wrote itself and this watcher has not already seen. A file that went away
+// is nobody's save. It also returns the newest open save any file now holds,
+// changed or not, because a file holding it means the saves before it are over.
+func onlySelfWrites(before, after map[string][sha256.Size]byte, seen uint64) (bool, uint64) {
+	changed, foreign := false, false
 	for p := range before {
 		if _, ok := after[p]; !ok {
-			return false
+			foreign = true
 		}
 	}
+	newest := seen
 	for p, sum := range after {
+		seq := selfWriteAfter(sum, seen)
+		newest = max(newest, seq)
 		if old, ok := before[p]; ok && old == sum {
 			continue
 		}
-		if !isSelfWrite(sum) {
-			return false
-		}
 		changed = true
+		if seq == 0 {
+			foreign = true
+		}
 	}
-	return changed
+	return changed && !foreign, newest
 }
 
 // Stop stops the file watcher.

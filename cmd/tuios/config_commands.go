@@ -4,8 +4,10 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
@@ -84,8 +86,8 @@ This will overwrite your existing configuration after confirmation.`,
 func newConfigApplyCommand() *cobra.Command {
 	return &cobra.Command{
 		Use:   "apply",
-		Short: "Apply config.toml to the running daemon now",
-		Long: `Apply config.toml to the running daemon now, including changes that give panes or other machines more.
+		Short: "Apply config.toml to the running daemon and clients now",
+		Long: `Apply config.toml to the running daemon and to every tuios client on this machine now, including changes that give panes or other machines more.
 
 The daemon applies a change to the file at once only where it gives less. A change that gives more waits for this command or a daemon restart. Run it from a terminal outside tuios. It is refused from inside a pane.`,
 		Args: cobra.NoArgs,
@@ -100,8 +102,26 @@ The daemon applies a change to the file at once only where it gives less. A chan
 				return explainVerbError("apply-config", err)
 			}
 			fmt.Print(describeConfigApplied(raw))
+			askClientsToApply()
 			return nil
 		},
+	}
+}
+
+// askClientsToApply tells every client on this machine to apply the file as it
+// stands. Each client's config watcher follows a stamp in the config directory,
+// the way tuios theme reload reaches them, so this needs no protocol of its own.
+// The stamp stays in place: kqueue sees a new file only by listing the directory.
+// The daemon has already applied the file, so a failure here costs only the
+// clients, and the command says so.
+func askClientsToApply() {
+	path, err := config.GetConfigPath()
+	if err == nil {
+		stamp := filepath.Join(filepath.Dir(path), config.ConfigApplyStamp)
+		err = os.WriteFile(stamp, []byte(time.Now().Format(time.RFC3339Nano)), 0o600)
+	}
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "tuios could not tell the clients to apply config.toml: %v. Run this command again, or restart the clients.\n", err)
 	}
 }
 

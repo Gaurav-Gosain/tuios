@@ -5650,7 +5650,7 @@ Manage TUIOS configuration file.
 - `tuios config path`: Print configuration file path
 - `tuios config edit`: Edit configuration in $EDITOR
 - `tuios config reset`: Reset configuration to defaults
-- `tuios config apply`: Apply `config.toml` to the running daemon now
+- `tuios config apply`: Apply `config.toml` to the running daemon and clients now
 - `tuios config browse`: Search the settable options and set one, in an explorer
 - `tuios config files`: List the files the config is read from
 - `tuios config origin`: Show which file sets each key
@@ -5660,6 +5660,8 @@ Manage TUIOS configuration file.
 
 Apply `config.toml` to the running daemon now, including the changes that give
 panes or other machines more than they had.
+
+Every tuios client on this machine also applies the file as it is now.
 
 A process in a pane can write `config.toml`, so the daemon applies a change to
 the bounds of panes and links at once only when the change gives less: a

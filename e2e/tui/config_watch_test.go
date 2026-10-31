@@ -3,6 +3,7 @@ package tuie2e
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -80,6 +81,91 @@ func TestConfigEditedOnDiskReachesTheScreen(t *testing.T) {
 			"first one: %v\n%s", err, term.Snapshot())
 	}
 	alive(t, term, "after two config reloads")
+}
+
+// TestAnEditBackToATuiosSaveReachesTheScreen is issue 1411, the steps as the
+// report gives them. Leader Z twice has tuios save the file. A hand edit turns the
+// beam on, and a hand edit back to the bytes tuios saved has to turn it off, since
+// the beam is what is in force at that moment.
+//
+// The second half is tuios config apply, which reaches a client whose file has not
+// changed under its watcher. An included file in a folder made after the client
+// started gives no event, so the client has not read it until the command runs.
+//
+// Negative controls: with onlySelfWrites ignoring the number it has got to, the
+// beam stays on after the edit back. With askClientsToApply cut, the included
+// file never reaches the screen.
+func TestAnEditBackToATuiosSaveReachesTheScreen(t *testing.T) {
+	const lateInclude = "include = [\"late/beam.toml\"]\n"
+	base := spotlightConfigFile(t, lateInclude+spotlightNoTheme)
+	killDaemon(t, base)
+	term := startIn(t, base, startOpts{cols: 120, rows: 40, args: []string{"new", "e2e-edit-back"}})
+	if err := term.WaitForText(welcomeHint, bootTimeout); err != nil {
+		t.Fatalf("tuios never booted: %v\n%s", err, term.Snapshot())
+	}
+	newWindow(t, term)
+	enterTerminalMode(t, term)
+	runInShell(t, term,
+		`printf '%sTOP\n' "$(echo INK)"; printf '\n%.0s' $(seq 1 12); printf '%sBOT\n' "$(echo INK)"`,
+		"INKBOT", shellTimeout)
+	at := findSpotlightMarks(t, term)
+	faint := func(want bool) func(tuitest.Screen) bool {
+		return func(s tuitest.Screen) bool { return s.Cell(at.topCol, at.topRow).Faint == want }
+	}
+
+	// tuios saves calm on and calm off. Each save changes the file, and the second
+	// leaves calm = false in it.
+	for _, want := range []string{"calm = true", "calm = false"} {
+		if err := term.SendKeys(tuitest.Ctrl('b'), "Z"); err != nil {
+			t.Fatalf("send leader Z: %v", err)
+		}
+		deadline := time.Now().Add(configWatchTimeout)
+		for {
+			data, err := os.ReadFile(configPathIn(base))
+			if err == nil && strings.Contains(string(data), want) {
+				break
+			}
+			if time.Now().After(deadline) {
+				t.Fatalf("tuios never saved %q:\n%s", want, data)
+			}
+			time.Sleep(50 * time.Millisecond)
+		}
+	}
+	saved, err := os.ReadFile(configPathIn(base))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(saved), "[spotlight]") {
+		t.Fatalf("the save holds a spotlight table, so the edit below cannot add one:\n%s", saved)
+	}
+
+	beam := strings.TrimPrefix(spotlightNoThemeBeam(95), spotlightNoTheme)
+	saveConfigLikeAnEditor(t, base, string(saved)+beam)
+	if err := term.WaitFor(faint(true), configWatchTimeout); err != nil {
+		t.Fatalf("a hand edit after a tuios save never reached the screen: %v\n%s", err, term.Snapshot())
+	}
+	saveConfigLikeAnEditor(t, base, string(saved))
+	if err := term.WaitFor(faint(false), configWatchTimeout); err != nil {
+		t.Fatalf("an edit back to the bytes of a tuios save never reached the screen: %v\n%s", err, term.Snapshot())
+	}
+
+	late := filepath.Join(filepath.Dir(configPathIn(base)), "late")
+	if err := os.Mkdir(late, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(late, "beam.toml"), []byte(beam), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := term.WaitFor(faint(true), 4*time.Second); err == nil {
+		t.Fatalf("the client read the late file with no request, so this cannot show what the command does\n%s", term.Snapshot())
+	}
+	if out, err := tuiosCLI(t, base, "config", "apply"); err != nil {
+		t.Fatalf("tuios config apply: %v\n%s", err, out)
+	}
+	if err := term.WaitFor(faint(true), configWatchTimeout); err != nil {
+		t.Fatalf("tuios config apply never reached the client: %v\n%s", err, term.Snapshot())
+	}
+	alive(t, term, "after the edits and tuios config apply")
 }
 
 // TestAKeybindingSavedOnDiskReachesTheClient: the hot reload carries

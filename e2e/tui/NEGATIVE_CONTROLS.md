@@ -7,6 +7,22 @@ below. Two of them are **not** caught here; that is written down rather than
 papered over, because a suite whose real coverage is unknown is worse than no
 suite.
 
+## An edit back to a tuios save reaches the screen
+
+`TestAnEditBackToATuiosSaveReachesTheScreen` follows issue 1411. tuios saves the
+file twice with leader `Z`. A hand edit turns the beam on, and a hand edit back to
+the saved bytes has to turn it off. Then `tuios config apply` has to bring in an
+included file that the watcher has no event for.
+
+Run on 2026-10-31 on Linux. A build with `onlySelfWrites` matching every save in
+the ring, whatever the watcher has seen, failed: `an edit back to the bytes of a
+tuios save never reached the screen`. A build with `askClientsToApply` cut failed:
+`tuios config apply never reached the client`. The fixed build passes.
+
+`TestWatcherDropsTuiosOwnSave` failed on the first build with `an edit back to the
+first of the quick saves: the watcher delivered nothing`, and
+`TestWatcherDeliversTheFileWhenAskedToApply` failed with the stamp event ignored.
+
 ## tuios tutor keeps out of the person's home
 
 `TestTutorBasics` plants an Omarchy theme, Catppuccin Latte, under the

@@ -236,31 +236,56 @@ func writeConfigBytes(data []byte, configPath string) error {
 //
 // A short ring rather than one hash: two saves can be in flight at once, so the
 // file the watcher reads may be either of them.
+//
+// Each entry carries a number that only goes up, and a watcher keeps the number
+// it has got to. The file passing through a save means every earlier save is
+// over, and an edit delivered means the same for every save so far. An entry
+// behind that number is history: the same bytes showing up again are somebody's
+// edit, however long ago tuios wrote them. Nothing expires by the clock, so an
+// echo read late, behind a loaded machine, still counts as one. The number lives
+// in the watcher and not here because the daemon's watcher and a client's can
+// share this ring in one process, and neither may use up the other's echo.
 var selfWrites struct {
 	sync.Mutex
-	hashes [8][sha256.Size]byte
-	next   int
+	entries [8]selfWrite
+	seq     uint64
+}
+
+// selfWrite is one save: its content and its place in the order. A seq of zero
+// is an entry not written yet.
+type selfWrite struct {
+	sum [sha256.Size]byte
+	seq uint64
 }
 
 // noteSelfWrite records what tuios just wrote.
 func noteSelfWrite(data []byte) {
 	sum := sha256.Sum256(data)
 	selfWrites.Lock()
-	selfWrites.hashes[selfWrites.next] = sum
-	selfWrites.next = (selfWrites.next + 1) % len(selfWrites.hashes)
+	selfWrites.seq++
+	selfWrites.entries[selfWrites.seq%uint64(len(selfWrites.entries))] = selfWrite{sum: sum, seq: selfWrites.seq}
 	selfWrites.Unlock()
 }
 
-// isSelfWrite reports whether the given content is one tuios itself wrote.
-func isSelfWrite(sum [sha256.Size]byte) bool {
+// lastSelfWrite is the number of the newest save.
+func lastSelfWrite() uint64 {
 	selfWrites.Lock()
 	defer selfWrites.Unlock()
-	for _, h := range selfWrites.hashes {
-		if h == sum {
-			return true
+	return selfWrites.seq
+}
+
+// selfWriteAfter is the number of the newest save with this content that came
+// after the number given, or zero when there is none.
+func selfWriteAfter(sum [sha256.Size]byte, after uint64) uint64 {
+	selfWrites.Lock()
+	defer selfWrites.Unlock()
+	var found uint64
+	for _, e := range selfWrites.entries {
+		if e.seq > after && e.seq > found && e.sum == sum {
+			found = e.seq
 		}
 	}
-	return false
+	return found
 }
 
 // WriteConfigFile marshals cfg to TOML (with the documented header) and writes

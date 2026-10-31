@@ -175,6 +175,88 @@ func TestWatcherDropsTuiosOwnSave(t *testing.T) {
 	if got.cfg.Appearance.Theme != "nord" {
 		t.Errorf("the hand edit carries theme %q, want nord", got.cfg.Appearance.Theme)
 	}
+
+	// An edit back to the bytes of a save changes what is in force, so it is not
+	// an echo, however recently tuios wrote those bytes (issue 1411). Negative
+	// control: with onlySelfWrites ignoring the number it has got to, every
+	// delivery below is dropped.
+	save := func(dim int) string {
+		t.Helper()
+		cfg.Spotlight.Dim = dim
+		if err := WriteConfigFile(cfg, path); err != nil {
+			t.Fatalf("save from the settings page: %v", err)
+		}
+		data, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return string(data)
+	}
+	waitForDim := func(body string, dim int, why string) {
+		t.Helper()
+		saveLikeVim(t, path, body)
+		got := nextReport(t, reports, why)
+		if got.err != nil || got.cfg.Spotlight.Dim != dim {
+			t.Fatalf("%s: delivered dim %+v, want %d", why, got, dim)
+		}
+	}
+
+	// Several quick saves come back as one read of the last. Each is still an
+	// echo, and so is one the machine was slow to show.
+	first := save(50)
+	second := save(51)
+	last := save(52)
+	noReport(t, reports, "three quick saves from the settings page")
+	waitForDim(first, 50, "an edit back to the first of the quick saves")
+	waitForDim(last, 52, "an edit back to the last of the quick saves")
+	waitForDim(second, 51, "an edit back to the middle of the quick saves")
+
+	// A save that says what the file already says has no change to come back
+	// through, and it must not stay open for the next edit to match.
+	same := save(51)
+	noReport(t, reports, "a save with the content of the file")
+	saveLikeVim(t, path, "[spotlight]\ndim = 60\n")
+	if got := nextReport(t, reports, "a hand edit after a save that changed nothing"); got.err != nil {
+		t.Fatal(got.err)
+	}
+	waitForDim(same, 51, "an edit back to a save that changed nothing")
+
+	// And the echo still works after all of that.
+	save(53)
+	noReport(t, reports, "a save after the edits")
+}
+
+// TestWatcherDeliversTheFileWhenAskedToApply: tuios config apply reaches a client
+// whose file is what the watcher last read, because what is in force can differ
+// from it. The daemon's watcher does not follow the stamp: that command has
+// already applied the file to the daemon.
+func TestWatcherDeliversTheFileWhenAskedToApply(t *testing.T) {
+	path, reports := startWatcher(t, watcherBase)
+	stamp := filepath.Join(filepath.Dir(path), ConfigApplyStamp)
+	if err := os.WriteFile(stamp, []byte("1"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	got := nextReport(t, reports, "tuios config apply with the file unchanged")
+	if got.err != nil || got.cfg.Spotlight.Dim != 40 {
+		t.Fatalf("delivered %+v, want the file as it stands", got)
+	}
+	noReport(t, reports, "one request is one delivery")
+
+	daemon := make(chan watcherReport, 8)
+	w, err := NewWatcherWithOptions(path, func(cfg *UserConfig, err error) {
+		daemon <- watcherReport{cfg: cfg, err: err}
+	}, WatcherOptions{DeliverSelfWrites: true, DeliverUnchanged: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(w.Stop)
+	if err := os.WriteFile(stamp, []byte("2"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if got := nextReport(t, reports, "the client follows a second request"); got.err != nil {
+		t.Fatal(got.err)
+	}
+	noReport(t, daemon, "the daemon's watcher and the stamp")
 }
 
 // TestWatcherCollapsesOneSaveIntoOneReload. A save is several events: the

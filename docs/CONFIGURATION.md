@@ -155,6 +155,10 @@ tuios also watches the file that the link points to. A save to any of them
 takes effect at once. An included file that was missing applies when you make
 it, if its directory exists.
 
+`tuios config apply` makes the daemon and every tuios client on this machine
+apply the files as they are now. Use it when a save does not reach a client,
+for example when you make an included file in a new directory.
+
 ### Where tuios writes a change
 
 The settings page, `tuios set-config`, the keybind manager,
