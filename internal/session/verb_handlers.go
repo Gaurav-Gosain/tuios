@@ -2155,7 +2155,10 @@ func paneInSession(pa *paneAuth, sess *Session) bool {
 // from pane to pane. So the folder is also worked out from peer, the
 // environment of the process that sent the report as the kernel holds it,
 // which is the hook running inside the harness. The report itself names no
-// folder.
+// folder. The sender picks that folder, so once its links are resolved it
+// must still end in the folder the manifest names (projects, sessions): a
+// profile folder that is itself a link still counts, and a projects folder
+// that is a link to somewhere else does not.
 func transcriptPathAllowed(tr *harness.Transcript, path string, peer func(string) string) (string, string) {
 	roots := []string{tr.Root()}
 	if peer != nil {
@@ -2171,11 +2174,14 @@ func transcriptPathAllowed(tr *harness.Transcript, path string, peer func(string
 	}
 	resolved := resolveExisting(filepath.Clean(path))
 	realRoot := ""
-	for _, root := range roots {
+	for i, root := range roots {
 		if root == "" {
 			continue
 		}
 		r := resolveExisting(root)
+		if i > 0 && filepath.Base(r) != filepath.Base(root) {
+			continue
+		}
 		rel, err := filepath.Rel(r, resolved)
 		if err == nil && rel != "." && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
 			realRoot = r
