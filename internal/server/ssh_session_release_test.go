@@ -95,6 +95,35 @@ func waitForText(t *testing.T, term *sshExitRun, d time.Duration, want string) {
 	t.Fatalf("%q never reached the client within %s\n--- last output ---\n%s", want, d, tailPrintable(term.text()))
 }
 
+// probeWait is how long a typed probe line gets to come back through ten
+// attached clients. The line itself takes two seconds. Under the race detector
+// on a starved core it took 19 to 23 s to arrive, and it did arrive, so a line
+// that never comes still fails, only later.
+func probeWait() time.Duration {
+	if raceEnabled {
+		return 60 * time.Second
+	}
+	return 15 * time.Second
+}
+
+// waitForPaneCursor waits, bounded, until the client shows the terminal cursor.
+// A client shows it only in terminal mode with a pane focused and nothing over
+// it, so from then on a key reaches the pane's shell. Before that the same key
+// is a window command: w closes a pane, s takes the rail, and the rest of a
+// typed line goes on from there. The first frame comes before that point. It
+// is the logo, and the pane arrives later through a state sync.
+func waitForPaneCursor(t *testing.T, term *sshExitRun, d time.Duration) {
+	t.Helper()
+	deadline := time.Now().Add(d)
+	for !strings.Contains(term.text(), "\x1b[?25h") {
+		if time.Now().After(deadline) {
+			t.Fatalf("the client showed no terminal cursor within %s, so no pane has the keyboard\n--- last output ---\n%s",
+				d, tailPrintable(term.text()))
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+}
+
 func typeLine(t *testing.T, stdin io.Writer, line string) {
 	t.Helper()
 	if _, err := io.WriteString(stdin, line+"\r"); err != nil {
@@ -130,6 +159,7 @@ func TestSSHSessionsWithTheScreensaverGiveBackWhenTheyEnd(t *testing.T) {
 
 	warm, warmIn := openReleaseTerm(t, run.client, run.name)
 	warm.waitForOutput(t, 15*time.Second, "the warm-up client never painted a frame")
+	waitForPaneCursor(t, warm, 15*time.Second)
 	warmBy := time.Now().Add(30 * time.Second)
 	for !strings.Contains(warm.text(), "warm-0") {
 		if time.Now().After(warmBy) {
@@ -172,7 +202,7 @@ func TestSSHSessionsWithTheScreensaverGiveBackWhenTheyEnd(t *testing.T) {
 
 	// Positive half: a live client of this server still gets its pane's output.
 	typeLine(t, probeIn, "sleep 2; echo probe-$((1))")
-	waitForText(t, terms[0], 15*time.Second, "probe-1")
+	waitForText(t, terms[0], probeWait(), "probe-1")
 	t.Log("live session painted probe-1")
 	t.Logf("live, %d clients up: %s", clients, readRelease())
 
@@ -194,6 +224,13 @@ func TestSSHSessionsWithTheScreensaverGiveBackWhenTheyEnd(t *testing.T) {
 			elapsed := time.Since(started)
 			t.Logf("last poll at %s after the server started", elapsed.Round(time.Millisecond))
 			if elapsed > saverBound {
+				// A run this slow under the detector cannot tell a release from
+				// a screen saver that fired, so it decides nothing. The other
+				// test here holds the release without a saver.
+				if raceEnabled {
+					t.Skipf("the last poll came %s after the server started, past %s, so this run decides nothing",
+						elapsed.Round(time.Millisecond), saverBound)
+				}
 				t.Fatalf("test defect: the last poll came %s after the server started, past %s, so a kept session's screen saver may have run during the polls",
 					elapsed.Round(time.Millisecond), saverBound)
 			}
@@ -231,6 +268,7 @@ func TestSSHSessionsGiveBackTheirGoroutinesAndMemoryWhenTheyEnd(t *testing.T) {
 	// line is typed again, cleared first with ctrl+u, until its output shows.
 	warm, warmIn := openReleaseTerm(t, run.client, run.name)
 	warm.waitForOutput(t, 15*time.Second, "the warm-up client never painted a frame")
+	waitForPaneCursor(t, warm, 15*time.Second)
 	warmBy := time.Now().Add(30 * time.Second)
 	for !strings.Contains(warm.text(), "warm-0") {
 		if time.Now().After(warmBy) {
@@ -276,10 +314,10 @@ func TestSSHSessionsGiveBackTheirGoroutinesAndMemoryWhenTheyEnd(t *testing.T) {
 	// The second one proves the pane listener was armed again after the first.
 	probe := terms[0]
 	typeLine(t, probeIn, "sleep 2; echo probe-$((1))")
-	waitForText(t, probe, 15*time.Second, "probe-1")
+	waitForText(t, probe, probeWait(), "probe-1")
 	t.Log("live session painted probe-1")
 	typeLine(t, probeIn, "sleep 2; echo probe-$((2))")
-	waitForText(t, probe, 15*time.Second, "probe-2")
+	waitForText(t, probe, probeWait(), "probe-2")
 	t.Log("live session painted probe-2")
 	t.Logf("live, %d clients up: %s", clients, readRelease())
 
