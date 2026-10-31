@@ -55,15 +55,15 @@ func (m *OS) agentAlertPolicy() config.AgentAlertPolicy {
 // goroutine inside the state sync, so it does no I/O beyond the host write,
 // which is a single mutex-guarded Write.
 func (m *OS) considerAgentAlert(w *terminal.Window, from, to string) {
+	if !m.agentsOn() {
+		return
+	}
 	// A dock component watching agent state counts panes in each state, so it
 	// refreshes on every transition. Behind the policy below it would only hear
 	// the states the person asked to be alerted about, and a cell counting panes
 	// that need the person kept its count after the answer moved the pane to
 	// working.
 	m.NotifyDockEvent(string(hooks.AfterAgentState))
-	if !m.agentsOn() {
-		return
-	}
 	if w == nil {
 		return
 	}
