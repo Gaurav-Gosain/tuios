@@ -140,7 +140,7 @@ func (s *Surface) buildLeaf(b *box, vars map[string]any) widget {
 		return s.buildTable(b, vars)
 	case "tree":
 		return s.buildTree(b, vars)
-	case "bar", "line", "area", "sparkline", "gauge", "progress", "histogram", "heatmap", "pie":
+	case "bar", "line", "area", "sparkline", "gauge", "progress", "histogram", "heatmap", "map", "pie":
 		return s.buildChart(b, vars)
 	}
 	// A component loom does not draw yet, or an unknown one: its name, so

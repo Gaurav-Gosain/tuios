@@ -1,0 +1,279 @@
+=== truecolor 90x30
+|Median $/GPU/hr                                                                          ┃|
+|              ⣀⣀⣠⣄⢠⣴⣶⣶⣶⣿⣿⡿⠿⣿⣿⣷⣶⣶⣶⣿⣿⣿⣿⣿⣿⣶⠒⠂     ⠤⣤⠤⡤     ⠒ ⠒  ⡀     ⠐⠦⢤⣄⣀                 ┃|
+|⣀  ⣀⣤⣤⣤⣤⣤⣤⣀⣠⣤⣾⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡿⣷⣶⣤⣀ ⠉⢿⣿⣿⣿⣿⣿⣿⠿⠉        ⣀⣀⣤⣤⣄⣀⡀⢀⢀⣐⣏⣍⣀⣴⣦⣴⣶⣶⣿⣿⣿⣿⣿⣿⣿⣶⣶⣶⣦⣤⣬⣿⣶⣧⣤⣤⣀⣀⣀⣀⣀┃|
+|⠉⠉⠓⣻⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡿⠛⠻⠷⣿⣿⣿⣿⠁ ⠘⠿⢿⠋⠉   ⠛⠛   ⡀⢀⣴⣾⣿⠻⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⠿⣿⣿⢿⠿⠟┃|
+|⢀⣀⠠⠴⠚⠋⠉   ⠈⠻⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣶⣶⣿⣿⣿⣿⣷⣦           ⡼⣿⣧⣀⣽⣿⣯⣴⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣯⣥   ⡾⠛  ⠄ ┃|
+|            ⠈⢹⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡿⡿⠿⠛⠓          ⢀⣉⣿⣿⡿⣿⢿⣿⣿⡿⠻⠟⢿⣿⡟⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⠟⣹⡄        ┃|
+|             ⠘⢿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⠋⠁              ⠚⣿⣫⣤⣬⡈⠉⠘⠋⠻⠿⢿⣿⣿⣿⣼⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡍⠙⣇⣠⣴⡟         ┃|
+|               ⠈⢿⢿⣿⣿⣿⠛⠛⠛⣯                ⣠⣾⣿⣿⣿⣿⣿⣷⣾⣷⣶⣶⢿⣿⣿⣟⠿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡗ ⠘⠉           ┃|
+|     ⠐⠄          ⠁⠹⢿⣧⣀⣴ ⠒⠂⠠⠄            ⢸⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣷⡻⣿⣿⣿⡿⠂ ⠙⢻⣿⣿⡿⠟⠻⣿⣿⣿⠻⠋⠉⢉              ┃|
+|                    ⠈⠈⠙⢿⣀⣀⣤⣤⣠⡀          ⠸⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣷⣿⣭⠅    ⠈⣿⡏  ⠆⢘⡛⢿⠇  ⠹⣄             ┃|
+|                        ⢀⣽⣿⣿⣿⣿⣷⣶⣄        ⠈⠙⠛⠋⠉⠛⣿⣿⣿⣿⣿⣿⣿⣿⡿⠋       ⠉   ⠲⣵⡄⢀⣤⣶ ⡉⡀            ┃|
+|                        ⠸⣿⣿⣿⣿⣿⣿⣿⣿⣷⣶⣦          ⠈⢻⣿⣿⣿⣿⣿⣿⡏              ⠘⠷⣌⣛⢃⠛ ⠐⠙⢺⣶⣤⠠       ┃|
+|                         ⠹⢿⣿⣿⣿⣿⣿⣿⣿⣿⠋           ⢨⣿⣿⣿⣿⣿⣿⡧⢀⣤                 ⢀⣥⣴⣶⣆⣰⣄⠁       ┃|
+|                           ⣿⣿⣿⣿⣿⣿⡿⠟            ⠘⣿⣿⣿⣿⣿⠏ ⢸⠏               ⢠⣶⣾⣿⣿⣿⣿⣿⣿⣦⡀      ┃|
+|                          ⢠⣿⣿⣿⣿⣿⠟               ⠹⣿⣿⣿⠟                   ⠘⣿⣿⣿⡿⢿⣿⣿⣿⣿⡇      ┃|
+|                          ⣸⣿⣿⠟⠃                  ⠁                       ⠉    ⠉⠻⣿⡟     ⣸⠆┃|
+|                          ⣿⣿⠅                                                   ⠈     ⠛⠁ ┃|
+|                          ⠙⠓                                                             ┃|
+|■ $0.088  ■ ≥ $0.19  ■ ≥ $0.42  ■ ≥ $0.91  ■ ≥ $2                                        ┃|
+|                                                                                         ┃|
+|              ⣀⣀⣠⣄⢠⣴⣶⣶⣶⣿⣿⡿⠿⣿⣿⣷⣶⣶⣶⣿⣿⣿⣿⣿⣿⣶⠒⠂     ⠤⣤⠤⡤     ⠒ ⠒  ⡀     ⠐⠦⢤⣄⣀                 ┃|
+|⣀  ⣀⣤⣤⣤⣤⣤⣤⣀⣠⣤⣾⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡿⣷⣶⣤⣀ ⠉⢿⣿⣿⣿⣿⣿⣿⠿⠉        ⣀⣀⣤⣤⣄⣀⡀⢀⢀⣐⣏⣍⣀⣴⣦⣴⣶⣶⣿⣿⣿⣿⣿⣿⣿⣶⣶⣶⣦⣤⣬⣿⣶⣧⣤⣤⣀⣀⣀⣀⣀┃|
+|⠉⠉⠓⣻⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡿⠛⠻⠷⣿⣿⣿⣿⠁ ⠘⠿⢿⠋⠉   ⠛⠛   ⡀⢀⣴⣾⣿⠻⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⠿⣿⣿⢿⠿⠟┃|
+|⢀⣀⠠⠴⠚⠋⠉   ⠈⠻⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣶⣶⣿⣿⣿⣿⣷⣦           ⡼⣿⣧⣀⣽⣿⣯⣴⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣯⣥   ⡾⠛  ⠄ │|
+|            ⠈⢹⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡿⡿⠿⠛⠓          ⢀⣉⣿⣿⡿⣿⢿⣿⣿⡿⠻⠟⢿⣿⡟⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⠟⣹⡄        │|
+|             ⠘⢿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⠋⠁              ⠚⣿⣫⣤⣬⡈⠉⠘⠋⠻⠿⢿⣿⣿⣿⣼⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡍⠙⣇⣠⣴⡟         │|
+|               ⠈⢿⢿⣿⣿⣿⠛⠛⠛⣯                ⣠⣾⣿⣿⣿⣿⣿⣷⣾⣷⣶⣶⢿⣿⣿⣟⠿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡗ ⠘⠉           │|
+|     ⠐⠄          ⠁⠹⢿⣧⣀⣴ ⠒⠂⠠⠄            ⢸⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣷⡻⣿⣿⣿⡿⠂ ⠙⢻⣿⣿⡿⠟⠻⣿⣿⣿⠻⠋⠉⢉              │|
+|                    ⠈⠈⠙⢿⣀⣀⣤⣤⣠⡀          ⠸⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣷⣿⣭⠅    ⠈⣿⡏  ⠆⢘⡛⢿⠇  ⠹⣄             │|
+|                        ⢀⣽⣿⣿⣿⣿⣷⣶⣄        ⠈⠙⠛⠋⠉⠛⣿⣿⣿⣿⣿⣿⣿⣿⡿⠋       ⠉   ⠲⣵⡄⢀⣤⣶ ⡉⡀            │|
+--- styles
+|aaaaaabaaaaaaaaccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccd|
+|cccccccccccccceeeeeeeeeeeeeeeeffffffffffffcccccffffcccccfcfccfcccccfffffcccccccccccccccccd|
+|fccgggggggeeeeeeeeeeeeeeeeeeecffffffffffccccccccfffffffffffffffffffffffffffffffffffffffffd|
+|ffggggggggggeeeeeeeeeeeeeeeeeecfffffcccffccchffffffffffffffffffffffffffffffffffffffffffffd|
+|gggggggcccgggeeeeeeeeeeeeeeeeeeccccccccccchhhfgggfffffffffffffffffffffffffffffffcccffccgcd|
+|ccccccccccccegggggggggggggggeeeeccccccccccfhffggfffffffffffffffffffffffffffffffggccccccccd|
+|cccccccccccccgggggggggggggggccccccccccccccffffffffffffffffffffiiifffffffffffggggcccccccccd|
+|cccccccccccccccggggggggggccccccccccccccccffffffffffffffffffffiiiiiiiiffffffcggcccccccccccd|
+|cccccggccccccccccffffffcffffccccccccccccffffffffffffffffffffciiiiiiifffffffccccccccccccccd|
+|ccccccccccccccccccccffffffffffccccccccccffffffffffffffffffcccciiicciffffccffcccccccccccccd|
+|ccccccccccccccccccccccccfffiiiiiiccccccccffffffffffffffffcccccccfcccffjfffcffccccccccccccd|
+|ccccccccccccccccccccccccffiiiiiiiiiiccccccccccfffffffffccccccccccccccffffffcffffffcccccccd|
+|cccccccccccccccccccccccccfiiiiiiiiiicccccccccccffffffffffccccccccccccccccchhhhhhhfcccccccd|
+|cccccccccccccccccccccccccccfffiiiiiccccccccccccffjjjjfcffccccccccccccccchhhhhhhhhhhccccccd|
+|ccccccccccccccccccccccccccffffiiicccccccccccccccjjjjjccccccccccccccccccchhhhhhhhhhhccccccd|
+|ccccccccccccccccccccccccccfffffccccccccccccccccccjccccccccccccccccccccccchcccchhhhcccccffd|
+|ccccccccccccccccccccccccccfffccccccccccccccccccccccccccccccccccccccccccccccccccchcccccffcd|
+|ccccccccccccccccccccccccccffcccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccd|
+|eckkkkkkccgckckkkkkccjckckkkkkccickckkkkkcchckckkccccccccccccccccccccccccccccccccccccccccd|
+|cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccd|
+|cccccccccccccceeeeeeeeeeeeeeeeffffffffffffcccccffffcccccfcfccfcccccfffffcccccccccccccccccd|
+|fcceeeeeeeeeeeeeeeeeeeeeeeeeecffffffffffccccccccfffffffffffffffffffffffffffffffffffffffffd|
+|ffeeeeeeeeeeeeeeeeeeeeeeeeeeeecfffffcccffccchffffffffffffffffffffffffffffffffffffffffffffd|
+|eeeeeeeccceeeeeeeeeeeeeeeeeeeeeccccccccccchhhfeeefffffffffffffffffffffffffffffffcccffcceck|
+|cccccccccccceeeeeeeeeeeeeeeeeeeeccccccccccfhffeefffffffffffffffffffffffffffffffeecccccccck|
+|ccccccccccccceeeeeeeeeeeeeeeccccccccccccccffffffffffffffffffffgggfffffffffffeeeeccccccccck|
+|ccccccccccccccceeeeeeeeeeccccccccccccccccffffffffffffffffffffggggggggffffffceeccccccccccck|
+|ccccceeccccccccccffffffcffffccccccccccccffffffffffffffffffffcgggggggfffffffcccccccccccccck|
+|ccccccccccccccccccccffffffffffccccccccccffffffffffffffffffccccgggccgffffccffccccccccccccck|
+|ccccccccccccccccccccccccfffggggggccccccccffffffffffffffffcccccccfcccffefffcffcccccccccccck|
+a: fg=dim bg=panel bold
+b: bg=panel bold
+c: bg=panel
+d: fg=dim bg=panel
+e: fg=heat1 bg=panel
+f: fg=track bg=panel
+g: fg=heat2 bg=panel
+h: fg=accent-bright bg=panel
+i: fg=heat4 bg=panel
+j: fg=info bg=panel
+k: fg=mute bg=panel
+=== 256 90x30
+|Median $/GPU/hr                                                                          ┃|
+|              ⣀⣀⣠⣄⢠⣴⣶⣶⣶⣿⣿⡿⠿⣿⣿⣷⣶⣶⣶⣿⣿⣿⣿⣿⣿⣶⠒⠂     ⠤⣤⠤⡤     ⠒ ⠒  ⡀     ⠐⠦⢤⣄⣀                 ┃|
+|⣀  ⣀⣤⣤⣤⣤⣤⣤⣀⣠⣤⣾⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡿⣷⣶⣤⣀ ⠉⢿⣿⣿⣿⣿⣿⣿⠿⠉        ⣀⣀⣤⣤⣄⣀⡀⢀⢀⣐⣏⣍⣀⣴⣦⣴⣶⣶⣿⣿⣿⣿⣿⣿⣿⣶⣶⣶⣦⣤⣬⣿⣶⣧⣤⣤⣀⣀⣀⣀⣀┃|
+|⠉⠉⠓⣻⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡿⠛⠻⠷⣿⣿⣿⣿⠁ ⠘⠿⢿⠋⠉   ⠛⠛   ⡀⢀⣴⣾⣿⠻⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⠿⣿⣿⢿⠿⠟┃|
+|⢀⣀⠠⠴⠚⠋⠉   ⠈⠻⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣶⣶⣿⣿⣿⣿⣷⣦           ⡼⣿⣧⣀⣽⣿⣯⣴⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣯⣥   ⡾⠛  ⠄ ┃|
+|            ⠈⢹⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡿⡿⠿⠛⠓          ⢀⣉⣿⣿⡿⣿⢿⣿⣿⡿⠻⠟⢿⣿⡟⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⠟⣹⡄        ┃|
+|             ⠘⢿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⠋⠁              ⠚⣿⣫⣤⣬⡈⠉⠘⠋⠻⠿⢿⣿⣿⣿⣼⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡍⠙⣇⣠⣴⡟         ┃|
+|               ⠈⢿⢿⣿⣿⣿⠛⠛⠛⣯                ⣠⣾⣿⣿⣿⣿⣿⣷⣾⣷⣶⣶⢿⣿⣿⣟⠿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡗ ⠘⠉           ┃|
+|     ⠐⠄          ⠁⠹⢿⣧⣀⣴ ⠒⠂⠠⠄            ⢸⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣷⡻⣿⣿⣿⡿⠂ ⠙⢻⣿⣿⡿⠟⠻⣿⣿⣿⠻⠋⠉⢉              ┃|
+|                    ⠈⠈⠙⢿⣀⣀⣤⣤⣠⡀          ⠸⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣷⣿⣭⠅    ⠈⣿⡏  ⠆⢘⡛⢿⠇  ⠹⣄             ┃|
+|                        ⢀⣽⣿⣿⣿⣿⣷⣶⣄        ⠈⠙⠛⠋⠉⠛⣿⣿⣿⣿⣿⣿⣿⣿⡿⠋       ⠉   ⠲⣵⡄⢀⣤⣶ ⡉⡀            ┃|
+|                        ⠸⣿⣿⣿⣿⣿⣿⣿⣿⣷⣶⣦          ⠈⢻⣿⣿⣿⣿⣿⣿⡏              ⠘⠷⣌⣛⢃⠛ ⠐⠙⢺⣶⣤⠠       ┃|
+|                         ⠹⢿⣿⣿⣿⣿⣿⣿⣿⣿⠋           ⢨⣿⣿⣿⣿⣿⣿⡧⢀⣤                 ⢀⣥⣴⣶⣆⣰⣄⠁       ┃|
+|                           ⣿⣿⣿⣿⣿⣿⡿⠟            ⠘⣿⣿⣿⣿⣿⠏ ⢸⠏               ⢠⣶⣾⣿⣿⣿⣿⣿⣿⣦⡀      ┃|
+|                          ⢠⣿⣿⣿⣿⣿⠟               ⠹⣿⣿⣿⠟                   ⠘⣿⣿⣿⡿⢿⣿⣿⣿⣿⡇      ┃|
+|                          ⣸⣿⣿⠟⠃                  ⠁                       ⠉    ⠉⠻⣿⡟     ⣸⠆┃|
+|                          ⣿⣿⠅                                                   ⠈     ⠛⠁ ┃|
+|                          ⠙⠓                                                             ┃|
+|■ $0.088  ■ ≥ $0.19  ■ ≥ $0.42  ■ ≥ $0.91  ■ ≥ $2                                        ┃|
+|                                                                                         ┃|
+|              ⣀⣀⣠⣄⢠⣴⣶⣶⣶⣿⣿⡿⠿⣿⣿⣷⣶⣶⣶⣿⣿⣿⣿⣿⣿⣶⠒⠂     ⠤⣤⠤⡤     ⠒ ⠒  ⡀     ⠐⠦⢤⣄⣀                 ┃|
+|⣀  ⣀⣤⣤⣤⣤⣤⣤⣀⣠⣤⣾⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡿⣷⣶⣤⣀ ⠉⢿⣿⣿⣿⣿⣿⣿⠿⠉        ⣀⣀⣤⣤⣄⣀⡀⢀⢀⣐⣏⣍⣀⣴⣦⣴⣶⣶⣿⣿⣿⣿⣿⣿⣿⣶⣶⣶⣦⣤⣬⣿⣶⣧⣤⣤⣀⣀⣀⣀⣀┃|
+|⠉⠉⠓⣻⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡿⠛⠻⠷⣿⣿⣿⣿⠁ ⠘⠿⢿⠋⠉   ⠛⠛   ⡀⢀⣴⣾⣿⠻⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⠿⣿⣿⢿⠿⠟┃|
+|⢀⣀⠠⠴⠚⠋⠉   ⠈⠻⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣶⣶⣿⣿⣿⣿⣷⣦           ⡼⣿⣧⣀⣽⣿⣯⣴⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣯⣥   ⡾⠛  ⠄ │|
+|            ⠈⢹⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡿⡿⠿⠛⠓          ⢀⣉⣿⣿⡿⣿⢿⣿⣿⡿⠻⠟⢿⣿⡟⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⠟⣹⡄        │|
+|             ⠘⢿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⠋⠁              ⠚⣿⣫⣤⣬⡈⠉⠘⠋⠻⠿⢿⣿⣿⣿⣼⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡍⠙⣇⣠⣴⡟         │|
+|               ⠈⢿⢿⣿⣿⣿⠛⠛⠛⣯                ⣠⣾⣿⣿⣿⣿⣿⣷⣾⣷⣶⣶⢿⣿⣿⣟⠿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡗ ⠘⠉           │|
+|     ⠐⠄          ⠁⠹⢿⣧⣀⣴ ⠒⠂⠠⠄            ⢸⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣷⡻⣿⣿⣿⡿⠂ ⠙⢻⣿⣿⡿⠟⠻⣿⣿⣿⠻⠋⠉⢉              │|
+|                    ⠈⠈⠙⢿⣀⣀⣤⣤⣠⡀          ⠸⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣷⣿⣭⠅    ⠈⣿⡏  ⠆⢘⡛⢿⠇  ⠹⣄             │|
+|                        ⢀⣽⣿⣿⣿⣿⣷⣶⣄        ⠈⠙⠛⠋⠉⠛⣿⣿⣿⣿⣿⣿⣿⣿⡿⠋       ⠉   ⠲⣵⡄⢀⣤⣶ ⡉⡀            │|
+--- styles
+|aaaaaabaaaaaaaaccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccd|
+|cccccccccccccceeeeeeeeeeeeeeeeeeeeeeeeeeeeccccceeeecccccececceccccceeeeecccccccccccccccccd|
+|eccfffffffeeeeeeeeeeeeeeeeeeeceeeeeeeeeecccccccceeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeed|
+|eeffffffffffeeeeeeeeeeeeeeeeeeceeeeeccceecccgeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeed|
+|fffffffcccfffeeeeeeeeeeeeeeeeeecccccccccccgggefffeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeccceeccfcd|
+|ccccccccccccefffffffffffffffeeeeccccccccccegeeffeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeffccccccccd|
+|cccccccccccccfffffffffffffffcccccccccccccceeeeeeeeeeeeeeeeeeeehhheeeeeeeeeeeffffcccccccccd|
+|cccccccccccccccffffffffffcccccccccccccccceeeeeeeeeeeeeeeeeeeehhhhhhhheeeeeecffcccccccccccd|
+|cccccffcccccccccceeeeeeceeeecccccccccccceeeeeeeeeeeeeeeeeeeechhhhhhheeeeeeeccccccccccccccd|
+|cccccccccccccccccccceeeeeeeeeecccccccccceeeeeeeeeeeeeeeeeecccchhhccheeeecceecccccccccccccd|
+|cccccccccccccccccccccccceeehhhhhhcccccccceeeeeeeeeeeeeeeeccccccceccceeieeeceeccccccccccccd|
+|cccccccccccccccccccccccceehhhhhhhhhhcccccccccceeeeeeeeecccccccccccccceeeeeeceeeeeecccccccd|
+|cccccccccccccccccccccccccehhhhhhhhhhccccccccccceeeeeeeeeecccccccccccccccccgggggggecccccccd|
+|ccccccccccccccccccccccccccceeehhhhhcccccccccccceeiiiieceecccccccccccccccgggggggggggccccccd|
+|cccccccccccccccccccccccccceeeehhhccccccccccccccciiiiicccccccccccccccccccgggggggggggccccccd|
+|cccccccccccccccccccccccccceeeeeccccccccccccccccccicccccccccccccccccccccccgccccggggccccceed|
+|cccccccccccccccccccccccccceeecccccccccccccccccccccccccccccccccccccccccccccccccccgccccceecd|
+|cccccccccccccccccccccccccceecccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccd|
+|ecjjjjjjccfcjcjjjjjccicjcjjjjjcchcjcjjjjjccgcjcjjccccccccccccccccccccccccccccccccccccccccd|
+|cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccd|
+|cccccccccccccceeeeeeeeeeeeeeeeeeeeeeeeeeeeccccceeeecccccececceccccceeeeecccccccccccccccccd|
+|ecceeeeeeeeeeeeeeeeeeeeeeeeeeceeeeeeeeeecccccccceeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeed|
+|eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeceeeeeccceecccgeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeed|
+|eeeeeeeccceeeeeeeeeeeeeeeeeeeeecccccccccccgggeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeccceeccecj|
+|cccccccccccceeeeeeeeeeeeeeeeeeeeccccccccccegeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeccccccccj|
+|ccccccccccccceeeeeeeeeeeeeeecccccccccccccceeeeeeeeeeeeeeeeeeeefffeeeeeeeeeeeeeeecccccccccj|
+|ccccccccccccccceeeeeeeeeecccccccccccccccceeeeeeeeeeeeeeeeeeeeffffffffeeeeeeceecccccccccccj|
+|ccccceecccccccccceeeeeeceeeecccccccccccceeeeeeeeeeeeeeeeeeeecfffffffeeeeeeeccccccccccccccj|
+|cccccccccccccccccccceeeeeeeeeecccccccccceeeeeeeeeeeeeeeeeeccccfffccfeeeecceecccccccccccccj|
+|cccccccccccccccccccccccceeeffffffcccccccceeeeeeeeeeeeeeeeccccccceccceeeeeeceeccccccccccccj|
+a: fg=dim bg=panel bold
+b: bg=panel bold
+c: bg=panel
+d: fg=dim bg=panel
+e: fg=success-tint bg=panel
+f: fg=accent-tint bg=panel
+g: fg=accent-bright bg=panel
+h: fg=heat4 bg=panel
+i: fg=info bg=panel
+j: fg=mute bg=panel
+=== 16 90x30
+|Median $/GPU/hr                                                                          ┃|
+|              ⣀⣀⣠⣄⢠⣴⣶⣶⣶⣿⣿⡿⠿⣿⣿⣷⣶⣶⣶⣿⣿⣿⣿⣿⣿⣶⠒⠂     ⠤⣤⠤⡤     ⠒ ⠒  ⡀     ⠐⠦⢤⣄⣀                 ┃|
+|⣀  ⣀⣤⣤⣤⣤⣤⣤⣀⣠⣤⣾⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡿⣷⣶⣤⣀ ⠉⢿⣿⣿⣿⣿⣿⣿⠿⠉        ⣀⣀⣤⣤⣄⣀⡀⢀⢀⣐⣏⣍⣀⣴⣦⣴⣶⣶⣿⣿⣿⣿⣿⣿⣿⣶⣶⣶⣦⣤⣬⣿⣶⣧⣤⣤⣀⣀⣀⣀⣀┃|
+|⠉⠉⠓⣻⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡿⠛⠻⠷⣿⣿⣿⣿⠁ ⠘⠿⢿⠋⠉   ⠛⠛   ⡀⢀⣴⣾⣿⠻⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⠿⣿⣿⢿⠿⠟┃|
+|⢀⣀⠠⠴⠚⠋⠉   ⠈⠻⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣶⣶⣿⣿⣿⣿⣷⣦           ⡼⣿⣧⣀⣽⣿⣯⣴⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣯⣥   ⡾⠛  ⠄ ┃|
+|            ⠈⢹⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡿⡿⠿⠛⠓          ⢀⣉⣿⣿⡿⣿⢿⣿⣿⡿⠻⠟⢿⣿⡟⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⠟⣹⡄        ┃|
+|             ⠘⢿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⠋⠁              ⠚⣿⣫⣤⣬⡈⠉⠘⠋⠻⠿⢿⣿⣿⣿⣼⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡍⠙⣇⣠⣴⡟         ┃|
+|               ⠈⢿⢿⣿⣿⣿⠛⠛⠛⣯                ⣠⣾⣿⣿⣿⣿⣿⣷⣾⣷⣶⣶⢿⣿⣿⣟⠿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡗ ⠘⠉           ┃|
+|     ⠐⠄          ⠁⠹⢿⣧⣀⣴ ⠒⠂⠠⠄            ⢸⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣷⡻⣿⣿⣿⡿⠂ ⠙⢻⣿⣿⡿⠟⠻⣿⣿⣿⠻⠋⠉⢉              ┃|
+|                    ⠈⠈⠙⢿⣀⣀⣤⣤⣠⡀          ⠸⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣷⣿⣭⠅    ⠈⣿⡏  ⠆⢘⡛⢿⠇  ⠹⣄             ┃|
+|                        ⢀⣽⣿⣿⣿⣿⣷⣶⣄        ⠈⠙⠛⠋⠉⠛⣿⣿⣿⣿⣿⣿⣿⣿⡿⠋       ⠉   ⠲⣵⡄⢀⣤⣶ ⡉⡀            ┃|
+|                        ⠸⣿⣿⣿⣿⣿⣿⣿⣿⣷⣶⣦          ⠈⢻⣿⣿⣿⣿⣿⣿⡏              ⠘⠷⣌⣛⢃⠛ ⠐⠙⢺⣶⣤⠠       ┃|
+|                         ⠹⢿⣿⣿⣿⣿⣿⣿⣿⣿⠋           ⢨⣿⣿⣿⣿⣿⣿⡧⢀⣤                 ⢀⣥⣴⣶⣆⣰⣄⠁       ┃|
+|                           ⣿⣿⣿⣿⣿⣿⡿⠟            ⠘⣿⣿⣿⣿⣿⠏ ⢸⠏               ⢠⣶⣾⣿⣿⣿⣿⣿⣿⣦⡀      ┃|
+|                          ⢠⣿⣿⣿⣿⣿⠟               ⠹⣿⣿⣿⠟                   ⠘⣿⣿⣿⡿⢿⣿⣿⣿⣿⡇      ┃|
+|                          ⣸⣿⣿⠟⠃                  ⠁                       ⠉    ⠉⠻⣿⡟     ⣸⠆┃|
+|                          ⣿⣿⠅                                                   ⠈     ⠛⠁ ┃|
+|                          ⠙⠓                                                             ┃|
+|■ $0.088  ■ ≥ $0.19  ■ ≥ $0.42  ■ ≥ $0.91  ■ ≥ $2                                        ┃|
+|                                                                                         ┃|
+|              ⣀⣀⣠⣄⢠⣴⣶⣶⣶⣿⣿⡿⠿⣿⣿⣷⣶⣶⣶⣿⣿⣿⣿⣿⣿⣶⠒⠂     ⠤⣤⠤⡤     ⠒ ⠒  ⡀     ⠐⠦⢤⣄⣀                 ┃|
+|⣀  ⣀⣤⣤⣤⣤⣤⣤⣀⣠⣤⣾⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡿⣷⣶⣤⣀ ⠉⢿⣿⣿⣿⣿⣿⣿⠿⠉        ⣀⣀⣤⣤⣄⣀⡀⢀⢀⣐⣏⣍⣀⣴⣦⣴⣶⣶⣿⣿⣿⣿⣿⣿⣿⣶⣶⣶⣦⣤⣬⣿⣶⣧⣤⣤⣀⣀⣀⣀⣀┃|
+|⠉⠉⠓⣻⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡿⠛⠻⠷⣿⣿⣿⣿⠁ ⠘⠿⢿⠋⠉   ⠛⠛   ⡀⢀⣴⣾⣿⠻⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⠿⣿⣿⢿⠿⠟┃|
+|⢀⣀⠠⠴⠚⠋⠉   ⠈⠻⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣶⣶⣿⣿⣿⣿⣷⣦           ⡼⣿⣧⣀⣽⣿⣯⣴⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣯⣥   ⡾⠛  ⠄ │|
+|            ⠈⢹⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡿⡿⠿⠛⠓          ⢀⣉⣿⣿⡿⣿⢿⣿⣿⡿⠻⠟⢿⣿⡟⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⠟⣹⡄        │|
+|             ⠘⢿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⠋⠁              ⠚⣿⣫⣤⣬⡈⠉⠘⠋⠻⠿⢿⣿⣿⣿⣼⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡍⠙⣇⣠⣴⡟         │|
+|               ⠈⢿⢿⣿⣿⣿⠛⠛⠛⣯                ⣠⣾⣿⣿⣿⣿⣿⣷⣾⣷⣶⣶⢿⣿⣿⣟⠿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡗ ⠘⠉           │|
+|     ⠐⠄          ⠁⠹⢿⣧⣀⣴ ⠒⠂⠠⠄            ⢸⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣷⡻⣿⣿⣿⡿⠂ ⠙⢻⣿⣿⡿⠟⠻⣿⣿⣿⠻⠋⠉⢉              │|
+|                    ⠈⠈⠙⢿⣀⣀⣤⣤⣠⡀          ⠸⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣷⣿⣭⠅    ⠈⣿⡏  ⠆⢘⡛⢿⠇  ⠹⣄             │|
+|                        ⢀⣽⣿⣿⣿⣿⣷⣶⣄        ⠈⠙⠛⠋⠉⠛⣿⣿⣿⣿⣿⣿⣿⣿⡿⠋       ⠉   ⠲⣵⡄⢀⣤⣶ ⡉⡀            │|
+--- styles
+|aaaaaabaaaaaaaa                                                                          c|
+|              ddddddddddddddddeeeeeeeeeeee     eeee     e e  e     eeeee                 c|
+|e  fffffffddddddddddddddddddd eeeeeeeeee        eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeec|
+|eeffffffffffdddddddddddddddddd eeeee   ee   geeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeec|
+|fffffff   fffdddddddddddddddddd           gggefffeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee   ee  f c|
+|            dfffffffffffffffdddd          egeeffeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeff        c|
+|             fffffffffffffff              eeeeeeeeeeeeeeeeeeeehhheeeeeeeeeeeffff         c|
+|               ffffffffff                eeeeeeeeeeeeeeeeeeeehhhhhhhheeeeee ff           c|
+|     ff          eeeeee eeee            eeeeeeeeeeeeeeeeeeee hhhhhhheeeeeee              c|
+|                    eeeeeeeeee          eeeeeeeeeeeeeeeeee    hhh  heeee  ee             c|
+|                        eeehhhhhh        eeeeeeeeeeeeeeee       e   eeieee ee            c|
+|                        eehhhhhhhhhh          eeeeeeeee              eeeeee eeeeee       c|
+|                         ehhhhhhhhhh           eeeeeeeeee                 ggggggge       c|
+|                           eeehhhhh            eeiiiie ee               ggggggggggg      c|
+|                          eeeehhh               iiiii                   ggggggggggg      c|
+|                          eeeee                  i                       g    gggg     eec|
+|                          eee                                                   g     ee c|
+|                          ee                                                             c|
+|d eeeeee  f e eeeee  i e eeeee  h e eeeee  g e ee                                        c|
+|                                                                                         c|
+|              ddddddddddddddddeeeeeeeeeeee     eeee     e e  e     eeeee                 c|
+|e  dddddddddddddddddddddddddd eeeeeeeeee        eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeec|
+|eedddddddddddddddddddddddddddd eeeee   ee   geeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeec|
+|ddddddd   ddddddddddddddddddddd           gggedddeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee   ee  d e|
+|            dddddddddddddddddddd          egeeddeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeedd        e|
+|             ddddddddddddddd              eeeeeeeeeeeeeeeeeeeefffeeeeeeeeeeedddd         e|
+|               dddddddddd                eeeeeeeeeeeeeeeeeeeeffffffffeeeeee dd           e|
+|     dd          eeeeee eeee            eeeeeeeeeeeeeeeeeeee fffffffeeeeeee              e|
+|                    eeeeeeeeee          eeeeeeeeeeeeeeeeee    fff  feeee  ee             e|
+|                        eeeffffff        eeeeeeeeeeeeeeee       e   eedeee ee            e|
+a: fg=dim bold
+b: bold
+c: fg=dim
+d: fg=heat1
+e: fg=mute
+f: fg=info
+g: fg=accent-bright
+h: fg=accent
+i: fg=heat3
+=== ascii 90x30
+|Median $/GPU/hr                                                                          #|
+|              ****************..........        .                   ...                  #|
+|   +++++++******************** ........          .....   ................................#|
+|  ++++++++++******************  ..        %%% ...........................................#|
+|++++++     ++++++++++++*********          %%%.+++...............................   .   + #|
+|             +++++++++++++++****           ...++.............................. ++        #|
+|              ++++++++++++                ......  ............xxx.......... ++++         #|
+|                 .+++++++                ....................xxxxxxxx......              #|
+|     ++            .....                ..................    xxxxxx....                 #|
+|                         ...xx.x         ................      xx  x .                   #|
+|                        ..xxxxxxxxxx           ........              .o ...   ..         #|
+|                         .xxxxxxxxxx            .......                    %%%%%%        #|
+|                           ..xxxxxx             ...oo. ..               %%%%%%%%%%       #|
+|                           ...xxxx              ooooo                   %%%%%%%%%%%      #|
+|                          .....x                 ooo                     %%% %%%%%       #|
+|                          ..                                                    %%       #|
+|                           .                                                             #|
+|* $0.088  + >= $0.19  o >= $0.42  x >= $0.91  % >= $2                                    #|
+|                                                                                         #|
+|              ****************..........        .                   ...                  #|
+|   *************************** ........          .....   ................................#|
+|  ****************************  ..        %%% ...........................................#|
+|******     *********************          %%%.***...............................   .   * #|
+|             *******************           ...**.............................. **        #|
+|              ************                ......  ............+++.......... ****         #|
+|                 .*******                ....................++++++++......              ||
+|     **            .....                ..................    ++++++....                 ||
+|                         ...++.+         ................      ++  + .                   ||
+|                        ..++++++++++           ........              .* ...   ..         ||
+|                         .++++++++++            .......                    %%%%%%        ||
+--- styles
+|aaaaaaaaaaaaaaa                                                                           |
+|                                                                                          |
+|                                                                                          |
+|                                                                                          |
+|                                                                                          |
+|                                                                                          |
+|                                                                                          |
+|                                                                                          |
+|                                                                                          |
+|                                                                                          |
+|                                                                                          |
+|                                                                                          |
+|                                                                                          |
+|                                                                                          |
+|                                                                                          |
+|                                                                                          |
+|                                                                                          |
+|                                                                                          |
+|                                                                                          |
+|                                                                                          |
+|                                                                                          |
+|                                                                                          |
+|                                                                                          |
+|                                                                                          |
+|                                                                                          |
+|                                                                                          |
+|                                                                                          |
+|                                                                                          |
+|                                                                                          |
+|                                                                                          |
+a: bold

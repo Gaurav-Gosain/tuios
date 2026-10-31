@@ -129,6 +129,7 @@
       "kv",
       "line",
       "list",
+      "map",
       "markdown",
       "mermaid",
       "modal",

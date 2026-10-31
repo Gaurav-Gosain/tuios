@@ -1,0 +1,215 @@
+=== truecolor 56x22
+|Median $/GPU/hr                                        ┃|
+|  ⢀⣀⣀⣀ ⢀⣠⣶⣶⣶⣾⣿⣿⣿⣛⡛⠻⣿⣿⣿⣿⣿⡗⠁   ⠐⠒⠂   ⢀⠤ ⣀⣀⣠⣤⣶⣦⣤⣀⣀⣀⣠⣄⣀    ┃|
+|⠉⠒⢿⣿⡿⠿⣿⣿⣿⣿⣿⣿⣿⣟⡻⣿⣿⣿⡁⠙⠿⠋⠉⠁⠒⠂⢀⡄⢤⣾⢟⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⠿⠿⢟⡿⠿⠛┃|
+|⠘⠉⠉    ⠙⢻⣿⣿⣿⣿⣿⣿⣿⣿⣿⠿⠇      ⣙⣿⣾⣿⣿⣿⠿⢿⣿⢿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⢟⣇ ⠈ ⠈ ┃|
+|        ⠘⠿⣿⣿⣿⣿⢿⡿⠁        ⢀⣽⣷⣶⣮⣨⣭⣿⣿⣿⣾⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⠉⠷⠞⠃     ┃|
+|   ⠰      ⠈⠹⠿⢤⣀⠑⠠        ⣿⣿⣿⣿⣿⣿⣿⣿⣟⣿⠿⠋⠉⢻⣿⠟⢛⢿⣿⡋⠉⡄        ┃|
+|              ⠈⣰⣿⣿⣶⣤⣀    ⠙⠛⠛⠛⣿⣿⣿⣿⣿⠿⠁   ⠛ ⠈⢸⡌⣠⣄⡑⢀       ┃|
+|               ⠹⣿⣿⣿⣿⣿⣿⠇      ⢹⣿⣿⣿⣧⢀⡀       ⠉⠚⠉⣁⣤⣝⣟⠂    ┃|
+|                ⢸⣿⣿⣿⡟⠋       ⠸⣿⣿⣿⠁⠛         ⢰⣾⣿⣿⣿⣿⣷    ┃|
+|                ⣼⡿⠛⠉          ⠙⠉⠁            ⠛⠉⠉⠛⢿⡟  ⣀⠆┃|
+|                ⠻⠅                                     ┃|
+|■ $0.088  ■ ≥ $0.19  ■ ≥ $0.42  ■ ≥ $0.91  ■ ≥ $2      ┃|
+|                                                       ┃|
+|  ⢀⣀⣀⣀ ⢀⣠⣶⣶⣶⣾⣿⣿⣿⣛⡛⠻⣿⣿⣿⣿⣿⡗⠁   ⠐⠒⠂   ⢀⠤ ⣀⣀⣠⣤⣶⣦⣤⣀⣀⣀⣠⣄⣀    ┃|
+|⠉⠒⢿⣿⡿⠿⣿⣿⣿⣿⣿⣿⣿⣟⡻⣿⣿⣿⡁⠙⠿⠋⠉⠁⠒⠂⢀⡄⢤⣾⢟⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⠿⠿⢟⡿⠿⠛┃|
+|⠘⠉⠉    ⠙⢻⣿⣿⣿⣿⣿⣿⣿⣿⣿⠿⠇      ⣙⣿⣾⣿⣿⣿⠿⢿⣿⢿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⢟⣇ ⠈ ⠈ ┃|
+|        ⠘⠿⣿⣿⣿⣿⢿⡿⠁        ⢀⣽⣷⣶⣮⣨⣭⣿⣿⣿⣾⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⠉⠷⠞⠃     ┃|
+|   ⠰      ⠈⠹⠿⢤⣀⠑⠠        ⣿⣿⣿⣿⣿⣿⣿⣿⣟⣿⠿⠋⠉⢻⣿⠟⢛⢿⣿⡋⠉⡄        ┃|
+|              ⠈⣰⣿⣿⣶⣤⣀    ⠙⠛⠛⠛⣿⣿⣿⣿⣿⠿⠁   ⠛ ⠈⢸⡌⣠⣄⡑⢀       ┃|
+|               ⠹⣿⣿⣿⣿⣿⣿⠇      ⢹⣿⣿⣿⣧⢀⡀       ⠉⠚⠉⣁⣤⣝⣟⠂    ┃|
+|                ⢸⣿⣿⣿⡟⠋       ⠸⣿⣿⣿⠁⠛         ⢰⣾⣿⣿⣿⣿⣷    │|
+|                ⣼⡿⠛⠉          ⠙⠉⠁            ⠛⠉⠉⠛⢿⡟  ⣀⠆│|
+--- styles
+|aaaaaabaaaaaaaaccccccccccccccccccccccccccccccccccccccccd|
+|cceeeecffffffffffffgggggggcccgggcccggcgggggggggggggccccd|
+|geeeeeeefffffffffffggggggghhgggggggggggggggggggggggggggd|
+|eeecccceeeeeeeeeeeffcccccchheeggggggggggggggggggeecgcecd|
+|cccccccceeeeeeeeeccccccccgggggggggggggiiiiiggggeeecccccd|
+|ccceccccccggeggegccccccccggggggggggggiiiiiiggggccccccccd|
+|ccccccccccccccggiiiiiccccgggggggggggcccicigjggggcccccccd|
+|cccccccccccccccgiiiiiiiccccccgggggggcccccccggghhhhgccccd|
+|ccccccccccccccccggiiiicccccccgjjjggccccccccchhhhhhhccccd|
+|ccccccccccccccccgggiccccccccccjjjcccccccccccchhhhhhccggd|
+|ccccccccccccccccggcccccccccccccccccccccccccccccccccccccd|
+|fckkkkkkcceckckkkkkccjckckkkkkccickckkkkkcchckckkccccccd|
+|cccccccccccccccccccccccccccccccccccccccccccccccccccccccd|
+|ccffffcffffffffffffgggggggcccgggcccggcgggggggggggggccccd|
+|gffffffffffffffffffggggggghhgggggggggggggggggggggggggggd|
+|fffccccfffffffffffffcccccchhffggggggggggggggggggffcgcfcd|
+|ccccccccfffffffffccccccccgggggggggggggeeeeeggggfffcccccd|
+|cccfccccccggfggfgccccccccggggggggggggeeeeeeggggccccccccd|
+|ccccccccccccccggeeeeeccccgggggggggggcccecegfggggcccccccd|
+|cccccccccccccccgeeeeeeeccccccgggggggcccccccggghhhhgccccd|
+|ccccccccccccccccggeeeecccccccgfffggccccccccchhhhhhhcccck|
+|ccccccccccccccccgggeccccccccccfffcccccccccccchhhhhhccggk|
+a: fg=dim bg=panel bold
+b: bg=panel bold
+c: bg=panel
+d: fg=dim bg=panel
+e: fg=heat2 bg=panel
+f: fg=heat1 bg=panel
+g: fg=track bg=panel
+h: fg=accent-bright bg=panel
+i: fg=heat4 bg=panel
+j: fg=info bg=panel
+k: fg=mute bg=panel
+=== 256 56x22
+|Median $/GPU/hr                                        ┃|
+|  ⢀⣀⣀⣀ ⢀⣠⣶⣶⣶⣾⣿⣿⣿⣛⡛⠻⣿⣿⣿⣿⣿⡗⠁   ⠐⠒⠂   ⢀⠤ ⣀⣀⣠⣤⣶⣦⣤⣀⣀⣀⣠⣄⣀    ┃|
+|⠉⠒⢿⣿⡿⠿⣿⣿⣿⣿⣿⣿⣿⣟⡻⣿⣿⣿⡁⠙⠿⠋⠉⠁⠒⠂⢀⡄⢤⣾⢟⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⠿⠿⢟⡿⠿⠛┃|
+|⠘⠉⠉    ⠙⢻⣿⣿⣿⣿⣿⣿⣿⣿⣿⠿⠇      ⣙⣿⣾⣿⣿⣿⠿⢿⣿⢿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⢟⣇ ⠈ ⠈ ┃|
+|        ⠘⠿⣿⣿⣿⣿⢿⡿⠁        ⢀⣽⣷⣶⣮⣨⣭⣿⣿⣿⣾⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⠉⠷⠞⠃     ┃|
+|   ⠰      ⠈⠹⠿⢤⣀⠑⠠        ⣿⣿⣿⣿⣿⣿⣿⣿⣟⣿⠿⠋⠉⢻⣿⠟⢛⢿⣿⡋⠉⡄        ┃|
+|              ⠈⣰⣿⣿⣶⣤⣀    ⠙⠛⠛⠛⣿⣿⣿⣿⣿⠿⠁   ⠛ ⠈⢸⡌⣠⣄⡑⢀       ┃|
+|               ⠹⣿⣿⣿⣿⣿⣿⠇      ⢹⣿⣿⣿⣧⢀⡀       ⠉⠚⠉⣁⣤⣝⣟⠂    ┃|
+|                ⢸⣿⣿⣿⡟⠋       ⠸⣿⣿⣿⠁⠛         ⢰⣾⣿⣿⣿⣿⣷    ┃|
+|                ⣼⡿⠛⠉          ⠙⠉⠁            ⠛⠉⠉⠛⢿⡟  ⣀⠆┃|
+|                ⠻⠅                                     ┃|
+|■ $0.088  ■ ≥ $0.19  ■ ≥ $0.42  ■ ≥ $0.91  ■ ≥ $2      ┃|
+|                                                       ┃|
+|  ⢀⣀⣀⣀ ⢀⣠⣶⣶⣶⣾⣿⣿⣿⣛⡛⠻⣿⣿⣿⣿⣿⡗⠁   ⠐⠒⠂   ⢀⠤ ⣀⣀⣠⣤⣶⣦⣤⣀⣀⣀⣠⣄⣀    ┃|
+|⠉⠒⢿⣿⡿⠿⣿⣿⣿⣿⣿⣿⣿⣟⡻⣿⣿⣿⡁⠙⠿⠋⠉⠁⠒⠂⢀⡄⢤⣾⢟⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⠿⠿⢟⡿⠿⠛┃|
+|⠘⠉⠉    ⠙⢻⣿⣿⣿⣿⣿⣿⣿⣿⣿⠿⠇      ⣙⣿⣾⣿⣿⣿⠿⢿⣿⢿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⢟⣇ ⠈ ⠈ ┃|
+|        ⠘⠿⣿⣿⣿⣿⢿⡿⠁        ⢀⣽⣷⣶⣮⣨⣭⣿⣿⣿⣾⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⠉⠷⠞⠃     ┃|
+|   ⠰      ⠈⠹⠿⢤⣀⠑⠠        ⣿⣿⣿⣿⣿⣿⣿⣿⣟⣿⠿⠋⠉⢻⣿⠟⢛⢿⣿⡋⠉⡄        ┃|
+|              ⠈⣰⣿⣿⣶⣤⣀    ⠙⠛⠛⠛⣿⣿⣿⣿⣿⠿⠁   ⠛ ⠈⢸⡌⣠⣄⡑⢀       ┃|
+|               ⠹⣿⣿⣿⣿⣿⣿⠇      ⢹⣿⣿⣿⣧⢀⡀       ⠉⠚⠉⣁⣤⣝⣟⠂    ┃|
+|                ⢸⣿⣿⣿⡟⠋       ⠸⣿⣿⣿⠁⠛         ⢰⣾⣿⣿⣿⣿⣷    │|
+|                ⣼⡿⠛⠉          ⠙⠉⠁            ⠛⠉⠉⠛⢿⡟  ⣀⠆│|
+--- styles
+|aaaaaabaaaaaaaaccccccccccccccccccccccccccccccccccccccccd|
+|cceeeecfffffffffffffffffffcccfffcccffcfffffffffffffccccd|
+|feeeeeeeffffffffffffffffffggfffffffffffffffffffffffffffd|
+|eeecccceeeeeeeeeeeffccccccggeeffffffffffffffffffeecfcecd|
+|cccccccceeeeeeeeeccccccccfffffffffffffhhhhhffffeeecccccd|
+|ccceccccccffeffefccccccccffffffffffffhhhhhhffffccccccccd|
+|ccccccccccccccffhhhhhccccfffffffffffccchchfiffffcccccccd|
+|cccccccccccccccfhhhhhhhccccccfffffffcccccccfffggggfccccd|
+|ccccccccccccccccffhhhhcccccccfiiiffcccccccccgggggggccccd|
+|ccccccccccccccccfffhcccccccccciiiccccccccccccggggggccffd|
+|ccccccccccccccccffcccccccccccccccccccccccccccccccccccccd|
+|fcjjjjjjccecjcjjjjjccicjcjjjjjcchcjcjjjjjccgcjcjjccccccd|
+|cccccccccccccccccccccccccccccccccccccccccccccccccccccccd|
+|ccffffcfffffffffffffffffffcccfffcccffcfffffffffffffccccd|
+|ffffffffffffffffffffffffffggfffffffffffffffffffffffffffd|
+|fffccccfffffffffffffccccccggffffffffffffffffffffffcfcfcd|
+|ccccccccfffffffffccccccccfffffffffffffeeeeefffffffcccccd|
+|cccfccccccfffffffccccccccffffffffffffeeeeeeffffccccccccd|
+|ccccccccccccccffeeeeeccccfffffffffffccceceffffffcccccccd|
+|cccccccccccccccfeeeeeeeccccccfffffffcccccccfffggggfccccd|
+|ccccccccccccccccffeeeecccccccffffffcccccccccgggggggccccj|
+|ccccccccccccccccfffeccccccccccfffccccccccccccggggggccffj|
+a: fg=dim bg=panel bold
+b: bg=panel bold
+c: bg=panel
+d: fg=dim bg=panel
+e: fg=accent-tint bg=panel
+f: fg=success-tint bg=panel
+g: fg=accent-bright bg=panel
+h: fg=heat4 bg=panel
+i: fg=info bg=panel
+j: fg=mute bg=panel
+=== 16 56x22
+|Median $/GPU/hr                                        ┃|
+|  ⢀⣀⣀⣀ ⢀⣠⣶⣶⣶⣾⣿⣿⣿⣛⡛⠻⣿⣿⣿⣿⣿⡗⠁   ⠐⠒⠂   ⢀⠤ ⣀⣀⣠⣤⣶⣦⣤⣀⣀⣀⣠⣄⣀    ┃|
+|⠉⠒⢿⣿⡿⠿⣿⣿⣿⣿⣿⣿⣿⣟⡻⣿⣿⣿⡁⠙⠿⠋⠉⠁⠒⠂⢀⡄⢤⣾⢟⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⠿⠿⢟⡿⠿⠛┃|
+|⠘⠉⠉    ⠙⢻⣿⣿⣿⣿⣿⣿⣿⣿⣿⠿⠇      ⣙⣿⣾⣿⣿⣿⠿⢿⣿⢿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⢟⣇ ⠈ ⠈ ┃|
+|        ⠘⠿⣿⣿⣿⣿⢿⡿⠁        ⢀⣽⣷⣶⣮⣨⣭⣿⣿⣿⣾⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⠉⠷⠞⠃     ┃|
+|   ⠰      ⠈⠹⠿⢤⣀⠑⠠        ⣿⣿⣿⣿⣿⣿⣿⣿⣟⣿⠿⠋⠉⢻⣿⠟⢛⢿⣿⡋⠉⡄        ┃|
+|              ⠈⣰⣿⣿⣶⣤⣀    ⠙⠛⠛⠛⣿⣿⣿⣿⣿⠿⠁   ⠛ ⠈⢸⡌⣠⣄⡑⢀       ┃|
+|               ⠹⣿⣿⣿⣿⣿⣿⠇      ⢹⣿⣿⣿⣧⢀⡀       ⠉⠚⠉⣁⣤⣝⣟⠂    ┃|
+|                ⢸⣿⣿⣿⡟⠋       ⠸⣿⣿⣿⠁⠛         ⢰⣾⣿⣿⣿⣿⣷    ┃|
+|                ⣼⡿⠛⠉          ⠙⠉⠁            ⠛⠉⠉⠛⢿⡟  ⣀⠆┃|
+|                ⠻⠅                                     ┃|
+|■ $0.088  ■ ≥ $0.19  ■ ≥ $0.42  ■ ≥ $0.91  ■ ≥ $2      ┃|
+|                                                       ┃|
+|  ⢀⣀⣀⣀ ⢀⣠⣶⣶⣶⣾⣿⣿⣿⣛⡛⠻⣿⣿⣿⣿⣿⡗⠁   ⠐⠒⠂   ⢀⠤ ⣀⣀⣠⣤⣶⣦⣤⣀⣀⣀⣠⣄⣀    ┃|
+|⠉⠒⢿⣿⡿⠿⣿⣿⣿⣿⣿⣿⣿⣟⡻⣿⣿⣿⡁⠙⠿⠋⠉⠁⠒⠂⢀⡄⢤⣾⢟⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⠿⠿⢟⡿⠿⠛┃|
+|⠘⠉⠉    ⠙⢻⣿⣿⣿⣿⣿⣿⣿⣿⣿⠿⠇      ⣙⣿⣾⣿⣿⣿⠿⢿⣿⢿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⢟⣇ ⠈ ⠈ ┃|
+|        ⠘⠿⣿⣿⣿⣿⢿⡿⠁        ⢀⣽⣷⣶⣮⣨⣭⣿⣿⣿⣾⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⠉⠷⠞⠃     ┃|
+|   ⠰      ⠈⠹⠿⢤⣀⠑⠠        ⣿⣿⣿⣿⣿⣿⣿⣿⣟⣿⠿⠋⠉⢻⣿⠟⢛⢿⣿⡋⠉⡄        ┃|
+|              ⠈⣰⣿⣿⣶⣤⣀    ⠙⠛⠛⠛⣿⣿⣿⣿⣿⠿⠁   ⠛ ⠈⢸⡌⣠⣄⡑⢀       ┃|
+|               ⠹⣿⣿⣿⣿⣿⣿⠇      ⢹⣿⣿⣿⣧⢀⡀       ⠉⠚⠉⣁⣤⣝⣟⠂    ┃|
+|                ⢸⣿⣿⣿⡟⠋       ⠸⣿⣿⣿⠁⠛         ⢰⣾⣿⣿⣿⣿⣷    │|
+|                ⣼⡿⠛⠉          ⠙⠉⠁            ⠛⠉⠉⠛⢿⡟  ⣀⠆│|
+--- styles
+|aaaaaabaaaaaaaa                                        c|
+|  dddd eeeeeeeeeeeefffffff   fff   ff fffffffffffff    c|
+|fdddddddeeeeeeeeeeefffffffggfffffffffffffffffffffffffffc|
+|ddd    dddddddddddee      ggddffffffffffffffffffdd f d c|
+|        ddddddddd        fffffffffffffhhhhhffffddd     c|
+|   d      ffdffdf        ffffffffffffhhhhhhffff        c|
+|              ffhhhhh    fffffffffff   h hfiffff       c|
+|               fhhhhhhh      fffffff       fffggggf    c|
+|                ffhhhh       fiiiff         ggggggg    c|
+|                fffh          iii            gggggg  ffc|
+|                ff                                     c|
+|e ffffff  d f fffff  i f fffff  h f fffff  g f ff      c|
+|                                                       c|
+|  eeee eeeeeeeeeeeefffffff   fff   ff fffffffffffff    c|
+|feeeeeeeeeeeeeeeeeefffffffggfffffffffffffffffffffffffffc|
+|eee    eeeeeeeeeeeee      ggeeffffffffffffffffffee f e c|
+|        eeeeeeeee        fffffffffffffdddddffffeee     c|
+|   e      ffeffef        ffffffffffffddddddffff        c|
+|              ffddddd    fffffffffff   d dfeffff       c|
+|               fddddddd      fffffff       fffggggf    c|
+|                ffdddd       feeeff         ggggggg    f|
+|                fffd          eee            gggggg  fff|
+a: fg=dim bold
+b: bold
+c: fg=dim
+d: fg=info
+e: fg=heat1
+f: fg=mute
+g: fg=accent-bright
+h: fg=accent
+i: fg=heat3
+=== ascii 56x22
+|Median $/GPU/hr                                        #|
+|  ++++ ************......                ....          #|
+| +++++++*********** ..    %% ..........................#|
+|+++    +++++++++++**      %%++..................++   + #|
+|        +++++++++         ............xxxxx... +++     #|
+|   +       .+. +         ........... xxxxxx..          #|
+|               .xxxxx     .........    x x o .         #|
+|               .xxxxxxx      .....            %%%%     #|
+|                 .xxxx        ooo .         %%%%%%%    #|
+|                ...x          ooo            %%%%%%    #|
+|                .                                      #|
+|* $0.088  + >= $0.19  o >= $0.42  x >= $0.91  % >= $2  #|
+|                                                       #|
+|  **** ************......                ....          #|
+| ****************** ..    %% ..........................#|
+|***    *************      %%**..................**   * #|
+|        *********         ............+++++... ***     #|
+|   *       .*. *         ........... ++++++..          #|
+|               .+++++     .........    + + * .         #|
+|               .+++++++      .....            %%%%     #|
+|                 .++++        *** .         %%%%%%%    ||
+|                ...+          ***            %%%%%%    ||
+--- styles
+|aaaaaaaaaaaaaaa                                         |
+|                                                        |
+|                                                        |
+|                                                        |
+|                                                        |
+|                                                        |
+|                                                        |
+|                                                        |
+|                                                        |
+|                                                        |
+|                                                        |
+|                                                        |
+|                                                        |
+|                                                        |
+|                                                        |
+|                                                        |
+|                                                        |
+|                                                        |
+|                                                        |
+|                                                        |
+|                                                        |
+|                                                        |
+a: bold
