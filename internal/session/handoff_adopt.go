@@ -34,9 +34,20 @@ import (
 func (d *Daemon) RunAdopted(fd int) error {
 	InstallDaemonLogging(d.foreground, d.logFile)
 	LogBasic("Daemon %s adopting its predecessor's panes (pid %d)", d.version, os.Getpid())
+	handoffTestCrash(crashAtStart)
+	// An image a keeper started finds every descriptor where the keeper
+	// held it, the manifest's included.
+	kept, err := keptDescriptors()
+	if err == nil {
+		fd, err = keptAt(kept, fd)
+	}
+	if err != nil {
+		LogError("Live upgrade: %v", err)
+		return fmt.Errorf("live upgrade: %w", err)
+	}
 	fb := &adoptFallback{manifestFD: fd}
 	stopWatch := fb.watch(adoptWatchdogTimeout())
-	err := d.adoptGuarded(fd, fb)
+	err = d.adoptGuarded(fd, fb, kept)
 	stopWatch()
 	if err != nil {
 		LogError("Live upgrade: adopting the panes failed: %v", err)
@@ -54,19 +65,21 @@ func (d *Daemon) RunAdopted(fd int) error {
 // adoptGuarded is adopt with a panic turned into an error, so the fallback
 // still runs. A recover covers only its own goroutine, which is why nothing
 // adopt starts runs before the point the fallback is disarmed.
-func (d *Daemon) adoptGuarded(fd int, fb *adoptFallback) (err error) {
+func (d *Daemon) adoptGuarded(fd int, fb *adoptFallback, kept map[int]int) (err error) {
 	defer func() {
 		if r := recover(); r != nil {
 			err = fmt.Errorf("panic: %v\n%s", r, debug.Stack())
 		}
 	}()
-	return d.adopt(fd, fb)
+	return d.adopt(fd, fb, kept)
 }
 
 // adopt reads the manifest on fd and takes over what it names. Until the
 // fallback is disarmed nothing reads a pane or accepts a call, so an adoption
 // that fails before then leaves every inherited descriptor as it found it.
-func (d *Daemon) adopt(fd int, fb *adoptFallback) error {
+// kept is where a keeper holds each descriptor, nil for an image the handoff
+// or its fallback execed.
+func (d *Daemon) adopt(fd int, fb *adoptFallback, kept map[int]int) error {
 	mf := adoptedFile(fd, "tuios-handoff")
 	if mf == nil {
 		return ErrHandoffUnsupported
@@ -79,7 +92,11 @@ func (d *Daemon) adopt(fd int, fb *adoptFallback) error {
 	if err != nil {
 		return err
 	}
+	if err := m.remapKept(kept); err != nil {
+		return err
+	}
 	fb.prepare(m)
+	d.adoptKeeper(m.Daemon.Keeper, fb)
 	if err := checkAdoptable(m); err != nil {
 		return err
 	}
@@ -164,6 +181,7 @@ func (d *Daemon) adopt(fd int, fb *adoptFallback) error {
 		started = append(started, ptys...)
 	}
 	d.adopting.Store(false)
+	handoffTestCrash(crashWhileAdopting)
 
 	// The point of no return: from here the panes are read and the sockets
 	// served, and the previous binary could not take them back.
@@ -177,7 +195,9 @@ func (d *Daemon) adopt(fd int, fb *adoptFallback) error {
 		stats.PausedMS = float64(time.Now().UnixNano()-stats.StoppedAt) / 1e6
 	}
 	stats.Fallback = os.Getenv(handoffFallbackEnv) != ""
+	stats.Recovered = kept != nil
 	_ = os.Unsetenv(handoffFallbackEnv)
+	_ = os.Unsetenv(handoffKeptEnv)
 	d.lastHandoff.Store(&stats)
 
 	d.attention.load(attentionPath(), d.attentionLive)
@@ -185,6 +205,17 @@ func (d *Daemon) adopt(fd int, fb *adoptFallback) error {
 	d.outbox.load(outboxPath())
 	d.reviewNotes.load(reviewNotesPath(), func(window string) bool { return d.sessionOfWindow(window) != "" })
 	d.serve()
+	state := "upgraded"
+	if stats.Fallback {
+		state = "fallback"
+	}
+	if stats.Recovered {
+		state = "recovered"
+	}
+	d.events.publish(streamEvent{Type: EventDaemonUpgraded, Title: stats.From, Body: d.version, State: state})
+	// This image is up: the keeper stands down and exits, and is reaped.
+	handoffTestCrash(crashServing)
+	d.releaseKeeper()
 	_ = mf.Close()
 	for _, f := range inherited {
 		_ = f.Close()

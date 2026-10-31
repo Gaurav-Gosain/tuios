@@ -62,6 +62,10 @@ var exampleOutcomes = map[string]exampleOutcome{
 	"set-task-stage#0": {errCode: ErrVerbNoTask, why: "the fixture's session holds no task card"},
 	// A client-owned surface with no client attached.
 	"list-dock-components#0": {errCode: ErrVerbNeedsClient, why: "the dock is drawn by a client"},
+	// The fixture daemon runs inside the test binary, with no tuios command
+	// line to exec, which is a daemon inside another program. The upgrade is
+	// proved in e2e/tui/live_upgrade_test.go.
+	"daemon-upgrade#0": {errCode: ErrVerbUpgradeRefused, why: "the fixture daemon has no tuios command line to exec"},
 	// The fixture daemon reads no config file. The verb is proved in
 	// pane_grants_hold_test.go.
 	"apply-config#0":         {errCode: ErrVerbCommandFailed, why: "the fixture daemon reads no config file"},

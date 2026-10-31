@@ -56,8 +56,21 @@ type handoffBinary struct {
 	duration time.Duration
 }
 
-// fileID names a file by device and inode.
-type fileID struct{ dev, ino uint64 }
+// fileID names a file by device and inode, and pins its content by size,
+// modification and change time. A rename over the path changes the inode; a
+// write in place keeps it, but changes the size or a time. The change time
+// cannot be set back without root, where it is read.
+type fileID struct {
+	dev, ino     uint64
+	size         int64
+	mtime, ctime int64
+}
+
+// withoutChange is f without its change time.
+func (f fileID) withoutChange() fileID {
+	f.ctime = 0
+	return f
+}
 
 // preflightBinary runs path's handoff-accepts and checks it reads the
 // manifest this build writes.
@@ -81,8 +94,11 @@ func preflightBinary(path string) (handoffBinary, error) {
 	cmd.Stdout, cmd.Stderr = &out, &errOut
 	started := time.Now()
 	if err := cmd.Run(); err != nil {
-		detail := clip(bytes.TrimSpace(errOut.Bytes()), 200)
-		return handoffBinary{}, fmt.Errorf("%s does not run as a tuios that can take this daemon's state: %v %s", abs, err, detail)
+		why := err.Error()
+		if detail := clip(bytes.TrimSpace(errOut.Bytes()), 200); len(detail) > 0 {
+			why += " " + string(detail)
+		}
+		return handoffBinary{}, fmt.Errorf("%s does not run as a tuios that can take this daemon's state: %s. Check that the path names a tuios binary that runs on this machine", abs, why)
 	}
 	took := time.Since(started)
 	var acc HandoffAccepts
@@ -98,7 +114,7 @@ func preflightBinary(path string) (handoffBinary, error) {
 	}
 	after, err := statFileID(abs)
 	if err != nil || after != before {
-		return handoffBinary{}, fmt.Errorf("%s was replaced while it was being checked", abs)
+		return handoffBinary{}, fmt.Errorf("%s was replaced while it was being checked. Run the upgrade again when the install has finished", abs)
 	}
 	return handoffBinary{path: abs, file: after, accepts: acc, duration: took}, nil
 }
@@ -137,7 +153,13 @@ func (b handoffBinary) stillThere() bool {
 
 var errNotAnExecutable = errors.New("not a regular executable file")
 
-// statFileID is the device and inode of the executable at path.
+// errBinaryReplaced refuses a confirmed binary whose file changed after the
+// person said yes to it.
+func errBinaryReplaced(path string) error {
+	return fmt.Errorf("%s was changed after the upgrade to it was confirmed. Ask again to upgrade to the file there now", path)
+}
+
+// statFileID is the identity of the executable at path.
 func statFileID(path string) (fileID, error) {
 	info, err := os.Stat(path)
 	if err != nil {

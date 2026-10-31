@@ -62,6 +62,7 @@ var (
 		EventSessionCreated, EventSessionClosed, EventClientSessionChanged, EventGap, EventAttention,
 		EventHostChanged, EventPrompt, EventCommandStarted, EventCommandFinished,
 		EventAgentActivity, EventTranscript, EventTransfer, EventTransferProgress, EventTransferFile,
+		EventDaemonUpgraded,
 		EventTML, EventTaskClaimed, EventTaskFinished, EventTaskChanged,
 	}
 	// knownEventTypes are the event types a subscribe filter can name.
@@ -144,6 +145,8 @@ var errorCodeCatalog = []struct {
 	{ErrVerbNoTransfer, "No transfer has that id. Finished transfers leave the list after 30 minutes. transfer-list shows the ids."},
 	{ErrVerbSameSession, "move-window was given to_session, and the window is already in that session. Nothing moved. Name another session, or leave out to_session and give workspace."},
 	{ErrVerbPaneNotMovable, "move-window cannot move the window to another session: it is a popup, a scratch pane, a TML pane, or a pane that runs on another machine. Nothing moved."},
+	{ErrVerbUpgradeRefused, "daemon-upgrade did not start: the new binary failed the preflight, the daemon holds something a live upgrade cannot hand over (a pane on another machine, a running fan check), or this platform cannot hand off. Nothing was changed. The message says which."},
+	{ErrVerbDaemonUpgrading, "A live upgrade replaced the daemon's image while it worked on, or waited in, this call. The connection closes after it. A call that reads or waits can be made again: the new image answers, with the same panes. A call that changes something, such as fan or send-text, may have partly run, so check what it did before calling again."},
 	{ErrVerbInvalidTML, "The TML document does not parse or does not validate. Nothing was opened or changed. The error lists each problem with a JSON Pointer to the node and the fix. Check a document with tuios tml validate."},
 	{ErrVerbNoSurface, "No open TML surface has that id. It closed, or the id is wrong. list-windows names the surface of each TML window."},
 	{ErrVerbTooManySurfaces, "The caller holds as many open TML surfaces as it may: 8 for a pane, and 32 per session for the callers outside the panes. Nothing was opened. Close one with tml-close."},

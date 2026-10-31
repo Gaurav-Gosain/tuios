@@ -650,6 +650,11 @@ func (m *OS) applyInboxEvents(msg InboxEventsMsg) tea.Cmd {
 			} else {
 				st.Items = append(st.Items, *it)
 			}
+			// An upgrade's confirm is its own dialog (syncUpgradeConfirm),
+			// which is alert enough.
+			if it.Upgrade != nil {
+				continue
+			}
 			// A question about the pane in front of the person opens the
 			// Inbox on it, which is the popup: it needs no alert.
 			if ev.Action == session.AttentionOpened && m.inboxPopAsk(*it) {
@@ -694,6 +699,7 @@ func (m *OS) inboxChanged() {
 	m.Inbox.Gen++
 	m.clampInboxSelection()
 	m.sidebarCache.invalidate()
+	m.syncUpgradeConfirm()
 }
 
 // inboxAttached reports whether an item is in the session this client is
@@ -1377,6 +1383,10 @@ func (m *OS) InboxAnswerAsk(n int) tea.Cmd {
 	if m.refuseRemoteAnswer("An answer") {
 		return nil
 	}
+	if it.Upgrade != nil {
+		m.ShowNotification("A live upgrade is answered in its own dialog, which every client attached here shows", "info", m.Settings.NotificationDuration)
+		return nil
+	}
 	if n < 1 || n > len(it.Options) {
 		m.ShowNotification("This question takes 1 to "+strconv.Itoa(len(it.Options)), "warning", m.Settings.NotificationDuration)
 		return nil
@@ -1393,7 +1403,7 @@ func (m *OS) InboxAnswerAsk(n int) tea.Cmd {
 		m.ShowNotification("This question just appeared. Read it, then answer", "warning", m.Settings.NotificationDuration)
 		return nil
 	}
-	return m.inboxAnswerAskCmd(it, it.Options[n-1])
+	return m.inboxAnswerAskCmd(it, it.Options[n-1], false)
 }
 
 // InboxAskAnsweredMsg is the answer to an answer-ask.
@@ -1410,7 +1420,7 @@ type InboxAskAnsweredMsg struct {
 
 // inboxAnswerAskCmd is the answer-ask call, with this client's attach nonce,
 // which is what lets the daemon take the answer as the person's.
-func (m *OS) inboxAnswerAskCmd(it session.AttentionItem, answer string) tea.Cmd {
+func (m *OS) inboxAnswerAskCmd(it session.AttentionItem, answer string, upgradeDialog bool) tea.Cmd {
 	if m.DaemonClient == nil || m.AttachedHost != "" || it.Host != "" {
 		m.ShowNotification("Answering needs a client attached to this machine's daemon", "warning", m.Settings.NotificationDuration)
 		return nil
@@ -1432,14 +1442,18 @@ func (m *OS) inboxAnswerAskCmd(it session.AttentionItem, answer string) tea.Cmd 
 			return InboxAskAnsweredMsg{Name: name, Answer: answer, Err: err}
 		}
 		defer func() { _ = client.Close() }()
-		raw, err := client.CallWithTimeout("answer-ask", map[string]any{
+		params := map[string]any{
 			"request_id":  it.RequestID,
 			"answer":      answer,
 			"human_nonce": nonce,
 			// The question the person read. The daemon answers nothing when
 			// it is not the one asked.
 			"question": it.Summary,
-		}, 5*time.Second)
+		}
+		if upgradeDialog {
+			params["upgrade_dialog"] = true
+		}
+		raw, err := client.CallWithTimeout("answer-ask", params, 5*time.Second)
 		if err != nil {
 			return InboxAskAnsweredMsg{Name: name, Answer: answer, Err: err}
 		}

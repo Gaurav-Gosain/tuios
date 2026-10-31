@@ -8997,6 +8997,184 @@ TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios TUIOS_E2E_HANDOFF_MEASURE=1 \
   go test -count=1 -run '^TestDaemonUpgradeMeasuresABusyDaemon$' .
 ```
 
+### PR 5: `tuios daemon upgrade` and the client notice
+
+- `TestDaemonUpgradeCommandKeepsPanes`: `tuios daemon upgrade --binary <copy>` reports the preflight, the panes it paused, the pid it kept and the time it took; the daemon keeps its pid, runs the copy and keeps every pane's process. A second run with `--json` reports two panes and no fallback. A `wait-for` that was waiting in the daemon when it was upgraded ends with `daemon_upgrading`, not with a dropped connection.
+- `TestDaemonUpgradeKeepsPaneProcesses` (PR 4) is driven by the command from this PR on.
+- `TestAttachedClientIsToldToReattach`: a real attached client exits with status 0 and prints "The daemon was upgraded to dev. Your programs are still running. Run 'tuios attach e2e-reattach' to continue."; the command reports "1 attached client was told to attach again".
+- `TestFederationLinkRedialsAfterUpgrade`: a daemon linked to a host through the ssh stand-in of `hosts_manage_test.go` has the link up after the upgrade, with one live link child, a new one, and none defunct.
+- `TestDaemonUpgradeRefusalNamesTheServer`: an upgrade of a named server to `false` is refused, and the refusal says to run `tuios --server <name> kill-server`, never the bare `tuios kill-server` that stops the default daemon.
+- `TestDaemonUpgradeFromAPaneIsRefused`: a pane under the default open mode, which holds admin, runs `tuios daemon upgrade --binary <copy>` with no client attached. It must exit non-zero with "daemon-upgrade is for the person", the daemon's image must not change, and the same upgrade from outside every pane then goes through. Run on 2026-10-28 on macOS arm64 (Go 1.26.10). With a client attached the pane's upgrade asks the person; see "A pane's upgrade confirmed at a client" below.
+
+Run on 2026-10-17 on macOS arm64, one build per control.
+
+| Control | How | Test that fails | Verdict |
+| --- | --- | --- | --- |
+| No `MsgDaemonUpgrading` | the send in `closeClientsForHandoff` cut | `TestAttachedClientIsToldToReattach`: "the client said \"The connection to the TUIOS daemon was lost.\" as it exited", "the client exited 1 after an upgrade" | **caught** |
+| A waiting call is not answered | the `cs.verbCall.take()` answer in `closeClientsForHandoff` cut | `TestDaemonUpgradeCommandKeepsPanes`: "a wait-for in flight during the upgrade ended with \"failed to read response: EOF\"" | **caught** |
+| The new image does not dial its links | `serve` skips `federation.Start` on an image made by a handoff | `TestFederationLinkRedialsAfterUpgrade`: "the link to the host did not come back up after the upgrade" | **caught** |
+| The refusal names no server | `killServerCommand` returns the bare `tuios kill-server` | `TestDaemonUpgradeRefusalNamesTheServer`: "the refusal on server e2e-upname does not say to run 'tuios --server e2e-upname kill-server'", "… says to run the bare 'tuios kill-server', which stops the default daemon" | **caught** |
+| A pane with admin may upgrade (2026-10-28) | the `mayActAsHuman` check in `verbDaemonUpgrade` made false | `TestDaemonUpgradeFromAPaneIsRefused`, 2 runs of 2: "a pane upgraded the daemon ({PID:38155 Instance:3731d834-…} then {PID:38155 Instance:bef886f4-…})" | **caught** |
+| The old image does not stop its links | `d.federation.Stop()` cut from `prepare` | none | **not caught** |
+
+The last control is not caught by this rig. The stand-in's host is this daemon itself, so the link's relay is a client of the daemon, and the upgrade closing every client ends the relay before the exec, which the old image then reaps. A link to a real machine does not end that way; with the stop cut, its ssh child would stay this pid's child across the exec, unread and never waited for. The stop is kept on the strength of that reasoning, not of a test.
+
+```sh
+TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios \
+  go test -count=1 -run '^(TestDaemonUpgradeCommandKeepsPanes|TestAttachedClientIsToldToReattach|TestFederationLinkRedialsAfterUpgrade|TestDaemonUpgradeRefusalNamesTheServer|TestDaemonUpgradeFromAPaneIsRefused)$' .
+```
+
+### A pane's upgrade confirmed at a client
+
+`e2e/tui/upgrade_confirm_test.go`. A pane's `tuios daemon upgrade` asks the person in a dialog on every attached client (`internal/session/upgrade_confirm.go`, `internal/app/upgrade_confirm.go`). Each test writes `handoff.json` and the client's screens under `artifactDir`.
+
+- `TestPaneUpgradeConfirmedAtTheClient`: the dialog names the pane (`agent`), the copy's full path and its version; Down then Enter at the client upgrades the daemon to the copy with its pid kept, and the pane's command exits 0.
+- `TestPaneUpgradeRefusedWithoutYes`: Enter on the default row, Esc, Down, Up, Enter, and Up, Enter each refuse with "daemon-upgrade is for the person" and "The person answered No", close the dialog and leave the image as it was. Up then Enter is what a shell takes for "run the last command again".
+- `TestPaneUpgradeRefusesAFileChangedAfterTheDialog`: while the dialog is open the copy's last byte is written over in place with the same byte and its modification time set back, so only its change time moves; Yes is refused with "was changed after the upgrade to it was confirmed".
+- `TestPaneUpgradeTimesOut`: with `TUIOS_TEST_UPGRADE_CONFIRM_MS=3000` and no answer, the upgrade is refused no sooner than 3 s, saying "Nobody answered the dialog", and the dialog closes.
+- `TestDaemonUpgradeFromAPaneIsRefused` (PR 5): with no client attached the pane's upgrade is refused in under 30 s, not after the 60 s wait.
+- `TestPaneUpgradeTakesOnlyKeysAtTheClient`: with the dialog up, the other pane printing `j`, Enter, Down and `Yes`; `tuios send-keys -s <session> "j Enter"`; a tape's `Press j Enter`; a bracketed paste of `j` and Enter; and `tuios call answer-ask` with Yes from the other pane each leave the dialog open and the image unchanged. Each ends in Enter, so any one of them that got through would answer the dialog and close it (the controls below ran when `j` still moved to Yes, and so upgraded the daemon). Esc then refuses.
+- `TestPaneUpgradeFirstAnswerWins`: two clients show the dialog. Esc on the first closes it on the second, and Down, Enter typed there right after upgrades nothing.
+- `TestPluginUpgradeRefusedWithoutADialog`: a herdr plugin's command runs `tuios daemon upgrade` with a client attached; it is refused with "daemon-upgrade is for the person" and the client never shows the dialog.
+- `TestOutsideUpgradeNeedsNoDialog`: with a client attached, an upgrade from outside every pane goes through and the client never shows the dialog.
+
+Run on 2026-10-29 on macOS arm64 (Darwin 27, Go 1.26.10) against `pr/live-handoff-5`, one build per control, one run each:
+
+| Control | How | Test that fails | Verdict |
+| --- | --- | --- | --- |
+| Keys put through the client answer | `m.ProcessingRemoteKeys \|\| m.pressingTapeKeys` cut from `UpgradeConfirmKey` | `TestPaneUpgradeTakesOnlyKeysAtTheClient`: "send-keys of j and Enter upgraded the daemon" | **caught** |
+| A tape's Press answers | `m.pressingTapeKeys` alone cut from `UpgradeConfirmKey` | `TestPaneUpgradeTakesOnlyKeysAtTheClient`: "a tape's Press of j and Enter upgraded the daemon" | **caught** |
+| A pane's answer-ask is taken | `humanNonceHeld` and `humanNonceFor` both cut from `verbAnswerAsk` | `TestPaneUpgradeTakesOnlyKeysAtTheClient`: "answer-ask from the other pane upgraded the daemon" | **caught** |
+| One nonce check of answer-ask gone | `humanNonceHeld` alone cut from `verbAnswerAsk` | none | **not caught** |
+| The dialog stays on the other client | the close branch cut from `syncUpgradeConfirm` | `TestPaneUpgradeFirstAnswerWins`: "the dialog stayed open after the first client answered" | **caught** |
+| A plugin gets the dialog | the `callerIsPlugin` refusal cut from `verbDaemonUpgrade` | `TestPluginUpgradeRefusedWithoutADialog`: "a plugin's upgrade opened the dialog" | **caught** |
+| Yes is the default | the dialog opens with Yes under the cursor | `TestPaneUpgradeRefusedWithoutYes`: "default upgraded the daemon" | **caught** |
+| No client still waits | the `personClients` check cut from `confirmUpgrade` | `TestDaemonUpgradeFromAPaneIsRefused`: "with no client attached the pane's upgrade took 1m0.808010667s to be refused" | **caught** |
+
+The single nonce check is not caught because there are two: a nonce the daemon never issued fails `humanNonceFor` as well, so only cutting both lets a pane's answer through. A paste has no control of its own. A paste is never turned into keys, and the dialog is an overlay that owns the keyboard, so `pasteTakenByOverlay` drops it with every other overlay's; a dedicated drop for the dialog was tried, its control was not caught for that reason, and it was removed. Bytes a pane prints have no control either: they go to that pane's emulator and never reach a client's input. Not covered by an end-to-end test: the refusal of an upgrade ask answered over a link (`askIsUpgrade` in `verbAnswerAsk`), which needs a client of a hub answering a host's dialog, and the refusal of a binary replaced between the person's Yes and the exec (`pinned` in `prepareHandoff` and `commit`), which needs the file swapped inside that window.
+
+```sh
+TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios \
+  go test -count=1 -run '^(TestPaneUpgrade|TestPluginUpgradeRefusedWithoutADialog|TestOutsideUpgradeNeedsNoDialog|TestDaemonUpgradeFromAPaneIsRefused)' .
+```
+
+#### Review fixes: the dialog keys and the put-back
+
+Run on 2026-10-30 on macOS arm64 (Darwin 27, Go 1.26.10) against `pr/live-handoff-4`, one build carrying the first two controls and one for the third, one run each:
+
+| Control | How | Test that fails | Verdict |
+| --- | --- | --- | --- |
+| Every move key toggles the cursor | the `UpgradeConfirmKey` switch put back to `st.selected = 1 - st.selected` for Up, Down, Left, Right, Tab, Shift+Tab, `j` and `k` | `TestPaneUpgradeRefusedWithoutYes`: "up upgraded the daemon ({PID:91298 Instance:5301f1a9-…} then {PID:91298 Instance:77391964-…})" | **caught** |
+| A put-back leaves the plugin host stopped | `h.runner.Resume()` and `clear(h.startedUp)` cut from `pluginHost.restart` | `TestDaemonUpgradeRefusesWhileHookOrPluginRuns/plugin`: "after a put-back the plugin command did not run: exit status 1", "the startup command ran 1 times, want once at start and once after the put-back" | **caught** |
+| A file changed in place after the dialog runs | `fileIDOf` back to device and inode only (size and times zeroed) | `TestPaneUpgradeRefusesAFileChangedAfterTheDialog`: "a Yes for a file changed after the dialog opened upgraded the daemon ({PID:3002 Instance:066ec880-…} then {PID:3002 Instance:0df50cdf-…})" | **caught** |
+| A put-back leaves the host pumps ended | the pump restart cut from `hostFleet.start` | none | **not run** |
+
+The put-back is a commit refused by its second preflight: `test-handoff` with `hold_ms`, and the binary replaced by a shell script during the hold, after the plugins, the links and the host pumps were stopped. The host pumps have no rig here: the fleet's start after stop is kept on reading `hostFleet.stop`, which ends each pump and keeps its host, and `reconcile`, which starts a pump only for a name it does not have.
+
+```sh
+TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios \
+  go test -count=1 -run '^(TestPaneUpgradeRefusedWithoutYes|TestDaemonUpgradeRefusesWhileHookOrPluginRuns|TestPaneUpgradeRefusesAFileChangedAfterTheDialog)$' .
+```
+#### Second review: an answer only from the dialog, no Tab, no file run without a dialog
+
+Run on 2026-10-31 on macOS arm64 (Darwin 27, Go 1.27.3) against `pr/live-handoff-4`, one build per control, one run each:
+
+- `TestPaneUpgradeRefusedWithoutYes` gains Tab, Enter, which a shell's completion types: `cd pro<Tab><Enter>` after the settle delay must not say yes.
+- `TestPaneUpgradeRunsNoFileWithoutADialog`: a pane calls the `daemon-upgrade` verb directly (the CLI runs the binary itself first, in the pane, where it may), naming a script that leaves a mark when run. With no client attached, with only a client attached under `TUIOS_VIEW_ONLY=1` (as `tuios-web --read-only` attaches), and with `[agents] enabled = false` and a client attached, it must be refused within 30 s with the reason, and the mark must not exist.
+- `TestPaneUpgradeRefusesAnAnswerFromTheGUIBridge`: with the dialog up, a `tuios gui-bridge` attached to the session sends `answer-ask` with Yes from its renderer, once plainly and once with `upgrade_dialog: true`. The bridge adds its client's nonce to both. Each must be refused with `not_human`, leave the dialog open and the image unchanged; Esc at the client then refuses.
+
+| Control | How | Test that fails | Verdict |
+| --- | --- | --- | --- |
+| A nonce alone answers an upgrade ask | the `!p.UpgradeDialog` refusal cut from `verbAnswerAsk` | `TestPaneUpgradeRefusesAnAnswerFromTheGUIBridge`: "the bridge's answer-ask (plain) upgraded the daemon" | **caught** |
+| The bridge passes the renderer's `upgrade_dialog` on | `upgrade_dialog` no longer dropped in `guibridge.verbParams` | `TestPaneUpgradeRefusesAnAnswerFromTheGUIBridge`: "the bridge's answer-ask (upgrade_dialog) upgraded the daemon" | **caught** |
+| Tab moves to Yes | `"tab"` put back beside Down and Right in `UpgradeConfirmKey` | `TestPaneUpgradeRefusedWithoutYes`: "tab upgraded the daemon" | **caught** |
+| The preflight runs the pane's file before the checks | `handoff_verb.go` back to the preflight first, with the no-client and agents-off checks only in `confirmUpgrade` | `TestPaneUpgradeRunsNoFileWithoutADialog/no-client` and `/agents-off`: "the daemon ran the pane's file with no dialog to show" | **caught** |
+| A view-only client counts as one that could answer | `!cs.viewOnly` cut from `personClients` | `TestPaneUpgradeRunsNoFileWithoutADialog/view-only`: "the daemon ran the pane's file with no dialog to show", and the call waited for an answer no key could give | **caught** |
+
+The pin taken before the checks has no control: a file swapped between it and the preflight needs the swap inside that window, the same limit as the pin between Yes and the exec above.
+
+```sh
+TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios \
+  go test -count=1 -run '^(TestPaneUpgradeRefusesAnAnswerFromTheGUIBridge|TestPaneUpgradeRefusedWithoutYes|TestPaneUpgradeRunsNoFileWithoutADialog)$' .
+### The keeper: a crash of the new image after the swap
+
+`e2e/tui/handoff_keeper_test.go`, for section 7.1 of the spec. The daemon runs with `TUIOS_TEST_HANDOFF=1`; `TUIOS_TEST_HANDOFF_CRASH` ends the image a handoff execs at `start` (SIGKILL first thing in `RunAdopted`), `adopt` (with every pane rebuilt, before the fallback is disarmed), `serve` (after it serves, before it releases the keeper) or `fallback` (in the in-place fallback image), and `TUIOS_TEST_HANDOFF_CRASH_MODE=panic` makes it a panic in a goroutine of its own instead of SIGKILL.
+
+- `TestDaemonUpgradeKeeperStandsDown`: an upgrade held 1.5 s between the manifest write and the exec. During the hold exactly one keeper runs, as the daemon's child (the positive half, which shows the `ps` search finds one). After the new image answers no keeper is left (the first `ps` already finds none) and the daemon has no defunct child; the pane keeps its pid.
+- `TestDaemonUpgradeSurvivesACrashOfTheNewImage`, four cases: `killed-at-start`, `panic-while-adopting`, `killed-once-serving`, and `fallback-also-dies` (`TUIOS_TEST_HANDOFF_FAIL=error` with the fallback image killed). `tuios daemon upgrade --json` reports `recovered` and "died before it was up" and exits 1; the daemon answers from the kept `tuios.prev` (on Linux, from the binary it ran, through the descriptor the keeper holds) under a new pid, the old pid is gone; every pane keeps its pid; a 20 ms counter goes on past where it stood, with no gap except in `killed-once-serving`, where the dead image had read some (one gap in the recorded run); a pane told to exit 9 afterwards reads 9 on macOS; no keeper is left. Each case writes `handoff.json` with the pids, the command's output, the image's stats, the counter and the exit status.
+
+Run on 2026-10-17 on macOS arm64 (Darwin 27, Go 1.26.9) against the branch feat/live-handoff-keeper, one build per control. Each control was run against the regex below plus `TestDaemonUpgradeFallsBackToPreviousBinary`.
+
+| Control | How | Test that fails | Verdict |
+| --- | --- | --- | --- |
+| No keeper | `startKeeper` returns `nil, nil` | `TestDaemonUpgradeKeeperStandsDown`: "0 keepers while the upgrade was held, want 1"; every case of `TestDaemonUpgradeSurvivesACrashOfTheNewImage`: "call hello: ... The TUIOS daemon is not running, but a stale socket is left over" (the panes ended with the image) | **caught** |
+| The fallback exec closes the keeper's socket | the keeper's descriptor left out of `adoptFallback.prepare` | `TestDaemonUpgradeFallsBackToPreviousBinary/error` and `/hang`: "the daemon's pid changed from 67349 to 67453" (the keeper took the socket's end as the daemon's death and started a second daemon beside the fallback image). The crash cases pass | **caught** |
+| The new image never releases the keeper | `d.releaseKeeper()` cut from `adopt` | `TestDaemonUpgradeKeeperStandsDown`: "a keeper is still there 3.094s after the new image was up", "the daemon has a child left from the keeper" | **caught** |
+| The released keeper is not reaped | `go reapKeeper(k.pid)` cut from `releaseKeeper` | `TestDaemonUpgradeKeeperStandsDown`: "the daemon has a child left from the keeper: \"70118 <defunct> <defunct>\"" | **caught** |
+| No wait for a pane that is not the daemon's child | `monitorExit` ignores the peek's `ECHILD` and reaps as before | every case of `TestDaemonUpgradeSurvivesACrashOfTheNewImage`: "the pane that exited 9 after the crash reads -1" | **caught** (macOS only, see below) |
+| The keeper's descriptor map is ignored | `keptAt` returns the number unchanged | every case of `TestDaemonUpgradeSurvivesACrashOfTheNewImage`: "The TUIOS daemon is not running, but a stale socket is left over" (the restored image read the old image's numbers and could not adopt) | **caught** |
+| The keeper runs the daemon's own `/proc/self/fd/N` (Linux, 2026-10-28) | `keeperBinary` returns `prev.path`, which names the binary's descriptor in the daemon, not where the keeper holds it | every case of `TestDaemonUpgradeSurvivesACrashOfTheNewImage`, 2 runs of 2, in Docker (`golang:1.26.10`, Linux arm64): "call hello: exit status 3: The TUIOS daemon is not running, but a stale socket is left over" (the keeper could not exec the previous binary, and the panes ended) | **caught** |
+
+The wait control is caught only by the exit status, which the test checks on macOS alone: on Linux a non-child's status is not known, so there the same cut would leave the exit code at -1 either way and pass. The pane's pid, its output and the restored daemon all look right under that cut, because a recorded exit does not close a window by itself.
+
+```sh
+TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios \
+  go test -count=1 -run '^(TestDaemonUpgradeKeeperStandsDown|TestDaemonUpgradeSurvivesACrashOfTheNewImage|TestDaemonUpgradeFallsBackToPreviousBinary)$' .
+```
+#### Third review: only a client that shows the dialog counts, and the bridge cannot upgrade
+
+Run on 2026-10-31 on macOS arm64 (Darwin 27, Go 1.27.3) against `pr/live-handoff-4`, one build per control, one run each. The old client is v0.12.0 built from its tag:
+
+- `TestPaneUpgradeRunsNoFileWithoutADialog/bridge-only`: only a `tuios gui-bridge` is attached. The pane's direct `daemon-upgrade` must be refused within 30 s with "No client is attached to show the dialog", and the mark must not exist.
+- `TestPaneUpgradeRunsNoFileWithoutADialog/old-client`: only a client of `TUIOS_E2E_OLD_BIN` is attached, which never sends `upgrade_dialog` on its attach. The same refusal, and no mark. It skips when `TUIOS_E2E_OLD_BIN` is not set.
+- `TestPaneUpgradeRefusesAnAnswerFromTheGUIBridge` gains a step: with the dialog up, the renderer calls `daemon-upgrade` with the copy through the bridge. It must be refused with `forbidden` and leave the image unchanged.
+
+| Control | How | Test that fails | Verdict |
+| --- | --- | --- | --- |
+| Any input-taking client counts as one that shows the dialog | `cs.upgradeDialog` cut from `personClients` | `TestPaneUpgradeRunsNoFileWithoutADialog/bridge-only` and `/old-client`: "the daemon ran the pane's file with no dialog to show" | **caught** |
+| The bridge proxies `daemon-upgrade` | the `personOnlyVerbs` refusal cut from `guibridge.runVerb` | `TestPaneUpgradeRefusesAnAnswerFromTheGUIBridge`: "the bridge's daemon-upgrade upgraded the daemon ({PID:63373 Instance:f4e2fd5b-…} then {PID:63373 Instance:419948e0-…})" | **caught** |
+
+```sh
+TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios TUIOS_E2E_OLD_BIN=/path/to/tuios-v0.12.0 \
+  go test -count=1 -run '^(TestPaneUpgradeRefusesAnAnswerFromTheGUIBridge|TestPaneUpgradeRunsNoFileWithoutADialog)$' .
+```
+
+### A quiesced pane is frozen
+
+- `TestSelfExecFreezesPaneDuringHandoff`: a probe pane turns on modes 2048 and 2031 and prints, through `cat -v`, every reply it hears, and on `SIGWINCH` or `SIGUSR1` the size the kernel gives it. A `test-handoff` is held 2.5 s between the manifest and the exec, and in the hold a `resize` to 117x33 and a `stream-pane` with a light `viewer` report go out on connections opened before the handoff; the test checks the old image answered them. After the exec the pane must be the size it was written down at, the kernel must give the program the same size, and the program must have heard no size report, no `SIGWINCH` and no scheme report in the span. A resize and a light push to the new image must then reach the program.
+- `TestHandoffPutBackAppliesWhatWasHeld`: the same calls in the hold of a handoff to a copy of the binary, which is replaced in the hold by a script that is not a tuios, so the exec runs the preflight again, it fails, and the daemon is put back with its clients attached. The pane must then be 117x33, the kernel must give the program 117x33, and the program's last size report must be 33x117 and its last scheme report light.
+
+Run on 2026-10-17 on macOS arm64 (Darwin 27, Go 1.26.9) against feat/live-handoff, one build per control. The first two controls were run again on 2026-10-31 (Go 1.27.3) against `pr/live-handoff-5`, where this fix follows the keeper, and were caught with the same messages.
+
+| Control | How | Test that fails | Verdict |
+| --- | --- | --- | --- |
+| A resize reaches a frozen pane | the `frozen` check at the top of `resizeStreamLocked` made `if false` | `TestSelfExecFreezesPaneDuringHandoff`: "after the handoff the pane is 28x98 and the kernel gives its program 33x117", "the program heard 2 in-band size reports by the handoff's end, 1 before it: [28x98 33x117]", "the program read its size 3 times by the handoff's end, want 2" | **caught** |
+| A colour push reaches a held session | the `reportsHeld` check in `applyReportColors` made `if false` | `TestSelfExecFreezesPaneDuringHandoff`: "the program heard 1 scheme reports by the handoff's end, 0 before it: [2]" | **caught** |
+| A put-back drops the held size | `Resume`'s `thaw` skips the `resizeStreamLocked` of the held size | `TestHandoffPutBackAppliesWhatWasHeld`: "after the put-back the pane is 28x98, want 33x117", "the kernel gives the program 28x98", "the program's last in-band size report is not 33x117: [28x98]" | **caught** |
+| A put-back drops the held colours | `releaseReportColors` skips the apply of the push it held | `TestHandoffPutBackAppliesWhatWasHeld`: "the program was not told of the light scheme pushed during the freeze: []" | **caught** |
+
+Not covered by a test: the cell size in pixels a TUI client reports (`UpdatePixelDimensions`), which no verb sends. It is held by the same flag, under `terminalMu` for the emulator and `winsizeMu` for the kernel, and applied by the same `thaw`.
+
+```sh
+TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios \
+  go test -count=1 -run '^(TestSelfExecFreezesPaneDuringHandoff|TestHandoffPutBackAppliesWhatWasHeld)$' .
+```
+
+### Hooks are held across a handoff
+
+- `TestHandoffHoldsHooks`: an `after-workspace-switch` hook sleeps 3 s and appends to a file. A `select-workspace` on a connection opened before the handoff, answered by the old image, lands in a 1.5 s hold between the manifest and the exec. "exec": after the handoff, once the hook would have ended, the daemon must have no `<defunct>` child and the file must be empty. "put back": the binary is replaced in the hold, the handoff is put back, and the hook must run once.
+
+The hooks wait on the pipe holds of `handoff_refuse.go`, which shut once the panes are frozen; there is no hold of their own in the hooks manager. Run on 2026-10-31 on macOS arm64 (Darwin 27, Go 1.27.3) against `pr/live-handoff-5`, one build per control.
+
+| Control | How | Test that fails | Verdict |
+| --- | --- | --- | --- |
+| A hook takes no pipe hold | drop `m.SetHold(d.pipes.hold)` in `loadHooks` | `TestHandoffHoldsHooks/exec`: "the daemon has zombie children after the handoff: [5257 <defunct> <defunct>]", "a hook fired in the handoff's hold ran across the exec: \"ran\\n\"" | **caught** |
+| A put-back leaves the waiting hooks waiting | drop `close(p.closed)` from `pipeHolds.open` | `TestHandoffHoldsHooks/put_back`: "the hook held during the handoff ran 0 times after the put-back, want once" | **caught** |
+
+```sh
+TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestHandoffHoldsHooks$' .
+```
+
 ## Deleting a worktree from the close-confirmation dialog
 
 `TestSidebarCloseDeletesWorktree` takes the third row of the close dialog on

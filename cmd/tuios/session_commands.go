@@ -450,6 +450,9 @@ func runDaemonSessionOn(host, sessionName string, createNew bool) error {
 	// The person's terminal, for the panes of a session this attach makes.
 	// The detached and verb paths send it too.
 	client.UseCallerTerm()
+	// The person is at this terminal, so the live upgrade dialog shows here
+	// and takes their keys. See internal/app/upgrade_confirm.go.
+	client.UpgradeDialog = true
 	if host == "" && createNew {
 		// tuios new may supply --cwd. The daemon ignores the directory if
 		// this attach finds a session that already exists.
@@ -659,6 +662,17 @@ func runDaemonSessionOn(host, sessionName string, createNew bool) error {
 			where = " on " + exitHost
 		}
 		fmt.Printf("Detached from session '%s'%s.\n", exitSession, where)
+		return nil
+	}
+
+	// A live upgrade replaced the daemon's image. The session and every
+	// program in it run on, and nothing failed here.
+	if reason == app.ExitDaemonUpgraded {
+		to, _ := exitClient.UpgradedTo()
+		if to == "" {
+			to = "a new version"
+		}
+		fmt.Printf("The daemon is being upgraded to %s. Your programs are still running. Run 'tuios attach %s' to continue.\n", to, exitSession)
 		return nil
 	}
 

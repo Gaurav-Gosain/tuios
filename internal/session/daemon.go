@@ -75,6 +75,10 @@ type Daemon struct {
 	// handoff_prev.go.
 	prevMu sync.Mutex
 	prev   *prevBinary
+	// keeper holds a copy of the panes' descriptors from before a handoff's
+	// exec until the image it made is up. See handoff_keeper.go.
+	keeperMu sync.Mutex
+	keeper   *handoffKeeper
 	// lastHandoff is what the handoff that made this image measured, nil
 	// for an image that started fresh.
 	lastHandoff atomic.Pointer[HandoffStats]
@@ -652,9 +656,18 @@ type connState struct {
 	// largest and latest it does not count toward the session's size.
 	// Guarded by mu.
 	viewOnly bool
+	// upgradeDialog says the client's attach marked it as one that shows a
+	// live upgrade's dialog and answers it only with a key the person
+	// pressed. Guarded by mu. See upgrade_confirm.go.
+	upgradeDialog bool
 	// passive is a pane viewer without a full renderer command executor.
 	// It does not size the session, but may write to its subscribed PTY. Guarded by mu.
 	passive bool
+
+	// verbCall is the JSON verb this connection is running, so a live
+	// upgrade can answer it before closing the connection. See
+	// handoff_clients.go.
+	verbCall inflightVerb
 
 	// takeover, when a verb sets it, runs after that verb's reply line has been
 	// written and owns the connection from then on; the JSON loop returns
@@ -1768,6 +1781,10 @@ func (d *Daemon) shutdown() error {
 		log.Println("Shutting down daemon...")
 		// The clients hear why before anything closes under them.
 		d.sayGoodbye()
+
+		// A daemon stopped on purpose before a handoff's new image was up is
+		// not a crash: the keeper stands down rather than bring it back.
+		d.releaseKeeper()
 
 		// The Inbox is saved first and not again. Everything below closes
 		// panes, and a pane closing on shutdown is not the person dealing

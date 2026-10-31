@@ -22,3 +22,8 @@ func newHandoffFile(string) (*os.File, error) { return nil, ErrHandoffUnsupporte
 func adoptMaster(int, string) (paneIO, error) { return nil, ErrHandoffUnsupported }
 
 func rewindDescriptor(int) error { return ErrHandoffUnsupported }
+
+func startKeeper(string, []int, []string) (*handoffKeeper, error) { return nil, ErrHandoffUnsupported }
+
+// RunHandoffKeeper has nothing to keep where there is no live handoff.
+func RunHandoffKeeper([]int, []string) error { return ErrHandoffUnsupported }

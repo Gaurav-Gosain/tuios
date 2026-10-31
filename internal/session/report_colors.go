@@ -61,6 +61,10 @@ func (d *Daemon) ownsReportColors(cs *connState, sessionID string) bool {
 func (s *Session) applyReportColors(bgHex, fgHex, palHex string) {
 	s.ptysMu.Lock()
 	defer s.ptysMu.Unlock()
+	if s.reportsHeld {
+		s.reportHeld = &heldReportColors{Bg: bgHex, Fg: fgHex, Palette: palHex}
+		return
+	}
 	if s.reportBgHex == bgHex && s.reportFgHex == fgHex && s.reportPalHex == palHex {
 		return
 	}
@@ -69,6 +73,35 @@ func (s *Session) applyReportColors(bgHex, fgHex, palHex string) {
 	s.reportPal = parseReportPalette(palHex)
 	for _, p := range s.ptys {
 		p.setReportColors(s.reportFg, s.reportBg, s.reportPal)
+	}
+}
+
+// heldReportColors is a push of the colours held by holdReportColors.
+type heldReportColors struct {
+	Bg, Fg, Palette string
+}
+
+// holdReportColors keeps every push of the colours from the emulators until
+// releaseReportColors, for a handoff from before its panes stop until the
+// exec. A push in that span would tell a program with mode 2031 on that the
+// scheme changed, from an emulator already written down with the colours
+// before it, and the new image would answer with those. A push held there is
+// applied when the handoff is put back, and after the exec it comes again
+// from the clients, which every one attaches again and pushes its colours.
+func (s *Session) holdReportColors() {
+	s.ptysMu.Lock()
+	defer s.ptysMu.Unlock()
+	s.reportsHeld = true
+}
+
+// releaseReportColors ends holdReportColors and applies the last push held.
+func (s *Session) releaseReportColors() {
+	s.ptysMu.Lock()
+	held := s.reportHeld
+	s.reportsHeld, s.reportHeld = false, nil
+	s.ptysMu.Unlock()
+	if held != nil {
+		s.applyReportColors(held.Bg, held.Fg, held.Palette)
 	}
 }
 

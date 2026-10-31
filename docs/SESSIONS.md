@@ -19,6 +19,7 @@ what does and does not come back after each kind of interruption.
 - [Picture in Picture](#picture-in-picture)
 - [Return Notes](#return-notes)
 - [What Survives](#what-survives)
+- [Upgrading the Daemon Without Ending Programs](#upgrading-the-daemon-without-ending-programs)
 - [Resurrection](#resurrection)
 - [The resurrect Command](#the-resurrect-command)
 - [Windows on Another Machine](#windows-on-another-machine)
@@ -132,12 +133,15 @@ also run it explicitly:
 tuios daemon                 # run in the foreground (useful for debugging)
 tuios daemon --log-level=messages
 tuios kill-server            # stop the daemon and all its sessions
+tuios daemon upgrade         # move the daemon to another build, programs still running
 tuios restart-server         # stop it and start the newest tuios installed
 ```
 
 `tuios kill-server` is synchronous. It returns only after every session's state
 has been written and the daemon's socket has been removed, so a new daemon can
 be started as soon as it returns.
+
+A restart ends the programs in every pane. `tuios daemon upgrade` moves the running daemon to another build with them still running; see [Upgrading the Daemon Without Ending Programs](#upgrading-the-daemon-without-ending-programs).
 
 ### Restart the daemon after an update
 
@@ -526,26 +530,26 @@ survives a daemon restart. See [`tuios note`](CLI_REFERENCE.md#tuios-note).
 
 ## What Survives
 
-Four tiers of interruption, and what comes back after each. "Structure" means
+Five tiers of interruption, and what comes back after each. "Structure" means
 window count, geometry, workspace assignment, custom names, minimize state, the
 BSP tree and the layout mode.
 
-| | Client exits (detach, crash, SSH drop) | Daemon restart (`kill-server`, `SIGTERM`) | Daemon crash (`SIGKILL`, OOM) | Reboot |
-|---|---|---|---|---|
-| Session exists afterwards | Yes | Yes, restored on daemon start | Yes, restored on daemon start | Yes, restored on daemon start |
-| Session id | Yes | Yes | Yes | Yes |
-| Window structure | Yes | Yes | Partial: as of the last save, a couple of seconds stale | Partial: as of the last save |
-| Shell processes | Yes, they keep running | No, fresh shells are spawned | No, fresh shells are spawned | No, fresh shells are spawned |
-| Working directories | Yes | Yes, on Linux and macOS (see below) | Partial: the cwd from the last save | Partial: the cwd from the last save |
-| Screen contents | Yes | Yes, as history above a divider (see below) | Partial: as of the pane's last save, up to 30 seconds stale | Yes, as for a daemon restart |
-| Scrollback | Yes | Yes, the last 1000 lines by default | Partial: as of the pane's last save | Yes, as for a daemon restart |
-| Running programs (vim, tail, a build) | Yes | No | No | No |
-| Agent conversations (resumable harnesses) | Yes, the agent keeps running | The conversation, not the process: see below | Same | Same |
-| Sidebar shown or hidden | Yes | Yes | Partial: as of the last save | Partial: as of the last save |
-| Space membership | Yes | Yes | Partial: as of the last save | Partial: as of the last save |
-| Return notes | Yes | Yes | Partial: as of the last save | Partial: as of the last save |
-| Copy-mode position, selection | No, per-client | No | No | No |
-| Input mode (window vs terminal) | No, per-client | No | No | No |
+| | Client exits (detach, crash, SSH drop) | Live upgrade (`daemon upgrade`) | Daemon restart (`kill-server`, `SIGTERM`) | Daemon crash (`SIGKILL`, OOM) | Reboot |
+|---|---|---|---|---|---|
+| Session exists afterwards | Yes | Yes, the daemon keeps running it | Yes, restored on daemon start | Yes, restored on daemon start | Yes, restored on daemon start |
+| Session id | Yes | Yes | Yes | Yes | Yes |
+| Window structure | Yes | Yes | Yes | Partial: as of the last save, a couple of seconds stale | Partial: as of the last save |
+| Shell processes | Yes, they keep running | Yes, the same processes keep running | No, fresh shells are spawned | No, fresh shells are spawned | No, fresh shells are spawned |
+| Working directories | Yes | Yes | Yes, on Linux and macOS (see below) | Partial: the cwd from the last save | Partial: the cwd from the last save |
+| Screen contents | Yes | Yes, the live screen, alternate screen included | Yes, as history above a divider (see below) | Partial: as of the pane's last save, up to 30 seconds stale | Yes, as for a daemon restart |
+| Scrollback | Yes | Partial: the last 1000 lines | Partial: the last 1000 lines by default | Partial: as of the pane's last save | Yes, as for a daemon restart |
+| Running programs (vim, tail, a build) | Yes | Yes | No | No | No |
+| Agent conversations (resumable harnesses) | Yes, the agent keeps running | Yes, the agent keeps running | The conversation, not the process: see below | Same | Same |
+| Sidebar shown or hidden | Yes | Yes | Yes | Partial: as of the last save | Partial: as of the last save |
+| Space membership | Yes | Yes | Yes | Partial: as of the last save | Partial: as of the last save |
+| Return notes | Yes | Yes | Yes | Partial: as of the last save | Partial: as of the last save |
+| Copy-mode position, selection | No, per-client | No, per-client: the client attaches again | No | No | No |
+| Input mode (window vs terminal) | No, per-client | No, per-client: the client attaches again | No | No | No |
 
 The client column is the important one: a detach costs you nothing, because the
 daemon holds the PTYs and keeps a terminal emulator fed for each. On reattach the
@@ -560,6 +564,26 @@ a daemon exit except what was written to disk.
 The session id is saved in the state file, so a restored session keeps its id
 and a client that stored the id still finds the session. A state file from a
 build before ids were saved has none, and that session gets a new id once.
+
+## Upgrading the Daemon Without Ending Programs
+
+`tuios daemon upgrade` replaces the running daemon's binary in place. The daemon keeps its pid, and every pane's program keeps running with the same process, the same terminal and the same screen. It is experimental, opt-in, and macOS and Linux only.
+
+```bash
+tuios daemon upgrade                          # to the tuios running the command
+tuios daemon upgrade --binary ~/bin/tuios-next
+tuios --server test daemon upgrade --binary ./tuios
+```
+
+The new binary is run once first and must say it reads this daemon's state; a refusal changes nothing. The daemon then pauses every pane, writes down what each holds, and execs the new binary, which takes the panes over. The pause is well under a second, and a program writing output during it waits and loses nothing. If the new binary cannot take the panes over, the daemon goes back to the binary it was running, with every pane, and the command says so. If the new binary crashes or is killed before it is up, a keeper process the upgrade started holding every pane's terminal brings the binary that was running back in its place: every program keeps running, the daemon comes back under a new pid, and the command says so. A daemon brought back this way is no longer the parent of those programs: it learns when one ends, with its exit status on macOS, without it on Linux.
+
+Attached clients are dropped. A tuios client says the daemon is being upgraded and that the programs are still running, and exits; run `tuios attach <session>` to continue. Copy-mode state and input mode start fresh, as for any attach. Each pane carries the last 1000 lines of its history; deeper history is not carried.
+
+The daemon refuses an upgrade while it holds something it cannot hand over: a pane hosted for another machine or one running on another machine, a running `tuios fan verify` check, or a popup capturing its output. It is refused on Windows, where `tuios restart-server` moves the daemon to another build and stops every program in every pane.
+
+Run from inside a pane, the upgrade asks you first. The binary named runs as the daemon, which holds every pane's terminal, so a pane does not get one by asking. Every attached client shows a dialog with the binary's full path, its version and the pane that asked. No is the default, and only a key you press at a client answers it: bytes a pane writes, a paste, keys sent with `tuios send-keys` or a tape, a key on another machine, an answer from the Inbox or a `gui-bridge` renderer, and a client too old to show the dialog do not. The first answer counts and closes the dialog on the other clients. No, Esc, a minute without an answer, or no client attached refuses the upgrade, and nothing changes. A view-only client, such as `tuios-web --read-only`, cannot answer, so it does not count as one, and neither does a `gui-bridge` renderer or a client too old to show the dialog. A `gui-bridge` renderer cannot call `daemon-upgrade` at all. A plugin is refused without a dialog, and an upgrade from a terminal outside tuios needs none. The dialog rides the Inbox, so with `[agents] enabled = false` a pane's upgrade is refused. With no client attached or the agent features off, the refusal comes before the daemon runs the binary at all. The dialog stops mistakes and agents, not a local process that wants to get past it: tuios tells a pane by its process, so a process that leaves its pane and its environment behind, such as `env -i HOME="$HOME" setsid -f tuios daemon upgrade --binary <path>`, runs as one outside every pane and needs no dialog. That is the limit of every verb that only the person may call.
+
+The command, its output and everything it keeps and ends are in [CLI_REFERENCE.md](CLI_REFERENCE.md#tuios-daemon-upgrade). The design is in [design/live-handoff.md](design/live-handoff.md).
 
 ## Resurrection
 

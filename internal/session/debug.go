@@ -369,6 +369,7 @@ var messageTypeNames = [...]string{
 	MsgDirChanged:        "DirChanged",
 	MsgSessionsChanged:   "SessionsChanged",
 	MsgPaneMark:          "PaneMark",
+	MsgDaemonUpgrading:   "DaemonUpgrading",
 	MsgPluginApprovals:   "PluginApprovals",
 }
 

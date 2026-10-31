@@ -187,7 +187,19 @@ const (
 	// list closes the client's dialog. The daemon sends it only to a client
 	// whose hello set PluginApprovals. See plugin_approval.go.
 	MsgPluginApprovals
+	// MsgDaemonUpgrading tells a TUI client, just before the daemon closes
+	// its connection, that a live upgrade is replacing the daemon's image and
+	// every pane keeps running. The client says so when it exits, rather than
+	// that the daemon was lost. An older client ignores the type and says the
+	// daemon was lost. See handoff.go.
+	MsgDaemonUpgrading
 )
+
+// DaemonUpgradingPayload is the body of MsgDaemonUpgrading: the version the
+// daemon is being upgraded to.
+type DaemonUpgradingPayload struct {
+	Version string
+}
 
 // WatchDirPayload is the body of MsgWatchDir. WindowID is the pane the folder
 // was listed for, which says which machine the folder is on. An empty Dir ends
@@ -417,6 +429,12 @@ type AttachPayload struct {
 	// window_size policies it does not count toward the session's size;
 	// under smallest it counts like any client. An older daemon ignores it.
 	ViewOnly bool `json:"view_only,omitzero"`
+	// UpgradeDialog says the client shows a live upgrade's dialog to the
+	// person at it and answers it only with a key they pressed: the tuios
+	// TUI, and not gui-bridge, whose renderer is never a key. Only such a
+	// client counts as one that could answer a pane's upgrade. A client that
+	// predates it sends none, and does not count. See upgrade_confirm.go.
+	UpgradeDialog bool `json:"upgrade_dialog,omitzero"`
 	// Passive displays and accepts input for a pane but does not implement
 	// renderer commands (for example a session shown in a sidebar rail).
 	// Command routing skips it; its viewport does not size the shared session.
