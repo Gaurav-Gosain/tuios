@@ -5416,3 +5416,43 @@ both encoders.
   723,706 B for the framed one (1.144 times). It was also slower: 29.0 ms
   against 31.3 ms bare (+7.8%) and 33.4 ms against 36.4 ms framed (+8.8%).
   Sub makes the file larger and the encode slower, so unfiltered rows stay.
+
+## 2026-10 a browser in a pane on macOS
+
+terminal-browser sends a whole frame per paint when it does not recognise its terminal, which is what it finds in a pane. Each frame is in its own synchronized update. On macOS tuios refused shared memory (`t=s`), so the browser used a ring of 8 files (`t=f`) that it overwrites in place.
+
+### What changed
+
+- `internal/kittyshm` opens and deletes an object by name on macOS, without cgo. The daemon and the client offer `t=s` there.
+- A shared memory frame that is first in its synchronized update travels as one `a=T`. The next frame replaces it if the render loop has not sent it, and tuios deletes the replaced object.
+
+### Numbers
+
+macOS 27.0.1, arm64, 11 cores, terminal-browser v0.15.3, one pane in a daemon session. The window is 120x40 at 16x34 pixels, and the page is 1504x1224 pixels with a ground that changes every frame. The browser paints about 107 frames a second. The host is a stand-in that answers as kitty 0.49.2, keeps kitty's rules for images and placements, and reads each file or object when it parses the command. 26 s runs. The stand-in has no display, so tuios renders at 60 frames a second.
+
+| | before | after |
+|---|---|---|
+| Medium | `t=f`, 8 reused files | `t=s`, one object per frame |
+| Frames the host read, per second | 107 | 60 |
+| Frames on screen, per second | 60 | 60 |
+| Bytes the host read | 17.5 GB | 9.9 GB |
+| Bytes on the host's tty | 496 KB | 153 KB |
+| Longest gap between frames | 24.3 ms | 22.0 ms |
+| Client CPU | 1.90 s | 2.11 s |
+| Daemon CPU | 0.71 s | 0.47 s |
+
+The torn frames depend on how late the host reads. The stand-in waits this long before it parses each read:
+
+| Wait | before: torn, out of order | after: torn, out of order |
+|---|---|---|
+| 0 ms | 0, 0 | 0, 0 |
+| 3 ms | 0, 0 | not run |
+| 6 ms | 0, 0 | not run |
+| 12 ms | 28, 139 | 0, 0 |
+
+The binary grows by 55 KB on macOS and 29 KB on Linux.
+
+### Measured and deliberately not changed
+
+- A page where one small thing moves still costs a whole frame per paint: 8.2 GB read in 22 s, against 187 MB for the browser in kitty directly, where it sends only the tiles that changed. The browser chooses that way of drawing only for a terminal it names. Forced with `TERMINAL_BROWSER_PRESENT=patched` through tuios the read falls to 99 MB, but the picture is wrong: tuios sizes each patch in whole cells, and kitty scales the patch to fit them.
+- A real kitty 0.49.2 on Linux, with software GL on a headless stage and `/tmp` in memory, showed 0 torn frames in 400 screenshots before and 400 after. The same check finds the tears in the stand-in's frames. kitty's own CPU did not move beyond run-to-run noise: 402% and 398% before, 307% and 394% after.

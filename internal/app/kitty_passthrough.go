@@ -85,6 +85,11 @@ type KittyPassthrough struct {
 	syncProbes map[string]func() (open bool, serial uint64)
 	held       map[string]*heldUpdate
 	heldBytes  int
+	// heldFrames is the frame each window's held update consists of, when it
+	// consists of one. See replaceHeldStreamFrame.
+	heldFrames map[string]heldStreamFrame
+	// renderPasses counts the passes that release held updates.
+	renderPasses uint64
 	// heldGeom is each window's tuios-owned geometry at the last refresh.
 	heldGeom     map[string]paneGeom
 	guestCapture bool

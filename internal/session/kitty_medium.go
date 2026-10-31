@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/Gaurav-Gosain/tuios/internal/kittyshm"
 	"tuios.dev/vt"
 )
 
@@ -35,6 +36,10 @@ func releaseUnreadKittyMedium(cmd *vt.KittyCommand) {
 	name := strings.TrimPrefix(cmd.FilePath, "/")
 	if name == "" || name == "." || name == ".." ||
 		strings.ContainsRune(name, '/') || strings.ContainsRune(name, 0) {
+		return
+	}
+	if kittyshm.Available() {
+		kittyshm.ReleaseFrame(cmd)
 		return
 	}
 	path := filepath.Join("/dev/shm", name)

@@ -14,6 +14,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/Gaurav-Gosain/tuios/internal/kittyshm"
 	"tuios.dev/vt"
 )
 
@@ -259,11 +260,11 @@ func (kp *KittyPassthrough) forwardQuery(cmd *vt.KittyCommand, _ []byte, ptyInpu
 	case cmd.Medium.IsFile() && !kp.hostReadsFiles():
 		ok = false
 		errMsg = "ENOTSUPPORTED:host terminal cannot read files from this machine"
-	case cmd.Medium == vt.KittyMediumSharedMemory && !kittyShmHasPath():
-		// tuios cannot read a shared memory object that has no path (macOS),
-		// so the frame depends on the host reading it. The daemon refuses
-		// this medium there for the same reason; see kittyQueryResponse in
-		// internal/session. A temporary file works on every path.
+	case cmd.Medium == vt.KittyMediumSharedMemory && !kittyShmReadable():
+		// tuios cannot read the object here, so the frame depends on the host
+		// reading it. The daemon refuses this medium there for the same reason;
+		// see kittyQueryResponse in internal/session. A temporary file works on
+		// every path.
 		ok = false
 		errMsg = "ENOTSUPPORTED:shared memory is not supported here"
 	}
@@ -852,28 +853,47 @@ func (kp *KittyPassthrough) forwardFileTransmit(cmd *vt.KittyCommand, windowID s
 	// A shared memory frame is one command, never chunked, so the test above
 	// never sees one. A guest that sends a=T,t=s again under an id it already
 	// used is streaming frames (a compositor in a pane, mpv with shared
-	// memory), and each frame used to wait in the queue for the render loop to
-	// place it again: an a=t now and an a=p on the next pass. When the last pass
-	// placed the whole image exactly where this frame goes, the frame is that
-	// placement's new picture, so it is written now, as one a=T under the
-	// placement's own id. Anything else (a moved pane, a crop, a window over
-	// it, a guest inside a synchronized update) still goes through the refresh
-	// pass, which is what knows about those.
+	// memory, a browser), and each frame used to wait in the queue for the
+	// render loop to place it again: an a=t now and an a=p on the next pass.
+	// When the last pass placed the whole image exactly where this frame goes,
+	// the frame is that placement's new picture, so it travels as one a=T under
+	// the placement's own id. Anything else (a moved pane, a crop, a window over
+	// it) still goes through the refresh pass, which is what knows about those.
+	//
+	// A frame outside a synchronized update is written now. A frame that is the
+	// first thing in an update is held like everything else in that update (see
+	// kitty_sync_hold.go), and it needs no placement after it. If the next frame
+	// comes before the render loop sends this one, the host would read a whole
+	// frame it never draws, so the next frame replaces it.
 	placedNow := false
 	if !isVideoFrame && reusingID && andPlace && cmd.Medium == vt.KittyMediumSharedMemory &&
-		kp.streamFrameFitsPlacement(windowID, hostID, hostX, hostY,
-			displayCols, displayRows, imgCols, imgRows, isAltScreen) {
-		p := kp.placements[windowID][imageKey(hostID)]
-		frame := bytes.Replace(buf.Bytes(), []byte("a=t,"),
-			fmt.Appendf(nil, "a=T,p=%d,C=1,", p.PlacementID), 1)
-		kp.pendingOutput = append(kp.pendingOutput, "\x1b7"...)
-		kp.pendingOutput = fmt.Appendf(kp.pendingOutput, "\x1b[%d;%dH", p.HostY+1, p.HostX+1)
-		kp.pendingOutput = append(kp.pendingOutput, frame...)
-		kp.pendingOutput = append(kp.pendingOutput, "\x1b8"...)
-		// Everything queued before it goes first, in the same write, so the
-		// host never takes an older frame after this one.
-		kp.flushToHost()
-		placedNow = true
+		kp.hostOut != nil && kp.streamFrameFitsPlacement(windowID, hostID, hostX, hostY,
+		displayCols, displayRows, imgCols, imgRows, isAltScreen) {
+		guestOpen, guestSerial := false, uint64(0)
+		if probe := kp.syncProbes[windowID]; probe != nil {
+			guestOpen, guestSerial = probe()
+		}
+		h := kp.held[windowID]
+		firstInUpdate := guestOpen && (h == nil || h.serial != guestSerial || (len(h.buf) == 0 && !h.bypass))
+		if firstInUpdate || (!guestOpen && h == nil) {
+			p := kp.placements[windowID][imageKey(hostID)]
+			frame := bytes.Replace(buf.Bytes(), []byte("a=t,"),
+				fmt.Appendf(nil, "a=T,p=%d,C=1,", p.PlacementID), 1)
+			start := len(kp.pendingOutput)
+			kp.pendingOutput = append(kp.pendingOutput, "\x1b7"...)
+			kp.pendingOutput = fmt.Appendf(kp.pendingOutput, "\x1b[%d;%dH", p.HostY+1, p.HostX+1)
+			kp.pendingOutput = append(kp.pendingOutput, frame...)
+			kp.pendingOutput = append(kp.pendingOutput, "\x1b8"...)
+			if firstInUpdate {
+				kp.replaceHeldStreamFrame(windowID, hostID, cmd)
+				kp.noteHeldStreamFrame(windowID, hostID, guestSerial, len(kp.pendingOutput)-start, cmd, filePath)
+			} else {
+				// Everything queued before it goes first, in the same write, so
+				// the host never takes an older frame after this one.
+				kp.flushToHost()
+			}
+			placedNow = true
+		}
 	} else if isVideoFrame && kp.hostOut != nil {
 		// Override to a=T for video immediate flush (buf was built with a=t)
 		bufBytes := bytes.Replace(buf.Bytes(), []byte("a=t,"), []byte("a=T,"), 1)
@@ -1021,22 +1041,13 @@ func (kp *KittyPassthrough) forwardFileTransmit(cmd *vt.KittyCommand, windowID s
 
 // streamFrameFitsPlacement reports whether a streamed frame lands exactly on
 // the placement the last refresh pass made for its image: the whole image, at
-// the same cells, uncropped and unoccluded, on the same screen, with nothing of
-// the guest's held back. Only then can the frame be written at once without the
-// refresh pass. Callers hold kp.mu.
+// the same cells, uncropped and unoccluded, on the same screen. Only then can
+// the frame go out without the refresh pass. Callers hold kp.mu.
 func (kp *KittyPassthrough) streamFrameFitsPlacement(
 	windowID string, hostID uint32,
 	hostX, hostY, displayCols, displayRows, imgCols, imgRows int,
 	isAltScreen bool,
 ) bool {
-	if kp.hostOut == nil || kp.held[windowID] != nil {
-		return false
-	}
-	if probe := kp.syncProbes[windowID]; probe != nil {
-		if open, _ := probe(); open {
-			return false
-		}
-	}
 	p := kp.placements[windowID][imageKey(hostID)]
 	if p == nil || p.Hidden || p.DataDirty || p.PlacementID == 0 {
 		return false
@@ -1125,7 +1136,13 @@ func (kp *KittyPassthrough) forwardFileTransmitInline(
 	defer func() { kp.chargePacing(time.Since(prepStarted)) }()
 
 	// plain files are safe to slurp, and only up to the transmit cap.
-	info, err := os.Stat(filePath)
+	var info os.FileInfo
+	var err error
+	if name, isObject := kittyShmObject(filePath); isObject {
+		info, err = kittyshm.Stat(name)
+	} else {
+		info, err = os.Stat(filePath)
+	}
 	if err != nil {
 		kittyPassthroughLog("forwardFileTransmitInline: stat %s failed: %v", filePath, err)
 		return
@@ -1139,7 +1156,7 @@ func (kp *KittyPassthrough) forwardFileTransmitInline(
 		return
 	}
 
-	f, err := os.Open(filePath)
+	f, err := openKittyObject(filePath, 0)
 	if err != nil {
 		kittyPassthroughLog("forwardFileTransmitInline: open %s failed: %v", filePath, err)
 		return
@@ -1147,7 +1164,7 @@ func (kp *KittyPassthrough) forwardFileTransmitInline(
 	// LimitReader is a hard ceiling in case the file grew past its stat size
 	// (or is a special file that slipped past the regular-file check on some
 	// platform); never read more than the cap.
-	data, err := io.ReadAll(io.LimitReader(f, maxPassthroughTransmitBytes))
+	data, err := readFrameBytes(f, cmd)
 	_ = f.Close()
 	if err != nil {
 		kittyPassthroughLog("forwardFileTransmitInline: read %s failed: %v", filePath, err)
@@ -2000,7 +2017,7 @@ func (kp *KittyPassthrough) forwardFileFrameIsNew(
 	// one lookup, and the thing described is the thing read. A path that is not
 	// a plain file is refused for the reason the inline path refuses one: a
 	// fifo would block here and a device would read without end.
-	f, err := os.Open(filePath)
+	f, err := openKittyObject(filePath, 0)
 	if err != nil {
 		return true
 	}
@@ -2054,6 +2071,19 @@ func hashFileFrame(r io.Reader, cmd *vt.KittyCommand, buf []byte) (uint32, error
 func (kp *KittyPassthrough) forgetFrameHashes(windowID string) {
 	delete(kp.lastFrameHash, windowID)
 	delete(kp.frameHashMisses, windowID)
+}
+
+// readFrameBytes reads a frame up to the transmit cap. An object on macOS is
+// rounded up to whole pages, so a frame whose size the command states is cut to
+// it, or the padding would be sent as pixels.
+func readFrameBytes(f io.Reader, cmd *vt.KittyCommand) ([]byte, error) {
+	limit := int64(maxPassthroughTransmitBytes)
+	if _, isObject := f.(shmKittyObject); isObject && cmd.Medium == vt.KittyMediumSharedMemory {
+		if n, ok := kittyshm.FrameBytes(cmd); ok && n < limit {
+			limit = n
+		}
+	}
+	return io.ReadAll(io.LimitReader(f, limit))
 }
 
 // frameHashTable is CRC-32C. Go computes it with the processor's CRC32

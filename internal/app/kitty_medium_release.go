@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/Gaurav-Gosain/tuios/internal/kittyshm"
 	"tuios.dev/vt"
 )
 
@@ -40,8 +41,11 @@ import (
 // a temporary directory.
 func releaseKittyMedium(cmd *vt.KittyCommand, path string) {
 	if path == "" {
-		// A shared memory object on macOS has no path. Deleting it takes
-		// shm_unlink, which Go reaches only through cgo.
+		// A shared memory object on a machine where tuios cannot reach one.
+		return
+	}
+	if _, isObject := kittyShmObject(path); isObject {
+		kittyshm.ReleaseFrame(cmd)
 		return
 	}
 	switch cmd.Medium {

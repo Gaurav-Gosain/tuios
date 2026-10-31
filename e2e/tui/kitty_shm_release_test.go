@@ -61,6 +61,107 @@ func TestKittySharedMemoryFramesAreReleased(t *testing.T) {
 		assertReleased(t, left, forwarded)
 	})
 
+	// Frames in synchronized updates, faster than the render loop sends them,
+	// as terminal-browser sends them. The host reads every frame it is handed,
+	// so a frame the next one has replaced is dropped, with nobody left to
+	// read it. What is sent needs no placement after it.
+	for _, daemon := range []bool{false, true} {
+		name := "superseded"
+		if daemon {
+			name = "superseded-daemon"
+		}
+		t.Run(name, func(t *testing.T) {
+			host := newKittyHost()
+			term, base := start(t, startOpts{
+				cols: 120, rows: 40,
+				env:           []string{"TUIOS_SIXEL_GRAPHICS=0"},
+				out:           host,
+				daemonDefault: daemon,
+			})
+			if daemon {
+				killDaemon(t, base)
+			}
+			host.answerProbe(t, term)
+			waitBoot(t, term)
+			newWindow(t, term)
+			enableTiling(t, term)
+			waitWindowCount(t, term, 1, "one pane")
+			enterTerminalMode(t, term)
+			runInShell(t, term, "echo IMAG\"\"EPANE", "IMAGEPANE", shellTimeout)
+
+			names := runShmStream(t, term, 400, 200, 0, "sync")
+			stream := host.bytes()
+			forwarded := forwardedShmNames(stream)
+			left := leftInDevShm(names)
+			counts := map[string]int{}
+			for _, c := range wireCmds(stream) {
+				if c.image != 0 {
+					counts["a="+c.action]++
+				}
+			}
+			t.Logf("%d frames: %d forwarded to the host, %d still in /dev/shm, host commands %v",
+				len(names), len(forwarded), len(left), counts)
+			if len(forwarded) == 0 {
+				t.Fatalf("no frame was forwarded to the host, so nothing here exercised the passthrough")
+			}
+			// 400 frames at 200 a second, and a render loop at 60: most of
+			// them have a newer one behind them before the loop runs.
+			if len(forwarded) > len(names)*3/4 {
+				t.Fatalf("the host was handed %d of %d frames, and it reads each one whole", len(forwarded), len(names))
+			}
+			// The first frames are placed by the refresh pass, the way every
+			// new image is, and more of them on a loaded machine. The rest
+			// carry their own placement.
+			if counts["a=t"] > counts["a=T"]/2 {
+				t.Fatalf("%d frames went out as a transmit to be placed later: %v", counts["a=t"], counts)
+			}
+			assertReleased(t, left, forwarded)
+		})
+	}
+
+	// A guest that closes one update and opens the next in the same write has an
+	// update open whenever tuios looks. A frame the next one replaces has to be
+	// one the render loop has not passed yet, or the picture never changes.
+	t.Run("joined-updates", func(t *testing.T) {
+		term, host := startShmPane(t)
+		names := runShmStream(t, term, 150, 30, 0, "syncjoined")
+		forwarded := forwardedShmNames(host.bytes())
+		t.Logf("%d frames: %d forwarded to the host", len(names), len(forwarded))
+		// At 30 frames a second the render loop passes between any two of them.
+		if len(forwarded) < len(names)/2 {
+			t.Fatalf("the host was handed %d of %d frames: the stream froze", len(forwarded), len(names))
+		}
+		assertReleased(t, leftInDevShm(names), forwarded)
+	})
+
+	// A guest may send one object again and again, rewriting it in place. The
+	// name in the frame that replaces a held one is that name, so the object
+	// must stay for the host to read.
+	t.Run("reused-name", func(t *testing.T) {
+		term, host := startShmPane(t)
+		names := runShmStream(t, term, 400, 200, 0, "syncreuse")
+		if len(names) != 1 {
+			t.Fatalf("the stand-in logged %d names for one object", len(names))
+		}
+		stream := host.bytes()
+		if !forwardedShmNames(stream)[names[0]] {
+			t.Fatalf("the host was never handed the object")
+		}
+		// The positive half: frames were replaced, or this tests nothing.
+		sent := 0
+		for _, c := range wireCmds(stream) {
+			if c.action == "T" {
+				sent++
+			}
+		}
+		if sent == 0 || sent > 300 {
+			t.Fatalf("the host was sent %d of 400 frames, so none was replaced, or none went out as a=T", sent)
+		}
+		if len(leftInDevShm(names)) != 1 {
+			t.Fatalf("tuios deleted the object the next frame names: the host cannot read it")
+		}
+	})
+
 	// A daemon pane on a workspace that is not shown has no client reading
 	// it, so the daemon is the last reader of every frame.
 	t.Run("daemon-unwatched", func(t *testing.T) {
@@ -81,6 +182,26 @@ func TestKittySharedMemoryFramesAreReleased(t *testing.T) {
 			t.Fatalf("%d of %d objects of the wrong size were deleted", len(names)-len(left), len(names))
 		}
 	})
+}
+
+// startShmPane starts a standalone tuios with one shell pane under a host that
+// records.
+func startShmPane(t *testing.T) (*tuitest.Terminal, *kittyHost) {
+	t.Helper()
+	host := newKittyHost()
+	term, _ := start(t, startOpts{
+		cols: 120, rows: 40,
+		env: []string{"TUIOS_SIXEL_GRAPHICS=0"},
+		out: host,
+	})
+	host.answerProbe(t, term)
+	waitBoot(t, term)
+	newWindow(t, term)
+	enableTiling(t, term)
+	waitWindowCount(t, term, 1, "one pane")
+	enterTerminalMode(t, term)
+	runInShell(t, term, "echo IMAG\"\"EPANE", "IMAGEPANE", shellTimeout)
+	return term, host
 }
 
 // streamUnwatched runs the stand-in in a daemon pane on a workspace that is
