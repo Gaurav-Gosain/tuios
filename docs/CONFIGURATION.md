@@ -1640,6 +1640,9 @@ default list. `[dock.session]` takes `format` (`{session}`, `{workspace}`,
 `cap_right`, which `[dock.custom.NAME]` takes too. Colours take any [colour value](#colour-values).
 A custom component's first line of stdout becomes its cell, it is hidden when
 the command fails, and `tuios list-dock-components` says which and why.
+tuios runs one copy of the command at a time. When an event arrives while the
+command runs, tuios runs the command one more time when it ends. An interval
+that comes due while the command runs is skipped.
 
 ### Workspace tab style
 

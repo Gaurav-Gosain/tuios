@@ -11263,6 +11263,10 @@ Run on 2026-10-31 on macOS (arm64). The test passes on the fixed build, 6 runs o
 | --- | --- | --- |
 | The `NotifyDockEvent` call at the head of `considerAgentAlert` (`internal/app/agent_alert.go`), so the dock hears agent state only through an alert | "the dock cell never read WAIT0 after the answer moved the pane to working": the cell still reads `WAIT1` | **caught** |
 
+The same test then holds a run on a file after it has read `needs_input`, moves the pane to `working` during that run, and releases it. The event has to start one more run (issue 1416).
+
+Run on 2026-10-31 on Linux. A build with the re-run kept for the rail only failed: `an event during a run did not start one more run: runs "1\n"`. In the same build `TestDockEngineCoalescesAnEventMidRun/dock_cell` failed with `the one pending re-run`. A build with the re-run kept for every refresh failed `TestDockEngineDropsAnIntervalMidRun`: `an interval mid-run queued a re-run, which read "polled"`. The fixed build passes.
+
 ### hosts sync and a paired phone
 
 Run on 2026-10-31 on Linux. The fleet in `hosts_sync_test.go` has a `[hosts.phone]` table with no addr, as `tuios pair` writes.

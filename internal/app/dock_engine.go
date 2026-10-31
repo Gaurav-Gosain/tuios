@@ -79,10 +79,11 @@ type dockComponent struct {
 	// the first. The rail's custom section draws one row per line; a dock
 	// cell has one line to draw.
 	MultiLine bool
-	// Coalesce keeps one pending re-run for an event that lands while the
-	// command is running, where a dock cell drops it. The rail's rows are
-	// about the focused pane, and a focus change dropped mid-run would leave
-	// the old pane's text on screen until the next event.
+	// Coalesce keeps one pending re-run for any trigger that lands while the
+	// command is running, an interval's included. The rail's rows are about the
+	// focused pane, and a focus change dropped mid-run would leave the old
+	// pane's text on screen until the next event. Every component refreshed by
+	// an event keeps its re-run without this (see fire).
 	Coalesce bool
 
 	// Everything below is guarded by dockEngine.mu.
@@ -456,7 +457,7 @@ func (e *dockEngine) earliest() (*dockComponent, time.Time) {
 
 // fire runs whatever came due. A built-in is reported to the model, which owns
 // the state its refresh reads; a custom one is executed here, off the render
-// goroutine, and skipped entirely if the previous run has not finished.
+// goroutine, and never alongside a run that has not finished.
 func (e *dockEngine) fire(c *dockComponent) {
 	e.mu.Lock()
 	delete(e.eventDue, c.Name)
@@ -464,9 +465,9 @@ func (e *dockEngine) fire(c *dockComponent) {
 		c.nextDue = e.alignedDeadline(c, time.Now())
 	}
 	builtin, running := c.Builtin, c.running
-	if running && c.Coalesce && !builtin {
+	if running && !builtin && (c.Coalesce || c.Refresh.Kind == config.DockRefreshEvent) {
 		// Not dropped: the run that is going reads the state from before this
-		// event, so one more run after it is the only way the rows catch up.
+		// event, so one more run after it is the only way the value catches up.
 		// One, whatever the burst, because the re-run reads the state as it is
 		// then. Set under the same lock hold that saw the run in flight, so the
 		// run cannot end between the check and the flag and lose the re-run.
@@ -479,8 +480,9 @@ func (e *dockEngine) fire(c *dockComponent) {
 		return
 	}
 	if running {
-		// Drop-if-in-flight. A component slower than its own interval polls at
-		// the rate it can manage instead of stacking processes.
+		// No second process. A component slower than its own interval polls at
+		// the rate it can manage instead of stacking them, and an event waits
+		// for the end of the run in the flag set above.
 		return
 	}
 	go e.runOnce(c)
