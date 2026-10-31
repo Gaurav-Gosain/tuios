@@ -48,6 +48,13 @@ var streamVerbs = map[string]bool{
 	"request-approval": true,
 }
 
+// personOnlyVerbs are for the person at a key, which a renderer never is,
+// so the proxy refuses them. The bridge's connection is outside every pane,
+// so the daemon would take daemon-upgrade from it with no dialog.
+var personOnlyVerbs = map[string]bool{
+	"daemon-upgrade": true,
+}
+
 // verbTimeout bounds one proxied call. respond waits up to 30 s for the pane
 // to settle, so the bound is above that.
 const verbTimeout = 35 * time.Second
@@ -120,6 +127,10 @@ func runVerb(out *frameWriter, version, nonce string, c Command) {
 	}
 	if streamVerbs[c.Verb] {
 		res.Code, res.Error = "unsupported", fmt.Sprintf("%s streams its answer; the bridge proxies only verbs with one reply", c.Verb)
+		return
+	}
+	if personOnlyVerbs[c.Verb] {
+		res.Code, res.Error = session.ErrVerbForbidden, c.Verb+" is for the person at a terminal, and the bridge's renderer is not one. Nothing was changed"
 		return
 	}
 	host := c.Host
