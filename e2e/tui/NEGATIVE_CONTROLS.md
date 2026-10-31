@@ -9244,6 +9244,7 @@ Run on 2026-10-31 on macOS arm64 (Darwin 27, Go 1.27.3) against `pr/live-handoff
 | --- | --- | --- | --- |
 | Any input-taking client counts as one that shows the dialog | `cs.upgradeDialog` cut from `personClients` | `TestPaneUpgradeRunsNoFileWithoutADialog/bridge-only` and `/old-client`: "the daemon ran the pane's file with no dialog to show" | **caught** |
 | The bridge proxies `daemon-upgrade` | the `personOnlyVerbs` refusal cut from `guibridge.runVerb` | `TestPaneUpgradeRefusesAnAnswerFromTheGUIBridge`: "the bridge's daemon-upgrade upgraded the daemon ({PID:63373 Instance:f4e2fd5b-…} then {PID:63373 Instance:419948e0-…})" | **caught** |
+| The check line says "refused" when the person did not say Yes (fourth review) | `daemon_upgrade.go` prints `refused` for every error, as before | `TestPaneUpgradeRefusedWithoutYes`: "the check line after default does not end in not confirmed", and the same after `esc`, `no`, `up` and `tab` (run 2026-11-01) | **caught** |
 
 ```sh
 TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios TUIOS_E2E_OLD_BIN=/path/to/tuios-v0.12.0 \

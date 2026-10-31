@@ -220,6 +220,9 @@ func TestPaneUpgradeRefusedWithoutYes(t *testing.T) {
 		if said := strings.Join(strings.Fields(strings.Join(lines, "")), ""); !strings.Contains(said, "ThepersonansweredNo") {
 			t.Errorf("ASSERTION: the refusal after %s does not say the person answered No:\n%s", tc.name, strings.Join(lines, "\n"))
 		}
+		if said := strings.Join(strings.Fields(strings.Join(lines, "")), ""); !strings.Contains(said, "...notconfirmed") || strings.Contains(said, "...refused") {
+			t.Errorf("ASSERTION: the check line after %s does not end in not confirmed:\n%s", tc.name, strings.Join(lines, "\n"))
+		}
 		results[tc.name] = code
 	}
 	writeHandoffArtifact(t, map[string]any{"exits": results, "image": r.img, "screen": mustScrollback(t, r.base, r.sess, r.agent)})
