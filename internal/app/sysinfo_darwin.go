@@ -13,6 +13,6 @@ func readCPUTicks() (cpuTicks, bool) {
 	t := times[0]
 	return cpuTicks{
 		idle:  uint64(t.Idle * 1e6),
-		total: uint64(t.Total() * 1e6),
+		total: uint64((t.User + t.System + t.Idle + t.Nice) * 1e6),
 	}, true
 }

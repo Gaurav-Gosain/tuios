@@ -12,6 +12,8 @@ import (
 	"syscall"
 	"testing"
 	"time"
+
+	"github.com/Gaurav-Gosain/tuios/internal/testutil"
 )
 
 // The agent socket a split passes on comes from another process's
@@ -33,7 +35,7 @@ func TestOwnedSocket(t *testing.T) {
 		t.Cleanup(func() { _ = l.Close() })
 		return path
 	}
-	private := filepath.Join(t.TempDir(), "p")
+	private := filepath.Join(testutil.RuntimeDir(t), "p")
 	if err := os.Mkdir(private, 0o700); err != nil {
 		t.Fatal(err)
 	}
@@ -48,7 +50,7 @@ func TestOwnedSocket(t *testing.T) {
 	if owned(link) {
 		t.Fatalf("a link to the socket was passed")
 	}
-	open := filepath.Join(t.TempDir(), "o")
+	open := filepath.Join(testutil.RuntimeDir(t), "o")
 	if err := os.Mkdir(open, 0o700); err != nil {
 		t.Fatal(err)
 	}
@@ -88,11 +90,7 @@ func TestOwnedSocketFollowsASafeSymlinkAncestor(t *testing.T) {
 	// A short-named root, not t.TempDir(): a Unix domain socket's sun_path is
 	// capped (104 bytes on macOS/BSD), and t.TempDir() embeds this test's own
 	// (long) function name in the directory it hands back.
-	root, err := os.MkdirTemp("", "owned-sock-")
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = os.RemoveAll(root) })
+	root := testutil.RuntimeDir(t)
 
 	safeTarget := filepath.Join(root, "real")
 	if err := os.Mkdir(safeTarget, 0o700); err != nil {
