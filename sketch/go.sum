@@ -16,5 +16,5 @@ golang.org/x/term v0.45.0 h1:NwWyBmoJCbfTHpxrWoZ9C6/VxOf7ic219I8xZZFdrf0=
 golang.org/x/term v0.45.0/go.mod h1:9aqxs0blBcrm/n0L9QW0aRVD+ktan8ssZromtqJC43w=
 golang.org/x/text v0.41.0 h1:vz/seA0lnX87Othu2f/0L24RcgrXD9/YFTSuGjj3rH8=
 golang.org/x/text v0.41.0/go.mod h1:jvf1O8ajNzZqhSrQBPbutR/EB83Cc0CFrezNQIwbb5M=
-tuios.dev/plot v0.2.2-0.20261023124927-50c38920e301 h1:ICqI+4WFDSTIasBDN/uTOJEYufp0exgBl6+0KjE+PYs=
-tuios.dev/plot v0.2.2-0.20261023124927-50c38920e301/go.mod h1:YNjGUvsZUCEfRcs27dMp8Y09OYHMj7ahPdXN8jzXiKc=
+tuios.dev/plot v0.2.3-0.20261101044251-193bbd706cd8 h1:zx+RE1mRYo4Mrlx85nMAurWev07ys/iGO46NYCVz3ec=
+tuios.dev/plot v0.2.3-0.20261101044251-193bbd706cd8/go.mod h1:YNjGUvsZUCEfRcs27dMp8Y09OYHMj7ahPdXN8jzXiKc=
