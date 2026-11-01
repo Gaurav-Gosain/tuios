@@ -37,17 +37,17 @@
   {
     "name": "PermissionRequest Bash",
     "payload": {"session_id": "sess-1", "hook_event_name": "PermissionRequest", "tool_name": "Bash", "tool_input": {"command": "GITHUB_TOKEN=ghp_abcdefghijklmnop git push origin main", "description": "Push"}, "tool_use_id": "t2"},
-    "want": {"state": "needs_input", "kind": "approval", "message": "approve Bash: GITHUB_TOKEN=*** git push origin main", "agent_session_id": "sess-1"}
+    "want": {"state": "needs_input", "kind": "approval", "message": "approve Bash: GITHUB_TOKEN=*** git push origin main", "agent_session_id": "sess-1", "notification": true}
   },
   {
     "name": "PermissionRequest Edit",
     "payload": {"session_id": "sess-1", "hook_event_name": "PermissionRequest", "tool_name": "Edit", "tool_input": {"file_path": "/src/main.go", "old_string": "a", "new_string": "b"}},
-    "want": {"state": "needs_input", "kind": "approval", "message": "approve Edit: /src/main.go", "agent_session_id": "sess-1"}
+    "want": {"state": "needs_input", "kind": "approval", "message": "approve Edit: /src/main.go", "agent_session_id": "sess-1", "notification": true}
   },
   {
     "name": "PermissionRequest unknown tool",
     "payload": {"session_id": "sess-1", "hook_event_name": "PermissionRequest", "tool_name": "mcp__db__query", "tool_input": {"sql_text": "select 1"}},
-    "want": {"state": "needs_input", "kind": "approval", "message": "approve mcp__db__query", "agent_session_id": "sess-1"}
+    "want": {"state": "needs_input", "kind": "approval", "message": "approve mcp__db__query", "agent_session_id": "sess-1", "notification": true}
   },
   {
     "name": "PostToolUse",
@@ -102,7 +102,7 @@
   {
     "name": "Notification elicitation_url_dialog",
     "payload": {"session_id": "sess-1", "hook_event_name": "Notification", "notification_type": "elicitation_url_dialog", "message": "Open the link"},
-    "want": {"state": "needs_input", "kind": "question", "message": "Open the link", "agent_session_id": "sess-1", "notification": true}
+    "want": {"state": "needs_input", "kind": "question", "message": "Open the link", "agent_session_id": "sess-1"}
   },
   {
     "name": "Notification agent_needs_input",

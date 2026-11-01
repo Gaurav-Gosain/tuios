@@ -200,6 +200,16 @@ func (s *Session) eventClaimWrittenOver(windowID string, claim agentClaim, wrote
 	return false
 }
 
+// hookEventPrompt reports whether the claim stands for a prompt a hook
+// reported from a one-off event (set-agent-state's notification), itself or
+// as the claim a screen rule took the pane from while the prompt was drawn.
+func (c agentClaim) hookEventPrompt() bool {
+	if c.blocker {
+		return c.prior.event && c.prior.source == AgentSourceReport
+	}
+	return c.event && c.source == AgentSourceReport
+}
+
 // windowAgentState returns the current agent state of a window and whether the
 // window exists.
 func (s *Session) windowAgentState(windowID string) (AgentState, bool) {

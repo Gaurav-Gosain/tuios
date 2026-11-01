@@ -245,6 +245,12 @@ type agentPriorClaim struct {
 	herdrAt      int64
 	herdrAnchors []herdrAnchor
 	screenWins   bool
+	// What the claim said and how it was read. A prompt a hook reported from
+	// a one-off event goes back as one, so the screen can still take it back
+	// once the prompt goes, and with the words and kind the person was shown.
+	message string
+	kind    string
+	event   bool
 }
 
 // setAgentClaim records a claim, allocating the map on first use. It is called
