@@ -6,7 +6,9 @@ import (
 	"math"
 	"os"
 	"path/filepath"
+	"reflect"
 	"runtime"
+	"slices"
 	"sort"
 	"strings"
 	"testing"
@@ -420,6 +422,27 @@ func TestMapBudget(t *testing.T) {
 	for _, c := range []string{"US", "FR", "NO", "SG", "MT", "XK", "TW", "HK", "MF", "SX"} {
 		if _, ok := wd.index[c]; !ok {
 			t.Errorf("the map has no %s", c)
+		}
+	}
+}
+
+// TestMapUnknownCodes holds a value under a code the map does not know to what
+// the Values doc promises: it shows as nothing, so the map and the legend are
+// the ones the same values draw without it. A value that is the largest or the
+// only one shows the difference.
+func TestMapUnknownCodes(t *testing.T) {
+	known := map[string]float64{"US": 10, "BR": 3}
+	with := map[string]float64{"US": 10, "BR": 3, "ZZ": 1e6, " qq ": -5}
+	for _, log := range []bool{false, true} {
+		a, b := Map{Values: known, Log: log}, Map{Values: with, Log: log}
+		if la, lb := a.Legend(Braille), b.Legend(Braille); !slices.Equal(la, lb) {
+			t.Errorf("log %v: legend %v, without the unknown codes %v", log, lb, la)
+		}
+		if ga, gb := a.Draw(60, 16, Braille), b.Draw(60, 16, Braille); !reflect.DeepEqual(ga, gb) {
+			t.Errorf("log %v: the unknown codes move the map", log)
+		}
+		if got := (Map{Values: map[string]float64{"ZZ": 5}, Log: log}).Legend(Braille); got != nil {
+			t.Errorf("log %v: only an unknown code gives a legend: %v", log, got)
 		}
 	}
 }

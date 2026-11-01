@@ -207,14 +207,17 @@ func (mp Map) land() Role {
 	return Track
 }
 
-// rng returns the range of the values, and false when there is none.
+// rng returns the range of the values, and false when there is none. A value
+// under a code the map does not know shades nothing, so it sets no range: one
+// large one would push every real country into the lowest shade.
 func (mp Map) rng() (lo, hi float64, ok bool) {
 	if (mp.Min != 0 || mp.Max != 0) && finite(mp.Min) && finite(mp.Max) && mp.Max > mp.Min {
 		return mp.Min, mp.Max, true
 	}
 	lo, hi, ok = math.Inf(1), math.Inf(-1), false
-	for _, v := range mp.Values {
-		if finite(v) {
+	wd := loadWorld()
+	for code, v := range mp.Values {
+		if _, known := wd.index[strings.ToUpper(strings.TrimSpace(code))]; known && finite(v) {
 			hi, ok = math.Max(hi, v), true
 			if v > 0 {
 				lo = math.Min(lo, v)
