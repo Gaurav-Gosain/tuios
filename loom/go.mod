@@ -8,10 +8,10 @@ require (
 	github.com/charmbracelet/x/ansi v0.11.8
 	github.com/charmbracelet/x/term v0.2.2
 	golang.org/x/image v0.45.0
-	tuios.dev/plot v0.2.2-0.20261023124927-50c38920e301
+	tuios.dev/plot v0.2.3-0.20261101044251-193bbd706cd8
 	tuios.dev/shot v0.2.0
-	tuios.dev/sketch v0.4.1-0.20261031063548-b443ae3ee956
-	tuios.dev/tml v0.1.0
+	tuios.dev/sketch v0.4.1-0.20261101044610-110fb596ed93
+	tuios.dev/tml v0.1.2-0.20261101044251-193bbd706cd8
 )
 
 require (
