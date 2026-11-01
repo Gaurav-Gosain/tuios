@@ -241,6 +241,18 @@ func (s *Session) DropAgentTranscript(windowID string) {
 	}
 }
 
+// dropAgentTranscripts ends every join of a session that is stopping. Unlike
+// DropAgentTranscript it gives back no claim: the session is going away.
+func (s *Session) dropAgentTranscripts() {
+	s.transcripts.mu.Lock()
+	defer s.transcripts.mu.Unlock()
+	for id, j := range s.transcripts.joins {
+		delete(s.transcripts.joins, id)
+		delete(s.transcripts.nextTry, id)
+		s.releaseJoinLocked(j)
+	}
+}
+
 // releaseJoinLocked stops a join's timer and unwatches its file. Called with the
 // transcript mutex held.
 func (s *Session) releaseJoinLocked(j *transcriptJoin) {

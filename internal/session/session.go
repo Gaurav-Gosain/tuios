@@ -3767,6 +3767,8 @@ func (s *Session) Stop() {
 	s.agentMetaPrune.stop()
 	s.subagentPrune.stop()
 	s.subagentFlush.stop()
+	// A stopped session must not stay reachable from the daemon's transcript watcher.
+	s.dropAgentTranscripts()
 
 	defer s.holdPaneLife()()
 	s.ptysMu.Lock()

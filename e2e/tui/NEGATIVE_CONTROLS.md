@@ -23,6 +23,28 @@ its own binary.
 | `panelCenterX` (`internal/app/overlay_hit.go`) returns `viewReserve().Left`, so the panel's left edge does not depend on the screen's width | "ASSERTION: after a resize from 260 to 240 columns the panel did not move: the panel's left edge is at 28, 112 wide" | **caught** |
 
 The frame is `quick-look-resized` under `TUIOS_E2E_FRAMES`.
+## Killed sessions release their transcript joins
+
+`TestKilledSessionsReleaseTheirTranscriptJoins` starts a daemon with `--pprof`,
+joins one survivor session to a transcript in a project directory, then joins a
+window of each of 30 more sessions with the real SessionStart hook (one in the
+survivor's directory, the rest in a directory each) and kills the 30. Before the
+kills the daemon holds one inotify watch more per new directory and every window
+reads its first record. Once the daemon's goroutines are back to the baseline
+after the kills, the watch count must be back to the baseline, and the survivor
+must still get a `transcript` event when its file grows. The control (the call
+that ends the joins cut from `Session.Stop`) is caught by the watch count, which
+is read only on Linux (the daemon's `/proc` fdinfo), so off Linux the test does
+not see the leak. The heap is not asserted: post-collection `HeapAlloc` is read
+every 500 ms for 10 s after the kills and written to the artifact with each
+reading's offset, because pane timers of about a second still hold a just-killed
+session for that long.
+
+Run on 2026-11-01 on Linux, go1.27.3. On a build whose `Session.Stop` does not
+end the joins, the test fails: `the killed sessions kept their watches: want 3
+(W0), got 32 (32 before the kills)`. On that build the heap after the kills
+settles at about 63 KB above the baseline per killed session within about a
+second and stays there for the rest of the 10 s.
 
 ## An edit back to a tuios save reaches the screen
 
