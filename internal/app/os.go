@@ -1276,6 +1276,7 @@ type OS struct {
 	dndPanes map[string]*dndPane
 	dndPress *dndPress
 	dndDrag  *dndDrag
+	dndHost  dndHostState
 	// tapeDetect holds the project-tape detection state (trust store, session
 	// memory of handled directories, debounce bookkeeping, and the current
 	// passive indicator). See tape_detect.go.

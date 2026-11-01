@@ -94,6 +94,7 @@ func runTapeInteractive(tapeFile string) error {
 		failure = finalOS.ScriptFailure
 		finalOS.Cleanup()
 		_, _ = os.Stdout.WriteString(finalOS.HostProgramStatusClear())
+		_, _ = os.Stdout.WriteString(finalOS.DnDHostClear())
 	}
 
 	terminal.ResetTerminal()

@@ -174,6 +174,7 @@ func runLocal() error {
 		finalOS.Cleanup()
 		// The OSC 7501 records this client left on the terminal.
 		_, _ = os.Stdout.WriteString(finalOS.HostProgramStatusClear())
+		_, _ = os.Stdout.WriteString(finalOS.DnDHostClear())
 	}
 
 	terminal.ResetTerminal()

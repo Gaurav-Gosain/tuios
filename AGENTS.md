@@ -417,6 +417,11 @@ go build -o /tmp/tuios ./cmd/tuios
 cd e2e/tui && TUIOS_E2E=1 TUIOS_E2E_BIN=/tmp/tuios go test -count=1 -timeout 40m .
 ```
 
+`TestDnDDesktopBridge` runs the drag and drop bridge against a real kitty
+under Xvfb. It skips unless `TUIOS_E2E_KITTY` names a kitty binary, and
+needs `Xvfb`, `xdotool` and `xclip`; `TUIOS_E2E_YAZI` adds yazi as a source.
+The e2e-kitty workflow runs it on request and once a week.
+
 A pull request runs only the e2e tests its change can reach. `e2e/tui/testselect`
 reads the diff and `e2e/tui/testselect/testmap.txt`, which records the functions
 each test ran in a coverage run. The e2e-tui test map workflow refreshes the map
