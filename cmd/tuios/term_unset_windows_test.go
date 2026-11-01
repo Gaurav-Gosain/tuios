@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/charmbracelet/x/ansi"
+	"github.com/charmbracelet/x/xpty"
 
 	"github.com/Gaurav-Gosain/tuios/internal/ptyspawn"
 	"github.com/Gaurav-Gosain/tuios/internal/testutil"
@@ -61,32 +62,43 @@ func TestStartsOnAConsoleWithNoTerm(t *testing.T) {
 		env = append(env, kv)
 	}
 
-	t.Run("unset", func(t *testing.T) {
-		t.Cleanup(func() {
-			ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
-			defer cancel()
-			stop := exec.CommandContext(ctx, bin, "kill-server")
-			stop.Env = env
-			if out, err := stop.CombinedOutput(); err != nil {
-				t.Logf("kill-server: %v\n%s", err, out)
-			}
-		})
-		const want = "PANE-TERM=[xterm-256color] PANE-COLORTERM=[truecolor]"
-		out := onConsole(t, bin, env, []string{want, "TERM is not set"}, "new", "term-unset")
-		if strings.Contains(out, "TERM is not set") {
-			t.Fatalf("tuios refused the unset TERM:\n%s", out)
+	// The refused run starts the daemon too, so this waits for both subtests.
+	t.Cleanup(func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+		defer cancel()
+		stop := exec.CommandContext(ctx, bin, "kill-server")
+		stop.Env = env
+		if out, err := stop.CombinedOutput(); err != nil {
+			t.Logf("kill-server: %v\n%s", err, out)
 		}
 	})
 
+	t.Run("unset", func(t *testing.T) {
+		c := openConsole(t, bin, env, "new", "term-unset")
+		if out := c.wait(t, "new window", "TERM is not set"); strings.Contains(out, "TERM is not set") {
+			t.Fatalf("tuios refused the unset TERM:\n%s", out)
+		}
+		if _, err := c.pty.Write([]byte("n")); err != nil {
+			t.Fatal(err)
+		}
+		c.wait(t, "PANE-TERM=[xterm-256color] PANE-COLORTERM=[truecolor]")
+	})
+
 	t.Run("dumb", func(t *testing.T) {
-		onConsole(t, bin, append(env[:len(env):len(env)], "TERM=dumb"), []string{`TERM is "dumb"`}, "new", "term-dumb")
+		c := openConsole(t, bin, append(env[:len(env):len(env)], "TERM=dumb"), "new", "term-dumb")
+		c.wait(t, `TERM is "dumb"`)
 	})
 }
 
-// onConsole starts bin on a pseudo console and returns what the console has
-// shown, with the escape sequences removed, once any of the markers is on it.
-// A console stays open after its program ends, so the wait has a deadline.
-func onConsole(t *testing.T, bin string, env, markers []string, args ...string) string {
+// console is a program on a pseudo console, and all it has written so far.
+type console struct {
+	pty xpty.Pty
+
+	mu   sync.Mutex
+	seen []byte
+}
+
+func openConsole(t *testing.T, bin string, env []string, args ...string) *console {
 	t.Helper()
 	pty, cmd, err := ptyspawn.Spawn(120, 40, func() *exec.Cmd {
 		cmd := exec.Command(bin, args...)
@@ -100,16 +112,14 @@ func onConsole(t *testing.T, bin string, env, markers []string, args ...string) 
 		_ = cmd.Process.Kill()
 		_ = pty.Close()
 	})
-
-	var mu sync.Mutex
-	var seen []byte
+	c := &console{pty: pty}
 	go func() {
 		buf := make([]byte, 4096)
 		for {
 			n, err := pty.Read(buf)
-			mu.Lock()
-			seen = append(seen, buf[:n]...)
-			mu.Unlock()
+			c.mu.Lock()
+			c.seen = append(c.seen, buf[:n]...)
+			c.mu.Unlock()
 			// The pseudo console asks once at startup, and waits for the answer.
 			if bytes.Contains(buf[:n], []byte("\x1b[c")) {
 				_, _ = pty.Write([]byte("\x1b[?62;4;22c"))
@@ -119,15 +129,23 @@ func onConsole(t *testing.T, bin string, env, markers []string, args ...string) 
 			}
 		}
 	}()
+	return c
+}
 
-	shown := func() string {
-		mu.Lock()
-		defer mu.Unlock()
-		return ansi.Strip(string(seen))
-	}
+// shown is what the console has written, with the escape sequences removed.
+func (c *console) shown() string {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return ansi.Strip(string(c.seen))
+}
+
+// wait returns what the console has shown once any of the markers is on it. A
+// console stays open after its program ends, so the wait has a deadline.
+func (c *console) wait(t *testing.T, markers ...string) string {
+	t.Helper()
 	deadline := time.Now().Add(60 * time.Second)
 	for time.Now().Before(deadline) {
-		out := shown()
+		out := c.shown()
 		for _, m := range markers {
 			if strings.Contains(out, m) {
 				return out
@@ -135,6 +153,6 @@ func onConsole(t *testing.T, bin string, env, markers []string, args ...string) 
 		}
 		time.Sleep(100 * time.Millisecond)
 	}
-	t.Fatalf("the console never showed any of %q; it showed:\n%s", markers, shown())
+	t.Fatalf("the console never showed any of %q; it showed:\n%s", markers, c.shown())
 	return ""
 }
