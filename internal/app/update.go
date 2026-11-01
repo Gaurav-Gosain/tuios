@@ -937,6 +937,10 @@ func (m *OS) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		msg = TickerMsg(dt.at)
 	}
 	model, cmd := m.update(msg)
+	// Whatever this message did may have moved the box of quick look's picture.
+	if qc := m.quickLookPicture(); qc != nil {
+		cmd = tea.Batch(cmd, qc)
+	}
 	// Input may switch the center workspace, edit an edge's session assignment,
 	// or finish a rail resize. Reconcile after it has changed the model.
 	switch msg.(type) {

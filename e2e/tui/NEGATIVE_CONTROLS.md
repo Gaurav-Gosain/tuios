@@ -7,6 +7,45 @@ below. Two of them are **not** caught here; that is written down rather than
 papered over, because a suite whose real coverage is unknown is worse than no
 suite.
 
+## Quick look keeps its picture through a resize
+
+`TestRailQuickLookKittyPicture` opens quick look on a host with kitty graphics
+and reads the host through `hostPictures`. An ED 2 now drops every picture and
+its data in that model, and a placement of a picture the host does not hold
+shows nothing. I checked those rules by replaying streams through kitty 0.49.2's
+own parser and graphics manager, with no window. ghostty's
+`ImageStorage.clearScreen` does the same in its source.
+
+The test resizes the terminal four ways: same box, a new box, back to a size
+already drawn, and a burst of 30 steps. It also opens a panel over the picture,
+walks past the pictures tuios leaves on the host, and resizes a PDF page.
+`TestCockpitReplyClipboardImageFirstPaste` runs an editor over a draft with a
+picture. The renderer erases the screen when it starts again, with no resize of
+its own making. `TestAnErasingFrameCarriesItsPictures` is a kept unit test for the
+order the suite cannot force.
+
+Run on 2026-11-01 on Linux. All three pass on the fixed build, and a binary of
+main (7aaaed819) fails the first two. Each control was built into its own binary.
+
+| Control: what was cut | Where it fails | Verdict |
+| --- | --- | --- |
+| Main without the fix | `TestRailQuickLookKittyPicture` ("a wider terminal took pic.png off the host: the host shows 0 pictures"), `TestCockpitReplyClipboardImageFirstPaste` ("back from the editor the host holds 0 pictures") | **caught** |
+| The commit before #1437, for the same run through kitty's core | The same picture is gone after the second resize, so #1437 did not cause this | **caught** |
+| `AddEraseHook` not called | The same two tests, with the same messages | **caught** |
+| `hostErased` forgets the uploads and sends nothing | `TestAnErasingFrameCarriesItsPictures` ("the two frames carried no single upload and placement"). Both e2e tests pass: a settle or the return from the editor brings a later frame, so only the unit test holds this | **caught** |
+| `Update` does not ask `quickLookPicture` after a message | `TestRailQuickLookKittyPicture` ("no kitty placement of the picture at its own size was sent") | **caught** |
+| `previewResizing` always false | `TestRailQuickLookKittyPicture` ("30 resizes in a burst placed the picture 56 times") | **caught** |
+| `trimHost` not called, so only the 64 of the previewer are freed | `TestRailQuickLookKittyPicture` ("after the walk the host holds 10 pictures, the bound is 8") | **caught** |
+
+The frames are `quick-look-kitty-taller`, `quick-look-kitty-pdf-resized` and, on a
+failure, `quick-look-picture-missing` under `TUIOS_E2E_FRAMES`.
+
+I also ran main and this branch in a real kitty 0.49.2 under a private Xvfb, with
+a blue PDF page, and counted the blue pixels of a screenshot of the display after
+each step. Main has 0 after a resize that keeps the box, 0 back at an earlier size,
+and 0 after a close and a reopen. This branch has the page after each of those. A
+pointer move before each screenshot makes kitty paint. See the pull request.
+
 ## Quick look moves on a resize
 
 `TestQuickLookMovesOnAResize` opens quick look on `main.go`, then resizes the

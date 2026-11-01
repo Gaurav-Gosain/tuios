@@ -2,13 +2,27 @@
 
 package app
 
-import "fmt"
+import (
+	"fmt"
+	"slices"
+)
 
 // The kitty half of the reply previews: put each picture on the host after
 // the frame that reserved its cells, and take down the ones no frame shows.
 // It follows flushLauncherIcons: a picture is uploaded once per image and
 // size, placed with the launcher's escapes, and moved only when its cell box
 // moved.
+//
+// What the host holds is written down here, and two things change it without a
+// word back. An ED 2 drops every picture, which hostErased hears about. A host
+// over its storage quota drops the oldest, kitty at 320 MB, which
+// replyPreviewHostMax keeps these from reaching. A placement of a picture the
+// host dropped fails, and with q=2 it fails in silence.
+
+// replyPreviewHostMax bounds the pictures left on the host. Eight full-size
+// pictures are under 50 MB there, and moving back over the last few files costs
+// a placement instead of an upload.
+const replyPreviewHostMax = 8
 
 // replyPixelsReady reports whether the previews can be kitty pictures.
 func (m *OS) replyPixelsReady() bool {
@@ -45,8 +59,15 @@ func (m *OS) flushReplyPreviewForFrame() {
 	if pl, ok := m.quickLookPlacement(); ok && m.replyPixelsReady() {
 		want = append(want, pl)
 	}
+	if m.previewResizing() {
+		want = nil
+	}
 	if p == nil {
 		return
+	}
+	if !p.eraseHooked && m.PostRenderWriter != nil && len(want) > 0 {
+		p.eraseHooked = true
+		m.PostRenderWriter.AddEraseHook(p.hostErased)
 	}
 	p.mu.Lock()
 	if len(want) == 0 && len(p.shown) == 0 && len(p.gone) == 0 {
@@ -65,6 +86,7 @@ func (m *OS) flushReplyPreviewForFrame() {
 			id = p.nextID
 			p.nextID++
 			p.hostID[pl.key] = id
+			p.hostOrder = append(p.hostOrder, pl.key)
 			buf = appendKittyTransmitPNG(buf, id, pic.png)
 		}
 		at := previewID{img: id, placement: uint32(i + 1)}
@@ -81,6 +103,7 @@ func (m *OS) flushReplyPreviewForFrame() {
 			buf = appendKittyUnplace(buf, at.img, at.placement)
 		}
 	}
+	p.trimHost(want)
 	// An uppercase delete frees the image data; the unplace above keeps it.
 	for _, id := range p.gone {
 		buf = fmt.Appendf(buf, "\x1b_Ga=d,d=I,i=%d,q=2\x1b\\", id)
@@ -97,4 +120,52 @@ func (m *OS) flushReplyPreviewForFrame() {
 		return
 	}
 	m.WriteHost(out)
+}
+
+// trimHost sends the oldest uploads past replyPreviewHostMax to the gone list,
+// other than the ones on screen. Call it with p.mu held.
+func (p *replyPreview) trimHost(want []previewPlacement) {
+	over := len(p.hostOrder) - replyPreviewHostMax
+	if over <= 0 {
+		return
+	}
+	kept := p.hostOrder[:0]
+	for _, k := range p.hostOrder {
+		onScreen := slices.ContainsFunc(want, func(pl previewPlacement) bool { return pl.key == k })
+		if over > 0 && !onScreen {
+			p.gone = append(p.gone, p.hostID[k])
+			delete(p.hostID, k)
+			over--
+			continue
+		}
+		kept = append(kept, k)
+	}
+	p.hostOrder = kept
+}
+
+// hostErased runs in the writer for a frame that erases the host's screen. The
+// host now holds none of these pictures, so nothing is taken as uploaded, and
+// the ones the last frame placed go out again behind the frame: no later frame
+// need come to carry them. See PostRenderWriter.AddEraseHook.
+func (p *replyPreview) hostErased() []byte {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	clear(p.hostID)
+	p.hostOrder = p.hostOrder[:0]
+	p.gone = p.gone[:0]
+	var buf []byte
+	for at, pl := range p.shown {
+		pic := p.pics[pl.key]
+		if pic == nil || len(pic.png) == 0 {
+			delete(p.shown, at)
+			continue
+		}
+		if _, up := p.hostID[pl.key]; !up {
+			p.hostID[pl.key] = at.img
+			p.hostOrder = append(p.hostOrder, pl.key)
+			buf = appendKittyTransmitPNG(buf, at.img, pic.png)
+		}
+		buf = appendKittyPlaceBox(buf, at.img, at.placement, pl.x, pl.y, pl.cols, pl.rows)
+	}
+	return buf
 }

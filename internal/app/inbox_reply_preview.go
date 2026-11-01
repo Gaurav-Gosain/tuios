@@ -12,6 +12,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -88,13 +89,18 @@ type replyPreview struct {
 	pics    map[previewKey]*previewPicture
 	order   []previewKey
 	asked   map[previewKey]bool
-	// hostID is the kitty image id a picture was uploaded under, and shown
-	// what is placed on the host now. See inbox_reply_preview_unix.go.
-	hostID map[previewKey]uint32
+	// hostID is the kitty image id a picture was uploaded under, hostOrder the
+	// same pictures oldest first, and shown what is placed on the host now. See
+	// inbox_reply_preview_unix.go.
+	hostID    map[previewKey]uint32
+	hostOrder []previewKey
 	// gone is the kitty ids of evicted pictures, freed at the next flush.
 	gone   []uint32
 	nextID uint32
 	shown  map[previewID]previewPlacement
+	// eraseHooked says the writer tells hostErased when it erases the host's
+	// screen. Only the render touches it.
+	eraseHooked bool
 
 	// openDir is the private folder of the copy the desktop viewer opened,
 	// removed when the view closes and when the client ends.
@@ -274,6 +280,7 @@ func (m *OS) applyReplyPreview(msg replyPreviewMsg) {
 		delete(p.asked, old)
 		if id, up := p.hostID[old]; up {
 			delete(p.hostID, old)
+			p.hostOrder = slices.DeleteFunc(p.hostOrder, func(k previewKey) bool { return k == old })
 			p.gone = append(p.gone, id)
 		}
 	}

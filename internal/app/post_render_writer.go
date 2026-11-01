@@ -40,6 +40,9 @@ type PostRenderWriter struct {
 	frameOwed bool
 	// written runs after each frame the renderer wrote. See FrameWriter.
 	written func()
+	// erased is what has to follow a frame that erases the host's screen. See
+	// AddEraseHook.
+	erased []func() []byte
 }
 
 // FrameHook runs on each frame the renderer writes. out is the frame to send
@@ -55,6 +58,20 @@ func (w *PostRenderWriter) SetFrameHook(fn FrameHook) {
 	w.mu.Unlock()
 }
 
+// AddEraseHook adds a function that runs for each frame that erases the host's
+// screen, and whose output goes out behind that frame.
+//
+// An ED 2 takes every kitty picture off the host, its image data too, and
+// kitty and ghostty both do this. Bubble Tea writes one on each resize and
+// whenever it restarts its renderer, so whatever put a picture on the host has
+// to hear about it, and this writer is the one place that sees every frame. A
+// client with no such hook pays nothing here.
+func (w *PostRenderWriter) AddEraseHook(fn func() []byte) {
+	w.mu.Lock()
+	w.erased = append(w.erased, fn)
+	w.mu.Unlock()
+}
+
 func NewPostRenderWriter(f *os.File) *PostRenderWriter {
 	return &PostRenderWriter{File: f}
 }
@@ -66,6 +83,9 @@ var (
 	frameSyncBegin = []byte("\x1b[?2026h")
 	frameSyncEnd   = []byte("\x1b[?2026l")
 )
+
+// hostEraseScreen is ED 2. See AddEraseHook.
+var hostEraseScreen = []byte("\x1b[2J")
 
 // Write passes bubbletea's frame through to the underlying file, appends any
 // pending post-render data, and brackets the whole thing in a synchronized
@@ -106,6 +126,13 @@ func (w *PostRenderWriter) write(p []byte, frame bool) (n int, err error) {
 		var after []byte
 		if out, after = w.frameHook(p); len(after) > 0 {
 			pending = append(pending, after...)
+		}
+	}
+	if frame && len(w.erased) > 0 && bytes.Contains(p, hostEraseScreen) {
+		// Behind what was queued for this frame: a picture that had its upload
+		// queued is sent again, and the same id and placement replace it.
+		for _, fn := range w.erased {
+			pending = append(pending, fn()...)
 		}
 	}
 

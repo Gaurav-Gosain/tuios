@@ -995,7 +995,7 @@ func TestCockpitReplyClipboardImageFirstPaste(t *testing.T) {
 	}
 	host := &lockedBuffer{}
 	term := startIn(t, base, startOpts{args: []string{"attach", "home"}, cols: 200, rows: 55, shippedLooks: true, out: host,
-		env: []string{"TERM=xterm-256color", "COLORTERM=truecolor", "PATH=" + bin + ":" + os.Getenv("PATH"), "WAYLAND_DISPLAY=wayland-e2e"}})
+		env: []string{"TERM=xterm-256color", "COLORTERM=truecolor", "PATH=" + bin + ":" + os.Getenv("PATH"), "WAYLAND_DISPLAY=wayland-e2e", "EDITOR=true", "VISUAL="}})
 	if err := term.WaitFor(func(s tuitest.Screen) bool { return countWindows(s) == 1 }, bootTimeout); err != nil {
 		t.Fatalf("client never attached: %v\n%s", err, term.Snapshot())
 	}
@@ -1030,6 +1030,22 @@ func TestCockpitReplyClipboardImageFirstPaste(t *testing.T) {
 		t.Fatalf("ASSERTION: the first paste placed no thumbnail (label at %+v): %v\n%s", label, err, term.Snapshot())
 	}
 	saveCockpitFrames(t, term, "clipboard-thumb-200x55", hostPictures(t, []byte(host.String()))...)
+
+	// An editor over the draft and back. The renderer erases the host's screen
+	// when it starts again, with no resize and no other input to carry the
+	// picture back. Run before the chip is clicked, so the draft is all there is.
+	mark = len(host.String())
+	if err := term.SendKeys(tuitest.Ctrl('g')); err != nil {
+		t.Fatal(err)
+	}
+	if err := term.WaitFor(func(tuitest.Screen) bool {
+		s := host.String()[mark:]
+		return strings.Contains(s, "\x1b[2J") && len(hostPictures(t, []byte(host.String()))) == 1
+	}, 5*time.Second); err != nil {
+		saveCockpitFrames(t, term, "clipboard-thumb-after-editor", hostPictures(t, []byte(host.String()))...)
+		t.Fatalf("ASSERTION: back from the editor the host holds %d pictures, want the thumbnail: %v\n%s",
+			len(hostPictures(t, []byte(host.String()))), err, term.Snapshot())
+	}
 
 	// The chip opens the image view, and its picture is placed with no
 	// other input.
@@ -1070,7 +1086,7 @@ func waitBufferQuiet(t *testing.T, host *lockedBuffer, quiet time.Duration) {
 
 // placedAPC is one kitty graphics command, with the cursor move just before
 // it, which is where a placement goes.
-var placedAPC = regexp.MustCompile(`(?:\x1b\[(\d+);(\d+)H)?\x1b_G([^;\x1b]*)(?:;([^\x1b]*))?\x1b\\`)
+var placedAPC = regexp.MustCompile(`\x1b\[2J|(?:\x1b\[(\d+);(\d+)H)?\x1b_G([^;\x1b]*)(?:;([^\x1b]*))?\x1b\\`)
 
 // hostPictures replays the kitty graphics in stream as the host does and
 // returns the pictures placed at the end, for a frame.
@@ -1082,19 +1098,38 @@ func hostPictures(t *testing.T, stream []byte) []shot.Image {
 	data := map[uint32][]byte{}
 	decoded := map[uint32]image.Image{}
 	live := map[gfxKey]placed{}
+	arriving := map[uint32]bool{}
 	var sending uint32
 	for _, m := range placedAPC.FindAllSubmatch(stream, -1) {
+		if bytes.Equal(m[0], []byte("\x1b[2J")) {
+			// ED 2 takes every picture off the host, its data too. Run through
+			// kitty's own parser and graphics manager (0.49.2), a picture that
+			// had no placement at that moment goes as well, and ghostty's
+			// ImageStorage.clearScreen does the same.
+			clear(live)
+			clear(data)
+			clear(decoded)
+			continue
+		}
 		p := kittyParams(string(m[3]))
 		id := atoiU32(p["i"])
 		switch p["a"] {
 		case "t", "T":
 			sending = id
 			data[id] = append([]byte(nil), m[4]...)
+			delete(decoded, id)
+			arriving[id] = p["m"] == "1"
 		case "":
 			// A chunk after the first names no image: it is the one being
 			// sent.
 			data[sending] = append(data[sending], m[4]...)
+			arriving[sending] = p["m"] == "1"
 		case "p":
+			// The host refuses a placement of a picture it does not hold, and
+			// with q=2 it says nothing.
+			if _, held := data[id]; !held {
+				continue
+			}
 			r, _ := strconv.Atoi(string(m[1]))
 			c, _ := strconv.Atoi(string(m[2]))
 			cols, _ := strconv.Atoi(p["c"])
@@ -1111,10 +1146,18 @@ func hostPictures(t *testing.T, stream []byte) []shot.Image {
 					delete(live, k)
 				}
 			}
+			if p["d"] == "I" {
+				delete(data, id)
+				delete(decoded, id)
+			}
 		}
 	}
 	var out []shot.Image
 	for k, pl := range live {
+		// The stream was read in the middle of an upload that replaces it.
+		if arriving[k.img] {
+			continue
+		}
 		img, ok := decoded[k.img]
 		if !ok {
 			raw, err := base64.StdEncoding.DecodeString(string(data[k.img]))

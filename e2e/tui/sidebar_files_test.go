@@ -1261,7 +1261,9 @@ func TestRailFileDragAt16Colours(t *testing.T) {
 
 // quickLookFixture is a folder with one file of each kind quick look draws:
 // code, Markdown, a picture, a file that is not text, and a text longer than
-// the preview keeps. The names sort in the order the test walks them.
+// the preview keeps. The names sort in the order the test walks them. Behind
+// them are a picture larger than the panel, enough small ones to pass what
+// tuios leaves on a host, and a PDF, for TestRailQuickLookKittyPicture.
 func quickLookFixture(t *testing.T) string {
 	t.Helper()
 	dir := t.TempDir()
@@ -1279,19 +1281,29 @@ func quickLookFixture(t *testing.T) string {
 	if err := png.Encode(&pic, img); err != nil {
 		t.Fatal(err)
 	}
-	for name, body := range map[string]string{
-		"big.txt":  long.String(),
-		"blob.bin": "\x00\x01\x02\x03binary",
-		"main.go":  "package main\n\nimport \"fmt\"\n\n// main says hello.\nfunc main() {\n\tfmt.Println(\"hello\")\n}\n",
-		"notes.md": "# Quick look notes\n\nSome **bold** words.\n\n- first point\n- second point\n",
-		"pic.png":  pic.String(),
-	} {
+	files := map[string]string{
+		"big.txt":   long.String(),
+		"blob.bin":  "\x00\x01\x02\x03binary",
+		"main.go":   "package main\n\nimport \"fmt\"\n\n// main says hello.\nfunc main() {\n\tfmt.Println(\"hello\")\n}\n",
+		"notes.md":  "# Quick look notes\n\nSome **bold** words.\n\n- first point\n- second point\n",
+		"pic.png":   pic.String(),
+		"tall.png":  string(gradientPNG(t, 800, 1100)),
+		"zpage.pdf": string(minimalPDF()),
+	}
+	for i := range quickLookWalked {
+		files[fmt.Sprintf("walk%02d.png", i)] = string(gradientPNG(t, 64+i, 32))
+	}
+	for name, body := range files {
 		if err := os.WriteFile(filepath.Join(dir, name), []byte(body), 0o644); err != nil {
 			t.Fatal(err)
 		}
 	}
 	return dir
 }
+
+// quickLookWalked is how many small pictures the fixture holds: more than the
+// previews leave on a host.
+const quickLookWalked = 10
 
 // quickLookShows waits for every marker in want to be on screen and none in
 // not, and saves the frame under name.
@@ -1562,10 +1574,39 @@ func quickLookFocusRail(t *testing.T, term *tuitest.Terminal, first string) {
 // kittyPlaceRe is a kitty placement of a picture the previews uploaded.
 var kittyPlaceRe = regexp.MustCompile(`\x1b_Ga=p,i=(\d+),p=\d+,c=(\d+),r=(\d+),`)
 
+// quickLookOnHost waits for the stream after mark to hold want, then for the
+// host to show one picture that place accepts, and returns it. A nil place
+// accepts any. hostPictures replays the stream by the rules a real kitty keeps:
+// see the ED 2 case there.
+func quickLookOnHost(t *testing.T, term *tuitest.Terminal, out *lockedBuffer, mark int, want, why string, place func(shot.Image) bool) shot.Image {
+	t.Helper()
+	var pics []shot.Image
+	if err := term.WaitFor(func(tuitest.Screen) bool {
+		s := out.String()
+		pics = hostPictures(t, []byte(s))
+		return strings.Contains(s[mark:], want) && len(pics) == 1 && (place == nil || place(pics[0]))
+	}, uiTimeout); err != nil {
+		saveCockpitFrames(t, term, "quick-look-picture-missing", pics...)
+		t.Fatalf("ASSERTION: %s: the host shows %d pictures %+v, want 1 in its place: %v\n%s", why, len(pics), pics, err, term.Snapshot())
+	}
+	return pics[0]
+}
+
 // TestRailQuickLookKittyPicture is the picture on a host with kitty graphics,
 // which the test terminal says it has: the picture is uploaded and placed in
 // the panel, at no more cells than its own pixels fill, and taken down when
-// the preview closes.
+// the preview closes. It stays through what happens to an open preview: a
+// resize that leaves its box as it was, one that changes the box, a return to
+// a size it was drawn at, a burst of resizes, and a panel opened over it. A walk
+// past what tuios leaves on the host keeps that bounded, and the first picture
+// still shows on the way back. See NEGATIVE_CONTROLS.md.
+//
+// How this could pass wrongly: a placement in the stream is not a picture on the
+// host. The renderer's ED 2 drops the picture and its data, and tuios then sent
+// only placements that the host refuses in silence. So the test reads the host
+// through hostPictures, which drops them too, and it waits for an ED 2 where
+// one is due, so the picture from before the resize cannot answer for the one
+// after it.
 //
 // NEGATIVE CONTROL: with quickLookPlacement answering false, no placement is
 // sent and the wait times out.
@@ -1574,6 +1615,15 @@ func TestRailQuickLookKittyPicture(t *testing.T) {
 	term, _ := quickLookStart(t, "pic.png", nil, out)
 	sendKeys(t, term, " ")
 	railLists(t, term, "space did not show pic.png", []string{"pic.png ", "64 x 32"}, nil)
+	const erase = "\x1b[2J"
+	resize := func(cols, rows int) int {
+		t.Helper()
+		mark := len(out.String())
+		if err := term.Resize(cols, rows); err != nil {
+			t.Fatalf("resize to %dx%d: %v", cols, rows, err)
+		}
+		return mark
+	}
 	var id string
 	deadline := time.Now().Add(uiTimeout)
 	for id == "" {
@@ -1590,9 +1640,107 @@ func TestRailQuickLookKittyPicture(t *testing.T) {
 		}
 		time.Sleep(50 * time.Millisecond)
 	}
+
+	// Its own pixels fill the same box at either width, and the panel moves.
+	before := quickLookOnHost(t, term, out, 0, "", "pic.png before a resize", nil)
+	mark := resize(160, 40)
+	quickLookOnHost(t, term, out, mark, erase, "a wider terminal took pic.png off the host", func(p shot.Image) bool {
+		return p.Cols == before.Cols && p.Rows == before.Rows && p.Col != before.Col
+	})
+	mark = resize(140, 40)
+	quickLookOnHost(t, term, out, mark, erase, "a return to 140 columns took pic.png off the host", func(p shot.Image) bool {
+		return p.Col == before.Col
+	})
+
+	// Another panel over the picture takes it down, and closing it puts it back.
+	sendKeys(t, term, tuitest.Ctrl('p'))
+	waitScreen(t, term, "the palette never opened over the preview", paletteTitle)
+	if err := term.WaitFor(func(tuitest.Screen) bool { return len(hostPictures(t, []byte(out.String()))) == 0 }, uiTimeout); err != nil {
+		t.Errorf("ASSERTION: the palette left the picture on top of it: %v", err)
+	}
+	mark = len(out.String())
+	sendKeys(t, term, tuitest.Esc)
+	quickLookOnHost(t, term, out, mark, "a=p,", "closing the palette did not bring pic.png back", nil)
+
+	// Larger than the panel: its box follows the height, and an earlier size
+	// comes back from what is already prepared.
+	sendKeys(t, term, "j")
+	railLists(t, term, "j did not move the preview to tall.png", []string{"tall.png ", "800 x 1100"}, nil)
+	short := quickLookOnHost(t, term, out, 0, "", "tall.png", func(p shot.Image) bool { return p.Cols > 16 })
+	mark = resize(140, 50)
+	taller := quickLookOnHost(t, term, out, mark, erase, "a taller terminal took tall.png off the host", func(p shot.Image) bool {
+		return p.Rows > short.Rows
+	})
+	saveCockpitFrames(t, term, "quick-look-kitty-taller", taller)
+	mark = resize(140, 40)
+	quickLookOnHost(t, term, out, mark, erase, "a return to 40 rows took tall.png off the host", func(p shot.Image) bool {
+		return p.Rows == short.Rows
+	})
+
+	// A drag of the window's edge: the picture waits for it to settle, and is
+	// not sent to the host at every step.
+	mark = len(out.String())
+	const steps = 30
+	for i := range steps {
+		if err := term.Resize(142+2*i, 41+i%3); err != nil {
+			t.Fatalf("resize step %d: %v", i, err)
+		}
+		time.Sleep(25 * time.Millisecond)
+	}
+	quickLookOnHost(t, term, out, mark, erase, "a burst of resizes took tall.png off the host", nil)
+	if n := len(kittyPlaceRe.FindAllString(out.String()[mark:], -1)); n > steps/3 {
+		t.Errorf("ASSERTION: %d resizes in a burst placed the picture %d times", steps, n)
+	}
+	_ = resize(140, 40)
+	waitScreen(t, term, "the preview after the burst", "tall.png ", "800 x 1100")
+
+	// A walk past what tuios leaves on the host. The host never holds more than
+	// the bound, and pic.png, freed on the way, shows again on the way back.
+	for i := range quickLookWalked {
+		mark = len(out.String())
+		sendKeys(t, term, "j")
+		name := fmt.Sprintf("walk%02d.png", i)
+		railLists(t, term, "j did not move the preview to "+name, []string{name + " "}, nil)
+		quickLookOnHost(t, term, out, mark, "a=p,", name, nil)
+	}
+	if n := hostHeldPictures(out.String()); n > 8 {
+		t.Errorf("ASSERTION: after the walk the host holds %d pictures, the bound is 8", n)
+	}
+	mark = len(out.String())
+	sendKeys(t, term, "k")
+	railLists(t, term, "k did not move the preview back", []string{fmt.Sprintf("walk%02d.png ", quickLookWalked-2)}, nil)
+	for range quickLookWalked {
+		sendKeys(t, term, "k")
+	}
+	railLists(t, term, "k did not move the preview to pic.png", []string{"pic.png ", "64 x 32"}, nil)
+	quickLookOnHost(t, term, out, mark, "a=p,", "pic.png was not on the host on the way back", func(p shot.Image) bool {
+		return p.Cols == before.Cols && p.Rows == before.Rows
+	})
+
+	// The report: a page of a PDF stays through a resize. It needs the reader.
+	if _, err := exec.LookPath("pdftoppm"); err != nil {
+		t.Log("no pdftoppm here: the PDF step is skipped")
+	} else {
+		for range quickLookWalked + 2 {
+			sendKeys(t, term, "j")
+		}
+		railLists(t, term, "j did not move the preview to zpage.pdf", []string{"zpage.pdf ", "PDF"}, nil)
+		page := quickLookOnHost(t, term, out, 0, "", "zpage.pdf", func(p shot.Image) bool { return p.Cols > 16 })
+		mark = resize(160, 40)
+		wider := quickLookOnHost(t, term, out, mark, erase, "a wider terminal took the PDF page off the host", func(p shot.Image) bool {
+			return p.Col != page.Col
+		})
+		saveCockpitFrames(t, term, "quick-look-kitty-pdf-resized", wider)
+		mark = resize(140, 40)
+		quickLookOnHost(t, term, out, mark, erase, "a return to 140 columns took the PDF page off the host", func(p shot.Image) bool {
+			return p.Col == page.Col
+		})
+	}
+
 	sendKeys(t, term, " ")
-	unplace := "\x1b_Ga=d,d=i,i=" + id + ","
-	if err := term.WaitFor(func(tuitest.Screen) bool { return strings.Contains(out.String(), unplace) }, uiTimeout); err != nil {
+	if err := term.WaitFor(func(tuitest.Screen) bool {
+		return len(hostPictures(t, []byte(out.String()))) == 0 && strings.Contains(out.String(), "\x1b_Ga=d,d=i,i=")
+	}, uiTimeout); err != nil {
 		t.Fatalf("ASSERTION: closing the preview did not take the picture down: %v", err)
 	}
 	alive(t, term, "after the kitty picture")
@@ -1742,6 +1890,26 @@ func TestQuickLookFreesThePicturesItLeaves(t *testing.T) {
 		t.Logf("no picture was freed more than once (%d freed)", len(freed))
 	}
 	alive(t, term, "after the walk")
+}
+
+// hostHeldPictures is how many pictures a host holds after stream, placed or
+// not, by the rules hostPictures keeps.
+func hostHeldPictures(stream string) int {
+	held := map[uint32]bool{}
+	for _, m := range placedAPC.FindAllStringSubmatch(stream, -1) {
+		if m[0] == "\x1b[2J" {
+			clear(held)
+			continue
+		}
+		p := kittyParams(m[3])
+		switch {
+		case p["a"] == "t" || p["a"] == "T":
+			held[atoiU32(p["i"])] = true
+		case p["a"] == "d" && p["d"] == "I":
+			delete(held, atoiU32(p["i"]))
+		}
+	}
+	return len(held)
 }
 
 // clickNoteGone waits out the note a click on a file row leaves: the click

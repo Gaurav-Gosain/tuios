@@ -56,6 +56,11 @@ import (
 // Nothing runs while it is closed: no timer, no watch, no read. A read runs
 // once per row the cursor stops on, and only one at a time: a key held down
 // starts one read, and the read for the row the cursor ended on follows it.
+//
+// A picture waits for a resize of the terminal to settle, then is scaled once
+// for the size the person stopped at. The renderer erases the host's screen on
+// a resize, and that takes a kitty picture and its data off the host, so the
+// upload follows the settle too. See hostErased in inbox_reply_preview_unix.go.
 
 // overlayKindQuickLook names the panel's layer.
 const overlayKindQuickLook = "quicklook"
@@ -303,7 +308,7 @@ func (m *OS) QuickLookSync() tea.Cmd {
 	if t != ql.target {
 		return m.quickLookShow(t)
 	}
-	return m.quickLookPicture()
+	return nil
 }
 
 // quickLookCursorTarget is the row under the rail's cursor, when it is a row
@@ -352,7 +357,7 @@ func (m *OS) quickLookShow(t quickLookTarget) tea.Cmd {
 		return nil
 	}
 	if ql.res != nil && ql.res.target == t {
-		return m.quickLookPicture()
+		return nil
 	}
 	if ql.fetching {
 		return nil
@@ -511,7 +516,7 @@ func (m *OS) applyQuickLook(msg quickLookMsg) tea.Cmd {
 	}
 	if msg.res.target == ql.target {
 		ql.res = msg.res
-		return m.quickLookPicture()
+		return nil
 	}
 	return m.quickLookShow(ql.target)
 }
@@ -552,12 +557,27 @@ func (m *OS) quickLookPicBox(img *composer.Image, innerW, bodyH int) (x, y, cols
 	return 1 + (availW-cols)/2, 1 + (availH-rows)/2, cols, rows
 }
 
+// previewResizing says a resize of the terminal is still in flight. A preview's
+// picture waits for it to settle, as a pane's images do: it is decoded and scaled
+// once for the size the person stopped at, and a drag of the window's edge sends
+// the host no picture at all. The time is the same guard the resize deferral has:
+// a settle that never comes does not hide the picture for good.
+func (m *OS) previewResizing() bool {
+	return m.viewportResizing && time.Since(m.viewportResizeAt) <= resizeDeferralTimeout
+}
+
 // quickLookPicture prepares the picture at the size the panel shows it, when
-// it is not ready. It is nil when there is nothing to do.
+// it is not ready. Update asks after every message, because more than input
+// moves the box or the key: a settled resize, a session sized by another client,
+// a theme. It is one comparison while the preview is closed, and nil when there
+// is nothing to do.
 func (m *OS) quickLookPicture() tea.Cmd {
 	ql := &m.quickLook
+	if !ql.open {
+		return nil
+	}
 	r := ql.res
-	if !ql.open || r == nil || r.img == nil || r.target != ql.target {
+	if r == nil || r.img == nil || r.target != ql.target || m.previewResizing() {
 		return nil
 	}
 	p := m.replyPreviewer()

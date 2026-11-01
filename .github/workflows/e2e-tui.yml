@@ -291,6 +291,18 @@ jobs:
             echo "This shard runs no tests: the change reaches none of the tests it would run." >> "$GITHUB_STEP_SUMMARY"
           fi
 
+      # TestRailQuickLookKittyPicture resizes a PDF page, the case the bug was
+      # reported on, and skips that step without pdftoppm. Only the shard that
+      # holds the test pays for the package.
+      - name: Install pdftoppm for the shard that needs it
+        if: env.TESTED_URL == '' && steps.plan.outputs.run == 'true'
+        run: |
+          if grep -qx 'TestRailQuickLookKittyPicture' "$RUNNER_TEMP/names.txt"; then
+            sudo apt-get update -qq
+            sudo apt-get install -y -qq --no-install-recommends poppler-utils
+            pdftoppm -v 2>&1 | head -1
+          fi
+
       - name: Build the binary under test
         if: env.TESTED_URL == '' && steps.plan.outputs.run == 'true'
         run: go build -o "$RUNNER_TEMP/tuios" ./cmd/tuios
