@@ -647,9 +647,9 @@ var table = [...]Component{
 		{Name: "value", Type: TBool, Bind: true, Doc: "The first value."},
 	}},
 	{Name: "card", Group: "container", Doc: "A titled box, in the cockpit card style.", Content: ContentBlocks, Block: true, Attrs: []AttrSpec{
-		{Name: "fold", Type: TBool, Bind: true, Doc: "Starts folded."},
+		{Name: "fold", Type: TBool, Bind: true, Doc: "Starts folded. A card with this attribute takes the focus, and enter folds it."},
 		{Name: "meta", Type: TString, Bind: true, Doc: "Text at the right of the title."},
-		{Name: "on-press", Type: TAction, Doc: "Runs on enter or a click."},
+		{Name: "on-press", Type: TAction, Doc: "Runs on enter or a click. A card with this attribute takes the focus, and enter runs this instead of a fold."},
 		{Name: "role", Type: TRole, Bind: true, Doc: "A theme role colour."},
 		{Name: "title", Type: TString, Bind: true, Doc: "The title."},
 	}},

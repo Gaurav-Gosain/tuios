@@ -16,10 +16,9 @@ type cardWidget struct {
 	modal             bool
 	indent            int // 2, or 0 when the body starts with a cursor margin of its own
 	press             []tml.Action
-	// foldable is true when the document declared fold, so the card can be
-	// folded. A card that cannot fold is not a tab stop: it would take a key
-	// press that does nothing, and a screen of titled panels would otherwise be
-	// a screen of dead stops.
+	// foldable is true when the document declared fold. A plain card is not a
+	// tab stop, or a screen of titled panels would be a screen of stops the
+	// person never wants (see focusable).
 	foldable bool
 }
 

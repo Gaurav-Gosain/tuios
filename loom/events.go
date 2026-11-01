@@ -53,7 +53,10 @@ func focusable(s *Surface, b *box) bool {
 	case *tabsWidget:
 		return len(w.ids) > 1
 	case *cardWidget:
-		return !w.modal && w.foldable
+		// A folded card stays a stop whatever folded it, so a click on a title
+		// or the fold action never leaves a card the keyboard cannot open. The
+		// card that has the focus keeps it once it opens, until tab moves on.
+		return !w.modal && (w.foldable || w.folded || len(w.press) > 0 || s.view.Focus == b.key)
 	case *buttonWidget:
 		return !w.disabled
 	case *scrollWidget:
@@ -221,6 +224,13 @@ func (s *Surface) keyOn(b *box, key string) (Result, bool, error) {
 		}
 	case *cardWidget:
 		if press {
+			if len(w.press) > 0 {
+				res, err := s.run(b, w.press, nil)
+				return res, true, err
+			}
+			// The focus may be here only as the default. Name it, so it stays
+			// when the card opens and stops being a stop by itself.
+			s.setFocus(b)
 			s.toggleFold(b, w)
 			return Result{View: true}, true, nil
 		}

@@ -372,6 +372,79 @@ func TestFocusAccentMoves(t *testing.T) {
 	sameAsFresh(t, s, w, h)
 }
 
+// TestCardFocus pins which cards are tab stops and what enter does on each.
+func TestCardFocus(t *testing.T) {
+	const w, h = 40, 12
+	stops := func(src string) []string {
+		s := mustSurface(t, src)
+		s.Render(w, h)
+		var out []string
+		for _, b := range s.focus {
+			out = append(out, b.key)
+		}
+		return out
+	}
+	for _, c := range []struct {
+		name, card string
+		stop       bool
+	}{
+		{"plain", `<card id="c" title="C"><text>x</text></card>`, false},
+		{"fold true", `<card id="c" title="C" fold="true"><text>x</text></card>`, true},
+		{"fold false", `<card id="c" title="C" fold="false"><text>x</text></card>`, true},
+		{"fold bound", `<card id="c" title="C" fold="{state.f}"><text>x</text></card>`, true},
+		{"on-press", `<card id="c" title="C" on-press="emit('p')"><text>x</text></card>`, true},
+	} {
+		got := stops(`<tml version="1"><state>{"f": false}</state><col>` + c.card + `</col></tml>`)
+		if (len(got) == 1) != c.stop {
+			t.Errorf("%s: stops %v, want a stop: %v", c.name, got, c.stop)
+		}
+	}
+
+	// Enter runs on-press, and folds only when there is none.
+	s := mustSurface(t, `<tml version="1"><col><card id="c" title="C" fold="false" on-press="emit('p')"><text>x</text></card></col></tml>`)
+	s.Render(w, h)
+	res, err := s.Key("enter")
+	if err != nil || len(res.Effects) != 1 || res.Effects[0].Name != "p" {
+		t.Fatalf("enter on a card with on-press: %+v %v", res, err)
+	}
+	screenHas(t, s.Render(w, h), "x")
+
+	// A plain card that a click folded stays in reach of the keyboard, and
+	// keeps the focus when enter opens it.
+	s = mustSurface(t, `<tml version="1"><col><card id="c" title="C"><text>inside</text></card><button id="b" on-press="emit('b')">OK</button></col></tml>`)
+	buf := s.Render(w, h)
+	if _, err := s.Mouse(Mouse{X: 3, Y: rowWith(buf, "C"), Button: MouseLeft}); err != nil {
+		t.Fatal(err)
+	}
+	s.Render(w, h)
+	for s.Focus() != "c" {
+		if _, err := s.Key("tab"); err != nil {
+			t.Fatal(err)
+		}
+		s.Render(w, h)
+		if len(s.focus) != 2 {
+			t.Fatalf("a folded card is no stop: %d stops", len(s.focus))
+		}
+	}
+	if _, err := s.Key("enter"); err != nil {
+		t.Fatal(err)
+	}
+	screenHas(t, s.Render(w, h), "inside")
+	if s.focused() == nil || s.focused().key != "c" {
+		t.Fatalf("enter opened the card and the focus went to %v", s.focused())
+	}
+	sameAsFresh(t, s, w, h)
+	// Once tab leaves it, the open card is a plain card again.
+	if _, err := s.Key("tab"); err != nil {
+		t.Fatal(err)
+	}
+	s.Render(w, h)
+	if s.Focus() != "b" || len(s.focus) != 1 {
+		t.Fatalf("after tab: focus %q, %d stops", s.Focus(), len(s.focus))
+	}
+	sameAsFresh(t, s, w, h)
+}
+
 // TestControlCharsDropped draws a tree built in code, so tml.Sanitize never
 // saw it: no C0 or C1 control character or DEL may reach a cell, since a
 // cell's text goes to the terminal as is.

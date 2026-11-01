@@ -1526,7 +1526,7 @@
               "$ref": "#/$defs/binding"
             }
           ],
-          "description": "Starts folded."
+          "description": "Starts folded. A card with this attribute takes the focus, and enter folds it."
         },
         "grow": {
           "description": "Share of free space.",
@@ -1638,7 +1638,7 @@
           "description": "Smallest width."
         },
         "on-press": {
-          "description": "Runs on enter or a click.",
+          "description": "Runs on enter or a click. A card with this attribute takes the focus, and enter runs this instead of a fold.",
           "type": "string"
         },
         "pad": {
