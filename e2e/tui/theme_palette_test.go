@@ -511,10 +511,19 @@ func TestThemeEditorEditsAndSaves(t *testing.T) {
 //
 // How this could pass wrongly: a fix that greys the colour also reads, so the
 // fixed accent must still be red: its red channel above the other two.
+//
+// Enter on a row the theme leaves unset must open the colour picker on the
+// colour the row shows. The host's background is one no theme draws, so a
+// picker that opens on the theme's background or on black does not pass.
 func TestThemeEditorQuickAndFix(t *testing.T) {
 	base := t.TempDir()
-	writeConfig(t, base, "[appearance]\ntheme = \"nord\"\n")
-	term := startIn(t, base, startOpts{cols: 140, rows: 40, env: []string{"COLORTERM=truecolor"}})
+	writeConfig(t, base, "[appearance]\ntheme = \"nord\"\n\n[appearance.sidebar]\nbackground = \"#123456\"\n")
+	const hostBg, hostFg = "#0f2a14", "#d0e8d0"
+	term := startIn(t, base, startOpts{
+		cols: 140, rows: 40,
+		env:  []string{"COLORTERM=truecolor"},
+		wrap: []string{buildHostTerm(t), "run", "-bg", hostBg, "-fg", hostFg, "-ansi", hostANSISpec(), "--"},
+	})
 	waitBoot(t, term)
 
 	sendKeys(t, term, legacyCtrlP)
@@ -570,6 +579,72 @@ func TestThemeEditorQuickAndFix(t *testing.T) {
 	if r <= g || r <= b || r <= 0x33 {
 		t.Fatalf("the fixed accent %s is not a lighter red", got.Chrome.Accent)
 	}
+
+	// The picker opens on the colour a role shows, also for a role the theme
+	// leaves unset. These rows had no colour and enter on them was a panic:
+	// the grounds in every built-in theme, Selection in one_dark and others.
+	// The source and the arrow are the picker's readout, and the spaces are
+	// its swatch: the rows behind it print the same hex.
+	pickerOn := func(hex, source string) {
+		t.Helper()
+		sendKeys(t, term, tuitest.Enter)
+		waitScreen(t, term, "the colour picker never opened on "+hex, source+" →", "→    "+hex)
+	}
+	closePicker := func() {
+		t.Helper()
+		sendKeys(t, term, tuitest.Esc)
+		waitGone(t, term, "the colour picker", "esc cancel")
+	}
+	editTheme := func(id string) {
+		t.Helper()
+		sendKeys(t, term, legacyCtrlP)
+		waitScreen(t, term, "the palette never opened", paletteTitle)
+		sendKeys(t, term, "Theme picker")
+		waitScreen(t, term, "the palette never filtered", "Theme picker")
+		sendKeys(t, term, tuitest.Enter)
+		waitScreen(t, term, "the theme picker never opened", "themes")
+		sendKeys(t, term, id)
+		waitScreen(t, term, "the picker never filtered", id)
+		sendKeys(t, term, tuitest.Ctrl('e'))
+		waitScreen(t, term, "ctrl+e never opened the editor", "Edit theme: "+id, "Accents")
+	}
+	sendKeys(t, term, tuitest.Esc)
+	waitGone(t, term, "the theme editor", "Edit theme: nord-custom")
+
+	// The steps of the report, on a saved copy of a theme. Nothing paints the
+	// dock, so it shows the host's background, and the picker opens on that.
+	editTheme("nord-custom")
+	for range 8 {
+		sendKeys(t, term, tuitest.Down)
+	}
+	pickerOn(hostBg, "from base")
+	// The cursor's flash paints the dock for a moment. Once it ends the dock's
+	// cells have the default background, which is the host's.
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		cols, rows := s.Size()
+		return s.Cell(cols/2, rows-1).Bg.Kind == tuitest.ColorDefault
+	}, uiTimeout); err != nil {
+		t.Fatalf("the dock paints a ground of its own: %v\n%s", err, term.SnapshotStyled())
+	}
+	saveArtifact(t, term, artifactDir(t), "dock-ground-picker")
+	savePNG(t, term.Screen(), hostGroundPalette(hostFg, hostBg), artifactDir(t), "dock-ground-picker")
+	closePicker()
+
+	// A config key wins over the theme, so the picker opens on the key's colour.
+	sendKeys(t, term, tuitest.Down)
+	pickerOn("#123456", "set in config.toml")
+	saveArtifact(t, term, artifactDir(t), "rail-ground-picker")
+	closePicker()
+	sendKeys(t, term, tuitest.Esc)
+	waitGone(t, term, "the theme editor", "Edit theme: nord-custom")
+
+	// one_dark names no selection colour, so the row shows the configured one.
+	editTheme("one_dark")
+	sendKeys(t, term, tuitest.Tab)
+	waitScreen(t, term, "the pane colours tab never opened", "Foreground", "The sixteen")
+	sendKeys(t, term, tuitest.Down, tuitest.Down)
+	pickerOn("#45475a", "from base")
+	saveArtifact(t, term, artifactDir(t), "selection-picker")
 }
 
 // TestAfterThemeChangeHookFiresOncePerPick runs a hook on after-theme-change

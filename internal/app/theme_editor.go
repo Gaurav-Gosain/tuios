@@ -87,6 +87,9 @@ var themeEditorRoleRows = []themeEditorRow{
 	{group: "Status", label: "Busy", role: theme.RoleBusy, pane: -1},
 }
 
+// themeEditorPaneSelection is the Selection row's index in themeEditorPaneRows.
+const themeEditorPaneSelection = 2
+
 // themeEditorPaneRows are the Pane colours tab, in the draft's colour order.
 var themeEditorPaneRows = func() []themeEditorRow {
 	labels := []string{"Foreground", "Background", "Selection", "Cursor",
@@ -390,17 +393,52 @@ func (m *OS) themeEditorChanged(pane bool) {
 	m.MarkAllDirty()
 }
 
-// themeEditorColour is the colour row draws in the draft, or nil for a
-// ground the theme does not set.
+// themeEditorColour is the colour row shows in the draft, or nil for a draft
+// that does not resolve. A row the theme leaves unset still shows a colour on
+// the screen, and this is that colour: the picker opens on it and the row
+// prints it.
 func (m *OS) themeEditorColour(row themeEditorRow) color.Color {
 	st := &m.themeEditor
 	if st.resolved == nil {
 		return nil
 	}
 	if row.pane >= 0 {
-		return theme.AsColor(theme.ColourOf(st.resolved, row.pane))
+		c := theme.AsColor(theme.ColourOf(st.resolved, row.pane))
+		if c == nil && row.pane == themeEditorPaneSelection {
+			// Some built-in themes name no selection colour. A selection is
+			// drawn in appearance.selection, which has a default.
+			return configInk(m.Settings.SelectionBg)
+		}
+		return c
+	}
+	if row.role == theme.RoleDockGround || row.role == theme.RoleRailGround {
+		return m.themeEditorGround(row)
 	}
 	return theme.RoleColour(row.role, st.resolved, st.chrome, st.pal)
+}
+
+// themeEditorGround is the colour under the dock or the rail. No built-in
+// theme names either ground, and by default nothing is painted there, so a
+// cell shows the host terminal's own background. Only when the host has not
+// said what that is does the theme's background stand in, as it does for the
+// inks measured against this ground (see railGround).
+func (m *OS) themeEditorGround(row themeEditorRow) color.Color {
+	st := &m.themeEditor
+	if m.themeEditorConfigWins(row) {
+		which := surfaceDock
+		if row.role == theme.RoleRailGround {
+			which = surfaceSidebar
+		}
+		if g := m.surfaceGround(which); g.on() {
+			return g.bg
+		}
+	} else if c := st.chrome.Furniture(row.role); c != nil {
+		return c
+	}
+	if m.host.bg != nil {
+		return m.host.bg
+	}
+	return theme.AsColor(st.resolved.Bg)
 }
 
 // themeEditorFloor is the contrast row has to clear and the ground it is
@@ -493,14 +531,19 @@ func (m *OS) ThemeEditorPick() {
 		m.themeEditorSet(row, value)
 		return
 	}
-	start := toRGBA(m.themeEditorColour(row))
+	c := m.themeEditorColour(row)
+	if overlay.IsNoColor(c) {
+		// The row has no colour to start from, so the picker says none.
+		m.openAccentPicker(AccentTargetThemeRole, m.themeEditorRowID(row), Accent{}, accentSourceNone)
+		return
+	}
 	src := accentSourceOwn
 	if m.themeEditor.raw(row) == "" {
 		src = accentSourceDefault
 	}
-	m.openAccentPicker(AccentTargetThemeRole, m.themeEditorRowID(row), RGBAccent(start), src)
+	m.openAccentPicker(AccentTargetThemeRole, m.themeEditorRowID(row), RGBAccent(toRGBA(c)), src)
 	if src == accentSourceDefault {
-		m.AccentPicker.SrcWord = "from base"
+		m.AccentPicker.SrcWord = m.themeEditorSource(row)
 	}
 }
 

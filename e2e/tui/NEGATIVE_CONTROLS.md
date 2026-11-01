@@ -7116,6 +7116,24 @@ Run on 2026-10-17.
 |---|---|---|---|---|
 | f did not change the colour | yes | `ThemeEditorFix` sets the colour it already had | `TestThemeEditorQuickAndFix` ("f did not fix the accent's contrast") | **caught** |
 
+## The colour picker on a role the theme leaves unset (#1430)
+
+`TestThemeEditorQuickAndFix` goes on to the steps of the report, behind a host
+terminal with a background no theme draws. Enter on Dock ground must open the
+picker on the host's background, and the dock's cells must have the default
+background. Enter on Rail ground must open on `sidebar.background` from the
+config. Enter on Selection in one_dark must open on `appearance.selection`.
+
+Run on 2026-11-01.
+
+| Bug | Fix removed | How | Tests that fail | Verdict |
+|---|---|---|---|---|
+| Enter on an unset ground panicked | yes | the build of the commit before the fix | `TestThemeEditorQuickAndFix` ("the colour picker never opened on #0f2a14", with the nil pointer screen) | **caught** |
+| The dock's picker ignored the host | yes | `themeEditorGround` returns the theme's background and never `host.bg` | `TestThemeEditorQuickAndFix` ("the colour picker never opened on #0f2a14") | **caught** |
+| The rail's picker ignored the config | yes | `themeEditorGround` skips the `themeEditorConfigWins` branch | `TestThemeEditorQuickAndFix` ("the colour picker never opened on #123456") | **caught** |
+| Enter on an unset Selection had no colour | yes | `themeEditorColour` skips the selection fallback | `TestThemeEditorQuickAndFix` ("the colour picker never opened on #45475a") | **caught** |
+| The cursor's flash stayed on the dock | yes | `endThemeEditorFlash` does not put the draft back | `TestThemeEditorQuickAndFix` ("the dock paints a ground of its own") | **caught** |
+
 ## The rail's row style
 
 `TestLiveAppearanceKeepsTheScreen` gains `sidebar.row_style=pill` and
