@@ -149,6 +149,7 @@ func (s *Session) lookAtPane(ptyID string, reg *harness.Registry, look paneLook)
 		}
 	}
 
+	screenIdle := screen.ok && screen.state == AgentStateIdle
 	if title.ok && title.state == AgentStateIdle && screen.ok && screen.state != AgentStateIdle {
 		title.ok = false
 	}
@@ -172,7 +173,7 @@ func (s *Session) lookAtPane(ptyID string, reg *harness.Registry, look paneLook)
 		}
 		if v.state == AgentStateIdle {
 			idleSeen = true
-			if s.applyIdleVerdict(winID, ptyID, reg, v, hid, wrote) {
+			if s.applyIdleVerdict(winID, ptyID, reg, v, hid, wrote, screenIdle) {
 				matched = true
 			}
 			continue
@@ -196,14 +197,29 @@ func (s *Session) lookAtPane(ptyID string, reg *harness.Registry, look paneLook)
 // applyIdleVerdict puts an idle reading through the confirmation gate and
 // publishes it once confirmed. It reports whether the reading counts: false
 // when a stronger claim owns the window, since publishing would be refused.
-func (s *Session) applyIdleVerdict(winID, ptyID string, reg *harness.Registry, v agentVerdict, hid string, wrote int64) bool {
+// screenIdle says the screen tier read idle on this look, whichever tier's
+// reading v is.
+//
+// A prompt a hook reported from a one-off event (hookEventPrompt) ends only on
+// the screen's word, and only once that word holds as long as a working pane's
+// idle must. The title says nothing about it: Claude Code shows its rest glyph
+// at a menu as well as at its prompt box, so a frame that blanks the menu for
+// a redraw read as the prompt answered. A frame of the prompt box drawn in
+// the middle of a redraw is no answer either. A prompt that ends early is a
+// prompt nobody answers, which costs more than one that stays.
+func (s *Session) applyIdleVerdict(winID, ptyID string, reg *harness.Registry, v agentVerdict, hid string, wrote int64, screenIdle bool) bool {
 	claim, held := s.agentClaimHeld(winID)
-	if held && claim.source.rank() > v.source.rank() && !s.eventClaimWrittenOver(winID, claim, wrote) {
+	current, exists := s.windowAgentState(winID)
+	if !exists {
+		return false
+	}
+	hookPrompt := held && current == AgentStateNeedsInput && claim.hookEventPrompt()
+	if hookPrompt && !screenIdle {
 		s.idle.cancel(winID)
 		return false
 	}
-	current, exists := s.windowAgentState(winID)
-	if !exists {
+	if held && claim.source.rank() > v.source.rank() && !s.eventClaimWrittenOver(winID, claim, wrote) {
+		s.idle.cancel(winID)
 		return false
 	}
 	// Already idle on this tier's word: saying it again would restamp the
@@ -213,7 +229,11 @@ func (s *Session) applyIdleVerdict(winID, ptyID string, reg *harness.Registry, v
 		s.idle.cancel(winID)
 		return true
 	}
-	publish, recheck := s.idle.admit(winID, current, time.Now())
+	gate := current
+	if hookPrompt {
+		gate = AgentStateWorking
+	}
+	publish, recheck := s.idle.admit(winID, gate, time.Now())
 	if !publish {
 		if recheck > 0 {
 			s.idle.schedule(winID, recheck, func() { s.scanPaneForAgent(ptyID, reg) })
