@@ -21,6 +21,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode"
 	"unicode/utf8"
 
 	"github.com/Gaurav-Gosain/tuios/internal/childproc"
@@ -49,10 +50,15 @@ import (
 // swaps a key in under it.
 
 const (
-	previewMaxPx       = 1600
-	previewMaxPxLimit  = 4096
-	previewTextMax     = 256 << 10
-	previewWindowMax   = 1 << 20
+	previewMaxPx      = 1600
+	previewMaxPxLimit = 4096
+	previewTextMax    = 256 << 10
+	previewWindowMax  = 1 << 20
+	previewSeekChunk  = 1 << 20
+	previewLineMax    = 1 << 20
+	// previewSeekBudget bounds one search or one count. The answer says how far it
+	// read, and the next call goes on from there.
+	previewSeekBudget  = 5 * time.Second
 	previewImageMax    = 64 << 20
 	previewImageDimMax = 10000
 	previewPDFBytesMax = 8 << 20
@@ -88,6 +94,10 @@ func (d *Daemon) verbFilePreview(cs *connState, params json.RawMessage) (any, *v
 		Page   int    `json:"page"`
 		Offset *int64 `json:"offset"`
 		Limit  int    `json:"limit"`
+		Find   string `json:"find"`
+		From   int64  `json:"from"`
+		Back   bool   `json:"back"`
+		Line   int64  `json:"line"`
 	}
 	if verr := decodeParams(params, &p); verr != nil {
 		return nil, verr
@@ -117,6 +127,14 @@ func (d *Daemon) verbFilePreview(cs *connState, params json.RawMessage) (any, *v
 	}
 	ctx, cancel := context.WithTimeout(d.ctx, previewToolTimeout)
 	defer cancel()
+	if (p.Find != "" || p.Line > 0) && err == nil {
+		defer func() { _ = f.Close() }()
+		out := map[string]any{"path": path, "name": filepath.Base(path), "size": fi.Size(), "mtime": fi.ModTime().UnixMilli()}
+		ctx, cancel := context.WithTimeout(d.ctx, previewSeekBudget)
+		defer cancel()
+		previewSeek(ctx, f, fi.Size(), PreviewSeek{Find: p.Find, From: p.From, Back: p.Back, Line: p.Line}, out)
+		return out, nil
+	}
 	if p.Offset != nil && err == nil {
 		defer func() { _ = f.Close() }()
 		out := map[string]any{"path": path, "name": filepath.Base(path), "size": fi.Size(), "mtime": fi.ModTime().UnixMilli()}
@@ -154,6 +172,30 @@ func PreviewLocalWindow(path string, offset int64, limit int) (map[string]any, e
 	defer func() { _ = f.Close() }()
 	out := map[string]any{"path": path, "name": filepath.Base(path), "size": fi.Size(), "mtime": fi.ModTime().UnixMilli()}
 	previewWindow(f, fi.Size(), offset, limit, out)
+	return out, nil
+}
+
+// PreviewSeek says what to look for in a text: Find from byte From, going back
+// when Back is set, or line number Line.
+type PreviewSeek struct {
+	Find string
+	From int64
+	Back bool
+	Line int64
+}
+
+// PreviewLocalSeek looks in a text on this machine, as file-preview does for
+// find and line.
+func PreviewLocalSeek(ctx context.Context, path string, seek PreviewSeek) (map[string]any, error) {
+	f, fi, err := openRegular(path)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = f.Close() }()
+	ctx, cancel := context.WithTimeout(ctx, previewSeekBudget)
+	defer cancel()
+	out := map[string]any{"path": path, "name": filepath.Base(path), "size": fi.Size(), "mtime": fi.ModTime().UnixMilli()}
+	previewSeek(ctx, f, fi.Size(), seek, out)
 	return out, nil
 }
 
@@ -635,6 +677,121 @@ func previewWindow(f *os.File, size, offset int64, limit int, out map[string]any
 	out["truncated"] = offset+int64(end) < size
 }
 
+// previewSeek looks in a text one chunk at a time, for at most previewSeekBudget.
+// It holds one chunk, whatever the size of the file. offset is the start of the
+// line it found, or -1. reached is how far it read, so a later call can go on
+// from there, and counted is the lines it passed on the way to a line number.
+func previewSeek(ctx context.Context, f *os.File, size int64, seek PreviewSeek, out map[string]any) {
+	out["kind"] = "text"
+	out["offset"] = int64(-1)
+	buf := make([]byte, previewSeekChunk)
+	if seek.Line > 0 {
+		previewSeekLine(ctx, f, size, seek.Line, buf, out)
+		return
+	}
+	needle := []byte(seek.Find)
+	// A search in lower case ignores case, and one with a capital does not.
+	fold := !bytes.ContainsFunc(needle, unicode.IsUpper)
+	over := len(needle) - 1
+	at := min(max(seek.From, 0), size)
+	for ctx.Err() == nil {
+		start := at
+		if seek.Back {
+			start = max(at-int64(len(buf)), 0)
+		}
+		n, _ := f.ReadAt(buf[:min(int64(len(buf)), max(size-start, 0))], start)
+		chunk := buf[:n]
+		if seek.Back {
+			chunk = chunk[:min(int64(n), at-start)]
+		}
+		hay := chunk
+		if fold {
+			hay = bytes.ToLower(chunk)
+		}
+		i := bytes.Index(hay, needle)
+		if seek.Back {
+			i = bytes.LastIndex(hay, needle)
+		}
+		if i >= 0 {
+			out["offset"] = previewLineStart(f, start+int64(i))
+			out["reached"] = start + int64(i)
+			return
+		}
+		if seek.Back {
+			if start == 0 {
+				at = 0
+				break
+			}
+			at = min(start+int64(over), at-1)
+			continue
+		}
+		if start+int64(n) >= size || n == 0 {
+			at = size
+			break
+		}
+		at = start + int64(n) - int64(over)
+		if at <= start {
+			at = start + int64(n)
+		}
+	}
+	out["reached"] = at
+}
+
+// previewSeekLine finds the start of line number line.
+func previewSeekLine(ctx context.Context, f *os.File, size, line int64, buf []byte, out map[string]any) {
+	if line <= 1 {
+		out["offset"] = int64(0)
+		out["counted"] = int64(1)
+		out["reached"] = int64(0)
+		return
+	}
+	var at, counted int64
+	for ctx.Err() == nil && at < size {
+		n, _ := f.ReadAt(buf, at)
+		if n == 0 {
+			break
+		}
+		chunk := buf[:n]
+		for {
+			i := bytes.IndexByte(chunk, '\n')
+			if i < 0 {
+				break
+			}
+			counted++
+			chunk = chunk[i+1:]
+			if counted == line-1 {
+				start := at + int64(n-len(chunk))
+				if start >= size {
+					// The newline ends the file: that line is not there.
+					break
+				}
+				out["offset"] = start
+				out["counted"] = line
+				out["reached"] = start
+				return
+			}
+		}
+		at += int64(n)
+	}
+	out["counted"] = counted
+	out["reached"] = at
+}
+
+// previewLineStart is the start of the line that holds byte at. It looks back at
+// most previewLineMax bytes: a longer line is entered where the match is.
+func previewLineStart(f *os.File, at int64) int64 {
+	from := max(at-previewLineMax, 0)
+	buf := make([]byte, at-from)
+	n, _ := f.ReadAt(buf, from)
+	if i := bytes.LastIndexByte(buf[:n], '\n'); i >= 0 {
+		return from + int64(i) + 1
+	}
+	if from == 0 {
+		return 0
+	}
+	return at
+}
+
 // describeBinary is the preview of a file that has none: its type and size.
 func describeBinary(f *os.File, out map[string]any, note string) {
 	out["kind"] = "binary"
@@ -656,6 +813,10 @@ func previewVerbs() map[string]verbEntry {
 				{Name: "page", Type: "int", Description: "The PDF page.", Default: "1"},
 				{Name: "offset", Type: "int", Description: "Send a window of a text file from this byte, whole lines only, in place of the preview."},
 				{Name: "limit", Type: "int", Description: "The most bytes in that window, at most 1 MiB.", Default: "262144"},
+				{Name: "find", Type: "string", Description: "Look for this text in a text file, in place of the preview. Lower case ignores case."},
+				{Name: "from", Type: "int", Description: "The byte find starts at."},
+				{Name: "back", Type: "bool", Description: "Find goes toward the start of the file."},
+				{Name: "line", Type: "int", Description: "Find the start of this line number, in place of the preview."},
 			},
 			returns: []verbParam{
 				{Name: "kind", Type: "string", Description: "image, svg, pdf, video, text, dir or binary.", Accepted: []string{"image", "svg", "pdf", "video", "text", "dir", "binary"}},
@@ -665,7 +826,9 @@ func previewVerbs() map[string]verbEntry {
 				{Name: "height", Type: "int", Description: "An image's own height."},
 				{Name: "text", Type: "string", Description: "text and svg: the content."},
 				{Name: "truncated", Type: "bool", Description: "text: the file is longer than what was sent."},
-				{Name: "offset", Type: "int", Description: "A window: the byte it starts at."},
+				{Name: "offset", Type: "int", Description: "A window: the byte it starts at. find and line: the start of the line found, or -1."},
+				{Name: "reached", Type: "int", Description: "find and line: how far the read went. Call again from there when the search ran out of time."},
+				{Name: "counted", Type: "int", Description: "line: the lines passed."},
 				{Name: "next_offset", Type: "int", Description: "A window: the byte the next window starts at."},
 				{Name: "pdf", Type: "string", Description: "pdf, when this machine cannot draw the page: the file, base64, at most 8 MiB."},
 				{Name: "pages", Type: "int", Description: "pdf: the page count, when pdfinfo is there."},

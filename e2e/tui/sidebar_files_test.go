@@ -1612,6 +1612,49 @@ func quickLookTopRow(t *testing.T, term *tuitest.Terminal, why string, ok func(r
 	return top
 }
 
+// quickLookLitCells counts the cells of text on screen drawn on another ground
+// than the cells beside them.
+func quickLookLitCells(s tuitest.Screen, text string) int {
+	col, row, ok := findOnGrid(s, text)
+	if !ok {
+		return 0
+	}
+	base := s.Cell(col+len(text)+2, row).Bg
+	n := 0
+	for i := range len(text) {
+		if s.Cell(col+i, row).Bg != base {
+			n++
+		}
+	}
+	return n
+}
+
+// TestQuickLookLightsAMatchAtEachDepth searches at truecolor, 256 and 16 colours.
+// A match that lit only at truecolor would be a search with no answer on the
+// others.
+func TestQuickLookLightsAMatchAtEachDepth(t *testing.T) {
+	for _, d := range []struct {
+		name string
+		env  []string
+	}{
+		{"truecolor", []string{"TUIOS_KITTY_GRAPHICS=0", "TERM=xterm-256color", "COLORTERM=truecolor"}},
+		{"256", []string{"TUIOS_KITTY_GRAPHICS=0", "TERM=xterm-256color", "COLORTERM="}},
+		{"16", []string{"TUIOS_KITTY_GRAPHICS=0", "TERM=xterm", "COLORTERM="}},
+	} {
+		t.Run(d.name, func(t *testing.T) {
+			term, _ := quickLookStart(t, "zzlong.log", d.env, nil)
+			sendKeys(t, term, " ")
+			railLists(t, term, "space did not show the log", []string{"zzlong.log ", "row 1 x"}, nil)
+			sendKeys(t, term, tuitest.Tab, "/", "row 12 x", tuitest.Enter)
+			railLists(t, term, "the search did not end", []string{"/ row 12 x", "n next"}, nil)
+			if err := term.WaitFor(func(s tuitest.Screen) bool { return quickLookLitCells(s, "row 12 x") == len("row 12 x") }, uiTimeout); err != nil {
+				t.Errorf("ASSERTION: at %s the match has %d of %d cells lit: %v", d.name, quickLookLitCells(term.Screen(), "row 12 x"), len("row 12 x"), err)
+			}
+			saveCockpitFrames(t, term, "quick-look-search-"+d.name)
+		})
+	}
+}
+
 // TestQuickLookMovesInsideAFile walks a log longer than a window. J and K move
 // half a page and keep j and k on the list. The text goes on past the first
 // window and back to the start, with each row beside its own number, across
@@ -1667,6 +1710,46 @@ func TestQuickLookMovesInsideAFile(t *testing.T) {
 	copiesFrame(t, term, "quick-look-log-end")
 	sendKeys(t, term, "g")
 	quickLookTopRow(t, term, "g did not show the start of the file", func(r int) bool { return r == 1 })
+
+	// Search: first in the held text, then on through the file. The match a
+	// window read found comes with it, and N comes back.
+	sendKeys(t, term, "/", "row 5000 x", tuitest.Enter)
+	railLists(t, term, "the search did not find a row far down the file", []string{"row 5000 x", "n next"}, nil)
+	copiesFrame(t, term, "quick-look-log-search")
+	if q := quickLookLitCells(term.Screen(), "row 5000 x"); q == 0 {
+		t.Errorf("ASSERTION: the match on screen is not lit")
+	}
+	sendKeys(t, term, "n")
+	railLists(t, term, "n past the last match did not say so", []string{"No more matches."}, nil)
+	// N goes back past what is held, through the machine's backward search.
+	sendKeys(t, term, "/", "row 7 x", tuitest.Enter)
+	railLists(t, term, "a search with no match ahead did not say so", []string{"/ row 7 x", "No more matches."}, nil)
+	sendKeys(t, term, "N")
+	railLists(t, term, "N did not find the row far behind", []string{"row 7 x"}, []string{"No more matches."})
+	sendKeys(t, term, "/", "NOT IN THE FILE", tuitest.Enter)
+	railLists(t, term, "a search that finds nothing did not say so", []string{"No more matches."}, nil)
+	sendKeys(t, term, tuitest.Esc)
+
+	// Go to a line: the count gives an exact number, and the rows agree with it.
+	sendKeys(t, term, tuitest.Tab, ":", "4321", tuitest.Enter)
+	quickLookTopRow(t, term, "go to a line did not show that line", func(r int) bool { return r == 4321 })
+	sendKeys(t, term, ":", "99999", tuitest.Enter)
+	railLists(t, term, "a line past the end did not say how many there are", []string{"The file has 6000 lines."}, []string{"NOT IN THE FILE"})
+	copiesFrame(t, term, "quick-look-log-goto")
+
+	// Wrap: a row of the log takes more than one row of the panel.
+	sendKeys(t, term, "g")
+	quickLookTopRow(t, term, "g did not go back", func(r int) bool { return r == 1 })
+	sendKeys(t, term, "w")
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		_, one, ok1 := findOnGrid(s, "row 1 x")
+		_, two, ok2 := findOnGrid(s, "row 2 x")
+		return ok1 && ok2 && two-one > 1
+	}, uiTimeout); err != nil {
+		t.Errorf("ASSERTION: w did not wrap the lines: %v\n%s", err, term.Snapshot())
+	}
+	copiesFrame(t, term, "quick-look-log-wrap")
+	sendKeys(t, term, "w")
 
 	// Back on the list: esc leaves the preview open, and j moves the list.
 	sendKeys(t, term, tuitest.Esc)

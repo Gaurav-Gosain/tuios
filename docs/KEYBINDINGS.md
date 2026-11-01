@@ -270,7 +270,8 @@ the panes and shows:
 
 A file that is not text shows its type and size. A long text opens at once, and
 tuios reads more of it as you move. Line numbers after a jump to the end are
-estimates, and the preview says so.
+estimates, and the preview says so. A search or a count stops after 5 seconds
+and says how far it went. Press `n` to go on.
 
 `Up` and `Down` (or `j` and `k`) move the cursor to the next row, and the preview
 shows that row. `Space` or `Esc` closes the preview. A click outside it closes
@@ -294,6 +295,10 @@ Inside the file, every key acts on the preview:
 | `j` `k` | Move one line |
 | `d` `u` | Move half a page |
 | `g` `G` | Go to the start or the end |
+| `/` | Search in a text. Lower case ignores case |
+| `n` `N` | Go to the next match, or the one before |
+| `:` | Go to a line number |
+| `w` | Wrap long lines, or cut them |
 | `f` | Fill the area of the panes, or go back |
 | `Esc` or `Tab` | Move the keyboard back to the list |
 | `Space` | Close the preview |

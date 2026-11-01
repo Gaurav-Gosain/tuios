@@ -80,6 +80,24 @@ Run on 2026-11-02 on Linux. The test passes on the change. Each control was buil
 
 The frames are `quick-look-log-start`, `-far`, `-inside`, `-end`, `-full` and `quick-look-far-log-end` under `TUIOS_E2E_FRAMES`.
 
+## Quick look searches a file
+
+`TestQuickLookMovesInsideAFile` searches in a log of 6000 rows, past what is held in both directions, goes to a line, goes past the last line, and wraps. `TestQuickLookLightsAMatchAtEachDepth` checks every cell of a match at truecolor, 256 and 16 colours. `TestQuickLookOnAFarFile` searches and goes to a line over the link. `TestQuickLookSearchGoesOnFromWhereItStopped` is a kept unit test, since the suite has no way to run a search out of its 5 seconds.
+
+Run on 2026-11-02 on Linux. All pass on the change. Each control was built into its own binary.
+
+| Control: what was cut | Where it fails | Verdict |
+| --- | --- | --- |
+| The prompt is not read first, so a space closes the preview | `TestQuickLookLightsAMatchAtEachDepth` ("the search did not end"). This was the first bug the test found | **caught** |
+| A match is not lit | "at truecolor the match has 0 of 8 cells lit", and the same at 256 | **caught** |
+| The search looks only at the held text | "the search did not find a row far down the file" | **caught** |
+| The backward search finds nothing | "N did not find the row far behind" | **caught** |
+| A line found keeps no number | "go to a line did not show that line" | **caught** |
+| `w` does nothing | "w did not wrap the lines" | **caught** |
+| A go to line message keeps the old query beside it | "a line past the end did not say how many there are" | **caught** |
+
+The frames are `quick-look-search-truecolor`, `-256` and `-16`, `quick-look-log-search`, `-goto` and `-wrap` under `TUIOS_E2E_FRAMES`.
+
 ## Quick look moves on a resize
 
 `TestQuickLookMovesOnAResize` opens quick look on `main.go`, then resizes the

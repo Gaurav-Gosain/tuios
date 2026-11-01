@@ -2022,6 +2022,11 @@ func getDefaultQuickLookInsideKeybinds() map[string][]string {
 		"end":       {"G", "end"},
 		"go_back":   {"esc", "tab"},
 		"full_size": {"f"},
+		"find":      {"/"},
+		"find_next": {"n"},
+		"find_prev": {"N"},
+		"go_to":     {":"},
+		"wrap":      {"w"},
 	}
 }
 

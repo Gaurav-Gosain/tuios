@@ -377,6 +377,11 @@ func TestQuickLookOnAFarFile(t *testing.T) {
 	sendKeys(t, term, tuitest.Tab, "G")
 	railLists(t, term, "G did not read the end of the far log", []string{fmt.Sprintf("row %d x", quickLookLogLines), "on build"}, []string{"older tuios"})
 	copiesFrame(t, term, "quick-look-far-log-end")
+	// Build looks through the file, and only the part found comes over the link.
+	sendKeys(t, term, "/", "row 3000 x", tuitest.Enter)
+	railLists(t, term, "the far search did not find the row", []string{"row 3000 x", "on build"}, []string{"older tuios"})
+	sendKeys(t, term, ":", "1234", tuitest.Enter)
+	railLists(t, term, "go to a line did not work over the link", []string{"row 1234 x", "on build"}, nil)
 	sendKeys(t, term, " ")
 	railLists(t, term, "space did not close the far preview", nil, []string{"on build"})
 	alive(t, term, "after quick look on a far file")

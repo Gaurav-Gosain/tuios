@@ -38,7 +38,8 @@ import (
 //
 // Tab moves the keyboard inside the file, where the scope takes every key and
 // plain keys act on the file, so d there cannot reach the rail's delete. esc or
-// Tab comes back. f fills the area of the panes.
+// Tab comes back. f fills the area of the panes. Inside a text, / searches, n and
+// N go on, : goes to a line, and w wraps long lines.
 //
 // The files menu's Preview is the same preview with a way in from anywhere: it
 // gives the rail the keyboard, moves the cursor to the row, and closing gives
@@ -95,6 +96,8 @@ const (
 	quickLookTimeout = 25 * time.Second
 	// quickLookWheelStep is the lines one wheel notch scrolls.
 	quickLookWheelStep = 3
+	// quickLookPromptMax bounds what the search prompt holds.
+	quickLookPromptMax = 256
 )
 
 // quickLookTarget is the row the preview is for.
@@ -165,6 +168,23 @@ type quickLookState struct {
 	jump   quickLookMove
 	inside bool
 	full   bool
+	// seek is the search or count a quickLookSeek read asks for. prompt and input
+	// are the row at the bottom of a text being typed in, query the last search,
+	// and status what the last search or count said. wrap says long lines wrap,
+	// and wrapSet that the person chose it for this open.
+	seek session.PreviewSeek
+	// resume is where a search that ran out of its time goes on from, 0 for
+	// none.
+	resume int64
+	prompt quickLookPromptKind
+	input  string
+	query  string
+	status string
+	// statusLine says status answers a go to line, so the search row leaves the
+	// query out: the query stays for n, and it is not what the message is about.
+	statusLine bool
+	wrap       bool
+	wrapSet    bool
 	// hostOlder holds the machines whose file-preview verb has no windows, and
 	// hostAsked those it was asked of, once per link.
 	hostOlder map[string]bool
@@ -197,6 +217,11 @@ type quickLookFrame struct {
 	target        quickLookTarget
 	scroll        int
 	inside        bool
+	prompt        quickLookPromptKind
+	input         string
+	query         string
+	status        string
+	wrap          bool
 	innerW, bodyH int
 	key           string
 	seekKey       string
@@ -320,6 +345,8 @@ func (m *OS) dropQuickLook() {
 	ql.jump = quickLookNoMove
 	ql.inside = false
 	ql.full = false
+	ql.prompt, ql.input, ql.query, ql.status = quickLookNoPrompt, "", "", ""
+	ql.wrapSet = false
 	ql.box = overlay.Rect{}
 	ql.pic = quickLookPic{}
 	ql.mdLines = nil
@@ -393,6 +420,10 @@ func (m *OS) quickLookShow(t quickLookTarget) tea.Cmd {
 	ql.scroll = 0
 	ql.jump = quickLookNoMove
 	ql.inside = false
+	ql.prompt, ql.input, ql.query, ql.status = quickLookNoPrompt, "", "", ""
+	if !ql.wrapSet {
+		ql.wrap = quickLookWrapsByDefault(t.name)
+	}
 	if t.up || t.refuse != "" {
 		return nil
 	}
@@ -733,6 +764,7 @@ func (m *OS) renderQuickLook() (string, int, int) {
 	// The border is in the key: the frame glyphs are a package global set from
 	// border_style every frame, outside the palette.
 	f := quickLookFrame{ok: true, look: ql.lookKey, res: ql.res, target: ql.target, scroll: ql.scroll, inside: ql.inside,
+		prompt: ql.prompt, input: ql.input, query: ql.query, status: ql.status, wrap: ql.wrap,
 		innerW: innerW, bodyH: bodyH, key: key, seekKey: seekKey, insideKey: insideKey, border: m.Settings.OverlayBorder(),
 		canvas: pal.Canvas, fgMute: pal.FgMute, frame: pal.Frame, accent: pal.Accent,
 		accentBright: pal.AccentBright, fgDim: pal.FgDim}
@@ -740,6 +772,7 @@ func (m *OS) renderQuickLook() (string, int, int) {
 	var geo overlay.Geometry
 	var pic quickLookPic
 	if k := &ql.framed; k.ok && k.look == f.look && k.res == f.res && k.target == f.target && k.scroll == f.scroll && k.inside == f.inside &&
+		k.prompt == f.prompt && k.input == f.input && k.query == f.query && k.status == f.status && k.wrap == f.wrap &&
 		k.innerW == f.innerW && k.bodyH == f.bodyH && k.key == f.key && k.seekKey == f.seekKey && k.insideKey == f.insideKey && k.border == f.border &&
 		k.canvas == f.canvas && k.fgMute == f.fgMute && k.frame == f.frame && k.accent == f.accent &&
 		k.accentBright == f.accentBright && k.fgDim == f.fgDim {
@@ -810,6 +843,10 @@ func (m *OS) drawQuickLook(c *ckCanvas, l ckLook, dv *diffview.Theme, w, h int) 
 
 	// The line that says what it is, and where when it is not here.
 	bodyTop, bodyRows := 1, max(h-1, 0)
+	if quickLookText(r) && m.quickLookSearchRow() {
+		bodyRows = max(bodyRows-1, 1)
+		quickLookDrawSearchRow(c, pal, ql, h-1, w)
+	}
 	meta := quickLookMeta(r)
 	right := []ckSeg{}
 	if ql.inside {
@@ -833,13 +870,6 @@ func (m *OS) drawQuickLook(c *ckCanvas, l ckLook, dv *diffview.Theme, w, h int) 
 		// While a window is on its way, a key past the held text keeps its place,
 		// so a held key loses no presses: the panel shows the edge, and the read
 		// brings the text up to the position.
-		from := max(min(ql.scroll, len(r.lines)-bodyRows), 0)
-		if ql.scroll > from && (!r.more || r.older || r.stopped) {
-			ql.scroll = from
-		}
-		if ql.scroll < 0 && (r.startOff == 0 || r.older || r.stopped) {
-			ql.scroll = 0
-		}
 		codeX := 1
 		gutter := 0
 		if r.firstLine > 0 {
@@ -847,18 +877,43 @@ func (m *OS) drawQuickLook(c *ckCanvas, l ckLook, dv *diffview.Theme, w, h int) 
 			codeX = 1 + gutter + 2
 		}
 		codeW := max(w-codeX-2, 1)
+		last := len(r.lines) - bodyRows
+		if ql.wrap {
+			last = quickLookLastWrapped(r.lines, bodyRows, codeW)
+		}
+		from := max(min(ql.scroll, last), 0)
+		if ql.scroll > from && (!r.more || r.older || r.stopped) {
+			ql.scroll = from
+		}
+		if ql.scroll < 0 && (r.startOff == 0 || r.older || r.stopped) {
+			ql.scroll = 0
+		}
 		quickLookBar(c, pal, w-1, bodyTop, bodyRows, r, from)
-		for i := 0; i < bodyRows && from+i < len(r.lines); i++ {
-			n := from + i
+		row := 0
+		for n := from; row < bodyRows && n < len(r.lines); n++ {
 			if r.firstLine > 0 {
 				num := strconv.Itoa(r.firstLine + n)
-				c.text(1+gutter-len(num), bodyTop+i, 0, ckSeg{t: num, fg: pal.FgMute})
+				c.text(1+gutter-len(num), bodyTop+row, 0, ckSeg{t: num, fg: pal.FgMute})
 			}
 			var sp []diffview.Span
 			if n < len(r.spans) {
 				sp = r.spans[n]
 			}
-			c.draw(codeX, bodyTop+i, codeW, dv.Code(r.lines[n], sp, diffview.Range{}, diffview.Context, false, 0, codeW))
+			rows := 1
+			if ql.wrap {
+				rows = quickLookWrapRows(r.lines[n], codeW)
+			}
+			for k := 0; k < rows && row < bodyRows; k++ {
+				// One cell more than the row, so a wrapped row ends in text and
+				// not in the ellipsis of a cut line.
+				width := codeW
+				if ql.wrap {
+					width = codeW + 1
+				}
+				c.draw(codeX, bodyTop+row, codeW, dv.Code(r.lines[n], sp, diffview.Range{}, diffview.Context, false, k*codeW, width))
+				quickLookLightMatches(c, pal, ql.query, r.lines[n], codeX, bodyTop+row, codeW, k*codeW)
+				row++
+			}
 		}
 	case "markdown":
 		width := max(w-3, 4)
@@ -1082,6 +1137,15 @@ func (m *OS) quickLookHints(closeKey string) []overlay.Hint {
 	if ql.inside {
 		in := reg.GetQuickLookInsideKeys
 		h := add(nil, first(in("go_back")), "back to files")
+		if quickLookText(ql.res) {
+			h = add(h, first(in("find")), "search")
+			h = add(h, first(in("go_to")), "go to line")
+			wrap := "wrap"
+			if ql.wrap {
+				wrap = "cut lines"
+			}
+			h = add(h, first(in("wrap")), wrap)
+		}
 		h = add(h, pair(in, "line_down", "line_up"), "line")
 		h = add(h, pair(in, "half_down", "half_up"), "half page")
 		h = add(h, pair(in, "start", "end"), "start, end")
