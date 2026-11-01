@@ -15,8 +15,6 @@ use (
 	./vt
 )
 
-replace tuios.dev/vt v0.3.3-0.20261030005101-f3383d2005bd => ./vt
-
 replace tuios.dev/progstatus v0.1.2-0.20261030111253-c0f512aa3148 => ./progstatus
 
 replace tuios.dev/shot v0.2.2-0.20261030111253-e3068c27991c => ./shot
@@ -30,3 +28,5 @@ replace tuios.dev/plot v0.2.3-0.20261101044251-193bbd706cd8 => ./plot
 replace tuios.dev/sketch v0.4.1-0.20261101044610-110fb596ed93 => ./sketch
 
 replace tuios.dev/tml v0.1.2-0.20261101044251-193bbd706cd8 => ./tml
+
+replace tuios.dev/vt v0.3.3-0.20261101171432-b7643f25e058 => ./vt
