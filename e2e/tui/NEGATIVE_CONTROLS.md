@@ -62,6 +62,24 @@ Run on 2026-11-01 on Linux. Both pass on the fixed build. Each control was built
 
 These tests hold the rules, not the pixels. The pixels were counted in a real kitty 0.49.2 under a private Xvfb: main has 0 blue pixels after the first resize, and the fixed build keeps every one through six resizes.
 
+## Quick look moves inside a file
+
+`TestQuickLookMovesInsideAFile` walks a log of 6000 numbered rows, about 1.1 MB, with `J` and `K`, in one burst of keys, past what the preview holds and back. Each row on screen must sit beside its own line number. The test then goes inside with `Tab`, checks that `d` does not reach the rail, goes to both ends, comes back with `esc`, uses the wheel and toggles full size.
+
+Run on 2026-11-02 on Linux. The test passes on the change. Each control was built into its own binary.
+
+| Control: what was cut | Where it fails | Verdict |
+| --- | --- | --- |
+| `Update` does not ask `quickLookWindow` | "J did not read on past the first window: the first row is 1290" | **caught** |
+| The line number is not moved when a window is let go | "the first row is 0 (a row and a number differ: "3677  row 4993 x")". The first form of the test stopped at row 3000, under what the preview holds, and passed here, so it now goes to row 5000 | **caught** |
+| A key past the held text is held to its edge | "J did not read on past the first window: the first row is 2964" | **caught** |
+| The scope inside the file does not take every key | "j inside did not move a line" | **caught** |
+| `f` does nothing | "f did not make the panel taller" | **caught** |
+
+`TestQuickLookHostHasWindows` is a kept wire compatibility test. The suite has no older daemon, and an older daemon ignores `offset`.
+
+The frames are `quick-look-log-start`, `-far`, `-inside`, `-end`, `-full` and `quick-look-far-log-end` under `TUIOS_E2E_FRAMES`.
+
 ## Quick look moves on a resize
 
 `TestQuickLookMovesOnAResize` opens quick look on `main.go`, then resizes the

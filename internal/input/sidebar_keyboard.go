@@ -58,9 +58,55 @@ func handleSidebarKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		noteRailAction(o, act)
 		return o, o.SidebarQuickLook()
 	}
+	// Inside the file the scope takes every key, so a key that deletes on the
+	// list cannot reach the rail from here.
+	if o.QuickLookInside() {
+		act := lookupAction(o, msg, o.KeybindRegistry.GetQuickLookInsideAction)
+		if act != "" {
+			noteRailAction(o, act)
+		}
+		switch act {
+		case "line_down":
+			o.QuickLookLine(true)
+		case "line_up":
+			o.QuickLookLine(false)
+		case "half_down":
+			o.QuickLookHalfPage(true)
+		case "half_up":
+			o.QuickLookHalfPage(false)
+		case "start":
+			o.QuickLookEdge(false)
+		case "end":
+			o.QuickLookEdge(true)
+		case "full_size":
+			o.QuickLookFullSize()
+		case "go_back":
+			o.QuickLookGoBack()
+		}
+		return o, nil
+	}
 	if key == "esc" && o.QuickLookOpen() {
 		o.CloseQuickLook()
 		return o, nil
+	}
+	if o.QuickLookOpen() {
+		handled := false
+		act := lookupAction(o, msg, o.KeybindRegistry.GetQuickLookAction)
+		switch act {
+		case "seek_down", "half_down":
+			handled = o.QuickLookHalfPage(true)
+		case "seek_up", "half_up":
+			handled = o.QuickLookHalfPage(false)
+		case "go_inside":
+			handled = o.QuickLookGoInside()
+		case "full_size":
+			o.QuickLookFullSize()
+			handled = true
+		}
+		if handled {
+			noteRailAction(o, act)
+			return o, nil
+		}
 	}
 
 	// The files section's own keys are consulted first, and only while the

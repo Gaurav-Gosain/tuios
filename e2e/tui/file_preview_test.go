@@ -135,6 +135,20 @@ func TestFilePreviewOnAHost(t *testing.T) {
 		t.Fatalf("ASSERTION: the table preview is %+v", text)
 	}
 
+	// A window starts at the next line and holds whole lines.
+	var window struct {
+		Kind       string `json:"kind"`
+		Text       string `json:"text"`
+		Offset     int64  `json:"offset"`
+		NextOffset int64  `json:"next_offset"`
+		Truncated  bool   `json:"truncated"`
+	}
+	far.must("file-preview", map[string]any{"path": "~/work/data.csv", "offset": 5, "limit": 10}, &window)
+	record["csv-window"] = window
+	if window.Kind != "text" || window.Text != "1,ada\n" || window.Offset != 8 || window.NextOffset != 14 || !window.Truncated {
+		t.Fatalf("ASSERTION: the window of the table is %+v", window)
+	}
+
 	if _, err := exec.LookPath("pdftoppm"); err != nil {
 		t.Logf("no pdftoppm here: the PDF half is skipped")
 	} else {

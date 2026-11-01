@@ -52,6 +52,7 @@ const (
 	previewMaxPx       = 1600
 	previewMaxPxLimit  = 4096
 	previewTextMax     = 256 << 10
+	previewWindowMax   = 1 << 20
 	previewImageMax    = 64 << 20
 	previewImageDimMax = 10000
 	previewPDFBytesMax = 8 << 20
@@ -82,9 +83,11 @@ var (
 // verbFilePreview makes the preview of one file on this machine.
 func (d *Daemon) verbFilePreview(cs *connState, params json.RawMessage) (any, *verbError) {
 	var p struct {
-		Path  string `json:"path"`
-		MaxPx int    `json:"max_px"`
-		Page  int    `json:"page"`
+		Path   string `json:"path"`
+		MaxPx  int    `json:"max_px"`
+		Page   int    `json:"page"`
+		Offset *int64 `json:"offset"`
+		Limit  int    `json:"limit"`
 	}
 	if verr := decodeParams(params, &p); verr != nil {
 		return nil, verr
@@ -114,6 +117,12 @@ func (d *Daemon) verbFilePreview(cs *connState, params json.RawMessage) (any, *v
 	}
 	ctx, cancel := context.WithTimeout(d.ctx, previewToolTimeout)
 	defer cancel()
+	if p.Offset != nil && err == nil {
+		defer func() { _ = f.Close() }()
+		out := map[string]any{"path": path, "name": filepath.Base(path), "size": fi.Size(), "mtime": fi.ModTime().UnixMilli()}
+		previewWindow(f, fi.Size(), *p.Offset, p.Limit, out)
+		return out, nil
+	}
 	return previewOpened(ctx, f, fi, err, path, maxPx, page), nil
 }
 
@@ -133,6 +142,26 @@ func PreviewLocalFile(ctx context.Context, path string, maxPx int) (map[string]a
 	ctx, cancel := context.WithTimeout(ctx, previewToolTimeout)
 	defer cancel()
 	return previewOpened(ctx, f, fi, err, path, maxPx, 1), nil
+}
+
+// PreviewLocalWindow is a window of a text file on this machine, as file-preview
+// sends one for offset and limit.
+func PreviewLocalWindow(path string, offset int64, limit int) (map[string]any, error) {
+	f, fi, err := openRegular(path)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = f.Close() }()
+	out := map[string]any{"path": path, "name": filepath.Base(path), "size": fi.Size(), "mtime": fi.ModTime().UnixMilli()}
+	previewWindow(f, fi.Size(), offset, limit, out)
+	return out, nil
+}
+
+// PreviewShowsPicture reports whether a file of this name previews as a picture:
+// an image, a PDF page or a film frame.
+func PreviewShowsPicture(name string) bool {
+	ext := strings.ToLower(filepath.Ext(name))
+	return previewImageExt[ext] || previewVideoExt[ext] || ext == ".pdf"
 }
 
 // previewOpened is the preview of the file f, opened through openRegular.
@@ -567,6 +596,45 @@ func previewText(f *os.File, size int64, out map[string]any) bool {
 	return true
 }
 
+// previewWindow sends a window of a text file: at most limit bytes from offset.
+// The window holds whole lines. It starts at the first line that starts at or
+// after offset, and it ends after the last line that ends inside it. A line
+// longer than the window is sent cut. next_offset is where the next window
+// starts, and a window that ends at offset N asked for from N-limit ends exactly
+// there, so a client can read backward too.
+//
+// No line is counted and nothing is kept: the cost is one read of limit bytes,
+// whatever the size of the file.
+func previewWindow(f *os.File, size, offset int64, limit int, out map[string]any) {
+	if limit <= 0 {
+		limit = previewTextMax
+	}
+	limit = min(limit, previewWindowMax)
+	offset = min(max(offset, 0), size)
+	buf := make([]byte, min(int64(limit), size-offset))
+	n, _ := f.ReadAt(buf, offset)
+	buf = buf[:n]
+	start, end := 0, len(buf)
+	if offset > 0 {
+		var prev [1]byte
+		if _, err := f.ReadAt(prev[:], offset-1); err == nil && prev[0] != '\n' {
+			if i := bytes.IndexByte(buf, '\n'); i >= 0 {
+				start = i + 1
+			}
+		}
+	}
+	if offset+int64(end) < size {
+		if i := bytes.LastIndexByte(buf[start:], '\n'); i >= 0 {
+			end = start + i + 1
+		}
+	}
+	out["kind"] = "text"
+	out["text"] = strings.ToValidUTF8(string(buf[start:end]), "\uFFFD")
+	out["offset"] = offset + int64(start)
+	out["next_offset"] = offset + int64(end)
+	out["truncated"] = offset+int64(end) < size
+}
+
 // describeBinary is the preview of a file that has none: its type and size.
 func describeBinary(f *os.File, out map[string]any, note string) {
 	out["kind"] = "binary"
@@ -586,6 +654,8 @@ func previewVerbs() map[string]verbEntry {
 				{Name: "path", Type: "string", Required: true, Description: "The file. An absolute path, or one that starts with ~."},
 				{Name: "max_px", Type: "int", Description: "The longest side of an image, at most 4096.", Default: "1600"},
 				{Name: "page", Type: "int", Description: "The PDF page.", Default: "1"},
+				{Name: "offset", Type: "int", Description: "Send a window of a text file from this byte, whole lines only, in place of the preview."},
+				{Name: "limit", Type: "int", Description: "The most bytes in that window, at most 1 MiB.", Default: "262144"},
 			},
 			returns: []verbParam{
 				{Name: "kind", Type: "string", Description: "image, svg, pdf, video, text, dir or binary.", Accepted: []string{"image", "svg", "pdf", "video", "text", "dir", "binary"}},
@@ -595,6 +665,8 @@ func previewVerbs() map[string]verbEntry {
 				{Name: "height", Type: "int", Description: "An image's own height."},
 				{Name: "text", Type: "string", Description: "text and svg: the content."},
 				{Name: "truncated", Type: "bool", Description: "text: the file is longer than what was sent."},
+				{Name: "offset", Type: "int", Description: "A window: the byte it starts at."},
+				{Name: "next_offset", Type: "int", Description: "A window: the byte the next window starts at."},
 				{Name: "pdf", Type: "string", Description: "pdf, when this machine cannot draw the page: the file, base64, at most 8 MiB."},
 				{Name: "pages", Type: "int", Description: "pdf: the page count, when pdfinfo is there."},
 				{Name: "duration_ms", Type: "int", Description: "video: the length."},

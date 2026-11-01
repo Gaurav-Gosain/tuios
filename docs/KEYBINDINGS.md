@@ -268,14 +268,38 @@ the panes and shows:
 - a picture, a PDF page or a film frame,
 - the names in a folder.
 
-A file that is not text shows its type and size. A long text shows its first
-5000 lines, and the preview says so. Turn the mouse wheel over the preview to
-scroll it.
+A file that is not text shows its type and size. A long text opens at once, and
+tuios reads more of it as you move. Line numbers after a jump to the end are
+estimates, and the preview says so.
 
 `Up` and `Down` (or `j` and `k`) move the cursor to the next row, and the preview
 shows that row. `Space` or `Esc` closes the preview. A click outside it closes
-it too. The preview takes no other key: every other key goes to the sidebar.
-When the sidebar loses keyboard focus, the preview closes.
+it too. When the sidebar loses keyboard focus, the preview closes.
+
+These keys move inside the file. The preview shows the keys that work now. All
+other keys go to the sidebar.
+
+| Key | Action |
+| --- | --- |
+| `J` `K` | Move half a page |
+| `Ctrl+D` `Ctrl+U` | Move half a page |
+| Mouse wheel over the preview | Move 3 lines |
+| `Tab` | Move the keyboard inside the file |
+| `f` | Fill the area of the panes, or go back |
+
+Inside the file, every key acts on the preview:
+
+| Key | Action |
+| --- | --- |
+| `j` `k` | Move one line |
+| `d` `u` | Move half a page |
+| `g` `G` | Go to the start or the end |
+| `f` | Fill the area of the panes, or go back |
+| `Esc` or `Tab` | Move the keyboard back to the list |
+| `Space` | Close the preview |
+
+Change these keys in `[keybindings.quick_look]` and
+`[keybindings.quick_look_inside]`.
 
 For a listing on another machine, that machine reads the file and sends the
 preview. Its host policy must allow `files`. The binding is `file_quick_look`

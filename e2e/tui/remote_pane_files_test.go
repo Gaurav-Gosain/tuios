@@ -2,6 +2,7 @@ package tuie2e
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -320,6 +321,13 @@ func TestQuickLookOnAFarFile(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(top, "linked.txt"), []byte("two names\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
+	var log strings.Builder
+	for i := range quickLookLogLines {
+		fmt.Fprintf(&log, "row %d %s\n", i+1, strings.Repeat("x", 190))
+	}
+	if err := os.WriteFile(filepath.Join(top, "zlong.log"), []byte(log.String()), 0o600); err != nil {
+		t.Fatal(err)
+	}
 	if err := os.Link(filepath.Join(top, "linked.txt"), filepath.Join(top, "other-name.txt")); err != nil {
 		t.Fatal(err)
 	}
@@ -354,6 +362,21 @@ func TestQuickLookOnAFarFile(t *testing.T) {
 	railLists(t, term, "the far machine did not judge the file with two names",
 		[]string{"linked.txt ", "links),"}, []string{"two names", "package far"})
 	copiesFrame(t, term, "quick-look-far-refused")
+
+	// A log longer than a window: build sends the part asked for, over the link.
+	col, row, ok = findOnGrid(term.Screen(), "zlong.log")
+	if !ok {
+		t.Fatalf("no zlong.log row:\n%s", term.Snapshot())
+	}
+	sendKeys(t, term, " ")
+	railLists(t, term, "space did not close the far preview", nil, []string{"on build"})
+	mouseClick(t, term, col, row, tuitest.MouseLeft, 0)
+	clickNoteGone(t, term)
+	sendKeys(t, term, " ")
+	railLists(t, term, "space did not show the far log", []string{"zlong.log ", "on build", "row 1 x"}, nil)
+	sendKeys(t, term, tuitest.Tab, "G")
+	railLists(t, term, "G did not read the end of the far log", []string{fmt.Sprintf("row %d x", quickLookLogLines), "on build"}, []string{"older tuios"})
+	copiesFrame(t, term, "quick-look-far-log-end")
 	sendKeys(t, term, " ")
 	railLists(t, term, "space did not close the far preview", nil, []string{"on build"})
 	alive(t, term, "after quick look on a far file")

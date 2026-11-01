@@ -70,6 +70,8 @@ const (
 	SectionSidebar          = "sidebar"
 	SectionSidebarFiles     = "sidebar_files"
 	SectionSidebarAgents    = "sidebar_agents"
+	SectionQuickLook        = "quick_look"
+	SectionQuickLookInside  = "quick_look_inside"
 	SectionInbox            = "inbox"
 	SectionInboxPeek        = "inbox_peek"
 	SectionMail             = "mail"
@@ -90,6 +92,8 @@ const (
 	ScopeSidebar        = "sidebar"
 	ScopeSidebarFiles   = "sidebar.files"
 	ScopeSidebarAgents  = "sidebar.agents"
+	ScopeQuickLook      = "quick_look"
+	ScopeQuickLookIn    = "quick_look.inside"
 	ScopeInbox          = "inbox"
 	ScopeInboxPeek      = "inbox.peek"
 	ScopeMail           = "mail"
@@ -166,6 +170,18 @@ func Scopes(leader string) []Scope {
 			// resolution, not a collision.
 			ID: ScopeSidebarAgents, Name: "Sidebar agents",
 			Sections: []string{SectionSidebarAgents},
+			Reaches:  ReachModal,
+		},
+		{
+			// Consulted only while the file preview is open.
+			ID: ScopeQuickLook, Name: "File preview",
+			Sections: []string{SectionQuickLook},
+			Reaches:  ReachModal,
+		},
+		{
+			// Consulted only while the keyboard is inside the previewed file.
+			ID: ScopeQuickLookIn, Name: "File preview, inside the file",
+			Sections: []string{SectionQuickLookInside},
 			Reaches:  ReachModal,
 		},
 		{
@@ -360,6 +376,10 @@ func (k *KeybindingsConfig) section(name string) map[string][]string {
 		return k.SidebarFiles
 	case SectionSidebarAgents:
 		return k.SidebarAgents
+	case SectionQuickLook:
+		return k.QuickLook
+	case SectionQuickLookInside:
+		return k.QuickLookInside
 	case SectionInbox:
 		return k.Inbox
 	case SectionInboxPeek:

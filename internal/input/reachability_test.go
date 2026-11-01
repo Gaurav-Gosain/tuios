@@ -153,6 +153,10 @@ func reachSections(t *testing.T) []bindingSection {
 		// The agent rows' keys are read first too, and only while the cursor is
 		// on an agent row.
 		{name: "sidebar_agents", binds: k.SidebarAgents, modes: windowMode, newOS: reachAgentsOS},
+		// The file preview's keys are read first while it is open, and the keys
+		// inside the file while the keyboard is there.
+		{name: "quick_look", binds: k.QuickLook, modes: windowMode, newOS: reachQuickLookOS},
+		{name: "quick_look_inside", binds: k.QuickLookInside, modes: windowMode, newOS: reachQuickLookInsideOS},
 		// The Inbox, the prompt open over it and the mailbox own the keyboard
 		// while they are up, in either mode.
 		{name: "inbox", binds: k.Inbox, modes: bothModes, newOS: reachInboxOS},
@@ -168,6 +172,24 @@ func reachSections(t *testing.T) []bindingSection {
 }
 
 // reachReviewOS is a client with the review overlay open on a diff.
+func reachQuickLookOS(t *testing.T) *app.OS {
+	t.Helper()
+	o := reachFilesOS(t)
+	if !o.QuickLookOpenTextForTest("one\ntwo\n") {
+		t.Fatal("the fixture's cursor is not on a file row")
+	}
+	return o
+}
+
+func reachQuickLookInsideOS(t *testing.T) *app.OS {
+	t.Helper()
+	o := reachQuickLookOS(t)
+	if !o.QuickLookGoInside() {
+		t.Fatal("the fixture's text cannot be moved through")
+	}
+	return o
+}
+
 func reachReviewOS(t *testing.T) *app.OS {
 	t.Helper()
 	o, _, _ := reviewInputOS(t)

@@ -56,6 +56,7 @@ type sectionMaps struct {
 	terminalMode, global, script, sidebar, sidebarFiles   map[string]string
 	sidebarAgents, inbox, inboxPeek, mail, copyMode       map[string]string
 	transfers, lists, review                              map[string]string
+	quickLook, quickLookInside                            map[string]string
 	// menus holds each declared menu (see MenuConfig), by name.
 	menus map[string]map[string]string
 }
@@ -121,6 +122,8 @@ func (r *KeybindRegistry) buildMappings() {
 		sidebar:         r.sectionKeyMap(kb.Sidebar),
 		sidebarFiles:    r.sectionKeyMap(kb.SidebarFiles),
 		sidebarAgents:   r.sectionKeyMap(kb.SidebarAgents),
+		quickLook:       r.sectionKeyMap(kb.QuickLook),
+		quickLookInside: r.sectionKeyMap(kb.QuickLookInside),
 		inbox:           r.sectionKeyMap(kb.Inbox),
 		inboxPeek:       r.sectionKeyMap(kb.InboxPeek),
 		mail:            r.sectionKeyMap(kb.Mail),
@@ -330,6 +333,28 @@ func (r *KeybindRegistry) GetSidebarAction(key string) string {
 // share each mean the thing the row under the cursor is.
 func (r *KeybindRegistry) GetSidebarFilesAction(key string) string {
 	return r.lookupKey(key, r.sections.sidebarFiles)
+}
+
+// GetQuickLookAction returns the action name for a key while the file preview
+// is open and the keyboard is on the list.
+func (r *KeybindRegistry) GetQuickLookAction(key string) string {
+	return r.lookupKey(key, r.sections.quickLook)
+}
+
+// GetQuickLookInsideAction returns the action name for a key while the keyboard
+// is inside the previewed file.
+func (r *KeybindRegistry) GetQuickLookInsideAction(key string) string {
+	return r.lookupKey(key, r.sections.quickLookInside)
+}
+
+// GetQuickLookKeys is GetKeys for the file preview's binds, for its hints.
+func (r *KeybindRegistry) GetQuickLookKeys(action string) []string {
+	return r.config.Keybindings.QuickLook[action]
+}
+
+// GetQuickLookInsideKeys is GetKeys for the binds inside the previewed file.
+func (r *KeybindRegistry) GetQuickLookInsideKeys(action string) []string {
+	return r.config.Keybindings.QuickLookInside[action]
 }
 
 // GetSidebarAgentsAction returns the action name for a key among the agent
@@ -568,7 +593,7 @@ func buildPressesByAction(r *KeybindRegistry) map[string][]string {
 // no chord that would say so.
 func contextOnlyScope(scope string) bool {
 	switch scope {
-	case ScopeSidebar, ScopeSidebarFiles, ScopeSidebarAgents, ScopeScript, ScopeLists, ScopeInbox, ScopeInboxPeek, ScopeMail, ScopeTransfers, ScopeCopyMode, ScopeReview:
+	case ScopeSidebar, ScopeSidebarFiles, ScopeSidebarAgents, ScopeQuickLook, ScopeQuickLookIn, ScopeScript, ScopeLists, ScopeInbox, ScopeInboxPeek, ScopeMail, ScopeTransfers, ScopeCopyMode, ScopeReview:
 		return true
 	case ScopeGUI:
 		// Only the GUI reads these keys. A terminal's help that listed
@@ -611,6 +636,17 @@ var ActionDescriptions = map[string]string{
 	"file_edit":           "Files: edit this text file in a new pane",
 	"file_copy_path":      "Files: copy the path of this file or folder",
 	"file_quick_look":     "Files: show a preview of this file or folder",
+	"seek_down":           "Preview: move forward in the file",
+	"seek_up":             "Preview: move back in the file",
+	"half_down":           "Preview: move half a page forward",
+	"half_up":             "Preview: move half a page back",
+	"go_inside":           "Preview: move the keyboard inside the file",
+	"go_back":             "Preview: move the keyboard back to the list",
+	"full_size":           "Preview: fill the area of the panes, or go back",
+	"line_down":           "Preview: move one line forward",
+	"line_up":             "Preview: move one line back",
+	"start":               "Preview: go to the start of the file",
+	"end":                 "Preview: go to the end of the file",
 	"file_send":           "Files: send this file or folder to a host",
 	"file_insert_path":    "Files: paste the path into the focused pane",
 	// The Copies panel: the copies between machines.

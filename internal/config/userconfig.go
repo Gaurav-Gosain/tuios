@@ -1087,6 +1087,11 @@ type KeybindingsConfig struct {
 	// SidebarAgents binds are looked up before Sidebar, and only while the
 	// rail's cursor is on an agent row. See getDefaultSidebarAgentsKeybinds.
 	SidebarAgents map[string][]string `toml:"sidebar_agents"`
+	// QuickLook binds are looked up before the rail's own while the file preview
+	// is open, and QuickLookInside while the keyboard is inside the file. See
+	// getDefaultQuickLookKeybinds.
+	QuickLook       map[string][]string `toml:"quick_look"`
+	QuickLookInside map[string][]string `toml:"quick_look_inside"`
 	// Inbox binds are live while the Inbox is open and its selector line is
 	// not, through GetInboxAction. The digits 1 to 9 are not in it: they
 	// answer a held approval or a question by its number, which is the number
@@ -1598,17 +1603,19 @@ func DefaultConfig() *UserConfig {
 				"add_master":            {"i"},
 				"remove_master":         {"d"},
 			},
-			TerminalMode:  getDefaultTerminalModeKeybinds(),
-			Sidebar:       getDefaultSidebarKeybinds(),
-			SidebarFiles:  getDefaultSidebarFilesKeybinds(),
-			SidebarAgents: getDefaultSidebarAgentsKeybinds(),
-			Inbox:         getDefaultInboxKeybinds(),
-			InboxPeek:     getDefaultInboxPeekKeybinds(),
-			Mail:          getDefaultMailKeybinds(),
-			Transfers:     getDefaultTransfersKeybinds(),
-			CopyMode:      getDefaultCopyModeKeybinds(),
-			Review:        getDefaultReviewKeybinds(),
-			GUI:           getDefaultGUIKeybinds(),
+			TerminalMode:    getDefaultTerminalModeKeybinds(),
+			Sidebar:         getDefaultSidebarKeybinds(),
+			SidebarFiles:    getDefaultSidebarFilesKeybinds(),
+			SidebarAgents:   getDefaultSidebarAgentsKeybinds(),
+			QuickLook:       getDefaultQuickLookKeybinds(),
+			QuickLookInside: getDefaultQuickLookInsideKeybinds(),
+			Inbox:           getDefaultInboxKeybinds(),
+			InboxPeek:       getDefaultInboxPeekKeybinds(),
+			Mail:            getDefaultMailKeybinds(),
+			Transfers:       getDefaultTransfersKeybinds(),
+			CopyMode:        getDefaultCopyModeKeybinds(),
+			Review:          getDefaultReviewKeybinds(),
+			GUI:             getDefaultGUIKeybinds(),
 			Global: map[string][]string{
 				// ctrl+p is fish's history-back and vim's keyword completion, and
 				// alt+space is readline's set-mark. Both are taken on purpose and
@@ -1984,6 +1991,37 @@ func getDefaultSidebarFilesKeybinds() map[string][]string {
 		// space previews the row, as Finder and yazi do. Free in the rail:
 		// nothing else in the rail's scope takes it.
 		"file_quick_look": {"space"},
+	}
+}
+
+// getDefaultQuickLookKeybinds returns the keys that move inside a file while
+// its preview is open and the keyboard is still on the list. j and k stay with
+// the list, so these are the capitals and chords nothing else on a file row
+// uses. J and K are reorder keys, which do nothing on a file row.
+func getDefaultQuickLookKeybinds() map[string][]string {
+	return map[string][]string{
+		"seek_down": {"J", "shift+down"},
+		"seek_up":   {"K", "shift+up"},
+		"half_down": {"ctrl+d", "pgdown"},
+		"half_up":   {"ctrl+u", "pgup"},
+		"go_inside": {"tab"},
+		"full_size": {"f"},
+	}
+}
+
+// getDefaultQuickLookInsideKeybinds returns the keys while the keyboard is
+// inside the file: plain keys act on the file, and the scope takes every key,
+// so d here cannot reach the rail's delete.
+func getDefaultQuickLookInsideKeybinds() map[string][]string {
+	return map[string][]string{
+		"line_down": {"j", "down"},
+		"line_up":   {"k", "up"},
+		"half_down": {"d", "ctrl+d", "J", "pgdown"},
+		"half_up":   {"u", "ctrl+u", "K", "pgup"},
+		"start":     {"g", "home"},
+		"end":       {"G", "end"},
+		"go_back":   {"esc", "tab"},
+		"full_size": {"f"},
 	}
 }
 
@@ -3673,6 +3711,12 @@ func fillMissingKeybinds(cfg, defaultCfg *UserConfig) {
 	if cfg.Keybindings.SidebarFiles == nil {
 		cfg.Keybindings.SidebarFiles = make(map[string][]string)
 	}
+	if cfg.Keybindings.QuickLook == nil {
+		cfg.Keybindings.QuickLook = make(map[string][]string)
+	}
+	if cfg.Keybindings.QuickLookInside == nil {
+		cfg.Keybindings.QuickLookInside = make(map[string][]string)
+	}
 	if cfg.Keybindings.SidebarAgents == nil {
 		cfg.Keybindings.SidebarAgents = make(map[string][]string)
 	}
@@ -3773,6 +3817,8 @@ func fillMissingKeybinds(cfg, defaultCfg *UserConfig) {
 	// The agent rows' keys are newer still, and every config before them has
 	// no sidebar_agents section.
 	fillMapDefaults(cfg.Keybindings.SidebarAgents, defaultCfg.Keybindings.SidebarAgents)
+	fillMapDefaults(cfg.Keybindings.QuickLook, defaultCfg.Keybindings.QuickLook)
+	fillMapDefaults(cfg.Keybindings.QuickLookInside, defaultCfg.Keybindings.QuickLookInside)
 	// The Inbox, its peek and the mailbox had their keys written into the
 	// input path before these sections existed, so every config written
 	// before them has none and has to get the keys it always had.
@@ -4068,6 +4114,8 @@ func keybindSectionPairs(cfg, defaultCfg *UserConfig) []keybindSection {
 		{"sidebar", c.Sidebar, d.Sidebar},
 		{"sidebar_files", c.SidebarFiles, d.SidebarFiles},
 		{"sidebar_agents", c.SidebarAgents, d.SidebarAgents},
+		{"quick_look", c.QuickLook, d.QuickLook},
+		{"quick_look_inside", c.QuickLookInside, d.QuickLookInside},
 		{"inbox", c.Inbox, d.Inbox},
 		{"inbox_peek", c.InboxPeek, d.InboxPeek},
 		{"mail", c.Mail, d.Mail},

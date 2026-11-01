@@ -535,6 +535,9 @@ func generateSidebarBindings(registry *config.KeybindRegistry, s *config.Setting
 			Category:    cat,
 		}
 	}
+	quickLookRow := func(action, desc string) HelpBinding {
+		return HelpBinding{Action: action, Keys: registry.GetQuickLookKeys(action), Description: desc, Category: cat}
+	}
 	bindings = append(bindings,
 		fileRow("file_create", "Files: make a file, or a folder with a / at the end"),
 		fileRow("file_rename", "Files: rename the file under the cursor"),
@@ -549,6 +552,10 @@ func generateSidebarBindings(registry *config.KeybindRegistry, s *config.Setting
 		fileRow("file_send", "Files: send the file or folder to a host"),
 		fileRow("file_insert_path", "Files: paste the path into the focused pane"),
 		fileRow("file_quick_look", "Files: show a preview of the file or folder"),
+		quickLookRow("seek_down", "Preview: move forward in the file"),
+		quickLookRow("seek_up", "Preview: move back in the file"),
+		quickLookRow("go_inside", "Preview: move the keyboard inside the file"),
+		quickLookRow("full_size", "Preview: fill the area of the panes"),
 	)
 
 	// The Copies panel's keys, live while it is open. They are read from

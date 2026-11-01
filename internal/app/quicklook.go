@@ -31,9 +31,14 @@ import (
 // space on a row of the files section opens it; space or esc closes it. The
 // preview follows the cursor: j and k walk the listing and the preview
 // shows each file as the cursor reaches it, without being opened again. It
-// is not a mode. Every key it does not use goes to the rail as before, and
+// is not a mode. J and K move inside the file, by half a page for text, and the
+// wheel over the panel does too. Every other key goes to the rail as before, and
 // the preview closes when the rail lets go of the keyboard, when the cursor
 // leaves the files section, or on a click outside it.
+//
+// Tab moves the keyboard inside the file, where the scope takes every key and
+// plain keys act on the file, so d there cannot reach the rail's delete. esc or
+// Tab comes back. f fills the area of the panes.
 //
 // The files menu's Preview is the same preview with a way in from anywhere: it
 // gives the rail the keyboard, moves the cursor to the row, and closing gives
@@ -41,8 +46,8 @@ import (
 //
 // The content comes from the machine the file is on. A file of a listing on
 // another machine goes to that machine's file-preview verb over the link,
-// which reads it there and sends back the small result: the first 256 KiB of
-// a text, an image scaled down, the first page of a PDF, a frame of a film.
+// which reads it there and sends back the small result: 256 KiB of a text, an
+// image scaled down, the first page of a PDF, a frame of a film.
 // A file on this machine goes through the same code in this process
 // (session.PreviewLocalFile), so a client with no daemon has quick look too.
 // A folder is read the way the rail reads one (readListing).
@@ -53,9 +58,17 @@ import (
 // does not, a line of words at 16 colours), and for anything else its type
 // and size.
 //
+// A text is read in windows, on demand, by byte offset (quickLookText), so a
+// log of any size opens as fast as a small file. At most quickLookTextHeld bytes
+// are held. No line is counted: a line number is exact only when the held text
+// reaches back to the start of the file, and after a jump to the end the panel
+// gives an estimate and says so.
+//
 // Nothing runs while it is closed: no timer, no watch, no read. A read runs
 // once per row the cursor stops on, and only one at a time: a key held down
-// starts one read, and the read for the row the cursor ended on follows it.
+// starts one read, and the read for the row the cursor ended on follows it. The
+// same holds for a window of a text, where the next read goes to the position the
+// keys ended on.
 //
 // A picture waits for a resize of the terminal to settle, then is scaled once
 // for the size the person stopped at. See keepPicturesFrame for why the host
@@ -65,19 +78,28 @@ import (
 const overlayKindQuickLook = "quicklook"
 
 const (
-	// quickLookMaxLines bounds the lines of a text the preview keeps. The
-	// verb sends at most 256 KiB; a file of short lines can still hold tens
-	// of thousands of them, and nobody scrolls that far in a preview.
-	quickLookMaxLines = 5000
+	// quickLookTextHeld bounds the bytes of a text the preview holds, as whole
+	// windows of quickLookTextWindow bytes.
+	quickLookTextHeld   = 768 << 10
+	quickLookTextWindow = 256 << 10
+	// quickLookLineMax cuts a longer line for the highlighter and the panel.
+	quickLookLineMax = 64 << 10
 	// quickLookMarkdownMax bounds the Markdown the preview lays out.
 	quickLookMarkdownMax = 64 << 10
-	// quickLookMaxPx is the long side of a picture asked for. The panel is at
-	// most quickLookMaxW cells wide, which is under 1200 pixels at any cell
-	// size a terminal uses.
-	quickLookMaxPx = 1200
-	// quickLookMaxW and quickLookMaxH bound the panel's inner size in cells.
+	// quickLookMaxPx is the long side of a picture asked for. The largest panel
+	// that is not full size is quickLookPicW cells wide.
+	quickLookMaxPx = 1600
+	// quickLookMaxW and quickLookMaxH bound the panel's inner size in cells for
+	// reading, and quickLookPicW and quickLookPicH for a picture, unless the
+	// person asks for full size.
 	quickLookMaxW = 110
 	quickLookMaxH = 48
+	quickLookPicW = 180
+	quickLookPicH = 60
+	// A terminal under quickLookSmallW by quickLookSmallH gives the panel all of
+	// its screen.
+	quickLookSmallW = 60
+	quickLookSmallH = 20
 	// quickLookTimeout bounds a read on this machine. The tools a PDF or a
 	// film needs have their own limit inside it.
 	quickLookTimeout = 25 * time.Second
@@ -106,11 +128,23 @@ type quickLookResult struct {
 	size int64
 	mime string
 	note string
-	// lines and spans are a text's lines and their highlighting. more says
-	// the file holds more than the lines kept.
+	// lines and spans are the held part of a text and its highlighting. more
+	// says the file holds more than the lines kept, and older says the machine
+	// has no windows to send the rest of it.
 	lines []string
 	spans [][]diffview.Span
 	more  bool
+	older bool
+	// stopped says a window could not be read, so no more are asked for.
+	stopped bool
+	// startOff and endOff are the bytes of the file the lines hold, and parts
+	// the windows they came in, oldest in the file first, so whole windows can
+	// be let go. firstLine is the line number of lines[0], 0 when it is not
+	// known. cutLong says a line was cut.
+	startOff, endOff int64
+	parts            []quickLookPart
+	firstLine        int
+	cutLong          bool
 	// md is a Markdown file's text.
 	md string
 	// img is the picture: an image, a PDF page or a film frame. width and
@@ -124,8 +158,39 @@ type quickLookResult struct {
 	capped  bool
 }
 
+// quickLookPart is one window of a text in a result.
+type quickLookPart struct {
+	lines int
+	bytes int64
+}
+
 // quickLookMsg carries a finished read back to the loop.
 type quickLookMsg struct{ res *quickLookResult }
+
+// quickLookMove says which window of a text a read is for.
+type quickLookMove uint8
+
+const (
+	quickLookNoMove quickLookMove = iota
+	// quickLookNext and quickLookPrev join the windows after and before the
+	// held text. quickLookStart and quickLookEnd replace it.
+	quickLookNext
+	quickLookPrev
+	quickLookStart
+	quickLookEnd
+)
+
+// quickLookWindowMsg carries a finished window of a text back to the loop.
+type quickLookWindowMsg struct {
+	target quickLookTarget
+	move   quickLookMove
+	reply  quickLookWindowReply
+	// failed says the read failed, and older that the machine has no windows.
+	failed, older bool
+	lines         []string
+	spans         [][]diffview.Span
+	cutLong       bool
+}
 
 // quickLookState is the open preview.
 type quickLookState struct {
@@ -136,6 +201,15 @@ type quickLookState struct {
 	fetching bool
 	res      *quickLookResult
 	scroll   int
+	// jump is the window a key asked for that is not read yet. inside says the
+	// keyboard is inside the file, and full that the panel fills the panes.
+	jump   quickLookMove
+	inside bool
+	full   bool
+	// hostOlder holds the machines whose file-preview verb has no windows, and
+	// hostAsked those it was asked of, once per link.
+	hostOlder map[string]bool
+	hostAsked map[string]bool
 	// borrowed says the files menu's Preview took the keyboard for the rail.
 	// Closing the preview gives it back. See CloseQuickLook.
 	borrowed bool
@@ -163,8 +237,11 @@ type quickLookFrame struct {
 	res           *quickLookResult
 	target        quickLookTarget
 	scroll        int
+	inside        bool
 	innerW, bodyH int
 	key           string
+	seekKey       string
+	insideKey     string
 	// What Dialog.Render reads from the palette, and the frame's glyphs.
 	canvas, fgMute, frame, accent, accentBright, fgDim color.Color
 	border                                             lipgloss.Border
@@ -281,6 +358,9 @@ func (m *OS) dropQuickLook() {
 	ql.borrowed = false
 	ql.res = nil
 	ql.scroll = 0
+	ql.jump = quickLookNoMove
+	ql.inside = false
+	ql.full = false
 	ql.box = overlay.Rect{}
 	ql.pic = quickLookPic{}
 	ql.mdLines = nil
@@ -352,6 +432,8 @@ func (m *OS) quickLookShow(t quickLookTarget) tea.Cmd {
 	ql := &m.quickLook
 	ql.target = t
 	ql.scroll = 0
+	ql.jump = quickLookNoMove
+	ql.inside = false
 	if t.up || t.refuse != "" {
 		return nil
 	}
@@ -417,6 +499,26 @@ type quickLookReply struct {
 	DurationMs int64  `json:"duration_ms"`
 }
 
+// quickLookWindowReply is the part of a window's answer the preview reads.
+type quickLookWindowReply struct {
+	Size       int64  `json:"size"`
+	Text       string `json:"text"`
+	Offset     int64  `json:"offset"`
+	NextOffset int64  `json:"next_offset"`
+}
+
+// quickLookLines splits a text into lines for the panel, and highlights them.
+func quickLookLines(path, text string, ascii bool) (lines []string, spans [][]diffview.Span, cutLong bool) {
+	lines = strings.Split(strings.TrimSuffix(text, "\n"), "\n")
+	for i, l := range lines {
+		if len(l) > quickLookLineMax {
+			l, cutLong = strings.ToValidUTF8(l[:quickLookLineMax], ""), true
+		}
+		lines[i] = ckCodeText(strings.TrimSuffix(l, "\r"), ascii)
+	}
+	return lines, diffview.Highlight(path, lines), cutLong
+}
+
 // quickLookDecode turns a file-preview answer into what the panel draws. It
 // runs off the loop: the highlighting and the picture's header are read here.
 func quickLookDecode(t quickLookTarget, raw json.RawMessage, err error, ascii bool) *quickLookResult {
@@ -444,21 +546,19 @@ func quickLookDecode(t quickLookTarget, raw json.RawMessage, err error, ascii bo
 			return res
 		}
 		res.kind = "text"
-		text := strings.TrimSuffix(r.Text, "\n")
-		lines := strings.Split(text, "\n")
-		if len(lines) > quickLookMaxLines {
-			lines, res.more = lines[:quickLookMaxLines], true
+		text := r.Text
+		if r.Truncated {
+			// The last line is cut where the bytes ran out, and the next window
+			// starts it again.
+			if i := strings.LastIndexByte(text, '\n'); i >= 0 {
+				text = text[:i+1]
+			}
 		}
-		if r.Truncated && len(lines) > 1 {
-			// The last line is cut where the bytes ran out.
-			lines, res.more = lines[:len(lines)-1], true
-		}
-		res.more = res.more || r.Truncated
-		for i, l := range lines {
-			lines[i] = ckCodeText(strings.TrimSuffix(l, "\r"), ascii)
-		}
-		res.lines = lines
-		res.spans = diffview.Highlight(t.path, lines)
+		res.lines, res.spans, res.cutLong = quickLookLines(t.path, text, ascii)
+		res.more = r.Truncated
+		res.endOff = int64(len(text))
+		res.firstLine = 1
+		res.parts = []quickLookPart{{lines: len(res.lines), bytes: res.endOff}}
 	case "image", "pdf", "video":
 		res.kind = r.Kind
 		if r.Image != "" {
@@ -531,10 +631,23 @@ func (m *OS) quickLookSize() (innerW, bodyH int) {
 	}
 	r := m.viewReserve()
 	usable := max(rh-r.Top-r.Bottom, 1)
-	innerW = min(max(cw*4/5, 24), quickLookMaxW, rw-2)
-	innerW = max(innerW, overlay.MinDialogWidth)
-	bodyH = min(max(usable*4/5-2, 3), quickLookMaxH, max(rh-2, 1))
-	return innerW, bodyH
+	ql := &m.quickLook
+	switch {
+	case ql.full:
+		innerW = min(max(cw-4, 24), rw-2)
+		bodyH = min(max(usable-4, 3), max(rh-2, 1))
+	case rw < quickLookSmallW || rh < quickLookSmallH:
+		innerW = max(rw-2, 1)
+		bodyH = max(rh-2, 1)
+	default:
+		capW, capH := quickLookMaxW, quickLookMaxH
+		if session.PreviewShowsPicture(ql.target.name) {
+			capW, capH = quickLookPicW, quickLookPicH
+		}
+		innerW = min(max(cw*4/5, 24), capW, rw-2)
+		bodyH = min(max(usable*4/5-2, 3), capH, max(rh-2, 1))
+	}
+	return max(innerW, overlay.MinDialogWidth), bodyH
 }
 
 // quickLookPicBox is the picture's box in the body: the largest that holds
@@ -629,9 +742,9 @@ func (m *OS) QuickLookWheel(x, y int, up bool) bool {
 		return false
 	}
 	if up {
-		ql.scroll = max(ql.scroll-quickLookWheelStep, 0)
+		m.QuickLookScroll(-quickLookWheelStep)
 	} else {
-		ql.scroll += quickLookWheelStep // the draw holds it to the end
+		m.QuickLookScroll(quickLookWheelStep) // the draw holds it to the end
 	}
 	return true
 }
@@ -671,17 +784,24 @@ func (m *OS) renderQuickLook() (string, int, int) {
 	if keys := m.KeybindRegistry.GetSidebarFilesKeys("file_quick_look"); len(keys) > 0 {
 		key = keys[0]
 	}
+	var seekKey, insideKey string
+	if keys := m.KeybindRegistry.GetQuickLookKeys("seek_down"); len(keys) > 0 {
+		seekKey = keys[0]
+	}
+	if keys := m.KeybindRegistry.GetQuickLookKeys("go_inside"); len(keys) > 0 {
+		insideKey = keys[0]
+	}
 	// The border is in the key: the frame glyphs are a package global set from
 	// border_style every frame, outside the palette.
-	f := quickLookFrame{ok: true, look: ql.lookKey, res: ql.res, target: ql.target, scroll: ql.scroll,
-		innerW: innerW, bodyH: bodyH, key: key, border: m.Settings.OverlayBorder(),
+	f := quickLookFrame{ok: true, look: ql.lookKey, res: ql.res, target: ql.target, scroll: ql.scroll, inside: ql.inside,
+		innerW: innerW, bodyH: bodyH, key: key, seekKey: seekKey, insideKey: insideKey, border: m.Settings.OverlayBorder(),
 		canvas: pal.Canvas, fgMute: pal.FgMute, frame: pal.Frame, accent: pal.Accent,
 		accentBright: pal.AccentBright, fgDim: pal.FgDim}
 	var content string
 	var geo overlay.Geometry
 	var pic quickLookPic
-	if k := &ql.framed; k.ok && k.look == f.look && k.res == f.res && k.target == f.target && k.scroll == f.scroll &&
-		k.innerW == f.innerW && k.bodyH == f.bodyH && k.key == f.key && k.border == f.border &&
+	if k := &ql.framed; k.ok && k.look == f.look && k.res == f.res && k.target == f.target && k.scroll == f.scroll && k.inside == f.inside &&
+		k.innerW == f.innerW && k.bodyH == f.bodyH && k.key == f.key && k.seekKey == f.seekKey && k.insideKey == f.insideKey && k.border == f.border &&
 		k.canvas == f.canvas && k.fgMute == f.fgMute && k.frame == f.frame && k.accent == f.accent &&
 		k.accentBright == f.accentBright && k.fgDim == f.fgDim {
 		content, geo = k.content, k.geo
@@ -692,7 +812,7 @@ func (m *OS) renderQuickLook() (string, int, int) {
 		if ql.target.dir {
 			title += "/"
 		}
-		hints := []overlay.Hint{{Key: key, Label: "close"}, {Key: "↑↓", Label: "other files"}}
+		hints := m.quickLookHints(key)
 		content, geo = overlay.Dialog{Title: title, Width: innerW, Body: c.render(), Hints: hints}.Render(pal)
 		// Only a finished text, markdown, folder, binary or error body is kept;
 		// a picture's cells arrive later.
@@ -750,29 +870,51 @@ func (m *OS) drawQuickLook(c *ckCanvas, l ckLook, dv *diffview.Theme, w, h int) 
 	}
 
 	// The line that says what it is, and where when it is not here.
+	bodyTop, bodyRows := 1, max(h-1, 0)
 	meta := quickLookMeta(r)
 	right := []ckSeg{}
+	if ql.inside {
+		right = append(right, ckSeg{t: "Inside the file", fg: pal.AccentBright, attrs: ckBold}, ckSeg{t: " "})
+	}
+	if pos := quickLookPosition(r, ql.scroll, bodyRows); pos != "" {
+		right = append(right, ckSeg{t: pos, fg: pal.FgMute}, ckSeg{t: " "})
+	}
 	if t.host != "" {
 		right = append(right, ckSeg{t: "on " + t.host, fg: pal.FgMute}, ckSeg{t: " "})
 	}
 	rx := c.textR(w, 0, right...)
 	c.text(1, 0, rx-1, ckSeg{t: meta, fg: pal.FgMute})
 
-	bodyTop, bodyRows := 1, max(h-1, 0)
 	scrollTo := func(n int) int {
-		ql.scroll = min(ql.scroll, max(n-bodyRows, 0))
+		ql.scroll = max(min(ql.scroll, n-bodyRows), 0)
 		return ql.scroll
 	}
 	switch r.kind {
 	case "text":
-		from := scrollTo(len(r.lines))
-		gutter := len(strconv.Itoa(len(r.lines)))
-		codeX := 1 + gutter + 2
-		codeW := max(w-codeX-1, 1)
+		// While a window is on its way, a key past the held text keeps its place,
+		// so a held key loses no presses: the panel shows the edge, and the read
+		// brings the text up to the position.
+		from := max(min(ql.scroll, len(r.lines)-bodyRows), 0)
+		if ql.scroll > from && (!r.more || r.older || r.stopped) {
+			ql.scroll = from
+		}
+		if ql.scroll < 0 && (r.startOff == 0 || r.older || r.stopped) {
+			ql.scroll = 0
+		}
+		codeX := 1
+		gutter := 0
+		if r.firstLine > 0 {
+			gutter = len(strconv.Itoa(r.firstLine + len(r.lines) - 1))
+			codeX = 1 + gutter + 2
+		}
+		codeW := max(w-codeX-2, 1)
+		quickLookBar(c, pal, w-1, bodyTop, bodyRows, r, from)
 		for i := 0; i < bodyRows && from+i < len(r.lines); i++ {
 			n := from + i
-			num := strconv.Itoa(n + 1)
-			c.text(1+gutter-len(num), bodyTop+i, 0, ckSeg{t: num, fg: pal.FgMute})
+			if r.firstLine > 0 {
+				num := strconv.Itoa(r.firstLine + n)
+				c.text(1+gutter-len(num), bodyTop+i, 0, ckSeg{t: num, fg: pal.FgMute})
+			}
 			var sp []diffview.Span
 			if n < len(r.spans) {
 				sp = r.spans[n]
@@ -852,10 +994,16 @@ func quickLookMeta(r *quickLookResult) string {
 	switch r.kind {
 	case "text":
 		parts = append(parts, quickLookSize(r.size))
-		if r.more {
-			parts = append(parts, "Showing the first "+strconv.Itoa(len(r.lines))+" lines.")
-		} else {
+		switch {
+		case r.older:
+			parts = append(parts, "This machine runs an older tuios. It sends only the start of the file.")
+		case r.stopped:
+			parts = append(parts, "tuios could not read the rest of the file.")
+		case !r.more && r.startOff == 0:
 			parts = append(parts, plural.Count(len(r.lines), "line"))
+		}
+		if r.cutLong {
+			parts = append(parts, "Long lines are cut.")
 		}
 	case "markdown":
 		parts = append(parts, "Markdown", quickLookSize(r.size))
@@ -961,4 +1109,441 @@ func quickLookCellsKey(p *replyPreview, img *composer.Image, cols, rows int) pre
 	k := p.cellsKey(img, cols, rows)
 	k.kind = mosaic.Half
 	return k
+}
+
+// quickLookText reports whether r is a text the keys move through in windows.
+func quickLookText(r *quickLookResult) bool { return r != nil && r.kind == "text" }
+
+// quickLookMoves reports whether r is something the keys scroll.
+func quickLookMoves(r *quickLookResult) bool {
+	return r != nil && (r.kind == "text" || r.kind == "markdown" || r.kind == "dir")
+}
+
+// quickLookPosition says where the top of the panel is in a text: the line, and
+// how far through the file when the panel does not hold all of it. It is ""
+// when there is nothing to say.
+func quickLookPosition(r *quickLookResult, scroll, rows int) string {
+	if !quickLookText(r) || len(r.lines) == 0 {
+		return ""
+	}
+	scroll = max(min(scroll, len(r.lines)-rows), 0)
+	whole := !r.more && r.startOff == 0
+	if whole && len(r.lines) <= rows {
+		return ""
+	}
+	var line string
+	if r.firstLine > 0 {
+		line = "Line " + strconv.Itoa(r.firstLine+scroll)
+	} else {
+		// Bytes held over lines held, for the lines above the held text.
+		avg := max((r.endOff-r.startOff)/int64(len(r.lines)), 1)
+		line = "Line about " + strconv.FormatInt(r.startOff/avg+int64(scroll)+1, 10)
+	}
+	if whole {
+		return line + " of " + strconv.Itoa(len(r.lines))
+	}
+	return line + " · " + strconv.FormatInt(quickLookPercent(r, scroll), 10) + "%"
+}
+
+// quickLookPercent is how far through the file the line at scroll is.
+func quickLookPercent(r *quickLookResult, scroll int) int64 {
+	if r.size <= 0 || len(r.lines) == 0 {
+		return 0
+	}
+	off := r.startOff + (r.endOff-r.startOff)*int64(scroll)/int64(len(r.lines))
+	return off * 100 / r.size
+}
+
+// quickLookBar draws the bar on the panel's edge that says where the top of the
+// panel is in the file, when the file does not fit.
+func quickLookBar(c *ckCanvas, pal overlay.Palette, x, top, rows int, r *quickLookResult, scroll int) {
+	if rows < 3 || r.size <= 0 || (!r.more && r.startOff == 0 && len(r.lines) <= rows) {
+		return
+	}
+	at := int(quickLookPercent(r, scroll)) * rows / 100
+	if !r.more && scroll+rows >= len(r.lines) {
+		at = rows - 1
+	}
+	glyph, thumb := "│", "┃"
+	if overlay.UseASCII() {
+		glyph, thumb = "|", "#"
+	}
+	for i := range rows {
+		seg := ckSeg{t: glyph, fg: pal.FgMute}
+		if i == min(at, rows-1) {
+			seg = ckSeg{t: thumb, fg: pal.AccentBright}
+		}
+		c.text(x, top+i, 0, seg)
+	}
+}
+
+// quickLookHints is the keys that work now, most useful first. The panel's
+// footer drops from the end what does not fit.
+func (m *OS) quickLookHints(closeKey string) []overlay.Hint {
+	ql := &m.quickLook
+	reg := m.KeybindRegistry
+	pair := func(keys func(string) []string, a, b string) string {
+		ak, bk := keys(a), keys(b)
+		if len(ak) == 0 || len(bk) == 0 {
+			return ""
+		}
+		return ak[0] + " " + bk[0]
+	}
+	add := func(h []overlay.Hint, key, label string) []overlay.Hint {
+		if key == "" {
+			return h
+		}
+		return append(h, overlay.Hint{Key: key, Label: label})
+	}
+	first := func(keys []string) string {
+		if len(keys) == 0 {
+			return ""
+		}
+		return keys[0]
+	}
+	if ql.inside {
+		in := reg.GetQuickLookInsideKeys
+		h := add(nil, first(in("go_back")), "back to files")
+		h = add(h, pair(in, "line_down", "line_up"), "line")
+		h = add(h, pair(in, "half_down", "half_up"), "half page")
+		h = add(h, pair(in, "start", "end"), "start, end")
+		h = add(h, first(in("full_size")), "full size")
+		return add(h, closeKey, "close")
+	}
+	out := reg.GetQuickLookKeys
+	h := add(nil, closeKey, "close")
+	if quickLookMoves(ql.res) {
+		h = add(h, pair(out, "seek_down", "seek_up"), "half page")
+		h = add(h, first(out("go_inside")), "go inside")
+	}
+	h = append(h, overlay.Hint{Key: "↑↓", Label: "other files"})
+	return add(h, first(out("full_size")), "full size")
+}
+
+// QuickLookInside reports whether the keyboard is inside the previewed file.
+func (m *OS) QuickLookInside() bool { return m.quickLook.open && m.quickLook.inside }
+
+// QuickLookGoInside moves the keyboard inside the file. It reports false for a
+// file with nothing to move through.
+func (m *OS) QuickLookGoInside() bool {
+	ql := &m.quickLook
+	if !ql.open || !quickLookMoves(ql.res) {
+		return false
+	}
+	ql.inside = true
+	return true
+}
+
+// QuickLookGoBack moves the keyboard back to the list.
+func (m *OS) QuickLookGoBack() { m.quickLook.inside = false }
+
+// QuickLookFullSize fills the area of the panes, or goes back.
+func (m *OS) QuickLookFullSize() { m.quickLook.full = !m.quickLook.full }
+
+// quickLookPage is how many lines half a page is.
+func (m *OS) quickLookPage() int {
+	_, bodyH := m.quickLookSize()
+	return max((bodyH-1)/2, 1)
+}
+
+// QuickLookScroll moves inside the file by lines. It reports false for a file
+// with nothing to move through. The draw holds the position to what is held, and
+// Update reads the next window.
+func (m *OS) QuickLookScroll(lines int) bool {
+	ql := &m.quickLook
+	if !ql.open || !quickLookMoves(ql.res) {
+		return false
+	}
+	ql.scroll += lines
+	if !quickLookText(ql.res) || ql.res.startOff == 0 {
+		ql.scroll = max(ql.scroll, 0)
+	}
+	ql.jump = quickLookNoMove
+	return true
+}
+
+// QuickLookHalfPage moves half a page, forward or back.
+func (m *OS) QuickLookHalfPage(forward bool) bool {
+	n := m.quickLookPage()
+	if !forward {
+		n = -n
+	}
+	return m.QuickLookScroll(n)
+}
+
+// QuickLookLine moves one line, forward or back.
+func (m *OS) QuickLookLine(forward bool) bool {
+	if forward {
+		return m.QuickLookScroll(1)
+	}
+	return m.QuickLookScroll(-1)
+}
+
+// QuickLookEdge goes to the start or the end of the file. A text whose start or
+// end is not held asks for that window, and the next read fetches it.
+func (m *OS) QuickLookEdge(end bool) bool {
+	ql := &m.quickLook
+	r := ql.res
+	if !ql.open || !quickLookMoves(r) {
+		return false
+	}
+	switch {
+	case !end && (!quickLookText(r) || r.startOff == 0):
+		ql.scroll, ql.jump = 0, quickLookNoMove
+	case end && (!quickLookText(r) || !r.more):
+		ql.scroll, ql.jump = 1<<30, quickLookNoMove
+	case end:
+		ql.jump = quickLookEnd
+	default:
+		ql.jump = quickLookStart
+	}
+	return true
+}
+
+// quickLookWindow reads the next window of a text when the position calls for
+// one. Update asks after every message. It is nil unless a read is due, and only
+// one read runs at a time, so a held key moves the position and the next read goes
+// to where it ended.
+func (m *OS) quickLookWindow() tea.Cmd {
+	ql := &m.quickLook
+	r := ql.res
+	if !ql.open || ql.fetching || !quickLookText(r) || r.target != ql.target || r.older || r.stopped {
+		return nil
+	}
+	if !r.more && r.startOff == 0 {
+		return nil
+	}
+	if h := ql.target.host; h != "" && ql.hostOlder[h] {
+		n := *r
+		n.older = true
+		ql.res = &n
+		return nil
+	}
+	_, bodyH := m.quickLookSize()
+	rows := max(bodyH-1, 1)
+	move := ql.jump
+	if move == quickLookNoMove {
+		top := min(ql.scroll, len(r.lines)-rows)
+		switch {
+		case r.more && len(r.lines)-(ql.scroll+rows) < rows*2:
+			move = quickLookNext
+		case r.startOff > 0 && top < rows:
+			move = quickLookPrev
+		default:
+			return nil
+		}
+	}
+	var offset int64
+	limit := quickLookTextWindow
+	switch move {
+	case quickLookNext:
+		offset = r.endOff
+	case quickLookPrev:
+		offset = max(r.startOff-int64(limit), 0)
+		limit = int(r.startOff - offset)
+	case quickLookEnd:
+		offset = max(r.size-int64(limit), 0)
+	}
+	ql.fetching = true
+	t := ql.target
+	var call func(host, verb string, params map[string]any) (json.RawMessage, error)
+	ask := false
+	if t.host != "" {
+		call = m.verbOnHostCaller()
+		ask = !ql.hostAsked[t.host]
+	}
+	ascii := overlay.UseASCII()
+	return func() tea.Msg {
+		msg := quickLookWindowMsg{target: t, move: move}
+		var raw json.RawMessage
+		var err error
+		switch {
+		case t.host == "":
+			var out map[string]any
+			if out, err = session.PreviewLocalWindow(t.path, offset, limit); err == nil {
+				raw, err = json.Marshal(out)
+			}
+		default:
+			if ask {
+				msg.older = !quickLookHostHasWindows(call, t.host)
+				if msg.older {
+					return msg
+				}
+			}
+			raw, err = call(t.host, "file-preview", map[string]any{"path": t.path, "offset": offset, "limit": limit})
+		}
+		if err != nil || json.Unmarshal(raw, &msg.reply) != nil {
+			msg.failed = true
+			return msg
+		}
+		msg.lines, msg.spans, msg.cutLong = quickLookLines(t.path, msg.reply.Text, ascii)
+		return msg
+	}
+}
+
+// quickLookJoinSpans joins the highlighting of two runs of lines, one entry per
+// line. A file the lexer does not know has none, and stays with none.
+func quickLookJoinSpans(a [][]diffview.Span, aLines int, b [][]diffview.Span, bLines int) [][]diffview.Span {
+	if a == nil && b == nil {
+		return nil
+	}
+	out := make([][]diffview.Span, aLines+bLines)
+	copy(out, a)
+	copy(out[aLines:], b)
+	return out
+}
+
+// quickLookHostHasWindows asks a machine whether its file-preview verb takes
+// offset. A daemon that does not know a param ignores it, so without asking, an
+// older one would answer every window with the start of the file. A failed call
+// counts as having them: the window read that follows says what is wrong.
+func quickLookHostHasWindows(call func(host, verb string, params map[string]any) (json.RawMessage, error), host string) bool {
+	raw, err := call(host, "list-verbs", map[string]any{"verb": "file-preview"})
+	if err != nil {
+		return true
+	}
+	var res struct {
+		Verbs []struct {
+			Verb   string `json:"verb"`
+			Params []struct {
+				Name string `json:"name"`
+			} `json:"params"`
+		} `json:"verbs"`
+	}
+	if json.Unmarshal(raw, &res) != nil {
+		return true
+	}
+	for _, v := range res.Verbs {
+		if v.Verb != "file-preview" {
+			continue
+		}
+		for _, p := range v.Params {
+			if p.Name == "offset" {
+				return true
+			}
+		}
+		return false
+	}
+	return true
+}
+
+// applyQuickLookWindow joins a finished window to the held text. It makes a new
+// result, so the kept panel sees the change.
+func (m *OS) applyQuickLookWindow(msg quickLookWindowMsg) tea.Cmd {
+	ql := &m.quickLook
+	ql.fetching = false
+	if !ql.open {
+		return nil
+	}
+	if msg.target != ql.target {
+		return m.quickLookShow(ql.target)
+	}
+	r := ql.res
+	if !quickLookText(r) || r.target != msg.target {
+		return nil
+	}
+	if msg.move == ql.jump {
+		ql.jump = quickLookNoMove
+	}
+	if t := msg.target; t.host != "" && (msg.older || !msg.failed) {
+		if ql.hostAsked == nil {
+			ql.hostAsked = make(map[string]bool)
+		}
+		ql.hostAsked[t.host] = true
+		if msg.older {
+			if ql.hostOlder == nil {
+				ql.hostOlder = make(map[string]bool)
+			}
+			ql.hostOlder[t.host] = true
+		}
+	}
+	n := *r
+	switch {
+	case msg.older:
+		n.older = true
+		ql.res = &n
+		return nil
+	case msg.failed:
+		// The text held stays, and the panel says the rest could not be read.
+		n.stopped = true
+		ql.res = &n
+		return nil
+	}
+	w := msg.reply
+	part := quickLookPart{lines: len(msg.lines), bytes: w.NextOffset - w.Offset}
+	n.size = max(w.Size, r.size)
+	n.cutLong = r.cutLong || msg.cutLong
+	switch msg.move {
+	case quickLookNext:
+		n.lines = append(slices.Clone(r.lines), msg.lines...)
+		n.spans = quickLookJoinSpans(r.spans, len(r.lines), msg.spans, len(msg.lines))
+		n.parts = append(slices.Clone(r.parts), part)
+		n.endOff = w.NextOffset
+	case quickLookPrev:
+		n.lines = append(slices.Clone(msg.lines), r.lines...)
+		n.spans = quickLookJoinSpans(msg.spans, len(msg.lines), r.spans, len(r.lines))
+		n.parts = append([]quickLookPart{part}, r.parts...)
+		n.startOff = w.Offset
+		ql.scroll += len(msg.lines)
+		switch {
+		case w.Offset == 0:
+			n.firstLine = 1
+		case r.firstLine > 0:
+			n.firstLine = max(r.firstLine-len(msg.lines), 1)
+		}
+	default:
+		n.lines, n.spans = msg.lines, msg.spans
+		n.parts = []quickLookPart{part}
+		n.startOff, n.endOff = w.Offset, w.NextOffset
+		n.firstLine = 0
+		if w.Offset == 0 {
+			n.firstLine = 1
+		}
+		ql.scroll = 0
+		if msg.move == quickLookEnd {
+			ql.scroll = 1 << 30
+		}
+	}
+	n.more = n.endOff < n.size
+	// Let whole windows go from the far side of the position.
+	for n.endOff-n.startOff > quickLookTextHeld && len(n.parts) > 1 {
+		if msg.move == quickLookNext {
+			p := n.parts[0]
+			n.parts = n.parts[1:]
+			n.lines = n.lines[p.lines:]
+			if n.spans != nil {
+				n.spans = n.spans[p.lines:]
+			}
+			n.startOff += p.bytes
+			ql.scroll -= p.lines
+			if n.firstLine > 0 {
+				n.firstLine += p.lines
+			}
+			continue
+		}
+		p := n.parts[len(n.parts)-1]
+		n.parts = n.parts[:len(n.parts)-1]
+		n.lines = n.lines[:len(n.lines)-p.lines]
+		if n.spans != nil {
+			n.spans = n.spans[:len(n.lines)]
+		}
+		n.endOff -= p.bytes
+		n.more = true
+	}
+	ql.res = &n
+	return nil
+}
+
+// QuickLookOpenTextForTest opens the preview on the row under the cursor with
+// text as its result, with no read. It reports false off a file row.
+func (m *OS) QuickLookOpenTextForTest(text string) bool {
+	t, ok := m.quickLookCursorTarget()
+	if !ok {
+		return false
+	}
+	ql := &m.quickLook
+	ql.open, ql.target = true, t
+	lines, spans, _ := quickLookLines(t.path, text, false)
+	ql.res = &quickLookResult{target: t, kind: "text", lines: lines, spans: spans, size: int64(len(text)), endOff: int64(len(text)), firstLine: 1}
+	return true
 }

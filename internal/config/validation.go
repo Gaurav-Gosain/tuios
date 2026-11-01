@@ -826,6 +826,8 @@ func keySections(kb *KeybindingsConfig) []keySection {
 		{"sidebar", kb.Sidebar},
 		{"sidebar_files", kb.SidebarFiles},
 		{"sidebar_agents", kb.SidebarAgents},
+		{"quick_look", kb.QuickLook},
+		{"quick_look_inside", kb.QuickLookInside},
 		{"inbox", kb.Inbox},
 		{"inbox_peek", kb.InboxPeek},
 		{"mail", kb.Mail},
