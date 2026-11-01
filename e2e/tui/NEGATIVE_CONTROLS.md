@@ -11806,3 +11806,40 @@ Run on 2026-11-01 on Linux. Each control is one change to a build of this branch
 The first Inbox assertion passed with its control, because the rail's agents section shows the same message. The assertion now waits for the Inbox to cover the rail, and the control is caught.
 
 The frames are `rail-compact-*` and `rail-drag-*` under the test's artifact folder.
+
+## A Claude Code notification prompt clears when the prompt goes
+
+`TestClaudeNotificationPromptClearsWhenThePromptGoes` runs Claude Code's real hook against a pane that draws Claude Code's screens, with the hooks in the order Claude Code sends them: `PermissionRequest`, the menu, then a `permission_prompt` notification the daemon refuses, since the pane is on `needs_input` already. The pane has to hold while the menu is drawn again, and end once the menu is replaced by the empty prompt box, as Esc leaves it. Then an `agent_needs_input` notification, a background agent's question, has to end the same way once the pane draws the empty prompt box. Claude Code sends nothing when either prompt goes without a tool running. The steps and the pane's state after each go to `claude-notification-stale.log` in the test's artifact directory.
+
+`TestClaudePromptKeepsItsWordsThroughARedraw` draws the menu after `PermissionRequest`, so a screen rule takes the prompt over, then a frame no rule reads, until the screen gives the prompt back and for a second after. The pane has to be on `needs_input` from the report, an approval with the hook's words, and still end once the prompt box shows. Its log is `claude-prompt-redraw.log`.
+
+`TestClaudePromptHoldsThroughABlankFrame` draws Claude Code's `✳` title on every frame, as Claude Code shows it at a menu too. A blank frame is the first thing the pane writes after the notification and stands 4s, past the startup grace, then the menu comes back, and the same again under the screen rule's loan. The pane has to stay on `needs_input` with one Inbox item throughout, and end once the prompt box shows. Its log is `claude-prompt-blank.log`.
+
+`TestClaudeURLFormHoldsWithoutARule` reports an `elicitation_url_dialog` over a form no rule reads, under the `✳` title, redraws the form and needs the pane on `needs_input` for 6s, until `ElicitationResult` moves it on. Its log is `claude-url-form.log`.
+
+`TestClaudePromptHoldsUnderAWorkingLook` reports `PermissionRequest`, then draws a form no rule reads under a `⠋` title for 3s, then the same form under a `✻ Thinking…` line for 3s. The pane has to stay on `needs_input` with its one Inbox item, and end once the prompt box shows. Its log is `claude-prompt-working-look.log`.
+
+`TestClaudePromptHoldsThroughASpinnerBeforeTheMenu` reports `PermissionRequest`, draws a spinner frame (`⠋` title, `✻ Running…` line) for 2s, then the menu. The pane has to stay on `needs_input`, the screen has to take the prompt when the menu shows, and the Inbox has to keep its one item. Its log is `claude-prompt-spinner-first.log`.
+
+`TestClaudePromptEndsAtOnceOnYes` draws the menu, then a spinner frame, and runs `PostToolUse`: the pane has to read `working` as soon as the hook returns, and the Inbox item has to close. Then a second prompt with its hooks lost: the menu, then the turn's spinner and `Thinking…` line for 2s, which the pane holds on `needs_input`, then the empty prompt box, which ends it. Its log is `claude-prompt-yes.log`.
+
+Run on 2026-11-02 on macOS arm64, on the branch at `680fc3ee9` plus the working-look gate, on a machine also running another e2e suite (load average about 11). The seven tests in `claude_notification_stale_test.go` pass 3 runs of 3 together. One build per control:
+
+| Control: what was cut | Where it fails | Verdict |
+| --- | --- | --- |
+| `hookPromptHolds` returns false, so a working look, a desktop notification or the transcript may replace a hook's event prompt once the pane wrote, as at `680fc3ee9` | `TestClaudePromptHoldsUnderAWorkingLook`: "a form no rule reads under a ⠋ title, for 3s: the pane is working, want it to stay needs_input". `TestClaudePromptHoldsThroughASpinnerBeforeTheMenu`: "a spinner frame before the menu, for 2s: the pane is working, want it to stay needs_input". `TestClaudePromptEndsAtOnceOnYes`: "the menu drawn again: the pane's state is from \"osc\", want \"screen\"" | **caught** |
+| `applyIdleVerdict` publishes the confirmed empty prompt box without `promptGone`, so the gate refuses it too | `TestClaudeNotificationPromptClearsWhenThePromptGoes`: "Esc: the menu gone, the prompt box empty: the pane is still needs_input (\"approval: Do you want to proceed?\") with the prompt gone from its screen". The three new tests fail the same way at their last step | **caught** |
+
+The earlier runs, before the working-look gate:
+
+Run on 2026-11-01 on macOS arm64, on `upstream/main` at `4c95caa50` plus the branch, on a machine also running another e2e suite (load average 10 to 17). The fixed build passes 3 runs of 3 of the four tests together, but for one run in which the frame no rule reads drew and no look followed it for 10s, a settle look lost to the load; that test then passed 5 runs of 5 on its own. One build per control:
+
+| Control: what was cut | Where it fails | Verdict |
+| --- | --- | --- |
+| The hook sends no `notification` on any event, so no report's claim is an event | `TestClaudeNotificationPromptClearsWhenThePromptGoes`: "Esc: the menu gone, the prompt box empty: the pane is still needs_input (\"approve Bash: go test ./...\") with the prompt gone from its screen". `TestClaudePromptHoldsThroughABlankFrame`: "Esc: ... still needs_input (\"Claude needs your permission to use Bash\")". `TestClaudePromptKeepsItsWordsThroughARedraw` fails too | **caught** |
+| `applyIdleVerdict` refuses an idle look under any stronger claim, as before, so only a non-idle look could replace a written-over event claim | `TestClaudeNotificationPromptClearsWhenThePromptGoes`: "the background agent's question answered: the pane is still needs_input (\"production-setup needs your input\")". The permission cases pass, because the menu's own look had already taken the claim | **caught** |
+| `PermissionRequest` sends no `notification`, as the Notification alone did | `TestClaudeNotificationPromptClearsWhenThePromptGoes`: "Esc: the menu gone, the prompt box empty: the pane is still needs_input (\"approve Bash: go test ./...\") with the prompt gone from its screen". `TestClaudePromptKeepsItsWordsThroughARedraw`: "the menu drawn: the screen reads it: the pane's state is from \"report\", want \"screen\"" | **caught** |
+| `releaseAgentBlockerOverride` clears the message and kind and drops the event mark, as before | `TestClaudePromptKeepsItsWordsThroughARedraw`: "after the frame the pane says {State:needs_input Message: Source:report ... BlockedBy: ...}, want the hook's approval back: blocked_by approval, message \"approve Bash: go test ./...\"" | **caught** |
+| `applyIdleVerdict` takes a hook's event prompt as any other claim: any idle look, the title's included, ends it at once once the pane wrote | `TestClaudePromptHoldsThroughABlankFrame`: "the menu, then a blank frame for 4s: the pane is idle, want it to stay needs_input". `TestClaudeURLFormHoldsWithoutARule` passes, since that report is not an event | **caught** |
+| `elicitation_url_dialog` sends `notification` as the other questions do | `TestClaudeURLFormHoldsWithoutARule` passes: the idle gate above holds the form on its own. The fixture test catches it: `TestTranslateFixtures/claude-code/Notification_elicitation_url_dialog` in `internal/integration` | not caught by e2e, caught by the fixture |
+| Both of the last two | `TestClaudeURLFormHoldsWithoutARule`: "the form drawn again, for 6s: the pane is idle, want it to stay needs_input" | **caught** |

@@ -785,7 +785,7 @@ type hookReportResult struct {
 // the ones every daemon takes. activity is the hook event for the pane's
 // activity ring; a daemon from before it drops it, and the report goes
 // without it.
-var hookFields = []string{"kind", "agent_session_id", "transcript_path", "transcript_leaf", "if_state", "subagent_id", "if_subagent_id", "harness_pid", "activity", "agent_cwd", "session_start"}
+var hookFields = []string{"kind", "agent_session_id", "transcript_path", "transcript_leaf", "if_state", "subagent_id", "if_subagent_id", "harness_pid", "activity", "agent_cwd", "session_start", "notification"}
 
 // setAgentStateParams asks the daemon which params its set-agent-state takes.
 //
@@ -885,6 +885,9 @@ func reportHook(client verbCaller, sess, window, harness string, harnessPID int,
 	}
 	if r.SessionStart && r.SessionID != "" {
 		extra["session_start"] = true
+	}
+	if r.Notification {
+		extra["notification"] = true
 	}
 	if r.TranscriptLeaf != nil {
 		extra["transcript_leaf"] = *r.TranscriptLeaf

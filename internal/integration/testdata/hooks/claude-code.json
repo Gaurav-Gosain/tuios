@@ -37,17 +37,17 @@
   {
     "name": "PermissionRequest Bash",
     "payload": {"session_id": "sess-1", "hook_event_name": "PermissionRequest", "tool_name": "Bash", "tool_input": {"command": "GITHUB_TOKEN=ghp_abcdefghijklmnop git push origin main", "description": "Push"}, "tool_use_id": "t2"},
-    "want": {"state": "needs_input", "kind": "approval", "message": "approve Bash: GITHUB_TOKEN=*** git push origin main", "agent_session_id": "sess-1"}
+    "want": {"state": "needs_input", "kind": "approval", "message": "approve Bash: GITHUB_TOKEN=*** git push origin main", "agent_session_id": "sess-1", "notification": true}
   },
   {
     "name": "PermissionRequest Edit",
     "payload": {"session_id": "sess-1", "hook_event_name": "PermissionRequest", "tool_name": "Edit", "tool_input": {"file_path": "/src/main.go", "old_string": "a", "new_string": "b"}},
-    "want": {"state": "needs_input", "kind": "approval", "message": "approve Edit: /src/main.go", "agent_session_id": "sess-1"}
+    "want": {"state": "needs_input", "kind": "approval", "message": "approve Edit: /src/main.go", "agent_session_id": "sess-1", "notification": true}
   },
   {
     "name": "PermissionRequest unknown tool",
     "payload": {"session_id": "sess-1", "hook_event_name": "PermissionRequest", "tool_name": "mcp__db__query", "tool_input": {"sql_text": "select 1"}},
-    "want": {"state": "needs_input", "kind": "approval", "message": "approve mcp__db__query", "agent_session_id": "sess-1"}
+    "want": {"state": "needs_input", "kind": "approval", "message": "approve mcp__db__query", "agent_session_id": "sess-1", "notification": true}
   },
   {
     "name": "PostToolUse",
@@ -92,12 +92,12 @@
   {
     "name": "Notification permission_prompt",
     "payload": {"session_id": "sess-1", "hook_event_name": "Notification", "notification_type": "permission_prompt", "message": "Claude needs your permission to use Bash"},
-    "want": {"state": "needs_input", "kind": "approval", "message": "Claude needs your permission to use Bash", "agent_session_id": "sess-1", "if_state": "none,working,idle,done,errored,unknown"}
+    "want": {"state": "needs_input", "kind": "approval", "message": "Claude needs your permission to use Bash", "agent_session_id": "sess-1", "if_state": "none,working,idle,done,errored,unknown", "notification": true}
   },
   {
     "name": "Notification elicitation_dialog",
     "payload": {"session_id": "sess-1", "hook_event_name": "Notification", "notification_type": "elicitation_dialog", "message": "The db server asks for a region"},
-    "want": {"state": "needs_input", "kind": "question", "message": "The db server asks for a region", "agent_session_id": "sess-1"}
+    "want": {"state": "needs_input", "kind": "question", "message": "The db server asks for a region", "agent_session_id": "sess-1", "notification": true}
   },
   {
     "name": "Notification elicitation_url_dialog",
@@ -107,7 +107,7 @@
   {
     "name": "Notification agent_needs_input",
     "payload": {"session_id": "sess-1", "hook_event_name": "Notification", "notification_type": "agent_needs_input", "message": "Which branch?"},
-    "want": {"state": "needs_input", "kind": "question", "message": "Which branch?", "agent_session_id": "sess-1"}
+    "want": {"state": "needs_input", "kind": "question", "message": "Which branch?", "agent_session_id": "sess-1", "notification": true}
   },
   {
     "name": "Notification idle_prompt",
@@ -137,7 +137,7 @@
   {
     "name": "Notification untyped permission (older Claude Code)",
     "payload": {"session_id": "sess-1", "hook_event_name": "Notification", "message": "Claude needs your permission to use Bash"},
-    "want": {"state": "needs_input", "kind": "approval", "message": "Claude needs your permission to use Bash", "agent_session_id": "sess-1", "if_state": "none,working,idle,done,errored,unknown"}
+    "want": {"state": "needs_input", "kind": "approval", "message": "Claude needs your permission to use Bash", "agent_session_id": "sess-1", "if_state": "none,working,idle,done,errored,unknown", "notification": true}
   },
   {
     "name": "Notification untyped idle (older Claude Code)",

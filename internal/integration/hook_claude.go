@@ -168,7 +168,11 @@ func translateClaude(in Input, p fields) Decision {
 			// A plan is known by its title, not by the tool's name.
 			msg = PlanSummaryPrefix + PlanTitle(p.obj("tool_input").str("plan"))
 		}
-		d := send(ClaudeCode, event, identity(Report{State: "needs_input", Kind: "approval", Message: msg}, p))
+		// Marked as a notification's is. Esc at the menu sends no hook, and
+		// the permission_prompt notification that follows is refused, the
+		// pane being on needs_input already, so this is the claim the
+		// screen has to be able to take back.
+		d := send(ClaudeCode, event, identity(Report{State: "needs_input", Kind: "approval", Message: msg, Notification: true}, p))
 		d.Approval = claudeApproval(p)
 		return d
 	case "PostToolUse", "PostToolUseFailure", "PermissionDenied", "ElicitationResult":
@@ -231,6 +235,14 @@ func translateClaude(in Input, p fields) Decision {
 // the person still sees the turn finished, so it only corrects a pane still
 // showing working after a Stop that never arrived.
 //
+// Claude Code sends nothing when such a prompt goes without a tool running:
+// Esc at a permission menu, or a background agent's question answered in its
+// own view. So a needs_input from a notification is sent as one, and once
+// the pane draws again an empty prompt box on the screen may take it back.
+// elicitation_url_dialog is not: no screen rule is known to read its form,
+// so nothing would tell the form still up from the form gone. It holds until
+// a hook moves the pane on, since a missed prompt costs more than a stale one.
+//
 // A Claude Code old enough to send no notification_type is read from its
 // message, and only for the two messages it is known to send. Anything else
 // reports nothing, so a notification such as auth_success never reads as
@@ -253,8 +265,10 @@ func claudeNotification(event string, p fields) Decision {
 	case "permission_prompt":
 		// It names no subagent, and comes after the PermissionRequest it is
 		// about, so it must not take a subagent's prompt over.
-		return send(ClaudeCode, event, identity(Report{State: "needs_input", Kind: "approval", Message: Clip(msg), IfState: claudeNotBlocked}, p))
-	case "elicitation_dialog", "elicitation_url_dialog", "agent_needs_input":
+		return send(ClaudeCode, event, identity(Report{State: "needs_input", Kind: "approval", Message: Clip(msg), IfState: claudeNotBlocked, Notification: true}, p))
+	case "elicitation_dialog", "agent_needs_input":
+		return send(ClaudeCode, event, identity(Report{State: "needs_input", Kind: "question", Message: Clip(msg), Notification: true}, p))
+	case "elicitation_url_dialog":
 		return send(ClaudeCode, event, identity(Report{State: "needs_input", Kind: "question", Message: Clip(msg)}, p))
 	case "idle_prompt":
 		return send(ClaudeCode, event, identity(Report{State: "idle", IfState: "working,unknown"}, p))

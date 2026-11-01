@@ -198,6 +198,11 @@ type AgentReport struct {
 	// the approval was given, against every tier that could see the agent
 	// working again. Only the daemon sets it.
 	event bool
+	// promptGone marks an idle look that the screen confirmed: the empty
+	// prompt box, read as long as a working pane's idle must hold. It is the
+	// one look that may end a prompt a hook reported from a one-off event
+	// (hookPromptHolds). Only applyIdleVerdict sets it.
+	promptGone bool
 }
 
 // SetDaemonWindowAgentState records an explicit report on the window matching
@@ -513,6 +518,10 @@ func (s *Session) applyAgentReport(target string, r AgentReport) (AgentState, bo
 			effective = prev
 			return errAgentReportRefused(reason)
 		}
+		if hookPromptHolds(claim, held, w, r) {
+			effective = w.AgentState
+			return errAgentClaimHeld
+		}
 		override := false
 		// held, not the zero claim's rank: a window nobody has claimed is open to
 		// any source, including the weakest.
@@ -544,7 +553,7 @@ func (s *Session) applyAgentReport(target string, r AgentReport) (AgentState, bo
 		switch {
 		case override:
 			next.blocker = true
-			next.prior = priorOf(claim, prev, w.AgentHarness)
+			next.prior = priorOf(claim, w)
 		case claim.blocker && r.Source == claim.source && r.State == prev:
 			// The same rule matching the same prompt again is the standing
 			// override, not a fresh claim. Forgetting what it displaced here
@@ -559,7 +568,7 @@ func (s *Session) applyAgentReport(target string, r AgentReport) (AgentState, bo
 			// whole turn that followed the answer, because the screen tier
 			// asserts no other state and outranks the detector.
 			next.blocker = true
-			next.prior = priorOf(claim, prev, w.AgentHarness)
+			next.prior = priorOf(claim, w)
 		}
 		switch {
 		case r.State == AgentStateNeedsInput, r.fromPane, r.paneWroteAt != 0:
@@ -730,15 +739,19 @@ func screenNamesPrompt(claim agentClaim, w *WindowState, r AgentReport) bool {
 		w.AgentMessage == herdrBlockedPlaceholder
 }
 
-// priorOf is what a visible-blocker override keeps of the claim it displaces.
-func priorOf(claim agentClaim, state AgentState, harness string) agentPriorClaim {
+// priorOf is what a visible-blocker override keeps of the claim it displaces,
+// on window w before the override is applied.
+func priorOf(claim agentClaim, w *WindowState) agentPriorClaim {
 	return agentPriorClaim{
 		source:       claim.source,
-		state:        state,
-		harness:      harness,
+		state:        w.AgentState,
+		harness:      w.AgentHarness,
 		herdrAt:      claim.herdrAt,
 		herdrAnchors: claim.herdrAnchors,
 		screenWins:   claim.screenWins,
+		message:      w.AgentMessage,
+		kind:         w.AgentKind,
+		event:        claim.event,
 	}
 }
 
@@ -877,6 +890,34 @@ func eventClaimStale(claim agentClaim, w *WindowState, r AgentReport) bool {
 	return claim.event && r.paneWroteAt > w.AgentStateAt && r.Source.rank() >= AgentSourceScreen.rank()
 }
 
+// hookPromptHolds reports whether r must leave alone the prompt a hook
+// reported from a one-off event (agentClaim.hookEventPrompt), held by the hook
+// itself or lent to a screen rule reading its menu.
+//
+// Such a prompt ends on a hook's word, or on the screen's word that it is gone:
+// the empty prompt box, confirmed as a working pane's idle is (promptGone). No
+// other look ends it. A spinner in the title or a "Thinking…" line on the
+// screen can be drawn between the hook and the menu, or over a form no rule
+// reads, so a working look says nothing about whether the prompt was answered,
+// and a prompt that ends early is one nobody answers. A desktop notification
+// or the transcript would end it the same way, so they are held off too, and
+// a needs_input from any of them is the prompt the hook already reported.
+//
+// A screen rule reading the prompt still takes it, as a loan that keeps the
+// hook's claim to hand back. The hook tier is not held at all: a person who
+// answers Yes sets off PostToolUse or PreToolUse, which ends the prompt at
+// once. Nor is a report that the agent is gone, so a pane whose harness left
+// clears as before.
+func hookPromptHolds(claim agentClaim, held bool, w *WindowState, r AgentReport) bool {
+	if !held || w.AgentState != AgentStateNeedsInput || !claim.hookEventPrompt() {
+		return false
+	}
+	if r.Source.rank() >= AgentSourceReport.rank() || r.promptGone || r.State == AgentStateNone {
+		return false
+	}
+	return r.Source != AgentSourceScreen || !agentStateBlocks(r.State) || r.paneWroteAt == 0
+}
+
 // releaseAgentBlockerOverride puts back the claim a visible blocker displaced,
 // and reports whether it had one to put back. Its caller is the screen tier,
 // running a look that found no rule matching: the prompt the exception was
@@ -900,7 +941,7 @@ func (s *Session) releaseAgentBlockerOverride(windowID string) bool {
 			return errNoBlockerRelease
 		}
 		w.AgentState = claim.prior.state
-		clearAgentNote(w)
+		w.AgentMessage, w.AgentKind = claim.prior.message, claim.prior.kind
 		w.AgentHarness = claim.prior.harness
 		w.AgentStateAt = time.Now().UnixNano()
 		// auto and sawProcess are the blocker's, not the displaced claim's:
@@ -917,6 +958,7 @@ func (s *Session) releaseAgentBlockerOverride(windowID string) bool {
 			herdrAt:      claim.prior.herdrAt,
 			herdrAnchors: claim.prior.herdrAnchors,
 			screenWins:   claim.prior.screenWins,
+			event:        claim.prior.event,
 		})
 		released = true
 		return nil
