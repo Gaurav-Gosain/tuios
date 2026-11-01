@@ -198,6 +198,11 @@ type AgentReport struct {
 	// the approval was given, against every tier that could see the agent
 	// working again. Only the daemon sets it.
 	event bool
+	// promptGone marks an idle look that the screen confirmed: the empty
+	// prompt box, read as long as a working pane's idle must hold. It is the
+	// one look that may end a prompt a hook reported from a one-off event
+	// (hookPromptHolds). Only applyIdleVerdict sets it.
+	promptGone bool
 }
 
 // SetDaemonWindowAgentState records an explicit report on the window matching
@@ -512,6 +517,10 @@ func (s *Session) applyAgentReport(target string, r AgentReport) (AgentState, bo
 		if reason := sessionGuard(w, claim, held, s.agentHarnessPIDs[w.ID].pid, s.agentSharedGuards[w.ID], r); reason != "" {
 			effective = prev
 			return errAgentReportRefused(reason)
+		}
+		if hookPromptHolds(claim, held, w, r) {
+			effective = w.AgentState
+			return errAgentClaimHeld
 		}
 		override := false
 		// held, not the zero claim's rank: a window nobody has claimed is open to
@@ -879,6 +888,34 @@ func blockerOverridesClaim(w *WindowState, r AgentReport, claim agentClaim, now 
 // detector or the silence timer. See AgentReport.event.
 func eventClaimStale(claim agentClaim, w *WindowState, r AgentReport) bool {
 	return claim.event && r.paneWroteAt > w.AgentStateAt && r.Source.rank() >= AgentSourceScreen.rank()
+}
+
+// hookPromptHolds reports whether r must leave alone the prompt a hook
+// reported from a one-off event (agentClaim.hookEventPrompt), held by the hook
+// itself or lent to a screen rule reading its menu.
+//
+// Such a prompt ends on a hook's word, or on the screen's word that it is gone:
+// the empty prompt box, confirmed as a working pane's idle is (promptGone). No
+// other look ends it. A spinner in the title or a "Thinking…" line on the
+// screen can be drawn between the hook and the menu, or over a form no rule
+// reads, so a working look says nothing about whether the prompt was answered,
+// and a prompt that ends early is one nobody answers. A desktop notification
+// or the transcript would end it the same way, so they are held off too, and
+// a needs_input from any of them is the prompt the hook already reported.
+//
+// A screen rule reading the prompt still takes it, as a loan that keeps the
+// hook's claim to hand back. The hook tier is not held at all: a person who
+// answers Yes sets off PostToolUse or PreToolUse, which ends the prompt at
+// once. Nor is a report that the agent is gone, so a pane whose harness left
+// clears as before.
+func hookPromptHolds(claim agentClaim, held bool, w *WindowState, r AgentReport) bool {
+	if !held || w.AgentState != AgentStateNeedsInput || !claim.hookEventPrompt() {
+		return false
+	}
+	if r.Source.rank() >= AgentSourceReport.rank() || r.promptGone || r.State == AgentStateNone {
+		return false
+	}
+	return r.Source != AgentSourceScreen || !agentStateBlocks(r.State) || r.paneWroteAt == 0
 }
 
 // releaseAgentBlockerOverride puts back the claim a visible blocker displaced,

@@ -5158,10 +5158,14 @@ The optional hook fields:
   desktop notification the pane sends. Claude Code sends nothing when a prompt
   goes without a tool running, after Esc at a permission menu or once a
   background agent's question is answered in its own view, so without this the
-  pane stayed on `needs_input`. A `needs_input` marked so ends on an idle look
-  only while the screen reads idle (the empty prompt box), and only once that
+  pane stayed on `needs_input`. A `needs_input` marked so ends on a look only
+  while the screen reads idle (the empty prompt box), and only once that
   reading has held as long as a working pane's idle must: the title's rest
-  glyph is drawn at a menu too. A screen rule that takes the prompt over while
+  glyph is drawn at a menu too. No working look ends it, whether a spinner in
+  the title or a working line on the screen, since one can be drawn between
+  the hook and its menu, nor does a desktop notification or the transcript. A
+  hook's report ends it at once, such as `PostToolUse` once the prompt is
+  answered. A screen rule that takes the prompt over while
   it is drawn hands it back, message and kind included, when a frame no rule
   reads stands in its place. Claude Code's `elicitation_url_dialog` is sent
   without it, since no screen rule is known to read that form.

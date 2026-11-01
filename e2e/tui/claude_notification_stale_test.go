@@ -110,6 +110,30 @@ func (c *claudeStage) play(cmd string) {
 	}
 }
 
+// waitItems waits for the pane's prompt to open an Inbox item, and returns
+// the open items about it.
+func (c *claudeStage) waitItems() []string {
+	c.t.Helper()
+	items := c.blockItems()
+	for deadline := time.Now().Add(uiTimeout); len(items) == 0; items = c.blockItems() {
+		if time.Now().After(deadline) {
+			c.t.Fatal("the prompt opened no Inbox item")
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	c.log.add("Inbox items: %v", items)
+	return items
+}
+
+// sameItems checks the Inbox holds the items want and no others.
+func (c *claudeStage) sameItems(step string, want []string) {
+	c.t.Helper()
+	if got := c.blockItems(); len(got) != len(want) || (len(got) > 0 && got[0] != want[0]) {
+		c.log.add("%s: Inbox items: %v", step, got)
+		c.t.Fatalf("%s: the Inbox holds %v, want %v", step, got, want)
+	}
+}
+
 func (c *claudeStage) note(step string, st agentStateJSON) {
 	c.log.add("%-48s state=%s source=%s blocked_by=%s message=%q", step, st.State, st.Source, st.BlockedBy, st.Message)
 }
@@ -321,14 +345,7 @@ func TestClaudePromptHoldsThroughABlankFrame(t *testing.T) {
 	c.drawUntil(claudeMenu, flag)
 	c.waitFrame(claudeMenu...)
 	c.hook("Notification permission_prompt", claudePermissionNotice, "needs_input")
-	first := c.blockItems()
-	for deadline := time.Now().Add(uiTimeout); len(first) == 0; first = c.blockItems() {
-		if time.Now().After(deadline) {
-			t.Fatal("the prompt opened no Inbox item")
-		}
-		time.Sleep(100 * time.Millisecond)
-	}
-	c.log.add("Inbox items: %v", first)
+	first := c.waitItems()
 	if err := os.WriteFile(flag, nil, 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -371,4 +388,129 @@ func TestClaudeURLFormHoldsWithoutARule(t *testing.T) {
 	c.draw(form...)
 	c.holds("needs_input", "the form drawn again, for 6s", 6*time.Second)
 	c.hook("ElicitationResult", `{"hook_event_name":"ElicitationResult","session_id":"cl-e2e"}`, "working")
+}
+
+// Frames of a turn running, as Claude Code draws them: the spinner in the
+// title, and the spinner line a screen rule reads as working.
+const (
+	claudeSpinnerTitle = "⠋ Claude Code"
+	claudeRestTitle    = "✳ Claude Code"
+	claudePostToolUse  = `{"hook_event_name":"PostToolUse","session_id":"cl-e2e","tool_name":"Bash","tool_input":{"command":"go test ./..."},"tool_response":{"stdout":"ok"}}`
+)
+
+var (
+	// claudeUnreadForm is a form no screen rule reads.
+	claudeUnreadForm = []string{"Bash command", "  go test ./...", "Allow this command to run?"}
+	claudeThinking   = "✻ Thinking… (3s · ↑ 120 tokens)"
+	claudeRunning    = []string{"⏺ Bash(go test ./...)", "", "✻ Running… (1s)"}
+)
+
+// TestClaudePromptHoldsUnderAWorkingLook checks a working look does not end a
+// prompt a hook reported: not a spinner in the title over a form no rule
+// reads, and not a "Thinking…" line on the screen under that form. A working
+// look says nothing about whether the prompt was answered, and both ended the
+// prompt within a second. Only the empty prompt box ends it, or a hook.
+//
+// The artifact is claude-prompt-working-look.log in the test's artifact
+// directory.
+//
+// Negative control: with a working look able to replace the prompt once the
+// pane wrote, the pane goes working under the ⠋ title.
+func TestClaudePromptHoldsUnderAWorkingLook(t *testing.T) {
+	c := newClaudeStage(t, "claude-prompt-working-look")
+
+	c.hook("UserPromptSubmit", claudePromptSubmit, "working")
+	c.hook("PermissionRequest", claudePermissionRequest, "needs_input")
+	items := c.waitItems()
+	c.title = claudeSpinnerTitle
+	c.draw(claudeUnreadForm...)
+	c.waitFrame(claudeUnreadForm...)
+	c.holds("needs_input", "a form no rule reads under a ⠋ title, for 3s", 3*time.Second)
+	c.title = claudeRestTitle
+	thinking := append(append([]string{}, claudeUnreadForm...), "", claudeThinking)
+	c.draw(thinking...)
+	c.waitFrame(thinking...)
+	c.holds("needs_input", "the form under a Thinking line, for 3s", 3*time.Second)
+	c.sameItems("after the working looks", items)
+	c.draw(claudePromptBox...)
+	c.leaves("Esc: the form gone, the prompt box empty")
+}
+
+// TestClaudePromptHoldsThroughASpinnerBeforeTheMenu checks a spinner frame
+// drawn between PermissionRequest and the menu does not end the prompt. It
+// used to, closing the Inbox item, and the menu drawn after it then left the
+// pane working with no item.
+//
+// The artifact is claude-prompt-spinner-first.log in the test's artifact
+// directory.
+//
+// Negative control: with a working look able to replace the prompt once the
+// pane wrote, the pane goes working on the spinner frame.
+func TestClaudePromptHoldsThroughASpinnerBeforeTheMenu(t *testing.T) {
+	c := newClaudeStage(t, "claude-prompt-spinner-first")
+
+	c.hook("UserPromptSubmit", claudePromptSubmit, "working")
+	c.hook("PermissionRequest", claudePermissionRequest, "needs_input")
+	items := c.waitItems()
+	c.title = claudeSpinnerTitle
+	c.draw(claudeRunning...)
+	c.waitFrame(claudeRunning...)
+	c.holds("needs_input", "a spinner frame before the menu, for 2s", 2*time.Second)
+	c.title = claudeRestTitle
+	c.draw(claudeMenu...)
+	c.waitSource("screen", "the menu drawn: the screen reads it")
+	c.holds("needs_input", "the menu, for 2s", 2*time.Second)
+	c.sameItems("the menu up", items)
+	c.draw(claudePromptBox...)
+	c.leaves("Esc: the menu gone, the prompt box empty")
+}
+
+// TestClaudePromptEndsAtOnceOnYes checks the gate on looks leaves a hook's
+// word alone. Yes at the menu sets off PostToolUse, which ends the prompt at
+// once under a spinner, and its Inbox item with it. Then the same prompt with
+// its hooks lost, as Claude Code loses them to its hook timeout under load:
+// the pane holds needs_input through the turn's spinner, as it would with no
+// screen rules at all, and ends once the turn is over and the prompt box
+// shows.
+//
+// The artifact is claude-prompt-yes.log in the test's artifact directory.
+func TestClaudePromptEndsAtOnceOnYes(t *testing.T) {
+	c := newClaudeStage(t, "claude-prompt-yes")
+
+	c.hook("UserPromptSubmit", claudePromptSubmit, "working")
+	c.hook("PermissionRequest", claudePermissionRequest, "needs_input")
+	c.waitItems()
+	c.title = claudeRestTitle
+	c.draw(claudeMenu...)
+	c.waitSource("screen", "the menu drawn: the screen reads it")
+	c.title = claudeSpinnerTitle
+	c.draw(claudeRunning...)
+	c.waitFrame(claudeRunning...)
+	if out := runHook(t, c.base, "claude-code", c.sess, c.win, claudePostToolUse); out != "" {
+		t.Fatalf("PostToolUse: the hook printed %q, want nothing", out)
+	}
+	st := readAgentState(t, c.base, c.sess, c.win)
+	c.note("Yes: PostToolUse under the spinner", st)
+	if st.State != "working" {
+		t.Fatalf("PostToolUse left the pane %s, want working at once", st.State)
+	}
+	for deadline := time.Now().Add(uiTimeout); len(c.blockItems()) > 0; {
+		if time.Now().After(deadline) {
+			t.Fatalf("the Inbox still holds %v after PostToolUse", c.blockItems())
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+
+	c.hook("PermissionRequest again", claudePermissionRequest, "needs_input")
+	c.title = claudeRestTitle
+	c.draw(claudeMenu...)
+	c.waitSource("screen", "the menu drawn again")
+	c.title = claudeSpinnerTitle
+	turn := append(append([]string{}, claudeRunning...), claudeThinking)
+	c.draw(turn...)
+	c.waitFrame(turn...)
+	c.holds("needs_input", "Yes with its hooks lost: the turn runs, for 2s", 2*time.Second)
+	c.title = claudeRestTitle
+	c.draw(claudePromptBox...)
+	c.leaves("the turn over: the prompt box empty")
 }

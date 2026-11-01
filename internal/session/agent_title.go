@@ -206,7 +206,9 @@ func (s *Session) lookAtPane(ptyID string, reg *harness.Registry, look paneLook)
 // at a menu as well as at its prompt box, so a frame that blanks the menu for
 // a redraw read as the prompt answered. A frame of the prompt box drawn in
 // the middle of a redraw is no answer either. A prompt that ends early is a
-// prompt nobody answers, which costs more than one that stays.
+// prompt nobody answers, which costs more than one that stays. The reading
+// that passes is published as promptGone, the one look hookPromptHolds lets
+// end such a prompt; a working look never does.
 func (s *Session) applyIdleVerdict(winID, ptyID string, reg *harness.Registry, v agentVerdict, hid string, wrote int64, screenIdle bool) bool {
 	claim, held := s.agentClaimHeld(winID)
 	current, exists := s.windowAgentState(winID)
@@ -248,6 +250,7 @@ func (s *Session) applyIdleVerdict(winID, ptyID string, reg *harness.Registry, v
 		Source:      v.source,
 		Harness:     hid,
 		paneWroteAt: wrote,
+		promptGone:  hookPrompt,
 	})
 	return true
 }
