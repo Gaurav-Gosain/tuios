@@ -75,6 +75,9 @@ type promptGate struct {
 	pty     *PTY
 	reg     *harness.Registry
 	harness string
+	// late marks a gate that goes on watching a prompt that already stalled:
+	// only working and the screen count then. See watchStalledQueue.
+	late bool
 	// taken names what showed the prompt was taken: a state name, "turn" for a
 	// finished turn, "screen" for the screen, or "output". Empty until something
 	// did.
@@ -137,10 +140,14 @@ func (g *promptGate) observe(ev streamEvent) {
 		return
 	}
 	switch ev.State {
-	case AgentStateWorking.Name(), AgentStateDone.Name():
+	case AgentStateWorking.Name():
 		g.taken = ev.State
+	case AgentStateDone.Name():
+		if !g.late {
+			g.taken = ev.State
+		}
 	case AgentStateNeedsInput.Name():
-		if g.startState != AgentStateNeedsInput {
+		if !g.late && g.startState != AgentStateNeedsInput {
 			g.taken = ev.State
 		}
 	}
@@ -158,6 +165,8 @@ func (g *promptGate) check(sess *Session, last func() int64) bool {
 		switch {
 		case w.AgentState == AgentStateWorking:
 			g.taken = w.AgentState.Name()
+		case g.late:
+			// Late, a state counts only as working. See watchStalledQueue.
 		case w.AgentState == AgentStateNeedsInput && g.startState != AgentStateNeedsInput:
 			g.taken = w.AgentState.Name()
 		case w.AgentState == AgentStateDone && g.startState != AgentStateDone:
@@ -169,7 +178,7 @@ func (g *promptGate) check(sess *Session, last func() int64) bool {
 	if g.taken == "" && g.screenShowsTaken() {
 		g.taken = "screen"
 	}
-	if g.taken == "" && g.outputCounts && last != nil && last() > g.submittedAt {
+	if g.taken == "" && !g.late && g.outputCounts && last != nil && last() > g.submittedAt {
 		g.taken = "output"
 	}
 	return g.taken != ""
@@ -188,11 +197,13 @@ func (g *promptGate) stalledMessage(stall time.Duration) string {
 // stall window ends, the window closes, or the daemon stops. It reports whether
 // the prompt was taken and whether the window is gone.
 func (d *Daemon) waitPromptTaken(sess *Session, pty *PTY, g *promptGate, stall time.Duration) (taken, gone bool) {
-	return d.watchPromptGate(sess, pty, g, stall, promptGatePoll)
+	taken, gone, _ = d.watchPromptGate(sess, pty, g, stall, promptGatePoll, nil)
+	return taken, gone
 }
 
-// watchPromptGate is waitPromptTaken looking every poll.
-func (d *Daemon) watchPromptGate(sess *Session, pty *PTY, g *promptGate, stall, poll time.Duration) (taken, gone bool) {
+// watchPromptGate is waitPromptTaken looking every poll, and ending early,
+// stopped, once stop closes. A nil stop never does.
+func (d *Daemon) watchPromptGate(sess *Session, pty *PTY, g *promptGate, stall, poll time.Duration, stop <-chan struct{}) (taken, gone, stopped bool) {
 	sub := d.events.subscribe(eventFilter{
 		session: sess.Name(),
 		sess:    sess,
@@ -206,16 +217,18 @@ func (d *Daemon) watchPromptGate(sess *Session, pty *PTY, g *promptGate, stall, 
 	defer tick.Stop()
 	for {
 		if g.check(sess, pty.LastOutput) {
-			return true, false
+			return true, false, false
 		}
 		select {
 		case <-deadline.C:
-			return g.check(sess, pty.LastOutput), false
+			return g.check(sess, pty.LastOutput), false, false
 		case <-d.ctx.Done():
-			return false, false
+			return false, false, false
+		case <-stop:
+			return false, false, true
 		case ev := <-sub.ch:
 			if ev.Type == EventSessionClosed || (ev.Type == EventWindowClosed && ev.Window == g.windowID) {
-				return false, true
+				return false, true, false
 			}
 			g.observe(ev)
 		case <-tick.C:

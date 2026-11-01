@@ -4747,10 +4747,14 @@ question on the pane: "your queued message was typed but api did not take
 it: look at the pane". A stalled message holds the ones behind it until the
 pane next shows `working` (the agent took it late, or you dealt with the
 pane), which drops it, or until you drop it with `tuios queue rm`. The daemon
-watches the pane for ten minutes more, and once it shows it took the message
-by the same signs, the message is dropped and the question closed: a hook that
-reports the agent's state can come late or never, as when Claude Code kills
-one at its timeout on a loaded machine.
+watches the pane for ten minutes more, and once it turns `working` or its
+screen shows a turn running with its input box empty, the message is dropped
+and the question closed: a hook that reports the agent's state can come late
+or never, as when Claude Code kills one at its timeout on a loaded machine.
+A finished turn or a `needs_input` does not drop the message, since the agent
+can end the turn it was on, or ask something, with the message still in its
+box.
+The watch ends early once the message leaves the queue.
 
 **What ends a queue.** It lives in the daemon's memory only. A daemon restart
 drops every queue, since the conversation a message was for ended with the

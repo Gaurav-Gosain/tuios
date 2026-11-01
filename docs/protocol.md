@@ -1476,8 +1476,11 @@ has no queue until something is queued. For one that does:
 - An Inbox question may carry the summary "your queued message was typed but
   NAME did not take it: look at the pane", on the pane's blocking key, for a
   queued message the agent showed no sign of taking. It is an ordinary
-  `question` item and closes like one. It also closes when the pane shows
-  within ten minutes that it took the message after all, by the same signs.
+  `question` item and closes like one. It also closes, and the stalled
+  message leaves the queue, when the pane shows within ten minutes that it
+  took the message after all: it turns `working`, or its screen shows a turn
+  running with its input box empty. A finished turn or a `needs_input` does
+  not drop the message, since it may still be in the box.
 - `[agents.queue] max` is read at start and again when the config file
   changes.
 - One message per rest holds across an emptied queue: a message queued just

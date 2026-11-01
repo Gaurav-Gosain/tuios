@@ -49,7 +49,9 @@ import (
 //     and never typed again, and the Inbox gets a question on the pane's
 //     blocking key. A stalled entry holds the entries behind it until the pane
 //     next shows working (the agent took it late, or the person dealt with the
-//     pane), which drops it, or until someone cancels it. Either way the next
+//     pane), or its screen shows it took it (watchStalledQueue), which drops
+//     it, or until someone cancels it. A finished turn or a needs_input does
+//     not drop it: the text may still sit in the box. Either way the next
 //     entry still waits for a rest reached after the stalled one was typed.
 //
 // A queue is memory only. It is dropped when the daemon stops, when its pane
@@ -137,6 +139,9 @@ type queueEntry struct {
 	// by being typed, refused or found stale.
 	recheck func() (string, bool)
 	done    func()
+	// unwatch is closed when a stalled entry leaves the queue, which ends
+	// the watch for it taken late (watchStalledQueue). nil otherwise.
+	unwatch chan struct{}
 }
 
 // paneQueue is one pane's queue.
@@ -425,6 +430,10 @@ func (q *agentQueues) removeLocked(window string, pq *paneQueue, drop func(*queu
 	for _, e := range gone {
 		pq.bytes -= e.size
 		q.bytes -= e.size
+		if e.unwatch != nil {
+			close(e.unwatch)
+			e.unwatch = nil
+		}
 	}
 	q.total.Add(-int64(len(gone)))
 	if len(pq.entries) == 0 && !pq.delivering {
@@ -681,6 +690,7 @@ func (d *Daemon) deliverQueued(window string) {
 	// gate waited has dropped its queue, and it gets no stamp.
 	live := q.panes[window] == pq
 	var stalled bool
+	var unwatch chan struct{}
 	switch status {
 	case PromptSent:
 		// Stamped with when the Enter went out, not now: a fast turn can
@@ -695,6 +705,10 @@ func (d *Daemon) deliverQueued(window string) {
 			q.stampLocked(window, sess.Name(), at)
 		}
 		e.state = queueStalled
+		if live {
+			unwatch = make(chan struct{})
+			e.unwatch = unwatch
+		}
 		// A pane that closed while the gate waited has dropped its queue,
 		// and there is no pane left to look at.
 		stalled = live
@@ -731,7 +745,7 @@ func (d *Daemon) deliverQueued(window string) {
 
 	if stalled {
 		summary := d.attention.openQueueStalled(sess.Name(), target)
-		go d.watchStalledQueue(sess, window, prompt, summary)
+		go d.watchStalledQueue(sess, window, e, unwatch, prompt, summary)
 	}
 	if e.done != nil && (status == PromptSent || status == queueRefused || status == PromptStalled) {
 		e.done()
@@ -866,43 +880,63 @@ const (
 	queueLatePoll = time.Second
 )
 
-// watchStalledQueue goes on watching a pane whose queued message was typed and
+// watchStalledQueue goes on watching a pane whose queued entry e was typed and
 // not taken, by the prompt gate that saw it stall. An agent that reports its
 // state from hooks can take a message and have the report come late or never:
 // Claude Code kills a hook at its timeout, and on a loaded machine it killed
 // both the one that would have said working and the one that would have said
 // done, so the pane's state never changed and nothing closed the question.
-// Once the pane shows it took the message after all, the entry is settled and
-// the question closed, as the pane turning working does. A pane state that
-// changes is seen here too, which covers one that changed after the gate gave
-// up and before the question was opened.
-func (d *Daemon) watchStalledQueue(sess *Session, window string, gate *promptGate, summary string) {
+//
+// Late, only the signs that the message itself was taken count: the pane
+// working, as noteQueueEvent settles a stalled entry by, and its screen
+// showing a turn running with its input box empty. A finished turn or a
+// needs_input can come late from a turn the agent was already on, or from a
+// notification, with the message still in the box, and settling on it would
+// drop text that was never sent. Once the pane shows it took the message, e
+// is settled and the question closed. The pane working is seen here as well
+// as there, which covers a pane that turned working after the gate gave up and
+// before the entry was marked stalled; whichever path takes e out of the queue
+// first settles it, and the other finds it gone.
+//
+// The watch ends early when e leaves the queue by any path (unwatch, closed by
+// removeLocked), and a pane whose screen cannot show it took a message is
+// looked at once rather than watched.
+func (d *Daemon) watchStalledQueue(sess *Session, window string, e *queueEntry, unwatch <-chan struct{}, gate *promptGate, summary string) {
 	if gate == nil {
 		return
 	}
-	pty, err := d.resolvePTYForTarget(sess, window)
-	if err != nil {
-		return
-	}
-	if taken, gone := d.watchPromptGate(sess, pty, gate, queueLateTake, queueLatePoll); !taken || gone {
-		return
+	gate.late = true
+	if gate.pty == nil {
+		if !gate.check(sess, nil) {
+			return
+		}
+	} else {
+		taken, gone, stopped := d.watchPromptGate(sess, gate.pty, gate, queueLateTake, queueLatePoll, unwatch)
+		if stopped {
+			LogBasic("Stopped watching window %s for its stalled queued %s: it left the queue", shortWindowID(window), e.id)
+			return
+		}
+		if !taken || gone {
+			return
+		}
 	}
 	q := &d.queue
 	q.mu.Lock()
 	settled := false
-	if pq := q.panes[window]; pq != nil && !pq.delivering && len(pq.entries) > 0 && pq.entries[0].state == queueStalled {
-		q.removeLocked(window, pq, func(e *queueEntry) bool { return e.state == queueStalled })
+	if pq := q.panes[window]; pq != nil && !pq.delivering && len(pq.entries) > 0 && pq.entries[0] == e && e.state == queueStalled {
+		q.removeLocked(window, pq, func(x *queueEntry) bool { return x == e })
 		settled = true
 		if len(pq.entries) > 0 && pq.entries[0].state == queueWaiting {
 			q.armLocked(d, window, pq, q.restFor())
 		}
 	}
 	q.mu.Unlock()
-	LogBasic("Window %s took its stalled queued message late, by %s", shortWindowID(window), gate.taken)
-	d.attention.closeHeldPrompt(sess.Name(), window, summary)
-	if settled {
-		d.publishQueued(window)
+	if !settled {
+		return
 	}
+	LogBasic("Window %s took its stalled queued %s late, by %s", shortWindowID(window), e.id, gate.taken)
+	d.attention.closeHeldPrompt(sess.Name(), window, summary)
+	d.publishQueued(window)
 }
 
 // queuePreview is the first line of a message, cut to queuePreviewLen

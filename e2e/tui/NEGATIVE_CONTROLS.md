@@ -11858,4 +11858,13 @@ Run on 2026-11-01 on macOS (arm64), on `856b4be28`. Both tests pass on the fixed
 | `watchStalledQueue` (`internal/session/agent_queue.go`) returning at once | Second test: "taken late with no report: the stalled question is open=true after 10s, want false". The first passes | **caught** |
 | `screenShowsTaken` not reading the input box, so a turn on the screen alone is taken | Second test: "Enter not read as submit: the stalled question is open=false after 15s, want true". The first passes | **caught** |
 
-Repeat from `e2e/tui` with `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run 'TestQueuedMessageTakenWhileItsHookIsLost|TestQueuedMessageLeftInTheBox' -v .`. The state log of each run is `queue-taken-hook-lost.log` and `queue-left-in-box.log` under `TUIOS_E2E_FRAMES`.
+The late watch counts only the pane turning working and its screen. `TestQueuedMessageLeftInTheBoxStaysStalledThroughALateStop` leaves a message in the box of a pane resting on idle, ends the turn on the screen, and runs a late Stop and then a Notification of type `agent_needs_input`: the message must stay `stalled` through both, and the person pressing Enter, which the screen shows taken, must then drop it. `TestDroppingAStalledQueuedMessageEndsItsWatch` drops a stalled message with `tuios queue rm --all` and needs the daemon log to say "Stopped watching window" within ten seconds, rather than the watch polling for its ten minutes.
+
+Run on 2026-11-02 on macOS (arm64). All four tests pass on the fixed build.
+
+| Control: what was cut | Where it fails | Verdict |
+| --- | --- | --- |
+| `gate.late = true` in `watchStalledQueue`, so the late watch counts done, needs_input and a finished turn as the five second gate does (the review's report against `1809eff3a`) | Third test: "a late Stop dropped the message still in the box: \"Nothing is queued in session e2e-stall.\"". With the pane resting on done, where the Stop changes nothing, it fails one step later on "a late agent_needs_input dropped the message still in the box" | **caught** |
+| `removeLocked` closing the entry's `unwatch` | Fourth test: "the watch on the dropped message did not end within 10s" | **caught** |
+
+Repeat from `e2e/tui` with `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run 'TestQueuedMessageTakenWhileItsHookIsLost|TestQueuedMessageLeftInTheBox|TestDroppingAStalledQueuedMessage' -v .`. The state log of each run is `queue-taken-hook-lost.log`, `queue-left-in-box.log`, `queue-stalled-late-stop.log` and `queue-stalled-rm.log` under `TUIOS_E2E_FRAMES`.

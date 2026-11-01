@@ -128,7 +128,14 @@ func (s *stallStage) setMode(mode string) {
 // state.
 func (s *stallStage) hook(event, state string) {
 	s.t.Helper()
-	payload := `{"hook_event_name":"` + event + `","session_id":"stall-e2e","prompt":"the queued message","last_assistant_message":"done"}`
+	s.hookWith(event, state, "")
+}
+
+// hookWith is hook with extra JSON fields in the payload, such as a
+// notification's type.
+func (s *stallStage) hookWith(event, state, extra string) {
+	s.t.Helper()
+	payload := `{"hook_event_name":"` + event + `","session_id":"stall-e2e","prompt":"the queued message","last_assistant_message":"done"` + extra + `}`
 	if out := runHook(s.t, s.base, "claude-code", s.sess, s.win, payload); out != "" {
 		s.t.Fatalf("%s: the hook printed %q, want nothing", event, out)
 	}
@@ -318,6 +325,103 @@ func TestQueuedMessageLeftInTheBoxRaisesAQuestionThatClosesOnceTaken(t *testing.
 	if st := readAgentState(t, s.base, s.sess, s.win); st.State != "done" {
 		t.Errorf("the pane is %s, want it still on done: nothing reported", st.State)
 	}
+	s.rest()
+}
+
+// TestQueuedMessageLeftInTheBoxStaysStalledThroughALateStop: a message the
+// agent left in its input box stays stalled when a finished turn or a
+// needs_input comes late. Neither says the message was taken: the agent can
+// end the turn it was already on, or ask something, with the text still in
+// the box, and dropping the entry then would lose text that was never sent.
+// The watch goes on after them, and the person pressing Enter, which the
+// screen shows taken, still settles it.
+//
+// Negative control: with the late gate counting done and needs_input as the
+// five second gate does, the late Stop drops the stalled message and the test
+// fails on it.
+func TestQueuedMessageLeftInTheBoxStaysStalledThroughALateStop(t *testing.T) {
+	s := newStallStage(t, "queue-stalled-late-stop")
+	// At rest on idle, so the late Stop is a state change, as it is for an
+	// agent whose turn began before the message was typed.
+	s.hook("SessionStart", "idle")
+
+	s.setMode("busy")
+	const marker = "queued-left-then-stop-5c7e"
+	s.queue(marker)
+	s.waitQuestion("Enter not read as submit", true, 3*promptStallE2E)
+
+	stillStalled := func(step string) {
+		t.Helper()
+		// The watch looks every second and hears every state change at once,
+		// so three seconds is time for it to have acted.
+		time.Sleep(3 * time.Second)
+		out := s.queueState()
+		s.log.add("%-44s question open=%v queue=%q", step, len(s.stalledQuestions()) > 0, strings.TrimSpace(out))
+		if !strings.Contains(out, "stalled") {
+			t.Fatalf("ASSERTION: %s dropped the message still in the box: %q\nscreen:\n%s", step, out, s.screen())
+		}
+		if screen := s.screen(); !strings.Contains(screen, marker) || strings.Contains(screen, "> "+marker) {
+			t.Fatalf("the stand-in moved the message out of the box\n%s", screen)
+		}
+	}
+
+	// The turn the agent was on ends, with the message still in the box.
+	s.cli("end the turn on the screen", "send-keys", "-s", s.sess, "-w", s.win, "C-r")
+	s.hook("Stop", "done")
+	stillStalled("a late Stop")
+	s.hookWith("Notification", "needs_input", `,"notification_type":"agent_needs_input","message":"Claude needs your input"`)
+	stillStalled("a late agent_needs_input")
+
+	// The person presses Enter and the agent takes it, with no report.
+	s.setMode("take")
+	s.cli("the person presses Enter", "send-keys", "-s", s.sess, "-w", s.win, "Enter")
+	s.waitScreen("the stand-in took it", func(text string) bool { return strings.Contains(text, "> "+marker) })
+	deadline := time.Now().Add(uiTimeout)
+	for !strings.Contains(s.queueState(), "Nothing is queued") {
+		if time.Now().After(deadline) {
+			t.Fatalf("ASSERTION: the message the screen shows taken stayed queued: %q", s.queueState())
+		}
+		time.Sleep(200 * time.Millisecond)
+	}
+	s.log.add("%-44s queue=%q", "taken on Enter", strings.TrimSpace(s.queueState()))
+	s.rest()
+}
+
+// TestDroppingAStalledQueuedMessageEndsItsWatch: a stalled message dropped
+// with tuios queue rm is no longer watched. The watch would otherwise look at
+// the pane every second for ten minutes for a message nobody is waiting on.
+// The daemon log says when a watch ends that way.
+//
+// Negative control: with removeLocked not closing the entry's unwatch, the
+// log never says so and the test fails on it.
+func TestDroppingAStalledQueuedMessageEndsItsWatch(t *testing.T) {
+	s := newStallStage(t, "queue-stalled-rm")
+	s.hook("UserPromptSubmit", "working")
+	s.hook("Stop", "done")
+
+	s.setMode("busy")
+	s.queue("queued-then-dropped-2f6a")
+	s.waitQuestion("Enter not read as submit", true, 3*promptStallE2E)
+	s.cli("queue rm", "queue", "rm", "--all", "-s", s.sess, "-w", s.win)
+	s.waitQuestion("dropped with queue rm", false, uiTimeout)
+
+	const ended = "Stopped watching window "
+	deadline := time.Now().Add(uiTimeout)
+	for {
+		data, err := os.ReadFile(daemonLogOf(t, s.base))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if strings.Contains(string(data), ended) {
+			s.log.add("%-44s watch ended", "dropped with queue rm")
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("ASSERTION: the watch on the dropped message did not end within %s\n%s", uiTimeout, daemonLogTail(s.base, 20))
+		}
+		time.Sleep(200 * time.Millisecond)
+	}
+	s.cli("clear the box", "send-keys", "-s", s.sess, "-w", s.win, "C-u")
 	s.rest()
 }
 
