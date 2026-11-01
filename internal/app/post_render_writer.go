@@ -5,6 +5,7 @@ import (
 	"io"
 	"os"
 	"sync"
+	"time"
 )
 
 // PostRenderWriter wraps *os.File (stdout) to intercept bubbletea's
@@ -43,6 +44,8 @@ type PostRenderWriter struct {
 	// erased is what has to follow a frame that erases the host's screen. See
 	// AddEraseHook.
 	erased []func(kept bool) []byte
+	// repaint follows a kitty picture with a second write. See pictureRepaint.
+	repaint pictureRepaint
 }
 
 // FrameHook runs on each frame the renderer writes. out is the frame to send
@@ -85,6 +88,43 @@ var (
 	frameSyncBegin = []byte("\x1b[?2026h")
 	frameSyncEnd   = []byte("\x1b[?2026l")
 )
+
+// kittyGraphicsStart begins a kitty graphics command.
+var kittyGraphicsStart = []byte("\x1b_G")
+
+// pictureRepaintDelay is how long after a kitty picture its second write goes out.
+// A real kitty painted at 5 ms and did not with no gap at all.
+const pictureRepaintDelay = 20 * time.Millisecond
+
+// emptySyncUpdate changes nothing on any host, and a host without the mode ignores it.
+var emptySyncUpdate = []byte("\x1b[?2026h\x1b[?2026l")
+
+// pictureRepaint sends one empty write a moment after a kitty picture.
+//
+// With its cursor hidden, as ours always is, kitty 0.49.2 does not show a picture
+// until it has read one more write. A cell changed in the same write does not help,
+// and any later write does, even one that changes nothing. A visible cursor hides
+// this, because its blink paints. So a picture prepared off the update loop stayed
+// blank until the next key or pointer move. The replay that shows it is in
+// quicklook's notes: a captured stream with one thing changed per run.
+//
+// The timer is reset, not added to, so a burst of pictures costs one write after the
+// last, and nothing runs until a picture is sent.
+type pictureRepaint struct {
+	mu    sync.Mutex
+	timer *time.Timer
+}
+
+// note arms the second write. write is the writer's own way to send it.
+func (r *pictureRepaint) note(write func()) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.timer == nil {
+		r.timer = time.AfterFunc(pictureRepaintDelay, write)
+		return
+	}
+	r.timer.Reset(pictureRepaintDelay)
+}
 
 // hostEraseScreen is ED 2. See AddEraseHook.
 var hostEraseScreen = []byte("\x1b[2J")
@@ -183,10 +223,21 @@ func (w *PostRenderWriter) write(p []byte, frame bool) (n int, err error) {
 	if _, err = w.File.Write(buf); err != nil {
 		return 0, err
 	}
+	if bytes.Contains(pending, kittyGraphicsStart) || (!frame && bytes.Contains(out, kittyGraphicsStart)) {
+		w.repaint.note(w.writeRepaint)
+	}
 	if frame && w.written != nil {
 		w.written()
 	}
 	return len(p), nil
+}
+
+// writeRepaint is the second write of pictureRepaint. It takes the writer's lock, so
+// it cannot land inside a frame.
+func (w *PostRenderWriter) writeRepaint() {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	_, _ = w.File.Write(emptySyncUpdate)
 }
 
 // QueuePostRender queues data to be written after bubbletea's next Write.
@@ -281,6 +332,7 @@ type FrameHookWriter struct {
 	mu      sync.Mutex
 	hook    FrameHook
 	written func()
+	repaint pictureRepaint
 }
 
 // NewFrameHookWriter wraps the writer a session's renderer writes to.
@@ -309,6 +361,9 @@ func (f *FrameHookWriter) Write(p []byte) (int, error) {
 	}
 	if _, err := f.w.Write(buf); err != nil {
 		return 0, err
+	}
+	if bytes.Contains(after, kittyGraphicsStart) {
+		f.repaint.note(f.writeRepaint)
 	}
 	if written != nil {
 		written()
@@ -370,7 +425,15 @@ func (w *PostRenderWriter) WriteOutside(p []byte) { _, _ = w.write(p, false) }
 func (f *FrameHookWriter) SetFrameHook(fn FrameHook) { f.SetHook(fn) }
 
 // WriteOutside writes p to the session without running the frame hook.
-func (f *FrameHookWriter) WriteOutside(p []byte) { _, _ = f.w.Write(p) }
+func (f *FrameHookWriter) WriteOutside(p []byte) {
+	_, _ = f.w.Write(p)
+	if bytes.Contains(p, kittyGraphicsStart) {
+		f.repaint.note(f.writeRepaint)
+	}
+}
+
+// writeRepaint is the second write of pictureRepaint.
+func (f *FrameHookWriter) writeRepaint() { _, _ = f.w.Write(emptySyncUpdate) }
 
 // SetFrameHook is SetHook, for FrameWriter.
 func (f *FrameHookFile) SetFrameHook(fn FrameHook) { f.hw.SetHook(fn) }

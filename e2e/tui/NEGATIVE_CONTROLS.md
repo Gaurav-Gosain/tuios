@@ -11806,3 +11806,27 @@ Run on 2026-11-01 on Linux. Each control is one change to a build of this branch
 The first Inbox assertion passed with its control, because the rail's agents section shows the same message. The assertion now waits for the Inbox to cover the rail, and the control is caught.
 
 The frames are `rail-compact-*` and `rail-drag-*` under the test's artifact folder.
+
+## A kitty picture shows with no input
+
+kitty 0.49.2 with its cursor hidden does not show a picture until it reads one more write. CI has no kitty, so the pixels come from a local run: real kitty under a private Xvfb, tuios opens a PDF, shots over 8 seconds with no key and no pointer move. Blue pixels count the page.
+
+| Build | Quiet, 0.25 s to 8 s | After a pointer move, no new bytes |
+| --- | --- | --- |
+| Before the fix | 0 | 85149 |
+| With the fix | 85149 | 85149 |
+
+A replay of the captured stream into the same kitty, with one change per run, found the cause. tuios is not running in these.
+
+| Change | Quiet |
+| --- | --- |
+| The stream as it came, no brackets, or one bracket | 0 |
+| Only `CSI ? 25 l` before the picture | 0 |
+| No `CSI ? 25 l` before the picture | 85149 |
+| A changed cell, or a cursor toggle, in the same write | 0 |
+| An empty bracket with no gap | 0 |
+| An empty bracket, `CSI ? 25 l`, or `ESC 7 ESC 8`, 5 to 200 ms later | 85149 |
+
+| Control: what was cut | Where it fails | Verdict |
+| --- | --- | --- |
+| The empty write | `TestRailQuickLookKittyPicture` ("no empty write followed the picture") | **caught** |

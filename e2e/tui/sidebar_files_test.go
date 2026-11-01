@@ -1851,6 +1851,15 @@ func TestRailQuickLookKittyPicture(t *testing.T) {
 
 	// Its own pixels fill the same box at either width, and the panel moves.
 	before := quickLookOnHost(t, term, out, 0, "", "pic.png before a resize", nil)
+	// kitty with its cursor hidden shows a picture only after one more write, so
+	// tuios sends an empty one. Real kitty's pixels are in NEGATIVE_CONTROLS.md.
+	if err := term.WaitFor(func(tuitest.Screen) bool {
+		s := out.String()
+		place := strings.LastIndex(s, "a=p,")
+		return place >= 0 && strings.Contains(s[place:], "\x1b[?2026l\x1b[?2026h\x1b[?2026l")
+	}, uiTimeout); err != nil {
+		t.Fatalf("ASSERTION: no empty write followed the picture, so kitty does not show it until the next input: %v", err)
+	}
 	mark := resize(160, 40)
 	quickLookOnHost(t, term, out, mark, erase, "a wider terminal took pic.png off the host", func(p shot.Image) bool {
 		return p.Cols == before.Cols && p.Rows == before.Rows && p.Col != before.Col
