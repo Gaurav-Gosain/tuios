@@ -7,6 +7,23 @@ below. Two of them are **not** caught here; that is written down rather than
 papered over, because a suite whose real coverage is unknown is worse than no
 suite.
 
+## Quick look moves on a resize
+
+`TestQuickLookMovesOnAResize` opens quick look on `main.go`, then resizes the
+terminal from 140 to 260 columns and from 260 to 240. At 260 and 240 columns
+the panel is at its widest, so the second resize leaves its size as it was. The
+panel's left edge must move, and its width must stay the same. The test reads
+the place and the width off the panel's top frame.
+
+Run on 2026-11-01 on Linux. The test passes on main. The control was built into
+its own binary.
+
+| Control: what was cut | Where it fails | Verdict |
+| --- | --- | --- |
+| `panelCenterX` (`internal/app/overlay_hit.go`) returns `viewReserve().Left`, so the panel's left edge does not depend on the screen's width | "ASSERTION: after a resize from 260 to 240 columns the panel did not move: the panel's left edge is at 28, 112 wide" | **caught** |
+
+The frame is `quick-look-resized` under `TUIOS_E2E_FRAMES`.
+
 ## An edit back to a tuios save reaches the screen
 
 `TestAnEditBackToATuiosSaveReachesTheScreen` follows issue 1411. tuios saves the

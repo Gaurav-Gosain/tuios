@@ -5431,3 +5431,35 @@ both encoders.
   723,706 B for the framed one (1.144 times). It was also slower: 29.0 ms
   against 31.3 ms bare (+7.8%) and 33.4 ms against 36.4 ms framed (+8.8%).
   Sub makes the file larger and the encode slower, so unfiltered rows stay.
+
+## 2026-11 quick look keeps its drawn panel
+
+While quick look is open, every overlay compose drew the whole panel again,
+including frames caused only by pane output: a new canvas, the body and the
+dialog around it. On a 2,000-line highlighted Go file that is about 1.5 ms,
+751 KiB and 2,187 allocations per frame. The panel is now kept and drawn again
+only when something it shows changed.
+
+Measured with a scratch benchmark (`keystrokeOS(b, 1, 200, 60)`, a keybind
+registry, quick look open on a 2,000-line highlighted text result, one
+`renderQuickLook` per iteration), base and branch test binaries alternated for
+8 rounds, `nice -n 10 taskset -c 0-5`, `-test.cpu 1`, `-test.benchtime 200x`,
+benchstat, Go 1.27.3 (`go version` checked on both binaries):
+
+| | base | branch |
+|---|---|---|
+| time per frame | 1.50 ms ± 4% | 444 ns ± 3% |
+| memory per frame | 750.7 KiB | 0 |
+| allocations per frame | 2,187 | 0 |
+
+The kept panel is keyed on everything that is drawn into it: the look
+(theme generation, colour depth, ascii and nerd-font settings, canvas, panel,
+text and accent colours, the glyph set), the result and its target, the scroll
+after the draw clamped it, the panel's inner width and body height, the close
+key, the palette's canvas, muted, frame, accent, bright accent and dim inks,
+and the border style (the frame glyphs are set from `appearance.border_style`
+outside the palette). Where the panel sits is never kept: the origin and the
+mouse box are worked out on every frame, so a resize moves the
+panel even when its size stays the same. A picture is never kept, nor is a
+result still being read or a stale one. Closing the panel drops the kept
+frame, so a large file is not held after it.

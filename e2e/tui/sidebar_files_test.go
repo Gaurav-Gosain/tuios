@@ -1426,6 +1426,79 @@ func TestRailQuickLook(t *testing.T) {
 	alive(t, term, "after quick look")
 }
 
+// TestQuickLookMovesOnAResize keeps quick look centred in the panes' columns
+// when the terminal is resized under it. The screen is wide enough that the
+// panel is at its widest before and after, so it moves and keeps its size.
+//
+// NEGATIVE CONTROL: with panelCenterX returning the rail's edge, so the
+// panel's left edge does not depend on the screen's width, the panel stays
+// where it was.
+func TestQuickLookMovesOnAResize(t *testing.T) {
+	term, _ := quickLookListed(t, nil, nil)
+	quickLookFocusRail(t, term, "main.go")
+	sendKeys(t, term, " ")
+	railLists(t, term, "space did not show main.go", []string{"main.go ", "package main", "8 lines"}, nil)
+
+	// panel is the panel's left column and width, read off its top frame,
+	// which holds the title.
+	panel := func(s tuitest.Screen) (x, w int, ok bool) {
+		const title = " main.go "
+		cols, rows := s.Size()
+		for r := range rows {
+			for c := 0; c+2+len(title) < cols; c++ {
+				h := s.Cell(c+1, r).Content
+				if h == "" || h == " " || !gridMatchesAt(s, c+2, r, title) {
+					continue
+				}
+				e := c + 2 + len(title)
+				for e < cols && s.Cell(e, r).Content == h {
+					e++
+				}
+				if e > c+2+len(title) && e < cols {
+					return c, e - c + 1, true
+				}
+			}
+		}
+		return 0, 0, false
+	}
+	// await waits for the panel to be on screen with cond true of it, and
+	// returns its place.
+	await := func(why string, cond func(x, w int) bool) (int, int) {
+		t.Helper()
+		var x, w int
+		var ok bool
+		if err := term.WaitFor(func(s tuitest.Screen) bool {
+			x, w, ok = panel(s)
+			return ok && cond(x, w)
+		}, uiTimeout); err != nil {
+			if !ok {
+				t.Fatalf("ASSERTION: %s: quick look is not on screen: %v\n%s", why, err, term.Snapshot())
+			}
+			t.Fatalf("ASSERTION: %s: the panel's left edge is at %d, %d wide: %v\n%s", why, x, w, err, term.Snapshot())
+		}
+		return x, w
+	}
+	resize := func(cols int) {
+		t.Helper()
+		if err := term.Resize(cols, 40); err != nil {
+			t.Fatalf("resize to %d columns: %v", cols, err)
+		}
+	}
+
+	_, narrow := await("quick look at 140 columns", func(int, int) bool { return true })
+	resize(260)
+	wide, width := await("after a resize to 260 columns the panel did not widen",
+		func(_, w int) bool { return w != narrow })
+
+	resize(240)
+	moved, w := await("after a resize from 260 to 240 columns the panel did not move",
+		func(x, _ int) bool { return x != wide })
+	copiesFrame(t, term, "quick-look-resized")
+	if w != width {
+		t.Errorf("ASSERTION: a resize from 260 to 240 columns took the panel from %d to %d wide (left edge %d to %d)", width, w, wide, moved)
+	}
+}
+
 // quickLookStart lists the quick look fixture in the rail, gives the rail
 // the keyboard and puts its cursor on the row named first.
 func quickLookStart(t *testing.T, first string, env []string, out *lockedBuffer) (*tuitest.Terminal, string) {

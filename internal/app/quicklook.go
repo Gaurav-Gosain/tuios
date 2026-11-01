@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"image/color"
 	"io/fs"
 	"path/filepath"
 	"slices"
@@ -13,6 +14,7 @@ import (
 	"time"
 
 	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 
 	"github.com/Gaurav-Gosain/tuios/internal/composer"
 	"github.com/Gaurav-Gosain/tuios/internal/diffview"
@@ -144,6 +146,26 @@ type quickLookState struct {
 	look    ckLook
 	dv      *diffview.Theme
 	lookKey ckLookKey
+	// framed is the last panel drawn, with what it was drawn from, so a frame
+	// composed for another reason reuses it.
+	framed quickLookFrame
+}
+
+// quickLookFrame is a drawn panel and its key. Where the panel is placed is
+// not kept: the origin follows the screen and the rail on every render.
+type quickLookFrame struct {
+	ok            bool
+	look          ckLookKey
+	res           *quickLookResult
+	target        quickLookTarget
+	scroll        int
+	innerW, bodyH int
+	key           string
+	// What Dialog.Render reads from the palette, and the frame's glyphs.
+	canvas, fgMute, frame, accent, accentBright, fgDim color.Color
+	border                                             lipgloss.Border
+	content                                            string
+	geo                                                overlay.Geometry
 }
 
 // quickLookPic is the picture's box on the screen and how it is shown.
@@ -258,6 +280,7 @@ func (m *OS) dropQuickLook() {
 	ql.box = overlay.Rect{}
 	ql.pic = quickLookPic{}
 	ql.mdLines = nil
+	ql.framed = quickLookFrame{}
 }
 
 // QuickLookSync keeps the preview on the row under the cursor. The input
@@ -625,19 +648,42 @@ func (m *OS) renderQuickLook() (string, int, int) {
 	pal := m.overlayUI()
 	innerW, bodyH := m.quickLookSize()
 	l, dv := m.quickLookLook(pal)
-	c := (*ckCanvas)(nil).reset(innerW, bodyH, ckColor(pal.Canvas))
-	pic := m.drawQuickLook(c, l, dv, innerW, bodyH)
-
-	title := ql.target.name
-	if ql.target.dir {
-		title += "/"
-	}
 	key := "space"
 	if keys := m.KeybindRegistry.GetSidebarFilesKeys("file_quick_look"); len(keys) > 0 {
 		key = keys[0]
 	}
-	hints := []overlay.Hint{{Key: key, Label: "close"}, {Key: "↑↓", Label: "other files"}}
-	content, geo := overlay.Dialog{Title: title, Width: innerW, Body: c.render(), Hints: hints}.Render(pal)
+	// The border is in the key: the frame glyphs are a package global set from
+	// border_style every frame, outside the palette.
+	f := quickLookFrame{ok: true, look: ql.lookKey, res: ql.res, target: ql.target, scroll: ql.scroll,
+		innerW: innerW, bodyH: bodyH, key: key, border: m.Settings.OverlayBorder(),
+		canvas: pal.Canvas, fgMute: pal.FgMute, frame: pal.Frame, accent: pal.Accent,
+		accentBright: pal.AccentBright, fgDim: pal.FgDim}
+	var content string
+	var geo overlay.Geometry
+	var pic quickLookPic
+	if k := &ql.framed; k.ok && k.look == f.look && k.res == f.res && k.target == f.target && k.scroll == f.scroll &&
+		k.innerW == f.innerW && k.bodyH == f.bodyH && k.key == f.key && k.border == f.border &&
+		k.canvas == f.canvas && k.fgMute == f.fgMute && k.frame == f.frame && k.accent == f.accent &&
+		k.accentBright == f.accentBright && k.fgDim == f.fgDim {
+		content, geo = k.content, k.geo
+	} else {
+		c := (*ckCanvas)(nil).reset(innerW, bodyH, ckColor(pal.Canvas))
+		pic = m.drawQuickLook(c, l, dv, innerW, bodyH)
+		title := ql.target.name
+		if ql.target.dir {
+			title += "/"
+		}
+		hints := []overlay.Hint{{Key: key, Label: "close"}, {Key: "↑↓", Label: "other files"}}
+		content, geo = overlay.Dialog{Title: title, Width: innerW, Body: c.render(), Hints: hints}.Render(pal)
+		// Only a finished text, markdown, folder, binary or error body is kept;
+		// a picture's cells arrive later.
+		ql.framed = quickLookFrame{}
+		if r := ql.res; r != nil && r.target == ql.target && r.kind != "image" && r.kind != "pdf" && r.kind != "video" {
+			f.scroll = ql.scroll // after the draw clamped it
+			f.content, f.geo = content, geo
+			ql.framed = f
+		}
+	}
 	x, y := m.overlayOrigin(overlayKindQuickLook, geo)
 	ql.box = overlay.Rect{X0: x, Y0: y, X1: x + geo.Width, Y1: y + geo.Height}
 	ql.pic = quickLookPic{}
