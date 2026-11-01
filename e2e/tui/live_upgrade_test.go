@@ -288,13 +288,20 @@ func TestDaemonUpgradeKeepsOpenPrompts(t *testing.T) {
 			t.Errorf("ASSERTION: the item for %s across the handoff: before %+v, after %+v", want, before[want], after[want])
 		}
 	}
-	// The client is back and has seen the state before this is read.
-	if err := term.WaitFor(func(s tuitest.Screen) bool { return strings.Contains(s.Text(), "╰") }, bootTimeout); err != nil {
-		t.Fatalf("the client lost the session: %v\n%s", err, term.Snapshot())
-	}
-	time.Sleep(time.Second)
+	// A live upgrade drops each client, which says so and exits. One attached
+	// after it reads the open prompts from the Inbox, and raises no alert for
+	// them, and neither did the dropped one.
 	if got := alerts(); got != seen {
 		t.Errorf("ASSERTION: the handoff raised %d more alerts for prompts already open", got-seen)
+	}
+	again := &lockedBuffer{}
+	term = startIn(t, base, startOpts{cols: 120, rows: 30, out: again, env: copyColorOpts.env, args: []string{"attach", sess}})
+	if err := term.WaitFor(func(s tuitest.Screen) bool { return strings.Contains(s.Text(), "╰") }, bootTimeout); err != nil {
+		t.Fatalf("a client attached after the handoff never drew the session: %v\n%s", err, term.Snapshot())
+	}
+	time.Sleep(time.Second)
+	if got := len(regexp.MustCompile("\x1b\\]9;[^\x07]*OPEN-").FindAllString(again.String(), -1)); got != 0 {
+		t.Errorf("ASSERTION: a client attached after the handoff raised %d alerts for prompts already open", got)
 	}
 
 	// The pane moves on, and its item closes as it always did.
