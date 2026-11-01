@@ -940,7 +940,10 @@ and over the next pane, with nothing to take it back.
 
 **Detection.** Each client decides for its own terminal.
 
-- A local terminal is asked at startup: DA1 attribute 4 says sixel.
+- A local terminal is asked at startup: DA1 attribute 4 says sixel. The probe
+  talks to `/dev/tty`, or on Windows to the console's `CONIN$` and `CONOUT$`.
+  A terminal that answers too late is asked again once the program runs
+  (`internal/app/sixel_probe.go`).
 - An SSH client's terminal is guessed from its `TERM` first, then asked for DA1
   once the session runs (`internal/app/sixel_probe.go`). The answer replaces
   the guess.

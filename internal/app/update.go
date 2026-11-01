@@ -410,7 +410,8 @@ func (m *OS) Init() tea.Cmd {
 		listenDnDUntil(m.stopSignal(), m.ensureDnDInbox()),
 	}
 
-	// Ask an SSH client's terminal whether it draws sixel. See sixel_probe.go.
+	// Ask an SSH client's terminal whether it draws sixel, or a local one
+	// that answered the startup probe late. See sixel_probe.go.
 	if cmd := m.sixelProbe(); cmd != nil {
 		cmds = append(cmds, cmd)
 	}

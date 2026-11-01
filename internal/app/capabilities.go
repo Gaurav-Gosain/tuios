@@ -325,6 +325,16 @@ const probeTimeout = 300 * time.Millisecond
 // the kitty terminators the graphics read was waiting for either.
 var da1Response = lazyre.New(`\x1b\[\?[0-9;]*c`)
 
+// probeTTY is the host terminal the probe talks to: queries are written to
+// out and the replies are read from in. It is opened apart from stdin and
+// stdout so the probe leaves them as the program will find them. On Unix both
+// are the one /dev/tty; Windows has no such file, and a console's input and
+// output are separate handles (probe_tty_windows.go).
+type probeTTY struct {
+	in, out *os.File
+	close   func()
+}
+
 // probeTerminal asks the host terminal what it can do, in one round trip.
 //
 // Every query goes out in a single write with DA1 last. A terminal answers in
@@ -343,20 +353,19 @@ func probeTerminal(caps *HostCapabilities) {
 		return
 	}
 
-	// Open /dev/tty for queries to avoid messing with stdin
-	tty, err := os.OpenFile("/dev/tty", os.O_RDWR, 0)
+	tty, err := openProbeTTY()
 	if err != nil {
 		setDefaultCellSize(caps)
 		return
 	}
-	defer func() { _ = tty.Close() }()
+	defer tty.close()
 
-	oldState, err := term.MakeRaw(int(tty.Fd()))
+	oldState, err := term.MakeRaw(int(tty.in.Fd()))
 	if err != nil {
 		setDefaultCellSize(caps)
 		return
 	}
-	defer func() { _ = term.Restore(int(tty.Fd()), oldState) }()
+	defer func() { _ = term.Restore(int(tty.in.Fd()), oldState) }()
 
 	// Probe direct transmission (i=1) and, if we can stage a file for it,
 	// file transmission (i=2). The ids let the two answers be told apart; the
@@ -383,9 +392,9 @@ func probeTerminal(caps *HostCapabilities) {
 	// placeholders are drawn or dropped.
 	q.WriteString(xtversionQuery)
 	q.WriteString("\x1b[c") // DA1 last, so its reply closes the whole batch
-	_, _ = tty.WriteString(q.String())
+	_, _ = tty.out.WriteString(q.String())
 
-	response := readTTYResponse(tty, probeTimeout, da1Response().MatchString)
+	response := readTTYResponse(tty.in, probeTimeout, da1Response().MatchString)
 	caps.DA1Late = !da1Response().MatchString(response)
 
 	parsePixelGeometry(caps, response)

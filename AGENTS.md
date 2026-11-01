@@ -588,6 +588,9 @@ go run ./cmd/tuios tape play examples/demo.tape
   `newpty_windows.go`. On Windows a pane opens on the `conpty.dll` and
   `OpenConsole.exe` beside `tuios.exe` when both are there, and on the inbox
   ConPTY otherwise
+- Opening the host terminal for the capability probe differs:
+  `internal/app/probe_tty_other.go` opens `/dev/tty`, and
+  `probe_tty_windows.go` opens the console's `CONIN$` and `CONOUT$`
 - Workspace keybinds differ: `opt+N` on macOS, `alt+N` on Linux
 - See `internal/config/userconfig.go` → `getDefaultWorkspaceKeybinds()`
 

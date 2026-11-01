@@ -311,8 +311,9 @@ jobs:
     # herdr command line the link runs, the opencode socket owner check, the
     # owner and DACL checks of service.json and of the tuios-web password
     # file, the job object of the opencode export, the choice between a
-    # conpty.dll beside tuios.exe and the inbox ConPTY, the web daemon E2E
-    # tests, and tuios.exe itself on a console with TERM unset.
+    # conpty.dll beside tuios.exe and the inbox ConPTY, the host capability
+    # probe on a console, the web daemon E2E tests, and tuios.exe itself on a
+    # console with TERM unset.
     # The whole suite has never run on Windows and does not run here.
     timeout-minutes: 15
 
@@ -396,6 +397,27 @@ jobs:
             echo "::error::TestStartsOnAConsoleWithNoTerm did not run and pass"
             exit 1
           fi
+
+      - name: Test the host probe on a console
+        # The rest of internal/app has never run on Windows, so only the
+        # probe tests run here. One opens a pane on the package's conpty.dll
+        # and runs the test binary in it, so the probe has a console to talk
+        # to and a host that answers; the other checks the console wait gives
+        # up at its deadline.
+        #
+        # Each test named below must print its PASS line, so a rename or a
+        # skip fails the step.
+        shell: bash
+        run: |
+          go test -count=1 -timeout 5m -v \
+            -run '^(TestHostProbeAsksTheWindowsConsole|TestHostProbeChild|TestPollReadableGivesUpAtAnExpiredDeadline)$' \
+            ./internal/app/ | tee "$RUNNER_TEMP/probe-tests.log"
+          for name in TestHostProbeAsksTheWindowsConsole TestPollReadableGivesUpAtAnExpiredDeadline; do
+            if ! grep -q -- "^--- PASS: $name " "$RUNNER_TEMP/probe-tests.log"; then
+              echo "::error::$name did not run and pass"
+              exit 1
+            fi
+          done
 
   macos:
     name: go test (macos)

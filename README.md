@@ -125,8 +125,6 @@ package, at `runtimes/win-<arch>/native/conpty.dll` and
 holds `tuios.exe`. tuios then opens panes through them, as Windows Terminal
 does. Without both files, panes use the built-in ConPTY. The daemon looks for
 the two files when it starts, so run `tuios kill-server` after adding them.
-tuios does not yet detect sixel support in the terminal on Windows, so set
-`TUIOS_SIXEL_GRAPHICS=1` as well.
 
 ### Shell Completions
 

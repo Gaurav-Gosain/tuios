@@ -17,19 +17,31 @@ import (
 // Once the program runs, its own input reader can take the answer. The client
 // is asked for DA1, the same question the local startup probe asks, and the
 // reply decides sixel for this session. A local terminal was probed before the
-// program started and a browser is known to draw sixel, so only SSH asks.
+// program started and a browser is known to draw sixel, so only SSH asks, and
+// a local terminal that answered that probe late (below).
 //
 // A local terminal can answer the startup probe too late: the probe gives up
 // after probeTimeout, and the reply reaches the program's input reader
 // instead. Dropped, it left a terminal with sixel taken for one without, so
 // its images were drawn as glyphs. The probe records that it gave up
 // (HostCapabilities.DA1Late), and the first reply after that is taken here.
+//
+// The late replies do not always reach the reader: on Windows the reader
+// flushes the console's input as it starts, and a reply that arrived after the
+// probe gave up and before the reader started went with it. So a terminal
+// that answered late is asked again, and the first DA1 reply is taken. A
+// terminal answers in order, so the probe's own replies still come before
+// these.
 
-// sixelProbe asks an SSH client's terminal who it is and for its device
-// attributes. XTVERSION goes first, so a terminal that stores images in its
-// cells is known before its DA1 could turn sixel on (handleHostVersion).
+// sixelProbe asks an SSH client's terminal, or a local one that answered the
+// startup probe late, who it is and for its device attributes. XTVERSION goes
+// first, so a terminal that stores images in its cells is known before its
+// DA1 could turn sixel on (handleHostVersion).
 func (m *OS) sixelProbe() tea.Cmd {
-	if m.Client != ClientSSH || m.SixelPassthrough == nil || m.hostCaps().SixelPinned {
+	if m.SixelPassthrough == nil || m.hostCaps().SixelPinned {
+		return nil
+	}
+	if m.Client != ClientSSH && !m.hostCaps().DA1Late {
 		return nil
 	}
 	return tea.Raw(xtversionQuery + ansi.RequestPrimaryDeviceAttributes)
