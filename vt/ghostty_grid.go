@@ -37,6 +37,10 @@ type ghosttyCellDecoder struct {
 	// giving up the fast decoder.
 	protBit uint64
 	hasProt bool
+	// Where a background-only cell keeps its colour, in the same union as the
+	// codepoint.
+	rLSB, gLSB, bLSB uint64
+	palLSB           uint64
 }
 
 func newGhosttyCellDecoder() ghosttyCellDecoder {
@@ -84,7 +88,7 @@ func newGhosttyCellDecoder() ghosttyCellDecoder {
 			Bits map[string]field `json:"bits"`
 		} `json:"arms"`
 	}
-	ok5 := false
+	ok5, ok6 := false, false
 	if rawContent, okC := cell.Bits["content"]; okC {
 		if err := json.Unmarshal(rawContent, &content); err == nil {
 			if arm, okA := content.Arms["CODEPOINT"]; okA {
@@ -94,9 +98,19 @@ func newGhosttyCellDecoder() ghosttyCellDecoder {
 					ok5 = true
 				}
 			}
+			rgb := content.Arms["BG_COLOR_RGB"].Bits
+			r, okR := rgb["r"]
+			g, okG := rgb["g"]
+			b, okB := rgb["b"]
+			pal, okP := content.Arms["BG_COLOR_PALETTE"].Bits["index"]
+			if okR && okG && okB && okP {
+				d.rLSB, d.gLSB, d.bLSB = content.LSB+r.LSB, content.LSB+g.LSB, content.LSB+b.LSB
+				d.palLSB = content.LSB + pal.LSB
+				ok6 = true
+			}
 		}
 	}
-	if !(ok1 && ok2 && ok3 && ok4 && ok5) {
+	if !(ok1 && ok2 && ok3 && ok4 && ok5 && ok6) {
 		return d
 	}
 	d.tagLSB, d.tagMask = tag.LSB, (1<<tag.Width)-1
@@ -128,6 +142,53 @@ func (d *ghosttyCellDecoder) decode(v uint64) decodedCell {
 		link:    (v>>d.linkBit)&1 != 0,
 		prot:    d.hasProt && (v>>d.protBit)&1 != 0,
 	}
+}
+
+// background reads the colour out of a packed background-only cell.
+func (d *ghosttyCellDecoder) background(v uint64, tag gh.CellContentTag) gh.StyleColor {
+	if tag == gh.CellContentBgColorPalette {
+		return gh.StyleColor{Tag: gh.StyleColorPalette, Palette: uint8(v >> d.palLSB)}
+	}
+	return gh.StyleColor{Tag: gh.StyleColorRGB, RGB: gh.ColorRGB{
+		R: uint8(v >> d.rLSB),
+		G: uint8(v >> d.gLSB),
+		B: uint8(v >> d.bLSB),
+	}}
+}
+
+// backgroundMemo is backgroundOnlyStyle's last answer. The zero value holds no
+// colour, which matches a cell whose colour could not be read: it has no style.
+type backgroundMemo struct {
+	color gh.StyleColor
+	style uv.Style
+}
+
+// backgroundOnlyStyle is the style of a cell whose content tag says it holds
+// only a background. The library erases under a coloured pen with these: the
+// colour is in the cell, the style ID is 0, and no style lookup finds it.
+//
+// memo holds the last answer, because a clear fills whole rows with one colour
+// and boxing the colour per cell would allocate per cell. It lives for one row
+// or one history line, so it cannot outlast a palette change.
+func (t *GhosttyTerminal) backgroundOnlyStyle(memo *backgroundMemo, cell *gh.Cell, tag gh.CellContentTag, pal *ghosttyPalette) uv.Style {
+	var sc gh.StyleColor
+	switch {
+	case t.dec.ok:
+		sc = t.dec.background(cell.PackedValue(), tag)
+	case tag == gh.CellContentBgColorPalette:
+		if i, err := cell.ColorPalette(); err == nil {
+			sc = gh.StyleColor{Tag: gh.StyleColorPalette, Palette: i}
+		}
+	default:
+		if rgb, err := cell.ColorRGB(); err == nil {
+			sc = gh.StyleColor{Tag: gh.StyleColorRGB, RGB: rgb}
+		}
+	}
+	if memo.color != sc {
+		memo.color = sc
+		memo.style = uv.Style{Bg: t.resolveStyleColor(sc, pal)}
+	}
+	return memo.style
 }
 
 // decodeCellSlow reads the same fields through cgo getters, for builds whose
@@ -220,6 +281,7 @@ func (t *GhosttyTerminal) syncRowLocked(buf *grid, y int) {
 	n := view.Len()
 	cellsLoaded := false
 	memo := kittyPlaceholderMemo{x: -2}
+	var bg backgroundMemo
 	for x := 0; x < n && x < t.width; x++ {
 		cell := view.Cell(x)
 		var dc decodedCell
@@ -284,9 +346,12 @@ func (t *GhosttyTerminal) syncRowLocked(buf *grid, y int) {
 			// Background-only cells carry no text.
 			out.Content = " "
 			out.Width = 1
+			out.Style = t.backgroundOnlyStyle(&bg, cell, dc.tag, nil)
 		}
 
-		out.Style = t.styleFor(dc.styleID, x)
+		if dc.styleID != 0 {
+			out.Style = t.styleFor(dc.styleID, x)
+		}
 		// A kitty placeholder cell names its image in its foreground colour,
 		// and the name the guest used is not the one the host knows the image
 		// by. libghostty owns the write side here, so the rewrite happens on

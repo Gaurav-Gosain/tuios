@@ -116,6 +116,7 @@ func (t *GhosttyTerminal) readHistoryLineLocked(src *gh.Terminal, index int) uv.
 // decoder, which never changes.
 func (t *GhosttyTerminal) readHistoryLine(src *gh.Terminal, index, width int, pal *ghosttyPalette) uv.Line {
 	line := make(uv.Line, width)
+	var bg backgroundMemo
 	for x := 0; x < width; x++ {
 		line[x] = uv.Cell{Content: " ", Width: 1}
 		ref, err := src.GridRef(gh.Point{Tag: gh.PointTagHistory, X: uint16(x), Y: uint32(index)})
@@ -167,6 +168,7 @@ func (t *GhosttyTerminal) readHistoryLine(src *gh.Terminal, index, width int, pa
 			// Background-only cells carry no text.
 			out.Content = " "
 			out.Width = 1
+			out.Style = t.backgroundOnlyStyle(&bg, cell, dc.tag, pal)
 		}
 		if dc.styleID != 0 {
 			if gs, err := ref.Style(); err == nil && gs != nil {

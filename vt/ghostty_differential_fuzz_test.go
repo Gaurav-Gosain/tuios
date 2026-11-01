@@ -962,47 +962,35 @@ func TestDiffFilterDropsOnlyAReflowAfterProtection(t *testing.T) {
 	keeps("a reset before the resize", vtgen.Script{protect, reset, narrow, erase})
 }
 
-// TestGhosttyDivergence_BackgroundColourErase pins which operations carry the
-// current background into the cells they blank.
+// TestGhosttyBackgroundColourEraseAgrees pins that every operation that blanks
+// cells carries the current background into them, on both backends, as xterm
+// with bce does. neovim clears with its colour scheme's background and draws
+// only the text, so a clear without it leaves the rest of each line on the
+// host's background (#624, #1436).
 //
-// The pure emulator applies background-colour erase to ED, EL, IL, DL and SU;
-// the library applies it to none of them. xterm with bce set fills all
-// of them, so the pure emulator is the compatible side. What a user sees on
-// the library backend is a coloured application (anything with a themed
-// background) growing default-coloured bands wherever it inserts, deletes or
-// scrolls lines.
-func TestGhosttyDivergence_BackgroundColourErase(t *testing.T) {
-	// bgAt reports whether a blanked cell carries a background colour.
-	bgAt := func(term Terminal, x, y int) bool {
-		c := term.CellAt(x, y)
-		return c != nil && c.Style.Bg != nil
-	}
-
+// This entry used to say the library applies it to none of them, and pinned
+// that as a divergence. The library does apply it. It keeps the colour in the
+// cell's content, with style ID 0, and the grid reader looked only at the style
+// ID (#1436). TestGhosttyDiffErasedCellsKeepThePenBackground holds the colours.
+func TestGhosttyBackgroundColourEraseAgrees(t *testing.T) {
 	cases := []struct {
 		name, in string
 		x, y     int
-		wantPure bool
-		wantGh   bool
 	}{
-		// ED 2 carries the background on the pure emulator, as xterm with
-		// bce does. neovim clears with its colour scheme's background and
-		// draws only the text, so a clear without it left the rest of each
-		// line on the host's background (#624). The library does not.
-		{"ED carries it only on the pure emulator", "\x1b[41m\x1b[2J", 0, 0, true, false},
-		{"EL carries it only on the pure emulator", "ABCD\x1b[H\x1b[41m\x1b[K", 0, 0, true, false},
-		{"IL carries it only on the pure emulator", "\x1b[41m\x1b[3L", 0, 0, true, false},
-		{"DL carries it only on the pure emulator", "A\r\nB\r\nC\x1b[H\x1b[41m\x1b[2M", 0, 10, true, false},
-		{"SU carries it only on the pure emulator", "A\r\nB\x1b[41m\x1b[2S", 0, 10, true, false},
+		{"ED", "\x1b[41m\x1b[2J", 0, 0},
+		{"EL", "ABCD\x1b[H\x1b[41m\x1b[K", 0, 0},
+		{"IL", "\x1b[41m\x1b[3L", 0, 0},
+		{"DL", "A\r\nB\r\nC\x1b[H\x1b[41m\x1b[2M", 0, 10},
+		{"SU", "A\r\nB\x1b[41m\x1b[2S", 0, 10},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			p := newDiffPair(t, 40, 12)
 			p.write(t, []byte(tc.in))
-			if got := bgAt(p.pure, tc.x, tc.y); got != tc.wantPure {
-				t.Errorf("pure background at (%d,%d) = %v, want %v", tc.x, tc.y, got, tc.wantPure)
-			}
-			if got := bgAt(p.gh, tc.x, tc.y); got != tc.wantGh {
-				t.Errorf("ghostty background at (%d,%d) = %v, want %v", tc.x, tc.y, got, tc.wantGh)
+			for name, term := range map[string]Terminal{"pure": p.pure, "ghostty": p.gh} {
+				if c := term.CellAt(tc.x, tc.y); c == nil || c.Style.Bg == nil {
+					t.Errorf("%s: the cell at (%d,%d) has no background", name, tc.x, tc.y)
+				}
 			}
 		})
 	}

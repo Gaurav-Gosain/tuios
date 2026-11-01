@@ -4928,6 +4928,25 @@ the fix.
 | Control: what was cut | Where it failed | Verdict |
 | --- | --- | --- |
 | ED 2 fills with `e.scr.blankCell()` (back to `e.scr.Clear()`) | "cells the clear painted lost the program's background": all three probes on the terminal's own background | **caught** |
+
+### ED 2 keeps the program's background on libghostty (#1436)
+
+The library erases under a coloured pen with cells that hold the colour in
+their content and have style ID 0. `TestGhosttyDiffErasedCellsKeepThePenBackground`
+in `vt/ghostty_erase_background_test.go` runs on the ghostty-vt job. It compares
+each erase under each pen with the pure emulator, through both the decoder and
+the cgo getters. CI's e2e job does not build the ghostty backend, so
+`TestEraseDisplayKeepsTheProgramBackground` covers this backend only when
+`TUIOS_E2E_BIN` names a ghostty binary.
+
+The controls were run on 2026-11-01 on branch `fix/ghostty-erased-cell-background`.
+
+| Control: what was cut | Where it failed | Verdict |
+| --- | --- | --- |
+| The whole fix, on a ghostty binary | `TestEraseDisplayKeepsTheProgramBackground`: all three probes on the terminal's own background | **caught** |
+| The whole fix | `TestGhosttyDiffErasedCellsKeepThePenBackground`: all 120 pen and erase cases, and the `the decoder reads the manifest`, `osc 4` and `history` subtests. `TestGhosttyBackgroundColourEraseAgrees`: all 5 cases | **caught** |
+| `backgroundOnlyStyle` in `readHistoryLine` | The `history` subtest only | **caught** |
+
 ### tuios call
 
 Run on 2026-10-11 on branch `feat/call-verb`. The control cuts one thing from
