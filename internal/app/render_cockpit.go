@@ -1286,7 +1286,7 @@ func (m *OS) ckRowLine2(l ckLook, r ckRow, e sidebarAgentEntry) (verb, rest stri
 		return ckDraftVerb, session.DraftHeldSummary, pal.Attention, right
 	}
 	wt := m.ckWorktreeOf(e)
-	br := wt.branch
+	br := m.ckBranch(e)
 	if pr := ckPRSegs(l, e.PR, wt.failed); pr != nil {
 		right = pr
 	}
@@ -1384,6 +1384,8 @@ type ckWorktree struct {
 	verdictAt         int64
 	// name is the session's name.
 	name string
+	// main says the session is in the repository's main checkout.
+	main bool
 }
 
 // ckFanKey names a fan: its machine, its repository and its group, "" for
@@ -1434,10 +1436,15 @@ func (m *OS) ckFanNote(host string, wt ckWorktree) string {
 	return ""
 }
 
-// ckBranch is the branch of the agent's worktree session, empty when it is
-// not in one.
+// ckBranch is the branch a row's second line names in place of the agent's
+// message, empty when it is not in a worktree. A main checkout has a branch too,
+// but its usual branch tells a person nothing the session's name does not, so
+// its row keeps the message and the focus header names the branch.
 func (m *OS) ckBranch(e sidebarAgentEntry) string {
-	return m.ckWorktreeOf(e).branch
+	if wt := m.ckWorktreeOf(e); !wt.main {
+		return wt.branch
+	}
+	return ""
 }
 
 // ckWorktreeOf is the agent's worktree session, zero when it is not in one.
@@ -1472,7 +1479,7 @@ func (m *OS) ckBranches() map[string]ckWorktree {
 		if w := s.Worktree; w != nil && w.Branch != "" {
 			out[s.Host+"\x00"+s.ID] = ckWorktree{branch: printableTitle(w.Branch), group: w.Group, fanID: w.FanID,
 				path: printableTitle(w.Path), prompt: printableTitle(w.Prompt), failed: w.PRFailed, repo: w.RepoRoot,
-				pick: w.Pick, judgeWindow: w.JudgeWindow, verdictAt: w.VerdictAt, name: s.ID}
+				pick: w.Pick, judgeWindow: w.JudgeWindow, verdictAt: w.VerdictAt, name: s.ID, main: w.Main}
 		}
 	}
 	if m.LearnMode {

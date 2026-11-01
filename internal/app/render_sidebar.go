@@ -163,6 +163,8 @@ type sidebarRowState struct {
 	// when unset. It is a string so a row state stays cheap to build per row;
 	// sidebarRowBg resolves it against the palette the row is drawn with.
 	CursorBg string
+	// FoldCursor says the keyboard cursor is on the row's fold mark.
+	FoldCursor bool
 }
 
 // lit reports whether the row is drawing any band at all, which is what the
@@ -2135,7 +2137,7 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 				break
 			}
 		}
-		sessionIdx := localSessionIndexes(sessions)
+		sessionIdx := m.localSessionIndexes(sessions)
 		for i := range count[sidebarSectionSessions] {
 			idx := start[sidebarSectionSessions] + i
 			s := sessionRows[idx]
@@ -2164,6 +2166,13 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 			}
 			dragged := m.SidebarDrag.Dragging && s.ID == m.SidebarDrag.SessionID
 			st := m.railRowState(idx == hoverRow[sidebarSectionSessions], isCursor(sidebarRowSession, s.ID, ""))
+			if s.GroupHead {
+				// The fold mark is a control of its own, as the "+" is on a
+				// machine's row: the rest of the row opens the session. It
+				// names the repository the way a repository's row does.
+				st.FoldCursor = isCursor(sidebarRowRepo, s.Worktree.Repo, s.Space)
+				recordToken(sidebarTokenSpan{Kind: sidebarRowRepo, X0: cw - sidebarFoldCells, X1: cw, WindowID: s.Space}, s.Worktree.Repo)
+			}
 			recordHit(sidebarRowSession, s.ID, "", -1, 1)
 			lines = append(lines, compose(st.mark(pal, m.sidebarSessionRow(s, sessionIdx[s.ID], variant, cw, pal, st, dragged, showCounts))))
 		}
@@ -2812,6 +2821,9 @@ func (m *OS) sidebarCursorIndex(target sidebarNavRow, sessions []sessiontree.Nod
 			if s.Kind == sessiontree.KindRepo && s.ID == target.SessionID && s.Space == target.WindowID {
 				return sidebarSectionSessions, i, true
 			}
+			if s.GroupHead && s.Worktree.Repo == target.SessionID && s.Space == target.WindowID {
+				return sidebarSectionSessions, i, true
+			}
 		}
 	case sidebarRowHost, sidebarRowHostNew, sidebarRowHostSignIn:
 		for i, s := range sessions {
@@ -3021,6 +3033,11 @@ const railNoteMin = 4
 
 func (m *OS) sidebarSessionRow(node sessiontree.Node, sessionIdx, variant, cw int, pal overlay.Palette, st sidebarRowState, dragged, showCounts bool) string {
 	rowBg := sidebarRowBg(st, pal)
+	// A repository's row speaks for the rows its fold hides.
+	folded := node.GroupHead && m.SidebarRepoCollapsed(node.Worktree.Repo)
+	if folded {
+		node.AgentState, node.DoneSeen = node.GroupState, node.GroupDoneSeen
+	}
 	if dragged {
 		// A drag keeps the strongest band on the row riding the pointer.
 		rowBg = pal.Surface
@@ -3034,6 +3051,14 @@ func (m *OS) sidebarSessionRow(node sessiontree.Node, sessionIdx, variant, cw in
 	// and identity gives way entirely. An alarm outranks a label.
 	tint := m.sessionTint(node.ID, m.rowGround(rowBg))
 	stated := agentStateIndicator(node.AgentState) != ""
+	// A fold that holds the attached session wears that session's mark, in that
+	// session's colour, because the session's own row is not drawn. The row's dot
+	// keeps its own colour.
+	focusTint := tint
+	if folded && node.GroupCurrent && !node.IsCurrent {
+		node.IsCurrent = true
+		focusTint = m.sessionTint(m.sidebarCurrentSessionID(), m.rowGround(rowBg))
+	}
 
 	glyph := sidebarQuietDotTinted(dotTint(tint, pal, stated), rowBg, pal, &m.Settings)
 	if stated {
@@ -3046,7 +3071,7 @@ func (m *OS) sidebarSessionRow(node sessiontree.Node, sessionIdx, variant, cw in
 	// directory has been removed says so in the same slot, for the same reason:
 	// the session still runs and the place it ran in is not there any more. The
 	// window count is last, so it is the figure that survives.
-	var figures [3]string
+	var figures [4]string
 	if node.Restored && variant == sidebarVariantFull {
 		figures[0] = sidebarRestoredTag
 	}
@@ -3055,6 +3080,12 @@ func (m *OS) sidebarSessionRow(node sessiontree.Node, sessionIdx, variant, cw in
 	}
 	if m.Settings.SidebarShowCounts && showCounts && node.WindowCount > 0 && variant == sidebarVariantFull {
 		figures[2] = strconv.Itoa(node.WindowCount)
+	}
+	if folded {
+		// Ungated by the counts setting, as on a repository's own row: it is the
+		// only thing that says how many sessions the fold holds. The plus keeps
+		// it apart from the window count beside it.
+		figures[3] = "+" + strconv.Itoa(node.GroupCount)
 	}
 
 	// A session name takes the brightest ink the rail has, and keeps it. It is
@@ -3140,7 +3171,11 @@ func (m *OS) sidebarSessionRow(node sessiontree.Node, sessionIdx, variant, cw in
 		titleW -= took
 		treeW -= took
 	}
-	keep, avail := railRowFitInto(s.keep, titleW, railNameKeep(titleW), s.tokens, sidebarNameAvailIn(cw, 0, indent)-markW-capsW)
+	foldW := 0
+	if node.GroupHead {
+		foldW = sidebarFoldCells
+	}
+	keep, avail := railRowFitInto(s.keep, titleW, railNameKeep(titleW), s.tokens, sidebarNameAvailIn(cw, 0, indent)-markW-capsW-foldW)
 	s.keep = keep
 	branch := ""
 	if keep[0] && b != "" {
@@ -3154,15 +3189,19 @@ func (m *OS) sidebarSessionRow(node sessiontree.Node, sessionIdx, variant, cw in
 	ink := sidebarStyle(rowBg, fg).Bold(sidebarAttention(node.AgentState))
 	name := mark + ink.Render(treeMark+shown) + branch
 	if nameMarked {
-		name = mark + ink.Render(treeMark) + railCurrentName(shown, tint, rowBg, pal, &m.Settings) + branch
+		name = mark + ink.Render(treeMark) + railCurrentName(shown, focusTint, rowBg, pal, &m.Settings) + branch
 	}
 
-	gutter := sidebarGutterTinted(node.IsCurrent, node.AgentState, tint, rowBg, pal, &m.Settings)
+	gutter := sidebarGutterTinted(node.IsCurrent, node.AgentState, focusTint, rowBg, pal, &m.Settings)
 	if nameMarked {
 		gutter = sidebarGutterNameMarked(node.AgentState, rowBg, pal, &m.Settings)
 	}
 	if tint != nil && stated && !node.IsCurrent && !sidebarAttention(node.AgentState) {
 		gutter = sidebarStyle(rowBg, tint).Render(accentMark())
+	}
+	if node.GroupHead {
+		fold := m.sidebarFoldMark(folded, st.FoldCursor, rowBg, pal)
+		return sidebarComposeFoldRow(indent, gutter, glyph, name, right, fold, cw, rowBg)
 	}
 	return sidebarComposeGroupRow(indent, gutter, glyph, name, right, cw, rowBg)
 }

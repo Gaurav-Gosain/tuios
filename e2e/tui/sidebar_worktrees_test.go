@@ -4,6 +4,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -230,6 +231,241 @@ func TestSidebarPillKeepsTreeBars(t *testing.T) {
 	railShot(t, term, "rail-pill-tree-bars")
 }
 
+// TestRailMainCheckoutIsRepoRow is the default layout of #1399, at the rail's
+// normal width and at 18 columns: the main checkout's row is the repository's
+// row, the worktree hangs off it, and the number beside each row is the key that
+// opens it. A click on the name opens the session, and the fold mark folds the
+// group by click, by keyboard and from the row's menu. A folded row shows what it
+// holds, the attached session's mark included. An agent in the main checkout
+// keeps its message in the Inbox.
+//
+// The worktree is made first, so the row order is not the creation order. The
+// controls are in NEGATIVE_CONTROLS.md.
+func TestRailMainCheckoutIsRepoRow(t *testing.T) {
+	for _, width := range []int{30, 18} {
+		t.Run(strconv.Itoa(width), func(t *testing.T) { railMainCheckoutIsRepoRow(t, width) })
+	}
+}
+
+func railMainCheckoutIsRepoRow(t *testing.T, width int) {
+	base := t.TempDir()
+	killDaemon(t, base)
+	repo := testutil.GitRepo(t)
+	t.Setenv("TUIOS_WORKTREE_DIR", filepath.Join(base, "worktrees"))
+	writeConfig(t, base, `[appearance.sidebar]
+enabled = true
+show_numbers = true
+width = `+strconv.Itoa(width)+`
+
+[keybindings.window_management]
+switch_session_2 = ["alt+shift+c"]
+switch_session_3 = ["alt+shift+z"]
+`)
+	if out, err := tuiosCLIIn(t, base, t.TempDir(), "new", "plain", "--detach"); err != nil {
+		t.Fatalf("create the plain session: %v: %s", err, out)
+	}
+	if out, err := tuiosCLI(t, base, "worktree", "new", "f/one", "--repo", repo, "--detach"); err != nil {
+		t.Fatalf("worktree new f/one: %v: %s", err, out)
+	}
+	if out, err := tuiosCLIIn(t, base, repo, "new", "mainsess", "--detach"); err != nil {
+		t.Fatalf("create the main checkout's session: %v: %s", err, out)
+	}
+	if out, err := tuiosCLI(t, base, "new-window", "AGENT", "-s", "mainsess", "--no-focus"); err != nil {
+		t.Fatalf("open the agent's pane: %v: %s", err, out)
+	}
+	if out, err := tuiosCLI(t, base, "set-agent-state", "done", "-s", "mainsess", "-w", "AGENT", "-m", "reached lunch"); err != nil {
+		t.Fatalf("report the agent: %v: %s", err, out)
+	}
+	// Two more agents, so the Inbox draws a list and not a single agent's page.
+	for _, win := range []string{"OTHERONE", "OTHERTWO"} {
+		if out, err := tuiosCLI(t, base, "new-window", win, "-s", "plain", "--no-focus"); err != nil {
+			t.Fatalf("open the pane %s: %v: %s", win, err, out)
+		}
+		if out, err := tuiosCLI(t, base, "set-agent-state", "idle", "-s", "plain", "-w", win, "-m", "another agent"); err != nil {
+			t.Fatalf("report the agent %s: %v: %s", win, err, out)
+		}
+	}
+
+	term := startIn(t, base, startOpts{args: []string{"attach", "plain"}})
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		head, child := railLineWith(s, "2 mainsess"), railLineWith(s, "3 └─ f/one")
+		return head >= 0 && child == head+1
+	}, bootTimeout); err != nil {
+		t.Fatalf("the worktree never hung off the numbered main checkout row: %v\n%s", err, term.Snapshot())
+	}
+	if railLineWith(term.Screen(), "· repo") >= 0 {
+		t.Errorf("the repository kept a row of its own\n%s", term.Snapshot())
+	}
+	windowManagementMode(t, term)
+
+	if err := term.SendKeys(tuitest.Alt('C')); err != nil {
+		t.Fatalf("send switch_session_2: %v", err)
+	}
+	if err := term.WaitForText("Session: mainsess", uiTimeout); err != nil {
+		t.Fatalf("the key numbered 2 did not open the row numbered 2: %v\n%s", err, term.Snapshot())
+	}
+	time.Sleep(insertGuard + 150*time.Millisecond)
+	if err := term.SendKeys(tuitest.Alt('Z')); err != nil {
+		t.Fatalf("send switch_session_3: %v", err)
+	}
+	if err := term.WaitForText("Session: repo-f-one", uiTimeout); err != nil {
+		t.Fatalf("the key numbered 3 did not open the row numbered 3: %v\n%s", err, term.Snapshot())
+	}
+
+	// A folded row holding the attached session wears that session's mark. Open,
+	// the same row wears none, so the mark says where the session went.
+	foldMark := func(glyph string) (int, int) {
+		return railCellColumn(term.Screen(), glyph), railLineWith(term.Screen(), glyph)
+	}
+	const focusMark = "▎"
+	if line := railLineWith(term.Screen(), "mainsess"); strings.Contains(term.Screen().Line(line), focusMark) {
+		t.Errorf("the open row wears the attached session's mark\n%s", term.Snapshot())
+	}
+	col, row := foldMark("▾")
+	mouseClick(t, term, col, row, tuitest.MouseLeft, 0)
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		line := railLineWith(s, "mainsess")
+		return railLineWith(s, "f/one") < 0 && line >= 0 && strings.Contains(s.Line(line), focusMark)
+	}, uiTimeout); err != nil {
+		t.Fatalf("the folded row does not show the attached session: %v\n%s", err, term.Snapshot())
+	}
+	railShot(t, term, "rail-compact-folded-attached-"+strconv.Itoa(width))
+	if !strings.Contains(term.Screen().Text(), "Session: repo-f-one") {
+		t.Errorf("the fold mark changed the session\n%s", term.Snapshot())
+	}
+	col, row = foldMark("▸")
+	mouseClick(t, term, col, row, tuitest.MouseLeft, 0)
+	if err := term.WaitFor(func(s tuitest.Screen) bool { return railLineWith(s, "f/one") >= 0 }, uiTimeout); err != nil {
+		t.Fatalf("the fold mark did not open the group: %v\n%s", err, term.Snapshot())
+	}
+
+	// A click on the name opens the session and leaves the group open.
+	col, row = railCellColumn(term.Screen(), "mainsess"), railLineWith(term.Screen(), "mainsess")
+	mouseClick(t, term, col, row, tuitest.MouseLeft, 0)
+	if err := term.WaitForText("Session: mainsess", uiTimeout); err != nil {
+		t.Fatalf("the row click did not open the main checkout's session: %v\n%s", err, term.Snapshot())
+	}
+	if railLineWith(term.Screen(), "f/one") < 0 {
+		t.Errorf("opening the main checkout folded the group\n%s", term.Snapshot())
+	}
+
+	// A click on the mark folds. The row keeps its name and says what it holds.
+	col, row = foldMark("▾")
+	mouseClick(t, term, col, row, tuitest.MouseLeft, 0)
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		line := railLineWith(s, "mainsess")
+		if railLineWith(s, "f/one") >= 0 || line < 0 || !strings.Contains(s.Line(line), "▸") {
+			return false
+		}
+		// The name outranks the count, and at 18 columns only the name fits.
+		return width < 30 || strings.Contains(s.Line(line), "+1")
+	}, uiTimeout); err != nil {
+		t.Fatalf("the fold mark did not fold the group: %v\n%s", err, term.Snapshot())
+	}
+	railShot(t, term, "rail-compact-folded-"+strconv.Itoa(width))
+	col, row = foldMark("▸")
+	mouseClick(t, term, col, row, tuitest.MouseLeft, 0)
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		return railLineWith(s, "f/one") >= 0
+	}, uiTimeout); err != nil {
+		t.Fatalf("the fold mark did not open the group: %v\n%s", err, term.Snapshot())
+	}
+
+	// The row's menu has the group's fold row and a live New worktree. A dim row
+	// runs nothing, so running it is what tells it apart from a live one.
+	menu := func(pick string) {
+		t.Helper()
+		c, r := railCellColumn(term.Screen(), "mainsess"), railLineWith(term.Screen(), "mainsess")
+		mouseClick(t, term, c, r, tuitest.MouseRight, 0)
+		if err := term.WaitForText(pick, uiTimeout); err != nil {
+			t.Fatalf("the row's menu has no %s: %v\n%s", pick, err, term.Snapshot())
+		}
+		railShot(t, term, "rail-compact-menu-"+strconv.Itoa(width))
+		c, r = findOnScreen(t, term, pick)
+		mouseClick(t, term, c, r, tuitest.MouseLeft, 0)
+	}
+	menu("Fold group")
+	if err := term.WaitFor(func(s tuitest.Screen) bool { return railLineWith(s, "f/one") < 0 }, uiTimeout); err != nil {
+		t.Fatalf("the menu's fold did not fold the group: %v\n%s", err, term.Snapshot())
+	}
+	menu("Unfold group")
+	if err := term.WaitFor(func(s tuitest.Screen) bool { return railLineWith(s, "f/one") >= 0 }, uiTimeout); err != nil {
+		t.Fatalf("the menu's unfold did not open the group: %v\n%s", err, term.Snapshot())
+	}
+	menu("New worktree...")
+	if err := term.WaitForText("Branch", uiTimeout); err != nil {
+		t.Fatalf("New worktree on the main checkout's row opened no dialog: %v\n%s", err, term.Snapshot())
+	}
+	if err := term.SendKeys(tuitest.Esc); err != nil {
+		t.Fatalf("close the dialog: %v", err)
+	}
+	if err := term.WaitFor(func(s tuitest.Screen) bool { return !strings.Contains(s.Text(), "Branch") }, uiTimeout); err != nil {
+		t.Fatalf("the dialog did not close: %v\n%s", err, term.Snapshot())
+	}
+
+	windowManagementMode(t, term)
+	// The rail's cursor lands on the attached row, and the row's fold mark is the
+	// stop above it. On that stop enter folds and the keyboard stays in the rail.
+	// On the row itself enter would hand the keyboard to the session.
+	if err := term.SendKeys("s"); err != nil {
+		t.Fatalf("enter the rail: %v", err)
+	}
+	if err := term.WaitForText(railPill, uiTimeout); err != nil {
+		t.Fatalf("s did not give the keyboard to the rail: %v\n%s", err, term.Snapshot())
+	}
+	if err := term.SendKeys("k"); err != nil {
+		t.Fatalf("move to the fold mark: %v", err)
+	}
+	if err := term.WaitStable(uiTimeout); err != nil {
+		t.Fatalf("the rail never settled: %v", err)
+	}
+	railShot(t, term, "rail-compact-fold-cursor-"+strconv.Itoa(width))
+	if err := term.SendKeys(tuitest.Enter); err != nil {
+		t.Fatalf("activate the fold mark: %v", err)
+	}
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		return railLineWith(s, "f/one") < 0 && strings.Contains(s.Text(), railPill)
+	}, uiTimeout); err != nil {
+		t.Fatalf("enter on the fold mark did not fold the group and keep the rail: %v\n%s", err, term.Snapshot())
+	}
+	if err := term.SendKeys(tuitest.Enter); err != nil {
+		t.Fatalf("activate the fold mark again: %v", err)
+	}
+	if err := term.WaitFor(func(s tuitest.Screen) bool { return railLineWith(s, "f/one") >= 0 }, uiTimeout); err != nil {
+		t.Fatalf("enter on the fold mark did not open the group: %v\n%s", err, term.Snapshot())
+	}
+	if err := term.SendKeys(tuitest.Esc); err != nil {
+		t.Fatalf("leave the rail: %v", err)
+	}
+	if err := term.WaitFor(func(s tuitest.Screen) bool { return !strings.Contains(s.Text(), railPill) }, uiTimeout); err != nil {
+		t.Fatalf("esc did not leave the rail: %v\n%s", err, term.Snapshot())
+	}
+
+	// The Inbox row of an agent in the main checkout keeps the agent's message. A
+	// worktree's branch takes that line, and a main checkout's says nothing.
+	if err := term.SendKeys(tuitest.Ctrl('b'), "i"); err != nil {
+		t.Fatalf("open the Inbox: %v", err)
+	}
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		// The rail's agents section says the message too, until the Inbox covers it.
+		if !strings.Contains(s.Text(), "Search agents") {
+			return false
+		}
+		_, rows := s.Size()
+		for r := range rows {
+			// The selected agent's thread says the message too, on a line of its own.
+			if line := s.Line(r); strings.Contains(line, "reached lunch") && !strings.Contains(line, "Says:") {
+				return true
+			}
+		}
+		return false
+	}, uiTimeout); err != nil {
+		t.Fatalf("the Inbox row lost the agent's message: %v\n%s", err, term.Snapshot())
+	}
+	railShot(t, term, "rail-compact-inbox-"+strconv.Itoa(width))
+	alive(t, term, "after folding the main checkout's row")
+}
+
 // TestSidebarGroupsMainCheckout drives the same grouping with the main
 // checkout gathered in: with group_main on, the session whose directory is the
 // repository itself sits under the repo row with the worktrees, a click on
@@ -339,18 +575,32 @@ func TestSidebarGroupsMainCheckout(t *testing.T) {
 		t.Errorf("the main checkout's row is not under the repo header\n%s", term.Snapshot())
 	}
 
-	// group_main points the header's activation at the main checkout's
-	// session: the click opens it and leaves the group on screen.
-	col, row := findOnScreen(t, term, "· repo")
+	// The header folds in this layout too. The main checkout has its own row
+	// under it, and a click there opens the session.
+	col, row := findOnScreen(t, term, "─ main")
 	mouseClick(t, term, col, row, tuitest.MouseLeft, 0)
 	if err := term.WaitForText("Session: mainsess", uiTimeout); err != nil {
-		t.Fatalf("the header click did not open the main checkout's session: %v\n%s", err, term.Snapshot())
+		t.Fatalf("a click on the main checkout's row did not open its session: %v\n%s", err, term.Snapshot())
 	}
-	if railLineWith(term.Screen(), "feat/one") < 0 {
-		t.Errorf("opening the main checkout's session folded the group\n%s", term.Snapshot())
+	col, row = findOnScreen(t, term, "· repo")
+	mouseClick(t, term, col, row, tuitest.MouseLeft, 0)
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		text := s.Text()
+		if strings.Contains(text, "feat/one") || strings.Contains(text, "─ main") {
+			return false
+		}
+		line := railLineWith(s, "repo")
+		return line >= 0 && strings.Contains(s.Line(line), "2") && strings.Contains(s.Line(line), "▸") &&
+			strings.Contains(s.Line(line), "▎")
+	}, uiTimeout); err != nil {
+		t.Fatalf("the header click did not fold the group into a row with its count and the attached session's mark: %v\n%s", err, term.Snapshot())
+	}
+	mouseClick(t, term, col, row, tuitest.MouseLeft, 0)
+	if err := term.WaitFor(func(s tuitest.Screen) bool { return railLineWith(s, "feat/one") >= 0 }, uiTimeout); err != nil {
+		t.Fatalf("the header click did not open the group: %v\n%s", err, term.Snapshot())
 	}
 
-	// The fold gesture moved to the header's right-click menu.
+	// The header's right-click menu folds too.
 	mouseClick(t, term, col, row, tuitest.MouseRight, 0)
 	if err := term.WaitForText("Fold group", uiTimeout); err != nil {
 		t.Fatalf("the header's menu offered no fold: %v\n%s", err, term.Snapshot())
@@ -481,5 +731,26 @@ func TestRailRevealsGroupedRow(t *testing.T) {
 	}
 	clientShows(t, base, "newest")
 	shows("a switch to a new session", "newest")
+	current = "newest"
 	railShot(t, term, "reveal-new-session")
+
+	// A repository with a main checkout session has that session's row as its
+	// row, so that row stands in for a session inside the fold (#1399).
+	if out, err := tuiosCLIIn(t, base, repo, "new", "mainsess", "--detach"); err != nil {
+		t.Fatalf("create the main checkout's session: %v: %s", err, out)
+	}
+	if err := term.WaitFor(func(s tuitest.Screen) bool { return railRowOf(s, "· repo") < 0 }, uiTimeout); err != nil {
+		t.Fatalf("the repository kept a row of its own: %v\n%s", err, term.Snapshot())
+	}
+	switchTo("top-a")
+	shows("a switch away from the main checkout's row", "top-a")
+	if inSessions(term.Screen(), "mainsess") {
+		t.Fatalf("the main checkout's row is still on screen, so the switch back tests nothing\n%s", term.Snapshot())
+	}
+	switchTo("repo-feat-two")
+	shows("a switch into the fold on a main checkout's row", "mainsess")
+	if railRowOf(term.Screen(), "feat/two") >= 0 {
+		t.Errorf("the switch opened the folded repository\n%s", term.Snapshot())
+	}
+	railShot(t, term, "reveal-folded-main-row")
 }

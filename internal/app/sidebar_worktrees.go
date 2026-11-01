@@ -1,6 +1,7 @@
 package app
 
 import (
+	"image/color"
 	"strconv"
 	"strings"
 
@@ -31,14 +32,10 @@ import (
 const sidebarWorktreeGoneTag = "gone"
 
 // worktreeRef adapts the daemon's record to the shared row model, which knows
-// nothing about internal/session. A main-checkout record is a record only for
-// a rail that has opted into it: group_main off reads it as no record at all,
-// which is exactly the shape the sessions had before it existed.
+// nothing about internal/session. The main checkout's record comes through in
+// both of the rail's layouts, because both group by it. See sidebarRepoGrouping.
 func (m *OS) worktreeRef(info *session.WorktreeInfo) *sessiontree.WorktreeRef {
 	if info == nil {
-		return nil
-	}
-	if info.Main && !m.Settings.SidebarGroupMain {
 		return nil
 	}
 	ref := &sessiontree.WorktreeRef{
@@ -70,32 +67,6 @@ func (m *OS) worktreeRef(info *session.WorktreeInfo) *sessiontree.WorktreeRef {
 	return ref
 }
 
-// sidebarRepoGotoMain opens the repo group's session in the main checkout —
-// the one whose directory is the repository itself, usually on main or
-// master — and reports whether there was one. It is what a repo header's
-// activation does once group_main gathers the main checkout in; without it,
-// or when the group holds no main-checkout session, the header keeps its
-// fold gesture.
-func (m *OS) sidebarRepoGotoMain(repo string) bool {
-	if !m.Settings.SidebarGroupMain {
-		return false
-	}
-	for _, n := range m.BuildSessionTree().Sessions {
-		if n.Kind == sessiontree.KindSession && n.Host == "" &&
-			n.Worktree != nil && n.Worktree.Repo == repo && n.Worktree.Main {
-			// Open the group, so the session the header pointed at is on
-			// screen under it rather than hidden behind a count.
-			if m.SidebarRepoCollapsed(repo) {
-				m.SidebarToggleRepoCollapsed(repo)
-			}
-			m.sidebarSwitchSession(n.ID)
-			m.sidebarFollowSession = n.ID
-			return true
-		}
-	}
-	return false
-}
-
 // sidebarSessionRows is the sessions section's own row list: the attached
 // machine's sessions under their space's heading and, inside that, the worktree
 // ones under their repository, with the members of a folded repository left
@@ -116,19 +87,80 @@ func (m *OS) sidebarSessionRows(sessions []sessiontree.Node) []sessiontree.Node 
 // their repository. A folded repository's members are left out, in every
 // space they are in.
 func (m *OS) sidebarGroupedRows(sessions []sessiontree.Node) []sessiontree.Node {
-	rows := sessiontree.GroupBySpace(sessions, sessiontree.GroupByRepo)
+	rows := sessiontree.GroupBySpace(sessions, m.sidebarRepoGrouping())
 	if len(m.SidebarCollapsedRepos) == 0 {
 		return rows
 	}
 	out := make([]sessiontree.Node, 0, len(rows))
 	for _, n := range rows {
-		if n.Kind == sessiontree.KindSession && n.Worktree != nil && m.SidebarCollapsedRepos[n.Worktree.Repo] {
+		if n.Kind == sessiontree.KindSession && !n.GroupHead && n.Worktree != nil && m.SidebarCollapsedRepos[n.Worktree.Repo] {
 			continue
 		}
 		out = append(out, n)
 	}
 	return out
 }
+
+// sidebarRepoGrouping is how the rail gathers a repository's sessions. By
+// default the main checkout's session is the repository's row. group_main gives
+// the repository a row of its own, with the main checkout under it.
+func (m *OS) sidebarRepoGrouping() func([]sessiontree.Node) []sessiontree.Node {
+	if m.Settings.SidebarGroupMain {
+		return sessiontree.GroupByRepo
+	}
+	return sessiontree.GroupByRepoCompact
+}
+
+// sidebarRepoOfRow is the repository a row folds, "" for a row that folds none:
+// a repository's own row, or a main checkout's row that stands in for it.
+func sidebarRepoOfRow(n sessiontree.Node) string {
+	switch {
+	case n.Kind == sessiontree.KindRepo:
+		return n.ID
+	case n.GroupHead:
+		return n.Worktree.Repo
+	}
+	return ""
+}
+
+// sidebarHeadRepo is the repository whose row sessionID's row is, "" when that
+// session's row does not stand in for a repository.
+func (m *OS) sidebarHeadRepo(sessionID string) string {
+	for _, n := range m.sidebarGroupedRows(localSessionNodes(m.BuildSessionTree().Sessions)) {
+		if n.GroupHead && n.ID == sessionID {
+			return n.Worktree.Repo
+		}
+	}
+	return ""
+}
+
+// sidebarFoldMark is the mark that says a repository's row folds and which way
+// it is folded now. While the keyboard cursor is on it the mark is reversed,
+// the one way to set a single cell apart at every colour depth.
+func (m *OS) sidebarFoldMark(collapsed, cursor bool, bg color.Color, pal overlay.Palette) string {
+	glyph := m.Settings.GetRailFoldOpenGlyph()
+	if collapsed {
+		glyph = m.Settings.GetRailFoldShutGlyph()
+	}
+	if cursor {
+		return sidebarStyle(bg, pal.Fg).Reverse(true).Render(glyph)
+	}
+	return sidebarStyle(bg, pal.FgMute).Render(glyph)
+}
+
+// sidebarComposeFoldRow is sidebarComposeGroupRow for a row with a fold mark.
+// The mark takes the inset cell, so the figures stay on the column the figures
+// of the rows around them are on.
+func sidebarComposeFoldRow(indent int, gutter, glyph, name, right, fold string, cw int, bg color.Color) string {
+	row := gutter + sidebarStyle(bg, nil).Render(strings.Repeat(" ", max(indent, 0))) +
+		sidebarMarkCell(glyph, bg) + name
+	gap := max(cw-lipgloss.Width(row)-lipgloss.Width(right)-lipgloss.Width(fold), 0)
+	return sidebarFit(row+sidebarStyle(bg, nil).Render(strings.Repeat(" ", gap))+right+fold, cw, bg)
+}
+
+// sidebarFoldCells is what a fold mark costs a row's name: the mark and the
+// blank in front of it.
+const sidebarFoldCells = 2
 
 // SidebarRepoCollapsed reports whether a repository's group is folded shut.
 func (m *OS) SidebarRepoCollapsed(repo string) bool {
@@ -172,7 +204,7 @@ func (m *OS) SidebarToggleRepoCollapsed(repo string) {
 // is one of ours, chosen by the glyph settings, and already ASCII in the mode
 // that asks for ASCII.
 func (m *OS) sidebarWorktreeLabel(node sessiontree.Node) (mark, label string, ok bool) {
-	if node.Worktree == nil {
+	if node.Worktree == nil || node.GroupHead {
 		return "", "", false
 	}
 	mark = m.Settings.GetRailTreeBranch()
@@ -250,10 +282,30 @@ func (m *OS) sidebarRepoRow(node sessiontree.Node, cw int, pal overlay.Palette, 
 	// machine with every other session row. Its own members hang off it on the
 	// tree marks. See sidebarWorktreeLabel.
 	indent := m.sidebarNodeIndent(node)
-	name := sidebarStyle(rowBg, fg).Bold(sidebarAttention(state)).
-		Render(overlay.Truncate(printableTitle(node.Title), sidebarNameAvailIn(cw, rightW, indent)))
-	gutter := sidebarGutter(false, state, rowBg, pal, &m.Settings)
-	return sidebarComposeGroupRow(indent, gutter, glyph, name, right, cw, rowBg)
+	nameW := sidebarNameAvailIn(cw, rightW, indent)
+	if rightW == 0 {
+		nameW = max(nameW-sidebarFoldCells, 1)
+	}
+	// A shut group that holds the attached session wears that session's mark,
+	// in that session's colour, because the session's own row is not drawn.
+	holdsCurrent := collapsed && node.GroupCurrent
+	nameMarked, capsW := railNameMarked(&m.Settings)
+	nameMarked = nameMarked && holdsCurrent
+	var tint color.Color
+	if holdsCurrent {
+		tint = m.sessionTint(m.sidebarCurrentSessionID(), m.rowGround(rowBg))
+	}
+	title := printableTitle(node.Title)
+	name := ""
+	gutter := sidebarGutterTinted(holdsCurrent, state, tint, rowBg, pal, &m.Settings)
+	if nameMarked {
+		name = railCurrentName(overlay.Truncate(title, max(nameW-capsW, 1)), tint, rowBg, pal, &m.Settings)
+		gutter = sidebarGutterNameMarked(state, rowBg, pal, &m.Settings)
+	} else {
+		name = sidebarStyle(rowBg, fg).Bold(sidebarAttention(state)).Render(overlay.Truncate(title, nameW))
+	}
+	fold := m.sidebarFoldMark(collapsed, false, rowBg, pal)
+	return sidebarComposeFoldRow(indent, gutter, glyph, name, right, fold, cw, rowBg)
 }
 
 // sessionNamed reports whether a person chose the label of the session called

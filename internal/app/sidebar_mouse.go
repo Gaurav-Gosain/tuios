@@ -462,9 +462,7 @@ func (m *OS) sidebarClick(x, y int, right bool) bool {
 	case sidebarRowCollapse:
 		m.SidebarToggleCollapsed()
 	case sidebarRowRepo:
-		if !m.sidebarRepoGotoMain(hit.SessionID) {
-			m.SidebarToggleRepoCollapsed(hit.SessionID)
-		}
+		m.SidebarToggleRepoCollapsed(hit.SessionID)
 	case sidebarRowFiles:
 		m.queueSidebarCmd(m.ToggleFileView())
 	case sidebarRowFileCd:
@@ -654,9 +652,7 @@ func (m *OS) sidebarActivateRow(hit sidebarRowHit) {
 	case sidebarRowCollapse:
 		m.SidebarToggleCollapsed()
 	case sidebarRowRepo:
-		if !m.sidebarRepoGotoMain(hit.SessionID) {
-			m.SidebarToggleRepoCollapsed(hit.SessionID)
-		}
+		m.SidebarToggleRepoCollapsed(hit.SessionID)
 	case sidebarRowHost:
 		m.SidebarToggleHostCollapsed(hit.SessionID)
 	case sidebarRowFiles:
@@ -1042,6 +1038,9 @@ func (m *OS) openSidebarContextMenu(hit sidebarRowHit, x, y int) {
 			// quit menu offers, anchored where the user right-clicked, plus the
 			// colour of the row's own session.
 			cm.SessionID = hit.SessionID
+			// A main checkout's row is its repository's row too, and the menu's
+			// fold row reads the repository from here.
+			cm.Repo = m.sidebarHeadRepo(hit.SessionID)
 			cm.Title, cm.Items = m.sessionMenu(hit.SessionID)
 		} else {
 			cm.Title, cm.Items = m.desktopMenu()

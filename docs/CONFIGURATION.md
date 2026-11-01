@@ -1961,30 +1961,48 @@ other than `diff` or `files` reads as `diff`, with a warning when the config
 loads, and `tuios set-config` refuses it. See
 [KEYBINDINGS.md](KEYBINDINGS.md#the-review-overlay).
 
-## The main checkout in the sessions tree
+## Repositories in the sessions tree
 
-`appearance.sidebar.group_main` gathers the repository's main checkout under
-the repo row with its worktrees. The main checkout is the session whose
-directory is the repository itself, usually on `main` or `master`. The option
-is `false` by default,
-which leaves the main checkout's sessions flat in the list and groups only
-the worktrees split off the repository.
+The sessions section gathers the sessions of a repository into one group. The
+main checkout's row is the repository's row, and the worktree rows hang off it.
+The main checkout is the session whose directory is the repository itself,
+usually on `main` or `master`.
+
+```
+tuios main          2 ▾
+├─ feat/compact-rail  2
+└─ fix/pill-bars      1
+```
+
+- An unnamed session on that row shows the repository's name. A session with a
+  name you chose keeps that name.
+- A repository with no main checkout session has a row of its own.
+- A repository with only a main checkout session shows a plain row.
+
+Each group's row ends in a fold mark. These controls fold and open the group:
+
+- Click the fold mark.
+- Move the rail cursor to the fold mark and press `enter`.
+- Right-click the row and select `Fold group` or `Unfold group`.
+- Click a repository's own row.
+
+A click on a main checkout's row opens its session. A folded row shows `+N` for
+the sessions that it holds, the loudest agent state of the group, and the mark
+of the attached session when that session is in the group.
+
+`appearance.sidebar.group_main` gives each repository a row of its own, with the
+main checkout under that row. The option is `false` by default. An explicit
+`false` gives the same layout as no option. The option is on the settings page,
+in the Sidebar section, as `Separate repository row`.
 
 ```toml
 [appearance.sidebar]
 group_main = true
 ```
 
-With it on, a session in the main checkout is one of the group's children,
-labelled by its branch like the rest, and the repo header points at it:
-`enter` or a click on the header opens the main checkout's session instead of
-folding the group, and opens the group first when it was folded. The fold
-gesture stays on the header's right-click menu, as `Fold group` and
-`Unfold group`. The option is on the settings page, in the Sidebar section.
-
-Independent of the option, the daemon now records the main checkout the way
-it records a worktree, so `tuios worktree ls` and the worktree verbs see it
-alongside the worktrees it was split into.
+Independent of the option, the daemon records the main checkout the way it
+records a worktree, so `tuios worktree ls` and the worktree verbs see it with the
+worktrees of the repository.
 
 ## Keep the files section shut by default
 

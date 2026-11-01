@@ -174,6 +174,20 @@ type Node struct {
 	// draw the tree glyph that closes the group. Set by GroupByRepo and
 	// meaningless anywhere else.
 	GroupLast bool
+	// GroupHead marks a main checkout's session that is also its repository's
+	// row: the group's other sessions hang off it. GroupCount is how many hang
+	// off it, and GroupState and GroupDoneSeen are the loudest state of the
+	// whole group, itself included, which the row shows while the group is
+	// folded. Set by GroupByRepoCompact and meaningless anywhere else.
+	GroupHead     bool
+	GroupCount    int
+	GroupState    string
+	GroupDoneSeen bool
+	// GroupCurrent says the attached session is in this repository's group,
+	// itself included. A folded group's row shows it, because the attached
+	// session's own row is hidden. Set on a KindRepo row by GroupByRepo and on a
+	// head by GroupByRepoCompact.
+	GroupCurrent bool
 	// Space is the space a session is filed under, empty for one in none. After
 	// GroupBySpace it is set on exactly the rows drawn under a space's heading,
 	// the heading and a repository's row inside the space included, and on no

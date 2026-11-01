@@ -949,12 +949,10 @@ type SidebarConfig struct {
 	// SubagentHideFinished hides a finished subagent's row this long after it
 	// ended: a duration, or off (default: off).
 	SubagentHideFinished string `toml:"subagent_hide_finished"`
-	// GroupMain gathers the repository's main checkout — the session whose
-	// directory is the repository itself, usually on main or master — under
-	// the repo row with its worktrees (default: false, the main checkout's
-	// sessions stay flat). With it on, the repo header's activation goes to
-	// the main checkout's session; the fold gesture moves to the header's
-	// right-click menu.
+	// GroupMain gives each repository a row of its own, with its main checkout
+	// (the session whose directory is the repository itself, usually on main or
+	// master) under that row with the worktrees. By default the main checkout's
+	// row is the repository's row and the worktrees hang off it (default: false).
 	GroupMain *bool `toml:"group_main"`
 	// Custom is the [appearance.sidebar.custom] table: the command whose
 	// output the custom section draws, its heading, and when it runs. Read

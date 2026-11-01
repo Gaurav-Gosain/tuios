@@ -1295,8 +1295,7 @@ func handleNewWorktree(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 }
 
 // handleRepoToggleFold folds or opens the repository's group the menu was
-// opened on: the fold gesture a repo header's activation gives up when
-// group_main points the header at the main checkout's session.
+// opened on.
 func handleRepoToggleFold(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	o.SidebarToggleRepoCollapsed(o.TakeMenuRepo())
 	return o, nil

@@ -991,7 +991,7 @@ var optionSpecs = []Option{
 	},
 	{
 		Path: "appearance.sidebar.group_main", Type: OptionBool, Section: "sidebar",
-		Description: "Gather the repository's main checkout under the repo row with its worktrees. The repo header then opens the main checkout's session",
+		Description: "Give each repository a row of its own, with the main checkout under it. When off, the main checkout's row is the repository's row",
 		Default:     "false",
 	},
 	{

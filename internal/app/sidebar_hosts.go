@@ -876,9 +876,9 @@ func (m *OS) createRemoteSession(host string) {
 // the order SwitchToSessionByIndex reads, so a row's label and its key agree;
 // a folded repository's sessions keep their numbers though their rows are
 // hidden. Remote sessions are absent: no number on this machine reaches them.
-func localSessionIndexes(nodes []sessiontree.Node) map[string]int {
+func (m *OS) localSessionIndexes(nodes []sessiontree.Node) map[string]int {
 	indexes := make(map[string]int, len(nodes))
-	for i, s := range railSessionOrder(nodes) {
+	for i, s := range m.railSessionOrder(nodes) {
 		indexes[s.ID] = i + 1
 	}
 	return indexes

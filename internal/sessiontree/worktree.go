@@ -1,5 +1,7 @@
 package sessiontree
 
+import "slices"
+
 // A worktree session is a session whose directory is a linked git worktree.
 // The daemon records which repository and which branch, and the surfaces group
 // those sessions under a row for their repository instead of listing them flat.
@@ -32,7 +34,6 @@ type WorktreeRef struct {
 	// Main says the session sits in the repository's main checkout, the
 	// directory holding the shared .git, rather than in a worktree split off
 	// it. Its repo row points here: activating the header opens this session.
-	// Hidden entirely when the rail's group_main is off.
 	Main bool
 	// PR is the short form of the branch's pull request ("PR #12 open
 	// pass"), empty when there is none. The agent rows of the session draw
@@ -112,6 +113,76 @@ func GroupByRepo(nodes []Node) []Node {
 	return out
 }
 
+// GroupByRepoCompact is GroupByRepo without the line a repository's own row
+// costs when a session can stand in for it: the first session in the main
+// checkout becomes the repository's row, and the group's other sessions follow
+// it. The result has a KindRepo row only for a repository with no main checkout
+// session in nodes, because there is nothing to attach that row to.
+//
+// A repository whose only session is its main checkout is a plain session, so
+// it loses its record on the returned row. Selecting and numbering read the
+// session's name and neither looks at the record.
+func GroupByRepoCompact(nodes []Node) []Node {
+	// The rail draws this list on every rebuild of a frame, and a Node is large,
+	// so the rows GroupByRepo allocated are rewritten in place. A group only ever
+	// loses rows here, so the write position never passes the read position. With
+	// no group GroupByRepo hands back the caller's slice, and nothing is written.
+	rows := GroupByRepo(nodes)
+	w := 0
+	for i := 0; i < len(rows); {
+		if rows[i].Kind != KindRepo {
+			if w != i {
+				rows[w] = rows[i]
+			}
+			w++
+			i++
+			continue
+		}
+		end := i + 1
+		for end < len(rows) && !rows[end-1].GroupLast {
+			end++
+		}
+		w = compactGroup(rows, w, i, end)
+		i = end
+	}
+	return rows[:w]
+}
+
+// compactGroup rewrites one repository's rows, rows[repo:end] with its KindRepo
+// row first, at rows[w:], and returns the position after them. The first main
+// checkout session is pulled up as the head.
+func compactGroup(rows []Node, w, repo, end int) int {
+	members := rows[repo+1 : end]
+	head := slices.IndexFunc(members, func(n Node) bool { return n.Worktree.Main })
+	if head < 0 {
+		return w + copy(rows[w:], rows[repo:end])
+	}
+	lead := members[head]
+	if len(members) == 1 {
+		lead.Worktree, lead.GroupLast = nil, false
+		rows[w] = lead
+		return w + 1
+	}
+	lead.GroupHead, lead.GroupLast = true, false
+	lead.GroupCount = len(members) - 1
+	state, doneSeen, current := rows[repo].AgentState, rows[repo].DoneSeen, rows[repo].GroupCurrent
+	lead.GroupState, lead.GroupDoneSeen, lead.GroupCurrent = state, doneSeen, current
+	if !lead.Named {
+		lead.Title = rows[repo].Title
+	}
+	rest := w + 1
+	// The rows before the head move first, then the rows after it, so neither
+	// overwrites a row still to be read. The lead was copied out above.
+	rest += copy(rows[rest:], members[:head])
+	rest += copy(rows[rest:], members[head+1:])
+	rows[w] = lead
+	rows[rest-1].GroupLast = true
+	if rest-2 > w {
+		rows[rest-2].GroupLast = false
+	}
+	return rest
+}
+
 // groupRepo is the repository a node is grouped under, or "" for a node that is
 // not grouped at all.
 func groupRepo(n Node) string {
@@ -139,6 +210,7 @@ func repoNode(repo string, members []Node) Node {
 		if r := AgentRank(m.AgentState, m.DoneSeen); r > best {
 			node.AgentState, node.DoneSeen, best = m.AgentState, m.DoneSeen, r
 		}
+		node.GroupCurrent = node.GroupCurrent || m.IsCurrent
 	}
 	return node
 }

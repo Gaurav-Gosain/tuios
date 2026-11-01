@@ -26,9 +26,9 @@ type WorktreeInfo struct {
 	worktree.Info
 	// Main says the record names the repository's main checkout — the
 	// directory holding the shared .git — which Detect alone does not report.
-	// A main-checkout record reaches the tree the same way a worktree's does,
-	// and every surface that has not opted into it (the rail's group_main)
-	// treats it as no record at all.
+	// A main-checkout record reaches the tree the same way a worktree's does.
+	// The surfaces that act on a worktree's directory, such as the delete rows,
+	// check this first: git refuses to remove a main checkout.
 	Main bool `json:"main,omitempty"`
 	// Base is the ref the branch was created from, when tuios created it.
 	Base string `json:"base,omitempty"`

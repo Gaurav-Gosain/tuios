@@ -141,7 +141,7 @@ var settingLabels = map[string]string{
 	"appearance.sidebar.file_drag":              "Drag a file into a pane",
 	"appearance.sidebar.files_style":            "Files style",
 	"appearance.sidebar.file_actions":           "File actions",
-	"appearance.sidebar.group_main":             "Main checkout in sessions tree",
+	"appearance.sidebar.group_main":             "Separate repository row",
 	"appearance.sidebar.file_delete":            "Delete sends to",
 	"appearance.sidebar.agent_rest_fold":        "Fold agents at rest after",
 	"appearance.sidebar.subagent_rows":          "Show subagents as",

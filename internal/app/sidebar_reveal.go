@@ -68,7 +68,8 @@ func (m *OS) sidebarRevealFocus(sessions, sessionRows []sessiontree.Node, termin
 // sidebarAttachedRow is the row in rows that the reveal scrolls to for the
 // attached session, or -1 for none. It is the session's own row when one is
 // drawn. A session in a folded group has none, so the row holding it stands in:
-// its repository's, or its machine's when the machine is folded too. The reveal
+// its repository's, which is the main checkout's row when the repository has
+// one, or its machine's when the machine is folded too. The reveal
 // leaves the fold alone. A person shut that group, and the row they shut it to
 // is where the session now is.
 func (m *OS) sidebarAttachedRow(sessions, rows []sessiontree.Node, attached string) int {
@@ -85,7 +86,7 @@ func (m *OS) sidebarAttachedRow(sessions, rows []sessiontree.Node, attached stri
 	node := sessions[at]
 	if node.Worktree != nil {
 		if i := slices.IndexFunc(rows, func(n sessiontree.Node) bool {
-			return n.Kind == sessiontree.KindRepo && n.ID == node.Worktree.Repo && n.Space == node.Space
+			return sidebarRepoOfRow(n) == node.Worktree.Repo && n.Space == node.Space
 		}); i >= 0 {
 			return i
 		}
