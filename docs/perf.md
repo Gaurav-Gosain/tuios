@@ -2397,6 +2397,21 @@ call sites, each with a copy of `lipgloss.Style`. It now carries
 `//go:noinline`. A helper that runs once per action, or that returns a large
 struct, should carry it too.
 
+`StateFingerprint` hashed through a closure that the compiler inlined at each of
+about 170 field calls. It now hashes through the method value `h.str` of a small
+`fpHash` type, which keeps one copy. Main at 856b4be2 (Go 1.27.3, release flags)
+measured 49,049,760 bytes on linux/amd64 and 45,529,074 on darwin/arm64, and the
+change measured 49,016,992 and 45,495,874, which is 32,768 and 33,200 bytes
+less. The fingerprint is the same value for the same state (150,000 random
+states compared with main's, all identical). A scratch benchmark of 12 windows
+over 3 workspaces with uuid-like ids, titles and cwds and 3 BSP trees of 7
+splits each, 8 runs each of main and the change alternated on one core, went
+from 20.59 us to 11.31 us (-45%, p<0.001), 4,400 to 762 B/op and 547 to 72
+allocs/op. This path runs on every keystroke and every broadcast, so the cut
+carries no `//go:noinline`: with it the size was the same and the hash slower.
+The binary-size job would show the bytes coming back if a future compiler
+inlined method values.
+
 A map literal of slices compiles to code that runs at every start. A map literal
 of arrays of constants compiles to data. `verbCapabilities` uses this form.
 

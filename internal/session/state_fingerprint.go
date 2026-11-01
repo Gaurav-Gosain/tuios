@@ -1,7 +1,6 @@
 package session
 
 import (
-	"hash/fnv"
 	"math"
 	"sort"
 	"strconv"
@@ -33,12 +32,8 @@ func StateFingerprint(s *SessionState) uint64 {
 	if s == nil {
 		return 0
 	}
-	h := fnv.New64a()
-
-	str := func(v string) {
-		_, _ = h.Write([]byte(v))
-		_, _ = h.Write([]byte{0})
-	}
+	h := newFPHash()
+	str := h.str
 	num := func(v int) { str(strconv.Itoa(v)) }
 	flag := func(v bool) {
 		if v {
@@ -285,7 +280,7 @@ func StateFingerprint(s *SessionState) uint64 {
 	num(len(s.WorkspaceTrees))
 	for _, k := range sortedIntKeys(s.WorkspaceTrees) {
 		num(k)
-		hashBSPNode(h, s.WorkspaceTrees[k])
+		hashBSPNode(&h, s.WorkspaceTrees[k])
 	}
 
 	num(len(s.WindowToBSPID))
@@ -340,16 +335,32 @@ func StateFingerprint(s *SessionState) uint64 {
 		num(s.PaneGeometry.ScrollColumnWidth)
 	}
 
-	return h.Sum64()
+	return uint64(h)
+}
+
+// fpHash is an FNV-1a 64 hash held in one word.
+type fpHash uint64
+
+func newFPHash() fpHash { return 14695981039346656037 }
+
+// str folds v and a zero byte in. Calls go through the method value h.str,
+// which keeps one out-of-line copy where the closure was inlined at every
+// field. Calling h.str(...) directly at each site measured 8,192 bytes more on
+// linux/amd64 and the same size on darwin/arm64.
+func (h *fpHash) str(v string) {
+	x := uint64(*h)
+	for i := 0; i < len(v); i++ {
+		x ^= uint64(v[i])
+		x *= 1099511628211
+	}
+	x *= 1099511628211
+	*h = fpHash(x)
 }
 
 // hashBSPNode folds a serialized tree in, shape and all. A nil tree and an
 // empty one are distinguished, because they mean different things to a peer.
-func hashBSPNode(h interface{ Write([]byte) (int, error) }, t *SerializedBSPTree) {
-	write := func(v string) {
-		_, _ = h.Write([]byte(v))
-		_, _ = h.Write([]byte{0})
-	}
+func hashBSPNode(h *fpHash, t *SerializedBSPTree) {
+	write := h.str
 	if t == nil {
 		write("nil-tree")
 		return
