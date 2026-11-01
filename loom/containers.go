@@ -112,6 +112,38 @@ func holdsFocus(s *Surface, b *box) bool {
 	return false
 }
 
+// markFocusCards repaints the cards the focus left or entered. A card draws
+// its title from the focus, and a focus move marks only the boxes it moved
+// between, which sit inside the card. Whatever moved it (tab, a click, a
+// patch that took the focused box away) comes through here. A repaint is
+// enough: nothing a card evaluates reads the focus, so its subtree is not
+// built again.
+func (s *Surface) markFocusCards() {
+	key := ""
+	if f := s.focused(); f != nil {
+		key = f.key
+	}
+	if key == s.litFocus {
+		return
+	}
+	old := s.litFocus
+	s.litFocus = key
+	var walk func(b *box) bool
+	walk = func(b *box) bool {
+		holds := b.key != "" && (b.key == key || b.key == old)
+		for _, k := range b.kids {
+			if walk(k) {
+				holds = true
+			}
+		}
+		if _, ok := b.w.(*cardWidget); ok && holds {
+			b.dirty = true
+		}
+		return holds
+	}
+	walk(s.root)
+}
+
 // frame draws a rounded border on r with a title on the top edge and a
 // label at the right of it, the frame a host puts around a popup.
 func (s *Surface) frame(c *canvas, r Rect, title, right, edge string) {

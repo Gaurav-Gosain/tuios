@@ -330,6 +330,48 @@ func TestFocusCycle(t *testing.T) {
 	sameAsFresh(t, s, 20, 6)
 }
 
+// TestFocusAccentMoves is about the frame after the focus moves: the surface
+// keeps its buffer between frames, so the card that paints the accent must
+// repaint although its own view state did not change.
+func TestFocusAccentMoves(t *testing.T) {
+	const w, h = 40, 14
+	s := mustSurface(t, `<tml version="1"><state>{"a": [{"t": "x"}], "b": [{"t": "y"}], "hide": false}</state><col>
+  <card title="One"><table id="ta" rows="state.a" select="single" on-select="emit('a')"><column field="t"/></table></card>
+  <card title="Two"><col><text>two</text><table id="tb" if="!state.hide" rows="state.b" select="single" on-select="emit('b')"><column field="t"/></table></col></card>
+  <row><card title="Three"><card title="Inner"><button id="ok" on-press="emit('ok')">OK</button></card></card></row>
+</col></tml>`)
+	buf := s.Render(w, h)
+	sameAsFresh(t, s, w, h)
+	for _, step := range []string{"tab", "tab", "tab", "shift+tab"} {
+		if _, err := s.Key(step); err != nil {
+			t.Fatal(err)
+		}
+		buf = s.Render(w, h)
+		if s.stats.built > 2 {
+			t.Errorf("%s built %d boxes: a focus move only repaints the cards", step, s.stats.built)
+		}
+		sameAsFresh(t, s, w, h)
+	}
+	// A click moves the focus too.
+	if _, err := s.Mouse(Mouse{X: 4, Y: rowWith(buf, "OK"), Button: MouseLeft}); err != nil {
+		t.Fatal(err)
+	}
+	s.Render(w, h)
+	sameAsFresh(t, s, w, h)
+	// A patch that takes the focused box away takes the accent with it.
+	for s.Focus() != "tb" {
+		if _, err := s.Key("tab"); err != nil {
+			t.Fatal(err)
+		}
+		s.Render(w, h)
+	}
+	if err := s.Set("state.hide", true); err != nil {
+		t.Fatal(err)
+	}
+	s.Render(w, h)
+	sameAsFresh(t, s, w, h)
+}
+
 // TestControlCharsDropped draws a tree built in code, so tml.Sanitize never
 // saw it: no C0 or C1 control character or DEL may reach a cell, since a
 // cell's text goes to the terminal as is.

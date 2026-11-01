@@ -93,6 +93,8 @@ type Surface struct {
 	// focused box into view. A wheel scroll leaves it, so the person can
 	// look away from the focus.
 	focusMoved bool
+	// litFocus is the key of the box the cards last drew the focus for.
+	litFocus string
 	// relayout says the page scrolled: the next Render places and paints
 	// again, with no binding evaluated.
 	relayout bool
@@ -375,6 +377,7 @@ func (s *Surface) Render(w, h int) *Buffer {
 
 	s.layoutRoot()
 	s.focusMoved, s.reveal = false, false
+	s.markFocusCards()
 	if s.links == nil || s.full {
 		s.links = map[image.Point]string{}
 	}
