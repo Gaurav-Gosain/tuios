@@ -445,6 +445,31 @@ func TestCardFocus(t *testing.T) {
 	sameAsFresh(t, s, w, h)
 }
 
+// TestMapCellAspect holds the map to its true shape on any cell, 2.5 times as
+// wide as it is tall, both in the box the layout gives it and in what it draws.
+// The text under it shows the layout measured the same rows the map drew.
+func TestMapCellAspect(t *testing.T) {
+	const w = 80
+	for _, c := range []struct {
+		aspect float64
+		rows   int
+	}{{1, 32}, {2, 16}, {19.0 / 8, 14}, {4, 8}} {
+		doc, problems, err := tml.Check([]byte(`<tml version="1"><state>{"r": [{"c": "US", "v": 1}]}</state><col>
+  <map data="state.r" x="c" y="v"/><text>after</text><spacer/>
+</col></tml>`), nil)
+		if err != nil {
+			t.Fatalf("%v %v", err, problems)
+		}
+		s, err := New(doc, &Options{CellAspect: c.aspect})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := rowWith(s.Render(w, 50), "after") - 1; got != c.rows {
+			t.Errorf("aspect %v: the map takes %d rows, want %d", c.aspect, got, c.rows)
+		}
+	}
+}
+
 // TestControlCharsDropped draws a tree built in code, so tml.Sanitize never
 // saw it: no C0 or C1 control character or DEL may reach a cell, since a
 // cell's text goes to the terminal as is.

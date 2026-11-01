@@ -253,6 +253,16 @@ func labels(rows []any, field string) []string {
 	return out
 }
 
+// world returns the plot map a map chart draws, on the client's cell shape.
+func (w *chartWidget) world(s *Surface) plot.Map {
+	mp := plot.Map{Values: w.codes, Log: w.logv, Aspect: s.opts.CellAspect}
+	if w.unit != "" {
+		unit := w.unit
+		mp.Format = func(v float64) string { return unit + plot.Compact(v) }
+	}
+	return mp
+}
+
 func (w *chartWidget) titleRows() int {
 	if w.title != "" {
 		return 1
@@ -269,7 +279,7 @@ func (w *chartWidget) measure(s *Surface, _ *box, maxW int) (int, int) {
 		// A map keeps its true shape, so its height follows from the width. One
 		// more row goes to the legend under it. A map is always wider than it
 		// is tall, so the width is a safe bound on the height.
-		_, rows := plot.Map{Values: w.codes}.Fit(maxW, maxW, s.mode)
+		_, rows := w.world(s).Fit(maxW, maxW, s.mode)
 		return maxW, rows + w.titleRows() + 1
 	case "sparkline":
 		if w.title != "" && w.height == 1 {
@@ -383,11 +393,7 @@ func (w *chartWidget) paint(s *Surface, _ *box, c *canvas, r Rect) {
 		if room < 1 {
 			room = 1
 		}
-		world := plot.Map{Values: w.codes, Log: w.logv}
-		if w.unit != "" {
-			unit := w.unit
-			world.Format = func(v float64) string { return unit + plot.Compact(v) }
-		}
+		world := w.world(s)
 		_, mh := world.Fit(r.Dx(), room, s.mode)
 		if mh > room {
 			mh = room
