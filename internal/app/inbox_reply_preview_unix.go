@@ -2,6 +2,8 @@
 
 package app
 
+import "fmt"
+
 // The kitty half of the reply previews: put each picture on the host after
 // the frame that reserved its cells, and take down the ones no frame shows.
 // It follows flushLauncherIcons: a picture is uploaded once per image and
@@ -19,7 +21,8 @@ func (m *OS) replyPixelsReady() bool {
 
 // flushReplyPreviewForFrame draws the open draft's pictures for the frame
 // just rendered, in the Inbox or the mailbox. With no draft open, or one with
-// no picture, and nothing on the host, it returns at once.
+// no picture, nothing on the host and no picture waiting to be freed, it
+// returns at once.
 func (m *OS) flushReplyPreviewForFrame() {
 	p := m.replyPreview
 	var want []previewPlacement
@@ -42,10 +45,14 @@ func (m *OS) flushReplyPreviewForFrame() {
 	if pl, ok := m.quickLookPlacement(); ok && m.replyPixelsReady() {
 		want = append(want, pl)
 	}
-	if p == nil || (len(want) == 0 && len(p.shown) == 0) {
+	if p == nil {
 		return
 	}
 	p.mu.Lock()
+	if len(want) == 0 && len(p.shown) == 0 && len(p.gone) == 0 {
+		p.mu.Unlock()
+		return
+	}
 	var buf []byte
 	next := make(map[previewID]previewPlacement, len(want))
 	for i, pl := range want {
@@ -74,6 +81,11 @@ func (m *OS) flushReplyPreviewForFrame() {
 			buf = appendKittyUnplace(buf, at.img, at.placement)
 		}
 	}
+	// An uppercase delete frees the image data; the unplace above keeps it.
+	for _, id := range p.gone {
+		buf = fmt.Appendf(buf, "\x1b_Ga=d,d=I,i=%d,q=2\x1b\\", id)
+	}
+	p.gone = p.gone[:0]
 	p.shown = next
 	p.mu.Unlock()
 	if len(buf) == 0 {

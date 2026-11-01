@@ -11092,6 +11092,18 @@ under `TUIOS_E2E_FRAMES`.
 | The same cut, with the "on build" wait passed by a comment in the file that held those words (an earlier draft of the test) | `TestQuickLookOnAFarFile`: "the far machine did not judge the file with two names", linked.txt read locally | **caught** |
 | `quickLookCellsKey` keeps the panes' glyph set (quadrants) | `TestRailQuickLook`: "the picture has 7 quadrant glyphs; the preview draws half blocks" | **caught** |
 | `quickLookPlacement` answers false | `TestRailQuickLookKittyPicture`: "no kitty placement of the picture at its own size was sent" | **caught** |
+
+### Quick look frees the pictures it leaves
+
+`TestQuickLookFreesThePicturesItLeaves` writes 80 small pictures, `p-00.png` to `p-79.png`, into the quick look folder and walks quick look over them one row at a time on a host with kitty graphics, waiting at each row for the new picture's placement. It counts the ids in the previews' range (0xF2000000 and up) that were uploaded and those freed with the uppercase delete, `a=d,d=I`. At most 64 may be left. The picture on screen must not be freed and its last placement must stand, and no id may be freed twice. The ids are written to `preview-ids.txt` in the test's artifact folder.
+
+Run on 2026-11-01 on Linux. The control is a build of `856b4be28`, which unplaces a picture that leaves the screen and keeps it uploaded. It fails, and its log shows the picture on screen placed and nothing freed twice:
+
+| Control: what was cut | Where it fails | Verdict |
+| --- | --- | --- |
+| Freeing an evicted picture on the host (the build of `856b4be28`) | "80 pictures are still in the terminal after quick look showed 80, want at most 64" (80 uploaded, 0 freed, 80 live) | **caught** |
+
+Repeat from `e2e/tui` with `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestQuickLookFreesThePicturesItLeaves$' -v .`.
 ## Long-running commands write --cpuprofile
 
 `TestCPUProfileWrittenByLongRunningCommands` starts each command that keeps

@@ -91,6 +91,8 @@ type replyPreview struct {
 	// hostID is the kitty image id a picture was uploaded under, and shown
 	// what is placed on the host now. See inbox_reply_preview_unix.go.
 	hostID map[previewKey]uint32
+	// gone is the kitty ids of evicted pictures, freed at the next flush.
+	gone   []uint32
 	nextID uint32
 	shown  map[previewID]previewPlacement
 
@@ -270,6 +272,10 @@ func (m *OS) applyReplyPreview(msg replyPreviewMsg) {
 		p.order = p.order[1:]
 		delete(p.pics, old)
 		delete(p.asked, old)
+		if id, up := p.hostID[old]; up {
+			delete(p.hostID, old)
+			p.gone = append(p.gone, id)
+		}
 	}
 	p.version++
 }

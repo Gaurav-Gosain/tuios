@@ -1598,6 +1598,152 @@ func TestRailQuickLookKittyPicture(t *testing.T) {
 	alive(t, term, "after the kitty picture")
 }
 
+// Kitty commands for the pictures the previews send: an upload, a free (the
+// uppercase delete, which drops the image data) and an unplace (the lowercase
+// one, which keeps it).
+var (
+	kittyUploadRe = regexp.MustCompile(`\x1b_Ga=t,(?:[^;,]*,)*?i=(\d+)[,;]`)
+	kittyFreeRe   = regexp.MustCompile(`\x1b_Ga=d,d=I,i=(\d+)[,;]`)
+)
+
+// previewIDs is every id in the stream matched by re, within the range of
+// ids tuios gives its preview pictures, in order of first use, with the
+// number of times each was matched.
+func previewIDs(re *regexp.Regexp, stream string) ([]uint64, map[uint64]int) {
+	var order []uint64
+	n := map[uint64]int{}
+	for _, m := range re.FindAllStringSubmatch(stream, -1) {
+		id, err := strconv.ParseUint(m[1], 10, 32)
+		if err != nil || id < 0xF200_0000 || id >= 0xF300_0000 {
+			continue
+		}
+		if n[id] == 0 {
+			order = append(order, id)
+		}
+		n[id]++
+	}
+	return order, n
+}
+
+// TestQuickLookFreesThePicturesItLeaves walks quick look through a folder of
+// 80 pictures on a host with kitty graphics. Each picture is uploaded once,
+// and the previewer keeps 64. A picture it forgets must be freed on the host
+// too, or every picture ever shown stays in the terminal's image memory, up
+// to the terminal's own quota, which the panes' images share. The picture on
+// screen must stay, and a picture is freed once.
+//
+// NEGATIVE CONTROL: see NEGATIVE_CONTROLS.md. A build that keeps every
+// uploaded id fails with 80 pictures live.
+func TestQuickLookFreesThePicturesItLeaves(t *testing.T) {
+	const pictures, kept = 80, 64
+	out := &lockedBuffer{}
+	term, dir := quickLookListed(t, nil, out)
+	// '-' sorts before 'i': the pictures list between notes.md and pic.png.
+	for i := range pictures {
+		img := image.NewRGBA(image.Rect(0, 0, 24, 12))
+		c := color.RGBA{uint8(i * 3), uint8(255 - i*3), uint8(i * 7), 255}
+		for y := range 12 {
+			for x := range 24 {
+				img.Set(x, y, c)
+			}
+		}
+		var b bytes.Buffer
+		if err := png.Encode(&b, img); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, fmt.Sprintf("p-%02d.png", i)), b.Bytes(), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	waitForAll(t, term, uiTimeout, "the pictures in the listing", "p-00.png")
+	quickLookFocusRail(t, term, "p-00.png")
+
+	// One row at a time, each step waiting for the new picture's placement.
+	shown := make([]uint64, 0, pictures)
+	off := 0
+	for i := range pictures {
+		if i == 0 {
+			sendKeys(t, term, " ")
+		} else {
+			sendKeys(t, term, "j")
+		}
+		deadline := time.Now().Add(uiTimeout)
+		for len(shown) == i {
+			s := out.String()
+			for _, loc := range kittyPlaceRe.FindAllStringSubmatchIndex(s[off:], -1) {
+				id, err := strconv.ParseUint(s[off+loc[2]:off+loc[3]], 10, 32)
+				if err != nil || id < 0xF200_0000 || id >= 0xF300_0000 || slices.Contains(shown, id) {
+					continue
+				}
+				shown = append(shown, id)
+				off += loc[1]
+				break
+			}
+			if len(shown) == i {
+				if time.Now().After(deadline) {
+					t.Fatalf("no placement of a new picture at p-%02d.png\n%s", i, term.Snapshot())
+				}
+				time.Sleep(50 * time.Millisecond)
+			}
+		}
+	}
+	railLists(t, term, "the walk did not end on p-79.png", []string{"p-79.png", "24 x 12"}, []string{"64 x 32"})
+
+	// The frees for the last pictures forgotten go out with the frame that
+	// shows the next picture; give that frame a moment to land.
+	var stream string
+	var sent, freed []uint64
+	var frees map[uint64]int
+	deadline := time.Now().Add(2 * time.Second)
+	for {
+		stream = out.String()
+		sent, _ = previewIDs(kittyUploadRe, stream)
+		freed, frees = previewIDs(kittyFreeRe, stream)
+		if len(sent)-len(freed) <= kept || time.Now().After(deadline) {
+			break
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	live := len(sent) - len(freed)
+
+	art := artifactDir(t)
+	report := fmt.Sprintf("uploaded %d: %v\nfreed %d: %v\nlive %d\n", len(sent), sent, len(freed), freed, live)
+	if err := os.WriteFile(filepath.Join(art, "preview-ids.txt"), []byte(report), 0o644); err != nil {
+		t.Errorf("save the ids: %v", err)
+	}
+	t.Logf("after %d pictures: %d uploaded, %d freed, %d live", pictures, len(sent), len(freed), live)
+
+	if live > kept {
+		t.Errorf("ASSERTION: %d pictures are still in the terminal after quick look showed %d, want at most %d", live, pictures, kept)
+	}
+
+	// The picture on screen is not freed, and its last placement stands.
+	cur := strconv.FormatUint(shown[len(shown)-1], 10)
+	place := strings.LastIndex(stream, "\x1b_Ga=p,i="+cur+",")
+	unplace := strings.LastIndex(stream, "\x1b_Ga=d,d=i,i="+cur+",")
+	switch {
+	case frees[shown[len(shown)-1]] > 0:
+		t.Errorf("ASSERTION: the picture on screen (id %s) was freed", cur)
+	case place < 0 || unplace > place:
+		t.Errorf("ASSERTION: the picture on screen (id %s) is not placed: last placement at %d, last unplace at %d", cur, place, unplace)
+	default:
+		t.Logf("the picture on screen (id %s) is placed and not freed", cur)
+	}
+
+	// Each freed picture is freed once.
+	again := 0
+	for _, id := range freed {
+		if frees[id] > 1 {
+			again++
+			t.Errorf("ASSERTION: picture %d was freed %d times", id, frees[id])
+		}
+	}
+	if again == 0 {
+		t.Logf("no picture was freed more than once (%d freed)", len(freed))
+	}
+	alive(t, term, "after the walk")
+}
+
 // clickNoteGone waits out the note a click on a file row leaves: the click
 // copies the row's path. The frames start clean, and a note seen after
 // that comes from the key under test, not from the click.
