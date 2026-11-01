@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"runtime"
 	"sort"
 	"strings"
 
@@ -511,9 +512,18 @@ func checkTerminalSize(fd int) error {
 // movement and styling the renderer needs. Only "dumb" and an unset TERM are
 // genuinely unusable; everything else is allowed through, because guessing at
 // terminfo coverage would reject working terminals.
+//
+// An unset TERM says nothing on Windows: Windows Terminal and conhost never set
+// it. Whether the console takes escape sequences is settled when Bubble Tea
+// asks for ENABLE_VIRTUAL_TERMINAL_PROCESSING, and it returns an error if the
+// console refuses, so asking here too would add a second check of the same
+// thing. A TERM set to "dumb" is still somebody's explicit answer.
 func checkTerminalCapabilities(termEnv string) error {
 	switch termEnv {
 	case "":
+		if runtime.GOOS == "windows" {
+			return nil
+		}
 		return &diagnosticError{
 			What:  "TERM is not set, so TUIOS cannot tell what the terminal can render.",
 			Cause: "the shell was started without a terminal type, which happens over bare ssh commands, in some CI runners, and inside minimal containers.",
