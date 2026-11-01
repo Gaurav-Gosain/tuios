@@ -1,0 +1,167 @@
+=== truecolor 44x16
+|Median $/GPU/hr                            ┃|
+|⣀⣀⣤⣤⣤⣠⣴⣶⣶⣾⣿⣿⣿⣟⡛⣿⣿⡿⠿⠃   ⣂⣀⣀⣀⣀⣄⣠⣤⣤⣼⣶⣶⣤⣤⣤⣤⣤⣀⣀⣀┃|
+|⠤⠽⠛⠋⠙⠻⢿⣿⣿⣿⣿⣿⣿⣿⣶⡈⠁   ⠰⣧⣽⣯⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣏⠉⠟⠉⠍┃|
+|      ⠘⠿⣿⣿⣿⢿⠟⠉      ⣸⣿⣾⣍⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⠙⠷⠋    ┃|
+|  ⠘      ⠙⠒⠄⣠⣀⡀    ⠸⣿⣿⣿⣿⣿⣿⣿⡟⠁⠈⢿⠟⠩⠿⠏⠁⡄      ┃|
+|            ⣿⣿⣿⣿⣶⡆    ⠘⣿⣿⣿⡏      ⠙⠸⠓⣀⣒⣦⠄   ┃|
+|             ⣿⣿⣿⠛      ⢻⣿⡟⠐⠃       ⣾⣿⣿⣿⣷   ┃|
+|            ⢸⡟⠁                      ⠈⠙⠃  ⠂┃|
+|                                           ┃|
+|            ■■■■■ $0.088 … ≥ $2            ┃|
+|                                           ┃|
+|⣀⣀⣤⣤⣤⣠⣴⣶⣶⣾⣿⣿⣿⣟⡛⣿⣿⡿⠿⠃   ⣂⣀⣀⣀⣀⣄⣠⣤⣤⣼⣶⣶⣤⣤⣤⣤⣤⣀⣀⣀┃|
+|⠤⠽⠛⠋⠙⠻⢿⣿⣿⣿⣿⣿⣿⣿⣶⡈⠁   ⠰⣧⣽⣯⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣏⠉⠟⠉⠍│|
+|      ⠘⠿⣿⣿⣿⢿⠟⠉      ⣸⣿⣾⣍⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⠙⠷⠋    │|
+|  ⠘      ⠙⠒⠄⣠⣀⡀    ⠸⣿⣿⣿⣿⣿⣿⣿⡟⠁⠈⢿⠟⠩⠿⠏⠁⡄      │|
+|            ⣿⣿⣿⣿⣶⡆    ⠘⣿⣿⣿⡏      ⠙⠸⠓⣀⣒⣦⠄   │|
+--- styles
+|aaaaaabaaaaaaaaccccccccccccccccccccccccccccd|
+|effffggggggggggeeeeeccceeeeeeeeeeeeeeeeeeeed|
+|ffffffffffffffggeccchhffeeeeeeeeeeeeeefeeefd|
+|ccccccffffffffcccccceeeeeeeeeiiiiieeeffccccd|
+|ccfcccccceeeeeecccceeeeeeeeeeiiiieeeeccccccd|
+|cccccccccccciiiiiicccceeeeeccccccjeehhhecccd|
+|ccccccccccccceiiiccccccjjjeeccccccchhhhhcccd|
+|cccccccccccceeecccccccccccccccccccccchhhcced|
+|cccccccccccccccccccccccccccccccccccccccccccd|
+|ccccccccccccgfjihckkkkkkckckckkccccccccccccd|
+|cccccccccccccccccccccccccccccccccccccccccccd|
+|eggggggggggggggeeeeeccceeeeeeeeeeeeeeeeeeeed|
+|ggggggggggggggggeccchhggeeeeeeeeeeeeeegeeegk|
+|ccccccggggggggcccccceeeeeeeeefffffeeeggcccck|
+|ccgcccccceeeeeecccceeeeeeeeeeffffeeeecccccck|
+|ccccccccccccffffffcccceeeeeccccccgeehhheccck|
+a: fg=dim bg=panel bold
+b: bg=panel bold
+c: bg=panel
+d: fg=dim bg=panel
+e: fg=track bg=panel
+f: fg=heat2 bg=panel
+g: fg=heat1 bg=panel
+h: fg=accent-bright bg=panel
+i: fg=heat4 bg=panel
+j: fg=info bg=panel
+k: fg=mute bg=panel
+=== 256 44x16
+|Median $/GPU/hr                            ┃|
+|⣀⣀⣤⣤⣤⣠⣴⣶⣶⣾⣿⣿⣿⣟⡛⣿⣿⡿⠿⠃   ⣂⣀⣀⣀⣀⣄⣠⣤⣤⣼⣶⣶⣤⣤⣤⣤⣤⣀⣀⣀┃|
+|⠤⠽⠛⠋⠙⠻⢿⣿⣿⣿⣿⣿⣿⣿⣶⡈⠁   ⠰⣧⣽⣯⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣏⠉⠟⠉⠍┃|
+|      ⠘⠿⣿⣿⣿⢿⠟⠉      ⣸⣿⣾⣍⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⠙⠷⠋    ┃|
+|  ⠘      ⠙⠒⠄⣠⣀⡀    ⠸⣿⣿⣿⣿⣿⣿⣿⡟⠁⠈⢿⠟⠩⠿⠏⠁⡄      ┃|
+|            ⣿⣿⣿⣿⣶⡆    ⠘⣿⣿⣿⡏      ⠙⠸⠓⣀⣒⣦⠄   ┃|
+|             ⣿⣿⣿⠛      ⢻⣿⡟⠐⠃       ⣾⣿⣿⣿⣷   ┃|
+|            ⢸⡟⠁                      ⠈⠙⠃  ⠂┃|
+|                                           ┃|
+|            ■■■■■ $0.088 … ≥ $2            ┃|
+|                                           ┃|
+|⣀⣀⣤⣤⣤⣠⣴⣶⣶⣾⣿⣿⣿⣟⡛⣿⣿⡿⠿⠃   ⣂⣀⣀⣀⣀⣄⣠⣤⣤⣼⣶⣶⣤⣤⣤⣤⣤⣀⣀⣀┃|
+|⠤⠽⠛⠋⠙⠻⢿⣿⣿⣿⣿⣿⣿⣿⣶⡈⠁   ⠰⣧⣽⣯⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣏⠉⠟⠉⠍│|
+|      ⠘⠿⣿⣿⣿⢿⠟⠉      ⣸⣿⣾⣍⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⠙⠷⠋    │|
+|  ⠘      ⠙⠒⠄⣠⣀⡀    ⠸⣿⣿⣿⣿⣿⣿⣿⡟⠁⠈⢿⠟⠩⠿⠏⠁⡄      │|
+|            ⣿⣿⣿⣿⣶⡆    ⠘⣿⣿⣿⡏      ⠙⠸⠓⣀⣒⣦⠄   │|
+--- styles
+|aaaaaabaaaaaaaaccccccccccccccccccccccccccccd|
+|effffeeeeeeeeeeeeeeeccceeeeeeeeeeeeeeeeeeeed|
+|ffffffffffffffeeecccggffeeeeeeeeeeeeeefeeefd|
+|ccccccffffffffcccccceeeeeeeeehhhhheeeffccccd|
+|ccfcccccceeeeeecccceeeeeeeeeehhhheeeeccccccd|
+|cccccccccccchhhhhhcccceeeeeccccccieegggecccd|
+|cccccccccccccehhhcccccciiieecccccccgggggcccd|
+|cccccccccccceeeccccccccccccccccccccccgggcced|
+|cccccccccccccccccccccccccccccccccccccccccccd|
+|ccccccccccccefihgcjjjjjjcjcjcjjccccccccccccd|
+|cccccccccccccccccccccccccccccccccccccccccccd|
+|eeeeeeeeeeeeeeeeeeeeccceeeeeeeeeeeeeeeeeeeed|
+|eeeeeeeeeeeeeeeeecccggeeeeeeeeeeeeeeeeeeeeej|
+|cccccceeeeeeeecccccceeeeeeeeefffffeeeeeccccj|
+|ccecccccceeeeeecccceeeeeeeeeeffffeeeeccccccj|
+|ccccccccccccffffffcccceeeeecccccceeegggecccj|
+a: fg=dim bg=panel bold
+b: bg=panel bold
+c: bg=panel
+d: fg=dim bg=panel
+e: fg=success-tint bg=panel
+f: fg=accent-tint bg=panel
+g: fg=accent-bright bg=panel
+h: fg=heat4 bg=panel
+i: fg=info bg=panel
+j: fg=mute bg=panel
+=== 16 44x16
+|Median $/GPU/hr                            ┃|
+|⣀⣀⣤⣤⣤⣠⣴⣶⣶⣾⣿⣿⣿⣟⡛⣿⣿⡿⠿⠃   ⣂⣀⣀⣀⣀⣄⣠⣤⣤⣼⣶⣶⣤⣤⣤⣤⣤⣀⣀⣀┃|
+|⠤⠽⠛⠋⠙⠻⢿⣿⣿⣿⣿⣿⣿⣿⣶⡈⠁   ⠰⣧⣽⣯⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣏⠉⠟⠉⠍┃|
+|      ⠘⠿⣿⣿⣿⢿⠟⠉      ⣸⣿⣾⣍⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⠙⠷⠋    ┃|
+|  ⠘      ⠙⠒⠄⣠⣀⡀    ⠸⣿⣿⣿⣿⣿⣿⣿⡟⠁⠈⢿⠟⠩⠿⠏⠁⡄      ┃|
+|            ⣿⣿⣿⣿⣶⡆    ⠘⣿⣿⣿⡏      ⠙⠸⠓⣀⣒⣦⠄   ┃|
+|             ⣿⣿⣿⠛      ⢻⣿⡟⠐⠃       ⣾⣿⣿⣿⣷   ┃|
+|            ⢸⡟⠁                      ⠈⠙⠃  ⠂┃|
+|                                           ┃|
+|            ■■■■■ $0.088 … ≥ $2            ┃|
+|                                           ┃|
+|⣀⣀⣤⣤⣤⣠⣴⣶⣶⣾⣿⣿⣿⣟⡛⣿⣿⡿⠿⠃   ⣂⣀⣀⣀⣀⣄⣠⣤⣤⣼⣶⣶⣤⣤⣤⣤⣤⣀⣀⣀┃|
+|⠤⠽⠛⠋⠙⠻⢿⣿⣿⣿⣿⣿⣿⣿⣶⡈⠁   ⠰⣧⣽⣯⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣏⠉⠟⠉⠍│|
+|      ⠘⠿⣿⣿⣿⢿⠟⠉      ⣸⣿⣾⣍⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⠙⠷⠋    │|
+|  ⠘      ⠙⠒⠄⣠⣀⡀    ⠸⣿⣿⣿⣿⣿⣿⣿⡟⠁⠈⢿⠟⠩⠿⠏⠁⡄      │|
+|            ⣿⣿⣿⣿⣶⡆    ⠘⣿⣿⣿⡏      ⠙⠸⠓⣀⣒⣦⠄   │|
+--- styles
+|aaaaaabaaaaaaaa                            c|
+|deeeeffffffffffddddd   ddddddddddddddddddddc|
+|eeeeeeeeeeeeeeffd   ggeeddddddddddddddedddec|
+|      eeeeeeee      dddddddddhhhhhdddee    c|
+|  e      dddddd    ddddddddddhhhhdddd      c|
+|            hhhhhh    ddddd      iddgggd   c|
+|             dhhh      iiidd       ggggg   c|
+|            ddd                      ggg  dc|
+|                                           c|
+|            feihg dddddd d d dd            c|
+|                                           c|
+|dffffffffffffffddddd   ddddddddddddddddddddc|
+|ffffffffffffffffd   ggffddddddddddddddfdddfd|
+|      ffffffff      dddddddddeeeeedddff    d|
+|  f      dddddd    ddddddddddeeeedddd      d|
+|            eeeeee    ddddd      fddgggd   d|
+a: fg=dim bold
+b: bold
+c: fg=dim
+d: fg=mute
+e: fg=info
+f: fg=heat1
+g: fg=accent-bright
+h: fg=accent
+i: fg=heat3
+=== ascii 44x16
+|Median $/GPU/hr                            #|
+| ++++**********....    ..   .............  #|
+|++++++++++++++**    %%++..............+ . +#|
+|      ++++++++      .........xxxxx.. ++    #|
+|  +         .xxx    ........ xxxx.         #|
+|            xxxxxx     ....      o  %%%    #|
+|             .xxx      ooo         %%%%%   #|
+|             .                        %%   #|
+|          *+ox% $0.088 ... >= $2           #|
+|                                           #|
+| **************....    ..   .............  #|
+|****************    %%**..............* . *#|
+|      ********      .........+++++.. **    #|
+|  *         .+++    ........ ++++.         #|
+|            ++++++     ....      *  %%%    ||
+|             .+++      ***         %%%%%   ||
+--- styles
+|aaaaaaaaaaaaaaa                             |
+|                                            |
+|                                            |
+|                                            |
+|                                            |
+|                                            |
+|                                            |
+|                                            |
+|                                            |
+|                                            |
+|                                            |
+|                                            |
+|                                            |
+|                                            |
+|                                            |
+|                                            |
+a: bold

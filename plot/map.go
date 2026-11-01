@@ -309,6 +309,35 @@ func (mp Map) Legend(m Mode) []LegendItem {
 	return out
 }
 
+// LegendGrid returns the legend in one row at most w cells wide, as wide as it
+// needs. When the items of Legend fit, it is those. When they do not, it is one
+// mark per shade and the labels of the lowest and the highest shade, so the top
+// shades keep a meaning. When those labels do not fit either, it is the marks
+// alone.
+func (mp Map) LegendGrid(w int, m Mode) *Grid {
+	items := mp.Legend(m)
+	w = min(w, MaxSide)
+	if lw := LegendWidth(items); lw <= w {
+		g := NewGrid(lw, 1)
+		DrawLegend(g, 0, 0, items, m)
+		return g
+	}
+	n := len(items)
+	if n > w {
+		return NewGrid(0, 1)
+	}
+	span := " " + items[0].Label + block(m, " … ", " ... ") + items[n-1].Label
+	if n+width(span) > w {
+		span = ""
+	}
+	g := NewGrid(n+width(span), 1)
+	for i, it := range items {
+		g.set(i, 0, block(m, "■", asciiMarks[i%len(asciiMarks)]), it.Role)
+	}
+	g.Text(n, 0, span, Mute, false)
+	return g
+}
+
 // round2 rounds v to two significant digits, so a legend reads 2.8k and
 // not 2786.
 func round2(v float64) float64 {

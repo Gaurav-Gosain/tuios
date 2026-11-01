@@ -151,6 +151,7 @@ mp := plot.Map{
 }
 g := mp.Draw(100, 20, plot.Braille)
 legend := mp.Legend(plot.Braille) // one item per shade: "120k", "≥ 610k", ...
+row := mp.LegendGrid(40, plot.Braille) // the legend in 40 cells, with the top shade kept
 ```
 
 - Countries are ISO 3166-1 alpha-2 codes, such as `DE` or `jp`.

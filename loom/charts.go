@@ -398,9 +398,8 @@ func (w *chartWidget) paint(s *Surface, _ *box, c *canvas, r Rect) {
 		g = world.Draw(r.Dx(), mapRows, s.mode)
 		// The legend goes right under the map, when a row is left for it.
 		if r.Dy() > mapRows {
-			lg := plot.NewGrid(r.Dx(), 1)
-			end := plot.DrawLegend(lg, 0, 0, world.Legend(s.mode), s.mode)
-			s.blit(c, lg, r.Min.X+(r.Dx()-end)/2, r.Min.Y+mapRows)
+			lg := world.LegendGrid(r.Dx(), s.mode)
+			s.blit(c, lg, r.Min.X+(r.Dx()-lg.W)/2, r.Min.Y+mapRows)
 		}
 	case "heatmap":
 		g = plot.Heatmap{Values: w.grid, RowLabels: w.rowsL, ColLabels: w.colsL}.Draw(r.Dx(), r.Dy(), s.mode)

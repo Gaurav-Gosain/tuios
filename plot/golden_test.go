@@ -447,6 +447,40 @@ func TestMapUnknownCodes(t *testing.T) {
 	}
 }
 
+// TestMapLegendGrid holds the legend to its width without losing the top shade.
+func TestMapLegendGrid(t *testing.T) {
+	mp := Map{Values: map[string]float64{"US": 10, "BR": 3}, Format: func(v float64) string { return "$" + Compact(v) }}
+	full := LegendWidth(mp.Legend(Braille))
+	for _, c := range []struct {
+		w    int
+		want string
+	}{
+		{full, "■ $0  ■ ≥ $2  ■ ≥ $4  ■ ≥ $6  ■ ≥ $8"},
+		{full - 1, "■■■■■ $0 … ≥ $8"},
+		{15, "■■■■■ $0 … ≥ $8"},
+		{14, "■■■■■"},
+		{5, "■■■■■"},
+		{4, ""},
+		{0, ""},
+	} {
+		g := mp.LegendGrid(c.w, Braille)
+		if got := strings.TrimRight(g.String(), "\n"); got != c.want {
+			t.Errorf("width %d: %q, want %q", c.w, got, c.want)
+		}
+		if g.W > max(c.w, 0) {
+			t.Errorf("width %d: the legend is %d wide", c.w, g.W)
+		}
+	}
+	// Every shade keeps its own colour in the narrow form, and ASCII keeps the
+	// mark Draw gives that shade.
+	g := mp.LegendGrid(15, ASCII)
+	for i, want := range mapRamp {
+		if cell := g.At(i, 0); cell.Role != want || cell.Text != asciiMarks[i] {
+			t.Errorf("shade %d: %q in %s", i, cell.Text, cell.Role)
+		}
+	}
+}
+
 // TestHugeBins asks a histogram for 1e10 bins, as a bound attribute could.
 // The bins size an allocation, so plot caps them: before the cap this asked
 // for 80 GB and the Go runtime ended the process.
