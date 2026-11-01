@@ -311,8 +311,8 @@ jobs:
     # herdr command line the link runs, the opencode socket owner check, the
     # owner and DACL checks of service.json and of the tuios-web password
     # file, the job object of the opencode export, the choice between a
-    # conpty.dll beside tuios.exe and the inbox ConPTY, and the web daemon E2E
-    # tests.
+    # conpty.dll beside tuios.exe and the inbox ConPTY, the web daemon E2E
+    # tests, and tuios.exe itself on a console with TERM unset.
     # The whole suite has never run on Windows and does not run here.
     timeout-minutes: 15
 
@@ -384,6 +384,18 @@ jobs:
               exit 1
             fi
           done
+
+      - name: Test tuios.exe on a console with TERM unset
+        # The rest of cmd/tuios has never run on Windows, so only this test
+        # runs here. It must print its PASS line, so a rename or a skip fails
+        # the step.
+        shell: bash
+        run: |
+          go test -count=1 -timeout 5m -v -run '^TestStartsOnAConsoleWithNoTerm$' ./cmd/tuios/ | tee "$RUNNER_TEMP/term-unset-tests.log"
+          if ! grep -q -- "^--- PASS: TestStartsOnAConsoleWithNoTerm " "$RUNNER_TEMP/term-unset-tests.log"; then
+            echo "::error::TestStartsOnAConsoleWithNoTerm did not run and pass"
+            exit 1
+          fi
 
   macos:
     name: go test (macos)
