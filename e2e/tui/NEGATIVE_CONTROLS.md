@@ -11745,3 +11745,28 @@ Run on 2026-11-01 on Linux against a build of `origin/main` at `90af97147`, whic
 | The whole fix | "the current row's bar is in column 4 and its sibling's in column 3", and the same for the names, columns 7 and 6 | caught |
 
 The frame is `rail-pill-tree-bars` under `TUIOS_E2E_FRAMES`, in the test's folder.
+
+## The main checkout's row is the repository's row
+
+`TestRailMainCheckoutIsRepoRow` runs at 30 and 18 columns. `TestRailRevealsGroupedRow` and `TestSidebarGroupsMainCheckout` cover the same rows from the reveal and from `group_main = true`. `TestSidebarDragReordersSessions` covers the moves of a group (#1418).
+
+Run on 2026-11-01 on Linux. Each control is one change to a build of this branch.
+
+| Control: what was cut | Test | Where it fails | Verdict |
+| --- | --- | --- | --- |
+| `sidebarAttachedRow` accepts only a repository's own row | `TestRailRevealsGroupedRow` | "a switch into the fold on a main checkout's row: the sessions section does not show mainsess" | caught |
+| The main checkout's row records no fold control | `TestRailMainCheckoutIsRepoRow/30` | "the folded row does not show the attached session", because the click on the mark opens the session | caught |
+| The fold control stays clickable and leaves the keyboard's list | `TestRailMainCheckoutIsRepoRow/30` | "enter on the fold mark did not fold the group and keep the rail" | caught |
+| The session menu has no fold row | `TestRailMainCheckoutIsRepoRow/30` | "the row's menu has no Fold group" | caught |
+| `sessionWorktreeInfo` hides the main checkout unless `group_main` is on | `TestRailMainCheckoutIsRepoRow/30` | "New worktree on the main checkout's row opened no dialog" | caught |
+| A folded row does not take the attached session's mark | `TestRailMainCheckoutIsRepoRow/30` | "the folded row does not show the attached session" | caught |
+| `ckBranch` returns a main checkout's branch | `TestRailMainCheckoutIsRepoRow/30` | "the Inbox row lost the agent's message" | caught |
+| A release on a repository's row does not fold | `TestSidebarGroupsMainCheckout` | "the header click did not fold the group" | caught |
+| A worktree row moves as a block of its own | `TestSidebarDragReordersSessions` | "a worktree row dragged over its sibling": the rows do not swap | caught |
+| The drag moves one id through the flat list, as it did before | `TestSidebarDragReordersSessions` | "the group's row dragged down": the group stays above zulu | caught |
+| A block swaps as soon as the pointer touches the block it passes | `TestSidebarDragReordersSessions` | "a session stopped over the middle of a group": zulu lands above the group | caught |
+| The reorder keys swap two ids in the flat list | `TestSidebarDragReordersSessions` | "J on the group's row": the group does not move past bravo | caught |
+
+The first Inbox assertion passed with its control, because the rail's agents section shows the same message. The assertion now waits for the Inbox to cover the rail, and the control is caught.
+
+The frames are `rail-compact-*` and `rail-drag-*` under the test's artifact folder.

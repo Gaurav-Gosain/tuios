@@ -1990,6 +1990,9 @@ A click on a main checkout's row opens its session. A folded row shows `+N` for
 the sessions that it holds, the loudest agent state of the group, and the mark
 of the attached session when that session is in the group.
 
+Drag a group's row to move the whole group. Drag a worktree row to move it inside
+its group. The reorder keys follow the same rule.
+
 `appearance.sidebar.group_main` gives each repository a row of its own, with the
 main checkout under that row. The option is `false` by default. An explicit
 `false` gives the same layout as no option. The option is on the settings page,

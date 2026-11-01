@@ -1,10 +1,14 @@
 package tuie2e
 
 import (
+	"maps"
+	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/Gaurav-Gosain/tuios/internal/testutil"
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
@@ -185,11 +189,14 @@ func screenRowOf(s tuitest.Screen, needle string) int {
 func TestSidebarDragReordersSessions(t *testing.T) {
 	base := t.TempDir()
 	killDaemon(t, base)
+	t.Setenv("TUIOS_WORKTREE_DIR", filepath.Join(base, "worktrees"))
+	repo := testutil.GitRepo(t)
+	away := t.TempDir()
 
-	if out, err := tuiosCLI(t, base, "new", "alpha", "--detach"); err != nil {
+	if out, err := tuiosCLIIn(t, base, away, "new", "alpha", "--detach"); err != nil {
 		t.Fatalf("create alpha: %v: %s", err, out)
 	}
-	if out, err := tuiosCLI(t, base, "new", "bravo", "--detach"); err != nil {
+	if out, err := tuiosCLIIn(t, base, away, "new", "bravo", "--detach"); err != nil {
 		t.Fatalf("create bravo: %v: %s", err, out)
 	}
 
@@ -235,4 +242,148 @@ func TestSidebarDragReordersSessions(t *testing.T) {
 	}
 
 	alive(t, term, "after dragging a session row")
+	sidebarDragMovesGroups(t, base, repo, away, term)
+}
+
+// sidebarDragMovesGroups is #1418: a group's row moves the whole group, and a
+// worktree row moves only inside its group. It runs in the default layout, then
+// with group_main on, where the repository has a row of its own. The controls are
+// in NEGATIVE_CONTROLS.md.
+func sidebarDragMovesGroups(t *testing.T, base, repo, away string, term *tuitest.Terminal) {
+	for _, step := range []struct {
+		dir  string
+		args []string
+	}{
+		{repo, []string{"new", "mainsess", "--detach"}},
+		{away, []string{"worktree", "new", "f/one", "--repo", repo, "--detach"}},
+		{away, []string{"worktree", "new", "f/two", "--repo", repo, "--detach"}},
+		{away, []string{"new", "zulu", "--detach"}},
+	} {
+		if out, err := tuiosCLIIn(t, base, step.dir, step.args...); err != nil {
+			t.Fatalf("tuios %v: %v: %s", step.args, err, out)
+		}
+	}
+	waitForAll(t, term, uiTimeout, "the group and the session under it", "mainsess", "f/one", "f/two", "zulu")
+
+	// rail is the rows of the names in the order the rail draws them. The order
+	// is the assertion: a block moved whole leaves its rows next to each other.
+	rail := func(s tuitest.Screen, names ...string) []string {
+		rows := map[int]string{}
+		for _, name := range names {
+			rows[screenRowOf(s, name)] = name
+		}
+		keys := slices.Sorted(maps.Keys(rows))
+		out := make([]string, 0, len(keys))
+		for _, k := range keys {
+			out = append(out, rows[k])
+		}
+		return out
+	}
+	drag := func(from, to string) {
+		t.Helper()
+		s := term.Screen()
+		col, _ := findOnScreen(t, term, from)
+		mouseDrag(t, term, col, screenRowOf(s, from), col, screenRowOf(s, to), tuitest.MouseLeft, 0)
+	}
+	wantOrder := func(what string, names ...string) {
+		t.Helper()
+		if err := term.WaitFor(func(s tuitest.Screen) bool {
+			return slices.Equal(rail(s, names...), names)
+		}, uiTimeout); err != nil {
+			t.Fatalf("%s: want the rail in the order %v, got %v: %v\n%s", what, names, rail(term.Screen(), names...), err, term.Snapshot())
+		}
+	}
+	names := []string{"bravo", "alpha", "mainsess", "f/one", "f/two", "zulu"}
+	wantOrder("before the drags", names...)
+
+	// A worktree row moves inside its group and stops at the group's edge.
+	drag("f/two", "f/one")
+	wantOrder("a worktree row dragged over its sibling", "bravo", "alpha", "mainsess", "f/two", "f/one", "zulu")
+	drag("f/one", "zulu")
+	wantOrder("a worktree row dragged past its group", "bravo", "alpha", "mainsess", "f/two", "f/one", "zulu")
+	drag("f/two", "alpha")
+	wantOrder("a worktree row dragged above its group", "bravo", "alpha", "mainsess", "f/two", "f/one", "zulu")
+
+	// A main checkout's row moves the group, past a block taller and shorter
+	// than itself, and stays put between the two events of a slow drag.
+	drag("mainsess", "zulu")
+	wantOrder("the group's row dragged down", "bravo", "alpha", "zulu", "mainsess", "f/two", "f/one")
+	railShot(t, term, "rail-drag-group-down")
+	drag("zulu", "f/one")
+	wantOrder("a session dragged past a group", "bravo", "alpha", "mainsess", "f/two", "f/one", "zulu")
+	// A session that stops over the middle of a taller block stays where it is,
+	// however the pointer shakes there. The block it would pass is under the
+	// pointer on both sides of a swap, so a swap here would flip on every event.
+	{
+		s := term.Screen()
+		col, _ := findOnScreen(t, term, "zulu")
+		from, to := screenRowOf(s, "zulu"), screenRowOf(s, "f/two")
+		mousePress(t, term, col, from, tuitest.MouseLeft, 0)
+		for row := from - 1; row >= to; row-- {
+			mouseMotion(t, term, col, row, tuitest.MouseLeft, 0)
+		}
+		mouseMotion(t, term, col+1, to, tuitest.MouseLeft, 0)
+		mouseRelease(t, term, col+1, to, tuitest.MouseLeft, 0)
+	}
+	time.Sleep(insertGuard)
+	wantOrder("a session stopped over the middle of a group", "bravo", "alpha", "mainsess", "f/two", "f/one", "zulu")
+	drag("mainsess", "bravo")
+	wantOrder("the group's row dragged up", "mainsess", "f/two", "f/one", "bravo", "alpha", "zulu")
+	if strings.Contains(term.Screen().Text(), "Session: mainsess") {
+		t.Errorf("dragging the group's row opened its session\n%s", term.Snapshot())
+	}
+
+	// The reorder keys follow the same rule, on the main checkout's row and on a
+	// worktree row. The attached session is alpha, so k walks up to the row wanted.
+	if err := term.SendKeys("s"); err != nil {
+		t.Fatalf("enter the rail: %v", err)
+	}
+	if err := term.WaitForText(railPill, uiTimeout); err != nil {
+		t.Fatalf("s did not give the keyboard to the rail: %v\n%s", err, term.Snapshot())
+	}
+	// alpha, bravo, f/one, f/two, mainsess.
+	if err := term.SendKeys("k", "k", "k", "k", "J"); err != nil {
+		t.Fatalf("reorder the main checkout's row: %v", err)
+	}
+	wantOrder("J on the group's row", "bravo", "mainsess", "f/two", "f/one", "alpha", "zulu")
+	if err := term.SendKeys("j", "J"); err != nil {
+		t.Fatalf("reorder a worktree row: %v", err)
+	}
+	wantOrder("J on a worktree row", "bravo", "mainsess", "f/one", "f/two", "alpha", "zulu")
+	if err := term.SendKeys("J"); err != nil {
+		t.Fatalf("reorder a worktree row past its group: %v", err)
+	}
+	time.Sleep(insertGuard)
+	wantOrder("J on the last worktree row", "bravo", "mainsess", "f/one", "f/two", "alpha", "zulu")
+	if err := term.SendKeys(tuitest.Esc); err != nil {
+		t.Fatalf("leave the rail: %v", err)
+	}
+	if err := term.WaitFor(func(s tuitest.Screen) bool { return !strings.Contains(s.Text(), railPill) }, uiTimeout); err != nil {
+		t.Fatalf("esc did not leave the rail: %v\n%s", err, term.Snapshot())
+	}
+
+	// With group_main on, the repository's own row moves the group, and the main
+	// checkout's row is one more row inside it.
+	if err := term.Close(); err != nil {
+		t.Logf("close: %v", err)
+	}
+	writeConfig(t, base, "[appearance.sidebar]\nenabled = true\ngroup_main = true\n")
+	term = startIn(t, base, startOpts{args: []string{"attach", "alpha"}})
+	const header = "· repo"
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		return railLineWith(s, header) >= 0 && railLineWith(s, "─ main") >= 0
+	}, bootTimeout); err != nil {
+		t.Fatalf("the rail never drew the repository's own row: %v\n%s", err, term.Snapshot())
+	}
+	windowManagementMode(t, term)
+	names = []string{"bravo", header, "─ main", "f/one", "f/two", "alpha", "zulu"}
+	wantOrder("with group_main on", names...)
+	drag("─ main", "f/two")
+	wantOrder("the main checkout's row inside the group", "bravo", header, "f/one", "f/two", "─ main", "alpha", "zulu")
+	drag(header, "alpha")
+	wantOrder("the header dragged down", "bravo", "alpha", header, "f/one", "f/two", "─ main", "zulu")
+	railShot(t, term, "rail-drag-group-main")
+	drag("f/one", "zulu")
+	wantOrder("a worktree row stops at its group's edge", "bravo", "alpha", header, "f/two", "─ main", "f/one", "zulu")
+	alive(t, term, "after dragging groups")
 }

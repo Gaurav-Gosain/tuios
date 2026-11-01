@@ -252,6 +252,10 @@ func railTreeMarkForCaps(mark string, s *config.Settings) (string, int) {
 // count of what it is hiding.
 func (m *OS) sidebarRepoRow(node sessiontree.Node, cw int, pal overlay.Palette, st sidebarRowState) string {
 	rowBg := sidebarRowBg(st, pal)
+	if d := m.SidebarDrag; d.Dragging && d.Repo && d.SessionID == node.ID && d.Space == node.Space {
+		// A drag keeps the strongest band on the row riding the pointer.
+		rowBg = pal.Surface
+	}
 	collapsed := m.SidebarRepoCollapsed(node.ID)
 
 	right, rightW := "", 0
