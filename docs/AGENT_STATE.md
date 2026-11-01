@@ -4738,14 +4738,19 @@ something queued, is looked at on a timer.
 
 It is typed the way `fan` types its first prompt (see
 [Typing a prompt](#typing-a-prompt)), and the daemon then waits for the agent
-to show it took it: a state change, a finished turn, or, for a harness whose
-rules cannot show working, new output. Taken, the message leaves the queue.
+to show it took it: a state change, a finished turn, its screen showing a turn
+running with its input box empty (Claude Code), or, for a harness whose rules
+cannot show working, new output. Taken, the message leaves the queue.
 Not taken within the stall window (5 seconds), it is marked `stalled` and is
 never typed again, so text is never typed twice, and the Inbox gets a
 question on the pane: "your queued message was typed but api did not take
 it: look at the pane". A stalled message holds the ones behind it until the
 pane next shows `working` (the agent took it late, or you dealt with the
-pane), which drops it, or until you drop it with `tuios queue rm`.
+pane), which drops it, or until you drop it with `tuios queue rm`. The daemon
+watches the pane for ten minutes more, and once it shows it took the message
+by the same signs, the message is dropped and the question closed: a hook that
+reports the agent's state can come late or never, as when Claude Code kills
+one at its timeout on a loaded machine.
 
 **What ends a queue.** It lives in the daemon's memory only. A daemon restart
 drops every queue, since the conversation a message was for ended with the

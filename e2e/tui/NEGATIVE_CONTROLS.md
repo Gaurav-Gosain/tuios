@@ -11846,3 +11846,16 @@ A replay of the captured stream into the same kitty, with one change per run, fo
 | `page` over the link | "J did not turn the page over the link", the colour of page 1 | **caught** |
 
 The first versions of the last group missed two of these: the far test read only the number the keys set, and the failed read was not reached. Both tests were changed, and the runs above are on the changed tests.
+## A queued message taken while its hook is lost
+
+`TestQueuedMessageTakenWhileItsHookIsLostRaisesNoQuestion` and `TestQueuedMessageLeftInTheBoxRaisesAQuestionThatClosesOnceTaken` run a pane that draws Claude Code's input box, with Claude Code's real hook run for the reports that arrive. In use, Claude Code killed `tuios agent-hook` at its five second timeout on a loaded machine, for UserPromptSubmit, PreToolUse and Stop alike: two panes took their queued message, the daemon marked it stalled and opened "did not take it" in the Inbox, and the question stayed open since no report ever changed the panes' state. The first test takes a message with no hook at all for seven seconds and needs no question to open. The second leaves a message in the box while the screen shows the agent at work on something else, which must open the question, closes it with a hook report of working, then leaves a second message in the box and has the person press Enter with no report, which must close the question.
+
+Run on 2026-11-01 on macOS (arm64), on `856b4be28`. Both tests pass on the fixed build, and fail on an upstream main build at the same lines as the first control.
+
+| Control: what was cut | Where it fails | Verdict |
+| --- | --- | --- |
+| The `screenShowsTaken` look in `promptGate.check` (`internal/session/prompt_gate.go`) | First test: "the message the pane took opened a not-taken question [2]". Second test: "taken late with no report: the stalled question is open=true after 10s, want false" | **caught** |
+| `watchStalledQueue` (`internal/session/agent_queue.go`) returning at once | Second test: "taken late with no report: the stalled question is open=true after 10s, want false". The first passes | **caught** |
+| `screenShowsTaken` not reading the input box, so a turn on the screen alone is taken | Second test: "Enter not read as submit: the stalled question is open=false after 15s, want true". The first passes | **caught** |
+
+Repeat from `e2e/tui` with `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run 'TestQueuedMessageTakenWhileItsHookIsLost|TestQueuedMessageLeftInTheBox' -v .`. The state log of each run is `queue-taken-hook-lost.log` and `queue-left-in-box.log` under `TUIOS_E2E_FRAMES`.

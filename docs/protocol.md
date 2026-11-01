@@ -752,8 +752,11 @@ a bundled harness.
 the pane five seconds to show that it took the prompt, the check herdr calls
 `agent_prompt_stalled`. The pane shows it by turning `working`, by turning
 `needs_input` when it was not on `needs_input` before, by turning `done` or
-finishing a turn (`completion_seq` goes up), or by printing something after
-Enter. Output counts only for a pane whose harness has no screen or title rule
+finishing a turn (`completion_seq` goes up), by its screen showing a turn
+running with its input box empty, for a harness with rules for both (Claude
+Code), or by printing something after Enter. The screen counts because a
+harness that reports its state from hooks can take a prompt and have the
+report come late or never, when the harness kills a slow hook. Output counts only for a pane whose harness has no screen or title rule
 that reports `working`, which today leaves out Claude Code, Codex, Gemini CLI,
 opencode and every other harness with such a rule: a TUI that read Enter as a
 newline redraws its input box, so output from it proves nothing.
@@ -1473,7 +1476,8 @@ has no queue until something is queued. For one that does:
 - An Inbox question may carry the summary "your queued message was typed but
   NAME did not take it: look at the pane", on the pane's blocking key, for a
   queued message the agent showed no sign of taking. It is an ordinary
-  `question` item and closes like one.
+  `question` item and closes like one. It also closes when the pane shows
+  within ten minutes that it took the message after all, by the same signs.
 - `[agents.queue] max` is read at start and again when the config file
   changes.
 - One message per rest holds across an emptied queue: a message queued just

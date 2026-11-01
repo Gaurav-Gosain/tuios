@@ -409,16 +409,23 @@ func (d *Daemon) harnessKnown(sess *Session, windowID string) bool {
 // typePromptPastes is typeFirstPrompt for a prompt typed as several pastes
 // and submitted once. See submitPastes.
 func (d *Daemon) typePromptPastes(sess *Session, windowID string, pastes []string) (string, string, int64) {
+	status, note, at, _ := d.typePromptGated(sess, windowID, pastes)
+	return status, note, at
+}
+
+// typePromptGated is typePromptPastes returning the prompt gate as well, nil
+// when nothing was typed, so a caller can go on watching a stalled prompt.
+func (d *Daemon) typePromptGated(sess *Session, windowID string, pastes []string) (string, string, int64, *promptGate) {
 	pty, err := d.resolvePTYForTarget(sess, windowID)
 	if err != nil {
-		return PromptNotSent, "The agent's pane is gone.", 0
+		return PromptNotSent, "The agent's pane is gone.", 0, nil
 	}
 	// Pasted and submitted with a carriage return, the way ask-agent types its
 	// question. See prompt_submit.go.
 	gate := d.newPromptGate(sess, windowID)
 	at, err := submitPastes(d.ctx, pty, pastes, d.inputProfileFor(sess, windowID))
 	if err != nil {
-		return PromptNotSent, "Could not write to the agent's pane: " + err.Error(), 0
+		return PromptNotSent, "Could not write to the agent's pane: " + err.Error(), 0, nil
 	}
 	// The prompt is sent only once the agent shows it took it. See
 	// prompt_gate.go.
@@ -427,9 +434,9 @@ func (d *Daemon) typePromptPastes(sess *Session, windowID string, pastes []strin
 	taken, gone := d.waitPromptTaken(sess, pty, gate, stall)
 	switch {
 	case gone:
-		return PromptNotSent, "The agent's window closed as the prompt was typed.", at.UnixNano()
+		return PromptNotSent, "The agent's window closed as the prompt was typed.", at.UnixNano(), nil
 	case !taken:
-		return PromptStalled, "The prompt was typed and Enter was sent, and the agent showed no sign of taking it within " + stall.String() + ". Look at the pane before sending it again: it may be in the input box, waiting for Enter.", at.UnixNano()
+		return PromptStalled, "The prompt was typed and Enter was sent, and the agent showed no sign of taking it within " + stall.String() + ". Look at the pane before sending it again: it may be in the input box, waiting for Enter.", at.UnixNano(), gate
 	}
-	return PromptSent, "", at.UnixNano()
+	return PromptSent, "", at.UnixNano(), gate
 }

@@ -670,7 +670,7 @@ func (d *Daemon) deliverQueued(window string) {
 	if hook != nil {
 		hook(window)
 	}
-	status, note, at := d.typeQueued(sess, target, e)
+	status, note, at, prompt := d.typeQueued(sess, target, e)
 	if at == 0 {
 		at = time.Now().UnixNano()
 	}
@@ -730,7 +730,8 @@ func (d *Daemon) deliverQueued(window string) {
 	q.mu.Unlock()
 
 	if stalled {
-		d.attention.openQueueStalled(sess.Name(), target)
+		summary := d.attention.openQueueStalled(sess.Name(), target)
+		go d.watchStalledQueue(sess, window, prompt, summary)
 	}
 	if e.done != nil && (status == PromptSent || status == queueRefused || status == PromptStalled) {
 		e.done()
@@ -744,30 +745,30 @@ const queueRefused = "refused"
 
 // typeQueued checks e once more and types it: the origin's authority as it is
 // now, then that the pane is not on a prompt, then the prompt path fan uses.
-// It returns the prompt status, or queueRefused, a note, and when the Enter
-// went out (0 when nothing was typed).
-func (d *Daemon) typeQueued(sess *Session, target WindowState, e *queueEntry) (string, string, int64) {
+// It returns the prompt status, or queueRefused, a note, when the Enter went
+// out (0 when nothing was typed), and the prompt gate that watched it.
+func (d *Daemon) typeQueued(sess *Session, target WindowState, e *queueEntry) (string, string, int64, *promptGate) {
 	if why := d.queueOriginRefusal(e, sess, target); why != "" {
-		return queueRefused, why, 0
+		return queueRefused, why, 0, nil
 	}
 	if verr := d.refuseBlockedAgent(sess, target.ID); verr != nil {
-		return PromptNotSent, verr.Message, 0
+		return PromptNotSent, verr.Message, 0, nil
 	}
 	if e.recheck != nil {
 		text, ok := e.recheck()
 		if !ok {
-			return queueRefused, "nothing is left for it to say", 0
+			return queueRefused, "nothing is left for it to say", 0, nil
 		}
-		return d.typePromptPastes(sess, target.ID, []string{text})
+		return d.typePromptGated(sess, target.ID, []string{text})
 	}
 	pastes, err := d.composeQueued(sess, target, e)
 	if err != nil {
 		// Typing it without its blocks would send a message the person did
 		// not write. It is dropped, and the Inbox says so.
 		d.attention.openQueueFailed(sess.Name(), target, err.Error())
-		return queueRefused, "a pasted block could not be saved: " + err.Error(), 0
+		return queueRefused, "a pasted block could not be saved: " + err.Error(), 0, nil
 	}
-	return d.typePromptPastes(sess, target.ID, pastes)
+	return d.typePromptGated(sess, target.ID, pastes)
 }
 
 // queueOriginRefusal says why the entry's origin may no longer type into
@@ -839,10 +840,11 @@ func queueStalledSummary(w WindowState) string {
 // that was typed and not taken. Like the held-screen question, the pane's
 // next state change closes it, and a needs_input the pane reaches replaces
 // it.
-func (a *attentionStore) openQueueStalled(sessionName string, w WindowState) {
+func (a *attentionStore) openQueueStalled(sessionName string, w WindowState) string {
 	if a == nil {
-		return
+		return ""
 	}
+	summary := attentionText(queueStalledSummary(w), attentionMaxSummary)
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	a.upsertLocked(AttentionItem{
@@ -852,8 +854,55 @@ func (a *attentionStore) openQueueStalled(sessionName string, w WindowState) {
 		Workspace: w.Workspace,
 		Harness:   w.AgentHarness,
 		Name:      attentionText(windowLabelOf(w), attentionMaxSummary),
-		Summary:   attentionText(queueStalledSummary(w), attentionMaxSummary),
+		Summary:   summary,
 	})
+	return summary
+}
+
+// queueLateTake is how long a pane whose queued message stalled is watched
+// for taking it late, and queueLatePoll how often it is looked at then.
+const (
+	queueLateTake = 10 * time.Minute
+	queueLatePoll = time.Second
+)
+
+// watchStalledQueue goes on watching a pane whose queued message was typed and
+// not taken, by the prompt gate that saw it stall. An agent that reports its
+// state from hooks can take a message and have the report come late or never:
+// Claude Code kills a hook at its timeout, and on a loaded machine it killed
+// both the one that would have said working and the one that would have said
+// done, so the pane's state never changed and nothing closed the question.
+// Once the pane shows it took the message after all, the entry is settled and
+// the question closed, as the pane turning working does. A pane state that
+// changes is seen here too, which covers one that changed after the gate gave
+// up and before the question was opened.
+func (d *Daemon) watchStalledQueue(sess *Session, window string, gate *promptGate, summary string) {
+	if gate == nil {
+		return
+	}
+	pty, err := d.resolvePTYForTarget(sess, window)
+	if err != nil {
+		return
+	}
+	if taken, gone := d.watchPromptGate(sess, pty, gate, queueLateTake, queueLatePoll); !taken || gone {
+		return
+	}
+	q := &d.queue
+	q.mu.Lock()
+	settled := false
+	if pq := q.panes[window]; pq != nil && !pq.delivering && len(pq.entries) > 0 && pq.entries[0].state == queueStalled {
+		q.removeLocked(window, pq, func(e *queueEntry) bool { return e.state == queueStalled })
+		settled = true
+		if len(pq.entries) > 0 && pq.entries[0].state == queueWaiting {
+			q.armLocked(d, window, pq, q.restFor())
+		}
+	}
+	q.mu.Unlock()
+	LogBasic("Window %s took its stalled queued message late, by %s", shortWindowID(window), gate.taken)
+	d.attention.closeHeldPrompt(sess.Name(), window, summary)
+	if settled {
+		d.publishQueued(window)
+	}
 }
 
 // queuePreview is the first line of a message, cut to queuePreviewLen

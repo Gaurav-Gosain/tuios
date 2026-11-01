@@ -2,6 +2,8 @@ package session
 
 import (
 	"time"
+
+	"github.com/Gaurav-Gosain/tuios/internal/harness"
 )
 
 // The stall gate: did the agent take the prompt it was just given?
@@ -22,6 +24,13 @@ import (
 //     needs_input before, or done;
 //   - it finishes a turn, which CompletionSeq counts, for an agent quick enough
 //     to go working and back to rest between two looks;
+//   - its screen shows a turn running and its input box empty, by its
+//     harness's rules, for a harness with a box rule. A harness that reports
+//     its own state does it from hooks, and a hook can come late or not at
+//     all: Claude Code kills one at its five second timeout, and on a loaded
+//     machine it did, so the prompt it took read as stalled. The empty box is
+//     what makes the screen evidence: a prompt the agent did not take is still
+//     in the box;
 //   - or it prints something after the Enter, but only for a pane whose harness
 //     has no rule that shows working. For a harness that can show working,
 //     output alone is not evidence: a TUI that read the Enter as a newline also
@@ -61,8 +70,14 @@ type promptGate struct {
 	startState AgentState
 	// submittedAt is when the Enter was sent, in Unix nanoseconds.
 	submittedAt int64
+	// pty, reg and harness read the pane's screen, for a harness whose rules
+	// can show working and read its input box. pty is nil otherwise.
+	pty     *PTY
+	reg     *harness.Registry
+	harness string
 	// taken names what showed the prompt was taken: a state name, "turn" for a
-	// finished turn, or "output". Empty until something did.
+	// finished turn, "screen" for the screen, or "output". Empty until something
+	// did.
 	taken string
 }
 
@@ -78,7 +93,27 @@ func (d *Daemon) newPromptGate(sess *Session, windowID string) *promptGate {
 	g.startSeq = w.CompletionSeq
 	g.startState = w.AgentState
 	g.outputCounts = d.outputShowsTaking(sess, w)
+	hid := firstNonEmpty(w.AgentHarness, sess.agentClaimFor(w.ID).harness)
+	if reg := d.agentMatcher.registry; reg.HasBoxRule(hid) && reg.CanProveWorking(hid) {
+		if pty, err := d.resolvePTYForTarget(sess, windowID); err == nil {
+			g.pty, g.reg, g.harness = pty, reg, hid
+		}
+	}
 	return g
+}
+
+// screenShowsTaken reports whether the pane's screen says the agent took the
+// prompt: its harness's rules read a turn running, and its input box empty.
+func (g *promptGate) screenShowsTaken() bool {
+	if g.pty == nil {
+		return false
+	}
+	if v, _ := screenVerdict(g.pty, g.harness, g.reg); !v.ok || v.state != AgentStateWorking {
+		return false
+	}
+	tail, shown := g.pty.tailShown(g.reg.ScreenLines(g.harness))
+	draft, known := g.reg.BoxDraft(g.harness, tail, shown)
+	return known && !draft
 }
 
 // outputShowsTaking reports whether output from the pane counts as evidence
@@ -131,6 +166,9 @@ func (g *promptGate) check(sess *Session, last func() int64) bool {
 			g.taken = "turn"
 		}
 	}
+	if g.taken == "" && g.screenShowsTaken() {
+		g.taken = "screen"
+	}
 	if g.taken == "" && g.outputCounts && last != nil && last() > g.submittedAt {
 		g.taken = "output"
 	}
@@ -150,6 +188,11 @@ func (g *promptGate) stalledMessage(stall time.Duration) string {
 // stall window ends, the window closes, or the daemon stops. It reports whether
 // the prompt was taken and whether the window is gone.
 func (d *Daemon) waitPromptTaken(sess *Session, pty *PTY, g *promptGate, stall time.Duration) (taken, gone bool) {
+	return d.watchPromptGate(sess, pty, g, stall, promptGatePoll)
+}
+
+// watchPromptGate is waitPromptTaken looking every poll.
+func (d *Daemon) watchPromptGate(sess *Session, pty *PTY, g *promptGate, stall, poll time.Duration) (taken, gone bool) {
 	sub := d.events.subscribe(eventFilter{
 		session: sess.Name(),
 		sess:    sess,
@@ -159,7 +202,7 @@ func (d *Daemon) waitPromptTaken(sess *Session, pty *PTY, g *promptGate, stall t
 
 	deadline := time.NewTimer(stall)
 	defer deadline.Stop()
-	tick := time.NewTicker(promptGatePoll)
+	tick := time.NewTicker(poll)
 	defer tick.Stop()
 	for {
 		if g.check(sess, pty.LastOutput) {

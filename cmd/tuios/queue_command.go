@@ -28,8 +28,8 @@ away.
 The daemon watches for the agent to take it. A message the agent shows no sign
 of taking is marked stalled, is never typed again, and opens a question in the
 Inbox: look at the pane. A stalled message holds the ones behind it until the
-agent next works or you drop it with 'tuios queue rm', and the next is then
-typed at the next rest.
+agent next works, shows on its screen that it took it, or you drop it with
+'tuios queue rm', and the next is then typed at the next rest.
 
 For an agent that cannot show it is working (Aider, Crush, or a pane with no
 harness), a rest after a typed message is also new output followed by 5

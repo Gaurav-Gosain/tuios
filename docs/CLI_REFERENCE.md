@@ -2585,7 +2585,7 @@ it is typed right away. The daemon then waits for the agent to show it took
 the message, the way `fan` waits for its first prompt. A message the agent
 shows no sign of taking is marked `stalled`, is never typed again, and opens a
 question in the Inbox; it holds the messages behind it until the agent next
-works or you drop it, and the next message is then typed at the next rest.
+works, shows on its screen that it took it, or you drop it, and the next message is then typed at the next rest.
 A message also waits while you type into the pane, and while the agent's
 input box holds your draft. See
 [Queued messages](AGENT_STATE.md#queued-messages).
