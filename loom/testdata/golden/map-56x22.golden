@@ -10,7 +10,7 @@
 |                ⢸⣿⣿⣿⡟⠋       ⠸⣿⣿⣿⠁⠛         ⢰⣾⣿⣿⣿⣿⣷    ┃|
 |                ⣼⡿⠛⠉          ⠙⠉⠁            ⠛⠉⠉⠛⢿⡟  ⣀⠆┃|
 |                ⠻⠅                                     ┃|
-|■ $0.088  ■ ≥ $0.19  ■ ≥ $0.42  ■ ≥ $0.91  ■ ≥ $2      ┃|
+|   ■ $0.088  ■ ≥ $0.19  ■ ≥ $0.42  ■ ≥ $0.91  ■ ≥ $2   ┃|
 |                                                       ┃|
 |  ⢀⣀⣀⣀ ⢀⣠⣶⣶⣶⣾⣿⣿⣿⣛⡛⠻⣿⣿⣿⣿⣿⡗⠁   ⠐⠒⠂   ⢀⠤ ⣀⣀⣠⣤⣶⣦⣤⣀⣀⣀⣠⣄⣀    ┃|
 |⠉⠒⢿⣿⡿⠿⣿⣿⣿⣿⣿⣿⣿⣟⡻⣿⣿⣿⡁⠙⠿⠋⠉⠁⠒⠂⢀⡄⢤⣾⢟⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⠿⠿⢟⡿⠿⠛┃|
@@ -33,7 +33,7 @@
 |ccccccccccccccccggiiiicccccccgjjjggccccccccchhhhhhhccccd|
 |ccccccccccccccccgggiccccccccccjjjcccccccccccchhhhhhccggd|
 |ccccccccccccccccggcccccccccccccccccccccccccccccccccccccd|
-|fckkkkkkcceckckkkkkccjckckkkkkccickckkkkkcchckckkccccccd|
+|cccfckkkkkkcceckckkkkkccjckckkkkkccickckkkkkcchckckkcccd|
 |cccccccccccccccccccccccccccccccccccccccccccccccccccccccd|
 |ccffffcffffffffffffgggggggcccgggcccggcgggggggggggggccccd|
 |gffffffffffffffffffggggggghhgggggggggggggggggggggggggggd|
@@ -67,7 +67,7 @@ k: fg=mute bg=panel
 |                ⢸⣿⣿⣿⡟⠋       ⠸⣿⣿⣿⠁⠛         ⢰⣾⣿⣿⣿⣿⣷    ┃|
 |                ⣼⡿⠛⠉          ⠙⠉⠁            ⠛⠉⠉⠛⢿⡟  ⣀⠆┃|
 |                ⠻⠅                                     ┃|
-|■ $0.088  ■ ≥ $0.19  ■ ≥ $0.42  ■ ≥ $0.91  ■ ≥ $2      ┃|
+|   ■ $0.088  ■ ≥ $0.19  ■ ≥ $0.42  ■ ≥ $0.91  ■ ≥ $2   ┃|
 |                                                       ┃|
 |  ⢀⣀⣀⣀ ⢀⣠⣶⣶⣶⣾⣿⣿⣿⣛⡛⠻⣿⣿⣿⣿⣿⡗⠁   ⠐⠒⠂   ⢀⠤ ⣀⣀⣠⣤⣶⣦⣤⣀⣀⣀⣠⣄⣀    ┃|
 |⠉⠒⢿⣿⡿⠿⣿⣿⣿⣿⣿⣿⣿⣟⡻⣿⣿⣿⡁⠙⠿⠋⠉⠁⠒⠂⢀⡄⢤⣾⢟⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⠿⠿⢟⡿⠿⠛┃|
@@ -90,7 +90,7 @@ k: fg=mute bg=panel
 |ccccccccccccccccffhhhhcccccccfiiiffcccccccccgggggggccccd|
 |ccccccccccccccccfffhcccccccccciiiccccccccccccggggggccffd|
 |ccccccccccccccccffcccccccccccccccccccccccccccccccccccccd|
-|fcjjjjjjccecjcjjjjjccicjcjjjjjcchcjcjjjjjccgcjcjjccccccd|
+|cccfcjjjjjjccecjcjjjjjccicjcjjjjjcchcjcjjjjjccgcjcjjcccd|
 |cccccccccccccccccccccccccccccccccccccccccccccccccccccccd|
 |ccffffcfffffffffffffffffffcccfffcccffcfffffffffffffccccd|
 |ffffffffffffffffffffffffffggfffffffffffffffffffffffffffd|
@@ -123,7 +123,7 @@ j: fg=mute bg=panel
 |                ⢸⣿⣿⣿⡟⠋       ⠸⣿⣿⣿⠁⠛         ⢰⣾⣿⣿⣿⣿⣷    ┃|
 |                ⣼⡿⠛⠉          ⠙⠉⠁            ⠛⠉⠉⠛⢿⡟  ⣀⠆┃|
 |                ⠻⠅                                     ┃|
-|■ $0.088  ■ ≥ $0.19  ■ ≥ $0.42  ■ ≥ $0.91  ■ ≥ $2      ┃|
+|   ■ $0.088  ■ ≥ $0.19  ■ ≥ $0.42  ■ ≥ $0.91  ■ ≥ $2   ┃|
 |                                                       ┃|
 |  ⢀⣀⣀⣀ ⢀⣠⣶⣶⣶⣾⣿⣿⣿⣛⡛⠻⣿⣿⣿⣿⣿⡗⠁   ⠐⠒⠂   ⢀⠤ ⣀⣀⣠⣤⣶⣦⣤⣀⣀⣀⣠⣄⣀    ┃|
 |⠉⠒⢿⣿⡿⠿⣿⣿⣿⣿⣿⣿⣿⣟⡻⣿⣿⣿⡁⠙⠿⠋⠉⠁⠒⠂⢀⡄⢤⣾⢟⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⠿⠿⢟⡿⠿⠛┃|
@@ -146,7 +146,7 @@ j: fg=mute bg=panel
 |                ffhhhh       fiiiff         ggggggg    c|
 |                fffh          iii            gggggg  ffc|
 |                ff                                     c|
-|e ffffff  d f fffff  i f fffff  h f fffff  g f ff      c|
+|   e ffffff  d f fffff  i f fffff  h f fffff  g f ff   c|
 |                                                       c|
 |  eeee eeeeeeeeeeeefffffff   fff   ff fffffffffffff    c|
 |feeeeeeeeeeeeeeeeeefffffffggfffffffffffffffffffffffffffc|
@@ -177,7 +177,7 @@ i: fg=heat3
 |                 .xxxxx       .ooo .         %%%%%%%    |
 |                 ..xx         oooo           %%%%%%%    |
 |                ..                                      |
-|* $0.088  + >= $0.19  o >= $0.42  x >= $0.91  % >= $2   |
+| * $0.088  + >= $0.19  o >= $0.42  x >= $0.91  % >= $2  |
 |                                                        |
 |  *****************......                .......  .     |
 |********************..    %%%**.......................*.|
@@ -188,7 +188,7 @@ i: fg=heat3
 |                 .+++++       .*** .         %%%%%%%    |
 |                 ..++         ****           %%%%%%%    |
 |                ..                                      |
-|* 0  + >= 0.86  o >= 1.7  x >= 2.6  % >= 3.4            |
+|      * 0  + >= 0.86  o >= 1.7  x >= 2.6  % >= 3.4      |
 --- styles
 |aaaaaaaaaaaaaaa                                         |
 |                                                        |

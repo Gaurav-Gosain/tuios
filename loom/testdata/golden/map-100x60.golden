@@ -1,0 +1,516 @@
+=== truecolor 100x60
+|Median $/GPU/hr                                                                                     |
+|                ⣀⣀⣠⣤⢠⣤⣦⣶⣶⣶⣿⣿⡿⠿⢿⣿⣿⣶⣶⣶⣶⣿⣿⣿⣿⣿⣿⣿⣶⠒⠂      ⠤⣤⠤⡤      ⠒ ⠐⠂ ⢀      ⠐⠶⠤⣤⣀⣀                   |
+|⣀  ⢀⣠⣤⣤⣤⣤⣤⣤⣄⣀⣤⣤⣾⣟⣿⣿⣿⣿⣽⣻⣿⣟⣿⣿⡿⣷⣶⣤⣄⡀ ⠹⣿⣿⣿⣿⣿⣿⣿⣿⠿⠁         ⣀⣀⣤⣤⣤⣀⣀ ⢀⢀⣐⣮⣩⣀⣠⣶⣶⣴⣶⣶⣿⣿⣿⣿⣿⣿⣿⣿⣶⣶⣶⣶⣤⣤⣽⣿⣶⣧⣤⣤⣄⣀⣀⣀⣀⣀|
+|⠉⠉⠓⢛⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⠿⠛⠻⠷⣾⣿⣿⣿⡏  ⠙⠿⢿⠟⠉⠁  ⠘⠛⠛   ⢀ ⢠⣴⣾⣿⡛⣽⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⠿⢿⣿⡿⡿⠿⠛|
+|⢀⢀ ⠤⠖⠛⠉⠉   ⠈⠙⢿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣷⣶⣶⣿⣿⣿⣿⣿⣶⣆            ⢤⢿⣷⣄⣠⣿⣿⣯⣴⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣯⣥   ⢺⠟⠁  ⠄ |
+|              ⠈⢹⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⢿⠿⠟⠛⠃           ⢀⣈⣹⣿⢿⠿⣿⢿⣿⣿⣿⠟⠿⠻⣿⣿⡟⢿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡿⠋⣼⡄         |
+|               ⠘⢿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⠏⠁                ⠘⣿⣟⣥⣤⣬⠈⠉⠘⠟⠹⠿⠿⣿⣿⣿⣿⣬⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡭⠙⡿⣀⣤⣴⡇          |
+|                 ⠉⢿⣿⣿⣿⣿⡟⠛⠛⠛⣯⠁                 ⣠⣾⣿⣿⣿⣿⣿⣿⣷⣾⣿⣶⣶⡾⣿⣿⣿⣟⡻⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡿  ⠋⠁            |
+|      ⠰            ⠁⠙⢿⣿⣄⣠⡶ ⠒⠲⠠⡤              ⢸⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣎⢻⣿⣿⣿⡿⠃ ⠈⠛⣿⣿⣿⡿⠟⠛⣿⣿⣿⣟⠿⠋⠉⢈                |
+|                       ⠁⠉⠛⢿⣀⣀⣤⣤⣄⣄⡀           ⠸⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣷⣿⣭⠅     ⠘⣿⡏  ⠰ ⣻⠻⡿⠇  ⠘⣆               |
+|                           ⢀⣸⣿⣿⣿⣿⣿⣶⣶⣄         ⠈⠙⠛⠛⠉⠙⢻⣿⣿⣿⣿⣿⣿⣿⣿⣿⡿⠋        ⠉   ⠐⢮⣷ ⣀⣤⣶⣀⠈⢀              |
+|                           ⠸⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣶⣦⡄           ⠈⢻⣿⣿⣿⣿⣿⣿⣿⠋                ⠛⠧⣈⣛⢃⢛⠁ ⠊⠓⢷⣶⣤⡠        |
+|                            ⠙⢿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡟⠁            ⣸⣿⣿⣿⣿⣿⣿⣿⠇⢀⣴                    ⣨⣤⣶⣶⣆⣶⣄⠉        |
+|                              ⢸⣿⣿⣿⣿⣿⣿⡿⠿⠁             ⠘⣿⣿⣿⣿⣿⡿⠁ ⣿⠏                 ⢠⣶⣾⣿⣿⣿⣿⣿⣿⣿⣶⣄       |
+|                              ⣿⣿⣿⣿⣿⣿⠟                 ⠹⣿⣿⣿⡿⠃                     ⠘⣿⣿⣿⣿⠿⣿⣿⣿⣿⣿⡿       |
+|                             ⢰⣿⣿⡿⠛⠃                    ⠈                          ⠉    ⠈⠙⠻⣻⡟     ⢀⣱⠆|
+|                             ⣾⣿⠯                                                          ⠈     ⠐⠋  |
+|                             ⠈⠛⠂ ⠈                                                                  |
+|                         ■ $0.088  ■ ≥ $0.19  ■ ≥ $0.42  ■ ≥ $0.91  ■ ≥ $2                          |
+|                                                                                                    |
+|                ⣀⣀⣠⣤⢠⣤⣦⣶⣶⣶⣿⣿⡿⠿⢿⣿⣿⣶⣶⣶⣶⣿⣿⣿⣿⣿⣿⣿⣶⠒⠂      ⠤⣤⠤⡤      ⠒ ⠐⠂ ⢀      ⠐⠶⠤⣤⣀⣀                   |
+|⣀  ⢀⣠⣤⣤⣤⣤⣤⣤⣄⣀⣤⣤⣾⣟⣿⣿⣿⣿⣽⣻⣿⣟⣿⣿⡿⣷⣶⣤⣄⡀ ⠹⣿⣿⣿⣿⣿⣿⣿⣿⠿⠁         ⣀⣀⣤⣤⣤⣀⣀ ⢀⢀⣐⣮⣩⣀⣠⣶⣶⣴⣶⣶⣿⣿⣿⣿⣿⣿⣿⣿⣶⣶⣶⣶⣤⣤⣽⣿⣶⣧⣤⣤⣄⣀⣀⣀⣀⣀|
+|⠉⠉⠓⢛⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⠿⠛⠻⠷⣾⣿⣿⣿⡏  ⠙⠿⢿⠟⠉⠁  ⠘⠛⠛   ⢀ ⢠⣴⣾⣿⡛⣽⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⠿⢿⣿⡿⡿⠿⠛|
+|⢀⢀ ⠤⠖⠛⠉⠉   ⠈⠙⢿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣷⣶⣶⣿⣿⣿⣿⣿⣶⣆            ⢤⢿⣷⣄⣠⣿⣿⣯⣴⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣯⣥   ⢺⠟⠁  ⠄ |
+|              ⠈⢹⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⢿⠿⠟⠛⠃           ⢀⣈⣹⣿⢿⠿⣿⢿⣿⣿⣿⠟⠿⠻⣿⣿⡟⢿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡿⠋⣼⡄         |
+|               ⠘⢿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⠏⠁                ⠘⣿⣟⣥⣤⣬⠈⠉⠘⠟⠹⠿⠿⣿⣿⣿⣿⣬⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡭⠙⡿⣀⣤⣴⡇          |
+|                 ⠉⢿⣿⣿⣿⣿⡟⠛⠛⠛⣯⠁                 ⣠⣾⣿⣿⣿⣿⣿⣿⣷⣾⣿⣶⣶⡾⣿⣿⣿⣟⡻⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡿  ⠋⠁            |
+|      ⠰            ⠁⠙⢿⣿⣄⣠⡶ ⠒⠲⠠⡤              ⢸⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣎⢻⣿⣿⣿⡿⠃ ⠈⠛⣿⣿⣿⡿⠟⠛⣿⣿⣿⣟⠿⠋⠉⢈                |
+|                       ⠁⠉⠛⢿⣀⣀⣤⣤⣄⣄⡀           ⠸⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣷⣿⣭⠅     ⠘⣿⡏  ⠰ ⣻⠻⡿⠇  ⠘⣆               |
+|                           ⢀⣸⣿⣿⣿⣿⣿⣶⣶⣄         ⠈⠙⠛⠛⠉⠙⢻⣿⣿⣿⣿⣿⣿⣿⣿⣿⡿⠋        ⠉   ⠐⢮⣷ ⣀⣤⣶⣀⠈⢀              |
+|                           ⠸⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣶⣦⡄           ⠈⢻⣿⣿⣿⣿⣿⣿⣿⠋                ⠛⠧⣈⣛⢃⢛⠁ ⠊⠓⢷⣶⣤⡠        |
+|                            ⠙⢿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡟⠁            ⣸⣿⣿⣿⣿⣿⣿⣿⠇⢀⣴                    ⣨⣤⣶⣶⣆⣶⣄⠉        |
+|                              ⢸⣿⣿⣿⣿⣿⣿⡿⠿⠁             ⠘⣿⣿⣿⣿⣿⡿⠁ ⣿⠏                 ⢠⣶⣾⣿⣿⣿⣿⣿⣿⣿⣶⣄       |
+|                              ⣿⣿⣿⣿⣿⣿⠟                 ⠹⣿⣿⣿⡿⠃                     ⠘⣿⣿⣿⣿⠿⣿⣿⣿⣿⣿⡿       |
+|                             ⢰⣿⣿⡿⠛⠃                    ⠈                          ⠉    ⠈⠙⠻⣻⡟     ⢀⣱⠆|
+|                             ⣾⣿⠯                                                          ⠈     ⠐⠋  |
+|                             ⠈⠛⠂ ⠈                                                                  |
+|                              ■ 0  ■ ≥ 0.86  ■ ≥ 1.7  ■ ≥ 2.6  ■ ≥ 3.4                              |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+--- styles
+|aaaaaabaaaaaaaaccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc|
+|ccccccccccccccccdddddddddddddddddeeeeeeeeeeeeeecccccceeeecccccceceececccccceeeeeeccccccccccccccccccc|
+|eccffffffffddddddddddddddddddddddceeeeeeeeeeeccccccccceeeeeeeceeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee|
+|eefffffffffffddddddddddddddddddddcceeeeeecceeecccgceeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee|
+|ffcfffffcccfffdddddddddddddddddddddccccccccccccggggffffeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeccceeeccfc|
+|ccccccccccccccdfffffffffffffffffddddccccccccccceggefffeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeffccccccccc|
+|cccccccccccccccffffffffffffffffcccccccccccccccceeeeeeeeeeeeeeeeeeeeeeehheeeeeeeeeeeeeeffffcccccccccc|
+|cccccccccccccccccffffffffffffccccccccccccccccceeeeeeeeeeeeeeeeeeeeeeehhhhhhhhheeeeeeccffcccccccccccc|
+|ccccccfcccccccccccceeeeeeeceeeecccccccccccccceeeeeeeeeeeeeeeeeeeeeecehhhhhhhheeeeeeecccccccccccccccc|
+|ccccccccccccccccccccccceeeeeeeeeeeccccccccccceeeeeeeeeeeeeeeeeeeeccccchhhcchceeeecceeccccccccccccccc|
+|ccccccccccccccccccccccccccceeehhhhhhhccccccccceeeeeeeeeeeeeeeeeecccccccceccceeiceeeeeecccccccccccccc|
+|ccccccccccccccccccccccccccceehhhhhhhhhhhhccccccccccceeeeeeeeeecccccccccccccccceeeeeeeceeeeeecccccccc|
+|ccccccccccccccccccccccccccccehhhhhhhhhhhhcccccccccccceeeeeeeeeeeccccccccccccccccccccgggggggecccccccc|
+|cccccccccccccccccccccccccccccceeeehhhhhhccccccccccccceeiiiieeceecccccccccccccccccggggggggggggccccccc|
+|cccccccccccccccccccccccccccccceeeehhhccccccccccccccccciiiiiicccccccccccccccccccccggggggggggggccccccc|
+|ccccccccccccccccccccccccccccceeeeeecccccccccccccccccccciccccccccccccccccccccccccccgccccgggggccccceee|
+|ccccccccccccccccccccccccccccceeeccccccccccccccccccccccccccccccccccccccccccccccccccccccccccgccccceecc|
+|ccccccccccccccccccccccccccccceeececccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc|
+|cccccccccccccccccccccccccdcjjjjjjccfcjcjjjjjccicjcjjjjjcchcjcjjjjjccgcjcjjcccccccccccccccccccccccccc|
+|cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc|
+|ccccccccccccccccdddddddddddddddddeeeeeeeeeeeeeecccccceeeecccccceceececccccceeeeeeccccccccccccccccccc|
+|eccddddddddddddddddddddddddddddddceeeeeeeeeeeccccccccceeeeeeeceeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee|
+|eedddddddddddddddddddddddddddddddcceeeeeecceeecccgceeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee|
+|ddcdddddcccddddddddddddddddddddddddccccccccccccggggddddeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeccceeeccdc|
+|ccccccccccccccddddddddddddddddddddddccccccccccceggedddeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeddccccccccc|
+|cccccccccccccccddddddddddddddddcccccccccccccccceeeeeeeeeeeeeeeeeeeeeeeffeeeeeeeeeeeeeeddddcccccccccc|
+|cccccccccccccccccddddddddddddccccccccccccccccceeeeeeeeeeeeeeeeeeeeeeefffffffffeeeeeeccddcccccccccccc|
+|ccccccdcccccccccccceeeeeeeceeeecccccccccccccceeeeeeeeeeeeeeeeeeeeeeceffffffffeeeeeeecccccccccccccccc|
+|ccccccccccccccccccccccceeeeeeeeeeeccccccccccceeeeeeeeeeeeeeeeeeeecccccfffccfceeeecceeccccccccccccccc|
+|ccccccccccccccccccccccccccceeefffffffccccccccceeeeeeeeeeeeeeeeeecccccccceccceedceeeeeecccccccccccccc|
+|ccccccccccccccccccccccccccceeffffffffffffccccccccccceeeeeeeeeecccccccccccccccceeeeeeeceeeeeecccccccc|
+|cccccccccccccccccccccccccccceffffffffffffcccccccccccceeeeeeeeeeeccccccccccccccccccccgggggggecccccccc|
+|cccccccccccccccccccccccccccccceeeeffffffccccccccccccceeddddeeceecccccccccccccccccggggggggggggccccccc|
+|cccccccccccccccccccccccccccccceeeefffcccccccccccccccccddddddcccccccccccccccccccccggggggggggggccccccc|
+|ccccccccccccccccccccccccccccceeeeeeccccccccccccccccccccdccccccccccccccccccccccccccgccccgggggccccceee|
+|ccccccccccccccccccccccccccccceeeccccccccccccccccccccccccccccccccccccccccccccccccccccccccccgccccceecc|
+|ccccccccccccccccccccccccccccceeececccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc|
+|ccccccccccccccccccccccccccccccdcjccfcjcjjjjccicjcjjjcchcjcjjjccgcjcjjjcccccccccccccccccccccccccccccc|
+|cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc|
+|cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc|
+|cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc|
+|cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc|
+|cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc|
+|cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc|
+|cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc|
+|cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc|
+|cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc|
+|cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc|
+|cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc|
+|cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc|
+|cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc|
+|cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc|
+|cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc|
+|cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc|
+|cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc|
+|cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc|
+|cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc|
+|cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc|
+|cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc|
+|cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc|
+a: fg=dim bg=panel bold
+b: bg=panel bold
+c: bg=panel
+d: fg=heat1 bg=panel
+e: fg=track bg=panel
+f: fg=heat2 bg=panel
+g: fg=accent-bright bg=panel
+h: fg=heat4 bg=panel
+i: fg=info bg=panel
+j: fg=mute bg=panel
+=== 256 100x60
+|Median $/GPU/hr                                                                                     |
+|                ⣀⣀⣠⣤⢠⣤⣦⣶⣶⣶⣿⣿⡿⠿⢿⣿⣿⣶⣶⣶⣶⣿⣿⣿⣿⣿⣿⣿⣶⠒⠂      ⠤⣤⠤⡤      ⠒ ⠐⠂ ⢀      ⠐⠶⠤⣤⣀⣀                   |
+|⣀  ⢀⣠⣤⣤⣤⣤⣤⣤⣄⣀⣤⣤⣾⣟⣿⣿⣿⣿⣽⣻⣿⣟⣿⣿⡿⣷⣶⣤⣄⡀ ⠹⣿⣿⣿⣿⣿⣿⣿⣿⠿⠁         ⣀⣀⣤⣤⣤⣀⣀ ⢀⢀⣐⣮⣩⣀⣠⣶⣶⣴⣶⣶⣿⣿⣿⣿⣿⣿⣿⣿⣶⣶⣶⣶⣤⣤⣽⣿⣶⣧⣤⣤⣄⣀⣀⣀⣀⣀|
+|⠉⠉⠓⢛⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⠿⠛⠻⠷⣾⣿⣿⣿⡏  ⠙⠿⢿⠟⠉⠁  ⠘⠛⠛   ⢀ ⢠⣴⣾⣿⡛⣽⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⠿⢿⣿⡿⡿⠿⠛|
+|⢀⢀ ⠤⠖⠛⠉⠉   ⠈⠙⢿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣷⣶⣶⣿⣿⣿⣿⣿⣶⣆            ⢤⢿⣷⣄⣠⣿⣿⣯⣴⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣯⣥   ⢺⠟⠁  ⠄ |
+|              ⠈⢹⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⢿⠿⠟⠛⠃           ⢀⣈⣹⣿⢿⠿⣿⢿⣿⣿⣿⠟⠿⠻⣿⣿⡟⢿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡿⠋⣼⡄         |
+|               ⠘⢿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⠏⠁                ⠘⣿⣟⣥⣤⣬⠈⠉⠘⠟⠹⠿⠿⣿⣿⣿⣿⣬⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡭⠙⡿⣀⣤⣴⡇          |
+|                 ⠉⢿⣿⣿⣿⣿⡟⠛⠛⠛⣯⠁                 ⣠⣾⣿⣿⣿⣿⣿⣿⣷⣾⣿⣶⣶⡾⣿⣿⣿⣟⡻⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡿  ⠋⠁            |
+|      ⠰            ⠁⠙⢿⣿⣄⣠⡶ ⠒⠲⠠⡤              ⢸⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣎⢻⣿⣿⣿⡿⠃ ⠈⠛⣿⣿⣿⡿⠟⠛⣿⣿⣿⣟⠿⠋⠉⢈                |
+|                       ⠁⠉⠛⢿⣀⣀⣤⣤⣄⣄⡀           ⠸⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣷⣿⣭⠅     ⠘⣿⡏  ⠰ ⣻⠻⡿⠇  ⠘⣆               |
+|                           ⢀⣸⣿⣿⣿⣿⣿⣶⣶⣄         ⠈⠙⠛⠛⠉⠙⢻⣿⣿⣿⣿⣿⣿⣿⣿⣿⡿⠋        ⠉   ⠐⢮⣷ ⣀⣤⣶⣀⠈⢀              |
+|                           ⠸⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣶⣦⡄           ⠈⢻⣿⣿⣿⣿⣿⣿⣿⠋                ⠛⠧⣈⣛⢃⢛⠁ ⠊⠓⢷⣶⣤⡠        |
+|                            ⠙⢿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡟⠁            ⣸⣿⣿⣿⣿⣿⣿⣿⠇⢀⣴                    ⣨⣤⣶⣶⣆⣶⣄⠉        |
+|                              ⢸⣿⣿⣿⣿⣿⣿⡿⠿⠁             ⠘⣿⣿⣿⣿⣿⡿⠁ ⣿⠏                 ⢠⣶⣾⣿⣿⣿⣿⣿⣿⣿⣶⣄       |
+|                              ⣿⣿⣿⣿⣿⣿⠟                 ⠹⣿⣿⣿⡿⠃                     ⠘⣿⣿⣿⣿⠿⣿⣿⣿⣿⣿⡿       |
+|                             ⢰⣿⣿⡿⠛⠃                    ⠈                          ⠉    ⠈⠙⠻⣻⡟     ⢀⣱⠆|
+|                             ⣾⣿⠯                                                          ⠈     ⠐⠋  |
+|                             ⠈⠛⠂ ⠈                                                                  |
+|                         ■ $0.088  ■ ≥ $0.19  ■ ≥ $0.42  ■ ≥ $0.91  ■ ≥ $2                          |
+|                                                                                                    |
+|                ⣀⣀⣠⣤⢠⣤⣦⣶⣶⣶⣿⣿⡿⠿⢿⣿⣿⣶⣶⣶⣶⣿⣿⣿⣿⣿⣿⣿⣶⠒⠂      ⠤⣤⠤⡤      ⠒ ⠐⠂ ⢀      ⠐⠶⠤⣤⣀⣀                   |
+|⣀  ⢀⣠⣤⣤⣤⣤⣤⣤⣄⣀⣤⣤⣾⣟⣿⣿⣿⣿⣽⣻⣿⣟⣿⣿⡿⣷⣶⣤⣄⡀ ⠹⣿⣿⣿⣿⣿⣿⣿⣿⠿⠁         ⣀⣀⣤⣤⣤⣀⣀ ⢀⢀⣐⣮⣩⣀⣠⣶⣶⣴⣶⣶⣿⣿⣿⣿⣿⣿⣿⣿⣶⣶⣶⣶⣤⣤⣽⣿⣶⣧⣤⣤⣄⣀⣀⣀⣀⣀|
+|⠉⠉⠓⢛⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⠿⠛⠻⠷⣾⣿⣿⣿⡏  ⠙⠿⢿⠟⠉⠁  ⠘⠛⠛   ⢀ ⢠⣴⣾⣿⡛⣽⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⠿⢿⣿⡿⡿⠿⠛|
+|⢀⢀ ⠤⠖⠛⠉⠉   ⠈⠙⢿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣷⣶⣶⣿⣿⣿⣿⣿⣶⣆            ⢤⢿⣷⣄⣠⣿⣿⣯⣴⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣯⣥   ⢺⠟⠁  ⠄ |
+|              ⠈⢹⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⢿⠿⠟⠛⠃           ⢀⣈⣹⣿⢿⠿⣿⢿⣿⣿⣿⠟⠿⠻⣿⣿⡟⢿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡿⠋⣼⡄         |
+|               ⠘⢿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⠏⠁                ⠘⣿⣟⣥⣤⣬⠈⠉⠘⠟⠹⠿⠿⣿⣿⣿⣿⣬⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡭⠙⡿⣀⣤⣴⡇          |
+|                 ⠉⢿⣿⣿⣿⣿⡟⠛⠛⠛⣯⠁                 ⣠⣾⣿⣿⣿⣿⣿⣿⣷⣾⣿⣶⣶⡾⣿⣿⣿⣟⡻⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡿  ⠋⠁            |
+|      ⠰            ⠁⠙⢿⣿⣄⣠⡶ ⠒⠲⠠⡤              ⢸⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣎⢻⣿⣿⣿⡿⠃ ⠈⠛⣿⣿⣿⡿⠟⠛⣿⣿⣿⣟⠿⠋⠉⢈                |
+|                       ⠁⠉⠛⢿⣀⣀⣤⣤⣄⣄⡀           ⠸⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣷⣿⣭⠅     ⠘⣿⡏  ⠰ ⣻⠻⡿⠇  ⠘⣆               |
+|                           ⢀⣸⣿⣿⣿⣿⣿⣶⣶⣄         ⠈⠙⠛⠛⠉⠙⢻⣿⣿⣿⣿⣿⣿⣿⣿⣿⡿⠋        ⠉   ⠐⢮⣷ ⣀⣤⣶⣀⠈⢀              |
+|                           ⠸⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣶⣦⡄           ⠈⢻⣿⣿⣿⣿⣿⣿⣿⠋                ⠛⠧⣈⣛⢃⢛⠁ ⠊⠓⢷⣶⣤⡠        |
+|                            ⠙⢿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡟⠁            ⣸⣿⣿⣿⣿⣿⣿⣿⠇⢀⣴                    ⣨⣤⣶⣶⣆⣶⣄⠉        |
+|                              ⢸⣿⣿⣿⣿⣿⣿⡿⠿⠁             ⠘⣿⣿⣿⣿⣿⡿⠁ ⣿⠏                 ⢠⣶⣾⣿⣿⣿⣿⣿⣿⣿⣶⣄       |
+|                              ⣿⣿⣿⣿⣿⣿⠟                 ⠹⣿⣿⣿⡿⠃                     ⠘⣿⣿⣿⣿⠿⣿⣿⣿⣿⣿⡿       |
+|                             ⢰⣿⣿⡿⠛⠃                    ⠈                          ⠉    ⠈⠙⠻⣻⡟     ⢀⣱⠆|
+|                             ⣾⣿⠯                                                          ⠈     ⠐⠋  |
+|                             ⠈⠛⠂ ⠈                                                                  |
+|                              ■ 0  ■ ≥ 0.86  ■ ≥ 1.7  ■ ≥ 2.6  ■ ≥ 3.4                              |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+--- styles
+|aaaaaabaaaaaaaaccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc|
+|ccccccccccccccccdddddddddddddddddddddddddddddddccccccddddccccccdcddcdccccccddddddccccccccccccccccccc|
+|dcceeeeeeeeddddddddddddddddddddddcdddddddddddcccccccccdddddddcdddddddddddddddddddddddddddddddddddddd|
+|ddeeeeeeeeeeeddddddddddddddddddddccddddddccdddcccfcddddddddddddddddddddddddddddddddddddddddddddddddd|
+|eeceeeeeccceeedddddddddddddddddddddccccccccccccffffeeeedddddddddddddddddddddddddddddddddddcccdddccec|
+|ccccccccccccccdeeeeeeeeeeeeeeeeeddddcccccccccccdffdeeedddddddddddddddddddddddddddddddddddeeccccccccc|
+|ccccccccccccccceeeeeeeeeeeeeeeeccccccccccccccccdddddddddddddddddddddddggddddddddddddddeeeecccccccccc|
+|ccccccccccccccccceeeeeeeeeeeecccccccccccccccccdddddddddddddddddddddddgggggggggddddddcceecccccccccccc|
+|cccccceccccccccccccdddddddcddddccccccccccccccddddddddddddddddddddddcdggggggggdddddddcccccccccccccccc|
+|cccccccccccccccccccccccdddddddddddcccccccccccddddddddddddddddddddcccccgggccgcddddccddccccccccccccccc|
+|cccccccccccccccccccccccccccdddgggggggcccccccccddddddddddddddddddccccccccdcccddhcddddddcccccccccccccc|
+|cccccccccccccccccccccccccccddggggggggggggcccccccccccddddddddddccccccccccccccccdddddddcddddddcccccccc|
+|ccccccccccccccccccccccccccccdggggggggggggccccccccccccdddddddddddccccccccccccccccccccfffffffdcccccccc|
+|ccccccccccccccccccccccccccccccddddggggggcccccccccccccddhhhhddcddcccccccccccccccccffffffffffffccccccc|
+|ccccccccccccccccccccccccccccccddddgggccccccccccccccccchhhhhhcccccccccccccccccccccffffffffffffccccccc|
+|cccccccccccccccccccccccccccccddddddcccccccccccccccccccchccccccccccccccccccccccccccfccccfffffcccccddd|
+|cccccccccccccccccccccccccccccdddccccccccccccccccccccccccccccccccccccccccccccccccccccccccccfcccccddcc|
+|cccccccccccccccccccccccccccccdddcdcccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc|
+|cccccccccccccccccccccccccdciiiiiicceciciiiiicchciciiiiiccgciciiiiiccfciciicccccccccccccccccccccccccc|
+|cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc|
+|ccccccccccccccccdddddddddddddddddddddddddddddddccccccddddccccccdcddcdccccccddddddccccccccccccccccccc|
+|dccddddddddddddddddddddddddddddddcdddddddddddcccccccccdddddddcdddddddddddddddddddddddddddddddddddddd|
+|dddddddddddddddddddddddddddddddddccddddddccdddcccfcddddddddddddddddddddddddddddddddddddddddddddddddd|
+|ddcdddddcccddddddddddddddddddddddddccccccccccccffffdddddddddddddddddddddddddddddddddddddddcccdddccdc|
+|ccccccccccccccddddddddddddddddddddddcccccccccccdffdddddddddddddddddddddddddddddddddddddddddccccccccc|
+|cccccccccccccccddddddddddddddddccccccccccccccccdddddddddddddddddddddddeeddddddddddddddddddcccccccccc|
+|cccccccccccccccccddddddddddddcccccccccccccccccdddddddddddddddddddddddeeeeeeeeeddddddccddcccccccccccc|
+|ccccccdccccccccccccdddddddcddddccccccccccccccddddddddddddddddddddddcdeeeeeeeedddddddcccccccccccccccc|
+|cccccccccccccccccccccccdddddddddddcccccccccccddddddddddddddddddddccccceeeccecddddccddccccccccccccccc|
+|cccccccccccccccccccccccccccdddeeeeeeecccccccccddddddddddddddddddccccccccdcccdddcddddddcccccccccccccc|
+|cccccccccccccccccccccccccccddeeeeeeeeeeeecccccccccccddddddddddccccccccccccccccdddddddcddddddcccccccc|
+|ccccccccccccccccccccccccccccdeeeeeeeeeeeeccccccccccccdddddddddddccccccccccccccccccccfffffffdcccccccc|
+|ccccccccccccccccccccccccccccccddddeeeeeecccccccccccccddddddddcddcccccccccccccccccffffffffffffccccccc|
+|ccccccccccccccccccccccccccccccddddeeecccccccccccccccccddddddcccccccccccccccccccccffffffffffffccccccc|
+|cccccccccccccccccccccccccccccddddddccccccccccccccccccccdccccccccccccccccccccccccccfccccfffffcccccddd|
+|cccccccccccccccccccccccccccccdddccccccccccccccccccccccccccccccccccccccccccccccccccccccccccfcccccddcc|
+|cccccccccccccccccccccccccccccdddcdcccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc|
+|ccccccccccccccccccccccccccccccdcicceciciiiicchciciiiccgciciiiccfciciiicccccccccccccccccccccccccccccc|
+|cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc|
+|cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc|
+|cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc|
+|cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc|
+|cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc|
+|cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc|
+|cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc|
+|cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc|
+|cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc|
+|cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc|
+|cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc|
+|cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc|
+|cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc|
+|cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc|
+|cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc|
+|cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc|
+|cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc|
+|cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc|
+|cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc|
+|cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc|
+|cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc|
+|cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc|
+a: fg=dim bg=panel bold
+b: bg=panel bold
+c: bg=panel
+d: fg=success-tint bg=panel
+e: fg=accent-tint bg=panel
+f: fg=accent-bright bg=panel
+g: fg=heat4 bg=panel
+h: fg=info bg=panel
+i: fg=mute bg=panel
+=== 16 100x60
+|Median $/GPU/hr                                                                                     |
+|                ⣀⣀⣠⣤⢠⣤⣦⣶⣶⣶⣿⣿⡿⠿⢿⣿⣿⣶⣶⣶⣶⣿⣿⣿⣿⣿⣿⣿⣶⠒⠂      ⠤⣤⠤⡤      ⠒ ⠐⠂ ⢀      ⠐⠶⠤⣤⣀⣀                   |
+|⣀  ⢀⣠⣤⣤⣤⣤⣤⣤⣄⣀⣤⣤⣾⣟⣿⣿⣿⣿⣽⣻⣿⣟⣿⣿⡿⣷⣶⣤⣄⡀ ⠹⣿⣿⣿⣿⣿⣿⣿⣿⠿⠁         ⣀⣀⣤⣤⣤⣀⣀ ⢀⢀⣐⣮⣩⣀⣠⣶⣶⣴⣶⣶⣿⣿⣿⣿⣿⣿⣿⣿⣶⣶⣶⣶⣤⣤⣽⣿⣶⣧⣤⣤⣄⣀⣀⣀⣀⣀|
+|⠉⠉⠓⢛⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⠿⠛⠻⠷⣾⣿⣿⣿⡏  ⠙⠿⢿⠟⠉⠁  ⠘⠛⠛   ⢀ ⢠⣴⣾⣿⡛⣽⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⠿⢿⣿⡿⡿⠿⠛|
+|⢀⢀ ⠤⠖⠛⠉⠉   ⠈⠙⢿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣷⣶⣶⣿⣿⣿⣿⣿⣶⣆            ⢤⢿⣷⣄⣠⣿⣿⣯⣴⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣯⣥   ⢺⠟⠁  ⠄ |
+|              ⠈⢹⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⢿⠿⠟⠛⠃           ⢀⣈⣹⣿⢿⠿⣿⢿⣿⣿⣿⠟⠿⠻⣿⣿⡟⢿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡿⠋⣼⡄         |
+|               ⠘⢿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⠏⠁                ⠘⣿⣟⣥⣤⣬⠈⠉⠘⠟⠹⠿⠿⣿⣿⣿⣿⣬⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡭⠙⡿⣀⣤⣴⡇          |
+|                 ⠉⢿⣿⣿⣿⣿⡟⠛⠛⠛⣯⠁                 ⣠⣾⣿⣿⣿⣿⣿⣿⣷⣾⣿⣶⣶⡾⣿⣿⣿⣟⡻⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡿  ⠋⠁            |
+|      ⠰            ⠁⠙⢿⣿⣄⣠⡶ ⠒⠲⠠⡤              ⢸⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣎⢻⣿⣿⣿⡿⠃ ⠈⠛⣿⣿⣿⡿⠟⠛⣿⣿⣿⣟⠿⠋⠉⢈                |
+|                       ⠁⠉⠛⢿⣀⣀⣤⣤⣄⣄⡀           ⠸⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣷⣿⣭⠅     ⠘⣿⡏  ⠰ ⣻⠻⡿⠇  ⠘⣆               |
+|                           ⢀⣸⣿⣿⣿⣿⣿⣶⣶⣄         ⠈⠙⠛⠛⠉⠙⢻⣿⣿⣿⣿⣿⣿⣿⣿⣿⡿⠋        ⠉   ⠐⢮⣷ ⣀⣤⣶⣀⠈⢀              |
+|                           ⠸⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣶⣦⡄           ⠈⢻⣿⣿⣿⣿⣿⣿⣿⠋                ⠛⠧⣈⣛⢃⢛⠁ ⠊⠓⢷⣶⣤⡠        |
+|                            ⠙⢿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡟⠁            ⣸⣿⣿⣿⣿⣿⣿⣿⠇⢀⣴                    ⣨⣤⣶⣶⣆⣶⣄⠉        |
+|                              ⢸⣿⣿⣿⣿⣿⣿⡿⠿⠁             ⠘⣿⣿⣿⣿⣿⡿⠁ ⣿⠏                 ⢠⣶⣾⣿⣿⣿⣿⣿⣿⣿⣶⣄       |
+|                              ⣿⣿⣿⣿⣿⣿⠟                 ⠹⣿⣿⣿⡿⠃                     ⠘⣿⣿⣿⣿⠿⣿⣿⣿⣿⣿⡿       |
+|                             ⢰⣿⣿⡿⠛⠃                    ⠈                          ⠉    ⠈⠙⠻⣻⡟     ⢀⣱⠆|
+|                             ⣾⣿⠯                                                          ⠈     ⠐⠋  |
+|                             ⠈⠛⠂ ⠈                                                                  |
+|                         ■ $0.088  ■ ≥ $0.19  ■ ≥ $0.42  ■ ≥ $0.91  ■ ≥ $2                          |
+|                                                                                                    |
+|                ⣀⣀⣠⣤⢠⣤⣦⣶⣶⣶⣿⣿⡿⠿⢿⣿⣿⣶⣶⣶⣶⣿⣿⣿⣿⣿⣿⣿⣶⠒⠂      ⠤⣤⠤⡤      ⠒ ⠐⠂ ⢀      ⠐⠶⠤⣤⣀⣀                   |
+|⣀  ⢀⣠⣤⣤⣤⣤⣤⣤⣄⣀⣤⣤⣾⣟⣿⣿⣿⣿⣽⣻⣿⣟⣿⣿⡿⣷⣶⣤⣄⡀ ⠹⣿⣿⣿⣿⣿⣿⣿⣿⠿⠁         ⣀⣀⣤⣤⣤⣀⣀ ⢀⢀⣐⣮⣩⣀⣠⣶⣶⣴⣶⣶⣿⣿⣿⣿⣿⣿⣿⣿⣶⣶⣶⣶⣤⣤⣽⣿⣶⣧⣤⣤⣄⣀⣀⣀⣀⣀|
+|⠉⠉⠓⢛⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⠿⠛⠻⠷⣾⣿⣿⣿⡏  ⠙⠿⢿⠟⠉⠁  ⠘⠛⠛   ⢀ ⢠⣴⣾⣿⡛⣽⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⠿⢿⣿⡿⡿⠿⠛|
+|⢀⢀ ⠤⠖⠛⠉⠉   ⠈⠙⢿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣷⣶⣶⣿⣿⣿⣿⣿⣶⣆            ⢤⢿⣷⣄⣠⣿⣿⣯⣴⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣯⣥   ⢺⠟⠁  ⠄ |
+|              ⠈⢹⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⢿⠿⠟⠛⠃           ⢀⣈⣹⣿⢿⠿⣿⢿⣿⣿⣿⠟⠿⠻⣿⣿⡟⢿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡿⠋⣼⡄         |
+|               ⠘⢿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⠏⠁                ⠘⣿⣟⣥⣤⣬⠈⠉⠘⠟⠹⠿⠿⣿⣿⣿⣿⣬⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡭⠙⡿⣀⣤⣴⡇          |
+|                 ⠉⢿⣿⣿⣿⣿⡟⠛⠛⠛⣯⠁                 ⣠⣾⣿⣿⣿⣿⣿⣿⣷⣾⣿⣶⣶⡾⣿⣿⣿⣟⡻⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡿  ⠋⠁            |
+|      ⠰            ⠁⠙⢿⣿⣄⣠⡶ ⠒⠲⠠⡤              ⢸⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣎⢻⣿⣿⣿⡿⠃ ⠈⠛⣿⣿⣿⡿⠟⠛⣿⣿⣿⣟⠿⠋⠉⢈                |
+|                       ⠁⠉⠛⢿⣀⣀⣤⣤⣄⣄⡀           ⠸⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣷⣿⣭⠅     ⠘⣿⡏  ⠰ ⣻⠻⡿⠇  ⠘⣆               |
+|                           ⢀⣸⣿⣿⣿⣿⣿⣶⣶⣄         ⠈⠙⠛⠛⠉⠙⢻⣿⣿⣿⣿⣿⣿⣿⣿⣿⡿⠋        ⠉   ⠐⢮⣷ ⣀⣤⣶⣀⠈⢀              |
+|                           ⠸⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣶⣦⡄           ⠈⢻⣿⣿⣿⣿⣿⣿⣿⠋                ⠛⠧⣈⣛⢃⢛⠁ ⠊⠓⢷⣶⣤⡠        |
+|                            ⠙⢿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡟⠁            ⣸⣿⣿⣿⣿⣿⣿⣿⠇⢀⣴                    ⣨⣤⣶⣶⣆⣶⣄⠉        |
+|                              ⢸⣿⣿⣿⣿⣿⣿⡿⠿⠁             ⠘⣿⣿⣿⣿⣿⡿⠁ ⣿⠏                 ⢠⣶⣾⣿⣿⣿⣿⣿⣿⣿⣶⣄       |
+|                              ⣿⣿⣿⣿⣿⣿⠟                 ⠹⣿⣿⣿⡿⠃                     ⠘⣿⣿⣿⣿⠿⣿⣿⣿⣿⣿⡿       |
+|                             ⢰⣿⣿⡿⠛⠃                    ⠈                          ⠉    ⠈⠙⠻⣻⡟     ⢀⣱⠆|
+|                             ⣾⣿⠯                                                          ⠈     ⠐⠋  |
+|                             ⠈⠛⠂ ⠈                                                                  |
+|                              ■ 0  ■ ≥ 0.86  ■ ≥ 1.7  ■ ≥ 2.6  ■ ≥ 3.4                              |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+--- styles
+|aaaaaabaaaaaaaa                                                                                     |
+|                cccccccccccccccccdddddddddddddd      dddd      d dd d      dddddd                   |
+|d  eeeeeeeecccccccccccccccccccccc ddddddddddd         ddddddd dddddddddddddddddddddddddddddddddddddd|
+|ddeeeeeeeeeeecccccccccccccccccccc  dddddd  ddd   f ddddddddddddddddddddddddddddddddddddddddddddddddd|
+|ee eeeee   eeeccccccccccccccccccccc            ffffeeeeddddddddddddddddddddddddddddddddddd   ddd  e |
+|              ceeeeeeeeeeeeeeeeecccc           dffdeeedddddddddddddddddddddddddddddddddddee         |
+|               eeeeeeeeeeeeeeee                dddddddddddddddddddddddggddddddddddddddeeee          |
+|                 eeeeeeeeeeee                 dddddddddddddddddddddddgggggggggdddddd  ee            |
+|      e            ddddddd dddd              dddddddddddddddddddddd dggggggggddddddd                |
+|                       ddddddddddd           dddddddddddddddddddd     ggg  g dddd  dd               |
+|                           dddggggggg         dddddddddddddddddd        d   ddh dddddd              |
+|                           ddgggggggggggg           dddddddddd                ddddddd dddddd        |
+|                            dgggggggggggg            ddddddddddd                    fffffffd        |
+|                              ddddgggggg             ddhhhhdd dd                 ffffffffffff       |
+|                              ddddggg                 hhhhhh                     ffffffffffff       |
+|                             dddddd                    h                          f    fffff     ddd|
+|                             ddd                                                          f     dd  |
+|                             ddd d                                                                  |
+|                         c dddddd  e d ddddd  h d ddddd  g d ddddd  f d dd                          |
+|                                                                                                    |
+|                cccccccccccccccccdddddddddddddd      dddd      d dd d      dddddd                   |
+|d  cccccccccccccccccccccccccccccc ddddddddddd         ddddddd dddddddddddddddddddddddddddddddddddddd|
+|ddccccccccccccccccccccccccccccccc  dddddd  ddd   f ddddddddddddddddddddddddddddddddddddddddddddddddd|
+|cc ccccc   cccccccccccccccccccccccc            ffffccccddddddddddddddddddddddddddddddddddd   ddd  c |
+|              cccccccccccccccccccccc           dffdcccdddddddddddddddddddddddddddddddddddcc         |
+|               cccccccccccccccc                dddddddddddddddddddddddeeddddddddddddddcccc          |
+|                 cccccccccccc                 dddddddddddddddddddddddeeeeeeeeedddddd  cc            |
+|      c            ddddddd dddd              dddddddddddddddddddddd deeeeeeeeddddddd                |
+|                       ddddddddddd           dddddddddddddddddddd     eee  e dddd  dd               |
+|                           dddeeeeeee         dddddddddddddddddd        d   ddc dddddd              |
+|                           ddeeeeeeeeeeee           dddddddddd                ddddddd dddddd        |
+|                            deeeeeeeeeeee            ddddddddddd                    fffffffd        |
+|                              ddddeeeeee             ddccccdd dd                 ffffffffffff       |
+|                              ddddeee                 cccccc                     ffffffffffff       |
+|                             dddddd                    c                          f    fffff     ddd|
+|                             ddd                                                          f     dd  |
+|                             ddd d                                                                  |
+|                              c d  e d dddd  h d ddd  g d ddd  f d ddd                              |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+a: fg=dim bold
+b: bold
+c: fg=heat1
+d: fg=mute
+e: fg=info
+f: fg=accent-bright
+g: fg=accent
+h: fg=heat3
+=== ascii 100x60
+|Median $/GPU/hr                                                                                     |
+|                *****************............         .                       .                     |
+|   ++++++++********************** ..........            ...      ... .........................      |
+|  +++++++++++********************   ...          %  ................................................|
+|++ +++++   +++*********************            %%%%++++...................................   ..   + |
+|              *+++++++++++++++++****            %%.+++...................................++         |
+|               ++++++++++++++++                 .....   ..............xx..............++++          |
+|                 ++++++++++++                  ......................xxxxxxxxx......  ++            |
+|      +              ... .                   .....................   xxxxxxxx.....                  |
+|                         ..  ..              ...................      xxx  x ...                    |
+|                            ..xxxxxxx           .. .............             .o  ..                 |
+|                            .xxxxxxxxxxxx            ........                 .... .   ....         |
+|                             xxxxxxxxxxxx            ........  .                    %%%%%%%         |
+|                              ....xxxxxx              .oooo.  ..                 %%%%%%%%%%%%       |
+|                              ....xxx                 oooooo                     %%%%%%%%%%%%       |
+|                             .....                     o                          %    %%%%%      . |
+|                             ...                                                          %         |
+|                              .                                                                     |
+|                       * $0.088  + >= $0.19  o >= $0.42  x >= $0.91  % >= $2                        |
+|                                                                                                    |
+|                *****************............         .                       .                     |
+|   ****************************** ..........            ...      ... .........................      |
+|  *******************************   ...          %  ................................................|
+|** *****   ************************            %%%%****...................................   ..   * |
+|              **********************            %%.***...................................**         |
+|               ****************                 .....   ..............++..............****          |
+|                 ************                  ......................+++++++++......  **            |
+|      *              ... .                   .....................   ++++++++.....                  |
+|                         ..  ..              ...................      +++  + ...                    |
+|                            ..+++++++           .. .............             .*  ..                 |
+|                            .++++++++++++            ........                 .... .   ....         |
+|                             ++++++++++++            ........  .                    %%%%%%%         |
+|                              ....++++++              .****.  ..                 %%%%%%%%%%%%       |
+|                              ....+++                 ******                     %%%%%%%%%%%%       |
+|                             .....                     *                          %    %%%%%      . |
+|                             ...                                                          %         |
+|                              .                                                                     |
+|                            * 0  + >= 0.86  o >= 1.7  x >= 2.6  % >= 3.4                            |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+--- styles
+|aaaaaaaaaaaaaaa                                                                                     |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+a: bold

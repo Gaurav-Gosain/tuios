@@ -332,6 +332,15 @@ func (w *chartWidget) paint(s *Surface, _ *box, c *canvas, r Rect) {
 		}
 		return
 	}
+	var world plot.Map
+	mapRows := 0
+	if w.kind == "map" {
+		// A map keeps its shape, so it cannot fill a tall box. The title, the
+		// map and the legend stay together as one block, centred.
+		world = w.world(s)
+		_, mapRows = world.Fit(r.Dx(), max(r.Dy()-w.titleRows()-1, 1), s.mode)
+		r.Min.Y += max(r.Dy()-w.titleRows()-mapRows-1, 0) / 2
+	}
 	if w.title != "" || w.legend() != nil {
 		end := r.Min.X
 		if w.title != "" {
@@ -386,29 +395,12 @@ func (w *chartWidget) paint(s *Surface, _ *box, c *canvas, r Rect) {
 		axis := w.axis || w.kind == "area" && r.Dy() >= 4 && r.Dx() >= 16
 		g = plot.Line{Series: w.series, Fill: w.kind == "area", Axis: axis, Labels: w.labels}.Draw(r.Dx(), r.Dy(), s.mode)
 	case "map":
-		// The legend takes the last row, and the map is centred in what is
-		// left: unlike every other chart, it cannot fill the box.
-		legendY := r.Max.Y - 1
-		room := r.Dy() - 1
-		if room < 1 {
-			room = 1
-		}
-		world := w.world(s)
-		_, mh := world.Fit(r.Dx(), room, s.mode)
-		if mh > room {
-			mh = room
-		}
-		if mh < 1 {
-			mh = 1
-		}
-		if room > mh {
-			r.Min.Y += (room - mh) / 2
-		}
-		g = world.Draw(r.Dx(), mh, s.mode)
-		if r.Dx() > 0 {
+		g = world.Draw(r.Dx(), mapRows, s.mode)
+		// The legend goes right under the map, when a row is left for it.
+		if r.Dy() > mapRows {
 			lg := plot.NewGrid(r.Dx(), 1)
-			plot.DrawLegend(lg, 0, 0, world.Legend(s.mode), s.mode)
-			s.blit(c, lg, r.Min.X, legendY)
+			end := plot.DrawLegend(lg, 0, 0, world.Legend(s.mode), s.mode)
+			s.blit(c, lg, r.Min.X+(r.Dx()-end)/2, r.Min.Y+mapRows)
 		}
 	case "heatmap":
 		g = plot.Heatmap{Values: w.grid, RowLabels: w.rowsL, ColLabels: w.colsL}.Draw(r.Dx(), r.Dy(), s.mode)

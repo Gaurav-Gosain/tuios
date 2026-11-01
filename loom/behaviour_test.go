@@ -470,6 +470,36 @@ func TestMapCellAspect(t *testing.T) {
 	}
 }
 
+// TestMapBlockInTallBox keeps the title, the map and the legend together in a
+// box much taller than the map, centred in it, and draws no legend over the map
+// when the box has no row for it.
+func TestMapBlockInTallBox(t *testing.T) {
+	const w, h = 100, 60
+	src := `<tml version="1"><state>{"r": [{"c": "US", "v": 8}]}</state>
+  <map data="state.r" x="c" y="v" title="Rates" h="fill"/>
+</tml>`
+	s := mustSurface(t, src)
+	buf := s.Render(w, h)
+	title, legend := rowWith(buf, "Rates"), rowWith(buf, "≥")
+	if title < 0 || legend < 0 {
+		t.Fatalf("no title or legend:\n%s", strings.Join(rows(buf), "\n"))
+	}
+	all := rows(buf)
+	for y := title + 1; y < legend; y++ {
+		if strings.TrimSpace(all[y]) == "" {
+			t.Fatalf("row %d between the title and the legend is empty:\n%s", y, strings.Join(all, "\n"))
+		}
+	}
+	if above, below := title, h-1-legend; above < 15 || above-below > 1 || below-above > 1 {
+		t.Errorf("the block is not centred: %d rows above, %d below", above, below)
+	}
+	// One row: the map takes it, and no legend mark lands on it.
+	s = mustSurface(t, strings.ReplaceAll(src, ` title="Rates"`, ""))
+	if got := rowWith(s.Render(w, 1), "≥"); got >= 0 {
+		t.Errorf("a legend on the only row: %q", rows(s.Render(w, 1))[got])
+	}
+}
+
 // TestControlCharsDropped draws a tree built in code, so tml.Sanitize never
 // saw it: no C0 or C1 control character or DEL may reach a cell, since a
 // cell's text goes to the terminal as is.
