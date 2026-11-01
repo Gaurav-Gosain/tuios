@@ -1040,7 +1040,7 @@ func TestCockpitReplyClipboardImageFirstPaste(t *testing.T) {
 	}
 	if err := term.WaitFor(func(tuitest.Screen) bool {
 		s := host.String()[mark:]
-		return strings.Contains(s, "\x1b[2J") && len(hostPictures(t, []byte(host.String()))) == 1
+		return strings.Contains(s, hostClear) && len(hostPictures(t, []byte(host.String()))) == 1
 	}, 5*time.Second); err != nil {
 		saveCockpitFrames(t, term, "clipboard-thumb-after-editor", hostPictures(t, []byte(host.String()))...)
 		t.Fatalf("ASSERTION: back from the editor the host holds %d pictures, want the thumbnail: %v\n%s",
@@ -1083,6 +1083,10 @@ func waitBufferQuiet(t *testing.T, host *lockedBuffer, quiet time.Duration) {
 	}
 	t.Fatalf("the client never stopped writing to the host")
 }
+
+// hostClear is the whole-screen clear a frame carries on a host with kitty
+// graphics. It has no ED 2, which would take the pictures with it.
+const hostClear = "\x1b[H\x1b[J"
 
 // placedAPC is one kitty graphics command, with the cursor move just before
 // it, which is where a placement goes.

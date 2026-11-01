@@ -58,9 +58,8 @@ import (
 // starts one read, and the read for the row the cursor ended on follows it.
 //
 // A picture waits for a resize of the terminal to settle, then is scaled once
-// for the size the person stopped at. The renderer erases the host's screen on
-// a resize, and that takes a kitty picture and its data off the host, so the
-// upload follows the settle too. See hostErased in inbox_reply_preview_unix.go.
+// for the size the person stopped at. See keepPicturesFrame for why the host
+// still holds it then.
 
 // overlayKindQuickLook names the panel's layer.
 const overlayKindQuickLook = "quicklook"

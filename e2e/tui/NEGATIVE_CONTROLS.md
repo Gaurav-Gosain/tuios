@@ -46,6 +46,22 @@ each step. Main has 0 after a resize that keeps the box, 0 back at an earlier si
 and 0 after a close and a reopen. This branch has the page after each of those. A
 pointer move before each screenshot makes kitty paint. See the pull request.
 
+## A picture in a pane and the launcher's icons survive a resize
+
+`TestPanePictureSurvivesAResize` shows a kitty picture once from a shell in a pane and resizes the terminal six times. `TestLauncherIconsSurviveAResize` resizes under the open launcher. Each resize must carry no ED 2 and must place the picture again. A resize of one row or column can leave the launcher's panel where it was, and only the erase then asks for the icons.
+
+Run on 2026-11-01 on Linux. Both pass on the fixed build. Each control was built into its own binary.
+
+| Control: what was cut | Where it fails | Verdict |
+| --- | --- | --- |
+| `keepHostPictures` always false, so frames keep the ED 2 | `TestPanePictureSurvivesAResize` ("a resize to [160 40] did not place the picture again"), `TestLauncherIconsSurviveAResize` ("a resize to [140 40] did not place the icons again") | **caught** |
+| `replaceAll` always false in `RefreshAllPlacements` | `TestPanePictureSurvivesAResize` ("a resize to [160 40] did not place the picture again") | **caught** |
+| The launcher's `AddEraseHook` not called | `TestLauncherIconsSurviveAResize` ("a resize to [121 40] did not place the icons again"). The first form of the test passed here: every size it used moved the panel. So the test now has steps of one row and one column | **caught** |
+| `hostScreenErased` not cleared with nothing placed, so the startup frame's erase stays set | `TestKittyMultiplePlacements` ("the guest placed the image 9 times and the host was told 12 times") | **caught** |
+| The browser client gets the rewrite too | `touch.spec.mjs:529` in clienttests (`Expected: 47`, `Received: 103`), in CI on an earlier commit of this change | **caught** |
+
+These tests hold the rules, not the pixels. The pixels were counted in a real kitty 0.49.2 under a private Xvfb: main has 0 blue pixels after the first resize, and the fixed build keeps every one through six resizes.
+
 ## Quick look moves on a resize
 
 `TestQuickLookMovesOnAResize` opens quick look on `main.go`, then resizes the

@@ -48,6 +48,11 @@ func (kp *KittyPassthrough) RefreshAllPlacements(getAllWindows func() map[string
 	// placements computed below follow it in the same drain.
 	kp.releaseDueHeld(true)
 
+	// A resize can have scrolled the host's screen, and a placement goes with
+	// it, while tuios's own record of the placement has not changed. Each one
+	// goes out again, which costs a few bytes and no image data.
+	replaceAll := kp.hostScreenErased.Swap(false)
+
 	// Note: prior versions short-circuited this loop in web mode because
 	// xterm-addon-image could not update placements in place. sip now
 	// ships a custom kitty overlay (xterm-kitty-overlay.js) that renders
@@ -218,7 +223,7 @@ func (kp *KittyPassthrough) RefreshAllPlacements(getAllWindows func() map[string
 			// Record the desired geometry BEFORE emitting, so the async frame
 			// writer's write-time read and its post-write convergence check
 			// always see the same target this pass decided on.
-			changed := st.hidden || newHostX != st.hostX || newHostY != st.hostY ||
+			changed := replaceAll || st.hidden || newHostX != st.hostX || newHostY != st.hostY ||
 				showCols != st.showCols || showRows != st.showRows
 			st.hostX, st.hostY = newHostX, newHostY
 			st.showCols, st.showRows = showCols, showRows
@@ -554,7 +559,7 @@ func (kp *KittyPassthrough) RefreshAllPlacements(getAllWindows func() map[string
 				// this pass would draw, it is not sent again.
 				if p.sentAsIs {
 					p.sentAsIs = false
-					if !p.Hidden && !p.DataDirty && len(slices) == 1 &&
+					if !replaceAll && !p.Hidden && !p.DataDirty && len(slices) == 1 &&
 						clipTop == 0 && clipBottom == 0 && clipLeft == 0 &&
 						newHostX == p.HostX && newHostY == p.HostY &&
 						maxShowableCols == p.Cols && maxShowableRows == p.DisplayRows {
@@ -564,7 +569,7 @@ func (kp *KittyPassthrough) RefreshAllPlacements(getAllWindows func() map[string
 						continue
 					}
 				}
-				posChanged := p.Hidden || p.DataDirty || p.HostX != newHostX || p.HostY != newHostY ||
+				posChanged := replaceAll || p.Hidden || p.DataDirty || p.HostX != newHostX || p.HostY != newHostY ||
 					p.ClipTop != clipTop || p.ClipBottom != clipBottom || p.ClipLeft != clipLeft ||
 					p.MaxShowable != maxShowableRows || p.MaxShowableCols != maxShowableCols ||
 					!sameSlices(p.Slices, slices)

@@ -26,6 +26,11 @@ func kittyPassthroughLog(format string, args ...any) {
 }
 
 type KittyPassthrough struct {
+	// hostScreenErased says a frame erased the host's screen, so the next refresh
+	// places every picture again. The frame writer sets it, off kp.mu: kp.mu is
+	// held around writes to the host.
+	hostScreenErased atomic.Bool
+
 	mu      sync.Mutex
 	enabled bool
 	// inlineGraphics indicates the host terminal is the browser client, whose

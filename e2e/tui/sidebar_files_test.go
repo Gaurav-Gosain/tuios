@@ -1615,7 +1615,7 @@ func TestRailQuickLookKittyPicture(t *testing.T) {
 	term, _ := quickLookStart(t, "pic.png", nil, out)
 	sendKeys(t, term, " ")
 	railLists(t, term, "space did not show pic.png", []string{"pic.png ", "64 x 32"}, nil)
-	const erase = "\x1b[2J"
+	const erase = hostClear
 	resize := func(cols, rows int) int {
 		t.Helper()
 		mark := len(out.String())
@@ -1651,6 +1651,10 @@ func TestRailQuickLookKittyPicture(t *testing.T) {
 	quickLookOnHost(t, term, out, mark, erase, "a return to 140 columns took pic.png off the host", func(p shot.Image) bool {
 		return p.Col == before.Col
 	})
+
+	if s := out.String()[mark:]; strings.Contains(s, "\x1b[2J") {
+		t.Error("ASSERTION: a resize sent an ED 2 to a host with kitty graphics: that takes every picture off it")
+	}
 
 	// Another panel over the picture takes it down, and closing it puts it back.
 	sendKeys(t, term, tuitest.Ctrl('p'))

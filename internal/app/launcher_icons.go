@@ -85,7 +85,10 @@ type launcherIcons struct {
 	// transmitted once and merely re-placed afterwards. Keyed by size for the
 	// same reason pixels is: a different size is a different upload.
 	hostID map[iconKey]uint32
-	nextID uint32
+	// eraseHooked says the writer tells hostErased when it erases the host's
+	// screen. Only the render touches it.
+	eraseHooked bool
+	nextID      uint32
 	// shown is what is currently on screen, keyed by the pair the host keys a
 	// placement on, so an unchanged list emits nothing and a changed one erases
 	// what it replaces.
@@ -350,6 +353,10 @@ func (m *OS) flushLauncherIcons(placements []launcherIconPlacement) {
 		return
 	}
 	st := m.launcherIconState()
+	if !st.eraseHooked && m.PostRenderWriter != nil {
+		st.eraseHooked = true
+		m.PostRenderWriter.AddEraseHook(st.hostErased)
+	}
 
 	w, h := m.iconCellSize()
 
@@ -418,6 +425,25 @@ func (m *OS) flushLauncherIcons(placements []launcherIconPlacement) {
 		return
 	}
 	m.WriteHost(out)
+}
+
+// hostErased runs in the writer for a frame that erases the host's screen: the
+// icons on screen are placed again behind it. When the host dropped them too,
+// nothing counts as uploaded, and the next frame sends them. See
+// PostRenderWriter.AddEraseHook.
+func (s *launcherIcons) hostErased(kept bool) []byte {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if !kept {
+		clear(s.hostID)
+		clear(s.shown)
+		return nil
+	}
+	var buf []byte
+	for at, p := range s.shown {
+		buf = appendKittyPlace(buf, at.img, at.placement, p.X, p.Y)
+	}
+	return buf
 }
 
 // clearLauncherIcons takes every launcher icon off the host. Called when the

@@ -934,3 +934,32 @@ func TestVerbOnAQueryThatMatchesNothing(t *testing.T) {
 		t.Fatalf("tab on a query matching nothing threw the query away:\n%s", term.Snapshot())
 	}
 }
+
+// TestLauncherIconsSurviveAResize resizes the terminal under the open launcher.
+// A resize must not send an ED 2, which takes every picture off a kitty host, and
+// every icon must be placed again, since a host that loses rows scrolls its
+// screen and the placements go with it. The real pixels were checked in a kitty
+// under Xvfb: see NEGATIVE_CONTROLS.md.
+func TestLauncherIconsSurviveAResize(t *testing.T) {
+	f := newLauncherFixture(t, 4, "TUIOS_CELL_SIZE=10x20")
+	f.openWithQuery(t, "zzapp", 4)
+	f.nudgeSelection()
+	f.requirePlaced(t)
+	// One row or column can leave the panel where it was, and then only the
+	// erase says the icons have to go out again.
+	for _, size := range [][2]int{{140, 40}, {120, 40}, {120, 41}, {120, 40}, {121, 40}, {120, 40}, {120, 50}, {120, 40}} {
+		mark := len(f.stream.bytes())
+		if err := f.term.Resize(size[0], size[1]); err != nil {
+			t.Fatal(err)
+		}
+		if err := f.term.WaitFor(func(tuitest.Screen) bool {
+			s := string(f.stream.bytes()[mark:])
+			return strings.Contains(s, hostClear) && strings.Count(s, "_Ga=p,") >= 4
+		}, uiTimeout); err != nil {
+			t.Fatalf("ASSERTION: a resize to %v did not place the icons again: %v", size, err)
+		}
+		if s := string(f.stream.bytes()[mark:]); strings.Contains(s, "\x1b[2J") {
+			t.Errorf("ASSERTION: a resize to %v sent an ED 2 to a host with kitty graphics", size)
+		}
+	}
+}

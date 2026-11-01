@@ -42,7 +42,7 @@ type PostRenderWriter struct {
 	written func()
 	// erased is what has to follow a frame that erases the host's screen. See
 	// AddEraseHook.
-	erased []func() []byte
+	erased []func(kept bool) []byte
 }
 
 // FrameHook runs on each frame the renderer writes. out is the frame to send
@@ -59,14 +59,16 @@ func (w *PostRenderWriter) SetFrameHook(fn FrameHook) {
 }
 
 // AddEraseHook adds a function that runs for each frame that erases the host's
-// screen, and whose output goes out behind that frame.
+// screen, and whose output goes out behind that frame. kept says the frame was
+// rewritten by keepPicturesFrame, so the host still holds the pictures. A resize
+// can still have moved or dropped their placements: a host that loses rows
+// scrolls its screen, and a placement goes with it. When kept is false the host
+// dropped the pictures too.
 //
-// An ED 2 takes every kitty picture off the host, its image data too, and
-// kitty and ghostty both do this. Bubble Tea writes one on each resize and
-// whenever it restarts its renderer, so whatever put a picture on the host has
-// to hear about it, and this writer is the one place that sees every frame. A
-// client with no such hook pays nothing here.
-func (w *PostRenderWriter) AddEraseHook(fn func() []byte) {
+// Bubble Tea erases on each resize and whenever it restarts its renderer, so
+// whatever put a picture on the host has to hear about it, and this writer is
+// the one place that sees every frame. A client with no such hook pays nothing.
+func (w *PostRenderWriter) AddEraseHook(fn func(kept bool) []byte) {
 	w.mu.Lock()
 	w.erased = append(w.erased, fn)
 	w.mu.Unlock()
@@ -86,6 +88,26 @@ var (
 
 // hostEraseScreen is ED 2. See AddEraseHook.
 var hostEraseScreen = []byte("\x1b[2J")
+
+// The renderer's whole-screen clear, and the same clear with no ED 2.
+var (
+	rendererClear     = []byte("\x1b[H\x1b[2J")
+	rendererClearKeep = []byte("\x1b[H\x1b[J")
+)
+
+// keepPicturesFrame takes the ED 2 out of a frame for a host with kitty graphics.
+//
+// The renderer writes one on each resize. kitty and ghostty drop every picture on
+// an ED 2, its data too, and only a program can send a picture again: a pane's
+// program may have shown it once and gone on. An ED 0 from the home position
+// clears the same cells and leaves the pictures alone. It reports whether the
+// frame erased.
+func keepPicturesFrame(frame []byte) ([]byte, bool) {
+	if !bytes.Contains(frame, rendererClear) {
+		return frame, false
+	}
+	return bytes.ReplaceAll(frame, rendererClear, rendererClearKeep), true
+}
 
 // Write passes bubbletea's frame through to the underlying file, appends any
 // pending post-render data, and brackets the whole thing in a synchronized
@@ -130,9 +152,11 @@ func (w *PostRenderWriter) write(p []byte, frame bool) (n int, err error) {
 	}
 	if frame && len(w.erased) > 0 && bytes.Contains(p, hostEraseScreen) {
 		// Behind what was queued for this frame: a picture that had its upload
-		// queued is sent again, and the same id and placement replace it.
+		// or placement queued is sent again, and the same id and placement
+		// replace it.
+		kept := !bytes.Contains(out, hostEraseScreen)
 		for _, fn := range w.erased {
-			pending = append(pending, fn()...)
+			pending = append(pending, fn(kept)...)
 		}
 	}
 
@@ -363,6 +387,12 @@ func (m *OS) ConnectFrameWriter(w FrameWriter) {
 	park := m.connectCursorPark(w)
 	w.SetFrameWritten(m.frameWritten.note)
 	w.SetFrameHook(func(frame []byte) ([]byte, []byte) {
+		if m.keepHostPictures.Load() {
+			var erased bool
+			if frame, erased = keepPicturesFrame(frame); erased && m.KittyPassthrough != nil {
+				m.KittyPassthrough.hostScreenErased.Store(true)
+			}
+		}
 		after := m.GraphicsFrameBytes(frame)
 		out, seq := park.frame(frame)
 		if len(seq) > 0 {

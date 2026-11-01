@@ -14,7 +14,8 @@ import (
 // moved.
 //
 // What the host holds is written down here, and two things change it without a
-// word back. An ED 2 drops every picture, which hostErased hears about. A host
+// word back. An ED 2 drops every picture, which keepPicturesFrame takes out of
+// the frame and hostErased hears about. A host
 // over its storage quota drops the oldest, kitty at 320 MB, which
 // replyPreviewHostMax keeps these from reaching. A placement of a picture the
 // host dropped fails, and with q=2 it fails in silence.
@@ -143,24 +144,27 @@ func (p *replyPreview) trimHost(want []previewPlacement) {
 	p.hostOrder = kept
 }
 
-// hostErased runs in the writer for a frame that erases the host's screen. The
-// host now holds none of these pictures, so nothing is taken as uploaded, and
-// the ones the last frame placed go out again behind the frame: no later frame
-// need come to carry them. See PostRenderWriter.AddEraseHook.
-func (p *replyPreview) hostErased() []byte {
+// hostErased runs in the writer for a frame that erases the host's screen. What
+// the last frame placed goes out again behind the frame, so no later frame need
+// come to carry it. When kept is false the host dropped the pictures too, so
+// nothing counts as uploaded and those pictures are sent again. See
+// PostRenderWriter.AddEraseHook.
+func (p *replyPreview) hostErased(kept bool) []byte {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	clear(p.hostID)
-	p.hostOrder = p.hostOrder[:0]
-	p.gone = p.gone[:0]
+	if !kept {
+		clear(p.hostID)
+		p.hostOrder = p.hostOrder[:0]
+		p.gone = p.gone[:0]
+	}
 	var buf []byte
 	for at, pl := range p.shown {
-		pic := p.pics[pl.key]
-		if pic == nil || len(pic.png) == 0 {
-			delete(p.shown, at)
-			continue
-		}
 		if _, up := p.hostID[pl.key]; !up {
+			pic := p.pics[pl.key]
+			if pic == nil || len(pic.png) == 0 {
+				delete(p.shown, at)
+				continue
+			}
 			p.hostID[pl.key] = at.img
 			p.hostOrder = append(p.hostOrder, pl.key)
 			buf = appendKittyTransmitPNG(buf, at.img, pic.png)

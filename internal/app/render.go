@@ -1328,6 +1328,9 @@ func (m *OS) flushGraphicsForView() {
 		}
 	}()
 
+	// The browser client's overlay keeps its pictures through an ED 2.
+	m.keepHostPictures.Store(m.hostCaps().KittyGraphics && (m.KittyPassthrough == nil || !m.KittyPassthrough.inlineGraphics))
+
 	// Republish every window's geometry snapshot for the PTY-reader
 	// passthrough callbacks. This runs on the goroutine that owns the layout
 	// fields, so the reads are safe, and it keeps the snapshots at most one
@@ -1428,6 +1431,12 @@ func (m *OS) snapshotPlacementScrollbackLens() {
 func (m *OS) GetKittyGraphicsCmd() tea.Cmd {
 	if m.KittyPassthrough == nil {
 		return nil
+	}
+
+	// With nothing placed, an erase has nothing to put back. Left set, the
+	// startup frame's erase would send the first placements twice.
+	if !m.KittyPassthrough.HasPlacements() {
+		m.KittyPassthrough.hostScreenErased.Store(false)
 	}
 
 	// Always refresh placements if there are any. This handles window movement.

@@ -60,4 +60,18 @@ func TestAnErasingFrameCarriesItsPictures(t *testing.T) {
 	if id := p.hostID[key]; id != 7 {
 		t.Errorf("the picture on screen is under %d, want 7", id)
 	}
+
+	// A frame rewritten for a kitty host leaves the pictures on the host: only
+	// the placement goes out again, and nothing counts as lost.
+	kept := string(p.hostErased(true))
+	if strings.Contains(kept, "a=t,") || strings.Count(kept, "a=p,i=7,p=1,") != 1 {
+		t.Errorf("a kept frame sent %q, want one placement and no upload", kept)
+	}
+	if _, up := p.hostID[key]; !up {
+		t.Error("a kept frame forgot the picture on screen")
+	}
+	out, erased := keepPicturesFrame([]byte("a\x1b[H\x1b[2Jb"))
+	if !erased || strings.Contains(string(out), "\x1b[2J") || !strings.Contains(string(out), "\x1b[H\x1b[Jb") {
+		t.Errorf("keepPicturesFrame gave %q, erased %v", out, erased)
+	}
 }
