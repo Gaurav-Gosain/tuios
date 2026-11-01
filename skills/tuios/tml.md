@@ -100,16 +100,17 @@ Data:
 - `table` filter key on-key on-select rows*=path select=none|single|multi sort: holds `column`
 - `tree` children items*=path label on-select open select=none|single|multi
 
-Charts. Each also takes graphics=auto|kitty|cells|ascii role title:
+Charts. Each also takes graphics=auto|kitty|cells|ascii title:
 
-- `area` data*=path x y
-- `bar` data*=path dir=v|h x y
-- `gauge` label max value*
-- `heatmap` data*=path v x y
-- `histogram` bins values*=path
-- `line` axis data*=path x y
-- `pie` data*=path label style=pie|donut v
-- `sparkline` values*=path
+- `area` data*=path role x y
+- `bar` data*=path dir=v|h role x y
+- `gauge` label max role value*
+- `heatmap` data*=path role v x y
+- `histogram` bins role values*=path
+- `line` axis data*=path role x y
+- `map` data*=path log unit x* y
+- `pie` data*=path label role style=pie|donut v
+- `sparkline` role values*=path
 
 Media:
 

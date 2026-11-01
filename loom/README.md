@@ -44,7 +44,7 @@ answer=$(tml confirm.tml)               # the value of close(), as JSON
 | Layout | `row`, `col`, `grid`, `stack`, `spacer`, `scroll`, `split` |
 | Text | `text` with `b`, `i`, `u`, `s`, `code`, `c`, `kbd` and `a`, `heading`, `code` (plain) |
 | Data | `table` (sort, select, scroll), `list`, `kv`, `stat`, `tree` |
-| Charts | `bar`, `line`, `area`, `sparkline`, `gauge`, `progress`, `histogram`, `heatmap`, `pie`, through [tuios.dev/plot](https://pkg.go.dev/tuios.dev/plot) |
+| Charts | `bar`, `line`, `area`, `sparkline`, `gauge`, `progress`, `histogram`, `heatmap`, `map`, `pie`, through [tuios.dev/plot](https://pkg.go.dev/tuios.dev/plot) |
 | Containers | `card`, `tabs`, `modal` (in place), `toast` |
 | Status | `badge`, `status`, `spinner`, `button` |
 | Forms | `input` and `textarea` take typed text, with a caret and the readline keys. `submit` buttons and `enter` in an input run the form's `on-submit`. The other fields show their label and value. |
