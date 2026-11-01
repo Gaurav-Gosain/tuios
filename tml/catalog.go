@@ -529,7 +529,7 @@ var table = [...]Component{
 		{Name: "log", Type: TBool, Bind: true, Doc: "Shades by the logarithm of the value, so values that span orders of magnitude spread over the shades."},
 		{Name: "title", Type: TString, Bind: true, Doc: "A caption above the chart."},
 		{Name: "unit", Type: TString, Bind: true, Doc: "A prefix for the legend values, such as $."},
-		{Name: "x", Type: TField, Doc: "The ISO 3166-1 alpha-2 country field."},
+		{Name: "x", Type: TField, Required: true, Doc: "The ISO 3166-1 alpha-2 country field."},
 		{Name: "y", Type: TField, Doc: "The value field."},
 	}},
 	{Name: "pie", Group: "chart", Doc: "Shares of a whole.", Content: ContentNone, Block: true, Attrs: []AttrSpec{

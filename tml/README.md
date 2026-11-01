@@ -251,7 +251,7 @@ parser keeps an unknown component in the tree, and the validator reports it.
 | `heatmap` | A grid of values as shades. | **`data`** `graphics` `role` `title` `v` `x` `y` | nothing |
 | `histogram` | Counts of values in bins. | `bins` `graphics` `role` `title` **`values`** | nothing |
 | `line` | A line chart. | `axis` **`data`** `graphics` `role` `title` `x` `y` | nothing |
-| `map` | Countries shaded by a value. | **`data`** `graphics` `log` `title` `unit` `x` `y` | nothing |
+| `map` | Countries shaded by a value. | **`data`** `graphics` `log` `title` `unit` **`x`** `y` | nothing |
 | `pie` | Shares of a whole. | **`data`** `graphics` `label` `role` `style` `title` `v` | nothing |
 | `sparkline` | A one-row trend. | `graphics` `role` `title` **`values`** | nothing |
 

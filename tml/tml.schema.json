@@ -5817,7 +5817,8 @@
       },
       "required": [
         "type",
-        "data"
+        "data",
+        "x"
       ],
       "type": "object"
     },

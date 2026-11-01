@@ -1,0 +1,13 @@
+[
+  {
+    "at": "/children/0",
+    "line": 3,
+    "col": 3,
+    "code": "missing_attribute",
+    "message": "\u003cmap\u003e needs the x attribute. The ISO 3166-1 alpha-2 country field.",
+    "severity": "error",
+    "accepted": [
+      "x"
+    ]
+  }
+]
