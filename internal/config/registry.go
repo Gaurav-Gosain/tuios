@@ -652,6 +652,7 @@ var ActionDescriptions = map[string]string{
 	"find_prev":           "Preview: go to the match before",
 	"filmstrip":           "Preview: show the filmstrip of a film, or hide it",
 	"next_view":           "Preview: show the next view of the file",
+	"open_details":        "Preview: open the closed sections of a Markdown file",
 	"column_left":         "Preview: move a column left, or 1 second back in a film",
 	"column_right":        "Preview: move a column right, or 1 second on in a film",
 	"go_to":               "Preview: go to a line",

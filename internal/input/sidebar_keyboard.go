@@ -108,6 +108,8 @@ func handleSidebarKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 			o.QuickLookWrap()
 		case "filmstrip":
 			o.QuickLookFilmstrip()
+		case "open_details":
+			o.QuickLookOpenDetails()
 		case "column_left":
 			o.QuickLookColumn(false)
 		case "column_right":

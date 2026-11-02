@@ -6,7 +6,8 @@
 // use: ATX and setext headings, paragraphs, bullet, ordered and task lists,
 // block quotes, fenced and indented code, thematic breaks, pipe tables, and
 // inline emphasis, strong, strikethrough, code spans, links, autolinks and
-// bare URLs. HTML, reference links and footnotes stay as text.
+// bare URLs. Reference links, footnotes, GitHub alerts and the common HTML tags are
+// turned into these before the blocks are read. See html.go.
 //
 // It is small on purpose. goldmark with its GFM extensions adds about 480 KB
 // to the tuios binary, and glamour, which also links every chroma lexer,
@@ -86,6 +87,8 @@ type Block struct {
 	Number  string
 	// Task is 0 for an item with no check box, 1 for "[ ]" and 2 for "[x]".
 	Task int8
+	// Alert is a quote's GitHub alert, such as "NOTE", and "" for a plain quote.
+	Alert string
 	// Children are the blocks of an item or a quote.
 	Children []Block
 	// Lang and Lines are a code block's language, as the fence names it,
@@ -102,11 +105,18 @@ type Block struct {
 
 // Parse reads src into blocks. cut reports that src was longer than
 // MaxBytes and only its start was read.
-func Parse(src string) (blocks []Block, cut bool) {
-	if len(src) > MaxBytes {
-		end := strings.LastIndexByte(src[:MaxBytes], '\n')
+func Parse(src string) (blocks []Block, cut bool) { return ParseWith(src, Options{}) }
+
+// ParseWith is Parse with Options.
+func ParseWith(src string, opt Options) (blocks []Block, cut bool) {
+	limit := opt.Max
+	if limit <= 0 {
+		limit = MaxBytes
+	}
+	if len(src) > limit {
+		end := strings.LastIndexByte(src[:limit], '\n')
 		if end < 0 {
-			end = MaxBytes
+			end = limit
 		}
 		src, cut = src[:end], true
 	}
@@ -115,6 +125,7 @@ func Parse(src string) (blocks []Block, cut bool) {
 	// never held.
 	src = strings.ToValidUTF8(src, "\uFFFD")
 	src = strings.ReplaceAll(src, "\r\n", "\n")
+	src = clean(src, opt)
 	lines := strings.Split(src, "\n")
 	for i, l := range lines {
 		if strings.IndexByte(l, '\t') >= 0 {
@@ -376,7 +387,13 @@ func parseBlocks(lines []string, depth int) []Block {
 				}
 				inner = append(inner, lines[i])
 			}
-			out = append(out, Block{Kind: Quote, Children: parseBlocks(inner, depth+1)})
+			q := Block{Kind: Quote, Children: parseBlocks(inner, depth+1)}
+			if len(q.Children) > 0 && q.Children[0].Kind == Paragraph {
+				if kind, rest := alert(q.Children[0].Text); kind != "" {
+					q.Alert, q.Children[0].Text = kind, rest
+				}
+			}
+			out = append(out, q)
 			continue
 		}
 		if ordered, number, content, ok := listItem(s); ok && nest {

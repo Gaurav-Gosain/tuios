@@ -301,6 +301,10 @@ A film shows one frame and a bar with the time. Click or drag the bar to move to
 time. There is no playback. Press `t` to show 7 small frames from across the film.
 At 16 colours the preview shows the facts of the film.
 
+Markdown shows HTML as formatted text, with alerts, footnotes and reference links.
+A `<details>` block starts closed, and `Enter` inside the file opens it. A Mermaid
+block shows as a diagram in text.
+
 JSON is laid out for reading. CSV and TSV show as a table. An archive shows the
 files in it. A binary file shows its first 16 KiB in hex. `J` and `K` step through
 the frames of a GIF.

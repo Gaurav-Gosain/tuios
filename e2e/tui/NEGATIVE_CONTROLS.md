@@ -13627,3 +13627,15 @@ the branch head with one change, built with `go build -overlay`:
 The frames are `setup-running`, `setup-passed` and `setup-failed` under
 `TUIOS_E2E_FRAMES`, in the test's folder. Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestWorktreeSetup' -v .`.
+## Quick look reads rich Markdown
+
+| Control: what was cut | Where it fails | Verdict |
+| --- | --- | --- |
+| Tags go | "the document did not read as Markdown" | **caught** |
+| Scripts go with their text | "the document did not read as Markdown" | **caught** |
+| Comments go | "the document did not read as Markdown" | **caught** |
+| Alerts | "the document did not read as Markdown" | **caught** |
+| Mermaid | "the document did not read as Markdown" | **caught** |
+| Sections start closed | "the document did not read as Markdown" | **caught** |
+| Enter opens them | "enter did not open the section" | **caught** |
+| Arrow heads swapped for kept glyphs | "the diagram lost its arrow head" | **caught** |

@@ -2908,6 +2908,58 @@ func TestQuickLookShowsADiff(t *testing.T) {
 	alive(t, term, "after the views")
 }
 
+// TestQuickLookReadsRichMarkdown reads a document with HTML, alerts, footnotes, a
+// reference link, a closed section and a Mermaid diagram.
+//
+// How this could pass wrongly: the words would be there as raw source too. So the test
+// also checks that no tag, no marker and no fence reaches the panel.
+func TestQuickLookReadsRichMarkdown(t *testing.T) {
+	term, dir := quickLookListed(t, nil, nil)
+	doc := `<!-- a hidden comment -->
+<h2 align="center">Rich title</h2>
+
+<script>alert("hidden script")</script>
+
+Some <b>bold</b> words, a <kbd>key</kbd>, and a [link][site].
+
+> [!WARNING]
+> Mind the step.
+
+A claim[^one] here.
+
+<details>
+<summary>More words</summary>
+
+The secret body.
+</details>
+
+![a logo](logo.png)
+
+` + "```mermaid\nflowchart LR\n  A[Start] --> B[Stop]\n```" + `
+
+[site]: https://example.com
+[^one]: The note text.
+`
+	if err := os.WriteFile(filepath.Join(dir, "zrich.md"), []byte(doc), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	railLists(t, term, "the rail did not list the document", []string{"zrich.md"}, nil)
+	quickLookFocusRail(t, term, "zrich.md")
+	sendKeys(t, term, " ")
+	railLists(t, term, "the document did not read as Markdown",
+		[]string{"Rich title", "bold", "Warning", "Mind the step.", "[1]", "1. The note text.", "More words", "[Image: a logo]", "Start", "Stop"},
+		[]string{"<h2", "<b>", "</", "[!WARNING]", "[^one]", "[site]", "hidden", "The secret body.", "```", "flowchart", "-->"})
+	// The arrow head stays, as a glyph the code block keeps, so the box after it
+	// keeps its column.
+	if !strings.Contains(term.Snapshot(), "─>│ Stop") {
+		t.Errorf("ASSERTION: the diagram lost its arrow head:\n%s", term.Snapshot())
+	}
+	saveCockpitFrames(t, term, "quick-look-rich-markdown")
+	sendKeys(t, term, tuitest.Tab, tuitest.Enter)
+	railLists(t, term, "enter did not open the section", []string{"The secret body."}, nil)
+	alive(t, term, "after rich Markdown")
+}
+
 // Kitty commands for the pictures the previews send: an upload, a free (the
 // uppercase delete, which drops the image data) and an unplace (the lowercase
 // one, which keeps it).

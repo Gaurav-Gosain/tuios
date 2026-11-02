@@ -2120,6 +2120,7 @@ func getDefaultQuickLookInsideKeybinds() map[string][]string {
 		"line_up":      {"k", "up"},
 		"column_left":  {"h", "left"},
 		"column_right": {"l", "right"},
+		"open_details": {"enter"},
 		"next_view":    {"v"},
 		"half_down":    {"d", "ctrl+d", "J", "pgdown"},
 		"half_up":      {"u", "ctrl+u", "K", "pgup"},

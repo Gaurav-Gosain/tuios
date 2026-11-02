@@ -19,6 +19,7 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/composer"
 	"github.com/Gaurav-Gosain/tuios/internal/diffview"
 	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
+	"github.com/Gaurav-Gosain/tuios/internal/markdown"
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 	"github.com/Gaurav-Gosain/tuios/internal/plural"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
@@ -81,7 +82,7 @@ const overlayKindQuickLook = "quicklook"
 
 const (
 	// quickLookMarkdownMax bounds the Markdown the preview lays out.
-	quickLookMarkdownMax = 64 << 10
+	quickLookMarkdownMax = 256 << 10
 	// quickLookMaxPx is the long side of a picture asked for. The largest panel
 	// that is not full size is quickLookPicW cells wide.
 	quickLookMaxPx = 1600
@@ -241,6 +242,8 @@ type quickLookState struct {
 	strip       [quickLookStripFrames]*composer.Image
 	stripFailed [quickLookStripFrames]bool
 	stripPics   []quickLookPic
+	// mdOpen says enter opened the <details> blocks of a Markdown file.
+	mdOpen bool
 	// mdLines is the Markdown laid out, for mdKey.
 	mdLines []ckLine
 	mdKey   quickLookMDKey
@@ -256,6 +259,7 @@ type quickLookState struct {
 // quickLookFrame is a drawn panel and its key. Where the panel is placed is
 // not kept: the origin follows the screen and the rail on every render.
 type quickLookFrame struct {
+	mdOpen             bool
 	ok                 bool
 	look               ckLookKey
 	res                *quickLookResult
@@ -291,6 +295,7 @@ type quickLookPic struct {
 
 // quickLookMDKey is what a Markdown layout was made for.
 type quickLookMDKey struct {
+	open  bool
 	res   *quickLookResult
 	width int
 	look  ckLookKey
@@ -400,7 +405,7 @@ func (m *OS) dropQuickLook() {
 	ql.mdLines = nil
 	ql.framed = quickLookFrame{}
 	m.quickLookDropPages()
-	ql.view, ql.viewScroll, ql.details, ql.column = "", 0, nil, 0
+	ql.view, ql.viewScroll, ql.details, ql.column, ql.mdOpen = "", 0, nil, 0, false
 }
 
 // QuickLookSync keeps the preview on the row under the cursor. The input
@@ -468,7 +473,7 @@ func (m *OS) quickLookShow(t quickLookTarget) tea.Cmd {
 	ql := &m.quickLook
 	if ql.target != t {
 		m.quickLookDropPages()
-		ql.view, ql.viewScroll, ql.details, ql.column = "", 0, nil, 0
+		ql.view, ql.viewScroll, ql.details, ql.column, ql.mdOpen = "", 0, nil, 0, false
 		// The hints and keys ask what the file is, and this is not that file.
 		ql.res = nil
 	}
@@ -605,6 +610,7 @@ func quickLookDecode(t quickLookTarget, raw json.RawMessage, err error, ascii bo
 				cut := strings.LastIndexByte(res.md[:quickLookMarkdownMax], '\n')
 				res.md, res.more = res.md[:max(cut, 0)], true
 			}
+			res.md = quickLookDrawMermaid(res.md, ascii)
 			return res
 		}
 		res.kind = "text"
@@ -918,7 +924,7 @@ func (m *OS) renderQuickLook() (string, int, int) {
 	}
 	// The border is in the key: the frame glyphs are a package global set from
 	// border_style every frame, outside the palette.
-	f := quickLookFrame{view: ql.view, viewScroll: ql.viewScroll, column: ql.column, details: ql.details, ok: true, look: ql.lookKey, res: ql.res, target: ql.target, scroll: ql.scroll, inside: ql.inside,
+	f := quickLookFrame{mdOpen: ql.mdOpen, view: ql.view, viewScroll: ql.viewScroll, column: ql.column, details: ql.details, ok: true, look: ql.lookKey, res: ql.res, target: ql.target, scroll: ql.scroll, inside: ql.inside,
 		prompt: ql.prompt, input: ql.input, query: ql.query, status: ql.status, wrap: ql.wrap,
 		innerW: innerW, bodyH: bodyH, key: key, seekKey: seekKey, insideKey: insideKey, border: m.Settings.OverlayBorder(),
 		canvas: pal.Canvas, fgMute: pal.FgMute, frame: pal.Frame, accent: pal.Accent,
@@ -927,7 +933,7 @@ func (m *OS) renderQuickLook() (string, int, int) {
 	var geo overlay.Geometry
 	var pic quickLookPic
 	if k := &ql.framed; k.ok && k.look == f.look && k.res == f.res && k.target == f.target && k.scroll == f.scroll && k.inside == f.inside &&
-		k.prompt == f.prompt && k.input == f.input && k.query == f.query && k.status == f.status && k.wrap == f.wrap && k.view == f.view && k.viewScroll == f.viewScroll && k.column == f.column && k.details == f.details &&
+		k.prompt == f.prompt && k.input == f.input && k.query == f.query && k.status == f.status && k.wrap == f.wrap && k.view == f.view && k.mdOpen == f.mdOpen && k.viewScroll == f.viewScroll && k.column == f.column && k.details == f.details &&
 		k.innerW == f.innerW && k.bodyH == f.bodyH && k.key == f.key && k.seekKey == f.seekKey && k.insideKey == f.insideKey && k.border == f.border &&
 		k.canvas == f.canvas && k.fgMute == f.fgMute && k.frame == f.frame && k.accent == f.accent &&
 		k.accentBright == f.accentBright && k.fgDim == f.fgDim {
@@ -1115,9 +1121,9 @@ func (m *OS) drawQuickLook(c *ckCanvas, l ckLook, dv *diffview.Theme, w, h int) 
 		}
 	case "markdown":
 		width := max(w-3, 4)
-		mk := quickLookMDKey{res: r, width: width, look: ql.lookKey}
+		mk := quickLookMDKey{res: r, width: width, look: ql.lookKey, open: ql.mdOpen}
 		if ql.mdKey != mk || ql.mdLines == nil {
-			ql.mdLines, ql.mdKey = m.ckMarkdown(l, r.md, width), mk
+			ql.mdLines, ql.mdKey = m.ckMarkdownWith(l, r.md, width, markdown.Options{Max: quickLookMarkdownMax, CloseDetails: !ql.mdOpen}), mk
 		}
 		from := scrollTo(len(ql.mdLines))
 		for i := 0; i < bodyRows && from+i < len(ql.mdLines); i++ {
@@ -1366,6 +1372,9 @@ func (m *OS) quickLookHints(closeKey string) []overlay.Hint {
 		}
 		if ql.res != nil && ql.res.table != nil {
 			h = add(h, pair(in, "column_left", "column_right"), "columns")
+		}
+		if quickLookHasDetails(ql) {
+			h = add(h, first(in("open_details")), "open details")
 		}
 		if quickLookPaged(ql.res) {
 			unit := strings.ToLower(quickLookUnit(ql.res))

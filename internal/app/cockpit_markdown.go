@@ -45,7 +45,12 @@ type ckMD struct {
 // ckMarkdown lays out an agent's message as card lines of at most width
 // cells.
 func (m *OS) ckMarkdown(l ckLook, text string, width int) []ckLine {
-	blocks, cut := markdown.Parse(strings.TrimSpace(text))
+	return m.ckMarkdownWith(l, text, width, markdown.Options{})
+}
+
+// ckMarkdownWith is ckMarkdown with the parser's options.
+func (m *OS) ckMarkdownWith(l ckLook, text string, width int, opt markdown.Options) []ckLine {
+	blocks, cut := markdown.ParseWith(strings.TrimSpace(text), opt)
 	md := &ckMD{m: m, l: l}
 	md.blocks(blocks, nil, nil, width, l.pal.Fg, 0, false)
 	if cut {
@@ -68,6 +73,21 @@ func (md *ckMD) blocks(bs []markdown.Block, first, rest []ckSeg, width int, ink 
 		}
 		md.block(b, pre, rest, width, ink, list)
 	}
+}
+
+// ckAlert is a GitHub alert's label and ink.
+func ckAlert(pal overlay.Palette, kind string) (string, color.Color) {
+	switch kind {
+	case "TIP":
+		return "Tip", pal.Success
+	case "IMPORTANT":
+		return "Important", pal.AccentBright
+	case "WARNING":
+		return "Warning", pal.Warning
+	case "CAUTION":
+		return "Caution", pal.Warn
+	}
+	return "Note", pal.Accent
 }
 
 // slicesClone copies a prefix, so lines never share one backing array.
@@ -127,6 +147,14 @@ func (md *ckMD) block(b markdown.Block, first, rest []ckSeg, width int, ink colo
 		bar := ckSeg{t: "▎ ", fg: pal.FgMute}
 		if l.ascii {
 			bar.t = "| "
+		}
+		if b.Alert != "" {
+			name, ink := ckAlert(pal, b.Alert)
+			bar.fg = ink
+			md.lines = append(md.lines, ckLine{segs: append(slicesClone(first), bar, ckSeg{t: name, fg: ink, attrs: ckBold})})
+			first = append(slicesClone(rest), bar)
+			md.blocks(b.Children, first, append(slicesClone(rest), bar), width, pal.Fg, list, false)
+			return
 		}
 		// Past a third of the width, a deeper quote or list draws no more
 		// indent, so its text keeps room on a narrow thread.
