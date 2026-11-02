@@ -895,14 +895,10 @@ func TestRailFileDragIntoPane(t *testing.T) {
 	}
 	// A stand-in for ssh: a program called ssh that holds the terminal.
 	fakeBin := t.TempDir()
-	catPath, err := exec.LookPath("cat")
-	if err != nil {
-		t.Skip("no cat to stand in for ssh")
-	}
-	data, err := os.ReadFile(catPath)
-	if err != nil {
-		t.Fatal(err)
-	}
+	// A script that reads its input, as ssh does. Its process name is the
+	// script's, ssh. A copy of cat does not do: a multi-call coreutils, as
+	// Ubuntu 26.04 ships, refuses to run under another name.
+	data := []byte("#!/bin/sh\nwhile IFS= read -r line; do :; done\n")
 	if err := os.WriteFile(filepath.Join(fakeBin, "ssh"), data, 0o755); err != nil {
 		t.Fatal(err)
 	}
