@@ -38,7 +38,7 @@ tuios.dev/plot v0.2.3-0.20261101044251-193bbd706cd8 h1:zx+RE1mRYo4Mrlx85nMAurWev
 tuios.dev/plot v0.2.3-0.20261101044251-193bbd706cd8/go.mod h1:YNjGUvsZUCEfRcs27dMp8Y09OYHMj7ahPdXN8jzXiKc=
 tuios.dev/shot v0.2.0 h1:lAWvNN/XfqxKAHxlJ8l0Ee1NHI+QYRgARVKQ83D8Azw=
 tuios.dev/shot v0.2.0/go.mod h1:6fhIgX/x7TpDqi+LCipIZYJvegMF2jfGqzukF7B6vTM=
-tuios.dev/sketch v0.4.1-0.20261101044610-110fb596ed93 h1:kDDGdrg0uxf3vUqgptqg4NmaftbMkcghMvUOo2PI4Es=
-tuios.dev/sketch v0.4.1-0.20261101044610-110fb596ed93/go.mod h1:h51gEbOg0IMyYHsiHYX8VkY3DxoxQCZvQaDJ7G9La90=
+tuios.dev/sketch v0.4.1-0.20261102100120-a0242ef25e1f h1:TIij+BziFAzDLXyNqNLeu3PM90XDMX2BLqjoe+Ds4/I=
+tuios.dev/sketch v0.4.1-0.20261102100120-a0242ef25e1f/go.mod h1:h51gEbOg0IMyYHsiHYX8VkY3DxoxQCZvQaDJ7G9La90=
 tuios.dev/tml v0.1.2-0.20261101044251-193bbd706cd8 h1:pCGPyq/DgcTq+aiBGRpL/UZaTrs5DP4HTlZaJ4KjJ1Y=
 tuios.dev/tml v0.1.2-0.20261101044251-193bbd706cd8/go.mod h1:8F9rKdZTa4zslNLjGxEMDA+UUw3RODNSU/tbYDcSMdc=

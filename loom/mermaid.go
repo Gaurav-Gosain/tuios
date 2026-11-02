@@ -5,7 +5,7 @@ import (
 	"strconv"
 	"strings"
 
-	"tuios.dev/sketch"
+	sketch "tuios.dev/sketch/core"
 	sketchtext "tuios.dev/sketch/text"
 )
 
@@ -48,7 +48,15 @@ type sketchCache struct {
 type parsedDiagram struct {
 	d   *sketch.Diagram
 	err error
+	// missing is a diagram type sketch knows and this build does not draw.
+	missing string
 }
+
+// MissingDiagram, when set, hears of a diagram type sketch knows and this
+// build does not draw, once each time a surface parses such a source. A
+// surface parses a source once and keeps it, so this does not run per frame.
+// It runs where the surface draws, so it must not block.
+var MissingDiagram func(typ string)
 
 type sketchKey struct {
 	src string
@@ -74,12 +82,21 @@ func (s *Surface) drawMermaid(src string, w int) *mermaidDrawing {
 		}
 		p = &parsedDiagram{}
 		p.d, p.err = sketch.Parse(src, sketch.ParseOptions{})
+		if typ, known := sketch.Detect(src); p.err != nil && known && !sketch.Supports(src) {
+			p.missing = string(typ)
+			if MissingDiagram != nil {
+				MissingDiagram(p.missing)
+			}
+		}
 		c.parsed[src] = p
 	}
 	out := &mermaidDrawing{width: w}
-	if p.err != nil {
+	switch {
+	case p.missing != "":
+		out.fail = "the sketch plugin draws " + p.missing + " diagrams"
+	case p.err != nil:
 		out.fail = p.err.Error()
-	} else {
+	default:
 		rows, err := sketchtext.DrawCells(p.d, sketchtext.Options{Cols: w})
 		if errors.Is(err, sketchtext.ErrTooWide) {
 			// Even the narrowest layout is too wide: draw it at its own
