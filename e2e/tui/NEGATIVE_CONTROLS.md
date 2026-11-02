@@ -12016,3 +12016,38 @@ Run on 2026-11-01 on macOS arm64, on `upstream/main` at `4c95caa50` plus the bra
 ## plugins/pr-status
 
 `TestPluginPRStatus` runs the shipped folder against a fake `gh`. Control, run on 2026-11-02: the saved text is never reused. It fails with "gh ran 2 times for two focuses in a minute". **caught**
+## The host title follows the focused pane (#1064)
+
+`TestHostTitleFollowsFocusedPane` sets `appearance.host_title` on an attached
+client and reads every OSC 2 the client writes to the host. It moves the focus,
+has the focused pane retitle itself, renames the pane to a name holding an
+OSC 2, `cd`s the pane into a directory whose name holds one, changes the
+template live, and switches to an empty workspace. The titles written are kept
+in `osc2.txt` under the test's artifact folder.
+
+Run on 2026-11-01 on macOS. Each control is one change to a build of this
+branch.
+
+| Control: what was cut | Where it fails | Verdict |
+| --- | --- | --- |
+| `View` does not call `hostTitle` | "after attach: the host title never became \"home\"; titles written: []" | caught |
+| `hostTitle` does not pass the expanded template through `notifyPlainText` | "a working directory holding an OSC 2: the OSC 2 inside the title reached the host" | caught |
+
+The pane-name step passes with the second control, because `paneName` already
+cleans a name through `printableTitle`. `{cwd}` is read from the shell's process
+and cleaned by nothing else, which is why the test also takes that path.
+
+A code review found four more cases. Each test below was written first and seen
+to fail on the build before its fix, on 2026-11-01 on macOS:
+
+| Before the fix | Test | Where it fails | Verdict |
+| --- | --- | --- | --- |
+| `{session}` is the session's own name, not the one the rail shows | `TestHostTitleFollowsFocusedPane` | "a session with a display name: the host title never became \"demo:1\"", the last title written being `home:1` | caught |
+| `{workspace}` is `CurrentWorkspace`, which a scratch group sets to its own number | `TestHostTitleFollowsFocusedPane` | "the scratch group shown: the host title is not \"demo:1\"", the last title written being `demo:1000` | caught |
+| The standalone TUI has no session name to fall back to | `TestHostTitleWithoutADaemon` | "a fresh shell with no session: the host title never became \"tuios\"; titles written: []" | caught |
+| `{cwd}` reads the pane's pid on this machine for a session attached from another | `TestHostTitleNeverReadsARemoteShellLocally`, a kept unit test: the suite cannot attach to another machine | "attached to another machine, {cwd} read a local process" | caught |
+| `View` puts the host title before a title a tool set (`ClientTitle`) | `TestHostTitleFollowsFocusedPane` | "a tool set the title: the host title never became \"from a tool\"" | caught |
+
+The plain `cd` step guards a stale `{cwd}` the review suspected. It passed on the
+build before any of these fixes, twice, so it records that the title follows a
+`cd` and claims no fix.
