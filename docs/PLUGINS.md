@@ -60,7 +60,7 @@ Run these from a terminal outside tuios. A pane cannot change which plugins run.
 
 | Command | What it does |
 |---|---|
-| `tuios plugins install SOURCE` | Get, build and enable a plugin. `SOURCE` is `owner/repo[/dir][@ref]`, a git URL or a folder. |
+| `tuios plugins install SOURCE` | Get, build and enable a plugin. `SOURCE` is the name of a tuios plugin such as `pr-status`, `owner/repo[/dir][@ref]`, a git URL or a folder. |
 | `tuios plugins update [ID...]` | Move plugins to the newest commit of their ref. Shows the commits and asks. `--check` changes nothing. |
 | `tuios plugins uninstall ID` | Stop a plugin, close its panes and remove it. |
 | `tuios plugins list` | Show each plugin, its state and the reason for that state. |
@@ -226,6 +226,7 @@ a plugin does nothing. `tuios --skill tml` has the components.
 | tuios | Change | What to do |
 |---|---|---|
 | next | New: `tuios plugins update`. | Nothing. |
+| next | New: `tuios plugins install NAME` for the plugins of the tuios release. | Nothing. |
 | next | New: the `ui` grant, `[[cell]]`, `tuios plugin-cell` and `tuios plugin-notify`. | A plugin that uses them sets `min_tuios`. A plugin that held `write` only to open a panel can ask for `ui`. |
 | next | `api` replaces `schema`. `schema = 1` still works and `tuios plugins info` warns. | Write `api = 1`. |
 | next | New variables: `TUIOS_BIN`, `TUIOS_PLUGIN_ROOT`, `TUIOS_PLUGIN_CONFIG_DIR`, `TUIOS_PLUGIN_STATE_DIR`, `TUIOS_PLUGIN_ENTRY`, `TUIOS_PLUGIN_SESSION`, `TUIOS_PLUGIN_PANE`, `TUIOS_PLUGIN_CWD`, `TUIOS_PLUGIN_CONTEXT_JSON`. | Use these instead of `HERDR_PLUGIN_*` in a tuios plugin. |
@@ -319,6 +320,21 @@ it, and the folders that open plugin panes run from. It removes the other
 folders of the plugin. When a build fails or you stop it, the plugin runs
 from its old folder. When tuios cannot restart the plugin, it keeps the old
 folders and tells you to restart the daemon.
+
+### Plugins of the tuios release
+
+Each tuios release carries its own plugins. `tuios plugins install pr-status`
+takes the plugin from the release of the tuios that runs, and needs no git and
+no build. tuios checks each file against the `checksums.txt` of the release, and
+`plugins.lock` pins the version and a hash of the files. On another machine,
+`tuios plugins install` gets the same files or nothing.
+
+`tuios plugins update` moves these plugins to the release of the tuios that
+runs. `tuios update` does that after it installs a new tuios. A failure keeps
+the old plugin running. When a package manager updates tuios, run
+`tuios plugins update` after it. A tuios that you built yourself has no release,
+so install the plugin from its folder:
+`tuios plugins install Gaurav-Gosain/tuios/plugins/pr-status`.
 
 ### Update
 

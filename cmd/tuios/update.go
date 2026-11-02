@@ -8,11 +8,13 @@ import (
 	"io"
 	"net"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"runtime/debug"
 	"time"
 
+	"github.com/Gaurav-Gosain/tuios/internal/herdrplugin"
 	"github.com/Gaurav-Gosain/tuios/internal/release"
 	"tuios.dev/vt"
 )
@@ -304,8 +306,39 @@ func installRelease(ctx context.Context, src release.Source, rel release.Release
 	}
 
 	fmt.Fprintf(out, "\nUpdated to %s.\n", rel.Tag)
+	updateFirstPartyPlugins(filepath.Join(dir, release.ExecutableName("tuios")), out)
 	reportDaemonAfterUpdate(out)
 	return nil
+}
+
+// updateFirstPartyPlugins moves the plugins installed from the release to the
+// new one, with the new binary, which knows their assets. A failure keeps the
+// old plugin, which still runs. A plugin that asks for something new asks
+// here.
+func updateFirstPartyPlugins(bin string, out io.Writer) {
+	path, err := pluginsConfigPath()
+	if err != nil {
+		return
+	}
+	lock, err := herdrplugin.ReadLock(herdrplugin.DefaultDirs(path, nil).LockPath())
+	if err != nil {
+		return
+	}
+	args := []string{"plugins", "update"}
+	for _, e := range lock.Plugins {
+		if e.Release() {
+			args = append(args, e.ID)
+		}
+	}
+	if len(args) == 2 {
+		return
+	}
+	fmt.Fprintln(out, "\nUpdating the plugins of the tuios release.")
+	cmd := exec.Command(bin, args...) //nolint:gosec // the binary this command just installed
+	cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, out, out
+	if err := cmd.Run(); err != nil {
+		fmt.Fprintln(out, "Some plugins were not updated, and they keep running as before. Run tuios plugins update to try again.")
+	}
 }
 
 // releasePage is where to send someone who has to do this by hand.

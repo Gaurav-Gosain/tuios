@@ -49,7 +49,7 @@ func newPluginsInstallCommand() *cobra.Command {
 		Short: "Install, build and enable a plugin from git or a folder",
 		Long: `Install a plugin, build it and enable it.
 
-SOURCE is owner/repo[/dir][@ref] on github.com, a git URL (https, ssh, git@host:path or file) with an optional @ref, or a folder on this machine. Without a ref, tuios uses the default branch. tuios writes the commit to plugins.lock in the config folder.
+SOURCE is the name of a plugin of the tuios release, such as pr-status, or owner/repo[/dir][@ref] on github.com, a git URL (https, ssh, git@host:path or file) with an optional @ref, or a folder on this machine. Without a ref, tuios uses the default branch. tuios writes the commit to plugins.lock in the config folder.
 
 Without SOURCE, tuios installs each plugin in plugins.lock at its commit. It does not enable them.
 
@@ -78,14 +78,19 @@ tuios shows what the plugin runs and asks first. A plugin runs with your rights.
 
 // pluginSource is a parsed SOURCE argument.
 type pluginSource struct {
-	local  string // absolute folder, for a local install
-	url    string // what git fetches
-	ref    string
-	subdir string
+	local string // absolute folder, for a local install
+	// release is a first-party plugin of the running release.
+	release string
+	url     string // what git fetches
+	ref     string
+	subdir  string
 }
 
 // shownSource is a source as the plan and the list show it.
 func shownSource(src string) string {
+	if name, ok := strings.CutPrefix(src, herdrplugin.ReleasePrefix); ok {
+		return "the tuios release, plugin " + name
+	}
 	if s, ok := strings.CutPrefix(src, "https://"); ok {
 		return strings.TrimSuffix(s, ".git")
 	}
@@ -127,7 +132,11 @@ func parsePluginSource(arg string, o installOpts) (pluginSource, error) {
 	} else {
 		parts := strings.Split(body, "/")
 		if len(parts) < 2 {
-			return s, fmt.Errorf("tuios has no plugin catalog yet, so it cannot find %s. Give owner/repo, a git URL or a folder", arg)
+			if _, ok := firstParty[arg]; ok {
+				s.release = arg
+				return s, nil
+			}
+			return s, fmt.Errorf("tuios has no plugin catalog yet, so it cannot find %s. tuios plugins install takes these names: %s. For another plugin, give owner/repo, a git URL or a folder", arg, firstPartyNames())
 		}
 		for _, part := range parts[:2] {
 			if part == "" || part == "." || part == ".." {
@@ -610,6 +619,18 @@ func installPlugin(cmd *cobra.Command, arg string, o installOpts) error {
 		return err
 	}
 	defer release()
+	if src.release != "" {
+		lock, err := herdrplugin.ReadLock(in.dirs.LockPath())
+		if err != nil {
+			return err
+		}
+		for _, le := range lock.Plugins {
+			if le.Source == herdrplugin.ReleasePrefix+src.release {
+				return fmt.Errorf("the plugin %s is installed. Run tuios plugins update %s to move it to this tuios", le.ID, le.ID)
+			}
+		}
+		return in.installFirstParty(src.release)
+	}
 	var e *herdrplugin.LockEntry
 	var p *herdrplugin.Plugin
 	fetched := ""
@@ -855,6 +876,9 @@ func (in *installer) installPinned(e herdrplugin.LockEntry) error {
 	if in.ready(e) {
 		fmt.Fprintf(in.out, "%s is installed at %.12s.\n", e.ID, e.Commit)
 		return nil
+	}
+	if e.Release() {
+		return in.pinnedRelease(e)
 	}
 	fmt.Fprintf(in.out, "tuios gets %s at %.12s.\n", shownSource(e.Source), e.Commit)
 	fetched, got, p, err := in.fetch(e.Source, e.Commit, e.Subdir)

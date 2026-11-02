@@ -12051,3 +12051,16 @@ to fail on the build before its fix, on 2026-11-01 on macOS:
 The plain `cd` step guards a stale `{cwd}` the review suspected. It passed on the
 build before any of these fixes, twice, so it records that the title follows a
 `cd` and claims no fix.
+
+## Plugins from the release
+
+`TestPluginsFromRelease` installs `pr-status` from a fake GitHub API that serves
+the archive `scripts/plugin-assets.sh` makes, with builds stamped as releases.
+Run on 2026-11-02, each control against the branch head with one change:
+
+| Claim | Control | Where it fails | Verdict |
+|---|---|---|---|
+| A wrong checksum installs nothing | the `Verify` call cut | "install with a wrong checksum" | **caught** |
+| Another machine gets the pinned files or nothing | the pin check cut | "install from plugins.lock after the asset changed" | **caught** |
+| The same release is up to date | the tag check cut | "update with the same tuios" | **caught** |
+

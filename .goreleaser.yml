@@ -20,6 +20,8 @@ git:
 
 before:
   hooks:
+    # The plugins/ folder as one release asset. See scripts/plugin-assets.sh.
+    - ./scripts/plugin-assets.sh {{ .Version }}
     # Ensure dependencies are up to date
     - go mod tidy
     # Run tests before building
@@ -421,6 +423,9 @@ archives:
 checksum:
   name_template: "checksums.txt"
   algorithm: sha256
+  # tuios plugins install checks the plugin asset against this list.
+  extra_files:
+    - glob: ./.dev/release/tuios-plugins_*.tar.gz
 
 snapshot:
   version_template: "{{ incpatch .Version }}-next"
@@ -460,6 +465,9 @@ release:
   draft: false
   prerelease: auto
   mode: replace
+  # The plugins/ folder, which tuios plugins install NAME reads.
+  extra_files:
+    - glob: ./.dev/release/tuios-plugins_*.tar.gz
   # The body is docs/release-notes/<tag>.md when that file exists (see
   # .github/workflows/release.yml), and the install instructions live there.
   footer: |

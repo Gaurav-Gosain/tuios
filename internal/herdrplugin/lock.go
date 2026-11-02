@@ -64,6 +64,14 @@ type LockEntry struct {
 // place.
 func (e LockEntry) Local() bool { return strings.HasPrefix(e.Source, LocalPrefix) }
 
+// ReleasePrefix marks a plugin from the assets of a tuios release:
+// release:NAME. Its Ref is the release tag, and its Commit and Tree hold a
+// hash of what was downloaded.
+const ReleasePrefix = "release:"
+
+// Release reports whether e came from the assets of a tuios release.
+func (e LockEntry) Release() bool { return strings.HasPrefix(e.Source, ReleasePrefix) }
+
 // Lock is the lock file.
 type Lock struct {
 	Version int         `toml:"version"`
@@ -197,6 +205,12 @@ func CheckLockEntry(e LockEntry) error {
 	}
 	if !IsCommit(e.Commit) {
 		return fmt.Errorf("the lock file entry %s has no full commit", e.ID)
+	}
+	if name, ok := strings.CutPrefix(e.Source, ReleasePrefix); ok {
+		if n, ok := NormalizeLocalID(name); !ok || n != name || e.Subdir != "" || !strings.HasPrefix(e.Ref, "v") || hasControl(e.Ref) {
+			return fmt.Errorf("the lock file entry %s names a release plugin that is not valid", e.ID)
+		}
+		return nil
 	}
 	if err := CheckSource(e.Source); err != nil {
 		return err

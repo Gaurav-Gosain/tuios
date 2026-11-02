@@ -114,6 +114,8 @@ func (in *installer) updateOne(e herdrplugin.LockEntry, check bool) error {
 	case e.Local():
 		fmt.Fprintf(in.out, "%s uses the folder %s. tuios does not update it.\n", e.ID, in.dirs.PluginRoot(e, ""))
 		return nil
+	case e.Release():
+		return in.updateRelease(e, check)
 	case herdrplugin.IsCommit(e.Ref):
 		fmt.Fprintf(in.out, "%s is pinned to the commit %.12s.\n", e.ID, e.Commit)
 		return nil
@@ -248,4 +250,30 @@ func trustLines(p *herdrplugin.Plugin) []string {
 		out = append(out, "pane     "+shownArgv(x.ID)+": "+shownArgv(x.Command...))
 	}
 	return append(out, herdrplugin.RunsLines(&herdrplugin.Plugin{Startup: p.Startup})...)
+}
+
+// updateRelease moves a first-party plugin to the release this tuios came
+// from. The update asks again, also with --yes, when the trust surface
+// changed.
+func (in *installer) updateRelease(e herdrplugin.LockEntry, check bool) error {
+	tag, err := runningTag()
+	if err != nil {
+		fmt.Fprintf(in.out, "%s stays at %s. %v\n", e.ID, e.Ref, err)
+		return nil
+	}
+	if tag == e.Ref {
+		fmt.Fprintf(in.out, "%s is up to date at %s.\n", e.ID, e.Ref)
+		return nil
+	}
+	fmt.Fprintf(in.out, "\n%s: %s to %s\n", e.ID, e.Ref, tag)
+	if check {
+		return nil
+	}
+	in.verb = "Updated"
+	name := strings.TrimPrefix(e.Source, herdrplugin.ReleasePrefix)
+	err = in.firstPartyAt(name, tag, &e)
+	if errors.Is(err, errFetchFailed) {
+		return errSourceUnreachable
+	}
+	return err
 }
