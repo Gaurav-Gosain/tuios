@@ -5,6 +5,8 @@ package main
 import (
 	"bytes"
 	"context"
+	"errors"
+	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -17,6 +19,7 @@ import (
 	"github.com/charmbracelet/x/xpty"
 
 	"github.com/Gaurav-Gosain/tuios/internal/ptyspawn"
+	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/testutil"
 )
 
@@ -32,7 +35,13 @@ import (
 // reach the console through the TUI's own frame.
 //
 // A TERM set to dumb stays refused, on Windows as everywhere else.
+//
+// The daemon is the test's own. It runs kill-server in its cleanup, and it once
+// reached the developer's daemon that way and ended every agent in it (#1450).
+// So it stops before any tuios runs unless the socket is inside its own folder.
 func TestStartsOnAConsoleWithNoTerm(t *testing.T) {
+	sock := ownDaemonSocket(t)
+
 	dir, err := os.MkdirTemp("", "tuios-term")
 	if err != nil {
 		t.Fatal(err)
@@ -52,18 +61,24 @@ func TestStartsOnAConsoleWithNoTerm(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	env := []string{"XDG_RUNTIME_DIR=" + testutil.RuntimeDir(t), "SHELL=" + shell}
+	env := []string{"SHELL=" + shell}
 	for _, kv := range os.Environ() {
 		name, _, _ := strings.Cut(kv, "=")
 		switch strings.ToUpper(name) {
-		case "TERM", "COLORTERM", "XDG_RUNTIME_DIR", "SHELL":
+		case "TERM", "COLORTERM", "SHELL":
 			continue
 		}
 		env = append(env, kv)
 	}
 
 	// The refused run starts the daemon too, so this waits for both subtests.
+	// With nothing at the test's own socket there is no daemon of its own to
+	// stop, and kill-server is not worth the risk of reaching another one.
 	t.Cleanup(func() {
+		if _, err := os.Lstat(sock); errors.Is(err, fs.ErrNotExist) {
+			t.Logf("no daemon at %s, so kill-server does not run", sock)
+			return
+		}
 		ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 		defer cancel()
 		stop := exec.CommandContext(ctx, bin, "kill-server")
@@ -78,6 +93,9 @@ func TestStartsOnAConsoleWithNoTerm(t *testing.T) {
 		if out := c.wait(t, "new window", "TERM is not set"); strings.Contains(out, "TERM is not set") {
 			t.Fatalf("tuios refused the unset TERM:\n%s", out)
 		}
+		if _, err := os.Lstat(sock); errors.Is(err, fs.ErrNotExist) {
+			t.Fatalf("tuios drew a session, but no daemon listens at the test's own socket %s", sock)
+		}
 		if _, err := c.pty.Write([]byte("n")); err != nil {
 			t.Fatal(err)
 		}
@@ -88,6 +106,26 @@ func TestStartsOnAConsoleWithNoTerm(t *testing.T) {
 		c := openConsole(t, bin, append(env[:len(env):len(env)], "TERM=dumb"), "new", "term-dumb")
 		c.wait(t, `TERM is "dumb"`)
 	})
+}
+
+// ownDaemonSocket returns the socket a tuios started by this test reaches, or
+// stops the test if that socket could be a daemon the developer is using.
+func ownDaemonSocket(t *testing.T) string {
+	t.Helper()
+	// testutil.RunIsolated moves USERPROFILE and LOCALAPPDATA to one throwaway
+	// tree. If they differ, this binary still has the developer's folders.
+	if local, home := os.Getenv("LOCALAPPDATA"), os.Getenv("USERPROFILE"); !strings.EqualFold(filepath.Clean(local), filepath.Clean(home)) {
+		t.Fatalf("LOCALAPPDATA is %q and the isolated tree is %q, so a daemon here could be the developer's", local, home)
+	}
+	own := testutil.RuntimeDir(t)
+	sock, err := session.GetSocketPath()
+	if err != nil {
+		t.Fatalf("resolve the socket: %v", err)
+	}
+	if !strings.HasPrefix(strings.ToLower(sock), strings.ToLower(own)+string(filepath.Separator)) {
+		t.Fatalf("the socket is %s, outside the test's own folder %s", sock, own)
+	}
+	return sock
 }
 
 // console is a program on a pseudo console, and all it has written so far.
