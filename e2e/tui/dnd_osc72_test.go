@@ -64,10 +64,16 @@ func dndBoard(t *testing.T) (term *tuitest.Terminal, base, session string, left,
 // dndBoardWith is dndBoard under the config given.
 func dndBoardWith(t *testing.T, config string) (term *tuitest.Terminal, base, session string, left, right winRect) {
 	t.Helper()
+	return dndBoardEnv(t, config, nil)
+}
+
+// dndBoardEnv is dndBoardWith with env added to the client's environment.
+func dndBoardEnv(t *testing.T, config string, env []string) (term *tuitest.Terminal, base, session string, left, right winRect) {
+	t.Helper()
 	session = "e2e-dnd"
 	base = t.TempDir()
 	writeConfig(t, base, config)
-	term = dndClient(t, base, nil, "new", session)
+	term = dndClient(t, base, env, "new", session)
 	killDaemon(t, base)
 	waitBoot(t, term)
 	newWindow(t, term)

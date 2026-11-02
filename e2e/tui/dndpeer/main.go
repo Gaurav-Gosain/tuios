@@ -7,6 +7,7 @@
 //
 //	dndpeer source LOG FILE...   offer FILE... as text/uri-list and text/plain
 //	dndpeer target LOG           take text/uri-list and text/plain drops
+//	dndpeer winsize FILE         write the terminal's size, in cells and pixels
 //
 // DNDPEER_IGNORE_GESTURES=N makes a source leave the first N gestures (t=o)
 // unanswered, as a program does when the press was on nothing it drags.
@@ -109,6 +110,10 @@ func main() {
 		os.Exit(2)
 	}
 	mode := os.Args[1]
+	if mode == "winsize" {
+		writeWinsize(os.Args[2])
+		return
+	}
 	logf, err := os.OpenFile(os.Args[2], os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)

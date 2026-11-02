@@ -11472,6 +11472,50 @@ Repeat with `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run
 'TestDnD' -v .` from `e2e/tui`. `TUIOS_E2E_YAZI` and `TUIOS_E2E_KITTEN` add
 the runs with the real programs.
 
+## Drag and drop with the desktop
+
+`TestDnDDesktopBridge` runs tuios in a real kitty under Xvfb, with
+`[panes] drag_and_drop_desktop` on, and makes the drags with `xdotool`
+through XTEST, so kitty, the dnd kitten and yazi speak XDND to each other as
+on a desktop: a file from a kitten in another window dropped on a pane
+running the kitten and on a plain reader; a file the kitten in a pane drags,
+and one yazi in a pane drags, dropped on a kitten in another window; a drag
+between two panes while kitty carries it; a drag across text, which must
+select it; and the same board with the switch off. The copied file, the paste
+and the X clipboard are the artifacts, with a screenshot of the display and
+the exchange with kitty beside them. Skipped without `TUIOS_E2E_KITTY`. Run on
+2026-10-30 on Linux with Go 1.27.3, kitty 0.49.2 and yazi 26.9.1, based on
+`aa4748d`.
+
+| Control: what was cut | Test failure | Verdict |
+| --- | --- | --- |
+| `internal/app/update.go`, the `m.handleHostDnD(msg)` call, so kitty's answer to the probe and every message after it go unread | every subtest but the one with the switch off: "tuios never registered with kitty" | **caught** |
+| the same, for the subtest with the switch off | passes: nothing is asked, which is what it asserts | **guard**, by design |
+| `internal/app/dnd_drag.go`, the `dndHostOn` check in `DnDMotion`, so tuios recognises the gesture itself beside kitty | `.../a_file_a_pane_drags_drops_on_another_window` and `.../yazi_in_a_pane_drags_a_file_to_another_window`: "the kitten in the other window never copied the file". tuios's own drag takes the gesture first, kitty's goes unanswered, and a drag tuios carries cannot leave the window: the source hears it end cancelled. The drag between two panes passes: there kitty's gesture, which fires on a pixel threshold, arrives before the pointer leaves the cell tuios waits for, and the relay takes the gesture first | **caught** |
+| `internal/app/dnd_host.go`, `drag_and_drop_desktop` dropped from `dndHostWanted`, so the bridge is always on | `.../with_the_switch_off_nothing_is_bridged`: "tuios asked kitty about the protocol with the switch off" | **caught** |
+| `internal/app/dnd_host.go`, the body of `dndHostMouseSeen`, so a drag from the desktop whose source died over a pane is never ended | `.../a_drag_whose_source_dies_over_a_pane_does_not_stick`: "the drag after the stuck one never delivered its file" | **caught** |
+
+`TestDnDBridgeWithAnEmulatedTerminal` plays the terminal's side from the
+test's own terminal, with no kitty, so the pull request shards cover the
+inbound path: a drop typed as protocol messages lands as a paste, the switch
+taken off in the config file takes the registration back and asks again when
+it comes back on, the same messages with the switch off deliver nothing, and
+a client with `SSH_CONNECTION` set never asks. Run on 2026-11-02 on Linux,
+based on `4893c99`.
+
+| Control: what was cut | Test failure | Verdict |
+| --- | --- | --- |
+| `internal/app/dnd_host.go`, the `registered` check in `handleHostDnD`, so the terminal's messages are acted on whatever the switch says | `.../with_the_switch_off_the_terminal's_messages_are_ignored`: "the reader got `\x1b[200~…/dropped.txt \x1b[201~` from a terminal the client never registered with" and "the client spoke the protocol with the switch off" | **caught** |
+| the same file, `viewerIsRemote` dropped from `dndHostWanted`, so a client inside an ssh session bridges too | `.../inside_an_ssh_session_the_terminal_is_not_asked`: "the client asked a terminal on another machine about the protocol" | **caught** |
+
+Under each control the other subtests pass, and on the build with the code in
+place every subtest passes; the kitty test passed three runs in a row on that
+build. Repeat with `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios
+TUIOS_E2E_KITTY=/path/to/kitty TUIOS_E2E_YAZI=/path/to/yazi go test -count=1
+-run 'TestDnDDesktopBridge|TestDnDBridgeWithAnEmulatedTerminal' -v .` from
+`e2e/tui`, with `Xvfb`, `xdotool` and `xclip` in `PATH`; the emulated test
+needs none of them.
+
 ## Copy mode keys from discussion #281
 
 `TestCopyPipeKeys` adds a copy pipe on `X` whose command writes its own value to a file, sets a paste buffer with `tuios set-buffer`, and prints nothing, as `tmux-copy-it` does. The clipboard must get no write, the newest buffer must stay the command's, and the key must add exactly one buffer. A copy pipe on `x` exits 3, and the plain selection must reach the clipboard and the newest buffer. `TestCopyModeCtrlCAndFocusKeys` binds `alt+h` and `alt+l` to the terminal-mode focus keys, and `ctrl+u` and `ctrl+c` to a focus key as well. It presses `alt+h` in copy mode, runs a command in the left pane, presses `alt+l` and finds the copy cursor where it was. `ctrl+u` and `ctrl+b` must move the copy cursor and leave focus alone. `ctrl+c` must leave copy mode from normal mode, a selection, the search prompt and a pending `f`, and from multi copy mode in normal mode, a selection, the search prompt, a search with no match and the save prompt, with no clipboard write. `TestCopyModeLegend` reads `ctrl+c` off the dock in normal mode, the search prompt and a selection. Each control was built into its own binary. Run on 2026-10-30 on Linux.
