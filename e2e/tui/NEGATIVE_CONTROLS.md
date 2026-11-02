@@ -12012,3 +12012,7 @@ Run on 2026-11-01 on macOS arm64, on `upstream/main` at `4c95caa50` plus the bra
 | `applyIdleVerdict` takes a hook's event prompt as any other claim: any idle look, the title's included, ends it at once once the pane wrote | `TestClaudePromptHoldsThroughABlankFrame`: "the menu, then a blank frame for 4s: the pane is idle, want it to stay needs_input". `TestClaudeURLFormHoldsWithoutARule` passes, since that report is not an event | **caught** |
 | `elicitation_url_dialog` sends `notification` as the other questions do | `TestClaudeURLFormHoldsWithoutARule` passes: the idle gate above holds the form on its own. The fixture test catches it: `TestTranslateFixtures/claude-code/Notification_elicitation_url_dialog` in `internal/integration` | not caught by e2e, caught by the fixture |
 | Both of the last two | `TestClaudeURLFormHoldsWithoutARule`: "the form drawn again, for 6s: the pane is idle, want it to stay needs_input" | **caught** |
+
+## plugins/pr-status
+
+`TestPluginPRStatus` runs the shipped folder against a fake `gh`. Control, run on 2026-11-02: the saved text is never reused. It fails with "gh ran 2 times for two focuses in a minute". **caught**

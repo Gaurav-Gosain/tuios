@@ -1,0 +1,16 @@
+api = 1
+id = "tuios.pr-status"
+name = "PR status"
+version = "0.1.0"
+description = "Shows the pull request and CI state of the focused pane's folder in the dock"
+min_tuios = "0.13.0"
+platforms = ["linux", "macos"]
+
+[permissions]
+grants = ["ui"]
+
+[[cell]]
+id = "status"
+
+[herdr]
+manifest = "herdr-plugin.toml"

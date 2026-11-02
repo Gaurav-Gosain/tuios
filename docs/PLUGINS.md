@@ -232,6 +232,9 @@ a plugin does nothing. `tuios --skill tml` has the components.
 
 ## Not in this tuios yet
 
+Hooks work today through a `herdr-plugin.toml` beside the manifest, with
+`[herdr] manifest`. `plugins/pr-status` in this repository does that.
+
 These parts are planned. The names are the ones the plan uses, and they can change
 until a release has them. A manifest that uses one is refused today.
 
