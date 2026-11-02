@@ -75,10 +75,16 @@ type WorktreeRef struct {
 // rows: a session on another machine is drawn in its host group, and pulling
 // one into a local repository group would say it is here.
 func GroupByRepo(nodes []Node) []Node {
+	return groupByRepo(nodes, groupRepo)
+}
+
+// groupByRepo is GroupByRepo with the repository of each node read by repoOf,
+// "" for a node that is not grouped.
+func groupByRepo(nodes []Node, repoOf func(Node) string) []Node {
 	members := map[string][]Node{}
 	repos := make([]string, 0, len(nodes))
 	for _, n := range nodes {
-		repo := groupRepo(n)
+		repo := repoOf(n)
 		if repo == "" {
 			continue
 		}
@@ -94,7 +100,7 @@ func GroupByRepo(nodes []Node) []Node {
 	out := make([]Node, 0, len(nodes)+len(repos))
 	drawn := make(map[string]bool, len(repos))
 	for _, n := range nodes {
-		repo := groupRepo(n)
+		repo := repoOf(n)
 		if repo == "" {
 			out = append(out, n)
 			continue
@@ -119,20 +125,44 @@ func GroupByRepo(nodes []Node) []Node {
 // it. The result has a KindRepo row only for a repository with no main checkout
 // session in nodes, because there is nothing to attach that row to.
 //
-// A repository whose only session is its main checkout is a plain session, so
-// it loses its record on the returned row. Selecting and numbering read the
-// session's name and neither looks at the record.
+// Only worktrees hang off the head. Another session in the main checkout is
+// not a worktree of the head but a second shell in the same directory, so it
+// is left out of the group: it keeps its place in the list as a plain row,
+// which the group's fold does not hide and its count does not include.
+//
+// A session drawn as a plain row, a repository's only session in its main
+// checkout or another one in it, loses its record on the returned row.
+// Selecting and numbering read the session's name and neither looks at the
+// record.
 func GroupByRepoCompact(nodes []Node) []Node {
+	heads := map[string]string{}
+	for _, n := range nodes {
+		if repo := groupRepo(n); repo != "" && n.Worktree.Main {
+			if _, seen := heads[repo]; !seen {
+				heads[repo] = n.ID
+			}
+		}
+	}
 	// The rail draws this list on every rebuild of a frame, and a Node is large,
-	// so the rows GroupByRepo allocated are rewritten in place. A group only ever
+	// so the rows groupByRepo allocated are rewritten in place. A group only ever
 	// loses rows here, so the write position never passes the read position. With
-	// no group GroupByRepo hands back the caller's slice, and nothing is written.
-	rows := GroupByRepo(nodes)
+	// no group groupByRepo hands back the caller's slice, and nothing is written:
+	// a session left out of a group has a head, which is in one.
+	rows := groupByRepo(nodes, func(n Node) string {
+		repo := groupRepo(n)
+		if repo != "" && n.Worktree.Main && heads[repo] != n.ID {
+			return ""
+		}
+		return repo
+	})
 	w := 0
 	for i := 0; i < len(rows); {
 		if rows[i].Kind != KindRepo {
 			if w != i {
 				rows[w] = rows[i]
+			}
+			if groupRepo(rows[w]) != "" {
+				rows[w].Worktree = nil // another session in a main checkout
 			}
 			w++
 			i++

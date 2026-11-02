@@ -175,8 +175,8 @@ type Node struct {
 	// meaningless anywhere else.
 	GroupLast bool
 	// GroupHead marks a main checkout's session that is also its repository's
-	// row: the group's other sessions hang off it. GroupCount is how many hang
-	// off it, and GroupState and GroupDoneSeen are the loudest state of the
+	// row: the repository's worktree sessions hang off it. GroupCount is how
+	// many hang off it, and GroupState and GroupDoneSeen are the loudest state of the
 	// whole group, itself included, which the row shows while the group is
 	// folded. Set by GroupByRepoCompact and meaningless anywhere else.
 	GroupHead     bool

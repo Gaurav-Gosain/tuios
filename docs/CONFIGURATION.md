@@ -1978,6 +1978,11 @@ tuios main          2 ▾
   name you chose keeps that name.
 - A repository with no main checkout session has a row of its own.
 - A repository with only a main checkout session shows a plain row.
+- Only worktree rows hang off the repository's row. With several sessions in the
+  main checkout, the first in the rail's order is the repository's row, and the
+  others are plain rows in their own places. Folding the group does not hide
+  them, and the group's `+N` does not count them. Several sessions in the main
+  checkout and no worktree session show plain rows and no group.
 
 Each group's row ends in a fold mark. These controls fold and open the group:
 
