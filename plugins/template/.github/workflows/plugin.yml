@@ -11,9 +11,21 @@ jobs:
   check:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version: stable
+      # The newest release, or the main branch while no release has
+      # tuios plugins check yet.
       - name: Install tuios
-        run: curl -fsSL https://raw.githubusercontent.com/Gaurav-Gosain/tuios/main/install.sh | bash
+        run: |
+          curl -fsSL https://raw.githubusercontent.com/Gaurav-Gosain/tuios/main/install.sh | bash
+          # An older tuios answers check --help with its own help, so look
+          # for check in the list of commands.
+          if ! tuios plugins --help 2>&1 | grep -qE '^\s+check\b'; then
+            go install github.com/Gaurav-Gosain/tuios/cmd/tuios@main
+            echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+          fi
       - name: Check the manifest
         run: tuios plugins check .
       - name: Attach the plugin to the release
