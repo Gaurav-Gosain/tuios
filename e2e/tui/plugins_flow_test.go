@@ -229,6 +229,7 @@ func TestPluginsFlowSaysWhatToDo(t *testing.T) {
 		{"a newer key", "api = 1\n" + head + "new_thing = true\n", []string{"unknown key new_thing", "tuios update"}},
 		{"a newer grant", "api = 1\n" + head + "[permissions]\ngrants = [\"telepathy\"]\n", []string{`unknown grant "telepathy"`, "tuios update"}},
 		{"a newer run", "api = 1\n" + head + "[[process]]\nrun = \"lunar\"\ncommand = [\"true\"]\n", []string{`unknown run "lunar"`, "tuios update"}},
+		{"a newer event", "api = 1\n" + head + "[[process]]\nrun = \"event\"\non = [\"pane.teleported\"]\ncommand = [\"true\"]\n", []string{`unknown event "pane.teleported"`, "tuios update"}},
 		{"no api", head, []string{"api"}},
 		{"both names", "api = 1\nschema = 1\n" + head, []string{"Remove schema"}},
 	} {

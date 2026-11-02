@@ -49,8 +49,9 @@ placement = "popup"
 command = ["./show.sh"]
 ```
 
-`run` is `action`, `pane` or `startup`. An action or a pane costs nothing until
-the person uses it. A `startup` process stays in memory. Use an action or a pane
+`run` is `action`, `pane`, `event` or `startup`. An action, a pane or an event
+costs nothing until the person uses it or the event happens. An event process
+names its events in `on`, such as `on = ["pane.focused"]`. A `startup` process stays in memory. Use an action or a pane
 when you can.
 
 `[permissions] grants` is `read`, `write`, `fan`, `ui` or `admin`. Ask for the least

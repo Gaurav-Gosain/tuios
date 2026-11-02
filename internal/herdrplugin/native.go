@@ -253,11 +253,45 @@ func addProcess(raw *rawManifest, x rawProcess) *Error {
 	case "pane":
 		raw.Panes = append(raw.Panes, rawPane{ID: x.ID, Title: x.Title, Description: x.Description, Platforms: x.Platforms, Placement: x.Placement, Width: x.Width, Height: x.Height, Command: x.Command})
 	case "event":
-		return errf("plugin_requires_newer_tuios", "the plugin has an event process. This tuios does not run them. Run tuios update")
+		names, perr := eventNames(x.On)
+		if perr != nil {
+			return perr
+		}
+		for _, on := range names {
+			raw.Events = append(raw.Events, rawEvent{On: &on, Platforms: x.Platforms, Command: x.Command})
+		}
 	default:
-		return errf("plugin_manifest_parse_failed", "unknown run %q. Use startup, action or pane. %s", *x.Run, orUpdate)
+		return errf("plugin_manifest_parse_failed", "unknown run %q. Use startup, action, pane or event. %s", *x.Run, orUpdate)
 	}
 	return nil
+}
+
+// eventNames reads the on key of an event process: one name or a list, each
+// in HookEvents. An unknown name is refused, so a typo is not a hook that
+// never runs.
+func eventNames(on any) ([]string, *Error) {
+	var names []string
+	switch v := on.(type) {
+	case string:
+		names = []string{v}
+	case []any:
+		for _, x := range v {
+			s, ok := x.(string)
+			if !ok {
+				return nil, errf("plugin_manifest_parse_failed", "on must be event names, such as [\"pane.focused\"]")
+			}
+			names = append(names, s)
+		}
+	}
+	if len(names) == 0 {
+		return nil, errf("plugin_manifest_parse_failed", "an event process needs on, such as on = [\"pane.focused\"]")
+	}
+	for _, n := range names {
+		if !slices.Contains(HookEvents, n) {
+			return nil, errf("plugin_manifest_parse_failed", "unknown event %q. The events are %s. %s", n, strings.Join(HookEvents, ", "), orUpdate)
+		}
+	}
+	return names, nil
 }
 
 // nativeGrants checks and sorts the grants a manifest asks for.

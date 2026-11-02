@@ -100,14 +100,22 @@ A `[[process]]` has `id`, `run` and `command`. `run` says when it runs:
 |---|---|---|---|
 | `action` | When a person runs it from the palette, a key or `tuios plugins run` | `title`, `description`, `contexts` | None |
 | `pane` | When a person opens it from the palette or `tuios plugins open` | `title`, `description`, `placement`, `width`, `height` | None |
+| `event` | Each time an event in `on` happens, such as a focus. The command runs and exits | `on` | None. A run when the event happens |
 | `startup` | Once, when the daemon starts or you enable the plugin | | A process and a reaper for as long as it runs |
 
 `placement` is `popup`, `overlay`, `split`, `tab` or `zoomed`. A `command` is an
 argv array. No shell reads it. A program with a `/` in its name is found from the
 plugin folder. A program without one is found on `PATH`.
 
-**Use an action or a pane when you can.** They cost nothing until a person uses
-them. A `startup` process stays in memory and wakes up for as long as it runs.
+The events are `pane.created`, `pane.closed`, `pane.focused`, `pane.moved`,
+`pane.exited`, `pane.agent_detected`, `pane.agent_status_changed`, the same for
+`tab` (`created`, `closed`, `renamed`, `moved`, `focused`) and `workspace`
+(`created`, `updated`, `closed`, `renamed`, `moved`, `reordered`, `focused`), and
+`worktree.created`, `worktree.opened` and `worktree.removed`. A plugin runs at
+most 20 event commands in 10 seconds. tuios drops the rest.
+
+**Use an action, a pane or an event when you can.** They cost nothing until a
+person uses them or the event happens. A `startup` process stays in memory and wakes up for as long as it runs.
 Use one only when the plugin must watch something all the time.
 
 ## The environment
@@ -122,6 +130,8 @@ Every process of a tuios plugin gets these variables.
 | `TUIOS_PLUGIN_CONFIG_DIR` | A folder for the plugin's settings. An update keeps it. |
 | `TUIOS_PLUGIN_STATE_DIR` | A folder for the plugin's data. An update keeps it. |
 | `TUIOS_PLUGIN_ENTRY` | The `id` of the `[[process]]`, for an action or a pane. |
+| `TUIOS_PLUGIN_EVENT` | The event that ran an `event` process, such as `pane.focused`. |
+| `TUIOS_PLUGIN_EVENT_JSON` | The event as JSON. |
 | `TUIOS_PLUGIN_SESSION` | The session of the focused pane. `-s` takes it. |
 | `TUIOS_PLUGIN_PANE` | The focused pane. `-w` takes it. |
 | `TUIOS_PLUGIN_CWD` | The folder of the focused pane. |
@@ -226,6 +236,7 @@ a plugin does nothing. `tuios --skill tml` has the components.
 | tuios | Change | What to do |
 |---|---|---|
 | next | New: `tuios plugins update`. | Nothing. |
+| next | New: `run = "event"` with `on`, `TUIOS_PLUGIN_EVENT` and `TUIOS_PLUGIN_EVENT_JSON`. | Move hooks out of a `herdr-plugin.toml`. |
 | next | New: `tuios plugins install NAME` for the plugins of the tuios release. | Nothing. |
 | next | tuios draws eight Mermaid types itself. `tuios plugins install sketch` brings the rest to `tuios mermaid`. | Nothing. |
 | next | New: the `ui` grant, `[[cell]]`, `tuios plugin-cell` and `tuios plugin-notify`. | A plugin that uses them sets `min_tuios`. A plugin that held `write` only to open a panel can ask for `ui`. |
@@ -234,15 +245,12 @@ a plugin does nothing. `tuios --skill tml` has the components.
 
 ## Not in this tuios yet
 
-Hooks work today through a `herdr-plugin.toml` beside the manifest, with
-`[herdr] manifest`. `plugins/pr-status` in this repository does that.
 
 These parts are planned. The names are the ones the plan uses, and they can change
 until a release has them. A manifest that uses one is refused today.
 
 | Part | Names | What it adds |
 |---|---|---|
-| Hooks | `run = "event"`, `on = [...]`, `[permissions] events`, `TUIOS_PLUGIN_EVENT`, `TUIOS_PLUGIN_EVENT_JSON` | Runs a command on an event. No process waits. |
 | A timer | `run = "interval"`, `every = "60s"` | Runs a command on a timer that exists only while the plugin is enabled. |
 | Suggested keys | `[[key]]` | Offers a key. It is off until you accept it. |
 | Author tools | `tuios plugins new NAME`, `check [PATH]`, `dev PATH` | Makes a folder, checks a manifest, and runs a folder with reload. |

@@ -12076,3 +12076,14 @@ each control against the branch head with one change:
 | The person hears once per type | the check of the told types cut | "a second panel of the same type told the person again" | **caught** |
 | tuios mermaid says what to run, and runs the plugin | `notBuiltIn` returns "" | "a timeline with no plugin" | **caught** |
 | A panel shows what to do | the `MissingDiagram` call cut | "no notice for the timeline" | **caught** |
+
+## Native event hooks
+
+`TestPluginPRStatus` now runs `plugins/pr-status` with one manifest, its hook a
+`run = "event"` process. `TestPluginsFlowSaysWhatToDo` refuses an unknown event.
+Run on 2026-11-02, each control against the branch head with one change:
+
+| Claim | Control | Where it fails | Verdict |
+|---|---|---|---|
+| A plugin enabled while the daemon runs gets its hooks, now that the event follower starts with the first plugin | the start of the follower cut from `apply` | "the hook did not set the cell" | **caught** |
+| An unknown event is refused | the name check cut | "a newer event loaded" | **caught** |

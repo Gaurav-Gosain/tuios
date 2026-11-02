@@ -43,6 +43,9 @@ func TestPluginPRStatus(t *testing.T) {
 	if err != nil || !strings.Contains(out, "ui     Shows cells") || strings.Contains(out, "startup") {
 		t.Fatalf("install: %v\n%s", err, out)
 	}
+	if _, err := os.Stat(filepath.Join(plugin, "herdr-plugin.toml")); err == nil {
+		t.Error("pr-status has a second manifest")
+	}
 	if out, _ := tuiosCLI(t, base, "plugins", "info", "tuios.pr-status"); !strings.Contains(out, "pane.focused") || strings.Contains(out, "warning") {
 		t.Errorf("info:\n%s", out)
 	}

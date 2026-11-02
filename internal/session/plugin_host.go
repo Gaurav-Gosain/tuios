@@ -82,6 +82,10 @@ type pluginHost struct {
 	cache   []herdrplugin.Entry
 	cacheAt time.Time
 	running bool
+	// following says followEvents runs. It starts with the first enabled
+	// plugin, so a daemon with none subscribes to nothing and wakes for no
+	// event.
+	following bool
 	// cells are the dock cells of each plugin, nil until one sets a cell.
 	// See plugin_ui.go.
 	cells map[string]map[string]PluginCell
@@ -173,9 +177,13 @@ func (h *pluginHost) start() {
 		return
 	}
 	h.running = true
+	follow := len(h.enabled) > 0 && !h.following
+	h.following = h.following || follow
 	h.mu.Unlock()
 	h.runStartups()
-	go h.followEvents()
+	if follow {
+		go h.followEvents()
+	}
 }
 
 // stop kills every plugin process. It runs on daemon shutdown.
@@ -233,6 +241,8 @@ func (h *pluginHost) apply(cfg config.PluginsConfig, byPerson bool) (waits bool)
 	// so an event after it is told against that, and not against whatever
 	// the follower would find when the next event came.
 	wake := running && len(old) == 0 && len(next) > 0
+	follow := wake && !h.following
+	h.following = h.following || follow
 	if len(next) == 0 {
 		h.fresh = nil
 	}
@@ -256,6 +266,9 @@ func (h *pluginHost) apply(cfg config.PluginsConfig, byPerson bool) (waits bool)
 			h.fresh = tr
 		}
 		h.mu.Unlock()
+	}
+	if follow {
+		go h.followEvents()
 	}
 	if running {
 		h.runStartups()
@@ -329,6 +342,12 @@ func (h *pluginHost) run(p *herdrplugin.Plugin, actionID, event string, argv []s
 	env = append(env, "HERDR_PLUGIN_CONTEXT_JSON="+string(ctxJSON))
 	if p.Format == herdrplugin.FormatTuios {
 		env = append(env, ctx.nativeEnv(string(ctxJSON), actionID)...)
+		if event != "" {
+			env = append(env, "TUIOS_PLUGIN_EVENT="+event)
+		}
+		if eventJSON != "" {
+			env = append(env, "TUIOS_PLUGIN_EVENT_JSON="+eventJSON)
+		}
 	}
 	if actionID != "" {
 		env = append(env, "HERDR_PLUGIN_ACTION_ID="+actionID)
