@@ -967,6 +967,12 @@ func (m *OS) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	if hc := m.hostProgramStatusAfter(); hc != nil {
 		cmd = tea.Batch(cmd, hc)
 	}
+	// The drag and drop bridge follows its switches, and what it has for the
+	// terminal goes out, whichever message put it there. See dnd_host.go.
+	m.dndHostSync()
+	if hc := m.dndHostFlush(); hc != nil {
+		cmd = tea.Batch(cmd, hc)
+	}
 	// The View after this message may compose a frame, or move the cursor
 	// for input; flushCmd brings the write back once that frame is stored.
 	if m.frameRate.program != nil && (!m.renderSkipped || isPersonInput(msg) || m.flushWhileIdle(msg)) {
@@ -1159,6 +1165,10 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 	// host_program_status.go.
 	if c, ok := m.handleHostProgramStatusMsg(msg); ok {
 		return m, c
+	}
+	// The terminal's drag and drop messages. See dnd_host.go.
+	if m.handleHostDnD(msg) {
+		return m, nil
 	}
 
 	switch msg := msg.(type) {
@@ -1716,6 +1726,12 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 	case NvimNavigationMsg:
 		m.onNvimNavigation(msg)
 		return m, listenNvimNavigationUntil(m.stopSignal(), m.PendingNvimNavigation)
+	case dndHostWrittenMsg:
+		// The last write to the terminal for the bridge is done; Update's
+		// tail sends the next. See dnd_host.go.
+		m.dndHost.writing = false
+		m.renderSkipped = true
+		return m, nil
 	case dndWakeMsg:
 		// A pane's program sent drag and drop messages. See dnd.go.
 		m.handleDnDWake()
@@ -2056,6 +2072,7 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 			m.notePointerEvent(time.Now())
 		case tea.MouseClickMsg:
 			m.notePointerEvent(time.Now())
+			m.dndHostMouseSeen()
 			m.pointerDown = true
 			// A button is down, so a gesture may be starting and the sizes it
 			// passes through are none of the guest's business until it ends.
@@ -2066,9 +2083,11 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 			m.holdGestureAnnouncements()
 		case tea.MouseReleaseMsg:
 			m.notePointerEvent(time.Now())
+			m.dndHostMouseSeen()
 			m.pointerDown = false
 		case tea.MouseMotionMsg:
 			m.notePointerEvent(time.Now())
+			m.dndHostMouseSeen()
 			// Motion names the buttons still held, so it is the most current
 			// answer to whether one is, and it corrects a press whose own event
 			// never arrived.

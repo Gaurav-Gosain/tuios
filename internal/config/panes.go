@@ -31,6 +31,12 @@ type PanesConfig struct {
 	// speak it gets the paths as a paste (default: false). Panes on another
 	// machine take no part either way.
 	DragAndDrop bool `toml:"drag_and_drop"`
+	// DragAndDropDesktop, with DragAndDrop, bridges drags to and from the
+	// desktop through a terminal that speaks the protocol itself, kitty
+	// 0.47 or later: a file from a file manager can be dropped on a pane,
+	// and a file a program in a pane drags can be dropped on another window
+	// (default: false).
+	DragAndDropDesktop bool `toml:"drag_and_drop_desktop"`
 }
 
 // The pane navigator's layouts.
