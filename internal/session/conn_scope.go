@@ -185,6 +185,10 @@ var verbScopes = map[string]scopeKind{
 	"fan":         scopeLaunch,
 	"start-agent": scopeLaunch,
 
+	// A plugin's own verbs. checkPluginGrants holds them to the ui grant.
+	"plugin-cell":   scopeDeny,
+	"plugin-notify": scopeDeny,
+
 	"list-dock-components": scopeDeny,
 	"refresh-dock":         scopeDeny,
 	"pip":                  scopeDeny,

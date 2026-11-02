@@ -306,6 +306,9 @@ func (d *Daemon) tmlCallerKey(cs *connState) string {
 		return "link:" + cs.linkPeer
 	}
 	if pa := d.paneAuthority(cs); pa != nil {
+		if pa.plugin != "" {
+			return "plugin:" + pa.plugin
+		}
 		// A pane this daemon cannot place, or one it runs for another
 		// machine, is still not the person.
 		return cmp.Or(pa.window, unplacedWindow)
@@ -340,7 +343,9 @@ func (d *Daemon) tmlOwnerLabel(cs *connState) string {
 		}
 		return "pane " + shortID(ref.Window) + " (" + labels[0] + ")"
 	}
-	if d.paneAuthority(cs) != nil {
+	if pa := d.paneAuthority(cs); pa != nil && pa.plugin != "" {
+		return "plugin " + tmlLabelText(pa.plugin, 24)
+	} else if pa != nil {
 		return "a pane tuios cannot place"
 	}
 	return "tuios tml show"
@@ -1221,7 +1226,7 @@ func (d *Daemon) tmlReach(cs *connState, s *tmlSurface, verb string, write bool)
 	d.tml.mu.Lock()
 	owner := s.caller
 	d.tml.mu.Unlock()
-	if pa.window != "" && pa.window == owner {
+	if (pa.window != "" && pa.window == owner) || (pa.plugin != "" && "plugin:"+pa.plugin == owner) {
 		return nil
 	}
 	if !d.sessionInScope(pa.session, target) {

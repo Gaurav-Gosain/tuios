@@ -82,6 +82,12 @@ type pluginHost struct {
 	cache   []herdrplugin.Entry
 	cacheAt time.Time
 	running bool
+	// cells are the dock cells of each plugin, nil until one sets a cell.
+	// See plugin_ui.go.
+	cells map[string]map[string]PluginCell
+	// uiCount counts each plugin's cell changes and notices since uiStart.
+	uiCount map[string]int
+	uiStart time.Time
 	// fresh is a translator apply made as the first plugin was enabled,
 	// for followEvents to take up. See followEvents.
 	fresh *herdrTranslator
@@ -241,6 +247,7 @@ func (h *pluginHost) apply(cfg config.PluginsConfig, byPerson bool) (waits bool)
 	for _, id := range stopped {
 		log.Printf("[PLUGINS] %s is disabled. Its processes are stopped", id)
 		h.runner.StopPlugin(id)
+		h.dropCells(id)
 	}
 	if wake {
 		tr := h.d.newHerdrTranslator()
@@ -275,6 +282,7 @@ func (h *pluginHost) stopPlugin(id string) {
 	delete(h.startedUp, id)
 	h.mu.Unlock()
 	h.runner.StopPlugin(id)
+	h.dropCells(id)
 }
 
 // runStartups runs the startup commands of every enabled plugin whose

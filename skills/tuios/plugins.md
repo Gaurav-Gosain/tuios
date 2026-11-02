@@ -53,7 +53,7 @@ command = ["./show.sh"]
 the person uses it. A `startup` process stays in memory. Use an action or a pane
 when you can.
 
-`[permissions] grants` is `read`, `write`, `fan` or `admin`. Ask for the least
+`[permissions] grants` is `read`, `write`, `fan`, `ui` or `admin`. Ask for the least
 you need. A plugin that only opens a pane needs no grant. A plugin never holds
 `respond`.
 
@@ -83,8 +83,19 @@ tuios plugins run me.notes save --wait
 tuios plugins log me.notes
 ```
 
-An action's output goes to the log. The person does not see it. To show the
-person something, use a pane.
+An action's output goes to the log. The person does not see it.
+
+## Show the person something
+
+A plugin with the `ui` grant names a cell in `[[cell]]` and sets it from any of
+its processes. Only a plugin's process can do this. From a pane or a shell it
+fails. The daemon keeps the text, so the process can exit.
+
+```sh
+tuios plugin-cell set status "CI ok" --action open
+tuios plugin-cell clear status
+tuios plugin-notify "The build failed" --level error
+```
 
 ## Which verbs a plugin can use
 

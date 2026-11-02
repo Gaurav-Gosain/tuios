@@ -119,6 +119,7 @@ func pluginAsksReader(cs *connState) bool {
 
 // sendPluginAsks sends a client that just attached the plugins that wait.
 func (d *Daemon) sendPluginAsks(cs *connState) {
+	d.sendPluginCells(cs)
 	if d.plugins != nil {
 		// A manifest can change on disk with nothing else to tell the
 		// clients, so an attach reads the plugins again. It reads files

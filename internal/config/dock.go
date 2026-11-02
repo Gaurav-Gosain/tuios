@@ -37,6 +37,11 @@ const (
 // [dock.custom.NAME] table rather than to a built-in.
 const DockCustomPrefix = "custom/"
 
+// DockPluginPrefix marks a name as a plugin's cell: plugin/ID/CELL. A plugin
+// sets the cell while it runs, so a name in a list that no plugin set yet
+// draws nothing and earns no warning.
+const DockPluginPrefix = "plugin/"
+
 // dockBuiltins is every name the lists accept without the custom/ prefix. It is
 // the set the warning path checks against, so a typo says what it should have
 // been instead of drawing nothing and saying nothing.
@@ -500,6 +505,9 @@ func validateDock(cfg *UserConfig, result *ValidationResult) {
 			}
 			seen[name] = side
 
+			if strings.HasPrefix(name, DockPluginPrefix) {
+				continue
+			}
 			if custom, ok := strings.CutPrefix(name, DockCustomPrefix); ok {
 				spec, defined := cfg.Dock.Custom[custom]
 				if !defined {

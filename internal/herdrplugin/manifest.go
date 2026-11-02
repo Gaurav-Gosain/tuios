@@ -159,6 +159,13 @@ type Command struct {
 	Command   []string `json:"command"`
 }
 
+// Cell is one [[cell]] entry of a native manifest: a dock cell the plugin's
+// processes may set.
+type Cell struct {
+	ID   string `json:"id"`
+	Side string `json:"side"`
+}
+
 // Action is one [[actions]] entry.
 type Action struct {
 	ID          string   `json:"id"`
@@ -229,6 +236,7 @@ type Plugin struct {
 	LinkHandlers    []LinkHandler `json:"link_handlers,omitempty"`
 	Source          Source        `json:"source"`
 	Warnings        []string      `json:"warnings,omitempty"`
+	Cells           []Cell        `json:"cells,omitempty"`
 	// Format is FormatTuios for a tuios-plugin.toml and "" for a herdr
 	// manifest.
 	Format string `json:"format,omitempty"`

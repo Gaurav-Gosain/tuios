@@ -721,7 +721,8 @@ func (d *Daemon) herdrPluginPaneOpen(cs *connState, params json.RawMessage) (any
 		if grants != nil {
 			g = *grants
 		}
-		g = g.expand() & grantsFromNames(e.Plugin.Held).expand()
+		// ui is the plugin's own, and a pane is not the plugin.
+		g = g.expand() & grantsFromNames(e.Plugin.Held).expand() &^ GrantUI
 		grants = &g
 	}
 	focus := in.Focus || popup || placement == herdrplugin.PlacementZoomed

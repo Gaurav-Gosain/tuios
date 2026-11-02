@@ -54,7 +54,7 @@ const orUpdate = "Check the spelling. If the plugin needs a newer tuios, run tui
 // PluginGrants are the grants a native manifest may ask for. respond is not
 // one: a plugin never answers a prompt for the person. files is for a later
 // tuios, since a copy is held to the folder of a pane and a plugin has none.
-var PluginGrants = []string{"read", "write", "fan", "admin"}
+var PluginGrants = []string{"read", "write", "fan", "ui", "admin"}
 
 type rawNative struct {
 	API         *int      `toml:"api"`
@@ -70,10 +70,56 @@ type rawNative struct {
 	} `toml:"permissions"`
 	Build   []rawCommand `toml:"build"`
 	Process []rawProcess `toml:"process"`
+	Cell    []rawCell    `toml:"cell"`
 	Wasm    []any        `toml:"wasm"`
 	Herdr   *struct {
 		Manifest string `toml:"manifest"`
 	} `toml:"herdr"`
+}
+
+// rawCell is one [[cell]]: a dock cell the plugin may set.
+type rawCell struct {
+	ID   *string `toml:"id"`
+	Side *string `toml:"side"`
+}
+
+// maxCells bounds the cells of one plugin.
+const maxCells = 8
+
+// Sides of a cell.
+var cellSides = []string{"left", "center", "right"}
+
+// parseCells checks the [[cell]] entries.
+func parseCells(raw []rawCell, grants []string) ([]Cell, []string, *Error) {
+	if len(raw) > maxCells {
+		return nil, nil, errf("plugin_manifest_parse_failed", "the manifest has %d [[cell]] entries. A plugin can have %d", len(raw), maxCells)
+	}
+	var out []Cell
+	for _, c := range raw {
+		if c.ID == nil {
+			return nil, nil, missingField("id")
+		}
+		id, ok := NormalizeLocalID(*c.ID)
+		if !ok {
+			return nil, nil, errf("plugin_manifest_parse_failed", "invalid [[cell]] id %q", *c.ID)
+		}
+		side := "right"
+		if c.Side != nil {
+			side = *c.Side
+		}
+		if !slices.Contains(cellSides, side) {
+			return nil, nil, errf("plugin_manifest_parse_failed", "unknown side %q. Use left, center or right. %s", side, orUpdate)
+		}
+		if slices.ContainsFunc(out, func(x Cell) bool { return x.ID == id }) {
+			return nil, nil, errf("plugin_manifest_parse_failed", "two [[cell]] entries have the id %s", id)
+		}
+		out = append(out, Cell{ID: id, Side: side})
+	}
+	var warn []string
+	if len(out) > 0 && !slices.Contains(grants, "ui") && !slices.Contains(grants, "admin") {
+		warn = []string{"[[cell]] needs the ui grant. Add ui to [permissions] grants"}
+	}
+	return out, warn, nil
 }
 
 // rawProcess is one [[process]]: an action, a pane or a startup command, by
@@ -158,7 +204,12 @@ func parseNative(data []byte, root string) (*Plugin, *Error) {
 		p.Warnings = slices.DeleteFunc(p.Warnings, func(w string) bool { return w == noPlatformsWarning })
 	}
 	p.Format, p.Grants = FormatTuios, grants
-	p.Warnings = append(p.Warnings, warnings...)
+	cells, warn, perr := parseCells(n.Cell, grants)
+	if perr != nil {
+		return nil, perr
+	}
+	p.Cells = cells
+	p.Warnings = append(append(p.Warnings, warnings...), warn...)
 	if n.MinTuios != nil {
 		p.MinTuios = strings.TrimSpace(*n.MinTuios)
 	}

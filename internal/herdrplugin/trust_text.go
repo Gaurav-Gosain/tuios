@@ -20,6 +20,8 @@ func GrantMeaning(grant string) string {
 		return "Types into your panes and shells, so it can run commands as you. It stops at an agent's approval prompt."
 	case "fan":
 		return "Starts agents in new sessions."
+	case "ui":
+		return "Shows cells, panels and messages. It cannot type or read panes."
 	case "files":
 		return "Copies files."
 	case "admin":
@@ -55,7 +57,10 @@ func RunsLines(p *Plugin) []string {
 	for _, s := range p.Startup {
 		out = append(out, "startup  "+ShownArgv(s.Command...))
 	}
-	var hooks, actions, panes, links []string
+	var hooks, actions, panes, links, cells []string
+	for _, c := range p.Cells {
+		cells = append(cells, c.ID)
+	}
 	for _, ev := range p.Events {
 		hooks = append(hooks, ev.On)
 	}
@@ -68,9 +73,9 @@ func RunsLines(p *Plugin) []string {
 	for _, h := range p.LinkHandlers {
 		links = append(links, h.ID)
 	}
-	for i, list := range [][]string{hooks, actions, panes, links} {
+	for i, list := range [][]string{hooks, actions, panes, links, cells} {
 		if len(list) > 0 {
-			out = append(out, fmt.Sprintf("%-8s %s (%d)", [...]string{"hooks", "actions", "panes", "links"}[i], ShownArgv(strings.Join(list, ", ")), len(list)))
+			out = append(out, fmt.Sprintf("%-8s %s (%d)", [...]string{"hooks", "actions", "panes", "links", "cells"}[i], ShownArgv(strings.Join(list, ", ")), len(list)))
 		}
 	}
 	return out

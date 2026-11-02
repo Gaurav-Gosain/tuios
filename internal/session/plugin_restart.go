@@ -40,6 +40,7 @@ func (d *Daemon) herdrPluginRestart(cs *connState, params json.RawMessage) (any,
 	if restarted {
 		log.Printf("[PLUGINS] %s restarts from %s", e.ID, e.Plugin.PluginRoot)
 		h.runner.StopPlugin(e.ID)
+		h.dropCells(e.ID)
 		h.mu.Lock()
 		delete(h.startedUp, e.ID)
 		running := h.running

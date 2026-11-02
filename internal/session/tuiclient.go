@@ -315,7 +315,11 @@ type TUIClient struct {
 	// a handler did: the daemon sends it right behind the attach reply.
 	pluginAsksHandler func(PluginApprovalsPayload)
 	pluginAsksLast    *PluginApprovalsPayload
-	tmlBacklog        []*TMLSurfacePayload
+	// pluginUIHandler takes MsgPluginUI. pluginUILast is the newest list of
+	// cells that came before it was set. See plugin_ui.go.
+	pluginUIHandler func(PluginUIPayload)
+	pluginUILast    *PluginUIPayload
+	tmlBacklog      []*TMLSurfacePayload
 	// pasteRefusedHandler takes a paste the daemon refused. See
 	// paste_retry.go. pastes holds the large inputs sent and not answered,
 	// and pasteBarriers the pings behind them, by request id, under
@@ -1237,6 +1241,20 @@ func (c *TUIClient) OnPaneMark(handler func(PaneMarkPayload)) {
 	c.multiClientMu.Unlock()
 }
 
+// OnPluginUI registers the handler for MsgPluginUI. Cells that came before
+// the handler are handed to it now. It runs on the read-loop goroutine, so it
+// only queues.
+func (c *TUIClient) OnPluginUI(handler func(PluginUIPayload)) {
+	c.multiClientMu.Lock()
+	c.pluginUIHandler = handler
+	last := c.pluginUILast
+	c.pluginUILast = nil
+	c.multiClientMu.Unlock()
+	if handler != nil && last != nil {
+		handler(*last)
+	}
+}
+
 // OnPluginApprovals registers the handler for MsgPluginApprovals, the
 // daemon's list of native plugins that wait for the person. A push that
 // came before the handler is handed to it now. It runs on the read-loop
@@ -2043,6 +2061,22 @@ func (c *TUIClient) handleMessage(msg *Message) {
 		c.multiClientMu.RUnlock()
 		var payload PaneMarkPayload
 		if handler != nil && msg.ParsePayload(&payload) == nil {
+			handler(payload)
+		}
+
+	case MsgPluginUI:
+		var payload PluginUIPayload
+		if err := msg.ParsePayload(&payload); err != nil {
+			debugLog("[CLIENT] Failed to parse plugin UI: %v", err)
+			return
+		}
+		c.multiClientMu.Lock()
+		handler := c.pluginUIHandler
+		if handler == nil && payload.Notice == "" {
+			c.pluginUILast = &payload
+		}
+		c.multiClientMu.Unlock()
+		if handler != nil {
 			handler(payload)
 		}
 

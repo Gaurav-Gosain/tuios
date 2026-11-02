@@ -24,7 +24,7 @@ import (
 // starts the engine. Returns the command that listens for updates, or nil when
 // there is nothing to listen to.
 func (m *OS) InitDockComponents() tea.Cmd {
-	m.dockPlan = buildDockPlan(m.UserConfig)
+	m.rebuildDockPlan()
 	m.dockEngine.Stop()
 
 	comps := dockRefreshableComponents(m.UserConfig, m.dockPlan, m.Settings.ShowClock, &m.Settings)
@@ -311,6 +311,9 @@ func (m *OS) RefreshDockComponent(name string) error {
 // had a command to run, so a cell without one falls through to whatever is
 // under it.
 func (m *OS) RunDockComponentClick(name string, button int) bool {
+	if strings.HasPrefix(name, config.DockPluginPrefix) {
+		return m.runPluginCellClick(name)
+	}
 	c, ok := m.dockEngine.Component(name)
 	if !ok || strings.TrimSpace(c.OnClick) == "" {
 		return false

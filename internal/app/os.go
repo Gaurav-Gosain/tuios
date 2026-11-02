@@ -439,6 +439,7 @@ type OS struct {
 	dockSessionHover       DockSessionAction             // which session control the pointer is on, DockSessionNone for neither
 	dockCustomHits         []dockCustomHit               // where the custom components were drawn last frame
 	dockPlan               dockPlan                      // which components are on which side, in draw order
+	pluginCells            map[string]session.PluginCell // what plugins show on the dock, by name, nil until one does
 	dockEngine             *dockEngine                   // refresh scheduler for the components that move on their own
 	// RemoteCommandChan carries a verb the daemon routed to this client, for
 	// the hosts that cannot Send into the program directly. See dock_remote.go.

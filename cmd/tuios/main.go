@@ -3098,7 +3098,7 @@ command in authorized_keys to make the policy a boundary:
 	rootCmd.AddCommand(newTmuxCommand(), newTmuxShimCommand(), newTmuxPaneCommand())
 	rootCmd.AddCommand(newAgentProtoCommand(), newAgentLogCommand(), newNotifyCommand(), newStatusCommand(), newPairCommand())
 	rootCmd.AddCommand(newHerdrGroupCommand("pane"), newHerdrGroupCommand("notification"))
-	rootCmd.AddCommand(newPluginsCommand())
+	rootCmd.AddCommand(newPluginsCommand(), newPluginCellCommand(), newPluginNotifyCommand())
 	rootCmd.AddCommand(newCpCommand(), newTransfersCommand())
 	rootCmd.AddCommand(newMermaidCommand())
 	rootCmd.AddCommand(newTMLCommand())

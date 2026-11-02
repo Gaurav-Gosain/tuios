@@ -31,7 +31,9 @@ import (
 // agent in a pane. read reads every session, write types into any pane (held
 // by the prompt rule, holdTypingTarget), and fan starts agents. Verbs about
 // the caller's own pane are refused, since it has none. respond is never
-// held. Every plugin is refused acting as the person (connFromPane).
+// held. ui shows cells, panels and messages, and reaches nothing else: a
+// surface a plugin opens runs no pane() action (runTMLPaneAction). Every
+// plugin is refused acting as the person (connFromPane).
 
 // pluginOfPeer is the plugin whose process session the caller is in, or nil.
 func (d *Daemon) pluginOfPeer(cs *connState) *herdrplugin.Plugin {
@@ -74,6 +76,13 @@ func (d *Daemon) pluginAuthority(cs *connState) *paneAuth {
 	return &paneAuth{window: unplacedWindow, via: "plugin-token", plugin: *bound, grants: d.boundPluginGrants(*bound)}
 }
 
+// pluginUIVerbs are what the ui grant lets a plugin call. A surface verb
+// still reaches only the plugin's own surfaces (tmlOwnerCheck).
+var pluginUIVerbs = map[string]bool{
+	"plugin-cell": true, "plugin-notify": true,
+	"tml-open": true, "tml-close": true, "tml-patch": true, "tml-replace": true,
+}
+
 // checkPluginGrants holds a call from a native plugin to its grants, across
 // every session.
 func (d *Daemon) checkPluginGrants(cs *connState, verb string, pa *paneAuth, params json.RawMessage, deny func(string) *verbError) (json.RawMessage, *verbError) {
@@ -85,6 +94,12 @@ func (d *Daemon) checkPluginGrants(cs *connState, verb string, pa *paneAuth, par
 		// no pane: delivery would drop the entry. Refused, so the plugin
 		// is told now.
 		return nil, deny(verb + " queues for later, and a plugin cannot queue. Use send-text or ask-agent")
+	}
+	if pluginUIVerbs[verb] && pa.grants.Has(GrantUI) {
+		return params, nil
+	}
+	if verb == "plugin-cell" || verb == "plugin-notify" {
+		return nil, deny(verb + " needs the ui grant")
 	}
 	if !pa.grants.Has(GrantAdmin) {
 		var need Grants

@@ -193,6 +193,10 @@ const (
 	// that the daemon was lost. An older client ignores the type and says the
 	// daemon was lost. See handoff.go.
 	MsgDaemonUpgrading
+	// MsgPluginUI carries a plugin's dock cells or one notice
+	// (PluginUIPayload), to the clients that read MsgPluginApprovals. See
+	// plugin_ui.go.
+	MsgPluginUI
 )
 
 // DaemonUpgradingPayload is the body of MsgDaemonUpgrading: the version the

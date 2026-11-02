@@ -376,7 +376,7 @@ func (m *OS) commitDockLists(rebuild bool) tea.Cmd {
 		m.MarkAllDirty()
 		return tea.Batch(cmd, m.persistSettings())
 	}
-	m.dockPlan = buildDockPlan(m.UserConfig)
+	m.rebuildDockPlan()
 	m.MarkAllDirty()
 	return m.persistSettings()
 }

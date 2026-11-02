@@ -55,7 +55,7 @@ func buildDockPlan(cfg *config.UserConfig) dockPlan {
 				if !defined || strings.TrimSpace(spec.Command) == "" {
 					continue
 				}
-			} else if !config.IsDockBuiltin(name) {
+			} else if !config.IsDockBuiltin(name) && !strings.HasPrefix(name, config.DockPluginPrefix) {
 				continue
 			}
 			plan.placed[name] = true
@@ -87,7 +87,7 @@ func buildDockPlan(cfg *config.UserConfig) dockPlan {
 // same answer buildDockPlan gives a config file with no [dock] table.
 func (m *OS) ensureDockPlan() {
 	if m.dockPlan.placed == nil {
-		m.dockPlan = buildDockPlan(m.UserConfig)
+		m.rebuildDockPlan()
 	}
 }
 
@@ -221,6 +221,9 @@ func (m *OS) dockCustomCell(name string) string {
 	if name == config.DockComponentTransfers {
 		return m.transfersDockCell()
 	}
+	if strings.HasPrefix(name, config.DockPluginPrefix) {
+		return m.pluginCellDrawn(name)
+	}
 	text := m.dockEngine.Text(name)
 	if name == config.DockComponentClock && text == "" {
 		// The clock is a built-in that carries a value, so it draws through the
@@ -327,7 +330,7 @@ func (m *OS) dockCustomCells(names []string) (cells []string, widths []int, keys
 // dockCellComponent reports whether a component draws as a bar cell from a
 // value the engine holds, rather than from model state the renderer reads.
 func dockCellComponent(name string) bool {
-	return strings.HasPrefix(name, config.DockCustomPrefix) || name == config.DockComponentClock ||
+	return strings.HasPrefix(name, config.DockCustomPrefix) || strings.HasPrefix(name, config.DockPluginPrefix) || name == config.DockComponentClock ||
 		name == config.DockComponentTransfers || name == config.DockComponentSession
 }
 
@@ -335,7 +338,7 @@ func dockCellComponent(name string) bool {
 // click: a custom component, which runs its on-click command, and the
 // copies, which open the Copies panel.
 func dockCellClickable(name string) bool {
-	return strings.HasPrefix(name, config.DockCustomPrefix) || name == config.DockComponentTransfers
+	return strings.HasPrefix(name, config.DockCustomPrefix) || strings.HasPrefix(name, config.DockPluginPrefix) || name == config.DockComponentTransfers
 }
 
 // dockCustomWidth is the room a side's custom cells want.
@@ -519,7 +522,7 @@ func (m *OS) renderDockRightCells(room int, meterStyle lipgloss.Style) (string, 
 				text:   cell,
 				width:  lipgloss.Width(cell),
 				name:   name,
-				custom: strings.HasPrefix(name, config.DockCustomPrefix),
+				custom: strings.HasPrefix(name, config.DockCustomPrefix) || strings.HasPrefix(name, config.DockPluginPrefix),
 				hit:    dockCellClickable(name),
 			})
 		}

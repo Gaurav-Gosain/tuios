@@ -221,6 +221,8 @@ var verbCapabilities = map[string]linkCaps{
 	"paste-image":      {config.LinkAllowWrite, config.LinkAllowFiles},
 
 	"refresh-dock":    {config.LinkAllowWrite},
+	"plugin-cell":     {config.LinkAllowWrite},
+	"plugin-notify":   {config.LinkAllowWrite},
 	"pip":             {config.LinkAllowWrite},
 	"rail-pane":       {config.LinkAllowOpen},
 	"remove-worktree": {config.LinkAllowWrite},

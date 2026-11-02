@@ -143,6 +143,12 @@ func (m *OS) WireDaemonClient(client *session.TUIClient) {
 			clientLog("ClientEventChan full, displaced an event for plugin approvals")
 		}
 	})
+	// A plugin's cells or notice. See plugin_ui.go.
+	client.OnPluginUI(func(p session.PluginUIPayload) {
+		if m.QueueClientEvent(ClientEvent{Type: "plugin-ui", PluginUI: p}) {
+			clientLog("ClientEventChan full, displaced an event for a plugin's cells")
+		}
+	})
 	// A TML surface opened, changed or closed. Applied in Update; see
 	// tml.go.
 	m.initTML()

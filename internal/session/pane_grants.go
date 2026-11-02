@@ -102,7 +102,14 @@ const (
 	// GrantTask writes the task cards of the pane's own session. See
 	// task.go.
 	GrantTask
+	// GrantUI shows a plugin's cells, panels and messages. Only a native
+	// plugin holds it, so it is not in config.PaneGrantNames. See
+	// plugin_grants.go.
+	GrantUI
 )
+
+// grantNameUI is the name of GrantUI in a plugin's manifest.
+const grantNameUI = "ui"
 
 // grantNone is the name a caller uses for the empty set.
 const grantNone = "none"
@@ -115,6 +122,7 @@ var grantByName = map[string]Grants{
 	config.PaneGrantFiles:   GrantFiles,
 	config.PaneGrantTask:    GrantTask,
 	config.PaneGrantAdmin:   GrantAdmin,
+	grantNameUI:             GrantUI,
 }
 
 // grantAccepted is what a grants parameter accepts.
@@ -149,7 +157,7 @@ func parseGrantsParam(names []string) (Grants, *verbError) {
 // expand adds what admin implies.
 func (g Grants) expand() Grants {
 	if g&GrantAdmin != 0 {
-		g |= GrantRead | GrantWrite | GrantFan | GrantFiles | GrantTask
+		g |= GrantRead | GrantWrite | GrantFan | GrantFiles | GrantTask | GrantUI
 	}
 	return g
 }
@@ -169,6 +177,9 @@ func (g Grants) Names() []string {
 		if g&grantByName[n] != 0 {
 			out = append(out, n)
 		}
+	}
+	if g&GrantUI != 0 {
+		out = append(out, grantNameUI)
 	}
 	return out
 }

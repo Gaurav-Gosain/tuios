@@ -154,10 +154,52 @@ A plugin holds only the grants you allowed, in every session. It is in no pane.
 | `read` | Reads every session and pane on this machine. |
 | `write` | Types into your panes and shells, so it can run commands as you. It stops at an agent's approval prompt. |
 | `fan` | Starts agents in new sessions. |
+| `ui` | Shows cells, panels and messages. It cannot type or read panes. |
 | `admin` | Does all that you can do in tuios. It needs `--grant admin`. |
 
 A plugin never holds `respond`, and it never acts as you. Ask for the least you
-need. A plugin that only opens a pane needs no grant.
+need. A plugin that only opens a pane needs no grant. A plugin that shows a status
+needs `ui`.
+
+## Show something
+
+A plugin with the `ui` grant shows text in the dock and sends messages. Name each
+cell in the manifest:
+
+```toml
+[permissions]
+grants = ["ui"]
+
+[[cell]]
+id = "status"
+side = "right"    # left, center or right
+```
+
+Set the cell from any command, then let the command exit. The daemon keeps the
+text, so no process waits. Set a cell when its value changes. tuios draws on a
+change only, and the same text costs nothing.
+
+```sh
+"$TUIOS_BIN" plugin-cell set status "CI ok" --action open
+"$TUIOS_BIN" plugin-cell clear status
+"$TUIOS_BIN" plugin-notify "The build failed" --level error
+```
+
+- `--action` names an action of the plugin. A click on the cell runs it.
+- A cell is one line of at most 512 bytes. SGR colour stays. tuios drops other
+  control sequences, and cuts the cell to 24 cells on the dock.
+- A plugin can name 8 cells. It can change cells and send messages 8 times a
+  second.
+- tuios puts the plugin's name before a message. A message can have the level
+  `info`, `warning` or `error`.
+- While a message shows, it can hide cells on the right of the dock.
+- The cells go when the plugin stops. A new daemon starts with no cells. Set them
+  again from a `startup` process or the next action.
+- To place a cell yourself, add `plugin/ID/CELL` to a list in `[dock]`.
+
+`"$TUIOS_BIN" tml show FILE -s "$TUIOS_PLUGIN_SESSION"` opens a panel. With `ui`, a
+plugin opens, changes and closes its own panels. A `pane()` action in a panel of
+a plugin does nothing. `tuios --skill tml` has the components.
 
 ## What tuios promises
 
@@ -184,6 +226,7 @@ need. A plugin that only opens a pane needs no grant.
 | tuios | Change | What to do |
 |---|---|---|
 | next | New: `tuios plugins update`. | Nothing. |
+| next | New: the `ui` grant, `[[cell]]`, `tuios plugin-cell` and `tuios plugin-notify`. | A plugin that uses them sets `min_tuios`. A plugin that held `write` only to open a panel can ask for `ui`. |
 | next | `api` replaces `schema`. `schema = 1` still works and `tuios plugins info` warns. | Write `api = 1`. |
 | next | New variables: `TUIOS_BIN`, `TUIOS_PLUGIN_ROOT`, `TUIOS_PLUGIN_CONFIG_DIR`, `TUIOS_PLUGIN_STATE_DIR`, `TUIOS_PLUGIN_ENTRY`, `TUIOS_PLUGIN_SESSION`, `TUIOS_PLUGIN_PANE`, `TUIOS_PLUGIN_CWD`, `TUIOS_PLUGIN_CONTEXT_JSON`. | Use these instead of `HERDR_PLUGIN_*` in a tuios plugin. |
 
@@ -194,9 +237,6 @@ until a release has them. A manifest that uses one is refused today.
 
 | Part | Names | What it adds |
 |---|---|---|
-| The `ui` grant | `grants = ["ui"]` | Shows cells, panels and messages. It cannot type or read panes. |
-| Cells | `[[cell]] id, side`, `tuios plugin-cell set ID TEXT [--action ACTION]`, `clear ID` | Text in the dock. A click runs an action. The daemon keeps the text, and it draws on a change only. |
-| A message | `tuios plugin-notify TEXT` | A notification, with the `ui` grant. Today an action cannot show a person anything. Use a pane. |
 | Hooks | `run = "event"`, `on = [...]`, `[permissions] events`, `TUIOS_PLUGIN_EVENT`, `TUIOS_PLUGIN_EVENT_JSON` | Runs a command on an event. No process waits. |
 | A timer | `run = "interval"`, `every = "60s"` | Runs a command on a timer that exists only while the plugin is enabled. |
 | Suggested keys | `[[key]]` | Offers a key. It is off until you accept it. |

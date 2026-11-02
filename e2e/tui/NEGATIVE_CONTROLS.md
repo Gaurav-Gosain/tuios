@@ -11941,3 +11941,17 @@ Run on 2026-11-02, each control against the branch head with one change:
 | The diff is sent | "v did not show the diff" | **caught** |
 | Git state in words | "v did not show the details" | **caught** |
 | `v` comes back | "v did not come back to the text" | **caught** |
+## The ui grant
+
+`TestPluginUIGrant` runs a shell plugin with `ui`. Run on 2026-11-02, each
+control against the branch head with one change:
+
+| Claim | Control | Where it fails | Verdict |
+|---|---|---|---|
+| `plugin-cell` needs `ui` | the `ui` refusal cut, and the grant check passes all | "cell.out without the grant" | **caught** |
+| `ui` does not type | `send-text` added to `pluginUIVerbs` | "type with the ui grant" | **caught** |
+| A client that attaches later gets the cells | `sendPluginCells` cut | "a late client has no cell" | **caught** |
+| A cell goes when its plugin stops | `dropCells` cut from `apply` | "the cell of a stopped plugin stays" | **caught** |
+| A cell must be in the manifest | the manifest check cut | "other with the ui grant" | **caught** |
+| A notice arrives after a cell | the client listener not armed again | "the notice did not show" | **caught** |
+

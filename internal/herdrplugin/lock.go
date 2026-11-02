@@ -295,6 +295,9 @@ func TrustHash(source string, p *Plugin, grants []string) string {
 	for _, l := range p.LinkHandlers {
 		put('l', l.ID, l.Pattern, l.Action)
 	}
+	for _, c := range p.Cells {
+		put('c', c.ID, c.Side)
+	}
 	return "sha256:" + hex.EncodeToString(h.Sum(nil))
 }
 

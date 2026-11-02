@@ -238,6 +238,8 @@ type ClientEvent struct {
 	PaneMark session.PaneMarkPayload
 	// PluginAsks is the push behind a "plugin-approvals" event.
 	PluginAsks []session.PluginApprovalAsk
+	// PluginUI is the push behind a "plugin-ui" event.
+	PluginUI session.PluginUIPayload
 }
 
 // SessionResizeMsg is sent when the effective session size changes (min of all clients).
@@ -598,6 +600,8 @@ func clientEventMsg(event ClientEvent) tea.Msg {
 		return PaneMarkMsg{Mark: event.PaneMark}
 	case "plugin-approvals":
 		return PluginApprovalsMsg{Asks: event.PluginAsks}
+	case "plugin-ui":
+		return PluginUIMsg{Payload: event.PluginUI}
 	case "paste-refused":
 		return PasteRefusedMsg{Message: event.Reason}
 	case "agent-mail-mark":
@@ -1928,6 +1932,10 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 	case PluginApprovalsMsg:
 		m.setPluginAsks(msg.Asks)
 		return m, nil
+
+	case PluginUIMsg:
+		m.handlePluginUI(msg.Payload)
+		return m, listenClientEventsUntil(m.stopSignal(), m.ClientEventChan)
 
 	case pluginApprovalDoneMsg:
 		m.pluginApprovalDone(msg)

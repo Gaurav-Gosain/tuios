@@ -51,6 +51,8 @@ type exampleOutcome struct {
 var exampleOutcomes = map[string]exampleOutcome{
 	// The fixture's session is made fresh for each example and holds no
 	// task card. The verbs are proved in task_test.go.
+	"plugin-cell#0":    {errCode: ErrVerbForbidden, why: "the fixture's caller is not a plugin's process"},
+	"plugin-notify#0":  {errCode: ErrVerbForbidden, why: "the fixture's caller is not a plugin's process"},
 	"block-task#0":     {errCode: ErrVerbNoTask, why: "the fixture's session holds no task card"},
 	"block-task#1":     {errCode: ErrVerbNoTask, why: "the fixture's session holds no task card"},
 	"claim-task#0":     {errCode: ErrVerbNoTask, why: "the fixture's session holds no task card"},
