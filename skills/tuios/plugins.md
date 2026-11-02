@@ -35,6 +35,15 @@ with `code` and `message`.
 
 ## Write one
 
+`tuios plugins new NAME` makes a folder that works. `tuios plugins check PATH`
+says what is wrong with a folder, and runs nothing. The person runs
+`tuios plugins dev PATH` to try it, since only the person installs a plugin.
+
+```sh
+tuios plugins new weather
+tuios plugins check weather
+```
+
 ```toml
 api = 1
 id = "me.commits"

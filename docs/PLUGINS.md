@@ -10,8 +10,13 @@ programs. The programs call tuios through the command line or the JSON socket.
 
 ## Write a plugin in ten minutes
 
-You need a shell and a running tuios. This plugin shows the last commits of the
-folder you work in, in a popup.
+You need a shell and a running tuios. The fastest start is
+`tuios plugins new NAME`, which makes a folder that works: a manifest, a script,
+a README and a GitHub workflow. `tuios plugins dev NAME` runs it and reloads it
+when you save a file.
+
+This plugin, written by hand, shows the last commits of the folder you work in,
+in a popup.
 
 Make a folder with two files. `tuios-plugin.toml`:
 
@@ -54,6 +59,18 @@ again. Run `tuios plugins install .` to answer.
 To remove the plugin, run `tuios plugins uninstall me.commits`. tuios keeps your
 folder.
 
+## Publish a plugin
+
+A plugin is a git repository. People install it with
+`tuios plugins install OWNER/REPO`, and `tuios plugins update` follows its default
+branch. To publish a version, push a tag such as `v0.1.0`. People install it with
+`tuios plugins install OWNER/REPO@v0.1.0`. The workflow that `tuios plugins new`
+writes runs `tuios plugins check` on each push, and attaches an archive of the
+plugin and its checksum to the release of each tag.
+
+Keep `version` in the manifest in step with the tag. Change the manifest only
+when you must: a new grant or a new command asks every person again.
+
 ## Commands
 
 Run these from a terminal outside tuios. A pane cannot change which plugins run.
@@ -72,6 +89,9 @@ Run these from a terminal outside tuios. A pane cannot change which plugins run.
 | `tuios plugins run ID ACTION` | Run an action. `--wait` prints its output. |
 | `tuios plugins open ID PANE` | Open a pane of the plugin. |
 | `tuios plugins log [ID]` | Show the last runs and their output. |
+| `tuios plugins new NAME` | Make a plugin folder that works, with a GitHub workflow. `--id` sets the id. |
+| `tuios plugins check [PATH]` | Read a plugin folder as tuios would and say what is wrong. Exits 1 when it cannot load. A CI job can run it. |
+| `tuios plugins dev PATH` | Install a folder in place and reload it when a file changes. It asks once at the start. |
 
 `tuios --skill plugins` prints this page's rules for an agent.
 
@@ -236,6 +256,7 @@ a plugin does nothing. `tuios --skill tml` has the components.
 | tuios | Change | What to do |
 |---|---|---|
 | next | New: `tuios plugins update`. | Nothing. |
+| next | New: `tuios plugins new`, `check` and `dev`. `check` warns on an old key such as `schema`. | Run `tuios plugins check` in your CI. |
 | next | New: `run = "event"` with `on`, `TUIOS_PLUGIN_EVENT` and `TUIOS_PLUGIN_EVENT_JSON`. | Move hooks out of a `herdr-plugin.toml`. |
 | next | New: `tuios plugins install NAME` for the plugins of the tuios release. | Nothing. |
 | next | tuios draws eight Mermaid types itself. `tuios plugins install sketch` brings the rest to `tuios mermaid`. | Nothing. |
@@ -253,7 +274,6 @@ until a release has them. A manifest that uses one is refused today.
 |---|---|---|
 | A timer | `run = "interval"`, `every = "60s"` | Runs a command on a timer that exists only while the plugin is enabled. |
 | Suggested keys | `[[key]]` | Offers a key. It is off until you accept it. |
-| Author tools | `tuios plugins new NAME`, `check [PATH]`, `dev PATH` | Makes a folder, checks a manifest, and runs a folder with reload. |
 | Cost | `tuios plugins stats` | Shows the processes, memory and runs of each plugin. |
 | Files only | `[[theme]]`, `[[saver]]` | A plugin that runs nothing needs no typed approval. |
 

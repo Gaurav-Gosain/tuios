@@ -12087,3 +12087,16 @@ Run on 2026-11-02, each control against the branch head with one change:
 |---|---|---|---|
 | A plugin enabled while the daemon runs gets its hooks, now that the event follower starts with the first plugin | the start of the follower cut from `apply` | "the hook did not set the cell" | **caught** |
 | An unknown event is refused | the name check cut | "a newer event loaded" | **caught** |
+
+## Author tools
+
+`TestPluginsAuthorTools` checks `plugins/template`, makes a plugin with `new`,
+breaks it for `check`, and runs `dev` in a terminal. Run on 2026-11-02, each
+control against the branch head with one change:
+
+| Claim | Control | Where it fails | Verdict |
+|---|---|---|---|
+| check finds a missing script | the script check cut | "check of a missing script" | **caught** |
+| dev reloads a changed folder | the install in the loop cut | "the new action after a reload" | **caught** |
+| new writes the workflow | `all:` cut from the embed | "new made no .github/workflows/plugin.yml" | **caught** |
+

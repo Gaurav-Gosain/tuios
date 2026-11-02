@@ -1,0 +1,16 @@
+api = 1
+id = "example.hello"
+name = "Hello"
+version = "0.1.0"
+description = "Says hello in a notification"
+
+# ui shows cells, panels and messages. Ask for the least you need.
+[permissions]
+grants = ["ui"]
+
+# An action runs when you choose it in the palette. Nothing runs before that.
+[[process]]
+id = "hello"
+run = "action"
+title = "Say hello"
+command = ["sh", "hello.sh"]

@@ -1,0 +1,27 @@
+name: plugin
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: write
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install tuios
+        run: curl -fsSL https://raw.githubusercontent.com/Gaurav-Gosain/tuios/main/install.sh | bash
+      - name: Check the manifest
+        run: tuios plugins check .
+      - name: Attach the plugin to the release
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          name="${GITHUB_REPOSITORY#*/}-${GITHUB_REF_NAME}.tar.gz"
+          git archive --format=tar.gz --prefix="${GITHUB_REPOSITORY#*/}/" -o "$name" HEAD
+          sha256sum "$name" > checksums.txt
+          gh release create "$GITHUB_REF_NAME" "$name" checksums.txt --verify-tag --notes "Install with: tuios plugins install $GITHUB_REPOSITORY@$GITHUB_REF_NAME"

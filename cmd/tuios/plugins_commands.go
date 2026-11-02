@@ -46,7 +46,8 @@ You must run install, update, uninstall, approve, enable, disable, link, unlink 
 		newPluginsEnableCommand(true), newPluginsEnableCommand(false),
 		newPluginsInstallCommand(), newPluginsUpdateCommand(), newPluginsUninstallCommand(), newPluginsApproveCommand(),
 		newPluginsLinkCommand(), newPluginsUnlinkCommand(), newPluginsBuildCommand(),
-		newPluginsRunCommand(), newPluginsOpenCommand(), newPluginsLogCommand())
+		newPluginsRunCommand(), newPluginsOpenCommand(), newPluginsLogCommand(),
+		newPluginsNewCommand(), newPluginsCheckCommand(), newPluginsDevCommand())
 	return cmd
 }
 
