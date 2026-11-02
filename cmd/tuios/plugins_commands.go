@@ -40,11 +40,11 @@ An enabled plugin runs its commands with your rights, outside every pane. Grants
 
 tuios finds plugins in five places: the folders [plugins] dirs names, the tuios plugins folder, plugins.lock, herdr's plugins.json and herdr's managed checkouts. Finding a plugin runs nothing. A plugin runs only after you enable it. tuios plugins install enables the plugin it installs. tuios plugins uninstall removes it.
 
-You must run install, uninstall, approve, enable, disable, link, unlink and build from a terminal outside tuios. To write a plugin, read docs/PLUGINS.md or run tuios --skill plugins.`,
+You must run install, update, uninstall, approve, enable, disable, link, unlink and build from a terminal outside tuios. To write a plugin, read docs/PLUGINS.md or run tuios --skill plugins.`,
 	}
 	cmd.AddCommand(newPluginsListCommand(), newPluginsInfoCommand(),
 		newPluginsEnableCommand(true), newPluginsEnableCommand(false),
-		newPluginsInstallCommand(), newPluginsUninstallCommand(), newPluginsApproveCommand(),
+		newPluginsInstallCommand(), newPluginsUpdateCommand(), newPluginsUninstallCommand(), newPluginsApproveCommand(),
 		newPluginsLinkCommand(), newPluginsUnlinkCommand(), newPluginsBuildCommand(),
 		newPluginsRunCommand(), newPluginsOpenCommand(), newPluginsLogCommand())
 	return cmd

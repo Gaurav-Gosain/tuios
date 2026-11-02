@@ -15,6 +15,7 @@ around that. Give the person the command to run in a terminal outside tuios:
 
 ```sh
 tuios plugins install ./my-plugin
+tuios plugins update me.commits
 tuios plugins approve me.commits
 tuios plugins enable me.commits
 tuios plugins uninstall me.commits

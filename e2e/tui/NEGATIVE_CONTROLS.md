@@ -11911,3 +11911,18 @@ was run by hand on a build stamped 0.1.0 against `min_tuios = "99.0.0"`.
 | `duration_known` in the verb | `TestFilePreviewOnAHost` ("a seek with the facts known") | **caught** |
 
 The first drag test passed with the drag broken, because the press alone met its check. The stronger test found that the motion filter dropped every drag.
+
+## tuios plugins update
+
+`TestPluginsUpdate` updates a plugin from a bare repository over `file://`.
+Run on 2026-11-02, each control against the branch head with one change:
+
+| Claim | Control | Where it fails | Verdict |
+|---|---|---|---|
+| A trust change asks again under `--yes` | `hashChanged` always false | "update with a trust change under --yes" | **caught** |
+| A force-push asks again under `--yes` | `updateReason` skips the ancestor check | "update after a force-push under --yes" | **caught** |
+| A moved tag asks again under `--yes` | `updateReason` skips the tag check | "update of a moved tag under --yes" | **caught** |
+| A commit subject cannot write to the terminal | the subject is not quoted | "a commit subject reached the terminal" | **caught** |
+| `--check` changes nothing | the check return cut | "update --check changed plugins.lock" | **caught** |
+| A source that is gone exits 3 | the fetch failure is not marked | "update with the source gone" | **caught** |
+

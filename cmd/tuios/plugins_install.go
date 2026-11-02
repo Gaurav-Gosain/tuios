@@ -172,10 +172,14 @@ func git(dir string, args ...string) (string, error) {
 	return strings.TrimSpace(out), nil
 }
 
+// errFetchFailed marks a fetch that reached nothing, which an update reports
+// as a source it cannot reach.
+var errFetchFailed = errors.New("tuios cannot get")
+
 // fetchInto fetches ref of url into dir, an empty folder, and checks out
 // the commit. "" is the remote's default branch. It returns the commit and
 // git's id of subdir at it, which must be a folder.
-func fetchInto(dir, url, ref, subdir string) (commit, tree string, err error) {
+func fetchInto(dir, url, ref, subdir string, history bool) (commit, tree string, err error) {
 	want := ref
 	if want == "" {
 		want = "HEAD"
@@ -189,14 +193,18 @@ func fetchInto(dir, url, ref, subdir string) (commit, tree string, err error) {
 		_, err = git(dir, "remote", "add", "origin", url)
 	}
 	if err == nil {
-		_, err = git(dir, "fetch", "-q", "--depth", "1", "--no-tags", "--", "origin", want)
+		if history {
+			_, err = git(dir, "fetch", "-q", "--filter=blob:none", "--no-tags", "--", "origin", want)
+		} else {
+			_, err = git(dir, "fetch", "-q", "--depth", "1", "--no-tags", "--", "origin", want)
+		}
 		if err != nil && herdrplugin.IsCommit(ref) {
 			// A host that refuses a fetch by commit gets a full fetch.
 			_, err = git(dir, "fetch", "-q", "--no-tags", "--", "origin", "+refs/heads/*:refs/remotes/origin/*", "+refs/tags/*:refs/tags/*")
 		}
 	}
 	if err != nil {
-		return "", "", fmt.Errorf("tuios cannot get %s. Check the network, the URL and the ref: %w", shownSource(url), err)
+		return "", "", fmt.Errorf("%w %s. Check the network, the URL and the ref: %w", errFetchFailed, shownSource(url), err)
 	}
 	if commit, err = git(dir, "rev-parse", "--verify", "-q", rev); err != nil {
 		return "", "", fmt.Errorf("the commit %.12s is not on %s", ref, shownSource(url))
@@ -241,6 +249,12 @@ type installer struct {
 	state *herdrplugin.State
 	// configPath is config.toml.
 	configPath string
+	// history makes fetch get the history of the ref, for an update.
+	history bool
+	// ask, when set, says why the person must answer again, also with --yes.
+	ask string
+	// verb is the word for what finish did, "" for Installed.
+	verb string
 }
 
 // newInstaller takes the install lock, then reads config.toml and the state
@@ -283,7 +297,7 @@ func (in *installer) fetch(url, ref, subdir string) (string, *herdrplugin.LockEn
 		return "", nil, nil, err
 	}
 	e := &herdrplugin.LockEntry{Format: "herdr", Source: url, Ref: ref, Subdir: subdir}
-	if e.Commit, e.Tree, err = fetchInto(work, url, ref, subdir); err != nil {
+	if e.Commit, e.Tree, err = fetchInto(work, url, ref, subdir, in.history); err != nil {
 		return work, nil, nil, err
 	}
 	root := filepath.Join(work, filepath.FromSlash(subdir))
@@ -339,15 +353,22 @@ func (in *installer) finish(e herdrplugin.LockEntry, p *herdrplugin.Plugin, fetc
 		}
 	}
 	hash := herdrplugin.TrustHash(e.Source, p, e.Grants)
-	changed := e.Approved != "" && e.Approved != hash
+	hashChanged := e.Approved != "" && e.Approved != hash
+	changed := hashChanged || in.ask != ""
 	rel := ""
 	if fetched != "" {
 		rel = herdrplugin.NewDir(e)
 	}
-	fmt.Fprint(out, installPlan(p, e, in.dirs.PluginRoot(e, rel), in.o))
+	fmt.Fprint(out, installPlan(p, e, in.dirs.PluginRoot(e, rel), in.o, cmp.Or(in.verb, "Installed")))
 	tty := term.IsTerminal(int(os.Stdin.Fd()))
 	if changed {
-		fmt.Fprintln(out, "\nThe plugin manifest is different from the approved one in plugins.lock. tuios asks again, also with --yes.")
+		if in.ask != "" {
+			fmt.Fprintln(out, "\n"+in.ask)
+		}
+		if hashChanged {
+			fmt.Fprintln(out, "\nThe plugin manifest is different from the approved one in plugins.lock.")
+		}
+		fmt.Fprintln(out, "tuios asks again, also with --yes.")
 		if !tty {
 			return errors.New("there is no terminal to ask in. Run the command in a terminal")
 		}
@@ -447,7 +468,7 @@ func (in *installer) finish(e herdrplugin.LockEntry, p *herdrplugin.Plugin, fetc
 			return err
 		}
 	}
-	fmt.Fprintf(out, "Installed %s", e.ID)
+	fmt.Fprintf(out, "%s %s", cmp.Or(in.verb, "Installed"), e.ID)
 	if e.Commit != "" {
 		fmt.Fprintf(out, " at %.12s", e.Commit)
 	}
@@ -621,6 +642,9 @@ func installPlugin(cmd *cobra.Command, arg string, o installOpts) error {
 		fmt.Fprintf(in.out, "The plugin %s is already installed at %.12s.\n", e.ID, e.Commit)
 		return nil
 	}
+	if old != nil && old.Source == e.Source && old.Subdir == e.Subdir && old.Ref == e.Ref && old.Commit != e.Commit && !e.Local() {
+		return fmt.Errorf("the plugin %s is installed from this source. Run tuios plugins update %s to see the new commits and move to them", e.ID, e.ID)
+	}
 	return in.finish(*e, p, fetched)
 }
 
@@ -684,11 +708,19 @@ func grantsText(p *herdrplugin.Plugin) string {
 // grantsNote keeps the limit of a grant beside the grants.
 const grantsNote = "Grants are not a sandbox. The plugin can read your files and run any program as you.\n"
 
+// planWord is the first word of the plan.
+func planWord(verb string) string {
+	if verb == "Updated" {
+		return "Update"
+	}
+	return "Install"
+}
+
 // installPlan is what the person approves: facts only.
-func installPlan(p *herdrplugin.Plugin, e herdrplugin.LockEntry, folder string, o installOpts) string {
+func installPlan(p *herdrplugin.Plugin, e herdrplugin.LockEntry, folder string, o installOpts, verb string) string {
 	var b strings.Builder
 	f := func(format string, a ...any) { fmt.Fprintf(&b, format, a...) }
-	f("\nInstall %s %s (%s plugin)\n  from    %s", p.PluginID, shownArgv(p.Version), cmp.Or(p.Format, "herdr"), shownSource(e.Source))
+	f("\n%s %s %s (%s plugin)\n  from    %s", planWord(verb), p.PluginID, shownArgv(p.Version), cmp.Or(p.Format, "herdr"), shownSource(e.Source))
 	if e.Commit != "" {
 		ref := e.Ref
 		if ref == "" {

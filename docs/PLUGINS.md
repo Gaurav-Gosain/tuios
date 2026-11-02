@@ -61,6 +61,7 @@ Run these from a terminal outside tuios. A pane cannot change which plugins run.
 | Command | What it does |
 |---|---|
 | `tuios plugins install SOURCE` | Get, build and enable a plugin. `SOURCE` is `owner/repo[/dir][@ref]`, a git URL or a folder. |
+| `tuios plugins update [ID...]` | Move plugins to the newest commit of their ref. Shows the commits and asks. `--check` changes nothing. |
 | `tuios plugins uninstall ID` | Stop a plugin, close its panes and remove it. |
 | `tuios plugins list` | Show each plugin, its state and the reason for that state. |
 | `tuios plugins info ID` | Show what a plugin runs and what it asks for. |
@@ -182,6 +183,7 @@ need. A plugin that only opens a pane needs no grant.
 
 | tuios | Change | What to do |
 |---|---|---|
+| next | New: `tuios plugins update`. | Nothing. |
 | next | `api` replaces `schema`. `schema = 1` still works and `tuios plugins info` warns. | Write `api = 1`. |
 | next | New variables: `TUIOS_BIN`, `TUIOS_PLUGIN_ROOT`, `TUIOS_PLUGIN_CONFIG_DIR`, `TUIOS_PLUGIN_STATE_DIR`, `TUIOS_PLUGIN_ENTRY`, `TUIOS_PLUGIN_SESSION`, `TUIOS_PLUGIN_PANE`, `TUIOS_PLUGIN_CWD`, `TUIOS_PLUGIN_CONTEXT_JSON`. | Use these instead of `HERDR_PLUGIN_*` in a tuios plugin. |
 
@@ -192,7 +194,6 @@ until a release has them. A manifest that uses one is refused today.
 
 | Part | Names | What it adds |
 |---|---|---|
-| Update | `tuios plugins update [ID...] [--check]` | Shows the commit range. Asks again on a trust change, a force-push or a moved tag. |
 | The `ui` grant | `grants = ["ui"]` | Shows cells, panels and messages. It cannot type or read panes. |
 | Cells | `[[cell]] id, side`, `tuios plugin-cell set ID TEXT [--action ACTION]`, `clear ID` | Text in the dock. A click runs an action. The daemon keeps the text, and it draws on a change only. |
 | A message | `tuios plugin-notify TEXT` | A notification, with the `ui` grant. Today an action cannot show a person anything. Use a pane. |
@@ -275,6 +276,33 @@ it, and the folders that open plugin panes run from. It removes the other
 folders of the plugin. When a build fails or you stop it, the plugin runs
 from its old folder. When tuios cannot restart the plugin, it keeps the old
 folders and tells you to restart the daemon.
+
+### Update
+
+`tuios plugins update` moves each installed plugin to the newest commit of the
+ref it follows. Give ids to update only those. tuios shows the new commits, the
+build commands and what the plugin runs, and asks. `--yes` skips the question.
+
+tuios asks again, also with `--yes`, in three cases. With no terminal, tuios
+refuses these updates.
+
+- What the plugin runs or asks for changes. tuios shows the lines that change.
+- The history of the branch was rewritten.
+- The tag that the plugin follows points to a different commit.
+
+A change to code alone does not ask again with `--yes`. Read the commits.
+
+When the plugin's folder did not change, tuios says "up to date". The update
+builds into a new folder, so a failed build changes nothing that runs. The
+daemon then restarts the plugin. An open plugin pane keeps its old folder until
+you open it again. A plugin that is off stays off.
+
+`--check` shows the same facts and changes nothing. When tuios cannot reach a
+source, that plugin stays at its commit, tuios goes on to the next one, and the
+command exits 3. A plugin from a folder has no update. A plugin pinned to a
+commit stays there. `tuios plugins install` of a plugin that is installed from
+the same source and ref tells you to run `update`. To follow another ref, run
+`tuios plugins install SOURCE@REF`.
 
 ### Uninstall
 
