@@ -211,6 +211,7 @@ var settingInverted = map[string]bool{
 var settingPlaceholders = map[string]string{
 	"appearance.sidebar.editor":            "micro, nano, or vim -f",
 	"appearance.window_title_format":       "{index}: {title}",
+	"appearance.host_title":                "{title} · {session}",
 	"appearance.dock_workspace_tab_format": "{index}: {name}",
 	"appearance.sidebar.sections":          "sessions:25,terminals,files:25,agents:34",
 	"appearance.clock_format":              "Mon 3:04PM",
@@ -227,6 +228,7 @@ var settingPlaceholders = map[string]string{
 var settingUnset = map[string]string{
 	"appearance.sidebar.editor":            "($EDITOR / $VISUAL / vi)",
 	"appearance.window_title_format":       "(raw title)",
+	"appearance.host_title":                "(off)",
 	"appearance.dock_workspace_tab_format": "(name only)",
 	"appearance.preferred_shell":           "(auto-detect)",
 	"appearance.clock_format":              config.DefaultClockFormat,

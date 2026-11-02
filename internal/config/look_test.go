@@ -82,6 +82,7 @@ func TestParseLookBoundary(t *testing.T) {
 		{name: "enum", body: "[appearance]\nborder_style = \"spiky\"", err: "appearance.border_style"},
 		{name: "colour", body: "[appearance]\nborder_focused_color = \"notacolour\"", err: "border_focused_color"},
 		{name: "escape in title format", body: "[appearance]\nwindow_title_format = \"\\u001b]52;c;eA==\\u0007{title}\"", err: "window_title_format"},
+		{name: "escape in host title", body: "[appearance]\nhost_title = \"\\u001b]52;c;eA==\\u0007{title}\"", err: "host_title"},
 		{name: "escape in name", body: "name = \"a\\u001bb\"", err: "name"},
 		{name: "unknown theme", body: "[appearance]\ntheme = \"../../etc/passwd\"", err: "appearance.theme"},
 		{name: "theme id with a path", body: "[theme]\nid = \"../evil\"", err: "cannot be a file name"},
@@ -156,7 +157,10 @@ func TestLookKeysAreLookKeys(t *testing.T) {
 		}
 		last := k[strings.LastIndex(k, ".")+1:]
 		for _, word := range []string{"command", "shell", "opener", "editor", "file", "dir", "path", "script", "host", "url", "exec", "osc52", "delete"} {
-			if strings.Contains(last, word) && last != "file_icons" && last != "file_icon_colors" {
+			// host_title only writes the host terminal's title, cleaned of
+			// control characters before it goes out: it runs and names
+			// nothing.
+			if strings.Contains(last, word) && last != "file_icons" && last != "file_icon_colors" && last != "host_title" {
 				t.Errorf("look key %s has %q in its name", k, word)
 			}
 		}

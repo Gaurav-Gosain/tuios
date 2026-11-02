@@ -122,6 +122,7 @@ var lookKeys = []string{
 	"appearance.window_button_style",
 	"appearance.window_title_align",
 	"appearance.window_title_format",
+	"appearance.host_title",
 	"appearance.window_title_position",
 	"appearance.window_title_style",
 	"appearance.hide_scrollbar",

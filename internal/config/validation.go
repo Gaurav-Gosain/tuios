@@ -461,7 +461,8 @@ func validateAppearanceEnums(cfg *UserConfig, result *ValidationResult) {
 	checkEnum("window_title_position", cfg.Appearance.WindowTitlePosition, WindowTitlePositions)
 	checkEnum("window_title_style", cfg.Appearance.WindowTitleStyle, WindowTitleStyles)
 	checkEnum("window_title_align", cfg.Appearance.WindowTitleAlign, WindowTitleAligns)
-	validateTitleFormat(cfg.Appearance.WindowTitleFormat, result)
+	validateTitleFormat("window_title_format", cfg.Appearance.WindowTitleFormat, knownTitlePlaceholders, result)
+	validateTitleFormat("host_title", cfg.Appearance.HostTitle, knownHostTitlePlaceholders, result)
 	validateGlyphSet(cfg, result)
 	validateOmarchyTheme(cfg, result)
 	validateClockFormat(cfg.Appearance.ClockFormat, result)
@@ -748,20 +749,23 @@ func validateScrollbar(cfg *UserConfig, result *ValidationResult) {
 // knownTitlePlaceholders are the placeholders FormatWindowTitle expands.
 var knownTitlePlaceholders = []string{"{title}", "{index}", "{cwd}"}
 
+// knownHostTitlePlaceholders are the placeholders FormatHostTitle expands.
+var knownHostTitlePlaceholders = append(slices.Clone(knownTitlePlaceholders), "{session}", "{workspace}")
+
 // titlePlaceholderPattern matches anything written as a placeholder, so a typo
 // like {name} can be reported instead of being rendered literally in the title.
 var titlePlaceholderPattern = lazyre.New(`\{[^{}]*\}`)
 
-func validateTitleFormat(format string, result *ValidationResult) {
+func validateTitleFormat(key, format string, allowed []string, result *ValidationResult) {
 	for _, placeholder := range titlePlaceholderPattern().FindAllString(format, -1) {
-		if slices.Contains(knownTitlePlaceholders, placeholder) {
+		if slices.Contains(allowed, placeholder) {
 			continue
 		}
 		result.Warnings = append(result.Warnings, ValidationError{
 			Field: "appearance",
-			Key:   "window_title_format",
+			Key:   key,
 			Message: fmt.Sprintf("'%s' is not a known placeholder (allowed: %s); it will be shown literally",
-				placeholder, strings.Join(knownTitlePlaceholders, ", ")),
+				placeholder, strings.Join(allowed, ", ")),
 		})
 	}
 }

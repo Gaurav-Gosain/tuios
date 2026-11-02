@@ -436,6 +436,11 @@ var optionSpecs = []Option{
 		Default:     "",
 	},
 	{
+		Path: "appearance.host_title", Type: OptionString, Section: "appearance",
+		Description: "Title of the terminal tuios runs in, from the focused pane: accepts {title}, {index}, {cwd}, {session} and {workspace}. Empty sets no title",
+		Default:     "",
+	},
+	{
 		Path: "appearance.zoom_max_width", Type: OptionInt, Section: "appearance",
 		Description: "Width in cells of a zoomed pane. 0 fills the screen.",
 		Default:     "0", Min: 0,

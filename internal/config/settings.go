@@ -512,6 +512,12 @@ type Settings struct {
 	// Set via appearance.window_title_format config
 	WindowTitleFormat string
 
+	// HostTitle is the template for the title of the terminal tuios runs in,
+	// built from the focused pane. Empty (the default) sets none. See
+	// FormatHostTitle for the supported placeholders.
+	// Set via appearance.host_title config
+	HostTitle string
+
 	// HideClock controls whether the clock overlay is hidden
 	// Set via --hide-clock flag or appearance.hide_clock config
 	// Deprecated: Use ShowClock instead. HideClock takes precedence when true.
@@ -1053,6 +1059,7 @@ func DefaultSettings() Settings {
 		WindowTitleStyle:            DefaultWindowTitleStyle,
 		WindowTitleAlign:            DefaultWindowTitleAlign,
 		WindowTitleFormat:           "",
+		HostTitle:                   "",
 		HideClock:                   false,
 		ShowClock:                   false,
 		ShowCPU:                     false,

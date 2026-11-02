@@ -437,6 +437,7 @@ type AppearanceConfig struct {
 	BorderGradientAngle  *int   `toml:"border_gradient_angle"`
 	BorderUnfocusedColor string `toml:"border_unfocused_color"` // Hex color for unfocused pane border (e.g., "#585b70")
 	WindowTitleFormat    string `toml:"window_title_format"`    // Format string for window titles: {title}, {index}, {cwd}
+	HostTitle            string `toml:"host_title"`             // Format string for the host terminal's title: {title}, {index}, {cwd}, {session}, {workspace}
 	ZoomMaxWidth         int    `toml:"zoom_max_width"`         // Max width in cells for zoom mode (0 = fullscreen, e.g. 120 centers at 120 cols)
 	NiriReverseScroll    bool   `toml:"niri_reverse_scroll"`    // Reverse mouse scroll direction in niri scrolling mode (default: false)
 	NiriScrollCells      int    `toml:"niri_scroll_cells"`      // Cells the niri viewport moves per mouse wheel event (default: 8, min: 1, max: 200)
@@ -3127,6 +3128,10 @@ func ApplyAppearanceConfig(cfg *UserConfig, s *Settings) {
 	// An empty string in the config also clears a previously set format on
 	// reload, which is why it is assigned unconditionally.
 	s.WindowTitleFormat = cfg.Appearance.WindowTitleFormat
+
+	// HostTitle defaults to empty, which sets no title. Assigned
+	// unconditionally for the same reason as above.
+	s.HostTitle = cfg.Appearance.HostTitle
 
 	// ScrollLines (lines per wheel notch)
 	if cfg.Appearance.ScrollLines > 0 {

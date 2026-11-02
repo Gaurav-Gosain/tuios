@@ -255,6 +255,12 @@
       "default": "false"
     },
     {
+      "path": "appearance.host_title",
+      "type": "string",
+      "description": "Title of the terminal tuios runs in, from the focused pane: accepts {title}, {index}, {cwd}, {session} and {workspace}. Empty sets no title",
+      "default": ""
+    },
+    {
       "path": "appearance.master_position",
       "type": "string",
       "description": "Side the master panes take in the master-stack layout. Center puts the stack on both sides.",

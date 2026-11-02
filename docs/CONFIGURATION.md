@@ -1346,6 +1346,34 @@ window_title_align = "center"
 settings page, in the Appearance section, and `tuios set-config` applies them
 at once.
 
+## Host terminal title
+
+`appearance.host_title` sets the title of the terminal tuios runs in, such as
+Ghostty's title bar, from the focused pane. It follows the focus, the
+workspace and the session, and the focused pane's own title changes. It is
+tmux's `set-titles`. Empty, the default, sets no title. Emptied while a client
+is attached, it clears the title it set, as a client does when it detaches.
+
+| Placeholder | What it holds |
+|---|---|
+| `{title}` | the focused pane's name, as its title on the border shows it |
+| `{index}` | the pane's place in its workspace, from 1 |
+| `{cwd}` | the pane's working directory |
+| `{session}` | the session's name as the rail shows it, its display name if it has one, or `tuios` without a daemon |
+| `{workspace}` | the workspace's name, or its number. With a scratch group open, the workspace it is shown over |
+
+```toml
+[appearance]
+host_title = "{title} · {session}"
+```
+
+With no focused pane on the workspace in view, the title is the session's
+name. So it is when the template uses `{title}` and the pane has no name, as a
+fresh shell has none, and when the template comes out empty. A title a tool
+set with herdr's `terminal title set` wins while it is set. Each client sets
+the title of its own terminal. The option is on the settings page, in the
+Appearance section, and `tuios set-config` applies it at once.
+
 ## Focused border colour
 
 The focused pane's border shows the mode. By default it is the theme's cyan

@@ -211,7 +211,7 @@ question about the screen. Do not change them unless the person asks.
 | **Colour** | the twenty terminal colours, the accents, the borders | `appearance.theme`, `list-themes` |
 | **Shape** | the characters the chrome is drawn with | `appearance.glyphs`, `list-glyphs` |
 | **Spacing** | ground between panes, padding inside overlay panels | `appearance.gap`, `appearance.panel_padding` |
-| **Composition** | what a window title, a workspace tab and the clock carry | `window_title_format`, `dock_workspace_tab_format`, `clock_format` |
+| **Composition** | what a window title, a workspace tab, the clock and the host terminal's title carry | `window_title_format`, `dock_workspace_tab_format`, `clock_format`, `host_title` |
 
 A pane title's shape and place: `window_title_style` (`pill`, `tab`, `plain`)
 and `window_title_align` (`auto`, `left`, `center`, `right`). The rail's

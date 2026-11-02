@@ -401,6 +401,7 @@ func (m *OS) settingsCategories() []settingsCategory {
 			opt("appearance.window_title_style"),
 			opt("appearance.window_title_align"),
 			opt("appearance.window_title_format"),
+			opt("appearance.host_title"),
 			// Hand-written: the value in force is the session's pane geometry,
 			// not this client's config. See sharedBordersItem.
 			custom("appearance.shared_borders", m.sharedBordersItem()),
