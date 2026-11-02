@@ -2,6 +2,7 @@ package tuie2e
 
 import (
 	"encoding/json"
+	"fmt"
 	"io"
 	"os"
 	"os/exec"
@@ -924,6 +925,310 @@ func TestDaemonUpgradePreflightRefusals(t *testing.T) {
 			}
 		})
 	}
+}
+
+// writeTuiosCopy copies the binary under test to dst with mode.
+func writeTuiosCopy(t *testing.T, dst string, mode os.FileMode) {
+	t.Helper()
+	data, err := os.ReadFile(tuiosBin)
+	if err != nil {
+		t.Fatal(err)
+	}
+	writeWithMode(t, dst, data, mode)
+}
+
+// writeWithMode writes data to path and then sets mode, which the umask
+// cannot narrow.
+func writeWithMode(t *testing.T, path string, data []byte, mode os.FileMode) {
+	t.Helper()
+	if err := os.WriteFile(path, data, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(path, mode); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// ownerOnlyDir makes a folder only its owner can enter, with its links
+// resolved, as the daemon names its binary.
+func ownerOnlyDir(t *testing.T, parts ...string) string {
+	t.Helper()
+	dir := filepath.Join(parts...)
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if resolved, err := filepath.EvalSymlinks(dir); err == nil {
+		dir = resolved
+	}
+	return dir
+}
+
+// raceFixture is a folder race/ with a tuios copy at race/next/tuios and a
+// script at race/alt/tuios that anyone can write. The script appends a line to
+// a marker outside race/ and runs another tuios copy, so it behaves as tuios
+// and only the marker tells that it ran. A swap of race/next and race/alt puts
+// the script where the daemon checked the copy.
+type raceFixture struct {
+	next, alt, binary, marker string
+	script                    []byte
+	copied, alternate         os.FileInfo
+}
+
+func newRaceFixture(t *testing.T) raceFixture {
+	t.Helper()
+	outside := ownerOnlyDir(t, t.TempDir(), "outside")
+	race := ownerOnlyDir(t, t.TempDir(), "race")
+	f := raceFixture{next: ownerOnlyDir(t, race, "next"), alt: ownerOnlyDir(t, race, "alt"), marker: filepath.Join(outside, "marker")}
+	f.binary = filepath.Join(f.next, "tuios")
+	stand := filepath.Join(outside, "tuios")
+	writeTuiosCopy(t, stand, 0o755)
+	writeTuiosCopy(t, f.binary, 0o755)
+	f.script = []byte("#!/bin/sh\necho ran >>'" + f.marker + "'\nexec '" + stand + "' \"$@\"\n")
+	writeWithMode(t, filepath.Join(f.alt, "tuios"), f.script, 0o777)
+	var err error
+	if f.copied, err = os.Stat(f.binary); err != nil {
+		t.Fatal(err)
+	}
+	if f.alternate, err = os.Stat(filepath.Join(f.alt, "tuios")); err != nil {
+		t.Fatal(err)
+	}
+	return f
+}
+
+// swapped says why race/next and race/alt were not swapped, or "" when they
+// were: race/next/tuios is the script and race/alt/tuios the copy.
+func (f raceFixture) swapped() string {
+	data, err := os.ReadFile(f.binary)
+	if err != nil || string(data) != string(f.script) {
+		return fmt.Sprintf("%s is not the script after the swap (read error %v, %d bytes)", f.binary, err, len(data))
+	}
+	info, err := os.Stat(filepath.Join(f.alt, "tuios"))
+	if err != nil || !os.SameFile(info, f.copied) {
+		return fmt.Sprintf("%s is not the tuios copy after the swap (stat error %v)", filepath.Join(f.alt, "tuios"), err)
+	}
+	return ""
+}
+
+// markerText is what the script wrote to the marker, and whether the marker
+// exists.
+func (f raceFixture) markerText() (string, bool) {
+	data, err := os.ReadFile(f.marker)
+	return string(data), err == nil
+}
+
+// openFile is one entry of /proc/<pid>/fd: where it points, its file, and the
+// flags of its fdinfo.
+type openFile struct {
+	FD    string `json:"fd"`
+	Link  string `json:"link"`
+	Flags uint64 `json:"flags"`
+	info  os.FileInfo
+}
+
+// oPath is O_PATH in the flags of /proc/<pid>/fdinfo on Linux.
+const oPath = 0o10000000
+
+func openFiles(t *testing.T, pid int) []openFile {
+	t.Helper()
+	dir := "/proc/" + strconv.Itoa(pid)
+	entries, err := os.ReadDir(dir + "/fd")
+	if err != nil {
+		t.Fatalf("read the descriptors of %d: %v", pid, err)
+	}
+	var out []openFile
+	for _, e := range entries {
+		f := openFile{FD: e.Name()}
+		f.Link, _ = os.Readlink(dir + "/fd/" + e.Name())
+		f.info, _ = os.Stat(dir + "/fd/" + e.Name())
+		info, _ := os.ReadFile(dir + "/fdinfo/" + e.Name())
+		for _, line := range strings.Split(string(info), "\n") {
+			if v, ok := strings.CutPrefix(line, "flags:"); ok {
+				f.Flags, _ = strconv.ParseUint(strings.TrimSpace(v), 8, 64)
+			}
+		}
+		out = append(out, f)
+	}
+	return out
+}
+
+// filesOf is the entries of files that are file.
+func filesOf(files []openFile, file os.FileInfo) []openFile {
+	var out []openFile
+	for _, f := range files {
+		if f.info != nil && os.SameFile(f.info, file) {
+			out = append(out, f)
+		}
+	}
+	return out
+}
+
+// awaitSettled waits until the daemon's image and the files it holds have
+// not changed for a second, at most 10 s: a commit runs after the reply.
+func awaitSettled(t *testing.T, base string, pid int) bool {
+	t.Helper()
+	var last string
+	var since time.Time
+	for deadline := time.Now().Add(10 * time.Second); time.Now().Before(deadline); time.Sleep(100 * time.Millisecond) {
+		key := "no answer"
+		if res, err := callVerb(t, base, "hello", map[string]any{}); err == nil {
+			key, _ = res["instance"].(string)
+		}
+		for _, f := range openFiles(t, pid) {
+			// A socket comes and goes with each caller, the hello above too.
+			if strings.HasPrefix(f.Link, "/") {
+				key += " " + f.Link
+			}
+		}
+		if key != last {
+			last, since = key, time.Now()
+		} else if time.Since(since) >= time.Second {
+			return true
+		}
+	}
+	return false
+}
+
+// TestDaemonUpgradeRunsTheFileItChecked renames another file onto the
+// binary's path after the daemon checked it: inside the exec window, and right
+// after the preflight's check, through test-handoff's swap parameters. The
+// file swapped in is a script anyone can write, which the daemon would refuse,
+// and which leaves a marker when it runs.
+//
+//   - exec: the new image must be the tuios the daemon checked, by its
+//     descriptor: the marker does not exist, the pid and the pane's process
+//     are kept, the daemon is still named tuios, and it holds no O_PATH
+//     descriptor of the checked file.
+//   - preflight: the preflight runs the checked file, and the commit finds
+//     another file at the path, runs its checks again and refuses it: the
+//     marker does not exist, the daemon keeps its image, and it holds neither
+//     file.
+//
+// Each case first checks the swap happened. Linux only: elsewhere the daemon
+// runs the path, as the docs say.
+func TestDaemonUpgradeRunsTheFileItChecked(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("only Linux runs the checked binary by its descriptor; other systems run the path, as docs/CLI_REFERENCE.md says")
+	}
+	t.Run("exec", func(t *testing.T) {
+		base := t.TempDir()
+		startHandoffDaemon(t, base)
+		f := newRaceFixture(t)
+		const sess = "e2e-checked-exec"
+		win := newCommandWindow(t, base, sess, "probe", false, "sh", "-c", "echo pid-$$; exec sleep 600")
+		waitHandoffPane(t, base, sess, win, regexp.MustCompile(`^pid-\d+`), 10*time.Second)
+		pids := panePIDs(t, base, sess)
+		img := helloImage(t, base)
+
+		_ = mustCall(t, base, "test-handoff", map[string]any{"binary": f.binary, "swap_in_window": []string{f.next, f.alt}})
+		after := awaitNewImage(t, base, img, 40*time.Second)
+		afterPIDs := panePIDs(t, base, sess)
+		comm, commErr := os.ReadFile("/proc/" + strconv.Itoa(after.PID) + "/comm")
+		files := openFiles(t, after.PID)
+		marker, ran := f.markerText()
+		swap := f.swapped()
+		writeHandoffArtifact(t, map[string]any{
+			"marker": marker, "marker_exists": ran, "swap_missing": swap, "pid_before": img.PID, "pid_after": after.PID,
+			"panes_before": pids, "panes_after": afterPIDs, "comm": string(comm), "descriptors": files,
+		})
+
+		if swap != "" {
+			t.Fatalf("ASSERTION: %s", swap)
+		}
+		if after.PID != img.PID {
+			t.Errorf("ASSERTION: the daemon's pid changed from %d to %d", img.PID, after.PID)
+		}
+		if afterPIDs[win] != pids[win] || pids[win] == 0 {
+			t.Errorf("ASSERTION: the probe pane had pid %d, and %d after the upgrade", pids[win], afterPIDs[win])
+		}
+		if got := strings.TrimSpace(string(comm)); got != "tuios" {
+			t.Errorf("ASSERTION: the daemon's process name is %q after the upgrade, want tuios (read error %v)", got, commErr)
+		}
+		if ran {
+			t.Errorf("ASSERTION: the file swapped in during the exec window ran as the new daemon: the marker holds %q", marker)
+		}
+		for _, o := range filesOf(files, f.copied) {
+			if o.Flags&oPath != 0 {
+				t.Errorf("ASSERTION: the new daemon holds the checked binary's O_PATH descriptor %s (%s, flags %o)", o.FD, o.Link, o.Flags)
+			}
+		}
+	})
+
+	t.Run("preflight", func(t *testing.T) {
+		base := t.TempDir()
+		startHandoffDaemon(t, base)
+		f := newRaceFixture(t)
+		img := helloImage(t, base)
+
+		_, callErr := callVerb(t, base, "test-handoff", map[string]any{"binary": f.binary, "swap_after_check": []string{f.next, f.alt}})
+		if swap := f.swapped(); swap != "" {
+			writeHandoffArtifact(t, map[string]any{"call": errString(callErr), "swap_missing": swap, "pid_before": img.PID})
+			t.Fatalf("ASSERTION: %s (the call said %v)", swap, callErr)
+		}
+		settled := awaitSettled(t, base, img.PID)
+		after := helloImage(t, base)
+		files := openFiles(t, img.PID)
+		marker, ran := f.markerText()
+		writeHandoffArtifact(t, map[string]any{
+			"call": errString(callErr), "settled": settled, "marker": marker, "marker_exists": ran,
+			"pid_before": img.PID, "pid_after": after.PID, "instance_kept": after.Instance == img.Instance, "descriptors": files,
+		})
+
+		if ran {
+			t.Errorf("ASSERTION: the file swapped in after the preflight's check ran: the marker holds %q", marker)
+		}
+		if after.PID != img.PID || after.Instance != img.Instance {
+			t.Errorf("ASSERTION: the daemon moved to another image after the binary was swapped: %+v then %+v", img, after)
+		}
+		for _, o := range append(filesOf(files, f.copied), filesOf(files, f.alternate)...) {
+			t.Errorf("ASSERTION: after the refusal the daemon still holds %s as descriptor %s (flags %o)", o.Link, o.FD, o.Flags)
+		}
+	})
+}
+
+// TestDaemonUpgradeRunsExecuteOnlyAndWrapperBinaries upgrades one daemon three
+// times to setups that work by path today: a plain copy; a wrapper script that
+// finds the real binary beside itself through $0; and, last, a copy nobody can
+// read, only run. Each must complete with the daemon's pid kept. An image run
+// from an unreadable file cannot be read through /proc, so nothing is read
+// there after the last upgrade. Linux only, as the descriptor route is.
+func TestDaemonUpgradeRunsExecuteOnlyAndWrapperBinaries(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("only Linux runs the checked binary by its descriptor; other systems run the path, as docs/CLI_REFERENCE.md says")
+	}
+	base := t.TempDir()
+	startHandoffDaemon(t, base)
+
+	plain := filepath.Join(ownerOnlyDir(t, ownerOnlyDir(t, t.TempDir(), "race"), "next"), "tuios")
+	writeTuiosCopy(t, plain, 0o755)
+	wrapperDir := ownerOnlyDir(t, t.TempDir(), "wrapper")
+	wrapper := filepath.Join(wrapperDir, "tuios")
+	writeTuiosCopy(t, filepath.Join(wrapperDir, "tuios-real"), 0o755)
+	writeWithMode(t, wrapper, []byte("#!/bin/sh\nexec \"$(dirname \"$0\")/tuios-real\" \"$@\"\n"), 0o755)
+	executeOnly := filepath.Join(ownerOnlyDir(t, t.TempDir(), "execute-only"), "tuios")
+	writeTuiosCopy(t, executeOnly, 0o111)
+
+	var steps []map[string]any
+	for _, step := range []struct{ name, binary string }{
+		{"plain copy", plain}, {"wrapper script", wrapper}, {"execute-only copy", executeOnly},
+	} {
+		img := helloImage(t, base)
+		_, err := callVerb(t, base, "test-handoff", map[string]any{"binary": step.binary})
+		rec := map[string]any{"step": step.name, "binary": step.binary, "call": errString(err), "pid_before": img.PID}
+		steps = append(steps, rec)
+		if err != nil {
+			writeHandoffArtifact(t, steps)
+			t.Fatalf("ASSERTION: the upgrade to the %s %s was refused: %v", step.name, step.binary, err)
+		}
+		after := awaitNewImage(t, base, img, 40*time.Second)
+		rec["pid_after"] = after.PID
+		if after.PID != img.PID {
+			t.Errorf("ASSERTION: the upgrade to the %s changed the daemon's pid from %d to %d", step.name, img.PID, after.PID)
+		}
+	}
+	writeHandoffArtifact(t, steps)
 }
 
 // resolvedTuios is the binary under test with its links resolved, as

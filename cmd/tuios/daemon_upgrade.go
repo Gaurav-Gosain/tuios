@@ -213,6 +213,16 @@ func runDaemonUpgrade(out io.Writer, binary string, asJSON bool) error {
 	}
 	_ = json.Unmarshal(raw, &before)
 
+	// The daemon's owner and mode check, made before the run below, so this
+	// command never runs a file the daemon would refuse.
+	if err := session.CheckUpgradeBinary(binary); err != nil {
+		_ = client.Close()
+		return &diagnosticError{
+			What:  err.Error() + ".",
+			Cause: "another user could have put it there, so the daemon would refuse it too.",
+			Fix:   "run this command again once the file is fixed.",
+		}
+	}
 	// The same run the daemon makes, made here first: it says what the
 	// binary is, and it pays a new file's first exec before the daemon
 	// pauses anything.

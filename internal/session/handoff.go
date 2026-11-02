@@ -81,10 +81,12 @@ type handoffRequest struct {
 	// pinned, when set, is the file the person confirmed binary as. A file
 	// put there since is refused, not run.
 	pinned *fileID
-	// holdAfterWrite and inWindow are for tests: a wait after the manifest
-	// is written, and a function run while the descriptors are exposed.
+	// holdAfterWrite, inWindow and afterCheck are for tests: a wait after
+	// the manifest is written, a function run while the descriptors are
+	// exposed, and one run between the preflight's checks and its run.
 	holdAfterWrite time.Duration
 	inWindow       func()
+	afterCheck     func()
 }
 
 // handoffRun is a handoff that has stopped the daemon's parts, holding what it
@@ -182,16 +184,18 @@ func (d *Daemon) prepareHandoff(req handoffRequest) (*handoffRun, error) {
 	}
 	run.prev = prev
 	t0 := time.Now()
-	if run.bin, err = preflightBinary(req.binary); err != nil {
+	if run.bin, err = preflightBinary(req.binary, req.afterCheck); err != nil {
 		d.handoffMu.Unlock()
 		return nil, err
 	}
 	run.stats.PreflightMS = msSince(t0)
 	if req.pinned != nil && run.bin.file != *req.pinned {
+		run.bin.close()
 		d.handoffMu.Unlock()
 		return nil, errBinaryReplaced(run.bin.path)
 	}
 	if err := run.prepare(); err != nil {
+		run.bin.close()
 		run.putBack()
 		d.handoffMu.Unlock()
 		return nil, err
@@ -547,11 +551,13 @@ func (r *handoffRun) commit() error {
 	// run: run it again, and pay its first exec here rather than after it.
 	if !r.bin.stillThere() {
 		if r.req.pinned != nil {
+			r.bin.close()
 			r.putBack()
 			d.handoffMu.Unlock()
 			return errBinaryReplaced(r.bin.path)
 		}
-		bin, err := preflightBinary(r.bin.path)
+		bin, err := preflightBinary(r.bin.path, nil)
+		r.bin.close()
 		if err != nil {
 			r.putBack()
 			d.handoffMu.Unlock()
@@ -563,8 +569,15 @@ func (r *handoffRun) commit() error {
 
 	argv := append([]string{r.bin.path}, d.handoffArgs(int(r.file.Fd()))...) //nolint:gosec // a descriptor number
 	log.Printf("Live upgrade: exec %s with %d panes (manifest %d bytes, stopped %s)", r.bin.path, r.panes, r.manifestBytes, time.Since(r.started).Round(time.Millisecond))
-	err := execHandoff(r.bin.path, argv, withoutEnv(os.Environ(), handoffFallbackEnv), r.fds, r.req.inWindow)
+	// A binary runs from the file the preflight ran, which stays
+	// close-on-exec; a script runs by its path, as its interpreter opens it.
+	path := r.bin.execPath()
+	if r.bin.script {
+		path = r.bin.path
+	}
+	err := execHandoff(path, argv, withoutEnv(os.Environ(), handoffFallbackEnv), r.fds, r.req.inWindow)
 	LogError("Live upgrade: exec %s failed, the daemon carries on: %v", r.bin.path, err)
+	r.bin.close()
 	r.putBack()
 	d.handoffMu.Unlock()
 	return fmt.Errorf("exec %s: %w", r.bin.path, err)
@@ -580,6 +593,7 @@ func (r *handoffRun) abandon() bool {
 	}
 	r.state = 2
 	r.mu.Unlock()
+	r.bin.close()
 	r.putBack()
 	r.d.handoffMu.Unlock()
 	return true

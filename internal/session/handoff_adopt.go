@@ -7,6 +7,7 @@ import (
 	"io"
 	"net"
 	"os"
+	"path/filepath"
 	"runtime"
 	"runtime/debug"
 	"runtime/metrics"
@@ -188,6 +189,10 @@ func (d *Daemon) adopt(fd int, fb *adoptFallback, kept map[int]int) error {
 	if !fb.disarm() {
 		select {}
 	}
+	// Run through /proc/self/fd/N, this image is named N: name it before
+	// it starts the panes and serves its main socket, so ps and pidof find
+	// the daemon from the first reply there.
+	setProcessName(filepath.Base(os.Args[0]))
 	for _, p := range started {
 		p.startPTY()
 	}

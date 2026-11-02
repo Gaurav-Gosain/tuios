@@ -60,10 +60,11 @@ func (d *Daemon) verbDaemonUpgrade(cs *connState, params json.RawMessage) (any, 
 		}
 		// The dialog shows the binary's path and version, so the preflight
 		// runs before it, and the upgrade then takes only the file it ran.
-		bin, err := preflightBinary(p.Binary)
+		bin, err := preflightBinary(p.Binary, nil)
 		if err != nil {
 			return nil, upgradeRefusal(err)
 		}
+		bin.close()
 		if bin.file != pin {
 			return nil, upgradeRefusal(fmt.Errorf("%s was replaced while it was being checked. Run the upgrade again when the install has finished", bin.path))
 		}

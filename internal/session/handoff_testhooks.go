@@ -40,6 +40,8 @@ func addHandoffTestVerbs() {
 			{Name: "binary", Type: "string", Description: "The binary to exec. Omit for this one."},
 			{Name: "hold_ms", Type: "int", Description: "Wait this long after the manifest is written, before the clients are closed."},
 			{Name: "fork_in_window", Type: "bool", Description: "Start a long-lived child while the descriptors are exposed."},
+			{Name: "swap_in_window", Type: "[]string", Description: "Two folders to swap by renames while the descriptors are exposed."},
+			{Name: "swap_after_check", Type: "[]string", Description: "Two folders to swap by renames between the preflight's checks and its run."},
 		},
 		handler: (*Daemon).verbTestHandoff,
 	}
@@ -60,9 +62,11 @@ func addHandoffTestVerbs() {
 
 func (d *Daemon) verbTestHandoff(cs *connState, params json.RawMessage) (any, *verbError) {
 	var p struct {
-		Binary       string `json:"binary"`
-		HoldMS       int    `json:"hold_ms"`
-		ForkInWindow bool   `json:"fork_in_window"`
+		Binary         string   `json:"binary"`
+		HoldMS         int      `json:"hold_ms"`
+		ForkInWindow   bool     `json:"fork_in_window"`
+		SwapInWindow   []string `json:"swap_in_window"`
+		SwapAfterCheck []string `json:"swap_after_check"`
 	}
 	if verr := decodeParams(params, &p); verr != nil {
 		return nil, verr
@@ -82,12 +86,37 @@ func (d *Daemon) verbTestHandoff(cs *connState, params json.RawMessage) (any, *v
 			time.Sleep(300 * time.Millisecond)
 		}
 	}
+	for _, swap := range []struct {
+		name  string
+		pair  []string
+		field *func()
+	}{{"swap_in_window", p.SwapInWindow, &req.inWindow}, {"swap_after_check", p.SwapAfterCheck, &req.afterCheck}} {
+		if swap.pair == nil {
+			continue
+		}
+		if len(swap.pair) != 2 {
+			return nil, invalidParam(swap.name, swap.name+" must be two folder paths")
+		}
+		*swap.field = swapFolders(swap.pair[0], swap.pair[1])
+	}
 	run, err := d.prepareHandoff(req)
 	if err != nil {
 		return nil, newVerbError(ErrVerbInternal, err.Error())
 	}
 	cs.takeover = func(*bufio.Reader) { _ = run.commit() }
 	return map[string]any{"pid": os.Getpid(), "panes": run.panes, "manifest_bytes": run.manifestBytes}, nil
+}
+
+// swapFolders swaps folders a and b with three renames.
+func swapFolders(a, b string) func() {
+	return func() {
+		for _, mv := range [][2]string{{a, a + ".swap"}, {b, a}, {a + ".swap", b}} {
+			if err := os.Rename(mv[0], mv[1]); err != nil {
+				LogError("test-handoff: swap %s and %s: %v", a, b, err)
+				return
+			}
+		}
+	}
 }
 
 func (d *Daemon) verbTestHandoffStats(_ *connState, _ json.RawMessage) (any, *verbError) {

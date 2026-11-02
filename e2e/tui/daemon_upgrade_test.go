@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"regexp"
 	"runtime"
 	"strconv"
@@ -271,6 +272,50 @@ func TestDaemonUpgradeRefusalNamesTheServer(t *testing.T) {
 	}
 	if strings.Contains(text, "'tuios restart-server'") {
 		t.Errorf("ASSERTION: the refusal on server %s says to run the bare 'tuios restart-server', which restarts the default daemon:\n%s", server, text)
+	}
+}
+
+// TestDaemonUpgradeCommandChecksTheBinaryFirst: `tuios daemon upgrade` runs
+// the binary it is given before it asks the daemon, so it makes the daemon's
+// owner and mode check first. A script anyone can write must be refused with
+// the daemon's message and never run: its marker must not exist. The positive
+// half: the same script, writable only by its owner, is run (its marker
+// exists) and refused as no tuios.
+func TestDaemonUpgradeCommandChecksTheBinaryFirst(t *testing.T) {
+	base := t.TempDir()
+	startHandoffDaemon(t, base)
+	bin := filepath.Join(t.TempDir(), "tuios")
+	marks := t.TempDir()
+	run := func(marker string, mode os.FileMode) (string, bool, error) {
+		if err := os.WriteFile(bin, []byte("#!/bin/sh\necho ran >>'"+marker+"'\necho hello\n"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Chmod(bin, mode); err != nil {
+			t.Fatal(err)
+		}
+		out, err := handoffCLI(t, base, 60*time.Second, "daemon", "upgrade", "--binary", bin)
+		_, statErr := os.Stat(marker)
+		return out, statErr == nil, err
+	}
+	outA, ranA, errA := run(filepath.Join(marks, "a"), 0o777)
+	outB, ranB, errB := run(filepath.Join(marks, "b"), 0o755)
+	writeHandoffArtifact(t, map[string]any{
+		"binary": bin, "writable_by_others": map[string]any{"text": outA, "error": errString(errA), "marker_exists": ranA},
+		"owner_only": map[string]any{"text": outB, "error": errString(errB), "marker_exists": ranB},
+	})
+
+	const want = "can be written by its group or by others (mode 0777), so this daemon will not run it"
+	if errA == nil || !strings.Contains(outA, want) {
+		t.Errorf("ASSERTION: the upgrade to a script anyone can write was not refused with %q (error %v):\n%s", want, errA, outA)
+	}
+	if ranA {
+		t.Errorf("ASSERTION: the command ran the script anyone can write before refusing it")
+	}
+	if errB == nil || !strings.Contains(outB, "cannot take the daemon over") {
+		t.Errorf("ASSERTION: the upgrade to the owner-only script was not refused with \"cannot take the daemon over\" (error %v):\n%s", errB, outB)
+	}
+	if !ranB {
+		t.Errorf("ASSERTION: the command did not run the owner-only script, so the first half never reached the run")
 	}
 }
 

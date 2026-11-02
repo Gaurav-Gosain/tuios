@@ -50,8 +50,14 @@ const handoffPreflightTimeout = 30 * time.Second
 // handoffBinary is a binary a preflight ran: its path and the file it was
 // when it ran, which the exec must still find there.
 type handoffBinary struct {
-	path     string
-	file     fileID
+	path string
+	file fileID
+	// open is the file the checks read and the preflight ran, on Linux,
+	// where the exec runs it by descriptor, so no rename over the path
+	// between the checks and the exec can change what runs.
+	open *os.File
+	// script is a binary that starts with #!, which runs by its path.
+	script   bool
 	accepts  HandoffAccepts
 	duration time.Duration
 }
@@ -73,24 +79,35 @@ func (f fileID) withoutChange() fileID {
 }
 
 // preflightBinary runs path's handoff-accepts and checks it reads the
-// manifest this build writes.
-func preflightBinary(path string) (handoffBinary, error) {
+// manifest this build writes. afterCheck, when not nil, runs between the
+// checks and the run; only a test sets it.
+func preflightBinary(path string, afterCheck func()) (handoffBinary, error) {
 	abs, err := filepath.Abs(path)
 	if err != nil {
 		return handoffBinary{}, err
 	}
-	before, err := statFileID(abs)
+	bin, err := preflightOpen(abs)
 	if err != nil {
-		return handoffBinary{}, fmt.Errorf("%s: %w", abs, err)
-	}
-	if err := checkBinaryOwner(abs); err != nil {
 		return handoffBinary{}, err
+	}
+	ok := false
+	defer func() {
+		if !ok {
+			bin.close()
+		}
+	}()
+	before := bin.file
+	if afterCheck != nil {
+		afterCheck()
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), handoffPreflightTimeout)
 	defer cancel()
 	var out, errOut bytes.Buffer
 	//tuios:allow-exec the preflight runs the new binary once, before anything is paused
 	cmd := exec.CommandContext(ctx, abs, "daemon", "handoff-accepts")
+	if !bin.script {
+		bin.runOpenFile(cmd)
+	}
 	cmd.Stdout, cmd.Stderr = &out, &errOut
 	started := time.Now()
 	if err := cmd.Run(); err != nil {
@@ -112,11 +129,62 @@ func preflightBinary(path string) (handoffBinary, error) {
 		return handoffBinary{}, fmt.Errorf("%s (%s) cannot read this daemon's state. This daemon writes handoff v%d, and that binary reads v%d to v%d. Upgrade live to a tuios that reads v%d. %s",
 			abs, acc.Version, HandoffVersion, acc.Handoff[0], acc.Handoff[1], HandoffVersion, restartAdvice())
 	}
-	after, err := statFileID(abs)
+	after, err := bin.current()
 	if err != nil || after != before {
 		return handoffBinary{}, fmt.Errorf("%s was replaced while it was being checked. Run the upgrade again when the install has finished", abs)
 	}
-	return handoffBinary{path: abs, file: after, accepts: acc, duration: took}, nil
+	bin.file, bin.accepts, bin.duration = after, acc, took
+	ok = true
+	return bin, nil
+}
+
+// preflightOpen checks the binary at abs. On Linux it opens it first and
+// checks the open file, which the preflight and the exec then run.
+func preflightOpen(abs string) (handoffBinary, error) {
+	f, err := openBinary(abs)
+	if err != nil {
+		return handoffBinary{}, fmt.Errorf("%s: %w", abs, err)
+	}
+	bin := handoffBinary{path: abs, open: f}
+	var info os.FileInfo
+	if f != nil {
+		info, err = f.Stat()
+	} else {
+		info, err = os.Stat(abs)
+	}
+	if err == nil && (!info.Mode().IsRegular() || info.Mode().Perm()&0o111 == 0) {
+		err = errNotAnExecutable
+	}
+	if err != nil {
+		bin.close()
+		return handoffBinary{}, fmt.Errorf("%s: %w", abs, err)
+	}
+	if err := checkBinaryInfo(abs, info); err != nil {
+		bin.close()
+		return handoffBinary{}, err
+	}
+	bin.file, bin.script = fileIDOf(info), bin.isScript()
+	return bin, nil
+}
+
+// current is the identity of the file the preflight ran: the open file for
+// a binary run through it, the file at the path otherwise.
+func (b handoffBinary) current() (fileID, error) {
+	if b.open == nil || b.script {
+		return statFileID(b.path)
+	}
+	info, err := b.open.Stat()
+	if err != nil {
+		return fileID{}, err
+	}
+	return fileIDOf(info), nil
+}
+
+// close lets go of the open file.
+func (b handoffBinary) close() {
+	if b.open != nil {
+		_ = b.open.Close()
+	}
 }
 
 // clip is b cut to at most n bytes.
@@ -127,14 +195,21 @@ func clip(b []byte, n int) []byte {
 	return b
 }
 
-// checkBinaryOwner refuses a binary someone else could have put there: one
-// owned by neither this user nor root, or one its group or others can write.
-// The daemon runs it with every pane it holds.
-func checkBinaryOwner(path string) error {
+// CheckUpgradeBinary is the daemon's owner and mode check on the binary at
+// path, for the command that runs it before it asks the daemon. A path it
+// cannot stat passes, and is left to the run to report.
+func CheckUpgradeBinary(path string) error {
 	info, err := os.Stat(path)
 	if err != nil {
-		return err
+		return nil
 	}
+	return checkBinaryInfo(path, info)
+}
+
+// checkBinaryInfo refuses a binary someone else could have put there: one
+// owned by neither this user nor root, or one its group or others can write.
+// The daemon runs it with every pane it holds.
+func checkBinaryInfo(path string, info os.FileInfo) error {
 	if uid, ok := fileUID(info); ok && uid != 0 && uid != os.Getuid() {
 		return fmt.Errorf("%s is owned by user %d, not by you or root, so this daemon will not run it. Install it as yourself or as root", path, uid)
 	}
