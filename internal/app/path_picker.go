@@ -538,7 +538,7 @@ func pathPickerText(d pasteDialect, origin, walked, tail string) (text, refusal 
 			return "~/", ""
 		}
 		switch d {
-		case dialectPOSIX, dialectFish, dialectCsh:
+		case dialectPOSIX, dialectUnknown, dialectFish, dialectCsh:
 			text, refusal = quoteDropPath(d, rel)
 			if refusal != "" {
 				return "", refusal

@@ -7,6 +7,36 @@ below. Two of them are **not** caught here; that is written down rather than
 papered over, because a suite whose real coverage is unknown is worse than no
 suite.
 
+## A pasted path reads back in fish behind tmux
+
+`TestPastedPathReadsBackBehindTmux` types names with the path picker into fish
+running behind tmux, where tuios reads tmux as the pane's program, and drags
+the first of them from the rail onto the same pane. A name with a backslash
+before a quote or another backslash, or ending in a backslash, must read back
+exactly as it is on disk, and the first one must not write MARKER. A name with
+only a quote, one with a lone backslash (whose command line must stay its
+POSIX form) and a path picked under `~/` must read back too. In sh, before
+tmux starts, the three names must read back with their POSIX form on the
+command line, and in bash behind the same tmux they must read back exactly.
+
+Run on 2026-11-02 on Linux (fish 4.9.3, tmux 3.8, bash 5.3.20). The control is
+a binary of main (6093c1b41), where every program tuios does not know gets
+POSIX single quotes. sh, bash behind tmux and the other fish names read back
+as they should. Each of the three names fails in fish behind tmux, and so does
+the drag (`<dir>` is the test's folder):
+
+| Name | Failure |
+| --- | --- |
+| `zz\'; echo hi > MARKER; echo \'` | `it read back as <zz''>, not <zz\'; echo hi > MARKER; echo \'>; after Enter a file named MARKER exists` |
+| `yy\\z` | `it read back as <yy\z>, not <yy\\z>` |
+| `ww\` | `it read back as nothing, not <ww\>`: fish reads `'ww\'` as an open quote |
+| `zz\'; echo hi > MARKER; echo \'`, dragged | `it read back as <<dir>/zz''>, not <<dir>/zz\'; echo hi > MARKER; echo \'>; after Enter a file named MARKER exists` |
+
+The frames are `sh-read-back`, `fish-read-back`, `dragged` and
+`bash-read-back` under `TUIOS_E2E_FRAMES`, in the test's folder. Repeat from
+`e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestPastedPathReadsBackBehindTmux$' -v .`.
+
 ## Quick look keeps its picture through a resize
 
 `TestRailQuickLookKittyPicture` opens quick look on a host with kitty graphics

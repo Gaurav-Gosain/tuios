@@ -1166,6 +1166,340 @@ func TestRailFileDragIntoPane(t *testing.T) {
 	alive(t, term, "after dragging rows into the pane")
 }
 
+// TestPastedPathReadsBackBehindTmux types names with the path picker into
+// shells running behind tmux, where tuios reads tmux as the pane's program and
+// cannot see the shell. fish reads \' and \\ inside single quotes as escapes,
+// so in POSIX quotes a name with a backslash before a quote or another
+// backslash, or ending in a backslash, reads back as another path, and the
+// rest of the name becomes words on the command line.
+//
+// The rules:
+//   - In fish behind tmux, each such name, picked, reads back exactly as it
+//     is on disk, and after Enter no file named MARKER exists (the first name
+//     would write it if fish read its tail as commands). The first name
+//     dragged from the rail onto the pane reads back as its full path, with
+//     no MARKER.
+//   - In fish behind tmux, a name with only a quote and one with a lone
+//     backslash read back exactly, and the second keeps its POSIX form on the
+//     command line. A path picked under ~/ reads back expanded.
+//   - In sh, a shell tuios names, before tmux starts, the three names read
+//     back exactly and the command line holds each one's POSIX form.
+//   - In bash behind the same tmux, the three names read back exactly, with
+//     no MARKER.
+//
+// How this could pass wrongly, written down first:
+//   - tmux drops the keys typed before it has its answers from the terminal,
+//     and a line typed at a stale prompt proves nothing. Every prompt is
+//     shown fresh by a probe whose output the shell has to compute.
+//   - The read-back could match the command line. The printf prints each
+//     name in angle brackets, which the command line does not hold, and the
+//     row must have no echo before it.
+//   - The line check could read an old row, or the rail, which lists the
+//     names. It reads the last row that holds the printf, up to the pane's
+//     border, and each name is told apart by its first letters.
+//
+// NEGATIVE CONTROL: on main, where every program tuios does not know gets
+// POSIX quotes, fish behind tmux reads each of the three names back wrong and
+// the first one writes MARKER, picked or dragged. See NEGATIVE_CONTROLS.md.
+func TestPastedPathReadsBackBehindTmux(t *testing.T) {
+	tmux, err := exec.LookPath("tmux")
+	if err != nil {
+		t.Skip("tmux is not installed")
+	}
+	if _, err := exec.LookPath("fish"); err != nil {
+		t.Skip("fish is not installed")
+	}
+	dir, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	type fixture struct{ name, filter string }
+	// The names fish reads wrong in POSIX quotes, in this order: fish reads
+	// the POSIX form of the last one, 'ww\', as an open quote.
+	misread := []fixture{{`zz\'; echo hi > MARKER; echo \'`, "zz"}, {`yy\\z`, "yy"}, {`ww\`, "ww"}}
+	kept := []fixture{{"qq Bob's notes.txt", "Bob"}, {`qq a\b c.txt`, "c.txt"}}
+	for _, f := range append(slices.Clone(misread), kept...) {
+		if err := os.WriteFile(filepath.Join(dir, f.name), nil, 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	marker := filepath.Join(dir, "MARKER")
+
+	term, base := start(t, startOpts{daemonDefault: true, cols: 200, rows: 50})
+	home := filepath.Join(xdgDir(base, "HOME"), "pickhome")
+	if err := os.Mkdir(home, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(home, "qq home.txt"), nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	waitBoot(t, term)
+	newWindow(t, term)
+	waitWindowCount(t, term, 1, "opening a shell")
+	enterTerminalMode(t, term)
+	runInShell(t, term, "cd "+dir+" && clear && printf '\\033]7;file://%s\\033\\\\in-the-%s\\n' \"$PWD\" dir", "in-the-dir", uiTimeout)
+	art := artifactDir(t)
+	frame := func(name string) {
+		t.Helper()
+		saveArtifact(t, term, art, name)
+		savePNG(t, term.Screen(), shot.XTermPalette(), art, name)
+	}
+
+	const printf = `printf '<%s>\n' `
+	// lineAfterPrintf is what follows the printf on the last row of s
+	// holding it, up to the pane's border: the command line being typed, not
+	// the rail beside it, which lists the names.
+	lineAfterPrintf := func(s tuitest.Screen) string {
+		_, rows := s.Size()
+		for r := rows - 1; r >= 0; r-- {
+			if _, rest, ok := strings.Cut(s.Line(r), strings.TrimSpace(printf)); ok {
+				rest, _, _ = strings.Cut(rest, "│")
+				return strings.TrimSpace(rest)
+			}
+		}
+		return ""
+	}
+	// printed is the last row of s holding prefix, from prefix up to the
+	// pane's border: what the shell printed for a name, or "".
+	printed := func(s tuitest.Screen, prefix string) string {
+		_, rows := s.Size()
+		for r := rows - 1; r >= 0; r-- {
+			if _, rest, ok := strings.Cut(s.Line(r), prefix); ok {
+				rest, _, _ = strings.Cut(rest, "│")
+				return prefix + strings.TrimSpace(rest)
+			}
+		}
+		return ""
+	}
+	// boxText is the text inside the picker's box, or "" when it is shut.
+	boxText := func(s tuitest.Screen) string {
+		c, r := pathPickerCorner(s)
+		if c < 0 {
+			return ""
+		}
+		right := gridCellAfter(s, r, c, "╮")
+		_, rows := s.Size()
+		var b strings.Builder
+		for y := r; y < rows && right > c; y++ {
+			for x := c; x <= right; x++ {
+				b.WriteString(s.Cell(x, y).Content)
+			}
+			b.WriteByte('\n')
+			if s.Cell(c, y).Content == "╰" {
+				break
+			}
+		}
+		return b.String()
+	}
+	// filter types the fixture's filter and waits for the box to list it
+	// and no other fixture.
+	filter := func(f fixture) func() {
+		return func() {
+			sendKeys(t, term, f.filter)
+			if err := term.WaitFor(func(s tuitest.Screen) bool {
+				box := boxText(s)
+				for _, o := range append(slices.Clone(misread), kept...) {
+					if strings.Contains(box, o.filter) != (o == f) {
+						return false
+					}
+				}
+				return true
+			}, uiTimeout); err != nil {
+				t.Fatalf("the filter %q did not narrow the list: %v\n%s", f.filter, err, term.Snapshot())
+			}
+		}
+	}
+	// pick returns a paste that types the printf, opens the picker, lets
+	// choose pick a row, and accepts it.
+	pick := func(choose func()) func() {
+		return func() {
+			t.Helper()
+			sendKeys(t, term, printf, tuitest.Alt(";"))
+			if err := term.WaitForText("╭─ ", uiTimeout); err != nil {
+				t.Fatalf("alt+; did not open the path picker: %v\n%s", err, term.Snapshot())
+			}
+			choose()
+			sendKeys(t, term, tuitest.Enter)
+			if err := term.WaitFor(func(s tuitest.Screen) bool { return !strings.Contains(s.Text(), "╭─ ") }, uiTimeout); err != nil {
+				t.Fatalf("Enter did not close the path picker:\n%s", term.Snapshot())
+			}
+		}
+	}
+	// noMarker reports whether MARKER is absent, and removes it so the next
+	// line starts without it.
+	noMarker := func() bool {
+		t.Helper()
+		_, err := os.Stat(marker)
+		if err := os.Remove(marker); err != nil && !os.IsNotExist(err) {
+			t.Fatal(err)
+		}
+		if _, err := os.Stat(marker); !os.IsNotExist(err) {
+			t.Fatalf("MARKER is still there: %v", err)
+		}
+		return os.IsNotExist(err)
+	}
+	// readBack runs one command line: paste puts the name after the printf,
+	// the line must then be exactly text when text is not empty, Enter runs
+	// it, and the shell must print want with no MARKER left after a fresh
+	// prompt. What went wrong is one error line.
+	readBack := func(shell string, f fixture, paste func(), text, want string, prompt func()) {
+		t.Helper()
+		paste()
+		var wrong []string
+		if err := term.WaitFor(func(s tuitest.Screen) bool { return strings.Contains(lineAfterPrintf(s), f.filter) }, uiTimeout); err != nil {
+			wrong = append(wrong, "it was not typed at the prompt")
+		}
+		if text != "" {
+			if err := term.WaitFor(func(s tuitest.Screen) bool { return lineAfterPrintf(s) == text }, uiTimeout); err != nil {
+				wrong = append(wrong, fmt.Sprintf("the command line holds %s, not %s", lineAfterPrintf(term.Screen()), text))
+			}
+		}
+		sendKeys(t, term, tuitest.Enter)
+		if err := term.WaitFor(func(s tuitest.Screen) bool { return screenHasLine(s, want) }, uiTimeout); err != nil {
+			got := printed(term.Screen(), want[:strings.Index(want, f.filter)+len(f.filter)])
+			if got == "" {
+				got = "nothing"
+			}
+			wrong = append(wrong, fmt.Sprintf("it read back as %s, not %s", got, want))
+			sendKeys(t, term, tuitest.Ctrl('c'))
+		}
+		prompt()
+		if !noMarker() {
+			wrong = append(wrong, "after Enter a file named MARKER exists")
+		}
+		if len(wrong) > 0 {
+			t.Errorf("%s, %q: %s", shell, f.name, strings.Join(wrong, "; "))
+			return
+		}
+		t.Logf("%s read back %s", shell, want)
+	}
+
+	// sh is named, so the three names paste with POSIX quotes there.
+	lines := 0
+	shPrompt := func() {
+		t.Helper()
+		lines++
+		m := fmt.Sprintf("SHLINE%d", lines)
+		runInShell(t, term, "echo "+splitMarker(m), m, uiTimeout)
+	}
+	shPrompt()
+	for _, f := range misread {
+		readBack("sh", f, pick(filter(f)), posixQuote(f.name), "<"+f.name+">", shPrompt)
+	}
+	frame("sh-read-back")
+
+	// fish behind a tmux of its own: its own server, no user config.
+	server := "tuios-e2e-pickquote-" + strconv.Itoa(os.Getpid())
+	t.Cleanup(func() { _ = exec.Command(tmux, "-L", server, "kill-server").Run() })
+	sendKeys(t, term, tmux+" -L "+server+" -f /dev/null new-session 'fish --no-config'", tuitest.Enter)
+	if err := term.WaitForText("0:fish", 3*uiTimeout); err != nil {
+		t.Fatalf("setup: fish behind tmux did not start: %v\n%s", err, term.Snapshot())
+	}
+	// ready shows a fresh prompt: a probe with a new number each time, a sum
+	// the shell computes. The probe is typed again after ctrl+c, because
+	// tmux drops the keys it reads before the terminal has answered its
+	// questions.
+	probe := 1
+	ready := func(command string, tries int) {
+		t.Helper()
+		probe++
+		want := fmt.Sprintf("READY-%d", 40+probe)
+		for try := 1; ; try++ {
+			sendKeys(t, term, fmt.Sprintf(command, probe), tuitest.Enter)
+			err := term.WaitForText(want, uiTimeout)
+			if err == nil {
+				return
+			}
+			if try == tries {
+				t.Fatalf("setup: the shell showed no fresh prompt (%s): %v\n%s", want, err, term.Snapshot())
+			}
+			sendKeys(t, term, tuitest.Ctrl('c'))
+		}
+	}
+	// fish has no $((...)), so its sum is math's.
+	const fishProbe = "echo READY-(math 40+%d)"
+	fishPrompt := func() { t.Helper(); ready(fishProbe, 2) }
+	ready(fishProbe, 3)
+
+	for _, f := range kept {
+		text := ""
+		if f.name == `qq a\b c.txt` {
+			// Only the names fish reads wrong change form.
+			text = posixQuote(f.name)
+		}
+		readBack("fish behind tmux", f, pick(filter(f)), text, "<"+f.name+">", fishPrompt)
+	}
+	fromHome := func() {
+		sendKeys(t, term, "~/")
+		if err := term.WaitForText("pickhome/", uiTimeout); err != nil {
+			t.Fatalf("~/ did not list the home folder: %v\n%s", err, term.Snapshot())
+		}
+		sendKeys(t, term, "pickhome/")
+		if err := term.WaitForText("qq home.txt", uiTimeout); err != nil {
+			t.Fatalf("the picker did not walk into ~/pickhome: %v\n%s", err, term.Snapshot())
+		}
+	}
+	readBack("fish behind tmux", fixture{"~/pickhome/qq home.txt", "qq home"}, pick(fromHome), "",
+		"<"+filepath.Join(home, "qq home.txt")+">", fishPrompt)
+	for _, f := range misread {
+		readBack("fish behind tmux", f, pick(filter(f)), "", "<"+f.name+">", fishPrompt)
+	}
+	frame("fish-read-back")
+
+	// A drag from the rail onto the pane goes through the same quoting.
+	dragged := misread[0]
+	drag := func() {
+		t.Helper()
+		sendKeys(t, term, tuitest.Ctrl('l'), printf)
+		if err := term.WaitFor(func(s tuitest.Screen) bool {
+			return strings.Count(s.Text(), strings.TrimSpace(printf)) == 1
+		}, uiTimeout); err != nil {
+			t.Fatalf("setup: fish did not show a clear command line for the drag:\n%s", term.Snapshot())
+		}
+		leaveTerminalMode(t, term)
+		toggleSidebarViaPalette(t, term)
+		if err := term.WaitForText(dragged.filter+`\'`, uiTimeout); err != nil {
+			t.Fatalf("setup: the rail did not list %q: %v\n%s", dragged.name, err, term.Snapshot())
+		}
+		enterTerminalMode(t, term)
+		scr := term.Screen()
+		col, row, _ := findOnGrid(scr, dragged.filter+`\'`)
+		cols, rows := scr.Size()
+		paneCol, paneRow := cols*3/4, rows/2
+		if col > cols/2 {
+			paneCol = cols / 4
+		}
+		mousePress(t, term, col, row, tuitest.MouseLeft, 0)
+		for i := 1; i <= 6; i++ {
+			mouseMotion(t, term, col+(paneCol-col)*i/6, row+(paneRow-row)*i/6, tuitest.MouseLeft, 0)
+		}
+		// The label names the program in the pane; text may follow it.
+		if err := term.WaitForText("(tmux", uiTimeout); err != nil {
+			mouseRelease(t, term, paneCol, paneRow, tuitest.MouseLeft, 0)
+			t.Fatalf("the label never named tmux while dragging %q onto the pane: %v\n%s", dragged.name, err, term.Snapshot())
+		}
+		mouseRelease(t, term, paneCol, paneRow, tuitest.MouseLeft, 0)
+	}
+	readBack("fish behind tmux, dragged", dragged, drag, "", "<"+filepath.Join(dir, dragged.name)+">", fishPrompt)
+	frame("dragged")
+
+	// bash, a POSIX shell, behind the same tmux in a window of its own.
+	if _, err := exec.LookPath("bash"); err != nil {
+		t.Log("bash is not installed; its block is skipped")
+	} else {
+		if out, err := exec.Command(tmux, "-L", server, "new-window", "-c", dir, "bash --norc --noprofile").CombinedOutput(); err != nil {
+			t.Fatalf("setup: tmux did not open a bash window: %v\n%s", err, out)
+		}
+		const bashProbe = "echo READY-$((40+%d))"
+		ready(bashProbe, 3)
+		for _, f := range misread {
+			readBack("bash behind tmux", f, pick(filter(f)), "", "<"+f.name+">", func() { t.Helper(); ready(bashProbe, 2) })
+		}
+		frame("bash-read-back")
+	}
+	alive(t, term, "after typing names behind tmux")
+}
+
 // dragRingUp reports whether a drop target's frame is on screen: the heavy
 // corner the frame is drawn with, which no pane border uses.
 func dragRingUp(s tuitest.Screen) bool {

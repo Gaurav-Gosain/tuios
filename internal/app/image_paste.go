@@ -395,8 +395,7 @@ func (m *OS) applyImagePasted(msg ImagePastedMsg) {
 // path is for can be another one than this, so the shape of the path decides,
 // not the platform tuios runs on.
 func pastePathText(path string) string {
-	windows := len(path) >= 3 && path[1] == ':' && (path[2] == '\\' || path[2] == '/') &&
-		(path[0] >= 'a' && path[0] <= 'z' || path[0] >= 'A' && path[0] <= 'Z')
+	windows := pastePathIsWindows(path)
 	extra := "/._-+:@%,="
 	if windows {
 		extra += "\\"
@@ -411,6 +410,12 @@ func pastePathText(path string) string {
 		return "'" + strings.ReplaceAll(path, "'", `'\''`) + "'"
 	}
 	return path
+}
+
+// pastePathIsWindows reports whether path starts with a drive letter.
+func pastePathIsWindows(path string) bool {
+	return len(path) >= 3 && path[1] == ':' && (path[2] == '\\' || path[2] == '/') &&
+		(path[0] >= 'a' && path[0] <= 'z' || path[0] >= 'A' && path[0] <= 'Z')
 }
 
 // imagePasteRefusal is the message for a paste the pane's machine refused by

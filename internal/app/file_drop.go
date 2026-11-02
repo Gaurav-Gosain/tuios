@@ -398,8 +398,11 @@ func paneProgram(w *terminal.Window) string {
 
 // paneDialect is how the program in w reads a quoted path. Only a pane on
 // this machine can be asked, through the process table. A pane elsewhere has
-// the daemon's ForegroundCmd, which is empty at a shell prompt, and then gets
-// POSIX quoting.
+// the daemon's ForegroundCmd, which is empty at a shell prompt. An empty name
+// gets POSIX quoting, as do the named POSIX shells; a name that was read and
+// is not known (a multiplexer or a wrapper such as script, which may run fish
+// behind it) gets dialectUnknown, which quotes as POSIX except for the names
+// fish would misread.
 func (m *OS) paneDialect(w *terminal.Window) pasteDialect {
 	if m.paneIsLocal(w) {
 		return pasteDialectOf(paneProgram(w))
@@ -411,9 +414,18 @@ func (m *OS) paneDialect(w *terminal.Window) pasteDialect {
 type pasteDialect int
 
 const (
-	// dialectPOSIX is sh, bash, zsh, dash, ksh, and anything not known: single
-	// quotes, a quote written as '\''.
+	// dialectPOSIX is sh, bash, rbash, zsh, dash, ksh, ksh93, mksh, lksh,
+	// oksh, loksh, pdksh, posh, yash, ash and hush, and an empty program name:
+	// single quotes, a quote written as '\''.
 	dialectPOSIX pasteDialect = iota
+	// dialectUnknown is a program tuios read and does not know: a multiplexer
+	// or a wrapper such as script, on this machine or another, may run fish
+	// behind it. It is quoted as POSIX, except a name with a backslash before
+	// a quote or another backslash, or ending in a backslash, which fish would
+	// read as another name inside single quotes. That one is written with its
+	// quotes and backslashes outside the single quotes, a form fish and POSIX
+	// shells read alike.
+	dialectUnknown
 	// dialectFish reads \' and \\ inside single quotes as escapes.
 	dialectFish
 	// dialectNu has raw single quotes with no escape at all.
@@ -426,9 +438,13 @@ const (
 	dialectCsh
 )
 
-// pasteDialectOf picks the dialect by program name.
+// pasteDialectOf picks the dialect by program name. An empty name stays POSIX:
+// the name is empty where tuios cannot read the pane's program (on Windows, for
+// one) and for a pane on another machine at its prompt.
 func pasteDialectOf(program string) pasteDialect {
 	switch strings.TrimSuffix(program, ".exe") {
+	case "":
+		return dialectPOSIX
 	case "fish":
 		return dialectFish
 	case "nu", "nushell":
@@ -439,8 +455,11 @@ func pasteDialectOf(program string) pasteDialect {
 		return dialectCmd
 	case "csh", "tcsh":
 		return dialectCsh
+	case "sh", "bash", "rbash", "zsh", "dash", "ksh", "ksh93", "mksh", "lksh",
+		"oksh", "loksh", "pdksh", "posh", "yash", "ash", "hush":
+		return dialectPOSIX
 	}
-	return dialectPOSIX
+	return dialectUnknown
 }
 
 // pastePathRefusalControl is the refusal for a name no quoting can carry.
@@ -483,12 +502,45 @@ func quoteDropPath(d pasteDialect, path string) (text, refusal string) {
 			return path, ""
 		}
 		return `"` + path + `"`, ""
+	case dialectUnknown:
+		if !pastePathIsWindows(path) && (strings.Contains(path, `\\`) || strings.Contains(path, `\'`) || strings.HasSuffix(path, `\`)) {
+			return quoteOutsideSingles(path), ""
+		}
 	case dialectCsh:
 		if strings.ContainsRune(path, '!') {
 			return "", "The name holds a !. csh expands it in quotes too. tuios does not paste it."
 		}
 	}
 	return pastePathText(path), ""
+}
+
+// quoteOutsideSingles writes path with each ' as \' and each \ as \\ outside
+// single quotes, and the non-empty runs between them in single quotes. A
+// POSIX shell and fish read this alike, where a backslash inside single quotes
+// is an escape only in fish.
+func quoteOutsideSingles(path string) string {
+	var b strings.Builder
+	run := 0
+	for i := 0; i < len(path); i++ {
+		c := path[i]
+		if c != '\'' && c != '\\' {
+			continue
+		}
+		if i > run {
+			b.WriteByte('\'')
+			b.WriteString(path[run:i])
+			b.WriteByte('\'')
+		}
+		b.WriteByte('\\')
+		b.WriteByte(c)
+		run = i + 1
+	}
+	if run < len(path) {
+		b.WriteByte('\'')
+		b.WriteString(path[run:])
+		b.WriteByte('\'')
+	}
+	return b.String()
 }
 
 // posixBare is what a POSIX shell, and fish, leave alone in a bare word

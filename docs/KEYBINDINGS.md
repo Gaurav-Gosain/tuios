@@ -220,9 +220,13 @@ the sidebar, and release the button over a pane. The pane gets the path.
 
 After the drop, the pane has the focus and the mode does not change.
 
-tuios quotes the path for the program in the pane. It knows sh, bash, zsh,
-dash, ksh, fish, nu, csh, PowerShell, elvish and cmd. Other programs get POSIX
-single quotes. A folder path ends in `/`. A space follows the path, so you can
+tuios quotes the path for the program in the pane. It knows sh, bash, rbash,
+zsh, dash, ksh, ksh93, mksh, lksh, oksh, loksh, pdksh, posh, yash, ash, hush,
+fish, nu, csh, PowerShell, elvish and cmd. Other programs get POSIX single
+quotes, except a name with a backslash before a quote or another backslash, or
+ending in a backslash, which gets its quotes and backslashes written outside
+the single quotes, so fish behind tmux or script reads it as a POSIX shell
+does. A folder path ends in `/`. A space follows the path, so you can
 type the next word. Hold `Alt` when you release a folder to type a cd to it.
 The path goes in as a paste. A program that turned on bracketed paste gets it
 as one paste.
