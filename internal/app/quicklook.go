@@ -41,7 +41,8 @@ import (
 // Tab comes back. f fills the area of the panes. Inside a text, / searches, n and
 // N go on, : goes to a line, and w wraps long lines. In a PDF, J and K and the wheel
 // turn the page, : goes to a page, and a click on the bar goes there. See
-// quicklook_pages.go.
+// quicklook_pages.go. In a film they move 5 percent, inside h and l move 1 second, a
+// click or a drag on the bar seeks, and t shows the filmstrip. See quicklook_film.go.
 //
 // The files menu's Preview is the same preview with a way in from anywhere: it
 // gives the rail the keyboard, moves the cursor to the row, and closing gives
@@ -50,7 +51,7 @@ import (
 // The content comes from the machine the file is on. A file of a listing on
 // another machine goes to that machine's file-preview verb over the link,
 // which reads it there and sends back the small result: 256 KiB of a text, an
-// image scaled down, one page of a PDF, a frame of a film.
+// image scaled down, one page of a PDF, one frame of a film.
 // A file on this machine goes through the same code in this process
 // (session.PreviewLocalFile), so a client with no daemon has quick look too.
 // A folder is read the way the rail reads one (readListing).
@@ -149,8 +150,11 @@ type quickLookResult struct {
 	width, height int
 	pages         int
 	durationMs    int64
-	// page is the PDF page in img.
+	// page is the PDF page in img, and atMs the film's position of the frame in img.
 	page int
+	atMs int64
+	// facts says what the film is, for a host that cannot draw a frame.
+	facts string
 	// entries is a folder's listing.
 	entries []fileEntry
 	capped  bool
@@ -210,6 +214,17 @@ type quickLookState struct {
 	pageCancel context.CancelFunc
 	pageSlow   bool
 	pageBar    quickLookBarBox
+	// barDrag says a press on the bar is held. filmWant is the film's position the
+	// keys asked for, filmOut the position of the read that is out, stripOn that t
+	// showed the filmstrip, strip its frames, and stripPics where they went in the
+	// last frame. See quicklook_film.go.
+	barDrag     bool
+	filmWant    int64
+	filmOut     int64
+	stripOn     bool
+	strip       [quickLookStripFrames]*composer.Image
+	stripFailed [quickLookStripFrames]bool
+	stripPics   []quickLookPic
 	// mdLines is the Markdown laid out, for mdKey.
 	mdLines []ckLine
 	mdKey   quickLookMDKey
@@ -475,12 +490,16 @@ func (m *OS) quickLookFetch(t quickLookTarget) tea.Cmd {
 		call = m.verbOnHostCaller()
 	}
 	ascii := overlay.UseASCII()
-	if strings.EqualFold(filepath.Ext(t.name), ".pdf") {
-		want := session.PreviewPDF{MaxPx: m.quickLookPagePx(), Page: 1, Words: m.replyPreviewer().Mode() == composer.PreviewText}
+	if isPDF, isFilm := strings.EqualFold(filepath.Ext(t.name), ".pdf"), session.PreviewIsFilm(t.name); isPDF || isFilm {
+		noPicture := m.replyPreviewer().Mode() == composer.PreviewText
+		want := session.PreviewWant{MaxPx: m.quickLookPagePx(), Words: isPDF && noPicture, NoFrame: isFilm && noPicture}
+		if isPDF {
+			want.Page = 1
+		}
 		return func() tea.Msg {
 			ctx, cancel := context.WithTimeout(context.Background(), quickLookTimeout)
 			defer cancel()
-			raw, err := quickLookPageReply(ctx, call, t, want)
+			raw, err := quickLookWantReply(ctx, call, t, want)
 			return quickLookMsg{res: quickLookDecode(t, raw, err, ascii)}
 		}
 	}
@@ -519,6 +538,10 @@ type quickLookReply struct {
 	Page       int     `json:"page"`
 	Words      *string `json:"words"`
 	NoTool     string  `json:"no_tool"`
+	AtMs       *int64  `json:"at_ms"`
+	VideoCodec string  `json:"video_codec"`
+	AudioCodec string  `json:"audio_codec"`
+	FPS        float64 `json:"fps"`
 }
 
 // quickLookDecode turns a file-preview answer into what the panel draws. It
@@ -537,6 +560,15 @@ func quickLookDecode(t quickLookTarget, raw json.RawMessage, err error, ascii bo
 	res.size, res.mime, res.note = r.Size, r.Mime, r.Note
 	res.width, res.height, res.pages, res.durationMs = r.Width, r.Height, r.Pages, r.DurationMs
 	res.page = max(r.Page, 1)
+	if r.Kind == "video" {
+		res.facts = quickLookFilmFacts(&r)
+		if r.AtMs != nil {
+			res.atMs = *r.AtMs
+		} else {
+			// An older machine has no position to give. Its frame is 5 % in.
+			res.atMs, res.older = r.DurationMs/20, r.Image != ""
+		}
+	}
 	switch r.Kind {
 	case "text", "svg":
 		if isMarkdownName(t.name) {
@@ -632,6 +664,7 @@ func (m *OS) applyQuickLook(msg quickLookMsg) tea.Cmd {
 			ql.pageWant = msg.res.page
 			ql.quickLookHoldPage(msg.res)
 		}
+		ql.filmWant = msg.res.atMs
 		return nil
 	}
 	return m.quickLookShow(ql.target)
@@ -675,8 +708,12 @@ func (m *OS) quickLookPicBox(img *composer.Image, innerW, bodyH int) (x, y, cols
 		cw, ch = 8, 16
 	}
 	availW, availH := max(innerW-2, 1), max(bodyH-1, 1)
-	if quickLookPaged(m.quickLook.res) {
+	if quickLookHasBar(m.quickLook.res) {
 		availH = max(availH-1, 1)
+	}
+	if m.quickLookStripShows(bodyH) {
+		_, rows := m.quickLookStripBox(innerW)
+		availH = max(availH-rows-2, 1)
 	}
 	cols, rows = ckFitBox(img, availW, availH, float64(ch)/float64(cw), 1)
 	// The host draws pixels at their own size at most: a small picture
@@ -712,16 +749,29 @@ func (m *OS) quickLookPicture() tea.Cmd {
 	if r == nil || r.img == nil || r.target != ql.target || m.previewResizing() {
 		return nil
 	}
-	p := m.replyPreviewer()
-	mode := p.Mode()
-	if mode == composer.PreviewText {
+	if m.replyPreviewer().Mode() == composer.PreviewText {
 		return nil
 	}
 	innerW, bodyH := m.quickLookSize()
 	_, _, cols, rows := m.quickLookPicBox(r.img, innerW, bodyH)
-	k := pixelsKey(r.img, cols, rows)
-	if mode == composer.PreviewCells {
-		k = quickLookCellsKey(p, r.img, cols, rows)
+	cmd := m.quickLookPrepare(r.img, cols, rows)
+	if m.quickLookStripShows(bodyH) {
+		cols, rows = m.quickLookStripBox(innerW)
+		for _, img := range ql.strip {
+			if img != nil {
+				cmd = tea.Batch(cmd, m.quickLookPrepare(img, cols, rows))
+			}
+		}
+	}
+	return cmd
+}
+
+// quickLookPrepare prepares a picture at a size, when it is not ready.
+func (m *OS) quickLookPrepare(img *composer.Image, cols, rows int) tea.Cmd {
+	p := m.replyPreviewer()
+	k := pixelsKey(img, cols, rows)
+	if p.Mode() == composer.PreviewCells {
+		k = quickLookCellsKey(p, img, cols, rows)
 	}
 	p.mu.Lock()
 	if p.asked[k] {
@@ -734,7 +784,7 @@ func (m *OS) quickLookPicture() tea.Cmd {
 	if cw <= 0 || ch <= 0 {
 		cw, ch = 8, 16
 	}
-	img, ground := r.img, m.overlayUI().Canvas
+	ground := m.overlayUI().Canvas
 	return func() tea.Msg {
 		return replyPreviewMsg{pics: map[previewKey]*previewPicture{k: preparePicture(img, k, cw, ch, ground)}}
 	}
@@ -779,6 +829,19 @@ func (m *OS) quickLookPlacement() (previewPlacement, bool) {
 		return previewPlacement{}, false
 	}
 	return previewPlacement{key: pic.key, x: pic.x, y: pic.y, cols: pic.cols, rows: pic.rows}, true
+}
+
+// quickLookStripPlacements adds the filmstrip's frames to the pictures on the host.
+func (m *OS) quickLookStripPlacements(want []previewPlacement) []previewPlacement {
+	if _, ok := m.quickLookPlacement(); !ok {
+		return want
+	}
+	for _, pic := range m.quickLook.stripPics {
+		if pic.key.mode == composer.PreviewPixels {
+			want = append(want, previewPlacement{key: pic.key, x: pic.x, y: pic.y, cols: pic.cols, rows: pic.rows})
+		}
+	}
+	return want
 }
 
 // quickLookLook is the colours the body is drawn in, on the panel's ground.
@@ -829,6 +892,7 @@ func (m *OS) renderQuickLook() (string, int, int) {
 		k.accentBright == f.accentBright && k.fgDim == f.fgDim {
 		content, geo = k.content, k.geo
 	} else {
+		ql.stripPics = ql.stripPics[:0]
 		c := (*ckCanvas)(nil).reset(innerW, bodyH, ckColor(pal.Canvas))
 		pic = m.drawQuickLook(c, l, dv, innerW, bodyH)
 		title := ql.target.name
@@ -853,6 +917,10 @@ func (m *OS) renderQuickLook() (string, int, int) {
 		pic.x += x + 1
 		pic.y += y + 1
 		ql.pic = pic
+	}
+	for i := range ql.stripPics {
+		ql.stripPics[i].x += x + 1
+		ql.stripPics[i].y += y + 1
 	}
 	return content, x, y
 }
@@ -906,11 +974,19 @@ func (m *OS) drawQuickLook(c *ckCanvas, l ckLook, dv *diffview.Theme, w, h int) 
 	ql.pageBar = quickLookBarBox{}
 	if quickLookPaged(r) {
 		right = append(right, ckSeg{t: quickLookPagePosition(r, ql.pageWant), fg: pal.Fg}, ckSeg{t: " "})
+	}
+	if quickLookFilm(r) && r.atMs != ql.filmWant && !r.older && m.replyPreviewer().Mode() != composer.PreviewText {
+		right = append(right, ckSeg{t: "Reading", fg: pal.FgMute}, ckSeg{t: " "})
+	}
+	if quickLookHasBar(r) {
 		bodyRows = max(bodyRows-1, 1)
-		if m.quickLookSearchRow() {
+		switch {
+		case m.quickLookSearchRow():
 			quickLookDrawSearchRow(c, pal, ql, h-1, w)
-		} else {
-			quickLookDrawPageBar(c, pal, ql, r, h-1, w)
+		case quickLookPaged(r):
+			quickLookDrawBar(c, pal, ql, "Page "+strconv.Itoa(ql.pageWant), strconv.Itoa(r.pages), int64(ql.pageWant-1), int64(r.pages-1), h-1, w)
+		default:
+			quickLookDrawBar(c, pal, ql, quickLookClock(ql.filmWant), quickLookClock(r.durationMs), ql.filmWant, r.durationMs, h-1, w)
 		}
 	}
 	if pos := quickLookPosition(r, ql.scroll, bodyRows); pos != "" {
@@ -1005,6 +1081,13 @@ func (m *OS) drawQuickLook(c *ckCanvas, l ckLook, dv *diffview.Theme, w, h int) 
 			quickLookDrawPageWords(c, pal, r.lines, bodyTop, bodyRows, w)
 			break
 		}
+		if r.kind == "video" && m.replyPreviewer().Mode() == composer.PreviewText {
+			center(mid, "This terminal cannot draw the frame.", false)
+			if r.facts != "" {
+				center(mid+1, r.facts, false)
+			}
+			break
+		}
 		if r.img == nil {
 			center(mid, r.note, false)
 			break
@@ -1028,6 +1111,9 @@ func (m *OS) drawQuickLook(c *ckCanvas, l ckLook, dv *diffview.Theme, w, h int) 
 func (m *OS) drawQuickLookPicture(c *ckCanvas, l ckLook, r *quickLookResult, w, h int, center func(int, string, bool), mid int) quickLookPic {
 	p := m.replyPreviewer()
 	x, y, cols, rows := m.quickLookPicBox(r.img, w, h)
+	if m.quickLookStripShows(h) {
+		m.drawQuickLookStrip(c, w, h)
+	}
 	switch p.Mode() {
 	case composer.PreviewText:
 		center(mid, "This terminal cannot draw the picture.", false)
@@ -1091,7 +1177,9 @@ func quickLookMeta(r *quickLookResult) string {
 		parts = append(parts, quickLookSize(r.size))
 	case "video":
 		parts = append(parts, "Film")
-		if r.durationMs > 0 {
+		if r.width > 0 && r.height > 0 {
+			parts = append(parts, strconv.Itoa(r.width)+" x "+strconv.Itoa(r.height))
+		} else if r.durationMs > 0 {
 			s := r.durationMs / 1000
 			parts = append(parts, strconv.FormatInt(s/60, 10)+":"+pad2(s%60))
 		}
@@ -1169,7 +1257,7 @@ func quickLookCellsKey(p *replyPreview, img *composer.Image, cols, rows int) pre
 
 // quickLookMoves reports whether r is something the keys scroll.
 func quickLookMoves(r *quickLookResult) bool {
-	return r != nil && (r.kind == "text" || r.kind == "markdown" || r.kind == "dir" || quickLookPaged(r))
+	return r != nil && (r.kind == "text" || r.kind == "markdown" || r.kind == "dir" || quickLookHasBar(r))
 }
 
 // quickLookHints is the keys that work now, most useful first. The panel's
@@ -1206,6 +1294,16 @@ func (m *OS) quickLookHints(closeKey string) []overlay.Hint {
 			h = add(h, first(in("full_size")), "full size")
 			return add(h, closeKey, "close")
 		}
+		if quickLookFilm(ql.res) {
+			h = add(h, pair(in, "line_down", "line_up"), "1 second")
+			h = add(h, pair(in, "half_down", "half_up"), "skip 5%")
+			if m.replyPreviewer().Mode() != composer.PreviewText {
+				h = add(h, first(in("filmstrip")), "filmstrip")
+			}
+			h = add(h, pair(in, "start", "end"), "start, end")
+			h = add(h, first(in("full_size")), "full size")
+			return add(h, closeKey, "close")
+		}
 		if quickLookText(ql.res) {
 			h = add(h, first(in("find")), "search")
 			h = add(h, first(in("go_to")), "go to line")
@@ -1228,7 +1326,13 @@ func (m *OS) quickLookHints(closeKey string) []overlay.Hint {
 		if quickLookPaged(ql.res) {
 			label = "page"
 		}
+		if quickLookFilm(ql.res) {
+			label = "skip 5%"
+		}
 		h = add(h, pair(out, "seek_down", "seek_up"), label)
+		if quickLookFilm(ql.res) && m.replyPreviewer().Mode() != composer.PreviewText {
+			h = add(h, first(out("filmstrip")), "filmstrip")
+		}
 		h = add(h, first(out("go_inside")), "go inside")
 	}
 	h = append(h, overlay.Hint{Key: "↑↓", Label: "other files"})

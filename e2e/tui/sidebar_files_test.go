@@ -2104,6 +2104,198 @@ func TestQuickLookPDFWordsAt16Colours(t *testing.T) {
 	saveCockpitFrames(t, term, "quick-look-pdf-words-16")
 }
 
+// quickLookFilmSeconds is the length of quickLookFilmStart's film.
+const quickLookFilmSeconds = 20
+
+// quickLookFilmStart lists a film in the rail, with the keyboard on it. Its colour
+// follows the time, so a test can tell which frame it was sent, and every frame is a
+// key frame, so the frame is the one asked for.
+func quickLookFilmStart(t *testing.T, env []string, out *lockedBuffer) *tuitest.Terminal {
+	t.Helper()
+	term, dir := quickLookListed(t, env, out)
+	quickLookMakeFilm(t, filepath.Join(dir, "zzfilm.mp4"))
+	railLists(t, term, "the rail did not list the new film", []string{"zzfilm.mp4"}, nil)
+	quickLookFocusRail(t, term, "zzfilm.mp4")
+	return term
+}
+
+// quickLookMakeFilm writes the film. See quickLookFilmStart.
+func quickLookMakeFilm(t *testing.T, path string) {
+	t.Helper()
+	ff, err := exec.LookPath("ffmpeg")
+	if err != nil {
+		t.Skip("no ffmpeg here")
+	}
+	if _, err := exec.LookPath("ffprobe"); err != nil {
+		t.Skip("no ffprobe here")
+	}
+	src := fmt.Sprintf("color=c=black:s=320x180:r=5:d=%d,format=yuv444p,geq=lum='60':cb='255':cr='107+128*T/%d'", quickLookFilmSeconds, quickLookFilmSeconds)
+	if b, err := exec.Command(ff, "-v", "error", "-f", "lavfi", "-i", src, "-g", "1", "-pix_fmt", "yuv420p", path).CombinedOutput(); err != nil {
+		t.Fatalf("make a test film: %v\n%s", err, b)
+	}
+}
+
+// quickLookFilmPicture is the main frame on the host: the largest picture.
+func quickLookFilmPicture(pics []shot.Image) (shot.Image, bool) {
+	var best shot.Image
+	for _, p := range pics {
+		if p.Cols*p.Rows > best.Cols*best.Rows {
+			best = p
+		}
+	}
+	return best, best.Pixels != nil
+}
+
+// quickLookFilmAt waits for a position: the clock in the bar, and the frame of that
+// second on the host.
+func quickLookFilmAt(t *testing.T, term *tuitest.Terminal, out *lockedBuffer, seconds int, why string) {
+	t.Helper()
+	railLists(t, term, why, []string{fmt.Sprintf("0:%02d  ", seconds)}, []string{"Reading"})
+	want := 107 + 128*float64(seconds)/quickLookFilmSeconds
+	var got float64
+	if err := term.WaitFor(func(tuitest.Screen) bool {
+		p, ok := quickLookFilmPicture(hostPictures(t, []byte(out.String())))
+		if !ok {
+			return false
+		}
+		b := p.Pixels.Bounds()
+		r, _, _, _ := p.Pixels.At(b.Min.X+b.Dx()/2, b.Min.Y+b.Dy()/2).RGBA()
+		// The red channel rises with Cr, so the frame says its own time.
+		got = float64(r >> 8)
+		return got >= 0 && quickLookFilmSecond(got) >= float64(seconds)-0.7 && quickLookFilmSecond(got) <= float64(seconds)+1.7
+	}, uiTimeout); err != nil {
+		t.Fatalf("ASSERTION: %s: the frame on the host is from %.1f s, want %d s (Cr %.0f): %v", why, quickLookFilmSecond(got), seconds, want, err)
+	}
+}
+
+// quickLookFilmSecond turns a frame's red channel into its time: Y 60, Cb 255, and Cr
+// from 107 to 235 over the film, through BT.601. Video range stops Cr at 240.
+func quickLookFilmSecond(red float64) float64 {
+	cr := (red-(60-16)*1.164)/1.596 + 128
+	return (cr - 107) * quickLookFilmSeconds / 128
+}
+
+// TestQuickLookMovesInAFilm moves through a film: J and K, the wheel, a click and a
+// drag on the bar, then inside the file j and k, h and l, g and G. t shows seven small
+// frames, and t hides them. A clip with one key frame shows a frame too.
+//
+// How this could pass wrongly: the clock comes from the keys, and an old frame could
+// stay behind it. So the frame's colour says its own time, and the test reads it from
+// the picture on the host.
+func TestQuickLookMovesInAFilm(t *testing.T) {
+	out := &lockedBuffer{}
+	term := quickLookFilmStart(t, nil, out)
+	at := func(seconds int, why string) { quickLookFilmAt(t, term, out, seconds, why) }
+
+	sendKeys(t, term, " ")
+	railLists(t, term, "space did not show the film", []string{"zzfilm.mp4 ", "Film", "320 x 180", "J K skip 5%", "t filmstrip", "0:20"}, nil)
+	at(1, "the first frame is 5 percent in")
+	sendKeys(t, term, "J")
+	at(2, "J did not skip 5 percent")
+	saveCockpitFrames(t, term, "quick-look-film", hostPictures(t, []byte(out.String()))...)
+	sendKeys(t, term, "K")
+	at(1, "K did not skip back")
+
+	col, row, ok := findOnGrid(term.Screen(), "zzfilm.mp4 ")
+	if !ok {
+		t.Fatalf("no panel:\n%s", term.Snapshot())
+	}
+	wheelAt(t, term, col+20, row+10, tuitest.MouseWheelDown, 5)
+	at(2, "the wheel did not move 1 percent a turn")
+	wheelAt(t, term, col+20, row+10, tuitest.MouseWheelUp, 5)
+	at(1, "the wheel did not move back")
+
+	// A click on the bar, then a drag. The drag goes on outside the track.
+	col, row, ok = findOnGrid(term.Screen(), "0:01  ")
+	if !ok {
+		t.Fatalf("no bar:\n%s", term.Snapshot())
+	}
+	mousePress(t, term, col+40, row, tuitest.MouseLeft, 0)
+	railLists(t, term, "a press on the bar did not seek", []string{"zzfilm.mp4 "}, []string{"0:01  ", "Reading"})
+	clock := regexp.MustCompile(`\d:\d\d  `)
+	pressed := clock.FindString(term.Snapshot())
+	mouseMotion(t, term, col+70, row, tuitest.MouseLeft, 0)
+	railLists(t, term, "a drag on the bar did not seek", []string{"zzfilm.mp4 "}, []string{pressed, "Reading"})
+	held := clock.FindString(term.Snapshot())
+	mouseRelease(t, term, col+70, row, tuitest.MouseLeft, 0)
+	// A later drag that did not start on the bar leaves the position alone.
+	mousePress(t, term, col+10, row-5, tuitest.MouseLeft, 0)
+	mouseMotion(t, term, col+20, row-5, tuitest.MouseLeft, 0)
+	mouseRelease(t, term, col+20, row-5, tuitest.MouseLeft, 0)
+	time.Sleep(300 * time.Millisecond)
+	railLists(t, term, "a drag after the release went on seeking", []string{"zzfilm.mp4 ", held}, []string{"Reading"})
+
+	// Inside: plain keys move in seconds.
+	sendKeys(t, term, tuitest.Tab, "g")
+	railLists(t, term, "tab did not go inside", []string{"Inside the file", "j k 1 second"}, nil)
+	at(0, "g did not go to the start")
+	sendKeys(t, term, "j")
+	at(1, "j did not move 1 second")
+	sendKeys(t, term, "l")
+	at(2, "l did not move 1 second")
+	sendKeys(t, term, "h")
+	at(1, "h did not move back")
+	sendKeys(t, term, "k")
+	at(0, "k did not move back")
+	sendKeys(t, term, "G")
+	at(19, "G did not go to the end")
+
+	// The filmstrip: seven small frames, across the film, and they go when asked.
+	sendKeys(t, term, "t")
+	var pics []shot.Image
+	if err := term.WaitFor(func(tuitest.Screen) bool {
+		pics = hostPictures(t, []byte(out.String()))
+		return len(pics) == quickLookStripOnHost
+	}, uiTimeout); err != nil {
+		t.Fatalf("ASSERTION: t did not show the filmstrip: the host shows %d pictures, want %d: %v", len(pics), quickLookStripOnHost, err)
+	}
+	seen := map[int]int{}
+	for _, p := range pics {
+		if p.Rows < 10 {
+			seen[p.Row]++
+		}
+	}
+	if len(seen) != 1 {
+		t.Errorf("ASSERTION: the small frames are not on one row: %v", seen)
+	}
+	saveCockpitFrames(t, term, "quick-look-film-strip", pics...)
+	sendKeys(t, term, "t")
+	if err := term.WaitFor(func(tuitest.Screen) bool { return len(hostPictures(t, []byte(out.String()))) == 1 }, uiTimeout); err != nil {
+		t.Fatalf("ASSERTION: t did not hide the filmstrip: %v", err)
+	}
+	sendKeys(t, term, " ")
+	if err := term.WaitFor(func(tuitest.Screen) bool { return len(hostPictures(t, []byte(out.String()))) == 0 }, uiTimeout); err != nil {
+		t.Fatalf("ASSERTION: closing the preview did not take the frames down: %v", err)
+	}
+	alive(t, term, "after moving in a film")
+}
+
+// quickLookStripOnHost is the main frame and the seven small ones.
+const quickLookStripOnHost = 8
+
+// TestQuickLookFilmAtEachDepth is a film on hosts with no kitty graphics. At 256
+// colours the frame and the filmstrip are block glyphs. At 16 colours there is no
+// frame: the panel says the film's facts, and the keys still move the position.
+func TestQuickLookFilmAtEachDepth(t *testing.T) {
+	t.Run("256", func(t *testing.T) {
+		term := quickLookFilmStart(t, []string{"TUIOS_KITTY_GRAPHICS=0", "TERM=xterm-256color", "COLORTERM="}, nil)
+		sendKeys(t, term, " ")
+		railLists(t, term, "the film did not show", []string{"zzfilm.mp4 ", "0:01  "}, []string{"cannot draw"})
+		sendKeys(t, term, "J", "t")
+		railLists(t, term, "J did not move", []string{"0:02  "}, []string{"Reading"})
+		time.Sleep(3 * time.Second) // nothing on the screen says the filmstrip ended
+		saveCockpitFrames(t, term, "quick-look-film-256")
+	})
+	t.Run("16", func(t *testing.T) {
+		term := quickLookFilmStart(t, []string{"TUIOS_KITTY_GRAPHICS=0", "TERM=xterm", "COLORTERM="}, nil)
+		sendKeys(t, term, " ")
+		railLists(t, term, "the film's facts did not show", []string{"This terminal cannot draw the frame.", "H.264, 320 x 180, 5 frames each second. Audio: none.", "0:01  "}, []string{"filmstrip"})
+		sendKeys(t, term, "J")
+		railLists(t, term, "J did not move the position", []string{"0:02  "}, []string{"0:01  ", "Reading"})
+		saveCockpitFrames(t, term, "quick-look-film-16")
+	})
+}
+
 // Kitty commands for the pictures the previews send: an upload, a free (the
 // uppercase delete, which drops the image data) and an unplace (the lowercase
 // one, which keeps it).

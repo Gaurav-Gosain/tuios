@@ -13,6 +13,7 @@ import (
 	"image/png"
 	"io"
 	"io/fs"
+	"math"
 	"net/http"
 	"os"
 	"os/exec"
@@ -90,17 +91,20 @@ var (
 // verbFilePreview makes the preview of one file on this machine.
 func (d *Daemon) verbFilePreview(cs *connState, params json.RawMessage) (any, *verbError) {
 	var p struct {
-		Path       string `json:"path"`
-		MaxPx      int    `json:"max_px"`
-		Page       int    `json:"page"`
-		PagesKnown bool   `json:"pages_known"`
-		Words      bool   `json:"words"`
-		Offset     *int64 `json:"offset"`
-		Limit      int    `json:"limit"`
-		Find       string `json:"find"`
-		From       int64  `json:"from"`
-		Back       bool   `json:"back"`
-		Line       int64  `json:"line"`
+		Path          string `json:"path"`
+		MaxPx         int    `json:"max_px"`
+		Page          int    `json:"page"`
+		PagesKnown    bool   `json:"pages_known"`
+		Words         bool   `json:"words"`
+		AtMs          *int64 `json:"at_ms"`
+		DurationKnown bool   `json:"duration_known"`
+		NoFrame       bool   `json:"no_frame"`
+		Offset        *int64 `json:"offset"`
+		Limit         int    `json:"limit"`
+		Find          string `json:"find"`
+		From          int64  `json:"from"`
+		Back          bool   `json:"back"`
+		Line          int64  `json:"line"`
 	}
 	if verr := decodeParams(params, &p); verr != nil {
 		return nil, verr
@@ -115,6 +119,10 @@ func (d *Daemon) verbFilePreview(cs *connState, params json.RawMessage) (any, *v
 	}
 	maxPx = min(maxPx, previewMaxPxLimit)
 	page := max(p.Page, 1)
+	var atMs int64
+	if p.AtMs != nil {
+		atMs = *p.AtMs
+	}
 
 	// The name is judged before anything about the file is said, so a
 	// folder or a pipe in the deny list gets the same refusal as a file.
@@ -144,7 +152,7 @@ func (d *Daemon) verbFilePreview(cs *connState, params json.RawMessage) (any, *v
 		previewWindow(f, fi.Size(), *p.Offset, p.Limit, out)
 		return out, nil
 	}
-	return previewOpened(ctx, f, fi, err, path, maxPx, PreviewPDF{Page: page, PagesKnown: p.PagesKnown, Words: p.Words}), nil
+	return previewOpened(ctx, f, fi, err, path, maxPx, PreviewWant{Page: page, PagesKnown: p.PagesKnown, Words: p.Words, Seek: p.AtMs != nil, AtMs: atMs, DurationKnown: p.DurationKnown && p.AtMs != nil, NoFrame: p.NoFrame}), nil
 }
 
 // PreviewLocalFile makes the preview of a file on this machine, in this
@@ -162,22 +170,31 @@ func PreviewLocalFile(ctx context.Context, path string, maxPx int) (map[string]a
 	}
 	ctx, cancel := context.WithTimeout(ctx, previewToolTimeout)
 	defer cancel()
-	return previewOpened(ctx, f, fi, err, path, maxPx, PreviewPDF{Page: 1}), nil
+	return previewOpened(ctx, f, fi, err, path, maxPx, PreviewWant{Page: 1}), nil
 }
 
-// PreviewPDF is what a preview asks of a PDF: a page, and how. PagesKnown leaves
-// out the count, which takes a run of pdfinfo. Words sends the page's words in place
-// of its picture.
-type PreviewPDF struct {
-	MaxPx      int
-	Page       int
-	PagesKnown bool
-	Words      bool
+// PreviewWant is what a preview asks of a PDF or a film.
+//
+// For a PDF: a page. PagesKnown leaves out the count, which takes a run of pdfinfo.
+// Words sends the page's words in place of its picture.
+//
+// For a film: Seek asks for the frame at AtMs, and otherwise the frame is 5 % in.
+// DurationKnown leaves out the facts, which take a run of ffprobe. NoFrame sends only
+// the facts.
+type PreviewWant struct {
+	MaxPx         int
+	Page          int
+	PagesKnown    bool
+	Words         bool
+	Seek          bool
+	AtMs          int64
+	DurationKnown bool
+	NoFrame       bool
 }
 
-// PreviewLocalPDF is PreviewLocalFile for one page of a PDF. A cancelled ctx kills
-// the tool that is running.
-func PreviewLocalPDF(ctx context.Context, path string, want PreviewPDF) (map[string]any, error) {
+// PreviewLocalWant is PreviewLocalFile with a PreviewWant. A cancelled ctx kills the
+// tool that is running.
+func PreviewLocalWant(ctx context.Context, path string, want PreviewWant) (map[string]any, error) {
 	maxPx := want.MaxPx
 	if maxPx <= 0 {
 		maxPx = previewMaxPx
@@ -229,6 +246,11 @@ func PreviewLocalSeek(ctx context.Context, path string, seek PreviewSeek) (map[s
 	return out, nil
 }
 
+// PreviewIsFilm reports whether a file of this name previews as a film.
+func PreviewIsFilm(name string) bool {
+	return previewVideoExt[strings.ToLower(filepath.Ext(name))]
+}
+
 // PreviewShowsPicture reports whether a file of this name previews as a picture:
 // an image, a PDF page or a film frame.
 func PreviewShowsPicture(name string) bool {
@@ -239,7 +261,7 @@ func PreviewShowsPicture(name string) bool {
 // previewOpened is the preview of the file f, opened through openRegular.
 // openErr is openRegular's refusal of a file that is not regular, whose
 // fi then says what it is; f is nil then. It closes f.
-func previewOpened(ctx context.Context, f *os.File, fi fs.FileInfo, openErr error, path string, maxPx int, pdf PreviewPDF) map[string]any {
+func previewOpened(ctx context.Context, f *os.File, fi fs.FileInfo, openErr error, path string, maxPx int, pdf PreviewWant) map[string]any {
 	out := map[string]any{
 		"path":  path,
 		"name":  filepath.Base(path),
@@ -281,7 +303,7 @@ func previewOpened(ctx context.Context, f *os.File, fi fs.FileInfo, openErr erro
 		previewPDF(ctx, f, fi.Size(), maxPx, pdf, out)
 		return out
 	case previewVideoExt[ext]:
-		previewVideo(ctx, f, maxPx, out)
+		previewVideo(ctx, f, maxPx, pdf, out)
 		return out
 	}
 	if previewText(f, fi.Size(), out) {
@@ -558,7 +580,7 @@ func encodePreview(img image.Image, photo bool) ([]byte, string, error) {
 }
 
 // previewPDF sends one page as an image, or the file for a client to draw.
-func previewPDF(ctx context.Context, f *os.File, size int64, maxPx int, want PreviewPDF, out map[string]any) {
+func previewPDF(ctx context.Context, f *os.File, size int64, maxPx int, want PreviewWant, out map[string]any) {
 	out["kind"] = "pdf"
 	page := max(want.Page, 1)
 	if !want.PagesKnown {
@@ -632,47 +654,110 @@ func pdfPages(ctx context.Context, f *os.File) int {
 
 // previewVideo sends one frame from 5 % into the film, the first key frame
 // there, as yazi does.
-func previewVideo(ctx context.Context, f *os.File, maxPx int, out map[string]any) {
+func previewVideo(ctx context.Context, f *os.File, maxPx int, want PreviewWant, out map[string]any) {
 	out["kind"] = "video"
-	durMs := videoDuration(ctx, f)
-	if durMs > 0 {
-		out["duration_ms"] = durMs
+	var durMs int64
+	if !want.DurationKnown {
+		durMs = videoFacts(ctx, f, out)
+	}
+	if want.NoFrame {
+		return
 	}
 	if _, err := exec.LookPath("ffmpeg"); err != nil || !previewToolsReadFD {
 		out["note"] = "This machine has no ffmpeg, so no frame can be shown."
 		return
 	}
-	at := float64(durMs) * 0.05 / 1000
+	atMs := durMs / 20
+	if want.Seek {
+		atMs = max(want.AtMs, 0)
+	}
+	out["at_ms"] = atMs
+	// Key frames first, because they need no decode from the frame before. A film
+	// with few of them has none past this point, so the next try decodes. The last
+	// frame of a film starts before its end, so the last try looks a second back.
+	for _, try := range []struct {
+		keys bool
+		back int64
+	}{{true, 0}, {false, 0}, {false, 1000}} {
+		frame, err := videoFrame(ctx, f, maxPx, max(atMs-try.back, 0), try.keys)
+		if err != nil || len(frame) == 0 {
+			if try.back > 0 || ctx.Err() != nil {
+				break
+			}
+			continue
+		}
+		if cfg, err := jpeg.DecodeConfig(bytes.NewReader(frame)); err == nil {
+			out["image_width"] = cfg.Width
+			out["image_height"] = cfg.Height
+		}
+		out["mime"] = "image/jpeg"
+		out["image"] = base64.StdEncoding.EncodeToString(frame)
+		return
+	}
+	out["note"] = "No frame could be read from the film."
+}
+
+// videoFrame runs ffmpeg for the one frame at atMs.
+func videoFrame(ctx context.Context, f *os.File, maxPx int, atMs int64, keys bool) ([]byte, error) {
+	at := float64(atMs) / 1000
 	args := []string{"-v", "error", "-nostdin", "-protocol_whitelist", previewProtocols, "-format_whitelist", previewFormats}
 	if at > 0 {
 		args = append(args, "-ss", strconv.FormatFloat(at, 'f', 3, 64))
 	}
 	scale := "scale='min(" + strconv.Itoa(maxPx) + ",iw)':'min(" + strconv.Itoa(maxPx) + ",ih)':force_original_aspect_ratio=decrease"
-	args = append(args, "-skip_frame", "nokey", "-i", fdArg, "-frames:v", "1", "-vf", scale, "-f", "image2pipe", "-vcodec", "mjpeg", "-q:v", "3", "-")
-	frame, err := previewTool(ctx, f, "ffmpeg", args...)
-	if err != nil || len(frame) == 0 {
-		out["note"] = "No frame could be read from the film."
-		return
+	if keys {
+		args = append(args, "-skip_frame", "nokey")
 	}
-	if cfg, err := jpeg.DecodeConfig(bytes.NewReader(frame)); err == nil {
-		out["image_width"] = cfg.Width
-		out["image_height"] = cfg.Height
-	}
-	out["mime"] = "image/jpeg"
-	out["image"] = base64.StdEncoding.EncodeToString(frame)
+	args = append(args, "-i", fdArg, "-frames:v", "1", "-vf", scale, "-f", "image2pipe", "-vcodec", "mjpeg", "-q:v", "3", "-")
+	return previewTool(ctx, f, "ffmpeg", args...)
 }
 
-// videoDuration is the film's length in ms from ffprobe, 0 when it cannot.
-func videoDuration(ctx context.Context, f *os.File) int64 {
-	b, err := previewTool(ctx, f, "ffprobe", "-v", "error", "-protocol_whitelist", previewProtocols, "-format_whitelist", previewFormats, "-show_entries", "format=duration", "-of", "default=nw=1:nk=1", fdArg)
+// videoFacts adds what ffprobe says of the film to out, and returns its length in
+// ms, 0 when it cannot.
+func videoFacts(ctx context.Context, f *os.File, out map[string]any) int64 {
+	b, err := previewTool(ctx, f, "ffprobe", "-v", "error", "-protocol_whitelist", previewProtocols, "-format_whitelist", previewFormats, "-show_entries", "format=duration:stream=codec_type,codec_name,width,height,avg_frame_rate", "-of", "json", fdArg)
 	if err != nil {
 		return 0
 	}
-	sec, err := strconv.ParseFloat(strings.TrimSpace(string(b)), 64)
+	var probe struct {
+		Format struct {
+			Duration string `json:"duration"`
+		} `json:"format"`
+		Streams []struct {
+			Type   string `json:"codec_type"`
+			Name   string `json:"codec_name"`
+			Width  int    `json:"width"`
+			Height int    `json:"height"`
+			Rate   string `json:"avg_frame_rate"`
+		} `json:"streams"`
+	}
+	if json.Unmarshal(b, &probe) != nil {
+		return 0
+	}
+	for _, s := range probe.Streams {
+		switch {
+		case s.Type == "video" && out["video_codec"] == nil:
+			out["video_codec"], out["width"], out["height"] = s.Name, s.Width, s.Height
+			if num, den, ok := strings.Cut(s.Rate, "/"); ok {
+				n, _ := strconv.ParseFloat(num, 64)
+				d, _ := strconv.ParseFloat(den, 64)
+				if d > 0 && n > 0 {
+					out["fps"] = math.Round(n/d*100) / 100
+				}
+			}
+		case s.Type == "audio" && out["audio_codec"] == nil:
+			out["audio_codec"] = s.Name
+		}
+	}
+	sec, err := strconv.ParseFloat(probe.Format.Duration, 64)
 	if err != nil {
 		return 0
 	}
-	return int64(sec * 1000)
+	durMs := int64(sec * 1000)
+	if durMs > 0 {
+		out["duration_ms"] = durMs
+	}
+	return durMs
 }
 
 // previewText sends the start of a file that reads as text. It reports false
@@ -875,6 +960,9 @@ func previewVerbs() map[string]verbEntry {
 				{Name: "page", Type: "int", Description: "The PDF page.", Default: "1"},
 				{Name: "pages_known", Type: "bool", Description: "The caller knows the page count, so pdfinfo does not run.", Default: "false"},
 				{Name: "words", Type: "bool", Description: "Send the PDF page's words from pdftotext in place of its picture.", Default: "false"},
+				{Name: "at_ms", Type: "int", Description: "The position in a film of the frame to send. Without it the frame is 5 % in."},
+				{Name: "duration_known", Type: "bool", Description: "The caller knows the film's facts, so ffprobe does not run.", Default: "false"},
+				{Name: "no_frame", Type: "bool", Description: "Send only the film's facts.", Default: "false"},
 				{Name: "offset", Type: "int", Description: "Send a window of a text file from this byte, whole lines only, in place of the preview."},
 				{Name: "limit", Type: "int", Description: "The most bytes in that window, at most 1 MiB.", Default: "262144"},
 				{Name: "find", Type: "string", Description: "Look for this text in a text file, in place of the preview. Lower case ignores case."},
@@ -898,6 +986,10 @@ func previewVerbs() map[string]verbEntry {
 				{Name: "pages", Type: "int", Description: "pdf: the page count, when pdfinfo is there."},
 				{Name: "words", Type: "string", Description: "pdf, when asked for: the page's words."},
 				{Name: "no_tool", Type: "string", Description: "pdf: the tool this machine needs and does not have."},
+				{Name: "at_ms", Type: "int", Description: "video: the position of the frame sent."},
+				{Name: "video_codec", Type: "string", Description: "video: the codec, from ffprobe."},
+				{Name: "audio_codec", Type: "string", Description: "video: the codec of the sound, from ffprobe, when it has sound."},
+				{Name: "fps", Type: "number", Description: "video: the frames each second, from ffprobe."},
 				{Name: "duration_ms", Type: "int", Description: "video: the length."},
 				{Name: "note", Type: "string", Description: "Why there is no picture, in words a person can act on."},
 				{Name: "size", Type: "int", Description: "The file's size."},

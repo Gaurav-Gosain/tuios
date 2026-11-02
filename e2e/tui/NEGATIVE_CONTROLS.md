@@ -11891,3 +11891,23 @@ Run on 2026-11-02, each control against the branch head with one change:
 
 The `min_tuios` refusal needs a stamped binary, so no e2e test covers it. It
 was run by hand on a build stamped 0.1.0 against `min_tuios = "99.0.0"`.
+## Quick look moves in a film
+
+| Control: what was cut | Where it fails | Verdict |
+| --- | --- | --- |
+| `at_ms` in the verb | "J did not skip 5 percent", the frame is from another time | **caught** |
+| `at_ms` over the link | "J did not move the far film" | **caught** |
+| The frame read | "J did not skip 5 percent" | **caught** |
+| The new frame is shown | "J did not skip 5 percent", the clock moved and the frame did not | **caught** |
+| The second try, with no key frames | `TestFilePreviewOnAHost` ("a clip with one key frame gave no frame") | **caught** |
+| The third try, a second back | `TestFilePreviewOnAHost` ("the end of a film gave no frame") | **caught** |
+| A press on the bar | "a press on the bar did not seek" | **caught** |
+| The motion filter passes a drag | "a drag on the bar did not seek" | **caught** |
+| A drag on the bar | "a drag on the bar did not seek" | **caught** |
+| The release ends the drag | "a drag after the release went on seeking" | **caught** |
+| The filmstrip reads | "t did not show the filmstrip" | **caught** |
+| The filmstrip on the host | "t did not show the filmstrip" | **caught** |
+| The facts | "the film's facts did not show" | **caught** |
+| `duration_known` in the verb | `TestFilePreviewOnAHost` ("a seek with the facts known") | **caught** |
+
+The first drag test passed with the drag broken, because the press alone met its check. The stronger test found that the motion filter dropped every drag.

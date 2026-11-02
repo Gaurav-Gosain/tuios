@@ -46,6 +46,10 @@ func handleMouseMotion(msg tea.MouseMotionMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	// way, which is the whole point of asking for button-free motion.
 	if mouse.Button == tea.MouseNone {
 		o.EndPointerGrabs()
+		o.QuickLookBarRelease()
+	}
+	if o.QuickLookBarDrag(o.LastMouseX) {
+		return o, nil
 	}
 
 	// A drag between panes over OSC 72 owns the pointer once the source

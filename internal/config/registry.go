@@ -649,6 +649,7 @@ var ActionDescriptions = map[string]string{
 	"find":                "Preview: search in the file",
 	"find_next":           "Preview: go to the next match",
 	"find_prev":           "Preview: go to the match before",
+	"filmstrip":           "Preview: show the filmstrip of a film, or hide it",
 	"go_to":               "Preview: go to a line",
 	"wrap":                "Preview: wrap long lines, or cut them",
 	"end":                 "Preview: go to the end of the file",

@@ -335,6 +335,9 @@ func TestQuickLookOnAFarFile(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(top, "zbook.pdf"), pagedPDF(3), 0o600); err != nil {
 		t.Fatal(err)
 	}
+	if _, err := exec.LookPath("ffmpeg"); err == nil {
+		quickLookMakeFilm(t, filepath.Join(top, "zfilm.mp4"))
+	}
 
 	if out, err := tuiosCLI(t, remote, "new", "far-shell", "--detach"); err != nil {
 		t.Fatalf("create the far session: %v\n%s", err, out)
@@ -404,6 +407,29 @@ func TestQuickLookOnAFarFile(t *testing.T) {
 		sendKeys(t, term, "J")
 		quickLookPDFPage(t, term, stream, 2, 3, "J did not turn the page over the link")
 		saveCockpitFrames(t, term, "quick-look-far-pdf", hostPictures(t, []byte(stream.String()))...)
+		sendKeys(t, term, " ")
+		railLists(t, term, "space did not close the far preview", nil, []string{"on build"})
+	}
+	// A film on build moves over the link, and the filmstrip comes over it too.
+	if _, err := exec.LookPath("ffmpeg"); err == nil {
+		col, row, ok = findOnGrid(term.Screen(), "zfilm.mp4")
+		if !ok {
+			t.Fatalf("no zfilm.mp4 row:\n%s", term.Snapshot())
+		}
+		mouseClick(t, term, col, row, tuitest.MouseLeft, 0)
+		clickNoteGone(t, term)
+		sendKeys(t, term, " ")
+		railLists(t, term, "space did not show the far film", []string{"zfilm.mp4 ", "on build"}, nil)
+		quickLookFilmAt(t, term, stream, 1, "the far film's first frame")
+		sendKeys(t, term, "J")
+		quickLookFilmAt(t, term, stream, 2, "J did not move the far film")
+		sendKeys(t, term, "t")
+		if err := term.WaitFor(func(tuitest.Screen) bool {
+			return len(hostPictures(t, []byte(stream.String()))) == quickLookStripOnHost
+		}, uiTimeout); err != nil {
+			t.Fatalf("ASSERTION: the filmstrip did not come over the link: %v", err)
+		}
+		saveCockpitFrames(t, term, "quick-look-far-film", hostPictures(t, []byte(stream.String()))...)
 		sendKeys(t, term, " ")
 		railLists(t, term, "space did not close the far preview", nil, []string{"on build"})
 	}

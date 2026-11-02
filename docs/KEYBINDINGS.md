@@ -276,6 +276,10 @@ and says how far it went. Press `n` to go on.
 A PDF shows one page and a bar with the page number. Click the bar to go to a
 page. At 16 colours the preview shows the words of the page.
 
+A film shows one frame and a bar with the time. Click or drag the bar to move to a
+time. There is no playback. Press `t` to show 7 small frames from across the film.
+At 16 colours the preview shows the facts of the film.
+
 `Up` and `Down` (or `j` and `k`) move the cursor to the next row, and the preview
 shows that row. `Space` or `Esc` closes the preview. A click outside it closes
 it too. When the sidebar loses keyboard focus, the preview closes.
@@ -285,9 +289,10 @@ other keys go to the sidebar.
 
 | Key | Action |
 | --- | --- |
-| `J` `K` | Move half a page, or one page of a PDF |
+| `J` `K` | Move half a page, one page of a PDF, or 5 percent of a film |
 | `Ctrl+D` `Ctrl+U` | Move half a page |
-| Mouse wheel over the preview | Move 3 lines, or one page of a PDF |
+| Mouse wheel over the preview | Move 3 lines, one page of a PDF, or 1 percent of a film |
+| `t` | Show the small frames of a film, or hide them |
 | `Tab` | Move the keyboard inside the file |
 | `f` | Fill the area of the panes, or go back |
 
@@ -295,7 +300,9 @@ Inside the file, every key acts on the preview:
 
 | Key | Action |
 | --- | --- |
-| `j` `k` | Move one line, or one page of a PDF |
+| `j` `k` | Move one line, one page of a PDF, or 1 second of a film |
+| `h` `l` | Move 1 second of a film |
+| `t` | Show the small frames of a film, or hide them |
 | `d` `u` | Move half a page |
 | `g` `G` | Go to the start or the end, or the first or last page |
 | `/` | Search in a text. Lower case ignores case |

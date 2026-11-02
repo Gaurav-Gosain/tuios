@@ -106,6 +106,8 @@ func handleSidebarKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 			o.QuickLookGoTo()
 		case "wrap":
 			o.QuickLookWrap()
+		case "filmstrip":
+			o.QuickLookFilmstrip()
 		}
 		return o, nil
 	}
@@ -125,6 +127,11 @@ func handleSidebarKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 			handled = o.QuickLookGoInside()
 		case "full_size":
 			o.QuickLookFullSize()
+			handled = true
+		case "filmstrip":
+			// Taken on any file: j and k walk the list with the preview open, and the
+			// same key must not open a window on the next row.
+			o.QuickLookFilmstrip()
 			handled = true
 		}
 		if handled {

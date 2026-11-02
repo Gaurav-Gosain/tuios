@@ -949,6 +949,9 @@ func (m *OS) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	if qc := m.quickLookPageRead(); qc != nil {
 		cmd = tea.Batch(cmd, qc)
 	}
+	if qc := m.quickLookFilmRead(); qc != nil {
+		cmd = tea.Batch(cmd, qc)
+	}
 	// Input may switch the center workspace, edit an edge's session assignment,
 	// or finish a rail resize. Reconcile after it has changed the model.
 	switch msg.(type) {
@@ -1250,6 +1253,11 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 
 	case quickLookPageMsg:
 		cmd := m.applyQuickLookPage(msg)
+		m.renderSkipped = false
+		return m, cmd
+
+	case quickLookFilmMsg:
+		cmd := m.applyQuickLookFilm(msg)
 		m.renderSkipped = false
 		return m, cmd
 

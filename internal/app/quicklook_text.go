@@ -199,6 +199,9 @@ func (m *OS) QuickLookScroll(lines int) bool {
 		}
 		return m.quickLookPageTo(ql.pageWant + 1)
 	}
+	if quickLookFilm(ql.res) {
+		return m.quickLookFilmPercentBy(quickLookWheelPercent, lines > 0)
+	}
 	ql.scroll += lines
 	if !quickLookText(ql.res) || ql.res.startOff == 0 {
 		ql.scroll = max(ql.scroll, 0)
@@ -209,6 +212,9 @@ func (m *OS) QuickLookScroll(lines int) bool {
 
 // QuickLookHalfPage moves half a page, forward or back.
 func (m *OS) QuickLookHalfPage(forward bool) bool {
+	if ql := &m.quickLook; ql.open && quickLookFilm(ql.res) {
+		return m.quickLookFilmPercentBy(quickLookFilmPercent, forward)
+	}
 	n := m.quickLookPage()
 	if !forward {
 		n = -n
@@ -218,6 +224,12 @@ func (m *OS) QuickLookHalfPage(forward bool) bool {
 
 // QuickLookLine moves one line, forward or back.
 func (m *OS) QuickLookLine(forward bool) bool {
+	if ql := &m.quickLook; ql.open && quickLookFilm(ql.res) {
+		if forward {
+			return m.quickLookFilmTo(ql.filmWant + 1000)
+		}
+		return m.quickLookFilmTo(ql.filmWant - 1000)
+	}
 	if forward {
 		return m.QuickLookScroll(1)
 	}
@@ -238,6 +250,12 @@ func (m *OS) QuickLookEdge(end bool) bool {
 			return m.quickLookPageTo(r.pages)
 		}
 		return m.quickLookPageTo(1)
+	}
+	if quickLookFilm(r) {
+		if end {
+			return m.quickLookFilmTo(r.durationMs)
+		}
+		return m.quickLookFilmTo(0)
 	}
 	switch {
 	case !end && (!quickLookText(r) || r.startOff == 0):

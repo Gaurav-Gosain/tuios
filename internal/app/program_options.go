@@ -225,6 +225,11 @@ func FilterMouseMotion(model tea.Model, msg tea.Msg) tea.Msg {
 		return msg
 	}
 
+	// A press on quick look's bar seeks as the pointer moves.
+	if m.quickLook.barDrag && movedCell {
+		return msg
+	}
+
 	// Allow motion events while a floating overlay panel is being dragged.
 	// Overlay drags don't set m.Dragging, so without this the motion events
 	// that move the panel are filtered out and the drag never tracks.

@@ -50,6 +50,8 @@ type filePreview struct {
 	Note        string `json:"note"`
 	Page        int    `json:"page"`
 	Words       string `json:"words"`
+	AtMs        int64  `json:"at_ms"`
+	VideoCodec  string `json:"video_codec"`
 }
 
 // minimalPDF is a one page PDF with a correct cross reference table.
@@ -215,6 +217,34 @@ func TestFilePreviewOnAHost(t *testing.T) {
 	if film == "" {
 		t.Logf("no ffmpeg here: the film half is skipped")
 	} else {
+		// A clip with one key frame has none past its start, so the frame must come
+		// from a decode. This was "No frame could be read" before.
+		one := filepath.Join(dir, "one-key.mp4")
+		if b, err := exec.Command("ffmpeg", "-v", "error", "-f", "lavfi", "-i", "testsrc=duration=2:size=160x120:rate=10", "-g", "1000", "-pix_fmt", "yuv420p", one).CombinedOutput(); err != nil {
+			t.Fatalf("make a film with one key frame: %v\n%s", err, b)
+		}
+		var key filePreview
+		far.must("file-preview", map[string]any{"path": "~/work/one-key.mp4", "max_px": 160}, &key)
+		if key.Image == "" {
+			t.Errorf("ASSERTION: a clip with one key frame gave no frame: note %q", key.Note)
+		}
+		// A place in the film, with the facts known: no ffprobe, and it says where.
+		var seek filePreview
+		far.must("file-preview", map[string]any{"path": "~/work/clip.mp4", "max_px": 160, "at_ms": 1500, "duration_known": true}, &seek)
+		if seek.AtMs != 1500 || seek.DurationMs != 0 || seek.Image == "" {
+			t.Errorf("ASSERTION: a seek with the facts known: at %d, duration %d, image %d bytes, note %q", seek.AtMs, seek.DurationMs, len(seek.Image), seek.Note)
+		}
+		// Past the last frame, which starts before the film's end.
+		var last filePreview
+		far.must("file-preview", map[string]any{"path": "~/work/clip.mp4", "max_px": 160, "at_ms": 1995, "duration_known": true}, &last)
+		if last.Image == "" {
+			t.Errorf("ASSERTION: the end of a film gave no frame: note %q", last.Note)
+		}
+		var facts filePreview
+		far.must("file-preview", map[string]any{"path": "~/work/clip.mp4", "no_frame": true}, &facts)
+		if facts.VideoCodec != "h264" || facts.Image != "" || facts.DurationMs == 0 {
+			t.Errorf("ASSERTION: only the facts: codec %q, duration %d, image %d bytes", facts.VideoCodec, facts.DurationMs, len(facts.Image))
+		}
 		var vid filePreview
 		far.must("file-preview", map[string]any{"path": "~/work/clip.mp4", "max_px": 160}, &vid)
 		record["film"] = map[string]any{"kind": vid.Kind, "duration_ms": vid.DurationMs, "image": []int{vid.ImageWidth, vid.ImageHeight}, "note": vid.Note}

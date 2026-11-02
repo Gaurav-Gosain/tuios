@@ -74,6 +74,12 @@ func (m *OS) quickLookDropPages() {
 	ql.pageWant = 0
 	ql.pageSlow = false
 	ql.pageBar = quickLookBarBox{}
+	ql.barDrag = false
+	ql.filmWant = 0
+	ql.stripOn = false
+	ql.strip = [quickLookStripFrames]*composer.Image{}
+	ql.stripFailed = [quickLookStripFrames]bool{}
+	ql.stripPics = nil
 }
 
 // quickLookHeldPage is a page held in memory, or nil.
@@ -174,7 +180,7 @@ func (m *OS) quickLookReadPage(page int) tea.Cmd {
 	return func() tea.Msg {
 		defer cancel()
 		start := time.Now()
-		raw, err := quickLookPageReply(ctx, call, t, session.PreviewPDF{MaxPx: maxPx, Page: page, PagesKnown: true, Words: words})
+		raw, err := quickLookWantReply(ctx, call, t, session.PreviewWant{MaxPx: maxPx, Page: page, PagesKnown: true, Words: words})
 		msg := quickLookPageMsg{target: t, page: page, took: time.Since(start), cancelled: errors.Is(ctx.Err(), context.Canceled)}
 		if msg.cancelled {
 			return msg
@@ -191,22 +197,35 @@ func (m *OS) quickLookReadPage(page int) tea.Cmd {
 	}
 }
 
-// quickLookPageReply asks for a page, on this machine or the one with the file.
-func quickLookPageReply(ctx context.Context, call func(host, verb string, params map[string]any) (json.RawMessage, error), t quickLookTarget, want session.PreviewPDF) (json.RawMessage, error) {
+// quickLookWantReply asks for a page, on this machine or the one with the file.
+func quickLookWantReply(ctx context.Context, call func(host, verb string, params map[string]any) (json.RawMessage, error), t quickLookTarget, want session.PreviewWant) (json.RawMessage, error) {
 	if t.host == "" {
-		out, err := session.PreviewLocalPDF(ctx, t.path, want)
+		out, err := session.PreviewLocalWant(ctx, t.path, want)
 		if err != nil {
 			return nil, err
 		}
 		return json.Marshal(out)
 	}
-	params := map[string]any{"path": t.path, "max_px": want.MaxPx, "page": want.Page}
-	// An older daemon ignores these: it counts the pages and sends the picture.
+	params := map[string]any{"path": t.path, "max_px": want.MaxPx}
+	if want.Page > 0 {
+		params["page"] = want.Page
+	}
+	// An older daemon ignores these. It counts the pages and sends the picture, and
+	// a film's first frame with no at_ms in its answer, which is how it is told.
 	if want.PagesKnown {
 		params["pages_known"] = true
 	}
 	if want.Words {
 		params["words"] = true
+	}
+	if want.Seek {
+		params["at_ms"] = want.AtMs
+	}
+	if want.DurationKnown {
+		params["duration_known"] = true
+	}
+	if want.NoFrame {
+		params["no_frame"] = true
 	}
 	return call(t.host, "file-preview", params)
 }
@@ -252,11 +271,11 @@ func quickLookPagePosition(r *quickLookResult, want int) string {
 	return "P" + s
 }
 
-// quickLookDrawPageBar draws the bar on the last row of the body: the page, a track
-// with a thumb that a click moves, and the last page.
-func quickLookDrawPageBar(c *ckCanvas, pal overlay.Palette, ql *quickLookState, r *quickLookResult, y, w int) {
-	label := ckSeg{t: "Page " + strconv.Itoa(ql.pageWant) + "  ", fg: pal.Fg}
-	end := ckSeg{t: "  " + strconv.Itoa(r.pages), fg: pal.FgMute}
+// quickLookDrawBar draws the bar on the last row of the body: where the file is, a
+// track with a thumb that a click moves, and where the file ends. pos is out of span.
+func quickLookDrawBar(c *ckCanvas, pal overlay.Palette, ql *quickLookState, here, last string, pos, span int64, y, w int) {
+	label := ckSeg{t: here + "  ", fg: pal.Fg}
+	end := ckSeg{t: "  " + last, fg: pal.FgMute}
 	x0 := 1 + ckWidth(label)
 	x1 := w - 1 - ckWidth(end)
 	if x1-x0 < 2 {
@@ -268,23 +287,57 @@ func quickLookDrawPageBar(c *ckCanvas, pal overlay.Palette, ql *quickLookState, 
 	if overlay.UseASCII() {
 		done, thumb, rest = "=", "#", "-"
 	}
-	at := (x1 - x0 - 1) * (ql.pageWant - 1) / (r.pages - 1)
+	at := int(int64(x1-x0-1) * max(min(pos, span), 0) / max(span, 1))
 	c.text(x0, y, x1, ckSeg{t: strings.Repeat(done, at), fg: pal.Accent},
 		ckSeg{t: thumb, fg: pal.AccentBright}, ckSeg{t: strings.Repeat(rest, x1-x0-1-at), fg: pal.FgMute})
 	ql.pageBar = quickLookBarBox{ok: true, x0: x0, x1: x1, row: y}
 }
 
-// quickLookBarClick moves to the page under a click on the page bar. x and y are on
-// the screen. It reports whether the click was on the bar.
+// quickLookBarClick moves to the place under a click on the bar. x and y are on the
+// screen. It reports whether the click was on the bar, and a drag goes on from it.
 func (m *OS) quickLookBarClick(x, y int) bool {
 	ql := &m.quickLook
 	b := ql.pageBar
 	x, y = x-ql.box.X0-1, y-ql.box.Y0-1
-	if !b.ok || !quickLookPaged(ql.res) || y != b.row || x < b.x0 || x >= b.x1 {
+	if !b.ok || !quickLookHasBar(ql.res) || y != b.row || x < b.x0 || x >= b.x1 {
 		return false
 	}
-	span := max(b.x1-b.x0-1, 1)
-	return m.quickLookPageTo(((x-b.x0)*(ql.res.pages-1)+span/2)/span + 1)
+	ql.barDrag = true
+	m.quickLookBarMove(x)
+	return true
+}
+
+// quickLookBarMove moves to the place at column x of the panel's body.
+func (m *OS) quickLookBarMove(x int) {
+	ql := &m.quickLook
+	b := ql.pageBar
+	span := int64(max(b.x1-b.x0-1, 1))
+	at := int64(max(min(x, b.x1-1), b.x0) - b.x0)
+	if quickLookPaged(ql.res) {
+		m.quickLookPageTo(int((at*int64(ql.res.pages-1)+span/2)/span) + 1)
+		return
+	}
+	m.quickLookFilmTo(at * ql.res.durationMs / span)
+}
+
+// QuickLookBarDrag follows the pointer while a press on the bar is held. It reports
+// whether one is. The next read goes to where the pointer is when the last read ends,
+// so a drag runs one read at a time.
+func (m *OS) QuickLookBarDrag(x int) bool {
+	ql := &m.quickLook
+	if !ql.open || !ql.barDrag || !ql.pageBar.ok {
+		return false
+	}
+	m.quickLookBarMove(x - ql.box.X0 - 1)
+	return true
+}
+
+// QuickLookBarRelease ends a drag. It reports whether one was going on.
+func (m *OS) QuickLookBarRelease() bool {
+	ql := &m.quickLook
+	drag := ql.barDrag
+	ql.barDrag = false
+	return drag
 }
 
 // quickLookDrawPageWords draws a page as its words, for a host that cannot draw the

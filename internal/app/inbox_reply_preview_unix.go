@@ -59,6 +59,7 @@ func (m *OS) flushReplyPreviewForFrame() {
 	}
 	if pl, ok := m.quickLookPlacement(); ok && m.replyPixelsReady() {
 		want = append(want, pl)
+		want = m.quickLookStripPlacements(want)
 	}
 	if m.previewResizing() {
 		want = nil

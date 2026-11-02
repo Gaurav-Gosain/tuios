@@ -2006,6 +2006,7 @@ func getDefaultQuickLookKeybinds() map[string][]string {
 		"half_up":   {"ctrl+u", "pgup"},
 		"go_inside": {"tab"},
 		"full_size": {"f"},
+		"filmstrip": {"t"},
 	}
 }
 
@@ -2014,8 +2015,8 @@ func getDefaultQuickLookKeybinds() map[string][]string {
 // so d here cannot reach the rail's delete.
 func getDefaultQuickLookInsideKeybinds() map[string][]string {
 	return map[string][]string{
-		"line_down": {"j", "down"},
-		"line_up":   {"k", "up"},
+		"line_down": {"j", "down", "l", "right"},
+		"line_up":   {"k", "up", "h", "left"},
 		"half_down": {"d", "ctrl+d", "J", "pgdown"},
 		"half_up":   {"u", "ctrl+u", "K", "pgup"},
 		"start":     {"g", "home"},
@@ -2027,6 +2028,7 @@ func getDefaultQuickLookInsideKeybinds() map[string][]string {
 		"find_prev": {"N"},
 		"go_to":     {":"},
 		"wrap":      {"w"},
+		"filmstrip": {"t"},
 	}
 }
 
