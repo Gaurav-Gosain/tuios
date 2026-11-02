@@ -1,6 +1,6 @@
 package text
 
-import "tuios.dev/sketch"
+import sketch "tuios.dev/sketch/internal/engine"
 
 // Mindmaps: a tree with the root at the top and each branch drawn with box
 // characters, as tree(1) draws folders. Each branch from the root takes a

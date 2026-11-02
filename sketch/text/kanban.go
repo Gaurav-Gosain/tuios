@@ -4,7 +4,7 @@ import (
 	"strconv"
 	"strings"
 
-	"tuios.dev/sketch"
+	sketch "tuios.dev/sketch/internal/engine"
 )
 
 // A kanban board is drawn from its lists: each column is a frame with its name

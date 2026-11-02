@@ -6,7 +6,7 @@ import (
 	"math"
 	"strings"
 
-	"tuios.dev/sketch"
+	sketch "tuios.dev/sketch/internal/engine"
 )
 
 // A Scene is a parsed drawing, ready to draw many times and to animate to and

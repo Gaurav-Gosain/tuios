@@ -17,7 +17,7 @@ import (
 	"errors"
 	"strings"
 
-	"tuios.dev/sketch"
+	sketch "tuios.dev/sketch/internal/engine"
 )
 
 // ErrUnsupported is returned for a diagram type with no text drawing.

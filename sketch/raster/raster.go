@@ -18,7 +18,7 @@ import (
 
 	"golang.org/x/image/vector"
 
-	"tuios.dev/sketch"
+	sketch "tuios.dev/sketch/internal/engine"
 )
 
 // Options say how to draw.

@@ -5,7 +5,7 @@
 
 // Package sketch draws Mermaid diagrams as SVG. It is a Go port of pele
 // (github.com/obsidianmd/pele), which draws them without a browser.
-package sketch
+package engine
 
 import (
 	"fmt"
@@ -76,8 +76,8 @@ type LinkInfo = types.LinkInfo
 
 var diagrams = map[types.DiagramType]*types.Diagram{}
 
-// register makes diagram types available to Render and Parse.
-func register(list ...*types.Diagram) {
+// Register makes diagram types available to Render and Parse.
+func Register(list ...*types.Diagram) {
 	for _, d := range list {
 		diagrams[d.Type] = d
 	}

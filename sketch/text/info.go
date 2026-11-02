@@ -3,7 +3,7 @@ package text
 import (
 	"strings"
 
-	"tuios.dev/sketch"
+	sketch "tuios.dev/sketch/internal/engine"
 )
 
 // An info diagram is its line of text, under its title when it has one. A title wider than the

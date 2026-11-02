@@ -7,7 +7,7 @@
 // palettes: lines in the text colour, the alternate surface equal to the
 // border, the accent the blue series colour and critical the red one.
 
-package sketch
+package engine
 
 import (
 	"image/color"

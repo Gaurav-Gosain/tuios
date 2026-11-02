@@ -3,7 +3,7 @@
 // RE_DIRECTIVE uses a lookahead, which Go's regexp lacks: matchDirective is a
 // hand-written matcher that takes the same text.
 
-package sketch
+package engine
 
 import (
 	"encoding/json"

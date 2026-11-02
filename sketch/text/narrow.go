@@ -1,6 +1,6 @@
 package text
 
-import "tuios.dev/sketch"
+import sketch "tuios.dev/sketch/internal/engine"
 
 // narrower draws a graph with draw, and when that is too wide for opt.Cols, asks
 // for layouts narrower than the one Draw asked for, so that a graph that runs

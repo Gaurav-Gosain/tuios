@@ -1,6 +1,6 @@
 package text
 
-import "tuios.dev/sketch"
+import sketch "tuios.dev/sketch/internal/engine"
 
 // drawC4 draws a C4 diagram as a flowchart: people and systems as boxes, boundaries as
 // groups, relations as routed lines. When it does not fit, it asks the layout for ever

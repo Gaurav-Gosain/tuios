@@ -1,4 +1,4 @@
-package sketch
+package engine
 
 import (
 	"regexp"

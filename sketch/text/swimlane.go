@@ -4,7 +4,7 @@ import (
 	"math"
 	"slices"
 
-	"tuios.dev/sketch"
+	sketch "tuios.dev/sketch/internal/engine"
 )
 
 // drawSwimlane draws a swimlane diagram as a flowchart whose lanes are frames.

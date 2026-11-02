@@ -1,6 +1,6 @@
 // Ported from pele tests/render/mermaid-type.test.ts at 8aff183be57021b533f319a29341a529be934b08.
 
-package sketch
+package engine
 
 import (
 	"encoding/json"
@@ -11,7 +11,7 @@ import (
 )
 
 func TestMermaidType(t *testing.T) {
-	data, err := os.ReadFile("testdata/corpus/railroad-docs.json")
+	data, err := os.ReadFile("../../testdata/corpus/railroad-docs.json")
 	if err != nil {
 		t.Fatal(err)
 	}

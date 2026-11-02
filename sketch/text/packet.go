@@ -5,7 +5,7 @@ import (
 	"strconv"
 	"strings"
 
-	"tuios.dev/sketch"
+	sketch "tuios.dev/sketch/internal/engine"
 )
 
 // A packet is drawn as its rows of bit fields: each field a box as wide as its bits, the

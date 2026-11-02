@@ -3,7 +3,7 @@ package text
 import (
 	"math"
 
-	"tuios.dev/sketch"
+	sketch "tuios.dev/sketch/internal/engine"
 )
 
 func drawSequence(l *sketch.Layout, opt Options) (*canvas, error) {

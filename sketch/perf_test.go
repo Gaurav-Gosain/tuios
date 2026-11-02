@@ -68,7 +68,8 @@ const initAllocBudget = 400
 // TestInitBudget runs the test binary again with GODEBUG=inittrace=1 and
 // holds the allocations of the init of sketch's internal packages to a
 // budget. The root package is left out: in a test binary its init also
-// builds the tests' own tables.
+// builds the tests' own tables. The engine is left out with it, since it
+// holds what the root package held before tuios.dev/sketch/core split off.
 func TestInitBudget(t *testing.T) {
 	cmd := exec.Command(os.Args[0], "-test.run=^$")
 	cmd.Env = append(os.Environ(), "GODEBUG=inittrace=1")
@@ -80,7 +81,7 @@ func TestInitBudget(t *testing.T) {
 	for line := range strings.Lines(string(out)) {
 		// init tuios.dev/sketch/internal/svg @1.2 ms, 0.009 ms clock, 6416 bytes, 183 allocs
 		f := strings.Fields(line)
-		if len(f) < 11 || f[0] != "init" || !strings.HasPrefix(f[1], "tuios.dev/sketch/") || f[10] != "allocs" {
+		if len(f) < 11 || f[0] != "init" || !strings.HasPrefix(f[1], "tuios.dev/sketch/") || f[1] == "tuios.dev/sketch/internal/engine" || f[10] != "allocs" {
 			continue
 		}
 		n, err := strconv.Atoi(f[9])

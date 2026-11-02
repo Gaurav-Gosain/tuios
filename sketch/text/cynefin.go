@@ -4,7 +4,7 @@ import (
 	"strconv"
 	"strings"
 
-	"tuios.dev/sketch"
+	sketch "tuios.dev/sketch/internal/engine"
 	"tuios.dev/sketch/internal/types"
 )
 

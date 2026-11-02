@@ -4,7 +4,7 @@ import (
 	"slices"
 	"strings"
 
-	"tuios.dev/sketch"
+	sketch "tuios.dev/sketch/internal/engine"
 )
 
 // A git graph is drawn the way git log --graph draws one: the history runs
