@@ -265,13 +265,16 @@ the panes and shows:
 
 - code with syntax colours and line numbers,
 - Markdown as formatted text,
-- a picture, a PDF page or a film frame,
+- a picture, a page of a PDF or a film frame,
 - the names in a folder.
 
 A file that is not text shows its type and size. A long text opens at once, and
 tuios reads more of it as you move. Line numbers after a jump to the end are
 estimates, and the preview says so. A search or a count stops after 5 seconds
 and says how far it went. Press `n` to go on.
+
+A PDF shows one page and a bar with the page number. Click the bar to go to a
+page. At 16 colours the preview shows the words of the page.
 
 `Up` and `Down` (or `j` and `k`) move the cursor to the next row, and the preview
 shows that row. `Space` or `Esc` closes the preview. A click outside it closes
@@ -282,9 +285,9 @@ other keys go to the sidebar.
 
 | Key | Action |
 | --- | --- |
-| `J` `K` | Move half a page |
+| `J` `K` | Move half a page, or one page of a PDF |
 | `Ctrl+D` `Ctrl+U` | Move half a page |
-| Mouse wheel over the preview | Move 3 lines |
+| Mouse wheel over the preview | Move 3 lines, or one page of a PDF |
 | `Tab` | Move the keyboard inside the file |
 | `f` | Fill the area of the panes, or go back |
 
@@ -292,12 +295,12 @@ Inside the file, every key acts on the preview:
 
 | Key | Action |
 | --- | --- |
-| `j` `k` | Move one line |
+| `j` `k` | Move one line, or one page of a PDF |
 | `d` `u` | Move half a page |
-| `g` `G` | Go to the start or the end |
+| `g` `G` | Go to the start or the end, or the first or last page |
 | `/` | Search in a text. Lower case ignores case |
 | `n` `N` | Go to the next match, or the one before |
-| `:` | Go to a line number |
+| `:` | Go to a line number, or a page of a PDF |
 | `w` | Wrap long lines, or cut them |
 | `f` | Fill the area of the panes, or go back |
 | `Esc` or `Tab` | Move the keyboard back to the list |

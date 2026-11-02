@@ -62,6 +62,7 @@ const (
 	previewImageMax    = 64 << 20
 	previewImageDimMax = 10000
 	previewPDFBytesMax = 8 << 20
+	previewWordsMax    = 256 << 10
 	previewSVGMax      = 4 << 20
 	previewToolTimeout = 20 * time.Second
 	// previewDecodeMax bounds the memory one image's decode and scale may
@@ -89,15 +90,17 @@ var (
 // verbFilePreview makes the preview of one file on this machine.
 func (d *Daemon) verbFilePreview(cs *connState, params json.RawMessage) (any, *verbError) {
 	var p struct {
-		Path   string `json:"path"`
-		MaxPx  int    `json:"max_px"`
-		Page   int    `json:"page"`
-		Offset *int64 `json:"offset"`
-		Limit  int    `json:"limit"`
-		Find   string `json:"find"`
-		From   int64  `json:"from"`
-		Back   bool   `json:"back"`
-		Line   int64  `json:"line"`
+		Path       string `json:"path"`
+		MaxPx      int    `json:"max_px"`
+		Page       int    `json:"page"`
+		PagesKnown bool   `json:"pages_known"`
+		Words      bool   `json:"words"`
+		Offset     *int64 `json:"offset"`
+		Limit      int    `json:"limit"`
+		Find       string `json:"find"`
+		From       int64  `json:"from"`
+		Back       bool   `json:"back"`
+		Line       int64  `json:"line"`
 	}
 	if verr := decodeParams(params, &p); verr != nil {
 		return nil, verr
@@ -141,7 +144,7 @@ func (d *Daemon) verbFilePreview(cs *connState, params json.RawMessage) (any, *v
 		previewWindow(f, fi.Size(), *p.Offset, p.Limit, out)
 		return out, nil
 	}
-	return previewOpened(ctx, f, fi, err, path, maxPx, page), nil
+	return previewOpened(ctx, f, fi, err, path, maxPx, PreviewPDF{Page: page, PagesKnown: p.PagesKnown, Words: p.Words}), nil
 }
 
 // PreviewLocalFile makes the preview of a file on this machine, in this
@@ -159,7 +162,34 @@ func PreviewLocalFile(ctx context.Context, path string, maxPx int) (map[string]a
 	}
 	ctx, cancel := context.WithTimeout(ctx, previewToolTimeout)
 	defer cancel()
-	return previewOpened(ctx, f, fi, err, path, maxPx, 1), nil
+	return previewOpened(ctx, f, fi, err, path, maxPx, PreviewPDF{Page: 1}), nil
+}
+
+// PreviewPDF is what a preview asks of a PDF: a page, and how. PagesKnown leaves
+// out the count, which takes a run of pdfinfo. Words sends the page's words in place
+// of its picture.
+type PreviewPDF struct {
+	MaxPx      int
+	Page       int
+	PagesKnown bool
+	Words      bool
+}
+
+// PreviewLocalPDF is PreviewLocalFile for one page of a PDF. A cancelled ctx kills
+// the tool that is running.
+func PreviewLocalPDF(ctx context.Context, path string, want PreviewPDF) (map[string]any, error) {
+	maxPx := want.MaxPx
+	if maxPx <= 0 {
+		maxPx = previewMaxPx
+	}
+	maxPx = min(maxPx, previewMaxPxLimit)
+	f, fi, err := openRegular(path)
+	if err != nil && fi == nil {
+		return nil, err
+	}
+	ctx, cancel := context.WithTimeout(ctx, previewToolTimeout)
+	defer cancel()
+	return previewOpened(ctx, f, fi, err, path, maxPx, want), nil
 }
 
 // PreviewLocalWindow is a window of a text file on this machine, as file-preview
@@ -209,7 +239,7 @@ func PreviewShowsPicture(name string) bool {
 // previewOpened is the preview of the file f, opened through openRegular.
 // openErr is openRegular's refusal of a file that is not regular, whose
 // fi then says what it is; f is nil then. It closes f.
-func previewOpened(ctx context.Context, f *os.File, fi fs.FileInfo, openErr error, path string, maxPx, page int) map[string]any {
+func previewOpened(ctx context.Context, f *os.File, fi fs.FileInfo, openErr error, path string, maxPx int, pdf PreviewPDF) map[string]any {
 	out := map[string]any{
 		"path":  path,
 		"name":  filepath.Base(path),
@@ -248,7 +278,7 @@ func previewOpened(ctx context.Context, f *os.File, fi fs.FileInfo, openErr erro
 		describeBinary(f, out, "The drawing is too large to show.")
 		return out
 	case ext == ".pdf":
-		previewPDF(ctx, f, fi.Size(), maxPx, page, out)
+		previewPDF(ctx, f, fi.Size(), maxPx, pdf, out)
 		return out
 	case previewVideoExt[ext]:
 		previewVideo(ctx, f, maxPx, out)
@@ -528,12 +558,27 @@ func encodePreview(img image.Image, photo bool) ([]byte, string, error) {
 }
 
 // previewPDF sends one page as an image, or the file for a client to draw.
-func previewPDF(ctx context.Context, f *os.File, size int64, maxPx, page int, out map[string]any) {
+func previewPDF(ctx context.Context, f *os.File, size int64, maxPx int, want PreviewPDF, out map[string]any) {
 	out["kind"] = "pdf"
-	if pages := pdfPages(ctx, f); pages > 0 {
-		out["pages"] = pages
+	page := max(want.Page, 1)
+	if !want.PagesKnown {
+		if pages := pdfPages(ctx, f); pages > 0 {
+			out["pages"] = pages
+		}
 	}
 	out["page"] = page
+	if want.Words {
+		b, err := previewTool(ctx, f, "pdftotext", "-f", strconv.Itoa(page), "-l", strconv.Itoa(page), "-layout", fdArg, "-")
+		switch {
+		case err == nil:
+			out["words"] = strings.ToValidUTF8(string(b[:min(len(b), previewWordsMax)]), "")
+		case previewToolMissing("pdftotext"):
+			out["no_tool"] = "pdftotext"
+		default:
+			out["note"] = "tuios could not read this page."
+		}
+		return
+	}
 	if png1, err := previewTool(ctx, f, "pdftoppm", "-png", "-singlefile", "-f", strconv.Itoa(page), "-l", strconv.Itoa(page),
 		"-scale-to", strconv.Itoa(maxPx), fdArg); err == nil && len(png1) > 0 {
 		if cfg, err := png.DecodeConfig(bytes.NewReader(png1)); err == nil {
@@ -544,6 +589,13 @@ func previewPDF(ctx context.Context, f *os.File, size int64, maxPx, page int, ou
 		out["image"] = base64.StdEncoding.EncodeToString(png1)
 		return
 	}
+	if previewToolMissing("pdftoppm") {
+		out["no_tool"] = "pdftoppm"
+	} else if page > 1 || want.PagesKnown {
+		// The file has been drawn before, so this page is what failed.
+		out["note"] = "tuios could not draw this page."
+		return
+	}
 	if size <= previewPDFBytesMax {
 		if b, err := readAllOf(f, previewPDFBytesMax); err == nil {
 			out["pdf"] = base64.StdEncoding.EncodeToString(b)
@@ -551,6 +603,16 @@ func previewPDF(ctx context.Context, f *os.File, size int64, maxPx, page int, ou
 		}
 	}
 	out["note"] = "This machine has no pdftoppm, and the file is too large to send for a preview."
+}
+
+// previewToolMissing reports whether a tool that could run on this system is not
+// installed.
+func previewToolMissing(tool string) bool {
+	if !previewToolsReadFD {
+		return false
+	}
+	_, err := exec.LookPath(tool)
+	return err != nil
 }
 
 // pdfPages counts a PDF's pages with pdfinfo, 0 when it cannot.
@@ -811,6 +873,8 @@ func previewVerbs() map[string]verbEntry {
 				{Name: "path", Type: "string", Required: true, Description: "The file. An absolute path, or one that starts with ~."},
 				{Name: "max_px", Type: "int", Description: "The longest side of an image, at most 4096.", Default: "1600"},
 				{Name: "page", Type: "int", Description: "The PDF page.", Default: "1"},
+				{Name: "pages_known", Type: "bool", Description: "The caller knows the page count, so pdfinfo does not run.", Default: "false"},
+				{Name: "words", Type: "bool", Description: "Send the PDF page's words from pdftotext in place of its picture.", Default: "false"},
 				{Name: "offset", Type: "int", Description: "Send a window of a text file from this byte, whole lines only, in place of the preview."},
 				{Name: "limit", Type: "int", Description: "The most bytes in that window, at most 1 MiB.", Default: "262144"},
 				{Name: "find", Type: "string", Description: "Look for this text in a text file, in place of the preview. Lower case ignores case."},
@@ -832,6 +896,8 @@ func previewVerbs() map[string]verbEntry {
 				{Name: "next_offset", Type: "int", Description: "A window: the byte the next window starts at."},
 				{Name: "pdf", Type: "string", Description: "pdf, when this machine cannot draw the page: the file, base64, at most 8 MiB."},
 				{Name: "pages", Type: "int", Description: "pdf: the page count, when pdfinfo is there."},
+				{Name: "words", Type: "string", Description: "pdf, when asked for: the page's words."},
+				{Name: "no_tool", Type: "string", Description: "pdf: the tool this machine needs and does not have."},
 				{Name: "duration_ms", Type: "int", Description: "video: the length."},
 				{Name: "note", Type: "string", Description: "Why there is no picture, in words a person can act on."},
 				{Name: "size", Type: "int", Description: "The file's size."},

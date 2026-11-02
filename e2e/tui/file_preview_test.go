@@ -48,6 +48,8 @@ type filePreview struct {
 	Pages       int    `json:"pages"`
 	DurationMs  int64  `json:"duration_ms"`
 	Note        string `json:"note"`
+	Page        int    `json:"page"`
+	Words       string `json:"words"`
 }
 
 // minimalPDF is a one page PDF with a correct cross reference table.
@@ -59,6 +61,40 @@ func minimalPDF() []byte {
 	}
 	stream := "0 0 1 rg 20 20 160 60 re f"
 	objs = append(objs, fmt.Sprintf("<< /Length %d >>\nstream\n%s\nendstream", len(stream), stream))
+	var b bytes.Buffer
+	b.WriteString("%PDF-1.4\n")
+	offsets := make([]int, len(objs))
+	for i, o := range objs {
+		offsets[i] = b.Len()
+		fmt.Fprintf(&b, "%d 0 obj\n%s\nendobj\n", i+1, o)
+	}
+	xref := b.Len()
+	fmt.Fprintf(&b, "xref\n0 %d\n0000000000 65535 f \n", len(objs)+1)
+	for _, off := range offsets {
+		fmt.Fprintf(&b, "%010d 00000 n \n", off)
+	}
+	fmt.Fprintf(&b, "trailer\n<< /Size %d /Root 1 0 R >>\nstartxref\n%d\n%%%%EOF\n", len(objs)+1, xref)
+	return b.Bytes()
+}
+
+// pagedPDF is a PDF of n pages. Each page has its own colour and its own words, so
+// a test can tell which page it was sent.
+func pagedPDF(n int) []byte {
+	kids := make([]string, n)
+	for i := range n {
+		kids[i] = fmt.Sprintf("%d 0 R", 4+2*i)
+	}
+	objs := []string{
+		"<< /Type /Catalog /Pages 2 0 R >>",
+		fmt.Sprintf("<< /Type /Pages /Kids [%s] /Count %d >>", strings.Join(kids, " "), n),
+		"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
+	}
+	for i := range n {
+		stream := fmt.Sprintf("0 0 %.2f rg 20 20 160 40 re f 0 0 0 rg BT /F1 12 Tf 20 75 Td (words of leaf %d) Tj ET", float64(i+1)/float64(n), i+1)
+		objs = append(objs,
+			fmt.Sprintf("<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 100] /Resources << /Font << /F1 3 0 R >> >> /Contents %d 0 R >>", 5+2*i),
+			fmt.Sprintf("<< /Length %d >>\nstream\n%s\nendstream", len(stream), stream))
+	}
 	var b bytes.Buffer
 	b.WriteString("%PDF-1.4\n")
 	offsets := make([]int, len(objs))
@@ -99,6 +135,7 @@ func TestFilePreviewOnAHost(t *testing.T) {
 	}
 	writeFarFile(t, filepath.Join(dir, "wide.png"), pngBuf.String(), 0o644)
 	writeFarFile(t, filepath.Join(dir, "page.pdf"), string(minimalPDF()), 0o644)
+	writeFarFile(t, filepath.Join(dir, "book.pdf"), string(pagedPDF(3)), 0o644)
 	film := ""
 	if ff, err := exec.LookPath("ffmpeg"); err == nil {
 		film = filepath.Join(dir, "clip.mp4")
@@ -160,6 +197,19 @@ func TestFilePreviewOnAHost(t *testing.T) {
 		}
 		if _, err := exec.LookPath("pdfinfo"); err == nil && pdf.Pages != 1 {
 			t.Errorf("ASSERTION: pdfinfo did not count the page of the open file: %d", pdf.Pages)
+		}
+		// A later page with the count known: no pdfinfo, and the page asked for.
+		var page filePreview
+		far.must("file-preview", map[string]any{"path": "~/work/book.pdf", "max_px": 400, "page": 2, "pages_known": true}, &page)
+		if page.Page != 2 || page.Pages != 0 || page.Image == "" {
+			t.Errorf("ASSERTION: a page with the count known: page %d, pages %d, image %d bytes, note %q", page.Page, page.Pages, len(page.Image), page.Note)
+		}
+		if _, err := exec.LookPath("pdftotext"); err == nil {
+			var words filePreview
+			far.must("file-preview", map[string]any{"path": "~/work/book.pdf", "page": 3, "pages_known": true, "words": true}, &words)
+			if !strings.Contains(words.Words, "words of leaf 3") || words.Image != "" {
+				t.Errorf("ASSERTION: the words of page 3 did not come from the open file: %q, image %d bytes", words.Words, len(words.Image))
+			}
 		}
 	}
 	if film == "" {

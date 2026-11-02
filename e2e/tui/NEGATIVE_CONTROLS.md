@@ -11830,3 +11830,19 @@ A replay of the captured stream into the same kitty, with one change per run, fo
 | Control: what was cut | Where it fails | Verdict |
 | --- | --- | --- |
 | The empty write | `TestRailQuickLookKittyPicture` ("no empty write followed the picture") | **caught** |
+
+## Quick look turns the pages of a PDF
+
+| Control: what was cut | Where it fails | Verdict |
+| --- | --- | --- |
+| The read ahead | "the next page was not held in memory" | **caught** |
+| The read of the page asked for | "G did not go to the last page" | **caught** |
+| A held page is shown | "the next page was not held in memory" | **caught** |
+| A click on the bar | "a click on the bar did not turn the page" | **caught** |
+| The cache is freed on close | "a page that cannot be read did not say why" | **caught** |
+| A failed read stays a page | "a file with no read permission did not say so" | **caught** |
+| Words at 16 colours | "J did not show the words of the next page" | **caught** |
+| `pages_known` | `TestFilePreviewOnAHost` ("a page with the count known") | **caught** |
+| `page` over the link | "J did not turn the page over the link", the colour of page 1 | **caught** |
+
+The first versions of the last group missed two of these: the far test read only the number the keys set, and the failed read was not reached. Both tests were changed, and the runs above are on the changed tests.

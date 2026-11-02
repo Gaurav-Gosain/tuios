@@ -1967,6 +1967,143 @@ func TestRailQuickLookKittyPicture(t *testing.T) {
 	alive(t, term, "after the kitty picture")
 }
 
+// quickLookPDFStart lists a PDF of six pages in the rail, with the keyboard on it.
+func quickLookPDFStart(t *testing.T, env []string, out *lockedBuffer) (*tuitest.Terminal, string) {
+	t.Helper()
+	term, dir := quickLookListed(t, env, out)
+	path := filepath.Join(dir, "zzbook.pdf")
+	if err := os.WriteFile(path, pagedPDF(6), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	railLists(t, term, "the rail did not list the new PDF", []string{"zzbook.pdf"}, nil)
+	quickLookFocusRail(t, term, "zzbook.pdf")
+	return term, path
+}
+
+// quickLookPDFPage waits for a page of pagedPDF: its number in the panel, and its
+// own colour in the picture on the host.
+func quickLookPDFPage(t *testing.T, term *tuitest.Terminal, out *lockedBuffer, page, pages int, why string) {
+	t.Helper()
+	railLists(t, term, why, []string{fmt.Sprintf("Page %d of %d", page, pages)}, []string{"Reading"})
+	var ink color.Color
+	blue := uint32(page) * 0xffff / uint32(pages)
+	if err := term.WaitFor(func(tuitest.Screen) bool {
+		pics := hostPictures(t, []byte(out.String()))
+		if len(pics) != 1 {
+			return false
+		}
+		b := pics[0].Pixels.Bounds()
+		ink = pics[0].Pixels.At(b.Min.X+b.Dx()/2, b.Min.Y+b.Dy()*7/10)
+		_, _, got, _ := ink.RGBA()
+		return max(got, blue)-min(got, blue) < 0x800
+	}, uiTimeout); err != nil {
+		t.Fatalf("ASSERTION: %s: the picture on the host is not page %d, its colour is %v: %v", why, page, ink, err)
+	}
+}
+
+// TestQuickLookTurnsPDFPages moves through a PDF of six pages: J and K, the wheel,
+// a click on the bar, then inside the file j and k, g and G, a held key, and : for a
+// page. With the file emptied, the next page still shows from memory, and the page
+// after it says what happened.
+//
+// How this could pass wrongly: the words "Page 2 of 6" come from the keys, and a
+// picture could stay behind them. So each page has its own colour, and the test
+// reads the colour from the picture on the host.
+func TestQuickLookTurnsPDFPages(t *testing.T) {
+	if _, err := exec.LookPath("pdftoppm"); err != nil {
+		t.Skip("no pdftoppm here")
+	}
+	out := &lockedBuffer{}
+	term, path := quickLookPDFStart(t, nil, out)
+	shows := func(page int, why string) { quickLookPDFPage(t, term, out, page, 6, why) }
+
+	sendKeys(t, term, " ")
+	railLists(t, term, "space did not show the PDF", []string{"zzbook.pdf ", "PDF", "J K page", "tab go inside"}, nil)
+	shows(1, "the first page")
+	sendKeys(t, term, "J")
+	shows(2, "J did not turn the page")
+	saveCockpitFrames(t, term, "quick-look-pdf-page", hostPictures(t, []byte(out.String()))...)
+	sendKeys(t, term, "K")
+	shows(1, "K did not turn the page back")
+	col, row, ok := findOnGrid(term.Screen(), "zzbook.pdf ")
+	if !ok {
+		t.Fatalf("no panel:\n%s", term.Snapshot())
+	}
+	wheelAt(t, term, col+20, row+10, tuitest.MouseWheelDown, 1)
+	shows(2, "the wheel did not turn the page")
+	wheelAt(t, term, col+20, row+10, tuitest.MouseWheelUp, 1)
+	shows(1, "the wheel did not turn the page back")
+
+	// A click on the bar goes to the page under it, and the preview stays open.
+	col, row, ok = findOnGrid(term.Screen(), "Page 1  ")
+	if !ok {
+		t.Fatalf("no bar:\n%s", term.Snapshot())
+	}
+	mouseClick(t, term, col+50, row, tuitest.MouseLeft, 0)
+	railLists(t, term, "a click on the bar did not turn the page", []string{"zzbook.pdf "}, []string{"Page 1 of 6"})
+
+	// Inside: plain keys turn pages, and : goes to one.
+	sendKeys(t, term, tuitest.Tab, "G")
+	shows(6, "G did not go to the last page")
+	sendKeys(t, term, "j")
+	shows(6, "j went past the last page")
+	sendKeys(t, term, "g")
+	shows(1, "g did not go to the first page")
+	sendKeys(t, term, "j", "j", "j", "j")
+	shows(5, "a held key did not end on its page")
+	sendKeys(t, term, ":", "4", tuitest.Enter)
+	shows(4, ": did not go to the page")
+	sendKeys(t, term, ":", "99", tuitest.Enter)
+	railLists(t, term, "a page past the end did not say how many there are", []string{"The file has 6 pages.", "Page 4 of 6"}, nil)
+	saveCockpitFrames(t, term, "quick-look-pdf-past-end", hostPictures(t, []byte(out.String()))...)
+
+	// The page next to the one shown is read ahead, so it shows with the file empty.
+	// Closing lets go of the pages, so only the one read ahead now is held.
+	sendKeys(t, term, " ")
+	railLists(t, term, "space did not close the preview", nil, []string{"Page 4 of 6"})
+	sendKeys(t, term, " ")
+	shows(1, "the preview did not open on the first page again")
+	time.Sleep(2 * time.Second) // nothing on the screen says the read ahead ended
+	// Empty, not removed: a removed file takes its row and the preview with it.
+	if err := os.Truncate(path, 0); err != nil {
+		t.Fatal(err)
+	}
+	sendKeys(t, term, "J")
+	shows(2, "the next page was not held in memory")
+	sendKeys(t, term, "J")
+	railLists(t, term, "a page that cannot be read did not say why", []string{"Page 3 of 6", "tuios could not draw this page."}, []string{"Reading"})
+	sendKeys(t, term, "K")
+	shows(2, "a page that cannot be read stopped the keys")
+
+	// A read that fails before any tool runs is still a page, and K still works.
+	if os.Geteuid() != 0 {
+		if err := os.Chmod(path, 0); err != nil {
+			t.Fatal(err)
+		}
+		sendKeys(t, term, "J", "J", "J")
+		railLists(t, term, "a file with no read permission did not say so", []string{"Page 5 of 6", "no permission"}, []string{"Reading"})
+		sendKeys(t, term, "K")
+		railLists(t, term, "a failed read stopped the keys", []string{"Page 4 of 6"}, []string{"Page 5 of 6", "Reading"})
+	}
+	alive(t, term, "after turning pages")
+}
+
+// TestQuickLookPDFWordsAt16Colours is a PDF on a host that cannot draw the picture:
+// the panel shows the words of the page, and J turns to the next page's words.
+func TestQuickLookPDFWordsAt16Colours(t *testing.T) {
+	for _, tool := range []string{"pdftotext", "pdfinfo"} {
+		if _, err := exec.LookPath(tool); err != nil {
+			t.Skip("no " + tool + " here")
+		}
+	}
+	term, _ := quickLookPDFStart(t, []string{"TUIOS_KITTY_GRAPHICS=0", "TERM=xterm", "COLORTERM="}, nil)
+	sendKeys(t, term, " ")
+	railLists(t, term, "the words of the first page did not show", []string{"Page 1 of 6", "words of leaf 1"}, []string{"cannot draw"})
+	sendKeys(t, term, "J")
+	railLists(t, term, "J did not show the words of the next page", []string{"Page 2 of 6", "words of leaf 2"}, []string{"words of leaf 1", "Reading"})
+	saveCockpitFrames(t, term, "quick-look-pdf-words-16")
+}
+
 // Kitty commands for the pictures the previews send: an upload, a free (the
 // uppercase delete, which drops the image data) and an unplace (the lowercase
 // one, which keeps it).

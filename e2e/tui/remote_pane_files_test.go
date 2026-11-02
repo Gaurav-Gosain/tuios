@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -331,11 +332,15 @@ func TestQuickLookOnAFarFile(t *testing.T) {
 	if err := os.Link(filepath.Join(top, "linked.txt"), filepath.Join(top, "other-name.txt")); err != nil {
 		t.Fatal(err)
 	}
+	if err := os.WriteFile(filepath.Join(top, "zbook.pdf"), pagedPDF(3), 0o600); err != nil {
+		t.Fatal(err)
+	}
 
 	if out, err := tuiosCLI(t, remote, "new", "far-shell", "--detach"); err != nil {
 		t.Fatalf("create the far session: %v\n%s", err, out)
 	}
-	term := startIn(t, base, startOpts{args: []string{"new", "home"}, env: env, cols: 140, rows: 40})
+	stream := &lockedBuffer{}
+	term := startIn(t, base, startOpts{args: []string{"new", "home"}, env: env, cols: 140, rows: 40, out: stream})
 	waitBoot(t, term)
 	waitForHostListing(t, base, func(s string) bool {
 		return containsAll(s, "build", "up")
@@ -384,5 +389,23 @@ func TestQuickLookOnAFarFile(t *testing.T) {
 	railLists(t, term, "go to a line did not work over the link", []string{"row 1234 x", "on build"}, nil)
 	sendKeys(t, term, " ")
 	railLists(t, term, "space did not close the far preview", nil, []string{"on build"})
+
+	// A PDF on build turns its pages over the link.
+	if _, err := exec.LookPath("pdftoppm"); err == nil {
+		col, row, ok = findOnGrid(term.Screen(), "zbook.pdf")
+		if !ok {
+			t.Fatalf("no zbook.pdf row:\n%s", term.Snapshot())
+		}
+		mouseClick(t, term, col, row, tuitest.MouseLeft, 0)
+		clickNoteGone(t, term)
+		sendKeys(t, term, " ")
+		railLists(t, term, "space did not show the far PDF", []string{"zbook.pdf ", "on build", "Page 1 of 3"}, nil)
+		quickLookPDFPage(t, term, stream, 1, 3, "the far PDF's first page")
+		sendKeys(t, term, "J")
+		quickLookPDFPage(t, term, stream, 2, 3, "J did not turn the page over the link")
+		saveCockpitFrames(t, term, "quick-look-far-pdf", hostPictures(t, []byte(stream.String()))...)
+		sendKeys(t, term, " ")
+		railLists(t, term, "space did not close the far preview", nil, []string{"on build"})
+	}
 	alive(t, term, "after quick look on a far file")
 }

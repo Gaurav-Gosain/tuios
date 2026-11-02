@@ -39,7 +39,9 @@ import (
 // Tab moves the keyboard inside the file, where the scope takes every key and
 // plain keys act on the file, so d there cannot reach the rail's delete. esc or
 // Tab comes back. f fills the area of the panes. Inside a text, / searches, n and
-// N go on, : goes to a line, and w wraps long lines.
+// N go on, : goes to a line, and w wraps long lines. In a PDF, J and K and the wheel
+// turn the page, : goes to a page, and a click on the bar goes there. See
+// quicklook_pages.go.
 //
 // The files menu's Preview is the same preview with a way in from anywhere: it
 // gives the rail the keyboard, moves the cursor to the row, and closing gives
@@ -48,7 +50,7 @@ import (
 // The content comes from the machine the file is on. A file of a listing on
 // another machine goes to that machine's file-preview verb over the link,
 // which reads it there and sends back the small result: 256 KiB of a text, an
-// image scaled down, the first page of a PDF, a frame of a film.
+// image scaled down, one page of a PDF, a frame of a film.
 // A file on this machine goes through the same code in this process
 // (session.PreviewLocalFile), so a client with no daemon has quick look too.
 // A folder is read the way the rail reads one (readListing).
@@ -56,7 +58,8 @@ import (
 // What it draws: code highlighted by internal/diffview, Markdown laid out by
 // the Inbox's renderer, a picture through the reply previews' pipeline (kitty
 // graphics where the host has them, block glyphs from shot/mosaic where it
-// does not, a line of words at 16 colours), and for anything else its type
+// does not, a line of words at 16 colours, or a PDF page's own words there), and for
+// anything else its type
 // and size.
 //
 // A text is read in windows on demand. See quicklook_text.go.
@@ -146,6 +149,8 @@ type quickLookResult struct {
 	width, height int
 	pages         int
 	durationMs    int64
+	// page is the PDF page in img.
+	page int
 	// entries is a folder's listing.
 	entries []fileEntry
 	capped  bool
@@ -196,6 +201,15 @@ type quickLookState struct {
 	box overlay.Rect
 	// pic is where the picture went in the last frame.
 	pic quickLookPic
+	// pageWant is the PDF page the keys asked for, pageHeld the pages kept, pageOut
+	// and pageCancel the read that is out, pageSlow that the link's last read was
+	// slow, and pageBar the bar in the last frame. See quicklook_pages.go.
+	pageWant   int
+	pageHeld   []*quickLookResult
+	pageOut    int
+	pageCancel context.CancelFunc
+	pageSlow   bool
+	pageBar    quickLookBarBox
 	// mdLines is the Markdown laid out, for mdKey.
 	mdLines []ckLine
 	mdKey   quickLookMDKey
@@ -351,6 +365,7 @@ func (m *OS) dropQuickLook() {
 	ql.pic = quickLookPic{}
 	ql.mdLines = nil
 	ql.framed = quickLookFrame{}
+	m.quickLookDropPages()
 }
 
 // QuickLookSync keeps the preview on the row under the cursor. The input
@@ -416,6 +431,11 @@ func (m *OS) quickLookRowTarget(row sidebarNavRow) (quickLookTarget, bool) {
 // the reply asks again for the row the cursor is on by then.
 func (m *OS) quickLookShow(t quickLookTarget) tea.Cmd {
 	ql := &m.quickLook
+	if ql.target != t {
+		m.quickLookDropPages()
+		// The hints and keys ask what the file is, and this is not that file.
+		ql.res = nil
+	}
 	ql.target = t
 	ql.scroll = 0
 	ql.jump = quickLookNoMove
@@ -455,6 +475,15 @@ func (m *OS) quickLookFetch(t quickLookTarget) tea.Cmd {
 		call = m.verbOnHostCaller()
 	}
 	ascii := overlay.UseASCII()
+	if strings.EqualFold(filepath.Ext(t.name), ".pdf") {
+		want := session.PreviewPDF{MaxPx: m.quickLookPagePx(), Page: 1, Words: m.replyPreviewer().Mode() == composer.PreviewText}
+		return func() tea.Msg {
+			ctx, cancel := context.WithTimeout(context.Background(), quickLookTimeout)
+			defer cancel()
+			raw, err := quickLookPageReply(ctx, call, t, want)
+			return quickLookMsg{res: quickLookDecode(t, raw, err, ascii)}
+		}
+	}
 	return func() tea.Msg {
 		var raw json.RawMessage
 		var err error
@@ -476,17 +505,20 @@ func (m *OS) quickLookFetch(t quickLookTarget) tea.Cmd {
 
 // quickLookReply is the part of a file-preview answer the preview reads.
 type quickLookReply struct {
-	Kind       string `json:"kind"`
-	Size       int64  `json:"size"`
-	Mime       string `json:"mime"`
-	Note       string `json:"note"`
-	Text       string `json:"text"`
-	Truncated  bool   `json:"truncated"`
-	Image      string `json:"image"`
-	Width      int    `json:"width"`
-	Height     int    `json:"height"`
-	Pages      int    `json:"pages"`
-	DurationMs int64  `json:"duration_ms"`
+	Kind       string  `json:"kind"`
+	Size       int64   `json:"size"`
+	Mime       string  `json:"mime"`
+	Note       string  `json:"note"`
+	Text       string  `json:"text"`
+	Truncated  bool    `json:"truncated"`
+	Image      string  `json:"image"`
+	Width      int     `json:"width"`
+	Height     int     `json:"height"`
+	Pages      int     `json:"pages"`
+	DurationMs int64   `json:"duration_ms"`
+	Page       int     `json:"page"`
+	Words      *string `json:"words"`
+	NoTool     string  `json:"no_tool"`
 }
 
 // quickLookDecode turns a file-preview answer into what the panel draws. It
@@ -504,6 +536,7 @@ func quickLookDecode(t quickLookTarget, raw json.RawMessage, err error, ascii bo
 	}
 	res.size, res.mime, res.note = r.Size, r.Mime, r.Note
 	res.width, res.height, res.pages, res.durationMs = r.Width, r.Height, r.Pages, r.DurationMs
+	res.page = max(r.Page, 1)
 	switch r.Kind {
 	case "text", "svg":
 		if isMarkdownName(t.name) {
@@ -539,7 +572,17 @@ func quickLookDecode(t quickLookTarget, raw json.RawMessage, err error, ascii bo
 				}
 			}
 		}
-		if res.img == nil && res.note == "" {
+		if r.Words != nil {
+			if words := strings.Trim(*r.Words, " \f\r\n"); words != "" {
+				res.lines, _, _ = quickLookLines("", words, ascii)
+			} else {
+				res.note = "This page has no words."
+			}
+		}
+		if r.NoTool != "" {
+			res.note = "This machine has no " + r.NoTool + "."
+		}
+		if res.img == nil && res.note == "" && res.lines == nil {
 			res.note = "tuios cannot draw this picture."
 		}
 	case "dir":
@@ -585,6 +628,10 @@ func (m *OS) applyQuickLook(msg quickLookMsg) tea.Cmd {
 	}
 	if msg.res.target == ql.target {
 		ql.res = msg.res
+		if msg.res.kind == "pdf" {
+			ql.pageWant = msg.res.page
+			ql.quickLookHoldPage(msg.res)
+		}
 		return nil
 	}
 	return m.quickLookShow(ql.target)
@@ -628,6 +675,9 @@ func (m *OS) quickLookPicBox(img *composer.Image, innerW, bodyH int) (x, y, cols
 		cw, ch = 8, 16
 	}
 	availW, availH := max(innerW-2, 1), max(bodyH-1, 1)
+	if quickLookPaged(m.quickLook.res) {
+		availH = max(availH-1, 1)
+	}
 	cols, rows = ckFitBox(img, availW, availH, float64(ch)/float64(cw), 1)
 	// The host draws pixels at their own size at most: a small picture
 	// stretched over the panel is a blur. Block glyphs are coarse anyway, so
@@ -699,6 +749,7 @@ func (m *OS) QuickLookMouseClick(x, y int) bool {
 		return false
 	}
 	if ql.box.Contains(x, y) {
+		m.quickLookBarClick(x, y)
 		return true
 	}
 	m.CloseQuickLook()
@@ -852,6 +903,16 @@ func (m *OS) drawQuickLook(c *ckCanvas, l ckLook, dv *diffview.Theme, w, h int) 
 	if ql.inside {
 		right = append(right, ckSeg{t: "Inside the file", fg: pal.AccentBright, attrs: ckBold}, ckSeg{t: " "})
 	}
+	ql.pageBar = quickLookBarBox{}
+	if quickLookPaged(r) {
+		right = append(right, ckSeg{t: quickLookPagePosition(r, ql.pageWant), fg: pal.Fg}, ckSeg{t: " "})
+		bodyRows = max(bodyRows-1, 1)
+		if m.quickLookSearchRow() {
+			quickLookDrawSearchRow(c, pal, ql, h-1, w)
+		} else {
+			quickLookDrawPageBar(c, pal, ql, r, h-1, w)
+		}
+	}
 	if pos := quickLookPosition(r, ql.scroll, bodyRows); pos != "" {
 		right = append(right, ckSeg{t: pos, fg: pal.FgMute}, ckSeg{t: " "})
 	}
@@ -940,6 +1001,10 @@ func (m *OS) drawQuickLook(c *ckCanvas, l ckLook, dv *diffview.Theme, w, h int) 
 			c.text(2, bodyTop+i, w-1, ckSeg{t: name, fg: ink})
 		}
 	case "image", "pdf", "video":
+		if r.img == nil && r.lines != nil {
+			quickLookDrawPageWords(c, pal, r.lines, bodyTop, bodyRows, w)
+			break
+		}
 		if r.img == nil {
 			center(mid, r.note, false)
 			break
@@ -1020,13 +1085,10 @@ func quickLookMeta(r *quickLookResult) string {
 		parts = append(parts, quickLookSize(r.size))
 	case "pdf":
 		parts = append(parts, "PDF")
-		if r.pages > 0 {
+		if r.pages == 1 {
 			parts = append(parts, plural.Count(r.pages, "page"))
 		}
 		parts = append(parts, quickLookSize(r.size))
-		if r.img != nil && r.pages > 1 {
-			parts = append(parts, "Page 1")
-		}
 	case "video":
 		parts = append(parts, "Film")
 		if r.durationMs > 0 {
@@ -1107,7 +1169,7 @@ func quickLookCellsKey(p *replyPreview, img *composer.Image, cols, rows int) pre
 
 // quickLookMoves reports whether r is something the keys scroll.
 func quickLookMoves(r *quickLookResult) bool {
-	return r != nil && (r.kind == "text" || r.kind == "markdown" || r.kind == "dir")
+	return r != nil && (r.kind == "text" || r.kind == "markdown" || r.kind == "dir" || quickLookPaged(r))
 }
 
 // quickLookHints is the keys that work now, most useful first. The panel's
@@ -1137,6 +1199,13 @@ func (m *OS) quickLookHints(closeKey string) []overlay.Hint {
 	if ql.inside {
 		in := reg.GetQuickLookInsideKeys
 		h := add(nil, first(in("go_back")), "back to files")
+		if quickLookPaged(ql.res) {
+			h = add(h, first(in("go_to")), "go to page")
+			h = add(h, pair(in, "line_down", "line_up"), "page")
+			h = add(h, pair(in, "start", "end"), "first, last")
+			h = add(h, first(in("full_size")), "full size")
+			return add(h, closeKey, "close")
+		}
 		if quickLookText(ql.res) {
 			h = add(h, first(in("find")), "search")
 			h = add(h, first(in("go_to")), "go to line")
@@ -1155,7 +1224,11 @@ func (m *OS) quickLookHints(closeKey string) []overlay.Hint {
 	out := reg.GetQuickLookKeys
 	h := add(nil, closeKey, "close")
 	if quickLookMoves(ql.res) {
-		h = add(h, pair(out, "seek_down", "seek_up"), "half page")
+		label := "half page"
+		if quickLookPaged(ql.res) {
+			label = "page"
+		}
+		h = add(h, pair(out, "seek_down", "seek_up"), label)
 		h = add(h, first(out("go_inside")), "go inside")
 	}
 	h = append(h, overlay.Hint{Key: "↑↓", Label: "other files"})

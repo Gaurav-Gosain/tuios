@@ -12,6 +12,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/diffview"
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
+	"github.com/Gaurav-Gosain/tuios/internal/plural"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	uv "github.com/charmbracelet/ultraviolet"
 	"github.com/charmbracelet/x/ansi"
@@ -192,6 +193,12 @@ func (m *OS) QuickLookScroll(lines int) bool {
 	if !ql.open || !quickLookMoves(ql.res) {
 		return false
 	}
+	if quickLookPaged(ql.res) {
+		if lines < 0 {
+			return m.quickLookPageTo(ql.pageWant - 1)
+		}
+		return m.quickLookPageTo(ql.pageWant + 1)
+	}
 	ql.scroll += lines
 	if !quickLookText(ql.res) || ql.res.startOff == 0 {
 		ql.scroll = max(ql.scroll, 0)
@@ -226,6 +233,12 @@ func (m *OS) QuickLookEdge(end bool) bool {
 		return false
 	}
 	ql.status = ""
+	if quickLookPaged(r) {
+		if end {
+			return m.quickLookPageTo(r.pages)
+		}
+		return m.quickLookPageTo(1)
+	}
 	switch {
 	case !end && (!quickLookText(r) || r.startOff == 0):
 		ql.scroll, ql.jump = 0, quickLookNoMove
@@ -552,7 +565,11 @@ func quickLookDrawSearchRow(c *ckCanvas, pal overlay.Palette, ql *quickLookState
 	case ql.prompt == quickLookFindPrompt:
 		c.text(1, y, w-1, key("/ "), ckSeg{t: ql.input + "█", fg: pal.Fg}, dim("   Press enter to search."))
 	case ql.prompt == quickLookLinePrompt:
-		c.text(1, y, w-1, key(": "), ckSeg{t: ql.input + "█", fg: pal.Fg}, dim("   Type a line number and press enter."))
+		word := "line"
+		if quickLookPaged(ql.res) {
+			word = "page"
+		}
+		c.text(1, y, w-1, key(": "), ckSeg{t: ql.input + "█", fg: pal.Fg}, dim("   Type a "+word+" number and press enter."))
 	case ql.status != "":
 		segs := []ckSeg{}
 		if ql.query != "" && !ql.statusLine {
@@ -659,7 +676,7 @@ func (m *OS) QuickLookFind() {
 // QuickLookGoTo opens the prompt for a line number.
 func (m *OS) QuickLookGoTo() {
 	ql := &m.quickLook
-	if quickLookText(ql.res) {
+	if quickLookText(ql.res) || quickLookPaged(ql.res) {
 		ql.prompt, ql.input, ql.status = quickLookLinePrompt, "", ""
 	}
 }
@@ -774,6 +791,14 @@ func quickLookNoMoreMatches(r *quickLookResult) string {
 func (m *OS) quickLookGoToLine(n int64) {
 	ql := &m.quickLook
 	r := ql.res
+	if quickLookPaged(r) {
+		if n > int64(r.pages) {
+			ql.status, ql.statusLine = "The file has "+plural.Count(r.pages, "page")+".", true
+			return
+		}
+		m.quickLookPageTo(int(n))
+		return
+	}
 	if !quickLookText(r) {
 		return
 	}
