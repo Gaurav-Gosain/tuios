@@ -1,0 +1,5 @@
+api = 1
+id = "tuios.sketch"
+name = "Sketch"
+version = "0.1.0"
+description = "Draws every Mermaid diagram type in tuios mermaid. tuios draws eight types itself"

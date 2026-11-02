@@ -18,7 +18,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"tuios.dev/sketch"
+	sketch "tuios.dev/sketch/core"
 	"tuios.dev/sketch/raster"
 	sketchtext "tuios.dev/sketch/text"
 )

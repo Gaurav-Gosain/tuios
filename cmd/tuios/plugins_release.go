@@ -41,6 +41,7 @@ type firstPartyPlugin struct {
 // firstParty are the plugins tuios plugins install takes by name.
 var firstParty = map[string]firstPartyPlugin{
 	"pr-status": {},
+	"sketch":    {binary: "sketch"},
 }
 
 // pluginsAsset is the name of the archive of plugin folders in a release.

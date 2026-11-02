@@ -439,6 +439,7 @@ type OS struct {
 	dockSessionHover       DockSessionAction             // which session control the pointer is on, DockSessionNone for neither
 	dockCustomHits         []dockCustomHit               // where the custom components were drawn last frame
 	dockPlan               dockPlan                      // which components are on which side, in draw order
+	diagramsTold           map[string]bool               // the diagram types the person heard need the sketch plugin, this session
 	pluginCells            map[string]session.PluginCell // what plugins show on the dock, by name, nil until one does
 	dockEngine             *dockEngine                   // refresh scheduler for the components that move on their own
 	// RemoteCommandChan carries a verb the daemon routed to this client, for

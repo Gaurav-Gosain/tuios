@@ -5267,11 +5267,17 @@ A Markdown file gives each of its `mermaid` code blocks.
 | `text` | Any other terminal. Box-drawing characters draw the diagram, and the labels are text |
 | `svg` | The output is not a terminal |
 
-`text` draws flowcharts, sequence diagrams, state diagrams, class diagrams, ER
-diagrams, pie charts, mindmaps, gantt charts, timelines, XY charts, quadrant
-charts, user journeys, kanban boards, git graphs, sankey diagrams, block
-diagrams, architecture diagrams and requirement diagrams. Another type is
-written as its source, with a note on stderr. A drawing wider than the terminal
+tuios draws eight diagram types itself: flowcharts, sequence diagrams, state
+diagrams, class diagrams, ER diagrams, gantt charts, pie charts and mindmaps.
+The sketch plugin draws the other types, such as timelines, git graphs and
+sankey diagrams. Install it with `tuios plugins install sketch`. Then
+`tuios mermaid` runs the plugin for such a diagram, with `--format`, `--out`,
+`--cols`, `--diagram` and `--theme`. Without the plugin, the command says what
+to run and exits 3. `--watch` and `--demo` draw the eight types only. A TML
+panel shows the source of another type, and a notice says what to run.
+
+`text` draws every type of the eight. Another type is written as its source,
+with a note on stderr. A drawing wider than the terminal
 is written at its full width, with a note on stderr.
 
 The text of a `kitty` picture has the size of the terminal's text, so the

@@ -13,7 +13,7 @@ import (
 	"strconv"
 	"strings"
 
-	"tuios.dev/sketch"
+	sketch "tuios.dev/sketch/core"
 
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 )

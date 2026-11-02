@@ -20,7 +20,7 @@ import (
 	"github.com/charmbracelet/colorprofile"
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
-	"tuios.dev/sketch"
+	sketch "tuios.dev/sketch/core"
 	"tuios.dev/sketch/raster"
 	sketchtext "tuios.dev/sketch/text"
 
@@ -179,6 +179,9 @@ func runMermaid(name string, o mermaidOptions, stdout *os.File) error {
 			return fmt.Errorf("%s has %d diagrams, not %d", name, len(sources), o.diagram)
 		}
 		sources = sources[o.diagram-1 : o.diagram]
+	}
+	if typ := notBuiltIn(sources); typ != "" {
+		return delegateSketch(name, data, typ, o, stdout)
 	}
 
 	tty := term.IsTerminal(int(stdout.Fd()))

@@ -20,7 +20,7 @@ import (
 
 	"github.com/fsnotify/fsnotify"
 	"golang.org/x/term"
-	"tuios.dev/sketch"
+	sketch "tuios.dev/sketch/core"
 
 	"github.com/Gaurav-Gosain/tuios/internal/mermaid"
 )

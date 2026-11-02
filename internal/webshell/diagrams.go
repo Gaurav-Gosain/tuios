@@ -11,7 +11,7 @@ import (
 	"strings"
 
 	"tuios.dev/plot"
-	"tuios.dev/sketch"
+	sketch "tuios.dev/sketch/core"
 	sketchtext "tuios.dev/sketch/text"
 )
 

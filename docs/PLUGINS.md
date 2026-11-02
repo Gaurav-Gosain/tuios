@@ -227,6 +227,7 @@ a plugin does nothing. `tuios --skill tml` has the components.
 |---|---|---|
 | next | New: `tuios plugins update`. | Nothing. |
 | next | New: `tuios plugins install NAME` for the plugins of the tuios release. | Nothing. |
+| next | tuios draws eight Mermaid types itself. `tuios plugins install sketch` brings the rest to `tuios mermaid`. | Nothing. |
 | next | New: the `ui` grant, `[[cell]]`, `tuios plugin-cell` and `tuios plugin-notify`. | A plugin that uses them sets `min_tuios`. A plugin that held `write` only to open a panel can ask for `ui`. |
 | next | `api` replaces `schema`. `schema = 1` still works and `tuios plugins info` warns. | Write `api = 1`. |
 | next | New variables: `TUIOS_BIN`, `TUIOS_PLUGIN_ROOT`, `TUIOS_PLUGIN_CONFIG_DIR`, `TUIOS_PLUGIN_STATE_DIR`, `TUIOS_PLUGIN_ENTRY`, `TUIOS_PLUGIN_SESSION`, `TUIOS_PLUGIN_PANE`, `TUIOS_PLUGIN_CWD`, `TUIOS_PLUGIN_CONTEXT_JSON`. | Use these instead of `HERDR_PLUGIN_*` in a tuios plugin. |

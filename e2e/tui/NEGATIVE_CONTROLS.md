@@ -12064,3 +12064,15 @@ Run on 2026-11-02, each control against the branch head with one change:
 | Another machine gets the pinned files or nothing | the pin check cut | "install from plugins.lock after the asset changed" | **caught** |
 | The same release is up to date | the tag check cut | "update with the same tuios" | **caught** |
 
+
+## The sketch plugin
+
+`TestSketchPlugin` draws a timeline, which tuios no longer draws itself, with no
+plugin, in a TML panel, and with a fake plugin program. Run on 2026-11-02,
+each control against the branch head with one change:
+
+| Claim | Control | Where it fails | Verdict |
+|---|---|---|---|
+| The person hears once per type | the check of the told types cut | "a second panel of the same type told the person again" | **caught** |
+| tuios mermaid says what to run, and runs the plugin | `notBuiltIn` returns "" | "a timeline with no plugin" | **caught** |
+| A panel shows what to do | the `MissingDiagram` call cut | "no notice for the timeline" | **caught** |

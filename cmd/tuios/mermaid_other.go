@@ -7,7 +7,7 @@ import (
 	"os"
 	"time"
 
-	"tuios.dev/sketch"
+	sketch "tuios.dev/sketch/core"
 )
 
 func windowPixels(*os.File) (pw, ph, cols, rows int, ok bool) { return 0, 0, 0, 0, false }
