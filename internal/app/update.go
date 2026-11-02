@@ -504,7 +504,6 @@ func (m *OS) Init() tea.Cmd {
 	// This allows buffered PTY output to settle before callbacks start tracking changes
 	if m.IsDaemonSession && m.RestoredFromState {
 		cmds = append(cmds, EnableCallbacksAfterDelay())
-		// Trigger alt screen redraws immediately to force apps like btop to redraw
 		cmds = append(cmds, TriggerAltScreenRedrawCmd())
 	}
 
@@ -792,11 +791,11 @@ func InteractionSettleCmd() tea.Cmd {
 	})
 }
 
-// TriggerAltScreenRedrawMsg triggers alt screen apps to redraw.
+// TriggerAltScreenRedrawMsg redraws the panes on the alternate screen.
 type TriggerAltScreenRedrawMsg struct{}
 
-// TriggerAltScreenRedrawCmd returns a command that immediately triggers
-// alt screen apps (vim, htop, btop) to redraw via SIGWINCH.
+// TriggerAltScreenRedrawCmd returns a command that immediately redraws the
+// panes on the alternate screen from the screens the attach restored.
 func TriggerAltScreenRedrawCmd() tea.Cmd {
 	return func() tea.Msg {
 		return TriggerAltScreenRedrawMsg{}
@@ -2026,33 +2025,14 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		return m, nil
 
 	case TriggerAltScreenRedrawMsg:
-		// Force alt screen apps to redraw by sending resize (fake then real)
-		// This triggers SIGWINCH which makes apps like vim/htop/btop redraw
-		m.LogInfo("[REDRAW] Triggering alt screen redraws")
-		for _, w := range m.Windows {
-			if w.DaemonMode && w.IsAltScreen() && w.DaemonResizeFunc != nil {
-				termWidth := w.ContentWidth()
-				termHeight := w.ContentHeight()
-
-				// Do a fake resize to slightly smaller, then back to real size
-				// This ensures SIGWINCH is sent even if size "hasn't changed"
-				fakeWidth := max(termWidth-1, 1)
-				fakeHeight := max(termHeight-1, 1)
-
-				_ = w.DaemonResizeFunc(fakeWidth, fakeHeight)
-				_ = w.DaemonResizeFunc(termWidth, termHeight)
-				// The PTY now carries this size, whatever the announcement
-				// record said before. Record it: a record naming a size the PTY
-				// does not have is what makes Resize skip the one announcement
-				// that would have corrected the shell.
-				w.SeedAnnouncedSize(termWidth, termHeight)
-
-				w.InvalidateCache()
-				w.MarkContentDirty()
-				m.LogInfo("[REDRAW] Sent resize to window %s (%dx%d)", shortID(w.ID), termWidth, termHeight)
-			}
-		}
-		m.MarkAllDirty()
+		// The attach handed over each pane's screen as the daemon holds it,
+		// so a pane on the alternate screen is redrawn from that and its
+		// program is left alone. Resizing the pane one cell smaller and back
+		// to make the program repaint is not a no-op: the daemon's emulator
+		// drops the top row on the way down, and a program that repaints only
+		// what it believes changed, or that reads its size once after both
+		// SIGWINCHes and sees no change, leaves the screen shifted.
+		m.TriggerAltScreenRedraws()
 		return m, nil
 
 	case tea.KeyPressMsg, tea.KeyReleaseMsg, tea.MouseClickMsg, tea.MouseMotionMsg,
