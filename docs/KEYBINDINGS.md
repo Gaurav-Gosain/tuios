@@ -280,6 +280,10 @@ A film shows one frame and a bar with the time. Click or drag the bar to move to
 time. There is no playback. Press `t` to show 7 small frames from across the film.
 At 16 colours the preview shows the facts of the film.
 
+JSON is laid out for reading. CSV and TSV show as a table. An archive shows the
+files in it. A binary file shows its first 16 KiB in hex. `J` and `K` step through
+the frames of a GIF.
+
 `Up` and `Down` (or `j` and `k`) move the cursor to the next row, and the preview
 shows that row. `Space` or `Esc` closes the preview. A click outside it closes
 it too. When the sidebar loses keyboard focus, the preview closes.
@@ -293,6 +297,7 @@ other keys go to the sidebar.
 | `Ctrl+D` `Ctrl+U` | Move half a page |
 | Mouse wheel over the preview | Move 3 lines, one page of a PDF, or 1 percent of a film |
 | `t` | Show the small frames of a film, or hide them |
+| `v` | Show the next view: the diff of a changed file, then the details |
 | `Tab` | Move the keyboard inside the file |
 | `f` | Fill the area of the panes, or go back |
 
@@ -301,7 +306,8 @@ Inside the file, every key acts on the preview:
 | Key | Action |
 | --- | --- |
 | `j` `k` | Move one line, one page of a PDF, or 1 second of a film |
-| `h` `l` | Move 1 second of a film |
+| `h` `l` | Move 1 second of a film, or one column of a table |
+| `v` | Show the next view: the diff of a changed file, then the details |
 | `t` | Show the small frames of a film, or hide them |
 | `d` `u` | Move half a page |
 | `g` `G` | Go to the start or the end, or the first or last page |

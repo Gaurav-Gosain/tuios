@@ -108,6 +108,12 @@ func handleSidebarKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 			o.QuickLookWrap()
 		case "filmstrip":
 			o.QuickLookFilmstrip()
+		case "column_left":
+			o.QuickLookColumn(false)
+		case "column_right":
+			o.QuickLookColumn(true)
+		case "next_view":
+			return o, o.QuickLookNextView()
 		}
 		return o, nil
 	}
@@ -133,6 +139,9 @@ func handleSidebarKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 			// same key must not open a window on the next row.
 			o.QuickLookFilmstrip()
 			handled = true
+		case "next_view":
+			noteRailAction(o, act)
+			return o, o.QuickLookNextView()
 		}
 		if handled {
 			noteRailAction(o, act)

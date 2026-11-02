@@ -1256,6 +1256,11 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		m.renderSkipped = false
 		return m, cmd
 
+	case quickLookDetailsMsg:
+		m.applyQuickLookDetails(msg)
+		m.renderSkipped = false
+		return m, nil
+
 	case quickLookFilmMsg:
 		cmd := m.applyQuickLookFilm(msg)
 		m.renderSkipped = false

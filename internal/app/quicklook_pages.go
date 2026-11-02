@@ -49,7 +49,7 @@ type quickLookBarBox struct {
 
 // quickLookPaged reports whether r is a PDF with pages to move through.
 func quickLookPaged(r *quickLookResult) bool {
-	return r != nil && r.kind == "pdf" && r.pages > 1
+	return r != nil && (r.kind == "pdf" || r.kind == "image") && r.pages > 1
 }
 
 // quickLookPageTo moves to a page, held to the file's pages.
@@ -167,7 +167,7 @@ func (m *OS) quickLookPageRead() tea.Cmd {
 // quickLookReadPage reads one page off the loop.
 func (m *OS) quickLookReadPage(page int) tea.Cmd {
 	ql := &m.quickLook
-	t, pages, size := ql.target, ql.res.pages, ql.res.size
+	t, pages, size, kind := ql.target, ql.res.pages, ql.res.size, ql.res.kind
 	maxPx := m.quickLookPagePx()
 	words := m.replyPreviewer().Mode() == composer.PreviewText
 	ascii := overlay.UseASCII()
@@ -187,9 +187,7 @@ func (m *OS) quickLookReadPage(page int) tea.Cmd {
 		}
 		res := quickLookDecode(t, raw, err, ascii)
 		// A page that failed stays a page: its note shows, and J and K go on.
-		if res.kind != "pdf" {
-			res.kind = "pdf"
-		}
+		res.kind = kind
 		res.page, res.pages = page, pages
 		res.size = max(res.size, size)
 		msg.res = res
@@ -226,6 +224,12 @@ func quickLookWantReply(ctx context.Context, call func(host, verb string, params
 	}
 	if want.NoFrame {
 		params["no_frame"] = true
+	}
+	if want.Format {
+		params["format"] = true
+	}
+	if want.Details {
+		params["details"] = true
 	}
 	return call(t.host, "file-preview", params)
 }
@@ -264,11 +268,19 @@ func (m *OS) quickLookPagePx() int {
 
 // quickLookPagePosition is "Page 3 of 12", and says when that page is on its way.
 func quickLookPagePosition(r *quickLookResult, want int) string {
-	s := "age " + strconv.Itoa(want) + " of " + strconv.Itoa(r.pages)
+	s := quickLookUnit(r) + " " + strconv.Itoa(want) + " of " + strconv.Itoa(r.pages)
 	if r.page != want {
-		return "Reading p" + s
+		return "Reading " + strings.ToLower(s)
 	}
-	return "P" + s
+	return s
+}
+
+// quickLookUnit is what the file has many of.
+func quickLookUnit(r *quickLookResult) string {
+	if r.kind == "image" {
+		return "Frame"
+	}
+	return "Page"
 }
 
 // quickLookDrawBar draws the bar on the last row of the body: where the file is, a

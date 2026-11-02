@@ -153,6 +153,13 @@ type quickLookResult struct {
 	// page is the PDF page in img, and atMs the film's position of the frame in img.
 	page int
 	atMs int64
+	// table is a CSV file, archive an archive's rows with its counts, and formatted
+	// says a JSON file was laid out. See quicklook_views.go.
+	table        *quickLookTable
+	archive      []quickLookArchiveRow
+	archiveItems int
+	unpacked     int64
+	formatted    bool
 	// facts says what the film is, for a host that cannot draw a frame.
 	facts string
 	// entries is a folder's listing.
@@ -218,7 +225,15 @@ type quickLookState struct {
 	// keys asked for, filmOut the position of the read that is out, stripOn that t
 	// showed the filmstrip, strip its frames, and stripPics where they went in the
 	// last frame. See quicklook_film.go.
-	barDrag     bool
+	barDrag bool
+	// view is the view of the file on the panel, "" for its own, viewScroll the
+	// position in it, details the answer to the first v, detailsOut that the read is
+	// out, and column the table's first column. See quicklook_views.go.
+	view        string
+	viewScroll  int
+	details     *quickLookDetails
+	detailsOut  bool
+	column      int
 	filmWant    int64
 	filmOut     int64
 	stripOn     bool
@@ -240,21 +255,24 @@ type quickLookState struct {
 // quickLookFrame is a drawn panel and its key. Where the panel is placed is
 // not kept: the origin follows the screen and the rail on every render.
 type quickLookFrame struct {
-	ok            bool
-	look          ckLookKey
-	res           *quickLookResult
-	target        quickLookTarget
-	scroll        int
-	inside        bool
-	prompt        quickLookPromptKind
-	input         string
-	query         string
-	status        string
-	wrap          bool
-	innerW, bodyH int
-	key           string
-	seekKey       string
-	insideKey     string
+	ok                 bool
+	look               ckLookKey
+	res                *quickLookResult
+	target             quickLookTarget
+	scroll             int
+	inside             bool
+	prompt             quickLookPromptKind
+	input              string
+	query              string
+	status             string
+	wrap               bool
+	view               string
+	viewScroll, column int
+	details            *quickLookDetails
+	innerW, bodyH      int
+	key                string
+	seekKey            string
+	insideKey          string
 	// What Dialog.Render reads from the palette, and the frame's glyphs.
 	canvas, fgMute, frame, accent, accentBright, fgDim color.Color
 	border                                             lipgloss.Border
@@ -381,6 +399,7 @@ func (m *OS) dropQuickLook() {
 	ql.mdLines = nil
 	ql.framed = quickLookFrame{}
 	m.quickLookDropPages()
+	ql.view, ql.viewScroll, ql.details, ql.column = "", 0, nil, 0
 }
 
 // QuickLookSync keeps the preview on the row under the cursor. The input
@@ -448,6 +467,7 @@ func (m *OS) quickLookShow(t quickLookTarget) tea.Cmd {
 	ql := &m.quickLook
 	if ql.target != t {
 		m.quickLookDropPages()
+		ql.view, ql.viewScroll, ql.details, ql.column = "", 0, nil, 0
 		// The hints and keys ask what the file is, and this is not that file.
 		ql.res = nil
 	}
@@ -490,12 +510,14 @@ func (m *OS) quickLookFetch(t quickLookTarget) tea.Cmd {
 		call = m.verbOnHostCaller()
 	}
 	ascii := overlay.UseASCII()
-	if isPDF, isFilm := strings.EqualFold(filepath.Ext(t.name), ".pdf"), session.PreviewIsFilm(t.name); isPDF || isFilm {
+	ext := strings.ToLower(filepath.Ext(t.name))
+	if isPDF, isFilm := ext == ".pdf", session.PreviewIsFilm(t.name); isPDF || isFilm || ext == ".gif" || ext == ".json" {
 		noPicture := m.replyPreviewer().Mode() == composer.PreviewText
 		want := session.PreviewWant{MaxPx: m.quickLookPagePx(), Words: isPDF && noPicture, NoFrame: isFilm && noPicture}
-		if isPDF {
+		if isPDF || ext == ".gif" {
 			want.Page = 1
 		}
+		want.Format = ext == ".json"
 		return func() tea.Msg {
 			ctx, cancel := context.WithTimeout(context.Background(), quickLookTimeout)
 			defer cancel()
@@ -524,24 +546,28 @@ func (m *OS) quickLookFetch(t quickLookTarget) tea.Cmd {
 
 // quickLookReply is the part of a file-preview answer the preview reads.
 type quickLookReply struct {
-	Kind       string  `json:"kind"`
-	Size       int64   `json:"size"`
-	Mime       string  `json:"mime"`
-	Note       string  `json:"note"`
-	Text       string  `json:"text"`
-	Truncated  bool    `json:"truncated"`
-	Image      string  `json:"image"`
-	Width      int     `json:"width"`
-	Height     int     `json:"height"`
-	Pages      int     `json:"pages"`
-	DurationMs int64   `json:"duration_ms"`
-	Page       int     `json:"page"`
-	Words      *string `json:"words"`
-	NoTool     string  `json:"no_tool"`
-	AtMs       *int64  `json:"at_ms"`
-	VideoCodec string  `json:"video_codec"`
-	AudioCodec string  `json:"audio_codec"`
-	FPS        float64 `json:"fps"`
+	Kind       string                        `json:"kind"`
+	Size       int64                         `json:"size"`
+	Mime       string                        `json:"mime"`
+	Note       string                        `json:"note"`
+	Text       string                        `json:"text"`
+	Truncated  bool                          `json:"truncated"`
+	Image      string                        `json:"image"`
+	Width      int                           `json:"width"`
+	Height     int                           `json:"height"`
+	Pages      int                           `json:"pages"`
+	DurationMs int64                         `json:"duration_ms"`
+	Page       int                           `json:"page"`
+	Words      *string                       `json:"words"`
+	NoTool     string                        `json:"no_tool"`
+	Formatted  bool                          `json:"formatted"`
+	Entries    []session.PreviewArchiveEntry `json:"entries"`
+	Capped     bool                          `json:"capped"`
+	Head       string                        `json:"head"`
+	AtMs       *int64                        `json:"at_ms"`
+	VideoCodec string                        `json:"video_codec"`
+	AudioCodec string                        `json:"audio_codec"`
+	FPS        float64                       `json:"fps"`
 }
 
 // quickLookDecode turns a file-preview answer into what the panel draws. It
@@ -581,6 +607,7 @@ func quickLookDecode(t quickLookTarget, raw json.RawMessage, err error, ascii bo
 			return res
 		}
 		res.kind = "text"
+		res.formatted = r.Formatted
 		text := r.Text
 		if r.Truncated {
 			// The last line is cut where the bytes ran out, and the next window
@@ -591,6 +618,12 @@ func quickLookDecode(t quickLookTarget, raw json.RawMessage, err error, ascii bo
 		}
 		res.lines, res.spans, res.cutLong = quickLookLines(t.path, text, ascii)
 		res.more = r.Truncated
+		if comma, ok := quickLookIsCSV(t.name); ok {
+			if res.table = quickLookParseTable(text, comma, r.Truncated, ascii); res.table != nil {
+				res.kind = "table"
+				return res
+			}
+		}
 		res.endOff = int64(len(text))
 		res.firstLine = 1
 		res.parts = []quickLookPart{{lines: len(res.lines), bytes: res.endOff}}
@@ -619,8 +652,15 @@ func quickLookDecode(t quickLookTarget, raw json.RawMessage, err error, ascii bo
 		}
 	case "dir":
 		res.kind, res.note = "binary", "This is a folder."
+	case "archive":
+		res.kind = "archive"
+		res.archive, res.unpacked = quickLookArchiveRows(r.Entries, ascii)
+		res.archiveItems, res.capped = len(r.Entries), r.Capped
 	default:
 		res.kind = "binary"
+		if res.note == "" && r.Head != "" {
+			quickLookDecodeHead(res, r.Head)
+		}
 	}
 	return res
 }
@@ -660,7 +700,7 @@ func (m *OS) applyQuickLook(msg quickLookMsg) tea.Cmd {
 	}
 	if msg.res.target == ql.target {
 		ql.res = msg.res
-		if msg.res.kind == "pdf" {
+		if quickLookPaged(msg.res) || msg.res.kind == "pdf" {
 			ql.pageWant = msg.res.page
 			ql.quickLookHoldPage(msg.res)
 		}
@@ -877,7 +917,7 @@ func (m *OS) renderQuickLook() (string, int, int) {
 	}
 	// The border is in the key: the frame glyphs are a package global set from
 	// border_style every frame, outside the palette.
-	f := quickLookFrame{ok: true, look: ql.lookKey, res: ql.res, target: ql.target, scroll: ql.scroll, inside: ql.inside,
+	f := quickLookFrame{view: ql.view, viewScroll: ql.viewScroll, column: ql.column, details: ql.details, ok: true, look: ql.lookKey, res: ql.res, target: ql.target, scroll: ql.scroll, inside: ql.inside,
 		prompt: ql.prompt, input: ql.input, query: ql.query, status: ql.status, wrap: ql.wrap,
 		innerW: innerW, bodyH: bodyH, key: key, seekKey: seekKey, insideKey: insideKey, border: m.Settings.OverlayBorder(),
 		canvas: pal.Canvas, fgMute: pal.FgMute, frame: pal.Frame, accent: pal.Accent,
@@ -886,7 +926,7 @@ func (m *OS) renderQuickLook() (string, int, int) {
 	var geo overlay.Geometry
 	var pic quickLookPic
 	if k := &ql.framed; k.ok && k.look == f.look && k.res == f.res && k.target == f.target && k.scroll == f.scroll && k.inside == f.inside &&
-		k.prompt == f.prompt && k.input == f.input && k.query == f.query && k.status == f.status && k.wrap == f.wrap &&
+		k.prompt == f.prompt && k.input == f.input && k.query == f.query && k.status == f.status && k.wrap == f.wrap && k.view == f.view && k.viewScroll == f.viewScroll && k.column == f.column && k.details == f.details &&
 		k.innerW == f.innerW && k.bodyH == f.bodyH && k.key == f.key && k.seekKey == f.seekKey && k.insideKey == f.insideKey && k.border == f.border &&
 		k.canvas == f.canvas && k.fgMute == f.fgMute && k.frame == f.frame && k.accent == f.accent &&
 		k.accentBright == f.accentBright && k.fgDim == f.fgDim {
@@ -906,6 +946,7 @@ func (m *OS) renderQuickLook() (string, int, int) {
 		ql.framed = quickLookFrame{}
 		if r := ql.res; r != nil && r.target == ql.target && r.kind != "image" && r.kind != "pdf" && r.kind != "video" {
 			f.scroll = ql.scroll // after the draw clamped it
+			f.viewScroll = ql.viewScroll
 			f.content, f.geo = content, geo
 			ql.framed = f
 		}
@@ -972,6 +1013,25 @@ func (m *OS) drawQuickLook(c *ckCanvas, l ckLook, dv *diffview.Theme, w, h int) 
 		right = append(right, ckSeg{t: "Inside the file", fg: pal.AccentBright, attrs: ckBold}, ckSeg{t: " "})
 	}
 	ql.pageBar = quickLookBarBox{}
+	if len(m.quickLookViews()) > 1 {
+		m.quickLookDrawTabs(c, pal, r, bodyTop, w)
+		bodyTop, bodyRows = bodyTop+2, max(bodyRows-2, 1)
+	}
+	if ql.quickLookOffMain() {
+		if st := ql.status; st != "" {
+			c.text(1, h-1, w-1, ckSeg{t: st, fg: pal.FgDim})
+			bodyRows = max(bodyRows-1, 1)
+		}
+		rx := c.textR(w, 0, right...)
+		c.text(1, 0, rx-1, ckSeg{t: meta, fg: pal.FgMute})
+		m.quickLookDrawView(c, pal, r, bodyTop, bodyRows, w)
+		return quickLookPic{}
+	}
+	if r.table != nil {
+		if s := quickLookColumnsShown(r.table, ql.column, w); s != "" {
+			right = append(right, ckSeg{t: s, fg: pal.FgMute}, ckSeg{t: " "})
+		}
+	}
 	if quickLookPaged(r) {
 		right = append(right, ckSeg{t: quickLookPagePosition(r, ql.pageWant), fg: pal.Fg}, ckSeg{t: " "})
 	}
@@ -984,7 +1044,7 @@ func (m *OS) drawQuickLook(c *ckCanvas, l ckLook, dv *diffview.Theme, w, h int) 
 		case m.quickLookSearchRow():
 			quickLookDrawSearchRow(c, pal, ql, h-1, w)
 		case quickLookPaged(r):
-			quickLookDrawBar(c, pal, ql, "Page "+strconv.Itoa(ql.pageWant), strconv.Itoa(r.pages), int64(ql.pageWant-1), int64(r.pages-1), h-1, w)
+			quickLookDrawBar(c, pal, ql, quickLookUnit(r)+" "+strconv.Itoa(ql.pageWant), strconv.Itoa(r.pages), int64(ql.pageWant-1), int64(r.pages-1), h-1, w)
 		default:
 			quickLookDrawBar(c, pal, ql, quickLookClock(ql.filmWant), quickLookClock(r.durationMs), ql.filmWant, r.durationMs, h-1, w)
 		}
@@ -1062,6 +1122,12 @@ func (m *OS) drawQuickLook(c *ckCanvas, l ckLook, dv *diffview.Theme, w, h int) 
 		for i := 0; i < bodyRows && from+i < len(ql.mdLines); i++ {
 			drawCkLineAt(c, 1, bodyTop+i, width, ql.mdLines[from+i])
 		}
+	case "table":
+		quickLookDrawTable(c, pal, ql, r.table, bodyTop, bodyRows, w)
+	case "archive":
+		quickLookDrawArchive(c, pal, ql, r, bodyTop, bodyRows, w)
+	case "hex":
+		quickLookDrawHex(c, pal, ql, r, bodyTop, bodyRows, w)
 	case "dir":
 		if len(r.entries) == 0 {
 			center(mid, "This folder is empty.", false)
@@ -1147,6 +1213,9 @@ func quickLookMeta(r *quickLookResult) string {
 		case !r.more && r.startOff == 0:
 			parts = append(parts, plural.Count(len(r.lines), "line"))
 		}
+		if r.formatted {
+			parts = append(parts, "Laid out for reading.")
+		}
 		if r.cutLong {
 			parts = append(parts, "Long lines are cut.")
 		}
@@ -1155,6 +1224,8 @@ func quickLookMeta(r *quickLookResult) string {
 		if r.more {
 			parts = append(parts, "Showing the start of the file.")
 		}
+	case "table", "archive", "hex":
+		parts = quickLookViewMeta(r)
 	case "dir":
 		n := plural.Count(len(r.entries), "item")
 		if r.capped {
@@ -1257,7 +1328,7 @@ func quickLookCellsKey(p *replyPreview, img *composer.Image, cols, rows int) pre
 
 // quickLookMoves reports whether r is something the keys scroll.
 func quickLookMoves(r *quickLookResult) bool {
-	return r != nil && (r.kind == "text" || r.kind == "markdown" || r.kind == "dir" || quickLookHasBar(r))
+	return r != nil && (r.kind == "text" || r.kind == "markdown" || r.kind == "dir" || r.kind == "table" || r.kind == "archive" || r.kind == "hex" || quickLookHasBar(r))
 }
 
 // quickLookHints is the keys that work now, most useful first. The panel's
@@ -1287,9 +1358,18 @@ func (m *OS) quickLookHints(closeKey string) []overlay.Hint {
 	if ql.inside {
 		in := reg.GetQuickLookInsideKeys
 		h := add(nil, first(in("go_back")), "back to files")
+		if ql.quickLookOffMain() {
+			h = add(h, first(in("next_view")), "next view")
+			h = add(h, pair(in, "line_down", "line_up"), "line")
+			return add(h, closeKey, "close")
+		}
+		if ql.res != nil && ql.res.table != nil {
+			h = add(h, pair(in, "column_left", "column_right"), "columns")
+		}
 		if quickLookPaged(ql.res) {
-			h = add(h, first(in("go_to")), "go to page")
-			h = add(h, pair(in, "line_down", "line_up"), "page")
+			unit := strings.ToLower(quickLookUnit(ql.res))
+			h = add(h, first(in("go_to")), "go to "+unit)
+			h = add(h, pair(in, "line_down", "line_up"), unit)
 			h = add(h, pair(in, "start", "end"), "first, last")
 			h = add(h, first(in("full_size")), "full size")
 			return add(h, closeKey, "close")
@@ -1324,7 +1404,7 @@ func (m *OS) quickLookHints(closeKey string) []overlay.Hint {
 	if quickLookMoves(ql.res) {
 		label := "half page"
 		if quickLookPaged(ql.res) {
-			label = "page"
+			label = strings.ToLower(quickLookUnit(ql.res))
 		}
 		if quickLookFilm(ql.res) {
 			label = "skip 5%"
@@ -1336,7 +1416,11 @@ func (m *OS) quickLookHints(closeKey string) []overlay.Hint {
 		h = add(h, first(out("go_inside")), "go inside")
 	}
 	h = append(h, overlay.Hint{Key: "↑↓", Label: "other files"})
-	return add(h, first(out("full_size")), "full size")
+	h = add(h, first(out("full_size")), "full size")
+	if ql.res != nil && ql.res.kind != "dir" && ql.res.kind != "error" {
+		h = add(h, first(out("next_view")), "next view")
+	}
+	return h
 }
 
 // QuickLookInside reports whether the keyboard is inside the previewed file.

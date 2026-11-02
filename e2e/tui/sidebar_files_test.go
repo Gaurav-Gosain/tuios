@@ -1,10 +1,14 @@
 package tuie2e
 
 import (
+	"archive/tar"
+	"archive/zip"
 	"bytes"
+	"compress/gzip"
 	"fmt"
 	"image"
 	"image/color"
+	"image/gif"
 	"image/png"
 	"os"
 	"os/exec"
@@ -1407,7 +1411,7 @@ func TestRailQuickLook(t *testing.T) {
 	// k three times: past notes.md and main.go to the file that is not text.
 	sendKeys(t, term, "k", "k", "k")
 	quickLookShows(t, term, "quick-look-binary", "the preview of a binary file",
-		[]string{"blob.bin ", "This file is not text. It has no preview."}, []string{"64 x 32"})
+		[]string{"blob.bin ", "00000000  00 01 02 03"}, []string{"64 x 32"})
 	sendKeys(t, term, "k")
 	quickLookShows(t, term, "quick-look-long", "the preview of a long file",
 		[]string{"big.txt ", "6000 lines", "row 1"}, nil)
@@ -2294,6 +2298,194 @@ func TestQuickLookFilmAtEachDepth(t *testing.T) {
 		railLists(t, term, "J did not move the position", []string{"0:02  "}, []string{"0:01  ", "Reading"})
 		saveCockpitFrames(t, term, "quick-look-film-16")
 	})
+}
+
+// quickLookSpinGIF is a GIF of n frames, each a flat colour of its own.
+func quickLookSpinGIF(t *testing.T, n int) []byte {
+	t.Helper()
+	all := &gif.GIF{}
+	for i := range n {
+		pal := color.Palette{color.RGBA{uint8(i * 255 / (n - 1)), 0, 255, 255}}
+		f := image.NewPaletted(image.Rect(0, 0, 200, 100), pal)
+		all.Image, all.Delay = append(all.Image, f), append(all.Delay, 10)
+	}
+	var b bytes.Buffer
+	if err := gif.EncodeAll(&b, all); err != nil {
+		t.Fatal(err)
+	}
+	return b.Bytes()
+}
+
+// TestQuickLookShowsEachKindOfFile walks the kinds of file that have a view of their
+// own: JSON laid out, a CSV table with columns that move, an archive of each type, a
+// binary file in hex, and the frames of a GIF.
+//
+// How this could pass wrongly: a table could be the raw text with the same words in
+// it. So the test looks for a cell lined up under its header, which raw text has not.
+func TestQuickLookShowsEachKindOfFile(t *testing.T) {
+	out := &lockedBuffer{}
+	term, dir := quickLookListed(t, nil, out)
+	var tgz bytes.Buffer
+	gz := gzip.NewWriter(&tgz)
+	tw := tar.NewWriter(gz)
+	for _, name := range []string{"app/bin/tuios", "app/docs/guide.md", "app/LICENSE"} {
+		if err := tw.WriteHeader(&tar.Header{Name: name, Mode: 0o644, Size: 5}); err != nil {
+			t.Fatal(err)
+		}
+		_, _ = tw.Write([]byte("hello"))
+	}
+	_ = tw.Close()
+	_ = gz.Close()
+	var zipped bytes.Buffer
+	zw := zip.NewWriter(&zipped)
+	w, _ := zw.Create("inside/zipped.txt")
+	_, _ = w.Write([]byte("hello"))
+	_ = zw.Close()
+	var csvText strings.Builder
+	csvText.WriteString("id,name,region,score,joined,team,site,note,extra,last\n")
+	for i := range 60 {
+		fmt.Fprintf(&csvText, "%d,person %d,eu-west,%d.5,2026-01-01,the long team name,the long site name,a long enough note here,and more,tail%d\n", 1000+i, i, i, i)
+	}
+	blob := make([]byte, 40000)
+	for i := range blob {
+		blob[i] = byte(i)
+	}
+	for name, data := range map[string][]byte{
+		"aconfig.json": []byte(`{"name":"tuios","list":[1,2],"deep":{"key":"value"}}`),
+		"bdata.csv":    []byte(csvText.String()),
+		"cpack.tar.gz": tgz.Bytes(),
+		"dpack.zip":    zipped.Bytes(),
+		"eblob.dat":    blob,
+		"fspin.gif":    quickLookSpinGIF(t, 5),
+	} {
+		if err := os.WriteFile(filepath.Join(dir, name), data, 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	railLists(t, term, "the rail did not list the new files", []string{"fspin.gif"}, nil)
+	open := func(name string) {
+		t.Helper()
+		quickLookFocusRail(t, term, name)
+		sendKeys(t, term, " ")
+	}
+	shut := func() {
+		t.Helper()
+		sendKeys(t, term, tuitest.Esc)
+		railLists(t, term, "esc did not close the preview", nil, []string{"other files"})
+		sendKeys(t, term, tuitest.Esc)
+	}
+
+	open("aconfig.json")
+	railLists(t, term, "the JSON was not laid out", []string{`"name": "tuios",`, `"key": "value"`, "Laid out for reading."}, []string{`{"name"`})
+	copiesFrame(t, term, "quick-look-json")
+	shut()
+
+	open("bdata.csv")
+	railLists(t, term, "the CSV is not a table", []string{"CSV", "60 rows", "10 columns", "Columns 1 to"}, []string{"id,name"})
+	hc, _, hok := findOnGrid(term.Screen(), "region")
+	cc, _, cok := findOnGrid(term.Screen(), "eu-west")
+	if !hok || !cok || hc != cc {
+		t.Errorf("ASSERTION: the column is not lined up: region at %d, its cell at %d\n%s", hc, cc, term.Snapshot())
+	}
+	// A number ends where its header ends.
+	sc, _, sok := findOnGrid(term.Screen(), "score")
+	nc, _, nok := findOnGrid(term.Screen(), "0.5")
+	if !sok || !nok || sc+5 != nc+3 {
+		t.Errorf("ASSERTION: the numbers are not right aligned: score at %d, 0.5 at %d", sc, nc)
+	}
+	saveCockpitFrames(t, term, "quick-look-csv")
+	sendKeys(t, term, tuitest.Tab, "l", "l")
+	railLists(t, term, "l did not move a column", []string{"Columns 3 to", "region"}, []string{"person 3 "})
+	sendKeys(t, term, "v")
+	railLists(t, term, "v did not show the text", []string{"Text", "id,name,region"}, nil)
+	sendKeys(t, term, "v")
+	railLists(t, term, "v did not show the details", []string{"Permissions", "rw-------"}, nil)
+	sendKeys(t, term, "v")
+	railLists(t, term, "v did not come back to the table", []string{"Columns 3 to"}, []string{"Permissions"})
+	sendKeys(t, term, tuitest.Tab)
+	shut()
+
+	open("cpack.tar.gz")
+	railLists(t, term, "the tar.gz is not listed", []string{"Archive", "3 items", "app/", "bin/", "tuios", "guide.md", "5 B"}, nil)
+	saveCockpitFrames(t, term, "quick-look-archive")
+	shut()
+	open("dpack.zip")
+	railLists(t, term, "the zip is not listed", []string{"Archive", "1 item", "inside/", "zipped.txt"}, nil)
+	shut()
+
+	open("eblob.dat")
+	railLists(t, term, "the binary file is not in hex", []string{"00000000  00 01 02 03", "Showing the first 16 KB."}, nil)
+	sendKeys(t, term, "J", "J", "J")
+	railLists(t, term, "J did not move in the hex", []string{"eblob.dat "}, []string{"00000000  00 01"})
+	saveCockpitFrames(t, term, "quick-look-hex")
+	shut()
+
+	open("fspin.gif")
+	railLists(t, term, "the GIF has no frames", []string{"Frame 1 of 5", "J K frame"}, nil)
+	red := func(frame int, why string) {
+		t.Helper()
+		railLists(t, term, why, []string{fmt.Sprintf("Frame %d of 5", frame)}, []string{"Reading"})
+		want := uint32(frame-1) * 255 / 4
+		var got uint32
+		if err := term.WaitFor(func(tuitest.Screen) bool {
+			pics := hostPictures(t, []byte(out.String()))
+			if len(pics) != 1 {
+				return false
+			}
+			b := pics[0].Pixels.Bounds()
+			r, _, _, _ := pics[0].Pixels.At(b.Min.X+b.Dx()/2, b.Min.Y+b.Dy()/2).RGBA()
+			got = r >> 8
+			return max(got, want)-min(got, want) < 6
+		}, uiTimeout); err != nil {
+			t.Fatalf("ASSERTION: %s: the frame's red is %d, want %d: %v", why, got, want, err)
+		}
+	}
+	red(1, "the first frame")
+	sendKeys(t, term, "J", "J")
+	red(3, "J did not step the frames")
+	saveCockpitFrames(t, term, "quick-look-gif", hostPictures(t, []byte(out.String()))...)
+	sendKeys(t, term, "K")
+	red(2, "K did not step back")
+	alive(t, term, "after each kind of file")
+}
+
+// TestQuickLookShowsADiff is a changed file in a git folder: v shows the diff and then
+// the details, and comes back to the text. A file with no changes has no diff.
+func TestQuickLookShowsADiff(t *testing.T) {
+	git, err := exec.LookPath("git")
+	if err != nil {
+		t.Skip("no git here")
+	}
+	term, dir := quickLookListed(t, nil, nil)
+	for _, args := range [][]string{{"init", "-q"}, {"add", "main.go", "notes.md"}, {"-c", "user.name=t", "-c", "user.email=t@example.invalid", "commit", "-qm", "one"}} {
+		if b, err := exec.Command(git, append([]string{"-C", dir}, args...)...).CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v\n%s", args, err, b)
+		}
+	}
+	src, err := os.ReadFile(filepath.Join(dir, "main.go"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	changed := strings.Replace(string(src), "// main says hello.", "// main says hello to the world.", 1)
+	if err := os.WriteFile(filepath.Join(dir, "main.go"), []byte(changed), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	quickLookFocusRail(t, term, "main.go")
+	sendKeys(t, term, " ")
+	railLists(t, term, "the file did not show", []string{"package main"}, nil)
+	sendKeys(t, term, "v")
+	railLists(t, term, "v did not show the diff", []string{" Diff ", "Details", "-// main says hello.", "+// main says hello to the world."}, []string{"package main\n"})
+	saveCockpitFrames(t, term, "quick-look-diff")
+	sendKeys(t, term, "v")
+	railLists(t, term, "v did not show the details", []string{"Permissions", "rw-r--r--", "changed on", "not staged"}, nil)
+	saveCockpitFrames(t, term, "quick-look-details")
+	sendKeys(t, term, "v")
+	railLists(t, term, "v did not come back to the text", []string{"package main"}, []string{"Permissions"})
+	sendKeys(t, term, "j")
+	railLists(t, term, "the notes did not show", []string{"Quick look notes"}, nil)
+	sendKeys(t, term, "v")
+	railLists(t, term, "a file with no changes", []string{"Permissions", "no changes on"}, []string{" Diff "})
+	alive(t, term, "after the views")
 }
 
 // Kitty commands for the pictures the previews send: an upload, a free (the

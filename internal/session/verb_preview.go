@@ -99,6 +99,8 @@ func (d *Daemon) verbFilePreview(cs *connState, params json.RawMessage) (any, *v
 		AtMs          *int64 `json:"at_ms"`
 		DurationKnown bool   `json:"duration_known"`
 		NoFrame       bool   `json:"no_frame"`
+		Format        bool   `json:"format"`
+		Details       bool   `json:"details"`
 		Offset        *int64 `json:"offset"`
 		Limit         int    `json:"limit"`
 		Find          string `json:"find"`
@@ -152,7 +154,7 @@ func (d *Daemon) verbFilePreview(cs *connState, params json.RawMessage) (any, *v
 		previewWindow(f, fi.Size(), *p.Offset, p.Limit, out)
 		return out, nil
 	}
-	return previewOpened(ctx, f, fi, err, path, maxPx, PreviewWant{Page: page, PagesKnown: p.PagesKnown, Words: p.Words, Seek: p.AtMs != nil, AtMs: atMs, DurationKnown: p.DurationKnown && p.AtMs != nil, NoFrame: p.NoFrame}), nil
+	return previewOpened(ctx, f, fi, err, path, maxPx, PreviewWant{Page: page, PagesKnown: p.PagesKnown, Words: p.Words, Seek: p.AtMs != nil, AtMs: atMs, DurationKnown: p.DurationKnown && p.AtMs != nil, NoFrame: p.NoFrame, Format: p.Format, Details: p.Details}), nil
 }
 
 // PreviewLocalFile makes the preview of a file on this machine, in this
@@ -181,6 +183,9 @@ func PreviewLocalFile(ctx context.Context, path string, maxPx int) (map[string]a
 // For a film: Seek asks for the frame at AtMs, and otherwise the frame is 5 % in.
 // DurationKnown leaves out the facts, which take a run of ffprobe. NoFrame sends only
 // the facts.
+//
+// Format lays out a JSON file. Details sends the file's permissions, what git says of
+// it, its diff and a PDF page's words, in place of the preview.
 type PreviewWant struct {
 	MaxPx         int
 	Page          int
@@ -190,6 +195,8 @@ type PreviewWant struct {
 	AtMs          int64
 	DurationKnown bool
 	NoFrame       bool
+	Format        bool
+	Details       bool
 }
 
 // PreviewLocalWant is PreviewLocalFile with a PreviewWant. A cancelled ctx kills the
@@ -282,10 +289,18 @@ func previewOpened(ctx context.Context, f *os.File, fi fs.FileInfo, openErr erro
 	}
 	defer func() { _ = f.Close() }()
 	ext := strings.ToLower(filepath.Ext(path))
+	if pdf.Details {
+		previewDetails(ctx, f, fi, path, pdf, out)
+		return out
+	}
 
 	switch {
+	case pdf.Format && ext == ".json" && previewFormatJSON(f, fi.Size(), out):
+		return out
+	case previewIsArchive(path) && previewArchive(ctx, f, fi.Size(), path, out):
+		return out
 	case previewImageExt[ext]:
-		if err := previewImage(ctx, f, ext, fi.Size(), maxPx, out); err != nil {
+		if err := previewImage(ctx, f, ext, fi.Size(), maxPx, pdf.Page, out); err != nil {
 			describeBinary(f, out, err.Error())
 		}
 		return out
@@ -400,7 +415,7 @@ var previewPassExt = map[string]string{".webp": "image/webp", ".bmp": "image/bmp
 // previewImage sends a picture at most maxPx on its long side, decoded and
 // scaled here when that fits in previewDecodeMax, and otherwise as it is for
 // the client to decode, when it is at most previewPassMax.
-func previewImage(ctx context.Context, f *os.File, ext string, size int64, maxPx int, out map[string]any) error {
+func previewImage(ctx context.Context, f *os.File, ext string, size int64, maxPx, page int, out map[string]any) error {
 	if mime, ok := previewPassExt[ext]; ok {
 		return passImage(f, size, mime, out)
 	}
@@ -428,8 +443,10 @@ func previewImage(ctx context.Context, f *os.File, ext string, size int64, maxPx
 	var img image.Image
 	r := io.NewSectionReader(f, 0, size)
 	if format == "gif" {
-		// The first frame. An animation is not played in a preview.
-		img, err = gif.Decode(r)
+		// One frame. An animation is not played in a preview.
+		if img = previewGIFFrame(f, size, cfg, page, out); img == nil {
+			img, err = gif.Decode(r)
+		}
 	} else {
 		img, _, err = image.Decode(r)
 	}
@@ -947,6 +964,10 @@ func describeBinary(f *os.File, out map[string]any, note string) {
 	out["mime"] = http.DetectContentType(head[:n])
 	if note != "" {
 		out["note"] = note
+		return
+	}
+	if fi, err := f.Stat(); err == nil {
+		previewHead(f, fi.Size(), out)
 	}
 }
 
@@ -963,6 +984,8 @@ func previewVerbs() map[string]verbEntry {
 				{Name: "at_ms", Type: "int", Description: "The position in a film of the frame to send. Without it the frame is 5 % in."},
 				{Name: "duration_known", Type: "bool", Description: "The caller knows the film's facts, so ffprobe does not run.", Default: "false"},
 				{Name: "no_frame", Type: "bool", Description: "Send only the film's facts.", Default: "false"},
+				{Name: "format", Type: "bool", Description: "Lay out a JSON file for reading.", Default: "false"},
+				{Name: "details", Type: "bool", Description: "Send the file's permissions, what git says of it, its diff and a PDF page's words, in place of the preview.", Default: "false"},
 				{Name: "offset", Type: "int", Description: "Send a window of a text file from this byte, whole lines only, in place of the preview."},
 				{Name: "limit", Type: "int", Description: "The most bytes in that window, at most 1 MiB.", Default: "262144"},
 				{Name: "find", Type: "string", Description: "Look for this text in a text file, in place of the preview. Lower case ignores case."},
@@ -987,6 +1010,16 @@ func previewVerbs() map[string]verbEntry {
 				{Name: "words", Type: "string", Description: "pdf, when asked for: the page's words."},
 				{Name: "no_tool", Type: "string", Description: "pdf: the tool this machine needs and does not have."},
 				{Name: "at_ms", Type: "int", Description: "video: the position of the frame sent."},
+				{Name: "formatted", Type: "bool", Description: "text: the JSON was laid out."},
+				{Name: "entries", Type: "array", Description: "archive: the listing, with name, size and dir."},
+				{Name: "capped", Type: "bool", Description: "archive: the listing stopped at a bound."},
+				{Name: "head", Type: "string", Description: "binary: the first 16 KiB, base64."},
+				{Name: "details", Type: "bool", Description: "The reply holds the details asked for."},
+				{Name: "mode", Type: "string", Description: "details: the permissions."},
+				{Name: "owner", Type: "string", Description: "details: the file's owner."},
+				{Name: "group", Type: "string", Description: "details: the file's group."},
+				{Name: "git", Type: "string", Description: "details: what git says of the file."},
+				{Name: "diff", Type: "string", Description: "details: the diff of a changed file."},
 				{Name: "video_codec", Type: "string", Description: "video: the codec, from ffprobe."},
 				{Name: "audio_codec", Type: "string", Description: "video: the codec of the sound, from ffprobe, when it has sound."},
 				{Name: "fps", Type: "number", Description: "video: the frames each second, from ffprobe."},

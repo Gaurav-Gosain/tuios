@@ -193,6 +193,10 @@ func (m *OS) QuickLookScroll(lines int) bool {
 	if !ql.open || !quickLookMoves(ql.res) {
 		return false
 	}
+	if ql.quickLookOffMain() {
+		ql.viewScroll = max(ql.viewScroll+lines, 0)
+		return true
+	}
 	if quickLookPaged(ql.res) {
 		if lines < 0 {
 			return m.quickLookPageTo(ql.pageWant - 1)
@@ -212,7 +216,7 @@ func (m *OS) QuickLookScroll(lines int) bool {
 
 // QuickLookHalfPage moves half a page, forward or back.
 func (m *OS) QuickLookHalfPage(forward bool) bool {
-	if ql := &m.quickLook; ql.open && quickLookFilm(ql.res) {
+	if ql := &m.quickLook; ql.open && !ql.quickLookOffMain() && quickLookFilm(ql.res) {
 		return m.quickLookFilmPercentBy(quickLookFilmPercent, forward)
 	}
 	n := m.quickLookPage()
@@ -224,7 +228,7 @@ func (m *OS) QuickLookHalfPage(forward bool) bool {
 
 // QuickLookLine moves one line, forward or back.
 func (m *OS) QuickLookLine(forward bool) bool {
-	if ql := &m.quickLook; ql.open && quickLookFilm(ql.res) {
+	if ql := &m.quickLook; ql.open && !ql.quickLookOffMain() && quickLookFilm(ql.res) {
 		if forward {
 			return m.quickLookFilmTo(ql.filmWant + 1000)
 		}
@@ -245,6 +249,13 @@ func (m *OS) QuickLookEdge(end bool) bool {
 		return false
 	}
 	ql.status = ""
+	if ql.quickLookOffMain() {
+		ql.viewScroll = 0
+		if end {
+			ql.viewScroll = 1 << 30
+		}
+		return true
+	}
 	if quickLookPaged(r) {
 		if end {
 			return m.quickLookPageTo(r.pages)
@@ -585,7 +596,7 @@ func quickLookDrawSearchRow(c *ckCanvas, pal overlay.Palette, ql *quickLookState
 	case ql.prompt == quickLookLinePrompt:
 		word := "line"
 		if quickLookPaged(ql.res) {
-			word = "page"
+			word = strings.ToLower(quickLookUnit(ql.res))
 		}
 		c.text(1, y, w-1, key(": "), ckSeg{t: ql.input + "█", fg: pal.Fg}, dim("   Type a "+word+" number and press enter."))
 	case ql.status != "":
@@ -686,7 +697,7 @@ func (m *OS) QuickLookPromptOpen() bool {
 // QuickLookFind opens the search prompt.
 func (m *OS) QuickLookFind() {
 	ql := &m.quickLook
-	if quickLookText(ql.res) {
+	if quickLookText(ql.res) && !ql.quickLookOffMain() {
 		ql.prompt, ql.input, ql.status = quickLookFindPrompt, "", ""
 	}
 }
@@ -811,7 +822,7 @@ func (m *OS) quickLookGoToLine(n int64) {
 	r := ql.res
 	if quickLookPaged(r) {
 		if n > int64(r.pages) {
-			ql.status, ql.statusLine = "The file has "+plural.Count(r.pages, "page")+".", true
+			ql.status, ql.statusLine = "The file has "+plural.Count(r.pages, strings.ToLower(quickLookUnit(r)))+".", true
 			return
 		}
 		m.quickLookPageTo(int(n))
