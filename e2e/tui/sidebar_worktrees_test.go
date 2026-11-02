@@ -466,6 +466,79 @@ switch_session_3 = ["alt+shift+z"]
 	alive(t, term, "after folding the main checkout's row")
 }
 
+// TestRailMainCheckoutSiblings is two sessions in one main checkout. Only a
+// worktree hangs off the repository's row: the second session in the main
+// checkout is not a worktree of the first, so it is a plain row at the same
+// indent, with no tree mark, numbered in its place. Folding the group hides the
+// worktree and leaves that row, and the count says one. With the worktree gone
+// there is no group to fold, and both sessions are plain rows.
+//
+// The controls are in NEGATIVE_CONTROLS.md.
+func TestRailMainCheckoutSiblings(t *testing.T) {
+	base := t.TempDir()
+	killDaemon(t, base)
+	repo := testutil.GitRepo(t)
+	t.Setenv("TUIOS_WORKTREE_DIR", filepath.Join(base, "worktrees"))
+	writeConfig(t, base, "[appearance.sidebar]\nenabled = true\nshow_numbers = true\nwidth = 30\n")
+	if out, err := tuiosCLIIn(t, base, t.TempDir(), "new", "plain", "--detach"); err != nil {
+		t.Fatalf("create the plain session: %v: %s", err, out)
+	}
+	if out, err := tuiosCLI(t, base, "worktree", "new", "f/one", "--repo", repo, "--detach"); err != nil {
+		t.Fatalf("worktree new f/one: %v: %s", err, out)
+	}
+	for _, name := range []string{"mainsess", "mainsib"} {
+		if out, err := tuiosCLIIn(t, base, repo, "new", name, "--detach"); err != nil {
+			t.Fatalf("create the main checkout's session %s: %v: %s", name, err, out)
+		}
+	}
+
+	term := startIn(t, base, startOpts{args: []string{"attach", "plain"}})
+	// siblings says the two main checkout rows are one above the other's level:
+	// the same column, no tree mark on the second, and its own number.
+	siblings := func(s tuitest.Screen) bool {
+		sib := railLineWith(s, "mainsib")
+		return sib >= 0 && strings.Contains(s.Line(sib), "4 mainsib") &&
+			!strings.ContainsAny(s.Line(sib), "└├") &&
+			railCellColumn(s, "mainsib") == railCellColumn(s, "mainsess")
+	}
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		head, child := railLineWith(s, "2 mainsess"), railLineWith(s, "3 └─ f/one")
+		return head >= 0 && child == head+1 && siblings(s)
+	}, bootTimeout); err != nil {
+		t.Fatalf("the second session in the main checkout is not a plain row beside the repository's row: %v\n%s", err, term.Snapshot())
+	}
+	railShot(t, term, "rail-main-siblings-open")
+
+	col, row := railCellColumn(term.Screen(), "▾"), railLineWith(term.Screen(), "▾")
+	if row != railLineWith(term.Screen(), "mainsess") {
+		t.Fatalf("the fold mark is not on the repository's row\n%s", term.Snapshot())
+	}
+	mouseClick(t, term, col, row, tuitest.MouseLeft, 0)
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		head := railLineWith(s, "mainsess")
+		return railLineWith(s, "f/one") < 0 && head >= 0 && strings.Contains(s.Line(head), "+1") &&
+			railLineWith(s, "mainsib") >= 0
+	}, uiTimeout); err != nil {
+		t.Fatalf("the fold did not hide only the worktree, counted as +1: %v\n%s", err, term.Snapshot())
+	}
+	railShot(t, term, "rail-main-siblings-folded")
+
+	// The group stays folded in the saved state while its worktree goes, so a
+	// fold that still reached the main checkout would hide mainsib here.
+	if out, err := tuiosCLI(t, base, "kill-session", "repo-f-one"); err != nil {
+		t.Fatalf("kill the worktree session: %v: %s", err, out)
+	}
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		head := railLineWith(s, "2 mainsess")
+		return head >= 0 && railLineWith(s, "3 mainsib") == head+1 &&
+			!strings.ContainsAny(s.Text(), "▾▸") && !strings.ContainsAny(s.Line(head+1), "└├")
+	}, uiTimeout); err != nil {
+		t.Fatalf("two sessions in a main checkout with no worktree are not two plain rows: %v\n%s", err, term.Snapshot())
+	}
+	railShot(t, term, "rail-main-siblings-no-worktree")
+	alive(t, term, "after the main checkout's sessions lost their worktree")
+}
+
 // TestSidebarGroupsMainCheckout drives the same grouping with the main
 // checkout gathered in: with group_main on, the session whose directory is the
 // repository itself sits under the repo row with the worktrees, a click on

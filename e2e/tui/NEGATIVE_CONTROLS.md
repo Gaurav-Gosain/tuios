@@ -11807,6 +11807,19 @@ The first Inbox assertion passed with its control, because the rail's agents sec
 
 The frames are `rail-compact-*` and `rail-drag-*` under the test's artifact folder.
 
+## A second session in a main checkout is a plain row
+
+`TestRailMainCheckoutSiblings` makes a worktree session and two sessions in the repository's main checkout. The first main checkout session is the repository's row and the worktree hangs off it. The second is a plain row at the same indent with no tree mark. Folding hides only the worktree and counts `+1`. With the worktree gone there is no fold mark, and both are plain rows.
+
+Run on 2026-11-02 on macOS. Each control was built into its own binary.
+
+| Control: what was cut | Where it fails | Verdict |
+| --- | --- | --- |
+| `GroupByRepoCompact` as on main, every main checkout session in the group | "the second session in the main checkout is not a plain row beside the repository's row": the frame shows `├─ f/one` and `└─ mainsib main` under `mainsess` | caught |
+| The second session kept out of the group, but its row keeps the worktree record | The same message: the frame shows `└─ f/one` and `├─ mainsib main`, a tree mark on a row outside the group | caught |
+
+The frames are `rail-main-siblings-*` under the test's artifact folder.
+
 ## A kitty picture shows with no input
 
 kitty 0.49.2 with its cursor hidden does not show a picture until it reads one more write. CI has no kitty, so the pixels come from a local run: real kitty under a private Xvfb, tuios opens a PDF, shots over 8 seconds with no key and no pointer move. Blue pixels count the page.
