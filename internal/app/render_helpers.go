@@ -281,6 +281,27 @@ func isDefaultTitle(title, windowID string) bool {
 	return title == "Terminal "+windowID[:8]
 }
 
+// paneName is the name a window's title shows before any template: a TML
+// window's document title, the custom name, or the title its program set,
+// and empty for the default "Terminal <id>". Each is laundered of the same
+// decorative junk the sidebar and palette drop.
+func paneName(window *terminal.Window, s *config.Settings) string {
+	if _, title, ok := tmlWindowParts(window); ok && s.WindowTitlePosition == "top" {
+		// A TML window's pill holds the document's title. The owner goes
+		// after the pill, where the title cannot push it out (tmlOwnerTag).
+		// Elsewhere the bar shows the whole name, owner first.
+		return printableTitle(title)
+	}
+	if window.CustomName != "" {
+		return printableTitle(window.CustomName)
+	}
+	if t := window.Title(); t != "" && !isDefaultTitle(t, window.ID) {
+		// Only show terminal-set title if it's not the default "Terminal <id>" format
+		return printableTitle(t)
+	}
+	return ""
+}
+
 // windowTitleText returns the display name for a window, truncated to fit
 // within maxWidth, or an empty string if the title should be hidden or does
 // not fit. position is the window's 1-based place in its workspace, used by
@@ -288,20 +309,9 @@ func isDefaultTitle(title, windowID string) bool {
 // state whose mark the title wears: the render passes windowMarkState, which
 // knows whether a finished pane has been looked at.
 func windowTitleText(window *terminal.Window, markState string, position int, maxWidth int, s *config.Settings) string {
-	// Titles reach the badge as chrome, so launder the same decorative junk the
-	// sidebar and palette drop; our own state glyph is added below, untouched.
-	windowName := ""
-	if _, title, ok := tmlWindowParts(window); ok && s.WindowTitlePosition == "top" {
-		// A TML window's pill holds the document's title. The owner goes
-		// after the pill, where the title cannot push it out (tmlOwnerTag).
-		// Elsewhere the bar shows the whole name, owner first.
-		windowName = printableTitle(title)
-	} else if window.CustomName != "" {
-		windowName = printableTitle(window.CustomName)
-	} else if t := window.Title(); t != "" && !isDefaultTitle(t, window.ID) {
-		// Only show terminal-set title if it's not the default "Terminal <id>" format
-		windowName = printableTitle(t)
-	}
+	// Titles reach the badge as chrome, laundered by paneName; our own state
+	// glyph is added below, untouched.
+	windowName := paneName(window, s)
 
 	if windowName != "" || s.WindowTitleFormat != "" {
 		// A format that mentions only {index} or {cwd} still has something to

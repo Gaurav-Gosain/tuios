@@ -1277,9 +1277,14 @@ func (m *OS) View() tea.View {
 		view.Cursor, cursorShown = m.viewCursor()
 	}
 	m.cursorPark.set(view.Cursor, cursorShown)
-	// The title of the terminal tuios runs in, when a tool set one through
-	// herdr's client.window_title.set. Empty leaves the title alone.
+	// The title of the terminal tuios runs in. One a tool set through herdr's
+	// client.window_title.set wins while it is set; otherwise
+	// appearance.host_title builds it from the focused pane. Empty sets none,
+	// and clears one this client set before.
 	view.WindowTitle = m.ClientTitle
+	if view.WindowTitle == "" {
+		view.WindowTitle = m.hostTitle()
+	}
 
 	// A composed frame goes out now rather than at the next tick. One equal
 	// to the last, with the cursor where it was, has nothing to write: that

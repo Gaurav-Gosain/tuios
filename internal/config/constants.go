@@ -648,11 +648,24 @@ func (s *Settings) FormatWindowTitle(title string, index int, cwd string) string
 	if s.WindowTitleFormat == "" {
 		return title
 	}
-	return strings.NewReplacer(
+	return expandTitle(s.WindowTitleFormat, title, index, cwd)
+}
+
+// FormatHostTitle expands HostTitle for the focused window: the placeholders of
+// FormatWindowTitle, plus {session} (the session's name) and {workspace} (the
+// workspace's name, or its number).
+func (s *Settings) FormatHostTitle(title string, index int, cwd, session, workspace string) string {
+	return expandTitle(s.HostTitle, title, index, cwd, "{session}", session, "{workspace}", workspace)
+}
+
+// expandTitle replaces the placeholders every title template has in format,
+// and the extra old, new pairs after them.
+func expandTitle(format, title string, index int, cwd string, extra ...string) string {
+	return strings.NewReplacer(append([]string{
 		"{title}", title,
 		"{index}", strconv.Itoa(index),
 		"{cwd}", cwd,
-	).Replace(s.WindowTitleFormat)
+	}, extra...)...).Replace(format)
 }
 
 // FormatWorkspaceTab renders a dock workspace tab label from the configured
