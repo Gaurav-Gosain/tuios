@@ -7,13 +7,24 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/testutil"
 )
 
+// fakeAgentName is the name the test binary runs under as a fake agent: crush,
+// which the bundled manifests detect by its command name.
+const fakeAgentName = "crush"
+
 // TestMain isolates the whole test binary from the developer's own XDG
 // directories and from their login shell.
 func TestMain(m *testing.M) {
+	// Run as a fake agent, this binary only waits. See
+	// TestTranscriptIdentityReadsTheAgentBehindAWrapper.
+	if filepath.Base(os.Args[0]) == fakeAgentName {
+		time.Sleep(60 * time.Second)
+		os.Exit(0)
+	}
 	code := testutil.RunIsolated(m, pinResurrectionDir, pinShell)
 	// A test that creates a session and never stops it leaves the session's
 	// periodic resurrection saver ticking for the rest of the binary, writing
