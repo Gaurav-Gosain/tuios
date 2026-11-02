@@ -118,6 +118,7 @@ func ownDaemonSocket(t *testing.T) string {
 		t.Fatalf("LOCALAPPDATA is %q and the isolated tree is %q, so a daemon here could be the developer's", local, home)
 	}
 	own := testutil.RuntimeDir(t)
+	t.Setenv("LOCALAPPDATA", own)
 	sock, err := session.GetSocketPath()
 	if err != nil {
 		t.Fatalf("resolve the socket: %v", err)

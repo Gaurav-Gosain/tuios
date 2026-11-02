@@ -62,10 +62,11 @@ func isolateXDG() (dir string, check func() error) {
 		panic(fmt.Sprintf("testutil: set HOME: %v", err))
 	}
 	// On Windows os.UserHomeDir reads USERPROFILE, so it moves as well. The
-	// daemon's socket is under LOCALAPPDATA and the config search reads APPDATA,
-	// and XDG_RUNTIME_DIR moves neither. A test that left them in place reached
-	// the developer's running daemon and stopped it (#1450). pinGoDirs has
-	// already read the real cache folder, so the go command keeps its own.
+	// daemon's socket is under LOCALAPPDATA, the herdr and integration lookups
+	// read APPDATA, and XDG_RUNTIME_DIR moves neither. A test that left them in
+	// place reached the developer's running daemon and stopped it (#1450).
+	// pinGoDirs has already read the real cache folder, so the go command keeps
+	// its own.
 	if runtime.GOOS == "windows" {
 		for _, name := range windowsDirVars {
 			if err := os.Setenv(name, tmp); err != nil {
