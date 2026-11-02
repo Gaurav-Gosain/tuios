@@ -390,6 +390,34 @@ func TestClaudeURLFormHoldsWithoutARule(t *testing.T) {
 	c.hook("ElicitationResult", `{"hook_event_name":"ElicitationResult","session_id":"cl-e2e"}`, "working")
 }
 
+// TestClaudeFormOptionIsNoPromptBox checks a form whose focused option starts
+// with ❯ does not end a prompt elicitation_dialog reported. Claude Code marks
+// the focused field, option and button of its forms with the ❯ its prompt box
+// starts with, and a form framed by its rules put that row where the idle
+// rule reads, so the pane went idle in 4s with the form still open. Only the
+// empty prompt box ends the prompt, and it still does.
+//
+// The artifact is claude-form-option.log in the test's artifact directory.
+//
+// Negative control: with promptGone taken on the idle rule's word alone, the
+// pane goes idle while the form is up.
+func TestClaudeFormOptionIsNoPromptBox(t *testing.T) {
+	c := newClaudeStage(t, "claude-form-option")
+	c.title = claudeRestTitle
+	form := []string{"The deploy server asks which region to use", claudeRule, "❯ us-east", "  eu-west", claudeRule}
+
+	c.hook("UserPromptSubmit", claudePromptSubmit, "working")
+	c.draw(form...)
+	c.hook("Notification elicitation_dialog", `{"hook_event_name":"Notification","session_id":"cl-e2e","message":"The deploy server asks which region to use","notification_type":"elicitation_dialog"}`, "needs_input")
+	items := c.waitItems()
+	c.draw(form...)
+	c.waitFrame(form...)
+	c.holds("needs_input", "the form with ❯ on its option, for 6s", 6*time.Second)
+	c.sameItems("the form up", items)
+	c.draw(claudePromptBox...)
+	c.leaves("the form answered: the prompt box empty")
+}
+
 // Frames of a turn running, as Claude Code draws them: the spinner in the
 // title, and the spinner line a screen rule reads as working.
 const (

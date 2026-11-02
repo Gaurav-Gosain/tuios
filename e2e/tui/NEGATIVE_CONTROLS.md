@@ -11971,6 +11971,14 @@ control against the branch head with one change:
 
 `TestClaudePromptEndsAtOnceOnYes` draws the menu, then a spinner frame, and runs `PostToolUse`: the pane has to read `working` as soon as the hook returns, and the Inbox item has to close. Then a second prompt with its hooks lost: the menu, then the turn's spinner and `Thinking…` line for 2s, which the pane holds on `needs_input`, then the empty prompt box, which ends it. Its log is `claude-prompt-yes.log`.
 
+`TestClaudeFormOptionIsNoPromptBox` reports an `elicitation_dialog` over a form framed by Claude Code's rules, whose focused option starts with the `❯` the prompt box starts with (`❯ us-east`, then `  eu-west`), under the `✳` title. The idle rule reads that option as the box, so the pane has to hold `needs_input` with its one Inbox item for 6s, past the idle confirmation, and end once the empty prompt box shows. Claude Code 2.1.316 draws its form's focused field, option and button with that `❯` (the pointer of its elicitation dialog). Its log is `claude-form-option.log`.
+
+Run on 2026-11-02 on macOS arm64, on the branch at `b2394291f` plus the empty-box gate. The eleven `^TestClaude` tests pass together. One build for the control:
+
+| Control: what was cut | Where it fails | Verdict |
+| --- | --- | --- |
+| `applyIdleVerdict` takes the idle rule's word for the empty prompt box, without `promptBoxEmpty`, as at `b2394291f` | `TestClaudeFormOptionIsNoPromptBox`: "the form with ❯ on its option, for 6s: the pane is idle, want it to stay needs_input", 5.6s into the test | **caught** |
+
 Run on 2026-11-02 on macOS arm64, on the branch at `680fc3ee9` plus the working-look gate, on a machine also running another e2e suite (load average about 11). The seven tests in `claude_notification_stale_test.go` pass 3 runs of 3 together. One build per control:
 
 | Control: what was cut | Where it fails | Verdict |
