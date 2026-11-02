@@ -205,10 +205,11 @@ func (s *Session) lookAtPane(ptyID string, reg *harness.Registry, look paneLook)
 // idle must. The title says nothing about it: Claude Code shows its rest glyph
 // at a menu as well as at its prompt box, so a frame that blanks the menu for
 // a redraw read as the prompt answered. A frame of the prompt box drawn in
-// the middle of a redraw is no answer either. A prompt that ends early is a
-// prompt nobody answers, which costs more than one that stays. The reading
-// that passes is published as promptGone, the one look hookPromptHolds lets
-// end such a prompt; a working look never does.
+// the middle of a redraw is no answer either, nor is a form that marks its
+// focused row with the box's ❯, so the box must read empty (promptBoxEmpty).
+// A prompt that ends early is a prompt nobody answers, which costs more than
+// one that stays. The reading that passes is published as promptGone, the one
+// look hookPromptHolds lets end such a prompt; a working look never does.
 func (s *Session) applyIdleVerdict(winID, ptyID string, reg *harness.Registry, v agentVerdict, hid string, wrote int64, screenIdle bool) bool {
 	claim, held := s.agentClaimHeld(winID)
 	current, exists := s.windowAgentState(winID)
@@ -216,7 +217,7 @@ func (s *Session) applyIdleVerdict(winID, ptyID string, reg *harness.Registry, v
 		return false
 	}
 	hookPrompt := held && current == AgentStateNeedsInput && claim.hookEventPrompt()
-	if hookPrompt && !screenIdle {
+	if hookPrompt && !(screenIdle && promptBoxEmpty(s.GetPTY(ptyID), hid, reg)) {
 		s.idle.cancel(winID)
 		return false
 	}

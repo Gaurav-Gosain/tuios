@@ -64,6 +64,25 @@ func screenVerdict(pty *PTY, hid string, reg *harness.Registry) (v agentVerdict,
 	}, true
 }
 
+// promptBoxEmpty reports whether the pane shows the harness's input box with
+// nothing typed in it, by the manifest's [prompt_box] block. The idle rule only
+// asks for a ❯ at the start of a line in the box, and Claude Code's forms mark
+// their focused field, option and button with the same ❯ (2.1.316's elicitation
+// dialog draws "❯ ◉ us-east"), so a form framed by rules reads idle. Its rows
+// are no empty box. A harness with no [prompt_box] block cannot say, and the
+// idle rule's word stands.
+func promptBoxEmpty(pty *PTY, hid string, reg *harness.Registry) bool {
+	if !reg.HasBoxRule(hid) {
+		return true
+	}
+	if pty == nil {
+		return false
+	}
+	tail, shown := pty.tailShown(reg.ScreenLines(hid))
+	draft, known := reg.BoxDraft(hid, tail, shown)
+	return known && !draft
+}
+
 // releaseScreenIdle stops defending an idle state the screen tier took, once a
 // look finds no rule matching: the prompt box that proved rest is off the
 // screen. The state stays where it is and the claim is yielded, so the pane is
