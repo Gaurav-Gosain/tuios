@@ -9532,6 +9532,19 @@ Run on 2026-11-02 on Linux amd64 with Go 1.27.3. Each control is a build that cu
 ```sh
 TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios \
   go test -count=1 -run '^(TestDaemonUpgradeRunsTheFileItChecked|TestDaemonUpgradeRunsExecuteOnlyAndWrapperBinaries|TestDaemonUpgradeCommandChecksTheBinaryFirst)$' .
+### A client attached after an upgrade leaves an alternate-screen pane alone
+
+- `TestUpgradeReattachLeavesAltScreenPaneAlone`: a Python program on the alternate screen draws every row of its window with the row's number once, after the first client has laid it out, and never draws again. It logs each `SIGWINCH` with the size it reads in the handler. The daemon is upgraded with `tuios daemon upgrade` to a copy of the binary, which drops the client, and a new client attaches at the same size. The program must hear no `SIGWINCH` after its frame, and the daemon's own grid of the pane (`capture-pane`) must still read `ROW01` to `ROW26`. The artifact records the frame before the upgrade, after it and after the second attach, the program's log, and the daemon log's resize lines.
+- The cause it covers: a client attaching to a restored session resized every pane on the alternate screen one cell smaller and back, to make its program repaint. The daemon's emulator applies both sizes at once, and the round trip on the alternate screen drops the top row and moves the cursor up. The program hears zero, one or two `SIGWINCH`es, depending on the 30 ms coalescing of window sizes, so nothing makes it put the row back. Claude Code panes showed this after every live upgrade until Ctrl+L.
+
+Run on 2026-11-02 on macOS arm64 (Darwin 27, Go 1.27.3) against `fix/upgrade-redraw`.
+
+| Control | How | Test that fails | Verdict |
+| --- | --- | --- | --- |
+| The resize round trip on attach | upstream main at 6093c1b41, without the fix | `TestUpgradeReattachLeavesAltScreenPaneAlone`, 5 runs of 5: "the daemon's grid of the pane changed across the upgrade and the second attach" (after: `ROW02` to `ROW26`, 25 rows). The daemon log has `PTY … resized 118x26 -> 117x25` and `117x25 -> 118x26` in the same millisecond after the second attach. The program logged no `SIGWINCH` in those 5 runs; a run with a timestamped handler logged `25x117` and `26x118` 31 ms apart | **caught** |
+
+```sh
+TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestUpgradeReattachLeavesAltScreenPaneAlone$' .
 ```
 
 ## Deleting a worktree from the close-confirmation dialog
