@@ -33,6 +33,9 @@ var xdgVars = []string{
 	"XDG_CACHE_HOME", "XDG_RUNTIME_DIR",
 }
 
+// windowsDirVars are the folders Windows names instead of the XDG ones.
+var windowsDirVars = []string{"USERPROFILE", "LOCALAPPDATA", "APPDATA"}
+
 // isolateXDG points every XDG directory at a throwaway tree and returns that
 // tree's path along with a function that removes it and reports whether the
 // redirect was still in force when the run ended.
@@ -58,10 +61,16 @@ func isolateXDG() (dir string, check func() error) {
 	if err := os.Setenv("HOME", tmp); err != nil {
 		panic(fmt.Sprintf("testutil: set HOME: %v", err))
 	}
-	// On Windows os.UserHomeDir reads USERPROFILE, so it moves as well.
+	// On Windows os.UserHomeDir reads USERPROFILE, so it moves as well. The
+	// daemon's socket is under LOCALAPPDATA and the config search reads APPDATA,
+	// and XDG_RUNTIME_DIR moves neither. A test that left them in place reached
+	// the developer's running daemon and stopped it (#1450). pinGoDirs has
+	// already read the real cache folder, so the go command keeps its own.
 	if runtime.GOOS == "windows" {
-		if err := os.Setenv("USERPROFILE", tmp); err != nil {
-			panic(fmt.Sprintf("testutil: set USERPROFILE: %v", err))
+		for _, name := range windowsDirVars {
+			if err := os.Setenv(name, tmp); err != nil {
+				panic(fmt.Sprintf("testutil: set %s: %v", name, err))
+			}
 		}
 	}
 	// A run started from a tuios pane inherits the pane's TUIOS_SOCKET, which
@@ -138,6 +147,14 @@ func stillRedirected(tmp string) error {
 		}
 		if !strings.HasPrefix(filepath.Clean(path)+string(filepath.Separator), filepath.Clean(tmp)+string(filepath.Separator)) {
 			escaped = append(escaped, fmt.Sprintf("  %s is %s", name, path))
+		}
+	}
+	if runtime.GOOS == "windows" {
+		for _, name := range windowsDirVars {
+			path := os.Getenv(name)
+			if !strings.HasPrefix(filepath.Clean(path)+string(filepath.Separator), filepath.Clean(tmp)+string(filepath.Separator)) {
+				escaped = append(escaped, fmt.Sprintf("  %s is %s", name, path))
+			}
 		}
 	}
 	if len(escaped) == 0 {
