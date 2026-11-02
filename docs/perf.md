@@ -21,7 +21,7 @@ visible consumer, idle CPU under ~0.5%.
   ~nothing to the wire (render count bounded). `TUIOS_STATS_FILE` makes the
   process dump its tick counters on clean exit.
 - `scripts/binary-size.sh`: builds the stripped release binary for
-  linux/amd64 and darwin/arm64 and fails over the 50 MB ceiling. See "Binary
+  linux/amd64 and darwin/arm64 and fails over the 47 MB ceiling. See "Binary
   size budget" below.
 
 ## Numbers
@@ -2358,8 +2358,10 @@ it. It builds tuios the way the release does
 darwin/arm64 with the Go version go.mod names, prints the size, and fails when
 a binary is over the ceiling.
 
-Since 2026-10-22 the ceiling is the only limit: 50,000,000 bytes for each
-target. There are no per-target budgets to raise. On a pull request, the job
+Since 2026-10-22 the ceiling is the only limit. Since 2026-11-02 it is
+47,000,000 bytes for each target, down from 50,000,000, after the rare diagram
+types moved to the sketch plugin. That keeps the saving saved: a new runtime,
+such as wazero, needs a deliberate raise in its own commit. There are no per-target budgets to raise. On a pull request, the job
 compares each size with main's last measured size. It writes the size, the
 change against main and the room under the ceiling to the job summary, and to
 one comment on the pull request that each run updates.
