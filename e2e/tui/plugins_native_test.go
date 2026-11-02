@@ -115,7 +115,7 @@ func TestNativePluginGrants(t *testing.T) {
 	// two manifests that name two ids.
 	herdrTwin := "id = \"e2e.other\"\nname = \"x\"\nversion = \"1.0.0\"\nmin_herdr_version = \"0.9.3\"\n"
 	for _, c := range []struct{ why, manifest, want string }{
-		{"wasm", nativeManifest("e2e.wasm", `"read"`, "\n[[wasm]]\nid = \"cell\"\n"), "does not run WASM plugins yet"},
+		{"wasm", nativeManifest("e2e.wasm", `"read"`, "\n[[wasm]]\nid = \"cell\"\n"), "does not run WASM plugins"},
 		{"admin", nativeManifest("e2e.admin", `"admin"`, ""), "--grant admin"},
 		{"respond", nativeManifest("e2e.respond", `"respond"`, ""), "cannot hold respond"},
 		{"typo", nativeManifest("e2e.typo", `"read"`, "\n[permision]\n"), "unknown key permision"},

@@ -107,4 +107,4 @@ tell the person.
 - Rules: `grants`, `errors`, `agents-off`
 - Results, dashboards and forms for the person: `tml`
 - Other machines: `hosts`, `files`
-- Other tools: `mcp`, `tmux`, `herdr`, `notify`, `pair`, `config`
+- Other tools: `mcp`, `tmux`, `herdr`, `plugins`, `notify`, `pair`, `config`

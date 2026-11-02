@@ -319,6 +319,9 @@ func (h *pluginHost) run(p *herdrplugin.Plugin, actionID, event string, argv []s
 	ctxJSON, _ := json.Marshal(ctx)
 	env := h.baseEnv(p, dirs)
 	env = append(env, "HERDR_PLUGIN_CONTEXT_JSON="+string(ctxJSON))
+	if p.Format == herdrplugin.FormatTuios {
+		env = append(env, ctx.nativeEnv(string(ctxJSON), actionID)...)
+	}
 	if actionID != "" {
 		env = append(env, "HERDR_PLUGIN_ACTION_ID="+actionID)
 	}
@@ -368,6 +371,15 @@ func (h *pluginHost) baseEnv(p *herdrplugin.Plugin, dirs herdrplugin.Dirs) []str
 		// The plugin's token, for a caller the kernel cannot place. See
 		// plugin_token.go.
 		env = append(env, "TUIOS_PLUGIN_ID="+p.PluginID, "TUIOS_PLUGIN_TOKEN="+h.d.manager.PluginToken(p.PluginID))
+		// The names docs/PLUGINS.md promises. TUIOS_BIN is this daemon's own
+		// binary, so a plugin reaches the tuios that runs it whatever PATH
+		// holds.
+		env = append(env, "TUIOS_PLUGIN_ROOT="+p.PluginRoot,
+			"TUIOS_PLUGIN_CONFIG_DIR="+dirs.ConfigDir(p.PluginID),
+			"TUIOS_PLUGIN_STATE_DIR="+dirs.StateDir(p.PluginID))
+		if exe, err := os.Executable(); err == nil {
+			env = append(env, "TUIOS_BIN="+exe)
+		}
 	}
 	if b := h.d.manager.herdrBin.Load(); b != nil && *b != "" {
 		env = append(env, "HERDR_BIN_PATH="+*b)
@@ -516,6 +528,27 @@ type pluginContext struct {
 	CorrelationID     string                  `json:"correlation_id,omitempty"`
 	ClickedURL        string                  `json:"clicked_url,omitempty"`
 	LinkHandlerID     string                  `json:"link_handler_id,omitempty"`
+
+	// sessionName and window name the focused pane as the -s and -w flags of
+	// the tuios command line take it. They are not in herdr's context.
+	sessionName, window string
+}
+
+// nativeEnv is what a process of a native plugin gets for this context, in
+// the names docs/PLUGINS.md promises. entry is the id of its [[process]].
+// These names differ from TUIOS_SESSION and TUIOS_PANE_ID on purpose: those
+// say that a process runs in that pane, and a plugin's process does not.
+func (c pluginContext) nativeEnv(contextJSON, entry string) []string {
+	env := []string{"TUIOS_PLUGIN_CONTEXT_JSON=" + contextJSON}
+	for _, kv := range [][2]string{
+		{"TUIOS_PLUGIN_ENTRY", entry}, {"TUIOS_PLUGIN_SESSION", c.sessionName},
+		{"TUIOS_PLUGIN_PANE", c.window}, {"TUIOS_PLUGIN_CWD", c.FocusedPaneCwd},
+	} {
+		if kv[1] != "" {
+			env = append(env, kv[0]+"="+kv[1])
+		}
+	}
+	return env
 }
 
 // merge lays the fields a caller gave over the computed ones, field by
@@ -572,7 +605,7 @@ func (d *Daemon) pluginContextForPane(paneID, correlation string) (pluginContext
 // pluginContextFor builds the context of window in sess, or of the session
 // alone when window is "".
 func (d *Daemon) pluginContextFor(sess *Session, window, correlation string) pluginContext {
-	ctx := pluginContext{InvocationSource: "api", CorrelationID: correlation}
+	ctx := pluginContext{InvocationSource: "api", CorrelationID: correlation, sessionName: sess.Name(), window: window}
 	v := &herdrView{}
 	st := sess.GetState()
 	d.addHerdrSession(v, sess, st, 1, false)

@@ -8,7 +8,7 @@ An agent **running inside a TUIOS pane** wants the other document. Run
 reading and writing them, running work and waiting on it, reporting agent
 state, and talking to other agents safely. `tuios --skill TOPIC` prints the
 rest (panes and state in depth, fleets, checkpoints, ship, files, the Inbox, notify, pair,
-mail, hosts, clients, events, MCP, the tmux shim, grants, config, agents-off,
+mail, hosts, clients, events, MCP, the tmux shim, plugins, grants, config, agents-off,
 errors, recipes). The source is [skills/tuios/SKILL.md](skills/tuios/SKILL.md)
 and the other files in `skills/tuios/`, embedded in the binary so the printed
 copy always matches the build. `cmd/tuios` tests resolve every command the
@@ -646,6 +646,7 @@ Releases are automated via GitHub Actions with GoReleaser:
 - **Configuration**: `docs/CONFIGURATION.md`. TOML config options
 - **Contributing**: `docs/CONTRIBUTING.md`. Contribution guidelines
 - **Tape Scripting**: `docs/TAPE_SCRIPTING.md`. Automation script syntax
+- **Plugins**: `docs/PLUGINS.md`. The plugin API, the contract that keeps it stable, and the trust rules
 - **Web Terminal**: `docs/WEB.md`. Web terminal documentation (tuios-web binary)
 - **VT Backends**: `docs/ghostty-vt.md`. The pure Go and libghostty-vt emulators, and how to build each
 - **Rehydration**: `docs/REHYDRATION.md`. The snapshot-vs-stream contract for pane content on attach

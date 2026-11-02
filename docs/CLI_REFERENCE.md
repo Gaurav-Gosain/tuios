@@ -4280,27 +4280,27 @@ Some commands also answer to a short name: `attach` to `a`, `new` to `n`,
 | `tuios stash get <stored-path> [file]` | Copy a stashed file out of the session store, across a link |
 | `tuios stash list` | List the files in the session store |
 
-**herdr plugins:**
+**Plugins:**
 
 | Command | What it does |
 |---------|--------------|
 | `tuios plugins install SOURCE [--ref REF] [--subdir DIR] [--yes] [--no-enable] [--no-build] [--replace] [--grant admin]` | Get a plugin with git, build it, pin its commit in `plugins.lock` and enable it. `SOURCE` is `owner/repo[/dir][@ref]` on github.com, a git URL (`https://`, `ssh://`, `git@host:path`, `file://`) with an optional `@ref`, or a local folder. tuios shows the plan and asks first. A native plugin that asks for `admin` needs `--grant admin`. Each install builds into a new folder. A failed build changes nothing that runs. Needs `git`. Refused inside a pane |
-| `tuios plugins uninstall ID` | Undo `tuios plugins install`. Disable the plugin, stop its processes and close its panes. Remove it from `plugins.lock`, remove its folder in `$XDG_DATA_HOME/tuios/plugins/` and remove its approval. `ID` can also be the source you installed from. The config and state folders of the plugin stay. Refused for a plugin that `install` did not install: use `unlink` for a linked folder. Refused inside a pane |
+| `tuios plugins uninstall ID [--yes]` | Undo `tuios plugins install`. Disable the plugin, stop its processes and close its panes. Remove it from `plugins.lock`, remove its folder in `$XDG_DATA_HOME/tuios/plugins/` and remove its approval. `ID` can also be the source you installed from. The config and state folders of the plugin stay. Refused for a plugin that `install` did not install: use `unlink` for a linked folder. Refused inside a pane |
 | `tuios plugins approve ID [--deny] [--grant admin] [--yes]` | Allow a tuios plugin to run on this machine, or deny it. tuios shows what the plugin runs and its grants, and asks first. A plugin that asks for `admin` needs `--grant admin`. When the plugin's manifest changes, it waits for a new answer. Refused inside a pane and from a plugin |
 | `tuios plugins install [--yes]` | With no `SOURCE`: install each plugin in `plugins.lock` at its pinned commit. It does not enable them. `--yes` trusts the author of `plugins.lock` |
-| `tuios plugins list [--json]` | List the herdr plugins tuios finds, with the state of each: `on`, `off` or `error`. An installed plugin shows `managed` and its source and commit. Reads the files only. It runs no plugin code |
+| `tuios plugins list [--json]` | List the plugins tuios finds, with the state of each and the reason: `on`, `off`, `error`, `waiting for approval` or `denied`. An installed plugin shows `managed` and its source and commit. Reads the files only. It runs no plugin code |
 | `tuios plugins info ID [--json]` | Show a plugin's build and startup commands, actions, panes, event hooks and link handlers |
 | `tuios plugins enable ID` | Add the plugin to `[plugins] enabled`. A running daemon starts it at once. Refused inside a pane |
 | `tuios plugins disable ID` | Remove the plugin from `[plugins] enabled` and stop its processes. Refused inside a pane |
 | `tuios plugins link DIR [--enable]` | Add a plugin folder to `[plugins] dirs`. The plugin stays off unless you add `--enable`. Refused inside a pane |
-| `tuios plugins unlink ID` | Remove a linked folder from `[plugins] dirs` and disable the plugin. Refused inside a pane |
+| `tuios plugins unlink ID` | Remove a linked folder from `[plugins] dirs`, disable the plugin and close its panes. Refused inside a pane |
 | `tuios plugins build ID` | Run the plugin's `[[build]]` commands in its folder. Each command is shown before it runs. Refused inside a pane |
 | `tuios plugins run ID ACTION [--wait]` | Run an action of an enabled plugin. `--wait` waits for it to end and prints its output |
 | `tuios plugins open ID PANE [--placement P]` | Open a pane of an enabled plugin. `P` is `overlay`, `popup`, `split`, `tab` or `zoomed` |
 | `tuios plugins log [ID] [--limit N] [--json]` | Show the last runs of plugin commands, with their exit codes and output |
 
-An enabled plugin runs with your rights. See
-[herdr plugins](AGENT_STATE.md#herdr-plugins).
+An enabled plugin runs with your rights. Grants are not a sandbox. See
+[PLUGINS.md](PLUGINS.md).
 
 **Other machines:**
 

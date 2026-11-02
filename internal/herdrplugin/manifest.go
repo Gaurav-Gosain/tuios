@@ -19,6 +19,11 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/sortx"
 )
 
+// noPlatformsWarning is herdr's warning on a manifest with no platforms. A
+// tuios manifest leaves platforms out to mean every platform, so it does not
+// get it.
+const noPlatformsWarning = "manifest does not declare platforms; platform support unknown"
+
 // HostVersion is the herdr release whose plugin format this package follows.
 // A manifest whose min_herdr_version is newer is refused, as herdr refuses
 // it.
@@ -323,6 +328,8 @@ func Load(path string) (*Plugin, *Error) {
 	}
 	if resolved, err := filepath.EvalSymlinks(abs); err == nil {
 		abs = resolved
+	} else if errors.Is(err, os.ErrNotExist) {
+		return nil, errf("plugin_manifest_not_found", "%s has no %s or %s", filepath.Dir(abs), NativeManifestName, ManifestName)
 	} else {
 		return nil, errf("plugin_manifest_not_found", "%v", err)
 	}
@@ -480,7 +487,7 @@ func parseRaw(raw *rawManifest) (*Plugin, *Error) {
 		}
 	}
 	if p.Platforms == nil {
-		p.Warnings = append(p.Warnings, "manifest does not declare platforms; platform support unknown")
+		p.Warnings = append(p.Warnings, noPlatformsWarning)
 	}
 	return p, nil
 }

@@ -2633,7 +2633,7 @@ to `enabled`, or a folder to `dirs`, waits for `tuios config apply` or a
 daemon restart. `tuios plugins enable ID` applies only the plugin that it
 names. A new folder waits because it can hold a
 plugin with the id of a plugin that you enabled.
-[AGENT_STATE.md](AGENT_STATE.md#herdr-plugins) says what runs and when.
+[PLUGINS.md](PLUGINS.md) says what runs and when.
 
 ## Plans, risk rules, the recap and the queue
 

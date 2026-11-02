@@ -346,6 +346,7 @@ func (m *OS) renderPluginApproval() (string, overlay.Geometry, []overlayRowHit) 
 			}
 		}
 	}
+	line("Grants are not a sandbox. It can read your files.", pal.FgDim)
 	line("", pal.FgDim)
 	word := pluginApprovalWord(a)
 	line("To allow it, type "+word+" and press Enter:", pal.Fg)

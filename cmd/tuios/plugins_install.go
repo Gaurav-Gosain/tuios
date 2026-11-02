@@ -21,7 +21,6 @@ import (
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/herdrplugin"
-	"github.com/Gaurav-Gosain/tuios/internal/release"
 	"github.com/Gaurav-Gosain/tuios/internal/review"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/spf13/cobra"
@@ -54,7 +53,7 @@ SOURCE is owner/repo[/dir][@ref] on github.com, a git URL (https, ssh, git@host:
 
 Without SOURCE, tuios installs each plugin in plugins.lock at its commit. It does not enable them.
 
-tuios shows what the plugin runs and asks first. A plugin runs with your rights. You need git.`,
+tuios shows what the plugin runs and asks first. A plugin runs with your rights. Grants are not a sandbox. You need git.`,
 		Args: cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if inPane() {
@@ -128,7 +127,7 @@ func parsePluginSource(arg string, o installOpts) (pluginSource, error) {
 	} else {
 		parts := strings.Split(body, "/")
 		if len(parts) < 2 {
-			return s, fmt.Errorf("no plugin is named %s in the registry. Use owner/repo or a git URL", arg)
+			return s, fmt.Errorf("tuios has no plugin catalog yet, so it cannot find %s. Give owner/repo, a git URL or a folder", arg)
 		}
 		for _, part := range parts[:2] {
 			if part == "" || part == "." || part == ".." {
@@ -221,7 +220,7 @@ func fetchInto(dir, url, ref, subdir string) (commit, tree string, err error) {
 func loadInside(root, checkout string) (*herdrplugin.Plugin, error) {
 	p, perr := herdrplugin.Load(root)
 	if perr != nil {
-		return nil, fmt.Errorf("the plugin cannot be read: %s: %s", perr.Code, perr.Msg)
+		return nil, fmt.Errorf("the plugin cannot be read: %s", perr.Msg)
 	}
 	if checkout != "" && !herdrplugin.Inside(p.ManifestPath, checkout) {
 		return nil, errors.New("the plugin manifest is a link to a file outside the repository. tuios does not install it")
@@ -287,8 +286,34 @@ func (in *installer) fetch(url, ref, subdir string) (string, *herdrplugin.LockEn
 	if e.Commit, e.Tree, err = fetchInto(work, url, ref, subdir); err != nil {
 		return work, nil, nil, err
 	}
-	p, err := loadInside(filepath.Join(work, filepath.FromSlash(subdir)), work)
+	root := filepath.Join(work, filepath.FromSlash(subdir))
+	if !herdrplugin.HasManifest(root) {
+		return work, nil, nil, errNoManifest(work, url, subdir)
+	}
+	p, err := loadInside(root, work)
 	return work, e, p, err
+}
+
+// errNoManifest says that the folder asked for holds no plugin manifest, and
+// names the folders of the repository that do. It never shows the fetch
+// folder, which is gone when the person reads this.
+func errNoManifest(work, url, subdir string) error {
+	where := "at the top of " + shownSource(url)
+	if subdir != "" {
+		where = "in the folder " + subdir + " of " + shownSource(url)
+	}
+	msg := fmt.Sprintf("there is no plugin manifest %s. Nothing was installed", where)
+	listed, _ := git(work, "ls-files", "--", ":(glob)**/"+herdrplugin.NativeManifestName, ":(glob)**/"+herdrplugin.ManifestName)
+	var folders []string
+	for f := range strings.Lines(listed) {
+		if dir := path.Dir(strings.TrimSpace(f)); !slices.Contains(folders, dir) {
+			folders = append(folders, dir)
+		}
+	}
+	if len(folders) == 0 {
+		return errors.New(msg + ". Check that this repository holds a tuios plugin")
+	}
+	return fmt.Errorf("%s. A manifest is in %s. Add --subdir %s", msg, shownArgv(strings.Join(folders[:min(5, len(folders))], ", ")), shownArgv(folders[0]))
 }
 
 // finish shows the plan and asks. Then it builds into a new build folder
@@ -643,17 +668,21 @@ func shownArgv(argv ...string) string { return herdrplugin.ShownArgv(argv...) }
 func grantsText(p *herdrplugin.Plugin) string {
 	switch {
 	case p.Format != herdrplugin.FormatTuios:
-		return "It can call tuios with the default pane grants.\n"
+		return "It can call tuios with the default pane grants.\n" + grantsNote
 	case len(p.Grants) == 0:
-		return "It can call tuios only for what every pane may do.\n"
+		return "It can call tuios only for what every pane may do.\n" + grantsNote
 	}
 	var b strings.Builder
 	b.WriteString("It can call tuios with these grants, in every session:\n")
 	for _, g := range p.Grants {
 		fmt.Fprintf(&b, "  %-6s %s\n", g, herdrplugin.GrantMeaning(g))
 	}
+	b.WriteString(grantsNote)
 	return b.String()
 }
+
+// grantsNote keeps the limit of a grant beside the grants.
+const grantsNote = "Grants are not a sandbox. The plugin can read your files and run any program as you.\n"
 
 // installPlan is what the person approves: facts only.
 func installPlan(p *herdrplugin.Plugin, e herdrplugin.LockEntry, folder string, o installOpts) string {
@@ -808,14 +837,9 @@ func (in *installer) installPinned(e herdrplugin.LockEntry) error {
 	return in.finish(e, p, fetched)
 }
 
-// checkNativeAsks refuses a native plugin that needs a newer tuios, or that
-// asks for admin when the person did not type --grant admin.
+// checkNativeAsks refuses a native plugin that asks for admin when the person
+// did not type --grant admin. Load refuses one that needs a newer tuios.
 func checkNativeAsks(p *herdrplugin.Plugin, o installOpts) error {
-	if p.MinTuios != "" {
-		if newer, ok := release.Newer(version, p.MinTuios); ok && newer {
-			return fmt.Errorf("%s needs tuios %s or later. This is tuios %s. Update tuios first", p.PluginID, p.MinTuios, version)
-		}
-	}
 	if slices.Contains(p.Grants, "admin") && !slices.Contains(o.grants, "admin") {
 		return fmt.Errorf("%s asks for the admin grant, which reaches every pane and verb. To give it, run the command again with --grant admin", p.PluginID)
 	}
@@ -835,7 +859,7 @@ func checkNativeAsks(p *herdrplugin.Plugin, o installOpts) error {
 func confirmPerson() error {
 	socks := liveDaemonSockets()
 	if len(socks) == 0 {
-		return errors.New("tuios asks its daemon to confirm that you run this command, and no daemon runs. Start tuios, then run the command again")
+		return errors.New("tuios asks its daemon to confirm that you run this command, and no daemon runs. Run tuios start-server, then run the command again")
 	}
 	for _, sock := range socks {
 		client, err := session.DialVerbClientAt(sock, version)

@@ -24,7 +24,8 @@ import (
 // dirs, the tuios plugins folder or herdr is refused.
 
 func newPluginsUninstallCommand() *cobra.Command {
-	return &cobra.Command{
+	var yes bool
+	cmd := &cobra.Command{
 		Use:   "uninstall ID",
 		Short: "Disable and remove a plugin that tuios plugins install installed",
 		Long: `Disable and remove a plugin that tuios plugins install installed.
@@ -33,19 +34,21 @@ tuios stops the processes of the plugin and closes its panes. It removes the plu
 
 ID is the plugin id. You can also give the source that you installed the plugin from.
 
-tuios keeps the config and state folders of the plugin. A plugin installed from a folder on this machine keeps that folder. tuios does not remove a plugin that it did not install. For a linked folder, use tuios plugins unlink.`,
+In a terminal, tuios asks first. --yes skips the question. tuios keeps the config and state folders of the plugin. A plugin installed from a folder on this machine keeps that folder. tuios does not remove a plugin that it did not install. For a linked folder, use tuios plugins unlink.`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if inPane() {
 				return errFromPane("uninstall")
 			}
-			return uninstallPlugin(cmd.OutOrStdout(), args[0])
+			return uninstallPlugin(cmd.OutOrStdout(), args[0], yes)
 		},
 	}
+	cmd.Flags().BoolVarP(&yes, "yes", "y", false, "Uninstall without the question")
+	return cmd
 }
 
 // uninstallPlugin is tuios plugins uninstall ARG.
-func uninstallPlugin(out io.Writer, arg string) error {
+func uninstallPlugin(out io.Writer, arg string, yes bool) error {
 	configPath, err := pluginsConfigPath()
 	if err != nil {
 		return err
@@ -66,6 +69,17 @@ func uninstallPlugin(out io.Writer, arg string) error {
 	id, err := installedID(arg, lock, state, herdrplugin.Discover(dirs, cfg.Enabled))
 	if err != nil {
 		return err
+	}
+
+	// A script with no terminal keeps working as it did before --yes existed.
+	if prompt := newLookPrompt(yes, false); prompt.tty {
+		ok, err := prompt.confirm(out, "Stop "+id+", close its panes and remove it?")
+		if err != nil {
+			return err
+		}
+		if !ok {
+			return errors.New("nothing was changed")
+		}
 	}
 
 	release, err := herdrplugin.HoldLock(filepath.Join(dirs.ManagedDir(), herdrplugin.InstallLockName))

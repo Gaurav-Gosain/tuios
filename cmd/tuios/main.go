@@ -64,6 +64,7 @@ func main() {
 	// A `go install ...@vX` build has no ldflags; its module version stands in
 	// for them before anything below reads the stamps.
 	applyModuleVersion()
+	herdrplugin.RunningVersion = version
 
 	// The build identity, handed to internal/app before anything can crash.
 	// A crash report that cannot say which build produced it cannot be placed

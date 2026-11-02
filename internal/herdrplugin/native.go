@@ -22,9 +22,10 @@ import (
 // processes hold the default grants, and a native plugin's hold the grants
 // the person approved at install (Plugin.Held), or none.
 //
-// Unknown keys are refused, so a typo is not a silent no-op. Entries a later
+// Unknown keys are refused, so a typo is not a silent no-op, and an older
+// tuios never ignores a key or a grant a newer one added. Entries a later
 // tuios runs, [[wasm]] and event processes, are refused with a message that
-// says so.
+// says so. docs/PLUGINS.md is the contract.
 
 // NativeManifestName is the file name of a native plugin manifest. In a
 // folder with both files, it wins.
@@ -38,8 +39,17 @@ const FormatTuios = "tuios"
 // to their grants. Elsewhere the runner does not start them.
 const kernelPlacesCallers = runtime.GOOS == "linux" || runtime.GOOS == "darwin"
 
-// nativeSchema is the schema version this build reads.
-const nativeSchema = 1
+// nativeAPI is the plugin API version this build reads, the api key of a
+// manifest.
+const nativeAPI = 1
+
+// RunningVersion is the version of this tuios, which the binary sets. A
+// manifest whose min_tuios is newer is refused. A value that is not a release
+// version, such as "dev", checks nothing.
+var RunningVersion string
+
+// orUpdate ends a refusal that a newer tuios may not make.
+const orUpdate = "Check the spelling. If the plugin needs a newer tuios, run tuios update"
 
 // PluginGrants are the grants a native manifest may ask for. respond is not
 // one: a plugin never answers a prompt for the person. files is for a later
@@ -47,7 +57,8 @@ const nativeSchema = 1
 var PluginGrants = []string{"read", "write", "fan", "admin"}
 
 type rawNative struct {
-	Schema      *int      `toml:"schema"`
+	API         *int      `toml:"api"`
+	Schema      *int      `toml:"schema"` // the old name of api, shipped in v0.12
 	ID          *string   `toml:"id"`
 	Name        *string   `toml:"name"`
 	Version     *string   `toml:"version"`
@@ -91,19 +102,37 @@ func parseNative(data []byte, root string) (*Plugin, *Error) {
 	if err := dec.Decode(&n); err != nil {
 		var strict *toml.StrictMissingError
 		if errors.As(err, &strict) && len(strict.Errors) > 0 {
-			return nil, errf("plugin_manifest_parse_failed", "unknown key %s in %s", strings.Join(strict.Errors[0].Key(), "."), NativeManifestName)
+			return nil, errf("plugin_manifest_parse_failed", "unknown key %s in %s. %s", strings.Join(strict.Errors[0].Key(), "."), NativeManifestName, orUpdate)
 		}
 		return nil, errf("plugin_manifest_parse_failed", "%v", err)
 	}
+	var warnings []string
+	if n.Schema != nil {
+		if n.API != nil {
+			return nil, errf("plugin_manifest_parse_failed", "the manifest has both api and schema. Remove schema")
+		}
+		n.API = n.Schema
+		warnings = append(warnings, "schema is an old name. Use api = 1")
+	}
 	switch {
-	case n.Schema == nil:
-		return nil, missingField("schema")
-	case *n.Schema > nativeSchema:
-		return nil, errf("plugin_requires_newer_tuios", "the manifest has schema %d. This tuios reads schema %d. Update tuios", *n.Schema, nativeSchema)
-	case *n.Schema < nativeSchema:
-		return nil, errf("plugin_manifest_parse_failed", "schema must be %d", nativeSchema)
+	case n.API == nil:
+		return nil, missingField("api")
+	case *n.API > nativeAPI:
+		return nil, errf("plugin_requires_newer_tuios", "the manifest has api %d. This tuios reads api %d. Run tuios update", *n.API, nativeAPI)
+	case *n.API < nativeAPI:
+		return nil, errf("plugin_manifest_parse_failed", "api must be %d", nativeAPI)
 	case len(n.Wasm) > 0:
-		return nil, errf("plugin_requires_newer_tuios", "the plugin has [[wasm]] entries. This tuios does not run WASM plugins yet")
+		return nil, errf("plugin_requires_newer_tuios", "the plugin has [[wasm]] entries. This tuios does not run WASM plugins")
+	}
+	if n.MinTuios != nil {
+		v := strings.TrimSpace(*n.MinTuios)
+		want, ok := parseVersion(v)
+		if !ok {
+			return nil, errf("invalid_plugin_min_tuios", "min_tuios must be a version such as 0.9.0")
+		}
+		if have, ok := parseVersion(RunningVersion); ok && slices.Compare(have[:], want[:]) < 0 {
+			return nil, errf("plugin_requires_newer_tuios", "the plugin needs tuios %s or later. This is tuios %s. Run tuios update", v, RunningVersion)
+		}
 	}
 	grants, perr := nativeGrants(n.Permissions.Grants)
 	if perr != nil {
@@ -126,14 +155,12 @@ func parseNative(data []byte, root string) (*Plugin, *Error) {
 			return nil, perr
 		}
 		p.MinHerdrVersion = ""
+		p.Warnings = slices.DeleteFunc(p.Warnings, func(w string) bool { return w == noPlatformsWarning })
 	}
 	p.Format, p.Grants = FormatTuios, grants
+	p.Warnings = append(p.Warnings, warnings...)
 	if n.MinTuios != nil {
-		v := strings.TrimSpace(*n.MinTuios)
-		if _, ok := parseVersion(v); !ok {
-			return nil, errf("invalid_plugin_min_tuios", "min_tuios must be a version such as 0.9.0")
-		}
-		p.MinTuios = v
+		p.MinTuios = strings.TrimSpace(*n.MinTuios)
 	}
 	return p, nil
 }
@@ -175,9 +202,9 @@ func addProcess(raw *rawManifest, x rawProcess) *Error {
 	case "pane":
 		raw.Panes = append(raw.Panes, rawPane{ID: x.ID, Title: x.Title, Description: x.Description, Platforms: x.Platforms, Placement: x.Placement, Width: x.Width, Height: x.Height, Command: x.Command})
 	case "event":
-		return errf("plugin_requires_newer_tuios", "the plugin has an event process. This tuios does not run them yet")
+		return errf("plugin_requires_newer_tuios", "the plugin has an event process. This tuios does not run them. Run tuios update")
 	default:
-		return errf("plugin_manifest_parse_failed", "unknown run %q, expected startup, action or pane", *x.Run)
+		return errf("plugin_manifest_parse_failed", "unknown run %q. Use startup, action or pane. %s", *x.Run, orUpdate)
 	}
 	return nil
 }
@@ -190,7 +217,7 @@ func nativeGrants(names []string) ([]string, *Error) {
 		case g == "respond":
 			return nil, errf("invalid_plugin_grant", "a plugin cannot hold respond. Only the person answers a prompt")
 		case !slices.Contains(PluginGrants, g):
-			return nil, errf("invalid_plugin_grant", "unknown grant %q. A plugin can ask for %s", g, strings.Join(PluginGrants, ", "))
+			return nil, errf("invalid_plugin_grant", "unknown grant %q. A plugin can ask for %s. %s", g, strings.Join(PluginGrants, ", "), orUpdate)
 		case !slices.Contains(out, g):
 			out = append(out, g)
 		}

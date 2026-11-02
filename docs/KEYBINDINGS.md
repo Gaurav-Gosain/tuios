@@ -959,7 +959,7 @@ height = "80%"
     example `example.layout.apply`. The daemon runs the action. The plugin
     must be enabled. When no plugin has the action, tuios shows a config
     problem. This works only in a daemon session on this machine. See
-    [herdr plugins](AGENT_STATE.md#herdr-plugins).
+    [plugins](PLUGINS.md).
 - `command` runs with `sh -c`, so you can write pipes and quotes. It starts in
   the folder of the focused pane.
 - `description` is the name in the command palette and in

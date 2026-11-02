@@ -395,8 +395,12 @@ func (d *Daemon) herdrPluginUnlink(cs *connState, params json.RawMessage) (any, 
 	}); herr != nil {
 		return nil, herr
 	}
+	// The plugin's folder is out of the list, so its panes must not outlive
+	// it: a pane left open is saved with the session and comes back with it,
+	// running the plugin's command after the person took the plugin away.
+	closed := d.closePluginPanes(cs, id)
 	d.plugins.forgetPanes(id)
-	return map[string]any{"type": "plugin_unlinked", "plugin_id": id, "removed": removed}, nil
+	return map[string]any{"type": "plugin_unlinked", "plugin_id": id, "removed": removed, "panes_closed": closed}, nil
 }
 
 // herdrActionInfo is herdr's PluginActionInfo.
@@ -554,6 +558,8 @@ var pluginPaneProtected = []string{
 	"HERDR_SOCKET_PATH", "HERDR_ENV", "HERDR_PLUGIN_ID", "HERDR_PLUGIN_ROOT",
 	"HERDR_PLUGIN_CONFIG_DIR", "HERDR_PLUGIN_STATE_DIR", "HERDR_PLUGIN_ENTRYPOINT_ID",
 	"HERDR_PLUGIN_CONTEXT_JSON", "HERDR_BIN_PATH", "TUIOS_PLUGIN_ID", "TUIOS_PLUGIN_TOKEN",
+	"TUIOS_PLUGIN_ROOT", "TUIOS_PLUGIN_CONFIG_DIR", "TUIOS_PLUGIN_STATE_DIR", "TUIOS_BIN",
+	"TUIOS_PLUGIN_CONTEXT_JSON", "TUIOS_PLUGIN_ENTRY", "TUIOS_PLUGIN_SESSION", "TUIOS_PLUGIN_PANE", "TUIOS_PLUGIN_CWD",
 }
 
 // overlaySize is the popup size of an overlay pane: herdr draws an overlay
@@ -694,6 +700,9 @@ func (d *Daemon) herdrPluginPaneOpen(cs *connState, params json.RawMessage) (any
 		}
 	}
 	env = append(env, "HERDR_PLUGIN_ENTRYPOINT_ID="+pane.ID, "HERDR_PLUGIN_CONTEXT_JSON="+string(ctxJSON))
+	if e.Plugin.Format == herdrplugin.FormatTuios {
+		env = append(env, ctx.nativeEnv(string(ctxJSON), pane.ID)...)
+	}
 
 	argv := slices.Clone(pane.Command)
 	if strings.ContainsAny(argv[0], `/\`) && !filepath.IsAbs(argv[0]) {

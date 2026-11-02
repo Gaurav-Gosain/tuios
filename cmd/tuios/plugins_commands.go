@@ -20,7 +20,8 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// tuios plugins: the herdr plugins tuios runs. See internal/herdrplugin for
+// tuios plugins: the plugins tuios runs, native (tuios-plugin.toml) and herdr
+// (herdr-plugin.toml). docs/PLUGINS.md is the contract. See internal/herdrplugin for
 // where plugins are found and internal/session/plugin_host.go for what runs.
 //
 // list and info read the files and need no daemon. enable, disable, link and
@@ -32,12 +33,14 @@ func newPluginsCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:     "plugins",
 		Aliases: []string{"plugin"},
-		Short:   "List, enable and run herdr plugins",
-		Long: `List, enable and run herdr plugins (herdr-plugin.toml).
+		Short:   "Install, list and run plugins",
+		Long: `Install, list and run plugins. A plugin is a folder with a manifest: tuios-plugin.toml for a tuios plugin, or herdr-plugin.toml for a herdr plugin.
+
+An enabled plugin runs its commands with your rights, outside every pane. Grants limit what a plugin can ask of tuios. Grants are not a sandbox: a plugin can read your files and run any program. Install only plugins you trust.
 
 tuios finds plugins in five places: the folders [plugins] dirs names, the tuios plugins folder, plugins.lock, herdr's plugins.json and herdr's managed checkouts. Finding a plugin runs nothing. A plugin runs only after you enable it. tuios plugins install enables the plugin it installs. tuios plugins uninstall removes it.
 
-An enabled plugin runs its commands with your rights, outside every pane, as it does in herdr. Enable only plugins you trust. You must run install, uninstall, enable, disable, link, unlink and build from a terminal outside tuios.`,
+You must run install, uninstall, approve, enable, disable, link, unlink and build from a terminal outside tuios. To write a plugin, read docs/PLUGINS.md or run tuios --skill plugins.`,
 	}
 	cmd.AddCommand(newPluginsListCommand(), newPluginsInfoCommand(),
 		newPluginsEnableCommand(true), newPluginsEnableCommand(false),
@@ -103,7 +106,7 @@ func needDaemon(method string, params map[string]any, timeout time.Duration) (ma
 		return nil, err
 	}
 	if !running {
-		return nil, errors.New("no tuios daemon is running. Start one with tuios, then try again")
+		return nil, errors.New("no tuios daemon is running. Run tuios start-server, then try again")
 	}
 	return res, nil
 }
@@ -151,7 +154,7 @@ func newPluginsListCommand() *cobra.Command {
 				return nil
 			}
 			tw := tabwriter.NewWriter(out, 0, 2, 2, ' ', 0)
-			fmt.Fprintln(tw, "ID\tSTATE\tFROM\tVERSION\tSOURCE\tNAME")
+			fmt.Fprintln(tw, "ID\tSTATE\tFROM\tVERSION\tSOURCE\tNAME\tREASON")
 			for _, e := range entries {
 				source := ""
 				if e.Lock != nil {
@@ -164,10 +167,11 @@ func newPluginsListCommand() *cobra.Command {
 				if e.Plugin != nil {
 					name, ver = e.Plugin.Name, e.Plugin.Version
 				}
+				reason := ""
 				if e.Err != nil {
-					name = e.Err.Msg
+					reason = e.Err.Msg
 				}
-				fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\t%s\n", e.ID, entryState(e), e.Origin, ver, source, name)
+				fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\t%s\t%s\n", e.ID, entryState(e), e.Origin, ver, source, name, reason)
 			}
 			return tw.Flush()
 		},
@@ -241,7 +245,7 @@ func printPluginInfo(w io.Writer, e herdrplugin.Entry) {
 		fmt.Fprintf(w, "\n%s:\n", title)
 		return true
 	}
-	if section("Build commands (run only by tuios plugins build)", len(p.Build)) {
+	if section("Build commands (run only by tuios plugins install and tuios plugins build)", len(p.Build)) {
 		for _, b := range p.Build {
 			fmt.Fprintf(w, "  %s\n", strings.Join(b.Command, " "))
 		}
@@ -335,7 +339,7 @@ func newPluginsLinkCommand() *cobra.Command {
 			}
 			p, perr := herdrplugin.Load(args[0])
 			if perr != nil {
-				return fmt.Errorf("the plugin cannot be read: %s: %s", perr.Code, perr.Msg)
+				return fmt.Errorf("the plugin cannot be read: %s", perr.Msg)
 			}
 			_, running, err := pluginCall("plugin.link", map[string]any{"path": p.PluginRoot, "enabled": enable}, 10*time.Second)
 			if err != nil {
@@ -370,14 +374,14 @@ func newPluginsLinkCommand() *cobra.Command {
 func newPluginsUnlinkCommand() *cobra.Command {
 	return &cobra.Command{
 		Use:   "unlink ID",
-		Short: "Remove a linked plugin folder and disable the plugin",
+		Short: "Remove a linked plugin folder, disable the plugin and close its panes",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if inPane() {
 				return errFromPane("unlink")
 			}
 			id := args[0]
-			_, running, err := pluginCall("plugin.unlink", map[string]any{"plugin_id": id}, 10*time.Second)
+			res, running, err := pluginCall("plugin.unlink", map[string]any{"plugin_id": id}, 30*time.Second)
 			if err != nil {
 				return err
 			}
@@ -403,6 +407,9 @@ func newPluginsUnlinkCommand() *cobra.Command {
 				}
 			}
 			fmt.Fprintf(cmd.OutOrStdout(), "The plugin %s is unlinked and disabled.\n", id)
+			if n, ok := res["panes_closed"].(json.Number); ok && n.String() != "0" {
+				fmt.Fprintf(cmd.OutOrStdout(), "Panes closed: %s.\n", n)
+			}
 			return nil
 		},
 	}

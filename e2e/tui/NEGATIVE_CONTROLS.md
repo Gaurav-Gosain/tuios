@@ -11868,3 +11868,26 @@ Run on 2026-11-02 on macOS (arm64). All four tests pass on the fixed build.
 | `removeLocked` closing the entry's `unwatch` | Fourth test: "the watch on the dropped message did not end within 10s" | **caught** |
 
 Repeat from `e2e/tui` with `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run 'TestQueuedMessageTakenWhileItsHookIsLost|TestQueuedMessageLeftInTheBox|TestDroppingAStalledQueuedMessage' -v .`. The state log of each run is `queue-taken-hook-lost.log`, `queue-left-in-box.log`, `queue-stalled-late-stop.log` and `queue-stalled-rm.log` under `TUIOS_E2E_FRAMES`.
+
+## The plugin flow
+
+`TestPluginsFlowSaysWhatToDo` follows a person from a first install to an
+unlink: each refusal says what to do, a manifest this tuios does not fully
+know is refused, a plugin's process gets the variables `docs/PLUGINS.md`
+names, and the pane of an unlinked plugin does not come back after a daemon
+restart. `TestPluginsWalkthrough` runs the walkthrough in `docs/PLUGINS.md`
+with the files as the page prints them.
+
+Run on 2026-11-02, each control against the branch head with one change:
+
+| Claim | Control | Where it fails | Verdict |
+|---|---|---|---|
+| unlink closes the plugin's panes | `closePluginPanes` cut from `plugin.unlink` | "the pane of an unlinked plugin stays open", and "came back after a restart" | **caught** |
+| A key from a newer tuios is refused | `DisallowUnknownFields` cut | "a newer key loaded" | **caught** |
+| A newer `api` is refused | the check moved to 99 | "a newer api loaded" | **caught** |
+| `TUIOS_BIN` reaches the daemon with no `PATH` | the variable cut | `plugins run` fails | **caught** |
+| A plugin's process carries no pane's names | `TUIOS_SESSION` added | "TUIOS_SESSION is set" | **caught** |
+| A missing manifest names the folder, not the fetch folder | the check cut | "the error shows a temp folder or a code" | **caught** |
+
+The `min_tuios` refusal needs a stamped binary, so no e2e test covers it. It
+was run by hand on a build stamped 0.1.0 against `min_tuios = "99.0.0"`.
