@@ -183,6 +183,11 @@ func runE2E(m *testing.M) int {
 		_ = os.Unsetenv(key)
 	}
 	defer func() { _ = os.RemoveAll(shortRuntimeRoot) }()
+	defer func() {
+		if otherProtocolDir != "" {
+			_ = os.RemoveAll(otherProtocolDir)
+		}
+	}()
 
 	if bin := os.Getenv("TUIOS_E2E_BIN"); bin != "" {
 		abs, err := filepath.Abs(bin)

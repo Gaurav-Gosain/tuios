@@ -288,6 +288,10 @@ var (
 	otherProtocolOnce sync.Once
 	otherProtocolBin  string
 	otherProtocolErr  error
+	// otherProtocolDir holds that build, and runE2E removes it when the run
+	// ends: the binary is tens of megabytes, and a test's cleanup is too early
+	// for it, since every test that wants it shares the one build.
+	otherProtocolDir string
 )
 
 // otherProtocolTuios builds this tree once per run with the wire protocol one
@@ -327,6 +331,7 @@ func buildOtherProtocol() (string, error) {
 	if err != nil {
 		return "", err
 	}
+	otherProtocolDir = dir
 	patched := filepath.Join(dir, "protocol_version.go")
 	if err := os.WriteFile(patched, []byte(text), 0o600); err != nil {
 		return "", err
