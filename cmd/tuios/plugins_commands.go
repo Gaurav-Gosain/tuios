@@ -665,3 +665,19 @@ func newPluginsStatsCommand() *cobra.Command {
 	cmd.Flags().BoolVar(&asJSON, "json", false, "Print JSON")
 	return cmd
 }
+
+// pluginThemeFiles lists the theme files of the enabled plugins that may run,
+// for internal/theme. It reads the plugin files each time the themes load.
+func pluginThemeFiles() []string {
+	entries, _, err := discoverPlugins()
+	if err != nil {
+		return nil
+	}
+	var out []string
+	for _, e := range entries {
+		if e.Runnable() {
+			out = append(out, e.Plugin.Themes...)
+		}
+	}
+	return out
+}

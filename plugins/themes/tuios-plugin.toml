@@ -1,0 +1,13 @@
+api = 1
+id = "tuios.themes"
+name = "Themes"
+version = "0.1.0"
+description = "Two more themes for tuios: Dusk, dark and warm, and Paper, light and calm"
+
+# A plugin of files only runs nothing, so it needs no approval beyond the
+# install.
+[[theme]]
+file = "themes/dusk.json"
+
+[[theme]]
+file = "themes/paper.json"

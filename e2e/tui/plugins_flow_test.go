@@ -80,7 +80,7 @@ func TestPluginsFlowSaysWhatToDo(t *testing.T) {
 	// With no daemon, approve names the command that starts one, and it does
 	// not start one itself.
 	linkedFirst := t.TempDir()
-	writeFiles(t, linkedFirst, map[string]string{"tuios-plugin.toml": "api = 1\nid = \"e2e.first\"\nname = \"First\"\nversion = \"1.0.0\"\n"})
+	writeFiles(t, linkedFirst, map[string]string{"tuios-plugin.toml": "api = 1\nid = \"e2e.first\"\nname = \"First\"\nversion = \"1.0.0\"\n\n[[process]]\nid = \"a\"\nrun = \"action\"\ntitle = \"A\"\ncommand = [\"true\"]\n"})
 	if out, err := tuiosCLI(t, base, "plugins", "link", linkedFirst, "--enable"); err != nil {
 		t.Fatalf("plugins link with no daemon: %v\n%s", err, out)
 	}

@@ -12288,3 +12288,13 @@ into its own binary.
 | Main without the fix | "the reply does not say the next client applies the value" | **caught** |
 | The attach handler does not call `applyWaitingOptions` | "the client that attached did not apply appearance.sidebar.row_style=pill" | **caught** |
 | The client drops a routed command that arrives before `OnRemoteCommand`, as main does | "the client that attached did not apply appearance.sidebar.row_style=pill". The command arrives before the program registers its handler on every run | **caught** |
+## Theme plugins
+
+`TestPluginThemes` installs `plugins/themes` with no daemon. Run on 2026-11-03,
+each control against the branch head with one change:
+
+| Claim | Control | Where it fails | Verdict |
+|---|---|---|---|
+| A plugin of files only needs no approval | the files-only case cut from `applyApproval` | "a plugin of files only does not run without an approval" | **caught** |
+| A plugin's themes load | `theme.ExtraFiles` not set | "--list-themes lacks the plugin theme dusk" | **caught** |
+| The person's own theme wins on the same id | the plugin's themes read after the person's | "the plugin's dusk won over the person's own" | **caught** |

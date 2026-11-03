@@ -2,6 +2,7 @@ package herdrplugin
 
 import (
 	"fmt"
+	"path/filepath"
 	"strings"
 	"unicode"
 )
@@ -57,7 +58,10 @@ func RunsLines(p *Plugin) []string {
 	for _, s := range p.Startup {
 		out = append(out, "startup  "+ShownArgv(s.Command...))
 	}
-	var hooks, actions, panes, links, cells []string
+	var hooks, actions, panes, links, cells, themes []string
+	for _, t := range p.Themes {
+		themes = append(themes, strings.TrimSuffix(filepath.Base(t), filepath.Ext(t)))
+	}
 	for _, c := range p.Cells {
 		cells = append(cells, c.ID)
 	}
@@ -73,9 +77,9 @@ func RunsLines(p *Plugin) []string {
 	for _, h := range p.LinkHandlers {
 		links = append(links, h.ID)
 	}
-	for i, list := range [][]string{hooks, actions, panes, links, cells} {
+	for i, list := range [][]string{hooks, actions, panes, links, cells, themes} {
 		if len(list) > 0 {
-			out = append(out, fmt.Sprintf("%-8s %s (%d)", [...]string{"hooks", "actions", "panes", "links", "cells"}[i], ShownArgv(strings.Join(list, ", ")), len(list)))
+			out = append(out, fmt.Sprintf("%-8s %s (%d)", [...]string{"hooks", "actions", "panes", "links", "cells", "themes"}[i], ShownArgv(strings.Join(list, ", ")), len(list)))
 		}
 	}
 	return out

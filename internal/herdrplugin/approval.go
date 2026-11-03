@@ -173,6 +173,12 @@ func applyApproval(d Dirs, p *Plugin, lock *LockEntry) *Error {
 	}
 	p.Held = []string{}
 	p.Trust = TrustOf(p, lock)
+	if p.RunsNothing() && len(grants) == 0 {
+		// Files only: nothing runs and nothing asks tuios for anything, so
+		// there is nothing to approve beyond the install.
+		p.Approval = ApprovalAllowed
+		return nil
+	}
 	x := approvalOf(d.ApprovalsPath(), p, p.Trust)
 	switch {
 	case x == nil:

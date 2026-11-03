@@ -71,10 +71,34 @@ type rawNative struct {
 	Build   []rawCommand `toml:"build"`
 	Process []rawProcess `toml:"process"`
 	Cell    []rawCell    `toml:"cell"`
+	Theme   []rawTheme   `toml:"theme"`
 	Wasm    []any        `toml:"wasm"`
 	Herdr   *struct {
 		Manifest string `toml:"manifest"`
 	} `toml:"herdr"`
+}
+
+// rawTheme is one [[theme]]: a theme file the plugin brings.
+type rawTheme struct {
+	File *string `toml:"file"`
+}
+
+// parseThemes checks the [[theme]] entries: each a .json file in the plugin
+// folder.
+func parseThemes(raw []rawTheme, root string) ([]string, *Error) {
+	var out []string
+	for _, t := range raw {
+		if t.File == nil || strings.TrimSpace(*t.File) == "" {
+			return nil, missingField("file")
+		}
+		rel := filepath.FromSlash(strings.TrimSpace(*t.File))
+		path := filepath.Join(root, rel)
+		if !filepath.IsLocal(rel) || !strings.EqualFold(filepath.Ext(rel), ".json") {
+			return nil, errf("plugin_manifest_parse_failed", "[[theme]] file must be a .json file in the plugin folder, not %q", *t.File)
+		}
+		out = append(out, path)
+	}
+	return out, nil
 }
 
 // rawCell is one [[cell]]: a dock cell the plugin may set.
@@ -209,6 +233,9 @@ func parseNative(data []byte, root string) (*Plugin, *Error) {
 		return nil, perr
 	}
 	p.Cells = cells
+	if p.Themes, perr = parseThemes(n.Theme, root); perr != nil {
+		return nil, perr
+	}
 	p.Warnings = append(append(p.Warnings, warnings...), warn...)
 	if n.MinTuios != nil {
 		p.MinTuios = strings.TrimSpace(*n.MinTuios)

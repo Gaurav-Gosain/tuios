@@ -59,6 +59,24 @@ again. Run `tuios plugins install .` to answer.
 To remove the plugin, run `tuios plugins uninstall me.commits`. tuios keeps your
 folder.
 
+## Themes
+
+A plugin can bring themes. Name each file in the manifest:
+
+```toml
+[[theme]]
+file = "themes/dusk.json"
+```
+
+A theme file has the format of `docs/THEMES.md`. When the plugin is enabled, its
+themes load with your own, and the theme picker and `[appearance] theme` take
+them. A theme file of your own in `~/.config/tuios/themes/` with the same id
+wins over a plugin's.
+
+A plugin of files only runs no program and asks for no grant. It needs no
+approval beyond the install. `tuios plugins install themes` installs the themes
+that ship with tuios.
+
 ## Publish a plugin
 
 A plugin is a git repository. People install it with
@@ -113,6 +131,7 @@ does not know, so a typo fails at once.
 | `[permissions] grants` | no | The grants the plugin asks for. Leave it out for none. |
 | `[[build]] command` | no | A command that `install` runs in the plugin folder. |
 | `[[process]]` | no | A program that tuios runs. See below. |
+| `[[theme]] file` | no | A theme file in the plugin folder, such as `themes/dusk.json`. See below. |
 | `[herdr] manifest` | no | Take the commands from a `herdr-plugin.toml`. |
 
 A `[[process]]` has `id`, `run` and `command`. `run` says when it runs:
@@ -258,6 +277,7 @@ a plugin does nothing. `tuios --skill tml` has the components.
 |---|---|---|
 | next | New: `tuios plugins update`. | Nothing. |
 | next | New: `tuios plugins stats`. | Nothing. |
+| next | New: `[[theme]]`. A plugin of files only needs no approval. | Nothing. |
 | next | New: `tuios plugins new`, `check` and `dev`. `check` warns on an old key such as `schema`. | Run `tuios plugins check` in your CI. |
 | next | New: `run = "event"` with `on`, `TUIOS_PLUGIN_EVENT` and `TUIOS_PLUGIN_EVENT_JSON`. | Move hooks out of a `herdr-plugin.toml`. |
 | next | New: `tuios plugins install NAME` for the plugins of the tuios release. | Nothing. |
@@ -276,7 +296,7 @@ until a release has them. A manifest that uses one is refused today.
 |---|---|---|
 | A timer | `run = "interval"`, `every = "60s"` | Runs a command on a timer that exists only while the plugin is enabled. |
 | Suggested keys | `[[key]]` | Offers a key. It is off until you accept it. |
-| Files only | `[[theme]]`, `[[saver]]` | A plugin that runs nothing needs no typed approval. |
+| Screensavers | `[[saver]]` | A screensaver from a process or a frames file. A frames file needs no approval. |
 
 ### Draft: the saver file
 

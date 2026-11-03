@@ -24,6 +24,11 @@ func GetThemesDir() (string, error) {
 	return filepath.Dir(keepFile), nil
 }
 
+// ExtraFiles, when set, lists the theme files of the enabled plugins. They
+// load with the person's own themes, which win on the same id. The binary
+// sets it, since this package does not read plugins.
+var ExtraFiles func() []string
+
 // LoadCustomThemes reads all *.json files from the themes directory,
 // loads each as a custom theme, and registers them with bubbletint.
 // Returns the list of successfully loaded theme IDs.
@@ -54,6 +59,21 @@ func readCustomThemes(themesDir string) (loaded, problems []string, err error) {
 	// another file whatever order the directory lists them in.
 	files := make(map[string]*themeFile)
 	names := make(map[string]string)
+	// The themes of plugins first, so a file of the person's own with the
+	// same id wins.
+	if ExtraFiles != nil {
+		for _, path := range ExtraFiles() {
+			data, err := os.ReadFile(path) //nolint:gosec // a theme file of a plugin the person installed
+			if err == nil {
+				var f *themeFile
+				if f, err = readThemeFile(path, data); err == nil {
+					files[f.ID], names[f.ID] = f, filepath.Base(path)
+					continue
+				}
+			}
+			problems = append(problems, fmt.Sprintf("skipping the plugin theme %s: %v", path, err))
+		}
+	}
 	for _, entry := range entries {
 		if entry.IsDir() || !strings.HasSuffix(strings.ToLower(entry.Name()), ".json") {
 			continue

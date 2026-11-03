@@ -444,7 +444,8 @@ func (in *installer) finish(e herdrplugin.LockEntry, p *herdrplugin.Plugin, fetc
 			return fail(err)
 		}
 	}
-	if p.Format == herdrplugin.FormatTuios {
+	if p.Format == herdrplugin.FormatTuios && !p.RunsNothing() {
+		// A plugin of files only needs no approval (applyApproval).
 		// checkNativeAsks made sure the person typed --grant admin. Every
 		// daemon that runs confirms that the person runs this command
 		// before the approval is written. With no daemon to ask, the

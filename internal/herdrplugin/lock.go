@@ -312,6 +312,9 @@ func TrustHash(source string, p *Plugin, grants []string) string {
 	for _, c := range p.Cells {
 		put('c', c.ID, c.Side)
 	}
+	for _, t := range p.Themes {
+		put('t', filepath.Base(t))
+	}
 	return "sha256:" + hex.EncodeToString(h.Sum(nil))
 }
 

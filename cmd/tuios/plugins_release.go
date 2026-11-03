@@ -42,6 +42,7 @@ type firstPartyPlugin struct {
 var firstParty = map[string]firstPartyPlugin{
 	"pr-status": {},
 	"sketch":    {binary: "sketch"},
+	"themes":    {},
 }
 
 // pluginsAsset is the name of the archive of plugin folders in a release.

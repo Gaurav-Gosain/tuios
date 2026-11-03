@@ -159,6 +159,13 @@ type Command struct {
 	Command   []string `json:"command"`
 }
 
+// RunsNothing reports whether p runs no program and asks for no grant: a
+// plugin of files only, such as themes. It needs no approval to load.
+func (p *Plugin) RunsNothing() bool {
+	return len(p.Build) == 0 && len(p.Startup) == 0 && len(p.Actions) == 0 && len(p.Panes) == 0 &&
+		len(p.Events) == 0 && len(p.LinkHandlers) == 0 && len(p.Grants) == 0
+}
+
 // Cell is one [[cell]] entry of a native manifest: a dock cell the plugin's
 // processes may set.
 type Cell struct {
@@ -237,6 +244,9 @@ type Plugin struct {
 	Source          Source        `json:"source"`
 	Warnings        []string      `json:"warnings,omitempty"`
 	Cells           []Cell        `json:"cells,omitempty"`
+	// Themes are the theme files of a native plugin, absolute paths in its
+	// folder.
+	Themes []string `json:"themes,omitempty"`
 	// Format is FormatTuios for a tuios-plugin.toml and "" for a herdr
 	// manifest.
 	Format string `json:"format,omitempty"`
