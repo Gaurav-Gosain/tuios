@@ -9,9 +9,9 @@ import (
 
 // What a live upgrade tells the clients it is about to drop.
 //
-// A TUI client is sent MsgDaemonUpgrading, so it can say the daemon was
-// upgraded and its programs are still running rather than that the daemon was
-// lost. A JSON verb call still running or waiting (wait-for, a popup that
+// A TUI client is sent MsgDaemonUpgrading, so it waits for the new image and
+// attaches again, or, when it cannot, says the daemon was upgraded and its
+// programs are still running rather than that the daemon was lost. A JSON verb call still running or waiting (wait-for, a popup that
 // waits, ask-agent) is answered with daemon_upgrading, which says to call
 // again. Every connection is then closed, as shutdown closes them; callers
 // that dial meanwhile wait in the backlog for the new image.

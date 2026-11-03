@@ -541,7 +541,7 @@ func (c *TUIClient) handshake(version string, width, height int, caps *ClientCap
 		if errPayload.Code == ErrCodeBusy {
 			return ErrTooManyConnections
 		}
-		return fmt.Errorf("the daemon refused this client: %s", errPayload.Message)
+		return &helloRefused{msg: errPayload.Message}
 	}
 	if resp.Type != MsgWelcome {
 		// A daemon that numbers its messages differently answers the hello with
@@ -745,6 +745,24 @@ func refusalOf(p ErrorPayload) *attachRefused {
 }
 
 func (e *attachRefused) Error() string { return "attach failed: " + e.msg }
+
+// helloRefused is the daemon declining the handshake itself, which it does
+// only for a wire protocol it does not serve. Its message names the fix.
+type helloRefused struct{ msg string }
+
+func (e *helloRefused) Error() string { return "the daemon refused this client: " + e.msg }
+
+// ProtocolRefused reports a daemon this client cannot talk to: one that
+// refused the handshake, or one whose welcome is outside the protocols this
+// build speaks. Either is found before the client attaches, so nothing of that
+// daemon was drawn, and asking again cannot help.
+func ProtocolRefused(err error) bool {
+	if _, ok := errors.AsType[*helloRefused](err); ok {
+		return true
+	}
+	_, ok := errors.AsType[*ProtocolMismatchError](err)
+	return ok
+}
 
 // AttachRefused reports an attach the daemon answered and declined, which a
 // client that is trying to get a lost session back needs to tell apart from an

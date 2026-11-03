@@ -313,9 +313,11 @@ const (
 	// named it. The session keeps running, and this is not a failure.
 	ExitDetached
 	// ExitDaemonUpgraded means the daemon closed this client's connection
-	// because a live upgrade replaced its image. Every pane keeps running,
-	// and attaching again continues the session. The version it became is
-	// the client's UpgradedTo.
+	// because a live upgrade replaced its image, and the client did not take
+	// the session back from the new image: it is not a local client, the new
+	// image does not speak its protocol, or none answered in time. Every pane
+	// keeps running, and attaching again continues the session. The version
+	// it became is the client's UpgradedTo.
 	ExitDaemonUpgraded
 	// ExitRestarted means the person restarted the daemon from the app and
 	// the new one answers. The entry point runs RestartExec to come back.
@@ -2919,12 +2921,7 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 			return m, listenDaemonExitUntil(m.stopSignal(), m.daemonExitChan())
 		}
 		if !m.QuitRequested {
-			m.ExitReason = ExitDaemonLost
-			if m.DaemonClient != nil {
-				if _, upgraded := m.DaemonClient.UpgradedTo(); upgraded {
-					m.ExitReason = ExitDaemonUpgraded
-				}
-			}
+			m.ExitReason = m.daemonGoneReason()
 		}
 		return m, m.QuitCmd()
 
