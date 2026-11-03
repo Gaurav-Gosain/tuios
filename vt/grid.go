@@ -595,10 +595,7 @@ func (g *grid) blankRows(y, end int, c *uv.Cell) {
 	g.clearProtectedRows(y, end)
 	if isBlankFill(c) {
 		for i := y; i < end; i++ {
-			row := g.rows[i]
-			for x := range row[:g.ext[i]] {
-				row[x] = uv.EmptyCell
-			}
+			blankLine(g.rows[i][:g.ext[i]])
 			g.ext[i] = 0
 		}
 		return
@@ -618,6 +615,20 @@ func (g *grid) blankRows(y, end int, c *uv.Cell) {
 		row := g.row(i)
 		for x := range row {
 			row[x] = *c
+		}
+	}
+}
+
+// blankLine makes every cell of line a plain blank. A cell that is already
+// one column wide with no style or link differs from the blank only in its
+// content, so only the content is stored: a flood's rows are mostly such
+// cells, and a whole-cell store is 112 bytes and seven pointers.
+func blankLine(line uv.Line) {
+	for x := range line {
+		if c := &line[x]; plainPen(c) {
+			c.Content = " "
+		} else {
+			*c = uv.EmptyCell
 		}
 	}
 }

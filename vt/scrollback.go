@@ -362,15 +362,22 @@ func (sb *Scrollback) encodeLine(buf []byte, cells uv.Line, width int) []byte {
 	var link uv.Link
 	clear(sb.lineLinks)
 	sb.lineLinks = sb.lineLinks[:0]
-	for i := range cells {
-		c := &cells[i]
-		if style == (packedStyle{}) && link == (uv.Link{}) && isPlainASCIICell(c) {
-			// A plain letter while no style or link is in force: the path
-			// below would write no style, link or width token and then this
-			// one byte, so write the byte. Most of a log line is this.
-			buf = append(buf, c.Content[0])
-			continue
+	for i := 0; i < len(cells); i++ {
+		if style == (packedStyle{}) && link == (uv.Link{}) {
+			// Plain letters while no style or link is in force: the path
+			// below would write no style, link or width token and then the
+			// one byte, so write the bytes. Most of a log line is this.
+			// The run is taken in one loop so the style and link in force
+			// are tested once per run and not once per cell.
+			for i < len(cells) && isPlainASCIICell(&cells[i]) {
+				buf = append(buf, cells[i].Content[0])
+				i++
+			}
+			if i == len(cells) {
+				break
+			}
 		}
+		c := &cells[i]
 		if st := sb.packStyle(&c.Style); st != style {
 			style = st
 			buf = append(buf, sbStyle)

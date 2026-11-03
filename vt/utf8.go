@@ -577,13 +577,32 @@ func (e *Emulator) printASCIIRun(run []byte) {
 			Style: e.scr.cursorPen(),
 			Link:  e.scr.cursorLink(),
 		}
-		if row := e.scr.buf.Row(y); row != nil && narrowRun(row[x:x+n]) {
+		// Cells from the row's extent on are plain blanks (see grid.ext):
+		// one column wide, unstyled and unlinked. text is how much of the
+		// run lands before the extent, on cells that may hold anything.
+		text := min(max(e.scr.buf.ext[y]-x, 0), n)
+		if row := e.scr.buf.Row(y); row != nil && narrowRun(row[x:x+text]) {
 			// Every cell being overwritten is one column wide, so no
 			// double-width character is cut, and Screen.SetCell and
 			// uv.Line.Set would each come down to this one store.
-			for k := range n {
+			for k := range text {
 				cell.Content = asciiStr[run[k]]
 				row[x+k] = cell
+			}
+			if plainPen(&cell) {
+				// A blank written with no style or link differs from the
+				// new cell only in its content, so only the content is
+				// stored: 16 bytes and one pointer instead of the whole
+				// 112-byte cell and its seven. A flood prints most of its
+				// bytes past the extent, onto the row a scroll just blanked.
+				for k := text; k < n; k++ {
+					row[x+k].Content = asciiStr[run[k]]
+				}
+			} else {
+				for k := text; k < n; k++ {
+					cell.Content = asciiStr[run[k]]
+					row[x+k] = cell
+				}
 			}
 			// Written behind the grid's back, so its extent is raised here
 			// (see grid.ext), and the row's tail dropped (see grid.tail):
@@ -626,6 +645,14 @@ func (e *Emulator) printASCIIRun(run []byte) {
 		e.openGrapheme.arm(x+n-1, y, 1, left, right, last, "")
 		run = run[n:]
 	}
+}
+
+// plainPen reports whether c carries no style and no link, so that past a
+// row's extent it differs from the blank there only in its content.
+func plainPen(c *uv.Cell) bool {
+	return c.Width == 1 && c.Style.Fg == nil && c.Style.Bg == nil && c.Style.UnderlineColor == nil &&
+		c.Style.Attrs == 0 && c.Style.Underline == 0 &&
+		c.Link.URL == "" && c.Link.Params == ""
 }
 
 // narrowRun reports whether every cell is exactly one column wide: neither the
