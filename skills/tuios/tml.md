@@ -149,11 +149,18 @@ wraps when it does not fit.
 ## Motion
 
 ```xml
-<col stagger="60ms">
-  <card each="state.jobs" title="{item.name}" enter="slide-up" exit="fade">...</card>
-</col>
-<card title="Host" skeleton="{state.loading}" h="6">...</card>
-<toast role="success" ttl="4s">{state.saved}</toast>
+<tml version="1" title="Jobs">
+  <state>{"loading": true, "jobs": [{"name": "build"}, {"name": "test"}], "saved": "Saved", "cpu": "12%"}</state>
+  <col pad="1" gap="1" stagger="60ms">
+    <card each="state.jobs" key="{item.name}" title="{item.name}" enter="slide-up" exit="fade">
+      <text>Running</text>
+    </card>
+    <card title="Host" skeleton="{state.loading}" h="4">
+      <text>CPU {state.cpu}</text>
+    </card>
+    <toast role="success" ttl="4s">{state.saved}</toast>
+  </col>
+</tml>
 ```
 
 - `enter` plays when the node shows: `fade`, `slide-up`, `slide-down`,
