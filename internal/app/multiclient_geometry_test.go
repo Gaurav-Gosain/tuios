@@ -135,9 +135,18 @@ func settleGeometry(t *testing.T, r *rig, p *peer, ex *exchange) {
 			return
 		}
 		if time.Now().After(deadline) {
-			t.Fatalf("the pair never settled on one arithmetic:\n local shared=%v gap=%d %s\n peer  shared=%v gap=%d %s",
+			// The trees, the rectangles, the boxes and the daemon's own pane
+			// sizes, so a failure that does not reproduce locally still says
+			// which side is wrong and why.
+			_, daemon := r.paneSizes()
+			t.Fatalf("the pair never settled on one arithmetic:\n local shared=%v gap=%d %s\n peer  shared=%v gap=%d %s\n"+
+				" local tree %s rects %s tiling=%v ws=%d box=%dx%d reserve=%+v\n"+
+				" peer  tree %s rects %s tiling=%v ws=%d box=%dx%d reserve=%+v\n daemon %v",
 				r.m.SharedBorders, r.m.PaneGap, contentSizes(r.m),
-				p.m.SharedBorders, p.m.PaneGap, contentSizes(p.m))
+				p.m.SharedBorders, p.m.PaneGap, contentSizes(p.m),
+				treeShape(r.m), rects(r.m), r.m.AutoTiling, r.m.CurrentWorkspace, r.m.GetRenderWidth(), r.m.GetRenderHeight(), r.m.SessionReserve,
+				treeShape(p.m), rects(p.m), p.m.AutoTiling, p.m.CurrentWorkspace, p.m.GetRenderWidth(), p.m.GetRenderHeight(), p.m.SessionReserve,
+				daemon)
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
