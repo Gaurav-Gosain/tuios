@@ -254,7 +254,7 @@ func (m *OS) ReviewCompareOpen() tea.Cmd {
 	if !ok || row.Gone {
 		return nil
 	}
-	return m.reviewFromCompare(reviewQuery{Session: row.Session, Window: m.reviewAgentWindow(row.Session)}, row.Session)
+	return m.reviewFromCompare(reviewQuery{Session: row.Session, Window: m.reviewAgentWindow(row.Session), Uncommitted: m.reviewOpensUncommitted()}, row.Session)
 }
 
 // reviewFromCompare shows a review asked for in the compare view.

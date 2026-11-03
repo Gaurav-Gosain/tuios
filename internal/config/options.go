@@ -1656,6 +1656,12 @@ var optionSpecs = []Option{
 		Accepted:    ReviewFocuses,
 		Default:     ReviewOpenOnDiff,
 	},
+	{
+		Path: "review.scope", Type: OptionString, Section: "review",
+		Description: "What a review shows when it opens: the changes since the base, or only the uncommitted changes. u switches between them",
+		Accepted:    ReviewScopes,
+		Default:     ReviewScopeBase,
+	},
 	// Read by the client on each switch, so a change applies at once.
 	{
 		Path: "workspaces.new_window_when_empty", Type: OptionBool, Section: "workspaces",

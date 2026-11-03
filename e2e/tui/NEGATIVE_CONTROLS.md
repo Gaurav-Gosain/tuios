@@ -12332,3 +12332,17 @@ each control against the branch head with one change:
 | The saver moves through its frames | the frame step cut | "the saver did not move to its second frame" | **caught** |
 | Each frame shows for its own time | the frame time replaced by the effect rate | "the second frame came after" | **caught** |
 | check reports the line of the frames file that is wrong | the frames check given no data | "check of a broken frames file" | **caught** |
+
+## A review that opens on the uncommitted changes (issue #1472)
+
+`TestReviewFileKeysFollowTheirBindings` also commits README in the worktree,
+leaves ZETA uncommitted, and sets `review.scope uncommitted` with
+`tuios set-config` after `review.scope sideways` is refused. The next review
+must show ZETA alone with "uncommitted only", and `u` must show both files. A
+new client at truecolor and one at 16 colours must open on ZETA alone too.
+
+Run on 2026-11-04 on Linux. The test passes on the branch build.
+
+| Control: what was cut | Where it fails | Verdict |
+| --- | --- | --- |
+| `reviewOpensUncommitted` always returns false (`internal/app/review_overlay.go`) | "the review with scope = uncommitted did not open on ZETA alone" | **caught** |

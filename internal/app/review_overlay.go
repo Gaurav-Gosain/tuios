@@ -287,6 +287,12 @@ func (m *OS) reviewOpensOnFiles() bool {
 	return m.UserConfig != nil && m.UserConfig.Review.FocusInUse() == config.ReviewOpenOnFiles
 }
 
+// reviewOpensUncommitted reports whether a review opens on the uncommitted
+// changes only (review.scope).
+func (m *OS) reviewOpensUncommitted() bool {
+	return m.UserConfig != nil && m.UserConfig.Review.OpensUncommitted()
+}
+
 // ReviewDiffMsg is a review-diff answer.
 type ReviewDiffMsg struct {
 	Gen   uint64
@@ -416,7 +422,7 @@ func (m *OS) openLearnReview(w *terminal.Window, who string) tea.Cmd {
 		return nil
 	}
 	*r = reviewState{gen: r.gen + 1, pending: true, who: who, openedAt: time.Now(), split: r.split}
-	r.query = reviewQuery{Session: m.SessionName, Window: w.ID, Dir: m.paneDir(w)}
+	r.query = reviewQuery{Session: m.SessionName, Window: w.ID, Dir: m.paneDir(w), Uncommitted: m.reviewOpensUncommitted()}
 	return m.reviewLoadCmd(r.query, true)
 }
 
@@ -484,7 +490,7 @@ func (m *OS) openReview(sessionName, windowID, who string) tea.Cmd {
 		return nil
 	}
 	*r = reviewState{gen: r.gen + 1, pending: true, who: who, openedAt: time.Now(), split: r.split}
-	r.query = reviewQuery{Session: sessionName, Window: windowID}
+	r.query = reviewQuery{Session: sessionName, Window: windowID, Uncommitted: m.reviewOpensUncommitted()}
 	return m.reviewLoadCmd(r.query, true)
 }
 

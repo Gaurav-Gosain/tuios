@@ -13,6 +13,28 @@ type ReviewConfig struct {
 	// (default: diff). A review with no changes opens on the diff. A reload
 	// of the same review keeps the side focused.
 	Focus string `toml:"focus"`
+	// Scope is what a review shows when it opens: base, the changes since
+	// the base, or uncommitted, the changes not yet committed (default:
+	// base). u still switches between them. A diff of two attempts ignores
+	// it.
+	Scope string `toml:"scope"`
+}
+
+// The diffs a review can open on.
+const (
+	// ReviewScopeBase is the changes since the base.
+	ReviewScopeBase = "base"
+	// ReviewScopeUncommitted is the changes not yet committed.
+	ReviewScopeUncommitted = "uncommitted"
+)
+
+// ReviewScopes is the accepted scope values.
+var ReviewScopes = []string{ReviewScopeBase, ReviewScopeUncommitted}
+
+// OpensUncommitted reports whether a review opens on the uncommitted
+// changes. An unknown scope is the base.
+func (r ReviewConfig) OpensUncommitted() bool {
+	return strings.EqualFold(strings.TrimSpace(r.Scope), ReviewScopeUncommitted)
 }
 
 // The sides of the review overlay that can have the keys.
@@ -39,7 +61,7 @@ func (r ReviewConfig) FocusInUse() string {
 
 // defaultReviewConfig returns the section DefaultConfig carries.
 func defaultReviewConfig() ReviewConfig {
-	return ReviewConfig{Focus: ReviewOpenOnDiff}
+	return ReviewConfig{Focus: ReviewOpenOnDiff, Scope: ReviewScopeBase}
 }
 
 // fillMissingReview fills an absent value with its default.
@@ -47,15 +69,26 @@ func fillMissingReview(cfg, defaultCfg *UserConfig) {
 	if strings.TrimSpace(cfg.Review.Focus) == "" {
 		cfg.Review.Focus = defaultCfg.Review.Focus
 	}
+	if strings.TrimSpace(cfg.Review.Scope) == "" {
+		cfg.Review.Scope = defaultCfg.Review.Scope
+	}
 }
 
-// validateReview warns about a focus that falls back to the diff.
+// validateReview warns about a focus or a scope that falls back to its
+// default.
 func validateReview(cfg *UserConfig, result *ValidationResult) {
 	if f := strings.TrimSpace(cfg.Review.Focus); f != "" && cfg.Review.FocusInUse() != strings.ToLower(f) {
 		result.Warnings = append(result.Warnings, ValidationError{
 			Field:   "review",
 			Key:     "focus",
 			Message: fmt.Sprintf("The review focus %q is not diff or files. A review opens on the diff.", f),
+		})
+	}
+	if sc := strings.TrimSpace(cfg.Review.Scope); sc != "" && !cfg.Review.OpensUncommitted() && !strings.EqualFold(sc, ReviewScopeBase) {
+		result.Warnings = append(result.Warnings, ValidationError{
+			Field:   "review",
+			Key:     "scope",
+			Message: fmt.Sprintf("The review scope %q is not base or uncommitted. A review opens on the changes since the base.", sc),
 		})
 	}
 }

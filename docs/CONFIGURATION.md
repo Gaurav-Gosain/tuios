@@ -1991,6 +1991,24 @@ other than `diff` or `files` reads as `diff`, with a warning when the config
 loads, and `tuios set-config` refuses it. See
 [KEYBINDINGS.md](KEYBINDINGS.md#the-review-overlay).
 
+A review shows the changes since the base when it opens. In a plain
+repository, the base is the merge base with the upstream branch. Commits you
+did not push yet are then part of the review. `[review] scope` picks what a
+review shows when it opens:
+
+```toml
+[review]
+# What a review shows when it opens: "base" or "uncommitted" (default: "base")
+scope = "uncommitted"
+```
+
+`u` still switches between the two, and `b` still sets another base. A diff of
+two attempts in the compare view does not use the setting. The setting is on
+the settings page, in the Behavior section, and
+`tuios set-config review.scope uncommitted` applies from the next review. A
+value other than `base` or `uncommitted` reads as `base`, with a warning when
+the config loads, and `tuios set-config` refuses it.
+
 ## Repositories in the sessions tree
 
 The sessions section gathers the sessions of a repository into one group. The

@@ -516,6 +516,15 @@ func TestReviewFooterKeepsItsRightMargin(t *testing.T) {
 //     focus = "diff" and the keys moved to the list.
 //   - The empty review could open on the diff only because focus is "diff".
 //     The last open runs with focus = "files".
+//
+// [review] scope = "uncommitted" (#1472) opens a review on the changes not
+// yet committed. How that could pass wrongly:
+//   - The worktree could have nothing committed, so the base and the
+//     uncommitted diff are the same. README is committed first, and the
+//     review must show ZETA without README, then both after u.
+//   - Only the attached client could read the setting. A new client at
+//     truecolor and one at 16 colours must open on ZETA alone too.
+//   - set-config could take any word. sideways must be refused.
 func TestReviewFileKeysFollowTheirBindings(t *testing.T) {
 	base, repo := fanFixture(t)
 	writeConfig(t, base, "[review]\nfocus = \"files\"\n\n[keybindings.review]\nreview_next_file = [\"n\"]\nreview_prev_file = [\"q\"]\n")
@@ -670,6 +679,52 @@ func TestReviewFileKeysFollowTheirBindings(t *testing.T) {
 	}
 	saveFrame(t, term, "review-empty-opens-on-diff")
 	sendKeys(t, term, tuitest.Esc)
+
+	// [review] scope = "uncommitted" (#1472): README is committed in the
+	// worktree and ZETA is not. A review opens on ZETA alone, and u shows both.
+	if err := os.WriteFile(filepath.Join(path, "README"), []byte("hello\nretry three times\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	testutil.Git(t, path, "commit", "-q", "-am", "retry")
+	if err := os.WriteFile(filepath.Join(path, "ZETA"), []byte("zeta line\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if out, err := tuiosCLI(t, base, "set-config", "review.scope", "sideways", "-s", session); err == nil {
+		t.Fatalf("set-config took review.scope sideways:\n%s", out)
+	}
+	if out, err := tuiosCLI(t, base, "set-config", "review.scope", "uncommitted", "-s", session); err != nil {
+		t.Fatalf("set-config review.scope uncommitted: %v\n%s", err, out)
+	}
+	uncommitted := func(s tuitest.Screen) bool {
+		text := s.Text()
+		return strings.Contains(text, "1 file") && strings.Contains(text, "uncommitted only") &&
+			strings.Contains(text, "ZETA") && !strings.Contains(text, "README")
+	}
+	sendKeys(t, term, tuitest.Ctrl('b'), "v")
+	if err := term.WaitFor(uncommitted, uiTimeout); err != nil {
+		t.Fatalf("the review with scope = uncommitted did not open on ZETA alone: %v\n%s", err, term.Snapshot())
+	}
+	sendKeys(t, term, "u")
+	waitScreen(t, term, "u did not show the changes since the base", "2 files", "README", "ZETA", "u uncommitted only")
+	sendKeys(t, term, tuitest.Esc)
+
+	// The frames: a fresh client at truecolor and at 16 colours reads the
+	// setting from config.toml, which set-config wrote.
+	for _, d := range chromeDepths {
+		if d.name == "256" {
+			continue
+		}
+		c := attachIn(t, base, session, startOpts{cols: 120, rows: 32, env: d.env})
+		sendKeys(t, c, tuitest.Ctrl('b'), "v")
+		if err := c.WaitFor(uncommitted, uiTimeout); err != nil {
+			t.Fatalf("%s: a new client's review did not open on ZETA alone: %v\n%s", d.name, err, c.Snapshot())
+		}
+		waitScreen(t, c, d.name+": the footer does not offer the changes since the base", "u since base")
+		dir := artifactDir(t)
+		saveArtifact(t, c, dir, "review-scope-uncommitted-"+d.name)
+		savePNG(t, c.Screen(), shot.XTermPalette(), dir, "review-scope-uncommitted-"+d.name)
+		sendKeys(t, c, tuitest.Esc)
+	}
 }
 
 // TestReviewOverlayStagesAHunk stages one hunk of three from the review
