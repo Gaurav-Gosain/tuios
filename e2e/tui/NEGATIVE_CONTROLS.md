@@ -13365,3 +13365,13 @@ rule, which `file-walk` states. The test checks it and no control cuts it.
 
 Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestQuickLookOnAFarFile$' -v .`.
+## Pi subagent rows through the real hook
+
+`TestPiSubagentRowsThroughTheRealHook` drives the managed pi extension's v4
+subagent events through the real `tuios agent-hook pi`, against a real daemon
+and client. Run on 2026-11-03 on macOS arm64. Against a build of the base
+commit (`b74fde8ac`), whose pi mapping skips these events ("event not
+mapped"), the test fails at the waitMeta assertion `the pane's metadata is
+map[], want map[subagents:2 subagents]`: the metadata stays empty because no
+hook report ever named a subagent. The branch's build passes.
+

@@ -78,6 +78,8 @@ function enqueue(payload, key) {
     return;
   }
   if (queue.length >= MAX_PENDING) {
+    // Under saturation the oldest keyed report is evicted, so a pending keyed
+    // report — a stop, say — can be the one dropped. Best-effort by contract.
     const obsolete = queue.findIndex(report => report.key);
     queue.splice(obsolete < 0 ? 0 : obsolete, 1);
   }
@@ -218,14 +220,17 @@ export default function (pi) {
   // (empty text a stop, non-empty a finish). A foreground run is the parent's
   // own tool call on the subagent tool, so its id is that call's, behind fg:
   // to keep it off the run ids; a background or workflow run reports through
-  // the async events and, for workflow children, through child-status. None
-  // of them say anything about the pane's own state.
+  // the async events and, for workflow children, through child-status. A
+  // workflow child never reports its own natural completion: it ends with
+  // its parent's async-complete, which carries a result per child. None of
+  // them say anything about the pane's own state.
   let subCtx;
   let subUnsub;
   const subTaskByCall = new Map(); // toolCallId -> task text of a background launch
   const subSeen = new Map(); // subagent id -> the last update reported for it
   const subRuns = new Map(); // run id -> asyncDir, for the live tool line
   const subPolled = new Map(); // run id -> when status was last read
+  const subChildParent = new Map(); // child id -> { parent, index, agent } of a workflow child
 
   const subFirstLine = value => {
     if (typeof value !== "string") return "";
@@ -250,11 +255,62 @@ export default function (pi) {
     const target = typeof extra.target === "string" ? extra.target : prior?.target || "";
     const line = tool ? tool + (target ? ": " + target : "") : "";
     const text = typeof extra.text === "string" ? extra.text : prior?.text || "";
-    if (event === "subagent_update" && prior && line === (prior.line || "") && text === (prior.text || "")) {
+    // An update that carries only an outcome never repeats the last report:
+    // its line and text may be the ones already given.
+    if (event === "subagent_update" && prior && extra.outcome === undefined &&
+        line === (prior.line || "") && text === (prior.text || "")) {
       return; // the daemon is not told again what it already has
     }
     subSeen.set(id, { line, text });
     report(event, subCtx, { agent_id: id, ...extra, tool, target }, event + "\0" + id);
+  };
+
+  // pi-subagents emits child-status only on user-stop paths: a workflow
+  // child that runs to its end is never named again. Track each child under
+  // the parent run that child-status names, with the step index and agent
+  // that map it to one of the parent's results.
+  const subTrackChild = (id, p) => {
+    const parent = typeof p.runId === "string" ? p.runId : "";
+    if (!parent || parent === id) return;
+    subChildParent.set(id, {
+      parent,
+      index: typeof p.stepIndex === "number" ? p.stepIndex : undefined,
+      agent: typeof p.agent === "string" ? p.agent : "",
+    });
+  };
+
+  const subDropChild = id => {
+    subChildParent.delete(id);
+    subRuns.delete(id);
+    subPolled.delete(id);
+  };
+
+  // The parent's async-complete is the only end a workflow child gets on
+  // natural completion: end every child it owns, with the child's own result
+  // where one maps to it — by step index, else by agent — else a plain done.
+  const subEndChildren = (parent, p) => {
+    const results = Array.isArray(p.results) ? p.results : [];
+    const consumed = new Set();
+    for (const [id, tracked] of [...subChildParent]) {
+      if (tracked.parent !== parent) continue;
+      subDropChild(id);
+      let result;
+      if (tracked.index !== undefined) {
+        result = results.find(r => r && typeof r === "object" && !consumed.has(r) && r.index === tracked.index);
+      }
+      if (!result) {
+        result = results.find(r => r && typeof r === "object" && !consumed.has(r) &&
+          typeof r.agent === "string" && r.agent && r.agent === tracked.agent);
+      }
+      if (result) consumed.add(result);
+      if (result?.status === "failed") {
+        subReport("subagent_update", id, { outcome: "failed", text: subFirstLine(result.summary) || "failed" });
+      } else if (result?.status === "stopped") {
+        subReport("subagent_stop", id, { text: "" });
+      } else {
+        subReport("subagent_stop", id, { text: subFirstLine(result?.summary) || "done" });
+      }
+    }
   };
 
   const pollStatuses = async () => {
@@ -285,6 +341,7 @@ export default function (pi) {
     subSeen.clear();
     subRuns.clear();
     subPolled.clear();
+    subChildParent.clear();
   };
 
   const startSubagents = () => {
@@ -292,50 +349,63 @@ export default function (pi) {
     try {
       subUnsub = [
         pi.events.on("subagent:async-started", p => {
-          if (!tui || !p || typeof p !== "object") return;
-          const id = typeof p.id === "string" && p.id ? p.id : "";
-          if (!id) return;
-          if (typeof p.asyncDir === "string") subRuns.set(id, p.asyncDir);
-          // A single background run was launched by a tool call whose input
-          // holds the task unredacted; the event redacts it.
-          const text = subTaskByCall.get(p.toolCallId) ?? subFirstLine(p.label);
-          if (typeof p.toolCallId === "string") subTaskByCall.delete(p.toolCallId);
-          subReport("subagent_start", id, { agent_type: subFirstLine(p.agent), text });
+          try {
+            if (!tui || !p || typeof p !== "object") return;
+            const id = typeof p.id === "string" && p.id ? p.id : "";
+            if (!id) return;
+            if (typeof p.asyncDir === "string") subRuns.set(id, p.asyncDir);
+            // A single background run was launched by a tool call whose input
+            // holds the task unredacted; the event redacts it.
+            const text = subTaskByCall.get(p.toolCallId) ?? subFirstLine(p.label);
+            if (typeof p.toolCallId === "string") subTaskByCall.delete(p.toolCallId);
+            subReport("subagent_start", id, { agent_type: subFirstLine(p.agent), text });
+          } catch {}
         }),
         pi.events.on("subagent:child-status", p => {
-          if (!tui || !p || typeof p !== "object" || p.type !== "subagent.child-status") return;
-          const id = (typeof p.childRunId === "string" && p.childRunId) ||
-            (typeof p.childId === "string" && p.childId) || "";
-          if (!id) return;
-          if (typeof p.asyncDir === "string") subRuns.set(id, p.asyncDir);
-          if (p.status === "started") {
-            subReport("subagent_start", id, { agent_type: subFirstLine(p.agent), text: subFirstLine(p.label) });
-          } else if (p.status === "stopping") {
-            subReport("subagent_update", id, { outcome: "stopping" });
-          } else if (p.status === "stopped") {
-            subReport("subagent_stop", id, { text: "" });
-          }
+          try {
+            if (!tui || !p || typeof p !== "object" || p.type !== "subagent.child-status") return;
+            const id = (typeof p.childRunId === "string" && p.childRunId) ||
+              (typeof p.childId === "string" && p.childId) || "";
+            if (!id) return;
+            if (typeof p.asyncDir === "string") subRuns.set(id, p.asyncDir);
+            if (p.status === "started") {
+              subTrackChild(id, p);
+              subReport("subagent_start", id, { agent_type: subFirstLine(p.agent), text: subFirstLine(p.label) });
+            } else if (p.status === "stopping") {
+              subTrackChild(id, p);
+              subReport("subagent_update", id, { outcome: "stopping" });
+            } else if (p.status === "stopped") {
+              subReport("subagent_stop", id, { text: "" });
+              subDropChild(id);
+            }
+          } catch {}
         }),
         pi.events.on("subagent:async-complete", p => {
-          if (!tui || !p || typeof p !== "object") return;
-          const id = (typeof p.runId === "string" && p.runId) ||
-            (typeof p.id === "string" && p.id) || "";
-          subRuns.delete(id);
-          if (!id) return;
-          if (p.success === false || p.state === "failed") {
-            subReport("subagent_update", id, { outcome: "failed", text: subFirstLine(p.error) || "failed" });
-          } else {
-            // A stop the daemon reads as done needs a text: a run that
-            // finished but left no summary still says so.
-            subReport("subagent_stop", id, {
-              text: subResultText(p.results?.[0]?.summary) ||
-                subResultText(p.results?.[0]?.output) || "done",
-            });
-          }
+          try {
+            if (!tui || !p || typeof p !== "object") return;
+            const id = (typeof p.runId === "string" && p.runId) ||
+              (typeof p.id === "string" && p.id) || "";
+            subRuns.delete(id);
+            if (!id) return;
+            if (p.state === "stopped" || p.stopped === true) {
+              // A user stop is published with success false and stopped set
+              // both; it is a stop, not a failure.
+              subReport("subagent_stop", id, { text: "" });
+            } else if (p.success === false || p.state === "failed") {
+              subReport("subagent_update", id, { outcome: "failed", text: subFirstLine(p.error) || "failed" });
+            } else {
+              // A stop the daemon reads as done needs a text: a run that
+              // finished but left no summary still says so.
+              subReport("subagent_stop", id, { text: subFirstLine(p.results?.[0]?.summary) || "done" });
+            }
+            subEndChildren(id, p);
+          } catch {}
         }),
         pi.events.on("subagent:jobs-changed", () => {
-          if (!tui) return;
-          void pollStatuses().catch(() => {});
+          try {
+            if (!tui) return;
+            void pollStatuses().catch(() => {});
+          } catch {}
         }),
       ];
     } catch {
@@ -344,34 +414,40 @@ export default function (pi) {
   };
 
   pi.on("tool_call", (event, ctx) => {
-    if (!tui || event?.toolName !== "subagent") return;
-    subCtx = ctx;
-    const input = event.input;
-    const call = typeof event.toolCallId === "string" ? event.toolCallId : "";
-    if (!call) return;
-    if (input?.async) {
-      // A background run reports through the async events; keep only what
-      // they redact, and pair it to the run at async-started.
-      const task = subFirstLine(input?.task) || subFirstLine(input?.goal);
-      if (task) subTaskByCall.set(call, task);
-      return;
-    }
-    subReport("subagent_start", "fg:" + call, {
-      agent_type: subFirstLine(input?.agent),
-      text: subFirstLine(input?.task) || subFirstLine(input?.goal),
-    });
+    try {
+      if (!tui || event?.toolName !== "subagent") return;
+      subCtx = ctx;
+      const input = event.input;
+      const call = typeof event.toolCallId === "string" ? event.toolCallId : "";
+      if (!call) return;
+      if (input?.async) {
+        // A background run reports through the async events; keep only what
+        // they redact, and pair it to the run at async-started.
+        const task = subFirstLine(input?.task) || subFirstLine(input?.goal);
+        if (task) subTaskByCall.set(call, task);
+        return;
+      }
+      subReport("subagent_start", "fg:" + call, {
+        agent_type: subFirstLine(input?.agent),
+        text: subFirstLine(input?.task) || subFirstLine(input?.goal),
+      });
+    } catch {}
   });
 
   pi.on("tool_result", (event, ctx) => {
-    if (!tui || event?.toolName !== "subagent") return;
-    subCtx = ctx;
-    const call = typeof event.toolCallId === "string" ? event.toolCallId : "";
-    if (!call) return;
-    const id = "fg:" + call;
-    if (event.isError) {
-      subReport("subagent_update", id, { outcome: "failed", text: subResultText(event.content) || "failed" });
-    } else {
-      subReport("subagent_stop", id, { text: subResultText(event.content) });
-    }
+    try {
+      if (!tui || event?.toolName !== "subagent") return;
+      subCtx = ctx;
+      const call = typeof event.toolCallId === "string" ? event.toolCallId : "";
+      if (!call) return;
+      const id = "fg:" + call;
+      if (event.isError) {
+        subReport("subagent_update", id, { outcome: "failed", text: subResultText(event.content) || "failed" });
+      } else {
+        // A stop the daemon reads as done needs a text, so a success with
+        // no text block still says done.
+        subReport("subagent_stop", id, { text: subResultText(event.content) || "done" });
+      }
+    } catch {}
   });
 }
