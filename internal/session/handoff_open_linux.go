@@ -11,6 +11,10 @@ import (
 	"golang.org/x/sys/unix"
 )
 
+// execByDescriptor says the checked binary runs through its open file here,
+// not through a private copy.
+const execByDescriptor = true
+
 // openBinary opens the binary at abs for the checks, the preflight and the
 // exec, which then run the open file, so no rename over the path after the
 // open can change what runs. O_PATH needs no read permission, so an

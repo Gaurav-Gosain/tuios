@@ -42,6 +42,7 @@ func addHandoffTestVerbs() {
 			{Name: "fork_in_window", Type: "bool", Description: "Start a long-lived child while the descriptors are exposed."},
 			{Name: "swap_in_window", Type: "[]string", Description: "Two folders to swap by renames while the descriptors are exposed."},
 			{Name: "swap_after_check", Type: "[]string", Description: "Two folders to swap by renames between the preflight's checks and its run."},
+			{Name: "copy", Type: "bool", Description: "Run a private copy of the binary, as systems without /proc/self/fd do, on Linux too."},
 		},
 		handler: (*Daemon).verbTestHandoff,
 	}
@@ -67,6 +68,7 @@ func (d *Daemon) verbTestHandoff(cs *connState, params json.RawMessage) (any, *v
 		ForkInWindow   bool     `json:"fork_in_window"`
 		SwapInWindow   []string `json:"swap_in_window"`
 		SwapAfterCheck []string `json:"swap_after_check"`
+		Copy           bool     `json:"copy"`
 	}
 	if verr := decodeParams(params, &p); verr != nil {
 		return nil, verr
@@ -78,7 +80,7 @@ func (d *Daemon) verbTestHandoff(cs *connState, params json.RawMessage) (any, *v
 		}
 		p.Binary = exe
 	}
-	req := handoffRequest{binary: p.Binary, holdAfterWrite: time.Duration(p.HoldMS) * time.Millisecond}
+	req := handoffRequest{binary: p.Binary, holdAfterWrite: time.Duration(p.HoldMS) * time.Millisecond, copyRoute: p.Copy}
 	if p.ForkInWindow {
 		req.inWindow = func() {
 			//tuios:allow-exec a test-only child that must not inherit the exposed descriptors

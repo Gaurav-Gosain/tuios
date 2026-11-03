@@ -1110,7 +1110,7 @@ func awaitSettled(t *testing.T, base string, pid int) bool {
 // runs the path, as the docs say.
 func TestDaemonUpgradeRunsTheFileItChecked(t *testing.T) {
 	if runtime.GOOS != "linux" {
-		t.Skip("only Linux runs the checked binary by its descriptor; other systems run the path, as docs/CLI_REFERENCE.md says")
+		t.Skip("only Linux runs the checked binary by its descriptor; TestDaemonUpgradeRunsAPrivateCopy covers the copy route other systems take")
 	}
 	t.Run("exec", func(t *testing.T) {
 		base := t.TempDir()
@@ -1188,6 +1188,103 @@ func TestDaemonUpgradeRunsTheFileItChecked(t *testing.T) {
 	})
 }
 
+// TestDaemonUpgradeRunsAPrivateCopy is the copy route, which darwin and every
+// system without /proc/self/fd takes: the daemon reads the checked binary
+// into a folder of its own in the handoff folder, and runs that copy. On
+// Linux the test asks for the route with the test verb's copy parameter; on
+// darwin it is the route the daemon takes anyway. The swaps are the ones of
+// TestDaemonUpgradeRunsTheFileItChecked.
+func TestDaemonUpgradeRunsAPrivateCopy(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("no live upgrade on Windows")
+	}
+	copies := func(base string) []string {
+		dirs, _ := filepath.Glob(filepath.Join(xdgDir(base, "XDG_STATE_HOME"), "tuios", "sessions", "handoff", "exec-*"))
+		return dirs
+	}
+	t.Run("exec", func(t *testing.T) {
+		base := t.TempDir()
+		startHandoffDaemon(t, base)
+		f := newRaceFixture(t)
+		const sess = "e2e-copy-exec"
+		win := newCommandWindow(t, base, sess, "probe", false, "sh", "-c", "echo pid-$$; exec sleep 600")
+		waitHandoffPane(t, base, sess, win, regexp.MustCompile(`^pid-\d+`), 10*time.Second)
+		pids := panePIDs(t, base, sess)
+		img := helloImage(t, base)
+
+		_ = mustCall(t, base, "test-handoff", map[string]any{"binary": f.binary, "copy": true, "swap_in_window": []string{f.next, f.alt}})
+		after := awaitNewImage(t, base, img, 40*time.Second)
+		afterPIDs := panePIDs(t, base, sess)
+		exe := executableOf(t, after.PID)
+		marker, ran := f.markerText()
+		swap := f.swapped()
+		first := copies(base)
+
+		// A second upgrade, from the copy to a new one: the image it starts
+		// removes the copy the first one ran from.
+		img2 := helloImage(t, base)
+		_ = mustCall(t, base, "test-handoff", map[string]any{"binary": copyTuios(t), "copy": true})
+		after2 := awaitNewImage(t, base, img2, 40*time.Second)
+		exe2 := executableOf(t, after2.PID)
+		second := copies(base)
+		writeHandoffArtifact(t, map[string]any{
+			"marker": marker, "marker_exists": ran, "swap_missing": swap, "pid_before": img.PID, "pid_after": after.PID,
+			"panes_before": pids, "panes_after": afterPIDs, "executable_after": exe, "copies_after": first,
+			"pid_after_second": after2.PID, "executable_after_second": exe2, "copies_after_second": second,
+		})
+
+		if swap != "" {
+			t.Fatalf("ASSERTION: %s", swap)
+		}
+		if after.PID != img.PID || after2.PID != img.PID {
+			t.Errorf("ASSERTION: the daemon's pid changed from %d to %d, then %d", img.PID, after.PID, after2.PID)
+		}
+		if afterPIDs[win] != pids[win] || pids[win] == 0 {
+			t.Errorf("ASSERTION: the probe pane had pid %d, and %d after the upgrade", pids[win], afterPIDs[win])
+		}
+		if ran {
+			t.Errorf("ASSERTION: the file swapped in during the exec window ran as the new daemon: the marker holds %q", marker)
+		}
+		if len(first) != 1 || exe != filepath.Join(first[0], "tuios") {
+			t.Errorf("ASSERTION: the new daemon runs %s, want the one private copy in %v", exe, first)
+		}
+		if len(second) != 1 || exe2 != filepath.Join(second[0], "tuios") || second[0] == first[0] {
+			t.Errorf("ASSERTION: after the second upgrade the daemon runs %s with copies %v, want only a new copy (the first was %v)", exe2, second, first)
+		}
+	})
+
+	t.Run("preflight", func(t *testing.T) {
+		base := t.TempDir()
+		startHandoffDaemon(t, base)
+		f := newRaceFixture(t)
+		img := helloImage(t, base)
+
+		_, callErr := callVerb(t, base, "test-handoff", map[string]any{"binary": f.binary, "copy": true, "swap_after_check": []string{f.next, f.alt}})
+		if swap := f.swapped(); swap != "" {
+			writeHandoffArtifact(t, map[string]any{"call": errString(callErr), "swap_missing": swap, "pid_before": img.PID})
+			t.Fatalf("ASSERTION: %s (the call said %v)", swap, callErr)
+		}
+		settled := awaitSettled(t, base, img.PID)
+		after := helloImage(t, base)
+		marker, ran := f.markerText()
+		left := copies(base)
+		writeHandoffArtifact(t, map[string]any{
+			"call": errString(callErr), "settled": settled, "marker": marker, "marker_exists": ran,
+			"pid_before": img.PID, "pid_after": after.PID, "instance_kept": after.Instance == img.Instance, "copies_left": left,
+		})
+
+		if ran {
+			t.Errorf("ASSERTION: the file swapped in after the preflight's check ran: the marker holds %q", marker)
+		}
+		if after.PID != img.PID || after.Instance != img.Instance {
+			t.Errorf("ASSERTION: the daemon moved to another image after the binary was swapped: %+v then %+v", img, after)
+		}
+		if len(left) != 0 {
+			t.Errorf("ASSERTION: the refused upgrade left its private copies behind: %v", left)
+		}
+	})
+}
+
 // TestDaemonUpgradeRunsExecuteOnlyAndWrapperBinaries upgrades one daemon three
 // times to setups that work by path today: a plain copy; a wrapper script that
 // finds the real binary beside itself through $0; and, last, a copy nobody can
@@ -1196,7 +1293,7 @@ func TestDaemonUpgradeRunsTheFileItChecked(t *testing.T) {
 // there after the last upgrade. Linux only, as the descriptor route is.
 func TestDaemonUpgradeRunsExecuteOnlyAndWrapperBinaries(t *testing.T) {
 	if runtime.GOOS != "linux" {
-		t.Skip("only Linux runs the checked binary by its descriptor; other systems run the path, as docs/CLI_REFERENCE.md says")
+		t.Skip("only Linux runs the checked binary by its descriptor; TestDaemonUpgradeRunsAPrivateCopy covers the copy route other systems take")
 	}
 	base := t.TempDir()
 	startHandoffDaemon(t, base)

@@ -9572,6 +9572,28 @@ Run on 2026-11-02 on Linux amd64 with Go 1.27.3. Each control is a build that cu
 ```sh
 TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios \
   go test -count=1 -run '^(TestDaemonUpgradeRunsTheFileItChecked|TestDaemonUpgradeRunsExecuteOnlyAndWrapperBinaries|TestDaemonUpgradeCommandChecksTheBinaryFirst)$' .
+```
+
+### An upgrade without /proc/self/fd runs a private copy of the binary it checked
+
+- `TestDaemonUpgradeRunsAPrivateCopy`: the copy route, which darwin takes and Linux takes when `test-handoff` gets `copy: true`. The fixture and swaps are those of `TestDaemonUpgradeRunsTheFileItChecked`. "exec": the new image keeps its pid and the probe pane, the marker does not exist, and the daemon runs `handoff/exec-*/tuios`, the only copy there. A second upgrade, to a fresh tuios copy, leaves only its own new copy: the image it starts removes the first. "preflight": once the commit has settled, the marker does not exist, the daemon keeps its pid and image, and no `exec-*` folder is left.
+
+Run on 2026-11-04 on Linux amd64 with Go 1.27.3. Each control is a build with one change, run once; the test passes on the fixed build. Not run on darwin.
+
+| Control | How | Test that fails | Verdict |
+| --- | --- | --- | --- |
+| The exec runs the path | `commit` passes `r.bin.path` to `execHandoff` instead of `r.bin.execTarget()` | `TestDaemonUpgradeRunsAPrivateCopy/exec`: "live_upgrade_test.go:1246: ASSERTION: the file swapped in during the exec window ran as the new daemon: the marker holds \"ran\n\"" | **caught** |
+| The preflight runs the path | the `runChecked` call in `preflightBinary` cut, so the run is `exec.CommandContext(ctx, abs, ...)` as on darwin before | `TestDaemonUpgradeRunsAPrivateCopy/preflight`: "live_upgrade_test.go:1277: ASSERTION: the file swapped in after the preflight's check ran: the marker holds \"ran\n\"" | **caught** |
+| The exec skips the copy | the copy case dropped from `execTarget` | `TestDaemonUpgradeRunsAPrivateCopy/exec`: "live_upgrade_test.go:1249: ASSERTION: the new daemon runs .../race/alt/tuios, want the one private copy in [.../handoff/exec-2749210869]". On Linux the exec then takes the open read-only file through `/proc/self/fd`, so the marker stays empty; on darwin this cut is the path | **caught** |
+| The preflight skips the copy | the copy case dropped from `runChecked` | none on Linux: the preflight then runs the open read-only file through `/proc/self/fd/3`, which is the checked file. On darwin `runOpenFile` does nothing, so this cut is the row above it | **not caught on Linux** |
+| Old copies stay | the `removeOldCopies` call in `handoff_adopt.go` cut | `TestDaemonUpgradeRunsAPrivateCopy/exec`: "live_upgrade_test.go:1252: ASSERTION: after the second upgrade the daemon runs .../handoff/exec-2801454527/tuios with copies [.../handoff/exec-1644581560 .../handoff/exec-2801454527], want only a new copy" | **caught** |
+| A refusal keeps the copy | `close` does not remove the copy | `TestDaemonUpgradeRunsAPrivateCopy/preflight`: "live_upgrade_test.go:1283: ASSERTION: the refused upgrade left its private copies behind: [.../handoff/exec-1584974320]" | **caught** |
+
+```sh
+TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios \
+  go test -count=1 -run '^TestDaemonUpgradeRunsAPrivateCopy$' .
+```
+
 ### A client attached after an upgrade leaves an alternate-screen pane alone
 
 - `TestUpgradeReattachLeavesAltScreenPaneAlone`: a Python program on the alternate screen draws every row of its window with the row's number once, after the first client has laid it out, and never draws again. It logs each `SIGWINCH` with the size it reads in the handler. The daemon is upgraded with `tuios daemon upgrade` to a copy of the binary, which drops the client, and a new client attaches at the same size. The program must hear no `SIGWINCH` after its frame, and the daemon's own grid of the pane (`capture-pane`) must still read `ROW01` to `ROW26`. The artifact records the frame before the upgrade, after it and after the second attach, the program's log, and the daemon log's resize lines.

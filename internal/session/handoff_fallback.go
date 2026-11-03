@@ -129,7 +129,7 @@ func (f *adoptFallback) reexec(why error) bool {
 		return true
 	}
 	argv := append([]string{path}, os.Args[1:]...)
-	env := append(withoutEnv(os.Environ(), handoffFallbackEnv), handoffFallbackEnv+"=1")
+	env := append(withOldCopies(withoutEnv(os.Environ(), handoffFallbackEnv)), handoffFallbackEnv+"=1")
 	LogError("Live upgrade: falling back to %s (%v)", path, why)
 	err := execHandoff(path, argv, env, fds, nil)
 	LogError("Live upgrade: the fallback exec of %s failed: %v. The panes end with this process", path, err)

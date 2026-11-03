@@ -60,7 +60,7 @@ func (d *Daemon) verbDaemonUpgrade(cs *connState, params json.RawMessage) (any, 
 		}
 		// The dialog shows the binary's path and version, so the preflight
 		// runs before it, and the upgrade then takes only the file it ran.
-		bin, err := preflightBinary(p.Binary, nil)
+		bin, err := preflightBinary(p.Binary, preflightOpts{copy: req.copyRoute})
 		if err != nil {
 			return nil, upgradeRefusal(err)
 		}

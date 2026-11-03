@@ -52,10 +52,13 @@ const handoffPreflightTimeout = 30 * time.Second
 type handoffBinary struct {
 	path string
 	file fileID
-	// open is the file the checks read and the preflight ran, on Linux,
-	// where the exec runs it by descriptor, so no rename over the path
-	// between the checks and the exec can change what runs.
+	// open is the file the checks read. On Linux the preflight and the exec
+	// run it by descriptor. Elsewhere its bytes are copied to copy, which
+	// they run. Either way no rename over the path after the checks can
+	// change what runs.
 	open *os.File
+	// copy is the private copy the copy route runs, nil on the others.
+	copy *binaryCopy
 	// script is a binary that starts with #!, which runs by its path.
 	script   bool
 	accepts  HandoffAccepts
@@ -78,15 +81,22 @@ func (f fileID) withoutChange() fileID {
 	return f
 }
 
+// preflightOpts are the test-only parts of a preflight.
+type preflightOpts struct {
+	// afterCheck, when not nil, runs between the checks and the run.
+	afterCheck func()
+	// copy takes the copy route on Linux too, so its tests run there.
+	copy bool
+}
+
 // preflightBinary runs path's handoff-accepts and checks it reads the
-// manifest this build writes. afterCheck, when not nil, runs between the
-// checks and the run; only a test sets it.
-func preflightBinary(path string, afterCheck func()) (handoffBinary, error) {
+// manifest this build writes.
+func preflightBinary(path string, opts preflightOpts) (handoffBinary, error) {
 	abs, err := filepath.Abs(path)
 	if err != nil {
 		return handoffBinary{}, err
 	}
-	bin, err := preflightOpen(abs)
+	bin, err := preflightOpen(abs, opts.copy || !execByDescriptor)
 	if err != nil {
 		return handoffBinary{}, err
 	}
@@ -97,8 +107,8 @@ func preflightBinary(path string, afterCheck func()) (handoffBinary, error) {
 		}
 	}()
 	before := bin.file
-	if afterCheck != nil {
-		afterCheck()
+	if opts.afterCheck != nil {
+		opts.afterCheck()
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), handoffPreflightTimeout)
 	defer cancel()
@@ -106,7 +116,7 @@ func preflightBinary(path string, afterCheck func()) (handoffBinary, error) {
 	//tuios:allow-exec the preflight runs the new binary once, before anything is paused
 	cmd := exec.CommandContext(ctx, abs, "daemon", "handoff-accepts")
 	if !bin.script {
-		bin.runOpenFile(cmd)
+		bin.runChecked(cmd)
 	}
 	cmd.Stdout, cmd.Stderr = &out, &errOut
 	started := time.Now()
@@ -133,15 +143,23 @@ func preflightBinary(path string, afterCheck func()) (handoffBinary, error) {
 	if err != nil || after != before {
 		return handoffBinary{}, fmt.Errorf("%s was replaced while it was being checked. Run the upgrade again when the install has finished", abs)
 	}
+	if err := bin.copy.verify(); err != nil {
+		return handoffBinary{}, err
+	}
 	bin.file, bin.accepts, bin.duration = after, acc, took
 	ok = true
 	return bin, nil
 }
 
-// preflightOpen checks the binary at abs. On Linux it opens it first and
-// checks the open file, which the preflight and the exec then run.
-func preflightOpen(abs string) (handoffBinary, error) {
-	f, err := openBinary(abs)
+// preflightOpen checks the binary at abs. It opens it first and checks the
+// open file. On Linux the preflight and the exec then run that file; on the
+// copy route they run a private copy of it.
+func preflightOpen(abs string, copyRoute bool) (handoffBinary, error) {
+	open := openBinary
+	if copyRoute {
+		open = openForCopy
+	}
+	f, err := open(abs)
 	if err != nil {
 		return handoffBinary{}, fmt.Errorf("%s: %w", abs, err)
 	}
@@ -163,7 +181,15 @@ func preflightOpen(abs string) (handoffBinary, error) {
 		bin.close()
 		return handoffBinary{}, err
 	}
-	bin.file, bin.script = fileIDOf(info), bin.isScript()
+	bin.file = fileIDOf(info)
+	if copyRoute {
+		if err := bin.makeCopy(info); err != nil {
+			bin.close()
+			return handoffBinary{}, err
+		}
+		return bin, nil
+	}
+	bin.script = bin.isScript()
 	return bin, nil
 }
 
@@ -180,11 +206,12 @@ func (b handoffBinary) current() (fileID, error) {
 	return fileIDOf(info), nil
 }
 
-// close lets go of the open file.
+// close lets go of the open file, and removes the copy.
 func (b handoffBinary) close() {
 	if b.open != nil {
 		_ = b.open.Close()
 	}
+	b.copy.remove()
 }
 
 // clip is b cut to at most n bytes.
@@ -220,10 +247,10 @@ func checkBinaryInfo(path string, info os.FileInfo) error {
 }
 
 // stillThere reports whether the binary's path still names the file the
-// preflight ran.
+// preflight ran, and the copy, when there is one, is still the copy it ran.
 func (b handoffBinary) stillThere() bool {
 	id, err := statFileID(b.path)
-	return err == nil && id == b.file
+	return err == nil && id == b.file && b.copy.unchanged()
 }
 
 var errNotAnExecutable = errors.New("not a regular executable file")

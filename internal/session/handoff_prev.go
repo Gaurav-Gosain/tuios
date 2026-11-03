@@ -119,12 +119,18 @@ func copyExecutable(src, dst string) ([]byte, error) {
 		return nil, err
 	}
 	defer func() { _ = in.Close() }()
+	return copyFrom(in, dst)
+}
+
+// copyFrom writes what src reads to a new file dst, owner only, and returns
+// its SHA-256.
+func copyFrom(src io.Reader, dst string) ([]byte, error) {
 	out, err := os.OpenFile(dst, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o700) //nolint:gosec // an executable, owner only
 	if err != nil {
 		return nil, err
 	}
 	h := sha256.New()
-	if _, err := io.Copy(io.MultiWriter(out, h), in); err != nil {
+	if _, err := io.Copy(io.MultiWriter(out, h), src); err != nil {
 		_ = out.Close()
 		return nil, err
 	}

@@ -227,6 +227,8 @@ func (d *Daemon) adopt(fd int, fb *adoptFallback, kept map[int]int) error {
 	}
 	// This image is the one a later handoff falls back to.
 	d.keepPrevBinary()
+	// The copies the images before this one ran from are no longer needed.
+	removeOldCopies()
 	LogBasic("Live upgrade: adopted %d sessions and %d panes from %s (paused %.0f ms, apply %.0f ms, peak heap in use %d MB)",
 		len(m.Sessions), len(m.Panes), stats.From, stats.PausedMS, stats.ApplyMS, stats.ApplyPeakHeapInuse>>20)
 	return nil
