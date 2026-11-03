@@ -8,6 +8,7 @@ package main
 import (
 	"bytes"
 	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
@@ -68,7 +69,7 @@ func run(args []string, stdout *os.File, stderr io.Writer) error {
 	fs := flag.NewFlagSet("sketch", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	var o options
-	fs.StringVar(&o.format, "f", "", "Output format: text, svg, png or kitty")
+	fs.StringVar(&o.format, "f", "", "Output format: text, svg, png, kitty or cells")
 	fs.StringVar(&o.out, "o", "", "Write to this file instead of standard output")
 	fs.StringVar(&o.theme, "theme", "", "Colour theme for svg, png and kitty, such as flexoki, nord or rose-pine")
 	fs.Float64Var(&o.scale, "scale", 2, "Pixels per SVG unit for png and kitty")
@@ -153,9 +154,9 @@ func draw(name string, o options, stdout *os.File, stderr io.Writer) error {
 		}
 	}
 	switch format {
-	case "svg", "png", "kitty", "text":
+	case "svg", "png", "kitty", "text", "cells":
 	default:
-		return fmt.Errorf("unknown format %q: use text, svg, png or kitty", o.format)
+		return fmt.Errorf("unknown format %q: use text, svg, png, kitty or cells", o.format)
 	}
 	if o.out != "" && format != "svg" && format != "png" {
 		return fmt.Errorf("-o takes svg or png, not %s", format)
@@ -191,6 +192,37 @@ func draw(name string, o options, stdout *os.File, stderr io.Writer) error {
 	return nil
 }
 
+// writeCells writes the text drawing as one line of JSON, for a host that
+// draws the cells in its own colours: {"rows":[[[rune,role,bg],...],...],
+// "cut":bool}. cut says the drawing is wider than cols. tuios draws a TML
+// <mermaid> of a type it does not have with it.
+func writeCells(src string, cols int, stdout io.Writer) error {
+	d, err := sketch.Parse(src, sketch.ParseOptions{})
+	if err != nil {
+		return err
+	}
+	cut := false
+	rows, err := sketchtext.DrawCells(d, sketchtext.Options{Cols: cols})
+	if errors.Is(err, sketchtext.ErrTooWide) {
+		rows, err = sketchtext.DrawCells(d, sketchtext.Options{})
+		cut = err == nil
+	}
+	if err != nil {
+		return err
+	}
+	out := struct {
+		Rows [][][3]int `json:"rows"`
+		Cut  bool       `json:"cut"`
+	}{Rows: make([][][3]int, len(rows)), Cut: cut}
+	for y, row := range rows {
+		out.Rows[y] = make([][3]int, len(row))
+		for x, c := range row {
+			out.Rows[y][x] = [3]int{int(c.Rune), int(c.Role), int(c.Bg)}
+		}
+	}
+	return json.NewEncoder(stdout).Encode(out)
+}
+
 func drawOne(src string, i, n int, format string, cols int, color bool, th *sketch.Theme, o options, stdout io.Writer, stderr io.Writer) error {
 	write := func(data []byte) error {
 		if o.out == "" {
@@ -198,6 +230,9 @@ func drawOne(src string, i, n int, format string, cols int, color bool, th *sket
 			return err
 		}
 		return os.WriteFile(numbered(o.out, i, n), data, 0o644) //nolint:gosec // a picture the person asked for, readable like any file they save
+	}
+	if format == "cells" {
+		return writeCells(src, cols, stdout)
 	}
 	if format == "text" {
 		if i > 0 {
