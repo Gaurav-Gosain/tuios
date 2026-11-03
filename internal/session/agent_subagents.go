@@ -423,6 +423,12 @@ func (s *Session) moveSubagentsLocked(w *WindowState, c subagentChange, now int6
 				sa.agentType = h.agentType
 			}
 		}
+		// A start that named what it was asked seeds the description when no
+		// spawn hint did: pi's subagent_start carries it, and claude-code's
+		// carries none.
+		if sa.description == "" && c.text != "" {
+			sa.description = c.text
+		}
 		ps.byID[c.id] = sa
 		out.move, out.sa = subagentListMove, *sa
 	case ActivitySubagentStop:
