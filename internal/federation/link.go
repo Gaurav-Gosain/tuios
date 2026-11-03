@@ -924,6 +924,14 @@ func (l *link) openConnection(info StreamOpen) (*Stream, error) {
 	}
 	// What this stream carries is an attached session, not a listing, so it
 	// gets the limit that was chosen for one. See connectionStallLimit.
+	//
+	// It also gets a window, so a pane that writes faster than this side
+	// reads waits for its own reader and never for the link's read loop,
+	// which every other pane and every listing on the machine shares. The
+	// limit then only applies to a proxy that predates windows.
+	if !info.Bulk {
+		info.Window = true
+	}
 	s, err := m.open(l.opts.connStallLimit, info)
 	if err == nil {
 		return s, nil

@@ -12356,3 +12356,22 @@ the branch head with one change:
 | Claim | Control | Where it fails | Verdict |
 |---|---|---|---|
 | The client keeps reading its events after a plugin approval push | the `PluginApprovalsMsg` handler returns without arming the listener again | "the client stopped hearing its events after the approval push" | **caught** |
+## A pane that streams images inline on a host holds only its own pane
+
+`TestKittyStreamHoldsOnlyItsPane` runs two panes on a host that send a 20 MB
+PNG inline (t=d) again and again. Two seconds later it opens a third window
+there, measures 2000 round trips in it, and lists the host's sessions for ten
+seconds. new-window and every listing must succeed, a listing must take under
+3 s and a round trip under 2 s. Run on 2026-11-04 on Linux, each binary built
+from the branch head with one change:
+
+| Control: what was cut | Where it fails | Verdict |
+| --- | --- | --- |
+| Main without the fix (e263524e0) | "new-window on the machine failed after 30.0s while a pane there streamed images" in 7 of 10 runs. In the other 3 the reader kept up, and the slowest listing took 255 ms | **caught, not on every run** |
+| `openConnection` does not set `StreamOpen.Window` | the same failure in 2 of 2 runs | **caught** |
+| A windowed stream's queue bounded by frames, not bytes | passes: the proxy writes frames of up to 32 KiB, so the window never holds more frames than the channel | **not caught here**. `TestAStalledConnectionDoesNotStallTheLink` in `internal/federation` catches it with thousands of small answers |
+
+The fixed build passed 7 of 7 runs, with the slowest listing at 63 ms and the
+slowest round trip at 18 ms. The figures are in `kitty-stream-impact.json`
+under `TUIOS_E2E_FRAMES`. Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestKittyStreamHoldsOnlyItsPane$' -v .`.

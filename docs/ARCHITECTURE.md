@@ -1084,6 +1084,14 @@ credit window, sized at twice the bytes of the shortest round trip seen, from
 keystroke. A peer that sends no credit frames gets no window, so an older peer
 still works.
 
+Every other connection on a link (a pane, an attach) keeps to the same window
+in the ordinary lane. Its frames are 64 KiB at most. The link has one read
+loop for all its streams. A stream without a window that its reader does not
+drain makes that loop wait, for up to 30 s, and every pane on the machine
+waits with it. With a window, the far writer waits for the reader instead.
+The near side counts what it holds for the reader in bytes, so many small
+frames cannot fill it either.
+
 Each file goes through a part file named by its job, a sha256 of the original
 and of the part, and a rename into place. A job that has not ended is in a
 journal under the state folder, so a daemon restart goes on with it from its

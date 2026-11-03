@@ -62,6 +62,9 @@ const (
 	// bulkCreditEvery is how many bytes a reader takes before it says so.
 	bulkCreditEvery = 64 << 10
 
+	// bulkMarkEvery is the least distance between two marks in a window.
+	bulkMarkEvery = 16 << 10
+
 	// bulkFilterSpan is how long a round trip or a delivery rate stays the
 	// best one the window is sized from. A link that slows down is followed
 	// within this span.
@@ -176,7 +179,10 @@ func (w *window) reserve(n int) bool {
 		return false
 	}
 	w.sent += uint64(n)
-	if w.on {
+	// A mark per write would be one per keystroke on a windowed stream, and
+	// a reader credits only every bulkCreditEvery bytes. Spacing them bounds
+	// the marks by the window and drops no sample a credit could give.
+	if w.on && (len(w.marks) == 0 || w.sent-w.marks[len(w.marks)-1].end >= bulkMarkEvery) {
 		w.marks = append(w.marks, mark{end: w.sent, at: time.Now(), credited: w.credited})
 	}
 	return true

@@ -3,11 +3,13 @@ package tuie2e
 import (
 	"bytes"
 	"encoding/base64"
+	"encoding/json"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -503,4 +505,193 @@ func TestKittyFilesStalledOwnerHoldsOnlyItsPane(t *testing.T) {
 	}
 	_ = os.Remove(stall)
 	alive(t, term, "after a stalled owner")
+}
+
+// TestKittyStreamHoldsOnlyItsPane is a pane on another machine that streams a
+// 20 MB PNG inline (t=d) again and again, as fast as its owner reads it, while
+// another pane on the same machine measures its round trip and the person
+// opens a third window there and lists its sessions. Issue 1106.
+//
+// The link has one read loop for every stream. A pane stream had no window,
+// so a guest that wrote faster than this side parsed filled the stream, and
+// the read loop waited on it for up to 30 s. Every other pane, listing and
+// command on that machine waited with it, and new-window failed with an i/o
+// timeout. Now a pane stream keeps to a window, so the guest waits for its own
+// reader and the read loop never does.
+//
+// How this could pass wrongly, written down first:
+//   - The stream could never fill. Two senders run until the measurement
+//     ends, and each must have sent at least two images, all answered OK.
+//   - The measurement could start before the stream is under load. It starts
+//     two seconds after the sender, and the sender has a 20 MB image queued.
+//   - A window could stop a sender instead of slowing it. Each sender must
+//     finish, and a failed or missing reply counts against it.
+//
+// The figures go to kitty-stream-impact.json in the artifact folder. The
+// longest wait between two writes to the host terminal is in them too, as a
+// figure only: it is two to three seconds with images named by path as well,
+// whose bulk streams always had a window, so the link is not what sets it.
+//
+// Negative control: with pane streams opened without a window, new-window
+// or a listing of the machine fails with an i/o timeout.
+func TestKittyStreamHoldsOnlyItsPane(t *testing.T) {
+	if runtime.GOOS != "linux" && runtime.GOOS != "darwin" {
+		t.Skip("the stand-ins are unix programs")
+	}
+	base := t.TempDir()
+	remote := remoteMachine(t)
+	ssh := writeFakeSSHTo(t, base, remote)
+	writeOneHostConfig(t, base, tuiosBin)
+	env := []string{"TUIOS_SSH=" + ssh, "TUIOS_SIXEL_GRAPHICS=0"}
+	load := filepath.Join(t.TempDir(), "linkload")
+	if out, err := exec.Command("go", "build", "-o", load, "./linkload").CombinedOutput(); err != nil {
+		t.Fatalf("build linkload: %v\n%s", err, out)
+	}
+	if out, err := tuiosCLI(t, remote, "new", "far-shell", "--detach"); err != nil {
+		t.Fatalf("start the far daemon: %v\n%s", err, out)
+	}
+	host := &gapSink{probe: make(chan struct{}, 1)}
+	term := startIn(t, base, startOpts{cols: 160, rows: 50, args: []string{"new", "home"}, env: env, out: host})
+	answerKittyProbe(t, term, host.probe, 160, 50)
+	waitBoot(t, term)
+	waitForHostListing(t, base, func(s string) bool { return containsAll(s, "build", "up") }, "the daemon never reported build up")
+
+	pics := filepath.Join(xdgDir(remote, "HOME"), "pictures")
+	if err := os.MkdirAll(pics, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	img := filepath.Join(pics, "noise.png")
+	writeNoisePNG(t, img, 2600, 2000)
+
+	stop := filepath.Join(pics, "running")
+	if err := os.WriteFile(stop, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	// Two senders, so this side falls behind the link on every run, not
+	// only on a slow one.
+	var senders []string
+	for _, name := range []string{"images1", "images2"} {
+		out := filepath.Join(pics, name+".json")
+		if o, err := tuiosCLIEnv(t, base, env, "new-window", name, "-s", "home", "--host", "build", "--no-focus", "--",
+			load, "images", img, "stream", stop, out); err != nil {
+			t.Fatalf("start the image sender: %v\n%s", err, o)
+		}
+		senders = append(senders, out)
+	}
+	// A pane that prints ten times a second, so the host terminal has
+	// something to draw for as long as the link carries it. It opens last
+	// and takes the focus, so it is on top and every line it prints is drawn.
+	if o, err := tuiosCLIEnv(t, base, env, "new-window", "tick", "-s", "home", "--host", "build", "--",
+		"sh", "-c", "while :; do date +%s.%N; sleep 0.1; done"); err != nil {
+		t.Fatalf("open the ticker: %v\n%s", err, o)
+	}
+	time.Sleep(2 * time.Second)
+
+	host.start()
+	opened := time.Now()
+	probe := filepath.Join(pics, "latency.json")
+	o, err := tuiosCLIEnv(t, base, env, "new-window", "probe", "-s", "home", "--host", "build", "--no-focus", "--", load, "latency", "2000", probe)
+	openTook := time.Since(opened)
+	if err != nil {
+		t.Fatalf("ASSERTION: new-window on the machine failed after %v while a pane there streamed images: %v\n%s", openTook, err, o)
+	}
+	// Listings of the machine, one after another for ten seconds. Each
+	// crosses the link's control stream.
+	var listMax time.Duration
+	lists := 0
+	for until := time.Now().Add(10 * time.Second); time.Now().Before(until); lists++ {
+		t0 := time.Now()
+		if o, err := tuiosCLIEnv(t, base, env, "ls", "--host", "build"); err != nil {
+			t.Fatalf("ASSERTION: a listing of the machine failed after %v while a pane there streamed images: %v\n%s", time.Since(t0), err, o)
+		}
+		listMax = max(listMax, time.Since(t0))
+	}
+	lat, ok := waitResult(probe, 90*time.Second)
+
+	maxGap := host.stop()
+	if !ok {
+		t.Fatalf("ASSERTION: the round trip pane wrote no result in 90 s while a pane on the same machine streamed images")
+	}
+	_ = os.Remove(stop)
+	ms := func(m map[string]any, k string) float64 { v, _ := m[k].(float64); return v }
+	var res []map[string]any
+	for _, out := range senders {
+		r, ok := waitResult(out, 2*time.Minute)
+		if !ok {
+			t.Fatalf("an image sender never finished")
+		}
+		res = append(res, r)
+	}
+	summary := map[string]any{
+		"new_window_ms":  float64(openTook.Microseconds()) / 1000,
+		"listings":       lists,
+		"listing_max_ms": float64(listMax.Microseconds()) / 1000,
+		"rtt_p50_ms":     ms(lat, "p50_ms"),
+		"rtt_p99_ms":     ms(lat, "p99_ms"),
+		"rtt_max_ms":     ms(lat, "max_ms"),
+		"frame_gap_ms":   float64(maxGap.Microseconds()) / 1000,
+		"images":         res,
+	}
+	raw, _ := json.MarshalIndent(summary, "", "  ")
+	_ = os.WriteFile(filepath.Join(artifactDir(t), "kitty-stream-impact.json"), raw, 0o644)
+	t.Logf("while a pane streamed images: %s", raw)
+
+	for _, r := range res {
+		if n := ms(r, "images"); n < 2 || ms(r, "failed") != 0 {
+			t.Fatalf("a sender sent %v images with %v failed: the stream was not under load, or the window broke it", n, ms(r, "failed"))
+		}
+	}
+	if openTook > 5*time.Second {
+		t.Errorf("ASSERTION: new-window took %v while a pane on the machine streamed images", openTook)
+	}
+	if listMax > 3*time.Second {
+		t.Errorf("ASSERTION: a listing of the machine took %v while a pane there streamed images", listMax)
+	}
+	if v := ms(lat, "max_ms"); v > 2000 {
+		t.Errorf("ASSERTION: a round trip in another pane took %.0f ms while a pane on the machine streamed images", v)
+	}
+	alive(t, term, "after a pane streamed images")
+}
+
+// gapSink is a host terminal that answers the kitty probe, keeps nothing,
+// and measures the longest wait between two writes while it is measuring.
+type gapSink struct {
+	probe chan struct{}
+
+	mu     sync.Mutex
+	on     bool
+	last   time.Time
+	maxGap time.Duration
+}
+
+func (g *gapSink) Write(p []byte) (int, error) {
+	if bytes.Contains(p, []byte(da1Query)) {
+		select {
+		case g.probe <- struct{}{}:
+		default:
+		}
+	}
+	g.mu.Lock()
+	if g.on {
+		now := time.Now()
+		g.maxGap = max(g.maxGap, now.Sub(g.last))
+		g.last = now
+	}
+	g.mu.Unlock()
+	return len(p), nil
+}
+
+func (g *gapSink) start() {
+	g.mu.Lock()
+	g.on, g.last, g.maxGap = true, time.Now(), 0
+	g.mu.Unlock()
+}
+
+// stop ends the measurement and returns the longest gap, the time since the
+// last write included.
+func (g *gapSink) stop() time.Duration {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	g.on = false
+	return max(g.maxGap, time.Since(g.last))
 }
