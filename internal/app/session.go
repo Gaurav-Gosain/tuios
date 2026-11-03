@@ -1545,8 +1545,11 @@ func (m *OS) newWindowFromState(ws *session.WindowState) *terminal.Window {
 		m.Settings.ScrollbackLines,
 	)
 	if m.streamTap != nil {
-		// The tap's renderer keeps the history; nothing reads this copy.
+		// The tap's renderer keeps the history and draws the screen: this
+		// copy only needs what the model reads (title, cwd, alternate screen,
+		// notifications, the clipboard), not a second full parse.
 		window.DiscardScrollback()
+		window.KeepModesOnly()
 	}
 	adoptWindowHost(window, ws.Host)
 	m.takeDaemonCwd(window, ws)

@@ -122,6 +122,10 @@ var (
 // Each window maintains its own virtual terminal, PTY, and rendering cache.
 // Scrollback buffer support is provided by the vendored vt library.
 type Window struct {
+	// modesOnly, when set, filters the stream before the emulator sees it
+	// (window_modes_only.go).
+	modesOnly modesFilter
+
 	title         atomic.Pointer[string]           // Written on PTY/monitor goroutine, read on UI goroutine
 	geomSnap      atomic.Pointer[GeometrySnapshot] // See PublishGeometry
 	CustomName    string                           // User-defined window name

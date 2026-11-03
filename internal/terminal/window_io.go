@@ -317,8 +317,12 @@ func (w *Window) outputWriter() {
 		// graphicsOnly. Only this goroutine writes, so it holds until the
 		// batch is written.
 		ground := w.parserAtGround()
-		for off := 0; off < len(batch); off += maxVTChunk {
-			end := min(off+maxVTChunk, len(batch))
+		data := batch
+		if f := w.modesOnly.Load(); f != nil {
+			data = f.filter(batch)
+		}
+		for off := 0; off < len(data) || off == 0; off += maxVTChunk {
+			end := min(off+maxVTChunk, len(data))
 			w.ioMu.Lock()
 			t = w.Terminal
 			// Re-checked under the lock the restore also takes, so a batch that
@@ -328,8 +332,8 @@ func (w *Window) outputWriter() {
 				w.ioMu.Unlock()
 				break
 			}
-			if t != nil {
-				_, _ = t.Write(batch[off:end])
+			if t != nil && end > off {
+				_, _ = t.Write(data[off:end])
 			}
 			w.ioMu.Unlock()
 			if t == nil {
