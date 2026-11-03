@@ -4,6 +4,7 @@ import (
 	"errors"
 	"strconv"
 	"strings"
+	"sync"
 
 	sketch "tuios.dev/sketch/core"
 	sketchtext "tuios.dev/sketch/text"
@@ -58,6 +59,68 @@ type parsedDiagram struct {
 // It runs where the surface draws, so it must not block.
 var MissingDiagram func(typ string)
 
+// ExternalDiagram, when set, draws a diagram this build does not, outside
+// loom: tuios runs the sketch plugin's program. It runs in a goroutine of its
+// own, once per source and width, and its answer is kept, so no frame waits
+// for it and no frame runs it again. ExternalDrawn, when set, hears that an
+// answer came in, so the host draws a frame. An error leaves the source under
+// its note.
+var (
+	ExternalDiagram func(src string, cols int) (rows [][]sketchtext.Cell, cut bool, err error)
+	ExternalDrawn   func()
+)
+
+// The states of an external drawing.
+const (
+	externalPending = iota
+	externalDone
+	externalFailed
+)
+
+// externalDrawing is one answer of ExternalDiagram, or the wait for it.
+type externalDrawing struct {
+	state int
+	rows  [][]sketchtext.Cell
+	cut   bool
+}
+
+// externals holds the external drawings of every surface, by source and
+// width, so two surfaces of one diagram run the program once.
+var externals = struct {
+	sync.Mutex
+	m map[sketchKey]*externalDrawing
+}{m: map[sketchKey]*externalDrawing{}}
+
+// external is the drawing of src at width w, and starts it when nothing has.
+func external(src string, w int) ([][]sketchtext.Cell, bool, int) {
+	k := sketchKey{src, w}
+	externals.Lock()
+	defer externals.Unlock()
+	if d, ok := externals.m[k]; ok {
+		return d.rows, d.cut, d.state
+	}
+	if len(externals.m) >= sketchCacheMax {
+		clear(externals.m)
+	}
+	d := &externalDrawing{state: externalPending}
+	externals.m[k] = d
+	draw, drawn := ExternalDiagram, ExternalDrawn
+	go func() {
+		rows, cut, err := draw(src, w)
+		externals.Lock()
+		if err != nil {
+			d.state = externalFailed
+		} else {
+			d.rows, d.cut, d.state = rows, cut, externalDone
+		}
+		externals.Unlock()
+		if drawn != nil {
+			drawn()
+		}
+	}()
+	return nil, false, externalPending
+}
+
 type sketchKey struct {
 	src string
 	w   int
@@ -92,6 +155,22 @@ func (s *Surface) drawMermaid(src string, w int) *mermaidDrawing {
 	}
 	out := &mermaidDrawing{width: w}
 	switch {
+	case p.missing != "" && ExternalDiagram != nil:
+		rows, cut, state := external(src, w)
+		switch state {
+		case externalPending:
+			// Not kept: the next frame after the drawing comes in asks again.
+			out.fail = "the sketch plugin is drawing this diagram"
+			out.fail = oneLine(out.fail)
+			return out
+		case externalDone:
+			out.rows, out.cut = rows, cut
+			for _, r := range rows {
+				out.w = max(out.w, len(r))
+			}
+		default:
+			out.fail = "the sketch plugin draws " + p.missing + " diagrams"
+		}
 	case p.missing != "":
 		out.fail = "the sketch plugin draws " + p.missing + " diagrams"
 	case p.err != nil:
