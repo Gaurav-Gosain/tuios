@@ -230,6 +230,19 @@ func sidebarRowBg(st sidebarRowState, pal overlay.Palette) color.Color {
 	return nil
 }
 
+// sidebarActiveBand is the band under the attached session's row when the
+// rail does not own the keyboard: quieter than the cursor ground, louder
+// than a resting row, and readable at both palette depths.
+func (m *OS) sidebarActiveBand(pal overlay.Palette) color.Color {
+	hover := sidebarRowBg(sidebarRowState{Hover: true}, pal)
+	ground := m.railGround()
+	bg := overlay.Lighter(hover, 1.3)
+	if overlay.ContrastRatio(bg, ground) < overlay.ContrastRatio(hover, ground) {
+		bg = overlay.Darker(hover, 1.3)
+	}
+	return overlay.Shown(bg)
+}
+
 // sidebarHeaderAdd places a section header's add control: right-aligned on the
 // same spine every other trailing figure lands on, one cell in from the rail's
 // edge. It returns the styled token and the content-relative columns it took,
@@ -3050,6 +3063,14 @@ func (m *OS) sidebarSessionRow(node sessiontree.Node, sessionIdx, variant, cw in
 	// the gutter, and when a pane wants a human the severity owns that one too
 	// and identity gives way entirely. An alarm outranks a label.
 	tint := m.sessionTint(node.ID, m.rowGround(rowBg))
+	// The attached session keeps a band of its own when the keyboard is
+	// elsewhere: quieter than the cursor, louder than a resting row, always
+	// in the rail's own ground so the row reads as furniture, not as a
+	// coloured thing. The cursor and a dragged row keep their stronger
+	// grounds.
+	if node.IsCurrent && !(st.Cursor && st.Focused) {
+		rowBg = m.sidebarActiveBand(pal)
+	}
 	stated := agentStateIndicator(node.AgentState) != ""
 	// A fold that holds the attached session wears that session's mark, in that
 	// session's colour, because the session's own row is not drawn. The row's dot
@@ -3186,7 +3207,7 @@ func (m *OS) sidebarSessionRow(node sessiontree.Node, sessionIdx, variant, cw in
 	}
 	right := sidebarJoinFigures(figures[:], keep[1:], sidebarStyle(rowBg, pal.FgMute))
 	shown := m.sidebarMarquee("s:"+node.ID, title, max(avail-treeW, 1), st.Cursor)
-	ink := sidebarStyle(rowBg, fg).Bold(sidebarAttention(node.AgentState))
+	ink := sidebarStyle(rowBg, fg).Bold(node.IsCurrent || sidebarAttention(node.AgentState))
 	name := mark + ink.Render(treeMark+shown) + branch
 	if nameMarked {
 		name = mark + ink.Render(treeMark) + railCurrentName(shown, focusTint, rowBg, pal, &m.Settings) + branch
