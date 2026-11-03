@@ -19,8 +19,9 @@
 // pane could show.
 
 import { spawn } from "node:child_process";
-import { watch } from "node:fs";
+import { readFileSync, watch } from "node:fs";
 import { basename, dirname } from "node:path";
+import { homedir } from "node:os";
 
 const TUIOS = __TUIOS_COMMAND__;
 
@@ -226,6 +227,7 @@ export default function (pi) {
   // them say anything about the pane's own state.
   let subCtx;
   let subUnsub;
+  let subAsyncDefault = true;
   const subTaskByCall = new Map(); // toolCallId -> task text of a background launch
   const subSeen = new Map(); // subagent id -> the last update reported for it
   const subRuns = new Map(); // run id -> asyncDir, for the live tool line
@@ -344,8 +346,22 @@ export default function (pi) {
     subChildParent.clear();
   };
 
+  // pi-subagents runs a call in the background unless the model said
+  // async: false — or unless asyncByDefault: false says the quiet default
+  // the other way. The tool_call event carries the model's raw input, so
+  // the default is read from pi-subagents' own config, once per session.
+  const subConfigAsyncDefault = () => {
+    try {
+      const dir = process.env.PI_CODING_AGENT_DIR || homedir() + "/.pi/agent";
+      return JSON.parse(readFileSync(dir + "/extensions/subagent/config.json", "utf8")).asyncByDefault !== false;
+    } catch {
+      return true; // no config, or one that cannot be read: background is the default
+    }
+  };
+
   const startSubagents = () => {
     if (subUnsub || !pi?.events?.on) return;
+    subAsyncDefault = subConfigAsyncDefault();
     try {
       subUnsub = [
         pi.events.on("subagent:async-started", p => {
@@ -420,7 +436,7 @@ export default function (pi) {
       const input = event.input;
       const call = typeof event.toolCallId === "string" ? event.toolCallId : "";
       if (!call) return;
-      if (input?.async) {
+      if (input?.async === true || (input?.async === undefined && subAsyncDefault)) {
         // A background run reports through the async events; keep only what
         // they redact, and pair it to the run at async-started.
         const task = subFirstLine(input?.task) || subFirstLine(input?.goal);
