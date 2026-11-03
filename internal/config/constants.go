@@ -493,7 +493,7 @@ const SidebarDefaultSections = "sessions:25,terminals,files:25,agents:34"
 // section the rail does not draw, and that is the only way to turn one off:
 // there is no second switch per section, because a switch cannot say where a
 // thing goes and two spacers would have no switch to share.
-var SidebarSectionNames = []string{"sessions", "terminals", "files", "agents", "git", SidebarSectionCustom, SidebarSectionPane}
+var SidebarSectionNames = []string{"sessions", "terminals", "files", "agents", "git", SidebarSectionCustom, SidebarSectionPane, "worktrees"}
 
 // SidebarSectionCustom is the rail section whose rows are the output of a
 // command the user writes, configured in [appearance.sidebar.custom]. It is
@@ -552,6 +552,19 @@ const (
 
 // SidebarFilesStyles lists the valid values for appearance.sidebar.files_style.
 var SidebarFilesStyles = []string{SidebarFilesList, SidebarFilesTree}
+
+// How the rail gathers a repository's sessions. Head: the main checkout's
+// session stands as the repository's row. Row: the repository gets a row of
+// its own. Flat: no repository grouping at all, every session is its own row
+// and the worktree is only the session's directory.
+const (
+	RepoGroupHead = "head"
+	RepoGroupRow  = "row"
+	RepoGroupFlat = "flat"
+)
+
+// RepoGroupModes lists the valid values for appearance.sidebar.repo_group.
+var RepoGroupModes = []string{RepoGroupHead, RepoGroupRow, RepoGroupFlat}
 
 // Rail header cases. See AppearanceConfig.RailHeaderCase.
 //

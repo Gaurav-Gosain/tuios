@@ -288,6 +288,11 @@ const (
 	// [appearance.sidebar.pane]. Its rows are the pane's own rows, and the
 	// pane is sized to the lines the section is given. See rail_pane.go.
 	sidebarSectionPane
+	// sidebarSectionWorktrees is the worktree listing: the sessions bound to
+	// worktrees, gathered under their repositories with the folds, whatever
+	// grouping the sessions section itself draws. Off unless the layout
+	// names it, like every other section.
+	sidebarSectionWorktrees
 	sidebarSectionCount
 )
 
@@ -1660,6 +1665,7 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 	}
 
 	gitRows := m.gitRows()
+	worktreeRows := m.sidebarWorktreeSectionRows(sessions)
 	// A section with no rows is dropped, header and all, which is right for a
 	// section that has nothing to say and wrong for this one. A person who put
 	// files in their rail layout and sees no files heading reads the feature as
@@ -1700,6 +1706,7 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 		sidebarSectionGit:       len(gitRows),
 		sidebarSectionCustom:    nC,
 		sidebarSectionPane:      nP,
+		sidebarSectionWorktrees: len(worktreeRows),
 	}
 	// The last section in the configured layout is the one pinned to the rail's
 	// bottom: the slack rides above it, and it wears a blank line of its own so
@@ -1722,7 +1729,7 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 	agentRowH := 1
 	// Row heights per section, which is what turns a section's line budget into
 	// the rows it can show and a st.lit() line back into the row under it.
-	rowH := [sidebarSectionCount]int{1, 1, agentRowH, 1, 1, 1, 1}
+	rowH := [sidebarSectionCount]int{1, 1, agentRowH, 1, 1, 1, 1, sidebarSectionWorktrees: 1}
 
 	// The chrome each drawn section costs before a row of it appears: its own
 	// header, plus the floating blank in front of the pinned block.
@@ -2174,7 +2181,7 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 				recordToken(sidebarTokenSpan{Kind: sidebarRowRepo, X0: cw - sidebarFoldCells, X1: cw, WindowID: s.Space}, s.Worktree.Repo)
 			}
 			recordHit(sidebarRowSession, s.ID, "", -1, 1)
-			lines = append(lines, compose(st.mark(pal, m.sidebarSessionRow(s, sessionIdx[s.ID], variant, cw, pal, st, dragged, showCounts))))
+			lines = append(lines, compose(st.mark(pal, m.sidebarSessionRow(s, sessionIdx[s.ID], variant, cw, pal, st, dragged, showCounts, m.Settings.SidebarRepoGroup != config.RepoGroupFlat))))
 		}
 		if h := hidden[sidebarSectionSessions]; h > 0 {
 			lines = append(lines, overflowRow(h, m.sidebarRowIndent()))
@@ -2448,6 +2455,44 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 		}
 	}
 
+	drawWorktrees := func() {
+		const label = "worktrees"
+		lines = append(lines, compose(sidebarHeaderRowRuled(label, "", cw, pal, &m.Settings)))
+		sec := sidebarSectionWorktrees
+		// The same rule the sessions section keeps: a count column that
+		// prints "1" against every row is a column of identical digits, so
+		// it appears only when some row has more than one window.
+		showCounts := false
+		for _, n := range worktreeRows {
+			if n.WindowCount > 1 {
+				showCounts = true
+				break
+			}
+		}
+		for i := range count[sec] {
+			n := worktreeRows[start[sec]+i]
+			idx := start[sec] + i
+			dragged := m.SidebarDrag.Dragging && n.ID == m.SidebarDrag.SessionID
+			if n.Kind == sessiontree.KindRepo {
+				st := m.railRowState(idx == hoverRow[sec], isCursor(sidebarRowRepo, n.ID, ""))
+				recordHit(sidebarRowRepo, n.ID, "", -1, 1)
+				lines = append(lines, compose(st.mark(pal, m.sidebarRepoRow(n, cw, pal, st))))
+				continue
+			}
+			st := m.railRowState(idx == hoverRow[sec], isCursor(sidebarRowSession, n.ID, ""))
+			recordHit(sidebarRowSession, n.ID, "", -1, 1)
+			// The listing is what shows the tree: the rows keep their marks
+			// and branch labels whatever the sessions section draws. No
+			// switch numbers here: the index belongs to the sessions
+			// section's order, and a worktree row that sometimes carries one
+			// and sometimes not reads as broken.
+			lines = append(lines, compose(st.mark(pal, m.sidebarSessionRow(n, 0, variant, cw, pal, st, dragged, showCounts, true))))
+		}
+		if h := hidden[sec]; h > 0 {
+			lines = append(lines, overflowRow(h, m.sidebarRowIndent()))
+		}
+	}
+
 	draw := [sidebarSectionCount]func(){
 		sidebarSectionSessions:  drawSessions,
 		sidebarSectionTerminals: drawTerminals,
@@ -2456,6 +2501,7 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 		sidebarSectionGit:       drawGit,
 		sidebarSectionCustom:    drawCustom,
 		sidebarSectionPane:      drawPane,
+		sidebarSectionWorktrees: drawWorktrees,
 	}
 	drawnAt := 0
 	for i, p := range plans {
@@ -3031,7 +3077,7 @@ func (m *OS) windowIndexByID(id string) int {
 // fewer than that says nothing but an ellipsis.
 const railNoteMin = 4
 
-func (m *OS) sidebarSessionRow(node sessiontree.Node, sessionIdx, variant, cw int, pal overlay.Palette, st sidebarRowState, dragged, showCounts bool) string {
+func (m *OS) sidebarSessionRow(node sessiontree.Node, sessionIdx, variant, cw int, pal overlay.Palette, st sidebarRowState, dragged, showCounts, tree bool) string {
 	rowBg := sidebarRowBg(st, pal)
 	// A repository's row speaks for the rows its fold hides.
 	folded := node.GroupHead && m.SidebarRepoCollapsed(node.Worktree.Repo)
@@ -3112,8 +3158,12 @@ func (m *OS) sidebarSessionRow(node sessiontree.Node, sessionIdx, variant, cw in
 	// is the whole label there, so nothing rides after it. A Named session
 	// keeps its own name there, and the branch rides after it as on any row.
 	grouped, treeMark := false, ""
-	if mark, label, ok := m.sidebarWorktreeLabel(node); ok {
-		treeMark, title, grouped = mark, label, true
+	// tree says the row belongs to a listing that draws the tree, the
+	// worktrees section; the sessions section in flat mode says plain names.
+	if tree {
+		if mark, label, ok := m.sidebarWorktreeLabel(node); ok {
+			treeMark, title, grouped = mark, label, true
+		}
 	}
 	// The branch rides after the name in muted ink, and only when the two fit
 	// together: a name that has to scroll wants every column, and a branch

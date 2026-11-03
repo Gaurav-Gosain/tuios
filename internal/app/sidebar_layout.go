@@ -80,6 +80,7 @@ var sidebarSectionByName = map[string]sidebarSection{
 	"git":                       sidebarSectionGit,
 	config.SidebarSectionCustom: sidebarSectionCustom,
 	config.SidebarSectionPane:   sidebarSectionPane,
+	"worktrees":                 sidebarSectionWorktrees,
 }
 
 // sidebarSectionFloors is the least each section is shrunk to, in rows, before
@@ -97,6 +98,9 @@ var sidebarSectionFloors = [sidebarSectionCount]int{
 	// Two, so a section the user put on the rail is never shrunk to only its
 	// title while another section grows.
 	sidebarSectionCustom: 2,
+	// Two, so a folded repository keeps its row and the count of what it
+	// hides.
+	sidebarSectionWorktrees: 2,
 	// Three, so a program is never squeezed below a line of output with a
 	// line above and below it while another section grows.
 	sidebarSectionPane: 3,
@@ -106,13 +110,17 @@ var sidebarSectionFloors = [sidebarSectionCount]int{
 // on every frame it rebuilds, and a split plus an Atoi per frame is a cost the
 // render cache exists to avoid paying; the mutex is here because tests render
 // rails in parallel.
+type sidebarLayoutParsed struct {
+	plans, open []sidebarSectionPlan
+	has         [sidebarSectionCount]bool
+}
+
+// Two rails parse two layouts in one frame, and each rail's section-data
+// functions consult the cache mid-frame, so the cache holds one entry per
+// layout string rather than the last one parsed.
 var (
-	layoutMu     sync.Mutex
-	layoutSource string
-	layoutParsed []sidebarSectionPlan
-	layoutOpen   []sidebarSectionPlan
-	layoutHas    [sidebarSectionCount]bool
-	layoutValid  bool
+	layoutMu    sync.Mutex
+	layoutCache = map[string]sidebarLayoutParsed{}
 )
 
 // sidebarLayoutPlans is the rail's layout, in the order the sections are
@@ -211,7 +219,8 @@ func sidebarLayoutFor(source string) ([]sidebarSectionPlan, [sidebarSectionCount
 func sidebarLayoutEntry(source string) ([]sidebarSectionPlan, []sidebarSectionPlan, [sidebarSectionCount]bool) {
 	layoutMu.Lock()
 	defer layoutMu.Unlock()
-	if !layoutValid || layoutSource != source {
+	parsed, ok := layoutCache[source]
+	if !ok {
 		var has [sidebarSectionCount]bool
 		entries := config.ParseSidebarSections(source)
 		plans := make([]sidebarSectionPlan, 0, len(entries))
@@ -233,9 +242,10 @@ func sidebarLayoutEntry(source string) ([]sidebarSectionPlan, []sidebarSectionPl
 		if !has[sidebarSectionFiles] {
 			open = sidebarPlansWithFiles(plans)
 		}
-		layoutSource, layoutParsed, layoutOpen, layoutHas, layoutValid = source, plans, open, has, true
+		parsed = sidebarLayoutParsed{plans: plans, open: open, has: has}
+		layoutCache[source] = parsed
 	}
-	return layoutParsed, layoutOpen, layoutHas
+	return parsed.plans, parsed.open, parsed.has
 }
 
 // sidebarBudgetLines divides avail lines between the sections of a layout.
@@ -469,6 +479,7 @@ func (m *OS) sidebarScrollOffsets() [sidebarSectionCount]*int {
 		sidebarSectionFiles:     &m.SidebarScrollF,
 		sidebarSectionGit:       &m.SidebarScrollG,
 		sidebarSectionCustom:    &m.SidebarScrollC,
+		sidebarSectionWorktrees: &m.SidebarScrollW,
 		// The pane never scrolls the rail's way: it is sized to its lines.
 		// The offset is here so every section has one.
 		sidebarSectionPane: &m.SidebarScrollP,

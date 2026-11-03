@@ -995,9 +995,15 @@ var optionSpecs = []Option{
 		Accepted:    SidebarFilesStyles, Default: SidebarFilesList,
 	},
 	{
+		Path: "appearance.sidebar.repo_group", Type: OptionString, Section: "sidebar",
+		Description: "How a repository's sessions gather: head is the main checkout's session standing as the repository's row, row gives the repository a row of its own, flat draws no grouping at all, every session its own row",
+		Accepted:    RepoGroupModes, Default: RepoGroupHead,
+	},
+	{
 		Path: "appearance.sidebar.group_main", Type: OptionBool, Section: "sidebar",
-		Description: "Give each repository a row of its own, with the main checkout under it. When off, the main checkout's row is the repository's row",
+		Description: "The old form of repo_group: true is row, false is head",
 		Default:     "false",
+		Deprecated:  "replaced by appearance.sidebar.repo_group: group_main = true is repo_group = \"row\", false is \"head\"",
 	},
 	{
 		Path: "appearance.sidebar.header_case", Type: OptionString, Section: "sidebar",
