@@ -74,6 +74,13 @@ func (d *Daemon) resolveVerbSession(cs *connState, name string) (*Session, *verb
 // mapResolveErr classifies a window/PTY resolution error into a stable code and
 // attaches the remedy for that class. sess may be nil when the caller has no
 // session context, in which case the available-window list is omitted.
+//
+// With a session it reads the session's state (GetState) for the window list,
+// so it must not run under the state lock. A mutateState function that fails
+// to resolve a window keeps the error and maps it after mutateState returns:
+// sync.RWMutex is not reentrant, and a call from inside the lock blocks that
+// goroutine for good with the lock held, so the whole daemon stops answering
+// (#1477).
 func mapResolveErr(err error, sess *Session) *verbError {
 	msg := err.Error()
 

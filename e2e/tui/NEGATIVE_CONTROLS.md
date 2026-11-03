@@ -12207,3 +12207,13 @@ resident startup command, and `TestPluginPRStatus` for a hook plugin. Run on
 |---|---|---|---|
 | stats counts runs | the count cut from `Start` | "plugins stats does not show the startup's processes, memory and runs" | **caught** |
 | stats counts the processes in the plugin's sessions | the loop over the session members cut | the same message | **caught** |
+
+## A claim for a missing pane leaves the daemon answering
+
+`TestTaskCardsAreReleasedWithTheirPane` claims a card for `closr`, a pane the
+session does not have, and then runs `task ls`. Both calls have a five second
+limit. Run on 2026-11-03 on Linux against the branch head with one change:
+
+| Claim | Control | Where it fails | Verdict |
+|---|---|---|---|
+| claim-task maps a missing window after the state lock is released (#1477) | the old `verb_task.go`, which maps it inside `mutateState` | "task claim -w closr = signal: killed", and kill-server then reports the daemon wedged | **caught** |

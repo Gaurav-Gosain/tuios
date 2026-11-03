@@ -172,8 +172,9 @@ func agentWindows(t *testing.T, base string, args ...string) []string {
 	return ids
 }
 
-// TestTaskCardsAreReleasedWithTheirPane: a pane holds two cards, and task:
-// names it by either. When the pane closes both cards are let go with "pane
+// TestTaskCardsAreReleasedWithTheirPane: a claim for a pane that does not
+// exist fails at once and leaves the daemon answering. A pane holds two cards,
+// and task: names it by either. When the pane closes both cards are let go with "pane
 // closed" in their history. A third card, held by a pane whose agent then
 // reports none, is let go with "agent left". A client that attaches and pushes
 // its state leaves every card in place.
@@ -186,7 +187,9 @@ func agentWindows(t *testing.T, base string, args ...string) []string {
 // closed the pane (releasedTaskEvents in session.go), the cards stay held.
 // With the client sync not keeping the daemon's cards (state_merge.go), the
 // listing after the attach is empty. With the selector reading no cards
-// (paneSelectorTarget), task:t1 lists no pane.
+// (paneSelectorTarget), task:t1 lists no pane. With claim-task mapping a
+// missing window inside its state change (verb_task.go), the claim for closr
+// times out and so does the task ls after it.
 func TestTaskCardsAreReleasedWithTheirPane(t *testing.T) {
 	base := t.TempDir()
 	killDaemon(t, base)
@@ -198,6 +201,18 @@ func TestTaskCardsAreReleasedWithTheirPane(t *testing.T) {
 	}
 	closer := strings.TrimSpace(mustCLI(t, base, "new-window", "-s", sess, "closer", "--no-focus", "--print-id"))
 	agent := strings.TrimSpace(mustCLI(t, base, "new-window", "-s", sess, "agent", "--no-focus", "--print-id"))
+
+	// A claim for a pane the session does not have is refused at once, with
+	// the window hint, and the daemon still answers the next request (#1477).
+	// The bounded calls are the point: the bug made the claim, and every call
+	// after it, wait for good.
+	missing, err := cliWithin(t, base, nil, "task", "claim", "-s", sess, "t1", "-w", "closr")
+	if err == nil || !strings.Contains(missing, `no window found matching "closr"`) || !strings.Contains(missing, "closer") {
+		t.Fatalf("ASSERTION: task claim -w closr = %v, want a prompt refusal that names closer:\n%s", err, missing)
+	}
+	if out, err := cliWithin(t, base, nil, "task", "ls", "-s", sess); err != nil {
+		t.Fatalf("ASSERTION: the daemon stopped answering after a claim for a missing pane: %v\n%s", err, out)
+	}
 	mustCLI(t, base, "task", "claim", "-s", sess, "t1", "-w", closer)
 	mustCLI(t, base, "task", "claim", "-s", sess, "t2", "-w", closer)
 	mustCLI(t, base, "set-agent-state", "-s", sess, "-w", agent, "working", "--harness", "claude-code")

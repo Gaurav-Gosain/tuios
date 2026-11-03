@@ -448,8 +448,9 @@ func (d *Daemon) verbClaimTask(cs *connState, params json.RawMessage) (any, *ver
 	}
 
 	var (
-		row    TaskRow
-		window string
+		row     TaskRow
+		window  string
+		missing error
 	)
 	var live map[string]bool
 	if p.Next {
@@ -458,7 +459,11 @@ func (d *Daemon) verbClaimTask(cs *connState, params json.RawMessage) (any, *ver
 	err := sess.mutateState(func(st *SessionState) error {
 		idx, err := findWindowStateIndex(st.Windows, name)
 		if err != nil {
-			verr = mapResolveErr(err, sess)
+			// Mapped once mutateState returns: mapResolveErr reads the
+			// session's state for its hint, and this function holds the state
+			// lock for writing. Mapped here, the daemon waited on itself and
+			// stopped answering every client (#1477).
+			missing = err
 			return errTaskRefused
 		}
 		if window = st.Windows[idx].ID; window != caller.window && !caller.any {
@@ -489,6 +494,9 @@ func (d *Daemon) verbClaimTask(cs *connState, params json.RawMessage) (any, *ver
 		row = taskRow(sess, st, tk)
 		return nil
 	})
+	if missing != nil {
+		return nil, mapResolveErr(missing, sess)
+	}
 	if verr != nil {
 		return nil, verr
 	}
