@@ -1,0 +1,8 @@
+<tml version="1" title="Services">
+  <state>{"svc": [{"name": "api", "up": "99.9%"}, {"name": "web", "up": "99.5%"}, {"name": "queue", "up": "98.1%"}]}</state>
+  <col pad="1" gap="1" stagger="80ms">
+    <card each="state.svc" title="{item.name}" enter="slide-up">
+      <text>Uptime <b>{item.up}</b></text>
+    </card>
+  </col>
+</tml>

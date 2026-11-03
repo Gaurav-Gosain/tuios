@@ -1,0 +1,428 @@
+=== truecolor 44x9 at 0s
+|                                            |
+|                                            |
+|                                            |
+|                                            |
+|                                            |
+|                                            |
+|                                            |
+|                                            |
+|                                            |
+--- styles
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+a: bg=panel
+=== truecolor 44x9 at 90ms
+|                                            |
+|                                            |
+|          v0.12.0 to production?            |
+|         y changes, 41 files                |
+|         ploy    n  Cancel                  |
+|                                            |
+|                                            |
+|                                            |
+|                                            |
+--- styles
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaabbbbbbbaccacccccccccccaaaaaaaaaaaa|
+|aaaaaaaaadaddddddddaddadddddaaaaaaaaaaaaaaaa|
+|aaaaaaaaaeeeefaaghgijjjjjjiaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+a: bg=panel
+b: fg=fg bg=panel bold
+c: fg=fg bg=panel
+d: fg=dim bg=panel
+e: fg=fg bg=accent
+f: bg=accent
+g: bg=surface bold
+h: fg=accent-bright bg=surface bold
+i: bg=surface
+j: fg=fg bg=surface
+=== truecolor 44x9 at 180ms
+|                                            |
+|   Deploy                                   |
+|   Deploy v0.12.0 to production?            |
+|   3 risky changes, 41 files                |
+|    y  Deploy    n  Cancel                  |
+|                                            |
+|                                            |
+|                                            |
+|                                            |
+--- styles
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaabbbbbbaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaccccccadddddddaccacccccccccccaaaaaaaaaaaa|
+|aaaeaeeeeeaeeeeeeeeaeeaeeeeeaaaaaaaaaaaaaaaa|
+|aaafgfhiiiiiihaajkjlmmmmmmlaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+a: bg=panel
+b: fg=accent bg=panel bold
+c: fg=fg bg=panel
+d: fg=fg bg=panel bold
+e: fg=dim bg=panel
+f: bg=accent bold
+g: fg=fg bg=accent bold
+h: bg=accent
+i: fg=fg bg=accent
+j: bg=surface bold
+k: fg=accent-bright bg=surface bold
+l: bg=surface
+m: fg=fg bg=surface
+=== truecolor 44x9 at 500ms
+|                                            |
+| ▾ Deploy                                   |
+|   Deploy v0.12.0 to production?            |
+|   3 risky changes, 41 files                |
+|    y  Deploy    n  Cancel                  |
+|                                            |
+|                                            |
+|                                            |
+|                                            |
+--- styles
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|abaccccccaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaddddddaeeeeeeeaddadddddddddddaaaaaaaaaaaa|
+|aaafafffffaffffffffaffafffffaaaaaaaaaaaaaaaa|
+|aaaghgijjjjjjiaaklkmnnnnnnmaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+a: bg=panel
+b: fg=accent bg=panel
+c: fg=accent bg=panel bold
+d: fg=fg bg=panel
+e: fg=fg bg=panel bold
+f: fg=dim bg=panel
+g: bg=accent bold
+h: fg=fg bg=accent bold
+i: bg=accent
+j: fg=fg bg=accent
+k: bg=surface bold
+l: fg=accent-bright bg=surface bold
+m: bg=surface
+n: fg=fg bg=surface
+=== 256 44x9 at 0s
+|                                            |
+|                                            |
+|                                            |
+|                                            |
+|                                            |
+|                                            |
+|                                            |
+|                                            |
+|                                            |
+--- styles
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+a: bg=panel
+=== 256 44x9 at 90ms
+|                                            |
+|                                            |
+|          v0.12.0 to production?            |
+|         y changes, 41 files                |
+|         ploy    n  Cancel                  |
+|                                            |
+|                                            |
+|                                            |
+|                                            |
+--- styles
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaabbbbbbbaccacccccccccccaaaaaaaaaaaa|
+|aaaaaaaaadaddddddddaddadddddaaaaaaaaaaaaaaaa|
+|aaaaaaaaaeeeefaaghgijjjjjjiaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+a: bg=panel
+b: fg=fg bg=panel bold
+c: fg=fg bg=panel
+d: fg=dim bg=panel
+e: fg=fg bg=accent
+f: bg=accent
+g: bg=surface bold
+h: fg=accent-bright bg=surface bold
+i: bg=surface
+j: fg=fg bg=surface
+=== 256 44x9 at 180ms
+|                                            |
+|   Deploy                                   |
+|   Deploy v0.12.0 to production?            |
+|   3 risky changes, 41 files                |
+|    y  Deploy    n  Cancel                  |
+|                                            |
+|                                            |
+|                                            |
+|                                            |
+--- styles
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaabbbbbbaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaccccccadddddddaccacccccccccccaaaaaaaaaaaa|
+|aaaeaeeeeeaeeeeeeeeaeeaeeeeeaaaaaaaaaaaaaaaa|
+|aaafgfhiiiiiihaajkjlmmmmmmlaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+a: bg=panel
+b: fg=accent bg=panel bold
+c: fg=fg bg=panel
+d: fg=fg bg=panel bold
+e: fg=dim bg=panel
+f: bg=accent bold
+g: fg=fg bg=accent bold
+h: bg=accent
+i: fg=fg bg=accent
+j: bg=surface bold
+k: fg=accent-bright bg=surface bold
+l: bg=surface
+m: fg=fg bg=surface
+=== 256 44x9 at 500ms
+|                                            |
+| ▾ Deploy                                   |
+|   Deploy v0.12.0 to production?            |
+|   3 risky changes, 41 files                |
+|    y  Deploy    n  Cancel                  |
+|                                            |
+|                                            |
+|                                            |
+|                                            |
+--- styles
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|abaccccccaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaddddddaeeeeeeeaddadddddddddddaaaaaaaaaaaa|
+|aaafafffffaffffffffaffafffffaaaaaaaaaaaaaaaa|
+|aaaghgijjjjjjiaaklkmnnnnnnmaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+a: bg=panel
+b: fg=accent bg=panel
+c: fg=accent bg=panel bold
+d: fg=fg bg=panel
+e: fg=fg bg=panel bold
+f: fg=dim bg=panel
+g: bg=accent bold
+h: fg=fg bg=accent bold
+i: bg=accent
+j: fg=fg bg=accent
+k: bg=surface bold
+l: fg=accent-bright bg=surface bold
+m: bg=surface
+n: fg=fg bg=surface
+=== 16 44x9 at 0s
+|                                            |
+|                                            |
+|                                            |
+|                                            |
+|                                            |
+|                                            |
+|                                            |
+|                                            |
+|                                            |
+--- styles
+|                                            |
+|                                            |
+|                                            |
+|                                            |
+|                                            |
+|                                            |
+|                                            |
+|                                            |
+|                                            |
+
+=== 16 44x9 at 90ms
+|                                            |
+|                                            |
+|          v0.12.0 to production?            |
+|         y changes, 41 files                |
+|         ploy   [n Cancel]                  |
+|                                            |
+|                                            |
+|                                            |
+|                                            |
+--- styles
+|                                            |
+|                                            |
+|          aaaaaaa bb bbbbbbbbbbb            |
+|         c cccccccc cc ccccc                |
+|         dddde  fg bbbbbbf                  |
+|                                            |
+|                                            |
+|                                            |
+|                                            |
+a: fg=fg bold
+b: fg=fg
+c: fg=dim
+d: fg=accent bold reverse
+e: bold reverse
+f: fg=mute
+g: fg=accent-bright bold
+=== 16 44x9 at 180ms
+|                                            |
+|   Deploy                                   |
+|   Deploy v0.12.0 to production?            |
+|   3 risky changes, 41 files                |
+|    y  Deploy   [n Cancel]                  |
+|                                            |
+|                                            |
+|                                            |
+|                                            |
+--- styles
+|                                            |
+|   aaaaaa                                   |
+|   bbbbbb ccccccc bb bbbbbbbbbbb            |
+|   d ddddd dddddddd dd ddddd                |
+|   efeeffffffe  gh bbbbbbg                  |
+|                                            |
+|                                            |
+|                                            |
+|                                            |
+a: fg=accent bold
+b: fg=fg
+c: fg=fg bold
+d: fg=dim
+e: bold reverse
+f: fg=accent bold reverse
+g: fg=mute
+h: fg=accent-bright bold
+=== 16 44x9 at 500ms
+|                                            |
+| ▾ Deploy                                   |
+|   Deploy v0.12.0 to production?            |
+|   3 risky changes, 41 files                |
+|    y  Deploy   [n Cancel]                  |
+|                                            |
+|                                            |
+|                                            |
+|                                            |
+--- styles
+|                                            |
+| a bbbbbb                                   |
+|   cccccc ddddddd cc ccccccccccc            |
+|   e eeeee eeeeeeee ee eeeee                |
+|   fgffggggggf  hi cccccch                  |
+|                                            |
+|                                            |
+|                                            |
+|                                            |
+a: fg=accent
+b: fg=accent bold
+c: fg=fg
+d: fg=fg bold
+e: fg=dim
+f: bold reverse
+g: fg=accent bold reverse
+h: fg=mute
+i: fg=accent-bright bold
+=== ascii 44x9 at 0s
+|                                            |
+|                                            |
+|                                            |
+|                                            |
+|                                            |
+|                                            |
+|                                            |
+|                                            |
+|                                            |
+--- styles
+|                                            |
+|                                            |
+|                                            |
+|                                            |
+|                                            |
+|                                            |
+|                                            |
+|                                            |
+|                                            |
+
+=== ascii 44x9 at 90ms
+|                                            |
+|                                            |
+|          v0.12.0 to production?            |
+|         y changes, 41 files                |
+|         ploy   [n Cancel]                  |
+|                                            |
+|                                            |
+|                                            |
+|                                            |
+--- styles
+|                                            |
+|                                            |
+|          aaaaaaa                           |
+|                                            |
+|         bbbbb   a                          |
+|                                            |
+|                                            |
+|                                            |
+|                                            |
+a: bold
+b: bold reverse
+=== ascii 44x9 at 180ms
+|                                            |
+|   Deploy                                   |
+|   Deploy v0.12.0 to production?            |
+|   3 risky changes, 41 files                |
+|    y  Deploy   [n Cancel]                  |
+|                                            |
+|                                            |
+|                                            |
+|                                            |
+--- styles
+|                                            |
+|   aaaaaa                                   |
+|          aaaaaaa                           |
+|                                            |
+|   bbbbbbbbbbb   a                          |
+|                                            |
+|                                            |
+|                                            |
+|                                            |
+a: bold
+b: bold reverse
+=== ascii 44x9 at 500ms
+|                                            |
+| v Deploy                                   |
+|   Deploy v0.12.0 to production?            |
+|   3 risky changes, 41 files                |
+|    y  Deploy   [n Cancel]                  |
+|                                            |
+|                                            |
+|                                            |
+|                                            |
+--- styles
+|                                            |
+|   aaaaaa                                   |
+|          aaaaaaa                           |
+|                                            |
+|   bbbbbbbbbbb   a                          |
+|                                            |
+|                                            |
+|                                            |
+|                                            |
+a: bold
+b: bold reverse

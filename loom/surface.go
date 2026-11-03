@@ -3,6 +3,7 @@ package loom
 import (
 	"errors"
 	"image"
+	"image/color"
 	"maps"
 	"math"
 	"slices"
@@ -45,6 +46,11 @@ type Options struct {
 	// the keys that work where it is, such as "esc close" in a popup only.
 	// SetPlacement changes it.
 	Placement string
+	// Motion plays the enter and exit effects and the skeleton's shimmer.
+	// Off, the default, draws each box as it is at once. A host that turns
+	// it on asks NextFrame after each Render when to draw again.
+	// SetMotion changes it.
+	Motion bool
 }
 
 // Surface is one TML document drawn into a cell buffer: the tree, the state
@@ -104,6 +110,21 @@ type Surface struct {
 
 	// The work of the last Render, for the budgets the tests hold.
 	stats renderStats
+
+	// Motion; see motion.go. motions holds the boxes with an enter, an
+	// exit, a skeleton or a ttl, by key; ghosts the boxes that left with
+	// an exit still playing.
+	motions map[string]*motion
+	ghosts  []ghost
+	now     time.Time // the clock of this Render
+	animate bool      // a box plays: paint it this frame
+	repaint bool      // paint every box this frame, with no build
+	resized bool      // this Render made a new buffer
+	fxCells []uv.Cell
+	mixes   map[mixKey]color.Color
+	lastMix lastMix
+	// The colours a fade blends from, read once per effect drawn.
+	fxBase, fxFg color.Color
 }
 
 // renderStats counts the work of one Render.
@@ -361,19 +382,29 @@ const maxSide = 4096
 func (s *Surface) Render(w, h int) *Buffer {
 	w, h = max(0, min(w, maxSide)), max(0, min(h, maxSide))
 	s.stats = renderStats{}
+	s.resized = false
 	if s.buf == nil || w != s.w || h != s.h {
 		s.buf = uv.NewBuffer(w, h)
 		s.out = &Buffer{b: s.buf}
 		s.w, s.h = w, h
 		s.full = true
+		s.resized = true
 	}
 	s.budget = tml.NewBudget()
+	if len(s.motions) > 0 || len(s.ghosts) > 0 {
+		s.beginMotion()
+	} else {
+		s.now = time.Time{}
+	}
 	if s.full || s.root == nil {
 		s.rebuildAll()
-	} else if !s.rebuildDirty() && !s.relayout {
+	} else if !s.rebuildDirty() && !s.relayout && !s.animate && !s.repaint {
 		return s.out
 	}
 	s.relayout = false
+	if len(s.motions) > 0 && s.stats.built > 0 {
+		s.departures()
+	}
 
 	s.layoutRoot()
 	s.focusMoved, s.reveal = false, false
@@ -382,14 +413,20 @@ func (s *Surface) Render(w, h int) *Buffer {
 		s.links = map[image.Point]string{}
 	}
 	c := &canvas{buf: s.buf, clip: rect(0, 0, w, h), pal: s.pal, g: s.g, cells: &s.stats.cells, links: s.links, osc8: s.opts.Hyperlinks}
-	if s.full {
+	if s.full || s.repaint {
 		c.fill(c.clip, s.ground())
 		s.addDamage(c.clip)
 		s.paint(s.root, c, true)
 	} else {
 		s.paint(s.root, c, false)
 	}
-	s.full = false
+	if len(s.ghosts) > 0 {
+		s.drawGhosts()
+	}
+	if len(s.motions) > 0 {
+		s.endMotion()
+	}
+	s.full, s.repaint = false, false
 	return s.out
 }
 

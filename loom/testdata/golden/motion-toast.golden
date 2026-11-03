@@ -1,0 +1,474 @@
+=== truecolor 40x6 at 0s
+|                                        |
+| Settings                               |
+|                                        |
+|  Saved config.toml                     |
+|                                        |
+|                                        |
+--- styles
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|abbbbbbbbaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|acdddddcdddddddddddcaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+a: bg=panel
+b: fg=fg bg=panel
+c: bg=panel bold
+d: fg=panel bg=panel bold
+=== truecolor 40x6 at 500ms
+|                                        |
+| Settings                               |
+|                                        |
+|  Saved config.toml                     |
+|                                        |
+|                                        |
+--- styles
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|abbbbbbbbaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|acdddddcdddddddddddceeeeeeeeeeeeeeeeeeea|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+a: bg=panel
+b: fg=fg bg=panel
+c: bg=success-tint bold
+d: fg=success bg=success-tint bold
+e: bg=success-tint
+=== truecolor 40x6 at 1.08s
+|                                        |
+| Settings                               |
+|                                        |
+|  Saved config.toml                     |
+|                                        |
+|                                        |
+--- styles
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|abbbbbbbbaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|acdddddcdddddddddddceeeeeeeeeeeeeeeeeeea|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+a: bg=panel
+b: fg=fg bg=panel
+c: bg=success-tint bold
+d: fg=success bg=success-tint bold
+e: bg=success-tint
+=== truecolor 40x6 at 1.3s
+|                                        |
+| Settings                               |
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+--- styles
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|abbbbbbbbaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+a: bg=panel
+b: fg=fg bg=panel
+=== truecolor 40x6 at 1.4s
+|                                        |
+| Settings                               |
+|                                        |
+|  Saved theme.toml                      |
+|                                        |
+|                                        |
+--- styles
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|abbbbbbbbaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|acdddddcddddddddddcaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+a: bg=panel
+b: fg=fg bg=panel
+c: bg=panel bold
+d: fg=panel bg=panel bold
+=== truecolor 40x6 at 1.48s
+|                                        |
+| Settings                               |
+|                                        |
+|  Saved theme.toml                      |
+|                                        |
+|                                        |
+--- styles
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|abbbbbbbbaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|acdddddcddddddddddceeeeeeeeeeeeeeeeeeeea|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+a: bg=panel
+b: fg=fg bg=panel
+c: bg={53 68 69 255} bold
+d: fg={47 217 157 255} bg={53 68 69 255} bold
+e: bg={53 68 69 255}
+=== truecolor 40x6 at 1.7s
+|                                        |
+| Settings                               |
+|                                        |
+|  Saved theme.toml                      |
+|                                        |
+|                                        |
+--- styles
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|abbbbbbbbaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|acdddddcddddddddddceeeeeeeeeeeeeeeeeeeea|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+a: bg=panel
+b: fg=fg bg=panel
+c: bg=success-tint bold
+d: fg=success bg=success-tint bold
+e: bg=success-tint
+=== 256 40x6 at 0s
+|                                        |
+| Settings                               |
+|                                        |
+|  Saved config.toml                     |
+|                                        |
+|                                        |
+--- styles
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|abbbbbbbbaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|acdddddcdddddddddddcaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+a: bg=panel
+b: fg=fg bg=panel
+c: bg=panel bold
+d: fg=panel bg=panel bold
+=== 256 40x6 at 500ms
+|                                        |
+| Settings                               |
+|                                        |
+|  Saved config.toml                     |
+|                                        |
+|                                        |
+--- styles
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|abbbbbbbbaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|acdddddcdddddddddddceeeeeeeeeeeeeeeeeeea|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+a: bg=panel
+b: fg=fg bg=panel
+c: bg=success-tint bold
+d: fg=success bg=success-tint bold
+e: bg=success-tint
+=== 256 40x6 at 1.08s
+|                                        |
+| Settings                               |
+|                                        |
+|  Saved config.toml                     |
+|                                        |
+|                                        |
+--- styles
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|abbbbbbbbaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|acdddddcdddddddddddceeeeeeeeeeeeeeeeeeea|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+a: bg=panel
+b: fg=fg bg=panel
+c: bg=success-tint bold
+d: fg=success bg=success-tint bold
+e: bg=success-tint
+=== 256 40x6 at 1.3s
+|                                        |
+| Settings                               |
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+--- styles
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|abbbbbbbbaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+a: bg=panel
+b: fg=fg bg=panel
+=== 256 40x6 at 1.4s
+|                                        |
+| Settings                               |
+|                                        |
+|  Saved theme.toml                      |
+|                                        |
+|                                        |
+--- styles
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|abbbbbbbbaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|acdddddcddddddddddcaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+a: bg=panel
+b: fg=fg bg=panel
+c: bg=panel bold
+d: fg=panel bg=panel bold
+=== 256 40x6 at 1.48s
+|                                        |
+| Settings                               |
+|                                        |
+|  Saved theme.toml                      |
+|                                        |
+|                                        |
+--- styles
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|abbbbbbbbaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|acdddddcddddddddddceeeeeeeeeeeeeeeeeeeea|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+a: bg=panel
+b: fg=fg bg=panel
+c: bg=success-tint bold
+d: fg=78 bg=success-tint bold
+e: bg=success-tint
+=== 256 40x6 at 1.7s
+|                                        |
+| Settings                               |
+|                                        |
+|  Saved theme.toml                      |
+|                                        |
+|                                        |
+--- styles
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|abbbbbbbbaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|acdddddcddddddddddceeeeeeeeeeeeeeeeeeeea|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+a: bg=panel
+b: fg=fg bg=panel
+c: bg=success-tint bold
+d: fg=success bg=success-tint bold
+e: bg=success-tint
+=== 16 40x6 at 0s
+|                                        |
+| Settings                               |
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+--- styles
+|                                        |
+| aaaaaaaa                               |
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+a: fg=fg
+=== 16 40x6 at 500ms
+|                                        |
+| Settings                               |
+|                                        |
+| Saved config.toml                      |
+|                                        |
+|                                        |
+--- styles
+|                                        |
+| aaaaaaaa                               |
+|                                        |
+| bbbbbcbbbbbbbbbbb                      |
+|                                        |
+|                                        |
+a: fg=fg
+b: fg=success bold
+c: bold
+=== 16 40x6 at 1.08s
+|                                        |
+| Settings                               |
+|                                        |
+| Saved config.toml                      |
+|                                        |
+|                                        |
+--- styles
+|                                        |
+| aaaaaaaa                               |
+|                                        |
+| bbbbbcbbbbbbbbbbb                      |
+|                                        |
+|                                        |
+a: fg=fg
+b: fg=success bold
+c: bold
+=== 16 40x6 at 1.3s
+|                                        |
+| Settings                               |
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+--- styles
+|                                        |
+| aaaaaaaa                               |
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+a: fg=fg
+=== 16 40x6 at 1.4s
+|                                        |
+| Settings                               |
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+--- styles
+|                                        |
+| aaaaaaaa                               |
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+a: fg=fg
+=== 16 40x6 at 1.48s
+|                                        |
+| Settings                               |
+|                                        |
+| Saved theme.toml                       |
+|                                        |
+|                                        |
+--- styles
+|                                        |
+| aaaaaaaa                               |
+|                                        |
+| bbbbbcbbbbbbbbbb                       |
+|                                        |
+|                                        |
+a: fg=fg
+b: fg=success bold
+c: bold
+=== 16 40x6 at 1.7s
+|                                        |
+| Settings                               |
+|                                        |
+| Saved theme.toml                       |
+|                                        |
+|                                        |
+--- styles
+|                                        |
+| aaaaaaaa                               |
+|                                        |
+| bbbbbcbbbbbbbbbb                       |
+|                                        |
+|                                        |
+a: fg=fg
+b: fg=success bold
+c: bold
+=== ascii 40x6 at 0s
+|                                        |
+| Settings                               |
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+--- styles
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+
+=== ascii 40x6 at 500ms
+|                                        |
+| Settings                               |
+|                                        |
+| [Saved config.toml]                    |
+|                                        |
+|                                        |
+--- styles
+|                                        |
+|                                        |
+|                                        |
+| aaaaaaaaaaaaaaaaaaa                    |
+|                                        |
+|                                        |
+a: bold
+=== ascii 40x6 at 1.08s
+|                                        |
+| Settings                               |
+|                                        |
+| [Saved config.toml]                    |
+|                                        |
+|                                        |
+--- styles
+|                                        |
+|                                        |
+|                                        |
+| aaaaaaaaaaaaaaaaaaa                    |
+|                                        |
+|                                        |
+a: bold
+=== ascii 40x6 at 1.3s
+|                                        |
+| Settings                               |
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+--- styles
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+
+=== ascii 40x6 at 1.4s
+|                                        |
+| Settings                               |
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+--- styles
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+
+=== ascii 40x6 at 1.48s
+|                                        |
+| Settings                               |
+|                                        |
+| [Saved theme.toml]                     |
+|                                        |
+|                                        |
+--- styles
+|                                        |
+|                                        |
+|                                        |
+| aaaaaaaaaaaaaaaaaa                     |
+|                                        |
+|                                        |
+a: bold
+=== ascii 40x6 at 1.7s
+|                                        |
+| Settings                               |
+|                                        |
+| [Saved theme.toml]                     |
+|                                        |
+|                                        |
+--- styles
+|                                        |
+|                                        |
+|                                        |
+| aaaaaaaaaaaaaaaaaa                     |
+|                                        |
+|                                        |
+a: bold

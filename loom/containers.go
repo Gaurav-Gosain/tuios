@@ -541,6 +541,25 @@ func (s *Surface) paintBox(b *box, c *canvas) {
 		markPainted(b)
 		return
 	}
+	if b.mo == nil {
+		s.paintContent(b, c)
+		return
+	}
+	if b.mo.skeleton {
+		s.paintSkeleton(b, c)
+		for _, k := range b.kids {
+			markPainted(k)
+		}
+	} else {
+		s.paintContent(b, c)
+	}
+	if b.mo.playing {
+		s.playEnter(b, c)
+	}
+}
+
+// paintContent draws b's widget and its children.
+func (s *Surface) paintContent(b *box, c *canvas) {
 	if b.w != nil {
 		b.w.paint(s, b, c, b.inner())
 	}

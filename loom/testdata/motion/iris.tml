@@ -1,0 +1,13 @@
+<tml version="1" title="Deploy">
+  <state>{"tag": "v0.12.0"}</state>
+  <col pad="1">
+    <card title="Deploy" enter="iris" role="accent">
+      <text>Deploy <b>{state.tag}</b> to production?</text>
+      <text role="dim">3 risky changes, 41 files</text>
+      <row gap="2">
+        <button kind="primary" key="y">Deploy</button>
+        <button key="n">Cancel</button>
+      </row>
+    </card>
+  </col>
+</tml>

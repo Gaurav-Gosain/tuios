@@ -1,0 +1,12 @@
+<tml version="1" title="Loading">
+  <state>{"loading": true, "cpu": "12%", "mem": "3.1 GB", "disk": "61%"}</state>
+  <col pad="1">
+    <card title="Host" skeleton="{state.loading}" enter="fade" h="7">
+      <kv>
+        <item k="CPU" v="{state.cpu}"/>
+        <item k="Memory" v="{state.mem}"/>
+        <item k="Disk" v="{state.disk}"/>
+      </kv>
+    </card>
+  </col>
+</tml>

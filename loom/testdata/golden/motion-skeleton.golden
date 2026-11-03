@@ -1,0 +1,580 @@
+=== truecolor 40x9 at 0s
+|                                        |
+| ▾ Host                                 |
+|   ▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅               |
+|   ▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅          |
+|                                        |
+|   ▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅          |
+|   ▅▅▅▅▅▅▅▅▅▅▅▅▅▅                       |
+|                                        |
+|                                        |
+--- styles
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|abaccccaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaabbbbbbbbbbbbbbbbbbbbbbaaaaaaaaaaaaaaa|
+|aaabbbbbbbbbbbbbbbbbbbbbbbbbbbaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaabbbbbbbbbbbbbbbbbbbbbbbbbbbaaaaaaaaaa|
+|aaabbbbbbbbbbbbbbaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+a: bg=panel
+b: fg=panel bg=panel
+c: fg=panel bg=panel bold
+=== truecolor 40x9 at 500ms
+|                                        |
+| ▾ Host                                 |
+|   ▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅               |
+|   ▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅          |
+|                                        |
+|   ▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅          |
+|   ▅▅▅▅▅▅▅▅▅▅▅▅▅▅                       |
+|                                        |
+|                                        |
+--- styles
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|abaccccaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaddddddddddefghijddddddaaaaaaaaaaaaaaa|
+|aaaddddddddefghijdddddddddddddaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaddddefghijdddddddddddddddddaaaaaaaaaa|
+|aaaddefghijddddddaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+a: bg=panel
+b: fg=mute bg=panel
+c: fg=fg bg=panel bold
+d: fg=track bg=panel
+e: fg={77 75 87 255} bg=panel
+f: fg={105 103 115 255} bg=panel
+g: fg={128 125 138 255} bg=panel
+h: fg={143 141 153 255} bg=panel
+i: fg={120 118 130 255} bg=panel
+j: fg={91 89 101 255} bg=panel
+=== truecolor 40x9 at 1s
+|                                        |
+| ▾ Host                                 |
+|   ▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅               |
+|   ▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅          |
+|                                        |
+|   ▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅          |
+|   ▅▅▅▅▅▅▅▅▅▅▅▅▅▅                       |
+|                                        |
+|                                        |
+--- styles
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|abaccccaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaddddddddddddddddddddddaaaaaaaaaaaaaaa|
+|aaadddddddddddddddddddddddddddaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaadddddddddddddddddddddddefggaaaaaaaaaa|
+|aaaddddddddddddddaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+a: bg=panel
+b: fg=mute bg=panel
+c: fg=fg bg=panel bold
+d: fg=track bg=panel
+e: fg={84 82 94 255} bg=panel
+f: fg={113 110 123 255} bg=panel
+g: fg={135 133 145 255} bg=panel
+=== truecolor 40x9 at 1.1s
+|                                        |
+| ▾ Host                                 |
+|   ▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅               |
+|   ▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅          |
+|                                        |
+|   ▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅          |
+|   ▅▅▅▅▅▅▅▅▅▅▅▅▅▅                       |
+|                                        |
+|                                        |
+--- styles
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|abaccccaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaddddddddddddddddddddddaaaaaaaaaaaaaaa|
+|aaadddddddddddddddddddddddddddaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaadddddddddddddddddddddddefggaaaaaaaaaa|
+|aaaddddddddddddddaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+a: bg=panel
+b: fg=mute bg=panel
+c: fg=fg bg=panel bold
+d: fg=track bg=panel
+e: fg={84 82 94 255} bg=panel
+f: fg={113 110 123 255} bg=panel
+g: fg={135 133 145 255} bg=panel
+=== truecolor 40x9 at 1.16s
+|                                        |
+| ▾ Host                                 |
+|   ▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅               |
+|   ▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅          |
+|                                        |
+|   ▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅          |
+|   ▅▅▅▅▅▅▅▅▅▅▅▅▅▅                       |
+|                                        |
+|                                        |
+--- styles
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|abaccccaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaadddeeeeedddeeeeeeeeeeeaaaaaaaaaaaaaaa|
+|aaaddddddeedddeddeeeeeeeeeeeeeaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaeeeeeeeeeeeeeeeeeeeeeeefghhaaaaaaaaaa|
+|aaaeeeeeeeeeeeeeeaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+a: bg=panel
+b: fg={104 102 116 255} bg=panel
+c: fg={183 180 178 255} bg=panel bold
+d: fg={62 60 72 255} bg=panel
+e: fg={65 63 75 255} bg=panel
+f: fg={76 75 86 255} bg=panel
+g: fg={100 97 109 255} bg=panel
+h: fg={117 115 127 255} bg=panel
+=== truecolor 40x9 at 1.5s
+|                                        |
+| ▾ Host                                 |
+|   CPU     12%                          |
+|   Memory  3.1 GB                       |
+|   Disk    61%                          |
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+--- styles
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|abaccccaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaadddaaaaaeeeaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaddddddaaeeeaeeaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaddddaaaaeeeaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+a: bg=panel
+b: fg=mute bg=panel
+c: fg=fg bg=panel bold
+d: fg=dim bg=panel
+e: fg=fg bg=panel
+=== 256 40x9 at 0s
+|                                        |
+| ▾ Host                                 |
+|   ▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅               |
+|   ▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅          |
+|                                        |
+|   ▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅          |
+|   ▅▅▅▅▅▅▅▅▅▅▅▅▅▅                       |
+|                                        |
+|                                        |
+--- styles
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|abaccccaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaabbbbbbbbbbbbbbbbbbbbbbaaaaaaaaaaaaaaa|
+|aaabbbbbbbbbbbbbbbbbbbbbbbbbbbaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaabbbbbbbbbbbbbbbbbbbbbbbbbbbaaaaaaaaaa|
+|aaabbbbbbbbbbbbbbaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+a: bg=panel
+b: fg=panel bg=panel
+c: fg=panel bg=panel bold
+=== 256 40x9 at 500ms
+|                                        |
+| ▾ Host                                 |
+|   ▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅               |
+|   ▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅          |
+|                                        |
+|   ▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅          |
+|   ▅▅▅▅▅▅▅▅▅▅▅▅▅▅                       |
+|                                        |
+|                                        |
+--- styles
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|abaccccaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaddddddddddefghijddddddaaaaaaaaaaaaaaa|
+|aaaddddddddefghijdddddddddddddaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaddddefghijdddddddddddddddddaaaaaaaaaa|
+|aaaddefghijddddddaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+a: bg=panel
+b: fg=mute bg=panel
+c: fg=fg bg=panel bold
+d: fg=success-tint bg=panel
+e: fg=edge bg=panel
+f: fg=242 bg=panel
+g: fg=244 bg=panel
+h: fg=245 bg=panel
+i: fg=243 bg=panel
+j: fg=240 bg=panel
+=== 256 40x9 at 1s
+|                                        |
+| ▾ Host                                 |
+|   ▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅               |
+|   ▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅          |
+|                                        |
+|   ▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅          |
+|   ▅▅▅▅▅▅▅▅▅▅▅▅▅▅                       |
+|                                        |
+|                                        |
+--- styles
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|abaccccaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaddddddddddddddddddddddaaaaaaaaaaaaaaa|
+|aaadddddddddddddddddddddddddddaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaadddddddddddddddddddddddefbbaaaaaaaaaa|
+|aaaddddddddddddddaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+a: bg=panel
+b: fg=mute bg=panel
+c: fg=fg bg=panel bold
+d: fg=success-tint bg=panel
+e: fg=edge bg=panel
+f: fg=242 bg=panel
+=== 256 40x9 at 1.1s
+|                                        |
+| ▾ Host                                 |
+|   ▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅               |
+|   ▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅          |
+|                                        |
+|   ▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅          |
+|   ▅▅▅▅▅▅▅▅▅▅▅▅▅▅                       |
+|                                        |
+|                                        |
+--- styles
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|abaccccaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaddddddddddddddddddddddaaaaaaaaaaaaaaa|
+|aaadddddddddddddddddddddddddddaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaadddddddddddddddddddddddefbbaaaaaaaaaa|
+|aaaddddddddddddddaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+a: bg=panel
+b: fg=mute bg=panel
+c: fg=fg bg=panel bold
+d: fg=success-tint bg=panel
+e: fg=edge bg=panel
+f: fg=242 bg=panel
+=== 256 40x9 at 1.16s
+|                                        |
+| ▾ Host                                 |
+|   ▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅               |
+|   ▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅          |
+|                                        |
+|   ▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅          |
+|   ▅▅▅▅▅▅▅▅▅▅▅▅▅▅                       |
+|                                        |
+|                                        |
+--- styles
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|abaccccaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaadddeeeeedddeeeeeeeeeeeaaaaaaaaaaaaaaa|
+|aaaddddddeedddeddeeeeeeeeeeeeeaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaeeeeeeeeeeeeeeeeeeeeeeeefggaaaaaaaaaa|
+|aaaeeeeeeeeeeeeeeaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+a: bg=panel
+b: fg=242 bg=panel
+c: fg=dim bg=panel bold
+d: fg=surface bg=panel
+e: fg=success-tint bg=panel
+f: fg=59 bg=panel
+g: fg=243 bg=panel
+=== 256 40x9 at 1.5s
+|                                        |
+| ▾ Host                                 |
+|   CPU     12%                          |
+|   Memory  3.1 GB                       |
+|   Disk    61%                          |
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+--- styles
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|abaccccaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaadddaaaaaeeeaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaddddddaaeeeaeeaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaddddaaaaeeeaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+a: bg=panel
+b: fg=mute bg=panel
+c: fg=fg bg=panel bold
+d: fg=dim bg=panel
+e: fg=fg bg=panel
+=== 16 40x9 at 0s
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+--- styles
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+
+=== 16 40x9 at 500ms
+|                                        |
+| ▾ Host                                 |
+|   ▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅               |
+|   ▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅          |
+|                                        |
+|   ▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅          |
+|   ▅▅▅▅▅▅▅▅▅▅▅▅▅▅                       |
+|                                        |
+|                                        |
+--- styles
+|                                        |
+| a bbbb                                 |
+|   aaaaaaaaaaaccccaaaaaaa               |
+|   aaaaaaaaaccccaaaaaaaaaaaaaa          |
+|                                        |
+|   aaaaaccccaaaaaaaaaaaaaaaaaa          |
+|   aaaccccaaaaaaa                       |
+|                                        |
+|                                        |
+a: fg=mute
+b: fg=fg bold
+c: fg=dim
+=== 16 40x9 at 1s
+|                                        |
+| ▾ Host                                 |
+|   ▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅               |
+|   ▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅          |
+|                                        |
+|   ▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅          |
+|   ▅▅▅▅▅▅▅▅▅▅▅▅▅▅                       |
+|                                        |
+|                                        |
+--- styles
+|                                        |
+| a bbbb                                 |
+|   aaaaaaaaaaaaaaaaaaaaaa               |
+|   aaaaaaaaaaaaaaaaaaaaaaaaaaa          |
+|                                        |
+|   aaaaaaaaaaaaaaaaaaaaaaaaccc          |
+|   aaaaaaaaaaaaaa                       |
+|                                        |
+|                                        |
+a: fg=mute
+b: fg=fg bold
+c: fg=dim
+=== 16 40x9 at 1.1s
+|                                        |
+| ▾ Host                                 |
+|   ▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅               |
+|   ▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅          |
+|                                        |
+|   ▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅          |
+|   ▅▅▅▅▅▅▅▅▅▅▅▅▅▅                       |
+|                                        |
+|                                        |
+--- styles
+|                                        |
+| a bbbb                                 |
+|   aaaaaaaaaaaaaaaaaaaaaa               |
+|   aaaaaaaaaaaaaaaaaaaaaaaaaaa          |
+|                                        |
+|   aaaaaaaaaaaaaaaaaaaaaaaaccc          |
+|   aaaaaaaaaaaaaa                       |
+|                                        |
+|                                        |
+a: fg=mute
+b: fg=fg bold
+c: fg=dim
+=== 16 40x9 at 1.16s
+|                                        |
+| ▾ Host                                 |
+|   ▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅               |
+|   ▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅          |
+|                                        |
+|   ▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅          |
+|   ▅▅▅▅▅▅▅▅▅▅▅▅▅▅                       |
+|                                        |
+|                                        |
+--- styles
+|                                        |
+| a bbbb                                 |
+|   aaaaaaaaaaaaaaaaaaaaaa               |
+|   aaaaaaaaaaaaaaaaaaaaaaaaaaa          |
+|                                        |
+|   aaaaaaaaaaaaaaaaaaaaaaaaccc          |
+|   aaaaaaaaaaaaaa                       |
+|                                        |
+|                                        |
+a: fg=mute
+b: fg=fg bold
+c: fg=dim
+=== 16 40x9 at 1.5s
+|                                        |
+| ▾ Host                                 |
+|   CPU     12%                          |
+|   Memory  3.1 GB                       |
+|   Disk    61%                          |
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+--- styles
+|                                        |
+| a bbbb                                 |
+|   ccc     ddd                          |
+|   cccccc  ddd dd                       |
+|   cccc    ddd                          |
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+a: fg=mute
+b: fg=fg bold
+c: fg=dim
+d: fg=fg
+=== ascii 40x9 at 0s
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+--- styles
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+
+=== ascii 40x9 at 500ms
+|                                        |
+| v Host                                 |
+|   -----------====-------               |
+|   ---------====--------------          |
+|                                        |
+|   -----====------------------          |
+|   ---====-------                       |
+|                                        |
+|                                        |
+--- styles
+|                                        |
+|   aaaa                                 |
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+a: bold
+=== ascii 40x9 at 1s
+|                                        |
+| v Host                                 |
+|   ----------------------               |
+|   ---------------------------          |
+|                                        |
+|   ------------------------===          |
+|   --------------                       |
+|                                        |
+|                                        |
+--- styles
+|                                        |
+|   aaaa                                 |
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+a: bold
+=== ascii 40x9 at 1.1s
+|                                        |
+| v Host                                 |
+|   ----------------------               |
+|   ---------------------------          |
+|                                        |
+|   ------------------------===          |
+|   --------------                       |
+|                                        |
+|                                        |
+--- styles
+|                                        |
+|   aaaa                                 |
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+a: bold
+=== ascii 40x9 at 1.16s
+|                                        |
+| v Host                                 |
+|   ----------------------               |
+|   ---------------------------          |
+|                                        |
+|   ------------------------===          |
+|   --------------                       |
+|                                        |
+|                                        |
+--- styles
+|                                        |
+|   aaaa                                 |
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+a: bold
+=== ascii 40x9 at 1.5s
+|                                        |
+| v Host                                 |
+|   CPU     12%                          |
+|   Memory  3.1 GB                       |
+|   Disk    61%                          |
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+--- styles
+|                                        |
+|   aaaa                                 |
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+a: bold

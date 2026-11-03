@@ -1,0 +1,509 @@
+=== truecolor 40x8 at 0s
+|                                        |
+| Uploads                                |
+|                                        |
+| ▾ Upload                               |
+|   report.pdf sent                      |
+|                                        |
+|                                        |
+|                                        |
+--- styles
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|abbbbbbbaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|acaddddddaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaccccccccccaccccaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+a: bg=panel
+b: fg=fg bg=panel
+c: fg=panel bg=panel
+d: fg=panel bg=panel bold
+=== truecolor 40x8 at 300ms
+|                                        |
+| Uploads                                |
+|                                        |
+| ▾ Upload                               |
+|   report.pdf sent                      |
+|                                        |
+|                                        |
+|                                        |
+--- styles
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|abbbbbbbaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|acaddddddaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaabbbbbbbbbbaeeeeaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+a: bg=panel
+b: fg=fg bg=panel
+c: fg=mute bg=panel
+d: fg=fg bg=panel bold
+e: fg=success bg=panel
+=== truecolor 40x8 at 330ms
+|                                        |
+| Uploads                                |
+|                                        |
+| ▾ Upload                               |
+|   report.pdf sent                      |
+|                                        |
+|                                        |
+|                                        |
+--- styles
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|abbbbbbbaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|acaddddddaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaabbbbbbbbbbaeeeeaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+a: bg=panel
+b: fg=fg bg=panel
+c: fg=mute bg=panel
+d: fg=fg bg=panel bold
+e: fg=success bg=panel
+=== truecolor 40x8 at 390ms
+|                                        |
+| Uploads                                |
+|                                        |
+| ▾ Upload                               |
+|   report.pdf sent                      |
+|                                        |
+|                                        |
+|                                        |
+--- styles
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|abbbbbbbaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|acaddddddaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaeeeeeeeeeeaffffaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+a: bg=panel
+b: fg=fg bg=panel
+c: fg={121 119 134 255} bg=panel
+d: fg={226 221 215 255} bg=panel bold
+e: fg={226 221 215 255} bg=panel
+f: fg={42 226 162 255} bg=panel
+=== truecolor 40x8 at 450ms
+|                                        |
+| Uploads                                |
+|                                        |
+|                                        |
+| ▾ Upload                               |
+|                                        |
+|                                        |
+|                                        |
+--- styles
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|abbbbbbbaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|acaddddddaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+a: bg=panel
+b: fg=fg bg=panel
+c: fg={93 91 104 255} bg=panel
+d: fg={156 153 154 255} bg=panel bold
+=== truecolor 40x8 at 600ms
+|                                        |
+| Uploads                                |
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+--- styles
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|abbbbbbbaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+a: bg=panel
+b: fg=fg bg=panel
+=== 256 40x8 at 0s
+|                                        |
+| Uploads                                |
+|                                        |
+| ▾ Upload                               |
+|   report.pdf sent                      |
+|                                        |
+|                                        |
+|                                        |
+--- styles
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|abbbbbbbaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|acaddddddaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaccccccccccaccccaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+a: bg=panel
+b: fg=fg bg=panel
+c: fg=panel bg=panel
+d: fg=panel bg=panel bold
+=== 256 40x8 at 300ms
+|                                        |
+| Uploads                                |
+|                                        |
+| ▾ Upload                               |
+|   report.pdf sent                      |
+|                                        |
+|                                        |
+|                                        |
+--- styles
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|abbbbbbbaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|acaddddddaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaabbbbbbbbbbaeeeeaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+a: bg=panel
+b: fg=fg bg=panel
+c: fg=mute bg=panel
+d: fg=fg bg=panel bold
+e: fg=success bg=panel
+=== 256 40x8 at 330ms
+|                                        |
+| Uploads                                |
+|                                        |
+| ▾ Upload                               |
+|   report.pdf sent                      |
+|                                        |
+|                                        |
+|                                        |
+--- styles
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|abbbbbbbaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|acaddddddaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaabbbbbbbbbbaeeeeaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+a: bg=panel
+b: fg=fg bg=panel
+c: fg=mute bg=panel
+d: fg=fg bg=panel bold
+e: fg=success bg=panel
+=== 256 40x8 at 390ms
+|                                        |
+| Uploads                                |
+|                                        |
+| ▾ Upload                               |
+|   report.pdf sent                      |
+|                                        |
+|                                        |
+|                                        |
+--- styles
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|abbbbbbbaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|acaddddddaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaeeeeeeeeeeaffffaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+a: bg=panel
+b: fg=fg bg=panel
+c: fg=244 bg=panel
+d: fg=254 bg=panel bold
+e: fg=254 bg=panel
+f: fg=78 bg=panel
+=== 256 40x8 at 450ms
+|                                        |
+| Uploads                                |
+|                                        |
+|                                        |
+| ▾ Upload                               |
+|                                        |
+|                                        |
+|                                        |
+--- styles
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|abbbbbbbaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|acaddddddaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+a: bg=panel
+b: fg=fg bg=panel
+c: fg=59 bg=panel
+d: fg=247 bg=panel bold
+=== 256 40x8 at 600ms
+|                                        |
+| Uploads                                |
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+--- styles
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|abbbbbbbaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+a: bg=panel
+b: fg=fg bg=panel
+=== 16 40x8 at 0s
+|                                        |
+| Uploads                                |
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+--- styles
+|                                        |
+| aaaaaaa                                |
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+a: fg=fg
+=== 16 40x8 at 300ms
+|                                        |
+| Uploads                                |
+|                                        |
+| ▾ Upload                               |
+|   report.pdf sent                      |
+|                                        |
+|                                        |
+|                                        |
+--- styles
+|                                        |
+| aaaaaaa                                |
+|                                        |
+| b cccccc                               |
+|   aaaaaaaaaa dddd                      |
+|                                        |
+|                                        |
+|                                        |
+a: fg=fg
+b: fg=mute
+c: fg=fg bold
+d: fg=success
+=== 16 40x8 at 330ms
+|                                        |
+| Uploads                                |
+|                                        |
+| ▾ Upload                               |
+|   report.pdf sent                      |
+|                                        |
+|                                        |
+|                                        |
+--- styles
+|                                        |
+| aaaaaaa                                |
+|                                        |
+| b cccccc                               |
+|   aaaaaaaaaa dddd                      |
+|                                        |
+|                                        |
+|                                        |
+a: fg=fg
+b: fg=mute
+c: fg=fg bold
+d: fg=success
+=== 16 40x8 at 390ms
+|                                        |
+| Uploads                                |
+|                                        |
+| ▾ Upload                               |
+|   report.pdf sent                      |
+|                                        |
+|                                        |
+|                                        |
+--- styles
+|                                        |
+| aaaaaaa                                |
+|                                        |
+| b cccccc                               |
+|   aaaaaaaaaa dddd                      |
+|                                        |
+|                                        |
+|                                        |
+a: fg=fg
+b: fg=mute
+c: fg=fg bold
+d: fg=success
+=== 16 40x8 at 450ms
+|                                        |
+| Uploads                                |
+|                                        |
+|                                        |
+| ▾ Upload                               |
+|                                        |
+|                                        |
+|                                        |
+--- styles
+|                                        |
+| aaaaaaa                                |
+|                                        |
+|                                        |
+| bcddddddcccccccccccccccccccccccccccccc |
+|                                        |
+|                                        |
+|                                        |
+a: fg=fg
+b: fg=mute faint
+c: faint
+d: fg=fg bold faint
+=== 16 40x8 at 600ms
+|                                        |
+| Uploads                                |
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+--- styles
+|                                        |
+| aaaaaaa                                |
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+a: fg=fg
+=== ascii 40x8 at 0s
+|                                        |
+| Uploads                                |
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+--- styles
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+
+=== ascii 40x8 at 300ms
+|                                        |
+| Uploads                                |
+|                                        |
+| v Upload                               |
+|   report.pdf sent                      |
+|                                        |
+|                                        |
+|                                        |
+--- styles
+|                                        |
+|                                        |
+|                                        |
+|   aaaaaa                               |
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+a: bold
+=== ascii 40x8 at 330ms
+|                                        |
+| Uploads                                |
+|                                        |
+| v Upload                               |
+|   report.pdf sent                      |
+|                                        |
+|                                        |
+|                                        |
+--- styles
+|                                        |
+|                                        |
+|                                        |
+|   aaaaaa                               |
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+a: bold
+=== ascii 40x8 at 390ms
+|                                        |
+| Uploads                                |
+|                                        |
+| v Upload                               |
+|   report.pdf sent                      |
+|                                        |
+|                                        |
+|                                        |
+--- styles
+|                                        |
+|                                        |
+|                                        |
+|   aaaaaa                               |
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+a: bold
+=== ascii 40x8 at 450ms
+|                                        |
+| Uploads                                |
+|                                        |
+|                                        |
+| v Upload                               |
+|                                        |
+|                                        |
+|                                        |
+--- styles
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+| aabbbbbbaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa |
+|                                        |
+|                                        |
+|                                        |
+a: faint
+b: bold faint
+=== ascii 40x8 at 600ms
+|                                        |
+| Uploads                                |
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+--- styles
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+

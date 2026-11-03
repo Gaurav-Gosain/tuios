@@ -15,6 +15,7 @@ func (s *Surface) buildChildren(n *tml.Node, ptr string, sc *scope, parent *box)
 		}
 		out = append(out, s.build(c, ptr+"/children/"+strconv.Itoa(i), sc, parent)...)
 	}
+	s.staggerChildren(n, out)
 	return out
 }
 
@@ -75,6 +76,9 @@ func (s *Surface) buildOne(n *tml.Node, ptr string, sc *scope, parent *box) *box
 		b.base = ptr
 	}
 	b.key = b.base + sc.idents()
+	if len(s.motions) > 0 && s.expiredToast(n, b.key, vars) {
+		return nil
+	}
 	b.hidden = !s.truthy(n, "show", vars)
 	b.width = parseSize(s.str(n, "w", vars))
 	b.height = parseSize(s.str(n, "h", vars))
@@ -122,6 +126,7 @@ func (s *Surface) buildOne(n *tml.Node, ptr string, sc *scope, parent *box) *box
 	default:
 		b.w = s.buildLeaf(b, vars)
 	}
+	s.track(b, n, vars)
 	s.byPtr[ptr] = append(s.byPtr[ptr], b)
 	return b
 }

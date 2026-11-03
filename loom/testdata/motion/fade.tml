@@ -1,0 +1,9 @@
+<tml version="1" title="Build">
+  <state>{"passed": 412, "failed": 3}</state>
+  <col pad="1" gap="1">
+    <card title="Build" enter="fade">
+      <text>Passed <c role="success">{state.passed}</c>, failed <c role="error">{state.failed}</c></text>
+      <progress value="0.8" label="Tests"/>
+    </card>
+  </col>
+</tml>

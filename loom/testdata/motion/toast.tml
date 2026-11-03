@@ -1,0 +1,7 @@
+<tml version="1" title="Toast">
+  <state>{"msg": "Saved config.toml"}</state>
+  <col pad="1" gap="1">
+    <text>Settings</text>
+    <toast role="success" ttl="1s">{state.msg}</toast>
+  </col>
+</tml>

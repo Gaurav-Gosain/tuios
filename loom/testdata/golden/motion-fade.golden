@@ -1,0 +1,376 @@
+=== truecolor 44x8 at 0s
+|                                            |
+| ▾ Build                                    |
+|   Passed 412, failed 3                     |
+|   ███████████████████████████▎░░░░░░ Tests |
+|                                            |
+|                                            |
+|                                            |
+|                                            |
+--- styles
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|abacccccaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaabbbbbbabbbbabbbbbbabaaaaaaaaaaaaaaaaaaaaa|
+|aaabbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbaccccca|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+a: bg=panel
+b: fg=panel bg=panel
+c: fg=panel bg=panel bold
+=== truecolor 44x8 at 60ms
+|                                            |
+| ▾ Build                                    |
+|   Passed 412, failed 3                     |
+|   ███████████████████████████▎░░░░░░ Tests |
+|                                            |
+|                                            |
+|                                            |
+|                                            |
+--- styles
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|abacccccaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaddddddaeeedaddddddafaaaaaaaaaaaaaaaaaaaaa|
+|aaaggggggggggggggggggggggggggghiiiiiiaccccca|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+a: bg=panel
+b: fg={104 102 116 255} bg=panel
+c: fg={183 180 178 255} bg=panel bold
+d: fg={183 180 178 255} bg=panel
+e: fg={58 184 138 255} bg=panel
+f: fg={186 62 111 255} bg=panel
+g: fg={85 73 188 255} bg=panel
+h: fg={90 79 195 255} bg={62 60 72 255}
+i: fg={62 60 72 255} bg=panel
+=== truecolor 44x8 at 120ms
+|                                            |
+| ▾ Build                                    |
+|   Passed 412, failed 3                     |
+|   ███████████████████████████▎░░░░░░ Tests |
+|                                            |
+|                                            |
+|                                            |
+|                                            |
+--- styles
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|abacccccaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaddddddaeeedaddddddafaaaaaaaaaaaaaaaaaaaaa|
+|aaaggggggggggggggggggggggggggghiiiiiiaccccca|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+a: bg=panel
+b: fg={127 125 140 255} bg=panel
+c: fg={240 236 228 255} bg=panel bold
+d: fg={240 236 228 255} bg=panel
+e: fg={29 240 170 255} bg=panel
+f: fg={241 58 133 255} bg=panel
+g: fg={102 79 241 255} bg=panel
+h: fg={104 81 243 255} bg={68 66 78 255}
+i: fg={68 66 78 255} bg=panel
+=== truecolor 44x8 at 400ms
+|                                            |
+| ▾ Build                                    |
+|   Passed 412, failed 3                     |
+|   ███████████████████████████▎░░░░░░ Tests |
+|                                            |
+|                                            |
+|                                            |
+|                                            |
+--- styles
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|abacccccaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaddddddaeeedaddddddafaaaaaaaaaaaaaaaaaaaaa|
+|aaaggggggggggggggggggggggggggghiiiiiiaccccca|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+a: bg=panel
+b: fg=mute bg=panel
+c: fg=fg bg=panel bold
+d: fg=fg bg=panel
+e: fg=success bg=panel
+f: fg=error bg=panel
+g: fg=accent bg=panel
+h: fg=accent bg=track
+i: fg=track bg=panel
+=== 256 44x8 at 0s
+|                                            |
+| ▾ Build                                    |
+|   Passed 412, failed 3                     |
+|   ███████████████████████████▎░░░░░░ Tests |
+|                                            |
+|                                            |
+|                                            |
+|                                            |
+--- styles
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|abacccccaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaabbbbbbabbbbabbbbbbabaaaaaaaaaaaaaaaaaaaaa|
+|aaabbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbaccccca|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+a: bg=panel
+b: fg=panel bg=panel
+c: fg=panel bg=panel bold
+=== 256 44x8 at 60ms
+|                                            |
+| ▾ Build                                    |
+|   Passed 412, failed 3                     |
+|   ███████████████████████████▎░░░░░░ Tests |
+|                                            |
+|                                            |
+|                                            |
+|                                            |
+--- styles
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|abacccccaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaddddddaeeedaddddddafaaaaaaaaaaaaaaaaaaaaa|
+|aaaggggggggggggggggggggggggggghiiiiiiaccccca|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+a: bg=panel
+b: fg=242 bg=panel
+c: fg=dim bg=panel bold
+d: fg=dim bg=panel
+e: fg=72 bg=panel
+f: fg=161 bg=panel
+g: fg=61 bg=panel
+h: fg=61 bg=surface
+i: fg=surface bg=panel
+=== 256 44x8 at 120ms
+|                                            |
+| ▾ Build                                    |
+|   Passed 412, failed 3                     |
+|   ███████████████████████████▎░░░░░░ Tests |
+|                                            |
+|                                            |
+|                                            |
+|                                            |
+--- styles
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|abacccccaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaddddddaeeedaddddddafaaaaaaaaaaaaaaaaaaaaa|
+|aaaggggggggggggggggggggggggggghiiiiiiaccccca|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+a: bg=panel
+b: fg=244 bg=panel
+c: fg=255 bg=panel bold
+d: fg=255 bg=panel
+e: fg=success bg=panel
+f: fg=error bg=panel
+g: fg=accent bg=panel
+h: fg=accent bg=success-tint
+i: fg=success-tint bg=panel
+=== 256 44x8 at 400ms
+|                                            |
+| ▾ Build                                    |
+|   Passed 412, failed 3                     |
+|   ███████████████████████████▎░░░░░░ Tests |
+|                                            |
+|                                            |
+|                                            |
+|                                            |
+--- styles
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|abacccccaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaddddddaeeedaddddddafaaaaaaaaaaaaaaaaaaaaa|
+|aaaggggggggggggggggggggggggggghiiiiiiaccccca|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+a: bg=panel
+b: fg=mute bg=panel
+c: fg=fg bg=panel bold
+d: fg=fg bg=panel
+e: fg=success bg=panel
+f: fg=error bg=panel
+g: fg=accent bg=panel
+h: fg=accent bg=success-tint
+i: fg=success-tint bg=panel
+=== 16 44x8 at 0s
+|                                            |
+|                                            |
+|                                            |
+|                                            |
+|                                            |
+|                                            |
+|                                            |
+|                                            |
+--- styles
+|                                            |
+|                                            |
+|                                            |
+|                                            |
+|                                            |
+|                                            |
+|                                            |
+|                                            |
+
+=== 16 44x8 at 60ms
+|                                            |
+| ▾ Build                                    |
+|   Passed 412, failed 3                     |
+|   ███████████████████████████▎░░░░░░ Tests |
+|                                            |
+|                                            |
+|                                            |
+|                                            |
+--- styles
+|                                            |
+| abcccccbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb |
+| bbddddddbeeedbddddddbfbbbbbbbbbbbbbbbbbbbb |
+| bbggggggggggggggggggggggggggghaaaaaabccccc |
+|                                            |
+|                                            |
+|                                            |
+|                                            |
+a: fg=mute faint
+b: faint
+c: fg=fg bold faint
+d: fg=fg faint
+e: fg=success faint
+f: fg=error faint
+g: fg=accent faint
+h: fg=accent bg=mute faint
+=== 16 44x8 at 120ms
+|                                            |
+| ▾ Build                                    |
+|   Passed 412, failed 3                     |
+|   ███████████████████████████▎░░░░░░ Tests |
+|                                            |
+|                                            |
+|                                            |
+|                                            |
+--- styles
+|                                            |
+| a bbbbb                                    |
+|   cccccc dddc cccccc e                     |
+|   fffffffffffffffffffffffffffgaaaaaa bbbbb |
+|                                            |
+|                                            |
+|                                            |
+|                                            |
+a: fg=mute
+b: fg=fg bold
+c: fg=fg
+d: fg=success
+e: fg=error
+f: fg=accent
+g: fg=accent bg=mute
+=== 16 44x8 at 400ms
+|                                            |
+| ▾ Build                                    |
+|   Passed 412, failed 3                     |
+|   ███████████████████████████▎░░░░░░ Tests |
+|                                            |
+|                                            |
+|                                            |
+|                                            |
+--- styles
+|                                            |
+| a bbbbb                                    |
+|   cccccc dddc cccccc e                     |
+|   fffffffffffffffffffffffffffgaaaaaa bbbbb |
+|                                            |
+|                                            |
+|                                            |
+|                                            |
+a: fg=mute
+b: fg=fg bold
+c: fg=fg
+d: fg=success
+e: fg=error
+f: fg=accent
+g: fg=accent bg=mute
+=== ascii 44x8 at 0s
+|                                            |
+|                                            |
+|                                            |
+|                                            |
+|                                            |
+|                                            |
+|                                            |
+|                                            |
+--- styles
+|                                            |
+|                                            |
+|                                            |
+|                                            |
+|                                            |
+|                                            |
+|                                            |
+|                                            |
+
+=== ascii 44x8 at 60ms
+|                                            |
+| v Build                                    |
+|   Passed 412, failed 3                     |
+|   [##########################------] Tests |
+|                                            |
+|                                            |
+|                                            |
+|                                            |
+--- styles
+|                                            |
+| aabbbbbaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa |
+| aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa |
+| aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaabbbbb |
+|                                            |
+|                                            |
+|                                            |
+|                                            |
+a: faint
+b: bold faint
+=== ascii 44x8 at 120ms
+|                                            |
+| v Build                                    |
+|   Passed 412, failed 3                     |
+|   [##########################------] Tests |
+|                                            |
+|                                            |
+|                                            |
+|                                            |
+--- styles
+|                                            |
+|   aaaaa                                    |
+|                                            |
+|                                      aaaaa |
+|                                            |
+|                                            |
+|                                            |
+|                                            |
+a: bold
+=== ascii 44x8 at 400ms
+|                                            |
+| v Build                                    |
+|   Passed 412, failed 3                     |
+|   [##########################------] Tests |
+|                                            |
+|                                            |
+|                                            |
+|                                            |
+--- styles
+|                                            |
+|   aaaaa                                    |
+|                                            |
+|                                      aaaaa |
+|                                            |
+|                                            |
+|                                            |
+|                                            |
+a: bold

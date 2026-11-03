@@ -1,0 +1,267 @@
+=== truecolor 48x6 at 0s
+|                                                |
+|                                                |
+|                                                |
+|                                                |
+|                                                |
+|                                                |
+--- styles
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+a: bg=panel
+=== truecolor 48x6 at 150ms
+|                                                |
+| SA7sF8: B45=:Fe5                               |
+|                                                |
+| 4 7aF8:, 4 =:Fn5<F <8 +B Af 5<B+llba2F         |
+|                                                |
+|                                                |
+--- styles
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|abccbcccdccccccbcaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aeaceccceacacccecccaceaceaceacccceeeeccaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+a: bg=panel
+b: fg=fg bg=panel bold
+c: fg=accent-bright bg=panel bold
+d: bg=panel bold
+e: fg=success bg=panel
+=== truecolor 48x6 at 300ms
+|                                                |
+| Session restored                               |
+|                                                |
+| 4 panes, 2 agents, 18 MB of scrollback         |
+|                                                |
+|                                                |
+--- styles
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|abbbbbbbcbbbbbbbbaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|adaddddddadadddddddaddaddaddaddddddddddaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+a: bg=panel
+b: fg=fg bg=panel bold
+c: bg=panel bold
+d: fg=success bg=panel
+=== truecolor 48x6 at 700ms
+|                                                |
+| Session restored                               |
+|                                                |
+| 4 panes, 2 agents, 18 MB of scrollback         |
+|                                                |
+|                                                |
+--- styles
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|abbbbbbbcbbbbbbbbaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|adaddddddadadddddddaddaddaddaddddddddddaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+a: bg=panel
+b: fg=fg bg=panel bold
+c: bg=panel bold
+d: fg=success bg=panel
+=== 256 48x6 at 0s
+|                                                |
+|                                                |
+|                                                |
+|                                                |
+|                                                |
+|                                                |
+--- styles
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+a: bg=panel
+=== 256 48x6 at 150ms
+|                                                |
+| SA7sF8: B45=:Fe5                               |
+|                                                |
+| 4 7aF8:, 4 =:Fn5<F <8 +B Af 5<B+llba2F         |
+|                                                |
+|                                                |
+--- styles
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|abccbcccdccccccbcaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aeaceccceacacccecccaceaceaceacccceeeeccaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+a: bg=panel
+b: fg=fg bg=panel bold
+c: fg=accent-bright bg=panel bold
+d: bg=panel bold
+e: fg=success bg=panel
+=== 256 48x6 at 300ms
+|                                                |
+| Session restored                               |
+|                                                |
+| 4 panes, 2 agents, 18 MB of scrollback         |
+|                                                |
+|                                                |
+--- styles
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|abbbbbbbcbbbbbbbbaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|adaddddddadadddddddaddaddaddaddddddddddaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+a: bg=panel
+b: fg=fg bg=panel bold
+c: bg=panel bold
+d: fg=success bg=panel
+=== 256 48x6 at 700ms
+|                                                |
+| Session restored                               |
+|                                                |
+| 4 panes, 2 agents, 18 MB of scrollback         |
+|                                                |
+|                                                |
+--- styles
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|abbbbbbbcbbbbbbbbaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|adaddddddadadddddddaddaddaddaddddddddddaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+a: bg=panel
+b: fg=fg bg=panel bold
+c: bg=panel bold
+d: fg=success bg=panel
+=== 16 48x6 at 0s
+|                                                |
+|                                                |
+|                                                |
+|                                                |
+|                                                |
+|                                                |
+--- styles
+|                                                |
+|                                                |
+|                                                |
+|                                                |
+|                                                |
+|                                                |
+
+=== 16 48x6 at 150ms
+|                                                |
+| SA7sF8: B45=:Fe5                               |
+|                                                |
+| 4 7aF8:, 4 =:Fn5<F <8 +B Af 5<B+llba2F         |
+|                                                |
+|                                                |
+--- styles
+|                                                |
+| abbabbbcbbbbbbab                               |
+|                                                |
+| d bdbbbd b bbbdbbb bd bd bd bbbbddddbb         |
+|                                                |
+|                                                |
+a: fg=fg bold
+b: fg=accent-bright bold
+c: bold
+d: fg=success
+=== 16 48x6 at 300ms
+|                                                |
+| Session restored                               |
+|                                                |
+| 4 panes, 2 agents, 18 MB of scrollback         |
+|                                                |
+|                                                |
+--- styles
+|                                                |
+| aaaaaaabaaaaaaaa                               |
+|                                                |
+| c cccccc c ccccccc cc cc cc cccccccccc         |
+|                                                |
+|                                                |
+a: fg=fg bold
+b: bold
+c: fg=success
+=== 16 48x6 at 700ms
+|                                                |
+| Session restored                               |
+|                                                |
+| 4 panes, 2 agents, 18 MB of scrollback         |
+|                                                |
+|                                                |
+--- styles
+|                                                |
+| aaaaaaabaaaaaaaa                               |
+|                                                |
+| c cccccc c ccccccc cc cc cc cccccccccc         |
+|                                                |
+|                                                |
+a: fg=fg bold
+b: bold
+c: fg=success
+=== ascii 48x6 at 0s
+|                                                |
+|                                                |
+|                                                |
+|                                                |
+|                                                |
+|                                                |
+--- styles
+|                                                |
+|                                                |
+|                                                |
+|                                                |
+|                                                |
+|                                                |
+
+=== ascii 48x6 at 150ms
+|                                                |
+| SA7sF8: B45=:Fe5                               |
+|                                                |
+| 4 7aF8:, 4 =:Fn5<F <8 +B Af 5<B+llba2F         |
+|                                                |
+|                                                |
+--- styles
+|                                                |
+| aaaaaaaaaaaaaaaa                               |
+|                                                |
+|   a aaa  a aaa aaa a  a  a  aaaa    aa         |
+|                                                |
+|                                                |
+a: bold
+=== ascii 48x6 at 300ms
+|                                                |
+| Session restored                               |
+|                                                |
+| 4 panes, 2 agents, 18 MB of scrollback         |
+|                                                |
+|                                                |
+--- styles
+|                                                |
+| aaaaaaaaaaaaaaaa                               |
+|                                                |
+|                                                |
+|                                                |
+|                                                |
+a: bold
+=== ascii 48x6 at 700ms
+|                                                |
+| Session restored                               |
+|                                                |
+| 4 panes, 2 agents, 18 MB of scrollback         |
+|                                                |
+|                                                |
+--- styles
+|                                                |
+| aaaaaaaaaaaaaaaa                               |
+|                                                |
+|                                                |
+|                                                |
+|                                                |
+a: bold

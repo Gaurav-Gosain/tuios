@@ -143,3 +143,71 @@ func TestDeepRowChainBudget(t *testing.T) {
 		t.Errorf("the chain took %v, the budget is 50 ms", took)
 	}
 }
+
+// motionSurfaceAt is the 200-row results surface with its body fading in,
+// the whole surface, with the clock held in the middle of the effect, so
+// every Render draws a frame of it.
+func motionSurfaceAt(tb testing.TB, attr string) *Surface {
+	tb.Helper()
+	src := strings.Replace(bigTable(), `<col gap="1">`, `<col gap="1" `+attr+`>`, 1)
+	doc, _, err := tml.Check([]byte(src), nil)
+	if err != nil {
+		tb.Fatal(err)
+	}
+	t0 := time.Unix(0, 0)
+	now := t0
+	s, err := New(doc, &Options{Motion: true, Now: func() time.Time { return now }})
+	if err != nil {
+		tb.Fatal(err)
+	}
+	s.Render(200, 55)
+	now = t0.Add(90 * time.Millisecond)
+	return s
+}
+
+// BenchmarkMotionFrame times one frame of an effect over a 200 by 55
+// surface: a fade, the costliest, and a skeleton's shimmer.
+func BenchmarkMotionFrame(b *testing.B) {
+	for _, attr := range []string{`enter="fade"`, `enter="slide-up"`, `enter="decode"`, `skeleton="true"`} {
+		b.Run(attr, func(b *testing.B) {
+			s := motionSurfaceAt(b, attr)
+			b.ReportAllocs()
+			for b.Loop() {
+				s.Render(200, 55)
+			}
+		})
+	}
+}
+
+// TestMotionBudget holds the cost of motion. A frame of an effect makes no
+// more garbage than painting the same boxes again with no effect, which is
+// what the widgets themselves make; and a surface whose effect ended draws
+// nothing and asks for no frame.
+func TestMotionBudget(t *testing.T) {
+	if raceEnabled {
+		t.Skip("allocation counts differ under -race")
+	}
+	plain := mustSurface(t, bigTable())
+	plain.Render(200, 55)
+	paint := testing.AllocsPerRun(20, func() {
+		plain.repaint = true
+		plain.Render(200, 55)
+	})
+	for _, attr := range []string{`enter="fade"`, `enter="slide-up"`, `enter="iris"`, `enter="decode"`, `skeleton="true"`} {
+		s := motionSurfaceAt(t, attr)
+		s.Render(200, 55)
+		if n := testing.AllocsPerRun(20, func() { s.Render(200, 55) }); n > paint {
+			t.Errorf("%s: a frame allocates %.0f times, a plain paint %.0f", attr, n, paint)
+		}
+	}
+	s := motionSurfaceAt(t, `enter="fade"`)
+	s.opts.Now = func() time.Time { return time.Unix(10, 0) }
+	s.Render(200, 55)
+	if _, ok := s.NextFrame(); ok {
+		t.Error("a surface whose effect ended still asks for a frame")
+	}
+	idle := testing.AllocsPerRun(20, func() { plain.Render(200, 55) })
+	if n := testing.AllocsPerRun(20, func() { s.Render(200, 55) }); n > idle {
+		t.Errorf("an idle Render allocates %.0f times, %.0f with no motion", n, idle)
+	}
+}

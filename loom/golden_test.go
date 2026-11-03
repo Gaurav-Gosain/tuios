@@ -11,6 +11,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"tuios.dev/tml"
 )
@@ -282,4 +283,113 @@ func nextLetter(b byte) byte {
 		return '#'
 	}
 	return b + 1
+}
+
+// motionStep is one frame of a motion case: the clock, and a state path to
+// set just before the frame is drawn.
+type motionStep struct {
+	at    time.Duration
+	path  string
+	value any
+}
+
+// motionCases are the documents of testdata/motion and the frames each is
+// drawn at, before and during its effect.
+var motionCases = []struct {
+	name  string
+	w, h  int
+	steps []motionStep
+}{
+	{"fade", 44, 8, []motionStep{{at: 0}, {at: 60 * time.Millisecond}, {at: 120 * time.Millisecond}, {at: 400 * time.Millisecond}}},
+	{"stagger", 40, 14, []motionStep{{at: 0}, {at: 100 * time.Millisecond}, {at: 200 * time.Millisecond}, {at: 600 * time.Millisecond}}},
+	{"iris", 44, 9, []motionStep{{at: 0}, {at: 90 * time.Millisecond}, {at: 180 * time.Millisecond}, {at: 500 * time.Millisecond}}},
+	{"decode", 48, 6, []motionStep{{at: 0}, {at: 150 * time.Millisecond}, {at: 300 * time.Millisecond}, {at: 700 * time.Millisecond}}},
+	{"exit", 40, 8, []motionStep{{at: 0}, {at: 300 * time.Millisecond}, {at: 330 * time.Millisecond, path: "state.show", value: false},
+		{at: 390 * time.Millisecond}, {at: 450 * time.Millisecond}, {at: 600 * time.Millisecond}}},
+	{"skeleton", 40, 9, []motionStep{{at: 0}, {at: 500 * time.Millisecond}, {at: 1000 * time.Millisecond},
+		{at: 1100 * time.Millisecond, path: "state.loading", value: false}, {at: 1160 * time.Millisecond}, {at: 1500 * time.Millisecond}}},
+	{"toast", 40, 6, []motionStep{{at: 0}, {at: 500 * time.Millisecond}, {at: 1080 * time.Millisecond}, {at: 1300 * time.Millisecond},
+		{at: 1400 * time.Millisecond, path: "state.msg", value: "Saved theme.toml"}, {at: 1480 * time.Millisecond}, {at: 1700 * time.Millisecond}}},
+}
+
+// motionSurface opens a motion case with the effects on and a clock the
+// test moves.
+func motionSurface(t testing.TB, name string, d Depth, now *time.Time, motion bool) *Surface {
+	t.Helper()
+	src, err := os.ReadFile(filepath.Join("testdata", "motion", name+".tml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	doc, problems, err := tml.Check(src, nil)
+	if err != nil {
+		t.Fatalf("%s: %v %v", name, err, problems)
+	}
+	for _, p := range problems {
+		if p.Severity == tml.SevError {
+			t.Fatalf("%s: %v", name, p)
+		}
+	}
+	s, err := New(doc, &Options{Palette: DefaultPalette(d), CellAspect: cellAspect, Motion: motion, Now: func() time.Time { return *now }})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return s
+}
+
+// TestMotionGolden draws each motion case at its steps, at the four depths,
+// and compares the cells with the golden file. It also holds the rules of
+// the clock: a surface that has finished moving asks for no frame, and with
+// motion off the first frame is the last.
+func TestMotionGolden(t *testing.T) {
+	t0 := time.Date(2026, 11, 3, 12, 0, 0, 0, time.UTC)
+	for _, c := range motionCases {
+		t.Run(c.name, func(t *testing.T) {
+			var b strings.Builder
+			for _, d := range Depths() {
+				now := t0
+				s := motionSurface(t, c.name, d, &now, true)
+				for _, st := range c.steps {
+					now = t0.Add(st.at)
+					if st.path != "" {
+						if err := s.Set(st.path, st.value); err != nil {
+							t.Fatal(err)
+						}
+					}
+					buf := s.Render(c.w, c.h)
+					checkFits(t, buf, c.w, c.h)
+					fmt.Fprintf(&b, "=== %s %dx%d at %s\n", d, c.w, c.h, st.at)
+					b.WriteString(dumpBuffer(buf, DefaultPalette(d)))
+				}
+				// Run the clock out: past every effect and ttl, the surface
+				// draws once more and then asks for nothing.
+				for range 3 {
+					now = now.Add(2 * time.Second)
+					s.Render(c.w, c.h)
+				}
+				if c.name != "skeleton" {
+					if wait, ok := s.NextFrame(); ok {
+						t.Errorf("%s: idle surface asks for a frame in %s", d, wait)
+					}
+				}
+			}
+			compareGolden(t, filepath.Join("testdata", "golden", "motion-"+c.name+".golden"), b.String())
+		})
+	}
+	// Motion off: the first frame is the finished one, and nothing waits.
+	for _, name := range []string{"fade", "stagger", "iris", "decode"} {
+		now := t0
+		off := motionSurface(t, name, TrueColor, &now, false)
+		first := dumpBuffer(off.Render(44, 14), DefaultPalette(TrueColor))
+		if _, ok := off.NextFrame(); ok {
+			t.Errorf("%s: motion off still asks for a frame", name)
+		}
+		on := motionSurface(t, name, TrueColor, &now, true)
+		on.Render(44, 14)
+		now = now.Add(5 * time.Second)
+		on.Render(44, 14)
+		on.Render(44, 14)
+		if last := dumpBuffer(on.Render(44, 14), DefaultPalette(TrueColor)); last != first {
+			t.Errorf("%s: with motion off the first frame differs from the last frame with motion on:\n%s\nwant\n%s", name, first, last)
+		}
+	}
 }

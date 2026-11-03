@@ -1,0 +1,6 @@
+<tml version="1" title="Token">
+  <col pad="1" gap="1">
+    <heading enter="decode">Session restored</heading>
+    <text enter="decode" role="success">4 panes, 2 agents, 18 MB of scrollback</text>
+  </col>
+</tml>

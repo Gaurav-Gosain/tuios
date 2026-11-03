@@ -11,7 +11,7 @@ require (
 	tuios.dev/plot v0.2.3-0.20261101044251-193bbd706cd8
 	tuios.dev/shot v0.2.0
 	tuios.dev/sketch v0.4.1-0.20261102100120-a0242ef25e1f
-	tuios.dev/tml v0.1.2-0.20261101044251-193bbd706cd8
+	tuios.dev/tml v0.1.2-0.20261104012002-e0cf866a6ddb
 )
 
 require (

@@ -78,7 +78,8 @@ type box struct {
 	kids   []*box
 	w      widget // the component's drawing, nil for a layout box
 
-	hidden bool // show is false: the box keeps its space and draws nothing
+	hidden bool    // show is false: the box keeps its space and draws nothing
+	mo     *motion // its enter, exit, skeleton or ttl; nil for most boxes
 
 	width, height          size
 	minW, maxW, minH, maxH size

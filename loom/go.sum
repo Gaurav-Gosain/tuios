@@ -40,5 +40,5 @@ tuios.dev/shot v0.2.0 h1:lAWvNN/XfqxKAHxlJ8l0Ee1NHI+QYRgARVKQ83D8Azw=
 tuios.dev/shot v0.2.0/go.mod h1:6fhIgX/x7TpDqi+LCipIZYJvegMF2jfGqzukF7B6vTM=
 tuios.dev/sketch v0.4.1-0.20261102100120-a0242ef25e1f h1:TIij+BziFAzDLXyNqNLeu3PM90XDMX2BLqjoe+Ds4/I=
 tuios.dev/sketch v0.4.1-0.20261102100120-a0242ef25e1f/go.mod h1:h51gEbOg0IMyYHsiHYX8VkY3DxoxQCZvQaDJ7G9La90=
-tuios.dev/tml v0.1.2-0.20261101044251-193bbd706cd8 h1:pCGPyq/DgcTq+aiBGRpL/UZaTrs5DP4HTlZaJ4KjJ1Y=
-tuios.dev/tml v0.1.2-0.20261101044251-193bbd706cd8/go.mod h1:8F9rKdZTa4zslNLjGxEMDA+UUw3RODNSU/tbYDcSMdc=
+tuios.dev/tml v0.1.2-0.20261104012002-e0cf866a6ddb h1:DP5/OaO4rozuHjV38KHNc0+HRvHGxJBkS1bm3fvga+s=
+tuios.dev/tml v0.1.2-0.20261104012002-e0cf866a6ddb/go.mod h1:8F9rKdZTa4zslNLjGxEMDA+UUw3RODNSU/tbYDcSMdc=

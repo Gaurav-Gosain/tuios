@@ -1,0 +1,9 @@
+<tml version="1" title="Exit">
+  <state>{"show": true}</state>
+  <col pad="1" gap="1">
+    <text>Uploads</text>
+    <card if="{state.show}" title="Upload" enter="fade" exit="slide-down">
+      <text>report.pdf <c role="success">sent</c></text>
+    </card>
+  </col>
+</tml>

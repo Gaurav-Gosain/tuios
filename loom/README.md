@@ -153,6 +153,25 @@ whether a surface has one, and the host then calls `Tick` about once a
 minute. `Tick` evaluates only those boxes. A surface without `ago()` needs
 no timer.
 
+## Motion
+
+`enter` and `exit` play a cell effect when a node shows or goes away: `fade`,
+`slide-up`, `slide-down`, `slide-left`, `slide-right`, `iris` or `decode`.
+`stagger` on a container starts each child's enter later than the one
+before it. `skeleton` draws placeholder bars with a moving band of light
+until the content arrives, then fades the content in. A `toast` with `ttl`
+goes away at the end of its time.
+
+Motion is off unless the host sets `Options.Motion` or calls `SetMotion`.
+Off, every node shows at once. After each `Render`, `NextFrame` says when the
+surface wants to draw again: 30 frames a second while an effect plays, the
+end of a toast's `ttl`, or never. A surface that is still needs no timer.
+At 16 colours and in ASCII a fade steps through faint, and the other
+effects draw the same at every depth.
+
+The effects are loom's own small versions of ideas from
+[bloom](https://github.com/lrstanley/bloom) (MIT).
+
 ## Limits
 
 - loom draws any tree, valid or not, at any size up to 4096 by 4096 cells,

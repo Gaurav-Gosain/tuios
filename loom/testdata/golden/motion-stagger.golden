@@ -1,0 +1,535 @@
+=== truecolor 40x14 at 0s
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+--- styles
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+a: bg=panel
+=== truecolor 40x14 at 100ms
+|                                        |
+| ▾ api                                  |
+|   Uptime 99.9%                         |
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+--- styles
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|abacccaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaddddddacccccaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+a: bg=panel
+b: fg={115 114 128 255} bg=panel
+c: fg={211 207 203 255} bg=panel bold
+d: fg={211 207 203 255} bg=panel
+=== truecolor 40x14 at 200ms
+|                                        |
+| ▾ api                                  |
+|   Uptime 99.9%                         |
+|                                        |
+| ▾ web                                  |
+|   Uptime 99.5%                         |
+|                                        |
+|                                        |
+| ▾ queue                                |
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+--- styles
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|abacccaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaddddddacccccaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aeafffaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaggggggafffffaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|ahaiiiiiaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+a: bg=panel
+b: fg=mute bg=panel
+c: fg=fg bg=panel bold
+d: fg=fg bg=panel
+e: fg={121 119 134 255} bg=panel
+f: fg={226 221 215 255} bg=panel bold
+g: fg={226 221 215 255} bg=panel
+h: fg={82 80 92 255} bg=panel
+i: fg={129 127 130 255} bg=panel bold
+=== truecolor 40x14 at 600ms
+|                                        |
+| ▾ api                                  |
+|   Uptime 99.9%                         |
+|                                        |
+| ▾ web                                  |
+|   Uptime 99.5%                         |
+|                                        |
+| ▾ queue                                |
+|   Uptime 98.1%                         |
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+--- styles
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|abacccaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaddddddacccccaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|abacccaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaddddddacccccaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|abacccccaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaddddddacccccaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+a: bg=panel
+b: fg=mute bg=panel
+c: fg=fg bg=panel bold
+d: fg=fg bg=panel
+=== 256 40x14 at 0s
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+--- styles
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+a: bg=panel
+=== 256 40x14 at 100ms
+|                                        |
+| ▾ api                                  |
+|   Uptime 99.9%                         |
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+--- styles
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|abacccaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaddddddacccccaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+a: bg=panel
+b: fg=243 bg=panel
+c: fg=188 bg=panel bold
+d: fg=188 bg=panel
+=== 256 40x14 at 200ms
+|                                        |
+| ▾ api                                  |
+|   Uptime 99.9%                         |
+|                                        |
+| ▾ web                                  |
+|   Uptime 99.5%                         |
+|                                        |
+|                                        |
+| ▾ queue                                |
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+--- styles
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|abacccaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaddddddacccccaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aeafffaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaggggggafffffaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|ahaiiiiiaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+a: bg=panel
+b: fg=mute bg=panel
+c: fg=fg bg=panel bold
+d: fg=fg bg=panel
+e: fg=244 bg=panel
+f: fg=254 bg=panel bold
+g: fg=254 bg=panel
+h: fg=240 bg=panel
+i: fg=244 bg=panel bold
+=== 256 40x14 at 600ms
+|                                        |
+| ▾ api                                  |
+|   Uptime 99.9%                         |
+|                                        |
+| ▾ web                                  |
+|   Uptime 99.5%                         |
+|                                        |
+| ▾ queue                                |
+|   Uptime 98.1%                         |
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+--- styles
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|abacccaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaddddddacccccaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|abacccaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaddddddacccccaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|abacccccaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaddddddacccccaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+a: bg=panel
+b: fg=mute bg=panel
+c: fg=fg bg=panel bold
+d: fg=fg bg=panel
+=== 16 40x14 at 0s
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+--- styles
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+
+=== 16 40x14 at 100ms
+|                                        |
+| ▾ api                                  |
+|   Uptime 99.9%                         |
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+--- styles
+|                                        |
+| a bbb                                  |
+|   cccccc bbbbb                         |
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+a: fg=mute
+b: fg=fg bold
+c: fg=fg
+=== 16 40x14 at 200ms
+|                                        |
+| ▾ api                                  |
+|   Uptime 99.9%                         |
+|                                        |
+| ▾ web                                  |
+|   Uptime 99.5%                         |
+|                                        |
+|                                        |
+| ▾ queue                                |
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+--- styles
+|                                        |
+| a bbb                                  |
+|   cccccc bbbbb                         |
+|                                        |
+| a bbb                                  |
+|   cccccc bbbbb                         |
+|                                        |
+|                                        |
+| defffffeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee |
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+a: fg=mute
+b: fg=fg bold
+c: fg=fg
+d: fg=mute faint
+e: faint
+f: fg=fg bold faint
+=== 16 40x14 at 600ms
+|                                        |
+| ▾ api                                  |
+|   Uptime 99.9%                         |
+|                                        |
+| ▾ web                                  |
+|   Uptime 99.5%                         |
+|                                        |
+| ▾ queue                                |
+|   Uptime 98.1%                         |
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+--- styles
+|                                        |
+| a bbb                                  |
+|   cccccc bbbbb                         |
+|                                        |
+| a bbb                                  |
+|   cccccc bbbbb                         |
+|                                        |
+| a bbbbb                                |
+|   cccccc bbbbb                         |
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+a: fg=mute
+b: fg=fg bold
+c: fg=fg
+=== ascii 40x14 at 0s
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+--- styles
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+
+=== ascii 40x14 at 100ms
+|                                        |
+| v api                                  |
+|   Uptime 99.9%                         |
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+--- styles
+|                                        |
+|   aaa                                  |
+|          aaaaa                         |
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+a: bold
+=== ascii 40x14 at 200ms
+|                                        |
+| v api                                  |
+|   Uptime 99.9%                         |
+|                                        |
+| v web                                  |
+|   Uptime 99.5%                         |
+|                                        |
+|                                        |
+| v queue                                |
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+--- styles
+|                                        |
+|   aaa                                  |
+|          aaaaa                         |
+|                                        |
+|   aaa                                  |
+|          aaaaa                         |
+|                                        |
+|                                        |
+| bbcccccbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb |
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+a: bold
+b: faint
+c: bold faint
+=== ascii 40x14 at 600ms
+|                                        |
+| v api                                  |
+|   Uptime 99.9%                         |
+|                                        |
+| v web                                  |
+|   Uptime 99.5%                         |
+|                                        |
+| v queue                                |
+|   Uptime 98.1%                         |
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+--- styles
+|                                        |
+|   aaa                                  |
+|          aaaaa                         |
+|                                        |
+|   aaa                                  |
+|          aaaaa                         |
+|                                        |
+|   aaaaa                                |
+|          aaaaa                         |
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+a: bold

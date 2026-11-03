@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"golang.org/x/image/font/sfnt"
 	"tuios.dev/shot"
@@ -17,37 +18,7 @@ import (
 // Font Mono by default. A rune the font's own cmap lacks fails the test, so
 // no frame falls back to shot's built-in face.
 func TestFrames(t *testing.T) {
-	out := os.Getenv("LOOM_FRAMES")
-	if out == "" {
-		t.Skip("set LOOM_FRAMES to a folder to render the frames")
-	}
-	dir := os.Getenv("LOOM_FONT_DIR")
-	if dir == "" {
-		dir = "/usr/share/fonts/TTF"
-	}
-	name := os.Getenv("LOOM_FONT")
-	if name == "" {
-		name = "JetBrainsMonoNerdFontMono-Regular.ttf"
-	}
-	regular, err := os.ReadFile(filepath.Join(dir, name))
-	if err != nil {
-		t.Skipf("no font: %v", err)
-	}
-	boldName := name[:len(name)-len("Regular.ttf")] + "Bold.ttf"
-	if filepath.Ext(name) == ".otf" {
-		boldName = name[:len(name)-len("Regular.otf")] + "Bold.otf"
-	}
-	bold, err := os.ReadFile(filepath.Join(dir, boldName))
-	if err != nil {
-		t.Fatal(err)
-	}
-	face, err := sfnt.Parse(regular)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := os.MkdirAll(out, 0o755); err != nil {
-		t.Fatal(err)
-	}
+	out, regular, bold, face := frameFont(t)
 	cases := append(loadCases(t, "testdata/examples-golden"), loadCases(t, "testdata/components")...)
 	for _, c := range cases {
 		if c.name == "text-wide" {
@@ -73,6 +44,81 @@ func TestFrames(t *testing.T) {
 			path := filepath.Join(out, fmt.Sprintf("%s-%s.png", c.name, d))
 			if err := os.WriteFile(path, png, 0o644); err != nil {
 				t.Fatal(err)
+			}
+		}
+	}
+}
+
+// frameFont reads LOOM_FRAMES and the font, or skips the test.
+func frameFont(t *testing.T) (out string, regular, bold []byte, face *sfnt.Font) {
+	t.Helper()
+	out = os.Getenv("LOOM_FRAMES")
+	if out == "" {
+		t.Skip("set LOOM_FRAMES to a folder to render the frames")
+	}
+	dir := os.Getenv("LOOM_FONT_DIR")
+	if dir == "" {
+		dir = "/usr/share/fonts/TTF"
+	}
+	name := os.Getenv("LOOM_FONT")
+	if name == "" {
+		name = "JetBrainsMonoNerdFontMono-Regular.ttf"
+	}
+	regular, err := os.ReadFile(filepath.Join(dir, name))
+	if err != nil {
+		t.Skipf("no font: %v", err)
+	}
+	boldName := name[:len(name)-len("Regular.ttf")] + "Bold.ttf"
+	if filepath.Ext(name) == ".otf" {
+		boldName = name[:len(name)-len("Regular.otf")] + "Bold.otf"
+	}
+	bold, err = os.ReadFile(filepath.Join(dir, boldName))
+	if err != nil {
+		t.Fatal(err)
+	}
+	face, err = sfnt.Parse(regular)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(out, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	return out, regular, bold, face
+}
+
+// TestMotionFrames renders each motion case at its steps to PNG, before and
+// during the effect, at the four depths, as TestFrames does for the golden
+// cases.
+func TestMotionFrames(t *testing.T) {
+	out, regular, bold, face := frameFont(t)
+	t0 := time.Date(2026, 11, 3, 12, 0, 0, 0, time.UTC)
+	for _, c := range motionCases {
+		for _, d := range Depths() {
+			now := t0
+			s := motionSurface(t, c.name, d, &now, true)
+			for i, st := range c.steps {
+				now = t0.Add(st.at)
+				if st.path != "" {
+					if err := s.Set(st.path, st.value); err != nil {
+						t.Fatal(err)
+					}
+				}
+				grid := toGrid(s.Render(c.w, c.h))
+				if miss := cmapMissing(face, grid); len(miss) > 0 {
+					t.Fatalf("%s at %s: the font has no glyph for %q", c.name, d, string(miss))
+				}
+				f := shot.BuildFrame(shot.FrameSpec{
+					Frame: "window", Title: fmt.Sprintf("%s · %s · %s", c.name, d, st.at), Padding: 24, Radius: 10, Shadow: true, Scale: 1,
+					Font: shot.Font{Data: regular}, BoldFont: shot.Font{Data: bold}, Controls: "macos",
+				}, shot.FrameInputs{Palette: shotPalette, Accents: []shot.Color{rgb(0x6B50FF), rgb(0x00A4FF)}})
+				png, err := shot.Render(shot.FormatPNG, grid, f)
+				if err != nil {
+					t.Fatal(err)
+				}
+				path := filepath.Join(out, fmt.Sprintf("motion-%s-%s-%d.png", c.name, d, i))
+				if err := os.WriteFile(path, png, 0o644); err != nil {
+					t.Fatal(err)
+				}
 			}
 		}
 	}
