@@ -493,7 +493,7 @@ func (m *OS) settingsCategories() []settingsCategory {
 			opt("appearance.sidebar.editor"),
 			opt("appearance.sidebar.file_actions"),
 			opt("appearance.sidebar.file_delete"),
-			opt("appearance.sidebar.group_main"),
+			opt("appearance.sidebar.repo_group"),
 			opt("appearance.sidebar.marquee"),
 			opt("appearance.sidebar.peek"),
 			opt("appearance.sidebar.tooltips"),

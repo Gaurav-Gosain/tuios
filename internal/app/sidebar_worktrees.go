@@ -79,7 +79,24 @@ func (m *OS) worktreeRef(info *session.WorktreeInfo) *sessiontree.WorktreeRef {
 // difference between tidying a list and losing work.
 func (m *OS) sidebarSessionRows(sessions []sessiontree.Node) []sessiontree.Node {
 	local := localSessionNodes(sessions)
-	return m.sidebarMachineRows(m.sidebarGroupedRows(local), sessions[len(local):])
+	rows := m.sidebarGroupedRows(local)
+	// Flat mode's sessions are the main ones: a session the worktrees section
+	// lists under its repository does not also take a row here. The main
+	// checkouts stay, because they are the repositories' own sessions.
+	if m.Settings.SidebarRepoGroup == config.RepoGroupFlat {
+		kept := rows[:0]
+		for _, n := range rows {
+			if n.Kind == sessiontree.KindRepo || n.Kind == sessiontree.KindSpace {
+				kept = append(kept, n)
+				continue
+			}
+			if w := n.Worktree; w == nil || w.Main {
+				kept = append(kept, n)
+			}
+		}
+		rows = kept
+	}
+	return m.sidebarMachineRows(rows, sessions[len(local):])
 }
 
 // sidebarGroupedRows groups one machine's sessions by space and, inside each
@@ -101,14 +118,19 @@ func (m *OS) sidebarGroupedRows(sessions []sessiontree.Node) []sessiontree.Node 
 	return out
 }
 
-// sidebarRepoGrouping is how the rail gathers a repository's sessions. By
-// default the main checkout's session is the repository's row. group_main gives
-// the repository a row of its own, with the main checkout under it.
+// sidebarRepoGrouping is how the rail gathers a repository's sessions. head
+// makes the main checkout's session the repository's row, row gives the
+// repository a row of its own, flat draws no grouping at all: a session per
+// row, with the worktree only the session's directory.
 func (m *OS) sidebarRepoGrouping() func([]sessiontree.Node) []sessiontree.Node {
-	if m.Settings.SidebarGroupMain {
+	switch m.Settings.SidebarRepoGroup {
+	case config.RepoGroupRow:
 		return sessiontree.GroupByRepo
+	case config.RepoGroupFlat:
+		return func(nodes []sessiontree.Node) []sessiontree.Node { return nodes }
+	default:
+		return sessiontree.GroupByRepoCompact
 	}
-	return sessiontree.GroupByRepoCompact
 }
 
 // sidebarRepoOfRow is the repository a row folds, "" for a row that folds none:
@@ -121,6 +143,32 @@ func sidebarRepoOfRow(n sessiontree.Node) string {
 		return n.Worktree.Repo
 	}
 	return ""
+}
+
+// sidebarWorktreeSectionRows is the worktrees section's listing: the sessions
+// bound to worktrees, gathered under their repositories with the folds,
+// whatever grouping the sessions section itself draws. The sessions' space
+// names are left off, because the listing organizes by repository.
+func (m *OS) sidebarWorktreeSectionRows(sessions []sessiontree.Node) []sessiontree.Node {
+	var wt []sessiontree.Node
+	for _, n := range localSessionNodes(sessions) {
+		if n.Kind == sessiontree.KindSession && n.Host == "" && n.Worktree != nil {
+			n.Space = ""
+			wt = append(wt, n)
+		}
+	}
+	rows := sessiontree.GroupByRepo(wt)
+	if len(m.SidebarCollapsedRepos) == 0 {
+		return rows
+	}
+	out := rows[:0]
+	for _, n := range rows {
+		if n.Kind == sessiontree.KindSession && !n.GroupHead && n.Worktree != nil && m.SidebarCollapsedRepos[n.Worktree.Repo] {
+			continue
+		}
+		out = append(out, n)
+	}
+	return out
 }
 
 // sidebarHeadRepo is the repository whose row sessionID's row is, "" when that

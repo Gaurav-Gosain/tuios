@@ -950,10 +950,14 @@ type SidebarConfig struct {
 	// SubagentHideFinished hides a finished subagent's row this long after it
 	// ended: a duration, or off (default: off).
 	SubagentHideFinished string `toml:"subagent_hide_finished"`
-	// GroupMain gives each repository a row of its own, with its main checkout
-	// (the session whose directory is the repository itself, usually on main or
-	// master) under that row with the worktrees. By default the main checkout's
-	// row is the repository's row and the worktrees hang off it (default: false).
+	// RepoGroup gathers a repository's sessions: "head" is the main checkout's
+	// session standing as the repository's row, "row" gives the repository a
+	// row of its own, "flat" draws no grouping at all, every session its own
+	// row (default: "head").
+	RepoGroup string `toml:"repo_group"`
+	// GroupMain is the old form of repo_group: a bool that could only say
+	// head or row. Still read when repo_group is not set; a config that says
+	// both is told so once and repo_group wins.
 	GroupMain *bool `toml:"group_main"`
 	// Custom is the [appearance.sidebar.custom] table: the command whose
 	// output the custom section draws, its heading, and when it runs. Read
@@ -1204,6 +1208,7 @@ func DefaultConfig() *UserConfig {
 				Density:       RailDensityNormal,
 				FileDelete:    SidebarFileDeleteTrash,
 				AgentRestFold: "1h",
+				RepoGroup:     RepoGroupHead,
 				SubagentRows:  SidebarSubagentRowsRows,
 				// The other subagent keys as they ship: no heading line, the
 				// row's four fields, no cap and no early hide.
@@ -2829,8 +2834,11 @@ func ApplyAppearanceConfig(cfg *UserConfig, s *Settings) {
 	s.SidebarAgentRestFold, _ = ParseAgentRestFold(sb.AgentRestFold)
 	// Anything but count draws rows, the default; validation names a typo.
 	s.SidebarSubagents = ResolveSidebarSubagentView(cfg.Appearance.Sidebar, primary)
-	if sb.GroupMain != nil {
-		s.SidebarGroupMain = *sb.GroupMain
+	if sb.RepoGroup != "" {
+		s.SidebarRepoGroup = sb.RepoGroup
+	} else if sb.GroupMain != nil {
+		// The bool could only say head or row; flat has no old spelling.
+		s.SidebarRepoGroup = RepoGroupRow
 	}
 	if sb.Tooltips != nil {
 		s.Tooltips = *sb.Tooltips

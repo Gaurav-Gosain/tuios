@@ -620,6 +620,7 @@
         "files",
         "agents",
         "git",
+        "worktrees",
         "spacer"
       ],
       "split": ","

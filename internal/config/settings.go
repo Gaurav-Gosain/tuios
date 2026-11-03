@@ -293,10 +293,11 @@ type Settings struct {
 	// Zero never folds. From appearance.sidebar.agent_rest_fold.
 	SidebarAgentRestFold time.Duration
 
-	// SidebarGroupMain gives each repository a row of its own, with the main
-	// checkout under it. Off, the main checkout's row is the repository's row.
-	// From appearance.sidebar.group_main.
-	SidebarGroupMain bool
+	// SidebarRepoGroup gathers a repository's sessions: head, the main
+	// checkout's session as the repository's row (default); row, a repository
+	// row of its own; flat, no grouping, a session per row. From
+	// appearance.sidebar.repo_group.
+	SidebarRepoGroup string
 
 	// SidebarSubagents is how the rail draws the subagents under an agent
 	// row: rows or the count, tree lines, the heading line that folds them,

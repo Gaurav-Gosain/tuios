@@ -145,3 +145,54 @@ func TestRailSignatureFollowsTheWorktreeGroups(t *testing.T) {
 		t.Error("the attached session moving to another branch left the signature unchanged")
 	}
 }
+
+// TestRailFlatRepoGroup is the sessions-only rail: no repository rows, no
+// heads, no folds — a session is a row that says its own name, and a worktree
+// is only the session's directory. Flat mode's rows are the main ones: a
+// session the worktrees section lists under its repository does not also
+// take a row here.
+func TestRailFlatRepoGroup(t *testing.T) {
+	m, tree := worktreeRailOS(t, 120, 40)
+	m.Settings.SidebarRepoGroup = config.RepoGroupFlat
+
+	lines := strings.Join(railPlain(t, m, tree), "\n")
+	if !strings.Contains(lines, "main") {
+		t.Errorf("the flat rail does not show the attached session:\n%s", lines)
+	}
+	for _, gone := range []string{"tuios-feat-one", "docs-fix"} {
+		if strings.Contains(lines, gone) {
+			t.Errorf("the flat rail also drew the worktree session %q; it lives in the worktrees section\n%s", gone, lines)
+		}
+	}
+	for _, hit := range m.SidebarHits {
+		if hit.Kind == sidebarRowRepo {
+			t.Errorf("the flat rail drew a repository row for %q", hit.SessionID)
+		}
+	}
+}
+
+// TestWorktreesSectionDrawsTheTreeWhileSessionsStayFlat pins the two halves
+// of the arrangement the section exists for: the sessions section draws plain
+// names in flat mode, and the worktrees section draws the repository tree
+// with its folds anyway — the listing is the one place the tree survives.
+func TestWorktreesSectionDrawsTheTreeWhileSessionsStayFlat(t *testing.T) {
+	m, tree := worktreeRailOS(t, 120, 40)
+	m.Settings.SidebarRepoGroup = config.RepoGroupFlat
+	m.Settings.SidebarSections = "sessions:25,worktrees"
+
+	lines, _ := m.sidebarPanelLinesForTree(tree)
+	plain := strings.Join(lines, "\n")
+	// The sessions section keeps the main sessions; the section lists the
+	// worktrees under their repositories, by branch.
+	for _, want := range []string{"main", "├─ feat/one", "└─ fix/typo"} {
+		if !strings.Contains(plain, want) {
+			t.Errorf("the rail does not show %q:\n%s", want, plain)
+		}
+	}
+	// The tree lives in the section: repository rows, and the members under
+	// them with their marks. The no-repo-rows-in-flat case is pinned by
+	// TestRailFlatRepoGroup, which names no worktrees section.
+	if !strings.Contains(plain, "├─") && !strings.Contains(plain, "└─") {
+		t.Errorf("the worktrees section drew no tree marks:\n%s", plain)
+	}
+}

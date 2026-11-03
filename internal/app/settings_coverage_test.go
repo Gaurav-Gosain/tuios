@@ -93,6 +93,7 @@ var settingsUIExcluded = map[string]string{
 	"appearance.sidebar_show_windows": "alias of appearance.sidebar.show_windows",
 	"appearance.sidebar_show_glyphs":  "alias of appearance.sidebar.show_glyphs",
 	"appearance.sidebar_show_counts":  "alias of appearance.sidebar.show_counts",
+	"appearance.sidebar.group_main":   "deprecated alias of appearance.sidebar.repo_group",
 	"appearance.sidebar.workspaces":   "no longer used: panes name their own workspace, and switching lives on the dock and alt+1..9",
 	"appearance.animations_enabled":   "replaced by appearance.motion (false is none)",
 

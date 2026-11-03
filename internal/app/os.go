@@ -1668,6 +1668,7 @@ type OS struct {
 	SidebarScrollF            int
 	SidebarScrollG            int
 	SidebarScrollC            int
+	SidebarScrollW            int
 	SidebarScrollP            int
 
 	// stopCh is closed by Cleanup. Every listener command takes it when it is
