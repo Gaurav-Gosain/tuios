@@ -2,10 +2,10 @@ package session
 
 import (
 	"encoding/json"
-	"slices"
 
 	"github.com/Gaurav-Gosain/tuios/internal/herdrplugin"
 	"github.com/Gaurav-Gosain/tuios/internal/procinfo"
+	"github.com/Gaurav-Gosain/tuios/internal/sortx"
 )
 
 // pluginStat is one row of plugin.stats: what a plugin costs now and since
@@ -45,7 +45,7 @@ func (d *Daemon) herdrPluginStats(_ *connState, _ json.RawMessage) (any, *herdrE
 			out = append(out, st)
 		}
 	}
-	slices.SortFunc(out, func(a, b pluginStat) int {
+	sortx.SortFunc(out, func(a, b pluginStat) int {
 		if a.PluginID < b.PluginID {
 			return -1
 		}

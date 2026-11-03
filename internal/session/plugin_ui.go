@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/herdrplugin"
+	"github.com/Gaurav-Gosain/tuios/internal/sortx"
 	"tuios.dev/tml"
 )
 
@@ -210,7 +211,9 @@ func (h *pluginHost) cellList() []PluginCell {
 			out = append(out, c)
 		}
 	}
-	slices.SortFunc(out, func(a, b PluginCell) int {
+	// sortx, not slices.SortFunc: a plugin changes its cells at most 8 times
+	// a second, and a generic sort of this struct costs about 20 KB of binary.
+	sortx.SortFunc(out, func(a, b PluginCell) int {
 		return cmp.Or(cmp.Compare(a.Plugin, b.Plugin), cmp.Compare(a.ID, b.ID))
 	})
 	return out
