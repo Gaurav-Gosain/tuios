@@ -292,6 +292,18 @@ func TestNativePluginApproval(t *testing.T) {
 	if err := term.WaitFor(func(s tuitest.Screen) bool { return !strings.Contains(s.Text(), "Allow the plugin") }, uiTimeout); err != nil {
 		t.Fatalf("esc did not close the dialog: %v\n%s", err, term.Snapshot())
 	}
+	// The client reads its events one at a time, and each handler takes up
+	// the next one. Mail after the approval push must still reach the dock.
+	if out, err := tuiosCLI(t, base, "set-window", "-s", "work", "-w", "0", "--name", "MAILER"); err != nil {
+		t.Fatalf("set-window: %v\n%s", err, out)
+	}
+	if out, err := tuiosCLI(t, base, "send-agent-message", "-s", "work", "-w", "human",
+		"--from", "MAILER", "--subject", "after the dialog", "still heard"); err != nil {
+		t.Fatalf("send-agent-message: %v\n%s", err, out)
+	}
+	if err := term.WaitForText("MAILER to you: after the dialog", uiTimeout); err != nil {
+		t.Fatalf("the client stopped hearing its events after the approval push: %v\n%s", err, term.Snapshot())
+	}
 	term.Close()
 	notRun("Not now")
 

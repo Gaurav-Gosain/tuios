@@ -1949,7 +1949,9 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 
 	case PluginApprovalsMsg:
 		m.setPluginAsks(msg.Asks)
-		return m, nil
+		// It came off the client event channel, which is read one event at
+		// a time, so the listener is armed again here.
+		return m, listenClientEventsUntil(m.stopSignal(), m.ClientEventChan)
 
 	case missingDiagramMsg:
 		m.noteMissingDiagram(msg.typ)

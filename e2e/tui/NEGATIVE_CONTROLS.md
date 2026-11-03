@@ -12346,3 +12346,13 @@ Run on 2026-11-04 on Linux. The test passes on the branch build.
 | Control: what was cut | Where it fails | Verdict |
 | --- | --- | --- |
 | `reviewOpensUncommitted` always returns false (`internal/app/review_overlay.go`) | "the review with scope = uncommitted did not open on ZETA alone" | **caught** |
+
+## The client event listener after an approval push
+
+`TestNativePluginApproval` now sends mail to the person after the approval
+dialog closes, and waits for the dock to announce it. Run on 2026-11-04 against
+the branch head with one change:
+
+| Claim | Control | Where it fails | Verdict |
+|---|---|---|---|
+| The client keeps reading its events after a plugin approval push | the `PluginApprovalsMsg` handler returns without arming the listener again | "the client stopped hearing its events after the approval push" | **caught** |
