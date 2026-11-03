@@ -5278,7 +5278,8 @@ sankey diagrams. Install it with `tuios plugins install sketch`. Then
 `tuios mermaid` runs the plugin for such a diagram, with `--format`, `--out`,
 `--cols`, `--diagram` and `--theme`. Without the plugin, the command says what
 to run and exits 3. `--watch` and `--demo` draw the eight types only. A TML
-panel shows the source of another type, and a notice says what to run.
+panel draws another type with the plugin too. Without the plugin it shows the
+source, and a notice says what to run.
 
 `text` draws every type of the eight. Another type is written as its source,
 with a note on stderr. A drawing wider than the terminal

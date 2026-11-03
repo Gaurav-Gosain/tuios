@@ -1957,6 +1957,18 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		m.noteMissingDiagram(msg.typ)
 		return m, nil
 
+	case sketchDrawnMsg:
+		// A surface's diagram came in from the sketch plugin: draw the
+		// surfaces again, which take it from loom's cache.
+		for id, v := range m.tml.views {
+			if v.surface != nil {
+				v.surface.Invalidate()
+				m.markTMLDirty(id)
+			}
+		}
+		m.MarkAllDirty()
+		return m, nil
+
 	case PluginUIMsg:
 		m.handlePluginUI(msg.Payload)
 		return m, listenClientEventsUntil(m.stopSignal(), m.ClientEventChan)

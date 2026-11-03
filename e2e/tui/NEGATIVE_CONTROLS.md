@@ -12389,3 +12389,14 @@ Run on 2026-11-03 on Linux. The fixed build passes: over the 10 s window,
 | Claim | Control | Where it fails | Verdict |
 | --- | --- | --- | --- |
 | The client draws a surface again when it asks for a frame | `tmlArmFrame` arms no timer | "the toast never went at the end of its ttl" | **caught** |
+## Rare diagrams in panels
+
+`TestSketchPlugin` opens a TML panel of a timeline with a fake sketch plugin
+installed. Run on 2026-11-03, each control against the branch head with one
+change:
+
+| Claim | Control | Where it fails | Verdict |
+|---|---|---|---|
+| A panel draws a rare type with the plugin | `loom.ExternalDiagram` not set | "the panel did not draw the timeline with the plugin" | **caught** |
+| The panel draws once the plugin answers | the surfaces not drawn again | the same message | **caught** |
+| No notice when the plugin draws the diagram | the plugin check cut from the notice | "the person was told to install a plugin that draws the diagram" | **caught** |

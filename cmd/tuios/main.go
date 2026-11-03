@@ -67,6 +67,13 @@ func main() {
 	herdrplugin.RunningVersion = version
 	theme.ExtraFiles = pluginThemeFiles
 	app.PluginSavers = pluginSaverFiles
+	app.SketchProgram = func() string {
+		prog, err := sketchPluginProgram()
+		if err != nil {
+			return ""
+		}
+		return prog
+	}
 
 	// The build identity, handed to internal/app before anything can crash.
 	// A crash report that cannot say which build produced it cannot be placed

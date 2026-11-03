@@ -1,12 +1,20 @@
 package app
 
 import (
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"os/exec"
+	"strconv"
+	"strings"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/herdrplugin"
 	"tuios.dev/loom"
+	sketchtext "tuios.dev/sketch/text"
 )
 
 // A TML <mermaid> of a type tuios does not draw shows its source under a
@@ -23,7 +31,66 @@ func bindMissingDiagram(p *tea.Program) {
 	loom.MissingDiagram = func(typ string) {
 		go p.Send(missingDiagramMsg{typ: typ})
 	}
+	// With the sketch plugin, a surface draws the diagram with the plugin's
+	// program, once per source and width (loom/mermaid.go).
+	loom.ExternalDiagram = drawWithSketchPlugin
+	loom.ExternalDrawn = func() { go p.Send(sketchDrawnMsg{}) }
 }
+
+// sketchDrawnMsg is a drawing of the sketch plugin that came in.
+type sketchDrawnMsg struct{}
+
+// SketchProgram, when set, is the program of the sketch plugin, "" when it
+// is not installed or does not run. The binary sets it.
+var SketchProgram func() string
+
+// sketchDrawTimeout bounds one run of the plugin's program.
+const sketchDrawTimeout = 20 * time.Second
+
+// drawWithSketchPlugin runs the sketch plugin's program for one diagram and
+// reads its cells.
+func drawWithSketchPlugin(src string, cols int) ([][]sketchtext.Cell, bool, error) {
+	prog := ""
+	if SketchProgram != nil {
+		prog = SketchProgram()
+	}
+	if prog == "" {
+		return nil, false, errors.New("the sketch plugin is not installed")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), sketchDrawTimeout)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, prog, "-f", "cells", "-cols", strconv.Itoa(cols), "-") //nolint:gosec // the program of the plugin the person installed
+	cmd.Stdin = strings.NewReader(src)
+	data, err := cmd.Output()
+	if err != nil {
+		return nil, false, err
+	}
+	if len(data) > sketchMaxCells {
+		return nil, false, errors.New("the drawing is too large")
+	}
+	var got struct {
+		Rows [][][3]int `json:"rows"`
+		Cut  bool       `json:"cut"`
+	}
+	if err := json.Unmarshal(data, &got); err != nil {
+		return nil, false, fmt.Errorf("the sketch plugin gave no cells: %w", err)
+	}
+	rows := make([][]sketchtext.Cell, len(got.Rows))
+	for y, row := range got.Rows {
+		rows[y] = make([]sketchtext.Cell, len(row))
+		for x, c := range row {
+			r := rune(c[0])
+			if r != 0 && (r < ' ' || r == 0x7f || (r >= 0x80 && r < 0xa0)) {
+				r = ' '
+			}
+			rows[y][x] = sketchtext.Cell{Rune: r, Role: sketchtext.Role(c[1]), Bg: sketchtext.Role(c[2])} //nolint:gosec // a role is a small number
+		}
+	}
+	return rows, got.Cut, nil
+}
+
+// sketchMaxCells bounds what the plugin's program may answer, in bytes.
+const sketchMaxCells = 16 << 20
 
 // noteMissingDiagram tells the person about typ, once in this session.
 func (m *OS) noteMissingDiagram(typ string) {
@@ -35,10 +102,12 @@ func (m *OS) noteMissingDiagram(typ string) {
 	}
 	m.diagramsTold[typ] = true
 	// Short enough for the dock, so the command is not cut.
-	text := "Run tuios plugins install sketch to draw this diagram."
+	// With the plugin, the surface draws the diagram, so there is nothing
+	// to tell.
 	if sketchPluginInstalled(m.UserConfig) {
-		text = "tuios mermaid draws this diagram with the sketch plugin."
+		return
 	}
+	text := "Run tuios plugins install sketch to draw this diagram."
 	m.ShowNotification(text, "info", max(m.Settings.NotificationDuration, 8*time.Second))
 	m.MarkAllDirty()
 }
