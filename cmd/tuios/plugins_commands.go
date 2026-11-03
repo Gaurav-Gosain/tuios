@@ -681,3 +681,22 @@ func pluginThemeFiles() []string {
 	}
 	return out
 }
+
+// pluginSaverFiles maps each screen saver of the enabled plugins that may run,
+// by its name plugin/ID/SAVER, to its frames file, for internal/app.
+func pluginSaverFiles() map[string]string {
+	entries, _, err := discoverPlugins()
+	if err != nil {
+		return nil
+	}
+	out := map[string]string{}
+	for _, e := range entries {
+		if !e.Runnable() {
+			continue
+		}
+		for _, s := range e.Plugin.Savers {
+			out[config.ScreensaverPluginPrefix+e.ID+"/"+s.ID] = s.File
+		}
+	}
+	return out
+}

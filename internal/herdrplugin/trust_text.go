@@ -58,7 +58,10 @@ func RunsLines(p *Plugin) []string {
 	for _, s := range p.Startup {
 		out = append(out, "startup  "+ShownArgv(s.Command...))
 	}
-	var hooks, actions, panes, links, cells, themes []string
+	var hooks, actions, panes, links, cells, themes, savers []string
+	for _, s := range p.Savers {
+		savers = append(savers, s.ID)
+	}
 	for _, t := range p.Themes {
 		themes = append(themes, strings.TrimSuffix(filepath.Base(t), filepath.Ext(t)))
 	}
@@ -77,9 +80,9 @@ func RunsLines(p *Plugin) []string {
 	for _, h := range p.LinkHandlers {
 		links = append(links, h.ID)
 	}
-	for i, list := range [][]string{hooks, actions, panes, links, cells, themes} {
+	for i, list := range [][]string{hooks, actions, panes, links, cells, themes, savers} {
 		if len(list) > 0 {
-			out = append(out, fmt.Sprintf("%-8s %s (%d)", [...]string{"hooks", "actions", "panes", "links", "cells", "themes"}[i], ShownArgv(strings.Join(list, ", ")), len(list)))
+			out = append(out, fmt.Sprintf("%-8s %s (%d)", [...]string{"hooks", "actions", "panes", "links", "cells", "themes", "savers"}[i], ShownArgv(strings.Join(list, ", ")), len(list)))
 		}
 	}
 	return out

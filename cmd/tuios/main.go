@@ -66,6 +66,7 @@ func main() {
 	applyModuleVersion()
 	herdrplugin.RunningVersion = version
 	theme.ExtraFiles = pluginThemeFiles
+	app.PluginSavers = pluginSaverFiles
 
 	// The build identity, handed to internal/app before anything can crash.
 	// A crash report that cannot say which build produced it cannot be placed

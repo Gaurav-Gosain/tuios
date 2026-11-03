@@ -166,6 +166,12 @@ func (p *Plugin) RunsNothing() bool {
 		len(p.Events) == 0 && len(p.LinkHandlers) == 0 && len(p.Grants) == 0
 }
 
+// Saver is one [[saver]] entry: a frames file tuios plays as a screen saver.
+type Saver struct {
+	ID   string `json:"id"`
+	File string `json:"file"`
+}
+
 // Cell is one [[cell]] entry of a native manifest: a dock cell the plugin's
 // processes may set.
 type Cell struct {
@@ -247,6 +253,8 @@ type Plugin struct {
 	// Themes are the theme files of a native plugin, absolute paths in its
 	// folder.
 	Themes []string `json:"themes,omitempty"`
+	// Savers are the screen savers of a native plugin, as frames files.
+	Savers []Saver `json:"savers,omitempty"`
 	// Format is FormatTuios for a tuios-plugin.toml and "" for a herdr
 	// manifest.
 	Format string `json:"format,omitempty"`

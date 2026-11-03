@@ -2,6 +2,7 @@ package app
 
 import (
 	"math/rand/v2"
+	"strings"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
@@ -43,6 +44,9 @@ type screensaverState struct {
 	// lastInput is when input last arrived. The armed timer compares against
 	// it rather than assuming it fired at the right moment.
 	lastInput time.Time
+
+	// player is a plugin's frames file playing, nil for an effect.
+	player *framesSaver
 
 	engine *tfx.Engine
 	effect tfx.Effect
@@ -156,7 +160,7 @@ func (m *OS) handleScreensaverArm() tea.Cmd {
 		m.screensaver.armed = true
 		return m.screensaverArmCmd(delay)
 	}
-	return screensaverFrameCmd(&m.Settings)
+	return m.nextSaverFrameCmd()
 }
 
 // StartScreensaverNow runs the saver because the user asked for it.
@@ -173,7 +177,7 @@ func (m *OS) StartScreensaverNow() tea.Cmd {
 		m.ShowNotification("The screen saver could not start here.", "warning", m.Settings.NotificationDuration)
 		return nil
 	}
-	return screensaverFrameCmd(&m.Settings)
+	return m.nextSaverFrameCmd()
 }
 
 // screensaverMayStart reports whether it is polite to cover the screen now.
@@ -206,6 +210,9 @@ func (m *OS) startScreensaver(cfg config.ScreensaverConfig) bool {
 	width, height := m.GetRenderWidth(), m.GetRenderHeight()
 	if width < 8 || height < 4 {
 		return false
+	}
+	if name := cfg.EffectName(); strings.HasPrefix(name, config.ScreensaverPluginPrefix) {
+		return m.startFramesSaver(name, width, height)
 	}
 	grid := m.composedGrid(0, 0, width, height)
 	if grid == nil {
@@ -370,6 +377,12 @@ func (m *OS) handleScreensaverFrame() tea.Cmd {
 		m.stopScreensaver()
 		return m.armScreensaver()
 	}
+	if p := m.screensaver.player; p != nil {
+		p.at = (p.at + 1) % len(p.frames)
+		m.screensaver.frame = p.frames[p.at]
+		m.renderSkipped = false
+		return m.nextSaverFrameCmd()
+	}
 	if !m.screensaver.effect.Advance(m.screensaver.engine) {
 		if !m.restartScreensaverEffect() {
 			m.stopScreensaver()
@@ -420,6 +433,7 @@ func (m *OS) dismissScreensaver() tea.Cmd {
 // stopScreensaver drops the animation and everything it held.
 func (m *OS) stopScreensaver() {
 	m.screensaver.active = false
+	m.screensaver.player = nil
 	m.screensaver.engine = nil
 	m.screensaver.effect = nil
 	m.screensaver.frame = ""

@@ -12298,3 +12298,14 @@ each control against the branch head with one change:
 | A plugin of files only needs no approval | the files-only case cut from `applyApproval` | "a plugin of files only does not run without an approval" | **caught** |
 | A plugin's themes load | `theme.ExtraFiles` not set | "--list-themes lacks the plugin theme dusk" | **caught** |
 | The person's own theme wins on the same id | the plugin's themes read after the person's | "the plugin's dusk won over the person's own" | **caught** |
+
+## Frames savers
+
+`TestPluginFramesSaver` plays a two-frame saver of a plugin. Run on 2026-11-03,
+each control against the branch head with one change:
+
+| Claim | Control | Where it fails | Verdict |
+|---|---|---|---|
+| The saver moves through its frames | the frame step cut | "the saver did not move to its second frame" | **caught** |
+| Each frame shows for its own time | the frame time replaced by the effect rate | "the second frame came after" | **caught** |
+| check reports the line of the frames file that is wrong | the frames check given no data | "check of a broken frames file" | **caught** |

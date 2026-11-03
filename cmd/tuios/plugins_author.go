@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Gaurav-Gosain/tuios/internal/app"
 	"github.com/Gaurav-Gosain/tuios/internal/herdrplugin"
 	"github.com/Gaurav-Gosain/tuios/plugins"
 	"github.com/spf13/cobra"
@@ -111,6 +112,20 @@ func checkPlugin(out io.Writer, dir string) error {
 			if _, err := os.Stat(filepath.Join(p.PluginRoot, argv[1])); err != nil {
 				problems = append(problems, fmt.Sprintf("the script %s is not in the folder", argv[1]))
 			}
+		}
+	}
+	for _, t := range p.Themes {
+		if _, err := os.Stat(t); err != nil {
+			problems = append(problems, fmt.Sprintf("the theme file %s is not in the folder", filepath.Base(t)))
+		}
+	}
+	for _, s := range p.Savers {
+		data, err := os.ReadFile(s.File) //nolint:gosec // a file of the folder being checked
+		if err == nil {
+			err = app.CheckSaverFile(data)
+		}
+		if err != nil {
+			problems = append(problems, fmt.Sprintf("the saver %s: %v", s.ID, err))
 		}
 	}
 	fmt.Fprintf(out, "%s %s (%s plugin)\n", p.PluginID, shownArgv(p.Version), p.Format)

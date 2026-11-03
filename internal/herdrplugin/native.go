@@ -72,10 +72,43 @@ type rawNative struct {
 	Process []rawProcess `toml:"process"`
 	Cell    []rawCell    `toml:"cell"`
 	Theme   []rawTheme   `toml:"theme"`
+	Saver   []rawSaver   `toml:"saver"`
 	Wasm    []any        `toml:"wasm"`
 	Herdr   *struct {
 		Manifest string `toml:"manifest"`
 	} `toml:"herdr"`
+}
+
+// rawSaver is one [[saver]]: a screen saver as a frames file.
+type rawSaver struct {
+	ID   *string `toml:"id"`
+	File *string `toml:"file"`
+}
+
+// parseSavers checks the [[saver]] entries.
+func parseSavers(raw []rawSaver, root string) ([]Saver, *Error) {
+	var out []Saver
+	for _, s := range raw {
+		if s.ID == nil {
+			return nil, missingField("id")
+		}
+		id, ok := NormalizeLocalID(*s.ID)
+		if !ok {
+			return nil, errf("plugin_manifest_parse_failed", "invalid [[saver]] id %q", *s.ID)
+		}
+		if s.File == nil || strings.TrimSpace(*s.File) == "" {
+			return nil, missingField("file")
+		}
+		rel := filepath.FromSlash(strings.TrimSpace(*s.File))
+		if !filepath.IsLocal(rel) {
+			return nil, errf("plugin_manifest_parse_failed", "[[saver]] file must be in the plugin folder, not %q", *s.File)
+		}
+		if slices.ContainsFunc(out, func(x Saver) bool { return x.ID == id }) {
+			return nil, errf("plugin_manifest_parse_failed", "two [[saver]] entries have the id %s", id)
+		}
+		out = append(out, Saver{ID: id, File: filepath.Join(root, rel)})
+	}
+	return out, nil
 }
 
 // rawTheme is one [[theme]]: a theme file the plugin brings.
@@ -234,6 +267,9 @@ func parseNative(data []byte, root string) (*Plugin, *Error) {
 	}
 	p.Cells = cells
 	if p.Themes, perr = parseThemes(n.Theme, root); perr != nil {
+		return nil, perr
+	}
+	if p.Savers, perr = parseSavers(n.Saver, root); perr != nil {
 		return nil, perr
 	}
 	p.Warnings = append(append(p.Warnings, warnings...), warn...)

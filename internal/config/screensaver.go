@@ -2,6 +2,7 @@ package config
 
 import (
 	"slices"
+	"strings"
 
 	tfx "github.com/Gaurav-Gosain/tuiffects"
 )
@@ -26,6 +27,9 @@ const (
 	ScreensaverMaxIdleMinutes     = 240
 	// ScreensaverRandomEffect picks a different effect each time it starts.
 	ScreensaverRandomEffect = "random"
+	// ScreensaverPluginPrefix marks a plugin's screen saver: plugin/ID/SAVER,
+	// the same form as a plugin's dock cell.
+	ScreensaverPluginPrefix = "plugin/"
 )
 
 // ScreensaverEffects is what the effect option accepts: the random choice plus
@@ -87,6 +91,9 @@ func (s ScreensaverConfig) IdleDelayMinutes() int {
 func (s ScreensaverConfig) EffectName() string {
 	if replacement, retired := retiredScreensaverEffects[s.Effect]; retired {
 		return replacement
+	}
+	if strings.HasPrefix(s.Effect, ScreensaverPluginPrefix) {
+		return s.Effect
 	}
 	if s.Effect == "" || !slices.Contains(ScreensaverEffects, s.Effect) {
 		return ScreensaverRandomEffect
