@@ -311,8 +311,10 @@ func TestDnDBetweenPanes(t *testing.T) {
 			t.Fatal(err)
 		}
 		srcLog := filepath.Join(t.TempDir(), "source.log")
-		// fish at its prompt, with a marker printed once it is up.
-		runInPane(t, base, session, right, "exec "+fish+" -C 'echo FISH\"\"READY'", "FISHREADY")
+		// fish at its prompt, with a marker printed once it is up. The prompt
+		// is fixed and short: the default one holds the user and host names,
+		// and a long host name wraps the pasted path onto a second line.
+		runInPane(t, base, session, right, "exec "+fish+" -C 'set -g fish_greeting; function fish_prompt; echo -n \"> \"; end; echo FISH\"\"READY'", "FISHREADY")
 		runInPane(t, base, session, left, peerSource(bin, srcLog, "", file), "DNDPEER-READY")
 		toX, toY := right.X+right.Width/2, right.Y+right.Height/2
 		dragAcross(t, term, left.X+4, left.Y+5, toX, toY, artifactDir(t))
