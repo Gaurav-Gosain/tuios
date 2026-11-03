@@ -1,0 +1,53 @@
+[
+  {
+    "at": "/children/0/stagger",
+    "line": 2,
+    "col": 8,
+    "code": "bad_value",
+    "message": "stagger must be a duration such as 300ms, 5s or 2m, not \"soon\".",
+    "severity": "error"
+  },
+  {
+    "at": "/children/0/children/0/enter",
+    "line": 3,
+    "col": 11,
+    "code": "bad_value",
+    "message": "enter cannot be \"bounce\".",
+    "severity": "error",
+    "accepted": [
+      "fade",
+      "slide-up",
+      "slide-down",
+      "slide-left",
+      "slide-right",
+      "iris",
+      "decode"
+    ]
+  },
+  {
+    "at": "/children/0/children/0/exit",
+    "line": 3,
+    "col": 26,
+    "code": "bad_value",
+    "message": "exit cannot be \"fade-out\".",
+    "severity": "error",
+    "did_you_mean": "fade",
+    "accepted": [
+      "fade",
+      "slide-up",
+      "slide-down",
+      "slide-left",
+      "slide-right",
+      "iris",
+      "decode"
+    ]
+  },
+  {
+    "at": "/children/0/children/0/skeleton",
+    "line": 3,
+    "col": 42,
+    "code": "bad_expression",
+    "message": "skeleton does not parse at character 7: expected \":\", found \".\".",
+    "severity": "error"
+  }
+]

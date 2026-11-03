@@ -88,6 +88,8 @@
       "title",
       "as",
       "each",
+      "enter",
+      "exit",
       "grow",
       "h",
       "id",
@@ -99,6 +101,8 @@
       "min-w",
       "pad",
       "show",
+      "skeleton",
+      "stagger",
       "w"
     ]
   }

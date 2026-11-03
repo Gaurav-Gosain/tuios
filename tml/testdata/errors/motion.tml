@@ -1,0 +1,5 @@
+<tml version="1">
+  <col stagger="soon">
+    <card enter="bounce" exit="fade-out" skeleton="{state.loading" title="Host"/>
+  </col>
+</tml>

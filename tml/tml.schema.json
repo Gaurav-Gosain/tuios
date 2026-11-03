@@ -27,6 +27,30 @@
           ],
           "description": "Repeats the node once per array element."
         },
+        "enter": {
+          "description": "The effect when the node shows: fade, slide-up, iris or decode, for example.",
+          "enum": [
+            "fade",
+            "slide-up",
+            "slide-down",
+            "slide-left",
+            "slide-right",
+            "iris",
+            "decode"
+          ]
+        },
+        "exit": {
+          "description": "The effect when the node goes away.",
+          "enum": [
+            "fade",
+            "slide-up",
+            "slide-down",
+            "slide-left",
+            "slide-right",
+            "iris",
+            "decode"
+          ]
+        },
         "grow": {
           "description": "Share of free space.",
           "maximum": 100,
@@ -147,6 +171,15 @@
           "description": "Hides the node when false and keeps its space.",
           "type": "string"
         },
+        "skeleton": {
+          "description": "Draws a loading placeholder in the node's space while true.",
+          "type": "string"
+        },
+        "stagger": {
+          "description": "Starts the enter of each child this much after the child before it.",
+          "pattern": "^[0-9]+(ms|s|m|h)$",
+          "type": "string"
+        },
         "type": {
           "const": "a"
         },
@@ -209,6 +242,30 @@
             }
           ],
           "description": "Repeats the node once per array element."
+        },
+        "enter": {
+          "description": "The effect when the node shows: fade, slide-up, iris or decode, for example.",
+          "enum": [
+            "fade",
+            "slide-up",
+            "slide-down",
+            "slide-left",
+            "slide-right",
+            "iris",
+            "decode"
+          ]
+        },
+        "exit": {
+          "description": "The effect when the node goes away.",
+          "enum": [
+            "fade",
+            "slide-up",
+            "slide-down",
+            "slide-left",
+            "slide-right",
+            "iris",
+            "decode"
+          ]
         },
         "graphics": {
           "description": "How to draw: auto picks kitty graphics, then cells, then ASCII.",
@@ -345,6 +402,15 @@
           "description": "Hides the node when false and keeps its space.",
           "type": "string"
         },
+        "skeleton": {
+          "description": "Draws a loading placeholder in the node's space while true.",
+          "type": "string"
+        },
+        "stagger": {
+          "description": "Starts the enter of each child this much after the child before it.",
+          "pattern": "^[0-9]+(ms|s|m|h)$",
+          "type": "string"
+        },
         "title": {
           "anyOf": [
             {
@@ -420,6 +486,30 @@
             }
           ],
           "description": "Repeats the node once per array element."
+        },
+        "enter": {
+          "description": "The effect when the node shows: fade, slide-up, iris or decode, for example.",
+          "enum": [
+            "fade",
+            "slide-up",
+            "slide-down",
+            "slide-left",
+            "slide-right",
+            "iris",
+            "decode"
+          ]
+        },
+        "exit": {
+          "description": "The effect when the node goes away.",
+          "enum": [
+            "fade",
+            "slide-up",
+            "slide-down",
+            "slide-left",
+            "slide-right",
+            "iris",
+            "decode"
+          ]
         },
         "grow": {
           "description": "Share of free space.",
@@ -536,6 +626,15 @@
           "description": "Hides the node when false and keeps its space.",
           "type": "string"
         },
+        "skeleton": {
+          "description": "Draws a loading placeholder in the node's space while true.",
+          "type": "string"
+        },
+        "stagger": {
+          "description": "Starts the enter of each child this much after the child before it.",
+          "pattern": "^[0-9]+(ms|s|m|h)$",
+          "type": "string"
+        },
         "type": {
           "const": "b"
         },
@@ -591,6 +690,30 @@
             }
           ],
           "description": "Repeats the node once per array element."
+        },
+        "enter": {
+          "description": "The effect when the node shows: fade, slide-up, iris or decode, for example.",
+          "enum": [
+            "fade",
+            "slide-up",
+            "slide-down",
+            "slide-left",
+            "slide-right",
+            "iris",
+            "decode"
+          ]
+        },
+        "exit": {
+          "description": "The effect when the node goes away.",
+          "enum": [
+            "fade",
+            "slide-up",
+            "slide-down",
+            "slide-left",
+            "slide-right",
+            "iris",
+            "decode"
+          ]
         },
         "grow": {
           "description": "Share of free space.",
@@ -722,6 +845,15 @@
           "description": "Hides the node when false and keeps its space.",
           "type": "string"
         },
+        "skeleton": {
+          "description": "Draws a loading placeholder in the node's space while true.",
+          "type": "string"
+        },
+        "stagger": {
+          "description": "Starts the enter of each child this much after the child before it.",
+          "pattern": "^[0-9]+(ms|s|m|h)$",
+          "type": "string"
+        },
         "type": {
           "const": "badge"
         },
@@ -790,6 +922,30 @@
             }
           ],
           "description": "Repeats the node once per array element."
+        },
+        "enter": {
+          "description": "The effect when the node shows: fade, slide-up, iris or decode, for example.",
+          "enum": [
+            "fade",
+            "slide-up",
+            "slide-down",
+            "slide-left",
+            "slide-right",
+            "iris",
+            "decode"
+          ]
+        },
+        "exit": {
+          "description": "The effect when the node goes away.",
+          "enum": [
+            "fade",
+            "slide-up",
+            "slide-down",
+            "slide-left",
+            "slide-right",
+            "iris",
+            "decode"
+          ]
         },
         "graphics": {
           "description": "How to draw: auto picks kitty graphics, then cells, then ASCII.",
@@ -924,6 +1080,15 @@
         },
         "show": {
           "description": "Hides the node when false and keeps its space.",
+          "type": "string"
+        },
+        "skeleton": {
+          "description": "Draws a loading placeholder in the node's space while true.",
+          "type": "string"
+        },
+        "stagger": {
+          "description": "Starts the enter of each child this much after the child before it.",
+          "pattern": "^[0-9]+(ms|s|m|h)$",
           "type": "string"
         },
         "title": {
@@ -1154,6 +1319,30 @@
           ],
           "description": "Repeats the node once per array element."
         },
+        "enter": {
+          "description": "The effect when the node shows: fade, slide-up, iris or decode, for example.",
+          "enum": [
+            "fade",
+            "slide-up",
+            "slide-down",
+            "slide-left",
+            "slide-right",
+            "iris",
+            "decode"
+          ]
+        },
+        "exit": {
+          "description": "The effect when the node goes away.",
+          "enum": [
+            "fade",
+            "slide-up",
+            "slide-down",
+            "slide-left",
+            "slide-right",
+            "iris",
+            "decode"
+          ]
+        },
         "grow": {
           "description": "Share of free space.",
           "maximum": 100,
@@ -1274,6 +1463,15 @@
           "description": "Hides the node when false and keeps its space.",
           "type": "string"
         },
+        "skeleton": {
+          "description": "Draws a loading placeholder in the node's space while true.",
+          "type": "string"
+        },
+        "stagger": {
+          "description": "Starts the enter of each child this much after the child before it.",
+          "pattern": "^[0-9]+(ms|s|m|h)$",
+          "type": "string"
+        },
         "submit": {
           "description": "Submits the form it is in.",
           "type": "boolean"
@@ -1333,6 +1531,30 @@
             }
           ],
           "description": "Repeats the node once per array element."
+        },
+        "enter": {
+          "description": "The effect when the node shows: fade, slide-up, iris or decode, for example.",
+          "enum": [
+            "fade",
+            "slide-up",
+            "slide-down",
+            "slide-left",
+            "slide-right",
+            "iris",
+            "decode"
+          ]
+        },
+        "exit": {
+          "description": "The effect when the node goes away.",
+          "enum": [
+            "fade",
+            "slide-up",
+            "slide-down",
+            "slide-left",
+            "slide-right",
+            "iris",
+            "decode"
+          ]
         },
         "grow": {
           "description": "Share of free space.",
@@ -1460,6 +1682,15 @@
           "description": "Hides the node when false and keeps its space.",
           "type": "string"
         },
+        "skeleton": {
+          "description": "Draws a loading placeholder in the node's space while true.",
+          "type": "string"
+        },
+        "stagger": {
+          "description": "Starts the enter of each child this much after the child before it.",
+          "pattern": "^[0-9]+(ms|s|m|h)$",
+          "type": "string"
+        },
         "type": {
           "const": "c"
         },
@@ -1516,6 +1747,30 @@
             }
           ],
           "description": "Repeats the node once per array element."
+        },
+        "enter": {
+          "description": "The effect when the node shows: fade, slide-up, iris or decode, for example.",
+          "enum": [
+            "fade",
+            "slide-up",
+            "slide-down",
+            "slide-left",
+            "slide-right",
+            "iris",
+            "decode"
+          ]
+        },
+        "exit": {
+          "description": "The effect when the node goes away.",
+          "enum": [
+            "fade",
+            "slide-up",
+            "slide-down",
+            "slide-left",
+            "slide-right",
+            "iris",
+            "decode"
+          ]
         },
         "fold": {
           "anyOf": [
@@ -1669,6 +1924,15 @@
           "description": "Hides the node when false and keeps its space.",
           "type": "string"
         },
+        "skeleton": {
+          "description": "Draws a loading placeholder in the node's space while true.",
+          "type": "string"
+        },
+        "stagger": {
+          "description": "Starts the enter of each child this much after the child before it.",
+          "pattern": "^[0-9]+(ms|s|m|h)$",
+          "type": "string"
+        },
         "title": {
           "anyOf": [
             {
@@ -1745,6 +2009,30 @@
             }
           ],
           "description": "Repeats the node once per array element."
+        },
+        "enter": {
+          "description": "The effect when the node shows: fade, slide-up, iris or decode, for example.",
+          "enum": [
+            "fade",
+            "slide-up",
+            "slide-down",
+            "slide-left",
+            "slide-right",
+            "iris",
+            "decode"
+          ]
+        },
+        "exit": {
+          "description": "The effect when the node goes away.",
+          "enum": [
+            "fade",
+            "slide-up",
+            "slide-down",
+            "slide-left",
+            "slide-right",
+            "iris",
+            "decode"
+          ]
         },
         "grow": {
           "description": "Share of free space.",
@@ -1892,6 +2180,15 @@
           "description": "Hides the node when false and keeps its space.",
           "type": "string"
         },
+        "skeleton": {
+          "description": "Draws a loading placeholder in the node's space while true.",
+          "type": "string"
+        },
+        "stagger": {
+          "description": "Starts the enter of each child this much after the child before it.",
+          "pattern": "^[0-9]+(ms|s|m|h)$",
+          "type": "string"
+        },
         "type": {
           "const": "checkbox"
         },
@@ -1961,6 +2258,30 @@
             }
           ],
           "description": "Repeats the node once per array element."
+        },
+        "enter": {
+          "description": "The effect when the node shows: fade, slide-up, iris or decode, for example.",
+          "enum": [
+            "fade",
+            "slide-up",
+            "slide-down",
+            "slide-left",
+            "slide-right",
+            "iris",
+            "decode"
+          ]
+        },
+        "exit": {
+          "description": "The effect when the node goes away.",
+          "enum": [
+            "fade",
+            "slide-up",
+            "slide-down",
+            "slide-left",
+            "slide-right",
+            "iris",
+            "decode"
+          ]
         },
         "from": {
           "description": "The first line number.",
@@ -2091,6 +2412,15 @@
           "description": "Hides the node when false and keeps its space.",
           "type": "string"
         },
+        "skeleton": {
+          "description": "Draws a loading placeholder in the node's space while true.",
+          "type": "string"
+        },
+        "stagger": {
+          "description": "Starts the enter of each child this much after the child before it.",
+          "pattern": "^[0-9]+(ms|s|m|h)$",
+          "type": "string"
+        },
         "type": {
           "const": "code"
         },
@@ -2155,6 +2485,30 @@
             }
           ],
           "description": "Repeats the node once per array element."
+        },
+        "enter": {
+          "description": "The effect when the node shows: fade, slide-up, iris or decode, for example.",
+          "enum": [
+            "fade",
+            "slide-up",
+            "slide-down",
+            "slide-left",
+            "slide-right",
+            "iris",
+            "decode"
+          ]
+        },
+        "exit": {
+          "description": "The effect when the node goes away.",
+          "enum": [
+            "fade",
+            "slide-up",
+            "slide-down",
+            "slide-left",
+            "slide-right",
+            "iris",
+            "decode"
+          ]
         },
         "gap": {
           "anyOf": [
@@ -2298,6 +2652,15 @@
           "description": "Hides the node when false and keeps its space.",
           "type": "string"
         },
+        "skeleton": {
+          "description": "Draws a loading placeholder in the node's space while true.",
+          "type": "string"
+        },
+        "stagger": {
+          "description": "Starts the enter of each child this much after the child before it.",
+          "pattern": "^[0-9]+(ms|s|m|h)$",
+          "type": "string"
+        },
         "type": {
           "const": "col"
         },
@@ -2355,6 +2718,30 @@
             }
           ],
           "description": "Repeats the node once per array element."
+        },
+        "enter": {
+          "description": "The effect when the node shows: fade, slide-up, iris or decode, for example.",
+          "enum": [
+            "fade",
+            "slide-up",
+            "slide-down",
+            "slide-left",
+            "slide-right",
+            "iris",
+            "decode"
+          ]
+        },
+        "exit": {
+          "description": "The effect when the node goes away.",
+          "enum": [
+            "fade",
+            "slide-up",
+            "slide-down",
+            "slide-left",
+            "slide-right",
+            "iris",
+            "decode"
+          ]
         },
         "field": {
           "description": "The row field the column shows.",
@@ -2479,9 +2866,18 @@
           "description": "Hides the node when false and keeps its space.",
           "type": "string"
         },
+        "skeleton": {
+          "description": "Draws a loading placeholder in the node's space while true.",
+          "type": "string"
+        },
         "sort": {
           "description": "A person can sort by this column.",
           "type": "boolean"
+        },
+        "stagger": {
+          "description": "Starts the enter of each child this much after the child before it.",
+          "pattern": "^[0-9]+(ms|s|m|h)$",
+          "type": "string"
         },
         "title": {
           "anyOf": [
@@ -2552,6 +2948,30 @@
             }
           ],
           "description": "Repeats the node once per array element."
+        },
+        "enter": {
+          "description": "The effect when the node shows: fade, slide-up, iris or decode, for example.",
+          "enum": [
+            "fade",
+            "slide-up",
+            "slide-down",
+            "slide-left",
+            "slide-right",
+            "iris",
+            "decode"
+          ]
+        },
+        "exit": {
+          "description": "The effect when the node goes away.",
+          "enum": [
+            "fade",
+            "slide-up",
+            "slide-down",
+            "slide-left",
+            "slide-right",
+            "iris",
+            "decode"
+          ]
         },
         "grow": {
           "description": "Share of free space.",
@@ -2679,6 +3099,15 @@
           "description": "Hides the node when false and keeps its space.",
           "type": "string"
         },
+        "skeleton": {
+          "description": "Draws a loading placeholder in the node's space while true.",
+          "type": "string"
+        },
+        "stagger": {
+          "description": "Starts the enter of each child this much after the child before it.",
+          "pattern": "^[0-9]+(ms|s|m|h)$",
+          "type": "string"
+        },
         "type": {
           "const": "diff"
         },
@@ -2734,6 +3163,30 @@
             }
           ],
           "description": "Repeats the node once per array element."
+        },
+        "enter": {
+          "description": "The effect when the node shows: fade, slide-up, iris or decode, for example.",
+          "enum": [
+            "fade",
+            "slide-up",
+            "slide-down",
+            "slide-left",
+            "slide-right",
+            "iris",
+            "decode"
+          ]
+        },
+        "exit": {
+          "description": "The effect when the node goes away.",
+          "enum": [
+            "fade",
+            "slide-up",
+            "slide-down",
+            "slide-left",
+            "slide-right",
+            "iris",
+            "decode"
+          ]
         },
         "grow": {
           "description": "Share of free space.",
@@ -2858,6 +3311,15 @@
           "description": "Hides the node when false and keeps its space.",
           "type": "string"
         },
+        "skeleton": {
+          "description": "Draws a loading placeholder in the node's space while true.",
+          "type": "string"
+        },
+        "stagger": {
+          "description": "Starts the enter of each child this much after the child before it.",
+          "pattern": "^[0-9]+(ms|s|m|h)$",
+          "type": "string"
+        },
         "type": {
           "const": "form"
         },
@@ -2907,6 +3369,30 @@
             }
           ],
           "description": "Repeats the node once per array element."
+        },
+        "enter": {
+          "description": "The effect when the node shows: fade, slide-up, iris or decode, for example.",
+          "enum": [
+            "fade",
+            "slide-up",
+            "slide-down",
+            "slide-left",
+            "slide-right",
+            "iris",
+            "decode"
+          ]
+        },
+        "exit": {
+          "description": "The effect when the node goes away.",
+          "enum": [
+            "fade",
+            "slide-up",
+            "slide-down",
+            "slide-left",
+            "slide-right",
+            "iris",
+            "decode"
+          ]
         },
         "graphics": {
           "description": "How to draw: auto picks kitty graphics, then cells, then ASCII.",
@@ -3065,6 +3551,15 @@
           "description": "Hides the node when false and keeps its space.",
           "type": "string"
         },
+        "skeleton": {
+          "description": "Draws a loading placeholder in the node's space while true.",
+          "type": "string"
+        },
+        "stagger": {
+          "description": "Starts the enter of each child this much after the child before it.",
+          "pattern": "^[0-9]+(ms|s|m|h)$",
+          "type": "string"
+        },
         "title": {
           "anyOf": [
             {
@@ -3149,6 +3644,30 @@
             }
           ],
           "description": "Repeats the node once per array element."
+        },
+        "enter": {
+          "description": "The effect when the node shows: fade, slide-up, iris or decode, for example.",
+          "enum": [
+            "fade",
+            "slide-up",
+            "slide-down",
+            "slide-left",
+            "slide-right",
+            "iris",
+            "decode"
+          ]
+        },
+        "exit": {
+          "description": "The effect when the node goes away.",
+          "enum": [
+            "fade",
+            "slide-up",
+            "slide-down",
+            "slide-left",
+            "slide-right",
+            "iris",
+            "decode"
+          ]
         },
         "gap": {
           "anyOf": [
@@ -3278,6 +3797,15 @@
           "description": "Hides the node when false and keeps its space.",
           "type": "string"
         },
+        "skeleton": {
+          "description": "Draws a loading placeholder in the node's space while true.",
+          "type": "string"
+        },
+        "stagger": {
+          "description": "Starts the enter of each child this much after the child before it.",
+          "pattern": "^[0-9]+(ms|s|m|h)$",
+          "type": "string"
+        },
         "type": {
           "const": "grid"
         },
@@ -3334,6 +3862,30 @@
             }
           ],
           "description": "Repeats the node once per array element."
+        },
+        "enter": {
+          "description": "The effect when the node shows: fade, slide-up, iris or decode, for example.",
+          "enum": [
+            "fade",
+            "slide-up",
+            "slide-down",
+            "slide-left",
+            "slide-right",
+            "iris",
+            "decode"
+          ]
+        },
+        "exit": {
+          "description": "The effect when the node goes away.",
+          "enum": [
+            "fade",
+            "slide-up",
+            "slide-down",
+            "slide-left",
+            "slide-right",
+            "iris",
+            "decode"
+          ]
         },
         "grow": {
           "description": "Share of free space.",
@@ -3474,6 +4026,15 @@
           "description": "Hides the node when false and keeps its space.",
           "type": "string"
         },
+        "skeleton": {
+          "description": "Draws a loading placeholder in the node's space while true.",
+          "type": "string"
+        },
+        "stagger": {
+          "description": "Starts the enter of each child this much after the child before it.",
+          "pattern": "^[0-9]+(ms|s|m|h)$",
+          "type": "string"
+        },
         "type": {
           "const": "heading"
         },
@@ -3535,6 +4096,30 @@
             }
           ],
           "description": "Repeats the node once per array element."
+        },
+        "enter": {
+          "description": "The effect when the node shows: fade, slide-up, iris or decode, for example.",
+          "enum": [
+            "fade",
+            "slide-up",
+            "slide-down",
+            "slide-left",
+            "slide-right",
+            "iris",
+            "decode"
+          ]
+        },
+        "exit": {
+          "description": "The effect when the node goes away.",
+          "enum": [
+            "fade",
+            "slide-up",
+            "slide-down",
+            "slide-left",
+            "slide-right",
+            "iris",
+            "decode"
+          ]
         },
         "graphics": {
           "description": "How to draw: auto picks kitty graphics, then cells, then ASCII.",
@@ -3669,6 +4254,15 @@
         },
         "show": {
           "description": "Hides the node when false and keeps its space.",
+          "type": "string"
+        },
+        "skeleton": {
+          "description": "Draws a loading placeholder in the node's space while true.",
+          "type": "string"
+        },
+        "stagger": {
+          "description": "Starts the enter of each child this much after the child before it.",
+          "pattern": "^[0-9]+(ms|s|m|h)$",
           "type": "string"
         },
         "title": {
@@ -3758,6 +4352,30 @@
           ],
           "description": "Repeats the node once per array element."
         },
+        "enter": {
+          "description": "The effect when the node shows: fade, slide-up, iris or decode, for example.",
+          "enum": [
+            "fade",
+            "slide-up",
+            "slide-down",
+            "slide-left",
+            "slide-right",
+            "iris",
+            "decode"
+          ]
+        },
+        "exit": {
+          "description": "The effect when the node goes away.",
+          "enum": [
+            "fade",
+            "slide-up",
+            "slide-down",
+            "slide-left",
+            "slide-right",
+            "iris",
+            "decode"
+          ]
+        },
         "graphics": {
           "description": "How to draw: auto picks kitty graphics, then cells, then ASCII.",
           "enum": [
@@ -3893,6 +4511,15 @@
           "description": "Hides the node when false and keeps its space.",
           "type": "string"
         },
+        "skeleton": {
+          "description": "Draws a loading placeholder in the node's space while true.",
+          "type": "string"
+        },
+        "stagger": {
+          "description": "Starts the enter of each child this much after the child before it.",
+          "pattern": "^[0-9]+(ms|s|m|h)$",
+          "type": "string"
+        },
         "title": {
           "anyOf": [
             {
@@ -3972,6 +4599,30 @@
             }
           ],
           "description": "Repeats the node once per array element."
+        },
+        "enter": {
+          "description": "The effect when the node shows: fade, slide-up, iris or decode, for example.",
+          "enum": [
+            "fade",
+            "slide-up",
+            "slide-down",
+            "slide-left",
+            "slide-right",
+            "iris",
+            "decode"
+          ]
+        },
+        "exit": {
+          "description": "The effect when the node goes away.",
+          "enum": [
+            "fade",
+            "slide-up",
+            "slide-down",
+            "slide-left",
+            "slide-right",
+            "iris",
+            "decode"
+          ]
         },
         "grow": {
           "description": "Share of free space.",
@@ -4088,6 +4739,15 @@
           "description": "Hides the node when false and keeps its space.",
           "type": "string"
         },
+        "skeleton": {
+          "description": "Draws a loading placeholder in the node's space while true.",
+          "type": "string"
+        },
+        "stagger": {
+          "description": "Starts the enter of each child this much after the child before it.",
+          "pattern": "^[0-9]+(ms|s|m|h)$",
+          "type": "string"
+        },
         "type": {
           "const": "i"
         },
@@ -4148,6 +4808,30 @@
             }
           ],
           "description": "Repeats the node once per array element."
+        },
+        "enter": {
+          "description": "The effect when the node shows: fade, slide-up, iris or decode, for example.",
+          "enum": [
+            "fade",
+            "slide-up",
+            "slide-down",
+            "slide-left",
+            "slide-right",
+            "iris",
+            "decode"
+          ]
+        },
+        "exit": {
+          "description": "The effect when the node goes away.",
+          "enum": [
+            "fade",
+            "slide-up",
+            "slide-down",
+            "slide-left",
+            "slide-right",
+            "iris",
+            "decode"
+          ]
         },
         "graphics": {
           "description": "How to draw: auto picks kitty graphics, then cells, then ASCII.",
@@ -4277,9 +4961,18 @@
           "description": "Hides the node when false and keeps its space.",
           "type": "string"
         },
+        "skeleton": {
+          "description": "Draws a loading placeholder in the node's space while true.",
+          "type": "string"
+        },
         "src": {
           "description": "A file: path or a data:image URI.",
           "pattern": "^(file:|data:image/(png|jpeg|gif|webp);base64,)",
+          "type": "string"
+        },
+        "stagger": {
+          "description": "Starts the enter of each child this much after the child before it.",
+          "pattern": "^[0-9]+(ms|s|m|h)$",
           "type": "string"
         },
         "type": {
@@ -4381,6 +5074,30 @@
             }
           ],
           "description": "Repeats the node once per array element."
+        },
+        "enter": {
+          "description": "The effect when the node shows: fade, slide-up, iris or decode, for example.",
+          "enum": [
+            "fade",
+            "slide-up",
+            "slide-down",
+            "slide-left",
+            "slide-right",
+            "iris",
+            "decode"
+          ]
+        },
+        "exit": {
+          "description": "The effect when the node goes away.",
+          "enum": [
+            "fade",
+            "slide-up",
+            "slide-down",
+            "slide-left",
+            "slide-right",
+            "iris",
+            "decode"
+          ]
         },
         "grow": {
           "description": "Share of free space.",
@@ -4576,6 +5293,15 @@
           "description": "Hides the node when false and keeps its space.",
           "type": "string"
         },
+        "skeleton": {
+          "description": "Draws a loading placeholder in the node's space while true.",
+          "type": "string"
+        },
+        "stagger": {
+          "description": "Starts the enter of each child this much after the child before it.",
+          "pattern": "^[0-9]+(ms|s|m|h)$",
+          "type": "string"
+        },
         "type": {
           "const": "input"
         },
@@ -4637,6 +5363,30 @@
             }
           ],
           "description": "Repeats the node once per array element."
+        },
+        "enter": {
+          "description": "The effect when the node shows: fade, slide-up, iris or decode, for example.",
+          "enum": [
+            "fade",
+            "slide-up",
+            "slide-down",
+            "slide-left",
+            "slide-right",
+            "iris",
+            "decode"
+          ]
+        },
+        "exit": {
+          "description": "The effect when the node goes away.",
+          "enum": [
+            "fade",
+            "slide-up",
+            "slide-down",
+            "slide-left",
+            "slide-right",
+            "iris",
+            "decode"
+          ]
         },
         "grow": {
           "description": "Share of free space.",
@@ -4775,6 +5525,15 @@
           "description": "Hides the node when false and keeps its space.",
           "type": "string"
         },
+        "skeleton": {
+          "description": "Draws a loading placeholder in the node's space while true.",
+          "type": "string"
+        },
+        "stagger": {
+          "description": "Starts the enter of each child this much after the child before it.",
+          "pattern": "^[0-9]+(ms|s|m|h)$",
+          "type": "string"
+        },
         "type": {
           "const": "item"
         },
@@ -4845,6 +5604,30 @@
           ],
           "description": "Repeats the node once per array element."
         },
+        "enter": {
+          "description": "The effect when the node shows: fade, slide-up, iris or decode, for example.",
+          "enum": [
+            "fade",
+            "slide-up",
+            "slide-down",
+            "slide-left",
+            "slide-right",
+            "iris",
+            "decode"
+          ]
+        },
+        "exit": {
+          "description": "The effect when the node goes away.",
+          "enum": [
+            "fade",
+            "slide-up",
+            "slide-down",
+            "slide-left",
+            "slide-right",
+            "iris",
+            "decode"
+          ]
+        },
         "grow": {
           "description": "Share of free space.",
           "maximum": 100,
@@ -4958,6 +5741,15 @@
         },
         "show": {
           "description": "Hides the node when false and keeps its space.",
+          "type": "string"
+        },
+        "skeleton": {
+          "description": "Draws a loading placeholder in the node's space while true.",
+          "type": "string"
+        },
+        "stagger": {
+          "description": "Starts the enter of each child this much after the child before it.",
+          "pattern": "^[0-9]+(ms|s|m|h)$",
           "type": "string"
         },
         "type": {
@@ -5021,6 +5813,30 @@
           ],
           "description": "Repeats the node once per array element."
         },
+        "enter": {
+          "description": "The effect when the node shows: fade, slide-up, iris or decode, for example.",
+          "enum": [
+            "fade",
+            "slide-up",
+            "slide-down",
+            "slide-left",
+            "slide-right",
+            "iris",
+            "decode"
+          ]
+        },
+        "exit": {
+          "description": "The effect when the node goes away.",
+          "enum": [
+            "fade",
+            "slide-up",
+            "slide-down",
+            "slide-left",
+            "slide-right",
+            "iris",
+            "decode"
+          ]
+        },
         "grow": {
           "description": "Share of free space.",
           "maximum": 100,
@@ -5134,6 +5950,15 @@
         },
         "show": {
           "description": "Hides the node when false and keeps its space.",
+          "type": "string"
+        },
+        "skeleton": {
+          "description": "Draws a loading placeholder in the node's space while true.",
+          "type": "string"
+        },
+        "stagger": {
+          "description": "Starts the enter of each child this much after the child before it.",
+          "pattern": "^[0-9]+(ms|s|m|h)$",
           "type": "string"
         },
         "type": {
@@ -5208,6 +6033,30 @@
             }
           ],
           "description": "Repeats the node once per array element."
+        },
+        "enter": {
+          "description": "The effect when the node shows: fade, slide-up, iris or decode, for example.",
+          "enum": [
+            "fade",
+            "slide-up",
+            "slide-down",
+            "slide-left",
+            "slide-right",
+            "iris",
+            "decode"
+          ]
+        },
+        "exit": {
+          "description": "The effect when the node goes away.",
+          "enum": [
+            "fade",
+            "slide-up",
+            "slide-down",
+            "slide-left",
+            "slide-right",
+            "iris",
+            "decode"
+          ]
         },
         "graphics": {
           "description": "How to draw: auto picks kitty graphics, then cells, then ASCII.",
@@ -5344,6 +6193,15 @@
           "description": "Hides the node when false and keeps its space.",
           "type": "string"
         },
+        "skeleton": {
+          "description": "Draws a loading placeholder in the node's space while true.",
+          "type": "string"
+        },
+        "stagger": {
+          "description": "Starts the enter of each child this much after the child before it.",
+          "pattern": "^[0-9]+(ms|s|m|h)$",
+          "type": "string"
+        },
         "title": {
           "anyOf": [
             {
@@ -5419,6 +6277,30 @@
             }
           ],
           "description": "Repeats the node once per array element."
+        },
+        "enter": {
+          "description": "The effect when the node shows: fade, slide-up, iris or decode, for example.",
+          "enum": [
+            "fade",
+            "slide-up",
+            "slide-down",
+            "slide-left",
+            "slide-right",
+            "iris",
+            "decode"
+          ]
+        },
+        "exit": {
+          "description": "The effect when the node goes away.",
+          "enum": [
+            "fade",
+            "slide-up",
+            "slide-down",
+            "slide-left",
+            "slide-right",
+            "iris",
+            "decode"
+          ]
         },
         "grow": {
           "description": "Share of free space.",
@@ -5563,6 +6445,15 @@
           "description": "Hides the node when false and keeps its space.",
           "type": "string"
         },
+        "skeleton": {
+          "description": "Draws a loading placeholder in the node's space while true.",
+          "type": "string"
+        },
+        "stagger": {
+          "description": "Starts the enter of each child this much after the child before it.",
+          "pattern": "^[0-9]+(ms|s|m|h)$",
+          "type": "string"
+        },
         "type": {
           "const": "list"
         },
@@ -5625,6 +6516,30 @@
             }
           ],
           "description": "Repeats the node once per array element."
+        },
+        "enter": {
+          "description": "The effect when the node shows: fade, slide-up, iris or decode, for example.",
+          "enum": [
+            "fade",
+            "slide-up",
+            "slide-down",
+            "slide-left",
+            "slide-right",
+            "iris",
+            "decode"
+          ]
+        },
+        "exit": {
+          "description": "The effect when the node goes away.",
+          "enum": [
+            "fade",
+            "slide-up",
+            "slide-down",
+            "slide-left",
+            "slide-right",
+            "iris",
+            "decode"
+          ]
         },
         "graphics": {
           "description": "How to draw: auto picks kitty graphics, then cells, then ASCII.",
@@ -5761,6 +6676,15 @@
           "description": "Hides the node when false and keeps its space.",
           "type": "string"
         },
+        "skeleton": {
+          "description": "Draws a loading placeholder in the node's space while true.",
+          "type": "string"
+        },
+        "stagger": {
+          "description": "Starts the enter of each child this much after the child before it.",
+          "pattern": "^[0-9]+(ms|s|m|h)$",
+          "type": "string"
+        },
         "title": {
           "anyOf": [
             {
@@ -5851,6 +6775,30 @@
           ],
           "description": "Repeats the node once per array element."
         },
+        "enter": {
+          "description": "The effect when the node shows: fade, slide-up, iris or decode, for example.",
+          "enum": [
+            "fade",
+            "slide-up",
+            "slide-down",
+            "slide-left",
+            "slide-right",
+            "iris",
+            "decode"
+          ]
+        },
+        "exit": {
+          "description": "The effect when the node goes away.",
+          "enum": [
+            "fade",
+            "slide-up",
+            "slide-down",
+            "slide-left",
+            "slide-right",
+            "iris",
+            "decode"
+          ]
+        },
         "grow": {
           "description": "Share of free space.",
           "maximum": 100,
@@ -5964,6 +6912,15 @@
         },
         "show": {
           "description": "Hides the node when false and keeps its space.",
+          "type": "string"
+        },
+        "skeleton": {
+          "description": "Draws a loading placeholder in the node's space while true.",
+          "type": "string"
+        },
+        "stagger": {
+          "description": "Starts the enter of each child this much after the child before it.",
+          "pattern": "^[0-9]+(ms|s|m|h)$",
           "type": "string"
         },
         "type": {
@@ -6024,6 +6981,30 @@
           ],
           "description": "Repeats the node once per array element."
         },
+        "enter": {
+          "description": "The effect when the node shows: fade, slide-up, iris or decode, for example.",
+          "enum": [
+            "fade",
+            "slide-up",
+            "slide-down",
+            "slide-left",
+            "slide-right",
+            "iris",
+            "decode"
+          ]
+        },
+        "exit": {
+          "description": "The effect when the node goes away.",
+          "enum": [
+            "fade",
+            "slide-up",
+            "slide-down",
+            "slide-left",
+            "slide-right",
+            "iris",
+            "decode"
+          ]
+        },
         "grow": {
           "description": "Share of free space.",
           "maximum": 100,
@@ -6139,6 +7120,15 @@
           "description": "Hides the node when false and keeps its space.",
           "type": "string"
         },
+        "skeleton": {
+          "description": "Draws a loading placeholder in the node's space while true.",
+          "type": "string"
+        },
+        "stagger": {
+          "description": "Starts the enter of each child this much after the child before it.",
+          "pattern": "^[0-9]+(ms|s|m|h)$",
+          "type": "string"
+        },
         "type": {
           "const": "mermaid"
         },
@@ -6194,6 +7184,30 @@
             }
           ],
           "description": "Repeats the node once per array element."
+        },
+        "enter": {
+          "description": "The effect when the node shows: fade, slide-up, iris or decode, for example.",
+          "enum": [
+            "fade",
+            "slide-up",
+            "slide-down",
+            "slide-left",
+            "slide-right",
+            "iris",
+            "decode"
+          ]
+        },
+        "exit": {
+          "description": "The effect when the node goes away.",
+          "enum": [
+            "fade",
+            "slide-up",
+            "slide-down",
+            "slide-left",
+            "slide-right",
+            "iris",
+            "decode"
+          ]
         },
         "grow": {
           "description": "Share of free space.",
@@ -6321,6 +7335,15 @@
           "description": "Hides the node when false and keeps its space.",
           "type": "string"
         },
+        "skeleton": {
+          "description": "Draws a loading placeholder in the node's space while true.",
+          "type": "string"
+        },
+        "stagger": {
+          "description": "Starts the enter of each child this much after the child before it.",
+          "pattern": "^[0-9]+(ms|s|m|h)$",
+          "type": "string"
+        },
         "title": {
           "anyOf": [
             {
@@ -6394,6 +7417,30 @@
             }
           ],
           "description": "Repeats the node once per array element."
+        },
+        "enter": {
+          "description": "The effect when the node shows: fade, slide-up, iris or decode, for example.",
+          "enum": [
+            "fade",
+            "slide-up",
+            "slide-down",
+            "slide-left",
+            "slide-right",
+            "iris",
+            "decode"
+          ]
+        },
+        "exit": {
+          "description": "The effect when the node goes away.",
+          "enum": [
+            "fade",
+            "slide-up",
+            "slide-down",
+            "slide-left",
+            "slide-right",
+            "iris",
+            "decode"
+          ]
         },
         "graphics": {
           "description": "How to draw: auto picks kitty graphics, then cells, then ASCII.",
@@ -6534,6 +7581,15 @@
           "description": "Hides the node when false and keeps its space.",
           "type": "string"
         },
+        "skeleton": {
+          "description": "Draws a loading placeholder in the node's space while true.",
+          "type": "string"
+        },
+        "stagger": {
+          "description": "Starts the enter of each child this much after the child before it.",
+          "pattern": "^[0-9]+(ms|s|m|h)$",
+          "type": "string"
+        },
         "style": {
           "description": "pie or donut.",
           "enum": [
@@ -6606,6 +7662,30 @@
             }
           ],
           "description": "Repeats the node once per array element."
+        },
+        "enter": {
+          "description": "The effect when the node shows: fade, slide-up, iris or decode, for example.",
+          "enum": [
+            "fade",
+            "slide-up",
+            "slide-down",
+            "slide-left",
+            "slide-right",
+            "iris",
+            "decode"
+          ]
+        },
+        "exit": {
+          "description": "The effect when the node goes away.",
+          "enum": [
+            "fade",
+            "slide-up",
+            "slide-down",
+            "slide-left",
+            "slide-right",
+            "iris",
+            "decode"
+          ]
         },
         "grow": {
           "description": "Share of free space.",
@@ -6744,6 +7824,15 @@
           "description": "Hides the node when false and keeps its space.",
           "type": "string"
         },
+        "skeleton": {
+          "description": "Draws a loading placeholder in the node's space while true.",
+          "type": "string"
+        },
+        "stagger": {
+          "description": "Starts the enter of each child this much after the child before it.",
+          "pattern": "^[0-9]+(ms|s|m|h)$",
+          "type": "string"
+        },
         "type": {
           "const": "progress"
         },
@@ -6851,6 +7940,30 @@
             }
           ],
           "description": "Repeats the node once per array element."
+        },
+        "enter": {
+          "description": "The effect when the node shows: fade, slide-up, iris or decode, for example.",
+          "enum": [
+            "fade",
+            "slide-up",
+            "slide-down",
+            "slide-left",
+            "slide-right",
+            "iris",
+            "decode"
+          ]
+        },
+        "exit": {
+          "description": "The effect when the node goes away.",
+          "enum": [
+            "fade",
+            "slide-up",
+            "slide-down",
+            "slide-left",
+            "slide-right",
+            "iris",
+            "decode"
+          ]
         },
         "gap": {
           "anyOf": [
@@ -6994,6 +8107,15 @@
           "description": "Hides the node when false and keeps its space.",
           "type": "string"
         },
+        "skeleton": {
+          "description": "Draws a loading placeholder in the node's space while true.",
+          "type": "string"
+        },
+        "stagger": {
+          "description": "Starts the enter of each child this much after the child before it.",
+          "pattern": "^[0-9]+(ms|s|m|h)$",
+          "type": "string"
+        },
         "type": {
           "const": "row"
         },
@@ -7049,6 +8171,30 @@
             }
           ],
           "description": "Repeats the node once per array element."
+        },
+        "enter": {
+          "description": "The effect when the node shows: fade, slide-up, iris or decode, for example.",
+          "enum": [
+            "fade",
+            "slide-up",
+            "slide-down",
+            "slide-left",
+            "slide-right",
+            "iris",
+            "decode"
+          ]
+        },
+        "exit": {
+          "description": "The effect when the node goes away.",
+          "enum": [
+            "fade",
+            "slide-up",
+            "slide-down",
+            "slide-left",
+            "slide-right",
+            "iris",
+            "decode"
+          ]
         },
         "grow": {
           "description": "Share of free space.",
@@ -7165,6 +8311,15 @@
           "description": "Hides the node when false and keeps its space.",
           "type": "string"
         },
+        "skeleton": {
+          "description": "Draws a loading placeholder in the node's space while true.",
+          "type": "string"
+        },
+        "stagger": {
+          "description": "Starts the enter of each child this much after the child before it.",
+          "pattern": "^[0-9]+(ms|s|m|h)$",
+          "type": "string"
+        },
         "type": {
           "const": "s"
         },
@@ -7220,6 +8375,30 @@
             }
           ],
           "description": "Repeats the node once per array element."
+        },
+        "enter": {
+          "description": "The effect when the node shows: fade, slide-up, iris or decode, for example.",
+          "enum": [
+            "fade",
+            "slide-up",
+            "slide-down",
+            "slide-left",
+            "slide-right",
+            "iris",
+            "decode"
+          ]
+        },
+        "exit": {
+          "description": "The effect when the node goes away.",
+          "enum": [
+            "fade",
+            "slide-up",
+            "slide-down",
+            "slide-left",
+            "slide-right",
+            "iris",
+            "decode"
+          ]
         },
         "follow": {
           "description": "Keeps the view at this end as content grows.",
@@ -7343,6 +8522,15 @@
           "description": "Hides the node when false and keeps its space.",
           "type": "string"
         },
+        "skeleton": {
+          "description": "Draws a loading placeholder in the node's space while true.",
+          "type": "string"
+        },
+        "stagger": {
+          "description": "Starts the enter of each child this much after the child before it.",
+          "pattern": "^[0-9]+(ms|s|m|h)$",
+          "type": "string"
+        },
         "type": {
           "const": "scroll"
         },
@@ -7408,6 +8596,30 @@
             }
           ],
           "description": "Repeats the node once per array element."
+        },
+        "enter": {
+          "description": "The effect when the node shows: fade, slide-up, iris or decode, for example.",
+          "enum": [
+            "fade",
+            "slide-up",
+            "slide-down",
+            "slide-left",
+            "slide-right",
+            "iris",
+            "decode"
+          ]
+        },
+        "exit": {
+          "description": "The effect when the node goes away.",
+          "enum": [
+            "fade",
+            "slide-up",
+            "slide-down",
+            "slide-left",
+            "slide-right",
+            "iris",
+            "decode"
+          ]
         },
         "grow": {
           "description": "Share of free space.",
@@ -7567,6 +8779,15 @@
           "description": "Hides the node when false and keeps its space.",
           "type": "string"
         },
+        "skeleton": {
+          "description": "Draws a loading placeholder in the node's space while true.",
+          "type": "string"
+        },
+        "stagger": {
+          "description": "Starts the enter of each child this much after the child before it.",
+          "pattern": "^[0-9]+(ms|s|m|h)$",
+          "type": "string"
+        },
         "type": {
           "const": "select"
         },
@@ -7645,6 +8866,30 @@
             }
           ],
           "description": "Repeats the node once per array element."
+        },
+        "enter": {
+          "description": "The effect when the node shows: fade, slide-up, iris or decode, for example.",
+          "enum": [
+            "fade",
+            "slide-up",
+            "slide-down",
+            "slide-left",
+            "slide-right",
+            "iris",
+            "decode"
+          ]
+        },
+        "exit": {
+          "description": "The effect when the node goes away.",
+          "enum": [
+            "fade",
+            "slide-up",
+            "slide-down",
+            "slide-left",
+            "slide-right",
+            "iris",
+            "decode"
+          ]
         },
         "grow": {
           "description": "Share of free space.",
@@ -7814,6 +9059,15 @@
           "description": "Hides the node when false and keeps its space.",
           "type": "string"
         },
+        "skeleton": {
+          "description": "Draws a loading placeholder in the node's space while true.",
+          "type": "string"
+        },
+        "stagger": {
+          "description": "Starts the enter of each child this much after the child before it.",
+          "pattern": "^[0-9]+(ms|s|m|h)$",
+          "type": "string"
+        },
         "step": {
           "anyOf": [
             {
@@ -7886,6 +9140,30 @@
             }
           ],
           "description": "Repeats the node once per array element."
+        },
+        "enter": {
+          "description": "The effect when the node shows: fade, slide-up, iris or decode, for example.",
+          "enum": [
+            "fade",
+            "slide-up",
+            "slide-down",
+            "slide-left",
+            "slide-right",
+            "iris",
+            "decode"
+          ]
+        },
+        "exit": {
+          "description": "The effect when the node goes away.",
+          "enum": [
+            "fade",
+            "slide-up",
+            "slide-down",
+            "slide-left",
+            "slide-right",
+            "iris",
+            "decode"
+          ]
         },
         "grow": {
           "description": "Share of free space.",
@@ -8002,6 +9280,15 @@
           "description": "Hides the node when false and keeps its space.",
           "type": "string"
         },
+        "skeleton": {
+          "description": "Draws a loading placeholder in the node's space while true.",
+          "type": "string"
+        },
+        "stagger": {
+          "description": "Starts the enter of each child this much after the child before it.",
+          "pattern": "^[0-9]+(ms|s|m|h)$",
+          "type": "string"
+        },
         "type": {
           "const": "spacer"
         },
@@ -8051,6 +9338,30 @@
             }
           ],
           "description": "Repeats the node once per array element."
+        },
+        "enter": {
+          "description": "The effect when the node shows: fade, slide-up, iris or decode, for example.",
+          "enum": [
+            "fade",
+            "slide-up",
+            "slide-down",
+            "slide-left",
+            "slide-right",
+            "iris",
+            "decode"
+          ]
+        },
+        "exit": {
+          "description": "The effect when the node goes away.",
+          "enum": [
+            "fade",
+            "slide-up",
+            "slide-down",
+            "slide-left",
+            "slide-right",
+            "iris",
+            "decode"
+          ]
         },
         "graphics": {
           "description": "How to draw: auto picks kitty graphics, then cells, then ASCII.",
@@ -8187,6 +9498,15 @@
           "description": "Hides the node when false and keeps its space.",
           "type": "string"
         },
+        "skeleton": {
+          "description": "Draws a loading placeholder in the node's space while true.",
+          "type": "string"
+        },
+        "stagger": {
+          "description": "Starts the enter of each child this much after the child before it.",
+          "pattern": "^[0-9]+(ms|s|m|h)$",
+          "type": "string"
+        },
         "title": {
           "anyOf": [
             {
@@ -8260,6 +9580,30 @@
             }
           ],
           "description": "Repeats the node once per array element."
+        },
+        "enter": {
+          "description": "The effect when the node shows: fade, slide-up, iris or decode, for example.",
+          "enum": [
+            "fade",
+            "slide-up",
+            "slide-down",
+            "slide-left",
+            "slide-right",
+            "iris",
+            "decode"
+          ]
+        },
+        "exit": {
+          "description": "The effect when the node goes away.",
+          "enum": [
+            "fade",
+            "slide-up",
+            "slide-down",
+            "slide-left",
+            "slide-right",
+            "iris",
+            "decode"
+          ]
         },
         "grow": {
           "description": "Share of free space.",
@@ -8387,6 +9731,15 @@
           "description": "Hides the node when false and keeps its space.",
           "type": "string"
         },
+        "skeleton": {
+          "description": "Draws a loading placeholder in the node's space while true.",
+          "type": "string"
+        },
+        "stagger": {
+          "description": "Starts the enter of each child this much after the child before it.",
+          "pattern": "^[0-9]+(ms|s|m|h)$",
+          "type": "string"
+        },
         "type": {
           "const": "spinner"
         },
@@ -8451,6 +9804,30 @@
             }
           ],
           "description": "Repeats the node once per array element."
+        },
+        "enter": {
+          "description": "The effect when the node shows: fade, slide-up, iris or decode, for example.",
+          "enum": [
+            "fade",
+            "slide-up",
+            "slide-down",
+            "slide-left",
+            "slide-right",
+            "iris",
+            "decode"
+          ]
+        },
+        "exit": {
+          "description": "The effect when the node goes away.",
+          "enum": [
+            "fade",
+            "slide-up",
+            "slide-down",
+            "slide-left",
+            "slide-right",
+            "iris",
+            "decode"
+          ]
         },
         "grow": {
           "description": "Share of free space.",
@@ -8573,6 +9950,15 @@
           "description": "Hides the node when false and keeps its space.",
           "type": "string"
         },
+        "skeleton": {
+          "description": "Draws a loading placeholder in the node's space while true.",
+          "type": "string"
+        },
+        "stagger": {
+          "description": "Starts the enter of each child this much after the child before it.",
+          "pattern": "^[0-9]+(ms|s|m|h)$",
+          "type": "string"
+        },
         "type": {
           "const": "split"
         },
@@ -8628,6 +10014,30 @@
             }
           ],
           "description": "Repeats the node once per array element."
+        },
+        "enter": {
+          "description": "The effect when the node shows: fade, slide-up, iris or decode, for example.",
+          "enum": [
+            "fade",
+            "slide-up",
+            "slide-down",
+            "slide-left",
+            "slide-right",
+            "iris",
+            "decode"
+          ]
+        },
+        "exit": {
+          "description": "The effect when the node goes away.",
+          "enum": [
+            "fade",
+            "slide-up",
+            "slide-down",
+            "slide-left",
+            "slide-right",
+            "iris",
+            "decode"
+          ]
         },
         "grow": {
           "description": "Share of free space.",
@@ -8744,6 +10154,15 @@
           "description": "Hides the node when false and keeps its space.",
           "type": "string"
         },
+        "skeleton": {
+          "description": "Draws a loading placeholder in the node's space while true.",
+          "type": "string"
+        },
+        "stagger": {
+          "description": "Starts the enter of each child this much after the child before it.",
+          "pattern": "^[0-9]+(ms|s|m|h)$",
+          "type": "string"
+        },
         "type": {
           "const": "stack"
         },
@@ -8804,6 +10223,30 @@
             }
           ],
           "description": "Repeats the node once per array element."
+        },
+        "enter": {
+          "description": "The effect when the node shows: fade, slide-up, iris or decode, for example.",
+          "enum": [
+            "fade",
+            "slide-up",
+            "slide-down",
+            "slide-left",
+            "slide-right",
+            "iris",
+            "decode"
+          ]
+        },
+        "exit": {
+          "description": "The effect when the node goes away.",
+          "enum": [
+            "fade",
+            "slide-up",
+            "slide-down",
+            "slide-left",
+            "slide-right",
+            "iris",
+            "decode"
+          ]
         },
         "grow": {
           "description": "Share of free space.",
@@ -8946,6 +10389,15 @@
           "description": "Hides the node when false and keeps its space.",
           "type": "string"
         },
+        "skeleton": {
+          "description": "Draws a loading placeholder in the node's space while true.",
+          "type": "string"
+        },
+        "stagger": {
+          "description": "Starts the enter of each child this much after the child before it.",
+          "pattern": "^[0-9]+(ms|s|m|h)$",
+          "type": "string"
+        },
         "type": {
           "const": "stat"
         },
@@ -9008,6 +10460,30 @@
             }
           ],
           "description": "Repeats the node once per array element."
+        },
+        "enter": {
+          "description": "The effect when the node shows: fade, slide-up, iris or decode, for example.",
+          "enum": [
+            "fade",
+            "slide-up",
+            "slide-down",
+            "slide-left",
+            "slide-right",
+            "iris",
+            "decode"
+          ]
+        },
+        "exit": {
+          "description": "The effect when the node goes away.",
+          "enum": [
+            "fade",
+            "slide-up",
+            "slide-down",
+            "slide-left",
+            "slide-right",
+            "iris",
+            "decode"
+          ]
         },
         "grow": {
           "description": "Share of free space.",
@@ -9135,6 +10611,15 @@
           "description": "Hides the node when false and keeps its space.",
           "type": "string"
         },
+        "skeleton": {
+          "description": "Draws a loading placeholder in the node's space while true.",
+          "type": "string"
+        },
+        "stagger": {
+          "description": "Starts the enter of each child this much after the child before it.",
+          "pattern": "^[0-9]+(ms|s|m|h)$",
+          "type": "string"
+        },
         "state": {
           "anyOf": [
             {
@@ -9209,6 +10694,30 @@
             }
           ],
           "description": "Repeats the node once per array element."
+        },
+        "enter": {
+          "description": "The effect when the node shows: fade, slide-up, iris or decode, for example.",
+          "enum": [
+            "fade",
+            "slide-up",
+            "slide-down",
+            "slide-left",
+            "slide-right",
+            "iris",
+            "decode"
+          ]
+        },
+        "exit": {
+          "description": "The effect when the node goes away.",
+          "enum": [
+            "fade",
+            "slide-up",
+            "slide-down",
+            "slide-left",
+            "slide-right",
+            "iris",
+            "decode"
+          ]
         },
         "grow": {
           "description": "Share of free space.",
@@ -9325,6 +10834,15 @@
           "description": "Hides the node when false and keeps its space.",
           "type": "string"
         },
+        "skeleton": {
+          "description": "Draws a loading placeholder in the node's space while true.",
+          "type": "string"
+        },
+        "stagger": {
+          "description": "Starts the enter of each child this much after the child before it.",
+          "pattern": "^[0-9]+(ms|s|m|h)$",
+          "type": "string"
+        },
         "title": {
           "anyOf": [
             {
@@ -9398,6 +10916,30 @@
             }
           ],
           "description": "Repeats the node once per array element."
+        },
+        "enter": {
+          "description": "The effect when the node shows: fade, slide-up, iris or decode, for example.",
+          "enum": [
+            "fade",
+            "slide-up",
+            "slide-down",
+            "slide-left",
+            "slide-right",
+            "iris",
+            "decode"
+          ]
+        },
+        "exit": {
+          "description": "The effect when the node goes away.",
+          "enum": [
+            "fade",
+            "slide-up",
+            "slide-down",
+            "slide-left",
+            "slide-right",
+            "iris",
+            "decode"
+          ]
         },
         "filter": {
           "description": "A text that rows must contain.",
@@ -9539,9 +11081,18 @@
           "description": "Hides the node when false and keeps its space.",
           "type": "string"
         },
+        "skeleton": {
+          "description": "Draws a loading placeholder in the node's space while true.",
+          "type": "string"
+        },
         "sort": {
           "description": "The first sort: field, field:asc or field:desc.",
           "pattern": "^[^:]+(:(asc|desc))?$",
+          "type": "string"
+        },
+        "stagger": {
+          "description": "Starts the enter of each child this much after the child before it.",
+          "pattern": "^[0-9]+(ms|s|m|h)$",
           "type": "string"
         },
         "type": {
@@ -9605,6 +11156,30 @@
             }
           ],
           "description": "Repeats the node once per array element."
+        },
+        "enter": {
+          "description": "The effect when the node shows: fade, slide-up, iris or decode, for example.",
+          "enum": [
+            "fade",
+            "slide-up",
+            "slide-down",
+            "slide-left",
+            "slide-right",
+            "iris",
+            "decode"
+          ]
+        },
+        "exit": {
+          "description": "The effect when the node goes away.",
+          "enum": [
+            "fade",
+            "slide-up",
+            "slide-down",
+            "slide-left",
+            "slide-right",
+            "iris",
+            "decode"
+          ]
         },
         "grow": {
           "description": "Share of free space.",
@@ -9725,6 +11300,15 @@
           "description": "Hides the node when false and keeps its space.",
           "type": "string"
         },
+        "skeleton": {
+          "description": "Draws a loading placeholder in the node's space while true.",
+          "type": "string"
+        },
+        "stagger": {
+          "description": "Starts the enter of each child this much after the child before it.",
+          "pattern": "^[0-9]+(ms|s|m|h)$",
+          "type": "string"
+        },
         "type": {
           "const": "tabs"
         },
@@ -9793,6 +11377,30 @@
             }
           ],
           "description": "Repeats the node once per array element."
+        },
+        "enter": {
+          "description": "The effect when the node shows: fade, slide-up, iris or decode, for example.",
+          "enum": [
+            "fade",
+            "slide-up",
+            "slide-down",
+            "slide-left",
+            "slide-right",
+            "iris",
+            "decode"
+          ]
+        },
+        "exit": {
+          "description": "The effect when the node goes away.",
+          "enum": [
+            "fade",
+            "slide-up",
+            "slide-down",
+            "slide-left",
+            "slide-right",
+            "iris",
+            "decode"
+          ]
         },
         "grow": {
           "description": "Share of free space.",
@@ -9924,6 +11532,15 @@
           "description": "Hides the node when false and keeps its space.",
           "type": "string"
         },
+        "skeleton": {
+          "description": "Draws a loading placeholder in the node's space while true.",
+          "type": "string"
+        },
+        "stagger": {
+          "description": "Starts the enter of each child this much after the child before it.",
+          "pattern": "^[0-9]+(ms|s|m|h)$",
+          "type": "string"
+        },
         "type": {
           "const": "text"
         },
@@ -9997,6 +11614,30 @@
             }
           ],
           "description": "Repeats the node once per array element."
+        },
+        "enter": {
+          "description": "The effect when the node shows: fade, slide-up, iris or decode, for example.",
+          "enum": [
+            "fade",
+            "slide-up",
+            "slide-down",
+            "slide-left",
+            "slide-right",
+            "iris",
+            "decode"
+          ]
+        },
+        "exit": {
+          "description": "The effect when the node goes away.",
+          "enum": [
+            "fade",
+            "slide-up",
+            "slide-down",
+            "slide-left",
+            "slide-right",
+            "iris",
+            "decode"
+          ]
         },
         "grow": {
           "description": "Share of free space.",
@@ -10168,6 +11809,15 @@
           "description": "Hides the node when false and keeps its space.",
           "type": "string"
         },
+        "skeleton": {
+          "description": "Draws a loading placeholder in the node's space while true.",
+          "type": "string"
+        },
+        "stagger": {
+          "description": "Starts the enter of each child this much after the child before it.",
+          "pattern": "^[0-9]+(ms|s|m|h)$",
+          "type": "string"
+        },
         "type": {
           "const": "textarea"
         },
@@ -10247,6 +11897,30 @@
             }
           ],
           "description": "Repeats the node once per array element."
+        },
+        "enter": {
+          "description": "The effect when the node shows: fade, slide-up, iris or decode, for example.",
+          "enum": [
+            "fade",
+            "slide-up",
+            "slide-down",
+            "slide-left",
+            "slide-right",
+            "iris",
+            "decode"
+          ]
+        },
+        "exit": {
+          "description": "The effect when the node goes away.",
+          "enum": [
+            "fade",
+            "slide-up",
+            "slide-down",
+            "slide-left",
+            "slide-right",
+            "iris",
+            "decode"
+          ]
         },
         "grow": {
           "description": "Share of free space.",
@@ -10367,6 +12041,15 @@
           "description": "Hides the node when false and keeps its space.",
           "type": "string"
         },
+        "skeleton": {
+          "description": "Draws a loading placeholder in the node's space while true.",
+          "type": "string"
+        },
+        "stagger": {
+          "description": "Starts the enter of each child this much after the child before it.",
+          "pattern": "^[0-9]+(ms|s|m|h)$",
+          "type": "string"
+        },
         "state": {
           "description": "The JSON state store. In TML text, a <state> element.",
           "type": "object"
@@ -10437,6 +12120,30 @@
             }
           ],
           "description": "Repeats the node once per array element."
+        },
+        "enter": {
+          "description": "The effect when the node shows: fade, slide-up, iris or decode, for example.",
+          "enum": [
+            "fade",
+            "slide-up",
+            "slide-down",
+            "slide-left",
+            "slide-right",
+            "iris",
+            "decode"
+          ]
+        },
+        "exit": {
+          "description": "The effect when the node goes away.",
+          "enum": [
+            "fade",
+            "slide-up",
+            "slide-down",
+            "slide-left",
+            "slide-right",
+            "iris",
+            "decode"
+          ]
         },
         "grow": {
           "description": "Share of free space.",
@@ -10564,8 +12271,17 @@
           "description": "Hides the node when false and keeps its space.",
           "type": "string"
         },
+        "skeleton": {
+          "description": "Draws a loading placeholder in the node's space while true.",
+          "type": "string"
+        },
+        "stagger": {
+          "description": "Starts the enter of each child this much after the child before it.",
+          "pattern": "^[0-9]+(ms|s|m|h)$",
+          "type": "string"
+        },
         "ttl": {
-          "description": "How long it shows, such as 5s.",
+          "description": "How long it shows, such as 5s. A new text shows it again.",
           "pattern": "^[0-9]+(ms|s|m|h)$",
           "type": "string"
         },
@@ -10634,6 +12350,30 @@
             }
           ],
           "description": "Repeats the node once per array element."
+        },
+        "enter": {
+          "description": "The effect when the node shows: fade, slide-up, iris or decode, for example.",
+          "enum": [
+            "fade",
+            "slide-up",
+            "slide-down",
+            "slide-left",
+            "slide-right",
+            "iris",
+            "decode"
+          ]
+        },
+        "exit": {
+          "description": "The effect when the node goes away.",
+          "enum": [
+            "fade",
+            "slide-up",
+            "slide-down",
+            "slide-left",
+            "slide-right",
+            "iris",
+            "decode"
+          ]
         },
         "grow": {
           "description": "Share of free space.",
@@ -10781,6 +12521,15 @@
           "description": "Hides the node when false and keeps its space.",
           "type": "string"
         },
+        "skeleton": {
+          "description": "Draws a loading placeholder in the node's space while true.",
+          "type": "string"
+        },
+        "stagger": {
+          "description": "Starts the enter of each child this much after the child before it.",
+          "pattern": "^[0-9]+(ms|s|m|h)$",
+          "type": "string"
+        },
         "type": {
           "const": "toggle"
         },
@@ -10846,6 +12595,30 @@
             }
           ],
           "description": "Repeats the node once per array element."
+        },
+        "enter": {
+          "description": "The effect when the node shows: fade, slide-up, iris or decode, for example.",
+          "enum": [
+            "fade",
+            "slide-up",
+            "slide-down",
+            "slide-left",
+            "slide-right",
+            "iris",
+            "decode"
+          ]
+        },
+        "exit": {
+          "description": "The effect when the node goes away.",
+          "enum": [
+            "fade",
+            "slide-up",
+            "slide-down",
+            "slide-left",
+            "slide-right",
+            "iris",
+            "decode"
+          ]
         },
         "grow": {
           "description": "Share of free space.",
@@ -11003,6 +12776,15 @@
           "description": "Hides the node when false and keeps its space.",
           "type": "string"
         },
+        "skeleton": {
+          "description": "Draws a loading placeholder in the node's space while true.",
+          "type": "string"
+        },
+        "stagger": {
+          "description": "Starts the enter of each child this much after the child before it.",
+          "pattern": "^[0-9]+(ms|s|m|h)$",
+          "type": "string"
+        },
         "type": {
           "const": "tree"
         },
@@ -11059,6 +12841,30 @@
             }
           ],
           "description": "Repeats the node once per array element."
+        },
+        "enter": {
+          "description": "The effect when the node shows: fade, slide-up, iris or decode, for example.",
+          "enum": [
+            "fade",
+            "slide-up",
+            "slide-down",
+            "slide-left",
+            "slide-right",
+            "iris",
+            "decode"
+          ]
+        },
+        "exit": {
+          "description": "The effect when the node goes away.",
+          "enum": [
+            "fade",
+            "slide-up",
+            "slide-down",
+            "slide-left",
+            "slide-right",
+            "iris",
+            "decode"
+          ]
         },
         "grow": {
           "description": "Share of free space.",
@@ -11173,6 +12979,15 @@
         },
         "show": {
           "description": "Hides the node when false and keeps its space.",
+          "type": "string"
+        },
+        "skeleton": {
+          "description": "Draws a loading placeholder in the node's space while true.",
+          "type": "string"
+        },
+        "stagger": {
+          "description": "Starts the enter of each child this much after the child before it.",
+          "pattern": "^[0-9]+(ms|s|m|h)$",
           "type": "string"
         },
         "type": {

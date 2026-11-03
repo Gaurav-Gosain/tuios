@@ -346,9 +346,18 @@ func (c Component) accepted() []string {
 }
 
 // globals are the attributes every component takes.
+// motionEffects are the values of enter and exit. A host that does not
+// animate, or a person who turned motion off, sees the node at once.
+var motionEffects = []string{"fade", "slide-up", "slide-down", "slide-left", "slide-right", "iris", "decode"}
+
+// MotionEffects returns the effects enter and exit accept.
+func MotionEffects() []string { return slices.Clone(motionEffects) }
+
 var globals = [...]AttrSpec{
 	{Name: "as", Type: TIdent, Doc: "The name of the element inside each. Default item."},
 	{Name: "each", Type: TData, Doc: "Repeats the node once per array element."},
+	{Name: "enter", Type: TEnum, Enum: motionEffects, Doc: "The effect when the node shows: fade, slide-up, iris or decode, for example."},
+	{Name: "exit", Type: TEnum, Enum: motionEffects, Doc: "The effect when the node goes away."},
 	{Name: "grow", Type: TInt, HasRange: true, Min: 0, Max: 100, Doc: "Share of free space."},
 	{Name: "h", Type: TSize, Bind: true, Doc: "Height: cells, 50%, fill or fill:2."},
 	{Name: "id", Type: TIdent, Doc: "Names the node for patches, focus and events."},
@@ -360,6 +369,8 @@ var globals = [...]AttrSpec{
 	{Name: "min-w", Type: TSize, Doc: "Smallest width."},
 	{Name: "pad", Type: TPad, Doc: "Padding in cells: all, vertical horizontal, or top right bottom left."},
 	{Name: "show", Type: TExpr, Doc: "Hides the node when false and keeps its space."},
+	{Name: "skeleton", Type: TExpr, Doc: "Draws a loading placeholder in the node's space while true."},
+	{Name: "stagger", Type: TDuration, Doc: "Starts the enter of each child this much after the child before it."},
 	{Name: "w", Type: TSize, Bind: true, Doc: "Width: cells, 50%, fill or fill:2."},
 }
 
@@ -667,6 +678,6 @@ var table = [...]Component{
 	}},
 	{Name: "toast", Group: "container", Doc: "A short notice that goes away.", Content: ContentInline, Block: true, Attrs: []AttrSpec{
 		{Name: "role", Type: TRole, Bind: true, Doc: "A theme role colour."},
-		{Name: "ttl", Type: TDuration, Doc: "How long it shows, such as 5s."},
+		{Name: "ttl", Type: TDuration, Doc: "How long it shows, such as 5s. A new text shows it again."},
 	}},
 }
