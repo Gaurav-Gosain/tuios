@@ -106,9 +106,15 @@ func (f *modesOnly) filter(in []byte) []byte {
 				f.hold('\\')
 				f.emit()
 			} else {
-				// An ESC that is not ST ends the OSC, which the emulator still
-				// runs, and starts a new sequence: b is read again after it.
-				f.hold(0x07)
+				// An ESC that is not ST cuts the OSC. The backends differ on
+				// a cut OSC: the pure Go emulator runs it and libghostty-vt
+				// drops it. So the OSC passes cut by an ESC of its own,
+				// finished as a harmless SGR reset, and the emulator decides
+				// as it would on the full stream. The ESC starts a new
+				// sequence here: b is read again after it.
+				f.hold(0x1b)
+				f.hold('[')
+				f.hold('m')
 				f.emit()
 				f.state = modeEsc
 				i--
