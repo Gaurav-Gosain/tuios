@@ -12497,5 +12497,7 @@ colocated and not, and folds it. Run on 2026-11-02 on macOS with jj 0.46.0:
 | A build of main at 2efd8ca0d575 | `TestRailGitJJProblems` | "the repository row never showed the divergent commit (◇)" | **caught** |
 | A build of main at 2efd8ca0d575 | `TestRailJJRepoRow/plain`, `/colocated` | "the rows are not \"mainsess main\" with \"featsess feat\" under it" | **caught** |
 | `gitstate.Branch` as on main: git's HEAD only | `TestRailJJRepoRow/plain`, `/colocated` | the same: the main workspace's row shows nothing when not colocated and a bare hash when colocated | **caught** |
+| Run on 2026-11-03: jj's `*` marker kept in the bookmark name, as before the review of #1470 | `TestRailGitJJ` | "the git section never showed repo, and feat with +2 above it and ↑3 ahead of trunk()": the row shows `feat*` | **caught** |
+| Run on 2026-11-03: `childproc.OwnGroup` and `WaitDelay` cut from `readJJ` | `TestJJTimeoutHoldsWithAHungChild` (unit, `internal/gitstate`) | readJJ returned after about 20 s, the fake jj's child, not within `countTimeout` | **caught** |
 
 The frames are `rail-jj-repo-row-*` under the test's artifact folder.

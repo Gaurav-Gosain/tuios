@@ -20,8 +20,12 @@ import (
 // and the three commits ahead of trunk() (↑3). The empty commit is not
 // counted.
 //
+// The bookmark was pushed and then rewritten, so it is ahead of its remote.
+// The row still names it feat, with no marker in the name.
+//
 // The test fails on a build that reads the workspace through git: the
-// branch row is missing or names no bookmark.
+// branch row is missing or names no bookmark. It also fails on a build that
+// keeps jj's markers in the name: the row shows feat*.
 func TestRailGitJJ(t *testing.T) {
 	repo := testutil.JJRepo(t, true)
 	for _, name := range []string{"one", "two", "three"} {
@@ -33,6 +37,10 @@ func TestRailGitJJ(t *testing.T) {
 			testutil.JJ(t, repo, "bookmark", "create", "feat", "-r", "@-")
 		}
 	}
+	// Pushed, then rewritten: feat is ahead of feat@origin, which jj marks
+	// "feat*" in its own log. The rail shows the name only.
+	testutil.JJ(t, repo, "git", "push", "-b", "feat")
+	testutil.JJ(t, repo, "describe", "-r", "feat", "-m", "one, reworded")
 	term, _ := railClient(t, "gitjj", railGitReftableConfig, startOpts{cols: 120, rows: 40})
 
 	enterTerminalMode(t, term)

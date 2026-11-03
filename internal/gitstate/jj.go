@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/childproc"
 )
@@ -31,7 +32,8 @@ const jjTemplate = `if(self.contained_in("trunk()"), "T",
   ++ "\t" ++ commit_id ++ "\t" ++ parents.map(|c| c.commit_id()).join(" ")
   ++ "\t" ++ change_id.shortest(8) ++ "\t" ++ empty ++ "\t" ++ conflict
   ++ "\t" ++ divergent ++ "\t" ++ root
-  ++ "\t" ++ local_bookmarks.map(|b| b.name() ++ if(b.conflict(), "??") ++ if(!b.synced(), "*")).join(" ")
+  ++ "\t" ++ local_bookmarks.map(|b| b.name()).join(" ")
+  ++ "\t" ++ local_bookmarks.any(|b| b.conflict())
   ++ "\t" ++ description.first_line() ++ "\n"`
 
 // @- and the stack's parents are asked for too, so a working copy sitting
@@ -149,6 +151,9 @@ func readJJ(root, repoDir string) (State, bool) {
 	cmd := childproc.CommandContext(ctx, "jj", "--ignore-working-copy", "--no-pager",
 		"--color=never", "log", "--no-graph", "-r", jjRevset, "-T", jjTemplate)
 	cmd.Dir = root
+	// A wrapper's child that keeps stdout open would hold Output past the timeout.
+	childproc.OwnGroup(cmd)
+	cmd.WaitDelay = time.Second
 	out, err := cmd.Output()
 	if err != nil {
 		// A missing or slow jj would otherwise cost a process, and up to
@@ -175,10 +180,12 @@ type jjCommit struct {
 	change    string
 	empty     bool
 	bookmarks []string
-	desc      string
-	conflict  bool
-	divergent bool
-	root      bool
+	// conflictedBookmark: a bookmark here points at more than one commit.
+	conflictedBookmark bool
+	desc               string
+	conflict           bool
+	divergent          bool
+	root               bool
 }
 
 // summarizeJJ turns jjTemplate's lines into the row's name and figures. Only
@@ -190,20 +197,21 @@ func summarizeJJ(out string) State {
 	ahead, behind := 0, 0
 	var st State
 	for line := range strings.SplitSeq(strings.TrimRight(out, "\n"), "\n") {
-		f := strings.SplitN(line, "\t", 10)
-		if len(f) < 10 || len(f[0]) != 1 {
+		f := strings.SplitN(line, "\t", 11)
+		if len(f) < 11 || len(f[0]) != 1 {
 			continue
 		}
 		c := &jjCommit{
-			side:      f[0][0],
-			parents:   strings.Fields(f[2]),
-			change:    f[3],
-			empty:     f[4] == "true",
-			conflict:  f[5] == "true",
-			divergent: f[6] == "true",
-			root:      f[7] == "true",
-			bookmarks: strings.Fields(f[8]),
-			desc:      f[9],
+			side:               f[0][0],
+			parents:            strings.Fields(f[2]),
+			change:             f[3],
+			empty:              f[4] == "true",
+			conflict:           f[5] == "true",
+			divergent:          f[6] == "true",
+			root:               f[7] == "true",
+			bookmarks:          strings.Fields(f[8]),
+			conflictedBookmark: f[9] == "true",
+			desc:               f[10],
 		}
 		byID[f[1]] = c
 		// jj lists children before parents, so the first commit that is not
@@ -221,7 +229,7 @@ func summarizeJJ(out string) State {
 			if c.conflict {
 				st.Conflicts++
 			}
-			if c.divergent || hasConflictedBookmark(c.bookmarks) {
+			if c.divergent || c.conflictedBookmark {
 				st.Divergent++
 			}
 		case 'B':
@@ -293,15 +301,4 @@ func jjLabel(start *jjCommit, byID map[string]*jjCommit, st *State) string {
 		return start.desc
 	}
 	return start.change
-}
-
-// hasConflictedBookmark reports a bookmark jj marked "??": it points at more
-// than one commit, which is divergence too.
-func hasConflictedBookmark(list []string) bool {
-	for _, b := range list {
-		if strings.HasSuffix(strings.TrimSuffix(b, "*"), "??") {
-			return true
-		}
-	}
-	return false
 }
