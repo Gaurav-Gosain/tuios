@@ -1684,6 +1684,10 @@ func (d *Daemon) setAgentState(cs *connState, params json.RawMessage, ownPane bo
 		}
 		ifState = append(ifState, st)
 	}
+	route, routed := d.routeSharedServerReport(cs, p.Session, p.Window, p.Harness, p.AgentSessionID, p.TranscriptPath)
+	if routed {
+		p.Session, p.Window = route.sess.Name(), route.windowID
+	}
 	sess, target, verr := d.reportTarget(cs, p.Session, p.Window)
 	if verr != nil {
 		return nil, verr
@@ -1724,6 +1728,9 @@ func (d *Daemon) setAgentState(cs *connState, params json.RawMessage, ownPane bo
 	report.foreignPane = d.harnessOutsidePane(cs, sess, target, p.HarnessPID)
 	report.harnessGone = p.AgentSessionID != "" && d.harnessLeftPane(cs, sess, target, p.HarnessPID)
 	report.fromPane = ownPane || d.reportFromOwnPane(cs, sess, target)
+	if routed {
+		placeRoutedReport(&report, route)
+	}
 	// The identity guard is read before the report applies, because it is
 	// about the pane as the report found it, and applyAgentReport checks
 	// if_state first and so may never reach it.
@@ -1813,6 +1820,9 @@ func (d *Daemon) setAgentState(cs *connState, params json.RawMessage, ownPane bo
 	}
 	if transcriptRefused != "" {
 		out["transcript_refused"] = transcriptRefused
+	}
+	if routed {
+		out["session"], out["window"] = sess.Name(), route.windowID
 	}
 	return out, nil
 }
@@ -1914,17 +1924,25 @@ func (d *Daemon) verbReportAgentActivity(cs *connState, params json.RawMessage) 
 	if verr := checkActivityReport(p.Activity, reportActivityEvents); verr != nil {
 		return nil, verr
 	}
+	route, routed := d.routeSharedServerReport(cs, p.Session, p.Window, p.Harness, p.AgentSessionID, "")
+	if routed {
+		p.Session, p.Window = route.sess.Name(), route.windowID
+	}
 	sess, target, verr := d.reportTarget(cs, p.Session, p.Window)
 	if verr != nil {
 		return nil, verr
 	}
-	windowID, state, reason, err := sess.activityReportGuard(target, AgentReport{
+	guarded := AgentReport{
 		Harness:      p.Harness,
 		SessionID:    p.AgentSessionID,
 		HarnessPID:   p.HarnessPID,
 		SharedServer: d.agentMatcher.registry.SharedServer(p.Harness),
 		foreignPane:  d.harnessOutsidePane(cs, sess, target, p.HarnessPID),
-	})
+	}
+	if routed {
+		placeRoutedReport(&guarded, route)
+	}
+	windowID, state, reason, err := sess.activityReportGuard(target, guarded)
 	if err != nil {
 		return nil, mapResolveErr(err, sess)
 	}

@@ -2514,6 +2514,8 @@ func buildVerbRegistry() map[string]verbEntry {
 				{Name: "reason", Type: "string", Description: "Why the report was not applied. Absent when it was.", Accepted: []string{agentRefusedOutranked, agentRefusedIfState, agentRefusedForeignSession, agentRefusedForeignHarness, agentRefusedForeignPane}},
 				{Name: "activity_recorded", Type: "bool", Description: "With activity: whether it went into the pane's activity ring. False for a report the identity guard refused. Absent without activity."},
 				{Name: "transcript_refused", Type: "string", Description: "Why the window was not joined to transcript_path. Absent when it was, or when no path was given."},
+				{Name: "session", Type: "string", Description: "The session of the window the report went to, when the daemon placed it on another window. Absent otherwise."},
+				{Name: "window", Type: "string", Description: "The window the report went to, when the window named is gone and the report is a shared_server harness's (Codex) from outside every pane. The daemon places it on the one live pane that runs its conversation: the pane that holds agent_session_id, the pane joined to transcript_path, or the pane whose agent started near the start of that transcript, in its folder. Absent otherwise."},
 			},
 			examples: []string{
 				`{"id":1,"verb":"set-agent-state","params":{"session":"work","state":"needs_input","message":"awaiting approval"}}`,

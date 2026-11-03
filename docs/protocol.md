@@ -5449,6 +5449,16 @@ not refused either. The daemon forgets both when the pane is back at
 its shell. Until a `session_start` arrives, the window is open to any report.
 `set-agent-session` is not guarded this way, and it clears the guard.
 
+The server keeps the `TUIOS_PANE_ID` of the pane that started it, so its hooks
+can name a window that is gone. Such a report, from a caller outside every pane,
+goes to the one live pane of that harness that runs its conversation: the pane
+that holds `agent_session_id`, the pane joined to `transcript_path`, or the pane
+whose agent started in the transcript's folder near the transcript's start. The
+answer then names that pane in `session` and `window`. With no such pane, or
+with two, the report fails with `window_not_found` as before. The daemon records
+the pane's agent process as the harness, not the server.
+`report-agent-activity` is placed the same way, by `agent_session_id` only.
+
 `reason`, `activity_recorded` and the hook fields are additive. A client that
 sends none of the fields is handled exactly as before. A daemon older than them does not
 reject them: params are decoded leniently, so it ignores the fields and applies

@@ -395,6 +395,26 @@ passes.
 | `noteSharedServerHook` is not called | `reports for a closed pane raised no notice` |
 | `goneHookWait` is 0 | `two quick reports for a closed pane raised the notice` |
 | `closeConfigNotice` is not called | `a report that reached a pane left the notice open` |
+
+The same test now covers the rest of issue 1391. A hook that names the closed pane
+goes to the live pane that runs its conversation. A hook for a conversation no
+pane runs still raises the notice. The panes may report for each other here
+(strict mode with `respond`), so only the route's own rule keeps a pane's process
+from placing a report.
+
+Run on 2026-11-04 on Linux. The fixed build passes 3 runs of 3. Each control is one
+edit, and each fails at the step named.
+
+| Control | Failure |
+| --- | --- |
+| `routeSharedServerReport` places nothing | `a hook for the pane's conversation did not reach the pane` |
+| The route skips its `paneAuthority` check | `a process in another pane placed a report on the second pane` |
+| The route skips the rollout start rule | `the second pane's SessionStart did not reach it` |
+| `agent-hook` ignores the pane in the answer | `the start hint does not name the pane the report reached` |
+
+Recording the pane's codex as the harness, not the server, has no control. The
+detector clears a pane it found codex in when the shell comes back, whatever
+harness the report named, and the route takes only such panes.
 ## A quiet pane keeps out of the Inbox
 
 `TestQuietPaneKeepsOutOfTheInbox` types state reports into a real pane's shell,

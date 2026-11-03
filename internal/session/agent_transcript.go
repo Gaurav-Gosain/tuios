@@ -626,6 +626,10 @@ type agentIdentity struct {
 	cwd, version string
 	// started is zero when the start time cannot be read.
 	started time.Time
+	// pid is the process read, the agent's when agent is set.
+	pid int
+	// agent says a manifest identified the process as an agent.
+	agent bool
 }
 
 // searchTranscript is the hookless join: find the file in the harness's
@@ -693,6 +697,7 @@ func paneAgentIdentity(info foregroundInfo) agentIdentity {
 	if info.pid <= 0 {
 		return id
 	}
+	id.pid = info.pid
 	if cwd, ok := ptyspawn.ProcessCwd(info.pid); ok {
 		id.cwd = cwd
 	}

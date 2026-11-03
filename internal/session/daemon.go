@@ -2731,10 +2731,13 @@ func (d *Daemon) paneAgentIdentifier(sess *Session) func(ptyID string) agentIden
 		// The agent's own process, not the wrapper above it: a transcript is
 		// checked against the agent's directory and build, and a shell that
 		// launched it has neither.
-		if det, ok := d.agentMatcher.identifyDetail(info); ok {
+		det, ok := d.agentMatcher.identifyDetail(info)
+		if ok {
 			info = det.proc
 		}
-		return paneAgentIdentity(info)
+		id := paneAgentIdentity(info)
+		id.agent = ok
+		return id
 	}
 }
 
