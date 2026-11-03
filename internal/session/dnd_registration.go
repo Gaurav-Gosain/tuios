@@ -24,6 +24,13 @@ import (
 // Everything else of the protocol, the drags themselves, is the clients'
 // business: a drag belongs to the client whose pointer made it. See
 // internal/app/dnd.go.
+//
+// A program unregisters when it exits, if it exits cleanly. One that crashes
+// or is killed says nothing, and the shell its pane goes back to would be
+// sent drops it cannot read. So a registration is bound to the process group
+// that held the pane's foreground when it was made, and it ends when that
+// group is gone. That is checked when the registration is read, so no timer
+// runs for it; the clients check the same group the same way.
 
 // dndRegistration is what a pane's program said about drag and drop. It is
 // written from the vtWriter goroutine, under the terminal lock, and read by
@@ -37,6 +44,9 @@ type dndRegistration struct {
 	// id is the multiplexer id (i key) the program used, which a client
 	// echoes on everything it sends that program.
 	id int
+	// owner is the process group that held the pane's foreground when the
+	// program registered, 0 when it could not be read.
+	owner int
 }
 
 // dndRegistrationFact is a copy of a registration for a state snapshot.
@@ -44,11 +54,13 @@ type dndRegistrationFact struct {
 	accepts bool
 	offers  bool
 	id      int
+	owner   int
 }
 
 // note takes the body of one OSC 72 the program wrote. It returns the reply
-// the program is owed, which only a query gets.
-func (r *dndRegistration) note(body []byte) []byte {
+// the program is owed, which only a query gets. foreground reads the pane's
+// foreground process group, which a registration is bound to.
+func (r *dndRegistration) note(body []byte, foreground func() int) []byte {
 	cmd, ok := dnd.Parse(body)
 	if !ok {
 		return nil
@@ -70,6 +82,7 @@ func (r *dndRegistration) note(body []byte) []byte {
 		// runs it.
 		if cmd.X != 1 {
 			r.accepts = true
+			r.owner = foreground()
 		}
 	case 'A':
 		r.accepts = false
@@ -77,16 +90,24 @@ func (r *dndRegistration) note(body []byte) []byte {
 		switch cmd.X {
 		case 1:
 			r.offers = true
+			r.owner = foreground()
 		case 2:
 			r.offers = false
 		}
 	}
+	if !r.accepts && !r.offers {
+		r.owner = 0
+	}
 	return nil
 }
 
-// fact copies the registration.
+// fact copies the registration, and ends it first when the process group it
+// is bound to is gone.
 func (r *dndRegistration) fact() dndRegistrationFact {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	return dndRegistrationFact{accepts: r.accepts, offers: r.offers, id: r.id}
+	if r.owner > 0 && !ProcessGroupAlive(r.owner) {
+		r.accepts, r.offers, r.owner = false, false, 0
+	}
+	return dndRegistrationFact{accepts: r.accepts, offers: r.offers, id: r.id, owner: r.owner}
 }

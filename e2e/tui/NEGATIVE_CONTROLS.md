@@ -11555,6 +11555,25 @@ Repeat with `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run
 'TestDnD' -v .` from `e2e/tui`. `TUIOS_E2E_YAZI` and `TUIOS_E2E_KITTEN` add
 the runs with the real programs.
 
+## Drag and drop: a registration ends with its program
+
+`TestDnDRegistrationEndsWithItsProgram` starts a `dndpeer` target in a pane,
+kills it with SIGKILL so it never unregisters, starts a reader with bracketed
+paste on in the same pane, and drags a file onto it from a `dndpeer` source.
+The reader must get the path as a paste: once in the client that saw the
+target register, once in a client attached with `attach -d` after it died,
+which knows the registration only from the daemon. On the build before the
+fix both subtests fail: the reader gets OSC 72 moves and no paste. Run on
+2026-11-03 on Linux with Go 1.27.3, based on `7505f49`.
+
+| Control: what was cut | Test failure | Verdict |
+| --- | --- | --- |
+| `internal/app/dnd.go`, `dndSweep` returns at once, so the client keeps the dead program's registration | `.../the_client_that_saw_it_register`: "the pane the dead program held got `\x1b]72;t=m:o=3:…`, want the paste" | **caught** |
+| `internal/session/dnd_registration.go`, the liveness check in `fact`, so the daemon hands the dead program's registration to a client that attaches later | `.../a_client_that_attached_after_it_died`: the same | **caught** |
+
+Under each control the other subtest passes, and on the build with the code
+in place both pass, with every other `TestDnD` test.
+
 ## Drag and drop with the desktop
 
 `TestDnDDesktopBridge` runs tuios in a real kitty under Xvfb, with

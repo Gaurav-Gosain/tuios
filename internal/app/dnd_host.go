@@ -222,6 +222,7 @@ func (m *OS) onHostMove(cmd dnd.Command) {
 		return
 	}
 	if d == nil {
+		m.dndSweep()
 		d = &dndDrag{phase: dndStarted, fromHost: true, presented: map[int][]byte{}, hostPending: map[int]bool{}}
 		m.dndDrag = d
 	} else if !d.viaHost() || d.phase != dndStarted {

@@ -36,3 +36,6 @@ func (w *Window) ForegroundCommand() string {
 
 // ShellAtPrompt is false: this platform does not say what holds the terminal.
 func (w *Window) ShellAtPrompt() bool { return false }
+
+// ForegroundPgrp is 0: a console has no process group holding it.
+func (w *Window) ForegroundPgrp() int { return 0 }

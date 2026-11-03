@@ -159,6 +159,7 @@ const dndMaxMimes = 64
 // of the gesture; nothing is sent until the pointer moves.
 func (m *OS) DnDNotePress(w *terminal.Window, x, y, termX, termY int) {
 	m.dndPress = nil
+	m.dndSweep()
 	if !m.dndSourceOK(w) {
 		return
 	}
@@ -616,6 +617,7 @@ func (m *OS) onDnDOffer(id string, p *dndPane, cmd dnd.Command) {
 	switch cmd.X {
 	case 1:
 		p.offers = true
+		p.owner = dndForeground(m.windowByID(id))
 		return
 	case 2:
 		p.offers = false

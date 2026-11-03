@@ -157,6 +157,9 @@ type WindowState struct {
 	DnDAccepts bool `json:"dnd_accepts,omitempty"`
 	DnDOffers  bool `json:"dnd_offers,omitempty"`
 	DnDID      int  `json:"dnd_id,omitempty"`
+	// DnDOwner is the process group the registration is bound to, which a
+	// client on this machine checks as the daemon does.
+	DnDOwner int `json:"dnd_owner,omitempty"`
 	// Unplaced marks a window the daemon created whose X/Y/Width/Height are a
 	// nominal box rather than a position anyone chose. The daemon has no viewport
 	// and cannot place a window; a client that receives an unplaced window puts it
@@ -2746,7 +2749,7 @@ func (s *Session) installPTY(ctx context.Context, cancel context.CancelFunc, id 
 			if cmd != dnd.Code || sp.host != "" || !s.dragAndDrop() {
 				return
 			}
-			if reply := pty.dnd.note(data); reply != nil {
+			if reply := pty.dnd.note(data, func() int { return ForegroundGroup(pty.ShellPID()) }); reply != nil {
 				terminal.WriteResponse(reply)
 			}
 		},
@@ -3014,7 +3017,7 @@ func (s *Session) fillLiveFacts(state *SessionState) {
 		w.CwdHost = place.elsewhere
 		// The drag and drop registration is live too, and the daemon's alone.
 		dnd := live[w.PTYID].dnd
-		w.DnDAccepts, w.DnDOffers, w.DnDID = dnd.accepts, dnd.offers, dnd.id
+		w.DnDAccepts, w.DnDOffers, w.DnDID, w.DnDOwner = dnd.accepts, dnd.offers, dnd.id, dnd.owner
 		switch {
 		case place.cwd != "":
 			w.Cwd = place.cwd

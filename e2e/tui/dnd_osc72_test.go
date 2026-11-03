@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -757,4 +758,104 @@ func TestDnDRefusesAPaneHostedElsewhere(t *testing.T) {
 	if n := strings.Count(farOut, "recv t=q"); n != 0 {
 		t.Errorf("the hosted program got %d answers to its query, want none:\n%s", n, farOut)
 	}
+}
+
+// TestDnDRegistrationEndsWithItsProgram: a program killed without taking its
+// registration back leaves its pane to whatever runs there next. A reader
+// started in that pane gets a drop as a paste, as any pane without the
+// protocol does, from the client that saw the program register and from a
+// client that attached after it died.
+//
+// How this could pass wrongly, written down first:
+//   - the program could have unregistered after all. It is killed with
+//     SIGKILL, which it cannot catch, and the peer only unregisters on q.
+//   - the paste could come from the reader being a new program the client
+//     somehow told apart. The reader never speaks the protocol; it is the
+//     dead peer's group, not the reader, that ends the registration.
+//   - the late client could take nothing because the daemon never had the
+//     registration. TestDnDRegistrationOutlivesTheClient shows a late client
+//     takes it, and the control on the daemon's check fails this subtest.
+//
+// Negative controls: with dndSweep returning at once, the first subtest
+// fails: the reader gets protocol messages and no paste. With the liveness
+// check in the daemon's fact() cut, the second fails the same way. See
+// NEGATIVE_CONTROLS.md.
+func TestDnDRegistrationEndsWithItsProgram(t *testing.T) {
+	bin := buildDnDPeer(t)
+
+	// doomed starts a target peer in pane whose pid is written to a file, so
+	// the test can kill it, and returns that file.
+	doomed := func(t *testing.T, base, session string, pane winRect, dir string) string {
+		t.Helper()
+		pidFile := filepath.Join(dir, "target.pid")
+		runInPane(t, base, session, pane,
+			"sh -c 'echo $$ > "+pidFile+"; stty raw -echo; exec "+bin+" target "+filepath.Join(dir, "target.log")+"'", "DNDPEER-READY")
+		waitFile(t, pidFile, func(s string) bool { return strings.TrimSpace(s) != "" }, "the target never wrote its pid")
+		return pidFile
+	}
+	kill := func(t *testing.T, pidFile string) {
+		t.Helper()
+		b, _ := os.ReadFile(pidFile)
+		pid, err := strconv.Atoi(strings.TrimSpace(string(b)))
+		if err != nil {
+			t.Fatalf("pid file holds %q", b)
+		}
+		proc, err := os.FindProcess(pid)
+		if err == nil {
+			err = proc.Kill()
+		}
+		if err != nil {
+			t.Fatalf("kill the target: %v", err)
+		}
+	}
+	// dropOnReader starts a reader in the pane the dead peer held, drags a
+	// file from the source on the left onto it and returns what it read.
+	dropOnReader := func(t *testing.T, term *tuitest.Terminal, base, session string, left, right winRect, dir string) string {
+		t.Helper()
+		out := filepath.Join(dir, "pasted")
+		runInPane(t, base, session, right, "stty sane; "+readerPane(out), "SINKREADY")
+		toX, toY := right.X+right.Width/2, right.Y+right.Height/2
+		dragAcross(t, term, left.X+4, left.Y+5, toX, toY, artifactDir(t))
+		dropAt(t, term, toX, toY)
+		return waitFile(t, out, func(s string) bool { return strings.Contains(s, "\x1b[201~") || strings.Contains(s, "\x1b]72;") }, "the reader got nothing")
+	}
+
+	t.Run("the client that saw it register", func(t *testing.T) {
+		term, base, session, left, right := dndBoard(t)
+		dir := t.TempDir()
+		file := filepath.Join(dir, "a.txt")
+		if err := os.WriteFile(file, []byte("a"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		pidFile := doomed(t, base, session, right, dir)
+		runInPane(t, base, session, left, peerSource(bin, filepath.Join(dir, "source.log"), "", file), "DNDPEER-READY")
+		kill(t, pidFile)
+		got := dropOnReader(t, term, base, session, left, right, dir)
+		if want := "\x1b[200~" + file + " \x1b[201~"; got != want {
+			t.Errorf("the pane the dead program held got %q, want the paste %q", got, want)
+		}
+	})
+
+	t.Run("a client that attached after it died", func(t *testing.T) {
+		_, base, session, left, right := dndBoard(t)
+		dir := t.TempDir()
+		file := filepath.Join(dir, "a.txt")
+		if err := os.WriteFile(file, []byte("a"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		pidFile := doomed(t, base, session, right, dir)
+		runInPane(t, base, session, left, peerSource(bin, filepath.Join(dir, "source.log"), "", file), "DNDPEER-READY")
+		kill(t, pidFile)
+		time.Sleep(300 * time.Millisecond)
+		term := dndClient(t, base, nil, "attach", session, "-d")
+		if err := term.WaitFor(func(s tuitest.Screen) bool { return countWindows(s) == 2 }, bootTimeout); err != nil {
+			t.Fatalf("the client never showed the two panes: %v\n%s", err, term.Snapshot())
+		}
+		windowManagementMode(t, term)
+		enterTerminalMode(t, term)
+		got := dropOnReader(t, term, base, session, left, right, dir)
+		if want := "\x1b[200~" + file + " \x1b[201~"; got != want {
+			t.Errorf("the pane the dead program held got %q, want the paste %q", got, want)
+		}
+	})
 }
