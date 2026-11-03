@@ -4,6 +4,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -278,9 +279,14 @@ type agentBus struct {
 
 // agentMailbox is one session's ring.
 type agentMailbox struct {
-	msgs    []*AgentMessage
-	bytes   int
+	msgs  []*AgentMessage
+	bytes int
+	// evicted is every entry the ring has dropped, of any kind, read or not.
 	evicted uint64
+	// evictedUnread is, per inbox, the mail the ring dropped before its
+	// recipient read it. It is the number an inbox read reports, because it
+	// is the one that says the reader lost something.
+	evictedUnread map[string]uint64
 	// buckets is one token bucket per claimed sender, at most agentMaxBuckets
 	// of them. Past the bound a sender on another machine is charged on the
 	// shared agentOverflowBucket.
@@ -392,17 +398,53 @@ func (mb *agentMailbox) makeBucket(sender string, now time.Time) *sendBucket {
 	return fresh(sender)
 }
 
-// append adds m to the ring and evicts from the oldest end until both caps
-// hold. Evictions are counted rather than silent: a reader is told how many
-// messages it will never see, the discipline the hub's gap marker follows.
+// append adds m to the ring and evicts until both caps hold. Evictions are
+// counted rather than silent: a reader is told how many messages it will never
+// see, the discipline the hub's gap marker follows.
+//
+// What goes first is what nobody is waiting to read: read mail, ask records
+// and notices, oldest first. Unread mail goes only when everything older than m
+// is unread mail, so the caps still hold, and each one is counted against the
+// inbox it was for. A count for the whole session cannot tell a reader whether
+// it lost anything, and a reader that is told it did when it did not learns to
+// ignore the one line that matters.
 func (mb *agentMailbox) append(m *AgentMessage) {
 	mb.msgs = append(mb.msgs, m)
 	mb.bytes += len(m.Text)
 	for len(mb.msgs) > agentMailboxMaxMessages || (mb.bytes > agentMailboxMaxBytes && len(mb.msgs) > 1) {
-		mb.bytes -= len(mb.msgs[0].Text)
-		mb.msgs = mb.msgs[1:]
+		i := mb.victim()
+		gone := mb.msgs[i]
+		mb.msgs = slices.Delete(mb.msgs, i, i+1)
+		mb.bytes -= len(gone.Text)
 		mb.evicted++
+		if waitsToBeRead(gone) {
+			if mb.evictedUnread == nil {
+				mb.evictedUnread = map[string]uint64{}
+			}
+			mb.evictedUnread[gone.To]++
+		}
 	}
+}
+
+// victim is the index of the entry append evicts next: the oldest one nobody
+// is waiting to read, or the oldest of all when every entry before the newest
+// is unread mail. The newest is never the victim while anything is older. It
+// is the message being sent, and dropping it would answer the send with an id
+// the ring no longer holds.
+func (mb *agentMailbox) victim() int {
+	for i, m := range mb.msgs[:len(mb.msgs)-1] {
+		if !waitsToBeRead(m) {
+			return i
+		}
+	}
+	return 0
+}
+
+// waitsToBeRead reports whether m is mail its recipient has not read: the one
+// kind of entry whose eviction loses something nobody has seen. A notice and
+// an ask record are never unread for anyone.
+func waitsToBeRead(m *AgentMessage) bool {
+	return m.Kind == agentMsgDirect && m.ReadAt == 0
 }
 
 // send records a message and returns the stored copy, so a caller can report the
@@ -467,6 +509,9 @@ type readResult struct {
 	MarkedSeen int
 	Total      int
 	Evicted    uint64
+	// EvictedUnread is the mail the ring dropped before it was read: the
+	// named inbox's when the read names one, the whole session's when not.
+	EvictedUnread uint64
 }
 
 // read answers a query against a session's ring, marking the returned directed
@@ -492,6 +537,13 @@ func (b *agentBus) collect(session string, q readQuery) readResult {
 
 	now := time.Now().UnixNano()
 	res := readResult{Evicted: mb.evicted}
+	if q.inbox != "" {
+		res.EvictedUnread = mb.evictedUnread[q.inbox]
+	} else {
+		for _, n := range mb.evictedUnread {
+			res.EvictedUnread += n
+		}
+	}
 
 	var picked []*AgentMessage
 	for _, m := range mb.msgs {

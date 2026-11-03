@@ -88,8 +88,14 @@ func (m *OS) renderAgentMail() (string, overlay.Geometry, []overlayRowHit) {
 	if st.Inbox != "" {
 		title = "Mail: " + m.agentMailWindowName(st.Inbox)
 	}
-	if st.Evicted > 0 {
-		title += " (" + strconv.FormatUint(st.Evicted, 10) + " older dropped)"
+	// The counts are the session's, so a list narrowed to one inbox does not
+	// show them: they would say that inbox lost mail it never had.
+	if st.Inbox == "" && st.Evicted > 0 {
+		dropped := strconv.FormatUint(st.Evicted, 10) + " older dropped"
+		if st.EvictedUnread > 0 {
+			dropped += ", " + strconv.FormatUint(st.EvictedUnread, 10) + " unread"
+		}
+		title += " (" + dropped + ")"
 	}
 
 	threads := m.agentMailThreads()

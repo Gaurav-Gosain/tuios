@@ -458,20 +458,28 @@ func runReadAgentMessages(sessionName, to string, unread, notices, peek bool, th
 // first thing a reader needs to decide what to make of it.
 func printAgentMessages(w io.Writer, raw json.RawMessage, on string) error {
 	var res struct {
-		Messages []agentMessageRow `json:"messages"`
-		Total    int               `json:"total"`
-		Evicted  uint64            `json:"evicted"`
-		Thread   uint64            `json:"thread"`
+		Messages      []agentMessageRow `json:"messages"`
+		Total         int               `json:"total"`
+		Evicted       uint64            `json:"evicted"`
+		EvictedUnread uint64            `json:"evicted_unread"`
+		Inbox         string            `json:"inbox"`
+		Thread        uint64            `json:"thread"`
 	}
 	if err := json.Unmarshal(raw, &res); err != nil {
 		return fmt.Errorf("failed to parse response: %w", err)
 	}
+	dropped := droppedLine(res.Inbox, res.Evicted, res.EvictedUnread)
 	if len(res.Messages) == 0 {
 		if res.Thread != 0 {
 			fmt.Fprintf(w, "No messages in thread %d. The ring may have dropped them, or nothing was ever sent there.\n", res.Thread)
-			return nil
+		} else {
+			fmt.Fprintln(w, "No messages.")
 		}
-		fmt.Fprintln(w, "No messages.")
+		// An inbox whose only unread mail was dropped reads empty, and that
+		// is the read that most needs to say why.
+		if dropped != "" {
+			fmt.Fprintln(w, dropped)
+		}
 		return nil
 	}
 
@@ -524,10 +532,32 @@ func printAgentMessages(w io.Writer, raw json.RawMessage, on string) error {
 	} else {
 		fmt.Fprintf(w, "\n%s%s, %s.\n", plural.Count(res.Total, "message"), where, mailStateSummary(res.Messages))
 	}
-	if res.Evicted > 0 {
-		fmt.Fprintf(w, "%s %s dropped: the ring was full, and %s never read.\n", plural.Count(res.Evicted, "older message"), plural.Word(res.Evicted, "was", "were"), plural.Word(res.Evicted, "it was", "they were"))
+	if dropped != "" {
+		fmt.Fprintln(w, dropped)
 	}
 	return nil
+}
+
+// droppedLine says what a full ring cost the reader, or "" when it cost
+// nothing. An inbox read hears only about its own mail that went unread. The
+// ring is the session's, and most of what it drops was read long ago by
+// someone else, so a count of that in every inbox is an alarm nobody can act
+// on. A read of the whole session hears about everything.
+func droppedLine(inbox string, evicted, evictedUnread uint64) string {
+	if inbox != "" {
+		if evictedUnread == 0 {
+			return ""
+		}
+		return fmt.Sprintf("%s to this inbox %s dropped before %s read: the ring was full.", plural.Count(evictedUnread, "message"), plural.Word(evictedUnread, "was", "were"), plural.Word(evictedUnread, "it was", "they were"))
+	}
+	if evicted == 0 {
+		return ""
+	}
+	line := fmt.Sprintf("The ring was full and dropped %s", plural.CountAs(evicted, "older entry", "older entries"))
+	if evictedUnread == 0 {
+		return line + ", none of them unread mail."
+	}
+	return line + fmt.Sprintf(". %d of them %s unread mail.", evictedUnread, plural.Word(evictedUnread, "was", "were"))
 }
 
 // mailStateSummary says what state the returned messages are in after the

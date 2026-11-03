@@ -259,8 +259,11 @@ tell them. The same caution applies to `capture-pane` of an agent's pane and to
 - **It cannot verify who you are.** `--from` is a claim, except for `human`.
   The loop guards stop an accident, not an adversary.
 - **Nothing is durable.** Messages live in memory and die with the daemon.
-- **The ring is bounded and drops its oldest.** 256 messages or 512 KiB per
-  session, 8 KiB per message. A read reports how many were dropped.
+- **The ring is bounded.** 256 messages or 512 KiB per session, 8 KiB per
+  message. A full ring drops what nobody waits to read first (read mail, ask
+  records and notices, oldest first), and unread mail only when nothing else
+  is left. A read of your inbox says how many of your messages were dropped
+  before you read them, and says nothing when none were.
 - **There is no delivery guarantee.** A message in the ring was stored, not
   read. The acknowledgement that means something is a reply.
 - **Rings do not cross sessions.**

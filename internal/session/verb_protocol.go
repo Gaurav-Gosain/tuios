@@ -2624,7 +2624,8 @@ func buildVerbRegistry() map[string]verbEntry {
 				{Name: "marked_read", Type: "int", Description: "How many messages this call marked read."},
 				{Name: "marked_seen", Type: "int", Description: "How many messages this call marked seen."},
 				{Name: "total", Type: "int", Description: "How many messages matched before the limit was applied."},
-				{Name: "evicted", Type: "int", Description: "How many messages the ring has dropped from its oldest end because it was full. Non-zero means something was never read."},
+				{Name: "evicted", Type: "int", Description: "How many entries of any kind the session's ring has dropped because it was full, read or not. A full ring drops read mail, ask records and notices before unread mail."},
+				{Name: "evicted_unread", Type: "int", Description: "How many messages the ring dropped before their recipient read them: for the inbox the read names, or for the whole session when it names none. Non-zero means mail was lost unread."},
 				{Name: "peek_forced", Type: "bool", Description: "True when the read would have marked the person's mail read and was served as a peek, because the caller runs inside a pane of this daemon."},
 			},
 			examples: []string{

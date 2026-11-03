@@ -2733,8 +2733,9 @@ between agents that means anything, so answer the message rather than sending a
 fresh one. Read a thread back with 'read-agent-messages --thread'.
 
 The ring is bounded and it is not durable: messages die with the daemon, a full
-ring drops its oldest, and a message to a window that has since closed reads
-back undeliverable rather than being handed to whatever pane takes its name.
+ring drops read mail, ask records and notices before unread mail, and a message
+to a window that has since closed reads back undeliverable rather than being
+handed to whatever pane takes its name.
 
 A reply to a message the ring has already dropped is still stored. It starts its
 thread from the id you named, and the answer says the parent is gone.

@@ -933,7 +933,11 @@ func (d *Daemon) verbReadAgentMessages(cs *connState, params json.RawMessage) (a
 		"marked_read": res.MarkedRead,
 		"marked_seen": res.MarkedSeen,
 		"total":       res.Total,
-		"evicted":     res.Evicted,
+		// evicted is every entry the session's ring has dropped, read or
+		// not. evicted_unread is the mail it dropped before anyone read it,
+		// for the inbox the read named, or for the whole session.
+		"evicted":        res.Evicted,
+		"evicted_unread": res.EvictedUnread,
 		// True when the read asked to mark the person's mail read and was
 		// served as a peek instead, because the caller runs in a pane.
 		"peek_forced": peekForced,
