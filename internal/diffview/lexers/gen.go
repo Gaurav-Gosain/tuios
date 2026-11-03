@@ -1,11 +1,24 @@
 //go:build ignore
 
 // gen_lexers copies the chroma lexer definitions the review highlights into this
-// directory, gzipped. Run it after changing the chroma version in go.mod or the
-// list below:
+// directory, compressed. Run it after changing the chroma version in go.mod or
+// the list below:
 //
 //	go run ./internal/diffview/lexers/gen.go
 //
+// Each definition is raw deflate against one shared dictionary, dict.z (itself
+// raw deflate). The definitions repeat the same XML, so the dictionary makes
+// them about a quarter smaller than one gzip file each, and each one still
+// decompresses alone. The run keeps the dictionary in dict.z. To train a new
+// one, for a list that changed a lot, uncompress the definitions to a scratch
+// folder and pass the last 24 KB of a zstd dictionary:
+//
+//	zstd --train-cover *.xml --maxdict=32768 -o train.zstd
+//	tail -c 24576 train.zstd > dict.raw
+//	go run ./internal/diffview/lexers/gen.go -dict dict.raw
+//
+// zstd puts its own tables at the start of the file, and the tail is the
+// content that deflate can refer back to.
 // chroma's lexers package embeds every one of its 279 definitions, about
 // 2.4 MB of XML, and registers them all at start. The review needs the
 // languages people keep in a repository, so tuios carries those, compressed,
@@ -17,8 +30,10 @@ package main
 
 import (
 	"bytes"
-	"compress/gzip"
+	"compress/flate"
+	"flag"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -73,6 +88,14 @@ func main() {
 }
 
 func run() error {
+	newDict := flag.String("dict", "", "train: a raw dictionary to write to dict.z and use")
+	flag.Parse()
+	dst := "internal/diffview/lexers"
+	dict, err := loadDict(dst, *newDict)
+	if err != nil {
+		return err
+	}
+
 	out, err := exec.Command("go", "list", "-m", "-f", "{{.Dir}}", "github.com/alecthomas/chroma/v2").Output()
 	if err != nil {
 		return fmt.Errorf("finding chroma: %w", err)
@@ -130,8 +153,7 @@ func run() error {
 		}
 	}
 
-	dst := "internal/diffview/lexers"
-	old, _ := filepath.Glob(filepath.Join(dst, "*.xml.gz"))
+	old, _ := filepath.Glob(filepath.Join(dst, "*.xml.z"))
 	for _, f := range old {
 		if err := os.Remove(f); err != nil {
 			return err
@@ -150,23 +172,55 @@ func run() error {
 		if err != nil {
 			return err
 		}
-		var buf bytes.Buffer
-		zw, err := gzip.NewWriterLevel(&buf, gzip.BestCompression)
+		z, err := deflate(data, dict)
 		if err != nil {
 			return err
 		}
-		// No name and no time in the header, so a rerun on the same chroma
-		// writes the same bytes.
-		if _, err := zw.Write(data); err != nil {
-			return err
-		}
-		if err := zw.Close(); err != nil {
-			return err
-		}
-		if err := os.WriteFile(filepath.Join(dst, stem+".xml.gz"), buf.Bytes(), 0o644); err != nil {
+		if err := os.WriteFile(filepath.Join(dst, stem+".xml.z"), z, 0o644); err != nil {
 			return err
 		}
 	}
 	fmt.Printf("wrote %d lexers to %s\n", len(stems), dst)
 	return nil
+}
+
+// loadDict returns the dictionary: the one in train when given, which it
+// also writes to dict.z, else the one dict.z holds.
+func loadDict(dst, train string) ([]byte, error) {
+	path := filepath.Join(dst, "dict.z")
+	if train == "" {
+		z, err := os.ReadFile(path)
+		if err != nil {
+			return nil, err
+		}
+		return io.ReadAll(flate.NewReader(bytes.NewReader(z)))
+	}
+	dict, err := os.ReadFile(train)
+	if err != nil {
+		return nil, err
+	}
+	if len(dict) > 32<<10 {
+		return nil, fmt.Errorf("%s is %d bytes; deflate reaches back 32 KB at most", train, len(dict))
+	}
+	z, err := deflate(dict, nil)
+	if err != nil {
+		return nil, err
+	}
+	return dict, os.WriteFile(path, z, 0o644)
+}
+
+// deflate is data as raw deflate at the best level, against dict.
+func deflate(data, dict []byte) ([]byte, error) {
+	var buf bytes.Buffer
+	zw, err := flate.NewWriterDict(&buf, flate.BestCompression, dict)
+	if err != nil {
+		return nil, err
+	}
+	if _, err := zw.Write(data); err != nil {
+		return nil, err
+	}
+	if err := zw.Close(); err != nil {
+		return nil, err
+	}
+	return buf.Bytes(), nil
 }

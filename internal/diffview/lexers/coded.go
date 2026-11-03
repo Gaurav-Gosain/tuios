@@ -14,11 +14,12 @@ import (
 	. "github.com/alecthomas/chroma/v2" //nolint:revive,staticcheck // the rules read as chroma's do, so they stay diffable against it
 )
 
-// registerCodedLexers adds Go, Go text templates and Markdown to reg. The
-// XML lexers must be registered first: Go reads its raw strings as templates.
-func registerCodedLexers(reg *LexerRegistry) {
+// registerCodedLexers adds Go, Go text templates and Markdown to reg, reading
+// the template definition from src. The XML lexers must be registered first:
+// Go reads its raw strings as templates.
+func registerCodedLexers(reg *LexerRegistry, src *deflateFS) {
 	goTextTemplate := reg.Register(MustNewXMLLexer(
-		gzipFS{lexerFiles},
+		src,
 		"go_template.xml",
 	).SetConfig(
 		&Config{
