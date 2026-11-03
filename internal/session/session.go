@@ -2429,6 +2429,9 @@ type ptySpawn struct {
 	keepOpen bool
 	// closeOnExit is new-window's close_on_exit. See PTY.ownShell.
 	closeOnExit bool
+	// cellWidth and cellHeight are the session's cell in pixels, read by
+	// createPTY before the process starts. See ptyspawn.SpawnTTY.
+	cellWidth, cellHeight int
 }
 
 // createPTY starts a pane's process. sp.command, when non-empty, is an argv
@@ -2524,7 +2527,15 @@ func (s *Session) createPTY(width, height int, sp ptySpawn) (*PTY, error) {
 			s.onRemotePane(sp.windowID, rp)
 		}
 	} else {
-		ptyInstance, cmd, err = ptyspawn.SpawnTTY(width, height, func(tty string) *exec.Cmd {
+		// The pane starts with the session's cell, so the guest's first
+		// pixel size is its last until a resize. A cell applied after the
+		// start reached a shell as a SIGWINCH at the size it started at.
+		if s.config != nil && s.config.CellSize != nil {
+			if w, h, ok := s.config.CellSize(s.ID); ok {
+				sp.cellWidth, sp.cellHeight = w, h
+			}
+		}
+		ptyInstance, cmd, err = ptyspawn.SpawnTTY(width, height, sp.cellWidth, sp.cellHeight, func(tty string) *exec.Cmd {
 			var cmd *exec.Cmd
 			if len(sp.command) > 0 {
 				//tuios:allow-exec ptyspawn starts the pane program on a pseudo console
@@ -2627,6 +2638,13 @@ func (s *Session) installPTY(ctx context.Context, cancel context.CancelFunc, id 
 		debug:       debugEnabled(),
 		rawLog:      newPTYLogger(id),
 		spawnedAt:   time.Now(),
+		// The cell the process started with, so UpdatePixelDimensions with
+		// the same cell writes nothing to the pty.
+		cellWidth:  sp.cellWidth,
+		cellHeight: sp.cellHeight,
+	}
+	if sp.cellWidth > 0 && sp.cellHeight > 0 {
+		terminal.SetCellSize(sp.cellWidth, sp.cellHeight)
 	}
 	if sp.keepOpen {
 		pty.keepOpen = newExitNote()

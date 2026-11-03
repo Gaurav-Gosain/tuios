@@ -10758,6 +10758,29 @@ TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/control-workspace \
   go test -count=1 -run '^TestNewPaneShellStartsAtItsSize$/^daemon$' ./e2e/tui
 ```
 
+### A new pane starts with the session's cell
+
+A daemon pane started at the fallback cell's pixel size. The daemon then gave
+it the session's cell, after the process had started. The rows and columns did
+not change, but the kernel sends SIGWINCH for a change of pixels alone. The
+signal usually reached bash before its rc file set the trap. On a slow CI
+runner it came after, and `/daemon` failed once: "empty workspace started at
+41x158, frame 41x158, and took 1 SIGWINCH". Now `createPTY` reads the cell
+before the process starts, and the later update writes nothing.
+
+The race depends on timing, so each control adds a 300 ms pause between the
+spawn and the cell update in `AddDaemonWindowWith`. That pause makes every
+pane lose the race. Run on 2026-11-03 on Linux, with the daemon cases
+(`-run '^TestNewPaneShellStartsAtItsSize$/^daemon'`). Each control was built
+into its own binary.
+
+| Control: what was cut | Where it fails | Verdict |
+| --- | --- | --- |
+| Main (`6c31c3c10`) with the pause | `/daemon`: new panes 1, 2 and 3 each start at their tile's size and take 1 SIGWINCH at that same size, about 290 ms after the start | **caught** |
+| The fix with the same pause | none: every daemon case passes | **guard** |
+
+The fixed build without the pause passes too.
+
 ## Next and previous agent walk the rail's order
 
 `TestCycleAgentsWalksTheRailOrder` makes two working agents in `alpha` and one in `bravo` waiting on an approval, so the rail's default needs-you order (`bravo/ag-b1`, `alpha/ag-a1`, `alpha/ag-a2`) differs from the order the panes were opened in. It checks the rail draws that order, then presses `alt+shift+j` and `alt+shift+k` in terminal mode from `alpha`'s plain shell, and the leader's `J` and `K`, and after each press reads the attached session from `ls --json` and its focused pane from `list-windows`. Each press moves to the next row, crossing sessions both ways, and next past the last and previous before the first wrap. A line typed at the end runs in the focused pane, so the keys never left terminal mode. Each control was built into its own binary from the feature commit and the test run against it; the unmodified binary passed. Run on 2026-10-27 on macOS.

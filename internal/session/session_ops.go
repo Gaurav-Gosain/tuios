@@ -445,9 +445,8 @@ func (s *Session) AddDaemonWindowWith(opts NewWindowOptions, onExit func(ptyID s
 	if err != nil {
 		return WindowState{}, err
 	}
-	// A client that creates a pane gives it the session's cell itself (see
-	// handleCreatePTY). A pane asked for any other way, by a verb or for a
-	// session nobody is attached to, gets it here.
+	// createPTY started the pane with the session's cell, so this writes
+	// nothing unless the cell changed while the pane started.
 	if s.config != nil && s.config.CellSize != nil {
 		if w, h, ok := s.config.CellSize(s.ID); ok {
 			_ = pty.UpdatePixelDimensions(w, h)

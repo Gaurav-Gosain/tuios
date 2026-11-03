@@ -92,24 +92,29 @@ func newPty(width, height int, logf func(string, ...any)) (xpty.Pty, error) {
 // On success the caller owns both returned values, including closing the PTY.
 // On failure nothing is left open.
 func Spawn(width, height int, build func() *exec.Cmd, logf func(string, ...any)) (xpty.Pty, *exec.Cmd, error) {
-	return SpawnTTY(width, height, func(string) *exec.Cmd { return build() }, logf)
+	return SpawnTTY(width, height, 0, 0, func(string) *exec.Cmd { return build() }, logf)
 }
 
 // SpawnTTY is Spawn with the path of the PTY's terminal passed to build, so
 // the command can be told which terminal it runs on. The path is empty when
-// the PTY has none, as on Windows and in the browser.
-func SpawnTTY(width, height int, build func(tty string) *exec.Cmd, logf func(string, ...any)) (xpty.Pty, *exec.Cmd, error) {
+// the PTY has none, as on Windows and in the browser. cellWidth and
+// cellHeight are the cell in pixels the pane is drawn with, or zero for the
+// fallback cell.
+func SpawnTTY(width, height, cellWidth, cellHeight int, build func(tty string) *exec.Cmd, logf func(string, ...any)) (xpty.Pty, *exec.Cmd, error) {
 	for attempt := 1; ; attempt++ {
 		pty, err := newPty(width, height, logf)
 		if err != nil {
 			return nil, nil, fmt.Errorf("failed to create PTY: %w", err)
 		}
 		// The new pty has no pixel size, and the guest can read its size
-		// before the first resize gives it one. It starts with the fallback
-		// cell's, which the emulator also answers XTWINOPS with. A pty that
-		// takes no pixels is left at the size it was made with.
+		// before the first resize gives it one. It starts with the cell the
+		// caller names, else the fallback cell's, which the emulator also
+		// answers XTWINOPS with. The pixels are set before the process starts:
+		// a later change to them alone is a SIGWINCH at the same rows and
+		// columns, and a shell takes it while it starts. A pty that takes no
+		// pixels is left at the size it was made with.
 		if ws, ok := pty.(WinsizeSetter); ok {
-			xpixel, ypixel := pixelsOr(width, height, 0, 0)
+			xpixel, ypixel := pixelsOr(width, height, width*cellWidth, height*cellHeight)
 			_ = ws.SetWinsize(width, height, xpixel, ypixel)
 		}
 
