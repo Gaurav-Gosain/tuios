@@ -138,9 +138,12 @@ func TestUpgradeReattachLeavesAltScreenPaneAlone(t *testing.T) {
 		t.Fatalf("tuios daemon upgrade failed: %v\n%s\n%v", err, out, outcome)
 	}
 	awaitNewImage(t, base, img, 30*time.Second)
-	if err := first.WaitFor(func(s tuitest.Screen) bool { return strings.Contains(s.Text(), "being upgraded") }, bootTimeout); err != nil {
-		t.Fatalf("the first client did not say the daemon is being upgraded: %v\n%s", err, first.Snapshot())
+	// The first client follows the upgrade and attaches again by itself, which
+	// is a reattach to the restored session like the second client's.
+	if err := first.WaitFor(func(s tuitest.Screen) bool { return strings.Contains(s.Text(), "tuios reattached") }, bootTimeout); err != nil {
+		t.Fatalf("the first client did not follow the upgrade: %v\n%s", err, first.Snapshot())
 	}
+	time.Sleep(time.Second)
 
 	upgraded := trimBlankTail(mustDaemonPane(t, base, sess, alt))
 	logUpgraded := readLog()
