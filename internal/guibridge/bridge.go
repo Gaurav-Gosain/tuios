@@ -186,7 +186,10 @@ type State struct {
 	NumWorkspaces  int            `json:"num_workspaces"`
 	WorkspaceNames map[int]string `json:"workspace_names,omitempty"`
 	// Occupied lists the workspaces that hold at least one window.
-	Occupied []int    `json:"occupied"`
+	Occupied []int `json:"occupied"`
+	// DoneSeen lists the panes of every session whose finished turn has been
+	// looked at, for the panes of other sessions in the agents view.
+	DoneSeen []string `json:"done_seen"`
 	Focused  string   `json:"focused"`
 	Tiling   bool     `json:"tiling"`
 	Windows  []Window `json:"windows"`
@@ -292,9 +295,12 @@ type Window struct {
 	Stack      string `json:"stack,omitempty"`
 	StackIndex int    `json:"stack_index,omitempty"`
 	Agent      string `json:"agent,omitempty"`
-	AgentMsg   string `json:"agent_message,omitempty"`
-	AgentKind  string `json:"agent_kind,omitempty"`
-	Cwd        string `json:"cwd,omitempty"`
+	// DoneSeen says the pane's finished turn has been looked at, the bit the
+	// rail and the agents view put a done pane under Ready for review by.
+	DoneSeen  bool   `json:"done_seen,omitempty"`
+	AgentMsg  string `json:"agent_message,omitempty"`
+	AgentKind string `json:"agent_kind,omitempty"`
+	Cwd       string `json:"cwd,omitempty"`
 	// Host is the machine the pane's program runs on, for a pane this
 	// session holds for another machine. Empty for this session's own
 	// machine (wave 5: the explorer and a drop follow it).
@@ -1000,6 +1006,7 @@ func (m *model) export() {
 			cwd = w.DaemonCwd
 		}
 		repo, branch := m.git(cwd)
+		agent, seen := o.RailAgentState(w.ID, w.AgentState, w.AgentCompletionSeq)
 		if w.Zoomed {
 			st.Zoomed = w.ID
 		}
@@ -1008,11 +1015,12 @@ func (m *model) export() {
 			Popup: w.IsPopup, Scratch: w.IsScratch, Stack: w.Stack, StackIndex: w.StackIndex,
 			Workspace: w.Workspace, X: w.X, Y: w.Y, W: w.Width, H: w.Height, Z: w.Z,
 			Border: w.BorderOffset(), Minimized: w.Minimized, Floating: w.IsFloating,
-			Zoomed: w.Zoomed, Agent: w.AgentState, AgentMsg: w.AgentMessage, AgentKind: w.AgentKind,
+			Zoomed: w.Zoomed, Agent: agent, DoneSeen: seen, AgentMsg: w.AgentMessage, AgentKind: w.AgentKind,
 			Cwd: cwd, Host: w.Host, Foreground: w.ForegroundCmd, Harness: w.AgentHarness, Reason: w.AgentReason, Queued: w.AgentQueued, DraftHeld: w.AgentDraftHeld, Settled: w.AgentSettled, AgentAt: w.AgentStateAt / int64(time.Millisecond),
 			Repo: repo, Branch: branch, StartedBy: startedByRef(w.StartedBySession, w.StartedByWindow),
 		})
 	}
+	st.DoneSeen = o.AgentSeenWindows()
 	for ws := 1; ws <= max(o.NumWorkspaces, 9); ws++ {
 		if occupied[ws] {
 			st.Occupied = append(st.Occupied, ws)

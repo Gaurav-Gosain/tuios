@@ -1,6 +1,7 @@
 package app
 
 import (
+	"slices"
 	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/harness"
@@ -27,6 +28,26 @@ import (
 // agentSeen reports whether a finished pane has already been looked at.
 func (m *OS) agentSeen(windowID string) bool {
 	return m.SidebarAgentSeen[windowID]
+}
+
+// RailAgentState is the state the rail and the agents view show for a pane, and
+// whether its finished turn has been seen: railAgentState, for a renderer that
+// draws them from this model (tuios gui-bridge).
+func (m *OS) RailAgentState(windowID, state string, seq uint64) (string, bool) {
+	return m.railAgentState(windowID, state, seq)
+}
+
+// AgentSeenWindows lists the panes whose finished turn has been seen, in every
+// session: the same bits the agents view groups other sessions' panes by.
+func (m *OS) AgentSeenWindows() []string {
+	out := make([]string, 0, len(m.SidebarAgentSeen))
+	for id, seen := range m.SidebarAgentSeen {
+		if seen {
+			out = append(out, id)
+		}
+	}
+	slices.Sort(out)
+	return out
 }
 
 // markAgentSeen records a look at a finished pane. The write to disk is guarded
