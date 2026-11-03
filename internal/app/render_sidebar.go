@@ -3209,6 +3209,13 @@ func (m *OS) sidebarSessionRow(node sessiontree.Node, sessionIdx, variant, cw in
 	shown := m.sidebarMarquee("s:"+node.ID, title, max(avail-treeW, 1), st.Cursor)
 	ink := sidebarStyle(rowBg, fg).Bold(node.IsCurrent || sidebarAttention(node.AgentState))
 	name := mark + ink.Render(treeMark+shown) + branch
+	if treeW > 0 && mark != "" {
+		// A numbered worktree row turns the pieces around: the tree mark leads
+		// and the number rides behind it, so the mark keeps hanging from the
+		// parent's name spine and the subtree's depth reads the same numbered
+		// or not. A plain session has no mark and keeps the number leading.
+		name = ink.Render(treeMark) + mark + ink.Render(shown) + branch
+	}
 	if nameMarked {
 		name = mark + ink.Render(treeMark) + railCurrentName(shown, focusTint, rowBg, pal, &m.Settings) + branch
 	}
