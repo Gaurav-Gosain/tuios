@@ -731,7 +731,9 @@ func (m *OS) ckArtRenderLive(v *tmlView, w, h int) string {
 		}
 		sh = max(h-strings.Count(confirm, "\n")-1, 1)
 	}
+	m.tmlMotion(v)
 	out := v.surface.Render(w, sh).Render()
+	m.tmlArmFrame(v)
 	// The window's last frame was at its own size: it draws again.
 	v.content = ""
 	if confirm != "" {

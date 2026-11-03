@@ -142,6 +142,18 @@ func TestIdleCostStaysLow(t *testing.T) {
 			ctxsw: 400,
 		}, tmlPaneAtIdle, nil)
 	})
+	t.Run("tml surface after motion", func(t *testing.T) {
+		// A surface whose enter effects played and whose toast went at the
+		// end of its ttl: the frame timer ran while they played, and the
+		// window holds no timer at all.
+		runIdleWindowOpts(t, "[startup]\ndaemon = true\n\n[appearance]\nmotion = \"full\"\n", startOpts{daemonDefault: true}, idleBudget{
+			wire:        idleWireBudget,
+			ticks:       2,
+			work:        1,
+			tickerWakes: 1,
+			ctxsw:       400,
+		}, tmlMotionSettled, nil)
+	})
 	t.Run("minimized tml surface", func(t *testing.T) {
 		// A minimized TML pane whose owner patches it twice a second takes
 		// the patches and composes no frame: nothing on the screen changed.
@@ -311,6 +323,39 @@ func tmlPaneAtIdle(t *testing.T, term *tuitest.Terminal, base string) {
 	}
 	// The window messages of the setup burn for six seconds, and they are
 	// not the surface's cost.
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		return !strings.Contains(s.Text(), "Window created") && !strings.Contains(s.Text(), "Session size")
+	}, 3*uiTimeout); err != nil {
+		t.Fatalf("the window messages never went: %v\n%s", err, term.Snapshot())
+	}
+}
+
+// tmlMotionDoc fades its cards in, one after the other, and shows a toast
+// that goes after a second.
+const tmlMotionDoc = `<tml version="1" title="Motion">
+  <col pad="1" gap="1" stagger="80ms">
+    <card title="Motion ready" enter="fade"><text>first</text></card>
+    <card title="Second" enter="slide-up"><text>second</text></card>
+    <toast role="success" ttl="1s">Saved for a second</toast>
+  </col>
+</tml>`
+
+// tmlMotionSettled opens tmlMotionDoc as a pane and waits until the toast
+// has gone: the frame timer ran the effects and the ttl in the real client.
+func tmlMotionSettled(t *testing.T, term *tuitest.Terminal, base string) {
+	t.Helper()
+	doc := writeTMLDoc(t, base, "motion.tml", tmlMotionDoc)
+	if out, err := tuiosCLI(t, base, "tml", "show", doc, "--pane"); err != nil {
+		t.Fatalf("tuios tml show --pane: %v\n%s", err, out)
+	}
+	if err := term.WaitForText("Saved for a second", uiTimeout); err != nil {
+		t.Fatalf("the toast never showed: %v\n%s", err, term.Snapshot())
+	}
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		return !strings.Contains(s.Text(), "Saved for a second") && strings.Contains(s.Text(), "Motion ready")
+	}, uiTimeout); err != nil {
+		t.Fatalf("the toast never went at the end of its ttl: %v\n%s", err, term.Snapshot())
+	}
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
 		return !strings.Contains(s.Text(), "Window created") && !strings.Contains(s.Text(), "Session size")
 	}, 3*uiTimeout); err != nil {

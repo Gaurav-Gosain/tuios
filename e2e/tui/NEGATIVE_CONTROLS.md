@@ -12375,3 +12375,17 @@ The fixed build passed 7 of 7 runs, with the slowest listing at 63 ms and the
 slowest round trip at 18 ms. The figures are in `kitty-stream-impact.json`
 under `TUIOS_E2E_FRAMES`. Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestKittyStreamHoldsOnlyItsPane$' -v .`.
+## TML motion
+
+`TestIdleCostStaysLow/tml_surface_after_motion` opens a surface whose cards
+enter one after the other and whose toast has a ttl of 1 s, with
+`appearance.motion = "full"`. It waits for the toast to go, then holds the idle
+budget of a still surface. Only the client's frame timer draws the surface at
+the end of the ttl, because nothing else changes it.
+
+Run on 2026-11-03 on Linux. The fixed build passes: over the 10 s window,
+0 renders, 0 ticks and 98 context switches.
+
+| Claim | Control | Where it fails | Verdict |
+| --- | --- | --- | --- |
+| The client draws a surface again when it asks for a frame | `tmlArmFrame` arms no timer | "the toast never went at the end of its ttl" | **caught** |

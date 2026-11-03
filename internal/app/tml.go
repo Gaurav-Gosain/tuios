@@ -14,6 +14,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
+	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
@@ -61,6 +62,10 @@ type tmlClient struct {
 	// shownDirty says a surface on the screen changed since the wake
 	// began. UI goroutine only.
 	shownDirty bool
+	// frameDue is when the frame timer armed last fires, zero when none is.
+	// UI goroutine only. frameFired says it fired; guarded by mu.
+	frameDue   time.Time
+	frameFired bool
 	// local answers the TML verbs in a session with no daemon: Learn mode,
 	// whose host keeps the surfaces in the tab. See learn_tml.go. Set once,
 	// before the program runs.
@@ -96,6 +101,35 @@ func (m *OS) handleTMLClock() tea.Cmd {
 		}
 	}
 	return m.tmlClockCmd()
+}
+
+// tmlMotion gives a surface the motion level before it draws: its enter and
+// exit effects and a skeleton's shimmer play only while appearance.motion
+// allows motion and calm mode is off.
+func (m *OS) tmlMotion(v *tmlView) {
+	v.surface.SetMotion(m.Settings.MotionAllows(config.MotionBasic))
+}
+
+// tmlArmFrame arms one timer for the next frame a surface wants after it
+// drew: the next frame of an effect, or the end of a toast. A surface that
+// is still asks for none, so an idle client has no timer. The timer wakes
+// the TML listener, and handleTMLWake marks the surfaces that want a frame.
+func (m *OS) tmlArmFrame(v *tmlView) {
+	wait, ok := v.surface.NextFrame()
+	if !ok {
+		return
+	}
+	due := time.Now().Add(wait)
+	if d := m.tml.frameDue; !d.IsZero() && !d.After(due) {
+		return
+	}
+	m.tml.frameDue = due
+	time.AfterFunc(wait, func() {
+		m.tml.mu.Lock()
+		m.tml.frameFired = true
+		m.tml.mu.Unlock()
+		m.signalTML()
+	})
 }
 
 // tmlView is one surface as this client draws it.
@@ -382,10 +416,25 @@ func (m *OS) handleTMLWake() tea.Cmd {
 	m.tml.pending = nil
 	cmds := m.tml.cmds
 	m.tml.cmds = nil
+	fired := m.tml.frameFired
+	m.tml.frameFired = false
 	m.tml.mu.Unlock()
 	changed := false
 	setGen := m.tml.setGen
 	m.tml.shownDirty = false
+	if fired {
+		// A frame of an effect, or a toast whose time ran out.
+		m.tml.frameDue = time.Time{}
+		for id, v := range m.tml.views {
+			if v.surface == nil {
+				continue
+			}
+			if _, ok := v.surface.NextFrame(); ok {
+				m.markTMLDirty(id)
+				changed = true
+			}
+		}
+	}
 	for _, p := range pending {
 		if m.applyTMLSurface(p) {
 			changed = true
@@ -669,7 +718,9 @@ func (m *OS) renderTML(window *terminal.Window, dim int) string {
 		}
 		sh = max(ch-strings.Count(confirmText, "\n")-1, 1)
 	}
+	m.tmlMotion(v)
 	buf := v.surface.Render(cw, sh)
+	m.tmlArmFrame(v)
 	if damage := v.surface.Damage(); len(damage) > 0 || v.content == "" || v.w != cw || v.h != sh {
 		v.content, v.w, v.h = buf.Render(), cw, sh
 	}

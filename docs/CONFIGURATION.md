@@ -525,6 +525,9 @@ on and off and saves the choice here.
 calm = true   # default: false
 ```
 
+Calm mode and `appearance.motion = "none"` also stop the enter, exit and
+skeleton effects of TML surfaces. A surface then shows each part at once.
+
 Calm mode sits over `appearance.motion`. When you turn calm mode off, the
 motion level you set comes back. See
 [KEYBINDINGS.md](KEYBINDINGS.md#calm-mode) for what calm mode changes.
