@@ -2121,10 +2121,19 @@ func TestAgentReportOnlyFromTheHarnessInThePane(t *testing.T) {
 		if got.Applied == nil || !*got.Applied || got.Reason != "" {
 			t.Errorf("%s from a harness in %s in the pane: applied=%s reason=%q, want applied", step, label, appliedText(got.Applied), got.Reason)
 		}
+		if got.State != state {
+			t.Errorf("%s from a harness in %s in the pane set %q, want %s", step, label, got.State, state)
+		}
+		// The stand-in harness exits as soon as its hook returns, which a real
+		// one does not. The daemon then lapses a reported state on a pane at
+		// its shell, by design (agent_detect.go), and that sweep can come
+		// before this read. So the state the hook set is read from its
+		// --explain line, and the pane is checked for the conversation, which
+		// the lapse keeps, and for a state no other report set.
 		st := readAgentState(t, base, session, win)
 		note("  pane after %s in %s: state=%s harness=%s agent_session_id=%s", step, label, st.State, st.Harness, st.AgentSession)
-		if st.State != state || st.AgentSession != conversation {
-			t.Errorf("the harness in %s in the pane did not set its state with %s: %+v, want %s with %s", label, step, st, state, conversation)
+		if st.AgentSession != conversation || (st.State != state && st.State != "none") {
+			t.Errorf("the harness in %s in the pane did not set its state with %s: %+v, want %s (or none once the harness left) with %s", label, step, st, state, conversation)
 		}
 	}
 
@@ -2154,7 +2163,10 @@ func TestAgentReportOnlyFromTheHarnessInThePane(t *testing.T) {
 	}
 	st = readAgentState(t, base, session, win)
 	note("  pane after the prompt under bg-child: state=%s harness=%s agent_session_id=%s", st.State, st.Harness, st.AgentSession)
-	if st.State != "done" || st.AgentSession != "mux-1" {
-		t.Errorf("a background session whose daemon the pane started took the pane over: %+v, want done with mux-1", st)
+	// tmux's harness has exited, so its done state may have lapsed to none
+	// (see checkTaken). What must not happen is the refused report taking
+	// the pane: its conversation or its working state.
+	if st.AgentSession != "mux-1" || (st.State != "done" && st.State != "none") {
+		t.Errorf("a background session whose daemon the pane started took the pane over: %+v, want done (or none once tmux's harness left) with mux-1", st)
 	}
 }
