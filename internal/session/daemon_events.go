@@ -46,6 +46,12 @@ const (
 	// and not kept for replay, since a dragged split raises one per step.
 	EventLayoutChanged = "layout-changed"
 	EventAgentState    = "agent-state" // a window's agent state changed
+	// EventAgentSeen: the person looked at a pane whose agent finished a turn
+	// they had not seen, or marked such a pane unread again. Window names the
+	// pane, and Action is seen or unread. The agent state does not change, so
+	// no agent-state event comes with it. list-agents' finished_unread reads
+	// the same fact.
+	EventAgentSeen = "agent-seen"
 	// EventAgentMessage is one agent leaving a message for another. Window is
 	// the recipient's window id, or empty for a session-wide notice. It carries
 	// nothing else on purpose: a subscriber reads the message back from the ring
@@ -313,6 +319,11 @@ type SessionEvent struct {
 // the daemon's sink hands it to the attention queue and never publishes it, and
 // no hook fires on it.
 const eventCompletionSeen = "completion-seen"
+
+// eventCompletionUnseen is raised when the Inbox marks a pane's last finished
+// turn unread again. Like eventCompletionSeen it raises no hook; the daemon's
+// sink publishes both as agent-seen.
+const eventCompletionUnseen = "completion-unseen"
 
 // eventAttentionDetail is raised when a needs_input or errored window keeps its
 // state but what the Inbox shows about it changes: the blocked_by kind, the

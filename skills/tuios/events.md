@@ -91,6 +91,7 @@ Every type, and what it reports:
 | `session-created`, `session-closed` | A session is made or ends |
 | `client-session-changed` | A client enters or leaves a session |
 | `agent-state`, `agent-message`, `agent-activity` | An agent changes state, gets mail, or logs activity |
+| `agent-seen` | A finished pane is looked at (`action` `seen`) or marked unread again (`action` `unread`) |
 | `transcript` | The transcript a pane is joined to grows, or Pi's selected entry changes |
 | `attention` | The Inbox changes |
 | `notification`, `bell` | A pane sends a notification or a bell |

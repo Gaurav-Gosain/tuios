@@ -192,6 +192,20 @@ old behaviour. None of them bumps the protocol integer: every field keeps its
 name and type, and a caller that sends nothing new keeps working. What changes
 is an answer, and each entry says which.
 
+**The new event `agent-seen`** says a finished pane was looked at, or marked
+unread again. A subscriber that names no types gets it.
+
+**The herdr socket reports a seen `done` pane as `idle`.** herdr's `done` is an
+idle agent nobody has looked at yet, and tuios's mapping did not read the
+seen bit. See [AGENT_STATE.md](AGENT_STATE.md#herdr-compatibility). What
+changes for a herdr client:
+
+- `agent_status` is `done` only while the pane has a finished turn nobody has
+  looked at, and `idle` after. `errored` stays `done`.
+- `pane.agent_status_changed` fires when a pane is looked at or marked unread.
+- `pane.focus` and `agent.focus` mark the pane seen, with or without a client.
+- `agent.wait`, `events.wait` and `agent.prompt` with `wait` match that status.
+
 **The new verb [list-routes](#list-routes)** lists this machine's addresses.
 
 **queue-prompt takes `client_id`.** A second call from the same sender with the
@@ -7429,6 +7443,7 @@ Event types:
 | `workspace-renamed` | A workspace's name was set, changed or cleared. `title` is the new name, absent when the name was cleared. | `session`, `workspace`, `title` |
 | `layout-changed` | The panes on a workspace sit differently: a pane opened, closed, moved, was minimized, zoomed or resized, or the session changed size. Call `list-windows` to read the new rectangles. Sent only to a subscription that names it in `types`, and not kept for replay. | `session`, `workspace` |
 | `agent-state` | A window's agent state changed, whichever tier changed it. A pane ceasing to be an agent reports `none`. | `session`, `window`, `pty_id`, `state` |
+| `agent-seen` | The person looked at a pane whose agent finished a turn they had not seen (`action` `seen`), or marked it unread again (`action` `unread`). The agent state does not change. `list-agents`' `finished_unread` reads the same fact. | `session`, `window`, `action` |
 | `agent-message` | A message was left in the session's ring. `window` is the recipient, or empty for a session-wide notice. Read the message itself with `read-agent-messages`. | `session`, `window` |
 | `output` | A window produced output (activity signal only; the raw bytes still flow over the binary stream). | `session`, `window`, `pty_id`, `bytes` |
 | `bell` | A window rang the terminal bell. | `session`, `window`, `pty_id` |

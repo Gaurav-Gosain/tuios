@@ -634,9 +634,22 @@ Agent state maps onto herdr's `agent_status`:
 | --- | --- |
 | `working` | `working` |
 | `needs_input` | `blocked` |
-| `idle` | `idle` |
-| `done`, `errored` | `done` |
+| `idle` or `done`, with a finished turn nobody has looked at | `done` |
+| `idle` or `done`, looked at | `idle` |
+| `errored` | `done` |
 | `unknown`, none | `unknown` |
+
+herdr's `done` is not a state of its own: it is an idle agent that nobody has
+seen yet, and the pane turns `idle` once someone looks at it (herdr's
+[socket API](https://github.com/herdrdev/herdr/blob/2ecf19a92fc3a7fff75b6ce3655ef04f4625ec01/docs/next/website/src/content/docs/socket-api.mdx#L421-L422),
+[agent automation](https://github.com/herdrdev/herdr/blob/2ecf19a92fc3a7fff75b6ce3655ef04f4625ec01/docs/next/website/src/content/docs/agent-automation.mdx#L78)
+and [`pane_agent_status`](https://github.com/herdrdev/herdr/blob/2ecf19a92fc3a7fff75b6ce3655ef04f4625ec01/src/app/api_helpers.rs#L96-L107), at v0.9.5).
+tuios keeps `done` for good and tracks the looking apart, as `list-agents`'
+`finished_unread` does, so the two are put back together here. A pane counts
+as looked at once an attached client shows it focused, the Inbox item for it
+is dismissed, or a herdr client calls `pane.focus` or `agent.focus` on it. The
+Inbox's "mark unread" makes it `done` again. Each of those raises
+`pane.agent_status_changed`.
 
 A pane's `agent` is herdr's name for the harness: `claude` for Claude Code,
 `gemini` for Gemini CLI, `cursor` for Cursor Agent, `agy` for Antigravity,
@@ -690,7 +703,7 @@ A refused call answers error `forbidden`, and nothing changes.
 | `pane.send_keys`, `agent.send_keys` | `send-keys` | herdr's key names. tuios also takes `PageUp`, `PageDown`, `Home`, `End`, `Insert` and `Delete`. `cmd`, `super` and `hyper` fail with `invalid_key` |
 | `pane.send_input` | `send-text` with `paste`, `send-keys` | the text is a paste, as for `pane.send_text` |
 | `pane.rename` | `set-window` | `label: null` clears the name |
-| `pane.focus`, `agent.focus` | `focus-window` | |
+| `pane.focus`, `agent.focus` | `focus-window` | marks the pane seen, as herdr does, so a `done` pane answers `idle`, with or without a client attached |
 | `pane.split` | `split-window`, else `new-window` | without an attached client, or with `cwd`, the new pane is a window on the same workspace |
 | `pane.close` | `close-window` | |
 | `pane.wait_for_output` | `wait-for window-output` | |
@@ -702,7 +715,7 @@ A refused call answers error `forbidden`, and nothing changes.
 | `pane.resize` | `set-layout` grant, then the attached client | moves one border of the pane by `amount`, a share of the tab (0.05 when not given, 0.5 at most, one cell at least). `right` and `down` move a border right or down, `left` and `up` move it left or up. The border is the one on that side of the pane, or the other one when the pane is at the edge of the tab there. `changed` is false and `reason` is `unchanged` when nothing moves, as in a floating or scrolling layout. Without an attached client it fails with `no_client` |
 | `pane.move` | `move-window` | to a tab of any workspace, or to a new tab there. A tab of another workspace moves the pane to that tuios session with its program running (`to_session`), and its pane id changes with the workspace. tuios places the pane in the tab's layout itself, so `target_pane_id`, `split` and `ratio` are not followed. `new_workspace` fails with `unsupported`, and so does a popup, a scratch pane, a TML pane or a pane on another machine sent to another workspace. `reason` is `same_tab` or `zoomed_tab` when nothing moves |
 | `agent.list`, `agent.get` | `list-windows` | a target is a pane id, a terminal id, or one agent's label or name |
-| `agent.wait` | `wait-for agent-state` | |
+| `agent.wait` | `wait-for agent-state` | matches herdr's status, so `idle` and `done` follow whether the pane was seen |
 | `agent.start` | `start-agent` grant, then `send-text` and `send-keys` | needs `fan` on the session (what `start-agent` needs) and `write` for the typing. Types the agent's command at the shell prompt of a pane, and names the pane after the agent. See below |
 | `agent.prompt` | `send-text` with `submit` | types the prompt as `ask-agent` does. As in herdr, a working agent gets the prompt, and its harness queues it for the next turn. An agent that waits on a prompt fails with `agent_blocked`, and nothing is typed. `tuios ask-agent` still refuses a working agent |
 | `agent.rename` | `set-window` | names the pane that holds the agent. No `name` clears it. `agent.get` and the other agent methods then find the agent by the new name |
@@ -718,7 +731,7 @@ A refused call answers error `forbidden`, and nothing changes.
 | `worktree.open` | `new-session` in the checkout | a checkout that a session shows answers `already_open: true` |
 | `worktree.remove` | `remove-worktree` | |
 | `events.subscribe` | `subscribe` | see below |
-| `events.wait` | `wait-for agent-state` | answers only a `pane_agent_status_changed` match, as herdr does |
+| `events.wait` | `wait-for agent-state` | answers only a `pane_agent_status_changed` match, as herdr does, on herdr's status as `agent.wait` does |
 | the pane reports | `set-agent-state` and the rest | see [herdr's pane state protocol](#herdrs-pane-state-protocol) |
 
 The `plugin.*` methods and `popup.close` are answered by the plugin host. See
@@ -927,6 +940,7 @@ event is `{"event":"pane.agent_status_changed","data":{...}}`.
 | `window-moved` | `pane_moved` |
 | `workspace-switched` | `tab_focused` |
 | `agent-state` | `pane_agent_detected` when an agent comes or goes, and `pane.agent_status_changed` when its status changes |
+| `agent-seen` | `pane.agent_status_changed` from `done` to `idle` when the pane is looked at, and back when it is marked unread |
 
 `pane.agent_status_changed` needs a `pane_id`. `pane.scroll_changed` and
 `pane.output_matched` fail with `unsupported`: use `pane.wait_for_output`. A

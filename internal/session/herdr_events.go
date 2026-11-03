@@ -35,6 +35,7 @@ import (
 //	workspace-switched  tab_focused
 //	agent-state         pane_agent_detected when an agent comes or goes, and
 //	                    pane.agent_status_changed when its status changes
+//	agent-seen          pane.agent_status_changed, done to idle or back
 //
 // herdr has no event for a lost one. When the stream falls behind, tuios
 // writes herdr's error line with code events_lost and closes, and the client
@@ -71,7 +72,7 @@ var herdrHubTypes = map[string]bool{
 	EventSessionCreated: true, EventSessionClosed: true, EventWindowCreated: true,
 	EventWindowClosed: true, EventWindowExit: true, EventWindowRetitled: true,
 	EventWindowFocused: true, EventWindowMoved: true, EventWorkspaceSwitched: true,
-	EventAgentState: true,
+	EventAgentState: true, EventAgentSeen: true,
 }
 
 // herdrParseSubscriptions reads and checks events.subscribe's list. One
@@ -169,16 +170,16 @@ func (t *herdrTranslator) remember(s *Session) {
 	st := s.GetState()
 	for _, w := range st.Windows {
 		if !herdrScratch(&w) {
-			t.panes[w.ID] = herdrMemoOf(s.ID, st, &w)
+			t.panes[w.ID] = herdrMemoOf(s, st, &w)
 		}
 	}
 }
 
-func herdrMemoOf(sessionID string, st *SessionState, w *WindowState) herdrPaneMemo {
-	m := herdrPaneMemo{sessionID: sessionID, tabKey: st.WorkspaceTabKey(max(w.Workspace, 1)), status: "unknown"}
+func herdrMemoOf(sess *Session, st *SessionState, w *WindowState) herdrPaneMemo {
+	m := herdrPaneMemo{sessionID: sess.ID, tabKey: st.WorkspaceTabKey(max(w.Workspace, 1)), status: "unknown"}
 	if w.AgentHarness != "" && w.AgentState != AgentStateNone {
 		m.agent = herdrAgentLabel(w.AgentHarness)
-		m.status = herdrStatus(w.AgentState)
+		m.status = herdrStatus(w.AgentState, sess.finishedUnread(w))
 	}
 	return m
 }
@@ -256,7 +257,9 @@ func (t *herdrTranslator) translate(ev streamEvent) []herdrEvent {
 	switch ev.Type {
 	case EventWindowFocused:
 		return []herdrEvent{global("pane_focused", &herdrEventData{PaneID: paneID, WorkspaceID: wsID})}
-	case EventAgentState:
+	case EventAgentState, EventAgentSeen:
+		// A pane looked at turns herdr's done into idle without a change of
+		// tuios state, so agent-seen is read the same way.
 		return t.agentState(sess, ev.Window, paneID, wsID)
 	}
 	v := t.view(sess)
@@ -267,7 +270,7 @@ func (t *herdrTranslator) translate(ev streamEvent) []herdrEvent {
 	prev := t.panes[ev.Window]
 	st := sess.GetState()
 	w, _ := findWindowState(st, ev.Window)
-	t.panes[ev.Window] = herdrMemoOf(sess.ID, st, &w)
+	t.panes[ev.Window] = herdrMemoOf(sess, st, &w)
 	switch ev.Type {
 	case EventWindowCreated:
 		out := []herdrEvent{global("pane_created", &herdrEventData{Pane: p})}
@@ -316,8 +319,8 @@ func (t *herdrTranslator) closed(ev streamEvent) []herdrEvent {
 	return out
 }
 
-// agentState is what one agent-state event says: an agent that came or
-// went, and a status that changed.
+// agentState is what one agent-state or agent-seen event says: an agent
+// that came or went, and a status that changed.
 func (t *herdrTranslator) agentState(sess *Session, window, paneID, wsID string) []herdrEvent {
 	st := sess.GetState()
 	w, ok := findWindowState(st, window)
@@ -325,7 +328,7 @@ func (t *herdrTranslator) agentState(sess *Session, window, paneID, wsID string)
 		return nil
 	}
 	prev := t.panes[window]
-	now := herdrMemoOf(sess.ID, st, &w)
+	now := herdrMemoOf(sess, st, &w)
 	t.panes[window] = now
 	var out []herdrEvent
 	if prev.agent != now.agent {

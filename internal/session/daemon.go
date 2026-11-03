@@ -1321,6 +1321,13 @@ func (d *Daemon) onSessionCreated(s *Session) {
 		}
 		if ev.Type == eventCompletionSeen || ev.Type == eventAttentionDetail || ev.Type == eventPaneFocused {
 			d.attention.noteSessionEvent(name, ev)
+			if ev.Type == eventCompletionSeen {
+				d.events.publish(streamEvent{Type: EventAgentSeen, Session: name, Window: ev.Window, Action: "seen"})
+			}
+			return
+		}
+		if ev.Type == eventCompletionUnseen {
+			d.events.publish(streamEvent{Type: EventAgentSeen, Session: name, Window: ev.Window, Action: "unread"})
 			return
 		}
 		// A task card the change let go, with its pane or its agent.

@@ -166,6 +166,7 @@ func (s *Session) MarkCompletionUnseen(windowID string) bool {
 		}
 		if s.completionSeen[w.ID] >= w.CompletionSeq {
 			s.completionSeen[w.ID] = w.CompletionSeq - 1
+			s.emit(SessionEvent{Type: eventCompletionUnseen, Window: w.ID, completionSeq: w.CompletionSeq})
 		}
 		return true
 	}

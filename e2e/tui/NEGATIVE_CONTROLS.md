@@ -36,6 +36,29 @@ The frames are `sh-read-back`, `fish-read-back`, `dragged` and
 `bash-read-back` under `TUIOS_E2E_FRAMES`, in the test's folder. Repeat from
 `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestPastedPathReadsBackBehindTmux$' -v .`.
+## The herdr socket reports a seen done pane as idle
+
+`TestHerdrSeenDoneIsIdle` holds the herdr socket to herdr 0.9.5's
+`agent_status`, where `done` is an agent at rest that nobody has seen and the
+pane turns `idle` once someone looks at it. Without a client, a `pane.focus`
+must mark the pane seen; with a client, the client focusing it must. Both must
+raise `pane.agent_status_changed`, and `agent.wait` must match the same status.
+
+Run on 2026-11-03 on macOS (darwin/arm64). Both parts pass on the fixed build,
+and a binary of main (b74fde8ac) fails both. Each control was built into its
+own binary.
+
+| Control: what was cut | Where it fails | Verdict |
+| --- | --- | --- |
+| Main without the fix | Both parts: no client ("pane.focus marks a done pane seen: the reply says done, want idle"), and a client ("the client focusing a done pane: no pane.agent_status_changed idle arrived") | **caught** |
+| `sess.MarkCompletionSeen` not called in `herdrFocusPane` | The part with no client ("the reply says done, want idle") | **caught** |
+| The `agent-seen` publish cut from the daemon's event sink | Both parts time out waiting for `pane.agent_status_changed` `idle` | **caught** |
+| `herdrStatus` reads `done` as `done` whether seen or not | Both parts, at the `pane.focus` reply and waiting for `idle` | **caught** |
+| `herdrWaitAgent` matches the tuios state, not herdr's status | The part with no client ("agent.wait for idle matched a pane nobody has seen") | **caught** |
+
+The event streams are `herdr-status-stream-no-client` and
+`herdr-status-stream-client`, and the frame `herdr-seen-done-is-idle`, under
+`TUIOS_E2E_FRAMES`.
 
 ## Quick look keeps its picture through a resize
 

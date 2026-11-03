@@ -8,6 +8,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/worktree"
 )
@@ -1056,6 +1057,11 @@ func (d *Daemon) herdrFocusPane(cs *connState, id string) (*herdrResult, *herdrE
 	if _, herr := d.herdrVerb(cs, "focus-window", herdrWin(sess, win.ID), "pane_focus_failed"); herr != nil {
 		return nil, herr
 	}
+	// herdr marks the target seen on an explicit pane.focus or agent.focus,
+	// with or without a client to show it, so a done pane answers idle. A
+	// tuios client marks a pane seen only when it pushes state with the pane
+	// in front of its user, which a daemon with no client never does.
+	sess.MarkCompletionSeen(win.ID)
 	return d.herdrPaneResult(cs, "pane_info", id)
 }
 
@@ -1239,19 +1245,21 @@ func (d *Daemon) herdrAgentFocus(cs *connState, in *herdrIn) (*herdrResult, *her
 	return d.herdrAgent(cs, in, func(id string) (*herdrResult, *herdrError) { return d.herdrFocusPane(cs, id) })
 }
 
-// herdrStatesFor is the tuios agent states a herdr status list waits for.
+// herdrStatesFor checks a herdr status list, and is the tuios agent states
+// it can match, for the grant check of the wait-for verb it stands in for.
 func herdrStatesFor(statuses []string) (string, *herdrError) {
 	var states []string
 	for _, s := range statuses {
 		switch s {
-		case "idle":
-			states = append(states, string(AgentStateIdle))
+		case "idle", "done":
+			states = append(states, string(AgentStateIdle), string(AgentStateDone))
+			if s == "done" {
+				states = append(states, string(AgentStateErrored))
+			}
 		case "working":
 			states = append(states, string(AgentStateWorking))
 		case "blocked":
 			states = append(states, string(AgentStateNeedsInput))
-		case "done":
-			states = append(states, string(AgentStateDone), string(AgentStateErrored))
 		case "unknown":
 			states = append(states, string(AgentStateUnknown))
 		default:
@@ -1261,7 +1269,12 @@ func herdrStatesFor(statuses []string) (string, *herdrError) {
 	return strings.Join(states, ","), nil
 }
 
-// herdrWaitAgent is wait-for agent-state on one pane.
+// herdrWaitAgent is wait-for agent-state on one pane, matched on herdr's
+// status rather than the tuios state: herdr's idle and done are one tuios
+// state told apart by whether the pane was seen, so a seen done pane matches
+// idle and not done, as herdr's agent wait does (src/api/wait.rs). It holds
+// the caller to the grants wait-for needs, and answers what wait-for would
+// when it runs out or the pane closes.
 func (d *Daemon) herdrWaitAgent(cs *connState, id string, until []string, timeoutMS *int64) *herdrError {
 	if len(until) == 0 {
 		until = []string{"idle", "done"}
@@ -1276,8 +1289,56 @@ func (d *Daemon) herdrWaitAgent(cs *connState, id string, until []string, timeou
 	}
 	args := herdrWin(sess, win.ID)
 	args.Condition, args.Until, args.Timeout = "agent-state", states, timeoutMS
-	_, herr = d.herdrVerb(cs, "wait-for", args, "wait_failed")
-	return herr
+	raw, err := json.Marshal(args)
+	if err != nil {
+		return herdrErr("internal_error", "could not encode params")
+	}
+	if _, _, verr := d.admitVerb(cs, "wait-for", raw); verr != nil {
+		return herdrFromVerb(verr, "wait_failed")
+	}
+	timeout := defaultWaitTimeout
+	if timeoutMS != nil {
+		if *timeoutMS < 0 || *timeoutMS > maxWaitTimeoutMS {
+			return herdrFromVerb(invalidParam("timeout", fmt.Sprintf("timeout is milliseconds from 1 to %d (24 hours)", maxWaitTimeoutMS)), "wait_failed")
+		}
+		if *timeoutMS > 0 {
+			timeout = time.Duration(*timeoutMS) * time.Millisecond
+		}
+	}
+	deadline, stop := d.waitDeadline(cs, timeout)
+	defer stop()
+	sub := d.events.subscribe(eventFilter{window: win.ID, types: map[string]bool{
+		EventAgentState: true, EventAgentSeen: true, EventWindowClosed: true,
+	}}, defaultEventQueue)
+	defer d.events.unsubscribe(sub)
+	matches := func() bool {
+		w, ok := findWindowState(sess.GetState(), win.ID)
+		if !ok {
+			return false
+		}
+		// The state is read without waiting for a harness, as wait-for does:
+		// a program that reports over OSC 7501 is at rest before tuios has
+		// named its harness.
+		return slices.Contains(until, herdrStatus(w.AgentState, sess.finishedUnread(&w)))
+	}
+	if matches() {
+		return nil
+	}
+	for {
+		select {
+		case <-deadline:
+			return herdrFromVerb(agentStateTimeout(strings.Join(until, ",")), "wait_failed")
+		case <-d.ctx.Done():
+			return herdrErr("internal_error", "daemon is shutting down")
+		case ev := <-sub.ch:
+			if ev.Type == EventWindowClosed {
+				return herdrFromVerb(newVerbError(ErrVerbWindowNotFound, "the watched window closed before reaching "+strings.Join(until, ",")), "wait_failed")
+			}
+			if matches() {
+				return nil
+			}
+		}
+	}
 }
 
 func (d *Daemon) herdrAgentWait(cs *connState, in *herdrIn) (*herdrResult, *herdrError) {
