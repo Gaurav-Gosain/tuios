@@ -1010,6 +1010,9 @@ func (m *OS) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	// Focus reports for every path that moved the focus without FocusWindow.
 	m.reportFocusChange()
 	m.reconcilePrevFocus()
+	// A session switch does not land in FocusWindow. By now a switch-then-focus
+	// route has focused its pane, so only the pane left in front is marked.
+	m.markSwitchSeen()
 	m.noteGotoPlace()
 	m.recordScrollAnchors()
 	// Asked again after the handler, not only before it, because the handler

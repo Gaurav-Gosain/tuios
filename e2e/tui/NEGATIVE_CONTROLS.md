@@ -7869,6 +7869,23 @@ pane's screen into the preview first. Run on 2026-10-19.
 |---|---|---|---|---|
 | The cached row drops the seen bit | `DoneSeen` in `navigatorSessions` | The field cut from the row | `TestNavigatorKeepsADonePaneSeen` ("the logs row never showed ○ (seen) after the load") | **caught** |
 | The load puts the unread mark back | `keepAgentMarks` in `ApplyNavigatorLoaded` | The call cut | `TestNavigatorKeepsADonePaneSeen` ("the logs row never showed ○ (seen) after the load") | **caught** |
+
+### A session switch marks the focused pane seen (issue #1471)
+
+`TestSessionSwitchMarksTheFocusedPaneSeen` finishes an agent in work's logs
+pane with logs focused there, reads ■ on the logs row from home, switches the
+client to work and back to home with no focus move, and reads ○ on the row.
+`switch-session` makes the switch with the CLI and `next_session` with the
+prefix and `)`. `pane-row` finishes a second agent in `first`, the pane work
+has focused, and presses Enter on the logs row: after the jump logs reads ○
+and `first`, never in front of the person, still reads ■. Run on 2026-11-03 on Linux.
+
+| Bug | Fix removed | How | Tests that fail | Verdict |
+|---|---|---|---|---|
+| A session switch leaves the focused pane unread | The mark call after a message in `update.go` | The call cut | `TestSessionSwitchMarksTheFocusedPaneSeen/switch-session` ("the navigator never showed ○ logs (seen after the switch) after the load") and `TestSessionSwitchMarksTheFocusedPaneSeen/next_session` (same message) | **caught** |
+| A session switch leaves the focused pane unread | The flag set in `SwitchToSession` | The line cut | `TestSessionSwitchMarksTheFocusedPaneSeen/switch-session` ("the navigator never showed ○ logs (seen after the switch) after the load") and `TestSessionSwitchMarksTheFocusedPaneSeen/next_session` (same message) | **caught** |
+| The mark lands on the pane the session had focused, before a pane row focuses its own | The mark deferred to the end of the message | Marked inside `SwitchToSession` instead | `TestSessionSwitchMarksTheFocusedPaneSeen/pane-row` ("the navigator never showed ■ first (logs seen after the jump, first never in front) after the load") | **caught** |
+
 ### A prefix binding on the leader key (issue #866)
 
 `TestLeaderBoundInPrefixRunsItsAction` binds `prefix_new_window` to the

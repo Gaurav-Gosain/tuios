@@ -261,6 +261,159 @@ func TestNavigatorKeepsADonePaneSeen(t *testing.T) {
 	saveFrame(t, term, "navigator-done-seen")
 }
 
+// TestSessionSwitchMarksTheFocusedPaneSeen: a finished agent pane that is the
+// focused pane of another session is drawn unread (■) until the person looks
+// at it. Switching to that session puts the pane in front of them, so after
+// the switch it is drawn seen (○), whichever route made the switch. A pane row
+// of another session switches and then focuses its own pane, so the pane that
+// was focused in the session before it is never in front of the person and
+// stays unread.
+//
+// How it could pass wrongly, written down first:
+//   - No mark at all would read as "not unread". The first check needs ■ on
+//     the logs row before the switch, and the second needs ○ on it after.
+//   - The pane could be seen by a focus move rather than by the switch. logs
+//     is focused in work before the client attaches, and nothing focuses it
+//     afterwards: the client goes to work by a session route and back to home
+//     by switch-session, and the mark is read from home in the navigator.
+//   - A mark set at the switch, before the pane row's focus, would mark the
+//     pane the session had focused. In pane-row that pane, first, is a
+//     finished agent too, and it must still show ■ after the jump to logs.
+func TestSessionSwitchMarksTheFocusedPaneSeen(t *testing.T) {
+	// finished reports each pane in work working and then done.
+	finished := func(t *testing.T, base string, panes ...string) {
+		t.Helper()
+		for _, pane := range panes {
+			for _, state := range []string{"working", "done"} {
+				if o, err := tuiosCLI(t, base, "set-agent-state", "-s", "work", "-w", pane, state, "--harness", "claude-code"); err != nil {
+					t.Fatalf("set-agent-state %s %s: %v\n%s", pane, state, err, o)
+				}
+			}
+		}
+	}
+	// marks waits for the navigator to show each of rows (a mark and a pane
+	// name) on a row of its list, once the load has brought the marker into
+	// the preview.
+	marks := func(t *testing.T, term *tuitest.Terminal, what string, rows ...string) {
+		t.Helper()
+		missing := func(text string) []string {
+			var out []string
+			for _, row := range rows {
+				found := false
+				for l := range strings.SplitSeq(text, "\n") {
+					if strings.Contains(navListRow(l), row) {
+						found = true
+						break
+					}
+				}
+				if !found {
+					out = append(out, row)
+				}
+			}
+			return out
+		}
+		if err := term.WaitFor(func(s tuitest.Screen) bool {
+			text := s.Text()
+			return strings.Contains(text, navMarker) && len(missing(text)) == 0
+		}, uiTimeout); err != nil {
+			t.Fatalf("%s: the navigator never showed %s (%s) after the load: %v\n%s",
+				t.Name(), strings.Join(missing(term.Snapshot()), " and "), what, err, term.Snapshot())
+		}
+	}
+	attached := func(t *testing.T, base string, term *tuitest.Terminal, name string) {
+		t.Helper()
+		isAttached := func(rows []lsRow) bool {
+			for _, r := range rows {
+				if r.Name == name && r.Attached {
+					return true
+				}
+			}
+			return false
+		}
+		if !isAttached(waitForRows(t, base, isAttached)) {
+			t.Fatalf("%s: the client never showed %s\n%s", t.Name(), name, term.Snapshot())
+		}
+	}
+	backHome := func(t *testing.T, base string, term *tuitest.Terminal) {
+		t.Helper()
+		if o, err := tuiosCLI(t, base, "switch-session", "-s", "work", "home"); err != nil {
+			t.Fatalf("%s: switch-session home: %v\n%s", t.Name(), err, o)
+		}
+		attached(t, base, term, "home")
+		openWorkLogs(t, term)
+	}
+
+	routes := []struct {
+		name   string
+		toWork func(t *testing.T, base string, term *tuitest.Terminal)
+	}{
+		{"switch-session", func(t *testing.T, base string, _ *tuitest.Terminal) {
+			if o, err := tuiosCLI(t, base, "switch-session", "-s", "home", "work"); err != nil {
+				t.Fatalf("%s: switch-session work: %v\n%s", t.Name(), err, o)
+			}
+		}},
+		{"next_session", func(t *testing.T, _ string, term *tuitest.Terminal) {
+			sendKeys(t, term, tuitest.Ctrl('b'), ")")
+		}},
+	}
+	for _, r := range routes {
+		t.Run(r.name, func(t *testing.T) {
+			base, logs := navigatorSessions(t)
+			if o, err := tuiosCLI(t, base, "focus-window", "-s", "work", logs); err != nil {
+				t.Fatalf("%s: focus-window logs: %v\n%s", t.Name(), err, o)
+			}
+			if got := focusedIn(t, base, "work"); got != logs {
+				t.Fatalf("%s: logs is not focused in work (%s), so the switch would prove nothing", t.Name(), got)
+			}
+			finished(t, base, logs)
+			term := navClient(t, base, nil)
+
+			openWorkLogs(t, term)
+			marks(t, term, "unread before the switch", "■ logs")
+			sendKeys(t, term, tuitest.Esc)
+			if err := term.WaitFor(func(s tuitest.Screen) bool {
+				return !strings.Contains(s.Text(), "Press / to search")
+			}, uiTimeout); err != nil {
+				t.Fatalf("%s: the navigator never closed: %v\n%s", t.Name(), err, term.Snapshot())
+			}
+
+			r.toWork(t, base, term)
+			attached(t, base, term, "work")
+			if got := focusedIn(t, base, "work"); got != logs {
+				t.Fatalf("%s: the switch left the focus on %s, not logs", t.Name(), got)
+			}
+
+			backHome(t, base, term)
+			marks(t, term, "seen after the switch", "○ logs")
+		})
+	}
+
+	t.Run("pane-row", func(t *testing.T) {
+		base, logs := navigatorSessions(t)
+		first := focusedIn(t, base, "work")
+		if o, err := tuiosCLI(t, base, "set-window", "-s", "work", "-w", first, "--name", "first"); err != nil {
+			t.Fatalf("%s: set-window first: %v\n%s", t.Name(), err, o)
+		}
+		finished(t, base, first, logs)
+		term := navClient(t, base, nil)
+
+		openWorkLogs(t, term)
+		marks(t, term, "unread before the jump", "■ first", "■ logs")
+		sendKeys(t, term, tuitest.Enter)
+		attached(t, base, term, "work")
+		deadline := time.Now().Add(uiTimeout)
+		for focusedIn(t, base, "work") != logs {
+			if time.Now().After(deadline) {
+				t.Fatalf("%s: enter on the logs row did not focus logs\n%s", t.Name(), term.Snapshot())
+			}
+			time.Sleep(100 * time.Millisecond)
+		}
+
+		backHome(t, base, term)
+		marks(t, term, "logs seen after the jump, first never in front", "○ logs", "■ first")
+	})
+}
+
 // navDecoy is a pane name that holds every character of navMarker in order,
 // spread out, and never the marker whole. A fuzzy search for the marker
 // matches it.

@@ -149,6 +149,18 @@ func (m *OS) markFocusedAgentSeen(i int) {
 	m.markAgentSeenAt(w)
 }
 
+// markSwitchSeen marks the focused pane seen after a session switch, once the
+// message that switched has been handled. A route that switches and then
+// focuses another pane has already marked that pane through FocusWindow, so
+// only the pane left in front is marked here.
+func (m *OS) markSwitchSeen() {
+	if !m.switchSeenPending {
+		return
+	}
+	m.switchSeenPending = false
+	m.markFocusedAgentSeen(m.FocusedWindow)
+}
+
 // agentSeenAtNow is the clock markAgentSeenAt reads. A test replaces it.
 var agentSeenAtNow = func() int64 { return time.Now().UnixNano() }
 

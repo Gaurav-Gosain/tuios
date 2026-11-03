@@ -111,6 +111,10 @@ type OS struct {
 	// tml holds the TML surfaces this client draws. See tml.go.
 	tml tmlClient
 
+	// switchSeenPending is set by a session switch and consumed once the
+	// message that caused it has been handled. See markSwitchSeen.
+	switchSeenPending bool
+
 	// ClientTitle is the title of the terminal this client runs in, set
 	// through herdr's client.window_title.set. Empty sets none.
 	ClientTitle string
@@ -2300,6 +2304,11 @@ func (m *OS) SwitchToSession(targetSession string) error {
 	from := lastSession{host: m.attachedMachine(), name: m.SessionName}
 	m.SessionName = m.DaemonClient.SessionName()
 	m.rebuildForSession(state, savedWidth, savedHeight)
+	// The switch puts the session's focused pane in front of the person, which
+	// is a look as a focus is, but it does not go through FocusWindow. A caller
+	// may still focus another pane before the frame, so the mark waits for
+	// the end of the message. See markSwitchSeen.
+	m.switchSeenPending = true
 	m.leftSession(from)
 	// The components tell their commands which session they are drawing for,
 	// and that answer just changed.
