@@ -166,6 +166,10 @@ func piTurnStart(id, event string, p fields) (Decision, bool) {
 //	                        with the session id and session file
 //	agent_start             working
 //	agent_settled           done
+//	subagent_start,         a subagent of the session starting, stopping
+//	subagent_stop,          or in flight, reported alone (report-agent-
+//	subagent_update         activity) with its id, type and text, the
+//	                        update's tool, target and outcome
 //	ui_prompt_start         needs_input: kind approval for a confirm, kind
 //	                        question for a select, input, editor or custom
 //	                        prompt, with the prompt's title
@@ -209,6 +213,25 @@ func translatePi(in Input, p fields) Decision {
 		if busy, _ := p["busy"].(bool); busy {
 			r.State = "working"
 		}
+	case "subagent_start", "subagent_stop", "subagent_update":
+		id := p.str("agent_id")
+		if !ValidSubagentID(id) {
+			return skip(Pi, event, "agent_id is not an id tuios keeps: 1 to 128 letters, digits, '_', '.', ':', '@' or '-'")
+		}
+		a := &Activity{Event: event, AgentID: id, AgentType: activityText(p.str("agent_type")), Text: activityText(p.str("text"))}
+		if event == "subagent_update" {
+			// The update's tool and target ride top-level payload keys, not
+			// tool_input, so the target is taken and clipped directly instead
+			// of through ToolTarget's tool_input lookup.
+			a.Tool, a.Target = p.str("tool"), Clip(p.str("target"))
+			switch p.str("outcome") {
+			case "stopping":
+				a.Outcome = OutcomeStopping
+			case "failed":
+				a.Outcome = OutcomeFailed
+			}
+		}
+		return send(Pi, event, Report{SessionID: p.str("session_id"), Activity: a})
 	case "":
 		return skip(Pi, event, "the payload names no event")
 	default:
