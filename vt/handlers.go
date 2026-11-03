@@ -48,17 +48,27 @@ type handlers struct {
 	pmHandlers  []PmHandler
 }
 
+// The Register functions that index a map carry //go:noinline. A new emulator
+// makes about 90 of these calls, and a copy inlined at each one cost 16 KB of
+// binary. They run once per emulator, so the call costs nothing that shows.
+
 // RegisterDcsHandler registers a DCS escape sequence handler.
+//
+//go:noinline
 func (h *handlers) RegisterDcsHandler(cmd int, handler DcsHandler) {
 	h.dcsHandlers[cmd] = append(h.dcsHandlers[cmd], handler)
 }
 
 // RegisterCsiHandler registers a CSI escape sequence handler.
+//
+//go:noinline
 func (h *handlers) RegisterCsiHandler(cmd int, handler CsiHandler) {
 	h.csiHandlers[cmd] = append(h.csiHandlers[cmd], handler)
 }
 
 // RegisterOscHandler registers an OSC escape sequence handler.
+//
+//go:noinline
 func (h *handlers) RegisterOscHandler(cmd int, handler OscHandler) {
 	h.oscHandlers[cmd] = append(h.oscHandlers[cmd], handler)
 }
@@ -79,6 +89,8 @@ func (h *handlers) RegisterPmHandler(handler PmHandler) {
 }
 
 // RegisterEscHandler registers an ESC escape sequence handler.
+//
+//go:noinline
 func (h *handlers) RegisterEscHandler(cmd int, handler EscHandler) {
 	h.escHandler[cmd] = append(h.escHandler[cmd], handler)
 }
