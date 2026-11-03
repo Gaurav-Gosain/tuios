@@ -1675,7 +1675,7 @@ command that has flags of its own, or tuios reads them as its own flags:
 
 **Flags:**
 - `-s, --session <name>`: Target session (default: this pane's session, else the most recently active)
-- `--workspace <n>`: Workspace to open the window on (default: the current one)
+- `--workspace <n>`: Workspace to open the window on (default: the calling pane's workspace, else the one the session shows)
 - `--cwd <dir>`: Directory to start the shell in (default: the daemon's)
 - `--no-focus`: Leave the focus where it is
 - `--host <name>`: Run the window's process on this machine from the `[hosts]` table (default: this machine)

@@ -1305,7 +1305,7 @@ window as one line with its uri.`,
 		},
 	}
 	newWindowCmd.Flags().StringVarP(&newWindowSession, "session", "s", "", "Target session (default: this pane's session, else the most recently active)")
-	newWindowCmd.Flags().IntVar(&newWindowWorkspace, "workspace", 0, "Workspace to open the window on (default: the current one)")
+	newWindowCmd.Flags().IntVar(&newWindowWorkspace, "workspace", 0, "Workspace to open the window on (default: the calling pane's workspace, else the one the session shows)")
 	newWindowCmd.Flags().StringVar(&newWindowCwd, "cwd", "", "Directory to start the shell in (default: the daemon's)")
 	newWindowCmd.Flags().BoolVar(&newWindowNoFocus, "no-focus", false, "Leave the focus where it is")
 	newWindowCmd.Flags().StringVar(&newWindowHost, "host", "", "Run the window's process on this machine from the [hosts] table (default: this machine)")

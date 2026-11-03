@@ -224,6 +224,27 @@ func (d *Daemon) callerPaneRef(cs *connState) *PaneRef {
 	return &PaneRef{Session: sess.Name(), Window: pa.window}
 }
 
+// callerWorkspaceIn is the workspace of the pane the caller on cs runs in,
+// when that pane is in sess and on an ordinary workspace. It is 0 otherwise,
+// which leaves the window on the workspace the session shows. An agent in a
+// pane on workspace 3 that opens a window wants it beside itself, not on
+// whatever workspace the person happens to be looking at (#1494).
+func (d *Daemon) callerWorkspaceIn(cs *connState, sess *Session) int {
+	ref := d.callerPaneRef(cs)
+	if ref == nil || sess == nil || ref.Session != sess.Name() {
+		return 0
+	}
+	st := sess.GetState()
+	i, err := findWindowStateIndex(st.Windows, ref.Window)
+	if err != nil {
+		return 0
+	}
+	if ws := st.Windows[i].Workspace; ws > 0 && !IsScratchWorkspace(ws) {
+		return ws
+	}
+	return 0
+}
+
 // noteStartedBy records on window the pane the caller on cs runs in, as the
 // pane that started it. It records nothing for a caller in no pane.
 func (d *Daemon) noteStartedBy(cs *connState, window string) {

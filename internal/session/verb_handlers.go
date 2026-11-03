@@ -367,6 +367,11 @@ func (d *Daemon) verbNewWindow(cs *connState, params json.RawMessage) (any, *ver
 	if p.Workspace < 0 {
 		return nil, invalidParam("workspace", "workspace is a workspace number, e.g. 2. Omit it for the current one")
 	}
+	// From inside a pane of this session, the default is the pane's own
+	// workspace (#1494). Outside every pane it stays the one the session shows.
+	if p.Workspace == 0 {
+		p.Workspace = d.callerWorkspaceIn(cs, sess)
+	}
 	// A window on another machine. The name is checked against the [hosts]
 	// table here rather than at the spawn, so a typo is a parameter error that
 	// names the machines available instead of a link failure twenty seconds
