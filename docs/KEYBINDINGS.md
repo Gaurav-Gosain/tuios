@@ -1202,6 +1202,11 @@ restarted. tuios reattached." While they wait, the dock says "Waiting for the
 daemon. Keys are not sent." With the dock hidden, the middle of the screen
 says it. Keys typed then are not sent to the panes.
 
+A live upgrade (`tuios daemon upgrade`) drops the clients the same way, and
+they wait for the new image and attach again by themselves, saying "The
+daemon was upgraded. tuios reattached." A client whose build speaks another
+wire protocol than the new image exits instead and says how to attach again.
+
 When a step fails, the dialog says what happened and what to do next. When
 a program started or stopped after you agreed, the restart does not run, and
 the dialog asks you to read the new list. When your session did not come
