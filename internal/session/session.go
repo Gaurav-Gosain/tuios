@@ -1361,6 +1361,13 @@ type Session struct {
 	// newest attach that detaches the others. See detach_client.go.
 	attachMu     sync.Mutex
 	exclusiveSeq atomic.Uint64
+	// optionApplyMu orders the routes of options to a client, so a value set
+	// live while the waiting ones are routed cannot reach the client ahead of
+	// an older one and be overwritten by it. optionsWaiting holds the options
+	// set while no client was attached, guarded by stateMu. See
+	// option_pending.go.
+	optionApplyMu  sync.Mutex
+	optionsWaiting map[string]string
 
 	// Identity
 	ID string

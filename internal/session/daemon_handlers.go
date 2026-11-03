@@ -397,6 +397,12 @@ func (d *Daemon) handleAttach(cs *connState, msg *Message) error {
 	d.sendTMLSurfaces(cs, session.ID)
 	// The native plugins that wait for the person. See plugin_approval.go.
 	d.sendPluginAsks(cs)
+	// The options set while no client was attached. On its own goroutine:
+	// each waits for the client's answer, which this connection's read loop
+	// delivers once this handler returns. See option_pending.go.
+	if session.hasWaitingOptions() {
+		go d.applyWaitingOptions(session)
+	}
 
 	// A probe that has not reached a pane yet may still: see nest_probe.go.
 	if inside == nil && !cs.viaLink {

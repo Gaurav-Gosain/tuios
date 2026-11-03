@@ -195,6 +195,13 @@ type TUIClient struct {
 	// Remote command handler, called when a remote command is received
 	remoteCommandHandler RemoteCommandHandler
 	remoteCommandMu      sync.RWMutex
+	// remoteCommandsEarly holds the routed commands that arrived before a
+	// handler was registered, oldest first, for OnRemoteCommand to hand over.
+	// The daemon routes to a client the moment its attach reply goes, and the
+	// handler is registered only once the program is built. The options set
+	// while no client was attached are routed in exactly that window. Bounded
+	// by remoteCommandsEarlyMax. Guarded by remoteCommandMu.
+	remoteCommandsEarly []*RemoteCommandPayload
 
 	// Multi-client handlers
 	stateSyncHandler     StateSyncHandler
@@ -1071,12 +1078,28 @@ func (c *TUIClient) OnPTYClosed(ptyID string, handler func()) {
 // so the oldest entries go.
 const ptyClosedEarlyMax = 32
 
+// remoteCommandsEarlyMax bounds remoteCommandsEarly. Past it the oldest
+// command goes, and its caller times out as it did before commands were kept.
+const remoteCommandsEarlyMax = 32
+
 // OnRemoteCommand registers a handler for remote commands from the CLI.
 // The handler should execute the command and return an error if it fails.
+// The commands that arrived before any handler was registered are handed to
+// it here, in the order they came.
 func (c *TUIClient) OnRemoteCommand(handler RemoteCommandHandler) {
 	c.remoteCommandMu.Lock()
 	c.remoteCommandHandler = handler
+	var early []*RemoteCommandPayload
+	if handler != nil {
+		early = c.remoteCommandsEarly
+		c.remoteCommandsEarly = nil
+	}
 	c.remoteCommandMu.Unlock()
+	for _, payload := range early {
+		if err := handler(payload); err != nil {
+			_ = c.SendCommandResult(payload.RequestID, false, err.Error())
+		}
+	}
 }
 
 // OnStateSync registers a handler for state sync messages from other clients.
@@ -2146,9 +2169,19 @@ func (c *TUIClient) handleMessage(msg *Message) {
 			return
 		}
 
-		c.remoteCommandMu.RLock()
+		// Handler read and retention under one lock, so a registration
+		// cannot slip between the two and leave a command kept with a
+		// handler present.
+		c.remoteCommandMu.Lock()
 		handler := c.remoteCommandHandler
-		c.remoteCommandMu.RUnlock()
+		if handler == nil {
+			if len(c.remoteCommandsEarly) >= remoteCommandsEarlyMax {
+				c.remoteCommandsEarly = c.remoteCommandsEarly[1:]
+			}
+			retained := payload
+			c.remoteCommandsEarly = append(c.remoteCommandsEarly, &retained)
+		}
+		c.remoteCommandMu.Unlock()
 
 		if handler != nil {
 			debugLog("[REMOTE] Executing command with handler")
@@ -2160,7 +2193,7 @@ func (c *TUIClient) handleMessage(msg *Message) {
 			}
 			// Don't send success result here. Let update.go send it with the actual data
 		} else {
-			debugLog("[REMOTE] No handler registered for remote commands")
+			debugLog("[REMOTE] No handler registered yet, kept the command for it")
 		}
 
 	case MsgStateSync:

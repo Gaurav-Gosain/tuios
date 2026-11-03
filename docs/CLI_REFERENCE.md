@@ -2150,8 +2150,8 @@ tuios set-config <path> <value> [flags]
 
 With a client attached, the client applies the value and writes it to
 `config.toml`. With no client attached, the daemon keeps the value for the
-session and does not write the file, and the client applies it when it
-attaches. The command still prints `Set PATH = VALUE` on stdout, and says on
+session. The next client that attaches applies it and writes it to
+`config.toml`. The command still prints `Set PATH = VALUE` on stdout, and says on
 stderr that the value is not applied yet. `agents.enabled` is the person's
 switch: a process in a pane cannot set it.
 

@@ -12217,3 +12217,17 @@ limit. Run on 2026-11-03 on Linux against the branch head with one change:
 | Claim | Control | Where it fails | Verdict |
 |---|---|---|---|
 | claim-task maps a missing window after the state lock is released (#1477) | the old `verb_task.go`, which maps it inside `mutateState` | "task claim -w closr = signal: killed", and kill-server then reports the daemon wedged | **caught** |
+## set-config with no client applies on attach
+
+`TestSetConfigWithNoClientAppliesOnAttach` sets `appearance.sidebar.row_style`
+to `pill` on a session with no client, then attaches one. The reply must say
+the next client applies the value. The client must draw the rail rows as pills,
+write the value to `config.toml`, and `get-config` must read it back. Run on
+2026-11-03 on Linux. The test passes on the fixed build. Each control was built
+into its own binary.
+
+| Control: what was cut | Where it fails | Verdict |
+| --- | --- | --- |
+| Main without the fix | "the reply does not say the next client applies the value" | **caught** |
+| The attach handler does not call `applyWaitingOptions` | "the client that attached did not apply appearance.sidebar.row_style=pill" | **caught** |
+| The client drops a routed command that arrives before `OnRemoteCommand`, as main does | "the client that attached did not apply appearance.sidebar.row_style=pill". The command arrives before the program registers its handler on every run | **caught** |

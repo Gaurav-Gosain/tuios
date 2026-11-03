@@ -1,6 +1,8 @@
 package tuie2e
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -110,6 +112,57 @@ func TestLiveAppearanceKeepsTheScreen(t *testing.T) {
 			again := startIn(t, base, startOpts{shippedLooks: true, animations: true, cols: liveCols, rows: liveRows, args: []string{"attach", "home"}})
 			waitPanesDrawn(t, again, c.noDock, "after attaching again")
 		})
+	}
+}
+
+// TestSetConfigWithNoClientAppliesOnAttach sets an option while no client
+// is attached, then attaches one, and holds:
+//
+//   - the reply says the next client applies the value;
+//   - the client that attaches draws the value and writes it to config.toml;
+//   - get-config reads the value back.
+//
+// set-config with no client said "It applies when a client attaches", and a
+// client that attached later never applied it. Reported by josephsintum on
+// #1454.
+func TestSetConfigWithNoClientAppliesOnAttach(t *testing.T) {
+	const path, value, shows = "appearance.sidebar.row_style", "pill", "\ue0b6home\ue0b4"
+	base := t.TempDir()
+	killDaemon(t, base)
+	useShippedLooks(base)
+	if o, err := tuiosCLI(t, base, "new", "home", "--detach"); err != nil {
+		t.Fatalf("new: %v\n%s", err, o)
+	}
+	out, err := tuiosCLI(t, base, "set-config", path, value)
+	if err != nil {
+		t.Fatalf("set-config %s %s: %v\n%s", path, value, err, out)
+	}
+	if !strings.Contains(out, "next client that attaches applies it") {
+		t.Fatalf("the reply does not say the next client applies the value:\n%s", out)
+	}
+
+	term := attachIn(t, base, "home", startOpts{shippedLooks: true, cols: liveCols, rows: liveRows})
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		return strings.Contains(s.Text(), shows)
+	}, uiTimeout); err != nil {
+		t.Fatalf("the client that attached did not apply %s=%s: %v\n%s", path, value, err, term.Snapshot())
+	}
+	saveArtifact(t, term, artifactDir(t), "applied-on-attach")
+
+	file := filepath.Join(xdgDir(base, "XDG_CONFIG_HOME"), "tuios", "config.toml")
+	deadline := time.Now().Add(uiTimeout)
+	for {
+		data, _ := os.ReadFile(file)
+		if strings.Contains(string(data), `row_style = "pill"`) {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("the client did not write %s=%s to config.toml:\n%s", path, value, data)
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	if o, err := tuiosCLI(t, base, "get-config", path); err != nil || !strings.Contains(o, value) {
+		t.Fatalf("get-config %s: %v\n%s", path, err, o)
 	}
 }
 

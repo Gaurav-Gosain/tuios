@@ -5078,7 +5078,9 @@ it.
 Set a session option. The value is recorded in daemon owned session state so a
 later get-option reads it back, and works with no client attached. When a TUI is
 attached the change is also routed to it so options it understands apply to the
-live renderer; `applied` reports whether that live apply succeeded.
+live renderer; `applied` reports whether that live apply succeeded. With no TUI
+attached, `applied` is false and the value waits. The next TUI that attaches
+applies it.
 
 Params: `session` (optional), `key` (required), `value` (optional).
 

@@ -904,7 +904,7 @@ option does not take is refused, and nothing changes.
 
 With a client attached, the client applies the value and writes it to
 config.toml. With no client attached, the daemon keeps the value for this
-session and does not write the file. The client applies it when it attaches.
+session. The next client that attaches applies it and writes it to config.toml.
 The command then says so on stderr, and --json reports "applied": false with
 the reason.
 
