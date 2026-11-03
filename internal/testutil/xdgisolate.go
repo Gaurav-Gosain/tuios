@@ -85,6 +85,22 @@ func isolateXDG() (dir string, check func() error) {
 	if err := os.Unsetenv("TUIOS_SERVER"); err != nil {
 		panic(fmt.Sprintf("testutil: unset TUIOS_SERVER: %v", err))
 	}
+	// tuios follows the Omarchy theme it finds when no theme is configured,
+	// and Omarchy keeps that theme under $HOME/.local/state and its themes
+	// under /usr/share as well, which no XDG variable moves. An empty
+	// SWATCH_OMARCHY_DIR is the one current directory swatch reads, and with
+	// it set the installed themes are not listed either. Without this a
+	// developer on Omarchy ran the tests in their own theme (#1492).
+	noOmarchy := filepath.Join(tmp, "omarchy-current")
+	if err := os.MkdirAll(noOmarchy, 0o755); err != nil {
+		panic(fmt.Sprintf("testutil: create %s: %v", noOmarchy, err))
+	}
+	if err := os.Setenv("SWATCH_OMARCHY_DIR", noOmarchy); err != nil {
+		panic(fmt.Sprintf("testutil: set SWATCH_OMARCHY_DIR: %v", err))
+	}
+	if err := os.Unsetenv("OMARCHY_PATH"); err != nil {
+		panic(fmt.Sprintf("testutil: unset OMARCHY_PATH: %v", err))
+	}
 	xdg.Reload()
 
 	return tmp, func() error {

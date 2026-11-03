@@ -19,8 +19,11 @@ import (
 // that fill the width. The v0.8.0 defaults are tested on their own, from
 // config.DefaultSettings, in sidebar_defaults_test.go.
 func TestMain(m *testing.M) {
-	cfg := config.DefaultConfig()
-	config.PinPreV080Appearance(&cfg.Appearance)
-	config.ApplyAppearanceConfig(cfg, &config.Global)
-	os.Exit(testutil.RunIsolated(m))
+	// After the redirect, so applying the looks reads nothing of the
+	// developer's: with no theme set it would follow their Omarchy theme.
+	os.Exit(testutil.RunIsolated(m, func(string) {
+		cfg := config.DefaultConfig()
+		config.PinPreV080Appearance(&cfg.Appearance)
+		config.ApplyAppearanceConfig(cfg, &config.Global)
+	}))
 }

@@ -19,8 +19,11 @@ import (
 // fixtures here were measured against: a click that starts typing, the dock
 // at the bottom, no rail. internal/app's TestMain says the same.
 func TestMain(m *testing.M) {
-	cfg := config.DefaultConfig()
-	config.PinPreV080Appearance(&cfg.Appearance)
-	config.ApplyAppearanceConfig(cfg, &config.Global)
-	os.Exit(testutil.RunIsolated(m))
+	// After the redirect, so applying the looks reads nothing of the
+	// developer's: with no theme set it would follow their Omarchy theme.
+	os.Exit(testutil.RunIsolated(m, func(string) {
+		cfg := config.DefaultConfig()
+		config.PinPreV080Appearance(&cfg.Appearance)
+		config.ApplyAppearanceConfig(cfg, &config.Global)
+	}))
 }
