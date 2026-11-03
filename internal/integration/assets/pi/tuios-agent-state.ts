@@ -227,7 +227,6 @@ export default function (pi) {
   // them say anything about the pane's own state.
   let subCtx;
   let subUnsub;
-  let subAsyncDefault = true;
   const subTaskByCall = new Map(); // toolCallId -> task text of a background launch
   const subSeen = new Map(); // subagent id -> the last update reported for it
   const subRuns = new Map(); // run id -> asyncDir, for the live tool line
@@ -348,20 +347,35 @@ export default function (pi) {
 
   // pi-subagents runs a call in the background unless the model said
   // async: false — or unless asyncByDefault: false says the quiet default
-  // the other way. The tool_call event carries the model's raw input, so
-  // the default is read from pi-subagents' own config, once per session.
-  const subConfigAsyncDefault = () => {
+  // the other way. The tool_call event carries the model's validated and
+  // coerced args (pi core coerces before the event fires), so an explicit
+  // async flag is a boolean here. The two defaults are read from
+  // pi-subagents' own config, once per extension load: pi-subagents loads
+  // its config once per process, so a hand-edited file mid-session changes
+  // neither side until a reload. An agent that is an external CLI or has a
+  // launcher is forced background with async omitted even when the default
+  // is foreground; that combination is not detected here and draws a
+  // phantom foreground row.
+  const subConfig = () => {
     try {
-      const dir = process.env.PI_CODING_AGENT_DIR || homedir() + "/.pi/agent";
-      return JSON.parse(readFileSync(dir + "/extensions/subagent/config.json", "utf8")).asyncByDefault !== false;
+      let dir = process.env.PI_CODING_AGENT_DIR || homedir() + "/.pi/agent";
+      if (dir.startsWith("~/")) dir = homedir() + dir.slice(1);
+      const config = JSON.parse(readFileSync(dir + "/extensions/subagent/config.json", "utf8"));
+      return {
+        asyncByDefault: config.asyncByDefault !== false,
+        forceTopLevelAsync: config.forceTopLevelAsync === true,
+      };
     } catch {
-      return true; // no config, or one that cannot be read: background is the default
+      // No config, or one that cannot be read: background is the default.
+      return { asyncByDefault: true, forceTopLevelAsync: false };
     }
   };
 
+  // Latched at extension load, the way pi-subagents latches its own.
+  const subLadder = subConfig();
+
   const startSubagents = () => {
     if (subUnsub || !pi?.events?.on) return;
-    subAsyncDefault = subConfigAsyncDefault();
     try {
       subUnsub = [
         pi.events.on("subagent:async-started", p => {
@@ -370,10 +384,17 @@ export default function (pi) {
             const id = typeof p.id === "string" && p.id ? p.id : "";
             if (!id) return;
             if (typeof p.asyncDir === "string") subRuns.set(id, p.asyncDir);
-            // A single background run was launched by a tool call whose input
-            // holds the task unredacted; the event redacts it.
-            const text = subTaskByCall.get(p.toolCallId) ?? subFirstLine(p.label);
-            if (typeof p.toolCallId === "string") subTaskByCall.delete(p.toolCallId);
+            // A single background run was launched by a tool call whose
+            // input holds the task unredacted; the event redacts it. The
+            // stash marks the call as launched: present means async-started
+            // has not named this call yet.
+            let text = "";
+            if (subTaskByCall.has(p.toolCallId)) {
+              text = subTaskByCall.get(p.toolCallId);
+              subTaskByCall.delete(p.toolCallId);
+            } else {
+              text = subFirstLine(p.label);
+            }
             subReport("subagent_start", id, { agent_type: subFirstLine(p.agent), text });
           } catch {}
         }),
@@ -436,11 +457,20 @@ export default function (pi) {
       const input = event.input;
       const call = typeof event.toolCallId === "string" ? event.toolCallId : "";
       if (!call) return;
-      if (input?.async === true || (input?.async === undefined && subAsyncDefault)) {
-        // A background run reports through the async events; keep only what
-        // they redact, and pair it to the run at async-started.
+      // The ladder, in pi-subagents' own order: an explicit flag wins;
+      // forceTopLevelAsync rewrites async: false at depth 0; else the quiet
+      // default. Nested calls (parentToolCallId set) are depth > 0, which
+      // the rewrite does not touch.
+      const forced = subLadder.forceTopLevelAsync && !event.parentToolCallId;
+      const background = input?.async === true ||
+        (input?.async === false ? forced : subLadder.asyncByDefault || forced);
+      if (background) {
+        // A background run reports through the async events; keep what they
+        // redact stashed against its tool call. A workflow call's start
+        // event names no tool call, so its stash is never consumed there —
+        // a failed launch still reports through the tool_result instead.
         const task = subFirstLine(input?.task) || subFirstLine(input?.goal);
-        if (task) subTaskByCall.set(call, task);
+        subTaskByCall.set(call, task);
         return;
       }
       subReport("subagent_start", "fg:" + call, {
@@ -457,7 +487,16 @@ export default function (pi) {
       const call = typeof event.toolCallId === "string" ? event.toolCallId : "";
       if (!call) return;
       const id = "fg:" + call;
-      if (event.isError) {
+      if (subTaskByCall.has(call)) {
+        // A background launch that was rejected before its run started —
+        // capacity, budget, a dead runner — returns an error result with no
+        // async-started ever fired, so no row exists yet. Name it, then end
+        // it failed, or the rejection is invisible on the pane.
+        const task = subTaskByCall.get(call);
+        subTaskByCall.delete(call);
+        subReport("subagent_start", id, { text: task });
+        subReport("subagent_update", id, { outcome: "failed", text: subResultText(event.content) || "failed" });
+      } else if (event.isError) {
         subReport("subagent_update", id, { outcome: "failed", text: subResultText(event.content) || "failed" });
       } else {
         // A stop the daemon reads as done needs a text, so a success with
