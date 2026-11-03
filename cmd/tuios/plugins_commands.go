@@ -47,7 +47,7 @@ You must run install, update, uninstall, approve, enable, disable, link, unlink 
 		newPluginsInstallCommand(), newPluginsUpdateCommand(), newPluginsUninstallCommand(), newPluginsApproveCommand(),
 		newPluginsLinkCommand(), newPluginsUnlinkCommand(), newPluginsBuildCommand(),
 		newPluginsRunCommand(), newPluginsOpenCommand(), newPluginsLogCommand(),
-		newPluginsNewCommand(), newPluginsCheckCommand(), newPluginsDevCommand())
+		newPluginsNewCommand(), newPluginsCheckCommand(), newPluginsDevCommand(), newPluginsStatsCommand())
 	return cmd
 }
 
@@ -616,4 +616,52 @@ func pluginConfigDir(id string) (string, error) {
 		return "", err
 	}
 	return dirs.ConfigDir(n), nil
+}
+
+func newPluginsStatsCommand() *cobra.Command {
+	var asJSON bool
+	cmd := &cobra.Command{
+		Use:   "stats",
+		Short: "Show what each plugin costs: processes, memory and runs",
+		Long:  "Show each enabled plugin's processes and memory now, and how many commands it ran since the daemon started, with their total time. A plugin that runs often or holds much memory shows here. Memory is not shown on macOS.",
+		Args:  cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			res, err := needDaemon("plugin.stats", nil, 10*time.Second)
+			if err != nil {
+				return err
+			}
+			out := cmd.OutOrStdout()
+			if asJSON {
+				return printJSONValue(out, res["plugins"])
+			}
+			rows, _ := res["plugins"].([]any)
+			if len(rows) == 0 {
+				fmt.Fprintln(out, "No plugin is enabled, and no plugin ran since the daemon started.")
+				return nil
+			}
+			tw := tabwriter.NewWriter(out, 0, 2, 2, ' ', 0)
+			fmt.Fprintln(tw, "ID\tPROCESSES\tMEMORY\tRUNS\tRUN TIME\tLAST RUN")
+			now := time.Now()
+			for _, r := range rows {
+				m, _ := r.(map[string]any)
+				num := func(k string) int64 {
+					n, _ := m[k].(json.Number)
+					v, _ := n.Int64()
+					return v
+				}
+				mem := "-"
+				if known, _ := m["rss_known"].(bool); known {
+					mem = humanBytes(num("rss_bytes"))
+				}
+				last := "never"
+				if ms := num("last_unix_ms"); ms > 0 {
+					last = now.Sub(time.UnixMilli(ms)).Truncate(time.Second).String() + " ago"
+				}
+				fmt.Fprintf(tw, "%v\t%d\t%s\t%d\t%s\t%s\n", m["plugin_id"], num("processes"), mem, num("runs"), (time.Duration(num("busy_ms")) * time.Millisecond).Truncate(time.Millisecond), last)
+			}
+			return tw.Flush()
+		},
+	}
+	cmd.Flags().BoolVar(&asJSON, "json", false, "Print JSON")
+	return cmd
 }

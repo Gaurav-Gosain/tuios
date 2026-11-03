@@ -30,3 +30,6 @@ func Environ(int) (Env, bool) { return Env{}, false }
 
 // SessionMembers is nil here: the kernel does not say.
 func SessionMembers(int) []int { return nil }
+
+// RSS is not read here.
+func RSS(int) (int64, bool) { return 0, false }

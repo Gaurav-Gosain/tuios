@@ -250,6 +250,23 @@ func TestPluginsInstallFromGit(t *testing.T) {
 		t.Errorf("the plugins list table lacks the source and the pin:\n%s", table)
 	}
 	ping("after the install of main")
+	// stats shows the resident startup command: its reaper and its sleep,
+	// with memory, and the runs so far.
+	if out, err := tuiosCLI(t, base, "plugins", "stats", "--json"); err != nil {
+		t.Fatalf("plugins stats: %v\n%s", err, out)
+	} else {
+		_ = os.WriteFile(filepath.Join(art, "stats.json"), []byte(out), 0o644)
+		var rows []struct {
+			ID        string `json:"plugin_id"`
+			Processes int    `json:"processes"`
+			RSS       int64  `json:"rss_bytes"`
+			Runs      int    `json:"runs"`
+		}
+		if err := json.Unmarshal([]byte(out), &rows); err != nil || len(rows) != 1 || rows[0].ID != id ||
+			rows[0].Processes < 2 || rows[0].RSS <= 0 || rows[0].Runs < 2 {
+			t.Errorf("plugins stats does not show the startup's processes, memory and runs: %v\n%s", err, out)
+		}
+	}
 	// A plugin pane opened from the build of main. Its folder stays while
 	// the pane is open.
 	if out, err := tuiosCLI(t, base, "plugins", "open", id, "hold", "--placement", "tab"); err != nil {

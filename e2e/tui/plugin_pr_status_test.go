@@ -3,6 +3,7 @@ package tuie2e
 import (
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -73,7 +74,11 @@ func TestPluginPRStatus(t *testing.T) {
 		t.Errorf("gh ran %d times for two focuses in a minute, want 1:\n%s", n, b)
 	}
 
-	// Nothing stays: the hook exits, so the plugin holds no process.
+	// Nothing stays: the hook exits, so the plugin holds no process, and stats
+	// says so with the runs counted.
+	if out, err := tuiosCLI(t, base, "plugins", "stats"); err != nil || !regexp.MustCompile(`tuios\.pr-status\s+0\s+0 bytes\s+[2-9]`).MatchString(out) {
+		t.Errorf("plugins stats for a hook plugin: %v, want no process and two runs or more\n%s", err, out)
+	}
 	if out, _ := tuiosCLI(t, base, "plugins", "log", "tuios.pr-status", "--limit", "20"); strings.Contains(out, "running\n") {
 		t.Errorf("a hook still runs:\n%s", out)
 	}

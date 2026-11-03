@@ -28,7 +28,11 @@ Reading the list runs no plugin code, and it works from a pane.
 ```sh
 tuios plugins list --json
 tuios plugins info me.commits --json
+tuios plugins stats --json
 ```
+
+`stats` shows what each plugin costs: processes and memory now, and runs since
+the daemon started. It needs `admin` from a pane.
 
 Each record has `plugin_id` and `enabled`. A plugin that cannot run also has `error`,
 with `code` and `message`.

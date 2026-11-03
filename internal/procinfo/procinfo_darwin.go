@@ -112,3 +112,7 @@ func SessionMembers(sid int) []int {
 	}
 	return out
 }
+
+// RSS is not read here: the kernel answers it only through libproc, which
+// needs cgo. tuios plugins stats shows no memory on macOS.
+func RSS(int) (int64, bool) { return 0, false }

@@ -4303,6 +4303,7 @@ Some commands also answer to a short name: `attach` to `a`, `new` to `n`,
 | `tuios plugins build ID` | Run the plugin's `[[build]]` commands in its folder. Each command is shown before it runs. Refused inside a pane |
 | `tuios plugins run ID ACTION [--wait]` | Run an action of an enabled plugin. `--wait` waits for it to end and prints its output |
 | `tuios plugins open ID PANE [--placement P]` | Open a pane of an enabled plugin. `P` is `overlay`, `popup`, `split`, `tab` or `zoomed` |
+| `tuios plugins stats [--json]` | Show each plugin's processes and memory now, and its runs and run time since the daemon started. No memory on macOS. Needs the daemon |
 | `tuios plugins log [ID] [--limit N] [--json]` | Show the last runs of plugin commands, with their exit codes and output |
 
 An enabled plugin runs with your rights. Grants are not a sandbox. See

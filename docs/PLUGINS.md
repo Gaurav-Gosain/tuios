@@ -89,6 +89,7 @@ Run these from a terminal outside tuios. A pane cannot change which plugins run.
 | `tuios plugins run ID ACTION` | Run an action. `--wait` prints its output. |
 | `tuios plugins open ID PANE` | Open a pane of the plugin. |
 | `tuios plugins log [ID]` | Show the last runs and their output. |
+| `tuios plugins stats` | Show what each plugin costs: processes and memory now, and runs and run time since the daemon started. |
 | `tuios plugins new NAME` | Make a plugin folder that works, with a GitHub workflow. `--id` sets the id. |
 | `tuios plugins check [PATH]` | Read a plugin folder as tuios would and say what is wrong. Exits 1 when it cannot load. A CI job can run it. |
 | `tuios plugins dev PATH` | Install a folder in place and reload it when a file changes. It asks once at the start. |
@@ -256,6 +257,7 @@ a plugin does nothing. `tuios --skill tml` has the components.
 | tuios | Change | What to do |
 |---|---|---|
 | next | New: `tuios plugins update`. | Nothing. |
+| next | New: `tuios plugins stats`. | Nothing. |
 | next | New: `tuios plugins new`, `check` and `dev`. `check` warns on an old key such as `schema`. | Run `tuios plugins check` in your CI. |
 | next | New: `run = "event"` with `on`, `TUIOS_PLUGIN_EVENT` and `TUIOS_PLUGIN_EVENT_JSON`. | Move hooks out of a `herdr-plugin.toml`. |
 | next | New: `tuios plugins install NAME` for the plugins of the tuios release. | Nothing. |
@@ -274,7 +276,6 @@ until a release has them. A manifest that uses one is refused today.
 |---|---|---|
 | A timer | `run = "interval"`, `every = "60s"` | Runs a command on a timer that exists only while the plugin is enabled. |
 | Suggested keys | `[[key]]` | Offers a key. It is off until you accept it. |
-| Cost | `tuios plugins stats` | Shows the processes, memory and runs of each plugin. |
 | Files only | `[[theme]]`, `[[saver]]` | A plugin that runs nothing needs no typed approval. |
 
 ### Draft: the saver file

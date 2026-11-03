@@ -12100,3 +12100,14 @@ control against the branch head with one change:
 | dev reloads a changed folder | the install in the loop cut | "the new action after a reload" | **caught** |
 | new writes the workflow | `all:` cut from the embed | "new made no .github/workflows/plugin.yml" | **caught** |
 
+
+## Plugin stats
+
+`TestPluginsInstallFromGit` reads `tuios plugins stats` for a plugin with a
+resident startup command, and `TestPluginPRStatus` for a hook plugin. Run on
+2026-11-03, each control against the branch head with one change:
+
+| Claim | Control | Where it fails | Verdict |
+|---|---|---|---|
+| stats counts runs | the count cut from `Start` | "plugins stats does not show the startup's processes, memory and runs" | **caught** |
+| stats counts the processes in the plugin's sessions | the loop over the session members cut | the same message | **caught** |

@@ -94,6 +94,8 @@ type Runner struct {
 	// the native plugins among them.
 	owners map[int]*Plugin
 	native atomic.Int32
+	// stats counts each plugin's runs since the daemon started.
+	stats map[string]*RunStats
 	// Reaper, when set, is the argv that runs a command under a reaper:
 	// the tuios binary and ReaperArg (reaper.go). Without it the command
 	// leads its own session, and its entry goes when it exits.
@@ -109,7 +111,7 @@ type Runner struct {
 
 // NewRunner returns an empty runner.
 func NewRunner() *Runner {
-	return &Runner{perPlug: map[string]int{}, procs: map[string]map[*exec.Cmd]*procGroup{}, owners: map[int]*Plugin{}}
+	return &Runner{perPlug: map[string]int{}, procs: map[string]map[*exec.Cmd]*procGroup{}, owners: map[int]*Plugin{}, stats: map[string]*RunStats{}}
 }
 
 // ResolveProgram finds a command's program as herdr does: a relative path
@@ -252,6 +254,13 @@ func (r *Runner) Start(j Job) (LogEntry, *Error) {
 	// about before it is entered here.
 	r.setOwner(cmd.Process.Pid, j.Plugin)
 	r.pushLocked(e)
+	st := r.stats[j.Plugin.PluginID]
+	if st == nil {
+		st = &RunStats{}
+		r.stats[j.Plugin.PluginID] = st
+	}
+	st.Runs++
+	st.LastMS = e.StartedMS
 	r.wg.Add(1)
 	onPID := r.OnPID
 	r.mu.Unlock()
@@ -317,6 +326,9 @@ func (r *Runner) Start(j Job) (LogEntry, *Error) {
 		r.mu.Lock()
 		r.inFlight--
 		r.perPlug[j.Plugin.PluginID]--
+		if st := r.stats[j.Plugin.PluginID]; st != nil {
+			st.BusyMS += end - e.StartedMS
+		}
 		for i := range r.logs {
 			if r.logs[i].LogID != e.LogID {
 				continue
@@ -507,3 +519,29 @@ func (b *capBuffer) String() string {
 }
 
 var _ io.Writer = (*capBuffer)(nil)
+
+// RunStats is what one plugin's commands did since the daemon started.
+type RunStats struct {
+	// Runs counts the commands started.
+	Runs int `json:"runs"`
+	// LastMS is when the last one started, in Unix milliseconds.
+	LastMS int64 `json:"last_unix_ms,omitempty"`
+	// BusyMS adds up how long the commands that ended ran.
+	BusyMS int64 `json:"busy_ms"`
+}
+
+// Stats returns each plugin's run counts and the process sessions its
+// commands lead now.
+func (r *Runner) Stats() (map[string]RunStats, map[string][]int) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	runs := make(map[string]RunStats, len(r.stats))
+	for id, st := range r.stats {
+		runs[id] = *st
+	}
+	sessions := map[string][]int{}
+	for sid, p := range r.owners {
+		sessions[p.PluginID] = append(sessions[p.PluginID], sid)
+	}
+	return runs, sessions
+}

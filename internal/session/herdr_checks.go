@@ -104,6 +104,7 @@ var herdrChecks = map[string]herdrCheck{
 	"plugin.action.list":           herdrRead,
 	"plugin.action.invoke":         herdrAdmin,
 	"plugin.log.list":              herdrAdmin,
+	"plugin.stats":                 herdrAdmin,
 	"plugin.pane.open":             herdrAdmin,
 	"plugin.pane.focus":            herdrVerbs,
 	"plugin.pane.close":            herdrVerbs,

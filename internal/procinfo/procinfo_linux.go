@@ -154,6 +154,23 @@ func SessionID(pid int) (int, bool) {
 	return sid, err == nil && sid > 0
 }
 
+// RSS is the resident memory of pid in bytes, from /proc/PID/statm.
+func RSS(pid int) (int64, bool) {
+	data, err := os.ReadFile("/proc/" + strconv.Itoa(pid) + "/statm")
+	if err != nil {
+		return 0, false
+	}
+	f := strings.Fields(string(data))
+	if len(f) < 2 {
+		return 0, false
+	}
+	pages, err := strconv.ParseInt(f[1], 10, 64)
+	if err != nil {
+		return 0, false
+	}
+	return pages * int64(os.Getpagesize()), true
+}
+
 // SessionMembers lists the pids of the processes in session sid, read from
 // /proc. A process that exits during the scan may be listed or not.
 func SessionMembers(sid int) []int {
