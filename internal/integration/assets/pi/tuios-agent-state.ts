@@ -11,7 +11,10 @@
 // work and agent_settled ends it. ui_prompt_start says Pi is waiting on the
 // person in a blocking prompt (a confirm, a choice, a line of input), and
 // ui_prompt_end that the prompt was answered; both say whether a turn is
-// running, so an answered prompt goes back to working or to rest. Only the TUI
+// running, so an answered prompt goes back to working or to rest. Pi's
+// subagents report as children of the pane: subagent_start names one and what
+// it was asked, subagent_update what it runs now, subagent_stop how it ended
+// — an empty stop text is a stop, a non-empty one a finish. Only the TUI
 // mode reports, since the print, JSON and RPC modes run with no terminal a
 // pane could show.
 
@@ -95,7 +98,7 @@ async function drain() {
   activeChild?.kill(); // only our reporting child, never the daemon or Pi
 }
 
-function report(event, ctx, extra) {
+function report(event, ctx, extra, key) {
   let sessionID = "";
   let sessionFile = "";
   let leaf;
@@ -125,7 +128,7 @@ function report(event, ctx, extra) {
   if (event === "transcript_update" && selection && selection === lastSelection) return;
   if (selection) lastSelection = selection;
   // A report that cannot be sent must never break Pi.
-  enqueue(payload, event === "transcript_update" ? sessionID + "\0" + sessionFile : "");
+  enqueue(payload, key || (event === "transcript_update" ? sessionID + "\0" + sessionFile : ""));
 }
 
 export default function (pi) {
@@ -161,10 +164,13 @@ export default function (pi) {
   };
   pi.on("session_start", (_event, ctx) => {
     stopWatching();
+    stopSubagents();
     epoch++;
     tui = ctx?.mode === "tui";
     if (!tui) return;
     startWatching(ctx);
+    subCtx = ctx;
+    startSubagents();
     // A reload replaces the extension mid-turn without a new agent_start.
     report("session_start", ctx, { busy: ctx?.isIdle?.() === false });
   });
@@ -181,6 +187,7 @@ export default function (pi) {
     tui = false;
     epoch++;
     stopWatching();
+    stopSubagents();
     return drain();
   });
   pi.on("agent_start", (_event, ctx) => {
@@ -203,5 +210,168 @@ export default function (pi) {
       kind: typeof event?.kind === "string" ? event.kind : "",
       busy: ctx?.isIdle?.() === false,
     });
+  });
+
+  // Pi-subagents announces its runs on the in-process event bus. Each run
+  // becomes a child row under the pane: subagent_start names one and what it
+  // was asked, subagent_update what it runs now, subagent_stop how it ended
+  // (empty text a stop, non-empty a finish). A foreground run is the parent's
+  // own tool call on the subagent tool, so its id is that call's, behind fg:
+  // to keep it off the run ids; a background or workflow run reports through
+  // the async events and, for workflow children, through child-status. None
+  // of them say anything about the pane's own state.
+  let subCtx;
+  let subUnsub;
+  const subTaskByCall = new Map(); // toolCallId -> task text of a background launch
+  const subSeen = new Map(); // subagent id -> the last update reported for it
+  const subRuns = new Map(); // run id -> asyncDir, for the live tool line
+  const subPolled = new Map(); // run id -> when status was last read
+
+  const subFirstLine = value => {
+    if (typeof value !== "string") return "";
+    const line = value.trim().split(/\r?\n/, 1)[0].trim();
+    return line.length > 200 ? line.slice(0, 200) : line;
+  };
+
+  const subResultText = content => {
+    if (!Array.isArray(content)) return "";
+    for (const block of content) {
+      if (block?.type === "text" && typeof block.text === "string" && block.text.trim()) {
+        return subFirstLine(block.text);
+      }
+    }
+    return "";
+  };
+
+  const subReport = (event, id, extra) => {
+    if (!id) return;
+    const prior = subSeen.get(id);
+    const tool = typeof extra.tool === "string" ? extra.tool : prior?.tool || "";
+    const target = typeof extra.target === "string" ? extra.target : prior?.target || "";
+    const line = tool ? tool + (target ? ": " + target : "") : "";
+    const text = typeof extra.text === "string" ? extra.text : prior?.text || "";
+    if (event === "subagent_update" && prior && line === (prior.line || "") && text === (prior.text || "")) {
+      return; // the daemon is not told again what it already has
+    }
+    subSeen.set(id, { line, text });
+    report(event, subCtx, { agent_id: id, ...extra, tool, target }, event + "\0" + id);
+  };
+
+  const pollStatuses = async () => {
+    const now = Date.now();
+    for (const [id, dir] of subRuns) {
+      if (!dir || now - (subPolled.get(id) || 0) < 2000) continue;
+      subPolled.set(id, now);
+      let status;
+      try {
+        const { readFile } = await import("node:fs/promises");
+        status = JSON.parse(await readFile(dir + "/status.json", "utf8"));
+      } catch {
+        continue; // the file may not exist yet, or not parse mid-write
+      }
+      try {
+        const tool = subFirstLine(status.currentTool);
+        subReport("subagent_update", id, { tool, target: subFirstLine(status.currentPath) });
+      } catch {}
+    }
+  };
+
+  const stopSubagents = () => {
+    for (const off of subUnsub || []) {
+      try { off?.(); } catch {}
+    }
+    subUnsub = undefined;
+    subTaskByCall.clear();
+    subSeen.clear();
+    subRuns.clear();
+    subPolled.clear();
+  };
+
+  const startSubagents = () => {
+    if (subUnsub || !pi?.events?.on) return;
+    try {
+      subUnsub = [
+        pi.events.on("subagent:async-started", p => {
+          if (!tui || !p || typeof p !== "object") return;
+          const id = typeof p.id === "string" && p.id ? p.id : "";
+          if (!id) return;
+          if (typeof p.asyncDir === "string") subRuns.set(id, p.asyncDir);
+          // A single background run was launched by a tool call whose input
+          // holds the task unredacted; the event redacts it.
+          const text = subTaskByCall.get(p.toolCallId) ?? subFirstLine(p.label);
+          if (typeof p.toolCallId === "string") subTaskByCall.delete(p.toolCallId);
+          subReport("subagent_start", id, { agent_type: subFirstLine(p.agent), text });
+        }),
+        pi.events.on("subagent:child-status", p => {
+          if (!tui || !p || typeof p !== "object" || p.type !== "subagent.child-status") return;
+          const id = (typeof p.childRunId === "string" && p.childRunId) ||
+            (typeof p.childId === "string" && p.childId) || "";
+          if (!id) return;
+          if (typeof p.asyncDir === "string") subRuns.set(id, p.asyncDir);
+          if (p.status === "started") {
+            subReport("subagent_start", id, { agent_type: subFirstLine(p.agent), text: subFirstLine(p.label) });
+          } else if (p.status === "stopping") {
+            subReport("subagent_update", id, { outcome: "stopping" });
+          } else if (p.status === "stopped") {
+            subReport("subagent_stop", id, { text: "" });
+          }
+        }),
+        pi.events.on("subagent:async-complete", p => {
+          if (!tui || !p || typeof p !== "object") return;
+          const id = (typeof p.runId === "string" && p.runId) ||
+            (typeof p.id === "string" && p.id) || "";
+          subRuns.delete(id);
+          if (!id) return;
+          if (p.success === false || p.state === "failed") {
+            subReport("subagent_update", id, { outcome: "failed", text: subFirstLine(p.error) || "failed" });
+          } else {
+            // A stop the daemon reads as done needs a text: a run that
+            // finished but left no summary still says so.
+            subReport("subagent_stop", id, {
+              text: subResultText(p.results?.[0]?.summary) ||
+                subResultText(p.results?.[0]?.output) || "done",
+            });
+          }
+        }),
+        pi.events.on("subagent:jobs-changed", () => {
+          if (!tui) return;
+          void pollStatuses().catch(() => {});
+        }),
+      ];
+    } catch {
+      subUnsub = undefined; // pi-subagents not loaded, or a bus that never fires
+    }
+  };
+
+  pi.on("tool_call", (event, ctx) => {
+    if (!tui || event?.toolName !== "subagent") return;
+    subCtx = ctx;
+    const input = event.input;
+    const call = typeof event.toolCallId === "string" ? event.toolCallId : "";
+    if (!call) return;
+    if (input?.async) {
+      // A background run reports through the async events; keep only what
+      // they redact, and pair it to the run at async-started.
+      const task = subFirstLine(input?.task) || subFirstLine(input?.goal);
+      if (task) subTaskByCall.set(call, task);
+      return;
+    }
+    subReport("subagent_start", "fg:" + call, {
+      agent_type: subFirstLine(input?.agent),
+      text: subFirstLine(input?.task) || subFirstLine(input?.goal),
+    });
+  });
+
+  pi.on("tool_result", (event, ctx) => {
+    if (!tui || event?.toolName !== "subagent") return;
+    subCtx = ctx;
+    const call = typeof event.toolCallId === "string" ? event.toolCallId : "";
+    if (!call) return;
+    const id = "fg:" + call;
+    if (event.isError) {
+      subReport("subagent_update", id, { outcome: "failed", text: subResultText(event.content) || "failed" });
+    } else {
+      subReport("subagent_stop", id, { text: subResultText(event.content) });
+    }
   });
 }
