@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/harness"
 )
@@ -128,6 +129,53 @@ func TestEndTurnIsDoneAndNothingElseIsAsserted(t *testing.T) {
 	}
 	if got := s.GetState().Windows[0].AgentState; got != AgentStateDone {
 		t.Fatalf("state = %q, want done", got)
+	}
+}
+
+// A local command run at rest, such as /effort, is written as user records and
+// starts no turn. When a look had read its picker as a prompt, reading those
+// records as a turn moved the pane to working from outside it, which held the
+// pane as still on the picker: every pane without respond was refused when it
+// typed into a pane at rest.
+func TestALocalCommandAtRestIsNoTurn(t *testing.T) {
+	s := newTestSessionWithWindow(t)
+	win := s.GetState().Windows[0].ID
+	w := newFakeWatch()
+	s.SetTranscriptWatcher(w)
+
+	path := writeTranscript(t, t.TempDir(), "a.jsonl", "")
+	if err := s.JoinAgentTranscript(win, "claude-code", path, true); err != nil {
+		t.Fatal(err)
+	}
+	if _, applied, err := s.ApplyAgentReport(win, AgentReport{State: AgentStateNeedsInput, Kind: "question", Source: AgentSourceScreen, paneWroteAt: time.Now().UnixNano()}); err != nil || !applied {
+		t.Fatalf("the look at the picker: applied=%v err=%v", applied, err)
+	}
+
+	local := func(content string) string {
+		return recLine(t, map[string]any{
+			"type": "user", "sessionId": "sess-1", "cwd": "/p", "version": "2.1.309",
+			"timestamp": "2026-08-16T10:00:01.000Z", "isSidechain": false,
+			"message": map[string]any{"role": "user", "content": content},
+		})
+	}
+	appendLine(t, path, local("<command-name>/effort</command-name>")+local("<local-command-stdout>invented</local-command-stdout>"))
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	w.fire(path)
+	waitFor(t, "the read of the command's records", func() bool {
+		s.transcripts.mu.Lock()
+		defer s.transcripts.mu.Unlock()
+		j := s.transcripts.joins[win]
+		return j != nil && j.reader.Offset() == info.Size()
+	})
+
+	if got := s.GetState().Windows[0].AgentState; got != AgentStateNeedsInput {
+		t.Errorf("state = %q after the local command, want needs_input until a look finds the picker gone", got)
+	}
+	if s.agentClaimFor(win).promptHold != 0 {
+		t.Error("the local command held the pane as still on the picker")
 	}
 }
 

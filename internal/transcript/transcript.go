@@ -12,7 +12,7 @@
 // every file the agent read, and the output of every command it ran. This
 // package is built so that leaking any of that is not a matter of care.
 //
-//   - Records decode into [record], a struct with six scalar fields. Go's
+//   - Records decode into [record], a struct with eight scalar fields. Go's
 //     encoding/json walks an unknown field to find where it ends and never
 //     allocates a Go value for it, so message.content, toolUseResult,
 //     lastPrompt, aiTitle and the file-history snapshots are not merely
@@ -80,10 +80,10 @@ func (t Turn) String() string {
 // whole of message as json.RawMessage would keep the conversation in memory in
 // exchange for nothing.
 //
-// toolUseResult is absent rather than ignored. A user record means the turn is
-// still running whether it carries a tool result or a fresh prompt, so the
-// field is not needed to derive a state, and a field that is not declared
-// cannot be read.
+// toolUseResult is absent rather than ignored. A tool result lands after the
+// assistant record that called the tool, which has already said the turn is
+// running, so the field is not needed to derive a state, and a field that is
+// not declared cannot be read.
 type record struct {
 	Type      string `json:"type"`
 	SessionID string `json:"sessionId"`
@@ -94,7 +94,16 @@ type record struct {
 	// the same file as its parent's, so without this a Task tool finishing would
 	// report the whole pane done while the agent that spawned it kept working.
 	IsSidechain bool `json:"isSidechain"`
-	Message     struct {
+	// PromptSource and TurnOrigin mark a user record as a prompt that starts a
+	// turn: where it came from ("typed", "queued", "sdk") and what started the
+	// turn ("human", "task_notification"). Claude Code writes one or both on
+	// every prompt, and neither on a local command such as /effort, its
+	// output, or a line typed after !, which are user records too and start no
+	// turn. Both are short labels Claude Code chooses, never what the prompt
+	// says.
+	PromptSource string `json:"promptSource"`
+	TurnOrigin   string `json:"turnOrigin"`
+	Message      struct {
 		StopReason string `json:"stop_reason"`
 	} `json:"message"`
 }
@@ -313,6 +322,13 @@ func (r *Reader) scan(buf []byte, atBoundary bool) (Observation, bool, int) {
 // repeated, and then an assistant record with end_turn followed by the human's
 // next prompt. Everything else in the file (titles, modes, queue operations,
 // snapshots) is bookkeeping and is silent here.
+//
+// Of the user records only the prompt speaks. A local command run at rest
+// (/effort, /model) is written as user records, its output too, and no turn
+// follows: read as a prompt, it showed a pane at rest as working until the
+// stall timer, and when the command's picker had been read as a prompt, the
+// move to working held the pane as still on it, refusing every pane without
+// respond that tried to type into it.
 func (r record) turn() (Turn, bool) {
 	if r.IsSidechain {
 		return TurnUnknown, false
@@ -332,8 +348,13 @@ func (r record) turn() (Turn, bool) {
 			return TurnWorking, true
 		}
 	case "user":
-		// A tool result or a fresh prompt. Both mean a turn is in progress: the
-		// human's prompt starts one, and a tool result lands inside one.
+		// A prompt starts a turn. A tool result lands inside one, after an
+		// assistant record that said so already, so it adds nothing. Any other
+		// user record, a local command, its output or a line typed after !,
+		// starts none.
+		if r.PromptSource == "" && r.TurnOrigin == "" {
+			return TurnUnknown, false
+		}
 		return TurnWorking, true
 	default:
 		return TurnUnknown, false

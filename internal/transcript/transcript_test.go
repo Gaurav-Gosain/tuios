@@ -110,7 +110,37 @@ func noiseLines() string {
 			"attachment": map[string]any{"content": "SECRET-ATTACHMENT"}}),
 		line(map[string]any{"type": "system", "sessionId": fixSession, "cwd": fixCWD,
 			"version": fixVersion, "subtype": "local_command", "isMeta": true}),
-	}, "")
+	}, "") + localCommandLines()
+}
+
+// localCommandLines are a local command run at rest, as Claude Code 2.1.309
+// writes it: user records with no prompt marker, and no turn after them. The
+// first three are /effort and its output, the last two a line typed after !.
+func localCommandLines() string {
+	user := func(meta bool, content string) string {
+		return line(map[string]any{
+			"type": "user", "sessionId": fixSession, "cwd": fixCWD,
+			"version": fixVersion, "timestamp": "2026-08-16T10:00:04.000Z",
+			"isSidechain": false, "isMeta": meta, "userType": "external",
+			"message": map[string]any{"role": "user", "content": content},
+		})
+	}
+	return user(true, "<local-command-caveat>SECRET-CAVEAT</local-command-caveat>") +
+		user(false, "<command-name>/effort</command-name><command-args>SECRET-COMMAND-ARGS</command-args>") +
+		user(false, "<local-command-stdout>SECRET-COMMAND-OUTPUT</local-command-stdout>") +
+		user(false, "<bash-input>SECRET-SHELL-LINE</bash-input>") +
+		user(false, "<bash-stdout>SECRET-SHELL-OUTPUT</bash-stdout><bash-stderr></bash-stderr>")
+}
+
+// taskNotificationLine is a prompt Claude Code sends itself when a background
+// task ends. It carries turnOrigin and no promptSource, and starts a turn.
+func taskNotificationLine() string {
+	return line(map[string]any{
+		"type": "user", "sessionId": fixSession, "cwd": fixCWD,
+		"version": fixVersion, "timestamp": "2026-08-16T10:00:05.000Z",
+		"isSidechain": false, "uuid": "u5", "turnOrigin": "task_notification",
+		"message": map[string]any{"role": "user", "content": "SECRET-TASK-NOTIFICATION"},
+	})
 }
 
 func line(v map[string]any) string {
@@ -151,6 +181,9 @@ func TestTurnFromNewestRecord(t *testing.T) {
 		{"tool_use is working", noiseLines() + assistantLine("tool_use"), TurnWorking, true},
 		{"tool result is working", assistantLine("tool_use") + userToolResultLine(), TurnWorking, true},
 		{"fresh prompt is working", assistantLine("end_turn") + userPromptLine(), TurnWorking, true},
+		{"a task notification is working", assistantLine("end_turn") + taskNotificationLine(), TurnWorking, true},
+		{"a local command at rest leaves the turn done", assistantLine("end_turn") + localCommandLines(), TurnDone, true},
+		{"a local command mid-turn leaves it working", assistantLine("tool_use") + localCommandLines(), TurnWorking, true},
 		{"a streaming record with no stop reason is working", assistantLine(""), TurnWorking, true},
 		{"noise alone says nothing", noiseLines(), TurnUnknown, false},
 		{"empty file says nothing", "", TurnUnknown, false},
@@ -321,7 +354,7 @@ func TestNoContentEscapes(t *testing.T) {
 // reason, not a field someone added to debug something and left behind.
 func TestRecordTypeCannotGrowAField(t *testing.T) {
 	got := jsonTagsOf(record{})
-	want := []string{"type", "sessionId", "cwd", "version", "timestamp", "isSidechain", "message"}
+	want := []string{"type", "sessionId", "cwd", "version", "timestamp", "isSidechain", "promptSource", "turnOrigin", "message"}
 	if len(got) != len(want) {
 		t.Fatalf("record has fields %v, want exactly %v", got, want)
 	}
