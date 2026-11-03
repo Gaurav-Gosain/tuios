@@ -131,7 +131,7 @@ directory on the host instead.`,
 	_ = newCmd.RegisterFlagCompletionFunc("host", completeConfiguredHosts)
 
 	var lsRepo, lsGroup, lsHost string
-	var lsJSON bool
+	var lsJSON, lsFast bool
 	lsCmd := &cobra.Command{
 		Use:   "ls",
 		Short: "List worktree sessions",
@@ -143,18 +143,24 @@ became of a fan prompt. A branch is merged when it has commits of its own and
 its base, or the upstream of its base, already holds all of them. A merge
 commit, a fast-forward, a rebase and a squash all count. No fetch is run. A row
 marked gone is a session whose worktree directory was removed under it. The
-session is kept, so what the agent printed can still be read.`,
+session is kept, so what the agent printed can still be read.
+
+The change columns walk each worktree with git, which is the slow part of the
+listing. --fast skips them: the rows keep everything but CHANGES, MERGED and
+the delete toll, and a listing of many worktrees comes back at the speed of
+the daemon's answer alone.`,
 		Example: `  tuios worktree ls
   tuios worktree ls --repo api
   tuios worktree ls --group fan/add-retry --json
   tuios worktree ls --host build`,
 		RunE: func(_ *cobra.Command, _ []string) error {
-			return runWorktreeList(lsHost, lsRepo, lsGroup, lsJSON)
+			return runWorktreeList(lsHost, lsRepo, lsGroup, lsJSON, !lsFast)
 		},
 	}
 	lsCmd.Flags().StringVar(&lsRepo, "repo", "", "Only worktrees of this repository, by name")
 	lsCmd.Flags().StringVar(&lsGroup, "group", "", "Only the sessions of one fan-out, by its branch stem")
 	lsCmd.Flags().BoolVar(&lsJSON, "json", false, "Output as JSON")
+	lsCmd.Flags().BoolVar(&lsFast, "fast", false, "Skip the git walk behind the change columns, which is the slow part of the listing")
 	lsCmd.Flags().StringVar(&lsHost, "host", "", "List the worktree sessions on this machine from the [hosts] table")
 	_ = lsCmd.RegisterFlagCompletionFunc("host", completeConfiguredHosts)
 
@@ -564,8 +570,8 @@ func listWorktreesOn(host, repo, group string, changes bool) ([]worktreeRow, err
 	return res.Worktrees, nil
 }
 
-func runWorktreeList(host, repo, group string, jsonOutput bool) error {
-	rows, err := listWorktreesOn(host, repo, group, true)
+func runWorktreeList(host, repo, group string, jsonOutput bool, changes bool) error {
+	rows, err := listWorktreesOn(host, repo, group, changes)
 	if err != nil {
 		return reportVerbError(err, jsonOutput)
 	}

@@ -1,6 +1,7 @@
 package session
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
@@ -16,6 +17,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"golang.org/x/sync/errgroup"
 
 	"github.com/Gaurav-Gosain/tuios/internal/hooks"
 	"github.com/Gaurav-Gosain/tuios/internal/plural"
@@ -385,6 +388,7 @@ func (d *Daemon) verbListWorktrees(_ *connState, params json.RawMessage) (any, *
 		return nil, verr
 	}
 	rows := make([]map[string]any, 0)
+	withChanges := make([]worktreeChanges, 0)
 	for _, s := range d.listSessions() {
 		wt := s.Worktree
 		if wt == nil {
@@ -444,49 +448,88 @@ func (d *Daemon) verbListWorktrees(_ *connState, params json.RawMessage) (any, *
 			row["pr"] = wt.PR
 		}
 		if p.Changes && !wt.Gone {
-			// A git status per worktree, only when asked for: the rail never
-			// asks, and a listing an agent polls should not run git it did not
-			// want.
-			if n, err := worktree.Changes(wt.Path); err == nil {
-				row["changes"] = n
-			} else {
-				row["changes"] = -1
-			}
-			// What the close dialog says the delete row will take. Ignored is
-			// the part nothing saves, counted in files, not in the entries git
-			// lists; own_commits is the part the delete refuses. -1 is a
-			// failed read, not a count.
-			if n, err := worktree.Ignored(wt.Path); err == nil {
-				row["ignored"] = n
-			} else {
-				row["ignored"] = -1
-			}
-			if n, err := worktree.OwnCommits(wt.Path); err == nil {
-				row["own_commits"] = n
-			} else {
-				row["own_commits"] = -1
-			}
-			if wt.Base != "" {
-				if n, err := worktree.Ahead(wt.Path, wt.Base); err == nil {
-					row["ahead"] = n
-				}
-			}
-			// Merged into its base, or into the base's upstream. Cached per
-			// tip in the worktree package, so a polled listing runs git
-			// again only when a branch moves.
-			into, _ := worktree.Merged(wt.Path, wt.RepoRoot, wt.StartCommit, wt.Base)
-			row["merged"] = into != ""
-			if into != "" {
-				row["merged_into"] = into
-			}
+			withChanges = append(withChanges, worktreeChanges{row: row, wt: wt})
 		}
 		rows = append(rows, row)
+	}
+	// The change columns run one heavy git walk each, and a listing of many
+	// worktrees would pay for them serially. Each worker writes only the row
+	// it was given; the one thing shared is the merged cache, which takes
+	// its own lock.
+	if len(withChanges) > 0 {
+		group, ctx := errgroup.WithContext(context.Background())
+		group.SetLimit(worktreeListWorkers)
+		for _, c := range withChanges {
+			c := c
+			group.Go(func() error {
+				select {
+				case <-ctx.Done():
+					return ctx.Err()
+				default:
+				}
+				c.fill()
+				return nil
+			})
+		}
+		_ = group.Wait()
 	}
 	return map[string]any{
 		"type":      "worktree_list",
 		"worktrees": rows,
 		"total":     len(rows),
 	}, nil
+}
+
+// worktreeChanges carries one worktree row's git reads. The row map is the
+// worker's only write target.
+type worktreeChanges struct {
+	row map[string]any
+	wt  *WorktreeInfo
+}
+
+// worktreeListWorkers bounds how many worktrees' git reads run at once. Git
+// walks are I/O and stat bound, so a handful saturate a disk and more only
+// add scheduler noise.
+const worktreeListWorkers = 8
+
+// fill adds the change columns to one worktree row. Every column is set even
+// when its git read fails: -1 is a failed read, not a count, and a listing
+// that dropped a column because one worktree's walk broke would read as if
+// the worktree had none.
+func (c worktreeChanges) fill() {
+	row, wt := c.row, c.wt
+	// A git status per worktree, only when asked for: the rail never
+	// asks, and a listing an agent polls should not run git it did not
+	// want. One walk serves the two status columns: the heavy walk is the
+	// ignored one.
+	if changes, ignored, err := worktree.ChangeCounts(wt.Path); err == nil {
+		row["changes"] = changes
+		row["ignored"] = ignored
+	} else {
+		row["changes"] = -1
+		row["ignored"] = -1
+	}
+	// What the close dialog says the delete row will take. Ignored is
+	// the part nothing saves, counted in files, not in the entries git
+	// lists; own_commits is the part the delete refuses.
+	if n, err := worktree.OwnCommits(wt.Path); err == nil {
+		row["own_commits"] = n
+	} else {
+		row["own_commits"] = -1
+	}
+	if wt.Base != "" {
+		if n, err := worktree.Ahead(wt.Path, wt.Base); err == nil {
+			row["ahead"] = n
+		}
+	}
+	// Merged into its base, or into the base's upstream. Cached per
+	// tip in the worktree package, so a polled listing runs git
+	// again only when a branch moves.
+	into, _ := worktree.Merged(wt.Path, wt.RepoRoot, wt.StartCommit, wt.Base)
+	row["merged"] = into != ""
+	if into != "" {
+		row["merged_into"] = into
+	}
 }
 
 func (d *Daemon) verbRemoveWorktree(cs *connState, params json.RawMessage) (any, *verbError) {

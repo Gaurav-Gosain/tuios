@@ -254,18 +254,52 @@ func Changes(path string) (int, error) {
 // path in half, and a quoted name would lstat as its quoted form and fail the
 // walk a clean worktree never fails.
 func statusEntries(path string) (ignored, untracked []string, err error) {
+	ignored, untracked, _, err = statusRecords(path)
+	return ignored, untracked, err
+}
+
+// statusRecords is statusEntries, and the count of every record git listed.
+// A record is one path: the modified, the untracked and the ignored. The
+// count of all of them minus the ignored is the count a plain status, which
+// knows nothing of ignored trees, would have printed.
+func statusRecords(path string) (ignored, untracked []string, records int, err error) {
 	out, err := run(path, "status", "--porcelain", "-z", "--untracked-files=all", "--ignored=matching")
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, 0, err
 	}
 	for record := range strings.SplitSeq(out, "\x00") {
+		if record == "" {
+			continue
+		}
+		records++
 		if entry, ok := strings.CutPrefix(record, "!! "); ok {
 			ignored = append(ignored, entry)
 		} else if entry, ok := strings.CutPrefix(record, "?? "); ok {
 			untracked = append(untracked, entry)
 		}
 	}
-	return ignored, untracked, nil
+	return ignored, untracked, records, nil
+}
+
+// ChangeCounts reports what a worktree's listing shows in its change columns
+// from one status walk: the paths that differ from HEAD, untracked files
+// included, and the files a removal would take unsaved. The two read the
+// same status at different depths, and the heavy walk is the ignored one, so
+// one of it serves both.
+func ChangeCounts(path string) (changes, ignored int, err error) {
+	entries, _, records, err := statusRecords(path)
+	if err != nil {
+		return 0, 0, err
+	}
+	changes = records - len(entries)
+	for _, entry := range entries {
+		c, err := countFiles(filepath.Join(path, entry))
+		if err != nil {
+			return 0, 0, err
+		}
+		ignored += c
+	}
+	return changes, ignored, nil
 }
 
 // Ignored scans the paths a removal would take unsaved: git never stashes
@@ -273,19 +307,8 @@ func statusEntries(path string) (ignored, untracked []string, err error) {
 // reports a matched directory as one entry however many files sit in it, so the
 // entry is walked to count the files a person deleting the worktree is owed.
 func Ignored(path string) (int, error) {
-	entries, _, err := statusEntries(path)
-	if err != nil {
-		return 0, err
-	}
-	n := 0
-	for _, entry := range entries {
-		c, err := countFiles(filepath.Join(path, entry))
-		if err != nil {
-			return 0, err
-		}
-		n += c
-	}
-	return n, nil
+	_, n, err := ChangeCounts(path)
+	return n, err
 }
 
 // NestedRepo reports the first ignored or untracked path in a worktree that
