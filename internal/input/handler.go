@@ -4,6 +4,7 @@
 package input
 
 import (
+	"slices"
 	"strings"
 	"time"
 
@@ -871,10 +872,8 @@ func isConfiguredKey(msg tea.KeyPressMsg, s *config.Settings, base rune, is func
 	if base == 0 {
 		base = msg.BaseCode
 	}
-	for _, chord := range composedChords(msg, base) {
-		if is(chord) {
-			return optionGlyphsApply(msg, s.KeyboardLayout, s.OptionGlyphs)
-		}
+	if slices.ContainsFunc(composedChords(msg, base), is) {
+		return optionGlyphsApply(msg, s.KeyboardLayout, s.OptionGlyphs)
 	}
 	return false
 }
