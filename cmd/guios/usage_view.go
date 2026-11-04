@@ -57,6 +57,34 @@ func sparkline(c *ui.Context, key string, s series, top float32, col ui.Color, w
 	return box
 }
 
+// trendline is a small line of a figure's readings over a hairline
+// baseline, with no fill and no ground, so that it does not read as a
+// progress bar (council round 1, visual 25).
+func trendline(c *ui.Context, pal *palette, key string, s series, top float32, w, h float32) ui.Element {
+	box := ui.Box(c.Key(key)).Size(w, h).Shrink(0).Unselectable()
+	if top <= 0 && len(s) > 0 {
+		top = slices.Max(s) * 4 / 3
+	}
+	top = max(top, 1e-6)
+	n := len(s)
+	xs := make([]float32, n)
+	ys := make([]float32, n)
+	for i, v := range s {
+		xs[i] = float32(i) / float32(max(n-1, 1))
+		ys[i] = min(v/top, 1)*0.85 + 0.08
+	}
+	box.Draw(func(p *ui.Painter, r ui.Rect) {
+		p.Line(r.X, r.Y+r.H-0.5, r.X+r.W, r.Y+r.H-0.5, 1, pal.textFaint.Alpha(0.5))
+		switch {
+		case n == 1:
+			p.Line(r.X, chart.Y(r, ys[0]), r.X+r.W, chart.Y(r, ys[0]), 1.25, pal.textMuted)
+		case n > 1:
+			p.StrokePath(chart.Line(r, xs, ys, chart.CurveMonotone), 1.25, pal.textMuted)
+		}
+	})
+	return box
+}
+
 // meter draws a fraction as a short bar.
 func meter(c *ui.Context, pal *palette, frac float64, col ui.Color, w float32) {
 	frac = min(max(frac, 0), 1)
@@ -66,10 +94,10 @@ func meter(c *ui.Context, pal *palette, frac float64, col ui.Color, w float32) {
 }
 
 // usageFigure is a label, a sparkline and its figure, on one line.
-func usageFigure(c *ui.Context, pal *palette, key, label string, s series, top float32, col ui.Color, figure string) {
+func usageFigure(c *ui.Context, pal *palette, key, label string, s series, top float32, figure string) {
 	ui.Row(c.Key(key)).Gap(7).AlignItems(ui.Center).Shrink(0).Children(func() {
 		ui.Text(c, label).FontSize(fsSmall).TextColor(pal.textFaint).SingleLine()
-		sparkline(c, "spark", s, top, col, 56, 16)
+		trendline(c, pal, "spark", s, top, 24, 14)
 		ui.Text(c, figure).FontSize(fsSmall).FontWeight(wSemibold).TextColor(pal.text).FontFeatures("tnum").SingleLine()
 	})
 }
@@ -88,8 +116,8 @@ func (a *App) agentUsage(c *ui.Context, pal *palette, ag client.Agent) {
 	}
 	ui.Row(c.Key("usage")).GapX(18).GapY(6).AlignItems(ui.Center).Margin(6, 0, 0, 0).Wrap().Children(func() {
 		if pu != nil {
-			usageFigure(c, pal, "cpu", locales.UsageCPU(), pu.cpu, 100, pal.accent, cpuText(pu.cpuNow))
-			usageFigure(c, pal, "mem", locales.UsageMemory(), pu.mem, 0, pal.attention, bytesText(pu.rss))
+			usageFigure(c, pal, "cpu", locales.UsageCPU(), pu.cpu, 100, cpuText(pu.cpuNow))
+			usageFigure(c, pal, "mem", locales.UsageMemory(), pu.mem, 0, bytesText(pu.rss))
 		}
 		if hasCtx {
 			col := pal.textMuted
