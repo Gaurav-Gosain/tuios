@@ -338,7 +338,7 @@ func (p *lookPicker) View() tea.View {
 			marker = "> "
 			text = lipgloss.NewStyle().Reverse(true).Bold(true).Render(text)
 		}
-		b.WriteString(marker + text + " " + lookSwatches(l.Colors) + "\n")
+		fmt.Fprintf(&b, "%s%s %s\n", marker, text, lookSwatches(l.Colors))
 	}
 	fmt.Fprintf(&b, "\n%d of %d. Up and down move.", p.cur+1, len(p.looks))
 	return tea.NewView(b.String())
