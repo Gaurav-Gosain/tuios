@@ -18,6 +18,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/egoist/mygo"
 	_ "github.com/egoist/mygo/plugins/automation"
@@ -30,6 +31,11 @@ func init() {
 	// capture frames on the way.
 	if k, err := strconv.ParseFloat(os.Getenv("GUIOS_MOTION_SCALE"), 64); err == nil && k > 0 {
 		scaleMotion(k)
+	}
+	// GUIOS_SCROLL_TRACE prints where smoothScroll puts the content in
+	// each frame, as MyGo's MYGO_SCROLL_TRACE does for a terminal.
+	if os.Getenv("GUIOS_SCROLL_TRACE") != "" {
+		scrollTrace = func(y float32) { fmt.Fprintf(os.Stderr, "SCROLLTRACE %d %.2f\n", time.Now().UnixNano(), y) }
 	}
 }
 
