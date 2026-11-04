@@ -2,9 +2,12 @@ package client
 
 import (
 	"encoding/json"
+	"maps"
 	"strconv"
+	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/guios/proto"
+	"github.com/Gaurav-Gosain/tuios/internal/layout"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 )
 
@@ -12,9 +15,8 @@ import (
 // every TUI client of the session lays its panes out by. guios shows that
 // tree as kero's split tree and writes its own splits, drags, moves and
 // closes back with set-layout-tree, so a TUI on the same session shows them
-// at once. The master-stack and scrolling layouts keep no tree: guios shows
-// them by the rectangles the TUI gave each pane (cutRects) and keeps its
-// own changes to itself.
+// at once. The other layouts are laid out by arrange.go from the rest of the
+// session's layout state.
 
 // BSP split types, as internal/layout numbers them.
 const (
@@ -27,12 +29,9 @@ type treeInfo struct {
 	ws        int
 	tree      *session.SerializedBSPTree
 	leaves    map[int]string
+	ls        layoutState
 	useTree   bool // the tree arranges the panes, and guios's changes go back to it
 	tui       bool // a TUI client is attached
-	tiling    bool
-	mode      string
-	scheme    int
-	defRatio  float64
 	numWS     int
 	wsNames   map[int]string
 	wsOrder   []int
@@ -44,8 +43,6 @@ func (k *stateKeeper) readTree(name string, ws int) treeInfo {
 	ti := treeInfo{ws: ws, numWS: 9}
 	if raw, err := k.c.verb("session-info", map[string]any{"session": name}); err == nil {
 		var si struct {
-			Tiling  string            `json:"tiling_mode"`
-			Mode    string            `json:"layout_mode"`
 			TUI     bool              `json:"tui_attached"`
 			NumWS   int               `json:"num_workspaces"`
 			WSNames map[string]string `json:"workspace_names"`
@@ -53,7 +50,7 @@ func (k *stateKeeper) readTree(name string, ws int) treeInfo {
 			Current int               `json:"current_workspace"`
 		}
 		if json.Unmarshal(raw, &si) == nil {
-			ti.tiling, ti.mode, ti.tui, ti.wsOrder = si.Tiling == "tiling", si.Mode, si.TUI, si.WSOrder
+			ti.tui, ti.wsOrder = si.TUI, si.WSOrder
 			if si.NumWS > 0 {
 				ti.numWS = si.NumWS
 			}
@@ -71,6 +68,7 @@ func (k *stateKeeper) readTree(name string, ws int) treeInfo {
 			Leaves map[string]string          `json:"leaves"`
 		}
 		if json.Unmarshal(raw, &lt) == nil {
+			_ = json.Unmarshal(raw, &ti.ls)
 			ti.tree = lt.Tree
 			ti.leaves = make(map[int]string, len(lt.Leaves))
 			for k, v := range lt.Leaves {
@@ -78,15 +76,9 @@ func (k *stateKeeper) readTree(name string, ws int) treeInfo {
 					ti.leaves[n] = v
 				}
 			}
-			if lt.Tree != nil {
-				ti.scheme, ti.defRatio = lt.Tree.AutoScheme, lt.Tree.DefaultRatio
-			}
 		}
 	}
-	// Master-stack and scrolling place panes without the tree; a TUI with
-	// tiling off floats them. With no TUI, guios is what lays them out.
-	treeMode := ti.mode != "master-stack" && ti.mode != "scrolling"
-	ti.useTree = treeMode && (ti.tiling || !ti.tui)
+	ti.useTree = ti.mode() == modeBSP
 	return ti
 }
 
@@ -168,70 +160,87 @@ func (c *Client) sendTree(name string, ti treeInfo, l *proto.Layout) bool {
 	if !ti.useTree {
 		return false
 	}
-	tree, leaves := toTree(l, ti.scheme, ti.defRatio)
+	scheme, defRatio := 0, 0.0
+	if ti.tree != nil {
+		scheme, defRatio = ti.tree.AutoScheme, ti.tree.DefaultRatio
+	} else {
+		t, _, _ := ti.bspTree()
+		scheme, defRatio = int(t.AutoScheme), t.DefaultRatio
+	}
+	tree, leaves := toTree(l, scheme, defRatio)
 	_, err := c.verb("set-layout-tree", map[string]any{"session": name, "workspace": ti.ws, "tree": tree, "leaves": leaves})
 	return err == nil
 }
 
-// layoutOf is the split tree of a session's shown panes. Where the
-// workspace's tree arranges them, it is that tree, with a pane the tree
-// lacks put beside the focus. A TUI places such a pane in the tree itself;
-// with none attached, guios writes the tree back with the pane in it.
-// Elsewhere the tree is cut from the panes' rectangles, or is the app's.
+// layoutOf is the split tree of a session's shown panes, when the BSP
+// layout places them. It is the workspace's tree with the panes it lacks put
+// in by tuios's own rules: a new pane splits the pane that had the focus
+// (or the one a split asked for), on the side the split asked for or the
+// one the tree's scheme picks, and panes missing for another reason go in
+// beside the last leaf (layout.AddWindow, layout.InsertMissing). A TUI
+// places such a pane in the tree itself; with none attached, guios writes
+// the tree back with the pane in it.
 func (k *stateKeeper) layoutOf(sid, name string, wins []windowRow, focus string, ti *treeInfo) *proto.Layout {
+	k.mu.Lock()
+	prev := k.prevFocus[sid]
+	k.prevFocus[sid] = focus
+	ps := k.pending[sid]
+	k.mu.Unlock()
 	if !ti.useTree {
-		// A TUI lays these panes out (master-stack, scrolling): its
-		// rectangles say where each one is, every time.
-		if ti.tui && ti.zoomByTUI != "" {
-			// A TUI's zoom is a camera: below zoom_size 100 it lays the
-			// layout out on a larger canvas and pans to the zoomed pane,
-			// so the other panes' rectangles are off the screen. guios
-			// draws the zoom itself, the zoomed pane over the whole area,
-			// and keeps the split it had before the zoom for the unzoom.
-			return k.layoutFor(sid, wins, focus, false)
-		}
-		if ti.tui {
-			if t := cutRects(wins); t != nil {
-				k.mu.Lock()
-				k.layouts[sid] = t
-				k.mu.Unlock()
-				if t.Leaf() {
-					return nil
-				}
-				return t.Clone()
-			}
-		}
-		return k.layoutFor(sid, wins, focus, true)
+		return nil
 	}
-	shown := make(map[string]bool, len(wins))
-	for _, w := range wins {
+	if ti.tui && ti.zoomByTUI != "" {
+		// A TUI's zoom is a camera: below zoom_size 100 it lays the layout
+		// out on a larger canvas and pans to the zoomed pane. guios draws
+		// the zoom itself, the zoomed pane over the whole area, from the
+		// tree, which the zoom leaves alone.
+		focus = ti.zoomByTUI
+	}
+	t := tiled(wins)
+	tree, leaves, nums := ti.bspTree()
+	ids := make([]int, len(t))
+	shown := make(map[string]bool, len(t))
+	for i, w := range t {
+		ids[i] = number(leaves, nums, w.ID)
 		shown[w.ID] = true
 	}
+	changed := tree.PruneTo(ids)
+	var missing []int
+	for _, n := range ids {
+		if !tree.HasWindow(n) {
+			missing = append(missing, n)
+		}
+	}
+	bounds, gap := ti.bounds(), ti.ls.Gap
+	if len(missing) == 1 && !tree.IsEmpty() {
+		// One new pane: it splits the pane the focus was on before it came,
+		// as the TUI's insertSyncedWindow does.
+		target, dir := prev, layout.PreselectionNone
+		if target == "" || !shown[target] || nums[target] == missing[0] {
+			target = focus
+		}
+		if ps.at.After(time.Now().Add(-5*time.Second)) && shown[ps.target] {
+			target, dir = ps.target, ps.dir
+		}
+		tree.AddWindow(missing[0], nums[target], dir, bounds, gap)
+		changed = true
+	} else if tree.InsertMissing(ids, bounds, gap) {
+		changed = true
+	}
+	if len(missing) > 0 {
+		k.mu.Lock()
+		delete(k.pending, sid)
+		k.mu.Unlock()
+	}
+	if changed && !ti.tui && !tree.IsEmpty() {
+		st, lv := sessionTree(tree), maps.Clone(leaves)
+		go func() {
+			_, _ = k.c.verb("set-layout-tree", map[string]any{"session": name, "workspace": ti.ws, "tree": st, "leaves": lv})
+		}()
+	}
 	var l *proto.Layout
-	if ti.tree != nil {
-		l = fromTree(ti.tree.Root, ti.leaves, shown)
-	} else if len(wins) > 1 {
-		l = k.layoutFor(sid, wins, focus, true)
-	}
-	write := ti.tree == nil && l != nil
-	for _, w := range wins {
-		if l == nil {
-			l = &proto.Layout{Pane: w.ID}
-			continue
-		}
-		if contains(l.Panes(), w.ID) {
-			continue
-		}
-		at := focus
-		if at == "" || !contains(l.Panes(), at) || at == w.ID {
-			ids := l.Panes()
-			at = ids[len(ids)-1]
-		}
-		l = l.Split(at, w.ID, "right", 0.5)
-		write = true
-	}
-	if write && !ti.tui && l != nil {
-		go k.c.sendTree(name, *ti, l.Clone())
+	if st := sessionTree(tree); st != nil {
+		l = fromTree(st.Root, leaves, shown)
 	}
 	if l == nil || l.Leaf() {
 		return nil
@@ -240,6 +249,30 @@ func (k *stateKeeper) layoutOf(sid, name string, wins []windowRow, focus string,
 	k.layouts[sid] = l
 	k.mu.Unlock()
 	return l.Clone()
+}
+
+// pendingSplit is a split guios asked the daemon for and has not seen the
+// pane of yet: the pane it splits and toward which side, as the TUI's
+// pendingSplitTarget and pendingSplitDir.
+type pendingSplit struct {
+	target string
+	dir    layout.PreselectionDir
+	at     time.Time
+}
+
+// preselection is a kero split side as tuios's preselection, none for "".
+func preselection(side string) layout.PreselectionDir {
+	switch side {
+	case "left":
+		return layout.PreselectionLeft
+	case "right":
+		return layout.PreselectionRight
+	case "up":
+		return layout.PreselectionUp
+	case "down":
+		return layout.PreselectionDown
+	}
+	return layout.PreselectionNone
 }
 
 // workspaceList is a session's workspaces that hold panes, with the shown

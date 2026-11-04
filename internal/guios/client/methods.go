@@ -125,6 +125,13 @@ func (c *Client) dispatch(method string, params any) (any, error) {
 		}
 		return true, nil
 
+	case "arrange":
+		p, err := decode[proto.ArrangeParams](params)
+		if err != nil {
+			return nil, err
+		}
+		return true, c.arrangeOp(p)
+
 	case "workspace":
 		p, err := decode[proto.WorkspaceParams](params)
 		if err != nil {
@@ -363,48 +370,40 @@ func (c *Client) split(p proto.CreateParams) (proto.Session, error) {
 	if env := paneEnv(); env != nil && c.host == "" && p.Host == "" {
 		params["env"] = env
 	}
+	// The side the new pane takes, or "" for the side the layout picks:
+	// tuios's auto scheme in the split tree.
 	dirn := p.Direction
-	if dirn == "" {
-		dirn = "right"
-	}
 	c.st.mu.Lock()
 	ti := c.st.trees[sid]
+	if beside == "" {
+		for _, w := range c.st.shown[sid] {
+			if w.Focused {
+				beside = w.ID
+			}
+		}
+	}
 	c.st.mu.Unlock()
-	// A TUI on the session places a new pane in the workspace's tree
+	// A TUI on the session places a new pane in the workspace's layout
 	// itself, so the split goes through it: a tree written here would race
-	// the one it writes for the new pane.
-	if ti.tui && ti.useTree && beside != "" && len(p.Command) == 0 && p.Ratio == 0 && p.Host == "" {
-		if _, err := c.verb("split-window", map[string]any{"session": name, "window": beside, "side": dirn}); err == nil {
-			return c.sessionNamed(name, sid)
+	// the one it writes for the new pane. A pane the daemon makes splits
+	// the focused pane there, so the focus goes first.
+	if ti.tui && beside != "" && len(p.Command) == 0 && p.Ratio == 0 && p.Host == "" {
+		if dirn != "" && ti.useTree {
+			if _, err := c.verb("split-window", map[string]any{"session": name, "window": beside, "side": dirn}); err == nil {
+				return c.sessionNamed(name, sid)
+			}
 		}
+		_, _ = c.verb("focus-window", map[string]any{"session": name, "window": beside})
 	}
-	raw, err := c.verb("new-window", params)
-	if err != nil {
+	if !ti.tui && beside != "" {
+		// layoutOf puts the pane in the tree when it shows up, as the
+		// TUI's insertSyncedWindow does with its pending split.
+		c.st.mu.Lock()
+		c.st.pending[sid] = pendingSplit{target: beside, dir: preselection(dirn), at: time.Now()}
+		c.st.mu.Unlock()
+	}
+	if _, err := c.verb("new-window", params); err != nil {
 		return proto.Session{}, err
-	}
-	var res struct {
-		ID string `json:"window_id"`
-	}
-	_ = json.Unmarshal(raw, &res)
-	// The new pane goes where the app asked: in the workspace's tree, or
-	// in the app's own.
-	ratio := p.Ratio
-	if ratio == 0 {
-		ratio = 0.5
-	}
-	c.st.mu.Lock()
-	l := c.st.layouts[sid]
-	if beside != "" && res.ID != "" {
-		if l == nil {
-			l = &proto.Layout{Pane: beside}
-		}
-		l = l.Split(beside, res.ID, dirn, ratio)
-		c.st.layouts[sid] = l
-	}
-	c.st.mu.Unlock()
-	c.st.saveLayouts()
-	if l != nil && ti.useTree && !ti.tui {
-		c.sendTree(name, ti, l.Clone())
 	}
 	return c.sessionNamed(name, sid)
 }

@@ -88,10 +88,15 @@ type stateKeeper struct {
 	state   *proto.State
 	layouts map[string]*proto.Layout // by session id
 	trees   map[string]treeInfo      // the shown workspace's tree, by session id
-	zoom    map[string]string        // the pane guios zoomed, by session id, with no TUI to zoom it
-	unread  map[string]bool          // pane ids with a finished turn not seen
-	viewed  string
-	started int64
+	shown   map[string][]windowRow   // the shown workspace's panes, by session id
+	// prevFocus is the focus each session had at the last build, which a
+	// new pane splits; pending the split guios asked for, by session id.
+	prevFocus map[string]string
+	pending   map[string]pendingSplit
+	zoom      map[string]string // the pane guios zoomed, by session id, with no TUI to zoom it
+	unread    map[string]bool   // pane ids with a finished turn not seen
+	viewed    string
+	started   int64
 	// paneSession finds a pane's session, for streams and pane methods.
 	paneSession map[string]string
 	sessionName map[string]string // session id to name
@@ -106,6 +111,7 @@ type stateKeeper struct {
 
 func newStateKeeper(c *Client) *stateKeeper {
 	k := &stateKeeper{c: c, layouts: map[string]*proto.Layout{}, trees: map[string]treeInfo{}, zoom: map[string]string{}, unread: map[string]bool{},
+		shown: map[string][]windowRow{}, prevFocus: map[string]string{}, pending: map[string]pendingSplit{},
 		paneSession: map[string]string{}, sessionName: map[string]string{}, kick: make(chan struct{}, 1),
 		exits: map[string]bool{}, closing: map[string]bool{},
 		started: time.Now().UnixMilli()}
@@ -235,6 +241,11 @@ func (k *stateKeeper) build() (*proto.State, error) {
 		ks.Workspaces = workspaceList(counts, ws, ti)
 		ks.TUI = ti.tui
 		ks.Layout = k.layoutOf(s.ID, s.Name, shown, wl.Focus, &ti)
+		ks.LayoutMode = ti.mode()
+		if a := ti.arrange(shown, wl.Focus); ks.LayoutMode != modeBSP || len(a.Float) > 0 {
+			ks.Arrange = a
+			k.settle(s.Name, &ti, shown, wl.Focus, a)
+		}
 		ks.Zoomed = ti.zoomByTUI
 		if ks.Zoomed == "" {
 			k.mu.Lock()
@@ -245,6 +256,7 @@ func (k *stateKeeper) build() (*proto.State, error) {
 		}
 		k.mu.Lock()
 		k.trees[s.ID] = ti
+		k.shown[s.ID] = shown
 		k.mu.Unlock()
 		if i := proto.Lead(ks.Panes, ks.Focus); i >= 0 && i < len(ks.Panes) {
 			ks.Pane = ks.Panes[i]
@@ -351,69 +363,6 @@ func (k *stateKeeper) seen(sid string) {
 			k.unread[pane] = false
 		}
 	}
-}
-
-// layoutFor keeps the session's split tree in step with its panes. A tree
-// the app holds for exactly these panes stays, with the sizes the person
-// gave it. Otherwise the tree is cut from where the tuios layout put each
-// pane, so guios starts from the session's own tiling, unless rects is
-// false: then the panes are split evenly, as during a TUI zoom.
-func (k *stateKeeper) layoutFor(sid string, wins []windowRow, focus string, rects bool) *proto.Layout {
-	k.mu.Lock()
-	defer k.mu.Unlock()
-	l := k.layouts[sid]
-	have := map[string]bool{}
-	for _, w := range wins {
-		have[w.ID] = true
-	}
-	same := l != nil && len(l.Panes()) == len(wins)
-	if same {
-		for _, id := range l.Panes() {
-			if !have[id] {
-				same = false
-				break
-			}
-		}
-	}
-	if !same && rects {
-		if t := cutRects(wins); t != nil {
-			k.layouts[sid] = t
-			if t.Leaf() {
-				return nil
-			}
-			return t.Clone()
-		}
-	}
-	panes := make([]proto.Pane, len(wins))
-	for i, w := range wins {
-		panes[i] = proto.Pane{ID: w.ID}
-	}
-	if l != nil {
-		for _, id := range l.Panes() {
-			if !have[id] {
-				l = l.Remove(id)
-			}
-		}
-	}
-	for _, p := range panes {
-		if l == nil {
-			l = &proto.Layout{Pane: p.ID}
-			continue
-		}
-		if !contains(l.Panes(), p.ID) {
-			at := focus
-			if at == "" || !contains(l.Panes(), at) {
-				ids := l.Panes()
-				at = ids[len(ids)-1]
-			}
-			l = l.Split(at, p.ID, "right", 0.5)
-		}
-	}
-	k.layouts[sid] = l
-	if l == nil || l.Leaf() {
-		return nil
-	}
-	return l.Clone()
 }
 
 func (k *stateKeeper) setLayout(sid string, l *proto.Layout) {
@@ -598,78 +547,6 @@ func firstOf(s ...string) string {
 		}
 	}
 	return ""
-}
-
-// cutRects builds a split tree from the panes' rectangles, as a guillotine
-// cut: a column or row line that no pane crosses splits them in two, and
-// each side is cut again. It returns nil when the panes overlap (floating
-// windows), and the caller falls back to splitting beside the focus.
-func cutRects(wins []windowRow) *proto.Layout {
-	if len(wins) == 0 {
-		return nil
-	}
-	if len(wins) == 1 {
-		return &proto.Layout{Pane: wins[0].ID}
-	}
-	x0, y0, x1, y1 := wins[0].X, wins[0].Y, wins[0].X+wins[0].Width, wins[0].Y+wins[0].Height
-	for _, w := range wins[1:] {
-		x0, y0 = min(x0, w.X), min(y0, w.Y)
-		x1, y1 = max(x1, w.X+w.Width), max(y1, w.Y+w.Height)
-	}
-	try := func(row bool) *proto.Layout {
-		var cuts []int
-		for _, w := range wins {
-			if row {
-				cuts = append(cuts, w.X+w.Width)
-			} else {
-				cuts = append(cuts, w.Y+w.Height)
-			}
-		}
-		sort.Ints(cuts)
-		for _, c := range cuts {
-			var a, b []windowRow
-			ok := true
-			for _, w := range wins {
-				lo, hi := w.Y, w.Y+w.Height
-				if row {
-					lo, hi = w.X, w.X+w.Width
-				}
-				switch {
-				case hi <= c+1:
-					a = append(a, w)
-				case lo >= c:
-					b = append(b, w)
-				default:
-					ok = false
-				}
-				if !ok {
-					break
-				}
-			}
-			if !ok || len(a) == 0 || len(b) == 0 {
-				continue
-			}
-			la, lb := cutRects(a), cutRects(b)
-			if la == nil || lb == nil {
-				return nil
-			}
-			span := float64(y1 - y0)
-			at := float64(c - y0)
-			if row {
-				span, at = float64(x1-x0), float64(c-x0)
-			}
-			ratio := 0.5
-			if span > 0 {
-				ratio = at / span
-			}
-			return &proto.Layout{Row: row, Ratio: ratio, A: la, B: lb}
-		}
-		return nil
-	}
-	if l := try(true); l != nil {
-		return l
-	}
-	return try(false)
 }
 
 // looksLikePrompt reports a shell's own title, user@host:dir, which names
