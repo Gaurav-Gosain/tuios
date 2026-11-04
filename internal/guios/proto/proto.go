@@ -316,6 +316,30 @@ type Session struct {
 	// Worktree is the linked git worktree kero made for the session to
 	// work in, nil for none.
 	Worktree *Worktree `json:"worktree,omitempty"`
+	// Workspace is the tuios workspace the session shows (1 to 9), whose
+	// panes Panes are; Workspaces are those that hold panes, and the shown
+	// one, in the session's order.
+	Workspace  int         `json:"workspace,omitempty"`
+	Workspaces []Workspace `json:"workspaces,omitempty"`
+}
+
+// Workspace is one of a tuios session's workspaces: its number, its name
+// when it has one, how many panes it holds, and the most urgent status of
+// them.
+type Workspace struct {
+	N      int    `json:"n"`
+	Name   string `json:"name,omitempty"`
+	Panes  int    `json:"panes"`
+	Status Status `json:"status,omitempty"`
+	Unread bool   `json:"unread,omitempty"`
+}
+
+// WorkspaceParams shows a session's workspace, or with Pane moves that
+// pane to it.
+type WorkspaceParams struct {
+	Session   string `json:"session"`
+	Pane      string `json:"pane,omitempty"`
+	Workspace int    `json:"workspace"`
 }
 
 // Worktree is a linked git worktree kero made for a session: Path checks

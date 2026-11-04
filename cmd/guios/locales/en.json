@@ -1167,5 +1167,13 @@
   "endedSetUpSkill": "Set up the tuios integration for your agents to list their ended conversations here",
   "actionQuickTerminal": "Quick Terminal",
   "toastGlobalShortcutFailed": "Couldn’t use {keys} for the quick terminal: {error}",
-  "setShortcutGlobal": "Works in every app"
+  "setShortcutGlobal": "Works in every app",
+  "menuWorkspace": "Workspace",
+  "menuMovePaneToWorkspace": "Move Pane to Workspace",
+  "actionNextWorkspace": "Next Workspace",
+  "actionPreviousWorkspace": "Previous Workspace",
+  "actionGoToWorkspace": "Go to Workspace {n}",
+  "actionMovePaneToWorkspace": "Move Pane to Workspace {n}",
+  "workspaceNew": "New Workspace",
+  "workspaceTip": "{count, plural, one {Workspace {name}: # pane} other {Workspace {name}: # panes}}"
 }

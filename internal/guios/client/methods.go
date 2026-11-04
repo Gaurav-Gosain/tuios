@@ -103,7 +103,11 @@ func (c *Client) dispatch(method string, params any) (any, error) {
 		return true, err
 
 	case "zoom":
-		return true, nil
+		p, err := decode[proto.FocusParams](params)
+		if err != nil {
+			return nil, err
+		}
+		return true, c.zoom(p.Session, p.Pane)
 
 	case "layout":
 		p, err := decode[proto.LayoutParams](params)
@@ -111,8 +115,26 @@ func (c *Client) dispatch(method string, params any) (any, error) {
 			return nil, err
 		}
 		c.st.setLayout(p.Session, p.Layout)
-		c.kickState()
+		if !c.writeTree(p.Session, p.Layout) {
+			c.kickState()
+		}
 		return true, nil
+
+	case "workspace":
+		p, err := decode[proto.WorkspaceParams](params)
+		if err != nil {
+			return nil, err
+		}
+		if p.Pane != "" {
+			_, name, ok := c.st.lookup(p.Pane)
+			if !ok {
+				return nil, errors.New("no such pane")
+			}
+			_, err = c.verb("move-window", map[string]any{"session": name, "window": p.Pane, "workspace": p.Workspace})
+			return true, err
+		}
+		_, err = c.verb("select-workspace", map[string]any{"session": c.st.nameOf(p.Session), "workspace": p.Workspace})
+		return true, err
 
 	case "move", "project.rename", "project.close", "project.move":
 		return true, nil
@@ -287,6 +309,21 @@ func (c *Client) split(p proto.CreateParams) (proto.Session, error) {
 	if env := paneEnv(); env != nil {
 		params["env"] = env
 	}
+	dirn := p.Direction
+	if dirn == "" {
+		dirn = "right"
+	}
+	c.st.mu.Lock()
+	ti := c.st.trees[sid]
+	c.st.mu.Unlock()
+	// A TUI on the session places a new pane in the workspace's tree
+	// itself, so the split goes through it: a tree written here would race
+	// the one it writes for the new pane.
+	if ti.tui && ti.useTree && beside != "" && len(p.Command) == 0 && p.Ratio == 0 {
+		if _, err := c.verb("split-window", map[string]any{"session": name, "window": beside, "side": dirn}); err == nil {
+			return c.sessionNamed(name, sid)
+		}
+	}
 	raw, err := c.verb("new-window", params)
 	if err != nil {
 		return proto.Session{}, err
@@ -295,22 +332,67 @@ func (c *Client) split(p proto.CreateParams) (proto.Session, error) {
 		ID string `json:"window_id"`
 	}
 	_ = json.Unmarshal(raw, &res)
-	// The new pane goes where the app asked, in the app's own tree.
+	// The new pane goes where the app asked: in the workspace's tree, or
+	// in the app's own.
+	ratio := p.Ratio
+	if ratio == 0 {
+		ratio = 0.5
+	}
 	c.st.mu.Lock()
-	if l := c.st.layouts[sid]; l != nil && beside != "" && res.ID != "" {
-		dirn := p.Direction
-		if dirn == "" {
-			dirn = "right"
+	l := c.st.layouts[sid]
+	if beside != "" && res.ID != "" {
+		if l == nil {
+			l = &proto.Layout{Pane: beside}
 		}
-		ratio := p.Ratio
-		if ratio == 0 {
-			ratio = 0.5
-		}
-		c.st.layouts[sid] = l.Split(beside, res.ID, dirn, ratio)
+		l = l.Split(beside, res.ID, dirn, ratio)
+		c.st.layouts[sid] = l
 	}
 	c.st.mu.Unlock()
 	c.st.saveLayouts()
+	if l != nil && ti.useTree && !ti.tui {
+		c.sendTree(name, ti, l.Clone())
+	}
 	return c.sessionNamed(name, sid)
+}
+
+// zoom zooms a pane, or unzooms it when it is the zoomed one. A TUI on the
+// session zooms it there, so every client shows the zoom; with none, the
+// zoom is guios's alone.
+func (c *Client) zoom(sid, pane string) error {
+	c.st.mu.Lock()
+	ti := c.st.trees[sid]
+	cur := ti.zoomByTUI
+	if cur == "" {
+		cur = c.st.zoom[sid]
+	}
+	name := c.st.sessionName[sid]
+	c.st.mu.Unlock()
+	if ti.tui {
+		target := pane
+		if cur != "" && cur != pane {
+			// Unzoom the zoomed one first, then zoom this one.
+			if _, err := c.verb("focus-window", map[string]any{"session": name, "window": cur}); err != nil {
+				return err
+			}
+			if _, err := c.verb("run-command", map[string]any{"session": name, "command": "ToggleZoom"}); err != nil {
+				return err
+			}
+		}
+		if _, err := c.verb("focus-window", map[string]any{"session": name, "window": target}); err != nil {
+			return err
+		}
+		_, err := c.verb("run-command", map[string]any{"session": name, "command": "ToggleZoom"})
+		return err
+	}
+	c.st.mu.Lock()
+	if cur == pane {
+		delete(c.st.zoom, sid)
+	} else {
+		c.st.zoom[sid] = pane
+	}
+	c.st.mu.Unlock()
+	c.kickState()
+	return nil
 }
 
 // sessionNamed reads the state and returns one session of it.

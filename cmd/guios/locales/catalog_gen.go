@@ -6113,3 +6113,85 @@ func SetShortcutGlobal() string { return In(i18n.Locale()).SetShortcutGlobal() }
 func (msgs Messages) SetShortcutGlobal() string {
 	return Catalog.Format(msgs.locale, "setShortcutGlobal", nil)
 }
+
+// MenuWorkspace says "Workspace"
+// in the language the app shows.
+func MenuWorkspace() string { return In(i18n.Locale()).MenuWorkspace() }
+
+// MenuWorkspace says "Workspace"
+// in the language of msgs.
+func (msgs Messages) MenuWorkspace() string {
+	return Catalog.Format(msgs.locale, "menuWorkspace", nil)
+}
+
+// MenuMovePaneToWorkspace says "Move Pane to Workspace"
+// in the language the app shows.
+func MenuMovePaneToWorkspace() string { return In(i18n.Locale()).MenuMovePaneToWorkspace() }
+
+// MenuMovePaneToWorkspace says "Move Pane to Workspace"
+// in the language of msgs.
+func (msgs Messages) MenuMovePaneToWorkspace() string {
+	return Catalog.Format(msgs.locale, "menuMovePaneToWorkspace", nil)
+}
+
+// ActionNextWorkspace says "Next Workspace"
+// in the language the app shows.
+func ActionNextWorkspace() string { return In(i18n.Locale()).ActionNextWorkspace() }
+
+// ActionNextWorkspace says "Next Workspace"
+// in the language of msgs.
+func (msgs Messages) ActionNextWorkspace() string {
+	return Catalog.Format(msgs.locale, "actionNextWorkspace", nil)
+}
+
+// ActionPreviousWorkspace says "Previous Workspace"
+// in the language the app shows.
+func ActionPreviousWorkspace() string { return In(i18n.Locale()).ActionPreviousWorkspace() }
+
+// ActionPreviousWorkspace says "Previous Workspace"
+// in the language of msgs.
+func (msgs Messages) ActionPreviousWorkspace() string {
+	return Catalog.Format(msgs.locale, "actionPreviousWorkspace", nil)
+}
+
+// ActionGoToWorkspace says "Go to Workspace {n}"
+// in the language the app shows.
+func ActionGoToWorkspace(n string) string { return In(i18n.Locale()).ActionGoToWorkspace(n) }
+
+// ActionGoToWorkspace says "Go to Workspace {n}"
+// in the language of msgs.
+func (msgs Messages) ActionGoToWorkspace(n string) string {
+	return Catalog.Format(msgs.locale, "actionGoToWorkspace", map[string]any{"n": n})
+}
+
+// ActionMovePaneToWorkspace says "Move Pane to Workspace {n}"
+// in the language the app shows.
+func ActionMovePaneToWorkspace(n string) string {
+	return In(i18n.Locale()).ActionMovePaneToWorkspace(n)
+}
+
+// ActionMovePaneToWorkspace says "Move Pane to Workspace {n}"
+// in the language of msgs.
+func (msgs Messages) ActionMovePaneToWorkspace(n string) string {
+	return Catalog.Format(msgs.locale, "actionMovePaneToWorkspace", map[string]any{"n": n})
+}
+
+// WorkspaceNew says "New Workspace"
+// in the language the app shows.
+func WorkspaceNew() string { return In(i18n.Locale()).WorkspaceNew() }
+
+// WorkspaceNew says "New Workspace"
+// in the language of msgs.
+func (msgs Messages) WorkspaceNew() string {
+	return Catalog.Format(msgs.locale, "workspaceNew", nil)
+}
+
+// WorkspaceTip says "{count, plural, one {Workspace {name}: # pane} other {Workspace {name}: # panes}}"
+// in the language the app shows.
+func WorkspaceTip(count int, name string) string { return In(i18n.Locale()).WorkspaceTip(count, name) }
+
+// WorkspaceTip says "{count, plural, one {Workspace {name}: # pane} other {Workspace {name}: # panes}}"
+// in the language of msgs.
+func (msgs Messages) WorkspaceTip(count int, name string) string {
+	return Catalog.Format(msgs.locale, "workspaceTip", map[string]any{"count": count, "name": name})
+}

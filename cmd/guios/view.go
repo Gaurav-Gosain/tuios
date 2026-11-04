@@ -582,6 +582,7 @@ func (a *App) sessionRow(c *ui.Context, pal *palette, s *proto.Session, n *int) 
 			statusIconP(c, pal, s.Status, s.Unread, s.Progress, 15)
 		}
 	})
+	a.workspaceBar(c, pal, s)
 }
 
 // rowDetail is the second line of a session's detailed row: its program's
@@ -875,6 +876,7 @@ func (a *App) card(c *ui.Context, pal *palette, bar ui.TitleBar, shown float32) 
 		h = a.hostOf(s.ID)
 	}
 	if s := a.workSession(); s != nil {
+		s = a.shownSession(c, s)
 		v := a.viewOf(s)
 		if v == nil {
 			a.panes(c, pal, bar, shown, s, true)

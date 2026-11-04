@@ -17,8 +17,9 @@ import (
 // The app reads the daemon as kero's proto.State: projects, sessions and
 // their panes, sent whole on every change. tuios has no projects: a session's
 // space (set-session-space) is its project, and sessions with none share one
-// project, defaultProject. The split tree of each session's panes is the
-// app's own (tuios keeps its layouts in its terminal clients), kept here and
+// project, defaultProject. A session's panes are those of the workspace it
+// shows, laid out by that workspace's tree (layouttree.go). Where the
+// workspace keeps no tree, the split tree is the app's own, kept here and
 // saved under the app's state folder.
 
 const defaultProject = "sessions"
@@ -48,6 +49,10 @@ type windowRow struct {
 	PID         int              `json:"pid"`
 	Focused     bool             `json:"focused"`
 	Minimized   bool             `json:"minimized"`
+	Zoomed      bool             `json:"zoomed"`
+	Floating    bool             `json:"floating"`
+	Scratch     bool             `json:"scratch"`
+	Rail        string           `json:"rail"`
 	Workspace   int              `json:"workspace"`
 	X           int              `json:"x"`
 	Y           int              `json:"y"`
@@ -71,6 +76,8 @@ type stateKeeper struct {
 	mu      sync.Mutex
 	state   *proto.State
 	layouts map[string]*proto.Layout // by session id
+	trees   map[string]treeInfo      // the shown workspace's tree, by session id
+	zoom    map[string]string        // the pane guios zoomed, by session id, with no TUI to zoom it
 	unread  map[string]bool          // pane ids with a finished turn not seen
 	viewed  string
 	started int64
@@ -82,7 +89,7 @@ type stateKeeper struct {
 }
 
 func newStateKeeper(c *Client) *stateKeeper {
-	k := &stateKeeper{c: c, layouts: map[string]*proto.Layout{}, unread: map[string]bool{},
+	k := &stateKeeper{c: c, layouts: map[string]*proto.Layout{}, trees: map[string]treeInfo{}, zoom: map[string]string{}, unread: map[string]bool{},
 		paneSession: map[string]string{}, sessionName: map[string]string{}, kick: make(chan struct{}, 1),
 		started: time.Now().UnixMilli()}
 	k.loadLayouts()
@@ -155,21 +162,55 @@ func (k *stateKeeper) build() (*proto.State, error) {
 			Shell     string      `json:"shell"`
 		}
 		_ = json.Unmarshal(wraw, &wl)
-		ks := proto.Session{ID: s.ID, Project: project, Name: s.Name, Focus: wl.Focus}
-		// The panes of the workspace the session shows. The others wait for
-		// workspaces in guios (K2).
+		ws := wl.Workspace
+		if ws <= 0 {
+			ws = 1
+		}
+		ks := proto.Session{ID: s.ID, Project: project, Name: s.Name, Focus: wl.Focus, Workspace: ws}
+		ti := k.readTree(s.Name, ws)
+		// The panes of the workspace the session shows; the others are
+		// counted on their workspaces.
 		var shown []windowRow
+		counts := map[int]*proto.Workspace{}
 		for _, w := range wl.Windows {
 			paneSession[w.ID] = s.ID
-			if w.Minimized || (wl.Workspace != 0 && w.Workspace != wl.Workspace) {
+			if w.Scratch || w.Rail != "" {
 				continue
 			}
-			shown = append(shown, w)
 			p := k.pane(w)
 			p.Shell = wl.Shell
+			cw := counts[w.Workspace]
+			if cw == nil {
+				cw = &proto.Workspace{N: w.Workspace, Status: proto.Idle}
+				counts[w.Workspace] = cw
+			}
+			cw.Panes++
+			cw.Unread = cw.Unread || p.Unread
+			if statusRank(p.Status) > statusRank(cw.Status) {
+				cw.Status = p.Status
+			}
+			if w.Minimized || w.Workspace != ws {
+				continue
+			}
+			if w.Zoomed {
+				ti.zoomByTUI = w.ID
+			}
+			shown = append(shown, w)
 			ks.Panes = append(ks.Panes, p)
 		}
-		ks.Layout = k.layoutFor(s.ID, shown, wl.Focus)
+		ks.Workspaces = workspaceList(counts, ws, ti)
+		ks.Layout = k.layoutOf(s.ID, s.Name, shown, wl.Focus, &ti)
+		ks.Zoomed = ti.zoomByTUI
+		if ks.Zoomed == "" {
+			k.mu.Lock()
+			if z := k.zoom[s.ID]; z != "" && contains(ids(shown), z) {
+				ks.Zoomed = z
+			}
+			k.mu.Unlock()
+		}
+		k.mu.Lock()
+		k.trees[s.ID] = ti
+		k.mu.Unlock()
 		if i := proto.Lead(ks.Panes, ks.Focus); i >= 0 && i < len(ks.Panes) {
 			ks.Pane = ks.Panes[i]
 			ks.Lead = ks.Panes[i].ID

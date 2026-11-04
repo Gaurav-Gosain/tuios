@@ -84,6 +84,10 @@ type termEntry struct {
 // App is the app's state. It lives on the main thread: other goroutines
 // change it through Window.Update.
 type App struct {
+	// holds keep a session's last frame while its new workspace's panes
+	// attach (workspaces.go).
+	holds map[string]*wsHold
+
 	// win is the main window, and winOpen whether it is open: closed, it
 	// still takes the updates of Window.Update, which run without it.
 	win     *mygo.Window
@@ -318,8 +322,10 @@ func (a *App) setState(h *host, st proto.State) {
 	if s := a.session(a.layoutDrag.session); s != nil {
 		dragged = s.Layout
 	}
+	before := a.snapshotSessions()
 	a.mergeState(h, st)
 	a.loaded = true
+	a.holdSwitches(before)
 	if s := a.session(a.layoutDrag.session); s != nil && s.Layout.SameShape(dragged) {
 		s.Layout = dragged
 	}
@@ -330,6 +336,7 @@ func (a *App) setState(h *host, st proto.State) {
 			live[p.ID] = true
 		}
 	}
+	a.heldPanes(live)
 	for id := range a.terms {
 		if !live[id] {
 			a.dropTerm(id)

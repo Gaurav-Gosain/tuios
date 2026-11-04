@@ -599,5 +599,13 @@
   "endedSetUpSkill": "終了したエージェントの会話をここに表示するには、エージェント向けスキルを設定してください",
   "actionQuickTerminal": "クイックターミナル",
   "toastGlobalShortcutFailed": "{keys} をクイックターミナルに使えませんでした: {error}",
-  "setShortcutGlobal": "どのアプリでも使えます"
+  "setShortcutGlobal": "どのアプリでも使えます",
+  "menuWorkspace": "ワークスペース",
+  "menuMovePaneToWorkspace": "ペインをワークスペースへ移動",
+  "actionNextWorkspace": "次のワークスペース",
+  "actionPreviousWorkspace": "前のワークスペース",
+  "actionGoToWorkspace": "ワークスペース {n} へ移動",
+  "actionMovePaneToWorkspace": "ペインをワークスペース {n} へ移動",
+  "workspaceNew": "新しいワークスペース",
+  "workspaceTip": "ワークスペース {name}: {count} 個のペイン"
 }

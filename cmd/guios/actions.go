@@ -105,6 +105,16 @@ func (a *App) run(id string, args map[string]string) {
 		a.cyclePane(-1)
 	case "pane.left", "pane.right", "pane.up", "pane.down":
 		a.focusDirection(id[len("pane."):])
+	case "workspace.next":
+		a.stepWorkspace(s, 1)
+	case "workspace.previous":
+		a.stepWorkspace(s, -1)
+	case "workspace.new":
+		a.newWorkspace(s)
+	case "workspace.1", "workspace.2", "workspace.3", "workspace.4", "workspace.5", "workspace.6", "workspace.7", "workspace.8", "workspace.9":
+		a.showWorkspace(s, int(id[len(id)-1]-'0'))
+	case "pane.workspace.1", "pane.workspace.2", "pane.workspace.3", "pane.workspace.4", "pane.workspace.5", "pane.workspace.6", "pane.workspace.7", "pane.workspace.8", "pane.workspace.9":
+		a.movePaneTo(s, "", int(id[len(id)-1]-'0'))
 	case "sidebar.toggle":
 		a.toggleSidebar()
 	case "changes.toggle":
@@ -185,6 +195,16 @@ var actionTitles = map[string]func() string{
 	"text.smaller":        locales.ActionSmaller,
 	"text.reset":          locales.ActionActualSize,
 	quickAction:           locales.ActionQuickTerminal,
+	"workspace.next":      locales.ActionNextWorkspace,
+	"workspace.previous":  locales.ActionPreviousWorkspace,
+	"workspace.new":       locales.WorkspaceNew,
+}
+
+func init() {
+	for n := 1; n <= 9; n++ {
+		actionTitles["workspace."+itoa(n)] = func() string { return locales.ActionGoToWorkspace(itoa(n)) }
+		actionTitles["pane.workspace."+itoa(n)] = func() string { return locales.ActionMovePaneToWorkspace(itoa(n)) }
+	}
 }
 
 // actionTitle is an action's title as the menus, the palette and
@@ -253,9 +273,22 @@ func (a *App) menu() *mygo.Menu {
 			[]string{"pane.browser", "browser.address"},
 			[]string{"pane.zoom"},
 			[]string{"pane.next", "pane.previous", "pane.left", "pane.right", "pane.up", "pane.down"})},
+		{Label: locales.MenuWorkspace(), Submenu: a.workspaceMenu()},
 		{Label: locales.MenuView(), Submenu: view},
 		{Role: mygo.RoleWindowMenu},
 	})
+}
+
+// workspaceMenu is the Workspace menu: next, previous and new, each
+// workspace, and moving the pane to one.
+func (a *App) workspaceMenu() []*mygo.MenuItem {
+	var show, move []string
+	for n := 1; n <= 9; n++ {
+		show = append(show, "workspace."+itoa(n))
+		move = append(move, "pane.workspace."+itoa(n))
+	}
+	items := a.items("Workspace", []string{"workspace.next", "workspace.previous", "workspace.new"}, show)
+	return append(items, mygo.Separator(), &mygo.MenuItem{Label: locales.MenuMovePaneToWorkspace(), Submenu: a.items("Workspace", move)})
 }
 
 // keys is an action's shortcut as the menus show it, "" when it has none.
