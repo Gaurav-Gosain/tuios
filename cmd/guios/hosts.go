@@ -604,6 +604,26 @@ func (a *App) sameKerod(h *host, rc *remote.Conn, cl *client.Client) *host {
 	return nil
 }
 
+// neighbor is the session that takes a gone one's place: the next in order
+// that is still there, else the one before. "" when id was not in order.
+func neighbor(order []string, id string, have func(string) *proto.Session) string {
+	i := slices.Index(order, id)
+	if i < 0 {
+		return ""
+	}
+	for _, x := range order[i+1:] {
+		if have(x) != nil {
+			return x
+		}
+	}
+	for j := i - 1; j >= 0; j-- {
+		if have(order[j]) != nil {
+			return order[j]
+		}
+	}
+	return ""
+}
+
 // reselect shows another session when the one shown is gone: the first,
 // once every host's state came or failed to, as the one the app showed
 // last may be of a host still connecting.

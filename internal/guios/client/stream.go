@@ -149,12 +149,26 @@ func (s *Stream) Read(p []byte) (int, error) {
 			}
 		case session.PaneFrameEnd:
 			s.goneOnce.Do(func() { close(s.Gone) })
+			if paneEnded(string(payload)) {
+				// The program exited, or the window closed: the app
+				// closes the pane, or keeps it with its last frame
+				// (keep_open). An end of the stream here would have the
+				// terminal write "[Disconnected]" over that frame.
+				<-s.closed
+			}
 			return 0, io.EOF
 		}
 	}
 	n := copy(p, s.buf)
 	s.buf = s.buf[n:]
 	return n, nil
+}
+
+// paneEnded reports whether a stream's exit reason says the pane's program
+// ended or its window closed ("exited 0", "killed 15", "closed"), and not
+// that the daemon stopped or refused the stream.
+func paneEnded(reason string) bool {
+	return reason == "closed" || strings.HasPrefix(reason, "exited ") || strings.HasPrefix(reason, "killed ")
 }
 
 // Write sends what the terminal encoded from keys, paste and the mouse.

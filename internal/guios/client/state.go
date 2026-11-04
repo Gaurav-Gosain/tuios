@@ -66,6 +66,13 @@ type windowRow struct {
 	Harness     string           `json:"agent_harness"`
 	Foreground  string           `json:"foreground"`
 	Program     []map[string]any `json:"program_status"`
+	// Exited and its exit status say the window's process ended; KeepOpen
+	// says the window stays after that (new-window keep_open). A daemon
+	// from before these fields sends neither: see stateKeeper.exits.
+	Exited   bool `json:"exited"`
+	ExitCode int  `json:"exit_code"`
+	Signal   int  `json:"signal"`
+	KeepOpen bool `json:"keep_open"`
 }
 
 // stateKeeper builds the state and keeps it current from the daemon's events.
@@ -87,6 +94,11 @@ type stateKeeper struct {
 	// paneSession finds a pane's session, for streams and pane methods.
 	paneSession map[string]string
 	sessionName map[string]string // session id to name
+	// exits are the windows a window-exit event named, for a daemon whose
+	// list-windows does not say a window exited; closing those being
+	// closed (exits.go).
+	exits   map[string]bool
+	closing map[string]bool
 
 	kick chan struct{}
 }
@@ -94,6 +106,7 @@ type stateKeeper struct {
 func newStateKeeper(c *Client) *stateKeeper {
 	k := &stateKeeper{c: c, layouts: map[string]*proto.Layout{}, trees: map[string]treeInfo{}, zoom: map[string]string{}, unread: map[string]bool{},
 		paneSession: map[string]string{}, sessionName: map[string]string{}, kick: make(chan struct{}, 1),
+		exits: map[string]bool{}, closing: map[string]bool{},
 		started: time.Now().UnixMilli()}
 	k.loadLayouts()
 	return k
@@ -136,6 +149,7 @@ func (k *stateKeeper) build() (*proto.State, error) {
 		return nil, err
 	}
 	st := &proto.State{Started: k.started, Conversations: k.convGen.Load() + 1}
+	var reaps []reap
 	projects := map[string]bool{}
 	paneSession := map[string]string{}
 	names := map[string]string{}
@@ -171,13 +185,19 @@ func (k *stateKeeper) build() (*proto.State, error) {
 		}
 		ks := proto.Session{ID: s.ID, Project: project, Name: userName(s.Name), Focus: wl.Focus, Workspace: ws}
 		ti := k.readTree(s.Name, ws)
+		// A pane whose program exited goes, unless it stays (keep_open):
+		// guios closes it, as a TUI client does (exits.go).
+		gone, hide, end := k.exitedIn(wl.Windows, ws)
+		if len(gone) > 0 {
+			reaps = append(reaps, reap{session: s.Name, windows: gone, end: end && !ti.tui})
+		}
 		// The panes of the workspace the session shows; the others are
 		// counted on their workspaces.
 		var shown []windowRow
 		counts := map[int]*proto.Workspace{}
 		for _, w := range wl.Windows {
 			paneSession[w.ID] = s.ID
-			if w.Scratch || w.Rail != "" {
+			if w.Scratch || w.Rail != "" || hide && slices.Contains(gone, w.ID) {
 				continue
 			}
 			p := k.pane(w)
@@ -246,7 +266,9 @@ func (k *stateKeeper) build() (*proto.State, error) {
 	k.paneSession, k.sessionName = paneSession, names
 	st.Viewed = k.viewed
 	k.state = st
+	k.forgetExits(paneSession)
 	k.mu.Unlock()
+	k.reap(reaps)
 	return st, nil
 }
 
@@ -294,6 +316,15 @@ func (k *stateKeeper) pane(w windowRow) proto.Pane {
 		b, _ := json.Marshal(r)
 		_ = json.Unmarshal(b, &rec)
 		p.Records = append(p.Records, rec)
+	}
+	if w.Exited && w.KeepOpen {
+		// A pane that stays after its program exited (keep_open), with the
+		// line the daemon wrote under the output: its status, as the
+		// terminal plugin counts one a signal ended.
+		p.Status, p.ExitCode = proto.Exited, w.ExitCode
+		if w.Signal > 0 {
+			p.ExitCode = 128 + w.Signal
+		}
 	}
 	return p
 }
@@ -472,6 +503,11 @@ func (k *stateKeeper) watch() {
 		if ev.Type == "window-closed" || ev.Type == "agent-state" {
 			// The daemon records an ended conversation on either.
 			k.convGen.Add(1)
+		}
+		if ev.Type == "window-exit" && ev.Window != "" {
+			k.mu.Lock()
+			k.exits[ev.Window] = true
+			k.mu.Unlock()
 		}
 		switch ev.Type {
 		case "agent-state", "agent-seen", "attention", "window-closed", "window-created", "window-retitled",

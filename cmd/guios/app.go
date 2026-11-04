@@ -346,6 +346,13 @@ func (a *App) setState(h *host, st proto.State) {
 		dragged = s.Layout
 	}
 	before := a.snapshotSessions()
+	// The session and the pane the user is in, which may go with this
+	// state: their program exited.
+	order := a.visibleOrder()
+	inPane := ""
+	if s := a.session(a.selected); s != nil {
+		inPane = a.focusOf(s)
+	}
 	a.mergeState(h, st)
 	a.loaded = true
 	a.holdSwitches(before)
@@ -371,10 +378,21 @@ func (a *App) setState(h *host, st proto.State) {
 		}
 	}
 	a.quickChanged()
-	if a.session(a.selected) == nil {
-		a.reselect()
-	} else if first || hostFirst && a.hostOf(a.selected) == h {
+	switch s := a.session(a.selected); {
+	case s == nil:
+		// The session ended: the next one in the sidebar takes its place,
+		// else the one before, as when the user closes it.
+		if next := neighbor(order, a.selected, a.session); next != "" {
+			a.selectSession(next)
+		} else {
+			a.reselect()
+		}
+	case first || hostFirst && a.hostOf(a.selected) == h:
 		a.selectSession(a.selected)
+	case inPane != "" && s.PaneByID(inPane) == nil && !live[inPane]:
+		// The pane the user was in closed: the keyboard goes to the
+		// pane the daemon focused in its place, once it is built.
+		a.defer_(a.focusTerminal)
 	}
 	a.notify(first)
 	a.updateTitle()
