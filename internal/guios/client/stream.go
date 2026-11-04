@@ -17,6 +17,7 @@ import (
 	"github.com/Gaurav-Gosain/mygo/ui"
 
 	"github.com/Gaurav-Gosain/tuios/internal/guios/proto"
+	"github.com/Gaurav-Gosain/tuios/internal/memtrim"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 )
 
@@ -242,6 +243,7 @@ func (s *Stream) Read(p []byte) (int, error) {
 		case session.PaneFrameOutput:
 			if len(payload) > 8 {
 				s.buf = payload[8:]
+				outputRead(len(s.buf))
 			}
 		case session.PaneFrameResize:
 			if len(payload) >= 12 && s.OnResized != nil {
@@ -262,6 +264,23 @@ func (s *Stream) Read(p []byte) (int, error) {
 	n := copy(p, s.buf)
 	s.buf = s.buf[n:]
 	return n, nil
+}
+
+// trimEvery is how much output the panes take between two asks for a
+// trim (memtrim): parsing a flood of output allocates, and the Go heap
+// keeps its peak after the flood ends unless it is handed back.
+const trimEvery = 1 << 20
+
+// outputSince counts the output bytes the streams took since the last ask.
+var outputSince atomic.Int64
+
+// outputRead counts n bytes of output, and asks for a trim once the panes
+// took trimEvery. The trim runs only once the output stopped (memtrim.Request).
+func outputRead(n int) {
+	if outputSince.Add(int64(n)) >= trimEvery {
+		outputSince.Store(0)
+		memtrim.Request()
+	}
 }
 
 // paneEnded reports whether a stream's exit reason says the pane's program

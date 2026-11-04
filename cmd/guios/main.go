@@ -25,6 +25,7 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/guios/client"
 	"github.com/Gaurav-Gosain/tuios/internal/guios/clilink"
 	"github.com/Gaurav-Gosain/tuios/internal/guios/proto"
+	"github.com/Gaurav-Gosain/tuios/internal/memtrim"
 
 	"github.com/Gaurav-Gosain/tuios/cmd/guios/locales"
 )
@@ -68,6 +69,10 @@ func main() {
 
 func runApp() {
 	servePprof()
+	// guios's live Go heap is about 10 MB: after a flood of output it holds
+	// a few MB more than that, which the default 32 MB floor of a trim
+	// would keep.
+	memtrim.SetMinExcess(4 << 20)
 	// Started from a pane, as Kero Dev by `mygo dev` in the installed Kero:
 	// the pane's variables name its kerod, not this build's.
 	if os.Getenv("TUIOS_PANE_ID") != "" {

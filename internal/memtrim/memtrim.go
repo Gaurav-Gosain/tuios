@@ -24,9 +24,9 @@ const (
 	// settle is how long Request waits after the last call before it looks.
 	// A burst of closes is one trim at its end.
 	settle = 2 * time.Second
-	// minExcess is the least heap held beyond the live data that is worth a
-	// forced collection to give back.
-	minExcess = 32 << 20
+	// defaultMinExcess is the least heap held beyond the live data that is
+	// worth a forced collection to give back (SetMinExcess).
+	defaultMinExcess = 32 << 20
 	// maxBusyAlloc is the most a process may allocate during the settle
 	// window and still count as quiet. A process allocating faster is in the
 	// middle of a burst, and what it gave back it would take again at once.
@@ -37,6 +37,8 @@ const (
 
 var (
 	mu sync.Mutex
+	// minExcess is defaultMinExcess unless SetMinExcess changed it.
+	minExcess uint64 = defaultMinExcess
 	// gen counts Requests. Each one starts its own timer, and only the timer
 	// of the latest Request looks. A Request never stops or resets an
 	// earlier timer: a timer started inside a synctest bubble belongs to that
@@ -45,6 +47,15 @@ var (
 	armAlloc uint64
 	lastTrim time.Time
 )
+
+// SetMinExcess sets the least unused heap a trim gives back. A process
+// whose live heap is small, as guios's (about 10 MB), holds less than the
+// default after a burst, while each MB it holds counts against its budget.
+func SetMinExcess(n uint64) {
+	mu.Lock()
+	minExcess = n
+	mu.Unlock()
+}
 
 // Request asks for a trim once the process has been quiet for a moment.
 // Calls during the wait push it back, so a burst of them is one look.
@@ -67,14 +78,14 @@ func check(g uint64) {
 		mu.Unlock()
 		return
 	}
-	since := armAlloc
+	since, least := armAlloc, minExcess
 	recent := !lastTrim.IsZero() && time.Since(lastTrim) < minInterval
 	mu.Unlock()
 	if recent {
 		return
 	}
 	s := read()
-	if s.allocs-since > maxBusyAlloc || s.excess() < minExcess {
+	if s.allocs-since > maxBusyAlloc || s.excess() < least {
 		return
 	}
 	debug.FreeOSMemory()
