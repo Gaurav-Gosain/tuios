@@ -142,6 +142,10 @@ func (c *Client) verb(name string, params any) (json.RawMessage, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	raw, err := c.vc.Call(name, params)
+	var ve *session.VerbCallError
+	if errors.As(err, &ve) && ve.Code == session.ErrVerbUnknownVerb {
+		return nil, NeedsNewerDaemon(name, c.Welcome.App)
+	}
 	if err != nil {
 		var ne net.Error
 		if errors.As(err, &ne) || errors.Is(err, net.ErrClosed) {
@@ -203,3 +207,11 @@ func init() {
 }
 
 var _ = time.Second
+
+// NeedsNewerDaemon is the error for a feature the running daemon is too old
+// for. The daemon runs the build it started with until it restarts, and
+// tuios restart-server starts the newer of the tuios it is given and the
+// one on PATH: from guios, the tuios guios carries.
+func NeedsNewerDaemon(verb, daemonVersion string) error {
+	return fmt.Errorf("The running tuios daemon (%s) is too old for this: it has no %s. Restart it with Settings > tuios daemon > Restart, or run: tuios restart-server.", daemonVersion, verb)
+}
