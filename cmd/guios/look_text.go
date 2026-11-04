@@ -137,6 +137,16 @@ func (a *App) mdView(c *ui.Context, pal *palette, l *fileLook) {
 	if b := sc.Bounds(); b.H > 0 {
 		m.viewH = b.H
 	}
+	// A table fits the panel: a column wraps its cells past about a third
+	// of the text's width, in steps of 2 ems so that the layout is kept
+	// while the panel holds its size (council round 1, visual 9). A table
+	// still too wide scrolls sideways inside the panel.
+	if b := sc.Bounds(); b.W > 0 && m.opts.Theme != nil {
+		ems := min(max(float32(int((min(b.W, 760+56)-56)/14/2.2/2))*2, 8), 24)
+		if m.opts.Theme.TableMaxColumn != ems {
+			m.opts.Theme.TableMaxColumn, m.inner.Theme.TableMaxColumn = ems, ems
+		}
+	}
 	sc.Children(func() {
 		ui.Column(c).Padding(24, 28, 40, 28).AlignItems(ui.Center).Children(func() {
 			ui.Column(c).MaxWidth(760).AlignSelf(ui.Stretch).Children(func() {
