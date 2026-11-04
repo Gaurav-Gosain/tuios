@@ -396,6 +396,11 @@ func kbd(c *ui.Context, pal *palette, keys string) {
 // --- the sidebar ---
 
 func (a *App) sidebar(c *ui.Context, pal *palette, bar ui.TitleBar) {
+	// What needs the person, once a frame, for the agent rows.
+	a.sbNeeds = nil
+	if a.ck.loaded {
+		a.sbNeeds = a.ck.needs()
+	}
 	ui.Row(c).Height(topBar).Shrink(0).AlignItems(ui.Center).Padding(0, 12, 0, lead(bar)).Gap(2).DragWindow().Children(func() {
 		// After the traffic lights on macOS, at the right; elsewhere the
 		// window controls are at the right, and the buttons at the left,
@@ -689,6 +694,7 @@ func (a *App) sessionRow(c *ui.Context, pal *palette, s *proto.Session, n *int) 
 		}
 	})
 	a.workspaceBar(c, pal, s)
+	a.agentRows(c, pal, s, a.sbNeeds)
 }
 
 // rowDetail is the second line of a session's detailed row: its program's

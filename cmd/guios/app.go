@@ -99,6 +99,9 @@ type App struct {
 	quitting bool
 	// ck is the agent cockpit (cockpit.go).
 	ck cockpit
+	// sbNeeds is what needs the person, read once a frame for the
+	// sidebar's agent rows (sidebar_agents.go).
+	sbNeeds []ckNeed
 	// motion notes what moves the panes from frame to frame (motion.go).
 	motion motionWatch
 	// usage is the last reading of the resource views, usageOpen whether

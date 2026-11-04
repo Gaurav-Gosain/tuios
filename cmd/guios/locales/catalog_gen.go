@@ -12101,3 +12101,23 @@ func HostOtherProtocol(name string) string { return In(i18n.Locale()).HostOtherP
 func (msgs Messages) HostOtherProtocol(name string) string {
 	return Catalog.Format(msgs.locale, "hostOtherProtocol", map[string]any{"name": name})
 }
+
+// SidebarMoreAgents says "{count, plural, one {# more agent} other {# more agents}}"
+// in the language the app shows.
+func SidebarMoreAgents(count int) string { return In(i18n.Locale()).SidebarMoreAgents(count) }
+
+// SidebarMoreAgents says "{count, plural, one {# more agent} other {# more agents}}"
+// in the language of msgs.
+func (msgs Messages) SidebarMoreAgents(count int) string {
+	return Catalog.Format(msgs.locale, "sidebarMoreAgents", map[string]any{"count": count})
+}
+
+// SidebarAgentTip says "Click to show it in Agents. Double-click to open its pane."
+// in the language the app shows.
+func SidebarAgentTip() string { return In(i18n.Locale()).SidebarAgentTip() }
+
+// SidebarAgentTip says "Click to show it in Agents. Double-click to open its pane."
+// in the language of msgs.
+func (msgs Messages) SidebarAgentTip() string {
+	return Catalog.Format(msgs.locale, "sidebarAgentTip", nil)
+}

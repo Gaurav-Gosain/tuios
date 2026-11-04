@@ -1193,5 +1193,7 @@
   "cockpitImage": "图片",
   "cockpitImageOpen": "以原始大小显示图片 (Space)",
   "hostDaemonStopped": "{name} 上的 tuios 守护进程已停止。",
-  "hostOtherProtocol": "{name} 上的 tuios 守护进程使用另一个版本的控制协议。请更新 {name} 上的 tuios。"
+  "hostOtherProtocol": "{name} 上的 tuios 守护进程使用另一个版本的控制协议。请更新 {name} 上的 tuios。",
+  "sidebarMoreAgents": "{count, plural, other {另外 # 个代理}}",
+  "sidebarAgentTip": "单击在代理中显示。双击打开其窗格。"
 }

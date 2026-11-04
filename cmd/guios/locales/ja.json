@@ -1193,5 +1193,7 @@
   "cockpitImage": "画像",
   "cockpitImageOpen": "画像を原寸で表示 (Space)",
   "hostDaemonStopped": "{name} の tuios デーモンが停止しました。",
-  "hostOtherProtocol": "{name} の tuios デーモンは別の版の制御プロトコルを使います。{name} の tuios を更新してください。"
+  "hostOtherProtocol": "{name} の tuios デーモンは別の版の制御プロトコルを使います。{name} の tuios を更新してください。",
+  "sidebarMoreAgents": "{count, plural, other {ほか # 件のエージェント}}",
+  "sidebarAgentTip": "クリックでエージェントに表示。ダブルクリックでペインを開く。"
 }

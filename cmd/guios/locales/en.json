@@ -2146,5 +2146,14 @@
         "type": "String"
       }
     }
-  }
+  },
+  "sidebarMoreAgents": "{count, plural, one {# more agent} other {# more agents}}",
+  "@sidebarMoreAgents": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "sidebarAgentTip": "Click to show it in Agents. Double-click to open its pane."
 }
