@@ -11670,6 +11670,35 @@ fix both subtests fail: the reader gets OSC 72 moves and no paste. Run on
 Under each control the other subtest passes, and on the build with the code
 in place both pass, with every other `TestDnD` test.
 
+## Drag and drop: a file list line with a space
+
+`TestDnDLabelNamesEachPathOfALine` drags from a `dndpeer` source that sends
+its text/uri-list ahead as written (`DNDPEER_URILIST`), each dropped on a
+reader with bracketed paste on. The lists are a line with a raw space
+(`file:///t/x /t/y`), the same after a plain line, a blank line between two
+paths, and a well-formed two-line list. The label must name every path the
+drop delivers with no crash overlay on screen, and the paste must be those
+paths. On the emulated terminal of `TestDnDBridgeWithAnEmulatedTerminal` the
+same line must start the desktop drag, with a drag image that names both
+paths. Run on 2026-11-04 on Linux.
+
+| Control: what was cut | Test failure | Verdict |
+| --- | --- | --- |
+| `internal/app/dnd_drag.go`, the `names = make([]string, len(paths))` line in `dndLabelWhat` (the label indexes the line count again) | `a_line_with_a_space_names_both_paths`: "the drag label never said \"x, y from \" mid-drag", then "the crash overlay is on screen after the drop"; `a_line_with_a_space_after_a_plain_line`: the same with \"a, b, c from \"; `a_blank_line_between_two_paths`: "the drag label never said \"a, b from \" mid-drag" (the screen shows `a, b, file:///t/b from pane`); `a_line_with_a_space_starts_the_desktop_drag`: "the start of the desktop drag: the client never wrote \"\\x1b]72;t=P\"" | **caught** |
+| `internal/app/dnd_drag.go`, the same line replaced by `if len(paths) != len(names) { paths = nil }` (the raw lines are kept on a count mismatch) | `a_line_with_a_space_names_both_paths`: "the drag label never said \"x, y from \" mid-drag"; `a_line_with_a_space_after_a_plain_line`: "the drag label never said \"a, b, c from \" mid-drag"; `a_blank_line_between_two_paths`: "the drag label never said \"a, b from \" mid-drag"; `a_line_with_a_space_starts_the_desktop_drag`: "the drag image is \"file:///t/x /t/y from pane cc2c4223\" (<nil>), want it to name x, y from the pane" | **caught** |
+
+Under both controls `one_path_a_line_names_each` passes, and on the build with
+the code in place all five subtests pass. Run with `-run TestDnD -v` on a host
+with neither kitty under Xvfb nor yazi, the build with the code in place passes
+`TestDnDBridgeWithAnEmulatedTerminal`, `TestDnDBetweenPanes`,
+`TestDnDRegistrationOutlivesTheClient`, `TestDnDRefusesPanesOnAnotherMachine`,
+`TestDnDRefusesAPaneHostedElsewhere` and `TestDnDRegistrationEndsWithItsProgram`
+beside it. `TestDnDDesktopBridge` (needs `TUIOS_E2E_KITTY`) and
+`TestDnDRealPrograms` (needs `TUIOS_E2E_YAZI`) skipped there.
+
+Repeat with `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test
+-count=1 -run 'TestDnDLabelNamesEachPathOfALine' -v .` from `e2e/tui`.
+
 ## Drag and drop with the desktop
 
 `TestDnDDesktopBridge` runs tuios in a real kitty under Xvfb, with

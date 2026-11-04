@@ -1014,6 +1014,9 @@ func (m *OS) dndLabelWhat() string {
 		if data, ok := d.presented[idx]; ok {
 			names := dndURILines(string(data))
 			if paths, ok := dndURIPaths(string(data)); ok {
+				// A line with a space splits into more than one path, and the drop
+				// splits the same way, so the label names the paths.
+				names = make([]string, len(paths))
 				for i, p := range paths {
 					names[i] = path.Base(p)
 				}
