@@ -947,9 +947,19 @@ func (a *App) card(c *ui.Context, pal *palette, bar ui.TitleBar, shown float32) 
 		row := ui.Row(c.Key("with-side")).Grow(1).MinHeight(0).AlignItems(ui.Stretch).Bind(a.paneRef("with-side"))
 		w := a.side.rowW
 		row.Children(func() {
-			ui.Column(c.Key("panes")).Grow(1).Basis(0).MinWidth(0).AlignItems(ui.Stretch).Children(func() {
+			panes := ui.Column(c.Key("panes")).Grow(1).Basis(0).MinWidth(0).AlignItems(ui.Stretch)
+			if v.full {
+				// The viewer fills the room; the panes stay built, out of
+				// sight, so their terminals keep their streams.
+				panes.Grow(0).Width(0).Opacity(0)
+			}
+			panes.Children(func() {
 				a.panes(c, pal, bar, shown, s, false)
 			})
+			if v.full {
+				a.viewerCard(c, pal, s, v, w)
+				return
+			}
 			a.sideEdge(c, pal, w)
 			a.viewerCard(c, pal, s, v, a.sideWidth(w))
 		})

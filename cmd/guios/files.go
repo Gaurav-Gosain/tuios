@@ -36,6 +36,10 @@ type filesState struct {
 	shown, showed bool
 	// edit is the name the user types in the tree (files_ops.go).
 	edit *nameEdit
+	// cursor is the row the keys are on, by path: j and k move it, space
+	// shows its file in the viewer, and the viewer follows it while open
+	// (the TUI's quick look keys).
+	cursor string
 }
 
 // dirList is a folder as kerod listed it.
@@ -78,10 +82,13 @@ type fileView struct {
 	busy                bool
 	stamp               string
 	fetched             time.Time
+	// look is what was read to show it as what it is (look.go); nil for
+	// a file of another machine, which shows as its text.
+	look *fileLook
 }
 
 // maxView bounds the files the viewer shows as text.
-const maxView = 4 << 20
+const maxView = editMax
 
 // filesKey keys a path of a host.
 func filesKey(h *host, p string) string { return h.name + "\x00" + p }
@@ -211,52 +218,214 @@ func (a *App) filesSide(c *ui.Context, pal *palette, s *proto.Session) {
 		shown = v.file.path
 	}
 	sid, pid := s.ID, p.ID
-	ui.List(c.Key("files"), ls, len(items), func(i int) {
-		it := items[i]
-		switch {
-		case it.edit:
-			a.nameRow(c, pal, it)
-		case it.err != "":
-			ui.Text(c, it.err).FontSize(12).TextColor(pal.textFaint).SingleLine().Ellipsis("…").Padding(4, 8, 4, 6+12*float32(it.depth)+28).Tooltip(it.err)
-		case it.Dir:
-			key := filesKey(h, it.path)
-			row := a.treeFolder(c, pal, it.Name, it.rel, it.depth, it.open, it.Ignored, func() {
-				if it.open {
-					delete(fs.open, key)
-				} else {
-					fs.open[key] = true
-				}
-			})
-			row.ContextMenu(func(m *ui.Menu) { a.entryMenu(m, s, pid, it) })
-		default:
-			row := a.treeEntry(c, pal, it, it.path == shown, func() {
-				s := a.session(sid)
-				if s == nil {
-					return
-				}
-				v := a.side.views[sid]
-				if v != nil && v.file != nil && v.file.path == it.path {
-					a.openView(s, sideFiles, nil) // the one it shows
+	// open shows a file in the viewer, in the place of the one it shows,
+	// saved first; focus gives the viewer the keyboard.
+	open := func(it fileItem, focus bool) {
+		s := a.session(sid)
+		if s == nil {
+			return
+		}
+		v := a.side.views[sid]
+		if v != nil && v.file != nil && v.file.path == it.path {
+			a.openView(s, sideFiles, nil) // the one it shows
+			if focus {
+				a.focusViewer()
+			}
+			return
+		}
+		var ts []editTarget
+		if v != nil && v.file != nil {
+			if t := a.fileTarget(v.file); t.dirty() {
+				ts = append(ts, t)
+			}
+		}
+		a.askToSave(ts, func() {
+			if s := a.session(sid); s != nil {
+				a.openView(s, sideFiles, &fileView{pane: pid, path: it.path, rel: it.rel})
+				if focus {
 					a.focusViewer()
-					return
 				}
-				// In the place of the one it shows, saved first.
-				var ts []editTarget
-				if v != nil && v.file != nil {
-					if t := a.fileTarget(v.file); t.dirty() {
-						ts = append(ts, t)
-					}
-				}
-				a.askToSave(ts, func() {
-					if s := a.session(sid); s != nil {
-						a.openView(s, sideFiles, &fileView{pane: pid, path: it.path, rel: it.rel})
-						a.focusViewer()
+			}
+		})
+	}
+	tree := ui.Column(c.Key("tree-keys")).Grow(1).MinHeight(0).AlignItems(ui.Stretch).Focusable().Bind(a.paneRef("files-tree"))
+	focused := tree.FocusWithin()
+	cur := -1
+	for i := range items {
+		if items[i].path == fs.cursor && !items[i].edit && items[i].err == "" {
+			cur = i
+		}
+	}
+	tree.Children(func() {
+		ui.List(c.Key("files"), ls, len(items), func(i int) {
+			it := items[i]
+			var row ui.Element
+			switch {
+			case it.edit:
+				a.nameRow(c, pal, it)
+				return
+			case it.err != "":
+				ui.Text(c, it.err).FontSize(12).TextColor(pal.textFaint).SingleLine().Ellipsis("…").Padding(4, 8, 4, 6+12*float32(it.depth)+28).Tooltip(it.err)
+				return
+			case it.Dir:
+				key := filesKey(h, it.path)
+				row = a.treeFolder(c, pal, it.Name, it.rel, it.depth, it.open, it.Ignored, func() {
+					fs.cursor = it.path
+					if it.open {
+						delete(fs.open, key)
+					} else {
+						fs.open[key] = true
 					}
 				})
-			})
+			default:
+				row = a.treeEntry(c, pal, it, it.path == shown, func() {
+					fs.cursor = it.path
+					open(it, true)
+				})
+			}
+			if focused && i == cur {
+				row.Border(1, pal.accent.Alpha(0.75))
+			}
 			row.ContextMenu(func(m *ui.Menu) { a.entryMenu(m, s, pid, it) })
+		}).Grow(1).MinHeight(0).Padding(0, 10, 16, 10)
+	})
+	if tree.Pressed() {
+		a.paneRef("files-tree").Focus()
+	}
+	a.treeKeys(tree, ls, s, items, cur, shown, open)
+}
+
+// treeKeys are the Files tree's keys, the TUI's rail and quick look keys:
+// j and k (and the arrows) move the cursor, l and h open and close a
+// folder, space shows the file in the viewer or closes it, Enter opens it
+// with the keyboard in it, Tab goes into the viewer, and while the viewer
+// shows a file it follows the cursor, and J, K, ctrl+d, ctrl+u, f, t and v
+// act on it, as in the TUI.
+func (a *App) treeKeys(tree ui.Element, ls *ui.ListState, s *proto.Session, items []fileItem, cur int, shown string, open func(fileItem, bool)) {
+	fs := &a.side.files
+	h := a.hostOf(s.ID)
+	move := func(d int) {
+		n := len(items)
+		if n == 0 {
+			return
 		}
-	}).Grow(1).MinHeight(0).Padding(0, 10, 16, 10)
+		i := cur
+		for k := 0; k < n; k++ {
+			if i < 0 {
+				i = 0
+				if d < 0 {
+					i = n - 1
+				}
+			} else {
+				i = min(max(i+d, 0), n-1)
+			}
+			if !items[i].edit && items[i].err == "" {
+				break
+			}
+		}
+		it := items[i]
+		fs.cursor = it.path
+		ls.ScrollIntoView(i)
+		// The viewer follows, unless its text has edits to save.
+		if v := a.viewOf(s); v != nil && v.kind == sideFiles && v.file != nil && !it.Dir && it.path != shown {
+			if t := a.fileTarget(v.file); !t.dirty() {
+				open(it, false)
+			}
+		}
+	}
+	if tree.Shortcut(0, ui.KeyJ) || tree.Shortcut(0, ui.KeyDown) {
+		move(1)
+	}
+	if tree.Shortcut(0, ui.KeyK) || tree.Shortcut(0, ui.KeyUp) {
+		move(-1)
+	}
+	if tree.Shortcut(0, ui.KeyHome) {
+		fs.cursor = ""
+		move(1)
+	}
+	if tree.Shortcut(ui.Shift, ui.KeyG) || tree.Shortcut(0, ui.KeyEnd) {
+		fs.cursor = ""
+		move(-1)
+	}
+	if cur < 0 {
+		return
+	}
+	it := items[cur]
+	key := filesKey(h, it.path)
+	switch {
+	case tree.Shortcut(0, ui.KeyL) || tree.Shortcut(0, ui.KeyRight):
+		if it.Dir {
+			fs.open[key] = true
+		}
+	case tree.Shortcut(0, ui.KeyH) || tree.Shortcut(0, ui.KeyLeft):
+		if it.Dir && it.open {
+			delete(fs.open, key)
+		} else if it.parent != "" {
+			fs.cursor = it.parent
+		}
+	case tree.Shortcut(0, ui.KeySpace):
+		v := a.viewOf(s)
+		switch {
+		case it.Dir:
+			if it.open {
+				delete(fs.open, key)
+			} else {
+				fs.open[key] = true
+			}
+		case v != nil && v.kind == sideFiles && v.file != nil && v.file.path == it.path:
+			a.closeView(s)
+		default:
+			open(it, false)
+		}
+	case tree.Shortcut(0, ui.KeyEnter):
+		if it.Dir {
+			if it.open {
+				delete(fs.open, key)
+			} else {
+				fs.open[key] = true
+			}
+		} else {
+			open(it, true)
+		}
+	}
+	v := a.viewOf(s)
+	if v == nil || v.kind != sideFiles || v.file == nil {
+		return
+	}
+	l := v.file.look
+	if tree.Shortcut(0, ui.KeyTab) {
+		a.focusViewer()
+	}
+	if tree.Shortcut(0, ui.KeyEscape) {
+		a.closeView(s)
+	}
+	if l == nil || !l.detected {
+		return
+	}
+	if tree.Shortcut(ui.Shift, ui.KeyJ) || tree.Shortcut(ui.Shift, ui.KeyDown) {
+		a.lookSeek(l, 1)
+	}
+	if tree.Shortcut(ui.Shift, ui.KeyK) || tree.Shortcut(ui.Shift, ui.KeyUp) {
+		a.lookSeek(l, -1)
+	}
+	if tree.Shortcut(ui.Ctrl, ui.KeyD) || tree.Shortcut(0, ui.KeyPageDown) {
+		a.lookHalf(l, 1)
+	}
+	if tree.Shortcut(ui.Ctrl, ui.KeyU) || tree.Shortcut(0, ui.KeyPageUp) {
+		a.lookHalf(l, -1)
+	}
+	if tree.Shortcut(0, ui.KeyF) {
+		v.full = !v.full
+	}
+	if tree.Shortcut(0, ui.KeyV) {
+		a.setView(l, l.view+1)
+	}
+	if tree.Shortcut(0, ui.KeyT) && l.film != nil {
+		l.film.strip = !l.film.strip
+		if l.film.strip {
+			a.readStrip(l)
+		}
+	}
 }
 
 // treeEntry is a file of the Files tab's tree, which a click opens in the
@@ -304,11 +473,16 @@ func (a *App) fetchDir(h *host, dir string, ignored bool, stamp string) *dirList
 	return l
 }
 
-// fileViewer is the viewer of a file of Files: its text, which it reads
-// again as the worktree changes, and every few seconds while an agent
-// works, while the user has no edits of it to save.
+// fileViewer is the viewer of a file of Files: the file as what it is
+// (look.go), or its text, which it reads again as the worktree changes, and
+// every few seconds while an agent works, while the user has no edits of it
+// to save.
 func (a *App) fileViewer(c *ui.Context, pal *palette, s *proto.Session, fv *fileView) {
 	h := a.hostOf(fv.pane)
+	if fv.look == nil && !h.remote() {
+		fv.look = a.openLook(fv.path)
+	}
+	l := fv.look
 	stamp := ""
 	if p := withGit(s, s.PaneByID(fv.pane)); p != nil {
 		stamp = gitStamp(p.Git)
@@ -317,22 +491,41 @@ func (a *App) fileViewer(c *ui.Context, pal *palette, s *proto.Session, fv *file
 	if working {
 		c.After(3 * time.Second)
 	}
+	text := l == nil || l.wantsText()
 	editing := fv.st != nil && (fv.st.Buffer.Modified() || fv.edits.saving)
-	if !fv.busy && !editing && h.cl != nil && (fv.fetched.IsZero() || fv.stamp != stamp || working && time.Since(fv.fetched) > 3*time.Second) {
+	stale := fv.fetched.IsZero() || fv.stamp != stamp || working && time.Since(fv.fetched) > 3*time.Second
+	switch {
+	case text && !fv.busy && !editing && h.cl != nil && stale:
 		a.loadFile(h.cl, fv, stamp)
+	case !text && l.detected && stale:
+		// A file shown as what it is reads again when it changed.
+		fv.fetched, fv.stamp = time.Now(), stamp
+		a.checkLook(fv)
 	}
 
 	dir, name := path.Split(fv.rel)
 	a.viewerHeader(c, pal, s, fileIcon, name, editing, func() {
 		if dir = strings.TrimSuffix(dir, "/"); dir != "" {
-			ui.Text(c, dir).FontSize(13).TextColor(pal.textFaint).SingleLine().Ellipsis("…").Shrink(2).MinWidth(0).Tooltip(fv.path)
+			ui.Text(c, dir).FontSize(12).TextColor(pal.textFaint).SingleLine().Ellipsis("…").Shrink(2).MinWidth(0).Tooltip(fv.path)
 		}
 	}, func() {
+		if v := a.viewOf(s); v != nil {
+			full, ic := "Fill the window (f)", zoomIcon
+			if v.full {
+				full, ic = "Show beside the panes (f)", unzoomIcon
+			}
+			iconButton(c, "full", ic, full, pal, func() { v.full = !v.full })
+		}
 		if !h.remote() && !fv.gone {
 			full := fv.path
 			iconButton(c, "open", openFileIcon, locales.ChangesOpenFile(), pal, func() { openPath(full) })
 		}
 	})
+	a.lookBar(c, pal, l)
+	if l != nil && !text {
+		a.lookBody(c, pal, fv)
+		return
+	}
 	switch {
 	case fv.gone:
 		a.sideMessage(c, pal, locales.FilesGone(), fv.rel)

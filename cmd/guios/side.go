@@ -73,6 +73,8 @@ type sideState struct {
 type sideView struct {
 	kind string
 	file *fileView // the file of Files it shows last
+	// full shows the viewer in the panes' room, the panes behind it.
+	full bool
 }
 
 // changesState is the Changes tab's: the files changed since a base,
@@ -225,6 +227,9 @@ func (a *App) openView(s *proto.Session, kind string, f *fileView) {
 	}
 	v.kind = kind
 	if f != nil {
+		if v.file != nil && v.file != f {
+			v.file.look.close()
+		}
 		v.file = f
 	}
 }
@@ -239,6 +244,13 @@ func (a *App) closeView(s *proto.Session) {
 	// Asking first to save what the user edited in it.
 	a.askToSave(a.viewTargets(v), func() {
 		v.kind = ""
+		v.full = false
+		if v.file != nil && v.file.look != nil {
+			// What was read for it goes: a picture's pixels, a PDF's
+			// pages, the reads under way.
+			v.file.look.close()
+			v.file.look = nil
+		}
 		if a.side.focused {
 			a.side.focused = false
 			a.focusTerminal()
@@ -395,8 +407,15 @@ func (a *App) viewerCard(c *ui.Context, pal *palette, s *proto.Session, v *sideV
 			a.changesViewer(c, pal, s, width)
 		}
 	})
+	if v.kind == sideFiles && v.file != nil {
+		a.lookKeys(card, v, v.file.look)
+	}
 	if card.Shortcut(0, ui.KeyEscape) {
-		a.focusTerminal()
+		if v.full {
+			v.full = false
+		} else {
+			a.focusTerminal()
+		}
 	}
 	if card.Shortcut(ui.Cmd, ui.KeyS) {
 		a.saveFocused(v)
