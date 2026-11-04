@@ -393,65 +393,6 @@ func newWindowExitStatus(wait bool, code *int, signal int) error {
 	return nil
 }
 
-// runSplitWindow divides a pane and reports the id of the one the split made,
-// which is the only way to address it without diffing two window lists.
-func runSplitWindow(sessionName, windowTarget, direction, name string, jsonOutput bool) error {
-	client, err := dialVerb()
-	if err != nil {
-		return err
-	}
-	defer func() { _ = client.Close() }()
-
-	params := map[string]any{
-		"session": sessionName,
-		"window":  windowTarget,
-		"name":    name,
-	}
-	// A side is sent as side. An older daemon that knows only the two axes
-	// ignores the unknown param and refuses the call for want of a direction,
-	// so it never splits the wrong way. That refusal is reported below as
-	// the daemon being too old.
-	side := false
-	switch direction {
-	case "left", "right", "up", "down":
-		params["side"] = direction
-		side = true
-	default:
-		params["direction"] = direction
-	}
-	raw, err := client.Call("split-window", params)
-	if err != nil {
-		var callErr *session.VerbCallError
-		if side && errors.As(err, &callErr) && callErr.Code == session.ErrVerbInvalidParams &&
-			strings.Contains(callErr.Message, "direction is required") {
-			return reportVerbError(&diagnosticError{
-				What:  fmt.Sprintf("The running daemon cannot split toward %s.", direction),
-				Cause: "the daemon is older than this tuios. It knows only horizontal and vertical.",
-				Fix:   "run 'tuios restart-server'. Saved sessions come back with new shells.",
-				Err:   err,
-			}, jsonOutput)
-		}
-		return reportVerbError(explainVerbError("split-window", err), jsonOutput)
-	}
-	if jsonOutput {
-		return printVerbResult(raw, jsonOutput)
-	}
-	var res struct {
-		WindowID string `json:"window_id"`
-		Name     string `json:"name"`
-		Note     string `json:"note"`
-	}
-	if err := json.Unmarshal(raw, &res); err != nil {
-		return fmt.Errorf("failed to parse response: %w", err)
-	}
-	if res.WindowID == "" {
-		fmt.Println(res.Note)
-		return nil
-	}
-	fmt.Printf("%s  %s\n", shortWindowID(res.WindowID), res.Name)
-	return nil
-}
-
 // runFocusWindow moves the focus and says where it landed. A relative or
 // directional move does not name its pane in advance, so echoing the request
 // would confirm nothing.

@@ -4334,15 +4334,24 @@ Some commands also answer to a short name: `attach` to `a`, `new` to `n`,
 
 **Windows and workspaces:**
 
+The layout commands (`split-window`, `zoom-window`, `swap-window`,
+`resize-window` and `move-window --beside`) work with no client attached. The
+daemon changes the layout, and a client that attaches later shows it. Without
+`-w`, a layout command run in a pane acts on that pane, and one run outside
+every pane acts on the focused pane.
+
 | Command | What it does |
 |---------|--------------|
 | `tuios focus-window [window]` | Move the focus to a pane, by name, id, `--relative next` or `--direction left`. With `appearance.focus_wrap` on, `--direction` wraps at the edge of a tiled layout |
-| `tuios move-window [workspace]` | Move a window to another workspace (`--follow` goes with it). `--to-session NAME` moves it to another session, and its program keeps running |
+| `tuios move-window [workspace]` | Move a window to another workspace (`--follow` goes with it). `--to-session NAME` moves it to another session, and its program keeps running. `--beside PANE` puts it next to that pane, on the side `--side left\|right\|up\|down` names (default: right), with `--ratio PERCENT` as its share |
 | `tuios select-workspace <workspace>` | Show a workspace |
 | `tuios list-workspaces` | List the workspaces in a session and how many windows each holds |
 | `tuios set-window` | Rename a window (`--name`), minimize it (`--minimize`) or restore it (`--restore`) |
 | `tuios set-agent-quiet` | Keep a window's finished turns, questions and failures out of the Inbox. `--off` clears the mark. Needs an agent in the pane and the admin grant |
-| `tuios split-window <horizontal\|vertical\|left\|right\|up\|down>` | Divide a pane and open a new one beside it. A side names where the new pane goes. Needs an attached client and tiling on |
+| `tuios split-window <left\|right\|up\|down\|horizontal\|vertical> [command...]` | Divide a pane and open a new one beside it. A side names where the new pane goes. Words after the side are the command the new pane runs. `--ratio PERCENT` is the new pane's share, `--no-focus` keeps the focus, and `--cwd`, `--name` and `--keep-open` work as for `new-window`. Turns tiling on when it is off |
+| `tuios zoom-window` | Zoom a pane to fill its workspace (`--on`), end the zoom (`--off`), or toggle it. Zooming a pane on the workspace you see focuses it |
+| `tuios swap-window <other>` | Swap two tiled panes of one workspace. The focus stays where it is |
+| `tuios resize-window <left\|right\|up\|down> [percent]` | Move a border of a tiled pane by a share of the layout (default 5 percent). The border is the one on that side of the pane, or the other one at the edge |
 | `tuios set-layout` | Turn tiling on or off (`--tiling`), reset the splits (`--equalize`: every split to half in BSP, and in master-stack the configured master ratio with even shares for the other panes), flip the focused split (`--rotate`), or shape the master-stack layout of the current workspace (`--master-position left\|right\|top\|bottom\|center`, `--masters N`). See [LAYOUT_MODES.md](LAYOUT_MODES.md#master-stack-layout) |
 
 **Agents:**

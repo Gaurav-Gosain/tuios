@@ -1450,45 +1450,6 @@ popup. Omit it to follow the config (default: 0); --dim 0 disables dimming.`,
 	popupCmd.Flags().BoolVar(&popupJSON, "json", false, "Output result as JSON")
 	_ = popupCmd.RegisterFlagCompletionFunc("session", completeSessionNames)
 
-	var splitWindowSession string
-	var splitWindowWindow string
-	var splitWindowName string
-	var splitWindowJSON bool
-	splitWindowCmd := &cobra.Command{
-		Use:   "split-window <horizontal|vertical|left|right|up|down>",
-		Short: "Divide a pane and open a new one beside it",
-		Long: `Split a pane along an axis and print the id of the new pane.
-
-horizontal and vertical put the new pane below or to the right. left, right,
-up and down name the side of the pane the new pane takes.
-
-Needs an attached client and tiling on. The split goes through the renderer's
-own path, so the new pane lands in the layout exactly as one opened from the
-keyboard does.`,
-		Example: `  # Split the focused pane left/right
-  tuios split-window vertical
-
-  # Put the new pane to the left of the focused one
-  tuios split-window left
-
-  # Split a named pane and name what comes out of it
-  tuios split-window horizontal -w build --name logs
-
-  # Capture the new pane's id for scripting
-  tuios split-window vertical --json | jq -r .window_id`,
-		Args:      cobra.ExactArgs(1),
-		ValidArgs: []string{"horizontal", "vertical", "left", "right", "up", "down"},
-		RunE: func(_ *cobra.Command, args []string) error {
-			return runSplitWindow(splitWindowSession, splitWindowWindow, args[0],
-				splitWindowName, splitWindowJSON)
-		},
-	}
-	splitWindowCmd.Flags().StringVarP(&splitWindowSession, "session", "s", "", "Target session (default: this pane's session, else the most recently active)")
-	splitWindowCmd.Flags().StringVarP(&splitWindowWindow, "window", "w", "", "Pane to split by name or ID (default: focused)")
-	splitWindowCmd.Flags().StringVar(&splitWindowName, "name", "", "Name for the new pane")
-	splitWindowCmd.Flags().BoolVar(&splitWindowJSON, "json", false, "Output result as JSON")
-	_ = splitWindowCmd.RegisterFlagCompletionFunc("session", completeSessionNames)
-
 	var focusWindowSession string
 	var focusWindowRelative string
 	var focusWindowDirection string
@@ -1538,6 +1499,8 @@ layout to the pane on the far side.`,
 	var moveWindowToSession string
 	var moveWindowFollow bool
 	var moveWindowJSON bool
+	var moveWindowBeside, moveWindowSide string
+	var moveWindowRatio int
 	moveWindowCmd := &cobra.Command{
 		Use:   "move-window [workspace]",
 		Short: "Move a window to another workspace or session",
@@ -1550,7 +1513,12 @@ With --to-session, the window moves to another session. The program in it
 keeps running, and the window keeps its id and its scrollback. The workspace
 is optional then: without it, the window goes to the workspace that session
 shows. A popup, a scratch pane, a TML pane and a pane on another machine
-cannot move.`,
+cannot move.
+
+With --beside, the window moves next to another pane, on the side --side
+names (default: right), on that pane's workspace. --ratio gives it that share
+of the space in percent. Without -w, this moves the pane you run it in, or the
+focused pane outside every pane.`,
 		Example: `  # Move the focused window to workspace 3
   tuios move-window 3
 
@@ -1561,7 +1529,10 @@ cannot move.`,
   tuios move-window -s work -w build --to-session review
 
   # Move it to workspace 2 of "review" and focus it there
-  tuios move-window 2 -w build --to-session review --follow`,
+  tuios move-window 2 -w build --to-session review --follow
+
+  # Put the pane named logs below the pane named editor, at 30 percent
+  tuios move-window -w logs --beside editor --side down --ratio 30`,
 		Args: cobra.RangeArgs(0, 1),
 		RunE: func(_ *cobra.Command, args []string) error {
 			workspace := 0
@@ -1572,8 +1543,16 @@ cannot move.`,
 				}
 				workspace = n
 			}
+			if moveWindowBeside != "" {
+				if workspace != 0 || moveWindowToSession != "" || moveWindowFollow {
+					return errors.New("--beside moves the window next to a pane of its session. Leave out the workspace, --to-session and --follow")
+				}
+				return runLayoutVerb("move-window", moveWindowSession, moveWindowWindow, map[string]any{
+					"beside": moveWindowBeside, "side": moveWindowSide, "ratio": moveWindowRatio,
+				}, moveWindowJSON, func(map[string]any) string { return "moved beside " + moveWindowBeside })
+			}
 			if workspace == 0 && moveWindowToSession == "" {
-				return errors.New("give the workspace to move the window to, or a session with --to-session")
+				return errors.New("give the workspace to move the window to, a session with --to-session, or a pane with --beside")
 			}
 			return runMoveWindow(moveWindowSession, moveWindowWindow, moveWindowToSession, workspace,
 				moveWindowFollow, moveWindowJSON)
@@ -1583,6 +1562,9 @@ cannot move.`,
 	moveWindowCmd.Flags().StringVarP(&moveWindowWindow, "window", "w", "", "Window to move by name or ID (default: focused)")
 	moveWindowCmd.Flags().StringVar(&moveWindowToSession, "to-session", "", "Session to move the window to")
 	moveWindowCmd.Flags().BoolVar(&moveWindowFollow, "follow", false, "Switch to that workspace after moving")
+	moveWindowCmd.Flags().StringVar(&moveWindowBeside, "beside", "", "Pane to move the window next to")
+	moveWindowCmd.Flags().StringVar(&moveWindowSide, "side", "", "With --beside: left, right, up or down (default: right)")
+	moveWindowCmd.Flags().IntVar(&moveWindowRatio, "ratio", 0, "With --beside: the window's share of the space, in percent (default: half)")
 	moveWindowCmd.Flags().BoolVar(&moveWindowJSON, "json", false, "Output result as JSON")
 	_ = moveWindowCmd.RegisterFlagCompletionFunc("session", completeSessionNames)
 	_ = moveWindowCmd.RegisterFlagCompletionFunc("to-session", completeSessionNames)
@@ -3119,7 +3101,8 @@ command in authorized_keys to make the policy a boundary:
 		newPeekPromptCommand(), newRespondCommand(), newQueueCommand(), newTaskCommand(), newReviewCommand(), newCheckpointCommand(), newShipCommand())
 	rootCmd.AddCommand(sendTextCmd, newWindowCmd, waitForCmd, newSubscribeCommand(), newRunCommand(), newAskHumanCommand())
 	rootCmd.AddCommand(renameSessionCmd, setSessionNameCmd, setSessionAccentCmd, setSessionSpaceCmd, setSessionOrderCmd, setWorkspaceNameCmd, newNoteCommand())
-	rootCmd.AddCommand(splitWindowCmd, popupCmd, focusWindowCmd, moveWindowCmd, setWindowCmd, newSetAgentQuietCommand(), newPiPCommand(), newCallCommand(), newPaneViewCommand())
+	rootCmd.AddCommand(newLayoutCommands()...)
+	rootCmd.AddCommand(newSplitWindowCommand(), popupCmd, focusWindowCmd, moveWindowCmd, setWindowCmd, newSetAgentQuietCommand(), newPiPCommand(), newCallCommand(), newPaneViewCommand())
 	rootCmd.AddCommand(selectWorkspaceCmd, listWorkspacesCmd, setLayoutCmd)
 	rootCmd.AddCommand(listWindowsCmd, getWindowCmd, sessionInfoCmd, listVerbsCmd, listOptionsCmd, listThemesCmd, listGlyphsCmd, importThemeCmd, themeCmd)
 	rootCmd.AddCommand(listDockComponentsCmd, refreshDockCmd, listHooksCmd)

@@ -306,37 +306,46 @@ func (d *Daemon) verbGetWindow(cs *connState, params json.RawMessage) (any, *ver
 }
 
 func (d *Daemon) verbNewWindow(cs *connState, params json.RawMessage) (any, *verbError) {
-	var p struct {
-		Session   string   `json:"session"`
-		Name      string   `json:"name"`
-		Workspace int      `json:"workspace"`
-		Cwd       string   `json:"cwd"`
-		Focus     *bool    `json:"focus"`
-		Command   []string `json:"command"`
-		Host      string   `json:"host"`
-		Grants    []string `json:"grants"`
-		// Env is set in the new pane's process, checked as start-agent
-		// checks its env.
-		Env map[string]string `json:"env"`
-		// CloseOnExit closes the window when its process exits, also with no
-		// client attached. An attached client closes a command window on
-		// exit already. A detached session keeps it until something closes
-		// it, which is right for a shell and wrong for tuios xpanes -ss.
-		CloseOnExit bool `json:"close_on_exit"`
-		// KeepOpen keeps the window after its process exits, with a line
-		// that shows the exit status. See keep_open.go.
-		KeepOpen bool `json:"keep_open"`
-		// Wait holds the call until the process exits and answers with its
-		// exit status. Timeout bounds the wait in milliseconds, 0 for none.
-		Wait    bool `json:"wait"`
-		Timeout int  `json:"timeout"`
-		// Kind and URI make a window a renderer draws natively.
-		Kind string `json:"kind"`
-		URI  string `json:"uri"`
-	}
+	var p newWindowParams
 	if verr := decodeParams(params, &p); verr != nil {
 		return nil, verr
 	}
+	return d.openWindow(cs, &p, nil)
+}
+
+// newWindowParams are new-window's params. split-window takes them too.
+type newWindowParams struct {
+	Session   string   `json:"session"`
+	Name      string   `json:"name"`
+	Workspace int      `json:"workspace"`
+	Cwd       string   `json:"cwd"`
+	Focus     *bool    `json:"focus"`
+	Command   []string `json:"command"`
+	Host      string   `json:"host"`
+	Grants    []string `json:"grants"`
+	// Env is set in the new pane's process, checked as start-agent
+	// checks its env.
+	Env map[string]string `json:"env"`
+	// CloseOnExit closes the window when its process exits, also with no
+	// client attached. An attached client closes a command window on
+	// exit already. A detached session keeps it until something closes
+	// it, which is right for a shell and wrong for tuios xpanes -ss.
+	CloseOnExit bool `json:"close_on_exit"`
+	// KeepOpen keeps the window after its process exits, with a line
+	// that shows the exit status. See keep_open.go.
+	KeepOpen bool `json:"keep_open"`
+	// Wait holds the call until the process exits and answers with its
+	// exit status. Timeout bounds the wait in milliseconds, 0 for none.
+	Wait    bool `json:"wait"`
+	Timeout int  `json:"timeout"`
+	// Kind and URI make a window a renderer draws natively.
+	Kind string `json:"kind"`
+	URI  string `json:"uri"`
+}
+
+// openWindow is new-window. With split, the window goes beside a pane in the
+// split tree, on the pane's workspace (see verbSplitWindow).
+func (d *Daemon) openWindow(cs *connState, p *newWindowParams, split *splitAsk) (any, *verbError) {
 	if p.Kind != "" && !slices.Contains(WindowKinds, p.Kind) {
 		return nil, invalidParam("kind", "kind is terminal, view, web or app")
 	}
@@ -369,6 +378,13 @@ func (d *Daemon) verbNewWindow(cs *connState, params json.RawMessage) (any, *ver
 	}
 	// From inside a pane of this session, the default is the pane's own
 	// workspace (#1494). Outside every pane it stays the one the session shows.
+	var placement *SplitPlacement
+	var cols, rows int
+	if split != nil {
+		if placement, cols, rows, verr = d.splitTarget(cs, sess, p, split); verr != nil {
+			return nil, verr
+		}
+	}
 	if p.Workspace == 0 {
 		p.Workspace = d.callerWorkspaceIn(cs, sess)
 	}
@@ -441,9 +457,15 @@ func (d *Daemon) verbNewWindow(cs *connState, params json.RawMessage) (any, *ver
 		Env:         env,
 		Kind:        p.Kind,
 		URI:         p.URI,
+		Split:       placement,
+		Cols:        cols,
+		Rows:        rows,
 	}, onExit)
 	if bverr != nil {
 		return nil, bverr
+	}
+	if errors.Is(err, errSplitNotTiled) {
+		return nil, invalidParam("window", err.Error())
 	}
 	if errors.Is(err, ErrScratchExists) {
 		return nil, invalidParam("scratch", err.Error())
@@ -512,20 +534,7 @@ func (d *Daemon) verbNewWindow(cs *connState, params json.RawMessage) (any, *ver
 	//
 	// keep_open is echoed only when set: a caller that asked for it and does
 	// not see it back is talking to a daemon that does not know it.
-	if p.KeepOpen {
-		return map[string]any{
-			"type":      "window_created",
-			"window_id": win.ID,
-			"name":      displayName,
-			"workspace": win.Workspace,
-			"pty_id":    win.PTYID,
-			"focused":   focus,
-			"unplaced":  win.Unplaced,
-			"host":      win.Host,
-			"keep_open": true,
-		}, nil
-	}
-	return map[string]any{
+	out := map[string]any{
 		"type":      "window_created",
 		"window_id": win.ID,
 		"name":      displayName,
@@ -536,7 +545,14 @@ func (d *Daemon) verbNewWindow(cs *connState, params json.RawMessage) (any, *ver
 		// Omitted for a window on this machine, so the ordinary result keeps
 		// the shape it has always had.
 		"host": win.Host,
-	}, nil
+	}
+	if p.KeepOpen {
+		out["keep_open"] = true
+	}
+	if split != nil {
+		d.splitDone(sess, out, placement, win.ID, split)
+	}
+	return out, nil
 }
 
 // newWindowPlaceWait bounds how long new-window waits for an attached client

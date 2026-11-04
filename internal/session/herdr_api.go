@@ -229,6 +229,8 @@ type herdrArgs struct {
 	Styled       bool              `json:"styled,omitempty"`
 	Lines        int               `json:"lines,omitempty"`
 	Direction    string            `json:"direction,omitempty"`
+	Side         string            `json:"side,omitempty"`
+	Beside       string            `json:"beside,omitempty"`
 	Order        []int             `json:"order,omitempty"`
 	Condition    string            `json:"condition,omitempty"`
 	Pattern      string            `json:"pattern,omitempty"`
@@ -1077,19 +1079,21 @@ func (d *Daemon) herdrFocusPane(cs *connState, id string) (*herdrResult, *herdrE
 	return d.herdrPaneResult(cs, "pane_info", id)
 }
 
-// herdrPaneSplit is split-window when a client is attached and tiles the
-// session. Without one, tuios has no split to cut, and the new pane is a
-// window on the same workspace, which a client tiles when it attaches.
+// herdrPaneSplit is split-window: the new pane goes right of or below the
+// target in the split tree, with or without a client.
 func (d *Daemon) herdrPaneSplit(cs *connState, in *herdrIn) (*herdrResult, *herdrError) {
-	dir := "vertical"
-	switch in.Direction {
-	case "right":
-	case "down":
-		dir = "horizontal"
-	default:
+	if in.Direction != "right" && in.Direction != "down" {
 		return nil, herdrErr("invalid_request", "invalid request: unknown variant `"+in.Direction+"`, expected `right` or `down`")
 	}
 	target := in.TargetPaneID
+	if target == "" {
+		// herdr splits the calling pane, else the focused one.
+		if ref := d.callerPaneRef(cs); ref != nil && in.WorkspaceID == "" {
+			if sess := d.sessionHoldingWindow(ref.Window); sess != nil {
+				target = herdrPaneID(sess.ID, ref.Window)
+			}
+		}
+	}
 	if target == "" {
 		sess, herr := d.herdrSessionOrFocused(cs, in.WorkspaceID)
 		if herr != nil {
@@ -1105,34 +1109,13 @@ func (d *Daemon) herdrPaneSplit(cs *connState, in *herdrIn) (*herdrResult, *herd
 	if ierr != nil {
 		return nil, ierr.herdr()
 	}
-	const fail = "pane_split_failed"
-	newID, split := "", false
-	// split-window takes no cwd or env, so a split that names either is a
-	// new window on the target's workspace, which the client tiles.
-	if in.Cwd == "" && len(in.Env) == 0 && d.findTUIClient(sess.ID) != nil {
-		args := herdrWin(sess, win.ID)
-		args.Direction = dir
-		out, verr := d.callVerb(cs, "split-window", args)
-		if verr == nil {
-			// The split ran. A new window is made only when it did not:
-			// a split whose pane is late to reach the state is reported,
-			// never answered with a second pane.
-			split = true
-			if newID = herdrString(out.(map[string]any), "window_id"); newID == "" {
-				return nil, herdrErr(fail, "the split ran, and the new pane has not reached the daemon yet. Run pane list to find it")
-			}
-		} else if verr.Code != ErrVerbNeedsClient && verr.Code != ErrVerbCommandFailed {
-			return nil, herdrFromVerb(verr, fail)
-		}
+	args := herdrWin(sess, win.ID)
+	args.Side, args.Focus, args.Cwd, args.Env = in.Direction, &in.Focus, in.Cwd, in.Env
+	out, herr := d.herdrVerb(cs, "split-window", args, "pane_split_failed")
+	if herr != nil {
+		return nil, herr
 	}
-	if !split {
-		out, herr := d.herdrVerb(cs, "new-window", herdrArgs{Session: sess.Name(), Workspace: max(win.Workspace, 1), Focus: &in.Focus, Cwd: in.Cwd, Env: in.Env}, fail)
-		if herr != nil {
-			return nil, herr
-		}
-		newID = herdrString(out, "window_id")
-	}
-	return d.herdrPaneResult(cs, "pane_info", herdrPaneID(sess.ID, newID))
+	return d.herdrPaneResult(cs, "pane_info", herdrPaneID(sess.ID, herdrString(out, "window_id")))
 }
 
 func (d *Daemon) herdrPaneClose(cs *connState, in *herdrIn) (*herdrResult, *herdrError) {

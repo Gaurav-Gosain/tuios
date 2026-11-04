@@ -8,6 +8,7 @@ import (
 	"sync"
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/layout"
 	"github.com/Gaurav-Gosain/tuios/internal/worktree"
 	"github.com/google/uuid"
 )
@@ -299,6 +300,10 @@ type NewWindowOptions struct {
 	// WindowState.Kind. With no Command, its program is the placeholder.
 	Kind string
 	URI  string
+	// Split puts the window beside a pane in the split tree of that pane's
+	// workspace, in the same change that adds it, so no client ever holds
+	// the window without its place. Workspace must be the pane's.
+	Split *SplitPlacement
 	// Cols and Rows are the content size the client that asked will give the
 	// pane, zero when it did not say. The process starts at that size. A
 	// shell started at the session's size and then resized once the client
@@ -477,6 +482,12 @@ func (s *Session) AddDaemonWindowWith(opts NewWindowOptions, onExit func(ptyID s
 	}
 
 	var win WindowState
+	var split *layoutEdit
+	var sizes []paneSize
+	box := layout.Rect{}
+	if opts.Split != nil {
+		box = s.layoutBox()
+	}
 	err = s.mutateState(func(state *SessionState) error {
 		// One scratch terminal per session, checked under the state lock so
 		// two calls that race cannot both add one.
@@ -577,7 +588,26 @@ func (s *Session) AddDaemonWindowWith(opts NewWindowOptions, onExit func(ptyID s
 		if opts.Host == "" {
 			win.Grants = grantNamesPtr(opts.Grants)
 		}
+		if opts.Split != nil {
+			// The tree is opened before the window joins the state, so the
+			// window goes in beside its pane and not where the scheme puts
+			// a pane the tree has not heard of.
+			split = newLayoutEdit(state, box)
+			if !split.tree(workspace).HasWindow(split.leaf(opts.Split.Target)) {
+				return errSplitNotTiled
+			}
+		}
 		state.Windows = append(state.Windows, win)
+		if split != nil {
+			t := split.tree(workspace)
+			t.SplitWindowAt(split.leaf(windowID), split.leaf(opts.Split.Target), opts.Split.Side, opts.Split.Share)
+			split.commit()
+			s.noteTreeOpLocked(state.Version+1, "", workspace)
+			if opts.Split.Place {
+				sizes = split.place()
+				win = state.Windows[len(state.Windows)-1]
+			}
+		}
 		// The workspace's own focus points at the new window either way: it is
 		// the only sensible thing to focus when that workspace is next shown.
 		// Session focus moves only when the caller asked for it, so a pane opened
@@ -602,6 +632,7 @@ func (s *Session) AddDaemonWindowWith(opts NewWindowOptions, onExit func(ptyID s
 		return nil
 	})
 	markAdded()
+	s.resizePanes(sizes)
 	if err != nil {
 		// The shell started for a window that was refused has no owner.
 		_ = s.ClosePTY(pty.ID)

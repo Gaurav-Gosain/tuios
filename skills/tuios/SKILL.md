@@ -36,6 +36,8 @@ command. It opens the window manager.
 | See every pane | `tuios list-windows -s "$TUIOS_SESSION"` |
 | Run a command in a new pane, and get its exit code | `tuios new-window -s "$TUIOS_SESSION" tests --cwd "$PWD" --no-focus --keep-open --wait -- ./run-tests.sh` |
 | Run a command in a shell pane, and get its exit code | `tuios run -s "$TUIOS_SESSION" -w build --timeout 600000 -- make test` |
+| Open a pane beside yours, and keep the focus | `tuios split-window -s "$TUIOS_SESSION" right --no-focus -- tail -f app.log` |
+| Zoom, swap, move or resize a pane | `tuios zoom-window -s "$TUIOS_SESSION" -w build --on`. `tuios --skill panes` has swap, move and resize. |
 | Read the end of a pane | `tuios capture-pane -s "$TUIOS_SESSION" -w build --scrollback --lines 40` |
 | Type a command into a shell pane, and do not wait | `tuios send-text -s "$TUIOS_SESSION" -w build 'make test'` then `tuios send-keys -s "$TUIOS_SESSION" -w build Enter` |
 | Start an agent beside you, and give it work | `tuios start-agent claude -s "$TUIOS_SESSION" --name reviewer --cwd "$PWD" --prompt 'Review the diff on this branch.'` |

@@ -420,12 +420,34 @@ tuios set-window -s work -w build --minimize
 tuios set-window -s work -w build --restore
 ```
 
-Geometry belongs to the attached client, so these need one and say
-`needs_client` when there is none:
+The layout verbs split, zoom, swap, move and resize a named pane. They also
+work with no client attached. Without `-w`, they act on your own pane:
 
 ```sh
-tuios split-window -s work vertical -w build --name logs
-tuios split-window -s work left -w build      # the new pane takes the left side
+tuios split-window -s work right --name logs --ratio 30 --no-focus -- tail -f app.log
+tuios split-window -s work down -w build       # a shell below the pane named build
+tuios zoom-window -s work -w build --on        # --off puts the layout back
+tuios swap-window -s work -w build logs        # each takes the other's place
+tuios move-window -s work -w logs --beside build --side down --ratio 30
+tuios resize-window -s work up 10 -w logs      # the border moves up by 10 percent
+```
+
+- `split-window` takes a side (`left`, `right`, `up`, `down`) and the flags of
+  `new-window`: a command after `--`, `--cwd`, `--keep-open` and `--name`.
+  Without `--cwd` the new pane starts in your directory. It prints the new
+  pane's id, and turns tiling on when it is off.
+- `--ratio` is the new or moved pane's share of the space, in percent.
+- `zoom-window` without `--on` or `--off` toggles. Zooming a pane on the
+  workspace the person sees also focuses it, so zoom only when asked.
+- `resize-window` moves the border on that side of the pane, or the border on
+  the other side when the pane is at the edge there.
+- Read the result with `tuios get-window -s work logs --json` (`x`, `y`,
+  `width`, `height`, `zoomed`). Split a wide pane `right` and a tall one
+  `down`.
+
+These need a client attached, and say `needs_client` without one:
+
+```sh
 tuios set-layout -s work --tiling true --equalize
 tuios set-layout -s work --rotate
 tuios set-layout -s work --master-position center --masters 1
@@ -494,7 +516,6 @@ A keybinding with no verb of its own is reachable by name. Every action
 `tuios keybinds list` prints runs this way:
 
 ```sh
-tuios run-command -s work ToggleZoom
 tuios run-command -s work toggle_spotlight
 tuios run-command -s work Press "ctrl+b ?"
 tuios run-command --list

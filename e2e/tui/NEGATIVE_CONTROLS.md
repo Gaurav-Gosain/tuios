@@ -12931,3 +12931,25 @@ against the branch head:
 
 With the fix the window measured work=0 in five of five runs, and about 650
 context switches against about 790 before.
+
+## An agent arranges panes with no client attached
+
+`TestAgentArrangesPanesWithNoClient` runs a script in a pane of a detached
+session: two `split-window` calls, then `swap-window`, `resize-window` and
+`zoom-window`, each naming the pane by the id the split printed. With no
+client, list-windows must show the agent's pane on the left at 60 percent,
+tests above logs on the right, and tests zoomed. A client then attaches and
+shows the zoomed pane alone. After `zoom-window --off` it draws tests above
+logs on the right, and list-windows reports its rectangles in that order.
+
+Run on 2026-11-04 on Linux. The fixed build passes in 0.5 s. Each control
+cuts one call site from the branch head:
+
+| Claim | Control | Where it fails | Verdict |
+| --- | --- | --- | --- |
+| split-window puts the pane in the tree | `Split: placement` cut from `openWindow` | the script stops at `swap-window`: "the session floats its panes" | **caught** |
+| swap-window swaps the leaves | the `SwapWindows` call cut from `swapPanes` | "logs is at ... want it ... in the lower half (the swap)", and on the attached client | **caught** |
+| resize-window moves the border | the `NudgeBorder` call cut from `resizePane` | "the agent's pane has 0.70 of the width, want 0.60" | **caught** |
+| zoom-window sets the zoom | `x.Zoomed = z` cut from `zoomPane` | "tests is not zoomed with no client attached", and the client shows logs | **caught** |
+| A client lays out the daemon's tree | `e.commit()` cut from `arrangeLayout` | headless and attached layouts both lack the swap and the resize | **caught** |
+| A client reports the layout it took from the daemon | the `SyncStateToDaemon` call cut from `ApplyStateSyncFrom` | "the client's layout is not the agent's": list-windows keeps the zoomed rectangles | **caught** |

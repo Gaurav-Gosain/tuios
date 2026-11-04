@@ -49,7 +49,7 @@ A retry without a change fails the same way, except for `busy`, `too_many_connec
 | `internal` | The daemon failed in a way no other code names. The message says what went wrong. Run `tuios logs`, and tell the person. |
 | `invalid_params` | The daemon does not take a parameter you sent. If you believed in it, the daemon is older than you think: ask `list-verbs`. |
 | `option_not_found` | The hint carries the closest option; `list-options` describes them all. |
-| `needs_client` | Splitting, tiling, directional focus and popups need an attached client. Reading, writing, waiting, creating and moving never do. |
+| `needs_client` | Tiling, directional focus and popups need an attached client. Splitting, zooming, swapping and resizing a pane do not. Reading, writing, waiting, creating and moving never do. |
 | `not_ready` | The target agent is mid-turn, or `unknown`. Wait for it, or look at it and pass `--force`. |
 | `agent_blocked` | The target is on `needs_input`. Read its prompt with `peek-prompt` and ask the person. Do not type at it. |
 | `prompt_stalled` | The text was typed and the agent showed no sign of taking it. Look at the pane before sending it again. |

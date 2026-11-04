@@ -2610,6 +2610,52 @@ Response:
 {"result": {"type": "window_created", "window_id": "9a3c...", "name": "build"}}
 ```
 
+### split-window, zoom-window, swap-window, resize-window
+
+The layout verbs. Each one names a pane with `window`. Without `window`, a
+caller in a pane of the session acts on its own pane, and any other caller on
+the focused pane. The daemon changes the layout itself, so these work with no
+client attached. An attached client lays its panes out again from the result,
+and a client that attaches later shows it.
+
+`split-window` cuts a pane in two and opens a new window in the new half. Params:
+`side` (`left`, `right`, `up` or `down`: the side of the pane the new pane
+takes) or `direction` (`vertical` for right, `horizontal` for below), `ratio`
+(the new pane's share in percent, 1 to 99; omit for half), and `name`,
+`command`, `cwd`, `focus`, `keep_open`, `close_on_exit`, `env`, `host` and
+`grants` as for `new-window`. Without `cwd`, the pane starts in the caller's
+directory when the caller runs in a pane. The new pane is on the workspace of
+the pane it cuts. A floating, minimized or popup pane cannot be split
+(`invalid_params`). The verb turns tiling on when it is off. The result is
+new-window's, with `type` `window_split`, `side` and `direction`.
+
+`zoom-window` zooms a pane to fill its workspace. Params: `zoom` (true or false;
+omit to toggle). Zooming a pane on the workspace the session shows focuses it.
+The result has `window_id`, `zoomed` and `changed`.
+
+`swap-window` swaps two tiled panes. Params: `with` (required, the other pane).
+The panes must be on one workspace. The focus does not move.
+
+`resize-window` moves one border of a tiled pane. Params: `direction` (required:
+`right` and `down` move a border right or down, `left` and `up` move it left
+or up) and `amount` (percent of the layout's width or height, 1 to 50;
+default 5). The border is the one on that side of the pane, or the one on the
+other side when the pane is at the edge there. The result has `changed`,
+false when no border could move.
+
+`move-window` takes `beside` (a pane), `side` (default `right`) and `ratio`:
+the window leaves its place and splits that pane, on that pane's workspace.
+
+In the master-stack and scrolling layouts, which place panes by order, an
+attached client does the swap and the resize.
+
+```json
+{"verb": "split-window", "params": {"session": "work", "window": "build", "side": "down", "ratio": 30, "focus": false, "command": ["tail", "-f", "app.log"]}}
+{"verb": "swap-window", "params": {"session": "work", "window": "build", "with": "logs"}}
+{"verb": "resize-window", "params": {"session": "work", "window": "logs", "direction": "up", "amount": 10}}
+{"verb": "zoom-window", "params": {"session": "work", "window": "build", "zoom": true}}
+```
+
 ### popup
 
 Open a popup: a floating pane that runs one command and closes when the command
@@ -6804,7 +6850,7 @@ the one before. The configuration is in
 | `list` | `list-*`, `session-info`, `ssh-agent-path`, `display-env`, `get-keep-awake`, `get-window`, `capture-pane`, `screenshot`, `get-option`, `get-agent-state`, `resolve-pane`, `explain-agent-*`, `wait-for`, `subscribe`, `unsubscribe`, `peek-prompt`, `read-dir`, `wait-dir`, `compare-fan`, `agent-activity`, `get-approval`, `file-stat`, `file-list`, `list-tasks`, `get-task` |
 | `mail` | `send-agent-message`, `read-agent-messages`, `agent-mail-notice`, `stash-put`, `stash-list`, `stash-get` |
 | `open` | `new-session`, `new-window`, `split-window`, `popup`, `new-worktree`, `fan`, `start-agent`, `open-pane`, `resize-pane`, `close-pane`, `pane-cwd`, `pane-agent`, `pane-calls` |
-| `write` | `send-keys`, `send-text`, `ask-agent`, `run-command`, `switch-session`, `detach-client`, `close-window`, `close-workspace`, `kill-session`, `focus-window`, `move-window`, `set-window`, `select-workspace`, `set-layout`, `resize`, `set-option`, `set-keep-awake`, `set-session-*`, `set-workspace-*`, `set-agent-*`, `resume-agent`, `request-approval`, `refresh-dock`, `pip`, `remove-worktree`, `bundle-worktree`, `run`, `ask-human` (whose handler refuses a link caller anyway), `review-diff` (it returns file contents), `review-note`, `review-stage`, `send-review`, `queue-prompt`, `cancel-queued`, `keep-fan`, `add-task`, `claim-task`, `finish-task`, `set-task-stage`, `block-task`, `release-task`, `remove-task` |
+| `write` | `send-keys`, `send-text`, `ask-agent`, `run-command`, `switch-session`, `detach-client`, `close-window`, `close-workspace`, `kill-session`, `focus-window`, `move-window`, `set-window`, `select-workspace`, `set-layout`, `zoom-window`, `swap-window`, `resize-window`, `resize`, `set-option`, `set-keep-awake`, `set-session-*`, `set-workspace-*`, `set-agent-*`, `resume-agent`, `request-approval`, `refresh-dock`, `pip`, `remove-worktree`, `bundle-worktree`, `run`, `ask-human` (whose handler refuses a link caller anyway), `review-diff` (it returns file contents), `review-note`, `review-stage`, `send-review`, `queue-prompt`, `cancel-queued`, `keep-fan`, `add-task`, `claim-task`, `finish-task`, `set-task-stage`, `block-task`, `release-task`, `remove-task` |
 | `open` and `write` | `verify-fan` |
 | `open` and `files` | `paste-pane-image` |
 | `write` and `files` | `paste-image` |

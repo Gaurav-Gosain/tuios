@@ -10,6 +10,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/Gaurav-Gosain/tuitest"
 )
 
 // These tests hold what a client that mirrors a session's layout reads: the
@@ -26,6 +28,8 @@ import (
 //   - TestLayoutChangedFollowsASplit: the layoutChanges call cut from
 //     diffLifecycle. The subscription is live and never sees a
 //     layout-changed, and the wait for it times out.
+//   - TestAgentArrangesPanesWithNoClient: one control per layout verb, and
+//     two for the attached client. See NEGATIVE_CONTROLS.md.
 
 // layoutRect is one window's rectangle, as list-windows reports it.
 type layoutRect struct {
@@ -223,4 +227,167 @@ func TestLayoutChangedFollowsASplit(t *testing.T) {
 	}
 	waitWindowCount(t, term, 2, "after the split")
 	saveArtifact(t, term, dir, "after-split")
+}
+
+// layoutPane is one window of list-windows, with what the layout verbs change.
+type layoutPane struct {
+	layoutRect
+	Name   string `json:"display_name"`
+	Cwd    string `json:"cwd"`
+	Zoomed bool   `json:"zoomed"`
+}
+
+// layoutPanes reads the session's windows by name.
+func layoutPanes(t *testing.T, base, sess string) map[string]layoutPane {
+	t.Helper()
+	out, err := tuiosCLI(t, base, "list-windows", "-s", sess, "--json")
+	if err != nil {
+		t.Fatalf("list-windows: %v\n%s", err, out)
+	}
+	var res struct {
+		Windows []layoutPane `json:"windows"`
+	}
+	if err := json.Unmarshal([]byte(out), &res); err != nil {
+		t.Fatalf("parse list-windows: %v\n%s", err, out)
+	}
+	rows := map[string]layoutPane{}
+	for _, w := range res.Windows {
+		rows[w.Name] = w
+	}
+	return rows
+}
+
+// An agent in a pane of a detached session splits its pane twice, swaps the
+// two new panes, moves a border and zooms a pane, each by id, with no client
+// attached. A client then attaches and shows that layout, and the zoom ends
+// from the command line while the client watches.
+//
+// The layout the five calls make: the agent's pane on the left at 60
+// percent, tests above logs on the right, tests zoomed.
+//
+// How this could pass wrongly, written down first:
+//   - A client could be attached while the agent works, and do the layout
+//     itself. Nothing is attached until the script is done, and the test
+//     checks list-clients before the script starts.
+//   - The rectangles could be the daemon's placeholder. The test checks
+//     where each pane is relative to the others, and the share of the left
+//     pane, which only a laid-out tree gives.
+//   - The client could build its own layout on attach that happens to look
+//     the same. The swap and the resize make a layout the client's own
+//     insertion order does not: logs below tests and a 60 percent split.
+//   - A step could fail and the next still pass. The script stops at the
+//     first failure (set -e), and its log is checked.
+func TestAgentArrangesPanesWithNoClient(t *testing.T) {
+	base := t.TempDir()
+	killDaemon(t, base)
+	dir := artifactDir(t)
+	const sess = "lay"
+	if out, err := tuiosCLI(t, base, "new", "-d", sess); err != nil {
+		t.Fatalf("new -d: %v\n%s", err, out)
+	}
+	var agentID string
+	for id := range listRects(t, base, sess) {
+		agentID = id
+	}
+	if out, err := tuiosCLI(t, base, "set-window", "-s", sess, "-w", agentID, "--name", "agent"); err != nil {
+		t.Fatalf("name the agent's pane: %v\n%s", err, out)
+	}
+	agentDir := filepath.Join(base, "agent-dir")
+	if err := os.MkdirAll(agentDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	// What an agent's shell tool runs. Each step names the pane by the id the
+	// split printed.
+	id := `sed -n 's/.*"window_id": *"\([^"]*\)".*/\1/p'`
+	script := `set -e
+T=` + tuiosBin + `
+L=$($T split-window right --name logs --ratio 30 --no-focus --json -- sh -c 'echo LOGS-PANE; exec sleep 600' | ` + id + `)
+X=$($T split-window down -w "$L" --name tests --no-focus --json -- sh -c 'echo TESTS-PANE; exec sleep 600' | ` + id + `)
+$T swap-window -w "$L" "$X"
+$T resize-window left 10 -w "$X"
+$T zoom-window -w "$X" --on
+`
+	scriptPath := filepath.Join(base, "arrange.sh")
+	if err := os.WriteFile(scriptPath, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if out, err := tuiosCLI(t, base, "list-clients", "--json"); err != nil || strings.Contains(out, `"`+sess+`"`) {
+		t.Fatalf("a client shows the session before the agent works: %v\n%s", err, out)
+	}
+	done, logPath := filepath.Join(base, "done"), filepath.Join(base, "arrange.log")
+	line := "cd " + agentDir + " && sh " + scriptPath + " > " + logPath + " 2>&1; echo $? > " + done + "\n"
+	if out, err := tuiosCLI(t, base, "send-text", "-s", sess, "-w", agentID, line); err != nil {
+		t.Fatalf("send-text: %v\n%s", err, out)
+	}
+	status := waitFile(t, done, func(s string) bool { return strings.HasSuffix(s, "\n") }, "the script never finished")
+	logged, _ := os.ReadFile(logPath)
+	_ = os.WriteFile(filepath.Join(dir, "arrange.log"), logged, 0o644)
+	if strings.TrimSpace(status) != "0" {
+		t.Fatalf("the script failed with %s:\n%s", status, logged)
+	}
+
+	// Headless: the daemon laid the panes out itself.
+	rows := layoutPanes(t, base, sess)
+	a, l, x := rows["agent"], rows["logs"], rows["tests"]
+	var log strings.Builder
+	fmt.Fprintf(&log, "# no client\nagent %+v\nlogs %+v\ntests %+v\n", a, l, x)
+	_ = os.WriteFile(filepath.Join(dir, "headless.txt"), []byte(log.String()), 0o644)
+	if l.ID == "" || x.ID == "" {
+		t.Fatalf("the splits made no logs and tests panes: %v", rows)
+	}
+	if l.Cwd != agentDir {
+		t.Errorf("ASSERTION: the split started in %q, want the agent's folder %s", l.Cwd, agentDir)
+	}
+	if !x.Zoomed {
+		t.Errorf("ASSERTION: tests is not zoomed with no client attached: %+v", x)
+	}
+	if !(l.X >= a.X+a.Width && l.Y > a.Y) {
+		t.Errorf("ASSERTION: with no client, logs is at %+v, want it right of the agent %+v and in the lower half (the swap)", l.layoutRect, a.layoutRect)
+	}
+	if share := float64(a.Width) / float64(a.Width+l.Width); share < 0.55 || share > 0.65 {
+		t.Errorf("ASSERTION: with no client, the agent's pane has %.2f of the width, want 0.60 (0.70 less the resize)", share)
+	}
+
+	// A client attaches and shows the zoomed pane.
+	term := attachIn(t, base, sess, startOpts{cols: 120, rows: 40})
+	if err := term.WaitForText("TESTS-PANE", uiTimeout); err != nil {
+		t.Fatalf("the attached client does not show the zoomed tests pane: %v\n%s", err, term.Snapshot())
+	}
+	saveArtifact(t, term, dir, "attached-zoomed")
+	if strings.Contains(term.Snapshot(), "LOGS-PANE") {
+		t.Errorf("ASSERTION: the client shows logs beside a zoomed pane:\n%s", term.Snapshot())
+	}
+
+	// The zoom ends from outside, and the client shows the layout.
+	if out, err := tuiosCLI(t, base, "zoom-window", "-s", sess, "-w", x.ID, "--off"); err != nil {
+		t.Fatalf("zoom-window --off: %v\n%s", err, out)
+	}
+	var ly, lx, ty, tx int
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		var lok, tok bool
+		ly, lx, lok = textAt(s, "LOGS-PANE", 0)
+		ty, tx, tok = textAt(s, "TESTS-PANE", 0)
+		return lok && tok
+	}, uiTimeout); err != nil {
+		t.Fatalf("the client never showed both panes after the zoom ended: %v\n%s", err, term.Snapshot())
+	}
+	saveArtifact(t, term, dir, "attached")
+	t.Logf("on screen: tests at row %d col %d, logs at row %d col %d", ty, tx, ly, lx)
+	if !(ly > ty && lx > 50 && tx > 50) {
+		t.Errorf("ASSERTION: the client does not show tests above logs on the right:\n%s", term.Snapshot())
+	}
+	deadline := time.Now().Add(uiTimeout)
+	for {
+		rows = layoutPanes(t, base, sess)
+		a, l, x = rows["agent"], rows["logs"], rows["tests"]
+		share := float64(a.Width) / float64(a.Width+l.Width)
+		if !x.Zoomed && l.Y > x.Y && l.X == x.X && share > 0.55 && share < 0.65 {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("ASSERTION: the client's layout is not the agent's: agent %+v, logs %+v, tests %+v (share %.2f)", a, l, x, share)
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
 }

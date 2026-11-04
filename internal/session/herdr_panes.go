@@ -274,9 +274,8 @@ func (d *Daemon) herdrPaneFocusDirection(cs *connState, in *herdrIn) (*herdrResu
 }
 
 // herdrPaneSwap swaps a pane with its neighbour, or two named panes of one
-// tab. The split tree lives in the client, so the swap is routed to the
-// attached client, which swaps the pair and leaves the focus on the source,
-// as herdr does. A swap that cannot happen answers with a reason and changes
+// tab, as swap-window does, and leaves the focus on the source, as herdr
+// does. A swap that cannot happen answers with a reason and changes
 // nothing, as in herdr.
 func (d *Daemon) herdrPaneSwap(cs *connState, in *herdrIn) (*herdrResult, *herdrError) {
 	directional := in.Direction != ""
@@ -336,8 +335,12 @@ func (d *Daemon) herdrPaneSwap(cs *connState, in *herdrIn) (*herdrResult, *herdr
 		if ierr != nil {
 			return nil, ierr.herdr()
 		}
-		if herr := d.herdrRouteClient(site.sess, "swap_windows", "pane_swap_failed", src.ID, dst.ID); herr != nil {
-			return nil, herr
+		if verr := d.swapPanes(site.sess, src, dst); verr != nil {
+			return nil, herdrFromVerb(verr, "pane_swap_failed")
+		}
+		// herdr leaves the focus on the source pane.
+		if site.sess.GetState().FocusedWindowID != src.ID {
+			_ = site.sess.FocusDaemonWindow(src.ID)
 		}
 		res.Changed = true
 	}
@@ -358,10 +361,8 @@ func (d *Daemon) herdrRouteClient(sess *Session, command, fail string, args ...s
 }
 
 // herdrPaneZoom zooms a pane, the way herdr zooms a tab: the pane is focused,
-// and a tab is zoomed on its focused pane or not at all. The client does both
-// in one routed command that names the pane, so the zoom can never land on
-// the pane that had the focus before. The answer waits until the session's
-// state shows the zoom on that pane, or no zoom for off.
+// and a tab is zoomed on its focused pane or not at all. The daemon focuses
+// the pane and sets the zoom, as zoom-window does.
 func (d *Daemon) herdrPaneZoom(cs *connState, in *herdrIn) (*herdrResult, *herdrError) {
 	mode := in.Mode
 	switch mode {
@@ -401,12 +402,13 @@ func (d *Daemon) herdrPaneZoom(cs *connState, in *herdrIn) (*herdrResult, *herdr
 			}
 		}
 	} else {
-		arg := "off"
-		if want {
-			arg = "on"
+		if res.FocusChanged {
+			if _, herr := d.herdrFocusPane(cs, site.pane.PaneID); herr != nil {
+				return nil, herr
+			}
 		}
-		if herr := d.herdrRouteClient(site.sess, "zoom_window", "pane_zoom_failed", site.win.ID, arg); herr != nil {
-			return nil, herr
+		if _, verr := d.zoomPane(site.sess, site.win, want); verr != nil {
+			return nil, herdrFromVerb(verr, "pane_zoom_failed")
 		}
 		res.ZoomChanged = true
 	}

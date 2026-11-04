@@ -269,6 +269,9 @@ var verbScopes = map[string]scopeKind{
 	// tml-validate reads only the document it is given.
 	"tml-validate":         scopeOpen,
 	"split-window":         scopeDeny,
+	"zoom-window":          scopeDeny,
+	"swap-window":          scopeDeny,
+	"resize-window":        scopeDeny,
 	"focus-window":         scopeDeny,
 	"move-window":          scopeDeny,
 	"set-window":           scopeDeny,

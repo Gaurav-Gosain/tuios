@@ -1097,13 +1097,14 @@ func (m *OS) ApplyStateSyncFrom(state *session.SessionState, sourceID string) er
 		m.settleBorderMode(m.CurrentWorkspace)
 	}
 
+	zoomRetile := false
 	m.settleSizes(func() {
 		// A popup that arrived in this sync, and every popup already open, is
 		// centred against this client's own bounds. Unconditional for the reason
 		// applyZoomState is: the box moves when the region does, not only when
 		// the flag changes.
 		m.applyPopupRects(false)
-		zoomRetile := m.applyZoomState(unzoomed)
+		zoomRetile = m.applyZoomState(unzoomed)
 		// Tiling switched by a peer. The rectangles arrive in this sync, but the
 		// border each pane draws is this client's own flag, and nothing else
 		// here writes it: a peer turning tiling off left every pane on this
@@ -1129,6 +1130,16 @@ func (m *OS) ApplyStateSyncFrom(state *session.SessionState, sourceID string) er
 			m.ClampWindowsToView()
 		}
 	})
+
+	// A tree or a zoom the daemon changed itself (swap-window, resize-window,
+	// zoom-window) moved the panes, and the push this sync owes carries
+	// no rectangles of a layout this client did not make. The daemon's copy
+	// of the rectangles is then the old layout's, which list-windows and
+	// herdr's pane.layout report, so the new ones are sent. Every client of
+	// the session lays the tree out in the same box, so they agree.
+	if (treeRetile || zoomRetile) && !fromPeer {
+		m.SyncStateToDaemon()
+	}
 
 	// A pane a switch to an empty workspace asked for has arrived.
 	m.settlePaneRequests()

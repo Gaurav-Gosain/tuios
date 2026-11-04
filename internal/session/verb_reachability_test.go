@@ -51,6 +51,9 @@ type exampleOutcome struct {
 var exampleOutcomes = map[string]exampleOutcome{
 	// The fixture's session is made fresh for each example and holds no
 	// task card. The verbs are proved in task_test.go.
+	// The fixture's session floats its panes until something splits one.
+	"swap-window#0":    {errCode: ErrVerbInvalidParams, why: "the fixture's session floats its panes, so there is no layout to swap in"},
+	"move-window#2":    {errCode: ErrVerbInvalidParams, why: "the fixture's session floats its panes, so there is no layout to move beside"},
 	"plugin-cell#0":    {errCode: ErrVerbForbidden, why: "the fixture's caller is not a plugin's process"},
 	"plugin-notify#0":  {errCode: ErrVerbForbidden, why: "the fixture's caller is not a plugin's process"},
 	"block-task#0":     {errCode: ErrVerbNoTask, why: "the fixture's session holds no task card"},
@@ -118,8 +121,6 @@ var exampleOutcomes = map[string]exampleOutcome{
 	"run-command#0":   {errCode: ErrVerbNeedsClient, why: "ToggleZoom is a client command"},
 	"set-layout#0":    {errCode: ErrVerbNeedsClient, why: "tiling is the client's arithmetic"},
 	"set-layout#1":    {errCode: ErrVerbNeedsClient, why: "the master-stack shape is laid out by a client"},
-	"split-window#0":  {errCode: ErrVerbNeedsClient, why: "a split is the client's arithmetic"},
-	"split-window#1":  {errCode: ErrVerbNeedsClient, why: "a split is the client's arithmetic"},
 
 	// The fixture has no agent panes, so no hook ever recorded a conversation
 	// to resume. Typing and dry runs are proved in agent_resume_test.go.
