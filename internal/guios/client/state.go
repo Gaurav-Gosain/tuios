@@ -84,6 +84,7 @@ type stateKeeper struct {
 	// an ended conversation (State.Conversations).
 	convGen atomic.Uint64
 
+	buildMu sync.Mutex
 	mu      sync.Mutex
 	state   *proto.State
 	layouts map[string]*proto.Layout // by session id
@@ -145,6 +146,11 @@ func (k *stateKeeper) nameOf(sid string) string {
 
 // build reads the daemon and makes the state anew.
 func (k *stateKeeper) build() (*proto.State, error) {
+	// One build at a time: a build places a pane the tree lacks and writes
+	// the tree before the next build reads it, so two builds never place
+	// one pane two ways.
+	k.buildMu.Lock()
+	defer k.buildMu.Unlock()
 	raw, err := k.c.verb("list-sessions", nil)
 	if err != nil {
 		return nil, err
