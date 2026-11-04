@@ -458,9 +458,7 @@ func (a *App) runKeyAction(action string) {
 	}
 	switch action {
 	case "prefix_new_window", "window_prefix_new", "new_window":
-		if s != nil {
-			a.split(s, proto.CreateParams{Split: s.ID})
-		}
+		a.splitPane(s, "", "")
 	case "prefix_close_window", "window_prefix_close", "close_window":
 		a.closeFocused()
 	case "prefix_next_window", "window_prefix_next", "next_window", "terminal_next_window":

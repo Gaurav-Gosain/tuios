@@ -741,7 +741,12 @@ func (a *App) paneTerminal(c *ui.Context, pal *palette, s *proto.Session, p *pro
 			if link, isPath, at := e.term.HoveredLink(); isPath {
 				a.imagePeek(p.ID, link, at, ref.Bounds(c))
 			}
-			if ref.Focused(c) && a.focusOf(s) != p.ID {
+			if a.wantFocus == p.ID {
+				// The keyboard goes to a pane made a moment ago once its
+				// terminal is here to take it.
+				ref.Focus()
+				a.wantFocus = ""
+			} else if ref.Focused(c) && a.focusOf(s) != p.ID && s.PaneByID(a.wantFocus) == nil {
 				a.setFocus(s, p.ID)
 			}
 			if a.find.pane == p.ID {
@@ -811,6 +816,14 @@ func (a *App) splitPane(s *proto.Session, at, direction string) {
 	if s == nil {
 		return
 	}
+	if at == "" && a.splitting[s.ID] {
+		// The focused pane's split is on its way, and the pane it makes
+		// takes the focus: this one splits that pane, once it is here,
+		// as a second new window in the TUI splits the first.
+		sid := s.ID
+		a.splitQueue[sid] = append(a.splitQueue[sid], func() { a.splitPane(a.session(sid), "", direction) })
+		return
+	}
 	if at == "" {
 		at = a.focusOf(s)
 	}
@@ -842,10 +855,20 @@ func (a *App) split(s *proto.Session, p proto.CreateParams) {
 	if cl == nil {
 		return
 	}
+	if a.splitting == nil {
+		a.splitting, a.splitQueue = map[string]bool{}, map[string][]func(){}
+	}
+	sid := s.ID
+	a.splitting[sid] = true
 	go func() {
 		var ns proto.Session
 		err := cl.Call("split", p, &ns)
 		a.update(func() {
+			a.splitting[sid] = false
+			if q := a.splitQueue[sid]; len(q) > 0 {
+				a.splitQueue[sid] = q[1:]
+				defer q[0]()
+			}
 			if err != nil {
 				a.toast(err.Error())
 				return
@@ -860,8 +883,11 @@ func (a *App) split(s *proto.Session, p proto.CreateParams) {
 				a.touch(ns.Focus)
 				if !a.isBrowser(ns.Focus) {
 					// A browser takes the keyboard in its address bar, or
-					// its page once it has one.
+					// its page once it has one. A terminal takes it once it
+					// is drawn: until then the pane that had the keyboard
+					// keeps it, and must not take the focus back.
 					a.paneRef(ns.Focus).Focus()
+					a.wantFocus = ns.Focus
 				}
 			}
 		})
