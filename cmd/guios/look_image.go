@@ -9,7 +9,7 @@ import (
 	"os"
 	"time"
 
-	"github.com/egoist/mygo/ui"
+	"github.com/Gaurav-Gosain/mygo/ui"
 
 	"github.com/Gaurav-Gosain/tuios/internal/guios/preview"
 	"github.com/Gaurav-Gosain/tuios/internal/memtrim"

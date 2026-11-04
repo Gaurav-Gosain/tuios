@@ -17,7 +17,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/egoist/mygo"
+	"github.com/Gaurav-Gosain/mygo"
 )
 
 // Version changes whenever the protocol changes in a way the other side

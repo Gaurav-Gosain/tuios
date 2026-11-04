@@ -6,7 +6,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/egoist/mygo"
+	"github.com/Gaurav-Gosain/mygo"
 )
 
 // Listen is one of kerod's network listeners, as the configuration's

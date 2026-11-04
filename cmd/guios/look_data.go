@@ -9,8 +9,8 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/egoist/mygo/ui"
-	"github.com/egoist/mygo/ui/editor"
+	"github.com/Gaurav-Gosain/mygo/ui"
+	"github.com/Gaurav-Gosain/mygo/ui/editor"
 
 	"github.com/Gaurav-Gosain/tuios/internal/guios/preview"
 	"github.com/Gaurav-Gosain/tuios/internal/memtrim"

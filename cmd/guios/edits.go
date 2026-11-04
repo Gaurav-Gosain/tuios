@@ -4,8 +4,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/egoist/mygo/ui"
-	"github.com/egoist/mygo/ui/editor"
+	"github.com/Gaurav-Gosain/mygo/ui"
+	"github.com/Gaurav-Gosain/mygo/ui/editor"
 
 	"github.com/Gaurav-Gosain/tuios/internal/guios/git"
 	"github.com/Gaurav-Gosain/tuios/internal/guios/proto"

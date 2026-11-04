@@ -3,7 +3,7 @@ package main
 import (
 	"time"
 
-	"github.com/egoist/mygo/ui"
+	"github.com/Gaurav-Gosain/mygo/ui"
 )
 
 // Motion: how the chrome moves. Every animation here eases out, takes 120

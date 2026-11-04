@@ -7,8 +7,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/egoist/mygo/ui"
-	"github.com/egoist/mygo/ui/chart"
+	"github.com/Gaurav-Gosain/mygo/ui"
+	"github.com/Gaurav-Gosain/mygo/ui/chart"
 
 	"github.com/Gaurav-Gosain/tuios/internal/guios/client"
 	"github.com/Gaurav-Gosain/tuios/internal/guios/proto"

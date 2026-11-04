@@ -3,7 +3,7 @@ package main
 import (
 	"strings"
 
-	"github.com/egoist/mygo/ui"
+	"github.com/Gaurav-Gosain/mygo/ui"
 
 	"github.com/Gaurav-Gosain/tuios/internal/guios/proto"
 

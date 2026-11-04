@@ -4,7 +4,7 @@ import (
 	"embed"
 	"strings"
 
-	"github.com/egoist/mygo/ui"
+	"github.com/Gaurav-Gosain/mygo/ui"
 )
 
 // The trees of Files and Changes show each file's and folder's icon as

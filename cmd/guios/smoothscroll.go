@@ -5,7 +5,7 @@ import (
 	"runtime"
 	"time"
 
-	"github.com/egoist/mygo/ui"
+	"github.com/Gaurav-Gosain/mygo/ui"
 )
 
 // smoothScroll scrolls a scroll container (ui.Scroll or ui.List) on the

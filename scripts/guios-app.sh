@@ -35,7 +35,7 @@ if ! ls "$FONTS"/JetBrainsMonoNerdFontMono-Regular.ttf >/dev/null 2>&1; then
 		'JetBrainsMonoNerdFontMono-Italic.ttf' 'JetBrainsMonoNerdFontMono-BoldItalic.ttf' -d "$FONTS"
 	rm -rf "$TMP"
 fi
-MYGO=$(cd "$ROOT" && go list -m -f '{{.Version}}' github.com/egoist/mygo)
+MYGO=$(cd "$ROOT" && go list -m -f '{{.Version}}' github.com/Gaurav-Gosain/mygo)
 echo "building guios with mygo $MYGO"
 cd "$ROOT/cmd/guios"
-go run "github.com/egoist/mygo/cmd/mygo@$MYGO" build -platform "$PLATFORM" "$@"
+go run "github.com/Gaurav-Gosain/mygo/cmd/mygo@$MYGO" build -platform "$PLATFORM" "$@"

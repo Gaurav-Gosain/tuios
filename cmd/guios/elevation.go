@@ -3,7 +3,7 @@ package main
 import (
 	"time"
 
-	"github.com/egoist/mygo/ui"
+	"github.com/Gaurav-Gosain/mygo/ui"
 )
 
 // Surfaces stand out by their color and an edge, crisp, on whole pixels.

@@ -4,8 +4,8 @@ import (
 	"math"
 	"sync/atomic"
 
-	"github.com/egoist/mygo/plugins/terminal"
-	"github.com/egoist/mygo/ui"
+	"github.com/Gaurav-Gosain/mygo/plugins/terminal"
+	"github.com/Gaurav-Gosain/mygo/ui"
 )
 
 // palette is kero's colors, for the light and the dark appearance.

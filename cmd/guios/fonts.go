@@ -6,8 +6,8 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/egoist/mygo"
-	"github.com/egoist/mygo/ui"
+	"github.com/Gaurav-Gosain/mygo"
+	"github.com/Gaurav-Gosain/mygo/ui"
 )
 
 // guios carries JetBrains Mono, with Nerd Fonts' icons in its Mono build,

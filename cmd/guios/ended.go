@@ -5,7 +5,7 @@ import (
 	"slices"
 	"time"
 
-	"github.com/egoist/mygo/ui"
+	"github.com/Gaurav-Gosain/mygo/ui"
 
 	"github.com/Gaurav-Gosain/tuios/cmd/guios/locales"
 	"github.com/Gaurav-Gosain/tuios/internal/guios/cli"

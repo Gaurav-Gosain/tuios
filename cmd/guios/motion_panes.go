@@ -4,7 +4,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/egoist/mygo/ui"
+	"github.com/Gaurav-Gosain/mygo/ui"
 )
 
 // paneMatch is the identity a pane's card shares across the parents it

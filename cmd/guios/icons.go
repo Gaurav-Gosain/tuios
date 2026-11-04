@@ -3,8 +3,8 @@ package main
 import (
 	"embed"
 
+	"github.com/Gaurav-Gosain/mygo/ui"
 	"github.com/Gaurav-Gosain/tuios/internal/guios/proto"
-	"github.com/egoist/mygo/ui"
 )
 
 // The icons are Framework7's, drawn after SF Symbols so that they feel at

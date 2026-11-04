@@ -8,7 +8,7 @@ import (
 	"slices"
 	"sync"
 
-	"github.com/egoist/mygo"
+	"github.com/Gaurav-Gosain/mygo"
 
 	"github.com/Gaurav-Gosain/tuios/internal/guios/adblock"
 	"github.com/Gaurav-Gosain/tuios/internal/guios/proto"

@@ -5,8 +5,8 @@ import (
 	"log"
 	"runtime"
 
-	"github.com/egoist/mygo"
-	"github.com/egoist/mygo/plugins/updater"
+	"github.com/Gaurav-Gosain/mygo"
+	"github.com/Gaurav-Gosain/mygo/plugins/updater"
 
 	"github.com/Gaurav-Gosain/tuios/internal/guios/settings"
 

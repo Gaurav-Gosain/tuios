@@ -4,7 +4,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/egoist/mygo/ui"
+	"github.com/Gaurav-Gosain/mygo/ui"
 )
 
 // The design system's tokens, as ~/dev/tuios-notes/guios/DESIGN.md sets

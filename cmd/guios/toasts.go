@@ -1,6 +1,6 @@
 package main
 
-import "github.com/egoist/mygo/ui"
+import "github.com/Gaurav-Gosain/mygo/ui"
 
 // toasts shows the window's toasts (DESIGN.md section 6): raised cards in
 // the text's color with an edge and the overlay shadow, at the bottom

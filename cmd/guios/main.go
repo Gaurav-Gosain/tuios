@@ -16,9 +16,9 @@ import (
 	"runtime"
 	"strings"
 
-	"github.com/egoist/mygo"
-	"github.com/egoist/mygo/plugins/updater/native"
-	"github.com/egoist/mygo/ui"
+	"github.com/Gaurav-Gosain/mygo"
+	"github.com/Gaurav-Gosain/mygo/plugins/updater/native"
+	"github.com/Gaurav-Gosain/mygo/ui"
 	"golang.org/x/term"
 
 	"github.com/Gaurav-Gosain/tuios/internal/guios/cli"

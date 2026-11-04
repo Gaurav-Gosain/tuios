@@ -20,9 +20,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/egoist/mygo"
-	_ "github.com/egoist/mygo/plugins/automation"
-	"github.com/egoist/mygo/plugins/terminal"
+	"github.com/Gaurav-Gosain/mygo"
+	_ "github.com/Gaurav-Gosain/mygo/plugins/automation"
+	"github.com/Gaurav-Gosain/mygo/plugins/terminal"
 )
 
 func init() {

@@ -10,7 +10,7 @@ import (
 // in. The tuios and tuios-web binaries ship under a size ceiling and run on
 // machines with no GTK, so a GUI toolkit in their import graph is a bug even
 // when it compiles.
-var guiOnly = []string{"github.com/egoist/mygo"}
+var guiOnly = []string{"github.com/Gaurav-Gosain/mygo"}
 
 // TestShippedBinariesLeaveTheGUIToolkitOut is the binary boundary lint. It
 // lists every package cmd/tuios and cmd/tuios-web build and fails on any

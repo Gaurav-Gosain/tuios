@@ -3,7 +3,7 @@
 // alone, with no app, and updates itself.
 package build
 
-import "github.com/egoist/mygo"
+import "github.com/Gaurav-Gosain/mygo"
 
 // Server is set by the server build.
 var Server bool
