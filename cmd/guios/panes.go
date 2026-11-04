@@ -822,6 +822,7 @@ func (a *App) paneTerminal(c *ui.Context, pal *palette, s *proto.Session, p *pro
 			a.linkBadge(c, pal, p.ID, e)
 		case e == nil && a.hostOf(p.ID).remote() && a.hostOf(p.ID).conn != connReady:
 			// Shown as it was, until its host is back.
+			a.pendingInput(c, p.ID)
 			h := a.hostOf(p.ID)
 			switch {
 			case h.conn == connConnecting || h.busy != "":
@@ -838,6 +839,7 @@ func (a *App) paneTerminal(c *ui.Context, pal *palette, s *proto.Session, p *pro
 				a.ensureTerm(p.ID)
 			})
 		default:
+			a.pendingInput(c, p.ID)
 			// Attaching takes a moment for a long scrollback: a spinner
 			// only once it is a noticeable one.
 			if e != nil && time.Since(e.started) > 250*time.Millisecond {

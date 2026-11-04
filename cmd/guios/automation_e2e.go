@@ -32,6 +32,11 @@ func init() {
 	if k, err := strconv.ParseFloat(os.Getenv("GUIOS_MOTION_SCALE"), 64); err == nil && k > 0 {
 		scaleMotion(k)
 	}
+	// GUIOS_ATTACH_DELAY holds every pane's attach that long, to check
+	// what a person types meanwhile (typeahead.go).
+	if d, err := time.ParseDuration(os.Getenv("GUIOS_ATTACH_DELAY")); err == nil {
+		attachDelay = d
+	}
 	// GUIOS_SCROLL_TRACE prints where smoothScroll puts the content in
 	// each frame, as MyGo's MYGO_SCROLL_TRACE does for a terminal.
 	if os.Getenv("GUIOS_SCROLL_TRACE") != "" {

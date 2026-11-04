@@ -164,6 +164,9 @@ type App struct {
 	// grid is the pane area in cells, as last told to the host.
 	grid    [2]int
 	gridKey [3]float32 // the area's size and the text size it was measured at
+	// early are the keys typed into panes whose terminal is attaching
+	// (typeahead.go).
+	early map[string][]byte
 
 	active   bool
 	focused  bool
@@ -686,6 +689,7 @@ func (a *App) dropTerm(id string) {
 		}
 		delete(a.terms, id)
 	}
+	delete(a.early, id)
 	if a.find.pane == id {
 		a.find.pane = ""
 	}
@@ -724,6 +728,9 @@ func (a *App) ensureTerm(id string) {
 	a.terms[id] = e
 	dialer := h.dialer()
 	go func() {
+		if attachDelay > 0 {
+			time.Sleep(attachDelay)
+		}
 		stream, err := client.AttachVia(dialer, id)
 		if err != nil {
 			a.update(func() {
@@ -768,6 +775,7 @@ func (a *App) ensureTerm(id string) {
 				return
 			}
 			e.term, e.stream = term, stream
+			a.flushTypeahead(id, e)
 			// Shown, it takes the window's size (claimShown).
 			if s := a.session(a.selected); s != nil && a.here() && slices.Contains(shownPanes(s), id) {
 				go stream.Claim()
