@@ -186,6 +186,9 @@ func (a *App) frozenPanes(c *ui.Context, pal *palette, s *proto.Session, key str
 					oneLine(c, p.PaneName(), fsBody, wSemibold).TextColor(pal.text)
 				})
 				if e := a.terms[p.ID]; e != nil && e.term != nil {
+					if auditPane != nil {
+						auditPane(p.ID, "copy", e.term)
+					}
 					ui.Box(c).Grow(1).MinHeight(0).Children(func() {
 						terminal.View(c.Key("term"), e.term).Fill()
 					})
