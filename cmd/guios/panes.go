@@ -122,24 +122,13 @@ func (a *App) panes(c *ui.Context, pal *palette, bar ui.TitleBar, shown float32,
 	// (paneTransition).
 	a.reportGrid(c, s)
 	ui.Column(c.Key("ws-" + view)).Grow(1).Basis(0).MinWidth(0).MinHeight(0).AlignItems(ui.Stretch).Bind(a.paneRef("ws-area")).Children(func() {
-		multi := len(s.Panes) > 1
-		if s.PaneByID(s.Zoomed) == nil && s.Arrange != nil && multi {
+		if s.PaneByID(s.Zoomed) == nil && s.Arrange != nil && len(s.Panes) > 1 {
 			// Master-stack, scrolling and floating, and panes floating
 			// over the split tree: by their rectangles.
 			a.arranged(c, pal, bar, shown, s, right)
 			return
 		}
-		if z := s.PaneByID(s.Zoomed); z != nil || s.Layout == nil || !multi {
-			p := z
-			if p == nil {
-				p = s.FocusPane()
-			}
-			if p != nil {
-				a.paneCard(c, pal, bar, shown, s, p, true, true, right, multi)
-			}
-			return
-		}
-		a.layoutNode(c, pal, bar, shown, s, s.Layout, "", true, true, right)
+		a.tiled(c, pal, bar, shown, s, right)
 	})
 }
 
@@ -175,60 +164,15 @@ func layoutSig(s *proto.Session) string {
 	return b.String()
 }
 
-func (a *App) layoutNode(c *ui.Context, pal *palette, bar ui.TitleBar, shown float32, s *proto.Session, l *proto.Layout, path string, top, left, right bool) {
-	if l.Leaf() {
-		if p := s.PaneByID(l.Pane); p != nil {
-			a.paneCard(c, pal, bar, shown, s, p, top, left, right, true)
-		}
-		return
-	}
-	ratio := float32(l.Ratio)
-	if ratio <= 0 || ratio >= 1 {
-		ratio = 0.5
-	}
-	// Row and Column each build an element, so make only the one used: a
-	// Row made and replaced would stay, an empty sibling under the key.
-	key := "split-" + s.ID + path
-	var box ui.Element
-	if l.Row {
-		box = ui.Row(c.Key(key))
-	} else {
-		box = ui.Column(c.Key(key))
-	}
-	box.Grow(1).Basis(0).MinWidth(0).MinHeight(0).AlignItems(ui.Stretch).Bind(a.paneRef(key))
-	// A pane split off grows out of the other's edge: the split starts
-	// with all its room on the other's side. The ratio moves on the frame
-	// clock after that, as when the splits are evened out.
-	fresh := func(n *proto.Layout) bool { return n.Leaf() && a.motion.isNew(n.Pane) }
-	if fa, fb := fresh(l.A), fresh(l.B); fa != fb {
-		box.Jump("ratio", b2f(fb))
-		if a.motion.growing == nil {
-			a.motion.growing = map[string]bool{}
-		}
-		for _, id := range append(l.A.Panes(), l.B.Panes()...) {
-			a.motion.growing[id] = true
-		}
-	}
-	ratio = box.AnimateTo("ratio", ratio, motionLayout)
-	box.Children(func() {
-		ui.Column(c.Key("a")).Grow(ratio).Basis(0).MinWidth(0).MinHeight(0).AlignItems(ui.Stretch).Children(func() {
-			a.layoutNode(c, pal, bar, shown, s, l.A, path+"a", top, left, right && !l.Row)
-		})
-		a.divider(c, pal, s, l, key)
-		ui.Column(c.Key("b")).Grow(1 - ratio).Basis(0).MinWidth(0).MinHeight(0).AlignItems(ui.Stretch).Children(func() {
-			a.layoutNode(c, pal, bar, shown, s, l.B, path+"b", top && l.Row, left && !l.Row, right)
-		})
-	})
-}
-
-// divider is the gap between two panes, which a drag moves.
-func (a *App) divider(c *ui.Context, pal *palette, s *proto.Session, l *proto.Layout, key string) {
+// divider is the gap between two panes, at r in the tiles' area, which a
+// drag moves. w and h are the split's size.
+func (a *App) divider(c *ui.Context, pal *palette, s *proto.Session, l *proto.Layout, key string, r ui.Rect, w, h float32) {
 	// A drag leaves the keyboard in the pane the user is in.
-	d := ui.Box(c.Key("div")).Shrink(0).KeepFocus()
+	d := ui.Box(c.Key("div-" + key)).Absolute().Left(r.X).Top(r.Y).Width(r.W).Height(r.H).KeepFocus()
 	if l.Row {
-		d.Width(paneGap).Cursor(ui.CursorResizeColumn)
+		d.Cursor(ui.CursorResizeColumn)
 	} else {
-		d.Height(paneGap).Cursor(ui.CursorResizeRow)
+		d.Cursor(ui.CursorResizeRow)
 	}
 	if d.Hovered() || d.Pressed() {
 		// A short grip, so the gap shows it moves.
@@ -243,10 +187,9 @@ func (a *App) divider(c *ui.Context, pal *palette, s *proto.Session, l *proto.La
 	if dx, dy, ok := d.Dragged(); ok {
 		// The ratio shares out the room the panes take, the split's less
 		// the divider's.
-		b := a.paneRef(key).Bounds(c)
-		size, delta := b.W-paneGap, dx
+		size, delta := w, dx
 		if !l.Row {
-			size, delta = b.H-paneGap, dy
+			size, delta = h, dy
 		}
 		if size > 0 {
 			// The ratio goes on past its bounds, unclamped, so the divider
@@ -291,12 +234,13 @@ func (a *App) paneCard(c *ui.Context, pal *palette, bar ui.TitleBar, shown float
 		dim = 0.28
 	}
 	card := ui.Column(c.Key("pane-" + p.ID)).Grow(1).Basis(0).MinWidth(0).MinHeight(0).Radius(rPane).Clip().Bind(a.paneRef("card-" + p.ID))
-	if !a.motion.growing[p.ID] {
+	// The tiles move their panes themselves (tiles.go); the panes placed
+	// by rectangles move from where they were shown (paneTransition).
+	if !a.motion.placed[p.ID] {
 		card.Transition(paneTransition(p.ID))
 	}
-	if k := a.paneArrival(c, p.ID); k < 1 {
-		card.Opacity(k*dim).Scale(0.96+0.04*k, 0.96+0.04*k)
-	} else if dim < 1 {
+	a.motion.notePane(p.ID)
+	if dim < 1 {
 		card.Opacity(dim)
 	}
 	paned(card.Background(card.AnimateColor("bg", bg, ui.Animation{Duration: dArrive})), pal)

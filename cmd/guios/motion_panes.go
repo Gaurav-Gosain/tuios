@@ -18,8 +18,8 @@ type paneMatch struct{ id string }
 // or out of a split as the pane beside it closes. It grows or shrinks from
 // where it showed (ElementTransition.Match). The terminal inside keeps its
 // grid until the move ends (holdLeases), so the pane is resized once, at
-// the end. A split grows the new pane out of the old one's edge instead
-// (layoutNode), and a pane that comes into view fades in (paneArrival).
+// the end. The split tree's panes move by their rectangles instead
+// (tiles.go).
 func paneTransition(id string) ui.ElementTransition {
 	return ui.ElementTransition{Animation: &motionLayout, Colors: true, Match: paneMatch{id}}
 }
@@ -104,10 +104,12 @@ type motionWatch struct {
 	// this frame shows so far. arrived are those that came into view
 	// since, and when.
 	last, now map[string]bool
-	arrived   map[string]time.Time
-	// growing are the panes of a split that grows out of one of them in
-	// this frame: the split moves them, not a Match.
-	growing map[string]bool
+	// placed are the panes the tiles place in this frame (tiles.go): they
+	// move by their rectangles, not by a Match.
+	placed map[string]bool
+	// top is the pane zoomed, or the one last zoomed while it shrinks
+	// back: drawn over the others.
+	top string
 }
 
 // isNew reports whether the frame shows pane id, of the view the last
@@ -120,42 +122,19 @@ func (m *motionWatch) isNew(id string) bool { return m.last != nil && !m.last[id
 func (a *App) watchPanes(view, layout string) {
 	m := &a.motion
 	if view != m.view {
-		m.last, m.arrived = nil, nil
+		m.last, m.top = nil, ""
 	} else {
 		m.last = m.now
 		if layout != m.layout {
 			holdLeases(motionLayout.Duration + 40*time.Millisecond)
 		}
 	}
-	m.view, m.layout, m.now, m.growing = view, layout, map[string]bool{}, nil
+	m.view, m.layout, m.now, m.placed = view, layout, map[string]bool{}, map[string]bool{}
 }
 
-// paneArrival returns how far a pane's card has come into view, 0 to 1:
-// 1 for a pane the last frame showed too, as the cards of a session shown
-// anew. A pane split off or opened, or shown again after zoom, fades in
-// and grows a little to its size.
-func (a *App) paneArrival(c *ui.Context, id string) float32 {
-	m := &a.motion
+// notePane notes that the frame shows pane id.
+func (m *motionWatch) notePane(id string) {
 	if m.now != nil {
 		m.now[id] = true
 	}
-	if m.last != nil && !m.last[id] {
-		if m.arrived == nil {
-			m.arrived = map[string]time.Time{}
-		}
-		if _, ok := m.arrived[id]; !ok {
-			m.arrived[id] = c.Now()
-		}
-	}
-	at, ok := m.arrived[id]
-	if !ok {
-		return 1
-	}
-	k := float32(c.Now().Sub(at)) / float32(motionBase.Duration)
-	if k >= 1 || c.Preferences().ReduceMotion {
-		delete(m.arrived, id)
-		return 1
-	}
-	c.AnimationFrame()
-	return easeOut(max(k, 0))
 }

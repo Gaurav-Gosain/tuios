@@ -84,9 +84,7 @@ func (a *App) arranged(c *ui.Context, pal *palette, bar ui.TitleBar, shown float
 	area.Children(func() {
 		if s.Layout != nil {
 			// The split tree under the panes floating over it.
-			ui.Column(c.Key("tree")).Absolute().Left(0).Top(0).Right(0).Bottom(0).AlignItems(ui.Stretch).Children(func() {
-				a.layoutNode(c, pal, bar, shown, s, s.Layout, "", true, true, right)
-			})
+			a.tiled(c, pal, bar, shown, s, right)
 		}
 		for _, id := range order {
 			p := s.PaneByID(id)
