@@ -25,9 +25,9 @@ func (a *App) browse(h *host, r *proto.BrowserRequest, answer func(*proto.Browse
 	fail := func(format string, args ...any) { answer(nil, fmt.Errorf(format, args...)) }
 	if !a.remoteControl(h) {
 		if h.remote() {
-			fail("Remote Control of %s is off: turn it on in Kero's Settings › Hosts", h.name)
+			fail("Remote Control of %s is off: turn it on in guios's Settings › Hosts", h.name)
 		} else {
-			fail("Remote Control is off: turn it on in Kero's Settings › Agents")
+			fail("Remote Control is off: turn it on in guios's Settings › Agents")
 		}
 		return
 	}
@@ -50,7 +50,7 @@ func (a *App) browse(h *host, r *proto.BrowserRequest, answer func(*proto.Browse
 	// sessions have no business with: they stay on this machine.
 	if r.Op == "cookies" {
 		if h.remote() {
-			fail("cookies stay on this machine: kero browser cookies works in its own sessions, not %s's", h.name)
+			fail("cookies stay on this machine: browser cookies work in its own sessions, not %s's", h.name)
 			return
 		}
 		go func() { answer(cookies(r.Text, r.Domain, r.Cookies)) }()
@@ -159,7 +159,7 @@ func (a *App) browse(h *host, r *proto.BrowserRequest, answer func(*proto.Browse
 			case err != nil:
 				return nil, err
 			case len(png) == 0:
-				return nil, fmt.Errorf("pane %s has no picture: show it with kero focus %s, then try again", r.Pane, r.Pane)
+				return nil, fmt.Errorf("pane %s has no picture: show it in guios, then try again", r.Pane, r.Pane)
 			}
 			return &proto.BrowserResult{PNG: png}, nil
 		})

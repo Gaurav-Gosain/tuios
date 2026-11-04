@@ -39,7 +39,7 @@ func (a *App) hostsPage(c *ui.Context, pal *palette) {
 			a.hostRow(c, pal, h)
 		}
 	})
-	docLink(c, pal, "hosts-docs", locales.SetHostsDocs(), "https://kero.sh/docs/remote")
+	docLink(c, pal, "hosts-docs", locales.SetHostsDocs(), "https://tuios.dev/docs")
 	settingsGroup(c, pal, locales.SetHostAdd(), locales.SetHostAddDetail(), func() {
 		d := &a.ss.host
 		ui.Row(c).Padding(10, 0).Gap(8).AlignItems(ui.Center).Children(func() {

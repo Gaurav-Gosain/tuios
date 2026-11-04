@@ -50,7 +50,7 @@ const faviconMaxAge = 7 * 24 * time.Hour
 // faviconDir is where sites' icons are kept: the user's cache directory,
 // as they can always be downloaded again, else kero's.
 func faviconDir() string {
-	if os.Getenv("KERO_HOME") == "" {
+	if os.Getenv("GUIOS_HOME") == "" {
 		if base, err := os.UserCacheDir(); err == nil {
 			return filepath.Join(base, proto.Name(), "favicons")
 		}

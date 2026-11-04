@@ -176,7 +176,7 @@ func (h *host) ahead() bool {
 // relaunchedEnv names the version of kerod the app relaunched for, which
 // the app it starts again inherits: should the app on disk be no newer
 // after all, it relaunches once, not on and on.
-const relaunchedEnv = "KERO_RELAUNCHED_FOR"
+const relaunchedEnv = "GUIOS_RELAUNCHED_FOR"
 
 // relaunchForKerod relaunches the app into a newer Kero that this
 // machine's kerod runs, as after Kero on another machine updated the app
@@ -321,7 +321,7 @@ func (a *App) connectHost(h *host) {
 
 // appClientName says what the app is, for kero clients on a host.
 func appClientName() string {
-	s := "Kero"
+	s := "guios"
 	if v := mygo.App.Version(); v != "" {
 		s += " " + v
 	}

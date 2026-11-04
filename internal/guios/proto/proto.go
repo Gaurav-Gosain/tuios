@@ -618,9 +618,9 @@ func Home() string {
 // the installed Kero.
 func Name() string {
 	if mygo.IsDev() {
-		return "kero-dev"
+		return "guios-dev"
 	}
-	return "kero"
+	return "guios"
 }
 
 // Dir returns kero's directory: $KERO_HOME, else
@@ -628,7 +628,7 @@ func Name() string {
 // %AppData%\kero on Windows), of Name. The app, the daemon and the CLI of
 // a build share it.
 func Dir() string {
-	if d := os.Getenv("KERO_HOME"); d != "" {
+	if d := os.Getenv("GUIOS_HOME"); d != "" {
 		return d
 	}
 	base, err := os.UserConfigDir()

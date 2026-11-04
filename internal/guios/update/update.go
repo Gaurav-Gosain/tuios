@@ -29,12 +29,13 @@ import (
 	"time"
 )
 
-// PublicKey checks Kero's releases: mygo.json's updates.publicKey, whose
-// private key signs the app's updates and the server build's archives.
-const PublicKey = "WzJsOGNIuf6mcEqo5ff8jub+NoQQOEk4JXreLPYjgyQ="
+// PublicKey checks guios's releases. guios has none yet, so nothing is
+// trusted: an update or a host install is refused until guios signs its own.
+const PublicKey = ""
 
-// Repo is the GitHub repository of Kero's releases.
-const Repo = "egoist/kero"
+// Repo is the GitHub repository of guios's releases. Empty until guios
+// publishes its own; $GUIOS_RELEASES names a mirror for tests.
+const Repo = ""
 
 // maxArchive bounds an archive's download.
 const maxArchive = 256 << 20
@@ -64,7 +65,7 @@ func exe(goos string) string {
 // releases is where the releases are: $KERO_RELEASES, for tests and
 // mirrors, else GitHub's.
 func releases() string {
-	if r := os.Getenv("KERO_RELEASES"); r != "" {
+	if r := os.Getenv("GUIOS_RELEASES"); r != "" {
 		return strings.TrimSuffix(r, "/")
 	}
 	return "https://github.com/" + Repo + "/releases/download"

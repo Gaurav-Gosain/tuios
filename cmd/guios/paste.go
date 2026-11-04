@@ -155,7 +155,7 @@ func pastedPath(h *host, p string) string {
 
 // pasteDir is where the images pasted into panes are kept, as files a
 // program takes by their paths. A var for tests.
-var pasteDir = func() string { return filepath.Join(os.TempDir(), "kero-paste") }
+var pasteDir = func() string { return filepath.Join(os.TempDir(), "guios-paste") }
 
 // pasteKeep is how long a pasted image's file stays: an agent may come
 // back to the path long after the paste.

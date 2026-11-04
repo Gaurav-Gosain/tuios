@@ -623,7 +623,7 @@ func adListDetail(src adblock.Source) string {
 
 func (a *App) updatesGroup(c *ui.Context, pal *palette) {
 	u := &a.ss.updates
-	version := "Kero " + mygo.App.Version()
+	version := "guios " + mygo.App.Version()
 	switch {
 	case !u.enabled:
 		version += locales.SetVersionNoUpdate()
@@ -952,7 +952,7 @@ func (a *App) terminalPreview(c *ui.Context, pal *palette) {
 	box.Children(func() {
 		// Nerd Fonts' folder and branch icons: fonts without them show
 		// boxes, which is worth knowing before picking one.
-		line(ui.Span{Text: "\uf07b ~/dev/kero ", Color: th.Palette[4]}, ui.Span{Text: "\ue0a0 main ", Color: th.Palette[5]}, ui.Span{Text: "❯ ", Color: th.Palette[2]}, ui.Span{Text: "git status", Color: th.Foreground})
+		line(ui.Span{Text: "\uf07b ~/dev/tuios ", Color: th.Palette[4]}, ui.Span{Text: "\ue0a0 main ", Color: th.Palette[5]}, ui.Span{Text: "❯ ", Color: th.Palette[2]}, ui.Span{Text: "git status", Color: th.Foreground})
 		line(ui.Span{Text: "modified:   ", Color: th.Foreground}, ui.Span{Text: "settings_view.go", Color: th.Palette[1]})
 		line(ui.Span{Text: "func ", Color: th.Palette[5]}, ui.Span{Text: "main", Color: th.Palette[4]}, ui.Span{Text: "() { x := a != b && c >= d => ok }", Color: th.Foreground})
 		ui.Row(c).Gap(4).Margin(10, 0, 0, 0).Children(func() {
@@ -1046,7 +1046,7 @@ func (a *App) notificationsPage(c *ui.Context, pal *palette) {
 		settingRow(c, pal, locales.SetDockBounce(), locales.SetDockBounceDetail(), func() { toggle(c.Key("nbo"), &s.BounceDock, pal) })
 	})
 	if button(c, "test-notif", locales.SetTestNotification(), "", false, pal) {
-		n := mygo.NewNotification(mygo.NotificationOptions{Title: "Kero", Body: locales.SetTestNotificationBody(), Silent: !s.NotifySound})
+		n := mygo.NewNotification(mygo.NotificationOptions{Title: "guios", Body: locales.SetTestNotificationBody(), Silent: !s.NotifySound})
 		go func() {
 			if err := n.Show(); err != nil {
 				a.update(func() {
@@ -1067,7 +1067,7 @@ func (a *App) agentsPage(c *ui.Context, pal *palette) {
 			toggle(c.Key("remote"), &s.RemoteControl, pal)
 		})
 	})
-	codeBlock(c, pal, "kero do pane.split.down\nkero do session.attention\nkero actions        # what kero do runs")
+	codeBlock(c, pal, "tuios new-window\ntuios list-agents\ntuios --help        # every command")
 	settingsGroup(c, pal, locales.SetCli(), locales.SetCliDetail(), func() {
 		detail := locales.SetCliNotInstalled()
 		if a.ss.cliPath != "" {
@@ -1110,7 +1110,7 @@ func (a *App) agentsPage(c *ui.Context, pal *palette) {
 		}
 	})
 	settingsGroup(c, pal, locales.SetProgramStatus(), locales.SetProgramStatusDetail(), nil)
-	codeBlock(c, pal, "kero report working \"Deploying\" --progress 40\nkero report blocked \"Approve the migration?\" --kind permission\nkero report done \"Deployed\"")
+	codeBlock(c, pal, "tuios status working --msg \"Deploying\" --progress 40\ntuios status blocked --kind permission --msg \"Approve the migration?\"\ntuios status done --msg \"Deployed\"")
 }
 
 // docLink opens a page of Kero's documentation in the browser: the

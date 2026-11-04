@@ -69,8 +69,8 @@ func main() {
 func runApp() {
 	// Started from a pane, as Kero Dev by `mygo dev` in the installed Kero:
 	// the pane's variables name its kerod, not this build's.
-	if os.Getenv("KERO_PANE") != "" {
-		for _, k := range []string{"KERO_SOCKET", "KERO_SESSION", "KERO_PANE"} {
+	if os.Getenv("TUIOS_PANE_ID") != "" {
+		for _, k := range []string{"TUIOS_SESSION", "TUIOS_PANE_ID", "TUIOS_WINDOW"} {
 			os.Unsetenv(k)
 		}
 	}
@@ -78,7 +78,8 @@ func runApp() {
 		return
 	}
 	cli.SyncSkill()
-	// Updates from Kero's GitHub releases, in a window of native UI.
+	// The updater's menu and settings need the plugin. With no updates
+	// in mygo.json it checks nothing: guios has no signed releases yet.
 	mygo.Use(native.Plugin)
 	a := newApp()
 	loadFonts()
@@ -146,7 +147,7 @@ func runApp() {
 // closing it left Kero running in the menu bar or the notification area.
 func (a *App) openWindow() {
 	a.win = mygo.NewWindow(framed(mygo.WindowOptions{
-		Title:     "Kero",
+		Title:     "guios",
 		Width:     1180,
 		Height:    760,
 		MinWidth:  560,

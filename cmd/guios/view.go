@@ -903,7 +903,7 @@ func (a *App) card(c *ui.Context, pal *palette, bar ui.TitleBar, shown float32) 
 					iconButton(c, "new-session-2", plusIcon, a.tip(locales.ActionNewSession(), "session.new"), pal, func() { a.newSession("") })
 				})
 			}
-			ui.Text(c, "Kero").FontSize(14).FontWeight(600).TextColor(pal.text)
+			ui.Text(c, "guios").FontSize(14).FontWeight(600).TextColor(pal.text)
 			ui.Spacer(c)
 			a.controlsRoom(c, 0)
 		})
@@ -957,7 +957,7 @@ func (a *App) emptyState(c *ui.Context, pal *palette) {
 		})
 		ui.Column(c).Margin(40, 0, 0, 0).Padding(14, 16).Gap(6).Radius(10).Background(pal.chip).MaxWidth(420).Children(func() {
 			ui.Text(c, locales.EmptyForAgents()).FontSize(11.5).FontWeight(600).TextColor(pal.textMuted)
-			ui.Text(c, "kero new -n review -- claude\nkero prompt review \"run the tests and fix them\"\nkero wait review && kero read review").
+			ui.Text(c, "tuios start-agent claude\ntuios send-text \"run the tests and fix them\"\ntuios list-agents").
 				Font("monospace").FontSize(12).TextColor(pal.text).LineHeight(1.5).Selectable()
 		})
 	})

@@ -48,6 +48,8 @@ type windowRow struct {
 	Focused     bool             `json:"focused"`
 	Minimized   bool             `json:"minimized"`
 	Workspace   int              `json:"workspace"`
+	X           int              `json:"x"`
+	Y           int              `json:"y"`
 	Agent       string           `json:"agent_state"`
 	AgentMsg    string           `json:"agent_message"`
 	AgentKind   string           `json:"agent_kind"`
@@ -142,16 +144,27 @@ func (k *stateKeeper) build() (*proto.State, error) {
 			continue
 		}
 		var wl struct {
-			Windows []windowRow `json:"windows"`
-			Focus   string      `json:"focused_window_id"`
+			Windows   []windowRow `json:"windows"`
+			Focus     string      `json:"focused_window_id"`
+			Workspace int         `json:"current_workspace"`
+			Shell     string      `json:"shell"`
 		}
 		_ = json.Unmarshal(wraw, &wl)
 		ks := proto.Session{ID: s.ID, Project: project, Name: s.Name, Focus: wl.Focus}
+		// The panes of the workspace the session shows. The others wait for
+		// workspaces in guios (K2).
+		var shown []windowRow
 		for _, w := range wl.Windows {
 			paneSession[w.ID] = s.ID
-			ks.Panes = append(ks.Panes, k.pane(w))
+			if w.Minimized || (wl.Workspace != 0 && w.Workspace != wl.Workspace) {
+				continue
+			}
+			shown = append(shown, w)
+			p := k.pane(w)
+			p.Shell = wl.Shell
+			ks.Panes = append(ks.Panes, p)
 		}
-		ks.Layout = k.layoutFor(s.ID, ks.Panes, wl.Focus)
+		ks.Layout = k.layoutFor(s.ID, shown, wl.Focus)
 		if i := proto.Lead(ks.Panes, ks.Focus); i >= 0 && i < len(ks.Panes) {
 			ks.Pane = ks.Panes[i]
 			ks.Lead = ks.Panes[i].ID
@@ -189,6 +202,11 @@ func (k *stateKeeper) pane(w windowRow) proto.Pane {
 		ID: w.ID, Title: title, Dir: w.Cwd, Cols: w.Width, Rows: w.Height, PID: w.PID,
 		Process: w.Foreground, Agent: w.Harness, Message: w.AgentMsg, Kind: w.AgentKind, Progress: -1,
 		Status: proto.Idle, Since: w.AgentAt / int64(time.Millisecond),
+	}
+	// A pane named by the person or its program shows that name: kero
+	// shows a pane's title while a program runs in it.
+	if p.Process == "" && title != "" && !strings.HasPrefix(title, "Terminal ") && !looksLikePrompt(title) {
+		p.Process = title
 	}
 	switch w.Agent {
 	case "working":
@@ -232,15 +250,39 @@ func (k *stateKeeper) seen(sid string) {
 	}
 }
 
-// layoutFor keeps the session's split tree in step with its panes: a new
-// pane goes to the right of the focused one, a gone one leaves the tree.
-func (k *stateKeeper) layoutFor(sid string, panes []proto.Pane, focus string) *proto.Layout {
+// layoutFor keeps the session's split tree in step with its panes. A tree
+// the app holds for exactly these panes stays, with the sizes the person
+// gave it. Otherwise the tree is cut from where the tuios layout put each
+// pane, so guios starts from the session's own tiling.
+func (k *stateKeeper) layoutFor(sid string, wins []windowRow, focus string) *proto.Layout {
 	k.mu.Lock()
 	defer k.mu.Unlock()
 	l := k.layouts[sid]
 	have := map[string]bool{}
-	for _, p := range panes {
-		have[p.ID] = true
+	for _, w := range wins {
+		have[w.ID] = true
+	}
+	same := l != nil && len(l.Panes()) == len(wins)
+	if same {
+		for _, id := range l.Panes() {
+			if !have[id] {
+				same = false
+				break
+			}
+		}
+	}
+	if !same {
+		if t := cutRects(wins); t != nil {
+			k.layouts[sid] = t
+			if t.Leaf() {
+				return nil
+			}
+			return t.Clone()
+		}
+	}
+	panes := make([]proto.Pane, len(wins))
+	for i, w := range wins {
+		panes[i] = proto.Pane{ID: w.ID}
 	}
 	if l != nil {
 		for _, id := range l.Panes() {
@@ -412,4 +454,83 @@ func firstOf(s ...string) string {
 		}
 	}
 	return ""
+}
+
+// cutRects builds a split tree from the panes' rectangles, as a guillotine
+// cut: a column or row line that no pane crosses splits them in two, and
+// each side is cut again. It returns nil when the panes overlap (floating
+// windows), and the caller falls back to splitting beside the focus.
+func cutRects(wins []windowRow) *proto.Layout {
+	if len(wins) == 0 {
+		return nil
+	}
+	if len(wins) == 1 {
+		return &proto.Layout{Pane: wins[0].ID}
+	}
+	x0, y0, x1, y1 := wins[0].X, wins[0].Y, wins[0].X+wins[0].Width, wins[0].Y+wins[0].Height
+	for _, w := range wins[1:] {
+		x0, y0 = min(x0, w.X), min(y0, w.Y)
+		x1, y1 = max(x1, w.X+w.Width), max(y1, w.Y+w.Height)
+	}
+	try := func(row bool) *proto.Layout {
+		var cuts []int
+		for _, w := range wins {
+			if row {
+				cuts = append(cuts, w.X+w.Width)
+			} else {
+				cuts = append(cuts, w.Y+w.Height)
+			}
+		}
+		sort.Ints(cuts)
+		for _, c := range cuts {
+			var a, b []windowRow
+			ok := true
+			for _, w := range wins {
+				lo, hi := w.Y, w.Y+w.Height
+				if row {
+					lo, hi = w.X, w.X+w.Width
+				}
+				switch {
+				case hi <= c+1:
+					a = append(a, w)
+				case lo >= c:
+					b = append(b, w)
+				default:
+					ok = false
+				}
+				if !ok {
+					break
+				}
+			}
+			if !ok || len(a) == 0 || len(b) == 0 {
+				continue
+			}
+			la, lb := cutRects(a), cutRects(b)
+			if la == nil || lb == nil {
+				return nil
+			}
+			span := float64(y1 - y0)
+			at := float64(c - y0)
+			if row {
+				span, at = float64(x1-x0), float64(c-x0)
+			}
+			ratio := 0.5
+			if span > 0 {
+				ratio = at / span
+			}
+			return &proto.Layout{Row: row, Ratio: ratio, A: la, B: lb}
+		}
+		return nil
+	}
+	if l := try(true); l != nil {
+		return l
+	}
+	return try(false)
+}
+
+// looksLikePrompt reports a shell's own title, user@host:dir, which names
+// no program.
+func looksLikePrompt(t string) bool {
+	at, colon := strings.IndexByte(t, '@'), strings.IndexByte(t, ':')
+	return at > 0 && colon > at
 }

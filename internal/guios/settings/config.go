@@ -24,7 +24,7 @@ import (
 // $XDG_CONFIG_HOME/kero/config, else ~/.config/kero/config; kero-dev in
 // place of kero for a development build (proto.Name).
 func ConfigPath() string {
-	if p := os.Getenv("KERO_CONFIG"); p != "" {
+	if p := os.Getenv("GUIOS_CONFIG"); p != "" {
 		return p
 	}
 	base := os.Getenv("XDG_CONFIG_HOME")

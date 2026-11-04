@@ -70,7 +70,7 @@
   "toastCopiedToClipboard": "Copied to clipboard",
   "toastSaveSettingsFailed": "Couldn’t save the settings: {error}",
   "toastPasteImageFailed": "Couldn’t paste the image: {error}. Try again, or drop the image file on the pane.",
-  "toastPasteImageDenied": "Couldn’t paste the image: Kero can’t write to {dir}. Make it writable, or drop the image file on the pane.",
+  "toastPasteImageDenied": "Couldn’t paste the image: guios can’t write to {dir}. Make it writable, or drop the image file on the pane.",
   "toastPasteImageDiskFull": "Couldn’t paste the image: the disk is full. Free some space and try again.",
   "toastPasteClipboardUnreadable": "Couldn’t read the clipboard. Copy it again and paste.",
   "toastPasteImageUnsupported": "Couldn’t paste the image: {format} isn’t supported. Copy it as PNG or JPEG, or drop the image file on the pane.",
@@ -84,8 +84,8 @@
   },
   "toastNothingNeedsYou": "Nothing needs you",
   "cliInstallFailed": "Couldn’t install the command line tool",
-  "cliInstalledIn": "Installed the kero command in {dir}",
-  "cliAddedToPath": "Added the kero command to your PATH: new terminals have it",
+  "cliInstalledIn": "Installed the tuios command in {dir}",
+  "cliAddedToPath": "Added the tuios command to your PATH: new terminals have it",
   "notifyNeedsYouTitle": "{name} needs you",
   "notifyWaitingBody": "Waiting for your answer",
   "notifyFailedTitle": "{name} failed",
@@ -116,7 +116,7 @@
   "confirmClosePaneTitle": "Close this pane?",
   "confirmClosePaneDetail": "{process} is still running in it. Closing the pane ends it.",
   "confirmQuitAllTitle": "Quit and end all sessions?",
-  "confirmQuitAllDetail": "{count, plural, one {Kero keeps sessions running when it quits. This ends the # session, with what runs in it.} other {Kero keeps sessions running when it quits. This ends all # of them, with what runs in them.}}",
+  "confirmQuitAllDetail": "{count, plural, one {guios keeps sessions running when it quits. This ends the # session, with what runs in it.} other {guios keeps sessions running when it quits. This ends all # of them, with what runs in them.}}",
   "@confirmQuitAllDetail": {
     "placeholders": {
       "count": {
@@ -135,7 +135,7 @@
       }
     }
   },
-  "restartStaleDetail": "The service that runs your sessions is still Kero {was}, and this is Kero {version}. {running}: restarting ends them, and sessions start again where they were, with their history.",
+  "restartStaleDetail": "The service that runs your sessions is still guios {was}, and this is guios {version}. {running}: restarting ends them, and sessions start again where they were, with their history.",
   "@restartStaleDetail": {
     "placeholders": {
       "was": {
@@ -200,7 +200,7 @@
     }
   },
   "footerGoToIt": "Go to it",
-  "footerServiceTip": "Sessions run in kerod, in the background: they keep running when you quit kero.",
+  "footerServiceTip": "Sessions run in the tuios daemon, in the background: they keep running when you quit guios.",
   "statusConnecting": "Connecting…",
   "statusConnectingLabel": "Connecting",
   "statusDisconnected": "Disconnected",
@@ -209,12 +209,12 @@
   "statusExited": "Exited",
   "statusFailed": "Failed",
   "statusDone": "Done",
-  "updateRestartTip": "Kero was updated: restart the background service to run the new version",
-  "updatedTitle": "Kero was updated",
+  "updateRestartTip": "guios was updated: restart the background service to run the new version",
+  "updatedTitle": "guios was updated",
   "updatedDetail": "The background service that runs your sessions is from another version. Restart it: your sessions start again where they were, with their history.",
-  "connCantReach": "Can’t reach kerod",
+  "connCantReach": "Can’t reach the tuios daemon",
   "emptyTitle": "Start a session",
-  "emptyDetail": "Sessions keep running in the background — quit Kero and come back to everything just as you left it.",
+  "emptyDetail": "Sessions keep running in the background — quit guios and come back to everything just as you left it.",
   "emptyForAgents": "For agents",
   "paletteSettingsPage": "Settings: {page}",
   "paletteRestartService": "Restart Background Service",
@@ -227,7 +227,7 @@
   "paletteConversations": "Recent Conversations",
   "paletteConversationsLabel": "Resume Conversation",
   "paletteConversationsPlaceholder": "Find a conversation to resume…",
-  "paletteNoConversations": "No conversations yet. Coding agents’ conversations show here once Kero’s skill is set up for them.",
+  "paletteNoConversations": "No conversations yet. Coding agents’ conversations show here once guios’s skill is set up for them.",
   "paletteConversationRunning": "running",
   "agoNow": "now",
   "agoMinutes": "{n}m",
@@ -308,7 +308,7 @@
       }
     }
   },
-  "svcStale": " · still an earlier Kero: restart it to update",
+  "svcStale": " · still an earlier guios: restart it to update",
   "durUnderMinute": "under a minute",
   "durMinutes": "{n} min",
   "@durMinutes": {
@@ -339,7 +339,7 @@
   "settingsSearchLabel": "Search settings",
   "settingsClearSearch": "Clear the search",
   "setSessions": "Sessions",
-  "setSessionsDetail": "Sessions keep running in the background when Kero quits; {action} ends them.",
+  "setSessionsDetail": "Sessions keep running in the background when guios quits; {action} ends them.",
   "setNewSessionsStartIn": "New sessions start in",
   "setDirCurrent": "Current Folder",
   "setDirProject": "Project",
@@ -360,15 +360,15 @@
   "setRestoreSessions": "Restore sessions after a restart",
   "setRestoreSessionsDetail": "If the background service stops, as when the Mac restarts, sessions start again in their folders, under their history.",
   "setResumeAgents": "Resume agents",
-  "setResumeAgentsDetail": "Claude Code, Codex, Pi and OpenCode pick up their conversation where it was, once Kero’s skill is set up for them in Agents.",
+  "setResumeAgentsDetail": "Claude Code, Codex, Pi and OpenCode pick up their conversation where it was, once guios’s skill is set up for them in Agents.",
   "setStartup": "Startup",
-  "setOpenAtLogin": "Open Kero at login",
+  "setOpenAtLogin": "Open guios at login",
   "setLoginFailed": "Couldn’t change it: {error}",
   "setAppIcon": "Show app icon",
   "setAppIconBoth": "Dock and menu bar",
   "setAppIconDock": "Dock only",
   "setAppIconMenuBar": "Menu bar only",
-  "setAppIconDetail": "Closing the window keeps Kero running in the menu bar.",
+  "setAppIconDetail": "Closing the window keeps guios running in the menu bar.",
   "trayOpen": "Open {app}",
   "setVersionNoUpdate": " · this copy can’t update itself",
   "setVersionNotChecked": " · not checked yet",
@@ -377,9 +377,9 @@
   "setVersion": "Version",
   "setCheckForUpdates": "Check for Updates",
   "setAutoCheck": "Check for updates automatically",
-  "setAutoCheckDetail": "Once a day, while Kero is open.",
+  "setAutoCheckDetail": "Once a day, while guios is open.",
   "setAutoInstall": "Download and install updates automatically",
-  "setAutoInstallDetail": "They take effect the next time Kero opens.",
+  "setAutoInstallDetail": "They take effect the next time guios opens.",
   "setAppearance": "Appearance",
   "setThemeSystem": "System",
   "setThemeLight": "Light",
@@ -403,7 +403,7 @@
   "bgPlain": "Plain",
   "setText": "Text",
   "setFont": "Font",
-  "setFontDetail": "JetBrains Mono with Nerd Fonts’ icons comes with Kero. Any installed monospaced font works; names separated by commas are tried in order.",
+  "setFontDetail": "JetBrains Mono with Nerd Fonts’ icons comes with guios. Any installed monospaced font works; names separated by commas are tried in order.",
   "setFontSystem": "System",
   "setUseFont": "Use “{name}”",
   "setSize": "Size",
@@ -464,7 +464,7 @@
   "setScrollback": "Scrollback",
   "setScrollbackDetail": "How much output each pane keeps, also while no window shows it.",
   "setEnvironment": "Environment",
-  "setEnvironmentDetail": "Added to every pane’s, over what kero sets (TERM, KERO_SESSION…).",
+  "setEnvironmentDetail": "Added to every pane’s, over what guios sets (TERM, TUIOS_SESSION…).",
   "setNotifyUnpackaged": "This build can’t post notifications: macOS shows those of packaged apps only.",
   "setNotifyWhen": "Notify me when",
   "setNotifyWaiting": "A session needs me",
@@ -484,29 +484,29 @@
   "setNotifyError": "Couldn’t notify: {error}",
   "setRemoteControl": "Remote Control",
   "setRemoteControlRow": "Let commands drive this window",
-  "setRemoteControlDetail": "kero do and kero focus run the app’s actions, as its menus do: splitting, switching sessions, opening the palette. kero browser clicks, types and reads in browser panes.",
+  "setRemoteControlDetail": "tuios do and tuios focus run the app’s actions, as its menus do: splitting, switching sessions, opening the palette. tuios browser clicks, types and reads in browser panes.",
   "setCli": "Command line tool",
-  "setCliDetail": "Inside Kero, every pane has the kero command on its PATH already.",
-  "setCliNotInstalled": "Not installed: other terminals don’t know the kero command.",
-  "setCliRow": "kero in your terminal",
+  "setCliDetail": "Inside guios, every pane has the tuios command on its PATH already.",
+  "setCliNotInstalled": "Not installed: other terminals don’t know the tuios command.",
+  "setCliRow": "guios in your terminal",
   "setSkills": "Skills for agents",
   "setSkillsDetail": "Teaches agents to start sessions and panes, drive them, wait for them and report their status, and tells them, as they start, which session they’re in.",
   "setSkillInstalled": "Installed",
-  "setSkillOutdated": "Installed, from an older Kero",
+  "setSkillOutdated": "Installed, from an older guios",
   "setSkillMissing": "Not installed",
   "setProgramStatus": "Program status",
   "setProgramStatusDetail": "Programs report what they do with OSC 7501, Superlogical’s program status protocol: the sidebar shows it, and notifies you.",
   "setConfiguration": "Configuration",
-  "setConfigurationDetail": "Every setting here is a line of this file, as Ghostty’s: edit it in any editor, and what you save applies at once. kero config show lists every key.",
+  "setConfigurationDetail": "Every setting here is a line of this file, as Ghostty’s: edit it in any editor, and what you save applies at once. tuios config show lists every key.",
   "setConfigFile": "Config file",
   "setBackgroundService": "Background service",
-  "setBackgroundServiceDetail": "kerod runs your sessions: quitting kero leaves it running.",
+  "setBackgroundServiceDetail": "the tuios daemon runs your sessions: quitting guios leaves it running.",
   "setLog": "Log",
   "setData": "Data",
   "setDataDetail": "Settings, sessions and their scrollback.",
   "setFolder": "Folder",
   "setReset": "Reset all settings",
-  "setResetDetail": "Back to how Kero comes, shortcuts included.",
+  "setResetDetail": "Back to how guios comes, shortcuts included.",
   "setResetButton": "Reset…",
   "setResetTitle": "Reset all settings?",
   "setResetConfirmDetail": "Your sessions stay.",
@@ -625,7 +625,7 @@
   "pageBrowser": "Browser",
   "setAdBlocking": "Ad blocking",
   "setBlockAds": "Block ads",
-  "setBlockAdsDetail": "Blocks ads and trackers with filter lists, which Kero downloads and keeps up to date.",
+  "setBlockAdsDetail": "Blocks ads and trackers with filter lists, which guios downloads and keeps up to date.",
   "setAdListEasylist": "Ads, the list most blockers start from.",
   "setAdListEasyprivacy": "Trackers and analytics.",
   "setAdListPeterLowe": "Ad and tracker servers, by their domains.",
@@ -692,7 +692,7 @@
       }
     }
   },
-  "hostNotInstalled": "Kero isn't installed on {host}",
+  "hostNotInstalled": "guios isn't installed on {host}",
   "@hostNotInstalled": {
     "placeholders": {
       "host": {
@@ -708,7 +708,7 @@
       }
     }
   },
-  "hostAuthHint": "Kero signs in with your SSH keys and agent, and never asks for a password. To trust a host's key, run ssh {address} once in a terminal.",
+  "hostAuthHint": "guios signs in with your SSH keys and agent, and never asks for a password. To trust a host's key, run ssh {address} once in a terminal.",
   "@hostAuthHint": {
     "placeholders": {
       "address": {
@@ -716,7 +716,7 @@
       }
     }
   },
-  "hostAbout": "Kero {version} on {platform} · {hostname}, as {user}",
+  "hostAbout": "guios {version} on {platform} · {hostname}, as {user}",
   "@hostAbout": {
     "placeholders": {
       "version": {
@@ -733,7 +733,7 @@
       }
     }
   },
-  "hostConnected": "Connected: Kero {version} on {platform} · {hostname}, as {user}",
+  "hostConnected": "Connected: guios {version} on {platform} · {hostname}, as {user}",
   "@hostConnected": {
     "placeholders": {
       "version": {
@@ -778,8 +778,8 @@
       }
     }
   },
-  "hostInstall": "Install Kero…",
-  "hostInstalling": "Installing Kero on {host}…",
+  "hostInstall": "Install guios…",
+  "hostInstalling": "Installing guios on {host}…",
   "@hostInstalling": {
     "placeholders": {
       "host": {
@@ -787,7 +787,7 @@
       }
     }
   },
-  "hostInstalled": "Installed Kero on {host}",
+  "hostInstalled": "Installed guios on {host}",
   "@hostInstalled": {
     "placeholders": {
       "host": {
@@ -795,7 +795,7 @@
       }
     }
   },
-  "hostInstallFailed": "Couldn't install Kero on {host}: {error}",
+  "hostInstallFailed": "Couldn't install guios on {host}: {error}",
   "@hostInstallFailed": {
     "placeholders": {
       "host": {
@@ -806,7 +806,7 @@
       }
     }
   },
-  "hostUpdateAction": "Update Kero on {host}…",
+  "hostUpdateAction": "Update guios on {host}…",
   "@hostUpdateAction": {
     "placeholders": {
       "host": {
@@ -814,7 +814,7 @@
       }
     }
   },
-  "hostUpdateTitle": "Update Kero on {host} to {version}?",
+  "hostUpdateTitle": "Update guios on {host} to {version}?",
   "@hostUpdateTitle": {
     "placeholders": {
       "host": {
@@ -825,7 +825,7 @@
       }
     }
   },
-  "hostUpdateDetail": "Kero then restarts its service on {host}. Sessions there start again where they were, with their history, and the programs running in them end.",
+  "hostUpdateDetail": "guios then restarts its service on {host}. Sessions there start again where they were, with their history, and the programs running in them end.",
   "@hostUpdateDetail": {
     "placeholders": {
       "host": {
@@ -833,7 +833,7 @@
       }
     }
   },
-  "hostUpdateAppDetail": "The Kero app on {host} updates and relaunches, then restarts its service. Sessions there start again where they were, with their history, and the programs running in them end.",
+  "hostUpdateAppDetail": "The guios app on {host} updates and relaunches, then restarts its service. Sessions there start again where they were, with their history, and the programs running in them end.",
   "@hostUpdateAppDetail": {
     "placeholders": {
       "host": {
@@ -841,7 +841,7 @@
       }
     }
   },
-  "hostUpdating": "Updating Kero on {host}…",
+  "hostUpdating": "Updating guios on {host}…",
   "@hostUpdating": {
     "placeholders": {
       "host": {
@@ -849,7 +849,7 @@
       }
     }
   },
-  "hostUpdated": "{host} runs Kero {version}",
+  "hostUpdated": "{host} runs guios {version}",
   "@hostUpdated": {
     "placeholders": {
       "host": {
@@ -860,8 +860,8 @@
       }
     }
   },
-  "hostUpdateDev": "A development build of Kero can't update a host. Run a released Kero, or update the host with kero daemon update there.",
-  "hostVersionTitle": "Kero on {host} is another version",
+  "hostUpdateDev": "A development build of guios can't update a host. Run a released guios, or update the host with tuios daemon update there.",
+  "hostVersionTitle": "guios on {host} is another version",
   "@hostVersionTitle": {
     "placeholders": {
       "host": {
@@ -869,7 +869,7 @@
       }
     }
   },
-  "hostVersionDetail": "{host} runs Kero {version}, and this app is Kero {app}. Update Kero there to see and start its sessions here.",
+  "hostVersionDetail": "{host} runs guios {version}, and this app is guios {app}. Update guios there to see and start its sessions here.",
   "@hostVersionDetail": {
     "placeholders": {
       "host": {
@@ -883,7 +883,7 @@
       }
     }
   },
-  "hostDesktopDetail": "{host} runs the Kero app, version {version}, and this is Kero {app}. Update Kero on {host}, or turn on Let them update Kero there (Settings › Hosts) to update it from here.",
+  "hostDesktopDetail": "{host} runs the guios app, version {version}, and this is guios {app}. Update guios on {host}, or turn on Let them update guios there (Settings › Hosts) to update it from here.",
   "@hostDesktopDetail": {
     "placeholders": {
       "host": {
@@ -929,7 +929,7 @@
       }
     }
   },
-  "hostStaleTip": "The service on {host} still runs Kero {was}, and Kero {version} is installed there: restart it to run the new version.",
+  "hostStaleTip": "The service on {host} still runs guios {was}, and guios {version} is installed there: restart it to run the new version.",
   "@hostStaleTip": {
     "placeholders": {
       "host": {
@@ -954,7 +954,7 @@
       }
     }
   },
-  "pasteNotAFile": "Kero pastes files into a pane on another machine, not folders: {name}",
+  "pasteNotAFile": "guios pastes files into a pane on another machine, not folders: {name}",
   "@pasteNotAFile": {
     "placeholders": {
       "name": {
@@ -962,7 +962,7 @@
       }
     }
   },
-  "pasteTooLarge": "Kero pastes at most {size} MB into a pane on another machine",
+  "pasteTooLarge": "guios pastes at most {size} MB into a pane on another machine",
   "@pasteTooLarge": {
     "placeholders": {
       "size": {
@@ -999,12 +999,12 @@
     }
   },
   "setHosts": "Hosts",
-  "setHostsDetail": "Other machines whose sessions show in the sidebar after this computer's. Kero reaches them over SSH with your keys and agent, through WSL, or through kerod's listener on your tailnet, and kero -H <name> drives them from the command line.",
+  "setHostsDetail": "Other machines whose sessions show in the sidebar after this computer's. guios reaches them over SSH with your keys and agent, through WSL, or through the tuios daemon's listener on your tailnet, and tuios -H <name> drives them from the command line.",
   "setHostsNone": "No hosts",
-  "setHostsNoneDetail": "Add a machine you reach with ssh. If Kero isn't installed there, Kero offers to install it.",
+  "setHostsNoneDetail": "Add a machine you reach with ssh. If guios isn't installed there, guios offers to install it.",
   "setHostsDocs": "Setting up hosts",
   "setHostAdd": "Add a Host",
-  "setHostAddDetail": "me@devbox or ssh://me@devbox:2222 over SSH, as ssh takes it with your ~/.ssh/config; wsl://Ubuntu for a WSL distribution; http://devbox:7373 or https://devbox.tail1234.ts.net for kerod's tailnet listener.",
+  "setHostAddDetail": "me@devbox or ssh://me@devbox:2222 over SSH, as ssh takes it with your ~/.ssh/config; wsl://Ubuntu for a WSL distribution; http://devbox:7373 or https://devbox.tail1234.ts.net for the tuios daemon's tailnet listener.",
   "setHostAddressPlaceholder": "me@devbox",
   "setHostNamePlaceholder": "Name: {name}",
   "@setHostNamePlaceholder": {
@@ -1024,7 +1024,7 @@
   },
   "setHostNeedsAddress": "Type the host's address",
   "setHostRemoteControl": "Remote Control",
-  "setHostRemoteControlDetail": "Let programs on {host} show sessions and run the app's actions (kero focus, kero do)",
+  "setHostRemoteControlDetail": "Let programs on {host} show sessions and run the app's actions (tuios focus, tuios do)",
   "@setHostRemoteControlDetail": {
     "placeholders": {
       "host": {
@@ -1034,16 +1034,16 @@
   },
   "setListenTitle": "This Computer as a Host",
   "setListen": "Let other machines connect",
-  "setListenDetail": "kerod listens at this computer's Tailscale addresses, for Kero on your other machines. Only your Tailscale account may connect.",
+  "setListenDetail": "the tuios daemon listens at this computer's Tailscale addresses, for guios on your other machines. Only your Tailscale account may connect.",
   "setListenOn": "Add this computer as a host on your other machines at this address. Only your Tailscale account may connect.",
-  "setListenNoTailscale": "Tailscale isn't running here: kerod listens once it is.",
-  "setRemoteUpdates": "Let them update Kero here",
-  "setRemoteUpdatesDetail": "Kero on your other machines can update this app to its version. The app relaunches, and the programs running in its sessions end.",
+  "setListenNoTailscale": "Tailscale isn't running here: the tuios daemon listens once it is.",
+  "setRemoteUpdates": "Let them update guios here",
+  "setRemoteUpdatesDetail": "guios on your other machines can update this app to its version. The app relaunches, and the programs running in its sessions end.",
   "setHostSettingsSplit": "A host's own settings",
-  "setHostSettingsSplitDetail": "The shell, environment, scrollback and session restore of a host's sessions come from its own configuration: run kero config edit on the host. Appearance, keyboard and notifications are this app's.",
+  "setHostSettingsSplitDetail": "The shell, environment, scrollback and session restore of a host's sessions come from its own configuration: run tuios config edit on the host. Appearance, keyboard and notifications are this app's.",
   "setShellThisComputer": "These apply to this computer's sessions. Each host's come from its own configuration (Settings › Hosts).",
   "confirmQuitAllHosts": "Sessions on other machines keep running.",
-  "hostInstallTitle": "Install Kero on {host}?",
+  "hostInstallTitle": "Install guios on {host}?",
   "@hostInstallTitle": {
     "placeholders": {
       "host": {
@@ -1051,7 +1051,7 @@
       }
     }
   },
-  "hostInstallDetail": "Kero runs its install script on {host}: the server build of Kero goes in your home folder there (~/.local, or %LOCALAPPDATA% on Windows), and kerod runs as a service of yours.",
+  "hostInstallDetail": "guios runs its install script on {host}: the server build of guios goes in your home folder there (~/.local, or %LOCALAPPDATA% on Windows), and the tuios daemon runs as a service of yours.",
   "@hostInstallDetail": {
     "placeholders": {
       "host": {
@@ -1059,7 +1059,7 @@
       }
     }
   },
-  "hostLinkRefused": "Kero opens only web links of {host}, not {scheme} ones",
+  "hostLinkRefused": "guios opens only web links of {host}, not {scheme} ones",
   "@hostLinkRefused": {
     "placeholders": {
       "host": {
@@ -1070,7 +1070,7 @@
       }
     }
   },
-  "hostManualDetail": "{host} runs Kero {version}, and this app is Kero {app}. Update Kero on {host} as you installed it, then restart its service.",
+  "hostManualDetail": "{host} runs guios {version}, and this app is guios {app}. Update guios on {host} as you installed it, then restart its service.",
   "@hostManualDetail": {
     "placeholders": {
       "host": {
@@ -1084,7 +1084,7 @@
       }
     }
   },
-  "hostNewerDetail": "{host} runs Kero {version}, newer than this app's {app}. Update this app to see and start the host's sessions.",
+  "hostNewerDetail": "{host} runs guios {version}, newer than this app's {app}. Update this app to see and start the host's sessions.",
   "@hostNewerDetail": {
     "placeholders": {
       "host": {
@@ -1098,7 +1098,7 @@
       }
     }
   },
-  "hostSameAs": "This host's kerod is {other}'s, which the app shows already",
+  "hostSameAs": "This host's the tuios daemon is {other}'s, which the app shows already",
   "@hostSameAs": {
     "placeholders": {
       "other": {
@@ -1114,8 +1114,8 @@
   "browserStop": "Stop",
   "browserAddress": "Address or search",
   "worktreeTitle": "New Session in Worktree",
-  "worktreeDetailDefault": "Kero checks out a new branch from the default branch in a folder of its own, so the session’s agent works apart from the others.",
-  "worktreeDetailCurrent": "Kero checks out a new branch from the current branch in a folder of its own, so the session’s agent works apart from the others.",
+  "worktreeDetailDefault": "guios checks out a new branch from the default branch in a folder of its own, so the session’s agent works apart from the others.",
+  "worktreeDetailCurrent": "guios checks out a new branch from the current branch in a folder of its own, so the session’s agent works apart from the others.",
   "worktreeBranch": "Branch name",
   "worktreeCreate": "Create",
   "worktreeRemoveTitle": "Remove the worktree of “{name}” too?",
@@ -1158,8 +1158,8 @@
       }
     }
   },
-  "endedDeleteAllDetail": "Kero forgets them; each agent keeps its own history of the conversation.",
-  "endedSetUpSkill": "Set up Kero's skill for your agents to list their ended conversations here",
+  "endedDeleteAllDetail": "guios forgets them; each agent keeps its own history of the conversation.",
+  "endedSetUpSkill": "Set up guios's skill for your agents to list their ended conversations here",
   "actionQuickTerminal": "Quick Terminal",
   "toastGlobalShortcutFailed": "Couldn’t use {keys} for the quick terminal: {error}",
   "setShortcutGlobal": "Works in every app"

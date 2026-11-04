@@ -231,7 +231,7 @@ func (a *App) menu() *mygo.Menu {
 	// shortcuts, so they go in a menu of Kero's there, without macOS's own.
 	kero := &mygo.MenuItem{Role: mygo.RoleAppMenu, Submenu: appMenu}
 	if runtime.GOOS != "darwin" {
-		kero = &mygo.MenuItem{Label: "Kero", Submenu: []*mygo.MenuItem{a.item("settings.open"), a.item("cli.install"), updater.MenuItem(), mygo.Separator(),
+		kero = &mygo.MenuItem{Label: "guios", Submenu: []*mygo.MenuItem{a.item("settings.open"), a.item("cli.install"), mygo.Separator(),
 			{Label: locales.MenuQuit(), Accelerator: quitKeys, ToolTip: locales.MenuQuitTip(), Click: func(*mygo.MenuItem, *mygo.Window) { mygo.App.Quit() }},
 			a.item("app.quitAll")}}
 	}

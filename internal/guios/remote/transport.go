@@ -218,7 +218,7 @@ func sshArgs(a Addr) []string {
 
 // SSHCommand is the program that runs ssh: $KERO_SSH, else ssh.
 func SSHCommand() string {
-	if s := os.Getenv("KERO_SSH"); s != "" {
+	if s := os.Getenv("GUIOS_SSH"); s != "" {
 		return s
 	}
 	return "ssh"
