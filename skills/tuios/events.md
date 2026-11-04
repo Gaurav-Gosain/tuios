@@ -53,6 +53,27 @@ tuios subscribe --types transfer,transfer-progress,transfer-file
 {"seq":134,"type":"window-created","session":"work","window":"86e5e19f-...","boot_id":"9f2c41d07a3e8b65","time":1786611217427984525}
 ```
 
+For a person, `--format text` prints one readable line per event and sends
+the ack to standard error:
+
+```sh
+tuios subscribe --format text --types agent-state
+```
+
+```
+12:04:31  work api  working -> needs_input  Allow Bash?
+```
+
+`--state` keeps only the agent-state events with those new states, and sets
+`--types agent-state` when you give no `--types`. `--once` exits after the
+first event that passes the filters. `--count N` counts the same lines, gap
+lines included. `--timeout MS` stops the stream, and with `--once` or `--count`
+it exits 1 if the limit is not met:
+
+```sh
+tuios subscribe --state needs_input,errored --once --timeout 60000
+```
+
 Without `-s` it covers every session. Events start from the moment you
 subscribe, so subscribe before you start the thing you want to watch. Useful
 types: `agent-state`, `attention` (the Inbox changed), `notification` (a pane

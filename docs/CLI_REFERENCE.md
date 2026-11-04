@@ -2413,7 +2413,8 @@ tuios run -w build --json -- make lint
 
 ### `tuios subscribe`
 
-Print the daemon's event stream, one JSON object per line.
+Print the daemon's event stream, one JSON object per line. `--format text`
+prints one readable line per event instead.
 
 The first line is the subscribe ack. It carries `seq`, the last event number
 assigned when the stream went live, and `boot_id`, a random id for this daemon
@@ -2435,7 +2436,11 @@ tuios subscribe [flags]
 - `--types <list>`: Only these event types, comma-separated (default: all)
 - `--after-seq <n>`: Replay the retained events after this seq before streaming live
 - `--boot-id <id>`: The `boot_id` the `--after-seq` came with, so a daemon restart shows as a gap. Needs `--after-seq`
-- `--count <n>`: Exit after printing this many events, gap lines included (default: run until the stream ends)
+- `--format <json|text>`: Output format (default: `json`). `text` prints one readable line per event and sends the ack to standard error
+- `--state <list>`: Only `agent-state` events with these new states, comma-separated: `none`, `working`, `needs_input`, `idle`, `done`, `errored` or `unknown`. Without `--types`, it sets `--types agent-state`. Other event types and gap lines pass
+- `--count <n>`: Exit after printing this many events (default: run until the stream ends). It counts the lines that pass the filters, gap lines included
+- `--once`: Exit after printing the first event that passes the filters. It is the same as `--count 1`
+- `--timeout <ms>`: Stop after this many milliseconds (default: no limit). With `--once` or `--count`, exit 1 if the limit is not met by then
 - `--hosts`: Also print the `agent-state`, `session-created` and `session-closed` events of every linked host, each with `host` set. Without it, the only events about other machines are `attention` for their Inbox items and `host-changed`, and only when no `--session` or `--window` is given
 
 To resume after a disconnect, pass the `seq` of the last event you printed and
@@ -2447,10 +2452,31 @@ restarted), `not_retained` (your filter includes `output`, which is never
 replayed) or, on a live stream, `overflow` (you read too slowly). After a gap,
 read current state again with `tuios list-agents` or `tuios list-windows`.
 
+A text line has the local time, the session and pane, and what happened. An
+`agent-state` line shows the previous state, the new state and the message
+the agent gave. A pane shows by its name when tuios knows it, else by a short
+id. Control characters in the text are removed.
+
+```
+12:04:31  work api  working -> needs_input  Allow Bash?
+12:04:40  work api  window closed
+12:04:41  -  gap: 12 events missed (overflow). Read the current state again
+```
+
+The command reads `list-agents` once at the start for the pane names and
+states. It reads it again for each `agent-state` line it prints, for the
+message. Without these reads, a line shows only the new state.
+
 **Examples:**
 ```bash
 # Every agent state change on the daemon
 tuios subscribe --types agent-state
+
+# The same, as readable lines
+tuios subscribe --format text --types agent-state
+
+# Wait up to a minute for an agent that needs you, then exit
+tuios subscribe --format text --state needs_input,errored --once --timeout 60000
 
 # One session's window lifecycle
 tuios subscribe -s work --types window-created,window-closed
