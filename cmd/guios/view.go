@@ -644,7 +644,7 @@ func (a *App) sessionRow(c *ui.Context, pal *palette, s *proto.Session, n *int) 
 			}
 		}
 		when := func() {
-			if c.Modifiers() == ui.Cmd && index <= 9 {
+			if index <= 9 && a.cmdHeld(c) {
 				ui.Text(c, actions.Glyphs(fmt.Sprintf("CmdOrCtrl+%d", index))).FontSize(fsSmall).TextColor(pal.textMuted).FontFeatures("tnum").SingleLine().Shrink(0)
 			} else {
 				// The name gives way to these, never they to the name.
@@ -1169,4 +1169,25 @@ func (a *App) emptyState(c *ui.Context, pal *palette) {
 				Font(a.termFamily()).FontSize(fsCode).TextColor(pal.text).LineHeight(1.5).NoWrap().Selectable()
 		})
 	})
+}
+
+// cmdHintDelay is how long Cmd (Ctrl elsewhere) must be held alone before
+// the sidebar shows the keys that go to its rows. A chord pressed at once,
+// as Ctrl+D, then does not flash them for a frame.
+const cmdHintDelay = 350 * time.Millisecond
+
+// cmdHeld reports whether Cmd has been held alone for cmdHintDelay.
+func (a *App) cmdHeld(c *ui.Context) bool {
+	if c.Modifiers() != ui.Cmd {
+		a.cmdAt = time.Time{}
+		return false
+	}
+	if a.cmdAt.IsZero() {
+		a.cmdAt = c.Now()
+	}
+	if d := c.Now().Sub(a.cmdAt); d < cmdHintDelay {
+		c.After(cmdHintDelay - d)
+		return false
+	}
+	return true
 }
