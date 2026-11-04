@@ -117,7 +117,9 @@ func (a *App) agentUsage(c *ui.Context, pal *palette, ag client.Agent) {
 	ui.Row(c.Key("usage")).GapX(18).GapY(6).AlignItems(ui.Center).Margin(6, 0, 0, 0).Wrap().Children(func() {
 		if pu != nil {
 			usageFigure(c, pal, "cpu", locales.UsageCPU(), pu.cpu, 100, cpuText(pu.cpuNow))
-			usageFigure(c, pal, "mem", locales.UsageMemory(), pu.mem, 0, bytesText(pu.rss))
+			// Memory on one scale for every agent: 256 MB, or more for
+			// one that went past it. A flat 7 MB is a low line.
+			usageFigure(c, pal, "mem", locales.UsageMemory(), pu.mem, max(256, slices.Max(append(series{0}, pu.mem...))), bytesText(pu.rss))
 		}
 		if hasCtx {
 			col := pal.textMuted
@@ -187,8 +189,9 @@ func (a *App) usagePanel(c *ui.Context, pal *palette) {
 		// This machine.
 		ui.Text(c, locales.UsageMachine()).FontSize(fsSmall).TextColor(pal.textFaint)
 		if u.loadOK && u.cores > 0 {
-			pct := 100 * u.load1 / float64(u.cores)
-			usageRow(c, pal, "load", locales.UsageLoad(), u.load, 100, pal.accent, strconv.Itoa(int(pct+0.5))+"%", locales.UsageCores(u.cores))
+			// The run queue as it is, and the cores it runs on: "141 %"
+			// read as more than the machine has.
+			usageRow(c, pal, "load", locales.UsageLoad(), u.load, 100, pal.accent, strconv.FormatFloat(u.load1, 'f', 1, 64), locales.UsageOfCores(u.cores))
 		}
 		usageRow(c, pal, "mem", locales.UsageMemory(), u.mem, 100, pal.attention, strconv.Itoa(int(u.memPct+0.5))+"%", "")
 		// The linked hosts.

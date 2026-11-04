@@ -12201,3 +12201,73 @@ func CockpitThreadFailed() string { return In(i18n.Locale()).CockpitThreadFailed
 func (msgs Messages) CockpitThreadFailed() string {
 	return Catalog.Format(msgs.locale, "cockpitThreadFailed", nil)
 }
+
+// CockpitNameAsks says "{name} asks"
+// in the language the app shows.
+func CockpitNameAsks(name string) string { return In(i18n.Locale()).CockpitNameAsks(name) }
+
+// CockpitNameAsks says "{name} asks"
+// in the language of msgs.
+func (msgs Messages) CockpitNameAsks(name string) string {
+	return Catalog.Format(msgs.locale, "cockpitNameAsks", map[string]any{"name": name})
+}
+
+// CockpitAnswerByReply says "Write the answer in the reply box. Enter sends it."
+// in the language the app shows.
+func CockpitAnswerByReply() string { return In(i18n.Locale()).CockpitAnswerByReply() }
+
+// CockpitAnswerByReply says "Write the answer in the reply box. Enter sends it."
+// in the language of msgs.
+func (msgs Messages) CockpitAnswerByReply() string {
+	return Catalog.Format(msgs.locale, "cockpitAnswerByReply", nil)
+}
+
+// CockpitQueuedWaiting says "Waits for the agent's prompt on the screen."
+// in the language the app shows.
+func CockpitQueuedWaiting() string { return In(i18n.Locale()).CockpitQueuedWaiting() }
+
+// CockpitQueuedWaiting says "Waits for the agent's prompt on the screen."
+// in the language of msgs.
+func (msgs Messages) CockpitQueuedWaiting() string {
+	return Catalog.Format(msgs.locale, "cockpitQueuedWaiting", nil)
+}
+
+// CockpitQueuedDelivering says "The agent is at its prompt. tuios types it now."
+// in the language the app shows.
+func CockpitQueuedDelivering() string { return In(i18n.Locale()).CockpitQueuedDelivering() }
+
+// CockpitQueuedDelivering says "The agent is at its prompt. tuios types it now."
+// in the language of msgs.
+func (msgs Messages) CockpitQueuedDelivering() string {
+	return Catalog.Format(msgs.locale, "cockpitQueuedDelivering", nil)
+}
+
+// CockpitQueuedStalled says "The agent did not take it. Send it now or drop it."
+// in the language the app shows.
+func CockpitQueuedStalled() string { return In(i18n.Locale()).CockpitQueuedStalled() }
+
+// CockpitQueuedStalled says "The agent did not take it. Send it now or drop it."
+// in the language of msgs.
+func (msgs Messages) CockpitQueuedStalled() string {
+	return Catalog.Format(msgs.locale, "cockpitQueuedStalled", nil)
+}
+
+// CockpitSendNowButton says "Send now"
+// in the language the app shows.
+func CockpitSendNowButton() string { return In(i18n.Locale()).CockpitSendNowButton() }
+
+// CockpitSendNowButton says "Send now"
+// in the language of msgs.
+func (msgs Messages) CockpitSendNowButton() string {
+	return Catalog.Format(msgs.locale, "cockpitSendNowButton", nil)
+}
+
+// UsageOfCores says "of {n} cores"
+// in the language the app shows.
+func UsageOfCores(n int) string { return In(i18n.Locale()).UsageOfCores(n) }
+
+// UsageOfCores says "of {n} cores"
+// in the language of msgs.
+func (msgs Messages) UsageOfCores(n int) string {
+	return Catalog.Format(msgs.locale, "usageOfCores", map[string]any{"n": n})
+}

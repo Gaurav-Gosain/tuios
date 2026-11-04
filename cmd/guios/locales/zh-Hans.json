@@ -1203,5 +1203,12 @@
   "cockpitSourceTranscript": "对话记录",
   "cockpitSourceProgram": "程序状态",
   "footerAgentsNeedYou": "{count} 个代理需要你",
-  "cockpitThreadFailed": "对话未能加载"
+  "cockpitThreadFailed": "对话未能加载",
+  "cockpitNameAsks": "{name} 问",
+  "cockpitAnswerByReply": "在回复框中写下答案。按 Enter 发送。",
+  "cockpitQueuedWaiting": "等待屏幕上出现代理的提示符。",
+  "cockpitQueuedDelivering": "代理在提示符处。tuios 正在输入。",
+  "cockpitQueuedStalled": "代理没有接收。请立即发送或丢弃。",
+  "cockpitSendNowButton": "立即发送",
+  "usageOfCores": "/ {n} 核"
 }

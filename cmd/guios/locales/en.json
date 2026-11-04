@@ -2170,5 +2170,26 @@
       }
     }
   },
-  "cockpitThreadFailed": "The conversation did not load"
+  "cockpitThreadFailed": "The conversation did not load",
+  "cockpitNameAsks": "{name} asks",
+  "@cockpitNameAsks": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "cockpitAnswerByReply": "Write the answer in the reply box. Enter sends it.",
+  "cockpitQueuedWaiting": "Waits for the agent's prompt on the screen.",
+  "cockpitQueuedDelivering": "The agent is at its prompt. tuios types it now.",
+  "cockpitQueuedStalled": "The agent did not take it. Send it now or drop it.",
+  "cockpitSendNowButton": "Send now",
+  "usageOfCores": "of {n} cores",
+  "@usageOfCores": {
+    "placeholders": {
+      "n": {
+        "type": "int"
+      }
+    }
+  }
 }

@@ -1203,5 +1203,12 @@
   "cockpitSourceTranscript": "トランスクリプト",
   "cockpitSourceProgram": "プログラムの状態",
   "footerAgentsNeedYou": "{count} 個のエージェントが対応待ち",
-  "cockpitThreadFailed": "会話を読み込めませんでした"
+  "cockpitThreadFailed": "会話を読み込めませんでした",
+  "cockpitNameAsks": "{name} の質問",
+  "cockpitAnswerByReply": "返信欄に答えを書いてください。Enter で送信します。",
+  "cockpitQueuedWaiting": "画面にエージェントのプロンプトが出るのを待っています。",
+  "cockpitQueuedDelivering": "エージェントはプロンプトにいます。tuios が今入力します。",
+  "cockpitQueuedStalled": "エージェントが受け取りませんでした。今すぐ送るか、取り消してください。",
+  "cockpitSendNowButton": "今すぐ送信",
+  "usageOfCores": "/ {n} コア"
 }
