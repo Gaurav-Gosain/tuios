@@ -1400,6 +1400,7 @@
   "cockpitStageDone": "Done",
   "cockpitNoBoard": "No task board",
   "cockpitAddCard": "Add a card",
+  "cockpitMoreColumns": "Show more columns",
   "cockpitCardPlaceholder": "What is the card? Press Enter to add it",
   "cockpitMoveTo": "Move to {stage}",
   "cockpitTakeCard": "Give to the selected agent",

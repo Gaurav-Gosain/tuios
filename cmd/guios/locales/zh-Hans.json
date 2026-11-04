@@ -745,6 +745,7 @@
   "cockpitStageDone": "完成",
   "cockpitNoBoard": "没有任务看板",
   "cockpitAddCard": "添加卡片",
+  "cockpitMoreColumns": "显示更多列",
   "cockpitCardPlaceholder": "卡片内容?按 Enter 添加",
   "cockpitMoveTo": "移到 {stage}",
   "cockpitTakeCard": "交给所选代理",

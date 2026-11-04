@@ -745,6 +745,7 @@
   "cockpitStageDone": "完了",
   "cockpitNoBoard": "タスクボードはありません",
   "cockpitAddCard": "カードを追加",
+  "cockpitMoreColumns": "他の列を表示",
   "cockpitCardPlaceholder": "カードの内容を入力し、Enter で追加",
   "cockpitMoveTo": "{stage} へ移動",
   "cockpitTakeCard": "選んだエージェントに渡す",

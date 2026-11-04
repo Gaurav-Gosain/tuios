@@ -19,10 +19,11 @@ import (
 // name, harness, session, age; then the one thing worth reading).
 
 const (
-	ckFleetW = 316
-	ckSideW  = 268
-	ckRowH   = 46
-	ckRowH1  = 30
+	ckFleetW    = 316
+	ckFleetMinW = 236
+	ckSideW     = 268
+	ckRowH      = 46
+	ckRowH1     = 30
 )
 
 // ckGroupTitle names a group, as its heading says it.
@@ -83,7 +84,7 @@ func (a *App) cockpitCard(c *ui.Context, pal *palette, bar ui.TitleBar, shown fl
 		w, _ := c.Size()
 		body := ui.Row(c).Grow(1).MinHeight(0).AlignItems(ui.Stretch)
 		body.Children(func() {
-			a.cockpitFleet(c, pal)
+			a.cockpitFleet(c, pal, ckFleetWidth(w-a.chrome.sideW))
 			ui.Box(c).Width(1).Shrink(0).Background(pal.divider)
 			ui.Column(c.Key("focus")).Grow(1).Basis(0).MinWidth(0).AlignItems(ui.Stretch).Children(func() {
 				a.cockpitFocus(c, pal)
@@ -154,9 +155,16 @@ func (a *App) cockpitHeader(c *ui.Context, pal *palette, bar ui.TitleBar, shown 
 }
 
 // cockpitFleet is the column of agents, grouped, with its keys.
-func (a *App) cockpitFleet(c *ui.Context, pal *palette) {
+// ckFleetWidth is the agents column's width in a cockpit w DIPs wide: its
+// full width while the focus keeps room for two board columns, narrower
+// down to ckFleetMinW in a narrow window.
+func ckFleetWidth(w float32) float32 {
+	return min(max(w-560, ckFleetMinW), ckFleetW)
+}
+
+func (a *App) cockpitFleet(c *ui.Context, pal *palette, width float32) {
 	ck := &a.ck
-	col := ui.Column(c.Key("fleet")).Width(ckFleetW).Shrink(0).AlignItems(ui.Stretch).Background(ckGround(pal)).
+	col := ui.Column(c.Key("fleet")).Width(width).Shrink(0).AlignItems(ui.Stretch).Background(ckGround(pal)).
 		Focusable().FocusRing(false).Bind(&ck.fleetFocus).Label(locales.CockpitTitle())
 	a.cockpitKeys(c, col)
 	col.Children(func() {

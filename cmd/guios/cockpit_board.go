@@ -58,6 +58,10 @@ type ckBoard struct {
 	focus   ui.Handle
 	adding  int // the column a new card is typed into, -1 for none
 	draft   string
+	// first is the first column the board shows, and width the width it
+	// had in the last frame.
+	first int
+	width float32
 }
 
 func (a *App) fetchBoard() {
@@ -138,7 +142,7 @@ func (a *App) boardView(c *ui.Context, pal *palette, sess string) {
 		if t.board != nil {
 			t.board.session, t.board.cards, t.board.sel = sess, nil, ""
 		} else {
-			t.board = &ckBoard{opened: map[string]bool{}, adding: -1, session: sess}
+			t.board = &ckBoard{opened: map[string]bool{}, adding: -1, width: -1, session: sess}
 		}
 		a.fetchBoard()
 	}
@@ -153,27 +157,209 @@ func (a *App) boardView(c *ui.Context, pal *palette, sess string) {
 		c.Invalidate()
 	}
 	root.Children(func() {
-		// Columns that do not fit scroll sideways, as the TUI's board
-		// shows the run round the cursor.
-		ui.ScrollHorizontal(c.Key("cols")).Grow(1).MinHeight(0).Children(func() {
-			ui.Row(c).FillHeight().AlignItems(ui.Stretch).Gap(10).Padding(14, 16).Children(func() {
-				for ci, st := range ckStages {
-					a.boardColumn(c, pal, b, ci, st)
-				}
-			})
+		box := ui.Row(c.Key("cols")).Grow(1).MinHeight(0).AlignItems(ui.Stretch).Gap(boardGap).Padding(14, 16)
+		w := box.Bounds().W
+		first, last, widths := b.run(w)
+		if w != b.width {
+			// The run is worked out from the last frame's width: build
+			// again once with this one, as after a resize.
+			b.width = w
+			c.Invalidate()
+		}
+		box.Children(func() {
+			if first > 0 {
+				a.boardEdge(c, pal, b, -1, first)
+			}
+			for ci := first; ci <= last; ci++ {
+				a.boardColumn(c, pal, b, ci, ckStages[ci], widths[ci])
+			}
+			if n := len(ckStages) - 1 - last; n > 0 {
+				a.boardEdge(c, pal, b, 1, n)
+			}
 		})
 	})
 }
 
+// Board column widths: a column with cards is at least boardColMin wide
+// and grows to boardColMax with room to spare, an empty or folded one is
+// boardColNarrow. An edge button for hidden columns is boardEdgeW.
+const (
+	boardColMin    = 168
+	boardColMax    = 300
+	boardColNarrow = 124
+	boardEdgeW     = 34
+	boardGap       = 10
+	boardPadX      = 32
+)
+
+// run is the columns the board shows in w DIPs, whole ones only: from
+// b.first on, moved so the cursor's column is in it, as the TUI's board
+// shows the run round the cursor. widths are the columns' widths, the room
+// left over shared by the columns with cards.
+func (b *ckBoard) run(w float32) (first, last int, widths []float32) {
+	n := len(ckStages)
+	need := make([]float32, n)
+	wide := make([]bool, n)
+	for i, st := range ckStages {
+		need[i] = boardColNarrow
+		if !b.folded(st) && len(b.column(st)) > 0 {
+			need[i], wide[i] = boardColMin, true
+		}
+	}
+	if w <= 0 {
+		w = 600 // the first frame: no width yet
+	}
+	// fits reports whether columns i..j fit, with an edge button on each
+	// side that has hidden columns.
+	fits := func(i, j int) bool {
+		sum := float32(boardPadX)
+		for k := i; k <= j; k++ {
+			sum += need[k]
+			if k > i {
+				sum += boardGap
+			}
+		}
+		if i > 0 {
+			sum += boardEdgeW + boardGap
+		}
+		if j < n-1 {
+			sum += boardEdgeW + boardGap
+		}
+		return sum <= w
+	}
+	ci, _ := b.cursor()
+	cur := min(max(ci, 0), n-1)
+	first = min(max(b.first, 0), cur)
+	for {
+		last = first
+		for last+1 < n && fits(first, last+1) {
+			last++
+		}
+		if cur <= last || first == cur {
+			break
+		}
+		first++
+	}
+	// Room to spare at the end: show columns before first too.
+	for first > 0 && fits(first-1, last) {
+		first--
+	}
+	b.first = first
+	widths = make([]float32, n)
+	spare := w - boardPadX
+	nwide := 0
+	for k := first; k <= last; k++ {
+		widths[k] = need[k]
+		spare -= need[k]
+		if k > first {
+			spare -= boardGap
+		}
+		if wide[k] {
+			nwide++
+		}
+	}
+	if first > 0 {
+		spare -= boardEdgeW + boardGap
+	}
+	if last < n-1 {
+		spare -= boardEdgeW + boardGap
+	}
+	if spare > 0 && nwide > 0 {
+		add := spare / float32(nwide)
+		for k := first; k <= last; k++ {
+			if wide[k] {
+				grow := min(add, boardColMax-widths[k])
+				widths[k] += grow
+				spare -= grow
+			}
+		}
+	}
+	if spare > 0 {
+		// What the columns with cards cannot take goes to all of them.
+		add := spare / float32(last-first+1)
+		for k := first; k <= last; k++ {
+			widths[k] += add
+		}
+	}
+	return first, last, widths
+}
+
+// boardEdge is the button for the columns hidden past one edge, dir -1
+// for the left and 1 for the right, n of them. A click moves the run a
+// column that way.
+func (a *App) boardEdge(c *ui.Context, pal *palette, b *ckBoard, dir, n int) {
+	key := "edge-r"
+	if dir < 0 {
+		key = "edge-l"
+	}
+	// The tooltip names the hidden columns and their cards.
+	var names []string
+	for k := range ckStages {
+		if dir < 0 && k < b.first || dir > 0 && k >= len(ckStages)-n {
+			st := ckStages[k]
+			names = append(names, ckStageTitle(st)+" "+itoa(len(b.column(st))))
+		}
+	}
+	btn := ui.ButtonBase(c.Key(key)).Width(boardEdgeW).Shrink(0).Radius(10).Background(ckGround(pal).Alpha(0.55)).
+		Label(locales.CockpitMoreColumns()).Tooltip(strings.Join(names, " · "))
+	if btn.Hovered() {
+		btn.Background(ckGround(pal))
+	}
+	if _, over := ui.DragOver[string](btn); over {
+		btn.Border(2, pal.accent)
+	}
+	if id, ok := ui.Drop[string](btn); ok {
+		// A card dropped here goes to the nearest hidden column.
+		next := b.first - 1
+		if dir > 0 {
+			next = len(ckStages) - n
+		}
+		a.moveCard(b, id, ckStages[next])
+	}
+	btn.Children(func() {
+		ui.Column(c).Fill().AlignItems(ui.Center).Justify(ui.Center).Gap(5).Children(func() {
+			ic := ui.Icon(c, chevronIcon).Size(12, 12).TextColor(pal.textMuted)
+			if dir < 0 {
+				ic.Rotate(180)
+			}
+			ui.Text(c, "+"+itoa(n)).FontSize(11.5).FontWeight(600).TextColor(pal.textFaint).FontFeatures("tnum")
+		})
+	})
+	if btn.Clicked() {
+		c.Invalidate()
+		b.step(dir)
+	}
+}
+
+// step moves the run a column: the cursor goes to the first hidden column
+// that way.
+func (b *ckBoard) step(dir int) {
+	first, last, _ := b.run(b.width)
+	ci := last + 1
+	if dir < 0 {
+		ci = first - 1
+	}
+	if ci < 0 || ci >= len(ckStages) {
+		return
+	}
+	b.col, b.sel = ci, ""
+	if dir < 0 {
+		b.first = ci
+	}
+	if cards := b.column(ckStages[ci]); !b.folded(ckStages[ci]) && len(cards) > 0 {
+		b.sel = cards[0].ID
+	}
+}
+
 // boardColumn is one stage's column.
-func (a *App) boardColumn(c *ui.Context, pal *palette, b *ckBoard, ci int, st string) {
+func (a *App) boardColumn(c *ui.Context, pal *palette, b *ckBoard, ci int, st string, width float32) {
 	cards := b.column(st)
 	folded := b.folded(st)
 	col := ui.Column(c.Key(st)).Gap(8).Padding(8).Radius(10).Background(ckGround(pal)).AlignItems(ui.Stretch)
-	if folded || len(cards) == 0 {
-		col.Width(112).Shrink(0)
-	} else {
-		col.Width(178).Shrink(0)
+	col.Width(width).Shrink(0)
+	if b.sel == "" && b.col == ci && b.focus.Focused(c) {
+		// The cursor in a column without a card to show it.
+		col.Border(1, pal.accent.Alpha(0.6))
 	}
 	if _, over := ui.DragOver[string](col); over {
 		col.Border(2, pal.accent)

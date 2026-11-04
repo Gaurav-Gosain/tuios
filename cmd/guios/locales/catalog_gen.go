@@ -7572,6 +7572,16 @@ func (msgs Messages) CockpitAddCard() string {
 	return Catalog.Format(msgs.locale, "cockpitAddCard", nil)
 }
 
+// CockpitMoreColumns says "Show more columns"
+// in the language the app shows.
+func CockpitMoreColumns() string { return In(i18n.Locale()).CockpitMoreColumns() }
+
+// CockpitMoreColumns says "Show more columns"
+// in the language of msgs.
+func (msgs Messages) CockpitMoreColumns() string {
+	return Catalog.Format(msgs.locale, "cockpitMoreColumns", nil)
+}
+
 // CockpitCardPlaceholder says "What is the card? Press Enter to add it"
 // in the language the app shows.
 func CockpitCardPlaceholder() string { return In(i18n.Locale()).CockpitCardPlaceholder() }
