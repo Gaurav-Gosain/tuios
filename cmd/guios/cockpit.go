@@ -4,6 +4,7 @@ import (
 	"slices"
 	"sort"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/Gaurav-Gosain/mygo/ui"
@@ -113,6 +114,9 @@ type cockpit struct {
 	jumpTo *ckJump
 	// focusView asks the view just shown to take the keys.
 	focusView bool
+	// zoomed is the session and pane goToAgent zoomed, to show the layout
+	// again when the agents view opens.
+	zoomed string
 	// advance is the agent the person just answered from a Needs you
 	// row, and when: once its row has moved, the next one is selected.
 	advance   string
@@ -214,6 +218,13 @@ func (a *App) toggleCockpit() {
 	a.ck.open = true
 	a.ck.fleetFocus.Focus()
 	a.refreshCockpit()
+	// A pane the cockpit zoomed to open it goes back into the layout.
+	if sid, pane, ok := strings.Cut(a.ck.zoomed, "\x00"); ok {
+		a.ck.zoomed = ""
+		if s := a.session(sid); s != nil && s.Zoomed == pane {
+			a.zoomPane(s, pane)
+		}
+	}
 }
 
 func (a *App) closeCockpit() {
@@ -571,6 +582,17 @@ func (a *App) goToAgent(ag client.Agent) {
 	a.focus[sid] = ag.Window
 	a.selectSession(sid)
 	a.ck.open = false
+	// A tile too small to read opens zoomed; the agents key shows the
+	// layout again with the agents (toggleCockpit).
+	// The size is the terminal's grid here: the daemon's is its own.
+	cols, rows := 0, 0
+	if t := a.termFor(ag.Window); t != nil {
+		cols, rows = t.Size()
+	}
+	if s.PaneByID(ag.Window) != nil && len(s.Panes) > 1 && s.Zoomed != ag.Window && cols > 0 && (cols < 80 || rows < 24) {
+		a.zoomPane(s, ag.Window)
+		a.ck.zoomed = sid + "\x00" + ag.Window
+	}
 	a.focusTerminal()
 }
 
