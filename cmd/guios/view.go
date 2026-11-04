@@ -444,9 +444,14 @@ func (a *App) sidebar(c *ui.Context, pal *palette, bar ui.TitleBar) {
 func (a *App) groupView(c *ui.Context, pal *palette, g group, gi int, n *int) {
 	id, key := g.project.ID, g.key()
 	collapsed := a.prefs.Collapsed[key]
+	// The agents that need the person, as the Agents badge counts them;
+	// the sessions that wait until the daemon's lists are read.
 	needs := 0
 	for _, s := range g.sessions {
-		if s.Status == proto.Waiting {
+		switch {
+		case a.ck.loaded && !g.host.remote():
+			needs += a.sessionNeeds(s)
+		case s.Status == proto.Waiting:
 			needs++
 		}
 	}
@@ -822,10 +827,26 @@ func (a *App) footerChip(c *ui.Context, pal *palette, st proto.Status, unread bo
 			n++
 		}
 	}
+	words := ""
+	if n > 0 {
+		words = say(n)
+	}
+	if st == proto.Waiting && a.ck.loaded {
+		// Agents, as the Agents badge counts them; the sessions in the
+		// tooltip.
+		agents := a.needsCount()
+		if agents > 0 {
+			if words != "" {
+				words = locales.FooterAgentsNeedYou(agents) + " · " + words
+			} else {
+				words = locales.FooterAgentsNeedYou(agents)
+			}
+		}
+		n = agents
+	}
 	if n == 0 {
 		return
 	}
-	words := say(n)
 	b := ui.ButtonBase(c.Key("chip-"+string(st))).Height(hControlSm).Padding(0, 8, 0, 6).Gap(5).Radius(rRow).AlignItems(ui.Center).
 		Label(words).Tooltip(words + " · " + hint)
 	if b.Hovered() {

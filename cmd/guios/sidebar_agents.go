@@ -168,3 +168,14 @@ func (a *App) showInCockpit(key string) {
 	}
 	ck.fleetFocus.Focus()
 }
+
+// sessionNeeds is how many agents of a session need the person.
+func (a *App) sessionNeeds(s *proto.Session) int {
+	n := 0
+	for _, r := range a.sessionAgents(s, a.sbNeeds) {
+		if r.need != nil {
+			n++
+		}
+	}
+	return n
+}

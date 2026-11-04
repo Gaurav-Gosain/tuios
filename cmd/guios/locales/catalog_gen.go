@@ -1166,11 +1166,11 @@ func (msgs Messages) SidebarCloseAllSessions() string {
 	return Catalog.Format(msgs.locale, "sidebarCloseAllSessions", nil)
 }
 
-// SidebarNeedsYou says "{count} needs you"
+// SidebarNeedsYou says "{count, plural, one {# needs you} other {# need you}}"
 // in the language the app shows.
 func SidebarNeedsYou(count int) string { return In(i18n.Locale()).SidebarNeedsYou(count) }
 
-// SidebarNeedsYou says "{count} needs you"
+// SidebarNeedsYou says "{count, plural, one {# needs you} other {# need you}}"
 // in the language of msgs.
 func (msgs Messages) SidebarNeedsYou(count int) string {
 	return Catalog.Format(msgs.locale, "sidebarNeedsYou", map[string]any{"count": count})
@@ -12180,4 +12180,14 @@ func CockpitSourceProgram() string { return In(i18n.Locale()).CockpitSourceProgr
 // in the language of msgs.
 func (msgs Messages) CockpitSourceProgram() string {
 	return Catalog.Format(msgs.locale, "cockpitSourceProgram", nil)
+}
+
+// FooterAgentsNeedYou says "{count, plural, one {# agent needs you} other {# agents need you}}"
+// in the language the app shows.
+func FooterAgentsNeedYou(count int) string { return In(i18n.Locale()).FooterAgentsNeedYou(count) }
+
+// FooterAgentsNeedYou says "{count, plural, one {# agent needs you} other {# agents need you}}"
+// in the language of msgs.
+func (msgs Messages) FooterAgentsNeedYou(count int) string {
+	return Catalog.Format(msgs.locale, "footerAgentsNeedYou", map[string]any{"count": count})
 }

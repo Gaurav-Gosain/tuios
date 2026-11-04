@@ -159,7 +159,7 @@
   "sidebarCloseProjectMenu": "Close project…",
   "sidebarCloseProject": "Close project",
   "sidebarCloseAllSessions": "Close all sessions",
-  "sidebarNeedsYou": "{count} needs you",
+  "sidebarNeedsYou": "{count, plural, one {# needs you} other {# need you}}",
   "@sidebarNeedsYou": {
     "placeholders": {
       "count": {
@@ -2161,5 +2161,13 @@
   "cockpitSourceOsc": "an escape sequence",
   "cockpitSourceDetect": "the running program",
   "cockpitSourceTranscript": "the transcript",
-  "cockpitSourceProgram": "the program's status"
+  "cockpitSourceProgram": "the program's status",
+  "footerAgentsNeedYou": "{count, plural, one {# agent needs you} other {# agents need you}}",
+  "@footerAgentsNeedYou": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  }
 }

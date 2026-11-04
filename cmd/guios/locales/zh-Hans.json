@@ -1201,5 +1201,6 @@
   "cockpitSourceOsc": "转义序列",
   "cockpitSourceDetect": "正在运行的程序",
   "cockpitSourceTranscript": "对话记录",
-  "cockpitSourceProgram": "程序状态"
+  "cockpitSourceProgram": "程序状态",
+  "footerAgentsNeedYou": "{count} 个代理需要你"
 }
