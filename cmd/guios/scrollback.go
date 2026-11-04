@@ -198,7 +198,8 @@ func (a *App) scrollbackView(c *ui.Context, pal *palette) {
 	list := b.shown()
 	b.sel = min(b.sel, max(len(list)-1, 0))
 	ui.DialogBase(c.Key("scrollback"), &b.open, func(backdrop, panel ui.Element) {
-		backdrop.Background(pal.overlay).Justify(ui.Start).Padding(64, 0, 0, 0)
+		dialogMotion(backdrop, panel, pal.overlay)
+		backdrop.Justify(ui.Start).Padding(64, 0, 0, 0)
 		h := float32(560)
 		if b.loading || len(list) == 0 {
 			h = 120

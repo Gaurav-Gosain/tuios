@@ -147,7 +147,8 @@ func (a *App) transfersView(c *ui.Context, pal *palette) {
 	}
 	rows := a.xfer.rows
 	ui.DialogBase(c.Key("transfers-panel"), &a.xp.open, func(backdrop, panel ui.Element) {
-		backdrop.Background(pal.overlay).Justify(ui.Start).Padding(84, 0, 0, 0)
+		dialogMotion(backdrop, panel, pal.overlay)
+		backdrop.Justify(ui.Start).Padding(84, 0, 0, 0)
 		floating(panel.Width(520).MaxHeight(520).Padding(16).Gap(6).Radius(14).Background(pal.popover), pal).Label(locales.TransfersTitle())
 		// Holds the keyboard, so Escape reaches the panel.
 		ui.Box(c.Key("keys")).Width(0).Height(0).Focusable().FocusRing(false).AutoFocus()

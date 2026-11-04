@@ -80,7 +80,8 @@ func (a *App) promptView(c *ui.Context, pal *palette) {
 	}
 	done := false
 	ui.DialogBase(c.Key("prompt"), &pr.open, func(backdrop, panel ui.Element) {
-		backdrop.Background(pal.overlay).Justify(ui.Start).Padding(120, 0, 0, 0)
+		dialogMotion(backdrop, panel, pal.overlay)
+		backdrop.Justify(ui.Start).Padding(120, 0, 0, 0)
 		floating(panel.Width(440).Padding(20).Gap(8).Radius(14).Background(pal.popover), pal).Label(pr.title)
 		ui.Text(c, pr.title).FontSize(15).FontWeight(650).TextColor(pal.text).SingleLine().Ellipsis("…")
 		ui.Text(c, pr.detail).FontSize(12.5).TextColor(pal.textMuted).LineHeight(1.4)

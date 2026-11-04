@@ -99,7 +99,8 @@ func (a *App) helpView(c *ui.Context, pal *palette) {
 		width = min(width, w-32)
 	}
 	ui.DialogBase(c.Key("help"), &a.help.open, func(backdrop, panel ui.Element) {
-		backdrop.Background(pal.overlay).Justify(ui.Start).Padding(64, 0, 0, 0)
+		dialogMotion(backdrop, panel, pal.overlay)
+		backdrop.Justify(ui.Start).Padding(64, 0, 0, 0)
 		floating(panel.Width(width).MaxHeight(620).Radius(14).Background(pal.popover), pal).Clip().Label(locales.HelpTitle())
 		ui.Row(c).Height(50).Shrink(0).Padding(0, 16).Gap(10).AlignItems(ui.Center).Children(func() {
 			ui.Icon(c, searchIcon).Size(16, 16).TextColor(pal.textMuted)
