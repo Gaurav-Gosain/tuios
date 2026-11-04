@@ -129,7 +129,12 @@ function report(event, ctx, extra, key) {
   // Every report that carries a selection counts, not only the metadata ones.
   const selection = sessionFile && leaf !== undefined ? sessionID + "\0" + sessionFile + "\0" + leaf : "";
   if (event === "transcript_update" && selection && selection === lastSelection) return;
-  if (selection) lastSelection = selection;
+  // Subagent reports' transcript fields are dropped by the daemon's
+  // translatePi, so they must not count as a selection: a subagent report
+  // firing between a transcript leaf advance and the watcher callback would
+  // otherwise suppress the parent's next transcript_update.
+  const dropsTranscript = event === "subagent_start" || event === "subagent_update" || event === "subagent_stop";
+  if (selection && !dropsTranscript) lastSelection = selection;
   // A report that cannot be sent must never break Pi.
   enqueue(payload, key || (event === "transcript_update" ? sessionID + "\0" + sessionFile : ""));
 }
@@ -239,6 +244,11 @@ export default function (pi) {
     return line.length > 200 ? line.slice(0, 200) : line;
   };
 
+  // The daemon's ValidSubagentID accepts only [A-Za-z0-9_.:@-], and OpenAI
+  // Responses/Codex toolCallIds contain '|', so the foreground id built from
+  // one must be sanitised. The cap is 128 including the fg: prefix.
+  const subId = call => "fg:" + call.replace(/[^A-Za-z0-9_.:@-]/g, "_").slice(0, 125);
+
   const subResultText = content => {
     if (!Array.isArray(content)) return "";
     for (const block of content) {
@@ -252,8 +262,8 @@ export default function (pi) {
   const subReport = (event, id, extra) => {
     if (!id) return;
     const prior = subSeen.get(id);
-    const tool = typeof extra.tool === "string" ? extra.tool : prior?.tool || "";
-    const target = typeof extra.target === "string" ? extra.target : prior?.target || "";
+    const tool = typeof extra.tool === "string" ? extra.tool : "";
+    const target = typeof extra.target === "string" ? extra.target : "";
     const line = tool ? tool + (target ? ": " + target : "") : "";
     const text = typeof extra.text === "string" ? extra.text : prior?.text || "";
     // An update that carries only an outcome never repeats the last report:
@@ -457,6 +467,10 @@ export default function (pi) {
       const input = event.input;
       const call = typeof event.toolCallId === "string" ? event.toolCallId : "";
       if (!call) return;
+      // pi-subagents 0.84.0: management calls ('status', 'guide', 'list',
+      // ...) carry an action; executions carry none. Only executions are
+      // runs the pane can show, so a management call reports nothing at all.
+      if (typeof input?.action === "string" && input.action) return;
       // The ladder, in pi-subagents' own order: an explicit flag wins;
       // forceTopLevelAsync rewrites async: false at depth 0; else the quiet
       // default. Nested calls (parentToolCallId set) are depth > 0, which
@@ -473,7 +487,7 @@ export default function (pi) {
         subTaskByCall.set(call, task);
         return;
       }
-      subReport("subagent_start", "fg:" + call, {
+      subReport("subagent_start", subId(call), {
         agent_type: subFirstLine(input?.agent),
         text: subFirstLine(input?.task) || subFirstLine(input?.goal),
       });
@@ -486,16 +500,20 @@ export default function (pi) {
       subCtx = ctx;
       const call = typeof event.toolCallId === "string" ? event.toolCallId : "";
       if (!call) return;
-      const id = "fg:" + call;
+      const id = subId(call);
       if (subTaskByCall.has(call)) {
-        // A background launch that was rejected before its run started —
-        // capacity, budget, a dead runner — returns an error result with no
-        // async-started ever fired, so no row exists yet. Name it, then end
-        // it failed, or the rejection is invisible on the pane.
-        const task = subTaskByCall.get(call);
+        // A failed launch was never started, so no row exists yet and the
+        // stash is the only witness. Name it, then end it failed, or the
+        // rejection is invisible on the pane. A successful launch also
+        // leaves the stash unconsumed (a workflow's async-started names no
+        // tool call), but its rows came from the async and child-status
+        // events: reporting here would draw a phantom start and failure.
+        const task = subTaskByCall.get(call) ?? "";
         subTaskByCall.delete(call);
-        subReport("subagent_start", id, { text: task });
-        subReport("subagent_update", id, { outcome: "failed", text: subResultText(event.content) || "failed" });
+        if (event.isError) {
+          subReport("subagent_start", id, { text: task });
+          subReport("subagent_update", id, { outcome: "failed", text: subResultText(event.content) || "failed" });
+        }
       } else if (event.isError) {
         subReport("subagent_update", id, { outcome: "failed", text: subResultText(event.content) || "failed" });
       } else {

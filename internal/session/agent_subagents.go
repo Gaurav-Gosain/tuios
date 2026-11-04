@@ -472,6 +472,22 @@ func (s *Session) updateSubagentLocked(w *WindowState, c subagentChange, now int
 	if sa.callID == "" && c.callID != "" && !c.spawn {
 		sa.callID = c.callID
 	}
+	// A bare update — no tool, target, text, outcome, ok, call id, spawn
+	// hint or tool count — is what pi's poller sends while a subagent runs
+	// between tools: it says only that the subagent is still at work. The
+	// tool it named last is over, so the line moves to last rather than
+	// hanging on the row, and carrying nothing else, it changes nothing but
+	// that: the count, description and type stay.
+	if c.tool == "" && c.target == "" && c.text == "" && c.outcome == "" && c.ok == nil &&
+		c.callID == "" && c.tools == 0 && !c.spawn && sa.endedAt == 0 {
+		if sa.tool != "" {
+			sa.last = toolLine(sa.tool, sa.target)
+			sa.tool, sa.target = "", ""
+			out.move = subagentToolMove
+		}
+		out.sa = *sa
+		return out
+	}
 	switch c.outcome {
 	case subagentOutcomeStopping:
 		sa.stopping = true

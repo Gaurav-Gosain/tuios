@@ -13375,3 +13375,35 @@ mapped"), the test fails at the waitMeta assertion `the pane's metadata is
 map[], want map[subagents:2 subagents]`: the metadata stays empty because no
 hook report ever named a subagent. The branch's build passes.
 
+
+## Pi subagent events through the extension in a node harness
+
+`TestPiExtensionSubagentEventsInANodeHarness` (internal/integration) loads the
+managed pi extension (assets/pi/tuios-agent-state.ts) in node under a fake pi
+harness, whose recorder stands in for the `tuios` command the extension
+spawns. The e2e feeds `tuios agent-hook pi` by hand and so never exercises
+the TypeScript; this one does. It pins five behaviours against pi-subagents
+0.84.0 event shapes: a management call ('status') starts and fails nothing, a
+good background run starts and stops its own row, a good background workflow
+reports no row for its tool call and ends its child with the parent's
+result, a foreground id keeps to the daemon's alphabet with the tool result
+ending the same row, and a subagent report wedged between a leaf advance and
+the folder watcher's callback does not suppress the parent's
+transcript_update. The test skips itself where node is missing or older than
+22.6. Run on 2026-11-04 on macOS arm64 (node 26.13.0, which strips the
+template's types with no flag), against the pre-fix asset of the base commit,
+taken with `git show HEAD:internal/integration/assets/pi/tuios-agent-state.ts`
+and passed through `TUIOS_TEST_PI_EXTENSION_SOURCE`. Each control run fails
+on all four of the fixed behaviours it can reach (the good background run
+behaves the same in both, by design):
+
+| Claim | Control (the pre-fix asset) | Where it fails | Verdict |
+| --- | --- | --- | --- |
+| A management call draws no row | no 'action' skip in tool_call | "a subagent management call drew 1 start reports, want none", plus its failed update | **caught** |
+| No sequence fails a run | a successful workflow's tool result ends the stash | "report 12 is a subagent_update with outcome failed: no sequence fails a run" | **caught** |
+| A workflow's tool call draws no row | the result reports a start and a failure for fg:c3 | "the workflow's tool call drew a subagent_start report for \"fg:c3\", want none" | **caught** |
+| Foreground ids keep to the daemon's alphabet | 'fg:' + the raw call id | "the foreground id \"fg:call_abc|item_def\" does not keep to the daemon's alphabet" | **caught** |
+| A wedged subagent report does not suppress the transcript_update | subagent reports count as a selection | "no transcript_update for leaf1 followed the wedged subagent reports: the watcher's report was suppressed" | **caught** |
+
+The fixed asset passes five runs out of five; the pre-fix asset fails five
+out of five, each with the messages above.

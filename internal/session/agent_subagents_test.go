@@ -82,6 +82,40 @@ func TestMoveSubagents(t *testing.T) {
 	}
 }
 
+// TestSubagentBareUpdateClearsTheToolLine: the bare update pi's poller sends
+// while a subagent runs between tools moves the tool the subagent ran to
+// last, leaving nothing on the row, and touches nothing else. A second bare
+// update keeps what the first put on last, and an update that carries text —
+// claude-code's background_tasks kind — leaves the line where it was.
+func TestSubagentBareUpdateClearsTheToolLine(t *testing.T) {
+	s := &Session{}
+	w := &WindowState{ID: "w", AgentState: AgentStateDone}
+	if got := s.moveSubagentsLocked(w, subagentChange{op: ActivitySubagentStart, id: "a1", agentType: "Explore"}, 100); got.move != subagentListMove {
+		t.Fatalf("a start: %+v, want the list moved", got)
+	}
+	if got := s.moveSubagentsLocked(w, subagentChange{op: ActivitySubagentUpdate, id: "a1", tool: "Read", target: "src/x.ts"}, 200); got.move != subagentToolMove {
+		t.Fatalf("a tool update: %+v, want the tool moved", got)
+	}
+	got := s.moveSubagentsLocked(w, subagentChange{op: ActivitySubagentUpdate, id: "a1"}, 300)
+	sa := s.agentSubagents["w"].byID["a1"]
+	if sa.tool != "" || sa.target != "" || sa.last == "" || got.move != subagentToolMove {
+		t.Fatalf("a bare update: tool %q target %q last %q move %v, want the line on last", sa.tool, sa.target, sa.last, got.move)
+	}
+	if sa.tools != 1 || sa.description != "" || sa.agentType != "Explore" || sa.endedAt != 0 {
+		t.Fatalf("a bare update changed the subagent: %+v", sa)
+	}
+	if got := s.moveSubagentsLocked(w, subagentChange{op: ActivitySubagentUpdate, id: "a1"}, 400); got.move != subagentNoMove || s.agentSubagents["w"].byID["a1"].last == "" {
+		t.Fatalf("a second bare update: %+v, want nothing moved and last kept", got)
+	}
+	if got := s.moveSubagentsLocked(w, subagentChange{op: ActivitySubagentUpdate, id: "a1", text: "Mapped the api."}, 500); got.move != subagentListMove {
+		t.Fatalf("a text update: %+v, want the list moved", got)
+	}
+	sa = s.agentSubagents["w"].byID["a1"]
+	if sa.tool != "" || sa.target != "" || sa.last == "" {
+		t.Fatalf("a text update moved the tool line: tool %q target %q last %q", sa.tool, sa.target, sa.last)
+	}
+}
+
 // TestSubagentsClearWithTheAgent: the count clears on the agent's session
 // start, when the pane's state goes to none, and when the window closes. Each
 // clear comes after a start that was counted, so a count that never moved
