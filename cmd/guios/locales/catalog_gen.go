@@ -8342,6 +8342,16 @@ func (msgs Messages) HostLoad(load string, cores int) string {
 	return Catalog.Format(msgs.locale, "hostLoad", map[string]any{"load": load, "cores": cores})
 }
 
+// HostLoadLabel says "Load {load}"
+// in the language the app shows.
+func HostLoadLabel(load string) string { return In(i18n.Locale()).HostLoadLabel(load) }
+
+// HostLoadLabel says "Load {load}"
+// in the language of msgs.
+func (msgs Messages) HostLoadLabel(load string) string {
+	return Catalog.Format(msgs.locale, "hostLoadLabel", map[string]any{"load": load})
+}
+
 // HostRunsTuios says "Runs tuios {version}"
 // in the language the app shows.
 func HostRunsTuios(version string) string { return In(i18n.Locale()).HostRunsTuios(version) }

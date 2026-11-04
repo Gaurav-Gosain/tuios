@@ -499,7 +499,12 @@ func (a *App) paneHeader(c *ui.Context, pal *palette, bar ui.TitleBar, shown flo
 	}
 	dir := hostOf.shortDir(p.WorkDir())
 	showDir := dir != title || hostOf.remote()
-	plan := a.planHeader(c, p, title, dir, showDir, pad, multi, top && right)
+	planDir := dir
+	if hostOf.remote() {
+		// The machine's chip comes before the folder: room for both.
+		planDir = hostOf.name + "\u2003\u2003" + dir
+	}
+	plan := a.planHeader(c, p, title, planDir, showDir, pad, multi, top && right)
 	h := ui.Row(c.Key("hdr")).Height(headerH).Shrink(0).AlignItems(ui.Center).Padding(0, 10, 0, pad).Gap(sp2)
 	if h.Pressed() && !focused {
 		a.setFocus(s, p.ID)
@@ -567,7 +572,11 @@ func (a *App) paneHeader(c *ui.Context, pal *palette, bar ui.TitleBar, shown flo
 					// The host's name in its color, as the sidebar's strip
 					// marks it: no pane passes for another machine's.
 					ui.Row(c.Key("where")).Width(plan.folderW).Shrink(0).MinWidth(0).AlignItems(ui.Center).Clip().Children(func() {
-						ui.Text(c, hostOf.name+":").FontSize(fsSmall).FontWeight(wMedium).TextColor(pal.hostColor(hostOf)).SingleLine().Ellipsis("…").Shrink(0.5).MinWidth(0)
+						// The machine as a chip before its folder, rather than
+						// "build:" run into the path (council round 1, visual 28).
+						chip(c, pal, pal.chip, pal.hostColor(hostOf), func() {
+							oneLine(c, hostOf.name, fsSmall, wMedium)
+						}).Shrink(0.5).MinWidth(0).Margin(0, sp1, 0, 0)
 						oneLine(c, dir, fsSmall, 0).TextColor(pal.textFaint)
 					})
 				}

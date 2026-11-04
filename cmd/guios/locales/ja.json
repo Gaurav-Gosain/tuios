@@ -822,6 +822,7 @@
   "hostStatusSignIn": "サインインが必要",
   "hostStatusUnreachable": "接続できません",
   "hostLoad": "負荷 {load}（{cores} コア）",
+  "hostLoadLabel": "負荷 {load}",
   "hostRunsTuios": "tuios {version} を実行中",
   "hostLastDrop": "前回の切断: {reason}",
   "hostQueued": "{count} 件のメッセージが接続を待っています",

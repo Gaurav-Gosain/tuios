@@ -822,6 +822,7 @@
   "hostStatusSignIn": "需要登录",
   "hostStatusUnreachable": "无法访问",
   "hostLoad": "负载 {load}（{cores} 核）",
+  "hostLoadLabel": "负载 {load}",
   "hostRunsTuios": "运行 tuios {version}",
   "hostLastDrop": "上次断开：{reason}",
   "hostQueued": "{count} 条消息等待连接",

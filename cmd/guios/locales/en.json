@@ -1522,6 +1522,14 @@
       }
     }
   },
+  "hostLoadLabel": "Load {load}",
+  "@hostLoadLabel": {
+    "placeholders": {
+      "load": {
+        "type": "String"
+      }
+    }
+  },
   "hostRunsTuios": "Runs tuios {version}",
   "@hostRunsTuios": {
     "placeholders": {

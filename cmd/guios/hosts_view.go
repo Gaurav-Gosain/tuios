@@ -59,8 +59,9 @@ func (a *App) machinesSection(c *ui.Context, pal *palette, gi, n *int) {
 		if a.prefs.Collapsed[machineKey(h)] {
 			continue
 		}
-		// Its sessions, a step in under it.
-		ui.Column(c.Key("in-"+h.name)).Padding(0, 0, 0, 8).Children(func() {
+		// Its sessions, at the sidebar's one indent (council round 1,
+		// visual 28).
+		ui.Column(c.Key("in-" + h.name)).Children(func() {
 			for i, g := range a.hostGroups(h) {
 				g.first = i == 0
 				a.groupView(c, pal, g, 1, n)
@@ -126,7 +127,16 @@ func (a *App) machineRow(c *ui.Context, pal *palette, h *host) {
 				return
 			}
 			if t := a.hostProblem(h); t != "" {
-				ui.Text(c, t).FontSize(11.5).TextColor(pal.textMuted).LineHeight(1.35).Selectable()
+				// A program's raw words (its stderr) go to the tooltip: the
+				// line says in plain words what is wrong.
+				say := t
+				if rawReason(t) {
+					say = a.hostStatusWord(h)
+				}
+				line := ui.Text(c, say).FontSize(fsSmall).TextColor(pal.textMuted).LineHeight(1.35).Selectable()
+				if say != t {
+					line.Tooltip(t)
+				}
 			}
 			a.hostFixes(c, pal, h)
 		})
@@ -140,17 +150,14 @@ func (a *App) loadMeter(c *ui.Context, pal *palette, r client.HostReport) {
 	col := pal.textFaint
 	switch {
 	case frac >= 0.9:
-		col = pal.danger
+		col = pal.dangerText
 	case frac >= 0.7:
-		col = pal.attention
+		col = pal.attnText
 	}
-	ui.Row(c.Key("load")).Gap(5).AlignItems(ui.Center).Shrink(0).
-		Tooltip(locales.HostLoad(fmt.Sprintf("%.2f", r.Load1), r.Cores)).Children(func() {
-		ui.Box(c).Size(22, 4).Radius(2).Background(pal.text.Alpha(0.1)).Children(func() {
-			ui.Box(c).Size(max(2, 22*frac), 4).Radius(2).Background(col)
-		})
-		ui.Text(c, fmt.Sprintf("%.1f", r.Load1)).FontSize(11).TextColor(pal.textFaint).FontFeatures("tnum").SingleLine()
-	})
+	// A labelled figure, in its role's colour past 70 % of the cores: an
+	// unlabelled bar read as a progress bar (council round 1, visual 28).
+	ui.Text(c.Key("load"), locales.HostLoadLabel(fmt.Sprintf("%.1f", r.Load1))).FontSize(fsSmall).TextColor(col).FontFeatures("tnum").SingleLine().
+		Shrink(0).Tooltip(locales.HostLoad(fmt.Sprintf("%.2f", r.Load1), r.Cores))
 }
 
 // hostDotColor is the color of a machine's link dot.
@@ -295,19 +302,19 @@ func (a *App) hostFixes(c *ui.Context, pal *palette, h *host) {
 	ui.Row(c.Key("fixes")).Gap(6).Children(func() {
 		switch h.rep.Status {
 		case client.HostNoDaemon:
-			if smallButton(c, "start", locales.HostStartDaemon(), true, pal) {
+			if smallButton(c, "start", locales.HostStartDaemon(), false, pal) {
 				a.startHostDaemon(h)
 			}
 		case client.HostNoTuios:
-			if smallButton(c, "install", locales.HostInstallTuios(), true, pal) {
+			if smallButton(c, "install", locales.HostInstallTuios(), false, pal) {
 				a.offerInstall(h)
 			}
 		case client.HostIncompatible:
-			if smallButton(c, "update", locales.CommonUpdate(), true, pal) {
+			if smallButton(c, "update", locales.CommonUpdate(), false, pal) {
 				a.offerHostUpdate(h)
 			}
 		case client.HostSignIn:
-			if h.rep.ApprovalURL != "" && smallButton(c, "signin", locales.HostSignIn(), true, pal) {
+			if h.rep.ApprovalURL != "" && smallButton(c, "signin", locales.HostSignIn(), false, pal) {
 				mygo.Shell.OpenExternal(h.rep.ApprovalURL)
 			}
 		}
@@ -319,6 +326,12 @@ func (a *App) hostFixes(c *ui.Context, pal *palette, h *host) {
 			}
 		}
 	})
+}
+
+// rawReason tells that a machine's reason is a program's own words, as
+// "sh: tuios: command not found", not a sentence of the app's.
+func rawReason(t string) bool {
+	return strings.Contains(t, ": ") || strings.Contains(t, "\n") || strings.Contains(t, "exit status")
 }
 
 // smallButton is a button for a sidebar's note.
