@@ -771,7 +771,13 @@ func (r *reader) finish(e *Entry) {
 		e.Tool, _ = r.clean(raw.tool, toolMax)
 	}
 	if raw.target != "" {
-		e.Target, _ = r.clean(raw.target, targetMax)
+		target := raw.target
+		if ShellTool(raw.tool) {
+			// Clean drops an escape sequence whole, so printf '\e[31m'
+			// would read as printf ''. A command shows what it holds.
+			target = ControlPictures(target)
+		}
+		e.Target, _ = r.clean(target, targetMax)
 	}
 	for _, t := range raw.todos {
 		text, _ := r.clean(t.Text, targetMax)

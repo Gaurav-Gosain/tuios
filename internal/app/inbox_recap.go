@@ -12,6 +12,7 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/sessiontree"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
+	"github.com/Gaurav-Gosain/tuios/internal/transcriptview"
 )
 
 // The away recap: what an agent did while the person was looking at
@@ -414,7 +415,7 @@ func agentReturnLine(r agentReturn, rc *session.AgentActivityRecap, now time.Tim
 			parts = append(parts, recapCount(rc.Commands, "command", "commands"))
 		}
 		if t := rc.Tests; t != nil {
-			if name := recapTestName(t.Cmdline); name != "" {
+			if name := recapTestName(transcriptview.CommandLabel(t.Cmdline)); name != "" {
 				parts = append(parts, name+" "+recapTestWord(t.OK))
 			}
 		}
@@ -453,7 +454,7 @@ func recapSentences(rc *session.AgentActivityRecap, since int64, now time.Time) 
 	out = append(out, line)
 	line = recapCount(rc.Commands, "command", "commands") + "."
 	if t := rc.Tests; t != nil {
-		line += " Tests: " + printableTitle(t.Cmdline) + " " + recapTestWord(t.OK) + " " + inboxWait(t.At, now) + " ago"
+		line += " Tests: " + printableTitle(transcriptview.CommandLabel(t.Cmdline)) + " " + recapTestWord(t.OK) + " " + inboxWait(t.At, now) + " ago"
 	}
 	out = append(out, line)
 	if rc.LastSaid != "" {

@@ -1261,7 +1261,7 @@ func (m *OS) ckRowLine2(l ckLook, r ckRow, e sidebarAgentEntry) (verb, rest stri
 		return "", silentNote(e.StateAt, time.Now()), pal.Warn, right
 	case e.State == "working":
 		if now := ckMeta(e, "now"); now != "" {
-			if tool, target, ok := strings.Cut(now, ": "); ok {
+			if tool, target, ok := strings.Cut(toolLineLabel(now), ": "); ok {
 				return tool, target, ink, right
 			}
 			return now, "", ink, right
@@ -1345,7 +1345,9 @@ func ckItemVerb(it session.AttentionItem) (verb, rest string) {
 	switch it.Kind {
 	case session.AttentionApproval:
 		if tool, text := risk.ParseSummary(it.Summary); tool != "" {
-			return "Allow " + printableTitle(tool), printableTitle(text)
+			// The row names the program. The card under it shows the
+			// command whole, which is what an allow runs.
+			return "Allow " + printableTitle(tool), printableTitle(ckToolTarget(tool, text))
 		}
 		return "Allow", sum
 	case session.AttentionPlan:

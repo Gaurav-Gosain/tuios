@@ -12595,3 +12595,22 @@ colocated and not, and folds it. Run on 2026-11-02 on macOS with jj 0.46.0:
 | Run on 2026-11-03: `childproc.OwnGroup` and `WaitDelay` cut from `readJJ` | `TestJJTimeoutHoldsWithAHungChild` (unit, `internal/gitstate`) | readJJ returned after about 20 s, the fake jj's child, not within `countTimeout` | **caught** |
 
 The frames are `rail-jj-repo-row-*` under the test's artifact folder.
+
+## Shell commands show their program in the thread
+
+The codex case of `TestCockpitThreadOtherHarnesses` reads a rollout whose
+`exec_command` runs `bash -lc 'cd /work/project && go test ./...'` and whose
+`shell` argv runs a script that prints an ESC byte. The thread must show
+`exec_command  go test ./...` and `shell  printf '␛[1m' && grep -n run src/app.go`,
+and no screen of it may show `bash -lc`. Run on 2026-11-04 on Linux, each
+control against the branch head with one change:
+
+| Control | Where it fails | Verdict |
+| --- | --- | --- |
+| A build of main at b1d5a5163 | the thread shows `exec_command  bash -lc 'cd /work/project && go test ./...'` and `shell  printf '' && grep -n run src/app.go`: "never showed" both labels, and "showed the wrapper \"bash -lc\"" | **caught** |
+| `transcriptview.CommandLabel` returns its input | "never showed \"exec_command  go test ./...\"" and "showed the wrapper \"bash -lc\" of a command" | **caught** |
+| The decoder's `ControlPictures` on a shell target taken out | the daemon strips the ESC sequence whole: "never showed \"shell  printf '␛[1m' && grep -n run src/app.go\"" | **caught** |
+
+The frames are `thread-codex-commands` under `TUIOS_E2E_FRAMES`. Repeat from
+`e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestCockpitThreadOtherHarnesses$/codex' -v .`.

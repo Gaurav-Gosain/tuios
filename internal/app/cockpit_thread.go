@@ -15,6 +15,7 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/diffview"
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
+	"github.com/Gaurav-Gosain/tuios/internal/transcriptview"
 )
 
 // The thread as cards: what the selected agent said and did, drawn from its
@@ -252,7 +253,7 @@ func (m *OS) threadCardLines(e sidebarAgentEntry, t *agentThread, width int, cha
 			}
 			add(ls...)
 		case en.Kind == "tool_call":
-			ls := []ckLine{m.ckToolLine(l, printableTitle(en.Tool), printableTitle(en.Target), en.Status, width)}
+			ls := []ckLine{m.ckToolLine(l, printableTitle(en.Tool), printableTitle(ckToolTarget(en.Tool, en.Target)), en.Status, width)}
 			if en.Status == "error" {
 				if res, ok := results[en.ToolID]; ok && res.Text != "" {
 					out := threadWrap(res.Text, max(width-6, 8))
@@ -371,6 +372,24 @@ func ckClock(at int64) string {
 		return ""
 	}
 	return time.UnixMilli(at).Format("15:04")
+}
+
+// ckToolTarget is what a tool line says the call acted on: for a shell
+// call, the program it ran without bash -lc, cd dir && and the like.
+func ckToolTarget(tool, target string) string {
+	if transcriptview.ShellTool(tool) {
+		return transcriptview.CommandLabel(target)
+	}
+	return target
+}
+
+// toolLineLabel is a "Tool: target" line, as the daemon writes what an agent
+// or a subagent runs now, with a shell call's target as its command label.
+func toolLineLabel(line string) string {
+	if tool, target, ok := strings.Cut(line, ": "); ok && transcriptview.ShellTool(tool) {
+		return tool + ": " + transcriptview.CommandLabel(target)
+	}
+	return line
 }
 
 // ckToolLine is a folded tool call: the fold mark, the kind, what it acted
