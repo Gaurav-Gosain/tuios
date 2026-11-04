@@ -512,6 +512,7 @@ func (k *stateKeeper) watch() {
 			Message string `json:"message"`
 		}
 		_ = json.Unmarshal(line, &ev)
+		debugf("event %s: %s", k.c.host, ev.Type)
 		if ev.Type == "window-closed" || ev.Type == "agent-state" {
 			// The daemon records an ended conversation on either.
 			k.convGen.Add(1)

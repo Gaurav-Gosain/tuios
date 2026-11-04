@@ -14,6 +14,7 @@ import (
 	"runtime"
 	"slices"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/egoist/mygo"
@@ -115,7 +116,12 @@ type App struct {
 	// hostsGen counts the watches of this machine's daemon's links, so a
 	// watch of a daemon gone stops; hostsKnown says the daemon told its
 	// links once; localLoad is this machine's load, as it told it.
-	hostsGen   int
+	hostsGen int
+	// hostsMu guards hostsKey, what the app last showed of the links
+	// (hostsShown), which refreshHosts reads off the main thread.
+	hostsMu    sync.Mutex
+	hostsKey   string
+	hostsLast  map[string]client.HostReport
 	hostsKnown bool
 	localLoad  client.HostReport
 	// xfer are the copies between machines (transfers.go).

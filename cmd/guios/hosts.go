@@ -2,6 +2,7 @@ package main
 
 import (
 	"errors"
+	"fmt"
 	"path"
 	"runtime"
 	"slices"
@@ -194,7 +195,7 @@ func (a *App) hostPrefs(name string) settings.Host {
 // hostsEvery is how often the app asks this machine's daemon how its links
 // stand, besides the host-changed events: a far machine's load moves
 // without one.
-const hostsEvery = 30 * time.Second
+const hostsEvery = 60 * time.Second
 
 // refreshHosts asks this machine's daemon how its links stand, off the main
 // thread, and follows the answer.
@@ -208,8 +209,50 @@ func (a *App) refreshHosts() {
 		if err != nil {
 			return
 		}
+		a.hostsMu.Lock()
+		// A link that failed and dials again says connecting for the
+		// moment of the dial, about once a minute: the app keeps showing
+		// why it failed until the dial ends.
+		for i, r := range reps {
+			if last, ok := a.hostsLast[r.Host]; ok && r.Status == client.HostConnecting && failedLink(last.Status) {
+				reps[i].Status, reps[i].Reason, reps[i].Detail = last.Status, last.Reason, last.Detail
+			}
+		}
+		a.hostsLast = map[string]client.HostReport{}
+		for _, r := range reps {
+			a.hostsLast[r.Host] = r
+		}
+		// Nothing the app shows changed: no frame, no work.
+		key := hostsShown(reps)
+		same := key == a.hostsKey
+		a.hostsKey = key
+		a.hostsMu.Unlock()
+		if same {
+			return
+		}
 		a.update(func() { a.applyHosts(reps, load) })
 	}()
+}
+
+// failedLink tells a link status that keeps a host's sessions from
+// showing until something changes.
+func failedLink(status string) bool {
+	switch status {
+	case client.HostUnreachable, client.HostNoDaemon, client.HostNoTuios, client.HostIncompatible, client.HostSignIn:
+		return true
+	}
+	return false
+}
+
+// hostsShown is what the app shows of the daemon's links, as text: two
+// answers that differ only in what it does not show draw nothing anew.
+func hostsShown(reps []client.HostReport) string {
+	var b strings.Builder
+	for _, r := range reps {
+		fmt.Fprintf(&b, "%s|%s|%s|%s|%s|%s|%s|%d|%.1f|%d|%d|%d|%s\n", r.Host, r.Addr, r.Status, r.Reason, r.Detail,
+			r.ApprovalURL, r.DaemonVersion, r.Cores, r.Load1, r.RTTMillis, r.Drops, r.Queued, r.Command)
+	}
+	return b.String()
 }
 
 // watchHosts follows the links of this machine's daemon: on its events,
