@@ -158,7 +158,7 @@ func (a *App) cockpitFocus(c *ui.Context, pal *palette) {
 		})
 	})
 	ui.Box(c).Height(1).Shrink(0).Background(pal.divider)
-	ui.Column(c.Key("tab-" + ck.tab)).Grow(1).MinHeight(0).AlignItems(ui.Stretch).Children(func() {
+	ui.Column(c.Key("tab-" + ck.tab)).Grow(1).MinHeight(ckTabMinH).ClipY().AlignItems(ui.Stretch).Children(func() {
 		switch ck.tab {
 		case tabChanges:
 			a.changesView(c, pal, ag)
@@ -172,13 +172,34 @@ func (a *App) cockpitFocus(c *ui.Context, pal *palette) {
 			a.threadView(c, pal, ag)
 		}
 	})
-	if r.item != nil && ckAnswerable(*r.item) {
-		a.approvalCard(c, pal, ag, *r.item)
+	card := r.item != nil && ckAnswerable(*r.item)
+	if !card && ck.tab != tabThread {
+		return
 	}
-	if ck.tab == tabThread {
-		a.replyBox(c, pal, ag)
-	}
+	// The card and the reply box take what the window leaves the tab's
+	// content beyond its least, and scroll past it: in a short window they
+	// would push past the card's foot over the key line.
+	_, winH := c.Size()
+	bottom := max(140, winH-ckFocusChromeH-ckTabMinH)
+	ui.Scroll(c.Key("ck-bottom")).Shrink(0).MaxHeight(bottom).Children(func() {
+		ui.Column(c).AlignItems(ui.Stretch).Children(func() {
+			if card {
+				a.approvalCard(c, pal, ag, *r.item)
+			}
+			if ck.tab == tabThread {
+				a.replyBox(c, pal, ag)
+			}
+		})
+	})
 }
+
+// ckFocusChromeH is the height around the focus area's tab content: the
+// window's header, the agent's header and tabs, the key line. ckTabMinH
+// is the least the tab's content keeps.
+const (
+	ckFocusChromeH = 250
+	ckTabMinH      = 120
+)
 
 // ckTab is one tab, with its count where it has one.
 func (a *App) ckTab(c *ui.Context, pal *palette, t string, ag client.Agent) {
