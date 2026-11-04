@@ -192,6 +192,11 @@ old behaviour. None of them bumps the protocol integer: every field keeps its
 name and type, and a caller that sends nothing new keeps working. What changes
 is an answer, and each entry says which.
 
+**herdr's `pane.focus` and `agent.focus` show the pane's session.** A
+focused pane in a session that no client shows now moves the attached client
+to that session, as `workspace.focus` does, so the pane is on screen. Before,
+the pane was focused in its session and the client stayed where it was.
+
 **The new event `agent-seen`** says a finished pane was looked at, or marked
 unread again. A subscriber that names no types gets it.
 

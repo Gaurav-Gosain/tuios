@@ -1048,7 +1048,11 @@ func (d *Daemon) herdrPaneFocus(cs *connState, in *herdrIn) (*herdrResult, *herd
 	return d.herdrFocusPane(cs, in.PaneID)
 }
 
-// herdrFocusPane is focus-window, which also shows the window's workspace.
+// herdrFocusPane is focus-window, which also shows the window's workspace,
+// and then shows the window's session on an attached client: herdr's
+// pane.focus makes the pane's workspace the active one, and a herdr
+// workspace is a tuios session. With no client attached the pane is still
+// focused in its session, as focus-window does.
 func (d *Daemon) herdrFocusPane(cs *connState, id string) (*herdrResult, *herdrError) {
 	sess, win, ierr := d.herdrFindPane(id)
 	if ierr != nil {
@@ -1056,6 +1060,14 @@ func (d *Daemon) herdrFocusPane(cs *connState, id string) (*herdrResult, *herdrE
 	}
 	if _, herr := d.herdrVerb(cs, "focus-window", herdrWin(sess, win.ID), "pane_focus_failed"); herr != nil {
 		return nil, herr
+	}
+	if d.findTUIClient(sess.ID) == nil {
+		if herr := d.herdrAdmit(cs, "select-workspace", sess); herr != nil {
+			return nil, herr
+		}
+		if _, herr := d.herdrShowSession(cs, sess, "pane_focus_failed"); herr != nil {
+			return nil, herr
+		}
 	}
 	// herdr marks the target seen on an explicit pane.focus or agent.focus,
 	// with or without a client to show it, so a done pane answers idle. A

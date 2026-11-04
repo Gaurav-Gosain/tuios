@@ -703,7 +703,7 @@ A refused call answers error `forbidden`, and nothing changes.
 | `pane.send_keys`, `agent.send_keys` | `send-keys` | herdr's key names. tuios also takes `PageUp`, `PageDown`, `Home`, `End`, `Insert` and `Delete`. `cmd`, `super` and `hyper` fail with `invalid_key` |
 | `pane.send_input` | `send-text` with `paste`, `send-keys` | the text is a paste, as for `pane.send_text` |
 | `pane.rename` | `set-window` | `label: null` clears the name |
-| `pane.focus`, `agent.focus` | `focus-window` | marks the pane seen, as herdr does, so a `done` pane answers `idle`, with or without a client attached |
+| `pane.focus`, `agent.focus` | `focus-window`, then the attached client | the pane's session becomes the one the client shows, as herdr makes the pane's workspace the active one. The client is chosen as for `workspace.focus`. Without a client the pane is focused in its session all the same. Marks the pane seen, as herdr does, so a `done` pane answers `idle` |
 | `pane.split` | `split-window`, else `new-window` | without an attached client, or with `cwd`, the new pane is a window on the same workspace |
 | `pane.close` | `close-window` | |
 | `pane.wait_for_output` | `wait-for window-output` | |

@@ -449,25 +449,42 @@ func (d *Daemon) herdrWorkspaceFocus(cs *connState, in *herdrIn) (*herdrResult, 
 	if herr := d.herdrAdmit(cs, "select-workspace", sess); herr != nil {
 		return nil, herr
 	}
-	if d.findTUIClient(sess.ID) == nil {
-		var from *Session
-		if fromPane, window := d.peerPane(cs); fromPane {
-			from = d.sessionHoldingWindow(window)
-		}
-		if from == nil || d.findTUIClient(from.ID) == nil {
-			from = d.herdrFocusedSession(d.herdrSessions(cs))
-		}
-		if from == nil || d.findTUIClient(from.ID) == nil {
-			return nil, herdrErr("no_client", "no tuios client is attached to show the workspace on. Attach one with tuios attach "+sess.Name())
-		}
-		if herr := d.herdrRouteClient(from, "switch_session", "workspace_focus_failed", sess.Name()); herr != nil {
-			return nil, herr
-		}
-		// The client answers before it switches, so the answer below waits
-		// for the switch to show.
-		sess.waitChange(routedVerbTimeout, func() bool { return d.findTUIClient(sess.ID) != nil })
+	shown, herr := d.herdrShowSession(cs, sess, "workspace_focus_failed")
+	if herr != nil {
+		return nil, herr
+	}
+	if !shown {
+		return nil, herdrErr("no_client", "no tuios client is attached to show the workspace on. Attach one with tuios attach "+sess.Name())
 	}
 	return d.herdrWorkspaceInfo(cs, in.WorkspaceID)
+}
+
+// herdrShowSession has an attached client show sess, as herdr's active
+// workspace follows workspace.focus and pane.focus. The client moved is the
+// one that shows the caller's own session, else the one that shows the
+// active workspace, and it switches the way the session switcher does. It
+// reports whether a client shows sess afterwards: false when none is
+// attached to move.
+func (d *Daemon) herdrShowSession(cs *connState, sess *Session, fail string) (bool, *herdrError) {
+	if d.findTUIClient(sess.ID) != nil {
+		return true, nil
+	}
+	var from *Session
+	if fromPane, window := d.peerPane(cs); fromPane {
+		from = d.sessionHoldingWindow(window)
+	}
+	if from == nil || d.findTUIClient(from.ID) == nil {
+		from = d.herdrFocusedSession(d.herdrSessions(cs))
+	}
+	if from == nil || d.findTUIClient(from.ID) == nil {
+		return false, nil
+	}
+	if herr := d.herdrRouteClient(from, "switch_session", fail, sess.Name()); herr != nil {
+		return false, herr
+	}
+	// The client answers before it switches, so wait for the switch to show.
+	sess.waitChange(routedVerbTimeout, func() bool { return d.findTUIClient(sess.ID) != nil })
+	return true, nil
 }
 
 // herdrAgentNameOK is herdr's rule for an agent name.

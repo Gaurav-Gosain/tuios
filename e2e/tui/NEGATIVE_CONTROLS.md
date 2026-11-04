@@ -36,6 +36,25 @@ The frames are `sh-read-back`, `fish-read-back`, `dragged` and
 `bash-read-back` under `TUIOS_E2E_FRAMES`, in the test's folder. Repeat from
 `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestPastedPathReadsBackBehindTmux$' -v .`.
+## herdr's pane.focus shows the pane's session
+
+`TestHerdrFocusShowsThePanesSession` holds `pane.focus` and `agent.focus` to
+herdr 0.9.5, where focusing a pane makes its workspace the active one. With a
+client on one session, a `pane.focus` on a pane in another session must move
+the client there with the pane focused, and `agent.focus` must move it back. A
+`pane.focus` in the session the client shows must leave the client where it is.
+
+Run on 2026-11-04 on macOS (darwin/arm64). The test passes on the fixed build.
+Each control was built into its own binary.
+
+| Control: what was cut | Where it fails | Verdict |
+| --- | --- | --- |
+| Main without the fix (57150e1ef) | "pane.focus on a pane in another session: the client shows [e2e-home], want e2e-other" | **caught** |
+| The `herdrShowSession` call in `herdrFocusPane` | The same message | **caught** |
+
+The frames are `herdr-focus-other-session` and `herdr-focus-back` under
+`TUIOS_E2E_FRAMES`.
+
 ## The herdr socket reports a seen done pane as idle
 
 `TestHerdrSeenDoneIsIdle` holds the herdr socket to herdr 0.9.5's
