@@ -60,7 +60,7 @@ const ReaderJSONL = "claude-code-jsonl"
 
 // knownReaders is the set a manifest may name. Each is a format of
 // internal/transcriptview, which this package does not import, so the names
-// are kept in step by the session package's tests.
+// are kept in step by hand.
 var knownReaders = map[string]struct{}{
 	ReaderJSONL:        {},
 	"codex-rollout":    {},
@@ -71,16 +71,6 @@ var knownReaders = map[string]struct{}{
 	"opencode-service": {},
 	"cursor-jsonl":     {},
 	"pi-jsonl":         {},
-}
-
-// KnownReaders returns the reader names a manifest may give.
-func KnownReaders() []string {
-	out := make([]string, 0, len(knownReaders))
-	for name := range knownReaders {
-		out = append(out, name)
-	}
-	slices.Sort(out)
-	return out
 }
 
 // verifiableFields are the record fields Verify may name. They are the agent's
