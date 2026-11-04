@@ -122,7 +122,31 @@ func (a *App) panes(c *ui.Context, pal *palette, bar ui.TitleBar, shown float32,
 	// at once, while panes opened, closed or moved within it animate
 	// (paneTransition).
 	a.reportGrid(c, s)
-	ui.Column(c.Key("ws-" + view)).Grow(1).Basis(0).MinWidth(0).MinHeight(0).AlignItems(ui.Stretch).Bind(a.paneRef("ws-area")).Children(func() {
+	// The area holds the workspace's panes, and the panes of the one left
+	// as they slide out (slide.go).
+	area := ui.Column(c.Key("ws-slide")).Grow(1).Basis(0).MinWidth(0).MinHeight(0).AlignItems(ui.Stretch)
+	sl, k := a.slideOf(c, s)
+	if sl == nil {
+		a.area = a.paneRef("ws-area").Bounds(c)
+	}
+	if sl != nil {
+		area.Clip()
+	}
+	area.Children(func() {
+		if sl != nil {
+			a.slideOut(c, pal, sl, k)
+		}
+		ws := ui.Column(c.Key("ws-" + view)).Grow(1).Basis(0).MinWidth(0).MinHeight(0).AlignItems(ui.Stretch)
+		if sl != nil {
+			ws.Translate(sl.dir*sl.w*(1-k), 0)
+		}
+		a.workspacePanes(c, pal, bar, shown, s, right, ws)
+	})
+}
+
+// workspacePanes builds ws, the column of the panes of s.
+func (a *App) workspacePanes(c *ui.Context, pal *palette, bar ui.TitleBar, shown float32, s *proto.Session, right bool, ws ui.Element) {
+	ws.Bind(a.paneRef("ws-area")).Children(func() {
 		if s.PaneByID(s.Zoomed) == nil && s.Arrange != nil && len(s.Panes) > 1 {
 			// Master-stack, scrolling and floating, and panes floating
 			// over the split tree: by their rectangles.
