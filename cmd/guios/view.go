@@ -25,8 +25,8 @@ const (
 	topBar  = 2 * barMid
 	headerH = 2 * (barMid - cardGap)
 	cardGap = 8 // around the card
-	rowH    = 34
-	rowH2   = 48 // a detailed row, of two lines
+	rowH    = hRow
+	rowH2   = hRow2 // a detailed row, of two lines
 	// rowInset is where a sidebar row's text starts: a session's name and
 	// its group's.
 	rowInset = 12
@@ -264,7 +264,7 @@ func (a *App) resizeHandle(c *ui.Context, pal *palette) {
 
 // iconButton is a quiet square button with an icon, as in a toolbar.
 func iconButton(c *ui.Context, key string, svg *ui.SVG, label string, pal *palette, fn func()) {
-	b := ui.ButtonBase(c.Key(key)).Size(28, 26).Radius(6).Center().TextColor(pal.textMuted).Label(label).Tooltip(label)
+	b := ui.ButtonBase(c.Key(key)).Size(hControl, 26).Radius(rRow).Center().TextColor(pal.textMuted).Label(label).Tooltip(label)
 	if b.Pressed() {
 		b.Background(pal.rowHover.Alpha(0.12))
 	} else if b.Hovered() {
@@ -325,9 +325,12 @@ func pointerTooltip(c *ui.Context, el ui.Element, key, s string) {
 	}
 }
 
+// kbd is a key cap: 18 high, at least as wide, in a ring.
 func kbd(c *ui.Context, pal *palette, keys string) {
-	ui.Text(c, keys).FontSize(11).TextColor(pal.textMuted).Padding(1, 5).Radius(4).
-		Background(pal.kbd).SingleLine()
+	ui.Row(c).Height(hKbd).MinWidth(hKbd).Padding(0, 5).Radius(rChip).Background(pal.kbd).Border(1, pal.kbdBorder).
+		AlignItems(ui.Center).Justify(ui.Center).Shrink(0).Children(func() {
+		ui.Text(c, keys).FontSize(fsCaption).FontWeight(wMedium).TextColor(pal.textMuted).SingleLine()
+	})
 }
 
 // --- the sidebar ---
@@ -357,7 +360,7 @@ func (a *App) sidebar(c *ui.Context, pal *palette, bar ui.TitleBar) {
 				gi++
 			}
 			if len(a.st.Sessions) == 0 && local.conn == connReady && len(a.hosts) == 1 {
-				ui.Text(c, locales.SidebarNoSessions()).FontSize(12.5).TextColor(pal.textFaint).Padding(8, 10)
+				ui.Text(c, locales.SidebarNoSessions()).FontSize(fsSmall).TextColor(pal.textFaint).Padding(8, 10).MaxLines(2)
 			}
 		}
 		// Then the machines this machine's daemon links, each with its
@@ -392,7 +395,7 @@ func (a *App) groupView(c *ui.Context, pal *palette, g group, gi int, n *int) {
 	if pal.dark {
 		inset++
 	}
-	hdr := ui.Row(c.Key("project-"+key)).Height(28).Margin(top, 0, 3, 0).Padding(0, 6, 0, inset).Gap(6).AlignItems(ui.Center).Radius(6)
+	hdr := ui.Row(c.Key("project-"+key)).Height(hControl).Margin(top, 0, 2, 0).Padding(0, 6, 0, inset).Gap(6).AlignItems(ui.Center).Radius(rRow)
 	hovered := hdr.Hovered()
 	renaming := id != "" && a.renamingProject == id
 	if hdr.Clicked() && !renaming {
@@ -446,7 +449,7 @@ func (a *App) groupView(c *ui.Context, pal *palette, g group, gi int, n *int) {
 	})
 	hdr.Children(func() {
 		if renaming {
-			in := ui.TextInputBase(c.Key("rename"), &a.renameBuf).Grow(1).MinWidth(0).FontSize(12.5).FontWeight(600).AutoFocus()
+			in := ui.TextInputBase(c.Key("rename"), &a.renameBuf).Grow(1).MinWidth(0).FontSize(fsSmall).FontWeight(wMedium).AutoFocus()
 			if in.Shortcut(0, ui.KeyEscape) {
 				a.renamingProject = ""
 				a.focusTerminal()
@@ -455,14 +458,14 @@ func (a *App) groupView(c *ui.Context, pal *palette, g group, gi int, n *int) {
 			}
 			return
 		}
-		ui.Text(c, g.project.Name).FontSize(12.5).FontWeight(600).TextColor(pal.textMuted).SingleLine().Ellipsis("…").MinWidth(0).Shrink(1)
+		oneLine(c, g.project.Name, fsSmall, wMedium).TextColor(pal.textMuted)
 		if g.host.remote() {
 			a.hostTag(c, pal, g.host)
 		}
-		ui.Textf(c, "%d", len(g.sessions)).FontSize(12.5).TextColor(pal.textFaint).FontFeatures("tnum")
-		chev := ui.Icon(c, chevronIcon).Size(11, 11).TextColor(pal.textFaint)
+		ui.Textf(c, "%d", len(g.sessions)).FontSize(fsSmall).TextColor(pal.textFaint).FontFeatures("tnum").Shrink(0)
+		chev := ui.Icon(c, chevronIcon).Size(12, 12).TextColor(pal.textFaint).Shrink(0)
 		turn := chev.AnimateTo("turn", 90*(1-b2f(collapsed)), ui.Snappy)
-		chev.Rotate(turn).Opacity(chev.Animate("shown", b2f(hovered || collapsed), 120*time.Millisecond))
+		chev.Rotate(turn).Opacity(chev.Animate("shown", b2f(hovered || collapsed), dHoverOut))
 		ui.Spacer(c)
 		// A machine's first group says how its link stands while it is
 		// not up.
@@ -470,14 +473,14 @@ func (a *App) groupView(c *ui.Context, pal *palette, g group, gi int, n *int) {
 			a.hostState(c, pal, g.host)
 		}
 		if needs > 0 {
-			ui.Text(c, locales.SidebarNeedsYou(needs)).FontSize(12.5).FontWeight(500).TextColor(pal.attention).SingleLine()
+			ui.Text(c, locales.SidebarNeedsYou(needs)).FontSize(fsSmall).FontWeight(wMedium).TextColor(pal.attention).FontFeatures("tnum").SingleLine().Shrink(0)
 		}
 		if hovered {
-			b := ui.ButtonBase(c.Key("add")).Size(20, 20).Radius(5).Center().TextColor(pal.textMuted).Label(locales.NewSessionIn(g.project.Name)).Tooltip(locales.ActionNewSession())
+			b := ui.ButtonBase(c.Key("add")).Size(20, 20).Radius(rRow).Center().Shrink(0).TextColor(pal.textMuted).Label(locales.NewSessionIn(g.project.Name)).Tooltip(locales.ActionNewSession())
 			if b.Hovered() {
 				b.Background(pal.rowHover).TextColor(pal.text)
 			}
-			b.Children(func() { ui.Icon(c, plusIcon).Size(13, 13) })
+			b.Children(func() { ui.Icon(c, plusIcon).Size(14, 14) })
 			if b.Clicked() {
 				a.newSessionOn(g.host, id)
 			}
@@ -506,7 +509,7 @@ func (a *App) sessionRow(c *ui.Context, pal *palette, s *proto.Session, n *int) 
 	if detailed {
 		h = rowH2
 	}
-	row := ui.Row(c.Key(s.ID)).Height(h).Padding(0, 10, 0, rowInset).Gap(10).AlignItems(ui.Center).Radius(8).Margin(0, 0, 1, 0)
+	row := ui.Row(c.Key(s.ID)).Height(h).Padding(0, 10, 0, rowInset).Gap(10).AlignItems(ui.Center).Radius(rRow).Margin(0, 0, 1, 0)
 	hovered := row.Hovered()
 	if pal.dark {
 		// Room for the chosen row's edge in every row, so that choosing
@@ -521,7 +524,7 @@ func (a *App) sessionRow(c *ui.Context, pal *palette, s *proto.Session, n *int) 
 	case hovered:
 		bg = pal.rowHover
 	}
-	row.Background(row.AnimateColor("bg", bg, ui.Animation{Duration: 110 * time.Millisecond}))
+	row.Background(row.AnimateColor("bg", bg, ui.Animation{Duration: dHoverOut}))
 	// A session of a host the app lost shows as it was, faded, until the
 	// host is back.
 	if h := a.hostOf(s.ID); h.remote() && h.conn != connReady {
@@ -548,7 +551,7 @@ func (a *App) sessionRow(c *ui.Context, pal *palette, s *proto.Session, n *int) 
 	row.ContextMenu(func(m *ui.Menu) { a.sessionMenu(m, s) })
 	row.Children(func() {
 		if a.renaming == s.ID {
-			in := ui.TextInputBase(c.Key("rename"), &a.renameBuf).Grow(1).MinWidth(0).FontSize(13.5).AutoFocus().
+			in := ui.TextInputBase(c.Key("rename"), &a.renameBuf).Grow(1).MinWidth(0).FontSize(fsBody).AutoFocus().
 				Placeholder(s.DisplayName(a.set.SessionName))
 			if in.Submitted() || in.Shortcut(0, ui.KeyEscape) {
 				if in.Shortcut(0, ui.KeyEscape) {
@@ -563,9 +566,9 @@ func (a *App) sessionRow(c *ui.Context, pal *palette, s *proto.Session, n *int) 
 			return
 		}
 		name := func() {
-			name := ui.Text(c, s.DisplayName(a.set.SessionName)).FontSize(13.5).SingleLine().Ellipsis("…").Shrink(1).MinWidth(0).TextColor(pal.text)
-			if s.Unread {
-				name.FontWeight(650)
+			name := ui.Text(c, s.DisplayName(a.set.SessionName)).FontSize(fsBody).FontWeight(wMedium).SingleLine().Ellipsis("…").Shrink(1).MinWidth(0).TextColor(pal.text)
+			if s.Unread || selected {
+				name.FontWeight(wSemibold)
 			}
 			if s.Status == proto.Exited && !s.Unread {
 				name.TextColor(pal.textMuted)
@@ -573,10 +576,10 @@ func (a *App) sessionRow(c *ui.Context, pal *palette, s *proto.Session, n *int) 
 		}
 		when := func() {
 			if c.Modifiers() == ui.Cmd && index <= 9 {
-				ui.Text(c, actions.Glyphs(fmt.Sprintf("CmdOrCtrl+%d", index))).FontSize(12).TextColor(pal.textMuted).FontFeatures("tnum").SingleLine().Shrink(0)
+				ui.Text(c, actions.Glyphs(fmt.Sprintf("CmdOrCtrl+%d", index))).FontSize(fsSmall).TextColor(pal.textMuted).FontFeatures("tnum").SingleLine().Shrink(0)
 			} else {
 				// The name gives way to these, never they to the name.
-				ui.Text(c, ago(s.Since, c.Now())).FontSize(12.5).TextColor(pal.textFaint).FontFeatures("tnum").SingleLine().Shrink(0)
+				ui.Text(c, ago(s.Since, c.Now())).FontSize(fsSmall).TextColor(pal.textFaint).FontFeatures("tnum").SingleLine().Shrink(0)
 			}
 		}
 		if detailed {
@@ -584,11 +587,11 @@ func (a *App) sessionRow(c *ui.Context, pal *palette, s *proto.Session, n *int) 
 			// at, on a line of the whole row's width, so that a long
 			// branch reads as far as it can.
 			ui.Column(c).Grow(1).MinWidth(0).Gap(2).Children(func() {
-				ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
+				ui.Row(c).Gap(sp2).AlignItems(ui.Center).Children(func() {
 					name()
 					ui.Spacer(c)
 					when()
-					statusIconP(c, pal, s.Status, s.Unread, s.Progress, 15)
+					statusIconP(c, pal, s.Status, s.Unread, s.Progress, 14)
 				})
 				line, msg := rowDetail(s, g, a.hostOf(s.ID).shortDir(s.WorkDir()))
 				if f := s.FocusPane(); !msg && f != nil && f.Shell != "" && line == s.DisplayName(a.set.SessionName) {
@@ -600,17 +603,17 @@ func (a *App) sessionRow(c *ui.Context, pal *palette, s *proto.Session, n *int) 
 				if msg {
 					fg = pal.textMuted
 				}
-				ui.Text(c, line).FontSize(12).TextColor(fg).SingleLine().Ellipsis("…").MinWidth(0)
+				ui.Text(c, flat(line)).FontSize(fsSmall).TextColor(fg).SingleLine().Ellipsis("…").MinWidth(0)
 			})
 		} else {
 			name()
 			// A branch of its own, as an agent's in a worktree, by the name.
 			if b := offBranch(g); b != "" {
-				ui.Text(c, b).FontSize(12).TextColor(pal.textFaint).SingleLine().Ellipsis("…").Shrink(3).MinWidth(24).MaxWidth(120)
+				ui.Text(c, b).FontSize(fsSmall).TextColor(pal.textFaint).SingleLine().Ellipsis("…").Shrink(3).MinWidth(24).MaxWidth(120)
 			}
 			ui.Spacer(c)
 			when()
-			statusIconP(c, pal, s.Status, s.Unread, s.Progress, 15)
+			statusIconP(c, pal, s.Status, s.Unread, s.Progress, 14)
 		}
 	})
 	a.workspaceBar(c, pal, s)
@@ -745,14 +748,14 @@ func (a *App) footerChip(c *ui.Context, pal *palette, st proto.Status, unread bo
 		return
 	}
 	words := say(n)
-	b := ui.ButtonBase(c.Key("chip-"+string(st))).Height(24).Padding(0, 8, 0, 6).Gap(5).Radius(12).AlignItems(ui.Center).
+	b := ui.ButtonBase(c.Key("chip-"+string(st))).Height(hControlSm).Padding(0, 8, 0, 6).Gap(5).Radius(rRow).AlignItems(ui.Center).
 		Label(words).Tooltip(words + " · " + hint)
 	if b.Hovered() {
 		b.Background(pal.rowHover)
 	}
 	b.Children(func() {
 		statusIcon(c, pal, st, unread, 12)
-		ui.Textf(c, "%d", n).FontSize(12).FontWeight(500).TextColor(fg).FontFeatures("tnum")
+		ui.Textf(c, "%d", n).FontSize(fsSmall).FontWeight(wMedium).TextColor(fg).FontFeatures("tnum")
 	})
 	if b.Clicked() {
 		if jump == nil {
@@ -765,14 +768,14 @@ func (a *App) footerChip(c *ui.Context, pal *palette, st proto.Status, unread bo
 // restartChip offers to restart kerod into this version of Kero, while it
 // runs another.
 func (a *App) restartChip(c *ui.Context, pal *palette) {
-	b := ui.ButtonBase(c.Key("chip-restart")).Height(24).Padding(0, 8, 0, 8).Gap(6).Radius(12).AlignItems(ui.Center).
+	b := ui.ButtonBase(c.Key("chip-restart")).Height(hControlSm).Padding(0, 8, 0, 8).Gap(6).Radius(rRow).AlignItems(ui.Center).
 		Label(locales.CommonRestartService()).Tooltip(locales.UpdateRestartTip())
 	if b.Hovered() {
 		b.Background(pal.rowHover)
 	}
 	b.Children(func() {
 		ui.Box(c).Size(6, 6).Radius(3).Background(pal.attention)
-		ui.Text(c, locales.CommonRestartService()).FontSize(12).FontWeight(500).TextColor(pal.attention).SingleLine()
+		ui.Text(c, locales.CommonRestartService()).FontSize(fsSmall).FontWeight(wMedium).TextColor(pal.attention).SingleLine()
 	})
 	if b.Clicked() {
 		a.offerRestart()
@@ -783,7 +786,7 @@ func (a *App) restartChip(c *ui.Context, pal *palette) {
 func (a *App) footerNote(c *ui.Context, pal *palette, dot ui.Color, label string) {
 	ui.Row(c).Gap(7).Padding(0, 6).AlignItems(ui.Center).Children(func() {
 		ui.Box(c).Size(6, 6).Radius(3).Background(dot)
-		ui.Text(c, label).FontSize(12).TextColor(pal.textFaint).SingleLine().
+		ui.Text(c, label).FontSize(fsSmall).TextColor(pal.textFaint).SingleLine().
 			Tooltip(locales.FooterServiceTip())
 	})
 }
@@ -858,24 +861,24 @@ func statusIconP(c *ui.Context, pal *palette, st proto.Status, unread bool, prog
 		case st == proto.Working && progress >= 0:
 			var track ui.Path
 			track.Circle(cx, cy, rad)
-			p.StrokePath(&track, 1.7, pal.text.Alpha(0.13))
+			p.StrokePath(&track, 1.7, pal.work.Alpha(0.25))
 			// From the top, clockwise: the circle starts at 3 o'clock.
 			p.Transform(ui.Rotation(-90), cx, cy, func() {
 				var arc ui.Path
 				arc.Circle(cx, cy, rad)
-				p.StrokePath(arc.Trim(0, max(0.02, float32(progress)/100)), 1.7, pal.text)
+				p.StrokePath(arc.Trim(0, max(0.02, float32(progress)/100)), 1.7, pal.work)
 			})
 		case st == proto.Working:
 			var track ui.Path
 			track.Circle(cx, cy, rad)
-			p.StrokePath(&track, 1.7, pal.text.Alpha(0.13))
+			p.StrokePath(&track, 1.7, pal.work.Alpha(0.25))
 			// A still arc, as the agents view draws: a turning one asked
 			// for a frame at the display's rate, about 2,400 wakeups a
 			// second for as long as any agent worked.
 			p.Transform(ui.Rotation(-90), cx, cy, func() {
 				var arc ui.Path
 				arc.Circle(cx, cy, rad)
-				p.StrokePath(arc.Trim(0, 0.3), 1.7, pal.text)
+				p.StrokePath(arc.Trim(0, 0.35), 1.7, pal.work)
 			})
 		case st == proto.Waiting:
 			var ring ui.Path
@@ -982,7 +985,7 @@ func (a *App) card(c *ui.Context, pal *palette, bar ui.TitleBar, shown float32) 
 		return
 	}
 	// No session: one card, for what the app has to say.
-	card := paned(ui.Column(c).Grow(1).MinHeight(0).Radius(14).Background(pal.card), pal).Clip()
+	card := paned(ui.Column(c).Grow(1).MinHeight(0).Radius(rPane).Background(pal.card), pal).Clip()
 	card.Children(func() {
 		left := a.chrome.headerPad
 		ui.Row(c).Height(headerH).Shrink(0).AlignItems(ui.Center).Padding(0, 10, 0, left).DragWindow().Children(func() {
@@ -992,7 +995,7 @@ func (a *App) card(c *ui.Context, pal *palette, bar ui.TitleBar, shown float32) 
 					iconButton(c, "new-session-2", plusIcon, a.tip(locales.ActionNewSession(), "session.new"), pal, func() { a.newSession("") })
 				})
 			}
-			ui.Text(c, "guios").FontSize(14).FontWeight(600).TextColor(pal.text)
+			ui.Text(c, "guios").FontSize(fsBody).FontWeight(wSemibold).TextColor(pal.text).SingleLine()
 			ui.Spacer(c)
 			a.controlsRoom(c, 0)
 		})
@@ -1016,38 +1019,33 @@ func (a *App) card(c *ui.Context, pal *palette, bar ui.TitleBar, shown float32) 
 }
 
 func (a *App) message(c *ui.Context, pal *palette, title, detail, action string, fn func()) {
-	ui.Column(c).Fill().Center().Gap(10).Padding(24).Children(func() {
-		ui.Text(c, title).FontSize(17).FontWeight(600).TextColor(pal.text)
-		ui.Text(c, detail).FontSize(13).TextColor(pal.textMuted).MaxWidth(420).TextAlign(ui.Center).LineHeight(1.4)
-		if action != "" {
-			ui.Box(c).Height(8)
+	var actions func()
+	if action != "" {
+		actions = func() {
 			if button(c, "msg-action", action, "", true, pal) {
 				fn()
 			}
 		}
-	})
+	}
+	emptyBlock(c, pal, nil, title, detail, true, actions)
 }
 
 func (a *App) emptyState(c *ui.Context, pal *palette) {
-	ui.Column(c).Fill().Center().Gap(0).Padding(24).Children(func() {
-		ui.Box(c).Size(52, 52).Radius(14).Center().Background(pal.chip).TextColor(pal.textMuted).Margin(0, 0, 18, 0).Children(func() {
-			ui.Icon(c, terminalIcon).Size(26, 26)
+	ui.Column(c).Fill().Center().Children(func() {
+		ui.Column(c).Shrink(0).AlignItems(ui.Center).Children(func() {
+			emptyBlock(c, pal, terminalIcon, locales.EmptyTitle(), locales.EmptyDetail(), true, func() {
+				if button(c, "empty-new", locales.ActionNewSession(), a.keys("session.new"), true, pal) {
+					a.newSession("")
+				}
+				if button(c, "empty-open", locales.ActionOpenProject(), a.keys("project.open"), false, pal) {
+					a.openProject()
+				}
+			})
 		})
-		ui.Text(c, locales.EmptyTitle()).FontSize(19).FontWeight(650).TextColor(pal.text)
-		ui.Text(c, locales.EmptyDetail()).
-			FontSize(13.5).TextColor(pal.textMuted).MaxWidth(380).TextAlign(ui.Center).LineHeight(1.45).Margin(8, 0, 22, 0)
-		ui.Row(c).Gap(10).Children(func() {
-			if button(c, "empty-new", locales.ActionNewSession(), a.keys("session.new"), true, pal) {
-				a.newSession("")
-			}
-			if button(c, "empty-open", locales.ActionOpenProject(), a.keys("project.open"), false, pal) {
-				a.openProject()
-			}
-		})
-		ui.Column(c).Margin(40, 0, 0, 0).Padding(14, 16).Gap(6).Radius(10).Background(pal.chip).MaxWidth(420).Children(func() {
-			ui.Text(c, locales.EmptyForAgents()).FontSize(11.5).FontWeight(600).TextColor(pal.textMuted)
+		ui.Column(c).Margin(sp6, sp6, 0, sp6).Padding(sp3, sp4).Gap(6).Radius(rCard).Background(pal.chip).MaxWidth(measure).Children(func() {
+			ui.Text(c, locales.EmptyForAgents()).FontSize(fsSmall).FontWeight(wMedium).TextColor(pal.textMuted).SingleLine()
 			ui.Text(c, "tuios start-agent claude\ntuios send-text \"run the tests and fix them\"\ntuios list-agents").
-				Font("monospace").FontSize(12).TextColor(pal.text).LineHeight(1.5).Selectable()
+				Font(a.termFamily()).FontSize(fsCode).TextColor(pal.text).LineHeight(1.5).NoWrap().Selectable()
 		})
 	})
 }

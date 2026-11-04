@@ -166,17 +166,22 @@ func (a *App) workspaceBar(c *ui.Context, pal *palette, s *proto.Session) {
 		return
 	}
 	sid := s.ID
-	ui.Row(c.Key("ws-"+s.ID)).Height(26).Padding(0, 10, 2, rowInset+2).Gap(3).AlignItems(ui.Center).Margin(0, 0, 2, 0).Children(func() {
+	// The pills' numbers start where the session's name does.
+	inset := float32(rowInset - 8)
+	if pal.dark {
+		inset++
+	}
+	ui.Row(c.Key("ws-"+s.ID)).Height(hRow-4).Padding(0, 10, 2, inset).Gap(2).AlignItems(ui.Center).Margin(0, 0, 2, 0).Children(func() {
 		for _, w := range s.Workspaces {
 			a.workspacePill(c, pal, s, w)
 		}
 		if selected && freeWorkspace(s) > 0 {
-			b := ui.ButtonBase(c.Key("ws-new")).Size(22, 20).Radius(6).Center().TextColor(pal.textFaint).Label(locales.WorkspaceNew())
+			b := ui.ButtonBase(c.Key("ws-new")).Size(22, 22).Radius(rRow).Center().TextColor(pal.textFaint).Label(locales.WorkspaceNew())
 			pointerTooltip(c, b, "ws-new-tip", locales.WorkspaceNew())
 			if b.Hovered() {
 				b.Background(pal.rowHover).TextColor(pal.text)
 			}
-			b.Children(func() { ui.Icon(c, plusIcon).Size(11, 11) })
+			b.Children(func() { ui.Icon(c, plusIcon).Size(12, 12) })
 			if b.Clicked() {
 				a.defer_(func() { a.newWorkspace(a.session(sid)) })
 			}
@@ -187,7 +192,7 @@ func (a *App) workspaceBar(c *ui.Context, pal *palette, s *proto.Session) {
 func (a *App) workspacePill(c *ui.Context, pal *palette, s *proto.Session, w proto.Workspace) {
 	cur := w.N == s.Workspace
 	sid, n := s.ID, w.N
-	pill := ui.Row(c.Key("ws-"+strconv.Itoa(w.N))).Height(20).MinWidth(22).Padding(0, 7).Gap(4).Radius(6).AlignItems(ui.Center).Justify(ui.Center)
+	pill := ui.Row(c.Key("ws-"+strconv.Itoa(w.N))).Height(22).MinWidth(26).Padding(0, 8).Gap(5).Radius(rRow).AlignItems(ui.Center).Justify(ui.Center)
 	over := false
 	if d, ok := ui.DragOver[paneDrag](pill); ok && d.session == sid && !cur {
 		over = true
@@ -202,11 +207,11 @@ func (a *App) workspacePill(c *ui.Context, pal *palette, s *proto.Session, w pro
 	case over:
 		bg, fg = pal.rowSelected, pal.text
 	case cur:
-		bg, fg = pal.chip, pal.text
+		bg, fg = pal.rowSelected, pal.text
 	case pill.Hovered():
 		bg, fg = pal.rowHover, pal.text
 	}
-	pill.Background(pill.AnimateColor("bg", bg, ui.Animation{Duration: 110 * time.Millisecond}))
+	pill.Background(pill.AnimateColor("bg", bg, ui.Animation{Duration: dHoverOut}))
 	if over {
 		pill.Border(1, pal.accent)
 	}
@@ -223,13 +228,13 @@ func (a *App) workspacePill(c *ui.Context, pal *palette, s *proto.Session, w pro
 		})
 	}
 	pill.Children(func() {
-		t := ui.Text(c, workspaceName(w)).FontSize(12).TextColor(fg).FontFeatures("tnum").SingleLine().Ellipsis("…").MaxWidth(90)
+		t := oneLine(c, workspaceName(w), fsSmall, wMedium).TextColor(fg).FontFeatures("tnum").MaxWidth(96)
 		if cur {
-			t.FontWeight(600)
+			t.FontWeight(wSemibold)
 		}
-		if dot := workspaceDot(pal, w); dot != ui.Transparent {
-			ui.Box(c).Size(5, 5).Radius(2.5).Background(dot)
-		}
+		// The dot keeps its room while there is none, so that a pill
+		// does not change its width as its panes change their state.
+		ui.Box(c).Size(6, 6).Radius(3).Shrink(0).Background(workspaceDot(pal, w))
 	})
 }
 

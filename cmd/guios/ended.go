@@ -93,16 +93,16 @@ func (a *App) endedSection(c *ui.Context, pal *palette, key, title string, list 
 	if pal.dark {
 		inset++
 	}
-	hdr := ui.Row(c.Key("section-"+key)).Height(28).Margin(18, 0, 3, 0).Padding(0, 6, 0, inset).Gap(6).AlignItems(ui.Center).Radius(6)
+	hdr := ui.Row(c.Key("section-"+key)).Height(28).Margin(18, 0, 3, 0).Padding(0, 6, 0, inset).Gap(6).AlignItems(ui.Center).Radius(rRow)
 	if hdr.Clicked() {
 		*open = !*open
 		a.savePrefs()
 	}
 	hdr.ContextMenu(func(m *ui.Menu) { a.endedSectionMenu(m, key, list) })
 	hdr.Children(func() {
-		ui.Text(c, title).FontSize(12.5).FontWeight(600).TextColor(pal.textMuted).SingleLine()
-		ui.Textf(c, "%d", len(list)).FontSize(12.5).TextColor(pal.textFaint).FontFeatures("tnum")
-		chev := ui.Icon(c, chevronIcon).Size(11, 11).TextColor(pal.textFaint)
+		ui.Text(c, title).FontSize(fsSmall).FontWeight(wSemibold).TextColor(pal.textMuted).SingleLine()
+		ui.Textf(c, "%d", len(list)).FontSize(fsSmall).TextColor(pal.textFaint).FontFeatures("tnum")
+		chev := ui.Icon(c, chevronIcon).Size(12, 12).TextColor(pal.textFaint)
 		chev.Rotate(chev.AnimateTo("turn", 90*b2f(*open), ui.Snappy))
 	})
 	if !*open {
@@ -117,7 +117,7 @@ func (a *App) endedSection(c *ui.Context, pal *palette, key, title string, list 
 		a.endedRow(c, pal, he.h, he.c, now)
 	}
 	if len(shown) < len(list) {
-		more := ui.Row(c.Key("show-all")).Height(26).Padding(0, 6, 0, inset).AlignItems(ui.Center).Radius(6)
+		more := ui.Row(c.Key("show-all")).Height(26).Padding(0, 6, 0, inset).AlignItems(ui.Center).Radius(rRow)
 		if more.Hovered() {
 			more.Background(pal.rowHover)
 		}
@@ -125,14 +125,14 @@ func (a *App) endedSection(c *ui.Context, pal *palette, key, title string, list 
 			a.endedAll = true
 		}
 		more.Children(func() {
-			ui.Text(c, locales.EndedShowAll(len(list))).FontSize(12.5).TextColor(pal.textFaint).SingleLine()
+			ui.Text(c, locales.EndedShowAll(len(list))).FontSize(fsSmall).TextColor(pal.textFaint).SingleLine()
 		})
 	}
 }
 
 func (a *App) endedRow(c *ui.Context, pal *palette, h *host, cv proto.Conversation, now time.Time) {
 	key := "e-" + h.name + "-" + cv.Agent + "-" + cv.ID
-	row := ui.Row(c.Key(key)).Height(44).Padding(0, 6, 0, rowInset).Gap(10).Radius(8).AlignItems(ui.Center)
+	row := ui.Row(c.Key(key)).Height(44).Padding(0, 6, 0, rowInset).Gap(10).Radius(rControl).AlignItems(ui.Center)
 	pointerTooltip(c, row, "tip-"+key, h.shortDir(cv.Dir))
 	hovered := row.Hovered()
 	if hovered {
@@ -150,19 +150,19 @@ func (a *App) endedRow(c *ui.Context, pal *palette, h *host, cv proto.Conversati
 		ui.Icon(c, i).Size(16, 16).TextColor(pal.textMuted).Shrink(0)
 		ui.Column(c).Grow(1).MinWidth(0).Gap(2).Children(func() {
 			ui.Row(c).Gap(6).AlignItems(ui.Center).Children(func() {
-				ui.Text(c, cv.Label()).FontSize(13).TextColor(pal.text).SingleLine().Ellipsis("…").MinWidth(0).Shrink(1)
+				ui.Text(c, cv.Label()).FontSize(fsBody).TextColor(pal.text).SingleLine().Ellipsis("…").MinWidth(0).Shrink(1)
 				if h.remote() {
 					a.hostTag(c, pal, h)
 				}
 			})
-			ui.Text(c, proto.DirName(cv.Dir)).FontSize(12).TextColor(pal.textFaint).SingleLine().Ellipsis("…")
+			ui.Text(c, proto.DirName(cv.Dir)).FontSize(fsSmall).TextColor(pal.textFaint).SingleLine().Ellipsis("…")
 		})
 		if hovered && !cv.Archived {
 			iconButton(c, "archive", archiveIcon, locales.EndedArchive(), pal, func() {
 				a.archiveConversation(h, cv, true)
 			})
 		} else {
-			ui.Text(c, ago(cv.Updated, now)).FontSize(12).TextColor(pal.textFaint).SingleLine().Shrink(0)
+			ui.Text(c, ago(cv.Updated, now)).FontSize(fsSmall).TextColor(pal.textFaint).SingleLine().Shrink(0)
 		}
 	})
 }
@@ -246,7 +246,7 @@ func (a *App) skillHint(c *ui.Context, pal *palette) {
 	if !a.skillMissing {
 		return
 	}
-	hint := ui.Row(c.Key("ended-hint")).Margin(18, 0, 3, 0).Padding(6, 6, 6, rowInset).Radius(6)
+	hint := ui.Row(c.Key("ended-hint")).Margin(18, 0, 3, 0).Padding(6, 6, 6, rowInset).Radius(rRow)
 	if hint.Hovered() {
 		hint.Background(pal.rowHover)
 	}
@@ -254,6 +254,6 @@ func (a *App) skillHint(c *ui.Context, pal *palette) {
 		a.openSettings("agents")
 	}
 	hint.Children(func() {
-		ui.Text(c, locales.EndedSetUpSkill()).FontSize(12).TextColor(pal.textFaint).Grow(1).MinWidth(0)
+		ui.Text(c, locales.EndedSetUpSkill()).FontSize(fsSmall).TextColor(pal.textFaint).Grow(1).MinWidth(0)
 	})
 }
