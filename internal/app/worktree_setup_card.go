@@ -143,7 +143,7 @@ func setupCardRows(s *session.WorktreeSetup, branch string, w int, pal overlay.P
 		lines = append(lines, line(waiting, pal.FgMute, stage, "Waits for the setup", pal.FgMute))
 	}
 	if s.Note != "" {
-		for _, l := range strings.Split(ansi.Wordwrap(s.Note, max(w-4, 8), ""), "\n") {
+		for l := range strings.SplitSeq(ansi.Wordwrap(s.Note, max(w-4, 8), ""), "\n") {
 			lines = append(lines, overlay.Style(bg).Render("   ")+overlay.Style(bg).Foreground(pal.FgMute).Render(l))
 		}
 	}
