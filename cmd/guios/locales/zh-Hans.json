@@ -790,5 +790,6 @@
   "keysMenuWindow": "窗口",
   "keysMenuLayout": "布局",
   "keysMenuMinimize": "最小化",
-  "keysEscape": "按 Esc 关闭。"
+  "keysEscape": "按 Esc 关闭。",
+  "setFontMissing": "{font} 未安装或不是等宽字体。guios 使用自带的字体。"
 }

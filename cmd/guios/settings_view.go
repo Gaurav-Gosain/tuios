@@ -789,7 +789,7 @@ func (a *App) backgroundTile(c *ui.Context, pal *palette, id, name string, dark 
 
 // fontChoices are the fonts the picker offers: kero's own first, then
 // the system's, then common coding fonts the user may have installed.
-var fontChoices = []string{"JetBrains Mono Nerd Font", "System", "SF Mono", "Menlo", "Monaco", "JetBrains Mono", "Fira Code", "Cascadia Code",
+var fontChoices = []string{bundledFont, "System", "SF Mono", "Menlo", "Monaco", "JetBrains Mono", "Fira Code", "Cascadia Code",
 	"Iosevka", "Berkeley Mono", "Geist Mono", "IBM Plex Mono", "Source Code Pro", "Hack", "Maple Mono"}
 
 // fontOptions are the families the font menu offers: kero's own, the
@@ -828,13 +828,17 @@ func (a *App) terminalPage(c *ui.Context, pal *palette) {
 	s := &a.set
 	a.terminalPreview(c, pal)
 	settingsGroup(c, pal, locales.SetText(), "", func() {
-		settingRow(c, pal, locales.SetFont(), locales.SetFontDetail(), func() {
+		fontDetail := locales.SetFontDetail()
+		if s.FontFamily != "" && usableFamily(s.FontFamily) == "" {
+			fontDetail = locales.SetFontMissing(s.FontFamily) + " " + fontDetail
+		}
+		settingRow(c, pal, locales.SetFont(), fontDetail, func() {
 			// The picker's names for the settings' values: "" is kero's
 			// font, "monospace" the system's.
 			family := s.FontFamily
 			switch family {
 			case "":
-				family = "JetBrains Mono Nerd Font"
+				family = bundledFont
 			case "monospace":
 				family = locales.SetFontSystem()
 			}
@@ -844,7 +848,7 @@ func (a *App) terminalPage(c *ui.Context, pal *palette) {
 			}
 			a.searchPopup(c, "font", family, opts, 240, locales.SetUseFont, pal, func(v string) {
 				switch v {
-				case "JetBrains Mono Nerd Font":
+				case bundledFont:
 					v = ""
 				case locales.SetFontSystem():
 					v = "monospace"

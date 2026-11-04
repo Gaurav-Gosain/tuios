@@ -790,5 +790,6 @@
   "keysMenuWindow": "ウインドウ",
   "keysMenuLayout": "レイアウト",
   "keysMenuMinimize": "最小化",
-  "keysEscape": "Esc で閉じます。"
+  "keysEscape": "Esc で閉じます。",
+  "setFontMissing": "{font} はインストールされていないか、等幅ではありません。guios は内蔵のフォントを使います。"
 }

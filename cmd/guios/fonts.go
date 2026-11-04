@@ -3,17 +3,20 @@ package main
 import (
 	"os"
 	"path/filepath"
+	"strings"
+	"sync"
 
 	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/ui"
 )
 
-// kero carries JetBrains Mono, with Nerd Fonts' icons (resources/fonts,
-// SIL Open Font License, see OFL.txt there): the terminals' font unless
-// the user picks another, and the icons of prompts and of agents' TUIs.
+// guios carries JetBrains Mono, with Nerd Fonts' icons in its Mono build,
+// whose icons take one cell (resources/fonts, SIL Open Font License, see
+// OFL.txt there): the terminals' font unless the user picks another, and
+// the icons of prompts and of agents' TUIs.
 
 // bundledFont is the family the fonts register as.
-const bundledFont = "JetBrainsMono Nerd Font"
+const bundledFont = "JetBrainsMono Nerd Font Mono"
 
 // fontsLoaded tells that the fonts registered, so that a terminal asks
 // for them only where they are.
@@ -29,7 +32,8 @@ func loadFonts() {
 	}
 	dirs = append(dirs, filepath.Join("resources", "fonts"))
 	for _, dir := range dirs {
-		files, _ := filepath.Glob(filepath.Join(dir, "*.ttf"))
+		// The Mono build alone: the others draw icons wider than a cell.
+		files, _ := filepath.Glob(filepath.Join(dir, "*NerdFontMono-*.ttf"))
 		for _, f := range files {
 			data, err := os.ReadFile(f)
 			if err != nil {
@@ -45,10 +49,12 @@ func loadFonts() {
 	}
 }
 
-// termFamily returns the family terminals draw with: the user's, else
-// the font kero carries, else the system's monospaced one.
+// termFamily returns the family terminals draw with: the user's first
+// installed monospaced family, else the font guios carries, else the
+// system's monospaced one. A family that is not installed would make the
+// text system fall back to a proportional font, which breaks the grid.
 func (a *App) termFamily() string {
-	if f := a.set.FontFamily; f != "" {
+	if f := usableFamily(a.set.FontFamily); f != "" {
 		return f
 	}
 	if fontsLoaded {
@@ -56,3 +62,36 @@ func (a *App) termFamily() string {
 	}
 	return "monospace"
 }
+
+// usableFamily is the first family of a comma-separated list that is
+// installed and monospaced, "" for none.
+func usableFamily(list string) string {
+	for f := range strings.SplitSeq(list, ",") {
+		f = strings.TrimSpace(f)
+		switch {
+		case f == "":
+		case f == "monospace":
+			return f
+		case strings.EqualFold(f, bundledFont):
+			if fontsLoaded {
+				return bundledFont
+			}
+		case monoFamilies()[strings.ToLower(f)]:
+			return f
+		}
+	}
+	return ""
+}
+
+// monoFamilies are the monospaced families installed, by lower-case
+// name. The system lists them once (tens of milliseconds with many
+// fonts), and only when the user picked a font of their own.
+var monoFamilies = sync.OnceValue(func() map[string]bool {
+	m := map[string]bool{}
+	for _, f := range ui.FontFamilies() {
+		if f.Monospaced {
+			m[strings.ToLower(f.Name)] = true
+		}
+	}
+	return m
+})

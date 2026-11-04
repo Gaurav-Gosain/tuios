@@ -122,7 +122,7 @@ var keys = []key{
 	choiceKey("language", "the app's language; system follows the system's", func(s *Settings) *string { return &s.Language }, append([]string{"system"}, Languages...)...),
 	boolKey("window-translucent", "let the desktop show through the window", func(s *Settings) *bool { return &s.Vibrancy }),
 
-	stringKey("font-family", "the terminals' font: empty for JetBrains Mono Nerd Font, which guios carries; monospace for the system's", func(s *Settings) *string { return &s.FontFamily }),
+	stringKey("font-family", "the terminals' font: empty for JetBrainsMono Nerd Font Mono, which guios carries; monospace for the system's. A font that is not installed or not monospaced falls back to the one guios carries", func(s *Settings) *string { return &s.FontFamily }),
 	numberKey("font-size", "in points", func(s *Settings) float64 { return float64(s.FontSize) }, func(s *Settings, n float64) { s.FontSize = float32(n) }),
 	numberKey("font-weight", "100 to 900", func(s *Settings) float64 { return float64(s.FontWeight) }, func(s *Settings, n float64) { s.FontWeight = int(n) }),
 	numberKey("line-height", "a multiple of the font's", func(s *Settings) float64 { return float64(s.LineHeight) }, func(s *Settings, n float64) { s.LineHeight = float32(n) }),

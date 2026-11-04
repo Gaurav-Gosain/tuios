@@ -2642,11 +2642,11 @@ func (msgs Messages) SetFont() string {
 	return Catalog.Format(msgs.locale, "setFont", nil)
 }
 
-// SetFontDetail says "JetBrains Mono with Nerd Fonts’ icons comes with guios. Any installed monospaced font works; names separated by com…"
+// SetFontDetail says "JetBrains Mono with Nerd Fonts icons comes with guios. Any installed monospaced font works. To give more than one fon…"
 // in the language the app shows.
 func SetFontDetail() string { return In(i18n.Locale()).SetFontDetail() }
 
-// SetFontDetail says "JetBrains Mono with Nerd Fonts’ icons comes with guios. Any installed monospaced font works; names separated by com…"
+// SetFontDetail says "JetBrains Mono with Nerd Fonts icons comes with guios. Any installed monospaced font works. To give more than one fon…"
 // in the language of msgs.
 func (msgs Messages) SetFontDetail() string {
 	return Catalog.Format(msgs.locale, "setFontDetail", nil)
@@ -8030,4 +8030,14 @@ func KeysEscape() string { return In(i18n.Locale()).KeysEscape() }
 // in the language of msgs.
 func (msgs Messages) KeysEscape() string {
 	return Catalog.Format(msgs.locale, "keysEscape", nil)
+}
+
+// SetFontMissing says "{font} is not installed or not monospaced. guios uses its own font."
+// in the language the app shows.
+func SetFontMissing(font string) string { return In(i18n.Locale()).SetFontMissing(font) }
+
+// SetFontMissing says "{font} is not installed or not monospaced. guios uses its own font."
+// in the language of msgs.
+func (msgs Messages) SetFontMissing(font string) string {
+	return Catalog.Format(msgs.locale, "setFontMissing", map[string]any{"font": font})
 }
