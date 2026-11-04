@@ -62,6 +62,10 @@ type Client struct {
 
 	st *stateKeeper
 
+	// ck is the agent cockpit's connection, nil until it is used
+	// (agents.go).
+	ck *cockpitConn
+
 	// viewMu guards what the person looks at: the session shown, the
 	// focused pane of each session, and the open streams (stream.go).
 	viewMu  sync.Mutex
@@ -124,6 +128,7 @@ func (c *Client) Done() <-chan struct{} { return c.closed }
 // Close ends the connection and its subscription.
 func (c *Client) Close() error {
 	c.end()
+	c.closeCockpit()
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	return c.vc.Close()

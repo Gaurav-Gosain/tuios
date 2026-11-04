@@ -87,6 +87,17 @@ type Message struct {
 	// Browser asks the app to do something on a browser pane's page
 	// ("kero browser"), which it answers with browser.answer.
 	Browser *BrowserRequest `json:"browser,omitempty"`
+	// Daemon is a tuios daemon event the agent cockpit reads, with Event
+	// "daemon": an agent's state, the Inbox, a transcript, mail or a task
+	// card changed.
+	Daemon *DaemonEvent `json:"daemon,omitempty"`
+}
+
+// DaemonEvent is one event of the tuios daemon's subscribe stream.
+type DaemonEvent struct {
+	Type    string `json:"type"`
+	Session string `json:"session,omitempty"`
+	Window  string `json:"window,omitempty"`
 }
 
 // Notice is a desktop notification a program in a session sent.

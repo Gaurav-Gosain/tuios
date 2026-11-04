@@ -432,6 +432,8 @@ func (k *stateKeeper) watch() {
 		"window-retitled", "window-exit", "window-moved", "window-focused", "window-minimized", "window-restored",
 		"agent-state", "agent-seen", "notification", "bell", "attention", "prompt", "command-finished",
 		"workspace-switched", "layout-changed",
+		// For the agent cockpit only: they change no pane.
+		"transcript", "agent-message", "task-claimed", "task-finished", "task-changed", "agent-activity",
 	}}); err != nil {
 		k.c.end()
 		return
@@ -455,6 +457,16 @@ func (k *stateKeeper) watch() {
 		if ev.Type == "window-closed" || ev.Type == "agent-state" {
 			// The daemon records an ended conversation on either.
 			k.convGen.Add(1)
+		}
+		switch ev.Type {
+		case "agent-state", "agent-seen", "attention", "window-closed", "window-created", "window-retitled",
+			"transcript", "agent-message", "task-claimed", "task-finished", "task-changed", "agent-activity":
+			k.c.emit(proto.Message{Event: "daemon", Daemon: &proto.DaemonEvent{Type: ev.Type, Session: ev.Session, Window: ev.Window}})
+		}
+		switch ev.Type {
+		case "transcript", "agent-message", "task-claimed", "task-finished", "task-changed", "agent-activity":
+			// No pane changed: the state stays as it is.
+			continue
 		}
 		if ev.Type == "notification" {
 			k.c.emit(proto.Message{Event: "notice", Notice: &proto.Notice{Session: k.sessionOf(ev.Session), Pane: ev.Window, Title: ev.Title, Body: firstOf(ev.Body, ev.Message)}})

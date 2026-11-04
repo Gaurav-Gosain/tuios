@@ -1175,5 +1175,131 @@
   "actionGoToWorkspace": "Go to Workspace {n}",
   "actionMovePaneToWorkspace": "Move Pane to Workspace {n}",
   "workspaceNew": "New Workspace",
-  "workspaceTip": "{count, plural, one {Workspace {name}: # pane} other {Workspace {name}: # panes}}"
+  "workspaceTip": "{count, plural, one {Workspace {name}: # pane} other {Workspace {name}: # panes}}",
+  "actionAgents": "Agents",
+  "cockpitTitle": "Agents",
+  "cockpitAgentCount": "{count, plural, one {# agent} other {# agents}}",
+  "@cockpitAgentCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "cockpitAllowAlways": "Always allow",
+  "cockpitAllowOnce": "Allow once",
+  "cockpitAlwaysAllows": "Always allows: {scope}",
+  "cockpitAnswered": "{name}: {answer}",
+  "cockpitAsks": "Asks",
+  "cockpitClose": "Close agents",
+  "cockpitCode": "code",
+  "cockpitCopy": "Copy",
+  "cockpitCountIdle": "idle",
+  "cockpitCountNeeds": "need you",
+  "cockpitCountReview": "to review",
+  "cockpitCountWorking": "working",
+  "cockpitDismiss": "Dismiss",
+  "cockpitEmptyTitle": "No agents yet",
+  "cockpitEmptyDetail": "Run claude, codex or another agent in any pane. tuios finds it and shows it here.",
+  "cockpitFailed": "Failed",
+  "cockpitFailedPill": "failed",
+  "cockpitGroupNeeds": "Needs you",
+  "cockpitGroupReview": "Ready for review",
+  "cockpitGroupWorking": "Working",
+  "cockpitGroupIdle": "Idle",
+  "cockpitGroupSettled": "Settled",
+  "cockpitGroupSnoozed": "Snoozed",
+  "cockpitHintOpen": "open pane",
+  "cockpitHintAllow": "allow",
+  "cockpitHintReply": "reply",
+  "cockpitHintSettle": "settle",
+  "cockpitHintSnooze": "snooze",
+  "cockpitHintFilter": "needs you only",
+  "cockpitHintTabs": "tabs",
+  "cockpitIdle": "idle",
+  "cockpitToReview": "to review",
+  "cockpitJustChanged": "This prompt just changed. Read it, then answer.",
+  "cockpitWasTyping": "You were typing. Press the key again to answer.",
+  "cockpitMail": "Mail",
+  "cockpitMore": "{count, plural, one {# more} other {# more}}",
+  "@cockpitMore": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "cockpitNoHarness": "agent",
+  "cockpitNoOutput": "No output.",
+  "cockpitNoPane": "This pane is gone.",
+  "cockpitNoReason": "This agent takes no reason with a reject. Press r to reject it.",
+  "cockpitNotApplied": "The answer was not sent: {reason}",
+  "cockpitNothingToUndo": "Nothing to undo.",
+  "cockpitNotHuman": "The daemon does not accept guios as you. Open guios outside every tuios pane.",
+  "cockpitNoTranscript": "No conversation to show",
+  "cockpitNoTranscriptDetail": "tuios has not found this agent's transcript. Install the integration for its harness, or wait for its first turn.",
+  "cockpitOlder": "Show older messages",
+  "cockpitOpenPane": "Open pane",
+  "cockpitPickAgent": "Select an agent",
+  "cockpitPickAgentDetail": "Its conversation, changes and mail show here.",
+  "cockpitPlan": "Plan",
+  "cockpitPressAgain": "This command is risky. Press {key} again within 3 seconds to allow it.",
+  "cockpitReasonPlaceholder": "Type the reason, then press Enter to reject",
+  "cockpitReject": "Reject",
+  "cockpitRejectWhy": "Reject and say why",
+  "cockpitReply": "Reply",
+  "cockpitResult": "Result",
+  "cockpitRiskLine": "Risky: {rule}. {why}",
+  "cockpitRisky": "risky",
+  "cockpitRiskYours": "A rule in your config",
+  "cockpitScreenPrompt": "Answers the prompt on the pane's screen",
+  "cockpitSettle": "Settle",
+  "cockpitUnsettle": "Take off the Settled shelf",
+  "cockpitSettled": "{name} is settled. Press u to undo.",
+  "cockpitSettleOnlyAgent": "Only an agent can be settled. Dismiss or snooze this row.",
+  "cockpitShowAllLines": "{count, plural, one {Show all # line} other {Show all # lines}}",
+  "@cockpitShowAllLines": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "cockpitSnooze": "Snooze",
+  "cockpitWake": "Show again",
+  "cockpitSnoozeOnlyItem": "Only an Inbox item can be snoozed.",
+  "cockpitStateFrom": "state from {source}",
+  "cockpitTabThread": "Thread",
+  "cockpitTabChanges": "Changes",
+  "cockpitTabCheckpoints": "Checkpoints",
+  "cockpitTabMail": "Mail",
+  "cockpitTabBoard": "Board",
+  "cockpitThought": "Thinking",
+  "cockpitThreadEmpty": "No messages yet",
+  "cockpitTodos": "To-dos",
+  "cockpitTodosDone": "{done} of {total} done",
+  "@cockpitTodosDone": {
+    "placeholders": {
+      "done": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      }
+    }
+  },
+  "cockpitUnnamed": "unnamed",
+  "cockpitWaits": "{name} waits {age}",
+  "cockpitWorkspace": "workspace {n}",
+  "@cockpitWorkspace": {
+    "placeholders": {
+      "n": {
+        "type": "int"
+      }
+    }
+  },
+  "cockpitYou": "You",
+  "cockpitAnswerInPane": "tuios cannot read this prompt on the screen. Open the pane to answer it.",
+  "cockpitAllowTool": "Allow {tool}",
+  "cockpitQuestion": "Answer the agent"
 }

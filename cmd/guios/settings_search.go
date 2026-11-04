@@ -122,6 +122,7 @@ var actionWords = map[string]string{
 	"project.open":        "folder directory repo repository workspace add",
 	"palette.open":        "switch jump search find command palette",
 	"session.attention":   "waiting blocked attention notification needs input agent",
+	"agents.toggle":       "agents cockpit inbox approvals thread mail board",
 	"session.next":        "switch tab forward",
 	"session.previous":    "switch tab back backward",
 	"session.rename":      "name title label",

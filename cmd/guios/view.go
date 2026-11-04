@@ -317,6 +317,7 @@ func (a *App) sidebar(c *ui.Context, pal *palette, bar ui.TitleBar) {
 	// The space between and below the rows moves the window, as the top
 	// bar does.
 	ui.Scroll(c.Key("sessions")).Grow(1).Padding(0, 10, 16, 10).DragWindow().Children(func() {
+		a.agentsRow(c, pal)
 		n := 0  // the rows shown, for ⌘1–9 (Ctrl+1–9 elsewhere)
 		gi := 0 // the groups shown, the first of which sits higher
 		// This machine's projects first, unlabeled; then each host's,
@@ -897,6 +898,10 @@ func (a *App) workSession() *proto.Session {
 }
 
 func (a *App) card(c *ui.Context, pal *palette, bar ui.TitleBar, shown float32) {
+	if a.ck.open && a.loaded {
+		a.cockpitCard(c, pal, bar, shown)
+		return
+	}
 	s := a.session(a.selected)
 	h := a.local()
 	if s != nil {

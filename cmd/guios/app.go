@@ -84,6 +84,9 @@ type termEntry struct {
 // App is the app's state. It lives on the main thread: other goroutines
 // change it through Window.Update.
 type App struct {
+	// ck is the agent cockpit (cockpit.go).
+	ck cockpit
+
 	// holds keep a session's last frame while its new workspace's panes
 	// attach (workspaces.go).
 	holds map[string]*wsHold
@@ -287,6 +290,10 @@ func (a *App) event(h *host, cl *client.Client, m proto.Message) {
 				}
 				cl.Go("browser.answer", ans, nil)
 			})
+		}
+	case "daemon":
+		if !h.remote() {
+			a.cockpitEvent(m.Daemon)
 		}
 	case "notice":
 		// A program's own notification, as a terminal shows it: not
