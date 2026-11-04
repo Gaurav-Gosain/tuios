@@ -561,12 +561,19 @@ func linkRows(t *testing.T, base string, params map[string]any) map[string]linkR
 // and returns its path. Run as `agent.sh N`, it reports idle with the
 // conversation id conv-N, so it is an agent start-agent can wait for, then
 // starts generation N-1 with tuios start-agent, named genN-1, from its pane.
+// gen2 then starts sib1 as well, and gen1 is slow to report.
 func writeChainAgent(t *testing.T, base string) string {
 	t.Helper()
 	agent := filepath.Join(base, "agent.sh")
 	script := "#!/bin/sh\nT='" + tuiosBin + "'\n" +
+		// gen1 takes a few seconds to come up, so gen2 waits in its first
+		// start-agent across the daemon's agent detection poll.
+		`if [ "$1" -eq 1 ]; then sleep 3; fi` + "\n" +
 		`"$T" set-agent-state idle --agent-session-id "conv-$1"` + "\n" +
 		`if [ "$1" -gt 0 ]; then "$T" start-agent "$0 $(($1 - 1))" --name "gen$(($1 - 1))" --json > "$0.start$1" 2>&1; fi` + "\n" +
+		// The root starts a second child right after the first, with no
+		// report in between: a pane that has been an agent keeps linking.
+		`if [ "$1" -eq 2 ]; then "$T" start-agent "$0 0" --name sib1 --json > "$0.sib" 2>&1; fi` + "\n" +
 		"exec sleep 600\n"
 	if err := os.WriteFile(agent, []byte(script), 0o755); err != nil {
 		t.Fatal(err)
@@ -576,7 +583,8 @@ func writeChainAgent(t *testing.T, base string) string {
 
 // TestAgentParentLinkSurvivesUpgradeAndRestart starts a chain of agents the
 // way agents start them: a fake agent in a pane reports itself idle and runs
-// tuios start-agent, whose agent does the same once more. Each child must
+// tuios start-agent, whose agent does the same once more, and the first then
+// starts a second child, sib1, with no report in between. Each child must
 // name its parent and the first agent as its root, the selector must find a
 // parent's children and a root's whole chain, and a script outside every pane
 // must link with --parent. A chain stops at 8. The links must hold across a
@@ -592,13 +600,15 @@ func TestAgentParentLinkSurvivesUpgradeAndRestart(t *testing.T) {
 	deadline := time.Now().Add(60 * time.Second)
 	for {
 		rows = linkRows(t, base, map[string]any{"session": sess})
-		if _, ok := rows["gen0"]; ok {
+		_, sib := rows["sib1"]
+		if _, ok := rows["gen0"]; ok && sib {
 			break
 		}
 		if time.Now().After(deadline) {
 			first, _ := os.ReadFile(agent + ".start2")
 			second, _ := os.ReadFile(agent + ".start1")
-			t.Fatalf("ASSERTION: the chain never reached gen0: rows %+v\nstart from gen2: %s\nstart from gen1: %s", rows, first, second)
+			sibling, _ := os.ReadFile(agent + ".sib")
+			t.Fatalf("ASSERTION: the chain never reached gen0 and sib1: rows %+v\nstart from gen2: %s\nstart from gen1: %s\nsecond start from gen2: %s", rows, first, second, sibling)
 		}
 		time.Sleep(200 * time.Millisecond)
 	}
@@ -615,7 +625,7 @@ func TestAgentParentLinkSurvivesUpgradeAndRestart(t *testing.T) {
 		want := map[string]struct {
 			parent, conv string
 			depth        int
-		}{"gen1": {gen2, "conv-2", 1}, "gen0": {gen1, "conv-1", 2}}
+		}{"gen1": {gen2, "conv-2", 1}, "gen0": {gen1, "conv-1", 2}, "sib1": {gen2, "conv-2", 1}}
 		for name, w := range want {
 			r, ok := rows[name]
 			if !ok && name == "gen1" && gone[gen1] {
@@ -647,8 +657,8 @@ func TestAgentParentLinkSurvivesUpgradeAndRestart(t *testing.T) {
 	}
 	byParent, byRoot := names("parent:"+gen2[:8]), names("root:"+gen2)
 	evidence["select_parent"], evidence["select_root"] = byParent, byRoot
-	if !slices.Equal(byParent, []string{"gen1"}) || !slices.Equal(byRoot, []string{"gen0", "gen1"}) {
-		t.Errorf("ASSERTION: parent:%s selects %v and root:%s selects %v, want [gen1] and [gen0 gen1]", gen2[:8], byParent, gen2, byRoot)
+	if !slices.Equal(byParent, []string{"gen1", "sib1"}) || !slices.Equal(byRoot, []string{"gen0", "gen1", "sib1"}) {
+		t.Errorf("ASSERTION: parent:%s selects %v and root:%s selects %v, want [gen1 sib1] and [gen0 gen1 sib1]", gen2[:8], byParent, gen2, byRoot)
 	}
 	if out, err := handoffCLI(t, base, 30*time.Second, "wait-for", "agent-state", "--select", "root:"+gen2, "--until", "idle", "--every", "--timeout", "10000"); err != nil {
 		t.Errorf("ASSERTION: wait-for agent-state --select root:%s --every did not end on the idle chain: %v\n%s", gen2, err, out)

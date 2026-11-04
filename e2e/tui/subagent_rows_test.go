@@ -446,7 +446,8 @@ func TestChildAgentRowsNestUnderTheirParent(t *testing.T) {
 	}
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
 		y, _ := rowAt(s, "gen0")
-		return y >= 0
+		ys, _ := rowAt(s, "sib1")
+		return y >= 0 && ys >= 0
 	}, 60*time.Second); err != nil {
 		t.Fatalf("the rail never listed gen0: %v\n%s", err, term.Snapshot())
 	}

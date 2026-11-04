@@ -13481,6 +13481,7 @@ the branch head. Each control was built into its own binary.
 | `setAgentParent` in `verbStartAgent`: start-agent records `StartedBy` alone, as on main | "after start: gen1 has parent <nil> and root <nil>", the selector finds nothing, and the start at depth 9 is not refused | **caught** |
 | `AgentLink` tagged `json:"-"`, so the handoff manifest and the saved state leave it out | "after the upgrade: gen1 has parent <nil> and root <nil>", and the same after the restart | **caught** |
 | The resurrect step that puts `AgentLink` back on a restored window | "after the restart: gen0 has parent <nil> and root <nil>" | **caught** |
+| Follow-up, run the same day: `harnessLeftPane` without its check for a caller whose parent is the pane's process. The test now has the root start a second child, sib1, right after gen1, and gen1 takes 3 s to come up, so the root waits across a detection tick | "after start: sib1 has parent <nil> and root <nil>", and gen2 is no longer listed: its claim lapsed while it ran start-agent | **caught** |
 | A build of main without this branch, for the rail | "the agent rows are gen2 at 26:3, gen1 at 27:3, gen0 at 28:3; want each child on the next row, stepped in further than its parent" | **caught** |
 
 The frame is `agent-child-rows` under `TUIOS_E2E_FRAMES`. The upgrade test
