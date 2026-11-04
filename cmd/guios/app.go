@@ -591,6 +591,11 @@ func (a *App) selectSession(id string) {
 	changed := a.selected != id
 	a.selected = id
 	s := a.session(id)
+	// A session of a machine whose link is down: ask the daemon to dial it
+	// now, not at its next turn, which can be a minute away.
+	if h := a.hostOf(id); h.remote() && h.conn != connReady {
+		a.pokeHost(h)
+	}
 	for _, p := range s.Panes {
 		a.ensureTerm(p.ID)
 	}
@@ -724,7 +729,12 @@ func (a *App) ensureTerm(id string) {
 		stream.OnResized = term.Resize
 		// A pane of another machine says when its link drops and comes
 		// back (linkBadge).
-		stream.OnLink = func(bool) { a.update(func() {}) }
+		stream.OnLink = func(up bool) {
+			a.update(func() {})
+			if !up {
+				go a.pokeWhileLost(id, stream)
+			}
+		}
 		close(g.ready)
 		a.update(func() {
 			if a.terms[id] != e {

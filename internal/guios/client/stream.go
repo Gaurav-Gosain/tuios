@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"maps"
+	"os"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -127,6 +128,7 @@ func AttachVia(d Dialer, id string) (*Stream, error) {
 		params["window"] = window
 	}
 	ps, reply, renew, err := openPane(host, params)
+	debugf("attach %s %s: %v (%dx%d)", host, id, err, reply.Cols, reply.Rows)
 	if err != nil {
 		return nil, err
 	}
@@ -161,6 +163,35 @@ func openPane(host string, params map[string]any) (*session.PaneStream, session.
 		return nil, reply, false, err
 	}
 	return ps, reply, renew, nil
+}
+
+// backs wake the streams of a host that wait for its link: closed and
+// replaced when the link is back (LinkBack).
+var (
+	backMu sync.Mutex
+	backs  = map[string]chan struct{}{}
+)
+
+func linkBack(host string) <-chan struct{} {
+	backMu.Lock()
+	defer backMu.Unlock()
+	ch := backs[host]
+	if ch == nil {
+		ch = make(chan struct{})
+		backs[host] = ch
+	}
+	return ch
+}
+
+// LinkBack tells the streams of a host that wait for its link that the link
+// is up again: they try at once rather than at their next turn.
+func LinkBack(host string) {
+	backMu.Lock()
+	if ch := backs[host]; ch != nil {
+		close(ch)
+		delete(backs, host)
+	}
+	backMu.Unlock()
 }
 
 // Lost reports whether a linked machine's stream lost its connection and
@@ -254,13 +285,15 @@ func (s *Stream) reopen() bool {
 		case <-s.closed:
 			return false
 		case <-time.After(wait):
+		case <-linkBack(s.c.host):
 		}
 		wait = min(wait*2, 5*time.Second)
 		params := maps.Clone(s.params)
 		if s.renew {
 			delete(params, "yield")
 		}
-		ps, _, _, err := openPane(s.c.host, params)
+		ps, reply, _, err := openPane(s.c.host, params)
+		debugf("reopen %s %s: %v (%dx%d) lease %v", s.c.host, s.window, err, reply.Cols, reply.Rows, s.lease)
 		if err != nil {
 			var ve *session.VerbCallError
 			if errors.As(err, &ve) && (ve.Code == session.ErrVerbSessionNotFound || ve.Code == session.ErrVerbWindowNotFound) {
@@ -320,14 +353,26 @@ func (s *Stream) Write(p []byte) (int, error) {
 // ResizePixels asks for the pane at this view's size, as the stream's
 // lease. The daemon applies it only while no TUI client shows the session,
 // and answers with a resize frame when the pane's size changes.
+// debugStreams prints the streams' opens, reopens and leases on stderr.
+var debugStreams = os.Getenv("GUIOS_DEBUG_STREAMS") != ""
+
+func debugf(f string, args ...any) {
+	if debugStreams {
+		fmt.Fprintf(os.Stderr, "guios: "+f+"\n", args...)
+	}
+}
+
 func (s *Stream) ResizePixels(cols, rows, cellW, cellH int) error {
+	debugf("lease %s %s %dx%d", s.c.host, s.window, cols, rows)
 	if cols <= 0 || rows <= 0 {
 		return nil
 	}
 	s.leaseMu.Lock()
 	defer s.leaseMu.Unlock()
 	s.lease = [4]int{cols, rows, cellW, cellH}
-	if s.renew && !s.renewing {
+	// A daemon without yield lets a lease lapse after its TTL, and so does
+	// a linked machine's daemon for a stream over a link, yield or not.
+	if (s.renew || s.c.host != "") && !s.renewing {
 		s.renewing = true
 		go s.renewLease()
 	}

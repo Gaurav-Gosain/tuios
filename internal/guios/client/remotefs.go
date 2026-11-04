@@ -96,3 +96,23 @@ func (c *Client) remoteFSRead(p proto.FSReadParams) (proto.FSRead, error) {
 func (c *Client) errRemoteWrite() error {
 	return fmt.Errorf("guios does not change files on %s from here. Copy files there with Copy to %s", c.host, c.host)
 }
+
+// HostInfo is what the app knows of the machine of the client's daemon:
+// its OS, from the hello, and its home folder, which a link may read from
+// file-list ("" when the far machine does not say).
+func (c *Client) HostInfo() (goos, home string) {
+	c.mu.Lock()
+	if d := c.vc.Daemon(); d != nil {
+		goos = d.OS
+	}
+	c.mu.Unlock()
+	raw, err := c.verb("file-list", map[string]any{"dir": "~", "limit": 1})
+	if err != nil {
+		return goos, ""
+	}
+	var res struct {
+		Dir string `json:"dir"`
+	}
+	_ = json.Unmarshal(raw, &res)
+	return goos, res.Dir
+}

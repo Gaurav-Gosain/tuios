@@ -49,6 +49,8 @@ type host struct {
 	// busy is what the app does on the host for the user: "start",
 	// "install" or "update".
 	busy string
+	// poked is when the app last asked the daemon to dial the host now.
+	poked time.Time
 }
 
 func (h *host) remote() bool { return h.name != "" }
@@ -268,6 +270,7 @@ func (a *App) applyHosts(reps []client.HostReport, load client.HostReport) {
 func (a *App) followLink(h *host) {
 	switch h.rep.Status {
 	case client.HostUp:
+		client.LinkBack(h.name)
 		if h.cl != nil {
 			h.conn, h.err = connReady, ""
 		} else if !h.dialing && h.busy == "" {
@@ -365,6 +368,16 @@ func (a *App) connected(h *host, gen int, cl *client.Client, err error) {
 	a.reportView()
 	if !h.remote() {
 		a.watchHosts(cl)
+	} else {
+		// Its OS and home, for its paths: ~ for its home in the sidebar.
+		go func() {
+			goos, home := cl.HostInfo()
+			a.update(func() {
+				if h.cl == cl {
+					h.info.OS, h.info.Home = goos, home
+				}
+			})
+		}()
 	}
 	go func() {
 		<-cl.Done()
@@ -435,6 +448,54 @@ func (a *App) disconnected(h *host, cl *client.Client) {
 			}
 		})
 	})
+}
+
+// pokeHost has this machine's daemon dial a machine's link now, at most
+// once every pokeEvery: the person looks at its sessions.
+func (a *App) pokeHost(h *host) {
+	local := a.local().cl
+	if local == nil || time.Since(h.poked) < pokeEvery {
+		return
+	}
+	h.poked = time.Now()
+	go local.RetryHost(h.name)
+}
+
+// pokeWhileLost pokes the machine of a pane whose stream lost its link,
+// every pokeEvery while the pane shows and the stream waits. The daemon's own
+// redials wait longer each time, up to a minute, and a person who looks at
+// the pane wants it back as soon as the machine answers.
+func (a *App) pokeWhileLost(id string, st *client.Stream) {
+	t := time.NewTicker(pokeEvery)
+	defer t.Stop()
+	for range t.C {
+		if !st.Lost() {
+			return
+		}
+		select {
+		case <-st.Gone:
+			return
+		default:
+		}
+		a.update(func() {
+			if s := a.session(a.selected); s != nil && slices.Contains(shownPanes(s), id) {
+				a.pokeHost(a.hostOf(id))
+			}
+		})
+	}
+}
+
+// pokeEvery is the least time between two pokes of one machine.
+const pokeEvery = 5 * time.Second
+
+// pokeHosts pokes every machine whose link is down, as when the window
+// comes back to the front after the computer slept.
+func (a *App) pokeHosts() {
+	for _, h := range a.hosts[1:] {
+		if h.conn != connReady && h.busy == "" && h.rep.Status != client.HostConnecting {
+			a.pokeHost(h)
+		}
+	}
 }
 
 // dropTerms lets go of a host's terminals, which attach again as they
