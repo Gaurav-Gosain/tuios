@@ -158,6 +158,8 @@ type App struct {
 	skillsAt     time.Time
 	sideDrag     float32 // the width as a drag of the sidebar's edge began
 	pendingToast string
+	// tk is the tuios prefix key's state (tuios_keys.go).
+	tk tuiosKeys
 	// later are actions that change what the view is building, run once
 	// it is built.
 	later []func()
@@ -639,6 +641,16 @@ func (a *App) dropTerm(id string) {
 type gated struct {
 	*client.Stream
 	ready chan struct{}
+	app   *App
+}
+
+// Write takes what the terminal writes as the tuios prefix's next key
+// while the prefix is armed, and sends the rest to the pane.
+func (g *gated) Write(p []byte) (int, error) {
+	if g.app != nil && g.app.takeTyped(p) {
+		return len(p), nil
+	}
+	return g.Stream.Write(p)
 }
 
 func (g *gated) Read(p []byte) (int, error) {
@@ -665,7 +677,7 @@ func (a *App) ensureTerm(id string) {
 			})
 			return
 		}
-		g := &gated{Stream: stream, ready: make(chan struct{})}
+		g := &gated{Stream: stream, ready: make(chan struct{}), app: a}
 		o := a.termOptions(id, g)
 		// The terminal shows kerod's frames: kerod's terminal is the
 		// session's, ours shows what it shows, cell for cell, and lays out
@@ -806,6 +818,9 @@ func (a *App) termOptions(id string, conn *gated) terminal.Options {
 		// Control+E, which shells take as kill-line, beginning-of-line and
 		// end-of-line.
 		OnKey: func(mods ui.Modifiers, key ui.Key) bool {
+			if a.keyDown(id, mods, key) {
+				return true
+			}
 			if runtime.GOOS != "darwin" || mods != ui.Super {
 				return false
 			}

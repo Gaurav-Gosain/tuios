@@ -353,6 +353,13 @@ type WorkspaceParams struct {
 	Workspace int    `json:"workspace"`
 }
 
+// CommandParams runs a tuios keymap action, as `tuios run-command` does,
+// in a session.
+type CommandParams struct {
+	Session string `json:"session"`
+	Command string `json:"command"`
+}
+
 // Worktree is a linked git worktree kero made for a session: Path checks
 // out Branch, which started from Base, in the repository whose main
 // checkout is Main.

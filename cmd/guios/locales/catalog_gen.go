@@ -7941,3 +7941,93 @@ func WorkspaceNewPane() string { return In(i18n.Locale()).WorkspaceNewPane() }
 func (msgs Messages) WorkspaceNewPane() string {
 	return Catalog.Format(msgs.locale, "workspaceNewPane", nil)
 }
+
+// SetTuiosKeys says "Use tuios keys"
+// in the language the app shows.
+func SetTuiosKeys() string { return In(i18n.Locale()).SetTuiosKeys() }
+
+// SetTuiosKeys says "Use tuios keys"
+// in the language of msgs.
+func (msgs Messages) SetTuiosKeys() string {
+	return Catalog.Format(msgs.locale, "setTuiosKeys", nil)
+}
+
+// SetTuiosKeysDetail says "In a pane, press the tuios prefix key (Ctrl+B by default) to open the tuios menus. Your tuios config.toml sets the keys."
+// in the language the app shows.
+func SetTuiosKeysDetail() string { return In(i18n.Locale()).SetTuiosKeysDetail() }
+
+// SetTuiosKeysDetail says "In a pane, press the tuios prefix key (Ctrl+B by default) to open the tuios menus. Your tuios config.toml sets the keys."
+// in the language of msgs.
+func (msgs Messages) SetTuiosKeysDetail() string {
+	return Catalog.Format(msgs.locale, "setTuiosKeysDetail", nil)
+}
+
+// KeysNeedTui says "Open this session in the tuios TUI to use this key."
+// in the language the app shows.
+func KeysNeedTui() string { return In(i18n.Locale()).KeysNeedTui() }
+
+// KeysNeedTui says "Open this session in the tuios TUI to use this key."
+// in the language of msgs.
+func (msgs Messages) KeysNeedTui() string {
+	return Catalog.Format(msgs.locale, "keysNeedTui", nil)
+}
+
+// KeysMenuPrefix says "Prefix"
+// in the language the app shows.
+func KeysMenuPrefix() string { return In(i18n.Locale()).KeysMenuPrefix() }
+
+// KeysMenuPrefix says "Prefix"
+// in the language of msgs.
+func (msgs Messages) KeysMenuPrefix() string {
+	return Catalog.Format(msgs.locale, "keysMenuPrefix", nil)
+}
+
+// KeysMenuWorkspace says "Workspace"
+// in the language the app shows.
+func KeysMenuWorkspace() string { return In(i18n.Locale()).KeysMenuWorkspace() }
+
+// KeysMenuWorkspace says "Workspace"
+// in the language of msgs.
+func (msgs Messages) KeysMenuWorkspace() string {
+	return Catalog.Format(msgs.locale, "keysMenuWorkspace", nil)
+}
+
+// KeysMenuWindow says "Window"
+// in the language the app shows.
+func KeysMenuWindow() string { return In(i18n.Locale()).KeysMenuWindow() }
+
+// KeysMenuWindow says "Window"
+// in the language of msgs.
+func (msgs Messages) KeysMenuWindow() string {
+	return Catalog.Format(msgs.locale, "keysMenuWindow", nil)
+}
+
+// KeysMenuLayout says "Layout"
+// in the language the app shows.
+func KeysMenuLayout() string { return In(i18n.Locale()).KeysMenuLayout() }
+
+// KeysMenuLayout says "Layout"
+// in the language of msgs.
+func (msgs Messages) KeysMenuLayout() string {
+	return Catalog.Format(msgs.locale, "keysMenuLayout", nil)
+}
+
+// KeysMenuMinimize says "Minimize"
+// in the language the app shows.
+func KeysMenuMinimize() string { return In(i18n.Locale()).KeysMenuMinimize() }
+
+// KeysMenuMinimize says "Minimize"
+// in the language of msgs.
+func (msgs Messages) KeysMenuMinimize() string {
+	return Catalog.Format(msgs.locale, "keysMenuMinimize", nil)
+}
+
+// KeysEscape says "Press Esc to close."
+// in the language the app shows.
+func KeysEscape() string { return In(i18n.Locale()).KeysEscape() }
+
+// KeysEscape says "Press Esc to close."
+// in the language of msgs.
+func (msgs Messages) KeysEscape() string {
+	return Catalog.Format(msgs.locale, "keysEscape", nil)
+}

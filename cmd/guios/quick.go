@@ -248,7 +248,7 @@ func (a *App) attachQuick() {
 			})
 			return
 		}
-		g := &gated{Stream: stream, ready: make(chan struct{})}
+		g := &gated{Stream: stream, ready: make(chan struct{}), app: a}
 		o := a.termOptions(id, g)
 		o.ResizeByConn = true
 		// No card under it: the terminal paints its background.

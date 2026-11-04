@@ -12,9 +12,14 @@ import (
 
 	"github.com/Gaurav-Gosain/tuios/internal/guios/git"
 	"github.com/Gaurav-Gosain/tuios/internal/guios/proto"
+	"github.com/Gaurav-Gosain/tuios/internal/session"
 )
 
 // errNotYet answers a method the app has and tuios does not serve yet.
+// ErrNeedsTUI is the error of a keymap action only the tuios TUI can run,
+// such as one that moves a floating pane, on a session no TUI shows.
+var ErrNeedsTUI = errors.New("this action needs the tuios TUI on the session")
+
 func errNotYet(what string) error {
 	return fmt.Errorf("%s is not available with the tuios daemon yet", what)
 }
@@ -134,6 +139,18 @@ func (c *Client) dispatch(method string, params any) (any, error) {
 			return true, err
 		}
 		_, err = c.verb("select-workspace", map[string]any{"session": c.st.nameOf(p.Session), "workspace": p.Workspace})
+		return true, err
+
+	case "command":
+		p, err := decode[proto.CommandParams](params)
+		if err != nil {
+			return nil, err
+		}
+		_, err = c.verb("run-command", map[string]any{"session": c.st.nameOf(p.Session), "command": p.Command})
+		var ve *session.VerbCallError
+		if errors.As(err, &ve) && ve.Code == session.ErrVerbNeedsClient {
+			return nil, ErrNeedsTUI
+		}
 		return true, err
 
 	case "move", "project.rename", "project.close", "project.move":

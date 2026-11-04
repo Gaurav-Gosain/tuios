@@ -96,6 +96,9 @@ type Settings struct {
 
 	// Keyboard: accelerators by action, over the defaults; "" unbinds.
 	Shortcuts map[string]string `json:"shortcuts,omitempty"`
+	// TuiosKeys: the tuios prefix key (keybindings.leader_key) and its
+	// menus work in the panes, from tuios's config.toml.
+	TuiosKeys bool `json:"tuiosKeys"`
 
 	// Hosts are other machines' kerods, which the app shows beside this
 	// one's and the CLI reaches with -H.
@@ -145,6 +148,7 @@ func Default() Settings {
 		SessionName:     proto.NameFocused,
 		SidebarRows:     "detailed",
 		ConfirmClose:    true,
+		TuiosKeys:       true,
 		KeepHistory:     true,
 		ResumeAgents:    "ask",
 		QuitConfirm:     true,

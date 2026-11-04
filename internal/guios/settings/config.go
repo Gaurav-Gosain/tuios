@@ -159,6 +159,7 @@ var keys = []key{
 	choiceKey("cursor-style", "programs may change it", func(s *Settings) *string { return &s.Cursor }, "block", "bar", "underline"),
 	boolKey("cursor-style-blink", "", func(s *Settings) *bool { return &s.CursorBlink }),
 	boolKey("macos-option-as-alt", "Option sends Alt (Meta) to programs", func(s *Settings) *bool { return &s.OptionAsAlt }),
+	boolKey("tuios-keys", "the tuios prefix key and its menus work in the panes, as in the tuios TUI", func(s *Settings) *bool { return &s.TuiosKeys }),
 	boolKey("copy-on-select", "what you select goes to the clipboard", func(s *Settings) *bool { return &s.CopyOnSelect }),
 	choiceKey("clipboard-read", "programs reading the clipboard (OSC 52)", func(s *Settings) *string { return &s.Clipboard }, "ask", "allow", "deny"),
 	mapChoice("right-click-action", "", func(s *Settings) *string { return &s.RightClick },

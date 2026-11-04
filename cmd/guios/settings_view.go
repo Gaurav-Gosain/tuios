@@ -1216,6 +1216,13 @@ func (a *App) keyboardPage(c *ui.Context, pal *palette) {
 		ui.Text(c, a.ss.notice).FontSize(12).TextColor(pal.attention).Padding(0, 4)
 	}
 	q := strings.ToLower(strings.TrimSpace(a.ss.filter))
+	if q == "" {
+		settingsGroup(c, pal, "tuios", "", func() {
+			settingRow(c, pal, locales.SetTuiosKeys(), locales.SetTuiosKeysDetail(), func() {
+				toggle(c.Key("tuios-keys"), &a.set.TuiosKeys, pal)
+			})
+		})
+	}
 	menus := []string{"Kero", "Session", "Edit", "Pane", "View"}
 	for _, menu := range menus {
 		var acts []actions.Action

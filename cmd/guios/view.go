@@ -109,6 +109,7 @@ func (a *App) view(c *ui.Context) {
 		a.pendingToast = ""
 	}
 	a.shortcuts(c)
+	a.keysShortcut(c)
 
 	bar := c.TitleBar()
 	row := ui.Row(c).Fill().AlignItems(ui.Stretch)
@@ -200,6 +201,7 @@ func (a *App) view(c *ui.Context) {
 	a.pickerView(c, pal)
 	a.confirmView(c, pal)
 	a.worktreeView(c, pal)
+	a.keysCard(c, pal)
 	// A preview that showed no more fades in anew next time.
 	if !a.previewShown {
 		a.previewKey = ""

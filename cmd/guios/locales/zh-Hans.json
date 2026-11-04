@@ -781,5 +781,14 @@
   "usageNoPanes": "这里没有运行的窗格。",
   "workspaceEmptyTitle": "工作区 {n} 没有窗格",
   "workspaceEmptyDetail": "在这里打开一个窗格，或转到另一个工作区。",
-  "workspaceNewPane": "新建窗格"
+  "workspaceNewPane": "新建窗格",
+  "setTuiosKeys": "使用 tuios 按键",
+  "setTuiosKeysDetail": "在窗格中按 tuios 前缀键（默认 Ctrl+B）打开 tuios 菜单。按键由 tuios 的 config.toml 设置。",
+  "keysNeedTui": "请在 tuios TUI 中打开此会话以使用此按键。",
+  "keysMenuPrefix": "前缀",
+  "keysMenuWorkspace": "工作区",
+  "keysMenuWindow": "窗口",
+  "keysMenuLayout": "布局",
+  "keysMenuMinimize": "最小化",
+  "keysEscape": "按 Esc 关闭。"
 }
