@@ -150,6 +150,13 @@ type App struct {
 	fdrag     floatDrag       // the floating pane moved or resized
 	mdrag     masterDrag      // the master-stack line dragged
 	floatHere map[string]bool // the panes drawn floating, by id
+	// splitting is the sessions with a split on its way, and splitQueue
+	// the splits of the focused pane asked for meanwhile.
+	splitting  map[string]bool
+	splitQueue map[string][]func()
+	// wantFocus is a new pane the keyboard goes to once its terminal is
+	// drawn.
+	wantFocus string
 
 	active   bool
 	focused  bool
