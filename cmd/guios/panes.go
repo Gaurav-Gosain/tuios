@@ -491,7 +491,7 @@ func (a *App) paneHeader(c *ui.Context, pal *palette, bar ui.TitleBar, shown flo
 		if top {
 			gap.DragWindow()
 		}
-		a.paneChips(c, pal, p, !multi)
+		a.paneChips(c, pal, p, multi)
 		// The button that shows the right sidebar sits by the pane's own,
 		// as one row of buttons.
 		ui.Row(c.Key("buttons")).AlignItems(ui.Center).Children(func() {
@@ -543,8 +543,9 @@ func (a *App) paneControls(c *ui.Context, pal *palette, s *proto.Session, p *pro
 }
 
 // paneChips says what the pane is doing. With several panes the title
-// already leads with the status icon, so the chips go without (icon false).
-func (a *App) paneChips(c *ui.Context, pal *palette, p *proto.Pane, icon bool) {
+// already leads with the status icon, so the chips go without.
+func (a *App) paneChips(c *ui.Context, pal *palette, p *proto.Pane, multi bool) {
+	icon := !multi
 	switch p.Status {
 	case proto.Waiting:
 		msg := p.Message
@@ -586,11 +587,18 @@ func (a *App) paneChips(c *ui.Context, pal *palette, p *proto.Pane, icon bool) {
 			ui.Text(c, msg).FontSize(12).FontWeight(500).SingleLine().Ellipsis("…").MaxWidth(320)
 		})
 	case proto.Exited:
+		// A pane that stayed after its program exited (keep_open). It
+		// gives up its room in a narrow header before the buttons do.
 		chip(c, pal, pal.danger.Alpha(0.1), pal.danger, func() {
-			ui.Text(c, locales.PaneExited(itoa(p.ExitCode))).FontSize(12).FontWeight(500).SingleLine()
-		})
-		if button(c, "restart-"+p.ID, locales.CommonRestart(), "", false, pal) {
-			a.restartSession(p.ID)
+			ui.Text(c, locales.PaneExited(itoa(p.ExitCode))).FontSize(12).FontWeight(500).SingleLine().Ellipsis("…").Shrink(1).MinWidth(0)
+		}).Shrink(1).MinWidth(0)
+		// tuios starts no program again in a pane: it closes. With
+		// several panes the header's own close button does it.
+		if !multi {
+			id := p.ID
+			iconButton(c, "close-"+id, closeIcon, locales.PaneClose(), pal, func() {
+				a.defer_(func() { a.closePane(a.sessionOfPane(id), id, false) })
+			})
 		}
 	case proto.Idle:
 		if p.Message != "" {
