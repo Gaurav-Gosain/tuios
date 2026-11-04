@@ -483,7 +483,7 @@ func (a *App) paneHeader(c *ui.Context, pal *palette, bar ui.TitleBar, shown flo
 	}
 	dir := hostOf.shortDir(p.WorkDir())
 	showDir := dir != title || hostOf.remote()
-	plan := a.planHeader(c, p, title, dir, pad, multi, top && right)
+	plan := a.planHeader(c, p, title, dir, showDir, pad, multi, top && right)
 	h := ui.Row(c.Key("hdr")).Height(headerH).Shrink(0).AlignItems(ui.Center).Padding(0, 10, 0, pad).Gap(sp2)
 	if h.Pressed() && !focused {
 		a.setFocus(s, p.ID)
@@ -495,8 +495,10 @@ func (a *App) paneHeader(c *ui.Context, pal *palette, bar ui.TitleBar, shown flo
 		}
 		// The title is the pane's handle: dragged, it takes the pane to
 		// another place in the session.
-		gripMin := plan.titleMin + 2*sp2 + 14 + sp2
-		grip := ui.Row(c.Key("grip")).Gap(sp2).AlignItems(ui.Center).Shrink(1).MinWidth(gripMin).Height(hControl).Padding(0, sp2).Margin(0, 0, 0, -sp2).Radius(rControl)
+		grip := ui.Row(c.Key("grip")).Gap(sp2).AlignItems(ui.Center).Shrink(0).Height(hControl).Padding(0, sp2).Margin(0, 0, 0, -sp2).Radius(rControl)
+		if !plan.sized {
+			grip.Shrink(1).MinWidth(min(plan.titleW, titleKeep) + 2*sp2 + 14 + sp2)
+		}
 		floats := a.floatHere[p.ID] && s.Arrange != nil
 		if floats {
 			// A floating pane's header moves it, under the pointer as it
@@ -522,7 +524,12 @@ func (a *App) paneHeader(c *ui.Context, pal *palette, bar ui.TitleBar, shown flo
 			}
 			// The title gives way last: it keeps its first titleKeep DIPs
 			// while the chips and the folder go before it.
-			name := oneLine(c, title, fsBody, wSemibold).TextColor(pal.text).MinWidth(plan.titleMin)
+			name := oneLine(c, title, fsBody, wSemibold).TextColor(pal.text)
+			if plan.sized {
+				name.Width(plan.titleW).Shrink(0)
+			} else {
+				name.MinWidth(min(plan.titleW, titleKeep))
+			}
 			if multi && !focused && !dragging {
 				name.TextColor(pal.textMuted)
 			}
@@ -531,15 +538,19 @@ func (a *App) paneHeader(c *ui.Context, pal *palette, bar ui.TitleBar, shown flo
 			if showDir && plan.folderW > 0 {
 				if !hostOf.remote() {
 					// Cut at its start, so its last folder stays.
+					// The folder clips inside its own box: it never runs
+					// under the chips after it.
 					cut := startCut(c, dir, fsSmall, plan.folderW)
-					t := ui.Text(c, cut).FontSize(fsSmall).TextColor(pal.textFaint).SingleLine().Shrink(0)
-					if cut != dir {
-						t.Tooltip(dir)
-					}
+					ui.Box(c.Key("folder")).Width(plan.folderW).Shrink(0).Clip().Children(func() {
+						t := ui.Text(c, cut).FontSize(fsSmall).TextColor(pal.textFaint).SingleLine()
+						if cut != dir {
+							t.Tooltip(dir)
+						}
+					})
 				} else {
 					// The host's name in its color, as the sidebar's strip
 					// marks it: no pane passes for another machine's.
-					ui.Row(c.Key("where")).Shrink(3).MinWidth(0).AlignItems(ui.Center).Clip().Children(func() {
+					ui.Row(c.Key("where")).Width(plan.folderW).Shrink(0).MinWidth(0).AlignItems(ui.Center).Clip().Children(func() {
 						ui.Text(c, hostOf.name+":").FontSize(fsSmall).FontWeight(wMedium).TextColor(pal.hostColor(hostOf)).SingleLine().Ellipsis("…").Shrink(0.5).MinWidth(0)
 						oneLine(c, dir, fsSmall, 0).TextColor(pal.textFaint)
 					})
@@ -547,8 +558,11 @@ func (a *App) paneHeader(c *ui.Context, pal *palette, bar ui.TitleBar, shown flo
 			}
 		})
 		if p.Git != nil && plan.git {
-			a.gitChip(c, pal, s, p)
+			a.gitChip(c, pal, s, p, plan)
 		}
+		// The chips follow the folder and the branch, packed left with the
+		// same gap in every pane (council round 1, visual 13).
+		a.paneChips(c, pal, p, multi, plan)
 		// The header's empty stretch moves the window, as a title bar
 		// does, and zooms it on a double click: the header around it
 		// takes clicks, which focus the pane.
@@ -559,7 +573,6 @@ func (a *App) paneHeader(c *ui.Context, pal *palette, bar ui.TitleBar, shown flo
 		} else if top {
 			gap.DragWindow()
 		}
-		a.paneChips(c, pal, p, multi, plan)
 		// The button that shows the right sidebar sits by the pane's own,
 		// as one row of buttons.
 		ui.Row(c.Key("buttons")).AlignItems(ui.Center).Shrink(0).Children(func() {
@@ -618,17 +631,97 @@ func (a *App) paneControls(c *ui.Context, pal *palette, s *proto.Session, p *pro
 // mark, so the chips go without one.
 func (a *App) paneChips(c *ui.Context, pal *palette, p *proto.Pane, multi bool, plan headerPlan) {
 	if plan.state {
-		a.stateChip(c, pal, p, multi)
+		a.stateChip(c, pal, p, multi, plan)
 	}
 	if plan.process {
-		chip(c, pal, pal.chip, pal.textMuted, func() {
-			ui.Text(c, p.Process).FontSize(fsSmall).SingleLine()
+		pc := chip(c, pal, pal.chip, pal.textMuted, func() {
+			oneLine(c, p.Process, fsSmall, 0)
 		}).Shrink(0).Tooltip(locales.PaneForegroundTip())
+		if plan.sized {
+			pc.MaxWidth(plan.processW)
+		}
 	}
 }
 
-// stateChip says what the pane is doing, one line, in its state's color.
-func (a *App) stateChip(c *ui.Context, pal *palette, p *proto.Pane, multi bool) {
+// stateChip says what the pane is doing, one line, in its state's color,
+// as wide as the header's plan gives it.
+func (a *App) stateChip(c *ui.Context, pal *palette, p *proto.Pane, multi bool, plan headerPlan) {
+	msg, weight := stateText(p)
+	if msg == "" {
+		return
+	}
+	bg, fg := pal.chip, pal.textMuted
+	switch p.Status {
+	case proto.Waiting:
+		bg, fg = pal.attnSoft, pal.attnText
+	case proto.Failed, proto.Exited:
+		bg, fg = pal.danger.Alpha(0.1), pal.dangerText
+	case proto.Working:
+		msg = ago(p.Since, c.Now())
+		if p.Progress >= 0 {
+			msg = itoa(p.Progress) + "%"
+		}
+		if p.Message != "" {
+			msg = p.Message + " · " + msg
+		}
+	}
+	width := plan.stateW
+	exitedClose := p.Status == proto.Exited && !multi
+	if exitedClose {
+		width -= sp2 + hControl
+	}
+	ch := chip(c, pal, bg, fg, func() {
+		t := oneLine(c, msg, fsSmall, weight)
+		if p.Status == proto.Working {
+			t.FontFeatures("tnum")
+		}
+	}).Shrink(0).MaxWidth(320)
+	if plan.sized {
+		ch.MaxWidth(width)
+	}
+	// tuios starts no program again in a pane that stayed after its
+	// program exited (keep_open): it closes. With several panes the
+	// header's own close button does it.
+	if exitedClose {
+		id := p.ID
+		iconButton(c, "close-"+id, closeIcon, locales.PaneClose(), pal, func() {
+			a.defer_(func() { a.closePane(a.sessionOfPane(id), id, false) })
+		})
+	}
+}
+
+// headerPlan is what a pane's header shows and how wide each part is,
+// from the room its card had in the last frame. One budget holds the
+// title, the folder and the chips: the title keeps at least
+// min(natural, titleKeep), then the state chip comes, then the branch, the
+// process and the folder, each whole or not at all (DESIGN.md section 7,
+// rule 5). What fits at its least then grows toward its natural width in
+// the same order, so a chip is cut only when the header has no room left.
+type headerPlan struct {
+	// sized tells that the widths below are the card's: in the first frame
+	// the card has no bounds yet and the parts take their natural widths.
+	sized                                     bool
+	titleW, folderW, gitW, stateW, processW   float32
+	state, git, gitCompact, process, controls bool
+}
+
+// chipPad is a chip's padding on both sides.
+const chipPad = 2 * 7
+
+// sixChars is the least a cut label shows: its first six characters and
+// the ellipsis. A label that would show fewer drops whole (DESIGN.md
+// section 7, rule 5: never a chip of one letter).
+func sixChars(c *ui.Context, s string, size float32, weight int) float32 {
+	s = flat(s)
+	r := []rune(s)
+	if len(r) <= 6 {
+		return natural(c, s, size, weight)
+	}
+	return min(natural(c, s, size, weight), natural(c, string(r[:6])+"…", size, weight))
+}
+
+// stateText is what the state chip says, and its weight; "" for no chip.
+func stateText(p *proto.Pane) (string, int) {
 	switch p.Status {
 	case proto.Waiting:
 		msg := p.Message
@@ -638,106 +731,164 @@ func (a *App) stateChip(c *ui.Context, pal *palette, p *proto.Pane, multi bool) 
 		if msg == "" {
 			msg = locales.StatusNeedsYou()
 		}
-		chip(c, pal, pal.attnSoft, pal.attention, func() {
-			oneLine(c, msg, fsSmall, wMedium)
-		}).MinWidth(80).MaxWidth(320)
+		return msg, wMedium
 	case proto.Working:
-		chip(c, pal, pal.chip, pal.textMuted, func() {
-			label := ago(p.Since, c.Now())
-			if p.Progress >= 0 {
-				label = itoa(p.Progress) + "%"
-			}
-			if p.Message != "" {
-				label = p.Message + " · " + label
-			}
-			oneLine(c, label, fsSmall, 0).FontFeatures("tnum")
-		}).MinWidth(80)
-	case proto.Failed:
-		chip(c, pal, pal.danger.Alpha(0.1), pal.danger, func() {
-			msg := p.Message
-			if msg == "" {
-				msg = locales.StatusFailed()
-			}
-			oneLine(c, msg, fsSmall, wMedium)
-		}).MinWidth(80)
-	case proto.Exited:
-		// A pane that stayed after its program exited (keep_open). It
-		// gives up its room in a narrow header before the buttons do.
-		chip(c, pal, pal.danger.Alpha(0.1), pal.danger, func() {
-			ui.Text(c, locales.PaneExited(itoa(p.ExitCode))).FontSize(fsSmall).FontWeight(wMedium).SingleLine().Ellipsis("…").Shrink(1).MinWidth(0)
-		}).Shrink(1).MinWidth(0)
-		// tuios starts no program again in a pane: it closes. With
-		// several panes the header's own close button does it.
-		if !multi {
-			id := p.ID
-			iconButton(c, "close-"+id, closeIcon, locales.PaneClose(), pal, func() {
-				a.defer_(func() { a.closePane(a.sessionOfPane(id), id, false) })
-			})
+		// The age changes each minute: the chip is sized for a long one, so
+		// that it does not move the header as it grows.
+		label := "59m"
+		if p.Progress >= 0 {
+			label = "100%"
 		}
-	case proto.Idle:
 		if p.Message != "" {
-			chip(c, pal, pal.chip, pal.textMuted, func() {
-				oneLine(c, p.Message, fsSmall, 0)
-			}).MinWidth(80)
+			label = p.Message + " · " + label
 		}
+		return label, wRegular
+	case proto.Failed:
+		if p.Message == "" {
+			return locales.StatusFailed(), wMedium
+		}
+		return p.Message, wMedium
+	case proto.Exited:
+		return locales.PaneExited(itoa(p.ExitCode)), wMedium
+	case proto.Idle:
+		return p.Message, wRegular
 	}
+	return "", 0
 }
 
-// headerPlan is what a pane's header shows, from the room its card had in
-// the last frame: the title keeps its first titleKeep DIPs, then the
-// state chip comes, then the folder, the branch and the process, each
-// whole or not at all (DESIGN.md section 7, rule 5).
-type headerPlan struct {
-	titleMin, folderW             float32
-	state, git, process, controls bool
+// gitWidths are the branch chip's natural width, its least, and its width
+// with its counts alone.
+func (a *App) gitWidths(c *ui.Context, g *proto.GitInfo) (full, least, compact float32) {
+	box := float32(2*8 + 12 + 5)
+	counts := float32(0)
+	if g.Added > 0 {
+		counts += natural(c, "+"+itoa(g.Added), fsSmall, 0)
+	}
+	if g.Removed > 0 {
+		if counts > 0 {
+			counts += 5
+		}
+		counts += natural(c, "−"+itoa(g.Removed), fsSmall, 0)
+	}
+	if counts > 0 {
+		counts += 5
+	}
+	extra := counts
+	if st := gitState(g.State); st != "" {
+		extra += 5 + natural(c, st, fsSmall, 0)
+	}
+	name := branchName(g)
+	full = box + min(natural(c, name, fsSmall, 0), 180) + extra
+	least = box + sixChars(c, name, fsSmall, 0) + extra
+	compact = 0
+	if g.Files > 0 && counts > 0 {
+		compact = box + counts - 5
+	}
+	return full, least, compact
 }
 
-func (a *App) planHeader(c *ui.Context, p *proto.Pane, title, dir string, pad float32, multi, corner bool) headerPlan {
+func (a *App) planHeader(c *ui.Context, p *proto.Pane, title, dir string, showDir bool, pad float32, multi, corner bool) headerPlan {
+	titleN := natural(c, title, fsBody, wSemibold)
+	folderN := float32(0)
+	if showDir {
+		folderN = natural(c, dir, fsSmall, 0) + 1
+	}
+	msg, weight := stateText(p)
+	stateCap := float32(240)
+	if p.Status == proto.Waiting {
+		stateCap = 320
+	}
+	stateN, stateMin := float32(0), float32(0)
+	if msg != "" {
+		stateN = min(chipPad+natural(c, msg, fsSmall, weight)+1, stateCap)
+		// A cut message keeps 80 at least, or six characters if those are
+		// wider (DESIGN.md section 6, chips).
+		stateMin = min(stateN, max(80, chipPad+sixChars(c, msg, fsSmall, weight)))
+	}
+	exitedClose := p.Status == proto.Exited && !multi
+	if exitedClose {
+		// The exited chip's close button rides with it.
+		stateN += sp2 + hControl
+		stateMin += sp2 + hControl
+	}
 	// A process named as the title says nothing more.
 	process := p.Process != "" && p.Status != proto.Exited && !strings.EqualFold(p.Process, title)
-	all := headerPlan{titleMin: min(natural(c, title, fsBody, wSemibold), titleKeep), folderW: natural(c, dir, fsSmall, 0) + 1, state: true, git: true, process: process, controls: true}
+	processN := float32(0)
+	if process {
+		processN = chipPad + natural(c, p.Process, fsSmall, 0) + 1
+	}
+	gitN, gitMin, gitCompact := float32(0), float32(0), float32(0)
+	if p.Git != nil {
+		gitN, gitMin, gitCompact = a.gitWidths(c, p.Git)
+	}
+
 	w := a.paneRef("card-" + p.ID).Bounds(c).W
 	if w <= 0 {
-		return all
+		return headerPlan{titleW: titleN, folderW: folderN, gitW: gitN, stateW: stateN, processW: processN,
+			state: msg != "", git: p.Git != nil, process: process, controls: true}
 	}
-	plan := headerPlan{titleMin: all.titleMin}
-	room := w - pad - 10
+	plan := headerPlan{sized: true}
+	// The header's own room: its padding, the grip's status mark and gap,
+	// the stretch that moves the window and the gaps around it.
+	room := w - pad - 10 - (14 + sp2 + sp2) - 2*sp2
 	// The pane's buttons keep their room only where a pane has it: below
 	// 260 DIPs they leave the header, and the Pane menu, the pane's own
 	// right-click menu and the keys still reach them.
-	buttons := float32(2)
-	if multi {
-		buttons = 4
-	}
 	if w >= 260 {
 		plan.controls = true
+		buttons := float32(2)
+		if multi {
+			buttons = 4
+		}
 		room -= buttons * hControl
 	}
 	if corner {
-		room -= controlsW + 6 + 8 + hControl
+		room -= controlsW + 6 + sp2 + hControl
 	}
-	room -= 14 + sp2 + plan.titleMin + sp2
-	take := func(need float32) bool {
-		if need <= room {
-			room -= need + sp2
+	titleMin := min(titleN, titleKeep)
+	room -= titleMin
+	plan.titleW = titleMin
+	// Each part at its least, in order, each with the gap before it.
+	take := func(least float32) bool {
+		if least > 0 && least+sp2 <= room {
+			room -= least + sp2
 			return true
 		}
 		return false
 	}
-	switch p.Status {
-	case proto.Waiting, proto.Working, proto.Failed, proto.Exited:
-		plan.state = take(80 + 14)
-	case proto.Idle:
-		plan.state = p.Message == "" || take(80)
+	if plan.state = take(stateMin); plan.state {
+		plan.stateW = stateMin
 	}
-	if rest := natural(c, title, fsBody, wSemibold) - plan.titleMin; rest > 0 {
-		room -= min(rest, max(room, 0))
+	if p.Git != nil && w >= 320 {
+		if plan.git = take(gitMin); plan.git {
+			plan.gitW = gitMin
+		} else if plan.git = take(gitCompact); plan.git {
+			plan.gitW, plan.gitCompact = gitCompact, true
+		}
 	}
-	plan.git = w >= 320 && take(96)
-	plan.process = process && take(natural(c, p.Process, fsSmall, 0)+14)
+	if plan.process = process && take(processN); plan.process {
+		plan.processW = processN
+	}
 	// The folder takes what is left, cut at its start, down to 48 DIPs.
-	if dw := natural(c, dir, fsSmall, 0) + 1; room >= 48 {
-		plan.folderW = min(dw, room)
+	if showDir && take(min(48, folderN)) {
+		plan.folderW = min(48, folderN)
+	}
+	// Then each grows toward its natural width, in the same order.
+	grow := func(cur *float32, want float32) {
+		if more := min(want-*cur, room); more > 0 {
+			*cur += more
+			room -= more
+		}
+	}
+	grow(&plan.titleW, titleN)
+	if plan.state {
+		grow(&plan.stateW, stateN)
+	}
+	if plan.git && !plan.gitCompact {
+		grow(&plan.gitW, gitN)
+	}
+	if plan.folderW > 0 {
+		grow(&plan.folderW, folderN)
 	}
 	return plan
 }

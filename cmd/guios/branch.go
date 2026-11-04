@@ -13,18 +13,17 @@ import (
 // gitChip is a pane's branch and its changes since HEAD, after its title:
 // a click shows the Changes tab and the diffs. In a narrow pane, whose header the
 // title and its controls fill, it shows its counts alone, or nothing.
-func (a *App) gitChip(c *ui.Context, pal *palette, s *proto.Session, p *proto.Pane) {
+func (a *App) gitChip(c *ui.Context, pal *palette, s *proto.Session, p *proto.Pane, plan headerPlan) {
 	g := p.Git
-	room := a.paneRef("card-" + p.ID).Bounds(c).W
-	if room > 0 && room < 320 {
-		return
-	}
-	compact := room > 0 && room < 460
+	compact := plan.gitCompact
 	summary := gitSummary(g)
 	// It gives up its room before the title does: its branch shrinks
 	// first, down to its counts.
-	b := ui.ButtonBase(c.Key("git")).Height(24).Padding(0, 8).Gap(5).Radius(rRow).AlignItems(ui.Center).Shrink(8).
+	b := ui.ButtonBase(c.Key("git")).Height(24).Padding(0, 8).Gap(5).Radius(rRow).AlignItems(ui.Center).Shrink(0).
 		Label(summary).Tooltip(summary + "\n" + a.tip(locales.GitShowChanges(), "changes.toggle"))
+	if plan.sized {
+		b.MaxWidth(plan.gitW)
+	}
 	if b.Hovered() || a.prefs.Side == sideChanges {
 		b.Background(pal.rowHover)
 	}
@@ -34,9 +33,9 @@ func (a *App) gitChip(c *ui.Context, pal *palette, s *proto.Session, p *proto.Pa
 			a.lineCounts(c, pal, g.Added, g.Removed, 12)
 			return
 		}
-		ui.Text(c, branchName(g)).FontSize(fsSmall).TextColor(pal.textMuted).SingleLine().Ellipsis("…").MinWidth(0).MaxWidth(180)
+		ui.Text(c, branchName(g)).FontSize(fsSmall).TextColor(pal.textMuted).SingleLine().Ellipsis("…").MinWidth(0).Shrink(1).MaxWidth(180)
 		if st := gitState(g.State); st != "" {
-			ui.Text(c, st).FontSize(fsSmall).TextColor(pal.attention).SingleLine().Shrink(0)
+			ui.Text(c, st).FontSize(fsSmall).TextColor(pal.attnText).SingleLine().Shrink(0)
 		}
 		a.lineCounts(c, pal, g.Added, g.Removed, 12)
 	})
