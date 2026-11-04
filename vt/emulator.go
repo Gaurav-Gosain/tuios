@@ -233,6 +233,9 @@ type Emulator struct {
 
 	// semanticMarkers tracks OSC 133 shell integration markers
 	semanticMarkers *SemanticMarkerList
+	// historyDropped counts the lines the main screen's history let go of
+	// from its oldest end. See HistoryDropped.
+	historyDropped atomic.Int64
 
 	// onReflow is called after a reflow with where rows went.
 	onReflow func(remap func(absLine int) int)
@@ -317,6 +320,7 @@ func NewEmulator(w, h int) *Emulator {
 	// Wire scrollback trim to semantic markers adjustment
 	if sb := t.scrs[0].Scrollback(); sb != nil {
 		sb.SetOnTrim(func(n int) {
+			t.historyDropped.Add(int64(n))
 			t.semanticMarkers.AdjustForScrollbackTrim(n)
 		})
 	}
@@ -640,6 +644,15 @@ func (e *Emulator) ClearScrollback() {
 // ScrollbackLen returns the number of lines in the scrollback buffer.
 func (e *Emulator) ScrollbackLen() int {
 	return e.scrs[0].ScrollbackLen()
+}
+
+// HistoryDropped returns how many lines the main screen's history has let
+// go of from its oldest end since the emulator was made: lines the ring's
+// limit pushed out, and lines a clear or a reflow removed. History line
+// index plus HistoryDropped is a number the line keeps while newer lines
+// come and older ones go, until a reflow rewraps the lines.
+func (e *Emulator) HistoryDropped() int64 {
+	return e.historyDropped.Load()
 }
 
 // SemanticMarkers returns the list of OSC 133 semantic zone markers.
