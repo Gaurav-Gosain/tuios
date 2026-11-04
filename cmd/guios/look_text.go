@@ -269,7 +269,7 @@ func (a *App) mdAlert(c *ui.Context, pal *palette, m *lookMD, d *parser.Document
 		ui.Column(c).Grow(1).MinWidth(0).Padding(2, 0, 2, 14).Gap(4).Children(func() {
 			ui.Row(c).Gap(6).AlignItems(ui.Center).Children(func() {
 				ui.Icon(c, alertIcon(kind)).Size(15, 15).TextColor(col)
-				ui.Text(c, alertTitle(kind)).FontSize(14).FontWeight(600).TextColor(col)
+				ui.Text(c, alertTitle(kind)).FontSize(14).FontWeight(wSemibold).TextColor(col)
 			})
 			markdown.View(c.Key("body"), strings.Join(body, "\n"), &m.inner)
 		})
@@ -385,7 +385,7 @@ func (a *App) mdPicture(c *ui.Context, pal *palette, m *lookMD, src, alt string,
 		if label == "" {
 			label = filepath.Base(src)
 		}
-		ui.Text(c, "["+label+"]").FontSize(12).TextColor(pal.textFaint).Padding(2, 6).Background(pal.chip).Radius(4).SingleLine()
+		ui.Text(c, "["+label+"]").FontSize(fsSmall).TextColor(pal.textFaint).Padding(2, 6).Background(pal.chip).Radius(rChip).SingleLine()
 		return
 	}
 	el := ui.Image(c, p.img)
@@ -492,7 +492,7 @@ func (a *App) bigView(c *ui.Context, pal *palette, l *fileLook) {
 		ui.List(c.Key("lines"), &b.list, rows, func(i int) {
 			line, ok := b.tf.Line(int64(i), func() { a.update(func() {}) })
 			ui.Row(c).AlignItems(ui.Start).Children(func() {
-				num := ui.Text(c, strconv.Itoa(i+1)).Font(mono).FontSize(12).TextColor(pal.textFaint).Width(gutter).Shrink(0).TextAlign(ui.End).Padding(0, 12, 0, 0).SingleLine()
+				num := ui.Text(c, strconv.Itoa(i+1)).Font(mono).FontSize(fsSmall).TextColor(pal.textFaint).Width(gutter).Shrink(0).TextAlign(ui.End).Padding(0, 12, 0, 0).SingleLine()
 				if int64(i) == b.hit {
 					num.TextColor(pal.accent)
 				}
@@ -514,7 +514,7 @@ func (a *App) bigView(c *ui.Context, pal *palette, l *fileLook) {
 				if !done {
 					msg = locales.LookCountingSoFar(groupDigits(int(n)))
 				}
-				ui.Text(c, msg).FontSize(12).TextColor(pal.textFaint).SingleLine().Ellipsis("…")
+				ui.Text(c, msg).FontSize(fsSmall).TextColor(pal.textFaint).SingleLine().Ellipsis("…")
 			})
 		}
 	})
@@ -555,8 +555,8 @@ func (a *App) bigPrompt(c *ui.Context, pal *palette, l *fileLook) {
 		label, hint = locales.LookGoToLine(), locales.LookGoToLineHint()
 	}
 	ui.Row(c.Key("prompt")).Height(40).Shrink(0).Padding(0, 12).Gap(8).AlignItems(ui.Center).Children(func() {
-		ui.Text(c, label).FontSize(12).FontWeight(500).TextColor(pal.textMuted).SingleLine().Shrink(0)
-		in := ui.TextInput(c.Key("q"), &b.query).Grow(1).Height(26).FontSize(12.5).Placeholder(hint).AutoFocus()
+		ui.Text(c, label).FontSize(fsSmall).FontWeight(wMedium).TextColor(pal.textMuted).SingleLine().Shrink(0)
+		in := ui.TextInput(c.Key("q"), &b.query).Grow(1).Height(26).FontSize(fsBody).Placeholder(hint).AutoFocus()
 		if in.Submitted() {
 			switch b.prompt {
 			case promptFind:

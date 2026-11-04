@@ -198,7 +198,7 @@ func (a *App) filmView(c *ui.Context, pal *palette, l *fileLook) {
 			switch {
 			case fm.frame != nil:
 			case fm.failed != "":
-				ui.Text(c, fm.failed).FontSize(13).TextColor(ui.RGBA(255, 255, 255, 0.7)).Absolute().Left(0).Right(0).Top(0).Bottom(0).TextAlign(ui.Center)
+				ui.Text(c, fm.failed).FontSize(fsBody).TextColor(ui.RGBA(255, 255, 255, 0.7)).Absolute().Left(0).Right(0).Top(0).Bottom(0).TextAlign(ui.Center)
 			}
 			if fm.reading && fm.frame == nil {
 				ui.Box(c).Absolute().Left(0).Right(0).Top(0).Bottom(0).Center().Children(func() { ui.Spinner(c) })
@@ -224,7 +224,7 @@ func (a *App) filmView(c *ui.Context, pal *palette, l *fileLook) {
 			facts = append(facts, locales.LookNoSound())
 		}
 		ui.Row(c.Key("film-facts")).Height(28).Shrink(0).Padding(0, 14).AlignItems(ui.Center).Children(func() {
-			ui.Text(c, strings.Join(facts, " · ")).FontSize(12).TextColor(pal.textFaint).SingleLine().Ellipsis("…").MinWidth(0)
+			ui.Text(c, strings.Join(facts, " · ")).FontSize(fsSmall).TextColor(pal.textFaint).SingleLine().Ellipsis("…").MinWidth(0)
 		})
 	})
 }
@@ -236,7 +236,7 @@ func (a *App) filmBar(c *ui.Context, pal *palette, l *fileLook) {
 	ui.Row(c.Key("film-bar")).Height(40).Shrink(0).Padding(0, 10).Gap(10).AlignItems(ui.Center).Children(func() {
 		iconButton(c, "film-back", chevronLeftIcon, locales.LookBack5(), pal, func() { a.filmSeek(l, fm.want-dur/20) })
 		iconButton(c, "film-on", chevronIcon, locales.LookOn5(), pal, func() { a.filmSeek(l, fm.want+dur/20) })
-		ui.Text(c, filmClock(fm.want)).FontSize(12).FontFeatures("tnum").TextColor(pal.text).SingleLine().Shrink(0)
+		ui.Text(c, filmClock(fm.want)).FontSize(fsSmall).FontFeatures("tnum").TextColor(pal.text).SingleLine().Shrink(0)
 		bar := ui.Box(c.Key("track")).Grow(1).Height(24).Cursor(ui.CursorPointer)
 		bw := bar.Bounds().W
 		seekTo := func(x float32) {
@@ -268,7 +268,7 @@ func (a *App) filmBar(c *ui.Context, pal *palette, l *fileLook) {
 		if over {
 			bar.Tooltip(filmClock(int64(min(max(hx/max(bw, 1), 0), 1) * float32(dur))))
 		}
-		ui.Text(c, filmClock(dur)).FontSize(12).FontFeatures("tnum").TextColor(pal.textMuted).SingleLine().Shrink(0)
+		ui.Text(c, filmClock(dur)).FontSize(fsSmall).FontFeatures("tnum").TextColor(pal.textMuted).SingleLine().Shrink(0)
 		strip := locales.LookShowStrip()
 		if fm.strip {
 			strip = locales.LookHideStrip()
@@ -289,7 +289,7 @@ func (a *App) filmStrip(c *ui.Context, pal *palette, l *fileLook) {
 	ui.Row(c.Key("strip")).Height(72).Shrink(0).Padding(8, 10, 0, 10).Gap(6).Children(func() {
 		for i := range stripFrames {
 			at := dur * int64(2*i+1) / (2 * stripFrames)
-			cell := ui.ButtonBase(c.Key(i)).Grow(1).Basis(0).MinWidth(0).Radius(6).Clip().Background(ui.RGBA(0, 0, 0, 0.85)).
+			cell := ui.ButtonBase(c.Key(i)).Grow(1).Basis(0).MinWidth(0).Radius(rRow).Clip().Background(ui.RGBA(0, 0, 0, 0.85)).
 				Tooltip(filmClock(at)).Label(locales.LookGoToTime(filmClock(at))).Cursor(ui.CursorPointer)
 			near := fm.at >= at-dur/(2*stripFrames) && fm.at < at+dur/(2*stripFrames)
 			if near {
@@ -438,9 +438,9 @@ func (a *App) audioView(c *ui.Context, pal *palette, l *fileLook) {
 				}
 			})
 			ui.Column(c).Gap(4).AlignItems(ui.Center).MaxWidth(420).Children(func() {
-				ui.Text(c, title).FontSize(15).FontWeight(600).TextColor(pal.text).TextAlign(ui.Center).MaxLines(2).Ellipsis("…")
+				ui.Text(c, title).FontSize(15).FontWeight(wSemibold).TextColor(pal.text).TextAlign(ui.Center).MaxLines(2).Ellipsis("…")
 				if len(by) > 0 {
-					ui.Text(c, strings.Join(by, " · ")).FontSize(13).TextColor(pal.textMuted).TextAlign(ui.Center).MaxLines(2).Ellipsis("…")
+					ui.Text(c, strings.Join(by, " · ")).FontSize(fsBody).TextColor(pal.textMuted).TextAlign(ui.Center).MaxLines(2).Ellipsis("…")
 				}
 			})
 			rows := [][2]string{}
@@ -482,8 +482,8 @@ func factsTable(c *ui.Context, pal *palette, rows [][2]string, width float32) {
 	ui.Column(c.Key("facts")).AlignSelf(ui.Stretch).MaxWidth(width).Gap(0).Children(func() {
 		for i, r := range rows {
 			ui.Row(c.Key(i)).Height(28).Gap(12).AlignItems(ui.Center).Children(func() {
-				ui.Text(c, r[0]).FontSize(12).TextColor(pal.textFaint).Width(110).Shrink(0).SingleLine()
-				ui.Text(c, r[1]).FontSize(12).TextColor(pal.text).SingleLine().Ellipsis("…").MinWidth(0).Grow(1).Tooltip(r[1])
+				ui.Text(c, r[0]).FontSize(fsSmall).TextColor(pal.textFaint).Width(110).Shrink(0).SingleLine()
+				ui.Text(c, r[1]).FontSize(fsSmall).TextColor(pal.text).SingleLine().Ellipsis("…").MinWidth(0).Grow(1).Tooltip(r[1])
 			})
 		}
 	})

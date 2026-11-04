@@ -484,7 +484,7 @@ func (a *App) gifBar(c *ui.Context, pal *palette, l *fileLook) {
 		if im.stepAt >= 0 {
 			text = locales.LookFrameOf(itoa(im.stepAt+1), itoa(im.frames))
 		}
-		ui.Text(c, text).FontSize(12).FontFeatures("tnum").TextColor(pal.textMuted).SingleLine()
+		ui.Text(c, text).FontSize(fsSmall).FontFeatures("tnum").TextColor(pal.textMuted).SingleLine()
 	})
 }
 

@@ -313,7 +313,7 @@ func (a *App) pdfPage(c *ui.Context, pal *palette, pd *lookPDF, i int, s, conten
 	})
 	if pic == nil {
 		box.Children(func() {
-			ui.Text(c, itoa(i+1)).FontSize(13).TextColor(ui.RGBA(0, 0, 0, 0.3)).Absolute().Left(0).Right(0).Top(h/2 - 9).TextAlign(ui.Center)
+			ui.Text(c, itoa(i+1)).FontSize(fsBody).TextColor(ui.RGBA(0, 0, 0, 0.3)).Absolute().Left(0).Right(0).Top(h/2 - 9).TextAlign(ui.Center)
 		})
 	}
 }
@@ -416,7 +416,7 @@ func (a *App) pdfBar(c *ui.Context, pal *palette, l *fileLook) {
 		iconButton(c, "pdf-prev", chevronUpIcon, locales.LookPrevPage(), pal, func() { a.pdfGo(l, pd.page-1) })
 		iconButton(c, "pdf-next", chevronDownIcon, locales.LookNextPage(), pal, func() { a.pdfGo(l, pd.page+1) })
 		if pd.goTo {
-			in := ui.TextInput(c.Key("pdf-goto"), &pd.goToText).Width(64).Height(24).FontSize(12).AutoFocus().Placeholder(itoa(pd.page + 1))
+			in := ui.TextInput(c.Key("pdf-goto"), &pd.goToText).Width(64).Height(24).FontSize(fsSmall).AutoFocus().Placeholder(itoa(pd.page + 1))
 			if in.Submitted() {
 				if n, err := strconv.Atoi(strings.TrimSpace(pd.goToText)); err == nil {
 					a.pdfGo(l, n-1)
@@ -428,14 +428,14 @@ func (a *App) pdfBar(c *ui.Context, pal *palette, l *fileLook) {
 				pd.goTo, pd.goToText = false, ""
 				a.focusViewer()
 			}
-			ui.Text(c, locales.LookOfPages(itoa(pd.pages))).FontSize(12).FontFeatures("tnum").TextColor(pal.textMuted).SingleLine()
+			ui.Text(c, locales.LookOfPages(itoa(pd.pages))).FontSize(fsSmall).FontFeatures("tnum").TextColor(pal.textMuted).SingleLine()
 		} else {
-			t := ui.ButtonBase(c.Key("pdf-page")).Height(24).Padding(0, 6).Radius(6).Center().Tooltip(locales.LookGoToPage()).Label(locales.LookGoToPage())
+			t := ui.ButtonBase(c.Key("pdf-page")).Height(24).Padding(0, 6).Radius(rRow).Center().Tooltip(locales.LookGoToPage()).Label(locales.LookGoToPage())
 			if t.Hovered() {
 				t.Background(pal.rowHover)
 			}
 			t.Children(func() {
-				ui.Text(c, locales.LookPageOf(itoa(pd.page+1), itoa(pd.pages))).FontSize(12).FontFeatures("tnum").TextColor(pal.textMuted).SingleLine()
+				ui.Text(c, locales.LookPageOf(itoa(pd.page+1), itoa(pd.pages))).FontSize(fsSmall).FontFeatures("tnum").TextColor(pal.textMuted).SingleLine()
 			})
 			if t.Clicked() {
 				pd.goTo = true
@@ -443,12 +443,12 @@ func (a *App) pdfBar(c *ui.Context, pal *palette, l *fileLook) {
 		}
 		ui.Spacer(c)
 		iconButton(c, "pdf-out", minusIcon, locales.LookZoomOut(), pal, func() { a.pdfZoom(l, 0.8, -1, -1) })
-		z := ui.ButtonBase(c.Key("pdf-zoom")).Height(24).Width(52).Radius(6).Center().Tooltip(locales.LookZoomFit()).Label(locales.LookZoomFit())
+		z := ui.ButtonBase(c.Key("pdf-zoom")).Height(24).Width(52).Radius(rRow).Center().Tooltip(locales.LookZoomFit()).Label(locales.LookZoomFit())
 		if z.Hovered() {
 			z.Background(pal.rowHover)
 		}
 		z.Children(func() {
-			ui.Text(c, itoa(int(pd.shownZoom*100+0.5))+"%").FontSize(12).FontFeatures("tnum").TextColor(pal.textMuted).SingleLine()
+			ui.Text(c, itoa(int(pd.shownZoom*100+0.5))+"%").FontSize(fsSmall).FontFeatures("tnum").TextColor(pal.textMuted).SingleLine()
 		})
 		if z.Clicked() {
 			a.pdfZoom(l, 0, -1, -1)

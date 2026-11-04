@@ -84,7 +84,7 @@ func (a *App) tableView(c *ui.Context, pal *palette, l *fileLook) {
 	ui.Column(c.Key("table")).Grow(1).MinHeight(0).AlignItems(ui.Stretch).Children(func() {
 		ui.Table(c.Key("rows"), &t.list, t.cols, len(d.Rows), func(row, col int) {
 			if col == 0 {
-				ui.Text(c, itoa(row+1)).FontSize(12).FontFeatures("tnum").TextColor(pal.textFaint).SingleLine()
+				ui.Text(c, itoa(row+1)).FontSize(fsSmall).FontFeatures("tnum").TextColor(pal.textFaint).SingleLine()
 				return
 			}
 			r := d.Rows[row]
@@ -92,14 +92,14 @@ func (a *App) tableView(c *ui.Context, pal *palette, l *fileLook) {
 			if col-1 < len(r) {
 				cell = r[col-1]
 			}
-			tx := ui.Text(c, oneLineText(cell)).FontSize(12.5).TextColor(pal.text).SingleLine().Ellipsis("…").MinWidth(0)
+			tx := ui.Text(c, oneLineText(cell)).FontSize(fsBody).TextColor(pal.text).SingleLine().Ellipsis("…").MinWidth(0)
 			if d.Numeric[col-1] {
 				tx.FontFeatures("tnum")
 			}
 		}).Grow(1).MinHeight(0)
 		if d.Capped {
 			ui.Row(c).Height(28).Shrink(0).Padding(0, 14).AlignItems(ui.Center).Children(func() {
-				ui.Text(c, locales.LookTableCapped(groupDigits(len(d.Rows)))).FontSize(12).TextColor(pal.textFaint).SingleLine()
+				ui.Text(c, locales.LookTableCapped(groupDigits(len(d.Rows)))).FontSize(fsSmall).TextColor(pal.textFaint).SingleLine()
 			})
 		}
 	})
@@ -207,7 +207,7 @@ func (a *App) jsonView(c *ui.Context, pal *palette, l *fileLook) {
 		}).Grow(1).MinHeight(0).Padding(6, 10)
 		if j.tree.Capped {
 			ui.Row(c).Height(28).Shrink(0).Padding(0, 14).AlignItems(ui.Center).Children(func() {
-				ui.Text(c, locales.LookJSONCapped()).FontSize(12).TextColor(pal.textFaint).SingleLine()
+				ui.Text(c, locales.LookJSONCapped()).FontSize(fsSmall).TextColor(pal.textFaint).SingleLine()
 			})
 		}
 	})
@@ -324,7 +324,7 @@ func (a *App) archiveView(c *ui.Context, pal *palette, l *fileLook) {
 			if ar.capped {
 				s += ". " + locales.LookArchiveCapped()
 			}
-			ui.Text(c, s).FontSize(12).TextColor(pal.textFaint).SingleLine().Ellipsis("…").MinWidth(0)
+			ui.Text(c, s).FontSize(fsSmall).TextColor(pal.textFaint).SingleLine().Ellipsis("…").MinWidth(0)
 		})
 		ui.Outline(c.Key("entries"), &ar.state, ar.kids[""], func(k string) []string {
 			if !ar.dirs[k] {
@@ -339,9 +339,9 @@ func (a *App) archiveView(c *ui.Context, pal *palette, l *fileLook) {
 				} else {
 					fileIconImage(c, pal, name, false, false)
 				}
-				ui.Text(c, name).FontSize(12.5).TextColor(pal.text).SingleLine().Ellipsis("…").MinWidth(0).Grow(1).Tooltip(k)
+				ui.Text(c, name).FontSize(fsBody).TextColor(pal.text).SingleLine().Ellipsis("…").MinWidth(0).Grow(1).Tooltip(k)
 				if !ar.dirs[k] {
-					ui.Text(c, sizeText(ar.sizes[k])).FontSize(12).FontFeatures("tnum").TextColor(pal.textFaint).SingleLine().Shrink(0)
+					ui.Text(c, sizeText(ar.sizes[k])).FontSize(fsSmall).FontFeatures("tnum").TextColor(pal.textFaint).SingleLine().Shrink(0)
 				}
 			})
 		}).Grow(1).MinHeight(0).Padding(0, 10, 10, 10)
@@ -606,7 +606,7 @@ func (a *App) fontView(c *ui.Context, pal *palette, l *fileLook) {
 	sc.Children(func() {
 		ui.Column(c).Padding(20, 24).Gap(14).AlignItems(ui.Stretch).Children(func() {
 			ui.Column(c).Gap(2).Children(func() {
-				ui.Text(c, info.Family).FontSize(15).FontWeight(600).TextColor(pal.text).SingleLine().Ellipsis("…")
+				ui.Text(c, info.Family).FontSize(15).FontWeight(wSemibold).TextColor(pal.text).SingleLine().Ellipsis("…")
 				meta := []string{}
 				if info.Style != "" {
 					meta = append(meta, info.Style)
@@ -615,7 +615,7 @@ func (a *App) fontView(c *ui.Context, pal *palette, l *fileLook) {
 					meta = append(meta, locales.LookVersionOf(info.Version))
 				}
 				meta = append(meta, locales.LookGlyphsCount(groupDigits(info.Glyphs)))
-				ui.Text(c, strings.Join(meta, " · ")).FontSize(12).TextColor(pal.textFaint).SingleLine().Ellipsis("…")
+				ui.Text(c, strings.Join(meta, " · ")).FontSize(fsSmall).TextColor(pal.textFaint).SingleLine().Ellipsis("…")
 			})
 			sp := ui.Box(c.Key("specimen")).AlignSelf(ui.Start)
 			bm := fo.bm

@@ -360,14 +360,14 @@ func lookWaiting(c *ui.Context, pal *palette, l *fileLook) {
 	}
 	ui.Column(c).Grow(1).Center().Gap(10).Children(func() {
 		ui.Spinner(c)
-		ui.Text(c, locales.LookReading(l.name)).FontSize(12).TextColor(pal.textFaint).SingleLine()
+		ui.Text(c, locales.LookReading(l.name)).FontSize(fsSmall).TextColor(pal.textFaint).SingleLine()
 	})
 }
 
 // lookFailed shows why a view has nothing, with what to do.
 func lookFailed(c *ui.Context, pal *palette, msg string) {
 	ui.Column(c).Grow(1).Center().Gap(6).Padding(24).Children(func() {
-		ui.Text(c, msg).FontSize(13).FontWeight(500).TextColor(pal.textMuted).TextAlign(ui.Center).MaxWidth(360).LineHeight(1.4)
+		ui.Text(c, msg).FontSize(fsBody).FontWeight(wMedium).TextColor(pal.textMuted).TextAlign(ui.Center).MaxWidth(360).LineHeight(1.4)
 	})
 }
 
@@ -551,7 +551,7 @@ func (a *App) lookBar(c *ui.Context, pal *palette, l *fileLook) {
 	ui.Row(c.Key("look-bar")).Height(32).Shrink(0).Padding(0, 12, 0, 12).Gap(2).AlignItems(ui.Center).Children(func() {
 		for i, v := range vs {
 			name := l.viewName(v)
-			b := ui.ButtonBase(c.Key("view-"+name)).Height(24).Padding(0, 8).Radius(6).Center().Label(name).Tooltip(locales.LookViewTip(name)).Shrink(0)
+			b := ui.ButtonBase(c.Key("view-"+name)).Height(24).Padding(0, 8).Radius(rRow).Center().Label(name).Tooltip(locales.LookViewTip(name)).Shrink(0)
 			bg, fg := ui.Transparent, pal.textMuted
 			switch {
 			case i == l.view:
@@ -561,7 +561,7 @@ func (a *App) lookBar(c *ui.Context, pal *palette, l *fileLook) {
 				bg, fg = pal.rowHover, pal.text
 			}
 			b.Background(bg).Children(func() {
-				ui.Text(c, name).FontSize(12).FontWeight(500).TextColor(fg).SingleLine()
+				ui.Text(c, name).FontSize(fsSmall).FontWeight(wMedium).TextColor(fg).SingleLine()
 			})
 			if b.Clicked() {
 				a.setView(l, i)
@@ -569,7 +569,7 @@ func (a *App) lookBar(c *ui.Context, pal *palette, l *fileLook) {
 		}
 		ui.Box(c).Grow(1).MinWidth(8)
 		if meta := a.lookMeta(l); meta != "" {
-			ui.Text(c, meta).FontSize(12).FontFeatures("tnum").TextColor(pal.textFaint).SingleLine().Ellipsis("…").Shrink(1).MinWidth(0).Tooltip(meta)
+			ui.Text(c, meta).FontSize(fsSmall).FontFeatures("tnum").TextColor(pal.textFaint).SingleLine().Ellipsis("…").Shrink(1).MinWidth(0).Tooltip(meta)
 		}
 	})
 }
@@ -593,8 +593,8 @@ func (a *App) lookHints(c *ui.Context, pal *palette, l *fileLook) {
 	ui.Row(c.Key("look-hints")).Height(32).Shrink(0).Padding(0, 16).Gap(16).AlignItems(ui.Center).Children(func() {
 		hint := func(keys, what string) {
 			ui.Row(c).Gap(6).AlignItems(ui.Center).Shrink(0).Children(func() {
-				ui.Text(c, keys).FontSize(11).FontWeight(500).TextColor(pal.textMuted).Padding(1, 5).Radius(4).Background(pal.kbd).Border(1, pal.kbdBorder).SingleLine()
-				ui.Text(c, what).FontSize(12).TextColor(pal.textFaint).SingleLine()
+				ui.Text(c, keys).FontSize(fsCaption).FontWeight(wMedium).TextColor(pal.textMuted).Padding(1, 5).Radius(rChip).Background(pal.kbd).Border(1, pal.kbdBorder).SingleLine()
+				ui.Text(c, what).FontSize(fsSmall).TextColor(pal.textFaint).SingleLine()
 			})
 		}
 		hint("Esc", locales.LookHintClose())
