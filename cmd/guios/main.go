@@ -143,6 +143,7 @@ func runApp() {
 		a.connect()
 		a.syncHosts()
 		go a.watchConfig()
+		a.followTuiosTheme()
 	})
 	if err := mygo.App.Run(); err != nil {
 		log.Fatal(err)

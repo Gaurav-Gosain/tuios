@@ -130,7 +130,7 @@ var keys = []key{
 	boolKey("font-thicken", "a heavier stroke, as Ghostty's", func(s *Settings) *bool { return &s.Thicken }),
 	numberKey("minimum-contrast", "the least contrast text keeps with its background, 1 (none) to 21, as Ghostty's", func(s *Settings) float64 { return float64(s.MinContrast) }, func(s *Settings, n float64) { s.MinContrast = float32(min(max(n, 1), 21)) }),
 	boolKey("dim-unfocused-terminals", "fade the terminals you're not in, when a session has several panes", func(s *Settings) *bool { return &s.DimUnfocused }),
-	{name: "theme", doc: "the theme of the window, its panes and terminals: one of guios's (" + strings.Join(keroThemeNames(), ", ") + "), a Ghostty theme, or light:<theme>,dark:<theme>",
+	{name: "theme", doc: "the theme of the window, its panes and terminals: one of guios's (" + strings.Join(keroThemeNames(), ", ") + "), a Ghostty theme, tuios for the theme tuios's config.toml names (Omarchy's while tuios follows it), or light:<theme>,dark:<theme>",
 		get: func(s *Settings) []string {
 			if s.LightTheme == s.DarkTheme {
 				return []string{s.LightTheme}

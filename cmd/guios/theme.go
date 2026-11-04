@@ -52,6 +52,9 @@ type palette struct {
 	onDone    ui.Color
 	danger    ui.Color
 	accent    ui.Color
+	// work marks what works: an agent's turn, a program's progress. The
+	// accent means only what is selected or primary (DESIGN.md section 1).
+	work ui.Color
 
 	overlay   ui.Color // behind dialogs
 	popover   ui.Color
@@ -89,6 +92,7 @@ var lightPalette = palette{
 	onDone:    ui.Hex("#ffffff"),
 	danger:    ui.Hex("#d93a35"),
 	accent:    ui.Hex("#3b6cf6"),
+	work:      ui.Hex("#2f5bd8"),
 
 	overlay:   ui.RGBA(10, 10, 30, 0.12),
 	popover:   ui.Hex("#ffffff"),
@@ -129,6 +133,7 @@ var darkPalette = palette{
 	onDone:    ui.Hex("#161618"),
 	danger:    ui.Hex("#ff6961"),
 	accent:    ui.Hex("#6b93ff"),
+	work:      ui.Hex("#6b9bff"),
 
 	overlay:   ui.RGBA(0, 0, 0, 0.35),
 	popover:   ui.Hex("#232327"),
@@ -225,6 +230,11 @@ var currentLooks atomic.Pointer[looks]
 // theme of each appearance, kero's (the background's) or a Ghostty one.
 func (a *App) looks() *looks {
 	key := a.set.LightTheme + "\x00" + a.set.DarkTheme
+	if a.set.LightTheme == tuiosThemeName || a.set.DarkTheme == tuiosThemeName {
+		// The tuios theme changes with config.toml and Omarchy, under
+		// the same setting.
+		key += "\x00" + itoa(int(tuiosThemeGen.Load()))
+	}
 	if l := currentLooks.Load(); l != nil && l.key == key {
 		return l
 	}
@@ -249,6 +259,14 @@ func lookFor(c *ui.Context) *look {
 // lookNamed is the look of a theme: one of kero's by its name, else a
 // Ghostty one by its name, else kero's default.
 func lookNamed(name string, dark bool) *look {
+	if name == tuiosThemeName {
+		l := tuiosLook(dark)
+		tuiosNamesNone[b2i(dark)].Store(l == nil)
+		if l != nil {
+			return l
+		}
+		return keroLook("paper", dark)
+	}
 	if id := keroID(name); id != "" {
 		return keroLook(id, dark)
 	}
@@ -329,7 +347,7 @@ func glowOf(c ui.Color) ui.LinearGradient {
 }
 
 // ghosttyLook washes the window in a Ghostty theme's background, a shade
-// under its cards, lit by its cursor's color: its accent, unless that is
+// under its cards, with its cursor's color as its accent, unless that is
 // a gray, as many themes' cursors are, when blue is.
 func ghosttyLook(th *terminal.Theme) *look {
 	bl, bc, bh := oklch(th.Background)
@@ -341,13 +359,15 @@ func ghosttyLook(th *terminal.Theme) *look {
 		accent = th.Palette[4]
 	}
 	l := &look{term: th, pal: tinted(th, accent)}
-	shade, glow := float32(0.03), float32(0.16)
+	shade := float32(0.03)
 	if l.pal.dark {
-		shade, glow = 0.04, 0.2
+		shade = 0.04
 	}
 	l.base = ui.LinearGradient{Angle: 180, Oklab: true, Stops: []ui.GradientStop{
 		{Color: ui.Oklch(max(bl-shade, 0), bc, bh), At: 0}, {Color: ui.Oklch(max(bl-shade/2, 0), bc, bh), At: 1}}}
-	l.glow = glowOf(accent.Alpha(glow))
+	// No glow: a theme's ground is one surface, so the right sidebar
+	// sits on the same ground as the left (DESIGN.md principle 1).
+	l.glow = glowOf(accent.Alpha(0))
 	return l
 }
 
@@ -363,8 +383,18 @@ func tinted(th *terminal.Theme, accent ui.Color) *palette {
 	p.card = bg
 	p.cardDim = bg.Alpha(float32(p.cardDim.A) / 255)
 	p.text, p.textMuted, p.textFaint = fg, fg.Mix(bg, 0.38), fg.Mix(bg, 0.56)
+	// The text tiers keep their contrast on the cards whatever the theme:
+	// 4.5:1 for the second, 3:1 for the third (DESIGN.md section 1). A
+	// low-contrast theme moves them toward its foreground until they do.
+	p.textMuted = legible(p.textMuted, fg, bg, 4.5)
+	p.textFaint = legible(p.textFaint, fg, bg, 3)
 	p.done, p.onDone = fg, bg
 	p.accent = accent
+	// The states take the theme's own blue and red, so a theme colors
+	// them too, where they read on its cards: the bright one in the dark
+	// when the plain one is too dim there.
+	p.work = readable(th.Palette[4], th.Palette[12], bg, p.dark)
+	p.danger = readable(th.Palette[1], th.Palette[9], bg, p.dark)
 	if p.dark {
 		p.popover = bg.Mix(white, 0.04)
 	} else {
@@ -372,6 +402,48 @@ func tinted(th *terminal.Theme, accent ui.Color) *palette {
 		p.popover = bg.Mix(white, 0.6)
 	}
 	return &p
+}
+
+// legible is c moved toward fg, in steps, until it has at least ratio of
+// contrast on bg, or fg itself.
+func legible(c, fg, bg ui.Color, ratio float64) ui.Color {
+	for i := 0; i < 10 && contrast(c, bg) < ratio; i++ {
+		c = c.Mix(fg, 0.25)
+	}
+	return c
+}
+
+// contrast is the WCAG contrast ratio of two colors.
+func contrast(a, b ui.Color) float64 {
+	lum := func(c ui.Color) float64 {
+		ch := func(v uint8) float64 {
+			x := float64(v) / 255
+			if x <= 0.04045 {
+				return x / 12.92
+			}
+			return math.Pow((x+0.055)/1.055, 2.4)
+		}
+		return 0.2126*ch(c.R) + 0.7152*ch(c.G) + 0.0722*ch(c.B)
+	}
+	la, lb := lum(a), lum(b)
+	if la < lb {
+		la, lb = lb, la
+	}
+	return (la + 0.05) / (lb + 0.05)
+}
+
+// readable is c, or alt where c is too close to the background bg to
+// read as a mark: below a lightness gap of 0.3 in OKLCH.
+func readable(c, alt, bg ui.Color, dark bool) ui.Color {
+	l, _, _ := oklch(c)
+	lb, _, _ := oklch(bg)
+	if abs(l-lb) >= 0.3 {
+		return c
+	}
+	if la, _, _ := oklch(alt); abs(la-lb) > abs(l-lb) {
+		return alt
+	}
+	return c
 }
 
 // tone is the hue of a kero theme, how much of it its cards and text
@@ -495,7 +567,7 @@ var washTable = map[string]wash{
 	// White paper on a desk of light gray, in ink, flat and quiet.
 	"paper": {
 		light: []string{"#f6f6f7", "#f7f7f8", "#f8f8f8"}, lightGlow: ui.RGBA(255, 255, 255, 0),
-		dark: []string{"#141416", "#151517", "#161618"}, darkGlow: ui.RGBA(90, 120, 200, 0.1),
+		dark: []string{"#141416", "#151517", "#161618"}, darkGlow: ui.RGBA(0, 0, 0, 0),
 		tone: tone{260, 0, 0.9, 262},
 	},
 	"plain": {
