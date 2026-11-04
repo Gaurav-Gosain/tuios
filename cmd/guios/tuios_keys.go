@@ -397,8 +397,9 @@ var nativeActions = map[string]bool{
 	// The layouts, which guios lays out with tuios's engine (layoutKeys).
 	"prefix_toggle_tiling": true, "toggle_tiling": true, "window_prefix_tiling": true, "cycle_layout": true,
 	"prefix_rotate_split": true, "rotate_split": true, "prefix_equalize_splits": true, "equalize_splits": true,
-	"window_prefix_float": true,
-	"snap_corner_1":       true, "snap_corner_2": true, "snap_corner_3": true, "snap_corner_4": true,
+	"window_prefix_float":     true,
+	"minimize_prefix_focused": true, "minimize_prefix_restore_1": true, "minimize_prefix_restore_all": true,
+	"snap_corner_1": true, "snap_corner_2": true, "snap_corner_3": true, "snap_corner_4": true,
 	"snap_left": true, "snap_right": true, "snap_fullscreen": true, "unsnap": true,
 	"cycle_master_position": true, "swap_with_master": true, "focus_master": true, "add_master": true, "remove_master": true,
 	"scroll_focus_left": true, "scroll_focus_right": true, "scroll_move_left": true, "scroll_move_right": true,
@@ -407,7 +408,6 @@ var nativeActions = map[string]bool{
 
 var daemonActions = map[string]bool{
 	"resize_width_50": true, "resize_height_50": true,
-	"minimize_prefix_focused": true, "minimize_prefix_restore_1": true, "minimize_prefix_restore_all": true,
 	"close_workspace": true, "last_workspace": true,
 }
 
@@ -450,6 +450,10 @@ func (a *App) runKeyAction(action string) {
 	}
 	if n, ok := digitOf(action, "switch_workspace_"); ok {
 		a.showWorkspace(s, n)
+		return
+	}
+	if n, ok := digitOf(action, "minimize_prefix_restore_"); ok {
+		a.arrange(s, "restore", func(p *proto.ArrangeParams) { p.Delta = n })
 		return
 	}
 	if n, ok := digitOf(action, "workspace_prefix_move_"); ok {
@@ -506,6 +510,10 @@ func (a *App) runKeyAction(action string) {
 	case "prev_workspace":
 		a.stepWorkspace(s, -1)
 	case "prefix_exit_mode", "workspace_prefix_cancel", "window_prefix_cancel", "layout_prefix_cancel", "minimize_prefix_cancel":
+	case "minimize_prefix_focused", "minimize_window":
+		a.arrange(s, "minimize", nil)
+	case "minimize_prefix_restore_all", "restore_all":
+		a.arrange(s, "restore", nil)
 	case "scroll_focus_left", "scroll_focus_right":
 		// The strip's columns, as the TUI's scroll focus keys move.
 		a.arrange(s, "scroll."+strings.TrimPrefix(action, "scroll_focus_"), nil)

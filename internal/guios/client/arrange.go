@@ -632,6 +632,8 @@ func (e *engine) run(p proto.ArrangeParams) error {
 		return e.toggleFloat()
 	case "snap":
 		return e.snap(p.Mode)
+	case "minimize", "restore":
+		return e.minimize(p)
 	case "swap":
 		return e.swap(p.Pane, p.Target)
 	}
@@ -916,6 +918,39 @@ func (e *engine) setRect(p proto.ArrangeParams) error {
 	}
 	e.set("windows", []session.WindowRect{{Window: p.Pane, X: r.X, Y: r.Y, Width: r.W, Height: r.H}})
 	return e.flush()
+}
+
+// minimize minimizes the focused pane, or restores the Delta-th minimized
+// pane of the workspace (1 the first), or every one with Delta 0, as the
+// TUI's minimize menu does. The daemon keeps the flag (set-window), so it
+// works with no TUI attached.
+func (e *engine) minimize(p proto.ArrangeParams) error {
+	set := func(id string, on bool) error {
+		_, err := e.c.verb("set-window", map[string]any{"session": e.name, "window": id, "minimized": on})
+		return err
+	}
+	if p.Op == "minimize" {
+		if e.focus == "" {
+			return nil
+		}
+		return set(e.focus, true)
+	}
+	e.c.st.mu.Lock()
+	mins := slices.Clone(e.c.st.minimized[p.Session])
+	e.c.st.mu.Unlock()
+	if p.Delta > 0 {
+		if p.Delta > len(mins) {
+			return nil
+		}
+		e.result.Focus = mins[p.Delta-1]
+		return set(mins[p.Delta-1], false)
+	}
+	for _, id := range mins {
+		if err := set(id, false); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // snapNames are the snaps as the actions name them.
