@@ -11,7 +11,6 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
-	"syscall"
 )
 
 // The copy route: how a live upgrade runs the binary it checked where there
@@ -56,7 +55,7 @@ type binaryCopy struct {
 // read returns no file, and runs by its path. O_NONBLOCK keeps a FIFO put at
 // the path from blocking the open; the checks then refuse it.
 func openForCopy(abs string) (*os.File, error) {
-	f, err := os.OpenFile(abs, os.O_RDONLY|syscall.O_NONBLOCK, 0)
+	f, err := os.OpenFile(abs, os.O_RDONLY|openNoBlock, 0)
 	if errors.Is(err, fs.ErrPermission) {
 		LogBasic("Live upgrade: %s cannot be read, only run, so it runs by its path", abs)
 		return nil, nil

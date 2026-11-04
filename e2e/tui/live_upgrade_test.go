@@ -1229,7 +1229,12 @@ func TestDaemonUpgradeRunsAPrivateCopy(t *testing.T) {
 		_ = mustCall(t, base, "test-handoff", map[string]any{"binary": copyTuios(t), "copy": true})
 		after2 := awaitNewImage(t, base, img2, 40*time.Second)
 		exe2, ino2 := executableOf(t, after2.PID), imageIno(t, after2.PID)
+		// The new image removes the old copy once it serves, so it may
+		// answer before the copy is gone.
 		second := copies(base)
+		for deadline := time.Now().Add(10 * time.Second); len(second) > 1 && time.Now().Before(deadline); second = copies(base) {
+			time.Sleep(50 * time.Millisecond)
+		}
 		secondIno := inoOf(filepath.Join(append(second, "")[0], "tuios"))
 		writeHandoffArtifact(t, map[string]any{
 			"marker": marker, "marker_exists": ran, "swap_missing": swap, "pid_before": img.PID, "pid_after": after.PID,
