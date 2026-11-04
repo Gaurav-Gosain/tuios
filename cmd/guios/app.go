@@ -203,8 +203,10 @@ type App struct {
 	xp       transfersPanel
 	calm     bool
 	calmHeld int
-	dbg      debugCard
-	sbr      scrollBrowser
+	// badge is the count the app's icon shows, -1 before the first.
+	badge int
+	dbg   debugCard
+	sbr   scrollBrowser
 	// prompt is an open one-line prompt (prompt.go), nil for none.
 	prompt *promptState
 	// help is the keys sheet (help.go).
@@ -280,7 +282,7 @@ type confirmation struct {
 }
 
 func newApp() *App {
-	a := &App{terms: map[string]*termEntry{}, webs: map[string]*webEntry{}, statuses: map[string]proto.Status{}, active: true, focused: true,
+	a := &App{terms: map[string]*termEntry{}, webs: map[string]*webEntry{}, statuses: map[string]proto.Status{}, active: true, focused: true, badge: -1,
 		refs: map[string]*ui.Handle{}, focus: map[string]string{}}
 	a.loadPrefs()
 	a.loadBackup()
@@ -571,7 +573,12 @@ func (a *App) notify(first bool) {
 	if !a.set.DockBadge {
 		waiting = 0
 	}
-	mygo.App.SetBadgeCount(waiting)
+	// Each badge sets the launcher entry again: on Linux a D-Bus signal
+	// every dock on the bus takes, whether the count moved or not.
+	if waiting != a.badge {
+		a.badge = waiting
+		mygo.App.SetBadgeCount(waiting)
+	}
 }
 
 func (a *App) updateTitle() {
