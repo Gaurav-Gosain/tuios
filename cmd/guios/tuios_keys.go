@@ -785,8 +785,11 @@ func (a *App) keysCard(c *ui.Context, pal *palette) {
 	card := ui.Column(c.Key("tuios-keys")).Absolute().Right(cardGap+12).Bottom(cardGap+12).
 		Padding(14, 16).Gap(10).Radius(rCard).Background(pal.popover).Label(keysTitle(menu))
 	floating(card, pal)
-	if !shown {
-		card.Opacity(0)
+	// It fades in and rises 4 DIPs once the which-key delay is over, and
+	// fades out as the prefix ends, as one cached bitmap.
+	card.Transition(ui.ElementTransition{Animation: &motionOut, Exit: &ui.Motion{Opacity: 0, Y: 4}})
+	if k := card.AnimateTo("in", b2f(shown), motionQuick); k < 1 {
+		card.Cache().Opacity(k).Translate(0, 4*(1-k))
 	}
 	if viaCard {
 		// No terminal has the keyboard: the card takes it, and the keys.

@@ -20,6 +20,8 @@ var easeOut = ui.CubicBezier(0.2, 0.9, 0.3, 1)
 var (
 	// motionQuick is for what only fades: a backdrop, a toast leaving.
 	motionQuick = ui.Animation{Duration: 120 * time.Millisecond, Ease: easeOut}
+	// motionOut is for what leaves at once: a card the keys close.
+	motionOut = ui.Animation{Duration: 80 * time.Millisecond, Ease: easeOut}
 	// motionBase is for what comes and goes: a dialog, a toast, a pane.
 	motionBase = ui.Animation{Duration: 160 * time.Millisecond, Ease: easeOut}
 	// motionLayout is for what moves the layout: a split, a pane closing,
@@ -56,7 +58,7 @@ func keepOverlay(c *ui.Context) { ui.Overlay(c, func() {}) }
 // scaleMotion makes every animation of motion.go k times as long: the e2e
 // build's GUIOS_MOTION_SCALE slows them down to capture frames on the way.
 func scaleMotion(k float64) {
-	for _, a := range []*ui.Animation{&motionQuick, &motionBase, &motionLayout, &sidebarMotion} {
+	for _, a := range []*ui.Animation{&motionQuick, &motionOut, &motionBase, &motionLayout, &sidebarMotion} {
 		a.Duration = time.Duration(float64(a.Duration) * k)
 	}
 	enterKeys = []ui.Keyframe{{At: 0, Value: 0}, {At: motionQuick.Duration, Value: 1, Ease: easeOut}}
