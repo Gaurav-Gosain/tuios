@@ -208,10 +208,18 @@ func init() {
 
 var _ = time.Second
 
-// NeedsNewerDaemon is the error for a feature the running daemon is too old
-// for. The daemon runs the build it started with until it restarts, and
-// tuios restart-server starts the newer of the tuios it is given and the
-// one on PATH: from guios, the tuios guios carries.
+// OldDaemonError is a verb the running daemon does not know: it is older
+// than this guios. Its message says what to do. The daemon runs the build it
+// started with until it restarts, and tuios restart-server starts the newer
+// of the tuios it is given and the one on PATH: from guios, the tuios guios
+// carries.
+type OldDaemonError struct{ Verb, Version string }
+
+func (e *OldDaemonError) Error() string {
+	return fmt.Sprintf("The running tuios daemon (%s) is too old for this: it has no %s. Restart it with Settings > tuios daemon > Restart, or run: tuios restart-server.", e.Version, e.Verb)
+}
+
+// NeedsNewerDaemon is the OldDaemonError for verb.
 func NeedsNewerDaemon(verb, daemonVersion string) error {
-	return fmt.Errorf("The running tuios daemon (%s) is too old for this: it has no %s. Restart it with Settings > tuios daemon > Restart, or run: tuios restart-server.", daemonVersion, verb)
+	return &OldDaemonError{Verb: verb, Version: daemonVersion}
 }

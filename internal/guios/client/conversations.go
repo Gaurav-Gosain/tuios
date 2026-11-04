@@ -2,6 +2,7 @@ package client
 
 import (
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"sync"
@@ -16,6 +17,11 @@ import (
 
 func (c *Client) conversations() ([]proto.Conversation, error) {
 	raw, err := c.verb("list-conversations", nil)
+	var old *OldDaemonError
+	if errors.As(err, &old) {
+		// A daemon from before the list keeps none: nothing to show.
+		return nil, nil
+	}
 	if err != nil {
 		return nil, err
 	}
