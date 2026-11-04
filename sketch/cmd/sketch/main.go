@@ -66,6 +66,7 @@ type options struct {
 }
 
 func run(args []string, stdout *os.File, stderr io.Writer) error {
+	sketchtext.Rare()
 	fs := flag.NewFlagSet("sketch", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	var o options

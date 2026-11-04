@@ -2437,6 +2437,26 @@ call, so it no longer sees these calls. `internal/lint` applies the same rule to
 `-s -w`, add up the bytes per source line inside tuios functions, and look for
 a standard library line with a large total over hundreds of functions.
 
+`draw` in `sketch/text` named the text drawer of all 33 diagram types, so every
+program that links the package kept the drawers of the 25 rare types, and
+tuios cannot parse a rare type. `draw` now names the eight types that
+`sketch/core` parses, and the others draw through `text.Rare()`, which the
+sketch command calls first. Release mode (`CGO_ENABLED=0`, `-trimpath`,
+`-ldflags "-s -w"`, Go 1.27.3, built without go.work against the pinned
+libraries), main at 3559788a and the change:
+
+| target | main | change | delta |
+|---|---:|---:|---:|
+| tuios linux/amd64 | 46,952,608 | 46,649,504 | -303,104 (-296.0 KiB) |
+| tuios darwin/arm64 | 43,757,394 | 43,523,314 | -234,080 (-228.6 KiB) |
+| tuios-web linux/amd64 | 50,286,752 | 49,979,552 | -307,200 (-300.0 KiB) |
+| tuios-web darwin/arm64 | 47,579,650 | 47,329,058 | -250,592 (-244.7 KiB) |
+
+The output is the same: the sketch command over the 522 corpus sources (`-f
+cells` at 80 and 40 columns, `-f text`: 1,566 drawings) and `tuios mermaid` over
+the same sources as text and SVG matches main byte for byte: 526 drawings of the
+263 core-type sources, and the same plugin message for the other 259.
+
 The per-target budgets below are history. Every pull request had to edit them,
 so every landing made the open pull requests rebase on a conflict in
 `scripts/binary-size.sh`.

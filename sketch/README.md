@@ -202,7 +202,8 @@ their overlaps. A Wardley map is a grid of visibility by evolution,
 or a table when it is narrow. A railroad diagram is its tracks in cells, or
 its rules as EBNF text when they do not fit. Use case diagrams and agent flows
 are drawn as a flowchart is. A swimlane diagram is a flowchart with its lanes
-as bands.
+as bands. A program that draws the types `tuios.dev/sketch/core` does not parse
+calls `text.Rare()` first, as the sketch command does.
 
 ```go
 d, _ := sketch.Parse(src, sketch.ParseOptions{})
