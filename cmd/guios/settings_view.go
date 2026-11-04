@@ -1186,6 +1186,11 @@ func (a *App) notificationsPage(c *ui.Context, pal *palette) {
 
 func (a *App) agentsPage(c *ui.Context, pal *palette) {
 	s := &a.set
+	settingsGroup(c, pal, locales.SetApprovals(), "", func() {
+		settingRow(c, pal, locales.SetApprovalsRow(), locales.SetApprovalsDetail(), func() {
+			toggle(c.Key("approvals"), &s.Approvals, pal)
+		})
+	})
 	settingsGroup(c, pal, locales.SetRemoteControl(), "", func() {
 		settingRow(c, pal, locales.SetRemoteControlRow(), locales.SetRemoteControlDetail(), func() {
 			toggle(c.Key("remote"), &s.RemoteControl, pal)

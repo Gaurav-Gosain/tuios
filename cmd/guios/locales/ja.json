@@ -1231,5 +1231,8 @@
   "cockpitWaitsAtPrompt": "このエージェントは画面のプロンプトで待っています。ここで送るテキストはそれを待ちます。",
   "cockpitSentTo": "{name} に送りました。",
   "cockpitYouTo": "あなた → {name}",
-  "cockpitMailReplyTo": "{name} のメールへの返信"
+  "cockpitMailReplyTo": "{name} のメールへの返信",
+  "setApprovals": "承認",
+  "setApprovalsRow": "Claude Code の許可プロンプトにエージェントで答える",
+  "setApprovalsDetail": "プロンプトは許可または拒否するまで最大 2 分間エージェントで待ちます。その後 Claude Code はペインで尋ねます。tuios はこれを config.toml に保存します。"
 }

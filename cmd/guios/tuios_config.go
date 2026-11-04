@@ -1,6 +1,8 @@
 package main
 
 import (
+	"slices"
+
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/guios/settings"
 )
@@ -15,7 +17,12 @@ import (
 // tuiosHeld copies the settings tuios's config holds from src into dst.
 func tuiosHeld(dst *settings.Settings, src settings.Settings) {
 	dst.KeepHistory, dst.ResumeAgents, dst.Shell = src.KeepHistory, src.ResumeAgents, src.Shell
+	dst.Approvals = src.Approvals
 }
+
+// approvalsHarness is the harness the Approvals switch turns on: the one
+// whose hook tuios installs with its integration.
+const approvalsHarness = "claude-code"
 
 // loadTuiosSettings reads the settings tuios's config holds into s. A config
 // that does not load leaves the defaults.
@@ -32,12 +39,13 @@ func loadTuiosSettings(s *settings.Settings) {
 		s.ResumeAgents = "ask"
 	}
 	s.Shell = cfg.Appearance.PreferredShell
+	s.Approvals = len(cfg.Agents.Approvals.Enabled) > 0
 }
 
 // saveTuiosSettings writes the settings tuios's config holds when they
 // changed from old. It writes only the keys that changed.
 func saveTuiosSettings(old, s settings.Settings) error {
-	if old.KeepHistory == s.KeepHistory && old.ResumeAgents == s.ResumeAgents && old.Shell == s.Shell {
+	if old.KeepHistory == s.KeepHistory && old.ResumeAgents == s.ResumeAgents && old.Shell == s.Shell && old.Approvals == s.Approvals {
 		return nil
 	}
 	cfg, err := config.LoadUserConfig()
@@ -53,6 +61,17 @@ func saveTuiosSettings(old, s settings.Settings) error {
 	}
 	if old.Shell != s.Shell {
 		cfg.Appearance.PreferredShell = s.Shell
+	}
+	if old.Approvals != s.Approvals {
+		// On adds Claude Code to the harnesses already listed; off
+		// lists none.
+		if s.Approvals {
+			if !slices.Contains(cfg.Agents.Approvals.Enabled, approvalsHarness) {
+				cfg.Agents.Approvals.Enabled = append(cfg.Agents.Approvals.Enabled, approvalsHarness)
+			}
+		} else {
+			cfg.Agents.Approvals.Enabled = nil
+		}
 	}
 	_, err = config.SaveUserConfig(cfg)
 	return err
