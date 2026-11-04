@@ -154,10 +154,22 @@ func kindButton(c *ui.Context, key, label, keys string, kind int, height, radius
 	b.Children(func() {
 		ui.Text(c, label).FontSize(fsBody).FontWeight(wMedium).SingleLine()
 		if keys != "" {
-			ui.Text(c, keys).FontSize(fsSmall).TextColor(fg.Alpha(0.55)).SingleLine()
+			ui.Text(c, keys).FontSize(fsSmall).TextColor(hintOn(fg, bg)).SingleLine()
 		}
 	})
 	return b.Clicked()
+}
+
+// hintOn is a key hint's colour on a button: the label's colour faded
+// toward the fill, no further than keeps 4.5:1 on it (council round 1,
+// visual 33).
+func hintOn(fg, bg ui.Color) ui.Color {
+	for a := float32(0.55); a < 1; a += 0.05 {
+		if contrast(fg.Alpha(a).Over(bg), bg) >= 4.5 {
+			return fg.Alpha(a)
+		}
+	}
+	return fg
 }
 
 // borderless returns the theme with kero's look: its accent, and no lines
