@@ -125,6 +125,16 @@ func (c *Client) dispatch(method string, params any) (any, error) {
 		}
 		return true, nil
 
+	case "grid":
+		p, err := decode[proto.GridParams](params)
+		if err != nil {
+			return nil, err
+		}
+		if setGrid(p.Cols, p.Rows) {
+			c.kickState()
+		}
+		return true, nil
+
 	case "arrange":
 		p, err := decode[proto.ArrangeParams](params)
 		if err != nil {

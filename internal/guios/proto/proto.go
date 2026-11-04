@@ -382,6 +382,13 @@ type Rect struct {
 	H int `json:"h"`
 }
 
+// GridParams is the app's pane area in cells: the box the client lays
+// panes out in while no TUI shows the session.
+type GridParams struct {
+	Cols int `json:"cols"`
+	Rows int `json:"rows"`
+}
+
 // ArrangeResult is what a change to the layout did beyond the layout:
 // Focus is the pane it moved the focus to, "" when it moved none.
 type ArrangeResult struct {

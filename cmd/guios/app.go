@@ -161,6 +161,9 @@ type App struct {
 	// wantFocus is a new pane the keyboard goes to once its terminal is
 	// drawn.
 	wantFocus string
+	// grid is the pane area in cells, as last told to the host.
+	grid    [2]int
+	gridKey [3]float32 // the area's size and the text size it was measured at
 
 	active   bool
 	focused  bool

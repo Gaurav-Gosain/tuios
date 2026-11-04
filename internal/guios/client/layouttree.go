@@ -29,6 +29,7 @@ type treeInfo struct {
 	tree      *session.SerializedBSPTree
 	leaves    map[int]string
 	ls        layoutState
+	grid      layout.Rect // guios's pane area in cells (setGrid)
 	useTree   bool // the tree arranges the panes, and guios's changes go back to it
 	tui       bool // a TUI client is attached
 	numWS     int
@@ -39,7 +40,7 @@ type treeInfo struct {
 
 // readTree reads the session's settings and the shown workspace's tree.
 func (k *stateKeeper) readTree(name string, ws int) treeInfo {
-	ti := treeInfo{ws: ws, numWS: 9}
+	ti := treeInfo{ws: ws, numWS: 9, grid: currentGrid()}
 	if raw, err := k.c.verb("session-info", map[string]any{"session": name}); err == nil {
 		var si struct {
 			TUI     bool              `json:"tui_attached"`
