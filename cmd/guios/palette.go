@@ -750,3 +750,46 @@ func (a *App) shortcuts(c *ui.Context) {
 		a.selectOffset(-1)
 	}
 }
+
+// paletteWarmAfter is how long after the app has loaded the palette's
+// text is measured ahead (warmPalette): late enough to stay out of the
+// start, early enough to come before most first opens.
+const paletteWarmAfter = 1500 * time.Millisecond
+
+// warmPalette measures, once, the text the palette's first rows show, at
+// their sizes and weights, in a frame of its own while nothing else
+// happens. The first open then finds the fonts loaded and the text
+// shaped, and its first frame lays out as fast as a later one's.
+func (a *App) warmPalette(c *ui.Context) {
+	w := &a.palWarm
+	if w.done || !a.loaded || a.pal.open {
+		return
+	}
+	if w.at.IsZero() {
+		w.at = c.Now()
+	}
+	if d := c.Now().Sub(w.at); d < paletteWarmAfter {
+		c.After(paletteWarmAfter - d)
+		return
+	}
+	w.done = true
+	measure := func(s string, size float32, weight int) {
+		if s != "" {
+			c.MeasureText(0, ui.Span{Text: s, Size: size, Weight: weight})
+		}
+	}
+	measure(locales.PalettePlaceholder(), fsProse, 0)
+	for _, g := range paletteGroups {
+		measure(g(), fsSmall, wMedium)
+	}
+	for i, it := range a.paletteItems() {
+		if i == 24 {
+			break
+		}
+		measure(it.title, fsBody, 0)
+		measure(flat(it.detail), fsSmall, 0)
+		for _, k := range it.keys {
+			measure(k, fsCaption, wMedium)
+		}
+	}
+}

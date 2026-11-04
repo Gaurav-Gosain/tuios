@@ -226,6 +226,7 @@ func (a *App) view(c *ui.Context) {
 	keepOverlay(c)
 	toasts(c)
 	a.paletteView(c, pal)
+	a.warmPalette(c)
 	a.helpView(c, pal)
 	a.transfersView(c, pal)
 	a.sidebarKeysView(c)

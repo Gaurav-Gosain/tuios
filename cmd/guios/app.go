@@ -161,6 +161,12 @@ type App struct {
 	// the splits of the focused pane asked for meanwhile.
 	splitting  map[string]bool
 	splitQueue map[string][]func()
+	// palWarm is warmPalette's: when the app had loaded, and whether the
+	// palette's text was measured.
+	palWarm struct {
+		at   time.Time
+		done bool
+	}
 	// cmdAt is when Cmd (Ctrl elsewhere) went down alone (cmdHeld).
 	cmdAt time.Time
 	// wantFocus is a new pane the keyboard goes to once its terminal is
