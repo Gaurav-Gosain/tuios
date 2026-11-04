@@ -1179,5 +1179,7 @@
   "compareHintRead": "重新读取",
   "compareJudge": "评判",
   "compareKeep": "保留 {letter}",
-  "compareKeepAgain": "立即保留 {letter}"
+  "compareKeepAgain": "立即保留 {letter}",
+  "cockpitHintSend": "发送",
+  "cockpitHintList": "返回列表"
 }

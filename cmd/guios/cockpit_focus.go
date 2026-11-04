@@ -276,6 +276,9 @@ func (a *App) ckTab(c *ui.Context, pal *palette, t string, ag client.Agent) {
 	if b.Clicked() {
 		c.Invalidate()
 		a.ckSetTab(t)
+		// The keys stay on the agents: a tab is chosen with the pointer
+		// or with [ and ], and Up, Down and Enter still move the list.
+		a.ck.fleetFocus.Focus()
 	}
 }
 
@@ -429,6 +432,7 @@ func (a *App) approvalCard(c *ui.Context, pal *palette, ag client.Agent, it sess
 				// A risky command gets no primary button to allow it.
 				if sizedButton(c, "ans-"+o, ckDecisionWords(o), ckDecisionKey(o), o == "once" && !risky, hControl, rControl, pal) {
 					a.ckAnswer(o, true)
+					ck.fleetFocus.Focus()
 				}
 			}
 			ui.Spacer(c)

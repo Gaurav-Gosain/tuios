@@ -594,6 +594,12 @@ func (a *App) cockpitHints(c *ui.Context, pal *palette) {
 			keyHint(c, pal, k, what)
 		}
 		switch {
+		case a.ck.reply.box.FocusWithin(c):
+			// The keys of the field that has them.
+			hint("↵", locales.CockpitHintSend())
+			hint("⇧↵", locales.CockpitHintNewLine())
+			hint(keyName("CmdOrCtrl+Enter"), locales.CockpitHintSendNow())
+			hint("esc", locales.CockpitHintList())
 		case a.ck.stacked && a.ck.stackFocus:
 			hint("esc", locales.CockpitHintBack())
 			hint("a", locales.CockpitHintAllow())

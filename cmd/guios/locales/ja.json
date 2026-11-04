@@ -1179,5 +1179,7 @@
   "compareHintRead": "再読み込み",
   "compareJudge": "判定",
   "compareKeep": "{letter} を残す",
-  "compareKeepAgain": "今すぐ {letter} を残す"
+  "compareKeepAgain": "今すぐ {letter} を残す",
+  "cockpitHintSend": "送信",
+  "cockpitHintList": "一覧に戻る"
 }

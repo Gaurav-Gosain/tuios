@@ -11961,3 +11961,23 @@ func CompareKeepAgain(letter string) string { return In(i18n.Locale()).CompareKe
 func (msgs Messages) CompareKeepAgain(letter string) string {
 	return Catalog.Format(msgs.locale, "compareKeepAgain", map[string]any{"letter": letter})
 }
+
+// CockpitHintSend says "send"
+// in the language the app shows.
+func CockpitHintSend() string { return In(i18n.Locale()).CockpitHintSend() }
+
+// CockpitHintSend says "send"
+// in the language of msgs.
+func (msgs Messages) CockpitHintSend() string {
+	return Catalog.Format(msgs.locale, "cockpitHintSend", nil)
+}
+
+// CockpitHintList says "back to the list"
+// in the language the app shows.
+func CockpitHintList() string { return In(i18n.Locale()).CockpitHintList() }
+
+// CockpitHintList says "back to the list"
+// in the language of msgs.
+func (msgs Messages) CockpitHintList() string {
+	return Catalog.Format(msgs.locale, "cockpitHintList", nil)
+}

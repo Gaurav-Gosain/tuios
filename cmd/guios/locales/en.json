@@ -2118,5 +2118,7 @@
   "compareHintRead": "read again",
   "compareJudge": "Judge",
   "compareKeep": "Keep {letter}",
-  "compareKeepAgain": "Keep {letter} now"
+  "compareKeepAgain": "Keep {letter} now",
+  "cockpitHintSend": "send",
+  "cockpitHintList": "back to the list"
 }
