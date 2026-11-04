@@ -460,6 +460,9 @@ func (a *App) connected(h *host, gen int, cl *client.Client, err error) {
 	if !h.remote() {
 		a.watchHosts(cl)
 		a.watchTransfers(cl)
+		// The badge and the keys to what needs you read the agents and
+		// the Inbox (cockpit_needs.go).
+		a.refreshCockpit()
 	} else {
 		// Its OS and home, for its paths: ~ for its home in the sidebar.
 		go func() {

@@ -106,6 +106,11 @@ type ckArmed struct {
 // cockpit is the agent cockpit's state.
 type cockpit struct {
 	open bool
+	// view is what the card shows: the agents, the board or the mail for
+	// the person.
+	view int
+	// jumpTo is a row to select once the rows are built.
+	jumpTo *ckJump
 
 	agents []client.Agent
 	items  []session.AttentionItem
@@ -206,10 +211,18 @@ func (a *App) closeCockpit() {
 	a.focusTerminal()
 }
 
-// cockpitEvent takes a daemon event while the cockpit is open: the lists are
-// read again, and the selected agent's thread when its transcript grew.
+// cockpitEvent takes a daemon event: the lists are read again, open or not,
+// since the badge and the keys to what needs you read them; while the
+// cockpit is open, the selected agent's thread too when its transcript grew.
 func (a *App) cockpitEvent(ev *proto.DaemonEvent) {
-	if !a.ck.open || ev == nil {
+	if ev == nil {
+		return
+	}
+	if !a.ck.open {
+		switch ev.Type {
+		case "agent-state", "attention", "agent-message", "window-closed", "window-created", "agent-seen":
+			a.refreshCockpit()
+		}
 		return
 	}
 	// A verdict comes with no event of its own: the judge's state and the
@@ -335,6 +348,9 @@ func (a *App) buildCockpitRows(c *ui.Context) []ckRow {
 		byKey[ag.Session+"\x00"+ag.Window] = i
 	}
 	used := map[int]bool{}
+	// An agent that needs the person is in Needs you, whatever its first
+	// item is: the badge counts it from the same list (cockpit_needs.go).
+	needing := ck.needAgents()
 	for i := range ck.items {
 		it := &ck.items[i]
 		g := ckNeeds
@@ -351,6 +367,9 @@ func (a *App) buildCockpitRows(c *ui.Context) []ckRow {
 			if j, ok := byKey[it.Session+"\x00"+it.Window]; ok {
 				idx = j
 			}
+		}
+		if g == ckReview && idx >= 0 && needing[idx] {
+			continue
 		}
 		if g == ckReview && idx >= 0 {
 			switch ck.agents[idx].State {

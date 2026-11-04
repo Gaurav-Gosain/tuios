@@ -1628,16 +1628,6 @@ func (a *App) jumpTo(want func(*proto.Session) bool) bool {
 	return false
 }
 
-// jumpToAttention goes to the next session that needs the user, after the
-// one shown, else to the next with something unseen.
-func (a *App) jumpToAttention() {
-	if a.jumpTo(func(s *proto.Session) bool { return s.Status == proto.Waiting }) ||
-		a.jumpTo(func(s *proto.Session) bool { return s.Unread }) {
-		return
-	}
-	a.toast(locales.ToastNothingNeedsYou())
-}
-
 func (a *App) toggleSidebar() {
 	if a.leftCrowded && !a.prefs.SidebarHidden {
 		// Hidden only for the narrow window: show it there, or hide it

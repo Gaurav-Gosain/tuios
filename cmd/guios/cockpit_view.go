@@ -83,6 +83,7 @@ func ckGround(pal *palette) ui.Color {
 func (a *App) cockpitCard(c *ui.Context, pal *palette, bar ui.TitleBar, shown float32) {
 	ck := &a.ck
 	ck.rows = a.buildCockpitRows(c)
+	a.ckTakeJump()
 	a.ckClamp()
 	// The card's own width, as the frame lays it out: the window less
 	// both sidebars and the gaps (view.go).
@@ -636,29 +637,9 @@ func ckAllHints(hint func(k, what string)) {
 // agentsRow is the sidebar's row that opens the cockpit, with how many
 // agents need the person.
 func (a *App) agentsRow(c *ui.Context, pal *palette) {
-	// The agents that need the person: the cockpit's count once read, else
-	// the panes shown and the other workspaces' marks.
-	waiting := 0
-	if a.ck.loaded {
-		for _, r := range a.ck.rows {
-			if r.kind == ckRowHead && r.group == ckNeeds {
-				waiting = r.count
-			}
-		}
-	} else {
-		for _, s := range a.st.Sessions {
-			for _, p := range s.Panes {
-				if p.Status == proto.Waiting {
-					waiting++
-				}
-			}
-			for _, w := range s.Workspaces {
-				if w.N != s.Workspace && w.Status == proto.Waiting {
-					waiting++
-				}
-			}
-		}
-	}
+	// The agents that need the person, from the one list the keys to them
+	// read too (cockpit_needs.go).
+	waiting := a.needsCount()
 	on := a.ck.open
 	row := ui.Row(c.Key("agents-row")).Height(rowH).Padding(0, 10, 0, rowInset).Gap(10).AlignItems(ui.Center).Radius(rRow).Margin(0, 0, 6, 0).
 		Label(locales.ActionAgents()).Cursor(ui.CursorPointer)
