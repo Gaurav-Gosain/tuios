@@ -1210,5 +1210,11 @@
   "cockpitQueuedDelivering": "代理在提示符处。tuios 正在输入。",
   "cockpitQueuedStalled": "代理没有接收。请立即发送或丢弃。",
   "cockpitSendNowButton": "立即发送",
-  "usageOfCores": "/ {n} 核"
+  "usageOfCores": "/ {n} 核",
+  "cockpitSendAs": "发送方式",
+  "cockpitSendAsPrompt": "提示",
+  "cockpitSendAsMail": "邮件",
+  "cockpitMailInbox": "发送到 {name} 的收件箱",
+  "cockpitMailNoImages": "邮件只能发送文本。请以提示发送图片。",
+  "cockpitMailSent": "已向 {name} 发送邮件。"
 }

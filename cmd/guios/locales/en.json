@@ -2191,5 +2191,25 @@
         "type": "int"
       }
     }
+  },
+  "cockpitSendAs": "Send as",
+  "cockpitSendAsPrompt": "Prompt",
+  "cockpitSendAsMail": "Mail",
+  "cockpitMailInbox": "Goes to the inbox of {name}",
+  "@cockpitMailInbox": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "cockpitMailNoImages": "Mail takes text only. Send the image as a prompt.",
+  "cockpitMailSent": "Mail sent to {name}.",
+  "@cockpitMailSent": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
   }
 }

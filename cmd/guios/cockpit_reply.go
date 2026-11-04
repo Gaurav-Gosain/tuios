@@ -36,6 +36,9 @@ type ckReply struct {
 	box    ui.Handle
 	queued map[string][]ckQueued // by agent, as list-queued said
 	asked  map[string]bool       // the agents whose queue was read
+	// asMail holds, by agent, that the box sends mail to the agent's
+	// inbox rather than a prompt typed into its pane.
+	asMail map[string]bool
 	// texts holds the whole text of each message this app queued, by its
 	// queue id, for Send now: list-queued gives only its first line.
 	texts map[string]string
@@ -128,11 +131,22 @@ func (a *App) replyBox(c *ui.Context, pal *palette, ag client.Agent) {
 			box.Background(pal.accent.Alpha(0.08))
 		}
 		box.Children(func() {
+			mail := r.asMail[ag.Key()]
 			ui.Row(c).Gap(6).AlignItems(ui.Center).Children(func() {
-				ui.Text(c, locales.CockpitTo()).FontSize(fsSmall).TextColor(pal.textFaint).SingleLine().Shrink(0)
-				oneLine(c, ag.Name, fsSmall, wMedium).TextColor(pal.textMuted)
+				// One box, two ways to reach the agent: a prompt typed
+				// into its pane, or mail to its inbox.
+				ui.Text(c, locales.CockpitSendAs()).FontSize(fsSmall).TextColor(pal.textFaint).SingleLine().Shrink(0)
+				a.sendAsChip(c, pal, ag, false, locales.CockpitSendAsPrompt())
+				a.sendAsChip(c, pal, ag, true, locales.CockpitSendAsMail())
 				ui.Spacer(c)
-				oneLine(c, locales.CockpitNextTurn(), fsSmall, 0).TextColor(pal.textFaint).Shrink(2)
+				note := locales.CockpitNextTurn()
+				if mail {
+					note = locales.CockpitMailInbox(ag.Name)
+					if m := a.ck.tabs.mail; m != nil && m.replyTo != 0 {
+						note = locales.CockpitMailReply(int(m.replyTo))
+					}
+				}
+				oneLine(c, note, fsSmall, 0).TextColor(pal.textFaint).Shrink(2)
 			})
 			if len(d.images) > 0 {
 				ui.Row(c).Gap(8).Wrap().Children(func() {
@@ -154,13 +168,13 @@ func (a *App) replyBox(c *ui.Context, pal *palette, ag client.Agent) {
 			}
 			in.OnTextKey(func(k ui.TextKey) bool {
 				switch {
-				case k.Key == ui.KeyEnter && k.Mods == ui.Cmd:
+				case k.Key == ui.KeyEnter && k.Mods == ui.Cmd && !mail:
 					d.text = k.Text()
 					a.sendReply(ag, d, true)
 					return true
 				case k.Key == ui.KeyEnter && k.Mods == 0:
 					d.text = k.Text()
-					a.sendReply(ag, d, false)
+					a.sendBox(ag, d, mail)
 					return true
 				case k.Key == ui.KeyUp && k.Mods == 0 && k.Text() == "" && d.last != "":
 					// The last message sent, to send again or change.
@@ -181,11 +195,87 @@ func (a *App) replyBox(c *ui.Context, pal *palette, ag client.Agent) {
 					keyHint(c, pal, keyName("CmdOrCtrl+Enter"), locales.CockpitHintSendNow())
 				})
 				if sizedButton(c, "send", locales.CockpitSend(), "↵", true, hControlSm, rControl, pal) {
-					a.sendReply(ag, d, false)
+					a.sendBox(ag, d, mail)
 				}
 			})
 		})
 	})
+}
+
+// sendAsChip is one way the box sends: a prompt, or mail.
+func (a *App) sendAsChip(c *ui.Context, pal *palette, ag client.Agent, mail bool, label string) {
+	r := &a.ck.reply
+	on := r.asMail[ag.Key()] == mail
+	b := ui.ButtonBase(c.Key(label)).Height(20).Padding(0, 8).Radius(rRow).AlignItems(ui.Center).Shrink(0).Label(label)
+	switch {
+	case on:
+		b.Background(pal.rowSelected)
+	case b.Hovered():
+		b.Background(pal.rowHover)
+	}
+	b.Children(func() {
+		col := pal.textMuted
+		if on {
+			col = pal.text
+		}
+		ui.Text(c, label).FontSize(fsSmall).FontWeight(wMedium).TextColor(col).SingleLine()
+	})
+	if b.Clicked() {
+		c.Invalidate()
+		a.ckSendAs(ag, mail)
+		r.box.Focus()
+	}
+}
+
+// ckSendAs sets how the box sends to an agent.
+func (a *App) ckSendAs(ag client.Agent, mail bool) {
+	r := &a.ck.reply
+	if r.asMail == nil {
+		r.asMail = map[string]bool{}
+	}
+	r.asMail[ag.Key()] = mail
+}
+
+// sendBox sends the box's text as the switch says: a prompt queued for
+// the agent's rest, or mail to its inbox.
+func (a *App) sendBox(ag client.Agent, d *ckDraft, mail bool) {
+	if !mail {
+		a.sendReply(ag, d, false)
+		return
+	}
+	cl := a.cockpitClient()
+	text := strings.TrimSpace(d.text)
+	if cl == nil || d.sending || text == "" {
+		return
+	}
+	if len(d.images) > 0 {
+		a.toast(locales.CockpitMailNoImages())
+		return
+	}
+	p := map[string]any{"session": ag.Session, "to": ag.Window, "text": text, "from": "human"}
+	m := a.ck.tabs.mail
+	if m != nil && m.replyTo != 0 && m.replySess == ag.Session {
+		p["reply_to"] = m.replyTo
+	}
+	d.sending = true
+	go func() {
+		_, err := cl.Verb("send-agent-message", p, true)
+		a.update(func() {
+			d.sending = false
+			if err != nil {
+				a.toast(err.Error())
+				return
+			}
+			d.last = text
+			d.text = ""
+			if m != nil {
+				m.replyTo = 0
+			}
+			a.toast(locales.CockpitMailSent(ag.Name))
+			a.fetchMail()
+			a.ckAdvanceAfter(ag)
+		})
+	}()
 }
 
 // keyName is a shortcut as this platform writes it.

@@ -12271,3 +12271,63 @@ func UsageOfCores(n int) string { return In(i18n.Locale()).UsageOfCores(n) }
 func (msgs Messages) UsageOfCores(n int) string {
 	return Catalog.Format(msgs.locale, "usageOfCores", map[string]any{"n": n})
 }
+
+// CockpitSendAs says "Send as"
+// in the language the app shows.
+func CockpitSendAs() string { return In(i18n.Locale()).CockpitSendAs() }
+
+// CockpitSendAs says "Send as"
+// in the language of msgs.
+func (msgs Messages) CockpitSendAs() string {
+	return Catalog.Format(msgs.locale, "cockpitSendAs", nil)
+}
+
+// CockpitSendAsPrompt says "Prompt"
+// in the language the app shows.
+func CockpitSendAsPrompt() string { return In(i18n.Locale()).CockpitSendAsPrompt() }
+
+// CockpitSendAsPrompt says "Prompt"
+// in the language of msgs.
+func (msgs Messages) CockpitSendAsPrompt() string {
+	return Catalog.Format(msgs.locale, "cockpitSendAsPrompt", nil)
+}
+
+// CockpitSendAsMail says "Mail"
+// in the language the app shows.
+func CockpitSendAsMail() string { return In(i18n.Locale()).CockpitSendAsMail() }
+
+// CockpitSendAsMail says "Mail"
+// in the language of msgs.
+func (msgs Messages) CockpitSendAsMail() string {
+	return Catalog.Format(msgs.locale, "cockpitSendAsMail", nil)
+}
+
+// CockpitMailInbox says "Goes to the inbox of {name}"
+// in the language the app shows.
+func CockpitMailInbox(name string) string { return In(i18n.Locale()).CockpitMailInbox(name) }
+
+// CockpitMailInbox says "Goes to the inbox of {name}"
+// in the language of msgs.
+func (msgs Messages) CockpitMailInbox(name string) string {
+	return Catalog.Format(msgs.locale, "cockpitMailInbox", map[string]any{"name": name})
+}
+
+// CockpitMailNoImages says "Mail takes text only. Send the image as a prompt."
+// in the language the app shows.
+func CockpitMailNoImages() string { return In(i18n.Locale()).CockpitMailNoImages() }
+
+// CockpitMailNoImages says "Mail takes text only. Send the image as a prompt."
+// in the language of msgs.
+func (msgs Messages) CockpitMailNoImages() string {
+	return Catalog.Format(msgs.locale, "cockpitMailNoImages", nil)
+}
+
+// CockpitMailSent says "Mail sent to {name}."
+// in the language the app shows.
+func CockpitMailSent(name string) string { return In(i18n.Locale()).CockpitMailSent(name) }
+
+// CockpitMailSent says "Mail sent to {name}."
+// in the language of msgs.
+func (msgs Messages) CockpitMailSent(name string) string {
+	return Catalog.Format(msgs.locale, "cockpitMailSent", map[string]any{"name": name})
+}

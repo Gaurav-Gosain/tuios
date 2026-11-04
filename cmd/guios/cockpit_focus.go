@@ -91,6 +91,8 @@ func (a *App) ckTabFor(r ckRow) string {
 	it := r.item
 	if it != nil && needItemKind(it) {
 		if it.Kind == session.AttentionMail {
+			// A mail item is answered by mail.
+			a.ckSendAs(ck.rowAgent(r), true)
 			return tabMail
 		}
 		return tabThread
@@ -224,7 +226,7 @@ func (a *App) cockpitFocus(c *ui.Context, pal *palette) {
 		}
 	})
 	card := r.item != nil && ckAnswerable(*r.item)
-	if !card && ck.tab != tabThread {
+	if !card && ck.tab != tabThread && ck.tab != tabMail {
 		return
 	}
 	// The card and the reply box take what the window leaves the tab's
@@ -237,7 +239,7 @@ func (a *App) cockpitFocus(c *ui.Context, pal *palette) {
 			if card {
 				a.approvalCard(c, pal, ag, *r.item)
 			}
-			if ck.tab == tabThread {
+			if ck.tab == tabThread || ck.tab == tabMail {
 				a.replyBox(c, pal, ag)
 			}
 		})

@@ -597,8 +597,7 @@ func (a *App) mailView(c *ui.Context, pal *palette, ag client.Agent) {
 			}
 		})
 	})
-	// Mail to the agent, as the person.
-	a.mailCompose(c, pal, m, ag.Session, ag.Window, ag.Name)
+	// The reply box below writes to the agent, as mail or as a prompt.
 }
 
 // mailCard is one message: who to whom, the text, and a reply link.
@@ -637,6 +636,13 @@ func (a *App) mailCard(c *ui.Context, pal *palette, m *ckMail, msg ckMsg, in boo
 		if r.Clicked() {
 			c.Invalidate()
 			m.replyTo, m.replySess = msg.ID, msg.Session
+			if a.ck.view == viewAgents {
+				// The agent's reply box answers it, as mail.
+				if ag, ok := a.ckSelectedAgent(); ok {
+					a.ckSendAs(ag, true)
+				}
+				a.ckFocusReply()
+			}
 		}
 		r.Children(func() {
 			ui.Text(c, locales.CockpitReplyAsYou()).FontSize(fsSmall).TextColor(pal.accent)

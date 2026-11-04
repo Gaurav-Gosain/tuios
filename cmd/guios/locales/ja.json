@@ -1210,5 +1210,11 @@
   "cockpitQueuedDelivering": "エージェントはプロンプトにいます。tuios が今入力します。",
   "cockpitQueuedStalled": "エージェントが受け取りませんでした。今すぐ送るか、取り消してください。",
   "cockpitSendNowButton": "今すぐ送信",
-  "usageOfCores": "/ {n} コア"
+  "usageOfCores": "/ {n} コア",
+  "cockpitSendAs": "送信方法",
+  "cockpitSendAsPrompt": "プロンプト",
+  "cockpitSendAsMail": "メール",
+  "cockpitMailInbox": "{name} の受信箱に届きます",
+  "cockpitMailNoImages": "メールはテキストのみです。画像はプロンプトで送ってください。",
+  "cockpitMailSent": "{name} にメールを送りました。"
 }
