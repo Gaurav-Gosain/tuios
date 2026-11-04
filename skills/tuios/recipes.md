@@ -72,6 +72,54 @@ For an agent that runs now and is busy, `tuios queue` types the text as its
 next prompt when it comes to rest. Do not use `send-text` for either case: it
 types at once, into whatever runs in the pane.
 
+## Start a reviewer beside you, and read its answer
+
+```sh
+tuios start-agent claude -s "$TUIOS_SESSION" --name reviewer --cwd "$PWD"
+tuios ask-agent -s "$TUIOS_SESSION" -w reviewer --timeout 900000 'Review the diff on this branch. List only the problems.'
+tuios close-window -s "$TUIOS_SESSION" reviewer
+```
+
+`start-agent` returns when the agent is at its prompt, and keeps the focus
+where it is. An agent can stop on a question of its own, such as whether to
+trust the folder. Then `start-agent` exits non-zero and keeps the pane. Tell
+the person, and do not answer the question yourself. Close the pane when the
+work is done.
+
+## Start a server, and wait until it is ready
+
+```sh
+tuios new-window -s "$TUIOS_SESSION" server --cwd "$PWD" --no-focus --keep-open -- npm run dev
+tuios wait-for window-output -s "$TUIOS_SESSION" -w server --pattern 'ready|listening' --timeout 120000
+```
+
+Use the start command of the project, and a word that it prints when it is
+ready. `--keep-open` keeps the pane after the server stops, so the person can
+read why. A timeout does not tell you that the server failed. Read the pane
+with `capture-pane` before you start it again.
+
+## Stop what runs in a pane
+
+```sh
+tuios send-keys -s "$TUIOS_SESSION" -w server ctrl+c
+tuios wait-for window-exit -s "$TUIOS_SESSION" -w server --timeout 10000
+tuios close-window -s "$TUIOS_SESSION" server
+```
+
+`window-exit` returns when the program of the pane stops, and shows its exit
+status. A program that is already stopped matches at once. Close only a pane
+that you opened.
+
+## Show the person a diff
+
+```sh
+tuios new-window -s "$TUIOS_SESSION" diff --cwd "$PWD" --no-focus --keep-open -- git --no-pager diff
+```
+
+The pane keeps the diff after `git` exits. Tell the person the name of the
+pane. `tuios review` shows what an agent changed in its worktree, and takes
+notes on lines (`tuios --skill fleet`).
+
 ## Keep the machine awake while agents work
 
 A hook only fires for the states that `[notifications.agent.states]` alerts on,
