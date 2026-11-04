@@ -94,25 +94,38 @@ func (a *App) cockpitFocus(c *ui.Context, pal *palette) {
 		ck.tab = tabThread
 	}
 	// Header: name, harness, the state pill; then where it works.
-	ui.Column(c).Shrink(0).Padding(14, 24, 0, 24).Gap(4).Children(func() {
+	pad := float32(24)
+	if ck.stacked {
+		pad = 14
+	}
+	ui.Column(c).Shrink(0).Padding(14, pad, 0, pad).Gap(4).Children(func() {
 		ui.Row(c).Gap(10).AlignItems(ui.Center).Children(func() {
+			if ck.stacked {
+				iconButton(c, "ck-back", chevronLeftIcon, a.tip(locales.CockpitBack(), ""), pal, func() { ck.stackFocus = false })
+			}
 			ui.Icon(c, harnessIcon(ag.Harness)).Size(16, 16).TextColor(pal.textMuted)
 			name := ui.Text(c, ag.Name).FontSize(16).FontWeight(700).TextColor(pal.text).SingleLine().Ellipsis("…").MinWidth(0).Cursor(ui.CursorPointer)
 			pointerTooltip(c, name, "ck-name", locales.CockpitOpenPane())
 			if name.Clicked() && ag.Window != "" {
 				a.goToAgent(ag)
 			}
-			ui.Text(c, harnessName(ag.Harness)).FontSize(13).TextColor(pal.textMuted)
-			if m, ok := ag.Meta["model"].(string); ok && m != "" {
-				ui.Text(c, "· "+m).FontSize(13).TextColor(pal.textFaint)
+			if !ck.narrow {
+				ui.Text(c, harnessName(ag.Harness)).FontSize(13).TextColor(pal.textMuted)
+				if m, ok := ag.Meta["model"].(string); ok && m != "" {
+					ui.Text(c, "· "+m).FontSize(13).TextColor(pal.textFaint)
+				}
 			}
 			ui.Spacer(c)
 			word, col := ckStatePill(pal, ag, r.item)
-			ui.Row(c).Gap(6).AlignItems(ui.Center).Padding(3, 10).Radius(11).Background(col.Alpha(0.15)).Children(func() {
+			ui.Row(c).Shrink(0).Gap(6).AlignItems(ui.Center).Padding(3, 10).Radius(11).Background(col.Alpha(0.15)).Children(func() {
 				ui.Box(c).Size(7, 7).Radius(4).Background(col)
-				ui.Text(c, word).FontSize(12).FontWeight(650).TextColor(col)
+				ui.Text(c, word).FontSize(12).FontWeight(650).TextColor(col).SingleLine()
 			})
-			if ag.Window != "" {
+			switch {
+			case ag.Window == "":
+			case ck.narrow:
+				iconButton(c, "ck-open", openFileIcon, locales.CockpitOpenPane()+" (↵)", pal, func() { a.goToAgent(ag) })
+			default:
 				if sizedButton(c, "ck-open", locales.CockpitOpenPane(), "↵", false, 26, 7, pal) {
 					a.goToAgent(ag)
 				}
@@ -132,7 +145,12 @@ func (a *App) cockpitFocus(c *ui.Context, pal *palette) {
 		ui.Text(c, strings.Join(where, " · ")).FontSize(12).TextColor(pal.textFaint).SingleLine().Ellipsis("…").MinWidth(0)
 		a.agentUsage(c, pal, ag)
 		// Tabs.
-		ui.Row(c).Gap(2).Margin(10, 0, 0, 0).FocusGroup(ui.Horizontal).Children(func() {
+		// A narrow card scrolls the tabs sideways rather than cut the last.
+		tabs := ui.Row(c)
+		if ck.narrow {
+			tabs = ui.ScrollHorizontal(c.Key("tabs")).Shrink(0)
+		}
+		tabs.Gap(2).Margin(10, 0, 0, 0).FocusGroup(ui.Horizontal).Children(func() {
 			for _, t := range ckTabOrder {
 				a.ckTab(c, pal, t, ag)
 			}

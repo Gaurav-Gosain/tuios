@@ -6528,6 +6528,36 @@ func (msgs Messages) CockpitHintTabs() string {
 	return Catalog.Format(msgs.locale, "cockpitHintTabs", nil)
 }
 
+// CockpitHintBack says "back"
+// in the language the app shows.
+func CockpitHintBack() string { return In(i18n.Locale()).CockpitHintBack() }
+
+// CockpitHintBack says "back"
+// in the language of msgs.
+func (msgs Messages) CockpitHintBack() string {
+	return Catalog.Format(msgs.locale, "cockpitHintBack", nil)
+}
+
+// CockpitHintDetails says "details"
+// in the language the app shows.
+func CockpitHintDetails() string { return In(i18n.Locale()).CockpitHintDetails() }
+
+// CockpitHintDetails says "details"
+// in the language of msgs.
+func (msgs Messages) CockpitHintDetails() string {
+	return Catalog.Format(msgs.locale, "cockpitHintDetails", nil)
+}
+
+// CockpitBack says "Show the agents"
+// in the language the app shows.
+func CockpitBack() string { return In(i18n.Locale()).CockpitBack() }
+
+// CockpitBack says "Show the agents"
+// in the language of msgs.
+func (msgs Messages) CockpitBack() string {
+	return Catalog.Format(msgs.locale, "cockpitBack", nil)
+}
+
 // CockpitIdle says "idle"
 // in the language the app shows.
 func CockpitIdle() string { return In(i18n.Locale()).CockpitIdle() }

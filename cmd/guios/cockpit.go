@@ -126,6 +126,11 @@ type cockpit struct {
 	needsOnly bool
 	// tab is the focus area's tab.
 	tab string
+	// stacked is a card too narrow for both columns, which then shows one
+	// at a time: the agents, or with stackFocus the chosen agent.
+	stacked, stackFocus bool
+	// narrow is a card too narrow for what the cockpit shows twice.
+	narrow bool
 
 	shown ckShown
 	// peek is the prompt on the selected pane's screen, as peek-prompt read
@@ -461,6 +466,13 @@ func (a *App) ckSelected() (ckRow, bool) {
 		return ck.rows[i], true
 	}
 	return ckRow{}, false
+}
+
+// ckOnAgent reports whether the cursor is on an agent's row or an Inbox
+// item's, which the focus area shows.
+func (a *App) ckOnAgent() bool {
+	r, ok := a.ckSelected()
+	return ok && r.kind != ckRowHead && r.kind != ckRowMore
 }
 
 // ckSelectedAgent is the agent under the cursor.

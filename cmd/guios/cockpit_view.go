@@ -21,9 +21,16 @@ import (
 const (
 	ckFleetW    = 316
 	ckFleetMinW = 236
-	ckSideW     = 268
-	ckRowH      = 46
-	ckRowH1     = 30
+	// ckStackBelow is the card width under which the cockpit shows one
+	// column at a time: the agents column at its narrowest beside a focus
+	// area too narrow for the thread and the reply box.
+	ckStackBelow = 680
+	// ckNarrowBelow is the card width under which the cockpit drops what
+	// it shows twice: the counts in its header, the harness by the name.
+	ckNarrowBelow = 440
+	ckSideW       = 268
+	ckRowH        = 46
+	ckRowH1       = 30
 )
 
 // ckGroupTitle names a group, as its heading says it.
@@ -77,19 +84,36 @@ func (a *App) cockpitCard(c *ui.Context, pal *palette, bar ui.TitleBar, shown fl
 	ck := &a.ck
 	ck.rows = a.buildCockpitRows(c)
 	a.ckClamp()
+	w, _ := c.Size()
+	ck.stacked = w-a.chrome.sideW < ckStackBelow
+	ck.narrow = w-a.chrome.sideW < ckNarrowBelow
 	card := paned(ui.Column(c.Key("cockpit")).Grow(1).MinHeight(0).Radius(14).Background(pal.card), pal).Clip()
 	card.Children(func() {
 		a.cockpitHeader(c, pal, bar, shown)
 		ui.Box(c).Height(1).Shrink(0).Background(pal.divider)
 		w, _ := c.Size()
+		cw := w - a.chrome.sideW
 		body := ui.Row(c).Grow(1).MinHeight(0).AlignItems(ui.Stretch)
 		body.Children(func() {
-			a.cockpitFleet(c, pal, ckFleetWidth(w-a.chrome.sideW))
+			if ck.stacked {
+				// One column at a time: the agents, or the chosen one.
+				// The agents column stays, empty, while the focus shows:
+				// it holds the keys.
+				focus := ck.stackFocus
+				a.cockpitFleet(c, pal, 0, !focus)
+				if focus {
+					ui.Column(c.Key("focus")).Grow(1).Basis(0).MinWidth(0).AlignItems(ui.Stretch).Children(func() {
+						a.cockpitFocus(c, pal)
+					})
+				}
+				return
+			}
+			a.cockpitFleet(c, pal, ckFleetWidth(cw), true)
 			ui.Box(c).Width(1).Shrink(0).Background(pal.divider)
 			ui.Column(c.Key("focus")).Grow(1).Basis(0).MinWidth(0).AlignItems(ui.Stretch).Children(func() {
 				a.cockpitFocus(c, pal)
 			})
-			if w-a.chrome.sideW > 1080 {
+			if cw > 1080 {
 				ui.Box(c).Width(1).Shrink(0).Background(pal.divider)
 				a.cockpitSide(c, pal)
 			}
@@ -116,7 +140,8 @@ func (a *App) cockpitHeader(c *ui.Context, pal *palette, bar ui.TitleBar, shown 
 		}
 		ui.Text(c, locales.CockpitTitle()).FontSize(14).FontWeight(650).TextColor(pal.text)
 		count := func(key string, g int, st proto.Status, unread bool, label string) {
-			if n[g] == 0 {
+			if n[g] == 0 || ck.narrow {
+				// A narrow card has no room: the groups' heads count them.
 				return
 			}
 			b := ui.ButtonBase(c.Key(key)).Height(24).Padding(0, 8).Gap(6).Radius(6).AlignItems(ui.Center).Label(label)
@@ -130,8 +155,13 @@ func (a *App) cockpitHeader(c *ui.Context, pal *palette, bar ui.TitleBar, shown 
 			b.Children(func() {
 				ckMark(c, pal, st, unread, 12)
 				ui.Text(c, itoa(n[g])).FontSize(12.5).FontWeight(650).TextColor(pal.text).FontFeatures("tnum")
-				ui.Text(c, label).FontSize(12.5).TextColor(pal.textMuted)
+				if !ck.stacked {
+					ui.Text(c, label).FontSize(12.5).TextColor(pal.textMuted)
+				}
 			})
+			if ck.stacked {
+				pointerTooltip(c, b, key+"-tip", label)
+			}
 			if b.Clicked() {
 				c.Invalidate()
 				if g == ckNeeds {
@@ -162,11 +192,25 @@ func ckFleetWidth(w float32) float32 {
 	return min(max(w-560, ckFleetMinW), ckFleetW)
 }
 
-func (a *App) cockpitFleet(c *ui.Context, pal *palette, width float32) {
+// A width of 0 fills the card, as the stacked cockpit draws it, and shown
+// false draws the column empty and zero wide: it still holds the focus
+// and the keys while the stacked cockpit shows the focus area.
+func (a *App) cockpitFleet(c *ui.Context, pal *palette, width float32, shown bool) {
 	ck := &a.ck
-	col := ui.Column(c.Key("fleet")).Width(width).Shrink(0).AlignItems(ui.Stretch).Background(ckGround(pal)).
+	col := ui.Column(c.Key("fleet")).AlignItems(ui.Stretch).Background(ckGround(pal)).
 		Focusable().FocusRing(false).Bind(&ck.fleetFocus).Label(locales.CockpitTitle())
+	switch {
+	case !shown:
+		col.Width(0).Shrink(0)
+	case width == 0:
+		col.Grow(1).Basis(0).MinWidth(0)
+	default:
+		col.Width(width).Shrink(0)
+	}
 	a.cockpitKeys(c, col)
+	if !shown {
+		return
+	}
 	col.Children(func() {
 		if !ck.loaded {
 			ui.Column(c).Grow(1).Center().Children(func() { ui.Spinner(c) })
@@ -312,6 +356,10 @@ func (a *App) ckRowView(c *ui.Context, pal *palette, r ckRow) {
 		a.ckSelect(r)
 		ck.fleetFocus.Focus()
 	}
+	if row.Clicked() && ck.stacked {
+		ck.stackFocus = true
+		c.Invalidate()
+	}
 	if row.DoubleClicked() && r.agent >= 0 {
 		a.goToAgent(ag)
 	}
@@ -437,6 +485,10 @@ func (a *App) cockpitKeys(c *ui.Context, col ui.Element) {
 				a.goToAgent(ck.agents[r.agent])
 			}
 		}
+	case ck.stacked && ck.stackFocus && (key(0, ui.KeyLeft) || key(0, ui.KeyH) || key(0, ui.KeyEscape)):
+		ck.stackFocus = false
+	case ck.stacked && !ck.stackFocus && (key(0, ui.KeyRight) || key(0, ui.KeyL)) && a.ckOnAgent():
+		ck.stackFocus = true
 	case key(0, ui.KeySpace), key(0, ui.KeyRight), key(0, ui.KeyLeft):
 		if r, ok := a.ckSelected(); ok && r.kind == ckRowHead {
 			a.ckToggleFold(r.group)
@@ -496,14 +548,21 @@ func (a *App) cockpitHints(c *ui.Context, pal *palette) {
 				ui.Text(c, what).FontSize(12).TextColor(pal.textMuted).SingleLine()
 			})
 		}
-		hint("↵", locales.CockpitHintOpen())
-		hint("a", locales.CockpitHintAllow())
-		hint("r", locales.CockpitHintReply())
-		hint("D", locales.CockpitHintSettle())
-		hint("z", locales.CockpitHintSnooze())
-		hint("f", locales.CockpitHintFilter())
-		hint("[ ]", locales.CockpitHintTabs())
+		switch {
+		case a.ck.stacked && a.ck.stackFocus:
+			hint("esc", locales.CockpitHintBack())
+			hint("a", locales.CockpitHintAllow())
+			hint("r", locales.CockpitHintReply())
+		case a.ck.stacked:
+			hint("↵", locales.CockpitHintOpen())
+			hint("→", locales.CockpitHintDetails())
+		default:
+			ckAllHints(hint)
+		}
 		ui.Spacer(c)
+		if a.ck.narrow {
+			return
+		}
 		n := 0
 		for _, ag := range a.ck.agents {
 			if ag.Window != "" {
@@ -512,6 +571,18 @@ func (a *App) cockpitHints(c *ui.Context, pal *palette) {
 		}
 		ui.Text(c, locales.CockpitAgentCount(n)).FontSize(12).TextColor(pal.textFaint).SingleLine()
 	})
+}
+
+// ckAllHints is the key line of a cockpit wide enough for both
+// columns.
+func ckAllHints(hint func(k, what string)) {
+	hint("↵", locales.CockpitHintOpen())
+	hint("a", locales.CockpitHintAllow())
+	hint("r", locales.CockpitHintReply())
+	hint("D", locales.CockpitHintSettle())
+	hint("z", locales.CockpitHintSnooze())
+	hint("f", locales.CockpitHintFilter())
+	hint("[ ]", locales.CockpitHintTabs())
 }
 
 // agentsRow is the sidebar's row that opens the cockpit, with how many
