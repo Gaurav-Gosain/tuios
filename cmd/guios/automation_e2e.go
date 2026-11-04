@@ -12,6 +12,7 @@ package main
 // its echo in the emulator.
 import (
 	"bufio"
+	"fmt"
 	"net"
 	"os"
 	"strconv"
@@ -70,6 +71,16 @@ func startProbe(a *App) {
 								a.addImageFiles(a.draftFor(ag), []string{p})
 							}
 						})
+						conn.Write([]byte("ok\n"))
+						continue
+					}
+					// "size W H" sizes the main window, for frames at a
+					// width: a headless compositor has no edge to drag.
+					if p, ok := strings.CutPrefix(sc.Text(), "size "); ok {
+						var w, h int
+						if _, err := fmt.Sscan(p, &w, &h); err == nil {
+							a.update(func() { a.win.SetSize(w, h) })
+						}
 						conn.Write([]byte("ok\n"))
 						continue
 					}
