@@ -52,10 +52,10 @@ Each control was built into its own binary.
 
 | Control: what was cut | Where it fails | Verdict |
 | --- | --- | --- |
-| Main without the fix (57150e1ef) | "pane.focus on a pane in another session: the client shows [e2e-home], want e2e-other" | **caught** |
-| The `herdrShowSession` call in `herdrFocusPane` | The same message | **caught** |
+| Main without the fix (c606b6b2d) | "pane.focus on a pane in another session: the stream ended before workspace_focused and pane_focused" (the subscription times out, as the client never moves) | **caught** |
+| The `herdrShowSession` call in `herdrFocusPane` | The same message as main | **caught** |
 | The `client-session-changed` case in the herdr translator | "the stream ended before workspace_focused and pane_focused" (the subscription times out) | **caught** |
-| The check in the herdr translator that drops `pane_focused` for a session no client shows (2dd3b4478) | "the focus events read pane_focused workspace_focused tab_focused pane_focused, want workspace_focused tab_focused pane_focused" | **caught** |
+| The check in the herdr translator that drops `pane_focused` for a session no client shows (b97aa1467) | "the focus events read pane_focused workspace_focused tab_focused pane_focused, want workspace_focused tab_focused pane_focused" | **caught** |
 
 The frames are `herdr-focus-other-session` and `herdr-focus-back`, and the
 events `herdr-focus-events`, under
