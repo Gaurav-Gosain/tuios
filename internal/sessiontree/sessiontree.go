@@ -313,8 +313,13 @@ type SessionInput struct {
 	// session whose name tuios made up: a name a person chose says more than a
 	// directory does. Branch is the git branch there, and follows whichever
 	// title wins.
-	Dir         string
-	Branch      string
+	Dir    string
+	Branch string
+	// AgentTitle is the title the session's first agent pane set, such as a
+	// task summary. It is the title when there is no DisplayName, ahead of
+	// Dir. The caller offers it only for a session whose name tuios made up,
+	// as it does Dir.
+	AgentTitle  string
 	Attached    bool
 	IsCurrent   bool
 	WindowCount int
@@ -405,6 +410,9 @@ func BuildSession(s SessionInput) Node {
 	title := s.Name
 	if s.Dir != "" {
 		title = s.Dir
+	}
+	if s.AgentTitle != "" {
+		title = s.AgentTitle
 	}
 	if s.DisplayName != "" {
 		title = s.DisplayName

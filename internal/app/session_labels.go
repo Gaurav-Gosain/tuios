@@ -106,8 +106,9 @@ func (m *OS) SessionLabel(name string) string {
 }
 
 // sessionTitle is the one name a session is shown by in every view: the rail's
-// title for it (sessiontree.BuildSession), which is its display name, else the
-// directory of its focused pane when tuios made the name up, else the name.
+// title for it (sessiontree.BuildSession), which is its display name, else,
+// when tuios made the name up, the title its first agent pane set, else the
+// directory of its focused pane, else the name.
 // The rail said "demo" while the Inbox, the peek, the dock's alerts, the
 // palette and the close dialog said "session-0" for the same session.
 //
@@ -116,6 +117,9 @@ func (m *OS) SessionLabel(name string) string {
 func (m *OS) sessionTitle(name string) string {
 	if display := m.SessionLabel(name); display != name && display != "" {
 		return display
+	}
+	if t := m.sessionAgentTitle(name); t != "" {
+		return t
 	}
 	if dir, _ := m.sessionPlace(name); dir != "" {
 		return dir
@@ -137,6 +141,41 @@ func (m *OS) sessionPlace(name string) (dir, branch string) {
 		dir = ""
 	}
 	return dir, branch
+}
+
+// sessionAgentTitle is the title the session's first agent pane set, such as
+// Claude Code's task summary, offered only for a name tuios generated, as the
+// directory is. The attached session reads its live windows, so the label
+// follows the title as it changes. Any other session reads the cached listing.
+// See session.SessionAgentTitle for the rules. For showing only.
+func (m *OS) sessionAgentTitle(name string) string {
+	if !session.IsGeneratedSessionName(name) {
+		return ""
+	}
+	if name == m.SessionName {
+		return m.attachedAgentTitle()
+	}
+	if m.DaemonClient != nil {
+		return m.DaemonClient.SessionAgentTitle(name)
+	}
+	return ""
+}
+
+// attachedAgentTitle is session.SessionAgentTitle over the live windows. A
+// pane's own name stands in for its title, as it does in the daemon's
+// listing, so the attached row and every other client agree.
+func (m *OS) attachedAgentTitle() string {
+	for _, w := range m.Windows {
+		if w == nil || w.AgentHarness == "" || hiddenFromLists(w) {
+			continue
+		}
+		title, program := w.Title(), w.ForegroundCmd
+		if w.CustomName != "" {
+			title, program = w.CustomName, ""
+		}
+		return session.PaneAgentTitle(w.AgentHarness, program, title)
+	}
+	return ""
 }
 
 // WorkspaceLabel is what to show for a workspace of the attached session. An

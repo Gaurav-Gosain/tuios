@@ -2481,6 +2481,20 @@ func (c *TUIClient) SessionPlace(name string) (dir, branch string) {
 	return "", ""
 }
 
+// SessionAgentTitle returns the title of the named session's first agent pane
+// (see SessionAgentTitle in session_agent_title.go), empty when there is none.
+// Read from the cached listing, so it costs no round trip.
+func (c *TUIClient) SessionAgentTitle(name string) string {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	for _, s := range c.availableSessions {
+		if s.Name == name {
+			return SessionAgentTitle(s.Windows)
+		}
+	}
+	return ""
+}
+
 // SessionRestored reports whether the named session came back from saved state
 // and has not been attached to since, from the cached listing. False for an
 // unknown session and for an older daemon that does not send the field, which
