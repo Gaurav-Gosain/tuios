@@ -12,6 +12,7 @@ import (
 	"github.com/egoist/mygo/ui"
 
 	"github.com/Gaurav-Gosain/tuios/internal/guios/preview"
+	"github.com/Gaurav-Gosain/tuios/internal/memtrim"
 
 	"github.com/Gaurav-Gosain/tuios/cmd/guios/locales"
 )
@@ -148,9 +149,12 @@ func (a *App) startImage(l *fileLook) {
 	}
 	im := &lookImage{stepAt: -1}
 	l.img = im
-	ctx, path := l.ctx, l.path
+	ctx, path, px := l.ctx, l.path, l.viewPx
+	if px == 0 {
+		px = firstPx
+	}
 	go func() {
-		pic, err := preview.DecodeImage(ctx, path, firstPx)
+		pic, err := preview.DecodeImage(ctx, path, px)
 		if ctx.Err() != nil {
 			return
 		}
@@ -194,9 +198,10 @@ func (a *App) startImage(l *fileLook) {
 				im.bmW = bw
 			}
 			l.mark("decoded")
-			if pic.Img != nil {
+			if pic.Img != nil && max(pic.Img.Bounds().Dx(), pic.Img.Bounds().Dy()) > 1600 {
 				a.packLater(l, im, pic.Img, bm)
 			}
+			memtrim.Request()
 		})
 	}()
 }
@@ -253,6 +258,7 @@ func (a *App) wantSharper(l *fileLook, im *lookImage, devScale float32) {
 				if pic.Img != nil {
 					a.packLater(l, im, pic.Img, bm)
 				}
+				memtrim.Request()
 			}
 		})
 	}()

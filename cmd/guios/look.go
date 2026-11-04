@@ -12,6 +12,7 @@ import (
 	"github.com/egoist/mygo/ui"
 
 	"github.com/Gaurav-Gosain/tuios/internal/guios/preview"
+	"github.com/Gaurav-Gosain/tuios/internal/memtrim"
 
 	"github.com/Gaurav-Gosain/tuios/cmd/guios/locales"
 )
@@ -61,6 +62,9 @@ type fileLook struct {
 	checking bool
 	// marked are the steps lookTrace logged.
 	marked map[string]bool
+	// viewPx is the long side a picture is first decoded at, from the
+	// viewer's width.
+	viewPx int
 
 	img   *lookImage
 	pdf   *lookPDF
@@ -248,6 +252,9 @@ func (l *fileLook) close() {
 	if l.hex != nil {
 		l.hex.close()
 	}
+	// What a picture or a table took comes back to the system once things
+	// settle.
+	memtrim.Request()
 }
 
 // setView shows another view of the file.

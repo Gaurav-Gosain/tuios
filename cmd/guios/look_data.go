@@ -13,6 +13,7 @@ import (
 	"github.com/egoist/mygo/ui/editor"
 
 	"github.com/Gaurav-Gosain/tuios/internal/guios/preview"
+	"github.com/Gaurav-Gosain/tuios/internal/memtrim"
 
 	"github.com/Gaurav-Gosain/tuios/cmd/guios/locales"
 )
@@ -50,6 +51,7 @@ func (a *App) startTable(l *fileLook) {
 			}
 			t.data = d
 			l.mark("parsed " + itoa(len(d.Rows)) + " rows")
+			memtrim.Request()
 			t.cols = append(t.cols, ui.TableColumn{Title: "#", ID: "#", Width: max(float32(len(itoa(len(d.Rows))))*8+16, 36), Align: ui.End, Fixed: true, RowHeader: true})
 			for i := range d.Width {
 				title := ""

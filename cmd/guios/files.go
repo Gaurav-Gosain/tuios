@@ -483,12 +483,17 @@ func (a *App) fetchDir(h *host, dir string, ignored bool, stamp string) *dirList
 // (look.go), or its text, which it reads again as the worktree changes, and
 // every few seconds while an agent works, while the user has no edits of it
 // to save.
-func (a *App) fileViewer(c *ui.Context, pal *palette, s *proto.Session, fv *fileView) {
+func (a *App) fileViewer(c *ui.Context, pal *palette, s *proto.Session, fv *fileView, width float32) {
 	h := a.hostOf(fv.pane)
 	if fv.look == nil && !h.remote() {
 		fv.look = a.openLook(fv.path)
 	}
 	l := fv.look
+	if l != nil {
+		// The pixels a picture is first decoded at: the viewer's width on
+		// a 2x screen, at least 1024; zoom asks for more.
+		l.viewPx = min(max(int(width*2), 1024), firstPx)
+	}
 	stamp := ""
 	if p := withGit(s, s.PaneByID(fv.pane)); p != nil {
 		stamp = gitStamp(p.Git)

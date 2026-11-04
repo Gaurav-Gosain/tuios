@@ -418,7 +418,7 @@ func (a *App) viewerCard(c *ui.Context, pal *palette, s *proto.Session, v *sideV
 	a.side.focused = card.FocusWithin()
 	card.Children(func() {
 		if v.kind == sideFiles && v.file != nil {
-			a.fileViewer(c, pal, s, v.file)
+			a.fileViewer(c, pal, s, v.file, width)
 			if v.full {
 				a.lookHints(c, pal, v.file.look)
 			}
