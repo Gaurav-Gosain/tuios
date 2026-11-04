@@ -3,7 +3,6 @@ package main
 import (
 	"math"
 	"os"
-	"path/filepath"
 	"reflect"
 	"runtime"
 	"slices"
@@ -27,6 +26,7 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/guios/proto"
 	"github.com/Gaurav-Gosain/tuios/internal/guios/settings"
 	"github.com/Gaurav-Gosain/tuios/internal/guios/shell"
+	"github.com/Gaurav-Gosain/tuios/internal/session"
 
 	"github.com/Gaurav-Gosain/tuios/cmd/guios/locales"
 )
@@ -151,8 +151,7 @@ func (a *App) refreshService() {
 			for _, s := range st.Sessions {
 				panes += len(s.Panes)
 			}
-			up := time.Since(time.UnixMilli(c.Welcome.Started)).Round(time.Minute)
-			line = locales.SvcRunning(strconv.Itoa(c.Welcome.PID), durationWords(up), len(st.Sessions), panes)
+			line = locales.SvcRunning(strconv.Itoa(c.Welcome.PID), c.Welcome.App, len(st.Sessions), panes)
 			if kerodStale(c.Welcome.App, c.Welcome.Build) {
 				line += locales.SvcStale()
 			}
@@ -508,14 +507,13 @@ func (a *App) generalPage(c *ui.Context, pal *palette) {
 		settingRow(c, pal, locales.SetAskBeforeClosing(), locales.SetAskBeforeClosingDetail(), func() {
 			toggle(c.Key("confirm"), &s.ConfirmClose, pal)
 		})
-		settingRow(c, pal, locales.SetRestoreSessions(), locales.SetRestoreSessionsDetail(), func() {
-			toggle(c.Key("restore"), &s.RestoreSessions, pal)
+		settingRow(c, pal, locales.SetKeepHistory(), locales.SetKeepHistoryDetail(), func() {
+			toggle(c.Key("keep-history"), &s.KeepHistory, pal)
 		})
-		if s.RestoreSessions {
-			settingRow(c, pal, locales.SetResumeAgents(), locales.SetResumeAgentsDetail(), func() {
-				toggle(c.Key("resume"), &s.ResumeAgents, pal)
-			})
-		}
+		settingRow(c, pal, locales.SetResumeAgents(), locales.SetResumeAgentsDetail(), func() {
+			segmented(c, "resume", &s.ResumeAgents, []string{"ask", "auto", "off"},
+				[]string{locales.SetResumeAsk(), locales.SetResumeAuto(), locales.SetResumeOff()})
+		})
 		settingRow(c, pal, locales.SetSessionHistory(), locales.SetSessionHistoryDetail(), func() {
 			toggle(c.Key("session-history"), &s.SessionHistory, pal)
 		})
@@ -1154,7 +1152,7 @@ func (a *App) advancedPage(c *ui.Context, pal *palette) {
 		}
 	})
 	settingsGroup(c, pal, locales.SetBackgroundService(), locales.SetBackgroundServiceDetail(), func() {
-		settingRow(c, pal, "kerod", a.ss.service, func() {
+		settingRow(c, pal, locales.SetDaemonStatus(), a.ss.service, func() {
 			if button(c, "svc-restart", locales.CommonRestart(), "", false, pal) {
 				a.ss.confirm = &confirmation{
 					open: true, title: locales.ConfirmRestartServiceTitle(),
@@ -1164,9 +1162,9 @@ func (a *App) advancedPage(c *ui.Context, pal *palette) {
 				}
 			}
 		})
-		settingRow(c, pal, locales.SetLog(), proto.ShortDir(filepath.Join(proto.Dir(), "kerod.log")), func() {
+		settingRow(c, pal, locales.SetLog(), proto.ShortDir(session.DefaultDaemonLogPath()), func() {
 			if button(c, "log", locales.CommonShow(), "", false, pal) {
-				revealPath(filepath.Join(proto.Dir(), "kerod.log"))
+				revealPath(session.DefaultDaemonLogPath())
 			}
 		})
 	})

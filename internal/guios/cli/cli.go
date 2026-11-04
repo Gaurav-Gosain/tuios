@@ -26,6 +26,11 @@ func SyncSkill() {}
 // StopDaemon stops the tuios daemon and every session in it.
 func StopDaemon() error { return exec.Command(Tuios, "kill-server").Run() }
 
+// RestartDaemon restarts the tuios daemon. Every program in every pane
+// ends. Each session comes back with its layout, its history and new
+// shells, and the agents' conversations are offered for resume.
+func RestartDaemon() error { return run("restart-server", "--yes") }
+
 // SkillState is one harness's integration: Agent its id, Name what it is
 // called, Dir the file tuios writes, State current, outdated or missing.
 type SkillState struct {

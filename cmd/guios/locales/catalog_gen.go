@@ -506,11 +506,11 @@ func (msgs Messages) CommonRestart() string {
 	return Catalog.Format(msgs.locale, "commonRestart", nil)
 }
 
-// CommonRestartService says "Restart Service"
+// CommonRestartService says "Restart Daemon"
 // in the language the app shows.
 func CommonRestartService() string { return In(i18n.Locale()).CommonRestartService() }
 
-// CommonRestartService says "Restart Service"
+// CommonRestartService says "Restart Daemon"
 // in the language of msgs.
 func (msgs Messages) CommonRestartService() string {
 	return Catalog.Format(msgs.locale, "commonRestartService", nil)
@@ -740,11 +740,11 @@ func (msgs Messages) ToastPasteImageFailed(error string) string {
 	return Catalog.Format(msgs.locale, "toastPasteImageFailed", map[string]any{"error": error})
 }
 
-// ToastPasteImageDenied says "Couldn’t paste the image: Kero can’t write to {dir}. Make it writable, or drop the image file on the pane."
+// ToastPasteImageDenied says "Couldn’t paste the image: guios can’t write to {dir}. Make it writable, or drop the image file on the pane."
 // in the language the app shows.
 func ToastPasteImageDenied(dir string) string { return In(i18n.Locale()).ToastPasteImageDenied(dir) }
 
-// ToastPasteImageDenied says "Couldn’t paste the image: Kero can’t write to {dir}. Make it writable, or drop the image file on the pane."
+// ToastPasteImageDenied says "Couldn’t paste the image: guios can’t write to {dir}. Make it writable, or drop the image file on the pane."
 // in the language of msgs.
 func (msgs Messages) ToastPasteImageDenied(dir string) string {
 	return Catalog.Format(msgs.locale, "toastPasteImageDenied", map[string]any{"dir": dir})
@@ -812,21 +812,21 @@ func (msgs Messages) CliInstallFailed() string {
 	return Catalog.Format(msgs.locale, "cliInstallFailed", nil)
 }
 
-// CliInstalledIn says "Installed the kero command in {dir}"
+// CliInstalledIn says "Installed the tuios command in {dir}"
 // in the language the app shows.
 func CliInstalledIn(dir string) string { return In(i18n.Locale()).CliInstalledIn(dir) }
 
-// CliInstalledIn says "Installed the kero command in {dir}"
+// CliInstalledIn says "Installed the tuios command in {dir}"
 // in the language of msgs.
 func (msgs Messages) CliInstalledIn(dir string) string {
 	return Catalog.Format(msgs.locale, "cliInstalledIn", map[string]any{"dir": dir})
 }
 
-// CliAddedToPath says "Added the kero command to your PATH: new terminals have it"
+// CliAddedToPath says "Added the tuios command to your PATH: new terminals have it"
 // in the language the app shows.
 func CliAddedToPath() string { return In(i18n.Locale()).CliAddedToPath() }
 
-// CliAddedToPath says "Added the kero command to your PATH: new terminals have it"
+// CliAddedToPath says "Added the tuios command to your PATH: new terminals have it"
 // in the language of msgs.
 func (msgs Messages) CliAddedToPath() string {
 	return Catalog.Format(msgs.locale, "cliAddedToPath", nil)
@@ -1004,11 +1004,11 @@ func (msgs Messages) ConfirmQuitAllTitle() string {
 	return Catalog.Format(msgs.locale, "confirmQuitAllTitle", nil)
 }
 
-// ConfirmQuitAllDetail says "{count, plural, one {Kero keeps sessions running when it quits. This ends the # session, with what runs in it.} other…"
+// ConfirmQuitAllDetail says "{count, plural, one {guios keeps sessions running when it quits. This ends the # session, with what runs in it.} othe…"
 // in the language the app shows.
 func ConfirmQuitAllDetail(count int) string { return In(i18n.Locale()).ConfirmQuitAllDetail(count) }
 
-// ConfirmQuitAllDetail says "{count, plural, one {Kero keeps sessions running when it quits. This ends the # session, with what runs in it.} other…"
+// ConfirmQuitAllDetail says "{count, plural, one {guios keeps sessions running when it quits. This ends the # session, with what runs in it.} othe…"
 // in the language of msgs.
 func (msgs Messages) ConfirmQuitAllDetail(count int) string {
 	return Catalog.Format(msgs.locale, "confirmQuitAllDetail", map[string]any{"count": count})
@@ -1024,11 +1024,11 @@ func (msgs Messages) ConfirmQuitAllAction() string {
 	return Catalog.Format(msgs.locale, "confirmQuitAllAction", nil)
 }
 
-// ConfirmRestartServiceTitle says "Restart the background service?"
+// ConfirmRestartServiceTitle says "Restart the tuios daemon?"
 // in the language the app shows.
 func ConfirmRestartServiceTitle() string { return In(i18n.Locale()).ConfirmRestartServiceTitle() }
 
-// ConfirmRestartServiceTitle says "Restart the background service?"
+// ConfirmRestartServiceTitle says "Restart the tuios daemon?"
 // in the language of msgs.
 func (msgs Messages) ConfirmRestartServiceTitle() string {
 	return Catalog.Format(msgs.locale, "confirmRestartServiceTitle", nil)
@@ -1054,13 +1054,13 @@ func (msgs Messages) RestartRunning(count int) string {
 	return Catalog.Format(msgs.locale, "restartRunning", map[string]any{"count": count})
 }
 
-// RestartStaleDetail says "The service that runs your sessions is still Kero {was}, and this is Kero {version}. {running}: restarting ends them,…"
+// RestartStaleDetail says "The service that runs your sessions is still guios {was}, and this is guios {version}. {running}: restarting ends the…"
 // in the language the app shows.
 func RestartStaleDetail(was string, version string, running string) string {
 	return In(i18n.Locale()).RestartStaleDetail(was, version, running)
 }
 
-// RestartStaleDetail says "The service that runs your sessions is still Kero {was}, and this is Kero {version}. {running}: restarting ends them,…"
+// RestartStaleDetail says "The service that runs your sessions is still guios {was}, and this is guios {version}. {running}: restarting ends the…"
 // in the language of msgs.
 func (msgs Messages) RestartStaleDetail(was string, version string, running string) string {
 	return Catalog.Format(msgs.locale, "restartStaleDetail", map[string]any{"was": was, "version": version, "running": running})
@@ -1296,11 +1296,11 @@ func (msgs Messages) FooterGoToIt() string {
 	return Catalog.Format(msgs.locale, "footerGoToIt", nil)
 }
 
-// FooterServiceTip says "Sessions run in kerod, in the background: they keep running when you quit kero."
+// FooterServiceTip says "Sessions run in the tuios daemon, in the background: they keep running when you quit guios."
 // in the language the app shows.
 func FooterServiceTip() string { return In(i18n.Locale()).FooterServiceTip() }
 
-// FooterServiceTip says "Sessions run in kerod, in the background: they keep running when you quit kero."
+// FooterServiceTip says "Sessions run in the tuios daemon, in the background: they keep running when you quit guios."
 // in the language of msgs.
 func (msgs Messages) FooterServiceTip() string {
 	return Catalog.Format(msgs.locale, "footerServiceTip", nil)
@@ -1386,41 +1386,41 @@ func (msgs Messages) StatusDone() string {
 	return Catalog.Format(msgs.locale, "statusDone", nil)
 }
 
-// UpdateRestartTip says "Kero was updated: restart the background service to run the new version"
+// UpdateRestartTip says "The tuios daemon is from another version. Restart it to run this version."
 // in the language the app shows.
 func UpdateRestartTip() string { return In(i18n.Locale()).UpdateRestartTip() }
 
-// UpdateRestartTip says "Kero was updated: restart the background service to run the new version"
+// UpdateRestartTip says "The tuios daemon is from another version. Restart it to run this version."
 // in the language of msgs.
 func (msgs Messages) UpdateRestartTip() string {
 	return Catalog.Format(msgs.locale, "updateRestartTip", nil)
 }
 
-// UpdatedTitle says "Kero was updated"
+// UpdatedTitle says "guios was updated"
 // in the language the app shows.
 func UpdatedTitle() string { return In(i18n.Locale()).UpdatedTitle() }
 
-// UpdatedTitle says "Kero was updated"
+// UpdatedTitle says "guios was updated"
 // in the language of msgs.
 func (msgs Messages) UpdatedTitle() string {
 	return Catalog.Format(msgs.locale, "updatedTitle", nil)
 }
 
-// UpdatedDetail says "The background service that runs your sessions is from another version. Restart it: your sessions start again where t…"
+// UpdatedDetail says "The tuios daemon that runs your sessions is from another version. Restart it. Your sessions start again where they we…"
 // in the language the app shows.
 func UpdatedDetail() string { return In(i18n.Locale()).UpdatedDetail() }
 
-// UpdatedDetail says "The background service that runs your sessions is from another version. Restart it: your sessions start again where t…"
+// UpdatedDetail says "The tuios daemon that runs your sessions is from another version. Restart it. Your sessions start again where they we…"
 // in the language of msgs.
 func (msgs Messages) UpdatedDetail() string {
 	return Catalog.Format(msgs.locale, "updatedDetail", nil)
 }
 
-// ConnCantReach says "Can’t reach kerod"
+// ConnCantReach says "Can’t reach the tuios daemon"
 // in the language the app shows.
 func ConnCantReach() string { return In(i18n.Locale()).ConnCantReach() }
 
-// ConnCantReach says "Can’t reach kerod"
+// ConnCantReach says "Can’t reach the tuios daemon"
 // in the language of msgs.
 func (msgs Messages) ConnCantReach() string {
 	return Catalog.Format(msgs.locale, "connCantReach", nil)
@@ -1436,11 +1436,11 @@ func (msgs Messages) EmptyTitle() string {
 	return Catalog.Format(msgs.locale, "emptyTitle", nil)
 }
 
-// EmptyDetail says "Sessions keep running in the background — quit Kero and come back to everything just as you left it."
+// EmptyDetail says "Sessions run in the tuios daemon. Quit guios and come back to everything as you left it."
 // in the language the app shows.
 func EmptyDetail() string { return In(i18n.Locale()).EmptyDetail() }
 
-// EmptyDetail says "Sessions keep running in the background — quit Kero and come back to everything just as you left it."
+// EmptyDetail says "Sessions run in the tuios daemon. Quit guios and come back to everything as you left it."
 // in the language of msgs.
 func (msgs Messages) EmptyDetail() string {
 	return Catalog.Format(msgs.locale, "emptyDetail", nil)
@@ -1466,11 +1466,11 @@ func (msgs Messages) PaletteSettingsPage(page string) string {
 	return Catalog.Format(msgs.locale, "paletteSettingsPage", map[string]any{"page": page})
 }
 
-// PaletteRestartService says "Restart Background Service"
+// PaletteRestartService says "Restart the tuios daemon"
 // in the language the app shows.
 func PaletteRestartService() string { return In(i18n.Locale()).PaletteRestartService() }
 
-// PaletteRestartService says "Restart Background Service"
+// PaletteRestartService says "Restart the tuios daemon"
 // in the language of msgs.
 func (msgs Messages) PaletteRestartService() string {
 	return Catalog.Format(msgs.locale, "paletteRestartService", nil)
@@ -1568,11 +1568,11 @@ func (msgs Messages) PaletteConversationsPlaceholder() string {
 	return Catalog.Format(msgs.locale, "paletteConversationsPlaceholder", nil)
 }
 
-// PaletteNoConversations says "No conversations yet. Coding agents’ conversations show here once Kero’s skill is set up for them."
+// PaletteNoConversations says "No conversations yet. Agents’ conversations show here after you set up the tuios integration for them in Agents."
 // in the language the app shows.
 func PaletteNoConversations() string { return In(i18n.Locale()).PaletteNoConversations() }
 
-// PaletteNoConversations says "No conversations yet. Coding agents’ conversations show here once Kero’s skill is set up for them."
+// PaletteNoConversations says "No conversations yet. Agents’ conversations show here after you set up the tuios integration for them in Agents."
 // in the language of msgs.
 func (msgs Messages) PaletteNoConversations() string {
 	return Catalog.Format(msgs.locale, "paletteNoConversations", nil)
@@ -1858,23 +1858,23 @@ func (msgs Messages) SvcNotRunning() string {
 	return Catalog.Format(msgs.locale, "svcNotRunning", nil)
 }
 
-// SvcRunning says "Running (pid {pid}) for {duration} · {sessions, plural, one {# session} other {# sessions}}, {panes, plural, one {# …"
+// SvcRunning says "Running, version {version} (pid {pid}) · {sessions, plural, one {# session} other {# sessions}}, {panes, plural, one…"
 // in the language the app shows.
-func SvcRunning(pid string, duration string, sessions int, panes int) string {
-	return In(i18n.Locale()).SvcRunning(pid, duration, sessions, panes)
+func SvcRunning(pid string, version string, sessions int, panes int) string {
+	return In(i18n.Locale()).SvcRunning(pid, version, sessions, panes)
 }
 
-// SvcRunning says "Running (pid {pid}) for {duration} · {sessions, plural, one {# session} other {# sessions}}, {panes, plural, one {# …"
+// SvcRunning says "Running, version {version} (pid {pid}) · {sessions, plural, one {# session} other {# sessions}}, {panes, plural, one…"
 // in the language of msgs.
-func (msgs Messages) SvcRunning(pid string, duration string, sessions int, panes int) string {
-	return Catalog.Format(msgs.locale, "svcRunning", map[string]any{"pid": pid, "duration": duration, "sessions": sessions, "panes": panes})
+func (msgs Messages) SvcRunning(pid string, version string, sessions int, panes int) string {
+	return Catalog.Format(msgs.locale, "svcRunning", map[string]any{"pid": pid, "version": version, "sessions": sessions, "panes": panes})
 }
 
-// SvcStale says " · still an earlier Kero: restart it to update"
+// SvcStale says " · still an earlier guios: restart it to update"
 // in the language the app shows.
 func SvcStale() string { return In(i18n.Locale()).SvcStale() }
 
-// SvcStale says " · still an earlier Kero: restart it to update"
+// SvcStale says " · still an earlier guios: restart it to update"
 // in the language of msgs.
 func (msgs Messages) SvcStale() string {
 	return Catalog.Format(msgs.locale, "svcStale", nil)
@@ -1970,11 +1970,11 @@ func (msgs Messages) SetSessions() string {
 	return Catalog.Format(msgs.locale, "setSessions", nil)
 }
 
-// SetSessionsDetail says "Sessions keep running in the background when Kero quits; {action} ends them."
+// SetSessionsDetail says "Sessions keep running in the background when guios quits; {action} ends them."
 // in the language the app shows.
 func SetSessionsDetail(action string) string { return In(i18n.Locale()).SetSessionsDetail(action) }
 
-// SetSessionsDetail says "Sessions keep running in the background when Kero quits; {action} ends them."
+// SetSessionsDetail says "Sessions keep running in the background when guios quits; {action} ends them."
 // in the language of msgs.
 func (msgs Messages) SetSessionsDetail(action string) string {
 	return Catalog.Format(msgs.locale, "setSessionsDetail", map[string]any{"action": action})
@@ -2150,44 +2150,74 @@ func (msgs Messages) SetAskBeforeClosingDetail() string {
 	return Catalog.Format(msgs.locale, "setAskBeforeClosingDetail", nil)
 }
 
-// SetRestoreSessions says "Restore sessions after a restart"
+// SetKeepHistory says "Keep pane history"
 // in the language the app shows.
-func SetRestoreSessions() string { return In(i18n.Locale()).SetRestoreSessions() }
+func SetKeepHistory() string { return In(i18n.Locale()).SetKeepHistory() }
 
-// SetRestoreSessions says "Restore sessions after a restart"
+// SetKeepHistory says "Keep pane history"
 // in the language of msgs.
-func (msgs Messages) SetRestoreSessions() string {
-	return Catalog.Format(msgs.locale, "setRestoreSessions", nil)
+func (msgs Messages) SetKeepHistory() string {
+	return Catalog.Format(msgs.locale, "setKeepHistory", nil)
 }
 
-// SetRestoreSessionsDetail says "If the background service stops, as when the Mac restarts, sessions start again in their folders, under their history."
+// SetKeepHistoryDetail says "The tuios daemon saves each pane’s history with its session. After a restart, the history shows again above a new s…"
 // in the language the app shows.
-func SetRestoreSessionsDetail() string { return In(i18n.Locale()).SetRestoreSessionsDetail() }
+func SetKeepHistoryDetail() string { return In(i18n.Locale()).SetKeepHistoryDetail() }
 
-// SetRestoreSessionsDetail says "If the background service stops, as when the Mac restarts, sessions start again in their folders, under their history."
+// SetKeepHistoryDetail says "The tuios daemon saves each pane’s history with its session. After a restart, the history shows again above a new s…"
 // in the language of msgs.
-func (msgs Messages) SetRestoreSessionsDetail() string {
-	return Catalog.Format(msgs.locale, "setRestoreSessionsDetail", nil)
+func (msgs Messages) SetKeepHistoryDetail() string {
+	return Catalog.Format(msgs.locale, "setKeepHistoryDetail", nil)
 }
 
-// SetResumeAgents says "Resume agents"
+// SetResumeAgents says "Resume agents after a restart"
 // in the language the app shows.
 func SetResumeAgents() string { return In(i18n.Locale()).SetResumeAgents() }
 
-// SetResumeAgents says "Resume agents"
+// SetResumeAgents says "Resume agents after a restart"
 // in the language of msgs.
 func (msgs Messages) SetResumeAgents() string {
 	return Catalog.Format(msgs.locale, "setResumeAgents", nil)
 }
 
-// SetResumeAgentsDetail says "Claude Code, Codex, Pi and OpenCode pick up their conversation where it was, once Kero’s skill is set up for them i…"
+// SetResumeAgentsDetail says "What the tuios daemon does with each agent’s conversation when it starts again. Ask puts an item in the Inbox. Auto…"
 // in the language the app shows.
 func SetResumeAgentsDetail() string { return In(i18n.Locale()).SetResumeAgentsDetail() }
 
-// SetResumeAgentsDetail says "Claude Code, Codex, Pi and OpenCode pick up their conversation where it was, once Kero’s skill is set up for them i…"
+// SetResumeAgentsDetail says "What the tuios daemon does with each agent’s conversation when it starts again. Ask puts an item in the Inbox. Auto…"
 // in the language of msgs.
 func (msgs Messages) SetResumeAgentsDetail() string {
 	return Catalog.Format(msgs.locale, "setResumeAgentsDetail", nil)
+}
+
+// SetResumeAsk says "Ask"
+// in the language the app shows.
+func SetResumeAsk() string { return In(i18n.Locale()).SetResumeAsk() }
+
+// SetResumeAsk says "Ask"
+// in the language of msgs.
+func (msgs Messages) SetResumeAsk() string {
+	return Catalog.Format(msgs.locale, "setResumeAsk", nil)
+}
+
+// SetResumeAuto says "Auto"
+// in the language the app shows.
+func SetResumeAuto() string { return In(i18n.Locale()).SetResumeAuto() }
+
+// SetResumeAuto says "Auto"
+// in the language of msgs.
+func (msgs Messages) SetResumeAuto() string {
+	return Catalog.Format(msgs.locale, "setResumeAuto", nil)
+}
+
+// SetResumeOff says "Off"
+// in the language the app shows.
+func SetResumeOff() string { return In(i18n.Locale()).SetResumeOff() }
+
+// SetResumeOff says "Off"
+// in the language of msgs.
+func (msgs Messages) SetResumeOff() string {
+	return Catalog.Format(msgs.locale, "setResumeOff", nil)
 }
 
 // SetStartup says "Startup"
@@ -2200,11 +2230,11 @@ func (msgs Messages) SetStartup() string {
 	return Catalog.Format(msgs.locale, "setStartup", nil)
 }
 
-// SetOpenAtLogin says "Open Kero at login"
+// SetOpenAtLogin says "Open guios at login"
 // in the language the app shows.
 func SetOpenAtLogin() string { return In(i18n.Locale()).SetOpenAtLogin() }
 
-// SetOpenAtLogin says "Open Kero at login"
+// SetOpenAtLogin says "Open guios at login"
 // in the language of msgs.
 func (msgs Messages) SetOpenAtLogin() string {
 	return Catalog.Format(msgs.locale, "setOpenAtLogin", nil)
@@ -2260,11 +2290,11 @@ func (msgs Messages) SetAppIconMenuBar() string {
 	return Catalog.Format(msgs.locale, "setAppIconMenuBar", nil)
 }
 
-// SetAppIconDetail says "Closing the window keeps Kero running in the menu bar."
+// SetAppIconDetail says "Closing the window keeps guios running in the menu bar."
 // in the language the app shows.
 func SetAppIconDetail() string { return In(i18n.Locale()).SetAppIconDetail() }
 
-// SetAppIconDetail says "Closing the window keeps Kero running in the menu bar."
+// SetAppIconDetail says "Closing the window keeps guios running in the menu bar."
 // in the language of msgs.
 func (msgs Messages) SetAppIconDetail() string {
 	return Catalog.Format(msgs.locale, "setAppIconDetail", nil)
@@ -2352,11 +2382,11 @@ func (msgs Messages) SetAutoCheck() string {
 	return Catalog.Format(msgs.locale, "setAutoCheck", nil)
 }
 
-// SetAutoCheckDetail says "Once a day, while Kero is open."
+// SetAutoCheckDetail says "Once a day, while guios is open."
 // in the language the app shows.
 func SetAutoCheckDetail() string { return In(i18n.Locale()).SetAutoCheckDetail() }
 
-// SetAutoCheckDetail says "Once a day, while Kero is open."
+// SetAutoCheckDetail says "Once a day, while guios is open."
 // in the language of msgs.
 func (msgs Messages) SetAutoCheckDetail() string {
 	return Catalog.Format(msgs.locale, "setAutoCheckDetail", nil)
@@ -2372,11 +2402,11 @@ func (msgs Messages) SetAutoInstall() string {
 	return Catalog.Format(msgs.locale, "setAutoInstall", nil)
 }
 
-// SetAutoInstallDetail says "They take effect the next time Kero opens."
+// SetAutoInstallDetail says "They take effect the next time guios opens."
 // in the language the app shows.
 func SetAutoInstallDetail() string { return In(i18n.Locale()).SetAutoInstallDetail() }
 
-// SetAutoInstallDetail says "They take effect the next time Kero opens."
+// SetAutoInstallDetail says "They take effect the next time guios opens."
 // in the language of msgs.
 func (msgs Messages) SetAutoInstallDetail() string {
 	return Catalog.Format(msgs.locale, "setAutoInstallDetail", nil)
@@ -2612,11 +2642,11 @@ func (msgs Messages) SetFont() string {
 	return Catalog.Format(msgs.locale, "setFont", nil)
 }
 
-// SetFontDetail says "JetBrains Mono with Nerd Fonts’ icons comes with Kero. Any installed monospaced font works; names separated by comm…"
+// SetFontDetail says "JetBrains Mono with Nerd Fonts’ icons comes with guios. Any installed monospaced font works; names separated by com…"
 // in the language the app shows.
 func SetFontDetail() string { return In(i18n.Locale()).SetFontDetail() }
 
-// SetFontDetail says "JetBrains Mono with Nerd Fonts’ icons comes with Kero. Any installed monospaced font works; names separated by comm…"
+// SetFontDetail says "JetBrains Mono with Nerd Fonts’ icons comes with guios. Any installed monospaced font works; names separated by com…"
 // in the language of msgs.
 func (msgs Messages) SetFontDetail() string {
 	return Catalog.Format(msgs.locale, "setFontDetail", nil)
@@ -3094,11 +3124,11 @@ func (msgs Messages) SetShellGroup() string {
 	return Catalog.Format(msgs.locale, "setShellGroup", nil)
 }
 
-// SetShellGroupDetail says "Changes apply to panes started after them."
+// SetShellGroupDetail says "Changes apply to new panes. The shell is in tuios’s config.toml, so the TUI uses it too."
 // in the language the app shows.
 func SetShellGroupDetail() string { return In(i18n.Locale()).SetShellGroupDetail() }
 
-// SetShellGroupDetail says "Changes apply to panes started after them."
+// SetShellGroupDetail says "Changes apply to new panes. The shell is in tuios’s config.toml, so the TUI uses it too."
 // in the language of msgs.
 func (msgs Messages) SetShellGroupDetail() string {
 	return Catalog.Format(msgs.locale, "setShellGroupDetail", nil)
@@ -3134,11 +3164,11 @@ func (msgs Messages) SetScrollback() string {
 	return Catalog.Format(msgs.locale, "setScrollback", nil)
 }
 
-// SetScrollbackDetail says "How much output each pane keeps, also while no window shows it."
+// SetScrollbackDetail says "How much history guios keeps for each pane it shows. The tuios daemon keeps the full history."
 // in the language the app shows.
 func SetScrollbackDetail() string { return In(i18n.Locale()).SetScrollbackDetail() }
 
-// SetScrollbackDetail says "How much output each pane keeps, also while no window shows it."
+// SetScrollbackDetail says "How much history guios keeps for each pane it shows. The tuios daemon keeps the full history."
 // in the language of msgs.
 func (msgs Messages) SetScrollbackDetail() string {
 	return Catalog.Format(msgs.locale, "setScrollbackDetail", nil)
@@ -3154,11 +3184,11 @@ func (msgs Messages) SetEnvironment() string {
 	return Catalog.Format(msgs.locale, "setEnvironment", nil)
 }
 
-// SetEnvironmentDetail says "Added to every pane’s, over what kero sets (TERM, KERO_SESSION…)."
+// SetEnvironmentDetail says "Added to every pane’s, over what guios sets (TERM, TUIOS_SESSION…)."
 // in the language the app shows.
 func SetEnvironmentDetail() string { return In(i18n.Locale()).SetEnvironmentDetail() }
 
-// SetEnvironmentDetail says "Added to every pane’s, over what kero sets (TERM, KERO_SESSION…)."
+// SetEnvironmentDetail says "Added to every pane’s, over what guios sets (TERM, TUIOS_SESSION…)."
 // in the language of msgs.
 func (msgs Messages) SetEnvironmentDetail() string {
 	return Catalog.Format(msgs.locale, "setEnvironmentDetail", nil)
@@ -3354,11 +3384,11 @@ func (msgs Messages) SetRemoteControlRow() string {
 	return Catalog.Format(msgs.locale, "setRemoteControlRow", nil)
 }
 
-// SetRemoteControlDetail says "kero do and kero focus run the app’s actions, as its menus do: splitting, switching sessions, opening the palette. …"
+// SetRemoteControlDetail says "tuios do and tuios focus run the app’s actions, as its menus do: splitting, switching sessions, opening the palette…"
 // in the language the app shows.
 func SetRemoteControlDetail() string { return In(i18n.Locale()).SetRemoteControlDetail() }
 
-// SetRemoteControlDetail says "kero do and kero focus run the app’s actions, as its menus do: splitting, switching sessions, opening the palette. …"
+// SetRemoteControlDetail says "tuios do and tuios focus run the app’s actions, as its menus do: splitting, switching sessions, opening the palette…"
 // in the language of msgs.
 func (msgs Messages) SetRemoteControlDetail() string {
 	return Catalog.Format(msgs.locale, "setRemoteControlDetail", nil)
@@ -3374,51 +3404,51 @@ func (msgs Messages) SetCli() string {
 	return Catalog.Format(msgs.locale, "setCli", nil)
 }
 
-// SetCliDetail says "Inside Kero, every pane has the kero command on its PATH already."
+// SetCliDetail says "Inside guios, every pane has the tuios command on its PATH already."
 // in the language the app shows.
 func SetCliDetail() string { return In(i18n.Locale()).SetCliDetail() }
 
-// SetCliDetail says "Inside Kero, every pane has the kero command on its PATH already."
+// SetCliDetail says "Inside guios, every pane has the tuios command on its PATH already."
 // in the language of msgs.
 func (msgs Messages) SetCliDetail() string {
 	return Catalog.Format(msgs.locale, "setCliDetail", nil)
 }
 
-// SetCliNotInstalled says "Not installed: other terminals don’t know the kero command."
+// SetCliNotInstalled says "Not installed: other terminals don’t know the tuios command."
 // in the language the app shows.
 func SetCliNotInstalled() string { return In(i18n.Locale()).SetCliNotInstalled() }
 
-// SetCliNotInstalled says "Not installed: other terminals don’t know the kero command."
+// SetCliNotInstalled says "Not installed: other terminals don’t know the tuios command."
 // in the language of msgs.
 func (msgs Messages) SetCliNotInstalled() string {
 	return Catalog.Format(msgs.locale, "setCliNotInstalled", nil)
 }
 
-// SetCliRow says "kero in your terminal"
+// SetCliRow says "guios in your terminal"
 // in the language the app shows.
 func SetCliRow() string { return In(i18n.Locale()).SetCliRow() }
 
-// SetCliRow says "kero in your terminal"
+// SetCliRow says "guios in your terminal"
 // in the language of msgs.
 func (msgs Messages) SetCliRow() string {
 	return Catalog.Format(msgs.locale, "setCliRow", nil)
 }
 
-// SetSkills says "Skills for agents"
+// SetSkills says "Agent integrations"
 // in the language the app shows.
 func SetSkills() string { return In(i18n.Locale()).SetSkills() }
 
-// SetSkills says "Skills for agents"
+// SetSkills says "Agent integrations"
 // in the language of msgs.
 func (msgs Messages) SetSkills() string {
 	return Catalog.Format(msgs.locale, "setSkills", nil)
 }
 
-// SetSkillsDetail says "Teaches agents to start sessions and panes, drive them, wait for them and report their status, and tells them, as the…"
+// SetSkillsDetail says "The tuios integration tells the daemon what each agent does: working, waiting for you, or done. It also lets agents d…"
 // in the language the app shows.
 func SetSkillsDetail() string { return In(i18n.Locale()).SetSkillsDetail() }
 
-// SetSkillsDetail says "Teaches agents to start sessions and panes, drive them, wait for them and report their status, and tells them, as the…"
+// SetSkillsDetail says "The tuios integration tells the daemon what each agent does: working, waiting for you, or done. It also lets agents d…"
 // in the language of msgs.
 func (msgs Messages) SetSkillsDetail() string {
 	return Catalog.Format(msgs.locale, "setSkillsDetail", nil)
@@ -3434,11 +3464,11 @@ func (msgs Messages) SetSkillInstalled() string {
 	return Catalog.Format(msgs.locale, "setSkillInstalled", nil)
 }
 
-// SetSkillOutdated says "Installed, from an older Kero"
+// SetSkillOutdated says "Installed, from an older tuios"
 // in the language the app shows.
 func SetSkillOutdated() string { return In(i18n.Locale()).SetSkillOutdated() }
 
-// SetSkillOutdated says "Installed, from an older Kero"
+// SetSkillOutdated says "Installed, from an older tuios"
 // in the language of msgs.
 func (msgs Messages) SetSkillOutdated() string {
 	return Catalog.Format(msgs.locale, "setSkillOutdated", nil)
@@ -3484,11 +3514,11 @@ func (msgs Messages) SetConfiguration() string {
 	return Catalog.Format(msgs.locale, "setConfiguration", nil)
 }
 
-// SetConfigurationDetail says "Every setting here is a line of this file, as Ghostty’s: edit it in any editor, and what you save applies at once. …"
+// SetConfigurationDetail says "Each setting here is a line of this file, as in Ghostty. Edit it in any editor. What you save applies at once."
 // in the language the app shows.
 func SetConfigurationDetail() string { return In(i18n.Locale()).SetConfigurationDetail() }
 
-// SetConfigurationDetail says "Every setting here is a line of this file, as Ghostty’s: edit it in any editor, and what you save applies at once. …"
+// SetConfigurationDetail says "Each setting here is a line of this file, as in Ghostty. Edit it in any editor. What you save applies at once."
 // in the language of msgs.
 func (msgs Messages) SetConfigurationDetail() string {
 	return Catalog.Format(msgs.locale, "setConfigurationDetail", nil)
@@ -3504,21 +3534,41 @@ func (msgs Messages) SetConfigFile() string {
 	return Catalog.Format(msgs.locale, "setConfigFile", nil)
 }
 
-// SetBackgroundService says "Background service"
+// SetBackgroundService says "tuios daemon"
 // in the language the app shows.
 func SetBackgroundService() string { return In(i18n.Locale()).SetBackgroundService() }
 
-// SetBackgroundService says "Background service"
+// SetBackgroundService says "tuios daemon"
 // in the language of msgs.
 func (msgs Messages) SetBackgroundService() string {
 	return Catalog.Format(msgs.locale, "setBackgroundService", nil)
 }
 
-// SetBackgroundServiceDetail says "kerod runs your sessions: quitting kero leaves it running."
+// SetDaemon says "tuios daemon"
+// in the language the app shows.
+func SetDaemon() string { return In(i18n.Locale()).SetDaemon() }
+
+// SetDaemon says "tuios daemon"
+// in the language of msgs.
+func (msgs Messages) SetDaemon() string {
+	return Catalog.Format(msgs.locale, "setDaemon", nil)
+}
+
+// SetDaemonStatus says "Status"
+// in the language the app shows.
+func SetDaemonStatus() string { return In(i18n.Locale()).SetDaemonStatus() }
+
+// SetDaemonStatus says "Status"
+// in the language of msgs.
+func (msgs Messages) SetDaemonStatus() string {
+	return Catalog.Format(msgs.locale, "setDaemonStatus", nil)
+}
+
+// SetBackgroundServiceDetail says "The tuios daemon runs your sessions. It keeps running when you quit guios."
 // in the language the app shows.
 func SetBackgroundServiceDetail() string { return In(i18n.Locale()).SetBackgroundServiceDetail() }
 
-// SetBackgroundServiceDetail says "kerod runs your sessions: quitting kero leaves it running."
+// SetBackgroundServiceDetail says "The tuios daemon runs your sessions. It keeps running when you quit guios."
 // in the language of msgs.
 func (msgs Messages) SetBackgroundServiceDetail() string {
 	return Catalog.Format(msgs.locale, "setBackgroundServiceDetail", nil)
@@ -3544,11 +3594,11 @@ func (msgs Messages) SetData() string {
 	return Catalog.Format(msgs.locale, "setData", nil)
 }
 
-// SetDataDetail says "Settings, sessions and their scrollback."
+// SetDataDetail says "The settings and window state of guios. Sessions and their history are in the tuios daemon."
 // in the language the app shows.
 func SetDataDetail() string { return In(i18n.Locale()).SetDataDetail() }
 
-// SetDataDetail says "Settings, sessions and their scrollback."
+// SetDataDetail says "The settings and window state of guios. Sessions and their history are in the tuios daemon."
 // in the language of msgs.
 func (msgs Messages) SetDataDetail() string {
 	return Catalog.Format(msgs.locale, "setDataDetail", nil)
@@ -3574,11 +3624,11 @@ func (msgs Messages) SetReset() string {
 	return Catalog.Format(msgs.locale, "setReset", nil)
 }
 
-// SetResetDetail says "Back to how Kero comes, shortcuts included."
+// SetResetDetail says "Back to how guios comes, shortcuts included."
 // in the language the app shows.
 func SetResetDetail() string { return In(i18n.Locale()).SetResetDetail() }
 
-// SetResetDetail says "Back to how Kero comes, shortcuts included."
+// SetResetDetail says "Back to how guios comes, shortcuts included."
 // in the language of msgs.
 func (msgs Messages) SetResetDetail() string {
 	return Catalog.Format(msgs.locale, "setResetDetail", nil)
@@ -4638,11 +4688,11 @@ func (msgs Messages) SetBlockAds() string {
 	return Catalog.Format(msgs.locale, "setBlockAds", nil)
 }
 
-// SetBlockAdsDetail says "Blocks ads and trackers with filter lists, which Kero downloads and keeps up to date."
+// SetBlockAdsDetail says "Blocks ads and trackers with filter lists, which guios downloads and keeps up to date."
 // in the language the app shows.
 func SetBlockAdsDetail() string { return In(i18n.Locale()).SetBlockAdsDetail() }
 
-// SetBlockAdsDetail says "Blocks ads and trackers with filter lists, which Kero downloads and keeps up to date."
+// SetBlockAdsDetail says "Blocks ads and trackers with filter lists, which guios downloads and keeps up to date."
 // in the language of msgs.
 func (msgs Messages) SetBlockAdsDetail() string {
 	return Catalog.Format(msgs.locale, "setBlockAdsDetail", nil)
@@ -4958,11 +5008,11 @@ func (msgs Messages) HostCantConnect(host string) string {
 	return Catalog.Format(msgs.locale, "hostCantConnect", map[string]any{"host": host})
 }
 
-// HostNotInstalled says "Kero isn't installed on {host}"
+// HostNotInstalled says "guios isn't installed on {host}"
 // in the language the app shows.
 func HostNotInstalled(host string) string { return In(i18n.Locale()).HostNotInstalled(host) }
 
-// HostNotInstalled says "Kero isn't installed on {host}"
+// HostNotInstalled says "guios isn't installed on {host}"
 // in the language of msgs.
 func (msgs Messages) HostNotInstalled(host string) string {
 	return Catalog.Format(msgs.locale, "hostNotInstalled", map[string]any{"host": host})
@@ -4978,35 +5028,35 @@ func (msgs Messages) HostRefused(host string) string {
 	return Catalog.Format(msgs.locale, "hostRefused", map[string]any{"host": host})
 }
 
-// HostAuthHint says "Kero signs in with your SSH keys and agent, and never asks for a password. To trust a host's key, run ssh {address} o…"
+// HostAuthHint says "guios signs in with your SSH keys and agent, and never asks for a password. To trust a host's key, run ssh {address} …"
 // in the language the app shows.
 func HostAuthHint(address string) string { return In(i18n.Locale()).HostAuthHint(address) }
 
-// HostAuthHint says "Kero signs in with your SSH keys and agent, and never asks for a password. To trust a host's key, run ssh {address} o…"
+// HostAuthHint says "guios signs in with your SSH keys and agent, and never asks for a password. To trust a host's key, run ssh {address} …"
 // in the language of msgs.
 func (msgs Messages) HostAuthHint(address string) string {
 	return Catalog.Format(msgs.locale, "hostAuthHint", map[string]any{"address": address})
 }
 
-// HostAbout says "Kero {version} on {platform} · {hostname}, as {user}"
+// HostAbout says "guios {version} on {platform} · {hostname}, as {user}"
 // in the language the app shows.
 func HostAbout(version string, platform string, hostname string, user string) string {
 	return In(i18n.Locale()).HostAbout(version, platform, hostname, user)
 }
 
-// HostAbout says "Kero {version} on {platform} · {hostname}, as {user}"
+// HostAbout says "guios {version} on {platform} · {hostname}, as {user}"
 // in the language of msgs.
 func (msgs Messages) HostAbout(version string, platform string, hostname string, user string) string {
 	return Catalog.Format(msgs.locale, "hostAbout", map[string]any{"version": version, "platform": platform, "hostname": hostname, "user": user})
 }
 
-// HostConnected says "Connected: Kero {version} on {platform} · {hostname}, as {user}"
+// HostConnected says "Connected: guios {version} on {platform} · {hostname}, as {user}"
 // in the language the app shows.
 func HostConnected(version string, platform string, hostname string, user string) string {
 	return In(i18n.Locale()).HostConnected(version, platform, hostname, user)
 }
 
-// HostConnected says "Connected: Kero {version} on {platform} · {hostname}, as {user}"
+// HostConnected says "Connected: guios {version} on {platform} · {hostname}, as {user}"
 // in the language of msgs.
 func (msgs Messages) HostConnected(version string, platform string, hostname string, user string) string {
 	return Catalog.Format(msgs.locale, "hostConnected", map[string]any{"version": version, "platform": platform, "hostname": hostname, "user": user})
@@ -5082,151 +5132,151 @@ func (msgs Messages) HostRemoveDetail(host string) string {
 	return Catalog.Format(msgs.locale, "hostRemoveDetail", map[string]any{"host": host})
 }
 
-// HostInstall says "Install Kero…"
+// HostInstall says "Install guios…"
 // in the language the app shows.
 func HostInstall() string { return In(i18n.Locale()).HostInstall() }
 
-// HostInstall says "Install Kero…"
+// HostInstall says "Install guios…"
 // in the language of msgs.
 func (msgs Messages) HostInstall() string {
 	return Catalog.Format(msgs.locale, "hostInstall", nil)
 }
 
-// HostInstalling says "Installing Kero on {host}…"
+// HostInstalling says "Installing guios on {host}…"
 // in the language the app shows.
 func HostInstalling(host string) string { return In(i18n.Locale()).HostInstalling(host) }
 
-// HostInstalling says "Installing Kero on {host}…"
+// HostInstalling says "Installing guios on {host}…"
 // in the language of msgs.
 func (msgs Messages) HostInstalling(host string) string {
 	return Catalog.Format(msgs.locale, "hostInstalling", map[string]any{"host": host})
 }
 
-// HostInstalled says "Installed Kero on {host}"
+// HostInstalled says "Installed guios on {host}"
 // in the language the app shows.
 func HostInstalled(host string) string { return In(i18n.Locale()).HostInstalled(host) }
 
-// HostInstalled says "Installed Kero on {host}"
+// HostInstalled says "Installed guios on {host}"
 // in the language of msgs.
 func (msgs Messages) HostInstalled(host string) string {
 	return Catalog.Format(msgs.locale, "hostInstalled", map[string]any{"host": host})
 }
 
-// HostInstallFailed says "Couldn't install Kero on {host}: {error}"
+// HostInstallFailed says "Couldn't install guios on {host}: {error}"
 // in the language the app shows.
 func HostInstallFailed(host string, error string) string {
 	return In(i18n.Locale()).HostInstallFailed(host, error)
 }
 
-// HostInstallFailed says "Couldn't install Kero on {host}: {error}"
+// HostInstallFailed says "Couldn't install guios on {host}: {error}"
 // in the language of msgs.
 func (msgs Messages) HostInstallFailed(host string, error string) string {
 	return Catalog.Format(msgs.locale, "hostInstallFailed", map[string]any{"host": host, "error": error})
 }
 
-// HostUpdateAction says "Update Kero on {host}…"
+// HostUpdateAction says "Update guios on {host}…"
 // in the language the app shows.
 func HostUpdateAction(host string) string { return In(i18n.Locale()).HostUpdateAction(host) }
 
-// HostUpdateAction says "Update Kero on {host}…"
+// HostUpdateAction says "Update guios on {host}…"
 // in the language of msgs.
 func (msgs Messages) HostUpdateAction(host string) string {
 	return Catalog.Format(msgs.locale, "hostUpdateAction", map[string]any{"host": host})
 }
 
-// HostUpdateTitle says "Update Kero on {host} to {version}?"
+// HostUpdateTitle says "Update guios on {host} to {version}?"
 // in the language the app shows.
 func HostUpdateTitle(host string, version string) string {
 	return In(i18n.Locale()).HostUpdateTitle(host, version)
 }
 
-// HostUpdateTitle says "Update Kero on {host} to {version}?"
+// HostUpdateTitle says "Update guios on {host} to {version}?"
 // in the language of msgs.
 func (msgs Messages) HostUpdateTitle(host string, version string) string {
 	return Catalog.Format(msgs.locale, "hostUpdateTitle", map[string]any{"host": host, "version": version})
 }
 
-// HostUpdateDetail says "Kero then restarts its service on {host}. Sessions there start again where they were, with their history, and the pro…"
+// HostUpdateDetail says "guios then restarts its service on {host}. Sessions there start again where they were, with their history, and the pr…"
 // in the language the app shows.
 func HostUpdateDetail(host string) string { return In(i18n.Locale()).HostUpdateDetail(host) }
 
-// HostUpdateDetail says "Kero then restarts its service on {host}. Sessions there start again where they were, with their history, and the pro…"
+// HostUpdateDetail says "guios then restarts its service on {host}. Sessions there start again where they were, with their history, and the pr…"
 // in the language of msgs.
 func (msgs Messages) HostUpdateDetail(host string) string {
 	return Catalog.Format(msgs.locale, "hostUpdateDetail", map[string]any{"host": host})
 }
 
-// HostUpdateAppDetail says "The Kero app on {host} updates and relaunches, then restarts its service. Sessions there start again where they were,…"
+// HostUpdateAppDetail says "The guios app on {host} updates and relaunches, then restarts its service. Sessions there start again where they were…"
 // in the language the app shows.
 func HostUpdateAppDetail(host string) string { return In(i18n.Locale()).HostUpdateAppDetail(host) }
 
-// HostUpdateAppDetail says "The Kero app on {host} updates and relaunches, then restarts its service. Sessions there start again where they were,…"
+// HostUpdateAppDetail says "The guios app on {host} updates and relaunches, then restarts its service. Sessions there start again where they were…"
 // in the language of msgs.
 func (msgs Messages) HostUpdateAppDetail(host string) string {
 	return Catalog.Format(msgs.locale, "hostUpdateAppDetail", map[string]any{"host": host})
 }
 
-// HostUpdating says "Updating Kero on {host}…"
+// HostUpdating says "Updating guios on {host}…"
 // in the language the app shows.
 func HostUpdating(host string) string { return In(i18n.Locale()).HostUpdating(host) }
 
-// HostUpdating says "Updating Kero on {host}…"
+// HostUpdating says "Updating guios on {host}…"
 // in the language of msgs.
 func (msgs Messages) HostUpdating(host string) string {
 	return Catalog.Format(msgs.locale, "hostUpdating", map[string]any{"host": host})
 }
 
-// HostUpdated says "{host} runs Kero {version}"
+// HostUpdated says "{host} runs guios {version}"
 // in the language the app shows.
 func HostUpdated(host string, version string) string {
 	return In(i18n.Locale()).HostUpdated(host, version)
 }
 
-// HostUpdated says "{host} runs Kero {version}"
+// HostUpdated says "{host} runs guios {version}"
 // in the language of msgs.
 func (msgs Messages) HostUpdated(host string, version string) string {
 	return Catalog.Format(msgs.locale, "hostUpdated", map[string]any{"host": host, "version": version})
 }
 
-// HostUpdateDev says "A development build of Kero can't update a host. Run a released Kero, or update the host with kero daemon update there."
+// HostUpdateDev says "A development build of guios can't update a host. Run a released guios, or update the host with tuios daemon update t…"
 // in the language the app shows.
 func HostUpdateDev() string { return In(i18n.Locale()).HostUpdateDev() }
 
-// HostUpdateDev says "A development build of Kero can't update a host. Run a released Kero, or update the host with kero daemon update there."
+// HostUpdateDev says "A development build of guios can't update a host. Run a released guios, or update the host with tuios daemon update t…"
 // in the language of msgs.
 func (msgs Messages) HostUpdateDev() string {
 	return Catalog.Format(msgs.locale, "hostUpdateDev", nil)
 }
 
-// HostVersionTitle says "Kero on {host} is another version"
+// HostVersionTitle says "guios on {host} is another version"
 // in the language the app shows.
 func HostVersionTitle(host string) string { return In(i18n.Locale()).HostVersionTitle(host) }
 
-// HostVersionTitle says "Kero on {host} is another version"
+// HostVersionTitle says "guios on {host} is another version"
 // in the language of msgs.
 func (msgs Messages) HostVersionTitle(host string) string {
 	return Catalog.Format(msgs.locale, "hostVersionTitle", map[string]any{"host": host})
 }
 
-// HostVersionDetail says "{host} runs Kero {version}, and this app is Kero {app}. Update Kero there to see and start its sessions here."
+// HostVersionDetail says "{host} runs guios {version}, and this app is guios {app}. Update guios there to see and start its sessions here."
 // in the language the app shows.
 func HostVersionDetail(host string, version string, app string) string {
 	return In(i18n.Locale()).HostVersionDetail(host, version, app)
 }
 
-// HostVersionDetail says "{host} runs Kero {version}, and this app is Kero {app}. Update Kero there to see and start its sessions here."
+// HostVersionDetail says "{host} runs guios {version}, and this app is guios {app}. Update guios there to see and start its sessions here."
 // in the language of msgs.
 func (msgs Messages) HostVersionDetail(host string, version string, app string) string {
 	return Catalog.Format(msgs.locale, "hostVersionDetail", map[string]any{"host": host, "version": version, "app": app})
 }
 
-// HostDesktopDetail says "{host} runs the Kero app, version {version}, and this is Kero {app}. Update Kero on {host}, or turn on Let them updat…"
+// HostDesktopDetail says "{host} runs the guios app, version {version}, and this is guios {app}. Update guios on {host}, or turn on Let them up…"
 // in the language the app shows.
 func HostDesktopDetail(host string, version string, app string) string {
 	return In(i18n.Locale()).HostDesktopDetail(host, version, app)
 }
 
-// HostDesktopDetail says "{host} runs the Kero app, version {version}, and this is Kero {app}. Update Kero on {host}, or turn on Let them updat…"
+// HostDesktopDetail says "{host} runs the guios app, version {version}, and this is guios {app}. Update guios on {host}, or turn on Let them up…"
 // in the language of msgs.
 func (msgs Messages) HostDesktopDetail(host string, version string, app string) string {
 	return Catalog.Format(msgs.locale, "hostDesktopDetail", map[string]any{"host": host, "version": version, "app": app})
@@ -5272,13 +5322,13 @@ func (msgs Messages) HostRestarting(host string) string {
 	return Catalog.Format(msgs.locale, "hostRestarting", map[string]any{"host": host})
 }
 
-// HostStaleTip says "The service on {host} still runs Kero {was}, and Kero {version} is installed there: restart it to run the new version."
+// HostStaleTip says "The service on {host} still runs guios {was}, and guios {version} is installed there: restart it to run the new version."
 // in the language the app shows.
 func HostStaleTip(host string, was string, version string) string {
 	return In(i18n.Locale()).HostStaleTip(host, was, version)
 }
 
-// HostStaleTip says "The service on {host} still runs Kero {was}, and Kero {version} is installed there: restart it to run the new version."
+// HostStaleTip says "The service on {host} still runs guios {was}, and guios {version} is installed there: restart it to run the new version."
 // in the language of msgs.
 func (msgs Messages) HostStaleTip(host string, was string, version string) string {
 	return Catalog.Format(msgs.locale, "hostStaleTip", map[string]any{"host": host, "was": was, "version": version})
@@ -5296,21 +5346,21 @@ func (msgs Messages) HostNoSuchFile(host string, path string) string {
 	return Catalog.Format(msgs.locale, "hostNoSuchFile", map[string]any{"host": host, "path": path})
 }
 
-// PasteNotAFile says "Kero pastes files into a pane on another machine, not folders: {name}"
+// PasteNotAFile says "guios pastes files into a pane on another machine, not folders: {name}"
 // in the language the app shows.
 func PasteNotAFile(name string) string { return In(i18n.Locale()).PasteNotAFile(name) }
 
-// PasteNotAFile says "Kero pastes files into a pane on another machine, not folders: {name}"
+// PasteNotAFile says "guios pastes files into a pane on another machine, not folders: {name}"
 // in the language of msgs.
 func (msgs Messages) PasteNotAFile(name string) string {
 	return Catalog.Format(msgs.locale, "pasteNotAFile", map[string]any{"name": name})
 }
 
-// PasteTooLarge says "Kero pastes at most {size} MB into a pane on another machine"
+// PasteTooLarge says "guios pastes at most {size} MB into a pane on another machine"
 // in the language the app shows.
 func PasteTooLarge(size int) string { return In(i18n.Locale()).PasteTooLarge(size) }
 
-// PasteTooLarge says "Kero pastes at most {size} MB into a pane on another machine"
+// PasteTooLarge says "guios pastes at most {size} MB into a pane on another machine"
 // in the language of msgs.
 func (msgs Messages) PasteTooLarge(size int) string {
 	return Catalog.Format(msgs.locale, "pasteTooLarge", map[string]any{"size": size})
@@ -5396,11 +5446,11 @@ func (msgs Messages) SetHosts() string {
 	return Catalog.Format(msgs.locale, "setHosts", nil)
 }
 
-// SetHostsDetail says "Other machines whose sessions show in the sidebar after this computer's. Kero reaches them over SSH with your keys an…"
+// SetHostsDetail says "Other machines whose sessions show in the sidebar after this computer's. guios reaches them over SSH with your keys a…"
 // in the language the app shows.
 func SetHostsDetail() string { return In(i18n.Locale()).SetHostsDetail() }
 
-// SetHostsDetail says "Other machines whose sessions show in the sidebar after this computer's. Kero reaches them over SSH with your keys an…"
+// SetHostsDetail says "Other machines whose sessions show in the sidebar after this computer's. guios reaches them over SSH with your keys a…"
 // in the language of msgs.
 func (msgs Messages) SetHostsDetail() string {
 	return Catalog.Format(msgs.locale, "setHostsDetail", nil)
@@ -5416,11 +5466,11 @@ func (msgs Messages) SetHostsNone() string {
 	return Catalog.Format(msgs.locale, "setHostsNone", nil)
 }
 
-// SetHostsNoneDetail says "Add a machine you reach with ssh. If Kero isn't installed there, Kero offers to install it."
+// SetHostsNoneDetail says "Add a machine you reach with ssh. If guios isn't installed there, guios offers to install it."
 // in the language the app shows.
 func SetHostsNoneDetail() string { return In(i18n.Locale()).SetHostsNoneDetail() }
 
-// SetHostsNoneDetail says "Add a machine you reach with ssh. If Kero isn't installed there, Kero offers to install it."
+// SetHostsNoneDetail says "Add a machine you reach with ssh. If guios isn't installed there, guios offers to install it."
 // in the language of msgs.
 func (msgs Messages) SetHostsNoneDetail() string {
 	return Catalog.Format(msgs.locale, "setHostsNoneDetail", nil)
@@ -5508,13 +5558,13 @@ func (msgs Messages) SetHostRemoteControl() string {
 	return Catalog.Format(msgs.locale, "setHostRemoteControl", nil)
 }
 
-// SetHostRemoteControlDetail says "Let programs on {host} show sessions and run the app's actions (kero focus, kero do)"
+// SetHostRemoteControlDetail says "Let programs on {host} show sessions and run the app's actions (tuios focus, tuios do)"
 // in the language the app shows.
 func SetHostRemoteControlDetail(host string) string {
 	return In(i18n.Locale()).SetHostRemoteControlDetail(host)
 }
 
-// SetHostRemoteControlDetail says "Let programs on {host} show sessions and run the app's actions (kero focus, kero do)"
+// SetHostRemoteControlDetail says "Let programs on {host} show sessions and run the app's actions (tuios focus, tuios do)"
 // in the language of msgs.
 func (msgs Messages) SetHostRemoteControlDetail(host string) string {
 	return Catalog.Format(msgs.locale, "setHostRemoteControlDetail", map[string]any{"host": host})
@@ -5540,11 +5590,11 @@ func (msgs Messages) SetListen() string {
 	return Catalog.Format(msgs.locale, "setListen", nil)
 }
 
-// SetListenDetail says "kerod listens at this computer's Tailscale addresses, for Kero on your other machines. Only your Tailscale account ma…"
+// SetListenDetail says "the tuios daemon listens at this computer's Tailscale addresses, for guios on your other machines. Only your Tailscal…"
 // in the language the app shows.
 func SetListenDetail() string { return In(i18n.Locale()).SetListenDetail() }
 
-// SetListenDetail says "kerod listens at this computer's Tailscale addresses, for Kero on your other machines. Only your Tailscale account ma…"
+// SetListenDetail says "the tuios daemon listens at this computer's Tailscale addresses, for guios on your other machines. Only your Tailscal…"
 // in the language of msgs.
 func (msgs Messages) SetListenDetail() string {
 	return Catalog.Format(msgs.locale, "setListenDetail", nil)
@@ -5560,31 +5610,31 @@ func (msgs Messages) SetListenOn() string {
 	return Catalog.Format(msgs.locale, "setListenOn", nil)
 }
 
-// SetListenNoTailscale says "Tailscale isn't running here: kerod listens once it is."
+// SetListenNoTailscale says "Tailscale isn't running here: the tuios daemon listens once it is."
 // in the language the app shows.
 func SetListenNoTailscale() string { return In(i18n.Locale()).SetListenNoTailscale() }
 
-// SetListenNoTailscale says "Tailscale isn't running here: kerod listens once it is."
+// SetListenNoTailscale says "Tailscale isn't running here: the tuios daemon listens once it is."
 // in the language of msgs.
 func (msgs Messages) SetListenNoTailscale() string {
 	return Catalog.Format(msgs.locale, "setListenNoTailscale", nil)
 }
 
-// SetRemoteUpdates says "Let them update Kero here"
+// SetRemoteUpdates says "Let them update guios here"
 // in the language the app shows.
 func SetRemoteUpdates() string { return In(i18n.Locale()).SetRemoteUpdates() }
 
-// SetRemoteUpdates says "Let them update Kero here"
+// SetRemoteUpdates says "Let them update guios here"
 // in the language of msgs.
 func (msgs Messages) SetRemoteUpdates() string {
 	return Catalog.Format(msgs.locale, "setRemoteUpdates", nil)
 }
 
-// SetRemoteUpdatesDetail says "Kero on your other machines can update this app to its version. The app relaunches, and the programs running in its s…"
+// SetRemoteUpdatesDetail says "guios on your other machines can update this app to its version. The app relaunches, and the programs running in its …"
 // in the language the app shows.
 func SetRemoteUpdatesDetail() string { return In(i18n.Locale()).SetRemoteUpdatesDetail() }
 
-// SetRemoteUpdatesDetail says "Kero on your other machines can update this app to its version. The app relaunches, and the programs running in its s…"
+// SetRemoteUpdatesDetail says "guios on your other machines can update this app to its version. The app relaunches, and the programs running in its …"
 // in the language of msgs.
 func (msgs Messages) SetRemoteUpdatesDetail() string {
 	return Catalog.Format(msgs.locale, "setRemoteUpdatesDetail", nil)
@@ -5600,11 +5650,11 @@ func (msgs Messages) SetHostSettingsSplit() string {
 	return Catalog.Format(msgs.locale, "setHostSettingsSplit", nil)
 }
 
-// SetHostSettingsSplitDetail says "The shell, environment, scrollback and session restore of a host's sessions come from its own configuration: run kero…"
+// SetHostSettingsSplitDetail says "The shell, environment, scrollback and session restore of a host's sessions come from its own configuration: run tuio…"
 // in the language the app shows.
 func SetHostSettingsSplitDetail() string { return In(i18n.Locale()).SetHostSettingsSplitDetail() }
 
-// SetHostSettingsSplitDetail says "The shell, environment, scrollback and session restore of a host's sessions come from its own configuration: run kero…"
+// SetHostSettingsSplitDetail says "The shell, environment, scrollback and session restore of a host's sessions come from its own configuration: run tuio…"
 // in the language of msgs.
 func (msgs Messages) SetHostSettingsSplitDetail() string {
 	return Catalog.Format(msgs.locale, "setHostSettingsSplitDetail", nil)
@@ -5630,67 +5680,67 @@ func (msgs Messages) ConfirmQuitAllHosts() string {
 	return Catalog.Format(msgs.locale, "confirmQuitAllHosts", nil)
 }
 
-// HostInstallTitle says "Install Kero on {host}?"
+// HostInstallTitle says "Install guios on {host}?"
 // in the language the app shows.
 func HostInstallTitle(host string) string { return In(i18n.Locale()).HostInstallTitle(host) }
 
-// HostInstallTitle says "Install Kero on {host}?"
+// HostInstallTitle says "Install guios on {host}?"
 // in the language of msgs.
 func (msgs Messages) HostInstallTitle(host string) string {
 	return Catalog.Format(msgs.locale, "hostInstallTitle", map[string]any{"host": host})
 }
 
-// HostInstallDetail says "Kero runs its install script on {host}: the server build of Kero goes in your home folder there (~/.local, or %LOCALA…"
+// HostInstallDetail says "guios runs its install script on {host}: the server build of guios goes in your home folder there (~/.local, or %LOCA…"
 // in the language the app shows.
 func HostInstallDetail(host string) string { return In(i18n.Locale()).HostInstallDetail(host) }
 
-// HostInstallDetail says "Kero runs its install script on {host}: the server build of Kero goes in your home folder there (~/.local, or %LOCALA…"
+// HostInstallDetail says "guios runs its install script on {host}: the server build of guios goes in your home folder there (~/.local, or %LOCA…"
 // in the language of msgs.
 func (msgs Messages) HostInstallDetail(host string) string {
 	return Catalog.Format(msgs.locale, "hostInstallDetail", map[string]any{"host": host})
 }
 
-// HostLinkRefused says "Kero opens only web links of {host}, not {scheme} ones"
+// HostLinkRefused says "guios opens only web links of {host}, not {scheme} ones"
 // in the language the app shows.
 func HostLinkRefused(host string, scheme string) string {
 	return In(i18n.Locale()).HostLinkRefused(host, scheme)
 }
 
-// HostLinkRefused says "Kero opens only web links of {host}, not {scheme} ones"
+// HostLinkRefused says "guios opens only web links of {host}, not {scheme} ones"
 // in the language of msgs.
 func (msgs Messages) HostLinkRefused(host string, scheme string) string {
 	return Catalog.Format(msgs.locale, "hostLinkRefused", map[string]any{"host": host, "scheme": scheme})
 }
 
-// HostManualDetail says "{host} runs Kero {version}, and this app is Kero {app}. Update Kero on {host} as you installed it, then restart its s…"
+// HostManualDetail says "{host} runs guios {version}, and this app is guios {app}. Update guios on {host} as you installed it, then restart it…"
 // in the language the app shows.
 func HostManualDetail(host string, version string, app string) string {
 	return In(i18n.Locale()).HostManualDetail(host, version, app)
 }
 
-// HostManualDetail says "{host} runs Kero {version}, and this app is Kero {app}. Update Kero on {host} as you installed it, then restart its s…"
+// HostManualDetail says "{host} runs guios {version}, and this app is guios {app}. Update guios on {host} as you installed it, then restart it…"
 // in the language of msgs.
 func (msgs Messages) HostManualDetail(host string, version string, app string) string {
 	return Catalog.Format(msgs.locale, "hostManualDetail", map[string]any{"host": host, "version": version, "app": app})
 }
 
-// HostNewerDetail says "{host} runs Kero {version}, newer than this app's {app}. Update this app to see and start the host's sessions."
+// HostNewerDetail says "{host} runs guios {version}, newer than this app's {app}. Update this app to see and start the host's sessions."
 // in the language the app shows.
 func HostNewerDetail(host string, version string, app string) string {
 	return In(i18n.Locale()).HostNewerDetail(host, version, app)
 }
 
-// HostNewerDetail says "{host} runs Kero {version}, newer than this app's {app}. Update this app to see and start the host's sessions."
+// HostNewerDetail says "{host} runs guios {version}, newer than this app's {app}. Update this app to see and start the host's sessions."
 // in the language of msgs.
 func (msgs Messages) HostNewerDetail(host string, version string, app string) string {
 	return Catalog.Format(msgs.locale, "hostNewerDetail", map[string]any{"host": host, "version": version, "app": app})
 }
 
-// HostSameAs says "This host's kerod is {other}'s, which the app shows already"
+// HostSameAs says "This host's the tuios daemon is {other}'s, which the app shows already"
 // in the language the app shows.
 func HostSameAs(other string) string { return In(i18n.Locale()).HostSameAs(other) }
 
-// HostSameAs says "This host's kerod is {other}'s, which the app shows already"
+// HostSameAs says "This host's the tuios daemon is {other}'s, which the app shows already"
 // in the language of msgs.
 func (msgs Messages) HostSameAs(other string) string {
 	return Catalog.Format(msgs.locale, "hostSameAs", map[string]any{"other": other})
@@ -5776,21 +5826,21 @@ func (msgs Messages) WorktreeTitle() string {
 	return Catalog.Format(msgs.locale, "worktreeTitle", nil)
 }
 
-// WorktreeDetailDefault says "Kero checks out a new branch from the default branch in a folder of its own, so the session’s agent works apart fro…"
+// WorktreeDetailDefault says "guios checks out a new branch from the default branch in a folder of its own, so the session’s agent works apart fr…"
 // in the language the app shows.
 func WorktreeDetailDefault() string { return In(i18n.Locale()).WorktreeDetailDefault() }
 
-// WorktreeDetailDefault says "Kero checks out a new branch from the default branch in a folder of its own, so the session’s agent works apart fro…"
+// WorktreeDetailDefault says "guios checks out a new branch from the default branch in a folder of its own, so the session’s agent works apart fr…"
 // in the language of msgs.
 func (msgs Messages) WorktreeDetailDefault() string {
 	return Catalog.Format(msgs.locale, "worktreeDetailDefault", nil)
 }
 
-// WorktreeDetailCurrent says "Kero checks out a new branch from the current branch in a folder of its own, so the session’s agent works apart fro…"
+// WorktreeDetailCurrent says "guios checks out a new branch from the current branch in a folder of its own, so the session’s agent works apart fr…"
 // in the language the app shows.
 func WorktreeDetailCurrent() string { return In(i18n.Locale()).WorktreeDetailCurrent() }
 
-// WorktreeDetailCurrent says "Kero checks out a new branch from the current branch in a folder of its own, so the session’s agent works apart fro…"
+// WorktreeDetailCurrent says "guios checks out a new branch from the current branch in a folder of its own, so the session’s agent works apart fr…"
 // in the language of msgs.
 func (msgs Messages) WorktreeDetailCurrent() string {
 	return Catalog.Format(msgs.locale, "worktreeDetailCurrent", nil)
@@ -6012,21 +6062,21 @@ func (msgs Messages) EndedDeleteAllTitle(n int) string {
 	return Catalog.Format(msgs.locale, "endedDeleteAllTitle", map[string]any{"n": n})
 }
 
-// EndedDeleteAllDetail says "Kero forgets them; each agent keeps its own history of the conversation."
+// EndedDeleteAllDetail says "guios forgets them; each agent keeps its own history of the conversation."
 // in the language the app shows.
 func EndedDeleteAllDetail() string { return In(i18n.Locale()).EndedDeleteAllDetail() }
 
-// EndedDeleteAllDetail says "Kero forgets them; each agent keeps its own history of the conversation."
+// EndedDeleteAllDetail says "guios forgets them; each agent keeps its own history of the conversation."
 // in the language of msgs.
 func (msgs Messages) EndedDeleteAllDetail() string {
 	return Catalog.Format(msgs.locale, "endedDeleteAllDetail", nil)
 }
 
-// EndedSetUpSkill says "Set up Kero's skill for your agents to list their ended conversations here"
+// EndedSetUpSkill says "Set up the tuios integration for your agents to list their ended conversations here"
 // in the language the app shows.
 func EndedSetUpSkill() string { return In(i18n.Locale()).EndedSetUpSkill() }
 
-// EndedSetUpSkill says "Set up Kero's skill for your agents to list their ended conversations here"
+// EndedSetUpSkill says "Set up the tuios integration for your agents to list their ended conversations here"
 // in the language of msgs.
 func (msgs Messages) EndedSetUpSkill() string {
 	return Catalog.Format(msgs.locale, "endedSetUpSkill", nil)

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"strings"
 	"sync"
 	"time"
 
@@ -218,6 +219,9 @@ func (c *Client) create(p proto.CreateParams) (proto.Session, error) {
 	if len(p.Command) > 0 {
 		params["command"] = p.Command
 	}
+	if env := paneEnv(); env != nil {
+		params["env"] = env
+	}
 	if p.Cols > 0 && p.Rows > 0 {
 		params["width"], params["height"] = p.Cols, p.Rows
 	}
@@ -256,6 +260,9 @@ func (c *Client) split(p proto.CreateParams) (proto.Session, error) {
 	}
 	if len(p.Command) > 0 {
 		params["command"] = p.Command
+	}
+	if env := paneEnv(); env != nil {
+		params["env"] = env
 	}
 	raw, err := c.verb("new-window", params)
 	if err != nil {
@@ -391,4 +398,34 @@ func (c *Client) repoOf(ctx context.Context, pane, base string) (git.Repo, strin
 	}
 	rev, name, err := r.Base(ctx, base, "")
 	return r, rev, name, err
+}
+
+// envMu guards env, the variables the app adds to every new pane's
+// environment (the Environment settings).
+var (
+	envMu sync.Mutex
+	env   map[string]string
+)
+
+// SetPaneEnv sets the variables every new pane gets, as NAME=value.
+func SetPaneEnv(kvs []string) {
+	m := make(map[string]string, len(kvs))
+	for _, kv := range kvs {
+		if k, v, ok := strings.Cut(kv, "="); ok && k != "" {
+			m[k] = v
+		}
+	}
+	envMu.Lock()
+	env = m
+	envMu.Unlock()
+}
+
+// paneEnv is what SetPaneEnv set, or nil for none.
+func paneEnv() map[string]string {
+	envMu.Lock()
+	defer envMu.Unlock()
+	if len(env) == 0 {
+		return nil
+	}
+	return env
 }

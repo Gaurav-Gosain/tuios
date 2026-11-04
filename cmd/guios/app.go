@@ -22,6 +22,7 @@ import (
 	"github.com/egoist/mygo/ui"
 
 	"github.com/Gaurav-Gosain/tuios/internal/guios/actions"
+	"github.com/Gaurav-Gosain/tuios/internal/guios/cli"
 	"github.com/Gaurav-Gosain/tuios/internal/guios/client"
 	"github.com/Gaurav-Gosain/tuios/internal/guios/proto"
 	"github.com/Gaurav-Gosain/tuios/internal/guios/settings"
@@ -189,6 +190,8 @@ func newApp() *App {
 	a.loadPrefs()
 	a.loadBackup()
 	a.set = settings.Load()
+	loadTuiosSettings(&a.set)
+	client.SetPaneEnv(a.set.Env)
 	a.ss.problems = settings.Problems()
 	a.applied = a.set.Clone()
 	a.selected = a.prefs.Selected
@@ -864,7 +867,13 @@ func (a *App) apply(s settings.Settings, save bool) {
 		if err := settings.Save(s); err != nil {
 			a.toast(locales.ToastSaveSettingsFailed(err.Error()))
 		}
+		go func() {
+			if err := saveTuiosSettings(old, s); err != nil {
+				a.update(func() { a.toast(locales.ToastSaveSettingsFailed(err.Error())) })
+			}
+		}()
 	}
+	client.SetPaneEnv(s.Env)
 	font := old.FontFamily != s.FontFamily || old.FontSize != s.FontSize || old.FontWeight != s.FontWeight ||
 		old.LineHeight != s.LineHeight || old.Ligatures != s.Ligatures || old.Thicken != s.Thicken
 	themes := old.LightTheme != s.LightTheme || old.DarkTheme != s.DarkTheme
@@ -1014,6 +1023,7 @@ func (a *App) reloadConfig() {
 	a.update(func() {
 		changed := strings.Join(problems, "\n") != strings.Join(a.ss.problems, "\n")
 		a.ss.problems = problems
+		tuiosHeld(&cur, a.applied)
 		if !reflect.DeepEqual(cur, a.applied) {
 			a.apply(cur, false)
 		}
@@ -1550,7 +1560,7 @@ func (a *App) restartDaemon() {
 	h := a.local()
 	h.conn = connConnecting
 	go func() {
-		err := stopDaemon()
+		err := cli.RestartDaemon()
 		a.update(func() {
 			if err != nil {
 				h.conn, h.err = connFailed, err.Error()

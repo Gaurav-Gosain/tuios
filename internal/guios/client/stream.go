@@ -72,11 +72,21 @@ func AttachVia(_ Dialer, id string) (*Stream, error) {
 	if err != nil {
 		return nil, err
 	}
-	params := map[string]any{"session_id": sid, "session": name}
+	// The pane takes this view's size only while no TUI client shows the
+	// session (fit, yield). While one does, the pane keeps the size the
+	// TUI gave it, and the view draws that grid: a TUI's panes never change
+	// size because guios shows them.
+	params := map[string]any{"session_id": sid, "session": name, "fit": true, "yield": true}
 	if window != "" {
 		params["window"] = window
 	}
 	ps, reply, err := vc.OpenPaneStream(params)
+	if err != nil && strings.Contains(err.Error(), "parameter yield") {
+		// A daemon from before yielding leases: its fit lease holds a TUI
+		// client's pane at most at this view's size.
+		delete(params, "yield")
+		ps, reply, err = vc.OpenPaneStream(params)
+	}
 	if err != nil {
 		_ = vc.Close()
 		return nil, err
@@ -135,14 +145,14 @@ func (s *Stream) Write(p []byte) (int, error) {
 	return len(p), nil
 }
 
-// ResizePixels sets the pane's size. The daemon learns cell pixels from
-// the hello of its terminal clients only, so they are not sent.
+// ResizePixels asks for the pane at this view's size, as the stream's
+// lease. The daemon applies it only while no TUI client shows the session,
+// and answers with a resize frame when the pane's size changes.
 func (s *Stream) ResizePixels(cols, rows, _, _ int) error {
 	if cols <= 0 || rows <= 0 {
 		return nil
 	}
-	_, err := s.c.verb("resize", map[string]any{"session": s.session, "window": s.window, "width": cols, "height": rows})
-	return err
+	return s.ps.Lease(cols, rows)
 }
 
 // Claim makes the pane take this view's size, which ResizePixels does at
@@ -169,5 +179,3 @@ func (s *Stream) Close() error {
 	})
 	return err
 }
-
-var _ = strings.TrimSpace

@@ -159,7 +159,7 @@ func (a *App) browse(h *host, r *proto.BrowserRequest, answer func(*proto.Browse
 			case err != nil:
 				return nil, err
 			case len(png) == 0:
-				return nil, fmt.Errorf("pane %s has no picture: show it in guios, then try again", r.Pane, r.Pane)
+				return nil, fmt.Errorf("pane %s has no picture: show it in guios, then try again", r.Pane)
 			}
 			return &proto.BrowserResult{PNG: png}, nil
 		})

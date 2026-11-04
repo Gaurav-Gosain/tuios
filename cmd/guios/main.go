@@ -131,6 +131,9 @@ func runApp() {
 	}
 	mygo.App.WhenReady(func() {
 		a.openWindow()
+		if onNewApp != nil {
+			onNewApp(a)
+		}
 		a.applyTray()
 		a.applyGlobalShortcuts()
 		a.idleTime = mygo.Power.IdleTime
@@ -166,5 +169,3 @@ func (a *App) openWindow() {
 
 // newSessionIn starts a session in a directory of a host, in its project.
 func (a *App) newSessionIn(h *host, dir string) { a.create(h, proto.CreateParams{Dir: dir}, "") }
-
-func stopDaemon() error { return cli.StopDaemon() }

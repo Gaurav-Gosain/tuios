@@ -27,11 +27,14 @@ type Settings struct {
 	SidebarRows       string `json:"sidebarRows"`       // "detailed", two lines a session, or "compact", one
 	FocusFollowsMouse bool   `json:"focusFollowsMouse"` // a pane the pointer enters takes the focus
 	ConfirmClose      bool   `json:"confirmClose"`      // before closing a pane a program runs in
-	RestoreSessions   bool   `json:"restoreSessions"`   // after kerod restarts, as after a reboot
-	ResumeAgents      bool   `json:"resumeAgents"`      // as it restores sessions: the agents' own
-	SessionHistory    bool   `json:"sessionHistory"`    // the sidebar lists the agents' ended conversations
-	QuitConfirm       bool   `json:"quitConfirm"`       // tell, the first time, that quitting keeps sessions
-	AppIcon           string `json:"appIcon"`           // macOS: AppIcons; elsewhere the icon is always in the notification area
+	// KeepHistory and ResumeAgents are the tuios daemon's: its config.toml
+	// holds them (daemon.persist_scrollback, daemon.resume_agents), and the
+	// app reads and writes them there, never in its own file.
+	KeepHistory    bool   `json:"-"`
+	ResumeAgents   string `json:"-"`              // "ask", "auto" or "off"
+	SessionHistory bool   `json:"sessionHistory"` // the sidebar lists the agents' ended conversations
+	QuitConfirm    bool   `json:"quitConfirm"`    // tell, the first time, that quitting keeps sessions
+	AppIcon        string `json:"appIcon"`        // macOS: AppIcons; elsewhere the icon is always in the notification area
 
 	// Appearance
 	Appearance string `json:"appearance"` // "system", "light" or "dark"
@@ -62,8 +65,8 @@ type Settings struct {
 	ScrollDiscrete  float32 `json:"scrollDiscrete"`
 
 	// Shell
-	Shell      string   `json:"shell"` // "" the account's login shell
-	Env        []string `json:"env"`   // "KEY=value", added to every pane's
+	Shell      string   `json:"-"`   // tuios's appearance.preferred_shell; "" the login shell
+	Env        []string `json:"env"` // "KEY=value", added to every pane's
 	Scrollback int      `json:"scrollback"`
 
 	// Notifications
@@ -83,7 +86,7 @@ type Settings struct {
 	// WorktreeBase is what a session's own worktree branches from:
 	// "default", the repository's default branch, or "current", the
 	// branch of the session the user is in. WorktreeDir is where its
-	// worktrees go, "" for .kero/worktrees in the repository.
+	// worktrees go, "" for where tuios puts them.
 	WorktreeBase string `json:"worktreeBase"`
 	WorktreeDir  string `json:"worktreeDir"`
 
@@ -142,8 +145,8 @@ func Default() Settings {
 		SessionName:     proto.NameFocused,
 		SidebarRows:     "detailed",
 		ConfirmClose:    true,
-		RestoreSessions: true,
-		ResumeAgents:    true,
+		KeepHistory:     true,
+		ResumeAgents:    "ask",
 		QuitConfirm:     true,
 		AppIcon:         "dock-and-menubar",
 		Appearance:      "system",

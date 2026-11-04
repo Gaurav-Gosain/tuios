@@ -13,3 +13,7 @@ func servePprof() {
 		go func() { log.Println(http.ListenAndServe(addr, nil)) }()
 	}
 }
+
+// onNewApp, when set, runs once the main window is open: the e2e build's
+// latency probe (automation_e2e.go).
+var onNewApp func(*App)

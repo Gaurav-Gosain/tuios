@@ -114,17 +114,15 @@ var keys = []key{
 		func(s *Settings) *string { return &s.SidebarRows }, "detailed", "compact"),
 	boolKey("focus-follows-mouse", "focus the pane the pointer moves into", func(s *Settings) *bool { return &s.FocusFollowsMouse }),
 	boolKey("confirm-close", "ask before closing a pane a program runs in", func(s *Settings) *bool { return &s.ConfirmClose }),
-	boolKey("restore-sessions", "start sessions again after kerod restarts, as after a reboot", func(s *Settings) *bool { return &s.RestoreSessions }),
-	boolKey("resume-agents", "as sessions start again, resume the conversation of the coding agent each pane ran", func(s *Settings) *bool { return &s.ResumeAgents }),
 	boolKey("session-history", "list the coding agents' ended conversations in the sidebar, to resume or archive", func(s *Settings) *bool { return &s.SessionHistory }),
-	choiceKey("macos-show-app-icon", "where Kero's icon shows; closing the window keeps Kero running in the menu bar while it shows there. Windows and Linux always show it in the notification area",
+	choiceKey("macos-show-app-icon", "where guios's icon shows; closing the window keeps guios running in the menu bar while it shows there. Windows and Linux always show it in the notification area",
 		func(s *Settings) *string { return &s.AppIcon }, AppIcons...),
 
 	choiceKey("window-theme", "the app's appearance", func(s *Settings) *string { return &s.Appearance }, "system", "light", "dark"),
 	choiceKey("language", "the app's language; system follows the system's", func(s *Settings) *string { return &s.Language }, append([]string{"system"}, Languages...)...),
 	boolKey("window-translucent", "let the desktop show through the window", func(s *Settings) *bool { return &s.Vibrancy }),
 
-	stringKey("font-family", "the terminals' font: empty for JetBrains Mono Nerd Font, which Kero carries; monospace for the system's", func(s *Settings) *string { return &s.FontFamily }),
+	stringKey("font-family", "the terminals' font: empty for JetBrains Mono Nerd Font, which guios carries; monospace for the system's", func(s *Settings) *string { return &s.FontFamily }),
 	numberKey("font-size", "in points", func(s *Settings) float64 { return float64(s.FontSize) }, func(s *Settings, n float64) { s.FontSize = float32(n) }),
 	numberKey("font-weight", "100 to 900", func(s *Settings) float64 { return float64(s.FontWeight) }, func(s *Settings, n float64) { s.FontWeight = int(n) }),
 	numberKey("line-height", "a multiple of the font's", func(s *Settings) float64 { return float64(s.LineHeight) }, func(s *Settings, n float64) { s.LineHeight = float32(n) }),
@@ -132,7 +130,7 @@ var keys = []key{
 	boolKey("font-thicken", "a heavier stroke, as Ghostty's", func(s *Settings) *bool { return &s.Thicken }),
 	numberKey("minimum-contrast", "the least contrast text keeps with its background, 1 (none) to 21, as Ghostty's", func(s *Settings) float64 { return float64(s.MinContrast) }, func(s *Settings, n float64) { s.MinContrast = float32(min(max(n, 1), 21)) }),
 	boolKey("dim-unfocused-terminals", "fade the terminals you're not in, when a session has several panes", func(s *Settings) *bool { return &s.DimUnfocused }),
-	{name: "theme", doc: "the theme of the window, its panes and terminals: one of kero's (" + strings.Join(keroThemeNames(), ", ") + "), a Ghostty theme, or light:<theme>,dark:<theme>",
+	{name: "theme", doc: "the theme of the window, its panes and terminals: one of guios's (" + strings.Join(keroThemeNames(), ", ") + "), a Ghostty theme, or light:<theme>,dark:<theme>",
 		get: func(s *Settings) []string {
 			if s.LightTheme == s.DarkTheme {
 				return []string{s.LightTheme}
@@ -208,7 +206,6 @@ var keys = []key{
 			return nil
 		}},
 
-	stringKey("command", "the shell of new panes: empty for your login shell", func(s *Settings) *string { return &s.Shell }),
 	{name: "env", doc: "added to every pane's environment, as NAME=value; repeat it", list: true,
 		get: func(s *Settings) []string { return slices.Clone(s.Env) },
 		set: func(s *Settings, v []string) error {
@@ -230,8 +227,8 @@ var keys = []key{
 	boolKey("dock-badge", "the number of sessions that need you", func(s *Settings) *bool { return &s.DockBadge }),
 	boolKey("dock-bounce", "once, when a session comes to need you", func(s *Settings) *bool { return &s.BounceDock }),
 
-	boolKey("remote-control", "kero do, kero focus and kero browser drive the app", func(s *Settings) *bool { return &s.RemoteControl }),
-	{name: "host", doc: "another machine whose sessions the app shows, as name=address: [user@]host or ssh://… over SSH, wsl://distro, http(s)://… for kerod's tailnet listener; add remote-control after it to let its programs drive the app, and color=red, orange, amber, green, teal, blue, purple or pink to mark its sessions; repeat it", list: true,
+	boolKey("remote-control", "programs in panes may drive the app", func(s *Settings) *bool { return &s.RemoteControl }),
+	{name: "host", doc: "another machine whose sessions the app shows, as name=address: [user@]host or ssh://… over SSH, wsl://distro, http(s)://… for the tuios daemon's tailnet listener; add remote-control after it to let its programs drive the app, and color=red, orange, amber, green, teal, blue, purple or pink to mark its sessions; repeat it", list: true,
 		get: func(s *Settings) []string {
 			var out []string
 			for _, h := range s.Hosts {
@@ -265,7 +262,7 @@ var keys = []key{
 			}
 			return nil
 		}},
-	{name: "listen", doc: "let Kero on other machines reach this one's sessions: tailnet://:7373 on its Tailscale addresses, tailnet-serve:// for Tailscale Serve; repeat it", list: true,
+	{name: "listen", doc: "let guios on other machines reach this one's sessions: tailnet://:7373 on its Tailscale addresses, tailnet-serve:// for Tailscale Serve; repeat it", list: true,
 		get: func(s *Settings) []string { return slices.Clone(s.Listen) },
 		set: func(s *Settings, v []string) error {
 			s.Listen = nil
@@ -293,10 +290,10 @@ var keys = []key{
 			}
 			return nil
 		}},
-	boolKey("remote-updates", "let Kero on another machine that connects update the Kero app here to its version, which restarts it", func(s *Settings) *bool { return &s.RemoteUpdates }),
+	boolKey("remote-updates", "let guios on another machine that connects update the guios app here to its version, which restarts it", func(s *Settings) *bool { return &s.RemoteUpdates }),
 	boolKey("git-status", "show the git branch and changes of each session", func(s *Settings) *bool { return &s.GitStatus }),
 	choiceKey("worktree-base", "what a session's own git worktree branches from: the repository's default branch, or the branch of the session you're in", func(s *Settings) *string { return &s.WorktreeBase }, "default", "current"),
-	stringKey("worktree-dir", "where sessions' own git worktrees go, each under its repository's name; empty for .kero/worktrees in the repository", func(s *Settings) *string { return &s.WorktreeDir }),
+	stringKey("worktree-dir", "where sessions' own git worktrees go, each under its repository's name; empty for where tuios puts them", func(s *Settings) *string { return &s.WorktreeDir }),
 	choiceKey("diff-layout", "the changes panel's diffs: unified while the panel is narrow and side by side once it's wide, or always one", func(s *Settings) *string { return &s.DiffLayout }, "auto", "unified", "split"),
 	boolKey("browser-block-ads", "block ads and trackers in browser panes, with the browser-filter-list lists", func(s *Settings) *bool { return &s.BlockAds }),
 	{name: "browser-filter-list", doc: "a filter list browser-block-ads blocks with: " + strings.Join(adListIDs(), ", ") + ", or a list's https URL; repeat it, and leave it empty for none", list: true,
@@ -324,7 +321,7 @@ var keys = []key{
 			}
 			return nil
 		}},
-	{name: "keybind", doc: "<keys>=<action>, over the defaults, as cmd+shift+d=pane.split.down; <keys>=unbind frees keys; see kero actions", list: true,
+	{name: "keybind", doc: "<keys>=<action>, over the defaults, as cmd+shift+d=pane.split.down; <keys>=unbind frees keys", list: true,
 		get: func(s *Settings) []string {
 			var out []string
 			for _, a := range actions.All {
@@ -582,10 +579,9 @@ func format(s Settings, data string) string {
 }
 
 var header = []string{
-	"# Kero's configuration, as Ghostty's: one setting a line, `key = value`.",
-	"# It holds what differs from the defaults. Kero's Settings window edits",
+	"# guios's configuration, as Ghostty's: one setting a line, `key = value`.",
+	"# It holds what differs from the defaults. guios's Settings window edits",
 	"# it in place, keeping your comments; what you save here applies at once.",
-	"# `kero config show` lists every key, with its default.",
 	"",
 }
 
