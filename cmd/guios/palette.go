@@ -25,6 +25,9 @@ type paletteState struct {
 	query  string
 	index  int
 	scroll smoothScroll
+	// list builds only the rows in view. It keeps the heights it measured
+	// from one opening to the next.
+	list   ui.ListState
 	reveal bool // the chosen item scrolls into view, once
 	// convs are the conversations the hosts' kerods remember, the last to
 	// run first, as they come; only shows them alone (Resume
@@ -67,7 +70,7 @@ type paletteItem struct {
 }
 
 func (a *App) openPalette() {
-	a.pal = paletteState{open: true, reveal: true, gen: a.pal.gen + 1}
+	a.pal = paletteState{open: true, reveal: true, gen: a.pal.gen + 1, list: a.pal.list}
 	a.loadConversations()
 }
 
@@ -522,8 +525,8 @@ func (a *App) paletteView(c *ui.Context, pal *palette) {
 		width = min(width, ww-2*sp4)
 	}
 	ui.DialogBase(c.Key("palette"), &a.pal.open, func(backdrop, panel ui.Element) {
-		dialogMotion(backdrop, panel)
-		backdrop.Background(pal.overlay).Justify(ui.Start).Padding(max(wh*0.12, 40), 0, 0, 0)
+		dialogMotion(backdrop, panel, pal.overlay)
+		backdrop.Justify(ui.Start).Padding(max(wh*0.12, 40), 0, 0, 0)
 		floating(panel.Width(width).MaxHeight(min(480, wh*0.7)).Radius(rSheet).Background(pal.popover), pal).Clip().
 			Label(label)
 		ui.Row(c).Height(44).Shrink(0).Padding(0, sp4).Gap(10).AlignItems(ui.Center).Children(func() {
@@ -547,65 +550,85 @@ func (a *App) paletteView(c *ui.Context, pal *palette) {
 			}
 		})
 		ui.Box(c).Height(1).Shrink(0).Background(pal.divider)
-		list := a.pal.scroll.track(c, ui.Scroll(c.Key("results"))).Grow(1).MinHeight(0).Padding(6)
-		reveal := a.pal.reveal
+		// The rows: a group's header over its first item while nothing is
+		// typed (a ranked list would split into runs under them), then
+		// the items. Only those in view are built.
+		type palRow struct{ head, item int }
+		rows := make([]palRow, 0, len(items)+len(paletteGroups))
+		lastKind := -1
+		chosenRow := 0
+		for i := range items {
+			kind := items[i].kind()
+			if kind != lastKind && a.pal.query == "" && !a.pal.only && a.pal.custom == nil {
+				rows = append(rows, palRow{head: kind, item: -1})
+			}
+			lastKind = kind
+			if i == a.pal.index {
+				chosenRow = len(rows)
+			}
+			rows = append(rows, palRow{head: -1, item: i})
+		}
+		ls := &a.pal.list
+		if a.pal.reveal {
+			if a.pal.index == 0 {
+				ls.ScrollTo(0, ui.Start)
+			} else {
+				ls.ScrollIntoView(chosenRow)
+			}
+		}
 		a.pal.reveal = false
-		list.Children(func() {
-			if len(items) == 0 {
-				ui.Text(c, none).FontSize(fsBody).TextColor(pal.textFaint).Padding(12, 12).LineHeight(1.4).MaxLines(3)
+		if len(items) == 0 {
+			ui.Text(c, none).FontSize(fsBody).TextColor(pal.textFaint).Padding(18, 18).LineHeight(1.4).MaxLines(3)
+			return
+		}
+		list := ui.List(c.Key("results"), ls, len(rows), func(r int) {
+			if h := rows[r].head; h >= 0 {
+				ui.Text(c, paletteGroups[h]()).FontSize(fsSmall).FontWeight(wMedium).TextColor(pal.textFaint).
+					SingleLine().Padding(10, 10, 4, 10)
+				return
 			}
-			lastKind := -1
-			for i, it := range items {
-				kind := it.kind()
-				// Headers only over the list as it is, with nothing typed:
-				// a ranked list would split into runs under them.
-				if kind != lastKind && a.pal.query == "" && !a.pal.only && a.pal.custom == nil {
-					ui.Text(c, paletteGroups[kind]()).FontSize(fsSmall).FontWeight(wMedium).TextColor(pal.textFaint).
-						SingleLine().Padding(10, 10, 4, 10)
-				}
-				lastKind = kind
-				row := ui.Row(c.Key(i)).Height(hRow+2).Padding(0, 10).Gap(10).AlignItems(ui.Center).Radius(rRow)
-				if i == a.pal.index {
-					row.Background(pal.accent.Alpha(0.15))
-					if reveal {
-						row.ScrollIntoView()
-					}
-				} else if row.Hovered() {
-					row.Background(pal.rowHover)
-				}
-				if row.Clicked() {
-					chosen = it.run
-				}
-				row.Children(func() {
-					switch kind {
-					case paletteSession:
-						statusIcon(c, pal, it.session.Status, it.session.Unread, 14)
-					case palettePane:
-						if p := it.pane; p.Status != proto.Idle || p.Unread {
-							statusIcon(c, pal, p.Status, p.Unread, 14)
-						} else {
-							ui.Icon(c, programIcon(p)).Size(14, 14).TextColor(pal.textFaint)
-						}
-					case paletteConversation:
-						ui.Icon(c, programIcon(&proto.Pane{Agent: it.conv.Agent})).Size(14, 14).TextColor(pal.textFaint)
-					default:
-						ui.Icon(c, returnIcon).Size(14, 14).TextColor(pal.textFaint)
-					}
-					// One line each: the title gives way to its keys, the
-					// detail to both, and takes at most 45 % of the row (T3
-					// Code's palette caps it so).
-					ui.RichText(c, paletteSpans(it.title, it.hits, pal)...).FontSize(fsBody).TextColor(pal.text).
-						SingleLine().Ellipsis("…").Shrink(1).MinWidth(48).MaxWidth(320)
-					oneLine(c, it.detail, fsSmall, 0).TextColor(pal.textFaint).Shrink(4).MaxWidthPercent(45)
-					ui.Spacer(c)
-					for _, k := range it.keys {
-						if k != "" {
-							kbd(c, pal, k)
-						}
-					}
-				})
+			i := rows[r].item
+			it := items[i]
+			kind := it.kind()
+			row := ui.Row(c.Key(i)).Height(hRow+2).Padding(0, 10).Gap(10).AlignItems(ui.Center).Radius(rRow)
+			if i == a.pal.index {
+				row.Background(pal.accent.Alpha(0.15))
+			} else if row.Hovered() {
+				row.Background(pal.rowHover)
 			}
+			if row.Clicked() {
+				chosen = it.run
+			}
+			row.Children(func() {
+				switch kind {
+				case paletteSession:
+					statusIcon(c, pal, it.session.Status, it.session.Unread, 14)
+				case palettePane:
+					if p := it.pane; p.Status != proto.Idle || p.Unread {
+						statusIcon(c, pal, p.Status, p.Unread, 14)
+					} else {
+						ui.Icon(c, programIcon(p)).Size(14, 14).TextColor(pal.textFaint)
+					}
+				case paletteConversation:
+					ui.Icon(c, programIcon(&proto.Pane{Agent: it.conv.Agent})).Size(14, 14).TextColor(pal.textFaint)
+				default:
+					ui.Icon(c, returnIcon).Size(14, 14).TextColor(pal.textFaint)
+				}
+				// One line each: the title gives way to its keys, the
+				// detail to both, and takes at most 45 % of the row (T3
+				// Code's palette caps it so).
+				ui.RichText(c, paletteSpans(it.title, it.hits, pal)...).FontSize(fsBody).TextColor(pal.text).
+					SingleLine().Ellipsis("…").Shrink(1).MinWidth(48).MaxWidth(320)
+				oneLine(c, it.detail, fsSmall, 0).TextColor(pal.textFaint).Shrink(4).MaxWidthPercent(45)
+				ui.Spacer(c)
+				for _, k := range it.keys {
+					if k != "" {
+						kbd(c, pal, k)
+					}
+				}
+			})
 		})
+		a.pal.scroll.track(c, list).Grow(1).MinHeight(0).Padding(6)
 	})
 	if chosen != nil {
 		a.pal.open = false
@@ -628,8 +651,7 @@ func confirmDialog(c *ui.Context, pal *palette, pending **confirmation) bool {
 	cf := *pending
 	run, alt := false, false
 	ui.DialogBase(c.Key("confirm"), &cf.open, func(backdrop, panel ui.Element) {
-		dialogMotion(backdrop, panel)
-		backdrop.Background(pal.overlay)
+		dialogMotion(backdrop, panel, pal.overlay)
 		width := float32(dialogW)
 		if cf.alt != "" {
 			width = 480 // room for a third button

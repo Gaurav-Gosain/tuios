@@ -133,8 +133,8 @@ func (a *App) pickerView(c *ui.Context, pal *palette) {
 	var goTo, openDir string
 	ui.DialogBase(c.Key("picker"), &p.open, func(backdrop, panel ui.Element) {
 		ww, wh := c.Size()
-		dialogMotion(backdrop, panel)
-		backdrop.Background(pal.overlay).Justify(ui.Start).Padding(max(wh*0.12, 40), 0, 0, 0)
+		dialogMotion(backdrop, panel, pal.overlay)
+		backdrop.Justify(ui.Start).Padding(max(wh*0.12, 40), 0, 0, 0)
 		floating(panel.Width(min(paletteW, ww-2*sp4)).MaxHeight(min(500, wh*0.75)).Radius(rSheet).Background(pal.popover), pal).Clip().
 			Label(locales.PickerTitle(h.label()))
 		ui.Row(c).Height(42).Shrink(0).Padding(0, 16).Gap(8).AlignItems(ui.Center).Children(func() {

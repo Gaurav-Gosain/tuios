@@ -27,24 +27,24 @@ var (
 	motionLayout = ui.Animation{Duration: 200 * time.Millisecond, Ease: easeOut}
 )
 
-// enterKeys are the keyframes of something appearing: 0 to 1, eased out.
-var enterKeys = []ui.Keyframe{{At: 0, Value: 0}, {At: motionBase.Duration, Value: 1, Ease: easeOut}}
+// enterKeys are the keyframes of a dialog appearing: 0 to 1 over
+// motionQuick, eased out.
+var enterKeys = []ui.Keyframe{{At: 0, Value: 0}, {At: motionQuick.Duration, Value: 1, Ease: easeOut}}
 
-// dialogMotion animates a dialog built by ui.DialogBase: the backdrop
-// fades in, and the panel rises a little and grows to its size as it
-// fades in. As it closes, the backdrop fades out with the panel on it.
-// keepOverlay must run in every frame of the window, so that the closed
-// dialog's parent is still built for its exit.
-func dialogMotion(backdrop, panel ui.Element) {
-	backdrop.Transition(ui.ElementTransition{
-		Animation: &motionQuick,
-		Colors:    true,
-		Enter:     &ui.Motion{Opacity: 0},
-		Exit:      &ui.Motion{Opacity: 0},
-	})
+// dialogMotion animates a dialog built by ui.DialogBase and sets its
+// backdrop's colour, scrim. The backdrop's colour fades in, and the panel
+// rises 4 DIPs as it fades in, over 120 ms. Opacity on the backdrop would
+// draw the window's whole overlay again in each frame of the motion, so
+// only its colour changes, and the panel fades as one cached bitmap
+// (Cache) while it moves. As it closes, the backdrop fades out with the
+// panel on it. keepOverlay must run in every frame of the window, so that
+// the closed dialog's parent is still built for its exit.
+func dialogMotion(backdrop, panel ui.Element, scrim ui.Color) {
+	backdrop.Transition(ui.ElementTransition{Animation: &motionQuick, Exit: &ui.Motion{Opacity: 0}})
 	k := panel.Keyframes("in", enterKeys)
+	backdrop.Background(scrim.Alpha(k))
 	if k < 1 {
-		panel.Opacity(k).Translate(0, -8*(1-k)).Scale(0.97+0.03*k, 0.97+0.03*k)
+		panel.Cache().Opacity(k).Translate(0, -4*(1-k))
 	}
 }
 
@@ -59,5 +59,5 @@ func scaleMotion(k float64) {
 	for _, a := range []*ui.Animation{&motionQuick, &motionBase, &motionLayout, &sidebarMotion} {
 		a.Duration = time.Duration(float64(a.Duration) * k)
 	}
-	enterKeys = []ui.Keyframe{{At: 0, Value: 0}, {At: motionBase.Duration, Value: 1, Ease: easeOut}}
+	enterKeys = []ui.Keyframe{{At: 0, Value: 0}, {At: motionQuick.Duration, Value: 1, Ease: easeOut}}
 }
