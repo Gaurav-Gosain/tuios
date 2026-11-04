@@ -25,9 +25,9 @@ func (a *App) browse(h *host, r *proto.BrowserRequest, answer func(*proto.Browse
 	fail := func(format string, args ...any) { answer(nil, fmt.Errorf(format, args...)) }
 	if !a.remoteControl(h) {
 		if h.remote() {
-			fail("Remote Control of %s is off: turn it on in guios's Settings › Hosts", h.name)
+			fail("Remote control of %s is off: turn it on in guios's Settings › Hosts", h.name)
 		} else {
-			fail("Remote Control is off: turn it on in guios's Settings › Agents")
+			fail("Remote control is off: turn it on in guios's Settings › Agents")
 		}
 		return
 	}
