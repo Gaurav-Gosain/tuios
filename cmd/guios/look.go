@@ -49,6 +49,8 @@ type fileLook struct {
 	view int
 	// checking tells a stat of the file is under way, to see it changed.
 	checking bool
+	// marked are the steps lookTrace logged.
+	marked map[string]bool
 
 	img   *lookImage
 	pdf   *lookPDF
@@ -162,6 +164,7 @@ func (a *App) openLook(path string) *fileLook {
 				l.view = 0
 			}
 			l.detected = true
+			l.mark("detected " + l.kind.String())
 			a.startLook(l)
 		})
 	}()
@@ -544,6 +547,9 @@ func (a *App) lookKeys(card ui.Element, v *sideView, l *fileLook) {
 	}
 	if card.Shortcut(0, ui.Key0) || card.Shortcut(ui.Cmd, ui.Key0) {
 		a.lookZoom(l, 0)
+	}
+	if card.Shortcut(0, ui.KeyZ) && l.pdf != nil && l.pdf.doc != nil && l.current() == viewOwn {
+		a.pdfFit(l)
 	}
 	if card.Shortcut(0, ui.KeyT) && l.film != nil {
 		l.film.strip = !l.film.strip

@@ -67,7 +67,9 @@ func openPoppler(ctx context.Context, path string) (Doc, error) {
 	if Tool("pdftoppm") == "" {
 		return nil, ErrNoTool("pdftoppm")
 	}
-	out, err := run(ctx, 4<<20, "pdfinfo", path)
+	// One run says the count and each page's size: pdfinfo stops at the
+	// last page of a shorter range.
+	out, err := run(ctx, 16<<20, "pdfinfo", "-f", "1", "-l", strconv.Itoa(maxSizedPages), path)
 	if err != nil {
 		if _, ok := err.(ErrNoTool); ok {
 			return nil, err
@@ -83,11 +85,7 @@ func openPoppler(ctx context.Context, path string) (Doc, error) {
 	if d.pages <= 0 {
 		return nil, errors.New("The PDF has no pages.")
 	}
-	n := min(d.pages, maxSizedPages)
-	out, err = run(ctx, 16<<20, "pdfinfo", "-f", "1", "-l", strconv.Itoa(n), path)
-	if err == nil {
-		d.sizes = popplerSizes(out, n)
-	}
+	d.sizes = popplerSizes(out, min(d.pages, maxSizedPages))
 	if len(d.sizes) == 0 {
 		d.sizes = [][2]float64{{612, 792}}
 	}

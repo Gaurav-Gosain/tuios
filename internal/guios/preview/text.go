@@ -206,7 +206,7 @@ func (t *TextFile) readBlock(from, to int64) *textBlock {
 		if len(line) > lineCut {
 			line, b.cut = line[:lineCut], true
 		}
-		b.lines = append(b.lines, strings.ToValidUTF8(strings.ReplaceAll(string(line), "\t", "    "), "�"))
+		b.lines = append(b.lines, strings.ToValidUTF8(strings.ReplaceAll(string(line), "\t", "    "), "\uFFFD"))
 	}
 	return b
 }

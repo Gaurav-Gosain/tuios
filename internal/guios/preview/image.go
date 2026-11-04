@@ -107,6 +107,17 @@ func DecodeImage(ctx context.Context, path string, maxPx int) (*Picture, error) 
 	if int64(cfg.Width)*int64(cfg.Height)*int64(bytesPerPixel(cfg.ColorModel)) > decodeMax {
 		return nil, errTooLarge
 	}
+	// A large JPEG decodes in Go at about 30 megapixels a second; libjpeg's
+	// djpeg scales it down as it decodes, five to ten times faster.
+	if format == "jpeg" && (cfg.Width > 2*maxPx || cfg.Height > 2*maxPx || cfg.Width*cfg.Height > 12_000_000) {
+		if img, err := djpeg(ctx, path, cfg.Width, cfg.Height, maxPx); err == nil {
+			img = Fit(img, maxPx)
+			if orient > 1 {
+				img = Orient(img, orient)
+			}
+			return &Picture{Img: img, W: w, H: h, Format: format}, nil
+		}
+	}
 	img, _, err := image.Decode(bytes.NewReader(data))
 	if err != nil {
 		return nil, errUnreadable
@@ -123,6 +134,18 @@ func DecodeImage(ctx context.Context, path string, maxPx int) (*Picture, error) 
 
 // goReads are the extensions Go's decoders here read.
 var goReads = map[string]bool{".png": true, ".jpg": true, ".jpeg": true, ".gif": true, ".webp": true, ".bmp": true, ".tif": true, ".tiff": true}
+
+// djpeg decodes a JPEG with libjpeg's djpeg, scaled by the eighths that
+// keep it at least maxPx on its long side.
+func djpeg(ctx context.Context, path string, w, h, maxPx int) (image.Image, error) {
+	long := max(w, h)
+	m := min(max((8*maxPx+long-1)/long, 1), 8)
+	out, err := run(ctx, 512<<20, "djpeg", "-scale", itoa(m)+"/8", "-ppm", path)
+	if err != nil {
+		return nil, err
+	}
+	return decodePPM(out)
+}
 
 // bytesPerPixel is what a pixel of the color model takes, decoded, at most.
 func bytesPerPixel(m color.Model) int {

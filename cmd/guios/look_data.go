@@ -47,6 +47,7 @@ func (a *App) startTable(l *fileLook) {
 				return
 			}
 			t.data = d
+			l.mark("parsed " + itoa(len(d.Rows)) + " rows")
 			t.cols = append(t.cols, ui.TableColumn{Title: "#", ID: "#", Width: max(float32(len(itoa(len(d.Rows))))*8+16, 36), Align: ui.End, Fixed: true})
 			for i := range d.Width {
 				title := ""
@@ -135,6 +136,7 @@ func (a *App) startJSON(l *fileLook) {
 				return
 			}
 			j.tree = t
+			l.mark("parsed " + itoa(len(t.Nodes)) + " nodes")
 			// The root and its children open, as a reader looks first.
 			j.state.Open.Add(0)
 			for _, k := range j.children(0) {
@@ -288,6 +290,7 @@ func (a *App) startArchive(l *fileLook) {
 				ar.err = err.Error()
 				return
 			}
+			l.mark("listed")
 			ar.entries, ar.capped, ar.kids, ar.sizes, ar.dirs, ar.unpacked = entries, capped, kids, sizes, dirs, unpacked
 			// One folder at the top, as most archives hold, opens.
 			if top := kids[""]; len(top) == 1 && dirs[top[0]] {
@@ -571,6 +574,7 @@ func (a *App) startFont(l *fileLook) {
 				return
 			}
 			fo.ff = ff
+			l.mark("read")
 		})
 	}()
 }
@@ -587,8 +591,9 @@ func (a *App) fontView(c *ui.Context, pal *palette, l *fileLook) {
 	}
 	info := fo.ff.Info
 	sc := ui.Scroll(c.Key("font")).TrackScroll(&fo.scroll).Grow(1).MinHeight(0)
-	if b := sc.Bounds(); b.W > 0 {
+	if b := sc.Bounds(); b.W > 0 && (b.H != fo.viewH || b.W-48 != fo.widthIn) {
 		fo.viewH, fo.widthIn = b.H, b.W-48
+		c.Invalidate()
 	}
 	sc.Children(func() {
 		ui.Column(c).Padding(20, 24).Gap(14).AlignItems(ui.Stretch).Children(func() {

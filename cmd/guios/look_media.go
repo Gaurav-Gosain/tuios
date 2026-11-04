@@ -69,6 +69,7 @@ func (a *App) startFilm(l *fileLook) {
 				return
 			}
 			fm.facts = &f
+			l.mark("facts")
 			if fm.want < 0 {
 				fm.want = f.DurationMs / 20
 			}
@@ -123,6 +124,7 @@ func (a *App) filmRead(l *fileLook) {
 			} else {
 				fm.failed = ""
 				fm.frame, fm.at = bm, at
+				l.mark("frame")
 			}
 			if fm.want != at {
 				a.filmRead(l)
@@ -375,6 +377,7 @@ func (a *App) startAudio(l *fileLook) {
 				return
 			}
 			au.facts = &f
+			l.mark("facts")
 		})
 		if err != nil || !f.Cover {
 			return

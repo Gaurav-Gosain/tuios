@@ -7,6 +7,7 @@ import (
 	"image/jpeg"
 	"image/png"
 	"os"
+	"time"
 
 	"github.com/egoist/mygo/ui"
 
@@ -33,8 +34,12 @@ type lookImage struct {
 	w, h   int // its own size
 	format string
 	err    string
-	// released tells the bitmap's pixels left the CPU, once shown.
+	// shownFrames counts the frames the bitmap showed in: its pixels leave
+	// the CPU after a few. bmW is its width in pixels, sharpAsked that it
+	// was asked again at preview.MaxPx.
 	shownFrames int
+	bmW         int
+	sharpAsked  bool
 	// scale is DIPs per picture pixel, 0 to fit; shown is the scale the
 	// last frame drew at, which the header says.
 	scale, shown float32
@@ -52,7 +57,14 @@ type lookImage struct {
 	stepAt int // the frame shown while stepping, -1 while it plays
 	step   ui.VideoDecoder
 	stepBm *ui.Bitmap
+	// playFrom is when the GIF began playing: it holds after gifPlayMax,
+	// so a viewer left open costs nothing.
+	playFrom time.Time
 }
+
+// gifPlayMax is how long a GIF plays before it holds on its frame. Space or
+// the play button plays it again.
+const gifPlayMax = 20 * time.Second
 
 // fit is the scale that shows the picture whole in the box, a small one at
 // its own size.
@@ -122,6 +134,11 @@ func (im *lookImage) clamp() {
 	clampAxis(&im.cy, float32(im.h), im.boxH)
 }
 
+// firstPx is the long side a picture is first decoded at: sharp at the
+// viewer's widest on a 2x screen. Zooming in past it decodes it again at
+// preview.MaxPx, once.
+const firstPx = 2560
+
 // startImage decodes the picture on a goroutine.
 func (a *App) startImage(l *fileLook) {
 	if l.img != nil {
@@ -131,7 +148,7 @@ func (a *App) startImage(l *fileLook) {
 	l.img = im
 	ctx, path := l.ctx, l.path
 	go func() {
-		pic, err := preview.DecodeImage(ctx, path, preview.MaxPx)
+		pic, err := preview.DecodeImage(ctx, path, firstPx)
 		if ctx.Err() != nil {
 			return
 		}
@@ -170,26 +187,96 @@ func (a *App) startImage(l *fileLook) {
 			}
 			im.bm, im.player, im.frames, im.data = bm, player, frames, pic.Data
 			im.w, im.h, im.format = pic.W, pic.H, pic.Format
+			if bm != nil {
+				bw, _ := bm.Size()
+				im.bmW = bw
+			}
+			l.mark("decoded")
+			if pic.Img != nil {
+				a.packLater(l, im, pic.Img, bm)
+			}
 		})
 	}()
 }
 
-// bitmapOf makes a picture a bitmap. A picture the viewer's decoder reads
-// goes to it as its bytes, and a scaled one as a JPEG or PNG of it: either
-// way the bitmap can drop its pixels once the GPU has them, and decode them
-// again from the bytes when it needs them.
+// packLater packs a decoded picture as a JPEG or PNG on a goroutine and
+// shows that in its place: the bitmap of the packed bytes lets its pixels
+// go once the GPU has them, where one of the pixels keeps them.
+func (a *App) packLater(l *fileLook, im *lookImage, img image.Image, was *ui.Bitmap) {
+	ctx := l.ctx
+	go func() {
+		packed, err := packBitmap(img)
+		if err != nil || ctx.Err() != nil {
+			return
+		}
+		a.update(func() {
+			if im.bm == was {
+				im.bm, im.shownFrames = packed, 0
+			}
+		})
+	}()
+}
+
+// needSharper reports whether the picture shows larger than its bitmap
+// holds, by a quarter, and a sharper one can be read.
+func (im *lookImage) needSharper(devScale float32) bool {
+	if im.sharpAsked || im.bm == nil || im.bmW == 0 || im.bmW >= im.w || im.bmW >= preview.MaxPx || im.boxW <= 1 {
+		return false
+	}
+	return im.effScale()*float32(im.w)*devScale > float32(im.bmW)*1.25
+}
+
+// wantSharper decodes the picture again at preview.MaxPx once it shows
+// larger than its bitmap holds.
+func (a *App) wantSharper(l *fileLook, im *lookImage, devScale float32) {
+	if !im.needSharper(devScale) {
+		return
+	}
+	im.sharpAsked = true
+	ctx, path := l.ctx, l.path
+	go func() {
+		pic, err := preview.DecodeImage(ctx, path, preview.MaxPx)
+		if err != nil || ctx.Err() != nil {
+			return
+		}
+		bm, err := bitmapOf(pic)
+		if err != nil {
+			return
+		}
+		a.update(func() {
+			if ctx.Err() == nil {
+				im.bm, im.shownFrames = bm, 0
+				im.bmW, _ = bm.Size()
+				l.mark("sharper")
+				if pic.Img != nil {
+					a.packLater(l, im, pic.Img, bm)
+				}
+			}
+		})
+	}()
+}
+
+// bitmapOf makes a picture a bitmap: one the viewer's decoder reads as its
+// bytes, which can let its pixels go once shown and decode them again, and
+// a decoded one as its pixels, at once (packLater packs it after).
 func bitmapOf(pic *preview.Picture) (*ui.Bitmap, error) {
 	if pic.Data != nil {
 		return ui.DecodeBitmap(pic.Data)
 	}
+	return ui.NewBitmap(pic.Img), nil
+}
+
+// packBitmap is a decoded picture as a JPEG, or a PNG where it has
+// transparency, decoded back as a bitmap that keeps the bytes.
+func packBitmap(img image.Image) (*ui.Bitmap, error) {
 	var buf bytes.Buffer
-	if opaque(pic.Img) {
-		if err := jpeg.Encode(&buf, pic.Img, &jpeg.Options{Quality: 92}); err != nil {
+	if opaque(img) {
+		if err := jpeg.Encode(&buf, img, &jpeg.Options{Quality: 92}); err != nil {
 			return nil, err
 		}
 	} else {
 		enc := png.Encoder{CompressionLevel: png.BestSpeed}
-		if err := enc.Encode(&buf, pic.Img); err != nil {
+		if err := enc.Encode(&buf, img); err != nil {
 			return nil, err
 		}
 	}
@@ -227,6 +314,7 @@ func (a *App) startSVG(l *fileLook) {
 				return
 			}
 			im.svg = svg
+			l.mark("parsed")
 			w, h := svg.Size()
 			im.w, im.h, im.format = max(int(w+0.5), 1), max(int(h+0.5), 1), "svg"
 		})
@@ -272,7 +360,12 @@ func (a *App) imageView(c *ui.Context, pal *palette, l *fileLook) {
 		}
 		if b := stage.Bounds(); b.W > 0 {
 			// The picture keeps a margin from the card's edges.
-			im.boxW, im.boxH = max(b.W-2*picPad, 1), max(b.H-2*picPad, 1)
+			w, h := max(b.W-2*picPad, 1), max(b.H-2*picPad, 1)
+			if w != im.boxW || h != im.boxH {
+				im.boxW, im.boxH = w, h
+				im.clamp()
+				c.Invalidate()
+			}
 		}
 		stage.HandleInput(func(ev ui.InputEvent) bool {
 			ev.X, ev.Y = ev.X-picPad, ev.Y-picPad
@@ -327,6 +420,10 @@ func (a *App) imageView(c *ui.Context, pal *palette, l *fileLook) {
 				stage.Draw(func(p *ui.Painter, r ui.Rect) {
 					s := im.effScale()
 					im.shown = s
+					if im.needSharper(p.Scale()) {
+						dev := p.Scale()
+						a.update(func() { a.wantSharper(l, im, dev) })
+					}
 					cx, cy := float32(im.w)/2, float32(im.h)/2
 					if im.scale > 0 {
 						cx, cy = im.cx, im.cy
@@ -338,8 +435,8 @@ func (a *App) imageView(c *ui.Context, pal *palette, l *fileLook) {
 			}
 		}
 		if im.bm != nil {
-			// Once on the GPU, the pixels leave the CPU; they decode again
-			// from the file's bytes if needed.
+			// Once on the GPU, the pixels of a bitmap of bytes leave the
+			// CPU; they decode again from the bytes if needed.
 			if im.shownFrames++; im.shownFrames == 3 {
 				a.defer_(im.bm.ReleasePixels)
 			}
@@ -356,6 +453,13 @@ func (a *App) imageView(c *ui.Context, pal *palette, l *fileLook) {
 // gifBar is a GIF's controls: play or hold, and the frame while it holds.
 func (a *App) gifBar(c *ui.Context, pal *palette, l *fileLook) {
 	im := l.img
+	if im.player.Playing() && im.stepAt < 0 {
+		if im.playFrom.IsZero() {
+			im.playFrom = c.Now()
+		} else if c.Now().Sub(im.playFrom) > gifPlayMax {
+			im.player.Pause()
+		}
+	}
 	ui.Row(c.Key("gif-bar")).Height(36).Shrink(0).Padding(0, 12).Gap(8).AlignItems(ui.Center).Children(func() {
 		playing := im.stepAt < 0 && im.player.Playing()
 		icon, label := pauseIcon, "Hold (space)"
@@ -381,6 +485,7 @@ func (a *App) gifPlay(l *fileLook, play bool) {
 	}
 	if play {
 		im.stepAt = -1
+		im.playFrom = time.Time{}
 		im.player.Play()
 		return
 	}

@@ -9,6 +9,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/egoist/mygo/ui"
 
@@ -131,6 +132,7 @@ func (a *App) startPDF(l *fileLook) {
 				pd.widest = max(pd.widest, s[0])
 			}
 			pd.pics, pd.asks = map[int]*pagePic{}, map[int]*pageAsk{}
+			l.mark("opened " + itoa(pd.pages) + " pages")
 			if pd.keep > 0 {
 				a.pdfGo(l, pd.keep-1)
 				pd.keep = 0
@@ -209,8 +211,13 @@ func (a *App) pdfZoom(l *fileLook, k, px, py float32) {
 	page := pd.pageAt(cy, old)
 	within := (cy - pd.pageTop(page, old)) / old
 	cx := pd.scroll.X + px
-	pd.scroll.Y = max(pd.pageTop(page, ns)+within*ns-py, 0)
-	pd.scroll.X = max((cx-pagePad)*ns/old+pagePad-px, 0)
+	jumpTo(&pd.scroll, max((cx-pagePad)*ns/old+pagePad-px, 0), max(pd.pageTop(page, ns)+within*ns-py, 0))
+}
+
+// jumpTo scrolls to x, y at once, ending a glide on its way.
+func jumpTo(st *ui.ScrollState, x, y float32) {
+	st.X, st.Y = x, y
+	st.ScrollTo(x, y, ui.Animation{Duration: time.Nanosecond})
 }
 
 // pdfView is the column of pages and its bar.
@@ -229,8 +236,19 @@ func (a *App) pdfView(c *ui.Context, pal *palette, l *fileLook) {
 	}
 	ui.Column(c.Key("pdf-view")).Grow(1).MinHeight(0).AlignItems(ui.Stretch).Children(func() {
 		sc := ui.ScrollBoth(c.Key("pages")).TrackScroll(&pd.scroll).Grow(1).MinHeight(0).Background(pal.sidebar.Alpha(0.35))
-		if b := sc.Bounds(); b.W > 0 {
+		if b := sc.Bounds(); b.W > 0 && (b.W != pd.viewW || b.H != pd.viewH) {
+			// The view changed size: the page at the top stays there, at
+			// the new scale, and the frame builds again at it.
+			old := pd.ptScale()
+			top := pd.pageAt(pd.scroll.Y, old)
+			within := (pd.scroll.Y - pd.pageTop(top, old)) / old
+			first := pd.viewW == 0
 			pd.viewW, pd.viewH = b.W, b.H
+			if !first {
+				ns := pd.ptScale()
+				jumpTo(&pd.scroll, pd.scroll.X, max(pd.pageTop(top, ns)+within*ns, 0))
+			}
+			c.Invalidate()
 		}
 		sc.HandleInput(func(ev ui.InputEvent) bool {
 			switch {
@@ -379,6 +397,7 @@ func (a *App) pdfRender(l *fileLook, i, px int) {
 			}
 			pic := &pagePic{bm: bm, px: px}
 			pd.pics[i] = pic
+			l.mark("page " + itoa(i+1) + " drawn")
 			// Packed on the side: the PNG keeps a page in a fortieth of
 			// its pixels' room.
 			go func() {
@@ -415,9 +434,11 @@ func (a *App) pdfBar(c *ui.Context, pal *palette, l *fileLook) {
 					a.pdfGo(l, n-1)
 				}
 				pd.goTo, pd.goToText = false, ""
+				a.focusViewer()
 			}
 			if in.Shortcut(0, ui.KeyEscape) {
 				pd.goTo, pd.goToText = false, ""
+				a.focusViewer()
 			}
 			ui.Text(c, "of "+itoa(pd.pages)).FontSize(12).FontFeatures("tnum").TextColor(pal.textMuted).SingleLine()
 		} else {
@@ -450,8 +471,17 @@ func (a *App) pdfBar(c *ui.Context, pal *palette, l *fileLook) {
 		if pd.fitPage {
 			fit, fitIcon = "Fit the width (z)", collapseIcon
 		}
-		iconButton(c, "pdf-fit", fitIcon, fit, pal, func() { pd.fitPage = !pd.fitPage; pd.zoomK = 1 })
+		iconButton(c, "pdf-fit", fitIcon, fit, pal, func() { a.pdfFit(l) })
 	})
+}
+
+// pdfFit goes between fit to the width and fit to the page, the page in
+// view staying in view.
+func (a *App) pdfFit(l *fileLook) {
+	pd := l.pdf
+	page := pd.page
+	pd.fitPage, pd.zoomK = !pd.fitPage, 1
+	jumpTo(&pd.scroll, 0, pd.pageTop(page, pd.ptScale())-pagePad/2)
 }
 
 // lookGoTo opens the field for a page, or a line of a large text.

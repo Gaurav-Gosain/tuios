@@ -61,7 +61,8 @@ func (a *App) startMD(l *fileLook) {
 				m.err = err.Error()
 				return
 			}
-			m.src = strings.ToValidUTF8(string(data), "�")
+			m.src = strings.ToValidUTF8(string(data), "\uFFFD")
+			l.mark("read")
 		})
 	}()
 }
@@ -202,6 +203,9 @@ func docImages(dir string) func(url string) (ui.ImageSource, error) {
 		pic, err := preview.DecodeImage(context.Background(), p, 2048)
 		if err != nil {
 			return nil, err
+		}
+		if pic.Img != nil {
+			return packBitmap(pic.Img)
 		}
 		return bitmapOf(pic)
 	}
@@ -433,7 +437,8 @@ func (a *App) startBig(l *fileLook) {
 	b.tf = tf
 	ctx := l.ctx
 	go func() {
-		_ = tf.Index(ctx, func() { a.update(func() {}) })
+		_ = tf.Index(ctx, func() { a.update(func() { l.mark("first lines") }) })
+		a.update(func() { l.mark("indexed") })
 	}()
 }
 
@@ -473,7 +478,8 @@ func (a *App) bigView(c *ui.Context, pal *palette, l *fileLook) {
 				}
 				spans := bigSpans(line, q, fold, pal, mono)
 				t := ui.RichText(c, spans...).MinWidth(0).Grow(1)
-				if !b.wrap {
+				// The line of the match wraps, so the match shows.
+				if !b.wrap && int64(i) != b.hit {
 					t.SingleLine()
 				}
 			})
@@ -541,9 +547,11 @@ func (a *App) bigPrompt(c *ui.Context, pal *palette, l *fileLook) {
 				}
 			}
 			b.prompt = promptNone
+			a.focusViewer()
 		}
 		if in.Shortcut(0, ui.KeyEscape) {
 			b.prompt = promptNone
+			a.focusViewer()
 		}
 		if b.searching {
 			ui.Spinner(c).Size(14, 14)

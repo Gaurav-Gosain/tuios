@@ -576,6 +576,9 @@ func (a *App) loadFile(cl *client.Client, fv *fileView, stamp string) {
 				return
 			}
 			a.showFile(fv, data)
+			if fv.look != nil {
+				fv.look.mark("text shown")
+			}
 		})
 	}()
 }

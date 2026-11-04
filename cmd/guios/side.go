@@ -258,6 +258,17 @@ func (a *App) closeView(s *proto.Session) {
 	})
 }
 
+// focusFiles gives the Files tree the keyboard, on its cursor or the file
+// the viewer shows.
+func (a *App) focusFiles() {
+	if s := a.session(a.selected); s != nil {
+		if v := a.viewOf(s); v != nil && v.file != nil && a.side.files.cursor == "" {
+			a.side.files.cursor = v.file.path
+		}
+	}
+	a.paneRef("files-tree").Focus()
+}
+
 // focusViewer gives the viewer the keyboard, as it comes if it has yet to:
 // a click that opens it leaves the keyboard with no one, where Close would
 // take the pane beside it.
@@ -411,9 +422,14 @@ func (a *App) viewerCard(c *ui.Context, pal *palette, s *proto.Session, v *sideV
 		a.lookKeys(card, v, v.file.look)
 	}
 	if card.Shortcut(0, ui.KeyEscape) {
-		if v.full {
+		switch {
+		case v.full:
 			v.full = false
-		} else {
+		case v.kind == sideFiles && a.rightShown() && a.sideTab() == sideFiles:
+			// Back to the list the file came from, as the TUI's quick
+			// look goes back from inside the file.
+			a.focusFiles()
+		default:
 			a.focusTerminal()
 		}
 	}
