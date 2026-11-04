@@ -95,12 +95,6 @@ func button(c *ui.Context, key, label, keys string, primary bool, pal *palette) 
 	return sizedButton(c, key, label, keys, primary, hControl, rControl, pal)
 }
 
-// defaultButton is button, focused when its dialog first appears, so that
-// Return presses it.
-func defaultButton(c *ui.Context, key, label, keys string, primary bool, pal *palette) bool {
-	return sizedButtonAt(c, key, label, keys, primary, hControl, rControl, pal, true)
-}
-
 // fieldButton is a button beside a text field, of the field's height and
 // corners, as a form's Add.
 func fieldButton(c *ui.Context, key, label string, primary bool, pal *palette) bool {

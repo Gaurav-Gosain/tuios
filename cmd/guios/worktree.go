@@ -49,13 +49,14 @@ func (a *App) worktreeView(c *ui.Context, pal *palette) {
 	ui.DialogBase(c.Key("worktree"), &w.open, func(backdrop, panel ui.Element) {
 		dialogMotion(backdrop, panel)
 		backdrop.Background(pal.overlay)
-		floating(panel.Width(420).Padding(22).Gap(8).Radius(14).Background(pal.popover), pal).Label(locales.WorktreeTitle())
-		ui.Text(c, locales.WorktreeTitle()).FontSize(15).FontWeight(650).TextColor(pal.text)
+		ww, _ := c.Size()
+		floating(panel.Width(min(dialogW, ww-2*sp4)).Padding(sp5).Gap(sp2).Radius(rSheet).Background(pal.popover), pal).Label(locales.WorktreeTitle())
+		ui.Text(c, locales.WorktreeTitle()).FontSize(fsTitle).FontWeight(wSemibold).TextColor(pal.text).SingleLine()
 		detail := locales.WorktreeDetailDefault()
 		if w.p.Base == "HEAD" {
 			detail = locales.WorktreeDetailCurrent()
 		}
-		ui.Text(c, detail).FontSize(13).TextColor(pal.textMuted).LineHeight(1.4)
+		ui.Text(c, detail).FontSize(fsBody).TextColor(pal.textMuted).LineHeight(1.4)
 		ui.Row(c).Margin(8, 0, 0, 0).Children(func() {
 			in := textField(c, "branch", &w.branch, locales.WorktreeBranch(), 0, pal)
 			in.AutoFocus()

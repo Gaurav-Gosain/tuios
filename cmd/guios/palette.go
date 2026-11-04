@@ -504,19 +504,21 @@ func (a *App) paletteView(c *ui.Context, pal *palette) {
 			none = locales.PaletteNoConversations()
 		}
 	}
-	// As wide as the window lets it be, up to 640.
-	width := float32(640)
-	if w, _ := c.Size(); w > 0 {
-		width = min(width, w-32)
+	// As wide as the window lets it be, up to paletteW, at 12 % of its
+	// height.
+	ww, wh := c.Size()
+	width := float32(paletteW)
+	if ww > 0 {
+		width = min(width, ww-2*sp4)
 	}
 	ui.DialogBase(c.Key("palette"), &a.pal.open, func(backdrop, panel ui.Element) {
 		dialogMotion(backdrop, panel)
-		backdrop.Background(pal.overlay).Justify(ui.Start).Padding(84, 0, 0, 0)
-		floating(panel.Width(width).MaxHeight(480).Radius(14).Background(pal.popover), pal).Clip().
+		backdrop.Background(pal.overlay).Justify(ui.Start).Padding(max(wh*0.12, 40), 0, 0, 0)
+		floating(panel.Width(width).MaxHeight(min(480, wh*0.7)).Radius(rSheet).Background(pal.popover), pal).Clip().
 			Label(label)
-		ui.Row(c).Height(50).Shrink(0).Padding(0, 16).Gap(10).AlignItems(ui.Center).Children(func() {
-			ui.Icon(c, searchIcon).Size(16, 16).TextColor(pal.textMuted)
-			in := ui.TextInputBase(c.Key("q"), &a.pal.query).Grow(1).FontSize(15).Placeholder(placeholder).AutoFocus()
+		ui.Row(c).Height(44).Shrink(0).Padding(0, sp4).Gap(10).AlignItems(ui.Center).Children(func() {
+			ui.Icon(c, searchIcon).Size(16, 16).TextColor(pal.textMuted).Shrink(0)
+			in := ui.TextInputBase(c.Key("q"), &a.pal.query).Grow(1).MinWidth(0).FontSize(fsProse).Placeholder(placeholder).AutoFocus()
 			if in.Changed() {
 				a.pal.index, a.pal.reveal = 0, true
 			}
@@ -534,12 +536,13 @@ func (a *App) paletteView(c *ui.Context, pal *palette) {
 				chosen = items[a.pal.index].run
 			}
 		})
+		ui.Box(c).Height(1).Shrink(0).Background(pal.divider)
 		list := a.pal.scroll.track(c, ui.Scroll(c.Key("results"))).Grow(1).MinHeight(0).Padding(6)
 		reveal := a.pal.reveal
 		a.pal.reveal = false
 		list.Children(func() {
 			if len(items) == 0 {
-				ui.Text(c, none).FontSize(13).TextColor(pal.textFaint).Padding(12, 12).LineHeight(1.4)
+				ui.Text(c, none).FontSize(fsBody).TextColor(pal.textFaint).Padding(12, 12).LineHeight(1.4).MaxLines(3)
 			}
 			lastKind := -1
 			for i, it := range items {
@@ -547,13 +550,13 @@ func (a *App) paletteView(c *ui.Context, pal *palette) {
 				// Headers only over the list as it is, with nothing typed:
 				// a ranked list would split into runs under them.
 				if kind != lastKind && a.pal.query == "" && !a.pal.only {
-					ui.Text(c, paletteGroups[kind]()).FontSize(11.5).FontWeight(600).TextColor(pal.textFaint).
+					ui.Text(c, paletteGroups[kind]()).FontSize(fsSmall).FontWeight(wMedium).TextColor(pal.textFaint).
 						SingleLine().Padding(10, 10, 4, 10)
 				}
 				lastKind = kind
-				row := ui.Row(c.Key(i)).Height(38).Padding(0, 10).Gap(10).AlignItems(ui.Center).Radius(8)
+				row := ui.Row(c.Key(i)).Height(hRow+2).Padding(0, 10).Gap(10).AlignItems(ui.Center).Radius(rRow)
 				if i == a.pal.index {
-					row.Background(pal.accent.Alpha(0.12))
+					row.Background(pal.accent.Alpha(0.15))
 					if reveal {
 						row.ScrollIntoView()
 					}
@@ -579,10 +582,12 @@ func (a *App) paletteView(c *ui.Context, pal *palette) {
 						ui.Icon(c, returnIcon).Size(14, 14).TextColor(pal.textFaint)
 					}
 					// One line each: the title gives way to its keys, the
-					// detail to both.
-					ui.RichText(c, paletteSpans(it.title, it.hits, pal)...).FontSize(13.5).TextColor(pal.text).
+					// detail to both, and takes at most 45 % of the row (T3
+					// Code's palette caps it so).
+					ui.RichText(c, paletteSpans(it.title, it.hits, pal)...).FontSize(fsBody).TextColor(pal.text).
 						SingleLine().Ellipsis("…").Shrink(1).MinWidth(48).MaxWidth(320)
-					ui.Text(c, it.detail).FontSize(12.5).TextColor(pal.textFaint).SingleLine().Ellipsis("…").Grow(1).Shrink(4).MinWidth(0)
+					oneLine(c, it.detail, fsSmall, 0).TextColor(pal.textFaint).Shrink(4).MaxWidthPercent(45)
+					ui.Spacer(c)
 					for _, k := range it.keys {
 						if k != "" {
 							kbd(c, pal, k)
@@ -615,21 +620,26 @@ func confirmDialog(c *ui.Context, pal *palette, pending **confirmation) bool {
 	ui.DialogBase(c.Key("confirm"), &cf.open, func(backdrop, panel ui.Element) {
 		dialogMotion(backdrop, panel)
 		backdrop.Background(pal.overlay)
-		width := float32(380)
+		width := float32(dialogW)
 		if cf.alt != "" {
-			width = 460 // room for a third button
+			width = 480 // room for a third button
 		}
-		floating(panel.Width(width).Padding(22).Gap(8).Radius(14).Background(pal.popover), pal).Label(cf.title)
-		ui.Text(c, cf.title).FontSize(15).FontWeight(650).TextColor(pal.text)
-		ui.Text(c, cf.detail).FontSize(13).TextColor(pal.textMuted).LineHeight(1.4)
-		ui.Row(c).Gap(8).Justify(ui.End).Margin(14, 0, 0, 0).Children(func() {
+		ww, _ := c.Size()
+		floating(panel.Width(min(width, ww-2*sp4)).Padding(sp5).Gap(sp2).Radius(rSheet).Background(pal.popover), pal).Label(cf.title)
+		ui.Text(c, cf.title).FontSize(fsTitle).FontWeight(wSemibold).TextColor(pal.text).MaxLines(2)
+		ui.Text(c, cf.detail).FontSize(fsBody).TextColor(pal.textMuted).LineHeight(1.45).MaxLines(5)
+		ui.Row(c).Gap(sp2).Justify(ui.End).Margin(sp3, 0, 0, 0).Wrap().Children(func() {
 			if button(c, "cancel", locales.CommonCancel(), "esc", false, pal) {
 				cf.open = false
 			}
 			if cf.alt != "" && button(c, "alt", cf.alt, "", false, pal) {
 				alt = true
 			}
-			if defaultButton(c, "ok", cf.action, "↵", true, pal) || c.Shortcut(0, ui.KeyEnter) {
+			kind := btnPrimary
+			if cf.destroy {
+				kind = btnDanger
+			}
+			if kindButton(c, "ok", cf.action, "↵", kind, hControl, rControl, pal, true) || c.Shortcut(0, ui.KeyEnter) {
 				run = true
 			}
 		})
