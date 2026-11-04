@@ -2,20 +2,6 @@ package federation
 
 import "strings"
 
-// masterNameLen is the length of the name ssh's %C gives a master socket:
-// a SHA-1 in hex.
-const masterNameLen = 40
-
-// reuseArgs are the options that make ssh use a live master in dir and
-// otherwise connect as it always did: ControlMaster=no never opens a master
-// and never fails for want of one.
-func reuseArgs(dir string) []string {
-	return []string{
-		"-o", "ControlMaster=no",
-		"-o", "ControlPath=" + dir + "/%C",
-	}
-}
-
 // staleMasterPrefix starts the line ssh prints when it finds a socket in
 // SharedMasterDir that no master answers on, a master that has exited:
 // "Control socket connect(<path>): Connection refused". ssh then connects
