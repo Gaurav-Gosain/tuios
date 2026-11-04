@@ -117,10 +117,50 @@ func (a *App) guessSplit(s *proto.Session, p proto.CreateParams) {
 	holdLeases(motionLayout.Duration + 40*time.Millisecond)
 }
 
-// tileKey names one value a pane's rectangle animates by.
-type tileKey struct {
-	pane string
-	at   byte // x, y, w or h
+// tileAnim is a pane's rectangle on its way from one place to another,
+// on motionLayout's curve. guios eases it itself, not with AnimateTo: the
+// move ends in the frame whose rectangle rounds to the target, so no frame
+// after the last change asks to be drawn.
+type tileAnim struct {
+	from, cur, to frac
+	start         time.Time
+}
+
+// step moves the rectangle to where it is at now, in an area of ew x eh
+// DIPs, and returns how far it still has to go, 0 when it is there.
+func (t *tileAnim) step(now time.Time, instant bool, ew, eh float64) float64 {
+	if t.cur == t.to {
+		return 0
+	}
+	k := float64(now.Sub(t.start)) / float64(motionLayout.Duration)
+	if instant || k >= 1 {
+		t.cur = t.to
+		return 0
+	}
+	e := float64(easeOut(float32(max(k, 0))))
+	lerp := func(a, b float64) float64 { return a + (b-a)*e }
+	t.cur = frac{lerp(t.from.x, t.to.x), lerp(t.from.y, t.to.y), lerp(t.from.w, t.to.w), lerp(t.from.h, t.to.h)}
+	d := max(math.Abs(t.to.x-t.cur.x)*ew, math.Abs(t.to.y-t.cur.y)*eh,
+		math.Abs(t.to.w-t.cur.w)*ew, math.Abs(t.to.h-t.cur.h)*eh)
+	if d < 0.5 {
+		// Within half a DIP of the target: drawn there, it rounds to it.
+		t.cur = t.to
+		return 0
+	}
+	return d
+}
+
+// progress is how far the rectangle is from its start to its target, 0
+// to 1.
+func (t *tileAnim) progress() float32 {
+	if t.cur == t.to {
+		return 1
+	}
+	span := math.Abs(t.to.w-t.from.w) + math.Abs(t.to.h-t.from.h) + math.Abs(t.to.x-t.from.x) + math.Abs(t.to.y-t.from.y)
+	if span == 0 {
+		return 1
+	}
+	return float32(1 - (math.Abs(t.to.w-t.cur.w)+math.Abs(t.to.h-t.cur.h)+math.Abs(t.to.x-t.cur.x)+math.Abs(t.to.y-t.cur.y))/span)
 }
 
 // tiled draws the panes of s: the split tree, the zoomed pane over it, or
@@ -175,28 +215,45 @@ func (a *App) tiled(c *ui.Context, pal *palette, bar ui.TitleBar, shown float32,
 	// The rectangles this frame shows: each value on its way to the
 	// target. A pane new to the tree starts in its slot.
 	shownAt := map[string]frac{}
-	moving := false
+	now := c.Now()
+	instant := c.Instant() || c.Preferences().ReduceMotion || b.W <= 0
+	if a.motion.tiles == nil {
+		a.motion.tiles = map[string]*tileAnim{}
+	}
+	var left float64 // the largest distance still to go, in DIPs
 	for id, t := range target {
 		// Shown, if under the zoomed pane: back from zoom, it is no pane
 		// new to the tree.
 		a.motion.notePane(id)
-		if f, ok := from[id]; ok {
-			area.Jump(tileKey{id, 'x'}, float32(f.x))
-			area.Jump(tileKey{id, 'y'}, float32(f.y))
-			area.Jump(tileKey{id, 'w'}, float32(f.w))
-			area.Jump(tileKey{id, 'h'}, float32(f.h))
+		an := a.motion.tiles[id]
+		f, fresh := from[id]
+		switch {
+		case an == nil && !fresh:
+			an = &tileAnim{cur: t, to: t}
+		case an == nil || fresh:
+			an = &tileAnim{from: f, cur: f, to: t, start: now}
+		case an.to != t:
+			// Retargeted on the way: on from where it shows.
+			an.from, an.to, an.start = an.cur, t, now
 		}
-		r := frac{
-			float64(area.AnimateTo(tileKey{id, 'x'}, float32(t.x), motionLayout)),
-			float64(area.AnimateTo(tileKey{id, 'y'}, float32(t.y), motionLayout)),
-			float64(area.AnimateTo(tileKey{id, 'w'}, float32(t.w), motionLayout)),
-			float64(area.AnimateTo(tileKey{id, 'h'}, float32(t.h), motionLayout)),
-		}
-		shownAt[id] = r
-		if r != t {
-			moving = true
+		a.motion.tiles[id] = an
+		left = max(left, an.step(now, instant, ew, eh))
+		shownAt[id] = an.cur
+	}
+	for id := range a.motion.tiles {
+		if _, ok := target[id]; !ok {
+			delete(a.motion.tiles, id)
 		}
 	}
+	moving := left > 0
+	if moving {
+		c.AnimationFrame()
+	} else if a.motion.moved {
+		// The last frame of the move: the terminals take their new size
+		// in it, not in frames of their own after it.
+		releaseLeases()
+	}
+	a.motion.moved = moving
 	if g != nil {
 		a.motion.guess = guessShown{g.id, shownAt[g.id]}
 	}
@@ -237,7 +294,18 @@ func (a *App) tiled(c *ui.Context, pal *palette, bar ui.TitleBar, shown float32,
 	const eps = 1e-6
 	// The panes under the zoomed one dim as it grows over them, and light
 	// up as it shrinks back: one fill, under the zoomed pane.
-	dim := area.AnimateTo("zoom-dim", b2f(zoomed != ""), motionLayout)
+	// It follows the zoomed pane's own move: no frame of its own after.
+	dim := float32(0)
+	if top := a.motion.top; top != "" {
+		if an := a.motion.tiles[top]; an != nil {
+			k := an.progress()
+			if zoomed != "" {
+				dim = k
+			} else {
+				dim = 1 - k
+			}
+		}
+	}
 	area.Children(func() {
 		for _, id := range order {
 			p := s.PaneByID(id)
