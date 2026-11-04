@@ -312,24 +312,37 @@ func (a *App) threadView(c *ui.Context, pal *palette, ag client.Agent) {
 		a.fetchThread(ag, true)
 		th = a.ck.threads[threadKey(ag)]
 	}
-	if th == nil {
-		return
-	}
+	// Every thread with no messages shows the same empty state, with its
+	// icon tile, whatever the reason (council round 1, visual 6).
 	switch {
+	case th == nil:
+		a.ckEmptyThread(c, pal, locales.CockpitNoTranscript(), locales.CockpitNoTranscriptDetail())
+		return
 	case len(th.items) == 0 && th.loading:
 		ui.Column(c).Grow(1).Center().Children(func() { ui.Spinner(c) })
 		return
 	case len(th.items) == 0 && th.err != "":
-		a.ckMessage(c, pal, th.err, locales.CockpitNoTranscriptDetail())
+		a.ckEmptyThread(c, pal, th.err, locales.CockpitNoTranscriptDetail())
 		return
 	case len(th.items) == 0:
-		a.ckMessage(c, pal, locales.CockpitThreadEmpty(), "")
+		a.ckEmptyThread(c, pal, locales.CockpitThreadEmpty(), "")
 		return
 	}
 	mono := a.termFamily()
 	list := ui.List(c.Key("thread-"+threadKey(ag)), &th.list, len(th.items))
 	th.scroll.track(c, list).Grow(1).MinHeight(0).Padding(18, a.ckSide(28), 22, a.ckSide(28)).Gap(14).Selectable().CopyData(copyThread).
 		Rows(func(r ui.ListRow) { a.itemView(r.Context, pal, th, &th.items[r.Index], mono) })
+}
+
+// threadIcon is a speech bubble, for a thread's empty state.
+var threadIcon = icon(`<path d="M3 3.5h10a1 1 0 0 1 1 1v6a1 1 0 0 1-1 1H8l-3 2.5v-2.5H3a1 1 0 0 1-1-1v-6a1 1 0 0 1 1-1z"/>`)
+
+// ckEmptyThread is a thread's empty state: it fills the tab's room, so
+// that a thread with nothing to show is never a blank column.
+func (a *App) ckEmptyThread(c *ui.Context, pal *palette, title, detail string) {
+	ui.Column(c.Key("thread-empty")).Grow(1).MinHeight(0).Children(func() {
+		emptyBlock(c, pal, threadIcon, title, detail, false, nil)
+	})
 }
 
 // itemView draws one chat item.
