@@ -56,6 +56,17 @@ const (
 func MediaFacts(ctx context.Context, path string) (Facts, error) {
 	if nativeFacts != nil {
 		if f, err := nativeFacts(ctx, path); err == nil {
+			// AVFoundation leaves out tags an ID3 or FLAC tag holds, as
+			// an MP3's year: the file's own tags fill them in.
+			if ByName(path) == Audio {
+				if t, ok := tagFacts(path); ok {
+					for k, v := range t.Tags {
+						if f.Tags[k] == "" {
+							f.Tags[k] = v
+						}
+					}
+				}
+			}
 			return f, nil
 		}
 	}
