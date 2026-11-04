@@ -101,14 +101,11 @@ func (m *OS) considerAgentAlert(w *terminal.Window, from, to string) {
 	// The silent baseline: the state this client first sees the pane in is
 	// one it found there, from the attach or the reconnect that built the
 	// pane, and its run raises nothing more. That is the state it moves out
-	// of, or the one it arrives in when it had none on this client yet. A run
-	// raises each keyed state once, so a repeated report of a state the run
-	// already alerted for, or a state seen again after an attach, is not news.
-	base := from
-	if base == "" {
-		base = to
-	}
-	m.agentAlertRuns.Baseline(w.ID, base, w.AgentCompletionSeq)
+	// of. A pane that had no state on this client found nothing: the state it
+	// arrives in is news, as a new agent's first error is. A run raises each
+	// keyed state once, so a repeated report of a state the run already
+	// alerted for, or a state seen again after an attach, is not news.
+	m.agentAlertRuns.Baseline(w.ID, from, w.AgentCompletionSeq)
 	if !m.agentAlertRuns.Due(w.ID, to, w.AgentCompletionSeq) {
 		return
 	}
