@@ -36,6 +36,9 @@ type ckReply struct {
 	box    ui.Handle
 	queued map[string][]ckQueued // by agent, as list-queued said
 	asked  map[string]bool       // the agents whose queue was read
+	// texts holds the whole text of each message this app queued, by its
+	// queue id, for Send now: list-queued gives only its first line.
+	texts map[string]string
 }
 
 // ckDraft is a message being written.
@@ -96,8 +99,16 @@ func (a *App) replyBox(c *ui.Context, pal *palette, ag client.Agent) {
 	ui.Column(c.Key("reply")).Shrink(0).Margin(0, a.ckSide(24), 16, a.ckSide(24)).Gap(8).Children(func() {
 		for _, q := range r.queued[ag.Key()] {
 			ui.Row(c.Key("q-"+q.ID)).Gap(8).AlignItems(ui.Center).Padding(6, 10).Radius(rControl).Background(ckGround(pal)).Children(func() {
-				ui.Text(c, locales.CockpitQueued()).FontSize(fsSmall).FontWeight(wMedium).TextColor(pal.textMuted).SingleLine().Shrink(0)
-				oneLine(c, q.Text, fsBody, 0).TextColor(pal.text).Grow(1)
+				ui.Column(c).Grow(1).MinWidth(0).Gap(2).Children(func() {
+					oneLine(c, q.Text, fsBody, 0).TextColor(pal.text)
+					// Why it waits, from the queue's state.
+					oneLine(c, ckQueuedWhy(q.State), fsSmall, 0).TextColor(pal.textMuted)
+				})
+				if full, ok := r.texts[q.ID]; ok && q.State != "delivering" {
+					if sizedButton(c, "now", locales.CockpitSendNowButton(), "", true, hControlSm, rControl, pal) {
+						a.sendQueuedNow(ag, q.ID, full)
+					}
+				}
 				if sizedButton(c, "cancel", locales.CockpitCancelQueued(), "", false, hControlSm, rControl, pal) {
 					a.cancelQueued(ag, q.ID)
 				}
@@ -313,12 +324,22 @@ func (a *App) sendReply(ag client.Agent, d *ckDraft, now bool) {
 	}
 	d.sending = true
 	go func() {
-		_, err := cl.Verb(verb, p, !now)
+		raw, err := cl.Verb(verb, p, !now)
 		a.update(func() {
 			d.sending = false
 			if err != nil {
 				a.toast(err.Error())
 				return
+			}
+			var q struct {
+				ID string `json:"id"`
+			}
+			if !now && jsonUnmarshal(raw, &q) == nil && q.ID != "" && len(d.images) == 0 {
+				r := &a.ck.reply
+				if r.texts == nil {
+					r.texts = map[string]string{}
+				}
+				r.texts[q.ID] = text
 			}
 			d.last = text
 			d.text, d.images = "", nil
@@ -353,6 +374,41 @@ func (a *App) fetchQueued(ag client.Agent) {
 				r.queued = map[string][]ckQueued{}
 			}
 			r.queued[ag.Key()] = out.Entries
+		})
+	}()
+}
+
+// ckQueuedWhy says why a queued message waits.
+func ckQueuedWhy(state string) string {
+	switch state {
+	case "delivering":
+		return locales.CockpitQueuedDelivering()
+	case "stalled":
+		return locales.CockpitQueuedStalled()
+	}
+	return locales.CockpitQueuedWaiting()
+}
+
+// sendQueuedNow takes a waiting message out of the queue and types it into
+// the pane now.
+func (a *App) sendQueuedNow(ag client.Agent, id, text string) {
+	cl := a.cockpitClient()
+	if cl == nil {
+		return
+	}
+	go func() {
+		_, err := cl.Verb("cancel-queued", map[string]any{"session": ag.Session, "window": ag.Window, "id": id}, true)
+		if err == nil {
+			_, err = cl.Verb("send-text", map[string]any{"session": ag.Session, "window": ag.Window, "text": text, "submit": true}, false)
+		}
+		a.update(func() {
+			if err != nil {
+				a.toast(err.Error())
+			} else {
+				delete(a.ck.reply.texts, id)
+				a.toast(locales.CockpitSentNow(ag.Name))
+			}
+			a.fetchQueued(ag)
 		})
 	}()
 }
