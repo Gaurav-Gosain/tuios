@@ -323,20 +323,23 @@ func (a *App) rightSidebar(c *ui.Context, pal *palette, s *proto.Session) {
 	}
 	ui.Row(c.Key("right-bar")).Height(topBar).Shrink(0).AlignItems(ui.Stretch).DragWindow().Children(func() {
 		ui.Row(c.Key("shown")).Width(shown).Shrink(0).AlignItems(ui.Stretch).ClipX().Children(func() {
-			ui.Row(c.Key("tabs")).Width(w).Shrink(0).AlignItems(ui.Center).Padding(0, 0, 0, 10).Gap(2).Children(func() {
-				// The tabs scroll sideways in a narrow bar, and the button
-				// that hides the sidebar stays whole beside them: it was
-				// cut to a sliver at 268 (council round 1, visual 20).
-				ui.ScrollHorizontal(c.Key("tab-row")).Shrink(1).MinWidth(0).Children(func() {
-					ui.Row(c).Gap(2).AlignItems(ui.Center).Children(func() {
-						a.tabButton(c, pal, sideChanges, locales.SideChanges(), tab)
-						a.tabButton(c, pal, sideFiles, locales.SideFiles(), tab)
-					})
+			// One budget for the bar: the tabs whole, then the button that
+			// hides the sidebar, which drops whole where both do not fit
+			// (the header's button, the menu and the key still hide it).
+			// The tabs never run under it (council round 2).
+			tabsW := 4 + natural(c, locales.SideChanges(), fsBody, wMedium) + natural(c, locales.SideFiles(), fsBody, wMedium) + 2*2*tabPad + 2 + 2
+			hideBtn := tabsW+sp1+hControl <= w
+			ui.Row(c.Key("tabs")).Width(w).Shrink(0).AlignItems(ui.Center).Padding(0, 0, 0, 4).Gap(2).Children(func() {
+				ui.Row(c).Gap(2).AlignItems(ui.Center).Shrink(0).Children(func() {
+					a.tabButton(c, pal, sideChanges, locales.SideChanges(), tab)
+					a.tabButton(c, pal, sideFiles, locales.SideFiles(), tab)
 				})
 				ui.Spacer(c)
-				ui.Row(c).Shrink(0).Children(func() {
-					iconButton(c, "hide-right", sidebarRightIcon, a.tip(locales.RightSidebarHide(), "rightSidebar.toggle"), pal, a.toggleRight)
-				})
+				if hideBtn {
+					ui.Row(c).Shrink(0).Children(func() {
+						iconButton(c, "hide-right", sidebarRightIcon, a.tip(locales.RightSidebarHide(), "rightSidebar.toggle"), pal, a.toggleRight)
+					})
+				}
 			})
 		})
 	})
@@ -351,8 +354,11 @@ func (a *App) rightSidebar(c *ui.Context, pal *palette, s *proto.Session) {
 
 // tabButton is a tab of the sidebar, its own chosen as a session's row is,
 // in the same weight as the others.
+// tabPad is a sidebar tab's padding at each side.
+const tabPad = 8
+
 func (a *App) tabButton(c *ui.Context, pal *palette, id, label, tab string) {
-	b := ui.ButtonBase(c.Key("tab-"+id)).Height(26).Padding(0, 10).Radius(rRow).Center().Label(label)
+	b := ui.ButtonBase(c.Key("tab-"+id)).Height(26).Padding(0, tabPad).Radius(rRow).Center().Label(label)
 	if pal.dark {
 		// Room for the chosen tab's edge in every tab.
 		b.Border(1, ui.Transparent)
