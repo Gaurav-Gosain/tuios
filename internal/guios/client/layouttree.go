@@ -30,8 +30,8 @@ type treeInfo struct {
 	leaves    map[int]string
 	ls        layoutState
 	grid      layout.Rect // guios's pane area in cells (setGrid)
-	useTree   bool // the tree arranges the panes, and guios's changes go back to it
-	tui       bool // a TUI client is attached
+	useTree   bool        // the tree arranges the panes, and guios's changes go back to it
+	tui       bool        // a TUI client is attached
 	numWS     int
 	wsNames   map[int]string
 	wsOrder   []int
