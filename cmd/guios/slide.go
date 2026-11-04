@@ -2,6 +2,7 @@ package main
 
 import (
 	"math"
+	"slices"
 	"time"
 
 	"github.com/Gaurav-Gosain/mygo/plugins/terminal"
@@ -12,12 +13,18 @@ import (
 
 // A workspace switch slides: the panes of the workspace left go out to one
 // side as those of the one shown come in from the other, toward the left
-// for a higher number, on motionLayout's curve. Until the daemon has sent
-// the new workspace's panes and they have attached, the hold keeps the
-// last frame (workspaces.go); the slide starts as they show. The panes
-// left are drawn as they were, without their buttons, as one cached
-// bitmap clipped to the panes' area: they take no input and never draw
-// over the sidebar.
+// for a higher number, on motionLayout's curve.
+//
+// A switch to the workspace last left starts in the frame of the key: its
+// panes come in as they last showed (wsLeft keeps them and their
+// terminals), and the daemon's answer puts the live panes in their place
+// on the way. A switch to another workspace waits for the daemon: the hold
+// keeps the last frame until its panes have attached (workspaces.go), and
+// the slide starts as they show.
+//
+// The panes not live are drawn as they were, without their buttons, as
+// one cached bitmap clipped to the panes' area: they take no input, never
+// draw over the sidebar, and never resize their panes (gated.frozen).
 
 // wsSlide is a workspace switch on its way.
 type wsSlide struct {
@@ -26,12 +33,58 @@ type wsSlide struct {
 	dir   float32       // 1 when the panes go left
 	w, h  float32       // the panes' area as it showed, in DIPs
 	since time.Time     // when the switch came
-	shown time.Time     // when the panes of to first showed
+	shown time.Time     // when the slide began
+	// incoming is the workspace asked for, as it last showed, while the
+	// daemon has not answered: nil for a slide that waited for it.
+	incoming *proto.Session
+}
+
+// slideLead is how far a slide is on its way in its first frame: half a
+// frame, as the key came between frames.
+const slideLead = 8 * time.Millisecond
+
+// leaveWorkspace keeps old, the workspace the session leaves, and its
+// terminals, so that a switch back to it can start at once.
+func (a *App) leaveWorkspace(old proto.Session) {
+	if len(old.Panes) == 0 {
+		return
+	}
+	if a.wsLeft == nil {
+		a.wsLeft = map[string]proto.Session{}
+	}
+	a.wsLeft[old.ID] = old
+}
+
+// slideNow starts the switch of s to workspace n in this frame, if the
+// session left n last: its panes come in as they showed.
+func (a *App) slideNow(s *proto.Session, n int) {
+	left, ok := a.wsLeft[s.ID]
+	if !ok || left.Workspace != n || a.calm || len(s.Panes) == 0 || a.area.W <= 0 {
+		return
+	}
+	if a.slides == nil {
+		a.slides = map[string]*wsSlide{}
+	}
+	dir := float32(1)
+	if n < s.Workspace {
+		dir = -1
+	}
+	from := *s
+	from.Panes = slices.Clone(s.Panes)
+	from.Layout = s.Layout.Clone()
+	now := time.Now()
+	a.slides[s.ID] = &wsSlide{from: from, to: n, dir: dir, w: a.area.W + cardGap, h: a.area.H, since: now,
+		shown: now.Add(-slideLead), incoming: &left}
+	holdLeases(motionLayout.Duration)
 }
 
 // startSlide notes a switch of old's session to workspace to.
 func (a *App) startSlide(old proto.Session, to int) {
 	if a.calm || len(old.Panes) == 0 {
+		return
+	}
+	if sl := a.slides[old.ID]; sl != nil && sl.to == to && sl.incoming != nil {
+		// It began with the key: the daemon's answer goes on with it.
 		return
 	}
 	if a.slides == nil {
@@ -53,11 +106,16 @@ func (a *App) slideOf(c *ui.Context, s *proto.Session) (*wsSlide, float32) {
 	if sl == nil {
 		return nil, 1
 	}
-	if s.Workspace != sl.to {
+	if s.Workspace != sl.to && sl.incoming == nil {
 		// The hold shows the workspace left.
 		if time.Since(sl.since) > holdMax+time.Second {
 			delete(a.slides, s.ID) // another switch came first
 		}
+		return nil, 1
+	}
+	if sl.incoming != nil && s.Workspace != sl.to && time.Since(sl.since) > holdMax {
+		// The daemon never answered: the panes shown stay.
+		delete(a.slides, s.ID)
 		return nil, 1
 	}
 	if sl.w <= cardGap || c.Preferences().ReduceMotion || c.Instant() {
@@ -73,20 +131,25 @@ func (a *App) slideOf(c *ui.Context, s *proto.Session) (*wsSlide, float32) {
 	// Done once the panes are within half a DIP of their place: no frame
 	// after the last that moves them.
 	k := easeOut(min(max(t, 0), 1))
-	if t >= 1 || (1-k)*sl.w < 0.5 {
+	if (t >= 1 || (1-k)*sl.w < 0.5) && s.Workspace == sl.to {
 		delete(a.slides, s.ID)
 		return nil, 1
+	}
+	if t >= 1 {
+		// There, before the daemon's answer: the panes wait in place.
+		return sl, 1
 	}
 	c.AnimationFrame()
 	return sl, k
 }
 
-// slideOut draws the panes of the workspace left, k of the way out.
-func (a *App) slideOut(c *ui.Context, pal *palette, sl *wsSlide, k float32) {
-	s := &sl.from
-	out := ui.Box(c.Key("ws-out")).Absolute().Left(0).Top(0).Width(sl.w-cardGap).Height(sl.h).
-		Translate(-sl.dir*sl.w*k, 0).Cache().PassThrough()
-	ew, eh := float64(sl.w), float64(sl.h)+paneGap
+// frozenPanes draws the panes of s as they last showed, at x across the
+// area, w x h DIPs with the gap after it: no buttons, no input, one cached
+// bitmap, and no size of theirs goes to the daemon.
+func (a *App) frozenPanes(c *ui.Context, pal *palette, s *proto.Session, key string, x, w, h float32) {
+	out := ui.Box(c.Key(key)).Absolute().Left(0).Top(0).Width(w-cardGap).Height(h).
+		Translate(x, 0).Cache().PassThrough()
+	ew, eh := float64(w), float64(h)+paneGap
 	rects := map[string]frac{}
 	whole := frac{0, 0, 1, 1}
 	switch z := s.PaneByID(s.Zoomed); {

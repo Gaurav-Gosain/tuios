@@ -127,17 +127,23 @@ func (a *App) panes(c *ui.Context, pal *palette, bar ui.TitleBar, shown float32,
 	sl, k := a.slideOf(c, s)
 	if sl == nil {
 		a.area = a.paneRef("ws-area").Bounds(c)
-	}
-	if sl != nil {
+	} else {
 		area.Clip()
 	}
 	area.Children(func() {
-		if sl != nil {
-			a.slideOut(c, pal, sl, k)
-		}
 		ws := ui.Column(c.Key("ws-" + view)).Grow(1).Basis(0).MinWidth(0).MinHeight(0).AlignItems(ui.Stretch)
-		if sl != nil {
+		switch {
+		case sl == nil:
+		case s.Workspace == sl.to:
+			// The panes shown come in; those left go out, as they were.
+			a.frozenPanes(c, pal, &sl.from, "ws-out", -sl.dir*sl.w*k, sl.w, sl.h)
 			ws.Translate(sl.dir*sl.w*(1-k), 0)
+		default:
+			// The daemon has not answered yet: the panes still shown go
+			// out, and those of the workspace asked for come in as they
+			// last showed.
+			a.frozenPanes(c, pal, sl.incoming, "ws-in", sl.dir*sl.w*(1-k), sl.w, sl.h)
+			ws.Translate(-sl.dir*sl.w*k, 0)
 		}
 		a.workspacePanes(c, pal, bar, shown, s, right, ws)
 	})
