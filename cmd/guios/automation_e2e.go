@@ -24,7 +24,14 @@ import (
 	"github.com/egoist/mygo/plugins/terminal"
 )
 
-func init() { onNewApp = startProbe }
+func init() {
+	onNewApp = startProbe
+	// GUIOS_MOTION_SCALE slows the chrome's animations down, k times, to
+	// capture frames on the way.
+	if k, err := strconv.ParseFloat(os.Getenv("GUIOS_MOTION_SCALE"), 64); err == nil && k > 0 {
+		scaleMotion(k)
+	}
+}
 
 func startProbe(a *App) {
 	path := os.Getenv("GUIOS_PROBE")
@@ -97,6 +104,13 @@ func startProbe(a *App) {
 							got <- mygo.Clipboard.ReadText()
 						})
 						conn.Write([]byte(strconv.Quote(<-got) + "\n"))
+						continue
+					}
+					// "toast TEXT" shows a toast, for frames of one coming
+					// and going.
+					if t, ok := strings.CutPrefix(sc.Text(), "toast "); ok {
+						a.update(func() { a.toast(t); a.win.Invalidate() })
+						conn.Write([]byte("ok\n"))
 						continue
 					}
 					c, ok := strings.CutPrefix(sc.Text(), "count ")
