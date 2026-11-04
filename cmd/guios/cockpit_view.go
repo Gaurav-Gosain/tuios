@@ -445,6 +445,10 @@ func (a *App) ckRowView(c *ui.Context, pal *palette, r ckRow) {
 				ui.Spacer(c)
 				ui.Text(c, age).FontSize(fsSmall).TextColor(pal.textFaint).FontFeatures("tnum").SingleLine().Shrink(0)
 			})
+			if verb == "" && rest == "" && ag.Message == "" {
+				// An agent just started says its task until it reports.
+				rest = ck.spawnTasks[ag.Name]
+			}
 			if verb != "" || rest != "" {
 				ui.RichText(c, ckLine2Spans(pal, verb, flat(rest))...).FontSize(fsSmall).SingleLine().Ellipsis("…").MinWidth(0).Margin(0, 0, 0, 21)
 			} else {

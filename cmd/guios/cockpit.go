@@ -187,6 +187,11 @@ type cockpit struct {
 	// selectWhenSeen is the key of an agent just started: the list selects
 	// its row once it shows.
 	selectWhenSeen string
+	// selectName is the name of an agent being started, which the list
+	// selects as soon as its pane shows; spawnTasks the task of each, by
+	// name, which its row says until the agent reports.
+	selectName string
+	spawnTasks map[string]string
 	// cmp is the open comparison of a fan's attempts.
 	cmp *ckCompare
 	// newHover is the sidebar's New agent button under the pointer, so a
@@ -484,6 +489,15 @@ func (r ckRow) selectable() bool {
 // row of the same agent, else the first row that needs the person.
 func (a *App) ckClamp() {
 	ck := &a.ck
+	if n := ck.selectName; n != "" {
+		for _, r := range ck.rows {
+			if r.agent >= 0 && ck.agents[r.agent].Name == n && ck.agents[r.agent].Host == "" {
+				ck.selectName = ""
+				a.ckSelect(r)
+				return
+			}
+		}
+	}
 	if k := ck.selectWhenSeen; k != "" {
 		for _, r := range ck.rows {
 			if r.agent >= 0 && ck.agents[r.agent].Key() == k {

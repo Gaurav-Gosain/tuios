@@ -794,6 +794,18 @@ func (a *App) spawnStart() {
 		if s.session != "" {
 			params["session"] = s.session
 		}
+		// Named after the task, as a worktree's branch is: the row says
+		// what it works on from its first frame, not "Terminal 23a8…",
+		// and the agents view selects it as soon as its pane shows.
+		if name := strings.TrimPrefix(spawnBranchName(task), "agent/"); name != "" {
+			params["name"] = name
+			ck := &a.ck
+			if ck.spawnTasks == nil {
+				ck.spawnTasks = map[string]string{}
+			}
+			ck.spawnTasks[name] = flat(task)
+			ck.selectName = name
+		}
 	}
 	// The daemon takes the card in the call: start-agent opens the pane in
 	// the card's session and claims the card for it, and fan stamps the
