@@ -135,6 +135,25 @@ const syncFirstFunc = `first() { while IFS= read -r l; do case $l in /*) if [ -x
 // anything else is used as written.
 const syncResolveArg = `case $1 in -) a=$HOME/.local/bin/tuios;; H:*) a=$HOME/${1#H:};; *) a=$1;; esac`
 
+// syncServiceProbe says whether the machine has the daemon service of the
+// default server (tuios daemon install-service): svc=installed, svc=none, or
+// svc=unsupported where it has no service manager tuios knows. It reads the
+// files the service is written to, as service.Get does.
+const syncServiceProbe = `case $(uname -s) in Linux) if command -v systemctl >/dev/null 2>&1; then if [ -f "$HOME/.config/systemd/user/tuios-daemon.service" ] || [ -f "${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user/tuios-daemon.service" ]; then echo "svc=installed"; else echo "svc=none"; fi; else echo "svc=unsupported"; fi;; Darwin) if [ -f "$HOME/Library/LaunchAgents/dev.tuios.tuios-daemon.plist" ]; then echo "svc=installed"; else echo "svc=none"; fi;; *) echo "svc=unsupported";; esac`
+
+// syncServiceScript installs the daemon service with the binary in $1, as
+// syncResolveArg reads it. It prints what install-service said, one out=
+// line each, then svcok=1 or svcfail=1, and up=1 when a daemon answers.
+func syncServiceScript() string {
+	return strings.Join([]string{
+		syncResolveArg,
+		`if o=$("$a" daemon install-service </dev/null 2>&1); then r=svcok; else r=svcfail; fi`,
+		`echo "$o" | head -n 12 | while IFS= read -r l; do echo "out=$l"; done`,
+		`echo "$r=1"`,
+		`if "$a" daemon service-status --json </dev/null 2>/dev/null | grep -q '"daemon_pid"'; then echo "up=1"; fi`,
+	}, "; ")
+}
+
 // syncProbeScript reports what a machine has. $1 is the configured command
 // as syncCommandArg spells it, or "-" to look for tuios the way the link does.
 func syncProbeScript() string {
@@ -145,6 +164,7 @@ func syncProbeScript() string {
 		syncShaFunc,
 		`if [ "$1" = - ]; then ` + federation.FindBinaryScript() + `; else ` + syncResolveArg + `; p=$a; echo "configured=$p"; if [ -x "$p" ]; then :; else p=; fi; fi`,
 		`echo "path=$p"`,
+		syncServiceProbe,
 		`if [ -n "$p" ]; then if [ -L "$p" ]; then echo "symlink=1"; fi; if [ -w "$(dirname "$p")" ]; then echo "dirw=1"; fi; "$p" --version </dev/null 2>/dev/null | head -n 2 | while IFS= read -r l; do echo "ver=$l"; done; echo "sha=$(sum "$p")"; fi`,
 	}, "; ")
 }
@@ -333,6 +353,7 @@ func probeHostBinary(ctx context.Context, t *syncTarget) error {
 	t.symlink = f.has("symlink")
 	t.dirWritable = f.has("dirw")
 	t.sha = f.get("sha")
+	t.res.Service = f.get("svc")
 	if vers := f["ver"]; len(vers) > 0 {
 		t.res.Before, t.res.BeforeBackend = parseVersionLine(vers[0])
 	}

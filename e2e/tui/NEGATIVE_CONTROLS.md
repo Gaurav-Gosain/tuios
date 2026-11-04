@@ -7,6 +7,30 @@ below. Two of them are **not** caught here; that is written down rather than
 papered over, because a suite whose real coverage is unknown is worse than no
 suite.
 
+## The daemon service keeps what outlives the daemon, and stays stopped after kill-server
+
+`TestDaemonRunsAsAService` installs the daemon as a systemd user unit under a
+scratch server name, with every folder under the test's root. A pane starts a
+program with `setsid`. After `kill-server` the unit must be inactive (a clean
+stop does not restart it) and the program must still run. Then `start-server`
+must start the daemon through the unit, a SIGKILL must make systemd start it
+again, a live upgrade must keep the unit's main pid, and `uninstall-service`
+must remove the file and leave the daemon.
+
+Run on 2026-11-04 on Linux (systemd user manager). The two controls are this
+branch with one unit line changed, and the test's text check on that line
+taken out, so the behaviour is what fails:
+
+| Change | Failure |
+| --- | --- |
+| `KillMode=control-group` | `the pane program <pid> died with the daemon: the unit killed what outlived the daemon` |
+| `Restart=always` | `after kill-server the unit is "active", want inactive (a clean stop must not restart it)` |
+
+With the text check in place, the first control fails earlier with
+`the unit lacks "KillMode=process"`. Each step is in `transcript.txt` under
+`TUIOS_E2E_FRAMES`, in the test's folder. Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestDaemonRunsAsAService$' -v .`.
+
 ## A pasted path reads back in fish behind tmux
 
 `TestPastedPathReadsBackBehindTmux` types names with the path picker into fish

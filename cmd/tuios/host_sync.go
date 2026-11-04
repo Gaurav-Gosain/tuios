@@ -69,6 +69,7 @@ type syncOptions struct {
 	binary  string
 	restart bool
 	start   bool
+	service bool
 	yes     bool
 	dryRun  bool
 	json    bool
@@ -141,6 +142,11 @@ type syncResult struct {
 	// ApprovalURL is where the person approves the login, with
 	// "tailscale_check".
 	ApprovalURL string `json:"approval_url,omitempty"`
+	// Service is the daemon service on the host: "installed", "none",
+	// "unsupported", or empty when the probe did not say.
+	Service string `json:"service,omitempty"`
+	// ServiceInstalled says --service installed it in this run.
+	ServiceInstalled bool `json:"service_installed,omitzero"`
 }
 
 // syncTarget is one machine being worked on.
@@ -164,6 +170,7 @@ type syncTarget struct {
 	targetArg  string
 	restart    bool
 	start      bool
+	service    bool
 	oldArg     string
 	newVersion string
 	failed     bool
@@ -273,6 +280,11 @@ the command to restart them.
 with no tuios, sync installs tuios first and then starts the daemon. sync
 never starts a daemon where tuios is missing.
 
+--service installs the daemon service on each host that has none (see
+'tuios daemon install-service'). Then the daemon starts at boot, or at login
+on macOS, and runs after the ssh session ends. A host without the service
+gets a note with the command.
+
 --restart restarts each daemon whose version is different. First it lists the
 sessions and the panes with a running program on each host. Then it asks you
 to agree. Without a terminal, add --yes. A daemon with no sessions restarts
@@ -294,6 +306,9 @@ scripts/install.sh ghostty.`,
   # Install where tuios is missing, and start every daemon that is not running
   tuios hosts sync --start
 
+  # Start the daemon at boot on every host
+  tuios hosts sync --service
+
   # Install on two hosts, and restart their daemons
   tuios hosts sync build lab --restart
 
@@ -311,6 +326,7 @@ scripts/install.sh ghostty.`,
 	f.StringVar(&opts.binary, "binary", "", "Send this tuios binary")
 	f.BoolVar(&opts.restart, "restart", false, "Restart each daemon whose version is different")
 	f.BoolVar(&opts.start, "start", false, "Start the daemon on each host where it does not run")
+	f.BoolVar(&opts.service, "service", false, "Install the daemon service on each host that has none")
 	f.BoolVarP(&opts.yes, "yes", "y", false, "Restart without a question. Needed for --restart without a terminal")
 	f.BoolVar(&opts.dryRun, "dry-run", false, "Show the plan and change nothing")
 	f.BoolVar(&opts.json, "json", false, "Print the result as JSON")
@@ -744,6 +760,9 @@ func planSyncTarget(t *syncTarget, src *syncSource, opts syncOptions) {
 			}
 		}
 	}
+	if opts.service && t.res.Service == "none" {
+		t.service = true
+	}
 	if opts.start {
 		switch d.State {
 		case daemonStopped:
@@ -934,6 +953,7 @@ func applySyncTarget(t *syncTarget, src *syncSource) {
 		if t.restart {
 			restartResult(t, f)
 		}
+		installSyncService(t)
 		startSyncDaemon(t)
 		return
 	}
@@ -953,7 +973,50 @@ func applySyncTarget(t *syncTarget, src *syncSource) {
 		}
 		restartResult(t, f)
 	}
+	installSyncService(t)
 	startSyncDaemon(t)
+}
+
+// installSyncService installs the daemon service on a host that has none,
+// with the binary the host has now. When the service starts the daemon, the
+// start that --start asked for is done.
+func installSyncService(t *syncTarget) {
+	if !t.service || t.failed {
+		return
+	}
+	arg := t.oldArg
+	if t.res.Installed {
+		arg = t.res.InstallPath
+		if !federation.SafeRemoteArg(arg) {
+			arg = t.targetArg
+		}
+	}
+	if arg == "-" {
+		arg = t.targetArg
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), syncRestartTimeout)
+	defer cancel()
+	out, stderr, err := t.runner.run(ctx, syncServiceScript(), []string{arg}, nil)
+	f := parseSyncFacts(out)
+	said := strings.Join(f["out"], " ")
+	switch {
+	case f.has("svcok"):
+		t.res.ServiceInstalled = true
+		t.res.Service = "installed"
+		if said != "" {
+			t.note("The service: " + plainLine(said))
+		}
+		if f.has("up") && t.res.Daemon.State != daemonRunning {
+			t.start = false
+			t.res.Daemon.Started = true
+			t.res.Daemon.State = daemonRunning
+			t.res.Daemon.Version = t.res.After
+		}
+	case f.has("svcfail"):
+		t.note("The service was not installed. tuios on the host said: " + plainLine(said))
+	default:
+		t.note(remoteRunError("the service was not installed", stderr, err).Error())
+	}
 }
 
 // startSyncDaemon starts the daemon on a host where it does not run, with the
@@ -1075,6 +1138,14 @@ func finishSyncTarget(t *syncTarget, src *syncSource, opts syncOptions) {
 					cmp.Or(d.Version, "unknown"), plural.Count(d.SessionCount, "session"), plural.Word(d.SessionCount, "keeps", "keep"), r.RestartCommand))
 			}
 		}
+	}
+	switch {
+	case r.ServiceInstalled:
+		parts = append(parts, "service installed")
+	case opts.dryRun && t.service:
+		parts = append(parts, "would install service")
+	case r.Service == "none" && !opts.service:
+		t.note(fmt.Sprintf("The daemon does not start at boot. To install the service, run: tuios hosts sync %s --service", t.name))
 	}
 	if r.BeforeBackend == "ghostty" && t.install {
 		t.note("The old binary used the ghostty backend. The new one uses the pure Go backend.")

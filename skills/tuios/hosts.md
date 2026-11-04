@@ -18,6 +18,7 @@ tuios hosts signin build --print        # the Tailscale sign-in page build waits
 tuios hosts sync --dry-run --json      # which hosts run another tuios version
 tuios hosts sync --dev                  # install a build of this checkout on each host
 tuios hosts sync build --start          # install tuios if missing, then start the daemon
+tuios hosts sync build --service        # start the daemon at boot on build
 tuios ls --all-hosts
 tuios list-agents --all-hosts
 ```
@@ -51,6 +52,12 @@ one, and it starts nothing on a host with no tuios. `hosts sync NAME --start`
 installs tuios first on such a host, then starts the daemon. Both take
 `--dry-run` and `--json`. Starting a daemon ends nothing, so it needs no
 question.
+
+A daemon on a host ends when the host restarts, unless the daemon service is
+installed there. A `hosts sync --json` row has `"service": "none"` for such a
+host. `hosts sync NAME --service` installs it (`tuios daemon install-service`
+on that host). It ends nothing. On this machine, `tuios daemon
+service-status` shows it.
 
 The daemon follows each host's agents and Inbox over the link as they change, so
 `list-attention` and the person's Inbox cover every machine, and

@@ -1401,6 +1401,33 @@ tuios daemon-app uninstall [--path PATH]
 When the app is installed, each new daemon starts through it. Set
 `TUIOS_NO_DAEMON_APP=1` to start a daemon directly.
 
+### `tuios daemon install-service`
+
+Install the daemon as a service of your user: a systemd user unit on Linux, a
+launchd agent on macOS, a Task Scheduler task on Windows. The service starts
+the daemon at boot (Linux, with linger on) or at login, and again after a
+crash. See [Running the Daemon as a Service](SESSIONS.md#running-the-daemon-as-a-service).
+
+**Usage:**
+```bash
+tuios daemon install-service [--dry-run] [--binary PATH]
+tuios daemon service-status [--json]
+tuios daemon uninstall-service
+```
+
+**Flags of `install-service`:**
+- `--dry-run`: Show the service file and change nothing
+- `--binary <path>`: The tuios the service runs. The default is the tuios on `PATH`
+
+A daemon that runs now continues. It moves under the service when it starts
+again, for example after `tuios restart-server`. `uninstall-service` removes
+the service and leaves the daemon that runs now. When a service is installed,
+tuios starts each new daemon through it. Set `TUIOS_NO_SERVICE=1` to start a
+daemon directly.
+
+`service-status` shows the service, its state, the tuios it runs, linger on
+Linux, and whether the daemon that runs now is the service's.
+
 ### `tuios daemon upgrade`
 
 Upgrade the running daemon to another tuios binary in place, without ending any pane's program. Every pane's program keeps running with the same pid, the same terminal and the same screen, and the daemon keeps its pid. Live upgrades are experimental, opt-in, and macOS and Linux only.
@@ -4620,6 +4647,7 @@ tuios hosts sync --dev              # install a build of this checkout on every 
 tuios hosts sync build lab          # only these hosts
 tuios hosts sync build --restart    # install, then restart the daemon on build
 tuios hosts sync build --start      # install if needed, then start the daemon if it does not run
+tuios hosts sync --service          # install the daemon service on each host that has none
 tuios hosts sync --restart --yes --json
 ```
 
@@ -4630,6 +4658,7 @@ tuios hosts sync --restart --yes --json
 | `--binary PATH` | Send this binary. A host with a different system fails |
 | `--restart` | Restart each daemon whose version is different |
 | `--start` | Start the daemon on each host where it does not run |
+| `--service` | Install the daemon service on each host that has none. See `tuios daemon install-service` |
 | `--yes`, `-y` | Restart without a question. Needed for `--restart` without a terminal |
 | `--dry-run` | Show the plan and change nothing |
 | `--json` | Print the result as JSON |

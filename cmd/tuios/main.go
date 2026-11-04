@@ -510,6 +510,7 @@ run this command manually.`,
 	var daemonLogLevel string
 	var daemonNoRestore bool
 	var daemonAdoptFD int
+	var daemonService bool
 	daemonCmd := &cobra.Command{
 		Use:   "daemon",
 		Short: "Run the TUIOS daemon in the foreground",
@@ -542,6 +543,9 @@ Debug log levels:
 			if daemonAdoptFD > 0 {
 				return runAdoptingDaemon(daemonAdoptFD)
 			}
+			if daemonService {
+				return runServiceDaemon(daemonNoRestore)
+			}
 			return runDaemon(true, daemonNoRestore)
 		},
 	}
@@ -551,7 +555,12 @@ Debug log levels:
 	// descriptor of the manifest its predecessor wrote. See daemon_upgrade.go.
 	daemonCmd.Flags().IntVar(&daemonAdoptFD, adoptFDFlag, 0, "Adopt the panes a live upgrade handed over on this descriptor")
 	_ = daemonCmd.Flags().MarkHidden(adoptFDFlag)
-	daemonCmd.AddCommand(handoffAcceptsCommand(), handoffKeeperCommand(), daemonUpgradeCommand())
+	// Set only by the service that install-service writes. A live upgrade
+	// keeps it, since handoffArgs keeps the daemon's own arguments.
+	daemonCmd.Flags().BoolVar(&daemonService, "service", false, "A service manager started this daemon")
+	_ = daemonCmd.Flags().MarkHidden("service")
+	daemonCmd.AddCommand(handoffAcceptsCommand(), handoffKeeperCommand(), daemonUpgradeCommand(),
+		newDaemonInstallServiceCommand(), newDaemonUninstallServiceCommand(), newDaemonServiceStatusCommand())
 
 	var killRestart bool
 	killDaemonCmd := &cobra.Command{

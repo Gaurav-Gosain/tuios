@@ -89,6 +89,13 @@ var spawnDaemon = func() error { return startDaemonBackground() }
 // that starts a daemon on the way to attaching keeps its own --pprof, and
 // handing the address on would make the two processes race to bind it.
 func startDaemonBackground(daemonArgs ...string) error {
+	// An installed service starts the daemon, so the daemon runs under the
+	// service manager and not in the scope of this terminal. A start with
+	// arguments of its own cannot go through the service.
+	if len(daemonArgs) == 0 && startDaemonThroughService() {
+		return nil
+	}
+
 	// On macOS, the TUIOS Daemon app (when installed) starts the daemon, so
 	// its panes keep local network access after the terminal quits.
 	if handled, err := startDaemonThroughApp(daemonArgs); handled {
@@ -147,4 +154,18 @@ func startDaemonBackground(daemonArgs ...string) error {
 		return errors.New("the daemon exited immediately without taking the socket")
 	}
 	return fmt.Errorf("daemon did not start within %v", daemonStartTimeout)
+}
+
+// waitForDaemon waits up to timeout for a daemon to answer on the socket.
+func waitForDaemon(timeout time.Duration) bool {
+	deadline := time.Now().Add(timeout)
+	for {
+		if session.IsDaemonRunning() {
+			return true
+		}
+		if time.Now().After(deadline) {
+			return false
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
 }
