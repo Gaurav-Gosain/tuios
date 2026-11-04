@@ -25,8 +25,8 @@ replace tuios.dev/plot v0.2.3-0.20261101044251-193bbd706cd8 => ./plot
 
 replace tuios.dev/tml v0.1.2-0.20261101044251-193bbd706cd8 => ./tml
 
-replace tuios.dev/vt v0.3.3-0.20261101171432-b7643f25e058 => ./vt
-
 replace tuios.dev/loom v0.2.3-0.20261102100154-bb12b293c9c1 => ./loom
 
 replace tuios.dev/sketch v0.4.1-0.20261102100120-a0242ef25e1f => ./sketch
+
+replace tuios.dev/vt v0.3.3-0.20261104004556-4b7505bfc5bf => ./vt
