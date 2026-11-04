@@ -12191,3 +12191,13 @@ func FooterAgentsNeedYou(count int) string { return In(i18n.Locale()).FooterAgen
 func (msgs Messages) FooterAgentsNeedYou(count int) string {
 	return Catalog.Format(msgs.locale, "footerAgentsNeedYou", map[string]any{"count": count})
 }
+
+// CockpitThreadFailed says "The conversation did not load"
+// in the language the app shows.
+func CockpitThreadFailed() string { return In(i18n.Locale()).CockpitThreadFailed() }
+
+// CockpitThreadFailed says "The conversation did not load"
+// in the language of msgs.
+func (msgs Messages) CockpitThreadFailed() string {
+	return Catalog.Format(msgs.locale, "cockpitThreadFailed", nil)
+}

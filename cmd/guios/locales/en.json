@@ -2169,5 +2169,6 @@
         "type": "int"
       }
     }
-  }
+  },
+  "cockpitThreadFailed": "The conversation did not load"
 }

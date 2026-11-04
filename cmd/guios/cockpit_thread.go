@@ -41,8 +41,14 @@ type ckThread struct {
 	older   string
 	more    bool
 	loading bool
-	err     string
-	usedAt  time.Time
+	// loadedAt is when the read under way started: one that never
+	// answers does not keep the thread blank (ckReadStuck).
+	loadedAt time.Time
+	err      string
+	// failed says the last read failed for a cause a retry can fix, not
+	// for want of a transcript.
+	failed bool
+	usedAt time.Time
 
 	items []ckItem
 	list  ui.ListState
@@ -108,14 +114,14 @@ func (a *App) fetchThread(ag client.Agent, fresh bool) {
 		ck.threads[key] = th
 		a.dropOldThreads()
 		fresh = true
-	} else if fresh && th.cursor != "" {
+	} else if fresh && th.cursor != "" && th.err == "" {
 		fresh = false
 	}
 	th.agent, th.usedAt = ag, time.Now()
-	if th.loading {
+	if th.loading && time.Since(th.loadedAt) < ckReadStuck {
 		return
 	}
-	th.loading = true
+	th.loading, th.loadedAt = true, time.Now()
 	p := map[string]any{"session": ag.Session, "window": ag.Window, "limit": 400}
 	if !fresh && th.cursor != "" {
 		p["after"] = th.cursor
@@ -133,9 +139,10 @@ func (a *App) fetchThread(ag client.Agent, fresh bool) {
 			th.loading = false
 			if err != nil {
 				th.err = ckTranscriptError(err)
+				th.failed = th.err != locales.CockpitNoTranscript()
 				return
 			}
-			th.err = ""
+			th.err, th.failed = "", false
 			if page.Reset || p["after"] == nil {
 				th.entries = page.Entries
 				th.older, th.more = page.Older, page.More
@@ -180,6 +187,10 @@ func (a *App) fetchOlder(th *ckThread) {
 		})
 	}()
 }
+
+// ckReadStuck is how long a read of a thread may go unanswered before
+// the next selection or event reads again.
+const ckReadStuck = 5 * time.Second
 
 // ckTranscriptError says why a thread cannot be read, in the app's words.
 func ckTranscriptError(err error) string {
@@ -323,8 +334,18 @@ func (a *App) threadView(c *ui.Context, pal *palette, ag client.Agent) {
 	case th == nil:
 		a.ckEmptyThread(c, pal, locales.CockpitNoTranscript(), locales.CockpitNoTranscriptDetail())
 		return
-	case len(th.items) == 0 && th.loading:
+	case len(th.items) == 0 && th.loading && time.Since(th.loadedAt) < ckReadStuck:
+		// Look again when the read would count as stuck.
+		c.After(ckReadStuck - time.Since(th.loadedAt))
 		ui.Column(c).Grow(1).Center().Children(func() { ui.Spinner(c) })
+		return
+	case len(th.items) == 0 && (th.failed || th.loading):
+		// A read that failed says so, and offers another.
+		emptyBlock(c, pal, nil, locales.CockpitThreadFailed(), th.err, false, func() {
+			if button(c, "retry", locales.CommonTryAgain(), "", true, pal) {
+				a.fetchThread(ag, true)
+			}
+		})
 		return
 	case len(th.items) == 0 && th.err != "":
 		a.ckEmptyThread(c, pal, th.err, locales.CockpitNoTranscriptDetail())

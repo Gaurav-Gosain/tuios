@@ -1202,5 +1202,6 @@
   "cockpitSourceDetect": "正在运行的程序",
   "cockpitSourceTranscript": "对话记录",
   "cockpitSourceProgram": "程序状态",
-  "footerAgentsNeedYou": "{count} 个代理需要你"
+  "footerAgentsNeedYou": "{count} 个代理需要你",
+  "cockpitThreadFailed": "对话未能加载"
 }

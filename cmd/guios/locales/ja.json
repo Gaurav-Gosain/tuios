@@ -1202,5 +1202,6 @@
   "cockpitSourceDetect": "実行中のプログラム",
   "cockpitSourceTranscript": "トランスクリプト",
   "cockpitSourceProgram": "プログラムの状態",
-  "footerAgentsNeedYou": "{count} 個のエージェントが対応待ち"
+  "footerAgentsNeedYou": "{count} 個のエージェントが対応待ち",
+  "cockpitThreadFailed": "会話を読み込めませんでした"
 }
