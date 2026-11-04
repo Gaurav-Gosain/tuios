@@ -796,7 +796,9 @@ func (a *App) closePane(s *proto.Session, pane string, ask bool) {
 	a.dropTerm(pane)
 	a.dropWeb(pane)
 	a.call(pane, "pane.close", proto.IDParams{ID: pane}, nil)
-	a.focusTerminal()
+	// Once the panes left are built in their new layout: a pane that was
+	// in a split is a new element alone, which a focus given now misses.
+	a.defer_(a.focusTerminal)
 }
 
 func (a *App) zoomPane(s *proto.Session, pane string) {
