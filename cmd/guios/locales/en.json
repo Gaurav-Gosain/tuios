@@ -2221,5 +2221,21 @@
   "spawnCardLeftOut": "{id} was left out: {why}",
   "cockpitStartOnCard": "Start an agent on it",
   "cockpitKeysToList": "Keys go to the list. Press r to write.",
-  "cockpitWaitsAtPrompt": "This agent waits at a prompt on its screen. Text you send here waits for that."
+  "cockpitWaitsAtPrompt": "This agent waits at a prompt on its screen. Text you send here waits for that.",
+  "cockpitSentTo": "Sent to {name}.",
+  "@cockpitSentTo": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "cockpitYouTo": "You → {name}",
+  "@cockpitYouTo": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  }
 }

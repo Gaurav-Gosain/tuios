@@ -12433,3 +12433,23 @@ func CockpitWaitsAtPrompt() string { return In(i18n.Locale()).CockpitWaitsAtProm
 func (msgs Messages) CockpitWaitsAtPrompt() string {
 	return Catalog.Format(msgs.locale, "cockpitWaitsAtPrompt", nil)
 }
+
+// CockpitSentTo says "Sent to {name}."
+// in the language the app shows.
+func CockpitSentTo(name string) string { return In(i18n.Locale()).CockpitSentTo(name) }
+
+// CockpitSentTo says "Sent to {name}."
+// in the language of msgs.
+func (msgs Messages) CockpitSentTo(name string) string {
+	return Catalog.Format(msgs.locale, "cockpitSentTo", map[string]any{"name": name})
+}
+
+// CockpitYouTo says "You → {name}"
+// in the language the app shows.
+func CockpitYouTo(name string) string { return In(i18n.Locale()).CockpitYouTo(name) }
+
+// CockpitYouTo says "You → {name}"
+// in the language of msgs.
+func (msgs Messages) CockpitYouTo(name string) string {
+	return Catalog.Format(msgs.locale, "cockpitYouTo", map[string]any{"name": name})
+}

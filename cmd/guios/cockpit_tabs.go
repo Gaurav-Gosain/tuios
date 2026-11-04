@@ -632,6 +632,21 @@ func (a *App) mailCard(c *ui.Context, pal *palette, m *ckMail, msg ckMsg, in boo
 			m.md[mk] = blocks
 		}
 		a.markdownView(c, pal, blocks, mono)
+		if msg.To == "human" {
+			// The person's replies in its thread, so a reply sent shows.
+			for _, rep := range m.msgs {
+				if rep.Session == msg.Session && rep.Thread == msg.Thread && rep.From == "human" && rep.SentAt > msg.SentAt {
+					ui.Column(c.Key("rep-"+itoa(int(rep.ID)))).Gap(4).Margin(4, 0, 0, 0).Padding(8, 12).Radius(rControl).Background(pal.accent.Alpha(0.10)).Children(func() {
+						ui.Row(c).Gap(6).AlignItems(ui.Center).Children(func() {
+							ui.Text(c, locales.CockpitYouTo(rep.ToName)).FontSize(fsSmall).FontWeight(wSemibold).TextColor(pal.text)
+							ui.Spacer(c)
+							ui.Text(c, ago(rep.SentAt/int64(time.Millisecond), c.Now())).FontSize(fsSmall).TextColor(pal.textFaint)
+						})
+						ui.Text(c, rep.Text).FontSize(fsBody).TextColor(pal.text).MaxLines(6).Selectable()
+					})
+				}
+			}
+		}
 		r := ui.Row(c.Key("reply")).Cursor(ui.CursorPointer)
 		if r.Clicked() {
 			c.Invalidate()
@@ -680,6 +695,12 @@ func (a *App) sendMail(sess, to string, m *ckMail) {
 	if m.replyTo != 0 {
 		p["reply_to"] = m.replyTo
 	}
+	name := to
+	for _, msg := range m.msgs {
+		if msg.Session == sess && msg.From == to && msg.FromName != "" {
+			name = msg.FromName
+		}
+	}
 	go func() {
 		_, err := cl.Verb("send-agent-message", p, true)
 		a.update(func() {
@@ -688,7 +709,40 @@ func (a *App) sendMail(sess, to string, m *ckMail) {
 				return
 			}
 			m.draft, m.replyTo = "", 0
+			a.mailAnswered(sess, to, name)
+		})
+	}()
+}
+
+// mailAnswered follows a reply to an agent: the person's unread mail from
+// it is read now, so its count, the badge, its sidebar row and its Inbox
+// item go, and a toast says the reply went out.
+func (a *App) mailAnswered(sess, from, name string) {
+	cl := a.cockpitClient()
+	m := a.ck.tabs.mail
+	if cl == nil {
+		return
+	}
+	threads := map[int64]bool{}
+	if m != nil {
+		for i := range m.msgs {
+			msg := &m.msgs[i]
+			if msg.Session == sess && msg.From == from && msg.To == "human" && msg.Unread {
+				threads[msg.Thread] = true
+				msg.Unread = false // at once; the read confirms it
+			}
+		}
+	}
+	a.toast(locales.CockpitSentTo(name))
+	go func() {
+		for t := range threads {
+			// Not a peek: the person's inbox read marks the thread read,
+			// and the daemon closes its mail item.
+			_, _ = cl.Verb("read-agent-messages", map[string]any{"session": sess, "to": "human", "thread": t, "limit": 50}, false)
+		}
+		a.update(func() {
 			a.fetchMail()
+			a.refreshCockpit()
 		})
 	}()
 }

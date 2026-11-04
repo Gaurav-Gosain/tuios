@@ -278,8 +278,7 @@ func (a *App) sendBox(ag client.Agent, d *ckDraft, mail bool) {
 			if m != nil {
 				m.replyTo = 0
 			}
-			a.toast(locales.CockpitMailSent(ag.Name))
-			a.fetchMail()
+			a.mailAnswered(ag.Session, ag.Window, ag.Name)
 			a.ckAdvanceAfter(ag)
 		})
 	}()
