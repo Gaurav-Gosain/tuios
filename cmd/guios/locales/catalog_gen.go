@@ -10513,3 +10513,13 @@ func KeysWorkspaceQuery() string { return In(i18n.Locale()).KeysWorkspaceQuery()
 func (msgs Messages) KeysWorkspaceQuery() string {
 	return Catalog.Format(msgs.locale, "keysWorkspaceQuery", nil)
 }
+
+// KeysNest says "Every key goes to the pane now, {leader} too. Press {key} to leave."
+// in the language the app shows.
+func KeysNest(leader string, key string) string { return In(i18n.Locale()).KeysNest(leader, key) }
+
+// KeysNest says "Every key goes to the pane now, {leader} too. Press {key} to leave."
+// in the language of msgs.
+func (msgs Messages) KeysNest(leader string, key string) string {
+	return Catalog.Format(msgs.locale, "keysNest", map[string]any{"leader": leader, "key": key})
+}

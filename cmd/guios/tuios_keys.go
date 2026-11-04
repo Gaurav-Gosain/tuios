@@ -52,6 +52,8 @@ type tuiosKeys struct {
 	whichKey bool
 	path     string // config.toml, and its time when it was read
 	modTime  time.Time
+	// nestExit is the key that leaves nest mode.
+	nestExit string
 	// palette are the command palette's keys (palette_keys.go).
 	palette []keyChord
 
@@ -90,6 +92,10 @@ func (a *App) loadKeys() {
 	tk.leader = normKey(leader)
 	tk.literal = keyBytes(tk.leader)
 	tk.whichKey = cfg.Appearance.WhichKeyEnabled == nil || *cfg.Appearance.WhichKeyEnabled
+	tk.nestExit = normKey(cfg.Keybindings.NestExitKey)
+	if tk.nestExit == "" {
+		tk.nestExit = config.DefaultNestExitKey
+	}
 	tk.palette = append(paletteChords(cfg.Keybindings.Global["command_palette"], false),
 		paletteChords(cfg.Keybindings.GUI["command_palette"], true)...)
 	tk.path, tk.modTime = path, mod
@@ -246,6 +252,18 @@ func (a *App) keyDown(pane string, mods ui.Modifiers, key ui.Key) bool {
 	}
 	tk := &a.tk
 	k, ok := keyString(mods, key)
+	if a.nest {
+		// Nest mode: every key goes to the pane, the leader too, until the
+		// key that leaves it, as the TUI's prefix and Enter.
+		if ok && k == tk.nestExit {
+			a.nest = false
+			if a.win != nil {
+				a.win.Invalidate()
+			}
+			return true
+		}
+		return false
+	}
 	if !tk.live() {
 		if !ok {
 			return false
@@ -336,6 +354,11 @@ func (a *App) stepKey(k string) bool {
 		action = tk.reg.GetLayoutPrefixAction(k)
 	case "minimize":
 		action = tk.reg.GetMinimizePrefixAction(k)
+	case "labels":
+		// The panes' labels show: a number goes to that pane.
+		if n, err := strconv.Atoi(k); err == nil && n >= 0 && n <= 9 {
+			action = "prefix_select_" + k
+		}
 	}
 	repeats := menu == "" && action != "" && tk.reg.PrefixRepeats(action)
 	if tk.repeat.Load() != 0 && !repeats {
@@ -388,7 +411,7 @@ var nativeActions = map[string]bool{
 	"prefix_split_horizontal": true, "prefix_split_vertical": true, "split_horizontal": true, "split_vertical": true,
 	"prev_session": true, "next_session": true, "prefix_session_switcher": true, "goto_picker": true, "choose_tree": true,
 	"prefix_close_session": true, "prefix_command_palette": true, "prefix_settings": true, "prefix_keybinds": true,
-	"prefix_file_search": true, "prefix_selection": true, "prefix_help": true, "prefix_toggle_other_rail": true, "toggle_scratch": true, "prefix_agents_settings": true,
+	"prefix_file_search": true, "prefix_selection": true, "prefix_help": true, "nest": true, "display_panes": true, "prefix_toggle_spotlight": true, "prefix_toggle_other_rail": true, "toggle_scratch": true, "prefix_agents_settings": true,
 	"prefix_next_finished": true, "next_agent": true, "prev_agent": true, "prefix_jump_notif": true, "prefix_last_message": true,
 	"prefix_workspace_switcher": true, "paste_image": true, "paste_buffer": true, "choose_buffer": true,
 	"prefix_screenshot": true, "pick_path": true, "edit_scrollback": true, "prefix_rename_window": true, "window_prefix_rename": true, "workspace_prefix_rename": true, "set_note": true, "prefix_review": true, "prefix_inbox": true,
@@ -542,6 +565,19 @@ func (a *App) runKeyAction(action string) {
 	case "edit_scrollback":
 		a.editScrollback()
 		return
+	case "nest":
+		a.nest = true
+		a.loadKeys()
+		a.toast(locales.KeysNest(chordLabel(a.tk.leader), chordLabel(a.tk.nestExit)))
+	case "display_panes":
+		tk := &a.tk
+		tk.mu.Lock()
+		tk.menu, tk.since = "labels", time.Now()
+		tk.armed.Store(true)
+		tk.mu.Unlock()
+		return
+	case "prefix_toggle_spotlight":
+		a.spotlight = !a.spotlight
 	case "prefix_help":
 		if a.help.open {
 			a.help.open = false
@@ -699,7 +735,7 @@ func keysTitle(menu string) string {
 // as the TUI shows them, at the window's bottom right.
 func (a *App) keysCard(c *ui.Context, pal *palette) {
 	tk := &a.tk
-	if !tk.live() || tk.reg == nil || tk.repeat.Load() != 0 {
+	if !tk.live() || tk.reg == nil || tk.repeat.Load() != 0 || a.labelsShown() {
 		return
 	}
 	tk.mu.Lock()
@@ -799,4 +835,15 @@ func chordLabel(k string) string {
 		l = l[:i+1] + strings.ToUpper(l[i+1:])
 	}
 	return l
+}
+
+// labelsShown reports whether the panes show their labels (the prefix and
+// Q): the next number goes to that pane.
+func (a *App) labelsShown() bool {
+	if !a.tk.live() {
+		return false
+	}
+	a.tk.mu.Lock()
+	defer a.tk.mu.Unlock()
+	return a.tk.menu == "labels"
 }

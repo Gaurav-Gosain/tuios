@@ -285,12 +285,19 @@ func (a *App) paneCard(c *ui.Context, pal *palette, bar ui.TitleBar, shown float
 	if multi && !focused && !p.Browser() && a.set.DimUnfocused {
 		bg = pal.cardDim
 	}
+	// The spotlight (the prefix and B): the other panes all but go.
+	dim := float32(1)
+	if a.spotlight && multi && !focused {
+		dim = 0.28
+	}
 	card := ui.Column(c.Key("pane-" + p.ID)).Grow(1).Basis(0).MinWidth(0).MinHeight(0).Radius(rPane).Clip().Bind(a.paneRef("card-" + p.ID))
 	if !a.motion.growing[p.ID] {
 		card.Transition(paneTransition(p.ID))
 	}
 	if k := a.paneArrival(c, p.ID); k < 1 {
-		card.Opacity(k).Scale(0.96+0.04*k, 0.96+0.04*k)
+		card.Opacity(k*dim).Scale(0.96+0.04*k, 0.96+0.04*k)
+	} else if dim < 1 {
+		card.Opacity(dim)
 	}
 	paned(card.Background(card.AnimateColor("bg", bg, ui.Animation{Duration: dArrive})), pal)
 	hovered := card.Hovered()
@@ -807,6 +814,9 @@ func (a *App) paneTerminal(c *ui.Context, pal *palette, s *proto.Session, p *pro
 		case e != nil && e.term != nil:
 			ref := a.paneRef(p.ID)
 			terminal.View(c.Key("term"), e.term).Fill().Bind(ref)
+			if a.labelsShown() {
+				a.paneLabel(c, pal, s, p.ID)
+			}
 			if link, isPath, at := e.term.HoveredLink(); isPath {
 				a.imagePeek(p.ID, link, at, ref.Bounds(c))
 			}
@@ -1217,4 +1227,22 @@ func panesMoving() bool {
 	leaseHold.mu.Lock()
 	defer leaseHold.mu.Unlock()
 	return time.Now().Before(leaseHold.until)
+}
+
+// paneLabel is a pane's number over it while the labels show (the prefix
+// and Q): 1 for the first pane, 0 for the tenth.
+func (a *App) paneLabel(c *ui.Context, pal *palette, s *proto.Session, id string) {
+	n := -1
+	for i := range s.Panes {
+		if s.Panes[i].ID == id {
+			n = (i + 1) % 10
+		}
+	}
+	if n < 0 || len(s.Panes) > 10 {
+		return
+	}
+	ui.Box(c.Key("label")).Absolute().Left(0).Top(0).Right(0).Bottom(0).Center().Children(func() {
+		ui.Text(c, strconv.Itoa(n)).FontSize(64).FontWeight(700).TextColor(pal.popover).
+			Padding(4, 28).Radius(18).Background(pal.accent)
+	})
 }

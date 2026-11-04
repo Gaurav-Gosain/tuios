@@ -49,7 +49,7 @@ func paletteChords(keys []string, gui bool) []keyChord {
 // other key reaches the pane.
 func (a *App) paletteShortcuts(c *ui.Context) {
 	open := false
-	if a.keysOn() && !a.tk.live() {
+	if a.keysOn() && !a.tk.live() && !a.nest {
 		for _, k := range a.tk.palette {
 			open = c.Shortcut(k.mods, k.key) || open
 		}

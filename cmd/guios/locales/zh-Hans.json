@@ -1037,5 +1037,6 @@
   "keysBuffersLabel": "粘贴缓冲区",
   "keysScreenshotSaved": "截图已保存到 {path}。",
   "keysPickPathTitle": "输入文件的路径",
-  "keysWorkspaceQuery": "工作区"
+  "keysWorkspaceQuery": "工作区",
+  "keysNest": "现在所有按键都发送到窗格，{leader} 也是。按 {key} 退出。"
 }

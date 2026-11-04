@@ -167,6 +167,9 @@ type App struct {
 	// early are the keys typed into panes whose terminal is attaching
 	// (typeahead.go).
 	early map[string][]byte
+	// nest sends every key to the pane, the leader too, until the nest
+	// exit key; spotlight dims every pane but the one the user is in.
+	nest, spotlight bool
 	// prompt is an open one-line prompt (prompt.go), nil for none.
 	prompt *promptState
 	// help is the keys sheet (help.go).

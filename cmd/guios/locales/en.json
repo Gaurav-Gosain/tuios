@@ -1882,5 +1882,6 @@
   "keysBuffersLabel": "Paste a buffer",
   "keysScreenshotSaved": "Saved the screenshot to {path}.",
   "keysPickPathTitle": "Type the path of a file",
-  "keysWorkspaceQuery": "workspace"
+  "keysWorkspaceQuery": "workspace",
+  "keysNest": "Every key goes to the pane now, {leader} too. Press {key} to leave."
 }

@@ -1037,5 +1037,6 @@
   "keysBuffersLabel": "バッファを貼り付け",
   "keysScreenshotSaved": "スクリーンショットを {path} に保存しました。",
   "keysPickPathTitle": "ファイルのパスを入力",
-  "keysWorkspaceQuery": "ワークスペース"
+  "keysWorkspaceQuery": "ワークスペース",
+  "keysNest": "すべてのキーがペインに送られます ({leader} も)。{key} で終了します。"
 }
