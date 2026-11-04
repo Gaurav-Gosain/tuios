@@ -69,6 +69,10 @@ type Stream struct {
 	lease    [4]int
 	renewing bool
 	theme    *session.ViewerReport
+
+	// hist is where the history the terminal holds starts in the pane's
+	// (history.go).
+	hist history
 }
 
 // leaseRenew is how often a lease is sent again on a daemon without yield,
@@ -208,6 +212,10 @@ func (s *Stream) pane() *session.PaneStream {
 // Read gives the pane's bytes: the snapshot first, which paints the pane on
 // a reset terminal, then the output.
 func (s *Stream) Read(p []byte) (int, error) {
+	if len(s.buf) == 0 {
+		// The terminal wrote all it read before: a snapshot's bytes too.
+		s.hist.written()
+	}
 	for len(s.buf) == 0 {
 		kind, payload, err := s.pane().ReadFrame()
 		if err != nil {
@@ -218,11 +226,14 @@ func (s *Stream) Read(p []byte) (int, error) {
 			return 0, io.EOF
 		}
 		switch kind {
+		case session.PaneFrameHistory:
+			s.hist.idFrame(payload)
 		case session.PaneFrameSnapshot:
 			if len(payload) < 12 {
 				continue
 			}
 			cols, rows := int(binary.BigEndian.Uint16(payload[8:])), int(binary.BigEndian.Uint16(payload[10:]))
+			s.hist.snapshot()
 			if s.OnResized != nil {
 				s.OnResized(cols, rows)
 			}

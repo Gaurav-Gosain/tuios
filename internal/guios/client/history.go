@@ -1,0 +1,108 @@
+package client
+
+import (
+	"encoding/binary"
+	"encoding/json"
+	"sync"
+
+	"github.com/Gaurav-Gosain/mygo/plugins/terminal"
+)
+
+// historyFetch is how many rows one pane-history call asks for.
+const historyFetch = 1000
+
+// history follows where the history a pane's terminal holds starts in the
+// pane's history on the daemon. A snapshot brings the last 500 rows, and the
+// H frame before it the id of the first. As the view nears the top,
+// FetchHistory asks pane-history for the rows above it and adds them to the
+// terminal.
+type history struct {
+	mu sync.Mutex
+	// next is the id an H frame gave, for the snapshot after it.
+	next   int64
+	nextOK bool
+	// first is the id of the oldest history row the terminal holds; ok
+	// says it is known. A daemon without ids leaves it unknown. A resize
+	// does not: the daemon's emulator keeps its history at the width it
+	// was written at, and the rows fetched wrap at this terminal's width
+	// as they are written.
+	first int64
+	ok    bool
+	// gen counts snapshots, and unwritten says the terminal has not yet
+	// written the one read last: rows added before it would go.
+	gen       uint64
+	unwritten bool
+	// busy says a fetch runs, and done that the pane holds nothing older.
+	busy, done bool
+}
+
+// idFrame takes an H frame.
+func (h *history) idFrame(p []byte) {
+	if len(p) < 8 {
+		return
+	}
+	h.mu.Lock()
+	h.next, h.nextOK = int64(binary.BigEndian.Uint64(p)), true
+	h.mu.Unlock()
+}
+
+// snapshot takes an S frame: the terminal starts over with its rows.
+func (h *history) snapshot() {
+	h.mu.Lock()
+	h.first, h.ok = h.next, h.nextOK
+	h.nextOK, h.done, h.unwritten = false, false, true
+	h.gen++
+	h.mu.Unlock()
+}
+
+// written says the terminal wrote what it read before.
+func (h *history) written() {
+	h.mu.Lock()
+	h.unwritten = false
+	h.mu.Unlock()
+}
+
+// FetchHistory adds the pane's history rows above those t holds, when the
+// daemon gives row ids and has older rows. The terminal calls for it as
+// its view nears the top (terminal.Options.OnNearTop). It blocks on the
+// daemon: call it on a goroutine of its own.
+func (s *Stream) FetchHistory(t *terminal.Terminal) {
+	h := &s.hist
+	h.mu.Lock()
+	if t == nil || !h.ok || h.done || h.busy || h.unwritten {
+		h.mu.Unlock()
+		return
+	}
+	h.busy = true
+	before, gen := h.first, h.gen
+	h.mu.Unlock()
+	raw, err := s.c.verb("pane-history", map[string]any{"session": s.session, "window": s.window, "before": before, "count": historyFetch})
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.busy = false
+	var r struct {
+		Rows  string `json:"rows"`
+		First int64  `json:"first"`
+		Count int    `json:"count"`
+	}
+	if err == nil {
+		err = json.Unmarshal(raw, &r)
+	}
+	switch {
+	case err != nil:
+		// An older daemon, a pane without ids, or a lost link: until the
+		// next snapshot, the terminal keeps what it holds.
+		debugf("pane-history %s: %v", s.window, err)
+		h.ok = false
+		return
+	case r.Count == 0:
+		h.done = true
+		return
+	case h.gen != gen || h.unwritten || !h.ok:
+		return // the terminal started over meanwhile
+	}
+	// A full-screen program's screen shows: the next call adds them.
+	if _, err := t.PrependHistory([]byte(r.Rows)); err == nil {
+		h.first = r.First
+	}
+}

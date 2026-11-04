@@ -903,6 +903,13 @@ func (a *App) termOptions(id string, conn *gated) terminal.Options {
 			go conn.Claim()
 			return false
 		},
+		// The stream brings the last 500 rows of the pane's history: the
+		// rows above come as the view nears them.
+		OnNearTop: func() {
+			if t := a.termFor(id); t != nil {
+				go conn.FetchHistory(t)
+			}
+		},
 		OpenLink: func(link string) bool { return a.openLink(id, link) },
 		// An image alone on the clipboard pastes as the path of a file
 		// with it, which agents take as an image they attach.
