@@ -1006,5 +1006,7 @@
   "layoutSnapNeedsFloating": "ペインをスナップするには、タイル表示をオフにしてください。",
   "actionNewPane": "新しいペイン",
   "lookKindHTML": "HTML ページ",
-  "lookViewPage": "ページ"
+  "lookViewPage": "ページ",
+  "cockpitReadingPrompt": "tuios はまだ確認を読んでいます。もう一度キーを押してください。",
+  "cockpitAnswerFailed": "tuios は答えを送れませんでした。ペインを開いて答えてください。"
 }

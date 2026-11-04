@@ -10203,3 +10203,23 @@ func LookViewPage() string { return In(i18n.Locale()).LookViewPage() }
 func (msgs Messages) LookViewPage() string {
 	return Catalog.Format(msgs.locale, "lookViewPage", nil)
 }
+
+// CockpitReadingPrompt says "tuios is still reading the prompt. Press the key again."
+// in the language the app shows.
+func CockpitReadingPrompt() string { return In(i18n.Locale()).CockpitReadingPrompt() }
+
+// CockpitReadingPrompt says "tuios is still reading the prompt. Press the key again."
+// in the language of msgs.
+func (msgs Messages) CockpitReadingPrompt() string {
+	return Catalog.Format(msgs.locale, "cockpitReadingPrompt", nil)
+}
+
+// CockpitAnswerFailed says "tuios could not send the answer. Open the pane to answer it."
+// in the language the app shows.
+func CockpitAnswerFailed() string { return In(i18n.Locale()).CockpitAnswerFailed() }
+
+// CockpitAnswerFailed says "tuios could not send the answer. Open the pane to answer it."
+// in the language of msgs.
+func (msgs Messages) CockpitAnswerFailed() string {
+	return Catalog.Format(msgs.locale, "cockpitAnswerFailed", nil)
+}

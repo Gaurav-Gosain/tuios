@@ -1851,5 +1851,7 @@
   "layoutSnapNeedsFloating": "Turn tiling off to snap a pane.",
   "actionNewPane": "New pane",
   "lookKindHTML": "HTML page",
-  "lookViewPage": "Page"
+  "lookViewPage": "Page",
+  "cockpitReadingPrompt": "tuios is still reading the prompt. Press the key again.",
+  "cockpitAnswerFailed": "tuios could not send the answer. Open the pane to answer it."
 }

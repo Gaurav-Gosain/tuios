@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"slices"
 	"strings"
@@ -325,10 +326,15 @@ func (a *App) approvalCard(c *ui.Context, pal *palette, ag client.Agent, it sess
 				ck.fleetFocus.Focus()
 			}
 		}
-		ui.Row(c).Gap(8).AlignItems(ui.Center).Opacity(map[bool]float32{true: 1, false: 0.55}[settled]).Children(func() {
+		// The buttons wrap rather than cut the last in a narrow card.
+		ui.Row(c).Wrap().Gap(8).AlignItems(ui.Center).Opacity(map[bool]float32{true: 1, false: 0.55}[settled]).Children(func() {
 			opts := a.ckOptions(it, pk)
 			if len(opts) == 0 && (pk == nil || !pk.loading) {
-				ui.Text(c, locales.CockpitAnswerInPane()).FontSize(12.5).TextColor(pal.textMuted)
+				// Nothing here can answer it: say so, and offer the pane.
+				ui.Text(c, locales.CockpitAnswerInPane()).FontSize(12.5).TextColor(pal.textMuted).MinWidth(0)
+				if ag.Window != "" && sizedButton(c, "ans-open", locales.CockpitOpenPane(), "↵", true, 28, 7, pal) {
+					a.goToAgent(ag)
+				}
 			}
 			for _, o := range opts {
 				if sizedButton(c, "ans-"+o, ckDecisionWords(o), ckDecisionKey(o), o == "once", 28, 7, pal) {
@@ -465,6 +471,20 @@ func (a *App) ckAnswer(decision string, click bool) bool {
 		a.ckOpenReason()
 		return true
 	}
+	if !ckHeld(it) {
+		// A prompt on the pane's screen is answered only with the keys
+		// its harness's rule declares for it: with none read, a key
+		// would press nothing, and the daemon would refuse it.
+		pk := ck.peek
+		switch {
+		case pk == nil || pk.window != ag.Window || pk.loading:
+			a.toast(locales.CockpitReadingPrompt())
+			return true
+		case !slices.Contains(a.ckOptions(it, pk), decision):
+			a.toast(locales.CockpitAnswerInPane())
+			return true
+		}
+	}
 	rules := it.Risk
 	if !ckHeld(it) && ck.peek != nil {
 		rules = ck.peek.risk
@@ -534,7 +554,9 @@ func (a *App) ckSend(it session.AttentionItem, ag client.Agent, decision, messag
 		raw, err := cl.Verb(verb, p, true)
 		a.update(func() {
 			if err != nil {
-				a.toast(err.Error())
+				a.toast(ckAnswerError(err))
+				a.ck.peek = nil
+				a.refreshCockpit()
 				return
 			}
 			var out struct {
@@ -554,3 +576,21 @@ func (a *App) ckSend(it session.AttentionItem, ag client.Agent, decision, messag
 }
 
 var _ = fmt.Sprint
+
+// ckAnswerError says why an answer was not sent, and what to do: the
+// daemon's codes are not words a person reads.
+func ckAnswerError(err error) string {
+	var ve *session.VerbCallError
+	if !errors.As(err, &ve) {
+		return locales.CockpitAnswerFailed()
+	}
+	switch ve.Code {
+	case "prompt_changed", "not_blocked", "no_prompt", "no_rule":
+		return locales.CockpitAnswerInPane()
+	case "not_human":
+		return locales.CockpitNotHuman()
+	case "risk_unacknowledged":
+		return locales.CockpitJustChanged()
+	}
+	return locales.CockpitAnswerFailed()
+}

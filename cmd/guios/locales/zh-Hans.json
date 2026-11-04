@@ -1006,5 +1006,7 @@
   "layoutSnapNeedsFloating": "请关闭平铺后再吸附窗格。",
   "actionNewPane": "新建窗格",
   "lookKindHTML": "HTML 页面",
-  "lookViewPage": "页面"
+  "lookViewPage": "页面",
+  "cockpitReadingPrompt": "tuios 仍在读取提示。请再按一次键。",
+  "cockpitAnswerFailed": "tuios 无法发送回答。请打开窗格回答。"
 }
