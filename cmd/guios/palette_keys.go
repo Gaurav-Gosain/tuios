@@ -121,8 +121,8 @@ var keyRows = []keyRow{
 	{action: "scroll_move_right", kero: "layout.scroll.moveRight"},
 	{action: "snap_fullscreen", kero: "layout.snap.full"},
 	{action: "unsnap", kero: "layout.snap.unsnap"},
-	{action: "minimize_prefix_focused", title: locales.PaletteMinimizePane, tui: true},
-	{action: "minimize_prefix_restore_all", title: locales.PaletteRestorePanes, tui: true},
+	{action: "minimize_prefix_focused", title: locales.PaletteMinimizePane},
+	{action: "minimize_prefix_restore_all", title: locales.PaletteRestorePanes},
 	{action: "close_workspace", title: locales.PaletteCloseWorkspace, tui: true},
 	{action: "last_workspace", title: locales.PaletteLastWorkspace, tui: true},
 }
