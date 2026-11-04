@@ -2252,5 +2252,13 @@
         "type": "String"
       }
     }
+  },
+  "cockpitMailReplyTo": "Reply to the mail of {name}",
+  "@cockpitMailReplyTo": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
   }
 }

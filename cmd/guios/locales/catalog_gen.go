@@ -12475,3 +12475,13 @@ func CockpitYouTo(name string) string { return In(i18n.Locale()).CockpitYouTo(na
 func (msgs Messages) CockpitYouTo(name string) string {
 	return Catalog.Format(msgs.locale, "cockpitYouTo", map[string]any{"name": name})
 }
+
+// CockpitMailReplyTo says "Reply to the mail of {name}"
+// in the language the app shows.
+func CockpitMailReplyTo(name string) string { return In(i18n.Locale()).CockpitMailReplyTo(name) }
+
+// CockpitMailReplyTo says "Reply to the mail of {name}"
+// in the language of msgs.
+func (msgs Messages) CockpitMailReplyTo(name string) string {
+	return Catalog.Format(msgs.locale, "cockpitMailReplyTo", map[string]any{"name": name})
+}

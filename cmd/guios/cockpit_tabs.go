@@ -603,7 +603,12 @@ func (a *App) mailView(c *ui.Context, pal *palette, ag client.Agent) {
 // mailCard is one message: who to whom, the text, and a reply link.
 func (a *App) mailCard(c *ui.Context, pal *palette, m *ckMail, msg ckMsg, in bool) {
 	mono := a.termFamily()
-	ui.Column(c.Key(msg.Session+"/"+itoa(int(msg.ID)))).Gap(6).Padding(10, 14).Radius(rCard).Background(ckGround(pal)).Children(func() {
+	card := ui.Column(c.Key(msg.Session+"/"+itoa(int(msg.ID)))).Gap(6).Padding(10, 14).Radius(rCard).Background(ckGround(pal))
+	if m.replyTo == msg.ID && m.replySess == msg.Session {
+		// The message the reply box answers.
+		card.Background(pal.accent.Alpha(0.10)).Border(1, pal.accent.Alpha(0.45))
+	}
+	card.Children(func() {
 		ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
 			arrow := "→"
 			if in {
@@ -651,12 +656,18 @@ func (a *App) mailCard(c *ui.Context, pal *palette, m *ckMail, msg ckMsg, in boo
 		if r.Clicked() {
 			c.Invalidate()
 			m.replyTo, m.replySess = msg.ID, msg.Session
-			if a.ck.view == viewAgents {
-				// The agent's reply box answers it, as mail.
+			// The agent's reply box answers it, as mail.
+			switch {
+			case a.ck.view == viewAgents:
 				if ag, ok := a.ckSelectedAgent(); ok {
 					a.ckSendAs(ag, true)
 				}
 				a.ckFocusReply()
+			case a.ck.view == viewMail:
+				if ag, ok := a.ck.agentByWindow(msg.Session, msg.From); ok {
+					a.ckSendAs(ag, true)
+					a.ck.reply.focusNext = true
+				}
 			}
 		}
 		r.Children(func() {
