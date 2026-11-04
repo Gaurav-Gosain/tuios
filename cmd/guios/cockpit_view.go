@@ -94,9 +94,6 @@ func (a *App) cockpitCard(c *ui.Context, pal *palette, bar ui.TitleBar, shown fl
 		ck.fleetW = cw - 2*cardGap
 	}
 	card := paned(ui.Column(c.Key("cockpit")).Grow(1).MinHeight(0).Radius(rPane).Background(pal.card), pal).Clip()
-	// It comes in as a dialog does (motion.go), from a hair smaller;
-	// MyGo shows it at once with reduced motion.
-	card.Transition(ui.ElementTransition{Animation: &motionBase, Position: true, Enter: &ui.Motion{Opacity: 0, Scale: 0.985}})
 	card.Children(func() {
 		a.cockpitHeader(c, pal, bar, shown)
 		ui.Box(c).Height(1).Shrink(0).Background(pal.divider)

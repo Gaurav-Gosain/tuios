@@ -957,11 +957,43 @@ func (a *App) workSession() *proto.Session {
 	return s
 }
 
+// card is the main card: the session's panes, or the agents view over
+// them. The agents view rises over the panes as it opens and sinks as it
+// closes, and the panes stay built under it while it moves: no frame shows
+// the empty canvas. At rest only one of the two is built, so the panes
+// cost nothing while the agents view shows.
 func (a *App) card(c *ui.Context, pal *palette, bar ui.TitleBar, shown float32) {
-	if a.ck.open && a.loaded {
-		a.cockpitCard(c, pal, bar, shown)
-		return
+	on := a.ck.open && a.loaded
+	stack := ui.Box(c.Key("card-stack")).Grow(1).MinHeight(0)
+	move := motionQuick
+	if on {
+		move = motionBase
 	}
+	k := stack.AnimateTo("agents", b2f(on), move)
+	stack.Children(func() {
+		if k < 1 {
+			ui.Column(c.Key("work")).Absolute().Left(0).Top(0).Right(0).Bottom(0).AlignItems(ui.Stretch).Children(func() {
+				a.workCard(c, pal, bar, shown)
+			})
+		}
+		if k > 0 {
+			over := ui.Column(c.Key("agents")).Absolute().Left(0).Top(0).Right(0).Bottom(0).AlignItems(ui.Stretch)
+			if k < 1 {
+				// One cached bitmap fades and moves, not the view's
+				// layers: frames stay as cheap as at rest.
+				over.Cache().Opacity(k).Translate(0, 8*(1-k))
+				if !on {
+					over.PassThrough()
+				}
+			}
+			over.Children(func() { a.cockpitCard(c, pal, bar, shown) })
+		}
+	})
+}
+
+// workCard is the session's panes, or what the app has to say without
+// one.
+func (a *App) workCard(c *ui.Context, pal *palette, bar ui.TitleBar, shown float32) {
 	s := a.session(a.selected)
 	h := a.local()
 	if s != nil {
