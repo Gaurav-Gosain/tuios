@@ -462,7 +462,21 @@ func (c *Client) split(p proto.CreateParams) (proto.Session, error) {
 		c.st.pending[sid] = pendingSplit{target: beside, dir: preselection(dirn), at: time.Now()}
 		c.st.mu.Unlock()
 	}
-	if _, err := c.verb("new-window", params); err != nil {
+	if p.Cols > 0 && p.Rows > 0 && p.Host == "" {
+		// The pane starts at the size it will show at, so its shell
+		// prints its first prompt at it (QA-011).
+		params["cols"], params["rows"] = p.Cols, p.Rows
+	}
+	_, err := c.verb("new-window", params)
+	var ve *session.VerbCallError
+	if errors.As(err, &ve) && ve.Code == session.ErrVerbInvalidParams && params["cols"] != nil {
+		// A daemon from before cols and rows refuses them: the pane
+		// starts at the session's size there, as it always did.
+		delete(params, "cols")
+		delete(params, "rows")
+		_, err = c.verb("new-window", params)
+	}
+	if err != nil {
 		return proto.Session{}, err
 	}
 	return c.sessionNamed(name, sid)

@@ -174,6 +174,9 @@ type App struct {
 	// the splits of the focused pane asked for meanwhile.
 	splitting  map[string]bool
 	splitQueue map[string][]func()
+	// cardBox is each pane card's box as the last frame laid it out: a
+	// split sizes the new pane from it.
+	cardBox map[string]ui.Rect
 	// guesses are the splits on their way, drawn at once (tiles.go).
 	guesses map[string]*splitGuess
 	// palWarm is warmPalette's: when the app had loaded, and whether the
@@ -861,6 +864,12 @@ func (a *App) ensureTerm(id string) {
 	}()
 }
 
+// termPadX and termPadY are a pane terminal's padding, in DIPs.
+const (
+	termPadX = 16
+	termPadY = 6
+)
+
 func (a *App) termFont() terminal.Font {
 	f := terminal.Font{Family: a.termFamily(), Size: a.set.FontSize, Weight: a.set.FontWeight,
 		LineHeight: a.set.LineHeight, Thicken: a.set.Thicken}
@@ -902,7 +911,7 @@ func (a *App) termOptions(id string, conn *gated) terminal.Options {
 		Transparent: true,
 		// Text lines up with the pane's title; a full-screen program's
 		// colors reach the card's edges.
-		Padding:      terminal.Padding{X: 16, Y: 6},
+		Padding:      terminal.Padding{X: termPadX, Y: termPadY},
 		PaddingColor: terminal.PaddingExtend,
 		// Text a program colored for the other appearance, as a dark
 		// theme's light grays on a light one, stays legible.

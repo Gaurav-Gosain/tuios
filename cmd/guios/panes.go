@@ -268,6 +268,12 @@ func (a *App) paneCard(c *ui.Context, pal *palette, bar ui.TitleBar, shown float
 		card.Opacity(dim)
 	}
 	paned(card.Background(card.AnimateColor("bg", bg, ui.Animation{Duration: dFade})), pal)
+	if b := a.paneRef("card-" + p.ID).Bounds(c); b.W > 0 {
+		if a.cardBox == nil {
+			a.cardBox = map[string]ui.Rect{}
+		}
+		a.cardBox[p.ID] = b
+	}
 	hovered := card.Hovered()
 	if a.set.FocusFollowsMouse && multi {
 		a.followMouse(c, s, p, card, hovered, focused)
@@ -1110,6 +1116,30 @@ func (a *App) splitPane(s *proto.Session, at, direction string) {
 
 // split makes a pane beside another, as p asks, on the session's host,
 // and puts the user in it.
+// splitGrid is the grid of the pane a split makes beside one of cols by
+// rows in a card of box: half the card, less the gap between the two and
+// each one's header and padding, at the cells' size. The pane starts at it,
+// so its shell prints its first prompt at the width it keeps (QA-011). An
+// estimate errs small: a pane that grows a column redraws nothing a reflow
+// broke.
+func splitGrid(box ui.Rect, cols, rows int, down bool) (int, int) {
+	if box.W <= 0 || box.H <= 0 || cols <= 0 || rows <= 0 {
+		if down {
+			return cols, max(rows/2, 4)
+		}
+		return max(cols/2, 10), rows
+	}
+	padX, padY := float32(2*termPadX), float32(2*termPadY)
+	cellW := (box.W - padX) / float32(cols)
+	cellH := (box.H - headerH - padY) / float32(rows)
+	if down {
+		h := (box.H-paneGap)/2 - headerH - padY
+		return cols, max(int(h/cellH), 4)
+	}
+	w := (box.W-paneGap)/2 - padX
+	return max(int(w/cellW), 10), rows
+}
+
 func (a *App) split(s *proto.Session, p proto.CreateParams) {
 	if s == nil {
 		return
@@ -1146,12 +1176,7 @@ func (a *App) split(s *proto.Session, p proto.CreateParams) {
 			a.toast(locales.ToastPaneTooSmall())
 			return
 		}
-		p.Cols, p.Rows = cols, rows
-		if down {
-			p.Rows = max(p.Rows/2, 4)
-		} else {
-			p.Cols = max(p.Cols/2, 10)
-		}
+		p.Cols, p.Rows = splitGrid(a.cardBox[pane.ID], cols, rows, down)
 	}
 	cl := h.cl
 	if cl == nil {

@@ -53,18 +53,26 @@ func holdLeases(d time.Duration) {
 	}
 }
 
-// releaseLeases ends the hold now and sends the leases held, in the frame
-// the layout's move ends.
+// releaseLeases ends the hold once the frame the layout's move ends in has
+// laid out the terminals: their size in that frame, the final one, is the
+// one that goes out. Flushed at once, the hold sent the size of the frame
+// before, one column off, and the final frame's size followed as a second
+// resize: the shell redrew its prompt twice, and a prompt reflowed between
+// the two stayed on the screen twice (QA-011).
 func releaseLeases() {
 	leaseHold.mu.Lock()
-	leaseHold.until = time.Now()
-	if leaseHold.timer != nil {
-		// Its work is done here: no wake-up after.
-		leaseHold.timer.Stop()
+	defer leaseHold.mu.Unlock()
+	leaseHold.until = time.Now().Add(leaseSettle)
+	if leaseHold.timer == nil {
+		leaseHold.timer = time.AfterFunc(leaseSettle, flushLeases)
+	} else {
+		leaseHold.timer.Reset(leaseSettle)
 	}
-	leaseHold.mu.Unlock()
-	flushLeases()
 }
+
+// leaseSettle is how long the hold lasts past the frame a move ends in:
+// that frame's layout, and so its terminals' size, comes within it.
+const leaseSettle = 40 * time.Millisecond
 
 // heldLease keeps the lease of g while a hold runs, and reports whether it
 // did.
