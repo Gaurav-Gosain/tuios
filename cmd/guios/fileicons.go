@@ -9,8 +9,7 @@ import (
 
 // The trees of Files and Changes show each file's and folder's icon as
 // VS Code does with an icon theme: Pierre's (icons/files, made with
-// scripts/fileicons), in their own colors, for the light appearance or the
-// dark one. A file's is that of its name, else of its longest extension,
+// scripts/fileicons), in gray, for the light appearance or the dark one. A file's is that of its name, else of its longest extension,
 // else the theme's file; a folder's that of its name, else the theme's
 // folder, open or not.
 
@@ -87,5 +86,8 @@ func fileIconImage(c *ui.Context, pal *palette, name string, dir, open bool) ui.
 	if dir {
 		icon = fileIconTheme.folderIconOf(name, open)
 	}
-	return ui.Image(c, fileIconSVG(icon, pal.dark)).Size(16, 16).Shrink(0)
+	// One mono set: the logos' and tiles' own colours mixed with the
+	// outlines read as two icon sets in one list (council round 1, visual
+	// 22). Colour in the tree is the git state's alone.
+	return ui.Image(c, fileIconSVG(icon, pal.dark)).Size(16, 16).Shrink(0).Grayscale()
 }
