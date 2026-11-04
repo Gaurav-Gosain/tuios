@@ -318,6 +318,32 @@ const paneFrame = (page) => page.evaluate(() => {
   return { top, bottom, left, right: right < left ? -1 : right };
 });
 
+/**
+ * A column on a title bar that is bare border, to grab the pane by.
+ *
+ * Read off the drawn row rather than offset from the corner, because the
+ * window buttons sit on the left by default, at a width that depends on the
+ * button style, and a fixed offset from the corner landed on minimize. The
+ * middle of the longest run of plain border glyphs between the two corners is
+ * clear of the buttons and of the title, wherever the config puts either.
+ */
+const bareTitleColumn = (page, row, left) => page.evaluate(({ row, left }) => {
+  const b = window.sipTerm.term.buffer.active;
+  const line = b.getLine(b.viewportY + row)?.translateToString(true) ?? '';
+  const end = line.slice(left + 1).search(/[╮┐╗┓]/);
+  const right = end === -1 ? line.length : left + 1 + end;
+  let best = { start: -1, len: 0 };
+  for (let c = left + 1, start = -1; c <= right; c++) {
+    if (c < right && /[─━═]/.test(line[c])) {
+      if (start === -1) start = c;
+      continue;
+    }
+    if (start !== -1 && c - start > best.len) best = { start, len: c - start };
+    start = -1;
+  }
+  return best.len < 3 ? null : best.start + Math.floor(best.len / 2);
+}, { row, left });
+
 test.describe('the touch key bar', () => {
   test('installs both rows, chords over the keys a phone lacks', async ({ page }) => {
     await boot(page);
@@ -554,9 +580,11 @@ test.describe('a finger on tuios itself', () => {
 
     const before = await paneFrame(page);
     const g = await geom(page);
-    // The title bar is the drag handle, and its left half is clear of the
-    // buttons on the right.
-    const grab = cell(g, before.left + 4, before.top);
+    // The title bar is the drag handle. Grab it on bare border, off the
+    // window buttons: a press on minimize hid the pane on every run.
+    const col = await bareTitleColumn(page, before.top, before.left);
+    expect(col, 'the title bar has no bare border to grab').not.toBeNull();
+    const grab = cell(g, col, before.top);
 
     const touch = (type, x, y) => cdp.send('Input.dispatchTouchEvent', {
       type, touchPoints: type === 'touchEnd' ? [] : [{ x, y, id: 1 }],
@@ -571,6 +599,11 @@ test.describe('a finger on tuios itself', () => {
       return f !== null && f.top > before.top && f.left < before.left;
     }, 5_000);
 
+    // A press on a window button hides the pane, and the splash drawn in its
+    // place has box glyphs that paneFrame reads as a pane further down and to
+    // the left, so the moved-frame checks alone passed on a minimized pane.
+    expect(await onSplash(page), 'the drag hid the pane instead of moving it').toBe(false);
+    expect(await paneCount(page), 'the drag left other than one pane').toBe(1);
     const after = await paneFrame(page);
     expect(after, 'the pane vanished during the drag').not.toBeNull();
     expect(after.top, 'the drag did not move the pane down').toBeGreaterThan(before.top);
@@ -625,11 +658,12 @@ test.describe('a finger on tuios itself', () => {
     // edge is the screen's, not a shared divider a touch would resize instead.
     const target = before.reduce((a, b) => (b.row + b.col < a.row + a.col ? b : a));
     const other = before.find((c) => key(c) !== key(target));
-    const cols = await page.evaluate(() => window.sipTerm.term.cols);
     const rows = await page.evaluate(() => window.sipTerm.term.rows);
     const g = await geom(page);
-    // The middle of the title row, clear of the window buttons at the left end.
-    const grab = cell(g, Math.floor(cols / 2), target.row);
+    // Bare border on the title row, clear of the window buttons and the title.
+    const grabCol = await bareTitleColumn(page, target.row, target.col);
+    expect(grabCol, 'the tiled title bar has no bare border to grab').not.toBeNull();
+    const grab = cell(g, grabCol, target.row);
     // Down onto the other tile, so the drop swaps the two.
     const dropRow = other.row + 4;
 
