@@ -155,7 +155,9 @@ func (a *App) cockpitFocus(c *ui.Context, pal *palette) {
 	if r.item != nil && ckAnswerable(*r.item) {
 		a.approvalCard(c, pal, ag, *r.item)
 	}
-	a.replyBox(c, pal, ag)
+	if ck.tab == tabThread {
+		a.replyBox(c, pal, ag)
+	}
 }
 
 // ckTab is one tab, with its count where it has one.
@@ -180,6 +182,7 @@ func (a *App) ckTab(c *ui.Context, pal *palette, t string, ag client.Agent) {
 		}
 	})
 	if b.Clicked() {
+		c.Invalidate()
 		a.ckSetTab(t)
 	}
 }
@@ -314,7 +317,7 @@ func (a *App) approvalCard(c *ui.Context, pal *palette, ag client.Agent, it sess
 				}
 			}
 			ui.Spacer(c)
-			if !held {
+			if !held && len(opts) > 0 {
 				ui.Text(c, locales.CockpitScreenPrompt()).FontSize(11.5).TextColor(pal.textFaint)
 			}
 		})

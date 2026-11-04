@@ -132,6 +132,7 @@ func (a *App) cockpitHeader(c *ui.Context, pal *palette, bar ui.TitleBar, shown 
 				ui.Text(c, label).FontSize(12.5).TextColor(pal.textMuted)
 			})
 			if b.Clicked() {
+				c.Invalidate()
 				if g == ckNeeds {
 					ck.needsOnly = !ck.needsOnly
 				} else if ck.folded[g] {
@@ -201,6 +202,7 @@ func (a *App) ckHead(c *ui.Context, pal *palette, r ckRow) {
 		row.Background(pal.rowHover)
 	}
 	if row.Clicked() {
+		c.Invalidate()
 		a.ckToggleFold(r.group)
 	}
 	row.Children(func() {
@@ -225,6 +227,7 @@ func (a *App) ckMore(c *ui.Context, pal *palette, r ckRow) {
 		row.Background(pal.rowHover)
 	}
 	if row.Clicked() {
+		c.Invalidate()
 		a.ckOpenMore(r.group)
 	}
 	row.Children(func() {
@@ -353,14 +356,17 @@ func ckLine2Spans(pal *palette, verb, rest string) []ui.Span {
 
 // ckRowMenu is a row's context menu: every action the row has.
 func (a *App) ckRowMenu(m *ui.Menu, r ckRow) {
+	// No state changes here but in a chosen item's: the builder also runs
+	// to collect the menu's shortcuts.
 	ck := &a.ck
-	a.ckSelect(r)
 	if r.agent >= 0 {
 		ag := ck.agents[r.agent]
 		if m.Item(locales.CockpitOpenPane()).Chosen() {
+			a.ckSelect(r)
 			a.goToAgent(ag)
 		}
 		if m.Item(locales.CockpitReply()).Chosen() {
+			a.ckSelect(r)
 			a.ckFocusReply()
 		}
 		label := locales.CockpitSettle()
@@ -368,6 +374,7 @@ func (a *App) ckRowMenu(m *ui.Menu, r ckRow) {
 			label = locales.CockpitUnsettle()
 		}
 		if m.Item(label).Chosen() {
+			a.ckSelect(r)
 			a.ckSettle()
 		}
 	}
@@ -381,14 +388,20 @@ func (a *App) ckRowMenu(m *ui.Menu, r ckRow) {
 				a.ckAnswer("deny", true)
 			}
 		}
+		if r.item.HeldID != 0 && m.Item(locales.CockpitPassMail()).Chosen() {
+			a.ckSelect(r)
+			a.ckPassHeld(*r.item)
+		}
 		label := locales.CockpitSnooze()
 		if r.item.SnoozedUntil != 0 {
 			label = locales.CockpitWake()
 		}
 		if m.Item(label).Chosen() {
+			a.ckSelect(r)
 			a.ckSnooze()
 		}
 		if m.Item(locales.CockpitDismiss()).Chosen() {
+			a.ckSelect(r)
 			a.ckDismiss()
 		}
 	}
@@ -420,16 +433,17 @@ func (a *App) cockpitKeys(c *ui.Context, col ui.Element) {
 		if r, ok := a.ckSelected(); ok && r.kind == ckRowHead {
 			a.ckToggleFold(r.group)
 		}
-	case key(0, ui.KeyA):
-		a.ckAnswer("once", false)
+	// Shift first: a key with Shift also reads as the key alone.
 	case key(ui.Shift, ui.KeyA):
 		a.ckAnswer("always", false)
+	case key(ui.Shift, ui.KeyR):
+		a.ckOpenReason()
+	case key(0, ui.KeyA):
+		a.ckAnswer("once", false)
 	case key(0, ui.KeyR):
 		if !a.ckAnswer("deny", false) {
 			a.ckFocusReply()
 		}
-	case key(ui.Shift, ui.KeyR):
-		a.ckOpenReason()
 	case key(0, ui.KeyI):
 		a.ckFocusReply()
 	case key(ui.Shift, ui.KeyD), key(0, ui.KeyD):
@@ -440,6 +454,16 @@ func (a *App) cockpitKeys(c *ui.Context, col ui.Element) {
 		a.ckSnooze()
 	case key(0, ui.KeyX):
 		a.ckDismiss()
+	case key(0, ui.KeyP):
+		if r, ok := a.ckSelected(); ok && r.item != nil && r.item.HeldID != 0 {
+			a.ckPassHeld(*r.item)
+		}
+	case key(0, ui.KeyM):
+		a.ckSetTab(tabMail)
+	case key(0, ui.KeyB):
+		a.ckSetTab(tabBoard)
+	case key(0, ui.KeyV):
+		a.ckSetTab(tabChanges)
 	case key(0, ui.KeyF):
 		ck.needsOnly = !ck.needsOnly
 	case key(0, ui.KeyBracketRight):
@@ -448,7 +472,11 @@ func (a *App) cockpitKeys(c *ui.Context, col ui.Element) {
 		a.ckStepTab(-1)
 	case key(0, ui.KeyEscape):
 		a.closeCockpit()
+	default:
+		return
 	}
+	// The key came in this build: build again to show what it did.
+	c.Invalidate()
 }
 
 // cockpitHints is the key line at the foot.
@@ -485,9 +513,9 @@ func (a *App) agentsRow(c *ui.Context, pal *palette) {
 	// the panes shown and the other workspaces' marks.
 	waiting := 0
 	if a.ck.loaded {
-		for _, ag := range a.ck.agents {
-			if ag.State == "needs_input" || ag.State == "errored" {
-				waiting++
+		for _, r := range a.ck.rows {
+			if r.kind == ckRowHead && r.group == ckNeeds {
+				waiting = r.count
 			}
 		}
 	} else {
@@ -518,6 +546,7 @@ func (a *App) agentsRow(c *ui.Context, pal *palette) {
 	}
 	pointerTooltip(c, row, "agents-tip", a.tip(locales.ActionAgents(), "agents.toggle"))
 	if row.Clicked() {
+		c.Invalidate()
 		a.toggleCockpit()
 	}
 	row.Children(func() {

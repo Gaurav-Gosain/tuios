@@ -139,6 +139,7 @@ func (a *App) codeBlock(c *ui.Context, pal *palette, b *markdown.Block, mono str
 			}
 			cp.Children(func() { ui.Icon(c, copyIcon).Size(13, 13) })
 			if cp.Clicked() {
+				c.Invalidate()
 				a.copyText = strings.Join(b.Lines, "\n")
 			}
 		})

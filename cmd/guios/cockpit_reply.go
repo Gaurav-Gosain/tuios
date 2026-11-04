@@ -214,6 +214,7 @@ func (a *App) imageChip(c *ui.Context, pal *palette, d *ckDraft, i int) {
 		}
 		x.Children(func() { ui.Icon(c, closeIcon).Size(10, 10).TextColor(pal.textMuted) })
 		if x.Clicked() {
+			c.Invalidate()
 			d.images = append(d.images[:i:i], d.images[i+1:]...)
 		}
 	})

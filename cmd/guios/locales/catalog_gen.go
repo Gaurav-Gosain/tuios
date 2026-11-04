@@ -7251,3 +7251,483 @@ func CockpitQueuedFor(name string) string { return In(i18n.Locale()).CockpitQueu
 func (msgs Messages) CockpitQueuedFor(name string) string {
 	return Catalog.Format(msgs.locale, "cockpitQueuedFor", map[string]any{"name": name})
 }
+
+// CockpitSendNotes says "Send notes to the agent"
+// in the language the app shows.
+func CockpitSendNotes() string { return In(i18n.Locale()).CockpitSendNotes() }
+
+// CockpitSendNotes says "Send notes to the agent"
+// in the language of msgs.
+func (msgs Messages) CockpitSendNotes() string {
+	return Catalog.Format(msgs.locale, "cockpitSendNotes", nil)
+}
+
+// CockpitNoChanges says "No changes"
+// in the language the app shows.
+func CockpitNoChanges() string { return In(i18n.Locale()).CockpitNoChanges() }
+
+// CockpitNoChanges says "No changes"
+// in the language of msgs.
+func (msgs Messages) CockpitNoChanges() string {
+	return Catalog.Format(msgs.locale, "cockpitNoChanges", nil)
+}
+
+// CockpitFilesChanged says "{count, plural, one {# file changed} other {# files changed}}"
+// in the language the app shows.
+func CockpitFilesChanged(count int) string { return In(i18n.Locale()).CockpitFilesChanged(count) }
+
+// CockpitFilesChanged says "{count, plural, one {# file changed} other {# files changed}}"
+// in the language of msgs.
+func (msgs Messages) CockpitFilesChanged(count int) string {
+	return Catalog.Format(msgs.locale, "cockpitFilesChanged", map[string]any{"count": count})
+}
+
+// CockpitAgainst says "against {base}"
+// in the language the app shows.
+func CockpitAgainst(base string) string { return In(i18n.Locale()).CockpitAgainst(base) }
+
+// CockpitAgainst says "against {base}"
+// in the language of msgs.
+func (msgs Messages) CockpitAgainst(base string) string {
+	return Catalog.Format(msgs.locale, "cockpitAgainst", map[string]any{"base": base})
+}
+
+// CockpitNoteOn says "Line {line}"
+// in the language the app shows.
+func CockpitNoteOn(line int) string { return In(i18n.Locale()).CockpitNoteOn(line) }
+
+// CockpitNoteOn says "Line {line}"
+// in the language of msgs.
+func (msgs Messages) CockpitNoteOn(line int) string {
+	return Catalog.Format(msgs.locale, "cockpitNoteOn", map[string]any{"line": line})
+}
+
+// CockpitRemove says "Remove"
+// in the language the app shows.
+func CockpitRemove() string { return In(i18n.Locale()).CockpitRemove() }
+
+// CockpitRemove says "Remove"
+// in the language of msgs.
+func (msgs Messages) CockpitRemove() string {
+	return Catalog.Format(msgs.locale, "cockpitRemove", nil)
+}
+
+// CockpitNotePlaceholder says "Write a note for the agent, then press Enter"
+// in the language the app shows.
+func CockpitNotePlaceholder() string { return In(i18n.Locale()).CockpitNotePlaceholder() }
+
+// CockpitNotePlaceholder says "Write a note for the agent, then press Enter"
+// in the language of msgs.
+func (msgs Messages) CockpitNotePlaceholder() string {
+	return Catalog.Format(msgs.locale, "cockpitNotePlaceholder", nil)
+}
+
+// CockpitAddNote says "Add a note"
+// in the language the app shows.
+func CockpitAddNote() string { return In(i18n.Locale()).CockpitAddNote() }
+
+// CockpitAddNote says "Add a note"
+// in the language of msgs.
+func (msgs Messages) CockpitAddNote() string {
+	return Catalog.Format(msgs.locale, "cockpitAddNote", nil)
+}
+
+// CockpitNotesSent says "{name} gets the notes."
+// in the language the app shows.
+func CockpitNotesSent(name string) string { return In(i18n.Locale()).CockpitNotesSent(name) }
+
+// CockpitNotesSent says "{name} gets the notes."
+// in the language of msgs.
+func (msgs Messages) CockpitNotesSent(name string) string {
+	return Catalog.Format(msgs.locale, "cockpitNotesSent", map[string]any{"name": name})
+}
+
+// CockpitNoCheckpoints says "No checkpoints"
+// in the language the app shows.
+func CockpitNoCheckpoints() string { return In(i18n.Locale()).CockpitNoCheckpoints() }
+
+// CockpitNoCheckpoints says "No checkpoints"
+// in the language of msgs.
+func (msgs Messages) CockpitNoCheckpoints() string {
+	return Catalog.Format(msgs.locale, "cockpitNoCheckpoints", nil)
+}
+
+// CockpitNoCheckpointsDetail says "tuios keeps one when a turn ends in a git worktree."
+// in the language the app shows.
+func CockpitNoCheckpointsDetail() string { return In(i18n.Locale()).CockpitNoCheckpointsDetail() }
+
+// CockpitNoCheckpointsDetail says "tuios keeps one when a turn ends in a git worktree."
+// in the language of msgs.
+func (msgs Messages) CockpitNoCheckpointsDetail() string {
+	return Catalog.Format(msgs.locale, "cockpitNoCheckpointsDetail", nil)
+}
+
+// CockpitTurn says "Turn {n}"
+// in the language the app shows.
+func CockpitTurn(n int) string { return In(i18n.Locale()).CockpitTurn(n) }
+
+// CockpitTurn says "Turn {n}"
+// in the language of msgs.
+func (msgs Messages) CockpitTurn(n int) string {
+	return Catalog.Format(msgs.locale, "cockpitTurn", map[string]any{"n": n})
+}
+
+// CockpitRestore says "Restore"
+// in the language the app shows.
+func CockpitRestore() string { return In(i18n.Locale()).CockpitRestore() }
+
+// CockpitRestore says "Restore"
+// in the language of msgs.
+func (msgs Messages) CockpitRestore() string {
+	return Catalog.Format(msgs.locale, "cockpitRestore", nil)
+}
+
+// CockpitRestoreConfirm says "Click again to restore"
+// in the language the app shows.
+func CockpitRestoreConfirm() string { return In(i18n.Locale()).CockpitRestoreConfirm() }
+
+// CockpitRestoreConfirm says "Click again to restore"
+// in the language of msgs.
+func (msgs Messages) CockpitRestoreConfirm() string {
+	return Catalog.Format(msgs.locale, "cockpitRestoreConfirm", nil)
+}
+
+// CockpitRestored says "Restored checkpoint {n}."
+// in the language the app shows.
+func CockpitRestored(n int) string { return In(i18n.Locale()).CockpitRestored(n) }
+
+// CockpitRestored says "Restored checkpoint {n}."
+// in the language of msgs.
+func (msgs Messages) CockpitRestored(n int) string {
+	return Catalog.Format(msgs.locale, "cockpitRestored", map[string]any{"n": n})
+}
+
+// CockpitNoMail says "No mail"
+// in the language the app shows.
+func CockpitNoMail() string { return In(i18n.Locale()).CockpitNoMail() }
+
+// CockpitNoMail says "No mail"
+// in the language of msgs.
+func (msgs Messages) CockpitNoMail() string {
+	return Catalog.Format(msgs.locale, "cockpitNoMail", nil)
+}
+
+// CockpitNoMailDetail says "Mail to and from {name} shows here."
+// in the language the app shows.
+func CockpitNoMailDetail(name string) string { return In(i18n.Locale()).CockpitNoMailDetail(name) }
+
+// CockpitNoMailDetail says "Mail to and from {name} shows here."
+// in the language of msgs.
+func (msgs Messages) CockpitNoMailDetail(name string) string {
+	return Catalog.Format(msgs.locale, "cockpitNoMailDetail", map[string]any{"name": name})
+}
+
+// CockpitEveryone says "everyone"
+// in the language the app shows.
+func CockpitEveryone() string { return In(i18n.Locale()).CockpitEveryone() }
+
+// CockpitEveryone says "everyone"
+// in the language of msgs.
+func (msgs Messages) CockpitEveryone() string {
+	return Catalog.Format(msgs.locale, "cockpitEveryone", nil)
+}
+
+// CockpitReplyAsYou says "Reply as you"
+// in the language the app shows.
+func CockpitReplyAsYou() string { return In(i18n.Locale()).CockpitReplyAsYou() }
+
+// CockpitReplyAsYou says "Reply as you"
+// in the language of msgs.
+func (msgs Messages) CockpitReplyAsYou() string {
+	return Catalog.Format(msgs.locale, "cockpitReplyAsYou", nil)
+}
+
+// CockpitMailTo says "Mail to {name}"
+// in the language the app shows.
+func CockpitMailTo(name string) string { return In(i18n.Locale()).CockpitMailTo(name) }
+
+// CockpitMailTo says "Mail to {name}"
+// in the language of msgs.
+func (msgs Messages) CockpitMailTo(name string) string {
+	return Catalog.Format(msgs.locale, "cockpitMailTo", map[string]any{"name": name})
+}
+
+// CockpitMailReply says "Reply to message {id}"
+// in the language the app shows.
+func CockpitMailReply(id int) string { return In(i18n.Locale()).CockpitMailReply(id) }
+
+// CockpitMailReply says "Reply to message {id}"
+// in the language of msgs.
+func (msgs Messages) CockpitMailReply(id int) string {
+	return Catalog.Format(msgs.locale, "cockpitMailReply", map[string]any{"id": id})
+}
+
+// CockpitSendMail says "Send mail"
+// in the language the app shows.
+func CockpitSendMail() string { return In(i18n.Locale()).CockpitSendMail() }
+
+// CockpitSendMail says "Send mail"
+// in the language of msgs.
+func (msgs Messages) CockpitSendMail() string {
+	return Catalog.Format(msgs.locale, "cockpitSendMail", nil)
+}
+
+// CockpitPassMail says "Pass the mail to the agent"
+// in the language the app shows.
+func CockpitPassMail() string { return In(i18n.Locale()).CockpitPassMail() }
+
+// CockpitPassMail says "Pass the mail to the agent"
+// in the language of msgs.
+func (msgs Messages) CockpitPassMail() string {
+	return Catalog.Format(msgs.locale, "cockpitPassMail", nil)
+}
+
+// CockpitStageTodo says "To do"
+// in the language the app shows.
+func CockpitStageTodo() string { return In(i18n.Locale()).CockpitStageTodo() }
+
+// CockpitStageTodo says "To do"
+// in the language of msgs.
+func (msgs Messages) CockpitStageTodo() string {
+	return Catalog.Format(msgs.locale, "cockpitStageTodo", nil)
+}
+
+// CockpitStagePlan says "Plan"
+// in the language the app shows.
+func CockpitStagePlan() string { return In(i18n.Locale()).CockpitStagePlan() }
+
+// CockpitStagePlan says "Plan"
+// in the language of msgs.
+func (msgs Messages) CockpitStagePlan() string {
+	return Catalog.Format(msgs.locale, "cockpitStagePlan", nil)
+}
+
+// CockpitStageDoing says "Doing"
+// in the language the app shows.
+func CockpitStageDoing() string { return In(i18n.Locale()).CockpitStageDoing() }
+
+// CockpitStageDoing says "Doing"
+// in the language of msgs.
+func (msgs Messages) CockpitStageDoing() string {
+	return Catalog.Format(msgs.locale, "cockpitStageDoing", nil)
+}
+
+// CockpitStageVerify says "Verify"
+// in the language the app shows.
+func CockpitStageVerify() string { return In(i18n.Locale()).CockpitStageVerify() }
+
+// CockpitStageVerify says "Verify"
+// in the language of msgs.
+func (msgs Messages) CockpitStageVerify() string {
+	return Catalog.Format(msgs.locale, "cockpitStageVerify", nil)
+}
+
+// CockpitStageReview says "Review"
+// in the language the app shows.
+func CockpitStageReview() string { return In(i18n.Locale()).CockpitStageReview() }
+
+// CockpitStageReview says "Review"
+// in the language of msgs.
+func (msgs Messages) CockpitStageReview() string {
+	return Catalog.Format(msgs.locale, "cockpitStageReview", nil)
+}
+
+// CockpitStageShipped says "Shipped"
+// in the language the app shows.
+func CockpitStageShipped() string { return In(i18n.Locale()).CockpitStageShipped() }
+
+// CockpitStageShipped says "Shipped"
+// in the language of msgs.
+func (msgs Messages) CockpitStageShipped() string {
+	return Catalog.Format(msgs.locale, "cockpitStageShipped", nil)
+}
+
+// CockpitStageDone says "Done"
+// in the language the app shows.
+func CockpitStageDone() string { return In(i18n.Locale()).CockpitStageDone() }
+
+// CockpitStageDone says "Done"
+// in the language of msgs.
+func (msgs Messages) CockpitStageDone() string {
+	return Catalog.Format(msgs.locale, "cockpitStageDone", nil)
+}
+
+// CockpitNoBoard says "No task board"
+// in the language the app shows.
+func CockpitNoBoard() string { return In(i18n.Locale()).CockpitNoBoard() }
+
+// CockpitNoBoard says "No task board"
+// in the language of msgs.
+func (msgs Messages) CockpitNoBoard() string {
+	return Catalog.Format(msgs.locale, "cockpitNoBoard", nil)
+}
+
+// CockpitAddCard says "Add a card"
+// in the language the app shows.
+func CockpitAddCard() string { return In(i18n.Locale()).CockpitAddCard() }
+
+// CockpitAddCard says "Add a card"
+// in the language of msgs.
+func (msgs Messages) CockpitAddCard() string {
+	return Catalog.Format(msgs.locale, "cockpitAddCard", nil)
+}
+
+// CockpitCardPlaceholder says "What is the card? Press Enter to add it"
+// in the language the app shows.
+func CockpitCardPlaceholder() string { return In(i18n.Locale()).CockpitCardPlaceholder() }
+
+// CockpitCardPlaceholder says "What is the card? Press Enter to add it"
+// in the language of msgs.
+func (msgs Messages) CockpitCardPlaceholder() string {
+	return Catalog.Format(msgs.locale, "cockpitCardPlaceholder", nil)
+}
+
+// CockpitMoveTo says "Move to {stage}"
+// in the language the app shows.
+func CockpitMoveTo(stage string) string { return In(i18n.Locale()).CockpitMoveTo(stage) }
+
+// CockpitMoveTo says "Move to {stage}"
+// in the language of msgs.
+func (msgs Messages) CockpitMoveTo(stage string) string {
+	return Catalog.Format(msgs.locale, "cockpitMoveTo", map[string]any{"stage": stage})
+}
+
+// CockpitTakeCard says "Give to the selected agent"
+// in the language the app shows.
+func CockpitTakeCard() string { return In(i18n.Locale()).CockpitTakeCard() }
+
+// CockpitTakeCard says "Give to the selected agent"
+// in the language of msgs.
+func (msgs Messages) CockpitTakeCard() string {
+	return Catalog.Format(msgs.locale, "cockpitTakeCard", nil)
+}
+
+// CockpitBlocked says "Blocked"
+// in the language the app shows.
+func CockpitBlocked() string { return In(i18n.Locale()).CockpitBlocked() }
+
+// CockpitBlocked says "Blocked"
+// in the language of msgs.
+func (msgs Messages) CockpitBlocked() string {
+	return Catalog.Format(msgs.locale, "cockpitBlocked", nil)
+}
+
+// CockpitFree says "free"
+// in the language the app shows.
+func CockpitFree() string { return In(i18n.Locale()).CockpitFree() }
+
+// CockpitFree says "free"
+// in the language of msgs.
+func (msgs Messages) CockpitFree() string {
+	return Catalog.Format(msgs.locale, "cockpitFree", nil)
+}
+
+// CockpitTakeNeedsAgent says "Select an agent of the card's session first."
+// in the language the app shows.
+func CockpitTakeNeedsAgent() string { return In(i18n.Locale()).CockpitTakeNeedsAgent() }
+
+// CockpitTakeNeedsAgent says "Select an agent of the card's session first."
+// in the language of msgs.
+func (msgs Messages) CockpitTakeNeedsAgent() string {
+	return Catalog.Format(msgs.locale, "cockpitTakeNeedsAgent", nil)
+}
+
+// CockpitCardFree says "No pane holds this card."
+// in the language the app shows.
+func CockpitCardFree() string { return In(i18n.Locale()).CockpitCardFree() }
+
+// CockpitCardFree says "No pane holds this card."
+// in the language of msgs.
+func (msgs Messages) CockpitCardFree() string {
+	return Catalog.Format(msgs.locale, "cockpitCardFree", nil)
+}
+
+// CockpitDetails says "Details"
+// in the language the app shows.
+func CockpitDetails() string { return In(i18n.Locale()).CockpitDetails() }
+
+// CockpitDetails says "Details"
+// in the language of msgs.
+func (msgs Messages) CockpitDetails() string {
+	return Catalog.Format(msgs.locale, "cockpitDetails", nil)
+}
+
+// CockpitDetailAgent says "Agent"
+// in the language the app shows.
+func CockpitDetailAgent() string { return In(i18n.Locale()).CockpitDetailAgent() }
+
+// CockpitDetailAgent says "Agent"
+// in the language of msgs.
+func (msgs Messages) CockpitDetailAgent() string {
+	return Catalog.Format(msgs.locale, "cockpitDetailAgent", nil)
+}
+
+// CockpitDetailModel says "Model"
+// in the language the app shows.
+func CockpitDetailModel() string { return In(i18n.Locale()).CockpitDetailModel() }
+
+// CockpitDetailModel says "Model"
+// in the language of msgs.
+func (msgs Messages) CockpitDetailModel() string {
+	return Catalog.Format(msgs.locale, "cockpitDetailModel", nil)
+}
+
+// CockpitDetailSession says "Session"
+// in the language the app shows.
+func CockpitDetailSession() string { return In(i18n.Locale()).CockpitDetailSession() }
+
+// CockpitDetailSession says "Session"
+// in the language of msgs.
+func (msgs Messages) CockpitDetailSession() string {
+	return Catalog.Format(msgs.locale, "cockpitDetailSession", nil)
+}
+
+// CockpitDetailState says "State"
+// in the language the app shows.
+func CockpitDetailState() string { return In(i18n.Locale()).CockpitDetailState() }
+
+// CockpitDetailState says "State"
+// in the language of msgs.
+func (msgs Messages) CockpitDetailState() string {
+	return Catalog.Format(msgs.locale, "cockpitDetailState", nil)
+}
+
+// CockpitDetailSource says "From"
+// in the language the app shows.
+func CockpitDetailSource() string { return In(i18n.Locale()).CockpitDetailSource() }
+
+// CockpitDetailSource says "From"
+// in the language of msgs.
+func (msgs Messages) CockpitDetailSource() string {
+	return Catalog.Format(msgs.locale, "cockpitDetailSource", nil)
+}
+
+// CockpitDetailMail says "Unread mail"
+// in the language the app shows.
+func CockpitDetailMail() string { return In(i18n.Locale()).CockpitDetailMail() }
+
+// CockpitDetailMail says "Unread mail"
+// in the language of msgs.
+func (msgs Messages) CockpitDetailMail() string {
+	return Catalog.Format(msgs.locale, "cockpitDetailMail", nil)
+}
+
+// CockpitDetailQueued says "Waiting"
+// in the language the app shows.
+func CockpitDetailQueued() string { return In(i18n.Locale()).CockpitDetailQueued() }
+
+// CockpitDetailQueued says "Waiting"
+// in the language of msgs.
+func (msgs Messages) CockpitDetailQueued() string {
+	return Catalog.Format(msgs.locale, "cockpitDetailQueued", nil)
+}
+
+// CockpitSubagents says "Subagents"
+// in the language the app shows.
+func CockpitSubagents() string { return In(i18n.Locale()).CockpitSubagents() }
+
+// CockpitSubagents says "Subagents"
+// in the language of msgs.
+func (msgs Messages) CockpitSubagents() string {
+	return Catalog.Format(msgs.locale, "cockpitSubagents", nil)
+}

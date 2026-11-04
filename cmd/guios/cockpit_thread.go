@@ -394,6 +394,7 @@ func (a *App) foldItem(c *ui.Context, pal *palette, th *ckThread, it *ckItem, he
 	ui.Column(c).Gap(6).Children(func() {
 		row := ui.Row(c.Key("h")).Gap(7).AlignItems(ui.Center).Cursor(ui.CursorPointer).Unselectable()
 		if row.Clicked() {
+			c.Invalidate()
 			th.open[it.key] = !open
 		}
 		row.Children(func() {
@@ -547,6 +548,7 @@ func (a *App) editItem(c *ui.Context, pal *palette, th *ckThread, it *ckItem, mo
 	ui.Column(c).Radius(10).Background(ckCodeBg(pal)).Clip().Children(func() {
 		row := ui.Row(c.Key("h")).Gap(8).AlignItems(ui.Center).Padding(8, 12).Cursor(ui.CursorPointer).Unselectable()
 		if row.Clicked() {
+			c.Invalidate()
 			th.shut[it.key] = open
 		}
 		row.Children(func() {
@@ -571,6 +573,7 @@ func (a *App) editItem(c *ui.Context, pal *palette, th *ckThread, it *ckItem, mo
 			if n := diffLineCount(d); n > ckEditLines && !th.open[it.key+"+all"] {
 				r := ui.Row(c.Key("all")).Padding(5, 12).Cursor(ui.CursorPointer).Unselectable()
 				if r.Clicked() {
+					c.Invalidate()
 					th.open[it.key+"+all"] = true
 				}
 				r.Children(func() {

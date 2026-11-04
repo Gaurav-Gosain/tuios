@@ -1332,5 +1332,88 @@
   "cockpitImageTooBig": "{name} is larger than 8 MB.",
   "cockpitNowNoImages": "Images go only with a queued message. Press Enter to queue it.",
   "cockpitSentNow": "Sent to {name}.",
-  "cockpitQueuedFor": "{name} gets the message when it rests."
+  "cockpitQueuedFor": "{name} gets the message when it rests.",
+  "cockpitSendNotes": "Send notes to the agent",
+  "cockpitNoChanges": "No changes",
+  "cockpitFilesChanged": "{count, plural, one {# file changed} other {# files changed}}",
+  "@cockpitFilesChanged": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "cockpitAgainst": "against {base}",
+  "cockpitNoteOn": "Line {line}",
+  "@cockpitNoteOn": {
+    "placeholders": {
+      "line": {
+        "type": "int"
+      }
+    }
+  },
+  "cockpitRemove": "Remove",
+  "cockpitNotePlaceholder": "Write a note for the agent, then press Enter",
+  "cockpitAddNote": "Add a note",
+  "cockpitNotesSent": "{name} gets the notes.",
+  "cockpitNoCheckpoints": "No checkpoints",
+  "cockpitNoCheckpointsDetail": "tuios keeps one when a turn ends in a git worktree.",
+  "cockpitTurn": "Turn {n}",
+  "@cockpitTurn": {
+    "placeholders": {
+      "n": {
+        "type": "int"
+      }
+    }
+  },
+  "cockpitRestore": "Restore",
+  "cockpitRestoreConfirm": "Click again to restore",
+  "cockpitRestored": "Restored checkpoint {n}.",
+  "@cockpitRestored": {
+    "placeholders": {
+      "n": {
+        "type": "int"
+      }
+    }
+  },
+  "cockpitNoMail": "No mail",
+  "cockpitNoMailDetail": "Mail to and from {name} shows here.",
+  "cockpitEveryone": "everyone",
+  "cockpitReplyAsYou": "Reply as you",
+  "cockpitMailTo": "Mail to {name}",
+  "cockpitMailReply": "Reply to message {id}",
+  "@cockpitMailReply": {
+    "placeholders": {
+      "id": {
+        "type": "int"
+      }
+    }
+  },
+  "cockpitSendMail": "Send mail",
+  "cockpitPassMail": "Pass the mail to the agent",
+  "cockpitStageTodo": "To do",
+  "cockpitStagePlan": "Plan",
+  "cockpitStageDoing": "Doing",
+  "cockpitStageVerify": "Verify",
+  "cockpitStageReview": "Review",
+  "cockpitStageShipped": "Shipped",
+  "cockpitStageDone": "Done",
+  "cockpitNoBoard": "No task board",
+  "cockpitAddCard": "Add a card",
+  "cockpitCardPlaceholder": "What is the card? Press Enter to add it",
+  "cockpitMoveTo": "Move to {stage}",
+  "cockpitTakeCard": "Give to the selected agent",
+  "cockpitBlocked": "Blocked",
+  "cockpitFree": "free",
+  "cockpitTakeNeedsAgent": "Select an agent of the card's session first.",
+  "cockpitCardFree": "No pane holds this card.",
+  "cockpitDetails": "Details",
+  "cockpitDetailAgent": "Agent",
+  "cockpitDetailModel": "Model",
+  "cockpitDetailSession": "Session",
+  "cockpitDetailState": "State",
+  "cockpitDetailSource": "From",
+  "cockpitDetailMail": "Unread mail",
+  "cockpitDetailQueued": "Waiting",
+  "cockpitSubagents": "Subagents"
 }
