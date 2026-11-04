@@ -135,10 +135,31 @@ func (c *Client) dispatch(method string, params any) (any, error) {
 		return proto.WorktreeCheck{}, nil
 
 	case "conversations":
-		return []proto.Conversation{}, nil
+		return c.conversations()
 
-	case "conversation.resume", "conversation.archive", "conversation.forget":
-		return nil, errNotYet("the list of past conversations")
+	case "conversation.resume":
+		p, err := decode[proto.ConversationParams](params)
+		if err != nil {
+			return nil, err
+		}
+		return c.resumeConversation(p)
+
+	case "conversation.archive":
+		p, err := decode[proto.ConversationParams](params)
+		if err != nil {
+			return nil, err
+		}
+		setArchived(p.Agent, p.ID, p.Archived)
+		return true, nil
+
+	case "conversation.forget":
+		p, err := decode[proto.ConversationParams](params)
+		if err != nil {
+			return nil, err
+		}
+		setArchived(p.Agent, p.ID, false)
+		_, err = c.verb("forget-conversation", map[string]any{"harness": harnessOf(p.Agent), "id": p.ID})
+		return true, err
 
 	case "browser.answer":
 		return true, nil

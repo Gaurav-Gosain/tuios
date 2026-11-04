@@ -7,6 +7,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/guios/proto"
@@ -62,6 +63,10 @@ type windowRow struct {
 // stateKeeper builds the state and keeps it current from the daemon's events.
 type stateKeeper struct {
 	c *Client
+
+	// convGen counts the events after which the daemon may have recorded
+	// an ended conversation (State.Conversations).
+	convGen atomic.Uint64
 
 	mu      sync.Mutex
 	state   *proto.State
@@ -120,7 +125,7 @@ func (k *stateKeeper) build() (*proto.State, error) {
 	if err := json.Unmarshal(raw, &sl); err != nil {
 		return nil, err
 	}
-	st := &proto.State{Started: k.started}
+	st := &proto.State{Started: k.started, Conversations: k.convGen.Load() + 1}
 	projects := map[string]bool{}
 	paneSession := map[string]string{}
 	names := map[string]string{}
@@ -406,6 +411,10 @@ func (k *stateKeeper) watch() {
 			Message string `json:"message"`
 		}
 		_ = json.Unmarshal(line, &ev)
+		if ev.Type == "window-closed" || ev.Type == "agent-state" {
+			// The daemon records an ended conversation on either.
+			k.convGen.Add(1)
+		}
 		if ev.Type == "notification" {
 			k.c.emit(proto.Message{Event: "notice", Notice: &proto.Notice{Session: k.sessionOf(ev.Session), Pane: ev.Window, Title: ev.Title, Body: firstOf(ev.Body, ev.Message)}})
 		}
