@@ -672,8 +672,9 @@ func (a *App) splitPane(s *proto.Session, at, direction string) {
 	}
 	if at == "" {
 		// An empty workspace: the session itself, so the new pane opens
-		// alone in the workspace it shows.
-		at = s.ID
+		// alone in the workspace it shows, where the session works.
+		a.split(s, proto.CreateParams{Split: s.ID, Direction: direction, Dir: s.WorkDir()})
+		return
 	}
 	a.split(s, proto.CreateParams{Split: at, Direction: direction})
 }

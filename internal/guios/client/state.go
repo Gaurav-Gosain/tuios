@@ -218,8 +218,19 @@ func (k *stateKeeper) build() (*proto.State, error) {
 			ks.Pane = ks.Panes[i]
 			ks.Lead = ks.Panes[i].ID
 		}
-		if s.Dir != "" && ks.Pane.Dir == "" {
-			ks.Pane.Dir = expandHome(s.Dir, home)
+		if ks.Pane.Dir == "" {
+			// A workspace with no pane: where the session's other panes
+			// work, else its own folder. list-sessions may give that
+			// folder by its last name alone, which is no path to start in.
+			for _, w := range wl.Windows {
+				if filepath.IsAbs(w.Cwd) {
+					ks.Pane.Dir = w.Cwd
+					break
+				}
+			}
+		}
+		if d := expandHome(s.Dir, home); ks.Pane.Dir == "" && filepath.IsAbs(d) {
+			ks.Pane.Dir = d
 		}
 		st.Sessions = append(st.Sessions, ks)
 	}
