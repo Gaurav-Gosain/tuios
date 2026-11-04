@@ -889,14 +889,23 @@ func otherWorkspacePanes(s *proto.Session) bool {
 	return false
 }
 
-// emptyWorkspace fills the pane area of a workspace that holds no pane.
+// emptyWorkspace fills the pane area of a workspace that holds no pane:
+// a card as a pane's, which says so and opens one.
 func (a *App) emptyWorkspace(c *ui.Context, pal *palette, s *proto.Session) {
-	ui.Column(c).Fill().Center().Gap(0).Padding(24).Children(func() {
-		ui.Text(c, locales.WorkspaceEmptyTitle(s.Workspace)).FontSize(17).FontWeight(600).TextColor(pal.text)
-		ui.Text(c, locales.WorkspaceEmptyDetail()).
-			FontSize(13).TextColor(pal.textMuted).MaxWidth(380).TextAlign(ui.Center).LineHeight(1.45).Margin(8, 0, 18, 0)
-		if button(c, "ws-empty-new", locales.WorkspaceNewPane(), a.keys("pane.split.right"), true, pal) {
-			a.splitPane(s, "", "right")
-		}
+	card := paned(ui.Column(c.Key("ws-empty")).Grow(1).MinHeight(0).Radius(14).Background(pal.card), pal).Clip()
+	card.Children(func() {
+		ui.Row(c).Height(headerH).Shrink(0).AlignItems(ui.Center).Padding(0, 10, 0, a.chrome.headerPad).DragWindow().Children(func() {
+			ui.Text(c, s.DisplayName(a.set.SessionName)).FontSize(14).FontWeight(600).TextColor(pal.text).SingleLine()
+			ui.Spacer(c)
+			a.controlsRoom(c, 0)
+		})
+		ui.Column(c).Grow(1).MinHeight(0).Center().Padding(24).Children(func() {
+			ui.Text(c, locales.WorkspaceEmptyTitle(s.Workspace)).FontSize(17).FontWeight(600).TextColor(pal.text)
+			ui.Text(c, locales.WorkspaceEmptyDetail()).
+				FontSize(13).TextColor(pal.textMuted).MaxWidth(380).TextAlign(ui.Center).LineHeight(1.45).Margin(8, 0, 18, 0)
+			if button(c, "ws-empty-new", locales.WorkspaceNewPane(), a.keys("pane.split.right"), true, pal) {
+				a.splitPane(s, "", "right")
+			}
+		})
 	})
 }
