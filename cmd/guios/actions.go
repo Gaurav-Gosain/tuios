@@ -188,10 +188,28 @@ func (a *App) item(id string) *mygo.MenuItem {
 				a.setWin.Close()
 				return
 			}
+			if fastActions[id] && a.win != nil {
+				// GTK runs the item on the main thread: the action goes
+				// at once, not through the main loop's queue, which
+				// held it about 11 ms past the key's frame.
+				a.run(id, nil)
+				a.win.Invalidate()
+				return
+			}
 			a.update(func() { a.run(id, nil) })
 		},
 	}
 }
+
+// fastActions are the actions whose first frame the person waits for:
+// the sidebar and the workspaces. Their menu items run them at once.
+var fastActions = func() map[string]bool {
+	m := map[string]bool{"sidebar.toggle": true, "workspace.next": true, "workspace.previous": true}
+	for n := 1; n <= 9; n++ {
+		m["workspace."+itoa(n)] = true
+	}
+	return m
+}()
 
 // actionTitles are the actions' titles in the language the app shows;
 // an Action's Title stays English, for `kero actions`.
