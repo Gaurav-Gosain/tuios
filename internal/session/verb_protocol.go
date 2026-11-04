@@ -1920,7 +1920,7 @@ func buildVerbRegistry() map[string]verbEntry {
 				{Name: "session", Type: "string", Description: "Only deliver events from this session. Omit for events from every session. Unlike most verbs, an omitted session does not mean the most recently active one."},
 				{Name: "window", Type: "string", Description: "Only deliver events about this window id. Omit for every window."},
 				{Name: "types", Type: "[]string", Description: "Only deliver these event types. Omit for all of them.", Accepted: knownEventTypes},
-				{Name: "queue", Type: "int", Description: "Buffered events before the stream marks a gap.", Default: "256"},
+				{Name: "queue", Type: "int", Description: "Buffered events before the stream marks a gap. A size above 4096 is lowered to 4096.", Default: "256"},
 				{Name: "after_seq", Type: "int", Description: "Resume: replay the retained events with a seq above this one before streaming live. Pass the seq of the last event received. 0 replays everything the daemon still holds. Output events are not retained."},
 				{Name: "boot_id", Type: "string", Description: "The boot_id the after_seq came with. If the daemon has restarted since, the stream starts with a gap marker with reason boot_changed instead of a replay. Needs after_seq."},
 				{Name: "hosts", Type: "bool", Description: "Also deliver the agent-state, session-created and session-closed events this daemon relays from its linked hosts, each carrying host, and let session and window match events of other machines. Without it an event about another machine reaches only a subscriber that names no session or window, and only an attention or host-changed event.", Default: "false"},

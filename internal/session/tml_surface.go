@@ -629,8 +629,16 @@ func (d *Daemon) verbTMLOpen(cs *connState, params json.RawMessage) (any, *verbE
 		defer t.Stop()
 		timeout = t.C
 	}
+	// A caller that leaves ends the wait, so its handler and connection state
+	// do not stay for as long as the surface is on screen. The surface stays.
+	gone, stopGone := askCancel(cs)
+	defer stopGone()
 	select {
 	case <-s.done:
+	case <-gone:
+		return nil, newVerbError(ErrVerbInternal, "the caller went away while it waited for the surface")
+	case <-d.ctx.Done():
+		return nil, newVerbError(ErrVerbInternal, "daemon is shutting down")
 	case <-timeout:
 		return nil, hintedVerbError(ErrVerbTimeout, "the surface was still open when the wait ended", &VerbHint{
 			Command: "tuios tml close " + s.id,

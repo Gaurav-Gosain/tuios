@@ -495,11 +495,15 @@ func (d *Daemon) hostedCallsOnce(s *Session, windowID string, p *remotePane) err
 	}
 	stop := context.AfterFunc(d.ctx, func() { _ = stream.Close() })
 	defer stop()
+	// The watcher ends with this call. Without exit it would wait for the pane
+	// to close, and every retry after a channel end would add one more.
+	exit := make(chan struct{})
+	defer close(exit)
 	go func() {
 		select {
 		case <-p.done:
 			_ = stream.Close()
-		case <-d.ctx.Done():
+		case <-exit:
 		}
 	}()
 	defer func() { _ = stream.Close() }()

@@ -7534,7 +7534,7 @@ Params:
 - `window` (optional): only events about this window id. The filter compares
   window ids, so a window name matches nothing.
 - `types` (optional): event types to include; empty means all.
-- `queue` (optional): per-connection queue size; defaults to 256.
+- `queue` (optional): per-connection queue size; defaults to 256. A size above 4096 is lowered to 4096.
 - `after_seq` (optional): resume. Replay the retained events with a higher
   `seq` before streaming live. `0` replays everything the daemon still holds.
 - `boot_id` (optional, needs `after_seq`): the boot id `after_seq` came with.
