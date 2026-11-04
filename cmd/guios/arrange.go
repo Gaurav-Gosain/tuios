@@ -1,12 +1,15 @@
 package main
 
 import (
+	"errors"
 	"math"
 	"slices"
 
 	"github.com/Gaurav-Gosain/mygo/ui"
 
+	"github.com/Gaurav-Gosain/tuios/cmd/guios/locales"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/guios/client"
 	"github.com/Gaurav-Gosain/tuios/internal/guios/proto"
 	"github.com/Gaurav-Gosain/tuios/internal/layout"
 )
@@ -432,6 +435,10 @@ func (a *App) arrange(s *proto.Session, op string, set func(*proto.ArrangeParams
 		var res proto.ArrangeResult
 		err := cl.Call("arrange", p, &res)
 		a.update(func() {
+			if errors.Is(err, client.ErrTooSmall) {
+				a.toast(locales.ToastLayoutTooSmall())
+				return
+			}
 			if err != nil {
 				a.toast(err.Error())
 				return

@@ -1871,6 +1871,7 @@
   "cockpitReadingPrompt": "tuios is still reading the prompt. Press the key again.",
   "cockpitAnswerFailed": "tuios could not send the answer. Open the pane to answer it.",
   "toastPaneTooSmall": "This pane is too small to split. Close a pane or make the window wider.",
+  "toastLayoutTooSmall": "The panes would be too small for this layout. Close a pane or make the window larger.",
   "copyModeLabel": "Copy mode",
   "copyModeNormal": "Copy",
   "copyModeVisual": "Visual",

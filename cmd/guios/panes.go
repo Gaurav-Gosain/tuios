@@ -10,6 +10,7 @@ import (
 	"github.com/Gaurav-Gosain/mygo/plugins/terminal"
 	"github.com/Gaurav-Gosain/mygo/ui"
 
+	"github.com/Gaurav-Gosain/tuios/internal/guios/client"
 	"github.com/Gaurav-Gosain/tuios/internal/guios/proto"
 
 	"github.com/Gaurav-Gosain/tuios/cmd/guios/locales"
@@ -1360,8 +1361,8 @@ func (h *host) autoSplitDown(sid, pane string) (down, ok bool) {
 
 // minPaneCols and minPaneRows are the least a split leaves each half.
 const (
-	minPaneCols = 24
-	minPaneRows = 5
+	minPaneCols = client.MinPaneCols
+	minPaneRows = client.MinPaneRows
 )
 
 // reportGrid tells the session's host the pane area's size in cells, when

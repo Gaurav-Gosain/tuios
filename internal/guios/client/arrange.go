@@ -3,6 +3,7 @@ package client
 import (
 	"encoding/json"
 	"errors"
+	"math"
 	"os"
 	"slices"
 	"sync"
@@ -766,8 +767,10 @@ func (e *engine) treeOp(op string) error {
 	for _, w := range tiled(e.wins) {
 		ids = append(ids, number(leaves, nums, w.ID))
 	}
+	bounds, gap := e.ti.bounds(), e.ti.ls.Gap
 	t.PruneTo(ids)
-	t.InsertMissing(ids, e.ti.bounds(), e.ti.ls.Gap)
+	t.InsertMissing(ids, bounds, gap)
+	was := fit(t.ApplyLayout(bounds, gap))
 	if op == "rotate" {
 		n, ok := nums[e.focus]
 		if !ok {
@@ -777,7 +780,34 @@ func (e *engine) treeOp(op string) error {
 	} else {
 		t.EqualizeRatios()
 	}
+	if now := fit(t.ApplyLayout(bounds, gap)); now < 1 && now < was {
+		// Panes a few columns wide wrap every line, and a shell that
+		// rewrapped its prompt keeps it broken when they grow back.
+		return ErrTooSmall
+	}
 	return e.writeTree(t, leaves)
+}
+
+// MinPaneCols and MinPaneRows are the smallest pane, in cells, that a
+// layout change may leave: a split, a rotate or an even out. They are the
+// TUI's (layout.CanSplit), so both refuse the same splits.
+const (
+	MinPaneCols = config.DefaultWindowWidth
+	MinPaneRows = config.DefaultWindowHeight
+)
+
+// ErrTooSmall refuses a layout change that would leave a pane smaller
+// than MinPaneCols by MinPaneRows.
+var ErrTooSmall = errors.New("a pane would be too small")
+
+// fit is how the smallest of rects measures against the smallest pane: 1
+// or more when every pane is at least MinPaneCols by MinPaneRows.
+func fit(rects map[int]layout.Rect) float64 {
+	f := math.Inf(1)
+	for _, r := range rects {
+		f = min(f, float64(r.W)/MinPaneCols, float64(r.H)/MinPaneRows)
+	}
+	return f
 }
 
 // masterOp changes the master-stack shape, as the TUI's master actions do.

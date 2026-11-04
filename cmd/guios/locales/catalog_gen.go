@@ -10324,6 +10324,16 @@ func (msgs Messages) ToastPaneTooSmall() string {
 	return Catalog.Format(msgs.locale, "toastPaneTooSmall", nil)
 }
 
+// ToastLayoutTooSmall says "The panes would be too small for this layout. Close a pane or make the window larger."
+// in the language the app shows.
+func ToastLayoutTooSmall() string { return In(i18n.Locale()).ToastLayoutTooSmall() }
+
+// ToastLayoutTooSmall says "The panes would be too small for this layout. Close a pane or make the window larger."
+// in the language of msgs.
+func (msgs Messages) ToastLayoutTooSmall() string {
+	return Catalog.Format(msgs.locale, "toastLayoutTooSmall", nil)
+}
+
 // CopyModeLabel says "Copy mode"
 // in the language the app shows.
 func CopyModeLabel() string { return In(i18n.Locale()).CopyModeLabel() }

@@ -1019,6 +1019,7 @@
   "cockpitReadingPrompt": "tuios はまだ確認を読んでいます。もう一度キーを押してください。",
   "cockpitAnswerFailed": "tuios は答えを送れませんでした。ペインを開いて答えてください。",
   "toastPaneTooSmall": "このペインは小さすぎて分割できません。ペインを閉じるか、ウィンドウを広げてください。",
+  "toastLayoutTooSmall": "このレイアウトではペインが小さくなりすぎます。ペインを閉じるか、ウィンドウを大きくしてください。",
   "copyModeLabel": "コピーモード",
   "copyModeNormal": "コピー",
   "copyModeVisual": "ビジュアル",

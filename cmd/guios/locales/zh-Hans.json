@@ -1019,6 +1019,7 @@
   "cockpitReadingPrompt": "tuios 仍在读取提示。请再按一次键。",
   "cockpitAnswerFailed": "tuios 无法发送回答。请打开窗格回答。",
   "toastPaneTooSmall": "此窗格太小,无法拆分。请关闭一个窗格或加宽窗口。",
+  "toastLayoutTooSmall": "此布局会使窗格太小。请关闭一个窗格或放大窗口。",
   "copyModeLabel": "复制模式",
   "copyModeNormal": "复制",
   "copyModeVisual": "可视",
