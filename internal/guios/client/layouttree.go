@@ -294,4 +294,3 @@ func ids(wins []windowRow) []string {
 	}
 	return out
 }
-
