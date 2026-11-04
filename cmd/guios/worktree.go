@@ -31,7 +31,7 @@ func (a *App) newWorktreeSession() {
 	}
 	var p proto.CreateParams
 	if cur := a.session(a.selected); cur != nil && a.hostOf(cur.ID) == h {
-		p.Project, p.After, p.Dir = cur.Project, cur.ID, cur.FocusPane().WorkDir()
+		p.Project, p.After, p.Dir = cur.Project, cur.ID, cur.WorkDir()
 		p.Cols, p.Rows = cur.Cols, cur.Rows
 	}
 	if a.set.WorktreeBase == "current" {

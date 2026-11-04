@@ -386,7 +386,8 @@ func (s *Session) PaneByID(id string) *Pane {
 	return nil
 }
 
-// FocusPane returns the pane the user was in last, else the first.
+// FocusPane returns the pane the user was in last, else the first, else
+// nil: the workspace a tuios session shows can hold no pane.
 func (s *Session) FocusPane() *Pane {
 	if p := s.PaneByID(s.Focus); p != nil {
 		return p
@@ -395,6 +396,16 @@ func (s *Session) FocusPane() *Pane {
 		return &s.Panes[0]
 	}
 	return nil
+}
+
+// WorkDir is where a new pane or session beside this one should start: the
+// focused pane's directory, else the session's own. A tuios session shows
+// one workspace, which can hold no pane at all.
+func (s *Session) WorkDir() string {
+	if p := s.FocusPane(); p != nil {
+		return p.WorkDir()
+	}
+	return s.Pane.WorkDir()
 }
 
 // urgency orders statuses by how much they need the user.

@@ -1181,7 +1181,7 @@ func (a *App) newSessionOn(h *host, projectID string) {
 		if projectID == "" || cur.Project == projectID {
 			p.Project, p.After = cur.Project, cur.ID
 			if a.set.NewSessionDir == "current" {
-				p.Dir = cur.FocusPane().WorkDir()
+				p.Dir = cur.WorkDir()
 			}
 		}
 		p.Cols, p.Rows = cur.Cols, cur.Rows
