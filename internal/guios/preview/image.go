@@ -53,7 +53,6 @@ type Picture struct {
 // AVIF, RAW and the rest. It returns the picture's own size too.
 var nativeImage func(ctx context.Context, path string, maxPx int) (img image.Image, w, h int, err error)
 
-
 // DecodeImage reads the picture at path. maxPx bounds its long side, 0 for
 // MaxPx.
 func DecodeImage(ctx context.Context, path string, maxPx int) (*Picture, error) {
