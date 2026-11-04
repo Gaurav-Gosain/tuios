@@ -1811,10 +1811,13 @@ const (
 	ActionInboxMark        = "inbox_mark"
 	ActionInboxMarkAll     = "inbox_mark_all"
 	// The focus\'s tabs, every line of every thread card, and the group fold.
-	ActionInboxTabPrev      = "inbox_tab_prev"
-	ActionInboxTabNext      = "inbox_tab_next"
-	ActionInboxExpand       = "inbox_expand"
-	ActionInboxFold         = "inbox_fold"
+	ActionInboxTabPrev = "inbox_tab_prev"
+	ActionInboxTabNext = "inbox_tab_next"
+	ActionInboxExpand  = "inbox_expand"
+	ActionInboxFold    = "inbox_fold"
+	// The thread's previous and next prompt, the marks on its ruler.
+	ActionInboxPromptPrev   = "inbox_prompt_prev"
+	ActionInboxPromptNext   = "inbox_prompt_next"
 	ActionAgentUnread       = "agent_unread"
 	ActionAgentSnooze       = "agent_snooze"
 	ActionAgentReply        = "agent_reply"
@@ -1904,6 +1907,9 @@ func getDefaultInboxKeybinds() map[string][]string {
 		ActionInboxTabNext:     {"]"},
 		ActionInboxExpand:      {"e"},
 		ActionInboxFold:        {"F"},
+		// [ and ] step the tabs, so the prompt jumps take the braces.
+		ActionInboxPromptPrev: {"{"},
+		ActionInboxPromptNext: {"}"},
 	}
 }
 
@@ -3998,6 +4004,9 @@ var yieldingDefaults = map[string]bool{
 	"send_to_workspace_9": true,
 	// c, new with the fan comparison.
 	"inbox_compare": true,
+	// { and }, new with the thread's prompt ruler.
+	"inbox_prompt_prev": true,
+	"inbox_prompt_next": true,
 }
 
 // windowModeTables is every binding the user's config holds in the tables

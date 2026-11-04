@@ -2554,7 +2554,16 @@ conversation, read from its transcript and drawn as cards:
 
 The newest card is at the bottom. The wheel over the thread, or `J` and `K`,
 scrolls it. `[` and `]` switch between the Thread and Changes tabs: Changes
-shows every edit of the last turn whole. tuios follows the transcript of the
+shows every edit of the last turn whole.
+
+The thread follows the newest card while it shows the bottom. A new prompt
+goes to the top of the thread, and the reply fills the space under it. When
+you scroll up, the thread stays where it is. A line at the bottom counts the
+entries that arrived, such as `3 new entries ↓`. `G`, a click on that line,
+or a scroll back to the bottom shows them and follows again. Each agent keeps
+its place when you select another agent and come back. When the thread is
+longer than the space, a ruler at its right edge shows where you are and
+marks each prompt. `{` and `}` show the previous and next prompt at the top. tuios follows the transcript of the
 selected agent only, and the thread grows as the agent works. For other
 agents it is the recap of their turns, their last message, and the last mail
 between them and other agents.

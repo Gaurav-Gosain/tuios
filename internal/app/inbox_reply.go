@@ -560,6 +560,7 @@ func (m *OS) InboxReplySend() tea.Cmd {
 	}
 	st.sendSeq++
 	st.sending[st.sendSeq] = ed.comp
+	m.threadFollowOnSend(ed.host, ed.session, ed.window)
 	return m.inboxQueueCmdOn(ed.host, ed.session, ed.window, ed.who, text, nonce, false, st.sendSeq, parts)
 }
 

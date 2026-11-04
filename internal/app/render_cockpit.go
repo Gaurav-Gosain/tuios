@@ -2049,9 +2049,9 @@ func (m *OS) drawFocus(c *ckCanvas, l ckLook, x, y, w, y1, top int, now time.Tim
 	if r.agent >= 0 && cardTop-bodyTop > 1 {
 		room := cardTop - bodyTop - 1
 		t := st.threads.byKey[agentKey(e)]
-		scroll := 0
+		up := 0
 		if t != nil {
-			scroll = t.scroll
+			up = max(t.follow.Up, 0)
 		}
 		// The live activity row sits under the newest line, where the
 		// thread's last line would be, while the agent works.
@@ -2060,24 +2060,26 @@ func (m *OS) drawFocus(c *ckCanvas, l ckLook, x, y, w, y1, top int, now time.Tim
 			room--
 			base--
 		}
-		lines := m.threadBody(e, w, room+scroll, now)
+		lines := m.threadBody(e, w, room+up, now)
 		var hits []string
 		if t != nil && len(t.hits) == len(lines) {
 			hits = t.hits
 		}
-		if t != nil {
-			// The thread scrolls no further than its first line.
-			t.scroll = min(scroll, max(len(lines)-room, 0))
-			scroll = t.scroll
+		start, end := max(len(lines)-room, 0), len(lines)
+		if t != nil && (t.read || t.recap != nil) {
+			t.follow.Apply(threadLayout(t, len(lines), room))
+			start, end = t.follow.Window()
 		}
-		end := len(lines) - scroll
-		start := max(end-room, 0)
-		ty := base - (end - start)
-		for i := start; i < end; i++ {
-			c.draw(x, ty+i-start, w, lines[i])
+		for i := start; i < min(end, len(lines)); i++ {
+			y := base - (end - i)
+			c.draw(x, y, w, lines[i])
 			if hits != nil && hits[i] != "" {
-				st.ck.hits = append(st.ck.hits, ckHit{x0: x, y0: top + ty + i - start, x1: right, y1: top + ty + i - start + 1, kind: ckHitAction, action: hits[i]})
+				st.ck.hits = append(st.ck.hits, ckHit{x0: x, y0: top + y, x1: right, y1: top + y + 1, kind: ckHitAction, action: hits[i]})
 			}
+		}
+		if t != nil {
+			m.drawThreadUnseen(c, l, t, x, w, base-1, top)
+			drawThreadRuler(c, l, t, x+w-1, base-room, room, len(lines), start)
 		}
 	}
 }

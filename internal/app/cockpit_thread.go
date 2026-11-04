@@ -140,6 +140,8 @@ func (m *OS) threadCardLines(e sidebarAgentEntry, t *agentThread, width int, cha
 	// Each item carries its lines drawn: a line is drawn once, when its
 	// card is built, and a rebuild only joins them.
 	var items []ckItem
+	// prompts are the items that are prompts, for the thread's ruler.
+	var prompts []int
 	var c *ckCanvas
 	draw := func(ls []ckLine) []string {
 		out := make([]string, len(ls))
@@ -204,6 +206,7 @@ func (m *OS) threadCardLines(e sidebarAgentEntry, t *agentThread, width int, cha
 		switch {
 		case en.Kind == "text" && en.Role == "user":
 			turn++
+			prompts = append(prompts, len(items))
 			cached(en, turn, func() []ckLine {
 				label := []ckSeg{{t: "You", fg: pal.AccentBright, attrs: ckBold}, {t: "  " + ckClock(en.At), fg: pal.FgMute}}
 				if turn > 1 {
@@ -302,7 +305,11 @@ func (m *OS) threadCardLines(e sidebarAgentEntry, t *agentThread, width int, cha
 	// Every item, oldest first. The thread keeps the lines until it, the
 	// width or a fold changes; scrolling picks from them.
 	var out, hits []string
-	for _, it := range items {
+	for i, it := range items {
+		if len(prompts) > 0 && prompts[0] == i {
+			prompts = prompts[1:]
+			t.prompts = append(t.prompts, len(out))
+		}
 		out = append(out, it.out...)
 		for _, ln := range it.lines {
 			hits = append(hits, ln.hit)

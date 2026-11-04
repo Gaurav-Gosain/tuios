@@ -1836,6 +1836,7 @@ Inside it:
 | Keys | What it does |
 |---|---|
 | `j` `k`, arrows | Move between agents. The focus area shows the selected one |
+| `g` `G` | Go to the first or last agent. When the thread is scrolled up, `G` first shows its newest lines and follows it again |
 | `enter` | Go to the agent's pane and close the view. On mail, open the thread |
 | `a` `A` `r` `R` | On a held approval: allow once, always allow, reject, reject and say why. `1` `2` `3` still work |
 | `r`, `i`, `tab` | With no approval waiting: write a reply to the agent, or to the mail |
@@ -1858,6 +1859,7 @@ Inside it:
 | `y` with marks | Resume every marked Resume row. `*` then `y` resumes them all |
 | `[` `]` | Switch the focus tabs: Card on the board, Thread, Changes, Artifacts, Checkpoints and Pane |
 | `J` `K` | Scroll the thread, or a long plan waiting for a yes. On the Artifacts tab, move between the artifacts |
+| `{` `}` | Show the thread's previous or next prompt at the top. The ruler at the right of the thread marks each prompt |
 | `e` | Show every line of every card in the thread |
 | `F` | Fold or open the group of the row under the cursor. On a folded heading, `enter` also opens it |
 | `v` | Review the agent's changes |
@@ -1978,9 +1980,9 @@ These keys are in three sections of their own, rebindable like any other:
 `inbox_write`, `inbox_sort`, `inbox_view_pane`, `inbox_new_agent`,
 `inbox_allow`, `inbox_allow_always`, `inbox_open`, `inbox_back`,
 `inbox_help`, `inbox_mark`, `inbox_mark_all`, `inbox_tab_prev`,
-`inbox_tab_next`, `inbox_expand`, `inbox_fold`, `inbox_compare`, `inbox_artifact`,
-`inbox_board`, `inbox_board_layout`, `inbox_take`, `inbox_stage_prev`,
-`inbox_stage_next`),
+`inbox_tab_next`, `inbox_expand`, `inbox_fold`, `inbox_prompt_prev`,
+`inbox_prompt_next`, `inbox_compare`, `inbox_artifact`, `inbox_board`,
+`inbox_board_layout`, `inbox_take`, `inbox_stage_prev`, `inbox_stage_next`),
 `[keybindings.inbox_peek]` (the prompt: `peek_approve`, `peek_approve_always`,
 `peek_deny`, `peek_type`, `peek_read_again`, `peek_go`, `peek_back`) and
 `[keybindings.mail]` (the mailbox: `mail_down`, `mail_up`, `mail_page_down`,

@@ -1247,6 +1247,8 @@ func (m *OS) cockpitAction(action string) tea.Cmd {
 		m.cockpitNextScope()
 	case "needs":
 		m.CockpitCycleFilter()
+	case "follow":
+		m.CockpitThreadBottom()
 	case "a", "A", "r":
 		cmd, _ := m.CockpitAnswerLetter(action)
 		return cmd
@@ -1388,11 +1390,7 @@ func (m *OS) CockpitWheel(x, y int, up bool) {
 		return
 	}
 	if t := m.cockpitThread(); t != nil {
-		if up {
-			t.scroll += 3
-		} else {
-			t.scroll = max(t.scroll-3, 0)
-		}
+		t.follow.Scroll(-3 * wheelDelta(up))
 		m.cockpitTouch()
 		return
 	}
@@ -1449,7 +1447,7 @@ func (m *OS) CockpitTab(delta int) {
 	i := ((m.cockpitTabIndex()+delta)%n + n) % n
 	m.Inbox.ck.tab, _, _ = strings.Cut(tabs[i], " ")
 	if t := m.cockpitThread(); t != nil {
-		t.scroll = 0
+		t.follow.Bottom()
 	}
 	m.cockpitTouch()
 }
@@ -1546,12 +1544,11 @@ func (m *OS) CockpitKey(action string) (tea.Cmd, bool) {
 		if t == nil || len(t.entries) == 0 {
 			return nil, false
 		}
-		if action == config.ActionInboxDetailUp {
-			t.scroll += 3
-		} else {
-			t.scroll = max(t.scroll-3, 0)
-		}
+		t.follow.Scroll(-3 * d)
 		m.cockpitTouch()
+		return nil, true
+	case config.ActionInboxPromptPrev, config.ActionInboxPromptNext:
+		m.CockpitPromptJump(action == config.ActionInboxPromptNext)
 		return nil, true
 	case config.ActionInboxNewAgent:
 		if _, c, ok := m.cockpitCard(); ok {
@@ -1597,6 +1594,10 @@ func (m *OS) CockpitKey(action string) (tea.Cmd, bool) {
 		case config.ActionInboxFirst:
 			d = -1 << 20
 		case config.ActionInboxLast:
+			// G shows a held thread's newest lines first, then moves.
+			if m.CockpitThreadBottom() {
+				return nil, true
+			}
 			d = 1 << 20
 		}
 		m.CockpitMove(d)

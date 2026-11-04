@@ -7834,6 +7834,14 @@ pane.
 | Bug | Fix removed | How | Tests that fail | Verdict |
 |---|---|---|---|---|
 | The activity row repeats a card the transcript already shows | The newest tool call check in `transcriptview.ActivityShown` | The check never taken, so the row shows while the agent works | `TestCockpitThreadCards` ("the activity row stays when the transcript shows the call's card") | **caught** |
+`threadFollowAndRuler`, the end of `TestCockpitThreadCards`, appends prompts
+and replies to the transcript in a third client at 160x45. Run on 2026-11-04.
+
+| Bug | Fix removed | How | Tests that fail | Verdict |
+|---|---|---|---|---|
+| A held thread moves when entries arrive | the hold rule in `transcriptview.Follow.Apply` | the held case keeps `Up` and does not add the new lines | `TestCockpitThreadCards` ("the held thread moved when entries arrived") | **caught** |
+| `{` and `}` do nothing | `transcriptview.Follow.Jump` | `Jump` returns at once | `TestCockpitThreadCards` ("{ did not put \"turn 3\" on the thread's first rows") | **caught** |
+| A new prompt stays at the bottom | the anchor rule in `transcriptview.Follow.Apply` | the anchor case never taken | `TestCockpitThreadCards` ("the new prompt is not at the top of the thread: its label is on row 28, the thread starts on row 13") | **caught** |
 
 ## The agents cockpit: reply area and image view
 

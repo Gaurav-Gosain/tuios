@@ -14,6 +14,7 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
+	"github.com/Gaurav-Gosain/tuios/internal/transcriptview"
 )
 
 // The agent thread: what the selected agent in the agents view said and did,
@@ -113,11 +114,16 @@ type agentThread struct {
 	hits []string
 	// folded are the cards whose fold the person flipped, by entry id, and
 	// the turns, by "turn:" and the id of the turn's first entry;
-	// expandAll shows every line of every card (e); scroll is how many
-	// lines the thread is scrolled up from its newest.
+	// expandAll shows every line of every card (e).
 	folded    map[string]bool
 	expandAll bool
-	scroll    int
+	// follow is where the person reads the thread: how far up from the
+	// newest line, and what arrived while it held still. taken counts the
+	// entries that arrived after the first page, for its count of unseen
+	// ones, and prompts are the lines of body each prompt starts on.
+	follow  transcriptview.Follow
+	taken   int
+	prompts []int
 	// cards are the entries' cards as last built, by entry id.
 	cards map[string]ckCard
 	// act is the activity row's text as last drawn, "" for no row, and
@@ -363,6 +369,10 @@ func (m *OS) applyThreadPage(msg threadPageMsg) tea.Cmd {
 		}
 		at[e.ID] = len(t.entries)
 		t.entries = append(t.entries, e)
+		if msg.after && !msg.reset && e.Kind != "tool_result" {
+			// A result finishes a call the thread already counted.
+			t.taken++
+		}
 	}
 	// A result can arrive on a later page than the call it finishes. Fold it
 	// into retained calls too, otherwise a cached running card hides failures.
@@ -562,7 +572,7 @@ func (m *OS) threadBody(e sidebarAgentEntry, width, room int, now time.Time) []s
 	if t.body != nil && t.bodyAt == key {
 		return t.body
 	}
-	t.hits = nil
+	t.hits, t.prompts = nil, nil
 	t.body, t.bodyAt = m.threadBodyLines(e, t, width, room, now), key
 	return t.body
 }
