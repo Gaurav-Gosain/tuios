@@ -937,9 +937,11 @@ func (a *App) copyView(c *ui.Context, pal *palette) {
 			case visualBlock:
 				mode = locales.CopyModeVisualBlock()
 			}
+			// The mode is the bar's one word that matters: it keeps its
+			// width, and the message beside it gives way.
 			chip(c, pal, pal.accent.Alpha(0.18), pal.accent, func() {
-				ui.Text(c, mode).FontSize(11.5).FontWeight(650).SingleLine()
-			})
+				ui.Text(c, mode).FontSize(fsSmall).FontWeight(wSemibold).SingleLine()
+			}).Shrink(0)
 			switch {
 			case cm.searching:
 				prompt := "/"
