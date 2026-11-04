@@ -225,6 +225,7 @@ var leaderToolRows = []menuRow{
 	{parts: []menuPart{{"prefix_jump_notif", "Newest message"}}, desc: "Newest message"},
 	{parts: []menuPart{{"prefix_last_message", "Show last message"}}, desc: "Show last message"},
 	{parts: []menuPart{{"prefix_help", "Help"}}, desc: "Help"},
+	{parts: []menuPart{{"prefix_help_mode", "Inspect"}}, desc: "Hover help"},
 }
 
 // leaderAgentRows is the leader menu's Agents section.

@@ -1490,6 +1490,7 @@ func DefaultConfig() *UserConfig {
 				"prefix_exit_mode":        {"esc"},
 				"prefix_selection":        {"["},
 				"prefix_help":             {"?"},
+				"prefix_help_mode":        {"h"},
 				"prefix_debug":            {"D"},
 				"prefix_tape":             {"T"},
 				"prefix_quit":             {"q"},

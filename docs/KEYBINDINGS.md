@@ -182,6 +182,33 @@ the keys, the action, the scope and the description. `q` or `esc` leaves it.
 It opens only when you run `browse`. `tuios keybinds list` stays plain text,
 on a terminal too.
 
+## Hover help
+
+`Ctrl+B h` opens help mode. It explains one component at a time rather than
+listing every key: move the pointer over a rail, the dock or one of its cells, a
+pane's title bar or its terminal body, and a pane with a red border appears
+above or below it, never over it when the screen has room. The pane says what
+the component is for, the hotkeys that act on it, and the `tuios` commands that
+change it. `Ctrl+B ?` still opens the full key list.
+
+| Key | What it does |
+| --- | --- |
+| `Tab`, `Shift+Tab` | Next or previous top-level component. `←` and `→` do the same. |
+| `Down` | Move into the selected component's parts, such as a rail's sections or a pane's title bar and body, then through them. |
+| `Up` | Move back out: previous part, then the component itself. |
+| `h` | Show every keybinding of the selected component instead of the short list. |
+| `s` | Show or hide the session rail, so a hidden rail can be inspected. |
+| `S` | Show or hide the opposite rail, when one is configured. |
+| `esc` | Leave help mode. |
+
+A hidden rail still has an entry in the rotation, marked `(hidden)`; `s` (or `S`
+for the opposite edge) gives it a rectangle to hover. While help mode is on it
+owns the keyboard and the pointer: no letter reaches a pane, and a click or a
+wheel event acts on nothing but the selected component. The default is
+`prefix_help_mode = ["h"]` in
+`[keybindings.prefix_mode]`, so a preset that binds `h` to something else takes
+the key with it; rebind either action.
+
 ## Editing sidebar files
 
 Focus the sidebar with `s` in window mode or `Ctrl+B e`, or walk into it with

@@ -259,9 +259,26 @@ type OS struct {
 	// last motion that did reach it, which is what the filter's "moved a
 	// cell" tests are written against, so the two cannot be one field. See
 	// NotePointerSeen.
-	pointerSeenX    int
-	pointerSeenY    int
-	ShowHelp        bool
+	pointerSeenX int
+	pointerSeenY int
+	ShowHelp     bool
+	// HelpMode is the hover help mode: the leader then h enters it, esc leaves
+	// it. The mouse, or Tab and the arrow keys, walk the components on screen
+	// and the pane explains the one under the cursor. See help_mode.go.
+	HelpMode bool
+	// helpTarget is the id of the component help mode explains. Empty until
+	// the first component is selected.
+	helpTarget string
+	// helpShowKeys says the pane shows the selected component's whole
+	// keybinding set rather than the short account of it. h toggles it.
+	helpShowKeys bool
+	// helpPaneRect is where the pane was drawn on the last frame, in screen
+	// cells. Motion over the pane itself is ignored, so reading it does not
+	// select whatever the pane covers.
+	helpPaneRect image.Rectangle
+	// helpComps is the component list the last frame drew. Motion and the
+	// Tab/arrow keys read it instead of rebuilding every row's help.
+	helpComps       []helpComponent
 	InteractionMode bool              // True when actively dragging/resizing
 	WindowExitChan  chan string       // Channel to signal window closure
 	windowExits     windowExitQueue   // Overflow for exits WindowExitChan could not take

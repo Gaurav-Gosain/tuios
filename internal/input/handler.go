@@ -63,6 +63,13 @@ func HandleInput(msg tea.Msg, o *app.OS) (tea.Model, tea.Cmd) {
 	case tea.PasteEndMsg:
 		return o, nil
 	case tea.MouseClickMsg:
+		// Help mode reads the pointer: a click picks the component under it
+		// and does nothing else, so a click cannot focus or move a pane while
+		// the user is inspecting it.
+		if o.HelpMode {
+			o.HelpHoverAt(msg.X, msg.Y)
+			return o, nil
+		}
 		if _, inside := o.SidebarSessionAt(msg.X, msg.Y); !inside {
 			o.BlurSidebarSession()
 		}
@@ -88,6 +95,12 @@ func HandleInput(msg tea.Msg, o *app.OS) (tea.Model, tea.Cmd) {
 			result, cmd = handleMouseClick(msg, o)
 		}
 	case tea.MouseMotionMsg:
+		// Help mode reads the pointer as its cursor. Motion never moves,
+		// resizes or hovers anything else while it is on.
+		if o.HelpMode {
+			o.HelpHoverAt(msg.X, msg.Y)
+			return o, nil
+		}
 		// The labels cover the pane, so motion over it is not the pane's.
 		if o.HintsOpen() || o.PaneLabelsOpen() {
 			return o, nil
@@ -107,6 +120,9 @@ func HandleInput(msg tea.Msg, o *app.OS) (tea.Model, tea.Cmd) {
 		// Don't sync on motion: too frequent
 		return handleMouseMotion(msg, o)
 	case tea.MouseReleaseMsg:
+		if o.HelpMode {
+			return o, nil
+		}
 		if o.CaptureActive() {
 			result, cmd = handleCaptureMouseRelease(o)
 		} else if o.ShowScrollbackBrowser {
@@ -121,6 +137,9 @@ func HandleInput(msg tea.Msg, o *app.OS) (tea.Model, tea.Cmd) {
 		// tick.
 		o.ReleaseGestureAnnouncements()
 	case tea.MouseWheelMsg:
+		if o.HelpMode {
+			return o, nil
+		}
 		// A wheel scrolls the pane out from under the labels, so it ends
 		// hints mode and then scrolls as usual. The pane labels the same.
 		o.CloseHints()
@@ -404,6 +423,12 @@ func HandleKeyPress(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	// window-management and terminal mode. It only observes; it never consumes.
 	if o.ShowKeys {
 		o.CaptureKeyEvent(msg)
+	}
+
+	// Help mode owns the keyboard while it is up: every key is either one of
+	// its own or swallowed, and no letter reaches a pane or a leader menu.
+	if o.HelpMode {
+		return handleHelpModeKey(msg, o)
 	}
 
 	// Hold-to-window-mode. The trigger is consumed here, before any mode routing,
