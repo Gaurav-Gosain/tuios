@@ -53,6 +53,19 @@ func holdLeases(d time.Duration) {
 	}
 }
 
+// releaseLeases ends the hold now and sends the leases held, in the frame
+// the layout's move ends.
+func releaseLeases() {
+	leaseHold.mu.Lock()
+	leaseHold.until = time.Now()
+	if leaseHold.timer != nil {
+		// Its work is done here: no wake-up after.
+		leaseHold.timer.Stop()
+	}
+	leaseHold.mu.Unlock()
+	flushLeases()
+}
+
 // heldLease keeps the lease of g while a hold runs, and reports whether it
 // did.
 func heldLease(g *gated, l [4]int) bool {
@@ -108,6 +121,10 @@ type motionWatch struct {
 	placed map[string]bool
 	// width is each placed pane's width in this frame, in DIPs.
 	width map[string]float32
+	// tiles are the rectangles of the panes of view, as they move
+	// (tiles.go), and moved tells that they moved in the last frame.
+	tiles map[string]*tileAnim
+	moved bool
 	// guess is the guessed card of a split (splitGuess) as the last frame
 	// showed it.
 	guess guessShown
@@ -126,7 +143,7 @@ func (m *motionWatch) isNew(id string) bool { return m.last != nil && !m.last[id
 func (a *App) watchPanes(view, layout string) {
 	m := &a.motion
 	if view != m.view {
-		m.last, m.top = nil, ""
+		m.last, m.top, m.tiles, m.moved = nil, "", nil, false
 	} else {
 		m.last = m.now
 		if layout != m.layout {
