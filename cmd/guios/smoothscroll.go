@@ -42,10 +42,17 @@ type smoothScroll struct {
 	flingV, flingFrom float64
 	flingAt           time.Time
 	flinging          bool
+	// easedAt is when the content last moved, for its ease to the last
+	// move.
+	easedAt time.Time
 	// lastY is the offset the container wrote back in the last frame, to
 	// tell that it stopped at an end.
 	lastY float32
 }
+
+// scrollTrace, set by the e2e build, sees where each frame puts the
+// content.
+var scrollTrace func(y float32)
 
 type scrollSample struct {
 	at time.Time
@@ -58,12 +65,16 @@ const (
 	resampleLag = 9 * time.Millisecond
 	// notchGlide is how long a wheel's notch glides.
 	notchGlide = 150 * time.Millisecond
+	// fitWindow is how far back resample's line goes through the moves,
+	// and easeTime how fast the content catches up once they stop.
+	fitWindow = 50 * time.Millisecond
+	easeTime  = 12 * time.Millisecond
 	// flingDecay is how fast a flick slows, per second: its speed falls
 	// to 1/e in 1/flingDecay seconds, and it goes v/flingDecay in all.
 	flingDecay = 4.0
 	// flingMin is the least speed, in DIPs a second, that a flick goes on
 	// at, and flingStop the speed it stops at.
-	flingMin, flingStop = 250.0, 12.0
+	flingMin, flingStop = 250.0, 30.0
 )
 
 // track scrolls e, a scroll container, with s, and returns it. Call it
@@ -169,23 +180,38 @@ func (s *smoothScroll) at(now time.Time) float64 {
 		s.glideTo = s.target
 		return s.glideFrom + (s.glideTo-s.glideFrom)*(1-math.Pow(1-k, 3))
 	case s.n > 0:
-		when := now.Add(-resampleLag)
-		last := s.samples[s.n-1]
-		if !when.Before(last.at) {
-			s.n = 0
-			return s.target
-		}
-		for i := s.n - 1; i > 0; i-- {
-			a, b := s.samples[i-1], s.samples[i]
-			if !when.Before(a.at) {
-				k := float64(when.Sub(a.at)) / float64(b.at.Sub(a.at))
-				return a.to + (b.to-a.to)*k
-			}
-		}
-		// Before the first move kept: the content waits for it.
-		return s.shown
+		return s.resample(now)
 	}
 	return s.target
+}
+
+// resample returns where the touchpad's moves put the content at now,
+// resampleLag behind them: on the line through the moves of the last
+// fitWindow, which events that come in bursts, as the main thread takes
+// them, do not throw off as they do the moves themselves. The content
+// never goes past the last move, nor back, and once the moves stop it
+// eases the rest of the way.
+func (s *smoothScroll) resample(now time.Time) float64 {
+	last := s.samples[s.n-1]
+	when := now.Add(-resampleLag)
+	if when.Sub(last.at) > 2*resampleLag || s.n < 2 {
+		// The fingers stopped, or there is one move: ease to it.
+		return s.shown + (s.target-s.shown)*(1-math.Exp(-float64(now.Sub(s.easedAt))/float64(easeTime)))
+	}
+	var n, st, sx, stt, stx float64
+	for i := s.n - 1; i >= 0 && last.at.Sub(s.samples[i].at) <= fitWindow; i-- {
+		t := s.samples[i].at.Sub(last.at).Seconds()
+		x := s.samples[i].to
+		n, st, sx, stt, stx = n+1, st+t, sx+x, stt+t*t, stx+t*x
+	}
+	q := when.Sub(last.at).Seconds()
+	to := sx / n
+	if d := n*stt - st*st; n >= 2 && d > 1e-12 {
+		b := (n*stx - st*sx) / d
+		to = (sx-b*st)/n + b*q
+	}
+	lo, hi := min(s.shown, s.target), max(s.shown, s.target)
+	return max(lo, min(to, hi))
 }
 
 // step moves the content to where it goes in this frame.
@@ -197,15 +223,22 @@ func (s *smoothScroll) step(c *ui.Context) {
 		s.flinging, s.gliding, s.n = false, false, 0
 		s.target = s.shown
 	}
-	if s.shown == s.target && !s.gliding && !s.flinging && s.n == 0 {
+	if s.shown == s.target && !s.gliding && !s.flinging {
 		s.lastY = s.Y
 		return
 	}
-	to := s.at(c.Now())
+	now := c.Now()
+	to := s.at(now)
+	if math.Abs(s.target-to) < 0.05 && !s.gliding && !s.flinging {
+		to = s.target // an ease's tail, under a pixel
+	}
 	s.Y = max(s.Y+float32(to-s.shown), 0)
-	s.shown = to
+	s.shown, s.easedAt = to, now
+	if scrollTrace != nil {
+		scrollTrace(s.Y)
+	}
 	s.lastY = s.Y
-	if s.shown != s.target || s.gliding || s.flinging || s.n > 0 {
+	if s.shown != s.target || s.gliding || s.flinging {
 		c.AnimationFrame()
 	}
 }
