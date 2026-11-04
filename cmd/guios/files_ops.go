@@ -276,4 +276,5 @@ func (a *App) entryMenu(m *ui.Menu, s *proto.Session, pane string, it fileItem) 
 	if m.Item(locales.FilesDeleteItem()).Chosen() {
 		a.askDelete(pane, it)
 	}
+	a.copyMenu(m, a.hostOf(pane), it.path)
 }

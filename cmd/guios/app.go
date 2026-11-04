@@ -118,9 +118,11 @@ type App struct {
 	hostsGen   int
 	hostsKnown bool
 	localLoad  client.HostReport
-	owner      map[string]*host
-	st         proto.State
-	loaded     bool // a state came
+	// xfer are the copies between machines (transfers.go).
+	xfer   transfers
+	owner  map[string]*host
+	st     proto.State
+	loaded bool // a state came
 
 	prefs      prefs
 	set        settings.Settings // the user's settings: Settings' controls edit it

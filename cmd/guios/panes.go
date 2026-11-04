@@ -528,14 +528,23 @@ func (a *App) paneHeader(c *ui.Context, pal *palette, bar ui.TitleBar, shown flo
 			// The home directory names itself "~", which the title may
 			// already say; another machine's, as scp writes it: devbox:~/api.
 			h := a.hostOf(p.ID)
+			if p.Host != "" && !h.remote() {
+				// A pane of this session whose program runs on a linked
+				// machine is that machine's, as its paths are.
+				if o := a.hostNamed(p.Host); o != nil {
+					h = o
+				} else {
+					h = &host{name: p.Host}
+				}
+			}
 			if dir := h.shortDir(p.WorkDir()); dir != title || h.remote() {
 				if !h.remote() {
 					ui.Text(c, dir).FontSize(13).TextColor(pal.textFaint).SingleLine().Ellipsis("…").Shrink(2).MinWidth(0)
 				} else {
 					// The host's name in its color, as the sidebar's strip
 					// marks it: no pane passes for another machine's.
-					ui.Row(c.Key("where")).Shrink(2).MinWidth(0).AlignItems(ui.Center).Children(func() {
-						ui.Text(c, h.name+":").FontSize(13).FontWeight(500).TextColor(pal.hostColor(h)).SingleLine().Shrink(0)
+					ui.Row(c.Key("where")).Shrink(2).MinWidth(0).AlignItems(ui.Center).Clip().Children(func() {
+						ui.Text(c, h.name+":").FontSize(13).FontWeight(500).TextColor(pal.hostColor(h)).SingleLine().Ellipsis("…").Shrink(0.5).MinWidth(0)
 						ui.Text(c, dir).FontSize(13).TextColor(pal.textFaint).SingleLine().Ellipsis("…").Shrink(1).MinWidth(0)
 					})
 				}

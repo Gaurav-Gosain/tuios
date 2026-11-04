@@ -65,6 +65,7 @@ type windowRow struct {
 	AgentAt     int64            `json:"agent_state_at"`
 	Harness     string           `json:"agent_harness"`
 	Foreground  string           `json:"foreground"`
+	Host        string           `json:"host"`
 	Program     []map[string]any `json:"program_status"`
 	// Exited and its exit status say the window's process ended; KeepOpen
 	// says the window stays after that (new-window keep_open). A daemon
@@ -294,7 +295,7 @@ func (k *stateKeeper) pane(w windowRow) proto.Pane {
 	p := proto.Pane{
 		ID: w.ID, Title: title, Dir: w.Cwd, Cols: w.Width, Rows: w.Height, PID: w.PID,
 		Process: w.Foreground, Agent: w.Harness, Message: w.AgentMsg, Kind: w.AgentKind, Progress: -1,
-		Status: proto.Idle, Since: w.AgentAt / int64(time.Millisecond),
+		Status: proto.Idle, Since: w.AgentAt / int64(time.Millisecond), Host: w.Host,
 	}
 	// A pane named by the person or its program shows that name: kero
 	// shows a pane's title while a program runs in it.

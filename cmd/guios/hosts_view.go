@@ -445,7 +445,12 @@ func (a *App) hostsCLI(h *host, done func(error), args ...string) {
 			if done != nil {
 				done(err)
 			}
+			if a.setWin != nil {
+				a.setWin.Invalidate()
+			}
+			// The daemon follows a change of its config in a moment.
 			a.refreshHosts()
+			time.AfterFunc(time.Second, func() { a.update(a.refreshHosts) })
 		})
 	}()
 }

@@ -358,6 +358,8 @@ func (a *App) sidebar(c *ui.Context, pal *palette, bar ui.TitleBar) {
 			a.endedSections(c, pal)
 		}
 	})
+	// The copies between machines stay in view under the list.
+	ui.Column(c.Key("xfers")).Padding(0, 10, 0, 10).Shrink(0).Children(func() { a.transfersSection(c, pal) })
 	a.usagePanel(c, pal)
 	a.sidebarFooter(c, pal)
 }
@@ -646,6 +648,15 @@ func (a *App) sessionMenu(m *ui.Menu, s *proto.Session) {
 		}
 	}
 	h := a.hostOf(id)
+	// A pane whose program runs on a linked machine, in this session.
+	if !h.remote() && len(a.hosts) > 1 {
+		for _, o := range a.hosts[1:] {
+			if m.Item(locales.NewPaneOn(o.name)).Disabled(o.conn != connReady).Chosen() {
+				name := o.name
+				a.defer_(func() { a.newPaneOn(a.session(id), name) })
+			}
+		}
+	}
 	m.Submenu(locales.SessionMoveToProject(), func(m *ui.Menu) {
 		// A session moves among its host's projects alone.
 		for _, p := range a.projectsOf(h) {

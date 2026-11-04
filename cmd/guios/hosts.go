@@ -263,6 +263,10 @@ func (a *App) applyHosts(reps []client.HostReport, load client.HostReport) {
 	// The session shown may have gone with its host.
 	a.reselect()
 	a.updateTitle()
+	// Settings › Hosts shows the links too, in a window of its own.
+	if a.setWin != nil {
+		a.setWin.Invalidate()
+	}
 }
 
 // followLink sets how the app stands with a remote host from its link, and
@@ -368,6 +372,7 @@ func (a *App) connected(h *host, gen int, cl *client.Client, err error) {
 	a.reportView()
 	if !h.remote() {
 		a.watchHosts(cl)
+		a.watchTransfers(cl)
 	} else {
 		// Its OS and home, for its paths: ~ for its home in the sidebar.
 		go func() {
@@ -448,6 +453,20 @@ func (a *App) disconnected(h *host, cl *client.Client) {
 			}
 		})
 	})
+}
+
+// newPaneOn opens a pane in a session of this machine whose program runs on
+// a linked machine, beside the session's focused pane, as tuios new-window
+// --host does. It stays in the session, titled HOST:NAME.
+func (a *App) newPaneOn(s *proto.Session, host string) {
+	if s == nil {
+		return
+	}
+	at := a.focusOf(s)
+	if at == "" {
+		at = s.ID
+	}
+	a.split(s, proto.CreateParams{Split: at, Direction: "right", Host: host})
 }
 
 // pokeHost has this machine's daemon dial a machine's link now, at most

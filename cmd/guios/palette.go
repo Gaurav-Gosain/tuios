@@ -351,7 +351,12 @@ func (a *App) commandItems() []paletteItem {
 			paletteItem{title: locales.NewSessionIn(h.name), detail: h.addr(), words: en.NewSessionIn(h.name), run: func() { a.newSessionOn(h, "") }},
 			paletteItem{title: locales.PickerTitle(h.name), detail: h.addr(), words: en.PickerTitle(h.name), run: func() { a.openProjectOn(h) }},
 			paletteItem{title: locales.HostReconnectTo(h.name), detail: h.addr(), words: en.HostReconnectTo(h.name), run: func() { a.reconnectHost(h) }})
+		if s := a.session(a.selected); s != nil && !a.hostOf(s.ID).remote() {
+			sid, name := s.ID, h.name
+			cmds = append(cmds, paletteItem{title: locales.NewPaneOn(name), detail: h.addr(), words: en.NewPaneOn(name), run: func() { a.newPaneOn(a.session(sid), name) }})
+		}
 	}
+	cmds = append(cmds, paletteItem{title: locales.MachineAdd(), words: en.MachineAdd(), run: func() { a.openSettings("hosts") }})
 	return cmds
 }
 

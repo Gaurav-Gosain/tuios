@@ -346,8 +346,13 @@ func (c *Client) split(p proto.CreateParams) (proto.Session, error) {
 	}
 	params := map[string]any{"session": name}
 	dir := p.Dir
-	if dir == "" && beside != "" {
+	if dir == "" && beside != "" && p.Host == "" {
+		// A pane on another machine starts in its home there: this
+		// pane's folder is this machine's.
 		dir = c.paneDir(sid, beside)
+	}
+	if p.Host != "" {
+		params["host"] = p.Host
 	}
 	if dir != "" {
 		params["cwd"] = dir
@@ -355,7 +360,7 @@ func (c *Client) split(p proto.CreateParams) (proto.Session, error) {
 	if len(p.Command) > 0 {
 		params["command"] = p.Command
 	}
-	if env := paneEnv(); env != nil && c.host == "" {
+	if env := paneEnv(); env != nil && c.host == "" && p.Host == "" {
 		params["env"] = env
 	}
 	dirn := p.Direction
@@ -368,7 +373,7 @@ func (c *Client) split(p proto.CreateParams) (proto.Session, error) {
 	// A TUI on the session places a new pane in the workspace's tree
 	// itself, so the split goes through it: a tree written here would race
 	// the one it writes for the new pane.
-	if ti.tui && ti.useTree && beside != "" && len(p.Command) == 0 && p.Ratio == 0 {
+	if ti.tui && ti.useTree && beside != "" && len(p.Command) == 0 && p.Ratio == 0 && p.Host == "" {
 		if _, err := c.verb("split-window", map[string]any{"session": name, "window": beside, "side": dirn}); err == nil {
 			return c.sessionNamed(name, sid)
 		}

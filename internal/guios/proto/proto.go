@@ -171,8 +171,11 @@ type Pane struct {
 	Title string `json:"title,omitempty"` // set by the program (OSC 0/2), or the page
 	// URL is the page a browser pane shows, as the app last told: set,
 	// the pane runs no shell.
-	URL     string   `json:"url,omitempty"`
-	Dir     string   `json:"dir,omitempty"` // the shell's working directory
+	URL string `json:"url,omitempty"`
+	Dir string `json:"dir,omitempty"` // the shell's working directory
+	// Host is the linked machine a pane of this machine's session runs its
+	// program on (tuios new-window --host), "" for this machine.
+	Host    string   `json:"host,omitempty"`
 	Command []string `json:"command,omitempty"`
 	// Process is the foreground program, "" while the shell is.
 	Process string `json:"process,omitempty"`
@@ -786,6 +789,9 @@ type (
 		// existing branch no worktree has is checked out as it is.
 		Worktree string `json:"worktree,omitempty"`
 		Base     string `json:"base,omitempty"`
+		// Host runs a split's pane on a machine the daemon links: the
+		// pane stays in this session, its program runs there.
+		Host string `json:"host,omitempty"`
 	}
 	IDParams struct {
 		ID string `json:"id"`
