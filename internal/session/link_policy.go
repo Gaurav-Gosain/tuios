@@ -240,6 +240,7 @@ var verbCapabilities = map[string]linkCaps{
 	"select-workspace": {config.LinkAllowWrite},
 	"set-layout":       {config.LinkAllowWrite},
 	"set-layout-tree":  {config.LinkAllowWrite},
+	"set-layout-state": {config.LinkAllowWrite},
 	"run-command":      {config.LinkAllowWrite},
 	"switch-session":   {config.LinkAllowWrite},
 	"detach-client":    {config.LinkAllowWrite},
