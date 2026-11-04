@@ -1224,5 +1224,7 @@
   "spawnHoldsCard": "它持有 {id}。",
   "spawnFanOnCard": "它们处理 {id}。",
   "spawnCardLeftOut": "{id} 未包含: {why}",
-  "cockpitStartOnCard": "在此启动代理"
+  "cockpitStartOnCard": "在此启动代理",
+  "cockpitKeysToList": "按键发送到列表。按 r 开始输入。",
+  "cockpitWaitsAtPrompt": "此代理在其屏幕上的提示符处等待。在此发送的文本会等待该提示符。"
 }

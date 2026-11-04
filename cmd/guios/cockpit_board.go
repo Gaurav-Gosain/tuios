@@ -157,7 +157,7 @@ func (a *App) boardView(c *ui.Context, pal *palette, sess string) {
 		a.ck.focusView = false
 		b.focus.Focus()
 	}
-	if a.boardKeys(root, b) {
+	if a.boardKeys(c, root, b) {
 		c.Invalidate()
 	}
 	root.Children(func() {
@@ -506,7 +506,10 @@ func ckStateStatus(state string) (proto.Status, bool) {
 }
 
 // boardKeys are the board's keys.
-func (a *App) boardKeys(root ui.Element, b *ckBoard) (handled bool) {
+func (a *App) boardKeys(c *ui.Context, root ui.Element, b *ckBoard) (handled bool) {
+	if !b.focus.FocusWithin(c) {
+		return false
+	}
 	handled = true
 	key := func(m ui.Modifiers, k ui.Key) bool { return root.Shortcut(m, k) }
 	ci, ri := b.cursor()
@@ -520,38 +523,73 @@ func (a *App) boardKeys(root ui.Element, b *ckBoard) (handled bool) {
 		}
 		b.sel = cards[min(max(ri, 0), len(cards)-1)].ID
 	}
+	// Letters go through the typing guard (cockpit_guard.go): h j k l
+	// only move the cursor and run at once, the others wait.
+	moves := func(k ckKey) bool {
+		switch k.key {
+		case ui.KeyH, ui.KeyJ, ui.KeyK, ui.KeyL:
+			return !k.shift
+		}
+		return false
+	}
+	if k, ok := a.guard(c, root, &a.ck.guard, moves); ok {
+		switch {
+		case k.shift && k.key == ui.KeyH:
+			if t, ok := b.card(b.sel); ok && ci > 0 {
+				a.moveCard(b, t.ID, ckStages[ci-1])
+			}
+		case k.shift && k.key == ui.KeyL:
+			if t, ok := b.card(b.sel); ok && ci < len(ckStages)-1 {
+				a.moveCard(b, t.ID, ckStages[ci+1])
+			}
+		case k.shift:
+		case k.key == ui.KeyH:
+			pick(ci-1, max(ri, 0))
+		case k.key == ui.KeyL:
+			pick(ci+1, max(ri, 0))
+		case k.key == ui.KeyJ:
+			pick(ci, ri+1)
+		case k.key == ui.KeyK:
+			pick(ci, ri-1)
+		case k.key == ui.KeyN:
+			// n on a card starts an agent on it, as the TUI's; on an
+			// empty column it adds a card there.
+			if t, ok := b.card(b.sel); ok {
+				a.newAgentFor(t)
+			} else {
+				b.adding, b.draft = ci, ""
+			}
+		case k.key == ui.KeyT:
+			if t, ok := b.card(b.sel); ok {
+				a.takeCard(b, t)
+			}
+		}
+		return true
+	}
+	if a.ck.guard.typing(time.Now()) && key(0, ui.KeyEnter) {
+		// Enter after typed text ends a sentence; it is no command.
+		return true
+	}
 	switch {
-	case key(ui.Shift, ui.KeyH), key(ui.Shift, ui.KeyLeft):
+	case key(ui.Shift, ui.KeyLeft):
 		if t, ok := b.card(b.sel); ok && ci > 0 {
 			a.moveCard(b, t.ID, ckStages[ci-1])
 		}
-	case key(ui.Shift, ui.KeyL), key(ui.Shift, ui.KeyRight):
+	case key(ui.Shift, ui.KeyRight):
 		if t, ok := b.card(b.sel); ok && ci < len(ckStages)-1 {
 			a.moveCard(b, t.ID, ckStages[ci+1])
 		}
-	case key(0, ui.KeyH), key(0, ui.KeyLeft):
+	case key(0, ui.KeyLeft):
 		pick(ci-1, max(ri, 0))
-	case key(0, ui.KeyL), key(0, ui.KeyRight):
+	case key(0, ui.KeyRight):
 		pick(ci+1, max(ri, 0))
-	case key(0, ui.KeyJ), key(0, ui.KeyDown):
+	case key(0, ui.KeyDown):
 		pick(ci, ri+1)
-	case key(0, ui.KeyK), key(0, ui.KeyUp):
+	case key(0, ui.KeyUp):
 		pick(ci, ri-1)
 	case key(0, ui.KeyEnter):
 		if t, ok := b.card(b.sel); ok {
 			a.goToHolder(t)
-		}
-	case key(0, ui.KeyN):
-		// n on a card starts an agent on it, as the TUI's; on an empty
-		// column it adds a card there.
-		if t, ok := b.card(b.sel); ok {
-			a.newAgentFor(t)
-		} else {
-			b.adding, b.draft = ci, ""
-		}
-	case key(0, ui.KeyT):
-		if t, ok := b.card(b.sel); ok {
-			a.takeCard(b, t)
 		}
 	case key(0, ui.KeyEscape):
 		a.ckSetView(viewAgents)

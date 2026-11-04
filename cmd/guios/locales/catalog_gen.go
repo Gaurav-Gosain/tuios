@@ -12413,3 +12413,23 @@ func CockpitStartOnCard() string { return In(i18n.Locale()).CockpitStartOnCard()
 func (msgs Messages) CockpitStartOnCard() string {
 	return Catalog.Format(msgs.locale, "cockpitStartOnCard", nil)
 }
+
+// CockpitKeysToList says "Keys go to the list. Press r to write."
+// in the language the app shows.
+func CockpitKeysToList() string { return In(i18n.Locale()).CockpitKeysToList() }
+
+// CockpitKeysToList says "Keys go to the list. Press r to write."
+// in the language of msgs.
+func (msgs Messages) CockpitKeysToList() string {
+	return Catalog.Format(msgs.locale, "cockpitKeysToList", nil)
+}
+
+// CockpitWaitsAtPrompt says "This agent waits at a prompt on its screen. Text you send here waits for that."
+// in the language the app shows.
+func CockpitWaitsAtPrompt() string { return In(i18n.Locale()).CockpitWaitsAtPrompt() }
+
+// CockpitWaitsAtPrompt says "This agent waits at a prompt on its screen. Text you send here waits for that."
+// in the language of msgs.
+func (msgs Messages) CockpitWaitsAtPrompt() string {
+	return Catalog.Format(msgs.locale, "cockpitWaitsAtPrompt", nil)
+}

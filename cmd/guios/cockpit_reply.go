@@ -13,6 +13,7 @@ import (
 	"github.com/Gaurav-Gosain/mygo/ui"
 
 	"github.com/Gaurav-Gosain/tuios/internal/guios/client"
+	"github.com/Gaurav-Gosain/tuios/internal/session"
 
 	"github.com/Gaurav-Gosain/tuios/cmd/guios/locales"
 )
@@ -140,6 +141,12 @@ func (a *App) replyBox(c *ui.Context, pal *palette, ag client.Agent) {
 				a.sendAsChip(c, pal, ag, true, locales.CockpitSendAsMail())
 				ui.Spacer(c)
 				note := locales.CockpitNextTurn()
+				if r, ok := a.ckSelected(); ok && r.item != nil && !ckHeld(*r.item) && !a.ckCanReject() &&
+					(r.item.Kind == session.AttentionApproval || r.item.Kind == session.AttentionPlan) {
+					// An approval this app cannot answer: what is sent
+					// waits for the prompt on the agent's screen.
+					note = locales.CockpitWaitsAtPrompt()
+				}
 				if mail {
 					note = locales.CockpitMailInbox(ag.Name)
 					if m := a.ck.tabs.mail; m != nil && m.replyTo != 0 {

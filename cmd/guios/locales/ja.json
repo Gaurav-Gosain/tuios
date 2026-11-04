@@ -1224,5 +1224,7 @@
   "spawnHoldsCard": "{id} を受け持ちます。",
   "spawnFanOnCard": "{id} に取り組みます。",
   "spawnCardLeftOut": "{id} は外されました: {why}",
-  "cockpitStartOnCard": "エージェントを開始"
+  "cockpitStartOnCard": "エージェントを開始",
+  "cockpitKeysToList": "キーは一覧に送られます。書くには r を押してください。",
+  "cockpitWaitsAtPrompt": "このエージェントは画面のプロンプトで待っています。ここで送るテキストはそれを待ちます。"
 }

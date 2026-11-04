@@ -657,13 +657,16 @@ func (a *App) mailCompose(c *ui.Context, pal *palette, m *ckMail, sess, to, name
 		if m.replyTo != 0 {
 			ph = locales.CockpitMailReply(int(m.replyTo))
 		}
-		in := textField(c, "mail-text", &m.draft, ph, 0, pal).Grow(1)
+		// Keyed by the message answered, so that Reply as you puts the
+		// keys here each time: typed text never reaches the list.
+		in := textField(c, "mail-text-"+itoa(int(m.replyTo)), &m.draft, ph, 0, pal).Grow(1).AutoFocus()
 		send := sizedButton(c, "mail-send", locales.CockpitSendMail(), "", false, 28, 7, pal)
 		if (in.Submitted() || send) && strings.TrimSpace(m.draft) != "" {
 			a.sendMail(sess, to, m)
 		}
 		if in.Shortcut(0, ui.KeyEscape) {
 			m.replyTo = 0
+			m.focus.Focus()
 		}
 	})
 }

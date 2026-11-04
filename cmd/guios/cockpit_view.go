@@ -533,10 +533,19 @@ func (a *App) cockpitKeys(c *ui.Context, col ui.Element) {
 		}
 		return
 	}
+	if k, ok := a.guard(c, col, &ck.guard, ckMoveKey); ok {
+		a.ckLetter(k)
+		c.Invalidate()
+		return
+	}
+	if ck.guard.typing(time.Now()) && (key(0, ui.KeyEnter) || key(0, ui.KeyBracketRight) || key(0, ui.KeyBracketLeft)) {
+		// Enter after typed text is the end of a sentence, not a command.
+		return
+	}
 	switch {
-	case key(0, ui.KeyJ), key(0, ui.KeyDown):
+	case key(0, ui.KeyDown):
 		a.ckMove(1)
-	case key(0, ui.KeyK), key(0, ui.KeyUp):
+	case key(0, ui.KeyUp):
 		a.ckMove(-1)
 	case key(0, ui.KeyEnter):
 		if r, ok := a.ckSelected(); ok {
@@ -547,63 +556,14 @@ func (a *App) cockpitKeys(c *ui.Context, col ui.Element) {
 				a.goToAgent(ck.agents[r.agent])
 			}
 		}
-	case ck.stacked && ck.stackFocus && (key(0, ui.KeyLeft) || key(0, ui.KeyH) || key(0, ui.KeyEscape)):
+	case ck.stacked && ck.stackFocus && (key(0, ui.KeyLeft) || key(0, ui.KeyEscape)):
 		ck.stackFocus = false
-	case ck.stacked && !ck.stackFocus && (key(0, ui.KeyRight) || key(0, ui.KeyL)) && a.ckOnAgent():
+	case ck.stacked && !ck.stackFocus && key(0, ui.KeyRight) && a.ckOnAgent():
 		ck.stackFocus = true
-	case key(0, ui.KeySpace):
-		if r, ok := a.ckSelected(); ok && r.kind == ckRowHead {
-			a.ckToggleFold(r.group)
-		} else if im := a.ckNewestImage(); im != nil {
-			// Space shows the agent's newest image whole.
-			ck.lightbox = im
-		}
 	case key(0, ui.KeyRight), key(0, ui.KeyLeft):
 		if r, ok := a.ckSelected(); ok && r.kind == ckRowHead {
 			a.ckToggleFold(r.group)
 		}
-	// Shift first: a key with Shift also reads as the key alone.
-	case key(ui.Shift, ui.KeyA):
-		a.ckAnswer("always", false)
-	case key(ui.Shift, ui.KeyR):
-		a.ckOpenReason()
-	case key(0, ui.KeyA):
-		a.ckAnswer("once", false)
-	case key(0, ui.KeyR):
-		// r answers a question in the reply box, and rejects an approval.
-		if r, ok := a.ckSelected(); ok && r.item != nil && (r.item.Kind == session.AttentionQuestion || r.item.Kind == session.AttentionAsk) && !ckHeld(*r.item) {
-			a.ckFocusReply()
-		} else if !a.ckAnswer("deny", false) {
-			a.ckFocusReply()
-		}
-	case key(0, ui.KeyI):
-		a.ckFocusReply()
-	case key(ui.Shift, ui.KeyD), key(0, ui.KeyD):
-		a.ckSettle()
-	case key(0, ui.KeyU):
-		a.ckUndoSettle()
-	case key(0, ui.KeyZ):
-		a.ckSnooze()
-	case key(0, ui.KeyX):
-		a.ckDismiss()
-	case key(0, ui.KeyP):
-		if r, ok := a.ckSelected(); ok && r.item != nil && r.item.HeldID != 0 {
-			a.ckPassHeld(*r.item)
-		}
-	case key(ui.Shift, ui.KeyM):
-		a.ckSetView(viewMail)
-	case key(0, ui.KeyM):
-		a.ckSetTab(tabMail)
-	case key(0, ui.KeyB):
-		a.ckSetView(viewBoard)
-	case key(0, ui.KeyV):
-		a.ckSetTab(tabChanges)
-	case key(0, ui.KeyF):
-		ck.needsOnly = !ck.needsOnly
-	case key(0, ui.KeyN):
-		a.newAgent()
-	case key(0, ui.KeyC):
-		a.openCompare()
 	case key(0, ui.KeyBracketRight):
 		a.ckStepTab(1)
 	case key(0, ui.KeyBracketLeft):
@@ -619,6 +579,82 @@ func (a *App) cockpitKeys(c *ui.Context, col ui.Element) {
 	}
 	// The key came in this build: build again to show what it did.
 	c.Invalidate()
+}
+
+// ckLetter runs a list's letter or Space that the typing guard let
+// through (cockpit_guard.go).
+func (a *App) ckLetter(k ckKey) {
+	ck := &a.ck
+	if k.shift {
+		switch k.key {
+		case ui.KeyA:
+			a.ckAnswer("always", false)
+		case ui.KeyR:
+			a.ckOpenReason()
+		case ui.KeyD:
+			a.ckSettle()
+		case ui.KeyM:
+			a.ckSetView(viewMail)
+		}
+		return
+	}
+	switch k.key {
+	case ui.KeyJ:
+		a.ckMove(1)
+	case ui.KeyK:
+		a.ckMove(-1)
+	case ui.KeyH:
+		if ck.stacked && ck.stackFocus {
+			ck.stackFocus = false
+		}
+	case ui.KeyL:
+		if ck.stacked && !ck.stackFocus && a.ckOnAgent() {
+			ck.stackFocus = true
+		}
+	case ui.KeySpace:
+		if r, ok := a.ckSelected(); ok && r.kind == ckRowHead {
+			a.ckToggleFold(r.group)
+		} else if im := a.ckNewestImage(); im != nil {
+			// Space shows the agent's newest image whole.
+			ck.lightbox = im
+		}
+	case ui.KeyA:
+		a.ckAnswer("once", false)
+	case ui.KeyR:
+		// r rejects an approval the card answers, as the TUI's; on any
+		// other row it puts the keys in the reply box.
+		if !a.ckCanReject() {
+			a.ckFocusReply()
+		} else {
+			a.ckAnswer("deny", false)
+		}
+	case ui.KeyI:
+		a.ckFocusReply()
+	case ui.KeyD:
+		a.ckSettle()
+	case ui.KeyU:
+		a.ckUndoSettle()
+	case ui.KeyZ:
+		a.ckSnooze()
+	case ui.KeyX:
+		a.ckDismiss()
+	case ui.KeyP:
+		if r, ok := a.ckSelected(); ok && r.item != nil && r.item.HeldID != 0 {
+			a.ckPassHeld(*r.item)
+		}
+	case ui.KeyM:
+		a.ckSetTab(tabMail)
+	case ui.KeyB:
+		a.ckSetView(viewBoard)
+	case ui.KeyV:
+		a.ckSetTab(tabChanges)
+	case ui.KeyF:
+		ck.needsOnly = !ck.needsOnly
+	case ui.KeyN:
+		a.newAgent()
+	case ui.KeyC:
+		a.openCompare()
+	}
 }
 
 // cockpitHints is the key line at the foot.

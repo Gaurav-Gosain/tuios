@@ -121,6 +121,9 @@ type cockpit struct {
 	// row, and when: once its row has moved, the next one is selected.
 	advance   string
 	advanceAt time.Time
+	// guard keeps typed prose from running as the lists' keys
+	// (cockpit_guard.go).
+	guard typingGuard
 	// lightbox is an image of a thread shown whole.
 	lightbox *ckThreadImage
 

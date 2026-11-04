@@ -2219,5 +2219,7 @@
   "spawnHoldsCard": "It holds {id}.",
   "spawnFanOnCard": "They work on {id}.",
   "spawnCardLeftOut": "{id} was left out: {why}",
-  "cockpitStartOnCard": "Start an agent on it"
+  "cockpitStartOnCard": "Start an agent on it",
+  "cockpitKeysToList": "Keys go to the list. Press r to write.",
+  "cockpitWaitsAtPrompt": "This agent waits at a prompt on its screen. Text you send here waits for that."
 }

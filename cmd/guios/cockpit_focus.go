@@ -592,7 +592,13 @@ func (a *App) ckAnswer(decision string, click bool) bool {
 	}
 	if (decision == "once" || decision == "always") && len(rules) > 0 {
 		key := ckShownKey(it)
-		if !(ck.armed.decision == decision && ck.armed.item == key && now.Sub(ck.armed.at) <= ckRiskWindow) {
+		armed := ck.armed.decision == decision && ck.armed.item == key && now.Sub(ck.armed.at) <= ckRiskWindow
+		if armed && !click && now.Sub(ck.armed.at) < ckRiskPause {
+			// The second press of a key came too soon to be a choice:
+			// the first stays armed, and this one does nothing.
+			return true
+		}
+		if !armed {
 			ck.armed = ckArmed{decision: decision, item: key, at: now}
 			return true
 		}
@@ -678,6 +684,29 @@ func (a *App) ckSend(it session.AttentionItem, ag client.Agent, decision, messag
 }
 
 var _ = fmt.Sprint
+
+// ckRiskPause is the least time between the two key presses that allow a
+// risky call: a double letter in typed text comes sooner.
+const ckRiskPause = 500 * time.Millisecond
+
+// ckCanReject reports whether the selected row's card takes a reject: an
+// approval or a plan a hook holds, or a prompt on the screen whose rule
+// has a deny.
+func (a *App) ckCanReject() bool {
+	r, ok := a.ckSelected()
+	if !ok || r.item == nil {
+		return false
+	}
+	it := *r.item
+	if ckHeld(it) {
+		return slices.Contains(it.Options, "deny")
+	}
+	if it.Kind != session.AttentionApproval && it.Kind != session.AttentionPlan {
+		return false
+	}
+	pk := a.ck.peek
+	return pk != nil && pk.window == it.Window && !pk.loading && slices.Contains(pk.actions, "deny")
+}
 
 // ckAnswerError says why an answer was not sent, and what to do: the
 // daemon's codes are not words a person reads.
