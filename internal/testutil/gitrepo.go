@@ -1,3 +1,6 @@
+// Package testutil holds helpers the tests share: throwaway git repositories,
+// a short runtime directory for daemon sockets, and a throwaway XDG tree for
+// a whole test binary.
 package testutil
 
 import (
