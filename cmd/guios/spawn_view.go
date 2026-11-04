@@ -197,6 +197,13 @@ func (a *App) spawnTask(c *ui.Context, pal *palette, s *spawnSheet, h *spawnHand
 				}
 			}
 			in.OnTextKey(func(k ui.TextKey) bool {
+				if k.Key == ui.KeyEscape && k.Mods == 0 {
+					// One Escape closes the sheet: the box would take the
+					// first for itself, and the sheet stayed open.
+					s.task.text = k.Text()
+					a.update(a.spawnClose)
+					return true
+				}
 				if k.Key == ui.KeyEnter && (k.Mods == 0 || k.Mods == ui.Cmd) {
 					// This runs between frames: the next frame starts.
 					s.task.text = k.Text()
