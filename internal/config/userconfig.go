@@ -324,6 +324,11 @@ type DaemonConfig struct {
 	// panes with the daemon's environment. See
 	// internal/session/display_follow.go.
 	Display string `toml:"display"`
+	// KeepAwake keeps the machine from sleeping: "on" while the daemon runs,
+	// "agents" while an agent pane on this machine works, and "off", the
+	// default, never. The display can still dim and lock. See
+	// internal/session/keep_awake.go.
+	KeepAwake string `toml:"keep_awake"`
 }
 
 // Resume modes. See DaemonConfig.ResumeAgents.
@@ -360,6 +365,27 @@ var DisplayModes = []string{DisplayFollow, DisplayOff}
 func DisplayFollows(value string) bool {
 	v := strings.TrimSpace(value)
 	return v == "" || v == DisplayFollow
+}
+
+// Keep awake modes. See DaemonConfig.KeepAwake.
+const (
+	KeepAwakeOff    = "off"
+	KeepAwakeOn     = "on"
+	KeepAwakeAgents = "agents"
+)
+
+// KeepAwakeModes lists the valid values for daemon.keep_awake.
+var KeepAwakeModes = []string{KeepAwakeOff, KeepAwakeAgents, KeepAwakeOn}
+
+// ResolveKeepAwake is the mode a daemon.keep_awake value means. Empty is the
+// default, off, and so is an unknown value, so a typo never keeps a machine
+// awake.
+func ResolveKeepAwake(value string) string {
+	v := strings.TrimSpace(value)
+	if slices.Contains(KeepAwakeModes, v) {
+		return v
+	}
+	return KeepAwakeOff
 }
 
 // Window size policies. See DaemonConfig.WindowSize.
@@ -1217,6 +1243,7 @@ func DefaultConfig() *UserConfig {
 			ResumeAgents: ResumeAgentsAsk,
 			WindowSize:   WindowSizeLatest,
 			Display:      DisplayFollow,
+			KeepAwake:    KeepAwakeOff,
 		},
 		Startup: StartupConfig{
 			OpenDefaultWindow:   false,

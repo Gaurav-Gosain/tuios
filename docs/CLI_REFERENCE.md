@@ -827,6 +827,32 @@ has no display. Run this line in that shell, or add it to your shell rc:
 eval "$(tuios display-env 2>/dev/null)"
 ```
 
+### `tuios keep-awake`
+
+Show or set `keep_awake` in `[daemon]`. The daemon keeps the machine from
+sleeping while an agent pane on this machine works (`agents`), while the
+daemon runs (`on`), or never (`off`, the default). See
+[CONFIGURATION.md](CONFIGURATION.md).
+
+**Usage:**
+```bash
+tuios keep-awake [off|on|agents] [--json]
+```
+
+**Flags:**
+- `--json`: Output as JSON, with `mode`, `held`, `working`, `method` and, when the hold failed, `error`
+
+With no argument, the command shows the mode, whether the daemon holds the
+machine awake now, and how many agents work. With a mode, it applies the mode
+at once and saves it to the config file. The daemon uses `systemd-inhibit` on
+Linux, `caffeinate` on macOS and `SetThreadExecutionState` on Windows. Only
+sleep is held off. The display can still dim and lock.
+
+```bash
+tuios keep-awake agents
+tuios keep-awake
+```
+
 ### `tuios kill-session`
 
 Kill a specific session.
@@ -4327,6 +4353,7 @@ Some commands also answer to a short name: `attach` to `a`, `new` to `n`,
 | `tuios mcp` | Serve tuios to an agent harness as an MCP server over stdio. By default it cannot type into a pane, and it is held to the session of the pane it runs in. Its default tools still set your own agent state and meta and send and read mail. `--write` adds the tools that type into panes. `--scope all` reaches every session. See [tuios mcp](#tuios-mcp) |
 | `tuios doctor shell` | Per pane: whether its shell marks its commands with OSC 133, which `tuios run`, `wait-for command-finished` and `capture-pane --last-command` need, and, when one does not, the lines that turn the marks on for your `$SHELL` (zsh, and bash 4.4 or newer; fish 4 sends them itself). A pane that marks its prompts and ran a command without marking it is flagged as prompt marks only, and one that has not run a command yet is said to mark its prompts (`-s`, `--json`, with `command_mark_seen` and `prompt_marks_only`) |
 | `tuios doctor agents` | Per harness: on PATH or not, integration installed and current or not, what it reports, the recognised harnesses with no integration and why, the running agent panes whose integration is missing or out of date with the command that fixes each, and the harness manifests loaded from the user manifest directory, which of them replace a bundled one, and the files there that failed to load (`--json`) |
+| `tuios doctor keep-awake` | Whether this machine has the program the daemon holds it awake with (`systemd-inhibit` that logind answers, `caffeinate`, or `SetThreadExecutionState`), and, when a daemon runs, `keep_awake` in `[daemon]`, the hold and the working agents |
 | `tuios agent-hook <harness> [event]` | What an installed hook runs: read the hook payload on stdin and report the pane's state, or for a session integration only its conversation id (`set-agent-session`). For Claude Code and Codex the prompt, tool and Stop events also carry the event as activity for [`tuios agent-log`](#tuios-agent-log), and a `Stop` reports `done` with the first line of what the agent said last. Claude Code's `SubagentStart` and `SubagentStop` report no state: they send the subagent with `report-agent-activity`, which moves the pane's `subagents` count, and a `SessionStart` sends a `session_start` there after its state report, which clears it. A report that ends a turn also sends what the pane's `agent-statusline` feed held back (`set-agent-meta`). For Claude Code and Codex, `SessionStart`, `UserPromptSubmit` and `PostToolUse` also add one line about the pane's unread mail to the agent's context, once per message: the count, the senders and the `read-agent-messages` command. It never holds a subject or a body. `--explain` prints the decision to stderr. With `[agents.approvals]` naming the harness, a permission prompt (Claude Code `PermissionRequest`, including an `ExitPlanMode` plan unless `hold_plans = false`, Qwen Code `PermissionRequest`, opencode or Kilo `permission.asked`) then waits for an answer from the Inbox and prints the harness's decision, or nothing when there is none. See [Agent state](AGENT_STATE.md#harness-integrations) and [Approvals from the Inbox](AGENT_STATE.md#approvals-from-the-inbox) |
 | `tuios agent-statusline <harness>` | What the Claude Code status line `integration install --statusline` writes runs, and what the opencode and Kilo plugins run for the model and cost: write the model, context use and cost on stdin to the pane's agent metadata. `--then CMD` chains to your own status line. See [above](#tuios-agent-statusline) |
 | `tuios tmux-shim [-- command]` | Run a command (your shell when none is given) with a `tmux` on PATH that answers in this tuios session, so a tool that drives tmux, such as Claude Code agent teams (`tuios tmux-shim -- env CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1 claude`), opens its panes here. Off until you run it. `--log FILE` moves the log of calls the shim could not answer from `$XDG_STATE_HOME/tuios/tmux-shim.log`; `--log-all` records every call. Not on Windows. See [The tmux shim](TMUX_SHIM.md) |

@@ -382,6 +382,8 @@ var EventTypes = []string{
 	"tml-event",
 	// A session's task cards.
 	"task-claimed", "task-finished", "task-changed",
+	// The daemon took or dropped its hold that keeps the machine awake.
+	"keep-awake",
 }
 
 // defaultEventTypes are the types a call that names none gets: what an agent

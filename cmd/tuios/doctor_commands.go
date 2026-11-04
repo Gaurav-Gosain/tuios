@@ -22,7 +22,7 @@ func newDoctorCommand() *cobra.Command {
 
 'tuios keybinds doctor' checks the keybindings. The checks here cover the rest.`,
 	}
-	cmd.AddCommand(newDoctorAgentsCommand(), newDoctorShellCommand())
+	cmd.AddCommand(newDoctorAgentsCommand(), newDoctorShellCommand(), newDoctorKeepAwakeCommand())
 	return cmd
 }
 

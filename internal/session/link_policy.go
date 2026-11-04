@@ -105,6 +105,8 @@ var verbCapabilities = map[string]linkCaps{
 	"session-info":         {config.LinkAllowList},
 	"ssh-agent-path":       {config.LinkAllowList},
 	"display-env":          {config.LinkAllowList},
+	"get-keep-awake":       {config.LinkAllowList},
+	"set-keep-awake":       {config.LinkAllowWrite},
 	"list-windows":         {config.LinkAllowList},
 	"search-panes":         {config.LinkAllowList},
 	"command-history":      {config.LinkAllowList},

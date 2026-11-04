@@ -399,6 +399,35 @@ func buildVerbRegistry() map[string]verbEntry {
 			},
 			handler: (*Daemon).verbSetPaneGrants,
 		},
+		"get-keep-awake": {
+			description: "Report whether the daemon holds the machine awake: [daemon] keep_awake, the hold, the working agent panes on this machine, and the method the system uses.",
+			returns: []verbParam{
+				{Name: "mode", Type: "string", Description: "[daemon] keep_awake in force.", Accepted: config.KeepAwakeModes},
+				{Name: "held", Type: "bool", Description: "True while the daemon holds the machine awake."},
+				{Name: "working", Type: "int", Description: "Agent panes that work now on this machine."},
+				{Name: "method", Type: "string", Description: "How the hold is made: systemd-inhibit, caffeinate, SetThreadExecutionState, or none."},
+				{Name: "error", Type: "string", Description: "Why the machine could not be held awake. Absent when nothing failed."},
+			},
+			examples: []string{`{"id":1,"verb":"get-keep-awake"}`},
+			handler:  (*Daemon).verbGetKeepAwake,
+		},
+		"set-keep-awake": {
+			description: "Set [daemon] keep_awake: off, on (while the daemon runs) or agents (while an agent pane on this machine works). It applies at once and is saved to config.toml, so the settings page, the file and every client show one value.",
+			params: []verbParam{
+				{Name: "mode", Type: "string", Required: true, Description: "The new mode.", Accepted: config.KeepAwakeModes},
+			},
+			returns: []verbParam{
+				{Name: "mode", Type: "string", Description: "[daemon] keep_awake in force."},
+				{Name: "held", Type: "bool", Description: "True while the daemon holds the machine awake."},
+				{Name: "working", Type: "int", Description: "Agent panes that work now on this machine."},
+				{Name: "method", Type: "string", Description: "How the hold is made."},
+				{Name: "error", Type: "string", Description: "Why the machine could not be held awake. Absent when nothing failed."},
+				{Name: "saved", Type: "bool", Description: "True when config.toml now holds the mode."},
+				{Name: "save_error", Type: "string", Description: "Why config.toml could not be written. The mode applies until the daemon stops."},
+			},
+			examples: []string{`{"id":1,"verb":"set-keep-awake","params":{"mode":"agents"}}`},
+			handler:  (*Daemon).verbSetKeepAwake,
+		},
 		"apply-config": {
 			description: "Apply config.toml now, including the changes that give panes or linked machines more: [agents.permissions], [hosts] and their link policies. A change to the file applies only what narrows those; the rest waits for this verb or a daemon restart. Only the person may call it: it is refused from inside a pane and over a link.",
 			params: []verbParam{

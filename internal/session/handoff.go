@@ -227,6 +227,9 @@ func (r *handoffRun) prepare() error {
 	if d.federation != nil {
 		d.federation.Stop()
 	}
+	// The keep awake holder is a child too. The new image takes the hold
+	// again once its panes are in place (serve).
+	d.awake.stop()
 	// A hook that started since the refusal check is waited for here. One
 	// fired later either holds a pipe when the holds shut below, and the
 	// handoff is refused, or waits on them: a put-back starts it, and the
@@ -240,6 +243,7 @@ func (r *handoffRun) prepare() error {
 		}
 		d.fleet.start(d.ctx)
 		d.plugins.restart()
+		d.awake.start(d.ctx)
 	})
 
 	// The reaps first: a reap in progress runs the pane's exit, which may

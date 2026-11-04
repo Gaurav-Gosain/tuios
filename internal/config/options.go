@@ -1153,6 +1153,11 @@ var optionSpecs = []Option{
 		Default:     "0",
 	},
 	{
+		Path: "daemon.keep_awake", Type: OptionString, Section: "daemon",
+		Description: "Keep the machine from sleeping: while an agent works on this machine, while the daemon runs, or never. The display can still lock.",
+		Accepted:    KeepAwakeModes, Default: KeepAwakeOff,
+	},
+	{
 		Path: "daemon.resume_agents", Type: OptionString, Section: "daemon",
 		Description: "After a daemon restart, ask to resume each pane's agent conversation, resume it, or do neither",
 		Accepted:    ResumeAgentsModes, Default: ResumeAgentsAsk,

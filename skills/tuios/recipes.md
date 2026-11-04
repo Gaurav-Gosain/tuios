@@ -122,43 +122,18 @@ notes on lines (`tuios --skill fleet`).
 
 ## Keep the machine awake while agents work
 
-A hook only fires for the states that `[notifications.agent.states]` alerts on,
-so a hook cannot see every change without raising alerts. Use the event stream
-instead. `tuios subscribe` sends one line for each agent state change and
-raises no alert. This script holds `systemd-inhibit` (Linux) or `caffeinate`
-(macOS) while any agent works, and lets go when none works:
+The daemon does it. Set it once:
 
 ```sh
-#!/bin/sh
-# ~/.config/tuios/awake.sh
-holder=
-
-watch() {
-  trap '[ -n "$holder" ] && kill "$holder"' EXIT
-  while read -r _; do
-    n=$(tuios list-agents --all-sessions --json | jq '[.agents[] | select(.state == "working")] | length')
-    if [ "$n" -gt 0 ] && [ -z "$holder" ]; then
-      case "$(uname)" in
-        Darwin) caffeinate -i & ;;
-        *) systemd-inhibit --what=idle:sleep --who=tuios --why='An agent works' sleep infinity & ;;
-      esac
-      holder=$!
-    elif [ "$n" = 0 ] && [ -n "$holder" ]; then
-      kill "$holder"
-      holder=
-    fi
-  done
-}
-
-while true; do
-  tuios subscribe --types agent-state | watch
-  sleep 5
-done
+tuios keep-awake agents
 ```
 
-Run it from your login, for example `sh ~/.config/tuios/awake.sh &` or a
-systemd user service. The outer loop connects again after a daemon restart.
-`systemd-inhibit --list` shows a `tuios` row while an agent works.
+The machine then stays awake while any agent pane on this machine works, and
+can sleep when none works. `tuios keep-awake on` holds it awake while the
+daemon runs, and `tuios keep-awake off` turns it off. The value is
+`keep_awake` in `[daemon]` in config.toml. `tuios keep-awake` shows the hold,
+and `tuios doctor keep-awake` checks that this machine can be held awake.
+The display can still dim and lock.
 
 ## Run an agent on a schedule
 

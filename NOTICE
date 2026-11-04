@@ -7,6 +7,10 @@ This product includes code adapted from Kero
   internal/service: the systemd user unit, the launchd agent and the
   Task Scheduler task that run the daemon as a service.
 
+  internal/session/awake_hold_unix.go and awake_hold_windows.go: the
+  systemd-inhibit, caffeinate and SetThreadExecutionState holders that keep
+  the machine awake while agents work.
+
 MIT License
 
 Copyright (c) 2026 EGOIST

@@ -133,7 +133,13 @@ const (
 	EventTaskClaimed  = "task-claimed"
 	EventTaskFinished = "task-finished"
 	EventTaskChanged  = "task-changed"
-	EventSubscribed   = "subscribed" // subscribe ack result type
+	// EventKeepAwake says the daemon took or dropped its hold that keeps the
+	// machine awake, or [daemon] keep_awake changed (keep_awake.go). Mode is
+	// off, on or agents, State is held or released, Working is the number of
+	// working agent panes on this machine, and Reason says why the machine
+	// could not be held awake, when it could not. It names no session.
+	EventKeepAwake  = "keep-awake"
+	EventSubscribed = "subscribed" // subscribe ack result type
 )
 
 // defaultEventQueue bounds a subscriber's per-connection event queue. When it is
@@ -240,6 +246,8 @@ type streamEvent struct {
 	TML *TMLEvent `json:"tml,omitempty"`
 	// Task is a task event's card, as list-tasks gives its row.
 	Task *TaskRow `json:"task,omitempty"`
+	// Working is a keep-awake event's count of working agent panes.
+	Working *int `json:"working,omitempty"`
 
 	// relayed marks an event copied from a linked host's own stream. It is
 	// delivered only to a subscriber that asked for other machines' events,

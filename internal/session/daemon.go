@@ -251,6 +251,9 @@ type Daemon struct {
 	// session event sinks and the mailbox, and saved beside the session state.
 	// See attention.go.
 	attention *attentionStore
+	// awake holds the machine awake as [daemon] keep_awake says. See
+	// keep_awake.go.
+	awake *awakeKeeper
 
 	// queueDedup answers a queue-prompt sent again with the same client_id.
 	queueDedup queueDedup
@@ -980,6 +983,10 @@ type DaemonConfig struct {
 	// with no display of its own the display of the session's newest local
 	// client. See display_follow.go.
 	Display string
+	// KeepAwake is [daemon] keep_awake: "on" holds the machine awake while
+	// the daemon runs, "agents" while an agent pane on this machine works,
+	// and "off", the default, never. See keep_awake.go.
+	KeepAwake string
 	// SSHAgent is [daemon] ssh_agent: "follow" keeps a link per session to
 	// the agent socket of the client that attached or used it last, and
 	// gives new panes SSH_AUTH_SOCK naming it. See ssh_agent_follow.go.
@@ -1041,6 +1048,8 @@ func NewDaemon(cfg *DaemonConfig) *Daemon {
 	d.manager.cellSource.Store(&cellSource)
 	d.SetDisplay(cfg.Display)
 	d.attention = newAttentionStore(d.events.publish, d.events.currentSeq)
+	d.awake = newAwakeKeeper(d.workingAgents, d.events.publish)
+	d.awake.setMode(cfg.KeepAwake)
 	d.SetApprovalPolicy(cfg.Approvals)
 	d.activity = newActivityStore(d.events.publish)
 	d.SetRecapTestPatterns(cfg.RecapTestPatterns)
@@ -1343,6 +1352,12 @@ func (d *Daemon) onSessionCreated(s *Session) {
 		if !d.agentsOff.Load() {
 			d.noteCheckpointEvent(s, ev)
 		}
+		// A pane that starts or stops working, or closes, can move the
+		// machine's keep awake hold. It only wakes the keeper's goroutine,
+		// and only when keep_awake is agents.
+		if ev.Type == EventAgentState || ev.Type == EventWindowClosed {
+			d.awake.agentEvent()
+		}
 		// Hooks run before the fan-out because a hook is a side effect of the
 		// fact and a subscriber is a reader of it. Fire itself only starts
 		// goroutines, so nothing here waits on a command.
@@ -1436,6 +1451,8 @@ func (d *Daemon) onSessionDeleted(s *Session) {
 	d.forgetLatest(s.ID)
 	d.herdrWorkspaceMeta.forget(s.ID)
 	d.events.publish(streamEvent{Type: EventSessionClosed, Session: s.Name()})
+	// Its working agents no longer keep the machine awake.
+	d.awake.agentEvent()
 	// A session with no windows has no inboxes, so its ring is dropped with it.
 	d.agents.forget(s.Name())
 	// And so are its panes' activity rings.
@@ -1636,6 +1653,10 @@ func (d *Daemon) serve() {
 	// The enabled plugins' startup commands run once the daemon is up, and
 	// their event hooks follow the stream from here on.
 	d.plugins.start()
+	// The machine is held awake from here on when keep_awake asks for it.
+	// After a live upgrade this is the new image taking the hold its
+	// predecessor dropped before the exec.
+	d.awake.start(d.ctx)
 
 	go d.handleSignals()
 	d.startAccepting()
@@ -1792,6 +1813,9 @@ func (d *Daemon) shutdown() error {
 		log.Println("Shutting down daemon...")
 		// The clients hear why before anything closes under them.
 		d.sayGoodbye()
+
+		// The machine may sleep once the daemon has gone.
+		d.awake.stop()
 
 		// A daemon stopped on purpose before a handoff's new image was up is
 		// not a crash: the keeper stands down rather than bring it back.

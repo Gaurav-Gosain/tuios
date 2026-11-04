@@ -1963,7 +1963,7 @@ What a restricted connection may call:
 | Class | Verbs | Under `own` | Under `read_only` |
 |---|---|---|---|
 | open | `hello`, `list-verbs`, `unsubscribe`, `restrict-connection` | allowed | allowed |
-| across sessions | `list-sessions`, `list-clients`, `list-attention`, `list-worktrees`, `list-hosts`, `list-host-sessions`, `list-host-agents`, `list-themes`, `list-glyphs`, `list-hooks` | `forbidden` | allowed |
+| across sessions | `list-sessions`, `list-clients`, `list-attention`, `list-worktrees`, `list-hosts`, `list-host-sessions`, `list-host-agents`, `list-themes`, `list-glyphs`, `list-hooks`, `get-keep-awake` | `forbidden` | allowed |
 | read one session | `session-info`, `list-windows`, `get-window`, `list-workspaces`, `capture-pane`, `get-agent-state`, `list-agents`, `wait-for`, `subscribe`, `peek-prompt`, `read-agent-messages`, `explain-agent-screen`, `list-options`, `get-option`, `stash-list`, `stash-get`, `ssh-agent-path`, `display-env` | session in reach | allowed |
 | own pane's record | `set-agent-state`, `set-agent-meta`, `set-agent-session`, `report-agent-activity`, `agent-mail-notice`, `ask-human` | own pane only | allowed |
 | mail and stash | `send-agent-message`, `stash-put` | session in reach, sent as the own pane | allowed |
@@ -2373,6 +2373,62 @@ Response:
 `target` is absent when there is no link, and `env` is empty when the session
 has no display to give. The verb reads one session: a pane needs `read` and
 the session in reach. Over a link it needs `list`.
+
+### get-keep-awake
+
+Report whether the daemon holds the machine awake. `[daemon] keep_awake` is
+`off` (the default), `on`, which holds the machine awake while the daemon
+runs, or `agents`, which holds it while an agent pane of this machine has
+the state `working`. A pane whose program runs on another machine
+(`host` set) does not count, and with the agent features off no pane works.
+
+Params: none.
+
+Request:
+
+```json
+{"verb": "get-keep-awake"}
+```
+
+Response:
+
+```json
+{"result": {"type": "keep_awake", "mode": "agents", "held": true, "working": 2, "method": "systemd-inhibit"}}
+```
+
+`method` is how the daemon holds the machine: `systemd-inhibit` (an inhibitor
+lock on idle and sleep) on Linux, `caffeinate` on macOS,
+`SetThreadExecutionState` on Windows, and `none` elsewhere. `error` says why
+the machine could not be held awake, when it could not: for example, logind
+refused the lock. The daemon does not try again until the mode changes.
+`working` counts the working agent panes in every mode. The verb reads no
+session and is allowed under `read_only`. Over a link it needs `list`.
+
+### set-keep-awake
+
+Set `[daemon] keep_awake` and apply it at once. The daemon also writes the
+key to config.toml, so the settings page, the file and every client show one
+value. A client that offers a keep awake switch, such as the desktop app,
+calls this verb and listens for the `keep-awake` event.
+
+Params: `mode` (required): `off`, `on` or `agents`.
+
+Request:
+
+```json
+{"verb": "set-keep-awake", "params": {"mode": "agents"}}
+```
+
+Response:
+
+```json
+{"result": {"type": "keep_awake", "mode": "agents", "held": false, "working": 0, "method": "systemd-inhibit", "saved": true}}
+```
+
+The response says the hold after the change. `saved` is false, with
+`save_error`, when config.toml could not be written. The mode then applies
+until the daemon stops. The verb is refused on a restricted connection. Over
+a link it needs `write`.
 
 ### session-info
 
@@ -6692,10 +6748,10 @@ the one before. The configuration is in
 | Capability | Verbs |
 | --- | --- |
 | none | `hello`, `list-verbs`, `link-peer`, `restrict-connection`, `pane-grants` (which says no pane grants apply over a link) |
-| `list` | `list-*`, `session-info`, `ssh-agent-path`, `display-env`, `get-window`, `capture-pane`, `screenshot`, `get-option`, `get-agent-state`, `resolve-pane`, `explain-agent-*`, `wait-for`, `subscribe`, `unsubscribe`, `peek-prompt`, `read-dir`, `wait-dir`, `compare-fan`, `agent-activity`, `get-approval`, `file-stat`, `file-list`, `list-tasks`, `get-task` |
+| `list` | `list-*`, `session-info`, `ssh-agent-path`, `display-env`, `get-keep-awake`, `get-window`, `capture-pane`, `screenshot`, `get-option`, `get-agent-state`, `resolve-pane`, `explain-agent-*`, `wait-for`, `subscribe`, `unsubscribe`, `peek-prompt`, `read-dir`, `wait-dir`, `compare-fan`, `agent-activity`, `get-approval`, `file-stat`, `file-list`, `list-tasks`, `get-task` |
 | `mail` | `send-agent-message`, `read-agent-messages`, `agent-mail-notice`, `stash-put`, `stash-list`, `stash-get` |
 | `open` | `new-session`, `new-window`, `split-window`, `popup`, `new-worktree`, `fan`, `start-agent`, `open-pane`, `resize-pane`, `close-pane`, `pane-cwd`, `pane-agent`, `pane-calls` |
-| `write` | `send-keys`, `send-text`, `ask-agent`, `run-command`, `switch-session`, `detach-client`, `close-window`, `close-workspace`, `kill-session`, `focus-window`, `move-window`, `set-window`, `select-workspace`, `set-layout`, `resize`, `set-option`, `set-session-*`, `set-workspace-*`, `set-agent-*`, `resume-agent`, `request-approval`, `refresh-dock`, `pip`, `remove-worktree`, `bundle-worktree`, `run`, `ask-human` (whose handler refuses a link caller anyway), `review-diff` (it returns file contents), `review-note`, `review-stage`, `send-review`, `queue-prompt`, `cancel-queued`, `keep-fan`, `add-task`, `claim-task`, `finish-task`, `set-task-stage`, `block-task`, `release-task`, `remove-task` |
+| `write` | `send-keys`, `send-text`, `ask-agent`, `run-command`, `switch-session`, `detach-client`, `close-window`, `close-workspace`, `kill-session`, `focus-window`, `move-window`, `set-window`, `select-workspace`, `set-layout`, `resize`, `set-option`, `set-keep-awake`, `set-session-*`, `set-workspace-*`, `set-agent-*`, `resume-agent`, `request-approval`, `refresh-dock`, `pip`, `remove-worktree`, `bundle-worktree`, `run`, `ask-human` (whose handler refuses a link caller anyway), `review-diff` (it returns file contents), `review-note`, `review-stage`, `send-review`, `queue-prompt`, `cancel-queued`, `keep-fan`, `add-task`, `claim-task`, `finish-task`, `set-task-stage`, `block-task`, `release-task`, `remove-task` |
 | `open` and `write` | `verify-fan` |
 | `open` and `files` | `paste-pane-image` |
 | `write` and `files` | `paste-image` |
@@ -7478,6 +7534,7 @@ Event types:
 | `task-claimed` | A pane took a task card. `task` is the card's row as `list-tasks` gives it, and `window` the pane that took it. See [Task verbs](#task-verbs). | `session`, `window`, `task` |
 | `task-finished` | A task card was marked done. `window` is the pane that held it, empty when none did. | `session`, `window`, `task` |
 | `task-changed` | A task card was `added`, `staged`, `blocked`, `unblocked`, `released` or `removed` (`action`). A release tuios made on its own carries `reason`: `pane closed`, `agent left` or `restart`; a stage move it made on its own carries the fact (see [Task verbs](#task-verbs)); a block carries its reason too. `removed` carries the card's last row. | `session`, `action`, `reason`, `task` |
+| `keep-awake` | The daemon took or dropped its hold that keeps the machine awake, the number of working agent panes changed while `keep_awake` is `agents`, or `keep_awake` changed. `mode` is `off`, `on` or `agents`, `state` is `held` or `released`, `working` counts the working agent panes on this machine, and `reason` says why the machine could not be held awake, when it could not. See [get-keep-awake](#get-keep-awake). It names no session. | `mode`, `state`, `working`, `reason` |
 | `tml-event` | What a person did on a TML surface that its owner hears: an `emit` action in the document, or the close, which is the surface's last event. `tml` has `surface`, `name` (the emit's name, or `close`), `value` (absent when null), `reason` (on a close: `closed`, `program` or `dismissed`) and `version`. `window` is the TML window. Opt-in: only a subscription whose `types` names it receives it, and a `tml-open` with `events` gets the events of its own surface. | `tml` |
 
 ### What fires when

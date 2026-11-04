@@ -74,7 +74,7 @@ func (d *Daemon) stopHostsWatch() {
 
 // onConfigReload runs on the watcher goroutine. It applies the [hosts] table,
 // [notify], appearance.preferred_shell, workspaces.return_when_empty,
-// [paste_buffers], [agents] enabled and herdr_protocol, [daemon]
+// [paste_buffers], [agents] enabled and herdr_protocol, [daemon] keep_awake,
 // single_client and ssh_agent, the
 // [agents.approvals], [agents.permissions] and [agents.queue] tables and
 // [agents.recap] test_patterns, and reads nothing else out of the file. A new
@@ -114,6 +114,9 @@ func (d *Daemon) applyUserConfig(cfg *config.UserConfig, byPerson bool) {
 	// The display only ever comes from the person's own local client, so a
 	// file change applies at once, like the agent.
 	d.SetDisplay(cfg.Daemon.Display)
+	// Keeping the machine awake gives a pane nothing, so a file change
+	// applies it in both directions.
+	d.SetKeepAwake(cfg.Daemon.KeepAwake)
 	// [hosts] or ~/.ssh/config may forward the agent differently now, and a
 	// host that left the table leaves no agent link behind.
 	d.forgetHostForwards()

@@ -142,6 +142,8 @@ func (d *Daemon) SetAgentsEnabled(on bool) {
 	if d.agentsOff.Swap(!on) == !on {
 		return
 	}
+	// With the features off no agent works, so none keeps the machine awake.
+	defer d.awake.agentEvent()
 	if on {
 		LogBasic("Agent features are on")
 		d.wakes.detect.Set()

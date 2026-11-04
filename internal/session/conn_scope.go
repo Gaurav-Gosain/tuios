@@ -121,6 +121,9 @@ var verbScopes = map[string]scopeKind{
 	"daemon-upgrade": scopeDeny,
 	// apply-config is for the person, outside every pane.
 	"apply-config": scopeDeny,
+	// It changes what the person's machine does and saves config.toml.
+	"set-keep-awake": scopeDeny,
+	"get-keep-awake": scopeGlobal,
 
 	"list-sessions":      scopeGlobal,
 	"list-clients":       scopeGlobal,

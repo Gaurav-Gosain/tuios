@@ -467,6 +467,28 @@ display = "follow"
 - `XAUTHORITY` must be a file that you own, in folders that pass the same checks.
 - The daemon removes its links when it stops and when you set the option to `"off"`. At start, it removes the links that a stopped daemon left.
 
+`keep_awake` in `[daemon]` (default `"off"`) keeps the machine from sleeping while agents work.
+
+| Value | The machine stays awake |
+|---|---|
+| `off` (default) | Never. The machine sleeps as its own settings say. |
+| `agents` | While an agent pane on this machine has the state `working`. |
+| `on` | While the daemon runs. |
+
+```toml
+[daemon]
+keep_awake = "agents"
+```
+
+- The daemon holds the machine awake, so it works when no client is attached, over ssh, and on a host.
+- On Linux the daemon runs `systemd-inhibit` for idle and sleep. `systemd-inhibit --list` shows a `tuios` row while it holds. On macOS it runs `caffeinate`. On Windows it calls `SetThreadExecutionState`.
+- Only sleep is held off. The display can still dim and lock. On a Mac, a closed lid still sleeps.
+- A pane whose program runs on another machine, in a global session, does not count. That machine runs the agent.
+- With `[agents] enabled = false`, no agent works, so `agents` holds nothing.
+- The daemon does no work while nothing changes. It counts the working panes only when the state of a pane changes or a pane closes.
+- When the daemon stops, or a live upgrade replaces it, the hold ends. The new daemon takes it again.
+- `tuios keep-awake agents` sets the value, applies it at once and saves it to the config file. `tuios keep-awake` shows the hold. `tuios doctor keep-awake` checks that this machine can be held awake. The Daemon tab of the settings has the same option. A change in the config file applies at once.
+
 `[hints]` sets what hints mode (`Ctrl+B F`) labels. See [HINTS.md](HINTS.md).
 
 `[panes]` sets `label_keys`, the keys that the pane labels (`Ctrl+B Q`) use. The default is `1234567890`. Letters `a` to `z` and digits are allowed. See [KEYBINDINGS.md](KEYBINDINGS.md#pane-labels).

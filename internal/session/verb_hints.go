@@ -64,6 +64,7 @@ var (
 		EventAgentActivity, EventTranscript, EventTransfer, EventTransferProgress, EventTransferFile,
 		EventDaemonUpgraded,
 		EventTML, EventTaskClaimed, EventTaskFinished, EventTaskChanged,
+		EventKeepAwake,
 	}
 	// knownEventTypes are the event types a subscribe filter can name.
 	knownEventTypes = EventTypeNames

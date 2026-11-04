@@ -725,6 +725,7 @@ func (m *OS) settingsCategories() []settingsCategory {
 		Items: m.resolveRows([]settingsRow{
 			opt("daemon.log_level"),
 			opt("daemon.window_size"),
+			opt("daemon.keep_awake"),
 			opt("daemon.persist_scrollback"),
 			opt("daemon.persist_scrollback_lines"),
 			opt("daemon.persist_scrollback_kb"),
