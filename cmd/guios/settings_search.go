@@ -3,7 +3,6 @@ package main
 import (
 	"runtime"
 	"strings"
-	"time"
 
 	"github.com/egoist/mygo/ui"
 
@@ -71,8 +70,6 @@ func settingsIndex() []searchEntry {
 		{"notifications", locales.SetNotifyDone(), "notify-on-done done complete"},
 		{"notifications", locales.SetNotifyFailed(), "notify-on-error error"},
 		{"notifications", locales.SetPlaySound(), "notify-sound audio"},
-		{"notifications", locales.SetDockBadge(), "dock-badge count"},
-		{"notifications", locales.SetDockBounce(), "dock-bounce attention"},
 
 		{"agents", locales.SetRemoteControlRow(), "remote-control kero do focus browser automation"},
 		{"agents", locales.SetCliRow(), "cli command line tool install path"},
@@ -92,7 +89,9 @@ func settingsIndex() []searchEntry {
 		{"advanced", locales.SetReset(), "defaults reset"},
 	}
 	if runtime.GOOS == "darwin" {
-		entries = append(entries, searchEntry{"general", locales.SetAppIcon(), "macos-show-app-icon dock menu bar menubar tray status item hide"})
+		entries = append(entries, searchEntry{"general", locales.SetAppIcon(), "macos-show-app-icon dock menu bar menubar tray status item hide"},
+			searchEntry{"notifications", locales.SetDockBadge(), "dock-badge count"},
+			searchEntry{"notifications", locales.SetDockBounce(), "dock-bounce attention"})
 	}
 	return entries
 }
@@ -213,12 +212,12 @@ var (
 // title, as a tint wider than it by dx on each side, and taller by dy.
 func searchHighlight(c *ui.Context, el ui.Element, label string, pal *palette, dx, dy float32) {
 	hit := searchHits[label]
-	t := el.Animate("hit", b2f(hit), 180*time.Millisecond)
+	t := el.Animate("hit", b2f(hit), dArrive)
 	if label == searchReveal {
 		el.ScrollIntoView()
 	}
 	if t > 0 {
-		ui.Box(c.Key("hit")).Absolute().Top(-dy).Bottom(-dy).Left(-dx).Right(-dx).Radius(8).PassThrough().
+		ui.Box(c.Key("hit")).Absolute().Top(-dy).Bottom(-dy).Left(-dx).Right(-dx).Radius(rControl).PassThrough().
 			Background(pal.accent.Alpha(0.13*t)).InsetShadow(0, 0, 0, 1, pal.accent.Alpha(0.28*t))
 	}
 }

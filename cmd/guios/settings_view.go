@@ -205,25 +205,25 @@ func (a *App) settingsView(c *ui.Context) {
 				}
 			}
 			if found != nil && len(found) == 0 {
-				ui.Text(c, locales.CommonNoResults()).FontSize(13).TextColor(pal.textFaint).Padding(8, 10)
+				ui.Text(c, locales.CommonNoResults()).FontSize(fsBody).TextColor(pal.textFaint).Padding(8, 10)
 			}
 			ui.Spacer(c)
-			link := ui.ButtonBase(c.Key("open-config")).Padding(6, 10).Gap(6).Radius(7).AlignItems(ui.Center).Label(locales.SettingsOpenConfigLabel())
+			link := ui.ButtonBase(c.Key("open-config")).Height(hControl).Padding(0, 10).Gap(6).Radius(rRow).AlignItems(ui.Center).Label(locales.SettingsOpenConfigLabel())
 			fg := pal.textMuted
 			if link.Hovered() {
 				fg = pal.text
 				link.Background(pal.rowHover)
 			}
 			link.TextColor(fg).Tooltip(proto.ShortDir(settings.Path())).Children(func() {
-				ui.Icon(c, glyph("f7-chevron-left-slash-chevron-right")).Size(13, 13)
-				ui.Text(c, locales.SettingsOpenConfig()).FontSize(12.5).SingleLine()
+				ui.Icon(c, glyph("f7-chevron-left-slash-chevron-right")).Size(14, 14).Shrink(0)
+				oneLine(c, locales.SettingsOpenConfig(), fsSmall, 0)
 			})
 			if link.Clicked() {
 				a.openConfig()
 			}
 		})
 		ui.Column(c).Grow(1).MinWidth(0).Padding(cardGap, cardGap, cardGap, 0).Children(func() {
-			card := paned(ui.Column(c).Grow(1).MinHeight(0).Radius(14).Background(pal.card), pal).Clip()
+			card := paned(ui.Column(c).Grow(1).MinHeight(0).Radius(rPane).Background(pal.card), pal).Clip()
 			card.Children(func() {
 				page := settingsPages[0]
 				for _, p := range settingsPages {
@@ -275,13 +275,13 @@ func (a *App) settingsView(c *ui.Context) {
 					})
 					edge := ui.Box(c.Key("edge")).Absolute().Top(0).Left(0).Right(0).Height(headerH).PassThrough().
 						Material(glass.ScrollEdge{Hard: true, Background: pal.card})
-					edge.Opacity(edge.Animate("on", b2f(edgeOn), 160*time.Millisecond))
+					edge.Opacity(edge.Animate("on", b2f(edgeOn), dFade))
 					ui.Row(c).Absolute().Top(0).Left(0).Right(0).Height(headerH).AlignItems(ui.Center).Padding(0, 10, 0, 24).DragWindow().Children(func() {
-						ui.Text(c, page.title()).FontSize(15).FontWeight(650).TextColor(pal.text)
+						ui.Text(c, page.title()).FontSize(fsTitle).FontWeight(wSemibold).TextColor(pal.text).SingleLine()
 						if page.experimental {
-							ui.Row(c.Key("experimental")).Height(18).Margin(0, 0, 0, 8).Padding(0, 6).Radius(5).AlignItems(ui.Center).Shrink(0).
+							ui.Row(c.Key("experimental")).Height(18).Margin(0, 0, 0, 8).Padding(0, 6).Radius(rChip).AlignItems(ui.Center).Shrink(0).
 								Background(pal.attention.Alpha(0.14)).Children(func() {
-								ui.Text(c, locales.PageExperimental()).FontSize(11.5).FontWeight(600).TextColor(pal.attention).SingleLine()
+								ui.Text(c, locales.PageExperimental()).FontSize(fsSmall).FontWeight(wSemibold).TextColor(pal.attention).SingleLine()
 							})
 						}
 						ui.Spacer(c)
@@ -341,8 +341,8 @@ func (a *App) settingsSearch(c *ui.Context, pal *palette) {
 	var in ui.Element
 	frame := ui.Row(c.Key("search")).Cursor(ui.CursorText).Margin(0, 0, 10, 0)
 	frame.Children(func() {
-		ui.Icon(c, searchIcon).Size(13, 13).TextColor(pal.textFaint).Shrink(0)
-		in = ui.TextInputBase(c.Key("in"), &a.ss.query).Bind(&a.ss.searchRef).Grow(1).MinWidth(0).AlignSelf(ui.Stretch).FontSize(13).
+		ui.Icon(c, searchIcon).Size(14, 14).TextColor(pal.textFaint).Shrink(0)
+		in = ui.TextInputBase(c.Key("in"), &a.ss.query).Bind(&a.ss.searchRef).Grow(1).MinWidth(0).AlignSelf(ui.Stretch).FontSize(fsBody).
 			Placeholder(locales.CommonSearch()).Label(locales.SettingsSearchLabel())
 		in.OnShortcut(0, ui.KeyEscape, func() { a.ss.query = "" })
 		if a.ss.query != "" {
@@ -363,7 +363,7 @@ func (a *App) settingsSearch(c *ui.Context, pal *palette) {
 
 func (a *App) settingsNav(c *ui.Context, pal *palette, p settingsPage) {
 	sel := a.ss.page == p.id
-	item := ui.Row(c.Key(p.id)).Height(32).Padding(0, 10).Gap(10).AlignItems(ui.Center).Radius(8)
+	item := ui.Row(c.Key(p.id)).Height(hRow).Padding(0, 10).Gap(10).AlignItems(ui.Center).Radius(rRow)
 	if pal.dark {
 		item.Border(1, ui.Transparent) // room for the chosen item's edge
 	}
@@ -375,18 +375,18 @@ func (a *App) settingsNav(c *ui.Context, pal *palette, p settingsPage) {
 	case item.Hovered():
 		bg = pal.rowHover
 	}
-	item.Background(item.AnimateColor("bg", bg, ui.Animation{Duration: 110 * time.Millisecond}))
+	item.Background(item.AnimateColor("bg", bg, ui.Animation{Duration: dHoverOut}))
 	// A quick tap can press and release between frames; keep its click too.
 	if (item.Pressed() || item.Clicked()) && !sel {
 		a.ss.page = p.id
 		a.setRecording("")
 	}
 	item.Children(func() {
-		ic := ui.Icon(c, p.icon).Size(15, 15).TextColor(pal.textMuted)
+		ic := ui.Icon(c, p.icon).Size(16, 16).TextColor(pal.textMuted).Shrink(0)
 		if sel {
 			ic.TextColor(pal.accent)
 		}
-		ui.Text(c, p.title()).FontSize(13.5).TextColor(pal.text).SingleLine()
+		oneLine(c, p.title(), fsBody, 0).TextColor(pal.text)
 	})
 }
 
@@ -396,7 +396,7 @@ func groupTitle(c *ui.Context, pal *palette, title string) {
 	row := ui.Row(c.Key("title-"+title)).Padding(0, 4)
 	row.Children(func() {
 		searchHighlight(c, row, title, pal, 2, 3)
-		ui.Text(c, title).FontSize(12).FontWeight(600).TextColor(pal.textMuted)
+		oneLine(c, title, fsSmall, wMedium).TextColor(pal.textMuted)
 	})
 }
 
@@ -408,10 +408,10 @@ func settingsGroup(c *ui.Context, pal *palette, title, note string, fn func()) {
 		}
 		if fn != nil { // a group of a note alone has no panel
 			groupRows = 0
-			ui.Column(c).Radius(12).Background(pal.chip).Padding(4, 16).Children(fn)
+			ui.Column(c).Radius(rCard).Background(pal.chip).Padding(4, 16).Children(fn)
 		}
 		if note != "" {
-			ui.Text(c, note).FontSize(12).TextColor(pal.textFaint).LineHeight(1.4).Padding(0, 4)
+			ui.Text(c, note).FontSize(fsSmall).TextColor(pal.textFaint).LineHeight(1.4).Padding(0, 4)
 		}
 	})
 }
@@ -422,16 +422,44 @@ var groupRows int
 
 // setting is a row of a group: a label, what it does, and its control.
 func settingRow(c *ui.Context, pal *palette, label, detail string, control func()) {
+	var fn func()
+	if detail != "" {
+		fn = func() {
+			ui.Text(c, detail).FontSize(fsSmall).TextColor(pal.textMuted).LineHeight(1.4)
+		}
+	}
+	settingRowWith(c, pal, label, fn, control)
+}
+
+// settingPathRow is settingRow for a file or a folder: its path on one
+// line, cut at its start.
+func settingPathRow(c *ui.Context, pal *palette, label, path string, control func()) {
+	settingRowWith(c, pal, label, func() {
+		ui.Row(c).MinWidth(0).Children(func() { pathLine(c, "path-"+label, path, fsSmall, pal.textMuted) })
+	}, control)
+}
+
+func settingRowWith(c *ui.Context, pal *palette, label string, detail func(), control func()) {
 	if groupRows++; groupRows > 1 {
 		ui.Box(c).Height(1).Shrink(0).Background(pal.text.Alpha(0.07))
 	}
-	row := ui.Row(c.Key("row-"+label)).Padding(11, 0).Gap(16).AlignItems(ui.Center)
+	// The control goes under the label where a description would have
+	// less than 300 DIPs beside it: a wide control never squeezes what it
+	// is for into a column of words (DESIGN.md section 6).
+	row := ui.Row(c.Key("row-"+label)).Padding(11, 0).GapX(16).GapY(10).AlignItems(ui.Center).Wrap()
 	row.Children(func() {
 		searchHighlight(c, row, label, pal, 10, -2)
-		ui.Column(c).Grow(1).MinWidth(0).Gap(3).Children(func() {
-			ui.Text(c, label).FontSize(13.5).TextColor(pal.text)
-			if detail != "" {
-				ui.Text(c, detail).FontSize(12).TextColor(pal.textMuted).LineHeight(1.35)
+		// A label alone needs only its own width beside the control; with
+		// a description it keeps 300, so the description reads in lines
+		// rather than a column of words.
+		least := natural(c, flat(label), fsBody, 0) + 4
+		if detail != nil {
+			least = 300
+		}
+		ui.Column(c).Grow(1).Basis(0).MinWidth(least).Gap(3).Children(func() {
+			oneLine(c, label, fsBody, 0).TextColor(pal.text)
+			if detail != nil {
+				detail()
 			}
 		})
 		ui.Row(c).Shrink(0).Gap(8).AlignItems(ui.Center).Children(control)
@@ -458,7 +486,7 @@ func segmentedIn(c *ui.Context, key string, value *string, ids, labels []string,
 	if fill {
 		seg.Track.FillWidth()
 	}
-	seg.Track.Height(24).Padding(2).Radius(7).Background(track).AlignItems(ui.Center).Children(func() {
+	seg.Track.Height(hControlSm).Padding(2).Radius(rControl).Background(track).AlignItems(ui.Center).Children(func() {
 		for n, label := range labels {
 			if n > 0 {
 				// A separator, where neither segment beside it is chosen.
@@ -467,7 +495,7 @@ func segmentedIn(c *ui.Context, key string, value *string, ids, labels []string,
 					sep.Background(pal.text.Alpha(0.14))
 				}
 			}
-			s := seg.Segment(n).FillHeight().Padding(0, 12).Radius(5).Center()
+			s := seg.Segment(n).FillHeight().Padding(0, 12).Radius(rRow).Center()
 			if fill {
 				// Each its share of the width as its label's.
 				s.Grow(float32(utf8.RuneCountInString(label))).Basis(0).MinWidth(0).Padding(0, 6)
@@ -481,7 +509,7 @@ func segmentedIn(c *ui.Context, key string, value *string, ids, labels []string,
 				}
 			}
 			s.Children(func() {
-				ui.Text(c, label).FontSize(12.5).SingleLine().Ellipsis("…").MinWidth(0).TextColor(pal.text)
+				oneLine(c, label, fsSmall, wMedium).TextColor(pal.text)
 			})
 		}
 	})
@@ -667,7 +695,7 @@ func (a *App) appearancePage(c *ui.Context, pal *palette) {
 			if dark {
 				label = locales.SetDarkWindows()
 			}
-			ui.Text(c, label).FontSize(12).TextColor(pal.textFaint).Padding(4, 4, 0, 4)
+			ui.Text(c, label).FontSize(fsSmall).TextColor(pal.textFaint).Padding(4, 4, 0, 4)
 			ui.Row(c).Gap(12).Wrap().Children(func() {
 				for _, t := range settings.KeroThemes {
 					a.backgroundTile(c, pal, t.ID, backgroundName(t.ID, t.Name), dark)
@@ -677,7 +705,8 @@ func (a *App) appearancePage(c *ui.Context, pal *palette) {
 	})
 	// A Ghostty theme in place of kero's: none goes back to kero's default.
 	none := locales.SetThemeNone()
-	themes := append([]string{none}, terminal.GhosttyThemes()...)
+	// tuios: the theme the TUI has, Omarchy's while it follows Omarchy.
+	themes := append([]string{none, tuiosThemeName}, terminal.GhosttyThemes()...)
 	ghostty := func(key, value string, choose func(string)) {
 		if keroID(value) != "" {
 			value = none
@@ -746,7 +775,7 @@ func (a *App) backgroundTile(c *ui.Context, pal *palette, id, name string, dark 
 	if dark {
 		slot, key, windows = &a.set.DarkTheme, "bg-dark-", locales.SetDarkWindows()
 	}
-	sel := keroID(*slot) == id
+	sel := keroID(*slot) == id || *slot == tuiosThemeName && id == "paper" && tuiosNamesNone[b2i(dark)].Load()
 	tile := ui.ButtonBase(c.Key(key + id)).Column().Width(124).Gap(8).AlignItems(ui.Stretch).Label(name + ", " + windows)
 	if tile.Clicked() {
 		*slot = keroName(id)
@@ -755,16 +784,16 @@ func (a *App) backgroundTile(c *ui.Context, pal *palette, id, name string, dark 
 		l := keroLook(id, dark)
 		th := l.term
 		ui.Box(c).Children(func() {
-			sw := raised(ui.Box(c).Size(124, 80).Radius(12), pal).Clip()
+			sw := raised(ui.Box(c).Size(124, 80).Radius(rCard), pal).Clip()
 			sw.LinearGradient(l.base)
 			sw.Children(func() {
 				ui.Box(c).Absolute().Top(0).Left(0).Right(0).Bottom(0).LinearGradient(l.glow)
-				ui.Column(c).Absolute().Top(8).Left(8).Right(8).Bottom(8).Radius(8).Background(th.Background).
+				ui.Column(c).Absolute().Top(8).Left(8).Right(8).Bottom(8).Radius(rControl).Background(th.Background).
 					Padding(8, 9).Justify(ui.SpaceBetween).Children(func() {
 					ui.Row(c).AlignItems(ui.Center).Gap(4).Children(func() {
 						ui.Text(c, "Aa").FontSize(17).TextColor(th.Foreground).Grow(1)
-						ui.Box(c).Radius(4).Padding(1, 4).Background(th.Selection).Children(func() {
-							ui.Text(c, "~/").Font(a.termFamily()).FontSize(10).TextColor(th.Foreground)
+						ui.Box(c).Radius(rChip).Padding(1, 4).Background(th.Selection).Children(func() {
+							ui.Text(c, "~/").Font(a.termFamily()).FontSize(fsCaption).TextColor(th.Foreground)
 						})
 						ui.Box(c).Size(6, 13).Radius(1.5).Background(th.Cursor)
 					})
@@ -778,12 +807,12 @@ func (a *App) backgroundTile(c *ui.Context, pal *palette, id, name string, dark 
 			if sel {
 				// The ring, a gap off the tile and around it, so that
 				// nothing in the tile moves for it.
-				ui.Box(c).Absolute().Top(-5).Left(-5).Right(-5).Bottom(-5).Radius(17).Border(2, l.pal.accent)
+				ui.Box(c).Absolute().Top(-5).Left(-5).Right(-5).Bottom(-5).Radius(rCard+5).Border(2, l.pal.accent)
 			}
 		})
-		lbl := ui.Text(c, name).FontSize(12.5).TextColor(pal.textMuted).TextAlign(ui.Center)
+		lbl := ui.Text(c, name).FontSize(fsSmall).TextColor(pal.textMuted).TextAlign(ui.Center)
 		if sel {
-			lbl.TextColor(pal.text).FontWeight(600)
+			lbl.TextColor(pal.text).FontWeight(wSemibold)
 		}
 	})
 }
@@ -868,7 +897,7 @@ func (a *App) terminalPage(c *ui.Context, pal *palette) {
 		settingRow(c, pal, locales.SetLineHeight(), "", func() {
 			v := float64(s.LineHeight)
 			slider(c, "lh", &v, 1, 2, 160, pal).OnChange(func() { a.set.LineHeight = float32(int(v*100+0.5)) / 100 })
-			ui.Textf(c, "%.2f×", s.LineHeight).FontSize(12.5).TextColor(pal.textMuted).Width(40).FontFeatures("tnum")
+			ui.Textf(c, "%.2f×", s.LineHeight).FontSize(fsSmall).TextColor(pal.textMuted).Width(40).FontFeatures("tnum")
 		})
 		settingRow(c, pal, locales.SetWeight(), "", func() {
 			popup(c, "weight", &s.FontWeight, []int{300, 400, 500, 600}, func(w int) string {
@@ -927,7 +956,7 @@ func (a *App) terminalPage(c *ui.Context, pal *palette) {
 		settingRow(c, pal, locales.SetTrackpadScroll(), locales.SetTrackpadScrollDetail(), func() {
 			v := float64(s.ScrollPrecision)
 			slider(c, "trackpad", &v, 0.25, 3, 160, pal).OnChange(func() { a.set.ScrollPrecision = float32(int(v*20+0.5)) / 20 })
-			ui.Textf(c, "%.2f×", s.ScrollPrecision).FontSize(12.5).TextColor(pal.textMuted).Width(40).FontFeatures("tnum")
+			ui.Textf(c, "%.2f×", s.ScrollPrecision).FontSize(fsSmall).TextColor(pal.textMuted).Width(40).FontFeatures("tnum")
 		})
 	})
 }
@@ -951,7 +980,7 @@ func (a *App) terminalPreview(c *ui.Context, pal *palette) {
 		}
 		ui.RichText(c, spans...).LineHeight(a.set.LineHeight).SingleLine()
 	}
-	box := raised(ui.Column(c).Radius(12).Padding(16, 18).Gap(0).Background(th.Background), pal)
+	box := raised(ui.Column(c).Radius(rCard).Padding(16, 18).Gap(0).Background(th.Background), pal)
 	box.Children(func() {
 		// Nerd Fonts' folder and branch icons: fonts without them show
 		// boxes, which is worth knowing before picking one.
@@ -960,7 +989,7 @@ func (a *App) terminalPreview(c *ui.Context, pal *palette) {
 		line(ui.Span{Text: "func ", Color: th.Palette[5]}, ui.Span{Text: "main", Color: th.Palette[4]}, ui.Span{Text: "() { x := a != b && c >= d => ok }", Color: th.Foreground})
 		ui.Row(c).Gap(4).Margin(10, 0, 0, 0).Children(func() {
 			for i := range 16 {
-				ui.Box(c).Size(16, 10).Radius(3).Background(th.Palette[i])
+				ui.Box(c).Size(16, 10).Radius(rChip).Background(th.Palette[i])
 			}
 		})
 	})
@@ -968,7 +997,12 @@ func (a *App) terminalPreview(c *ui.Context, pal *palette) {
 
 func (a *App) shellPage(c *ui.Context, pal *palette) {
 	s := &a.set
-	login := shell.Login()
+	// The shell a pane runs: the daemon takes $SHELL before the
+	// account's shell, as panes started by guios inherit it.
+	login := os.Getenv("SHELL")
+	if login == "" {
+		login = shell.Login()
+	}
 	note := locales.SetShellGroupDetail()
 	if len(a.hosts) > 1 {
 		note += " " + locales.SetShellThisComputer()
@@ -1003,8 +1037,8 @@ func (a *App) shellPage(c *ui.Context, pal *palette) {
 		for i, kv := range s.Env {
 			k, v, _ := strings.Cut(kv, "=")
 			ui.Row(c.Key("env"+strconv.Itoa(i))).Padding(8, 0).Gap(10).AlignItems(ui.Center).Children(func() {
-				ui.Text(c, k).Font("monospace").FontSize(12.5).FontWeight(600).TextColor(pal.text)
-				ui.Text(c, v).Font("monospace").FontSize(12.5).TextColor(pal.textMuted).Grow(1).SingleLine().Ellipsis("…").MinWidth(0)
+				ui.Text(c, k).Font("monospace").FontSize(fsBody).FontWeight(wSemibold).TextColor(pal.text)
+				ui.Text(c, v).Font("monospace").FontSize(fsSmall).TextColor(pal.textMuted).Grow(1).SingleLine().Ellipsis("…").MinWidth(0)
 				idx := i
 				iconButton(c, "rm", closeIcon, locales.CommonRemove(), pal, func() {
 					a.set.Env = slices.Delete(slices.Clone(a.set.Env), idx, idx+1)
@@ -1045,8 +1079,11 @@ func (a *App) notificationsPage(c *ui.Context, pal *palette) {
 	})
 	settingsGroup(c, pal, locales.SetHow(), "", func() {
 		settingRow(c, pal, locales.SetPlaySound(), "", func() { toggle(c.Key("ns"), &s.NotifySound, pal) })
-		settingRow(c, pal, locales.SetDockBadge(), locales.SetDockBadgeDetail(), func() { toggle(c.Key("nb"), &s.DockBadge, pal) })
-		settingRow(c, pal, locales.SetDockBounce(), locales.SetDockBounceDetail(), func() { toggle(c.Key("nbo"), &s.BounceDock, pal) })
+		// The Dock is macOS's: elsewhere these rows would set nothing.
+		if runtime.GOOS == "darwin" {
+			settingRow(c, pal, locales.SetDockBadge(), locales.SetDockBadgeDetail(), func() { toggle(c.Key("nb"), &s.DockBadge, pal) })
+			settingRow(c, pal, locales.SetDockBounce(), locales.SetDockBounceDetail(), func() { toggle(c.Key("nbo"), &s.BounceDock, pal) })
+		}
 	})
 	if button(c, "test-notif", locales.SetTestNotification(), "", false, pal) {
 		n := mygo.NewNotification(mygo.NotificationOptions{Title: "guios", Body: locales.SetTestNotificationBody(), Silent: !s.NotifySound})
@@ -1119,14 +1156,14 @@ func (a *App) agentsPage(c *ui.Context, pal *palette) {
 // docLink opens a page of Kero's documentation in the browser: the
 // accent's words and an arrow, under the group it tells more of.
 func docLink(c *ui.Context, pal *palette, key, label, url string) {
-	b := ui.ButtonBase(c.Key(key)).AlignSelf(ui.Start).Padding(2, 4).Gap(3).Radius(5).AlignItems(ui.Center).Label(label).Tooltip(url)
+	b := ui.ButtonBase(c.Key(key)).AlignSelf(ui.Start).Padding(2, 4).Gap(3).Radius(rChip).AlignItems(ui.Center).Label(label).Tooltip(url)
 	col := pal.accent
 	if b.Hovered() {
 		col = col.Mix(pal.text, 0.25)
 	}
 	b.TextColor(col).Children(func() {
-		ui.Text(c, label).FontSize(12.5).FontWeight(500)
-		ui.Icon(c, linkIcon).Size(11, 11)
+		ui.Text(c, label).FontSize(fsBody).FontWeight(wMedium)
+		ui.Icon(c, linkIcon).Size(12, 12)
 	})
 	if b.Clicked() {
 		mygo.Shell.OpenExternal(url)
@@ -1134,13 +1171,13 @@ func docLink(c *ui.Context, pal *palette, key, label, url string) {
 }
 
 func codeBlock(c *ui.Context, pal *palette, code string) {
-	ui.Text(c, code).Font("monospace").FontSize(12).LineHeight(1.55).TextColor(pal.text).
-		Padding(12, 16).Radius(10).Background(pal.chip).Selectable()
+	ui.Text(c, code).Font("monospace").FontSize(fsSmall).LineHeight(1.55).TextColor(pal.text).
+		Padding(12, 16).Radius(rControl).Background(pal.chip).Selectable()
 }
 
 func (a *App) advancedPage(c *ui.Context, pal *palette) {
 	settingsGroup(c, pal, locales.SetConfiguration(), locales.SetConfigurationDetail(), func() {
-		settingRow(c, pal, locales.SetConfigFile(), proto.ShortDir(settings.Path()), func() {
+		settingPathRow(c, pal, locales.SetConfigFile(), proto.ShortDir(settings.Path()), func() {
 			if button(c, "reveal-config", locales.CommonShowIn(fileManager()), "", false, pal) {
 				a.ensureConfig()
 				revealPath(settings.Path())
@@ -1152,7 +1189,7 @@ func (a *App) advancedPage(c *ui.Context, pal *palette) {
 		for i, p := range a.ss.problems {
 			ui.Row(c.Key("problem"+strconv.Itoa(i))).Padding(0, 0, 8, 0).Gap(8).AlignItems(ui.Center).Children(func() {
 				ui.Box(c).Size(6, 6).Radius(3).Background(pal.attention).Shrink(0)
-				ui.Text(c, p).FontSize(12.5).TextColor(pal.attention).Grow(1).MinWidth(0)
+				ui.Text(c, p).FontSize(fsSmall).TextColor(pal.attention).Grow(1).MinWidth(0)
 			})
 		}
 	})
@@ -1167,14 +1204,14 @@ func (a *App) advancedPage(c *ui.Context, pal *palette) {
 				}
 			}
 		})
-		settingRow(c, pal, locales.SetLog(), proto.ShortDir(session.DefaultDaemonLogPath()), func() {
+		settingPathRow(c, pal, locales.SetLog(), proto.ShortDir(session.DefaultDaemonLogPath()), func() {
 			if button(c, "log", locales.CommonShow(), "", false, pal) {
 				revealPath(session.DefaultDaemonLogPath())
 			}
 		})
 	})
 	settingsGroup(c, pal, locales.SetData(), locales.SetDataDetail(), func() {
-		settingRow(c, pal, locales.SetFolder(), proto.ShortDir(proto.Dir()), func() {
+		settingPathRow(c, pal, locales.SetFolder(), proto.ShortDir(proto.Dir()), func() {
 			if button(c, "reveal", locales.CommonShowIn(fileManager()), "", false, pal) {
 				openPath(proto.Dir())
 			}
@@ -1218,7 +1255,7 @@ func (a *App) keyboardPage(c *ui.Context, pal *palette) {
 		}
 	})
 	if a.ss.notice != "" {
-		ui.Text(c, a.ss.notice).FontSize(12).TextColor(pal.attention).Padding(0, 4)
+		ui.Text(c, a.ss.notice).FontSize(fsSmall).TextColor(pal.attention).Padding(0, 4)
 	}
 	q := strings.ToLower(strings.TrimSpace(a.ss.filter))
 	if q == "" {
@@ -1251,7 +1288,7 @@ func (a *App) keyboardPage(c *ui.Context, pal *palette) {
 			}
 		})
 	}
-	ui.Text(c, locales.SetKeyboardHelp()).FontSize(12).TextColor(pal.textFaint).Padding(0, 4)
+	ui.Text(c, locales.SetKeyboardHelp()).FontSize(fsSmall).TextColor(pal.textFaint).Padding(0, 4)
 }
 
 func (a *App) shortcutRow(c *ui.Context, pal *palette, act actions.Action) {
@@ -1259,13 +1296,13 @@ func (a *App) shortcutRow(c *ui.Context, pal *palette, act actions.Action) {
 	_, custom := a.set.Shortcuts[act.ID]
 	ui.Row(c.Key(act.ID)).Padding(7, 0).Gap(10).AlignItems(ui.Center).Children(func() {
 		ui.Column(c).Grow(1).Gap(2).Children(func() {
-			ui.Text(c, strings.TrimSuffix(actionTitle(act.ID), "…")).FontSize(13.5).TextColor(pal.text).SingleLine()
+			ui.Text(c, strings.TrimSuffix(actionTitle(act.ID), "…")).FontSize(fsBody).TextColor(pal.text).SingleLine()
 			if act.Global {
-				ui.Text(c, locales.SetShortcutGlobal()).FontSize(11.5).TextColor(pal.textFaint).SingleLine()
+				ui.Text(c, locales.SetShortcutGlobal()).FontSize(fsSmall).TextColor(pal.textFaint).SingleLine()
 			}
 		})
 		if custom && keys != act.Keys {
-			b := ui.ButtonBase(c.Key("undo")).Size(22, 22).Radius(6).Center().TextColor(pal.textFaint).Label(locales.SetUseDefault(actions.Glyphs(act.Keys))).Tooltip(locales.SetDefaultKeys(actions.Glyphs(act.Keys)))
+			b := ui.ButtonBase(c.Key("undo")).Size(22, 22).Radius(rRow).Center().TextColor(pal.textFaint).Label(locales.SetUseDefault(actions.Glyphs(act.Keys))).Tooltip(locales.SetDefaultKeys(actions.Glyphs(act.Keys)))
 			if b.Hovered() {
 				b.Background(pal.rowHover).TextColor(pal.text)
 			}
@@ -1278,7 +1315,7 @@ func (a *App) shortcutRow(c *ui.Context, pal *palette, act actions.Action) {
 			}
 		}
 		recording := a.ss.recording == act.ID
-		chip := ui.ButtonBase(c.Key("keys")).Height(26).MinWidth(84).Padding(0, 10).Radius(7).Center().Label(locales.SetShortcutFor(strings.TrimSuffix(actionTitle(act.ID), "…")))
+		chip := ui.ButtonBase(c.Key("keys")).Height(26).MinWidth(84).Padding(0, 10).Radius(rRow).Center().Label(locales.SetShortcutFor(strings.TrimSuffix(actionTitle(act.ID), "…")))
 		bg := pal.control
 		switch {
 		case recording:
@@ -1306,11 +1343,11 @@ func (a *App) shortcutRow(c *ui.Context, pal *palette, act actions.Action) {
 		chip.Children(func() {
 			switch {
 			case recording:
-				ui.Text(c, locales.SetTypeShortcut()).FontSize(12.5).TextColor(pal.accent).SingleLine()
+				ui.Text(c, locales.SetTypeShortcut()).FontSize(fsBody).TextColor(pal.accent).SingleLine()
 			case keys == "":
-				ui.Text(c, locales.CommonNone()).FontSize(12.5).TextColor(pal.textFaint).SingleLine()
+				ui.Text(c, locales.CommonNone()).FontSize(fsSmall).TextColor(pal.textFaint).SingleLine()
 			default:
-				ui.Text(c, actions.Glyphs(keys)).FontSize(13).TextColor(pal.text).SingleLine().FontFeatures("tnum")
+				ui.Text(c, actions.Glyphs(keys)).FontSize(fsBody).TextColor(pal.text).SingleLine().FontFeatures("tnum")
 			}
 		})
 	})
