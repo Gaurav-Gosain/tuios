@@ -67,7 +67,7 @@ func (a *App) worktreeView(c *ui.Context, pal *palette) {
 			if button(c, "cancel", locales.CommonCancel(), "esc", false, pal) {
 				w.open = false
 			}
-			if button(c, "ok", locales.WorktreeCreate(), "↩", true, pal) {
+			if button(c, "ok", locales.WorktreeCreate(), "↵", true, pal) {
 				create = true
 			}
 		})

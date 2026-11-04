@@ -36,6 +36,8 @@ var emojiSourceAllowed = map[string]string{
 	"internal/webshell/agent.go": "imitates another program's screen",
 	// macOS Option-key output is what the keyboard sends, not what we show.
 	"internal/config/keynormalizer.go": "macOS Option-key character map",
+	// guios reads agent CLIs' screens, which mark tool calls with ⏺.
+	"internal/guios/proto/proto.go": "matches marks agent CLIs draw",
 }
 
 // emojiSourceRoots are the trees the lint reads.

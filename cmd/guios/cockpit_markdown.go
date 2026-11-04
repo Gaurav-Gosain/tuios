@@ -153,7 +153,7 @@ func (a *App) mdItem(c *ui.Context, pal *palette, b *markdown.Block, mono string
 		case b.Task == 1:
 			mark, col = "☐", pal.textMuted
 		case b.Task == 2:
-			mark, col = "☑", pal.done
+			mark, col = "▣", pal.done
 		case b.Ordered:
 			mark = b.Number
 		}

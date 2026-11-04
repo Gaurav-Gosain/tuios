@@ -253,9 +253,9 @@ func Glyphs(accel string) string {
 		b.WriteString("⌘")
 	}
 	names := map[string]string{
-		"enter": "↩", "return": "↩", "tab": "⇥", "space": "Space", "backspace": "⌫", "delete": "⌦",
+		"enter": "↵", "return": "↵", "tab": "⇥", "space": "Space", "backspace": "⌫", "delete": "⌦",
 		"escape": "⎋", "esc": "⎋", "up": "↑", "down": "↓", "left": "←", "right": "→",
-		"home": "↖", "end": "↘", "pageup": "⇞", "pagedown": "⇟", "plus": "+",
+		"home": "⇱", "end": "⇲", "pageup": "⇞", "pagedown": "⇟", "plus": "+",
 	}
 	if n, ok := names[strings.ToLower(key)]; ok {
 		b.WriteString(n)

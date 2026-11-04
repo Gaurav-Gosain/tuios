@@ -557,9 +557,9 @@ func (a *App) mailView(c *ui.Context, pal *palette, ag client.Agent) {
 				in := msg.To == ag.Window
 				ui.Column(c.Key(msg.ID)).Gap(6).Padding(10, 14).Radius(10).Background(ckGround(pal)).Children(func() {
 					ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
-						arrow := "↗"
+						arrow := "→"
 						if in {
-							arrow = "↙"
+							arrow = "←"
 						}
 						ui.Text(c, arrow).FontSize(13).TextColor(pal.accent)
 						to := msg.ToName
