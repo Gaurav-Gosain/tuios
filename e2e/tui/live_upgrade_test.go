@@ -1076,10 +1076,12 @@ func awaitSettled(t *testing.T, base string, pid int) bool {
 		if res, err := callVerb(t, base, "hello", map[string]any{}); err == nil {
 			key, _ = res["instance"].(string)
 		}
-		for _, f := range openFiles(t, pid) {
-			// A socket comes and goes with each caller, the hello above too.
-			if strings.HasPrefix(f.Link, "/") {
-				key += " " + f.Link
+		if runtime.GOOS == "linux" {
+			for _, f := range openFiles(t, pid) {
+				// A socket comes and goes with each caller, the hello above too.
+				if strings.HasPrefix(f.Link, "/") {
+					key += " " + f.Link
+				}
 			}
 		}
 		if key != last {
@@ -1215,22 +1217,24 @@ func TestDaemonUpgradeRunsAPrivateCopy(t *testing.T) {
 		_ = mustCall(t, base, "test-handoff", map[string]any{"binary": f.binary, "copy": true, "swap_in_window": []string{f.next, f.alt}})
 		after := awaitNewImage(t, base, img, 40*time.Second)
 		afterPIDs := panePIDs(t, base, sess)
-		exe := executableOf(t, after.PID)
+		exe, ino := executableOf(t, after.PID), imageIno(t, after.PID)
 		marker, ran := f.markerText()
 		swap := f.swapped()
 		first := copies(base)
+		firstIno := inoOf(filepath.Join(append(first, "")[0], "tuios"))
 
 		// A second upgrade, from the copy to a new one: the image it starts
 		// removes the copy the first one ran from.
 		img2 := helloImage(t, base)
 		_ = mustCall(t, base, "test-handoff", map[string]any{"binary": copyTuios(t), "copy": true})
 		after2 := awaitNewImage(t, base, img2, 40*time.Second)
-		exe2 := executableOf(t, after2.PID)
+		exe2, ino2 := executableOf(t, after2.PID), imageIno(t, after2.PID)
 		second := copies(base)
+		secondIno := inoOf(filepath.Join(append(second, "")[0], "tuios"))
 		writeHandoffArtifact(t, map[string]any{
 			"marker": marker, "marker_exists": ran, "swap_missing": swap, "pid_before": img.PID, "pid_after": after.PID,
-			"panes_before": pids, "panes_after": afterPIDs, "executable_after": exe, "copies_after": first,
-			"pid_after_second": after2.PID, "executable_after_second": exe2, "copies_after_second": second,
+			"panes_before": pids, "panes_after": afterPIDs, "executable_after": exe, "image_inode": ino, "copy_inode": firstIno, "copies_after": first,
+			"pid_after_second": after2.PID, "executable_after_second": exe2, "image_inode_second": ino2, "copy_inode_second": secondIno, "copies_after_second": second,
 		})
 
 		if swap != "" {
@@ -1245,11 +1249,11 @@ func TestDaemonUpgradeRunsAPrivateCopy(t *testing.T) {
 		if ran {
 			t.Errorf("ASSERTION: the file swapped in during the exec window ran as the new daemon: the marker holds %q", marker)
 		}
-		if len(first) != 1 || exe != filepath.Join(first[0], "tuios") {
-			t.Errorf("ASSERTION: the new daemon runs %s, want the one private copy in %v", exe, first)
+		if len(first) != 1 || ino != firstIno || ino == 0 {
+			t.Errorf("ASSERTION: the new daemon runs %s (inode %d), want the one private copy in %v (inode %d)", exe, ino, first, firstIno)
 		}
-		if len(second) != 1 || exe2 != filepath.Join(second[0], "tuios") || second[0] == first[0] {
-			t.Errorf("ASSERTION: after the second upgrade the daemon runs %s with copies %v, want only a new copy (the first was %v)", exe2, second, first)
+		if len(second) != 1 || ino2 != secondIno || ino2 == 0 || second[0] == first[0] {
+			t.Errorf("ASSERTION: after the second upgrade the daemon runs %s (inode %d) with copies %v (inode %d), want only a new copy (the first was %v)", exe2, ino2, second, secondIno, first)
 		}
 	})
 
@@ -1326,6 +1330,45 @@ func TestDaemonUpgradeRunsExecuteOnlyAndWrapperBinaries(t *testing.T) {
 		}
 	}
 	writeHandoffArtifact(t, steps)
+}
+
+// imageIno is the inode of the file process pid runs. A name is not enough
+// on darwin: ps prints argv[0], which a live upgrade keeps, and lsof prints
+// any one of the file's hard links, and the daemon links its own binary as
+// tuios.prev.
+func imageIno(t *testing.T, pid int) uint64 {
+	t.Helper()
+	if runtime.GOOS == "linux" {
+		info, err := os.Stat("/proc/" + strconv.Itoa(pid) + "/exe")
+		if err != nil {
+			t.Fatalf("stat the executable of %d: %v", pid, err)
+		}
+		return info.Sys().(*syscall.Stat_t).Ino
+	}
+	out, err := exec.Command("lsof", "-a", "-p", strconv.Itoa(pid), "-d", "txt", "-Fi").Output()
+	if err != nil {
+		t.Fatalf("lsof %d: %v", pid, err)
+	}
+	for line := range strings.SplitSeq(string(out), "\n") {
+		if ino, ok := strings.CutPrefix(line, "i"); ok {
+			n, err := strconv.ParseUint(ino, 10, 64)
+			if err != nil {
+				t.Fatalf("lsof %d: inode %q: %v", pid, ino, err)
+			}
+			return n
+		}
+	}
+	t.Fatalf("lsof %d names no executable:\n%s", pid, out)
+	return 0
+}
+
+// inoOf is the inode of the file at path, 0 when there is none.
+func inoOf(path string) uint64 {
+	info, err := os.Stat(path)
+	if err != nil {
+		return 0
+	}
+	return info.Sys().(*syscall.Stat_t).Ino
 }
 
 // resolvedTuios is the binary under test with its links resolved, as

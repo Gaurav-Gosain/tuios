@@ -16,8 +16,8 @@ import (
 
 // The copy route: how a live upgrade runs the binary it checked where there
 // is no /proc/self/fd to run an open file through (darwin, and every system
-// but Linux). The binary is opened, the checks read the open file, and its
-// bytes are copied from that open file into a folder of its own inside the
+// but Linux). The binary is opened, the checks read the open file, and that
+// open file is cloned (APFS) or copied into a folder of its own inside the
 // handoff folder, which only this user can change. The preflight and the
 // exec run the copy, so a rename over the binary's path after the open
 // changes nothing that runs. A hard link is not used: it moves the change
@@ -25,8 +25,10 @@ import (
 //
 // Two cases keep the path, as before: a script, which its interpreter opens
 // again by name, and a binary this user cannot read (mode 0111), which cannot
-// be copied. A copy that cannot be made, for a full disk or a handoff folder
-// others can write, keeps the path too, and the log says why.
+// be copied. On darwin the copy keeps the quarantine mark of the binary, so
+// Gatekeeper checks a downloaded binary as it would by its path. A copy that
+// cannot be made, for a full disk or a handoff folder others can write, keeps
+// the path too, and the log says why.
 //
 // The image started from the copy runs from it for its whole life: on darwin
 // os.Executable names the copy, and the panes and plugins it starts use that
@@ -110,7 +112,20 @@ func newBinaryCopy(src *os.File, size int64) (*binaryCopy, error) {
 		return nil, err
 	}
 	c := &binaryCopy{dir: dir, path: filepath.Join(dir, copyName)}
-	if c.sum, err = copyFrom(io.NewSectionReader(src, 0, size), c.path); err != nil {
+	// A clone shares the checked file's blocks: under 1 ms and no disk
+	// space, against about 40 ms for a written copy of a 43 MB binary
+	// (measured on an M-series Mac). Where it cannot be made, across volumes
+	// or off APFS, the bytes are copied.
+	if err = cloneFrom(src, c.path); err == nil {
+		c.sum, err = hashFile(c.path)
+	} else {
+		c.sum, err = copyFrom(io.NewSectionReader(src, 0, size), c.path)
+	}
+	if err != nil {
+		c.remove()
+		return nil, err
+	}
+	if err := c.markLike(src); err != nil {
 		c.remove()
 		return nil, err
 	}
@@ -119,6 +134,19 @@ func newBinaryCopy(src *os.File, size int64) (*binaryCopy, error) {
 		return nil, err
 	}
 	return c, nil
+}
+
+// markLike gives the copy the quarantine mark src has.
+func (c *binaryCopy) markLike(src *os.File) error {
+	dst, err := os.OpenFile(c.path, os.O_RDONLY, 0)
+	if err != nil {
+		return err
+	}
+	err = copyQuarantine(src, dst)
+	if cerr := dst.Close(); err == nil {
+		err = cerr
+	}
+	return err
 }
 
 // checkPrivateDir refuses a folder another user could rename things in.
@@ -149,17 +177,25 @@ func (c *binaryCopy) verify() error {
 	if !c.unchanged() {
 		return changed
 	}
-	f, err := os.Open(c.path)
-	if err != nil {
-		return changed
-	}
-	h := sha256.New()
-	_, err = io.Copy(h, f)
-	_ = f.Close()
-	if err != nil || !bytes.Equal(h.Sum(nil), c.sum) {
+	sum, err := hashFile(c.path)
+	if err != nil || !bytes.Equal(sum, c.sum) {
 		return changed
 	}
 	return nil
+}
+
+// hashFile is the SHA-256 of the file at path.
+func hashFile(path string) ([]byte, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = f.Close() }()
+	h := sha256.New()
+	if _, err := io.Copy(h, f); err != nil {
+		return nil, err
+	}
+	return h.Sum(nil), nil
 }
 
 // unchanged reports whether the copy is still the file that was made. Its
