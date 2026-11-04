@@ -13461,3 +13461,27 @@ The record is `child-mode-clamp.txt` under `TUIOS_E2E_FRAMES`. The unit tests
 `TestAChildNeverHoldsGrantsItsParentLacks` and
 `TestAChildAgentNeverRunsWiderThanItsParent` in `internal/session` fail on
 main (2c03bb3c0) for every refusal and step down they check.
+
+## Child agents link to their parent (D1)
+
+`TestAgentParentLinkSurvivesUpgradeAndRestart` starts a chain of three fake
+agents, each from the pane of the one before, with `tuios start-agent`. Each
+child must show `parent` and `root` in `list-agents`, the selector terms
+`parent:` and `root:` must find the children and the chain, `--parent` from
+outside every pane must link, and a start at depth 9 must be refused with no
+pane opened. The links must hold across `tuios daemon upgrade`, a closed
+parent must read `gone`, and the links must hold across `kill-server` and a
+restart that restores the session. `TestChildAgentRowsNestUnderTheirParent`
+reads the rail: each child's row must be on the row under its parent's, with
+its name stepped in further. Run on 2026-11-04 on Linux. Both tests pass on
+the branch head. Each control was built into its own binary.
+
+| Control: what was cut | Where it fails | Verdict |
+| --- | --- | --- |
+| `setAgentParent` in `verbStartAgent`: start-agent records `StartedBy` alone, as on main | "after start: gen1 has parent <nil> and root <nil>", the selector finds nothing, and the start at depth 9 is not refused | **caught** |
+| `AgentLink` tagged `json:"-"`, so the handoff manifest and the saved state leave it out | "after the upgrade: gen1 has parent <nil> and root <nil>", and the same after the restart | **caught** |
+| The resurrect step that puts `AgentLink` back on a restored window | "after the restart: gen0 has parent <nil> and root <nil>" | **caught** |
+| A build of main without this branch, for the rail | "the agent rows are gen2 at 26:3, gen1 at 27:3, gen0 at 28:3; want each child on the next row, stepped in further than its parent" | **caught** |
+
+The frame is `agent-child-rows` under `TUIOS_E2E_FRAMES`. The upgrade test
+writes its answers to `handoff.json` in its artifact folder.

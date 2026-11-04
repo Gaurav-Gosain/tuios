@@ -30,6 +30,8 @@ and a comma gives alternatives.
 | `cwd:` | the directory or anything under it; `~` is the home directory |
 | `task:` | a task card the pane holds, by id, a glob (`tuios --skill tasks`) |
 | `stage:` | the stage of a task card the pane holds |
+| `parent:` | the agent that started the pane, by window id or its start |
+| `root:` | the first agent of the pane's chain, by window id or its start |
 
 A glob's `*` does not cross a slash. A term the pane cannot answer does not
 match. `list-agents --all-hosts --select` reads every machine.
@@ -225,6 +227,19 @@ tuios start-agent claude --name reviewer --grants read
 `--grants` works the same on `fan` and `new-window`. You can give only what you
 hold (`tuios --skill grants`). The helper also never gets a wider permission
 mode than yours.
+
+An agent you start is your child. `list-agents` shows its `parent` and the
+`root` of the chain, and the rail draws it under your row. Wait for all your
+children with your own window id:
+
+```sh
+tuios wait-for agent-state --select "parent:$TUIOS_PANE_ID" --until idle,done --every
+```
+
+A script outside the parent's pane names the parent with `--parent WINDOW_ID`.
+A pane may name itself or a pane it could type into. The person may name any
+agent pane. A chain stops at 8 agents, and a deeper start is refused. When a
+parent closes, its children keep the link, marked `gone`.
 
 ### Headless, over a protocol
 

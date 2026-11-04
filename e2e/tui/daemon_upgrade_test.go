@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"runtime"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -521,4 +522,214 @@ func TestDaemonUpgradeFromAPaneIsRefused(t *testing.T) {
 	if err != nil {
 		t.Errorf("ASSERTION: the same upgrade from outside every pane failed: %v\n%s", err, out)
 	}
+}
+
+// linkRef is a pane of an agent's parent chain, as list-agents gives it.
+type linkRef struct {
+	Session        string `json:"session"`
+	Window         string `json:"window"`
+	AgentSessionID string `json:"agent_session_id"`
+	Gone           bool   `json:"gone"`
+}
+
+// linkRow is the part of a list-agents row the parent link test reads.
+type linkRow struct {
+	Window string   `json:"window_id"`
+	Name   string   `json:"name"`
+	Parent *linkRef `json:"parent"`
+	Root   *linkRef `json:"root"`
+	Depth  int      `json:"depth"`
+}
+
+// linkRows lists the windows of session, agent or not, by name.
+func linkRows(t *testing.T, base string, params map[string]any) map[string]linkRow {
+	t.Helper()
+	res := mustCall(t, base, "list-agents", params)
+	raw, _ := json.Marshal(res["agents"])
+	var rows []linkRow
+	if err := json.Unmarshal(raw, &rows); err != nil {
+		t.Fatalf("list-agents rows: %v: %s", err, raw)
+	}
+	out := make(map[string]linkRow, len(rows))
+	for _, r := range rows {
+		out[r.Name] = r
+	}
+	return out
+}
+
+// writeChainAgent writes the fake agent of the parent link tests under base
+// and returns its path. Run as `agent.sh N`, it reports idle with the
+// conversation id conv-N, so it is an agent start-agent can wait for, then
+// starts generation N-1 with tuios start-agent, named genN-1, from its pane.
+func writeChainAgent(t *testing.T, base string) string {
+	t.Helper()
+	agent := filepath.Join(base, "agent.sh")
+	script := "#!/bin/sh\nT='" + tuiosBin + "'\n" +
+		`"$T" set-agent-state idle --agent-session-id "conv-$1"` + "\n" +
+		`if [ "$1" -gt 0 ]; then "$T" start-agent "$0 $(($1 - 1))" --name "gen$(($1 - 1))" --json > "$0.start$1" 2>&1; fi` + "\n" +
+		"exec sleep 600\n"
+	if err := os.WriteFile(agent, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	return agent
+}
+
+// TestAgentParentLinkSurvivesUpgradeAndRestart starts a chain of agents the
+// way agents start them: a fake agent in a pane reports itself idle and runs
+// tuios start-agent, whose agent does the same once more. Each child must
+// name its parent and the first agent as its root, the selector must find a
+// parent's children and a root's whole chain, and a script outside every pane
+// must link with --parent. A chain stops at 8. The links must hold across a
+// live upgrade, a closed parent must read gone, and the links must hold
+// across a restart that restores the session.
+func TestAgentParentLinkSurvivesUpgradeAndRestart(t *testing.T) {
+	base := t.TempDir()
+	startHandoffDaemon(t, base)
+	const sess = "e2e-link"
+	agent := writeChainAgent(t, base)
+	newCommandWindow(t, base, sess, "gen2", false, "sh", agent, "2")
+	var rows map[string]linkRow
+	deadline := time.Now().Add(60 * time.Second)
+	for {
+		rows = linkRows(t, base, map[string]any{"session": sess})
+		if _, ok := rows["gen0"]; ok {
+			break
+		}
+		if time.Now().After(deadline) {
+			first, _ := os.ReadFile(agent + ".start2")
+			second, _ := os.ReadFile(agent + ".start1")
+			t.Fatalf("ASSERTION: the chain never reached gen0: rows %+v\nstart from gen2: %s\nstart from gen1: %s", rows, first, second)
+		}
+		time.Sleep(200 * time.Millisecond)
+	}
+	gen2, gen1 := rows["gen2"].Window, rows["gen1"].Window
+	evidence := map[string]any{"started": rows}
+
+	// check holds the chain to what it must be. gone is the set of panes
+	// that have closed.
+	check := func(when string, rows map[string]linkRow, gone map[string]bool) {
+		t.Helper()
+		if r := rows["gen2"]; r.Window != "" && (r.Parent != nil || r.Root != nil) {
+			t.Errorf("ASSERTION %s: the root gen2 has parent %+v and root %+v, want none", when, r.Parent, r.Root)
+		}
+		want := map[string]struct {
+			parent, conv string
+			depth        int
+		}{"gen1": {gen2, "conv-2", 1}, "gen0": {gen1, "conv-1", 2}}
+		for name, w := range want {
+			r, ok := rows[name]
+			if !ok && name == "gen1" && gone[gen1] {
+				continue
+			}
+			if r.Parent == nil || r.Root == nil {
+				t.Errorf("ASSERTION %s: %s has parent %+v and root %+v", when, name, r.Parent, r.Root)
+				continue
+			}
+			if r.Parent.Window != w.parent || r.Parent.Session != sess || r.Parent.AgentSessionID != w.conv || r.Parent.Gone != gone[w.parent] {
+				t.Errorf("ASSERTION %s: %s's parent is %+v, want %s/%s with conversation %s, gone %v", when, name, *r.Parent, sess, w.parent, w.conv, gone[w.parent])
+			}
+			if r.Root.Window != gen2 || r.Root.Gone != gone[gen2] || r.Depth != w.depth {
+				t.Errorf("ASSERTION %s: %s's root is %+v at depth %d, want %s at depth %d", when, name, *r.Root, r.Depth, gen2, w.depth)
+			}
+		}
+	}
+	check("after start", rows, nil)
+
+	// The selector: a parent's children, and a root's whole chain.
+	names := func(sel string) []string {
+		t.Helper()
+		var out []string
+		for name := range linkRows(t, base, map[string]any{"select": sel}) {
+			out = append(out, name)
+		}
+		slices.Sort(out)
+		return out
+	}
+	byParent, byRoot := names("parent:"+gen2[:8]), names("root:"+gen2)
+	evidence["select_parent"], evidence["select_root"] = byParent, byRoot
+	if !slices.Equal(byParent, []string{"gen1"}) || !slices.Equal(byRoot, []string{"gen0", "gen1"}) {
+		t.Errorf("ASSERTION: parent:%s selects %v and root:%s selects %v, want [gen1] and [gen0 gen1]", gen2[:8], byParent, gen2, byRoot)
+	}
+	if out, err := handoffCLI(t, base, 30*time.Second, "wait-for", "agent-state", "--select", "root:"+gen2, "--until", "idle", "--every", "--timeout", "10000"); err != nil {
+		t.Errorf("ASSERTION: wait-for agent-state --select root:%s --every did not end on the idle chain: %v\n%s", gen2, err, out)
+	}
+
+	// A script outside every pane names the parent. Six more links reach
+	// depth 8, and the ninth is refused with nothing started.
+	parent := gen1
+	for i := range 6 {
+		name := "deep" + strconv.Itoa(i)
+		out, err := handoffCLI(t, base, 60*time.Second, "start-agent", "-s", sess, agent+" 0", "--name", name, "--parent", parent[:12], "--json")
+		if err != nil {
+			t.Fatalf("ASSERTION: start-agent --parent %s: %v\n%s", parent[:12], err, out)
+		}
+		parent = linkRows(t, base, map[string]any{"session": sess})[name].Window
+	}
+	deep := linkRows(t, base, map[string]any{"session": sess})
+	if r := deep["deep0"]; r.Parent == nil || r.Parent.Window != gen1 || r.Root == nil || r.Root.Window != gen2 || r.Depth != 2 {
+		t.Errorf("ASSERTION: --parent gave deep0 parent %+v, root %+v, depth %d; want %s, %s, 2", r.Parent, r.Root, r.Depth, gen1, gen2)
+	}
+	if r := deep["deep5"]; r.Depth != 7 {
+		t.Errorf("ASSERTION: deep5 is at depth %d, want 7", r.Depth)
+	}
+	out, err := handoffCLI(t, base, 60*time.Second, "start-agent", "-s", sess, agent+" 0", "--name", "deep6", "--parent", parent)
+	if err != nil {
+		t.Errorf("ASSERTION: depth 8 was refused: %v\n%s", err, out)
+	}
+	parent = linkRows(t, base, map[string]any{"session": sess})["deep6"].Window
+	refused, err := handoffCLI(t, base, 60*time.Second, "start-agent", "-s", sess, agent+" 0", "--name", "deep7", "--parent", parent)
+	evidence["past_the_cap"] = refused
+	if err == nil || !strings.Contains(refused, "stops at 8") {
+		t.Errorf("ASSERTION: a start at depth 9 was not refused at the cap: %v\n%s", err, refused)
+	}
+	if _, ok := linkRows(t, base, map[string]any{"session": sess, "all": true})["deep7"]; ok {
+		t.Errorf("ASSERTION: the refused start at depth 9 still opened a pane")
+	}
+
+	// A live upgrade keeps every link.
+	res, upOut, err := daemonUpgrade(t, base, copyTuios(t))
+	if err != nil {
+		t.Fatalf("ASSERTION: daemon upgrade: %v\n%s", err, upOut)
+	}
+	evidence["upgrade"] = res
+	rows = linkRows(t, base, map[string]any{"session": sess})
+	evidence["after_upgrade"] = rows
+	check("after the upgrade", rows, nil)
+
+	// The parent closes: its child keeps the link, marked gone.
+	if out, err := handoffCLI(t, base, 30*time.Second, "close-window", "-s", sess, gen1); err != nil {
+		t.Fatalf("close-window gen1: %v\n%s", err, out)
+	}
+	gone := map[string]bool{gen1: true}
+	rows = linkRows(t, base, map[string]any{"session": sess})
+	evidence["after_close"] = rows
+	check("after gen1 closed", rows, gone)
+	text, _ := handoffCLI(t, base, 30*time.Second, "list-agents", "-s", sess)
+	evidence["list_agents_text"] = text
+	if !strings.Contains(text, "PARENT") || !strings.Contains(text, gen1[:8]+" (gone)") {
+		t.Errorf("ASSERTION: list-agents text shows no parent column or no gone parent:\n%s", text)
+	}
+
+	// A restart restores the session, and the links with it. The panes
+	// are new shells, so they are listed with all.
+	if out, err := handoffCLI(t, base, 30*time.Second, "kill-server"); err != nil {
+		t.Fatalf("kill-server: %v\n%s", err, out)
+	}
+	if out, err := handoffCLI(t, base, 30*time.Second, "start-server"); err != nil {
+		t.Fatalf("start-server: %v\n%s", err, out)
+	}
+	deadline = time.Now().Add(30 * time.Second)
+	for {
+		if _, err := callVerb(t, base, "session-info", map[string]any{"session": sess}); err == nil {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("ASSERTION: session %s was not restored after the restart", sess)
+		}
+		time.Sleep(200 * time.Millisecond)
+	}
+	rows = linkRows(t, base, map[string]any{"session": sess, "all": true})
+	evidence["after_restart"] = rows
+	check("after the restart", rows, gone)
+	writeHandoffArtifact(t, evidence)
 }

@@ -3044,7 +3044,8 @@ func windowSummariesAgree(a, b WindowSummary) bool {
 		slices.Equal(a.SubagentList, b.SubagentList) &&
 		slices.Equal(a.ProgramStatus, b.ProgramStatus) &&
 		a.ForegroundCmd == b.ForegroundCmd && a.Workspace == b.Workspace &&
-		a.Scratch == b.Scratch && a.Note == b.Note
+		a.Scratch == b.Scratch && a.Note == b.Note &&
+		(a.AgentParent == nil) == (b.AgentParent == nil) && (a.AgentParent == nil || *a.AgentParent == *b.AgentParent)
 }
 
 // UpgradedTo is the version a live upgrade said the daemon was becoming as

@@ -413,3 +413,54 @@ func TestSubagentRowsOnTheRail(t *testing.T) {
 	waitCapture(t, base, "e2e-sub", "0", "FAKE-DONE")
 	alive(t, term, "after the subagent rows came and went")
 }
+
+// TestChildAgentRowsNestUnderTheirParent starts a chain of three agents, each
+// from the pane of the one before (writeChainAgent), and reads the rail's
+// agents section. Each child's row must sit under its parent's row, its name
+// stepped in further than its parent's, the way subagent rows sit under their
+// pane. The frame is agent-child-rows.
+func TestChildAgentRowsNestUnderTheirParent(t *testing.T) {
+	base := t.TempDir()
+	useShippedLooks(base)
+	writeConfig(t, base, "[appearance.sidebar]\nenabled = true\nposition = \"left\"\nwidth = 28\n")
+	killDaemon(t, base)
+	const sess = "e2e-nest"
+	if out, err := tuiosCLI(t, base, "new", sess, "--detach"); err != nil {
+		t.Fatalf("create %s: %v\n%s", sess, err, out)
+	}
+	agent := writeChainAgent(t, base)
+	term := attachIn(t, base, sess, startOpts{cols: 110, rows: 30})
+	if out, err := tuiosCLI(t, base, "new-window", "-s", sess, "gen2", "--", "sh", agent, "2"); err != nil {
+		t.Fatalf("start the root agent: %v\n%s", err, out)
+	}
+	// rowAt is the rail row a name is on in the agents section, the last
+	// section, and the column its name starts at.
+	rowAt := func(s tuitest.Screen, name string) (int, int) {
+		rail := railOf(s)
+		for y := len(rail) - 1; y >= 0; y-- {
+			if i := strings.Index(rail[y], name); i >= 0 {
+				return y, len([]rune(rail[y][:i]))
+			}
+		}
+		return -1, -1
+	}
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		y, _ := rowAt(s, "gen0")
+		return y >= 0
+	}, 60*time.Second); err != nil {
+		t.Fatalf("the rail never listed gen0: %v\n%s", err, term.Snapshot())
+	}
+	time.Sleep(300 * time.Millisecond)
+	s := term.Screen()
+	saveFrame(t, term, "agent-child-rows")
+	if frames := os.Getenv("TUIOS_E2E_FRAMES"); frames != "" {
+		savePNG(t, s, shot.XTermPalette(), frames, "agent-child-rows")
+	}
+	y2, x2 := rowAt(s, "gen2")
+	y1, x1 := rowAt(s, "gen1")
+	y0, x0 := rowAt(s, "gen0")
+	if y2 < 0 || y1 != y2+1 || y0 != y1+1 || x1 <= x2 || x0 <= x1 {
+		t.Errorf("ASSERTION: the agent rows are gen2 at %d:%d, gen1 at %d:%d, gen0 at %d:%d; want each child on the next row, stepped in further than its parent\n%s",
+			y2, x2, y1, x1, y0, x0, strings.Join(railOf(s), "\n"))
+	}
+}

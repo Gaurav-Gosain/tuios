@@ -33,6 +33,9 @@ import (
 //	cwd:DIR      the working directory is DIR or under it; ~ is the home dir
 //	task:G       a task card the pane holds, by id, a glob (task.go)
 //	stage:S      a task card the pane holds is in stage S; a done card has no holder
+//	parent:ID    the agent pane that started this one (agent_parent.go), by
+//	             window id or a start of it
+//	root:ID      the first agent pane of this one's chain, the same way
 //
 // A glob is path.Match syntax: * and ? do not cross a slash, so group:fan/*
 // matches every group under fan/.
@@ -56,11 +59,13 @@ const (
 	SelectorCwd     = "cwd"
 	SelectorTask    = "task"
 	SelectorStage   = "stage"
+	SelectorParent  = "parent"
+	SelectorRoot    = "root"
 )
 
 // SelectorKeys lists the keys a selector takes, in the order the docs give
 // them.
-var SelectorKeys = []string{SelectorHarness, SelectorState, SelectorNeeds, SelectorSession, SelectorGroup, SelectorHost, SelectorName, SelectorCwd, SelectorTask, SelectorStage}
+var SelectorKeys = []string{SelectorHarness, SelectorState, SelectorNeeds, SelectorSession, SelectorGroup, SelectorHost, SelectorName, SelectorCwd, SelectorTask, SelectorStage, SelectorParent, SelectorRoot}
 
 // selectorMaxLen bounds a selector's text. A selector is typed by a person or
 // written by an agent, and one longer than this is not a selector.
@@ -100,6 +105,11 @@ type SelectorTarget struct {
 	Tasks []string
 	// Stages are the stages of those cards.
 	Stages []string
+	// Parent and Root are the window ids of the agent that started the pane
+	// and of the first agent of its chain, empty for a pane no agent
+	// started. Only a pane of this machine fills them.
+	Parent string
+	Root   string
 }
 
 // ParseSelector reads a selector. homeDir expands a leading ~ in a cwd term;
@@ -273,6 +283,10 @@ func (term selectorTerm) matchOne(v string, t SelectorTarget) bool {
 		return slices.ContainsFunc(t.Tasks, glob)
 	case SelectorStage:
 		return slices.Contains(t.Stages, v)
+	case SelectorParent:
+		return windowIDMatch(v, t.Parent)
+	case SelectorRoot:
+		return windowIDMatch(v, t.Root)
 	case SelectorCwd:
 		// t.Cwd is the folder the pane last reported, which the pane sets
 		// itself with cd or an OSC 7 it prints. A cwd: term only narrows
@@ -289,6 +303,19 @@ func (term selectorTerm) matchOne(v string, t SelectorTarget) bool {
 		return cwd == v || v == "/" || strings.HasPrefix(cwd, v+"/")
 	}
 	return false
+}
+
+// windowIDMatch reports whether v names the window id: the id itself, a start
+// of it (list-agents prints eight characters), or a glob over it.
+func windowIDMatch(v, id string) bool {
+	if id == "" {
+		return false
+	}
+	if strings.ContainsAny(v, "*?[") {
+		ok, _ := path.Match(v, id)
+		return ok
+	}
+	return strings.HasPrefix(id, v)
 }
 
 // SelectionToken is the confirm token for a set of targets, each named by a

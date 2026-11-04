@@ -851,12 +851,12 @@ func (s *Session) setStartedBy(window string, ref *PaneRef) {
 }
 
 // renameStartedBy follows a session rename in the started_by of this
-// session's panes. It changes nothing, and publishes nothing, when no pane
-// names the old session.
+// session's panes, and in the root of their agent links. It changes nothing,
+// and publishes nothing, when no pane names the old session.
 func (s *Session) renameStartedBy(old, name string) {
 	hit := false
 	for _, w := range s.GetState().Windows {
-		if w.StartedBy != nil && w.StartedBy.Session == old {
+		if w.StartedBy != nil && w.StartedBy.Session == old || w.AgentLink != nil && w.AgentLink.Root.Session == old {
 			hit = true
 			break
 		}
@@ -868,6 +868,13 @@ func (s *Session) renameStartedBy(old, name string) {
 		for i := range state.Windows {
 			if ref := state.Windows[i].StartedBy; ref != nil && ref.Session == old {
 				state.Windows[i].StartedBy = &PaneRef{Session: name, Window: ref.Window}
+			}
+			// The link is shared with older copies of the state, so it is
+			// replaced, never written in place.
+			if l := state.Windows[i].AgentLink; l != nil && l.Root.Session == old {
+				moved := *l
+				moved.Root.Session = name
+				state.Windows[i].AgentLink = &moved
 			}
 		}
 		return nil

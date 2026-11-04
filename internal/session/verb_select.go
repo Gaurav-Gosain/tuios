@@ -83,7 +83,13 @@ func (d *Daemon) paneSelectorTarget(sess *Session, w WindowState, group string, 
 		tasks = append(tasks, tk.ID)
 		stages = append(stages, tk.Stage)
 	}
+	var parent, root string
+	if w.AgentLink != nil && w.StartedBy != nil {
+		parent, root = w.StartedBy.Window, w.AgentLink.Root.Window
+	}
 	return SelectorTarget{
+		Parent:   parent,
+		Root:     root,
 		Host:     localAttentionHost,
 		Session:  sess.Name(),
 		Name:     windowLabelOf(w),

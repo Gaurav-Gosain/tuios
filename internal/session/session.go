@@ -409,6 +409,28 @@ type WindowState struct {
 	// it, and it is saved so a restored pane keeps it. Older peers and older
 	// state read it as absent.
 	StartedBy *PaneRef `json:"started_by,omitempty"`
+	// AgentLink is set on an agent pane another agent started: StartedBy is
+	// then its parent, and this is the rest of the chain. Nil for every other
+	// pane. Daemon-owned like StartedBy, and saved, so a restored or handed
+	// over pane keeps it. See agent_parent.go.
+	AgentLink *AgentLink `json:"agent_link,omitempty"`
+}
+
+// AgentLink is what a child agent pane knows of the agent that started it,
+// beyond the parent pane itself (WindowState.StartedBy).
+type AgentLink struct {
+	// Harness is the parent's harness id when the child started, empty when
+	// nothing named one.
+	Harness string `json:"harness,omitempty"`
+	// AgentSessionID is the parent harness's own conversation id when the
+	// child started, empty until a hook reported one.
+	AgentSessionID string `json:"agent_session_id,omitempty"`
+	// Root is the first agent of the chain: the parent's root, or the parent
+	// when it has none.
+	Root PaneRef `json:"root"`
+	// Depth is how many links lead from the root to this pane: 1 for a child
+	// of the root. It is at most agentLinkMaxDepth.
+	Depth int `json:"depth"`
 }
 
 // PaneRef names a pane by its session and window id.
@@ -4169,8 +4191,9 @@ func (s *Session) windowSummaries() []WindowSummary {
 			Workspace:     w.Workspace,
 			// The rail pane is left out of a rail's rows as the scratch
 			// terminal is, and an older reader knows only this mark.
-			Scratch: w.Scratch || w.Rail != "",
-			Note:    w.Note,
+			Scratch:     w.Scratch || w.Rail != "",
+			Note:        w.Note,
+			AgentParent: agentParentRef(*w),
 		})
 	}
 	return out

@@ -117,6 +117,7 @@ func (m *OS) currentSessionInput() sessiontree.SessionInput {
 			Subagents:    w.AgentSubagents,
 			SubagentList: w.AgentSubagentList,
 			Program:      w.ProgramStatus,
+			Parent:       agentParentNode(w),
 			Focused:      i == m.FocusedWindow,
 			Workspace:    w.Workspace,
 			Host:         w.Host,
@@ -184,6 +185,7 @@ func (m *OS) foreignSessionInput(client *session.TUIClient, name string) session
 			Subagents:    w.Subagents,
 			SubagentList: subagentsFromWire(nil, w.SubagentList),
 			Program:      programStatusFromWire(nil, w.ProgramStatus),
+			Parent:       agentParentFromWire(w.AgentParent),
 			Workspace:    w.Workspace,
 		})
 	}

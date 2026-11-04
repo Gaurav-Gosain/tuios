@@ -116,6 +116,9 @@ type Node struct {
 	// Program is the pane's OSC 7501 records, the root first. Nil for none.
 	// Never rolled up.
 	Program []ProgramRecord
+	// Parent is the agent pane that started a window node's agent, nil
+	// when no agent did. Never rolled up.
+	Parent *PaneRef
 	// Workspace is the workspace a window node sits on, or 0 when unknown. On a
 	// session node it is the workspace that session is showing, which is what
 	// decides which of its panes count as "here".
@@ -225,6 +228,12 @@ type ProgramRecord struct {
 	At int64
 }
 
+// PaneRef names a pane by its session name and window id.
+type PaneRef struct {
+	Session string
+	Window  string
+}
+
 // Tree is the full set of sessions, each with its windows when known.
 type Tree struct {
 	Sessions []Node
@@ -272,6 +281,9 @@ type WindowInput struct {
 	SubagentList []Subagent
 	// Program is the pane's OSC 7501 records, the root first. Nil for none.
 	Program []ProgramRecord
+	// Parent is the agent pane that started the pane's agent, nil when no
+	// agent did.
+	Parent *PaneRef
 	// Focused marks the currently focused window in its session.
 	Focused bool
 	// Workspace is the workspace the pane sits on, or 0 when the caller does
@@ -440,6 +452,7 @@ func BuildSession(s SessionInput) Node {
 			Subagents:    w.Subagents,
 			SubagentList: w.SubagentList,
 			Program:      w.Program,
+			Parent:       w.Parent,
 			IsCurrent:    w.Focused,
 			Workspace:    w.Workspace,
 			Host:         w.Host,

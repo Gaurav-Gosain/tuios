@@ -293,6 +293,7 @@ func (d *Daemon) agentRows(sess *Session, all bool, unread map[string]int, now i
 		if w.StartedBy != nil {
 			agents[len(agents)-1]["started_by"] = w.StartedBy
 		}
+		d.addAgentLink(agents[len(agents)-1], w)
 	}
 	return agents
 }

@@ -57,6 +57,7 @@ func (d *Daemon) verbStartAgent(cs *connState, params json.RawMessage) (any, *ve
 		Grants       []string          `json:"grants"`
 		Task         string            `json:"task"`
 		HumanNonce   string            `json:"human_nonce"`
+		Parent       string            `json:"parent"`
 	}
 	if verr := decodeParams(params, &p); verr != nil {
 		return nil, verr
@@ -69,6 +70,13 @@ func (d *Daemon) verbStartAgent(cs *connState, params json.RawMessage) (any, *ve
 	// What the new pane may do through tuios, decided before anything is
 	// made. See pane_grants.go.
 	grants, verr := d.launchGrants(cs, p.Grants)
+	if verr != nil {
+		return nil, verr
+	}
+	// The agent the new one reports to, also decided before anything is
+	// made: a parent the caller may not name, or a chain too deep, starts
+	// nothing. See agent_parent.go.
+	parent, verr := d.resolveAgentParent(cs, "start-agent", p.Parent)
 	if verr != nil {
 		return nil, verr
 	}
@@ -210,7 +218,11 @@ func (d *Daemon) verbStartAgent(cs *connState, params json.RawMessage) (any, *ve
 	if err != nil {
 		return nil, newWindowErr(err, sess, p.Workspace)
 	}
-	d.noteStartedBy(cs, win.ID)
+	if parent != nil {
+		sess.setAgentParent(win.ID, parent)
+	} else {
+		d.noteStartedBy(cs, win.ID)
+	}
 	// The card is the new pane's from the start, before the wait, so the
 	// board shows who works on it while the agent loads.
 	var taskRow *TaskRow
@@ -253,6 +265,10 @@ func (d *Daemon) verbStartAgent(cs *connState, params json.RawMessage) (any, *ve
 	}
 	if cloned {
 		out["cloned"] = true
+	}
+	if parent != nil {
+		out["parent"] = parent.ref
+		out["root"] = parent.link.Root
 	}
 	if p.Protocol != "" {
 		out["protocol"] = p.Protocol

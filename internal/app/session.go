@@ -2606,6 +2606,7 @@ func copyAgentWire(w *terminal.Window, ws *session.WindowState) {
 	w.AgentKind = ws.AgentKind
 	w.AgentHarness = ws.AgentHarness
 	w.StartedBySession, w.StartedByWindow = startedByFromWire(ws.StartedBy)
+	w.AgentChild = ws.AgentLink != nil
 	w.AgentMeta = agentMetaFromWire(w.AgentMeta, ws.AgentMeta)
 	w.AgentQueued = ws.AgentQueued
 	w.AgentDraftHeld = ws.AgentDraftHeld

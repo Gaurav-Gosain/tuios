@@ -607,6 +607,11 @@ type sidebarAgentEntry struct {
 	Open     bool
 	// Last marks the last line under a pane's row, where a tree line ends.
 	Last bool
+	// Parent is the agent pane that started this one, nil when no agent
+	// did. Nest is how many parent rows above this one it is drawn under,
+	// set by sidebarNestAgents. See sidebar_agent_nest.go.
+	Parent *sessiontree.PaneRef
+	Nest   int
 }
 
 // sidebarSubRow reports whether an entry is a row under a pane's row rather
@@ -1573,7 +1578,7 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 	// reads every agent pane, folded or not, since a folded pane is still one
 	// the agents section lists.
 	allAgents := agents
-	agents = m.sidebarFoldAgents(agents, time.Now())
+	agents = sidebarNestAgents(m.sidebarFoldAgents(agents, time.Now()))
 	// The one section whose order moves on its own, so the one whose viewport is
 	// anchored to a row rather than to an index. Before the cursor's auto-scroll
 	// below, which gets the last word on what is on screen.
@@ -2440,7 +2445,7 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 			// only for that state, so a rail with no working agent records
 			// nothing and the motion clock never starts. See shimmer.go.
 			if e.State == "working" && bodyW > 0 {
-				x0 := contentX0 + sidebarNameCol()
+				x0 := contentX0 + sidebarNameCol() + e.nestIndent()
 				m.motion.rail = append(m.motion.rail, shimmerSpan{
 					y: topMargin + len(lines), x0: x0, x1: min(x0+bodyW, contentX0+cw),
 				})
@@ -2821,6 +2826,7 @@ func (m *OS) agentEntries(sessions []sessiontree.Node) []sidebarAgentEntry {
 				Quiet:        win.Quiet,
 				Subagents:    win.Subagents,
 				Children:     win.SubagentList,
+				Parent:       win.Parent,
 				Program:      win.Program,
 				PR:           pr,
 				WindowIndex:  idx,
@@ -3467,8 +3473,8 @@ func sidebarAgentName(e sidebarAgentEntry) string {
 // sentence.
 func (m *OS) sidebarAgentNoteRow(e sidebarAgentEntry, variant, cw int, pal overlay.Palette, st sidebarRowState) string {
 	rowBg := sidebarRowBg(st, pal)
-	indent := sidebarNameCol() + 1
-	avail := sidebarNameAvail(cw, 0) - 1
+	indent := sidebarNameCol() + 1 + e.nestIndent()
+	avail := sidebarNameAvailIn(cw, 0, e.nestIndent()) - 1
 	plan := m.sidebarAgentTokensFor(e, variant, true, time.Now())
 	quiet := sidebarStyle(rowBg, pal.FgMute)
 	note := plan.Note
@@ -3656,6 +3662,8 @@ func (m *OS) sidebarAgentRow(e sidebarAgentEntry, variant, cw int, pal overlay.P
 	}
 
 	plan := m.sidebarAgentTokensFor(e, variant, tall, time.Now())
+	// A child agent's row steps in under its parent's (sidebar_agent_nest.go).
+	nest := e.nestIndent()
 	// The row under the cursor or the pointer says how long at any age; the
 	// rest wait for railAgeFloor.
 	if st.lit() && plan.Right.Name == "elapsed" && plan.Right.Text == "" && variant == sidebarVariantFull {
@@ -3715,9 +3723,9 @@ func (m *OS) sidebarAgentRow(e sidebarAgentEntry, variant, cw int, pal overlay.P
 	// off the budget before the tokens do.
 	quietMark := ""
 	if e.Quiet {
-		quietMark = sidebarQuietMark(sidebarNameAvail(cw, 0), nameW, sep)
+		quietMark = sidebarQuietMark(sidebarNameAvailIn(cw, 0, nest), nameW, sep)
 	}
-	label, keep, nameRoom := sidebarAgentFit(&m.railFit, plan.Prefix, plan.After, nameW, label, queued, mail, sep, sidebarNameAvail(cw, 0)-lipgloss.Width(quietMark))
+	label, keep, nameRoom := sidebarAgentFit(&m.railFit, plan.Prefix, plan.After, nameW, label, queued, mail, sep, sidebarNameAvailIn(cw, 0, nest)-lipgloss.Width(quietMark))
 	labelAt, mailAt := len(plan.Prefix)+len(plan.After), len(plan.Prefix)+len(plan.After)+1
 	nameRoom = max(nameRoom, 1)
 	shown := m.sidebarAgentPrefixRun(plan.Prefix, keep[:len(plan.Prefix)], quiet, pal)
@@ -3768,6 +3776,6 @@ func (m *OS) sidebarAgentRow(e sidebarAgentEntry, variant, cw int, pal overlay.P
 	body := shown +
 		m.sidebarTokenStyle(nameStyle, plan.Name, pal).Render(m.sidebarMarquee("a:"+e.SessionID+"/"+e.WindowID, name, nameRoom, st.Cursor)) +
 		quiet.Render(quietMark) + after
-	return sidebarComposeRow(gutter,
+	return sidebarComposeGroupRow(nest, gutter,
 		sidebarGlyph(e.State, e.DoneSeen, e.Subagents, rowBg, pal, &m.Settings), body, right, cw, rowBg), lipgloss.Width(body)
 }
