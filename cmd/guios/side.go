@@ -324,10 +324,19 @@ func (a *App) rightSidebar(c *ui.Context, pal *palette, s *proto.Session) {
 	ui.Row(c.Key("right-bar")).Height(topBar).Shrink(0).AlignItems(ui.Stretch).DragWindow().Children(func() {
 		ui.Row(c.Key("shown")).Width(shown).Shrink(0).AlignItems(ui.Stretch).ClipX().Children(func() {
 			ui.Row(c.Key("tabs")).Width(w).Shrink(0).AlignItems(ui.Center).Padding(0, 0, 0, 10).Gap(2).Children(func() {
-				a.tabButton(c, pal, sideChanges, locales.SideChanges(), tab)
-				a.tabButton(c, pal, sideFiles, locales.SideFiles(), tab)
+				// The tabs scroll sideways in a narrow bar, and the button
+				// that hides the sidebar stays whole beside them: it was
+				// cut to a sliver at 268 (council round 1, visual 20).
+				ui.ScrollHorizontal(c.Key("tab-row")).Shrink(1).MinWidth(0).Children(func() {
+					ui.Row(c).Gap(2).AlignItems(ui.Center).Children(func() {
+						a.tabButton(c, pal, sideChanges, locales.SideChanges(), tab)
+						a.tabButton(c, pal, sideFiles, locales.SideFiles(), tab)
+					})
+				})
 				ui.Spacer(c)
-				iconButton(c, "hide-right", sidebarRightIcon, a.tip(locales.RightSidebarHide(), "rightSidebar.toggle"), pal, a.toggleRight)
+				ui.Row(c).Shrink(0).Children(func() {
+					iconButton(c, "hide-right", sidebarRightIcon, a.tip(locales.RightSidebarHide(), "rightSidebar.toggle"), pal, a.toggleRight)
+				})
 			})
 		})
 	})
