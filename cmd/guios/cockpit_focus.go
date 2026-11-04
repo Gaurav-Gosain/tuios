@@ -367,17 +367,13 @@ func (a *App) approvalCard(c *ui.Context, pal *palette, ag client.Agent, it sess
 			target = t
 		}
 		mono := a.termFamily()
-		if question && (pk == nil || len(pk.actions) == 0) {
-			// A question reads as one, in the text's font; the reply box
-			// below answers it.
-			ui.Text(c, target).FontSize(fsProse).LineHeight(1.5).TextColor(pal.text).MaxLines(8).Selectable()
-		} else if !held && pk != nil && len(pk.lines) > 0 {
+		if !held && pk != nil && len(pk.lines) > 0 && (!question || len(pk.actions) > 0) {
 			ui.Column(c).Radius(rControl).Background(ckCodeBg(pal)).Padding(8, 12).Gap(1).Clip().Children(func() {
 				for _, l := range pk.lines {
 					ui.Text(c, l).Font(mono).FontSize(fsCode).TextColor(pal.text).SingleLine()
 				}
 			})
-		} else if target != "" && it.Kind == session.AttentionQuestion {
+		} else if target != "" && question {
 			// A question is the agent's prose, not a command: no prompt
 			// sign and no code ground (council round 1, visual 8).
 			ui.Text(c, target).FontSize(fsProse).LineHeight(22.0 / fsProse).TextColor(pal.text).MaxLines(6).Selectable()
