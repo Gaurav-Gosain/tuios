@@ -192,6 +192,10 @@ old behaviour. None of them bumps the protocol integer: every field keeps its
 name and type, and a caller that sends nothing new keeps working. What changes
 is an answer, and each entry says which.
 
+**list-windows and get-window report an exited pane.** An entry has
+`exited`, `exit_code` and `signal` once its process exited, and `keep_open`
+when the window stays after the exit. Other entries keep their shape.
+
 **The new event `agent-seen`** says a finished pane was looked at, or marked
 unread again. A subscriber that names no types gets it.
 
@@ -2466,6 +2470,12 @@ A window whose process runs on this machine also has `pid`, the process the
 pane started, and `tty`, the path of its terminal device. A zoomed window has
 `zoomed: true`. A floating window has `floating: true`. It sits over the tiled
 windows at its own rectangle.
+
+A window whose process exited has `exited: true` and `exit_code`. It also has
+`signal` when a signal ended the process. A window opened with `keep_open` has
+`keep_open: true`, before and after the exit. A client that was not attached
+when the process exited reads these fields to decide what to do with the
+window: close it, or keep it open with its exit status.
 
 A window that a process in another pane opened has `started_by`, that pane
 as `{"session", "window"}`. See

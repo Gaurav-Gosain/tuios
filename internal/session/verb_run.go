@@ -121,6 +121,12 @@ func addPaneMeta(sess *Session, data map[string]any) {
 
 // addOnePaneMeta adds one pane's history_rows, revision, pid and tty to its
 // window's entry. get-window uses it too, so the two reads agree.
+//
+// A pane whose process exited also carries exited, with exit_code and signal
+// as exitResult gives them, and keep_open when it stays after the exit. A
+// client that was not attached when the process exited reads here whether to
+// close the window (see keep_open.go): the exit's MsgPTYClosed went only to
+// the clients attached then.
 func addOnePaneMeta(pty *PTY, w map[string]any) {
 	m := pty.Meta()
 	w["history_rows"] = m.HistoryRows
@@ -130,6 +136,13 @@ func addOnePaneMeta(pty *PTY, w map[string]any) {
 	}
 	if tty := pty.TTYName(); tty != "" {
 		w["tty"] = tty
+	}
+	if pty.keepOpen != nil {
+		w["keep_open"] = true
+	}
+	if pty.IsExited() {
+		w["exited"] = true
+		exitResult(pty, w)
 	}
 }
 
