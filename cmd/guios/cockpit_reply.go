@@ -130,7 +130,7 @@ func (a *App) replyBox(c *ui.Context, pal *palette, ag client.Agent) {
 					}
 				})
 			}
-			in := ui.TextAreaBase(c.Key("text-"+ag.Key()), &d.text).Bind(&r.box).MinHeight(22).MaxHeight(180).
+			in := ui.TextAreaBase(c.Key("text-"+ag.Key()), &d.text).Bind(&r.box).Lines(2, 8).
 				FontSize(fsProse).LineHeight(1.5).TextColor(pal.text).Placeholder(locales.CockpitReplyPlaceholder()).ReadOnly(d.sending)
 			in.OnPaste(func(text string) bool {
 				if text != "" {
