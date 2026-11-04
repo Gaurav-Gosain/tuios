@@ -1,182 +1,168 @@
-// Command guios is the tuios desktop app: a native window, drawn with MyGo
-// (github.com/egoist/mygo), over the tuios client model running in the same
-// process.
+// kero is a terminal for coding agents: sessions grouped by project in a
+// sidebar that shows which work, which need you and which are done. The
+// sessions run in kerod, a daemon of their own, so quitting kero leaves
+// them running, and opening it again shows everything as it was.
 //
-// It is a binary of its own. The tuios binary never imports it or MyGo
-// (internal/lint keeps it that way).
+// The same executable is the kero CLI (kero help), which drives sessions
+// from a shell or an agent, and kerod itself (kero __kerod).
 package main
 
 import (
-	"flag"
 	"fmt"
 	"log"
-	"net/http"
-	_ "net/http/pprof"
 	"os"
+	"os/exec"
+	"path/filepath"
 	"runtime"
-	"sync/atomic"
-	"time"
+	"strings"
 
-	tea "charm.land/bubbletea/v2"
 	"github.com/egoist/mygo"
+	"github.com/egoist/mygo/plugins/updater/native"
 	"github.com/egoist/mygo/ui"
+	"golang.org/x/term"
 
-	"github.com/Gaurav-Gosain/tuios/internal/serverscope"
-	"github.com/Gaurav-Gosain/tuios/internal/terminal"
-	"github.com/Gaurav-Gosain/tuios/internal/theme"
+	"github.com/Gaurav-Gosain/tuios/internal/guios/cli"
+	"github.com/Gaurav-Gosain/tuios/internal/guios/client"
+	"github.com/Gaurav-Gosain/tuios/internal/guios/clilink"
+	"github.com/Gaurav-Gosain/tuios/internal/guios/proto"
+
+	"github.com/Gaurav-Gosain/tuios/cmd/guios/locales"
 )
-
-// version is the build, set with -ldflags "-X main.version=...".
-var version = "dev"
-
-var (
-	flagServer  = flag.String("server", "", "Use the daemon named NAME, as tuios --server does. TUIOS_SERVER sets it too")
-	flagSession = flag.String("session", "", "Session to attach, created when missing. Empty attaches the session last active")
-	flagTuios   = flag.String("tuios", "", "The tuios binary that starts the daemon. Empty finds it")
-	flagTheme   = flag.String("theme", "", "Theme to use instead of the one the config names")
-	flagControl = flag.String("control", "", "Unix socket for scripted checks (stats, dump, type, key, shot)")
-	flagW       = flag.Int("width", 1440, "Window width")
-	flagH       = flag.Int("height", 900, "Window height")
-	flagGPU     = flag.String("gpu", "auto", "The GPU to draw with on Linux: auto, integrated or discrete")
-	flagFont    = flag.Float64("font-size", 15, "Terminal font size")
-	flagVersion = flag.Bool("version", false, "Print the version and exit")
-	flagPprof   = flag.String("pprof", "", "Serve /debug/pprof on this address, for profiling")
-	flagRender  = flag.String("render", "", "Draw the window into this PNG with no window, then exit")
-	flagScale   = flag.Float64("render-scale", 2, "Scale of -render")
-	flagRType   = flag.String("render-type", "", "Text to type into the focused pane before -render")
-	flagFrames  = flag.Int("render-frames", 60, "Frames -render times")
-)
-
-// guiApp is the window's state. Everything here is read and written on the
-// main thread, except what is atomic.
-type guiApp struct {
-	win    *mygo.Window
-	cm     *clientModel
-	roles  roles
-	shaper *shaper
-	views  map[string]*paneView
-
-	// grid is the stage as the model last heard it: cols, rows, cell w, h.
-	grid [4]int
-	// geo is the stage's grid in device pixels, for the cards.
-	geo geo
-
-	services  *ui.Services
-	hoverPane string
-	preedit   string
-	caret     ui.Rect
-
-	frames  atomic.Int64
-	started time.Time
-	first   atomic.Int64 // first frame with pane text, Unix ns
-}
 
 func main() {
-	flag.Parse()
-	if *flagVersion {
-		fmt.Println("guios", version)
+	if len(os.Args) > 1 && (os.Args[1] == "--version" || os.Args[1] == "version") {
+		fmt.Println("guios", client.Version)
 		return
 	}
-	log.SetFlags(log.Lmicroseconds)
-	preferGPU(*flagGPU)
-	if *flagPprof != "" {
-		go func() { log.Println(http.ListenAndServe(*flagPprof, nil)) }()
-	}
-	a := &guiApp{views: map[string]*paneView{}, started: time.Now()}
-	if err := registerFonts(); err != nil {
-		log.Fatal(err)
-	}
-	// The daemon to reach: TUIOS_SERVER, then --server, as every tuios
-	// command chooses it. The tuios that starts a daemon inherits it.
-	if err := serverscope.ApplyEnv(); err != nil {
-		log.Fatal(err)
-	}
-	if *flagServer != "" {
-		if err := serverscope.Apply(*flagServer); err != nil {
-			log.Fatal(err)
-		}
-		_ = os.Setenv("TUIOS_SERVER", *flagServer)
-	}
-	tuios, err := findTuios(*flagTuios)
+	// The sessions live in the tuios daemon, which this app starts with
+	// the tuios binary when none runs (findTuios, ensureDaemon).
+	tuios, err := findTuios(os.Getenv("GUIOS_TUIOS"))
 	if err != nil {
-		log.Fatal(err)
+		fmt.Fprintln(os.Stderr, "guios:", err)
+		os.Exit(1)
 	}
-	if err := ensureDaemon(tuios); err != nil {
-		log.Fatal(err)
-	}
-	a.shaper = newShaper(float32(*flagFont), 20/15.0)
-
-	// The model starts at a guess of the window's grid, at scale 1. The
-	// first frame tells it the real one.
-	m := a.shaper.at(1)
-	g := stageGeo(float32(*flagW), float32(*flagH), 1, m)
-	cm, err := startModel(version, *flagSession, g.cols, g.rows, m.cellW, m.cellH, g.insets(m))
-	if err != nil {
-		log.Fatal(err)
-	}
-	a.cm = cm
-	if *flagTheme != "" {
-		_ = theme.Initialize(*flagTheme)
-	}
-	a.roles = currentRoles()
-	a.grid = [4]int{g.cols, g.rows, m.cellW, m.cellH}
-
-	if *flagRender != "" {
-		if err := a.renderHeadless(*flagRender, *flagW, *flagH, float32(*flagScale), *flagRType, *flagFrames); err != nil {
-			log.Fatal(err)
-		}
-		_ = cm.client.Detach()
-		return
-	}
-
-	mygo.App.WhenReady(func() {
-		opts := mygo.WindowOptions{
-			Title:         "guios",
-			Width:         *flagW,
-			Height:        *flagH,
-			TitleBarStyle: mygo.TitleBarHidden,
-			Content:       ui.View(a.view),
-		}
-		if runtime.GOOS == "darwin" {
-			opts.TrafficLightPosition = &mygo.Point{X: 16, Y: (int(bandH) - 12) / 2}
-		} else {
-			opts.HideWindowButtons = true
-		}
-		a.win = mygo.NewWindow(opts)
-		if runtime.GOOS == "darwin" {
-			// On macOS the menu bar is the app's. Linux windows get none.
-			mygo.App.SetMenu(appMenu(a))
-		}
-		inv := a.win.Invalidate
-		cm.m.notify.Store(&inv)
-		clip := func(text string) {
-			mygo.RunOnMain(func() {
-				if a.services != nil {
-					a.services.WriteClipboard(text)
+	cli.Tuios = tuios
+	client.StartDaemon = func() error { return ensureDaemon(tuios) }
+	// `kero` alone in a terminal, through the CLI's link to the app's
+	// executable: open the app as the Finder would.
+	if len(os.Args) == 1 && term.IsTerminal(int(os.Stdin.Fd())) {
+		if exe, err := os.Executable(); err == nil {
+			if real, err := filepath.EvalSymlinks(exe); err == nil {
+				if i := strings.Index(real, ".app/Contents/MacOS/"); i >= 0 {
+					if exec.Command("/usr/bin/open", real[:i+4]).Run() == nil {
+						return
+					}
 				}
-			})
+				// On Windows the command is a copy of the app's executable
+				// (package clilink), which knows what it is a copy of.
+				if bin := filepath.Dir(real); runtime.GOOS == "windows" && strings.EqualFold(bin, filepath.Join(proto.Dir(), "bin")) {
+					if app := clilink.Target(bin); app != "" && exec.Command(app).Start() == nil {
+						return
+					}
+				}
+			}
 		}
-		cm.m.clipboard.Store(&clip)
-		a.win.Invalidate()
-		a.win.OnClosed(func() {
-			cm.do(func(m *model) tea.Cmd { return tea.Quit })
-			// Leave the session as a detach does, so the daemon counts this
-			// client out at once.
-			_ = cm.client.Detach()
-			os.Exit(0)
+	}
+	runApp()
+}
+
+func runApp() {
+	// Started from a pane, as Kero Dev by `mygo dev` in the installed Kero:
+	// the pane's variables name its kerod, not this build's.
+	if os.Getenv("KERO_PANE") != "" {
+		for _, k := range []string{"KERO_SOCKET", "KERO_SESSION", "KERO_PANE"} {
+			os.Unsetenv(k)
+		}
+	}
+	if !mygo.App.RequestSingleInstanceLock() {
+		return
+	}
+	cli.SyncSkill()
+	// Updates from Kero's GitHub releases, in a window of native UI.
+	mygo.Use(native.Plugin)
+	a := newApp()
+	loadFonts()
+	mygo.Theme.SetSource(mygo.ThemeSource(a.set.Appearance))
+	mygo.App.SetLocale(localeTag(a.set.Language))
+	mygo.App.SetMenu(a.menu())
+	// Windows draw anew in another language; the menu and the titles,
+	// set once, are made again in it.
+	mygo.App.OnLocaleChanged(func(string) {
+		a.update(func() {
+			mygo.App.SetMenu(a.menu())
+			if a.setWin != nil {
+				a.setWin.SetTitle(locales.SettingsTitle())
+			}
+			if a.tray != nil {
+				a.tray.SetMenu(a.trayMenu())
+			}
 		})
-		if *flagControl != "" {
-			go serveControl(*flagControl, a)
+	})
+	mygo.App.OnSecondInstance(func([]string, string) { a.showWindow() })
+	mygo.App.OnDidBecomeActive(func() {
+		mygo.ClearNotifications()
+		a.update(func() { a.active = true; a.reportView() })
+	})
+	mygo.App.OnDidResignActive(func() {
+		a.update(func() { a.active = false; a.reportView() })
+	})
+	mygo.App.OnActivate(func(hasVisible bool) {
+		if !hasVisible {
+			a.showWindow()
 		}
+	})
+	mygo.App.OnWindowAllClosed(a.lastWindowClosed)
+	mygo.App.OnBeforeQuit(func(*mygo.QuitEvent) {
+		a.savePrefs()
+		a.backupOnQuit()
+	})
+	// Windows leaves an icon in the notification area after its app until
+	// the pointer passes over it.
+	mygo.App.OnWillQuit(func(*mygo.QuitEvent) {
+		if a.tray != nil {
+			a.tray.Destroy()
+		}
+	})
+	// No Dock icon from the start for the menu bar alone.
+	if runtime.GOOS == "darwin" {
+		mygo.App.SetActivationPolicy(activationPolicy(a.set))
+	}
+	mygo.App.WhenReady(func() {
+		a.openWindow()
+		a.applyTray()
+		a.applyGlobalShortcuts()
+		a.idleTime = mygo.Power.IdleTime
+		go a.watchReturn()
+		a.connect()
+		a.syncHosts()
+		go a.watchConfig()
 	})
 	if err := mygo.App.Run(); err != nil {
 		log.Fatal(err)
 	}
 }
 
-// insets is the room around each pane's text in device pixels, as the model
-// sizes each pane's PTY by it (terminal.PixelInsets).
-func (g geo) insets(m metrics) terminal.PixelInsets {
-	d := func(v float32) int { return int(v*m.scale + 0.5) }
-	return terminal.PixelInsets{CellWidth: m.cellW, CellHeight: m.cellH, Top: d(paneTop), Left: d(panePad), Right: d(panePad), Bottom: d(panePad)}
+// openWindow makes the main window: as Kero starts, and again after
+// closing it left Kero running in the menu bar or the notification area.
+func (a *App) openWindow() {
+	a.win = mygo.NewWindow(framed(mygo.WindowOptions{
+		Title:     "Kero",
+		Width:     1180,
+		Height:    760,
+		MinWidth:  560,
+		MinHeight: 360,
+		StateKey:  "main",
+		Vibrancy:  vibrancyFor(a.set),
+		Content:   ui.View(a.view),
+	}))
+	a.winOpen = true
+	a.updateTitle()
+	a.win.OnFocus(func() { a.update(func() { a.focused = true; a.claimShown(); a.reportView() }) })
+	a.win.OnBlur(func() { a.update(func() { a.focused = false; a.reportView() }) })
+	a.win.OnClosed(a.windowClosed)
 }
+
+// newSessionIn starts a session in a directory of a host, in its project.
+func (a *App) newSessionIn(h *host, dir string) { a.create(h, proto.CreateParams{Dir: dir}, "") }
+
+func stopDaemon() error { return cli.StopDaemon() }

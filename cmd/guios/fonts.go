@@ -1,56 +1,58 @@
 package main
 
 import (
-	"bytes"
-	"compress/gzip"
-	"embed"
-	"fmt"
-	"io"
+	"os"
+	"path/filepath"
 
+	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/ui"
 )
 
-// The fonts guios draws with: Inter for the chrome, JetBrains Mono for the
-// panes. Both are under the SIL Open Font License (fonts/*-LICENSE.txt). They
-// are kept gzipped, as the other fonts in this repository are, and registered
-// once at start.
-//
-//go:embed fonts/*.ttf.gz
-var fontFiles embed.FS
+// kero carries JetBrains Mono, with Nerd Fonts' icons (resources/fonts,
+// SIL Open Font License, see OFL.txt there): the terminals' font unless
+// the user picks another, and the icons of prompts and of agents' TUIs.
 
-const (
-	uiFamily   = "Inter"
-	monoFamily = "JetBrains Mono"
-)
+// bundledFont is the family the fonts register as.
+const bundledFont = "JetBrainsMono Nerd Font"
 
-var fontSet = []struct{ file, family string }{
-	{"Inter-Regular", uiFamily},
-	{"Inter-Medium", uiFamily},
-	{"Inter-SemiBold", uiFamily},
-	{"JetBrainsMono-Regular", monoFamily},
-	{"JetBrainsMono-Bold", monoFamily},
-	{"JetBrainsMono-Italic", monoFamily},
-	{"JetBrainsMono-BoldItalic", monoFamily},
-}
+// fontsLoaded tells that the fonts registered, so that a terminal asks
+// for them only where they are.
+var fontsLoaded bool
 
-// registerFonts adds the bundled fonts to MyGo's font set.
-func registerFonts() error {
-	for _, f := range fontSet {
-		gz, err := fontFiles.ReadFile("fonts/" + f.file + ".ttf.gz")
-		if err != nil {
-			return err
+// loadFonts registers the fonts kero carries: from the app's resources,
+// where `mygo build` and `mygo dev` put them, else from the source tree,
+// as under `go run`.
+func loadFonts() {
+	var dirs []string
+	if res, err := mygo.App.Path(mygo.PathResources); err == nil {
+		dirs = append(dirs, filepath.Join(res, "fonts"))
+	}
+	dirs = append(dirs, filepath.Join("resources", "fonts"))
+	for _, dir := range dirs {
+		files, _ := filepath.Glob(filepath.Join(dir, "*.ttf"))
+		for _, f := range files {
+			data, err := os.ReadFile(f)
+			if err != nil {
+				continue
+			}
+			if ui.RegisterFont(data, bundledFont) == nil {
+				fontsLoaded = true
+			}
 		}
-		r, err := gzip.NewReader(bytes.NewReader(gz))
-		if err != nil {
-			return fmt.Errorf("font %s: %w", f.file, err)
-		}
-		data, err := io.ReadAll(r)
-		if err != nil {
-			return fmt.Errorf("font %s: %w", f.file, err)
-		}
-		if err := ui.RegisterFont(data, f.family); err != nil {
-			return fmt.Errorf("font %s: %w", f.file, err)
+		if fontsLoaded {
+			return
 		}
 	}
-	return nil
+}
+
+// termFamily returns the family terminals draw with: the user's, else
+// the font kero carries, else the system's monospaced one.
+func (a *App) termFamily() string {
+	if f := a.set.FontFamily; f != "" {
+		return f
+	}
+	if fontsLoaded {
+		return bundledFont
+	}
+	return "monospace"
 }

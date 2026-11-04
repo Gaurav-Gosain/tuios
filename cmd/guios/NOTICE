@@ -1,13 +1,20 @@
-guios includes or links the work of others:
+guios is built on kero (https://github.com/egoist/kero), MIT licence,
+Copyright (c) 2026 EGOIST. The app's code in cmd/guios and internal/guios
+came from kero at the commit UPSTREAM names. LICENSE.kero is kero's licence.
+scripts/guios-upstream.sh lists kero's changes since then.
 
-- MyGo (github.com/egoist/mygo), MIT licence, Copyright (c) EGOIST.
-  The pane painter follows the approach of MyGo's terminal plugin: shaped
-  glyphs kept per cell text and row caches built again only when a row's
-  cells change.
-- Inter, SIL Open Font License 1.1. See fonts/Inter-LICENSE.txt.
-- JetBrains Mono, SIL Open Font License 1.1. See
-  fonts/JetBrainsMono-LICENSE.txt.
-- Lucide icons, ISC licence. See icons/LICENSE-lucide.txt.
+The daemon kero ran (kerod) is replaced by the tuios daemon. The package
+internal/guios/client keeps kero's client API and implements it on the
+tuios daemon's verbs. internal/guios/client/localfs.go came from kero's
+kerod (internal/daemon/fs.go).
 
-Code adapted from kero (github.com/egoist/kero, MIT licence, Copyright (c)
-EGOIST) is credited here and in the commit that brings it in.
+It also includes or links:
+
+- MyGo (https://github.com/egoist/mygo), MIT licence, Copyright (c) EGOIST.
+- libghostty-vt, which MyGo's terminal plugin loads, MIT licence.
+- JetBrains Mono with Nerd Fonts' symbols, SIL Open Font License 1.1. See
+  resources/fonts/OFL.txt.
+- The icons in icons/: Framework7 Icons (MIT), Meteor Icons (MIT),
+  Octicons (MIT), Lucide (ISC), Simple Icons (CC0; the logos are their
+  owners' trademarks) and Pierre Icons (MIT, icons/files/LICENSE.md). See
+  icons/README.md.

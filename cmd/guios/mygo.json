@@ -1,9 +1,26 @@
 {
-  "name": "guios",
-  "slug": "guios",
-  "identifier": "dev.tuios.guios",
-  "version": "0.1.0",
-  "copyright": "© 2026 Gaurav Gosain",
-  "license": "MIT",
-  "out": "build"
+  "name": "Kero",
+  "identifier": "sh.kero",
+  "version": "2.1.32",
+  "out": "build",
+  "i18n": {
+    "dir": "locales",
+    "source": "en"
+  },
+  "updates": {
+    "publicKey": "WzJsOGNIuf6mcEqo5ff8jub+NoQQOEk4JXreLPYjgyQ=",
+    "github": "egoist/kero"
+  },
+  "macos": {
+    "signingIdentity": "Developer ID Application: xinyu zeng (GJE9R5VE87)",
+    "notarize": {
+      "keychainProfile": "NOTARY"
+    },
+    "entitlements": "entitlements.plist",
+    "infoPlist": {
+      "NSMicrophoneUsageDescription": "A program running in Kero would like to use the microphone.",
+      "NSCameraUsageDescription": "A program running in Kero would like to use the camera.",
+      "NSAppleEventsUsageDescription": "A program running in Kero would like to control another app."
+    }
+  }
 }
