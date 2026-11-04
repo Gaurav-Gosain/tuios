@@ -4048,6 +4048,16 @@ func (msgs Messages) FilesNoFolder() string {
 	return Catalog.Format(msgs.locale, "filesNoFolder", nil)
 }
 
+// FilesNoFolderDetail says "Open a session in a folder to see its files here."
+// in the language the app shows.
+func FilesNoFolderDetail() string { return In(i18n.Locale()).FilesNoFolderDetail() }
+
+// FilesNoFolderDetail says "Open a session in a folder to see its files here."
+// in the language of msgs.
+func (msgs Messages) FilesNoFolderDetail() string {
+	return Catalog.Format(msgs.locale, "filesNoFolderDetail", nil)
+}
+
 // FilesCollapseFolders says "Collapse folders"
 // in the language the app shows.
 func FilesCollapseFolders() string { return In(i18n.Locale()).FilesCollapseFolders() }

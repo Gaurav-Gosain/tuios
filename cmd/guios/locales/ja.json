@@ -398,6 +398,7 @@
   "rightSidebarShow": "右サイドバーを表示",
   "changesShowDiffs": "差分を表示",
   "filesNoFolder": "表示するフォルダがありません",
+  "filesNoFolderDetail": "フォルダーでセッションを開くと、ここにそのファイルが表示されます。",
   "filesCollapseFolders": "フォルダをすべて折りたたむ",
   "filesCantReadFolder": "フォルダを読み取れません",
   "filesCantReadFile": "ファイルを読み取れません",

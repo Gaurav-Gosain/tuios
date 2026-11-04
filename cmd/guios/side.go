@@ -693,7 +693,7 @@ func (a *App) changesNone(c *ui.Context, pal *palette, cf *changesFrame) bool {
 	res := cf.list
 	switch {
 	case cf.title != "":
-		a.sideMessage(c, pal, cf.title, cf.detail)
+		a.sideEmpty(c, pal, branchIcon, cf.title, cf.detail)
 	case res == nil:
 		if ch.err != "" && !ch.busy && ch.scope == cf.scope {
 			a.sideMessage(c, pal, locales.ChangesCantRead(), ch.err)
@@ -709,7 +709,7 @@ func (a *App) changesNone(c *ui.Context, pal *palette, cf *changesFrame) bool {
 		if a.side.changes.base == git.BaseBranch {
 			detail = locales.ChangesNoneBranch(res.BaseName)
 		}
-		a.sideMessage(c, pal, locales.ChangesNone(), detail)
+		a.sideEmpty(c, pal, branchIcon, locales.ChangesNone(), detail)
 	default:
 		return false
 	}
@@ -1164,6 +1164,12 @@ func (a *App) codeTheme(c *ui.Context, pal *palette) *editor.Theme {
 // sideMessage says why the view shows nothing.
 func (a *App) sideMessage(c *ui.Context, pal *palette, title, detail string) {
 	emptyBlock(c, pal, nil, title, detail, false, nil)
+}
+
+// sideEmpty is a sidebar tab with nothing to show: the main area's empty
+// state, with its icon tile and detail (council round 1, visual 29).
+func (a *App) sideEmpty(c *ui.Context, pal *palette, icon *ui.SVG, title, detail string) {
+	emptyBlock(c, pal, icon, title, detail, false, nil)
 }
 
 // --- a file's diff ---

@@ -118,7 +118,7 @@ func (a *App) filesSide(c *ui.Context, pal *palette, s *proto.Session) {
 	fs.shown, fs.showed = true, true
 	p, root := a.filesRoot(s)
 	if root == "" {
-		a.sideMessage(c, pal, locales.FilesNoFolder(), "")
+		a.sideEmpty(c, pal, folderIcon, locales.FilesNoFolder(), locales.FilesNoFolderDetail())
 		return
 	}
 	h := a.hostOf(p.ID)

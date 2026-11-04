@@ -553,6 +553,7 @@
   "rightSidebarShow": "Show right sidebar",
   "changesShowDiffs": "Show diffs",
   "filesNoFolder": "No folder to show",
+  "filesNoFolderDetail": "Open a session in a folder to see its files here.",
   "filesCollapseFolders": "Collapse folders",
   "filesCantReadFolder": "Can't read the folder",
   "filesCantReadFile": "Can't read the file",

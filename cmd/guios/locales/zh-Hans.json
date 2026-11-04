@@ -398,6 +398,7 @@
   "rightSidebarShow": "显示右侧边栏",
   "changesShowDiffs": "显示差异",
   "filesNoFolder": "没有可显示的文件夹",
+  "filesNoFolderDetail": "在文件夹中打开会话后，这里会显示其中的文件。",
   "filesCollapseFolders": "折叠所有文件夹",
   "filesCantReadFolder": "无法读取文件夹",
   "filesCantReadFile": "无法读取文件",
