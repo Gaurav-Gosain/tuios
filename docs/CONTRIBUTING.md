@@ -36,7 +36,7 @@ The `justfile` at the root holds the dev commands. Install [just](https://just.s
 | `just e2e-flake TEST N` | Runs one end-to-end test N times and counts the failures. |
 | `just lint` | Runs golangci-lint, `go vet` for each OS, and `internal/lint`. |
 | `just check --changed` | Runs the check gate on what your branch changed. Run it before you mark a pull request ready. |
-| `just size` | Builds the release binary and fails above the 47 MB ceiling. |
+| `just size` | Builds the release binary and fails above the 50 MB ceiling. |
 | `just ci` | Runs the local part of CI: format, tidy, lint, unit tests and binary size. |
 | `just clean` | Stops the throwaway daemons and removes what the recipes built. |
 
