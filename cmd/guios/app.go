@@ -237,7 +237,6 @@ type App struct {
 	previewKey   string
 	previewSince time.Time
 	previewShown bool
-	arrived      map[string]bool
 	copyText     string
 	peek         peek // the image a path Command hovers shows
 	// from is the host whose program asked for the action being run (kero
@@ -265,7 +264,7 @@ type confirmation struct {
 
 func newApp() *App {
 	a := &App{terms: map[string]*termEntry{}, webs: map[string]*webEntry{}, statuses: map[string]proto.Status{}, active: true, focused: true,
-		refs: map[string]*ui.Handle{}, focus: map[string]string{}, arrived: map[string]bool{}}
+		refs: map[string]*ui.Handle{}, focus: map[string]string{}}
 	a.loadPrefs()
 	a.loadBackup()
 	a.set = settings.Load()

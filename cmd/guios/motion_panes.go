@@ -101,8 +101,7 @@ type motionWatch struct {
 	// long as the animation it starts.
 	view, layout string
 	// last are the panes the last frame showed, of view, and now those
-	// this frame shows so far. arrived are those that came into view
-	// since, and when.
+	// this frame shows so far.
 	last, now map[string]bool
 	// placed are the panes the tiles place in this frame (tiles.go): they
 	// move by their rectangles, not by a Match.

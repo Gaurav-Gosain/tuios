@@ -313,18 +313,13 @@ func (a *App) paneCard(c *ui.Context, pal *palette, bar ui.TitleBar, shown float
 		card.Shadow(0, 1, 2, 0, pal.cardShadow).Shadow(0, 1, 6, 0, pal.cardShadow2)
 	}
 
-	// The pane dragged sinks back where it was; one just moved springs in
-	// at its new place.
-	pose := ui.Pose{}
-	switch {
-	case dragging:
-		pose = ui.Pose{Scale: 0.985, Fade: 0.45}
-	case a.arrived[p.ID]:
-		pose = ui.Pose{Scale: 0.94, Fade: 0.7}
-		delete(a.arrived, p.ID)
-		c.Invalidate()
+	// The pane dragged sinks back as it goes, and comes up where it lands,
+	// as one cached bitmap: opacity on the terminal's layers would draw
+	// them again in each frame. A pane moved goes to its new place with
+	// the tiles' motion (tiles.go), or its Match.
+	if k := card.AnimateTo("drag", b2f(dragging), motionQuick); k > 0 {
+		card.Cache().Opacity(1-0.55*k).Scale(1-0.015*k, 1-0.015*k)
 	}
-	card.AnimatePose(pose, ui.Animation{Spring: ui.SpringOptions{Duration: 420 * time.Millisecond, Bounce: 0.18}})
 }
 
 // followMouse focuses the pane the pointer moves into. Only the pointer
@@ -456,18 +451,15 @@ func (a *App) movePane(sid, pane, target string, zone dropZone) {
 		// The layouts placed by rectangles take panes in an order: the
 		// dropped pane and the one it lands on change places.
 		if s.Arrange != nil {
-			a.arrived[pane], a.arrived[target] = true, true
 			a.arrange(s, "swap", func(p *proto.ArrangeParams) { p.Pane, p.Target = pane, target })
 		}
 		return
 	}
 	if zone == zoneSwap {
 		s.Layout = s.Layout.Swap(pane, target)
-		a.arrived[target] = true
 	} else {
 		s.Layout = s.Layout.Move(pane, target, zone.side())
 	}
-	a.arrived[pane] = true
 	s.Zoomed = ""
 	a.setFocus(s, pane)
 	a.paneRef(pane).Focus()
