@@ -29,15 +29,11 @@ func (m *OS) RebuildBSPTreeFromPositions() {
 	}
 
 	// Re-add all windows to BSP tree
-	for _, w := range visibleWindows {
-		intID := m.GetWindowIntID(w.ID)
-		existingIDs := tree.GetAllWindowIDs()
-		if len(existingIDs) == 0 {
-			tree.InsertWindow(intID, 0, layout.SplitNone, 0.5, m.GetBSPBounds(), m.separatorGap())
-		} else {
-			tree.InsertWindow(intID, existingIDs[len(existingIDs)-1], layout.SplitNone, 0.5, m.GetBSPBounds(), m.separatorGap())
-		}
+	ids := make([]int, len(visibleWindows))
+	for i, w := range visibleWindows {
+		ids[i] = m.GetWindowIntID(w.ID)
 	}
+	tree.InsertMissing(ids, m.GetBSPBounds(), m.separatorGap())
 
 	// Sync ratios from actual positions
 	windowRects := make(map[int]layout.Rect)

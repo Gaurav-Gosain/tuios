@@ -72,28 +72,29 @@ const (
 	BorderEdgeBottom
 )
 
-// SnapQuarter represents window snapping positions.
-type SnapQuarter int
+// SnapQuarter represents window snapping positions. The zones and the
+// rectangles are internal/layout's, which the desktop app reads too.
+type SnapQuarter = layout.Snap
 
 const (
 	// NoSnap indicates the window is not snapped.
-	NoSnap SnapQuarter = iota
+	NoSnap = layout.NoSnap
 	// SnapLeft snaps window to left half of screen.
-	SnapLeft
+	SnapLeft = layout.SnapLeft
 	// SnapRight snaps window to right half of screen.
-	SnapRight
+	SnapRight = layout.SnapRight
 	// SnapTopLeft snaps window to top-left quarter.
-	SnapTopLeft
+	SnapTopLeft = layout.SnapTopLeft
 	// SnapTopRight snaps window to top-right quarter.
-	SnapTopRight
+	SnapTopRight = layout.SnapTopRight
 	// SnapBottomLeft snaps window to bottom-left quarter.
-	SnapBottomLeft
+	SnapBottomLeft = layout.SnapBottomLeft
 	// SnapBottomRight snaps window to bottom-right quarter.
-	SnapBottomRight
+	SnapBottomRight = layout.SnapBottomRight
 	// SnapFullScreen maximizes window to full screen.
-	SnapFullScreen
+	SnapFullScreen = layout.SnapFullScreen
 	// Unsnap restores window to its previous position.
-	Unsnap
+	Unsnap = layout.Unsnap
 )
 
 // WindowLayout stores a window's position and size for workspace persistence

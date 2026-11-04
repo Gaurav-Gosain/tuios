@@ -2,6 +2,7 @@ package app
 
 import (
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/layout"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 )
 
@@ -35,76 +36,28 @@ func (m *OS) Snap(i int, quarter SnapQuarter) *OS {
 
 // SnapZoneAt names the snap a pointer released at (x, y) asks for, or NoSnap.
 //
-// It lives beside calculateSnapBounds on purpose. The two were once computed in
-// different places by different rules: the bounds partitioned the content
-// region while the zones were read off the raw screen, so with a right-hand
-// sidebar the right zone sat underneath the rail. A pane dragged to the visible
-// right edge snapped nothing, and reaching the zone at all meant dragging into
-// the sidebar. Keeping them adjacent is what stops that drifting again.
+// It reads the zones off snapRegion, the box calculateSnapBounds fills. The
+// two were once computed in different places by different rules: the bounds
+// partitioned the content region while the zones were read off the raw
+// screen, so with a right-hand sidebar the right zone sat underneath the
+// rail. A pane dragged to the visible right edge snapped nothing, and
+// reaching the zone at all meant dragging into the sidebar. Both rules live
+// in internal/layout now, beside each other, where the desktop app reads
+// them too.
 func (m *OS) SnapZoneAt(x, y int) SnapQuarter {
-	const edge = 5
+	return layout.SnapZoneAt(m.snapRegion(), x, y)
+}
 
-	topMargin := m.GetTopMargin()
-	bottomEdge := topMargin + m.GetUsableHeight()
-	leftEdge := m.GetLeftMargin()
-	rightEdge := m.GetLayoutWidth() - m.GetRightMargin()
-
-	atLeft := x <= leftEdge+edge
-	atRight := x >= rightEdge-edge
-	atTop := y <= topMargin+edge
-	atBottom := y >= bottomEdge-edge
-
-	switch {
-	case atTop && atLeft:
-		return SnapTopLeft
-	case atTop && atRight:
-		return SnapTopRight
-	case atBottom && atLeft:
-		return SnapBottomLeft
-	case atBottom && atRight:
-		return SnapBottomRight
-	case atTop:
-		return SnapFullScreen
-	case atLeft:
-		return SnapLeft
-	case atRight:
-		return SnapRight
-	}
-	return NoSnap
+// snapRegion is the content region a snap partitions: a sidebar reserves
+// columns the same way the dock reserves rows, so a left-snapped pane starts
+// at the left margin and a fullscreen snap fills the content box.
+func (m *OS) snapRegion() layout.Rect {
+	return layout.Rect{X: m.GetLeftMargin(), Y: m.GetTopMargin(), W: m.GetContentWidth(), H: m.GetUsableHeight()}
 }
 
 func (m *OS) calculateSnapBounds(quarter SnapQuarter) (x, y, width, height int) {
-	// Snapping partitions the content region, not the raw screen: a sidebar
-	// reserves columns the same way the dock reserves rows, so a left-snapped
-	// pane starts at the left margin and a fullscreen snap fills the content box.
-	usableHeight := m.GetUsableHeight()
-	left := m.GetLeftMargin()
-	contentWidth := m.GetContentWidth()
-	halfWidth := contentWidth / 2
-	midX := left + halfWidth
-	halfHeight := usableHeight / 2
-	topMargin := m.GetTopMargin()
-
-	switch quarter {
-	case SnapLeft:
-		return left, topMargin, halfWidth, usableHeight
-	case SnapRight:
-		return midX, topMargin, contentWidth - halfWidth, usableHeight
-	case SnapTopLeft:
-		return left, topMargin, halfWidth, halfHeight
-	case SnapTopRight:
-		return midX, topMargin, halfWidth, halfHeight
-	case SnapBottomLeft:
-		return left, halfHeight + topMargin, halfWidth, usableHeight - halfHeight
-	case SnapBottomRight:
-		return midX, halfHeight + topMargin, halfWidth, usableHeight - halfHeight
-	case SnapFullScreen:
-		return left, topMargin, contentWidth, usableHeight
-	case Unsnap:
-		return left + contentWidth/4, usableHeight/4 + topMargin, halfWidth, halfHeight
-	default:
-		return left + contentWidth/4, usableHeight/4 + topMargin, halfWidth, halfHeight
-	}
+	r := layout.SnapBounds(m.snapRegion(), quarter)
+	return r.X, r.Y, r.W, r.H
 }
 
 // ScaleWindowsToTerminal proportionally scales all windows when terminal size changes.
