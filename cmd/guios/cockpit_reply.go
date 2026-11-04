@@ -137,8 +137,13 @@ func (a *App) replyBox(c *ui.Context, pal *palette, ag client.Agent) {
 				// One box, two ways to reach the agent: a prompt typed
 				// into its pane, or mail to its inbox.
 				ui.Text(c, locales.CockpitSendAs()).FontSize(fsSmall).TextColor(pal.textFaint).SingleLine().Shrink(0)
-				a.sendAsChip(c, pal, ag, false, locales.CockpitSendAsPrompt())
-				a.sendAsChip(c, pal, ag, true, locales.CockpitSendAsMail())
+				// A segmented control, as Settings draws them: the chosen
+				// segment raised on a soft track, so that it shows on the
+				// light theme's white box too (council round 2, S5).
+				ui.Row(c).Gap(2).Padding(2).Radius(rControl).Background(pal.chip).Shrink(0).Children(func() {
+					a.sendAsChip(c, pal, ag, false, locales.CockpitSendAsPrompt())
+					a.sendAsChip(c, pal, ag, true, locales.CockpitSendAsMail())
+				})
 				ui.Spacer(c)
 				note := locales.CockpitNextTurn()
 				if r, ok := a.ckSelected(); ok && r.item != nil && !ckHeld(*r.item) && !a.ckCanReject() &&
@@ -216,7 +221,13 @@ func (a *App) sendAsChip(c *ui.Context, pal *palette, ag client.Agent, mail bool
 	b := ui.ButtonBase(c.Key(label)).Height(20).Padding(0, 8).Radius(rRow).AlignItems(ui.Center).Shrink(0).Label(label)
 	switch {
 	case on:
-		b.Background(pal.rowSelected)
+		// The box is the control's fill: in the dark the chosen segment
+		// takes the lighter hover fill to stand out of it.
+		fill := pal.control
+		if pal.dark {
+			fill = pal.controlHover
+		}
+		chosen(b.Background(fill), pal)
 	case b.Hovered():
 		b.Background(pal.rowHover)
 	}
