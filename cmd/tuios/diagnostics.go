@@ -13,7 +13,7 @@ import (
 	"charm.land/lipgloss/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/fang"
-	"github.com/Gaurav-Gosain/tuios/internal/plural"
+	"github.com/Gaurav-Gosain/tuios/internal/i18n"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/charmbracelet/colorprofile"
 	"github.com/spf13/cobra"
@@ -52,7 +52,8 @@ func (e *diagnosticError) Error() string {
 	var b strings.Builder
 	b.WriteString(e.What)
 	if e.Cause != "" {
-		b.WriteString("\nMost likely cause: ")
+		b.WriteString("\n")
+		b.WriteString(i18n.T("cli.label.cause"))
 		b.WriteString(e.Cause)
 	}
 	for _, line := range e.Extra {
@@ -60,7 +61,8 @@ func (e *diagnosticError) Error() string {
 		b.WriteString(line)
 	}
 	if e.Fix != "" {
-		b.WriteString("\nFix: ")
+		b.WriteString("\n")
+		b.WriteString(i18n.T("cli.label.fix"))
 		b.WriteString(e.Fix)
 	}
 	return b.String()
@@ -184,7 +186,7 @@ func errorStyles() fang.Styles {
 			Padding(0, 1).
 			Margin(1).
 			MarginLeft(2).
-			SetString("ERROR"),
+			SetString(i18n.T("cli.error.header")),
 	}
 }
 
@@ -261,9 +263,9 @@ func explainDialError(err error) error {
 
 	if errors.Is(err, session.ErrTooManyConnections) {
 		return &diagnosticError{
-			What:  "The tuios daemon has too many connections.",
-			Cause: "other clients, commands or linked machines hold all of its connections.",
-			Fix:   "close some clients or commands, then run this command again.",
+			What:  i18n.T("cli.daemon.too_many.what"),
+			Cause: i18n.T("cli.daemon.too_many.cause"),
+			Fix:   i18n.T("cli.daemon.too_many.fix"),
 			Err:   err,
 		}
 	}
@@ -275,9 +277,9 @@ func explainDialError(err error) error {
 		return &diagnosticError{What: d.Explain(), Err: err, Status: noDaemonStatus}
 	}
 	return &diagnosticError{
-		What:  fmt.Sprintf("Could not open a control connection to the TUIOS daemon: %v.", err),
-		Cause: "the daemon is running but rejected or dropped the connection, which usually means it is shutting down or is a different build.",
-		Fix:   "run 'tuios kill-server', then run this command again.",
+		What:  i18n.T("cli.daemon.dial.what", err),
+		Cause: i18n.T("cli.daemon.dial.cause"),
+		Fix:   i18n.T("cli.daemon.dial.fix"),
 		Err:   err,
 	}
 }
@@ -299,52 +301,52 @@ func explainVerbError(verb string, err error) error {
 	if current, ok := session.RenamedSessionTarget(err); ok {
 		return &diagnosticError{
 			What:  strings.ToUpper(callErr.Message[:1]) + callErr.Message[1:] + ".",
-			Cause: "the session has a new name, and " + verb + " takes the new name only.",
-			Fix:   fmt.Sprintf("run the command again with %q.", current),
+			Cause: i18n.T("cli.verb.renamed.cause", verb),
+			Fix:   i18n.T("cli.verb.renamed.fix", current),
 			Err:   err,
 		}
 	}
 	if stale := session.StaleDaemonError(verb, err); stale != nil {
 		return &diagnosticError{
-			What:  fmt.Sprintf("The running daemon does not know %s.", verb),
-			Cause: "the daemon is older than this tuios.",
-			Fix:   "run 'tuios restart-server'. Saved sessions come back with new shells.",
+			What:  i18n.T("cli.verb.unknown", verb),
+			Cause: i18n.T("cli.verb.unknown.cause"),
+			Fix:   i18n.T("cli.verb.unknown.fix"),
 			Err:   err,
 		}
 	}
 
 	d := &diagnosticError{
-		What: fmt.Sprintf("%s failed: %s.", verb, strings.TrimSuffix(callErr.Message, ".")),
+		What: i18n.T("cli.verb.failed", verb, strings.TrimSuffix(callErr.Message, ".")),
 		Err:  err,
 	}
 
 	hint := callErr.Hint
 	if hint == nil {
-		d.Cause = fmt.Sprintf("the daemon reported %s.", callErr.Code)
+		d.Cause = i18n.T("cli.verb.no_hint.cause", callErr.Code)
 		return d
 	}
 
 	if hint.DidYouMean != "" {
-		d.Extra = append(d.Extra, fmt.Sprintf("Did you mean %q?", hint.DidYouMean))
+		d.Extra = append(d.Extra, i18n.T("cli.common.did_you_mean", hint.DidYouMean))
 	}
 	if len(hint.Accepted) > 0 {
-		d.Extra = append(d.Extra, fmt.Sprintf("Accepted values for %s: %s.",
-			cmp.Or(hint.Param, "this parameter"), strings.Join(hint.Accepted, ", ")))
+		d.Extra = append(d.Extra, i18n.T("cli.common.accepted",
+			cmp.Or(hint.Param, i18n.T("cli.common.this_param")), strings.Join(hint.Accepted, ", ")))
 	}
 	if len(hint.Available) > 0 {
-		d.Extra = append(d.Extra, "Available: "+strings.Join(truncateList(hint.Available, 12), ", ")+".")
+		d.Extra = append(d.Extra, i18n.T("cli.common.available", strings.Join(truncateList(hint.Available, 12), ", ")))
 	}
 	if hint.Detail != "" {
 		d.Cause = hint.Detail
 	} else {
-		d.Cause = fmt.Sprintf("the daemon reported %s.", callErr.Code)
+		d.Cause = i18n.T("cli.verb.no_hint.cause", callErr.Code)
 	}
 
 	switch {
 	case hint.Command != "":
-		d.Fix = "run '" + hint.Command + "'."
+		d.Fix = i18n.T("cli.verb.run_fix", hint.Command)
 	case hint.Verb != "":
-		d.Fix = "call the '" + hint.Verb + "' verb to see valid targets."
+		d.Fix = i18n.T("cli.verb.call_fix", hint.Verb)
 	}
 	return d
 }
@@ -395,7 +397,7 @@ func truncateList(items []string, limit int) []string {
 	}
 	out := make([]string, 0, limit+1)
 	out = append(out, items[:limit]...)
-	return append(out, fmt.Sprintf("and %d more", len(items)-limit))
+	return append(out, i18n.T("cli.common.and_more", len(items)-limit))
 }
 
 // explainMissingSession builds the error for a session name that does not
@@ -404,7 +406,7 @@ func truncateList(items []string, limit int) []string {
 // the user never sees a bare "not found".
 func explainMissingSession(name string, available []string) error {
 	e := &diagnosticError{
-		What: fmt.Sprintf("Session %q was not found.", name),
+		What: i18n.T("cli.session.missing.what", name),
 	}
 
 	// A daemon started with --no-restore holds nothing while the sessions are
@@ -412,9 +414,9 @@ func explainMissingSession(name string, available []string) error {
 	// is the one case where the answer is neither "create it" nor "you typed it
 	// wrong".
 	if info, ok := savedSession(name); ok {
-		e.Cause = "the daemon is running but has not restored it."
-		e.Extra = append(e.Extra, fmt.Sprintf("It has saved state (%s) and can be brought back.", plural.Count(info.WindowCount, "window")))
-		e.Fix = fmt.Sprintf("run 'tuios resurrect %s' to restore it and attach.", name)
+		e.Cause = i18n.T("cli.session.missing.cause.not_restored")
+		e.Extra = append(e.Extra, i18n.T("cli.session.missing.saved", i18n.Count(info.WindowCount, i18n.T("noun.window"))))
+		e.Fix = i18n.T("cli.session.missing.fix.resurrect", name)
 		return e
 	}
 
@@ -423,15 +425,15 @@ func explainMissingSession(name string, available []string) error {
 
 	switch {
 	case len(sorted) == 0:
-		e.Cause = "the daemon is running but holds no sessions."
-		e.Fix = fmt.Sprintf("run 'tuios new %s' to create it, or 'tuios resurrect' to see saved sessions.", name)
+		e.Cause = i18n.T("cli.session.missing.cause.no_sessions")
+		e.Fix = i18n.T("cli.session.missing.fix.create", name)
 	default:
-		e.Cause = "the name does not match any live session."
+		e.Cause = i18n.T("cli.session.missing.cause.no_match")
 		if closest := session.ClosestMatch(name, sorted); closest != "" {
-			e.Extra = append(e.Extra, fmt.Sprintf("Did you mean %q?", closest))
+			e.Extra = append(e.Extra, i18n.T("cli.common.did_you_mean", closest))
 		}
-		e.Extra = append(e.Extra, "Sessions: "+strings.Join(truncateList(sorted, 12), ", ")+".")
-		e.Fix = fmt.Sprintf("run 'tuios ls' to list sessions, or 'tuios new %s' to create this one.", name)
+		e.Extra = append(e.Extra, i18n.T("cli.common.sessions", strings.Join(truncateList(sorted, 12), ", ")))
+		e.Fix = i18n.T("cli.session.missing.fix.list_or_create", name)
 	}
 	return e
 }
@@ -470,9 +472,9 @@ func checkTerminal() error {
 
 	if !term.IsTerminal(fd) {
 		return &diagnosticError{
-			What:  "Standard output is not a terminal, so the TUIOS interface cannot be displayed.",
-			Cause: "the command was run in a pipe, a redirect, or a non-interactive environment such as CI.",
-			Fix:   "run 'tuios attach' from an interactive terminal. For scripted use, drive the session with 'tuios send-keys' and 'tuios capture-pane' instead.",
+			What:  i18n.T("cli.term.not_terminal.what"),
+			Cause: i18n.T("cli.term.not_terminal.cause"),
+			Fix:   i18n.T("cli.term.not_terminal.fix"),
 		}
 	}
 
@@ -501,10 +503,10 @@ func checkTerminalSize(fd int) error {
 		return nil
 	}
 	return &diagnosticError{
-		What: fmt.Sprintf("The terminal is %dx%d, which is too small to render a TUIOS session (minimum %dx%d).",
+		What: i18n.T("cli.term.too_small.what",
 			width, height, minTerminalWidth, minTerminalHeight),
-		Cause: "the window, font size, or split pane leaves too few rows and columns for the dockbar and a usable window.",
-		Fix:   "resize the terminal or reduce the font size, then run this command again.",
+		Cause: i18n.T("cli.term.too_small.cause"),
+		Fix:   i18n.T("cli.term.too_small.fix"),
 	}
 }
 
@@ -525,15 +527,15 @@ func checkTerminalCapabilities(termEnv string) error {
 			return nil
 		}
 		return &diagnosticError{
-			What:  "TERM is not set, so TUIOS cannot tell what the terminal can render.",
-			Cause: "the shell was started without a terminal type, which happens over bare ssh commands, in some CI runners, and inside minimal containers.",
-			Fix:   "set a terminal type, for example 'TERM=xterm-256color tuios attach'.",
+			What:  i18n.T("cli.term.unset.what"),
+			Cause: i18n.T("cli.term.unset.cause"),
+			Fix:   i18n.T("cli.term.unset.fix"),
 		}
 	case "dumb":
 		return &diagnosticError{
-			What:  `TERM is "dumb", which has no cursor movement or styling, so TUIOS cannot draw its interface.`,
-			Cause: "the terminal reports no capabilities. Emacs shell buffers, some CI runners, and minimal containers do this.",
-			Fix:   "set a capable terminal type, for example 'TERM=xterm-256color tuios attach'.",
+			What:  i18n.T("cli.term.dumb.what"),
+			Cause: i18n.T("cli.term.dumb.cause"),
+			Fix:   i18n.T("cli.term.dumb.fix"),
 		}
 	}
 	return nil

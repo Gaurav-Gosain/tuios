@@ -106,6 +106,10 @@ func main() {
 	// This machine's agent switch governs an agent call to another machine.
 	session.HostCallGuard = refuseAgentCallHere
 
+	// The catalog every string below is drawn from, chosen before the first
+	// command can fail (language.go).
+	initLanguage()
+
 	rootCmd := newRootCommand()
 	rootCmd.SetArgs(skillArgs(rootCmd, os.Args[1:]))
 

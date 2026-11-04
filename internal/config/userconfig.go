@@ -63,6 +63,9 @@ type UserConfig struct {
 
 	// Mermaid is the [mermaid] table: the colours of tuios mermaid. See mermaid.go.
 	Mermaid MermaidConfig `toml:"mermaid"`
+	// UI is the [ui] table: the language the interface speaks. See
+	// language.go.
+	UI UIConfig `toml:"ui"`
 	// Launcher is the [launcher] table: how the app launcher starts a
 	// graphical program. See launcher.go.
 	Launcher LauncherConfig `toml:"launcher"`
@@ -1237,6 +1240,7 @@ func DefaultConfig() *UserConfig {
 		PiP:          defaultPiPConfig(),
 		SSH:          defaultSSHConfig(),
 		Mermaid:      MermaidConfig{Theme: "tuios", Background: "theme"},
+		UI:           defaultUIConfig(),
 		Panes:        defaultPanesConfig(),
 		PasteBuffers: defaultPasteBuffersConfig(),
 		Review:       defaultReviewConfig(),
@@ -2336,6 +2340,7 @@ func parseUserConfigOnce(data []byte) (*UserConfig, error) {
 	fillMissingPiP(&cfg, defaultCfg)
 	fillMissingPanes(&cfg, defaultCfg)
 	fillMissingReview(&cfg, defaultCfg)
+	fillMissingUI(&cfg, defaultCfg)
 	return &cfg, nil
 }
 
