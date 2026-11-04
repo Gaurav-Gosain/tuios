@@ -371,11 +371,13 @@ and installs into `~/.local/bin`. It builds the pure Go emulator.
 says which is installed.
 
 ```bash
-go test ./...              # Run tests
-go vet ./...               # Vet
-golangci-lint run          # Lint with the checks CI runs (.golangci.yml)
-govulncheck ./...          # Known vulnerabilities in what the build reaches
+go test ./...              # Run the tests of the app module
+just test                  # Run the tests of every module, the libraries too
+just check --changed       # Run fmt, vet, lint, vulns, tidy and cross builds on your branch's changes
 ```
+
+The `justfile` holds the other dev commands, and `just` lists them. See
+[CONTRIBUTING.md](docs/CONTRIBUTING.md).
 
 **Support:** [![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/B0B81N8V1R)
 
