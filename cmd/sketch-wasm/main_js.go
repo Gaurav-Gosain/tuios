@@ -87,8 +87,7 @@ func render(_ js.Value, args []js.Value) any {
 
 func failure(err error) map[string]any {
 	e := map[string]any{"message": err.Error(), "code": "error", "line": 0, "column": 0}
-	var se *sketch.Error
-	if errors.As(err, &se) {
+	if se, ok := errors.AsType[*sketch.Error](err); ok {
 		e["code"] = string(se.Code)
 		e["line"] = se.Line
 		e["column"] = se.Column
