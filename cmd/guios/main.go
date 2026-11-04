@@ -130,6 +130,7 @@ func runApp() {
 		mygo.App.SetActivationPolicy(activationPolicy(a.set))
 	}
 	mygo.App.WhenReady(func() {
+		installGLibPoll()
 		a.openWindow()
 		if onNewApp != nil {
 			onNewApp(a)
@@ -137,7 +138,6 @@ func runApp() {
 		a.applyTray()
 		a.applyGlobalShortcuts()
 		a.idleTime = mygo.Power.IdleTime
-		go a.watchReturn()
 		a.connect()
 		a.syncHosts()
 		go a.watchConfig()

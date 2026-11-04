@@ -84,6 +84,14 @@ func b2f(b bool) float32 {
 }
 
 func (a *App) view(c *ui.Context) {
+	agoDue = time.Time{}
+	defer func() {
+		// A frame when the first "ago" label shown changes, and none while
+		// no label would.
+		if !agoDue.IsZero() {
+			c.After(agoDue.Sub(c.Now()))
+		}
+	}()
 	a.looks()
 	pal := paletteFor(c)
 	c.SetTheme(borderless(c, pal))
@@ -345,7 +353,6 @@ func (a *App) sidebar(c *ui.Context, pal *palette, bar ui.TitleBar) {
 		}
 	})
 	a.sidebarFooter(c, pal)
-	c.After(20 * time.Second) // times ago move on
 }
 
 func (a *App) groupView(c *ui.Context, pal *palette, g group, gi int, n *int) {
@@ -745,11 +752,26 @@ func (a *App) footerNote(c *ui.Context, pal *palette, dot ui.Color, label string
 
 // ago is how long ago a time in Unix milliseconds was, shortly, as
 // proto.Ago writes it, in the language the app shows.
+//
+// It moves agoDue to when the label changes, if that is sooner.
 func ago(ms int64, now time.Time) string {
 	if ms == 0 {
 		return ""
 	}
-	d := now.Sub(time.UnixMilli(ms))
+	t := time.UnixMilli(ms)
+	d := now.Sub(t)
+	unit := 7 * 24 * time.Hour
+	switch {
+	case d < time.Hour:
+		unit = time.Minute
+	case d < 24*time.Hour:
+		unit = time.Hour
+	case d < 7*24*time.Hour:
+		unit = 24 * time.Hour
+	}
+	if due := t.Add((max(d, 0)/unit + 1) * unit); agoDue.IsZero() || due.Before(agoDue) {
+		agoDue = due
+	}
 	switch {
 	case d < time.Minute:
 		return locales.AgoNow()
@@ -762,6 +784,11 @@ func ago(ms int64, now time.Time) string {
 	}
 	return locales.AgoWeeks(int(d / (7 * 24 * time.Hour)))
 }
+
+// agoDue is when the soonest "ago" label of the frame being built changes,
+// zero when it shows none. Only the main thread, which builds frames,
+// touches it.
+var agoDue time.Time
 
 // statusIcon draws a session's status, as the sidebar shows it: a ring
 // turning while it works, an amber ring when it needs the user, a filled

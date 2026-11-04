@@ -683,12 +683,13 @@ func (a *App) ensureTerm(id string) {
 }
 
 // hereIdle is how long after the user's last input, on the keyboard or
-// mouse, they are taken to be at this machine still; awayIdle how long
-// without it they are taken to have gone, as to another machine's app.
-const (
-	hereIdle = 2 * time.Second
-	awayIdle = 5 * time.Second
-)
+// mouse, they are taken to be at this machine still.
+//
+// Kero's app also polled the idle time every second to claim the panes
+// again as the user came back. Stream.Claim does nothing on tuios, whose
+// ResizePixels sizes the pane at once, so that poll only woke the app
+// (a D-Bus call on the main thread on Linux): it is gone.
+const hereIdle = 2 * time.Second
 
 // here reports whether the user is at this window: it is focused, and
 // they used the machine just now. A window stays focused on a machine the
@@ -713,23 +714,6 @@ func (a *App) claimShown() {
 	for _, id := range shownPanes(s) {
 		if e := a.terms[id]; e != nil && e.stream != nil {
 			go e.stream.Claim()
-		}
-	}
-}
-
-// watchReturn claims the panes the window shows as the user comes back
-// to this machine after a while away, as at another machine's app, which
-// sized them for its own window: they need not type in them or move into
-// them for this window to show them whole.
-func (a *App) watchReturn() {
-	away := false
-	for range time.Tick(time.Second) {
-		switch idle := a.idleTime(); {
-		case idle >= awayIdle:
-			away = true
-		case away && idle < hereIdle:
-			away = false
-			a.update(a.claimShown)
 		}
 	}
 }
