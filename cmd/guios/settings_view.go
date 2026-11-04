@@ -1316,7 +1316,7 @@ func (a *App) keyboardPage(c *ui.Context, pal *palette) {
 		if len(acts) == 0 {
 			continue
 		}
-		title := map[string]func() string{"Kero": locales.MenuApp, "Session": locales.MenuSession, "Edit": locales.MenuEdit, "Pane": locales.MenuPane, "Layout": locales.MenuLayout, "Workspace": locales.MenuWorkspace, "View": locales.MenuView}[menu]()
+		title := menuTitle(menu)
 		settingsGroup(c, pal, title, "", func() {
 			for _, act := range acts {
 				a.shortcutRow(c, pal, act)
@@ -1503,3 +1503,12 @@ var keyNames = func() map[ui.Key]string {
 	}
 	return m
 }()
+
+// menuTitle is a menu's name as the menu bar shows it, from its id in
+// actions.All: "Kero", the upstream app's menu, is guios's.
+func menuTitle(id string) string {
+	if f, ok := map[string]func() string{"Kero": locales.MenuApp, "Session": locales.MenuSession, "Edit": locales.MenuEdit, "Pane": locales.MenuPane, "Layout": locales.MenuLayout, "Workspace": locales.MenuWorkspace, "View": locales.MenuView}[id]; ok {
+		return f()
+	}
+	return id
+}

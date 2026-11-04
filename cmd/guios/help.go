@@ -70,7 +70,7 @@ func (a *App) helpRows() []helpRow {
 		if k == "" {
 			continue
 		}
-		rows = append(rows, helpRow{"guios · " + act.Menu, k, strings.TrimSuffix(actionTitle(act.ID), "…")})
+		rows = append(rows, helpRow{"guios · " + menuTitle(act.Menu), k, strings.TrimSuffix(actionTitle(act.ID), "…")})
 	}
 	return rows
 }
