@@ -270,6 +270,11 @@ func (a *App) cockpitEvent(ev *proto.DaemonEvent) {
 		// A queued message is typed at a rest: the queue shown changes.
 		if ag, ok := a.ckSelectedAgent(); ok && ag.Window == ev.Window {
 			a.fetchQueued(ag)
+			// A report can join the pane to its transcript: a thread
+			// that had none, or did not load, reads again.
+			if th := a.ck.threads[threadKey(ag)]; th != nil && th.err != "" {
+				a.fetchThread(ag, true)
+			}
 		}
 	}
 	a.refreshCockpit()

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -10,6 +11,7 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/diffview"
 	"github.com/Gaurav-Gosain/tuios/internal/guios/client"
 	"github.com/Gaurav-Gosain/tuios/internal/markdown"
+	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/transcriptview"
 
 	"github.com/Gaurav-Gosain/tuios/cmd/guios/locales"
@@ -108,7 +110,10 @@ func (a *App) fetchThread(ag client.Agent, fresh bool) {
 	key := threadKey(ag)
 	th := ck.threads[key]
 	if th == nil {
-		th = &ckThread{agent: ag, open: map[string]bool{}, shut: map[string]bool{}, md: map[string][]markdown.Block{}}
+		// Used now: with no time, the new thread was the oldest, and
+		// dropOldThreads dropped it at once, so a fourth thread never
+		// kept a read and showed as having no conversation.
+		th = &ckThread{agent: ag, usedAt: time.Now(), open: map[string]bool{}, shut: map[string]bool{}, md: map[string][]markdown.Block{}}
 		th.list.FollowEnd = true
 		th.list.Key = func(i int) any { return th.items[i].key }
 		ck.threads[key] = th
@@ -193,15 +198,20 @@ func (a *App) fetchOlder(th *ckThread) {
 const ckReadStuck = 5 * time.Second
 
 // ckTranscriptError says why a thread cannot be read, in the app's words.
+//
+// Only the daemon's no_transcript answer says the agent has no
+// conversation; any other failure is a read that did not work, which the
+// thread offers to try again (threadView).
 func ckTranscriptError(err error) string {
-	s := err.Error()
-	switch {
-	case strings.Contains(s, "no transcript") || strings.Contains(s, "not joined") || strings.Contains(s, "no_transcript"):
-		return locales.CockpitNoTranscript()
-	case strings.Contains(s, "not_human"):
-		return locales.CockpitNotHuman()
+	if ve, ok := errors.AsType[*session.VerbCallError](err); ok {
+		switch ve.Code {
+		case session.ErrVerbNoTranscript:
+			return locales.CockpitNoTranscript()
+		case session.ErrVerbNotHuman:
+			return locales.CockpitNotHuman()
+		}
 	}
-	return s
+	return err.Error()
 }
 
 // dropOldThreads keeps the ckThreadKeep threads used last.
@@ -332,7 +342,8 @@ func (a *App) threadView(c *ui.Context, pal *palette, ag client.Agent) {
 	// icon tile, whatever the reason (council round 1, visual 6).
 	switch {
 	case th == nil:
-		a.ckEmptyThread(c, pal, locales.CockpitNoTranscript(), locales.CockpitNoTranscriptDetail())
+		// No read could start: the daemon is not connected.
+		ui.Column(c).Grow(1).Center().Children(func() { ui.Spinner(c) })
 		return
 	case len(th.items) == 0 && th.loading && time.Since(th.loadedAt) < ckReadStuck:
 		// Look again when the read would count as stuck.
