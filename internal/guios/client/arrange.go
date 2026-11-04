@@ -138,14 +138,47 @@ func validMode(m string) string {
 	return modeBSP
 }
 
-// bounds is the box the panes are laid out in, in cells: the session's, or
-// a screen's worth of cells when the session has none yet.
+// bounds is the box the panes are laid out in, in cells. With a TUI
+// attached it is the TUI's, the box the session settled on, so both lay
+// the panes out in the same cells. With none it is guios's own pane area
+// in cells (setGrid): the session's size is then whatever a client last
+// set, as small as 20x12 for a session guios made, and a layout worked out
+// in so few cells rounds its rows and columns to nothing, while the
+// scrolling strip's columns and a floating pane's smallest size fill it.
 func (ti *treeInfo) bounds() layout.Rect {
+	if !ti.tui && ti.grid.W >= 4 && ti.grid.H >= 2 {
+		return ti.grid
+	}
 	b := ti.ls.Box
 	if b.W < 4 || b.H < 2 {
 		return layout.Rect{W: 160, H: 45}
 	}
 	return layout.Rect{X: b.X, Y: b.Y, W: b.W, H: b.H}
+}
+
+// grid is guios's pane area in cells, as the app last measured it.
+var grid struct {
+	sync.Mutex
+	r layout.Rect
+}
+
+// setGrid records guios's pane area in cells, and reports whether it
+// changed.
+func setGrid(cols, rows int) bool {
+	grid.Lock()
+	defer grid.Unlock()
+	r := layout.Rect{W: cols, H: rows}
+	if r == grid.r {
+		return false
+	}
+	grid.r = r
+	return true
+}
+
+func currentGrid() layout.Rect {
+	grid.Lock()
+	defer grid.Unlock()
+	return grid.r
 }
 
 // bspTree is the workspace's tree, its leaves numbered as the session

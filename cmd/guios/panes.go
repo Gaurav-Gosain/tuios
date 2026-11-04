@@ -120,7 +120,8 @@ func (a *App) panes(c *ui.Context, pal *palette, bar ui.TitleBar, shown float32,
 	// One parent for each session and workspace: another one shown comes
 	// at once, while panes opened, closed or moved within it animate
 	// (paneTransition).
-	ui.Column(c.Key("ws-" + view)).Grow(1).Basis(0).MinWidth(0).MinHeight(0).AlignItems(ui.Stretch).Children(func() {
+	a.reportGrid(c, s)
+	ui.Column(c.Key("ws-" + view)).Grow(1).Basis(0).MinWidth(0).MinHeight(0).AlignItems(ui.Stretch).Bind(a.paneRef("ws-area")).Children(func() {
 		multi := len(s.Panes) > 1
 		if s.PaneByID(s.Zoomed) == nil && s.Arrange != nil && multi {
 			// Master-stack, scrolling and floating, and panes floating
@@ -1171,3 +1172,45 @@ const (
 	minPaneCols = 24
 	minPaneRows = 5
 )
+
+// reportGrid tells the session's host the pane area's size in cells, when
+// it changed: the box tuios's layout engine lays the panes out in while no
+// TUI shows the session. A cell is measured once per area size and text
+// size, from the focused terminal: its box changes on every frame of a pane
+// animation while its grid does not, and a grid measured then would change
+// on every frame and rebuild the state each time.
+func (a *App) reportGrid(c *ui.Context, s *proto.Session) {
+	area := a.paneRef("ws-area").Bounds(c)
+	if area.W <= 0 || area.H <= 0 {
+		return
+	}
+	key := [3]float32{area.W, area.H, a.set.FontSize}
+	if key == a.gridKey {
+		return
+	}
+	id := a.focusOf(s)
+	t := a.termFor(id)
+	if t == nil || panesMoving() {
+		return
+	}
+	cols, rows := t.Size()
+	tb := a.paneRef(id).Bounds(c)
+	if cols <= 0 || rows <= 0 || tb.W <= 0 || tb.H <= 0 {
+		return
+	}
+	a.gridKey = key
+	g := [2]int{int(area.W * float32(cols) / tb.W), int(area.H * float32(rows) / tb.H)}
+	if g == a.grid {
+		return
+	}
+	a.grid = g
+	a.call(s.ID, "grid", proto.GridParams{Cols: g[0], Rows: g[1]}, nil)
+}
+
+// panesMoving reports whether a pane animation holds the leases now: the
+// terminals' boxes are between two sizes.
+func panesMoving() bool {
+	leaseHold.mu.Lock()
+	defer leaseHold.mu.Unlock()
+	return time.Now().Before(leaseHold.until)
+}
