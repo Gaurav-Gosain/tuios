@@ -169,7 +169,7 @@ func (a *App) slideQuick(r mygo.Rectangle, from, to int, done func()) {
 // makeQuick makes the quick terminal's panel, hidden.
 func (a *App) makeQuick() {
 	q := &a.quick
-	q.win = mygo.NewWindow(mygo.WindowOptions{
+	q.win = mygo.NewWindow(inspectable(mygo.WindowOptions{
 		Title:         locales.ActionQuickTerminal(),
 		Panel:         true,
 		Hidden:        true,
@@ -178,7 +178,7 @@ func (a *App) makeQuick() {
 		Width:         960,
 		Height:        400,
 		Content:       ui.View(a.quickView),
-	})
+	}))
 	// Closing it, as with ⌘W, hides it; quitting destroys it. A quit
 	// closes every window, and a close this prevents cancels the quit, so
 	// it only hides while the app is not quitting.

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"os"
 	"os/exec"
 	"runtime"
 
@@ -51,6 +52,7 @@ var ownControls = runtime.GOOS != "darwin"
 // lights on macOS and without its buttons elsewhere (ownControls), which
 // keeps the edges that resize the window.
 func framed(o mygo.WindowOptions) mygo.WindowOptions {
+	o = inspectable(o)
 	if ownControls {
 		o.TitleBarStyle = mygo.TitleBarHidden
 		o.HideWindowButtons = true
@@ -160,4 +162,19 @@ func controlButtons(c *ui.Context, pal *palette, w *mygo.Window) {
 	if b.Clicked() {
 		w.Close()
 	}
+}
+
+// inspectorWanted is GUIOS_INSPECTOR=1, which opens MyGo's inspector to a
+// development build. Without it no build has the inspector: its keys
+// (Ctrl+Shift+C picks an element, Ctrl+Shift+I opens it) are the
+// terminal's copy and other keys, which then work the same in every build.
+var inspectorWanted = os.Getenv("GUIOS_INSPECTOR") == "1"
+
+// inspectable gives a window MyGo's inspector only when inspectorWanted.
+func inspectable(o mygo.WindowOptions) mygo.WindowOptions {
+	o.Page.DevTools = mygo.DevToolsDisabled
+	if inspectorWanted {
+		o.Page.DevTools = mygo.DevToolsAuto
+	}
+	return o
 }

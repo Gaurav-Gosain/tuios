@@ -259,7 +259,10 @@ func (a *App) menu() *mygo.Menu {
 			a.item("app.quitAll")}}
 	}
 	view := append(a.items("View", []string{"sidebar.toggle", "rightSidebar.toggle", "changes.toggle", "files.toggle"}, []string{"text.bigger", "text.smaller", "text.reset"}, []string{quickAction}),
-		mygo.Separator(), &mygo.MenuItem{Role: mygo.RoleToggleFullScreen}, &mygo.MenuItem{Role: mygo.RoleToggleDevTools})
+		mygo.Separator(), &mygo.MenuItem{Role: mygo.RoleToggleFullScreen})
+	if inspectorWanted {
+		view = append(view, &mygo.MenuItem{Role: mygo.RoleToggleDevTools})
+	}
 	return mygo.NewMenu([]*mygo.MenuItem{
 		kero,
 		{Label: locales.MenuSession(), Submenu: a.items("Session",
