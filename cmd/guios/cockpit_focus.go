@@ -335,14 +335,12 @@ func (a *App) approvalCard(c *ui.Context, pal *palette, ag client.Agent, it sess
 	pk := ck.peek
 	settled := now.Sub(ck.shown.since) >= ckAnswerSettle
 	risky := len(it.Risk) > 0 || pk != nil && len(pk.risk) > 0
-	// The card is the card's ground with a needs-you edge and a bar on its
-	// left: amber, red and blue do not meet on one brown fill, and the risk
-	// lines read at 4.5:1 (council round 1, visual 16).
-	card := ui.Column(c.Key("approval")).Shrink(0).Margin(0, a.ckSide(24), 10, a.ckSide(24)).Padding(14, 16, 14, 19).Gap(10).Radius(rCard).
-		Background(pal.card).Border(1, pal.attention.Alpha(0.55))
-	card.Draw(func(p *ui.Painter, r ui.Rect) {
-		p.Fill(ui.Rect{X: r.X + 5, Y: r.Y + 12, W: 3, H: r.H - 24}, pal.attention, 1.5)
-	})
+	// The card is the card's ground with one needs-you cue, its rounded
+	// edge: amber, red and blue do not meet on one brown fill, and the risk
+	// lines read at 4.5:1 (council round 1, visual 16). A bar inside the
+	// edge drew a second amber rule (council round 2, S3).
+	card := ui.Column(c.Key("approval")).Shrink(0).Margin(0, a.ckSide(24), 10, a.ckSide(24)).Padding(14, 16).Gap(10).Radius(rCard).
+		Background(pal.card).Border(1, pal.attention.Alpha(0.7))
 	card.Children(func() {
 		ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
 			ui.Box(c).Size(8, 8).Radius(4).Background(pal.attention).Shrink(0)
@@ -423,7 +421,8 @@ func (a *App) approvalCard(c *ui.Context, pal *palette, ag client.Agent, it sess
 			opts := a.ckOptions(it, pk)
 			if question && (pk == nil || len(pk.actions) == 0) {
 				opts = nil
-				if sizedButton(c, "ans-reply", locales.CockpitReply(), "r", true, hControl, rControl, pal) {
+				// Send, in the reply box under it, is the view's one primary.
+				if sizedButton(c, "ans-reply", locales.CockpitReply(), "r", false, hControl, rControl, pal) {
 					a.ckFocusReply()
 				}
 				oneLine(c, locales.CockpitAnswerByReply(), fsSmall, 0).TextColor(pal.textMuted).Shrink(2)
