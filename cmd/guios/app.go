@@ -1415,14 +1415,16 @@ func (a *App) startRename(id string) {
 	if s == nil {
 		return
 	}
-	a.renaming, a.renamingProject, a.renameBuf, a.renameFrames = id, "", s.DisplayName(a.set.SessionName), 0
+	// An empty field, with the name as its placeholder: typing replaces
+	// the name, which a field that starts with it would add to.
+	a.renaming, a.renamingProject, a.renameBuf, a.renameFrames = id, "", "", 0
 }
 
 func (a *App) commitRename() {
 	id, name := a.renaming, strings.TrimSpace(a.renameBuf)
 	a.renaming = ""
 	s := a.session(id)
-	if s == nil || name == s.DisplayName(a.set.SessionName) {
+	if s == nil || name == "" || name == s.DisplayName(a.set.SessionName) {
 		a.focusTerminal()
 		return
 	}
