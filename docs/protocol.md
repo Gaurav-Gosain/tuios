@@ -196,6 +196,9 @@ is an answer, and each entry says which.
 focused pane in a session that no client shows now moves the attached client
 to that session, as `workspace.focus` does, so the pane is on screen. Before,
 the pane was focused in its session and the client stayed where it was.
+The herdr stream also sends `workspace_focused`, `tab_focused` and
+`pane_focused` when a client moves to another session, as herdr does when its
+active workspace changes.
 
 **The new event `agent-seen`** says a finished pane was looked at, or marked
 unread again. A subscriber that names no types gets it.

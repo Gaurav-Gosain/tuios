@@ -939,6 +939,7 @@ event is `{"event":"pane.agent_status_changed","data":{...}}`.
 | `window-focused` | `pane_focused` |
 | `window-moved` | `pane_moved` |
 | `workspace-switched` | `tab_focused` |
+| `client-session-changed` | `workspace_focused`, `tab_focused` and `pane_focused` when a client moves from one session to another, for the new session, its tab and its focused pane. A first attach sends none |
 | `agent-state` | `pane_agent_detected` when an agent comes or goes, and `pane.agent_status_changed` when its status changes |
 | `agent-seen` | `pane.agent_status_changed` from `done` to `idle` when the pane is looked at, and back when it is marked unread |
 

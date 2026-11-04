@@ -33,6 +33,8 @@ import (
 //	window-focused      pane_focused
 //	window-moved        pane_moved
 //	workspace-switched  tab_focused
+//	client-session-changed  workspace_focused, tab_focused and pane_focused
+//	                    when a client moves to another session
 //	agent-state         pane_agent_detected when an agent comes or goes, and
 //	                    pane.agent_status_changed when its status changes
 //	agent-seen          pane.agent_status_changed, done to idle or back
@@ -72,7 +74,7 @@ var herdrHubTypes = map[string]bool{
 	EventSessionCreated: true, EventSessionClosed: true, EventWindowCreated: true,
 	EventWindowClosed: true, EventWindowExit: true, EventWindowRetitled: true,
 	EventWindowFocused: true, EventWindowMoved: true, EventWorkspaceSwitched: true,
-	EventAgentState: true, EventAgentSeen: true,
+	EventAgentState: true, EventAgentSeen: true, EventClientSessionChanged: true,
 }
 
 // herdrParseSubscriptions reads and checks events.subscribe's list. One
@@ -154,14 +156,55 @@ type herdrTranslator struct {
 	d        *Daemon
 	panes    map[string]herdrPaneMemo
 	sessions map[string]string // session name -> id
+	// shows is the session id each TUI client last showed. A client that
+	// enters the session it showed (a rename) is not a focus, and neither is
+	// a client's first attach: herdr has no attach, only a switch.
+	shows map[string]string
 }
 
 func (d *Daemon) newHerdrTranslator() *herdrTranslator {
-	t := &herdrTranslator{d: d, panes: map[string]herdrPaneMemo{}, sessions: map[string]string{}}
+	t := &herdrTranslator{d: d, panes: map[string]herdrPaneMemo{}, sessions: map[string]string{}, shows: map[string]string{}}
 	for _, s := range d.manager.AllSessions() {
 		t.remember(s)
 	}
+	d.clientsMu.RLock()
+	for _, cs := range d.clients {
+		cs.mu.Lock()
+		if cs.isTUIClient && cs.attached {
+			t.shows[cs.clientID] = cs.sessionID
+		}
+		cs.mu.Unlock()
+	}
+	d.clientsMu.RUnlock()
 	return t
+}
+
+// clientMoved is a client entering or leaving a session. A client that
+// moves from one session to another makes that session the active herdr
+// workspace, and herdr says so with workspace_focused, tab_focused and
+// pane_focused, for the workspace, its tab and its focused pane
+// (emit_focus_api_events in herdr's src/app/api.rs).
+func (t *herdrTranslator) clientMoved(ev streamEvent, sess *Session) []herdrEvent {
+	// A switch is a detach and then an attach, so the detach keeps the
+	// session the client showed for the attach to compare against.
+	if ev.Attached == nil || !*ev.Attached || sess == nil {
+		return nil
+	}
+	prev, seen := t.shows[ev.ClientID]
+	t.shows[ev.ClientID] = sess.ID
+	if !seen || prev == sess.ID {
+		return nil
+	}
+	st := sess.GetState()
+	wsID := herdrWorkspaceID(sess.ID)
+	out := []herdrEvent{
+		global("workspace_focused", &herdrEventData{WorkspaceID: wsID}),
+		global("tab_focused", &herdrEventData{TabID: herdrTabID(sess.ID, st.WorkspaceTabKey(max(st.CurrentWorkspace, 1))), WorkspaceID: wsID}),
+	}
+	if w, ok := findWindowState(st, st.FocusedWindowID); ok && !herdrScratch(&w) {
+		out = append(out, global("pane_focused", &herdrEventData{PaneID: herdrPaneID(sess.ID, w.ID), WorkspaceID: wsID}))
+	}
+	return out
 }
 
 // remember records a session and its windows as they are now.
@@ -235,6 +278,8 @@ func (t *herdrTranslator) translate(ev streamEvent) []herdrEvent {
 		return []herdrEvent{global("workspace_closed", &herdrEventData{WorkspaceID: herdrWorkspaceID(id)})}
 	case EventWindowClosed, EventWindowExit:
 		return t.closed(ev)
+	case EventClientSessionChanged:
+		return t.clientMoved(ev, sess)
 	}
 	if sess == nil {
 		return nil

@@ -1,7 +1,10 @@
 package tuie2e
 
 import (
+	"bufio"
 	"encoding/json"
+	"net"
+	"strings"
 	"testing"
 	"time"
 )
@@ -43,12 +46,16 @@ func focusedWindowOf(t *testing.T, base, session string) string {
 //   - pane.focus on a pane in the session the client shows focuses it, and
 //     the client stays.
 //   - pane.focus on a pane in another session moves the client there, with
-//     that pane focused, and the reply says the pane is focused.
+//     that pane focused, and the reply says the pane is focused. The event
+//     stream says workspace_focused, tab_focused and pane_focused for it, as
+//     herdr does when the active workspace changes.
 //   - agent.focus on an agent in the first session moves the client back.
 //
-// Negative control (e2e/tui/NEGATIVE_CONTROLS.md): with the herdrShowSession
+// Negative controls (e2e/tui/NEGATIVE_CONTROLS.md): with the herdrShowSession
 // call cut from herdrFocusPane, the test fails at "pane.focus on a pane in
-// another session": the client stays on e2e-home.
+// another session": the client stays on e2e-home. With the
+// client-session-changed case cut from the herdr translator, it times out
+// waiting for workspace_focused.
 func TestHerdrFocusShowsThePanesSession(t *testing.T) {
 	term, base := crushClient(t)
 	home := crushPanes(t, base, "near", "agent")
@@ -78,8 +85,44 @@ func TestHerdrFocusShowsThePanesSession(t *testing.T) {
 	}
 	waitShown(t, base, crushSession, "pane.focus on a pane in the shown session")
 
-	// A pane in another session: the client moves there, showing the pane.
+	// A pane in another session: the client moves there, showing the pane,
+	// and the stream says the active workspace, tab and pane changed.
+	conn, err := net.Dial("unix", herdrSocket(base))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = conn.Close() }()
+	_ = conn.SetDeadline(time.Now().Add(uiTimeout))
+	_, _ = conn.Write([]byte(`{"id":"es","method":"events.subscribe","params":{"subscriptions":[{"type":"workspace.focused"},{"type":"tab.focused"},{"type":"pane.focused"}]}}` + "\n"))
+	stream := bufio.NewReader(conn)
+	if ack, _ := stream.ReadString('\n'); !strings.Contains(ack, "subscription_started") {
+		t.Fatalf("subscribe ack %q", ack)
+	}
+	farWS := strings.SplitN(far, ":", 2)[0]
 	focused = herdrCall(t, base, "pane.focus", map[string]any{"pane_id": far})["pane"].(map[string]any)
+	seen := map[string]string{}
+	var lines strings.Builder
+	for seen["workspace_focused"] == "" || seen["pane_focused"] == "" {
+		line, err := stream.ReadString('\n')
+		if err != nil {
+			t.Fatalf("pane.focus on a pane in another session: the stream ended before workspace_focused and pane_focused: %v\n%s", err, lines.String())
+		}
+		lines.WriteString(line)
+		var ev struct {
+			Event string `json:"event"`
+			Data  struct {
+				WorkspaceID string `json:"workspace_id"`
+				PaneID      string `json:"pane_id"`
+			} `json:"data"`
+		}
+		if json.Unmarshal([]byte(line), &ev) == nil {
+			seen[ev.Event] = ev.Data.WorkspaceID + " " + ev.Data.PaneID
+		}
+	}
+	if !strings.HasPrefix(seen["workspace_focused"], farWS+" ") || seen["pane_focused"] != farWS+" "+far || !strings.HasPrefix(seen["tab_focused"], farWS+" ") {
+		t.Fatalf("pane.focus on a pane in another session: the focus events name %v, want workspace %s and pane %s\n%s", seen, farWS, far, lines.String())
+	}
+	saveText(t, "herdr-focus-events", lines.String())
 	waitShown(t, base, other, "pane.focus on a pane in another session")
 	if focused["focused"] != true {
 		t.Fatalf("pane.focus on a pane in another session: the reply says focused %v, want true", focused["focused"])

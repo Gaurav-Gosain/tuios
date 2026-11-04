@@ -43,6 +43,8 @@ herdr 0.9.5, where focusing a pane makes its workspace the active one. With a
 client on one session, a `pane.focus` on a pane in another session must move
 the client there with the pane focused, and `agent.focus` must move it back. A
 `pane.focus` in the session the client shows must leave the client where it is.
+The stream must say `workspace_focused`, `tab_focused` and `pane_focused` for
+the move.
 
 Run on 2026-11-04 on macOS (darwin/arm64). The test passes on the fixed build.
 Each control was built into its own binary.
@@ -51,8 +53,10 @@ Each control was built into its own binary.
 | --- | --- | --- |
 | Main without the fix (57150e1ef) | "pane.focus on a pane in another session: the client shows [e2e-home], want e2e-other" | **caught** |
 | The `herdrShowSession` call in `herdrFocusPane` | The same message | **caught** |
+| The `client-session-changed` case in the herdr translator | "the stream ended before workspace_focused and pane_focused" (the subscription times out) | **caught** |
 
-The frames are `herdr-focus-other-session` and `herdr-focus-back` under
+The frames are `herdr-focus-other-session` and `herdr-focus-back`, and the
+events `herdr-focus-events`, under
 `TUIOS_E2E_FRAMES`.
 
 ## The herdr socket reports a seen done pane as idle
