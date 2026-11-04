@@ -205,12 +205,14 @@ type ClientJoinedMsg struct {
 	ClientCount int
 	Width       int
 	Height      int
+	Attach      uint64 // see ClientEvent.Attach
 }
 
 // ClientLeftMsg is sent when another client leaves the session.
 type ClientLeftMsg struct {
 	ClientID    string
 	ClientCount int
+	Attach      uint64 // see ClientEvent.Attach
 }
 
 // PasteRefusedMsg says a paste did not reach its pane. Message is one of the
@@ -240,6 +242,10 @@ type ClientEvent struct {
 	PluginAsks []session.PluginApprovalAsk
 	// PluginUI is the push behind a "plugin-ui" event.
 	PluginUI session.PluginUIPayload
+	// Attach is the client's attach generation when a session's own event
+	// arrived: "joined", "left", "resize" and "agent-mail". Zero is an event
+	// with no stamp. See TUIClient.AttachGeneration and staleAttach.
+	Attach uint64
 }
 
 // SessionResizeMsg is sent when the effective session size changes (min of all clients).
@@ -254,6 +260,9 @@ type SessionResizeMsg struct {
 	// Generation numbers the daemon's answer, newer answers higher. Zero is
 	// a daemon that does not number them. See session/layout_gen.go.
 	Generation uint64
+	// Attach is the attach generation the answer arrived under. See
+	// ClientEvent.Attach.
+	Attach uint64
 }
 
 // ForceRefreshMsg is sent to force all clients to re-render.
@@ -581,6 +590,7 @@ func clientEventMsg(event ClientEvent) tea.Msg {
 			ClientCount: event.ClientCount,
 			Width:       event.Width,
 			Height:      event.Height,
+			Attach:      event.Attach,
 		}
 	case "resize":
 		return SessionResizeMsg{
@@ -589,11 +599,12 @@ func clientEventMsg(event ClientEvent) tea.Msg {
 			ClientCount: event.ClientCount,
 			Reserve:     event.Reserve,
 			Generation:  event.Generation,
+			Attach:      event.Attach,
 		}
 	case "refresh":
 		return ForceRefreshMsg{Reason: event.Reason}
 	case "agent-mail":
-		return AgentMailMsg{Payload: event.Mail}
+		return AgentMailMsg{Payload: event.Mail, Attach: event.Attach}
 	case "agent-mail-load":
 		return AgentMailLoadMsg{}
 	case "hosts-changed":
@@ -620,6 +631,7 @@ func clientEventMsg(event ClientEvent) tea.Msg {
 		return ClientLeftMsg{
 			ClientID:    event.ClientID,
 			ClientCount: event.ClientCount,
+			Attach:      event.Attach,
 		}
 	}
 }
@@ -2428,6 +2440,11 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 
 	// Multi-client daemon messages
 	case StateSyncMsg:
+		// A state of the session this client has left describes none of
+		// the panes it now shows. Applied, it replaced them.
+		if m.staleAttach(msg.Attach) {
+			return m, listenStateSyncUntil(m.stopSignal(), m.StateSyncChan)
+		}
 		// Another client updated state: apply incrementally
 		if msg.State != nil {
 			// Track what changed for notifications
@@ -2560,6 +2577,9 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		return m, nil
 
 	case ClientJoinedMsg:
+		if m.staleAttach(msg.Attach) {
+			return m, listenClientEventsUntil(m.stopSignal(), m.ClientEventChan)
+		}
 		// Another client joined the session
 		m.sessionClients = msg.ClientCount
 		m.ShowNotification(fmt.Sprintf("Client joined (%d connected)", msg.ClientCount), "info", 2*time.Second)
@@ -2567,6 +2587,11 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		return m, listenClientEventsUntil(m.stopSignal(), m.ClientEventChan)
 
 	case AgentMailMsg:
+		// The mailbox is the session's, and this one's was read afresh at
+		// the switch.
+		if m.staleAttach(msg.Attach) {
+			return m, listenClientEventsUntil(m.stopSignal(), m.ClientEventChan)
+		}
 		// A message an agent left, or a receipt for one an agent read. Applied
 		// here and nowhere else, so the mirror is only ever touched on this
 		// goroutine.
@@ -2754,6 +2779,9 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		return m, nil
 
 	case ClientLeftMsg:
+		if m.staleAttach(msg.Attach) {
+			return m, listenClientEventsUntil(m.stopSignal(), m.ClientEventChan)
+		}
 		// Another client left the session
 		m.sessionClients = msg.ClientCount
 		m.ShowNotification(fmt.Sprintf("Client left (%d connected)", msg.ClientCount), "info", 2*time.Second)
@@ -2761,6 +2789,13 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		return m, listenClientEventsUntil(m.stopSignal(), m.ClientEventChan)
 
 	case SessionResizeMsg:
+		// An answer about the session this client has left. Applied, it
+		// laid this session's panes out in the other's box, and raised the
+		// generation past this session's own count, so the daemon took
+		// this client's layouts for current when they were not.
+		if m.staleAttach(msg.Attach) {
+			return m, listenClientEventsUntil(m.stopSignal(), m.ClientEventChan)
+		}
 		// The box the panes are laid out in from here on is this answer's,
 		// so the next push says so. See session/layout_gen.go.
 		m.layoutGenApplied = max(m.layoutGenApplied, msg.Generation)

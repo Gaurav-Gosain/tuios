@@ -703,6 +703,11 @@ func (c *TUIClient) takeAttachReply(resp *Message) (*SessionState, error) {
 	c.sessionID = payload.SessionID
 	c.setSessionName(payload.SessionName)
 	c.humanNonce.Store(&payload.HumanNonce)
+	// With the read loop running, routeReply counted this attach as it read
+	// the reply. See AttachGeneration.
+	if !c.readLoopRunning {
+		c.attachGen.Add(1)
+	}
 	c.startPushes()
 	c.appliedSeq.Store(stateSeq(payload.State))
 	if err := validateSessionState(payload.State); err != nil {
@@ -1663,13 +1668,19 @@ func (c *TUIClient) startPushes() {
 	defer c.pushMu.Unlock()
 	c.pushOrigin.Store(&origin)
 	c.pushSeq.Store(0)
-	c.attachGen.Add(1)
 }
 
 // AttachGeneration counts this client's attaches. SnapshotSeq numbers are the
 // attached session's own and start over in another session or after a daemon
 // restart, both of which take a new attach, so two snapshots are comparable by
 // SnapshotSeq only when they arrived under the same generation.
+//
+// A handler reads it on the read loop to stamp what it hands on, and the model
+// drops a stamp that is not current: it came from the session the client left.
+// So the count moves on the read loop, at the moment the attach reply is read,
+// and not later on the goroutine that waits for the reply. Counted there, the
+// first messages of the new session, read before that goroutine woke, carried
+// the old count and were dropped as the old session's.
 func (c *TUIClient) AttachGeneration() uint64 {
 	if c == nil {
 		return 0
@@ -2836,6 +2847,11 @@ func (c *TUIClient) routeReply(msg *Message) replyRoute {
 			return replyStale
 		}
 		delete(c.pendingResponses, msg.Type)
+	}
+	// Every message read after this one belongs to the session it attaches
+	// to. See AttachGeneration.
+	if msg.Type == MsgAttached {
+		c.attachGen.Add(1)
 	}
 	select {
 	case p.ch <- msg:

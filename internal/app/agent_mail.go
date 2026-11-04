@@ -44,6 +44,7 @@ const agentMailBottom = 1 << 30
 // AgentMailMsg is one MsgAgentMail push from the daemon.
 type AgentMailMsg struct {
 	Payload session.AgentMailPayload
+	Attach  uint64 // see ClientEvent.Attach
 }
 
 // AgentMailLoadMsg asks Update to read the ring again, after a session switch.

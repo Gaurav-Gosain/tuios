@@ -2361,6 +2361,9 @@ func (m *OS) rebuildForSession(state *session.SessionState, savedWidth, savedHei
 
 	m.Windows = nil
 	m.FocusedWindow = -1
+	// Indexes into the windows just closed. RestoreFromState rebuilds this
+	// for a session with windows, and does not run for one without.
+	m.WorkspaceFocus = make(map[int]int)
 	m.WorkspaceTrees = make(map[int]*layout.BSPTree)
 	m.WorkspaceScrollingLayouts = make(map[int]*layout.ScrollingLayout)
 	m.pendingScrollColumns = nil

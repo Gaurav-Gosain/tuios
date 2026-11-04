@@ -106,12 +106,12 @@ func (m *OS) WireDaemonClient(client *session.TUIClient) {
 	})
 	client.OnClientJoined(func(clientID string, clientCount int, width, height int) {
 		clientLog("Client joined: %s (total: %d, size: %dx%d)", shortID(clientID), clientCount, width, height)
-		m.QueueClientEvent(ClientEvent{Type: "joined", ClientID: clientID, ClientCount: clientCount, Width: width, Height: height})
+		m.QueueClientEvent(ClientEvent{Type: "joined", ClientID: clientID, ClientCount: clientCount, Width: width, Height: height, Attach: client.AttachGeneration()})
 	})
 	// Mail an agent left in the session's ring, and receipts for mail an agent
 	// read. Queued like every other broadcast; the mirror is touched in Update.
 	client.OnAgentMail(func(payload session.AgentMailPayload) {
-		if m.QueueClientEvent(ClientEvent{Type: "agent-mail", Mail: payload}) {
+		if m.QueueClientEvent(ClientEvent{Type: "agent-mail", Mail: payload, Attach: client.AttachGeneration()}) {
 			clientLog("ClientEventChan full, displaced an event for agent mail")
 		}
 	})
@@ -168,7 +168,7 @@ func (m *OS) WireDaemonClient(client *session.TUIClient) {
 	client.OnDirChanged(m.fileWatch.remoteDirChanged)
 	client.OnClientLeft(func(clientID string, clientCount int) {
 		clientLog("Client left: %s (remaining: %d)", shortID(clientID), clientCount)
-		m.QueueClientEvent(ClientEvent{Type: "left", ClientID: clientID, ClientCount: clientCount})
+		m.QueueClientEvent(ClientEvent{Type: "left", ClientID: clientID, ClientCount: clientCount, Attach: client.AttachGeneration()})
 	})
 	// The session's size is the minimum over its clients. The geometry
 	// mutation (TileAllWindows, emulator resizes) happens in Update.
@@ -177,7 +177,7 @@ func (m *OS) WireDaemonClient(client *session.TUIClient) {
 		// Read here, on the client's read loop, where it is this resize's
 		// own: the loop took it just before calling this handler.
 		gen := client.SessionLayoutGeneration()
-		m.QueueClientEvent(ClientEvent{Type: "resize", ClientCount: clientCount, Width: width, Height: height, Reserve: reserve, Generation: gen})
+		m.QueueClientEvent(ClientEvent{Type: "resize", ClientCount: clientCount, Width: width, Height: height, Reserve: reserve, Generation: gen, Attach: client.AttachGeneration()})
 	})
 	// The session killed out from under this client, and the daemon going
 	// away. Both leave nothing to render and nothing to reconnect to, so the
@@ -215,6 +215,14 @@ func (m *OS) UnwireDaemonClient(client *session.TUIClient) {
 	client.OnSessionResize(nil)
 	client.OnSessionEnded(nil)
 	client.OnDisconnect(nil)
+}
+
+// staleAttach reports whether a message stamped with attach, the attach
+// generation it arrived under, came from a session this client has since left.
+// The read loop stamps it, so a message read before a switch carries the old
+// count however late Update gets to it. Zero is a message with no stamp.
+func (m *OS) staleAttach(attach uint64) bool {
+	return attach != 0 && m.DaemonClient != nil && attach != m.DaemonClient.AttachGeneration()
 }
 
 // clientLog is the standard logger, when verbose logging is on.
