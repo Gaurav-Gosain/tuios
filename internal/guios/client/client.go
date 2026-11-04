@@ -61,6 +61,13 @@ type Client struct {
 	once    sync.Once
 
 	st *stateKeeper
+
+	// viewMu guards what the person looks at: the session shown, the
+	// focused pane of each session, and the open streams (stream.go).
+	viewMu  sync.Mutex
+	viewing string
+	focused map[string]string
+	streams map[*Stream]struct{}
 }
 
 // Connect opens a control connection to this machine's daemon, starting it

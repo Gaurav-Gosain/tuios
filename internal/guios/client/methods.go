@@ -44,6 +44,7 @@ func (c *Client) dispatch(method string, params any) (any, error) {
 			return nil, err
 		}
 		c.st.seen(p.ID)
+		c.setView(p.ID)
 		return true, nil
 
 	case "create":
@@ -97,6 +98,7 @@ func (c *Client) dispatch(method string, params any) (any, error) {
 		if err != nil {
 			return nil, err
 		}
+		c.setFocus(p.Session, p.Pane)
 		_, err = c.verb("focus-window", map[string]any{"session": c.st.nameOf(p.Session), "window": p.Pane})
 		return true, err
 

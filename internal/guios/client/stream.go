@@ -3,11 +3,13 @@ package client
 import (
 	"encoding/binary"
 	"errors"
+	"fmt"
 	"io"
 	"strings"
 	"sync"
 
 	"github.com/egoist/mygo/plugins/terminal"
+	"github.com/egoist/mygo/ui"
 
 	"github.com/Gaurav-Gosain/tuios/internal/guios/proto"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
@@ -21,7 +23,11 @@ type Stream struct {
 	ps      *session.PaneStream
 	c       *Client
 	session string
+	sid     string
 	window  string
+	// shown is the last F frame sent: session.PaneHidden, PaneVisible or
+	// PaneFocused. Guarded by c.viewMu.
+	shown   byte
 	Welcome proto.Welcome
 
 	mu     sync.Mutex
@@ -91,7 +97,8 @@ func AttachVia(_ Dialer, id string) (*Stream, error) {
 		_ = vc.Close()
 		return nil, err
 	}
-	s := &Stream{ps: ps, c: c, session: name, window: reply.Window, closed: make(chan struct{}), Gone: make(chan struct{})}
+	s := &Stream{ps: ps, c: c, session: name, sid: sid, window: reply.Window, closed: make(chan struct{}), Gone: make(chan struct{})}
+	c.addStream(s)
 	s.Welcome = proto.Welcome{Version: proto.Version, Cols: reply.Cols, Rows: reply.Rows}
 	return s, nil
 }
@@ -148,20 +155,31 @@ func (s *Stream) Write(p []byte) (int, error) {
 // ResizePixels asks for the pane at this view's size, as the stream's
 // lease. The daemon applies it only while no TUI client shows the session,
 // and answers with a resize frame when the pane's size changes.
-func (s *Stream) ResizePixels(cols, rows, _, _ int) error {
+func (s *Stream) ResizePixels(cols, rows, cellW, cellH int) error {
 	if cols <= 0 || rows <= 0 {
 		return nil
 	}
-	return s.ps.Lease(cols, rows)
+	return s.ps.LeaseCell(cols, rows, cellW, cellH)
 }
 
 // Claim makes the pane take this view's size, which ResizePixels does at
 // once with the daemon: nothing more to tell.
 func (s *Stream) Claim() error { return nil }
 
-// UseTheme is the colours the view shows. The daemon takes a viewer's
-// colours when the stream opens. Mid-stream changes wait for a verb.
-func (s *Stream) UseTheme(*terminal.Theme) error { return nil }
+// UseTheme tells the daemon the colours the view shows, so a program that
+// asks the terminal for them (OSC 10, 11 and 4) gets this view's while no
+// TUI client shows the session.
+func (s *Stream) UseTheme(th *terminal.Theme) error {
+	if th == nil {
+		return nil
+	}
+	hex := func(c ui.Color) string { return fmt.Sprintf("#%02x%02x%02x", c.R, c.G, c.B) }
+	pal := make([]string, len(th.Palette))
+	for i, c := range th.Palette {
+		pal[i] = hex(c)
+	}
+	return s.ps.Viewer(session.ViewerReport{Bg: hex(th.Background), Fg: hex(th.Foreground), Palette: strings.Join(pal, ",")})
+}
 
 // Clear clears the pane's history, and its screen above the prompt with
 // proto.ClearScreen, for every client.
@@ -174,8 +192,69 @@ func (s *Stream) Clear(what byte) error {
 func (s *Stream) Close() error {
 	var err error
 	s.once.Do(func() {
+		s.c.removeStream(s)
 		close(s.closed)
 		err = s.ps.Close()
 	})
 	return err
+}
+
+// What the person looks at. The app says which session it shows ("view")
+// and which pane of it has the focus ("focus"). Each stream tells the
+// daemon whether its pane is hidden, on screen, or on screen with the
+// focus, as a TUI client's focus does: a finished turn on the focused pane
+// counts as seen, and the pane gets focus reports.
+
+func (c *Client) addStream(s *Stream) {
+	c.viewMu.Lock()
+	if c.streams == nil {
+		c.streams = map[*Stream]struct{}{}
+	}
+	c.streams[s] = struct{}{}
+	c.viewMu.Unlock()
+	c.applyView()
+}
+
+func (c *Client) removeStream(s *Stream) {
+	c.viewMu.Lock()
+	delete(c.streams, s)
+	c.viewMu.Unlock()
+}
+
+// setView records the session the app shows, "" for none.
+func (c *Client) setView(sid string) {
+	c.viewMu.Lock()
+	c.viewing = sid
+	c.viewMu.Unlock()
+	c.applyView()
+}
+
+// setFocus records the pane that has the focus in a session.
+func (c *Client) setFocus(sid, pane string) {
+	c.viewMu.Lock()
+	if c.focused == nil {
+		c.focused = map[string]string{}
+	}
+	c.focused[sid] = pane
+	c.viewMu.Unlock()
+	c.applyView()
+}
+
+// applyView sends each stream whose state changed its F frame.
+func (c *Client) applyView() {
+	c.viewMu.Lock()
+	defer c.viewMu.Unlock()
+	for s := range c.streams {
+		var want byte = session.PaneHidden
+		if s.sid != "" && s.sid == c.viewing {
+			want = session.PaneVisible
+			if f := c.focused[s.sid]; f == "" || f == s.window {
+				want = session.PaneFocused
+			}
+		}
+		if want != s.shown {
+			s.shown = want
+			_ = s.ps.Shown(want)
+		}
+	}
 }
