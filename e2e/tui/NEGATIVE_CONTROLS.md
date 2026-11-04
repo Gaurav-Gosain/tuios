@@ -6885,6 +6885,23 @@ on Linux.
 | No tick armed after View wakes the ticker | `Update`, `case flushMsg`: return nil in place of `m.frameIdleTickCmd()` (the branch before the fix) | `TestIdleCostStaysLow/one_late_output`: "made 2708 context switches (budget 800)", with 0 ticks: the ticker ran from the output to the end of the window | **caught** |
 | The positive half | the fixed branch | none | **guard** |
 
+### The idle window opens once the setup has settled
+
+`TestIdleCostStaysLow` opened its window a fixed second after the screen
+settled. On a loaded runner the setup's last full scans ran late, the daemon's
+listing pushes for a new agent come up to 3 s apart, and one or two of them
+landed in the window: `work=2` against a budget of 1. Now the window opens once
+no tick has run the full scans for 4 s, or after 15 s in any case.
+`one late output` times its output into the window and skips the wait.
+
+With two cores and five busy loops, the two agent subtests failed 15 of 30
+runs on main and 0 of 30 with the wait. The whole test passed 40 of 40
+subtest runs with the wait under the same load.
+
+| Claim | Control | Where it fails | Verdict |
+|---|---|---|---|
+| The wait does not hide a periodic tick | `nextWake` arms a tick every second, and `tickNeedsWork` returns true | every subtest: "10 ticks ran the full scans (budget 1)". The wait gave up after 15 s in 7 of 8 | **caught** |
+
 ### An equal frame, and the buffer release, on the deadline tick
 
 Two fixes on the branch perf/deadline-tick after #762 landed. A frame equal

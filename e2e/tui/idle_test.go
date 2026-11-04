@@ -78,6 +78,9 @@ type idleBudget struct {
 	// ctxsw is the client's voluntary context switches, all threads, on
 	// Linux only.
 	ctxsw int64
+	// noSettle starts the window without waitIdleSettled, for a setup that
+	// times an event to land inside the window.
+	noSettle bool
 }
 
 // TestIdleCostStaysLow is the idle-cost regression guard for the whole program:
@@ -120,7 +123,9 @@ func TestIdleCostStaysLow(t *testing.T) {
 		// armed for the flush that follows. Without it the ticker ran at the
 		// frame rate until the next message, which here never comes.
 		runIdleWindow(t, "", idleBudget{
-			wire: idleWireBudget,
+			// The output is timed to land inside the window.
+			noSettle: true,
+			wire:     idleWireBudget,
 			// The idle switch after the output's frame.
 			ticks: 2, work: 1,
 			// The output's frame.
@@ -473,6 +478,9 @@ func runIdleWindowOpts(t *testing.T, config string, o startOpts, budget idleBudg
 	time.Sleep(time.Second)
 
 	pid := term.Pid()
+	if !budget.noSettle {
+		waitIdleSettled(t, pid, statsPath)
+	}
 	start := sampleIdle(t, pid, statsPath)
 	before := wire.n.Load()
 	time.Sleep(idleWindow)
@@ -574,6 +582,45 @@ func clipboardAtIdle(t *testing.T, term *tuitest.Terminal, wire *wireRecorder) {
 		time.Sleep(10 * time.Millisecond)
 	}
 	t.Logf("the clipboard write reached the terminal %v after the command was typed", time.Since(typed).Round(time.Millisecond))
+}
+
+// idleSettleQuiet is how long the client's tick counters must stay flat
+// before the idle window opens, and idleSettleMax the longest
+// waitIdleSettled waits for that. The quiet time is longer than the daemon's
+// listingPushGap (3 s): an agent's state reaches the client in pushes up to
+// that far apart, and a shorter quiet time opens the window between two.
+const (
+	idleSettleQuiet = 4 * time.Second
+	idleSettleMax   = 15 * time.Second
+)
+
+// waitIdleSettled waits until no maintenance tick has run the full scans for
+// idleSettleQuiet. Ticks that skip them may go on: the git section arms one
+// for each reading. A setup leaves work behind it: a message burning out, the
+// daemon's listing moving after an agent report, a title the rail adopts. On
+// an idle machine that is over before the window opens. On a loaded CI runner
+// it runs a second or two late and one of those ticks lands in the window,
+// which then counts setup work as idle cost. A client that ticks without end,
+// the regression the window is there to catch, never goes quiet: after
+// idleSettleMax the window opens anyway and counts it.
+func waitIdleSettled(t *testing.T, pid int, statsPath string) {
+	t.Helper()
+	began := time.Now()
+	last := sampleIdle(t, pid, statsPath)
+	quietSince := began
+	for time.Since(quietSince) < idleSettleQuiet {
+		if time.Since(began) > idleSettleMax {
+			t.Logf("the client never went %v without a full scan in %v; measuring anyway", idleSettleQuiet, idleSettleMax)
+			return
+		}
+		time.Sleep(250 * time.Millisecond)
+		now := sampleIdle(t, pid, statsPath)
+		if now.stats["work"] != last.stats["work"] {
+			quietSince = time.Now()
+		}
+		last = now
+	}
+	t.Logf("the client went quiet %v after setup", time.Since(began).Round(100*time.Millisecond)-idleSettleQuiet)
 }
 
 // idleSample is a client's counters at one moment.
