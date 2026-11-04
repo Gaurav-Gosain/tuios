@@ -223,7 +223,8 @@ tuios start-agent claude --name reviewer --grants read
 ```
 
 `--grants` works the same on `fan` and `new-window`. You can give only what you
-hold (`tuios --skill grants`).
+hold (`tuios --skill grants`). The helper also never gets a wider permission
+mode than yours.
 
 ### Headless, over a protocol
 

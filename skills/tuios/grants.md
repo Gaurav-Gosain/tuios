@@ -103,9 +103,30 @@ without `admin`, a call that names no session means your own session.
   who applies it with `tuios config apply` outside tuios.
 
 A pane can never give more than it holds. A pane without `admin` that starts an
-agent without `--grants` gives it its own grants. A pane changes only its own
+agent without `--grants` gives it its own grants. A pane with `admin` gives the
+default, without the grants it does not hold itself. A pane changes only its own
 grants unless it holds `admin`, and `admin` cannot give `respond`, so `respond`
 comes only from the person.
+
+## A child agent never runs wider than you
+
+An agent that you start through tuios (`start-agent`, `fan`, `new-window`) never
+gets a wider permission mode than your own. tuios reads your mode from your
+command line. It knows the modes of Claude Code (`--permission-mode`,
+`--dangerously-skip-permissions`), Codex (`--sandbox`, `--ask-for-approval`,
+`--yolo`), Copilot and Gemini CLI. A child that asks for a wider mode is refused
+with `forbidden`, and nothing starts. A child that names no mode starts in your
+mode when its default is wider:
+
+```sh
+# You run claude --permission-mode plan.
+tuios start-agent claude                       # starts claude --permission-mode plan
+tuios start-agent codex                        # starts codex --sandbox read-only
+tuios start-agent 'claude --permission-mode auto'   # refused
+```
+
+When the work needs more, ask the person. The person starts agents from outside
+every pane, and tuios does not hold them.
 
 ## Giving a helper less
 

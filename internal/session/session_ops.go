@@ -264,6 +264,10 @@ type NewWindowOptions struct {
 	// it, and the caller's onExit must not close the window for it to mean
 	// anything.
 	keepOpen bool
+	// modeChecked says the caller already held Command's permission mode to
+	// the parent agent's (clampChildMode), so addWindowFor does not read it
+	// again. start-agent sets it.
+	modeChecked bool
 	// closeOnExit is new-window's close_on_exit: the daemon closes the
 	// window when its process exits. It is unexported, like keepOpen: the
 	// caller's onExit does the closing, and this only tells the PTY that its

@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/Gaurav-Gosain/tuitest"
 )
@@ -208,4 +209,80 @@ func TestAReadPaneRunsGetWindow(t *testing.T) {
 		t.Fatalf("get-window from a read pane was not served: %v\n%s", err, term.Snapshot())
 	}
 	alive(t, term, "after a read pane ran get-window")
+}
+
+// TestAChildAgentNeverRunsWiderThanItsParent runs a parent agent in a pane:
+// a script named claude, started with --permission-mode plan, that calls
+// tuios start-agent the way an agent's shell tool does. The daemon reads the
+// parent from the caller's process ancestry. A child that asks for bypass
+// mode is refused and nothing starts. A child that names no mode starts in
+// plan mode, with the flag added. The same bypass child started by the test
+// process, outside every pane, starts as asked.
+//
+// Negative control: with clampChildMode returning argv unchanged, the wide
+// child starts (WIDE_EXIT=0) and the plain child's command has no
+// --permission-mode plan.
+func TestAChildAgentNeverRunsWiderThanItsParent(t *testing.T) {
+	base, _ := fanFixture(t)
+	if out, err := tuiosCLI(t, base, "new", "plain", "--detach"); err != nil {
+		t.Fatalf("start the daemon: %v: %s", err, out)
+	}
+	outDir := t.TempDir()
+	parentBin := filepath.Join(t.TempDir(), "parent-bin")
+	if err := os.MkdirAll(parentBin, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	script := "#!/bin/sh\n" +
+		"'" + tuiosBin + "' start-agent -s plain 'claude --dangerously-skip-permissions' --name wide --ready-timeout 500 --json >'" + outDir + "/wide.txt' 2>&1\n" +
+		"echo \"WIDE_EXIT=$?\" >>'" + outDir + "/wide.txt'\n" +
+		"'" + tuiosBin + "' start-agent -s plain claude --name stepped --ready-timeout 500 --json >'" + outDir + "/step.txt' 2>&1\n" +
+		"touch '" + outDir + "/done'\n" +
+		"exec sleep 600\n"
+	parent := filepath.Join(parentBin, "claude")
+	if err := os.WriteFile(parent, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if out, err := tuiosCLI(t, base, "new-window", "-s", "plain", "parent", "--no-focus", "--", parent, "--permission-mode", "plan"); err != nil {
+		t.Fatalf("open the parent agent's pane: %v: %s", err, out)
+	}
+	deadline := time.Now().Add(60 * time.Second)
+	for {
+		if _, err := os.Stat(filepath.Join(outDir, "done")); err == nil {
+			break
+		}
+		if time.Now().After(deadline) {
+			pane, _ := tuiosCLI(t, base, "capture-pane", "-s", "plain", "-w", "parent")
+			t.Fatalf("the parent agent never finished its calls:\n%s", pane)
+		}
+		time.Sleep(200 * time.Millisecond)
+	}
+	wide, _ := os.ReadFile(filepath.Join(outDir, "wide.txt"))
+	step, _ := os.ReadFile(filepath.Join(outDir, "step.txt"))
+	if !strings.Contains(string(wide), "WIDE_EXIT=") || strings.Contains(string(wide), "WIDE_EXIT=0") ||
+		!strings.Contains(string(wide), "permission mode") {
+		t.Errorf("a child in bypass mode from a parent in plan mode was not refused:\n%s", wide)
+	}
+	if !strings.Contains(string(step), "--permission-mode plan") {
+		t.Errorf("a child that names no mode did not start in the parent's plan mode:\n%s", step)
+	}
+	windows, err := tuiosCLI(t, base, "list-windows", "-s", "plain")
+	if err != nil {
+		t.Fatalf("list-windows: %v: %s", err, windows)
+	}
+	if strings.Contains(windows, "wide") {
+		t.Errorf("the refused child has a window:\n%s", windows)
+	}
+
+	// The person is never held.
+	out, err := tuiosCLI(t, base, "start-agent", "-s", "plain", "claude --dangerously-skip-permissions", "--name", "byperson", "--ready-timeout", "500", "--json")
+	if !strings.Contains(out, "--dangerously-skip-permissions") || strings.Contains(out, "forbidden") {
+		t.Errorf("the person's start-agent was held: %v\n%s", err, out)
+	}
+	// The calls and their answers, for a person to read back.
+	if dir := os.Getenv("TUIOS_E2E_FRAMES"); dir != "" {
+		record := "parent: claude --permission-mode plan\n\nwide child:\n" + string(wide) + "\nchild with no mode:\n" + string(step) + "\nthe person:\n" + out
+		if err := os.WriteFile(filepath.Join(dir, "child-mode-clamp.txt"), []byte(record), 0o644); err != nil {
+			t.Logf("could not save the record: %v", err)
+		}
+	}
 }

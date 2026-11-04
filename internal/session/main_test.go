@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -22,6 +23,15 @@ func TestMain(m *testing.M) {
 	// Run as a fake agent, this binary only waits. See
 	// TestTranscriptIdentityReadsTheAgentBehindAWrapper.
 	if filepath.Base(os.Args[0]) == fakeAgentName {
+		time.Sleep(60 * time.Second)
+		os.Exit(0)
+	}
+	// Run as a parent agent or a plain caller, this binary calls the daemon
+	// and prints the answers. See child_clamp_test.go.
+	if base := filepath.Base(os.Args[0]); base == fakeCallerName || slices.Contains(fakeParentNames, base) {
+		if socket := os.Getenv("TUIOS_TEST_CALL_SOCKET"); socket != "" {
+			os.Exit(runFakeCaller(socket))
+		}
 		time.Sleep(60 * time.Second)
 		os.Exit(0)
 	}

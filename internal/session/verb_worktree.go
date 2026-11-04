@@ -359,11 +359,16 @@ func (d *Daemon) verbNewWorktree(cs *connState, params json.RawMessage) (any, *v
 	if len(p.Command) > 0 && p.Command[0] == "" {
 		return nil, invalidParam("command", "command[0] is the program to exec and cannot be empty")
 	}
+	// A child is never wider than its parent (child_clamp.go).
+	command, verr := d.clampChildMode(cs, "new-worktree", "", p.Command, nil, false)
+	if verr != nil {
+		return nil, verr
+	}
 	root, cloned, verr := d.resolveRepoSource(cs, "new-worktree", p.repoSource, nil)
 	if verr != nil {
 		return nil, verr
 	}
-	out, verr := d.createWorktreeSession(cs, root, branch, strings.TrimSpace(p.Base), strings.TrimSpace(p.Name), p.Command, nil, nil, nil)
+	out, verr := d.createWorktreeSession(cs, root, branch, strings.TrimSpace(p.Base), strings.TrimSpace(p.Name), command, nil, d.childDefaultGrants(cs), nil)
 	if verr != nil {
 		return nil, verr
 	}
@@ -842,6 +847,11 @@ func (d *Daemon) verbFan(cs *connState, params json.RawMessage) (any, *verbError
 				param = "agents"
 			}
 			if launches[i], verr = d.resolveAgentLaunch(param, spec, pathList); verr != nil {
+				return verr
+			}
+			// Each agent's permission mode is held to the calling agent's
+			// (child_clamp.go).
+			if launches[i].argv, verr = d.clampChildMode(cs, "fan", launches[i].harness, launches[i].argv, env, false); verr != nil {
 				return verr
 			}
 		}
