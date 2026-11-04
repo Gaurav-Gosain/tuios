@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"sync"
+	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 )
@@ -172,4 +173,19 @@ func (c *Client) closeCockpit() {
 		ck.vc, ck.nonce = nil, ""
 	}
 	ck.mu.Unlock()
+}
+
+// LongVerb calls a verb on a connection of its own, which it closes after,
+// waiting up to timeout for the answer. It is for the verbs that take long
+// (start-agent waits for the agent's prompt, fan may clone, judge-fan waits
+// for its judge), so that they never hold up the cockpit's connection. It
+// carries no presence: these verbs take the caller as the person when it is
+// not a pane.
+func (c *Client) LongVerb(name string, params map[string]any, timeout time.Duration) (json.RawMessage, error) {
+	vc, err := c.dial()
+	if err != nil {
+		return nil, err
+	}
+	defer vc.Close()
+	return vc.CallWithTimeout(name, params, timeout)
 }
