@@ -89,3 +89,13 @@ func SnapBounds(region Rect, q Snap) Rect {
 		return Rect{X: region.X + region.W/4, Y: region.H/4 + region.Y, W: halfWidth, H: halfHeight}
 	}
 }
+
+// IntoView moves r the least it takes to lie inside region, keeping its
+// size, or to start at region's near edge when it is the larger. It is
+// where a pane goes when tiling stops and the pane was laid out off the
+// screen, as a scrolling strip lays its far columns out.
+func IntoView(r, region Rect) Rect {
+	r.X = min(max(r.X, region.X), region.X+max(region.W-r.W, 0))
+	r.Y = min(max(r.Y, region.Y), region.Y+max(region.H-r.H, 0))
+	return r
+}
