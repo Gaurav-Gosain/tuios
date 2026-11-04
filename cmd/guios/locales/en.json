@@ -2155,5 +2155,11 @@
       }
     }
   },
-  "sidebarAgentTip": "Click to show it in Agents. Double-click to open its pane."
+  "sidebarAgentTip": "Click to show it in Agents. Double-click to open its pane.",
+  "cockpitSourceStall": "the screen, no report for 30 s",
+  "cockpitSourceScreen": "the screen",
+  "cockpitSourceOsc": "an escape sequence",
+  "cockpitSourceDetect": "the running program",
+  "cockpitSourceTranscript": "the transcript",
+  "cockpitSourceProgram": "the program's status"
 }

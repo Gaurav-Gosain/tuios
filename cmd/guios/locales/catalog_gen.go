@@ -12121,3 +12121,63 @@ func SidebarAgentTip() string { return In(i18n.Locale()).SidebarAgentTip() }
 func (msgs Messages) SidebarAgentTip() string {
 	return Catalog.Format(msgs.locale, "sidebarAgentTip", nil)
 }
+
+// CockpitSourceStall says "the screen, no report for 30 s"
+// in the language the app shows.
+func CockpitSourceStall() string { return In(i18n.Locale()).CockpitSourceStall() }
+
+// CockpitSourceStall says "the screen, no report for 30 s"
+// in the language of msgs.
+func (msgs Messages) CockpitSourceStall() string {
+	return Catalog.Format(msgs.locale, "cockpitSourceStall", nil)
+}
+
+// CockpitSourceScreen says "the screen"
+// in the language the app shows.
+func CockpitSourceScreen() string { return In(i18n.Locale()).CockpitSourceScreen() }
+
+// CockpitSourceScreen says "the screen"
+// in the language of msgs.
+func (msgs Messages) CockpitSourceScreen() string {
+	return Catalog.Format(msgs.locale, "cockpitSourceScreen", nil)
+}
+
+// CockpitSourceOsc says "an escape sequence"
+// in the language the app shows.
+func CockpitSourceOsc() string { return In(i18n.Locale()).CockpitSourceOsc() }
+
+// CockpitSourceOsc says "an escape sequence"
+// in the language of msgs.
+func (msgs Messages) CockpitSourceOsc() string {
+	return Catalog.Format(msgs.locale, "cockpitSourceOsc", nil)
+}
+
+// CockpitSourceDetect says "the running program"
+// in the language the app shows.
+func CockpitSourceDetect() string { return In(i18n.Locale()).CockpitSourceDetect() }
+
+// CockpitSourceDetect says "the running program"
+// in the language of msgs.
+func (msgs Messages) CockpitSourceDetect() string {
+	return Catalog.Format(msgs.locale, "cockpitSourceDetect", nil)
+}
+
+// CockpitSourceTranscript says "the transcript"
+// in the language the app shows.
+func CockpitSourceTranscript() string { return In(i18n.Locale()).CockpitSourceTranscript() }
+
+// CockpitSourceTranscript says "the transcript"
+// in the language of msgs.
+func (msgs Messages) CockpitSourceTranscript() string {
+	return Catalog.Format(msgs.locale, "cockpitSourceTranscript", nil)
+}
+
+// CockpitSourceProgram says "the program's status"
+// in the language the app shows.
+func CockpitSourceProgram() string { return In(i18n.Locale()).CockpitSourceProgram() }
+
+// CockpitSourceProgram says "the program's status"
+// in the language of msgs.
+func (msgs Messages) CockpitSourceProgram() string {
+	return Catalog.Format(msgs.locale, "cockpitSourceProgram", nil)
+}

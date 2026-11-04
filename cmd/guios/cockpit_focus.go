@@ -194,7 +194,7 @@ func (a *App) cockpitFocus(c *ui.Context, pal *palette) {
 			where = append(where, a.local().shortDir(ag.Cwd))
 		}
 		if ckSourceShown(ag.Source) {
-			where = append(where, locales.CockpitStateFrom(ag.Source))
+			where = append(where, locales.CockpitStateFrom(ckSource(ag.Source)))
 		}
 		oneLine(c, strings.Join(where, " · "), fsSmall, 0).TextColor(pal.textFaint)
 		a.agentUsage(c, pal, ag)
@@ -683,4 +683,23 @@ func ckAnswerError(err error) string {
 		return locales.CockpitJustChanged()
 	}
 	return locales.CockpitAnswerFailed()
+}
+
+// ckSource is where an agent's state came from, in words.
+func ckSource(src string) string {
+	switch src {
+	case "stall":
+		return locales.CockpitSourceStall()
+	case "screen":
+		return locales.CockpitSourceScreen()
+	case "osc":
+		return locales.CockpitSourceOsc()
+	case "detect":
+		return locales.CockpitSourceDetect()
+	case "transcript":
+		return locales.CockpitSourceTranscript()
+	case "program":
+		return locales.CockpitSourceProgram()
+	}
+	return src
 }

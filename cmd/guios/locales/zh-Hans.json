@@ -1195,5 +1195,11 @@
   "hostDaemonStopped": "{name} 上的 tuios 守护进程已停止。",
   "hostOtherProtocol": "{name} 上的 tuios 守护进程使用另一个版本的控制协议。请更新 {name} 上的 tuios。",
   "sidebarMoreAgents": "{count, plural, other {另外 # 个代理}}",
-  "sidebarAgentTip": "单击在代理中显示。双击打开其窗格。"
+  "sidebarAgentTip": "单击在代理中显示。双击打开其窗格。",
+  "cockpitSourceStall": "屏幕 (30 秒无报告)",
+  "cockpitSourceScreen": "屏幕",
+  "cockpitSourceOsc": "转义序列",
+  "cockpitSourceDetect": "正在运行的程序",
+  "cockpitSourceTranscript": "对话记录",
+  "cockpitSourceProgram": "程序状态"
 }
