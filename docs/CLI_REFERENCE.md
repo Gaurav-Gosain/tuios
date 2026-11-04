@@ -6168,7 +6168,7 @@ VAPID public key: BCM4cML1lw6X1BHn3-nOS6-QtjYUql5FDx-etpdO8RHCTTipUMWpGY46YBB4bL
 
 Write one OSC 7501 report, the Program Status Protocol, for a script. tuios
 shows it as the pane's agent state, in the rail and in the Inbox. Other
-terminals that read the protocol show it too. The command needs no daemon. See
+terminals that read the protocol show it too. See
 [PROGRAM_STATUS.md](PROGRAM_STATUS.md).
 
 **Usage:**
@@ -6179,6 +6179,11 @@ tuios status [idle|working|done|blocked|error] [flags]
 The report goes to the controlling terminal, so it is not lost when the
 output of the script goes to a file or a pipe. The command refuses a report
 that a terminal must discard, and says why.
+
+Some processes have no controlling terminal, such as the shell tool of an
+agent. In a tuios pane, such a process sends the report to the daemon for its
+pane (`TUIOS_PANE_ID`). Outside tuios, or when the daemon does not take the
+report, the report goes to standard output.
 
 **Flags:**
 - `--kind <kind>`: What a blocked program waits for: `permission`, `question` or `auth`. Only with `blocked`

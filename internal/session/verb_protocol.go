@@ -2276,6 +2276,22 @@ func buildVerbRegistry() map[string]verbEntry {
 			},
 			handler: (*Daemon).verbSetAgentMeta,
 		},
+		"report-program-status": {
+			description: "Apply one OSC 7501 report (the Program Status Protocol) to a pane, as if the pane's emulator read it from the pane's output. tuios status sends it when the process has no terminal, such as an agent's shell tool. The report gets the same checks, records and lifetime as one the pane writes. A pane may report only for itself, as with set-agent-state.",
+			params: []verbParam{
+				sessionParam,
+				{Name: "window", Type: "string", Description: "Window id or name. Omit from a pane for the pane itself, and from outside every pane for the focused window."},
+				{Name: "report", Type: "string", Description: "The body of the report: the text between ESC ] 7501; and the string terminator, such as state=working:app=build. A report a terminal would discard is refused, and nothing is recorded.", Required: true},
+			},
+			returns: []verbParam{
+				{Name: "window_id", Type: "string", Description: "The window the report was applied to."},
+				{Name: "program_status", Type: "[]object", Description: "The pane's records after the report, as get-agent-state reports them."},
+			},
+			examples: []string{
+				`{"id":1,"verb":"report-program-status","params":{"session":"work","report":"state=done:app=build:msg=QnVpbHQ="}}`,
+			},
+			handler: (*Daemon).verbReportProgramStatus,
+		},
 		"explain-agent-detect": {
 			description: "Say in plain words whether a pane runs an agent and on what evidence. Lists every agent name seen on the command line that did not count, what the detector read (comm, argv, executable, and the processes behind a wrapper), which harness manifest matched and on which predicate, and for each manifest that did not match, what it compared against.",
 			params:      []verbParam{sessionParam, windowParam},

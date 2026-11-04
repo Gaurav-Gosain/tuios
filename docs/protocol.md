@@ -215,6 +215,9 @@ changes for a herdr client:
 - `pane.focus` and `agent.focus` mark the pane seen, with or without a client.
 - `agent.wait`, `events.wait` and `agent.prompt` with `wait` match that status.
 
+**The new verb [report-program-status](#report-program-status)** applies an
+OSC 7501 report to a pane. `tuios status` sends it when it has no terminal.
+
 **The new verb [list-routes](#list-routes)** lists this machine's addresses.
 
 **queue-prompt takes `client_id`.** A second call from the same sender with the
@@ -1965,7 +1968,7 @@ What a restricted connection may call:
 | open | `hello`, `list-verbs`, `unsubscribe`, `restrict-connection` | allowed | allowed |
 | across sessions | `list-sessions`, `list-clients`, `list-attention`, `list-worktrees`, `list-hosts`, `list-host-sessions`, `list-host-agents`, `list-themes`, `list-glyphs`, `list-hooks`, `get-keep-awake` | `forbidden` | allowed |
 | read one session | `session-info`, `list-windows`, `get-window`, `list-workspaces`, `capture-pane`, `get-agent-state`, `list-agents`, `wait-for`, `subscribe`, `peek-prompt`, `read-agent-messages`, `explain-agent-screen`, `list-options`, `get-option`, `stash-list`, `stash-get`, `ssh-agent-path`, `display-env` | session in reach | allowed |
-| own pane's record | `set-agent-state`, `set-agent-meta`, `set-agent-session`, `report-agent-activity`, `agent-mail-notice`, `ask-human` | own pane only | allowed |
+| own pane's record | `set-agent-state`, `set-agent-meta`, `set-agent-session`, `report-agent-activity`, `report-program-status`, `agent-mail-notice`, `ask-human` | own pane only | allowed |
 | mail and stash | `send-agent-message`, `stash-put` | session in reach, sent as the own pane | allowed |
 | type into a pane | `send-text`, `send-keys`, `ask-agent`, `respond`, `run` | session in reach | `forbidden` |
 | start sessions | `fan`, `start-agent` | needs a pane; `start-agent` opens its pane in a session in reach | `forbidden` |
@@ -1987,9 +1990,9 @@ Under `own`:
   caller's own session: a selector reaches every session.
 - A `host` naming another machine, such as `send-agent-message`'s outbox
   delivery, is refused: no session on another machine is in reach.
-- `set-agent-state`, `set-agent-meta`, `set-agent-session` and
-  `report-agent-activity` with no `window` land on the caller's own pane, and
-  naming another pane is refused.
+- `set-agent-state`, `set-agent-meta`, `set-agent-session`,
+  `report-agent-activity` and `report-program-status` with no `window` land on
+  the caller's own pane, and naming another pane is refused.
 - `send-agent-message` and `ask-agent` in the caller's own session get `from`
   set to the caller's pane, and a different `from` is refused.
   `read-agent-messages` may name only the caller's own inbox in `to`.
@@ -5641,6 +5644,40 @@ Response:
 
 `get-agent-state` and each `list-agents` entry carry the same `meta` object,
 and `subagents`, the count `meta`'s `subagents` key states, as a number.
+
+### report-program-status
+
+Apply one OSC 7501 report, the Program Status Protocol, to a pane. The daemon
+handles it as if the pane's emulator read it from the pane's output. It uses
+the same parser, the same records and the same lifetime rules. See
+[PROGRAM_STATUS.md](PROGRAM_STATUS.md).
+
+`tuios status` sends this verb when the process has no controlling terminal,
+such as the shell tool of an agent. That tool captures standard output, so a
+sequence written there does not reach the pane.
+
+Params: `session` (optional), `window` (optional, default the caller's pane,
+or the focused pane outside every pane), `report` (required). `report` is the
+body of the sequence: the text between `ESC ] 7501;` and the string
+terminator. A report that a terminal must discard is `invalid_params`, and
+nothing is recorded.
+
+The record gets the process group that holds the pane's terminal when the call
+arrives, as a report the pane writes does. So a `working` record from a program
+in the foreground ends when that program exits. A pane may report only for
+itself, as with `set-agent-state`.
+
+Request:
+
+```json
+{"verb": "report-program-status", "params": {"session": "work", "window": "build", "report": "state=working:app=build:msg=Q29tcGlsaW5n"}}
+```
+
+Response:
+
+```json
+{"result": {"type": "program_status_reported", "window_id": "3f2a9c1e", "program_status": [{"state": "working", "progress": -1, "app": "build", "msg": "Compiling", "at": 1767225600000000000}]}}
+```
 
 Keys tuios writes itself, each only when the harness states it: `model`,
 `context` (`42%`), `cost` (`$1.20`, or the amount and an ISO 4217 code for

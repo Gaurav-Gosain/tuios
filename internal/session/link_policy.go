@@ -273,6 +273,8 @@ var verbCapabilities = map[string]linkCaps{
 	"run":                 {config.LinkAllowWrite},
 	// set-agent-state's activity with no state, so the same capability.
 	"report-agent-activity": {config.LinkAllowWrite},
+	// An OSC 7501 report, which sets the pane's agent state as set-agent-state does.
+	"report-program-status": {config.LinkAllowWrite},
 	// ask-human's own handler refuses every link caller as well.
 	"ask-human": {config.LinkAllowWrite},
 

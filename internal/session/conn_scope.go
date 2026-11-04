@@ -174,6 +174,8 @@ var verbScopes = map[string]scopeKind{
 	"report-agent-activity": scopeSelf,
 	// It marks the pane's own mail announced, so it is the pane's record.
 	"agent-mail-notice": scopeSelf,
+	// An OSC 7501 report the pane's process could not write to its terminal.
+	"report-program-status": scopeSelf,
 
 	"send-agent-message": scopeMail,
 	"stash-put":          scopeMail,

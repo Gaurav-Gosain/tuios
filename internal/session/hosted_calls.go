@@ -91,6 +91,8 @@ var hostedCallVerbs = map[string]string{
 	// set-agent-state's activity with no state, about the same pane.
 	"report-agent-activity": "window",
 	"agent-mail-notice":     "window",
+	// An OSC 7501 report from a process with no terminal, about the same pane.
+	"report-program-status": "window",
 }
 
 // hostedCallDropped are parameters removed from a forwarded call before the

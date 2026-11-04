@@ -30,6 +30,25 @@ With the text check in place, the first control fails earlier with
 `the unit lacks "KillMode=process"`. Each step is in `transcript.txt` under
 `TUIOS_E2E_FRAMES`, in the test's folder. Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestDaemonRunsAsAService$' -v .`.
+## tuios status reports without a terminal
+
+Step 9 of `TestProgramStatusDrivesTheRailAndInbox` runs `tuios status working`
+under `setsid`, with standard input from `/dev/null` and standard output into a
+pipe that ends in a file. An agent's shell tool runs it the same way. The step
+first proves that `/dev/tty` does not open there. The pane must then hold one
+`working` record from app `notty`, with source `program`, and standard output
+and standard error must stay empty.
+
+Run on 2026-11-04 on Linux. The fixed build passes. The control is a binary of
+main (57150e1ef), where `tuios status` writes the report to standard output
+when it cannot open `/dev/tty`. Steps 1 to 8 pass, and step 9 fails.
+
+| Control | Where it fails | Verdict |
+| --- | --- | --- |
+| Main without the fix | Step 9: "the report without a terminal: never held; last state {State:none ... Program:[]}" | **caught** |
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestProgramStatusDrivesTheRailAndInbox$' -v .`.
 
 The test waits until the pane program leads a session of its own before it
 runs `kill-server`. The shell writes `$!` before the child runs `setsid`. A

@@ -93,7 +93,9 @@ tuios integration install claude-code --statusline --then '~/.claude/sl.sh' # ke
 
 A program can write the Program Status Protocol sequence itself, or call
 `tuios status`, which writes it to the terminal and handles the base64. The
-pane is the one the sequence is written in, so no `-s` or `-w` is needed:
+pane is the one the sequence is written in, so no `-s` or `-w` is needed.
+Your shell tool may have no terminal. Then `tuios status` sends the report to
+the daemon for your pane (`$TUIOS_PANE_ID`), and the report is not lost:
 
 ```sh
 tuios status working --app build --msg 'Compiling' --progress 40
