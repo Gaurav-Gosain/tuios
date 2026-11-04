@@ -382,6 +382,8 @@ var EventTypes = []string{
 	"tml-event",
 	// A session's task cards.
 	"task-claimed", "task-finished", "task-changed",
+	// A judge's verdict on a fan.
+	"fan-verdict",
 }
 
 // defaultEventTypes are the types a call that names none gets: what an agent

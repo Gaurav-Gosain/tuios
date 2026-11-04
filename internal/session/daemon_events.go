@@ -133,7 +133,11 @@ const (
 	EventTaskClaimed  = "task-claimed"
 	EventTaskFinished = "task-finished"
 	EventTaskChanged  = "task-changed"
-	EventSubscribed   = "subscribed" // subscribe ack result type
+	// EventFanVerdict says a judge recorded its verdict on a fan: one event
+	// for each attempt's session, with Title the session the verdict picks.
+	// See fan_judge.go.
+	EventFanVerdict = "fan-verdict"
+	EventSubscribed = "subscribed" // subscribe ack result type
 )
 
 // defaultEventQueue bounds a subscriber's per-connection event queue. When it is
