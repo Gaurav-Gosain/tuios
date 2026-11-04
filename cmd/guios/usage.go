@@ -36,6 +36,9 @@ const (
 	// usageHostsEvery is how often the hosts' loads are read: their
 	// daemons send them on the link's heartbeat, every 15 s.
 	usageHostsEvery = 15 * time.Second
+	// usageBusyCPU is the share of one core, in percent, at which a pane
+	// counts as working for the sampler's pace.
+	usageBusyCPU = 2.0
 )
 
 // series is a chart's last readings, oldest first.
@@ -259,24 +262,40 @@ func readHostLoads(cl *client.Client) []hostLoad {
 }
 
 // usageChanged reports whether next shows a figure other than last does, as
-// the views round them (draw), and whether a pane's did (busy). A chart
+// the views round them (draw), and whether a pane works (busy). A chart
 // that only moved on is not drawn again until a figure changes.
+//
+// An idle shell reads 0.0 % and 0.1 % by turns: a figure that changes
+// while nothing works. A share under usageBusyCPU that moves is not drawn
+// again until another figure changes, and only a pane at usageBusyCPU or
+// more keeps the pace at a reading a second. Before, four idle panes kept
+// it there, and each reading drawn cost the main thread a frame: some 60
+// wakeups, as the Go runtime watches the main thread's P for 10 ms after
+// each call from GTK.
 func usageChanged(last, next *usageView) (draw, busy bool) {
 	if last == nil || last.supported != next.supported || len(last.panes) != len(next.panes) {
 		return true, true
 	}
+	for _, p := range next.panes {
+		if p.cpuNow >= usageBusyCPU {
+			busy = true
+		}
+	}
 	for k, p := range next.panes {
 		o := last.panes[k]
-		if o == nil || cpuText(o.cpuNow) != cpuText(p.cpuNow) || bytesText(o.rss) != bytesText(p.rss) || o.procs != p.procs {
+		if o == nil || o.procs != p.procs {
 			return true, true
+		}
+		if cpuText(o.cpuNow) != cpuText(p.cpuNow) && max(o.cpuNow, p.cpuNow) >= usageBusyCPU || bytesText(o.rss) != bytesText(p.rss) {
+			return true, busy
 		}
 	}
 	// The machine's load moves a point either way all the time on a busy
 	// machine: two points make a change worth a frame.
 	if iabs(loadPct(last)-loadPct(next)) >= 2 || math.Round(last.memPct) != math.Round(next.memPct) || !slices.Equal(last.hosts, next.hosts) {
-		return true, false
+		return true, busy
 	}
-	return false, false
+	return false, busy
 }
 
 func iabs(n int) int {
