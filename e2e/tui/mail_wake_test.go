@@ -571,7 +571,7 @@ func TestDelegateMailsTheAnswerAndWakesTheParentOnce(t *testing.T) {
 		n, got := gotLines(t, base, session, parent)
 		if n > 0 {
 			fmt.Fprintf(&log, "-- the parent's pane:\n%s\n", got)
-			if !strings.Contains(got, "GOT[You have 1 unread tuios message. Read it with:") {
+			if !strings.Contains(got, "GOT[You have 1 unread tuios message. Child agents finished: 1 done. Read it with:") {
 				t.Fatalf("ASSERTION: the parent got the wrong line:\n%s", got)
 			}
 			break
