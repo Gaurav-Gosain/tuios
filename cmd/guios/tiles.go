@@ -3,6 +3,7 @@ package main
 import (
 	"math"
 	"slices"
+	"time"
 
 	"github.com/Gaurav-Gosain/mygo/ui"
 
@@ -79,6 +80,43 @@ func layoutFracs(l *proto.Layout, r frac, key string, fresh func(string) bool, o
 	layoutFracs(l.B, rb, key+"b", fresh, out, from, splits)
 }
 
+// splitGuess is a split on its way to the daemon, drawn at once: the
+// layout as it will be, with an empty card where the new pane will be.
+// The pane the daemon makes takes the card's place and its motion, so the
+// split moves once, from the key, not from the daemon's answer.
+type splitGuess struct {
+	id     string        // the empty card's
+	layout *proto.Layout // the layout with it
+	panes  int           // the session's panes as it was made
+}
+
+// guessSplit draws the split p asks for in s before the daemon answers:
+// in the split tree, of a pane it shows, with nothing zoomed.
+func (a *App) guessSplit(s *proto.Session, p proto.CreateParams) {
+	if s.PaneByID(s.Zoomed) != nil || s.PaneByID(p.Split) == nil {
+		return
+	}
+	if ar := s.Arrange; ar != nil {
+		// The layouts placed by rectangles place the new pane themselves.
+		if _, placed := ar.Rects[p.Split]; placed || len(ar.Float) > 0 {
+			return
+		}
+	}
+	base := s.Layout
+	if len(s.Panes) < 2 {
+		base = nil
+	} else if base == nil || !slices.Contains(base.Panes(), p.Split) {
+		return
+	}
+	if a.guesses == nil {
+		a.guesses = map[string]*splitGuess{}
+	}
+	id := "guess-" + s.ID
+	a.guesses[s.ID] = &splitGuess{id: id, layout: base.Split(p.Split, id, p.Direction, 0.5), panes: len(s.Panes)}
+	// The panes keep their grids while it moves, as for any layout change.
+	holdLeases(motionLayout.Duration + 40*time.Millisecond)
+}
+
 // tileKey names one value a pane's rectangle animates by.
 type tileKey struct {
 	pane string
@@ -94,14 +132,24 @@ func (a *App) tiled(c *ui.Context, pal *palette, bar ui.TitleBar, shown float32,
 	b := a.paneRef(key).Bounds(c)
 	ew, eh := float64(b.W)+paneGap, float64(b.H)+paneGap
 
-	multi := len(s.Panes) > 1
+	lay := s.Layout
+	g := a.guesses[s.ID]
+	if g != nil && len(s.Panes) > g.panes {
+		// The daemon's pane came with the state before its answer.
+		delete(a.guesses, s.ID)
+		g = nil
+	}
+	if g != nil {
+		lay = g.layout
+	}
+	multi := len(s.Panes) > 1 || g != nil
 	target := map[string]frac{}
 	from := map[string]frac{}
 	var splits []fracSplit
 	whole := frac{0, 0, 1, 1}
 	z := s.PaneByID(s.Zoomed)
-	if s.Layout != nil && multi {
-		layoutFracs(s.Layout, whole, "split-"+s.ID, a.motion.isNew, target, from, &splits)
+	if lay != nil && multi {
+		layoutFracs(lay, whole, "split-"+s.ID, a.motion.isNew, target, from, &splits)
 	} else if p := s.FocusPane(); z == nil && p != nil {
 		target[p.ID] = whole
 	}
@@ -114,6 +162,16 @@ func (a *App) tiled(c *ui.Context, pal *palette, bar ui.TitleBar, shown float32,
 		a.motion.top = z.ID
 	}
 
+	// The guessed card went as the daemon answered: the pane it made
+	// goes on from where the card showed.
+	if last := a.motion.guess; last.id != "" && (g == nil || g.id != last.id) {
+		for id := range from {
+			if _, ok := target[last.id]; !ok {
+				from[id] = last.at
+			}
+		}
+		a.motion.guess = guessShown{}
+	}
 	// The rectangles this frame shows: each value on its way to the
 	// target. A pane new to the tree starts in its slot.
 	shownAt := map[string]frac{}
@@ -139,6 +197,9 @@ func (a *App) tiled(c *ui.Context, pal *palette, bar ui.TitleBar, shown float32,
 			moving = true
 		}
 	}
+	if g != nil {
+		a.motion.guess = guessShown{g.id, shownAt[g.id]}
+	}
 	// Zoomed and at rest, only the zoomed pane is built: the others are
 	// under it, and drawing them would cost frames for nothing.
 	settledZoom := zoomed != "" && shownAt[zoomed] == target[zoomed]
@@ -146,8 +207,8 @@ func (a *App) tiled(c *ui.Context, pal *palette, bar ui.TitleBar, shown float32,
 	// Back to front: the panes, the one zoomed last (or the one that was,
 	// while it shrinks back over the others).
 	var order []string
-	if s.Layout != nil && multi {
-		order = s.Layout.Panes()
+	if lay != nil && multi {
+		order = lay.Panes()
 	}
 	for id := range target {
 		if !slices.Contains(order, id) {
@@ -180,6 +241,11 @@ func (a *App) tiled(c *ui.Context, pal *palette, bar ui.TitleBar, shown float32,
 	area.Children(func() {
 		for _, id := range order {
 			p := s.PaneByID(id)
+			if g != nil && id == g.id {
+				x, y, w, h := px(shownAt[id])
+				paned(ui.Column(c.Key("tile-"+id)).Absolute().Left(x).Top(y).Width(w).Height(h).Radius(rPane).Background(pal.card), pal)
+				continue
+			}
 			if p == nil || (settledZoom && id != zoomed) {
 				continue
 			}

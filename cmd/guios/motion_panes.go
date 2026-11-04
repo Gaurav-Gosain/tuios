@@ -108,6 +108,9 @@ type motionWatch struct {
 	placed map[string]bool
 	// width is each placed pane's width in this frame, in DIPs.
 	width map[string]float32
+	// guess is the guessed card of a split (splitGuess) as the last frame
+	// showed it.
+	guess guessShown
 	// top is the pane zoomed, or the one last zoomed while it shrinks
 	// back: drawn over the others.
 	top string
@@ -138,4 +141,10 @@ func (m *motionWatch) notePane(id string) {
 	if m.now != nil {
 		m.now[id] = true
 	}
+}
+
+// guessShown is a guessed card and where it showed.
+type guessShown struct {
+	id string
+	at frac
 }

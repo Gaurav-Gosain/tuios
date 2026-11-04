@@ -1100,11 +1100,13 @@ func (a *App) split(s *proto.Session, p proto.CreateParams) {
 	}
 	sid := s.ID
 	a.splitting[sid] = true
+	a.guessSplit(s, p)
 	go func() {
 		var ns proto.Session
 		err := cl.Call("split", p, &ns)
 		a.update(func() {
 			a.splitting[sid] = false
+			delete(a.guesses, sid)
 			if q := a.splitQueue[sid]; len(q) > 0 {
 				a.splitQueue[sid] = q[1:]
 				defer q[0]()

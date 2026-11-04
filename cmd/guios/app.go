@@ -161,6 +161,8 @@ type App struct {
 	// the splits of the focused pane asked for meanwhile.
 	splitting  map[string]bool
 	splitQueue map[string][]func()
+	// guesses are the splits on their way, drawn at once (tiles.go).
+	guesses map[string]*splitGuess
 	// palWarm is warmPalette's: when the app had loaded, and whether the
 	// palette's text was measured.
 	palWarm struct {
