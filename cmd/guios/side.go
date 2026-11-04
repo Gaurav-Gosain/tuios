@@ -199,8 +199,10 @@ func (a *App) toggleRight() {
 }
 
 // minCards is the room the right sidebar leaves the cards: in a window
-// narrower, it gets out of their way (sideState.crowded).
-const minCards = 420
+// narrower, it gets out of their way (sideState.crowded). It holds a
+// terminal of about 70 columns, or two panes side by side that each still
+// read a prompt.
+const minCards = 600
 
 // rightShown tells that the right sidebar shows, or comes: shown, and the
 // window wide enough for it, or shown anyway.

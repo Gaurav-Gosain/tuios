@@ -1008,5 +1008,6 @@
   "lookKindHTML": "HTML 页面",
   "lookViewPage": "页面",
   "cockpitReadingPrompt": "tuios 仍在读取提示。请再按一次键。",
-  "cockpitAnswerFailed": "tuios 无法发送回答。请打开窗格回答。"
+  "cockpitAnswerFailed": "tuios 无法发送回答。请打开窗格回答。",
+  "toastPaneTooSmall": "此窗格太小,无法拆分。请关闭一个窗格或加宽窗口。"
 }

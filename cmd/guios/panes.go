@@ -848,6 +848,13 @@ func (a *App) split(s *proto.Session, p proto.CreateParams) {
 	}
 	h := a.hostOf(s.ID)
 	if pane := s.PaneByID(p.Split); pane != nil && !pane.Browser() {
+		// Two halves too small to read a prompt help no one: the pane
+		// stays whole, and the toast says what to do instead.
+		down := p.Direction == "down" || p.Direction == "up"
+		if pane.Cols > 0 && pane.Rows > 0 && (down && pane.Rows/2 < minPaneRows || !down && pane.Cols/2 < minPaneCols) {
+			a.toast(locales.ToastPaneTooSmall())
+			return
+		}
 		p.Cols, p.Rows = pane.Cols, pane.Rows
 		if p.Direction == "down" || p.Direction == "up" {
 			p.Rows = max(p.Rows/2, 4)
@@ -1096,3 +1103,9 @@ func (a *App) emptyWorkspace(c *ui.Context, pal *palette, s *proto.Session) {
 		})
 	})
 }
+
+// minPaneCols and minPaneRows are the least a split leaves each half.
+const (
+	minPaneCols = 24
+	minPaneRows = 5
+)

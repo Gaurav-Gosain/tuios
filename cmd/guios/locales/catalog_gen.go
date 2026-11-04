@@ -10223,3 +10223,13 @@ func CockpitAnswerFailed() string { return In(i18n.Locale()).CockpitAnswerFailed
 func (msgs Messages) CockpitAnswerFailed() string {
 	return Catalog.Format(msgs.locale, "cockpitAnswerFailed", nil)
 }
+
+// ToastPaneTooSmall says "This pane is too small to split. Close a pane or make the window wider."
+// in the language the app shows.
+func ToastPaneTooSmall() string { return In(i18n.Locale()).ToastPaneTooSmall() }
+
+// ToastPaneTooSmall says "This pane is too small to split. Close a pane or make the window wider."
+// in the language of msgs.
+func (msgs Messages) ToastPaneTooSmall() string {
+	return Catalog.Format(msgs.locale, "toastPaneTooSmall", nil)
+}

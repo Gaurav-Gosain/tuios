@@ -1853,5 +1853,6 @@
   "lookKindHTML": "HTML page",
   "lookViewPage": "Page",
   "cockpitReadingPrompt": "tuios is still reading the prompt. Press the key again.",
-  "cockpitAnswerFailed": "tuios could not send the answer. Open the pane to answer it."
+  "cockpitAnswerFailed": "tuios could not send the answer. Open the pane to answer it.",
+  "toastPaneTooSmall": "This pane is too small to split. Close a pane or make the window wider."
 }
