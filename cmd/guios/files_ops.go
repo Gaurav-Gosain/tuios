@@ -72,7 +72,7 @@ func (a *App) nameRow(c *ui.Context, pal *palette, it fileItem) {
 		ui.Box(c).Size(9, 9).Shrink(0)
 		// The icon of the name as typed.
 		fileIconImage(c, pal, strings.TrimSpace(e.name), e.op == editNewFolder || e.op == editRename && e.dirEnt, false)
-		in := ui.TextInputBase(c.Key("name"), &e.name).Grow(1).MinWidth(0).FontSize(12.5).AutoFocus().Label(it.Name)
+		in := ui.TextInputBase(c.Key("name"), &e.name).Grow(1).MinWidth(0).FontSize(fsBody).AutoFocus().Label(it.Name)
 		switch {
 		case in.Shortcut(0, ui.KeyEscape):
 			fs.edit = nil

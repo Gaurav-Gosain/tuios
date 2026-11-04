@@ -182,7 +182,7 @@ func (a *App) filesSide(c *ui.Context, pal *palette, s *proto.Session) {
 	walk(root, "", 0)
 
 	ui.Row(c.Key("root")).Height(28).Shrink(0).Padding(0, 10, 6, 16).Gap(0).AlignItems(ui.Center).Children(func() {
-		ui.Text(c, h.shortDir(root)).FontSize(12.5).TextColor(pal.textFaint).SingleLine().Ellipsis("…").MinWidth(0).Grow(1).Tooltip(root)
+		ui.Text(c, h.shortDir(root)).FontSize(fsSmall).TextColor(pal.textFaint).SingleLine().Ellipsis("…").MinWidth(0).Grow(1).Tooltip(root)
 		iconButton(c, "new-file", newFileIcon, locales.FilesNewFile(), pal, func() { a.startCreate(s, p.ID, root, "", false) })
 		iconButton(c, "new-folder", newFolderIcon, locales.FilesNewFolder(), pal, func() { a.startCreate(s, p.ID, root, "", true) })
 		iconButton(c, "fold-folders", collapseIcon, locales.FilesCollapseFolders(), pal, func() {
@@ -265,7 +265,7 @@ func (a *App) filesSide(c *ui.Context, pal *palette, s *proto.Session) {
 				a.nameRow(c, pal, it)
 				return
 			case it.err != "":
-				ui.Text(c, it.err).FontSize(12).TextColor(pal.textFaint).SingleLine().Ellipsis("…").Padding(4, 8, 4, 6+12*float32(it.depth)+28).Tooltip(it.err)
+				ui.Text(c, it.err).FontSize(fsSmall).TextColor(pal.textFaint).SingleLine().Ellipsis("…").Padding(4, 8, 4, 6+12*float32(it.depth)+28).Tooltip(it.err)
 				return
 			case it.Dir:
 				key := filesKey(h, it.path)
@@ -447,7 +447,7 @@ func (a *App) treeEntry(c *ui.Context, pal *palette, it fileItem, current bool, 
 	row.Children(func() {
 		ui.Box(c).Size(9, 9).Shrink(0)
 		fileIconImage(c, pal, it.Name, false, false)
-		ui.Text(c, it.Name).FontSize(12.5).TextColor(pal.text).SingleLine().Ellipsis("…").MinWidth(0)
+		ui.Text(c, it.Name).FontSize(fsBody).TextColor(pal.text).SingleLine().Ellipsis("…").MinWidth(0)
 	})
 	return row
 }
@@ -517,7 +517,7 @@ func (a *App) fileViewer(c *ui.Context, pal *palette, s *proto.Session, fv *file
 	dir, name := path.Split(fv.rel)
 	a.viewerHeader(c, pal, s, fileIcon, name, editing, func() {
 		if dir = strings.TrimSuffix(dir, "/"); dir != "" {
-			ui.Text(c, dir).FontSize(12).TextColor(pal.textFaint).SingleLine().Ellipsis("…").Shrink(2).MinWidth(0).Tooltip(fv.path)
+			ui.Text(c, dir).FontSize(fsSmall).TextColor(pal.textFaint).SingleLine().Ellipsis("…").Shrink(2).MinWidth(0).Tooltip(fv.path)
 		}
 	}, func() {
 		if v := a.viewOf(s); v != nil {

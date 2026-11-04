@@ -344,7 +344,7 @@ func (a *App) rightSidebar(c *ui.Context, pal *palette, s *proto.Session) {
 // tabButton is a tab of the sidebar, its own chosen as a session's row is,
 // in the same weight as the others.
 func (a *App) tabButton(c *ui.Context, pal *palette, id, label, tab string) {
-	b := ui.ButtonBase(c.Key("tab-"+id)).Height(26).Padding(0, 10).Radius(7).Center().Label(label)
+	b := ui.ButtonBase(c.Key("tab-"+id)).Height(26).Padding(0, 10).Radius(rRow).Center().Label(label)
 	if pal.dark {
 		// Room for the chosen tab's edge in every tab.
 		b.Border(1, ui.Transparent)
@@ -357,9 +357,9 @@ func (a *App) tabButton(c *ui.Context, pal *palette, id, label, tab string) {
 	case b.Hovered():
 		bg, fg = pal.rowHover, pal.text
 	}
-	b.Background(b.AnimateColor("bg", bg, ui.Animation{Duration: 110 * time.Millisecond}))
+	b.Background(b.AnimateColor("bg", bg, ui.Animation{Duration: dHoverOut}))
 	b.Children(func() {
-		ui.Text(c, label).FontSize(13).FontWeight(500).TextColor(fg).SingleLine()
+		ui.Text(c, label).FontSize(fsBody).FontWeight(wMedium).TextColor(fg).SingleLine()
 	})
 	if b.Clicked() {
 		a.showTab(id)
@@ -415,7 +415,7 @@ func (a *App) sideEdge(c *ui.Context, pal *palette, row float32) {
 // the window's right edge, whose header keeps room for the window's
 // controls (controlsRoom).
 func (a *App) viewerCard(c *ui.Context, pal *palette, s *proto.Session, v *sideView, width float32) {
-	card := ui.Column(c.Key("side")).Width(width).Shrink(0).MinHeight(0).Radius(14).Clip().Background(pal.card)
+	card := ui.Column(c.Key("side")).Width(width).Shrink(0).MinHeight(0).Radius(rPane).Clip().Background(pal.card)
 	if v.full {
 		floating(card, pal)
 	} else {
@@ -461,13 +461,19 @@ func (a *App) viewerCard(c *ui.Context, pal *palette, s *proto.Session, v *sideV
 // header shows its program, what follows it, then the viewer's buttons.
 func (a *App) viewerHeader(c *ui.Context, pal *palette, s *proto.Session, svg *ui.SVG, title string, dirty bool, after, buttons func()) {
 	ui.Row(c.Key("hdr")).Height(headerH).Shrink(0).AlignItems(ui.Center).Padding(0, 10, 0, 16).Gap(8).Children(func() {
+		// A viewer too narrow for its extras keeps its title and its
+		// close button: the extras go whole, as a pane header's chips do.
+		roomy := true
+		if w := a.paneRef("side-card").Bounds(c).W; w > 0 && w < 280 {
+			roomy = false
+		}
 		ui.Icon(c, svg).Size(14, 14).TextColor(pal.textFaint).Shrink(0)
-		ui.Text(c, title).FontSize(14).FontWeight(600).TextColor(pal.text).SingleLine().Ellipsis("…").Shrink(1).MinWidth(0)
-		if after != nil {
+		oneLine(c, title, fsBody, wSemibold).TextColor(pal.text)
+		if after != nil && roomy {
 			after()
 		}
 		ui.Box(c.Key("drag")).Grow(1).AlignSelf(ui.Stretch).DragWindow()
-		if buttons != nil {
+		if buttons != nil && roomy {
 			buttons()
 		}
 		sid := s.ID
@@ -727,17 +733,17 @@ func (a *App) changesSide(c *ui.Context, pal *palette, s *proto.Session) {
 		i := slices.Index(cf.bases, ch.base)
 		ui.Row(c).Height(28).Gap(8).AlignItems(ui.Center).Children(func() {
 			if list == nil || len(list.Files) == 0 {
-				ui.Text(c, cf.tips[i]).FontSize(12.5).TextColor(pal.textFaint).SingleLine().Ellipsis("…").MinWidth(0).Tooltip(cf.tips[i])
+				ui.Text(c, cf.tips[i]).FontSize(fsSmall).TextColor(pal.textFaint).SingleLine().Ellipsis("…").MinWidth(0).Tooltip(cf.tips[i])
 				return
 			}
 			added, removed := 0, 0
 			for _, f := range list.Files {
 				added, removed = added+f.Added, removed+f.Removed
 			}
-			ui.Text(c, locales.ChangesFiles(len(list.Files))).FontSize(12.5).TextColor(pal.textMuted).SingleLine().Shrink(0)
+			ui.Text(c, locales.ChangesFiles(len(list.Files))).FontSize(fsSmall).TextColor(pal.textMuted).SingleLine().Shrink(0)
 			a.lineCounts(c, pal, added, removed, 12.5)
 			if ch.base == git.BaseBranch && list.BaseName != "" {
-				ui.Text(c, locales.ChangesSince(list.BaseName)).FontSize(12.5).TextColor(pal.textFaint).SingleLine().Ellipsis("…").MinWidth(0)
+				ui.Text(c, locales.ChangesSince(list.BaseName)).FontSize(fsSmall).TextColor(pal.textFaint).SingleLine().Ellipsis("…").MinWidth(0)
 			}
 			ui.Spacer(c)
 			if v := a.viewOf(s); v == nil || v.kind != sideChanges {
@@ -752,7 +758,7 @@ func (a *App) changesSide(c *ui.Context, pal *palette, s *proto.Session) {
 		return
 	}
 	box := ui.Column(c.Key("tree-" + cf.scope)).Grow(1).MinHeight(0).AlignItems(ui.Stretch)
-	box.Opacity(box.Animate("held", 1-0.45*b2f(cf.held), 120*time.Millisecond))
+	box.Opacity(box.Animate("held", 1-0.45*b2f(cf.held), dFade))
 	box.Children(func() { a.changesTree(c, pal, s, cf) })
 }
 
@@ -768,7 +774,7 @@ func (a *App) changesViewer(c *ui.Context, pal *palette, s *proto.Session, width
 	}
 	a.viewerHeader(c, pal, s, diffIcon, locales.SideChanges(), dirty, func() {
 		if dir := a.changesDir(s); dir != "" {
-			ui.Text(c, a.hostOf(s.ID).shortDir(dir)).FontSize(13).TextColor(pal.textFaint).SingleLine().Ellipsis("…").Shrink(2).MinWidth(0).Tooltip(dir)
+			ui.Text(c, a.hostOf(s.ID).shortDir(dir)).FontSize(fsBody).TextColor(pal.textFaint).SingleLine().Ellipsis("…").Shrink(2).MinWidth(0).Tooltip(dir)
 		}
 	}, func() {
 		if files {
@@ -827,7 +833,7 @@ func (a *App) changesViewer(c *ui.Context, pal *palette, s *proto.Session, width
 	ls.Header = func(i int) bool { return !rows[i].diff }
 	ls.Key = func(i int) any { return changeKey{rows[i].f.Path, rows[i].diff} }
 	box := ui.Row(c.Key("files-" + scope)).Grow(1).MinHeight(0).AlignItems(ui.Stretch)
-	box.Opacity(box.Animate("held", 1-0.45*b2f(cf.held), 120*time.Millisecond))
+	box.Opacity(box.Animate("held", 1-0.45*b2f(cf.held), dFade))
 	box.Children(func() {
 		// The scroll bar runs below the header pinned at the top, not
 		// under it.
@@ -1025,7 +1031,7 @@ func (a *App) fileHeader(c *ui.Context, pal *palette, scope, root string, f prot
 		ch.collapsed[key] = !collapsed
 	}
 	hdr.Children(func() {
-		chev := ui.Icon(c, chevronIcon).Size(10, 10).TextColor(pal.textFaint).Shrink(0)
+		chev := ui.Icon(c, chevronIcon).Size(12, 12).TextColor(pal.textFaint).Shrink(0)
 		chev.Rotate(chev.AnimateTo("turn", 90*(1-b2f(collapsed)), ui.Snappy))
 		a.statusBadge(c, pal, f.Status)
 		dir, name := path.Split(f.Path)
@@ -1033,13 +1039,13 @@ func (a *App) fileHeader(c *ui.Context, pal *palette, scope, root string, f prot
 		if f.Status == "deleted" {
 			fg = pal.textMuted
 		}
-		ui.Text(c, name).FontSize(13).FontWeight(600).TextColor(fg).SingleLine().Ellipsis("…").Shrink(0).MaxWidth(260)
+		ui.Text(c, name).FontSize(fsBody).FontWeight(wSemibold).TextColor(fg).SingleLine().Ellipsis("…").Shrink(0).MaxWidth(260)
 		if sf := ch.files[key]; sf != nil && a.diffTarget(sf).dirty() {
 			ui.Box(c).Size(7, 7).Radius(3.5).Shrink(0).Background(pal.textMuted).Description(locales.ViewerUnsaved())
 		}
-		ui.Text(c, strings.TrimSuffix(dir, "/")).FontSize(12).TextColor(pal.textFaint).SingleLine().Ellipsis("…").Grow(1).MinWidth(0)
+		ui.Text(c, strings.TrimSuffix(dir, "/")).FontSize(fsSmall).TextColor(pal.textFaint).SingleLine().Ellipsis("…").Grow(1).MinWidth(0)
 		if f.Binary {
-			ui.Text(c, locales.ChangesBinary()).FontSize(11.5).TextColor(pal.textFaint).SingleLine()
+			ui.Text(c, locales.ChangesBinary()).FontSize(fsSmall).TextColor(pal.textFaint).SingleLine()
 		} else {
 			a.lineCounts(c, pal, f.Added, f.Removed, 12)
 		}
@@ -1052,7 +1058,7 @@ func (a *App) fileHeader(c *ui.Context, pal *palette, scope, root string, f prot
 
 // sectionNote says why a file shows no diff.
 func (a *App) sectionNote(c *ui.Context, pal *palette, text string) {
-	ui.Text(c, text).FontSize(12.5).TextColor(pal.textMuted).Padding(10, 12).LineHeight(1.4)
+	ui.Text(c, text).FontSize(fsSmall).TextColor(pal.textMuted).Padding(10, 12).LineHeight(1.4)
 }
 
 // fetchChanges asks kerod for the list of a pane's changes since a base.
@@ -1091,8 +1097,8 @@ func (a *App) fetchChanges(scope, stamp, pane, base string) {
 // modified, D deleted, R renamed, T a change of type.
 func (a *App) statusBadge(c *ui.Context, pal *palette, status string) {
 	letter, col := a.statusLetter(pal, status)
-	ui.Box(c).Size(18, 18).Radius(5).Shrink(0).Center().Background(col.Alpha(0.14)).Children(func() {
-		ui.Text(c, letter).FontSize(11).FontWeight(650).TextColor(col).SingleLine()
+	ui.Box(c).Size(18, 18).Radius(rChip).Shrink(0).Center().Background(col.Alpha(0.14)).Children(func() {
+		ui.Text(c, letter).FontSize(fsCaption).FontWeight(wSemibold).TextColor(col).SingleLine()
 	})
 }
 
@@ -1156,12 +1162,7 @@ func (a *App) codeTheme(c *ui.Context, pal *palette) *editor.Theme {
 
 // sideMessage says why the view shows nothing.
 func (a *App) sideMessage(c *ui.Context, pal *palette, title, detail string) {
-	ui.Column(c).Grow(1).Center().Gap(6).Padding(24).Children(func() {
-		ui.Text(c, title).FontSize(14).FontWeight(600).TextColor(pal.text).TextAlign(ui.Center)
-		if detail != "" {
-			ui.Text(c, detail).FontSize(12.5).TextColor(pal.textMuted).MaxWidth(300).TextAlign(ui.Center).LineHeight(1.4)
-		}
-	})
+	emptyBlock(c, pal, nil, title, detail, false, nil)
 }
 
 // --- a file's diff ---
@@ -1281,7 +1282,7 @@ func (a *App) diffOptions(c *ui.Context, pal *palette, s *proto.Session, sf *sid
 	d.RenderSeparator = func(c *ui.Context, sep ui.Element, s *editor.DiffSeparator) { a.separator(c, pal, sep, s) }
 	d.HunkActions = sf.base == git.BaseTurn && !sf.patch && !working && !sf.writing
 	d.RenderHunkActions = func(c *ui.Context, bar ui.Element, h *editor.DiffHunkActions) {
-		floating(bar.Gap(2).Padding(3).Radius(8).Background(pal.popover).AlignItems(ui.Center), pal)
+		floating(bar.Gap(2).Padding(3).Radius(rControl).Background(pal.popover).AlignItems(ui.Center), pal)
 		bar.Children(func() {
 			if hunkButton(c, "revert", revertIcon, locales.ChangesRevert(), locales.ChangesRevertTip(), pal) {
 				h.Revert()
@@ -1316,11 +1317,11 @@ func (a *App) separator(c *ui.Context, pal *palette, sep ui.Element, s *editor.D
 				}
 			}
 			chevron := func(key string, svg *ui.SVG, label string, fn func()) {
-				b := ui.ButtonBase(c.Key(key)).Size(24, 24).Radius(6).Center().TextColor(pal.textMuted).Label(label).Tooltip(label)
+				b := ui.ButtonBase(c.Key(key)).Size(24, 24).Radius(rRow).Center().TextColor(pal.textMuted).Label(label).Tooltip(label)
 				if b.Hovered() || b.Pressed() {
 					b.Background(pal.rowHover).TextColor(pal.text)
 				}
-				b.Children(func() { ui.Icon(c, svg).Size(11, 11) })
+				b.Children(func() { ui.Icon(c, svg).Size(12, 12) })
 				if b.Clicked() {
 					expand(fn)()
 				}
@@ -1337,13 +1338,13 @@ func (a *App) separator(c *ui.Context, pal *palette, sep ui.Element, s *editor.D
 				chevron("up", chevronUpIcon, locales.ChangesExpandUp(), s.ExpandUp)
 			}
 			label := locales.ChangesUnmodified(s.Lines)
-			b := ui.ButtonBase(c.Key("lines")).Height(24).Padding(0, 4).Radius(6).AlignItems(ui.Center).Label(label).Tooltip(locales.ChangesExpandAll())
+			b := ui.ButtonBase(c.Key("lines")).Height(24).Padding(0, 4).Radius(rRow).AlignItems(ui.Center).Label(label).Tooltip(locales.ChangesExpandAll())
 			b.Children(func() {
 				fg := pal.textFaint
 				if b.Hovered() {
 					fg = pal.textMuted
 				}
-				ui.Text(c, label).FontSize(12).TextColor(fg).SingleLine()
+				ui.Text(c, label).FontSize(fsSmall).TextColor(fg).SingleLine()
 			})
 			if b.Clicked() {
 				s.ExpandAll()
@@ -1355,14 +1356,14 @@ func (a *App) separator(c *ui.Context, pal *palette, sep ui.Element, s *editor.D
 // hunkButton is a small button of a change's actions, an icon and a
 // label.
 func hunkButton(c *ui.Context, key string, svg *ui.SVG, label, tip string, pal *palette) bool {
-	b := ui.ButtonBase(c.Key(key)).Height(24).Padding(0, 8).Gap(5).Radius(6).AlignItems(ui.Center).
+	b := ui.ButtonBase(c.Key(key)).Height(24).Padding(0, 8).Gap(5).Radius(rRow).AlignItems(ui.Center).
 		TextColor(pal.textMuted).Label(label).Tooltip(tip)
 	if b.Hovered() || b.Pressed() {
 		b.Background(pal.rowHover).TextColor(pal.text)
 	}
 	b.Children(func() {
-		ui.Icon(c, svg).Size(13, 13)
-		ui.Text(c, label).FontSize(12).FontWeight(500).SingleLine()
+		ui.Icon(c, svg).Size(14, 14)
+		ui.Text(c, label).FontSize(fsSmall).FontWeight(wMedium).SingleLine()
 	})
 	return b.Clicked()
 }

@@ -23,7 +23,7 @@ func (a *App) gitChip(c *ui.Context, pal *palette, s *proto.Session, p *proto.Pa
 	summary := gitSummary(g)
 	// It gives up its room before the title does: its branch shrinks
 	// first, down to its counts.
-	b := ui.ButtonBase(c.Key("git")).Height(24).Padding(0, 8).Gap(5).Radius(7).AlignItems(ui.Center).Shrink(8).
+	b := ui.ButtonBase(c.Key("git")).Height(24).Padding(0, 8).Gap(5).Radius(rRow).AlignItems(ui.Center).Shrink(8).
 		Label(summary).Tooltip(summary + "\n" + a.tip(locales.GitShowChanges(), "changes.toggle"))
 	if b.Hovered() || a.prefs.Side == sideChanges {
 		b.Background(pal.rowHover)
@@ -34,9 +34,9 @@ func (a *App) gitChip(c *ui.Context, pal *palette, s *proto.Session, p *proto.Pa
 			a.lineCounts(c, pal, g.Added, g.Removed, 12)
 			return
 		}
-		ui.Text(c, branchName(g)).FontSize(12.5).TextColor(pal.textMuted).SingleLine().Ellipsis("…").MinWidth(0).MaxWidth(180)
+		ui.Text(c, branchName(g)).FontSize(fsSmall).TextColor(pal.textMuted).SingleLine().Ellipsis("…").MinWidth(0).MaxWidth(180)
 		if st := gitState(g.State); st != "" {
-			ui.Text(c, st).FontSize(12).TextColor(pal.attention).SingleLine().Shrink(0)
+			ui.Text(c, st).FontSize(fsSmall).TextColor(pal.attention).SingleLine().Shrink(0)
 		}
 		a.lineCounts(c, pal, g.Added, g.Removed, 12)
 	})

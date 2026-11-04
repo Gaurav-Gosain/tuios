@@ -99,10 +99,10 @@ func (a *App) findBar(c *ui.Context, pal *palette, p *proto.Pane, t *terminal.Te
 		t.Search(f.query)
 	}
 	bar := ui.Row(c.Key("find")).Absolute().Top(8).Right(12).Height(36).Padding(0, 4, 0, 12).Gap(4).
-		AlignItems(ui.Center).Radius(10).Background(pal.popover).Label(locales.FindLabel())
+		AlignItems(ui.Center).Radius(rCard).Background(pal.popover).Label(locales.FindLabel())
 	floating(bar, pal).Children(func() {
-		ui.Icon(c, searchIcon).Size(13, 13).TextColor(pal.textMuted).Shrink(0)
-		in := ui.TextInputBase(c.Key("q"), &f.query).Width(180).FontSize(13).Placeholder(locales.FindPlaceholder()).Bind(&f.input)
+		ui.Icon(c, searchIcon).Size(14, 14).TextColor(pal.textMuted).Shrink(0)
+		in := ui.TextInputBase(c.Key("q"), &f.query).Width(180).FontSize(fsBody).Placeholder(locales.FindPlaceholder()).Bind(&f.input)
 		if f.focus {
 			f.focus = false
 			in.Focus().SetTextSelection(0, utf8.RuneCountInString(f.query))
@@ -125,7 +125,7 @@ func (a *App) findBar(c *ui.Context, pal *palette, p *proto.Pane, t *terminal.Te
 		case st.Total > 0:
 			count = locales.FindCount(itoa(st.Selected), itoa(st.Total))
 		}
-		ui.Text(c, count).FontSize(12).FontFeatures("tnum").TextColor(pal.textFaint).SingleLine().MinWidth(56).TextAlign(ui.End).Margin(0, 4, 0, 0)
+		ui.Text(c, count).FontSize(fsSmall).FontFeatures("tnum").TextColor(pal.textFaint).SingleLine().MinWidth(56).TextAlign(ui.End).Margin(0, 4, 0, 0)
 		// Up goes back through the output, as Enter does, as in Ghostty.
 		iconButton(c, "next", chevronUpIcon, a.tip(locales.ActionFindNext(), "find.next"), pal, t.SearchNext)
 		iconButton(c, "previous", chevronDownIcon, a.tip(locales.ActionFindPrevious(), "find.previous"), pal, t.SearchPrevious)

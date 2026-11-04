@@ -208,11 +208,11 @@ func (a *App) peekView(c *ui.Context) {
 	}
 	w, h := peekSize(bm)
 	pw, ph := bm.Size()
-	ui.Column(c).Fill().Padding(peekPad, peekPad, 0, peekPad).AlignItems(ui.Center).Radius(10).Background(pal.popover).Children(func() {
-		ui.Image(c, bm).Size(w, h).Fit(ui.Contain).Radius(5)
+	ui.Column(c).Fill().Padding(peekPad, peekPad, 0, peekPad).AlignItems(ui.Center).Radius(rCard).Background(pal.popover).Children(func() {
+		ui.Image(c, bm).Size(w, h).Fit(ui.Contain).Radius(rChip)
 		ui.Row(c).Height(peekCaption).AlignSelf(ui.Stretch).Gap(8).AlignItems(ui.Center).Children(func() {
-			ui.Text(c, a.peek.name).FontSize(11.5).TextColor(pal.textMuted).SingleLine().Grow(1).MinWidth(0)
-			ui.Text(c, itoa(pw)+" × "+itoa(ph)).FontSize(11.5).FontFeatures("tnum").TextColor(pal.textFaint).SingleLine().Shrink(0)
+			ui.Text(c, a.peek.name).FontSize(fsSmall).TextColor(pal.textMuted).SingleLine().Grow(1).MinWidth(0)
+			ui.Text(c, itoa(pw)+" × "+itoa(ph)).FontSize(fsSmall).FontFeatures("tnum").TextColor(pal.textFaint).SingleLine().Shrink(0)
 		})
 	})
 }

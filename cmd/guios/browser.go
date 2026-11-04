@@ -254,7 +254,7 @@ func (a *App) paneBrowser(c *ui.Context, pal *palette, bar ui.TitleBar, shown fl
 			// Nothing to show yet: the address bar asks.
 			ui.Column(c).Fill().Center().Gap(10).Children(func() {
 				ui.Icon(c, globeIcon).Size(36, 36).TextColor(pal.textFaint)
-				ui.Text(c, locales.BrowserBlank()).FontSize(13).TextColor(pal.textMuted)
+				ui.Text(c, locales.BrowserBlank()).FontSize(fsBody).TextColor(pal.textMuted)
 			})
 		case e.view == nil:
 			a.message(c, pal, locales.BrowserCantShow(), e.err, "", nil)
@@ -335,7 +335,7 @@ func (a *App) browserBar(c *ui.Context, pal *palette, bar ui.TitleBar, shown flo
 		// The button that shows the right sidebar sits by the pane's own,
 		// as one row of buttons.
 		ui.Row(c.Key("buttons")).AlignItems(ui.Center).Children(func() {
-			a.paneControls(c, pal, s, p, (hovered || focused && multi) && !dragging, multi)
+			a.paneControls(c, pal, s, p, hovered && !dragging, multi)
 			if top && right {
 				a.showRightButton(c, pal)
 			}
@@ -349,7 +349,7 @@ func (a *App) browserBar(c *ui.Context, pal *palette, bar ui.TitleBar, shown flo
 
 // navButton is a toolbar's button, faint while it can do nothing.
 func navButton(c *ui.Context, key string, svg *ui.SVG, label string, enabled bool, pal *palette, fn func()) {
-	b := ui.ButtonBase(c.Key(key)).Size(28, 26).Radius(6).Center().TextColor(pal.textMuted).Label(label).Tooltip(label).Disabled(!enabled)
+	b := ui.ButtonBase(c.Key(key)).Size(28, 26).Radius(rRow).Center().TextColor(pal.textMuted).Label(label).Tooltip(label).Disabled(!enabled)
 	switch {
 	case !enabled:
 		b.TextColor(pal.textFaint.Alpha(0.6))
@@ -358,7 +358,7 @@ func navButton(c *ui.Context, key string, svg *ui.SVG, label string, enabled boo
 	case b.Hovered():
 		b.Background(pal.rowHover).TextColor(pal.text)
 	}
-	b.Children(func() { ui.Icon(c, svg).Size(15, 15) })
+	b.Children(func() { ui.Icon(c, svg).Size(16, 16) })
 	if enabled && b.Clicked() {
 		fn()
 	}
@@ -371,11 +371,11 @@ func (a *App) addressBar(c *ui.Context, pal *palette, s *proto.Session, p *proto
 	blank := e.url == proto.BlankURL
 	// It takes the room up to a width that reads well, and leaves the
 	// rest to move the window by.
-	frame := ui.Row(c.Key("address")).Grow(100).MinWidth(120).MaxWidth(760).Height(28).Padding(0, 10, 0, 4).Gap(3).Radius(8).
+	frame := ui.Row(c.Key("address")).Grow(100).MinWidth(120).MaxWidth(760).Height(28).Padding(0, 10, 0, 4).Gap(3).Radius(rControl).
 		AlignItems(ui.Center).Background(pal.chip).Cursor(ui.CursorText)
 	var in ui.Element
 	frame.Children(func() {
-		grip := ui.Row(c.Key("grip")).Size(22, 22).Radius(6).Center().Shrink(0).TextColor(pal.textFaint)
+		grip := ui.Row(c.Key("grip")).Size(22, 22).Radius(rRow).Center().Shrink(0).TextColor(pal.textFaint)
 		if multi {
 			grip.Drag(paneDrag{s.ID, p.ID}).Tooltip(locales.PaneDragTip())
 			dragging = grip.Dragging()
@@ -388,12 +388,12 @@ func (a *App) addressBar(c *ui.Context, pal *palette, s *proto.Session, p *proto
 		}
 		grip.Children(func() {
 			if icon := a.favicon(e); icon != nil && !blank {
-				ui.Image(c, icon).Size(14, 14).Radius(3)
+				ui.Image(c, icon).Size(14, 14).Radius(rChip)
 			} else {
-				ui.Icon(c, globeIcon).Size(13, 13)
+				ui.Icon(c, globeIcon).Size(14, 14)
 			}
 		})
-		in = ui.TextInputBase(c.Key("in"), &e.address).Grow(1).MinWidth(0).FontSize(12.5).
+		in = ui.TextInputBase(c.Key("in"), &e.address).Grow(1).MinWidth(0).FontSize(fsBody).
 			Placeholder(locales.BrowserAddress()).Label(locales.BrowserAddress())
 		if blank {
 			// With no page, the pane's keyboard is the address bar's.
@@ -402,7 +402,7 @@ func (a *App) addressBar(c *ui.Context, pal *palette, s *proto.Session, p *proto
 	})
 	focused := in.Focused()
 	e.editing = focused
-	glow := frame.Animate("glow", b2f(focused), 120*time.Millisecond)
+	glow := frame.Animate("glow", b2f(focused), dFade)
 	if glow > 0 {
 		frame.Shadow(0, 0, 0, 3*glow, pal.accent.Alpha(0.3*glow))
 	}
@@ -443,9 +443,9 @@ func (a *App) addressBar(c *ui.Context, pal *palette, s *proto.Session, p *proto
 // browserError shows why the page failed to load, over its top.
 func (a *App) browserError(c *ui.Context, pal *palette, e *webEntry) {
 	bar := ui.Row(c.Key("error")).Absolute().Top(8).Left(12).Right(12).Padding(8, 8, 8, 12).Gap(8).
-		AlignItems(ui.Center).Radius(10).Background(pal.popover)
+		AlignItems(ui.Center).Radius(rCard).Background(pal.popover)
 	floating(bar, pal).Children(func() {
-		ui.Text(c, e.err).FontSize(12.5).TextColor(pal.danger).Grow(1).MinWidth(0).Ellipsis("…").SingleLine()
+		ui.Text(c, e.err).FontSize(fsSmall).TextColor(pal.danger).Grow(1).MinWidth(0).Ellipsis("…").SingleLine()
 		if button(c, "retry", locales.CommonTryAgain(), "", false, pal) {
 			e.load(e.url)
 		}
@@ -460,10 +460,10 @@ func (a *App) browserFind(c *ui.Context, pal *palette, e *webEntry) {
 		a.findInPage(e, false, false)
 	}
 	bar := ui.Row(c.Key("find")).Absolute().Top(8).Right(12).Height(36).Padding(0, 4, 0, 12).Gap(4).
-		AlignItems(ui.Center).Radius(10).Background(pal.popover).Label(locales.FindLabel())
+		AlignItems(ui.Center).Radius(rCard).Background(pal.popover).Label(locales.FindLabel())
 	floating(bar, pal).Children(func() {
-		ui.Icon(c, searchIcon).Size(13, 13).TextColor(pal.textMuted).Shrink(0)
-		in := ui.TextInputBase(c.Key("q"), &f.query).Width(180).FontSize(13).Placeholder(locales.FindPlaceholder()).Bind(&f.input)
+		ui.Icon(c, searchIcon).Size(14, 14).TextColor(pal.textMuted).Shrink(0)
+		in := ui.TextInputBase(c.Key("q"), &f.query).Width(180).FontSize(fsBody).Placeholder(locales.FindPlaceholder()).Bind(&f.input)
 		if f.focus {
 			f.focus = false
 			in.Focus().SetTextSelection(0, utf8.RuneCountInString(f.query))
@@ -479,7 +479,7 @@ func (a *App) browserFind(c *ui.Context, pal *palette, e *webEntry) {
 		default:
 			count = locales.FindCount(itoa(e.found.Active), itoa(e.found.Matches))
 		}
-		ui.Text(c, count).FontSize(12).FontFeatures("tnum").TextColor(pal.textFaint).SingleLine().MinWidth(56).TextAlign(ui.End).Margin(0, 4, 0, 0)
+		ui.Text(c, count).FontSize(fsSmall).FontFeatures("tnum").TextColor(pal.textFaint).SingleLine().MinWidth(56).TextAlign(ui.End).Margin(0, 4, 0, 0)
 		iconButton(c, "previous", chevronUpIcon, a.tip(locales.ActionFindPrevious(), "find.previous"), pal, func() { a.findInPage(e, true, true) })
 		iconButton(c, "next", chevronDownIcon, a.tip(locales.ActionFindNext(), "find.next"), pal, func() { a.findInPage(e, true, false) })
 		iconButton(c, "close", closeIcon, locales.FindClose(), pal, func() { a.defer_(a.closeFind) })

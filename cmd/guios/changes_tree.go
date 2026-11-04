@@ -161,7 +161,7 @@ type treeKey struct {
 // treeRow is a row of a tree, depth folders in, the one there chosen as
 // a session's row is.
 func treeRow(c *ui.Context, pal *palette, depth int, current bool) ui.Element {
-	row := ui.Row(c.Key("row")).Height(26).Padding(0, 8, 0, 6+12*float32(depth)).Gap(5).AlignItems(ui.Center).Radius(7)
+	row := ui.Row(c.Key("row")).Height(26).Padding(0, 8, 0, 6+12*float32(depth)).Gap(5).AlignItems(ui.Center).Radius(rRow)
 	if pal.dark {
 		// Room for the chosen row's edge in every row.
 		row.Border(1, ui.Transparent)
@@ -187,10 +187,10 @@ func (a *App) treeFolder(c *ui.Context, pal *palette, name, tip string, depth in
 		toggle()
 	}
 	row.Children(func() {
-		chev := ui.Icon(c, chevronIcon).Size(9, 9).TextColor(pal.textFaint).Shrink(0)
+		chev := ui.Icon(c, chevronIcon).Size(12, 12).TextColor(pal.textFaint).Shrink(0)
 		chev.Rotate(chev.AnimateTo("turn", 90*b2f(open), ui.Snappy))
 		fileIconImage(c, pal, name, true, open)
-		ui.Text(c, name).FontSize(12.5).TextColor(pal.textMuted).SingleLine().Ellipsis("…").MinWidth(0)
+		ui.Text(c, name).FontSize(fsSmall).TextColor(pal.textMuted).SingleLine().Ellipsis("…").MinWidth(0)
 	})
 	return row
 }
@@ -213,8 +213,8 @@ func (a *App) treeFile(c *ui.Context, pal *palette, it treeItem, f proto.GitFile
 		if f.Status == "deleted" {
 			fg = pal.textMuted
 		}
-		ui.Text(c, it.name).FontSize(12.5).TextColor(fg).SingleLine().Ellipsis("…").MinWidth(0).Grow(1)
+		ui.Text(c, it.name).FontSize(fsBody).TextColor(fg).SingleLine().Ellipsis("…").MinWidth(0).Grow(1)
 		letter, col := a.statusLetter(pal, f.Status)
-		ui.Text(c, letter).FontSize(10.5).FontWeight(650).TextColor(col).SingleLine().Shrink(0)
+		ui.Text(c, letter).FontSize(fsCaption).FontWeight(wSemibold).TextColor(col).SingleLine().Shrink(0)
 	})
 }
