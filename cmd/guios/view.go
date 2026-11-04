@@ -848,9 +848,10 @@ func statusIconP(c *ui.Context, pal *palette, st proto.Status, unread bool, prog
 			var track ui.Path
 			track.Circle(cx, cy, rad)
 			p.StrokePath(&track, 1.7, pal.text.Alpha(0.13))
-			p.AnimationFrame()
-			deg := float32(p.Now().UnixMilli()%1000) / 1000 * 360
-			p.Transform(ui.Rotation(deg), cx, cy, func() {
+			// A still arc, as the agents view draws: a turning one asked
+			// for a frame at the display's rate, about 2,400 wakeups a
+			// second for as long as any agent worked.
+			p.Transform(ui.Rotation(-90), cx, cy, func() {
 				var arc ui.Path
 				arc.Circle(cx, cy, rad)
 				p.StrokePath(arc.Trim(0, 0.3), 1.7, pal.text)
@@ -859,11 +860,11 @@ func statusIconP(c *ui.Context, pal *palette, st proto.Status, unread bool, prog
 			var ring ui.Path
 			ring.Circle(cx, cy, rad)
 			p.StrokePath(&ring, 1.7, pal.attention)
-			p.AnimationFrame()
-			pulse := float32(0.5 + 0.5*math.Sin(float64(p.Now().UnixMilli()%1600)/1600*2*math.Pi))
+			// Still, as in the agents view: a pulse cost a frame at the
+			// display's rate while anything waited.
 			var dot ui.Path
 			dot.Circle(cx, cy, rad*0.42)
-			p.FillPath(&dot, pal.attention.Alpha(0.65+0.35*pulse))
+			p.FillPath(&dot, pal.attention)
 		case st == proto.Failed:
 			var disc ui.Path
 			disc.Circle(cx, cy, rad+0.5)
