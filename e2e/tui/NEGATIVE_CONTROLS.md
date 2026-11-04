@@ -97,6 +97,19 @@ the next event, a `workspace_created`.
 
 Run on 2026-11-04 on macOS (darwin/arm64). The test passes on the fixed build,
 and a binary of main (46c9a434e) fails it. Each control was built into its own
+## The herdr socket sends tab_renamed when a workspace is named
+
+`TestHerdrTabRenamed` holds the herdr socket to herdr 0.9.5's `tab.renamed`.
+Naming a workspace that holds a pane, with `set-workspace-name` or with
+herdr's `tab.rename`, must send `tab_renamed` with the tab's id, its
+workspace's id and the label `tab.get` reads next. Clearing the name must send
+the workspace number as the label. Naming an empty workspace in the background
+must send nothing, and its first pane's `tab_created` must carry the name.
+After each rename the test opens a pane on a new workspace, so a rename that
+sent nothing shows as that `tab_created` arriving first.
+
+Run on 2026-11-04 on macOS (darwin/arm64). The test passes on the fixed build,
+and a binary of main (f75ac3943) fails. Each control was built into its own
 binary.
 
 | Control: what was cut | Where it fails | Verdict |
@@ -108,6 +121,13 @@ binary.
 The event stream is `herdr-workspace-renamed-stream` under
 `TUIOS_E2E_FRAMES`. Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestHerdrWorkspaceRenamed$' -v .`.
+| Main without the fix | "set-workspace-name names workspace 1: got `tab_created` (t4), want tab_renamed" | **caught** |
+| The `t.renamed` call cut from `herdrTranslator.translate` | The same place, the same `tab_created` | **caught** |
+| The empty-workspace check cut from `renamed` | "naming an empty workspace in the background: got `tab_renamed` (t3, `named-empty`), want tab_created" | **caught** |
+
+The event stream is `herdr-tab-renamed-stream` under `TUIOS_E2E_FRAMES`, in
+the test's folder. Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestHerdrTabRenamed$' -v .`.
 
 ## A pasted path reads back in fish behind tmux
 

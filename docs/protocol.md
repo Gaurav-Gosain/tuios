@@ -240,6 +240,18 @@ changes for a herdr client:
 **The new verb [report-program-status](#report-program-status)** applies an
 OSC 7501 report to a pane. `tuios status` sends it when it has no terminal.
 
+**The herdr socket sends `tab_renamed` when a workspace is named.** A herdr
+tab is a tuios workspace, and naming one with `set-workspace-name` or herdr's
+`tab.rename` sent nothing to a `tab.renamed` subscriber. See
+[AGENT_STATE.md](AGENT_STATE.md#herdr-compatibility). What changes for a herdr
+client:
+
+- `tab_renamed` carries the tab's `tab_id`, its `workspace_id` and the new
+  `label`, the label `tab.get` reads next.
+- Clearing a name sends the label the tab falls back to, its workspace number.
+- An empty workspace in the background sends nothing when named: its name
+  comes with the `tab_created` of its first pane.
+
 **The new verb [list-routes](#list-routes)** lists this machine's addresses.
 
 **queue-prompt takes `client_id`.** A second call from the same sender with the

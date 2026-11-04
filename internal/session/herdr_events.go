@@ -39,6 +39,7 @@ import (
 //	workspace-switched  tab_focused
 //	client-session-changed  workspace_focused, tab_focused and pane_focused
 //	                    when a client moves to another session
+//	workspace-renamed   tab_renamed
 //	agent-state         pane_agent_detected when an agent comes or goes, and
 //	                    pane.agent_status_changed when its status changes
 //	agent-seen          pane.agent_status_changed, done to idle or back
@@ -78,8 +79,8 @@ var herdrHubTypes = map[string]bool{
 	EventSessionCreated: true, EventSessionClosed: true, EventWindowCreated: true,
 	EventWindowClosed: true, EventWindowExit: true, EventWindowRetitled: true,
 	EventWindowFocused: true, EventWindowMoved: true, EventWorkspaceSwitched: true,
-	EventAgentState: true, EventAgentSeen: true, EventClientSessionChanged: true,
-	EventSessionLabelled: true,
+	EventWorkspaceRenamed: true, EventAgentState: true, EventAgentSeen: true,
+	EventClientSessionChanged: true, EventSessionLabelled: true,
 }
 
 // herdrParseSubscriptions reads and checks events.subscribe's list. One
@@ -343,6 +344,9 @@ func (t *herdrTranslator) translate(ev streamEvent) []herdrEvent {
 		}
 		return []herdrEvent{global("tab_focused", &herdrEventData{TabID: herdrTabID(sess.ID, sess.GetState().WorkspaceTabKey(max(ev.Workspace, 1))), WorkspaceID: wsID})}
 	}
+	if ev.Type == EventWorkspaceRenamed {
+		return t.renamed(sess, ev)
+	}
 	if ev.Window == "" {
 		return nil
 	}
@@ -395,6 +399,23 @@ func (t *herdrTranslator) translate(ev streamEvent) []herdrEvent {
 		})}
 	}
 	return nil
+}
+
+// renamed is tab_renamed for a workspace whose name was set, changed or
+// cleared. herdr's label is always there and is the label tab.get reads next,
+// so a cleared name sends the label the tab falls back to. The stream names a
+// tab with tab_created when its workspace gets a window, or tab_focused when
+// it shows; an empty workspace in the background has not been named to the
+// client, and its name reaches it with that tab_created.
+func (t *herdrTranslator) renamed(sess *Session, ev streamEvent) []herdrEvent {
+	st := sess.GetState()
+	if IsScratchWorkspace(ev.Workspace) || (herdrCount(st, ev.Workspace) == 0 && ev.Workspace != st.CurrentWorkspace) {
+		return nil
+	}
+	return []herdrEvent{global("tab_renamed", &herdrEventData{
+		TabID: herdrTabID(sess.ID, st.WorkspaceTabKey(ev.Workspace)), WorkspaceID: herdrWorkspaceID(sess.ID),
+		Label: herdrTabLabel(ev.Title, ev.Workspace),
+	})}
 }
 
 // closed is pane_closed or pane_exited for a window, with tab_closed when

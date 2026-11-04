@@ -693,7 +693,7 @@ A refused call answers error `forbidden`, and nothing changes.
 | `workspace.focus` | `select-workspace` grant, then the attached client | the client shows the session, as the session switcher does. The client is the one that shows the caller's session, else the one that shows the active workspace. Without a client it fails with `no_client` |
 | `tab.list`, `tab.get` | `list-windows` | |
 | `tab.create` | `new-window`, `set-workspace-name` | uses the first workspace that is not a tab. Fails with `tab_create_failed` when all are in use |
-| `tab.rename` | `set-workspace-name` | |
+| `tab.rename` | `set-workspace-name` | sends `tab_renamed` when the name changes |
 | `tab.focus` | `select-workspace` | |
 | `tab.move` | `set-workspace-order` | renumbers the workspaces to the new tab order: the tabs take the workspace numbers they hold between them. Every tab keeps its id |
 | `tab.close` | `close-window` for each pane, `set-workspace-name` | shows the nearest tab that holds a pane |
@@ -941,6 +941,7 @@ event is `{"event":"pane.agent_status_changed","data":{...}}`.
 | `window-moved` | `pane_moved` |
 | `workspace-switched` | `tab_focused` |
 | `client-session-changed` | `workspace_focused`, `tab_focused` and `pane_focused` when a client moves from one session to another, for the new session, its tab and its focused pane. A first attach sends none |
+| `workspace-renamed` | `tab_renamed`, whether the name came from `set-workspace-name` or `tab.rename`. A cleared name sends the label the tab falls back to, its workspace number. An empty workspace in the background sends nothing: its name comes with the `tab_created` of its first pane |
 | `agent-state` | `pane_agent_detected` when an agent comes or goes, and `pane.agent_status_changed` when its status changes |
 | `agent-seen` | `pane.agent_status_changed` from `done` to `idle` when the pane is looked at, and back when it is marked unread |
 
