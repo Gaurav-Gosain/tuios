@@ -21,7 +21,3 @@ func fileOwner(info os.FileInfo) int {
 	}
 	return -2
 }
-
-// myUID is the user a connection's server side must belong to. A test
-// changes it to see the check refuse.
-var myUID = os.Getuid
