@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/base64"
+	"encoding/binary"
 	"encoding/json"
 	"errors"
 	"image"
@@ -855,8 +856,14 @@ func previewSeek(ctx context.Context, f *os.File, size int64, seek PreviewSeek, 
 		return
 	}
 	needle := []byte(seek.Find)
-	// A search in lower case ignores case, and one with a capital does not.
-	fold := !bytes.ContainsFunc(needle, unicode.IsUpper)
+	// A search in lower case ignores case, and one with a capital does not. A
+	// query of ASCII digits, punctuation or spaces has no case to ignore, so it
+	// searches the raw bytes: nothing is lowered and no offset can shift.
+	fold := !bytes.ContainsFunc(needle, unicode.IsUpper) && !noLetterASCII(needle)
+	var lower []byte
+	if fold {
+		lower = make([]byte, len(buf))
+	}
 	over := len(needle) - 1
 	at := min(max(seek.From, 0), size)
 	for ctx.Err() == nil {
@@ -871,7 +878,14 @@ func previewSeek(ctx context.Context, f *os.File, size int64, seek PreviewSeek, 
 		}
 		hay := chunk
 		if fold {
-			hay = bytes.ToLower(chunk)
+			// An ASCII chunk is lowered into the one buffer, in place of its own
+			// length. A chunk with a byte past ASCII takes bytes.ToLower, which
+			// allocates that chunk, and its offsets are read as they always were
+			// (a chunk whose lowering changes its length keeps that shift).
+			hay = lower[:len(chunk)]
+			if !lowerASCII(hay, chunk) {
+				hay = bytes.ToLower(chunk)
+			}
 		}
 		i := bytes.Index(hay, needle)
 		if seek.Back {
@@ -900,6 +914,49 @@ func previewSeek(ctx context.Context, f *os.File, size int64, seek PreviewSeek, 
 		}
 	}
 	out["reached"] = at
+}
+
+// noLetterASCII reports whether q is all ASCII with no letter in it, so that
+// lowering cannot change what it matches.
+func noLetterASCII(q []byte) bool {
+	for _, c := range q {
+		if c >= utf8.RuneSelf || c|0x20 >= 'a' && c|0x20 <= 'z' {
+			return false
+		}
+	}
+	return true
+}
+
+// lowerASCII writes src into dst (at least len(src) long) with A-Z lowered, 8
+// bytes at a time. It reports false, leaving dst unspecified, when src has a
+// byte past ASCII.
+func lowerASCII(dst, src []byte) bool {
+	const hi = 0x8080808080808080
+	n := len(src)
+	dst = dst[:n]
+	i := 0
+	for ; i+8 <= n; i += 8 {
+		w := binary.LittleEndian.Uint64(src[i:])
+		if w&hi != 0 {
+			return false
+		}
+		// Per byte: bit 7 of ge is set from 'A' up, of gt from '[' up; they
+		// differ exactly for A-Z. No add carries into the next byte.
+		ge := w + 0x3f3f3f3f3f3f3f3f
+		gt := w + 0x2525252525252525
+		binary.LittleEndian.PutUint64(dst[i:], w|((ge^gt)&hi)>>2)
+	}
+	for ; i < n; i++ {
+		c := src[i]
+		if c >= utf8.RuneSelf {
+			return false
+		}
+		if c >= 'A' && c <= 'Z' {
+			c |= 0x20
+		}
+		dst[i] = c
+	}
+	return true
 }
 
 // previewSeekLine finds the start of line number line.

@@ -5523,3 +5523,37 @@ mouse box are worked out on every frame, so a resize moves the
 panel even when its size stays the same. A picture is never kept, nor is a
 result still being read or a stale one. Closing the panel drops the kept
 frame, so a large file is not held after it.
+
+## 2026-11 preview search lowers into one buffer
+
+A search in a previewed file (quick look's `/`, `file-preview` find) with no
+capital ignores case, and it did so by `bytes.ToLower` of every 1 MiB chunk: a
+fresh copy per chunk, so a search allocated about as many bytes as it read (51
+MiB on a 50 MiB file), and a query of digits or an address was lowered too. The
+search now lowers an ASCII chunk into one buffer kept for the call, 8 bytes at a
+time, and a query of ASCII digits, punctuation or spaces searches the raw bytes
+with no buffer at all. A chunk with a byte past ASCII still takes
+`bytes.ToLower`, so a caseless non-ASCII query still allocates per chunk and, with
+the lower buffer, about one chunk more than before (the Arabic row). A query
+with a capital is unchanged. A raw search also reports where it stopped
+exactly: after a character whose lowercase has another length (U+2C6F), the old
+offset of a digits query landed 10 bytes early for ten of them.
+
+Method: a scratch benchmark (not committed) calls `PreviewLocalSeek` once per
+iteration over a generated 50 MiB file with one absent query, so the search
+reads every 1 MiB chunk. Files: an ASCII log (the line `2026-11-04T10:11:12Z INFO
+worker 17 handled request id=48213 from host-a status ok in 12ms` repeated),
+an `x` file with `NeEdLe` 100 bytes before the end, and Arabic text (one
+sentence repeated). Base and branch test binaries built with `go test -c`
+(`go version` checked on both: go1.27.3), alternated for 10 rounds,
+`taskset -c 2`, `-test.cpu 1`, `-test.benchtime 10x`, `-test.benchmem`, then
+`benchstat base branch`. The queries were `zebra`, `99999`, `10.99.99.99`,
+`needle` and a three-letter Arabic string.
+
+| 50 MiB file, query | time base | time branch | memory base | memory branch |
+|---|---|---|---|---|
+| ASCII log, absent word | 112 ms ± 25% | 26.3 ms ± 14% | 51.0 MiB | 2.0 MiB |
+| ASCII log, absent digits | 106 ms ± 36% | 10.4 ms ± 19% | 51.0 MiB | 1.0 MiB |
+| ASCII log, an IP | 128 ms ± 28% | 35.9 ms ± 14% | 51.0 MiB | 1.0 MiB |
+| 'x' file, mixed-case hit at the end | 75.9 ms ± 36% | 20.6 ms ± 20% | 52.0 MiB | 3.0 MiB |
+| Arabic text, caseless query | 595 ms ± 23% | 521 ms ± 17% (no change, p=0.105) | 90.0 MiB | 91.0 MiB |
