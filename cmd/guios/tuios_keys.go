@@ -394,15 +394,41 @@ var nativeActions = map[string]bool{
 	"prev_workspace": true, "next_workspace": true,
 	"prefix_workspace": true, "prefix_window": true, "prefix_layout": true, "prefix_minimize": true,
 	"workspace_prefix_cancel": true, "window_prefix_cancel": true, "layout_prefix_cancel": true, "minimize_prefix_cancel": true,
+	// The layouts, which guios lays out with tuios's engine (layoutKeys).
+	"prefix_toggle_tiling": true, "toggle_tiling": true, "window_prefix_tiling": true, "cycle_layout": true,
+	"prefix_rotate_split": true, "rotate_split": true, "prefix_equalize_splits": true, "equalize_splits": true,
+	"window_prefix_float": true,
+	"snap_corner_1":       true, "snap_corner_2": true, "snap_corner_3": true, "snap_corner_4": true,
+	"snap_left": true, "snap_right": true, "snap_fullscreen": true, "unsnap": true,
+	"cycle_master_position": true, "swap_with_master": true, "focus_master": true, "add_master": true, "remove_master": true,
+	"scroll_focus_left": true, "scroll_focus_right": true, "scroll_move_left": true, "scroll_move_right": true,
+	"scroll_cycle_width": true, "scroll_maximize": true, "scroll_consume": true, "scroll_expel": true,
 }
 
 var daemonActions = map[string]bool{
-	"prefix_toggle_tiling": true, "prefix_rotate_split": true, "prefix_equalize_splits": true,
-	"window_prefix_tiling": true, "window_prefix_float": true,
-	"snap_corner_1": true, "resize_width_50": true, "resize_height_50": true,
-	"cycle_master_position": true, "swap_with_master": true, "focus_master": true, "add_master": true, "remove_master": true,
+	"resize_width_50": true, "resize_height_50": true,
 	"minimize_prefix_focused": true, "minimize_prefix_restore_1": true, "minimize_prefix_restore_all": true,
 	"close_workspace": true, "last_workspace": true,
+}
+
+// layoutKeys are the keymap's layout actions as guios's own.
+var layoutKeys = map[string]string{
+	"prefix_toggle_tiling": "layout.tiling", "toggle_tiling": "layout.tiling", "window_prefix_tiling": "layout.tiling",
+	"cycle_layout":        "layout.next",
+	"prefix_rotate_split": "layout.rotate", "rotate_split": "layout.rotate",
+	"prefix_equalize_splits": "layout.equalize", "equalize_splits": "layout.equalize",
+	"window_prefix_float":   "layout.float",
+	"cycle_master_position": "layout.master.position", "add_master": "layout.master.add", "remove_master": "layout.master.remove",
+	"swap_with_master": "layout.master.swap", "focus_master": "layout.master.focus",
+	"scroll_cycle_width": "layout.scroll.width", "scroll_maximize": "layout.scroll.max",
+	"scroll_consume": "layout.scroll.consume", "scroll_expel": "layout.scroll.expel",
+	"scroll_move_left": "layout.scroll.moveLeft", "scroll_move_right": "layout.scroll.moveRight",
+	"snap_fullscreen": "layout.snap.full", "unsnap": "layout.snap.unsnap",
+}
+
+// snapCorners are the corner snaps by their keymap action.
+var snapCorners = map[string]string{
+	"snap_corner_1": "top-left", "snap_corner_2": "top-right", "snap_corner_3": "bottom-left", "snap_corner_4": "bottom-right",
 }
 
 // digitOf is the number a numbered action ends in, as in prefix_select_3.
@@ -482,7 +508,26 @@ func (a *App) runKeyAction(action string) {
 	case "prev_workspace":
 		a.stepWorkspace(s, -1)
 	case "prefix_exit_mode", "workspace_prefix_cancel", "window_prefix_cancel", "layout_prefix_cancel", "minimize_prefix_cancel":
+	case "scroll_focus_left", "scroll_focus_right":
+		a.focusDirection(strings.TrimPrefix(action, "scroll_focus_"))
+	case "snap_left", "snap_right":
+		// As the TUI's: a snap with tiling off, else a move of the focus.
+		if s != nil && s.LayoutMode == "floating" {
+			a.run("layout.snap."+strings.TrimPrefix(action, "snap_"), nil)
+		} else {
+			a.focusDirection(strings.TrimPrefix(action, "snap_"))
+		}
+	case "snap_corner_1", "snap_corner_2", "snap_corner_3", "snap_corner_4":
+		if s != nil && s.LayoutMode != "floating" {
+			a.toast(locales.LayoutSnapNeedsFloating())
+			break
+		}
+		a.arrange(s, "snap", func(p *proto.ArrangeParams) { p.Mode = snapCorners[action] })
 	default:
+		if id, ok := layoutKeys[action]; ok {
+			a.run(id, nil)
+			break
+		}
 		if s == nil {
 			return
 		}
