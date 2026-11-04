@@ -167,6 +167,8 @@ type App struct {
 	// early are the keys typed into panes whose terminal is attaching
 	// (typeahead.go).
 	early map[string][]byte
+	// refocused is the pane keepKeyboard last gave the keyboard back to.
+	refocused string
 
 	active   bool
 	focused  bool

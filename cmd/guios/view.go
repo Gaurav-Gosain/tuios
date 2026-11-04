@@ -204,6 +204,7 @@ func (a *App) view(c *ui.Context) {
 			a.rightHandle(c, right)
 		}
 	})
+	a.keepKeyboard(row)
 	a.mainControls(c, pal, rightPad)
 	// A page staged for a screenshot takes the window's size, under its
 	// content, which hides it: at no opacity, it paints no hole there.

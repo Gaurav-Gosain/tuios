@@ -4,8 +4,6 @@ import (
 	"time"
 
 	"github.com/Gaurav-Gosain/mygo/ui"
-
-	"github.com/Gaurav-Gosain/tuios/internal/guios/proto"
 )
 
 // Typeahead: keys typed into a pane before its terminal is there.
@@ -65,17 +63,11 @@ func (a *App) flushTypeahead(id string, e *termEntry) {
 	if len(b) > 0 && e.stream != nil {
 		go e.stream.Write(b)
 	}
-	if len(b) > 0 || a.focusOf(a.sessionOfPaneOr(id)) == id {
+	// The selected session's: a session another machine shares shows
+	// under each of its hosts, with the same panes.
+	if s := a.session(a.selected); len(b) > 0 || s != nil && a.focusOf(s) == id {
 		a.wantFocus = id
 	}
-}
-
-// sessionOfPaneOr is the session a pane is of, an empty one for none.
-func (a *App) sessionOfPaneOr(id string) *proto.Session {
-	if s := a.sessionOfPane(id); s != nil {
-		return s
-	}
-	return &proto.Session{}
 }
 
 // keyInput is what a terminal sends a program for a key that types no
@@ -101,4 +93,29 @@ func keyInput(mods ui.Modifiers, key ui.Key) []byte {
 		return keyBytes(k)
 	}
 	return nil
+}
+
+// keepKeyboard gives the keyboard back to the pane the user is in when no
+// element of the main window has it, as after a rebuild put the pane's
+// terminal under a new element: typed keys went nowhere until a click.
+// It tries once each time the keyboard is lost, so a pane that cannot take
+// it costs no frames.
+func (a *App) keepKeyboard(root ui.Element) {
+	if !a.focused || a.pal.open || a.picker.open || a.confirm != nil || a.wtAsk != nil || a.ck.open || a.tk.live() {
+		return
+	}
+	if root.FocusWithin() {
+		a.refocused = ""
+		return
+	}
+	s := a.session(a.selected)
+	if s == nil {
+		return
+	}
+	id := a.focusOf(s)
+	if e := a.terms[id]; id == "" || a.refocused == id || e == nil || e.term == nil {
+		return
+	}
+	a.refocused = id
+	a.defer_(a.focusTerminal)
 }
