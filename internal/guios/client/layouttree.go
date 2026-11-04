@@ -2,7 +2,6 @@ package client
 
 import (
 	"encoding/json"
-	"maps"
 	"strconv"
 	"time"
 
@@ -233,10 +232,8 @@ func (k *stateKeeper) layoutOf(sid, name string, wins []windowRow, focus string,
 		k.mu.Unlock()
 	}
 	if changed && !ti.tui && !tree.IsEmpty() {
-		st, lv := sessionTree(tree), maps.Clone(leaves)
-		go func() {
-			_, _ = k.c.verb("set-layout-tree", map[string]any{"session": name, "workspace": ti.ws, "tree": st, "leaves": lv})
-		}()
+		// Written before the build ends, so the next build reads it.
+		_, _ = k.c.verb("set-layout-tree", map[string]any{"session": name, "workspace": ti.ws, "tree": sessionTree(tree), "leaves": leaves})
 	}
 	var l *proto.Layout
 	if st := sessionTree(tree); st != nil {
