@@ -1015,6 +1015,9 @@ func (a *App) paneTerminal(c *ui.Context, pal *palette, s *proto.Session, p *pro
 		case e != nil && e.term != nil && a.cm != nil && a.cm.pane == p.ID:
 			a.copyView(c, pal)
 		case e != nil && e.term != nil:
+			if auditPane != nil {
+				auditPane(p.ID, "live", e.term)
+			}
 			ref := a.paneRef(p.ID)
 			terminal.View(c.Key("term"), e.term).Fill().Bind(ref)
 			if a.labelsShown() {
@@ -1054,6 +1057,9 @@ func (a *App) paneTerminal(c *ui.Context, pal *palette, s *proto.Session, p *pro
 				a.ensureTerm(p.ID)
 			})
 		default:
+			if auditPane != nil {
+				auditPane(p.ID, "blank", nil)
+			}
 			a.pendingInput(c, p.ID)
 			// Attaching takes a moment for a long scrollback: a spinner
 			// only once it is a noticeable one.

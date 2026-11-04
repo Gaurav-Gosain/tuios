@@ -12,6 +12,7 @@ package main
 // its echo in the emulator.
 import (
 	"bufio"
+	"encoding/json"
 	"fmt"
 	"net"
 	"os"
@@ -28,6 +29,7 @@ import (
 
 func init() {
 	onNewApp = startProbe
+	startAudit()
 	// GUIOS_MOTION_SCALE slows the chrome's animations down, k times, to
 	// capture frames on the way.
 	if k, err := strconv.ParseFloat(os.Getenv("GUIOS_MOTION_SCALE"), 64); err == nil && k > 0 {
@@ -42,6 +44,51 @@ func init() {
 	// each frame, as MyGo's MYGO_SCROLL_TRACE does for a terminal.
 	if os.Getenv("GUIOS_SCROLL_TRACE") != "" {
 		scrollTrace = func(y float32) { fmt.Fprintf(os.Stderr, "SCROLLTRACE %d %.2f\n", time.Now().UnixNano(), y) }
+	}
+}
+
+// startAudit writes, with GUIOS_FRAME_AUDIT=FILE, one JSON line a frame:
+// its time and, for each pane the frame draws, how its terminal shows
+// (live, copy or blank), the card's size, and how many characters other
+// than spaces its terminal holds.
+func startAudit() {
+	path := os.Getenv("GUIOS_FRAME_AUDIT")
+	if path == "" {
+		return
+	}
+	f, err := os.Create(path)
+	if err != nil {
+		return
+	}
+	w := bufio.NewWriter(f)
+	type paneAudit struct {
+		ID    string  `json:"id"`
+		Mode  string  `json:"mode"`
+		W     float32 `json:"w"`
+		H     float32 `json:"h"`
+		Chars int     `json:"chars"`
+	}
+	var panes []paneAudit
+	auditPane = func(id, mode string, t *terminal.Terminal) {
+		n := 0
+		if t != nil {
+			for _, r := range t.Text() {
+				if r != ' ' && r != '\n' {
+					n++
+				}
+			}
+		}
+		panes = append(panes, paneAudit{ID: id, Mode: mode, Chars: n})
+	}
+	auditFrame = func(a *App, c *ui.Context) {
+		for i := range panes {
+			b := a.paneRef("card-" + panes[i].ID).Bounds(c)
+			panes[i].W, panes[i].H = b.W, b.H
+		}
+		line, _ := json.Marshal(map[string]any{"t": c.Now().UnixNano(), "panes": panes})
+		w.Write(append(line, '\n'))
+		w.Flush()
+		panes = panes[:0]
 	}
 }
 

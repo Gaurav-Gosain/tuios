@@ -136,6 +136,9 @@ func (a *App) view(c *ui.Context) {
 		c.DisableAnimations()
 	}
 	agoDue = time.Time{}
+	if auditFrame != nil {
+		defer auditFrame(a, c)
+	}
 	a.syncUsage()
 	defer func() {
 		// A frame when the first "ago" label shown changes, and none while
