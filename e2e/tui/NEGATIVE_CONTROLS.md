@@ -12652,3 +12652,28 @@ the queue keeps only the first. Run on 2026-11-04:
 | `composer.EventSendNow` routed to `InboxReplySend`, the queue path | `TestCockpitReplyEditorStdout` | "ASSERTION: alt+enter did not type the reply into the working agent's pane" | **caught** |
 
 The frames are `reply-send-*` under the test's artifact folder.
+## The scrolling layout shows a pane the user asked for (issue #1507)
+
+`TestScrollingRevealsANewPane` starts a client at 120x40 in the scrolling
+layout with `scroll_column_width = 50` and three columns. Before each route,
+Alt+P walks the focus onto the middle column, which leaves the next column as
+a peek at the right edge. Each route then focuses that column, and the pane
+must be wholly on screen:
+
+- Ctrl+B c opens a pane, which goes in the column after the focused one.
+- `tuios focus-window` names that pane.
+- The navigator finds that pane by its name, and Enter goes to it.
+
+Run on 2026-11-04 on Linux. The control is a binary of main (23003ac3a). All
+three routes fail on it, each with the pane at x=64 and 60 cells wide on a
+screen 120 cells wide. The fixed build passes in 9 s.
+
+| Route | Control | Where it fails | Verdict |
+| --- | --- | --- | --- |
+| A new pane | main at 23003ac3a | "a new pane: the focused pane is not wholly on screen: {X:64 Width:60}" | **caught** |
+| `tuios focus-window` | main at 23003ac3a | "focus-window: the focused pane is not wholly on screen: {X:64 Width:60}" | **caught** |
+| The navigator | main at 23003ac3a | "the navigator: the focused pane is not wholly on screen: {X:64 Width:60}" | **caught** |
+
+The frames are `before-new-pane`, `after-new-pane` and `after-navigator`
+under `TUIOS_E2E_FRAMES`, in the test's folder. Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestScrollingRevealsANewPane$' -v .`.

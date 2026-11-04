@@ -1054,7 +1054,9 @@ func (m *OS) ApplyStateSyncFrom(state *session.SessionState, sourceID string) er
 	// offset stays a snapshot field a retile can write, so this ordering is the
 	// only thing telling the two apart. The end state is an op, "the user
 	// scrolled the strip to X", after which a recompute has nothing to say.
-	m.adoptScrollStrip(state.ScrollStrip, focusChanged)
+	m.adoptScrollStrip(state.ScrollStrip, focusChanged, focusChanged && slices.ContainsFunc(created, func(w *terminal.Window) bool {
+		return w.ID == focusAfter
+	}))
 
 	// A sync carries the peer's pane rectangles, and a rectangle is not shared
 	// state: it is what the peer's own render size and the shared tree came to

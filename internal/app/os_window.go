@@ -810,6 +810,9 @@ func (m *OS) addLocalWindow(dir, name string, command []string) *OS {
 	// new pane focused underneath somebody else's zoom is one you are typing
 	// into and cannot see.
 	m.FocusWindow(len(m.Windows) - 1)
+	// Opening a pane is asking for it, so the strip shows all of it. See
+	// adoptScrollStrip, which does the same for a pane the daemon opened.
+	m.RevealFocusedColumn()
 
 	return m
 }

@@ -554,10 +554,14 @@ func (m *OS) PrevWindow() error {
 }
 
 // FocusWindowByID focuses a specific window by ID.
+//
+// A command that names the pane to focus asks to be taken there, so the
+// scrolling strip shows the whole column. See RevealFocusedColumn.
 func (m *OS) FocusWindowByID(windowID string) error {
 	for i, w := range m.Windows {
 		if w.ID == windowID {
 			m.FocusWindow(i)
+			m.RevealFocusedColumn()
 			m.MarkAllDirty()
 			return nil
 		}
@@ -1112,6 +1116,7 @@ func (m *OS) FocusDirection(direction string) error {
 		return fmt.Errorf("no window %s of the focused one", direction)
 	}
 	m.FocusWindow(targetIndex)
+	m.RevealFocusedColumn()
 	m.MarkAllDirty()
 
 	return nil

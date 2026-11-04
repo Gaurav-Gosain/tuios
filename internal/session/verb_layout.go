@@ -83,6 +83,7 @@ func (d *Daemon) verbFocusWindow(cs *connState, params json.RawMessage) (any, *v
 		if err := sess.FocusDaemonWindow(p.Window); err != nil {
 			return nil, mapResolveErr(err, sess)
 		}
+		d.revealFocus(sess)
 
 	case p.Relative != "":
 		delta := 0
@@ -97,6 +98,7 @@ func (d *Daemon) verbFocusWindow(cs *connState, params json.RawMessage) (any, *v
 		if err := sess.CycleDaemonFocus(delta); err != nil {
 			return nil, mapResolveErr(err, sess)
 		}
+		d.revealFocus(sess)
 
 	default:
 		if !slices.Contains(focusDirections, p.Direction) {
@@ -110,6 +112,22 @@ func (d *Daemon) verbFocusWindow(cs *connState, params json.RawMessage) (any, *v
 	}
 
 	return focusResult(sess), nil
+}
+
+// revealFocus asks the attached client to focus the pane the session's focus
+// is on, so the client shows it as a pane the user asked for: in the
+// scrolling layout that is the whole column, as after a focus key. The state
+// push alone reaches the client as a focus moved for some other reason, and
+// a column partly on screen then stays cut off at the edge.
+//
+// It is best effort. The focus is already the session's, and a session with
+// no client attached has no screen to show it on.
+func (d *Daemon) revealFocus(sess *Session) {
+	st := sess.GetState()
+	if st == nil || st.FocusedWindowID == "" || d.findTUIClient(sess.ID) == nil {
+		return
+	}
+	_ = d.routeTape(sess, "tape_command", "FocusWindow", []string{st.FocusedWindowID})
 }
 
 // focusResult reports where the focus ended up. Naming the pane rather than
