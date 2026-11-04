@@ -2531,7 +2531,9 @@ line that shows the exit status under the last output; not with
 another machine), `timeout` (with `wait`, milliseconds before the
 `timeout` error; 0 waits with no limit), and `env` (an object of variables
 to set in the process; checked as `start-agent` checks its `env`; not for a
-window on another machine, and refused from another machine). `new-session`
+window on another machine, and refused from another machine), and `cols` with
+`rows` (the size in cells the caller will give the pane, at most the
+session's, so that its program starts at that size). `new-session`
 takes the same `env` for its first window, and refuses it with `window` false.
 
 A daemon that does not know `keep_open` and `wait` refuses them with

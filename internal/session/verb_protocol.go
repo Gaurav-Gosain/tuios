@@ -1171,6 +1171,8 @@ func buildVerbRegistry() map[string]verbEntry {
 				{Name: "kind", Type: "string", Description: "What draws the window: terminal, or view, web or app for a window a native renderer (tuios-gpui) draws itself. Such a window runs a placeholder that shows its uri in a terminal client.", Default: "terminal", Accepted: WindowKinds},
 				{Name: "uri", Type: "string", Description: "What a view, web or app window shows, such as tuios://review/<pane> or a page. Needed for those kinds."},
 				{Name: "env", Type: "object", Description: "Environment variables for the window's process, name to value, on top of the daemon's. TUIOS_ names, TMUX and TMUX_PANE are refused, and a call from another machine may not pass env. Not for a window on another machine. Not saved: a restored pane starts without it."},
+				{Name: "cols", Type: "int", Description: "With rows: the size in cells the caller will give the pane, so that its program starts at it and is not resized a moment later. At most the session's size. 0 for the session's.", Default: "0"},
+				{Name: "rows", Type: "int", Description: "With cols: the pane's height in cells. 0 for the session's.", Default: "0"},
 			},
 			returns: []verbParam{
 				{Name: "window_id", Type: "string", Description: "Id of the new window. Use it to address the window in later calls."},

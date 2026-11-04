@@ -333,6 +333,12 @@ func (d *Daemon) verbNewWindow(cs *connState, params json.RawMessage) (any, *ver
 		// Kind and URI make a window a renderer draws natively.
 		Kind string `json:"kind"`
 		URI  string `json:"uri"`
+		// Cols and Rows are the size the caller will give the pane, so its
+		// program starts at it: a shell that printed its prompt at the
+		// session's nominal size and was then narrowed redrew it, and the
+		// reflowed prompt stayed on the screen twice (QA-011).
+		Cols int `json:"cols"`
+		Rows int `json:"rows"`
 	}
 	if verr := decodeParams(params, &p); verr != nil {
 		return nil, verr
@@ -348,6 +354,9 @@ func (d *Daemon) verbNewWindow(cs *connState, params json.RawMessage) (any, *ver
 	}
 	if p.Timeout < 0 {
 		return nil, invalidParam("timeout", "timeout is milliseconds, 0 for no limit")
+	}
+	if p.Cols < 0 || p.Rows < 0 {
+		return nil, invalidParam("cols", "cols and rows are the pane's size in cells, or 0 for the session's")
 	}
 	if p.Wait && p.Host != "" && p.Host != "local" {
 		return nil, invalidParam("wait", "wait reads the exit status, and a window on another machine does not report one")
@@ -440,6 +449,8 @@ func (d *Daemon) verbNewWindow(cs *connState, params json.RawMessage) (any, *ver
 		Env:         env,
 		Kind:        p.Kind,
 		URI:         p.URI,
+		Cols:        p.Cols,
+		Rows:        p.Rows,
 	}, onExit)
 	if bverr != nil {
 		return nil, bverr
