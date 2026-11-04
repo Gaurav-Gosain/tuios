@@ -40,9 +40,13 @@ const (
 // sideState is the right sidebar's and the viewer's, beside the prefs
 // that show them and size them.
 type sideState struct {
-	drag    float32 // the viewer's width as a drag of its edge began, 0 while none
-	barDrag float32 // the sidebar's, as a drag of its edge began
-	barW    float32 // the sidebar's width as it shows this frame, 0 while hidden
+	// focusNext gives the viewer the keyboard as it is built: asked for
+	// before its card exists, the focus went nowhere, and the pane kept
+	// the keyboard, so Esc never reached the viewer.
+	focusNext bool
+	drag      float32 // the viewer's width as a drag of its edge began, 0 while none
+	barDrag   float32 // the sidebar's, as a drag of its edge began
+	barW      float32 // the sidebar's width as it shows this frame, 0 while hidden
 	// crowded tells that the window is too narrow for the sidebar beside
 	// the cards (minCards), which it then leaves to them, shown as it is,
 	// unless the user shows it anyway, forced, until the window widens.
@@ -278,7 +282,10 @@ func (a *App) focusFiles() {
 // focusViewer gives the viewer the keyboard, as it comes if it has yet to:
 // a click that opens it leaves the keyboard with no one, where Close would
 // take the pane beside it.
-func (a *App) focusViewer() { a.paneRef("side-card").Focus() }
+func (a *App) focusViewer() {
+	a.side.focusNext = true
+	a.paneRef("side-card").Focus()
+}
 
 // rightWidth is the sidebar's width, shown.
 func (a *App) rightWidth() float32 {
@@ -435,6 +442,10 @@ func (a *App) viewerCard(c *ui.Context, pal *palette, s *proto.Session, v *sideV
 	// Raised over the panes, as quick look and the drawer both are.
 	card := floating(ui.Column(c.Key("side")).Width(width).Shrink(0).MinHeight(0).Radius(rPane).Clip().Background(pal.card), pal)
 	card.Focusable().Bind(a.paneRef("side-card"))
+	if a.side.focusNext {
+		a.side.focusNext = false
+		card.Focus()
+	}
 	a.side.focused = card.FocusWithin()
 	card.Children(func() {
 		if v.kind == sideFiles && v.file != nil {

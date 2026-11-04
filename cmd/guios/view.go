@@ -1088,6 +1088,16 @@ func (a *App) workCard(c *ui.Context, pal *palette, bar ui.TitleBar, shown float
 			// rewraps or shrinks to a sliver while it shows (council round
 			// 1, visual 7; QA-051). Its left edge still sizes it.
 			dw := a.drawerWidth(w)
+			// Esc closes the drawer from wherever the keyboard is, a pane
+			// aside, which takes its own Esc: a click on a file in Files
+			// leaves the keyboard with no one.
+			if pane := a.paneRef(a.focusOf(s)); !pane.Focused(c) && c.Shortcut(0, ui.KeyEscape) {
+				sid := s.ID
+				a.defer_(func() {
+					a.closeView(a.session(sid))
+					a.focusTerminal()
+				})
+			}
 			ui.Row(c.Key("drawer")).Absolute().Right(0).Top(0).Bottom(0).Width(dw + paneGap).AlignItems(ui.Stretch).Children(func() {
 				a.sideEdge(c, pal, w)
 				a.viewerCard(c, pal, s, v, dw)
