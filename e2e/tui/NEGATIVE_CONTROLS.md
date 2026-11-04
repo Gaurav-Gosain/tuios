@@ -12866,3 +12866,18 @@ branch head with one change:
 
 The frame is `no-save-rail-hidden` and the file is `config.toml` under the
 test's artifact folder.
+## Hold an approval while the person types a reply
+
+`TestInboxAnswersAHeldApproval` opens the reply editor on the agent's pane and
+types one key every 150 ms. The hook asks for a Bash call during the typing.
+The card must show "Paused while you type" in place of its buttons, and a click
+there, past the 400 ms settle, must answer nothing. When the typing stops, the
+hold must end within 2.5 s with no other key or event, and a click on Allow
+once must answer the approval. Run on 2026-11-04 on Linux:
+
+| Control | Where it fails | Verdict |
+|---|---|---|
+| `composer.TypingHold.Held` always returns false | "a click answered an approval that arrived while the person typed", and the hook printed the allow decision | **caught** |
+
+The frames are `inbox-approval-typing-held` and `inbox-approval-typing-released`
+under the test's artifact folder.

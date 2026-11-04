@@ -2367,7 +2367,12 @@ func (m *OS) drawItemCard(c *ckCanvas, l ckLook, r ckRow, x, w, y0, y1, top int,
 	if cut && answerable {
 		st.ck.cutKey = inboxShownKey(it)
 	}
-	m.noteInboxShown(it, held && inboxShowsWhole(it) && !(cut && answerable), now)
+	// An item that arrived while the person types a reply is drawn held,
+	// with words in place of its buttons, and is not counted as shown until
+	// the hold ends: the settle starts then.
+	typing, _ := m.inboxTypingHeld(it, now)
+	typing = typing && answerable && !cut
+	m.noteInboxShown(it, held && inboxShowsWhole(it) && !(cut && answerable) && !typing, now)
 	cy := max(y1-h, y0)
 	c.fill(x, cy, w, y1-cy, l.panel)
 	barInk := pal.Attention
@@ -2444,6 +2449,11 @@ func (m *OS) drawItemCard(c *ckCanvas, l ckLook, r ckRow, x, w, y0, y1, top int,
 			c.text(x+1, yy, x+w-2, ckSeg{t: s, fg: ink})
 		}
 		yy++
+	}
+	if typing && len(btns) > 0 && yy+1 < y1 {
+		bx := c.text(x+3, yy+1, x+w-2, ckSeg{t: " " + inboxTypingWords + " ", fg: overlay.Readable(pal.Attention, l.cursor), bg: l.cursor, attrs: ckBold})
+		c.text(bx+2, yy+1, x+w-2, ckSeg{t: "Stop typing to answer.", fg: pal.FgMute})
+		btns = nil
 	}
 	if len(btns) > 0 && yy+1 < y1 {
 		bx := x + 3

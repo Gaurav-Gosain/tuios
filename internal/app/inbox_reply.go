@@ -95,6 +95,9 @@ type inboxReplyState struct {
 	sending map[uint64]*composer.Model
 	// sendSeq numbers the sends.
 	sendSeq uint64
+	// holdSeq numbers the typing hold's release redraws, so one from an
+	// editor since closed does not arm again.
+	holdSeq uint64
 }
 
 // inboxReplyDraftsMax is how many closed drafts the client keeps. They live
@@ -130,6 +133,13 @@ type inboxReplyEditor struct {
 	// draftWires is the previewer's, the @ list's and the history's state.
 	// See draft_wiring.go.
 	draftWires
+	// typing is when the person typed into the draft, arrived is when each
+	// approval or question arrived or changed while the editor was open, and
+	// holdArmed is set while a redraw for the release is out. See
+	// inbox_typing_hold.go.
+	typing    composer.TypingHold
+	arrived   map[string]inboxArrival
+	holdArmed bool
 }
 
 // inboxSentReply is a reply this client queued, kept so a drop of it can be
@@ -390,6 +400,7 @@ func (m *OS) InboxReplyOpen() bool {
 // InboxReplyType types text into the reply at the cursor.
 func (m *OS) InboxReplyType(text string) {
 	if ed := m.Inbox.reply.editor; ed != nil {
+		m.noteInboxTyped()
 		ed.comp.Insert(text, m.ProcessingRemoteKeys)
 	}
 }
@@ -403,7 +414,8 @@ func (m *OS) InboxReplyPaste(text string) tea.Cmd {
 	if ed == nil {
 		return nil
 	}
-	return m.inboxReplyPasteCmd(ed, text)
+	m.noteInboxTyped()
+	return tea.Batch(m.inboxReplyPasteCmd(ed, text), m.armInboxTypingRelease())
 }
 
 // InboxReplyKey gives a key to the reply editor and does what it asks.
@@ -412,6 +424,7 @@ func (m *OS) InboxReplyKey(msg tea.KeyPressMsg) tea.Cmd {
 	if ed == nil {
 		return nil
 	}
+	m.noteInboxTyped()
 	var cmd tea.Cmd
 	switch ed.comp.Update(msg, m.ProcessingRemoteKeys) {
 	case composer.EventSend:
@@ -440,7 +453,7 @@ func (m *OS) InboxReplyKey(msg tea.KeyPressMsg) tea.Cmd {
 	// A view that closed takes its copy for the desktop viewer with it,
 	// and one that opened, or a strip that changed, may need pictures.
 	m.replyPreviewClosed()
-	return tea.Batch(cmd, m.replyPreviewCmd(), m.replyMentionCmd())
+	return tea.Batch(cmd, m.replyPreviewCmd(), m.replyMentionCmd(), m.armInboxTypingRelease())
 }
 
 // InboxReplyCancel closes the editor. A draft with text in it is kept for

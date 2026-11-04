@@ -2661,6 +2661,9 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		m.applyInboxAlertDue(msg)
 		return m, nil
 
+	case inboxTypingReleaseMsg:
+		return m, m.applyInboxTypingRelease(msg)
+
 	case InboxDismissedMsg:
 		m.applyInboxDismissed(msg)
 		return m, nil

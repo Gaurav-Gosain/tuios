@@ -133,6 +133,8 @@ func TestInboxAnswersAHeldApproval(t *testing.T) {
 	}
 	alive(t, term, "after answering an approval from the Inbox")
 
+	typingHold(t, base, term, hook.Dir, hook.Env)
+
 	// A Write is not held: the Inbox line would show only its path, not what
 	// it writes. The hook reports the block, prints nothing and exits at
 	// once, so Claude Code asks in its pane, and the Inbox lists the
@@ -190,3 +192,131 @@ const notHeldWords = "1, 2 and 3 answer a held approval"
 // answerSettle is past the time a held approval must be on screen before a
 // key answers it (inboxAnswerSettle in internal/app).
 const answerSettle = 700 * time.Millisecond
+
+// typingHold is the hold on an approval that arrives while the person types a
+// reply. The reply editor is open on the agent's pane and keys go into it.
+// The hook asks for a Bash call in the middle of the typing. The card says it
+// is paused and draws no buttons, and a click where the Allow once button
+// goes answers nothing. Once the typing stops, the hold ends within about two
+// seconds with no other key or event, the buttons come back, and a click on
+// Allow once answers it. It leaves the editor closed and the approval
+// answered.
+//
+// Negative control, recorded in NEGATIVE_CONTROLS.md: with
+// composer.TypingHold.Held always false, the card draws Allow once while the
+// person types, the click answers it, and the check that the hook still
+// waits fails.
+func typingHold(t *testing.T, base string, term *tuitest.Terminal, dir string, env []string) {
+	t.Helper()
+	// The pane is an agent at rest, so its reply area is drawn.
+	if out, err := tuiosCLI(t, base, "set-agent-state", "idle", "-s", "e2e-agent", "-w", "0", "--harness", "claude-code"); err != nil {
+		t.Fatalf("set the agent at rest: %v\n%s", err, out)
+	}
+	row, col := findText(t, term, "Write a reply.")
+	mouseClick(t, term, col, row, tuitest.MouseLeft, 0)
+	waitText(t, term, "the open reply editor", "Type your reply.")
+
+	// One key every 150 ms is a person typing: the gaps are well under the
+	// 1.5 s the hold lasts after the last key.
+	words := []rune("please also run the linter before you push ")
+	typed := 0
+	typeOne := func() {
+		t.Helper()
+		if err := term.SendKeys(string(words[typed%len(words)])); err != nil {
+			t.Fatalf("type: %v", err)
+		}
+		typed++
+		time.Sleep(150 * time.Millisecond)
+	}
+	for range 4 {
+		typeOne()
+	}
+
+	hook := exec.Command(tuiosBin, "agent-hook", "claude-code", "--session", "e2e-agent", "--window", "0")
+	hook.Dir = dir
+	hook.Env = env
+	hook.Stdin = strings.NewReader(permissionRequest)
+	var stdout bytes.Buffer
+	hook.Stdout = &stdout
+	if err := hook.Start(); err != nil {
+		t.Fatalf("start the hook: %v", err)
+	}
+	exited := make(chan error, 1)
+	finished := make(chan struct{})
+	go func() {
+		exited <- hook.Wait()
+		close(finished)
+	}()
+	t.Cleanup(func() {
+		_ = hook.Process.Kill()
+		<-finished
+	})
+
+	// The card shows while the typing goes on. A click on its first button,
+	// Allow once or the words in its place, must answer nothing.
+	deadline := time.Now().Add(uiTimeout)
+	for !strings.Contains(term.Snapshot(), "Allow Bash?") {
+		if time.Now().After(deadline) {
+			t.Fatalf("the approval never showed while typing\n%s", term.Snapshot())
+		}
+		typeOne()
+	}
+	// Past the 400 ms an approval must be on screen before it is answered,
+	// so only the typing hold can refuse the click.
+	for range 5 {
+		typeOne()
+	}
+	button := typingHoldPaused
+	if !strings.Contains(term.Snapshot(), typingHoldPaused) {
+		button = "Allow once"
+	}
+	row, col = findText(t, term, button)
+	mouseClick(t, term, col+1, row, tuitest.MouseLeft, 0)
+	for range 4 {
+		typeOne()
+	}
+	select {
+	case err := <-exited:
+		t.Fatalf("ASSERTION: a click answered an approval that arrived while the person typed: %v, printed %q\n%s", err, stdout.String(), term.Snapshot())
+	default:
+	}
+	text := term.Snapshot()
+	if !strings.Contains(text, typingHoldPaused) || strings.Contains(text, "Allow once") {
+		t.Fatalf("ASSERTION: the approval that arrived while typing is not drawn held\n%s", text)
+	}
+	saveCockpitFrames(t, term, "inbox-approval-typing-held")
+
+	// The typing stops. The hold ends by itself, with no key or event.
+	stopped := time.Now()
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		return !strings.Contains(s.Text(), typingHoldPaused) && strings.Contains(s.Text(), "Allow once")
+	}, uiTimeout); err != nil {
+		t.Fatalf("ASSERTION: the hold never ended after the typing stopped: %v\n%s", err, term.Snapshot())
+	}
+	if took := time.Since(stopped); took > 2500*time.Millisecond {
+		t.Fatalf("ASSERTION: the hold ended %s after the last key, want about 1.5 s", took)
+	}
+	saveCockpitFrames(t, term, "inbox-approval-typing-released")
+	time.Sleep(answerSettle)
+	row, col = findText(t, term, "Allow once")
+	mouseClick(t, term, col+1, row, tuitest.MouseLeft, 0)
+	select {
+	case err := <-exited:
+		if err != nil {
+			t.Fatalf("the hook failed: %v", err)
+		}
+	case <-time.After(uiTimeout):
+		t.Fatalf("ASSERTION: Allow once did not answer after the hold ended\n%s", term.Snapshot())
+	}
+	if out := stdout.String(); !strings.Contains(out, `"behavior":"allow"`) {
+		t.Fatalf("the hook printed %q, want Claude Code's allow decision", out)
+	}
+	if err := term.SendKeys(tuitest.Esc); err != nil {
+		t.Fatal(err)
+	}
+	waitText(t, term, "the closed reply area", "0 needs you")
+}
+
+// typingHoldPaused is what a held approval shows in place of its buttons
+// (inboxTypingWords in internal/app).
+const typingHoldPaused = "Paused while you type"

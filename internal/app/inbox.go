@@ -512,9 +512,13 @@ func (m *OS) handleInboxWatch(msg inboxWatchMsg) tea.Cmd {
 	case InboxSnapshotMsg:
 		m.applyInboxSnapshot(inner)
 		m.noteAgentsSeen()
+		cmd = m.armInboxTypingRelease()
 	case InboxEventsMsg:
 		cmd = tea.Batch(m.applyInboxEvents(inner), m.foreignAgentRefreshCmd(inner.Events))
 		m.noteAgentsSeen()
+		// An approval that arrived while the person types is held, and is
+		// drawn released when the hold ends.
+		cmd = tea.Batch(cmd, m.armInboxTypingRelease())
 	case InboxDownMsg:
 		m.applyInboxDown(inner)
 		if inner.Unsupported {
@@ -558,6 +562,16 @@ type foreignListingRefreshedMsg struct{}
 func (m *OS) applyInboxSnapshot(msg InboxSnapshotMsg) {
 	st := &m.Inbox
 	open, snoozed := splitSnoozed(msg.Items)
+	if m.Inbox.reply.editor != nil {
+		now := time.Now()
+		for _, it := range open {
+			var prev *session.AttentionItem
+			if i := m.inboxIndex(it.ID); i >= 0 {
+				prev = &st.Items[i]
+			}
+			m.noteInboxArrival(prev, it, now)
+		}
+	}
 	st.Items = append(st.Items[:0], open...)
 	st.life.Snoozed = append(st.life.Snoozed[:0], snoozed...)
 	session.SortAttention(st.Items)
@@ -643,6 +657,11 @@ func (m *OS) applyInboxEvents(msg InboxEventsMsg) tea.Cmd {
 				st.Items = append(st.Items[:idx], st.Items[idx+1:]...)
 			}
 		case session.AttentionOpened, session.AttentionUpdated:
+			var prev *session.AttentionItem
+			if idx >= 0 {
+				prev = &st.Items[idx]
+			}
+			m.noteInboxArrival(prev, *it, time.Now())
 			more := false
 			if idx >= 0 {
 				more = it.Kind == session.AttentionMail && it.Count > st.Items[idx].Count
@@ -1399,6 +1418,9 @@ func (m *OS) InboxAnswerAsk(n int) tea.Cmd {
 		m.ShowNotification("This question cannot be shown whole here. Enter answers it in the pane", "warning", m.Settings.NotificationDuration)
 		return nil
 	}
+	if m.inboxTypingRefused(it) {
+		return nil
+	}
 	if !m.inboxAnswerSettled(it, time.Now()) {
 		m.ShowNotification("This question just appeared. Read it, then answer", "warning", m.Settings.NotificationDuration)
 		return nil
@@ -1510,6 +1532,9 @@ func (m *OS) InboxReplyApproval(decision string) tea.Cmd {
 		m.ShowNotification("This prompt cannot be shown whole here. Enter answers it in the pane", "warning", m.Settings.NotificationDuration)
 		return nil
 	}
+	if m.inboxTypingRefused(it) {
+		return nil
+	}
 	if !m.inboxAnswerSettled(it, time.Now()) {
 		m.ShowNotification("This prompt just changed. Read it, then answer", "warning", m.Settings.NotificationDuration)
 		return nil
@@ -1581,9 +1606,14 @@ func (m *OS) inboxCut(it session.AttentionItem) bool {
 
 // inboxAnswerSettled reports whether it is the held approval last drawn under
 // the cursor, exactly as drawn, and has been on screen long enough to have
-// been read.
+// been read. An item the typing hold holds is not settled: it arrived while
+// the person typed a reply (inbox_typing_hold.go). The card does not count it
+// as shown while it is held, so the settle starts again when the hold ends.
 func (m *OS) inboxAnswerSettled(it session.AttentionItem, now time.Time) bool {
 	st := &m.Inbox
+	if held, _ := m.inboxTypingHeld(it, now); held {
+		return false
+	}
 	return st.shown.key != "" && st.shown.key == inboxShownKey(it) && now.Sub(st.shown.since) >= inboxAnswerSettle
 }
 
