@@ -27,6 +27,7 @@ func (d *Daemon) handleHello(cs *connState, msg *Message) error {
 	cs.scratchWS = payload.ScratchWorkspaces
 	sizeCapChanged := cs.windowSizeCap != payload.WindowSize
 	cs.windowSizeCap = payload.WindowSize
+	cs.holdOptions = payload.HoldOptions
 	cs.machine, cs.kind = helloMachine(payload.Machine), helloKind(payload.ClientKind)
 	cs.viewChrome = payload.ViewChrome
 	attachedTo := cs.sessionID

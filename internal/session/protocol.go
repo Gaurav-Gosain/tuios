@@ -295,6 +295,10 @@ type HelloPayload struct {
 	// session takes the smallest client's size whatever window_size says,
 	// which is what that client expects. See window_size.go.
 	WindowSize bool `json:"window_size,omitzero"`
+	// HoldOptions says the client applies a set_config with ConfigNoSave
+	// and keeps the value out of its config file. A client that predates it
+	// would save the value, so the daemon refuses set-option no_save for it.
+	HoldOptions bool `json:"hold_options,omitzero"`
 	// SSHAuthSock is the client's SSH_AUTH_SOCK. With [daemon] ssh_agent =
 	// "follow", the session's agent link points at it while this client is
 	// the newest to attach or use the session. Only the tuios attach and new
@@ -960,6 +964,10 @@ type RemoteCommandPayload struct {
 	WindowTarget string   `json:"window_target,omitempty"` // For send_keys (target window by name or ID)
 	ConfigPath   string   `json:"config_path,omitempty"`   // For set_config
 	ConfigValue  string   `json:"config_value,omitempty"`  // For set_config
+	// ConfigNoSave asks the client to apply the value without saving it, now
+	// or on any later save. Sent only to a client whose hello set
+	// HoldOptions. See verbSetOption.
+	ConfigNoSave bool `json:"config_no_save,omitempty"`
 }
 
 // GetLogsPayload requests log entries from the daemon.

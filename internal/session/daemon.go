@@ -630,6 +630,9 @@ type connState struct {
 	// activity and can draw a session larger than itself. Set at hello,
 	// read under mu. See window_size.go.
 	windowSizeCap bool
+	// holdOptions says the client's hello offered HoldOptions: it applies a
+	// set_config with ConfigNoSave without saving it. Guarded by mu.
+	holdOptions bool
 	// machine is the host name the client's hello gave, a label for the
 	// leftover hint, and kind its ClientKind. viewChrome is the hello's
 	// ViewChrome. Guarded by mu. See Daemon.clientLabel and

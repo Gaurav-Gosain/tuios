@@ -171,6 +171,7 @@ func (d *Daemon) verbSetOption(cs *connState, params json.RawMessage) (any, *ver
 		Session string `json:"session"`
 		Key     string `json:"key"`
 		Value   string `json:"value"`
+		NoSave  bool   `json:"no_save"`
 	}
 	if verr := decodeParams(params, &p); verr != nil {
 		return nil, verr
@@ -205,6 +206,13 @@ func (d *Daemon) verbSetOption(cs *connState, params json.RawMessage) (any, *ver
 			Param:  "key",
 			Detail: "Nothing was changed. The person sets it on the settings page or in config.toml.",
 		})
+	}
+
+	// The daemon reads the agent switch from the config file, so a value
+	// the file does not hold would leave the daemon and the client
+	// disagreeing about it.
+	if path == optionAgentsEnabled && p.NoSave {
+		return nil, invalidParam("no_save", "agents.enabled is always saved, because the daemon reads it from the config file. Nothing was changed")
 	}
 
 	// Validate by attempting the set against a throwaway config. Doing it this
@@ -249,12 +257,24 @@ func (d *Daemon) verbSetOption(cs *connState, params json.RawMessage) (any, *ver
 			"scope":    "daemon",
 			"previous": previous.String(),
 			"reason":   "the log level applies to the daemon at once. It is not saved to the config file",
+			"no_save":  p.NoSave,
 		}, nil
 	}
 
 	sess, verr := d.resolveVerbSession(cs, p.Session)
 	if verr != nil {
 		return nil, verr
+	}
+
+	// A client older than no_save ignores the field and saves the value, so
+	// the call is refused before anything changes.
+	if p.NoSave && path != optionWindowSize {
+		if tui := d.findTUIClient(sess.ID); tui != nil && !tui.holdsOptions() {
+			return nil, hintedVerbError(ErrVerbInvalidParams, "the attached client is too old to apply a value without saving it. Nothing was changed", &VerbHint{
+				Param:  "no_save",
+				Detail: "Restart the client with the tuios version of the daemon, then set the value again.",
+			})
+		}
 	}
 
 	// Record the option in daemon-owned state so get-option can read it back.
@@ -271,6 +291,7 @@ func (d *Daemon) verbSetOption(cs *connState, params json.RawMessage) (any, *ver
 			"applied": true,
 			"scope":   "session",
 			"reason":  "the session uses this size policy at once. It is not saved to the config file",
+			"no_save": p.NoSave,
 		}
 		if eff := sess.WindowSizePolicy(); eff != "" && eff != windowSizePolicy(p.Value) && d.getSessionClientCount(sess.ID) > 0 {
 			out["in_force"] = eff
@@ -291,9 +312,9 @@ func (d *Daemon) verbSetOption(cs *connState, params json.RawMessage) (any, *ver
 		// A value sent to a client supersedes one still waiting, whether or
 		// not the client applies it.
 		sess.dropWaitingOption(path)
-		applied, reason = d.routeOption(tui, path, p.Value)
+		applied, reason = d.routeOption(tui, path, p.Value, p.NoSave)
 	} else {
-		sess.waitOption(path, p.Value)
+		sess.waitOption(path, p.Value, p.NoSave)
 		// A caller has to tell "nobody was attached" from "that key means
 		// nothing" to act on applied false. The key is validated above, and
 		// this says which of the two remaining cases it is. The file is only
@@ -301,6 +322,10 @@ func (d *Daemon) verbSetOption(cs *connState, params json.RawMessage) (any, *ver
 		// writer marshals, so the reason says when that happens.
 		reason = "no client is attached, so nothing is drawing it yet. " +
 			"The next client that attaches applies it and saves it to the config file"
+		if p.NoSave {
+			reason = "no client is attached, so nothing is drawing it yet. " +
+				"The next client that attaches applies it and does not save it"
+		}
 	}
 	sess.optionApplyMu.Unlock()
 
@@ -309,6 +334,9 @@ func (d *Daemon) verbSetOption(cs *connState, params json.RawMessage) (any, *ver
 		"key":     path,
 		"value":   p.Value,
 		"applied": applied,
+		// Echoed so a caller can tell this daemon from an older one, which
+		// ignores no_save and saves the value.
+		"no_save": p.NoSave,
 	}
 	if reason != "" {
 		out["reason"] = reason

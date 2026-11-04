@@ -2204,7 +2204,8 @@ tuios set-config <path> <value> [flags]
 
 **Flags:**
 - `-s, --session <name>`: Target session (default: this pane's session, else the most recently active)
-- `--json`: Output the result as JSON: `key`, `value`, `applied`, and `reason` when `applied` is false
+- `--json`: Output the result as JSON: `key`, `value`, `applied`, `no_save`, and `reason` when `applied` is false
+- `--no-save`: Apply the value and do not write it to a config file
 
 With a client attached, the client applies the value and writes it to
 `config.toml`. With no client attached, the daemon keeps the value for the
@@ -2212,6 +2213,14 @@ session. The next client that attaches applies it and writes it to
 `config.toml`. The command still prints `Set PATH = VALUE` on stdout, and says on
 stderr that the value is not applied yet. `agents.enabled` is the person's
 switch: a process in a pane cannot set it.
+
+With `--no-save`, the client applies the value and does not write it to any
+config file. Later saves of other settings do not write it either. The value
+stays until the client exits, or until you set the same option again without
+`--no-save`. A change to the option on the settings page also saves it. Use
+`--no-save` in a hook that changes the display for a moment, such as a hook
+that hides the sidebar on one workspace. `agents.enabled` does not take
+`--no-save`, because the daemon reads it from the config file.
 
 **Paths:** every option `tuios list-options` prints can be set, by its full
 path (`appearance.dockbar_position`) or, for an `[appearance]` option, by its
@@ -2291,6 +2300,16 @@ tuios set-config -s mysession dockbar_position hidden
 
 # Give the session the size of the client that last had input
 tuios set-config -s mysession daemon.window_size latest
+
+# Hide the sidebar and keep the config files as they are
+tuios set-config --no-save appearance.sidebar.enabled false
+```
+
+A hook that hides the sidebar on workspace 9 and shows it on the others:
+
+```toml
+[hooks]
+after-workspace-switch = ['if [ "$TUIOS_WORKSPACE" = 9 ]; then v=false; else v=true; fi; tuios set-config --no-save -s "$TUIOS_SESSION_ID" appearance.sidebar.enabled $v']
 ```
 
 ### `tuios wait-for`

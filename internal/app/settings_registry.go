@@ -361,6 +361,9 @@ func (m *OS) setOption(path, value string) {
 		m.UserConfig = config.DefaultConfig()
 		m.ConfigReadOnly = true
 	}
+	// The settings page saves every change, so a value held by set-config
+	// --no-save is saved from here on.
+	m.UserConfig.ReleaseOption(path)
 	if err := m.setConfigFromRegistry(path, value); err != nil {
 		m.ShowNotification(err.Error(), "error", m.Settings.NotificationDuration)
 	}

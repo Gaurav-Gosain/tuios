@@ -337,6 +337,9 @@ func RenderUserConfig(cfg *UserConfig) (func() (WriteNote, error), error) {
 	}
 	base := cfg.baseline
 	cfg.baseline = data
+	// The keys held without saving are left alone, and the keys released
+	// since the last save are written. See hold.go.
+	keys := saveKeys{held: cfg.heldPaths(), forced: cfg.takeForced()}
 	gen := saveSeq.Add(1)
 	return func() (WriteNote, error) {
 		saveMu.Lock()
@@ -344,9 +347,9 @@ func RenderUserConfig(cfg *UserConfig) (func() (WriteNote, error), error) {
 		// An older save that lost the race is not dropped: it carries a change
 		// of its own, which the newer one does not repeat. It skips only the
 		// keys a newer save already wrote.
-		note, err := saveConfigData(configPath, base, data, gen)
+		note, err := saveConfigData(configPath, base, data, gen, keys)
 		if err != nil {
-			return note, &SaveError{Err: err, cfg: cfg, base: base}
+			return note, &SaveError{Err: err, cfg: cfg, base: base, forced: keys.forced}
 		}
 		return note, nil
 	}, nil
@@ -356,9 +359,10 @@ func RenderUserConfig(cfg *UserConfig) (func() (WriteNote, error), error) {
 // so RewindSave puts the config's baseline back and the next save writes the
 // change again.
 type SaveError struct {
-	Err  error
-	cfg  *UserConfig
-	base []byte
+	Err    error
+	cfg    *UserConfig
+	base   []byte
+	forced [][]string
 }
 
 func (e *SaveError) Error() string { return e.Err.Error() }
@@ -373,6 +377,7 @@ func RewindSave(cfg *UserConfig, err error) {
 		return
 	}
 	cfg.baseline = se.base
+	cfg.restoreForced(se.forced)
 }
 
 // SaveUserConfig persists cfg to the user's config file at the standard XDG

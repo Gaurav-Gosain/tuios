@@ -910,6 +910,7 @@ exists: get-window and list-windows read windows with the read grant.`,
 
 	var setConfigSession string
 	var setConfigJSON bool
+	var setConfigNoSave bool
 	setConfigCmd := &cobra.Command{
 		Use:   "set-config <path> <value>",
 		Short: "Set a configuration option in a running TUIOS session",
@@ -926,7 +927,13 @@ session. The next client that attaches applies it and writes it to config.toml.
 The command then says so on stderr, and --json reports "applied": false with
 the reason.
 
+--no-save applies the value and does not write it to a config file. Later
+saves of other settings do not write it either. The value stays until the
+client exits, or until you set the option again without --no-save. Use it in
+a hook that changes the display for a moment.
+
 agents.enabled is the person's switch. A process in a pane cannot set it.
+--no-save does not apply to it.
 
   tuios set-config appearance.border_style rounded
   tuios set-config appearance.dockbar_position top`,
@@ -940,14 +947,18 @@ agents.enabled is the person's switch. A process in a pane cannot set it.
   tuios set-config motion none
 
   # Hide window buttons
-  tuios set-config hide_window_buttons true`,
+  tuios set-config hide_window_buttons true
+
+  # Hide the sidebar for now and keep config.toml as it is
+  tuios set-config --no-save appearance.sidebar.enabled false`,
 		Args: cobra.ExactArgs(2),
 		RunE: func(_ *cobra.Command, args []string) error {
-			return runSetConfig(setConfigSession, args[0], args[1], setConfigJSON)
+			return runSetConfig(setConfigSession, args[0], args[1], setConfigJSON, setConfigNoSave)
 		},
 	}
 	setConfigCmd.Flags().StringVarP(&setConfigSession, "session", "s", "", "Target session (default: this pane's session, else the most recently active)")
 	setConfigCmd.Flags().BoolVar(&setConfigJSON, "json", false, "Output result as JSON, with applied and the reason when it is false")
+	setConfigCmd.Flags().BoolVar(&setConfigNoSave, "no-save", false, "Apply the value and keep it out of the config files until the client exits")
 	_ = setConfigCmd.RegisterFlagCompletionFunc("session", completeSessionNames)
 
 	var getConfigSession string

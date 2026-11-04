@@ -5170,7 +5170,16 @@ live renderer; `applied` reports whether that live apply succeeded. With no TUI
 attached, `applied` is false and the value waits. The next TUI that attaches
 applies it.
 
-Params: `session` (optional), `key` (required), `value` (optional).
+Params: `session` (optional), `key` (required), `value` (optional), `no_save`
+(optional bool).
+
+With `no_save` true, the client applies the value and does not write it to a
+config file. Later saves of other settings leave the key alone too. The value
+stays until the client exits, or until the option is set again without
+`no_save`. A value that waits for a client keeps `no_save`. The response
+always has `no_save`. A daemon that predates the param leaves it out of the
+response and saves the value. `no_save` is refused with `invalid_params` for
+`agents.enabled`, and when the attached client is too old to hold a value.
 
 Request:
 
@@ -5181,7 +5190,7 @@ Request:
 Response:
 
 ```json
-{"result": {"type": "option_set", "key": "border_style", "value": "rounded", "applied": true}}
+{"result": {"type": "option_set", "key": "border_style", "value": "rounded", "applied": true, "no_save": false}}
 ```
 
 ### get-option

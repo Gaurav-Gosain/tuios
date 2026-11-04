@@ -18,15 +18,22 @@ import (
 // page. Only a value no client has applied waits here, and the first client
 // that applies it takes it off.
 
+// waitingOption is a value kept for the next client. noSave is set-config
+// --no-save: the client applies it without saving it.
+type waitingOption struct {
+	value  string
+	noSave bool
+}
+
 // waitOption keeps a value for the next client that attaches. Called with
 // the route order held.
-func (s *Session) waitOption(path, value string) {
+func (s *Session) waitOption(path, value string, noSave bool) {
 	s.stateMu.Lock()
 	defer s.stateMu.Unlock()
 	if s.optionsWaiting == nil {
-		s.optionsWaiting = make(map[string]string)
+		s.optionsWaiting = make(map[string]waitingOption)
 	}
-	s.optionsWaiting[path] = value
+	s.optionsWaiting[path] = waitingOption{value: value, noSave: noSave}
 }
 
 // dropWaitingOption forgets a waiting value, once a client was sent a newer
@@ -44,9 +51,17 @@ func (s *Session) hasWaitingOptions() bool {
 	return len(s.optionsWaiting) > 0
 }
 
+// holdsOptions reports whether the client's hello offered HoldOptions: it
+// can apply a value without saving it.
+func (cs *connState) holdsOptions() bool {
+	cs.mu.Lock()
+	defer cs.mu.Unlock()
+	return cs.holdOptions
+}
+
 // takeWaitingOptions removes and returns the waiting values, sorted by path.
 // Called with the route order held.
-func (s *Session) takeWaitingOptions() (paths, values []string) {
+func (s *Session) takeWaitingOptions() (paths []string, values []waitingOption) {
 	s.stateMu.Lock()
 	defer s.stateMu.Unlock()
 	for p := range s.optionsWaiting {
@@ -61,13 +76,15 @@ func (s *Session) takeWaitingOptions() (paths, values []string) {
 }
 
 // routeOption sends one option to an attached client the way set-option does
-// live: the client applies it and writes it to its config file. It returns
-// whether the client applied it, and why not when it did not.
-func (d *Daemon) routeOption(tui *connState, path, value string) (bool, string) {
+// live: the client applies it and writes it to its config file, or with
+// noSave applies it and leaves the file alone. It returns whether the client
+// applied it, and why not when it did not.
+func (d *Daemon) routeOption(tui *connState, path, value string, noSave bool) (bool, string) {
 	res, err := d.routeToTUISync(tui, uuid.New().String(), &RemoteCommandPayload{
-		CommandType: "set_config",
-		ConfigPath:  path,
-		ConfigValue: value,
+		CommandType:  "set_config",
+		ConfigPath:   path,
+		ConfigValue:  value,
+		ConfigNoSave: noSave,
 	}, routedVerbTimeout)
 	switch {
 	case err == nil && res != nil && res.Success:
@@ -102,14 +119,22 @@ func (d *Daemon) applyWaitingOptions(sess *Session) {
 		return
 	}
 	paths, values := sess.takeWaitingOptions()
+	holds := tui.holdsOptions()
 	for i, path := range paths {
-		if ok, why := d.routeOption(tui, path, values[i]); !ok {
+		w := values[i]
+		if w.noSave && !holds {
+			// A client older than set-config --no-save would apply the value
+			// and save it. It waits for a client that can hold it.
+			sess.waitOption(path, w.value, w.noSave)
+			continue
+		}
+		if ok, why := d.routeOption(tui, path, w.value, w.noSave); !ok {
 			log.Printf("Session %s: the client did not apply the waiting option %s: %s",
 				sess.Name(), path, why)
 			// This one and the rest wait for the next client. A client that
 			// did not answer one would only time out on each of the others.
 			for j := i; j < len(paths); j++ {
-				sess.waitOption(paths[j], values[j])
+				sess.waitOption(paths[j], values[j].value, values[j].noSave)
 			}
 			return
 		}

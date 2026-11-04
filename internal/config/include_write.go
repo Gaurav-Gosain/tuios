@@ -177,11 +177,18 @@ func effectiveTable(lc *LayeredConfig) (map[string]any, error) {
 // errSaveFailed prefixes every error that stops a save.
 const errSaveFailed = "the config files have an error, so tuios did not save"
 
+// saveKeys are the keys a save treats apart from the difference: held keys it
+// never writes, and released keys it writes even when the difference leaves
+// them out. See hold.go.
+type saveKeys struct {
+	held, forced [][]string
+}
+
 // saveConfigData writes the change from base to next, both the TOML of a
 // UserConfig. A nil base is the config the files make now. gen is the
 // number of the save: a key a newer save already wrote is skipped. The
 // caller holds saveMu.
-func saveConfigData(path string, base, next []byte, gen uint64) (WriteNote, error) {
+func saveConfigData(path string, base, next []byte, gen uint64, keys saveKeys) (WriteNote, error) {
 	lc, err := loadLayered(path, true)
 	if err != nil {
 		return WriteNote{}, fmt.Errorf("%s: %w", errSaveFailed, err)
@@ -202,6 +209,8 @@ func saveConfigData(path string, base, next []byte, gen uint64) (WriteNote, erro
 	}
 	var changes []configChange
 	diffTables(from, want, nil, &changes)
+	changes = skipHeld(changes, keys.held)
+	changes = addForced(changes, want, keys.forced)
 	// A change the files already hold is not written again: writing it would
 	// copy a value an included file holds into config.toml.
 	kept := changes[:0]

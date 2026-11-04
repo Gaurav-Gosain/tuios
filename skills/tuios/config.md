@@ -34,6 +34,15 @@ the change on screen; when false, `reason` says whether nobody is attached (it
 applies on the next attach) or the client refused it. `get-config` answers with
 the value in effect and its `source`.
 
+A change you make for a moment, such as a hook that hides the rail on one
+workspace, takes `--no-save`. The client applies it and no config file gets
+it, now or on a later save. It lasts until the client exits or the option is
+set again without `--no-save`:
+
+```sh
+tuios set-config --no-save appearance.sidebar.enabled false
+```
+
 Everything here is also reachable by the person on the settings page (`,` in
 window mode), whose rows come from the same registry. Say so when you change
 something for someone: there is a control they can adjust.

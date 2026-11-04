@@ -1509,10 +1509,18 @@ func printOptionList(w io.Writer, options []optionRow, sections []string, total 
 
 // runSetConfig sets a session option over the verb protocol. The value is
 // recorded in daemon-owned state and, when a TUI is attached, applied live.
-func runSetConfig(sessionName, path, value string, jsonOutput bool) error {
-	raw, err := setConfigOption(sessionName, path, value)
+func runSetConfig(sessionName, path, value string, jsonOutput, noSave bool) error {
+	raw, err := setConfigOptionWith(sessionName, path, value, noSave)
 	if err != nil {
 		return err
+	}
+	if noSave && !daemonHonoursNoSave(raw) {
+		return &diagnosticError{
+			What:  "The value is set, but the daemon saved it to the config file.",
+			Cause: "the daemon is older than this tuios and does not know --no-save.",
+			Extra: []string{"Upgrade the daemon before you use --no-save again."},
+			Fix:   "tuios daemon upgrade",
+		}
 	}
 	if jsonOutput {
 		var pretty any
@@ -1529,6 +1537,16 @@ func runSetConfig(sessionName, path, value string, jsonOutput bool) error {
 		fmt.Fprintln(os.Stderr, note)
 	}
 	return nil
+}
+
+// daemonHonoursNoSave reports whether the set-option answer says the daemon
+// used no_save. A daemon that predates the field leaves it out and saves the
+// value.
+func daemonHonoursNoSave(raw json.RawMessage) bool {
+	var res struct {
+		NoSave *bool `json:"no_save"`
+	}
+	return json.Unmarshal(raw, &res) == nil && res.NoSave != nil && *res.NoSave
 }
 
 // setConfigNote is what set-config says on stderr about the daemon's answer:
@@ -1557,17 +1575,28 @@ func setConfigNote(raw json.RawMessage) string {
 // daemon's answer. tuios config browse sets a value through it too, so the
 // explorer has the same refusals as the command.
 func setConfigOption(sessionName, path, value string) (json.RawMessage, error) {
+	return setConfigOptionWith(sessionName, path, value, false)
+}
+
+// setConfigOptionWith is setConfigOption, with noSave for set-config --no-save.
+func setConfigOptionWith(sessionName, path, value string, noSave bool) (json.RawMessage, error) {
 	client, err := dialVerb()
 	if err != nil {
 		return nil, err
 	}
 	defer func() { _ = client.Close() }()
 
-	raw, err := client.Call("set-option", map[string]any{
+	params := map[string]any{
 		"session": sessionName,
 		"key":     path,
 		"value":   value,
-	})
+	}
+	// Sent only when set, so the call a plain set-config makes is the one an
+	// older daemon has always taken.
+	if noSave {
+		params["no_save"] = true
+	}
+	raw, err := client.Call("set-option", params)
 	if err != nil {
 		return nil, explainVerbError("set-option", err)
 	}

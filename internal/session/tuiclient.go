@@ -513,6 +513,7 @@ func (c *TUIClient) handshake(version string, width, height int, caps *ClientCap
 	}
 	hello.LayoutTreeOps = true
 	hello.ScratchWorkspaces = true
+	hello.HoldOptions = true
 	hello.WindowSize = !legacyWindowSize()
 	hello.ViewChrome = hello.WindowSize && !legacyViewChrome()
 	c.viewChrome = hello.ViewChrome

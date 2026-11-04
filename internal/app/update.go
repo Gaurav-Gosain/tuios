@@ -163,6 +163,7 @@ type RemoteCommandMsg struct {
 	WindowTarget string   // For send_keys (target window by name or ID)
 	ConfigPath   string   // For set_config
 	ConfigValue  string   // For set_config
+	ConfigNoSave bool     // For set_config: apply without saving (set-config --no-save)
 	RequestID    string   // For response tracking
 }
 
@@ -3231,17 +3232,30 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 			// Show what config is being changed
 			notificationMsg = fmt.Sprintf("Remote: set %s=%s", msg.ConfigPath, msg.ConfigValue)
 
-			err = m.SetConfig(msg.ConfigPath, msg.ConfigValue)
-			// Write it down, the way the settings panel does. Without this the
-			// routed path changed the running session and nothing else, so
-			// set-config reported success, get-config read the value back from
-			// memory, and the file never grew the section. Every value set this
-			// way was lost on the next restart, in every section, which is why
-			// this reuses persistSettings rather than fixing one of them: it
-			// carries the read-only gating for remote clients and the
-			// stale-write sequencing with it.
-			if err == nil {
-				persistCmd = m.persistSettings()
+			if msg.ConfigNoSave {
+				// set-config --no-save: the value applies here and every
+				// later save leaves its keys alone, so a hook can change the
+				// display without touching the config files. See
+				// config/hold.go.
+				notificationMsg += " (not saved)"
+				err = m.UserConfig.HoldOption(msg.ConfigPath, func() error {
+					return m.SetConfig(msg.ConfigPath, msg.ConfigValue)
+				})
+			} else {
+				// A set that saves ends a hold on the same option.
+				m.UserConfig.ReleaseOption(msg.ConfigPath)
+				err = m.SetConfig(msg.ConfigPath, msg.ConfigValue)
+				// Write it down, the way the settings panel does. Without this the
+				// routed path changed the running session and nothing else, so
+				// set-config reported success, get-config read the value back from
+				// memory, and the file never grew the section. Every value set this
+				// way was lost on the next restart, in every section, which is why
+				// this reuses persistSettings rather than fixing one of them: it
+				// carries the read-only gating for remote clients and the
+				// stale-write sequencing with it.
+				if err == nil {
+					persistCmd = m.persistSettings()
+				}
 			}
 			// Retile if in tiling mode after config change
 			if m.AutoTiling {

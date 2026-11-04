@@ -1370,7 +1370,7 @@ type Session struct {
 	// set while no client was attached, guarded by stateMu. See
 	// option_pending.go.
 	optionApplyMu  sync.Mutex
-	optionsWaiting map[string]string
+	optionsWaiting map[string]waitingOption
 
 	// Identity
 	ID string

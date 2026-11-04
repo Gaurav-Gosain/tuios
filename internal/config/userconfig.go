@@ -100,6 +100,9 @@ type UserConfig struct {
 	// baseline is this config as TOML when it was parsed, or when it was last
 	// saved. A save writes the difference from it to now and nothing else.
 	baseline []byte
+	// holds are the options set without saving, which every save leaves
+	// alone. See hold.go.
+	holds *optionHolds
 	// Dock is the [dock] table: the bar as ordered lists of named components.
 	// It sits outside the option registry for the same reason [hooks] and
 	// [keybindings] do, being file-plane config rather than a settable option.

@@ -242,7 +242,7 @@ x = "evil"
 		t.Fatal(err)
 	}
 	next, _ := MarshalUserConfig(cfg)
-	if _, err := saveConfigData(main, base, next, saveSeq.Add(1)); err != nil {
+	if _, err := saveConfigData(main, base, next, saveSeq.Add(1), saveKeys{}); err != nil {
 		t.Fatal(err)
 	}
 	lookData, _ := os.ReadFile(LookPath(main))
