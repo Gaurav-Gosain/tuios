@@ -1171,6 +1171,43 @@ a number key, or from the Inbox when one line shows the whole request, with no
 `[agents.approvals]` needed. A daemon older than `--protocol` refuses it by
 name.
 
+### `tuios delegate`
+
+Hand a task to a child agent, and get its answer back as mail.
+
+**Usage:**
+```bash
+tuios delegate '<task>' [--agent <agent>] [--role <role>] [--isolation shared|worktree] [--wait <duration>] [--name <name>] [-s <session>] [--cwd <dir>] [--parent <window>] [--grants <grant>[,<grant>...]] [--env NAME[=VALUE]]... [--ready-timeout <ms>] [--json] [-- <args>...]
+```
+
+The command starts the agent with `start-agent`, links it to you as its
+parent, and types the task as its first prompt. Without `--wait` it returns at
+once, and you end your turn. When the child finishes, tuios sends its answer
+to you as mail from the child, with the subject `Delegated task done: ROLE`.
+The mail wake then types one line into your pane once you are at rest. A
+question the child stops on comes as mail too. An approval stays in the Inbox.
+
+`--wait` returns the outcome instead, at most `10m`: `done`, `errored`,
+`question`, `approval` or `timeout`. The end of the wait does not stop the
+child, and its answer then comes as mail when there is a parent.
+
+`--isolation worktree` starts the child in a new worktree, in a session of its
+own, made from the commit of your checkout. It does not have your uncommitted
+changes. `--role` is `implementation`, `research`, `review`, `design`, `test`
+or `general`. `research` and `review` give the child the `read` grant unless
+`--grants` says otherwise. `--agent` defaults to your own harness.
+
+A child is never wider than its parent: the grants and permission mode rules
+of `start-agent` apply. From outside every pane, name the parent with
+`--parent` or pass `--wait`. The command exits 1 when the task was not typed
+into the child.
+
+**Examples:**
+```bash
+tuios delegate --role review 'Review the diff on this branch and list the bugs.'
+tuios delegate --agent codex --isolation worktree --role test --wait 10m 'Add tests for the parser.'
+```
+
 ### `tuios agent-proto`
 
 The pane program of `start-agent --protocol`: run an agent headless over ACP
@@ -5556,7 +5593,8 @@ tuios mcp [--write] [--scope own|all]
 **Flags:**
 
 - `--write`: Also list the tools that type into panes: `tuios_send_text`,
-  `tuios_send_keys`, `tuios_ask_agent`, `tuios_respond` and `tuios_fan`
+  `tuios_send_keys`, `tuios_ask_agent`, `tuios_respond`, `tuios_fan` and
+  `tuios_delegate`
 - `--scope`: `own` (the default) reaches only the session of the pane the
   server runs in, its fan group, and the sessions a `fan` from it started.
   `all` reaches every session, for a harness that runs outside tuios

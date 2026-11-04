@@ -36,6 +36,7 @@ import (
 //	parent:ID    the agent pane that started this one (agent_parent.go), by
 //	             window id or a start of it
 //	root:ID      the first agent pane of this one's chain, the same way
+//	role:R       the pane is a child agent delegate started with role R
 //
 // A glob is path.Match syntax: * and ? do not cross a slash, so group:fan/*
 // matches every group under fan/.
@@ -61,11 +62,12 @@ const (
 	SelectorStage   = "stage"
 	SelectorParent  = "parent"
 	SelectorRoot    = "root"
+	SelectorRole    = "role"
 )
 
 // SelectorKeys lists the keys a selector takes, in the order the docs give
 // them.
-var SelectorKeys = []string{SelectorHarness, SelectorState, SelectorNeeds, SelectorSession, SelectorGroup, SelectorHost, SelectorName, SelectorCwd, SelectorTask, SelectorStage, SelectorParent, SelectorRoot}
+var SelectorKeys = []string{SelectorHarness, SelectorState, SelectorNeeds, SelectorSession, SelectorGroup, SelectorHost, SelectorName, SelectorCwd, SelectorTask, SelectorStage, SelectorParent, SelectorRoot, SelectorRole}
 
 // selectorMaxLen bounds a selector's text. A selector is typed by a person or
 // written by an agent, and one longer than this is not a selector.
@@ -110,6 +112,9 @@ type SelectorTarget struct {
 	// started. Only a pane of this machine fills them.
 	Parent string
 	Root   string
+	// Role is the role of a child agent delegate started, empty for every
+	// other pane.
+	Role string
 }
 
 // ParseSelector reads a selector. homeDir expands a leading ~ in a cwd term;
@@ -154,6 +159,11 @@ func ParseSelector(text, homeDir string) (*Selector, error) {
 				v = strings.ToLower(v)
 				if !slices.Contains(AgentStateNames, v) {
 					return nil, errors.New("state " + echoName(v) + " is not an agent state. The states are " + strings.Join(AgentStateNames, ", "))
+				}
+			case SelectorRole:
+				v = strings.ToLower(v)
+				if !slices.Contains(delegateRoles, v) {
+					return nil, errors.New("role " + echoName(v) + " is not a role. The roles are " + strings.Join(delegateRoles, ", "))
 				}
 			case SelectorStage:
 				v = strings.ToLower(v)
@@ -287,6 +297,8 @@ func (term selectorTerm) matchOne(v string, t SelectorTarget) bool {
 		return windowIDMatch(v, t.Parent)
 	case SelectorRoot:
 		return windowIDMatch(v, t.Root)
+	case SelectorRole:
+		return v == t.Role
 	case SelectorCwd:
 		// t.Cwd is the folder the pane last reported, which the pane sets
 		// itself with cd or an OSC 7 it prints. A cwd: term only narrows

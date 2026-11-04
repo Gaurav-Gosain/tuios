@@ -13486,3 +13486,47 @@ the branch head. Each control was built into its own binary.
 
 The frame is `agent-child-rows` under `TUIOS_E2E_FRAMES`. The upgrade test
 writes its answers to `handoff.json` in its artifact folder.
+## A child agent never runs wider than its parent
+
+`TestAChildAgentNeverRunsWiderThanItsParent` runs a parent agent in a pane: a
+script named claude, started with `--permission-mode plan`, that calls
+`tuios start-agent`. A child with `--dangerously-skip-permissions` must be
+refused with no window made. A child that names no mode must start with
+`--permission-mode plan` added. The same bypass child started by the test
+process, outside every pane, must start as asked.
+
+Run on 2026-11-04 on Linux. The control is the branch build with
+`clampChildMode` returning its argv unchanged (a `go build -overlay` of
+`internal/session/child_clamp.go`):
+
+| Control | Where it fails | Verdict |
+| --- | --- | --- |
+| `clampChildMode` returns argv unchanged | "a child in bypass mode from a parent in plan mode was not refused" (`WIDE_EXIT=0`), "a child that names no mode did not start in the parent's plan mode", and "the refused child has a window" | **caught** |
+
+The record is `child-mode-clamp.txt` under `TUIOS_E2E_FRAMES`. The unit tests
+`TestAChildNeverHoldsGrantsItsParentLacks` and
+`TestAChildAgentNeverRunsWiderThanItsParent` in `internal/session` fail on
+main (2c03bb3c0) for every refusal and step down they check.
+
+## A delegated task's answer comes back by mail, or to a call that waits
+
+`TestDelegateMailsTheAnswerAndWakesTheParentOnce` delegates a task from
+outside every pane to a stand-in child agent, for a stand-in parent agent at
+rest. The call must return before the child answers. The parent must then
+hold one message from the child with the answer, and show one typed wake line
+that holds no text of the child. `TestDelegateWaitReturnsTheOutcome` waits
+for a child that finishes and for one that asks a question, and must get the
+answer and the question back. A wait that times out must leave the child
+running, and its answer must reach the parent by mail.
+
+Run on 2026-11-04 on Linux. Each control is the branch build with one
+function changed (a `go build -overlay` of
+`internal/session/verb_delegate.go`):
+
+| Control | Test | Where it fails | Verdict |
+| --- | --- | --- | --- |
+| `delegateMail` returns 0 and sends nothing | `TestDelegateMailsTheAnswerAndWakesTheParentOnce` | "the parent has 0 messages, want the one answer" | **caught** |
+| `delegates.deliver` hands nothing to a waiting call | `TestDelegateWaitReturnsTheOutcome` | "--wait did not return the answer": outcome `timeout` after the whole 60 s wait | **caught** |
+
+The records are `delegate-async.log` and `delegate-wait.log` in each test's
+artifact folder, and `delegate-worktree-clamp.txt` under `TUIOS_E2E_FRAMES`.

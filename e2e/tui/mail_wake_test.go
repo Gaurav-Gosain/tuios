@@ -1,12 +1,16 @@
 package tuie2e
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/Gaurav-Gosain/tuios/internal/testutil"
 )
 
 // mailAgentScript is a stand-in agent: it reports idle, then prints each line
@@ -366,4 +370,404 @@ func TestMailWakeTakesNoAuthorityFromAPaneOnAnotherMachine(t *testing.T) {
 		time.Sleep(250 * time.Millisecond)
 	}
 	alive(t, term, "after mail from a hosted pane")
+}
+
+// delegateChildScript is the child agent of the delegate tests. It reports
+// idle, then for each line typed into it reports working and, after DELAY
+// seconds (default 3), prints ANSWER-7f3[line] and reports done. A line with
+// ASK in it is a question instead: it prints the question and reports
+// needs_input of kind question.
+const delegateChildScript = `T="$1"
+stty -echo
+echo CHILD-READY
+"$T" set-agent-state idle -w "$TUIOS_PANE_ID" >/dev/null
+while IFS= read -r l; do
+  "$T" set-agent-state working -w "$TUIOS_PANE_ID" >/dev/null
+  case "$l" in
+  *ASK*)
+    echo "QUESTION-5c1: which file should I read?"
+    "$T" set-agent-state needs_input --kind question -m "Which file should I read?" -w "$TUIOS_PANE_ID" >/dev/null
+    continue ;;
+  esac
+  sleep "${DELAY:-3}"
+  echo "ANSWER-7f3[$l]"
+  "$T" set-agent-state done -w "$TUIOS_PANE_ID" >/dev/null
+done
+`
+
+// delegateRow is the part of a list-agents row the delegate tests read.
+type delegateRow struct {
+	Window     string `json:"window_id"`
+	Name       string `json:"name"`
+	Role       string `json:"role"`
+	Delegation *struct {
+		Role       string `json:"role"`
+		Isolation  string `json:"isolation"`
+		Mode       string `json:"mode"`
+		State      string `json:"state"`
+		ResultMail uint64 `json:"result_mail"`
+		AskedAt    int64  `json:"asked_at"`
+	} `json:"delegation"`
+}
+
+// delegateRows lists the agent panes of every session, by window id.
+func delegateRows(t *testing.T, base string) map[string]delegateRow {
+	t.Helper()
+	res := mustCall(t, base, "list-agents", map[string]any{"all_sessions": true})
+	raw, _ := json.Marshal(res["agents"])
+	var rows []delegateRow
+	if err := json.Unmarshal(raw, &rows); err != nil {
+		t.Fatalf("list-agents rows: %v: %s", err, raw)
+	}
+	out := map[string]delegateRow{}
+	for _, r := range rows {
+		out[r.Window] = r
+	}
+	return out
+}
+
+// delegateMail is one message of the parent's inbox, as the delegate tests
+// read it.
+type delegateMail struct {
+	From    string `json:"from"`
+	Subject string `json:"subject"`
+	Text    string `json:"text"`
+}
+
+// parentMail reads every message to window in session, marking nothing.
+func parentMail(t *testing.T, base, session, window string) []delegateMail {
+	t.Helper()
+	res := mustCall(t, base, "read-agent-messages", map[string]any{"session": session, "to": window, "peek": true, "limit": 100})
+	raw, _ := json.Marshal(res["messages"])
+	var msgs []delegateMail
+	if err := json.Unmarshal(raw, &msgs); err != nil {
+		t.Fatalf("read-agent-messages: %v: %s", err, raw)
+	}
+	return msgs
+}
+
+// delegateResult is the part of a delegate --json answer the tests read.
+type delegateResult struct {
+	Window    string `json:"window_id"`
+	Session   string `json:"session"`
+	Delegated bool   `json:"delegated"`
+	Mode      string `json:"mode"`
+	Next      string `json:"next"`
+	Outcome   string `json:"outcome"`
+	Answer    string `json:"answer"`
+	Untrusted bool   `json:"untrusted"`
+	WaitNote  string `json:"wait_note"`
+	Worktree  string `json:"worktree"`
+	Base      string `json:"base"`
+	Note      string `json:"worktree_note"`
+	Question  *struct {
+		Kind    string   `json:"kind"`
+		Message string   `json:"message"`
+		Lines   []string `json:"lines"`
+	} `json:"question"`
+}
+
+// runDelegate runs tuios delegate --json and decodes its answer. It fails the
+// test when the command fails.
+func runDelegate(t *testing.T, base string, args ...string) (delegateResult, string) {
+	t.Helper()
+	out, err := tuiosCLI(t, base, append([]string{"delegate", "--json"}, args...)...)
+	if err != nil {
+		t.Fatalf("delegate %v: %v\n%s", args, err, out)
+	}
+	var res delegateResult
+	start := max(strings.Index(out, "{"), 0)
+	if err := json.Unmarshal([]byte(out[start:]), &res); err != nil {
+		t.Fatalf("delegate output: %v\n%s", err, out)
+	}
+	return res, out
+}
+
+// TestDelegateMailsTheAnswerAndWakesTheParentOnce delegates a task to a
+// stand-in child agent, for a stand-in parent agent at rest, against a real
+// daemon.
+//
+// How this could pass wrongly, written down first:
+//   - The call could wait for the child. The child takes 3 s after its prompt,
+//     and the call must return with the parent's inbox still empty.
+//   - The answer could be mailed twice, or the parent woken once per state
+//     event. The parent must hold one message and show one typed line, also
+//     well after.
+//   - The wake could type the child's text into the parent. The answer holds
+//     marker text the parent's pane must never show.
+//   - The answer could be something the child printed before its prompt. The
+//     message must hold the answer line with the prompt's own marker.
+//
+// It also checks the record: the role on list-agents, done with the message
+// id, and a research child given the read grant only.
+//
+// The artifact is delegate-async.log in the test's artifact directory.
+//
+// Negative control (NEGATIVE_CONTROLS.md): with delegateMail sending nothing,
+// the parent never gets the answer.
+func TestDelegateMailsTheAnswerAndWakesTheParentOnce(t *testing.T) {
+	base := t.TempDir()
+	killDaemon(t, base)
+	const session = "e2e-delegate"
+	if out, err := tuiosCLI(t, base, "new", session, "--detach"); err != nil {
+		t.Fatalf("create the session: %v\n%s", err, out)
+	}
+	parent := startMailAgent(t, base, session, "parent")
+	child := filepath.Join(base, "child.sh")
+	if err := os.WriteFile(child, []byte(delegateChildScript), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	var log strings.Builder
+	defer func() {
+		path := filepath.Join(artifactDir(t), "delegate-async.log")
+		_ = os.WriteFile(path, []byte(log.String()), 0o644)
+		t.Logf("artifact: %s", path)
+	}()
+
+	started := time.Now()
+	res, out := runDelegate(t, base, "--parent", parent, "--role", "research", "--agent", "sh "+child+" "+tuiosBin, "find marker-q41")
+	took := time.Since(started)
+	fmt.Fprintf(&log, "-- delegate returned after %v:\n%s\n", took.Round(time.Millisecond), out)
+	if !res.Delegated || res.Mode != "async" || !strings.Contains(res.Next, "End your turn") {
+		t.Fatalf("ASSERTION: delegate did not hand the task over async: %+v", res)
+	}
+	if msgs := parentMail(t, base, session, parent); len(msgs) != 0 {
+		t.Fatalf("ASSERTION: the parent had mail when delegate returned, so the call waited for the child: %+v", msgs)
+	}
+	waitCapture(t, base, session, res.Window, "ANSWER-7f3[find marker-q41]")
+
+	// The answer is mailed once, from the child.
+	deadline := time.Now().Add(uiTimeout)
+	var msgs []delegateMail
+	for {
+		msgs = parentMail(t, base, session, parent)
+		if len(msgs) > 0 || time.Now().After(deadline) {
+			break
+		}
+		time.Sleep(200 * time.Millisecond)
+	}
+	fmt.Fprintf(&log, "-- the parent's mail: %+v\n", msgs)
+	if len(msgs) != 1 {
+		t.Fatalf("ASSERTION: the parent has %d messages, want the one answer: %+v", len(msgs), msgs)
+	}
+	if m := msgs[0]; m.From != res.Window || m.Subject != "Delegated task done: research" || !strings.Contains(m.Text, "ANSWER-7f3[find marker-q41]") {
+		t.Fatalf("ASSERTION: the answer mail is wrong: %+v", m)
+	}
+
+	// The parent is woken once, with no text of the child.
+	deadline = time.Now().Add(mailWakeWait + uiTimeout)
+	for {
+		n, got := gotLines(t, base, session, parent)
+		if n > 0 {
+			fmt.Fprintf(&log, "-- the parent's pane:\n%s\n", got)
+			if !strings.Contains(got, "GOT[You have 1 unread tuios message. Read it with:") {
+				t.Fatalf("ASSERTION: the parent got the wrong line:\n%s", got)
+			}
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("ASSERTION: the parent was never woken for the answer:\n%s", got)
+		}
+		time.Sleep(250 * time.Millisecond)
+	}
+	time.Sleep(mailWakeWait)
+	n, got := gotLines(t, base, session, parent)
+	if n != 1 {
+		t.Fatalf("ASSERTION: the parent was typed %d lines, want 1:\n%s", n, got)
+	}
+	if strings.Contains(got, "ANSWER-7f3") || strings.Contains(got, "marker-q41") {
+		t.Fatalf("ASSERTION: the child's text was typed into the parent:\n%s", got)
+	}
+	if msgs := parentMail(t, base, session, parent); len(msgs) != 1 {
+		t.Fatalf("ASSERTION: the parent has %d messages later, want 1: %+v", len(msgs), msgs)
+	}
+
+	row := delegateRows(t, base)[res.Window]
+	fmt.Fprintf(&log, "-- the child's row: %+v %+v\n", row, row.Delegation)
+	if row.Role != "research" || row.Delegation == nil || row.Delegation.State != "done" || row.Delegation.ResultMail == 0 || row.Delegation.Mode != "async" {
+		t.Fatalf("ASSERTION: the child's record is wrong: %+v %+v", row, row.Delegation)
+	}
+	grants, err := tuiosCLI(t, base, "list-agents", "-s", session, "--select", "role:research")
+	fmt.Fprintf(&log, "-- list-agents --select role:research:\n%s\n", grants)
+	if err != nil || !strings.Contains(grants, res.Window[:8]) || strings.Contains(grants, "\n│ "+parent[:8]) || !strings.Contains(grants, "ROLE") {
+		t.Fatalf("ASSERTION: the role selector or column is wrong: %v\n%s", err, grants)
+	}
+	held, _ := tuiosCLI(t, base, "list-windows", "--json", "-s", session)
+	var lw struct {
+		Windows []struct {
+			ID     string   `json:"window_id"`
+			Grants []string `json:"grants"`
+		} `json:"windows"`
+	}
+	_ = json.Unmarshal([]byte(held), &lw)
+	for _, w := range lw.Windows {
+		if w.ID == res.Window && strings.Join(w.Grants, ",") != "read" {
+			t.Fatalf("ASSERTION: a research child holds %v, want read", w.Grants)
+		}
+	}
+}
+
+// TestDelegateWaitReturnsTheOutcome delegates with --wait from outside every
+// pane, with no parent, and with a parent for the timeout.
+//
+// How this could pass wrongly: a wait could return at its timeout every time,
+// so the done and question cases check the outcome and its text, and finish
+// well inside the wait. A timeout could stop the child, so the child must
+// still finish afterwards, and its answer must then reach the parent by mail.
+// A wait could also mail the answer it returned, so the parent's inbox holds
+// only the timed-out task's answer.
+//
+// Negative control (NEGATIVE_CONTROLS.md): with deliver handing nothing to a
+// waiting call, every wait ends at its timeout.
+func TestDelegateWaitReturnsTheOutcome(t *testing.T) {
+	base := t.TempDir()
+	killDaemon(t, base)
+	const session = "e2e-delegate-wait"
+	if out, err := tuiosCLI(t, base, "new", session, "--detach"); err != nil {
+		t.Fatalf("create the session: %v\n%s", err, out)
+	}
+	child := filepath.Join(base, "child.sh")
+	if err := os.WriteFile(child, []byte(delegateChildScript), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	agent := "sh " + child + " " + tuiosBin
+	var log strings.Builder
+	defer func() {
+		path := filepath.Join(artifactDir(t), "delegate-wait.log")
+		_ = os.WriteFile(path, []byte(log.String()), 0o644)
+		t.Logf("artifact: %s", path)
+	}()
+
+	// No parent and no wait: refused, nothing starts.
+	out, err := tuiosCLI(t, base, "delegate", "-s", session, "--agent", agent, "nobody gets this")
+	fmt.Fprintf(&log, "-- no parent, no wait:\n%s\n", out)
+	if err == nil || !strings.Contains(out, "needs an agent to send the answer to") {
+		t.Fatalf("ASSERTION: a delegate with no one to mail was not refused: %v\n%s", err, out)
+	}
+
+	// Done.
+	started := time.Now()
+	res, out := runDelegate(t, base, "-s", session, "--agent", agent, "--wait", "60s", "--name", "waiter", "quick marker-w9")
+	fmt.Fprintf(&log, "-- wait for done, %v:\n%s\n", time.Since(started).Round(time.Millisecond), out)
+	if res.Outcome != "done" || !strings.Contains(res.Answer, "ANSWER-7f3[quick marker-w9]") || !res.Untrusted {
+		t.Fatalf("ASSERTION: --wait did not return the answer: %+v", res)
+	}
+	if took := time.Since(started); took > 40*time.Second {
+		t.Fatalf("ASSERTION: the wait for done took %v, near its timeout", took)
+	}
+	text, _ := tuiosCLI(t, base, "delegate", "-s", session, "--agent", agent, "--wait", "60s", "--name", "waiter2", "quick marker-w10")
+	fmt.Fprintf(&log, "-- wait for done, as text:\n%s\n", text)
+	if !strings.Contains(text, "The child finished") || !strings.Contains(text, "ANSWER-7f3[quick marker-w10]") {
+		t.Fatalf("ASSERTION: the text output does not show the answer:\n%s", text)
+	}
+
+	// A question.
+	res, out = runDelegate(t, base, "-s", session, "--agent", agent, "--wait", "60s", "--name", "asker", "ASK me")
+	fmt.Fprintf(&log, "-- wait for a question:\n%s\n", out)
+	if res.Outcome != "question" || res.Question == nil || res.Question.Kind != "question" || !strings.Contains(res.Question.Message+strings.Join(res.Question.Lines, "\n"), "Which file should I read?") {
+		t.Fatalf("ASSERTION: --wait did not return the question: %+v %+v", res, res.Question)
+	}
+	if row := delegateRows(t, base)[res.Window]; row.Delegation == nil || row.Delegation.State != "asking" || row.Delegation.AskedAt == 0 {
+		t.Fatalf("ASSERTION: the asking child's record is wrong: %+v", row.Delegation)
+	}
+
+	// A timeout, for a parent: the child goes on, and its answer is mailed.
+	parent := startMailAgent(t, base, session, "parent")
+	res, out = runDelegate(t, base, "--parent", parent, "--agent", agent, "--env", "DELAY=6", "--wait", "1s", "--name", "slow", "slow marker-s3")
+	fmt.Fprintf(&log, "-- wait that times out:\n%s\n", out)
+	if res.Outcome != "timeout" || !strings.Contains(res.WaitNote, "still works") {
+		t.Fatalf("ASSERTION: a 1 s wait on a 6 s task did not time out: %+v", res)
+	}
+	waitCapture(t, base, session, res.Window, "ANSWER-7f3[slow marker-s3]")
+	deadline := time.Now().Add(uiTimeout)
+	var msgs []delegateMail
+	for {
+		msgs = parentMail(t, base, session, parent)
+		if len(msgs) > 0 || time.Now().After(deadline) {
+			break
+		}
+		time.Sleep(200 * time.Millisecond)
+	}
+	fmt.Fprintf(&log, "-- the parent's mail after the timeout: %+v\n", msgs)
+	if len(msgs) != 1 || !strings.Contains(msgs[0].Text, "ANSWER-7f3[slow marker-s3]") {
+		t.Fatalf("ASSERTION: the timed-out child's answer did not reach the parent once: %+v", msgs)
+	}
+}
+
+// TestDelegateWorktreeAndClamp delegates into a worktree, and from a parent in
+// plan mode asks for a wider child.
+//
+// The worktree must be at the commit of the parent's checkout and must not
+// hold its uncommitted file, and the answer must say so. The wide child must
+// be refused with no window, as start-agent refuses it (child_clamp.go).
+func TestDelegateWorktreeAndClamp(t *testing.T) {
+	base, repo := fanFixture(t)
+	const session = "e2e-delegate-wt"
+	if out, err := tuiosCLI(t, base, "new", session, "--detach"); err != nil {
+		t.Fatalf("create the session: %v\n%s", err, out)
+	}
+	if err := os.WriteFile(filepath.Join(repo, "uncommitted-9b2.txt"), []byte("draft\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	head := strings.TrimSpace(testutil.Git(t, repo, "rev-parse", "HEAD"))
+	child := filepath.Join(base, "child.sh")
+	if err := os.WriteFile(child, []byte(delegateChildScript), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	parent := startMailAgent(t, base, session, "parent")
+	res, out := runDelegate(t, base, "--parent", parent, "--isolation", "worktree", "--cwd", repo, "--role", "test", "--agent", "sh "+child+" "+tuiosBin, "wt marker-t5")
+	if !res.Delegated || res.Worktree == "" || res.Base != head || !strings.Contains(res.Note, "uncommitted") {
+		t.Fatalf("ASSERTION: the worktree delegate is wrong (HEAD %s):\n%s", head, out)
+	}
+	got, err := exec.Command("git", "-C", res.Worktree, "rev-parse", "HEAD").Output()
+	if err != nil || strings.TrimSpace(string(got)) != head {
+		t.Fatalf("ASSERTION: the worktree is at %q, want %s: %v", got, head, err)
+	}
+	if _, err := os.Stat(filepath.Join(res.Worktree, "uncommitted-9b2.txt")); err == nil {
+		t.Fatalf("ASSERTION: the worktree holds the parent's uncommitted file")
+	}
+	if res.Session == session {
+		t.Fatalf("ASSERTION: the worktree child opened in the parent's session %s", res.Session)
+	}
+	waitCapture(t, base, res.Session, res.Window, "ANSWER-7f3[wt marker-t5]")
+
+	// A parent in plan mode asks for a child in bypass mode.
+	outDir := t.TempDir()
+	parentBin := filepath.Join(t.TempDir(), "parent-bin")
+	if err := os.MkdirAll(parentBin, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	script := "#!/bin/sh\n" +
+		"'" + tuiosBin + "' set-agent-state idle -w \"$TUIOS_PANE_ID\" >/dev/null\n" +
+		"'" + tuiosBin + "' delegate --agent 'claude --dangerously-skip-permissions' --name wide 'do it' >'" + outDir + "/wide.txt' 2>&1\n" +
+		"echo \"WIDE_EXIT=$?\" >>'" + outDir + "/wide.txt'\n" +
+		"touch '" + outDir + "/done'\n" +
+		"exec sleep 600\n"
+	planned := filepath.Join(parentBin, "claude")
+	if err := os.WriteFile(planned, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if out, err := tuiosCLI(t, base, "new-window", "-s", session, "planner", "--no-focus", "--", planned, "--permission-mode", "plan"); err != nil {
+		t.Fatalf("open the parent agent's pane: %v: %s", err, out)
+	}
+	deadline := time.Now().Add(60 * time.Second)
+	for {
+		if _, err := os.Stat(filepath.Join(outDir, "done")); err == nil {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("the parent agent never finished its call")
+		}
+		time.Sleep(200 * time.Millisecond)
+	}
+	wide, _ := os.ReadFile(filepath.Join(outDir, "wide.txt"))
+	if strings.Contains(string(wide), "WIDE_EXIT=0") || !strings.Contains(string(wide), "permission mode") {
+		t.Fatalf("ASSERTION: a wider child from a parent in plan mode was not refused:\n%s", wide)
+	}
+	if windows, _ := tuiosCLI(t, base, "list-windows", "-s", session); strings.Contains(windows, "wide") {
+		t.Fatalf("ASSERTION: the refused child has a window:\n%s", windows)
+	}
+	if dir := os.Getenv("TUIOS_E2E_FRAMES"); dir != "" {
+		_ = os.WriteFile(filepath.Join(dir, "delegate-worktree-clamp.txt"), []byte("worktree:\n"+out+"\nwide child:\n"+string(wide)), 0o644)
+	}
 }

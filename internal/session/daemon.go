@@ -339,6 +339,9 @@ type Daemon struct {
 	// mail. Its zero value is ready, and off until SetMailWake. See
 	// mail_wake.go.
 	mailWake mailWaker
+	// delegates are the delegated children the daemon waits on, for their
+	// answer or their question. See verb_delegate.go.
+	delegates delegates
 	// askTurns keeps one ask-agent typing at a pane at a time. See
 	// ask_turns.go.
 	askTurns askTurns
@@ -1408,6 +1411,7 @@ func (d *Daemon) onSessionCreated(s *Session) {
 			d.agents.forgetInbox(name, ev.Window)
 		}
 		d.noteMailWakeEvent(ev)
+		d.noteDelegateEvent(ev)
 		d.events.publish(streamEvent{
 			Type:       ev.Type,
 			Session:    name,

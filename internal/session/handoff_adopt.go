@@ -210,6 +210,9 @@ func (d *Daemon) adopt(fd int, fb *adoptFallback, kept map[int]int) error {
 	d.outbox.load(outboxPath())
 	d.reviewNotes.load(reviewNotesPath(), func(window string) bool { return d.sessionOfWindow(window) != "" })
 	d.serve()
+	// A delegated child that finished while the daemon was handed over is
+	// still answered for.
+	d.resumeDelegations()
 	state := "upgraded"
 	if stats.Fallback {
 		state = "fallback"

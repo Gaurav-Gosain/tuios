@@ -185,71 +185,11 @@ func (d *Daemon) createWorktreeSession(cs *connState, root, branch, base, sessio
 	if verr != nil {
 		return nil, verr
 	}
-	if _, err := os.Lstat(path); err == nil {
-		return nil, hintedVerbError(ErrVerbGitFailed, path+" already exists", &VerbHint{
-			Param:  "branch",
-			Detail: "A worktree for this branch is already there. Attach to its session, or remove it with remove-worktree first.",
-		})
+	sess, info, created, hookErr, verr := d.makeWorktreeSession(cs, root, path, branch, base, sessionName, record)
+	if verr != nil {
+		return nil, verr
 	}
-	if sessionName == "" {
-		sessionName = worktree.SessionName(filepath.Base(root), branch)
-	}
-	if err := ValidateSessionName(sessionName); err != nil {
-		return nil, invalidParam("name", err.Error())
-	}
-	if d.manager.GetSession(sessionName) != nil {
-		return nil, hintedVerbError(ErrVerbSessionExists, "session "+sessionName+" already exists", &VerbHint{
-			Param:     "name",
-			Command:   "tuios ls",
-			Available: d.sessionNames(),
-			Detail:    "Choose another session name with name, or attach to the session that exists.",
-		})
-	}
-
-	created, err := worktree.Add(root, path, branch, base)
-	if err != nil {
-		return nil, hintedVerbError(ErrVerbGitFailed, err.Error(), &VerbHint{
-			Param:  "branch",
-			Detail: "git refused to add the worktree. The repository is as it was.",
-		})
-	}
-
-	sess, err := d.manager.CreateSession(sessionName, callerSessionConfig(cs), defaultVerbSessionWidth, defaultVerbSessionHeight)
-	if err != nil {
-		return nil, hintedVerbError(ErrVerbInternal, "the worktree was created at "+path+" but its session could not: "+err.Error(), &VerbHint{
-			Detail: "The worktree is kept. Start a session in it with: tuios new-window --cwd " + path,
-		})
-	}
-	info := &WorktreeInfo{
-		Info: worktree.Info{
-			Repo:     filepath.Base(root),
-			RepoRoot: root,
-			Branch:   branch,
-			Path:     path,
-		},
-		Base:    base,
-		Managed: true,
-	}
-	// Where the branch starts, so list-worktrees can tell a branch with
-	// commits of its own from a fresh one. A failure leaves it empty, and the
-	// listing falls back to the merge base.
-	if start, err := worktree.HeadCommit(path); err == nil {
-		info.StartCommit = start
-	}
-	if record != nil {
-		record(info)
-	}
-	// The record goes on before the window, so a client that adopts the
-	// session on the window's push already sees it under its repository.
-	_ = sess.SetWorktree(info)
-
-	// The after-new-worktree hook runs before the first window, and the call
-	// waits for it, so what it puts into the tree is there when the shell or
-	// agent starts. Nothing is locked here: CreateSession and SetWorktree have
-	// returned, and a fan's reservation is a name, not a mutex, so other
-	// clients and verbs go on while the hook runs. A hook that fails keeps the
-	// worktree and the session, and its error goes back with the result.
-	hookErr := d.runWorktreeHook(sess.Name(), info, created)
+	sessionName = sess.Name()
 
 	sessionID := sess.ID
 	onExit := func(ptyID string) { d.notifyPTYClosed(sessionID, ptyID) }
@@ -283,6 +223,80 @@ func (d *Daemon) createWorktreeSession(cs *connState, root, branch, base, sessio
 		out["warning"] = warning
 	}
 	return out, nil
+}
+
+// makeWorktreeSession is the first half of createWorktreeSession: the
+// worktree at path, the session for it, its record, and the
+// after-new-worktree hook. It opens no window. delegate uses it on its own,
+// to start its agent in the session with start-agent.
+func (d *Daemon) makeWorktreeSession(cs *connState, root, path, branch, base, sessionName string, record func(*WorktreeInfo)) (sess *Session, info *WorktreeInfo, created bool, hookErr string, verr *verbError) {
+	var err error
+	if _, err := os.Lstat(path); err == nil {
+		return nil, nil, false, "", hintedVerbError(ErrVerbGitFailed, path+" already exists", &VerbHint{
+			Param:  "branch",
+			Detail: "A worktree for this branch is already there. Attach to its session, or remove it with remove-worktree first.",
+		})
+	}
+	if sessionName == "" {
+		sessionName = worktree.SessionName(filepath.Base(root), branch)
+	}
+	if err := ValidateSessionName(sessionName); err != nil {
+		return nil, nil, false, "", invalidParam("name", err.Error())
+	}
+	if d.manager.GetSession(sessionName) != nil {
+		return nil, nil, false, "", hintedVerbError(ErrVerbSessionExists, "session "+sessionName+" already exists", &VerbHint{
+			Param:     "name",
+			Command:   "tuios ls",
+			Available: d.sessionNames(),
+			Detail:    "Choose another session name with name, or attach to the session that exists.",
+		})
+	}
+
+	created, err = worktree.Add(root, path, branch, base)
+	if err != nil {
+		return nil, nil, false, "", hintedVerbError(ErrVerbGitFailed, err.Error(), &VerbHint{
+			Param:  "branch",
+			Detail: "git refused to add the worktree. The repository is as it was.",
+		})
+	}
+
+	sess, err = d.manager.CreateSession(sessionName, callerSessionConfig(cs), defaultVerbSessionWidth, defaultVerbSessionHeight)
+	if err != nil {
+		return nil, nil, false, "", hintedVerbError(ErrVerbInternal, "the worktree was created at "+path+" but its session could not: "+err.Error(), &VerbHint{
+			Detail: "The worktree is kept. Start a session in it with: tuios new-window --cwd " + path,
+		})
+	}
+	info = &WorktreeInfo{
+		Info: worktree.Info{
+			Repo:     filepath.Base(root),
+			RepoRoot: root,
+			Branch:   branch,
+			Path:     path,
+		},
+		Base:    base,
+		Managed: true,
+	}
+	// Where the branch starts, so list-worktrees can tell a branch with
+	// commits of its own from a fresh one. A failure leaves it empty, and the
+	// listing falls back to the merge base.
+	if start, err := worktree.HeadCommit(path); err == nil {
+		info.StartCommit = start
+	}
+	if record != nil {
+		record(info)
+	}
+	// The record goes on before the window, so a client that adopts the
+	// session on the window's push already sees it under its repository.
+	_ = sess.SetWorktree(info)
+
+	// The after-new-worktree hook runs before the first window, and the call
+	// waits for it, so what it puts into the tree is there when the shell or
+	// agent starts. Nothing is locked here: CreateSession and SetWorktree have
+	// returned, and a fan's reservation is a name, not a mutex, so other
+	// clients and verbs go on while the hook runs. A hook that fails keeps the
+	// worktree and the session, and its error goes back with the result.
+	hookErr = d.runWorktreeHook(sess.Name(), info, created)
+	return sess, info, created, hookErr, nil
 }
 
 // unignoredWorktreeWarning says so when a worktree was put inside its own

@@ -31,6 +31,7 @@ func TestToolAnnotationsFollowTheSpec(t *testing.T) {
 		"tuios_ask_agent":           {destructive: true, openWorld: true},
 		"tuios_respond":             {destructive: true, openWorld: true},
 		"tuios_fan":                 {destructive: true, openWorld: true},
+		"tuios_delegate":            {destructive: true, openWorld: true},
 	}
 	var verbs []VerbDoc
 	for _, spec := range catalog {

@@ -414,6 +414,54 @@ type WindowState struct {
 	// pane. Daemon-owned like StartedBy, and saved, so a restored or handed
 	// over pane keeps it. See agent_parent.go.
 	AgentLink *AgentLink `json:"agent_link,omitempty"`
+	// Delegation is set on an agent pane the delegate verb started: the
+	// task's role, how it runs, and where it is. Nil for every other pane.
+	// Daemon-owned like AgentLink, and saved, so a handed over pane keeps
+	// it. See verb_delegate.go.
+	Delegation *Delegation `json:"delegation,omitempty"`
+}
+
+// Delegation is the record of a task one agent handed to a child agent with
+// delegate. It is written when the child gets its prompt and changed only by
+// the daemon: when the child asks a question, and once when it finishes.
+// The record is replaced on every change, never written in place, because
+// older copies of the state share it.
+type Delegation struct {
+	// Role names the job: implementation, research, review, design, test
+	// or general.
+	Role string `json:"role"`
+	// Isolation is shared, the parent's checkout, or worktree, a worktree
+	// made from the parent's commit.
+	Isolation string `json:"isolation"`
+	// Mode is async, the call returned at once, or wait, the call waited
+	// for the outcome.
+	Mode string `json:"mode"`
+	// By is the pane whose call delegated the task, empty for a call from
+	// outside every pane. A wake of the parent is typed with its authority.
+	By string `json:"by,omitempty"`
+	// Parent is the pane the result is mailed to, nil when there is none: a
+	// delegate with wait from outside every pane.
+	Parent *PaneRef `json:"parent,omitempty"`
+	// Worktree is the worktree the child works in, and Base the commit it
+	// was made from, for worktree isolation.
+	Worktree string `json:"worktree,omitempty"`
+	Base     string `json:"base,omitempty"`
+	// StartedAt is the unix-milli time the prompt was typed. A state the
+	// child reaches after it is the child's answer to the task.
+	StartedAt int64 `json:"started_at"`
+	// State is working, asking, done, errored, closed or stopped.
+	// FinishedAt is the unix-milli time it became done, errored or stopped,
+	// zero before.
+	State      string `json:"state"`
+	FinishedAt int64  `json:"finished_at,omitempty"`
+	// AskedAt is the unix-milli time the child came to a question, zero
+	// while it asks none. QuestionMail is the message that told the parent,
+	// zero when no message was sent (an approval, or a call that waited).
+	AskedAt      int64  `json:"asked_at,omitempty"`
+	QuestionMail uint64 `json:"question_mail,omitempty"`
+	// ResultMail is the message that carried the answer to the parent, zero
+	// when none was sent.
+	ResultMail uint64 `json:"result_mail,omitempty"`
 }
 
 // AgentLink is what a child agent pane knows of the agent that started it,

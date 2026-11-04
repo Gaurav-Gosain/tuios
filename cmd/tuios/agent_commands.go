@@ -104,6 +104,8 @@ type agentRow struct {
 	// Parent and Root are set on an agent another agent started.
 	Parent *agentLinkRef `json:"parent"`
 	Root   *agentLinkRef `json:"root"`
+	// Role is set on a child agent delegate started.
+	Role string `json:"role"`
 }
 
 // agentLinkRef is a pane of an agent's parent chain, as list-agents gives it.
@@ -187,9 +189,10 @@ func printAgentList(w io.Writer, raw json.RawMessage, all bool, on string) error
 	}
 
 	// The parent and root columns show only when an agent here has a parent.
-	linked := false
+	linked, roles := false, false
 	for _, a := range res.Agents {
 		linked = linked || a.Parent != nil
+		roles = roles || a.Role != ""
 	}
 	rows := make([][]string, 0, len(res.Agents))
 	for _, a := range res.Agents {
@@ -224,11 +227,17 @@ func printAgentList(w io.Writer, raw json.RawMessage, all bool, on string) error
 		if linked {
 			row = append(row, agentLinkCell(a.Parent), agentLinkCell(a.Root))
 		}
+		if roles {
+			row = append(row, plainLine(a.Role))
+		}
 		rows = append(rows, append(row, unread, plainLine(a.Message)))
 	}
 	headers := []string{"ID", "NAME", "STATE", "HARNESS", "SOURCE"}
 	if linked {
 		headers = append(headers, "PARENT", "ROOT")
+	}
+	if roles {
+		headers = append(headers, "ROLE")
 	}
 	headers = append(headers, "MAIL", "NOTE")
 

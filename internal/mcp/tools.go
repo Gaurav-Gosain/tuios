@@ -123,6 +123,12 @@ var catalog = []toolSpec{
 		note:  "Only the person may answer a prompt: from inside a pane this is always refused, and from outside every pane only when the daemon runs with [daemon] respond_from_shell.",
 	},
 	{name: "tuios_fan", verb: "fan", write: true, hints: hintsPaneInput, base: 2 * time.Minute},
+	{
+		// parent is left out: the daemon takes the caller's own pane, so a
+		// pane delegates only as itself and the answer comes back to it.
+		name: "tuios_delegate", verb: "delegate", write: true, hints: hintsPaneInput,
+		hide: []string{"parent"}, untrusted: true, waits: []string{"wait", "ready_timeout"},
+	},
 }
 
 // tool is one listed tool.

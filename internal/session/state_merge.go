@@ -305,6 +305,8 @@ func retainDaemonExclusive(incoming, canonical *SessionState) {
 	startedBy := make(map[string]*PaneRef)
 	// The agent link goes with it, for the same reason.
 	agentLinks := make(map[string]*AgentLink)
+	// And so does a delegation record (verb_delegate.go).
+	delegations := make(map[string]*Delegation)
 	// A window's start folder is fixed by the daemon when it makes the
 	// window, and a grant is held to it, so canonical wins unconditionally:
 	// a push can neither set one nor move it, even where canonical has none.
@@ -328,6 +330,9 @@ func retainDaemonExclusive(incoming, canonical *SessionState) {
 		}
 		if w.AgentLink != nil {
 			agentLinks[w.ID] = w.AgentLink
+		}
+		if w.Delegation != nil {
+			delegations[w.ID] = w.Delegation
 		}
 		if w.Grants != nil {
 			paneGrants[w.ID] = w.Grants
@@ -494,6 +499,7 @@ func retainDaemonExclusive(incoming, canonical *SessionState) {
 		w.Grants = paneGrants[w.ID]
 		w.StartedBy = startedBy[w.ID]
 		w.AgentLink = agentLinks[w.ID]
+		w.Delegation = delegations[w.ID]
 	}
 }
 

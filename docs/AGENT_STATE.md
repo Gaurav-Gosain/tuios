@@ -3846,7 +3846,8 @@ The server is read-only by default: it lists and captures panes, waits for
 states, follows the event stream (`tuios_events`, resumable with the
 `last_seq` and `boot_id` it returns), reports the agent's own state and meta,
 and sends and reads mail. `--write` adds `tuios_send_text`,
-`tuios_send_keys`, `tuios_ask_agent`, `tuios_respond` and `tuios_fan`. Either
+`tuios_send_keys`, `tuios_ask_agent`, `tuios_respond`, `tuios_fan` and
+`tuios_delegate`. Either
 way it reaches only the session of the pane it runs in, the sessions in its fan
 group, and the sessions a `fan` from it started, unless it was started with
 `--scope all`.
