@@ -330,6 +330,7 @@ func (a *App) approvalCard(c *ui.Context, pal *palette, ag client.Agent, it sess
 	if !held {
 		a.ckFetchPeek(ag, it)
 	}
+	question := !held && (it.Kind == session.AttentionQuestion || it.Kind == session.AttentionAsk)
 	pk := ck.peek
 	settled := now.Sub(ck.shown.since) >= ckAnswerSettle
 	risky := len(it.Risk) > 0 || pk != nil && len(pk.risk) > 0
@@ -345,11 +346,14 @@ func (a *App) approvalCard(c *ui.Context, pal *palette, ag client.Agent, it sess
 		ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
 			ui.Box(c).Size(8, 8).Radius(4).Background(pal.attention).Shrink(0)
 			verb, rest := ckLine2(ag, &it)
-			if verb == locales.CockpitAsks() {
-				verb = locales.CockpitQuestion()
+			if question {
+				// "{name} asks", and how long it waits.
+				oneLine(c, locales.CockpitNameAsks(ag.Name), fsBody, wSemibold).TextColor(pal.text)
+				ui.Text(c, ago(it.Since/int64(time.Millisecond), now)).FontSize(fsSmall).TextColor(pal.textMuted).SingleLine().Shrink(0)
+			} else {
+				oneLine(c, verb+"?", fsBody, wSemibold).TextColor(pal.text)
+				oneLine(c, locales.CockpitWaits(ag.Name, ago(it.Since/int64(time.Millisecond), now)), fsSmall, 0).TextColor(pal.textMuted).Shrink(2)
 			}
-			oneLine(c, verb+"?", fsBody, wSemibold).TextColor(pal.text)
-			oneLine(c, locales.CockpitWaits(ag.Name, ago(it.Since/int64(time.Millisecond), now)), fsSmall, 0).TextColor(pal.textMuted).Shrink(2)
 			ui.Spacer(c)
 			if risky {
 				chip(c, pal, pal.danger.Alpha(0.14), pal.dangerText, func() {
@@ -363,7 +367,11 @@ func (a *App) approvalCard(c *ui.Context, pal *palette, ag client.Agent, it sess
 			target = t
 		}
 		mono := a.termFamily()
-		if !held && pk != nil && len(pk.lines) > 0 {
+		if question && (pk == nil || len(pk.actions) == 0) {
+			// A question reads as one, in the text's font; the reply box
+			// below answers it.
+			ui.Text(c, target).FontSize(fsProse).LineHeight(1.5).TextColor(pal.text).MaxLines(8).Selectable()
+		} else if !held && pk != nil && len(pk.lines) > 0 {
 			ui.Column(c).Radius(rControl).Background(ckCodeBg(pal)).Padding(8, 12).Gap(1).Clip().Children(func() {
 				for _, l := range pk.lines {
 					ui.Text(c, l).Font(mono).FontSize(fsCode).TextColor(pal.text).SingleLine()
@@ -416,7 +424,13 @@ func (a *App) approvalCard(c *ui.Context, pal *palette, ag client.Agent, it sess
 		// The buttons wrap rather than cut the last in a narrow card.
 		ui.Row(c).Wrap().Gap(8).AlignItems(ui.Center).Opacity(map[bool]float32{true: 1, false: 0.55}[settled]).Children(func() {
 			opts := a.ckOptions(it, pk)
-			if len(opts) == 0 && (pk == nil || !pk.loading) {
+			if question && (pk == nil || len(pk.actions) == 0) {
+				opts = nil
+				if sizedButton(c, "ans-reply", locales.CockpitReply(), "r", true, hControl, rControl, pal) {
+					a.ckFocusReply()
+				}
+				oneLine(c, locales.CockpitAnswerByReply(), fsSmall, 0).TextColor(pal.textMuted).Shrink(2)
+			} else if len(opts) == 0 && (pk == nil || !pk.loading) {
 				// Nothing here can answer it: say so, and offer the pane.
 				ui.Text(c, locales.CockpitAnswerInPane()).FontSize(fsSmall).TextColor(pal.textMuted).MaxLines(2).MinWidth(0)
 				// The view's one primary is Send: this one is secondary.

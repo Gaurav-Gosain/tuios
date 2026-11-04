@@ -570,7 +570,10 @@ func (a *App) cockpitKeys(c *ui.Context, col ui.Element) {
 	case key(0, ui.KeyA):
 		a.ckAnswer("once", false)
 	case key(0, ui.KeyR):
-		if !a.ckAnswer("deny", false) {
+		// r answers a question in the reply box, and rejects an approval.
+		if r, ok := a.ckSelected(); ok && r.item != nil && (r.item.Kind == session.AttentionQuestion || r.item.Kind == session.AttentionAsk) && !ckHeld(*r.item) {
+			a.ckFocusReply()
+		} else if !a.ckAnswer("deny", false) {
 			a.ckFocusReply()
 		}
 	case key(0, ui.KeyI):
