@@ -7,7 +7,12 @@ import "github.com/Gaurav-Gosain/mygo/ui"
 // center, 48 DIPs up so that they clear the hint bars, and moves them: a
 // toast rises and fades in, those above make room, and one that goes
 // sinks and fades out. Call it once in each window's view.
-func toasts(c *ui.Context) {
+func toasts(c *ui.Context) { toastsAt(c, false) }
+
+// toastsAt is toasts, at the top right under the title bar with top set:
+// the agents view keeps its composer and its key line at the bottom, which
+// a toast there would cover.
+func toastsAt(c *ui.Context, top bool) {
 	pal := paletteFor(c)
 	fill := pal.popover
 	if pal.dark {
@@ -20,8 +25,16 @@ func toasts(c *ui.Context) {
 		Enter:     &ui.Motion{Y: 14, Opacity: 0, Scale: 0.98},
 		Exit:      &ui.Motion{Y: 8, Opacity: 0, Scale: 0.98},
 	}
+	if top {
+		move.Enter = &ui.Motion{Y: -14, Opacity: 0, Scale: 0.98}
+		move.Exit = &ui.Motion{Y: -8, Opacity: 0, Scale: 0.98}
+	}
 	ui.ToastViewportBase(c, func(viewport ui.Element, list []ui.Toast) {
-		viewport.Bottom(48).AlignItems(ui.Center).Gap(sp2)
+		if top {
+			viewport.Justify(ui.Start).Top(headerH + sp3).Right(sp4).AlignItems(ui.End).Gap(sp2)
+		} else {
+			viewport.Bottom(48).AlignItems(ui.Center).Gap(sp2)
+		}
 		for _, t := range list {
 			p := ui.ToastBase(c, t)
 			box := p.Root.Row().AlignItems(ui.Center).Gap(sp3).Padding(10, sp4).Radius(rCard).

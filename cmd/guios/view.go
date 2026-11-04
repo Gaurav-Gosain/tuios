@@ -224,7 +224,7 @@ func (a *App) view(c *ui.Context) {
 		}
 	}
 	keepOverlay(c)
-	toasts(c)
+	toastsAt(c, a.ck.open)
 	a.spawnView(c, pal)
 	a.compareView(c, pal)
 	a.paletteView(c, pal)
