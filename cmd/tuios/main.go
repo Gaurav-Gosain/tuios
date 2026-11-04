@@ -1252,7 +1252,9 @@ when the program exits, unless you add --keep-open. Put -- before a command that
 tuios reads them as its own flags: tuios new-window log -- git log --oneline.
 
 --workspace picks the workspace, --cwd sets the starting directory, and
---no-focus leaves the focus where it is.
+--no-focus leaves the focus where it is. Run in a pane without --cwd, the
+window starts in the directory you run the command from. Outside a pane it
+starts in the focused pane's directory.
 
 --keep-open keeps the window after its program exits. The window shows a line
 with the exit status under the last output. Close the window to remove it.
@@ -1324,7 +1326,7 @@ window as one line with its uri.`,
 	}
 	newWindowCmd.Flags().StringVarP(&newWindowSession, "session", "s", "", "Target session (default: this pane's session, else the most recently active)")
 	newWindowCmd.Flags().IntVar(&newWindowWorkspace, "workspace", 0, "Workspace to open the window on (default: the calling pane's workspace, else the one the session shows)")
-	newWindowCmd.Flags().StringVar(&newWindowCwd, "cwd", "", "Directory to start the shell in (default: the daemon's)")
+	newWindowCmd.Flags().StringVar(&newWindowCwd, "cwd", "", "Directory to start the shell in (default: the calling pane's, else the focused pane's)")
 	newWindowCmd.Flags().BoolVar(&newWindowNoFocus, "no-focus", false, "Leave the focus where it is")
 	newWindowCmd.Flags().StringVar(&newWindowHost, "host", "", "Run the window's process on this machine from the [hosts] table (default: this machine)")
 	newWindowCmd.Flags().StringSliceVar(&newWindowGrants, "grants", nil, "What the window's process may do through tuios, comma separated: read, write, fan, files, task, respond, admin, or none (default: [agents.permissions])")

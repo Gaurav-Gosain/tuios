@@ -12784,3 +12784,16 @@ the path, and with the diff focused `l` must scroll the code. Run on
 | A build of main at 91a743c5a | "l scrolled the diff while the file list had the keys" | **caught** |
 
 The frame is `review-list-scrolled` under `TUIOS_E2E_FRAMES`.
+## A new pane starts in the calling pane's folder
+
+`TestNewWindowFromAPaneStartsInThatPanesFolder` opens two panes in two
+folders, with the focus on the second. The first pane runs
+`tuios new-window probe --no-focus`. The probe must start in the first pane's
+folder, and a window opened outside every pane must start in the focused
+pane's folder.
+
+Run on 2026-11-04 on Linux. The fixed build passes in 0.6 s.
+
+| Claim | Control | Where it fails | Verdict |
+| --- | --- | --- | --- |
+| new-window from a pane starts in the caller's folder | the `CallerCwd` line cut from `verbNewWindow` | "the window a pane in `<dir>/agent-dir` opened starts in `<dir>/person-dir`" | **caught** |

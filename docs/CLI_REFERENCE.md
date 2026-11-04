@@ -1105,6 +1105,11 @@ Inbox shows it), showed nothing before `--ready-timeout` (default 120000), or
 exited. It also exits 1 when a `--prompt` was not taken. The pane is not
 focused unless `--focus` is passed.
 
+Without `--cwd` or `--repo`, the agent starts in your directory when you run
+the command in a pane. Outside a pane it starts in the focused pane's
+directory. With `appearance.new_window_inherit_cwd` off, it starts in the
+session's directory.
+
 The command sends your `PATH` with any `--env`, as `fan` does, when the
 session is on this machine. For a session on another machine
 (`-s host:session`) it sends no `PATH`, and the agent is looked up on that
@@ -1703,7 +1708,7 @@ command that has flags of its own, or tuios reads them as its own flags:
 **Flags:**
 - `-s, --session <name>`: Target session (default: this pane's session, else the most recently active)
 - `--workspace <n>`: Workspace to open the window on (default: the calling pane's workspace, else the one the session shows)
-- `--cwd <dir>`: Directory to start the shell in (default: the daemon's)
+- `--cwd <dir>`: Directory to start the shell in (default: your directory when you run it in a pane, else the focused pane's)
 - `--no-focus`: Leave the focus where it is
 - `--host <name>`: Run the window's process on this machine from the `[hosts]` table (default: this machine)
 - `--grants <grant>[,<grant>...]`: What the window's process may do through tuios: `read`, `write`, `fan`, `respond`, `admin`, or `none` (default: `[agents.permissions]`). See [`tuios pane-grants`](#tuios-pane-grants)

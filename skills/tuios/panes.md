@@ -117,10 +117,10 @@ tuios new-window -s work tests --workspace 2 --cwd /src/api --no-focus
 id=$(tuios new-window -s work job --print-id)
 ```
 
-`--no-focus` keeps the person where they are. Without `--cwd`, the pane
-starts in the directory of the focused pane, which is often not your
-directory. `--cwd "$PWD"` starts it in yours. `--json` says where the
-pane went. `unplaced: true` means the session is detached and the pane has a
+From inside a pane, `new-window` and `start-agent` without `--cwd` start in
+your current directory. From outside every pane they start in the focused
+pane's directory. `--no-focus` keeps the person where they are. `--json` says
+where the pane went. `unplaced: true` means the session is detached and the pane has a
 nominal size until a client places it, so do not compute anything from its
 geometry yet.
 

@@ -2516,7 +2516,8 @@ Create a new window in a session.
 
 Params, all optional: `session`, `name` (window name; omit to use the shell's
 title), `workspace` (workspace number; omit for the current one), `cwd`
-(directory to start in; omit to inherit the daemon's), `focus` (default true;
+(directory to start in; omit for the caller's directory when the caller runs
+in a pane, else the focused pane's), `focus` (default true;
 pass false to leave the focus where it is), `command` (argv to exec instead of a
 shell, not parsed by any shell; with a client attached, the window closes when
 it exits), `host` (run the window's process on a machine from the `[hosts]`
@@ -4270,7 +4271,8 @@ The session `session` names is created when it does not exist. With no
 harness or program when there is none. The pane starts in `cwd`, or in the
 main checkout of the repository `repo` or `repo_url` names (see
 [new-worktree](#new-worktree) for `repo_url`, `repos_root` and `clone`), or
-else in the focused pane's directory. Passing `cwd` and a repository is
+else in the caller's directory when the caller runs in a pane, or else in the
+focused pane's directory. Passing `cwd` and a repository is
 `invalid_params`. From another machine it is reached like every session verb,
 with a host-qualified session, and names the repository by `repo_url`.
 

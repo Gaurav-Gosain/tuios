@@ -431,6 +431,7 @@ func (d *Daemon) verbNewWindow(cs *connState, params json.RawMessage) (any, *ver
 		closeOnExit: p.CloseOnExit,
 		Title:       p.Name,
 		Cwd:         p.Cwd,
+		CallerCwd:   d.callerCwd(cs),
 		Workspace:   p.Workspace,
 		Focus:       focus,
 		Command:     p.Command,

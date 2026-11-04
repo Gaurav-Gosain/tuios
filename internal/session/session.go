@@ -1964,9 +1964,16 @@ func (s *Session) historyPolicy() HistoryPolicy {
 // has since cd'd to. The shell's process comes first, then the record, which a
 // snapshot fills with the shell's OSC 7 report; see windowCwd. "" is the
 // fallback after that, and the caller then uses the session's start directory.
-func (s *Session) inheritedCwd() string {
+//
+// caller is the folder of the process that asked, when it runs in a pane (see
+// Daemon.callerCwd). It wins over the focused pane: an agent in one pane that
+// opens another means its own folder, not the one the person is looking at.
+func (s *Session) inheritedCwd(caller string) string {
 	if s.config == nil || !s.config.InheritCwd {
 		return ""
+	}
+	if caller != "" {
+		return caller
 	}
 	return s.windowCwd(s.GetState().FocusedWindowID)
 }

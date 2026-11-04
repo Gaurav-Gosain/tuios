@@ -3,10 +3,12 @@ package session
 import (
 	"encoding/json"
 	"errors"
+	"os"
 	"slices"
 	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/ptyspawn"
 )
 
 // The agent switch: [agents] enabled = false.
@@ -243,6 +245,29 @@ func (d *Daemon) callerWorkspaceIn(cs *connState, sess *Session) int {
 		return ws
 	}
 	return 0
+}
+
+// callerCwd is the folder of the process on cs, when it runs in a pane of
+// this machine: the folder the caller would pass as --cwd "$PWD". It falls
+// back to the folder of the caller's pane, where the process cannot be read
+// (native Windows). It is "" for a caller in no pane, which keeps the focused
+// pane's folder as the default.
+func (d *Daemon) callerCwd(cs *connState) string {
+	ref := d.callerPaneRef(cs)
+	if ref == nil {
+		return ""
+	}
+	if cs.peerPID > 0 {
+		if dir, ok := ptyspawn.ProcessCwd(cs.peerPID); ok && !d.peerChanged(cs) {
+			if fi, err := os.Stat(dir); err == nil && fi.IsDir() {
+				return dir
+			}
+		}
+	}
+	if sess := d.sessionHoldingWindow(ref.Window); sess != nil {
+		return sess.windowCwd(ref.Window)
+	}
+	return ""
 }
 
 // noteStartedBy records on window the pane the caller on cs runs in, as the

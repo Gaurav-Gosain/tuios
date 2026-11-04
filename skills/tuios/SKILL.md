@@ -51,8 +51,8 @@ command. It opens the window manager.
 | Show that you work, or wait for approval | `tuios set-agent-state working -m 'refactor payments'` or `tuios set-agent-state needs_input --kind approval -m 'approve make deploy'` |
 
 `new-window` prints the short id and the name (`3a42ab8f  tests`). With
-`--wait`, it exits with the status of the command. A new pane starts in the
-directory of the focused pane. Pass `--cwd "$PWD"` to start it in yours.
+`--wait`, it exits with the status of the command. From inside a pane, a new
+pane starts in your current directory. `--cwd DIR` starts it somewhere else.
 
 `run` prints what the command printed, and exits with its status. It needs a
 shell that marks its commands (OSC 133). Without the marks, it fails with

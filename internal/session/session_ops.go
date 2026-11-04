@@ -198,6 +198,10 @@ type NewWindowOptions struct {
 	// Cwd is the directory the shell starts in. Empty inherits the daemon's,
 	// which is what every window did before this existed.
 	Cwd string
+	// CallerCwd is the folder of the pane process that asked for the window,
+	// "" for a caller in no pane. With no Cwd it is inherited in place of the
+	// focused pane's folder. See Daemon.callerCwd.
+	CallerCwd string
 	// Workspace is the workspace to place the window on. Zero means whichever
 	// workspace is current, so a caller that does not care keeps the old
 	// behaviour.
@@ -395,7 +399,7 @@ func (s *Session) AddDaemonWindowWith(opts NewWindowOptions, onExit func(ptyID s
 	// unrelated on the rare occasion the path happens to exist there, so a
 	// window with a host inherits nothing and starts where its own shell would.
 	if cwd == "" && opts.Host == "" {
-		cwd = s.inheritedCwd()
+		cwd = s.inheritedCwd(opts.CallerCwd)
 	}
 	// With nothing to inherit, use the directory set when the session was
 	// created. A local path, so a window with a host skips it

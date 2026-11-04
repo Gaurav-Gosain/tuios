@@ -34,7 +34,8 @@ harness manifest recognises is ready only once it reports a state itself.
 
 The pane opens in the session -s names, which is created when it does not
 exist. It starts in --cwd, or the main checkout of the repository --repo
-names, or else the focused pane's directory.
+names. Without either, it starts in the directory you run the command from
+when you run it in a pane, and in the focused pane's directory otherwise.
 
 -s HOST:SESSION starts it on another machine from the [hosts] table. PATH is
 not sent then, and the agent is looked up on that machine's PATH. --env there
@@ -109,7 +110,7 @@ task claim needs. It is checked before anything starts.`,
 	}
 	cmd.Flags().StringVarP(&sessionName, "session", "s", "", "Session to open the pane in, HOST:SESSION for another machine. Created when it does not exist (default: this pane's session, else the most recently active)")
 	cmd.Flags().StringVar(&name, "name", "", "The pane's name, which list-agents shows and -w takes")
-	cmd.Flags().StringVar(&cwd, "cwd", "", "The directory the agent starts in (default: the focused pane's)")
+	cmd.Flags().StringVar(&cwd, "cwd", "", "The directory the agent starts in (default: the calling pane's, else the focused pane's)")
 	cmd.Flags().StringVar(&repo, "repo", "", "A directory inside a repository: the agent starts in its main checkout")
 	cmd.Flags().BoolVar(&clone, "clone", false, "On another machine, clone this repository there when it has no checkout")
 	cmd.Flags().IntVar(&workspace, "workspace", 0, "The workspace to open the pane on (default: the current one)")
