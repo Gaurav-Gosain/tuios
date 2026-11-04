@@ -1189,5 +1189,7 @@
   "cockpitHintAddCard": "添加卡片",
   "cockpitMailForYou": "给你的邮件",
   "cockpitNoMailForYou": "没有给你的邮件",
-  "cockpitNoMailForYouDetail": "代理发给你的邮件显示在这里。"
+  "cockpitNoMailForYouDetail": "代理发给你的邮件显示在这里。",
+  "cockpitImage": "图片",
+  "cockpitImageOpen": "以原始大小显示图片 (Space)"
 }

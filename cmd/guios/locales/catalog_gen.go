@@ -12061,3 +12061,23 @@ func CockpitNoMailForYouDetail() string { return In(i18n.Locale()).CockpitNoMail
 func (msgs Messages) CockpitNoMailForYouDetail() string {
 	return Catalog.Format(msgs.locale, "cockpitNoMailForYouDetail", nil)
 }
+
+// CockpitImage says "Image"
+// in the language the app shows.
+func CockpitImage() string { return In(i18n.Locale()).CockpitImage() }
+
+// CockpitImage says "Image"
+// in the language of msgs.
+func (msgs Messages) CockpitImage() string {
+	return Catalog.Format(msgs.locale, "cockpitImage", nil)
+}
+
+// CockpitImageOpen says "Show the image at full size (Space)"
+// in the language the app shows.
+func CockpitImageOpen() string { return In(i18n.Locale()).CockpitImageOpen() }
+
+// CockpitImageOpen says "Show the image at full size (Space)"
+// in the language of msgs.
+func (msgs Messages) CockpitImageOpen() string {
+	return Catalog.Format(msgs.locale, "cockpitImageOpen", nil)
+}

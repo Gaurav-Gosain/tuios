@@ -53,6 +53,8 @@ type ckThread struct {
 	open, shut map[string]bool
 	// md holds each text entry's blocks, parsed once, by entry id.
 	md map[string][]markdown.Block
+	// images holds the images read, by entry id (cockpit_image.go).
+	images map[string]*ckThreadImage
 }
 
 type ckItemKind uint8
@@ -68,6 +70,7 @@ const (
 	ckItemPlan
 	ckItemError
 	ckItemOlder
+	ckItemImage // an image in a prompt or an answer
 )
 
 // ckItem is one item of the chat: an entry, or several joined.
@@ -257,6 +260,8 @@ func buildItems(entries []transcriptview.Entry, more bool, mdc map[string][]mark
 				continue
 			}
 			it.kind = ckItemTool
+		case e.Kind == transcriptview.KindText && e.Image != nil:
+			it.kind = ckItemImage
 		case e.Role == transcriptview.RoleUser && e.Kind == transcriptview.KindText:
 			it.kind = ckItemUser
 		case e.Kind == transcriptview.KindText:
@@ -295,7 +300,7 @@ func buildItems(entries []transcriptview.Entry, more bool, mdc map[string][]mark
 				continue
 			}
 		}
-		if it.kind == ckItemUser {
+		if it.kind == ckItemUser || it.kind == ckItemImage && e.Role == transcriptview.RoleUser {
 			lastRole = "user"
 		} else {
 			lastRole = "assistant"
@@ -364,6 +369,8 @@ func (a *App) itemView(c *ui.Context, pal *palette, th *ckThread, it *ckItem, mo
 			ui.Text(c, it.e.Text).FontSize(fsProse).LineHeight(1.55).TextColor(pal.text).MaxWidthPercent(82).
 				Padding(10, 14).Radius(14, 14, 4, 14).Background(pal.accent.Alpha(0.16))
 		})
+	case ckItemImage:
+		a.imageItem(c, pal, th, it)
 	case ckItemText:
 		ui.Column(c).Gap(8).Children(func() {
 			if it.label {

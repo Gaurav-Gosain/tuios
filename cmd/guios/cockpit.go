@@ -113,6 +113,8 @@ type cockpit struct {
 	jumpTo *ckJump
 	// focusView asks the view just shown to take the keys.
 	focusView bool
+	// lightbox is an image of a thread shown whole.
+	lightbox *ckThreadImage
 
 	agents []client.Agent
 	items  []session.AttentionItem

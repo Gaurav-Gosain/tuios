@@ -1189,5 +1189,7 @@
   "cockpitHintAddCard": "カードを追加",
   "cockpitMailForYou": "あなたへのメール",
   "cockpitNoMailForYou": "あなたへのメールはありません",
-  "cockpitNoMailForYouDetail": "エージェントがあなたに送ったメールがここに表示されます。"
+  "cockpitNoMailForYouDetail": "エージェントがあなたに送ったメールがここに表示されます。",
+  "cockpitImage": "画像",
+  "cockpitImageOpen": "画像を原寸で表示 (Space)"
 }

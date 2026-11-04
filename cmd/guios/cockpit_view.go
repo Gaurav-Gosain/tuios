@@ -151,6 +151,7 @@ func (a *App) cockpitCard(c *ui.Context, pal *palette, bar ui.TitleBar, shown fl
 			ui.Box(c).Height(1).Shrink(0).Background(pal.divider)
 			a.cockpitHints(c, pal)
 		}
+		a.lightbox(c, pal)
 	})
 }
 
@@ -524,6 +525,13 @@ func (a *App) cockpitKeys(c *ui.Context, col ui.Element) {
 		return
 	}
 	key := func(mods ui.Modifiers, k ui.Key) bool { return col.Shortcut(mods, k) }
+	if ck.lightbox != nil {
+		if key(0, ui.KeyEscape) || key(0, ui.KeySpace) {
+			ck.lightbox = nil
+			c.Invalidate()
+		}
+		return
+	}
 	switch {
 	case key(0, ui.KeyJ), key(0, ui.KeyDown):
 		a.ckMove(1)
@@ -542,7 +550,14 @@ func (a *App) cockpitKeys(c *ui.Context, col ui.Element) {
 		ck.stackFocus = false
 	case ck.stacked && !ck.stackFocus && (key(0, ui.KeyRight) || key(0, ui.KeyL)) && a.ckOnAgent():
 		ck.stackFocus = true
-	case key(0, ui.KeySpace), key(0, ui.KeyRight), key(0, ui.KeyLeft):
+	case key(0, ui.KeySpace):
+		if r, ok := a.ckSelected(); ok && r.kind == ckRowHead {
+			a.ckToggleFold(r.group)
+		} else if im := a.ckNewestImage(); im != nil {
+			// Space shows the agent's newest image whole.
+			ck.lightbox = im
+		}
+	case key(0, ui.KeyRight), key(0, ui.KeyLeft):
 		if r, ok := a.ckSelected(); ok && r.kind == ckRowHead {
 			a.ckToggleFold(r.group)
 		}

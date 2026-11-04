@@ -2128,5 +2128,7 @@
   "cockpitHintAddCard": "add card",
   "cockpitMailForYou": "Mail for you",
   "cockpitNoMailForYou": "No mail for you",
-  "cockpitNoMailForYouDetail": "Mail that an agent sends to you shows here."
+  "cockpitNoMailForYouDetail": "Mail that an agent sends to you shows here.",
+  "cockpitImage": "Image",
+  "cockpitImageOpen": "Show the image at full size (Space)"
 }
