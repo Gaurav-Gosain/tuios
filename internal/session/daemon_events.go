@@ -327,6 +327,10 @@ type SessionEvent struct {
 	hookWorktree, hookAgentSession string
 	hookRoot                       string
 	hookRunDir                     string
+	// link is the window's place in a chain of agents, for the Inbox: the
+	// parent and the root its items carry, and whether a delegated task's
+	// question goes to the parent first. See attention_children.go.
+	link childLink
 	// taskRow and taskReason are an eventTaskReleased's card, as list-tasks
 	// gives it, and why it was let go (task.go).
 	taskRow    *TaskRow

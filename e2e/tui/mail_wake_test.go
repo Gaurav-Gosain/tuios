@@ -6,11 +6,13 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/testutil"
+	"github.com/Gaurav-Gosain/tuitest"
 )
 
 // mailAgentScript is a stand-in agent: it reports idle, then prints each line
@@ -374,9 +376,11 @@ func TestMailWakeTakesNoAuthorityFromAPaneOnAnotherMachine(t *testing.T) {
 
 // delegateChildScript is the child agent of the delegate tests. It reports
 // idle, then for each line typed into it reports working and, after DELAY
-// seconds (default 3), prints ANSWER-7f3[line] and reports done. A line with
-// ASK in it is a question instead: it prints the question and reports
-// needs_input of kind question.
+// seconds (default 3), prints ANSWER-7f3[line] and reports done. With GATE
+// set it also waits for that file first, so several children finish
+// together. A line with ASK in it is a question instead: it prints the
+// question and reports needs_input of kind question. A line with APPROVE in
+// it is an approval of a shell command.
 const delegateChildScript = `T="$1"
 stty -echo
 echo CHILD-READY
@@ -388,7 +392,14 @@ while IFS= read -r l; do
     echo "QUESTION-5c1: which file should I read?"
     "$T" set-agent-state needs_input --kind question -m "Which file should I read?" -w "$TUIOS_PANE_ID" >/dev/null
     continue ;;
+  *APPROVE*)
+    echo "APPROVAL-2d8: Bash wants to run rm -rf build"
+    "$T" set-agent-state needs_input --kind approval -m "Bash: rm -rf build" -w "$TUIOS_PANE_ID" >/dev/null
+    continue ;;
   esac
+  if [ -n "$GATE" ]; then
+    while [ ! -e "$GATE" ]; do sleep 0.1; done
+  fi
   sleep "${DELAY:-3}"
   echo "ANSWER-7f3[$l]"
   "$T" set-agent-state done -w "$TUIOS_PANE_ID" >/dev/null
@@ -769,5 +780,306 @@ func TestDelegateWorktreeAndClamp(t *testing.T) {
 	}
 	if dir := os.Getenv("TUIOS_E2E_FRAMES"); dir != "" {
 		_ = os.WriteFile(filepath.Join(dir, "delegate-worktree-clamp.txt"), []byte("worktree:\n"+out+"\nwide child:\n"+string(wide)), 0o644)
+	}
+}
+
+// routeItem is the part of a list-attention item the routing test reads.
+type routeItem struct {
+	ID              string   `json:"id"`
+	Kind            string   `json:"kind"`
+	Window          string   `json:"window"`
+	Summary         string   `json:"summary"`
+	Parent          *PaneRef `json:"parent"`
+	Root            *PaneRef `json:"root"`
+	WithParentUntil int64    `json:"with_parent_until"`
+}
+
+// PaneRef is a pane as list-attention names a child's parent and root.
+type PaneRef struct {
+	Session string `json:"session"`
+	Window  string `json:"window"`
+}
+
+// routeList is list-attention as the routing test reads it.
+type routeList struct {
+	Items      []routeItem    `json:"items"`
+	Counts     map[string]int `json:"counts"`
+	WithParent int            `json:"with_parent"`
+}
+
+// attentionList reads list-attention.
+func attentionList(t *testing.T, base string) routeList {
+	t.Helper()
+	raw, _ := json.Marshal(mustCall(t, base, "list-attention", map[string]any{}))
+	var l routeList
+	if err := json.Unmarshal(raw, &l); err != nil {
+		t.Fatalf("list-attention: %v: %s", err, raw)
+	}
+	return l
+}
+
+// itemOf is the item of kind for window, nil when none is open.
+func (l routeList) itemOf(window, kind string) *routeItem {
+	for i := range l.Items {
+		if l.Items[i].Window == window && l.Items[i].Kind == kind {
+			return &l.Items[i]
+		}
+	}
+	return nil
+}
+
+// childHold is the test's wait before a child's question is the person's, in
+// place of ten minutes (TUIOS_E2E_CHILD_HOLD_MS).
+const childHold = 20 * time.Second
+
+// TestDelegatedChildrenRouteTheirAttention delegates two tasks from a
+// stand-in parent agent, against a real daemon and a real client: one child
+// stops on an approval, the other asks a question.
+//
+// How this could pass wrongly, written down first:
+//   - The items could carry no chain. The approval and the question must each
+//     name the parent as parent and as root.
+//   - The question could skip the parent, or reach it twice. The parent must
+//     hold one mail, the question, and no mail for the approval.
+//   - The hold could hide the question. It must be listed, with
+//     with_parent_until set, and drawn in the agents view as with the parent
+//     agent, while the counts leave it out.
+//   - The hold could be forever, or end at once. It is still held well after
+//     the ask, and released after the test's hold, counted then.
+//   - The approval could be answered by an agent. A pane holding respond and
+//     write types into it and calls respond, and both are refused, with the
+//     child still on the approval.
+//
+// The frames are child-question-held and child-question-released in the
+// test's artifact directory.
+//
+// Negative controls (NEGATIVE_CONTROLS.md): with no hold set on the question
+// the held check fails; with the release timer doing nothing the release
+// check fails.
+func TestDelegatedChildrenRouteTheirAttention(t *testing.T) {
+	t.Setenv("TUIOS_E2E_CHILD_HOLD_MS", strconv.Itoa(int(childHold/time.Millisecond)))
+	base := t.TempDir()
+	killDaemon(t, base)
+	const session = "e2e-route"
+	if out, err := tuiosCLI(t, base, "new", session, "--detach"); err != nil {
+		t.Fatalf("create the session: %v\n%s", err, out)
+	}
+	parent := startMailAgent(t, base, session, "lead")
+	child := filepath.Join(base, "child.sh")
+	if err := os.WriteFile(child, []byte(delegateChildScript), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	agent := "sh " + child + " " + tuiosBin
+	var log strings.Builder
+	defer func() {
+		path := filepath.Join(artifactDir(t), "child-route.log")
+		_ = os.WriteFile(path, []byte(log.String()), 0o644)
+		t.Logf("artifact: %s", path)
+	}()
+
+	builder, _ := runDelegate(t, base, "--parent", parent, "--name", "builder", "--agent", agent, "APPROVE the cleanup")
+	reader, _ := runDelegate(t, base, "--parent", parent, "--role", "research", "--name", "reader", "--agent", agent, "ASK about the layout")
+	asked := time.Now()
+
+	var l routeList
+	deadline := time.Now().Add(uiTimeout)
+	for {
+		l = attentionList(t, base)
+		if l.itemOf(builder.Window, "approval") != nil && l.itemOf(reader.Window, "question") != nil || time.Now().After(deadline) {
+			break
+		}
+		time.Sleep(200 * time.Millisecond)
+	}
+	fmt.Fprintf(&log, "-- held: %+v\n", l)
+	appr, q := l.itemOf(builder.Window, "approval"), l.itemOf(reader.Window, "question")
+	if appr == nil || q == nil {
+		t.Fatalf("ASSERTION: the Inbox does not hold the child's approval and question: %+v", l)
+	}
+	for _, it := range []*routeItem{appr, q} {
+		if it.Parent == nil || it.Root == nil || it.Parent.Window != parent || it.Root.Window != parent {
+			t.Fatalf("ASSERTION: the child's %s does not name its parent and root %s: %+v %+v", it.Kind, parent, it.Parent, it.Root)
+		}
+	}
+	if appr.WithParentUntil != 0 {
+		t.Fatalf("ASSERTION: the child's approval is held for the parent agent: %+v", appr)
+	}
+	if q.WithParentUntil == 0 || l.WithParent != 1 || l.Counts["question"] != 0 || l.Counts["approval"] != 1 {
+		t.Fatalf("ASSERTION: the child's question is not held for the parent, or it is counted: %+v", l)
+	}
+	text, _ := tuiosCLI(t, base, "list-attention")
+	fmt.Fprintf(&log, "-- list-attention:\n%s\n", text)
+	if !strings.Contains(text, "with the parent agent") || !strings.Contains(text, "1 waiting.") {
+		t.Fatalf("ASSERTION: the command line does not show the held question apart:\n%s", text)
+	}
+
+	// The parent gets the question by mail, once, and nothing for the
+	// approval.
+	time.Sleep(time.Second)
+	msgs := parentMail(t, base, session, parent)
+	fmt.Fprintf(&log, "-- the parent's mail: %+v\n", msgs)
+	if len(msgs) != 1 || msgs[0].From != reader.Window || msgs[0].Subject != "Delegated task asks a question: research" {
+		t.Fatalf("ASSERTION: the parent's mail is not the one question: %+v", msgs)
+	}
+
+	// The agents view lists the held question with the working agents, and
+	// the parent's row counts what waits for the person in its chain.
+	term := startIn(t, base, startOpts{args: []string{"attach", session}, cols: 160, rows: 40, shippedLooks: true})
+	if err := term.WaitFor(func(s tuitest.Screen) bool { return countWindows(s) >= 1 }, bootTimeout); err != nil {
+		t.Fatalf("client never attached: %v\n%s", err, term.Snapshot())
+	}
+	windowManagementMode(t, term)
+	if err := term.SendKeys(tuitest.Ctrl('b'), "i"); err != nil {
+		t.Fatalf("open the agents view: %v", err)
+	}
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		return containsAll(s.Text(), "Needs you", "rm -rf build", "With the parent agent:", "Which file", "1 waiting in children")
+	}, uiTimeout); err != nil {
+		t.Fatalf("ASSERTION: the agents view does not show the held question and the chain's count: %v\n%s", err, term.Snapshot())
+	}
+	if s := term.Screen(); rowWith(s, "With the parent agent:") < rowWith(s, "Working") {
+		t.Fatalf("ASSERTION: the held question is not with the working agents\n%s", term.Snapshot())
+	}
+	saveCockpitFrames(t, term, "child-question-held")
+
+	// An agent pane may not answer the child's approval, whatever it holds.
+	if out, err := tuiosCLI(t, base, "new-window", "helper", "-s", session, "--no-focus"); err != nil {
+		t.Fatalf("open the helper pane: %v\n%s", err, out)
+	}
+	helper := windowID(t, base, session, "helper")
+	if out, err := tuiosCLI(t, base, "set-pane-grants", "-s", session, "-w", helper, "--grants", "read,write,respond"); err != nil {
+		t.Fatalf("give the helper respond: %v\n%s", err, out)
+	}
+	outFile := filepath.Join(base, "helper.txt")
+	line := fmt.Sprintf("'%s' send-keys -s %s -w %s --allow-blocked 1 >%s 2>&1; echo SENDKEYS=$? >>%s; '%s' respond approve -s %s -w %s >>%s 2>&1; echo RESPOND=$? >>%s; touch %s.done\n",
+		tuiosBin, session, builder.Window, outFile, outFile, tuiosBin, session, builder.Window, outFile, outFile, outFile)
+	if out, err := tuiosCLI(t, base, "send-text", "-s", session, "-w", helper, line); err != nil {
+		t.Fatalf("run the helper's calls: %v\n%s", err, out)
+	}
+	deadline = time.Now().Add(uiTimeout)
+	for {
+		if _, err := os.Stat(outFile + ".done"); err == nil {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("the helper's calls never finished")
+		}
+		time.Sleep(200 * time.Millisecond)
+	}
+	got, _ := os.ReadFile(outFile)
+	fmt.Fprintf(&log, "-- the helper pane's calls:\n%s\n", got)
+	if strings.Contains(string(got), "SENDKEYS=0") || strings.Contains(string(got), "RESPOND=0") || strings.Count(string(got), "child agent") < 2 {
+		t.Fatalf("ASSERTION: an agent pane answered the child's approval, or was refused for another reason:\n%s", got)
+	}
+	if st := attentionList(t, base).itemOf(builder.Window, "approval"); st == nil {
+		t.Fatalf("ASSERTION: the child's approval closed after the helper's calls")
+	}
+
+	// Well after the ask, the question is still the parent's. After the hold
+	// it is the person's.
+	if time.Since(asked) < childHold/2 {
+		if q := attentionList(t, base).itemOf(reader.Window, "question"); q == nil || q.WithParentUntil == 0 {
+			t.Fatalf("ASSERTION: the question was released early: %+v", q)
+		}
+	}
+	deadline = asked.Add(childHold + uiTimeout)
+	for {
+		l = attentionList(t, base)
+		if q := l.itemOf(reader.Window, "question"); q != nil && q.WithParentUntil == 0 {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("ASSERTION: the question was never released to the person: %+v", l)
+		}
+		time.Sleep(250 * time.Millisecond)
+	}
+	fmt.Fprintf(&log, "-- released after %v: %+v\n", time.Since(asked).Round(time.Millisecond), l)
+	if took := time.Since(asked); took < childHold-2*time.Second {
+		t.Fatalf("ASSERTION: the question was released after %v, before its hold of %v", took, childHold)
+	}
+	if l.Counts["question"] != 1 || l.WithParent != 0 {
+		t.Fatalf("ASSERTION: the released question is not counted: %+v", l)
+	}
+	// The row moves to Needs you once the view's short hold on a moving row
+	// is over.
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		work := rowWith(s, "Working")
+		return containsAll(s.Text(), "2 needs you", "Asks", "Which file", "2 waiting in children") && !strings.Contains(s.Text(), "With the parent agent:") &&
+			(work < 0 || rowWith(s, "Which file") < work)
+	}, uiTimeout); err != nil {
+		t.Fatalf("ASSERTION: the agents view did not move the released question to Needs you: %v\n%s", err, term.Snapshot())
+	}
+	saveCockpitFrames(t, term, "child-question-released")
+	if msgs := parentMail(t, base, session, parent); len(msgs) != 1 {
+		t.Fatalf("ASSERTION: the release mailed the parent again: %+v", msgs)
+	}
+	alive(t, term, "after a child's question was released")
+}
+
+// TestChildrenThatFinishTogetherWakeTheParentOnce delegates three tasks from a
+// stand-in parent agent at rest and lets them finish within a moment of each
+// other.
+//
+// How this could pass wrongly: the wake could be typed once per child, so
+// the parent's pane must show exactly one typed line, also well after. The
+// line could hold a child's text, so the answers carry marker text the pane
+// must never show. It could leave the states out, so it must say that three
+// tasks finished done.
+//
+// Negative control (NEGATIVE_CONTROLS.md): with the wake's grace and the
+// queued wake's cover both cut, the parent shows a line per child.
+func TestChildrenThatFinishTogetherWakeTheParentOnce(t *testing.T) {
+	base := t.TempDir()
+	killDaemon(t, base)
+	const session = "e2e-cohort"
+	if out, err := tuiosCLI(t, base, "new", session, "--detach"); err != nil {
+		t.Fatalf("create the session: %v\n%s", err, out)
+	}
+	parent := startMailAgent(t, base, session, "lead")
+	child := filepath.Join(base, "child.sh")
+	if err := os.WriteFile(child, []byte(delegateChildScript), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	gate := filepath.Join(base, "gate")
+	agent := "sh " + child + " " + tuiosBin
+	var windows []string
+	for i := range 3 {
+		res, _ := runDelegate(t, base, "--parent", parent, "--name", "part-"+strconv.Itoa(i+1), "--env", "GATE="+gate, "--env", "DELAY=0",
+			"--agent", agent, "part marker-c"+strconv.Itoa(i+1))
+		if !res.Delegated {
+			t.Fatalf("delegate %d did not hand the task over: %+v", i+1, res)
+		}
+		windows = append(windows, res.Window)
+	}
+	if err := os.WriteFile(gate, nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	for i, w := range windows {
+		waitCapture(t, base, session, w, "ANSWER-7f3[part marker-c"+strconv.Itoa(i+1)+"]")
+	}
+
+	deadline := time.Now().Add(mailWakeWait + uiTimeout)
+	for {
+		if n, _ := gotLines(t, base, session, parent); n > 0 {
+			break
+		}
+		if time.Now().After(deadline) {
+			_, got := gotLines(t, base, session, parent)
+			t.Fatalf("ASSERTION: the parent was never woken:\n%s", got)
+		}
+		time.Sleep(250 * time.Millisecond)
+	}
+	time.Sleep(mailWakeWait)
+	n, got := gotLines(t, base, session, parent)
+	if dir := artifactDir(t); dir != "" {
+		_ = os.WriteFile(filepath.Join(dir, "children-wake.txt"), []byte(got), 0o644)
+	}
+	if n != 1 {
+		t.Fatalf("ASSERTION: the parent was typed %d lines for three children, want 1:\n%s", n, got)
+	}
+	if !strings.Contains(got, "GOT[You have 3 unread tuios messages. Child agents finished: 3 done. Read them with:") {
+		t.Fatalf("ASSERTION: the wake line does not count the three finished children:\n%s", got)
+	}
+	if strings.Contains(got, "ANSWER-7f3") || strings.Contains(got, "marker-c") {
+		t.Fatalf("ASSERTION: a child's text was typed into the parent:\n%s", got)
 	}
 }

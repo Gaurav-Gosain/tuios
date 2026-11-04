@@ -176,6 +176,15 @@ func (d *Daemon) applyUserConfig(cfg *config.UserConfig, byPerson bool) {
 		log.Printf("[agents.mail] wake = true in the file waits for tuios config apply from outside tuios, or a daemon restart. The wake stays off.")
 	}
 	d.SetMailWake(wake)
+	// The same holds for a child's question: sending it to the parent agent
+	// first shows the parent what the child asks, so turning that on waits
+	// for the person too. Turning it off applies at once.
+	toParent := cfg.Agents.Mail.QuestionsToParentOn()
+	if toParent && !byPerson && d.attention != nil && !d.attention.parentFirst.Load() {
+		toParent = false
+		log.Printf("[agents.mail] questions_to_parent = true in the file waits for tuios config apply from outside tuios, or a daemon restart. A child's question goes to the Inbox at once until then.")
+	}
+	d.SetChildQuestionsToParent(toParent)
 	d.SetCheckpoints(cfg.Agents.Checkpoints)
 	// Moving cards types nothing and runs nothing, so a file change applies
 	// either way.

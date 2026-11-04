@@ -188,6 +188,11 @@ func (n *pushNotifier) note(action string, it AttentionItem) {
 		// Another machine's item. That machine sends its own.
 		return
 	}
+	if action != AttentionClosed && it.WithParentUntil != 0 {
+		// A question held for a parent agent is not the person's yet. Its
+		// release is an update, which sends it then.
+		return
+	}
 	n.web.note(action, it)
 	n.mu.Lock()
 	defer n.mu.Unlock()

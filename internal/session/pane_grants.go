@@ -1127,6 +1127,13 @@ func (d *Daemon) typingRefusal(pa *paneAuth, target WindowState, blockedChecked 
 	if target.ID == pa.window {
 		return ""
 	}
+	// What is typed into a child agent on an approval answers it, and that
+	// is the person's alone: no grant, admin included, covers it.
+	if !blockedChecked {
+		if why := d.childApprovalRefusal(pa.window, target); why != "" {
+			return why
+		}
+	}
 	held, _ := d.manager.grants.effective(target.ID)
 	if pa.plugin != "" {
 		held = 0

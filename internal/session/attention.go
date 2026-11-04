@@ -264,6 +264,20 @@ type AttentionItem struct {
 	// an Inbox question.
 	Upgrade *UpgradeAsk `json:"upgrade,omitempty"`
 
+	// Parent and Root are set on an item about a child agent, a pane another
+	// agent started (agent_parent.go): the agent that started it and the
+	// first agent of the chain. A client groups a chain's items under its
+	// root by them. Match a pane by its window id: the session name is the
+	// one the link was made in.
+	Parent *PaneRef `json:"parent,omitempty"`
+	Root   *PaneRef `json:"root,omitempty"`
+	// WithParentUntil is set while a delegated child's question waits for
+	// its parent agent before it is the person's: when the wait ends, in
+	// unix nanoseconds. The item is open and can be answered, but it is not
+	// counted and raises no alert until then. Zero for every other item.
+	// See attention_children.go.
+	WithParentUntil int64 `json:"with_parent_until,omitempty"`
+
 	// remoteSeq is the Seq the machine the item came from gave it, for an
 	// item mirrored from a linked host. It orders that machine's changes,
 	// which can reach this daemon out of order around a relisting.
@@ -348,6 +362,18 @@ type attentionStore struct {
 	// it takes mu for the reopen: the moment a pane's transition could slip
 	// through. Read and cleared under mu.
 	beforeRestore func()
+
+	// parentFirst says a delegated child's question goes to its parent agent
+	// first ([agents.mail] questions_to_parent). parentTimer releases the
+	// held questions whose time has come: there is one, for the earliest,
+	// and only while a question is held. parentAt is when it fires, and
+	// parentGen counts the timers set, as wakeGen does. parentHold is the
+	// wait, replaced by an E2E test. See attention_children.go.
+	parentFirst atomic.Bool
+	parentTimer *time.Timer
+	parentAt    int64
+	parentGen   uint64
+	parentHold  time.Duration
 
 	// risk are the rules that mark an approval risky, set from the approval
 	// policy. It is read under mu and replaced whole, so a reload never
@@ -533,7 +559,9 @@ func attentionSame(a, b AttentionItem) bool {
 		slices.Equal(a.Options, b.Options) && slices.Equal(a.AlwaysScope, b.AlwaysScope) &&
 		a.SnoozedUntil == b.SnoozedUntil && a.MarkedUnread == b.MarkedUnread &&
 		slices.Equal(a.Risk, b.Risk) && a.DenyMessage == b.DenyMessage &&
-		a.PlanLines == b.PlanLines && a.PlanSHA == b.PlanSHA
+		a.PlanLines == b.PlanLines && a.PlanSHA == b.PlanSHA &&
+		samePaneRef(a.Parent, b.Parent) && samePaneRef(a.Root, b.Root) &&
+		a.WithParentUntil == b.WithParentUntil
 }
 
 // closeLocked closes the item with this id, if it is open. The caller holds mu.
@@ -568,6 +596,9 @@ func (a *attentionStore) closeWithLocked(id, reason string, fill func(*Attention
 	}
 	a.publish(attentionEvent(AttentionClosed, closed))
 	a.changedLocked()
+	if it.WithParentUntil != 0 {
+		a.armParentLocked()
+	}
 	return true
 }
 
@@ -641,6 +672,10 @@ func (a *attentionStore) noteAgentState(sessionName string, ev SessionEvent) {
 	if ev.hookProgram {
 		base.Name += " [" + shortWindowID(ev.Window) + "]"
 	}
+	if ev.link.linked {
+		parent, root := ev.link.parent, ev.link.root
+		base.Parent, base.Root = &parent, &root
+	}
 
 	if state != AgentStateNeedsInput.Name() {
 		a.closeKeyLocked(attentionKey(AttentionApproval, sessionName, ev.Window, 0), AttentionClosedResolved)
@@ -698,7 +733,13 @@ func (a *attentionStore) noteAgentState(sessionName string, ev SessionEvent) {
 			it.Risk = risk.Names(a.riskOfLine(ev.hookMessage, ev.hookRoot, ev.hookRunDir))
 		}
 		it.Summary = attentionText(ev.hookMessage, attentionMaxSummary)
+		if it.Kind == AttentionQuestion && ev.link.delegated && !AgentKindReachesPerson(ev.hookKind) && a.parentFirst.Load() {
+			it.WithParentUntil = a.parentHoldUntilLocked(attentionKey(AttentionQuestion, sessionName, ev.Window, 0))
+		}
 		a.upsertLocked(it)
+		if it.WithParentUntil != 0 {
+			a.armParentLocked()
+		}
 	case AgentStateErrored.Name():
 		if ev.agentQuiet {
 			break
@@ -750,6 +791,8 @@ func (a *attentionStore) closeWindow(sessionName, window string) {
 	for _, kind := range []string{AttentionApproval, AttentionErrored, AttentionFinished, AttentionResume} {
 		a.closeKeyLocked(attentionKey(kind, sessionName, window, 0), AttentionClosedWindow)
 	}
+	// A child's question held for this pane has nobody to wait for now.
+	a.releaseChildrenOfLocked(window)
 	// An ask from the pane has nobody to hand the answer to any more.
 	for _, id := range a.sortedIDsLocked() {
 		if it := a.items[id]; it.Kind == AttentionAsk && it.Session == sessionName && it.Window == window {
@@ -1049,7 +1092,10 @@ func (a *attentionStore) list(q attentionQuery) ([]AttentionItem, map[string]int
 	}
 	out := make([]AttentionItem, 0, len(a.items)+len(a.hostItems))
 	add := func(it *AttentionItem) {
-		counts[it.Kind]++
+		// A question held for a parent agent is not the person's yet.
+		if it.WithParentUntil == 0 {
+			counts[it.Kind]++
+		}
 		if !q.matchHost(it.Host) {
 			return
 		}
@@ -1303,6 +1349,10 @@ func (a *attentionStore) loadKeeping(path string, live, waiting func(session, wi
 		a.byKey[key] = item.ID
 	}
 	a.armWakeLocked()
+	// A question held for a parent agent keeps its time across a live
+	// upgrade: the wait began when the child asked, and the handoff is no
+	// new question. One whose time passed meanwhile is released now.
+	a.armParentLocked()
 	// An item opened before load had no path to be saved to.
 	if opened {
 		a.changedLocked()

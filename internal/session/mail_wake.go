@@ -1,7 +1,9 @@
 package session
 
 import (
+	"slices"
 	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -35,6 +37,12 @@ import (
 // read while it waited is dropped, and one that waited while more mail came
 // says the count at that moment.
 //
+// Mail from delegate that carries a child's answer also says how the task
+// ended, and the line counts those messages by that state: "Child agents
+// finished: 2 done, 1 errored." The state is the daemon's own record, never
+// the child's text, so the rule above holds. Children that finish together
+// therefore wake the parent once, with one line that says what came back.
+//
 // Each message is announced once, by a hook or by a wake, whichever comes
 // first: both mark the bus's notice mark, and a wake claims it only if no hook
 // moved it since the wake looked (claimNotice). A burst of mail gives one wake,
@@ -62,6 +70,9 @@ const mailWakeBy = "tuios mail"
 type mailWakeSender struct {
 	id     uint64
 	origin queueOrigin
+	// finished is the final state of a delegated task whose answer the
+	// message carries, empty for any other message.
+	finished string
 }
 
 // mailWakePane is what the waker holds for one pane.
@@ -71,6 +82,9 @@ type mailWakePane struct {
 	timer   *time.Timer
 	// entry is the wake waiting in the pane's queue, nil when none.
 	entry *queueEntry
+	// answers are the delegated answers entry's line counts, which grow
+	// while it waits.
+	answers []mailWakeSender
 }
 
 // mailWakeMaxSenders bounds the senders kept for one pane. Only the newest
@@ -172,6 +186,12 @@ func (w *mailWaker) armLocked(d *Daemon, window string, p *mailWakePane) {
 // origin, and arms the look that may wake the pane. It runs after the message
 // is stored.
 func (d *Daemon) noteMailSent(session, window string, id uint64, origin queueOrigin) {
+	d.noteMailSentAs(session, window, id, origin, "")
+}
+
+// noteMailSentAs is noteMailSent for a message that carries a delegated
+// task's answer, with the state the task finished in.
+func (d *Daemon) noteMailSentAs(session, window string, id uint64, origin queueOrigin, finished string) {
 	w := &d.mailWake
 	if !w.on.Load() || window == "" || window == AgentInboxHuman {
 		return
@@ -184,7 +204,7 @@ func (d *Daemon) noteMailSent(session, window string, id uint64, origin queueOri
 		}
 	}
 	p := w.paneLocked(window, session)
-	p.senders = append(p.senders, mailWakeSender{id: id, origin: origin})
+	p.senders = append(p.senders, mailWakeSender{id: id, origin: origin, finished: finished})
 	if n := len(p.senders); n > mailWakeMaxSenders {
 		p.senders = append(p.senders[:0], p.senders[n-mailWakeMaxSenders:]...)
 	}
@@ -255,9 +275,25 @@ func (d *Daemon) mailWakeLook(window string) {
 		w.mu.Unlock()
 		return
 	}
+	// The delegated answers among the new mail.
+	var answers []mailWakeSender
+	for _, s := range senders {
+		if s.finished != "" && s.id > mark {
+			answers = append(answers, s)
+		}
+	}
 	if queued != nil && d.queue.holds(window, queued) {
 		// A wake already waits in the pane's queue. It is written again
 		// before it is typed, so it counts this message too.
+		w.mu.Lock()
+		if w.panes[window] == p {
+			for _, a := range answers {
+				if !slices.ContainsFunc(p.answers, func(x mailWakeSender) bool { return x.id == a.id }) {
+					p.answers = append(p.answers, a)
+				}
+			}
+		}
+		w.mu.Unlock()
 		d.agents.claimNotice(sess.Name(), window, sum.newest, mark)
 		return
 	}
@@ -272,8 +308,19 @@ func (d *Daemon) mailWakeLook(window string) {
 		return
 	}
 	session := sess.Name()
+	// The answers are counted again, by what is still unread, each time the
+	// line is written. A wake that waits gathers the answers that come.
+	tally := func() string {
+		w.mu.Lock()
+		got := answers
+		if w.panes[window] == p && p.entry != nil {
+			got = slices.Clone(p.answers)
+		}
+		w.mu.Unlock()
+		return d.childTally(session, got)
+	}
 	e := &queueEntry{
-		text: mailWakeText(sum, session, window),
+		text: mailWakeText(sum, session, window, tally()),
 		by:   mailWakeBy,
 	}
 	// The newest sender that may type into the pane now lends the wake its
@@ -300,7 +347,7 @@ func (d *Daemon) mailWakeLook(window string) {
 		if now.unread == 0 {
 			return "", false
 		}
-		return mailWakeText(now, session, window), true
+		return mailWakeText(now, session, window, tally()), true
 	}
 	e.done = func() { d.mailWakeTyped(window, e) }
 	// The claim fails when a hook announced the mail since it was looked at:
@@ -316,6 +363,7 @@ func (d *Daemon) mailWakeLook(window string) {
 	w.mu.Lock()
 	if w.panes[window] == p {
 		p.entry = e
+		p.answers = answers
 		p.senders = p.senders[:0]
 	}
 	w.mu.Unlock()
@@ -336,7 +384,7 @@ func (d *Daemon) mailWakeTyped(window string, e *queueEntry) {
 	if p == nil || p.entry != e {
 		return
 	}
-	p.entry = nil
+	p.entry, p.answers = nil, nil
 	if len(p.senders) == 0 && p.timer == nil {
 		w.dropLocked(window)
 	}
@@ -399,14 +447,45 @@ func (d *Daemon) mailOriginOf(cs *connState, verifiedHuman bool) (queueOrigin, b
 	return queueOrigin{kind: queueByShell}, true
 }
 
-// mailWakeText is the wake line: the count and the command, and nothing a
-// sender chose.
-func mailWakeText(s mailSummary, session, window string) string {
+// mailWakeText is the wake line: the count, the delegated answers by state
+// (childTally, empty when none), and the command, and nothing a sender chose.
+func mailWakeText(s mailSummary, session, window, tally string) string {
 	if s.unread == 0 {
 		return ""
 	}
-	if s.unread == 1 {
-		return "You have 1 unread tuios message. Read it with: " + mailReadCommand(session, window)
+	if tally != "" {
+		tally += " "
 	}
-	return "You have " + strconv.Itoa(s.unread) + " unread tuios messages. Read them with: " + mailReadCommand(session, window)
+	if s.unread == 1 {
+		return "You have 1 unread tuios message. " + tally + "Read it with: " + mailReadCommand(session, window)
+	}
+	return "You have " + strconv.Itoa(s.unread) + " unread tuios messages. " + tally + "Read them with: " + mailReadCommand(session, window)
+}
+
+// childTallyOrder is the order the wake line counts finished tasks in.
+var childTallyOrder = []string{delegateDone, delegateErrored, delegateClosed}
+
+// childTally counts the delegated answers among answers that are still
+// unread, by the state each task finished in: "Child agents finished: 2 done,
+// 1 errored." Empty when none is unread.
+func (d *Daemon) childTally(session string, answers []mailWakeSender) string {
+	if len(answers) == 0 {
+		return ""
+	}
+	n := map[string]int{}
+	for _, a := range answers {
+		if !d.agents.messageRead(session, a.id) {
+			n[a.finished]++
+		}
+	}
+	var parts []string
+	for _, state := range childTallyOrder {
+		if n[state] > 0 {
+			parts = append(parts, strconv.Itoa(n[state])+" "+state)
+		}
+	}
+	if len(parts) == 0 {
+		return ""
+	}
+	return "Child agents finished: " + strings.Join(parts, ", ") + "."
 }

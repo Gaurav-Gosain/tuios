@@ -250,9 +250,15 @@ func (d *Daemon) delegateLook(window string, closedEv bool) {
 			}
 			return
 		}
+		// The question goes to the parent first, unless the person turned
+		// that off. When the parent cannot be told, the Inbox item it holds
+		// for the parent is the person's at once. See attention_children.go.
 		var mail uint64
-		if rec.Parent != nil {
-			mail = d.delegateMail(rec, sess, w, "Delegated task asks a question: "+rec.Role, strings.Join(q.Lines, "\n"), "")
+		if rec.Parent != nil && d.attention.parentFirst.Load() {
+			mail = d.delegateMail(rec, sess, w, "Delegated task asks a question: "+rec.Role, strings.Join(q.Lines, "\n"), "", "")
+		}
+		if mail == 0 {
+			d.attention.releaseParentHold(sess.Name(), window)
 		}
 		sess.updateDelegation(window, func(r *Delegation) {
 			r.State, r.AskedAt, r.QuestionMail = delegateAsking, now, mail
@@ -274,7 +280,7 @@ func (d *Daemon) delegateLook(window string, closedEv bool) {
 			if state == delegateErrored {
 				subject = "Delegated task stopped on an error: " + rec.Role
 			}
-			mail = d.delegateMail(rec, sess, w, subject, answer, "delegate-answer-"+shortWindowID(window)+".txt")
+			mail = d.delegateMail(rec, sess, w, subject, answer, "delegate-answer-"+shortWindowID(window)+".txt", state)
 		}
 		sess.updateDelegation(window, func(r *Delegation) {
 			r.State, r.FinishedAt, r.AskedAt, r.QuestionMail, r.ResultMail = state, now, 0, 0, mail
@@ -294,7 +300,7 @@ func (d *Daemon) delegateGone(window string, p *delegatePending) {
 		return
 	}
 	d.delegateMail(&Delegation{Parent: p.parent, By: p.by}, nil, WindowState{ID: window},
-		"Delegated task closed: window "+shortWindowID(window), "The child window closed before the task finished.", "")
+		"Delegated task closed: window "+shortWindowID(window), "The child window closed before the task finished.", "", delegateClosed)
 }
 
 // delegateFinished reports whether a record's state is final.
@@ -349,11 +355,10 @@ func (d *Daemon) resumeDelegations() {
 			if rec == nil || delegateFinished(rec.State) {
 				continue
 			}
+			// A child still asking was told already, so the look below
+			// mails nothing again for the same question. Its next state is
+			// what to act on.
 			p := &delegatePending{parent: rec.Parent, by: rec.By, baseline: -1}
-			if rec.State == delegateAsking {
-				// It was told already. Its next state is what to act on.
-				sess.updateDelegation(w.ID, func(r *Delegation) { r.State = delegateWorking })
-			}
 			d.delegates.add(w.ID, p)
 			windows = append(windows, w.ID)
 		}
@@ -442,9 +447,10 @@ func (d *Daemon) delegateTranscriptAnswer(sess *Session, window string) (string,
 // wake tell the parent. child is the child's window, sess its session (nil
 // for a child that closed). A body longer than one message is cut, and the
 // whole body is put in the parent session's stash and attached, named
-// stashName; "" sends the cut body alone. It returns the message id, 0 when
-// the parent is gone.
-func (d *Daemon) delegateMail(rec *Delegation, sess *Session, child WindowState, subject, body, stashName string) uint64 {
+// stashName; "" sends the cut body alone. finished is the task's final state
+// for an answer, which the parent's wake line counts, and "" for a question.
+// It returns the message id, 0 when the parent is gone.
+func (d *Daemon) delegateMail(rec *Delegation, sess *Session, child WindowState, subject, body, stashName, finished string) uint64 {
 	parentSess := d.sessionHoldingWindow(rec.Parent.Window)
 	if parentSess == nil {
 		return 0
@@ -488,7 +494,7 @@ func (d *Daemon) delegateMail(rec *Delegation, sess *Session, child WindowState,
 	if rec.By != "" {
 		origin = queueOrigin{kind: "pane", window: rec.By, session: d.sessionOfWindow(rec.By)}
 	}
-	d.noteMailSent(parentSess.Name(), pw.ID, stored.ID, origin)
+	d.noteMailSentAs(parentSess.Name(), pw.ID, stored.ID, origin, finished)
 	return stored.ID
 }
 

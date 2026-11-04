@@ -2961,6 +2961,7 @@ max = 8
 
 [agents.mail]
 wake = true
+questions_to_parent = true
 
 [agents.checkpoints]
 enabled = true
@@ -3014,6 +3015,14 @@ max_untracked_mb = 50
   change turns it off at once. Turning it on again waits for `tuios config
   apply` from outside tuios, or a restart. See
   [AGENT_STATE.md](AGENT_STATE.md#mail-that-wakes-an-agent-at-rest).
+- `[agents.mail]` `questions_to_parent` sends a question from a child agent
+  that `tuios delegate` started to its parent agent by mail first. The Inbox
+  shows the question as "With the parent agent" for 10 minutes, and does not
+  count it or alert on it. After that, it is a normal Inbox item. It is true by
+  default. Set it to false to send every such question to the Inbox at once.
+  A file change turns it off at once. Turning it on again waits for `tuios
+  config apply` from outside tuios, or a restart. An approval of a child agent
+  always goes to the person, and no pane can answer it.
 - `[agents.checkpoints]` saves the git work tree of an agent's pane each time
   the agent finishes a turn that changed a file (`tuios checkpoint`).
   `enabled` is true by default. `keep` is how many checkpoints one pane keeps:

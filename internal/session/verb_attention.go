@@ -80,13 +80,21 @@ func (d *Daemon) verbListAttention(_ *connState, params json.RawMessage) (any, *
 	if sel != nil {
 		items = d.selectAttention(items, sel)
 	}
+	// The questions held for a parent agent are listed and not counted.
+	withParent := 0
+	for _, it := range items {
+		if it.WithParentUntil != 0 {
+			withParent++
+		}
+	}
 	out := map[string]any{
-		"type":    "attention_list",
-		"items":   items,
-		"counts":  counts,
-		"total":   len(items),
-		"seq":     seq,
-		"boot_id": d.events.bootIdentity(),
+		"with_parent": withParent,
+		"type":        "attention_list",
+		"items":       items,
+		"counts":      counts,
+		"total":       len(items),
+		"seq":         seq,
+		"boot_id":     d.events.bootIdentity(),
 	}
 	if sel != nil {
 		out["select"] = sel.String()

@@ -1020,6 +1020,10 @@ type DaemonConfig struct {
 	// MailWakeOff is [agents.mail] wake = false: an agent at rest is not
 	// told about its mail by a typed prompt. See mail_wake.go.
 	MailWakeOff bool
+	// ChildQuestionsToPerson is [agents.mail] questions_to_parent = false:
+	// a delegated child's question goes to the person's Inbox at once, and
+	// not to its parent agent first. See attention_children.go.
+	ChildQuestionsToPerson bool
 	// TaskAutoStageOff is [tasks] auto_stage = false: the daemon moves no
 	// card on its own. See task_auto.go.
 	TaskAutoStageOff bool
@@ -1089,6 +1093,7 @@ func NewDaemon(cfg *DaemonConfig) *Daemon {
 	// Stored, not set: the wake latches are made below.
 	d.silent.ns.Store(int64(resolveSilentAfter(cfg.AgentSilentAfter)))
 	d.SetMailWake(!cfg.MailWakeOff)
+	d.SetChildQuestionsToParent(!cfg.ChildQuestionsToPerson)
 	d.taskAutoOff.Store(cfg.TaskAutoStageOff)
 	d.openedKeep = cfg.OpenedCopyKeep
 	d.SetCheckpoints(cfg.Checkpoints)

@@ -60,6 +60,9 @@ While that machine's link is down it ends in `[unreachable, seen 5m ago]`.
   or when your report changes it. A new message or state wakes it, so report
   something new when there is something new; repeating the same report does
   not. `tuios list-attention --snoozed` shows what is snoozed.
+- A question from a delegated child goes to its parent agent first. Its row
+  has `with_parent_until` and shows "With the parent agent" until then. The
+  counts do not include it (`with_parent` counts it).
 - The person sees every agent in one full-screen agents view (ctrl+b i),
   grouped by what each needs: Needs you, Ready for review, Working, Idle,
   Settled. The person can settle you (put you away until you need them).

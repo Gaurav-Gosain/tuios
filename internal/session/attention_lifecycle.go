@@ -168,6 +168,10 @@ func (a *attentionStore) snoozeLocked(id string, until int64) (AttentionItem, *v
 	delete(a.items, id)
 	delete(a.byKey, attentionItemKey(it))
 	it.SnoozedUntil = until
+	// The person took the item in hand, so it is theirs from now on: a
+	// question held for a parent agent wakes as the person's.
+	held := it.WithParentUntil != 0
+	it.WithParentUntil = 0
 	a.putSnoozedLocked(it)
 	a.rev++
 	closed := *it
@@ -179,6 +183,9 @@ func (a *attentionStore) snoozeLocked(id string, until int64) (AttentionItem, *v
 	undo.SnoozedUntil = 0
 	a.rememberUndoLocked(undo, AttentionClosedSnoozed)
 	a.armWakeLocked()
+	if held {
+		a.armParentLocked()
+	}
 	return closed, nil
 }
 
@@ -422,6 +429,8 @@ func (a *attentionStore) restore(id string) (AttentionItem, *verbError) {
 		return AttentionItem{}, invalidParam("id", "item "+echoName(id)+" is not asleep any more: it woke, or what it was about is over")
 	}
 	it := u.item
+	// The person brought it back, so it is theirs, held for a parent or not.
+	it.WithParentUntil = 0
 	if it.Host != "" {
 		if _, hidden := a.hostHidden[id]; !hidden {
 			return AttentionItem{}, invalidParam("id", "the machine it came from changed or closed item "+echoName(id)+" since")

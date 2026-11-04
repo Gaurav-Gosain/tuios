@@ -59,6 +59,9 @@ type lifecycleWindow struct {
 	// id. The sink turns them into the approval root (windowApprovalRoot),
 	// off this snapshot, since that reads the file system.
 	worktree, agentSession string
+	// link rides along for the Inbox: the window's parent and root in a
+	// chain of agents. See attention_children.go.
+	link childLink
 	// The rectangle and how the pane sits in it, for layout-changed only.
 	// They change while a person drags a split, so they raise no event of
 	// their own and only mark the workspace's layout as changed.
@@ -125,6 +128,7 @@ func snapshotLifecycle(state *SessionState) lifecycleSnapshot {
 			program:       len(w.ProgramStatus) > 0,
 			worktree:      worktree,
 			agentSession:  w.AgentSessionID,
+			link:          childLinkOf(w),
 			x:             w.X,
 			y:             w.Y,
 			w:             w.Width,
@@ -236,6 +240,7 @@ func diffLifecycle(before, after lifecycleSnapshot) []SessionEvent {
 				hookKind:          w.agentKind,
 				hookWorktree:      w.worktree,
 				hookAgentSession:  w.agentSession,
+				link:              w.link,
 				hookProgram:       w.program,
 				agentQuiet:        w.agentQuiet,
 				completionSeq:     w.completionSeq,
@@ -259,6 +264,7 @@ func diffLifecycle(before, after lifecycleSnapshot) []SessionEvent {
 				hookKind:          w.agentKind,
 				hookWorktree:      w.worktree,
 				hookAgentSession:  w.agentSession,
+				link:              w.link,
 				hookProgram:       w.program,
 				agentQuiet:        w.agentQuiet,
 				completionSeq:     w.completionSeq,

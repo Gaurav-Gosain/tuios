@@ -291,8 +291,21 @@ An answer longer than one message is cut, and the whole answer is attached as
 a file.
 
 If the child stops on a question, you get the question as mail, with the subject
-`Delegated task asks a question: ROLE`. An approval stays in the Inbox for the
-person.
+`Delegated task asks a question: ROLE`. To answer it, type into the child's
+pane with `tuios send-text --allow-blocked`. That needs the `respond` grant.
+The person's Inbox shows
+the question as "With the parent agent" for 10 minutes. After that, the
+question goes to the person. The person can turn this off with
+`[agents.mail] questions_to_parent = false`. Then every question goes to the
+person at once.
+
+An approval of a child always goes to the person. You cannot answer it, with
+any grant: tuios refuses typing into it and `respond`. Every Inbox item of a
+child names its parent and its root agent, and your row in the agents view
+shows "N waiting in children".
+
+When several children finish together, tuios wakes you once. The line counts
+them by state, such as `Child agents finished: 2 done, 1 errored.`
 
 `--wait` returns the outcome in the reply instead, at most `10m`:
 
