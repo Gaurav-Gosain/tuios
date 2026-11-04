@@ -634,18 +634,22 @@ func subscribeKnown(vc *session.VerbClient, types []string) error {
 	return errors.New("subscribe: no event type the daemon knows")
 }
 
-// userName is a session's name as the app shows it: "" for the name tuios
-// makes up for a session nobody named ("session-" and eight hex digits),
-// so the app names it after what runs in it, as for an unnamed one.
+// userName is a session's name as the app shows it: "" for a name tuios
+// makes up for a session nobody named ("session-" and eight hex digits,
+// or a number on older daemons), so the app names it after what runs in
+// it, as for an unnamed one.
 func userName(name string) string {
 	rest, ok := strings.CutPrefix(name, "session-")
-	if !ok || len(rest) != 8 {
+	if !ok || rest == "" {
 		return name
 	}
+	digits, hex := true, len(rest) == 8
 	for _, r := range rest {
-		if !(r >= '0' && r <= '9' || r >= 'a' && r <= 'f') {
-			return name
-		}
+		digits = digits && r >= '0' && r <= '9'
+		hex = hex && (r >= '0' && r <= '9' || r >= 'a' && r <= 'f')
 	}
-	return ""
+	if digits || hex {
+		return ""
+	}
+	return name
 }
