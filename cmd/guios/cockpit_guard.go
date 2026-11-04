@@ -150,3 +150,44 @@ func (a *App) ckInstant(k ckKey) bool {
 	}
 	return false
 }
+
+// keysOwned reports whether a sheet, a dialog or a field of the agents view
+// is open: it owns the keyboard for as long as it is open, and the lists'
+// single keys are off, not only until its field takes the focus. A sheet
+// focuses its field a frame after it opens; a key typed in between must
+// not run as a list's command (QA-064).
+func (a *App) keysOwned() bool {
+	ck := &a.ck
+	switch {
+	case ck.spawn != nil && ck.spawn.open,
+		ck.cmp != nil,
+		a.pal.open,
+		a.help.open,
+		a.prompt != nil && a.prompt.open,
+		a.confirm != nil && a.confirm.open,
+		a.wtAsk != nil && a.wtAsk.open,
+		a.picker.open,
+		a.renaming != "" || a.renamingProject != "",
+		ck.reasonFor != "",
+		ck.tabs.board != nil && ck.tabs.board.adding >= 0,
+		ck.view == viewMail && ck.tabs.mail != nil && ck.tabs.mail.replyTo != 0:
+		return true
+	}
+	return false
+}
+
+// ownedKeys takes a list's keys of prose while keysOwned: they run
+// nothing, and count as typing for the guard.
+func (a *App) ownedKeys(el ui.Element) bool {
+	if !a.keysOwned() {
+		return false
+	}
+	if _, ok := takeProse(el); ok {
+		a.ck.guard.last = time.Now()
+	}
+	if el.Shortcut(0, ui.KeyEscape) && a.ck.spawn != nil && a.ck.spawn.open {
+		// Escape before the sheet's field had the keys still closes it.
+		a.spawnClose()
+	}
+	return true
+}

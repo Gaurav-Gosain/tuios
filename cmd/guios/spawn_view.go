@@ -102,8 +102,9 @@ func (a *App) spawnView(c *ui.Context, pal *palette) {
 	})
 	if s.focusAgain {
 		s.focusAgain = false
-		f := s.focusField
-		a.defer_(func() { h.of(f).Focus() })
+		// At once, in the frame the sheet opens: its fields are bound
+		// now, and a key typed before the next frame lands in the field.
+		h.of(s.focusField).Focus()
 	}
 	if start && s.open {
 		a.spawnStart()
@@ -179,7 +180,7 @@ func (a *App) spawnTask(c *ui.Context, pal *palette, s *spawnSheet, h *spawnHand
 				}
 				return a.pasteImageInto(&s.task)
 			})
-			if in.Changed() && !s.byKeyAt.IsZero() && time.Since(s.byKeyAt) < guardWindow {
+			if in.Changed() && !s.byKeyAt.IsZero() && (time.Since(s.byKeyAt) < guardWindow || time.Since(a.ck.guard.last) < guardWindow) {
 				// n opened the sheet in the middle of typed prose: take
 				// it back, and the rest of the prose goes nowhere.
 				s.task.text, s.byKeyAt = "", time.Time{}
@@ -189,6 +190,7 @@ func (a *App) spawnTask(c *ui.Context, pal *palette, s *spawnSheet, h *spawnHand
 				a.toast(locales.CockpitKeysToList())
 				c.Invalidate()
 			} else if in.Changed() {
+				s.byKeyAt = time.Time{}
 				s.followTask()
 				if s.noticeAt == spTask {
 					s.notice = ""

@@ -535,6 +535,9 @@ func (a *App) boardKeys(c *ui.Context, root ui.Element, b *ckBoard) (handled boo
 		}
 		return false
 	}
+	if b.adding < 0 && a.ownedKeys(root) {
+		return false
+	}
 	if k, ok := a.guard(c, root, &a.ck.guard, moves); ok {
 		switch {
 		case k.shift && k.key == ui.KeyH:
