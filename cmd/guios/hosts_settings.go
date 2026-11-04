@@ -48,7 +48,7 @@ func (a *App) hostsPage(c *ui.Context, pal *palette) {
 			}
 		})
 		if d.err != "" {
-			ui.Text(c, d.err).FontSize(12).TextColor(pal.danger).Padding(0, 0, 10, 0).Selectable()
+			ui.Text(c, d.err).FontSize(12).TextColor(pal.dangerText).Padding(0, 0, 10, 0).Selectable()
 		}
 	})
 	docLink(c, pal, "hosts-docs", locales.SetHostsDocs(), "https://tuios.dev/docs")
@@ -127,7 +127,7 @@ func (a *App) hostEditor(c *ui.Context, pal *palette, h *host) {
 			}
 		})
 		if d.err != "" {
-			ui.Text(c, d.err).FontSize(12).TextColor(pal.danger).Selectable()
+			ui.Text(c, d.err).FontSize(12).TextColor(pal.dangerText).Selectable()
 		}
 	})
 }

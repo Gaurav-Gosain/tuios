@@ -64,11 +64,11 @@ func ckStatePill(pal *palette, ag client.Agent, it *session.AttentionItem) (stri
 	st, unread := ckStatus(ag, it)
 	switch {
 	case st == proto.Waiting:
-		return locales.StatusNeedsYou(), pal.attention
+		return locales.StatusNeedsYou(), pal.attnText
 	case st == proto.Working:
 		return locales.StatusWorking(), pal.work
 	case st == proto.Failed:
-		return locales.StatusFailed(), pal.danger
+		return locales.StatusFailed(), pal.dangerText
 	case unread:
 		return locales.CockpitToReview(), pal.done
 	}
@@ -327,10 +327,10 @@ func (a *App) approvalCard(c *ui.Context, pal *palette, ag client.Agent, it sess
 			if why != "" {
 				why = strings.ToUpper(why[:1]) + why[1:]
 			}
-			ui.Text(c, locales.CockpitRiskLine(name, why)).FontSize(fsSmall).TextColor(pal.danger).MaxLines(2)
+			ui.Text(c, locales.CockpitRiskLine(name, why)).FontSize(fsSmall).TextColor(pal.dangerText).MaxLines(2)
 		}
 		if ck.armed.decision != "" && ck.armed.item == key && now.Sub(ck.armed.at) <= ckRiskWindow {
-			ui.Text(c, locales.CockpitPressAgain(ckDecisionKey(ck.armed.decision))).FontSize(fsSmall).FontWeight(wSemibold).TextColor(pal.attention)
+			ui.Text(c, locales.CockpitPressAgain(ckDecisionKey(ck.armed.decision))).FontSize(fsSmall).FontWeight(wSemibold).TextColor(pal.attnText)
 			c.After(ck.armed.at.Add(ckRiskWindow).Sub(now))
 		}
 		if len(it.AlwaysScope) > 0 {

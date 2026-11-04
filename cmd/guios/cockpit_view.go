@@ -194,7 +194,7 @@ func (a *App) cockpitHeader(c *ui.Context, pal *palette, bar ui.TitleBar, shown 
 		count("c-idle", ckIdle, proto.Idle, false, locales.CockpitCountIdle())
 		ui.Spacer(c)
 		if ck.err != "" {
-			oneLine(c, ck.err, fsSmall, 0).TextColor(pal.danger).MaxWidth(320)
+			oneLine(c, ck.err, fsSmall, 0).TextColor(pal.dangerText).MaxWidth(320)
 		}
 		iconButton(c, "ck-close", closeIcon, a.tip(locales.CockpitClose(), "agents.toggle"), pal, a.closeCockpit)
 		a.controlsRoom(c, 0)
@@ -279,7 +279,7 @@ func (a *App) ckHead(c *ui.Context, pal *palette, r ckRow) {
 		ui.Icon(c, ic).Size(12, 12).TextColor(pal.textFaint).Shrink(0)
 		t := oneLine(c, ckGroupTitle(r.group), fsSmall, wMedium).TextColor(pal.textMuted)
 		if r.group == ckNeeds {
-			t.TextColor(pal.attention)
+			t.TextColor(pal.attnText)
 		}
 		ui.Text(c, itoa(r.count)).FontSize(fsSmall).TextColor(pal.textFaint).FontFeatures("tnum").Shrink(0)
 		ui.Box(c).Grow(1).Height(1).Background(pal.divider).Margin(0, 0, 0, 6)
@@ -433,7 +433,7 @@ func (a *App) ckRowView(c *ui.Context, pal *palette, r ckRow) {
 func ckLine2Spans(pal *palette, verb, rest string) []ui.Span {
 	var out []ui.Span
 	if verb != "" {
-		out = append(out, ui.Span{Text: verb + "  ", Color: pal.attention, Weight: wSemibold})
+		out = append(out, ui.Span{Text: verb + "  ", Color: pal.attnText, Weight: wSemibold})
 	}
 	if t, r, ok := strings.Cut(rest, "\x00"); ok {
 		out = append(out, ui.Span{Text: t + "  ", Color: pal.text, Weight: wMedium}, ui.Span{Text: r, Color: pal.textMuted})

@@ -462,7 +462,7 @@ func (a *App) boardCard(c *ui.Context, pal *palette, b *ckBoard, t session.TaskR
 		ui.Row(c).Gap(6).AlignItems(ui.Center).Children(func() {
 			switch {
 			case t.Blocked != nil:
-				ui.Text(c, locales.CockpitBlocked()).FontSize(fsSmall).FontWeight(wSemibold).TextColor(pal.danger).SingleLine()
+				ui.Text(c, locales.CockpitBlocked()).FontSize(fsSmall).FontWeight(wSemibold).TextColor(pal.dangerText).SingleLine()
 			case t.Holder != nil:
 				st, unread := ckStateStatus(t.Holder.State)
 				ckMark(c, pal, st, unread, 11)

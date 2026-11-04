@@ -304,7 +304,7 @@ func (a *App) settingsView(c *ui.Context) {
 						if page.experimental {
 							ui.Row(c.Key("experimental")).Height(18).Margin(0, 0, 0, 8).Padding(0, 6).Radius(rChip).AlignItems(ui.Center).Shrink(0).
 								Background(pal.attention.Alpha(0.14)).Children(func() {
-								ui.Text(c, locales.PageExperimental()).FontSize(fsSmall).FontWeight(wSemibold).TextColor(pal.attention).SingleLine()
+								ui.Text(c, locales.PageExperimental()).FontSize(fsSmall).FontWeight(wSemibold).TextColor(pal.attnText).SingleLine()
 							})
 						}
 						ui.Spacer(c)
@@ -1219,7 +1219,7 @@ func (a *App) advancedPage(c *ui.Context, pal *palette) {
 		for i, p := range a.ss.problems {
 			ui.Row(c.Key("problem"+strconv.Itoa(i))).Padding(0, 0, 8, 0).Gap(8).AlignItems(ui.Center).Children(func() {
 				ui.Box(c).Size(6, 6).Radius(3).Background(pal.attention).Shrink(0)
-				ui.Text(c, p).FontSize(fsSmall).TextColor(pal.attention).Grow(1).MinWidth(0)
+				ui.Text(c, p).FontSize(fsSmall).TextColor(pal.attnText).Grow(1).MinWidth(0)
 			})
 		}
 	})
@@ -1285,7 +1285,7 @@ func (a *App) keyboardPage(c *ui.Context, pal *palette) {
 		}
 	})
 	if a.ss.notice != "" {
-		ui.Text(c, a.ss.notice).FontSize(fsSmall).TextColor(pal.attention).Padding(0, 4)
+		ui.Text(c, a.ss.notice).FontSize(fsSmall).TextColor(pal.attnText).Padding(0, 4)
 	}
 	q := strings.ToLower(strings.TrimSpace(a.ss.filter))
 	if q == "" {

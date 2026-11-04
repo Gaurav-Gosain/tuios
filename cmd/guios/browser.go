@@ -445,7 +445,7 @@ func (a *App) browserError(c *ui.Context, pal *palette, e *webEntry) {
 	bar := ui.Row(c.Key("error")).Absolute().Top(8).Left(12).Right(12).Padding(8, 8, 8, 12).Gap(8).
 		AlignItems(ui.Center).Radius(rCard).Background(pal.popover)
 	floating(bar, pal).Children(func() {
-		ui.Text(c, e.err).FontSize(fsSmall).TextColor(pal.danger).Grow(1).MinWidth(0).Ellipsis("…").SingleLine()
+		ui.Text(c, e.err).FontSize(fsSmall).TextColor(pal.dangerText).Grow(1).MinWidth(0).Ellipsis("…").SingleLine()
 		if button(c, "retry", locales.CommonTryAgain(), "", false, pal) {
 			e.load(e.url)
 		}

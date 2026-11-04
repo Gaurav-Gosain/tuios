@@ -46,12 +46,20 @@ type palette struct {
 	divider       ui.Color
 	chip          ui.Color
 
-	attention ui.Color // needs you
+	attention ui.Color // needs you: marks, edges, counts' pills
 	attnSoft  ui.Color
-	done      ui.Color // the filled check
-	onDone    ui.Color
-	danger    ui.Color
-	accent    ui.Color
+	// attnText is needs-you as text: the amber made deep enough (light) or
+	// bright enough (dark) to read at 4.5:1 on every surface it sits on,
+	// its soft chip fill included. The bright amber stays for marks.
+	attnText ui.Color
+	done     ui.Color // the filled check
+	onDone   ui.Color
+	danger   ui.Color
+	// dangerText is the danger color as text, at 4.5:1 on every surface;
+	// dangerFill is a destructive button's fill, under white text at 4.5:1.
+	dangerText ui.Color
+	dangerFill ui.Color
+	accent     ui.Color
 	// work marks what works: an agent's turn, a program's progress. The
 	// accent means only what is selected or primary (DESIGN.md section 1).
 	work ui.Color
@@ -326,10 +334,13 @@ var keroLooks = func() map[string][2]*look {
 			l := &look{base: ui.LinearGradient{Angle: 180, Oklab: true, Stops: stops}, glow: glowOf(glow), plain: id == "plain"}
 			if l.plain {
 				// kero's colors as they were, on the card's white or gray.
-				l.term, l.pal = lightTermTheme, &lightPalette
+				pal := lightPalette
+				l.term = lightTermTheme
 				if dark {
-					l.term, l.pal = darkTermTheme, &darkPalette
+					pal, l.term = darkPalette, darkTermTheme
 				}
+				pal.finish(l.term.Foreground, pal.card)
+				l.pal = &pal
 			} else {
 				var accent ui.Color
 				l.term, accent = toneTheme(w.tone, dark)
@@ -401,7 +412,79 @@ func tinted(th *terminal.Theme, accent ui.Color) *palette {
 		p.rowSelected = bg.Mix(white, 0.5)
 		p.popover = bg.Mix(white, 0.6)
 	}
+	p.finish(fg, bg)
 	return &p
+}
+
+// finish makes the palette's text colors legible on every surface they
+// sit on, not only on the card (council round 1, visual 3 to 5): the
+// selected row, a control's fill (the reply box), a chip and the ground.
+// The worst of those for each tier is the one checked: in the dark the
+// lightest, in the light the darkest. text2 keeps 4.5:1 and text3 3:1
+// there (DESIGN.md section 1), and needs-you and danger text 4.5:1.
+func (p *palette) finish(fg, bg ui.Color) {
+	worst := p.worstSurface(bg)
+	p.textMuted = legible(fg.Mix(bg, 0.38), fg, worst, 4.5)
+	p.textFaint = legible(fg.Mix(bg, 0.56), fg, worst, 3)
+	attnWorst := worst
+	if s := p.attnSoft.Over(bg); p.dark == (luminance(s) > luminance(attnWorst)) {
+		attnWorst = s
+	}
+	p.attnText = deepen(p.attention, attnWorst, 4.5)
+	dangerWorst := worst
+	if s := p.danger.Alpha(0.1).Over(bg); p.dark == (luminance(s) > luminance(dangerWorst)) {
+		dangerWorst = s
+	}
+	p.dangerText = deepen(p.danger, dangerWorst, 4.5)
+	// White on the fill: the fill goes darker until white reads on it.
+	p.dangerFill = deepen(p.danger, ui.Hex("#ffffff"), 4.5)
+}
+
+// worstSurface is the surface text has the least contrast on: the
+// lightest of them in the dark, the darkest in the light.
+func (p *palette) worstSurface(bg ui.Color) ui.Color {
+	surfaces := []ui.Color{bg, p.rowSelected.Over(bg), p.chip.Over(bg), p.rowHover.Over(bg), p.sidebar}
+	if p.dark {
+		surfaces = append(surfaces, p.control.Over(bg), p.rowSelected.Over(p.rowHover.Over(bg)))
+	} else {
+		// The ground is a shade under the cards (ghosttyLook), and a chip
+		// sits on it too.
+		ground := darker(bg, 0.03)
+		surfaces = append(surfaces, ground, p.chip.Over(ground), p.rowHover.Over(ground))
+	}
+	worst := surfaces[0]
+	for _, s := range surfaces[1:] {
+		if p.dark == (luminance(s) > luminance(worst)) {
+			worst = s
+		}
+	}
+	return worst
+}
+
+// darker is c with its OKLCH lightness lowered by d.
+func darker(c ui.Color, d float32) ui.Color {
+	l, ch, h := oklch(c)
+	return ui.Oklch(max(l-d, 0), ch, h)
+}
+
+// deepen is c with its hue and chroma kept and its lightness moved away
+// from bg, in small steps, until it has ratio of contrast on bg: darker on
+// a light ground, lighter on a dark one.
+func deepen(c, bg ui.Color, ratio float64) ui.Color {
+	l, ch, h := oklch(c)
+	down := luminance(bg) > 0.18
+	for i := 0; i < 60 && contrast(c, bg) < ratio; i++ {
+		if down {
+			l -= 0.01
+		} else {
+			l += 0.01
+		}
+		if l <= 0 || l >= 1 {
+			break
+		}
+		c = ui.Oklch(l, ch, h)
+	}
+	return c
 }
 
 // legible is c moved toward fg, in steps, until it has at least ratio of
@@ -413,19 +496,21 @@ func legible(c, fg, bg ui.Color, ratio float64) ui.Color {
 	return c
 }
 
+// luminance is a color's WCAG relative luminance.
+func luminance(c ui.Color) float64 {
+	ch := func(v uint8) float64 {
+		x := float64(v) / 255
+		if x <= 0.04045 {
+			return x / 12.92
+		}
+		return math.Pow((x+0.055)/1.055, 2.4)
+	}
+	return 0.2126*ch(c.R) + 0.7152*ch(c.G) + 0.0722*ch(c.B)
+}
+
 // contrast is the WCAG contrast ratio of two colors.
 func contrast(a, b ui.Color) float64 {
-	lum := func(c ui.Color) float64 {
-		ch := func(v uint8) float64 {
-			x := float64(v) / 255
-			if x <= 0.04045 {
-				return x / 12.92
-			}
-			return math.Pow((x+0.055)/1.055, 2.4)
-		}
-		return 0.2126*ch(c.R) + 0.7152*ch(c.G) + 0.0722*ch(c.B)
-	}
-	la, lb := lum(a), lum(b)
+	la, lb := luminance(a), luminance(b)
 	if la < lb {
 		la, lb = lb, la
 	}

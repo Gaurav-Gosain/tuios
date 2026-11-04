@@ -135,10 +135,15 @@ func kindButton(c *ui.Context, key, label, keys string, kind int, height, radius
 	case btnPrimary:
 		bg, fg = pal.accent, onAccent(pal)
 	case btnDanger:
-		bg, fg = pal.danger, ui.Hex("#ffffff")
+		// The fill is deep enough for white text at 4.5:1, in both
+		// themes (council round 1, visual 5).
+		bg, fg = pal.dangerFill, ui.Hex("#ffffff")
 	}
 	switch {
 	case b.Pressed():
+		bg = bg.Mix(ui.Hex("#000000"), 0.08)
+	case b.Hovered() && kind == btnDanger:
+		// Lighter would take the white text under 4.5:1.
 		bg = bg.Mix(ui.Hex("#000000"), 0.08)
 	case b.Hovered() && kind != btnSecondary:
 		bg = bg.Mix(ui.Hex("#ffffff"), 0.08)

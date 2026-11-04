@@ -195,7 +195,7 @@ func (a *App) pickerView(c *ui.Context, pal *palette) {
 		list.Children(func() {
 			switch {
 			case p.err != "":
-				ui.Text(c, p.err).FontSize(fsBody).TextColor(pal.danger).Padding(12, 12).Selectable()
+				ui.Text(c, p.err).FontSize(fsBody).TextColor(pal.dangerText).Padding(12, 12).Selectable()
 			case p.list == nil:
 				ui.Row(c).Padding(12).Children(func() { ui.Spinner(c) })
 			case len(items) == 0:

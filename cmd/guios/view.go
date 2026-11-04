@@ -488,7 +488,7 @@ func (a *App) groupView(c *ui.Context, pal *palette, g group, gi int, n *int) {
 			a.hostState(c, pal, g.host)
 		}
 		if needs > 0 {
-			ui.Text(c, locales.SidebarNeedsYou(needs)).FontSize(fsSmall).FontWeight(wMedium).TextColor(pal.attention).FontFeatures("tnum").SingleLine().Shrink(0)
+			ui.Text(c, locales.SidebarNeedsYou(needs)).FontSize(fsSmall).FontWeight(wMedium).TextColor(pal.attnText).FontFeatures("tnum").SingleLine().Shrink(0)
 		}
 		if hovered {
 			b := ui.ButtonBase(c.Key("add")).Size(20, 20).Radius(rRow).Center().Shrink(0).TextColor(pal.textMuted).Label(locales.NewSessionIn(g.project.Name)).Tooltip(locales.ActionNewSession())
@@ -737,7 +737,7 @@ func (a *App) sidebarFooter(c *ui.Context, pal *palette) {
 			waiting := func(s *proto.Session) bool { return s.Status == proto.Waiting }
 			working := func(s *proto.Session) bool { return s.Status == proto.Working }
 			done := func(s *proto.Session) bool { return s.Status == proto.Idle && s.Unread }
-			a.footerChip(c, pal, proto.Waiting, false, waiting, pal.attention, locales.FooterNeedsYou, a.tip(locales.FooterGoToIt(), "session.attention"), a.jumpToAttention)
+			a.footerChip(c, pal, proto.Waiting, false, waiting, pal.attnText, locales.FooterNeedsYou, a.tip(locales.FooterGoToIt(), "session.attention"), a.jumpToAttention)
 			a.footerChip(c, pal, proto.Working, false, working, pal.textMuted, locales.FooterWorking, locales.FooterGoToIt(), nil)
 			a.footerChip(c, pal, proto.Idle, true, done, pal.textMuted, locales.FooterDone, locales.FooterGoToIt(), nil)
 		case connConnecting:
@@ -794,7 +794,7 @@ func (a *App) restartChip(c *ui.Context, pal *palette) {
 	}
 	b.Children(func() {
 		ui.Box(c).Size(6, 6).Radius(3).Background(pal.attention)
-		ui.Text(c, locales.CommonRestartService()).FontSize(fsSmall).FontWeight(wMedium).TextColor(pal.attention).SingleLine()
+		ui.Text(c, locales.CommonRestartService()).FontSize(fsSmall).FontWeight(wMedium).TextColor(pal.attnText).SingleLine()
 	})
 	if b.Clicked() {
 		a.offerRestart()
