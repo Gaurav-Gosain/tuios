@@ -410,14 +410,15 @@ func (m *OS) bringPanesIntoView() {
 	if width <= 0 || height <= 0 {
 		return
 	}
+	region := layout.Rect{X: left, Y: top, W: width, H: height}
 	for _, w := range m.Windows {
 		// A floating pane was never under the tiler, and where it sits is where
 		// its user dragged it, edge and all.
 		if w.Minimized || w.IsFloating {
 			continue
 		}
-		x := min(max(w.X, left), left+max(width-w.Width, 0))
-		y := min(max(w.Y, top), top+max(height-w.Height, 0))
+		r := layout.IntoView(layout.Rect{X: w.X, Y: w.Y, W: w.Width, H: w.Height}, region)
+		x, y := r.X, r.Y
 		if x == w.X && y == w.Y {
 			continue
 		}
