@@ -344,6 +344,65 @@ type Session struct {
 	// TUI tells that a tuios TUI client shows the session, which runs the
 	// keymap actions only a TUI has.
 	TUI bool `json:"tui,omitempty"`
+	// LayoutMode is the shown workspace's layout: "bsp", "master-stack",
+	// "scrolling" or "floating". Layout is the split tree of bsp; Arrange
+	// places the panes of the others by rectangles, and the panes that
+	// float over any layout.
+	LayoutMode string   `json:"layoutMode,omitempty"`
+	Arrange    *Arrange `json:"arrange,omitempty"`
+}
+
+// Arrange is where a workspace's panes are, in the cells of Box, the box
+// tuios lays them out in. A pane in Rects that Float names floats over the
+// others, drawn in Float's order, the topmost last.
+type Arrange struct {
+	Box   Rect            `json:"box"`
+	Rects map[string]Rect `json:"rects"`
+	Float []string        `json:"float,omitempty"`
+	// Master is the line between the masters and the stack in the
+	// master-stack layout, which a drag moves; nil when there is none to
+	// move, as in the grid.
+	Master *MasterLine `json:"master,omitempty"`
+}
+
+// MasterLine is where the masters end: the cell At across the box, a
+// line from top to bottom when Vertical, and the masters before it (left
+// or above) when Before.
+type MasterLine struct {
+	Vertical bool `json:"vertical"`
+	At       int  `json:"at"`
+	Before   bool `json:"before"`
+}
+
+// Rect is a rectangle in cells.
+type Rect struct {
+	X int `json:"x"`
+	Y int `json:"y"`
+	W int `json:"w"`
+	H int `json:"h"`
+}
+
+// ArrangeParams changes a session's layout: Op "mode" (Mode "bsp",
+// "master-stack", "scrolling" or "floating"), "next", "tiling", "rotate",
+// "equalize", "master.position", "master.add", "master.remove",
+// "master.swap", "master.ratio" (Ratio), "scroll.left", "scroll.right",
+// "scroll.width", "scroll.max", "scroll.consume", "scroll.expel",
+// "scroll.moveLeft", "scroll.moveRight", "scroll.view" (Delta cells),
+// "scroll.reveal", "rect" (Pane to Rect, snapped when At is at an edge),
+// "snap" (Mode "left", "right", "top-left", "top-right", "bottom-left",
+// "bottom-right", "full" or "unsnap"), "float" or "swap" (Pane and
+// Target). Pane is the pane it acts on, the
+// focused one when empty.
+type ArrangeParams struct {
+	Session string  `json:"session"`
+	Op      string  `json:"op"`
+	Mode    string  `json:"mode,omitempty"`
+	Pane    string  `json:"pane,omitempty"`
+	Target  string  `json:"target,omitempty"`
+	Rect    *Rect   `json:"rect,omitempty"`
+	At      *Rect   `json:"at,omitempty"`
+	Ratio   float64 `json:"ratio,omitempty"`
+	Delta   int     `json:"delta,omitempty"`
 }
 
 // Workspace is one of a tuios session's workspaces: its number, its name
