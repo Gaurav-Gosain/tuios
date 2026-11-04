@@ -295,7 +295,23 @@ func (a *App) paneCard(c *ui.Context, pal *palette, bar ui.TitleBar, shown float
 		if zone != zoneNone {
 			a.dropPreview(c, pal, p.ID, zone)
 		}
+		// The card's edge says its state: amber while it needs the person,
+		// the focus line on the pane the keyboard is in (council round 1,
+		// visual 11 and 12). It comes over dArrive.
+		edge := ui.Transparent
+		switch {
+		case p.Status == proto.Waiting:
+			edge = pal.attention
+		case multi && focused:
+			edge = pal.focusLine
+		}
+		e := ui.Box(c.Key("edge")).Absolute().Top(0).Left(0).Right(0).Bottom(0).PassThrough().Radius(rPane)
+		e.Border(1, e.AnimateColor("c", edge, ui.Animation{Duration: dArrive}))
 	})
+	if multi && focused && !pal.dark {
+		// The focused card stands a level up from the others in the light.
+		card.Shadow(0, 1, 2, 0, pal.cardShadow).Shadow(0, 1, 6, 0, pal.cardShadow2)
+	}
 
 	// The pane dragged sinks back where it was; one just moved springs in
 	// at its new place.

@@ -48,6 +48,9 @@ type palette struct {
 
 	attention ui.Color // needs you: marks, edges, counts' pills
 	attnSoft  ui.Color
+	// focusLine is the focused card's edge (line.focus): ink 16 % in
+	// the light, 11 % in the dark.
+	focusLine ui.Color
 	// attnText is needs-you as text: the amber made deep enough (light) or
 	// bright enough (dark) to read at 4.5:1 on every surface it sits on,
 	// its soft chip fill included. The bright amber stays for marks.
@@ -423,6 +426,11 @@ func tinted(th *terminal.Theme, accent ui.Color) *palette {
 // lightest, in the light the darkest. text2 keeps 4.5:1 and text3 3:1
 // there (DESIGN.md section 1), and needs-you and danger text 4.5:1.
 func (p *palette) finish(fg, bg ui.Color) {
+	if p.dark {
+		p.focusLine = fg.Alpha(0.11)
+	} else {
+		p.focusLine = fg.Alpha(0.16)
+	}
 	worst := p.worstSurface(bg)
 	p.textMuted = legible(fg.Mix(bg, 0.38), fg, worst, 4.5)
 	p.textFaint = legible(fg.Mix(bg, 0.56), fg, worst, 3)
