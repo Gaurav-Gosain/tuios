@@ -12395,6 +12395,26 @@ each control against the branch head with one change:
 | tuios mermaid says what to run, and runs the plugin | `notBuiltIn` returns "" | "a timeline with no plugin" | **caught** |
 | A panel shows what to do | the `MissingDiagram` call cut | "no notice for the timeline" | **caught** |
 
+### The plan names the sketch program, and a release name is the release
+
+`TestSketchPluginPlanNamesItsProgram` installs a plugin with the sketch
+plugin's manifest and one with another id, and reads both plans.
+`TestPluginsReleaseNameBeatsAFolder` types `tuios plugins install pr-status`
+on a build stamped as a release in a folder that holds `pr-status/`, installs
+that folder as `./pr-status`, uninstalls it by name there, and installs it by
+name on a dev build. Run on 2026-11-04 on Linux, each control against the
+branch head with one change:
+
+| Claim | Control | Where it fails | Verdict |
+|---|---|---|---|
+| The plan of the sketch plugin names its program | the sketch line cut from `RunsLines` | `TestSketchPluginPlanNamesItsProgram`: "the plan of the sketch plugin does not name its program" | **caught** |
+| Only the sketch plugin's plan names it | the sketch line written for every plugin | `TestSketchPluginPlanNamesItsProgram`: "the plan of another plugin", the plan of `e2e.quiet` naming `mermaid  bin/sketch` | **caught** |
+| A release name on a release build is the release | the release return cut from `parsePluginSource` | `TestPluginsReleaseNameBeatsAFolder`: "install pr-status in a folder that holds pr-status/" and "install pr-status built the folder pr-status/" | **caught** |
+| Uninstall by the name in that folder removes the folder install | the folder fallback cut from `lockBySource` | `TestPluginsReleaseNameBeatsAFolder`: "uninstall pr-status in that folder: exit status 1", tuios printing "plugins.lock has no plugin with the id or the source pr-status" | **caught** |
+| The release name is read before the folder | the release check put after the folder check, as before | `TestPluginsReleaseNameBeatsAFolder`: "install pr-status in a folder that holds pr-status/" and "install pr-status built the folder pr-status/" | **caught** |
+| The plan names the program tuios runs | the line names `bin/sketch2` | `TestSketchPluginPlanNamesItsProgram`: "the plan of the sketch plugin does not name its program" | **caught** |
+| A dev build keeps installing the folder | the release name taken on every build (the `runningTag` check cut) | `TestPluginsReleaseNameBeatsAFolder`: "install pr-status on a dev build: exit status 1", tuios printing "this tuios is a dev build, which no release made, so it has no plugin assets" | **caught** |
+
 ## Native event hooks
 
 `TestPluginPRStatus` now runs `plugins/pr-status` with one manifest, its hook a

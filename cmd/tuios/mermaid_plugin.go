@@ -19,9 +19,6 @@ import (
 // type. tuios mermaid runs it for a diagram of another type, with the flags
 // both take. Without the plugin it says how to get it.
 
-// sketchPluginID is the id in plugins/sketch/tuios-plugin.toml.
-const sketchPluginID = "tuios.sketch"
-
 // errNeedsSketchPlugin is what tuios says about a type it does not draw.
 const errNeedsSketchPlugin = "this diagram needs the sketch plugin. Run tuios plugins install sketch"
 
@@ -43,7 +40,7 @@ func sketchPluginProgram() (string, error) {
 	if err != nil {
 		return "", err
 	}
-	e := herdrplugin.Find(entries, sketchPluginID)
+	e := herdrplugin.Find(entries, herdrplugin.SketchID)
 	switch {
 	case e == nil || e.Plugin == nil:
 		return "", &callError{status: 3, err: errors.New(errNeedsSketchPlugin)}
@@ -52,7 +49,7 @@ func sketchPluginProgram() (string, error) {
 	}
 	prog := filepath.Join(e.Plugin.PluginRoot, "bin", release.ExecutableName("sketch"))
 	if _, err := os.Stat(prog); err != nil {
-		return "", &callError{status: 3, err: fmt.Errorf("the sketch plugin has no program at %s. Run tuios plugins update %s", prog, sketchPluginID)}
+		return "", &callError{status: 3, err: fmt.Errorf("the sketch plugin has no program at %s. Run tuios plugins update %s", prog, herdrplugin.SketchID)}
 	}
 	return prog, nil
 }

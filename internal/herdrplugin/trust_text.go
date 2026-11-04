@@ -50,13 +50,20 @@ func ShownName(name string) string {
 	return name
 }
 
+// SketchID is the id of the sketch plugin. tuios runs the bin/sketch of the
+// plugin with this id for the diagrams it does not draw itself.
+const SketchID = "tuios.sketch"
+
 // RunsLines lists what p runs on its own once it is allowed: its startup
-// commands, then its hooks, actions, panes and link handlers by name.
-// Nothing is an empty list.
+// commands, the sketch program, then its hooks, actions, panes and link
+// handlers by name. Nothing is an empty list.
 func RunsLines(p *Plugin) []string {
 	var out []string
 	for _, s := range p.Startup {
 		out = append(out, "startup  "+ShownArgv(s.Command...))
+	}
+	if p.PluginID == SketchID {
+		out = append(out, "mermaid  bin/sketch, for the diagrams tuios does not draw, in tuios mermaid and in TML panels")
 	}
 	var hooks, actions, panes, links, cells, themes, savers []string
 	for _, s := range p.Savers {

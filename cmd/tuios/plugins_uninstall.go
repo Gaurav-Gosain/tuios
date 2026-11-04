@@ -184,6 +184,15 @@ func lockBySource(arg string, lock *herdrplugin.Lock) (*herdrplugin.LockEntry, e
 	if err != nil {
 		return nil, nil
 	}
+	// A release name typed beside a folder of that name also finds the
+	// install of that folder.
+	if src.release != "" {
+		if _, err := os.Stat(arg); err == nil {
+			if abs, err := filepath.Abs(arg); err == nil {
+				src.local = abs
+			}
+		}
+	}
 	want := src.url
 	if src.local != "" {
 		want = herdrplugin.LocalPrefix + src.local

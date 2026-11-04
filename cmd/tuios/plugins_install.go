@@ -49,7 +49,7 @@ func newPluginsInstallCommand() *cobra.Command {
 		Short: "Install, build and enable a plugin from git or a folder",
 		Long: `Install a plugin, build it and enable it.
 
-SOURCE is the name of a plugin of the tuios release, such as pr-status, or owner/repo[/dir][@ref] on github.com, a git URL (https, ssh, git@host:path or file) with an optional @ref, or a folder on this machine. Without a ref, tuios uses the default branch. tuios writes the commit to plugins.lock in the config folder.
+SOURCE is the name of a plugin of the tuios release, such as pr-status (give a folder of that name as ./pr-status), or owner/repo[/dir][@ref] on github.com, a git URL (https, ssh, git@host:path or file) with an optional @ref, or a folder on this machine. Without a ref, tuios uses the default branch. tuios writes the commit to plugins.lock in the config folder.
 
 Without SOURCE, tuios installs each plugin in plugins.lock at its commit. It does not enable them.
 
@@ -103,6 +103,15 @@ func parsePluginSource(arg string, o installOpts) (pluginSource, error) {
 	var s pluginSource
 	p := herdrplugin.ExpandHome(arg)
 	_, statErr := os.Stat(p)
+	// On a release build a name of the release is the release's plugin, also
+	// when a folder of that name is in this folder; give the folder as ./NAME.
+	// A dev build has no release to take, so it keeps the folder.
+	if _, ok := firstParty[arg]; ok && statErr == nil {
+		if _, err := runningTag(); err == nil {
+			s.release = arg
+			return s, nil
+		}
+	}
 	if strings.HasPrefix(arg, ".") || strings.HasPrefix(arg, "~") || strings.HasPrefix(arg, "/") || filepath.IsAbs(p) || statErr == nil {
 		if o.ref != "" || o.subdir != "" {
 			return s, errors.New("--ref and --subdir need a git source. tuios uses a folder as it is")

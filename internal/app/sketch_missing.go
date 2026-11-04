@@ -121,6 +121,6 @@ func sketchPluginInstalled(cfg *config.UserConfig) bool {
 	if err != nil || cfg == nil {
 		return false
 	}
-	e := herdrplugin.Find(herdrplugin.Discover(herdrplugin.DefaultDirs(path, cfg.Plugins.Dirs), cfg.Plugins.Enabled), "tuios.sketch")
+	e := herdrplugin.Find(herdrplugin.Discover(herdrplugin.DefaultDirs(path, cfg.Plugins.Dirs), cfg.Plugins.Enabled), herdrplugin.SketchID)
 	return e != nil && e.Runnable()
 }
