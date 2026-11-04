@@ -115,6 +115,7 @@ func runApp() {
 	})
 	mygo.App.OnWindowAllClosed(a.lastWindowClosed)
 	mygo.App.OnBeforeQuit(func(*mygo.QuitEvent) {
+		a.quitting = true
 		a.savePrefs()
 		a.backupOnQuit()
 	})

@@ -84,6 +84,9 @@ type termEntry struct {
 // App is the app's state. It lives on the main thread: other goroutines
 // change it through Window.Update.
 type App struct {
+	// quitting is set once a quit starts: windows that hide on close
+	// (the quick terminal) close for real then.
+	quitting bool
 	// ck is the agent cockpit (cockpit.go).
 	ck cockpit
 
