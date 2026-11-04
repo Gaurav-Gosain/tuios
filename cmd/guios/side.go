@@ -34,7 +34,6 @@ const (
 const (
 	defaultSide = 420 // the viewer's width, as it first opens
 	minSide     = 300
-	minPanes    = 360 // the room the viewer leaves the panes
 	splitWidth  = 760 // past which diff-layout auto shows diffs side by side
 )
 
@@ -366,27 +365,24 @@ func (a *App) tabButton(c *ui.Context, pal *palette, id, label, tab string) {
 	}
 }
 
-// sideWidth is the viewer's width in a row of width w, leaving the panes
-// their room, or half of a row too narrow for both.
-func (a *App) sideWidth(w float32) float32 {
+// drawerWidth is the viewer drawer's width over a row of panes w wide:
+// the width the person gave it, and at most what leaves a strip of the
+// panes in view beside it.
+func (a *App) drawerWidth(w float32) float32 {
 	sw := a.prefs.SideWidth
 	if sw == 0 {
 		sw = defaultSide
 	}
-	switch {
-	case w <= 0:
-	case w < minPanes+minSide+paneGap:
-		// Too narrow for either's least: they share it, the viewer never
-		// running past the row, under the right sidebar.
-		return (w - paneGap) / 2
-	default:
-		sw = min(sw, w-minPanes)
+	if w <= 0 {
+		return sw
 	}
-	return max(sw, minSide)
+	return max(min(sw, w-drawerPeek-paneGap), min(minSide, w-paneGap))
 }
 
-// sideEdge is the gap between the panes and the viewer, which a drag
-// moves.
+// drawerPeek is the least of the panes the viewer drawer leaves in view.
+const drawerPeek = 96
+
+// sideEdge is the viewer drawer's left edge, which a drag moves.
 func (a *App) sideEdge(c *ui.Context, pal *palette, row float32) {
 	d := ui.Box(c.Key("side-edge")).Width(paneGap).Shrink(0).Cursor(ui.CursorResizeColumn)
 	if d.Hovered() || d.Pressed() {
@@ -396,10 +392,10 @@ func (a *App) sideEdge(c *ui.Context, pal *palette, row float32) {
 	}
 	if dx, _, ok := d.Dragged(); ok {
 		if a.side.drag == 0 {
-			a.side.drag = a.sideWidth(row)
+			a.side.drag = a.drawerWidth(row)
 		}
 		a.side.drag -= dx
-		a.prefs.SideWidth = min(max(a.side.drag, minSide), max(row-minPanes, minSide))
+		a.prefs.SideWidth = min(max(a.side.drag, minSide), max(row-drawerPeek-paneGap, minSide))
 	} else if a.side.drag != 0 && !d.Pressed() {
 		a.side.drag = 0
 		a.savePrefs()
@@ -415,12 +411,8 @@ func (a *App) sideEdge(c *ui.Context, pal *palette, row float32) {
 // the window's right edge, whose header keeps room for the window's
 // controls (controlsRoom).
 func (a *App) viewerCard(c *ui.Context, pal *palette, s *proto.Session, v *sideView, width float32) {
-	card := ui.Column(c.Key("side")).Width(width).Shrink(0).MinHeight(0).Radius(rPane).Clip().Background(pal.card)
-	if v.full {
-		floating(card, pal)
-	} else {
-		paned(card, pal)
-	}
+	// Raised over the panes, as quick look and the drawer both are.
+	card := floating(ui.Column(c.Key("side")).Width(width).Shrink(0).MinHeight(0).Radius(rPane).Clip().Background(pal.card), pal)
 	card.Focusable().Bind(a.paneRef("side-card"))
 	a.side.focused = card.FocusWithin()
 	card.Children(func() {

@@ -1030,8 +1030,15 @@ func (a *App) workCard(c *ui.Context, pal *palette, bar ui.TitleBar, shown float
 				})
 				return
 			}
-			a.sideEdge(c, pal, w)
-			a.viewerCard(c, pal, s, v, a.sideWidth(w))
+			// The viewer (Changes, or a file from Files) is a drawer over the
+			// panes' right side: the panes keep their size, so no terminal
+			// rewraps or shrinks to a sliver while it shows (council round
+			// 1, visual 7; QA-051). Its left edge still sizes it.
+			dw := a.drawerWidth(w)
+			ui.Row(c.Key("drawer")).Absolute().Right(0).Top(0).Bottom(0).Width(dw + paneGap).AlignItems(ui.Stretch).Children(func() {
+				a.sideEdge(c, pal, w)
+				a.viewerCard(c, pal, s, v, dw)
+			})
 		})
 		return
 	}
