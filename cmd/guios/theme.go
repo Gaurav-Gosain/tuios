@@ -377,8 +377,10 @@ func ghosttyLook(th *terminal.Theme) *look {
 	if l.pal.dark {
 		shade = 0.04
 	}
-	l.base = ui.LinearGradient{Angle: 180, Oklab: true, Stops: []ui.GradientStop{
-		{Color: ui.Oklch(max(bl-shade, 0), bc, bh), At: 0}, {Color: ui.Oklch(max(bl-shade/2, 0), bc, bh), At: 1}}}
+	// One flat ground, as DESIGN.md section 1 asks: a gradient this
+	// shallow steps in visible bands.
+	ground := ui.Oklch(max(bl-shade, 0), bc, bh)
+	l.base = ui.LinearGradient{Angle: 180, Oklab: true, Stops: []ui.GradientStop{{Color: ground, At: 0}, {Color: ground, At: 1}}}
 	// No glow: a theme's ground is one surface, so the right sidebar
 	// sits on the same ground as the left (DESIGN.md principle 1).
 	l.glow = glowOf(accent.Alpha(0))
@@ -659,8 +661,10 @@ var washTable = map[string]wash{
 	},
 	// White paper on a desk of light gray, in ink, flat and quiet.
 	"paper": {
-		light: []string{"#f6f6f7", "#f7f7f8", "#f8f8f8"}, lightGlow: ui.RGBA(255, 255, 255, 0),
-		dark: []string{"#141416", "#151517", "#161618"}, darkGlow: ui.RGBA(0, 0, 0, 0),
+		// One flat ground: a gradient of one level steps in bands across
+		// the sidebar (council round 1, visual 21).
+		light: []string{"#f6f6f7", "#f6f6f7"}, lightGlow: ui.RGBA(255, 255, 255, 0),
+		dark: []string{"#141416", "#141416"}, darkGlow: ui.RGBA(0, 0, 0, 0),
 		tone: tone{260, 0, 0.9, 262},
 	},
 	"plain": {
