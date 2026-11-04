@@ -140,6 +140,11 @@ const (
 	// program stopped or did not start. Activating it starts it again. See
 	// rail_pane.go.
 	sidebarRowRailPaneStart
+	// sidebarRowAgentKin is the headline line under a parent agent's row,
+	// over the rows of the agents it started. Activating it opens or shuts
+	// those rows. It carries the parent's session and window. See
+	// SidebarToggleKin.
+	sidebarRowAgentKin
 )
 
 // sidebarAddGlyph is the mark both add controls wear. One cell, so it costs a
@@ -612,12 +617,18 @@ type sidebarAgentEntry struct {
 	// set by sidebarNestAgents. See sidebar_agent_nest.go.
 	Parent *sessiontree.PaneRef
 	Nest   int
+	// Kin is set on the headline line under a parent agent's row: what it
+	// says of the child rows under it, and KinNames their names. Open says
+	// whether those rows are drawn. See sidebar_agent_kin.go.
+	Kin, KinNames string
 }
 
 // sidebarSubRow reports whether an entry is a row under a pane's row rather
 // than a pane: a subagent's row, the "+N more" after them, or the heading
 // over them.
-func (e sidebarAgentEntry) sidebarSubRow() bool { return e.Child != nil || e.More > 0 || e.Head }
+func (e sidebarAgentEntry) sidebarSubRow() bool {
+	return e.Child != nil || e.More > 0 || e.Head || e.Kin != ""
+}
 
 // sidebarTerminalEntry is one pane of the session the terminals section is
 // showing, whether that is the attached session or a peeked one.
@@ -1578,7 +1589,7 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 	// reads every agent pane, folded or not, since a folded pane is still one
 	// the agents section lists.
 	allAgents := agents
-	agents = sidebarNestAgents(m.sidebarFoldAgents(agents, time.Now()))
+	agents = m.sidebarKinHeads(sidebarNestAgents(m.sidebarFoldAgents(agents, time.Now())))
 	// The one section whose order moves on its own, so the one whose viewport is
 	// anchored to a row rather than to an index. Before the cursor's auto-scroll
 	// below, which gets the last word on what is on screen.
@@ -2404,6 +2415,17 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 		for i := range count[sidebarSectionAgents] {
 			idx := start[sidebarSectionAgents] + i
 			e := agents[idx]
+			if e.Kin != "" {
+				// The headline over a parent's child agent rows: activating
+				// it opens or shuts them.
+				st := m.railRowState(idx == hoverRow[sidebarSectionAgents], isCursor(sidebarRowAgentKin, e.SessionID, e.WindowID))
+				recordHit(sidebarRowAgentKin, e.SessionID, e.WindowID, e.WindowIndex, rowH[sidebarSectionAgents])
+				lines = append(lines, compose(st.mark(pal, m.sidebarKinRow(e, cw, pal, st, false))))
+				if rowH[sidebarSectionAgents] > 1 {
+					lines = append(lines, compose(st.mark(pal, m.sidebarKinRow(e, cw, pal, st, true))))
+				}
+				continue
+			}
 			if e.Head {
 				// The heading over a pane's subagent rows: the mouse and the
 				// keyboard both reach it, and activating it opens or shuts
@@ -2897,6 +2919,12 @@ func (m *OS) sidebarCursorIndex(target sidebarNavRow, sessions []sessiontree.Nod
 	case sidebarRowSubagentToggle:
 		for i, e := range agents {
 			if e.Head && e.WindowID == target.WindowID && e.SessionID == target.SessionID {
+				return sidebarSectionAgents, i, true
+			}
+		}
+	case sidebarRowAgentKin:
+		for i, e := range agents {
+			if e.Kin != "" && e.WindowID == target.WindowID && e.SessionID == target.SessionID {
 				return sidebarSectionAgents, i, true
 			}
 		}

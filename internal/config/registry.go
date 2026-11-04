@@ -721,6 +721,7 @@ var ActionDescriptions = map[string]string{
 	"inbox_fold":         "Agents view: fold or open the group of the row under the cursor",
 	"inbox_prompt_prev":  "Agents view: show the thread's previous prompt at the top",
 	"inbox_prompt_next":  "Agents view: show the thread's next prompt at the top",
+	"inbox_child":        "Agents view: select the next agent a card in the thread started. Enter opens its thread",
 	"inbox_compare":      "Agents view: compare the attempts of the fan under the cursor, ask a judge, keep one",
 	"inbox_board":        "Agents view: show the task board, or the agents again",
 	"inbox_take":         "Agents view: take the card for the focused pane",

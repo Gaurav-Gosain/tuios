@@ -1,7 +1,9 @@
 package tuie2e
 
 import (
+	"bytes"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"slices"
 	"strconv"
@@ -418,27 +420,45 @@ func TestSubagentRowsOnTheRail(t *testing.T) {
 // from the pane of the one before (writeChainAgent), and reads the rail's
 // agents section. Each child's row must sit under its parent's row, its name
 // stepped in further than its parent's, the way subagent rows sit under their
-// pane. The frame is agent-child-rows.
+// pane, with the parent's headline between them. The frame is
+// agent-child-rows.
+//
+// Then a lead agent starts four children in mixed states (writeFamilyAgent).
+// The lead's headline must count them by state, "4 agents · 1 needs you · 2
+// working · 1 done", and a click on it must fold the children's rows away and
+// open them again. In the cockpit, the lead's thread draws a pill per child
+// under the card that started them: "." selects one and enter opens that
+// child's thread. Frames: agent-kin-rows, agent-kin-folded, agent-kin-rows-16,
+// agent-kin-pills, agent-kin-pill-selected, agent-kin-child-thread and the
+// 16 colour cockpit frames.
 func TestChildAgentRowsNestUnderTheirParent(t *testing.T) {
 	base := t.TempDir()
 	useShippedLooks(base)
-	writeConfig(t, base, "[appearance.sidebar]\nenabled = true\nposition = \"left\"\nwidth = 28\n")
+	writeConfig(t, base, "[appearance.sidebar]\nenabled = true\nposition = \"left\"\nwidth = 50\n")
 	killDaemon(t, base)
 	const sess = "e2e-nest"
 	if out, err := tuiosCLI(t, base, "new", sess, "--detach"); err != nil {
 		t.Fatalf("create %s: %v\n%s", sess, err, out)
 	}
 	agent := writeChainAgent(t, base)
-	term := attachIn(t, base, sess, startOpts{cols: 110, rows: 30})
+	term := attachIn(t, base, sess, startOpts{cols: 150, rows: 46})
 	if out, err := tuiosCLI(t, base, "new-window", "-s", sess, "gen2", "--", "sh", agent, "2"); err != nil {
 		t.Fatalf("start the root agent: %v\n%s", err, out)
 	}
-	// rowAt is the rail row a name is on in the agents section, the last
-	// section, and the column its name starts at.
+	frames := os.Getenv("TUIOS_E2E_FRAMES")
+	// rowAt is the rail row a name is on in the agents section, under its
+	// header, and the column its name starts at. A folded headline's line
+	// of names is no row.
 	rowAt := func(s tuitest.Screen, name string) (int, int) {
 		rail := railOf(s)
-		for y := len(rail) - 1; y >= 0; y-- {
-			if i := strings.Index(rail[y], name); i >= 0 {
+		top := -1
+		for y, line := range rail {
+			if strings.HasPrefix(strings.TrimSpace(line), "agents ") {
+				top = y
+			}
+		}
+		for y := top + 1; top >= 0 && y < len(rail); y++ {
+			if i := strings.Index(rail[y], name); i >= 0 && !strings.Contains(rail[y], ", ") {
 				return y, len([]rune(rail[y][:i]))
 			}
 		}
@@ -447,21 +467,238 @@ func TestChildAgentRowsNestUnderTheirParent(t *testing.T) {
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
 		y, _ := rowAt(s, "gen0")
 		ys, _ := rowAt(s, "sib1")
-		return y >= 0 && ys >= 0
+		h, _ := rowAt(s, "1 agent · 1 idle")
+		return y >= 0 && ys >= 0 && h >= 0
 	}, 60*time.Second); err != nil {
-		t.Fatalf("the rail never listed gen0: %v\n%s", err, term.Snapshot())
+		t.Fatalf("ASSERTION: the rail never listed gen0 under its headline: %v\n%s", err, term.Snapshot())
 	}
 	time.Sleep(300 * time.Millisecond)
 	s := term.Screen()
 	saveFrame(t, term, "agent-child-rows")
-	if frames := os.Getenv("TUIOS_E2E_FRAMES"); frames != "" {
+	if frames != "" {
 		savePNG(t, s, shot.XTermPalette(), frames, "agent-child-rows")
 	}
 	y2, x2 := rowAt(s, "gen2")
+	h2, _ := rowAt(s, "3 agents · 3 idle")
 	y1, x1 := rowAt(s, "gen1")
+	h1, _ := rowAt(s, "1 agent · 1 idle")
 	y0, x0 := rowAt(s, "gen0")
-	if y2 < 0 || y1 != y2+1 || y0 != y1+1 || x1 <= x2 || x0 <= x1 {
-		t.Errorf("ASSERTION: the agent rows are gen2 at %d:%d, gen1 at %d:%d, gen0 at %d:%d; want each child on the next row, stepped in further than its parent\n%s",
-			y2, x2, y1, x1, y0, x0, strings.Join(railOf(s), "\n"))
+	ys, xs := rowAt(s, "sib1")
+	// A row is one or two lines, as the section has room: the step is
+	// what one row takes. gen2's family is one block: its headline, then
+	// gen1 with its own headline and gen0, and sib1 before or after them.
+	step := h2 - y2
+	block := []int{h2, y1, h1, y0, ys}
+	slices.Sort(block)
+	tight := true
+	for i, y := range block {
+		tight = tight && y == y2+step*(i+1)
 	}
+	if y2 < 0 || step < 1 || step > 2 || !tight || h1 != y1+step || y0 != h1+step || x1 <= x2 || xs != x1 || x0 <= x1 {
+		t.Errorf("ASSERTION: the agent rows are gen2 at %d:%d, its headline at %d, gen1 at %d:%d, its headline at %d, gen0 at %d:%d, sib1 at %d:%d; want each parent's headline on the next row and its children after it, stepped in further than their parent\n%s",
+			y2, x2, h2, y1, x1, h1, y0, x0, ys, xs, strings.Join(railOf(s), "\n"))
+	}
+
+	// A lead with four children in mixed states.
+	family := writeFamilyAgent(t, base)
+	if out, err := tuiosCLI(t, base, "new-window", "-s", sess, "lead", "--", "sh", family, "lead"); err != nil {
+		t.Fatalf("start the lead: %v\n%s", err, out)
+	}
+	const headline = "4 agents · 1 needs you · 2 working · 1 done"
+	kids := []string{"kid-a", "kid-b", "kid-c", "kid-d"}
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		h, _ := rowAt(s, headline)
+		if h < 0 {
+			return false
+		}
+		for _, k := range kids {
+			if y, _ := rowAt(s, k); y <= h {
+				return false
+			}
+		}
+		return true
+	}, 60*time.Second); err != nil {
+		start, _ := os.ReadFile(family + ".starts")
+		t.Fatalf("ASSERTION: the lead's headline never read %q over its four children: %v\nstarts: %s\n%s", headline, err, start, term.Snapshot())
+	}
+	time.Sleep(300 * time.Millisecond)
+	saveFrame(t, term, "agent-kin-rows")
+	if frames != "" {
+		savePNG(t, term.Screen(), shot.XTermPalette(), frames, "agent-kin-rows")
+	}
+	// A click on the headline folds the children's rows away. The headline
+	// stays, and still counts them.
+	hy, hx := rowAt(term.Screen(), headline)
+	mouseClick(t, term, hx+2, hy, tuitest.MouseLeft, 0)
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		h, _ := rowAt(s, headline)
+		if h < 0 {
+			return false
+		}
+		for _, k := range kids {
+			if y, _ := rowAt(s, k); y >= 0 {
+				return false
+			}
+		}
+		return true
+	}, uiTimeout); err != nil {
+		t.Fatalf("ASSERTION: a click on the headline did not fold the children away: %v\n%s", err, term.Snapshot())
+	}
+	saveFrame(t, term, "agent-kin-folded")
+	if frames != "" {
+		savePNG(t, term.Screen(), shot.XTermPalette(), frames, "agent-kin-folded")
+	}
+	hy, hx = rowAt(term.Screen(), headline)
+	mouseClick(t, term, hx+2, hy, tuitest.MouseLeft, 0)
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		y, _ := rowAt(s, "kid-a")
+		return y >= 0
+	}, uiTimeout); err != nil {
+		t.Fatalf("ASSERTION: a second click did not open the children again: %v\n%s", err, term.Snapshot())
+	}
+
+	// The lead's thread: a Task card and the card that started the four.
+	joinLeadTranscript(t, base, sess)
+	cockpitPills(t, term, "agent-kin", frames)
+
+	// 16 colours: the headline and the pills still read.
+	plain := startIn(t, base, startOpts{cols: 150, rows: 46, args: []string{"attach", sess},
+		env: []string{"TERM=xterm", "COLORTERM="}})
+	if err := plain.WaitFor(func(s tuitest.Screen) bool {
+		h, _ := rowAt(s, headline)
+		return h >= 0
+	}, bootTimeout); err != nil {
+		t.Fatalf("the 16 colour rail has no headline: %v\n%s", err, plain.Snapshot())
+	}
+	saveFrame(t, plain, "agent-kin-rows-16")
+	if frames != "" {
+		savePNG(t, plain.Screen(), shot.XTermPalette(), frames, "agent-kin-rows-16")
+	}
+	cockpitPills(t, plain, "agent-kin-16", frames)
+}
+
+// writeFamilyAgent writes a fake agent. Run as "lead", it reports itself
+// idle and starts four children named kid-a to kid-d, two working, one
+// done and one waiting for the person. Run as "kid STATE", it reports STATE.
+func writeFamilyAgent(t *testing.T, base string) string {
+	t.Helper()
+	agent := filepath.Join(base, "family.sh")
+	script := "#!/bin/sh\nT='" + tuiosBin + "'\n" +
+		`if [ "$1" = lead ]; then` + "\n" +
+		`  "$T" set-agent-state idle --agent-session-id conv-lead` + "\n" +
+		`  for k in "a working" "b working" "c done" "d needs_input"; do` + "\n" +
+		`    set -- $k` + "\n" +
+		`    "$T" start-agent "$0 kid $2" --name "kid-$1" --ready-timeout 2000 --json >> "$0.starts" 2>&1` + "\n" +
+		"  done\n" +
+		"  exec sleep 600\n" +
+		"fi\n" +
+		`"$T" set-agent-state "$2" --agent-session-id "conv-kid-$$"` + "\n" +
+		"exec sleep 600\n"
+	if err := os.WriteFile(agent, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	return agent
+}
+
+// joinLeadTranscript writes a Claude Code transcript for the lead and joins
+// it to the lead's pane: a prompt, a Task call that ran a subagent, a shell
+// command that started kid-a to kid-d, and the answer.
+func joinLeadTranscript(t *testing.T, base, sess string) {
+	t.Helper()
+	rec := func(typ, at, content string) string {
+		return `{"type":"` + typ + `","isSidechain":false,"sessionId":"lead-conv","timestamp":"2026-11-04T10:0` + at + `.000Z","message":{"role":"` + typ + `","content":` + content + `}}`
+	}
+	lines := []string{
+		rec("user", "0:00", `"Split the token work across helpers."`),
+		rec("assistant", "0:10", `[{"type":"tool_use","id":"toolu_task","name":"Task","input":{"description":"Survey the token code","subagent_type":"Explore","prompt":"Find every caller."}}]`),
+		rec("user", "1:00", `[{"type":"tool_result","tool_use_id":"toolu_task","content":"Three callers."}]`),
+		rec("assistant", "1:10", `[{"type":"tool_use","id":"toolu_start","name":"Bash","input":{"command":"for k in kid-a kid-b kid-c kid-d; do tuios start-agent claude --name $k; done","description":"Start four helpers"}}]`),
+		rec("user", "1:20", `[{"type":"tool_result","tool_use_id":"toolu_start","content":"started 4"}]`),
+		rec("assistant", "1:30", `[{"type":"text","text":"Four helpers are on it."}]`),
+	}
+	path := filepath.Join(atProjects(base), "src-lead", "lead-conv.jsonl")
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte(strings.Join(lines, "\n")+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	hook := exec.Command(tuiosBin, "agent-hook", "claude-code", "--session", sess, "--window", "lead")
+	hook.Dir = workDirIn(t, base)
+	hook.Env = append(os.Environ(), "SHELL=/bin/sh")
+	for _, key := range xdgKeys {
+		hook.Env = append(hook.Env, key+"="+xdgDir(base, key))
+	}
+	hook.Stdin = bytes.NewReader(hookPayload(path, "lead-conv"))
+	if out, err := hook.CombinedOutput(); err != nil {
+		t.Fatalf("agent-hook SessionStart: %v\n%s", err, out)
+	}
+	if out, err := tuiosCLI(t, base, "set-agent-state", "working", "-s", sess, "-w", "lead", "--harness", "claude-code"); err != nil {
+		t.Fatalf("set the lead's harness: %v\n%s", err, out)
+	}
+}
+
+// cockpitPills opens the cockpit on the lead's thread and checks the pills:
+// the Task card's pill, a pill per child under the card that started them,
+// "." selecting one, and enter opening that child's thread.
+func cockpitPills(t *testing.T, term *tuitest.Terminal, name, frames string) {
+	t.Helper()
+	// A click on the rail gave it the keyboard: esc hands it back.
+	if err := term.SendKeys(tuitest.Esc); err != nil {
+		t.Fatal(err)
+	}
+	_ = term.WaitStable(uiTimeout)
+	if err := term.SendKeys(tuitest.Ctrl('b'), "i"); err != nil {
+		t.Fatalf("open the cockpit: %v", err)
+	}
+	const answer = "Four helpers are on it."
+	for range 12 {
+		if err := term.WaitFor(func(s tuitest.Screen) bool { return strings.Contains(s.Text(), answer) }, 2*time.Second); err == nil {
+			break
+		}
+		if err := term.SendKeys("j"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		text := s.Text()
+		// A pill reads its name and then its state, which no other line
+		// of the cockpit does.
+		return containsAll(text, answer, "Survey the token code done", "kid-a working", "kid-b working", "kid-c done", "kid-d needs you")
+	}, uiTimeout); err != nil {
+		t.Fatalf("ASSERTION: the lead's thread has no child pills: %v\n%s", err, term.Snapshot())
+	}
+	_ = term.WaitStable(uiTimeout)
+	saveCockpitFrames(t, term, name+"-pills")
+	if frames != "" {
+		savePNG(t, term.Screen(), shot.XTermPalette(), frames, name+"-pills")
+	}
+	if err := term.SendKeys("."); err != nil {
+		t.Fatal(err)
+	}
+	if err := term.WaitForText("open agent", uiTimeout); err != nil {
+		t.Fatalf("ASSERTION: . selected no pill: %v\n%s", err, term.Snapshot())
+	}
+	_ = term.WaitStable(uiTimeout)
+	saveCockpitFrames(t, term, name+"-pill-selected")
+	if frames != "" {
+		savePNG(t, term.Screen(), shot.XTermPalette(), frames, name+"-pill-selected")
+	}
+	if err := term.SendKeys(tuitest.Enter); err != nil {
+		t.Fatal(err)
+	}
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		return !strings.Contains(s.Text(), answer)
+	}, uiTimeout); err != nil {
+		t.Fatalf("ASSERTION: enter on the pill did not open the child's thread: %v\n%s", err, term.Snapshot())
+	}
+	_ = term.WaitStable(uiTimeout)
+	saveCockpitFrames(t, term, name+"-child-thread")
+	if frames != "" {
+		savePNG(t, term.Screen(), shot.XTermPalette(), frames, name+"-child-thread")
+	}
+	if err := term.SendKeys(tuitest.Esc); err != nil {
+		t.Fatal(err)
+	}
+	_ = term.WaitStable(uiTimeout)
 }

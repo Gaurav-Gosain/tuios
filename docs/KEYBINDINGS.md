@@ -1999,7 +1999,7 @@ These keys are in three sections of their own, rebindable like any other:
 `inbox_allow`, `inbox_allow_always`, `inbox_open`, `inbox_back`,
 `inbox_help`, `inbox_mark`, `inbox_mark_all`, `inbox_tab_prev`,
 `inbox_tab_next`, `inbox_expand`, `inbox_fold`, `inbox_prompt_prev`,
-`inbox_prompt_next`, `inbox_compare`, `inbox_artifact`, `inbox_board`,
+`inbox_prompt_next`, `inbox_child`, `inbox_compare`, `inbox_artifact`, `inbox_board`,
 `inbox_board_layout`, `inbox_view_list`, `inbox_take`, `inbox_stage_prev`, `inbox_stage_next`),
 `[keybindings.inbox_peek]` (the prompt: `peek_approve`, `peek_approve_always`,
 `peek_deny`, `peek_type`, `peek_read_again`, `peek_go`, `peek_back`) and

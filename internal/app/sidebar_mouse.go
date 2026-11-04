@@ -454,6 +454,8 @@ func (m *OS) sidebarClick(x, y int, right bool) bool {
 		m.SidebarUnfoldAgents()
 	case sidebarRowSubagentToggle:
 		m.SidebarToggleSubagents(hit.SessionID, hit.WindowID)
+	case sidebarRowAgentKin:
+		m.SidebarToggleKin(hit.SessionID, hit.WindowID)
 	case sidebarRowNewSession:
 		m.SidebarNewSessionHere()
 	case sidebarRowNewWindow:
@@ -657,6 +659,8 @@ func (m *OS) sidebarActivateRow(hit sidebarRowHit) {
 		m.SidebarUnfoldAgents()
 	case sidebarRowSubagentToggle:
 		m.SidebarToggleSubagents(hit.SessionID, hit.WindowID)
+	case sidebarRowAgentKin:
+		m.SidebarToggleKin(hit.SessionID, hit.WindowID)
 	case sidebarRowNewSession:
 		m.SidebarNewSessionHere()
 	case sidebarRowNewWindow:

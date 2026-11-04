@@ -1862,8 +1862,10 @@ const (
 	ActionInboxExpand  = "inbox_expand"
 	ActionInboxFold    = "inbox_fold"
 	// The thread's previous and next prompt, the marks on its ruler.
-	ActionInboxPromptPrev   = "inbox_prompt_prev"
-	ActionInboxPromptNext   = "inbox_prompt_next"
+	ActionInboxPromptPrev = "inbox_prompt_prev"
+	ActionInboxPromptNext = "inbox_prompt_next"
+	// The step through the agents the thread's cards started.
+	ActionInboxChild        = "inbox_child"
 	ActionAgentUnread       = "agent_unread"
 	ActionAgentSnooze       = "agent_snooze"
 	ActionAgentReply        = "agent_reply"
@@ -1957,6 +1959,7 @@ func getDefaultInboxKeybinds() map[string][]string {
 		// [ and ] step the tabs, so the prompt jumps take the braces.
 		ActionInboxPromptPrev: {"{"},
 		ActionInboxPromptNext: {"}"},
+		ActionInboxChild:      {"."},
 	}
 }
 
@@ -3913,6 +3916,7 @@ var yieldingDefaults = map[string]bool{
 	"inbox_tab_next":     true,
 	"inbox_expand":       true,
 	"inbox_fold":         true,
+	"inbox_child":        true,
 	// ctrl+alt+N (ctrl+opt+N on macOS), the first default for
 	// send_to_workspace_N.
 	"send_to_workspace_1": true,

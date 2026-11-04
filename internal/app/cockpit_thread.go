@@ -131,6 +131,7 @@ func (m *OS) threadCardLines(e sidebarAgentEntry, t *agentThread, width int, cha
 		entries = entries[last:]
 	}
 	results := map[string]threadEntry{}
+	pills := m.ckChildPills(e, t.entries)
 	turn := 0
 	for _, en := range t.entries {
 		if en.Kind == "tool_result" && en.ToolID != "" {
@@ -292,6 +293,7 @@ func (m *OS) threadCardLines(e sidebarAgentEntry, t *agentThread, width int, cha
 					}
 				}
 			}
+			ls = append(ls, m.ckPillLines(l, pills[en.ID], t.pill, width)...)
 			add(ls...)
 		default:
 			continue
