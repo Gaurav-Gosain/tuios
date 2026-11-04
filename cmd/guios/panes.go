@@ -741,7 +741,12 @@ func (a *App) closePane(s *proto.Session, pane string, ask bool) {
 	if s == nil {
 		return
 	}
-	if len(s.Panes) <= 1 {
+	if len(s.Panes) == 0 {
+		return
+	}
+	// The last pane of a session ends it, unless another workspace still
+	// holds panes.
+	if len(s.Panes) == 1 && !otherWorkspacePanes(s) {
 		a.closeSession(s.ID, ask)
 		return
 	}
@@ -871,6 +876,17 @@ func (a *App) closeFocused() {
 		return
 	}
 	a.closePane(s, a.focusOf(s), true)
+}
+
+// otherWorkspacePanes tells that a workspace the session does not show
+// holds panes.
+func otherWorkspacePanes(s *proto.Session) bool {
+	for _, w := range s.Workspaces {
+		if w.N != s.Workspace && w.Panes > 0 {
+			return true
+		}
+	}
+	return false
 }
 
 // emptyWorkspace fills the pane area of a workspace that holds no pane.
