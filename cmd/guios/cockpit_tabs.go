@@ -40,7 +40,7 @@ type ckDiff struct {
 	notes   []ckNote
 	// note is the line a note is being written on, "" for none.
 	note, noteText string
-	scroll         ui.ScrollState
+	scroll         smoothScroll
 }
 
 type ckFile struct {
@@ -194,7 +194,7 @@ func (a *App) diffPage(c *ui.Context, pal *palette, ag client.Agent, d *ckDiff, 
 	}
 	mono := a.termFamily()
 	added, removed := a.diffColorsFor(pal)
-	ui.Scroll(c.Key("diff")).TrackScroll(&d.scroll).Grow(1).MinHeight(0).Padding(14, 24, 18, 24).Children(func() {
+	d.scroll.track(c, ui.Scroll(c.Key("diff"))).Grow(1).MinHeight(0).Padding(14, 24, 18, 24).Children(func() {
 		ui.Column(c).Gap(12).Children(func() {
 			ui.Row(c).Gap(10).AlignItems(ui.Center).Children(func() {
 				ta, tr := 0, 0

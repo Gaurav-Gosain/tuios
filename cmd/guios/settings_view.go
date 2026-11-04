@@ -71,13 +71,13 @@ type settingsState struct {
 	service      string // kerod, as last asked
 	notice       string // a line under the keyboard page, as of a conflict
 	toast        string
-	menus        map[string]*searchMenu     // the search menus', by key
-	problems     []string                   // what the configuration file got wrong
-	scrolls      map[string]*ui.ScrollState // each page's, for its scroll edge
-	host         hostDraft                  // the Hosts page's form
-	hostEdit     hostDraft                  // a host's, as the user edits it
-	tailnet      tailnetLook                // this machine on the tailnet, for the Hosts page
-	confirm      *confirmation              // a question, asked in this window
+	menus        map[string]*searchMenu   // the search menus', by key
+	problems     []string                 // what the configuration file got wrong
+	scrolls      map[string]*smoothScroll // each page's, for its scroll edge
+	host         hostDraft                // the Hosts page's form
+	hostEdit     hostDraft                // a host's, as the user edits it
+	tailnet      tailnetLook              // this machine on the tailnet, for the Hosts page
+	confirm      *confirmation            // a question, asked in this window
 }
 
 // openSettings shows the Settings window, on a page.
@@ -237,18 +237,18 @@ func (a *App) settingsView(c *ui.Context) {
 				// The edge shows, as AppKit's, once content is under the bar,
 				// or while the pointer is over it.
 				if a.ss.scrolls == nil {
-					a.ss.scrolls = map[string]*ui.ScrollState{}
+					a.ss.scrolls = map[string]*smoothScroll{}
 				}
 				sc := a.ss.scrolls[page.id]
 				if sc == nil {
-					sc = &ui.ScrollState{}
+					sc = &smoothScroll{}
 					a.ss.scrolls[page.id] = sc
 				}
 				box := ui.Box(c.Key("page")).Grow(1).MinHeight(0)
 				_, py, over := box.PointerPosition()
 				edgeOn := sc.Y > 0.5 || over && py < headerH
 				box.Children(func() {
-					ui.Scroll(c.Key("page-"+page.id)).Fill().Padding(headerH+16, 24, 28, 24).ScrollbarInsets(headerH, 0, 0).TrackScroll(sc).Children(func() {
+					sc.track(c, ui.Scroll(c.Key("page-"+page.id))).Fill().Padding(headerH+16, 24, 28, 24).ScrollbarInsets(headerH, 0, 0).Children(func() {
 						ui.Column(c).Gap(22).MaxWidth(620).Children(func() {
 							switch page.id {
 							case "general":

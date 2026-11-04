@@ -24,7 +24,7 @@ type paletteState struct {
 	open   bool
 	query  string
 	index  int
-	scroll ui.ScrollState
+	scroll smoothScroll
 	reveal bool // the chosen item scrolls into view, once
 	// convs are the conversations the hosts' kerods remember, the last to
 	// run first, as they come; only shows them alone (Resume
@@ -527,7 +527,7 @@ func (a *App) paletteView(c *ui.Context, pal *palette) {
 				chosen = items[a.pal.index].run
 			}
 		})
-		list := ui.Scroll(c.Key("results")).Grow(1).MinHeight(0).Padding(6).TrackScroll(&a.pal.scroll)
+		list := a.pal.scroll.track(c, ui.Scroll(c.Key("results"))).Grow(1).MinHeight(0).Padding(6)
 		reveal := a.pal.reveal
 		a.pal.reveal = false
 		list.Children(func() {

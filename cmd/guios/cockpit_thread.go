@@ -46,6 +46,8 @@ type ckThread struct {
 
 	items []ckItem
 	list  ui.ListState
+	// scroll moves the list on the frame clock (smoothScroll).
+	scroll smoothScroll
 	// open holds the tool items the person unfolded, by item key; shut the
 	// edits they folded.
 	open, shut map[string]bool
@@ -325,10 +327,9 @@ func (a *App) threadView(c *ui.Context, pal *palette, ag client.Agent) {
 		return
 	}
 	mono := a.termFamily()
-	list := ui.List(c.Key("thread-"+threadKey(ag)), &th.list, len(th.items), func(i int) {
-		a.itemView(c, pal, th, &th.items[i], mono)
-	}).Grow(1).MinHeight(0).Padding(18, 28, 22, 28).Gap(14).Selectable().CopyData(copyThread)
-	_ = list
+	list := ui.List(c.Key("thread-"+threadKey(ag)), &th.list, len(th.items))
+	th.scroll.track(c, list).Grow(1).MinHeight(0).Padding(18, 28, 22, 28).Gap(14).Selectable().CopyData(copyThread).
+		Rows(func(r ui.ListRow) { a.itemView(r.Context, pal, th, &th.items[r.Index], mono) })
 }
 
 // itemView draws one chat item.

@@ -27,7 +27,7 @@ type folderPicker struct {
 	query  string
 	index  int
 	hidden bool
-	scroll ui.ScrollState
+	scroll smoothScroll
 	reveal bool // the chosen folder scrolls into view, once
 }
 
@@ -188,7 +188,7 @@ func (a *App) pickerView(c *ui.Context, pal *palette) {
 				}
 			}
 		})
-		list := ui.Scroll(c.Key("folders")).Grow(1).MinHeight(0).Padding(6).TrackScroll(&p.scroll)
+		list := p.scroll.track(c, ui.Scroll(c.Key("folders"))).Grow(1).MinHeight(0).Padding(6)
 		reveal := p.reveal
 		p.reveal = false
 		list.Children(func() {
