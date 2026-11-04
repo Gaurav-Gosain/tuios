@@ -1760,6 +1760,12 @@ const (
 	// focused pane.
 	ActionInboxBoard = "inbox_board"
 	ActionInboxTake  = "inbox_take"
+	// ActionInboxStagePrev and ActionInboxStageNext move the card under the
+	// cursor to the stage before or after its own. ActionInboxBoardLayout
+	// switches the board between its columns and the list.
+	ActionInboxStagePrev   = "inbox_stage_prev"
+	ActionInboxStageNext   = "inbox_stage_next"
+	ActionInboxBoardLayout = "inbox_board_layout"
 	// ActionInboxArtifact opens what the agent under the cursor has shown,
 	// such as a TML form, on its Artifacts tab, and gives it the keys.
 	ActionInboxArtifact   = "inbox_artifact"
@@ -1851,6 +1857,9 @@ func getDefaultInboxKeybinds() map[string][]string {
 		ActionInboxCompare:     {"c"},
 		ActionInboxBoard:       {"b"},
 		ActionInboxTake:        {"t"},
+		ActionInboxStagePrev:   {"H", "shift+left"},
+		ActionInboxStageNext:   {"L", "shift+right"},
+		ActionInboxBoardLayout: {"B"},
 		ActionInboxArtifact:    {"o"},
 		ActionInboxDetailDown:  {"J", "ctrl+d"},
 		ActionInboxDetailUp:    {"K", "ctrl+u"},

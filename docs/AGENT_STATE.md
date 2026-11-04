@@ -2421,8 +2421,43 @@ group longer than 8 rows shows its first 8 and `+N more`, which a click or
 `right` opens. Needs you never folds.
 
 `b`, or the `Board` word in the header, turns the list into the task board:
-every session's task cards grouped by stage, in the fixed stage order. A
-stage with no card has no head, and Done starts folded.
+every session's task cards grouped by stage, in the fixed stage order. The
+board shows one column for each stage, side by side, with the count of cards
+in its head.
+
+```
+Todo  1                      Plan  0     Doing  3                    Verify  1                  3›
+──────────────────────────── ─────────── ─────────────────────────── ───────────────────────────
+▌ write the changelog                      port the cache to lru       draft the rollout notes
+▌ × Blocked waits o… t6  3s                ● api-2           t2  8s    √ docs-1          t4  8s
+
+                                           wire the retry jitter
+                                           » api-1          t1  10s
+```
+
+A card shows its title, then its holder's mark and name, or `Blocked` and
+why, or `free`, with its id and how long it has been in the stage. A column
+with no card, and a folded column, take only the width of their head. When
+the columns do not fit, the board shows the columns round the cursor, and
+the head row counts the columns past each edge.
+
+| Keys | What it does |
+|---|---|
+| `h` `l`, `left` `right` | Go to the column before or after |
+| `j` `k`, `up` `down` | Go to the card above or below |
+| `H` `L`, `shift+left` `shift+right` | Move the card to the stage before or after |
+| `enter` | Go to the holder's pane. On a free card, open the New agent sheet on it |
+| `n` | Add a card to the column under the cursor. Type the title, then press `enter` |
+| `t` | Take the card for the pane behind the agents view |
+| `F` | Fold or open the column. Done starts folded |
+| `B` | Show the board as a list, or as columns again |
+
+Drag a card with the mouse onto another column to move it to that stage. A
+click on a card selects it, and a click on a head folds or opens its column.
+A new card goes to the session you are attached to. Under 80 columns of
+screen, and after `B`, the board is a list: the stages one under the other.
+A stage with no card has no head there, and Done starts folded. tuios keeps
+your choice of list or columns.
 
 ```
 Todo  2 ──────────────────────────────    split the auth middleware
@@ -2440,7 +2475,8 @@ you, then the oldest. A held card wears its holder's mark and the holder's
 second line; a free card is `free`. The Card tab shows the card's prompt and
 history; on a held card the holder's tabs follow it. `enter` goes to the
 holder's pane. `t` takes the card for the pane behind the agents view, when
-the card is in that pane's session. `n` opens the New agent sheet with the
+the card is in that pane's session. `H` and `L` move the card a stage, as on
+the columns. In the list, `n` opens the New agent sheet with the
 card's prompt as the task, or its title until the prompt has been read; a
 Start in this folder claims the card for the new pane as it opens, and a
 Start in new worktrees stamps the card with the fan, so its checks and pull

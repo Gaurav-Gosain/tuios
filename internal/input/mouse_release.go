@@ -53,6 +53,14 @@ func handleMouseRelease(msg tea.MouseReleaseMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	// because the picker's grab used to be cleared only when a panel happened to
 	// be under drag as well, so a press in the picker left the colour following
 	// the pointer for the rest of the dialog's life.
+	// A card dragged on the task board's columns drops on the column under
+	// the pointer.
+	if mouse := msg.Mouse(); o.ShowInbox {
+		if cmd, ok := o.CockpitRelease(mouse.X, mouse.Y); ok {
+			o.OverlayMouseRelease()
+			return o, cmd
+		}
+	}
 	panelDrag := o.OverlayDragActive()
 	o.OverlayMouseRelease()
 	if panelDrag {

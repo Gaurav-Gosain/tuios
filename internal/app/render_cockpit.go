@@ -278,7 +278,7 @@ func (m *OS) renderCockpit() (string, int, int, int) {
 	}
 	// A state that moves with the clock or the keyboard is drawn afresh.
 	// The reply editor is not one: what it draws is in the key.
-	transient := st.ck.img != nil || ck.spawn != nil || st.Peek != nil || st.selectEditing || m.InboxSnoozePicking() || st.agents.sheet != nil ||
+	transient := st.ck.img != nil || ck.spawn != nil || ck.kb.add != nil || ck.kb.drag != nil || st.Peek != nil || st.selectEditing || m.InboxSnoozePicking() || st.agents.sheet != nil ||
 		st.approvals.reason != nil || st.approvals.armed.key != ""
 	if !transient && ck.frame != "" && ck.frameAt == key {
 		return ck.frame, top, w, h
@@ -357,6 +357,11 @@ func (m *OS) drawCockpit(c *ckCanvas, l ckLook, top int, now time.Time) {
 	}
 	m.drawCockpitHeader(c, l, hdrY, top)
 
+	if m.kanbanOn() && m.kanbanDrawable() {
+		m.drawKanban(c, l, colTop, colBot, top)
+		m.drawCockpitHints(c, l, hintsY, now)
+		return
+	}
 	if empty := m.cockpitEmptyLines(rows); empty != nil {
 		m.drawCockpitEmpty(c, l, colTop, colBot, top, empty)
 		m.drawCockpitHints(c, l, hintsY, now)
@@ -1712,6 +1717,9 @@ func (m *OS) cockpitHints(now time.Time) []overlay.Hint {
 	// Resume all comes first while the fleet shows more than one offer:
 	// after a restart it is the one thing to do.
 	hints := m.resumeAllHint()
+	if m.kanbanOn() && m.kanbanDrawable() {
+		return append(hints, m.kanbanHints()...)
+	}
 	r, ok := m.cockpitSelected()
 	if ok && r.kind == ckRowHead {
 		hints = append(hints, m.keyHints(config.ActionInboxFold, "open group")...)
@@ -1785,8 +1793,11 @@ func (m *OS) cockpitHints(now time.Time) []overlay.Hint {
 	if st.ck.board {
 		board = "agents"
 	}
-	hints = append(hints, m.keyHints(config.ActionInboxNewAgent, "new agent", config.ActionInboxBoard, board, config.ActionInboxReview, "review",
-		config.ActionInboxFilter, "filter", config.ActionInboxSelect, "search")...)
+	hints = append(hints, m.keyHints(config.ActionInboxNewAgent, "new agent", config.ActionInboxBoard, board)...)
+	if st.ck.board && m.GetRenderWidth() >= ckOneColumn {
+		hints = append(hints, m.keyHints(config.ActionInboxBoardLayout, "columns")...)
+	}
+	hints = append(hints, m.keyHints(config.ActionInboxReview, "review", config.ActionInboxFilter, "filter", config.ActionInboxSelect, "search")...)
 	if ok && r.kind != ckRowHead {
 		// Optional, so a narrow footer gives it up first: ? lists it too.
 		hints = append(hints, overlay.Optional(m.keyHints(config.ActionInboxFold, "fold group"))...)

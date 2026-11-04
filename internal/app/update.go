@@ -1313,6 +1313,9 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 	case ckTakeMsg:
 		m.applyTake(msg)
 		return m, nil
+	case ckCardMsg:
+		m.applyCardReply(msg)
+		return m, nil
 	case ckCompareMsg:
 		return m, m.applyCompare(msg)
 	case ckFanActMsg:

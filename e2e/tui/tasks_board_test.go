@@ -2,8 +2,10 @@ package tuie2e
 
 import (
 	"encoding/json"
+	"fmt"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/Gaurav-Gosain/tuitest"
 )
@@ -95,7 +97,12 @@ func focusedWindow(t *testing.T, base string) (string, string) {
 }
 
 // TestTaskBoardGroupsCardsByStage opens the board on six cards in four
-// stages. The stage heads come in TaskStages order with their counts, Done
+// stages. The board opens as columns, every stage side by side in order; B
+// shows the list and B again the columns. On the columns L and H move a card
+// a stage and back, h then shift+right and shift+left do the same for the
+// first card of the column before, and a drag of a card onto another column
+// moves it there and back. Under 80 columns the board is the list. On the
+// list the stage heads come in TaskStages order with their counts, Done
 // folded; a held card names its holder and the holder's harness, a blocked
 // card says why. A claim made from the CLI while the board is open moves the
 // row. t takes the free card for the focused pane, n opens the New agent
@@ -113,7 +120,11 @@ func focusedWindow(t *testing.T, base string) (string, string) {
 // order inside a stage cut the blocked card is not first; with [tasks] stages
 // ignored the Verify head shows; with list-tasks' all_sessions cut the CLI
 // listing fails; with drawFoldFocus reading the group titles first the Done
-// heading shows the crash screen.
+// heading shows the crash screen; with kanbanStep moving nothing L leaves t4
+// in verify; with the drop moving nothing the drag leaves t6 in todo.
+//
+// The test ends by saving the columns at 160x45 and 100x30, dark, light and
+// at 16 colours, as frames for a person to look at.
 func TestTaskBoardGroupsCardsByStage(t *testing.T) {
 	base := t.TempDir()
 	startTaskBoard(t, base)
@@ -144,6 +155,19 @@ func TestTaskBoardGroupsCardsByStage(t *testing.T) {
 
 	term := attachIn(t, base, "S", startOpts{cols: 200, rows: 55, shippedLooks: true})
 	openBoard(t, term)
+	// The board opens as columns: every stage side by side, in stage order.
+	waitText(t, term, "the board's columns", "Todo  2", "Plan  0", "Doing  2", "Verify  1", "Review  0", "Done  1")
+	checkColumns(t, term, "Todo  2", "Plan  0", "Doing  2", "Verify  1", "Review  0", "Done  1")
+	saveCockpitFrames(t, term, "task-board-columns-200x55")
+	// B shows the list.
+	if err := term.SendKeys("B"); err != nil {
+		t.Fatalf("press B: %v", err)
+	}
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		return rowWith(s, "Todo  2") >= 0 && rowWith(s, "Doing  2") > rowWith(s, "Todo  2")
+	}, uiTimeout); err != nil {
+		t.Fatalf("ASSERTION: B did not show the board as a list: %v\n%s", err, term.Snapshot())
+	}
 	waitText(t, term, "the board", "Todo  2", "Doing  2", "Verify  1", "Done  1")
 	s := term.Screen()
 	last := -1
@@ -255,7 +279,61 @@ func TestTaskBoardGroupsCardsByStage(t *testing.T) {
 		t.Fatalf("ASSERTION: k left the Done heading in the focus: %v\n%s", err, term.Snapshot())
 	}
 
-	// Narrow and short, the rows are one line: the holder beside the title.
+	// B again shows the columns, with the cursor still on t4.
+	if err := term.SendKeys("B"); err != nil {
+		t.Fatalf("press B: %v", err)
+	}
+	waitText(t, term, "the columns again", "Review  0", "Plan  0")
+	checkColumns(t, term, "Todo  1", "Doing  3", "Verify  1", "Review  0")
+
+	// L moves the card under the cursor to the next stage, and H back.
+	if err := term.SendKeys("L"); err != nil {
+		t.Fatalf("press L: %v", err)
+	}
+	waitStage(t, term, base, "t4", "review", "L on t4")
+	waitText(t, term, "t4 in Review", "Review  1", "Verify  0")
+	saveCockpitFrames(t, term, "task-board-columns-moved-200x55")
+	if err := term.SendKeys("H"); err != nil {
+		t.Fatalf("press H: %v", err)
+	}
+	waitStage(t, term, base, "t4", "verify", "H on t4")
+	waitText(t, term, "t4 back in Verify", "Review  0", "Verify  1")
+	// h goes to the Doing column, on its first card: t2, whose holder needs
+	// you. shift+right moves it on, and shift+left back.
+	if err := term.SendKeys("h"); err != nil {
+		t.Fatalf("press h: %v", err)
+	}
+	if err := term.SendKeys(tuitest.Key("\x1b[1;2C")); err != nil {
+		t.Fatalf("press shift+right: %v", err)
+	}
+	waitStage(t, term, base, "t2", "verify", "h then shift+right")
+	if err := term.SendKeys(tuitest.Key("\x1b[1;2D")); err != nil {
+		t.Fatalf("press shift+left: %v", err)
+	}
+	waitStage(t, term, base, "t2", "doing", "shift+left on t2")
+
+	// A card dragged onto another column moves to its stage: the blocked
+	// t6 to the empty Review column, and back to Todo.
+	row, col = findText(t, term, boardCards[5])
+	_, review := findText(t, term, "Review  0")
+	mousePress(t, term, col, row, tuitest.MouseLeft, 0)
+	for x := col + 1; x <= review+2; x += 4 {
+		mouseMotion(t, term, x, row, tuitest.MouseLeft, 0)
+	}
+	mouseMotion(t, term, review+2, row, tuitest.MouseLeft, 0)
+	waitText(t, term, "the dragged card under the pointer", " "+boardCards[5]+" ")
+	saveCockpitFrames(t, term, "task-board-columns-drag-200x55")
+	mouseRelease(t, term, review+2, row, tuitest.MouseLeft, 0)
+	waitStage(t, term, base, "t6", "review", "the drag of t6 onto Review")
+	waitText(t, term, "t6 in Review", "Review  1", "Todo  0")
+	row, col = findText(t, term, boardCards[5])
+	_, todo := findText(t, term, "Todo  0")
+	mouseDrag(t, term, col, row, todo+2, row, tuitest.MouseLeft, 0)
+	waitStage(t, term, base, "t6", "todo", "the drag of t6 back onto Todo")
+	waitText(t, term, "t6 back in Todo", "Todo  1", "Review  0")
+
+	// Narrow and short, the board is the list again, and its rows are one
+	// line: the holder beside the title.
 	if err := term.Resize(70, 16); err != nil {
 		t.Fatalf("resize: %v", err)
 	}
@@ -273,13 +351,91 @@ func TestTaskBoardGroupsCardsByStage(t *testing.T) {
 	other := attachIn(t, base, "S", startOpts{cols: 200, rows: 55, shippedLooks: true})
 	openBoard(t, other)
 	waitText(t, other, "the board with [tasks] stages", "Todo  1", "Doing  3")
-	if txt := other.Screen().Text(); strings.Contains(txt, "Verify  1") || strings.Contains(txt, "Done  1") {
-		t.Errorf("ASSERTION: [tasks] stages = [doing, todo] still shows Verify or Done\n%s", other.Snapshot())
+	if txt := other.Screen().Text(); strings.Contains(txt, "Verify  1") || strings.Contains(txt, "Done  1") || strings.Contains(txt, "Plan  0") {
+		t.Errorf("ASSERTION: [tasks] stages = [doing, todo] still shows Plan, Verify or Done\n%s", other.Snapshot())
 	}
 	// The stage order stays fixed whatever order the list gives.
-	if sc := other.Screen(); rowWith(sc, "Todo  1") > rowWith(sc, "Doing  3") {
-		t.Errorf("ASSERTION: [tasks] stages = [doing, todo] put Doing above Todo, want the fixed stage order\n%s", other.Snapshot())
-	}
+	checkColumns(t, other, "Todo  1", "Doing  3")
 	saveCockpitFrames(t, other, "task-board-stages-200x55")
 	alive(t, other, "after the board with [tasks] stages")
+
+	// The columns at two sizes, on a dark and a light theme and at 16
+	// colours, for a person to look at.
+	for _, look := range []struct {
+		name, theme string
+		env         []string
+	}{
+		{"dark", "", []string{"TERM=xterm-256color", "COLORTERM=truecolor"}},
+		{"light", "catppuccin_latte", []string{"TERM=xterm-256color", "COLORTERM=truecolor"}},
+		{"16", "", []string{"TERM=xterm", "COLORTERM="}},
+	} {
+		cfg := ""
+		if look.theme != "" {
+			cfg = "[appearance]\ntheme = \"" + look.theme + "\"\n"
+		}
+		writeConfig(t, base, cfg)
+		view := attachIn(t, base, "S", startOpts{cols: 160, rows: 45, shippedLooks: true, env: look.env})
+		openBoard(t, view)
+		for _, size := range [][2]int{{160, 45}, {100, 30}} {
+			name := fmt.Sprintf("task-board-columns-%dx%d-%s", size[0], size[1], look.name)
+			if err := view.Resize(size[0], size[1]); err != nil {
+				t.Fatalf("resize: %v", err)
+			}
+			waitText(t, view, name, "Todo  1", "Doing  3")
+			if err := view.WaitStable(uiTimeout); err != nil {
+				t.Fatalf("%s never settled: %v", name, err)
+			}
+			dir := artifactDir(t)
+			saveArtifact(t, view, dir, name)
+			savePNG(t, view.Screen(), hostPalette(t, look.theme), dir, name)
+		}
+		alive(t, view, look.name)
+		// A client left at 100 columns would hold the session that narrow
+		// for the next one, whose dock then has no room for the mode.
+		if err := view.Resize(160, 45); err != nil {
+			t.Fatalf("resize: %v", err)
+		}
+		waitText(t, view, "the board at 160x45 again", "Todo  1")
+		_ = view.Close()
+	}
+}
+
+// checkColumns asserts the heads are on one row, left to right in the order
+// given.
+func checkColumns(t *testing.T, term *tuitest.Terminal, heads ...string) {
+	t.Helper()
+	s := term.Screen()
+	row, last := -1, -1
+	for _, h := range heads {
+		r := rowWith(s, h)
+		if r < 0 || row >= 0 && r != row {
+			t.Fatalf("ASSERTION: %q is on row %d, want the heads on one row (%d)\n%s", h, r, row, term.Snapshot())
+		}
+		row = r
+		before, _, _ := strings.Cut(s.Line(r), h)
+		col := len([]rune(before))
+		if col <= last {
+			t.Fatalf("ASSERTION: %q is at column %d, not right of the head before it (%d)\n%s", h, col, last, term.Snapshot())
+		}
+		last = col
+	}
+}
+
+// waitStage waits for the daemon to list card id in stage.
+func waitStage(t *testing.T, term *tuitest.Terminal, base, id, stage, what string) {
+	t.Helper()
+	deadline := time.Now().Add(uiTimeout)
+	got := ""
+	for time.Now().Before(deadline) {
+		for _, tk := range listTasks(t, base, "S").Tasks {
+			if tk.ID == id {
+				got = tk.Stage
+			}
+		}
+		if got == stage {
+			return
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	t.Fatalf("ASSERTION: after %s, %s is in %q, want %q\n%s", what, id, got, stage, term.Snapshot())
 }

@@ -46,6 +46,11 @@ func handleInboxInput(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	if o.CockpitArtifactFocused() {
 		return o, o.CockpitArtifactKey(msg.String())
 	}
+	// The line for a new card on the board takes every key while it is
+	// open.
+	if o.CockpitNewCardOpen() {
+		return o, o.CockpitNewCardKey(msg)
+	}
 	// A risky allow's first press waits for the same key again; any other
 	// key resets it.
 	o.InboxKeyPressed(msg.String())

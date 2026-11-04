@@ -292,6 +292,9 @@ func pasteTakenByOverlay(o *app.OS, content string) (tea.Cmd, bool) {
 	case o.ShowInbox && o.InboxReasonOpen():
 		o.InboxReasonPaste(content)
 		return nil, true
+	case o.ShowInbox && o.CockpitNewCardOpen():
+		o.CockpitNewCardPaste(content)
+		return nil, true
 	case o.ShowInbox && o.InboxPeekComposing():
 		o.InboxPeekPaste(content)
 		return nil, true

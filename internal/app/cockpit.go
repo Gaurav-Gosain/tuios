@@ -110,6 +110,9 @@ type ckRow struct {
 	// rows the fold hides, for the marks on the heading and the focus.
 	folded bool
 	hidden []ckRow
+	// rest lets the cursor rest on a heading: a column of the board's
+	// columns that shows no card.
+	rest bool
 }
 
 // selectable reports whether the row is an agent's, an item's or a card's:
@@ -121,7 +124,7 @@ func (r ckRow) selectable() bool {
 // cursorable reports whether the cursor can rest on the row: a selectable
 // row, or the heading of a folded group, so a key can open it again.
 func (r ckRow) cursorable() bool {
-	return r.selectable() || r.kind == ckRowHead && r.folded
+	return r.selectable() || r.kind == ckRowHead && (r.folded || r.rest)
 }
 
 // cockpitState is the cockpit's own state, beside the Inbox's.
@@ -277,6 +280,10 @@ type cockpitState struct {
 	heldGen   uint64
 	stages    string
 	stagesCfg *config.UserConfig
+	// boardList says the person chose the board's list over its columns.
+	// kb is the columns' own state. See cockpit_kanban.go.
+	boardList bool
+	kb        ckKanban
 }
 
 // ckBack is the cursor and the scroll to open the view on again.
@@ -308,6 +315,8 @@ type ckRowsKey struct {
 	cards  uint64
 	board  bool
 	stages string
+	// kanban says the board is drawn as columns.
+	kanban bool
 }
 
 // ckHit is a click target: a fleet row, a group heading, a button.
@@ -328,6 +337,8 @@ const (
 	ckHitAction
 	ckHitTab
 	ckHitMark
+	// ckHitColumn is a column of the board's columns, behind its cards.
+	ckHitColumn
 )
 
 // cockpitTouch marks the cockpit's own state changed.
@@ -361,7 +372,7 @@ func (m *OS) cockpitRows() []ckRow {
 	key := ckRowsKey{
 		list: m.Inbox.agents.listAt, inbox: m.Inbox.Gen, gen: ck.rowsGen, colH: ck.colH, arts: m.tml.setGen<<20 + ck.art.gen,
 		oneLine: ck.oneLine, minute: now.Unix() / 60, foldWorking: m.ckFoldWorking(),
-		cards: ck.cardsGen, board: ck.board, stages: m.ckStagesShown(),
+		cards: ck.cardsGen, board: ck.board, stages: m.ckStagesShown(), kanban: m.kanbanOn(),
 	}
 	if ck.rows != nil && ck.rowsAt == key {
 		return ck.rows
@@ -376,9 +387,12 @@ func (m *OS) cockpitRows() []ckRow {
 			ck.machines[e.Host]++
 		}
 	}
-	if ck.board {
+	switch {
+	case key.kanban:
+		ck.rows = m.buildKanbanRows(list)
+	case ck.board:
 		ck.rows = m.buildBoardRows(list)
-	} else {
+	default:
 		ck.rows = m.buildCockpitRows(list, now)
 	}
 	ck.rowsAt = key
@@ -1185,7 +1199,10 @@ func (m *OS) CockpitClick(x, y int) (tea.Cmd, bool) {
 			m.CockpitToggleGroup(h.group, false)
 		case ckHitMore:
 			m.CockpitToggleGroup(h.group, true)
+		case ckHitColumn:
+			m.kanbanFocusColumn(h.group)
 		case ckHitRow:
+			m.kanbanPress(h, x, y)
 			if ck.cmp != nil {
 				// A row of the fleet leaves the comparison for its agent.
 				m.CockpitCompareClose()
@@ -1324,6 +1341,9 @@ func (m *OS) CockpitHover(x, y int) {
 	if ck.spawn != nil {
 		return
 	}
+	if m.kanbanDragTo(x, y) {
+		return
+	}
 	key := ""
 	for _, h := range ck.hits {
 		if h.kind == ckHitRow && x >= h.x0 && x < h.x1 && y >= h.y0 && y < h.y1 {
@@ -1352,6 +1372,9 @@ func (m *OS) CockpitWheel(x, y int, up bool) {
 	}
 	if cmd, ok := m.cockpitArtifactMouse(x, y, button); ok {
 		m.queueTMLCmd(cmd)
+		return
+	}
+	if m.kanbanWheel(x, y, up) {
 		return
 	}
 	if x < ck.fleetW {
@@ -1445,6 +1468,9 @@ func (m *OS) cockpitGroupHides(g int) bool {
 // approval answers, the focus on a narrow screen, help, n, and tab. handled
 // is false for any other action.
 func (m *OS) CockpitKey(action string) (tea.Cmd, bool) {
+	if cmd, ok := m.kanbanKey(action); ok {
+		return cmd, true
+	}
 	switch action {
 	case config.ActionInboxAllow, config.ActionInboxAllowAlways, config.ActionInboxReply:
 		letter := "r"

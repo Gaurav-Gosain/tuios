@@ -1843,7 +1843,9 @@ Inside it:
 | `n` | Open the New agent sheet. See below |
 | `c` | On an attempt of a fan: compare the attempts. See below |
 | `b` | Show the task board, the cards grouped by stage, or the agents again |
-| `t` | On a card: take it for the pane behind the agents view. `n` on a card opens the New agent sheet on it |
+| `t` | On a card: take it for the pane behind the agents view. `n` on a card in the board's list opens the New agent sheet on it |
+| `H` `L`, `shift+left` `shift+right` | On a card: move it to the stage before or after |
+| `B` | Show the task board as columns or as a list |
 | `o` | Open what the agent has shown, such as a TML form, on its Artifacts tab, and use it. `esc` goes back to the list |
 | `f` | Show only what needs you, then each kind of item, then every agent |
 | `s` | Step the order inside each group |
@@ -1863,6 +1865,10 @@ Inside it:
 | `l` `h`, `right` `left` | On a narrow screen, open the focus and go back to the list |
 | `?` | All keys |
 | `esc` `q` | Close. On a narrow screen, go back from the focus to the list first |
+
+On the board's columns, `h` `l` go between the columns, `j` `k` between the
+cards, `n` adds a card, and `enter` on a free card opens the New agent sheet
+on it. See [AGENT_STATE.md](AGENT_STATE.md#the-agents-view).
 
 A bulk key acts only on the marked agents the list shows. An agent in a
 folded group, or one a search hides, is left out, and closing the view clears
@@ -1973,7 +1979,8 @@ These keys are in three sections of their own, rebindable like any other:
 `inbox_allow`, `inbox_allow_always`, `inbox_open`, `inbox_back`,
 `inbox_help`, `inbox_mark`, `inbox_mark_all`, `inbox_tab_prev`,
 `inbox_tab_next`, `inbox_expand`, `inbox_fold`, `inbox_compare`, `inbox_artifact`,
-`inbox_board`, `inbox_take`),
+`inbox_board`, `inbox_board_layout`, `inbox_take`, `inbox_stage_prev`,
+`inbox_stage_next`),
 `[keybindings.inbox_peek]` (the prompt: `peek_approve`, `peek_approve_always`,
 `peek_deny`, `peek_type`, `peek_read_again`, `peek_go`, `peek_back`) and
 `[keybindings.mail]` (the mailbox: `mail_down`, `mail_up`, `mail_page_down`,

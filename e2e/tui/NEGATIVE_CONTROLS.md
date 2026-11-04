@@ -12028,6 +12028,24 @@ Run on 2026-10-31 on Linux against builds from this branch, on `0e1679cfb`. Each
 | `ckStageTitle(r.group)` in `drawFoldFocus` becomes `ckStageTitle(0)`, so there is no crash and the title is wrong | "the focus title is \"   Todo  1\", want Done and its count" | **caught** |
 
 The frame is `task-board-done-focus-200x55` under `TUIOS_E2E_FRAMES`, in the test's folder. Repeat from `e2e/tui` with `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestTaskBoardGroupsCardsByStage$' -v .`.
+
+## The task board as columns
+
+`TestTaskBoardGroupsCardsByStage` opens the board as columns, moves t4 with
+`L` and `H`, moves t2 with `h`, `shift+right` and `shift+left`, and drags t6
+onto the Review column and back onto Todo. Each move is read back from
+`tuios task ls --json`, so a screen that only looks moved does not pass. Run
+on 2026-11-04 on Linux against builds of `feat/task-kanban-board` on
+`57150e1ef`. Each control is a text replacement, built and put back before
+the next.
+
+| Control: what was changed | Where it fails | Verdict |
+| --- | --- | --- |
+| `kanbanStep` returns at once, so `H` and `L` move nothing | "after L on t4, t4 is in \"verify\", want \"review\"" | **caught** |
+| `CockpitRelease` takes the drop and does not call `set-task-stage` | "after the drag of t6 onto Review, t6 is in \"todo\", want \"review\"" | **caught** |
+
+The fixed build passes. The frames are `task-board-columns-*` under
+`TUIOS_E2E_FRAMES`, in the test's folder.
 ## A dock cell watching agent state hears every transition
 
 `TestDockAgentCellClearsWhenTheAnswerMovesThePaneOn` draws a dock cell that counts the session's panes on `needs_input`, refreshed on `event:after-agent-state`, with `working` left out of `[notifications.agent.states]`. The pane goes to `needs_input` and the cell has to read `WAIT1`, then the pane goes to `working` and the cell has to read `WAIT0` again.
