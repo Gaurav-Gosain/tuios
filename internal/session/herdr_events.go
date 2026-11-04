@@ -30,7 +30,8 @@ import (
 //	window-closed       pane_closed, and tab_closed for a tab left empty
 //	window-exit         pane_exited
 //	window-retitled     pane_updated
-//	window-focused      pane_focused
+//	window-focused      pane_focused, unless clients are attached and none
+//	                    shows the window's session
 //	window-moved        pane_moved
 //	workspace-switched  tab_focused
 //	client-session-changed  workspace_focused, tab_focused and pane_focused
@@ -160,10 +161,13 @@ type herdrTranslator struct {
 	// enters the session it showed (a rename) is not a focus, and neither is
 	// a client's first attach: herdr has no attach, only a switch.
 	shows map[string]string
+	// in is the session id each client is in now. A detach drops it, which
+	// shows does not.
+	in map[string]string
 }
 
 func (d *Daemon) newHerdrTranslator() *herdrTranslator {
-	t := &herdrTranslator{d: d, panes: map[string]herdrPaneMemo{}, sessions: map[string]string{}, shows: map[string]string{}}
+	t := &herdrTranslator{d: d, panes: map[string]herdrPaneMemo{}, sessions: map[string]string{}, shows: map[string]string{}, in: map[string]string{}}
 	for _, s := range d.manager.AllSessions() {
 		t.remember(s)
 	}
@@ -172,6 +176,7 @@ func (d *Daemon) newHerdrTranslator() *herdrTranslator {
 		cs.mu.Lock()
 		if cs.isTUIClient && cs.attached {
 			t.shows[cs.clientID] = cs.sessionID
+			t.in[cs.clientID] = cs.sessionID
 		}
 		cs.mu.Unlock()
 	}
@@ -188,8 +193,10 @@ func (t *herdrTranslator) clientMoved(ev streamEvent, sess *Session) []herdrEven
 	// A switch is a detach and then an attach, so the detach keeps the
 	// session the client showed for the attach to compare against.
 	if ev.Attached == nil || !*ev.Attached || sess == nil {
+		delete(t.in, ev.ClientID)
 		return nil
 	}
+	t.in[ev.ClientID] = sess.ID
 	prev, seen := t.shows[ev.ClientID]
 	t.shows[ev.ClientID] = sess.ID
 	if !seen || prev == sess.ID {
@@ -205,6 +212,23 @@ func (t *herdrTranslator) clientMoved(ev streamEvent, sess *Session) []herdrEven
 		out = append(out, global("pane_focused", &herdrEventData{PaneID: herdrPaneID(sess.ID, w.ID), WorkspaceID: wsID}))
 	}
 	return out
+}
+
+// active says whether a session is the one herdr would call the active
+// workspace: a client is in it, or no client is attached anywhere. herdr
+// sends no focus event for a workspace that is not the active one, so a pane
+// focused in a session no client shows says nothing until a client moves
+// there, and clientMoved then names the pane.
+func (t *herdrTranslator) active(sessionID string) bool {
+	if len(t.in) == 0 {
+		return true
+	}
+	for _, id := range t.in {
+		if id == sessionID {
+			return true
+		}
+	}
+	return false
 }
 
 // remember records a session and its windows as they are now.
@@ -301,6 +325,9 @@ func (t *herdrTranslator) translate(ev streamEvent) []herdrEvent {
 	paneID := herdrPaneID(sess.ID, ev.Window)
 	switch ev.Type {
 	case EventWindowFocused:
+		if !t.active(sess.ID) {
+			return nil
+		}
 		return []herdrEvent{global("pane_focused", &herdrEventData{PaneID: paneID, WorkspaceID: wsID})}
 	case EventAgentState, EventAgentSeen:
 		// A pane looked at turns herdr's done into idle without a change of

@@ -45,17 +45,21 @@ func focusedWindowOf(t *testing.T, base, session string) string {
 //
 //   - pane.focus on a pane in the session the client shows focuses it, and
 //     the client stays.
-//   - pane.focus on a pane in another session moves the client there, with
-//     that pane focused, and the reply says the pane is focused. The event
-//     stream says workspace_focused, tab_focused and pane_focused for it, as
-//     herdr does when the active workspace changes.
+//   - pane.focus on a pane in another session, one that session does not
+//     have focused, moves the client there, with that pane focused, and the
+//     reply says the pane is focused. The event stream says
+//     workspace_focused, tab_focused and pane_focused for it, once each and
+//     in that order, as herdr does when the active workspace changes. A
+//     pane_focused for a session no client shows is not herdr's: its
+//     workspace is not the active one.
 //   - agent.focus on an agent in the first session moves the client back.
 //
 // Negative controls (e2e/tui/NEGATIVE_CONTROLS.md): with the herdrShowSession
 // call cut from herdrFocusPane, the test fails at "pane.focus on a pane in
 // another session": the client stays on e2e-home. With the
 // client-session-changed case cut from the herdr translator, it times out
-// waiting for workspace_focused.
+// waiting for workspace_focused. With pane_focused sent for a session no
+// client shows, the focus events read pane_focused first.
 func TestHerdrFocusShowsThePanesSession(t *testing.T) {
 	term, base := crushClient(t)
 	home := crushPanes(t, base, "near", "agent")
@@ -66,7 +70,13 @@ func TestHerdrFocusShowsThePanesSession(t *testing.T) {
 	if out, err := tuiosCLI(t, base, "new-window", "far", "-s", other); err != nil {
 		t.Fatalf("new-window: %v\n%s", err, out)
 	}
+	if out, err := tuiosCLI(t, base, "new-window", "farther", "-s", other); err != nil {
+		t.Fatalf("new-window: %v\n%s", err, out)
+	}
 	farWin := windowID(t, base, other, "far")
+	if out, err := tuiosCLI(t, base, "focus-window", "-s", other, windowID(t, base, other, "farther")); err != nil {
+		t.Fatalf("focus-window: %v\n%s", err, out)
+	}
 	near := herdrPaneByLabel(t, base, "near")["pane_id"].(string)
 	far := herdrPaneByLabel(t, base, "far")["pane_id"].(string)
 	agent := herdrPaneByLabel(t, base, "agent")["pane_id"].(string)
@@ -101,8 +111,9 @@ func TestHerdrFocusShowsThePanesSession(t *testing.T) {
 	farWS := strings.SplitN(far, ":", 2)[0]
 	focused = herdrCall(t, base, "pane.focus", map[string]any{"pane_id": far})["pane"].(map[string]any)
 	seen := map[string]string{}
+	var order []string
 	var lines strings.Builder
-	for seen["workspace_focused"] == "" || seen["pane_focused"] == "" {
+	for seen["workspace_focused"] == "" || order[len(order)-1] != "pane_focused" {
 		line, err := stream.ReadString('\n')
 		if err != nil {
 			t.Fatalf("pane.focus on a pane in another session: the stream ended before workspace_focused and pane_focused: %v\n%s", err, lines.String())
@@ -117,7 +128,11 @@ func TestHerdrFocusShowsThePanesSession(t *testing.T) {
 		}
 		if json.Unmarshal([]byte(line), &ev) == nil {
 			seen[ev.Event] = ev.Data.WorkspaceID + " " + ev.Data.PaneID
+			order = append(order, ev.Event)
 		}
+	}
+	if got := strings.Join(order, " "); got != "workspace_focused tab_focused pane_focused" {
+		t.Fatalf("pane.focus on a pane in another session: the focus events read %s, want workspace_focused tab_focused pane_focused\n%s", got, lines.String())
 	}
 	if !strings.HasPrefix(seen["workspace_focused"], farWS+" ") || seen["pane_focused"] != farWS+" "+far || !strings.HasPrefix(seen["tab_focused"], farWS+" ") {
 		t.Fatalf("pane.focus on a pane in another session: the focus events name %v, want workspace %s and pane %s\n%s", seen, farWS, far, lines.String())

@@ -936,7 +936,7 @@ event is `{"event":"pane.agent_status_changed","data":{...}}`.
 | `window-closed` | `pane_closed`, and `tab_closed` for a tab that is gone |
 | `window-exit` | `pane_exited` |
 | `window-retitled` | `pane_updated` |
-| `window-focused` | `pane_focused` |
+| `window-focused` | `pane_focused`, unless clients are attached and none shows the window's session: herdr sends no focus event for a workspace that is not the active one |
 | `window-moved` | `pane_moved` |
 | `workspace-switched` | `tab_focused` |
 | `client-session-changed` | `workspace_focused`, `tab_focused` and `pane_focused` when a client moves from one session to another, for the new session, its tab and its focused pane. A first attach sends none |
