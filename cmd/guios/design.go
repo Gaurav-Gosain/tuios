@@ -145,12 +145,25 @@ func startCut(c *ui.Context, s string, size float32, width float32) string {
 		clear(cuts)
 	}
 	r := []rune(s)
-	t := "…"
+	t := ""
+	// A whole folder at a time where one fits ("…/demo", not "…rc/demo"),
+	// else character by character.
 	for i := 1; i < len(r); i++ {
+		if r[i] != '/' && r[i] != '\\' {
+			continue
+		}
 		if tail := "…" + string(r[i:]); natural(c, tail, size, 0) <= width {
 			t = tail
 			break
 		}
+	}
+	for i := 1; t == "" && i < len(r); i++ {
+		if tail := "…" + string(r[i:]); natural(c, tail, size, 0) <= width {
+			t = tail
+		}
+	}
+	if t == "" {
+		t = "…"
 	}
 	// The tails measured on the way would crowd out the labels.
 	for i := 1; i < len(r); i++ {
