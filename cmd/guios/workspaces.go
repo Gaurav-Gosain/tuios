@@ -59,6 +59,7 @@ func (a *App) holdSwitches(before map[string]proto.Session) {
 		if _, held := a.holds[s.ID]; !held {
 			a.holds[s.ID] = &wsHold{s: old, since: time.Now()}
 		}
+		a.startSlide(old, s.Workspace)
 		for _, id := range shownPanes(&s) {
 			a.ensureTerm(id)
 		}
@@ -69,6 +70,11 @@ func (a *App) holdSwitches(before map[string]proto.Session) {
 func (a *App) heldPanes(live map[string]bool) {
 	for _, h := range a.holds {
 		for _, p := range h.s.Panes {
+			live[p.ID] = true
+		}
+	}
+	for _, sl := range a.slides {
+		for _, p := range sl.from.Panes {
 			live[p.ID] = true
 		}
 	}

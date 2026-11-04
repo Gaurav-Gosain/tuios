@@ -107,6 +107,11 @@ type App struct {
 	// holds keep a session's last frame while its new workspace's panes
 	// attach (workspaces.go).
 	holds map[string]*wsHold
+	// slides are the workspace switches whose panes slide (slide.go).
+	slides map[string]*wsSlide
+	// area is the panes' area as the last frame laid it out, which a
+	// workspace switch slides by.
+	area ui.Rect
 
 	// win is the main window, and winOpen whether it is open: closed, it
 	// still takes the updates of Window.Update, which run without it.
