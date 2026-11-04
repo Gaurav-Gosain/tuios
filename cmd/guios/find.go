@@ -20,7 +20,12 @@ type findState struct {
 	// focus has the field take the keyboard, its text selected, as the
 	// bar opens.
 	focus bool
-	input ui.Handle
+	// focused is set in the frame the field takes the keyboard. Its
+	// element is new in that frame, so the window does not yet count it
+	// as within, and keepKeyboard must not give the keyboard back to the
+	// pane: the Escape that follows would go to the shell.
+	focused bool
+	input   ui.Handle
 }
 
 // openFind opens the find bar over the pane the user is in, or gives the
@@ -104,7 +109,7 @@ func (a *App) findBar(c *ui.Context, pal *palette, p *proto.Pane, t *terminal.Te
 		ui.Icon(c, searchIcon).Size(14, 14).TextColor(pal.textMuted).Shrink(0)
 		in := ui.TextInputBase(c.Key("q"), &f.query).Width(180).FontSize(fsBody).Placeholder(locales.FindPlaceholder()).Bind(&f.input)
 		if f.focus {
-			f.focus = false
+			f.focus, f.focused = false, true
 			in.Focus().SetTextSelection(0, utf8.RuneCountInString(f.query))
 		}
 		if in.Changed() {
