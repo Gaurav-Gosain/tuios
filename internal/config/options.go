@@ -1668,6 +1668,13 @@ var optionSpecs = []Option{
 		Description: "When you switch to a workspace with no panes, open a new pane there. It starts in the folder of the pane you came from",
 		Default:     "false",
 	},
+	// Read once at startup, because every string the process prints is drawn
+	// from the catalog this selects. TUIOS_LANG overrides it for one shell.
+	{
+		Path: "ui.language", Type: OptionString, Section: "ui",
+		Description: "Language of the interface: en, or zh-CN. TUIOS_LANG overrides it",
+		Accepted:    LanguageTags(), Default: UIDefaultLanguage,
+	},
 }
 
 // optionsByPath indexes the registry for lookup. Built once at init so a caller
