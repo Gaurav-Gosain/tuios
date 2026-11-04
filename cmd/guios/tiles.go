@@ -2,6 +2,8 @@ package main
 
 import (
 	"math"
+
+	"github.com/Gaurav-Gosain/mygo/plugins/terminal"
 	"slices"
 	"time"
 
@@ -124,7 +126,14 @@ func (a *App) guessSplit(s *proto.Session, p proto.CreateParams) {
 type tileAnim struct {
 	from, cur, to frac
 	start         time.Time
+	// spring lands it on a critically damped spring (stiffness 1000),
+	// as a dropped pane lands, rather than on motionLayout's curve.
+	spring bool
 }
+
+// landOmega is the landing spring's angular frequency: the square root of
+// its stiffness, 1000, at a mass of 1.
+var landOmega = math.Sqrt(1000)
 
 // step moves the rectangle to where it is at now, in an area of ew x eh
 // DIPs, and returns how far it still has to go, 0 when it is there.
@@ -133,11 +142,19 @@ func (t *tileAnim) step(now time.Time, instant bool, ew, eh float64) float64 {
 		return 0
 	}
 	k := float64(now.Sub(t.start)) / float64(motionLayout.Duration)
-	if instant || k >= 1 {
+	if instant || (k >= 1 && !t.spring) {
 		t.cur = t.to
 		return 0
 	}
-	e := float64(easeOut(float32(max(k, 0))))
+	var e float64
+	if t.spring {
+		// Critically damped: the distance left shrinks as (1+wt)e^-wt.
+		// The e2e build's GUIOS_MOTION_SCALE slows it with the rest.
+		w := landOmega * max(now.Sub(t.start).Seconds(), 0) * float64(200*time.Millisecond) / float64(motionLayout.Duration)
+		e = 1 - (1+w)*math.Exp(-w)
+	} else {
+		e = float64(easeOut(float32(max(k, 0))))
+	}
 	lerp := func(a, b float64) float64 { return a + (b-a)*e }
 	t.cur = frac{lerp(t.from.x, t.to.x), lerp(t.from.y, t.to.y), lerp(t.from.w, t.to.w), lerp(t.from.h, t.to.h)}
 	d := max(math.Abs(t.to.x-t.cur.x)*ew, math.Abs(t.to.y-t.cur.y)*eh,
@@ -234,11 +251,20 @@ func (a *App) tiled(c *ui.Context, pal *palette, bar ui.TitleBar, shown float32,
 			an = &tileAnim{from: f, cur: f, to: t, start: now}
 		case an.to != t:
 			// Retargeted on the way: on from where it shows.
-			an.from, an.to, an.start = an.cur, t, now
+			an.from, an.to, an.start, an.spring = an.cur, t, now, false
+		}
+		if l := a.motion.landing; l.pane == id && an.start == now && t != l.at {
+			// Dropped: from where its copy was let go, on a spring.
+			an.from, an.cur, an.start, an.spring = l.at, l.at, now, true
+			a.motion.landing = paneGhost{}
 		}
 		a.motion.tiles[id] = an
 		left = max(left, an.step(now, instant, ew, eh))
 		shownAt[id] = an.cur
+	}
+	if l := a.motion.landing; l.pane != "" && now.Sub(l.when) > 300*time.Millisecond {
+		// Let go where it was: nothing moved it.
+		a.motion.landing = paneGhost{}
 	}
 	for id := range a.motion.tiles {
 		if _, ok := target[id]; !ok {
@@ -338,6 +364,7 @@ func (a *App) tiled(c *ui.Context, pal *palette, bar ui.TitleBar, shown float32,
 				a.paneCard(c, pal, bar, shown, s, p, top, left, edgeRight, multi)
 			})
 		}
+		a.dragGhost(c, pal, s, area, shownAt, px)
 		if zoomed != "" || b.W <= 0 {
 			return
 		}
@@ -350,5 +377,52 @@ func (a *App) tiled(c *ui.Context, pal *palette, bar ui.TitleBar, shown float32,
 			}
 			a.divider(c, pal, s, sp.l, sp.key, ui.Rect{X: x, Y: y, W: w, H: h}, float32(sp.r.w*ew), float32(sp.r.h*eh))
 		}
+	})
+}
+
+// ghostW and ghostH are the largest the copy of a dragged pane shows.
+const ghostW, ghostH = 480, 320
+
+// dragGhost draws the copy of the pane being dragged under the pointer:
+// the pane scaled to fit 480 x 320 DIPs, at 75 % opacity, as one cached
+// bitmap that takes no input. Let go on another pane, the pane flies to
+// its new place from where the copy was (tileAnim.spring).
+func (a *App) dragGhost(c *ui.Context, pal *palette, s *proto.Session, area ui.Element, shownAt map[string]frac, px func(frac) (x, y, w, h float32)) {
+	id := a.motion.dragging
+	r, ok := shownAt[id]
+	p := s.PaneByID(id)
+	if id == "" || !ok || p == nil {
+		a.motion.ghost = paneGhost{}
+		return
+	}
+	mx, my, in := area.PointerPosition()
+	if !in {
+		return
+	}
+	b := a.paneRef("tiles-" + s.ID).Bounds(c)
+	ew, eh := float64(b.W)+paneGap, float64(b.H)+paneGap
+	_, _, w, h := px(r)
+	sc := min(ghostW/max(w, 1), ghostH/max(h, 1), 1)
+	// The pointer holds the copy by its title, as it held the pane. The
+	// copy takes no input, so the pane under it takes the drop.
+	gx, gy := mx-24, my-12
+	cx, cy := gx+sc*w/2, gy+sc*h/2
+	ghost := ui.Column(c.Key("ghost")).Absolute().Left(cx-w/2).Top(cy-h/2).Width(w).Height(h).
+		Scale(sc, sc).Opacity(0.75).Cache().IgnoreInput(true)
+	a.motion.ghost = paneGhost{id, frac{float64(gx) / ew, float64(gy) / eh, (float64(sc*w) + paneGap) / ew, (float64(sc*h) + paneGap) / eh}, c.Now()}
+	ghost.Children(func() {
+		card := ui.Column(c.Key("card")).Grow(1).Radius(rPane).Clip().Background(pal.card).
+			Shadow(0, 14, 36, 0, pal.floatShadow)
+		paned(card, pal).Children(func() {
+			ui.Row(c).Height(headerH).Shrink(0).AlignItems(ui.Center).Padding(0, 10, 0, 16).Gap(sp2).Children(func() {
+				ui.Icon(c, programIcon(p)).Size(14, 14).TextColor(pal.textFaint)
+				oneLine(c, p.PaneName(), fsBody, wSemibold).TextColor(pal.text)
+			})
+			if e := a.terms[id]; e != nil && e.term != nil {
+				ui.Box(c).Grow(1).MinHeight(0).Children(func() {
+					terminal.View(c.Key("term"), e.term).Fill()
+				})
+			}
+		})
 	})
 }
