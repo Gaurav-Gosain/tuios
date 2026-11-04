@@ -123,8 +123,8 @@ func PathComponent(id string) string {
 		fmt.Fprintf(&b, "%%%02X", c)
 	}
 	s := b.String()
-	if strings.HasSuffix(s, ".") {
-		s = strings.TrimSuffix(s, ".") + "%2E"
+	if before, ok := strings.CutSuffix(s, "."); ok {
+		s = before + "%2E"
 	}
 	switch {
 	case s == "":
