@@ -112,6 +112,10 @@ func (a *App) humanMailView(c *ui.Context, pal *palette) {
 		ck.focusView = false
 		m.focus.Focus()
 	}
+	if m.focus.FocusWithin(c) {
+		// Prose typed here takes back the key that opened the view.
+		_, _ = a.guard(c, col, &ck.guard, func(ckKey) bool { return false })
+	}
 	if m.focus.FocusWithin(c) && col.Shortcut(0, ui.KeyEscape) {
 		a.ckSetView(viewAgents)
 		c.Invalidate()

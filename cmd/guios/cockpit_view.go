@@ -541,7 +541,7 @@ func (a *App) cockpitKeys(c *ui.Context, col ui.Element) {
 		}
 		return
 	}
-	if k, ok := a.guard(c, col, &ck.guard, ckMoveKey); ok {
+	if k, ok := a.guard(c, col, &ck.guard, a.ckInstant); ok {
 		a.ckLetter(k)
 		c.Invalidate()
 		return
@@ -590,9 +590,10 @@ func (a *App) cockpitKeys(c *ui.Context, col ui.Element) {
 }
 
 // ckLetter runs a list's letter or Space that the typing guard let
-// through (cockpit_guard.go).
+// through (cockpit_guard.go). A view key notes how to take itself back.
 func (a *App) ckLetter(k ckKey) {
 	ck := &a.ck
+	g := &ck.guard
 	if k.shift {
 		switch k.key {
 		case ui.KeyA:
@@ -602,9 +603,16 @@ func (a *App) ckLetter(k ckKey) {
 		case ui.KeyD:
 			a.ckSettle()
 		case ui.KeyM:
+			view := ck.view
 			a.ckSetView(viewMail)
+			g.setUndo(func() { a.ckSetView(view) })
 		}
 		return
+	}
+	tab := ck.tab
+	backTab := func() {
+		ck.tab = tab
+		ck.fleetFocus.Focus()
 	}
 	switch k.key {
 	case ui.KeyJ:
@@ -622,15 +630,18 @@ func (a *App) ckLetter(k ckKey) {
 	case ui.KeySpace:
 		if r, ok := a.ckSelected(); ok && r.kind == ckRowHead {
 			a.ckToggleFold(r.group)
+			g.setUndo(func() { a.ckToggleFold(r.group) })
 		} else if im := a.ckNewestImage(); im != nil {
 			// Space shows the agent's newest image whole.
 			ck.lightbox = im
+			g.setUndo(func() { ck.lightbox = nil })
 		}
 	case ui.KeyA:
 		a.ckAnswer("once", false)
 	case ui.KeyR:
 		// r rejects an approval the card answers, as the TUI's; on any
-		// other row it puts the keys in the reply box.
+		// other row it puts the keys in the reply box, where the rest of
+		// what is typed belongs.
 		if !a.ckCanReject() {
 			a.ckFocusReply()
 		} else {
@@ -652,14 +663,24 @@ func (a *App) ckLetter(k ckKey) {
 		}
 	case ui.KeyM:
 		a.ckSetTab(tabMail)
+		g.setUndo(backTab)
 	case ui.KeyB:
+		view := ck.view
 		a.ckSetView(viewBoard)
+		g.setUndo(func() { a.ckSetView(view) })
 	case ui.KeyV:
 		a.ckSetTab(tabChanges)
+		g.setUndo(backTab)
 	case ui.KeyF:
 		ck.needsOnly = !ck.needsOnly
+		g.setUndo(func() { ck.needsOnly = !ck.needsOnly })
 	case ui.KeyN:
+		// The sheet takes the keys: what comes within guardWindow lands
+		// in its task, and the sheet takes itself back (spawnTyped).
 		a.newAgent()
+		if ck.spawn != nil {
+			ck.spawn.byKeyAt = time.Now()
+		}
 	case ui.KeyC:
 		a.openCompare()
 	}

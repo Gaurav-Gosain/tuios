@@ -16,7 +16,15 @@ import (
 // it waits guardWindow, and runs only if no other key of prose came in
 // that time. A key that comes within guardWindow of the one before is
 // prose, and nothing runs; the first such key of a burst says once where
-// the keys went. j and k, which only move the cursor, run at once.
+// the keys went.
+//
+// Three groups of keys, so that a deliberate key still feels instant:
+//   - Moves (j k h l) only move the cursor: they run at once.
+//   - Views (b M m v f Space n i, and r where it writes) only show
+//     something or put the keys somewhere: they run at once, and are
+//     taken back (setUndo) when more prose follows within guardWindow.
+//   - Acts (a A r R d D u z x p c, and t H L n on the board) change
+//     something for good or start something: they wait guardWindow.
 
 // guardWindow is how long a list's letter waits to tell a command from
 // typing: keys typed as prose come closer together.
@@ -39,6 +47,23 @@ type typingGuard struct {
 	last   time.Time // the last key of prose
 	held   *heldKey
 	hinted bool // the hint for this burst was shown
+	// undo takes back the view key that ran at once at undoAt, if more
+	// prose follows within guardWindow.
+	undo   func()
+	undoAt time.Time
+}
+
+// setUndo notes how to take back a view key that just ran.
+func (g *typingGuard) setUndo(fn func()) {
+	g.undo, g.undoAt = fn, time.Now()
+}
+
+// takeBack takes back the view key that ran, when typing follows it.
+func (g *typingGuard) takeBack(now time.Time) {
+	if g.undo != nil && now.Sub(g.undoAt) < guardWindow {
+		g.undo()
+	}
+	g.undo = nil
 }
 
 // proseKeys are the keys typing makes, besides Shift.
@@ -79,13 +104,14 @@ func (a *App) guard(c *ui.Context, el ui.Element, g *typingGuard, immediate func
 		g.last = now
 		if typing {
 			g.held = nil
+			g.takeBack(now)
 			if !g.hinted {
 				g.hinted = true
 				a.toast(locales.CockpitKeysToList())
 			}
 			return ckKey{}, false
 		}
-		g.hinted = false
+		g.hinted, g.undo = false, nil
 		if immediate(k) {
 			return k, true
 		}
@@ -109,7 +135,18 @@ func (a *App) guard(c *ui.Context, el ui.Element, g *typingGuard, immediate func
 	return ckKey{}, false
 }
 
-// ckMoveKey reports whether a key only moves the cursor.
-func ckMoveKey(k ckKey) bool {
-	return !k.shift && (k.key == ui.KeyJ || k.key == ui.KeyK)
+// ckInstant reports whether an agents list key runs at once: a move, or a
+// view key that ckLetter can take back. The others wait.
+func (a *App) ckInstant(k ckKey) bool {
+	if k.shift {
+		return k.key == ui.KeyM
+	}
+	switch k.key {
+	case ui.KeyJ, ui.KeyK, ui.KeyH, ui.KeyL, ui.KeyB, ui.KeyM, ui.KeyV, ui.KeyF, ui.KeySpace, ui.KeyN, ui.KeyI:
+		return true
+	case ui.KeyR:
+		// r writes in the reply box, unless it rejects an approval.
+		return !a.ckCanReject()
+	}
+	return false
 }
