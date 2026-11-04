@@ -182,6 +182,14 @@ func (k *stateKeeper) layoutOf(sid, name string, wins []windowRow, focus string,
 	if !ti.useTree {
 		// A TUI lays these panes out (master-stack, scrolling): its
 		// rectangles say where each one is, every time.
+		if ti.tui && ti.zoomByTUI != "" {
+			// A TUI's zoom is a camera: below zoom_size 100 it lays the
+			// layout out on a larger canvas and pans to the zoomed pane,
+			// so the other panes' rectangles are off the screen. guios
+			// draws the zoom itself, the zoomed pane over the whole area,
+			// and keeps the split it had before the zoom for the unzoom.
+			return k.layoutFor(sid, wins, focus, false)
+		}
 		if ti.tui {
 			if t := cutRects(wins); t != nil {
 				k.mu.Lock()
@@ -193,7 +201,7 @@ func (k *stateKeeper) layoutOf(sid, name string, wins []windowRow, focus string,
 				return t.Clone()
 			}
 		}
-		return k.layoutFor(sid, wins, focus)
+		return k.layoutFor(sid, wins, focus, true)
 	}
 	shown := make(map[string]bool, len(wins))
 	for _, w := range wins {
@@ -203,7 +211,7 @@ func (k *stateKeeper) layoutOf(sid, name string, wins []windowRow, focus string,
 	if ti.tree != nil {
 		l = fromTree(ti.tree.Root, ti.leaves, shown)
 	} else if len(wins) > 1 {
-		l = k.layoutFor(sid, wins, focus)
+		l = k.layoutFor(sid, wins, focus, true)
 	}
 	write := ti.tree == nil && l != nil
 	for _, w := range wins {
@@ -286,3 +294,4 @@ func ids(wins []windowRow) []string {
 	}
 	return out
 }
+

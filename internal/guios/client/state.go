@@ -302,8 +302,9 @@ func (k *stateKeeper) seen(sid string) {
 // layoutFor keeps the session's split tree in step with its panes. A tree
 // the app holds for exactly these panes stays, with the sizes the person
 // gave it. Otherwise the tree is cut from where the tuios layout put each
-// pane, so guios starts from the session's own tiling.
-func (k *stateKeeper) layoutFor(sid string, wins []windowRow, focus string) *proto.Layout {
+// pane, so guios starts from the session's own tiling, unless rects is
+// false: then the panes are split evenly, as during a TUI zoom.
+func (k *stateKeeper) layoutFor(sid string, wins []windowRow, focus string, rects bool) *proto.Layout {
 	k.mu.Lock()
 	defer k.mu.Unlock()
 	l := k.layouts[sid]
@@ -320,7 +321,7 @@ func (k *stateKeeper) layoutFor(sid string, wins []windowRow, focus string) *pro
 			}
 		}
 	}
-	if !same {
+	if !same && rects {
 		if t := cutRects(wins); t != nil {
 			k.layouts[sid] = t
 			if t.Leaf() {
