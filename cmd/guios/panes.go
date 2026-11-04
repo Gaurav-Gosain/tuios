@@ -47,7 +47,7 @@ func (a *App) focusOf(s *proto.Session) string {
 // a layout.
 func shownPanes(s *proto.Session) []string {
 	p := s.PaneByID(s.Zoomed)
-	if p == nil && s.Layout != nil && len(s.Panes) > 1 {
+	if p == nil && (s.Layout != nil || s.Arrange != nil) && len(s.Panes) > 1 {
 		ids := make([]string, len(s.Panes))
 		for i, p := range s.Panes {
 			ids[i] = p.ID
@@ -78,7 +78,13 @@ func (a *App) setFocus(s *proto.Session, pane string) {
 	}
 	a.ensureTerm(pane)
 	a.touch(pane)
-	a.call(s.ID, "focus", proto.FocusParams{Session: s.ID, Pane: pane}, nil)
+	sid, scrolling := s.ID, s.LayoutMode == "scrolling"
+	a.call(s.ID, "focus", proto.FocusParams{Session: s.ID, Pane: pane}, func(err error) {
+		if err == nil && scrolling {
+			// The strip brings the focused column on screen.
+			a.arrange(a.session(sid), "scroll.reveal", func(p *proto.ArrangeParams) { p.Pane = pane })
+		}
+	})
 }
 
 // focusTerminal gives the keyboard to the pane the user is in.
@@ -112,6 +118,12 @@ func (a *App) panes(c *ui.Context, pal *palette, bar ui.TitleBar, shown float32,
 	// (paneTransition).
 	ui.Column(c.Key("ws-" + view)).Grow(1).Basis(0).MinWidth(0).MinHeight(0).AlignItems(ui.Stretch).Children(func() {
 		multi := len(s.Panes) > 1
+		if s.PaneByID(s.Zoomed) == nil && s.Arrange != nil && multi {
+			// Master-stack, scrolling and floating, and panes floating
+			// over the split tree: by their rectangles.
+			a.arranged(c, pal, bar, shown, s, right)
+			return
+		}
 		if z := s.PaneByID(s.Zoomed); z != nil || s.Layout == nil || !multi {
 			p := z
 			if p == nil {
@@ -146,6 +158,14 @@ func layoutSig(s *proto.Session) string {
 		walk(s.Layout)
 	} else if p := s.FocusPane(); z == nil && p != nil {
 		b.WriteString(" " + p.ID)
+	}
+	if ar := s.Arrange; ar != nil && s.PaneByID(s.Zoomed) == nil {
+		// The layouts placed by rectangles change with them.
+		for _, p := range s.Panes {
+			if r, ok := ar.Rects[p.ID]; ok {
+				fmt.Fprintf(&b, " %s %d %d %d %d", p.ID, r.X, r.Y, r.W, r.H)
+			}
+		}
 	}
 	return b.String()
 }
@@ -457,7 +477,16 @@ func (a *App) dropPreview(c *ui.Context, pal *palette, target string, zone dropZ
 // movePane puts a pane dropped on another beside it, or in its place.
 func (a *App) movePane(sid, pane, target string, zone dropZone) {
 	s := a.session(sid)
-	if s == nil || s.Layout == nil || zone == zoneNone {
+	if s == nil || zone == zoneNone {
+		return
+	}
+	if s.Layout == nil || s.Arrange != nil && s.Arrange.Rects[pane] != (proto.Rect{}) {
+		// The layouts placed by rectangles take panes in an order: the
+		// dropped pane and the one it lands on change places.
+		if s.Arrange != nil {
+			a.arrived[pane], a.arrived[target] = true, true
+			a.arrange(s, "swap", func(p *proto.ArrangeParams) { p.Pane, p.Target = pane, target })
+		}
 		return
 	}
 	if zone == zoneSwap {
@@ -495,7 +524,13 @@ func (a *App) paneHeader(c *ui.Context, pal *palette, bar ui.TitleBar, shown flo
 		// The title is the pane's handle: dragged, it takes the pane to
 		// another place in the session.
 		grip := ui.Row(c.Key("grip")).Gap(8).AlignItems(ui.Center).Shrink(1).MinWidth(0).Height(28).Padding(0, 8).Margin(0, 0, 0, -8).Radius(8)
-		if multi {
+		floats := a.floatHere[p.ID] && s.Arrange != nil
+		if floats {
+			// A floating pane's header moves it, under the pointer as it
+			// is: it does not fade as a pane carried to a drop does.
+			grip.Cursor(ui.CursorMove)
+			a.dragFloat(c, "grip", grip, s, p, 0)
+		} else if multi {
 			grip.Drag(paneDrag{s.ID, p.ID}).Tooltip(locales.PaneDragTip())
 			dragging = grip.Dragging()
 			switch {
@@ -557,7 +592,10 @@ func (a *App) paneHeader(c *ui.Context, pal *palette, bar ui.TitleBar, shown flo
 		// does, and zooms it on a double click: the header around it
 		// takes clicks, which focus the pane.
 		gap := ui.Box(c.Key("drag")).Grow(1).AlignSelf(ui.Stretch)
-		if top {
+		if floats {
+			gap.Cursor(ui.CursorMove)
+			a.dragFloat(c, "gap", gap, s, p, 0)
+		} else if top {
 			gap.DragWindow()
 		}
 		a.paneChips(c, pal, p, multi)
@@ -927,10 +965,20 @@ func (a *App) zoomPane(s *proto.Session, pane string) {
 // focusDirection moves into the pane next to the focused one.
 func (a *App) focusDirection(dir string) {
 	s := a.session(a.selected)
-	if s == nil || s.Layout == nil || s.Zoomed != "" {
+	if s == nil || s.Zoomed != "" {
 		return
 	}
-	if n := s.Layout.Neighbor(a.focusOf(s), dir); n != "" {
+	n := ""
+	switch {
+	case s.Arrange != nil:
+		n = arrangedNeighbour(s, a.focusOf(s), dir)
+		if n == "" && s.Layout != nil {
+			n = s.Layout.Neighbor(a.focusOf(s), dir)
+		}
+	case s.Layout != nil:
+		n = s.Layout.Neighbor(a.focusOf(s), dir)
+	}
+	if n != "" {
 		a.setFocus(s, n)
 		a.paneRef(n).Focus()
 	}
@@ -942,7 +990,7 @@ func (a *App) cyclePane(d int) {
 	if s == nil || len(s.Panes) < 2 {
 		return
 	}
-	order := s.Layout.Panes()
+	order := paneOrder(s)
 	i := 0
 	for j, id := range order {
 		if id == a.focusOf(s) {
@@ -1012,8 +1060,8 @@ func (a *App) emptyWorkspace(c *ui.Context, pal *palette, s *proto.Session) {
 			ui.Text(c, locales.WorkspaceEmptyTitle(s.Workspace)).FontSize(17).FontWeight(600).TextColor(pal.text)
 			ui.Text(c, locales.WorkspaceEmptyDetail()).
 				FontSize(13).TextColor(pal.textMuted).MaxWidth(380).TextAlign(ui.Center).LineHeight(1.45).Margin(8, 0, 18, 0)
-			if button(c, "ws-empty-new", locales.WorkspaceNewPane(), a.keys("pane.split.right"), true, pal) {
-				a.splitPane(s, "", "right")
+			if button(c, "ws-empty-new", locales.WorkspaceNewPane(), a.keys("pane.new"), true, pal) {
+				a.splitPane(s, "", "")
 			}
 		})
 	})
