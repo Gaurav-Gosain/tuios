@@ -340,6 +340,12 @@ func pointerTooltip(c *ui.Context, el ui.Element, key, s string) {
 	}
 }
 
+// renameInput is a name edited in place, as a field: the control's fill,
+// the text in the text colour, and a 2 px accent ring.
+func renameInput(in ui.Element, pal *palette) ui.Element {
+	return in.Height(hControlSm).Padding(0, 6).Radius(rRow).Background(pal.control).TextColor(pal.text).Border(2, pal.accent).FocusRing(false)
+}
+
 // rowTooltip is a list row's tooltip: beside the row, to its right, so
 // that it covers neither the row's own text nor the rows around it
 // (QA-062). Each line is one line: a path cut at its start, so that its
@@ -452,7 +458,9 @@ func (a *App) groupView(c *ui.Context, pal *palette, g group, gi int, n *int) {
 	if hdr.Clicked() && !renaming {
 		a.toggleProject(key)
 	}
-	pointerTooltip(c, hdr, "tip-project-"+key, g.host.shortDir(g.project.Dir))
+	if !renaming {
+		pointerTooltip(c, hdr, "tip-project-"+key, g.host.shortDir(g.project.Dir))
+	}
 	hdr.ContextMenu(func(m *ui.Menu) {
 		if m.Item(locales.ActionNewSession()).Chosen() {
 			a.newSessionOn(g.host, id)
@@ -500,7 +508,7 @@ func (a *App) groupView(c *ui.Context, pal *palette, g group, gi int, n *int) {
 	})
 	hdr.Children(func() {
 		if renaming {
-			in := ui.TextInputBase(c.Key("rename"), &a.renameBuf).Grow(1).MinWidth(0).FontSize(fsSmall).FontWeight(wMedium).AutoFocus()
+			in := renameInput(ui.TextInputBase(c.Key("rename"), &a.renameBuf).Grow(1).MinWidth(0).FontSize(fsSmall).FontWeight(wMedium).AutoFocus(), pal)
 			if in.Shortcut(0, ui.KeyEscape) {
 				a.renamingProject = ""
 				a.focusTerminal()
@@ -602,12 +610,18 @@ func (a *App) sessionRow(c *ui.Context, pal *palette, s *proto.Session, n *int) 
 	if g != nil {
 		tip += "\n" + gitSummary(g)
 	}
-	rowTooltip(c, row, "tip-"+s.ID, tip)
+	if a.renaming != s.ID {
+		// No tooltip over the name while it is edited.
+		rowTooltip(c, row, "tip-"+s.ID, tip)
+	}
 	row.ContextMenu(func(m *ui.Menu) { a.sessionMenu(m, s) })
 	row.Children(func() {
 		if a.renaming == s.ID {
-			in := ui.TextInputBase(c.Key("rename"), &a.renameBuf).Grow(1).MinWidth(0).FontSize(fsBody).AutoFocus().
-				Placeholder(s.DisplayName(a.set.SessionName))
+			// An edited name is a field: the focus ring, and the name in
+			// the text colour, so that it does not read as a placeholder
+			// (council round 1, visual 27).
+			in := renameInput(ui.TextInputBase(c.Key("rename"), &a.renameBuf).Grow(1).MinWidth(0).FontSize(fsBody).AutoFocus().
+				Placeholder(s.DisplayName(a.set.SessionName)), pal)
 			if in.Submitted() || in.Shortcut(0, ui.KeyEscape) {
 				if in.Shortcut(0, ui.KeyEscape) {
 					a.renaming = ""

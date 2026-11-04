@@ -106,7 +106,10 @@ func (a *App) cockpitFocus(c *ui.Context, pal *palette) {
 		ck.tab = tabThread
 	}
 	// Header: name, harness, the state pill; then where it works.
-	pad := float32(24)
+	// The header and tabs keep the thread's column: at 1920 they start
+	// where the thread, its card and the reply box do (council round 1,
+	// visual 14).
+	pad := a.ckSide(24)
 	if ck.stacked {
 		pad = 14
 	}
