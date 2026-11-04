@@ -481,7 +481,7 @@ func TestStreamPaneYieldingLease(t *testing.T) {
 	enableTiling(t, term)
 	spType(t, ctl, w1, "clear; echo T0-$(stty size | tr ' ' x)\n")
 	tui := spSize(t, ctl, w1, "T0-")
-	log.WriteString("client size " + tui + "\n")
+	fmt.Fprintf(&log, "client size %s\n", tui)
 
 	conn, err := net.Dial("unix", hubSocket(base))
 	if err != nil {
@@ -527,7 +527,7 @@ func TestStreamPaneYieldingLease(t *testing.T) {
 	if got := spSize(t, ctl, w1, "T1-"); got != tui {
 		t.Fatalf("a yielding lease clamped the client's pane: %s, want %s", got, tui)
 	}
-	log.WriteString("yield lease held, client attached: " + tui + "\n")
+	fmt.Fprintf(&log, "yield lease held, client attached: %s\n", tui)
 
 	// The client leaves. The lease sizes the pane, and its cell sets the
 	// pixels the emulator answers CSI 14 t with: 6x18 by 30x9.
@@ -569,7 +569,7 @@ func TestStreamPaneYieldingLease(t *testing.T) {
 	if got := focus(); got == "focused" {
 		t.Fatalf("after F 0 host_focus is still focused")
 	}
-	log.WriteString("F 2: host_focus focused; F 0: " + focus() + "\n")
+	fmt.Fprintf(&log, "F 2: host_focus focused; F 0: %s\n", focus())
 
 	// No L frame for longer than the 30 seconds a lease lasts: a local
 	// yielding lease does not expire.
@@ -593,7 +593,7 @@ func TestStreamPaneYieldingLease(t *testing.T) {
 		spType(t, ctl, w1, "clear; echo "+mark+"$(stty size | tr ' ' x)\n")
 		got := spSize(t, ctl, w1, mark)
 		if got != "6x30" {
-			log.WriteString("client attached again: " + got + "\n")
+			fmt.Fprintf(&log, "client attached again: %s\n", got)
 			break
 		}
 		if time.Now().After(deadline) {

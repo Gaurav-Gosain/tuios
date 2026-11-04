@@ -229,7 +229,7 @@ func TestLayoutChangedFollowsASplit(t *testing.T) {
 	// new tree: the first pane's rectangle narrows to the new ratio.
 	before := listRects(t, base, sess)[first]
 	out, err := tuiosCLI(t, base, "call", "layout-tree", `{"session":"`+sess+`"}`)
-	log.WriteString("$ tuios call layout-tree\n" + out + "\n")
+	fmt.Fprintf(&log, "$ tuios call layout-tree\n%s\n", out)
 	if err != nil {
 		t.Fatalf("layout-tree: %v\n%s", err, out)
 	}
@@ -248,7 +248,7 @@ func TestLayoutChangedFollowsASplit(t *testing.T) {
 	lt.Tree["root"].(map[string]any)["split_ratio"] = 0.25
 	params, _ := json.Marshal(map[string]any{"session": sess, "workspace": lt.Workspace, "tree": lt.Tree, "leaves": lt.Leaves})
 	out, err = tuiosCLI(t, base, "call", "set-layout-tree", string(params))
-	log.WriteString("$ tuios call set-layout-tree\n" + out + "\n")
+	fmt.Fprintf(&log, "$ tuios call set-layout-tree\n%s\n", out)
 	if err != nil || !strings.Contains(out, `"changed":true`) {
 		t.Fatalf("set-layout-tree: %v\n%s", err, out)
 	}
