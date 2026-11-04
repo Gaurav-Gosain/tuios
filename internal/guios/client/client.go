@@ -32,11 +32,21 @@ var ErrVersion = errors.New("the tuios daemon is of another version")
 // Version is this build's, sent to the daemon in the hello.
 var Version = "guios"
 
-// Dialer names the daemon a connection goes to. Local is this machine's.
-// Other machines are reached through this machine's daemon and its links,
-// so a remote Dialer is not used here.
+// Dialer names the daemon a connection goes to. Local is this machine's,
+// Host another machine's. Other machines are reached through this machine's
+// daemon and its links (open-host-connection), never by a dial of their
+// own.
 type Dialer interface {
 	Dial() (net.Conn, error)
+}
+
+// Host is a linked machine, by the name this machine's daemon gives it
+// (tuios hosts).
+type Host string
+
+// Dial is not used: connections are made through the daemon's verbs.
+func (h Host) Dial() (net.Conn, error) {
+	return nil, errors.New("guios reaches other machines through the tuios daemon's links")
 }
 
 // Local is this machine's daemon, which a connect starts unless NoStart.
@@ -53,6 +63,10 @@ var StartDaemon func() error
 // Client is a control connection: calls, and the events of a subscribe.
 type Client struct {
 	Welcome proto.Welcome
+
+	// host is the linked machine whose daemon this is, "" for this
+	// machine's. Every connection the client opens goes there.
+	host string
 
 	mu      sync.Mutex
 	vc      *session.VerbClient
@@ -87,23 +101,57 @@ func Connect(noStart bool) (*Client, error) {
 	if err != nil {
 		return nil, err
 	}
-	c := &Client{vc: vc, closed: make(chan struct{})}
+	return newClient(vc, ""), nil
+}
+
+func newClient(vc *session.VerbClient, host string) *Client {
+	c := &Client{vc: vc, host: host, closed: make(chan struct{})}
 	c.Welcome = proto.Welcome{Version: proto.Version, App: Version}
 	if d := vc.Daemon(); d != nil {
 		c.Welcome.PID = d.PID
 		c.Welcome.App = d.DaemonVersion
 	}
 	c.st = newStateKeeper(c)
-	return c, nil
+	return c
 }
 
-// ConnectVia opens a control connection through d. Only Local is served:
-// other machines' sessions come through this machine's daemon.
+// ConnectHost opens a control connection to the daemon on a linked machine,
+// through this machine's daemon. Every verb runs on that machine, and every
+// stream and subscription of the client goes there too.
+func ConnectHost(host string) (*Client, error) {
+	vc, _, err := session.DialVerbClientThroughHost(host, Version)
+	if err != nil {
+		return nil, err
+	}
+	return newClient(vc, host), nil
+}
+
+// ConnectVia opens a control connection through d: Local, or a Host.
 func ConnectVia(d Dialer) (*Client, error) {
-	if l, ok := d.(Local); ok {
-		return Connect(l.NoStart)
+	switch d := d.(type) {
+	case Local:
+		return Connect(d.NoStart)
+	case Host:
+		return ConnectHost(string(d))
 	}
 	return nil, errors.New("other machines are reached through the tuios daemon's hosts")
+}
+
+// Host is the linked machine the client's daemon runs on, "" for this one.
+func (c *Client) Host() string { return c.host }
+
+// dial opens another connection to the client's daemon: this machine's, or
+// a linked machine's through this machine's daemon.
+func (c *Client) dial() (*session.VerbClient, error) {
+	return dialHost(c.host)
+}
+
+func dialHost(host string) (*session.VerbClient, error) {
+	if host == "" {
+		return session.DialVerbClientAs(Version)
+	}
+	vc, _, err := session.DialVerbClientThroughHost(host, Version)
+	return vc, err
 }
 
 // OnEvent sets the function events go to.

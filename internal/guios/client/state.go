@@ -153,17 +153,22 @@ func (k *stateKeeper) build() (*proto.State, error) {
 	projects := map[string]bool{}
 	paneSession := map[string]string{}
 	names := map[string]string{}
-	home, _ := os.UserHomeDir()
+	home := ""
+	if k.c.host == "" {
+		// Another machine's home is not this one's.
+		home, _ = os.UserHomeDir()
+	}
 	for _, s := range sl.Sessions {
 		names[s.ID] = s.Name
-		project := s.Space
-		if project == "" {
-			project = defaultProject
+		space := s.Space
+		if space == "" {
+			space = defaultProject
 		}
+		project := k.c.projectID(space)
 		if !projects[project] {
 			projects[project] = true
-			name := project
-			if project == defaultProject {
+			name := space
+			if space == defaultProject {
 				name = "Sessions"
 			}
 			st.Projects = append(st.Projects, proto.Project{ID: project, Name: name, Dir: home})
@@ -255,14 +260,14 @@ func (k *stateKeeper) build() (*proto.State, error) {
 				}
 			}
 		}
-		if d := expandHome(s.Dir, home); ks.Pane.Dir == "" && filepath.IsAbs(d) {
+		if d := expandHome(s.Dir, home); ks.Pane.Dir == "" && home != "" && filepath.IsAbs(d) {
 			ks.Pane.Dir = d
 		}
 		st.Sessions = append(st.Sessions, ks)
 	}
 	sort.SliceStable(st.Projects, func(i, j int) bool {
 		// The shared project first, then spaces by name.
-		a, b := st.Projects[i].ID, st.Projects[j].ID
+		a, b := k.c.spaceOf(st.Projects[i].ID), k.c.spaceOf(st.Projects[j].ID)
 		if (a == defaultProject) != (b == defaultProject) {
 			return a == defaultProject
 		}
@@ -473,7 +478,7 @@ func (k *stateKeeper) saveLayouts() {
 // sends the state anew after each burst of them. Nothing polls: with no
 // event, nothing runs.
 func (k *stateKeeper) watch() {
-	vc, err := session.DialVerbClientAs(Version)
+	vc, err := k.c.dial()
 	if err != nil {
 		k.c.end()
 		return
@@ -564,6 +569,24 @@ func (k *stateKeeper) sessionOf(name string) string {
 		}
 	}
 	return name
+}
+
+// projectID is the app's id of a space. A linked machine's spaces are its
+// own: their ids carry the host's name, so the "sessions" of two machines
+// are two projects.
+func (c *Client) projectID(space string) string {
+	if c.host == "" {
+		return space
+	}
+	return c.host + "/" + space
+}
+
+// spaceOf is the space of a project id.
+func (c *Client) spaceOf(id string) string {
+	if c.host == "" {
+		return id
+	}
+	return strings.TrimPrefix(id, c.host+"/")
 }
 
 func firstOf(s ...string) string {

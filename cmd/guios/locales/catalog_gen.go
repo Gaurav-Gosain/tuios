@@ -5342,11 +5342,11 @@ func (msgs Messages) HostRemoveTitle(host string) string {
 	return Catalog.Format(msgs.locale, "hostRemoveTitle", map[string]any{"host": host})
 }
 
-// HostRemoveDetail says "Its sessions keep running on {host}. Add the host again to see them."
+// HostRemoveDetail says "Its sessions keep running on {host}. Add the machine again to see them."
 // in the language the app shows.
 func HostRemoveDetail(host string) string { return In(i18n.Locale()).HostRemoveDetail(host) }
 
-// HostRemoveDetail says "Its sessions keep running on {host}. Add the host again to see them."
+// HostRemoveDetail says "Its sessions keep running on {host}. Add the machine again to see them."
 // in the language of msgs.
 func (msgs Messages) HostRemoveDetail(host string) string {
 	return Catalog.Format(msgs.locale, "hostRemoveDetail", map[string]any{"host": host})
@@ -5362,65 +5362,65 @@ func (msgs Messages) HostInstall() string {
 	return Catalog.Format(msgs.locale, "hostInstall", nil)
 }
 
-// HostInstalling says "Installing guios on {host}…"
+// HostInstalling says "Installing tuios on {host}…"
 // in the language the app shows.
 func HostInstalling(host string) string { return In(i18n.Locale()).HostInstalling(host) }
 
-// HostInstalling says "Installing guios on {host}…"
+// HostInstalling says "Installing tuios on {host}…"
 // in the language of msgs.
 func (msgs Messages) HostInstalling(host string) string {
 	return Catalog.Format(msgs.locale, "hostInstalling", map[string]any{"host": host})
 }
 
-// HostInstalled says "Installed guios on {host}"
+// HostInstalled says "{host} runs tuios now."
 // in the language the app shows.
 func HostInstalled(host string) string { return In(i18n.Locale()).HostInstalled(host) }
 
-// HostInstalled says "Installed guios on {host}"
+// HostInstalled says "{host} runs tuios now."
 // in the language of msgs.
 func (msgs Messages) HostInstalled(host string) string {
 	return Catalog.Format(msgs.locale, "hostInstalled", map[string]any{"host": host})
 }
 
-// HostInstallFailed says "Couldn't install guios on {host}: {error}"
+// HostInstallFailed says "Could not install tuios on {host}: {error}"
 // in the language the app shows.
 func HostInstallFailed(host string, error string) string {
 	return In(i18n.Locale()).HostInstallFailed(host, error)
 }
 
-// HostInstallFailed says "Couldn't install guios on {host}: {error}"
+// HostInstallFailed says "Could not install tuios on {host}: {error}"
 // in the language of msgs.
 func (msgs Messages) HostInstallFailed(host string, error string) string {
 	return Catalog.Format(msgs.locale, "hostInstallFailed", map[string]any{"host": host, "error": error})
 }
 
-// HostUpdateAction says "Update guios on {host}…"
+// HostUpdateAction says "Update tuios on {host}…"
 // in the language the app shows.
 func HostUpdateAction(host string) string { return In(i18n.Locale()).HostUpdateAction(host) }
 
-// HostUpdateAction says "Update guios on {host}…"
+// HostUpdateAction says "Update tuios on {host}…"
 // in the language of msgs.
 func (msgs Messages) HostUpdateAction(host string) string {
 	return Catalog.Format(msgs.locale, "hostUpdateAction", map[string]any{"host": host})
 }
 
-// HostUpdateTitle says "Update guios on {host} to {version}?"
+// HostUpdateTitle says "Install tuios {version} on {host}?"
 // in the language the app shows.
 func HostUpdateTitle(host string, version string) string {
 	return In(i18n.Locale()).HostUpdateTitle(host, version)
 }
 
-// HostUpdateTitle says "Update guios on {host} to {version}?"
+// HostUpdateTitle says "Install tuios {version} on {host}?"
 // in the language of msgs.
 func (msgs Messages) HostUpdateTitle(host string, version string) string {
 	return Catalog.Format(msgs.locale, "hostUpdateTitle", map[string]any{"host": host, "version": version})
 }
 
-// HostUpdateDetail says "guios then restarts its service on {host}. Sessions there start again where they were, with their history, and the pr…"
+// HostUpdateDetail says "guios copies the tuios of this computer to {host} and restarts its daemon. The programs in its panes stop."
 // in the language the app shows.
 func HostUpdateDetail(host string) string { return In(i18n.Locale()).HostUpdateDetail(host) }
 
-// HostUpdateDetail says "guios then restarts its service on {host}. Sessions there start again where they were, with their history, and the pr…"
+// HostUpdateDetail says "guios copies the tuios of this computer to {host} and restarts its daemon. The programs in its panes stop."
 // in the language of msgs.
 func (msgs Messages) HostUpdateDetail(host string) string {
 	return Catalog.Format(msgs.locale, "hostUpdateDetail", map[string]any{"host": host})
@@ -5436,23 +5436,23 @@ func (msgs Messages) HostUpdateAppDetail(host string) string {
 	return Catalog.Format(msgs.locale, "hostUpdateAppDetail", map[string]any{"host": host})
 }
 
-// HostUpdating says "Updating guios on {host}…"
+// HostUpdating says "Updating tuios on {host}…"
 // in the language the app shows.
 func HostUpdating(host string) string { return In(i18n.Locale()).HostUpdating(host) }
 
-// HostUpdating says "Updating guios on {host}…"
+// HostUpdating says "Updating tuios on {host}…"
 // in the language of msgs.
 func (msgs Messages) HostUpdating(host string) string {
 	return Catalog.Format(msgs.locale, "hostUpdating", map[string]any{"host": host})
 }
 
-// HostUpdated says "{host} runs guios {version}"
+// HostUpdated says "{host} runs tuios {version}"
 // in the language the app shows.
 func HostUpdated(host string, version string) string {
 	return In(i18n.Locale()).HostUpdated(host, version)
 }
 
-// HostUpdated says "{host} runs guios {version}"
+// HostUpdated says "{host} runs tuios {version}"
 // in the language of msgs.
 func (msgs Messages) HostUpdated(host string, version string) string {
 	return Catalog.Format(msgs.locale, "hostUpdated", map[string]any{"host": host, "version": version})
@@ -5468,23 +5468,23 @@ func (msgs Messages) HostUpdateDev() string {
 	return Catalog.Format(msgs.locale, "hostUpdateDev", nil)
 }
 
-// HostVersionTitle says "guios on {host} is another version"
+// HostVersionTitle says "tuios on {host} is another version"
 // in the language the app shows.
 func HostVersionTitle(host string) string { return In(i18n.Locale()).HostVersionTitle(host) }
 
-// HostVersionTitle says "guios on {host} is another version"
+// HostVersionTitle says "tuios on {host} is another version"
 // in the language of msgs.
 func (msgs Messages) HostVersionTitle(host string) string {
 	return Catalog.Format(msgs.locale, "hostVersionTitle", map[string]any{"host": host})
 }
 
-// HostVersionDetail says "{host} runs guios {version}, and this app is guios {app}. Update guios there to see and start its sessions here."
+// HostVersionDetail says "{host} runs tuios {version}, and this computer runs tuios {app}. Update tuios there to see its sessions here."
 // in the language the app shows.
 func HostVersionDetail(host string, version string, app string) string {
 	return In(i18n.Locale()).HostVersionDetail(host, version, app)
 }
 
-// HostVersionDetail says "{host} runs guios {version}, and this app is guios {app}. Update guios there to see and start its sessions here."
+// HostVersionDetail says "{host} runs tuios {version}, and this computer runs tuios {app}. Update tuios there to see its sessions here."
 // in the language of msgs.
 func (msgs Messages) HostVersionDetail(host string, version string, app string) string {
 	return Catalog.Format(msgs.locale, "hostVersionDetail", map[string]any{"host": host, "version": version, "app": app})
@@ -5666,11 +5666,11 @@ func (msgs Messages) SetHosts() string {
 	return Catalog.Format(msgs.locale, "setHosts", nil)
 }
 
-// SetHostsDetail says "Other machines whose sessions show in the sidebar after this computer's. guios reaches them over SSH with your keys a…"
+// SetHostsDetail says "The machines that the tuios daemon of this computer links over ssh. Their sessions show in the sidebar under Machines…"
 // in the language the app shows.
 func SetHostsDetail() string { return In(i18n.Locale()).SetHostsDetail() }
 
-// SetHostsDetail says "Other machines whose sessions show in the sidebar after this computer's. guios reaches them over SSH with your keys a…"
+// SetHostsDetail says "The machines that the tuios daemon of this computer links over ssh. Their sessions show in the sidebar under Machines…"
 // in the language of msgs.
 func (msgs Messages) SetHostsDetail() string {
 	return Catalog.Format(msgs.locale, "setHostsDetail", nil)
@@ -5686,11 +5686,11 @@ func (msgs Messages) SetHostsNone() string {
 	return Catalog.Format(msgs.locale, "setHostsNone", nil)
 }
 
-// SetHostsNoneDetail says "Add a machine you reach with ssh. If guios isn't installed there, guios offers to install it."
+// SetHostsNoneDetail says "Add a machine that you reach with ssh. If it has no tuios, guios offers to install it."
 // in the language the app shows.
 func SetHostsNoneDetail() string { return In(i18n.Locale()).SetHostsNoneDetail() }
 
-// SetHostsNoneDetail says "Add a machine you reach with ssh. If guios isn't installed there, guios offers to install it."
+// SetHostsNoneDetail says "Add a machine that you reach with ssh. If it has no tuios, guios offers to install it."
 // in the language of msgs.
 func (msgs Messages) SetHostsNoneDetail() string {
 	return Catalog.Format(msgs.locale, "setHostsNoneDetail", nil)
@@ -5716,11 +5716,11 @@ func (msgs Messages) SetHostAdd() string {
 	return Catalog.Format(msgs.locale, "setHostAdd", nil)
 }
 
-// SetHostAddDetail says "Over SSH: me@devbox or ssh://me@devbox:2222, as ssh reads them with your ~/.ssh/config. For a WSL distribution: wsl:/…"
+// SetHostAddDetail says "Type the ssh address, such as me@devbox, or a host name from your ~/.ssh/config. The name is what guios and tuios cal…"
 // in the language the app shows.
 func SetHostAddDetail() string { return In(i18n.Locale()).SetHostAddDetail() }
 
-// SetHostAddDetail says "Over SSH: me@devbox or ssh://me@devbox:2222, as ssh reads them with your ~/.ssh/config. For a WSL distribution: wsl:/…"
+// SetHostAddDetail says "Type the ssh address, such as me@devbox, or a host name from your ~/.ssh/config. The name is what guios and tuios cal…"
 // in the language of msgs.
 func (msgs Messages) SetHostAddDetail() string {
 	return Catalog.Format(msgs.locale, "setHostAddDetail", nil)
@@ -5900,21 +5900,21 @@ func (msgs Messages) ConfirmQuitAllHosts() string {
 	return Catalog.Format(msgs.locale, "confirmQuitAllHosts", nil)
 }
 
-// HostInstallTitle says "Install guios on {host}?"
+// HostInstallTitle says "Install tuios on {host}?"
 // in the language the app shows.
 func HostInstallTitle(host string) string { return In(i18n.Locale()).HostInstallTitle(host) }
 
-// HostInstallTitle says "Install guios on {host}?"
+// HostInstallTitle says "Install tuios on {host}?"
 // in the language of msgs.
 func (msgs Messages) HostInstallTitle(host string) string {
 	return Catalog.Format(msgs.locale, "hostInstallTitle", map[string]any{"host": host})
 }
 
-// HostInstallDetail says "guios runs its install script on {host}: the server build of guios goes in your home folder there (~/.local, or %LOCA…"
+// HostInstallDetail says "guios copies the tuios of this computer to {host} and starts its daemon. Nothing on {host} stops."
 // in the language the app shows.
 func HostInstallDetail(host string) string { return In(i18n.Locale()).HostInstallDetail(host) }
 
-// HostInstallDetail says "guios runs its install script on {host}: the server build of guios goes in your home folder there (~/.local, or %LOCA…"
+// HostInstallDetail says "guios copies the tuios of this computer to {host} and starts its daemon. Nothing on {host} stops."
 // in the language of msgs.
 func (msgs Messages) HostInstallDetail(host string) string {
 	return Catalog.Format(msgs.locale, "hostInstallDetail", map[string]any{"host": host})
@@ -8290,4 +8290,340 @@ func SetFontMissing(font string) string { return In(i18n.Locale()).SetFontMissin
 // in the language of msgs.
 func (msgs Messages) SetFontMissing(font string) string {
 	return Catalog.Format(msgs.locale, "setFontMissing", map[string]any{"font": font})
+}
+
+// MachinesTitle says "Machines"
+// in the language the app shows.
+func MachinesTitle() string { return In(i18n.Locale()).MachinesTitle() }
+
+// MachinesTitle says "Machines"
+// in the language of msgs.
+func (msgs Messages) MachinesTitle() string {
+	return Catalog.Format(msgs.locale, "machinesTitle", nil)
+}
+
+// MachineAdd says "Add a machine"
+// in the language the app shows.
+func MachineAdd() string { return In(i18n.Locale()).MachineAdd() }
+
+// MachineAdd says "Add a machine"
+// in the language of msgs.
+func (msgs Messages) MachineAdd() string {
+	return Catalog.Format(msgs.locale, "machineAdd", nil)
+}
+
+// HostStartDaemon says "Start the daemon"
+// in the language the app shows.
+func HostStartDaemon() string { return In(i18n.Locale()).HostStartDaemon() }
+
+// HostStartDaemon says "Start the daemon"
+// in the language of msgs.
+func (msgs Messages) HostStartDaemon() string {
+	return Catalog.Format(msgs.locale, "hostStartDaemon", nil)
+}
+
+// HostInstallTuios says "Install tuios"
+// in the language the app shows.
+func HostInstallTuios() string { return In(i18n.Locale()).HostInstallTuios() }
+
+// HostInstallTuios says "Install tuios"
+// in the language of msgs.
+func (msgs Messages) HostInstallTuios() string {
+	return Catalog.Format(msgs.locale, "hostInstallTuios", nil)
+}
+
+// HostSaved says "{host} has a new address."
+// in the language the app shows.
+func HostSaved(host string) string { return In(i18n.Locale()).HostSaved(host) }
+
+// HostSaved says "{host} has a new address."
+// in the language of msgs.
+func (msgs Messages) HostSaved(host string) string {
+	return Catalog.Format(msgs.locale, "hostSaved", map[string]any{"host": host})
+}
+
+// HostAdded says "{host} is added."
+// in the language the app shows.
+func HostAdded(host string) string { return In(i18n.Locale()).HostAdded(host) }
+
+// HostAdded says "{host} is added."
+// in the language of msgs.
+func (msgs Messages) HostAdded(host string) string {
+	return Catalog.Format(msgs.locale, "hostAdded", map[string]any{"host": host})
+}
+
+// HostStatusUp says "Connected"
+// in the language the app shows.
+func HostStatusUp() string { return In(i18n.Locale()).HostStatusUp() }
+
+// HostStatusUp says "Connected"
+// in the language of msgs.
+func (msgs Messages) HostStatusUp() string {
+	return Catalog.Format(msgs.locale, "hostStatusUp", nil)
+}
+
+// HostStatusReconnecting says "Reconnecting"
+// in the language the app shows.
+func HostStatusReconnecting() string { return In(i18n.Locale()).HostStatusReconnecting() }
+
+// HostStatusReconnecting says "Reconnecting"
+// in the language of msgs.
+func (msgs Messages) HostStatusReconnecting() string {
+	return Catalog.Format(msgs.locale, "hostStatusReconnecting", nil)
+}
+
+// HostStatusNoDaemon says "No daemon"
+// in the language the app shows.
+func HostStatusNoDaemon() string { return In(i18n.Locale()).HostStatusNoDaemon() }
+
+// HostStatusNoDaemon says "No daemon"
+// in the language of msgs.
+func (msgs Messages) HostStatusNoDaemon() string {
+	return Catalog.Format(msgs.locale, "hostStatusNoDaemon", nil)
+}
+
+// HostStatusNoTuios says "No tuios"
+// in the language the app shows.
+func HostStatusNoTuios() string { return In(i18n.Locale()).HostStatusNoTuios() }
+
+// HostStatusNoTuios says "No tuios"
+// in the language of msgs.
+func (msgs Messages) HostStatusNoTuios() string {
+	return Catalog.Format(msgs.locale, "hostStatusNoTuios", nil)
+}
+
+// HostStatusOtherVersion says "Other version"
+// in the language the app shows.
+func HostStatusOtherVersion() string { return In(i18n.Locale()).HostStatusOtherVersion() }
+
+// HostStatusOtherVersion says "Other version"
+// in the language of msgs.
+func (msgs Messages) HostStatusOtherVersion() string {
+	return Catalog.Format(msgs.locale, "hostStatusOtherVersion", nil)
+}
+
+// HostStatusSignIn says "Sign in"
+// in the language the app shows.
+func HostStatusSignIn() string { return In(i18n.Locale()).HostStatusSignIn() }
+
+// HostStatusSignIn says "Sign in"
+// in the language of msgs.
+func (msgs Messages) HostStatusSignIn() string {
+	return Catalog.Format(msgs.locale, "hostStatusSignIn", nil)
+}
+
+// HostStatusUnreachable says "Not reachable"
+// in the language the app shows.
+func HostStatusUnreachable() string { return In(i18n.Locale()).HostStatusUnreachable() }
+
+// HostStatusUnreachable says "Not reachable"
+// in the language of msgs.
+func (msgs Messages) HostStatusUnreachable() string {
+	return Catalog.Format(msgs.locale, "hostStatusUnreachable", nil)
+}
+
+// HostLoad says "Load {load} on {cores} cores"
+// in the language the app shows.
+func HostLoad(load string, cores int) string { return In(i18n.Locale()).HostLoad(load, cores) }
+
+// HostLoad says "Load {load} on {cores} cores"
+// in the language of msgs.
+func (msgs Messages) HostLoad(load string, cores int) string {
+	return Catalog.Format(msgs.locale, "hostLoad", map[string]any{"load": load, "cores": cores})
+}
+
+// HostRunsTuios says "Runs tuios {version}"
+// in the language the app shows.
+func HostRunsTuios(version string) string { return In(i18n.Locale()).HostRunsTuios(version) }
+
+// HostRunsTuios says "Runs tuios {version}"
+// in the language of msgs.
+func (msgs Messages) HostRunsTuios(version string) string {
+	return Catalog.Format(msgs.locale, "hostRunsTuios", map[string]any{"version": version})
+}
+
+// HostLastDrop says "Last drop: {reason}"
+// in the language the app shows.
+func HostLastDrop(reason string) string { return In(i18n.Locale()).HostLastDrop(reason) }
+
+// HostLastDrop says "Last drop: {reason}"
+// in the language of msgs.
+func (msgs Messages) HostLastDrop(reason string) string {
+	return Catalog.Format(msgs.locale, "hostLastDrop", map[string]any{"reason": reason})
+}
+
+// HostQueued says "{count, plural, one {# message waits} other {# messages wait}} for the link"
+// in the language the app shows.
+func HostQueued(count int) string { return In(i18n.Locale()).HostQueued(count) }
+
+// HostQueued says "{count, plural, one {# message waits} other {# messages wait}} for the link"
+// in the language of msgs.
+func (msgs Messages) HostQueued(count int) string {
+	return Catalog.Format(msgs.locale, "hostQueued", map[string]any{"count": count})
+}
+
+// HostStarting says "Starting"
+// in the language the app shows.
+func HostStarting() string { return In(i18n.Locale()).HostStarting() }
+
+// HostStarting says "Starting"
+// in the language of msgs.
+func (msgs Messages) HostStarting() string {
+	return Catalog.Format(msgs.locale, "hostStarting", nil)
+}
+
+// HostStartingOn says "Starting the daemon on {host}…"
+// in the language the app shows.
+func HostStartingOn(host string) string { return In(i18n.Locale()).HostStartingOn(host) }
+
+// HostStartingOn says "Starting the daemon on {host}…"
+// in the language of msgs.
+func (msgs Messages) HostStartingOn(host string) string {
+	return Catalog.Format(msgs.locale, "hostStartingOn", map[string]any{"host": host})
+}
+
+// HostInstallingShort says "Installing"
+// in the language the app shows.
+func HostInstallingShort() string { return In(i18n.Locale()).HostInstallingShort() }
+
+// HostInstallingShort says "Installing"
+// in the language of msgs.
+func (msgs Messages) HostInstallingShort() string {
+	return Catalog.Format(msgs.locale, "hostInstallingShort", nil)
+}
+
+// HostStartFailed says "Could not start the daemon on {host}: {error}"
+// in the language the app shows.
+func HostStartFailed(host string, error string) string {
+	return In(i18n.Locale()).HostStartFailed(host, error)
+}
+
+// HostStartFailed says "Could not start the daemon on {host}: {error}"
+// in the language of msgs.
+func (msgs Messages) HostStartFailed(host string, error string) string {
+	return Catalog.Format(msgs.locale, "hostStartFailed", map[string]any{"host": host, "error": error})
+}
+
+// HostSignIn says "Sign in"
+// in the language the app shows.
+func HostSignIn() string { return In(i18n.Locale()).HostSignIn() }
+
+// HostSignIn says "Sign in"
+// in the language of msgs.
+func (msgs Messages) HostSignIn() string {
+	return Catalog.Format(msgs.locale, "hostSignIn", nil)
+}
+
+// HostPaneReconnecting says "Reconnecting to {host}"
+// in the language the app shows.
+func HostPaneReconnecting(host string) string { return In(i18n.Locale()).HostPaneReconnecting(host) }
+
+// HostPaneReconnecting says "Reconnecting to {host}"
+// in the language of msgs.
+func (msgs Messages) HostPaneReconnecting(host string) string {
+	return Catalog.Format(msgs.locale, "hostPaneReconnecting", map[string]any{"host": host})
+}
+
+// HostPaneWaiting says "{host} is not connected"
+// in the language the app shows.
+func HostPaneWaiting(host string) string { return In(i18n.Locale()).HostPaneWaiting(host) }
+
+// HostPaneWaiting says "{host} is not connected"
+// in the language of msgs.
+func (msgs Messages) HostPaneWaiting(host string) string {
+	return Catalog.Format(msgs.locale, "hostPaneWaiting", map[string]any{"host": host})
+}
+
+// HostCopyTo says "Copy to {host}"
+// in the language the app shows.
+func HostCopyTo(host string) string { return In(i18n.Locale()).HostCopyTo(host) }
+
+// HostCopyTo says "Copy to {host}"
+// in the language of msgs.
+func (msgs Messages) HostCopyTo(host string) string {
+	return Catalog.Format(msgs.locale, "hostCopyTo", map[string]any{"host": host})
+}
+
+// HostCopyStarted says "Copying {name} to {host}"
+// in the language the app shows.
+func HostCopyStarted(name string, host string) string {
+	return In(i18n.Locale()).HostCopyStarted(name, host)
+}
+
+// HostCopyStarted says "Copying {name} to {host}"
+// in the language of msgs.
+func (msgs Messages) HostCopyStarted(name string, host string) string {
+	return Catalog.Format(msgs.locale, "hostCopyStarted", map[string]any{"name": name, "host": host})
+}
+
+// TransfersTitle says "Transfers"
+// in the language the app shows.
+func TransfersTitle() string { return In(i18n.Locale()).TransfersTitle() }
+
+// TransfersTitle says "Transfers"
+// in the language of msgs.
+func (msgs Messages) TransfersTitle() string {
+	return Catalog.Format(msgs.locale, "transfersTitle", nil)
+}
+
+// TransfersNone says "No transfers"
+// in the language the app shows.
+func TransfersNone() string { return In(i18n.Locale()).TransfersNone() }
+
+// TransfersNone says "No transfers"
+// in the language of msgs.
+func (msgs Messages) TransfersNone() string {
+	return Catalog.Format(msgs.locale, "transfersNone", nil)
+}
+
+// TransferDone says "{name} is on {host}."
+// in the language the app shows.
+func TransferDone(name string, host string) string { return In(i18n.Locale()).TransferDone(name, host) }
+
+// TransferDone says "{name} is on {host}."
+// in the language of msgs.
+func (msgs Messages) TransferDone(name string, host string) string {
+	return Catalog.Format(msgs.locale, "transferDone", map[string]any{"name": name, "host": host})
+}
+
+// TransferFailed says "Could not copy {name}: {error}"
+// in the language the app shows.
+func TransferFailed(name string, error string) string {
+	return In(i18n.Locale()).TransferFailed(name, error)
+}
+
+// TransferFailed says "Could not copy {name}: {error}"
+// in the language of msgs.
+func (msgs Messages) TransferFailed(name string, error string) string {
+	return Catalog.Format(msgs.locale, "transferFailed", map[string]any{"name": name, "error": error})
+}
+
+// TransferCancel says "Cancel"
+// in the language the app shows.
+func TransferCancel() string { return In(i18n.Locale()).TransferCancel() }
+
+// TransferCancel says "Cancel"
+// in the language of msgs.
+func (msgs Messages) TransferCancel() string {
+	return Catalog.Format(msgs.locale, "transferCancel", nil)
+}
+
+// TransferClear says "Clear finished"
+// in the language the app shows.
+func TransferClear() string { return In(i18n.Locale()).TransferClear() }
+
+// TransferClear says "Clear finished"
+// in the language of msgs.
+func (msgs Messages) TransferClear() string {
+	return Catalog.Format(msgs.locale, "transferClear", nil)
+}
+
+// NewPaneOn says "New pane on {host}"
+// in the language the app shows.
+func NewPaneOn(host string) string { return In(i18n.Locale()).NewPaneOn(host) }
+
+// NewPaneOn says "New pane on {host}"
+// in the language of msgs.
+func (msgs Messages) NewPaneOn(host string) string {
+	return Catalog.Format(msgs.locale, "newPaneOn", map[string]any{"host": host})
 }

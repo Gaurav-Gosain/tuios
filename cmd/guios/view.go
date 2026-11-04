@@ -351,24 +351,9 @@ func (a *App) sidebar(c *ui.Context, pal *palette, bar ui.TitleBar) {
 				ui.Text(c, locales.SidebarNoSessions()).FontSize(12.5).TextColor(pal.textFaint).Padding(8, 10)
 			}
 		}
-		// Then each host's, flat, tagged with its name: a host has a row
-		// of its own only while it needs one (hostNeedsRow).
-		for _, h := range a.hosts[1:] {
-			groups := a.hostGroups(h)
-			if a.hostNeedsRow(h) {
-				top := float32(18)
-				if gi == 0 {
-					top = 2
-				}
-				a.hostLine(c, pal, h, top)
-				gi++
-			}
-			for i, g := range groups {
-				g.first = i == 0
-				a.groupView(c, pal, g, gi, &n)
-				gi++
-			}
-		}
+		// Then the machines this machine's daemon links, each with its
+		// sessions under it.
+		a.machinesSection(c, pal, &gi, &n)
 		if a.set.SessionHistory {
 			a.endedSections(c, pal)
 		}
@@ -468,9 +453,9 @@ func (a *App) groupView(c *ui.Context, pal *palette, g group, gi int, n *int) {
 		turn := chev.AnimateTo("turn", 90*(1-b2f(collapsed)), ui.Snappy)
 		chev.Rotate(turn).Opacity(chev.Animate("shown", b2f(hovered || collapsed), 120*time.Millisecond))
 		ui.Spacer(c)
-		// A host with no row of its own tells how the app stands with it
-		// here: reconnecting, or wanting an update or restart.
-		if g.first && g.host.remote() && !a.hostNeedsRow(g.host) {
+		// A machine's first group says how its link stands while it is
+		// not up.
+		if g.first && g.host.remote() {
 			a.hostState(c, pal, g.host)
 		}
 		if needs > 0 {

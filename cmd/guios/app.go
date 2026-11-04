@@ -111,10 +111,16 @@ type App struct {
 	// hosts are the kerods the app shows, this machine's first; st is
 	// what they hold, each host's sessions and projects after the one's
 	// before, and owner the host of each session, pane and project.
-	hosts  []*host
-	owner  map[string]*host
-	st     proto.State
-	loaded bool // a state came
+	hosts []*host
+	// hostsGen counts the watches of this machine's daemon's links, so a
+	// watch of a daemon gone stops; hostsKnown says the daemon told its
+	// links once; localLoad is this machine's load, as it told it.
+	hostsGen   int
+	hostsKnown bool
+	localLoad  client.HostReport
+	owner      map[string]*host
+	st         proto.State
+	loaded     bool // a state came
 
 	prefs      prefs
 	set        settings.Settings // the user's settings: Settings' controls edit it
@@ -716,6 +722,9 @@ func (a *App) ensureTerm(id string) {
 		}
 		term.Resize(stream.Welcome.Cols, stream.Welcome.Rows)
 		stream.OnResized = term.Resize
+		// A pane of another machine says when its link drops and comes
+		// back (linkBadge).
+		stream.OnLink = func(bool) { a.update(func() {}) }
 		close(g.ready)
 		a.update(func() {
 			if a.terms[id] != e {

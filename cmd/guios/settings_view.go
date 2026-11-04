@@ -76,7 +76,6 @@ type settingsState struct {
 	scrolls      map[string]*smoothScroll // each page's, for its scroll edge
 	host         hostDraft                // the Hosts page's form
 	hostEdit     hostDraft                // a host's, as the user edits it
-	tailnet      tailnetLook              // this machine on the tailnet, for the Hosts page
 	confirm      *confirmation            // a question, asked in this window
 }
 

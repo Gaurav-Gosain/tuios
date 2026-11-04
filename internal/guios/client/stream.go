@@ -5,8 +5,10 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/egoist/mygo/plugins/terminal"
@@ -20,16 +22,26 @@ import (
 // plugin's Conn, with ResizePixels and UseTheme. It is the daemon's
 // stream-pane: a snapshot of the pane with up to 500 rows of history, then
 // the pane's output as the program wrote it, resizes in band.
+//
+// A stream of a pane on a linked machine outlives its link: when the
+// connection drops without the pane ending, Read waits and opens the stream
+// again, and the new snapshot paints over the last frame in place. The
+// terminal keeps showing that frame meanwhile, so a reconnect never blanks
+// the pane. Lost reports the wait.
 type Stream struct {
-	ps      *session.PaneStream
 	c       *Client
 	session string
 	sid     string
 	window  string
+	params  map[string]any
 	// shown is the last F frame sent: session.PaneHidden, PaneVisible or
 	// PaneFocused. Guarded by c.viewMu.
 	shown   byte
 	Welcome proto.Welcome
+
+	// psMu guards ps, which a reconnect replaces.
+	psMu sync.RWMutex
+	ps   *session.PaneStream
 
 	mu     sync.Mutex
 	buf    []byte
@@ -41,6 +53,10 @@ type Stream struct {
 	// OnResized, when set, gets the sizes the pane takes, within Read,
 	// before the output after them: set it before the first Read.
 	OnResized func(cols, rows int)
+	// OnLink, when set, hears that a linked machine's stream lost its
+	// connection (false) and has it again (true).
+	OnLink func(up bool)
+	lost   atomic.Bool
 
 	// renew says the daemon took no yield: its fit lease lapses after the
 	// daemon's TTL (30 s) unless sent again, so the last one is sent
@@ -50,6 +66,7 @@ type Stream struct {
 	leaseMu  sync.Mutex
 	lease    [4]int
 	renewing bool
+	theme    *session.ViewerReport
 }
 
 // leaseRenew is how often a lease is sent again on a daemon without yield,
@@ -59,25 +76,38 @@ const leaseRenew = 10 * time.Second
 // Attach opens a pane's stream on this machine's daemon.
 func Attach(id string) (*Stream, error) { return AttachVia(Local{NoStart: true}, id) }
 
-// current is the client the app connected last, for the panes' streams.
+// clients are the clients the app connected last, by host ("" for this
+// machine), for the panes' streams.
 var (
 	currentMu sync.Mutex
-	current   *Client
+	clients   = map[string]*Client{}
 )
 
 func setCurrent(c *Client) {
 	currentMu.Lock()
-	current = c
+	clients[c.host] = c
 	currentMu.Unlock()
 }
 
-// AttachVia opens a pane's stream. id is a pane (a tuios window), or a
-// session, whose focused pane it then streams.
-func AttachVia(_ Dialer, id string) (*Stream, error) {
+func currentOf(host string) *Client {
 	currentMu.Lock()
-	c := current
-	currentMu.Unlock()
+	defer currentMu.Unlock()
+	return clients[host]
+}
+
+// AttachVia opens a pane's stream on the daemon d names: Local or a Host.
+// id is a pane (a tuios window), or a session, whose focused pane it then
+// streams.
+func AttachVia(d Dialer, id string) (*Stream, error) {
+	host := ""
+	if h, ok := d.(Host); ok {
+		host = string(h)
+	}
+	c := currentOf(host)
 	if c == nil {
+		if host != "" {
+			return nil, fmt.Errorf("not connected to the tuios daemon on %s", host)
+		}
 		return nil, errors.New("not connected to the tuios daemon")
 	}
 	sid, name, ok := c.st.lookup(id)
@@ -88,10 +118,6 @@ func AttachVia(_ Dialer, id string) (*Stream, error) {
 	if window == sid {
 		window = ""
 	}
-	vc, err := session.DialVerbClientAs(Version)
-	if err != nil {
-		return nil, err
-	}
 	// The pane takes this view's size only while no TUI client shows the
 	// session (fit, yield). While one does, the pane keeps the size the
 	// TUI gave it, and the view draws that grid: a TUI's panes never change
@@ -99,6 +125,27 @@ func AttachVia(_ Dialer, id string) (*Stream, error) {
 	params := map[string]any{"session_id": sid, "session": name, "fit": true, "yield": true}
 	if window != "" {
 		params["window"] = window
+	}
+	ps, reply, renew, err := openPane(host, params)
+	if err != nil {
+		return nil, err
+	}
+	if window == "" {
+		// A reconnect opens the pane it streamed, not the session's
+		// focused one of that time.
+		params["window"] = reply.Window
+	}
+	s := &Stream{ps: ps, c: c, session: name, sid: sid, window: reply.Window, params: params, closed: make(chan struct{}), Gone: make(chan struct{}), renew: renew}
+	c.addStream(s)
+	s.Welcome = proto.Welcome{Version: proto.Version, Cols: reply.Cols, Rows: reply.Rows}
+	return s, nil
+}
+
+// openPane dials the host's daemon and opens a pane's stream on it.
+func openPane(host string, params map[string]any) (*session.PaneStream, session.PaneStreamReply, bool, error) {
+	vc, err := dialHost(host)
+	if err != nil {
+		return nil, session.PaneStreamReply{}, false, err
 	}
 	ps, reply, err := vc.OpenPaneStream(params)
 	renew := false
@@ -111,20 +158,30 @@ func AttachVia(_ Dialer, id string) (*Stream, error) {
 	}
 	if err != nil {
 		_ = vc.Close()
-		return nil, err
+		return nil, reply, false, err
 	}
-	s := &Stream{ps: ps, c: c, session: name, sid: sid, window: reply.Window, closed: make(chan struct{}), Gone: make(chan struct{}), renew: renew}
-	c.addStream(s)
-	s.Welcome = proto.Welcome{Version: proto.Version, Cols: reply.Cols, Rows: reply.Rows}
-	return s, nil
+	return ps, reply, renew, nil
+}
+
+// Lost reports whether a linked machine's stream lost its connection and
+// waits to open it again.
+func (s *Stream) Lost() bool { return s.lost.Load() }
+
+func (s *Stream) pane() *session.PaneStream {
+	s.psMu.RLock()
+	defer s.psMu.RUnlock()
+	return s.ps
 }
 
 // Read gives the pane's bytes: the snapshot first, which paints the pane on
 // a reset terminal, then the output.
 func (s *Stream) Read(p []byte) (int, error) {
 	for len(s.buf) == 0 {
-		kind, payload, err := s.ps.ReadFrame()
+		kind, payload, err := s.pane().ReadFrame()
 		if err != nil {
+			if s.c.host != "" && s.reopen() {
+				continue
+			}
 			s.goneOnce.Do(func() { close(s.Gone) })
 			return 0, io.EOF
 		}
@@ -171,11 +228,89 @@ func paneEnded(reason string) bool {
 	return reason == "closed" || strings.HasPrefix(reason, "exited ") || strings.HasPrefix(reason, "killed ")
 }
 
+// reopenGiveUp is how long a linked machine's stream waits for its pane
+// to come back before it ends. The far daemon keeps the pane's program for
+// as long as it runs, so the wait is only a bound on a host gone for good.
+const reopenGiveUp = 30 * time.Minute
+
+// reopen opens a lost stream of a linked machine's pane again, waiting
+// longer each time, up to 5 s between tries. It reports false when the
+// stream was closed, the pane is gone, or the wait passed reopenGiveUp.
+func (s *Stream) reopen() bool {
+	select {
+	case <-s.closed:
+		return false
+	default:
+	}
+	s.lost.Store(true)
+	if s.OnLink != nil {
+		s.OnLink(false)
+	}
+	_ = s.pane().Close()
+	until := time.Now().Add(reopenGiveUp)
+	wait := 250 * time.Millisecond
+	for time.Now().Before(until) {
+		select {
+		case <-s.closed:
+			return false
+		case <-time.After(wait):
+		}
+		wait = min(wait*2, 5*time.Second)
+		params := maps.Clone(s.params)
+		if s.renew {
+			delete(params, "yield")
+		}
+		ps, _, _, err := openPane(s.c.host, params)
+		if err != nil {
+			var ve *session.VerbCallError
+			if errors.As(err, &ve) && (ve.Code == session.ErrVerbSessionNotFound || ve.Code == session.ErrVerbWindowNotFound) {
+				return false
+			}
+			continue
+		}
+		s.psMu.Lock()
+		s.ps = ps
+		s.psMu.Unlock()
+		// The new stream knows nothing of this view yet.
+		s.leaseMu.Lock()
+		if s.lease[0] > 0 {
+			_ = s.sendLease()
+		}
+		th := s.theme
+		s.leaseMu.Unlock()
+		if th != nil && !s.renew {
+			_ = ps.Viewer(*th)
+		}
+		if c := currentOf(s.c.host); c != nil && c != s.c {
+			s.c.removeStream(s)
+			s.c = c
+		}
+		s.c.viewMu.Lock()
+		s.shown = 0
+		s.c.viewMu.Unlock()
+		s.c.addStream(s)
+		s.lost.Store(false)
+		if s.OnLink != nil {
+			s.OnLink(true)
+		}
+		return true
+	}
+	return false
+}
+
 // Write sends what the terminal encoded from keys, paste and the mouse.
 func (s *Stream) Write(p []byte) (int, error) {
 	for off := 0; off < len(p); off += session.PaneStreamMaxInput {
 		end := min(off+session.PaneStreamMaxInput, len(p))
-		if err := s.ps.Input(p[off:end]); err != nil {
+		if s.lost.Load() {
+			// The link is down: what the person types now would reach
+			// the program late, or never. The pane says it reconnects.
+			return len(p), nil
+		}
+		if err := s.pane().Input(p[off:end]); err != nil {
+			if s.c.host != "" {
+				return len(p), nil
+			}
 			return off, err
 		}
 	}
@@ -203,10 +338,11 @@ func (s *Stream) ResizePixels(cols, rows, cellW, cellH int) error {
 // pixels too, and takes only the 4-byte L frame. Hold leaseMu.
 func (s *Stream) sendLease() error {
 	l := s.lease
+	ps := s.pane()
 	if s.renew {
-		return s.ps.Lease(l[0], l[1])
+		return ps.Lease(l[0], l[1])
 	}
-	return s.ps.LeaseCell(l[0], l[1], l[2], l[3])
+	return ps.LeaseCell(l[0], l[1], l[2], l[3])
 }
 
 // renewLease sends the last lease again every leaseRenew until the stream
@@ -222,7 +358,7 @@ func (s *Stream) renewLease() {
 			s.leaseMu.Lock()
 			err := s.sendLease()
 			s.leaseMu.Unlock()
-			if err != nil {
+			if err != nil && s.c.host == "" {
 				return
 			}
 		}
@@ -246,7 +382,11 @@ func (s *Stream) UseTheme(th *terminal.Theme) error {
 	for i, c := range th.Palette {
 		pal[i] = hex(c)
 	}
-	return s.ps.Viewer(session.ViewerReport{Bg: hex(th.Background), Fg: hex(th.Foreground), Palette: strings.Join(pal, ",")})
+	r := session.ViewerReport{Bg: hex(th.Background), Fg: hex(th.Foreground), Palette: strings.Join(pal, ",")}
+	s.leaseMu.Lock()
+	s.theme = &r
+	s.leaseMu.Unlock()
+	return s.pane().Viewer(r)
 }
 
 // Clear clears the pane's history, and its screen above the prompt with
@@ -262,7 +402,7 @@ func (s *Stream) Close() error {
 	s.once.Do(func() {
 		s.c.removeStream(s)
 		close(s.closed)
-		err = s.ps.Close()
+		err = s.pane().Close()
 	})
 	return err
 }
@@ -322,7 +462,7 @@ func (c *Client) applyView() {
 		}
 		if want != s.shown && !s.renew {
 			s.shown = want
-			_ = s.ps.Shown(want)
+			_ = s.pane().Shown(want)
 		}
 	}
 }

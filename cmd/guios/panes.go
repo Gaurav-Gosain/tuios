@@ -700,6 +700,7 @@ func (a *App) paneTerminal(c *ui.Context, pal *palette, s *proto.Session, p *pro
 			if a.find.pane == p.ID {
 				a.findBar(c, pal, p, e.term)
 			}
+			a.linkBadge(c, pal, p.ID, e)
 		case e == nil && a.hostOf(p.ID).remote() && a.hostOf(p.ID).conn != connReady:
 			// Shown as it was, until its host is back.
 			h := a.hostOf(p.ID)
@@ -726,6 +727,34 @@ func (a *App) paneTerminal(c *ui.Context, pal *palette, s *proto.Session, p *pro
 				c.After(260 * time.Millisecond)
 			}
 		}
+	})
+}
+
+// linkBadge marks a pane of another machine whose link is down: its last
+// frame stays, faded, with a badge that says the app reconnects. The new
+// frame paints over it in place once the link is back.
+func (a *App) linkBadge(c *ui.Context, pal *palette, id string, e *termEntry) {
+	h := a.hostOf(id)
+	if !h.remote() || e.stream == nil {
+		return
+	}
+	lost := e.stream.Lost()
+	if !lost && h.conn == connReady {
+		return
+	}
+	ui.Box(c.Key("lost-veil")).Absolute().Top(0).Left(0).Right(0).Bottom(0).PassThrough().Background(pal.veil)
+	label := locales.HostPaneReconnecting(h.name)
+	if !lost && h.conn == connFailed {
+		label = locales.HostPaneWaiting(h.name)
+	}
+	ui.Row(c.Key("lost")).Absolute().Top(8).Right(12).Height(28).Padding(0, 10, 0, 8).Gap(7).AlignItems(ui.Center).
+		Radius(14).Background(pal.popover).Border(1, pal.edgeHigh).Label(label).Children(func() {
+		if lost || h.conn == connConnecting {
+			ui.Spinner(c).Size(12, 12)
+		} else {
+			ui.Box(c).Size(7, 7).Radius(3.5).Background(a.hostDotColor(pal, h))
+		}
+		ui.Text(c, label).FontSize(12).TextColor(pal.textMuted).SingleLine()
 	})
 }
 

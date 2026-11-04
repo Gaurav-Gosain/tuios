@@ -348,9 +348,9 @@ func (a *App) commandItems() []paletteItem {
 	}
 	for _, h := range a.hosts[1:] {
 		cmds = append(cmds,
-			paletteItem{title: locales.NewSessionIn(h.name), detail: h.addr.String(), words: en.NewSessionIn(h.name), run: func() { a.newSessionOn(h, "") }},
-			paletteItem{title: locales.PickerTitle(h.name), detail: h.addr.String(), words: en.PickerTitle(h.name), run: func() { a.openProjectOn(h) }},
-			paletteItem{title: locales.HostReconnectTo(h.name), detail: h.addr.String(), words: en.HostReconnectTo(h.name), run: func() { a.reconnectHost(h) }})
+			paletteItem{title: locales.NewSessionIn(h.name), detail: h.addr(), words: en.NewSessionIn(h.name), run: func() { a.newSessionOn(h, "") }},
+			paletteItem{title: locales.PickerTitle(h.name), detail: h.addr(), words: en.PickerTitle(h.name), run: func() { a.openProjectOn(h) }},
+			paletteItem{title: locales.HostReconnectTo(h.name), detail: h.addr(), words: en.HostReconnectTo(h.name), run: func() { a.reconnectHost(h) }})
 	}
 	return cmds
 }

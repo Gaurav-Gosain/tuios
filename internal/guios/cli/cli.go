@@ -88,3 +88,9 @@ func run(args ...string) error {
 	}
 	return err
 }
+
+// Output runs the tuios binary with args and returns what it printed, its
+// error output with it.
+func Output(args ...string) ([]byte, error) {
+	return exec.Command(Tuios, args...).CombinedOutput()
+}

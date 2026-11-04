@@ -35,6 +35,15 @@ func hostColorName(h *host) string {
 	return settings.HostColors[f.Sum32()%uint32(len(settings.HostColors))]
 }
 
+// linkUp is the color of a machine's link dot while the link is up: the
+// green of the host colors.
+func (pal *palette) linkUp() ui.Color {
+	if pal.dark {
+		return hostColors["green"][1]
+	}
+	return hostColors["green"][0]
+}
+
 // hostColor is the color that marks a host's sessions: the text's for
 // this machine, which no other's is.
 func (pal *palette) hostColor(h *host) ui.Color {

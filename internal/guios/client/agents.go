@@ -73,7 +73,7 @@ func (c *Client) cockpit() (*cockpitConn, error) {
 	if ck.vc != nil {
 		return ck, nil
 	}
-	vc, err := session.DialVerbClientAs(Version)
+	vc, err := c.dial()
 	if err != nil {
 		return nil, err
 	}

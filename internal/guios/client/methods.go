@@ -165,7 +165,7 @@ func (c *Client) dispatch(method string, params any) (any, error) {
 		if id == "" {
 			id = defaultProject
 		}
-		return proto.Project{ID: id, Name: p.Name, Dir: p.Dir}, nil
+		return proto.Project{ID: c.projectID(id), Name: p.Name, Dir: p.Dir}, nil
 
 	case "restart":
 		return nil, errNotYet("restarting a pane")
@@ -211,11 +211,17 @@ func (c *Client) dispatch(method string, params any) (any, error) {
 		if err != nil {
 			return nil, err
 		}
+		if c.host != "" {
+			return c.remoteFSList(p)
+		}
 		return fsList(p)
 	case "fs.stat":
 		p, err := decode[proto.FSStatParams](params)
 		if err != nil {
 			return nil, err
+		}
+		if c.host != "" {
+			return c.remoteFSStat(p)
 		}
 		return fsStat(p), nil
 	case "fs.read":
@@ -223,7 +229,24 @@ func (c *Client) dispatch(method string, params any) (any, error) {
 		if err != nil {
 			return nil, err
 		}
+		if c.host != "" {
+			return c.remoteFSRead(p)
+		}
 		return fsRead(p)
+	case "fs.create", "fs.rename", "fs.delete", "fs.write", "paste.file":
+		if c.host != "" {
+			return nil, c.errRemoteWrite()
+		}
+		return c.localWrite(method, params)
+	case "git.changes", "git.file", "git.revert":
+		return c.gitDispatch(method, params)
+	}
+	return nil, fmt.Errorf("unknown method %q", method)
+}
+
+// localWrite serves the methods that write files on this machine.
+func (c *Client) localWrite(method string, params any) (any, error) {
+	switch method {
 	case "fs.create":
 		p, err := decode[proto.FSCreateParams](params)
 		if err != nil {
@@ -254,8 +277,16 @@ func (c *Client) dispatch(method string, params any) (any, error) {
 			return nil, err
 		}
 		return pasteFile(p)
+	}
+	return nil, fmt.Errorf("unknown method %q", method)
+}
 
+func (c *Client) gitDispatch(method string, params any) (any, error) {
+	switch method {
 	case "git.changes", "git.file", "git.revert":
+		if c.host != "" {
+			return nil, fmt.Errorf("changes of a pane on %s are not available yet", c.host)
+		}
 		return c.gitCall(method, params)
 	}
 	return nil, fmt.Errorf("unknown method %q", method)
@@ -281,7 +312,8 @@ func (c *Client) create(p proto.CreateParams) (proto.Session, error) {
 	if len(p.Command) > 0 {
 		params["command"] = p.Command
 	}
-	if env := paneEnv(); env != nil {
+	if env := paneEnv(); env != nil && c.host == "" {
+		// A linked machine refuses env from a link.
 		params["env"] = env
 	}
 	if p.Cols > 0 && p.Rows > 0 {
@@ -296,8 +328,8 @@ func (c *Client) create(p proto.CreateParams) (proto.Session, error) {
 		ID   string `json:"session_id"`
 	}
 	_ = json.Unmarshal(raw, &res)
-	if p.Project != "" && p.Project != defaultProject {
-		_, _ = c.verb("set-session-space", map[string]any{"session": res.Name, "space": p.Project})
+	if space := c.spaceOf(p.Project); space != "" && space != defaultProject {
+		_, _ = c.verb("set-session-space", map[string]any{"session": res.Name, "space": space})
 	}
 	return c.sessionNamed(res.Name, res.ID)
 }
@@ -323,7 +355,7 @@ func (c *Client) split(p proto.CreateParams) (proto.Session, error) {
 	if len(p.Command) > 0 {
 		params["command"] = p.Command
 	}
-	if env := paneEnv(); env != nil {
+	if env := paneEnv(); env != nil && c.host == "" {
 		params["env"] = env
 	}
 	dirn := p.Direction
