@@ -10183,3 +10183,23 @@ func ActionNewPane() string { return In(i18n.Locale()).ActionNewPane() }
 func (msgs Messages) ActionNewPane() string {
 	return Catalog.Format(msgs.locale, "actionNewPane", nil)
 }
+
+// LookKindHTML says "HTML page"
+// in the language the app shows.
+func LookKindHTML() string { return In(i18n.Locale()).LookKindHTML() }
+
+// LookKindHTML says "HTML page"
+// in the language of msgs.
+func (msgs Messages) LookKindHTML() string {
+	return Catalog.Format(msgs.locale, "lookKindHTML", nil)
+}
+
+// LookViewPage says "Page"
+// in the language the app shows.
+func LookViewPage() string { return In(i18n.Locale()).LookViewPage() }
+
+// LookViewPage says "Page"
+// in the language of msgs.
+func (msgs Messages) LookViewPage() string {
+	return Catalog.Format(msgs.locale, "lookViewPage", nil)
+}

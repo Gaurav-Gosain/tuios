@@ -173,6 +173,148 @@ func (d *popplerDoc) Words(ctx context.Context, i int) (string, error) {
 	return strings.ToValidUTF8(string(out), ""), nil
 }
 
+// isPNM reports whether b starts as a Netpbm picture: P1 to P6.
+func isPNM(b []byte) bool {
+	return len(b) > 3 && b[0] == 'P' && b[1] >= '1' && b[1] <= '6' && (b[2] == ' ' || b[2] == '\n' || b[2] == '\r' || b[2] == '\t' || b[2] == '#')
+}
+
+// decodePNM reads any Netpbm picture: bitmaps, gray and colour, plain or
+// binary, of 8 or 16 bits.
+func decodePNM(b []byte) (*image.RGBA, error) {
+	kind := b[1]
+	pos := 2
+	field := func() (int, bool) {
+		for pos < len(b) {
+			c := b[pos]
+			if c == '#' {
+				for pos < len(b) && b[pos] != '\n' {
+					pos++
+				}
+				continue
+			}
+			if c == ' ' || c == '\t' || c == '\n' || c == '\r' {
+				pos++
+				continue
+			}
+			break
+		}
+		start := pos
+		for pos < len(b) && b[pos] >= '0' && b[pos] <= '9' {
+			pos++
+		}
+		if start == pos {
+			return 0, false
+		}
+		n, err := strconv.Atoi(string(b[start:pos]))
+		return n, err == nil && n >= 0
+	}
+	w, ok1 := field()
+	h, ok2 := field()
+	if !ok1 || !ok2 || w <= 0 || h <= 0 || w*h > 100_000_000 {
+		return nil, errors.New("bad PNM")
+	}
+	maxval := 1
+	if kind != '1' && kind != '4' {
+		var ok bool
+		if maxval, ok = field(); !ok || maxval <= 0 || maxval > 65535 {
+			return nil, errors.New("bad PNM")
+		}
+	}
+	chans := 1
+	if kind == '3' || kind == '6' {
+		chans = 3
+	}
+	img := image.NewRGBA(image.Rect(0, 0, w, h))
+	scale := func(v int) byte {
+		if kind == '1' || kind == '4' {
+			if v != 0 {
+				return 0
+			}
+			return 255
+		}
+		return byte(v * 255 / maxval)
+	}
+	set := func(i int, vals [3]byte) {
+		p := img.Pix[i*4:]
+		p[0], p[1], p[2], p[3] = vals[0], vals[1], vals[2], 255
+	}
+	switch kind {
+	case '1':
+		// A plain bitmap's digits need no space between them.
+		for i := 0; i < w*h; i++ {
+			for pos < len(b) && b[pos] != '0' && b[pos] != '1' {
+				if b[pos] == '#' {
+					for pos < len(b) && b[pos] != '\n' {
+						pos++
+					}
+					continue
+				}
+				pos++
+			}
+			if pos >= len(b) {
+				return nil, errors.New("short PNM")
+			}
+			g := scale(int(b[pos] - '0'))
+			pos++
+			set(i, [3]byte{g, g, g})
+		}
+	case '2', '3':
+		for i := 0; i < w*h; i++ {
+			var v [3]byte
+			for c := 0; c < chans; c++ {
+				n, ok := field()
+				if !ok {
+					return nil, errors.New("short PNM")
+				}
+				v[c] = scale(min(n, maxval))
+			}
+			if chans == 1 {
+				v[1], v[2] = v[0], v[0]
+			}
+			set(i, v)
+		}
+	case '4':
+		pos++
+		stride := (w + 7) / 8
+		if len(b)-pos < stride*h {
+			return nil, errors.New("short PNM")
+		}
+		for y := 0; y < h; y++ {
+			for x := 0; x < w; x++ {
+				bit := b[pos+y*stride+x/8] >> (7 - x%8) & 1
+				g := scale(int(bit))
+				set(y*w+x, [3]byte{g, g, g})
+			}
+		}
+	default: // 5, 6
+		pos++
+		size := 1
+		if maxval > 255 {
+			size = 2
+		}
+		if len(b)-pos < w*h*chans*size {
+			return nil, errors.New("short PNM")
+		}
+		src := b[pos:]
+		for i := 0; i < w*h; i++ {
+			var v [3]byte
+			for c := 0; c < chans; c++ {
+				k := (i*chans + c) * size
+				n := int(src[k])
+				if size == 2 {
+					n = n<<8 | int(src[k+1])
+				}
+				v[c] = scale(min(n, maxval))
+			}
+			if chans == 1 {
+				v[1], v[2] = v[0], v[0]
+			}
+			set(i, v)
+		}
+	}
+	return img, nil
+}
+
 // decodePPM reads a binary PPM (P6, maxval 255) into an RGBA picture.
 func decodePPM(b []byte) (*image.RGBA, error) {
 	var fields [4]int

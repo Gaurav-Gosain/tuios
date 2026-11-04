@@ -30,11 +30,18 @@ func FuzzTags(f *testing.F) {
 func FuzzImageHeaders(f *testing.F) {
 	f.Add([]byte("P6\n2 1\n255\n\x00\x00\x00\xff\xff\xff"))
 	f.Add([]byte("P6 # comment\n1 1 255 \x01\x02\x03"))
+	f.Add([]byte("P1\n3 2\n010\n1 0 1"))
+	f.Add([]byte("P3\n1 1\n65535\n65535 0 300"))
+	f.Add([]byte("P5\n2 1\n65535\n\x01\x02\x03\x04"))
+	f.Add([]byte("P4\n9 1\n\xff\x80"))
 	f.Add([]byte("\xff\xd8\xff\xe1\x00\x16Exif\x00\x00II*\x00\x08\x00\x00\x00\x01\x00\x12\x01"))
 	f.Add([]byte("....ftypheic\x00\x00ispe\x00\x00\x00\x00\x00\x00\x04\x00\x00\x00\x03\x00"))
 	f.Fuzz(func(t *testing.T, b []byte) {
 		if img, err := decodePPM(b); err == nil && img.Bounds().Empty() {
 			t.Fatal("decodePPM returned an empty picture without an error")
+		}
+		if isPNM(b) {
+			_, _ = decodePNM(b)
 		}
 		if o := exifOrientation(b); o < 1 || o > 8 {
 			t.Fatalf("exifOrientation = %d", o)

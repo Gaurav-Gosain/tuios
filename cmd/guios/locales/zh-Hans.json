@@ -1004,5 +1004,7 @@
   "menuLayoutScrolling": "滚动",
   "menuLayoutFloating": "浮动",
   "layoutSnapNeedsFloating": "请关闭平铺后再吸附窗格。",
-  "actionNewPane": "新建窗格"
+  "actionNewPane": "新建窗格",
+  "lookKindHTML": "HTML 页面",
+  "lookViewPage": "页面"
 }

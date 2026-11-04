@@ -187,10 +187,16 @@ func (a *App) filmView(c *ui.Context, pal *palette, l *fileLook) {
 			a.filmSeek(l, fm.want+int64(d/10*float32(f.DurationMs)/100))
 			return true
 		})
+		if bm := fm.frame; bm != nil {
+			// Fitted whole in the stage, letterboxed, by hand: an Image
+			// child kept its own size and the stage cut it to its middle.
+			stage.Draw(func(p *ui.Painter, r ui.Rect) {
+				p.Clip(r, 0, func() { p.Image(bm, r, ui.Contain) })
+			})
+		}
 		stage.Children(func() {
 			switch {
 			case fm.frame != nil:
-				ui.Image(c, fm.frame).Fill().Fit(ui.Contain)
 			case fm.failed != "":
 				ui.Text(c, fm.failed).FontSize(13).TextColor(ui.RGBA(255, 255, 255, 0.7)).Absolute().Left(0).Right(0).Top(0).Bottom(0).TextAlign(ui.Center)
 			}

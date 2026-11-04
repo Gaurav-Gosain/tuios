@@ -52,9 +52,14 @@ func (a *App) startMD(l *fileLook) {
 	}
 	m := &lookMD{}
 	l.md = m
-	ctx, p := l.ctx, l.path
+	ctx, p, html := l.ctx, l.path, l.kind == preview.HTML
 	go func() {
 		data, err := readCapped(p, mdMax)
+		// A page is laid out as Markdown on this goroutine.
+		var htmlSrc string
+		if html && err == nil {
+			htmlSrc = preview.HTMLToMarkdown(strings.ToValidUTF8(string(data), "\uFFFD"))
+		}
 		a.update(func() {
 			if ctx.Err() != nil {
 				return
@@ -64,6 +69,9 @@ func (a *App) startMD(l *fileLook) {
 				return
 			}
 			m.src = strings.ToValidUTF8(string(data), "\uFFFD")
+			if html {
+				m.src = htmlSrc
+			}
 			l.mark("read")
 		})
 	}()

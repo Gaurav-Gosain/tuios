@@ -1004,5 +1004,7 @@
   "menuLayoutScrolling": "スクロール",
   "menuLayoutFloating": "フローティング",
   "layoutSnapNeedsFloating": "ペインをスナップするには、タイル表示をオフにしてください。",
-  "actionNewPane": "新しいペイン"
+  "actionNewPane": "新しいペイン",
+  "lookKindHTML": "HTML ページ",
+  "lookViewPage": "ページ"
 }

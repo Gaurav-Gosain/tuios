@@ -81,6 +81,14 @@ func DecodeImage(ctx context.Context, path string, maxPx int) (*Picture, error) 
 	if ctx.Err() != nil {
 		return nil, ctx.Err()
 	}
+	if isPNM(data) {
+		img, err := decodePNM(data)
+		if err != nil {
+			return nil, ErrUnreadable
+		}
+		b := img.Bounds()
+		return &Picture{Img: Fit(img, maxPx), W: b.Dx(), H: b.Dy(), Format: "pnm"}, nil
+	}
 	cfg, format, err := image.DecodeConfig(bytes.NewReader(data))
 	if err != nil {
 		// HEIC, AVIF, JPEG XL and icons: a tool reads them, where one is.

@@ -94,7 +94,7 @@ func (l *fileLook) views() []lookView {
 	switch l.kind {
 	case preview.Text:
 		return []lookView{viewText, viewDetails}
-	case preview.Markdown, preview.SVG, preview.JSON, preview.Table:
+	case preview.Markdown, preview.HTML, preview.SVG, preview.JSON, preview.Table:
 		if l.size <= editMax {
 			return []lookView{viewOwn, viewText, viewDetails}
 		}
@@ -125,6 +125,8 @@ func (l *fileLook) viewName(v lookView) string {
 		return locales.LookViewDetails()
 	}
 	switch l.kind {
+	case preview.HTML:
+		return locales.LookViewPage()
 	case preview.SVG:
 		return locales.LookViewDrawing()
 	case preview.JSON:
@@ -228,7 +230,7 @@ func (a *App) startLook(l *fileLook) {
 		a.startArchive(l)
 	case preview.Font:
 		a.startFont(l)
-	case preview.Markdown:
+	case preview.Markdown, preview.HTML:
 		a.startMD(l)
 	}
 }
@@ -341,7 +343,7 @@ func (a *App) lookBody(c *ui.Context, pal *palette, fv *fileView) {
 		a.archiveView(c, pal, l)
 	case preview.Font:
 		a.fontView(c, pal, l)
-	case preview.Markdown:
+	case preview.Markdown, preview.HTML:
 		a.mdView(c, pal, l)
 	default:
 		a.hexView(c, pal, l)
@@ -449,6 +451,8 @@ func kindName(k preview.Kind) string {
 		return locales.LookKindText()
 	case preview.Markdown:
 		return locales.LookKindMarkdown()
+	case preview.HTML:
+		return locales.LookKindHTML()
 	case preview.Image:
 		return locales.LookKindImage()
 	case preview.Animation:

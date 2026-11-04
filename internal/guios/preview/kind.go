@@ -44,6 +44,9 @@ const (
 	Text
 	// Markdown is a document drawn as Markdown, with its source a view away.
 	Markdown
+	// HTML is a web page drawn as its text and pictures, no engine running
+	// it, with its source a view away.
+	HTML
 	// Image is a picture: PNG, JPEG, WebP, BMP, TIFF, HEIC and the rest.
 	Image
 	// Animation is a picture with frames: a GIF of more than one.
@@ -75,6 +78,8 @@ func (k Kind) String() string {
 		return "Text"
 	case Markdown:
 		return "Markdown"
+	case HTML:
+		return "HTML page"
 	case Image:
 		return "Image"
 	case Animation:
@@ -106,6 +111,8 @@ var byExt = map[string]Kind{
 	".png": Image, ".jpg": Image, ".jpeg": Image, ".webp": Image, ".bmp": Image, ".tif": Image, ".tiff": Image,
 	".heic": Image, ".heif": Image, ".avif": Image, ".ico": Image, ".jxl": Image,
 	".gif": Animation,
+	".ppm": Image, ".pgm": Image, ".pnm": Image, ".pbm": Image,
+	".html": HTML, ".htm": HTML, ".xhtml": HTML,
 	".svg": SVG,
 	".pdf": PDF,
 	".mp4": Video, ".m4v": Video, ".mov": Video, ".mkv": Video, ".webm": Video, ".avi": Video,
