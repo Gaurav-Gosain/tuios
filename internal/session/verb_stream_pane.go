@@ -33,6 +33,9 @@ import (
 //	    The stream goes on.
 //	'X' exit:     UTF-8 reason. The pane is gone, or the caller may no
 //	    longer read it, and the daemon closes the connection.
+//	'H' history:  u64 id of the first history row of the S frame that
+//	    follows, for pane-history (verb_pane_history.go). Not sent for a pane
+//	    whose emulator gives no ids.
 //
 // From the client:
 //
@@ -124,6 +127,10 @@ type paneStream struct {
 	cols   int
 	rows   int
 	snap   *TerminalState // the snapshot to send first, nil in resume mode
+	// snapFirst is the id of the first history row snap carries, and
+	// snapIDs says the pane's emulator gives ids (verb_pane_history.go).
+	snapFirst int64
+	snapIDs   bool
 	// fit makes the stream's lease a viewer's, and viewer says the stream
 	// reported its terminal. See pane_lease.go and pane_viewers.go.
 	fit   bool
@@ -333,7 +340,7 @@ func (ps *paneStream) snapshotSubscribe() *verbError {
 		return newVerbError(ErrVerbBusy, "the daemon has no memory free for a snapshot of the pane now. Nothing was sent. Try again in a few seconds")
 	}
 	for attempt := 0; ; attempt++ {
-		st := ps.pty.GetTerminalState(paneStreamScrollback, 0)
+		st, first, ids := ps.pty.GetTerminalStateIDs(paneStreamScrollback)
 		if st == nil {
 			release()
 			return newVerbError(ErrVerbInternal, "the pane has no terminal to stream")
@@ -346,6 +353,7 @@ func (ps *paneStream) snapshotSubscribe() *verbError {
 		if ok && sub != nil {
 			ps.setSub(sub)
 			ps.snap, ps.snapRelease = st, release
+			ps.snapFirst, ps.snapIDs = first, ids
 			ps.pos = st.Seq
 			ps.cols, ps.rows = st.Width, st.Height
 			return nil
@@ -581,6 +589,11 @@ func (ps *paneStream) recoverGap() error {
 func (ps *paneStream) writeSnap() error {
 	st := ps.snap
 	defer ps.dropSnap()
+	if ps.snapIDs {
+		if err := ps.writeHistoryID(); err != nil {
+			return err
+		}
+	}
 	body := SnapshotVT(st)
 	payload := make([]byte, 12, 12+len(body))
 	binary.BigEndian.PutUint64(payload[0:8], uint64(st.Seq))

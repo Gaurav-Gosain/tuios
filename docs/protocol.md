@@ -3332,6 +3332,7 @@ Frames from the daemon:
 
 | Type | Payload | Meaning |
 | --- | --- | --- |
+| `H` (0x48) | u64 id | The id of the first history row that the next `S` frame carries. Use it with `pane-history` to read the rows above. The daemon does not send it when the pane's emulator gives no row ids. |
 | `S` (0x53) | u64 seq, u16 cols, u16 rows, bytes | A snapshot. Reset the emulator to cols by rows and write the bytes into it. |
 | `O` (0x4F) | u64 seq, bytes | Output. Write the bytes into the emulator. `seq` is the stream position after the last byte. |
 | `R` (0x52) | u64 seq, u16 cols, u16 rows | The pane changed size at `seq`. Resize the emulator. |
@@ -3467,6 +3468,37 @@ the buffers of the proxy, ssh and TCP, and does not fail until they are full.
 The stream itself ends when the connection closes, or when a write to the
 client blocks for 10 seconds. Until then, the stream holds only its place in
 the pane output. It never holds back the pane.
+
+### pane-history
+
+`pane-history` reads the history rows of a pane above the rows the caller
+holds. A viewer that streams a pane gets 500 rows of history with the
+snapshot. When the person scrolls to the top of those rows, the viewer asks
+for the rows before them.
+
+Each history row has an id. The id stays the same while output adds rows
+below and the history drops rows above. A resize or a clear of the history
+changes which row an id names. The `H` frame of `stream-pane` gives the id of
+the first history row of the snapshot.
+
+```json
+{"id": 1, "verb": "pane-history", "params": {"session": "work", "window": "build", "before": 10500, "count": 500}}
+```
+
+| Param | Type | Meaning |
+| --- | --- | --- |
+| `before` | int | The id of the oldest history row the caller holds. Required. |
+| `count` | int | How many rows to return at most, 1 to 2000. The default is 500. |
+
+The reply holds `rows`, the rows oldest first as bytes that print them, each
+row ended by CR LF. A row that the next row continues runs to its last column
+without CR LF. `first` is the id of the first row returned: ask before it for
+the rows above. `count` is how many rows the reply holds, 0 when the caller
+holds the oldest row already. `oldest` is the id of the oldest row of the
+pane.
+
+A pane whose emulator gives no row ids, such as the libghostty-vt emulator,
+gets no `H` frame. `pane-history` refuses it with `no_row_ids`.
 
 ### attach-presence
 

@@ -1686,7 +1686,7 @@ func buildVerbRegistry() map[string]verbEntry {
 			handler: (*Daemon).verbRun,
 		},
 		"stream-pane": {
-			description: "Stream one pane as bytes, for a client that is not tuios. The reply is one JSON line, and after it the connection carries binary frames both ways: a type byte, a 4-byte big-endian length, then the payload. From the daemon: S snapshot (u64 seq, u16 cols, u16 rows, then bytes that paint the pane on a fresh emulator of that size), O output (u64 seq after the frame's last byte, then the pane's bytes), R resize (u64 seq, u16 cols, u16 rows), E error (JSON code and message, for a refused frame or a lease that was not renewed; the stream goes on), X exit (the reason: exited N when the pane's program exited with status N, killed N when signal N ended it, closed when its window closed first, or refused: … when the caller may no longer read it; the connection then closes). From the client: I input (at most 64 KiB of bytes typed into the pane, checked as send-text is), L lease (u16 cols, u16 rows, 0 0 to release, then optionally u16 cell width and u16 cell height in pixels; send it again every 10 seconds, or the lease ends after 30), V viewer (the viewer object as JSON; it replaces the stream's report), F shown (one byte: 0 hidden, 1 on screen, 2 on screen and focused in a focused window; at 2 the stream counts as a focused client that shows the pane, and each F 2 marks the pane's finished turn seen). Skip a frame type you do not know: read its length and drop that many bytes. At most 4 I frames wait for a pane that does not read, and the next gets E busy. The stream never changes the pane's size or the session's. A lease holds the pane at most at its size while the stream is open, and the pane goes back to the size its clients asked for when the lease ends.",
+			description: "Stream one pane as bytes, for a client that is not tuios. The reply is one JSON line, and after it the connection carries binary frames both ways: a type byte, a 4-byte big-endian length, then the payload. From the daemon: S snapshot (u64 seq, u16 cols, u16 rows, then bytes that paint the pane on a fresh emulator of that size), O output (u64 seq after the frame's last byte, then the pane's bytes), R resize (u64 seq, u16 cols, u16 rows), E error (JSON code and message, for a refused frame or a lease that was not renewed; the stream goes on), H history (u64, the id of the first history row the next S frame carries, for pane-history; not sent when the pane's emulator gives no ids), X exit (the reason: exited N when the pane's program exited with status N, killed N when signal N ended it, closed when its window closed first, or refused: … when the caller may no longer read it; the connection then closes). From the client: I input (at most 64 KiB of bytes typed into the pane, checked as send-text is), L lease (u16 cols, u16 rows, 0 0 to release, then optionally u16 cell width and u16 cell height in pixels; send it again every 10 seconds, or the lease ends after 30), V viewer (the viewer object as JSON; it replaces the stream's report), F shown (one byte: 0 hidden, 1 on screen, 2 on screen and focused in a focused window; at 2 the stream counts as a focused client that shows the pane, and each F 2 marks the pane's finished turn seen). Skip a frame type you do not know: read its length and drop that many bytes. At most 4 I frames wait for a pane that does not read, and the next gets E busy. The stream never changes the pane's size or the session's. A lease holds the pane at most at its size while the stream is open, and the pane goes back to the size its clients asked for when the lease ends.",
 			params: []verbParam{
 				sessionParam,
 				{Name: "window", Type: "string", Description: "The pane to stream: a window id or name."},
@@ -1717,6 +1717,23 @@ func buildVerbRegistry() map[string]verbEntry {
 				`{"id":1,"verb":"stream-pane","params":{"session":"work","window":"build","from_seq":48211,"boot_id":"<from the last reply>","lease_cols":45,"lease_rows":20}}`,
 			},
 			handler: (*Daemon).verbStreamPane,
+		},
+		"pane-history": {
+			description: "Read a pane's history rows above those the caller holds, by row id, as bytes that print them. A history row's id stays the same while output adds rows below and the history lets go of rows above, until the pane is resized or its history cleared. stream-pane sends an H frame (u64, the id of the first history row the snapshot carries) before each S frame. A viewer that scrolls to the top of what it holds asks for the rows before that id, then before the first id of the reply. A pane whose emulator gives no ids gets no H frame, and pane-history refuses it with no_row_ids.",
+			params: []verbParam{
+				sessionParam,
+				windowParam,
+				{Name: "before", Type: "int", Description: "The id of the oldest history row the caller holds. The reply ends with the row before it."},
+				{Name: "count", Type: "int", Description: "How many rows to return at most, 1 to 2000.", Default: "500"},
+			},
+			returns: []verbParam{
+				{Name: "rows", Type: "string", Description: "The rows, oldest first: each row's text with its styles and links as escape sequences, then CR LF. A row the next one continues runs to its last column without CR LF."},
+				{Name: "first", Type: "int", Description: "The id of the first row returned. Ask before it for the rows above."},
+				{Name: "count", Type: "int", Description: "How many rows the reply holds. 0 when the caller holds the oldest row already."},
+				{Name: "oldest", Type: "int", Description: "The id of the oldest row the pane holds."},
+			},
+			examples: []string{`{"id":1,"verb":"pane-history","params":{"session":"work","window":"build","before":10500,"count":500}}`},
+			handler:  (*Daemon).verbPaneHistory,
 		},
 		"attach-presence": {
 			description: "Hold the person's nonce on this connection without a screen. The reply carries human_nonce, which respond, reply-approval, answer-ask and dismiss-attention take as the person's, by the same rules as an attach nonce: only from outside every pane, over a link only on a stream the hub vouched for, and only from the process that holds it. The presence does not attach: it does not change the session size, focus or view a pane, or receive broadcasts. The connection serves other verbs as before, and the presence ends when it closes.",

@@ -147,6 +147,7 @@ var verbScopes = map[string]scopeKind{
 	"layout-tree":     scopeRead,
 	"capture-pane":    scopeRead,
 	"stream-pane":     scopeRead,
+	"pane-history":    scopeRead,
 	// A restricted connection is automation, never the person.
 	"attach-presence": scopeDeny,
 	// The phones for Web Push are the person's, like attach-presence.
