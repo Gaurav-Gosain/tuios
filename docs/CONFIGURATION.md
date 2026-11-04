@@ -2190,6 +2190,45 @@ Empty is the default. While it is empty, `TUIOS_WORKTREE_DIR` in the daemon's
 environment still moves the default folder (see
 [CLI_REFERENCE.md](CLI_REFERENCE.md#tuios_worktree_dir)).
 
+## Setup before the agent
+
+`[worktree] setup` is a shell command that runs in every new worktree before
+its agent or shell starts. Use it to install dependencies:
+
+```toml
+[worktree]
+setup = "pnpm i"
+setup_async = false
+```
+
+| Key | What it does | Default |
+|---|---|---|
+| `setup` | The command. It runs with `sh -c` in the worktree, in a window named `setup`, with no grants. Empty runs nothing. | `""` |
+| `setup_async` | Start the agent at once, while the setup runs. | `false` |
+
+The new session shows a card at the top right with three stages: the
+checkout, the setup with its last four lines, and the agent. The rail row
+shows `setup` while it runs and `setup failed` after a failure. A key hides
+the card of a finished setup.
+
+Without `setup_async`, the agent starts when the setup passes. When the setup
+fails, tuios removes the new worktree and the branch it made. It keeps a
+worktree with an uncommitted change or a nested repository, and a branch with
+a commit or a branch that was there before. The note on the card says what it
+kept. The agent does not start. The session stays, and the setup window stays
+open on its output until you press Enter.
+
+With `setup_async = true`, a failed setup keeps the worktree and the branch,
+because the agent may already have work in them.
+
+`tuios worktree new --setup` and `tuios fan --setup` set the command for one
+call, and `--setup-async` the mode. `--setup ''` runs no setup.
+
+The daemon reads both keys when it starts. A change in the file applies at once
+when it clears the command or keeps it. A new command waits for
+`tuios config apply` in a terminal outside tuios, or a daemon restart. A
+process in a pane can write the file, and the daemon runs the command.
+
 ## Where a review opens
 
 The review overlay (`ctrl+b v`) opens with the keys on the diff. `tab` moves

@@ -3143,6 +3143,8 @@ func (m *OS) sidebarSessionRow(node sessiontree.Node, sessionIdx, variant, cw in
 	}
 	if node.Worktree != nil && node.Worktree.Gone && variant == sidebarVariantFull {
 		figures[1] = sidebarWorktreeGoneTag
+	} else if tag := sidebarSetupTag(node.Worktree); tag != "" && variant == sidebarVariantFull {
+		figures[1] = tag
 	}
 	if m.Settings.SidebarShowCounts && showCounts && node.WindowCount > 0 && variant == sidebarVariantFull {
 		figures[2] = strconv.Itoa(node.WindowCount)

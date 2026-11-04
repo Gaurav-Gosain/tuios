@@ -148,6 +148,10 @@ func (d *Daemon) applyUserConfig(cfg *config.UserConfig, byPerson bool) {
 	// Where a new worktree goes widens nothing a pane may do: a pane that can
 	// write the file can already run git worktree add itself.
 	d.SetWorktreePath(cfg.Worktree.Path)
+	// The setup runs a command as the daemon's child, like a hook, so a file
+	// change applies only when it clears the command or keeps it. A new
+	// command waits for the person.
+	d.setups.waiting.Store(!d.setups.applyConfig(cfg.Worktree.Setup, cfg.Worktree.SetupAsync, byPerson))
 	if d.buffers != nil {
 		d.buffers.SetLimits(cfg.PasteBuffers.Resolved())
 	}
@@ -227,7 +231,7 @@ func (d *Daemon) noteConfigWaiting() {
 // configWaiting reports whether config.toml holds a change that widens what
 // panes or links may do and waits for tuios config apply or a restart.
 func (d *Daemon) configWaiting() bool {
-	return d.manager.grants.restartNeeded.Load() || d.hostsWaiting.Load() || d.notify.waitingApply() || d.pluginsWaiting.Load() || d.approvalsWaiting.Load()
+	return d.manager.grants.restartNeeded.Load() || d.hostsWaiting.Load() || d.notify.waitingApply() || d.pluginsWaiting.Load() || d.approvalsWaiting.Load() || d.setups.waiting.Load()
 }
 
 // reloadHosts applies a changed host table only where it dials less: a host

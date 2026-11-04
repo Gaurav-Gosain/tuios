@@ -400,6 +400,11 @@ func (m *OS) GetCanvas(render bool) *frameCanvas {
 		if pipLayer := m.renderPiP(); pipLayer != nil {
 			layers = append(layers, pipLayer)
 		}
+		// The worktree setup card, at the top right. See
+		// worktree_setup_card.go.
+		if card := m.renderSetupCard(); card != nil {
+			layers = append(layers, card)
+		}
 		overlays := m.renderOverlays()
 		layers = append(layers, overlays...)
 
@@ -932,6 +937,11 @@ func (m *OS) fullscreenFastWindow() (*terminal.Window, bool) {
 	// background is painted. With one painted, the box's cells would need the
 	// same paint pass the pane gets, so the compositor draws the frame.
 	if m.pipWanted() && m.fastPathPaints() {
+		return nil, false
+	}
+	// The worktree setup card is a layer only the compositor draws. It is up
+	// while a setup runs and briefly after, so the fast path steps aside then.
+	if m.setupCardRecord() != nil {
 		return nil, false
 	}
 	// The sidebar is a reserved-region layer the fast path does not compose. When

@@ -54,6 +54,9 @@ type WorktreeRef struct {
 	Pick        string
 	VerdictAt   int64
 	JudgeWindow string
+	// Setup is the state of the worktree's setup: pending, running, passed
+	// or failed. Empty when it ran none.
+	Setup string
 }
 
 // GroupByRepo returns the session list with every worktree session gathered

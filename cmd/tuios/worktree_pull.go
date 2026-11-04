@@ -205,7 +205,9 @@ func runWorktreePull(target, repo, branch, name string, detach, jsonOutput bool)
 	if err != nil {
 		return err
 	}
-	params := map[string]any{"repo": root, "branch": localBranch}
+	// The setup runs async here: the work is applied after the call, and a
+	// sync setup that failed first would take the worktree from under it.
+	params := map[string]any{"repo": root, "branch": localBranch, "setup_async": true}
 	if name != "" {
 		params["name"] = name
 	}

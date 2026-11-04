@@ -13607,3 +13607,23 @@ fails at its first send-keys when `childApprovalRefusal` refuses nothing.
 The records are `child-route.log`, the frames `child-question-held` and
 `child-question-released`, and `children-wake.txt` in each test's artifact
 folder.
+## Worktree setup holds, releases and undoes
+
+`TestWorktreeSetupSyncFailureRemoves` makes worktrees whose sync setup fails.
+The worktree and the branch the call made must go. A branch that was there
+before, and a worktree with a change in it, must stay. The agent must never
+start. `TestWorktreeSetupAsync` runs an async setup that waits on a gate file.
+The agent must start while the setup still runs. A failed async setup must
+keep the worktree and the branch.
+
+Run on 2026-11-04 on Linux. The tests pass on the branch head. Each control is
+the branch head with one change, built with `go build -overlay`:
+
+| Control | Test | Where it fails | Verdict |
+|---|---|---|---|
+| `undoFailedSetup` returns before it removes anything | `TestWorktreeSetupSyncFailureRemoves` | "the failed sync setup's record is ... want removed, branch_removed and agent not_started", "the worktree folder is still there after the sync setup failed", "the branch feat/broken is still there after the sync setup failed" | **caught** |
+| `createWorktreeSession` does not start the agent of an async setup at once | `TestWorktreeSetupAsync` | "the agent did not start while the async setup ran" | **caught** |
+
+The frames are `setup-running`, `setup-passed` and `setup-failed` under
+`TUIOS_E2E_FRAMES`, in the test's folder. Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestWorktreeSetup' -v .`.

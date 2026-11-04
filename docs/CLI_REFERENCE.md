@@ -893,7 +893,7 @@ with a warning.
 
 **Usage:**
 ```bash
-tuios worktree new <branch> [--repo <dir>] [--base <ref>] [--name <session>] [--agent <cli>] [--host <host> [--clone]] [--detach]
+tuios worktree new <branch> [--repo <dir>] [--base <ref>] [--name <session>] [--agent <cli>] [--setup <command> [--setup-async]] [--host <host> [--clone]] [--detach]
 tuios worktree ls [--repo <name>] [--group <stem>] [--host <host>] [--json]
 tuios worktree rm [<host>:]<session> [--stash | --force] [--keep-session]
 tuios worktree diff <session> [--stat]
@@ -904,6 +904,7 @@ tuios worktree pull <host>:<session> [--repo <dir>] [--branch <name>] [--name <s
 ```bash
 tuios worktree new feat/retry                          # A new branch from HEAD, attached
 tuios worktree new feat/retry --agent claude --detach  # Headless, running Claude Code
+tuios worktree new feat/retry --agent claude --setup 'pnpm i'  # Install, then start Claude Code
 tuios worktree ls                                      # Repo, branch, agent state, changes, merged
 tuios worktree rm api-feat-retry --stash               # Keep the changes in git stash
 ```
@@ -917,6 +918,15 @@ An `after-new-worktree` hook runs in the new worktree before its first window
 starts, for example to copy `.env` from the main checkout. See
 [HOOKS.md](HOOKS.md). When the hook fails, `worktree new` prints a warning
 and keeps the worktree and the session.
+
+`--setup` runs a shell command in the new worktree, in a window named `setup`,
+before the agent or shell starts. `[worktree] setup` sets one for every
+worktree (see [Setup before the agent](CONFIGURATION.md#setup-before-the-agent)).
+The agent starts when the setup passes. When the setup fails, tuios removes the
+new worktree and the branch it made, if they hold no change and no commit. The
+session stays with the setup window open. `--setup-async` starts the agent at
+once, and a failed setup then keeps the worktree and the branch. The SETUP
+column of `worktree ls` shows the state, and the exit status of a failure.
 
 `worktree rm` refuses a worktree with uncommitted changes and removes nothing.
 `--stash` keeps the changes in git stash as `tuios: <branch>`. `--force`
@@ -975,7 +985,7 @@ Fan a prompt out across several agents, each in its own worktree.
 
 **Usage:**
 ```bash
-tuios fan <count> --agent <agent>[,<agent>...] [--env NAME[=VALUE]]... [--repo <dir>] [--base <ref>] [--name <stem>] [--host <host> [--clone]] [--wait] <prompt>
+tuios fan <count> --agent <agent>[,<agent>...] [--env NAME[=VALUE]]... [--repo <dir>] [--base <ref>] [--name <stem>] [--setup <command> [--setup-async]] [--host <host> [--clone]] [--wait] <prompt>
 tuios fan [<count>] --agent <agent>[,<agent>...] --prompt <prompt> --prompt <prompt>... [flags]
 tuios fan keep [<host>:]<session> [--stash | --force] [--merge [--squash | --ff-only] [--into <branch>]]
 tuios fan compare [[<host>:]<session>] [--no-changes] [--json]

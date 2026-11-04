@@ -753,8 +753,8 @@ func buildVerbRegistry() map[string]verbEntry {
 				{Name: "base", Type: "string", Description: "Ref a new branch starts from. Omit for HEAD of the main checkout."},
 				{Name: "name", Type: "string", Description: "Name for the session. Omit for <repo>-<branch>, with every slash in the branch turned into a hyphen."},
 				{Name: "command", Type: "[]string", Description: "Argv to exec as the first window's process instead of a shell. No shell parses it, so nothing needs quoting."},
-			}, repoSourceParams...),
-			returns: []verbParam{
+			}, slices.Concat(setupParams, repoSourceParams)...),
+			returns: append([]verbParam{
 				{Name: "session", Type: "string", Description: "Name of the new session."},
 				{Name: "session_id", Type: "string", Description: "Id of the new session."},
 				{Name: "repo", Type: "string", Description: "The repository's name: the base name of its main checkout."},
@@ -762,13 +762,14 @@ func buildVerbRegistry() map[string]verbEntry {
 				{Name: "branch", Type: "string", Description: "The branch the worktree has checked out."},
 				{Name: "created_branch", Type: "bool", Description: "True when the branch was created by this call."},
 				{Name: "path", Type: "string", Description: "The worktree's directory."},
-				{Name: "window_id", Type: "string", Description: "Id of the first window."},
-				{Name: "pty_id", Type: "string", Description: "Id of the first window's PTY."},
+				{Name: "window_id", Type: "string", Description: "Id of the agent's or the shell's window. Absent while a sync setup holds it."},
+				{Name: "pty_id", Type: "string", Description: "Id of that window's PTY. Absent while a sync setup holds it."},
 				{Name: "cloned", Type: "bool", Description: "True when the repository was cloned by this call. Absent otherwise."},
 				{Name: "hook_error", Type: "string", Description: "Why the after-new-worktree hook failed, with the last lines of its stderr. The worktree, the session and the first window are kept. Absent when the hook succeeded or none is set."},
-			},
+			}, setupReturns...),
 			examples: []string{
 				`{"id":1,"verb":"new-worktree","params":{"repo":"/src/api","branch":"feat/retry"}}`,
+				`{"id":1,"verb":"new-worktree","params":{"repo":"/src/api","branch":"feat/retry","command":["claude"],"setup":"pnpm i"}}`,
 				`{"id":1,"verb":"new-worktree","params":{"repo":"/src/api","branch":"feat/retry","base":"main","command":["claude"]}}`,
 				`{"id":1,"verb":"new-worktree","params":{"repo_url":"git@github.com:acme/api.git","repos_root":"~/src","branch":"feat/retry"}}`,
 			},
@@ -785,7 +786,7 @@ func buildVerbRegistry() map[string]verbEntry {
 				{Name: "changes", Type: "bool", Description: "Run git in the matching worktrees and report the count of uncommitted changes, the commits ahead of base, and whether the branch is merged. Off by default because it runs git.", Default: "false"},
 			},
 			returns: []verbParam{
-				{Name: "worktrees", Type: "[]object", Description: "One entry per worktree session: session, repo, repo_root, branch, path, base, group, main (true when the entry is the repository's main checkout, which no worktree verb acts on), managed, gone, state, harness, windows, attached, prompt_status, prompt_note, launched_from (the session whose pane ran the fan, only when a pane did), pr (the branch's pull request as ship-status reports it, only when tuios knows of one), and with changes: changes, ahead, merged, and merged_into. merged is true when the branch has commits of its own and merging it into base, or into the upstream of base, changes nothing. A merge commit, a fast-forward, a rebase and a squash all count. merged_into names the ref, only when merged is true. No fetch is run, so a remote ref is as git last fetched it."},
+				{Name: "worktrees", Type: "[]object", Description: "One entry per worktree session: session, repo, repo_root, branch, path, base, group, main (true when the entry is the repository's main checkout, which no worktree verb acts on), managed, gone, state, harness, windows, attached, prompt_status, prompt_note, launched_from (the session whose pane ran the fan, only when a pane did), pr (the branch's pull request as ship-status reports it, only when tuios knows of one), setup (the worktree setup's record, only when it ran one: command, async, state of pending, running, passed or failed, exit, started_at, finished_at, tail with the last four lines, agent of waiting, started or not_started, removed and branch_removed after a failed sync setup, and note), and with changes: changes, ahead, merged, and merged_into. merged is true when the branch has commits of its own and merging it into base, or into the upstream of base, changes nothing. A merge commit, a fast-forward, a rebase and a squash all count. merged_into names the ref, only when merged is true. No fetch is run, so a remote ref is as git last fetched it."},
 				{Name: "total", Type: "int", Description: "How many entries."},
 			},
 			examples: []string{
@@ -842,7 +843,7 @@ func buildVerbRegistry() map[string]verbEntry {
 				{Name: "task_session", Type: "string", Description: "The session of task. Omit for the caller's own session, or outside every pane the most recently active one."},
 				{Name: "human_nonce", Type: "string", Description: "With task: the attached client's nonce, so the stamp is the person's (by human)."},
 				grantsParam,
-			}, repoSourceParams...),
+			}, slices.Concat(setupParams, repoSourceParams)...),
 			returns: []verbParam{
 				{Name: "group", Type: "string", Description: "The branch stem, which is the group's name in list-worktrees."},
 				{Name: "repo", Type: "string", Description: "The repository's name."},
@@ -851,7 +852,7 @@ func buildVerbRegistry() map[string]verbEntry {
 				{Name: "agent", Type: "string", Description: "The harness id started in the first session, empty for a program no manifest recognises."},
 				{Name: "command", Type: "string", Description: "The command started in the first session."},
 				{Name: "prompt", Type: "string", Description: "The first session's prompt, as given."},
-				{Name: "sessions", Type: "[]object", Description: "One entry per session: session, branch, path, window_id, and the agent (harness id) and command started in it. hook_error is there when that session's after-new-worktree hook failed."},
+				{Name: "sessions", Type: "[]object", Description: "One entry per session: session, branch, path, window_id, and the agent (harness id) and command started in it. hook_error is there when that session's after-new-worktree hook failed. setup is there when the session runs a setup, and agent_pending with no window_id while a sync setup holds the agent."},
 				{Name: "total", Type: "int", Description: "How many sessions were started."},
 				{Name: "task", Type: "object", Description: "With task: the card as stamped, as list-tasks gives a row."},
 				{Name: "task_note", Type: "string", Description: "With task: why nothing was stamped, when the card was removed while the fan was made."},

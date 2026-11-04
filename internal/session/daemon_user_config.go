@@ -86,6 +86,7 @@ func DaemonConfigFromUser(uc *config.UserConfig) *DaemonConfig {
 	// The daemon makes every worktree, whichever client asked for it, so the
 	// path is the same for all of them.
 	cfg.WorktreePath = uc.Worktree.Path
+	cfg.WorktreeSetup, cfg.WorktreeSetupAsync = uc.Worktree.Setup, uc.Worktree.SetupAsync
 	// The daemon runs the hooks for the facts it owns, so a session with
 	// nobody attached still runs them. The client keeps the hooks that need a
 	// terminal.

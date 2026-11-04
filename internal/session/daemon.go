@@ -270,6 +270,9 @@ type Daemon struct {
 	// fanVerifies holds the verify-fan checks running now, one per fan
 	// session. See verb_fan_compare.go.
 	fanVerifies fanVerifyRuns
+	// setups holds the worktree setups running now, one per session, and
+	// the setup config in force. See verb_worktree_setup.go.
+	setups worktreeSetups
 	// respondFromShell is the [daemon] respond_from_shell grant: a caller
 	// outside every pane may call respond without an attach nonce.
 	respondFromShell bool
@@ -924,6 +927,11 @@ type DaemonConfig struct {
 	// and fan make are placed by. Empty is the default layout. See
 	// worktree.PathFor.
 	WorktreePath string
+	// WorktreeSetup and WorktreeSetupAsync are [worktree] setup and
+	// setup_async: the command every new worktree runs before its agent, and
+	// whether the agent waits for it. See verb_worktree_setup.go.
+	WorktreeSetup      string
+	WorktreeSetupAsync bool
 	// AgentStallTimeout overrides how long a pane may report working with no
 	// output before the stall heuristic demotes it to idle. Zero falls back to
 	// the TUIOS_AGENT_STALL_SECONDS environment override, then to the default; a
@@ -1113,6 +1121,7 @@ func NewDaemon(cfg *DaemonConfig) *Daemon {
 	d.manager.SetReturnWhenEmpty(!cfg.StayOnEmptyWorkspace)
 	d.manager.SetDragAndDrop(cfg.DragAndDrop)
 	d.SetWorktreePath(cfg.WorktreePath)
+	d.setups.setConfig(cfg.WorktreeSetup, cfg.WorktreeSetupAsync)
 	d.agentDetectInterval = resolveAgentDetectInterval(cfg.AgentAutoDetect, cfg.AgentDetectInterval)
 	d.agentsOff.Store(cfg.AgentsOff)
 	d.machineOfferOff.Store(cfg.MachineOfferOff)

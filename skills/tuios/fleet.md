@@ -89,6 +89,28 @@ A merge commit, a fast-forward, a rebase and a squash all count. No fetch runs.
 A person makes the same from the client: `Ctrl+B U` (action `new_worktree`)
 asks for a branch name and uses the repository of the focused pane's folder.
 
+### Setup before the agent
+
+`[worktree] setup` in config.toml, or `--setup` on `worktree new` and `fan`,
+runs a shell line in each new worktree before its agent starts:
+
+```sh
+tuios worktree new feat/retry --agent claude --setup 'pnpm i' --detach
+tuios worktree ls --json
+```
+
+The setup runs with `sh -c` in a window named `setup`, with no grants.
+The agent starts when the setup passes. A sync setup that fails removes the new
+worktree and the branch it made, if no change or commit is in them. The agent
+never starts. The session stays, with the setup window open on its output.
+`--setup-async` (or `setup_async = true`) starts the agent at once. A failed
+async setup keeps the worktree and the branch, and only reports.
+`worktree ls` gives `setup` per session: `state` (`pending`, `running`,
+`passed` or `failed`), `exit`, `tail` (the last four lines), `agent`
+(`waiting`, `started` or `not_started`), `removed`, `branch_removed` and `note`.
+With a sync setup, `new-worktree` and `fan` return `agent_pending` and no
+`window_id`. Wait on `setup.agent` before you address the agent.
+
 ## Fan-out
 
 One prompt across several agents, each in its own worktree:

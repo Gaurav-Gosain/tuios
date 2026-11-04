@@ -866,6 +866,9 @@ type OS struct {
 	// session state, so the rail reads the attached row from live state exactly
 	// as it reads the rest of that row.
 	SessionWorktree *session.WorktreeInfo
+	// setupCard is the worktree setup card's state. See
+	// worktree_setup_card.go.
+	setupCard setupCardState
 	// WorkspaceNames maps a workspace number to its daemon-owned label. An
 	// unnamed workspace shows its number, so an absent entry is not a missing
 	// label but the normal case.

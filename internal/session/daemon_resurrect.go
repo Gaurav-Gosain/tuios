@@ -115,6 +115,14 @@ func (d *Daemon) restoreSessionOffers(state *SessionState) (*Session, []resumeOf
 		w.JudgeSession, w.JudgeWindow = "", ""
 		state.Worktree = &w
 	}
+	// Nor does a setup that was running: its window comes back as a fresh
+	// shell, and no watcher is left to report how it ended.
+	if wt := state.Worktree; wt != nil && wt.Setup != nil && (wt.Setup.State == SetupRunning || wt.Setup.State == SetupPending) {
+		w, s := *wt, *wt.Setup
+		s.State, s.Note = SetupFailed, "The daemon restarted before the setup finished."
+		w.Setup = &s
+		state.Worktree = &w
+	}
 
 	// A session whose windows were all closed leaves a state file behind, and
 	// restoring it produced a session with nothing in it that no surface tells

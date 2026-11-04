@@ -391,6 +391,9 @@ func (m *OS) sidebarSignature() uint64 {
 		mixS(m.SessionWorktree.Branch)
 		mixB(m.SessionWorktree.Gone)
 		mixS(m.SessionWorktree.PR.Badge())
+		if s := m.SessionWorktree.Setup; s != nil {
+			mixS(s.State)
+		}
 	} else {
 		mixI(-1)
 	}
