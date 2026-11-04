@@ -67,6 +67,7 @@ func main() {
 }
 
 func runApp() {
+	servePprof()
 	// Started from a pane, as Kero Dev by `mygo dev` in the installed Kero:
 	// the pane's variables name its kerod, not this build's.
 	if os.Getenv("TUIOS_PANE_ID") != "" {
