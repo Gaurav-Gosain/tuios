@@ -110,7 +110,6 @@ func (b *ckBoard) column(stage string) []session.TaskRow {
 	return out
 }
 
-//
 // No column folds now: the board has the whole card, and a column that
 // shows a count draws its cards. b.opened stays for a person who folds
 // Done by hand.
