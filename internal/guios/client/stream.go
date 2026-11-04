@@ -7,6 +7,7 @@ import (
 	"io"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/egoist/mygo/plugins/terminal"
 	"github.com/egoist/mygo/ui"
@@ -40,7 +41,20 @@ type Stream struct {
 	// OnResized, when set, gets the sizes the pane takes, within Read,
 	// before the output after them: set it before the first Read.
 	OnResized func(cols, rows int)
+
+	// renew says the daemon took no yield: its fit lease lapses after the
+	// daemon's TTL (30 s) unless sent again, so the last one is sent
+	// every leaseRenew while the stream is open. With yield the daemon
+	// keeps a local lease, and no timer runs.
+	renew    bool
+	leaseMu  sync.Mutex
+	lease    [4]int
+	renewing bool
 }
+
+// leaseRenew is how often a lease is sent again on a daemon without yield,
+// well inside its 30 s TTL.
+const leaseRenew = 10 * time.Second
 
 // Attach opens a pane's stream on this machine's daemon.
 func Attach(id string) (*Stream, error) { return AttachVia(Local{NoStart: true}, id) }
@@ -87,17 +101,19 @@ func AttachVia(_ Dialer, id string) (*Stream, error) {
 		params["window"] = window
 	}
 	ps, reply, err := vc.OpenPaneStream(params)
+	renew := false
 	if err != nil && strings.Contains(err.Error(), "parameter yield") {
 		// A daemon from before yielding leases: its fit lease holds a TUI
 		// client's pane at most at this view's size.
 		delete(params, "yield")
 		ps, reply, err = vc.OpenPaneStream(params)
+		renew = true
 	}
 	if err != nil {
 		_ = vc.Close()
 		return nil, err
 	}
-	s := &Stream{ps: ps, c: c, session: name, sid: sid, window: reply.Window, closed: make(chan struct{}), Gone: make(chan struct{})}
+	s := &Stream{ps: ps, c: c, session: name, sid: sid, window: reply.Window, closed: make(chan struct{}), Gone: make(chan struct{}), renew: renew}
 	c.addStream(s)
 	s.Welcome = proto.Welcome{Version: proto.Version, Cols: reply.Cols, Rows: reply.Rows}
 	return s, nil
@@ -159,7 +175,44 @@ func (s *Stream) ResizePixels(cols, rows, cellW, cellH int) error {
 	if cols <= 0 || rows <= 0 {
 		return nil
 	}
-	return s.ps.LeaseCell(cols, rows, cellW, cellH)
+	s.leaseMu.Lock()
+	defer s.leaseMu.Unlock()
+	s.lease = [4]int{cols, rows, cellW, cellH}
+	if s.renew && !s.renewing {
+		s.renewing = true
+		go s.renewLease()
+	}
+	return s.sendLease()
+}
+
+// sendLease sends the last lease. A daemon without yield predates the cell
+// pixels too, and takes only the 4-byte L frame. Hold leaseMu.
+func (s *Stream) sendLease() error {
+	l := s.lease
+	if s.renew {
+		return s.ps.Lease(l[0], l[1])
+	}
+	return s.ps.LeaseCell(l[0], l[1], l[2], l[3])
+}
+
+// renewLease sends the last lease again every leaseRenew until the stream
+// closes, on a daemon without yield.
+func (s *Stream) renewLease() {
+	t := time.NewTicker(leaseRenew)
+	defer t.Stop()
+	for {
+		select {
+		case <-s.closed:
+			return
+		case <-t.C:
+			s.leaseMu.Lock()
+			err := s.sendLease()
+			s.leaseMu.Unlock()
+			if err != nil {
+				return
+			}
+		}
+	}
 }
 
 // Claim makes the pane take this view's size, which ResizePixels does at
