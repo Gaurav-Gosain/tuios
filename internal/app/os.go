@@ -262,6 +262,11 @@ type OS struct {
 	PTYDataChan     chan struct{}     // Signaled by PTY readers when new output arrives (buffered 1, coalescing)
 	StateSyncChan   chan StateSyncMsg // Channel for thread-safe state sync from callbacks
 	ClientEventChan chan ClientEvent  // Channel for thread-safe client join/leave notifications
+	// pluginCellsIn holds the newest push of the plugins' cells. A push
+	// carries every cell, so only the newest matters, and a plugin that
+	// changes its cells often must not crowd resizes, approvals and mail
+	// out of ClientEventChan. See plugin_ui.go.
+	pluginCellsIn chan session.PluginUIPayload
 	// DaemonExitChan carries the two daemon events that end this client: the
 	// session was destroyed, or the connection dropped. See daemon_exit.go.
 	DaemonExitChan chan tea.Msg
@@ -1286,6 +1291,10 @@ type OS struct {
 	dndPress *dndPress
 	dndDrag  *dndDrag
 	dndHost  dndHostState
+	// dndDropGen numbers the drops for their deadline ticks, and
+	// dndDropArmed says this message armed one. See dndDropTimeout.
+	dndDropGen   int
+	dndDropArmed bool
 	// tapeDetect holds the project-tape detection state (trust store, session
 	// memory of handled directories, debounce bookkeeping, and the current
 	// passive indicator). See tape_detect.go.

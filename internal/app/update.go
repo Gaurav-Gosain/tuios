@@ -466,6 +466,11 @@ func (m *OS) Init() tea.Cmd {
 	// See tml.go.
 	cmds = append(cmds, m.listenForTML())
 
+	// The plugins' cells, which keep a slot of their own. See plugin_ui.go.
+	if m.pluginCellsIn != nil {
+		cmds = append(cmds, m.listenPluginCells())
+	}
+
 	// The session's mail so far, read once. Everything after this arrives as
 	// a push, so an idle client never asks again.
 	if cmd := m.agentMailLoad(); cmd != nil {
@@ -971,6 +976,9 @@ func (m *OS) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	m.dndHostSync()
 	if hc := m.dndHostFlush(); hc != nil {
 		cmd = tea.Batch(cmd, hc)
+	}
+	if dc := m.dndDropDeadline(); dc != nil {
+		cmd = tea.Batch(cmd, dc)
 	}
 	// The View after this message may compose a frame, or move the cursor
 	// for input; flushCmd brings the write back once that frame is stored.
@@ -1725,6 +1733,12 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 	case NvimNavigationMsg:
 		m.onNvimNavigation(msg)
 		return m, listenNvimNavigationUntil(m.stopSignal(), m.PendingNvimNavigation)
+	case dndDropTimeoutMsg:
+		// A drop that has not moved for a while ends. See dnd_drag.go.
+		live := m.dndDrag
+		cmd := m.onDnDDropTimeout(msg)
+		m.renderSkipped = m.dndDrag == live
+		return m, cmd
 	case dndHostWrittenMsg:
 		// The last write to the terminal for the bridge is done; Update's
 		// tail sends the next. See dnd_host.go.
@@ -1972,6 +1986,10 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 	case PluginUIMsg:
 		m.handlePluginUI(msg.Payload)
 		return m, listenClientEventsUntil(m.stopSignal(), m.ClientEventChan)
+
+	case pluginCellsMsg:
+		m.handlePluginUI(msg.Payload)
+		return m, m.listenPluginCells()
 
 	case pluginApprovalDoneMsg:
 		m.pluginApprovalDone(msg)

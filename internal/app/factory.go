@@ -200,6 +200,7 @@ func NewOS(opts OSOptions) *OS {
 		PTYDataChan:     make(chan struct{}, 1),
 		StateSyncChan:   make(chan StateSyncMsg, 10),
 		ClientEventChan: make(chan ClientEvent, 10),
+		pluginCellsIn:   make(chan session.PluginUIPayload, 1),
 		// The two daemon events that end this client. Made here rather than on
 		// first use because the SSH and web hosts write to it from the daemon
 		// read loop, which starts before Init runs. See daemon_exit.go.

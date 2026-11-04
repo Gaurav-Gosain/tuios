@@ -771,6 +771,41 @@ func TestDnDBridgeWithAnEmulatedTerminal(t *testing.T) {
 		}
 	})
 
+	t.Run("a drop the terminal never serves ends, and the next drop lands", func(t *testing.T) {
+		term, base, session, _, right := dndBoardWith(t, deskConfig)
+		out := filepath.Join(base, "pasted")
+		runInPane(t, base, session, right, readerPane(out), "SINKREADY")
+		waitHostWrote(t, term, osc72("t=q"), "the probe")
+		if err := term.Type(osc72("t=q")); err != nil {
+			t.Fatal(err)
+		}
+		waitHostWrote(t, term, "\x1b]72;t=o:x=1", "the registration")
+		drop(t, term, right)
+		waitHostWrote(t, term, "\x1b]72;t=r:x=1", "the data request")
+		// The terminal never answers. The client ends the drop on its own
+		// and takes the next one.
+		end := time.Now().Add(45 * time.Second)
+		for !strings.Contains(hostWrote(term), osc72("t=r:x=0:y=0")) {
+			if time.Now().After(end) {
+				t.Fatalf("the client never ended a drop the terminal did not serve:\n%q", hostWrote(term))
+			}
+			time.Sleep(100 * time.Millisecond)
+		}
+		drop(t, term, right)
+		deadline := time.Now().Add(uiTimeout)
+		for strings.Count(hostWrote(term), "\x1b]72;t=r:x=1") < 2 {
+			if time.Now().After(deadline) {
+				t.Fatalf("the client never asked for the data of the second drop:\n%q", hostWrote(term))
+			}
+			time.Sleep(50 * time.Millisecond)
+		}
+		data(t, term)
+		pasted := waitFile(t, out, func(s string) bool { return strings.Contains(s, "\x1b[201~") }, "the reader never got the paste")
+		if pasted != want {
+			t.Errorf("the reader got %q, want %q", pasted, want)
+		}
+	})
+
 	t.Run("with the switch off the terminal's messages are ignored", func(t *testing.T) {
 		term, base, session, _, right := dndBoardWith(t, dndConfig)
 		out := filepath.Join(base, "pasted")

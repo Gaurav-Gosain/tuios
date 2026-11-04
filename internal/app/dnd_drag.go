@@ -4,6 +4,7 @@ import (
 	"path"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/dnd"
 
@@ -90,6 +91,62 @@ type dndDrag struct {
 	hostPending map[int]bool
 	// hostBuf collects the terminal's data for a fallback paste (fromHost).
 	hostBuf []byte
+	// gen names this drop to its deadline tick, and active is when the drop
+	// last moved: a data request, or data for one. See dndDropTimeout.
+	gen    int
+	active time.Time
+}
+
+// dndDropTimeout is how long a drop may wait with nothing moving. A target
+// that accepted the drop and never asks for the data, or a source or terminal
+// that never sends it, would otherwise hold the drag for good, and every later
+// drag in this client is refused while one is held.
+const dndDropTimeout = 30 * time.Second
+
+// dndDropTimeoutMsg is the deadline tick of the drop named gen.
+type dndDropTimeoutMsg struct{ gen int }
+
+// dndDropArm starts the deadline of the drop that has just gone to a target.
+// Update's tail turns the flag into the tick (dndDropDeadline).
+func (m *OS) dndDropArm(d *dndDrag) {
+	m.dndDropGen++
+	d.gen = m.dndDropGen
+	d.active = time.Now()
+	m.dndDropArmed = true
+}
+
+// dndDropMoved notes that the drop in hand is still moving.
+func (d *dndDrag) dndDropMoved() { d.active = time.Now() }
+
+// dndDropDeadline returns the tick for a deadline armed during this message.
+func (m *OS) dndDropDeadline() tea.Cmd {
+	if !m.dndDropArmed {
+		return nil
+	}
+	m.dndDropArmed = false
+	d := m.dndDrag
+	if d == nil || d.phase != dndDropped {
+		return nil
+	}
+	return dndDropTick(d.gen, dndDropTimeout)
+}
+
+func dndDropTick(gen int, after time.Duration) tea.Cmd {
+	return tea.Tick(after, func(time.Time) tea.Msg { return dndDropTimeoutMsg{gen: gen} })
+}
+
+// onDnDDropTimeout ends a drop that has not moved for dndDropTimeout, and
+// waits out the rest of the time for one that moved since the tick was set.
+func (m *OS) onDnDDropTimeout(msg dndDropTimeoutMsg) tea.Cmd {
+	d := m.dndDrag
+	if d == nil || d.phase != dndDropped || d.gen != msg.gen {
+		return nil
+	}
+	if left := dndDropTimeout - time.Since(d.active); left > 0 {
+		return dndDropTick(msg.gen, left)
+	}
+	m.dndCancel("the drop target did not finish the drop")
+	return nil
 }
 
 // viaHost reports whether the terminal carries this drag.
@@ -394,6 +451,7 @@ func (m *OS) dndDeliverDrop(w *terminal.Window, tx, ty int) {
 	d.phase = dndDropped
 	d.dropTarget = w.ID
 	d.pending = map[int]bool{}
+	m.dndDropArm(d)
 	if !d.viaHost() {
 		m.dndSend(d.source, dnd.Command{Type: 'e', X: 3})
 	}
@@ -420,6 +478,7 @@ func (m *OS) dndDropFallback(w *terminal.Window) {
 	d.dropTarget = w.ID
 	d.fallback, d.fallbackIdx = true, idx
 	d.pending = map[int]bool{}
+	m.dndDropArm(d)
 	if d.fromHost {
 		// The data is the terminal's to give.
 		d.hostPending[idx] = true
@@ -601,18 +660,12 @@ func (m *OS) onDnDPresent(id string, p *dndPane, cmd dnd.Command) {
 		m.dndRefuse(id, 'E', 0, 0, "EINVAL", "no drag is being built")
 		return
 	}
+	// A drag that fails here is cancelled with dndCancel, which for a relay
+	// also takes back the offer the terminal already holds.
 	if cmd.X >= 0 && cmd.X >= len(d.mimes) {
 		m.dndError(id, 'E', 0, 0, "EINVAL", "pre-sent data index out of range")
-		m.dndDrag = nil
+		m.dndCancel("the source sent data for a type it did not offer")
 		return
-	}
-	if d.relay && cmd.X >= 0 {
-		// The terminal serves data sent ahead, so it gets every chunk as the
-		// program sent it. The image stays here: the terminal shows tuios's
-		// own (dndHostImage).
-		fwd := cmd
-		fwd.ID = 0
-		m.dndHostSend(fwd)
 	}
 	if cmd.X < 0 && cmd.Y != 0 {
 		// A bitmap image. tuios draws text, so it keeps none.
@@ -621,8 +674,16 @@ func (m *OS) onDnDPresent(id string, p *dndPane, cmd dnd.Command) {
 	data, done, ok := m.dndStreamAdd(p, 'p', cmd)
 	if !ok {
 		m.dndError(id, 'E', 0, 0, "EFBIG", "too much pre-sent data")
-		m.dndDrag = nil
+		m.dndCancel("the source sent too much data ahead")
 		return
+	}
+	if d.relay && cmd.X >= 0 {
+		// The terminal serves data sent ahead, so it gets every chunk as the
+		// program sent it, once the chunk is known to fit. The image stays
+		// here: the terminal shows tuios's own (dndHostImage).
+		fwd := cmd
+		fwd.ID = 0
+		m.dndHostSend(fwd)
 	}
 	if !done {
 		return
@@ -677,7 +738,7 @@ func (m *OS) onDnDStart(id string, cmd dnd.Command) {
 	}
 	if d.released {
 		m.dndError(id, 'E', 0, 0, "EPERM", "the button was released")
-		m.dndDrag = nil
+		m.dndCancel("")
 		return
 	}
 	// Pre-sent data still open is complete now: the start says everything
@@ -722,6 +783,7 @@ func (m *OS) onDnDItemData(id string, p *dndPane, cmd dnd.Command) {
 	d := m.dndDrag
 	if d != nil && d.relay && d.source == id && d.hostPending[cmd.Y] {
 		// The terminal asked for it, for the window system's drop target.
+		d.dndDropMoved()
 		m.dndHostSend(dnd.Command{Type: 'e', Y: cmd.Y, More: cmd.More, Payload: cmd.Payload})
 		if !cmd.More && len(cmd.Payload) == 0 {
 			delete(d.hostPending, cmd.Y)
@@ -739,6 +801,7 @@ func (m *OS) onDnDItemData(id string, p *dndPane, cmd dnd.Command) {
 		m.dndCancel("the source sent data nobody asked for")
 		return
 	}
+	d.dndDropMoved()
 	data, done, ok := m.dndStreamAdd(p, 'e', cmd)
 	if !ok {
 		m.dndError(id, 'E', 0, cmd.Y, "EFBIG", "too much data")
@@ -846,6 +909,7 @@ func (m *OS) onDnDRequest(id string, cmd dnd.Command) {
 		m.dndRefuse(id, 'R', cmd.X, cmd.Y, "EPERM", "drop data can only be requested after a drop")
 		return
 	}
+	d.dndDropMoved()
 	if cmd.X == 0 {
 		m.dndFinish(cmd.Op)
 		return

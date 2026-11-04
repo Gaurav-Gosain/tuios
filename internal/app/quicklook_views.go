@@ -180,7 +180,7 @@ func (m *OS) quickLookViews() []string {
 	if ql.res != nil && ql.res.table != nil {
 		views = append(views, quickLookViewText)
 	}
-	if d := ql.details; d != nil && d.target == ql.target {
+	if d := ql.details; d != nil && d.target == ql.target && d.failed == "" {
 		if d.words != nil {
 			views = append(views, quickLookViewWords)
 		}
@@ -229,14 +229,21 @@ func (m *OS) QuickLookNextView() tea.Cmd {
 		return nil
 	}
 	ql.prompt, ql.status = quickLookNoPrompt, ""
-	if d := ql.details; (d == nil || d.target != ql.target) && r.table == nil {
+	// The details are read once for each file. A read that failed is kept
+	// too, so the next press goes on to the next view and does not start
+	// the same read again.
+	d := ql.details
+	read := d == nil || d.target != ql.target
+	if read && (r.table == nil || ql.view == quickLookViewText) {
 		if ql.detailsOut {
 			return nil
 		}
 		return m.quickLookReadDetails()
 	}
-	if d := ql.details; (d == nil || d.target != ql.target) && ql.view == quickLookViewText {
-		return m.quickLookReadDetails()
+	if !read && d.failed != "" && r.table == nil {
+		// The file has no other view: say again why.
+		ql.status, ql.statusLine = d.failed, true
+		return nil
 	}
 	views := m.quickLookViews()
 	i := max(slices.Index(views, ql.view), 0)
@@ -307,11 +314,11 @@ func (m *OS) applyQuickLookDetails(msg quickLookDetailsMsg) {
 	if !ql.open || d.target != ql.target {
 		return
 	}
+	ql.details = d
 	if d.failed != "" {
 		ql.status, ql.statusLine = d.failed, true
 		return
 	}
-	ql.details = d
 	views := m.quickLookViews()
 	i := max(slices.Index(views, ql.view), 0)
 	ql.view = views[min(i+1, len(views)-1)]

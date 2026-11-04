@@ -311,6 +311,7 @@ func (m *OS) onHostData(cmd dnd.Command) {
 	if d == nil || !d.fromHost || d.phase != dndDropped || !d.hostPending[cmd.X-1] {
 		return
 	}
+	d.dndDropMoved()
 	end := !cmd.More && len(cmd.Payload) == 0
 	if d.fallback {
 		if !end {

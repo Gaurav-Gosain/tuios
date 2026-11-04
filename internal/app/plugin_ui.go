@@ -3,6 +3,8 @@ package app
 import (
 	"slices"
 
+	tea "charm.land/bubbletea/v2"
+
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 )
@@ -14,6 +16,39 @@ import (
 // PluginUIMsg is the daemon's push of a plugin's cells or notice.
 type PluginUIMsg struct {
 	Payload session.PluginUIPayload
+}
+
+// pluginCellsMsg is the newest push of the plugins' cells, off pluginCellsIn.
+type pluginCellsMsg struct {
+	Payload session.PluginUIPayload
+}
+
+// queuePluginCells keeps a push of the cells for the Update loop, in place of
+// one that waits there still. It reports false when the model has no slot
+// for cells, and the push then goes on ClientEventChan. It runs on the
+// client's read loop, the one writer.
+func (m *OS) queuePluginCells(p session.PluginUIPayload) bool {
+	if m.pluginCellsIn == nil {
+		return false
+	}
+	for {
+		select {
+		case m.pluginCellsIn <- p:
+			return true
+		default:
+		}
+		select {
+		case <-m.pluginCellsIn:
+		default:
+		}
+	}
+}
+
+// listenPluginCells arms the listener for the next push of the cells.
+func (m *OS) listenPluginCells() tea.Cmd {
+	return listenOnce(m.stopSignal(), m.pluginCellsIn, func(p session.PluginUIPayload) tea.Msg {
+		return pluginCellsMsg{Payload: p}
+	})
 }
 
 // pluginCellName is a cell's name in the dock lists.

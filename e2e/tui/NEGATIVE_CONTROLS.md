@@ -12417,3 +12417,17 @@ change:
 | A panel draws a rare type with the plugin | `loom.ExternalDiagram` not set | "the panel did not draw the timeline with the plugin" | **caught** |
 | The panel draws once the plugin answers | the surfaces not drawn again | the same message | **caught** |
 | No notice when the plugin draws the diagram | the plugin check cut from the notice | "the person was told to install a plugin that draws the diagram" | **caught** |
+
+## A drop the terminal never serves ends
+
+`TestDnDBridgeWithAnEmulatedTerminal/a_drop_the_terminal_never_serves_ends,_and_the_next_drop_lands`
+drops a path from the terminal onto a pane without the protocol. The client
+asks the terminal for the data, and the test never answers. The client must
+end the drop on its own (`t=r:x=0:y=0`) within 45 s, and take the next drop:
+it asks for the data again, and the reader pane gets the paste.
+
+Run on 2026-11-04 on Linux. The fixed build passes in 46 s.
+
+| Claim | Control | Where it fails | Verdict |
+| --- | --- | --- | --- |
+| A drop with nothing moving ends after `dndDropTimeout` | main at 9a55ab59c, with no deadline | "the client never ended a drop the terminal did not serve" | **caught** |
