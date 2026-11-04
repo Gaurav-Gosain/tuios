@@ -131,6 +131,9 @@ type cockpit struct {
 	stacked, stackFocus bool
 	// narrow is a card too narrow for what the cockpit shows twice.
 	narrow bool
+	// fleetW is the agents column's width this frame, for its rows' plans;
+	// focusW the focus column's in the last frame, for the thread's.
+	fleetW, focusW float32
 
 	shown ckShown
 	// peek is the prompt on the selected pane's screen, as peek-prompt read

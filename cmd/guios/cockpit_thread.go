@@ -328,7 +328,7 @@ func (a *App) threadView(c *ui.Context, pal *palette, ag client.Agent) {
 	}
 	mono := a.termFamily()
 	list := ui.List(c.Key("thread-"+threadKey(ag)), &th.list, len(th.items))
-	th.scroll.track(c, list).Grow(1).MinHeight(0).Padding(18, 28, 22, 28).Gap(14).Selectable().CopyData(copyThread).
+	th.scroll.track(c, list).Grow(1).MinHeight(0).Padding(18, a.ckSide(28), 22, a.ckSide(28)).Gap(14).Selectable().CopyData(copyThread).
 		Rows(func(r ui.ListRow) { a.itemView(r.Context, pal, th, &th.items[r.Index], mono) })
 }
 
@@ -345,28 +345,28 @@ func (a *App) itemView(c *ui.Context, pal *palette, th *ckThread, it *ckItem, mo
 		// The person's prompt, in a bubble on the right.
 		ui.Column(c).AlignItems(ui.End).Gap(4).Children(func() {
 			ui.Row(c).Gap(6).Children(func() {
-				ui.Text(c, locales.CockpitYou()).FontSize(11.5).FontWeight(650).TextColor(pal.textMuted)
-				ui.Text(c, clock(it.at)).FontSize(11.5).TextColor(pal.textFaint)
+				ui.Text(c, locales.CockpitYou()).FontSize(fsSmall).FontWeight(wSemibold).TextColor(pal.textMuted)
+				ui.Text(c, clock(it.at)).FontSize(fsSmall).TextColor(pal.textFaint)
 			})
-			ui.Text(c, it.e.Text).FontSize(13.5).LineHeight(1.5).TextColor(pal.text).MaxWidthPercent(82).
+			ui.Text(c, it.e.Text).FontSize(fsProse).LineHeight(1.55).TextColor(pal.text).MaxWidthPercent(82).
 				Padding(10, 14).Radius(14, 14, 4, 14).Background(pal.accent.Alpha(0.16))
 		})
 	case ckItemText:
 		ui.Column(c).Gap(8).Children(func() {
 			if it.label {
 				ui.Row(c).Gap(6).AlignItems(ui.Center).Children(func() {
-					ui.Icon(c, harnessIcon(th.agent.Harness)).Size(13, 13).TextColor(pal.textMuted)
-					ui.Text(c, harnessName(th.agent.Harness)).FontSize(11.5).FontWeight(650).TextColor(pal.textMuted)
-					ui.Text(c, clock(it.at)).FontSize(11.5).TextColor(pal.textFaint)
+					ui.Icon(c, harnessIcon(th.agent.Harness)).Size(14, 14).TextColor(pal.textMuted)
+					ui.Text(c, harnessName(th.agent.Harness)).FontSize(fsSmall).FontWeight(wSemibold).TextColor(pal.textMuted)
+					ui.Text(c, clock(it.at)).FontSize(fsSmall).TextColor(pal.textFaint)
 				})
 			}
 			a.markdownView(c, pal, it.md, mono)
 		})
 	case ckItemThinking:
 		a.foldItem(c, pal, th, it, func() {
-			ui.Text(c, locales.CockpitThought()).FontSize(12.5).Italic().TextColor(pal.textMuted)
+			ui.Text(c, locales.CockpitThought()).FontSize(fsSmall).Italic().TextColor(pal.textMuted)
 		}, func() {
-			ui.Text(c, it.e.Text).FontSize(12.5).Italic().LineHeight(1.5).TextColor(pal.textMuted)
+			ui.Text(c, it.e.Text).FontSize(fsSmall).Italic().LineHeight(1.5).TextColor(pal.textMuted)
 		})
 	case ckItemTools:
 		a.toolsItem(c, pal, th, it, mono)
@@ -377,14 +377,14 @@ func (a *App) itemView(c *ui.Context, pal *palette, th *ckThread, it *ckItem, mo
 	case ckItemTodos:
 		a.todosItem(c, pal, it)
 	case ckItemPlan:
-		ui.Column(c).Gap(8).Padding(12, 14).Radius(10).Background(ckGround(pal)).Children(func() {
-			ui.Text(c, locales.CockpitPlan()).FontSize(12).FontWeight(650).TextColor(pal.textMuted)
+		ui.Column(c).Gap(8).Padding(12, 14).Radius(rCard).Background(ckGround(pal)).Children(func() {
+			ui.Text(c, locales.CockpitPlan()).FontSize(fsSmall).FontWeight(wSemibold).TextColor(pal.textMuted)
 			a.markdownView(c, pal, it.md, mono)
 		})
 	case ckItemError:
-		ui.Row(c).Gap(8).Padding(8, 12).Radius(8).Background(pal.danger.Alpha(0.12)).Children(func() {
-			ui.Text(c, "✕").FontSize(12).TextColor(pal.danger)
-			ui.Text(c, it.e.Text).FontSize(12.5).TextColor(pal.text).Grow(1).MinWidth(0)
+		ui.Row(c).Gap(8).Padding(8, 12).Radius(rControl).Background(pal.danger.Alpha(0.12)).Children(func() {
+			ui.Text(c, "✕").FontSize(fsSmall).TextColor(pal.danger)
+			ui.Text(c, it.e.Text).FontSize(fsBody).TextColor(pal.text).Grow(1).MinWidth(0)
 		})
 	}
 }
@@ -403,7 +403,7 @@ func (a *App) foldItem(c *ui.Context, pal *palette, th *ckThread, it *ckItem, he
 			if open {
 				ic = chevronDownIcon
 			}
-			ui.Icon(c, ic).Size(10, 10).TextColor(pal.textFaint)
+			ui.Icon(c, ic).Size(12, 12).TextColor(pal.textFaint)
 			head()
 		})
 		if open {
@@ -416,12 +416,12 @@ func (a *App) foldItem(c *ui.Context, pal *palette, th *ckThread, it *ckItem, he
 func statusMark(c *ui.Context, pal *palette, status string) {
 	switch status {
 	case transcriptview.StatusError:
-		ui.Text(c, "✕").FontSize(11.5).TextColor(pal.danger)
+		ui.Text(c, "✕").FontSize(fsSmall).TextColor(pal.danger)
 	case transcriptview.StatusRunning:
-		ui.Text(c, "●").FontSize(9).TextColor(pal.accent)
+		ui.Text(c, "●").FontSize(fsCaption).TextColor(pal.accent)
 	case "":
 	default:
-		ui.Text(c, "✓").FontSize(11.5).TextColor(pal.done)
+		ui.Text(c, "✓").FontSize(fsSmall).TextColor(pal.done)
 	}
 }
 
@@ -453,14 +453,14 @@ func (a *App) toolsItem(c *ui.Context, pal *palette, th *ckThread, it *ckItem, m
 		}
 	}
 	a.foldItem(c, pal, th, it, func() {
-		ui.Text(c, strings.Join(head, " · ")).FontSize(12.5).FontWeight(650).TextColor(pal.textMuted).Shrink(0)
-		ui.Text(c, strings.Join(targets, ", ")).Font(mono).FontSize(12).TextColor(pal.textFaint).SingleLine().Ellipsis("…").MinWidth(0).Grow(1)
+		ui.Text(c, strings.Join(head, " · ")).FontSize(fsSmall).FontWeight(wSemibold).TextColor(pal.textMuted).Shrink(0)
+		ui.Text(c, strings.Join(targets, ", ")).Font(mono).FontSize(fsSmall).TextColor(pal.textFaint).SingleLine().Ellipsis("…").MinWidth(0).Grow(1)
 		statusMark(c, pal, transcriptview.StatusOK)
 	}, func() {
 		for _, e := range it.calls {
 			ui.Row(c).Gap(8).Children(func() {
-				ui.Text(c, e.Tool).FontSize(12).FontWeight(600).TextColor(pal.textMuted).Shrink(0)
-				ui.Text(c, e.Target).Font(mono).FontSize(12).TextColor(pal.text).MinWidth(0)
+				ui.Text(c, e.Tool).FontSize(fsSmall).FontWeight(wSemibold).TextColor(pal.textMuted).Shrink(0)
+				ui.Text(c, e.Target).Font(mono).FontSize(fsSmall).TextColor(pal.text).MinWidth(0)
 			})
 		}
 	})
@@ -478,10 +478,10 @@ func (a *App) toolItem(c *ui.Context, pal *palette, th *ckThread, it *ckItem, mo
 		tool = locales.CockpitResult()
 	}
 	a.foldItem(c, pal, th, it, func() {
-		ui.Text(c, tool).FontSize(12.5).FontWeight(650).TextColor(pal.text).Shrink(0)
-		ui.Text(c, it.e.Target).Font(mono).FontSize(12).TextColor(pal.textMuted).SingleLine().Ellipsis("…").MinWidth(0).Grow(1)
+		ui.Text(c, tool).FontSize(fsBody).FontWeight(wSemibold).TextColor(pal.text).Shrink(0)
+		ui.Text(c, it.e.Target).Font(mono).FontSize(fsSmall).TextColor(pal.textMuted).SingleLine().Ellipsis("…").MinWidth(0).Grow(1)
 		if failed {
-			ui.Text(c, locales.CockpitFailedPill()).FontSize(11).FontWeight(650).TextColor(pal.danger).Padding(1, 7).Radius(5).Background(pal.danger.Alpha(0.14))
+			ui.Text(c, locales.CockpitFailedPill()).FontSize(fsCaption).FontWeight(wSemibold).TextColor(pal.danger).Padding(1, 7).Radius(rChip).Background(pal.danger.Alpha(0.14))
 		} else {
 			statusMark(c, pal, status)
 		}
@@ -491,11 +491,11 @@ func (a *App) toolItem(c *ui.Context, pal *palette, th *ckThread, it *ckItem, mo
 			out = it.res.Text
 		}
 		if strings.TrimSpace(out) == "" {
-			ui.Text(c, locales.CockpitNoOutput()).FontSize(12).TextColor(pal.textFaint)
+			ui.Text(c, locales.CockpitNoOutput()).FontSize(fsSmall).TextColor(pal.textFaint)
 			return
 		}
-		ui.ScrollHorizontal(c).Radius(8).Background(ckCodeBg(pal)).Children(func() {
-			ui.Text(c, strings.ReplaceAll(strings.TrimRight(out, "\n"), "\t", "    ")).Font(mono).FontSize(12).LineHeight(1.45).NoWrap().TextColor(pal.text).Padding(10, 12)
+		ui.ScrollHorizontal(c).Radius(rControl).Background(ckCodeBg(pal)).Children(func() {
+			ui.Text(c, strings.ReplaceAll(strings.TrimRight(out, "\n"), "\t", "    ")).Font(mono).FontSize(fsCode).LineHeight(1.5).NoWrap().TextColor(pal.text).Padding(10, 12)
 		})
 	})
 }
@@ -508,16 +508,16 @@ func (a *App) todosItem(c *ui.Context, pal *palette, it *ckItem) {
 			done++
 		}
 	}
-	ui.Column(c).Gap(6).Padding(12, 14).Radius(10).Background(ckGround(pal)).Children(func() {
+	ui.Column(c).Gap(6).Padding(12, 14).Radius(rCard).Background(ckGround(pal)).Children(func() {
 		ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
-			ui.Text(c, locales.CockpitTodos()).FontSize(12.5).FontWeight(650).TextColor(pal.text)
-			ui.Text(c, locales.CockpitTodosDone(done, len(it.e.Todos))).FontSize(12).TextColor(pal.textMuted)
+			ui.Text(c, locales.CockpitTodos()).FontSize(fsBody).FontWeight(wSemibold).TextColor(pal.text)
+			ui.Text(c, locales.CockpitTodosDone(done, len(it.e.Todos))).FontSize(fsSmall).TextColor(pal.textMuted)
 			ui.Spacer(c)
 			frac := float32(0)
 			if n := len(it.e.Todos); n > 0 {
 				frac = float32(done) / float32(n)
 			}
-			ui.Box(c).Width(80).Height(4).Radius(2).Background(pal.divider).Draw(func(p *ui.Painter, r ui.Rect) {
+			ui.Box(c).Width(80).Height(4).Radius(rChip).Background(pal.divider).Draw(func(p *ui.Painter, r ui.Rect) {
 				p.Fill(ui.Rect{X: r.X, Y: r.Y, W: r.W * frac, H: r.H}, pal.accent, 2)
 			})
 		})
@@ -525,14 +525,14 @@ func (a *App) todosItem(c *ui.Context, pal *palette, it *ckItem) {
 			ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
 				switch t.Status {
 				case "completed":
-					ui.Text(c, "✓").FontSize(12).TextColor(pal.done).Width(14)
-					ui.Text(c, t.Text).FontSize(13).TextColor(pal.textFaint).Strikethrough()
+					ui.Text(c, "✓").FontSize(fsSmall).TextColor(pal.done).Width(14)
+					ui.Text(c, t.Text).FontSize(fsBody).TextColor(pal.textFaint).Strikethrough()
 				case "in_progress":
-					ui.Text(c, "●").FontSize(10).TextColor(pal.accent).Width(14)
-					ui.Text(c, t.Text).FontSize(13).FontWeight(650).TextColor(pal.text)
+					ui.Text(c, "●").FontSize(fsCaption).TextColor(pal.accent).Width(14)
+					ui.Text(c, t.Text).FontSize(fsBody).FontWeight(wSemibold).TextColor(pal.text)
 				default:
-					ui.Text(c, "○").FontSize(12).TextColor(pal.textFaint).Width(14)
-					ui.Text(c, t.Text).FontSize(13).TextColor(pal.text)
+					ui.Text(c, "○").FontSize(fsSmall).TextColor(pal.textFaint).Width(14)
+					ui.Text(c, t.Text).FontSize(fsBody).TextColor(pal.text)
 				}
 			})
 		}
@@ -546,7 +546,7 @@ const ckEditLines = 12
 func (a *App) editItem(c *ui.Context, pal *palette, th *ckThread, it *ckItem, mono string) {
 	d := it.e.Diff
 	open := !th.shut[it.key]
-	ui.Column(c).Radius(10).Background(ckCodeBg(pal)).Clip().Children(func() {
+	ui.Column(c).Radius(rControl).Background(ckCodeBg(pal)).Clip().Children(func() {
 		row := ui.Row(c.Key("h")).Gap(8).AlignItems(ui.Center).Padding(8, 12).Cursor(ui.CursorPointer).Unselectable()
 		if row.Clicked() {
 			c.Invalidate()
@@ -557,15 +557,15 @@ func (a *App) editItem(c *ui.Context, pal *palette, th *ckThread, it *ckItem, mo
 			if open {
 				ic = chevronDownIcon
 			}
-			ui.Icon(c, ic).Size(10, 10).TextColor(pal.textFaint)
-			ui.Text(c, it.e.Tool).FontSize(12.5).FontWeight(650).TextColor(pal.text)
-			ui.Text(c, d.File).Font(mono).FontSize(12).TextColor(pal.textMuted).SingleLine().Ellipsis("…").MinWidth(0).Grow(1)
+			ui.Icon(c, ic).Size(12, 12).TextColor(pal.textFaint)
+			ui.Text(c, it.e.Tool).FontSize(fsBody).FontWeight(wSemibold).TextColor(pal.text)
+			ui.Text(c, d.File).Font(mono).FontSize(fsSmall).TextColor(pal.textMuted).SingleLine().Ellipsis("…").MinWidth(0).Grow(1)
 			added, removed := a.diffColorsFor(pal)
 			if d.Added > 0 {
-				ui.Text(c, fmt.Sprint("+", d.Added)).Font(mono).FontSize(12).TextColor(added)
+				ui.Text(c, fmt.Sprint("+", d.Added)).Font(mono).FontSize(fsSmall).TextColor(added)
 			}
 			if d.Removed > 0 {
-				ui.Text(c, fmt.Sprint("−", d.Removed)).Font(mono).FontSize(12).TextColor(removed)
+				ui.Text(c, fmt.Sprint("−", d.Removed)).Font(mono).FontSize(fsSmall).TextColor(removed)
 			}
 			statusMark(c, pal, callStatus(it))
 		})
@@ -578,7 +578,7 @@ func (a *App) editItem(c *ui.Context, pal *palette, th *ckThread, it *ckItem, mo
 					th.open[it.key+"+all"] = true
 				}
 				r.Children(func() {
-					ui.Text(c, locales.CockpitShowAllLines(n)).FontSize(12).TextColor(pal.accent)
+					ui.Text(c, locales.CockpitShowAllLines(n)).FontSize(fsSmall).TextColor(pal.accent)
 				})
 			}
 		}
@@ -605,11 +605,15 @@ func (a *App) diffView(c *ui.Context, pal *palette, d *transcriptview.Diff, all 
 	added, removed := a.diffColorsFor(pal)
 	syn := a.syntaxColors(c, pal)
 	shown := 0
-	ui.ScrollHorizontal(c).Children(func() {
-		ui.Column(c).Padding(0, 0, 6, 0).MinWidthPercent(100).AlignItems(ui.Stretch).Children(func() {
+	sc := ui.ScrollHorizontal(c)
+	// The lines' colors run the card's width, however short the lines:
+	// a percent of a sideways scroll's content is of the content.
+	view := sc.Bounds().W
+	sc.Children(func() {
+		ui.Column(c).Padding(0, 0, 6, 0).MinWidth(view).AlignItems(ui.Stretch).Children(func() {
 			for hi, h := range d.Hunks {
 				if hi > 0 {
-					ui.Text(c, "⋯").FontSize(11).TextColor(pal.textFaint).Padding(0, 12)
+					ui.Text(c, "⋯").FontSize(fsCaption).TextColor(pal.textFaint).Padding(0, 12)
 				}
 				texts := make([]string, len(h.Lines))
 				for i, l := range h.Lines {
@@ -641,9 +645,9 @@ func (a *App) diffView(c *ui.Context, pal *palette, d *transcriptview.Diff, all 
 					runs := codeSpans(l.Text, sp, syn, pal.text)
 					runs = litWords(runs, l.Text, l.Words, word)
 					ui.Row(c).Background(bg).Children(func() {
-						ui.Text(c, fmt.Sprint(num)).Font(mono).FontSize(12).TextColor(pal.textFaint).Width(40).TextAlign(ui.End).Padding(0, 8, 0, 0).FontFeatures("tnum").Unselectable()
-						ui.Text(c, sign).Font(mono).FontSize(12).TextColor(pal.textMuted).Width(16).Unselectable()
-						ui.RichText(c, detab(runs)...).Font(mono).FontSize(12).LineHeight(1.5).NoWrap().Padding(0, 12, 0, 0)
+						ui.Text(c, fmt.Sprint(num)).Font(mono).FontSize(fsSmall).TextColor(pal.textFaint).Width(40).TextAlign(ui.End).Padding(0, 8, 0, 0).FontFeatures("tnum").Unselectable()
+						ui.Text(c, sign).Font(mono).FontSize(fsSmall).TextColor(pal.textMuted).Width(16).Unselectable()
+						ui.RichText(c, detab(runs)...).Font(mono).FontSize(fsCode).LineHeight(1.5).NoWrap().Padding(0, 12, 0, 0)
 					})
 				}
 			}

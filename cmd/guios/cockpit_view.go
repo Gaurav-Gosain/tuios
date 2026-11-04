@@ -89,12 +89,26 @@ func (a *App) cockpitCard(c *ui.Context, pal *palette, bar ui.TitleBar, shown fl
 	cw := a.side.rowW
 	ck.stacked = cw < ckStackBelow
 	ck.narrow = cw < ckNarrowBelow
-	card := paned(ui.Column(c.Key("cockpit")).Grow(1).MinHeight(0).Radius(14).Background(pal.card), pal).Clip()
+	ck.fleetW = ckFleetWidth(cw)
+	if ck.stacked {
+		ck.fleetW = cw - 2*cardGap
+	}
+	card := paned(ui.Column(c.Key("cockpit")).Grow(1).MinHeight(0).Radius(rPane).Background(pal.card), pal).Clip()
+	// It comes in as a dialog does (motion.go), from a hair smaller;
+	// MyGo shows it at once with reduced motion.
+	card.Transition(ui.ElementTransition{Animation: &motionBase, Position: true, Enter: &ui.Motion{Opacity: 0, Scale: 0.985}})
 	card.Children(func() {
 		a.cockpitHeader(c, pal, bar, shown)
 		ui.Box(c).Height(1).Shrink(0).Background(pal.divider)
+		// With no agent, the empty state takes the whole card: no column
+		// says "Select an agent", no hint names a key that does nothing.
+		empty := ck.loaded && len(ck.rows) == 0
 		body := ui.Row(c).Grow(1).MinHeight(0).AlignItems(ui.Stretch)
 		body.Children(func() {
+			if empty {
+				a.cockpitFleet(c, pal, 0, true)
+				return
+			}
 			if ck.stacked {
 				// One column at a time: the agents, or the chosen one.
 				// The agents column stays, empty, while the focus shows:
@@ -102,7 +116,9 @@ func (a *App) cockpitCard(c *ui.Context, pal *palette, bar ui.TitleBar, shown fl
 				focus := ck.stackFocus
 				a.cockpitFleet(c, pal, 0, !focus)
 				if focus {
-					ui.Column(c.Key("focus")).Grow(1).Basis(0).MinWidth(0).AlignItems(ui.Stretch).Children(func() {
+					fc := ui.Column(c.Key("focus")).Grow(1).Basis(0).MinWidth(0).AlignItems(ui.Stretch)
+					ck.focusW = fc.Bounds().W
+					fc.Children(func() {
 						a.cockpitFocus(c, pal)
 					})
 				}
@@ -110,7 +126,9 @@ func (a *App) cockpitCard(c *ui.Context, pal *palette, bar ui.TitleBar, shown fl
 			}
 			a.cockpitFleet(c, pal, ckFleetWidth(cw), true)
 			ui.Box(c).Width(1).Shrink(0).Background(pal.divider)
-			ui.Column(c.Key("focus")).Grow(1).Basis(0).MinWidth(0).AlignItems(ui.Stretch).Children(func() {
+			fc := ui.Column(c.Key("focus")).Grow(1).Basis(0).MinWidth(0).AlignItems(ui.Stretch)
+			ck.focusW = fc.Bounds().W
+			fc.Children(func() {
 				a.cockpitFocus(c, pal)
 			})
 			if cw > 1080 {
@@ -118,8 +136,10 @@ func (a *App) cockpitCard(c *ui.Context, pal *palette, bar ui.TitleBar, shown fl
 				a.cockpitSide(c, pal)
 			}
 		})
-		ui.Box(c).Height(1).Shrink(0).Background(pal.divider)
-		a.cockpitHints(c, pal)
+		if !empty {
+			ui.Box(c).Height(1).Shrink(0).Background(pal.divider)
+			a.cockpitHints(c, pal)
+		}
 	})
 }
 
@@ -132,19 +152,19 @@ func (a *App) cockpitHeader(c *ui.Context, pal *palette, bar ui.TitleBar, shown 
 			n[r.group] = r.count
 		}
 	}
-	ui.Row(c).Height(headerH).Shrink(0).AlignItems(ui.Center).Gap(14).Padding(0, 10, 0, a.chrome.headerPad).DragWindow().Children(func() {
+	ui.Row(c).Height(headerH).Shrink(0).AlignItems(ui.Center).Gap(sp3).Padding(0, 10, 0, a.chrome.headerPad).DragWindow().Children(func() {
 		if shown < 0.5 {
 			ui.Row(c).Absolute().Left(a.chrome.buttonsLeft(bar)).Top(0).Bottom(0).AlignItems(ui.Center).Gap(2).Opacity(1 - 2*shown).Children(func() {
 				iconButton(c, "show-sidebar", sidebarIcon, a.tip(locales.SidebarShow(), "sidebar.toggle"), pal, a.toggleSidebar)
 			})
 		}
-		ui.Text(c, locales.CockpitTitle()).FontSize(14).FontWeight(650).TextColor(pal.text)
+		ui.Text(c, locales.CockpitTitle()).FontSize(fsTitle).FontWeight(wSemibold).TextColor(pal.text).SingleLine().Shrink(0)
 		count := func(key string, g int, st proto.Status, unread bool, label string) {
 			if n[g] == 0 || ck.narrow {
 				// A narrow card has no room: the groups' heads count them.
 				return
 			}
-			b := ui.ButtonBase(c.Key(key)).Height(24).Padding(0, 8).Gap(6).Radius(6).AlignItems(ui.Center).Label(label)
+			b := ui.ButtonBase(c.Key(key)).Height(hControlSm).Padding(0, 8).Gap(6).Radius(rRow).AlignItems(ui.Center).Shrink(0).Label(label)
 			on := g == ckNeeds && ck.needsOnly
 			switch {
 			case on:
@@ -154,9 +174,9 @@ func (a *App) cockpitHeader(c *ui.Context, pal *palette, bar ui.TitleBar, shown 
 			}
 			b.Children(func() {
 				ckMark(c, pal, st, unread, 12)
-				ui.Text(c, itoa(n[g])).FontSize(12.5).FontWeight(650).TextColor(pal.text).FontFeatures("tnum")
+				ui.Text(c, itoa(n[g])).FontSize(fsBody).FontWeight(wSemibold).TextColor(pal.text).FontFeatures("tnum")
 				if !ck.stacked {
-					ui.Text(c, label).FontSize(12.5).TextColor(pal.textMuted)
+					ui.Text(c, label).FontSize(fsSmall).TextColor(pal.textMuted)
 				}
 			})
 			if ck.stacked {
@@ -177,7 +197,7 @@ func (a *App) cockpitHeader(c *ui.Context, pal *palette, bar ui.TitleBar, shown 
 		count("c-idle", ckIdle, proto.Idle, false, locales.CockpitCountIdle())
 		ui.Spacer(c)
 		if ck.err != "" {
-			ui.Text(c, ck.err).FontSize(12).TextColor(pal.danger).SingleLine().Ellipsis("…").MaxWidth(320)
+			oneLine(c, ck.err, fsSmall, 0).TextColor(pal.danger).MaxWidth(320)
 		}
 		iconButton(c, "ck-close", closeIcon, a.tip(locales.CockpitClose(), "agents.toggle"), pal, a.closeCockpit)
 		a.controlsRoom(c, 0)
@@ -237,17 +257,14 @@ func (a *App) cockpitFleet(c *ui.Context, pal *palette, width float32, shown boo
 
 // cockpitEmpty says no agent runs, and how to start one.
 func (a *App) cockpitEmpty(c *ui.Context, pal *palette) {
-	ui.Column(c).Grow(1).Center().Gap(8).Padding(20).Children(func() {
-		ui.Text(c, locales.CockpitEmptyTitle()).FontSize(14).FontWeight(650).TextColor(pal.text)
-		ui.Text(c, locales.CockpitEmptyDetail()).FontSize(12.5).TextColor(pal.textMuted).TextAlign(ui.Center).LineHeight(1.45).MaxWidth(240)
-	})
+	emptyBlock(c, pal, agentsIcon, locales.CockpitEmptyTitle(), locales.CockpitEmptyDetail(), false, nil)
 }
 
 // ckHead is a group's heading: its title, its count and a fold mark. A
 // click folds it.
 func (a *App) ckHead(c *ui.Context, pal *palette, r ckRow) {
 	ck := &a.ck
-	row := ui.Row(c.Key(r.key)).Height(28).Padding(0, 8).Gap(6).AlignItems(ui.Center).Radius(6).Margin(6, 0, 0, 0).Cursor(ui.CursorPointer)
+	row := ui.Row(c.Key(r.key)).Height(28).Padding(0, 8).Gap(6).AlignItems(ui.Center).Radius(rRow).Margin(6, 0, 0, 0).Cursor(ui.CursorPointer)
 	if r.key == ck.sel {
 		chosen(row.Background(pal.rowSelected), pal)
 	} else if row.Hovered() {
@@ -262,19 +279,19 @@ func (a *App) ckHead(c *ui.Context, pal *palette, r ckRow) {
 		if r.folded {
 			ic = chevronIcon
 		}
-		ui.Icon(c, ic).Size(11, 11).TextColor(pal.textFaint)
-		t := ui.Text(c, ckGroupTitle(r.group)).FontSize(12).FontWeight(650).TextColor(pal.textMuted)
+		ui.Icon(c, ic).Size(12, 12).TextColor(pal.textFaint).Shrink(0)
+		t := oneLine(c, ckGroupTitle(r.group), fsSmall, wMedium).TextColor(pal.textMuted)
 		if r.group == ckNeeds {
 			t.TextColor(pal.attention)
 		}
-		ui.Text(c, itoa(r.count)).FontSize(12).TextColor(pal.textFaint).FontFeatures("tnum")
+		ui.Text(c, itoa(r.count)).FontSize(fsSmall).TextColor(pal.textFaint).FontFeatures("tnum").Shrink(0)
 		ui.Box(c).Grow(1).Height(1).Background(pal.divider).Margin(0, 0, 0, 6)
 	})
 }
 
 // ckMore is the row a long group folds its tail into.
 func (a *App) ckMore(c *ui.Context, pal *palette, r ckRow) {
-	row := ui.Row(c.Key(r.key)).Height(ckRowH1).Padding(0, 10, 0, 32).AlignItems(ui.Center).Radius(6).Cursor(ui.CursorPointer)
+	row := ui.Row(c.Key(r.key)).Height(ckRowH1).Padding(0, 10, 0, 32).AlignItems(ui.Center).Radius(rRow).Cursor(ui.CursorPointer)
 	if row.Hovered() {
 		row.Background(pal.rowHover)
 	}
@@ -283,7 +300,7 @@ func (a *App) ckMore(c *ui.Context, pal *palette, r ckRow) {
 		a.ckOpenMore(r.group)
 	}
 	row.Children(func() {
-		ui.Text(c, locales.CockpitMore(r.count)).FontSize(12.5).TextColor(pal.textMuted)
+		ui.Text(c, locales.CockpitMore(r.count)).FontSize(fsSmall).TextColor(pal.textMuted)
 	})
 }
 
@@ -337,7 +354,7 @@ func (a *App) ckRowView(c *ui.Context, pal *palette, r ckRow) {
 		h = ckRowH
 	}
 	sel := r.key == ck.sel
-	row := ui.Row(c.Key(r.key)).Height(h).Padding(0, 10, 0, 8).Gap(10).AlignItems(ui.Center).Radius(8).Margin(0, 0, 1, 0)
+	row := ui.Row(c.Key(r.key)).Height(h).Padding(0, 10, 0, 8).Gap(10).AlignItems(ui.Center).Radius(rControl).Margin(0, 0, 1, 0)
 	if pal.dark {
 		row.Border(1, ui.Transparent)
 	}
@@ -351,7 +368,7 @@ func (a *App) ckRowView(c *ui.Context, pal *palette, r ckRow) {
 	case row.Hovered():
 		bg = pal.rowHover
 	}
-	row.Background(row.AnimateColor("bg", bg, ui.Animation{Duration: 110 * time.Millisecond}))
+	row.Background(row.AnimateColor("bg", bg, ui.Animation{Duration: dHoverOut}))
 	if row.Pressed() || row.Clicked() {
 		a.ckSelect(r)
 		ck.fleetFocus.Focus()
@@ -370,26 +387,45 @@ func (a *App) ckRowView(c *ui.Context, pal *palette, r ckRow) {
 	}
 	pointerTooltip(c, row, "ck-tip-"+r.key, tip)
 	st, unread := ckStatus(ag, r.item)
+	since := ag.StateAt / int64(time.Millisecond)
+	if r.item != nil && r.item.Since > 0 {
+		since = r.item.Since / int64(time.Millisecond)
+	}
+	age := ago(since, c.Now())
+	weight := wMedium
+	if unread || r.group == ckNeeds {
+		weight = wSemibold
+	}
+	// The name keeps its room: the session gives way first, then the
+	// harness's name, which its icon still tells (DESIGN.md section 7).
+	// The row's content: the column less the list's and the row's
+	// padding and edge, then the mark, the name, the age and five gaps.
+	room := ck.fleetW - 16 - 18 - 2 - 14 - 5*7 - natural(c, age, fsSmall, 0) - natural(c, name, fsBody, weight)
+	harnessW := 12 + 4 + natural(c, harnessName(harness), fsSmall, 0)
+	sessW := min(natural(c, sess, fsSmall, 0), 90) + 7
+	showHarness := room >= harnessW
+	showSess := sess != "" && room >= harnessW+sessW
 	row.Children(func() {
 		ui.Column(c).Grow(1).MinWidth(0).Gap(3).Children(func() {
 			ui.Row(c).Gap(7).AlignItems(ui.Center).Children(func() {
-				ckMark(c, pal, st, unread, 13)
-				nm := ui.Text(c, name).FontSize(13.5).SingleLine().Ellipsis("…").Shrink(1).MinWidth(0).TextColor(pal.text)
-				if unread || r.group == ckNeeds {
-					nm.FontWeight(650)
-				}
-				ui.Icon(c, harnessIcon(harness)).Size(12, 12).TextColor(pal.textFaint).Shrink(0)
-				ui.Text(c, harnessName(harness)).FontSize(12).TextColor(pal.textMuted).SingleLine().Shrink(0)
+				ckMark(c, pal, st, unread, 14)
+				oneLine(c, name, fsBody, weight).TextColor(pal.text)
+				ui.Row(c).Gap(4).AlignItems(ui.Center).Shrink(0).Children(func() {
+					ic := ui.Icon(c, harnessIcon(harness)).Size(12, 12).TextColor(pal.textFaint).Shrink(0)
+					if showHarness {
+						ui.Text(c, harnessName(harness)).FontSize(fsSmall).TextColor(pal.textMuted).SingleLine().Shrink(0)
+					} else {
+						ic.Tooltip(harnessName(harness))
+					}
+				})
 				ui.Spacer(c)
-				ui.Text(c, sess).FontSize(11.5).TextColor(pal.textFaint).SingleLine().Ellipsis("…").Shrink(2).MinWidth(20).MaxWidth(90)
-				since := ag.StateAt / int64(time.Millisecond)
-				if r.item != nil && r.item.Since > 0 {
-					since = r.item.Since / int64(time.Millisecond)
+				if showSess {
+					oneLine(c, sess, fsSmall, 0).TextColor(pal.textFaint).Shrink(2).MaxWidth(90)
 				}
-				ui.Text(c, ago(since, c.Now())).FontSize(11.5).TextColor(pal.textFaint).FontFeatures("tnum").SingleLine().Shrink(0)
+				ui.Text(c, age).FontSize(fsSmall).TextColor(pal.textFaint).FontFeatures("tnum").SingleLine().Shrink(0)
 			})
 			if two {
-				ui.RichText(c, ckLine2Spans(pal, verb, rest)...).FontSize(12).SingleLine().Ellipsis("…").MinWidth(0).Margin(0, 0, 0, 20)
+				ui.RichText(c, ckLine2Spans(pal, verb, flat(rest))...).FontSize(fsSmall).SingleLine().Ellipsis("…").MinWidth(0).Margin(0, 0, 0, 21)
 			}
 		})
 	})
@@ -400,10 +436,10 @@ func (a *App) ckRowView(c *ui.Context, pal *palette, r ckRow) {
 func ckLine2Spans(pal *palette, verb, rest string) []ui.Span {
 	var out []ui.Span
 	if verb != "" {
-		out = append(out, ui.Span{Text: verb + "  ", Color: pal.attention, Weight: 650})
+		out = append(out, ui.Span{Text: verb + "  ", Color: pal.attention, Weight: wSemibold})
 	}
 	if t, r, ok := strings.Cut(rest, "\x00"); ok {
-		out = append(out, ui.Span{Text: t + "  ", Color: pal.text, Weight: 600}, ui.Span{Text: r, Color: pal.textMuted})
+		out = append(out, ui.Span{Text: t + "  ", Color: pal.text, Weight: wMedium}, ui.Span{Text: r, Color: pal.textMuted})
 	} else {
 		out = append(out, ui.Span{Text: rest, Color: pal.textMuted})
 	}
@@ -541,12 +577,18 @@ func (a *App) cockpitKeys(c *ui.Context, col ui.Element) {
 
 // cockpitHints is the key line at the foot.
 func (a *App) cockpitHints(c *ui.Context, pal *palette) {
-	ui.Row(c).Height(30).Shrink(0).AlignItems(ui.Center).Gap(14).Padding(0, 14).Children(func() {
+	// The hints that fit, from the left; the count of agents keeps its
+	// room at the right.
+	room := a.side.rowW - 28 - 100
+	ui.Row(c).Height(hRow).Shrink(0).AlignItems(ui.Center).Gap(sp3).Padding(0, 14).Clip().Children(func() {
 		hint := func(k, what string) {
-			ui.Row(c).Gap(5).AlignItems(ui.Center).Children(func() {
-				kbd(c, pal, k)
-				ui.Text(c, what).FontSize(12).TextColor(pal.textMuted).SingleLine()
-			})
+			need := natural(c, k, fsCaption, wMedium) + 10 + 6 + natural(c, what, fsSmall, 0) + sp3
+			if need > room {
+				room = -1
+				return
+			}
+			room -= need
+			keyHint(c, pal, k, what)
 		}
 		switch {
 		case a.ck.stacked && a.ck.stackFocus:
@@ -569,7 +611,7 @@ func (a *App) cockpitHints(c *ui.Context, pal *palette) {
 				n++
 			}
 		}
-		ui.Text(c, locales.CockpitAgentCount(n)).FontSize(12).TextColor(pal.textFaint).SingleLine()
+		ui.Text(c, locales.CockpitAgentCount(n)).FontSize(fsSmall).TextColor(pal.textFaint).FontFeatures("tnum").SingleLine().Shrink(0)
 	})
 }
 
@@ -612,7 +654,7 @@ func (a *App) agentsRow(c *ui.Context, pal *palette) {
 		}
 	}
 	on := a.ck.open
-	row := ui.Row(c.Key("agents-row")).Height(rowH).Padding(0, 10, 0, rowInset).Gap(10).AlignItems(ui.Center).Radius(8).Margin(0, 0, 6, 0).
+	row := ui.Row(c.Key("agents-row")).Height(rowH).Padding(0, 10, 0, rowInset).Gap(10).AlignItems(ui.Center).Radius(rRow).Margin(0, 0, 6, 0).
 		Label(locales.ActionAgents()).Cursor(ui.CursorPointer)
 	if pal.dark {
 		row.Border(1, ui.Transparent)
@@ -629,11 +671,11 @@ func (a *App) agentsRow(c *ui.Context, pal *palette) {
 		a.toggleCockpit()
 	}
 	row.Children(func() {
-		ui.Icon(c, agentsIcon).Size(15, 15).TextColor(pal.textMuted)
-		ui.Text(c, locales.ActionAgents()).FontSize(13.5).TextColor(pal.text)
+		ui.Icon(c, agentsIcon).Size(16, 16).TextColor(pal.textMuted).Shrink(0)
+		oneLine(c, locales.ActionAgents(), fsBody, wMedium).TextColor(pal.text)
 		ui.Spacer(c)
 		if waiting > 0 {
-			ui.Text(c, itoa(waiting)).FontSize(11.5).FontWeight(700).TextColor(pal.onDone).Padding(1, 7).Radius(9).Background(pal.attention)
+			countBadge(c, waiting, pal.attention, pal.onDone)
 		}
 	})
 }
@@ -662,12 +704,7 @@ func ckAsk(summary string) (tool, target string, ok bool) {
 
 // ckMessage is a quiet centred message in the focus area.
 func (a *App) ckMessage(c *ui.Context, pal *palette, title, detail string) {
-	ui.Column(c).Grow(1).Center().Gap(6).Padding(24).Children(func() {
-		ui.Text(c, title).FontSize(14).FontWeight(600).TextColor(pal.text).TextAlign(ui.Center)
-		if detail != "" {
-			ui.Text(c, detail).FontSize(12.5).TextColor(pal.textMuted).MaxWidth(380).TextAlign(ui.Center).LineHeight(1.45)
-		}
-	})
+	emptyBlock(c, pal, nil, title, detail, false, nil)
 }
 
 // clock is a time in unix milliseconds as hours and minutes.
@@ -692,33 +729,13 @@ func ckCodeBg(pal *palette) ui.Color {
 // cockpit lists many agents and keeps the TUI's rule of no spinners, so it
 // costs no frame while nothing changes.
 func ckMark(c *ui.Context, pal *palette, st proto.Status, unread bool, size float32) ui.Element {
-	if st != proto.Working && st != proto.Waiting {
-		return statusIcon(c, pal, st, unread, size)
-	}
-	box := ui.Box(c).Size(size, size).Shrink(0)
-	if st == proto.Working {
-		box.Label(locales.StatusWorking())
-	} else {
-		box.Label(locales.StatusNeedsYou())
-	}
-	box.Draw(func(p *ui.Painter, r ui.Rect) {
-		cx, cy := r.X+r.W/2, r.Y+r.H/2
-		rad := min(r.W, r.H)/2 - 1
-		var ring ui.Path
-		ring.Circle(cx, cy, rad)
-		if st == proto.Working {
-			p.StrokePath(&ring, 1.7, pal.accent.Alpha(0.25))
-			p.Transform(ui.Rotation(-90), cx, cy, func() {
-				var arc ui.Path
-				arc.Circle(cx, cy, rad)
-				p.StrokePath(arc.Trim(0, 0.35), 1.7, pal.accent)
-			})
-			return
-		}
-		p.StrokePath(&ring, 1.7, pal.attention)
-		var dot ui.Path
-		dot.Circle(cx, cy, rad*0.42)
-		p.FillPath(&dot, pal.attention)
-	})
-	return box
+	return statusIcon(c, pal, st, unread, size)
+}
+
+// ckSide is the room at each side of the thread, its approval card and
+// its reply box: at least min, more once the focus column is wider than
+// threadW, so that no line of the thread runs longer (DESIGN.md
+// section 9).
+func (a *App) ckSide(min float32) float32 {
+	return max(min, (a.ck.focusW-threadW)/2)
 }

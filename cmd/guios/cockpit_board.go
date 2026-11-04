@@ -300,7 +300,7 @@ func (a *App) boardEdge(c *ui.Context, pal *palette, b *ckBoard, dir, n int) {
 			names = append(names, ckStageTitle(st)+" "+itoa(len(b.column(st))))
 		}
 	}
-	btn := ui.ButtonBase(c.Key(key)).Width(boardEdgeW).Shrink(0).Radius(10).Background(ckGround(pal).Alpha(0.55)).
+	btn := ui.ButtonBase(c.Key(key)).Width(boardEdgeW).Shrink(0).Radius(rCard).Background(ckGround(pal).Alpha(0.55)).
 		Label(locales.CockpitMoreColumns()).Tooltip(strings.Join(names, " · "))
 	if btn.Hovered() {
 		btn.Background(ckGround(pal))
@@ -322,7 +322,7 @@ func (a *App) boardEdge(c *ui.Context, pal *palette, b *ckBoard, dir, n int) {
 			if dir < 0 {
 				ic.Rotate(180)
 			}
-			ui.Text(c, "+"+itoa(n)).FontSize(11.5).FontWeight(600).TextColor(pal.textFaint).FontFeatures("tnum")
+			ui.Text(c, "+"+itoa(n)).FontSize(fsSmall).FontWeight(wSemibold).TextColor(pal.textFaint).FontFeatures("tnum")
 		})
 	})
 	if btn.Clicked() {
@@ -355,7 +355,7 @@ func (b *ckBoard) step(dir int) {
 func (a *App) boardColumn(c *ui.Context, pal *palette, b *ckBoard, ci int, st string, width float32) {
 	cards := b.column(st)
 	folded := b.folded(st)
-	col := ui.Column(c.Key(st)).Gap(8).Padding(8).Radius(10).Background(ckGround(pal)).AlignItems(ui.Stretch)
+	col := ui.Column(c.Key(st)).Gap(8).Padding(8).Radius(rCard).Background(ckGround(pal)).AlignItems(ui.Stretch)
 	col.Width(width).Shrink(0)
 	if b.sel == "" && b.col == ci && b.focus.Focused(c) {
 		// The cursor in a column without a card to show it.
@@ -377,14 +377,14 @@ func (a *App) boardColumn(c *ui.Context, pal *palette, b *ckBoard, ci int, st st
 			b.col = ci
 		}
 		head.Children(func() {
-			ui.Text(c, ckStageTitle(st)).FontSize(12).FontWeight(650).TextColor(pal.textMuted).SingleLine()
-			ui.Text(c, itoa(len(cards))).FontSize(12).TextColor(pal.textFaint).FontFeatures("tnum")
+			ui.Text(c, ckStageTitle(st)).FontSize(fsSmall).FontWeight(wSemibold).TextColor(pal.textMuted).SingleLine()
+			ui.Text(c, itoa(len(cards))).FontSize(fsSmall).TextColor(pal.textFaint).FontFeatures("tnum")
 			ui.Spacer(c)
-			add := ui.ButtonBase(c.Key("add")).Size(20, 20).Radius(5).Center().Label(locales.CockpitAddCard()).Tooltip(locales.CockpitAddCard())
+			add := ui.ButtonBase(c.Key("add")).Size(20, 20).Radius(rChip).Center().Label(locales.CockpitAddCard()).Tooltip(locales.CockpitAddCard())
 			if add.Hovered() {
 				add.Background(pal.rowHover)
 			}
-			add.Children(func() { ui.Icon(c, plusIcon).Size(11, 11).TextColor(pal.textMuted) })
+			add.Children(func() { ui.Icon(c, plusIcon).Size(12, 12).TextColor(pal.textMuted) })
 			if add.Clicked() {
 				c.Invalidate()
 				b.adding, b.draft = ci, ""
@@ -416,7 +416,7 @@ func (a *App) boardColumn(c *ui.Context, pal *palette, b *ckBoard, ci int, st st
 // boardCard is one card.
 func (a *App) boardCard(c *ui.Context, pal *palette, b *ckBoard, t session.TaskRow) {
 	on := t.ID == b.sel
-	card := ui.Column(c.Key(t.Session+"/"+t.ID)).Gap(6).Padding(9, 10).Radius(8).Background(pal.card).Cursor(ui.CursorPointer)
+	card := ui.Column(c.Key(t.Session+"/"+t.ID)).Gap(6).Padding(9, 10).Radius(rControl).Background(pal.card).Cursor(ui.CursorPointer)
 	if on {
 		// The selected card drags to another column: a card that drags
 		// takes no click, so a click selects it first.
@@ -458,11 +458,11 @@ func (a *App) boardCard(c *ui.Context, pal *palette, b *ckBoard, t session.TaskR
 		}
 	})
 	card.Children(func() {
-		ui.Text(c, t.Title).FontSize(13).LineHeight(1.35).TextColor(pal.text).MaxLines(2).Ellipsis("…")
+		ui.Text(c, t.Title).FontSize(fsBody).LineHeight(1.35).TextColor(pal.text).MaxLines(2).Ellipsis("…")
 		ui.Row(c).Gap(6).AlignItems(ui.Center).Children(func() {
 			switch {
 			case t.Blocked != nil:
-				ui.Text(c, locales.CockpitBlocked()).FontSize(11.5).FontWeight(650).TextColor(pal.danger).SingleLine()
+				ui.Text(c, locales.CockpitBlocked()).FontSize(fsSmall).FontWeight(wSemibold).TextColor(pal.danger).SingleLine()
 			case t.Holder != nil:
 				st, unread := ckStateStatus(t.Holder.State)
 				ckMark(c, pal, st, unread, 11)
@@ -470,13 +470,13 @@ func (a *App) boardCard(c *ui.Context, pal *palette, b *ckBoard, t session.TaskR
 				if name == "" {
 					name = t.Holder.Window[:min(8, len(t.Holder.Window))]
 				}
-				ui.Text(c, name).FontSize(11.5).TextColor(pal.textMuted).SingleLine().Ellipsis("…").MinWidth(0)
+				ui.Text(c, name).FontSize(fsSmall).TextColor(pal.textMuted).SingleLine().Ellipsis("…").MinWidth(0)
 			default:
-				ui.Text(c, locales.CockpitFree()).FontSize(11.5).TextColor(pal.textFaint)
+				ui.Text(c, locales.CockpitFree()).FontSize(fsSmall).TextColor(pal.textFaint)
 			}
 			ui.Spacer(c)
-			ui.Text(c, t.ID).FontSize(11).TextColor(pal.textFaint).FontFeatures("tnum")
-			ui.Text(c, ago(t.StageAt/int64(time.Millisecond), c.Now())).FontSize(11).TextColor(pal.textFaint)
+			ui.Text(c, t.ID).FontSize(fsCaption).TextColor(pal.textFaint).FontFeatures("tnum")
+			ui.Text(c, ago(t.StageAt/int64(time.Millisecond), c.Now())).FontSize(fsCaption).TextColor(pal.textFaint)
 		})
 	})
 }

@@ -19,7 +19,7 @@ import (
 // by internal/diffview, and tables with a ruled header.
 
 // mdBody is the body text's size.
-const mdBody = 13.5
+const mdBody = fsProse
 
 // markdownView draws blocks.
 func (a *App) markdownView(c *ui.Context, pal *palette, blocks []markdown.Block, mono string) {
@@ -115,7 +115,7 @@ func (a *App) mdBlock(c *ui.Context, pal *palette, b *markdown.Block, mono strin
 			size = 13.5
 		}
 		ui.Column(c).Gap(6).Margin(6, 0, 2, 0).Children(func() {
-			ui.RichText(c, mdRuns(pal, b.Text, mono, size)...).FontSize(size).FontWeight(700).LineHeight(1.3)
+			ui.RichText(c, mdRuns(pal, b.Text, mono, size)...).FontSize(size).FontWeight(wSemibold).LineHeight(1.3)
 			if b.Level <= 2 {
 				// GitHub's rule under the two top levels.
 				ui.Box(c).Height(1).Background(pal.divider)
@@ -125,7 +125,7 @@ func (a *App) mdBlock(c *ui.Context, pal *palette, b *markdown.Block, mono strin
 		a.mdItem(c, pal, b, mono, depth)
 	case markdown.Quote:
 		ui.Row(c).AlignItems(ui.Stretch).Gap(12).Children(func() {
-			ui.Box(c).Width(3).Shrink(0).Radius(2).Background(pal.textFaint.Alpha(0.5))
+			ui.Box(c).Width(3).Shrink(0).Radius(rChip).Background(pal.textFaint.Alpha(0.5))
 			ui.Column(c).Grow(1).MinWidth(0).Gap(8).TextColor(pal.textMuted).Children(func() {
 				for i := range b.Children {
 					a.mdBlock(c.Key(i), pal, &b.Children[i], mono, depth)
@@ -171,19 +171,19 @@ func (a *App) mdItem(c *ui.Context, pal *palette, b *markdown.Block, mono string
 func (a *App) codeBlock(c *ui.Context, pal *palette, b *markdown.Block, mono string) {
 	syn := a.syntaxColors(c, pal)
 	spans := cachedSpans(b, func() [][]diffview.Span { return diffview.HighlightLang(b.Lang, b.Lines) })
-	ui.Column(c).Radius(10).Background(ckCodeBg(pal)).Clip().Children(func() {
+	ui.Column(c).Radius(rControl).Background(ckCodeBg(pal)).Clip().Children(func() {
 		ui.Row(c).Height(28).Padding(0, 6, 0, 12).AlignItems(ui.Center).Unselectable().Children(func() {
 			lang := b.Lang
 			if lang == "" {
 				lang = locales.CockpitCode()
 			}
-			ui.Text(c, lang).FontSize(11.5).TextColor(pal.textFaint)
+			ui.Text(c, lang).FontSize(fsSmall).TextColor(pal.textFaint)
 			ui.Spacer(c)
-			cp := ui.ButtonBase(c.Key("copy")).Size(24, 22).Radius(5).Center().TextColor(pal.textMuted).Label(locales.CockpitCopy()).Tooltip(locales.CockpitCopy())
+			cp := ui.ButtonBase(c.Key("copy")).Size(24, 22).Radius(rChip).Center().TextColor(pal.textMuted).Label(locales.CockpitCopy()).Tooltip(locales.CockpitCopy())
 			if cp.Hovered() {
 				cp.Background(pal.rowHover)
 			}
-			cp.Children(func() { ui.Icon(c, copyIcon).Size(13, 13) })
+			cp.Children(func() { ui.Icon(c, copyIcon).Size(14, 14) })
 			if cp.Clicked() {
 				c.Invalidate()
 				a.copyText = strings.Join(b.Lines, "\n")
@@ -196,7 +196,7 @@ func (a *App) codeBlock(c *ui.Context, pal *palette, b *markdown.Block, mono str
 					if i < len(spans) {
 						sp = spans[i]
 					}
-					ui.RichText(c, detab(codeSpans(line, sp, syn, pal.text))...).Font(mono).FontSize(12.5).LineHeight(1.5).NoWrap()
+					ui.RichText(c, detab(codeSpans(line, sp, syn, pal.text))...).Font(mono).FontSize(fsCode).LineHeight(1.5).NoWrap()
 				}
 			})
 		})
@@ -225,14 +225,14 @@ func (a *App) mdTable(c *ui.Context, pal *palette, b *markdown.Block, mono strin
 				if i < len(cells) {
 					cell = cells[i]
 				}
-				t := ui.RichText(c, mdRuns(pal, cell, mono, 13)...).FontSize(13).LineHeight(1.45).Grow(1).Basis(0).MinWidth(0).Padding(6, 10).TextAlign(align(i))
+				t := ui.RichText(c, mdRuns(pal, cell, mono, 13)...).FontSize(fsBody).LineHeight(1.45).Grow(1).Basis(0).MinWidth(0).Padding(6, 10).TextAlign(align(i))
 				if head {
-					t.FontWeight(650)
+					t.FontWeight(wSemibold)
 				}
 			}
 		})
 	}
-	ui.Column(c).Radius(8).Border(1, pal.divider).Clip().Children(func() {
+	ui.Column(c).Radius(rControl).Border(1, pal.divider).Clip().Children(func() {
 		ui.Column(c).Background(pal.chip.Alpha(0.6)).Children(func() { row(b.Header, true) })
 		for ri, r := range b.Rows {
 			ui.Box(c.Key(ri)).Height(1).Background(pal.divider)

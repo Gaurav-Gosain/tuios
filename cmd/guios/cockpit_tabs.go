@@ -202,11 +202,11 @@ func (a *App) diffPage(c *ui.Context, pal *palette, ag client.Agent, d *ckDiff, 
 					ta += f.Added
 					tr += f.Removed
 				}
-				ui.Text(c, locales.CockpitFilesChanged(len(d.files))).FontSize(13).FontWeight(650).TextColor(pal.text)
-				ui.Text(c, fmt.Sprint("+", ta)).Font(mono).FontSize(12).TextColor(added)
-				ui.Text(c, fmt.Sprint("−", tr)).Font(mono).FontSize(12).TextColor(removed)
+				ui.Text(c, locales.CockpitFilesChanged(len(d.files))).FontSize(fsBody).FontWeight(wSemibold).TextColor(pal.text)
+				ui.Text(c, fmt.Sprint("+", ta)).Font(mono).FontSize(fsSmall).TextColor(added)
+				ui.Text(c, fmt.Sprint("−", tr)).Font(mono).FontSize(fsSmall).TextColor(removed)
 				if d.base != "" {
-					ui.Text(c, locales.CockpitAgainst(d.base)).FontSize(12).TextColor(pal.textFaint)
+					ui.Text(c, locales.CockpitAgainst(d.base)).FontSize(fsSmall).TextColor(pal.textFaint)
 				}
 				ui.Spacer(c)
 				if actions != nil {
@@ -215,12 +215,12 @@ func (a *App) diffPage(c *ui.Context, pal *palette, ag client.Agent, d *ckDiff, 
 			})
 			for i := range d.files {
 				f := &d.files[i]
-				ui.Column(c.Key(f.Path)).Radius(10).Background(ckCodeBg(pal)).Clip().Children(func() {
+				ui.Column(c.Key(f.Path)).Radius(rControl).Background(ckCodeBg(pal)).Clip().Children(func() {
 					ui.Row(c).Gap(8).AlignItems(ui.Center).Padding(8, 12).Children(func() {
 						fileIconImage(c, pal, f.Path, false, false)
-						ui.Text(c, f.Path).Font(mono).FontSize(12.5).TextColor(pal.text).SingleLine().Ellipsis("…").MinWidth(0).Grow(1)
-						ui.Text(c, fmt.Sprint("+", f.Added)).Font(mono).FontSize(12).TextColor(added)
-						ui.Text(c, fmt.Sprint("−", f.Removed)).Font(mono).FontSize(12).TextColor(removed)
+						ui.Text(c, f.Path).Font(mono).FontSize(fsBody).TextColor(pal.text).SingleLine().Ellipsis("…").MinWidth(0).Grow(1)
+						ui.Text(c, fmt.Sprint("+", f.Added)).Font(mono).FontSize(fsSmall).TextColor(added)
+						ui.Text(c, fmt.Sprint("−", f.Removed)).Font(mono).FontSize(fsSmall).TextColor(removed)
 					})
 					a.diffView(c, pal, f.asDiff(), true, mono)
 					if notes {
@@ -239,9 +239,9 @@ func (a *App) fileNotes(c *ui.Context, pal *palette, ag client.Agent, d *ckDiff,
 			if n.Path != f.Path {
 				continue
 			}
-			ui.Row(c.Key("n"+n.ID)).Gap(8).AlignItems(ui.Center).Padding(6, 10).Radius(7).Background(pal.accent.Alpha(0.1)).Children(func() {
-				ui.Text(c, locales.CockpitNoteOn(n.Line)).FontSize(11.5).FontWeight(650).TextColor(pal.accent).Shrink(0)
-				t := ui.Text(c, n.Text).FontSize(12.5).TextColor(pal.text).Grow(1).MinWidth(0)
+			ui.Row(c.Key("n"+n.ID)).Gap(8).AlignItems(ui.Center).Padding(6, 10).Radius(rRow).Background(pal.accent.Alpha(0.1)).Children(func() {
+				ui.Text(c, locales.CockpitNoteOn(n.Line)).FontSize(fsSmall).FontWeight(wSemibold).TextColor(pal.accent).Shrink(0)
+				t := ui.Text(c, n.Text).FontSize(fsBody).TextColor(pal.text).Grow(1).MinWidth(0)
 				if n.Done {
 					t.Strikethrough().TextColor(pal.textMuted)
 				}
@@ -271,7 +271,7 @@ func (a *App) fileNotes(c *ui.Context, pal *palette, ag client.Agent, d *ckDiff,
 			d.note, d.noteText = f.Path, ""
 		}
 		r.Children(func() {
-			ui.Text(c, locales.CockpitAddNote()).FontSize(12).TextColor(pal.accent)
+			ui.Text(c, locales.CockpitAddNote()).FontSize(fsSmall).TextColor(pal.accent)
 		})
 	})
 }
@@ -414,7 +414,7 @@ func (a *App) checkpointsView(c *ui.Context, pal *palette, ag client.Agent) {
 		ui.Scroll(c.Key("cps")).Width(240).Shrink(0).Padding(12, 10).Children(func() {
 			for i, k := range cp.list {
 				on := k.N == cp.chosen
-				row := ui.Row(c.Key(k.N)).Gap(10).Padding(7, 10).Radius(7).AlignItems(ui.Start).Cursor(ui.CursorPointer)
+				row := ui.Row(c.Key(k.N)).Gap(10).Padding(7, 10).Radius(rRow).AlignItems(ui.Start).Cursor(ui.CursorPointer)
 				switch {
 				case on:
 					chosen(row.Background(pal.rowSelected), pal)
@@ -436,8 +436,8 @@ func (a *App) checkpointsView(c *ui.Context, pal *palette, ag client.Agent) {
 						if label == "" {
 							label = locales.CockpitTurn(k.Turn)
 						}
-						ui.Text(c, label).FontSize(12.5).TextColor(pal.text).MaxLines(2).Ellipsis("…")
-						ui.Text(c, fmt.Sprintf("#%d · %s", k.N, clock(k.At/int64(time.Millisecond)))).FontSize(11.5).TextColor(pal.textFaint).FontFeatures("tnum")
+						ui.Text(c, label).FontSize(fsBody).TextColor(pal.text).MaxLines(2).Ellipsis("…")
+						ui.Text(c, fmt.Sprintf("#%d · %s", k.N, clock(k.At/int64(time.Millisecond)))).FontSize(fsSmall).TextColor(pal.textFaint).FontFeatures("tnum")
 					})
 				})
 			}
@@ -555,27 +555,27 @@ func (a *App) mailView(c *ui.Context, pal *palette, ag client.Agent) {
 			}
 			for _, msg := range mine {
 				in := msg.To == ag.Window
-				ui.Column(c.Key(msg.ID)).Gap(6).Padding(10, 14).Radius(10).Background(ckGround(pal)).Children(func() {
+				ui.Column(c.Key(msg.ID)).Gap(6).Padding(10, 14).Radius(rCard).Background(ckGround(pal)).Children(func() {
 					ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
 						arrow := "→"
 						if in {
 							arrow = "←"
 						}
-						ui.Text(c, arrow).FontSize(13).TextColor(pal.accent)
+						ui.Text(c, arrow).FontSize(fsBody).TextColor(pal.accent)
 						to := msg.ToName
 						if to == "" {
 							to = locales.CockpitEveryone()
 						}
-						ui.Text(c, msg.FromName).FontSize(12.5).FontWeight(650).TextColor(pal.text)
-						ui.Text(c, "→ "+to).FontSize(12.5).TextColor(pal.textMuted)
+						ui.Text(c, msg.FromName).FontSize(fsBody).FontWeight(wSemibold).TextColor(pal.text)
+						ui.Text(c, "→ "+to).FontSize(fsSmall).TextColor(pal.textMuted)
 						if msg.Subject != "" {
-							ui.Text(c, "· "+msg.Subject).FontSize(12.5).TextColor(pal.textMuted).SingleLine().Ellipsis("…").MinWidth(0)
+							ui.Text(c, "· "+msg.Subject).FontSize(fsSmall).TextColor(pal.textMuted).SingleLine().Ellipsis("…").MinWidth(0)
 						}
 						ui.Spacer(c)
 						if msg.Unread {
-							ui.Box(c).Size(7, 7).Radius(4).Background(pal.attention)
+							ui.Box(c).Size(7, 7).Radius(rChip).Background(pal.attention)
 						}
-						ui.Text(c, ago(msg.SentAt/int64(time.Millisecond), c.Now())).FontSize(11.5).TextColor(pal.textFaint)
+						ui.Text(c, ago(msg.SentAt/int64(time.Millisecond), c.Now())).FontSize(fsSmall).TextColor(pal.textFaint)
 					})
 					blocks, ok := m.md[msg.ID]
 					if !ok {
@@ -589,7 +589,7 @@ func (a *App) mailView(c *ui.Context, pal *palette, ag client.Agent) {
 						m.replyTo = msg.ID
 					}
 					r.Children(func() {
-						ui.Text(c, locales.CockpitReplyAsYou()).FontSize(12).TextColor(pal.accent)
+						ui.Text(c, locales.CockpitReplyAsYou()).FontSize(fsSmall).TextColor(pal.accent)
 					})
 				})
 			}

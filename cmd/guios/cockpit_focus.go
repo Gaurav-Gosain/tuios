@@ -66,7 +66,7 @@ func ckStatePill(pal *palette, ag client.Agent, it *session.AttentionItem) (stri
 	case st == proto.Waiting:
 		return locales.StatusNeedsYou(), pal.attention
 	case st == proto.Working:
-		return locales.StatusWorking(), pal.accent
+		return locales.StatusWorking(), pal.work
 	case st == proto.Failed:
 		return locales.StatusFailed(), pal.danger
 	case unread:
@@ -104,30 +104,30 @@ func (a *App) cockpitFocus(c *ui.Context, pal *palette) {
 			if ck.stacked {
 				iconButton(c, "ck-back", chevronLeftIcon, a.tip(locales.CockpitBack(), ""), pal, func() { ck.stackFocus = false })
 			}
-			ui.Icon(c, harnessIcon(ag.Harness)).Size(16, 16).TextColor(pal.textMuted)
-			name := ui.Text(c, ag.Name).FontSize(16).FontWeight(700).TextColor(pal.text).SingleLine().Ellipsis("…").MinWidth(0).Cursor(ui.CursorPointer)
+			ui.Icon(c, harnessIcon(ag.Harness)).Size(16, 16).TextColor(pal.textMuted).Shrink(0)
+			name := oneLine(c, ag.Name, fsTitle, wSemibold).TextColor(pal.text).Cursor(ui.CursorPointer)
 			pointerTooltip(c, name, "ck-name", locales.CockpitOpenPane())
 			if name.Clicked() && ag.Window != "" {
 				a.goToAgent(ag)
 			}
 			if !ck.narrow {
-				ui.Text(c, harnessName(ag.Harness)).FontSize(13).TextColor(pal.textMuted)
+				ui.Text(c, harnessName(ag.Harness)).FontSize(fsBody).TextColor(pal.textMuted).SingleLine().Shrink(0)
 				if m, ok := ag.Meta["model"].(string); ok && m != "" {
-					ui.Text(c, "· "+m).FontSize(13).TextColor(pal.textFaint)
+					oneLine(c, "· "+m, fsBody, 0).TextColor(pal.textFaint).Shrink(2)
 				}
 			}
 			ui.Spacer(c)
 			word, col := ckStatePill(pal, ag, r.item)
-			ui.Row(c).Shrink(0).Gap(6).AlignItems(ui.Center).Padding(3, 10).Radius(11).Background(col.Alpha(0.15)).Children(func() {
-				ui.Box(c).Size(7, 7).Radius(4).Background(col)
-				ui.Text(c, word).FontSize(12).FontWeight(650).TextColor(col).SingleLine()
-			})
+			chip(c, pal, col.Alpha(0.15), col, func() {
+				ui.Box(c).Size(6, 6).Radius(3).Background(col).Shrink(0)
+				ui.Text(c, word).FontSize(fsSmall).FontWeight(wMedium).SingleLine()
+			}).Shrink(0)
 			switch {
 			case ag.Window == "":
 			case ck.narrow:
 				iconButton(c, "ck-open", openFileIcon, locales.CockpitOpenPane()+" (↵)", pal, func() { a.goToAgent(ag) })
 			default:
-				if sizedButton(c, "ck-open", locales.CockpitOpenPane(), "↵", false, 26, 7, pal) {
+				if sizedButton(c, "ck-open", locales.CockpitOpenPane(), "↵", false, hControlSm, rControl, pal) {
 					a.goToAgent(ag)
 				}
 			}
@@ -143,7 +143,7 @@ func (a *App) cockpitFocus(c *ui.Context, pal *palette) {
 		if ag.Source != "" && ag.Source != "report" {
 			where = append(where, locales.CockpitStateFrom(ag.Source))
 		}
-		ui.Text(c, strings.Join(where, " · ")).FontSize(12).TextColor(pal.textFaint).SingleLine().Ellipsis("…").MinWidth(0)
+		oneLine(c, strings.Join(where, " · "), fsSmall, 0).TextColor(pal.textFaint)
 		a.agentUsage(c, pal, ag)
 		// Tabs.
 		// A narrow card scrolls the tabs sideways rather than cut the last.
@@ -204,23 +204,19 @@ const (
 // ckTab is one tab, with its count where it has one.
 func (a *App) ckTab(c *ui.Context, pal *palette, t string, ag client.Agent) {
 	on := a.ck.tab == t
-	b := ui.ButtonBase(c.Key("tab-"+t)).Height(30).Padding(0, 10).Gap(6).AlignItems(ui.Center).Label(ckTabTitle(t))
+	b := ui.ButtonBase(c.Key("tab-"+t)).Height(hControl+2).Padding(0, 10).Gap(6).AlignItems(ui.Center).Shrink(0).Radius(rRow).Label(ckTabTitle(t))
 	b.Draw(func(p *ui.Painter, r ui.Rect) {
 		if on {
 			p.Fill(ui.Rect{X: r.X + 6, Y: r.Y + r.H - 2, W: r.W - 12, H: 2}, pal.accent, 1)
 		}
 	})
 	col := pal.textMuted
-	if on {
+	if on || b.Hovered() {
 		col = pal.text
-	} else if b.Hovered() {
-		col = pal.text.Alpha(0.85)
 	}
 	b.Children(func() {
-		t := ui.Text(c, ckTabTitle(t)).FontSize(13).TextColor(col)
-		if on {
-			t.FontWeight(650)
-		}
+		// One weight for every tab, so that the chosen one is no wider.
+		ui.Text(c, ckTabTitle(t)).FontSize(fsBody).FontWeight(wMedium).TextColor(col).SingleLine()
 	})
 	if b.Clicked() {
 		c.Invalidate()
@@ -282,19 +278,21 @@ func (a *App) approvalCard(c *ui.Context, pal *palette, ag client.Agent, it sess
 	}
 	pk := ck.peek
 	settled := now.Sub(ck.shown.since) >= ckAnswerSettle
-	ui.Column(c.Key("approval")).Shrink(0).Margin(0, 24, 10, 24).Padding(14, 16).Gap(10).Radius(10).
+	ui.Column(c.Key("approval")).Shrink(0).Margin(0, a.ckSide(24), 10, a.ckSide(24)).Padding(14, 16).Gap(10).Radius(rCard).
 		Background(pal.attnSoft).Border(1, pal.attention.Alpha(0.35)).Children(func() {
 		ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
-			ui.Box(c).Size(8, 8).Radius(4).Background(pal.attention)
+			ui.Box(c).Size(8, 8).Radius(4).Background(pal.attention).Shrink(0)
 			verb, rest := ckLine2(ag, &it)
 			if verb == locales.CockpitAsks() {
 				verb = locales.CockpitQuestion()
 			}
-			ui.Text(c, verb+"?").FontSize(14).FontWeight(700).TextColor(pal.text).SingleLine()
-			ui.Text(c, locales.CockpitWaits(ag.Name, ago(it.Since/int64(time.Millisecond), now))).FontSize(12).TextColor(pal.textMuted).SingleLine().Ellipsis("…").MinWidth(0)
+			oneLine(c, verb+"?", fsBody, wSemibold).TextColor(pal.text)
+			oneLine(c, locales.CockpitWaits(ag.Name, ago(it.Since/int64(time.Millisecond), now)), fsSmall, 0).TextColor(pal.textMuted).Shrink(2)
 			ui.Spacer(c)
 			if len(it.Risk) > 0 || pk != nil && len(pk.risk) > 0 {
-				ui.Text(c, locales.CockpitRisky()).FontSize(11.5).FontWeight(700).TextColor(pal.danger).Padding(2, 8).Radius(5).Background(pal.danger.Alpha(0.14))
+				chip(c, pal, pal.danger.Alpha(0.14), pal.danger, func() {
+					ui.Text(c, locales.CockpitRisky()).FontSize(fsSmall).FontWeight(wMedium).SingleLine()
+				}).Shrink(0)
 			}
 			_ = rest
 		})
@@ -304,15 +302,17 @@ func (a *App) approvalCard(c *ui.Context, pal *palette, ag client.Agent, it sess
 		}
 		mono := a.termFamily()
 		if !held && pk != nil && len(pk.lines) > 0 {
-			ui.Column(c).Radius(7).Background(ckCodeBg(pal)).Padding(8, 12).Gap(1).Children(func() {
+			ui.Column(c).Radius(rControl).Background(ckCodeBg(pal)).Padding(8, 12).Gap(1).Clip().Children(func() {
 				for _, l := range pk.lines {
-					ui.Text(c, l).Font(mono).FontSize(12).TextColor(pal.text).NoWrap()
+					ui.Text(c, l).Font(mono).FontSize(fsCode).TextColor(pal.text).SingleLine()
 				}
 			})
 		} else if target != "" {
-			ui.Row(c).Radius(7).Background(ckCodeBg(pal)).Padding(8, 12).Gap(8).Children(func() {
-				ui.Text(c, "$").Font(mono).FontSize(12.5).TextColor(pal.textFaint)
-				ui.Text(c, target).Font(mono).FontSize(12.5).TextColor(pal.text).Grow(1).MinWidth(0).Selectable()
+			// A long command keeps the card's height in bounds: six lines,
+			// its whole text in a tooltip.
+			ui.Row(c).Radius(rControl).Background(ckCodeBg(pal)).Padding(8, 12).Gap(8).Children(func() {
+				ui.Text(c, "$").Font(mono).FontSize(fsCode).TextColor(pal.textFaint).Shrink(0)
+				ui.Text(c, target).Font(mono).FontSize(fsCode).LineHeight(1.5).TextColor(pal.text).Grow(1).MinWidth(0).MaxLines(6).Selectable()
 			})
 		}
 		rules := it.Risk
@@ -327,14 +327,14 @@ func (a *App) approvalCard(c *ui.Context, pal *palette, ag client.Agent, it sess
 			if why != "" {
 				why = strings.ToUpper(why[:1]) + why[1:]
 			}
-			ui.Text(c, locales.CockpitRiskLine(name, why)).FontSize(12).TextColor(pal.danger)
+			ui.Text(c, locales.CockpitRiskLine(name, why)).FontSize(fsSmall).TextColor(pal.danger).MaxLines(2)
 		}
 		if ck.armed.decision != "" && ck.armed.item == key && now.Sub(ck.armed.at) <= ckRiskWindow {
-			ui.Text(c, locales.CockpitPressAgain(ckDecisionKey(ck.armed.decision))).FontSize(12.5).FontWeight(650).TextColor(pal.attention)
+			ui.Text(c, locales.CockpitPressAgain(ckDecisionKey(ck.armed.decision))).FontSize(fsSmall).FontWeight(wSemibold).TextColor(pal.attention)
 			c.After(ck.armed.at.Add(ckRiskWindow).Sub(now))
 		}
 		if len(it.AlwaysScope) > 0 {
-			ui.Text(c, locales.CockpitAlwaysAllows(strings.Join(it.AlwaysScope, ", "))).FontSize(12).TextColor(pal.textMuted)
+			ui.Text(c, locales.CockpitAlwaysAllows(strings.Join(it.AlwaysScope, ", "))).FontSize(fsSmall).TextColor(pal.textMuted)
 		}
 		if ck.reasonFor == it.ID {
 			in := textField(c, "reason", &ck.reason, locales.CockpitReasonPlaceholder(), 0, pal).AutoFocus()
@@ -352,19 +352,19 @@ func (a *App) approvalCard(c *ui.Context, pal *palette, ag client.Agent, it sess
 			opts := a.ckOptions(it, pk)
 			if len(opts) == 0 && (pk == nil || !pk.loading) {
 				// Nothing here can answer it: say so, and offer the pane.
-				ui.Text(c, locales.CockpitAnswerInPane()).FontSize(12.5).TextColor(pal.textMuted).MinWidth(0)
-				if ag.Window != "" && sizedButton(c, "ans-open", locales.CockpitOpenPane(), "↵", true, 28, 7, pal) {
+				ui.Text(c, locales.CockpitAnswerInPane()).FontSize(fsSmall).TextColor(pal.textMuted).MaxLines(2).MinWidth(0)
+				if ag.Window != "" && sizedButton(c, "ans-open", locales.CockpitOpenPane(), "↵", true, hControl, rControl, pal) {
 					a.goToAgent(ag)
 				}
 			}
 			for _, o := range opts {
-				if sizedButton(c, "ans-"+o, ckDecisionWords(o), ckDecisionKey(o), o == "once", 28, 7, pal) {
+				if sizedButton(c, "ans-"+o, ckDecisionWords(o), ckDecisionKey(o), o == "once", hControl, rControl, pal) {
 					a.ckAnswer(o, true)
 				}
 			}
 			ui.Spacer(c)
 			if !held && len(opts) > 0 {
-				ui.Text(c, locales.CockpitScreenPrompt()).FontSize(11.5).TextColor(pal.textFaint)
+				oneLine(c, locales.CockpitScreenPrompt(), fsSmall, 0).TextColor(pal.textFaint)
 			}
 		})
 	})

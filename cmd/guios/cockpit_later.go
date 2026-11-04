@@ -19,14 +19,14 @@ func (a *App) cockpitSide(c *ui.Context, pal *palette) {
 		if !ok {
 			return
 		}
-		ui.Text(c, locales.CockpitDetails()).FontSize(12).FontWeight(650).TextColor(pal.textMuted)
+		ui.Text(c, locales.CockpitDetails()).FontSize(fsSmall).FontWeight(wMedium).TextColor(pal.textMuted).SingleLine()
 		row := func(k, v string) {
 			if v == "" {
 				return
 			}
 			ui.Row(c).Gap(8).Children(func() {
-				ui.Text(c, k).FontSize(12).TextColor(pal.textFaint).Width(84).Shrink(0)
-				ui.Text(c, v).FontSize(12).TextColor(pal.text).MinWidth(0)
+				oneLine(c, k, fsSmall, 0).TextColor(pal.textFaint).Width(88).Shrink(0)
+				oneLine(c, v, fsSmall, 0).TextColor(pal.text)
 			})
 		}
 		row(locales.CockpitDetailAgent(), harnessName(ag.Harness))
@@ -34,8 +34,13 @@ func (a *App) cockpitSide(c *ui.Context, pal *palette) {
 			row(locales.CockpitDetailModel(), m)
 		}
 		row(locales.CockpitDetailSession(), ag.Session)
-		row(locales.CockpitDetailState(), ag.State)
-		row(locales.CockpitDetailSource(), ag.Source+" · "+ag.Confidence)
+		word, _ := ckStatePill(pal, ag, nil)
+		row(locales.CockpitDetailState(), word)
+		// Where the state came from matters only when it is not the
+		// agent's own report, as the row's tooltip says.
+		if ag.Source != "" && ag.Source != "report" {
+			row(locales.CockpitDetailSource(), locales.CockpitStateFrom(ag.Source))
+		}
 		if ag.Unread > 0 {
 			row(locales.CockpitDetailMail(), fmt.Sprint(ag.Unread))
 		}
@@ -43,16 +48,16 @@ func (a *App) cockpitSide(c *ui.Context, pal *palette) {
 			row(locales.CockpitDetailQueued(), fmt.Sprint(ag.Queued))
 		}
 		if len(ag.SubagentList) > 0 {
-			ui.Text(c, locales.CockpitSubagents()).FontSize(12).FontWeight(650).TextColor(pal.textMuted).Margin(8, 0, 0, 0)
+			ui.Text(c, locales.CockpitSubagents()).FontSize(fsSmall).FontWeight(wMedium).TextColor(pal.textMuted).SingleLine().Margin(8, 0, 0, 0)
 			for i, s := range ag.SubagentList {
 				mark := "├"
 				if i == len(ag.SubagentList)-1 {
 					mark = "└"
 				}
 				ui.Row(c).Gap(6).Children(func() {
-					ui.Text(c, mark).FontSize(12).TextColor(pal.textFaint)
-					ui.Text(c, s.Type).FontSize(12).FontWeight(600).TextColor(pal.text)
-					ui.Text(c, s.Label).FontSize(12).TextColor(pal.textMuted).SingleLine().Ellipsis("…").MinWidth(0)
+					ui.Text(c, mark).FontSize(fsSmall).TextColor(pal.textFaint)
+					ui.Text(c, s.Type).FontSize(fsSmall).FontWeight(wMedium).TextColor(pal.text).SingleLine().Shrink(0)
+					oneLine(c, s.Label, fsSmall, 0).TextColor(pal.textMuted)
 				})
 			}
 		}

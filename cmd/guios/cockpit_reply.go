@@ -93,17 +93,17 @@ func (a *App) replyBox(c *ui.Context, pal *palette, ag client.Agent) {
 		r.asked[ag.Key()] = true
 		a.fetchQueued(ag)
 	}
-	ui.Column(c.Key("reply")).Shrink(0).Margin(0, 24, 16, 24).Gap(8).Children(func() {
+	ui.Column(c.Key("reply")).Shrink(0).Margin(0, a.ckSide(24), 16, a.ckSide(24)).Gap(8).Children(func() {
 		for _, q := range r.queued[ag.Key()] {
-			ui.Row(c.Key("q-"+q.ID)).Gap(8).AlignItems(ui.Center).Padding(6, 10).Radius(8).Background(ckGround(pal)).Children(func() {
-				ui.Text(c, locales.CockpitQueued()).FontSize(11.5).FontWeight(650).TextColor(pal.textMuted)
-				ui.Text(c, q.Text).FontSize(12.5).TextColor(pal.text).SingleLine().Ellipsis("…").Grow(1).MinWidth(0)
-				if sizedButton(c, "cancel", locales.CockpitCancelQueued(), "", false, 24, 6, pal) {
+			ui.Row(c.Key("q-"+q.ID)).Gap(8).AlignItems(ui.Center).Padding(6, 10).Radius(rControl).Background(ckGround(pal)).Children(func() {
+				ui.Text(c, locales.CockpitQueued()).FontSize(fsSmall).FontWeight(wMedium).TextColor(pal.textMuted).SingleLine().Shrink(0)
+				oneLine(c, q.Text, fsBody, 0).TextColor(pal.text).Grow(1)
+				if sizedButton(c, "cancel", locales.CockpitCancelQueued(), "", false, hControlSm, rControl, pal) {
 					a.cancelQueued(ag, q.ID)
 				}
 			})
 		}
-		box := ui.Column(c).Radius(12).Padding(10, 12, 8, 12).Gap(8).Background(pal.control)
+		box := ui.Column(c).Radius(rCard).Padding(10, 12, 8, 12).Gap(8).Background(pal.control)
 		focused := r.box.FocusWithin(c)
 		if focused {
 			box.Border(1, pal.accent.Alpha(0.6))
@@ -118,10 +118,10 @@ func (a *App) replyBox(c *ui.Context, pal *palette, ag client.Agent) {
 		}
 		box.Children(func() {
 			ui.Row(c).Gap(6).AlignItems(ui.Center).Children(func() {
-				ui.Text(c, locales.CockpitTo()).FontSize(11.5).TextColor(pal.textFaint)
-				ui.Text(c, ag.Name).FontSize(11.5).FontWeight(650).TextColor(pal.textMuted)
+				ui.Text(c, locales.CockpitTo()).FontSize(fsSmall).TextColor(pal.textFaint).SingleLine().Shrink(0)
+				oneLine(c, ag.Name, fsSmall, wMedium).TextColor(pal.textMuted)
 				ui.Spacer(c)
-				ui.Text(c, locales.CockpitNextTurn()).FontSize(11.5).TextColor(pal.textFaint)
+				oneLine(c, locales.CockpitNextTurn(), fsSmall, 0).TextColor(pal.textFaint).Shrink(2)
 			})
 			if len(d.images) > 0 {
 				ui.Row(c).Gap(8).Wrap().Children(func() {
@@ -131,7 +131,7 @@ func (a *App) replyBox(c *ui.Context, pal *palette, ag client.Agent) {
 				})
 			}
 			in := ui.TextAreaBase(c.Key("text-"+ag.Key()), &d.text).Bind(&r.box).MinHeight(22).MaxHeight(180).
-				FontSize(13.5).LineHeight(1.45).TextColor(pal.text).Placeholder(locales.CockpitReplyPlaceholder()).ReadOnly(d.sending)
+				FontSize(fsProse).LineHeight(1.5).TextColor(pal.text).Placeholder(locales.CockpitReplyPlaceholder()).ReadOnly(d.sending)
 			in.OnPaste(func(text string) bool {
 				if text != "" {
 					return false
@@ -161,18 +161,15 @@ func (a *App) replyBox(c *ui.Context, pal *palette, ag client.Agent) {
 				}
 				return false
 			})
-			ui.Row(c).Gap(14).AlignItems(ui.Center).Children(func() {
-				hint := func(k, what string) {
-					ui.Row(c).Gap(5).AlignItems(ui.Center).Children(func() {
-						ui.Text(c, k).FontSize(11.5).FontWeight(650).TextColor(pal.accent)
-						ui.Text(c, what).FontSize(11.5).TextColor(pal.textFaint)
-					})
-				}
-				hint(keyName("CmdOrCtrl+V"), locales.CockpitHintImage())
-				hint("⇧↵", locales.CockpitHintNewLine())
-				hint(keyName("CmdOrCtrl+Enter"), locales.CockpitHintSendNow())
-				ui.Spacer(c)
-				if sizedButton(c, "send", locales.CockpitSend(), "↵", true, 26, 7, pal) {
+			ui.Row(c).Gap(sp3).AlignItems(ui.Center).Children(func() {
+				// The hints as key caps, as the hint bar draws them; they
+				// leave the row as it narrows, the send button stays.
+				ui.Row(c).Gap(sp3).AlignItems(ui.Center).Grow(1).MinWidth(0).Clip().Children(func() {
+					keyHint(c, pal, keyName("CmdOrCtrl+V"), locales.CockpitHintImage())
+					keyHint(c, pal, "⇧↵", locales.CockpitHintNewLine())
+					keyHint(c, pal, keyName("CmdOrCtrl+Enter"), locales.CockpitHintSendNow())
+				})
+				if sizedButton(c, "send", locales.CockpitSend(), "↵", true, hControlSm, rControl, pal) {
 					a.sendReply(ag, d, false)
 				}
 			})
@@ -195,24 +192,24 @@ func keyName(keys string) string {
 // button that takes it out.
 func (a *App) imageChip(c *ui.Context, pal *palette, d *ckDraft, i int) {
 	img := d.images[i]
-	ui.Row(c.Key(fmt.Sprint("img", img.n))).Gap(8).AlignItems(ui.Center).Padding(4, 6, 4, 4).Radius(8).Background(pal.chip).Children(func() {
+	ui.Row(c.Key(fmt.Sprint("img", img.n))).Gap(8).AlignItems(ui.Center).Padding(4, 6, 4, 4).Radius(rControl).Background(pal.chip).Children(func() {
 		if img.bm != nil {
-			ui.Image(c, img.bm).Size(36, 28).Fit(ui.Cover).Radius(5)
+			ui.Image(c, img.bm).Size(36, 28).Fit(ui.Cover).Radius(rChip)
 		}
 		ui.Column(c).Gap(1).Children(func() {
-			ui.Text(c, img.name).FontSize(12).TextColor(pal.text).SingleLine().Ellipsis("…").MaxWidth(160)
+			oneLine(c, img.name, fsSmall, 0).TextColor(pal.text).MaxWidth(160)
 			info := humanSize(len(img.data))
 			if img.bm != nil {
 				w, h := img.bm.Size()
 				info = fmt.Sprintf("%d × %d · %s", w, h, info)
 			}
-			ui.Text(c, info).FontSize(11).TextColor(pal.textFaint).FontFeatures("tnum")
+			ui.Text(c, info).FontSize(fsCaption).TextColor(pal.textFaint).FontFeatures("tnum")
 		})
 		x := ui.ButtonBase(c.Key("x")).Size(18, 18).Radius(9).Center().Label(locales.CockpitRemoveImage()).Tooltip(locales.CockpitRemoveImage())
 		if x.Hovered() {
 			x.Background(pal.rowHover)
 		}
-		x.Children(func() { ui.Icon(c, closeIcon).Size(10, 10).TextColor(pal.textMuted) })
+		x.Children(func() { ui.Icon(c, closeIcon).Size(12, 12).TextColor(pal.textMuted) })
 		if x.Clicked() {
 			c.Invalidate()
 			d.images = append(d.images[:i:i], d.images[i+1:]...)
