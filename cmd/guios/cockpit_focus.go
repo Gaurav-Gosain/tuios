@@ -278,8 +278,16 @@ func (a *App) approvalCard(c *ui.Context, pal *palette, ag client.Agent, it sess
 	}
 	pk := ck.peek
 	settled := now.Sub(ck.shown.since) >= ckAnswerSettle
-	ui.Column(c.Key("approval")).Shrink(0).Margin(0, a.ckSide(24), 10, a.ckSide(24)).Padding(14, 16).Gap(10).Radius(rCard).
-		Background(pal.attnSoft).Border(1, pal.attention.Alpha(0.35)).Children(func() {
+	risky := len(it.Risk) > 0 || pk != nil && len(pk.risk) > 0
+	// The card is the card's ground with a needs-you edge and a bar on its
+	// left: amber, red and blue do not meet on one brown fill, and the risk
+	// lines read at 4.5:1 (council round 1, visual 16).
+	card := ui.Column(c.Key("approval")).Shrink(0).Margin(0, a.ckSide(24), 10, a.ckSide(24)).Padding(14, 16, 14, 19).Gap(10).Radius(rCard).
+		Background(pal.card).Border(1, pal.attention.Alpha(0.55))
+	card.Draw(func(p *ui.Painter, r ui.Rect) {
+		p.Fill(ui.Rect{X: r.X + 5, Y: r.Y + 12, W: 3, H: r.H - 24}, pal.attention, 1.5)
+	})
+	card.Children(func() {
 		ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
 			ui.Box(c).Size(8, 8).Radius(4).Background(pal.attention).Shrink(0)
 			verb, rest := ckLine2(ag, &it)
@@ -289,8 +297,8 @@ func (a *App) approvalCard(c *ui.Context, pal *palette, ag client.Agent, it sess
 			oneLine(c, verb+"?", fsBody, wSemibold).TextColor(pal.text)
 			oneLine(c, locales.CockpitWaits(ag.Name, ago(it.Since/int64(time.Millisecond), now)), fsSmall, 0).TextColor(pal.textMuted).Shrink(2)
 			ui.Spacer(c)
-			if len(it.Risk) > 0 || pk != nil && len(pk.risk) > 0 {
-				chip(c, pal, pal.danger.Alpha(0.14), pal.danger, func() {
+			if risky {
+				chip(c, pal, pal.danger.Alpha(0.14), pal.dangerText, func() {
 					ui.Text(c, locales.CockpitRisky()).FontSize(fsSmall).FontWeight(wMedium).SingleLine()
 				}).Shrink(0)
 			}
@@ -307,6 +315,10 @@ func (a *App) approvalCard(c *ui.Context, pal *palette, ag client.Agent, it sess
 					ui.Text(c, l).Font(mono).FontSize(fsCode).TextColor(pal.text).SingleLine()
 				}
 			})
+		} else if target != "" && it.Kind == session.AttentionQuestion {
+			// A question is the agent's prose, not a command: no prompt
+			// sign and no code ground (council round 1, visual 8).
+			ui.Text(c, target).FontSize(fsProse).LineHeight(22.0 / fsProse).TextColor(pal.text).MaxLines(6).Selectable()
 		} else if target != "" {
 			// A long command keeps the card's height in bounds: six lines,
 			// its whole text in a tooltip.
@@ -353,12 +365,14 @@ func (a *App) approvalCard(c *ui.Context, pal *palette, ag client.Agent, it sess
 			if len(opts) == 0 && (pk == nil || !pk.loading) {
 				// Nothing here can answer it: say so, and offer the pane.
 				ui.Text(c, locales.CockpitAnswerInPane()).FontSize(fsSmall).TextColor(pal.textMuted).MaxLines(2).MinWidth(0)
-				if ag.Window != "" && sizedButton(c, "ans-open", locales.CockpitOpenPane(), "↵", true, hControl, rControl, pal) {
+				// The view's one primary is Send: this one is secondary.
+				if ag.Window != "" && sizedButton(c, "ans-open", locales.CockpitOpenPane(), "↵", false, hControl, rControl, pal) {
 					a.goToAgent(ag)
 				}
 			}
 			for _, o := range opts {
-				if sizedButton(c, "ans-"+o, ckDecisionWords(o), ckDecisionKey(o), o == "once", hControl, rControl, pal) {
+				// A risky command gets no primary button to allow it.
+				if sizedButton(c, "ans-"+o, ckDecisionWords(o), ckDecisionKey(o), o == "once" && !risky, hControl, rControl, pal) {
 					a.ckAnswer(o, true)
 				}
 			}
