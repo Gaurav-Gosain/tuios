@@ -174,11 +174,18 @@ func (a *App) tiled(c *ui.Context, pal *palette, bar ui.TitleBar, shown float32,
 		return float32(x0), float32(y0), float32(max(x1-x0, 0)), float32(max(y1-y0, 0))
 	}
 	const eps = 1e-6
+	// The panes under the zoomed one dim as it grows over them, and light
+	// up as it shrinks back: one fill, under the zoomed pane.
+	dim := area.AnimateTo("zoom-dim", b2f(zoomed != ""), motionLayout)
 	area.Children(func() {
 		for _, id := range order {
 			p := s.PaneByID(id)
 			if p == nil || (settledZoom && id != zoomed) {
 				continue
+			}
+			if id == a.motion.top && dim > 0 && !settledZoom && len(order) > 1 {
+				ui.Box(c.Key("zoom-dim")).Absolute().Left(0).Top(0).Right(0).Bottom(0).PassThrough().
+					Background(pal.overlay.Alpha(min(1, 1.6*dim)))
 			}
 			t := target[id]
 			wrap := ui.Column(c.Key("tile-" + id)).Absolute().AlignItems(ui.Stretch)
