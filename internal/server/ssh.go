@@ -12,6 +12,7 @@ import (
 	"runtime/debug"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
@@ -287,7 +288,7 @@ func (s *serialWriter) Write(p []byte) (int, error) {
 func tuiosSessionMiddleware() wish.Middleware {
 	return func(next ssh.Handler) ssh.Handler {
 		return func(sess ssh.Session) {
-			_, windowChanges, active := sess.Pty()
+			pty, windowChanges, active := sess.Pty()
 			if !active {
 				// No PTY requested, this shouldn't happen for TUIOS
 				wish.Fatalln(sess, "No terminal. Run ssh with -t to request one.")
@@ -315,7 +316,17 @@ func tuiosSessionMiddleware() wish.Middleware {
 			// server-side PTY (no ssh.AllocatePty), so the session itself is
 			// always the right output to wrap.
 			model.ConnectFrameWriter(frames)
-			opts := append(bubbletea.MakeOptions(sess), app.ProgramOptions()...)
+			// The size the client's terminal has now. The loop below stores
+			// each window change here before it sends it. See
+			// app.WithCurrentSize.
+			var size atomic.Uint64
+			storeSize := func(w, h int) { size.Store(uint64(uint32(w))<<32 | uint64(uint32(h))) }
+			storeSize(pty.Window.Width, pty.Window.Height)
+			current := app.WithCurrentSize(func() (int, int) {
+				v := size.Load()
+				return int(v >> 32), int(uint32(v))
+			})
+			opts := append(bubbletea.MakeOptions(sess), app.ProgramOptions(current)...)
 			opts = append(opts, tea.WithOutput(frames))
 			program := tea.NewProgram(model, opts...)
 			model.BindProgram(program)
@@ -328,6 +339,7 @@ func tuiosSessionMiddleware() wish.Middleware {
 						program.Quit()
 						return
 					case w := <-windowChanges:
+						storeSize(w.Width, w.Height)
 						program.Send(tea.WindowSizeMsg{Width: w.Width, Height: w.Height})
 					}
 				}

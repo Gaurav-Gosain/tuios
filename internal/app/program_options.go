@@ -39,8 +39,15 @@ import (
 // install a filter of their own, and the last one wins. The filter here does
 // what theirs do (see FilterMouseMotion), so it has to be the last one set.
 //
+// A served client passes WithCurrentSize, so a window size that arrives late
+// cannot undo a newer one. See sizeFilter.
+//
 // TestEveryProgramTakesTheSharedOptions holds every construction site to this.
-func ProgramOptions() []tea.ProgramOption {
+func ProgramOptions(opts ...ProgramOption) []tea.ProgramOption {
+	var setup programSetup
+	for _, opt := range opts {
+		opt(&setup)
+	}
 	return []tea.ProgramOption{
 		// The user's max_fps, read at program start, and not the ceiling it
 		// is clamped to. bubbletea runs a standing ticker at this rate for
@@ -52,7 +59,54 @@ func ProgramOptions() []tea.ProgramOption {
 		// it whenever max_fps changes.
 		tea.WithFPS(config.Global.NormalFPS),
 		tea.WithoutSignalHandler(),
-		tea.WithFilter(FilterMouseMotion),
+		tea.WithFilter(sizeFilter(setup.currentSize, FilterMouseMotion)),
+	}
+}
+
+// ProgramOption is a part of ProgramOptions that one transport supplies.
+type ProgramOption func(*programSetup)
+
+type programSetup struct {
+	currentSize func() (width, height int)
+}
+
+// WithCurrentSize names where a transport keeps the size its client's
+// terminal has now. The transport must store a new size there before it
+// sends the WindowSizeMsg for it.
+func WithCurrentSize(size func() (width, height int)) ProgramOption {
+	return func(s *programSetup) { s.currentSize = size }
+}
+
+// sizeFilter makes every window size message carry the size from current,
+// then passes the message on to next. With no current it is next.
+//
+// Two goroutines send a served program its sizes, and nothing orders them.
+// Bubble Tea sends the start size from a goroutine of its own when the
+// program starts (Program.Run). The transport sends each resize from its read
+// loop. On a phone the first resize comes a moment after the start, when
+// tuios-web's touch key bar takes the bottom rows. When the resize reaches the
+// event loop first, the start size lands last, and the renderer and the model
+// lay out a 48 by 46 frame in a 47 by 41 terminal. The lines wrap, cells of
+// older frames stay on screen, and the renderer never writes them again
+// because its own buffer says they are right. The board then shows the splash
+// with a pane open, or no pane at all, until a full redraw (issue 1017).
+//
+// The transport stores each size before it sends it, so current is never
+// older than the message. A message that arrives late is rewritten to the
+// current size, and the renderer and the model resize to the terminal that is
+// really there. The renderer resizes on the message after this filter runs.
+func sizeFilter(current func() (width, height int), next func(tea.Model, tea.Msg) tea.Msg) func(tea.Model, tea.Msg) tea.Msg {
+	if current == nil {
+		return next
+	}
+	return func(model tea.Model, msg tea.Msg) tea.Msg {
+		if ws, ok := msg.(tea.WindowSizeMsg); ok {
+			if w, h := current(); w > 0 && h > 0 {
+				ws.Width, ws.Height = w, h
+			}
+			msg = ws
+		}
+		return next(model, msg)
 	}
 }
 

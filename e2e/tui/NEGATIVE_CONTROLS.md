@@ -12453,3 +12453,24 @@ Run on 2026-11-04 on Linux. The fixed build passes in 46 s.
 | Claim | Control | Where it fails | Verdict |
 | --- | --- | --- | --- |
 | A drop with nothing moving ends after `dndDropTimeout` | main at 9a55ab59c, with no deadline | "the client never ended a drop the terminal did not serve" | **caught** |
+
+## The browser keeps the size its terminal has now (issue #1017)
+
+`TestWebSizeIsTheTerminalsAfterAStaleStartSize` in `cmd/tuios-web` builds a
+program with `createTUIOSProgram`. It sends the browser's resize to 47x41 and
+then the start size of 48x46, which is the order the race leaves them in.
+tuios must end at 47x41. `TestSizeFilterTakesTheCurrentSizeAndKeepsTheMotionFilter`
+in `internal/app` holds the shared filter to the same rule, and to dropping
+motion over chrome. Run on 2026-11-04 against the branch head with one change
+each:
+
+| Control | Where it fails | Verdict |
+| --- | --- | --- |
+| `createTUIOSProgram` calls `app.ProgramOptions()` without `WithCurrentSize` | "tuios was left at 48x46, but the browser's terminal is 47x41" | **caught** |
+| `sizeFilter` returns `next` whatever `current` is | both tests fail, the shared one with "a late 48x46 came out as {Width:48 Height:46}" | **caught** |
+
+The race itself needs a slow machine. The phone project of the clienttests
+suite ran 20 times against one `tuios-web`, on two cores, once without the
+filter and once with it. Without it, 68 size messages came in late and the
+board showed the splash with a pane still open 7 times. With it, 58 came in
+late, each was put right, and the board never showed it.

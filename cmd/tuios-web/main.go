@@ -461,7 +461,14 @@ func createTUIOSProgram(sess sip.Session) *tea.Program {
 	// programStart for why the teardown goroutine below has to wait for it.
 	running := make(chan struct{})
 	started := &programStart{Model: model, start: sync.OnceFunc(func() { close(running) })}
-	opts := append(sip.MakeOptions(sess), app.ProgramOptions()...)
+	// sip stores each size on the session before it sends it, so the
+	// session is where the size the browser has now is. See
+	// app.WithCurrentSize.
+	current := app.WithCurrentSize(func() (int, int) {
+		pty := sess.Pty()
+		return pty.Width, pty.Height
+	})
+	opts := append(sip.MakeOptions(sess), app.ProgramOptions(current)...)
 	// The renderer's writer, so the sixel images drawn on a frame go out
 	// after it in the same write. Graphics already share the PTY slave.
 	if slave := sess.PtySlave(); slave != nil {

@@ -258,3 +258,22 @@ func TestPointerSweepOverTheDockPassesOnlyItsTargets(t *testing.T) {
 			o.Width, passed, targets, limit)
 	}
 }
+
+// TestSizeFilterTakesTheCurrentSizeAndKeepsTheMotionFilter holds the filter a
+// served client gets from ProgramOptions(WithCurrentSize(...)) to both of its
+// jobs. A window size message that arrives late carries the size the
+// transport stored last (issue 1017), and a motion the motion filter drops is
+// still dropped.
+func TestSizeFilterTakesTheCurrentSizeAndKeepsTheMotionFilter(t *testing.T) {
+	o := filterOS(t)
+	filter := sizeFilter(func() (int, int) { return 47, 41 }, FilterMouseMotion)
+
+	got, ok := filter(o, tea.WindowSizeMsg{Width: 48, Height: 46}).(tea.WindowSizeMsg)
+	if !ok || got.Width != 47 || got.Height != 41 {
+		t.Errorf("a late 48x46 came out as %+v; the terminal is 47x41", got)
+	}
+	o.UserConfig.Appearance.Links = "off"
+	if filter(o, tea.MouseMotionMsg{X: 31, Y: 10}) != nil {
+		t.Error("motion over chrome passed the served filter; the motion filter is no longer wrapped")
+	}
+}
