@@ -1897,7 +1897,7 @@ The daemon first runs `<binary> daemon handoff-accepts`, which prints the handof
  "panes": 4, "manifest_bytes": 35123, "clients": 2, "preflight_ms": 41}}
 ```
 
-`handoff` is the manifest version, and `clients` the attached TUI clients that will be dropped. After the answer, every TUI client is sent `MsgDaemonUpgrading` (the binary message after `MsgPluginApprovals`, payload `{Version}`, the build the daemon is becoming; a client that does not know it ignores it) and dropped, every other call still running or waiting ends with `daemon_upgrading`, and the daemon execs the binary. The socket stays open: a call made during the swap waits in its backlog and the new image answers it. Call `hello` until `instance` changes; its `upgrade` field says what the handoff measured, `fallback` is set when the new binary could not take the panes over and the binary that was running took them back, and `recovered` too when the new image died first and the handoff's keeper started that binary under a new pid. The keeper is a process the daemon starts before it pauses the panes, holding a copy of their descriptors until the new image is up.
+`handoff` is the manifest version, and `clients` the attached TUI clients that will be dropped. After the answer, every TUI client is sent `MsgDaemonUpgrading` (the binary message after `MsgPluginApprovals`, payload `{Version}`, the build the daemon is becoming; a client that does not know it ignores it) and dropped; a client then dials again and attaches to its session on the new image, and a client whose wire protocol the new image does not serve is refused at its hello as on any connection, every other call still running or waiting ends with `daemon_upgrading`, and the daemon execs the binary. The socket stays open: a call made during the swap waits in its backlog and the new image answers it. Call `hello` until `instance` changes; its `upgrade` field says what the handoff measured, `fallback` is set when the new binary could not take the panes over and the binary that was running took them back, and `recovered` too when the new image died first and the handoff's keeper started that binary under a new pid. The keeper is a process the daemon starts before it pauses the panes, holding a copy of their descriptors until the new image is up.
 
 Refused with `upgrade_refused`, and nothing changed, on Windows, in a daemon embedded in another program (`tuios-web`, the SSH server), while a pane runs here for another machine or a window's process runs on another machine, and while a `fan verify` check or a popup with `capture_stdout` runs. A second call while an upgrade runs answers `busy`. Refused with `forbidden` over a link, on a restricted connection, and to a plugin, whatever its grants: the binary named runs as the daemon, which holds every pane's terminal and the key that signs every pane's token. A caller inside a pane of this daemon waits for the person instead. With no attached client that could answer, or the agent features off, it is refused at once and the binary is never run. Otherwise the file is pinned, and after the preflight, which must have run that same file, the daemon opens an ask with the answers `No` and `Yes`, whose attention item carries `upgrade` (`binary`, the full path, and `version`), and every attached client shows it as a dialog. Only `answer-ask` with a live attach nonce and `upgrade_dialog: true`, from outside every pane and not over a link, answers it: a client sends `upgrade_dialog` only from its dialog, and `gui-bridge` drops it. `Yes` goes on with the upgrade of that very file: one replaced or written to since, by its device, inode, size, modification time and, on Linux and macOS, change time, is refused; anything else, 60 seconds without an answer, no attached client that could answer, or the agent features off refuses with `forbidden`, with a message that says which and what to do next, and nothing changes. The call blocks while it waits.
 
@@ -1954,8 +1954,8 @@ What a restricted connection may call:
 | Class | Verbs | Under `own` | Under `read_only` |
 |---|---|---|---|
 | open | `hello`, `list-verbs`, `unsubscribe`, `restrict-connection` | allowed | allowed |
-| across sessions | `list-sessions`, `list-clients`, `list-attention`, `list-worktrees`, `list-hosts`, `list-host-sessions`, `list-host-agents`, `list-themes`, `list-glyphs`, `list-hooks` | `forbidden` | allowed |
-| read one session | `session-info`, `list-windows`, `get-window`, `list-workspaces`, `capture-pane`, `get-agent-state`, `list-agents`, `wait-for`, `subscribe`, `peek-prompt`, `read-agent-messages`, `explain-agent-screen`, `list-options`, `get-option`, `stash-list`, `stash-get`, `ssh-agent-path`, `display-env` | session in reach | allowed |
+| across sessions | `list-sessions`, `list-clients`, `list-attention`, `list-conversations`, `list-worktrees`, `list-hosts`, `list-host-sessions`, `list-host-agents`, `list-themes`, `list-glyphs`, `list-hooks` | `forbidden` | allowed |
+| read one session | `session-info`, `list-windows`, `get-window`, `list-workspaces`, `layout-tree`, `capture-pane`, `get-agent-state`, `list-agents`, `wait-for`, `subscribe`, `peek-prompt`, `read-agent-messages`, `explain-agent-screen`, `list-options`, `get-option`, `stash-list`, `stash-get`, `ssh-agent-path`, `display-env` | session in reach | allowed |
 | own pane's record | `set-agent-state`, `set-agent-meta`, `set-agent-session`, `report-agent-activity`, `agent-mail-notice`, `ask-human` | own pane only | allowed |
 | mail and stash | `send-agent-message`, `stash-put` | session in reach, sent as the own pane | allowed |
 | type into a pane | `send-text`, `send-keys`, `ask-agent`, `respond`, `run` | session in reach | `forbidden` |
@@ -3270,6 +3270,10 @@ Params:
   change. It wins over `session`. The reply carries it.
 - `fit` (optional bool): make the lease a viewer's. See
   [The size lease](#the-size-lease).
+- `yield` (optional bool): make the lease a viewer's lease that yields. See
+  [The size lease](#the-size-lease).
+- `cell_width`, `cell_height` (optional ints): the cell of the client in
+  pixels. See [The size lease](#the-size-lease).
 - `viewer` (optional object): the terminal the stream shows the pane in:
   `bg`, `fg` (`#rrggbb`), `palette` (sixteen comma-separated `#rrggbb`),
   `kitty` and `sixel` (bool). While no TUI client shows the session, the
@@ -3321,7 +3325,7 @@ Frames from the daemon:
 | `S` (0x53) | u64 seq, u16 cols, u16 rows, bytes | A snapshot. Reset the emulator to cols by rows and write the bytes into it. |
 | `O` (0x4F) | u64 seq, bytes | Output. Write the bytes into the emulator. `seq` is the stream position after the last byte. |
 | `R` (0x52) | u64 seq, u16 cols, u16 rows | The pane changed size at `seq`. Resize the emulator. |
-| `E` (0x45) | JSON `{"code", "message"}` | The daemon refused an `I` or `L` frame, or released a lease that the client did not renew (code `lease_expired`). The other codes are the verb error codes. The stream continues. |
+| `E` (0x45) | JSON `{"code", "message"}` | The daemon refused a frame from the client, or released a lease that the client did not renew (code `lease_expired`). The other codes are the verb error codes. The stream continues. |
 | `X` (0x58) | UTF-8 text | The stream ended: `exited N` when the pane's program exited with status N, `killed N` when signal N ended it, `closed` when its window closed first, `the daemon stopped`, or `refused: ...` when the caller may no longer read the pane. The daemon then closes the connection. |
 
 Frames from the client:
@@ -3329,7 +3333,9 @@ Frames from the client:
 | Type | Payload | Meaning |
 | --- | --- | --- |
 | `I` (0x49) | bytes | Input for the pane, as typed. The client encodes the keys. |
-| `L` (0x4C) | u16 cols, u16 rows | Hold a size lease. `0 0` releases it. |
+| `L` (0x4C) | u16 cols, u16 rows, optional u16 cell width, u16 cell height | Hold a size lease. `0 0` releases it. The 8-byte form also gives the cell of the client in pixels. |
+| `V` (0x56) | JSON viewer object | Replace the `viewer` report of the stream, as after a theme change. The object is the `viewer` param. |
+| `F` (0x46) | one byte | How the client shows the pane: 0 hidden, 1 on screen, 2 on screen and focused in a focused window. See [The shown frame](#the-shown-frame). |
 
 The snapshot bytes paint the pane on a fresh xterm-compatible emulator: up to
 500 rows of history above the screen, every cell with its colours and
@@ -3372,6 +3378,23 @@ The daemon checks the caller again each second, as it checks a new
 `stream-pane`. When a pane loses its read grant, or the link policy no longer
 allows `list`, the stream ends with an `X` frame.
 
+#### The shown frame
+
+An `F` frame tells the daemon how the client shows the pane. At 2 the daemon
+counts the stream as an attached TUI client whose terminal has focus, with the
+pane of the stream focused:
+
+- `session-info` reports `host_focus` as `focused`.
+- The daemon sends a focus report (`CSI I`, `CSI O`) to a pane whose focus
+  changes, when its program turned on focus reports.
+- An agent hook with `suppress_focused` stays quiet for the pane.
+- The finished turn of the pane is seen, as when a client focuses the pane.
+  Each `F 2` frame marks it seen again. A change to 2 also ends an approval
+  hold on the pane. A caller that may not act as the person (a pane, a plugin,
+  or a link that the hub did not vouch for) does not mark the turn seen.
+
+The stream stops to count when it sends 0 or 1, or when it closes.
+
 Link capability: `list` for the verb. `write` for `I` and `L` frames.
 
 Errors: `invalid_params` when `window` is missing or a lease size is not
@@ -3402,11 +3425,27 @@ client shows the session, a viewer's lease only holds the pane smaller, as any
 lease does. The daemon decides under the pane's lock, and decides again on
 every attach, detach and disconnect.
 
+A stream opened with `yield` holds a viewer's lease that yields. While no TUI
+client shows the session, it sizes the pane as a viewer's lease does. While a
+client shows the session, it has no effect: it does not hold the pane smaller.
+A desktop app that shows the same session as a TUI client uses it, so the
+panes of the TUI client keep their size. When the last client leaves, the
+lease sizes the pane again. When a client attaches, the pane goes back to the
+size that the clients ask for.
+
+While a viewer's lease sizes the pane, the pane takes the cell of that client:
+`cell_width` and `cell_height`, or the last 8-byte `L` frame. The pixel size of
+the pane (the `TIOCSWINSZ` pixels, and the answers to `CSI 14 t` and
+`CSI 16 t`) then follows the lease. When a client attaches, the pane takes the
+cell of that client again.
+
 Leases resize a pane at most once every 100 ms. A lease that comes sooner
 applies when the 100 ms end, and the pane takes the newest lease.
 
 A lease lasts 30 seconds. To keep it, send the same `L` frame again every 10
-seconds. When the client sends no `L` frame for 30 seconds, the daemon
+seconds. A `yield` lease over the daemon socket of this machine is the
+exception. It does not expire, and needs no renewal. It ends when the stream
+closes. Over a host link, a `yield` lease expires as any other lease does. When the client sends no `L` frame for 30 seconds, the daemon
 releases the lease within one more second. It then sends an `E` frame with
 code `lease_expired`, and the pane goes back to the size that the clients
 asked for. A new `L` frame sets the lease again.
@@ -3644,6 +3683,44 @@ item from another machine is not pushed: that machine pushes to its own
 phones.
 
 Link capability: `respond`.
+
+
+### layout-tree
+
+Read the BSP tree of a workspace. A client that draws the panes itself, such
+as a desktop app, reads the layout here, and writes it with
+`set-layout-tree`.
+
+Params: `session`, `workspace` (default: the current one).
+
+```json
+{"result": {"type": "layout_tree", "session": "work", "workspace": 1, "version": 42, "tree": {"root": {"window_id": 0, "split_type": 1, "split_ratio": 0.5, "left": {"window_id": 1, "split_type": 0, "split_ratio": 0}, "right": {"window_id": 2, "split_type": 0, "split_ratio": 0}}, "auto_scheme": 0, "default_ratio": 0.5}, "leaves": {"1": "3f2a9c1e", "2": "8b1d0c44"}, "workspaces": {"3f2a9c1e": 1, "8b1d0c44": 1}}}
+```
+
+- `tree` is `null` when the workspace has no tree. A leaf is a node with no
+  children. Its `window_id` is a number of the session.
+- `leaves` gives the window id of each leaf number.
+- `workspaces` gives the workspace of each window of the session.
+
+The event `layout-changed` tells a subscriber when to read again.
+
+### set-layout-tree
+
+Replace the BSP tree of a workspace. The daemon applies the tree as it applies
+a tree from an attached client, and every attached client takes it. When the
+tree changed, `layout-changed` fires for the workspace.
+
+Params: `session`, `workspace` (default: the current one), `tree` (as
+`layout-tree` returns it, `null` to remove it), `leaves` (the window id of each
+leaf number in `tree`). The leaf numbers are the caller's own. A leaf whose
+window is gone, or named twice, is dropped.
+
+```json
+{"result": {"type": "layout_tree_set", "session": "work", "workspace": 1, "changed": true}}
+```
+
+Errors: `invalid_params` for a tree that is too large or deep, or a workspace
+out of range.
 
 ### list-push
 
@@ -5434,7 +5511,8 @@ conversation back. It brings back the conversation, not the process: the turn
 that was running when the daemon stopped did not finish.
 
 Params: `session`, `window` (default: the focused window), `dry_run` (return
-the command without typing it).
+the command without typing it), `conversation`, `harness` and `workspace` (see
+below).
 
 ```json
 {"verb": "resume-agent", "params": {"session": "work", "window": "build"}}
@@ -5470,6 +5548,13 @@ its shell prompt. That is strictly less than `send-text`, which every caller of
 the socket, a pane or a link included, already has, so it is not gated on the
 person. User manifests (under the user harness directory) can set any
 program as the first token; that directory is the user's own configuration.
+
+With `conversation`, an id from `list-conversations`, the call opens a new
+window in `workspace` (default: the current one) of the session, in the folder
+of the conversation, and types the resume command there when its shell is at
+its prompt. `harness` picks the harness when two harnesses used the same id.
+The command and its checks are the same as for a pane. Opening the window needs
+what `new-window` needs. `window_id` in the reply is the new window.
 
 Restore behaviour, from `daemon.resume_agents`:
 
@@ -5570,6 +5655,36 @@ display only (see [Agent metadata](AGENT_STATE.md#what-feeds-it)).
 Wire compatibility: the metadata rides the window state as an additive field
 (`agent_meta`). An older client drops it and draws nothing, and an older daemon
 answers the verb with `unknown_verb`.
+
+### list-conversations
+
+List the agent conversations that ended. A conversation ends when its window
+closes, or when its agent leaves the pane. The list holds 200, newest first,
+one entry for each harness and id. A conversation that runs in a pane again is
+not in the list. The daemon keeps the list in its state folder, so it survives
+a restart. The list holds the window title and the folder, never what the
+person typed.
+
+Params: `harness` (optional): only the conversations of this harness.
+
+```json
+{"result": {"type": "conversation_list", "conversations": [{"harness": "claude-code", "id": "5f1c", "cwd": "/src/app", "title": "fix the login test", "session": "work", "flags": ["--model", "opus"], "ended_at": 1793780000000}]}}
+```
+
+`flags` are the kept flags of the agent's command line, which the resume
+command carries. `ended_at` is in unix milliseconds. `resume-agent` with
+`conversation` starts one again.
+
+### forget-conversation
+
+Remove an ended conversation from `list-conversations`. The harness keeps the
+conversation itself.
+
+Params: `id` (required), `harness` (optional).
+
+```json
+{"result": {"type": "conversation_forgotten", "id": "5f1c", "forgotten": true}}
+```
 
 ### list-attention
 
@@ -6681,10 +6796,10 @@ the one before. The configuration is in
 | Capability | Verbs |
 | --- | --- |
 | none | `hello`, `list-verbs`, `link-peer`, `restrict-connection`, `pane-grants` (which says no pane grants apply over a link) |
-| `list` | `list-*`, `session-info`, `ssh-agent-path`, `display-env`, `get-window`, `capture-pane`, `screenshot`, `get-option`, `get-agent-state`, `resolve-pane`, `explain-agent-*`, `wait-for`, `subscribe`, `unsubscribe`, `peek-prompt`, `read-dir`, `wait-dir`, `compare-fan`, `agent-activity`, `get-approval`, `file-stat`, `file-list`, `list-tasks`, `get-task` |
+| `list` | `list-*`, `session-info`, `layout-tree`, `ssh-agent-path`, `display-env`, `get-window`, `capture-pane`, `screenshot`, `get-option`, `get-agent-state`, `resolve-pane`, `explain-agent-*`, `wait-for`, `subscribe`, `unsubscribe`, `peek-prompt`, `read-dir`, `wait-dir`, `compare-fan`, `agent-activity`, `get-approval`, `file-stat`, `file-list`, `list-tasks`, `get-task` |
 | `mail` | `send-agent-message`, `read-agent-messages`, `agent-mail-notice`, `stash-put`, `stash-list`, `stash-get` |
 | `open` | `new-session`, `new-window`, `split-window`, `popup`, `new-worktree`, `fan`, `start-agent`, `open-pane`, `resize-pane`, `close-pane`, `pane-cwd`, `pane-agent`, `pane-calls` |
-| `write` | `send-keys`, `send-text`, `ask-agent`, `run-command`, `switch-session`, `detach-client`, `close-window`, `close-workspace`, `kill-session`, `focus-window`, `move-window`, `set-window`, `select-workspace`, `set-layout`, `resize`, `set-option`, `set-session-*`, `set-workspace-*`, `set-agent-*`, `resume-agent`, `request-approval`, `refresh-dock`, `pip`, `remove-worktree`, `bundle-worktree`, `run`, `ask-human` (whose handler refuses a link caller anyway), `review-diff` (it returns file contents), `review-note`, `review-stage`, `send-review`, `queue-prompt`, `cancel-queued`, `keep-fan`, `add-task`, `claim-task`, `finish-task`, `set-task-stage`, `block-task`, `release-task`, `remove-task` |
+| `write` | `send-keys`, `send-text`, `ask-agent`, `run-command`, `switch-session`, `detach-client`, `close-window`, `close-workspace`, `kill-session`, `focus-window`, `move-window`, `set-window`, `select-workspace`, `set-layout`, `set-layout-tree`, `resize`, `set-option`, `set-session-*`, `set-workspace-*`, `set-agent-*`, `resume-agent`, `forget-conversation`, `request-approval`, `refresh-dock`, `pip`, `remove-worktree`, `bundle-worktree`, `run`, `ask-human` (whose handler refuses a link caller anyway), `review-diff` (it returns file contents), `review-note`, `review-stage`, `send-review`, `queue-prompt`, `cancel-queued`, `keep-fan`, `add-task`, `claim-task`, `finish-task`, `set-task-stage`, `block-task`, `release-task`, `remove-task` |
 | `open` and `write` | `verify-fan` |
 | `open` and `files` | `paste-pane-image` |
 | `write` and `files` | `paste-image` |

@@ -3746,6 +3746,7 @@ func (s *Session) emitLifecycleLocked(before lifecycleSnapshot) {
 	// go here, in the change that closed it. See releasedTaskEvents.
 	events = append(events, releasedTaskEvents(s, s.state, events, time.Now().UnixNano())...)
 	moving := s.movingWindow
+	events = append(events, endedConversations(before, events, moving, s.Name())...)
 	s.movingWindow = ""
 	for _, ev := range events {
 		if moving != "" && ev.Window == moving {

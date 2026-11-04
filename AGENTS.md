@@ -6,10 +6,9 @@ how to build it, and the conventions to follow when changing it.
 An agent **running inside a TUIOS pane** wants the other document. Run
 `tuios --skill` for the core that drives a running session: addressing panes,
 reading and writing them, running work and waiting on it, reporting agent
-state, and talking to other agents safely. `tuios --skill TOPIC` prints the
-rest (panes and state in depth, fleets, checkpoints, ship, files, the Inbox, notify, pair,
-mail, hosts, clients, events, MCP, the tmux shim, plugins, grants, config, agents-off,
-errors, recipes). The source is [skills/tuios/SKILL.md](skills/tuios/SKILL.md)
+state, and talking to other agents safely. `tuios --skill TOPIC` prints one
+topic, `tuios --skill all` prints every topic, and a name it does not know
+lists the topics. The source is [skills/tuios/SKILL.md](skills/tuios/SKILL.md)
 and the other files in `skills/tuios/`, embedded in the binary so the printed
 copy always matches the build. `cmd/tuios` tests resolve every command the
 skill shows against the command tree.
@@ -37,15 +36,18 @@ go run ./cmd/tuios-web
 go run ./cmd/tuios --debug
 go run ./cmd/tuios-web --debug
 
-# Run tests
-go test ./... ./progstatus/... ./vt/...
+# Run the unit tests of every module. ./... stops at each library's go.mod,
+# so the libraries are named one by one. `just test` runs this line under the
+# limits below.
+go test ./... ./progstatus/... ./vt/... ./swatch/... ./shot/... ./tml/... \
+  ./plot/... ./loom/... ./sketch/...
 
 # Leave the machine usable. The maintainer works on this box while the suite
 # runs, and an uncapped build or test run takes every core. taskset confines the
 # whole process tree to half the cores, and the affinity is inherited, so it
 # also holds for the daemons and shells the e2e suite spawns. GOMAXPROCS and
 # `go test -p` do not, because they only bind the Go runtime.
-nice -n 10 taskset -c 0-7 go test ./... ./progstatus/... ./vt/... -timeout 20m
+nice -n 10 taskset -c 0-7 go test ./... -timeout 20m
 
 # Run specific package tests
 go test ./internal/config/...
@@ -57,8 +59,9 @@ go test -race ./...
 # Run the tests of the ghostty backend. `go build -tags ghostty ./...` compiles
 # it and runs none of its tests, so a change that passes the plain suite can
 # still be wrong on the backend `scripts/install.sh ghostty` builds. The
-# ghostty-vt workflow runs every package whose tests link vt; these
-# are the ones that matter most, the renderer in internal/app included.
+# ghostty-vt job runs the packages whose tests link vt and that the change
+# reaches; these are the ones that matter most, the renderer in internal/app
+# included. `just ghostty-test` builds libghostty-vt first (needs zig).
 PKG_CONFIG_PATH="$PWD/.ghostty-vt/native/pkgconfig" \
   go test -tags ghostty -count=1 -short \
     ./vt/ ./internal/session/ ./internal/terminal/ \
@@ -71,7 +74,8 @@ The `justfile` at the root wraps these commands for local work. `just` lists
 the recipes. They build into `.dev/`, run tests under `nice` and `taskset`,
 and run throwaway daemons under a scratch directory. Only `install`,
 `install-ghostty`, `deploy`, `deploy-hosts` and `restart` touch the live
-daemon. `just deploy` runs `tuios hosts sync --dev --local --restart --yes`.
+daemon. `just deploy` runs `tuios hosts sync --dev --src <checkout> --local
+--restart --yes`.
 
 ### The check gate
 
@@ -81,7 +85,7 @@ Run `just check --changed` before you mark a pull request ready. It runs
 
 | Check | What it runs | Fails the gate |
 |-------|--------------|----------------|
-| `fmt` | `gofmt -l`, and `goimports -l` when installed | yes |
+| `fmt` | `gofmt -l` and `goimports -l` | yes |
 | `vet` | `go vet`, also with `-tags ghostty` when libghostty-vt is built | yes |
 | `lint` | `golangci-lint` with `.golangci.yml`, at the CI version | yes |
 | `tuioslint` | the `internal/lint` tests | yes |
@@ -93,10 +97,19 @@ Run `just check --changed` before you mark a pull request ready. It runs
 | `deadcode` | functions no binary or test reaches, outside `pkg/` | no, report |
 
 `--only vet,lint` runs a subset. Each check writes its full output to
-`.dev/check/NAME.log`. `gopls` fails only on the lines the branch added.
-`lint` covers the whole of each changed package. Apply a `fix` finding package by package, and read each
-diff first. `go fix -diff ./...` prints the patches. Fix a finding at the
-root. A `//nolint` needs its reason on the same line.
+`.dev/check/NAME.log`. The tools run through `go run` at pinned versions, so
+the gate needs nothing installed beyond Go. `gopls` fails only on the lines
+the branch added. `lint` covers the whole of each changed package. Fix a
+finding at the root. A `//nolint` needs its reason on the same line.
+
+The gate runs no unit tests beyond `internal/lint`. Run the tests of the
+packages you changed as well, and see Source checks below.
+
+Apply `go fix` one package at a time, and read every hunk before you keep it.
+`go fix -diff ./...` in a module prints the patches. Keep the index form of a
+loop that deletes from the slice it walks, and of a loop on a render path
+that would copy a cell per step under `range`. Leave out the files an open
+pull request changes, and a library folder unless you will move its pin.
 
 ### What CI runs on a pull request
 
@@ -114,6 +127,33 @@ runs:
 ```bash
 CHANGES_BASE=origin/main scripts/ci-changes.sh
 ```
+
+A test that fails now and then on code that cannot reach it goes in
+`.github/flaky-tests.txt`. A failed run whose failures are all on that list
+retries them once. Any other failure fails the job.
+
+### Keep main green
+
+Main runs every Go test job and the whole e2e suite, so it catches what a
+pull request's selection left out. The idle-cost tests (`TestIdleCostStaysLow`,
+`TestDockIdleCostWithComponentsStaysLow` and the like) and the timing budgets
+in the unit tests fail there first. When one fails on main after your change
+lands, fix the cause at once. Do not retry it away, add it to the flaky list,
+or loosen its budget to make it pass.
+
+A timing test waits on a condition, never on a fixed sleep. A clock budget
+compares the fastest of several short runs, because load only adds time, and
+does not apply under `-race`.
+
+### Binary size
+
+The binary-size job builds tuios as the release does (`CGO_ENABLED=0`,
+`-trimpath`, `-ldflags "-s -w"`) for linux/amd64 and darwin/arm64. It fails
+when either is over the 47 MB ceiling in `scripts/binary-size.sh`, and it
+comments the size change against main on the pull request. `just size` runs
+the same check. State the size cost of a change in the pull request body.
+Raise the ceiling only on purpose, in its own commit, with `docs/perf.md`
+("Binary size budget").
 
 ### Browser build (Learn tuios)
 
@@ -140,8 +180,8 @@ node cmd/tuios-wasm/smoke-lessons.mjs out/ frames/ basics  # a track by show me
 ```
 
 A change to `internal/app` or `internal/input` can break the js build without
-breaking any native one. The learn-web workflow builds it on every pull
-request.
+breaking any native one. The learn-web job builds it on every pull request
+that reaches the js build.
 
 ### Development with Nix
 
@@ -165,7 +205,8 @@ Some parts of tuios are Go modules of their own, published under
 that points the go command at the folder in this repository. They are
 `progstatus/` (`tuios.dev/progstatus`), `vt/` (`tuios.dev/vt`), `swatch/`
 (`tuios.dev/swatch`), `shot/` (`tuios.dev/shot`), `tml/` (`tuios.dev/tml`),
-`plot/` (`tuios.dev/plot`) and `loom/` (`tuios.dev/loom`).
+`plot/` (`tuios.dev/plot`), `loom/` (`tuios.dev/loom`) and `sketch/`
+(`tuios.dev/sketch`). `go.work` lists them all.
 
 - `go.work` makes the app, `e2e/tui` and each library one workspace, so a
   change to a library and to the app lands in one pull request. Never add a
@@ -181,10 +222,19 @@ that points the go command at the folder in this repository. They are
   scripts/library-pins.sh check   # what CI and the release check
   ```
 
+  `sync` also tidies `e2e/tui/go.mod`, which carries the same pins. A pin move also
+  changes the Nix `vendorHash` in `tuios.nix`. The nix-vendor-hash job fails
+  and prints the new hash to put there.
+- Rebase a branch that moves a pin right before it lands, then move the pin
+  again to the library commit on the rebased branch. A rebase gives that
+  commit a new hash, so the old pin names a commit main does not hold. When
+  main changed the library in between, the old pin also lacks that change.
+  Either way `library-pins.sh check` fails on main.
 - A new library joins `go.work` first. It gets its pin with the first change
   that imports it, because `go mod tidy` drops a requirement nothing imports.
   Until then `scripts/library-pins.sh` skips it. A library may require
-  another one at a commit before tuios imports either, as loom requires plot.
+  another one at a commit before tuios imports either, as loom and sketch
+  require plot.
   `scripts/library-pins.sh proxy` serves that version too, so the tidy check
   needs no network for it.
 - `./...` from the root stops at a nested module. Name a library to test it:
@@ -194,6 +244,16 @@ that points the go command at the folder in this repository. They are
   `scripts/vt-rename.sh` after a rebase.
 - A library tag has the folder as a prefix, such as `progstatus/v0.1.0`.
   Tagging is the maintainer's call.
+
+### Generated files
+
+Some packages embed an archive that `go generate` packs from the files beside
+it: `skills/` (`skills/tuios.tar.gz`), `internal/learn/lessons`,
+`internal/harness` and `internal/integration`. Run `go generate` in the
+package after you edit those files. A test in each package fails when the
+archive and the files differ. Rebase with `scripts/rebase.sh origin/main`. It
+regenerates `skills/tuios.tar.gz` at each stop where that archive is the only
+conflict.
 
 ## Code Organization
 
@@ -227,6 +287,12 @@ tuios/
 │   │   └── window_unix.go / window_windows.go  # Platform-specific window and PTY glue
 │   ├── ptyspawn/           # The one path every PTY-backed process is spawned through (spawn_unix.go, spawn_windows.go)
 │   ├── session/            # The daemon: sessions, PTYs (session.go), wire protocol, JSON verbs
+│   ├── childproc/          # Starts the daemon's helper programs (git, ssh, gh, hooks) with no console window
+│   ├── serverscope/        # Names the daemon a process belongs to, for named servers
+│   ├── sockpath/           # The daemon's socket folder and the longest socket path
+│   ├── procinfo/           # What the kernel says about a process: socket peer, start time, parent
+│   ├── restartplan/        # What a daemon restart stops and brings back (restart-server --json)
+│   ├── guibridge/          # A client with no screen that streams layout and pane bytes to the GPU client (tuios gui-bridge)
 │   ├── transcriptview/     # Decodes an agent's transcript into a conversation, for agent-transcript only
 │   ├── federation/         # The link layer between this daemon and the daemons on other machines
 │   ├── worktree/           # Git worktrees: detect, create, and remove without losing uncommitted work
@@ -235,16 +301,22 @@ tuios/
 │   ├── review/             # Reading a worktree's diff, and the notes left on it
 │   ├── diffview/           # Drawing diff lines: chroma highlighting, split layout, changed words
 │   ├── markdown/           # Reads the Markdown agents write into blocks and styled runs; draws nothing
+│   ├── mermaid/            # Finds Mermaid diagrams, themes them, draws them as kitty graphics or text through sketch
+│   ├── tmldraw/            # Draws a TML document into text the way an attached client draws a surface, with loom
+│   ├── ghpr/               # Reads and opens GitHub pull requests through the person's own gh
 │   ├── capture/            # Turns a screenshot request and config into what shot renders
+│   ├── lookshare/          # Builds what "Share my look" hands the person (tuios look share)
 │   ├── release/            # Finds published releases and verifies a downloaded binary (tuios update)
 │   ├── netutil/            # Small network helpers the servers share
 │   ├── memtrim/            # Gives the heap a burst left behind back to the OS once the process settles
 │   ├── dnd/                # The kitty drag and drop protocol (OSC 72) on the wire: parse, join chunks, write
 │   ├── harness/            # Agent harness manifests and detection
 │   ├── herdrplugin/        # herdr plugins: manifest, discovery, the command runner (the host is internal/session/plugin_host.go)
+│   ├── herdrcli/           # herdr's command line, answered by tuios
 │   ├── integration/        # Wires harness hooks, plugins and MCP entries (tuios integration)
 │   ├── mcp/                # The MCP server behind tuios mcp
 │   ├── risk/               # Marks an approval risky by the shipped and configured rules
+│   ├── pushnotify/         # Sends Inbox items to a phone through ntfy, Pushover or a webhook
 │   ├── agentproto/         # Headless agents over ACP and the Codex app-server: the pane program of start-agent --protocol
 │   ├── learn/              # Learn tuios: tour model, event contract, page commands, lessons/ (the tracks as data and the engine)
 │   ├── webshell/           # In-memory pty and fake shell for the browser build
@@ -254,8 +326,12 @@ tuios/
 │   ├── shimlink/           # The tmux and herdr links that run tuios as another program
 │   ├── stopevent/          # The Windows event tuios kill-server sets to stop a daemon
 │   ├── scrollback/         # OSC 133 scrollback browser
+│   ├── hints/              # Finds the things on screen a person may copy and labels them, for hints mode
+│   ├── pastebuf/           # Paste buffers of recent yanks, newest first, after tmux's
 │   ├── overlay/            # Panel and dialog primitives for chrome
 │   ├── composer/           # The editor a person writes to an agent in: multiline, undo, paste blocks
+│   ├── textedit/           # The editing rules every text field shares
+│   ├── explore/            # The full-screen browser behind keybinds browse, config browse and help -i
 │   ├── sessiontree/        # Sidebar session tree model
 │   ├── tape/               # Tape scripting automation
 │   │   ├── lexer.go        # Tokenizer
@@ -267,13 +343,21 @@ tuios/
 │   ├── theme/              # Color theming
 │   ├── layout/             # Window tiling algorithms
 │   ├── pool/               # Memory pooling
+│   ├── refreshrate/        # Finds the displays' refresh rate, for max_fps = "auto"
+│   ├── crashexit/          # Puts the terminal back and exits when a goroutine tuios started panics
+│   ├── invisible/          # Finds characters that draw nothing but change how text reads
+│   ├── tarpack/            # Reads the gzipped archives a package embeds (see Generated files)
+│   ├── lint/               # Source checks that run as tests (see Source checks)
 │   └── ui/                 # Animation system
 │                           # (plus cliflags, debuglog, fang, listnav, sound,
-│                           #  transcript, guestenv, perf, fuzz, testutil)
+│                           #  transcript, guestenv, perf, fuzz, testutil,
+│                           #  atomicfile, cellsize, lazyre, linediff, pathroot,
+│                           #  plural, sortx, units, winacl, winjob, winpath)
 ├── loom/                   # tuios.dev/loom, a Go module of its own: draws TML into cells; flex layout, retained tree, palettes per depth, keys and mouse
-├── plot/                   # tuios.dev/plot, a Go module of its own: bar, line, area, sparkline, gauge and histogram charts as cells with theme roles
+├── plot/                   # tuios.dev/plot, a Go module of its own: eleven chart kinds (bar, line, area, heatmap, pie, world map and more) as cells with theme roles
 ├── progstatus/             # tuios.dev/progstatus, a Go module of its own: OSC 7501 parser, record store, encoder
 ├── shot/                   # tuios.dev/shot, a Go module of its own: a cell grid to PNG, SVG, HTML, ANSI or text; mosaic turns pictures into cells
+├── sketch/                 # tuios.dev/sketch, a Go module of its own: Mermaid diagrams to SVG in pure Go, a port of pele; raster/ and text/ outputs
 ├── swatch/                 # tuios.dev/swatch, a Go module of its own: desktop theme palettes (Omarchy), followed live
 ├── tml/                    # tuios.dev/tml, a Go module of its own: the TML markup for surfaces (codecs, validator, expressions, JSON Patch); draws nothing
 ├── vt/                     # tuios.dev/vt, a Go module of its own: the terminal emulator, pure Go, plus libghostty-vt behind -tags ghostty
@@ -290,6 +374,8 @@ tuios/
 │   ├── CONFIGURATION.md    # Config options
 │   └── CLI_REFERENCE.md    # CLI flags and commands
 ├── examples/               # Tape script examples, and dock components under examples/dock/
+├── plugins/                # First-party plugins; the binary embeds only template/, which tuios plugins new copies
+├── scripts/                # check.sh, ci-changes.sh, library-pins.sh, binary-size.sh, rebase.sh, install.sh
 ├── skills/                 # The tuios skill (skills/tuios/SKILL.md and its topics), embedded and printed by tuios --skill [topic]
 ├── integrations/           # Harness integrations, such as the claude-code agent-state shim
 ├── e2e/                    # End-to-end tests; e2e/tui is its own Go module
@@ -328,11 +414,21 @@ Tiling itself toggles on `Ctrl+B` `Space` (or bare `t` in window-management mode
 
 ### Window Lifecycle
 
-1. `OS.AddWindow()` creates window with PTY
-2. PTY spawns shell process with I/O polling goroutines
-3. VT emulator parses ANSI output
-4. Screen buffer updates trigger render
-5. `OS.DeleteWindow()` cleans up PTY and removes window
+A plain `tuios` is a daemon session: the daemon (`internal/session`) owns the
+PTYs and one emulator per pane, and the client keeps a second emulator per
+window. `docs/ARCHITECTURE.md` draws both sides.
+
+1. `OS.AddWindow()` (`internal/app/os_window.go`) sends a `NewWindow` intent
+   to the daemon
+2. The daemon spawns the pane's process through `ptyspawn` and pushes the new
+   state
+3. The client places the window when the push lands, and subscribes to the
+   pane's stream from a snapshot of the daemon's emulator
+4. Each chunk of the stream feeds the window's emulator and marks it dirty
+5. `OS.DeleteWindow()` asks the daemon to close the window, and the client
+   drops its copy when the push lands
+
+`tuios --standalone` skips the daemon: the window spawns and owns its PTY.
 
 ## Key Dependencies
 
@@ -345,7 +441,9 @@ Tiling itself toggles on `Ctrl+B` `Space` (or bare `t` in window-management mode
 - **libghostty-vt** (`go.mitchellh.com/libghostty`, behind `-tags ghostty`): Alternative VT emulation backend; `scripts/install.sh ghostty` builds it (see `docs/ghostty-vt.md`)
 - **sip** (`github.com/Gaurav-Gosain/sip`): WebGL terminal serving for `tuios-web`
 
-> **Note:** As of December 2025, the Charm stack packages have migrated from `github.com/charmbracelet/*` to `charm.land/*` module paths.
+> **Note:** Bubble Tea, Lipgloss, Wish, ssh, log and tone import from `charm.land/*`.
+> Ultraviolet, colorprofile and the `x/*` packages stay under `github.com/charmbracelet/*`.
+> `internal/fang` is a trimmed copy of `github.com/charmbracelet/fang`.
 
 ## Coding Conventions
 
@@ -372,6 +470,27 @@ Tiling itself toggles on `Ctrl+B` `Space` (or bare `t` in window-management mode
   `pal.Row(content, width, st, base)`. An unfocused list keeps its cursor.
 - Blend with `overlay.MixColors` (OKLab); measure with `overlay.Readable` and
   `ReadableAt`, which measure the colour the depth will actually show.
+
+### Source checks
+
+Some tests read the source and reject what the compiler accepts. These are
+the ones a change trips most often. Each test's doc comment gives the reason.
+
+| Rule | Test | Exception marker |
+|------|------|------------------|
+| No colour literal in render code | `internal/lint` `TestNoHardCodedColoursInRenderCode` | `//tuios:allow-color <reason>` |
+| Daemon code starts a process with `childproc.Command`, never `exec.Command` or `os.StartProcess` | `internal/lint` `TestDaemonChildrenGoThroughChildproc` | `//tuios:allow-exec <reason>` |
+| Every `git` starts through `childproc.Git`, which turns off repository hooks and filters | `internal/lint` `TestGitGoesThroughChildprocGit` | `//tuios:allow-exec <reason>` |
+| A client quits through `OS.QuitCmd`, never a bare `tea.Quit` | `internal/lint` `TestEveryClientQuitGoesThroughQuitCmd` | `//tuios:allow-quit <reason>` |
+| Lessons name real actions, overlays, events and keys | `internal/lint` `TestLessonsMatchTheApp` | none |
+| Every `tea.NewProgram` takes `app.ProgramOptions()`, with no other `tea.With*` option than `WithOutput`, and a transport's `MakeOptions` before it | `internal/app` `TestEveryProgramTakesTheSharedOptions` | none |
+| No emoji in a string or rune literal under `internal/` and `cmd/` | `internal/app` `TestNoEmojiInSourceStrings` | `emojiSourceAllowed` |
+| A new overlay kind has a place in `overlayKindOrder` | `internal/app` `TestEveryOverlayKindHasAPlaceInTheStack` | none |
+| An `ErrVerb*` code is in the `list-verbs` catalogue | `internal/session` `TestErrorCodeCatalogHasEveryErrVerbConstant` | none |
+| A package with tests has `func TestMain(m *testing.M) { os.Exit(testutil.RunIsolated(m)) }` | `internal/testutil` `TestEveryTestPackageIsolatesTheXDGTree` | none |
+
+Only the `internal/lint` rows run in the check gate. The others run with
+their package's tests.
 
 ### Error Handling
 
@@ -423,13 +542,33 @@ needs `Xvfb`, `xdotool` and `xclip`; `TUIOS_E2E_YAZI` adds yazi as a source.
 The e2e-kitty workflow runs it on request and once a week.
 
 A pull request runs only the e2e tests its change can reach. `e2e/tui/testselect`
-reads the diff and `e2e/tui/testselect/testmap.txt`, which records the functions
-each test ran in a coverage run. The e2e-tui test map workflow refreshes the map
-every week. CI files, the harness, `go.mod` beyond library pins, and any path no
-rule names run the whole suite. Main always runs the whole suite.
+reads the diff and a test map, which records the functions each test ran in a
+coverage run. The e2e-tui test map workflow builds the map every night and
+keeps it as the `e2e-test-map` artifact. CI reads the newest one from main.
+The committed `e2e/tui/testselect/testmap.txt` is an old fallback. CI files,
+the harness, `go.mod` beyond library pins, and any path no rule names run the
+whole suite.
+
+What the selector does with a change:
+
+- A changed function selects the tests that ran it. A changed function that
+  no test ran selects nothing, and the selector reports no error. When your
+  change needs e2e cover, add to a test that reaches the code. A changed test
+  file selects the tests it changes.
+- A test newer than the map runs on every change that reaches the binary,
+  until the next night's map knows it.
+- A draft pull request skips the shards. Mark it ready for review to run them.
+- Main runs the whole suite. It skips the run only when the same commit
+  already passed the whole suite as a pull request head.
+
+Run the selection with the current map:
 
 ```bash
-cd e2e/tui && TUIOS_E2E=1 go test -list '^Test' . | go run ./testselect -base origin/main
+id=$(gh run list -R Gaurav-Gosain/tuios --workflow e2e-tui-map.yml --branch main \
+  --status success --limit 1 --json databaseId --jq '.[0].databaseId')
+rm -rf .dev/map && gh run download "$id" -R Gaurav-Gosain/tuios -n e2e-test-map -D .dev/map
+cd e2e/tui && TUIOS_E2E=1 go test -list '^Test' . |
+  go run ./testselect -base origin/main -map ../../.dev/map/testmap.txt
 ```
 
 A test that claims to cover a bug must fail on a build with the fix removed.
@@ -438,8 +577,8 @@ A test that claims to cover a bug must fail on a build with the fix removed.
 ### Kept Unit Tests
 
 ```bash
-# Everything outside e2e/tui
-go test ./...
+# Every module outside e2e/tui (go test ./... covers the app module only)
+just test
 
 # One package
 go test ./vt/
@@ -564,7 +703,10 @@ go run ./cmd/tuios tape play examples/demo.tape
 
 - Use `tea.KeyPressMsg` not `tea.KeyMsg` (v2 change)
 - Mouse events are separate types: `tea.MouseClickMsg`, `tea.MouseMotionMsg`, etc.
-- `tea.WithFilter()` for event filtering (used for mouse motion filtering)
+- `View()` returns a `tea.View`, not a string
+- Program options live in `app.ProgramOptions()` (`internal/app/program_options.go`):
+  the frame rate, no signal handler, and the one `tea.WithFilter` slot (motion
+  filter and size filter). Spread it into every `tea.NewProgram` (see Source checks)
 
 ### VT Emulator
 
@@ -611,6 +753,9 @@ go run ./cmd/tuios tape play examples/demo.tape
 |---------|------|
 | Main entry point | `cmd/tuios/main.go` |
 | Central state | `internal/app/os.go` |
+| Window lifecycle | `internal/app/os_window.go` |
+| Bubble Tea options | `internal/app/program_options.go` |
+| Daemon | `internal/session/daemon.go` |
 | Rendering | `internal/app/render.go` |
 | Input handling | `internal/input/handler.go` |
 | Terminal window | `internal/terminal/window.go` |
@@ -640,9 +785,10 @@ docs: update keybindings reference
 ## Release Process
 
 Releases are automated via GitHub Actions with GoReleaser:
-- Tag format: `v*.*.*` (e.g., `v0.3.4`)
-- Builds for Linux, macOS, Windows, FreeBSD
-- Publishes to AUR, Homebrew, Docker
+- Tag format: `v*.*.*` (e.g., `v0.12.1`). Tagging is the maintainer's call
+- Builds for Linux, macOS, Windows, FreeBSD and OpenBSD
+- GoReleaser publishes to AUR and Homebrew. `docker-publish.yml` pushes the
+  image, and `update-nix.yml` moves `tuios.nix` to the release
 
 ## Additional Resources
 
@@ -655,5 +801,6 @@ Releases are automated via GitHub Actions with GoReleaser:
 - **Web Terminal**: `docs/WEB.md`. Web terminal documentation (tuios-web binary)
 - **VT Backends**: `docs/ghostty-vt.md`. The pure Go and libghostty-vt emulators, and how to build each
 - **Rehydration**: `docs/REHYDRATION.md`. The snapshot-vs-stream contract for pane content on attach
+- **Wire protocol**: `docs/protocol.md`. Binary frames, JSON verbs, and who owns session state
 - **Performance**: `docs/perf.md`. Measured baselines and the "measured and not changed" ledger
 - **Sip**: https://github.com/Gaurav-Gosain/sip. The library serving Bubble Tea apps as web apps (used by `cmd/tuios-web`)

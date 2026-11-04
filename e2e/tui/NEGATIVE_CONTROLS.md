@@ -4175,6 +4175,12 @@ its session is killed. `TestStreamPaneLeaseOnTheDesktop` saves the frames
 attached client draws the leased pane at 30 by 6 in its full rectangle, and at
 58 by 36 again once the lease ends.
 
+On 2026-11-04 one more control ran against `TestStreamPaneYieldingLease`:
+
+| Control: what was put back | Test | Result |
+| --- | --- | --- |
+| `leasedSizeLocked` ignoring `yield`, so a yielding lease clamps as a fit lease does | `TestStreamPaneYieldingLease` | **caught**: "a yielding lease clamped the client's pane: 6x30, want 36x58" |
+
 ## stream-pane review fixes
 
 `e2e/tui/stream_pane_review_test.go` holds the fixes from the review of the
@@ -12474,3 +12480,30 @@ suite ran 20 times against one `tuios-web`, on two cores, once without the
 filter and once with it. Without it, 68 size messages came in late and the
 board showed the splash with a pane still open 7 times. With it, 58 came in
 late, each was put right, and the board never showed it.
+## Clients follow a live upgrade
+
+`TestAttachedClientFollowsDaemonUpgrade` attaches a client to a shell, upgrades the daemon to a copy of the same build, and types at the client afterwards: the client must still run, say "The daemon was upgraded. tuios reattached.", show the pane as it was, and its typed line must reach the shell, whose pid the upgrade kept. `TestAttachedClientIsToldToReattach` upgrades to a build of this tree with the wire protocol one ahead and the oldest it serves moved up with it (a `go build -overlay` of `internal/session/protocol_version.go`): the client must exit 0 within 8 seconds with "The daemon is being upgraded to", well inside the 15-second wait. Run on 2026-11-03 on macOS arm64, each control against the branch head with one change:
+
+| Claim | Control | Where it fails | Verdict |
+|---|---|---|---|
+| A local client waits for the new image and attaches again | the early `return nil` for an upgraded client put back in `beginDaemonReconnect` | `TestAttachedClientFollowsDaemonUpgrade`: "the client exited (code 0) after the upgrade instead of following the daemon" | **caught** |
+| A client the new image cannot serve stops at the handshake's refusal | `session.ProtocolRefused(msg.err)` cut from `handleDaemonReconnectResult` | `TestAttachedClientIsToldToReattach`: "the client took 15.06s to exit after the upgrade: it waited for a daemon it cannot talk to instead of stopping at its answer" | **caught** |
+| A run removes the other-protocol build it made | the branch head before `runE2E` removed `otherProtocolDir` (fbe41763f), run on 2026-11-04 | `TestAttachedClientIsToldToReattach` passes and leaves a `tuios-e2e-other-protocol*` directory of about 64 MB in the temp directory: 10 before, 11 after. With the fix the count stays at 11 | **caught** (by the count, not by a test) |
+| `TestUpgradeReattachLeavesAltScreenPaneAlone` still holds the alternate-screen fix of #1463 when the first client follows the upgrade | the alternate-screen fix (bfbfb3d78) taken out of a build carrying this branch, run on 2026-11-03 | "the program heard winch 25 117 and winch 26 118", and the pane's grid changed | **caught** |
+
+## Ended conversations and set-layout-tree
+
+`TestEndedConversationResumes` in `e2e/tui/agent_resume_test.go` holds the list
+of ended conversations: a window that closes with a conversation and a pane
+whose agent leaves both go on it, the list survives `kill-server`, and
+`resume-agent` with `conversation` types the manifest's command in a new
+window. On 2026-11-04 the control below ran against it.
+
+| Control: what was put back | Test | Result |
+| --- | --- | --- |
+| The `endedConversations` call cut from `emitLifecycleLocked` (session.go) | `TestEndedConversationResumes` | **caught**: "the closed window's conversation is not listed" |
+
+`TestLayoutChangedFollowsASplit` also writes a tree with `set-layout-tree` and
+reads the attached client's screen: the first pane goes from 60 columns to 30
+at a ratio of 0.25. The rectangles in `list-windows` do not follow until the
+client pushes again, so the test reads the screen.

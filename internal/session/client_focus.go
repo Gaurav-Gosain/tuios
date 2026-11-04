@@ -99,6 +99,11 @@ func (d *Daemon) reportHostFocus(sessionID string, focused bool) {
 // them reported losing it, and unknown otherwise, which includes a session
 // with no client and a client whose terminal never said.
 func (d *Daemon) sessionHostFocus(sessionID string) string {
+	// A stream that shows a pane focused is a client with focus
+	// (viewer_focus.go).
+	if s := d.manager.GetSessionByID(sessionID); s != nil && s.viewerFocusOn("") {
+		return HostFocusFocused
+	}
 	d.clientsMu.RLock()
 	defer d.clientsMu.RUnlock()
 	clients, out := 0, 0

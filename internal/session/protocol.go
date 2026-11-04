@@ -189,8 +189,9 @@ const (
 	MsgPluginApprovals
 	// MsgDaemonUpgrading tells a TUI client, just before the daemon closes
 	// its connection, that a live upgrade is replacing the daemon's image and
-	// every pane keeps running. The client says so when it exits, rather than
-	// that the daemon was lost. An older client ignores the type and says the
+	// every pane keeps running. A local client waits for the new image and
+	// attaches again; one that cannot says so when it exits, rather than that
+	// the daemon was lost. An older client ignores the type and says the
 	// daemon was lost. See handoff.go.
 	MsgDaemonUpgrading
 	// MsgPluginUI carries a plugin's dock cells or one notice

@@ -27,7 +27,8 @@ binary frames in both directions: one type byte, a 4-byte big-endian length,
 then the payload.
 
 - From the daemon: `S` snapshot, `O` output, `R` resize, `E` error, `X` end.
-- From the client: `I` input, `L` size lease.
+- From the client: `I` input, `L` size lease, `V` viewer report (JSON, after a
+  theme change), `F` shown (one byte: 0 hidden, 1 on screen, 2 focused).
 - Skip a frame type that you do not know. Read its length, then read and drop
   the payload. A later daemon can add frame types.
 - Keep the `seq` of the last frame you wrote into your emulator. Send it back
@@ -47,6 +48,13 @@ then the payload.
   keep it. When a lease ends, the daemon sends an `E` frame with code
   `lease_expired`, and the pane goes back to the size its clients asked for.
 - A lease never changes the session size or another pane.
+- Open the stream with `yield: true` to hold a lease that sizes the pane only
+  while no TUI client shows the session. Over this machine's socket it needs
+  no renewal.
+- An 8-byte `L` frame adds the cell width and height in pixels. The pane takes
+  that cell while the lease sizes it.
+- `F` with 2 counts the stream as a focused client on the pane: host focus,
+  focus reports, quiet hooks, and the finished turn marked seen.
 
 ## attach-presence
 

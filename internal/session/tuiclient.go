@@ -541,7 +541,7 @@ func (c *TUIClient) handshake(version string, width, height int, caps *ClientCap
 		if errPayload.Code == ErrCodeBusy {
 			return ErrTooManyConnections
 		}
-		return fmt.Errorf("the daemon refused this client: %s", errPayload.Message)
+		return &helloRefused{msg: errPayload.Message}
 	}
 	if resp.Type != MsgWelcome {
 		// A daemon that numbers its messages differently answers the hello with
@@ -703,6 +703,11 @@ func (c *TUIClient) takeAttachReply(resp *Message) (*SessionState, error) {
 	c.sessionID = payload.SessionID
 	c.setSessionName(payload.SessionName)
 	c.humanNonce.Store(&payload.HumanNonce)
+	// With the read loop running, routeReply counted this attach as it read
+	// the reply. See AttachGeneration.
+	if !c.readLoopRunning {
+		c.attachGen.Add(1)
+	}
 	c.startPushes()
 	c.appliedSeq.Store(stateSeq(payload.State))
 	if err := validateSessionState(payload.State); err != nil {
@@ -740,6 +745,24 @@ func refusalOf(p ErrorPayload) *attachRefused {
 }
 
 func (e *attachRefused) Error() string { return "attach failed: " + e.msg }
+
+// helloRefused is the daemon declining the handshake itself, which it does
+// only for a wire protocol it does not serve. Its message names the fix.
+type helloRefused struct{ msg string }
+
+func (e *helloRefused) Error() string { return "the daemon refused this client: " + e.msg }
+
+// ProtocolRefused reports a daemon this client cannot talk to: one that
+// refused the handshake, or one whose welcome is outside the protocols this
+// build speaks. Either is found before the client attaches, so nothing of that
+// daemon was drawn, and asking again cannot help.
+func ProtocolRefused(err error) bool {
+	if _, ok := errors.AsType[*helloRefused](err); ok {
+		return true
+	}
+	_, ok := errors.AsType[*ProtocolMismatchError](err)
+	return ok
+}
 
 // AttachRefused reports an attach the daemon answered and declined, which a
 // client that is trying to get a lost session back needs to tell apart from an
@@ -1663,13 +1686,19 @@ func (c *TUIClient) startPushes() {
 	defer c.pushMu.Unlock()
 	c.pushOrigin.Store(&origin)
 	c.pushSeq.Store(0)
-	c.attachGen.Add(1)
 }
 
 // AttachGeneration counts this client's attaches. SnapshotSeq numbers are the
 // attached session's own and start over in another session or after a daemon
 // restart, both of which take a new attach, so two snapshots are comparable by
 // SnapshotSeq only when they arrived under the same generation.
+//
+// A handler reads it on the read loop to stamp what it hands on, and the model
+// drops a stamp that is not current: it came from the session the client left.
+// So the count moves on the read loop, at the moment the attach reply is read,
+// and not later on the goroutine that waits for the reply. Counted there, the
+// first messages of the new session, read before that goroutine woke, carried
+// the old count and were dropped as the old session's.
 func (c *TUIClient) AttachGeneration() uint64 {
 	if c == nil {
 		return 0
@@ -2836,6 +2865,11 @@ func (c *TUIClient) routeReply(msg *Message) replyRoute {
 			return replyStale
 		}
 		delete(c.pendingResponses, msg.Type)
+	}
+	// Every message read after this one belongs to the session it attaches
+	// to. See AttachGeneration.
+	if msg.Type == MsgAttached {
+		c.attachGen.Add(1)
 	}
 	select {
 	case p.ch <- msg:

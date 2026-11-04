@@ -623,6 +623,9 @@ func (m *OS) ApplyStateSyncFrom(state *session.SessionState, sourceID string) er
 	if m.FocusedWindow >= 0 && m.FocusedWindow < len(m.Windows) {
 		focusBefore = m.Windows[m.FocusedWindow].ID
 	}
+	// A drag holds its pane by index too, and for the same reason it is
+	// read before the rebuild. See followHeldPanes.
+	held := m.heldPanes()
 
 	// Build maps for efficient lookup
 	incomingByID := make(map[string]*session.WindowState)
@@ -687,6 +690,11 @@ func (m *OS) ApplyStateSyncFrom(state *session.SessionState, sourceID string) er
 
 	// Update window list
 	m.Windows = newWindows
+	if !m.followHeldPanes(held) {
+		// Registered after the answer's defer above, so it runs first: the
+		// gesture is over before the answer says where the panes are.
+		defer m.endLostGesture()
+	}
 
 	// MultifocusSet is keyed by window ID and survives the rebuild for windows
 	// that still exist; prune IDs no longer present in the synced window list.

@@ -223,4 +223,55 @@ func TestLayoutChangedFollowsASplit(t *testing.T) {
 	}
 	waitWindowCount(t, term, 2, "after the split")
 	saveArtifact(t, term, dir, "after-split")
+
+	// A client that draws the panes itself reads the tree with layout-tree
+	// and writes it back with set-layout-tree. The attached client takes the
+	// new tree: the first pane's rectangle narrows to the new ratio.
+	before := listRects(t, base, sess)[first]
+	out, err := tuiosCLI(t, base, "call", "layout-tree", `{"session":"`+sess+`"}`)
+	fmt.Fprintf(&log, "$ tuios call layout-tree\n%s\n", out)
+	if err != nil {
+		t.Fatalf("layout-tree: %v\n%s", err, out)
+	}
+	var lt struct {
+		Workspace  int               `json:"workspace"`
+		Tree       map[string]any    `json:"tree"`
+		Leaves     map[string]string `json:"leaves"`
+		Workspaces map[string]int    `json:"workspaces"`
+	}
+	if err := json.Unmarshal([]byte(out), &lt); err != nil || lt.Tree == nil || len(lt.Leaves) != 2 {
+		t.Fatalf("layout-tree gave no tree of two leaves: %v\n%s", err, out)
+	}
+	if lt.Workspaces[first] != 1 {
+		t.Errorf("layout-tree put %s on workspace %d, want 1", first, lt.Workspaces[first])
+	}
+	lt.Tree["root"].(map[string]any)["split_ratio"] = 0.25
+	params, _ := json.Marshal(map[string]any{"session": sess, "workspace": lt.Workspace, "tree": lt.Tree, "leaves": lt.Leaves})
+	out, err = tuiosCLI(t, base, "call", "set-layout-tree", string(params))
+	fmt.Fprintf(&log, "$ tuios call set-layout-tree\n%s\n", out)
+	if err != nil || !strings.Contains(out, `"changed":true`) {
+		t.Fatalf("set-layout-tree: %v\n%s", err, out)
+	}
+	waitEvent("layout-changed", uiTimeout)
+	// The client lays the panes out from the tree it took. The rectangles in
+	// list-windows follow only when it next pushes, so the screen is read:
+	// the first pane's top border ends near a quarter of the width.
+	split := func() int {
+		top, _, _ := strings.Cut(term.Snapshot(), "\n")
+		at := strings.Index(top, "╮╭")
+		if at < 0 {
+			return 1 << 20
+		}
+		return len([]rune(top[:at])) + 1
+	}
+	deadline := time.Now().Add(uiTimeout)
+	for split() >= before.Width*3/4 {
+		if time.Now().After(deadline) {
+			t.Fatalf("the attached client kept the old tree: its first pane is %d wide, was %d\n%s", split(), before.Width, term.Snapshot())
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	fmt.Fprintf(&log, "first pane on screen: %d columns, was %d\n", split(), before.Width)
+	saveArtifact(t, term, dir, "after-set-layout-tree")
+	_ = os.WriteFile(filepath.Join(dir, "layout-tree.txt"), []byte(log.String()), 0o644)
 }

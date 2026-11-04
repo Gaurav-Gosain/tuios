@@ -11,7 +11,7 @@ git clone https://github.com/Gaurav-Gosain/tuios.git
 cd tuios
 
 go build -o tuios ./cmd/tuios   # pure Go backend, needs only go (1.27.3+)
-go test ./...
+go test ./...                   # the app module; `just test` adds the libraries
 
 # Or build and install onto your PATH, pure Go emulator by default.
 # `ghostty` installs the ghostty backend (needs zig; see docs/ghostty-vt.md).
@@ -31,10 +31,12 @@ The `justfile` at the root holds the dev commands. Install [just](https://just.s
 | `just sandbox [args]` | Runs tuios against a throwaway daemon. It does not touch your own daemon. |
 | `just run-debug` | Runs the TUI with `--debug` against a throwaway daemon. |
 | `just logs` | Follows the live daemon's log file. |
-| `just test` | Runs the unit tests on half the cores, at low priority. |
+| `just test` | Runs the unit tests of every module on half the cores, at low priority. |
 | `just e2e [pattern]` | Builds the binary and runs the end-to-end suite, or the tests that match the pattern. |
 | `just e2e-flake TEST N` | Runs one end-to-end test N times and counts the failures. |
 | `just lint` | Runs golangci-lint, `go vet` for each OS, and `internal/lint`. |
+| `just check --changed` | Runs the check gate on what your branch changed. Run it before you mark a pull request ready. |
+| `just size` | Builds the release binary and fails above the 47 MB ceiling. |
 | `just ci` | Runs the local part of CI: format, tidy, lint, unit tests and binary size. |
 | `just clean` | Stops the throwaway daemons and removes what the recipes built. |
 

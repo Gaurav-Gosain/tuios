@@ -1,6 +1,8 @@
 package app
 
 import (
+	"slices"
+
 	"github.com/Gaurav-Gosain/tuios/internal/layout"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
@@ -121,4 +123,44 @@ func (m *OS) CancelWindowDrag() bool {
 	}
 	m.SyncStateToDaemon()
 	return true
+}
+
+// heldPaneIDs names the panes a pointer gesture holds by index into m.Windows.
+type heldPaneIDs struct {
+	drag, scrollbar string
+}
+
+// heldPanes reads which panes the live gesture holds, by ID. An index left
+// over with no gesture live names nothing.
+func (m *OS) heldPanes() heldPaneIDs {
+	var h heldPaneIDs
+	gesture := m.Dragging || m.Resizing || m.BorderResizing
+	if i := m.DraggedWindowIndex; gesture && i >= 0 && i < len(m.Windows) {
+		h.drag = m.Windows[i].ID
+	}
+	if i := m.ScrollbarDragWindowIndex; m.ScrollbarDragging && i >= 0 && i < len(m.Windows) {
+		h.scrollbar = m.Windows[i].ID
+	}
+	return h
+}
+
+// followHeldPanes points the gesture's indexes at the panes heldPanes named,
+// after a sync rebuilt m.Windows. A peer that opens, closes or reorders panes
+// moves the indexes, and a drag kept by index moved whatever pane came to sit
+// there. It reports false when a held pane is gone, and the caller ends the
+// gesture: there is nothing left under the pointer to move.
+func (m *OS) followHeldPanes(h heldPaneIDs) bool {
+	ok := true
+	follow := func(id string, index *int) {
+		if id == "" {
+			return
+		}
+		*index = slices.IndexFunc(m.Windows, func(w *terminal.Window) bool { return w.ID == id })
+		if *index < 0 {
+			ok = false
+		}
+	}
+	follow(h.drag, &m.DraggedWindowIndex)
+	follow(h.scrollbar, &m.ScrollbarDragWindowIndex)
+	return ok
 }

@@ -1524,6 +1524,37 @@ func buildVerbRegistry() map[string]verbEntry {
 			},
 			handler: (*Daemon).verbSetLayout,
 		},
+		"layout-tree": {
+			description: "Read a workspace's BSP tree. The leaves carry the session's numbers, and leaves names the window of each. With set-layout-tree, a client that draws the panes itself keeps the layout in the session.",
+			params: []verbParam{
+				sessionParam,
+				{Name: "workspace", Type: "int", Description: "The workspace. Omit it for the current one."},
+			},
+			returns: []verbParam{
+				{Name: "workspace", Type: "int", Description: "The workspace read."},
+				{Name: "version", Type: "int", Description: "The session state's version."},
+				{Name: "tree", Type: "object", Description: "root (nodes of window_id, split_type, split_ratio, left, right), auto_scheme and default_ratio, or null when the workspace has no tree."},
+				{Name: "leaves", Type: "object", Description: "Each leaf number in tree, as a string, to its window id."},
+				{Name: "workspaces", Type: "object", Description: "Each window id of the session to its workspace."},
+			},
+			examples: []string{`{"id":1,"verb":"layout-tree","params":{"session":"work","workspace":1}}`},
+			handler:  (*Daemon).verbLayoutTree,
+		},
+		"set-layout-tree": {
+			description: "Replace a workspace's BSP tree. Every attached client takes the new tree. A leaf whose window is gone or on another workspace is dropped. layout-changed fires when the tree changed.",
+			params: []verbParam{
+				sessionParam,
+				{Name: "workspace", Type: "int", Description: "The workspace. Omit it for the current one."},
+				{Name: "tree", Type: "object", Description: "The tree, as layout-tree returns it, numbered as the caller likes. null removes the workspace's tree."},
+				{Name: "leaves", Type: "object", Description: "Each leaf number in tree, as a string, to its window id."},
+			},
+			returns: []verbParam{
+				{Name: "workspace", Type: "int", Description: "The workspace set."},
+				{Name: "changed", Type: "bool", Description: "Whether the tree changed."},
+			},
+			examples: []string{`{"id":1,"verb":"set-layout-tree","params":{"session":"work","workspace":1,"tree":null,"leaves":{}}}`},
+			handler:  (*Daemon).verbSetLayoutTree,
+		},
 		"run-command": {
 			description: "Run one tape command, or any keybinding action by the name config.toml binds it to. Prefer a verb where one exists: a verb reports what changed, this reports only that the command ran.",
 			params: []verbParam{
@@ -1623,7 +1654,7 @@ func buildVerbRegistry() map[string]verbEntry {
 			handler: (*Daemon).verbRun,
 		},
 		"stream-pane": {
-			description: "Stream one pane as bytes, for a client that is not tuios. The reply is one JSON line, and after it the connection carries binary frames both ways: a type byte, a 4-byte big-endian length, then the payload. From the daemon: S snapshot (u64 seq, u16 cols, u16 rows, then bytes that paint the pane on a fresh emulator of that size), O output (u64 seq after the frame's last byte, then the pane's bytes), R resize (u64 seq, u16 cols, u16 rows), E error (JSON code and message, for a refused frame or a lease that was not renewed; the stream goes on), X exit (the reason: exited N when the pane's program exited with status N, killed N when signal N ended it, closed when its window closed first, or refused: … when the caller may no longer read it; the connection then closes). From the client: I input (at most 64 KiB of bytes typed into the pane, checked as send-text is), L lease (u16 cols, u16 rows, 0 0 to release; send it again every 10 seconds, or the lease ends after 30). Skip a frame type you do not know: read its length and drop that many bytes. At most 4 I frames wait for a pane that does not read, and the next gets E busy. The stream never changes the pane's size or the session's. A lease holds the pane at most at its size while the stream is open, and the pane goes back to the size its clients asked for when the lease ends.",
+			description: "Stream one pane as bytes, for a client that is not tuios. The reply is one JSON line, and after it the connection carries binary frames both ways: a type byte, a 4-byte big-endian length, then the payload. From the daemon: S snapshot (u64 seq, u16 cols, u16 rows, then bytes that paint the pane on a fresh emulator of that size), O output (u64 seq after the frame's last byte, then the pane's bytes), R resize (u64 seq, u16 cols, u16 rows), E error (JSON code and message, for a refused frame or a lease that was not renewed; the stream goes on), X exit (the reason: exited N when the pane's program exited with status N, killed N when signal N ended it, closed when its window closed first, or refused: … when the caller may no longer read it; the connection then closes). From the client: I input (at most 64 KiB of bytes typed into the pane, checked as send-text is), L lease (u16 cols, u16 rows, 0 0 to release, then optionally u16 cell width and u16 cell height in pixels; send it again every 10 seconds, or the lease ends after 30), V viewer (the viewer object as JSON; it replaces the stream's report), F shown (one byte: 0 hidden, 1 on screen, 2 on screen and focused in a focused window; at 2 the stream counts as a focused client that shows the pane, and each F 2 marks the pane's finished turn seen). Skip a frame type you do not know: read its length and drop that many bytes. At most 4 I frames wait for a pane that does not read, and the next gets E busy. The stream never changes the pane's size or the session's. A lease holds the pane at most at its size while the stream is open, and the pane goes back to the size its clients asked for when the lease ends.",
 			params: []verbParam{
 				sessionParam,
 				{Name: "window", Type: "string", Description: "The pane to stream: a window id or name."},
@@ -1633,6 +1664,9 @@ func buildVerbRegistry() map[string]verbEntry {
 				{Name: "lease_rows", Type: "int", Description: "Hold the pane at most this many rows high while the stream is open. Needs lease_cols."},
 				{Name: "session_id", Type: "string", Description: "The session by its id, which a rename does not change. It wins over session. The reply carries it."},
 				{Name: "fit", Type: "bool", Description: "Make the lease a viewer's: while no TUI client shows the session, the pane takes the size of the largest fit lease held, and goes back to its own size when the last one ends. While a client shows the session, a fit lease only holds the pane smaller."},
+				{Name: "yield", Type: "bool", Description: "Make the lease a fit lease that has no effect while a TUI client shows the session. Over this machine's socket, not a host link, it does not expire and needs no renewal: it ends when the stream closes."},
+				{Name: "cell_width", Type: "int", Description: "The viewer's cell width in pixels. While a fit lease sizes the pane, the pane takes this cell."},
+				{Name: "cell_height", Type: "int", Description: "The viewer's cell height in pixels. Needs cell_width."},
 				{Name: "viewer", Type: "object", Description: "The terminal the stream shows the pane in: bg, fg (#rrggbb), palette (sixteen comma-separated #rrggbb), kitty and sixel (bool). While no TUI client shows the session, the daemon answers the pane's OSC 10, 11 and 4, DA1 and kitty graphics queries from the newest viewer's report."},
 			},
 			returns: []verbParam{
@@ -2143,6 +2177,9 @@ func buildVerbRegistry() map[string]verbEntry {
 				sessionParam,
 				windowParam,
 				{Name: "dry_run", Type: "bool", Description: "Return the command without typing it."},
+				{Name: "conversation", Type: "string", Description: "An ended conversation's id from list-conversations, in place of window. It starts in a new window of the session, in the conversation's folder. It needs what new-window needs."},
+				{Name: "harness", Type: "string", Description: "The harness of conversation, when two harnesses used the same id."},
+				{Name: "workspace", Type: "int", Description: "The workspace of the new window for conversation. Omit it for the current one."},
 			},
 			returns: []verbParam{
 				{Name: "window_id", Type: "string", Description: "The window resumed."},
@@ -2157,6 +2194,29 @@ func buildVerbRegistry() map[string]verbEntry {
 				`{"id":1,"verb":"resume-agent","params":{"session":"work","window":"build","dry_run":true}}`,
 			},
 			handler: (*Daemon).verbResumeAgent,
+		},
+		"list-conversations": {
+			description: "List the agent conversations that ended: a window closed with one, or its agent left. Newest first, at most 200. A conversation that runs in a pane again is left out. resume-agent with conversation starts one again.",
+			params: []verbParam{
+				{Name: "harness", Type: "string", Description: "Only this harness's conversations."},
+			},
+			returns: []verbParam{
+				{Name: "conversations", Type: "[]object", Description: "Each with harness, id, cwd, title (the window's title), session, flags (the kept flags the resume carries) and ended_at (unix milliseconds)."},
+			},
+			examples: []string{`{"id":1,"verb":"list-conversations","params":{}}`},
+			handler:  (*Daemon).verbListConversations,
+		},
+		"forget-conversation": {
+			description: "Remove an ended conversation from list-conversations. The harness keeps the conversation itself.",
+			params: []verbParam{
+				{Name: "id", Type: "string", Description: "The conversation id."},
+				{Name: "harness", Type: "string", Description: "Only the conversation of this harness."},
+			},
+			returns: []verbParam{
+				{Name: "forgotten", Type: "bool", Description: "Whether the list held it."},
+			},
+			examples: []string{`{"id":1,"verb":"forget-conversation","params":{"id":"0b4c2a"}}`},
+			handler:  (*Daemon).verbForgetConversation,
 		},
 		"get-agent-state": {
 			description: "Read the agent state a window's pane last reported, with its optional message, the time it was set, which source and harness it came from, how confident the harness attribution is, whether the pane needs a person, whether ask-agent would type at it now (ready), and for a pane on needs_input whether it waits on an approval or a question (blocked_by).",

@@ -118,7 +118,7 @@ Upgraded in 0.31 s. 58 panes and their programs kept. 2 attached clients were as
 
 What an attached client sees:
 - PR 5: "The daemon was upgraded to v0.10.1. Your programs are still running. Run `tuios attach work` to continue."
-- Clients-follow step: a short "upgrading…" frame, then the same screen.
+- Clients-follow step: the dock says "Waiting for the daemon. Keys are not sent." for the pause, then the same screen and "The daemon was upgraded. tuios reattached."
 
 Refusal is explicit and changes nothing: "v0.11.0 cannot read this daemon's state (handoff v1, it needs v2+). Nothing was changed. Use `tuios kill-server` to restart, which ends running programs."
 
@@ -369,8 +369,9 @@ sequenceDiagram
 - **Today no client reconnects to the local daemon.** The TUI quits with `ExitDaemonLost` (`internal/app/daemon_wiring.go:150-155`, `internal/app/update.go:2454-2457`, message at `cmd/tuios/session_commands.go:639-644`). SSH and web TUIs quit too (`internal/app/daemon_exit.go:15-33`, `:114-117`).
 - **Reconnect does exist for other hosts:** 1 s first delay, 15 s cap, 3-minute budget (`internal/app/host_reconnect.go:44-70`), and for `pane-view` (`cmd/tuios/pane_view_command.go:188-204`, `:404-417`).
 - **PR 5.** Add `MsgDaemonUpgrading{version}` before close. A new client prints "The daemon was upgraded to X. Your programs are still running. `tuios attach <s>`". An old client shows its existing daemon-lost text, which is acceptable.
-- **Clients-follow step.** Reattach automatically. The running TUI client is the **old** binary. If the new daemon's protocol range excludes it (`internal/session/protocol_version.go:60-63`), it cannot reattach. So the client re-execs the new binary on disk as `tuios attach <session>` in the same terminal. This mirrors the daemon and keeps "one binary version per box after an upgrade". When the protocol is still compatible, it reattaches in-process using the host-reconnect loop with `AttachPayload.Reconnect` (`internal/session/tuiclient.go:68-70`), so it does not fire attach hooks.
-- **Keystrokes typed during the blackout** go nowhere in PR 5, because the client has quit. In the clients-follow step the client buffers input while reconnecting and sends it after the reattach, bounded.
+- **Clients-follow step, in process.** A local TUI client that heard `MsgDaemonUpgrading` waits for the new image in the loop it uses after a daemon restart (`internal/app/daemon_reconnect.go`), with the restart's 15 s budget, and attaches with `AttachPayload.Reconnect`, so it does not fire attach hooks. It says "The daemon was upgraded. tuios reattached." The running client is the **old** binary. Whether it can talk to the new image is decided by the handshake on the first dial: the new daemon refuses a hello outside its protocol range, and the client refuses a welcome outside its own (`internal/session/protocol_version.go`), both before the attach, so nothing of an incompatible daemon is drawn. On that refusal the client stops waiting and exits with the PR 5 message, as it does when the wait runs out. A client attached to another machine's session, and the SSH and web clients, exit with the PR 5 message too.
+- **Clients-follow step, by re-exec.** Not built. When the protocol range excludes the client, it could re-exec the new binary on disk as `tuios attach <session>` in the same terminal, which mirrors the daemon and keeps "one binary version per box after an upgrade".
+- **Keystrokes typed during the blackout** are not sent, as during a daemon restart's wait, and the dock says so.
 
 ### 2.7 Platforms, backends, remote hosts
 
@@ -595,7 +596,7 @@ Settled:
 Open questions, with the answers the first slice takes (PR 2 to PR 5):
 1. **PR split.** Is the PR 2 to PR 5 split above the plan's intended order? The branch keeps each PR's commits contiguous, so it can be split along it.
 2. **Default history depth.** Fixed at 1000 rows, the depth a client gets on attach. There is no `handoff_scrollback` knob yet, and `persist_scrollback = false` does not change it: they answer different questions.
-3. **Clients across a protocol bump.** No client follows the upgrade yet. A TUI client is sent `MsgDaemonUpgrading` with the new version before its connection closes, and exits with status 0 saying the daemon was upgraded, its programs are still running, and `tuios attach <session>` continues. An older client says the daemon was lost. Re-exec of the client is left to the clients-follow step.
+3. **Clients across a protocol bump.** A TUI client is sent `MsgDaemonUpgrading` with the new version before its connection closes. A local client whose protocol the new image serves attaches again by itself (section 2.6). One it does not serve exits with status 0 saying the daemon was upgraded, its programs are still running, and `tuios attach <session>` continues. An older client says the daemon was lost. Re-exec of the client is not built.
 4. **Hosted panes before the completeness step.** Refused, with nothing changed, as are a daemon embedded in another program, a window whose process runs on another machine, a running verify-fan and a `capture_stdout` popup. There is no `--force`.
 5. **Leases and in-flight verbs.** Failed with a retryable error: a JSON verb call still running or waiting when the clients are dropped is answered `daemon_upgrading`, and calling again reaches the new image. Leases end with their connections; pane-view takes its lease again when it reconnects.
 6. **Hooks.** An event only: `daemon-upgraded`, raised once by the image that took the panes over, with the build they came from, the build that has them, and `fallback` when the previous binary took them back. No hook.

@@ -27,6 +27,15 @@ const (
 	PaneFrameEnd      = 'X'
 	PaneFrameInput    = 'I'
 	PaneFrameLease    = 'L'
+	PaneFrameViewer   = 'V'
+	PaneFrameShown    = 'F'
+)
+
+// The values of an F frame.
+const (
+	PaneHidden  = 0
+	PaneVisible = 1
+	PaneFocused = 2
 )
 
 // paneFrameMax bounds a frame this client reads. The daemon's largest is a
@@ -126,6 +135,31 @@ func (s *PaneStream) Lease(cols, rows int) error {
 	binary.BigEndian.PutUint16(p[0:2], uint16(max(0, min(cols, 4096))))
 	binary.BigEndian.PutUint16(p[2:4], uint16(max(0, min(rows, 4096))))
 	return s.WriteFrame(PaneFrameLease, p[:])
+}
+
+// LeaseCell is Lease with the viewer's cell in pixels, which the pane takes
+// while a fit lease sizes it.
+func (s *PaneStream) LeaseCell(cols, rows, cellW, cellH int) error {
+	var p [8]byte
+	for i, v := range [4]int{cols, rows, cellW, cellH} {
+		binary.BigEndian.PutUint16(p[2*i:], uint16(max(0, min(v, 4096))))
+	}
+	return s.WriteFrame(PaneFrameLease, p[:])
+}
+
+// Viewer replaces the stream's viewer report, as after a theme change.
+func (s *PaneStream) Viewer(r ViewerReport) error {
+	b, err := json.Marshal(r)
+	if err != nil {
+		return err
+	}
+	return s.WriteFrame(PaneFrameViewer, b)
+}
+
+// Shown says how the client shows the pane: PaneHidden, PaneVisible or
+// PaneFocused.
+func (s *PaneStream) Shown(v byte) error {
+	return s.WriteFrame(PaneFrameShown, []byte{v})
 }
 
 // Close ends the stream.

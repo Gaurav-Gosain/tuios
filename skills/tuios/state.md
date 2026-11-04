@@ -279,3 +279,8 @@ stored id, and the flags the agent was started with that the manifest keeps
 (`--model` and `--permission-mode` for Claude Code, for example). A kept flag
 that turns approvals off is named on the Resume row, and `auto` leaves that
 agent for the person.
+
+A conversation whose window closed, or whose agent left the pane, goes on a
+list of 200. `tuios call list-conversations` reads it. `tuios call resume-agent
+'{"session":"work","conversation":"<id>"}'` starts one again in a new window,
+in its folder. `forget-conversation` removes one from the list.

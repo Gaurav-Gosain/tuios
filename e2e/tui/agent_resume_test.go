@@ -1,6 +1,7 @@
 package tuie2e
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -574,4 +575,89 @@ case "$TUIOS_RESTORED":%q in 1:unmarked*) PS1='ready> ' ;; esac
 			saveFrame(t, term, "resume-readiness-"+tc.mode)
 		})
 	}
+}
+
+// TestEndedConversationResumes: a conversation whose window closes, and one
+// whose agent leaves its pane, go on the list of ended conversations. The
+// list survives a daemon restart. resume-agent with conversation starts one
+// again in a new window by the manifest's resume command, and
+// forget-conversation takes one off the list. The transcript goes to
+// ended-conversations.txt.
+//
+// Negative control: with the endedConversations call cut from
+// emitLifecycleLocked (session.go), nothing is recorded and the test fails at
+// "the closed window's conversation is not listed".
+func TestEndedConversationResumes(t *testing.T) {
+	base := t.TempDir()
+	killDaemon(t, base)
+	dir := filepath.Join(xdgDir(base, "XDG_CONFIG_HOME"), "tuios", "harnesses")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	manifest := "schema_version = 1\nid = \"echoer\"\ndisplay_name = \"Echoer\"\n\n[detect]\ncomm = [\"echoer-agent\"]\n\n[resume]\nargv = [\"echo\", \"resumed-{session_id}\"]\n"
+	if err := os.WriteFile(filepath.Join(dir, "echoer.toml"), []byte(manifest), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	var log strings.Builder
+	call := func(verb, params string) string {
+		t.Helper()
+		out, err := tuiosCLI(t, base, "call", verb, params)
+		fmt.Fprintf(&log, "$ tuios call %s %s\n%s\n", verb, params, out)
+		if err != nil {
+			t.Fatalf("%s: %v\n%s", verb, err, out)
+		}
+		return out
+	}
+	const sess = "e2e-conv"
+	mustCLI(t, base, "new", sess, "--detach")
+	first := firstWindow(t, base, sess).ID
+	out := call("new-window", `{"session":"`+sess+`","focus":false}`)
+	var nw struct {
+		WindowID string `json:"window_id"`
+	}
+	if err := json.Unmarshal([]byte(out), &nw); err != nil || nw.WindowID == "" {
+		t.Fatalf("new-window gave no id: %v\n%s", err, out)
+	}
+	mustCLI(t, base, "set-agent-state", "-s", sess, "-w", nw.WindowID, "working", "--harness", "echoer", "--agent-session-id", "conv-closed")
+	mustCLI(t, base, "set-agent-state", "-s", sess, "-w", first, "working", "--harness", "echoer", "--agent-session-id", "conv-left")
+	call("close-window", `{"session":"`+sess+`","window":"`+nw.WindowID+`"}`)
+	mustCLI(t, base, "set-agent-state", "-s", sess, "-w", first, "none")
+
+	listed := func() string {
+		deadline := time.Now().Add(uiTimeout)
+		for {
+			out := call("list-conversations", `{"harness":"echoer"}`)
+			if strings.Contains(out, "conv-closed") && strings.Contains(out, "conv-left") {
+				return out
+			}
+			if time.Now().After(deadline) {
+				if !strings.Contains(out, "conv-closed") {
+					t.Fatalf("the closed window's conversation is not listed:\n%s", out)
+				}
+				t.Fatalf("the conversation whose agent left is not listed:\n%s", out)
+			}
+			time.Sleep(100 * time.Millisecond)
+		}
+	}
+	listed()
+
+	// The list is on disk: a new daemon reads it.
+	mustCLI(t, base, "kill-server")
+	mustCLI(t, base, "new", "e2e-conv-2", "--detach")
+	listed()
+
+	out = call("resume-agent", `{"session":"e2e-conv-2","conversation":"conv-closed","dry_run":true}`)
+	if !strings.Contains(out, `"command": "echo resumed-conv-closed"`) && !strings.Contains(out, `"command":"echo resumed-conv-closed"`) {
+		t.Fatalf("the dry run does not name the resume command:\n%s", out)
+	}
+	call("resume-agent", `{"session":"e2e-conv-2","conversation":"conv-closed"}`)
+	waitUnwrapped(t, base, "e2e-conv-2", "resumed-conv-closed")
+
+	if out := call("forget-conversation", `{"id":"conv-left"}`); !strings.Contains(out, "true") {
+		t.Fatalf("forget-conversation did not find it:\n%s", out)
+	}
+	if out := call("list-conversations", `{}`); strings.Contains(out, "conv-left") {
+		t.Fatalf("a forgotten conversation is still listed:\n%s", out)
+	}
+	writeReviewArtifact(t, "ended-conversations.txt", log.String())
 }

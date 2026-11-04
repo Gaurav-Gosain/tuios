@@ -32,8 +32,11 @@ graph TB
         TUI["tuios, tuios attach<br>Bubble Tea TUI"]
         SSHS["tuios ssh<br>one app.OS per connection"]
         WEBS["tuios-web<br>one app.OS per connection"]
+        GUIB["tuios gui-bridge<br>app.OS with no renderer"]
         CLI["CLI, agents, tuios mcp"]
     end
+
+    GPU[GPU client] <-->|pipe| GUIB
 
     SSHC[SSH client terminal] --> SSHS
     BROWSER[Browser with xterm.js] --> WEBS
@@ -53,6 +56,7 @@ graph TB
     TUI <-->|unix socket| BIN
     SSHS <-->|unix socket| BIN
     WEBS <-->|unix socket| BIN
+    GUIB <-->|unix socket| BIN
     CLI -->|unix socket| VERBS
     BIN --> MGR
     VERBS --> MGR
@@ -71,6 +75,7 @@ What runs where:
 - **The daemon** owns the sessions, their windows and workspaces, and a PTY per pane. Every byte a pane's PTY produces goes to the daemon's emulator for that pane, to a 64 KB ring that numbers each byte with a stream position, and to every client subscribed to the pane. The daemon's emulator answers the program's queries and holds the pane's state for the next attach. A client starts a daemon in the background when none is running. The SSH server and `tuios-web` start one in their own process.
 - **A TUI client** runs the whole window manager: the `app.OS` model, the layout, the input modes and the compositor. Each window holds a second emulator for its pane. It is filled from a snapshot of the daemon's emulator, then from the stream from the snapshot's position (see [REHYDRATION.md](REHYDRATION.md)). The client draws from this copy. Its emulator's replies to the program are dropped, because the daemon's emulator already answered. A key goes to the daemon as `MsgInput`, and the daemon writes it to the PTY.
 - **The SSH server and `tuios-web`** build one `app.OS` per connection with `internal/served`, attached to the daemon like a local client. They send the composed frame to the SSH client's terminal or to the browser. With `--ephemeral`, or when no daemon can be reached, that model runs standalone.
+- **The GPU client** runs `tuios gui-bridge` (`internal/guibridge`), which attaches like a TUI client and runs the same `app.OS` model with no renderer. It sends the session's layout as JSON and each pane's bytes as binary frames over a pipe. The GPU client keeps its own emulator per pane and draws.
 - **The CLI, agents and `tuios mcp`** speak the JSON verb protocol on the same socket. The daemon tells the two protocols apart by a connection's first byte. Read verbs, input verbs and window creation act on daemon-owned state, with or without a client attached (see [protocol.md](protocol.md#how-verbs-interact-with-an-attached-client)).
 - **Other machines** are reached through federation. The local daemon dials each host in the `[hosts]` table over ssh and runs `tuios stdio-proxy` there. One ssh connection carries several multiplexed streams. A client reaches another machine's daemon through its own daemon with `open-host-connection` (`tuios attach --host`). A window whose process runs on another machine (`new-window --host`) has its PTY there and its emulator here: the far daemon runs no emulator for it.
 

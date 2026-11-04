@@ -33,6 +33,9 @@ type sessionViewers struct {
 	mu    sync.Mutex
 	order []string
 	by    map[string]ViewerReport
+	// focus maps a stream that shows a pane focused to the pane's window id
+	// (viewer_focus.go).
+	focus map[string]string
 }
 
 // addViewer records holder's report and applies it if no client shows the

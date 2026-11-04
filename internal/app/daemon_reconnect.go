@@ -23,6 +23,15 @@ import (
 // after silence, a crash, it waits the shorter time. Keys typed while it
 // waits are not sent, and the wait note says so.
 //
+// A live upgrade (tuios daemon upgrade, see session/handoff_clients.go) drops
+// the client too, and says so first. The new image holds the same sessions
+// and the same running panes, so the client waits for it as after a restart.
+// The image may speak another wire protocol than this client's build. The
+// handshake finds that before the attach, from the new daemon's own hello
+// answer, so nothing of that daemon is drawn: the client stops waiting and
+// exits saying the daemon is being upgraded and how to attach again. A wait
+// after an upgrade that ends any other way says the same.
+//
 // The wait is short and has an end. A daemon that stopped for good, a crash
 // with no restart, ends the client as it always did, after the budget, with
 // the same message. Nothing runs while the client is attached: the dials
@@ -81,14 +90,14 @@ func (m *OS) beginDaemonReconnect() tea.Cmd {
 	if bye := m.DaemonClient.Goodbye(); bye != nil && bye.Reason == session.GoodbyeStop {
 		return nil
 	}
-	// A live upgrade dropped this client on purpose: the programs keep
-	// running, and the client exits to say how to attach again.
-	if _, upgraded := m.DaemonClient.UpgradedTo(); upgraded {
-		return nil
-	}
 	since, budget := time.Now(), daemonDropBudget
 	if bye := m.DaemonClient.Goodbye(); bye != nil && bye.Reason == session.GoodbyeRestart {
 		since, budget = bye.At, daemonRestartBudget
+	}
+	// A live upgrade said it as it dropped this client: the new image comes,
+	// as a restarted daemon does.
+	if m.droppedByUpgrade() {
+		budget = daemonRestartBudget
 	}
 	m.daemonReconnectGen++
 	m.daemonReconnect = &daemonReconnect{
@@ -167,13 +176,13 @@ func (m *OS) handleDaemonReconnectResult(msg daemonReconnectResultMsg) tea.Cmd {
 	if msg.err == nil && msg.client != nil {
 		return m.resumeOnNewDaemon(msg.client, msg.state)
 	}
-	// A daemon that answers and does not hold the session will not get it
-	// back by waiting.
-	if session.AttachRefused(msg.err) || time.Since(r.since) > r.budget {
+	// A daemon that answers and does not hold the session, or does not speak
+	// this client's protocol, will not take it back by waiting.
+	if session.AttachRefused(msg.err) || session.ProtocolRefused(msg.err) || time.Since(r.since) > r.budget {
 		m.LogWarn("No new daemon took the session back: %v", msg.err)
 		m.daemonReconnect = nil
 		m.daemonWaiting.Store(false)
-		m.ExitReason = ExitDaemonLost
+		m.ExitReason = m.daemonGoneReason()
 		return m.QuitCmd()
 	}
 	return m.daemonReconnectWait()
@@ -181,6 +190,7 @@ func (m *OS) handleDaemonReconnectResult(msg daemonReconnectResultMsg) tea.Cmd {
 
 // resumeOnNewDaemon puts the client on the session the new daemon restored.
 func (m *OS) resumeOnNewDaemon(client *session.TUIClient, state *session.SessionState) tea.Cmd {
+	upgraded := m.droppedByUpgrade()
 	m.daemonReconnect = nil
 	m.daemonWaiting.Store(false)
 	if old := m.DaemonClient; old != nil {
@@ -202,14 +212,40 @@ func (m *OS) resumeOnNewDaemon(client *session.TUIClient, state *session.Session
 	// still differs from the new one, the line below says so.
 	m.clearRestartNotice()
 	text := "The daemon restarted. tuios reattached."
+	if upgraded {
+		text = "The daemon was upgraded. tuios reattached."
+	}
 	if c, d := client.BuildMismatch(); c != "" {
-		text = fmt.Sprintf("The daemon restarted on %s. tuios reattached. This window still runs %s: start tuios again to use %s.", d, c, d)
+		on := "restarted on " + d
+		if upgraded {
+			on = "was upgraded to " + d
+		}
+		text = fmt.Sprintf("The daemon %s. tuios reattached. This window still runs %s: start tuios again to use %s.", on, c, d)
 	}
 	m.LogInfo("%s", text)
 	m.ShowNotification(text, "success", 2*m.Settings.NotificationDuration)
 	// An open agents view picks its live pane again: no input may come to
 	// run the follow, and the box stays empty until one does.
 	return m.CockpitSideFetch()
+}
+
+// droppedByUpgrade reports whether a live upgrade told this client it was
+// dropping it.
+func (m *OS) droppedByUpgrade() bool {
+	if m.DaemonClient == nil {
+		return false
+	}
+	_, upgraded := m.DaemonClient.UpgradedTo()
+	return upgraded
+}
+
+// daemonGoneReason is why the client exits when the daemon is gone and no new
+// one took the session back.
+func (m *OS) daemonGoneReason() ExitReason {
+	if m.droppedByUpgrade() {
+		return ExitDaemonUpgraded
+	}
+	return ExitDaemonLost
 }
 
 // ReconnectingToDaemon reports whether the client waits for a new daemon.

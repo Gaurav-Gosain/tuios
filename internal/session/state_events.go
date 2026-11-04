@@ -59,6 +59,10 @@ type lifecycleWindow struct {
 	// id. The sink turns them into the approval root (windowApprovalRoot),
 	// off this snapshot, since that reads the file system.
 	worktree, agentSession string
+	// convHarness, convFlags and cwd ride along for the record of ended
+	// conversations: what a resume of agentSession needs (conversations.go).
+	convHarness, cwd string
+	convFlags        []string
 	// The rectangle and how the pane sits in it, for layout-changed only.
 	// They change while a person drags a split, so they raise no event of
 	// their own and only mark the workspace's layout as changed.
@@ -122,6 +126,9 @@ func snapshotLifecycle(state *SessionState) lifecycleSnapshot {
 			program:       len(w.ProgramStatus) > 0,
 			worktree:      worktree,
 			agentSession:  w.AgentSessionID,
+			convHarness:   resumeHarnessOf(*w),
+			convFlags:     resumeFlagsOf(*w, resumeHarnessOf(*w)),
+			cwd:           w.Cwd,
 			x:             w.X,
 			y:             w.Y,
 			w:             w.Width,

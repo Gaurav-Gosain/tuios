@@ -300,7 +300,15 @@ func (d *Daemon) fireAgentStateHook(sess *Session, ev SessionEvent) {
 	// pane, on a terminal that has not said it lost focus. With every client's
 	// terminal out of focus nobody is looking at the pane, whatever it shows.
 	suppressed := func() bool {
-		if !policy.SuppressFocused || d.findTUIClient(sessionID) == nil {
+		if !policy.SuppressFocused {
+			return false
+		}
+		// A stream that shows the pane focused is such a client
+		// (viewer_focus.go).
+		if live := d.manager.GetSessionByID(sessionID); live != nil && live.viewerFocusOn(window) {
+			return true
+		}
+		if d.findTUIClient(sessionID) == nil {
 			return false
 		}
 		if d.sessionHostFocus(sessionID) == HostFocusUnfocused {

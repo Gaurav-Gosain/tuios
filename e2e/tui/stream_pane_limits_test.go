@@ -1,10 +1,13 @@
 package tuie2e
 
 import (
+	"bufio"
 	"encoding/binary"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
+	"net"
 	"os"
 	"path/filepath"
 	"strings"
@@ -458,4 +461,145 @@ func TestStreamPaneLeaseOnTheDesktop(t *testing.T) {
 	}
 	saveFrame(t, term, "stream-lease-released")
 	alive(t, term, "after the lease")
+}
+
+// TestStreamPaneYieldingLease: a desktop app holds a pane with a yielding
+// lease over this machine's socket. While a TUI client shows the session the
+// pane keeps the size the client gave it. With no client the lease sizes the
+// pane and its cell, and the pane goes back to the client's size when one
+// attaches again. The lease needs no renewal. The stream's V and F frames
+// reach the theme answers and the session's host focus. The transcript goes
+// to stream-yield.txt.
+//
+// NEGATIVE CONTROL (e2e/tui/NEGATIVE_CONTROLS.md, "stream-pane limits"): with
+// leasedSizeLocked ignoring yield, the lease clamps the attached client's
+// pane and the test fails at "clamped the client's pane".
+func TestStreamPaneYieldingLease(t *testing.T) {
+	base, _, ctl, w1, _ := limitsDaemon(t)
+	var log strings.Builder
+	term := attachIn(t, base, streamSession, startOpts{})
+	enableTiling(t, term)
+	spType(t, ctl, w1, "clear; echo T0-$(stty size | tr ' ' x)\n")
+	tui := spSize(t, ctl, w1, "T0-")
+	fmt.Fprintf(&log, "client size %s\n", tui)
+
+	conn, err := net.Dial("unix", hubSocket(base))
+	if err != nil {
+		t.Fatalf("dial: %v", err)
+	}
+	defer conn.Close()
+	req, _ := json.Marshal(map[string]any{"id": 1, "verb": "stream-pane", "params": map[string]any{
+		"session": streamSession, "window": w1, "yield": true, "lease_cols": 30, "lease_rows": 6,
+		"cell_width": 9, "cell_height": 18}})
+	if _, err := conn.Write(append(req, '\n')); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+	br := bufio.NewReader(conn)
+	reply, err := br.ReadString('\n')
+	if err != nil || !strings.Contains(reply, `"pane_stream"`) {
+		t.Fatalf("stream-pane: %v %s", err, reply)
+	}
+	codes := make(chan string, 16)
+	go func() {
+		var head [5]byte
+		for {
+			if _, err := io.ReadFull(br, head[:]); err != nil {
+				return
+			}
+			payload := make([]byte, binary.BigEndian.Uint32(head[1:]))
+			if _, err := io.ReadFull(br, payload); err != nil {
+				return
+			}
+			if head[0] == 'E' {
+				codes <- string(payload)
+			}
+		}
+	}()
+	send := func(typ byte, payload []byte) {
+		b := binary.BigEndian.AppendUint32([]byte{typ}, uint32(len(payload)))
+		if _, err := conn.Write(append(b, payload...)); err != nil {
+			t.Fatalf("send %c: %v", typ, err)
+		}
+	}
+
+	time.Sleep(time.Second)
+	spType(t, ctl, w1, "clear; echo T1-$(stty size | tr ' ' x)\n")
+	if got := spSize(t, ctl, w1, "T1-"); got != tui {
+		t.Fatalf("a yielding lease clamped the client's pane: %s, want %s", got, tui)
+	}
+	fmt.Fprintf(&log, "yield lease held, client attached: %s\n", tui)
+
+	// The client leaves. The lease sizes the pane, and its cell sets the
+	// pixels the emulator answers CSI 14 t with: 6x18 by 30x9.
+	_ = term.Close()
+	spType(t, ctl, w1, "clear; echo T2-$(stty size | tr ' ' x)\n")
+	if got := spSize(t, ctl, w1, "T2-"); got != "6x30" {
+		t.Fatalf("with no client the yielding lease did not size the pane: %s, want 6x30", got)
+	}
+	spType(t, ctl, w1, `clear; bash -c 'stty -echo; printf "\033[14t"; IFS= read -rs -t 2 -d t x; stty echo; echo PX-${x#*[}-END'`+"\n")
+	if !spShows(t, ctl, w1, "PX-4;108;270-END") {
+		t.Fatalf("the pane did not take the lease's cell:\n%s", strings.Join(spLines(t, ctl, w1), "\n"))
+	}
+	log.WriteString("no client: 6x30, CSI 14 t answers 4;108;270\n")
+
+	// The theme changes mid-stream: OSC 11 answers the new background.
+	send('V', []byte(`{"bg":"#123456","fg":"#fedcba"}`))
+	time.Sleep(300 * time.Millisecond)
+	spType(t, ctl, w1, `clear; bash -c 'stty -echo; printf "\033]11;?\007"; IFS= read -rs -t 1 -d X x; stty echo; echo BG-$(printf %s "$x" | grep -o "rgb:[0-9a-f/]*")-END'`+"\n")
+	if !spShows(t, ctl, w1, "BG-rgb:1212/3434/5656-END") {
+		t.Fatalf("OSC 11 did not follow the V frame:\n%s", strings.Join(spLines(t, ctl, w1), "\n"))
+	}
+	log.WriteString("V frame: OSC 11 answers rgb:1212/3434/5656\n")
+
+	// F 2 makes the session focused for session-info; F 0 takes it back.
+	focus := func() string {
+		res, verr := ctl.call(t, "session-info", map[string]any{"session": streamSession})
+		if verr != nil {
+			t.Fatalf("session-info: %v", verr)
+		}
+		return fmt.Sprint(res["host_focus"])
+	}
+	send('F', []byte{2})
+	time.Sleep(300 * time.Millisecond)
+	if got := focus(); got != "focused" {
+		t.Fatalf("after F 2 host_focus is %s, want focused", got)
+	}
+	send('F', []byte{0})
+	time.Sleep(300 * time.Millisecond)
+	if got := focus(); got == "focused" {
+		t.Fatalf("after F 0 host_focus is still focused")
+	}
+	fmt.Fprintf(&log, "F 2: host_focus focused; F 0: %s\n", focus())
+
+	// No L frame for longer than the 30 seconds a lease lasts: a local
+	// yielding lease does not expire.
+	select {
+	case e := <-codes:
+		t.Fatalf("the stream got an E frame: %s", e)
+	case <-time.After(33 * time.Second):
+	}
+	spType(t, ctl, w1, "clear; echo T3-$(stty size | tr ' ' x)\n")
+	if got := spSize(t, ctl, w1, "T3-"); got != "6x30" {
+		t.Fatalf("the yielding lease expired: the pane is %s after 33s, want 6x30", got)
+	}
+	log.WriteString("33s without L: still 6x30, no E frame\n")
+
+	// A client attaches again, and the pane goes back to its size.
+	term = attachIn(t, base, streamSession, startOpts{})
+	waitWindowCount(t, term, 2, "after the reattach")
+	deadline := time.Now().Add(uiTimeout)
+	for i := 0; ; i++ {
+		mark := fmt.Sprintf("T4%d-", i)
+		spType(t, ctl, w1, "clear; echo "+mark+"$(stty size | tr ' ' x)\n")
+		got := spSize(t, ctl, w1, mark)
+		if got != "6x30" {
+			fmt.Fprintf(&log, "client attached again: %s\n", got)
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("the pane kept the lease's size after a client attached")
+		}
+		time.Sleep(200 * time.Millisecond)
+	}
+	writeReviewArtifact(t, "stream-yield.txt", log.String())
 }
