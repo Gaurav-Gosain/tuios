@@ -3,6 +3,7 @@ package main
 import (
 	"strings"
 
+	"github.com/egoist/mygo/transfer"
 	"github.com/egoist/mygo/ui"
 
 	"github.com/Gaurav-Gosain/tuios/internal/diffview"
@@ -53,9 +54,54 @@ func mdRuns(pal *palette, src string, mono string, size float32) []ui.Span {
 			s.Color, s.Underline = pal.accent, true
 			s.DecorationColor = pal.accent.Alpha(0.4)
 		}
+		if len(out) > 0 {
+			prev := out[len(out)-1]
+			switch {
+			case s.Background.A != 0:
+				out = append(out, chipGap(strings.HasSuffix(prev.Text, " "), s))
+			case prev.Background.A != 0:
+				out = append(out, chipGap(strings.HasPrefix(s.Text, " "), prev))
+			}
+		}
 		out = append(out, s)
 	}
 	return out
+}
+
+// chipGap keeps a code span's chip off the text beside it. MyGo draws a
+// span's rounded Background a little wider than its glyphs, by
+// min(size*0.22, Radius) on each side, and lays the span out as if it were
+// not: the chip covered most of the space before and after it ("in`x`and").
+// The gap is an inline object as wide as that overhang, on the chip's side
+// of the neighbour. Its rune is a zero width space where the neighbour is a
+// space, so the line still breaks there, and a word joiner where it is
+// not, so a chip and its punctuation stay on one line. copyThread drops
+// both runes again.
+func chipGap(space bool, chip ui.Span) ui.Span {
+	r := "\u2060"
+	if space {
+		r = "\u200b"
+	}
+	return ui.Span{Text: r, ObjectWidth: min(chip.Size*0.22, chip.Radius)}
+}
+
+// copyThread is the thread's copy: the selected parts of its paragraphs,
+// one a line, as MyGo copies them, without chipGap's runes.
+func copyThread(parts []ui.SelectedText) transfer.Data {
+	var b strings.Builder
+	for i, p := range parts {
+		if i > 0 {
+			b.WriteByte('\n')
+		}
+		rs := []rune(p.Text)
+		from, to := min(max(p.Start, 0), len(rs)), min(max(p.End, 0), len(rs))
+		for _, r := range rs[from:to] {
+			if r != '\u200b' && r != '\u2060' {
+				b.WriteRune(r)
+			}
+		}
+	}
+	return transfer.TextData(b.String())
 }
 
 // mdBlock draws one block.

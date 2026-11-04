@@ -327,7 +327,7 @@ func (a *App) threadView(c *ui.Context, pal *palette, ag client.Agent) {
 	mono := a.termFamily()
 	list := ui.List(c.Key("thread-"+threadKey(ag)), &th.list, len(th.items), func(i int) {
 		a.itemView(c, pal, th, &th.items[i], mono)
-	}).Grow(1).MinHeight(0).Padding(18, 28, 22, 28).Gap(14).Selectable()
+	}).Grow(1).MinHeight(0).Padding(18, 28, 22, 28).Gap(14).Selectable().CopyData(copyThread)
 	_ = list
 }
 
