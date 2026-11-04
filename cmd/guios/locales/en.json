@@ -424,6 +424,7 @@
   "setSize": "Size",
   "setSizeDetail": "{bigger} and {smaller} change it too.",
   "setLineHeight": "Line height",
+  "setLineHeightDetail": "A multiple of the font's own line. At 1.00, rows are as the font draws them.",
   "setWeight": "Weight",
   "setWeightLight": "Light",
   "setWeightRegular": "Regular",

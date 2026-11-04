@@ -276,6 +276,7 @@
   "setSize": "大小",
   "setSizeDetail": "也可用 {bigger} 和 {smaller} 调整。",
   "setLineHeight": "行高",
+  "setLineHeightDetail": "字体自身行高的倍数。1.00 时按字体本身的行高绘制。",
   "setWeight": "字重",
   "setWeightLight": "细体",
   "setWeightRegular": "常规",

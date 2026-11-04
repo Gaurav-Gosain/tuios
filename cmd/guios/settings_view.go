@@ -1,6 +1,7 @@
 package main
 
 import (
+	"io"
 	"log"
 	"math"
 	"os"
@@ -55,29 +56,34 @@ var settingsPages = []settingsPage{
 
 // settingsState is what the Settings window keeps besides the settings.
 type settingsState struct {
-	page         string
-	recording    string // the action whose shortcut is being typed
-	recordRef    ui.Handle
-	filter       string // the keyboard page's search
-	query        string // the sidebar's search, of every page
-	searchRef    ui.Handle
-	revealed     string // the query and page the search last scrolled to
-	draft        map[string]string
-	envDraft     string
-	shellDraft   string
-	shellEditing bool
-	loginOpen    bool // open at login, as the system says
-	updates      updatePrefs
-	cliPath      string
-	service      string // kerod, as last asked
-	notice       string // a line under the keyboard page, as of a conflict
-	toast        string
-	menus        map[string]*searchMenu   // the search menus', by key
-	problems     []string                 // what the configuration file got wrong
-	scrolls      map[string]*smoothScroll // each page's, for its scroll edge
-	host         hostDraft                // the Hosts page's form
-	hostEdit     hostDraft                // a host's, as the user edits it
-	confirm      *confirmation            // a question, asked in this window
+	// preview is the Terminal page's sample terminal, with the font and
+	// themes it was last given.
+	preview                   *terminal.Terminal
+	previewFont               terminal.Font
+	previewLight, previewDark *terminal.Theme
+	page                      string
+	recording                 string // the action whose shortcut is being typed
+	recordRef                 ui.Handle
+	filter                    string // the keyboard page's search
+	query                     string // the sidebar's search, of every page
+	searchRef                 ui.Handle
+	revealed                  string // the query and page the search last scrolled to
+	draft                     map[string]string
+	envDraft                  string
+	shellDraft                string
+	shellEditing              bool
+	loginOpen                 bool // open at login, as the system says
+	updates                   updatePrefs
+	cliPath                   string
+	service                   string // kerod, as last asked
+	notice                    string // a line under the keyboard page, as of a conflict
+	toast                     string
+	menus                     map[string]*searchMenu   // the search menus', by key
+	problems                  []string                 // what the configuration file got wrong
+	scrolls                   map[string]*smoothScroll // each page's, for its scroll edge
+	host                      hostDraft                // the Hosts page's form
+	hostEdit                  hostDraft                // a host's, as the user edits it
+	confirm                   *confirmation            // a question, asked in this window
 }
 
 // openSettings shows the Settings window, on a page.
@@ -925,9 +931,9 @@ func (a *App) terminalPage(c *ui.Context, pal *palette) {
 				sizes = append(sizes, s.FontSize)
 				slices.Sort(sizes)
 			}
-			popup(c, "size", &s.FontSize, sizes, func(v float32) string { return strconv.FormatFloat(float64(v), 'f', -1, 32) + " pt" }, 90, pal)
+			popup(c, "size", &s.FontSize, sizes, func(v float32) string { return strconv.FormatFloat(float64(v), 'f', -1, 32) + " px" }, 90, pal)
 		})
-		settingRow(c, pal, locales.SetLineHeight(), "", func() {
+		settingRow(c, pal, locales.SetLineHeight(), locales.SetLineHeightDetail(), func() {
 			v := float64(s.LineHeight)
 			slider(c, "lh", &v, 1, 2, 160, pal).OnChange(func() { a.set.LineHeight = float32(int(v*100+0.5)) / 100 })
 			ui.Textf(c, "%.2f×", s.LineHeight).FontSize(fsSmall).TextColor(pal.textMuted).Width(40).FontFeatures("tnum")
@@ -997,35 +1003,80 @@ func (a *App) terminalPage(c *ui.Context, pal *palette) {
 // terminalPreview shows text as the terminals would draw it: the font,
 // its size and line height, and the colors of the window's appearance.
 func (a *App) terminalPreview(c *ui.Context, pal *palette) {
+	// The sample draws through a terminal as a pane does, with the pane's
+	// font and themes, so that what the slider and the pickers show is the
+	// pitch, the glyphs and the joins of a pane (council round 2, N3).
+	t := a.previewTerm()
+	if t == nil {
+		return
+	}
+	if f := a.termFont(); !fontsEqual(f, a.ss.previewFont) {
+		a.ss.previewFont = f
+		t.SetFont(f)
+	}
 	light, dark := a.termThemes()
-	th := light
-	if pal.dark {
-		th = dark
+	if light != a.ss.previewLight || dark != a.ss.previewDark {
+		a.ss.previewLight, a.ss.previewDark = light, dark
+		t.SetTheme(light, dark)
 	}
-	font := a.termFamily()
-	features := ""
-	if !a.set.Ligatures {
-		features = "-calt,-liga"
-	}
-	line := func(spans ...ui.Span) {
-		for i := range spans {
-			spans[i].Font, spans[i].Size, spans[i].Weight, spans[i].Features = font, a.set.FontSize, a.set.FontWeight, features
-		}
-		ui.RichText(c, spans...).LineHeight(a.set.LineHeight).SingleLine()
-	}
-	box := raised(ui.Column(c).Radius(rCard).Padding(16, 18).Gap(0).Background(th.Background), pal)
-	box.Children(func() {
-		// Nerd Fonts' folder and branch icons: fonts without them show
-		// boxes, which is worth knowing before picking one.
-		line(ui.Span{Text: "\uf07b ~/dev/tuios ", Color: th.Palette[4]}, ui.Span{Text: "\ue0a0 main ", Color: th.Palette[5]}, ui.Span{Text: "❯ ", Color: th.Palette[2]}, ui.Span{Text: "git status", Color: th.Foreground})
-		line(ui.Span{Text: "modified:   ", Color: th.Foreground}, ui.Span{Text: "settings_view.go", Color: th.Palette[1]})
-		line(ui.Span{Text: "func ", Color: th.Palette[5]}, ui.Span{Text: "main", Color: th.Palette[4]}, ui.Span{Text: "() { x := a != b && c >= d => ok }", Color: th.Foreground})
-		ui.Row(c).Gap(4).Margin(10, 0, 0, 0).Children(func() {
-			for i := range 16 {
-				ui.Box(c).Size(16, 10).Radius(rChip).Background(th.Palette[i])
-			}
-		})
+	// Room for its seven rows at the pitch the pane draws: the
+	// terminal lays them out itself, from the font's own line.
+	rowH := float32(math.Ceil(float64(a.set.FontSize * 1.32 * a.set.LineHeight)))
+	raised(ui.Box(c.Key("term-preview")).Radius(rCard).Clip().Height(7*rowH+2*10+6), pal).Children(func() {
+		terminal.View(c.Key("preview"), t).Fill()
 	})
+}
+
+// previewSample is what the preview terminal shows: a prompt with Nerd
+// Font icons, powerline segments, a box that must join with no gaps, code
+// and the 16 colours.
+const previewSample = "\x1b[?25l" +
+	"\x1b[30;44m \uf07b ~/dev/tuios \x1b[34;45m\ue0b0\x1b[30;45m \ue0a0 main \x1b[35;42m\ue0b0\x1b[30;42m ok \x1b[0;32m\ue0b0\x1b[0m git status\r\n" +
+	"\x1b[33m┌──────────┬─────┐\r\n│ name     │ cpu │\r\n│ guios    │  3% │\r\n└──────────┴─────┘\x1b[0m\r\n" +
+	"\x1b[35mfunc \x1b[34mmain\x1b[0m() { x := a != b && c >= d => ok }\r\n" +
+	"\x1b[40m  \x1b[41m  \x1b[42m  \x1b[43m  \x1b[44m  \x1b[45m  \x1b[46m  \x1b[47m  " +
+	"\x1b[100m  \x1b[101m  \x1b[102m  \x1b[103m  \x1b[104m  \x1b[105m  \x1b[106m  \x1b[107m  \x1b[0m"
+
+// previewTerm is the Settings preview's terminal, made once: it runs no
+// program and shows previewSample.
+func (a *App) previewTerm() *terminal.Terminal {
+	if a.ss.preview != nil {
+		return a.ss.preview
+	}
+	light, dark := a.termThemes()
+	t, err := terminal.New(terminal.Options{
+		Conn: idleConn{done: make(chan struct{})}, Font: a.termFont(), Theme: light, DarkTheme: dark,
+		Padding: terminal.Padding{X: 16, Y: 10}, PaddingColor: terminal.PaddingExtend, NoBlink: true,
+	})
+	if err != nil {
+		return nil
+	}
+	t.Feed([]byte(previewSample))
+	a.ss.preview, a.ss.previewFont, a.ss.previewLight, a.ss.previewDark = t, a.termFont(), light, dark
+	return t
+}
+
+// idleConn is a terminal's connection to nothing: it reads nothing until
+// closed and takes what is typed.
+type idleConn struct{ done chan struct{} }
+
+func (c idleConn) Read([]byte) (int, error) {
+	<-c.done
+	return 0, io.EOF
+}
+func (c idleConn) Write(p []byte) (int, error) { return len(p), nil }
+func (c idleConn) Close() error {
+	select {
+	case <-c.done:
+	default:
+		close(c.done)
+	}
+	return nil
+}
+
+func fontsEqual(a, b terminal.Font) bool {
+	return a.Family == b.Family && a.Size == b.Size && a.Weight == b.Weight && a.LineHeight == b.LineHeight &&
+		a.Thicken == b.Thicken && slices.Equal(a.Features, b.Features)
 }
 
 func (a *App) shellPage(c *ui.Context, pal *palette) {

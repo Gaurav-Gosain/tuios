@@ -2824,6 +2824,16 @@ func (msgs Messages) SetLineHeight() string {
 	return Catalog.Format(msgs.locale, "setLineHeight", nil)
 }
 
+// SetLineHeightDetail says "A multiple of the font's own line. At 1.00, rows are as the font draws them."
+// in the language the app shows.
+func SetLineHeightDetail() string { return In(i18n.Locale()).SetLineHeightDetail() }
+
+// SetLineHeightDetail says "A multiple of the font's own line. At 1.00, rows are as the font draws them."
+// in the language of msgs.
+func (msgs Messages) SetLineHeightDetail() string {
+	return Catalog.Format(msgs.locale, "setLineHeightDetail", nil)
+}
+
 // SetWeight says "Weight"
 // in the language the app shows.
 func SetWeight() string { return In(i18n.Locale()).SetWeight() }

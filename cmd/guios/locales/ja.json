@@ -276,6 +276,7 @@
   "setSize": "サイズ",
   "setSizeDetail": "{bigger} と {smaller} でも変更できます。",
   "setLineHeight": "行の高さ",
+  "setLineHeightDetail": "フォント自身の行の高さに対する倍率です。1.00 では、フォントのとおりに行を描きます。",
   "setWeight": "太さ",
   "setWeightLight": "細字",
   "setWeightRegular": "標準",

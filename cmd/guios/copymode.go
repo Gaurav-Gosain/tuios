@@ -1,6 +1,7 @@
 package main
 
 import (
+	"math"
 	"regexp"
 	"strconv"
 	"strings"
@@ -782,7 +783,7 @@ func (a *App) copyView(c *ui.Context, pal *palette) {
 	cm := a.cm
 	size := a.set.FontSize
 	// The terminal's rows: its cell's height, as the view last sized it.
-	rowH := float32(int(size*a.set.LineHeight*1.3 + 0.5))
+	rowH := float32(math.Ceil(float64(size * a.set.LineHeight * 1.32)))
 	if e := a.terms[cm.pane]; e != nil && e.stream != nil {
 		if _, h := e.stream.CellSize(); h > 0 {
 			rowH = float32(h)

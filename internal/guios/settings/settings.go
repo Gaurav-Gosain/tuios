@@ -159,12 +159,13 @@ func Default() Settings {
 		Vibrancy:      true,
 		DimUnfocused:  true,
 		FontSize:      13,
-		LineHeight:    1.22,
-		FontWeight:    400,
-		Ligatures:     true,
-		MinContrast:   3,
-		Cursor:        "block",
-		CursorBlink:   true,
+		// The font's own line, as Ghostty draws it (council round 2, N3).
+		LineHeight:  1.0,
+		FontWeight:  400,
+		Ligatures:   true,
+		MinContrast: 3,
+		Cursor:      "block",
+		CursorBlink: true,
 		// The tuios theme, Omarchy's included, so that the TUI and the
 		// app match; paper where tuios names none.
 		LightTheme:      "tuios",
