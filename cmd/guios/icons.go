@@ -49,6 +49,7 @@ var (
 	unzoomIcon       = glyph("f7-arrow-down-right-arrow-up-left")
 	closeIcon        = glyph("f7-xmark")
 	swapIcon         = glyph("f7-arrow-right-arrow-left")
+	usageIcon        = glyph("usage-wave")
 	branchIcon       = glyph("f7-arrow-branch")
 	diffIcon         = glyph("octicon-file-diff-16")
 	treeIcon         = glyph("f7-list-bullet-indent")

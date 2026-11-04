@@ -1416,5 +1416,29 @@
   "cockpitDetailSource": "From",
   "cockpitDetailMail": "Unread mail",
   "cockpitDetailQueued": "Waiting",
-  "cockpitSubagents": "Subagents"
+  "cockpitSubagents": "Subagents",
+  "usageTitle": "Usage",
+  "usageShow": "Show usage",
+  "usageHide": "Hide usage",
+  "usageCPU": "CPU",
+  "usageMemory": "Memory",
+  "usageLoad": "Load",
+  "usageContext": "Context",
+  "usageCost": "Cost",
+  "usageMachine": "This machine",
+  "usageHosts": "Hosts",
+  "usagePanes": "Panes",
+  "usageNotSupported": "This system does not report the usage of panes.",
+  "usageNoDaemon": "The daemon does not report usage. Update tuios to see it.",
+  "usageReading": "Reading the usage.",
+  "usageCores": "{n} cores",
+  "@usageCores": {
+    "placeholders": {
+      "n": {
+        "type": "int"
+      }
+    }
+  },
+  "usageOffline": "Not connected",
+  "usageNoPanes": "No pane runs here."
 }

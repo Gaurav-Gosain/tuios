@@ -89,6 +89,12 @@ type App struct {
 	quitting bool
 	// ck is the agent cockpit (cockpit.go).
 	ck cockpit
+	// usage is the last reading of the resource views, usageOpen whether
+	// the sidebar's usage panel shows, and sampler what reads them
+	// (usage.go).
+	usage     *usageView
+	usageOpen bool
+	sampler   usageSampler
 
 	// holds keep a session's last frame while its new workspace's panes
 	// attach (workspaces.go).
@@ -259,6 +265,10 @@ func (a *App) event(h *host, cl *client.Client, m proto.Message) {
 		if m.State != nil {
 			a.setState(h, *m.State)
 		}
+		if !h.remote() {
+			// A pane started or ended something: its usage may move.
+			a.nudgeUsage()
+		}
 	case "select":
 		// A host shows its own sessions, none of another machine.
 		if !a.remoteControl(h) || a.hostOf(m.Select) != h {
@@ -297,6 +307,7 @@ func (a *App) event(h *host, cl *client.Client, m proto.Message) {
 	case "daemon":
 		if !h.remote() {
 			a.cockpitEvent(m.Daemon)
+			a.nudgeUsage()
 		}
 	case "notice":
 		// A program's own notification, as a terminal shows it: not

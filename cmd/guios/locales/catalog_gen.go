@@ -7741,3 +7741,173 @@ func CockpitSubagents() string { return In(i18n.Locale()).CockpitSubagents() }
 func (msgs Messages) CockpitSubagents() string {
 	return Catalog.Format(msgs.locale, "cockpitSubagents", nil)
 }
+
+// UsageTitle says "Usage"
+// in the language the app shows.
+func UsageTitle() string { return In(i18n.Locale()).UsageTitle() }
+
+// UsageTitle says "Usage"
+// in the language of msgs.
+func (msgs Messages) UsageTitle() string {
+	return Catalog.Format(msgs.locale, "usageTitle", nil)
+}
+
+// UsageShow says "Show usage"
+// in the language the app shows.
+func UsageShow() string { return In(i18n.Locale()).UsageShow() }
+
+// UsageShow says "Show usage"
+// in the language of msgs.
+func (msgs Messages) UsageShow() string {
+	return Catalog.Format(msgs.locale, "usageShow", nil)
+}
+
+// UsageHide says "Hide usage"
+// in the language the app shows.
+func UsageHide() string { return In(i18n.Locale()).UsageHide() }
+
+// UsageHide says "Hide usage"
+// in the language of msgs.
+func (msgs Messages) UsageHide() string {
+	return Catalog.Format(msgs.locale, "usageHide", nil)
+}
+
+// UsageCPU says "CPU"
+// in the language the app shows.
+func UsageCPU() string { return In(i18n.Locale()).UsageCPU() }
+
+// UsageCPU says "CPU"
+// in the language of msgs.
+func (msgs Messages) UsageCPU() string {
+	return Catalog.Format(msgs.locale, "usageCPU", nil)
+}
+
+// UsageMemory says "Memory"
+// in the language the app shows.
+func UsageMemory() string { return In(i18n.Locale()).UsageMemory() }
+
+// UsageMemory says "Memory"
+// in the language of msgs.
+func (msgs Messages) UsageMemory() string {
+	return Catalog.Format(msgs.locale, "usageMemory", nil)
+}
+
+// UsageLoad says "Load"
+// in the language the app shows.
+func UsageLoad() string { return In(i18n.Locale()).UsageLoad() }
+
+// UsageLoad says "Load"
+// in the language of msgs.
+func (msgs Messages) UsageLoad() string {
+	return Catalog.Format(msgs.locale, "usageLoad", nil)
+}
+
+// UsageContext says "Context"
+// in the language the app shows.
+func UsageContext() string { return In(i18n.Locale()).UsageContext() }
+
+// UsageContext says "Context"
+// in the language of msgs.
+func (msgs Messages) UsageContext() string {
+	return Catalog.Format(msgs.locale, "usageContext", nil)
+}
+
+// UsageCost says "Cost"
+// in the language the app shows.
+func UsageCost() string { return In(i18n.Locale()).UsageCost() }
+
+// UsageCost says "Cost"
+// in the language of msgs.
+func (msgs Messages) UsageCost() string {
+	return Catalog.Format(msgs.locale, "usageCost", nil)
+}
+
+// UsageMachine says "This machine"
+// in the language the app shows.
+func UsageMachine() string { return In(i18n.Locale()).UsageMachine() }
+
+// UsageMachine says "This machine"
+// in the language of msgs.
+func (msgs Messages) UsageMachine() string {
+	return Catalog.Format(msgs.locale, "usageMachine", nil)
+}
+
+// UsageHosts says "Hosts"
+// in the language the app shows.
+func UsageHosts() string { return In(i18n.Locale()).UsageHosts() }
+
+// UsageHosts says "Hosts"
+// in the language of msgs.
+func (msgs Messages) UsageHosts() string {
+	return Catalog.Format(msgs.locale, "usageHosts", nil)
+}
+
+// UsagePanes says "Panes"
+// in the language the app shows.
+func UsagePanes() string { return In(i18n.Locale()).UsagePanes() }
+
+// UsagePanes says "Panes"
+// in the language of msgs.
+func (msgs Messages) UsagePanes() string {
+	return Catalog.Format(msgs.locale, "usagePanes", nil)
+}
+
+// UsageNotSupported says "This system does not report the usage of panes."
+// in the language the app shows.
+func UsageNotSupported() string { return In(i18n.Locale()).UsageNotSupported() }
+
+// UsageNotSupported says "This system does not report the usage of panes."
+// in the language of msgs.
+func (msgs Messages) UsageNotSupported() string {
+	return Catalog.Format(msgs.locale, "usageNotSupported", nil)
+}
+
+// UsageNoDaemon says "The daemon does not report usage. Update tuios to see it."
+// in the language the app shows.
+func UsageNoDaemon() string { return In(i18n.Locale()).UsageNoDaemon() }
+
+// UsageNoDaemon says "The daemon does not report usage. Update tuios to see it."
+// in the language of msgs.
+func (msgs Messages) UsageNoDaemon() string {
+	return Catalog.Format(msgs.locale, "usageNoDaemon", nil)
+}
+
+// UsageReading says "Reading the usage."
+// in the language the app shows.
+func UsageReading() string { return In(i18n.Locale()).UsageReading() }
+
+// UsageReading says "Reading the usage."
+// in the language of msgs.
+func (msgs Messages) UsageReading() string {
+	return Catalog.Format(msgs.locale, "usageReading", nil)
+}
+
+// UsageCores says "{n} cores"
+// in the language the app shows.
+func UsageCores(n int) string { return In(i18n.Locale()).UsageCores(n) }
+
+// UsageCores says "{n} cores"
+// in the language of msgs.
+func (msgs Messages) UsageCores(n int) string {
+	return Catalog.Format(msgs.locale, "usageCores", map[string]any{"n": n})
+}
+
+// UsageOffline says "Not connected"
+// in the language the app shows.
+func UsageOffline() string { return In(i18n.Locale()).UsageOffline() }
+
+// UsageOffline says "Not connected"
+// in the language of msgs.
+func (msgs Messages) UsageOffline() string {
+	return Catalog.Format(msgs.locale, "usageOffline", nil)
+}
+
+// UsageNoPanes says "No pane runs here."
+// in the language the app shows.
+func UsageNoPanes() string { return In(i18n.Locale()).UsageNoPanes() }
+
+// UsageNoPanes says "No pane runs here."
+// in the language of msgs.
+func (msgs Messages) UsageNoPanes() string {
+	return Catalog.Format(msgs.locale, "usageNoPanes", nil)
+}

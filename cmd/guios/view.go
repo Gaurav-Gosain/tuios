@@ -85,6 +85,7 @@ func b2f(b bool) float32 {
 
 func (a *App) view(c *ui.Context) {
 	agoDue = time.Time{}
+	a.syncUsage()
 	defer func() {
 		// A frame when the first "ago" label shown changes, and none while
 		// no label would.
@@ -360,6 +361,7 @@ func (a *App) sidebar(c *ui.Context, pal *palette, bar ui.TitleBar) {
 			a.endedSections(c, pal)
 		}
 	})
+	a.usagePanel(c, pal)
 	a.sidebarFooter(c, pal)
 }
 
@@ -676,6 +678,11 @@ func (a *App) sidebarFooter(c *ui.Context, pal *palette) {
 		iconButton(c, "open-project", folderIcon, a.tip(locales.ActionOpenProject(), "project.open"), pal, a.openProject)
 		iconButton(c, "palette", searchIcon, a.tip(locales.ActionGoToSession(), "palette.open"), pal, a.openPalette)
 		iconButton(c, "settings", gearIcon, a.tip(locales.SettingsTitle(), "settings.open"), pal, func() { a.openSettings("") })
+		usageTip := locales.UsageShow()
+		if a.usageOpen {
+			usageTip = locales.UsageHide()
+		}
+		iconButton(c, "usage", usageIcon, usageTip, pal, a.toggleUsage)
 		ui.Spacer(c)
 		switch a.local().conn {
 		case connReady:

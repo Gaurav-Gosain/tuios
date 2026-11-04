@@ -761,5 +761,22 @@
   "cockpitDetailSource": "来源",
   "cockpitDetailMail": "未读邮件",
   "cockpitDetailQueued": "等待中",
-  "cockpitSubagents": "子代理"
+  "cockpitSubagents": "子代理",
+  "usageTitle": "使用情况",
+  "usageShow": "显示使用情况",
+  "usageHide": "隐藏使用情况",
+  "usageCPU": "CPU",
+  "usageMemory": "内存",
+  "usageLoad": "负载",
+  "usageContext": "上下文",
+  "usageCost": "费用",
+  "usageMachine": "本机",
+  "usageHosts": "主机",
+  "usagePanes": "窗格",
+  "usageNotSupported": "此系统不报告窗格的使用情况。",
+  "usageNoDaemon": "守护进程不报告使用情况。请更新 tuios 后查看。",
+  "usageReading": "正在读取使用情况。",
+  "usageCores": "{n} 个核心",
+  "usageOffline": "未连接",
+  "usageNoPanes": "这里没有运行的窗格。"
 }

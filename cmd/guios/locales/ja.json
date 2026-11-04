@@ -761,5 +761,22 @@
   "cockpitDetailSource": "出所",
   "cockpitDetailMail": "未読メール",
   "cockpitDetailQueued": "待機中",
-  "cockpitSubagents": "サブエージェント"
+  "cockpitSubagents": "サブエージェント",
+  "usageTitle": "使用状況",
+  "usageShow": "使用状況を表示",
+  "usageHide": "使用状況を隠す",
+  "usageCPU": "CPU",
+  "usageMemory": "メモリ",
+  "usageLoad": "負荷",
+  "usageContext": "コンテキスト",
+  "usageCost": "コスト",
+  "usageMachine": "このマシン",
+  "usageHosts": "ホスト",
+  "usagePanes": "ペイン",
+  "usageNotSupported": "このシステムはペインの使用状況を報告しません。",
+  "usageNoDaemon": "デーモンは使用状況を報告しません。tuios を更新してください。",
+  "usageReading": "使用状況を読み込んでいます。",
+  "usageCores": "{n} コア",
+  "usageOffline": "未接続",
+  "usageNoPanes": "ここで動いているペインはありません。"
 }

@@ -130,6 +130,7 @@ func (a *App) cockpitFocus(c *ui.Context, pal *palette) {
 			where = append(where, locales.CockpitStateFrom(ag.Source))
 		}
 		ui.Text(c, strings.Join(where, " · ")).FontSize(12).TextColor(pal.textFaint).SingleLine().Ellipsis("…").MinWidth(0)
+		a.agentUsage(c, pal, ag)
 		// Tabs.
 		ui.Row(c).Gap(2).Margin(10, 0, 0, 0).FocusGroup(ui.Horizontal).Children(func() {
 			for _, t := range ckTabOrder {
