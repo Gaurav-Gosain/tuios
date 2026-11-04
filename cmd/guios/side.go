@@ -384,9 +384,11 @@ func (a *App) tabButton(c *ui.Context, pal *palette, id, label, tab string) {
 // the width the person gave it, and at most what leaves a strip of the
 // panes in view beside it.
 func (a *App) drawerWidth(w float32) float32 {
+	// The width the person dragged it to, kept in the prefs; else a share
+	// of the panes' room, at least the default.
 	sw := a.prefs.SideWidth
 	if sw == 0 {
-		sw = defaultSide
+		sw = max(defaultSide, w*drawerShare)
 	}
 	if w <= 0 {
 		return sw
@@ -394,8 +396,12 @@ func (a *App) drawerWidth(w float32) float32 {
 	return max(min(sw, w-drawerPeek-paneGap), min(minSide, w-paneGap))
 }
 
-// drawerPeek is the least of the panes the viewer drawer leaves in view.
-const drawerPeek = 96
+// drawerPeek is the least of the panes the viewer drawer leaves in view;
+// drawerShare is its first width's share of the panes' room.
+const (
+	drawerPeek  = 96
+	drawerShare = 0.45
+)
 
 // sideEdge is the viewer drawer's left edge, which a drag moves.
 func (a *App) sideEdge(c *ui.Context, pal *palette, row float32) {
@@ -416,7 +422,7 @@ func (a *App) sideEdge(c *ui.Context, pal *palette, row float32) {
 		a.savePrefs()
 	}
 	if d.DoubleClicked() {
-		a.prefs.SideWidth = defaultSide
+		a.prefs.SideWidth = 0 // back to its share of the room
 		a.savePrefs()
 	}
 }
@@ -451,11 +457,9 @@ func (a *App) viewerCard(c *ui.Context, pal *palette, s *proto.Session, v *sideV
 			if a.rightShown() && a.sideTab() == sideFiles {
 				a.focusFiles()
 			}
-		case v.kind == sideFiles && a.rightShown() && a.sideTab() == sideFiles:
-			// Back to the list the file came from, as the TUI's quick
-			// look goes back from inside the file.
-			a.focusFiles()
 		default:
+			// The drawer closes, and the keyboard goes back to the pane.
+			a.closeView(s)
 			a.focusTerminal()
 		}
 	}
