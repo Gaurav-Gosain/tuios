@@ -458,6 +458,9 @@ func (a *App) boardCard(c *ui.Context, pal *palette, b *ckBoard, t session.TaskR
 		}
 		if t.Holder == nil {
 			m.Separator()
+			if m.Item(locales.CockpitStartOnCard()).Chosen() {
+				a.newAgentFor(t)
+			}
 			if m.Item(locales.CockpitTakeCard()).Chosen() {
 				a.takeCard(b, t)
 			}
@@ -539,7 +542,13 @@ func (a *App) boardKeys(root ui.Element, b *ckBoard) (handled bool) {
 			a.goToHolder(t)
 		}
 	case key(0, ui.KeyN):
-		b.adding, b.draft = ci, ""
+		// n on a card starts an agent on it, as the TUI's; on an empty
+		// column it adds a card there.
+		if t, ok := b.card(b.sel); ok {
+			a.newAgentFor(t)
+		} else {
+			b.adding, b.draft = ci, ""
+		}
 	case key(0, ui.KeyT):
 		if t, ok := b.card(b.sel); ok {
 			a.takeCard(b, t)

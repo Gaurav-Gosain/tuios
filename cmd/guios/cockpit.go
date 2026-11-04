@@ -135,7 +135,6 @@ type cockpit struct {
 	rows   []ckRow
 	sel    string // the selected row's key
 	selAgt string // its agent's key, so the cursor follows an agent whose row key changed
-	hover  string
 	placed map[string]ckPlaced
 	folded map[int]bool
 	opened map[int]bool
@@ -170,8 +169,6 @@ type cockpit struct {
 	// fleetFocus is the fleet's focus binding: the keys act while it holds
 	// the focus.
 	fleetFocus ui.Handle
-	lastClick  time.Time
-	lastKey    string
 
 	threads map[string]*ckThread
 	reply   ckReply
@@ -247,11 +244,14 @@ func (a *App) cockpitEvent(ev *proto.DaemonEvent) {
 		}
 		return
 	}
-	// A verdict comes with no event of its own: the judge's state and the
-	// sessions' changes read the comparison again, never the activity
-	// ticks, which come many times a second.
-	if ev.Type != "agent-activity" && ev.Type != "transcript" {
-		a.compareEvent()
+	switch ev.Type {
+	case "fan-verdict":
+		a.compareEvent(ev.Session)
+		return
+	case "agent-state":
+		// A daemon from before fan-verdict: the judge's turn ending, or an
+		// attempt's, reads the comparison again.
+		a.compareEvent(ev.Session)
 	}
 	switch ev.Type {
 	case "transcript":

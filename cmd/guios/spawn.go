@@ -4,6 +4,7 @@ import (
 	"cmp"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"os"
@@ -103,23 +104,26 @@ type spawnSheet struct {
 	branches   []string
 	// The folder and what git says of it. read is false until the read
 	// answers; repo is empty outside a repository.
-	folder            string
-	read              bool
-	repo, root, head  string
-	origin            string
-	dirty             int
-	machines          []spawnMachine
-	machine           int
-	attempts          int
-	vary              []int // the agent of each attempt; A is the sheet's
-	notice            string
-	noticeAt          spawnField
-	starting          bool
-	gen               uint64
-	session           string // the session start-agent opens the pane in
-	focusField        spawnField
-	focusAgain        bool
-	whereSeen         string
+	folder           string
+	read             bool
+	repo, root, head string
+	origin           string
+	dirty            int
+	machines         []spawnMachine
+	machine          int
+	attempts         int
+	vary             []int // the agent of each attempt; A is the sheet's
+	notice           string
+	noticeAt         spawnField
+	starting         bool
+	gen              uint64
+	session          string // the session start-agent opens the pane in
+	focusField       spawnField
+	focusAgain       bool
+	whereSeen        string
+	// card is the task card the sheet opened on, nil for none: Start
+	// hands it to the daemon, which claims it for the new pane.
+	card              *spawnCard
 	wantStart         bool
 	listOpen, listWas bool
 }
@@ -182,7 +186,7 @@ func (a *App) newAgent() {
 		s = &spawnSheet{attempts: 1, where: "folder", folder: folder}
 		a.spawnApplyPreset(s, a.prefs.Spawn[folder])
 	}
-	s.open, s.notice, s.starting, s.listOpen = true, "", false, false
+	s.open, s.notice, s.starting, s.listOpen, s.card = true, "", false, false, nil
 	s.focusField, s.focusAgain = spTask, true
 	s.session = sess
 	ck.spawnGen++
@@ -194,6 +198,46 @@ func (a *App) newAgent() {
 	go func() {
 		info := readSpawnInfo(folder)
 		a.update(func() { a.applySpawnInfo(gen, info) })
+	}()
+}
+
+// spawnCard is the task card a sheet starts an agent on.
+type spawnCard struct{ session, id string }
+
+// newAgentFor is n on a board card, as the TUI's: the sheet with the card's
+// prompt as the task, its title until the prompt is read. Start claims the
+// card for the new pane. A draft kept from Esc keeps its own task, and the
+// card is not tied to it.
+func (a *App) newAgentFor(t session.TaskRow) {
+	a.newAgent()
+	s := a.ck.spawn
+	if s == nil {
+		return
+	}
+	if strings.TrimSpace(s.task.text) != "" {
+		s.notice, s.noticeAt = locales.SpawnKeepsTask(t.ID), spTask
+		return
+	}
+	s.task.text = t.Title
+	s.followTask()
+	s.card = &spawnCard{session: t.Session, id: t.ID}
+	cl := a.cockpitClient()
+	if cl == nil {
+		return
+	}
+	go func() {
+		var d struct {
+			Prompt string `json:"prompt"`
+		}
+		err := cl.VerbInto("get-task", map[string]any{"session": t.Session, "id": t.ID}, false, &d)
+		a.update(func() {
+			// The prompt takes the title's place while the person has not
+			// changed it.
+			if err == nil && d.Prompt != "" && a.ck.spawn == s && s.task.text == t.Title {
+				s.task.text = d.Prompt
+				s.followTask()
+			}
+		})
 	}()
 }
 
@@ -751,6 +795,20 @@ func (a *App) spawnStart() {
 			params["session"] = s.session
 		}
 	}
+	// The daemon takes the card in the call: start-agent opens the pane in
+	// the card's session and claims the card for it, and fan stamps the
+	// card with the fan it makes.
+	card := s.card
+	if host != "" {
+		card = nil
+	}
+	switch {
+	case card == nil:
+	case verb == "fan":
+		params["task"], params["task_session"] = card.id, card.session
+	default:
+		params["session"], params["task"] = card.session, card.id
+	}
 	a.ck.spawnLast = s.agents[s.agent].id
 	a.spawnSavePreset(s, false)
 	s.starting, s.notice = true, ""
@@ -765,8 +823,27 @@ func (a *App) spawnStart() {
 		a.toast(locales.SpawnStartingWorktree(agentCmd))
 	}
 	attempts := s.attempts
+	cockpit := a.cockpitClient()
 	go func() {
+		if params["task"] != nil && cockpit != nil {
+			// The card is the person's to hand out: the call carries
+			// their nonce, which the daemon takes from any connection
+			// of this app.
+			if nonce, err := cockpit.HumanNonce(); err == nil {
+				params["human_nonce"] = nonce
+			}
+		}
 		raw, err := cl.LongVerb(verb, params, spawnStartTimeout)
+		// A card that cannot be taken refuses the call: the agent starts
+		// without it, and the notice says why.
+		leftOut := ""
+		if verr, ok := errors.AsType[*session.VerbCallError](err); ok && params["task"] != nil && spawnTaskRefused(verr) {
+			leftOut = flat(verr.Message)
+			delete(params, "task")
+			delete(params, "task_session")
+			delete(params, "human_nonce")
+			raw, err = cl.LongVerb(verb, params, spawnStartTimeout)
+		}
 		var res struct {
 			Session      string `json:"session"`
 			Reason       string `json:"reason"`
@@ -776,13 +853,30 @@ func (a *App) spawnStart() {
 			PromptStatus string `json:"prompt_status"`
 			PromptNote   string `json:"prompt_note"`
 			WindowID     string `json:"window_id"`
-			Sessions     []struct {
+			Task         *struct {
+				ID string `json:"id"`
+			} `json:"task"`
+			TaskNote string `json:"task_note"`
+			Sessions []struct {
 				Session  string `json:"session"`
 				WindowID string `json:"window_id"`
 			} `json:"sessions"`
 		}
 		if err == nil {
 			_ = json.Unmarshal(raw, &res)
+		}
+		// What became of the card, said after the start's own words.
+		held := ""
+		switch {
+		case err != nil || card == nil:
+		case leftOut != "":
+			held = " " + locales.SpawnCardLeftOut(card.id, leftOut)
+		case res.Task != nil && verb == "fan":
+			held = " " + locales.SpawnFanOnCard(res.Task.ID)
+		case res.Task != nil:
+			held = " " + locales.SpawnHoldsCard(res.Task.ID)
+		case res.TaskNote != "":
+			held = " " + flat(res.TaskNote)
 		}
 		a.update(func() {
 			s.starting = false
@@ -810,6 +904,7 @@ func (a *App) spawnStart() {
 			default:
 				out.text = locales.SpawnStartedIn(what, res.Session)
 			}
+			out.text += held
 			a.applySpawnStarted(s, out)
 		})
 	}()
@@ -890,4 +985,18 @@ func spawnLoadAvg() (float64, bool) {
 	f, _, _ := strings.Cut(string(b), " ")
 	v, err := strconv.ParseFloat(f, 64)
 	return v, err == nil
+}
+
+// spawnTaskRefused reports whether a refusal names one of the parameters
+// the sheet sends for a card: the card cannot be taken, or the daemon is
+// older than them.
+func spawnTaskRefused(err *session.VerbCallError) bool {
+	if err.Hint == nil {
+		return false
+	}
+	switch err.Hint.Param {
+	case "task", "task_session", "human_nonce":
+		return true
+	}
+	return false
 }

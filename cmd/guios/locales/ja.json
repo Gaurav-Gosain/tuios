@@ -1216,5 +1216,13 @@
   "cockpitSendAsMail": "メール",
   "cockpitMailInbox": "{name} の受信箱に届きます",
   "cockpitMailNoImages": "メールはテキストのみです。画像はプロンプトで送ってください。",
-  "cockpitMailSent": "{name} にメールを送りました。"
+  "cockpitMailSent": "{name} にメールを送りました。",
+  "toastOpenFailed": "開けませんでした: {why}",
+  "toastTypeaheadLost": "ペインが開く前に入力したキーは届きませんでした: {why}",
+  "spawnKeepsTask": "書きかけのタスクが残っています。{id} を使うには消してください。",
+  "spawnForCard": "カード {id}",
+  "spawnHoldsCard": "{id} を受け持ちます。",
+  "spawnFanOnCard": "{id} に取り組みます。",
+  "spawnCardLeftOut": "{id} は外されました: {why}",
+  "cockpitStartOnCard": "エージェントを開始"
 }

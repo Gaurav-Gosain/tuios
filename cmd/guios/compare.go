@@ -55,6 +55,9 @@ type ckCompare struct {
 	// busy is what runs now ("judge", "keep"), note what last ended.
 	busy, note string
 	verdictAt  int64
+	// judge is the session of the judge j started, whose turn ending may
+	// carry the verdict on a daemon that sends no fan-verdict.
+	judge string
 }
 
 // ckCompareResult is compare-fan's answer.
@@ -198,10 +201,19 @@ func (a *App) applyCompare(gen uint64, res *ckCompareResult, err error) {
 	a.compareKeepNow()
 }
 
-// compareEvent reads the comparison again when a daemon event may carry a
-// new verdict or a state of an attempt.
-func (a *App) compareEvent() {
-	if cp := a.ck.cmp; cp != nil && cp.open && !cp.loading && cp.busy == "" && cp.armed == "" {
+// compareEvent reads the comparison again when an event names a session of
+// the fan or its judge: a verdict came, or an attempt or the judge changed
+// state. A keep that waits for a second k keeps the list it showed.
+func (a *App) compareEvent(sess string) {
+	cp := a.ck.cmp
+	if cp == nil || !cp.open || cp.loading || cp.busy != "" || cp.armed != "" || cp.res == nil {
+		return
+	}
+	ours := sess == cp.judge
+	for _, r := range cp.res.Rows {
+		ours = ours || r.Session == sess
+	}
+	if ours {
 		a.compareFetch()
 	}
 }
@@ -271,8 +283,10 @@ func (a *App) compareJudge() {
 				cp.note = locales.CompareJudgeFailed(compareErr(err))
 				return
 			case !res.Ready && res.Reason != "":
+				cp.judge = res.JudgeSession
 				cp.note = locales.CompareJudgeNotReady(res.JudgeSession, flat(res.Reason))
 			default:
+				cp.judge = res.JudgeSession
 				cp.note = locales.CompareJudgeStarted(res.JudgeSession)
 			}
 			a.refreshCockpit()

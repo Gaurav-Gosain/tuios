@@ -126,6 +126,9 @@ func (a *App) spawnHeader(c *ui.Context, pal *palette, s *spawnSheet) {
 		case s.folder != "":
 			from = locales.SpawnIn(a.local().shortDir(s.folder))
 		}
+		if s.card != nil {
+			from += " · " + locales.SpawnForCard(s.card.id)
+		}
 		oneLine(c, from, fsSmall, 0).TextColor(pal.textFaint)
 		ui.Spacer(c)
 		iconButton(c, "spawn-close", closeIcon, locales.SpawnClose()+" (Esc)", pal, func() { s.open = false })

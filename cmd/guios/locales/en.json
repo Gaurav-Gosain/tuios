@@ -2211,5 +2211,13 @@
         "type": "String"
       }
     }
-  }
+  },
+  "toastOpenFailed": "guios could not open it: {why}",
+  "toastTypeaheadLost": "The keys you typed before the pane opened did not reach it: {why}",
+  "spawnKeepsTask": "The sheet keeps the task you were writing. Clear it to use {id}.",
+  "spawnForCard": "card {id}",
+  "spawnHoldsCard": "It holds {id}.",
+  "spawnFanOnCard": "They work on {id}.",
+  "spawnCardLeftOut": "{id} was left out: {why}",
+  "cockpitStartOnCard": "Start an agent on it"
 }

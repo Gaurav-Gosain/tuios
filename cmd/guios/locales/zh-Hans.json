@@ -1216,5 +1216,13 @@
   "cockpitSendAsMail": "邮件",
   "cockpitMailInbox": "发送到 {name} 的收件箱",
   "cockpitMailNoImages": "邮件只能发送文本。请以提示发送图片。",
-  "cockpitMailSent": "已向 {name} 发送邮件。"
+  "cockpitMailSent": "已向 {name} 发送邮件。",
+  "toastOpenFailed": "无法打开: {why}",
+  "toastTypeaheadLost": "窗格打开前输入的按键没有送达: {why}",
+  "spawnKeepsTask": "表单保留了你正在写的任务。清除它以使用 {id}。",
+  "spawnForCard": "卡片 {id}",
+  "spawnHoldsCard": "它持有 {id}。",
+  "spawnFanOnCard": "它们处理 {id}。",
+  "spawnCardLeftOut": "{id} 未包含: {why}",
+  "cockpitStartOnCard": "在此启动代理"
 }

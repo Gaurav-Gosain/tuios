@@ -460,6 +460,8 @@ func (k *stateKeeper) watch() {
 		"workspace-switched", "layout-changed",
 		// For the agent cockpit only: they change no pane.
 		"transcript", "agent-message", "task-claimed", "task-finished", "task-changed", "agent-activity",
+		// A judge's verdict, which the fan comparison reads again on.
+		"fan-verdict",
 	}); err != nil {
 		k.c.end()
 		return
@@ -492,11 +494,11 @@ func (k *stateKeeper) watch() {
 		}
 		switch ev.Type {
 		case "agent-state", "agent-seen", "attention", "window-closed", "window-created", "window-retitled",
-			"transcript", "agent-message", "task-claimed", "task-finished", "task-changed", "agent-activity":
+			"transcript", "agent-message", "task-claimed", "task-finished", "task-changed", "agent-activity", "fan-verdict":
 			k.c.emit(proto.Message{Event: "daemon", Daemon: &proto.DaemonEvent{Type: ev.Type, Session: ev.Session, Window: ev.Window}})
 		}
 		switch ev.Type {
-		case "transcript", "agent-message", "task-claimed", "task-finished", "task-changed", "agent-activity":
+		case "transcript", "agent-message", "task-claimed", "task-finished", "task-changed", "agent-activity", "fan-verdict":
 			// No pane changed: the state stays as it is.
 			continue
 		}

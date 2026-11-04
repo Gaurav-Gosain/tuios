@@ -12331,3 +12331,85 @@ func CockpitMailSent(name string) string { return In(i18n.Locale()).CockpitMailS
 func (msgs Messages) CockpitMailSent(name string) string {
 	return Catalog.Format(msgs.locale, "cockpitMailSent", map[string]any{"name": name})
 }
+
+// ToastOpenFailed says "guios could not open it: {why}"
+// in the language the app shows.
+func ToastOpenFailed(why string) string { return In(i18n.Locale()).ToastOpenFailed(why) }
+
+// ToastOpenFailed says "guios could not open it: {why}"
+// in the language of msgs.
+func (msgs Messages) ToastOpenFailed(why string) string {
+	return Catalog.Format(msgs.locale, "toastOpenFailed", map[string]any{"why": why})
+}
+
+// ToastTypeaheadLost says "The keys you typed before the pane opened did not reach it: {why}"
+// in the language the app shows.
+func ToastTypeaheadLost(why string) string { return In(i18n.Locale()).ToastTypeaheadLost(why) }
+
+// ToastTypeaheadLost says "The keys you typed before the pane opened did not reach it: {why}"
+// in the language of msgs.
+func (msgs Messages) ToastTypeaheadLost(why string) string {
+	return Catalog.Format(msgs.locale, "toastTypeaheadLost", map[string]any{"why": why})
+}
+
+// SpawnKeepsTask says "The sheet keeps the task you were writing. Clear it to use {id}."
+// in the language the app shows.
+func SpawnKeepsTask(id string) string { return In(i18n.Locale()).SpawnKeepsTask(id) }
+
+// SpawnKeepsTask says "The sheet keeps the task you were writing. Clear it to use {id}."
+// in the language of msgs.
+func (msgs Messages) SpawnKeepsTask(id string) string {
+	return Catalog.Format(msgs.locale, "spawnKeepsTask", map[string]any{"id": id})
+}
+
+// SpawnForCard says "card {id}"
+// in the language the app shows.
+func SpawnForCard(id string) string { return In(i18n.Locale()).SpawnForCard(id) }
+
+// SpawnForCard says "card {id}"
+// in the language of msgs.
+func (msgs Messages) SpawnForCard(id string) string {
+	return Catalog.Format(msgs.locale, "spawnForCard", map[string]any{"id": id})
+}
+
+// SpawnHoldsCard says "It holds {id}."
+// in the language the app shows.
+func SpawnHoldsCard(id string) string { return In(i18n.Locale()).SpawnHoldsCard(id) }
+
+// SpawnHoldsCard says "It holds {id}."
+// in the language of msgs.
+func (msgs Messages) SpawnHoldsCard(id string) string {
+	return Catalog.Format(msgs.locale, "spawnHoldsCard", map[string]any{"id": id})
+}
+
+// SpawnFanOnCard says "They work on {id}."
+// in the language the app shows.
+func SpawnFanOnCard(id string) string { return In(i18n.Locale()).SpawnFanOnCard(id) }
+
+// SpawnFanOnCard says "They work on {id}."
+// in the language of msgs.
+func (msgs Messages) SpawnFanOnCard(id string) string {
+	return Catalog.Format(msgs.locale, "spawnFanOnCard", map[string]any{"id": id})
+}
+
+// SpawnCardLeftOut says "{id} was left out: {why}"
+// in the language the app shows.
+func SpawnCardLeftOut(id string, why string) string {
+	return In(i18n.Locale()).SpawnCardLeftOut(id, why)
+}
+
+// SpawnCardLeftOut says "{id} was left out: {why}"
+// in the language of msgs.
+func (msgs Messages) SpawnCardLeftOut(id string, why string) string {
+	return Catalog.Format(msgs.locale, "spawnCardLeftOut", map[string]any{"id": id, "why": why})
+}
+
+// CockpitStartOnCard says "Start an agent on it"
+// in the language the app shows.
+func CockpitStartOnCard() string { return In(i18n.Locale()).CockpitStartOnCard() }
+
+// CockpitStartOnCard says "Start an agent on it"
+// in the language of msgs.
+func (msgs Messages) CockpitStartOnCard() string {
+	return Catalog.Format(msgs.locale, "cockpitStartOnCard", nil)
+}

@@ -189,3 +189,16 @@ func (c *Client) LongVerb(name string, params map[string]any, timeout time.Durat
 	defer vc.Close()
 	return vc.CallWithTimeout(name, params, timeout)
 }
+
+// HumanNonce is the person's nonce of the cockpit's presence, for a verb
+// that LongVerb calls on a connection of its own: the daemon takes it from
+// any connection of this app.
+func (c *Client) HumanNonce() (string, error) {
+	ck, err := c.cockpit()
+	if err != nil {
+		return "", err
+	}
+	ck.mu.Lock()
+	defer ck.mu.Unlock()
+	return ck.nonce, nil
+}
