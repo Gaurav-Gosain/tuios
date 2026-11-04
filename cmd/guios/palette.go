@@ -341,8 +341,10 @@ func (a *App) commandItems() []paletteItem {
 		id := p.ID
 		h := a.hostOf(id)
 		detail := h.shortDir(p.Dir)
-		if h.remote() {
+		if h.remote() && detail != "" {
 			detail = h.name + " · " + detail
+		} else if h.remote() {
+			detail = h.name
 		}
 		cmds = append(cmds, paletteItem{title: locales.NewSessionIn(p.Name), detail: detail, words: en.NewSessionIn(p.Name), run: func() { a.newSession(id) }})
 	}

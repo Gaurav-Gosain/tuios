@@ -7,6 +7,7 @@ import (
 	"io"
 	"maps"
 	"os"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -350,9 +351,6 @@ func (s *Stream) Write(p []byte) (int, error) {
 	return len(p), nil
 }
 
-// ResizePixels asks for the pane at this view's size, as the stream's
-// lease. The daemon applies it only while no TUI client shows the session,
-// and answers with a resize frame when the pane's size changes.
 // debugStreams prints the streams' opens, reopens and leases on stderr.
 var debugStreams = os.Getenv("GUIOS_DEBUG_STREAMS") != ""
 
@@ -362,6 +360,9 @@ func debugf(f string, args ...any) {
 	}
 }
 
+// ResizePixels asks for the pane at this view's size, as the stream's
+// lease. The daemon applies it only while no TUI client shows the session,
+// and answers with a resize frame when the pane's size changes.
 func (s *Stream) ResizePixels(cols, rows, cellW, cellH int) error {
 	debugf("lease %s %s %dx%d", s.c.host, s.window, cols, rows)
 	if cols <= 0 || rows <= 0 {
@@ -374,7 +375,7 @@ func (s *Stream) ResizePixels(cols, rows, cellW, cellH int) error {
 	// a linked machine's daemon for a stream over a link, yield or not.
 	if (s.renew || s.c.host != "") && !s.renewing {
 		s.renewing = true
-		go s.renewLease()
+		renewAdd(s)
 	}
 	return s.sendLease()
 }
@@ -390,21 +391,55 @@ func (s *Stream) sendLease() error {
 	return ps.LeaseCell(l[0], l[1], l[2], l[3])
 }
 
-// renewLease sends the last lease again every leaseRenew until the stream
-// closes, on a daemon without yield.
-func (s *Stream) renewLease() {
+// The streams whose leases lapse unless sent again: one ticker sends them
+// all every leaseRenew, and stops once none is left, so a window of remote
+// panes wakes once every leaseRenew, not once per pane.
+var (
+	renewMu  sync.Mutex
+	renewSet = map[*Stream]struct{}{}
+	renewOn  bool
+)
+
+func renewAdd(s *Stream) {
+	renewMu.Lock()
+	defer renewMu.Unlock()
+	renewSet[s] = struct{}{}
+	if !renewOn {
+		renewOn = true
+		go renewLoop()
+	}
+}
+
+func renewLoop() {
 	t := time.NewTicker(leaseRenew)
 	defer t.Stop()
-	for {
-		select {
-		case <-s.closed:
+	for range t.C {
+		renewMu.Lock()
+		if len(renewSet) == 0 {
+			renewOn = false
+			renewMu.Unlock()
 			return
-		case <-t.C:
-			s.leaseMu.Lock()
-			err := s.sendLease()
-			s.leaseMu.Unlock()
-			if err != nil && s.c.host == "" {
-				return
+		}
+		list := slices.Collect(maps.Keys(renewSet))
+		renewMu.Unlock()
+		for _, s := range list {
+			drop := false
+			select {
+			case <-s.closed:
+				drop = true
+			default:
+				if s.lost.Load() {
+					continue
+				}
+				s.leaseMu.Lock()
+				err := s.sendLease()
+				s.leaseMu.Unlock()
+				drop = err != nil && s.c.host == ""
+			}
+			if drop {
+				renewMu.Lock()
+				delete(renewSet, s)
+				renewMu.Unlock()
 			}
 		}
 	}
