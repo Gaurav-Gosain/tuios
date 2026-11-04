@@ -3,6 +3,7 @@ package client
 import (
 	"encoding/binary"
 	"encoding/json"
+	"math"
 	"sync"
 
 	"github.com/Gaurav-Gosain/mygo/plugins/terminal"
@@ -76,6 +77,12 @@ func (s *Stream) FetchHistory(t *terminal.Terminal) {
 	h.busy = true
 	before, gen := h.first, h.gen
 	h.mu.Unlock()
+	if held := s.heldOldest(t); held > before {
+		// The terminal's scrollback limit let go of rows that came after
+		// the snapshot: the rows to fetch are above those it still holds,
+		// not above the snapshot's first.
+		before = held
+	}
 	raw, err := s.c.verb("pane-history", map[string]any{"session": s.session, "window": s.window, "before": before, "count": historyFetch})
 	h.mu.Lock()
 	defer h.mu.Unlock()
@@ -105,4 +112,26 @@ func (s *Stream) FetchHistory(t *terminal.Terminal) {
 	if _, err := t.PrependHistory([]byte(r.Rows)); err == nil {
 		h.first = r.First
 	}
+}
+
+// heldOldest is the id of the oldest history row t holds, from the id of
+// the pane's newest history row and how many rows t's scrollback holds; 0
+// when the daemon does not say. The pane's size is this view's lease, so t
+// holds the newest rows as the daemon numbers them.
+func (s *Stream) heldOldest(t *terminal.Terminal) int64 {
+	n := t.HistoryRows()
+	if n == 0 {
+		return 0
+	}
+	raw, err := s.c.verb("pane-history", map[string]any{"session": s.session, "window": s.window, "before": int64(math.MaxInt64), "count": 1})
+	if err != nil {
+		return 0
+	}
+	var r struct {
+		First int64 `json:"first"`
+	}
+	if json.Unmarshal(raw, &r) != nil {
+		return 0
+	}
+	return r.First - int64(n) + 1
 }
