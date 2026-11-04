@@ -1028,5 +1028,14 @@
   "promptNote": "会话备注",
   "promptNoteDetail": "简短的一行：会话的用途或下一步要做的事。留空则删除备注。",
   "promptNotePlaceholder": "写一条备注",
-  "promptSave": "保存"
+  "promptSave": "保存",
+  "keysNoAgents": "没有窗格在运行代理。",
+  "keysNothingFinished": "没有未查看的已完成回合。",
+  "keysNoMessage": "没有窗格有消息。",
+  "keysNoImage": "剪贴板中没有图片。",
+  "keysNoBuffer": "没有粘贴缓冲区。在复制模式中复制会创建一个。",
+  "keysBuffersLabel": "粘贴缓冲区",
+  "keysScreenshotSaved": "截图已保存到 {path}。",
+  "keysPickPathTitle": "输入文件的路径",
+  "keysWorkspaceQuery": "工作区"
 }

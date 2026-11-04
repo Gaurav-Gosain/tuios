@@ -98,6 +98,24 @@ func (c *Client) dispatch(method string, params any) (any, error) {
 		_, err = c.verb("rename-session", map[string]any{"session": c.st.nameOf(p.ID), "name": p.Name})
 		return true, err
 
+	case "verb":
+		p, err := decode[proto.VerbParams](params)
+		if err != nil {
+			return nil, err
+		}
+		args := map[string]any{}
+		for k, v := range p.Args {
+			args[k] = v
+		}
+		if p.Session != "" {
+			args["session"] = c.st.nameOf(p.Session)
+		}
+		raw, err := c.verb(p.Verb, args)
+		if err != nil {
+			return nil, err
+		}
+		return raw, nil
+
 	case "pane.rename":
 		p, err := decode[proto.RenameParams](params)
 		if err != nil {

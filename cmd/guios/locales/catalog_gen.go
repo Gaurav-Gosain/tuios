@@ -10423,3 +10423,93 @@ func PromptSave() string { return In(i18n.Locale()).PromptSave() }
 func (msgs Messages) PromptSave() string {
 	return Catalog.Format(msgs.locale, "promptSave", nil)
 }
+
+// KeysNoAgents says "No pane runs an agent."
+// in the language the app shows.
+func KeysNoAgents() string { return In(i18n.Locale()).KeysNoAgents() }
+
+// KeysNoAgents says "No pane runs an agent."
+// in the language of msgs.
+func (msgs Messages) KeysNoAgents() string {
+	return Catalog.Format(msgs.locale, "keysNoAgents", nil)
+}
+
+// KeysNothingFinished says "No finished turn waits for you."
+// in the language the app shows.
+func KeysNothingFinished() string { return In(i18n.Locale()).KeysNothingFinished() }
+
+// KeysNothingFinished says "No finished turn waits for you."
+// in the language of msgs.
+func (msgs Messages) KeysNothingFinished() string {
+	return Catalog.Format(msgs.locale, "keysNothingFinished", nil)
+}
+
+// KeysNoMessage says "No pane has a message."
+// in the language the app shows.
+func KeysNoMessage() string { return In(i18n.Locale()).KeysNoMessage() }
+
+// KeysNoMessage says "No pane has a message."
+// in the language of msgs.
+func (msgs Messages) KeysNoMessage() string {
+	return Catalog.Format(msgs.locale, "keysNoMessage", nil)
+}
+
+// KeysNoImage says "The clipboard holds no image."
+// in the language the app shows.
+func KeysNoImage() string { return In(i18n.Locale()).KeysNoImage() }
+
+// KeysNoImage says "The clipboard holds no image."
+// in the language of msgs.
+func (msgs Messages) KeysNoImage() string {
+	return Catalog.Format(msgs.locale, "keysNoImage", nil)
+}
+
+// KeysNoBuffer says "There is no paste buffer. A copy in copy mode makes one."
+// in the language the app shows.
+func KeysNoBuffer() string { return In(i18n.Locale()).KeysNoBuffer() }
+
+// KeysNoBuffer says "There is no paste buffer. A copy in copy mode makes one."
+// in the language of msgs.
+func (msgs Messages) KeysNoBuffer() string {
+	return Catalog.Format(msgs.locale, "keysNoBuffer", nil)
+}
+
+// KeysBuffersLabel says "Paste a buffer"
+// in the language the app shows.
+func KeysBuffersLabel() string { return In(i18n.Locale()).KeysBuffersLabel() }
+
+// KeysBuffersLabel says "Paste a buffer"
+// in the language of msgs.
+func (msgs Messages) KeysBuffersLabel() string {
+	return Catalog.Format(msgs.locale, "keysBuffersLabel", nil)
+}
+
+// KeysScreenshotSaved says "Saved the screenshot to {path}."
+// in the language the app shows.
+func KeysScreenshotSaved(path string) string { return In(i18n.Locale()).KeysScreenshotSaved(path) }
+
+// KeysScreenshotSaved says "Saved the screenshot to {path}."
+// in the language of msgs.
+func (msgs Messages) KeysScreenshotSaved(path string) string {
+	return Catalog.Format(msgs.locale, "keysScreenshotSaved", map[string]any{"path": path})
+}
+
+// KeysPickPathTitle says "Type the path of a file"
+// in the language the app shows.
+func KeysPickPathTitle() string { return In(i18n.Locale()).KeysPickPathTitle() }
+
+// KeysPickPathTitle says "Type the path of a file"
+// in the language of msgs.
+func (msgs Messages) KeysPickPathTitle() string {
+	return Catalog.Format(msgs.locale, "keysPickPathTitle", nil)
+}
+
+// KeysWorkspaceQuery says "workspace"
+// in the language the app shows.
+func KeysWorkspaceQuery() string { return In(i18n.Locale()).KeysWorkspaceQuery() }
+
+// KeysWorkspaceQuery says "workspace"
+// in the language of msgs.
+func (msgs Messages) KeysWorkspaceQuery() string {
+	return Catalog.Format(msgs.locale, "keysWorkspaceQuery", nil)
+}

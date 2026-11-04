@@ -1028,5 +1028,14 @@
   "promptNote": "セッションのメモ",
   "promptNoteDetail": "短い一行で、セッションの目的や次にすることを書きます。空にするとメモを削除します。",
   "promptNotePlaceholder": "メモを書く",
-  "promptSave": "保存"
+  "promptSave": "保存",
+  "keysNoAgents": "エージェントが動いているペインはありません。",
+  "keysNothingFinished": "未確認の完了したターンはありません。",
+  "keysNoMessage": "メッセージのあるペインはありません。",
+  "keysNoImage": "クリップボードに画像がありません。",
+  "keysNoBuffer": "ペーストバッファがありません。コピーモードでコピーすると作られます。",
+  "keysBuffersLabel": "バッファを貼り付け",
+  "keysScreenshotSaved": "スクリーンショットを {path} に保存しました。",
+  "keysPickPathTitle": "ファイルのパスを入力",
+  "keysWorkspaceQuery": "ワークスペース"
 }

@@ -388,7 +388,10 @@ var nativeActions = map[string]bool{
 	"prefix_split_horizontal": true, "prefix_split_vertical": true, "split_horizontal": true, "split_vertical": true,
 	"prev_session": true, "next_session": true, "prefix_session_switcher": true, "goto_picker": true, "choose_tree": true,
 	"prefix_close_session": true, "prefix_command_palette": true, "prefix_settings": true, "prefix_keybinds": true,
-	"prefix_file_search": true, "prefix_selection": true, "prefix_help": true, "prefix_rename_window": true, "window_prefix_rename": true, "workspace_prefix_rename": true, "set_note": true, "prefix_review": true, "prefix_inbox": true,
+	"prefix_file_search": true, "prefix_selection": true, "prefix_help": true, "prefix_toggle_other_rail": true, "toggle_scratch": true, "prefix_agents_settings": true,
+	"prefix_next_finished": true, "next_agent": true, "prev_agent": true, "prefix_jump_notif": true, "prefix_last_message": true,
+	"prefix_workspace_switcher": true, "paste_image": true, "paste_buffer": true, "choose_buffer": true,
+	"prefix_screenshot": true, "pick_path": true, "edit_scrollback": true, "prefix_rename_window": true, "window_prefix_rename": true, "workspace_prefix_rename": true, "set_note": true, "prefix_review": true, "prefix_inbox": true,
 	"prefix_next_attention": true, "prefix_mail": true,
 	"workspace_prefix_switch_1": true, "workspace_prefix_move_1": true, "new_workspace": true,
 	"prev_workspace": true, "next_workspace": true,
@@ -498,6 +501,46 @@ func (a *App) runKeyAction(action string) {
 		return
 	case "set_note":
 		a.setNote()
+		return
+	case "prefix_toggle_other_rail":
+		a.toggleRight()
+	case "toggle_scratch":
+		a.toggleQuick()
+		return
+	case "prefix_agents_settings":
+		a.openSettings("agents")
+		return
+	case "prefix_next_finished":
+		a.jumpNewestFinished()
+		return
+	case "next_agent", "prev_agent":
+		d := 1
+		if action == "prev_agent" {
+			d = -1
+		}
+		a.stepAgent(d)
+		return
+	case "prefix_jump_notif", "prefix_last_message":
+		a.jumpNewestMessage(action == "prefix_last_message")
+		return
+	case "prefix_workspace_switcher":
+		a.openPalette()
+		a.pal.query = locales.KeysWorkspaceQuery()
+		return
+	case "paste_image":
+		a.pasteClipboardImage()
+	case "paste_buffer":
+		a.pasteBuffer("")
+	case "choose_buffer":
+		a.chooseBuffer()
+		return
+	case "prefix_screenshot":
+		a.screenshot()
+	case "pick_path":
+		a.pickPath()
+		return
+	case "edit_scrollback":
+		a.editScrollback()
 		return
 	case "prefix_help":
 		if a.help.open {

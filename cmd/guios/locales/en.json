@@ -1873,5 +1873,14 @@
   "promptNote": "Note for the session",
   "promptNoteDetail": "One short line: what the session is for, or what comes next. Leave it empty to remove the note.",
   "promptNotePlaceholder": "Write a note",
-  "promptSave": "Save"
+  "promptSave": "Save",
+  "keysNoAgents": "No pane runs an agent.",
+  "keysNothingFinished": "No finished turn waits for you.",
+  "keysNoMessage": "No pane has a message.",
+  "keysNoImage": "The clipboard holds no image.",
+  "keysNoBuffer": "There is no paste buffer. A copy in copy mode makes one.",
+  "keysBuffersLabel": "Paste a buffer",
+  "keysScreenshotSaved": "Saved the screenshot to {path}.",
+  "keysPickPathTitle": "Type the path of a file",
+  "keysWorkspaceQuery": "workspace"
 }

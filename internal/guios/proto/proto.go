@@ -438,6 +438,15 @@ type WorkspaceParams struct {
 	Workspace int    `json:"workspace"`
 }
 
+// VerbParams calls one of the tuios daemon's verbs with Args, on the
+// session Session names (an id) when it is set. The result comes back as
+// the verb's JSON.
+type VerbParams struct {
+	Verb    string         `json:"verb"`
+	Session string         `json:"session,omitempty"`
+	Args    map[string]any `json:"args,omitempty"`
+}
+
 // NameWorkspaceParams names one of a session's workspaces; an empty Name
 // clears it.
 type NameWorkspaceParams struct {

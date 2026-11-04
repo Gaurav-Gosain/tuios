@@ -32,6 +32,10 @@ type paletteState struct {
 	convs []hostConversation
 	only  bool
 	gen   int
+	// custom, when set, are the only items, under customLabel: a list to
+	// choose from, as the paste buffers.
+	custom      []paletteItem
+	customLabel string
 }
 
 // hostConversation is a conversation a host's kerod remembers.
@@ -167,6 +171,9 @@ func (a *App) resumeConversation(h *host, cv proto.Conversation) {
 }
 
 func (a *App) paletteItems() []paletteItem {
+	if a.pal.custom != nil {
+		return a.pal.custom
+	}
 	if a.pal.only {
 		return a.conversationItems()
 	}
@@ -498,6 +505,9 @@ func (a *App) paletteView(c *ui.Context, pal *palette) {
 
 	var chosen func()
 	label, placeholder, none := locales.PaletteLabel(), locales.PalettePlaceholder(), locales.PaletteNoMatches()
+	if a.pal.custom != nil {
+		label, placeholder = a.pal.customLabel, a.pal.customLabel
+	}
 	if a.pal.only {
 		label, placeholder = locales.PaletteConversationsLabel(), locales.PaletteConversationsPlaceholder()
 		if a.pal.query == "" {
@@ -549,7 +559,7 @@ func (a *App) paletteView(c *ui.Context, pal *palette) {
 				kind := it.kind()
 				// Headers only over the list as it is, with nothing typed:
 				// a ranked list would split into runs under them.
-				if kind != lastKind && a.pal.query == "" && !a.pal.only {
+				if kind != lastKind && a.pal.query == "" && !a.pal.only && a.pal.custom == nil {
 					ui.Text(c, paletteGroups[kind]()).FontSize(fsSmall).FontWeight(wMedium).TextColor(pal.textFaint).
 						SingleLine().Padding(10, 10, 4, 10)
 				}

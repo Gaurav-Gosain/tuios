@@ -265,6 +265,7 @@ func (a *App) copyKey(k string) {
 		}
 		text := cm.selected()
 		a.copyText = text
+		a.addBuffer(text)
 		cm.visual = visualNone
 		cm.message = locales.CopyModeYanked(strconv.Itoa(utf8.RuneCountInString(text)))
 	}
