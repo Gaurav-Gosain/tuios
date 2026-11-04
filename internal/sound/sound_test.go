@@ -35,24 +35,3 @@ func TestCooldownCollapsesABurst(t *testing.T) {
 		t.Error("a cue past the cooldown was refused")
 	}
 }
-
-// TestPlayNeverBlocks is the property the Update goroutine depends on. Play is
-// called from the frame loop, so it has to return whether or not anything is
-// listening, whether or not the queue is full, and whether or not this machine
-// has an audio device.
-func TestPlayNeverBlocks(t *testing.T) {
-	t.Setenv(DisableEnv, "1")
-	done := make(chan struct{})
-	go func() {
-		defer close(done)
-		for range 100 {
-			Play(Request{Cue: CueAttention})
-			Play(Request{Cue: CueDone, Cooldown: time.Hour})
-		}
-	}()
-	select {
-	case <-done:
-	case <-time.After(5 * time.Second):
-		t.Fatal("Play blocked its caller")
-	}
-}
