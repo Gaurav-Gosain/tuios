@@ -73,8 +73,9 @@ func TestRailGitJJ(t *testing.T) {
 // moves onto a commit that conflicts: the row shows ✕1, because a conflict
 // outranks a divergence.
 //
-// Negative control: with problemFigure's call cut from gitRows, the row
-// shows neither figure.
+// Negative controls: with problemFigure's call cut from gitRows, the row
+// shows neither figure. With jj's "??" kept in the name, the branch row
+// reads feat??.
 func TestRailGitJJProblems(t *testing.T) {
 	repo := testutil.JJRepo(t, true)
 	if err := os.WriteFile(filepath.Join(repo, "one"), []byte("one\n"), 0o644); err != nil {
@@ -99,8 +100,18 @@ func TestRailGitJJProblems(t *testing.T) {
 		}
 		return ""
 	}
-	if err := term.WaitFor(func(s tuitest.Screen) bool { return strings.Contains(repoRow(s), "◇") }, uiTimeout); err != nil {
-		t.Fatalf("ASSERTION: the repository row never showed the divergent commit (◇): %v\n%s", err, term.Snapshot())
+	// feat is on both sides of the divergence, so jj calls it conflicted. The
+	// branch row still names it feat, with no "??" in the name.
+	branchRow := func(s tuitest.Screen) string {
+		if header := railHeaderRow(s, "git"); header >= 0 {
+			return railRowText(s, header+2)
+		}
+		return ""
+	}
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		return strings.Contains(repoRow(s), "◇") && slices.Contains(strings.Fields(branchRow(s)), "feat")
+	}, uiTimeout); err != nil {
+		t.Fatalf("ASSERTION: the git section never showed the divergent commit (◇) with the branch row named feat: %v\n%s", err, term.Snapshot())
 	}
 	saveArtifact(t, term, artifactDir(t), "rail-git-jj-divergent")
 
