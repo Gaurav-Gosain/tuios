@@ -1228,7 +1228,7 @@ func (a *App) keyboardPage(c *ui.Context, pal *palette) {
 			})
 		})
 	}
-	menus := []string{"Kero", "Session", "Edit", "Pane", "Workspace", "View"}
+	menus := []string{"Kero", "Session", "Edit", "Pane", "Layout", "Workspace", "View"}
 	for _, menu := range menus {
 		var acts []actions.Action
 		for _, act := range actions.All {
@@ -1244,7 +1244,7 @@ func (a *App) keyboardPage(c *ui.Context, pal *palette) {
 		if len(acts) == 0 {
 			continue
 		}
-		title := map[string]func() string{"Kero": locales.MenuApp, "Session": locales.MenuSession, "Edit": locales.MenuEdit, "Pane": locales.MenuPane, "Workspace": locales.MenuWorkspace, "View": locales.MenuView}[menu]()
+		title := map[string]func() string{"Kero": locales.MenuApp, "Session": locales.MenuSession, "Edit": locales.MenuEdit, "Pane": locales.MenuPane, "Layout": locales.MenuLayout, "Workspace": locales.MenuWorkspace, "View": locales.MenuView}[menu]()
 		settingsGroup(c, pal, title, "", func() {
 			for _, act := range acts {
 				a.shortcutRow(c, pal, act)
