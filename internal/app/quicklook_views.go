@@ -144,6 +144,9 @@ func quickLookHexLines(b []byte) []string {
 	return lines
 }
 
+// quickLookArchiveDepth is the most folder levels of a path drawn as rows; the rest of a deeper path is one row.
+const quickLookArchiveDepth = 64
+
 // quickLookArchiveRows turns a listing into a tree. An archive need not name its
 // folders, so a folder is added the first time something is in it.
 func quickLookArchiveRows(entries []session.PreviewArchiveEntry, ascii bool) (rows []quickLookArchiveRow, unpacked int64) {
@@ -151,7 +154,7 @@ func quickLookArchiveRows(entries []session.PreviewArchiveEntry, ascii bool) (ro
 	slices.SortStableFunc(entries, func(a, b session.PreviewArchiveEntry) int { return strings.Compare(a.Name, b.Name) })
 	for _, e := range entries {
 		parts := strings.Split(strings.Trim(e.Name, "/"), "/")
-		for i := range len(parts) - 1 {
+		for i := range min(len(parts)-1, quickLookArchiveDepth) {
 			dir := strings.Join(parts[:i+1], "/")
 			if !seen[dir] {
 				seen[dir] = true
@@ -159,7 +162,8 @@ func quickLookArchiveRows(entries []session.PreviewArchiveEntry, ascii bool) (ro
 			}
 		}
 		full := strings.Join(parts, "/")
-		name := ckCodeText(parts[len(parts)-1], ascii)
+		depth := min(len(parts)-1, quickLookArchiveDepth)
+		name := ckCodeText(strings.Join(parts[depth:], "/"), ascii)
 		if e.Dir {
 			if seen[full] {
 				continue
@@ -168,7 +172,7 @@ func quickLookArchiveRows(entries []session.PreviewArchiveEntry, ascii bool) (ro
 			name += "/"
 		}
 		unpacked += e.Size
-		rows = append(rows, quickLookArchiveRow{depth: len(parts) - 1, name: name, size: e.Size, dir: e.Dir})
+		rows = append(rows, quickLookArchiveRow{depth: depth, name: name, size: e.Size, dir: e.Dir})
 	}
 	return rows, unpacked
 }

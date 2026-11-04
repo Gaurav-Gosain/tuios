@@ -6373,6 +6373,44 @@ is `~/.cache/agent-tmp/gui-port/proof/nc-preview-review.txt`.
 | The decoder's coefficients not counted | `decodeCost`: the progressive term cut | `TestFilePreviewHoldsItsDecodeCap` (353 MB for the progressive JPEG, 421 MB after the grey one) | **caught** |
 | The CatmullRom scale | `fit`: `draw.CatmullRom` in place of `ApproxBiLinear` | `TestFilePreviewHoldsItsDecodeCap` (542 MB scaling the grey JPEG) | **caught** |
 | No ffmpeg whitelists | `previewVideo`, `videoDuration`: the whitelist flags cut | `TestFilePreviewOpensOnlyFilmContainers` (a frame of 6460 bytes, 2000 ms) | **caught** |
+
+### File previews hold to their bounds on crafted files
+
+`TestFilePreviewHoldsCraftedFilesToItsBounds` previews crafted files on the
+daemon socket, each subtest in a daemon of its own. `zip`: four previews at
+once of a zip64 that names a million files are listed capped at 2000, first
+and 2000th names checked, the daemon under 256 MB; a small zip lists its three
+names in its own order, and so does the same zip behind a 100-byte prefix,
+with and without the prefix counted in its offsets; a zip of 2000 files is not
+capped and one of 2001 is. `gif`: a GIF of two 1 x 1 frames on a 10000 x 10000
+screen is not stepped; a 40 x 40 GIF of 3 frames steps to frame 2 of 3.
+`json`: JSON nested 10000 deep comes back not laid out; 900 KB of ordinary
+JSON comes back laid out. `names`: in a tar.gz and a zip, a name over 4096
+bytes is listed as its start, cut at a character, and "...", 4096 bytes at
+most; a name of 4096 bytes and `src/a/b/c.txt` are listed whole.
+`TestQuickLookArchiveRowsStayBounded` (`internal/app`) builds the tree of 200
+paths 1990 folders deep within 32 MB of allocation, shows a path 70 folders
+deep as 64 folders and one row with the rest, and `a/b/c.txt` as it was.
+
+Run on 2026-11-04 on Linux. Each control was built into its own binary and fails
+the test below; the clean build passes all of them.
+
+| Control | How | Tests that fail | Verdict |
+| --- | --- | --- | --- |
+| The GIF check counts only the frames | `previewGIFFrame`: `int64(frames+previewGIFCanvases)` back to `int64(frames)` | `TestFilePreviewHoldsCraftedFilesToItsBounds/gif` (`file_preview_test.go:876`) ("a GIF of two 1 x 1 frames on a 10000 x 10000 screen was stepped to frame 2 of 2") | **caught** |
+| No JSON layout bound | `previewFormatJSON`: the layout size check cut | `TestFilePreviewHoldsCraftedFilesToItsBounds/json` (`file_preview_test.go:900`) ("JSON nested 10000 deep was laid out, 200040001 bytes of text") | **caught** |
+| The whole zip directory read | `previewArchive`: `previewZip` back to a `zip.NewReader` listing, name cut kept | `TestFilePreviewHoldsCraftedFilesToItsBounds/zip` (`file_preview_test.go:730`) ("four previews of a zip of a million files took the daemon to 1035 MB") | **caught** |
+| No name cut | `previewTar`, `previewZip`: both `previewArchiveClip` calls cut | `TestFilePreviewHoldsCraftedFilesToItsBounds/names` (`file_preview_test.go:993` tar.gz, `:1009` zip) ("names of 4097, 6002 and 921609 bytes listed whole, and the zip's 5000-byte name") | **caught** |
+| No depth cap on the tree | `quickLookArchiveRows`: `quickLookArchiveDepth = 1<<30` | `TestQuickLookArchiveRowsStayBounded` (`quicklook_archive_budget_test.go:38`, `:52`) ("the tree of 200 paths 1990 folders deep allocated 2064 MB, want under 32 MB") | **caught** |
+| A depth cap one too high | `quickLookArchiveRows`: `quickLookArchiveDepth = 65` | `TestQuickLookArchiveRowsStayBounded` (`quicklook_archive_budget_test.go:52`) ("a path 70 folders deep gives the rows") | **caught** |
+| Zip names in reverse order | `previewZip`: the entries reversed before return | `TestFilePreviewHoldsCraftedFilesToItsBounds/zip` (`file_preview_test.go:726`) ("lists "e0001999.txt" first and "e0000000.txt" 2000th") | **caught** |
+| The tail row without the file name | `quickLookArchiveRows`: the tail row drops the name of a path deeper than the cap | `TestQuickLookArchiveRowsStayBounded` (`quicklook_archive_budget_test.go:52`) ("a path 70 folders deep gives the rows") | **caught** |
+| A folder listed as a file | `previewZip`: `Dir: h.FileInfo().IsDir()` to `Dir: false` | `TestFilePreviewHoldsCraftedFilesToItsBounds/zip` (`file_preview_test.go:757`) ("small.zip lists app/ as folder false, 0 bytes, want folder true, 0 bytes") | **caught** |
+| A capped zip not marked capped | `previewZip`: `capped = true` to `capped = uint16(records) > previewArchiveItems` | `TestFilePreviewHoldsCraftedFilesToItsBounds/zip` (`file_preview_test.go:817`) ("a zip of 65537 files whose end record says 1 is archive with 2000 entries, capped false") | **caught** |
+| A name cut inside a character | `previewArchiveClip`: the rune-boundary loop cut | `TestFilePreviewHoldsCraftedFilesToItsBounds/names` (`file_preview_test.go:993`) ("in the tar.gz a name of 6002 bytes is listed as 4100 bytes") | **caught** |
+| Offsets taken from the file start | `previewZipEnd`: the base offset of a zip behind a prefix ignored | `TestFilePreviewHoldsCraftedFilesToItsBounds/zip` (`file_preview_test.go:751`) ("prefixed.zip is binary [], capped false, want archive") | **caught** |
+| A zip with a wrong entry count read | `previewZip`: the `uint16(len(entries)) != uint16(records)` check cut | `TestFilePreviewHoldsCraftedFilesToItsBounds/zip` (`file_preview_test.go:776`) ("a zip of 3 headers whose end record says 5 is archive with 3 entries, capped false, want binary") | **caught** |
+
 ## The bridge's output path (replaces #598)
 
 An output frame is now queued as two entries, its head and the daemon's own
