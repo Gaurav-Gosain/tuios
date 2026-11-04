@@ -719,7 +719,7 @@ func (m *OS) renderTML(window *terminal.Window, dim int) string {
 		sh = max(ch-strings.Count(confirmText, "\n")-1, 1)
 	}
 	m.tmlMotion(v)
-	buf := v.surface.Render(cw, sh)
+	buf := m.renderSurface(v.surface, cw, sh)
 	m.tmlArmFrame(v)
 	if damage := v.surface.Damage(); len(damage) > 0 || v.content == "" || v.w != cw || v.h != sh {
 		v.content, v.w, v.h = buf.Render(), cw, sh

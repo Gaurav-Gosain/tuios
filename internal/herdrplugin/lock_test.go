@@ -1,6 +1,7 @@
 package herdrplugin
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -149,5 +150,54 @@ func TestInsideRefusesALinkOut(t *testing.T) {
 	_ = os.WriteFile(plain, nil, 0o600)
 	if Inside(link, checkout) || Inside(target, checkout) || !Inside(plain, checkout) {
 		t.Fatalf("Inside: link %v, target %v, plain %v; want false, false, true", Inside(link, checkout), Inside(target, checkout), Inside(plain, checkout))
+	}
+}
+
+// A security boundary: a [[theme]] or [[saver]] file comes from a checkout
+// the person did not write, and git checks out a committed link as a link.
+// Ways it could fail: the manifest names a link out of the folder (to a
+// secret, to /dev/zero, to a FIFO), a file under a link to a folder out, a
+// link that does not resolve, or a refusal of a plain file, of a link that
+// stays inside, or of a file not there yet.
+func TestManifestFilesStayInside(t *testing.T) {
+	outside := t.TempDir()
+	if err := os.WriteFile(filepath.Join(outside, "secret.json"), []byte("{}"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	for _, c := range []struct {
+		name, file, link, target string
+		ok                       bool
+	}{
+		{"link to a file out", "theme.json", "theme.json", filepath.Join(outside, "secret.json"), false},
+		{"link to a device", "theme.json", "theme.json", os.DevNull, false},
+		{"file under a link to a folder out", "out/secret.json", "out", outside, false},
+		{"link that dangles", "theme.json", "theme.json", filepath.Join(outside, "gone.json"), false},
+		{"link inside the folder", "theme.json", "theme.json", filepath.Join("in", "plain.json"), true},
+		{"plain file", "in/plain.json", "", "", true},
+		{"file not there yet", "later.json", "", "", true},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			dir := t.TempDir()
+			if err := os.MkdirAll(filepath.Join(dir, "in"), 0o700); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(filepath.Join(dir, "in", "plain.json"), []byte("{}"), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			if c.link != "" {
+				if err := os.Symlink(c.target, filepath.Join(dir, c.link)); err != nil {
+					t.Skip("no symlinks here:", err)
+				}
+			}
+			for _, part := range []string{"[[theme]]\nfile = %q\n", "[[saver]]\nid = \"s\"\nfile = %q\n"} {
+				manifest := "api = 1\nid = \"example.files\"\nname = \"Files\"\nversion = \"0.1.0\"\n" + fmt.Sprintf(part, c.file)
+				if err := os.WriteFile(filepath.Join(dir, NativeManifestName), []byte(manifest), 0o600); err != nil {
+					t.Fatal(err)
+				}
+				if _, perr := Load(dir); (perr == nil) != c.ok {
+					t.Fatalf("%sLoad: %v, want ok %v", strings.SplitN(part, "\n", 2)[0], perr, c.ok)
+				}
+			}
+		})
 	}
 }

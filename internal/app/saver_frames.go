@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"strconv"
 	"strings"
@@ -18,9 +19,10 @@ import (
 // A frames file: a screen saver a plugin brings as data, which tuios plays
 // with no process. docs/PLUGINS.md has the format, so a tool can write it.
 //
-// The file is read and every frame drawn once, at the screen's size, when
-// the saver starts. Playing it costs one timer per frame and no work but
-// handing over the next string.
+// The file is read and every frame drawn once when the saver starts, as its
+// own box with no margin. Playing it costs one timer per frame and placing
+// one box on the screen. The box keeps no blank rows or trailing blanks, so
+// what the saver holds grows with the file, not with the screen.
 
 // PluginSavers, when set, maps a saver's name, plugin/ID/SAVER, to its frames
 // file, for the enabled plugins. The binary sets it, since this package does
@@ -34,6 +36,10 @@ const (
 	saverMaxRows   = 200
 	saverMaxFrames = 2000
 	saverMinDelay  = 20 * time.Millisecond
+	// saverMaxDrawn bounds the drawn frames together. A file of single-cell
+	// colour runs draws to about twenty bytes a cell, so this is what keeps
+	// a file under saverMaxBytes from drawing to a hundred megabytes.
+	saverMaxDrawn = 16 << 20
 )
 
 // saverColorNames are the ANSI colours a colors block can name, in index
@@ -50,10 +56,11 @@ type saverFrame struct {
 	delay        time.Duration
 }
 
-// saverFile is a parsed frames file.
+// saverFile is a parsed frames file. Every frame has rows lines of text,
+// and of colours when it has any: size comes once, before the first frame.
 type saverFile struct {
 	cols, rows int
-	palette    map[byte]lipgloss.Style
+	palette    map[byte]string // the SGR that starts a run of each letter
 	frames     []saverFrame
 }
 
@@ -63,7 +70,7 @@ func parseSaverFile(data []byte) (*saverFile, error) {
 	if len(data) > saverMaxBytes {
 		return nil, fmt.Errorf("the file is larger than %d bytes", saverMaxBytes)
 	}
-	f := &saverFile{palette: map[byte]lipgloss.Style{}}
+	f := &saverFile{palette: map[byte]string{}}
 	delay := 100 * time.Millisecond
 	sc := bufio.NewScanner(bytes.NewReader(data))
 	sc.Buffer(make([]byte, 64<<10), saverMaxBytes)
@@ -110,6 +117,11 @@ func parseSaverFile(data []byte) (*saverFile, error) {
 			r, err2 := strconv.Atoi(fields[2])
 			if err1 != nil || err2 != nil || c < 1 || r < 1 || c > saverMaxCols || r > saverMaxRows {
 				return nil, fail("size must be 1 to %d columns and 1 to %d rows", saverMaxCols, saverMaxRows)
+			}
+			// render reads every frame at the one size, so a second size
+			// would leave the frames before it short.
+			if len(f.frames) > 0 {
+				return nil, fail("size comes once, before the first frame")
 			}
 			f.cols, f.rows = c, r
 		case "fps":
@@ -177,88 +189,113 @@ func get(f []string, i int) string {
 	return ""
 }
 
-// saverStyle reads a colour: #rrggbb or an ANSI colour by name.
-func saverStyle(spec string) (lipgloss.Style, error) {
+// saverStyle reads a colour, #rrggbb or an ANSI colour by name, into the
+// SGR that starts a run in it.
+func saverStyle(spec string) (string, error) {
 	for i, name := range saverColorNames {
 		if spec == name {
-			return lipgloss.NewStyle().Foreground(lipgloss.ANSIColor(uint8(i))), nil //nolint:gosec // i < 16
+			return ansi.Style{}.ForegroundColor(lipgloss.ANSIColor(uint8(i))).String(), nil //nolint:gosec // i < 16
 		}
 	}
 	if len(spec) == 7 && spec[0] == '#' {
 		if _, err := strconv.ParseUint(spec[1:], 16, 32); err == nil {
-			return lipgloss.NewStyle().Foreground(lipgloss.Color(spec)), nil
+			return ansi.Style{}.ForegroundColor(lipgloss.Color(spec)).String(), nil
 		}
 	}
-	return lipgloss.Style{}, fmt.Errorf("unknown colour %q. Use #rrggbb or an ANSI name such as bright_blue", spec)
+	return "", fmt.Errorf("unknown colour %q. Use #rrggbb or an ANSI name such as bright_blue", spec)
 }
 
-// render draws every frame at the screen's size, centred.
-func (f *saverFile) render(width, height int) []string {
+// render draws every frame as its box, cut to a screen of width by height.
+// A box line keeps no trailing blank and the box no margin: framesSaver.show
+// places it. It fails when the frames draw to more than saverMaxDrawn.
+func (f *saverFile) render(width, height int) ([]string, error) {
 	out := make([]string, len(f.frames))
-	top := max((height-f.rows)/2, 0)
-	left := max((width-f.cols)/2, 0)
-	pad := strings.Repeat(" ", left)
-	blank := strings.Repeat(" ", width)
+	rows, cols := min(f.rows, height), min(f.cols, width)
+	total := 0
 	for i, fr := range f.frames {
 		var b strings.Builder
-		for y := range height {
-			if y > 0 {
+		for r := range rows {
+			if r > 0 {
 				b.WriteByte('\n')
-			}
-			r := y - top
-			if r < 0 || r >= f.rows {
-				b.WriteString(blank)
-				continue
 			}
 			line := []rune(fr.text[r])
 			colors := ""
 			if fr.colors != nil {
 				colors = fr.colors[r]
 			}
-			b.WriteString(pad)
-			cols := min(f.cols, width-left)
-			for x := 0; x < cols; {
-				// One style per run of the same colour letter.
-				letter := byte(' ')
+			// The cells past the last one that shows anything are left out.
+			end := 0
+			for x := range cols {
+				if (x < len(line) && line[x] > ' ') || (x < len(colors) && f.palette[colors[x]] != "") {
+					end = x + 1
+				}
+			}
+			var on string
+			for x := range end {
+				sgr := ""
 				if x < len(colors) {
-					letter = colors[x]
+					sgr = f.palette[colors[x]]
 				}
-				end := x + 1
-				for end < cols && end < len(colors) && colors[end] == letter {
-					end++
-				}
-				if letter == ' ' || x >= len(colors) {
-					end = max(end, x+1)
-				}
-				var run strings.Builder
-				for c := x; c < end; c++ {
-					ch := ' '
-					if c < len(line) && line[c] >= ' ' {
-						ch = line[c]
+				// One SGR per run of the same colour.
+				if sgr != on {
+					if on != "" {
+						b.WriteString(ansi.ResetStyle)
 					}
-					run.WriteRune(ch)
+					b.WriteString(sgr)
+					on = sgr
 				}
-				if st, ok := f.palette[letter]; ok {
-					b.WriteString(st.Render(run.String()))
-				} else {
-					b.WriteString(run.String())
+				ch := ' '
+				if x < len(line) && line[x] >= ' ' {
+					ch = line[x]
 				}
-				x = end
+				b.WriteRune(ch)
 			}
-			if rest := width - left - cols; rest > 0 {
-				b.WriteString(strings.Repeat(" ", rest))
+			if on != "" {
+				b.WriteString(ansi.ResetStyle)
 			}
+		}
+		if total += b.Len(); total > saverMaxDrawn {
+			return nil, fmt.Errorf("the frames draw to more than %d bytes. Use fewer frames or fewer colour changes", saverMaxDrawn)
 		}
 		out[i] = b.String()
 	}
-	return out
+	return out, nil
 }
 
 // framesSaver is a frames file playing.
 type framesSaver struct {
-	frames []string
-	delays []time.Duration
-	at     int
+	frames        []string // each frame's box, from render
+	delays        []time.Duration
+	at            int
+	width, height int // the screen
+	cols, rows    int // the box, cut to the screen
+}
+
+// show is the screen with frame i centred on it. It runs once per frame, so
+// only one screen of text is held at a time.
+func (p *framesSaver) show(i int) string {
+	top := max((p.height-p.rows)/2, 0)
+	pad := strings.Repeat(" ", max((p.width-p.cols)/2, 0))
+	blank := strings.Repeat(" ", p.width)
+	var b strings.Builder
+	b.Grow(p.width * p.height)
+	lines := strings.Split(p.frames[i], "\n")
+	for y := range p.height {
+		if y > 0 {
+			b.WriteByte('\n')
+		}
+		r := y - top
+		if r < 0 || r >= len(lines) {
+			b.WriteString(blank)
+			continue
+		}
+		b.WriteString(pad)
+		b.WriteString(lines[r])
+		if rest := p.width - len(pad) - ansi.StringWidth(lines[r]); rest > 0 {
+			b.WriteString(blank[:rest])
+		}
+	}
+	return b.String()
 }
 
 // startFramesSaver plays the frames file name names. It reports whether it
@@ -271,7 +308,7 @@ func (m *OS) startFramesSaver(name string, width, height int) bool {
 	if !ok {
 		return false
 	}
-	data, err := os.ReadFile(path) //nolint:gosec // a saver file of a plugin the person installed
+	data, err := ReadSaverFile(path)
 	if err != nil {
 		m.LogInfo("the screen saver %s could not be read: %v", name, err)
 		return false
@@ -281,7 +318,12 @@ func (m *OS) startFramesSaver(name string, width, height int) bool {
 		m.LogInfo("the screen saver %s cannot play: %v", name, err)
 		return false
 	}
-	p := &framesSaver{frames: f.render(width, height)}
+	frames, err := f.render(width, height)
+	if err != nil {
+		m.LogInfo("the screen saver %s cannot play: %v", name, err)
+		return false
+	}
+	p := &framesSaver{frames: frames, width: width, height: height, cols: min(f.cols, width), rows: min(f.rows, height)}
 	for _, fr := range f.frames {
 		p.delays = append(p.delays, fr.delay)
 	}
@@ -289,7 +331,7 @@ func (m *OS) startFramesSaver(name string, width, height int) bool {
 	m.screensaver.name = name
 	m.screensaver.width, m.screensaver.height = width, height
 	m.screensaver.active = true
-	m.screensaver.frame = p.frames[0]
+	m.screensaver.frame = p.show(0)
 	m.renderSkipped = false
 	return true
 }
@@ -306,6 +348,26 @@ func (m *OS) nextSaverFrameCmd() tea.Cmd {
 // CheckSaverFile says what is wrong with a frames file, for tuios plugins
 // check, or nil.
 func CheckSaverFile(data []byte) error {
-	_, err := parseSaverFile(data)
+	f, err := parseSaverFile(data)
+	if err == nil {
+		_, err = f.render(f.cols, f.rows)
+	}
 	return err
+}
+
+// ReadSaverFile reads a frames file, at most one byte past saverMaxBytes,
+// so parseSaverFile refuses a larger file without it all being read.
+// A FIFO or a device is refused before the open, which would block on it.
+func ReadSaverFile(path string) ([]byte, error) {
+	if fi, err := os.Stat(path); err != nil {
+		return nil, err
+	} else if !fi.Mode().IsRegular() {
+		return nil, errors.New("the file is not a regular file")
+	}
+	fh, err := os.Open(path) //nolint:gosec // a saver file of a plugin the person installed, inside its folder
+	if err != nil {
+		return nil, err
+	}
+	defer fh.Close()
+	return io.ReadAll(io.LimitReader(fh, saverMaxBytes+1))
 }

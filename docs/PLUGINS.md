@@ -119,7 +119,7 @@ frame 300
 ```
 
 - The first line is `tuios-saver 1`.
-- `size COLS ROWS` comes before the first frame: at most 400 by 200.
+- `size COLS ROWS` comes once, before the first frame: at most 400 by 200.
 - `fps N` sets the time of each frame after it, from 1 to 50. The default is 10.
 - `color LETTER COLOUR` names a colour: `#rrggbb`, or an ANSI name from `black`
   to `bright_white`, which follows the theme.
@@ -127,8 +127,12 @@ frame 300
 - `colors` after a frame gives a letter per cell, in ROWS lines. A space keeps
   the default colour.
 - A line that starts with `#` outside a frame is a comment.
-- A file has at most 2,000 frames and 4 MB. tuios centres the frames on the
-  screen and loops them until a key or the mouse.
+- A file has at most 2,000 frames and 4 MB. The drawn frames can have at most
+  16 MB. Each colour change adds about 20 bytes.
+- The file must be in the plugin folder. A link to a file outside the folder
+  stops the plugin from loading.
+- tuios centres the frames on the screen and loops them until a key or the
+  mouse.
 
 ## Publish a plugin
 

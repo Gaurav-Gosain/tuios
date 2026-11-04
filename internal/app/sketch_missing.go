@@ -10,9 +10,9 @@ import (
 	"strings"
 	"time"
 
-	tea "charm.land/bubbletea/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/herdrplugin"
+	"github.com/Gaurav-Gosain/tuios/internal/tmldraw"
 	"tuios.dev/loom"
 	sketchtext "tuios.dev/sketch/text"
 )
@@ -25,16 +25,18 @@ import (
 // missingDiagramMsg is a diagram type a surface could not draw.
 type missingDiagramMsg struct{ typ string }
 
-// bindMissingDiagram routes loom's report to the program as a message, so
-// the notice is made in Update and not where the surface draws.
-func bindMissingDiagram(p *tea.Program) {
-	loom.MissingDiagram = func(typ string) {
-		go p.Send(missingDiagramMsg{typ: typ})
+// renderSurface renders s for this client. Every loom.Surface.Render in this
+// package goes through it, so a missing diagram type, and a drawing of the
+// sketch plugin that comes in, reach this client's program as messages, and
+// the work is done in Update. See tmldraw.Render for why the hooks are set
+// per render.
+func (m *OS) renderSurface(s *loom.Surface, w, h int) *loom.Buffer {
+	hooks := tmldraw.Hooks{External: drawWithSketchPlugin}
+	if p := m.frameRate.program; p != nil {
+		hooks.Missing = func(typ string) { go p.Send(missingDiagramMsg{typ: typ}) }
+		hooks.Drawn = func() { go p.Send(sketchDrawnMsg{}) }
 	}
-	// With the sketch plugin, a surface draws the diagram with the plugin's
-	// program, once per source and width (loom/mermaid.go).
-	loom.ExternalDiagram = drawWithSketchPlugin
-	loom.ExternalDrawn = func() { go p.Send(sketchDrawnMsg{}) }
+	return tmldraw.Render(s, w, h, hooks)
 }
 
 // sketchDrawnMsg is a drawing of the sketch plugin that came in.

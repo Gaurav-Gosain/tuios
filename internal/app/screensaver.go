@@ -379,7 +379,7 @@ func (m *OS) handleScreensaverFrame() tea.Cmd {
 	}
 	if p := m.screensaver.player; p != nil {
 		p.at = (p.at + 1) % len(p.frames)
-		m.screensaver.frame = p.frames[p.at]
+		m.screensaver.frame = p.show(p.at)
 		m.renderSkipped = false
 		return m.nextSaverFrameCmd()
 	}

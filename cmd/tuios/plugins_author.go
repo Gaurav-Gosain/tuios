@@ -120,7 +120,7 @@ func checkPlugin(out io.Writer, dir string) error {
 		}
 	}
 	for _, s := range p.Savers {
-		data, err := os.ReadFile(s.File) //nolint:gosec // a file of the folder being checked
+		data, err := app.ReadSaverFile(s.File)
 		if err == nil {
 			err = app.CheckSaverFile(data)
 		}

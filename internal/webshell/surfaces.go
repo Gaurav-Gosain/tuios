@@ -468,7 +468,7 @@ func cmdTML(s *shell, in []string, _ string) int {
 		if width > 0 {
 			w = width
 		}
-		lines := strings.Split(sf.Render(w, height).Render(), "\n")
+		lines := strings.Split(tmldraw.Render(sf, w, height, tmldraw.Hooks{}).Render(), "\n")
 		lines = trimBlankTail(lines)
 		if !a.has("print") {
 			lines = append(lines, wrapTokens([]string{dim + "To", "open", "it", "in", "tuios:" + reset, bold + "tuios tml show " + name + reset}, cols)...)
