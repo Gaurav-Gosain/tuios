@@ -438,7 +438,10 @@ func (a *App) imageView(c *ui.Context, pal *palette, l *fileLook) {
 					}
 					dw, dh := float32(im.w)*s, float32(im.h)*s
 					dst := ui.Rect{X: r.X + r.W/2 - cx*s, Y: r.Y + r.H/2 - cy*s, W: dw, H: dh}
-					p.Image(src, dst, ui.FillBox)
+					// The element's Clip holds its children; its own
+					// drawing is clipped here, so a zoomed picture stays
+					// in its box.
+					p.Clip(r, 0, func() { p.Image(src, dst, ui.FillBox) })
 				})
 			}
 		}
