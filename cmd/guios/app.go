@@ -147,6 +147,9 @@ type App struct {
 		session, split string
 		ratio          float64 // where the pointer puts it, past its bounds
 	}
+	fdrag     floatDrag       // the floating pane moved or resized
+	mdrag     masterDrag      // the master-stack line dragged
+	floatHere map[string]bool // the panes drawn floating, by id
 
 	active   bool
 	focused  bool
