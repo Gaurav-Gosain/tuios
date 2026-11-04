@@ -1853,14 +1853,10 @@ func (m *OS) insertSyncedWindow(win *terminal.Window, focusBefore string) {
 	if !tree.HasWindow(targetIntID) {
 		return
 	}
-	if dir != layout.PreselectionNone {
-		tree.InsertWindowWithPreselection(windowIntID, targetIntID, dir, m.GetBSPBounds(), m.separatorGap())
-		if fromPreselection {
-			m.PreselectionDir = layout.PreselectionNone
-		}
-		return
+	tree.AddWindow(windowIntID, targetIntID, dir, m.GetBSPBounds(), m.separatorGap())
+	if dir != layout.PreselectionNone && fromPreselection {
+		m.PreselectionDir = layout.PreselectionNone
 	}
-	tree.InsertWindow(windowIntID, targetIntID, layout.SplitNone, 0.5, m.GetBSPBounds(), m.separatorGap())
 }
 
 // convertSessionBSPNode converts session.SerializedBSPNode to layout.SerializedNode
