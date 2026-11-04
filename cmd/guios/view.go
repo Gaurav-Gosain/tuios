@@ -1022,7 +1022,7 @@ func statusIconP(c *ui.Context, pal *palette, st proto.Status, unread bool, prog
 			// Idle is a hollow dot: the check means done, to review
 			// (council round 1, visual 24).
 			var ring ui.Path
-			ring.Circle(cx, cy, rad*0.45)
+			ring.Circle(cx, cy, max(rad*0.5, 3)) // a 6 px ring at least (council round 2, S7)
 			p.StrokePath(&ring, 1.5, pal.textFaint)
 		}
 	})
