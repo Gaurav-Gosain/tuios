@@ -30,7 +30,7 @@ const (
 	// usageGap is the time between readings while the numbers move, and
 	// usageMaxGap the longest the back-off goes to.
 	usageGap    = time.Second
-	usageMaxGap = 30 * time.Second
+	usageMaxGap = time.Minute
 	// usageQuiet is how many still readings start the back-off.
 	usageQuiet = 3
 	// usageHostsEvery is how often the hosts' loads are read: their
@@ -94,10 +94,14 @@ type usageSampler struct {
 	wake    chan struct{}
 	// cl is this machine's client, as the window last saw it.
 	cl atomic.Pointer[client.Client]
+	// linked says the app has linked machines, whose loads the sampler
+	// reads too.
+	linked atomic.Bool
 }
 
 // usageWanted reports whether a view that shows the numbers is open.
-func (a *App) usageWanted() bool { return a.usageOpen || a.ck.open }
+// The agents view shows them only for an agent: with none, it reads nothing.
+func (a *App) usageWanted() bool { return a.usageOpen || a.ck.open && len(a.ck.agents) > 0 }
 
 // syncUsage starts the sampler when a view that shows the numbers opened,
 // and lets it stop when none is open. The view calls it on every frame;
@@ -106,6 +110,7 @@ func (a *App) syncUsage() {
 	want := a.usageWanted()
 	was := a.sampler.want.Swap(want)
 	a.sampler.cl.Store(a.cockpitClient())
+	a.sampler.linked.Store(len(a.hosts) > 1)
 	if a.sampler.wake == nil {
 		a.sampler.wake = make(chan struct{}, 1)
 	}
@@ -155,7 +160,10 @@ func (a *App) usageLoop(wake chan struct{}) {
 			timer.Reset(usageMaxGap)
 			continue
 		}
-		if time.Since(hostsAt) >= usageHostsEvery {
+		switch {
+		case !a.sampler.linked.Load():
+			hosts = nil
+		case time.Since(hostsAt) >= usageHostsEvery:
 			hostsAt, hosts = time.Now(), readHostLoads(cl)
 		}
 		next := readUsage(cl, last, hosts)
