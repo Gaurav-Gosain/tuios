@@ -223,7 +223,8 @@ func (s *Stream) Claim() error { return nil }
 // asks the terminal for them (OSC 10, 11 and 4) gets this view's while no
 // TUI client shows the session.
 func (s *Stream) UseTheme(th *terminal.Theme) error {
-	if th == nil {
+	// A daemon without yield predates the V frame too.
+	if th == nil || s.renew {
 		return nil
 	}
 	hex := func(c ui.Color) string { return fmt.Sprintf("#%02x%02x%02x", c.R, c.G, c.B) }
@@ -305,7 +306,7 @@ func (c *Client) applyView() {
 				want = session.PaneFocused
 			}
 		}
-		if want != s.shown {
+		if want != s.shown && !s.renew {
 			s.shown = want
 			_ = s.ps.Shown(want)
 		}

@@ -2,8 +2,11 @@ package client
 
 import (
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
+	"regexp"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -427,14 +430,14 @@ func (k *stateKeeper) watch() {
 		return
 	}
 	defer vc.Close()
-	if _, err := vc.Call("subscribe", map[string]any{"types": []string{
+	if err := subscribeKnown(vc, []string{
 		"session-created", "session-closed", "client-session-changed", "window-created", "window-closed",
 		"window-retitled", "window-exit", "window-moved", "window-focused", "window-minimized", "window-restored",
 		"agent-state", "agent-seen", "notification", "bell", "attention", "prompt", "command-finished",
 		"workspace-switched", "layout-changed",
 		// For the agent cockpit only: they change no pane.
 		"transcript", "agent-message", "task-claimed", "task-finished", "task-changed", "agent-activity",
-	}}); err != nil {
+	}); err != nil {
 		k.c.end()
 		return
 	}
@@ -595,4 +598,26 @@ func cutRects(wins []windowRow) *proto.Layout {
 func looksLikePrompt(t string) bool {
 	at, colon := strings.IndexByte(t, '@'), strings.IndexByte(t, ':')
 	return at > 0 && colon > at
+}
+
+// unknownEventType matches the daemon's refusal of an event type it does
+// not know: "unknown event type NAME".
+var unknownEventType = regexp.MustCompile(`unknown event type ([a-z0-9-]+)`)
+
+// subscribeKnown subscribes to types, leaving out each one an older daemon
+// does not know. A daemon refuses the whole subscribe for one unknown type,
+// which left guios with no events at all: never connected.
+func subscribeKnown(vc *session.VerbClient, types []string) error {
+	for range len(types) + 1 {
+		_, err := vc.Call("subscribe", map[string]any{"types": types})
+		if err == nil {
+			return nil
+		}
+		m := unknownEventType.FindStringSubmatch(err.Error())
+		if m == nil || !slices.Contains(types, m[1]) {
+			return err
+		}
+		types = slices.DeleteFunc(slices.Clone(types), func(t string) bool { return t == m[1] })
+	}
+	return errors.New("subscribe: no event type the daemon knows")
 }
