@@ -1359,6 +1359,7 @@ func (d *Daemon) onSessionCreated(s *Session) {
 		d.reviewNotes.noteSessionEvent(ev)
 		if ev.Type == EventWindowClosed {
 			d.agents.forgetNotices(name, ev.Window)
+			d.agents.forgetInbox(name, ev.Window)
 		}
 		d.noteMailWakeEvent(ev)
 		d.events.publish(streamEvent{

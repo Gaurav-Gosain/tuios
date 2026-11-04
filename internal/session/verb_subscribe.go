@@ -599,7 +599,13 @@ func (d *Daemon) waitAgentState(cs *connState, sessionName, window, until string
 	sub := d.events.subscribe(eventFilter{session: sess.Name(), sess: sess, types: types}, defaultEventQueue)
 	defer d.events.unsubscribe(sub)
 
-	check := func() (string, string, bool) {
+	closed := func() *verbError {
+		return newVerbError(ErrVerbWindowNotFound, "the watched window closed before reaching "+until)
+	}
+	// check also says whether the watched pane is gone. A pane that closed
+	// after it was resolved and before the subscription sent its close event
+	// to nobody, so the read of the state is the only thing that can tell.
+	check := func() (id, name string, ok, gone bool) {
 		state := sess.GetState()
 		for i := range state.Windows {
 			w := &state.Windows[i]
@@ -607,17 +613,22 @@ func (d *Daemon) waitAgentState(cs *connState, sessionName, window, until string
 				continue
 			}
 			if states[w.AgentState.Name()] {
-				return w.ID, w.AgentState.Name(), true
+				return w.ID, w.AgentState.Name(), true, false
+			}
+			if targetID != "" {
+				return "", "", false, false
 			}
 		}
-		return "", "", false
+		return "", "", false, targetID != ""
 	}
 
 	matched := func(id, name string) map[string]any {
 		return waitMatched("agent-state", map[string]any{"session": sess.Name(), "window": id, "state": name})
 	}
-	if id, name, ok := check(); ok {
+	if id, name, ok, gone := check(); ok {
 		return matched(id, name), nil
+	} else if gone {
+		return nil, closed()
 	}
 	for {
 		select {
@@ -627,10 +638,12 @@ func (d *Daemon) waitAgentState(cs *connState, sessionName, window, until string
 			return nil, newVerbError(ErrVerbInternal, "daemon is shutting down")
 		case ev := <-sub.ch:
 			if ev.Type == EventWindowClosed && targetID != "" && ev.Window == targetID {
-				return nil, newVerbError(ErrVerbWindowNotFound, "the watched window closed before reaching "+until)
+				return nil, closed()
 			}
-			if id, name, ok := check(); ok {
+			if id, name, ok, gone := check(); ok {
 				return matched(id, name), nil
+			} else if gone {
+				return nil, closed()
 			}
 		}
 	}

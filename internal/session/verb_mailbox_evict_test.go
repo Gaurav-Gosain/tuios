@@ -120,18 +120,28 @@ func TestByteCapAlsoSparesUnreadMail(t *testing.T) {
 }
 
 // TestUnreadDropsSurviveAHandoff: a live upgrade carries the ring, so it
-// carries what the ring owes each inbox too.
+// carries what the ring owes each inbox too. A pane that closed has its count
+// folded into the session's total, so the per-inbox map does not keep one key
+// for every pane that ever lost mail, and the total still says what was lost.
 func TestUnreadDropsSurviveAHandoff(t *testing.T) {
 	bus := newAgentBus()
 	bus.send("s", AgentMessage{Kind: agentMsgDirect, To: "alice", Text: "never read"})
+	bus.send("s", AgentMessage{Kind: agentMsgDirect, To: "dave", Text: "never read"})
 	for range agentMailboxMaxMessages {
 		bus.send("s", AgentMessage{Kind: agentMsgDirect, To: "bob", Text: "unread"})
 	}
+	bus.forgetInbox("s", "dave")
 	var mail handoffMail
 	roundTripJSON(t, bus.handoffState(), &mail)
 	next := newAgentBus()
 	next.restore(mail)
 	if got := next.read("s", readQuery{inbox: "alice", peek: true}).EvictedUnread; got != 1 {
 		t.Errorf("after the handoff alice's inbox reports %d unread messages dropped, want 1", got)
+	}
+	if _, kept := mail.Boxes["s"].EvictedUnread["dave"]; kept {
+		t.Error("the closed pane's count is still kept by its window")
+	}
+	if got := next.read("s", readQuery{limit: 1000}).EvictedUnread; got != 2 {
+		t.Errorf("after the handoff the session reports %d unread messages dropped, want 2", got)
 	}
 }

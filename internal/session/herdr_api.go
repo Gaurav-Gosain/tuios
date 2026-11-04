@@ -1311,18 +1311,27 @@ func (d *Daemon) herdrWaitAgent(cs *connState, id string, until []string, timeou
 		EventAgentState: true, EventAgentSeen: true, EventWindowClosed: true,
 	}}, defaultEventQueue)
 	defer d.events.unsubscribe(sub)
-	matches := func() bool {
+	closed := func() *herdrError {
+		return herdrFromVerb(newVerbError(ErrVerbWindowNotFound, "the watched window closed before reaching "+strings.Join(until, ",")), "wait_failed")
+	}
+	// matches says whether the pane reached a wanted status, and gone whether
+	// it is no longer there. A pane that closed after herdrFindPane and before
+	// the subscription sent its close event to nobody, so the read of the
+	// state is the only thing that can tell.
+	matches := func() (matched, gone bool) {
 		w, ok := findWindowState(sess.GetState(), win.ID)
 		if !ok {
-			return false
+			return false, true
 		}
 		// The state is read without waiting for a harness, as wait-for does:
 		// a program that reports over OSC 7501 is at rest before tuios has
 		// named its harness.
-		return slices.Contains(until, herdrStatus(w.AgentState, sess.finishedUnread(&w)))
+		return slices.Contains(until, herdrStatus(w.AgentState, sess.finishedUnread(&w))), false
 	}
-	if matches() {
+	if ok, gone := matches(); ok {
 		return nil
+	} else if gone {
+		return closed()
 	}
 	for {
 		select {
@@ -1332,10 +1341,12 @@ func (d *Daemon) herdrWaitAgent(cs *connState, id string, until []string, timeou
 			return herdrErr("internal_error", "daemon is shutting down")
 		case ev := <-sub.ch:
 			if ev.Type == EventWindowClosed {
-				return herdrFromVerb(newVerbError(ErrVerbWindowNotFound, "the watched window closed before reaching "+strings.Join(until, ",")), "wait_failed")
+				return closed()
 			}
-			if matches() {
+			if ok, gone := matches(); ok {
 				return nil
+			} else if gone {
+				return closed()
 			}
 		}
 	}

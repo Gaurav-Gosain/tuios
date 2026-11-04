@@ -86,12 +86,17 @@ func (d *Daemon) routeOption(tui *connState, path, value string) (bool, string) 
 // the client is in the session's broadcast set and can take an unsolicited
 // command. A value the client does not apply waits for the next attach,
 // The route order is held throughout, so no newer value can be set between.
+//
+// The check for waiting values runs under the route order. A set-option holds
+// it from the moment it finds no client until it leaves its value waiting, so
+// a check made outside it can run in between: it finds nothing waiting, and
+// the value then waits while this client shows the session.
 func (d *Daemon) applyWaitingOptions(sess *Session) {
+	sess.optionApplyMu.Lock()
+	defer sess.optionApplyMu.Unlock()
 	if !sess.hasWaitingOptions() {
 		return
 	}
-	sess.optionApplyMu.Lock()
-	defer sess.optionApplyMu.Unlock()
 	tui := d.findTUIClient(sess.ID)
 	if tui == nil {
 		return

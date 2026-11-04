@@ -287,6 +287,11 @@ type agentMailbox struct {
 	// recipient read it. It is the number an inbox read reports, because it
 	// is the one that says the reader lost something.
 	evictedUnread map[string]uint64
+	// evictedUnreadGone is the evictedUnread of the panes that closed. A
+	// closed pane's key is dropped, so the map does not grow with every
+	// short-lived pane, and its count moves here, so the session's total
+	// stays the same.
+	evictedUnreadGone uint64
 	// buckets is one token bucket per claimed sender, at most agentMaxBuckets
 	// of them. Past the bound a sender on another machine is charged on the
 	// shared agentOverflowBucket.
@@ -325,6 +330,24 @@ func (b *agentBus) forget(session string) {
 	delete(b.boxes, session)
 	b.mu.Unlock()
 	b.forgetNotices(session, "")
+}
+
+// forgetInbox drops the count of unread mail the ring lost for a pane that
+// closed, and keeps it in the session's total.
+func (b *agentBus) forgetInbox(session, window string) {
+	if b == nil || window == "" {
+		return
+	}
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	mb := b.boxes[session]
+	if mb == nil {
+		return
+	}
+	if n, ok := mb.evictedUnread[window]; ok {
+		mb.evictedUnreadGone += n
+		delete(mb.evictedUnread, window)
+	}
 }
 
 // allow charges one send against the sender's token bucket, reporting whether
@@ -540,6 +563,7 @@ func (b *agentBus) collect(session string, q readQuery) readResult {
 	if q.inbox != "" {
 		res.EvictedUnread = mb.evictedUnread[q.inbox]
 	} else {
+		res.EvictedUnread = mb.evictedUnreadGone
 		for _, n := range mb.evictedUnread {
 			res.EvictedUnread += n
 		}

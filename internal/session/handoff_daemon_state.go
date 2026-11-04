@@ -36,6 +36,8 @@ type handoffMailbox struct {
 	Bytes         int               `json:"bytes,omitempty"`
 	Evicted       uint64            `json:"evicted,omitempty"`
 	EvictedUnread map[string]uint64 `json:"evicted_unread,omitempty"`
+	// EvictedUnreadGone is the count of the panes that closed.
+	EvictedUnreadGone uint64 `json:"evicted_unread_gone,omitempty"`
 }
 
 // handoffNotice is one pane's unread mail notice mark, with its lease, so
@@ -111,7 +113,7 @@ func (b *agentBus) handoffState() handoffMail {
 	defer b.mu.Unlock()
 	m := handoffMail{NextID: b.nextID, LeaseSeq: b.leaseSeq, Boxes: make(map[string]handoffMailbox, len(b.boxes))}
 	for name, mb := range b.boxes {
-		box := handoffMailbox{Bytes: mb.bytes, Evicted: mb.evicted, EvictedUnread: maps.Clone(mb.evictedUnread)}
+		box := handoffMailbox{Bytes: mb.bytes, Evicted: mb.evicted, EvictedUnread: maps.Clone(mb.evictedUnread), EvictedUnreadGone: mb.evictedUnreadGone}
 		for _, msg := range mb.msgs {
 			c := *msg
 			c.Attachments = slices.Clone(msg.Attachments)
@@ -134,7 +136,7 @@ func (b *agentBus) restore(m handoffMail) {
 	defer b.mu.Unlock()
 	b.nextID, b.leaseSeq = m.NextID, m.LeaseSeq
 	for name, box := range m.Boxes {
-		b.boxes[name] = &agentMailbox{msgs: box.Msgs, bytes: box.Bytes, evicted: box.Evicted, evictedUnread: box.EvictedUnread, buckets: map[string]*sendBucket{}}
+		b.boxes[name] = &agentMailbox{msgs: box.Msgs, bytes: box.Bytes, evicted: box.Evicted, evictedUnread: box.EvictedUnread, evictedUnreadGone: box.EvictedUnreadGone, buckets: map[string]*sendBucket{}}
 	}
 	for inbox, n := range m.Noticed {
 		if b.noticed == nil {

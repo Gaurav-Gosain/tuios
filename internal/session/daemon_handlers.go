@@ -399,10 +399,10 @@ func (d *Daemon) handleAttach(cs *connState, msg *Message) error {
 	d.sendPluginAsks(cs)
 	// The options set while no client was attached. On its own goroutine:
 	// each waits for the client's answer, which this connection's read loop
-	// delivers once this handler returns. See option_pending.go.
-	if session.hasWaitingOptions() {
-		go d.applyWaitingOptions(session)
-	}
+	// delivers once this handler returns. The goroutine runs on every attach,
+	// because only a check under the route order sees a value a set-option
+	// is about to leave waiting. See option_pending.go.
+	go d.applyWaitingOptions(session)
 
 	// A probe that has not reached a pane yet may still: see nest_probe.go.
 	if inside == nil && !cs.viaLink {
