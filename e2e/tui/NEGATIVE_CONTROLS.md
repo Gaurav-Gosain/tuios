@@ -7807,6 +7807,14 @@ turn 26, the last turn still at work) and reads it at 140x45.
 |---|---|---|---|---|
 | A finished turn does not fold its work | `transcriptview.Turns` | `Finished` set to false for every turn | `TestCockpitThreadCards` ("the finished turn 28 shows its work") | **caught** |
 | A finished turn does not fold its work | the whole change | a build of origin/main at 2c03bb3c0 | `TestCockpitThreadCards` ("the finished turn 28 shows its work") | **caught** |
+The live activity row (`cockpitActivityRow`, run from the same test on
+2026-11-04) sends a PreToolUse hook for a command the transcript does not have,
+then appends the call to the transcript, then sends a second tool and rests the
+pane.
+
+| Bug | Fix removed | How | Tests that fail | Verdict |
+|---|---|---|---|---|
+| The activity row repeats a card the transcript already shows | The newest tool call check in `transcriptview.ActivityShown` | The check never taken, so the row shows while the agent works | `TestCockpitThreadCards` ("the activity row stays when the transcript shows the call's card") | **caught** |
 
 ## The agents cockpit: reply area and image view
 

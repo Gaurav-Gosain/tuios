@@ -774,3 +774,59 @@ func ckRender(c *ckCanvas, width int, ln ckLine) string {
 	}
 	return c.render()
 }
+
+// drawThreadActivity draws the live activity row at row y, under the
+// thread's newest line, and reports whether it drew one. The row says what
+// the agent does now ("Running go test ./... · 3m"), from the daemon's now
+// key, which a hook or a protocol pane sets, or from a working program's OSC
+// 7501 message. transcriptview.ActivityShown decides when it shows. The time
+// is how long the activity has run as of this frame, drawn only when the
+// thread saw it start. It rides the redraws the cockpit already makes,
+// the minute tick among them, and no timer of its own.
+func (m *OS) drawThreadActivity(c *ckCanvas, l ckLook, e sidebarAgentEntry, t *agentThread, x, y, w int, now time.Time) bool {
+	if e.Host != "" {
+		return false
+	}
+	tool, target := "", ""
+	if v := ckMeta(e, "now"); v != "" {
+		tool, target, _ = strings.Cut(v, ": ")
+	} else if sum, ok := programSummary(e.Program); ok && sum.State == "working" {
+		target = printableTitle(firstNonEmptyStr(sum.Msg, sum.Title))
+	}
+	var last *transcriptview.Entry
+	if t != nil && m.threadReadsTranscript(e) {
+		for i := len(t.entries) - 1; i >= 0; i-- {
+			if en := &t.entries[i]; en.Kind == transcriptview.KindToolCall {
+				last = &transcriptview.Entry{Kind: en.Kind, Tool: en.Tool, Target: en.Target}
+				break
+			}
+		}
+	}
+	text := ""
+	if transcriptview.ActivityShown(e.State, tool, target, last) {
+		text = transcriptview.ActivityRow(tool, target)
+	}
+	if t != nil && (t.act != text || !t.actSeen) {
+		// The first frame that draws a thread finds its activity under way,
+		// so it has no time. Every later change is a start the thread saw.
+		t.act, t.actAt, t.actTimed, t.actSeen = text, now, t.actSeen, true
+	}
+	if text == "" {
+		return false
+	}
+	pal := l.pal
+	verb, rest, _ := strings.Cut(text, " ")
+	var right []ckSeg
+	if t != nil && t.actTimed {
+		if age := agentElapsed("working", t.actAt.UnixNano(), now); age != "" {
+			right = []ckSeg{{t: " · " + age, fg: pal.FgMute}}
+		}
+	}
+	room := max(w-ansi.StringWidth(verb)-ckWidth(right...)-5, 4)
+	segs := []ckSeg{{t: l.g(ckGlyphWorking) + " ", fg: pal.Busy}, {t: verb, fg: pal.FgDim, attrs: ckBold}}
+	if rest != "" {
+		segs = append(segs, ckSeg{t: " " + ckTrunc(rest, room), fg: pal.FgMute})
+	}
+	c.text(c.text(x+2, y, x+w, segs...), y, x+w, right...)
+	return true
+}

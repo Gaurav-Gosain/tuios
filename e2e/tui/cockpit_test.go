@@ -702,13 +702,17 @@ func saveCockpitFrames(t *testing.T, term *tuitest.Terminal, name string, pics .
 // lit, the todo list is a plan with its count, and the failed command shows
 // its output. The agent's Markdown is drawn: strong, lists, a highlighted
 // code block and a link. A click on the diff's header folds it, and ] shows
-// the last turn's changes alone. Then cockpitTurnFolds grows the thread to
-// 30 turns and checks that finished turns fold to a summary line.
+// the last turn's changes alone. While the agent works, a live activity row
+// under the thread says what it does now (cockpitActivityRow). Then
+// cockpitTurnFolds grows the thread to 30 turns and checks that finished
+// turns fold to a summary line.
 //
 // Negative controls, recorded in NEGATIVE_CONTROLS.md: with the changed
 // range left out of the diff lines the word check fails; with the todos
 // drawn as one line the plan check fails; with no turn finished the turn
-// fold check fails (see cockpitTurnFolds).
+// fold check fails (see cockpitTurnFolds); with the activity row never
+// hidden by the transcript's newest call, the row stays under the call's
+// card (see cockpitActivityRow).
 func TestCockpitThreadCards(t *testing.T) {
 	base := t.TempDir()
 	killDaemon(t, base)
@@ -847,7 +851,93 @@ func TestCockpitThreadCards(t *testing.T) {
 		}
 		alive(t, term, "after the thread cards")
 	}
+	cockpitActivityRow(t, base, path)
+	// cockpitActivityRow leaves the agent at rest, and cockpitTurnFolds reads
+	// a thread whose last turn is still at work.
+	if out, err := tuiosCLI(t, base, "set-agent-state", "working", "-s", "api", "-w", "api-auth", "--harness", "claude-code"); err != nil {
+		t.Fatalf("set-agent-state working: %v\n%s", err, out)
+	}
 	cockpitTurnFolds(t, base, path)
+}
+
+// cockpitActivityRow checks the live activity row under the thread of the
+// agent TestCockpitThreadCards joined to cockpit-auth.jsonl. A PreToolUse
+// hook for a command the transcript does not have yet shows the row with the
+// command. When the transcript gains the call's card, the row goes, so the
+// row never repeats a card. A second tool shows the row again, and at rest
+// there is no row.
+func cockpitActivityRow(t *testing.T, base, path string) {
+	t.Helper()
+	hook := func(payload map[string]any) {
+		t.Helper()
+		payload["session_id"], payload["transcript_path"] = "9a1f0c2e", path
+		b, _ := json.Marshal(payload)
+		cmd := exec.Command(tuiosBin, "agent-hook", "claude-code", "--session", "api", "--window", "api-auth")
+		cmd.Dir = workDirIn(t, base)
+		cmd.Env = append(os.Environ(), "SHELL=/bin/sh")
+		for _, key := range xdgKeys {
+			cmd.Env = append(cmd.Env, key+"="+xdgDir(base, key))
+		}
+		cmd.Stdin = bytes.NewReader(b)
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("agent-hook %v: %v\n%s", payload["hook_event_name"], err, out)
+		}
+	}
+	term := startIn(t, base, startOpts{args: []string{"attach", "home200"}, cols: 200, rows: 55, shippedLooks: true, env: []string{"TERM=xterm-256color", "COLORTERM=truecolor"}})
+	if err := term.WaitFor(func(s tuitest.Screen) bool { return countWindows(s) == 1 }, bootTimeout); err != nil {
+		t.Fatalf("client never attached: %v\n%s", err, term.Snapshot())
+	}
+	windowManagementMode(t, term)
+	if err := term.SendKeys(tuitest.Ctrl('b'), "i"); err != nil {
+		t.Fatalf("open the cockpit: %v", err)
+	}
+	if err := term.WaitForText("Running the auth tests.", uiTimeout); err != nil {
+		t.Fatalf("the thread never showed: %v\n%s", err, term.Snapshot())
+	}
+	const cmdText = "go test -run TestRefreshSkew ./internal/auth/"
+	row := "Running " + cmdText
+	hook(map[string]any{"hook_event_name": "PreToolUse", "tool_name": "Bash", "tool_input": map[string]any{"command": cmdText}})
+	if err := term.WaitForText(row, uiTimeout); err != nil {
+		t.Fatalf("ASSERTION: the thread shows no activity row while the agent runs a command: %v\n%s", err, term.Snapshot())
+	}
+	saveCockpitFrames(t, term, "activity-row-200x55")
+
+	// The transcript catches up: the call's card shows, and the row goes.
+	f, err := os.OpenFile(path, os.O_APPEND|os.O_WRONLY, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rec, _ := json.Marshal(map[string]any{
+		"type": "assistant", "uuid": "c18", "timestamp": "2026-10-18T09:52:05.000Z", "sessionId": "9a1f0c2e-0000-4000-8000-00000000c0c0",
+		"message": map[string]any{"role": "assistant", "stop_reason": "tool_use",
+			"content": []any{map[string]any{"type": "tool_use", "id": "b2", "name": "Bash", "input": map[string]any{"command": cmdText}}}},
+	})
+	if _, err := f.Write(append(rec, '\n')); err != nil {
+		t.Fatal(err)
+	}
+	_ = f.Close()
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		text := s.Text()
+		return strings.Contains(text, "Bash  "+cmdText) && !strings.Contains(text, row)
+	}, uiTimeout); err != nil {
+		t.Fatalf("ASSERTION: the activity row stays when the transcript shows the call's card: %v\n%s", err, term.Snapshot())
+	}
+	saveCockpitFrames(t, term, "activity-caught-up-200x55")
+
+	// The next tool shows the row again, and a pane at rest has none.
+	hook(map[string]any{"hook_event_name": "PreToolUse", "tool_name": "Read", "tool_input": map[string]any{"file_path": "internal/auth/refresh.go"}})
+	if err := term.WaitForText("Reading internal/auth/refresh.go", uiTimeout); err != nil {
+		t.Fatalf("ASSERTION: the thread shows no activity row for the next tool: %v\n%s", err, term.Snapshot())
+	}
+	if out, err := tuiosCLI(t, base, "set-agent-state", "idle", "-s", "api", "-w", "api-auth", "--harness", "claude-code"); err != nil {
+		t.Fatalf("set-agent-state idle: %v\n%s", err, out)
+	}
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		return !strings.Contains(s.Text(), "Reading internal/auth/refresh.go")
+	}, uiTimeout); err != nil {
+		t.Fatalf("ASSERTION: the activity row stays when the agent rests: %v\n%s", err, term.Snapshot())
+	}
+	alive(t, term, "after the activity row")
 }
 
 // claudeTurns writes turns 2 to n of a Claude Code transcript, after the

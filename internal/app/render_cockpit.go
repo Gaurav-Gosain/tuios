@@ -2053,6 +2053,13 @@ func (m *OS) drawFocus(c *ckCanvas, l ckLook, x, y, w, y1, top int, now time.Tim
 		if t != nil {
 			scroll = t.scroll
 		}
+		// The live activity row sits under the newest line, where the
+		// thread's last line would be, while the agent works.
+		base := cardTop - 1
+		if room > 2 && m.drawThreadActivity(c, l, e, t, x, base-1, w, now) {
+			room--
+			base--
+		}
 		lines := m.threadBody(e, w, room+scroll, now)
 		var hits []string
 		if t != nil && len(t.hits) == len(lines) {
@@ -2065,7 +2072,7 @@ func (m *OS) drawFocus(c *ckCanvas, l ckLook, x, y, w, y1, top int, now time.Tim
 		}
 		end := len(lines) - scroll
 		start := max(end-room, 0)
-		ty := cardTop - 1 - (end - start)
+		ty := base - (end - start)
 		for i := start; i < end; i++ {
 			c.draw(x, ty+i-start, w, lines[i])
 			if hits != nil && hits[i] != "" {

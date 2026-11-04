@@ -120,6 +120,14 @@ type agentThread struct {
 	scroll    int
 	// cards are the entries' cards as last built, by entry id.
 	cards map[string]ckCard
+	// act is the activity row's text as last drawn, "" for no row, and
+	// actAt when it changed to that. actTimed says the thread saw that
+	// activity start, so actAt is when it started, to within one redraw: an
+	// activity already under way when the thread was first drawn (actSeen
+	// false) has no time.
+	act               string
+	actAt             time.Time
+	actTimed, actSeen bool
 }
 
 // threadBodyKey is what a thread's drawn lines depend on.
