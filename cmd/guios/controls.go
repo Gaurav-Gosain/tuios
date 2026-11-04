@@ -48,10 +48,10 @@ func popupFace(c *ui.Context, trig ui.Element, text string, open bool, pal *pale
 	case hover:
 		bg, disc = tint, ui.Transparent
 	}
-	anim := ui.Animation{Duration: 120 * time.Millisecond}
+	anim := ui.Animation{Duration: dHoverOut}
 	trig.Background(trig.AnimateColor("bg", bg, anim))
 	trig.Children(func() {
-		ui.Text(c, text).FontSize(13).TextColor(pal.text).SingleLine().Ellipsis("…").MinWidth(0).Shrink(1)
+		ui.Text(c, text).FontSize(fsBody).TextColor(pal.text).SingleLine().Ellipsis("…").MinWidth(0).Shrink(1)
 		d := ui.Box(c.Key("disc")).Size(22, 22).Radius(11).Center().Shrink(0)
 		d.Background(d.AnimateColor("bg", disc, anim)).Children(func() {
 			ui.Icon(c, updownIcon).Size(16, 16).TextColor(pal.text.Alpha(0.85))
@@ -126,7 +126,7 @@ func menuSpot(c *ui.Context, key string, b ui.Rect, at, n int) (ui.Element, floa
 
 // menuPanel styles a menu: rounded, lifted off the window.
 func menuPanel(panel ui.Element, pal *palette) ui.Element {
-	return menu(panel.Padding(menuPad).Radius(13), pal)
+	return menu(panel.Padding(menuPad).Radius(rControl+2), pal)
 }
 
 // menuItem styles an item of a menu: a check by the current one, and the
@@ -136,18 +136,18 @@ func menuItem(c *ui.Context, item ui.Element, label string, current bool, pal *p
 }
 
 func menuRow(c *ui.Context, item ui.Element, label string, current, highlighted bool, pal *palette) {
-	item.Height(menuItemH).Padding(0, 12, 0, 6).Gap(5).Radius(7).AlignItems(ui.Center)
+	item.Height(menuItemH).Padding(0, 12, 0, 6).Gap(5).Radius(rRow).AlignItems(ui.Center)
 	fg := pal.text
 	if highlighted {
 		item.Background(pal.accent)
-		fg = ui.Hex("#ffffff")
+		fg = onAccent(pal)
 	}
 	item.TextColor(fg).Children(func() {
 		mark := ui.Icon(c, checkIcon).Size(12, 12).Shrink(0)
 		if !current {
 			mark.Opacity(0)
 		}
-		ui.Text(c, label).FontSize(13).SingleLine().Ellipsis("…").MinWidth(0)
+		ui.Text(c, label).FontSize(fsBody).SingleLine().Ellipsis("…").MinWidth(0)
 	})
 }
 
@@ -239,7 +239,7 @@ func (a *App) searchPopup(c *ui.Context, key, value string, options []string, wi
 		frame := ui.Row(c.Key("search")).Margin(inset, inset, menuPad+inset, inset).Cursor(ui.CursorText)
 		frame.Children(func() {
 			ui.Icon(c, searchIcon).Size(12, 12).TextColor(pal.textFaint).Shrink(0)
-			in = ui.TextInputBase(c.Key("q"), &m.query).AutoFocus().Grow(1).MinWidth(0).AlignSelf(ui.Stretch).FontSize(13).
+			in = ui.TextInputBase(c.Key("q"), &m.query).AutoFocus().Grow(1).MinWidth(0).AlignSelf(ui.Stretch).FontSize(fsBody).
 				Placeholder(locales.CommonSearch()).Label(locales.CommonSearch())
 		})
 		field(c, frame, in.Focused(), pal)
@@ -248,7 +248,7 @@ func (a *App) searchPopup(c *ui.Context, key, value string, options []string, wi
 		in.OnShortcut(0, ui.KeyUp, func() { m.hi, m.reveal = max(m.hi-1, 0), true })
 		in.OnSubmit(func() { pick(m.hi) })
 		if len(shown) == 0 {
-			ui.Text(c, locales.CommonNoResults()).FontSize(13).TextColor(pal.textFaint).Padding(6, 12)
+			ui.Text(c, locales.CommonNoResults()).FontSize(fsBody).TextColor(pal.textFaint).Padding(6, 12)
 			return
 		}
 		reveal := m.reveal
@@ -281,14 +281,14 @@ func (a *App) searchPopup(c *ui.Context, key, value string, options []string, wi
 
 // field styles a text field's frame, around its input.
 func field(c *ui.Context, frame ui.Element, focused bool, pal *palette) ui.Element {
-	frame.Height(controlH+2).Padding(0, 8).Gap(6).Radius(7).AlignItems(ui.Center)
+	frame.Height(controlH+2).Padding(0, 8).Gap(6).Radius(rControl).AlignItems(ui.Center)
 	stroke := ui.RGBA(0, 0, 0, 0.13)
 	bg := ui.Hex("#ffffff")
 	if pal.dark {
 		stroke, bg = ui.RGBA(255, 255, 255, 0.13), ui.RGBA(255, 255, 255, 0.06)
 	}
 	frame.Background(bg).InsetShadow(0, 0, 0, 1, stroke)
-	glow := frame.Animate("glow", b2f(focused), 120*time.Millisecond)
+	glow := frame.Animate("glow", b2f(focused), dFade)
 	if glow > 0 {
 		frame.Shadow(0, 0, 0, 3.5*glow, pal.accent.Alpha(0.32*glow)).InsetShadow(0, 0, 0, 1, pal.accent.Alpha(0.75*glow))
 	}
@@ -308,7 +308,7 @@ func textField(c *ui.Context, key string, value *string, placeholder string, wid
 	frame.Children(func() {
 		// The input fills the field, its padding its own, so that a click
 		// anywhere in the field lands in it.
-		in = ui.TextInputBase(c.Key("in"), value).Grow(1).MinWidth(0).AlignSelf(ui.Stretch).Padding(0, 8).FontSize(13).Placeholder(placeholder).Label(placeholder)
+		in = ui.TextInputBase(c.Key("in"), value).Grow(1).MinWidth(0).AlignSelf(ui.Stretch).Padding(0, 8).FontSize(fsBody).Placeholder(placeholder).Label(placeholder)
 	})
 	field(c, frame, in.Focused(), pal).Padding(0)
 	return in

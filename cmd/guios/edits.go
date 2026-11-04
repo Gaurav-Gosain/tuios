@@ -230,9 +230,9 @@ func (a *App) askToSave(ts []editTarget, then func()) {
 // editor's tab shows, the cross as the pointer comes over it.
 func closeButton(c *ui.Context, pal *palette, label string, dirty bool, fn func()) {
 	if dirty {
-		label = locales.ViewerUnsaved() + " — " + label
+		label = locales.ViewerUnsaved() + ". " + label
 	}
-	b := ui.ButtonBase(c.Key("close-side")).Size(28, 26).Radius(6).Center().TextColor(pal.textMuted).Label(label).Tooltip(label)
+	b := ui.ButtonBase(c.Key("close-side")).Size(hControl, 26).Radius(rRow).Center().Shrink(0).TextColor(pal.textMuted).Label(label).Tooltip(label)
 	hovered := b.Hovered() || b.Pressed()
 	if b.Pressed() {
 		b.Background(pal.rowHover.Alpha(0.12))

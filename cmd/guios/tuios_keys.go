@@ -661,7 +661,7 @@ func (a *App) keysCard(c *ui.Context, pal *palette) {
 		}
 	}
 	card := ui.Column(c.Key("tuios-keys")).Absolute().Right(cardGap+12).Bottom(cardGap+12).
-		Padding(14, 16).Gap(10).Radius(12).Background(pal.popover).Label(keysTitle(menu))
+		Padding(14, 16).Gap(10).Radius(rCard).Background(pal.popover).Label(keysTitle(menu))
 	floating(card, pal)
 	if !shown {
 		card.Opacity(0)
@@ -694,7 +694,7 @@ func (a *App) keysCard(c *ui.Context, pal *palette) {
 	card.Children(func() {
 		ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
 			kbd(c, pal, chordLabel(tk.leader))
-			ui.Text(c, keysTitle(menu)).FontSize(13).FontWeight(650).TextColor(pal.text)
+			ui.Text(c, keysTitle(menu)).FontSize(fsBody).FontWeight(wSemibold).TextColor(pal.text)
 		})
 		cols := 1
 		if len(groups) > 2 {
@@ -709,7 +709,7 @@ func (a *App) keysCard(c *ui.Context, pal *palette) {
 						}
 						ui.Column(c.Key("g" + strconv.Itoa(i))).Gap(3).Children(func() {
 							if g.Title != "" {
-								ui.Text(c, g.Title).FontSize(11).FontWeight(600).TextColor(pal.textFaint).Margin(0, 0, 2, 0)
+								ui.Text(c, g.Title).FontSize(fsCaption).FontWeight(wSemibold).TextColor(pal.textFaint).Margin(0, 0, 2, 0)
 							}
 							for j, b := range g.Bindings {
 								ui.Row(c.Key("b" + strconv.Itoa(j))).Gap(8).AlignItems(ui.Center).Children(func() {
@@ -718,7 +718,7 @@ func (a *App) keysCard(c *ui.Context, pal *palette) {
 									if b.Submenu {
 										desc += " …"
 									}
-									ui.Text(c, desc).FontSize(12).TextColor(pal.textMuted).SingleLine()
+									ui.Text(c, desc).FontSize(fsSmall).TextColor(pal.textMuted).SingleLine()
 								})
 							}
 						})
@@ -726,7 +726,7 @@ func (a *App) keysCard(c *ui.Context, pal *palette) {
 				})
 			}
 		})
-		ui.Text(c, locales.KeysEscape()).FontSize(11).TextColor(pal.textFaint)
+		ui.Text(c, locales.KeysEscape()).FontSize(fsCaption).TextColor(pal.textFaint)
 	})
 }
 

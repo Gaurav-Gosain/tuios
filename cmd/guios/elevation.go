@@ -92,19 +92,19 @@ func face(e ui.Element, pal *palette, bg ui.Color) ui.Element {
 // button is kero's button: a raised surface, or the accent's for the
 // primary one, with a label and, optionally, its keys.
 func button(c *ui.Context, key, label, keys string, primary bool, pal *palette) bool {
-	return sizedButton(c, key, label, keys, primary, 30, 8, pal)
+	return sizedButton(c, key, label, keys, primary, hControl, rControl, pal)
 }
 
 // defaultButton is button, focused when its dialog first appears, so that
 // Return presses it.
 func defaultButton(c *ui.Context, key, label, keys string, primary bool, pal *palette) bool {
-	return sizedButtonAt(c, key, label, keys, primary, 30, 8, pal, true)
+	return sizedButtonAt(c, key, label, keys, primary, hControl, rControl, pal, true)
 }
 
 // fieldButton is a button beside a text field, of the field's height and
 // corners, as a form's Add.
 func fieldButton(c *ui.Context, key, label string, primary bool, pal *palette) bool {
-	return sizedButton(c, key, label, "", primary, controlH+2, 7, pal)
+	return sizedButton(c, key, label, "", primary, controlH+2, rControl, pal)
 }
 
 func sizedButton(c *ui.Context, key, label, keys string, primary bool, height, radius float32, pal *palette) bool {
@@ -112,27 +112,50 @@ func sizedButton(c *ui.Context, key, label, keys string, primary bool, height, r
 }
 
 func sizedButtonAt(c *ui.Context, key, label, keys string, primary bool, height, radius float32, pal *palette, focus bool) bool {
-	b := ui.ButtonBase(c.Key(key)).Height(height).Padding(0, 14).Gap(8).Radius(radius).AlignItems(ui.Center).Label(label)
+	kind := btnSecondary
+	if primary {
+		kind = btnPrimary
+	}
+	return kindButton(c, key, label, keys, kind, height, radius, pal, focus)
+}
+
+// The kinds of button (DESIGN.md section 6): a view has one primary at
+// most, and a destructive one ends or deletes something.
+const (
+	btnSecondary = iota
+	btnPrimary
+	btnDanger
+)
+
+func kindButton(c *ui.Context, key, label, keys string, kind int, height, radius float32, pal *palette, focus bool) bool {
+	pad := float32(sp3)
+	if height < hControl {
+		pad = 10
+	}
+	b := ui.ButtonBase(c.Key(key)).Height(height).Padding(0, pad).Gap(6).Radius(radius).AlignItems(ui.Center).Shrink(0).Label(label)
 	if focus {
 		b.AutoFocus()
 	}
 	bg, fg := pal.control, pal.text
-	if primary {
-		bg, fg = pal.accent, ui.Hex("#ffffff")
+	switch kind {
+	case btnPrimary:
+		bg, fg = pal.accent, onAccent(pal)
+	case btnDanger:
+		bg, fg = pal.danger, ui.Hex("#ffffff")
 	}
 	switch {
 	case b.Pressed():
 		bg = bg.Mix(ui.Hex("#000000"), 0.08)
-	case b.Hovered() && primary:
+	case b.Hovered() && kind != btnSecondary:
 		bg = bg.Mix(ui.Hex("#ffffff"), 0.08)
 	case b.Hovered():
 		bg = pal.controlHover
 	}
-	face(b, pal, b.AnimateColor("bg", bg, ui.Animation{Duration: 90e6})).TextColor(fg)
+	face(b, pal, b.AnimateColor("bg", bg, ui.Animation{Duration: dPress})).TextColor(fg)
 	b.Children(func() {
-		ui.Text(c, label).FontSize(13).FontWeight(500).SingleLine()
+		ui.Text(c, label).FontSize(fsBody).FontWeight(wMedium).SingleLine()
 		if keys != "" {
-			ui.Text(c, keys).FontSize(12).TextColor(fg.Alpha(0.55)).SingleLine()
+			ui.Text(c, keys).FontSize(fsSmall).TextColor(fg.Alpha(0.55)).SingleLine()
 		}
 	})
 	return b.Clicked()
@@ -149,6 +172,13 @@ func borderless(c *ui.Context, pal *palette) *ui.Theme {
 	t.Surface = pal.control
 	t.SurfaceHover = pal.controlHover
 	t.SurfacePressed = pal.controlHover.Mix(pal.text, 0.06)
+	// Tooltips and toasts are raised surfaces, as menus are, rather than
+	// the theme turned over (DESIGN.md section 6).
+	t.Inverse, t.InverseText = pal.popover, pal.text
+	if pal.dark {
+		t.Inverse = pal.popover.Mix(pal.text, 0.06)
+	}
+	t.Warning, t.Success, t.Danger = pal.attention, pal.done, pal.danger
 	return &t
 }
 
@@ -164,7 +194,7 @@ func toggle(c *ui.Context, on *bool, pal *palette) ui.Element {
 	if *on {
 		track = pal.accent
 	}
-	sw.Background(sw.AnimateColor("track", track, ui.Animation{Duration: 150 * time.Millisecond}))
+	sw.Background(sw.AnimateColor("track", track, ui.Animation{Duration: dToggle}))
 	x := sw.AnimateTo("knob", b2f(*on)*16, ui.Animation{Spring: ui.SpringOptions{Duration: 260 * time.Millisecond, Bounce: 0.15}})
 	sw.Children(func() {
 		ui.Box(c).Size(18, 18).Radius(9).Background(ui.Hex("#ffffff")).Translate(x, 0).
