@@ -623,6 +623,11 @@ func (a *App) runKeyAction(action string) {
 		a.toggleSide(sideChanges)
 	case "prefix_inbox", "prefix_mail":
 		a.toggleCockpit()
+		if a.ck.open {
+			// The agents view holds the keys: n there starts an agent,
+			// as the TUI's prefix i then n.
+			return
+		}
 	case "prefix_next_attention":
 		a.jumpToAttention()
 	case "new_workspace":
