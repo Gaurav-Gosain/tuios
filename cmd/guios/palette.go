@@ -670,6 +670,12 @@ func confirmDialog(c *ui.Context, pal *palette, pending **confirmation) bool {
 
 // shortcuts are the window's keys that no menu item has.
 func (a *App) shortcuts(c *ui.Context) {
+	// What a dialog or a mode copied goes to the clipboard, open or not.
+	if a.copyText != "" {
+		c.WriteClipboard(a.copyText)
+		c.Toast(locales.ToastCopied())
+		a.copyText = ""
+	}
 	if a.pal.open || a.help.open || a.prompt != nil || a.picker.open || a.confirm != nil || a.wtAsk != nil {
 		return
 	}
@@ -688,10 +694,5 @@ func (a *App) shortcuts(c *ui.Context) {
 	}
 	if c.Shortcut(ui.Ctrl|ui.Shift, ui.KeyTab) {
 		a.selectOffset(-1)
-	}
-	if a.copyText != "" {
-		c.WriteClipboard(a.copyText)
-		c.Toast(locales.ToastCopied())
-		a.copyText = ""
 	}
 }
