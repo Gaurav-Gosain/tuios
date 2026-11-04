@@ -31,6 +31,15 @@ With the text check in place, the first control fails earlier with
 `TUIOS_E2E_FRAMES`, in the test's folder. Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestDaemonRunsAsAService$' -v .`.
 
+The test waits until the pane program leads a session of its own before it
+runs `kill-server`. The shell writes `$!` before the child runs `setsid`. A
+child that has not run it yet is still in the pane's session, and the hangup
+kills it with the same message as the `KillMode=control-group` control. That
+was a flake on CI. Run on 2026-11-05: with the pane command changed to
+`(sleep 1; exec setsid sleep 600) &`, the test without the wait failed 3 of 3
+runs with that message, and the test with the wait passed 3 of 3. With the
+wait in place, `KillMode=control-group` still fails it.
+
 ## A pasted path reads back in fish behind tmux
 
 `TestPastedPathReadsBackBehindTmux` types names with the path picker into fish

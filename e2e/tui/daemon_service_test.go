@@ -179,6 +179,15 @@ func TestDaemonRunsAsAService(t *testing.T) {
 		}
 	}
 	t.Cleanup(func() { _ = syscall.Kill(survivor, syscall.SIGKILL) })
+	// $! is written right after the fork, before the child has run setsid.
+	// Until it has, it is still in the pane's session, and the hangup when the
+	// daemon stops the pane kills it. Wait for it to lead a session of its own.
+	for deadline := time.Now().Add(10 * time.Second); sessionOf(survivor) != survivor; {
+		if time.Now().After(deadline) {
+			t.Fatalf("the pane program %d did not leave the pane's session (session %d)", survivor, sessionOf(survivor))
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
 	if cg, _ := os.ReadFile(fmt.Sprintf("/proc/%d/cgroup", survivor)); !strings.Contains(string(cg), unit) {
 		t.Fatalf("the pane program is not in the unit's cgroup: %s", cg)
 	}
@@ -227,4 +236,25 @@ func TestDaemonRunsAsAService(t *testing.T) {
 		t.Fatal("uninstall-service stopped the daemon")
 	}
 	logf("uninstall: file gone, daemon %d runs on", fourth.DaemonPID)
+}
+
+// sessionOf returns the session id of pid from /proc, or 0 when it cannot be
+// read. The command name in the stat line can hold spaces and parentheses, so
+// the fields are counted from the last ')'.
+func sessionOf(pid int) int {
+	data, err := os.ReadFile(fmt.Sprintf("/proc/%d/stat", pid))
+	if err != nil {
+		return 0
+	}
+	i := strings.LastIndexByte(string(data), ')')
+	if i < 0 {
+		return 0
+	}
+	// After the name: state, ppid, pgrp, session.
+	fields := strings.Fields(string(data[i+1:]))
+	if len(fields) < 4 {
+		return 0
+	}
+	sid, _ := strconv.Atoi(fields[3])
+	return sid
 }
