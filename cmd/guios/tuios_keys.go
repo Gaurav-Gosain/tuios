@@ -52,6 +52,8 @@ type tuiosKeys struct {
 	whichKey bool
 	path     string // config.toml, and its time when it was read
 	modTime  time.Time
+	// palette are the command palette's keys (palette_keys.go).
+	palette []keyChord
 
 	armed atomic.Bool // read by the terminals' writers
 	// repeat is when the repeat window of an action that stays armed ends
@@ -63,7 +65,9 @@ type tuiosKeys struct {
 }
 
 // loadKeys reads tuios's keymap, again only when config.toml changed. It
-// runs as the prefix is pressed, so a rebind applies with no watcher.
+// runs as the app starts, as its window takes the focus and as the prefix
+// is pressed, so a rebind applies with no watcher. Call it on the main
+// thread.
 func (a *App) loadKeys() {
 	tk := &a.tk
 	path, _ := xdg.SearchConfigFile("tuios/config.toml")
@@ -86,6 +90,8 @@ func (a *App) loadKeys() {
 	tk.leader = normKey(leader)
 	tk.literal = keyBytes(tk.leader)
 	tk.whichKey = cfg.Appearance.WhichKeyEnabled == nil || *cfg.Appearance.WhichKeyEnabled
+	tk.palette = append(paletteChords(cfg.Keybindings.Global["command_palette"], false),
+		paletteChords(cfg.Keybindings.GUI["command_palette"], true)...)
 	tk.path, tk.modTime = path, mod
 }
 

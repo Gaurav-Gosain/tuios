@@ -138,6 +138,7 @@ func runApp() {
 		}
 		a.applyTray()
 		a.applyGlobalShortcuts()
+		a.loadKeys()
 		a.idleTime = mygo.Power.IdleTime
 		a.connect()
 		a.syncHosts()
@@ -163,7 +164,7 @@ func (a *App) openWindow() {
 	}))
 	a.winOpen = true
 	a.updateTitle()
-	a.win.OnFocus(func() { a.update(func() { a.focused = true; a.claimShown(); a.reportView() }) })
+	a.win.OnFocus(func() { a.update(func() { a.focused = true; a.claimShown(); a.reportView(); a.loadKeys() }) })
 	a.win.OnBlur(func() { a.update(func() { a.focused = false; a.reportView() }) })
 	a.win.OnClosed(a.windowClosed)
 }

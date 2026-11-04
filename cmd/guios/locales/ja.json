@@ -786,7 +786,7 @@
   "workspaceEmptyDetail": "ここでペインを開くか、別のワークスペースに移動します。",
   "workspaceNewPane": "新しいペイン",
   "setTuiosKeys": "tuios のキーを使う",
-  "setTuiosKeysDetail": "ペインで tuios のプレフィックスキー (既定は Ctrl+B) を押すと、tuios のメニューが開きます。キーは tuios の config.toml で設定します。",
+  "setTuiosKeysDetail": "ペインで tuios のプレフィックスキー (既定は Ctrl+B) を押すと、tuios のメニューが開きます。Ctrl+P を押すと、コマンドパレットが開きます。キーは tuios の config.toml で設定します。",
   "keysNeedTui": "このキーを使うには、このセッションを tuios TUI で開いてください。",
   "keysMenuPrefix": "プレフィックス",
   "keysMenuWorkspace": "ワークスペース",

@@ -7982,11 +7982,11 @@ func (msgs Messages) SetTuiosKeys() string {
 	return Catalog.Format(msgs.locale, "setTuiosKeys", nil)
 }
 
-// SetTuiosKeysDetail says "In a pane, press the tuios prefix key (Ctrl+B by default) to open the tuios menus. Your tuios config.toml sets the keys."
+// SetTuiosKeysDetail says "In a pane, press the tuios prefix key (Ctrl+B by default) to open the tuios menus. Press Ctrl+P to open the command p…"
 // in the language the app shows.
 func SetTuiosKeysDetail() string { return In(i18n.Locale()).SetTuiosKeysDetail() }
 
-// SetTuiosKeysDetail says "In a pane, press the tuios prefix key (Ctrl+B by default) to open the tuios menus. Your tuios config.toml sets the keys."
+// SetTuiosKeysDetail says "In a pane, press the tuios prefix key (Ctrl+B by default) to open the tuios menus. Press Ctrl+P to open the command p…"
 // in the language of msgs.
 func (msgs Messages) SetTuiosKeysDetail() string {
 	return Catalog.Format(msgs.locale, "setTuiosKeysDetail", nil)
