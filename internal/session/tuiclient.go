@@ -831,38 +831,20 @@ func (c *TUIClient) SwitchSession(targetName string, width, height int) (*Sessio
 	// the new one's, so input is reported meanwhile.
 	c.noteSizePolicy("")
 
-	// 1. Detach (fire-and-forget, daemon sends MsgDetached back)
-	detachMsg, err := NewMessage(MsgDetach, nil)
-	if err != nil {
-		return nil, fmt.Errorf("detach encode: %w", err)
+	// 1. Detach. The daemon answers MsgDetached, or an untagged MsgError with
+	// ErrCodeNotAttached when this connection holds no session, which happens
+	// after a switch whose return attach failed. Either way the connection is
+	// free to attach.
+	if err := c.detachForSwitch(); err != nil {
+		if errors.Is(err, errDetachUnconfirmed) {
+			// The detach may still land after the wait, so the connection may
+			// hold no session. Saying it is still on prevName would leave the
+			// person looking at panes that no longer stream.
+			return nil, &SwitchRollback{Target: targetName, Prev: prevName, Err: err,
+				Recovery: errors.New("the daemon did not confirm the detach in time, so the client may hold no session")}
+		}
+		return nil, err
 	}
-
-	// Register for detach response before sending
-	detachResp := make(chan *Message, 1)
-	c.pendingResponsesMu.Lock()
-	c.pendingResponses[MsgDetached] = &pendingReply{ch: detachResp}
-	c.pendingResponsesMu.Unlock()
-
-	if err := c.send(detachMsg); err != nil {
-		return nil, fmt.Errorf("detach send: %w", err)
-	}
-
-	debugLog("[SWITCH] Detach sent, waiting for confirmation...")
-
-	// Wait for detach confirmation
-	select {
-	case <-detachResp:
-		debugLog("[SWITCH] Detach confirmed")
-	case <-time.After(5 * time.Second):
-		return nil, fmt.Errorf("detach timeout")
-	case <-c.done:
-		return nil, fmt.Errorf("client closed")
-	}
-
-	// Clean up pending response registration
-	c.pendingResponsesMu.Lock()
-	delete(c.pendingResponses, MsgDetached)
-	c.pendingResponsesMu.Unlock()
 
 	// 2. Attach to new session using sendAndWaitResponse
 	debugLog("[SWITCH] Attaching to session %q (%dx%d)", targetName, width, height)
@@ -900,6 +882,65 @@ func (c *TUIClient) SwitchSession(targetName string, width, height int) (*Sessio
 	rollback.State = prevState
 	debugLog("[SWITCH] Returned to %q", prevName)
 	return nil, rollback
+}
+
+// errDetachUnconfirmed is a detach the daemon did not answer in time. The
+// daemon may still take it later.
+var errDetachUnconfirmed = errors.New("detach timeout")
+
+// detachForSwitch sends the detach of a session switch and waits for the
+// daemon to take it. The detach goes untagged, so the answer is routed by
+// type. roundTripMu keeps another round trip from taking the MsgError slot
+// meanwhile.
+func (c *TUIClient) detachForSwitch() error {
+	detachMsg, err := NewMessage(MsgDetach, nil)
+	if err != nil {
+		return fmt.Errorf("detach encode: %w", err)
+	}
+
+	c.roundTripMu.Lock()
+	defer c.roundTripMu.Unlock()
+
+	resp := make(chan *Message, 1)
+	p := &pendingReply{ch: resp, accept: func(m *Message) bool {
+		if m.Type != MsgError {
+			return true
+		}
+		var e ErrorPayload
+		return m.ParsePayload(&e) == nil && e.Code == ErrCodeNotAttached
+	}}
+	c.pendingResponsesMu.Lock()
+	c.pendingResponses[MsgDetached] = p
+	c.pendingResponses[MsgError] = p
+	c.pendingResponsesMu.Unlock()
+	defer func() {
+		c.pendingResponsesMu.Lock()
+		for _, t := range []MessageType{MsgDetached, MsgError} {
+			if c.pendingResponses[t] == p {
+				delete(c.pendingResponses, t)
+			}
+		}
+		c.pendingResponsesMu.Unlock()
+	}()
+
+	if err := c.send(detachMsg); err != nil {
+		return fmt.Errorf("detach send: %w", err)
+	}
+	debugLog("[SWITCH] Detach sent, waiting for confirmation...")
+
+	select {
+	case m := <-resp:
+		if m.Type == MsgError {
+			debugLog("[SWITCH] Not attached to any session, nothing to detach")
+		} else {
+			debugLog("[SWITCH] Detach confirmed")
+		}
+		return nil
+	case <-time.After(5 * time.Second):
+		return errDetachUnconfirmed
+	case <-c.done:
+		return fmt.Errorf("client closed")
+	}
 }
 
 // attachWhileReading performs the attach round trip through the read loop, for
