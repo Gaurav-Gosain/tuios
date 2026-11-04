@@ -695,5 +695,22 @@
   "cockpitYou": "你",
   "cockpitAnswerInPane": "tuios 无法从屏幕读取此提示。请打开窗格来回答。",
   "cockpitAllowTool": "允许 {tool}",
-  "cockpitQuestion": "回答代理"
+  "cockpitQuestion": "回答代理",
+  "cockpitQueued": "等待中",
+  "cockpitCancelQueued": "撤回",
+  "cockpitTo": "发给",
+  "cockpitNextTurn": "代理空闲时发送",
+  "cockpitReplyPlaceholder": "写一条回复。粘贴或拖入图片即可添加。",
+  "cockpitHintImage": "图片",
+  "cockpitHintNewLine": "换行",
+  "cockpitHintSendNow": "立即发送",
+  "cockpitSend": "发送",
+  "cockpitRemoveImage": "移除图片",
+  "cockpitPastedImage": "粘贴的图片 {n}",
+  "cockpitNotImage": "{name} 不是图片。",
+  "cockpitTooManyImages": "一条消息最多带 {n} 张图片。",
+  "cockpitImageTooBig": "{name} 超过 8 MB。",
+  "cockpitNowNoImages": "图片只能随排队消息发送。按 Enter 排队。",
+  "cockpitSentNow": "已发送给 {name}。",
+  "cockpitQueuedFor": "{name} 空闲时会收到消息。"
 }

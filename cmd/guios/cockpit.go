@@ -201,6 +201,11 @@ func (a *App) cockpitEvent(ev *proto.DaemonEvent) {
 		return
 	case "agent-activity":
 		return
+	case "agent-state":
+		// A queued message is typed at a rest: the queue shown changes.
+		if ag, ok := a.ckSelectedAgent(); ok && ag.Window == ev.Window {
+			a.fetchQueued(ag)
+		}
 	}
 	a.refreshCockpit()
 }

@@ -61,6 +61,18 @@ func startProbe(a *App) {
 				mu.Unlock()
 				sc := bufio.NewScanner(conn)
 				for sc.Scan() {
+					// "image PATH" puts an image in the reply box of the
+					// cockpit's agent, as a paste of it does: a headless
+					// compositor has no clipboard to paste from.
+					if p, ok := strings.CutPrefix(sc.Text(), "image "); ok {
+						a.update(func() {
+							if ag, ok := a.ckSelectedAgent(); ok {
+								a.addImageFiles(a.draftFor(ag), []string{p})
+							}
+						})
+						conn.Write([]byte("ok\n"))
+						continue
+					}
 					c, ok := strings.CutPrefix(sc.Text(), "count ")
 					if !ok {
 						continue

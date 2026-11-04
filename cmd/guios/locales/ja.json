@@ -695,5 +695,22 @@
   "cockpitYou": "あなた",
   "cockpitAnswerInPane": "tuios はこの確認を画面から読めません。答えるにはペインを開いてください。",
   "cockpitAllowTool": "{tool} を許可",
-  "cockpitQuestion": "エージェントに答える"
+  "cockpitQuestion": "エージェントに答える",
+  "cockpitQueued": "待機中",
+  "cockpitCancelQueued": "取り消す",
+  "cockpitTo": "宛先",
+  "cockpitNextTurn": "エージェントが休むと送られます",
+  "cockpitReplyPlaceholder": "返信を書いてください。画像は貼り付けかドロップで追加できます。",
+  "cockpitHintImage": "画像",
+  "cockpitHintNewLine": "改行",
+  "cockpitHintSendNow": "今すぐ送る",
+  "cockpitSend": "送信",
+  "cockpitRemoveImage": "画像を外す",
+  "cockpitPastedImage": "貼り付けた画像 {n}",
+  "cockpitNotImage": "{name} は画像ではありません。",
+  "cockpitTooManyImages": "1 通に付けられる画像は {n} 枚までです。",
+  "cockpitImageTooBig": "{name} は 8 MB を超えています。",
+  "cockpitNowNoImages": "画像は待機メッセージでのみ送れます。Enter で待機させてください。",
+  "cockpitSentNow": "{name} に送りました。",
+  "cockpitQueuedFor": "{name} が休むとメッセージが届きます。"
 }

@@ -7081,3 +7081,173 @@ func CockpitQuestion() string { return In(i18n.Locale()).CockpitQuestion() }
 func (msgs Messages) CockpitQuestion() string {
 	return Catalog.Format(msgs.locale, "cockpitQuestion", nil)
 }
+
+// CockpitQueued says "Waiting"
+// in the language the app shows.
+func CockpitQueued() string { return In(i18n.Locale()).CockpitQueued() }
+
+// CockpitQueued says "Waiting"
+// in the language of msgs.
+func (msgs Messages) CockpitQueued() string {
+	return Catalog.Format(msgs.locale, "cockpitQueued", nil)
+}
+
+// CockpitCancelQueued says "Drop"
+// in the language the app shows.
+func CockpitCancelQueued() string { return In(i18n.Locale()).CockpitCancelQueued() }
+
+// CockpitCancelQueued says "Drop"
+// in the language of msgs.
+func (msgs Messages) CockpitCancelQueued() string {
+	return Catalog.Format(msgs.locale, "cockpitCancelQueued", nil)
+}
+
+// CockpitTo says "To"
+// in the language the app shows.
+func CockpitTo() string { return In(i18n.Locale()).CockpitTo() }
+
+// CockpitTo says "To"
+// in the language of msgs.
+func (msgs Messages) CockpitTo() string {
+	return Catalog.Format(msgs.locale, "cockpitTo", nil)
+}
+
+// CockpitNextTurn says "Sent when the agent rests"
+// in the language the app shows.
+func CockpitNextTurn() string { return In(i18n.Locale()).CockpitNextTurn() }
+
+// CockpitNextTurn says "Sent when the agent rests"
+// in the language of msgs.
+func (msgs Messages) CockpitNextTurn() string {
+	return Catalog.Format(msgs.locale, "cockpitNextTurn", nil)
+}
+
+// CockpitReplyPlaceholder says "Write a reply. Paste or drop an image to add it."
+// in the language the app shows.
+func CockpitReplyPlaceholder() string { return In(i18n.Locale()).CockpitReplyPlaceholder() }
+
+// CockpitReplyPlaceholder says "Write a reply. Paste or drop an image to add it."
+// in the language of msgs.
+func (msgs Messages) CockpitReplyPlaceholder() string {
+	return Catalog.Format(msgs.locale, "cockpitReplyPlaceholder", nil)
+}
+
+// CockpitHintImage says "image"
+// in the language the app shows.
+func CockpitHintImage() string { return In(i18n.Locale()).CockpitHintImage() }
+
+// CockpitHintImage says "image"
+// in the language of msgs.
+func (msgs Messages) CockpitHintImage() string {
+	return Catalog.Format(msgs.locale, "cockpitHintImage", nil)
+}
+
+// CockpitHintNewLine says "new line"
+// in the language the app shows.
+func CockpitHintNewLine() string { return In(i18n.Locale()).CockpitHintNewLine() }
+
+// CockpitHintNewLine says "new line"
+// in the language of msgs.
+func (msgs Messages) CockpitHintNewLine() string {
+	return Catalog.Format(msgs.locale, "cockpitHintNewLine", nil)
+}
+
+// CockpitHintSendNow says "send now"
+// in the language the app shows.
+func CockpitHintSendNow() string { return In(i18n.Locale()).CockpitHintSendNow() }
+
+// CockpitHintSendNow says "send now"
+// in the language of msgs.
+func (msgs Messages) CockpitHintSendNow() string {
+	return Catalog.Format(msgs.locale, "cockpitHintSendNow", nil)
+}
+
+// CockpitSend says "Send"
+// in the language the app shows.
+func CockpitSend() string { return In(i18n.Locale()).CockpitSend() }
+
+// CockpitSend says "Send"
+// in the language of msgs.
+func (msgs Messages) CockpitSend() string {
+	return Catalog.Format(msgs.locale, "cockpitSend", nil)
+}
+
+// CockpitRemoveImage says "Remove the image"
+// in the language the app shows.
+func CockpitRemoveImage() string { return In(i18n.Locale()).CockpitRemoveImage() }
+
+// CockpitRemoveImage says "Remove the image"
+// in the language of msgs.
+func (msgs Messages) CockpitRemoveImage() string {
+	return Catalog.Format(msgs.locale, "cockpitRemoveImage", nil)
+}
+
+// CockpitPastedImage says "Pasted image {n}"
+// in the language the app shows.
+func CockpitPastedImage(n int) string { return In(i18n.Locale()).CockpitPastedImage(n) }
+
+// CockpitPastedImage says "Pasted image {n}"
+// in the language of msgs.
+func (msgs Messages) CockpitPastedImage(n int) string {
+	return Catalog.Format(msgs.locale, "cockpitPastedImage", map[string]any{"n": n})
+}
+
+// CockpitNotImage says "{name} is not an image."
+// in the language the app shows.
+func CockpitNotImage(name string) string { return In(i18n.Locale()).CockpitNotImage(name) }
+
+// CockpitNotImage says "{name} is not an image."
+// in the language of msgs.
+func (msgs Messages) CockpitNotImage(name string) string {
+	return Catalog.Format(msgs.locale, "cockpitNotImage", map[string]any{"name": name})
+}
+
+// CockpitTooManyImages says "A message takes at most {n} images."
+// in the language the app shows.
+func CockpitTooManyImages(n int) string { return In(i18n.Locale()).CockpitTooManyImages(n) }
+
+// CockpitTooManyImages says "A message takes at most {n} images."
+// in the language of msgs.
+func (msgs Messages) CockpitTooManyImages(n int) string {
+	return Catalog.Format(msgs.locale, "cockpitTooManyImages", map[string]any{"n": n})
+}
+
+// CockpitImageTooBig says "{name} is larger than 8 MB."
+// in the language the app shows.
+func CockpitImageTooBig(name string) string { return In(i18n.Locale()).CockpitImageTooBig(name) }
+
+// CockpitImageTooBig says "{name} is larger than 8 MB."
+// in the language of msgs.
+func (msgs Messages) CockpitImageTooBig(name string) string {
+	return Catalog.Format(msgs.locale, "cockpitImageTooBig", map[string]any{"name": name})
+}
+
+// CockpitNowNoImages says "Images go only with a queued message. Press Enter to queue it."
+// in the language the app shows.
+func CockpitNowNoImages() string { return In(i18n.Locale()).CockpitNowNoImages() }
+
+// CockpitNowNoImages says "Images go only with a queued message. Press Enter to queue it."
+// in the language of msgs.
+func (msgs Messages) CockpitNowNoImages() string {
+	return Catalog.Format(msgs.locale, "cockpitNowNoImages", nil)
+}
+
+// CockpitSentNow says "Sent to {name}."
+// in the language the app shows.
+func CockpitSentNow(name string) string { return In(i18n.Locale()).CockpitSentNow(name) }
+
+// CockpitSentNow says "Sent to {name}."
+// in the language of msgs.
+func (msgs Messages) CockpitSentNow(name string) string {
+	return Catalog.Format(msgs.locale, "cockpitSentNow", map[string]any{"name": name})
+}
+
+// CockpitQueuedFor says "{name} gets the message when it rests."
+// in the language the app shows.
+func CockpitQueuedFor(name string) string { return In(i18n.Locale()).CockpitQueuedFor(name) }
+
+// CockpitQueuedFor says "{name} gets the message when it rests."
+// in the language of msgs.
+func (msgs Messages) CockpitQueuedFor(name string) string {
+	return Catalog.Format(msgs.locale, "cockpitQueuedFor", map[string]any{"name": name})
+}

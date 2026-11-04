@@ -1301,5 +1301,36 @@
   "cockpitYou": "You",
   "cockpitAnswerInPane": "tuios cannot read this prompt on the screen. Open the pane to answer it.",
   "cockpitAllowTool": "Allow {tool}",
-  "cockpitQuestion": "Answer the agent"
+  "cockpitQuestion": "Answer the agent",
+  "cockpitQueued": "Waiting",
+  "cockpitCancelQueued": "Drop",
+  "cockpitTo": "To",
+  "cockpitNextTurn": "Sent when the agent rests",
+  "cockpitReplyPlaceholder": "Write a reply. Paste or drop an image to add it.",
+  "cockpitHintImage": "image",
+  "cockpitHintNewLine": "new line",
+  "cockpitHintSendNow": "send now",
+  "cockpitSend": "Send",
+  "cockpitRemoveImage": "Remove the image",
+  "cockpitPastedImage": "Pasted image {n}",
+  "@cockpitPastedImage": {
+    "placeholders": {
+      "n": {
+        "type": "int"
+      }
+    }
+  },
+  "cockpitNotImage": "{name} is not an image.",
+  "cockpitTooManyImages": "A message takes at most {n} images.",
+  "@cockpitTooManyImages": {
+    "placeholders": {
+      "n": {
+        "type": "int"
+      }
+    }
+  },
+  "cockpitImageTooBig": "{name} is larger than 8 MB.",
+  "cockpitNowNoImages": "Images go only with a queued message. Press Enter to queue it.",
+  "cockpitSentNow": "Sent to {name}.",
+  "cockpitQueuedFor": "{name} gets the message when it rests."
 }
