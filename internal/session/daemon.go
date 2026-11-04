@@ -713,6 +713,13 @@ type connState struct {
 	// link-peer handshake, "" when the link forwards none.
 	linkAgentSock string
 	linkServed    bool
+	// linkCloseToken is the token the link-peer reply gave stdio-proxy for
+	// this connection. The proxy sends it back on a connection of its own,
+	// as link-peer's closes, when the far side closed the stream on purpose,
+	// and linkClosedOnPurpose records that. A stream that ends without it
+	// ended because the link dropped. Guarded by mu. See paneStream.close.
+	linkCloseToken      string
+	linkClosedOnPurpose bool
 
 	// peerPID is the pid of the process on the other end, as the kernel
 	// recorded it at connect time, or 0 where the platform does not say. For

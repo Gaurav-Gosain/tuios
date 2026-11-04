@@ -342,13 +342,16 @@ func (ps *paneStream) close() {
 			ps.pty.unsubscribeSub(ps.subID, ps.sub)
 		}
 		ps.leaseMu.Lock()
-		if ps.leased && ps.cs.viaLink {
+		if ps.leased && ps.cs.viaLink && !ps.cs.linkClosedOnPurposeNow() {
 			// A stream over a link ends when the link drops, and its
 			// viewer opens it again when the link is back. Releasing the
 			// lease now would resize the pane twice, to its own size and
 			// back, and the program in it would redraw both times. The
 			// lease lingers for linkLeaseLinger: a viewer back by then
-			// holds the pane with its new stream's lease.
+			// holds the pane with its new stream's lease. A stream the
+			// far side closed on purpose, as a phone leaving the pane,
+			// has no viewer coming back, and stdio-proxy says so before
+			// it ends the connection. Its lease goes at once.
 			pty, holder := ps.pty, ps.subID
 			time.AfterFunc(linkLeaseLinger, func() { _ = pty.SetLease(holder, 0, 0) })
 		} else if ps.leased {

@@ -428,6 +428,62 @@ func TestStreamPaneFromAPane(t *testing.T) {
 // phone leased smaller, and draws it at full size again when the lease ends.
 // The frames go to TUIOS_E2E_FRAMES as stream-lease-held and
 // stream-lease-released.
+// TestStreamPaneLeaseOutlivesADroppedLink: a link that drops ends its stream
+// without a close frame. The lease stays for 15 s, so a viewer that comes back
+// finds the pane at the size it left, and then the lease ends.
+// TestStreamPaneLeaseOnTheDesktop and TestPhoneStreamsAPaneAndAnswersTheInbox
+// are the other half: a stream closed on purpose gives its lease back at once.
+//
+// How this could pass wrongly, written down first:
+//   - The proxy could report the drop as a close on purpose. The lease would
+//     end at once and the "held" check fails.
+//   - The lease could never end. The "released" check waits past the 15 s.
+//   - The pane could read 6x30 for a reason other than the lease. The control
+//     link that types the checks holds no lease, and the released check reads
+//     another size from the same pane.
+func TestStreamPaneLeaseOutlivesADroppedLink(t *testing.T) {
+	base, _, ctl, w1, _ := limitsDaemon(t)
+
+	viewer := startPhoneLink(t, base)
+	ps := viewer.open(t, true)
+	if _, verr := ps.call(t, "stream-pane", map[string]any{"session": streamSession, "window": w1, "lease_cols": 30, "lease_rows": 6}); verr != nil {
+		t.Fatalf("stream-pane: %v", verr)
+	}
+	ps.nextOf(t, 'S', uiTimeout)
+	spType(t, ctl, w1, "clear; echo SZ-$(stty size | tr ' ' x)\n")
+	if got := spSize(t, ctl, w1, "SZ-"); got != "6x30" {
+		t.Fatalf("the leased pane is %s, want 6x30", got)
+	}
+
+	// The link drops: the proxy's stdin ends, as when ssh goes, and no close
+	// frame comes for the stream.
+	_ = viewer.in.Close()
+	if err := viewer.cmd.Wait(); err != nil {
+		t.Logf("stdio-proxy exited: %v", err)
+	}
+	dropped := time.Now()
+	time.Sleep(time.Second)
+	spType(t, ctl, w1, "clear; echo HELD-$(stty size | tr ' ' x)\n")
+	if got := spSize(t, ctl, w1, "HELD-"); got != "6x30" {
+		t.Fatalf("ASSERTION: %s after the link dropped the pane is %s, want 6x30: the lease ended with the link", time.Since(dropped).Round(time.Millisecond), got)
+	}
+
+	deadline := dropped.Add(25 * time.Second)
+	for i := 0; ; i++ {
+		prefix := fmt.Sprintf("BACK%d-", i)
+		spType(t, ctl, w1, "clear; echo "+prefix+"$(stty size | tr ' ' x)\n")
+		got := spSize(t, ctl, w1, prefix)
+		if got != "6x30" {
+			t.Logf("the lease ended %s after the link dropped; the pane is %s", time.Since(dropped).Round(100*time.Millisecond), got)
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("ASSERTION: the pane is still 6x30 %s after the link dropped", time.Since(dropped).Round(time.Second))
+		}
+		time.Sleep(time.Second)
+	}
+}
+
 func TestStreamPaneLeaseOnTheDesktop(t *testing.T) {
 	base, link, ctl, w1, _ := limitsDaemon(t)
 	term := attachIn(t, base, streamSession, startOpts{})

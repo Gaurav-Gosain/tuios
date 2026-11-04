@@ -3457,6 +3457,13 @@ client is limited to the lease. When the stream releases the lease with
 clients asked for last. Other panes and the session size do not change. An
 attached tuios client shows the smaller pane in the same rectangle.
 
+A stream that came over a link is the exception. When the link drops, its
+lease stays for 15 seconds after the connection closes. A viewer that opens
+the stream again in that time holds the pane at the same size, so the program
+in the pane does not redraw twice. When the far side closes the stream on
+purpose, `tuios stdio-proxy` tells the daemon first (see `closes` under
+[What a linked machine may do here](#what-a-linked-machine-may-do-here)), and the lease ends at once.
+
 When two streams hold a lease on one pane, the smaller lease applies in each
 dimension.
 
@@ -6796,6 +6803,13 @@ When the link's ssh forwards an agent, the proxy also sends the
 to that socket, under the same checks as a local client's socket. A daemon
 too old to know the parameter refuses it with `invalid_params`, and the proxy
 sends `link-peer` again without it.
+
+The reply holds a `close_token` for the connection. When the far side closes
+a stream on purpose, the proxy opens one more connection and sends `link-peer`
+with that token as `closes` before it ends the stream's connection. The daemon
+then ends the stream's size lease at once. A stream that ends without it
+ended because the link dropped, and its lease stays for 15 seconds. A daemon
+too old to give a token gets no `closes`.
 
 Only a pinned name is a boundary. A hub whose ssh key may run any command can
 run a shell, and can claim any name. Pin it in `authorized_keys` on this

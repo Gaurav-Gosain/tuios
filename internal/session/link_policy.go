@@ -2,6 +2,8 @@ package session
 
 import (
 	"bufio"
+	"crypto/rand"
+	"crypto/subtle"
 	"encoding/json"
 	"fmt"
 	"maps"
@@ -561,12 +563,18 @@ func (d *Daemon) verbLinkPeer(cs *connState, params json.RawMessage) (any, *verb
 		// agent the link's ssh forwards, when it forwards one. See
 		// ssh_agent_follow.go.
 		SSHAuthSock string `json:"ssh_auth_sock"`
+		// Closes is the close token of another link connection whose
+		// stream the far side closed on purpose. See linkClosedOnPurpose.
+		Closes string `json:"closes"`
 	}
 	if verr := decodeParams(params, &p); verr != nil {
 		return nil, verr
 	}
 	if cs == nil || !cs.viaLink {
 		return nil, newVerbError(ErrVerbForbidden, "link-peer is only for a connection that arrived over a link")
+	}
+	if p.Closes != "" {
+		d.noteLinkClosedOnPurpose(p.Closes)
 	}
 	peer := strings.TrimSpace(p.Peer)
 	if peer != "" && (len(peer) > 64 || !linkPeerPattern().MatchString(peer)) {
@@ -581,11 +589,35 @@ func (d *Daemon) verbLinkPeer(cs *connState, params json.RawMessage) (any, *verb
 	cs.linkPeer = peer
 	cs.linkPinned = p.Pinned
 	cs.linkAgentSock = p.SSHAuthSock
+	cs.linkCloseToken = rand.Text()
 	// The connection goes back to being read from its first byte, JSON or
 	// binary, so an attach can follow the handshake on the same connection.
 	cs.takeover = func(br *bufio.Reader) { d.serveConnection(cs, br) }
 	LogBasic("Link %s names its peer %q (pinned %v)", cs.clientID, peer, p.Pinned)
-	return map[string]any{"type": "link_peer", "peer": peer}, nil
+	return map[string]any{"type": "link_peer", "peer": peer, "close_token": cs.linkCloseToken}, nil
+}
+
+// noteLinkClosedOnPurpose marks the link connection that holds token as
+// closed on purpose by the far side. An unknown token does nothing: the
+// connection may already be gone.
+func (d *Daemon) noteLinkClosedOnPurpose(token string) {
+	d.clientsMu.Lock()
+	defer d.clientsMu.Unlock()
+	for _, c := range d.clients {
+		c.mu.Lock()
+		if c.viaLink && c.linkCloseToken != "" && subtle.ConstantTimeCompare([]byte(c.linkCloseToken), []byte(token)) == 1 {
+			c.linkClosedOnPurpose = true
+		}
+		c.mu.Unlock()
+	}
+}
+
+// linkClosedOnPurposeNow reports whether the far side of a link connection
+// closed it on purpose. See noteLinkClosedOnPurpose.
+func (cs *connState) linkClosedOnPurposeNow() bool {
+	cs.mu.Lock()
+	defer cs.mu.Unlock()
+	return cs.linkClosedOnPurpose
 }
 
 // linkPeerPattern is what a peer name may be: the same shape as a host name,

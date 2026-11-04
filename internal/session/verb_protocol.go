@@ -961,9 +961,11 @@ func buildVerbRegistry() map[string]verbEntry {
 				{Name: "peer", Type: "string", Description: "The machine's name: the one the hub gave for itself, or the one the proxy was pinned to with --as. Empty for none."},
 				{Name: "pinned", Type: "bool", Description: "The name came from stdio-proxy --as on this machine, not from the hub."},
 				{Name: "ssh_auth_sock", Type: "string", Description: "The SSH_AUTH_SOCK stdio-proxy runs with: the agent the link's ssh forwards. A client attached through the link uses it for ssh_agent = \"follow\"."},
+				{Name: "closes", Type: "string", Description: "The close_token of another link connection. The far side closed that connection's stream on purpose, so a size lease it holds ends at once and does not wait for a viewer to come back."},
 			},
 			returns: []verbParam{
 				{Name: "peer", Type: "string", Description: "The name the connection is held to."},
+				{Name: "close_token", Type: "string", Description: "The token stdio-proxy sends back as closes when the far side closes this connection's stream on purpose."},
 			},
 			examples: []string{`{"id":1,"verb":"link-peer","params":{"peer":"laptop"}}`},
 			handler:  (*Daemon).verbLinkPeer,

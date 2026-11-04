@@ -12815,3 +12815,17 @@ head with one change each:
 The steps and lock counts are in `keep-awake.txt` under `TUIOS_E2E_FRAMES`,
 in the test's folder. Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestKeepAwakeHoldsWhileAnAgentWorks$' -v .`.
+
+## A link stream's lease: closed on purpose or dropped
+
+`TestStreamPaneLeaseOutlivesADroppedLink` checks that a stream whose link
+drops keeps its lease for 15 s, and then lets it go.
+`TestStreamPaneLeaseOnTheDesktop` and `TestPhoneStreamsAPaneAndAnswersTheInbox`
+check that a stream the far side closes on purpose gives its lease back at
+once. Run on 2026-11-04 on Linux, each control against the branch head with
+one change:
+
+| Control | Where it fails | Verdict |
+|---|---|---|
+| `linkConn.NoteClosedOnPurpose` returns before it sends the close token | `TestStreamPaneLeaseOnTheDesktop`: "the pane stayed at the leased size after the stream closed"; `TestPhoneStreamsAPaneAndAnswersTheInbox`: "the pane did not go back to the size asked for when the stream closed" | **caught** |
+| `paneStream.close` releases every lease at once, with no linger | `TestStreamPaneLeaseOutlivesADroppedLink`: "1.102s after the link dropped the pane is 22x78, want 6x30" | **caught** |
