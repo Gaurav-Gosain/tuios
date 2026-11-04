@@ -820,6 +820,8 @@
   "hostSaved": "{host} のアドレスを変更しました。",
   "hostAdded": "{host} を追加しました。",
   "hostStatusUp": "接続済み",
+  "hostStatusSameMachine": "同じマシン",
+  "hostSameMachineAs": "{host} と同じマシンです。セッションは {host} の下に表示されます。",
   "hostStatusReconnecting": "再接続中",
   "hostStatusNoDaemon": "デーモンなし",
   "hostStatusNoTuios": "tuios なし",

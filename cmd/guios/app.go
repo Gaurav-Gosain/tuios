@@ -40,6 +40,7 @@ const (
 	connReady
 	connVersion // kerod of another version runs
 	connFailed
+	connAlias // the far daemon is another host's (host.alias)
 )
 
 // prefs are what the app remembers between runs; the sessions themselves

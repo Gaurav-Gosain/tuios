@@ -113,7 +113,7 @@ func (a *App) machineRow(c *ui.Context, pal *palette, h *host) {
 				if b.Clicked() {
 					a.newSessionOn(h, "")
 				}
-			case h.rep.Status == client.HostUp && h.rep.LoadKnown():
+			case h.conn != connAlias && h.rep.Status == client.HostUp && h.rep.LoadKnown():
 				a.loadMeter(c, pal, h.rep)
 			default:
 				ui.Text(c, label).FontSize(11.5).FontWeight(500).TextColor(col).SingleLine()
@@ -122,6 +122,10 @@ func (a *App) machineRow(c *ui.Context, pal *palette, h *host) {
 		// The second line: the version and the round trip of a machine
 		// that is up, else what keeps its sessions from showing.
 		ui.Column(c.Key("detail")).Padding(0, 6, 0, 23).Gap(6).Children(func() {
+			if h.conn == connAlias {
+				ui.Text(c, locales.HostSameMachineAs(h.alias)).FontSize(11.5).TextColor(pal.textFaint).LineHeight(1.35)
+				return
+			}
 			if h.conn == connReady || h.rep.Status == client.HostUp && h.busy == "" && h.err == "" {
 				ui.Text(c, a.hostSummary(h)).FontSize(11.5).TextColor(pal.textFaint).SingleLine().Ellipsis("…").MinWidth(0)
 				return
@@ -183,6 +187,8 @@ func (a *App) hostStatusWord(h *host) string {
 		return locales.HostInstallingShort()
 	case h.conn == connReady:
 		return locales.HostStatusUp()
+	case h.conn == connAlias:
+		return locales.HostStatusSameMachine()
 	}
 	switch h.rep.Status {
 	case client.HostUp, client.HostConnecting, "":

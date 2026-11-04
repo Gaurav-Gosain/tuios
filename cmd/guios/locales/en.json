@@ -1510,6 +1510,8 @@
     }
   },
   "hostStatusUp": "Connected",
+  "hostStatusSameMachine": "Same machine",
+  "hostSameMachineAs": "This is the same machine as {host}. Its sessions show under {host}.",
   "hostStatusReconnecting": "Reconnecting",
   "hostStatusNoDaemon": "No daemon",
   "hostStatusNoTuios": "No tuios",

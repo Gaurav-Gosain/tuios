@@ -820,6 +820,8 @@
   "hostSaved": "{host} 的地址已更改。",
   "hostAdded": "已添加 {host}。",
   "hostStatusUp": "已连接",
+  "hostStatusSameMachine": "同一台机器",
+  "hostSameMachineAs": "这是与 {host} 相同的机器。其会话显示在 {host} 下。",
   "hostStatusReconnecting": "正在重新连接",
   "hostStatusNoDaemon": "无守护进程",
   "hostStatusNoTuios": "无 tuios",

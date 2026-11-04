@@ -52,6 +52,10 @@ type host struct {
 	busy string
 	// poked is when the app last asked the daemon to dial the host now.
 	poked time.Time
+	// alias is the host listed before this one that reaches the same far
+	// daemon (one Instance), as two names for one address do. Its
+	// sessions show there only, so this host connects to nothing.
+	alias string
 }
 
 func (h *host) remote() bool { return h.name != "" }
@@ -317,6 +321,19 @@ func (a *App) applyHosts(reps []client.HostReport, load client.HostReport) {
 	}
 	a.hosts = keep
 	a.hostsKnown = true
+	// Two links that reach one far daemon show its sessions once, under
+	// the first.
+	first := map[string]string{}
+	for _, h := range keep[1:] {
+		h.alias = ""
+		if in := h.rep.Instance; in != "" {
+			if name, ok := first[in]; ok {
+				h.alias = name
+			} else {
+				first[in] = h.name
+			}
+		}
+	}
 	// The sessions shown follow the hosts' order.
 	a.mergeState(a.local(), proto.State{Projects: a.projectsOf(a.local()), Sessions: a.sessionsOf(a.local())})
 	for _, h := range keep[1:] {
@@ -334,6 +351,14 @@ func (a *App) applyHosts(reps []client.HostReport, load client.HostReport) {
 // followLink sets how the app stands with a remote host from its link, and
 // connects to its daemon once the link is up.
 func (a *App) followLink(h *host) {
+	if h.alias != "" {
+		if h.cl != nil || h.dialing || h.loaded {
+			a.closeHost(h)
+			h.dialing = false
+		}
+		h.conn, h.err = connAlias, ""
+		return
+	}
 	switch h.rep.Status {
 	case client.HostUp:
 		client.LinkBack(h.name)

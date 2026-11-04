@@ -8322,6 +8322,26 @@ func (msgs Messages) HostStatusUp() string {
 	return Catalog.Format(msgs.locale, "hostStatusUp", nil)
 }
 
+// HostStatusSameMachine says "Same machine"
+// in the language the app shows.
+func HostStatusSameMachine() string { return In(i18n.Locale()).HostStatusSameMachine() }
+
+// HostStatusSameMachine says "Same machine"
+// in the language of msgs.
+func (msgs Messages) HostStatusSameMachine() string {
+	return Catalog.Format(msgs.locale, "hostStatusSameMachine", nil)
+}
+
+// HostSameMachineAs says "This is the same machine as {host}. Its sessions show under {host}."
+// in the language the app shows.
+func HostSameMachineAs(host string) string { return In(i18n.Locale()).HostSameMachineAs(host) }
+
+// HostSameMachineAs says "This is the same machine as {host}. Its sessions show under {host}."
+// in the language of msgs.
+func (msgs Messages) HostSameMachineAs(host string) string {
+	return Catalog.Format(msgs.locale, "hostSameMachineAs", map[string]any{"host": host})
+}
+
 // HostStatusReconnecting says "Reconnecting"
 // in the language the app shows.
 func HostStatusReconnecting() string { return In(i18n.Locale()).HostStatusReconnecting() }
