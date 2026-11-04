@@ -165,6 +165,10 @@ func (a *App) cockpitHeader(c *ui.Context, pal *palette, bar ui.TitleBar, shown 
 			n[r.group] = r.count
 		}
 	}
+	// Needs you counts what the badge counts (cockpit_needs.go).
+	if ck.loaded {
+		n[ckNeeds] = len(ck.needs())
+	}
 	ui.Row(c).Height(headerH).Shrink(0).AlignItems(ui.Center).Gap(sp3).Padding(0, 10, 0, a.chrome.headerPad).DragWindow().Children(func() {
 		if shown < 0.5 {
 			ui.Row(c).Absolute().Left(a.chrome.buttonsLeft(bar)).Top(0).Bottom(0).AlignItems(ui.Center).Gap(2).Opacity(1 - 2*shown).Children(func() {

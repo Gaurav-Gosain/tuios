@@ -357,6 +357,11 @@ func (a *App) ckHoldGroup(c *ui.Context, key string, want int, now time.Time) in
 	case p.want != want:
 		p.want, p.since = want, now
 	}
+	if p.shown != p.want && p.want == ckNeeds {
+		// Into Needs you at once: the badge counts the agent from the
+		// moment it needs the person, and the row must say so too.
+		p.shown = ckNeeds
+	}
 	if p.shown != p.want {
 		if due := p.since.Add(ckHold); now.Before(due) {
 			c.After(due.Sub(now))
