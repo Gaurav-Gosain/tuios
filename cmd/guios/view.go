@@ -585,6 +585,11 @@ func (a *App) sessionRow(c *ui.Context, pal *palette, s *proto.Session, n *int) 
 					statusIconP(c, pal, s.Status, s.Unread, s.Progress, 15)
 				})
 				line, msg := rowDetail(s, g, a.hostOf(s.ID).shortDir(s.WorkDir()))
+				if f := s.FocusPane(); !msg && f != nil && f.Shell != "" && line == s.DisplayName(a.set.SessionName) {
+					// A session named after its folder says its shell
+					// under the name, not the folder again.
+					line = f.Shell
+				}
 				fg := pal.textFaint
 				if msg {
 					fg = pal.textMuted

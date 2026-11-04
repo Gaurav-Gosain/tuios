@@ -169,7 +169,7 @@ func (k *stateKeeper) build() (*proto.State, error) {
 		if ws <= 0 {
 			ws = 1
 		}
-		ks := proto.Session{ID: s.ID, Project: project, Name: s.Name, Focus: wl.Focus, Workspace: ws}
+		ks := proto.Session{ID: s.ID, Project: project, Name: userName(s.Name), Focus: wl.Focus, Workspace: ws}
 		ti := k.readTree(s.Name, ws)
 		// The panes of the workspace the session shows; the others are
 		// counted on their workspaces.
@@ -621,4 +621,20 @@ func subscribeKnown(vc *session.VerbClient, types []string) error {
 		types = slices.DeleteFunc(slices.Clone(types), func(t string) bool { return t == m[1] })
 	}
 	return errors.New("subscribe: no event type the daemon knows")
+}
+
+// userName is a session's name as the app shows it: "" for the name tuios
+// makes up for a session nobody named ("session-" and eight hex digits),
+// so the app names it after what runs in it, as for an unnamed one.
+func userName(name string) string {
+	rest, ok := strings.CutPrefix(name, "session-")
+	if !ok || len(rest) != 8 {
+		return name
+	}
+	for _, r := range rest {
+		if !(r >= '0' && r <= '9' || r >= 'a' && r <= 'f') {
+			return name
+		}
+	}
+	return ""
 }
