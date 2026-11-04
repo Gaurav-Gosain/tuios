@@ -18,7 +18,7 @@ import (
 //
 // The person sees the commits, and answers again, also with --yes, when the
 // trust surface changed, the history of the branch was rewritten or a tag
-// moved. docs/PLUGINS.md says the same.
+// moved or is gone. docs/PLUGINS.md says the same.
 
 // maxUpdateCommits bounds the commits an update shows.
 const maxUpdateCommits = 20
@@ -31,7 +31,7 @@ func newPluginsUpdateCommand() *cobra.Command {
 		Short: "Update installed plugins to the newest commit",
 		Long: `Update installed plugins. With no ID, tuios updates each plugin in plugins.lock.
 
-tuios shows the new commits and what the plugin runs, and asks first. --yes skips the question. tuios asks again, also with --yes, when what the plugin runs or asks for changes, when the history of its branch was rewritten or when its tag moved.
+tuios shows the new commits and what the plugin runs, and asks first. --yes skips the question. tuios asks again, also with --yes, when what the plugin runs or asks for changes, when the history of its branch was rewritten or when its tag moved or is gone.
 
 --check shows what an update would do and changes nothing. The command exits 3 when tuios cannot reach a source. That plugin stays at its commit.
 
@@ -126,13 +126,16 @@ func (in *installer) updateOne(e herdrplugin.LockEntry, check bool) error {
 		return err
 	}
 	if got.Tree == e.Tree {
+		if got.Tag && !e.Tag && !check {
+			in.recordTag(e.ID)
+		}
 		fmt.Fprintf(in.out, "%s is up to date at %.12s.\n", e.ID, e.Commit)
 		return nil
 	}
 	if p.PluginID != e.ID {
 		return fmt.Errorf("the new commit names the plugin %s, not %s. Run tuios plugins uninstall %s, then install it again", p.PluginID, e.ID, e.ID)
 	}
-	reason := updateReason(fetched, e, got.Commit)
+	reason := updateReason(fetched, e, got)
 	fmt.Fprintf(in.out, "\n%s: %.12s to %.12s\n", e.ID, e.Commit, got.Commit)
 	fmt.Fprint(in.out, commitRange(fetched, e, got.Commit, reason != ""))
 	diff := in.trustDiff(e, p)
@@ -144,7 +147,7 @@ func (in *installer) updateOne(e herdrplugin.LockEntry, check bool) error {
 		return nil
 	}
 	next := e
-	next.Commit, next.Tree = got.Commit, got.Tree
+	next.Commit, next.Tree, next.Tag = got.Commit, got.Tree, got.Tag
 	in.ask, in.verb = reason, "Updated"
 	return in.finish(next, p, fetched)
 }
@@ -161,15 +164,40 @@ func (in *installer) fetchHistory(e herdrplugin.LockEntry) (string, *herdrplugin
 	return work, got, p, err
 }
 
-// updateReason says why this update needs a fresh answer whatever the
-// manifest says, "" for an ordinary update.
-func updateReason(work string, e herdrplugin.LockEntry, commit string) string {
-	if e.Ref != "" {
-		if out, err := git(work, "ls-remote", "--tags", "origin", "refs/tags/"+e.Ref); err == nil && out != "" {
-			return "The tag " + shownArgv(e.Ref) + " now points to a different commit."
+// recordTag writes into plugins.lock that the up-to-date plugin id follows
+// a tag, for a lock entry written before the lock kept that. Only the Tag
+// field changes. A failure only warns: the plugin is still up to date.
+func (in *installer) recordTag(id string) {
+	err := herdrplugin.UpdateLock(in.dirs.LockPath(), func(l *herdrplugin.Lock) {
+		if x := l.Find(id); x != nil {
+			x.Tag = true
 		}
+	})
+	if err != nil {
+		fmt.Fprintf(in.cmd.ErrOrStderr(), "%s: tuios could not write plugins.lock, so it cannot yet ask when the tag it follows is replaced by a branch: %v\n", id, err)
 	}
-	if _, err := git(work, "merge-base", "--is-ancestor", e.Commit, commit); err != nil {
+}
+
+// updateReason says why this update needs a fresh answer whatever the
+// manifest says, "" for an ordinary update. It asks again when the tag the
+// plugin follows moved or is gone; docs/PLUGINS.md says the same. got is the
+// fetched entry: its Tag says whether the ref is a tag now.
+//
+// e.Tag is what the lock says the ref was. A lock entry written before the
+// lock kept Tag reads as a branch until an update finds it up to date at a
+// tag, which records the tag. A tuios before this change that rewrites
+// plugins.lock (a lock shared in dotfiles, or a downgrade) drops the tag key
+// from every entry, which the next up-to-date update records again. A tag
+// already replaced by a branch before that update is never seen as a tag,
+// so that update goes on as for a branch.
+func updateReason(work string, e herdrplugin.LockEntry, got *herdrplugin.LockEntry) string {
+	switch {
+	case got.Tag:
+		return "The tag " + shownArgv(e.Ref) + " now points to a different commit."
+	case e.Tag:
+		return "The tag " + shownArgv(e.Ref) + " is gone, and a branch of that name now gives the commit."
+	}
+	if _, err := git(work, "merge-base", "--is-ancestor", e.Commit, got.Commit); err != nil {
 		return "The history of this source was rewritten, so the pinned commit is not in the new one."
 	}
 	return ""

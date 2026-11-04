@@ -49,6 +49,8 @@ type LockEntry struct {
 	// Ref is what the person asked for: a branch, a tag or a commit. ""
 	// is the remote's default branch.
 	Ref string `toml:"ref,omitempty" json:"ref,omitempty"`
+	// Tag is set when Ref named a tag when it was installed or last updated.
+	Tag bool `toml:"tag,omitempty" json:"tag,omitempty"`
 	// Commit is the full commit the ref resolved to. It is the pin.
 	Commit string `toml:"commit,omitempty" json:"commit,omitempty"`
 	// Tree is git's id of the plugin folder at Commit.

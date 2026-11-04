@@ -420,7 +420,8 @@ refuses these updates.
 
 - What the plugin runs or asks for changes. tuios shows the lines that change.
 - The history of the branch was rewritten.
-- The tag that the plugin follows points to a different commit.
+- The tag that the plugin follows points to a different commit, or the tag is
+  gone and a branch of that name now gives the commit.
 
 A change to code alone does not ask again with `--yes`. Read the commits.
 

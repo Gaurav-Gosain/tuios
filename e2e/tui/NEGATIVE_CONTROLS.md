@@ -12324,6 +12324,17 @@ Run on 2026-11-02, each control against the branch head with one change:
 | `--check` changes nothing | the check return cut | "update --check changed plugins.lock" | **caught** |
 | A source that is gone exits 3 | the fetch failure is not marked | "update with the source gone" | **caught** |
 
+### A followed tag replaced or moved
+
+The tag check is now the fetch's tag kind, kept in plugins.lock; it replaces the `ls-remote` check that the 2026-11-02
+row "`updateReason` skips the tag check" cut.
+Run on 2026-11-04 on Linux, each control against the branch head with one change:
+
+| Claim | Control | Where it fails | Verdict |
+|---|---|---|---|
+| A tag replaced by a branch of its name asks again under `--yes` | the gone-tag case cut from `updateReason` | "update of a tag replaced by a branch under --yes: <nil>" | **caught** |
+| A moved tag installed as `refs/tags/NAME` asks again under `--yes` | `updateReason` asks `ls-remote` for the tag instead of the fetch's tag kind | "update of a moved tag by its full name under --yes: exit status 1" | **caught** |
+
 ## Quick look shows each kind of file
 
 | Control: what was cut | Where it fails | Verdict |

@@ -318,12 +318,28 @@ func (in *installer) fetch(url, ref, subdir string) (string, *herdrplugin.LockEn
 	if e.Commit, e.Tree, err = fetchInto(work, url, ref, subdir, in.history); err != nil {
 		return work, nil, nil, err
 	}
+	if ref != "" && !herdrplugin.IsCommit(ref) {
+		e.Tag = fetchedTag(work)
+	}
 	root := filepath.Join(work, filepath.FromSlash(subdir))
 	if !herdrplugin.HasManifest(root) {
 		return work, nil, nil, errNoManifest(work, url, subdir)
 	}
 	p, err := loadInside(root, work)
 	return work, e, p, err
+}
+
+// fetchedTag reports whether the fetch in work got a tag. git writes "tag
+// 'NAME' of URL" in FETCH_HEAD for a tag in any spelling, annotated or not,
+// and "branch 'NAME' of URL" for a branch.
+func fetchedTag(work string) bool {
+	data, err := os.ReadFile(filepath.Join(work, ".git", "FETCH_HEAD")) //nolint:gosec // the fetch folder tuios made
+	if err != nil {
+		return false
+	}
+	line, _, _ := strings.Cut(string(data), "\n")
+	fields := strings.Split(line, "\t")
+	return len(fields) > 2 && strings.HasPrefix(fields[2], "tag '")
 }
 
 // errNoManifest says that the folder asked for holds no plugin manifest, and
