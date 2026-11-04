@@ -84,15 +84,15 @@ func (a *App) cockpitCard(c *ui.Context, pal *palette, bar ui.TitleBar, shown fl
 	ck := &a.ck
 	ck.rows = a.buildCockpitRows(c)
 	a.ckClamp()
-	w, _ := c.Size()
-	ck.stacked = w-a.chrome.sideW < ckStackBelow
-	ck.narrow = w-a.chrome.sideW < ckNarrowBelow
+	// The card's own width, as the frame lays it out: the window less
+	// both sidebars and the gaps (view.go).
+	cw := a.side.rowW
+	ck.stacked = cw < ckStackBelow
+	ck.narrow = cw < ckNarrowBelow
 	card := paned(ui.Column(c.Key("cockpit")).Grow(1).MinHeight(0).Radius(14).Background(pal.card), pal).Clip()
 	card.Children(func() {
 		a.cockpitHeader(c, pal, bar, shown)
 		ui.Box(c).Height(1).Shrink(0).Background(pal.divider)
-		w, _ := c.Size()
-		cw := w - a.chrome.sideW
 		body := ui.Row(c).Grow(1).MinHeight(0).AlignItems(ui.Stretch)
 		body.Children(func() {
 			if ck.stacked {

@@ -119,7 +119,14 @@ func (a *App) view(c *ui.Context) {
 	// A curve, not a spring: a spring's long tail crawls under a pixel a
 	// frame, which whole pixels turn into hops and holds, a shake as it
 	// settles. This one lands in 200 ms, moving in every frame.
-	progress := row.AnimateTo("sidebar", b2f(!a.prefs.SidebarHidden), sidebarMotion)
+	winW0, _ := c.Size()
+	// In a narrow window the sidebar gets out of the panes' way, as the
+	// right one does, until the person shows it there (toggleSidebar).
+	a.leftCrowded = winW0 > 0 && winW0 < narrowWindow
+	if !a.leftCrowded {
+		a.leftForced = false
+	}
+	progress := row.AnimateTo("sidebar", b2f(a.sidebarShown()), sidebarMotion)
 	a.chrome = chromeFor(progress, a.prefs.SidebarWidth, bar)
 	shown := a.chrome.shown
 	// The right sidebar, beside a session's panes, comes and goes as the
@@ -132,7 +139,7 @@ func (a *App) view(c *ui.Context) {
 	// way, coming back as the window widens, unless shown anyway.
 	winW, _ := c.Size()
 	leftW := float32(0)
-	if !a.prefs.SidebarHidden {
+	if a.sidebarShown() {
 		leftW = a.prefs.SidebarWidth
 	}
 	a.side.crowded = winW > 0 && winW-leftW-rightW < minCards
@@ -140,7 +147,9 @@ func (a *App) view(c *ui.Context) {
 		a.side.forced = false
 	}
 	right := float32(0)
-	p := row.AnimateTo("right", b2f(a.rightShown()), sidebarMotion)
+	// The agents view takes the whole of the panes' place: the right
+	// sidebar, which is about the session's panes, steps aside for it.
+	p := row.AnimateTo("right", b2f(a.rightShown() && !a.ck.open), sidebarMotion)
 	if work != nil {
 		right = float32(math.Round(float64(rightW * min(max(p, 0), 1))))
 	}
@@ -162,7 +171,7 @@ func (a *App) view(c *ui.Context) {
 	row.Children(func() {
 		w := a.chrome.sideW
 		side := ui.Row(c).Width(w).Shrink(0).AlignItems(ui.Stretch).ClipX()
-		if h := a.local(); h.conn == connReady && h.cl != nil && !a.prefs.SidebarHidden && !a.pal.open && !a.picker.open && (a.confirm == nil || !a.confirm.open) {
+		if h := a.local(); h.conn == connReady && h.cl != nil && a.sidebarShown() && !a.pal.open && !a.picker.open && (a.confirm == nil || !a.confirm.open) {
 			if files := side.DroppedFiles(); len(files) > 0 {
 				go a.openProjectDirs(h, h.cl, slices.Clone(files), true)
 			}

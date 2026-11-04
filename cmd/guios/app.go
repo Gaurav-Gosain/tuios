@@ -85,6 +85,10 @@ type termEntry struct {
 // App is the app's state. It lives on the main thread: other goroutines
 // change it through Window.Update.
 type App struct {
+	// leftCrowded says the window is too narrow for the sidebar beside
+	// the panes, which then hides unless leftForced (view.go).
+	leftCrowded, leftForced bool
+
 	// quitting is set once a quit starts: windows that hide on close
 	// (the quick terminal) close for real then.
 	quitting bool
@@ -1565,7 +1569,14 @@ func (a *App) jumpToAttention() {
 }
 
 func (a *App) toggleSidebar() {
+	if a.leftCrowded && !a.prefs.SidebarHidden {
+		// Hidden only for the narrow window: show it there, or hide it
+		// again, and keep the setting for a wide window.
+		a.leftForced = !a.leftForced
+		return
+	}
 	a.prefs.SidebarHidden = !a.prefs.SidebarHidden
+	a.leftForced = a.leftCrowded && !a.prefs.SidebarHidden
 	a.savePrefs()
 }
 
@@ -1665,4 +1676,14 @@ func quitAllDetail(n int, hosts bool) string {
 		d += " " + locales.ConfirmQuitAllHosts()
 	}
 	return d
+}
+
+// narrowWindow is the window width under which the sidebar hides by
+// itself: the panes keep room for a readable terminal.
+const narrowWindow = 900
+
+// sidebarShown says the sidebar shows: the person has not hidden it, and
+// the window is wide enough for it or the person showed it anyway.
+func (a *App) sidebarShown() bool {
+	return !a.prefs.SidebarHidden && (!a.leftCrowded || a.leftForced)
 }
