@@ -1719,7 +1719,7 @@ func buildVerbRegistry() map[string]verbEntry {
 			handler: (*Daemon).verbStreamPane,
 		},
 		"pane-history": {
-			description: "Read a pane's history rows above those the caller holds, by row id, as bytes that print them. A history row's id stays the same while output adds rows below and the history lets go of rows above, until the pane is resized or its history cleared. stream-pane sends an H frame (u64, the id of the first history row the snapshot carries) before each S frame. A viewer that scrolls to the top of what it holds asks for the rows before that id, then before the first id of the reply. A pane whose emulator gives no ids gets no H frame, and pane-history refuses it with no_row_ids.",
+			description: "Read a pane's history rows above those the caller holds, by row id, as bytes that print them. A history row's id stays the same while output adds rows below, the history lets go of rows above, or the pane is resized. A clear removes the rows, and their ids name none after it. stream-pane sends an H frame (u64, the id of the first history row the snapshot carries) before each S frame. A viewer that scrolls to the top of what it holds asks for the rows before that id, then before the first id of the reply. A pane whose emulator gives no ids gets no H frame, and pane-history refuses it with no_row_ids.",
 			params: []verbParam{
 				sessionParam,
 				windowParam,

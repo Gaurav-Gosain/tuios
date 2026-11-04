@@ -18,8 +18,10 @@ import (
 // at the bottom and the ring drops them at the top. The H frame, sent before
 // each S frame, gives the id of the first history row the snapshot carries.
 //
-// A reflow rewraps the rows and a clear removes them, so ids taken before a
-// resize or a clear name other rows after it. The libghostty-vt emulator does
+// A resize keeps the ids of the rows a viewer fetches: the emulator lays out
+// again only the screen and the newest rows that belong to it, and keeps the
+// rest of the history at the width it was written at. A clear drops every
+// row, and counts them as let go of. The libghostty-vt emulator does
 // not count the rows its ring drops, so its panes have no ids: no H frame,
 // and pane-history refuses them.
 

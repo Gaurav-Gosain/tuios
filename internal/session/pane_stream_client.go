@@ -29,6 +29,7 @@ const (
 	PaneFrameLease    = 'L'
 	PaneFrameViewer   = 'V'
 	PaneFrameShown    = 'F'
+	PaneFrameHistory  = 'H'
 )
 
 // The values of an F frame.

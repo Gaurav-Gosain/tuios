@@ -3477,8 +3477,8 @@ snapshot. When the person scrolls to the top of those rows, the viewer asks
 for the rows before them.
 
 Each history row has an id. The id stays the same while output adds rows
-below and the history drops rows above. A resize or a clear of the history
-changes which row an id names. The `H` frame of `stream-pane` gives the id of
+below and the history drops rows above, and when the pane is resized. A clear
+of the history removes the rows. The `H` frame of `stream-pane` gives the id of
 the first history row of the snapshot.
 
 ```json
