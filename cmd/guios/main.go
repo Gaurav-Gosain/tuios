@@ -10,6 +10,8 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"net/http"
+	_ "net/http/pprof"
 	"os"
 	"runtime"
 	"sync/atomic"
@@ -38,6 +40,7 @@ var (
 	flagGPU     = flag.String("gpu", "auto", "The GPU to draw with on Linux: auto, integrated or discrete")
 	flagFont    = flag.Float64("font-size", 15, "Terminal font size")
 	flagVersion = flag.Bool("version", false, "Print the version and exit")
+	flagPprof   = flag.String("pprof", "", "Serve /debug/pprof on this address, for profiling")
 	flagRender  = flag.String("render", "", "Draw the window into this PNG with no window, then exit")
 	flagScale   = flag.Float64("render-scale", 2, "Scale of -render")
 	flagRType   = flag.String("render-type", "", "Text to type into the focused pane before -render")
@@ -76,6 +79,9 @@ func main() {
 	}
 	log.SetFlags(log.Lmicroseconds)
 	preferGPU(*flagGPU)
+	if *flagPprof != "" {
+		go func() { log.Println(http.ListenAndServe(*flagPprof, nil)) }()
+	}
 	a := &guiApp{views: map[string]*paneView{}, started: time.Now()}
 	if err := registerFonts(); err != nil {
 		log.Fatal(err)

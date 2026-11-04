@@ -3,6 +3,7 @@ package main
 import (
 	"hash/maphash"
 	"math"
+	"runtime"
 
 	uv "github.com/charmbracelet/ultraviolet"
 	"github.com/egoist/mygo/ui"
@@ -17,6 +18,14 @@ import (
 // and is built again only when the hash of its cells changes. Box drawing and
 // block elements are drawn as shapes, so lines join across cells whatever the
 // font does.
+
+// joinsGlyphs is true where MyGo's text engine joins the glyphs of one
+// Glyphs call whose bitmaps touch into a run it rasterizes as one (Pango on
+// Linux, to match cairo's coverage). In a terminal row nearly every pair of
+// neighbours touches, so a row that changes is rasterized again on every
+// frame: 58 % of all allocations under a 60 Hz repaint, and most of the
+// paint time. Glyphs drawn one a call come from the glyph atlas as they are.
+var joinsGlyphs = runtime.GOOS == "linux"
 
 // metrics is the cell size, in device pixels, at one scale.
 type metrics struct {
@@ -239,6 +248,13 @@ func (a *guiApp) paintPane(p *ui.Painter, r ui.Rect, pn paneSnap, focused bool, 
 		line := &pv.lines[y]
 		ry := oy + float32(y)*ch
 		for _, rn := range line.runs {
+			if joinsGlyphs {
+				// One glyph a call: see joinsGlyphs.
+				for i := range rn.glyphs {
+					p.Glyphs(rn.glyphs[i:i+1], ox, ry+base, rn.c)
+				}
+				continue
+			}
 			p.Glyphs(rn.glyphs, ox, ry+base, rn.c)
 		}
 		for _, d := range line.decos {
