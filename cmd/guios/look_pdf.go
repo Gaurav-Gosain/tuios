@@ -14,6 +14,8 @@ import (
 	"github.com/egoist/mygo/ui"
 
 	"github.com/Gaurav-Gosain/tuios/internal/guios/preview"
+
+	"github.com/Gaurav-Gosain/tuios/cmd/guios/locales"
 )
 
 // A PDF scrolls as one column of pages, as Preview and Quick Look show one.
@@ -144,9 +146,9 @@ func (a *App) startPDF(l *fileLook) {
 // pdfMessage is what the viewer says of a PDF it cannot open.
 func pdfMessage(err error) string {
 	if nt, ok := err.(preview.ErrNoTool); ok {
-		return "This machine has no " + string(nt) + " to draw PDF pages. Install poppler (poppler-utils) and open the file again."
+		return locales.LookNoPoppler(string(nt))
 	}
-	return err.Error()
+	return lookErrText(err)
 }
 
 // ptScale is the DIPs a point at the zoom: the widest page fits the width,
@@ -425,8 +427,8 @@ func (a *App) pdfRender(l *fileLook, i, px int) {
 func (a *App) pdfBar(c *ui.Context, pal *palette, l *fileLook) {
 	pd := l.pdf
 	ui.Row(c.Key("pdf-bar")).Height(36).Shrink(0).Padding(0, 10).Gap(4).AlignItems(ui.Center).Children(func() {
-		iconButton(c, "pdf-prev", chevronUpIcon, "Previous page (K)", pal, func() { a.pdfGo(l, pd.page-1) })
-		iconButton(c, "pdf-next", chevronDownIcon, "Next page (J)", pal, func() { a.pdfGo(l, pd.page+1) })
+		iconButton(c, "pdf-prev", chevronUpIcon, locales.LookPrevPage(), pal, func() { a.pdfGo(l, pd.page-1) })
+		iconButton(c, "pdf-next", chevronDownIcon, locales.LookNextPage(), pal, func() { a.pdfGo(l, pd.page+1) })
 		if pd.goTo {
 			in := ui.TextInput(c.Key("pdf-goto"), &pd.goToText).Width(64).Height(24).FontSize(12).AutoFocus().Placeholder(itoa(pd.page + 1))
 			if in.Submitted() {
@@ -440,22 +442,22 @@ func (a *App) pdfBar(c *ui.Context, pal *palette, l *fileLook) {
 				pd.goTo, pd.goToText = false, ""
 				a.focusViewer()
 			}
-			ui.Text(c, "of "+itoa(pd.pages)).FontSize(12).FontFeatures("tnum").TextColor(pal.textMuted).SingleLine()
+			ui.Text(c, locales.LookOfPages(itoa(pd.pages))).FontSize(12).FontFeatures("tnum").TextColor(pal.textMuted).SingleLine()
 		} else {
-			t := ui.ButtonBase(c.Key("pdf-page")).Height(24).Padding(0, 6).Radius(6).Center().Tooltip("Go to a page (:)").Label("Go to a page")
+			t := ui.ButtonBase(c.Key("pdf-page")).Height(24).Padding(0, 6).Radius(6).Center().Tooltip(locales.LookGoToPage()).Label(locales.LookGoToPage())
 			if t.Hovered() {
 				t.Background(pal.rowHover)
 			}
 			t.Children(func() {
-				ui.Text(c, "Page "+itoa(pd.page+1)+" of "+itoa(pd.pages)).FontSize(12).FontFeatures("tnum").TextColor(pal.textMuted).SingleLine()
+				ui.Text(c, locales.LookPageOf(itoa(pd.page+1), itoa(pd.pages))).FontSize(12).FontFeatures("tnum").TextColor(pal.textMuted).SingleLine()
 			})
 			if t.Clicked() {
 				pd.goTo = true
 			}
 		}
 		ui.Spacer(c)
-		iconButton(c, "pdf-out", minusIcon, "Zoom out (-)", pal, func() { a.pdfZoom(l, 0.8, -1, -1) })
-		z := ui.ButtonBase(c.Key("pdf-zoom")).Height(24).Width(52).Radius(6).Center().Tooltip("Fit (0)").Label("Fit")
+		iconButton(c, "pdf-out", minusIcon, locales.LookZoomOut(), pal, func() { a.pdfZoom(l, 0.8, -1, -1) })
+		z := ui.ButtonBase(c.Key("pdf-zoom")).Height(24).Width(52).Radius(6).Center().Tooltip(locales.LookZoomFit()).Label(locales.LookZoomFit())
 		if z.Hovered() {
 			z.Background(pal.rowHover)
 		}
@@ -465,11 +467,11 @@ func (a *App) pdfBar(c *ui.Context, pal *palette, l *fileLook) {
 		if z.Clicked() {
 			a.pdfZoom(l, 0, -1, -1)
 		}
-		iconButton(c, "pdf-in", plusIcon, "Zoom in (+)", pal, func() { a.pdfZoom(l, 1.25, -1, -1) })
-		fit := "Fit the page (z)"
+		iconButton(c, "pdf-in", plusIcon, locales.LookZoomIn(), pal, func() { a.pdfZoom(l, 1.25, -1, -1) })
+		fit := locales.LookFitPage()
 		fitIcon := expandIcon
 		if pd.fitPage {
-			fit, fitIcon = "Fit the width (z)", collapseIcon
+			fit, fitIcon = locales.LookFitWidth(), collapseIcon
 		}
 		iconButton(c, "pdf-fit", fitIcon, fit, pal, func() { a.pdfFit(l) })
 	})

@@ -1645,5 +1645,182 @@
         "type": "String"
       }
     }
-  }
+  },
+  "lookViewText": "Text",
+  "lookViewSource": "Source",
+  "lookViewHex": "Hex",
+  "lookViewDetails": "Details",
+  "lookViewPreview": "Preview",
+  "lookViewDrawing": "Drawing",
+  "lookViewTree": "Tree",
+  "lookViewTable": "Table",
+  "lookViewPages": "Pages",
+  "lookViewFilm": "Film",
+  "lookViewSpecimen": "Specimen",
+  "lookViewContents": "Contents",
+  "lookViewTip": "{name} (v)",
+  "lookKindText": "Text",
+  "lookKindMarkdown": "Markdown",
+  "lookKindImage": "Picture",
+  "lookKindAnimation": "Animation",
+  "lookKindSVG": "SVG drawing",
+  "lookKindPDF": "PDF document",
+  "lookKindVideo": "Film",
+  "lookKindAudio": "Sound",
+  "lookKindTable": "Table",
+  "lookKindJSON": "JSON",
+  "lookKindArchive": "Archive",
+  "lookKindFont": "Font",
+  "lookKindBinary": "Binary file",
+  "lookKindFile": "File",
+  "lookReading": "Reading {name}",
+  "lookCountingLines": "Counting lines",
+  "lookCountingSoFar": "Counting lines: {count} so far",
+  "lookTooLarge": "The file is too large to show.",
+  "lookUnreadable": "The file could not be read.",
+  "lookPictureUnreadable": "The picture could not be read.",
+  "lookNoDecoder": "This machine cannot read this picture. Install ImageMagick or ffmpeg.",
+  "lookEmpty": "The file is empty.",
+  "lookNoTool": "This machine has no {tool}.",
+  "lookNoPoppler": "This machine has no {tool} to draw PDF pages. Install poppler and open the file again.",
+  "lookNoFfmpeg": "This machine has no {tool}. Install ffmpeg to see this file.",
+  "lookNoBsdtar": "This machine has no {tool} to list this archive.",
+  "lookPDFLocked": "The PDF is locked with a password.",
+  "lookPDFNoPages": "The PDF has no pages.",
+  "lookPageFailed": "This page could not be drawn.",
+  "lookNoFrame": "No frame could be read here.",
+  "lookSVGUnsupported": "guios cannot draw this SVG. Its source is in the Source view.",
+  "lookNotJSON": "The file is not valid JSON.",
+  "lookCounting": "The lines are still being counted. Try again in a moment.",
+  "lookTableCapped": "Shows the first {count} rows. The file has more.",
+  "lookJSONCapped": "Shows the start of the file. It is too large to read whole.",
+  "lookArchiveSummary": "{entries}, {size} unpacked",
+  "lookArchiveCapped": "The listing stops there.",
+  "lookNoMoreMatches": "No more matches for “{query}”.",
+  "lookFind": "Find",
+  "lookFindHint": "Text to find. Lower case ignores case.",
+  "lookGoToLine": "Go to line",
+  "lookGoToLineHint": "A line number",
+  "lookPrevPage": "Previous page (K)",
+  "lookNextPage": "Next page (J)",
+  "lookGoToPage": "Go to a page (:)",
+  "lookPageOf": "Page {page} of {pages}",
+  "lookOfPages": "of {pages}",
+  "lookZoomOut": "Zoom out (-)",
+  "lookZoomIn": "Zoom in (+)",
+  "lookZoomFit": "Fit (0)",
+  "lookFitPage": "Fit the page (z)",
+  "lookFitWidth": "Fit the width (z)",
+  "lookHold": "Hold (space)",
+  "lookPlay": "Play (space)",
+  "lookPrevFrame": "Previous frame (K)",
+  "lookNextFrame": "Next frame (J)",
+  "lookFrames": "{count, plural, one {# frame} other {# frames}}",
+  "@lookFrames": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "lookFrameOf": "Frame {frame} of {frames}",
+  "lookBack5": "Back 5 % (K)",
+  "lookOn5": "On 5 % (J)",
+  "lookShowStrip": "Show the filmstrip (t)",
+  "lookHideStrip": "Hide the filmstrip (t)",
+  "lookGoToTime": "Go to {time}",
+  "lookNoSound": "no sound",
+  "lookSound": "sound {codec}",
+  "lookFillWindow": "Fill the window (f)",
+  "lookBesidePanes": "Show beside the panes (f)",
+  "lookFactName": "Name",
+  "lookFactKind": "Kind",
+  "lookFactSize": "Size",
+  "lookFactModified": "Modified",
+  "lookFactPermissions": "Permissions",
+  "lookFactFolder": "Folder",
+  "lookFactDimensions": "Dimensions",
+  "lookFactFrames": "Frames",
+  "lookFactPages": "Pages",
+  "lookFactPageSize": "Page size",
+  "lookFactDrawnBy": "Drawn by",
+  "lookFactLength": "Length",
+  "lookFactFrameSize": "Frame size",
+  "lookFactReadBy": "Read by",
+  "lookFactRows": "Rows",
+  "lookFactColumns": "Columns",
+  "lookFactFamily": "Family",
+  "lookFactStyle": "Style",
+  "lookFactVersion": "Version",
+  "lookFactGlyphs": "Glyphs",
+  "lookFactFaces": "Fonts in the file",
+  "lookFactDesigner": "Designer",
+  "lookFactLicense": "License",
+  "lookFactCodec": "Codec",
+  "lookFactSampleRate": "Sample rate",
+  "lookFactChannels": "Channels",
+  "lookFactBitRate": "Bit rate",
+  "lookFactDate": "Date",
+  "lookFactTrack": "Track",
+  "lookFactGenre": "Genre",
+  "lookFactAlbumArtist": "Album artist",
+  "lookMono": "Mono",
+  "lookStereo": "Stereo",
+  "lookSizeBytes": "{size} ({bytes} bytes)",
+  "lookPixels": "{size} pixels",
+  "lookGlyphsCount": "{count} glyphs",
+  "lookVersionOf": "version {version}",
+  "lookRows": "{count, plural, one {# row} other {# rows}}",
+  "@lookRows": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "lookColumns": "{count, plural, one {# column} other {# columns}}",
+  "@lookColumns": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "lookEntries": "{count, plural, one {# entry} other {# entries}}",
+  "@lookEntries": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "lookLines": "{count, plural, one {# line} other {# lines}}",
+  "@lookLines": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "lookKeys": "{count, plural, one {# key} other {# keys}}",
+  "@lookKeys": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "lookItems": "{count, plural, one {# item} other {# items}}",
+  "@lookItems": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "lookAlertNote": "Note",
+  "lookAlertTip": "Tip",
+  "lookAlertImportant": "Important",
+  "lookAlertWarning": "Warning",
+  "lookAlertCaution": "Caution"
 }

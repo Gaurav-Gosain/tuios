@@ -510,9 +510,9 @@ func (a *App) fileViewer(c *ui.Context, pal *palette, s *proto.Session, fv *file
 		}
 	}, func() {
 		if v := a.viewOf(s); v != nil {
-			full, ic := "Fill the window (f)", zoomIcon
+			full, ic := locales.LookFillWindow(), zoomIcon
 			if v.full {
-				full, ic = "Show beside the panes (f)", unzoomIcon
+				full, ic = locales.LookBesidePanes(), unzoomIcon
 			}
 			iconButton(c, "full", ic, full, pal, func() { v.full = !v.full })
 		}

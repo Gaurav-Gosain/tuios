@@ -15,6 +15,8 @@ import (
 	"github.com/egoist/mygo/ui/markdown/parser"
 
 	"github.com/Gaurav-Gosain/tuios/internal/guios/preview"
+
+	"github.com/Gaurav-Gosain/tuios/cmd/guios/locales"
 )
 
 // Markdown draws with MyGo's ui/markdown, the parser and view that pass
@@ -58,7 +60,7 @@ func (a *App) startMD(l *fileLook) {
 				return
 			}
 			if err != nil {
-				m.err = err.Error()
+				m.err = lookErrText(err)
 				return
 			}
 			m.src = strings.ToValidUTF8(string(data), "\uFFFD")
@@ -104,7 +106,7 @@ func (a *App) mdView(c *ui.Context, pal *palette, l *fileLook) {
 	switch {
 	case m == nil || m.src == "" && m.err == "":
 		if m != nil && m.src == "" && m.err == "" && !l.busy && l.size == 0 {
-			lookFailed(c, pal, "The file is empty.")
+			lookFailed(c, pal, locales.LookEmpty())
 			return
 		}
 		lookWaiting(c, pal, l)
@@ -212,7 +214,20 @@ func docImages(dir string) func(url string) (ui.ImageSource, error) {
 }
 
 // alertKinds are GitHub's alerts, by their marker.
-var alertKinds = map[string]string{"NOTE": "Note", "TIP": "Tip", "IMPORTANT": "Important", "WARNING": "Warning", "CAUTION": "Caution"}
+// alertTitle is an alert's title, by its marker.
+func alertTitle(kind string) string {
+	switch kind {
+	case "TIP":
+		return locales.LookAlertTip()
+	case "IMPORTANT":
+		return locales.LookAlertImportant()
+	case "WARNING":
+		return locales.LookAlertWarning()
+	case "CAUTION":
+		return locales.LookAlertCaution()
+	}
+	return locales.LookAlertNote()
+}
 
 var alertMark = regexp.MustCompile(`^\s*\[!(NOTE|TIP|IMPORTANT|WARNING|CAUTION)\]\s*$`)
 
@@ -246,7 +261,7 @@ func (a *App) mdAlert(c *ui.Context, pal *palette, m *lookMD, d *parser.Document
 		ui.Column(c).Grow(1).MinWidth(0).Padding(2, 0, 2, 14).Gap(4).Children(func() {
 			ui.Row(c).Gap(6).AlignItems(ui.Center).Children(func() {
 				ui.Icon(c, alertIcon(kind)).Size(15, 15).TextColor(col)
-				ui.Text(c, alertKinds[kind]).FontSize(14).FontWeight(600).TextColor(col)
+				ui.Text(c, alertTitle(kind)).FontSize(14).FontWeight(600).TextColor(col)
 			})
 			markdown.View(c.Key("body"), strings.Join(body, "\n"), &m.inner)
 		})
@@ -431,7 +446,7 @@ func (a *App) startBig(l *fileLook) {
 	l.big = b
 	tf, err := preview.OpenText(l.path)
 	if err != nil {
-		b.err = err.Error()
+		b.err = lookErrText(err)
 		return
 	}
 	b.tf = tf
@@ -489,7 +504,7 @@ func (a *App) bigView(c *ui.Context, pal *palette, l *fileLook) {
 			ui.Row(c).Height(26).Shrink(0).Padding(0, 14).AlignItems(ui.Center).Children(func() {
 				msg := b.note
 				if !done {
-					msg = "Counting lines: " + groupDigits(int(n)) + " so far"
+					msg = locales.LookCountingSoFar(groupDigits(int(n)))
 				}
 				ui.Text(c, msg).FontSize(12).TextColor(pal.textFaint).SingleLine().Ellipsis("…")
 			})
@@ -527,9 +542,9 @@ func bigSpans(line, q string, fold bool, pal *palette, mono string) []ui.Span {
 // bigPrompt is the field to find text or to go to a line.
 func (a *App) bigPrompt(c *ui.Context, pal *palette, l *fileLook) {
 	b := l.big
-	label, hint := "Find", "Text to find. Lower case ignores case."
+	label, hint := locales.LookFind(), locales.LookFindHint()
 	if b.prompt == promptGoTo {
-		label, hint = "Go to line", "A line number"
+		label, hint = locales.LookGoToLine(), locales.LookGoToLineHint()
 	}
 	ui.Row(c.Key("prompt")).Height(40).Shrink(0).Padding(0, 12).Gap(8).AlignItems(ui.Center).Children(func() {
 		ui.Text(c, label).FontSize(12).FontWeight(500).TextColor(pal.textMuted).SingleLine().Shrink(0)
@@ -596,9 +611,9 @@ func (a *App) bigFind(l *fileLook, back bool) {
 			b.searching = false
 			switch {
 			case errors.Is(err, preview.ErrNotFound):
-				b.note = "No more matches for “" + q + "”."
+				b.note = locales.LookNoMoreMatches(q)
 			case err != nil:
-				b.note = err.Error()
+				b.note = lookErrText(err)
 			default:
 				b.hit = line
 				b.list.ScrollTo(int(line), ui.Center)

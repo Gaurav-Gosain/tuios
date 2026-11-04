@@ -4,7 +4,6 @@ package preview
 
 import (
 	"context"
-	"errors"
 	"image"
 	"sync"
 )
@@ -35,16 +34,16 @@ func openQuartzPDF(path string) (Doc, error) {
 	doc := cg.CGPDFDocumentCreateWithURL(u)
 	cg.CFRelease(u)
 	if doc == 0 {
-		return nil, errors.New("The PDF could not be read.")
+		return nil, ErrUnreadable
 	}
 	if !cg.CGPDFDocumentIsUnlocked(doc) {
 		cg.CGPDFDocumentRelease(doc)
-		return nil, errors.New("The PDF is locked with a password.")
+		return nil, ErrLocked
 	}
 	n := int(cg.CGPDFDocumentGetNumberOfPages(doc))
 	if n <= 0 {
 		cg.CGPDFDocumentRelease(doc)
-		return nil, errors.New("The PDF has no pages.")
+		return nil, ErrNoPages
 	}
 	d := &quartzDoc{doc: doc, path: path, pages: n}
 	// Every page's size, as the viewer lays the pages out before it
@@ -99,22 +98,22 @@ func (d *quartzDoc) Render(ctx context.Context, i, widthPx int) (image.Image, er
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	if d.doc == 0 {
-		return nil, errors.New("The PDF is closed.")
+		return nil, ErrUnreadable
 	}
 	page := cg.CGPDFDocumentGetPage(d.doc, uintptr(i+1))
 	if page == 0 {
-		return nil, errors.New("This page could not be drawn.")
+		return nil, ErrPageFailed
 	}
 	size := pageSize(page)
 	widthPx = min(max(widthPx, 16), MaxPagePx)
 	scale := float64(widthPx) / size[0]
 	heightPx := max(int(size[1]*scale+0.5), 1)
 	if heightPx > 4*MaxPagePx {
-		return nil, errors.New("This page is too tall to draw.")
+		return nil, ErrPageFailed
 	}
 	bm, err := newBitmap(widthPx, heightPx)
 	if err != nil {
-		return nil, errors.New("This page could not be drawn.")
+		return nil, ErrPageFailed
 	}
 	defer bm.release()
 	cg.CGContextSetRGBFillColor(bm.ctx, 1, 1, 1, 1)

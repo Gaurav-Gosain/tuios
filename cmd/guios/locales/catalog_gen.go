@@ -8627,3 +8627,1289 @@ func NewPaneOn(host string) string { return In(i18n.Locale()).NewPaneOn(host) }
 func (msgs Messages) NewPaneOn(host string) string {
 	return Catalog.Format(msgs.locale, "newPaneOn", map[string]any{"host": host})
 }
+
+// LookViewText says "Text"
+// in the language the app shows.
+func LookViewText() string { return In(i18n.Locale()).LookViewText() }
+
+// LookViewText says "Text"
+// in the language of msgs.
+func (msgs Messages) LookViewText() string {
+	return Catalog.Format(msgs.locale, "lookViewText", nil)
+}
+
+// LookViewSource says "Source"
+// in the language the app shows.
+func LookViewSource() string { return In(i18n.Locale()).LookViewSource() }
+
+// LookViewSource says "Source"
+// in the language of msgs.
+func (msgs Messages) LookViewSource() string {
+	return Catalog.Format(msgs.locale, "lookViewSource", nil)
+}
+
+// LookViewHex says "Hex"
+// in the language the app shows.
+func LookViewHex() string { return In(i18n.Locale()).LookViewHex() }
+
+// LookViewHex says "Hex"
+// in the language of msgs.
+func (msgs Messages) LookViewHex() string {
+	return Catalog.Format(msgs.locale, "lookViewHex", nil)
+}
+
+// LookViewDetails says "Details"
+// in the language the app shows.
+func LookViewDetails() string { return In(i18n.Locale()).LookViewDetails() }
+
+// LookViewDetails says "Details"
+// in the language of msgs.
+func (msgs Messages) LookViewDetails() string {
+	return Catalog.Format(msgs.locale, "lookViewDetails", nil)
+}
+
+// LookViewPreview says "Preview"
+// in the language the app shows.
+func LookViewPreview() string { return In(i18n.Locale()).LookViewPreview() }
+
+// LookViewPreview says "Preview"
+// in the language of msgs.
+func (msgs Messages) LookViewPreview() string {
+	return Catalog.Format(msgs.locale, "lookViewPreview", nil)
+}
+
+// LookViewDrawing says "Drawing"
+// in the language the app shows.
+func LookViewDrawing() string { return In(i18n.Locale()).LookViewDrawing() }
+
+// LookViewDrawing says "Drawing"
+// in the language of msgs.
+func (msgs Messages) LookViewDrawing() string {
+	return Catalog.Format(msgs.locale, "lookViewDrawing", nil)
+}
+
+// LookViewTree says "Tree"
+// in the language the app shows.
+func LookViewTree() string { return In(i18n.Locale()).LookViewTree() }
+
+// LookViewTree says "Tree"
+// in the language of msgs.
+func (msgs Messages) LookViewTree() string {
+	return Catalog.Format(msgs.locale, "lookViewTree", nil)
+}
+
+// LookViewTable says "Table"
+// in the language the app shows.
+func LookViewTable() string { return In(i18n.Locale()).LookViewTable() }
+
+// LookViewTable says "Table"
+// in the language of msgs.
+func (msgs Messages) LookViewTable() string {
+	return Catalog.Format(msgs.locale, "lookViewTable", nil)
+}
+
+// LookViewPages says "Pages"
+// in the language the app shows.
+func LookViewPages() string { return In(i18n.Locale()).LookViewPages() }
+
+// LookViewPages says "Pages"
+// in the language of msgs.
+func (msgs Messages) LookViewPages() string {
+	return Catalog.Format(msgs.locale, "lookViewPages", nil)
+}
+
+// LookViewFilm says "Film"
+// in the language the app shows.
+func LookViewFilm() string { return In(i18n.Locale()).LookViewFilm() }
+
+// LookViewFilm says "Film"
+// in the language of msgs.
+func (msgs Messages) LookViewFilm() string {
+	return Catalog.Format(msgs.locale, "lookViewFilm", nil)
+}
+
+// LookViewSpecimen says "Specimen"
+// in the language the app shows.
+func LookViewSpecimen() string { return In(i18n.Locale()).LookViewSpecimen() }
+
+// LookViewSpecimen says "Specimen"
+// in the language of msgs.
+func (msgs Messages) LookViewSpecimen() string {
+	return Catalog.Format(msgs.locale, "lookViewSpecimen", nil)
+}
+
+// LookViewContents says "Contents"
+// in the language the app shows.
+func LookViewContents() string { return In(i18n.Locale()).LookViewContents() }
+
+// LookViewContents says "Contents"
+// in the language of msgs.
+func (msgs Messages) LookViewContents() string {
+	return Catalog.Format(msgs.locale, "lookViewContents", nil)
+}
+
+// LookViewTip says "{name} (v)"
+// in the language the app shows.
+func LookViewTip(name string) string { return In(i18n.Locale()).LookViewTip(name) }
+
+// LookViewTip says "{name} (v)"
+// in the language of msgs.
+func (msgs Messages) LookViewTip(name string) string {
+	return Catalog.Format(msgs.locale, "lookViewTip", map[string]any{"name": name})
+}
+
+// LookKindText says "Text"
+// in the language the app shows.
+func LookKindText() string { return In(i18n.Locale()).LookKindText() }
+
+// LookKindText says "Text"
+// in the language of msgs.
+func (msgs Messages) LookKindText() string {
+	return Catalog.Format(msgs.locale, "lookKindText", nil)
+}
+
+// LookKindMarkdown says "Markdown"
+// in the language the app shows.
+func LookKindMarkdown() string { return In(i18n.Locale()).LookKindMarkdown() }
+
+// LookKindMarkdown says "Markdown"
+// in the language of msgs.
+func (msgs Messages) LookKindMarkdown() string {
+	return Catalog.Format(msgs.locale, "lookKindMarkdown", nil)
+}
+
+// LookKindImage says "Picture"
+// in the language the app shows.
+func LookKindImage() string { return In(i18n.Locale()).LookKindImage() }
+
+// LookKindImage says "Picture"
+// in the language of msgs.
+func (msgs Messages) LookKindImage() string {
+	return Catalog.Format(msgs.locale, "lookKindImage", nil)
+}
+
+// LookKindAnimation says "Animation"
+// in the language the app shows.
+func LookKindAnimation() string { return In(i18n.Locale()).LookKindAnimation() }
+
+// LookKindAnimation says "Animation"
+// in the language of msgs.
+func (msgs Messages) LookKindAnimation() string {
+	return Catalog.Format(msgs.locale, "lookKindAnimation", nil)
+}
+
+// LookKindSVG says "SVG drawing"
+// in the language the app shows.
+func LookKindSVG() string { return In(i18n.Locale()).LookKindSVG() }
+
+// LookKindSVG says "SVG drawing"
+// in the language of msgs.
+func (msgs Messages) LookKindSVG() string {
+	return Catalog.Format(msgs.locale, "lookKindSVG", nil)
+}
+
+// LookKindPDF says "PDF document"
+// in the language the app shows.
+func LookKindPDF() string { return In(i18n.Locale()).LookKindPDF() }
+
+// LookKindPDF says "PDF document"
+// in the language of msgs.
+func (msgs Messages) LookKindPDF() string {
+	return Catalog.Format(msgs.locale, "lookKindPDF", nil)
+}
+
+// LookKindVideo says "Film"
+// in the language the app shows.
+func LookKindVideo() string { return In(i18n.Locale()).LookKindVideo() }
+
+// LookKindVideo says "Film"
+// in the language of msgs.
+func (msgs Messages) LookKindVideo() string {
+	return Catalog.Format(msgs.locale, "lookKindVideo", nil)
+}
+
+// LookKindAudio says "Sound"
+// in the language the app shows.
+func LookKindAudio() string { return In(i18n.Locale()).LookKindAudio() }
+
+// LookKindAudio says "Sound"
+// in the language of msgs.
+func (msgs Messages) LookKindAudio() string {
+	return Catalog.Format(msgs.locale, "lookKindAudio", nil)
+}
+
+// LookKindTable says "Table"
+// in the language the app shows.
+func LookKindTable() string { return In(i18n.Locale()).LookKindTable() }
+
+// LookKindTable says "Table"
+// in the language of msgs.
+func (msgs Messages) LookKindTable() string {
+	return Catalog.Format(msgs.locale, "lookKindTable", nil)
+}
+
+// LookKindJSON says "JSON"
+// in the language the app shows.
+func LookKindJSON() string { return In(i18n.Locale()).LookKindJSON() }
+
+// LookKindJSON says "JSON"
+// in the language of msgs.
+func (msgs Messages) LookKindJSON() string {
+	return Catalog.Format(msgs.locale, "lookKindJSON", nil)
+}
+
+// LookKindArchive says "Archive"
+// in the language the app shows.
+func LookKindArchive() string { return In(i18n.Locale()).LookKindArchive() }
+
+// LookKindArchive says "Archive"
+// in the language of msgs.
+func (msgs Messages) LookKindArchive() string {
+	return Catalog.Format(msgs.locale, "lookKindArchive", nil)
+}
+
+// LookKindFont says "Font"
+// in the language the app shows.
+func LookKindFont() string { return In(i18n.Locale()).LookKindFont() }
+
+// LookKindFont says "Font"
+// in the language of msgs.
+func (msgs Messages) LookKindFont() string {
+	return Catalog.Format(msgs.locale, "lookKindFont", nil)
+}
+
+// LookKindBinary says "Binary file"
+// in the language the app shows.
+func LookKindBinary() string { return In(i18n.Locale()).LookKindBinary() }
+
+// LookKindBinary says "Binary file"
+// in the language of msgs.
+func (msgs Messages) LookKindBinary() string {
+	return Catalog.Format(msgs.locale, "lookKindBinary", nil)
+}
+
+// LookKindFile says "File"
+// in the language the app shows.
+func LookKindFile() string { return In(i18n.Locale()).LookKindFile() }
+
+// LookKindFile says "File"
+// in the language of msgs.
+func (msgs Messages) LookKindFile() string {
+	return Catalog.Format(msgs.locale, "lookKindFile", nil)
+}
+
+// LookReading says "Reading {name}"
+// in the language the app shows.
+func LookReading(name string) string { return In(i18n.Locale()).LookReading(name) }
+
+// LookReading says "Reading {name}"
+// in the language of msgs.
+func (msgs Messages) LookReading(name string) string {
+	return Catalog.Format(msgs.locale, "lookReading", map[string]any{"name": name})
+}
+
+// LookCountingLines says "Counting lines"
+// in the language the app shows.
+func LookCountingLines() string { return In(i18n.Locale()).LookCountingLines() }
+
+// LookCountingLines says "Counting lines"
+// in the language of msgs.
+func (msgs Messages) LookCountingLines() string {
+	return Catalog.Format(msgs.locale, "lookCountingLines", nil)
+}
+
+// LookCountingSoFar says "Counting lines: {count} so far"
+// in the language the app shows.
+func LookCountingSoFar(count string) string { return In(i18n.Locale()).LookCountingSoFar(count) }
+
+// LookCountingSoFar says "Counting lines: {count} so far"
+// in the language of msgs.
+func (msgs Messages) LookCountingSoFar(count string) string {
+	return Catalog.Format(msgs.locale, "lookCountingSoFar", map[string]any{"count": count})
+}
+
+// LookTooLarge says "The file is too large to show."
+// in the language the app shows.
+func LookTooLarge() string { return In(i18n.Locale()).LookTooLarge() }
+
+// LookTooLarge says "The file is too large to show."
+// in the language of msgs.
+func (msgs Messages) LookTooLarge() string {
+	return Catalog.Format(msgs.locale, "lookTooLarge", nil)
+}
+
+// LookUnreadable says "The file could not be read."
+// in the language the app shows.
+func LookUnreadable() string { return In(i18n.Locale()).LookUnreadable() }
+
+// LookUnreadable says "The file could not be read."
+// in the language of msgs.
+func (msgs Messages) LookUnreadable() string {
+	return Catalog.Format(msgs.locale, "lookUnreadable", nil)
+}
+
+// LookPictureUnreadable says "The picture could not be read."
+// in the language the app shows.
+func LookPictureUnreadable() string { return In(i18n.Locale()).LookPictureUnreadable() }
+
+// LookPictureUnreadable says "The picture could not be read."
+// in the language of msgs.
+func (msgs Messages) LookPictureUnreadable() string {
+	return Catalog.Format(msgs.locale, "lookPictureUnreadable", nil)
+}
+
+// LookNoDecoder says "This machine cannot read this picture. Install ImageMagick or ffmpeg."
+// in the language the app shows.
+func LookNoDecoder() string { return In(i18n.Locale()).LookNoDecoder() }
+
+// LookNoDecoder says "This machine cannot read this picture. Install ImageMagick or ffmpeg."
+// in the language of msgs.
+func (msgs Messages) LookNoDecoder() string {
+	return Catalog.Format(msgs.locale, "lookNoDecoder", nil)
+}
+
+// LookEmpty says "The file is empty."
+// in the language the app shows.
+func LookEmpty() string { return In(i18n.Locale()).LookEmpty() }
+
+// LookEmpty says "The file is empty."
+// in the language of msgs.
+func (msgs Messages) LookEmpty() string {
+	return Catalog.Format(msgs.locale, "lookEmpty", nil)
+}
+
+// LookNoTool says "This machine has no {tool}."
+// in the language the app shows.
+func LookNoTool(tool string) string { return In(i18n.Locale()).LookNoTool(tool) }
+
+// LookNoTool says "This machine has no {tool}."
+// in the language of msgs.
+func (msgs Messages) LookNoTool(tool string) string {
+	return Catalog.Format(msgs.locale, "lookNoTool", map[string]any{"tool": tool})
+}
+
+// LookNoPoppler says "This machine has no {tool} to draw PDF pages. Install poppler and open the file again."
+// in the language the app shows.
+func LookNoPoppler(tool string) string { return In(i18n.Locale()).LookNoPoppler(tool) }
+
+// LookNoPoppler says "This machine has no {tool} to draw PDF pages. Install poppler and open the file again."
+// in the language of msgs.
+func (msgs Messages) LookNoPoppler(tool string) string {
+	return Catalog.Format(msgs.locale, "lookNoPoppler", map[string]any{"tool": tool})
+}
+
+// LookNoFfmpeg says "This machine has no {tool}. Install ffmpeg to see this file."
+// in the language the app shows.
+func LookNoFfmpeg(tool string) string { return In(i18n.Locale()).LookNoFfmpeg(tool) }
+
+// LookNoFfmpeg says "This machine has no {tool}. Install ffmpeg to see this file."
+// in the language of msgs.
+func (msgs Messages) LookNoFfmpeg(tool string) string {
+	return Catalog.Format(msgs.locale, "lookNoFfmpeg", map[string]any{"tool": tool})
+}
+
+// LookNoBsdtar says "This machine has no {tool} to list this archive."
+// in the language the app shows.
+func LookNoBsdtar(tool string) string { return In(i18n.Locale()).LookNoBsdtar(tool) }
+
+// LookNoBsdtar says "This machine has no {tool} to list this archive."
+// in the language of msgs.
+func (msgs Messages) LookNoBsdtar(tool string) string {
+	return Catalog.Format(msgs.locale, "lookNoBsdtar", map[string]any{"tool": tool})
+}
+
+// LookPDFLocked says "The PDF is locked with a password."
+// in the language the app shows.
+func LookPDFLocked() string { return In(i18n.Locale()).LookPDFLocked() }
+
+// LookPDFLocked says "The PDF is locked with a password."
+// in the language of msgs.
+func (msgs Messages) LookPDFLocked() string {
+	return Catalog.Format(msgs.locale, "lookPDFLocked", nil)
+}
+
+// LookPDFNoPages says "The PDF has no pages."
+// in the language the app shows.
+func LookPDFNoPages() string { return In(i18n.Locale()).LookPDFNoPages() }
+
+// LookPDFNoPages says "The PDF has no pages."
+// in the language of msgs.
+func (msgs Messages) LookPDFNoPages() string {
+	return Catalog.Format(msgs.locale, "lookPDFNoPages", nil)
+}
+
+// LookPageFailed says "This page could not be drawn."
+// in the language the app shows.
+func LookPageFailed() string { return In(i18n.Locale()).LookPageFailed() }
+
+// LookPageFailed says "This page could not be drawn."
+// in the language of msgs.
+func (msgs Messages) LookPageFailed() string {
+	return Catalog.Format(msgs.locale, "lookPageFailed", nil)
+}
+
+// LookNoFrame says "No frame could be read here."
+// in the language the app shows.
+func LookNoFrame() string { return In(i18n.Locale()).LookNoFrame() }
+
+// LookNoFrame says "No frame could be read here."
+// in the language of msgs.
+func (msgs Messages) LookNoFrame() string {
+	return Catalog.Format(msgs.locale, "lookNoFrame", nil)
+}
+
+// LookSVGUnsupported says "guios cannot draw this SVG. Its source is in the Source view."
+// in the language the app shows.
+func LookSVGUnsupported() string { return In(i18n.Locale()).LookSVGUnsupported() }
+
+// LookSVGUnsupported says "guios cannot draw this SVG. Its source is in the Source view."
+// in the language of msgs.
+func (msgs Messages) LookSVGUnsupported() string {
+	return Catalog.Format(msgs.locale, "lookSVGUnsupported", nil)
+}
+
+// LookNotJSON says "The file is not valid JSON."
+// in the language the app shows.
+func LookNotJSON() string { return In(i18n.Locale()).LookNotJSON() }
+
+// LookNotJSON says "The file is not valid JSON."
+// in the language of msgs.
+func (msgs Messages) LookNotJSON() string {
+	return Catalog.Format(msgs.locale, "lookNotJSON", nil)
+}
+
+// LookCounting says "The lines are still being counted. Try again in a moment."
+// in the language the app shows.
+func LookCounting() string { return In(i18n.Locale()).LookCounting() }
+
+// LookCounting says "The lines are still being counted. Try again in a moment."
+// in the language of msgs.
+func (msgs Messages) LookCounting() string {
+	return Catalog.Format(msgs.locale, "lookCounting", nil)
+}
+
+// LookTableCapped says "Shows the first {count} rows. The file has more."
+// in the language the app shows.
+func LookTableCapped(count string) string { return In(i18n.Locale()).LookTableCapped(count) }
+
+// LookTableCapped says "Shows the first {count} rows. The file has more."
+// in the language of msgs.
+func (msgs Messages) LookTableCapped(count string) string {
+	return Catalog.Format(msgs.locale, "lookTableCapped", map[string]any{"count": count})
+}
+
+// LookJSONCapped says "Shows the start of the file. It is too large to read whole."
+// in the language the app shows.
+func LookJSONCapped() string { return In(i18n.Locale()).LookJSONCapped() }
+
+// LookJSONCapped says "Shows the start of the file. It is too large to read whole."
+// in the language of msgs.
+func (msgs Messages) LookJSONCapped() string {
+	return Catalog.Format(msgs.locale, "lookJSONCapped", nil)
+}
+
+// LookArchiveSummary says "{entries}, {size} unpacked"
+// in the language the app shows.
+func LookArchiveSummary(entries string, size string) string {
+	return In(i18n.Locale()).LookArchiveSummary(entries, size)
+}
+
+// LookArchiveSummary says "{entries}, {size} unpacked"
+// in the language of msgs.
+func (msgs Messages) LookArchiveSummary(entries string, size string) string {
+	return Catalog.Format(msgs.locale, "lookArchiveSummary", map[string]any{"entries": entries, "size": size})
+}
+
+// LookArchiveCapped says "The listing stops there."
+// in the language the app shows.
+func LookArchiveCapped() string { return In(i18n.Locale()).LookArchiveCapped() }
+
+// LookArchiveCapped says "The listing stops there."
+// in the language of msgs.
+func (msgs Messages) LookArchiveCapped() string {
+	return Catalog.Format(msgs.locale, "lookArchiveCapped", nil)
+}
+
+// LookNoMoreMatches says "No more matches for “{query}”."
+// in the language the app shows.
+func LookNoMoreMatches(query string) string { return In(i18n.Locale()).LookNoMoreMatches(query) }
+
+// LookNoMoreMatches says "No more matches for “{query}”."
+// in the language of msgs.
+func (msgs Messages) LookNoMoreMatches(query string) string {
+	return Catalog.Format(msgs.locale, "lookNoMoreMatches", map[string]any{"query": query})
+}
+
+// LookFind says "Find"
+// in the language the app shows.
+func LookFind() string { return In(i18n.Locale()).LookFind() }
+
+// LookFind says "Find"
+// in the language of msgs.
+func (msgs Messages) LookFind() string {
+	return Catalog.Format(msgs.locale, "lookFind", nil)
+}
+
+// LookFindHint says "Text to find. Lower case ignores case."
+// in the language the app shows.
+func LookFindHint() string { return In(i18n.Locale()).LookFindHint() }
+
+// LookFindHint says "Text to find. Lower case ignores case."
+// in the language of msgs.
+func (msgs Messages) LookFindHint() string {
+	return Catalog.Format(msgs.locale, "lookFindHint", nil)
+}
+
+// LookGoToLine says "Go to line"
+// in the language the app shows.
+func LookGoToLine() string { return In(i18n.Locale()).LookGoToLine() }
+
+// LookGoToLine says "Go to line"
+// in the language of msgs.
+func (msgs Messages) LookGoToLine() string {
+	return Catalog.Format(msgs.locale, "lookGoToLine", nil)
+}
+
+// LookGoToLineHint says "A line number"
+// in the language the app shows.
+func LookGoToLineHint() string { return In(i18n.Locale()).LookGoToLineHint() }
+
+// LookGoToLineHint says "A line number"
+// in the language of msgs.
+func (msgs Messages) LookGoToLineHint() string {
+	return Catalog.Format(msgs.locale, "lookGoToLineHint", nil)
+}
+
+// LookPrevPage says "Previous page (K)"
+// in the language the app shows.
+func LookPrevPage() string { return In(i18n.Locale()).LookPrevPage() }
+
+// LookPrevPage says "Previous page (K)"
+// in the language of msgs.
+func (msgs Messages) LookPrevPage() string {
+	return Catalog.Format(msgs.locale, "lookPrevPage", nil)
+}
+
+// LookNextPage says "Next page (J)"
+// in the language the app shows.
+func LookNextPage() string { return In(i18n.Locale()).LookNextPage() }
+
+// LookNextPage says "Next page (J)"
+// in the language of msgs.
+func (msgs Messages) LookNextPage() string {
+	return Catalog.Format(msgs.locale, "lookNextPage", nil)
+}
+
+// LookGoToPage says "Go to a page (:)"
+// in the language the app shows.
+func LookGoToPage() string { return In(i18n.Locale()).LookGoToPage() }
+
+// LookGoToPage says "Go to a page (:)"
+// in the language of msgs.
+func (msgs Messages) LookGoToPage() string {
+	return Catalog.Format(msgs.locale, "lookGoToPage", nil)
+}
+
+// LookPageOf says "Page {page} of {pages}"
+// in the language the app shows.
+func LookPageOf(page string, pages string) string { return In(i18n.Locale()).LookPageOf(page, pages) }
+
+// LookPageOf says "Page {page} of {pages}"
+// in the language of msgs.
+func (msgs Messages) LookPageOf(page string, pages string) string {
+	return Catalog.Format(msgs.locale, "lookPageOf", map[string]any{"page": page, "pages": pages})
+}
+
+// LookOfPages says "of {pages}"
+// in the language the app shows.
+func LookOfPages(pages string) string { return In(i18n.Locale()).LookOfPages(pages) }
+
+// LookOfPages says "of {pages}"
+// in the language of msgs.
+func (msgs Messages) LookOfPages(pages string) string {
+	return Catalog.Format(msgs.locale, "lookOfPages", map[string]any{"pages": pages})
+}
+
+// LookZoomOut says "Zoom out (-)"
+// in the language the app shows.
+func LookZoomOut() string { return In(i18n.Locale()).LookZoomOut() }
+
+// LookZoomOut says "Zoom out (-)"
+// in the language of msgs.
+func (msgs Messages) LookZoomOut() string {
+	return Catalog.Format(msgs.locale, "lookZoomOut", nil)
+}
+
+// LookZoomIn says "Zoom in (+)"
+// in the language the app shows.
+func LookZoomIn() string { return In(i18n.Locale()).LookZoomIn() }
+
+// LookZoomIn says "Zoom in (+)"
+// in the language of msgs.
+func (msgs Messages) LookZoomIn() string {
+	return Catalog.Format(msgs.locale, "lookZoomIn", nil)
+}
+
+// LookZoomFit says "Fit (0)"
+// in the language the app shows.
+func LookZoomFit() string { return In(i18n.Locale()).LookZoomFit() }
+
+// LookZoomFit says "Fit (0)"
+// in the language of msgs.
+func (msgs Messages) LookZoomFit() string {
+	return Catalog.Format(msgs.locale, "lookZoomFit", nil)
+}
+
+// LookFitPage says "Fit the page (z)"
+// in the language the app shows.
+func LookFitPage() string { return In(i18n.Locale()).LookFitPage() }
+
+// LookFitPage says "Fit the page (z)"
+// in the language of msgs.
+func (msgs Messages) LookFitPage() string {
+	return Catalog.Format(msgs.locale, "lookFitPage", nil)
+}
+
+// LookFitWidth says "Fit the width (z)"
+// in the language the app shows.
+func LookFitWidth() string { return In(i18n.Locale()).LookFitWidth() }
+
+// LookFitWidth says "Fit the width (z)"
+// in the language of msgs.
+func (msgs Messages) LookFitWidth() string {
+	return Catalog.Format(msgs.locale, "lookFitWidth", nil)
+}
+
+// LookHold says "Hold (space)"
+// in the language the app shows.
+func LookHold() string { return In(i18n.Locale()).LookHold() }
+
+// LookHold says "Hold (space)"
+// in the language of msgs.
+func (msgs Messages) LookHold() string {
+	return Catalog.Format(msgs.locale, "lookHold", nil)
+}
+
+// LookPlay says "Play (space)"
+// in the language the app shows.
+func LookPlay() string { return In(i18n.Locale()).LookPlay() }
+
+// LookPlay says "Play (space)"
+// in the language of msgs.
+func (msgs Messages) LookPlay() string {
+	return Catalog.Format(msgs.locale, "lookPlay", nil)
+}
+
+// LookPrevFrame says "Previous frame (K)"
+// in the language the app shows.
+func LookPrevFrame() string { return In(i18n.Locale()).LookPrevFrame() }
+
+// LookPrevFrame says "Previous frame (K)"
+// in the language of msgs.
+func (msgs Messages) LookPrevFrame() string {
+	return Catalog.Format(msgs.locale, "lookPrevFrame", nil)
+}
+
+// LookNextFrame says "Next frame (J)"
+// in the language the app shows.
+func LookNextFrame() string { return In(i18n.Locale()).LookNextFrame() }
+
+// LookNextFrame says "Next frame (J)"
+// in the language of msgs.
+func (msgs Messages) LookNextFrame() string {
+	return Catalog.Format(msgs.locale, "lookNextFrame", nil)
+}
+
+// LookFrames says "{count, plural, one {# frame} other {# frames}}"
+// in the language the app shows.
+func LookFrames(count int) string { return In(i18n.Locale()).LookFrames(count) }
+
+// LookFrames says "{count, plural, one {# frame} other {# frames}}"
+// in the language of msgs.
+func (msgs Messages) LookFrames(count int) string {
+	return Catalog.Format(msgs.locale, "lookFrames", map[string]any{"count": count})
+}
+
+// LookFrameOf says "Frame {frame} of {frames}"
+// in the language the app shows.
+func LookFrameOf(frame string, frames string) string {
+	return In(i18n.Locale()).LookFrameOf(frame, frames)
+}
+
+// LookFrameOf says "Frame {frame} of {frames}"
+// in the language of msgs.
+func (msgs Messages) LookFrameOf(frame string, frames string) string {
+	return Catalog.Format(msgs.locale, "lookFrameOf", map[string]any{"frame": frame, "frames": frames})
+}
+
+// LookBack5 says "Back 5 % (K)"
+// in the language the app shows.
+func LookBack5() string { return In(i18n.Locale()).LookBack5() }
+
+// LookBack5 says "Back 5 % (K)"
+// in the language of msgs.
+func (msgs Messages) LookBack5() string {
+	return Catalog.Format(msgs.locale, "lookBack5", nil)
+}
+
+// LookOn5 says "On 5 % (J)"
+// in the language the app shows.
+func LookOn5() string { return In(i18n.Locale()).LookOn5() }
+
+// LookOn5 says "On 5 % (J)"
+// in the language of msgs.
+func (msgs Messages) LookOn5() string {
+	return Catalog.Format(msgs.locale, "lookOn5", nil)
+}
+
+// LookShowStrip says "Show the filmstrip (t)"
+// in the language the app shows.
+func LookShowStrip() string { return In(i18n.Locale()).LookShowStrip() }
+
+// LookShowStrip says "Show the filmstrip (t)"
+// in the language of msgs.
+func (msgs Messages) LookShowStrip() string {
+	return Catalog.Format(msgs.locale, "lookShowStrip", nil)
+}
+
+// LookHideStrip says "Hide the filmstrip (t)"
+// in the language the app shows.
+func LookHideStrip() string { return In(i18n.Locale()).LookHideStrip() }
+
+// LookHideStrip says "Hide the filmstrip (t)"
+// in the language of msgs.
+func (msgs Messages) LookHideStrip() string {
+	return Catalog.Format(msgs.locale, "lookHideStrip", nil)
+}
+
+// LookGoToTime says "Go to {time}"
+// in the language the app shows.
+func LookGoToTime(time_ string) string { return In(i18n.Locale()).LookGoToTime(time_) }
+
+// LookGoToTime says "Go to {time}"
+// in the language of msgs.
+func (msgs Messages) LookGoToTime(time_ string) string {
+	return Catalog.Format(msgs.locale, "lookGoToTime", map[string]any{"time": time_})
+}
+
+// LookNoSound says "no sound"
+// in the language the app shows.
+func LookNoSound() string { return In(i18n.Locale()).LookNoSound() }
+
+// LookNoSound says "no sound"
+// in the language of msgs.
+func (msgs Messages) LookNoSound() string {
+	return Catalog.Format(msgs.locale, "lookNoSound", nil)
+}
+
+// LookSound says "sound {codec}"
+// in the language the app shows.
+func LookSound(codec string) string { return In(i18n.Locale()).LookSound(codec) }
+
+// LookSound says "sound {codec}"
+// in the language of msgs.
+func (msgs Messages) LookSound(codec string) string {
+	return Catalog.Format(msgs.locale, "lookSound", map[string]any{"codec": codec})
+}
+
+// LookFillWindow says "Fill the window (f)"
+// in the language the app shows.
+func LookFillWindow() string { return In(i18n.Locale()).LookFillWindow() }
+
+// LookFillWindow says "Fill the window (f)"
+// in the language of msgs.
+func (msgs Messages) LookFillWindow() string {
+	return Catalog.Format(msgs.locale, "lookFillWindow", nil)
+}
+
+// LookBesidePanes says "Show beside the panes (f)"
+// in the language the app shows.
+func LookBesidePanes() string { return In(i18n.Locale()).LookBesidePanes() }
+
+// LookBesidePanes says "Show beside the panes (f)"
+// in the language of msgs.
+func (msgs Messages) LookBesidePanes() string {
+	return Catalog.Format(msgs.locale, "lookBesidePanes", nil)
+}
+
+// LookFactName says "Name"
+// in the language the app shows.
+func LookFactName() string { return In(i18n.Locale()).LookFactName() }
+
+// LookFactName says "Name"
+// in the language of msgs.
+func (msgs Messages) LookFactName() string {
+	return Catalog.Format(msgs.locale, "lookFactName", nil)
+}
+
+// LookFactKind says "Kind"
+// in the language the app shows.
+func LookFactKind() string { return In(i18n.Locale()).LookFactKind() }
+
+// LookFactKind says "Kind"
+// in the language of msgs.
+func (msgs Messages) LookFactKind() string {
+	return Catalog.Format(msgs.locale, "lookFactKind", nil)
+}
+
+// LookFactSize says "Size"
+// in the language the app shows.
+func LookFactSize() string { return In(i18n.Locale()).LookFactSize() }
+
+// LookFactSize says "Size"
+// in the language of msgs.
+func (msgs Messages) LookFactSize() string {
+	return Catalog.Format(msgs.locale, "lookFactSize", nil)
+}
+
+// LookFactModified says "Modified"
+// in the language the app shows.
+func LookFactModified() string { return In(i18n.Locale()).LookFactModified() }
+
+// LookFactModified says "Modified"
+// in the language of msgs.
+func (msgs Messages) LookFactModified() string {
+	return Catalog.Format(msgs.locale, "lookFactModified", nil)
+}
+
+// LookFactPermissions says "Permissions"
+// in the language the app shows.
+func LookFactPermissions() string { return In(i18n.Locale()).LookFactPermissions() }
+
+// LookFactPermissions says "Permissions"
+// in the language of msgs.
+func (msgs Messages) LookFactPermissions() string {
+	return Catalog.Format(msgs.locale, "lookFactPermissions", nil)
+}
+
+// LookFactFolder says "Folder"
+// in the language the app shows.
+func LookFactFolder() string { return In(i18n.Locale()).LookFactFolder() }
+
+// LookFactFolder says "Folder"
+// in the language of msgs.
+func (msgs Messages) LookFactFolder() string {
+	return Catalog.Format(msgs.locale, "lookFactFolder", nil)
+}
+
+// LookFactDimensions says "Dimensions"
+// in the language the app shows.
+func LookFactDimensions() string { return In(i18n.Locale()).LookFactDimensions() }
+
+// LookFactDimensions says "Dimensions"
+// in the language of msgs.
+func (msgs Messages) LookFactDimensions() string {
+	return Catalog.Format(msgs.locale, "lookFactDimensions", nil)
+}
+
+// LookFactFrames says "Frames"
+// in the language the app shows.
+func LookFactFrames() string { return In(i18n.Locale()).LookFactFrames() }
+
+// LookFactFrames says "Frames"
+// in the language of msgs.
+func (msgs Messages) LookFactFrames() string {
+	return Catalog.Format(msgs.locale, "lookFactFrames", nil)
+}
+
+// LookFactPages says "Pages"
+// in the language the app shows.
+func LookFactPages() string { return In(i18n.Locale()).LookFactPages() }
+
+// LookFactPages says "Pages"
+// in the language of msgs.
+func (msgs Messages) LookFactPages() string {
+	return Catalog.Format(msgs.locale, "lookFactPages", nil)
+}
+
+// LookFactPageSize says "Page size"
+// in the language the app shows.
+func LookFactPageSize() string { return In(i18n.Locale()).LookFactPageSize() }
+
+// LookFactPageSize says "Page size"
+// in the language of msgs.
+func (msgs Messages) LookFactPageSize() string {
+	return Catalog.Format(msgs.locale, "lookFactPageSize", nil)
+}
+
+// LookFactDrawnBy says "Drawn by"
+// in the language the app shows.
+func LookFactDrawnBy() string { return In(i18n.Locale()).LookFactDrawnBy() }
+
+// LookFactDrawnBy says "Drawn by"
+// in the language of msgs.
+func (msgs Messages) LookFactDrawnBy() string {
+	return Catalog.Format(msgs.locale, "lookFactDrawnBy", nil)
+}
+
+// LookFactLength says "Length"
+// in the language the app shows.
+func LookFactLength() string { return In(i18n.Locale()).LookFactLength() }
+
+// LookFactLength says "Length"
+// in the language of msgs.
+func (msgs Messages) LookFactLength() string {
+	return Catalog.Format(msgs.locale, "lookFactLength", nil)
+}
+
+// LookFactFrameSize says "Frame size"
+// in the language the app shows.
+func LookFactFrameSize() string { return In(i18n.Locale()).LookFactFrameSize() }
+
+// LookFactFrameSize says "Frame size"
+// in the language of msgs.
+func (msgs Messages) LookFactFrameSize() string {
+	return Catalog.Format(msgs.locale, "lookFactFrameSize", nil)
+}
+
+// LookFactReadBy says "Read by"
+// in the language the app shows.
+func LookFactReadBy() string { return In(i18n.Locale()).LookFactReadBy() }
+
+// LookFactReadBy says "Read by"
+// in the language of msgs.
+func (msgs Messages) LookFactReadBy() string {
+	return Catalog.Format(msgs.locale, "lookFactReadBy", nil)
+}
+
+// LookFactRows says "Rows"
+// in the language the app shows.
+func LookFactRows() string { return In(i18n.Locale()).LookFactRows() }
+
+// LookFactRows says "Rows"
+// in the language of msgs.
+func (msgs Messages) LookFactRows() string {
+	return Catalog.Format(msgs.locale, "lookFactRows", nil)
+}
+
+// LookFactColumns says "Columns"
+// in the language the app shows.
+func LookFactColumns() string { return In(i18n.Locale()).LookFactColumns() }
+
+// LookFactColumns says "Columns"
+// in the language of msgs.
+func (msgs Messages) LookFactColumns() string {
+	return Catalog.Format(msgs.locale, "lookFactColumns", nil)
+}
+
+// LookFactFamily says "Family"
+// in the language the app shows.
+func LookFactFamily() string { return In(i18n.Locale()).LookFactFamily() }
+
+// LookFactFamily says "Family"
+// in the language of msgs.
+func (msgs Messages) LookFactFamily() string {
+	return Catalog.Format(msgs.locale, "lookFactFamily", nil)
+}
+
+// LookFactStyle says "Style"
+// in the language the app shows.
+func LookFactStyle() string { return In(i18n.Locale()).LookFactStyle() }
+
+// LookFactStyle says "Style"
+// in the language of msgs.
+func (msgs Messages) LookFactStyle() string {
+	return Catalog.Format(msgs.locale, "lookFactStyle", nil)
+}
+
+// LookFactVersion says "Version"
+// in the language the app shows.
+func LookFactVersion() string { return In(i18n.Locale()).LookFactVersion() }
+
+// LookFactVersion says "Version"
+// in the language of msgs.
+func (msgs Messages) LookFactVersion() string {
+	return Catalog.Format(msgs.locale, "lookFactVersion", nil)
+}
+
+// LookFactGlyphs says "Glyphs"
+// in the language the app shows.
+func LookFactGlyphs() string { return In(i18n.Locale()).LookFactGlyphs() }
+
+// LookFactGlyphs says "Glyphs"
+// in the language of msgs.
+func (msgs Messages) LookFactGlyphs() string {
+	return Catalog.Format(msgs.locale, "lookFactGlyphs", nil)
+}
+
+// LookFactFaces says "Fonts in the file"
+// in the language the app shows.
+func LookFactFaces() string { return In(i18n.Locale()).LookFactFaces() }
+
+// LookFactFaces says "Fonts in the file"
+// in the language of msgs.
+func (msgs Messages) LookFactFaces() string {
+	return Catalog.Format(msgs.locale, "lookFactFaces", nil)
+}
+
+// LookFactDesigner says "Designer"
+// in the language the app shows.
+func LookFactDesigner() string { return In(i18n.Locale()).LookFactDesigner() }
+
+// LookFactDesigner says "Designer"
+// in the language of msgs.
+func (msgs Messages) LookFactDesigner() string {
+	return Catalog.Format(msgs.locale, "lookFactDesigner", nil)
+}
+
+// LookFactLicense says "License"
+// in the language the app shows.
+func LookFactLicense() string { return In(i18n.Locale()).LookFactLicense() }
+
+// LookFactLicense says "License"
+// in the language of msgs.
+func (msgs Messages) LookFactLicense() string {
+	return Catalog.Format(msgs.locale, "lookFactLicense", nil)
+}
+
+// LookFactCodec says "Codec"
+// in the language the app shows.
+func LookFactCodec() string { return In(i18n.Locale()).LookFactCodec() }
+
+// LookFactCodec says "Codec"
+// in the language of msgs.
+func (msgs Messages) LookFactCodec() string {
+	return Catalog.Format(msgs.locale, "lookFactCodec", nil)
+}
+
+// LookFactSampleRate says "Sample rate"
+// in the language the app shows.
+func LookFactSampleRate() string { return In(i18n.Locale()).LookFactSampleRate() }
+
+// LookFactSampleRate says "Sample rate"
+// in the language of msgs.
+func (msgs Messages) LookFactSampleRate() string {
+	return Catalog.Format(msgs.locale, "lookFactSampleRate", nil)
+}
+
+// LookFactChannels says "Channels"
+// in the language the app shows.
+func LookFactChannels() string { return In(i18n.Locale()).LookFactChannels() }
+
+// LookFactChannels says "Channels"
+// in the language of msgs.
+func (msgs Messages) LookFactChannels() string {
+	return Catalog.Format(msgs.locale, "lookFactChannels", nil)
+}
+
+// LookFactBitRate says "Bit rate"
+// in the language the app shows.
+func LookFactBitRate() string { return In(i18n.Locale()).LookFactBitRate() }
+
+// LookFactBitRate says "Bit rate"
+// in the language of msgs.
+func (msgs Messages) LookFactBitRate() string {
+	return Catalog.Format(msgs.locale, "lookFactBitRate", nil)
+}
+
+// LookFactDate says "Date"
+// in the language the app shows.
+func LookFactDate() string { return In(i18n.Locale()).LookFactDate() }
+
+// LookFactDate says "Date"
+// in the language of msgs.
+func (msgs Messages) LookFactDate() string {
+	return Catalog.Format(msgs.locale, "lookFactDate", nil)
+}
+
+// LookFactTrack says "Track"
+// in the language the app shows.
+func LookFactTrack() string { return In(i18n.Locale()).LookFactTrack() }
+
+// LookFactTrack says "Track"
+// in the language of msgs.
+func (msgs Messages) LookFactTrack() string {
+	return Catalog.Format(msgs.locale, "lookFactTrack", nil)
+}
+
+// LookFactGenre says "Genre"
+// in the language the app shows.
+func LookFactGenre() string { return In(i18n.Locale()).LookFactGenre() }
+
+// LookFactGenre says "Genre"
+// in the language of msgs.
+func (msgs Messages) LookFactGenre() string {
+	return Catalog.Format(msgs.locale, "lookFactGenre", nil)
+}
+
+// LookFactAlbumArtist says "Album artist"
+// in the language the app shows.
+func LookFactAlbumArtist() string { return In(i18n.Locale()).LookFactAlbumArtist() }
+
+// LookFactAlbumArtist says "Album artist"
+// in the language of msgs.
+func (msgs Messages) LookFactAlbumArtist() string {
+	return Catalog.Format(msgs.locale, "lookFactAlbumArtist", nil)
+}
+
+// LookMono says "Mono"
+// in the language the app shows.
+func LookMono() string { return In(i18n.Locale()).LookMono() }
+
+// LookMono says "Mono"
+// in the language of msgs.
+func (msgs Messages) LookMono() string {
+	return Catalog.Format(msgs.locale, "lookMono", nil)
+}
+
+// LookStereo says "Stereo"
+// in the language the app shows.
+func LookStereo() string { return In(i18n.Locale()).LookStereo() }
+
+// LookStereo says "Stereo"
+// in the language of msgs.
+func (msgs Messages) LookStereo() string {
+	return Catalog.Format(msgs.locale, "lookStereo", nil)
+}
+
+// LookSizeBytes says "{size} ({bytes} bytes)"
+// in the language the app shows.
+func LookSizeBytes(size string, bytes string) string {
+	return In(i18n.Locale()).LookSizeBytes(size, bytes)
+}
+
+// LookSizeBytes says "{size} ({bytes} bytes)"
+// in the language of msgs.
+func (msgs Messages) LookSizeBytes(size string, bytes string) string {
+	return Catalog.Format(msgs.locale, "lookSizeBytes", map[string]any{"size": size, "bytes": bytes})
+}
+
+// LookPixels says "{size} pixels"
+// in the language the app shows.
+func LookPixels(size string) string { return In(i18n.Locale()).LookPixels(size) }
+
+// LookPixels says "{size} pixels"
+// in the language of msgs.
+func (msgs Messages) LookPixels(size string) string {
+	return Catalog.Format(msgs.locale, "lookPixels", map[string]any{"size": size})
+}
+
+// LookGlyphsCount says "{count} glyphs"
+// in the language the app shows.
+func LookGlyphsCount(count string) string { return In(i18n.Locale()).LookGlyphsCount(count) }
+
+// LookGlyphsCount says "{count} glyphs"
+// in the language of msgs.
+func (msgs Messages) LookGlyphsCount(count string) string {
+	return Catalog.Format(msgs.locale, "lookGlyphsCount", map[string]any{"count": count})
+}
+
+// LookVersionOf says "version {version}"
+// in the language the app shows.
+func LookVersionOf(version string) string { return In(i18n.Locale()).LookVersionOf(version) }
+
+// LookVersionOf says "version {version}"
+// in the language of msgs.
+func (msgs Messages) LookVersionOf(version string) string {
+	return Catalog.Format(msgs.locale, "lookVersionOf", map[string]any{"version": version})
+}
+
+// LookRows says "{count, plural, one {# row} other {# rows}}"
+// in the language the app shows.
+func LookRows(count int) string { return In(i18n.Locale()).LookRows(count) }
+
+// LookRows says "{count, plural, one {# row} other {# rows}}"
+// in the language of msgs.
+func (msgs Messages) LookRows(count int) string {
+	return Catalog.Format(msgs.locale, "lookRows", map[string]any{"count": count})
+}
+
+// LookColumns says "{count, plural, one {# column} other {# columns}}"
+// in the language the app shows.
+func LookColumns(count int) string { return In(i18n.Locale()).LookColumns(count) }
+
+// LookColumns says "{count, plural, one {# column} other {# columns}}"
+// in the language of msgs.
+func (msgs Messages) LookColumns(count int) string {
+	return Catalog.Format(msgs.locale, "lookColumns", map[string]any{"count": count})
+}
+
+// LookEntries says "{count, plural, one {# entry} other {# entries}}"
+// in the language the app shows.
+func LookEntries(count int) string { return In(i18n.Locale()).LookEntries(count) }
+
+// LookEntries says "{count, plural, one {# entry} other {# entries}}"
+// in the language of msgs.
+func (msgs Messages) LookEntries(count int) string {
+	return Catalog.Format(msgs.locale, "lookEntries", map[string]any{"count": count})
+}
+
+// LookLines says "{count, plural, one {# line} other {# lines}}"
+// in the language the app shows.
+func LookLines(count int) string { return In(i18n.Locale()).LookLines(count) }
+
+// LookLines says "{count, plural, one {# line} other {# lines}}"
+// in the language of msgs.
+func (msgs Messages) LookLines(count int) string {
+	return Catalog.Format(msgs.locale, "lookLines", map[string]any{"count": count})
+}
+
+// LookKeys says "{count, plural, one {# key} other {# keys}}"
+// in the language the app shows.
+func LookKeys(count int) string { return In(i18n.Locale()).LookKeys(count) }
+
+// LookKeys says "{count, plural, one {# key} other {# keys}}"
+// in the language of msgs.
+func (msgs Messages) LookKeys(count int) string {
+	return Catalog.Format(msgs.locale, "lookKeys", map[string]any{"count": count})
+}
+
+// LookItems says "{count, plural, one {# item} other {# items}}"
+// in the language the app shows.
+func LookItems(count int) string { return In(i18n.Locale()).LookItems(count) }
+
+// LookItems says "{count, plural, one {# item} other {# items}}"
+// in the language of msgs.
+func (msgs Messages) LookItems(count int) string {
+	return Catalog.Format(msgs.locale, "lookItems", map[string]any{"count": count})
+}
+
+// LookAlertNote says "Note"
+// in the language the app shows.
+func LookAlertNote() string { return In(i18n.Locale()).LookAlertNote() }
+
+// LookAlertNote says "Note"
+// in the language of msgs.
+func (msgs Messages) LookAlertNote() string {
+	return Catalog.Format(msgs.locale, "lookAlertNote", nil)
+}
+
+// LookAlertTip says "Tip"
+// in the language the app shows.
+func LookAlertTip() string { return In(i18n.Locale()).LookAlertTip() }
+
+// LookAlertTip says "Tip"
+// in the language of msgs.
+func (msgs Messages) LookAlertTip() string {
+	return Catalog.Format(msgs.locale, "lookAlertTip", nil)
+}
+
+// LookAlertImportant says "Important"
+// in the language the app shows.
+func LookAlertImportant() string { return In(i18n.Locale()).LookAlertImportant() }
+
+// LookAlertImportant says "Important"
+// in the language of msgs.
+func (msgs Messages) LookAlertImportant() string {
+	return Catalog.Format(msgs.locale, "lookAlertImportant", nil)
+}
+
+// LookAlertWarning says "Warning"
+// in the language the app shows.
+func LookAlertWarning() string { return In(i18n.Locale()).LookAlertWarning() }
+
+// LookAlertWarning says "Warning"
+// in the language of msgs.
+func (msgs Messages) LookAlertWarning() string {
+	return Catalog.Format(msgs.locale, "lookAlertWarning", nil)
+}
+
+// LookAlertCaution says "Caution"
+// in the language the app shows.
+func LookAlertCaution() string { return In(i18n.Locale()).LookAlertCaution() }
+
+// LookAlertCaution says "Caution"
+// in the language of msgs.
+func (msgs Messages) LookAlertCaution() string {
+	return Catalog.Format(msgs.locale, "lookAlertCaution", nil)
+}

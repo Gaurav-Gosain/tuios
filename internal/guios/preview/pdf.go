@@ -83,7 +83,7 @@ func openPoppler(ctx context.Context, path string) (Doc, error) {
 		}
 	}
 	if d.pages <= 0 {
-		return nil, errors.New("The PDF has no pages.")
+		return nil, ErrNoPages
 	}
 	d.sizes = popplerSizes(out, min(d.pages, maxSizedPages))
 	if len(d.sizes) == 0 {
@@ -96,9 +96,9 @@ func openPoppler(ctx context.Context, path string) (Doc, error) {
 func pdfError(out []byte, err error) error {
 	s := strings.ToLower(string(out))
 	if strings.Contains(s, "password") || strings.Contains(s, "encrypt") {
-		return errors.New("The PDF is locked with a password.")
+		return ErrLocked
 	}
-	return errors.New("The PDF could not be read.")
+	return ErrUnreadable
 }
 
 // popplerSizes reads "Page N size: W x H pts" and "Page N rot: R" lines.
@@ -155,11 +155,11 @@ func (d *popplerDoc) Render(ctx context.Context, i, widthPx int) (image.Image, e
 		return nil, ctx.Err()
 	}
 	if err != nil {
-		return nil, errors.New("This page could not be drawn.")
+		return nil, ErrPageFailed
 	}
 	img, err := decodePPM(out)
 	if err != nil {
-		return nil, errors.New("This page could not be drawn.")
+		return nil, ErrPageFailed
 	}
 	return img, nil
 }

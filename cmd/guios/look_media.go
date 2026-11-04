@@ -8,6 +8,8 @@ import (
 	"github.com/egoist/mygo/ui"
 
 	"github.com/Gaurav-Gosain/tuios/internal/guios/preview"
+
+	"github.com/Gaurav-Gosain/tuios/cmd/guios/locales"
 )
 
 // Films show a frame at a time, as the TUI's quick look does: no playback,
@@ -81,9 +83,9 @@ func (a *App) startFilm(l *fileLook) {
 // mediaMessage is what the viewer says of a film or sound it cannot read.
 func mediaMessage(err error) string {
 	if nt, ok := err.(preview.ErrNoTool); ok {
-		return "This machine has no " + string(nt) + ". Install ffmpeg to see this file."
+		return locales.LookNoFfmpeg(string(nt))
 	}
-	return "The file could not be read."
+	return lookErrText(err)
 }
 
 // filmSeek moves to ms, read once the read under way ends.
@@ -119,7 +121,7 @@ func (a *App) filmRead(l *fileLook) {
 			if err != nil {
 				fm.failed = mediaMessage(err)
 				if _, ok := err.(preview.ErrNoTool); !ok {
-					fm.failed = "No frame could be read here."
+					fm.failed = locales.LookNoFrame()
 				}
 			} else {
 				fm.failed = ""
@@ -211,9 +213,9 @@ func (a *App) filmView(c *ui.Context, pal *palette, l *fileLook) {
 			facts = append(facts, trimFloat(f.FPS)+" fps")
 		}
 		if f.AudioCodec != "" {
-			facts = append(facts, "sound "+codecName(f.AudioCodec))
+			facts = append(facts, locales.LookSound(codecName(f.AudioCodec)))
 		} else {
-			facts = append(facts, "no sound")
+			facts = append(facts, locales.LookNoSound())
 		}
 		ui.Row(c.Key("film-facts")).Height(28).Shrink(0).Padding(0, 14).AlignItems(ui.Center).Children(func() {
 			ui.Text(c, strings.Join(facts, " · ")).FontSize(12).TextColor(pal.textFaint).SingleLine().Ellipsis("…").MinWidth(0)
@@ -226,8 +228,8 @@ func (a *App) filmBar(c *ui.Context, pal *palette, l *fileLook) {
 	fm := l.film
 	dur := max(fm.facts.DurationMs, 1)
 	ui.Row(c.Key("film-bar")).Height(40).Shrink(0).Padding(0, 10).Gap(10).AlignItems(ui.Center).Children(func() {
-		iconButton(c, "film-back", chevronLeftIcon, "Back 5 % (K)", pal, func() { a.filmSeek(l, fm.want-dur/20) })
-		iconButton(c, "film-on", chevronIcon, "On 5 % (J)", pal, func() { a.filmSeek(l, fm.want+dur/20) })
+		iconButton(c, "film-back", chevronLeftIcon, locales.LookBack5(), pal, func() { a.filmSeek(l, fm.want-dur/20) })
+		iconButton(c, "film-on", chevronIcon, locales.LookOn5(), pal, func() { a.filmSeek(l, fm.want+dur/20) })
 		ui.Text(c, filmClock(fm.want)).FontSize(12).FontFeatures("tnum").TextColor(pal.text).SingleLine().Shrink(0)
 		bar := ui.Box(c.Key("track")).Grow(1).Height(24).Cursor(ui.CursorPointer)
 		bw := bar.Bounds().W
@@ -261,9 +263,9 @@ func (a *App) filmBar(c *ui.Context, pal *palette, l *fileLook) {
 			bar.Tooltip(filmClock(int64(min(max(hx/max(bw, 1), 0), 1) * float32(dur))))
 		}
 		ui.Text(c, filmClock(dur)).FontSize(12).FontFeatures("tnum").TextColor(pal.textMuted).SingleLine().Shrink(0)
-		strip := "Show the filmstrip (t)"
+		strip := locales.LookShowStrip()
 		if fm.strip {
-			strip = "Hide the filmstrip (t)"
+			strip = locales.LookHideStrip()
 		}
 		iconButton(c, "film-strip", stripIcon, strip, pal, func() {
 			fm.strip = !fm.strip
@@ -282,7 +284,7 @@ func (a *App) filmStrip(c *ui.Context, pal *palette, l *fileLook) {
 		for i := range stripFrames {
 			at := dur * int64(2*i+1) / (2 * stripFrames)
 			cell := ui.ButtonBase(c.Key(i)).Grow(1).Basis(0).MinWidth(0).Radius(6).Clip().Background(ui.RGBA(0, 0, 0, 0.85)).
-				Tooltip(filmClock(at)).Label("Go to " + filmClock(at)).Cursor(ui.CursorPointer)
+				Tooltip(filmClock(at)).Label(locales.LookGoToTime(filmClock(at))).Cursor(ui.CursorPointer)
 			near := fm.at >= at-dur/(2*stripFrames) && fm.at < at+dur/(2*stripFrames)
 			if near {
 				cell.Border(2, pal.accent)
@@ -442,28 +444,28 @@ func (a *App) audioView(c *ui.Context, pal *palette, l *fileLook) {
 				}
 			}
 			if f.DurationMs > 0 {
-				add("Length", filmClock(f.DurationMs))
+				add(locales.LookFactLength(), filmClock(f.DurationMs))
 			}
-			add("Codec", codecName(f.AudioCodec))
+			add(locales.LookFactCodec(), codecName(f.AudioCodec))
 			if f.SampleRate > 0 {
-				add("Sample rate", trimFloat(float64(f.SampleRate)/1000)+" kHz")
+				add(locales.LookFactSampleRate(), trimFloat(float64(f.SampleRate)/1000)+" kHz")
 			}
 			switch f.Channels {
 			case 0:
 			case 1:
-				add("Channels", "Mono")
+				add(locales.LookFactChannels(), locales.LookMono())
 			case 2:
-				add("Channels", "Stereo")
+				add(locales.LookFactChannels(), locales.LookStereo())
 			default:
-				add("Channels", itoa(f.Channels))
+				add(locales.LookFactChannels(), itoa(f.Channels))
 			}
 			if f.BitRate > 0 {
-				add("Bit rate", itoa(int(f.BitRate/1000))+" kb/s")
+				add(locales.LookFactBitRate(), itoa(int(f.BitRate/1000))+" kb/s")
 			}
-			add("Date", tag("date"))
-			add("Track", tag("track"))
-			add("Genre", tag("genre"))
-			add("Album artist", tag("album_artist"))
+			add(locales.LookFactDate(), tag("date"))
+			add(locales.LookFactTrack(), tag("track"))
+			add(locales.LookFactGenre(), tag("genre"))
+			add(locales.LookFactAlbumArtist(), tag("album_artist"))
 			factsTable(c, pal, rows, 420)
 		})
 	})

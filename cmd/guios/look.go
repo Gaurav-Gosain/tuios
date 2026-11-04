@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"io"
 	"os"
 	"path/filepath"
@@ -11,6 +12,8 @@ import (
 	"github.com/egoist/mygo/ui"
 
 	"github.com/Gaurav-Gosain/tuios/internal/guios/preview"
+
+	"github.com/Gaurav-Gosain/tuios/cmd/guios/locales"
 )
 
 // A file of Files shows in the viewer as what it is: a picture, a PDF's
@@ -102,33 +105,31 @@ func (l *fileLook) viewName(v lookView) string {
 	switch v {
 	case viewText:
 		if l.kind == preview.Text {
-			return "Text"
+			return locales.LookViewText()
 		}
-		return "Source"
+		return locales.LookViewSource()
 	case viewHex:
-		return "Hex"
+		return locales.LookViewHex()
 	case viewDetails:
-		return "Details"
+		return locales.LookViewDetails()
 	}
 	switch l.kind {
-	case preview.Markdown:
-		return "Preview"
 	case preview.SVG:
-		return "Drawing"
+		return locales.LookViewDrawing()
 	case preview.JSON:
-		return "Tree"
+		return locales.LookViewTree()
 	case preview.Table:
-		return "Table"
+		return locales.LookViewTable()
 	case preview.PDF:
-		return "Pages"
+		return locales.LookViewPages()
 	case preview.Video:
-		return "Film"
+		return locales.LookViewFilm()
 	case preview.Font:
-		return "Specimen"
+		return locales.LookViewSpecimen()
 	case preview.Archive:
-		return "Contents"
+		return locales.LookViewContents()
 	}
-	return "Preview"
+	return locales.LookViewPreview()
 }
 
 // wantsText tells that the view shown is the file's text, which the editor
@@ -154,7 +155,7 @@ func (a *App) openLook(path string) *fileLook {
 			}
 			l.busy = false
 			if err != nil {
-				l.err = "The file is gone."
+				l.err = locales.FilesGone()
 				return
 			}
 			l.size, l.mod, l.mode = fi.Size(), fi.ModTime(), fi.Mode()
@@ -270,7 +271,7 @@ func (a *App) checkLook(fv *fileView) {
 				return
 			}
 			if err != nil {
-				l.err = "The file is gone."
+				l.err = locales.FilesGone()
 				return
 			}
 			if fi.ModTime().Equal(l.mod) && fi.Size() == l.size {
@@ -343,7 +344,7 @@ func lookWaiting(c *ui.Context, pal *palette, l *fileLook) {
 	}
 	ui.Column(c).Grow(1).Center().Gap(10).Children(func() {
 		ui.Spinner(c)
-		ui.Text(c, "Reading "+l.name).FontSize(12).TextColor(pal.textFaint).SingleLine()
+		ui.Text(c, locales.LookReading(l.name)).FontSize(12).TextColor(pal.textFaint).SingleLine()
 	})
 }
 
@@ -365,12 +366,12 @@ func (a *App) lookMeta(l *fileLook) string {
 	case viewOwn:
 		switch {
 		case l.pdf != nil && l.pdf.doc != nil:
-			parts = append(parts, "Page "+itoa(l.pdf.page+1)+" of "+itoa(l.pdf.pages))
+			parts = append(parts, locales.LookPageOf(itoa(l.pdf.page+1), itoa(l.pdf.pages)))
 			parts = append(parts, itoa(int(l.pdf.shownZoom*100+0.5))+"%")
 		case l.img != nil && l.img.w > 0:
 			parts = append(parts, itoa(l.img.w)+" × "+itoa(l.img.h))
 			if l.img.frames > 1 {
-				parts = append(parts, itoa(l.img.frames)+" frames")
+				parts = append(parts, locales.LookFrames(l.img.frames))
 			}
 			if l.img.shown > 0 {
 				parts = append(parts, itoa(int(l.img.shown*100+0.5))+"%")
@@ -378,17 +379,17 @@ func (a *App) lookMeta(l *fileLook) string {
 		case l.film != nil && l.film.facts != nil:
 			parts = append(parts, filmClock(l.film.at)+" / "+filmClock(l.film.facts.DurationMs))
 		case l.table != nil && l.table.data != nil:
-			parts = append(parts, countWord(len(l.table.data.Rows), "row", "rows"), countWord(len(l.table.data.Header), "column", "columns"))
+			parts = append(parts, locales.LookRows(len(l.table.data.Rows)), locales.LookColumns(len(l.table.data.Header)))
 		case l.arc != nil && l.arc.entries != nil:
-			parts = append(parts, countWord(len(l.arc.entries), "entry", "entries"))
+			parts = append(parts, locales.LookEntries(len(l.arc.entries)))
 		}
 	case viewText:
 		if l.big != nil && l.big.tf != nil {
 			n, done := l.big.tf.Count()
 			if done {
-				parts = append(parts, countWord(int(n), "line", "lines"))
+				parts = append(parts, locales.LookLines(int(n)))
 			} else {
-				parts = append(parts, "Counting lines")
+				parts = append(parts, locales.LookCountingLines())
 			}
 		}
 	}
@@ -396,12 +397,68 @@ func (a *App) lookMeta(l *fileLook) string {
 	return strings.Join(parts, " · ")
 }
 
-// countWord is n and its word, one or many.
-func countWord(n int, one, many string) string {
-	if n == 1 {
-		return "1 " + one
+// lookErrText is what the viewer says of a read that failed, in the
+// person's language.
+func lookErrText(err error) string {
+	var nt preview.ErrNoTool
+	switch {
+	case errors.As(err, &nt):
+		return locales.LookNoTool(string(nt))
+	case errors.Is(err, preview.ErrTooLarge), errors.Is(err, errFileTooLarge):
+		return locales.LookTooLarge()
+	case errors.Is(err, preview.ErrNoDecoder):
+		return locales.LookNoDecoder()
+	case errors.Is(err, preview.ErrLocked):
+		return locales.LookPDFLocked()
+	case errors.Is(err, preview.ErrNoPages):
+		return locales.LookPDFNoPages()
+	case errors.Is(err, preview.ErrPageFailed):
+		return locales.LookPageFailed()
+	case errors.Is(err, preview.ErrNoFrame):
+		return locales.LookNoFrame()
+	case errors.Is(err, preview.ErrEmpty):
+		return locales.LookEmpty()
+	case errors.Is(err, preview.ErrNotJSON):
+		return locales.LookNotJSON()
+	case errors.Is(err, preview.ErrCounting):
+		return locales.LookCounting()
+	case errors.Is(err, os.ErrNotExist):
+		return locales.FilesGone()
 	}
-	return groupDigits(n) + " " + many
+	return locales.LookUnreadable()
+}
+
+// kindName is a kind as the details say it.
+func kindName(k preview.Kind) string {
+	switch k {
+	case preview.Text:
+		return locales.LookKindText()
+	case preview.Markdown:
+		return locales.LookKindMarkdown()
+	case preview.Image:
+		return locales.LookKindImage()
+	case preview.Animation:
+		return locales.LookKindAnimation()
+	case preview.SVG:
+		return locales.LookKindSVG()
+	case preview.PDF:
+		return locales.LookKindPDF()
+	case preview.Video:
+		return locales.LookKindVideo()
+	case preview.Audio:
+		return locales.LookKindAudio()
+	case preview.Table:
+		return locales.LookKindTable()
+	case preview.JSON:
+		return locales.LookKindJSON()
+	case preview.Archive:
+		return locales.LookKindArchive()
+	case preview.Font:
+		return locales.LookKindFont()
+	case preview.Binary:
+		return locales.LookKindBinary()
+	}
+	return locales.LookKindFile()
 }
 
 // groupDigits writes n with a comma between each three digits.
@@ -476,7 +533,7 @@ func (a *App) lookBar(c *ui.Context, pal *palette, l *fileLook) {
 	ui.Row(c.Key("look-bar")).Height(32).Shrink(0).Padding(0, 12, 0, 12).Gap(2).AlignItems(ui.Center).Children(func() {
 		for i, v := range vs {
 			name := l.viewName(v)
-			b := ui.ButtonBase(c.Key("view-"+name)).Height(24).Padding(0, 8).Radius(6).Center().Label(name).Tooltip(name + " (v)").Shrink(0)
+			b := ui.ButtonBase(c.Key("view-"+name)).Height(24).Padding(0, 8).Radius(6).Center().Label(name).Tooltip(locales.LookViewTip(name)).Shrink(0)
 			bg, fg := ui.Transparent, pal.textMuted
 			switch {
 			case i == l.view:

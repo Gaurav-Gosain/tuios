@@ -94,7 +94,7 @@ func ReadTable(ctx context.Context, path string) (*TableData, error) {
 		t.Rows = append(t.Rows, rec)
 	}
 	if t.Header == nil {
-		return nil, errors.New("The table is empty.")
+		return nil, ErrEmpty
 	}
 	if _, err := br.Peek(1); err == nil && !t.Capped {
 		// The byte bound cut the file.
@@ -204,7 +204,7 @@ func ReadJSON(ctx context.Context, path string) (*JSONTree, error) {
 		return nil, err
 	}
 	if fi.Size() > jsonBytesMax {
-		return nil, errors.New("The JSON file is too large to read as a tree.")
+		return nil, ErrTooLarge
 	}
 	dec := json.NewDecoder(bufio.NewReaderSize(f, 256<<10))
 	dec.UseNumber()
@@ -246,7 +246,7 @@ func ReadJSON(ctx context.Context, path string) (*JSONTree, error) {
 		}
 		if err != nil {
 			if len(t.Nodes) == 0 {
-				return nil, errors.New("The file is not valid JSON: " + err.Error())
+				return nil, ErrNotJSON
 			}
 			t.Capped = true
 			break
@@ -290,7 +290,7 @@ func ReadJSON(ctx context.Context, path string) (*JSONTree, error) {
 		t.Nodes[fr.node].End = int32(len(t.Nodes))
 	}
 	if len(t.Nodes) == 0 {
-		return nil, errors.New("The file is empty.")
+		return nil, ErrEmpty
 	}
 	return t, nil
 }
@@ -320,10 +320,10 @@ func ListArchive(ctx context.Context, path string) ([]ArchiveEntry, bool, error)
 	if err != nil {
 		var nt ErrNoTool
 		if errors.As(err, &nt) {
-			return nil, false, errors.New("This machine has no bsdtar to list this archive.")
+			return nil, false, ErrNoTool("bsdtar")
 		}
 		if len(b) == 0 {
-			return nil, false, errors.New("The archive could not be read.")
+			return nil, false, ErrUnreadable
 		}
 	}
 	var entries []ArchiveEntry
@@ -340,7 +340,7 @@ func ListArchive(ctx context.Context, path string) ([]ArchiveEntry, bool, error)
 		entries = append(entries, e)
 	}
 	if len(entries) == 0 {
-		return nil, false, errors.New("The archive could not be read.")
+		return nil, false, ErrUnreadable
 	}
 	return entries, capped, nil
 }

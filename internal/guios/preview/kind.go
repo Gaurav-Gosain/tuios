@@ -13,9 +13,25 @@ package preview
 
 import (
 	"bytes"
+	"errors"
 	"path/filepath"
 	"strings"
 	"unicode/utf8"
+)
+
+// The errors a preview ends with. The viewer says each in the person's
+// language; their text here is for logs.
+var (
+	ErrTooLarge   = errors.New("preview: too large to show")
+	ErrUnreadable = errors.New("preview: could not be read")
+	ErrNoDecoder  = errors.New("preview: no decoder for this picture")
+	ErrLocked     = errors.New("preview: the PDF is locked with a password")
+	ErrNoPages    = errors.New("preview: the PDF has no pages")
+	ErrPageFailed = errors.New("preview: the page could not be drawn")
+	ErrNoFrame    = errors.New("preview: no frame could be read")
+	ErrEmpty      = errors.New("preview: the file is empty")
+	ErrNotJSON    = errors.New("preview: not valid JSON")
+	ErrCounting   = errors.New("preview: the lines are still being counted")
 )
 
 // Kind is how a file previews.

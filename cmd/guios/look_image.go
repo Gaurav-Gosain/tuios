@@ -12,6 +12,8 @@ import (
 	"github.com/egoist/mygo/ui"
 
 	"github.com/Gaurav-Gosain/tuios/internal/guios/preview"
+
+	"github.com/Gaurav-Gosain/tuios/cmd/guios/locales"
 )
 
 // Pictures: fit to the viewer, a small one at its own size; + - 0, a pinch
@@ -153,7 +155,7 @@ func (a *App) startImage(l *fileLook) {
 			return
 		}
 		if err != nil {
-			a.update(func() { im.err = err.Error() })
+			a.update(func() { im.err = lookErrText(err) })
 			return
 		}
 		// A GIF of several frames plays.
@@ -174,7 +176,7 @@ func (a *App) startImage(l *fileLook) {
 		if player == nil {
 			bm, err = bitmapOf(pic)
 			if err != nil {
-				a.update(func() { im.err = "The picture could not be read." })
+				a.update(func() { im.err = locales.LookPictureUnreadable() })
 				return
 			}
 		}
@@ -310,7 +312,7 @@ func (a *App) startSVG(l *fileLook) {
 				return
 			}
 			if err != nil {
-				im.err = "guios cannot draw this SVG. Its source is in the Source view."
+				im.err = locales.LookSVGUnsupported()
 				return
 			}
 			im.svg = svg
@@ -337,7 +339,7 @@ type lookError string
 
 func (e lookError) Error() string { return string(e) }
 
-const errFileTooLarge = lookError("The file is too large to show.")
+const errFileTooLarge = lookError("preview: the file is too large to show")
 
 // imageView is a picture, a GIF or a drawing, with its zoom.
 func (a *App) imageView(c *ui.Context, pal *palette, l *fileLook) {
@@ -462,16 +464,16 @@ func (a *App) gifBar(c *ui.Context, pal *palette, l *fileLook) {
 	}
 	ui.Row(c.Key("gif-bar")).Height(36).Shrink(0).Padding(0, 12).Gap(8).AlignItems(ui.Center).Children(func() {
 		playing := im.stepAt < 0 && im.player.Playing()
-		icon, label := pauseIcon, "Hold (space)"
+		icon, label := pauseIcon, locales.LookHold()
 		if !playing {
-			icon, label = playIcon, "Play (space)"
+			icon, label = playIcon, locales.LookPlay()
 		}
 		iconButton(c, "gif-play", icon, label, pal, func() { a.gifPlay(l, !playing) })
-		iconButton(c, "gif-prev", chevronLeftIcon, "Previous frame (K)", pal, func() { a.gifStep(l, -1) })
-		iconButton(c, "gif-next", chevronIcon, "Next frame (J)", pal, func() { a.gifStep(l, 1) })
-		text := itoa(im.frames) + " frames"
+		iconButton(c, "gif-prev", chevronLeftIcon, locales.LookPrevFrame(), pal, func() { a.gifStep(l, -1) })
+		iconButton(c, "gif-next", chevronIcon, locales.LookNextFrame(), pal, func() { a.gifStep(l, 1) })
+		text := locales.LookFrames(im.frames)
 		if im.stepAt >= 0 {
-			text = "Frame " + itoa(im.stepAt+1) + " of " + itoa(im.frames)
+			text = locales.LookFrameOf(itoa(im.stepAt+1), itoa(im.frames))
 		}
 		ui.Text(c, text).FontSize(12).FontFeatures("tnum").TextColor(pal.textMuted).SingleLine()
 	})

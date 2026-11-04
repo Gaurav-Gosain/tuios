@@ -5,7 +5,6 @@ package preview
 import (
 	"bytes"
 	"context"
-	"errors"
 	"fmt"
 	"image"
 	"math"
@@ -149,7 +148,7 @@ func asset(path string) (objc.ID, error) {
 	defer cg.CFRelease(u)
 	a := objc.ID(av.urlAsset).Send(av.selURLAssetWithURL, objc.ID(u), objc.ID(0))
 	if a == 0 {
-		return 0, errors.New("The file could not be read.")
+		return 0, ErrUnreadable
 	}
 	return a, nil
 }
@@ -301,7 +300,7 @@ func avFacts(ctx context.Context, path string) (Facts, error) {
 		return Facts{}, err
 	}
 	if f.DurationMs == 0 && f.VideoCodec == "" && f.AudioCodec == "" {
-		return Facts{}, errors.New("The file could not be read.")
+		return Facts{}, ErrUnreadable
 	}
 	return f, nil
 }
@@ -326,7 +325,7 @@ func avFrame(ctx context.Context, path string, atMs int64, maxPx int) (image.Ima
 		}
 		gen := objc.ID(av.generator).Send(av.selGeneratorWithAsset, a)
 		if gen == 0 {
-			err = errors.New("No frame could be read here.")
+			err = ErrNoFrame
 			return
 		}
 		gen.Send(av.selSetAppliesTransform, true)
@@ -346,7 +345,7 @@ func avFrame(ctx context.Context, path string, atMs int64, maxPx int) (image.Ima
 			cg.CGImageRelease(img)
 			return
 		}
-		err = errors.New("No frame could be read here.")
+		err = ErrNoFrame
 	})
 	if ctx.Err() != nil {
 		return nil, ctx.Err()
@@ -358,7 +357,7 @@ func avFrame(ctx context.Context, path string, atMs int64, maxPx int) (image.Ima
 func avCover(a objc.ID, maxPx int) (image.Image, error) {
 	items := a.Send(av.selCommonMetadata)
 	if items == 0 {
-		return nil, errors.New("The file has no cover.")
+		return nil, ErrNoFrame
 	}
 	n := objc.Send[uint](items, av.selCount)
 	for i := uint(0); i < n && i < 256; i++ {
@@ -376,14 +375,14 @@ func avCover(a objc.ID, maxPx int) (image.Image, error) {
 		}
 		return Fit(img, maxPx), nil
 	}
-	return nil, errors.New("The file has no cover.")
+	return nil, ErrNoFrame
 }
 
 // drawCGImage copies a CGImage into an image.RGBA.
 func drawCGImage(img uintptr) (image.Image, error) {
 	w, h := int(cg.CGImageGetWidth(img)), int(cg.CGImageGetHeight(img))
 	if w <= 0 || h <= 0 {
-		return nil, errors.New("No frame could be read here.")
+		return nil, ErrNoFrame
 	}
 	bm, err := newBitmap(w, h)
 	if err != nil {

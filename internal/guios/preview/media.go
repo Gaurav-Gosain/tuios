@@ -91,7 +91,7 @@ func MediaFacts(ctx context.Context, path string) (Facts, error) {
 		} `json:"streams"`
 	}
 	if err := json.Unmarshal(out, &probe); err != nil {
-		return Facts{}, errors.New("The file could not be read.")
+		return Facts{}, ErrUnreadable
 	}
 	f := Facts{Engine: "ffprobe", Tags: map[string]string{}}
 	for k, v := range probe.Format.Tags {
@@ -154,7 +154,7 @@ func Frame(ctx context.Context, path string, atMs int64, maxPx int) (image.Image
 			return img, nil
 		}
 	}
-	return nil, errors.New("No frame could be read here.")
+	return nil, ErrNoFrame
 }
 
 func ffmpegFrame(ctx context.Context, path string, atMs int64, maxPx int, keys bool) (image.Image, error) {

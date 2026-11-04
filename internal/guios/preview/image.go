@@ -53,12 +53,6 @@ type Picture struct {
 // AVIF, RAW and the rest. It returns the picture's own size too.
 var nativeImage func(ctx context.Context, path string, maxPx int) (img image.Image, w, h int, err error)
 
-// errTooLarge and errUnreadable are what the viewer says of a picture it
-// cannot show.
-var (
-	errTooLarge   = errors.New("The picture is too large to show.")
-	errUnreadable = errors.New("The picture could not be read.")
-)
 
 // DecodeImage reads the picture at path. maxPx bounds its long side, 0 for
 // MaxPx.
@@ -71,7 +65,7 @@ func DecodeImage(ctx context.Context, path string, maxPx int) (*Picture, error) 
 		return nil, err
 	}
 	if fi.Size() > imageFileMax {
-		return nil, errTooLarge
+		return nil, ErrTooLarge
 	}
 	ext := strings.ToLower(filepath.Ext(path))
 	// The platform's decoder reads what Go's do not, and a large JPEG at a
@@ -105,7 +99,7 @@ func DecodeImage(ctx context.Context, path string, maxPx int) (*Picture, error) 
 		return &Picture{Data: data, W: w, H: h, Format: format}, nil
 	}
 	if int64(cfg.Width)*int64(cfg.Height)*int64(bytesPerPixel(cfg.ColorModel)) > decodeMax {
-		return nil, errTooLarge
+		return nil, ErrTooLarge
 	}
 	// A large JPEG decodes in Go at about 30 megapixels a second; libjpeg's
 	// djpeg scales it down as it decodes, five to ten times faster.
@@ -120,7 +114,7 @@ func DecodeImage(ctx context.Context, path string, maxPx int) (*Picture, error) 
 	}
 	img, _, err := image.Decode(bytes.NewReader(data))
 	if err != nil {
-		return nil, errUnreadable
+		return nil, ErrUnreadable
 	}
 	if ctx.Err() != nil {
 		return nil, ctx.Err()
@@ -200,9 +194,9 @@ func toolImage(ctx context.Context, path string, maxPx int) (*Picture, error) {
 		return &Picture{Img: img, W: w, H: h, Format: t.tool}, nil
 	}
 	if len(missing) == len(tries) {
-		return nil, errors.New("This machine cannot decode this picture. Install ImageMagick or ffmpeg.")
+		return nil, ErrNoDecoder
 	}
-	return nil, errUnreadable
+	return nil, ErrUnreadable
 }
 
 // headerSize reads a HEIF's size from its ispe box, without decoding it.

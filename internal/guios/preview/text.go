@@ -258,7 +258,7 @@ func (t *TextFile) Find(ctx context.Context, needle string, from int64, back boo
 		return 0, ErrNotFound
 	}
 	if _, done := t.Count(); !done {
-		return 0, errors.New("The file is still being counted.")
+		return 0, ErrCounting
 	}
 	fold := !strings.ContainsFunc(needle, unicode.IsUpper)
 	nb := []byte(needle)

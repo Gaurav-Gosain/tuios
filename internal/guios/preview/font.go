@@ -40,7 +40,7 @@ func OpenFont(path string) (*FontFile, error) {
 		return nil, err
 	}
 	if fi.Size() > fontFileMax {
-		return nil, errors.New("The font file is too large to show.")
+		return nil, ErrTooLarge
 	}
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -51,11 +51,11 @@ func OpenFont(path string) (*FontFile, error) {
 	if err != nil {
 		c, cerr := sfnt.ParseCollection(data)
 		if cerr != nil {
-			return nil, errors.New("The font could not be read.")
+			return nil, ErrUnreadable
 		}
 		faces = c.NumFonts()
 		if f, err = c.Font(0); err != nil {
-			return nil, errors.New("The font could not be read.")
+			return nil, ErrUnreadable
 		}
 	}
 	var buf sfnt.Buffer

@@ -13,6 +13,8 @@ import (
 	"github.com/egoist/mygo/ui/editor"
 
 	"github.com/Gaurav-Gosain/tuios/internal/guios/preview"
+
+	"github.com/Gaurav-Gosain/tuios/cmd/guios/locales"
 )
 
 // Tables, JSON trees, archives, hex dumps, fonts and the details of a file.
@@ -43,7 +45,7 @@ func (a *App) startTable(l *fileLook) {
 				return
 			}
 			if err != nil {
-				t.err = err.Error()
+				t.err = lookErrText(err)
 				return
 			}
 			t.data = d
@@ -94,7 +96,7 @@ func (a *App) tableView(c *ui.Context, pal *palette, l *fileLook) {
 		}).Grow(1).MinHeight(0)
 		if d.Capped {
 			ui.Row(c).Height(28).Shrink(0).Padding(0, 14).AlignItems(ui.Center).Children(func() {
-				ui.Text(c, "Shows the first "+groupDigits(len(d.Rows))+" rows. The file has more.").FontSize(12).TextColor(pal.textFaint).SingleLine()
+				ui.Text(c, locales.LookTableCapped(groupDigits(len(d.Rows)))).FontSize(12).TextColor(pal.textFaint).SingleLine()
 			})
 		}
 	})
@@ -132,7 +134,7 @@ func (a *App) startJSON(l *fileLook) {
 				return
 			}
 			if err != nil {
-				j.err = err.Error()
+				j.err = lookErrText(err)
 				return
 			}
 			j.tree = t
@@ -188,9 +190,9 @@ func (a *App) jsonView(c *ui.Context, pal *palette, l *fileLook) {
 			}
 			switch n.Kind {
 			case preview.JSONObject:
-				spans = append(spans, ui.Span{Text: "{ " + countWord(int(n.Count), "key", "keys") + " }", Color: pal.textFaint, Size: 12})
+				spans = append(spans, ui.Span{Text: "{ " + locales.LookKeys(int(n.Count)) + " }", Color: pal.textFaint, Size: 12})
 			case preview.JSONArray:
-				spans = append(spans, ui.Span{Text: "[ " + countWord(int(n.Count), "item", "items") + " ]", Color: pal.textFaint, Size: 12})
+				spans = append(spans, ui.Span{Text: "[ " + locales.LookItems(int(n.Count)) + " ]", Color: pal.textFaint, Size: 12})
 			case preview.JSONString:
 				spans = append(spans, ui.Span{Text: `"` + oneLineText(n.Value) + `"`, Color: strC, Font: mono, Size: 12.5})
 			case preview.JSONNumber:
@@ -202,7 +204,7 @@ func (a *App) jsonView(c *ui.Context, pal *palette, l *fileLook) {
 		}).Grow(1).MinHeight(0).Padding(6, 10)
 		if j.tree.Capped {
 			ui.Row(c).Height(28).Shrink(0).Padding(0, 14).AlignItems(ui.Center).Children(func() {
-				ui.Text(c, "Shows the start of the file. It is too large to read whole.").FontSize(12).TextColor(pal.textFaint).SingleLine()
+				ui.Text(c, locales.LookJSONCapped()).FontSize(12).TextColor(pal.textFaint).SingleLine()
 			})
 		}
 	})
@@ -287,7 +289,10 @@ func (a *App) startArchive(l *fileLook) {
 				return
 			}
 			if err != nil {
-				ar.err = err.Error()
+				ar.err = lookErrText(err)
+				if nt, ok := err.(preview.ErrNoTool); ok {
+					ar.err = locales.LookNoBsdtar(string(nt))
+				}
 				return
 			}
 			l.mark("listed")
@@ -312,9 +317,9 @@ func (a *App) archiveView(c *ui.Context, pal *palette, l *fileLook) {
 	}
 	ui.Column(c.Key("archive")).Grow(1).MinHeight(0).AlignItems(ui.Stretch).Children(func() {
 		ui.Row(c).Height(30).Shrink(0).Padding(0, 16).AlignItems(ui.Center).Children(func() {
-			s := countWord(len(ar.entries), "entry", "entries") + ", " + sizeText(ar.unpacked) + " unpacked"
+			s := locales.LookArchiveSummary(locales.LookEntries(len(ar.entries)), sizeText(ar.unpacked))
 			if ar.capped {
-				s += ". The listing stops there."
+				s += ". " + locales.LookArchiveCapped()
 			}
 			ui.Text(c, s).FontSize(12).TextColor(pal.textFaint).SingleLine().Ellipsis("…").MinWidth(0)
 		})
@@ -423,7 +428,7 @@ func (a *App) hexView(c *ui.Context, pal *palette, l *fileLook) {
 	}
 	h := l.hex
 	if h.f == nil {
-		lookFailed(c, pal, "The file could not be read.")
+		lookFailed(c, pal, locales.LookUnreadable())
 		return
 	}
 	mono := a.termFamily()
@@ -486,43 +491,43 @@ func (a *App) hexView(c *ui.Context, pal *palette, l *fileLook) {
 // and what was read of it.
 func (a *App) detailsView(c *ui.Context, pal *palette, l *fileLook) {
 	rows := [][2]string{
-		{"Name", l.name},
-		{"Kind", l.kind.String()},
-		{"Size", sizeText(l.size) + " (" + groupDigits(int(l.size)) + " bytes)"},
-		{"Modified", l.mod.Format("2 Jan 2006, 15:04")},
-		{"Permissions", l.mode.Perm().String()},
-		{"Folder", path.Dir(strings.ReplaceAll(l.path, `\`, "/"))},
+		{locales.LookFactName(), l.name},
+		{locales.LookFactKind(), kindName(l.kind)},
+		{locales.LookFactSize(), locales.LookSizeBytes(sizeText(l.size), groupDigits(int(l.size)))},
+		{locales.LookFactModified(), l.mod.Format("2 Jan 2006, 15:04")},
+		{locales.LookFactPermissions(), l.mode.Perm().String()},
+		{locales.LookFactFolder(), path.Dir(strings.ReplaceAll(l.path, `\`, "/"))},
 	}
 	add := func(k, v string) { rows = append(rows, [2]string{k, v}) }
 	switch {
 	case l.img != nil && l.img.w > 0:
-		add("Dimensions", itoa(l.img.w)+" × "+itoa(l.img.h)+" pixels")
+		add(locales.LookFactDimensions(), locales.LookPixels(itoa(l.img.w)+" × "+itoa(l.img.h)))
 		if l.img.frames > 1 {
-			add("Frames", itoa(l.img.frames))
+			add(locales.LookFactFrames(), itoa(l.img.frames))
 		}
 	case l.pdf != nil && l.pdf.doc != nil:
-		add("Pages", itoa(l.pdf.pages))
+		add(locales.LookFactPages(), itoa(l.pdf.pages))
 		w, h := l.pdf.doc.PageSize(0)
-		add("Page size", trimFloat(w/72*25.4)+" × "+trimFloat(h/72*25.4)+" mm")
-		add("Drawn by", l.pdf.doc.Engine())
+		add(locales.LookFactPageSize(), trimFloat(w/72*25.4)+" × "+trimFloat(h/72*25.4)+" mm")
+		add(locales.LookFactDrawnBy(), l.pdf.doc.Engine())
 	case l.film != nil && l.film.facts != nil:
 		f := l.film.facts
-		add("Length", filmClock(f.DurationMs))
+		add(locales.LookFactLength(), filmClock(f.DurationMs))
 		if f.W > 0 {
-			add("Frame size", itoa(f.W)+" × "+itoa(f.H))
+			add(locales.LookFactFrameSize(), itoa(f.W)+" × "+itoa(f.H))
 		}
-		add("Read by", f.Engine)
+		add(locales.LookFactReadBy(), f.Engine)
 	case l.table != nil && l.table.data != nil:
-		add("Rows", groupDigits(len(l.table.data.Rows)))
-		add("Columns", itoa(len(l.table.data.Header)))
+		add(locales.LookFactRows(), groupDigits(len(l.table.data.Rows)))
+		add(locales.LookFactColumns(), itoa(len(l.table.data.Header)))
 	case l.font != nil && l.font.ff != nil:
 		fi := l.font.ff.Info
-		add("Family", fi.Family)
-		add("Style", fi.Style)
-		add("Version", fi.Version)
-		add("Glyphs", groupDigits(fi.Glyphs))
+		add(locales.LookFactFamily(), fi.Family)
+		add(locales.LookFactStyle(), fi.Style)
+		add(locales.LookFactVersion(), fi.Version)
+		add(locales.LookFactGlyphs(), groupDigits(fi.Glyphs))
 		if fi.Faces > 1 {
-			add("Fonts in the file", itoa(fi.Faces))
+			add(locales.LookFactFaces(), itoa(fi.Faces))
 		}
 	}
 	ui.Scroll(c.Key("details")).Grow(1).MinHeight(0).Children(func() {
@@ -570,7 +575,7 @@ func (a *App) startFont(l *fileLook) {
 				return
 			}
 			if err != nil {
-				fo.err = err.Error()
+				fo.err = lookErrText(err)
 				return
 			}
 			fo.ff = ff
@@ -600,11 +605,13 @@ func (a *App) fontView(c *ui.Context, pal *palette, l *fileLook) {
 			ui.Column(c).Gap(2).Children(func() {
 				ui.Text(c, info.Family).FontSize(15).FontWeight(600).TextColor(pal.text).SingleLine().Ellipsis("…")
 				meta := []string{}
-				for _, s := range []string{info.Style, "version " + info.Version, groupDigits(info.Glyphs) + " glyphs"} {
-					if strings.TrimSpace(strings.TrimPrefix(s, "version ")) != "" {
-						meta = append(meta, s)
-					}
+				if info.Style != "" {
+					meta = append(meta, info.Style)
 				}
+				if info.Version != "" {
+					meta = append(meta, locales.LookVersionOf(info.Version))
+				}
+				meta = append(meta, locales.LookGlyphsCount(groupDigits(info.Glyphs)))
 				ui.Text(c, strings.Join(meta, " · ")).FontSize(12).TextColor(pal.textFaint).SingleLine().Ellipsis("…")
 			})
 			sp := ui.Box(c.Key("specimen")).AlignSelf(ui.Start)
@@ -624,10 +631,10 @@ func (a *App) fontView(c *ui.Context, pal *palette, l *fileLook) {
 			if info.Designer != "" || info.License != "" {
 				rows := [][2]string{}
 				if info.Designer != "" {
-					rows = append(rows, [2]string{"Designer", info.Designer})
+					rows = append(rows, [2]string{locales.LookFactDesigner(), info.Designer})
 				}
 				if info.License != "" {
-					rows = append(rows, [2]string{"License", oneLineText(info.License)})
+					rows = append(rows, [2]string{locales.LookFactLicense(), oneLineText(info.License)})
 				}
 				factsTable(c, pal, rows, 520)
 			}
