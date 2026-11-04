@@ -10553,3 +10553,213 @@ func CopyModeNoHints() string { return In(i18n.Locale()).CopyModeNoHints() }
 func (msgs Messages) CopyModeNoHints() string {
 	return Catalog.Format(msgs.locale, "copyModeNoHints", nil)
 }
+
+// KeysSidebarLabel says "Sessions, by keyboard"
+// in the language the app shows.
+func KeysSidebarLabel() string { return In(i18n.Locale()).KeysSidebarLabel() }
+
+// KeysSidebarLabel says "Sessions, by keyboard"
+// in the language of msgs.
+func (msgs Messages) KeysSidebarLabel() string {
+	return Catalog.Format(msgs.locale, "keysSidebarLabel", nil)
+}
+
+// KeysNoTransfers says "No copies between machines yet. Copy a file to another machine from the Files tab."
+// in the language the app shows.
+func KeysNoTransfers() string { return In(i18n.Locale()).KeysNoTransfers() }
+
+// KeysNoTransfers says "No copies between machines yet. Copy a file to another machine from the Files tab."
+// in the language of msgs.
+func (msgs Messages) KeysNoTransfers() string {
+	return Catalog.Format(msgs.locale, "keysNoTransfers", nil)
+}
+
+// KeysCalmOn says "Calm mode is on. Nothing moves or blinks, and only what needs you notifies."
+// in the language the app shows.
+func KeysCalmOn() string { return In(i18n.Locale()).KeysCalmOn() }
+
+// KeysCalmOn says "Calm mode is on. Nothing moves or blinks, and only what needs you notifies."
+// in the language of msgs.
+func (msgs Messages) KeysCalmOn() string {
+	return Catalog.Format(msgs.locale, "keysCalmOn", nil)
+}
+
+// KeysCalmOff says "Calm mode is off."
+// in the language the app shows.
+func KeysCalmOff() string { return In(i18n.Locale()).KeysCalmOff() }
+
+// KeysCalmOff says "Calm mode is off."
+// in the language of msgs.
+func (msgs Messages) KeysCalmOff() string {
+	return Catalog.Format(msgs.locale, "keysCalmOff", nil)
+}
+
+// KeysCalmOffHeld says "Calm mode is off. It held {n} notifications."
+// in the language the app shows.
+func KeysCalmOffHeld(n string) string { return In(i18n.Locale()).KeysCalmOffHeld(n) }
+
+// KeysCalmOffHeld says "Calm mode is off. It held {n} notifications."
+// in the language of msgs.
+func (msgs Messages) KeysCalmOffHeld(n string) string {
+	return Catalog.Format(msgs.locale, "keysCalmOffHeld", map[string]any{"n": n})
+}
+
+// DebugTitle says "Debug"
+// in the language the app shows.
+func DebugTitle() string { return In(i18n.Locale()).DebugTitle() }
+
+// DebugTitle says "Debug"
+// in the language of msgs.
+func (msgs Messages) DebugTitle() string {
+	return Catalog.Format(msgs.locale, "debugTitle", nil)
+}
+
+// DebugFps says "Frames a second"
+// in the language the app shows.
+func DebugFps() string { return In(i18n.Locale()).DebugFps() }
+
+// DebugFps says "Frames a second"
+// in the language of msgs.
+func (msgs Messages) DebugFps() string {
+	return Catalog.Format(msgs.locale, "debugFps", nil)
+}
+
+// DebugFrame says "Build p50 · p99 · max"
+// in the language the app shows.
+func DebugFrame() string { return In(i18n.Locale()).DebugFrame() }
+
+// DebugFrame says "Build p50 · p99 · max"
+// in the language of msgs.
+func (msgs Messages) DebugFrame() string {
+	return Catalog.Format(msgs.locale, "debugFrame", nil)
+}
+
+// DebugWakeups says "Wakeups"
+// in the language the app shows.
+func DebugWakeups() string { return In(i18n.Locale()).DebugWakeups() }
+
+// DebugWakeups says "Wakeups"
+// in the language of msgs.
+func (msgs Messages) DebugWakeups() string {
+	return Catalog.Format(msgs.locale, "debugWakeups", nil)
+}
+
+// DebugHeap says "Go heap"
+// in the language the app shows.
+func DebugHeap() string { return In(i18n.Locale()).DebugHeap() }
+
+// DebugHeap says "Go heap"
+// in the language of msgs.
+func (msgs Messages) DebugHeap() string {
+	return Catalog.Format(msgs.locale, "debugHeap", nil)
+}
+
+// DebugGoroutines says "Goroutines"
+// in the language the app shows.
+func DebugGoroutines() string { return In(i18n.Locale()).DebugGoroutines() }
+
+// DebugGoroutines says "Goroutines"
+// in the language of msgs.
+func (msgs Messages) DebugGoroutines() string {
+	return Catalog.Format(msgs.locale, "debugGoroutines", nil)
+}
+
+// DebugTerminals says "Terminals"
+// in the language the app shows.
+func DebugTerminals() string { return In(i18n.Locale()).DebugTerminals() }
+
+// DebugTerminals says "Terminals"
+// in the language of msgs.
+func (msgs Messages) DebugTerminals() string {
+	return Catalog.Format(msgs.locale, "debugTerminals", nil)
+}
+
+// KeysNoTapes says "There are no tapes in {dir}."
+// in the language the app shows.
+func KeysNoTapes(dir string) string { return In(i18n.Locale()).KeysNoTapes(dir) }
+
+// KeysNoTapes says "There are no tapes in {dir}."
+// in the language of msgs.
+func (msgs Messages) KeysNoTapes(dir string) string {
+	return Catalog.Format(msgs.locale, "keysNoTapes", map[string]any{"dir": dir})
+}
+
+// KeysTapesLabel says "Play a tape"
+// in the language the app shows.
+func KeysTapesLabel() string { return In(i18n.Locale()).KeysTapesLabel() }
+
+// KeysTapesLabel says "Play a tape"
+// in the language of msgs.
+func (msgs Messages) KeysTapesLabel() string {
+	return Catalog.Format(msgs.locale, "keysTapesLabel", nil)
+}
+
+// KeysTapePlaying says "Playing {name}."
+// in the language the app shows.
+func KeysTapePlaying(name string) string { return In(i18n.Locale()).KeysTapePlaying(name) }
+
+// KeysTapePlaying says "Playing {name}."
+// in the language of msgs.
+func (msgs Messages) KeysTapePlaying(name string) string {
+	return Catalog.Format(msgs.locale, "keysTapePlaying", map[string]any{"name": name})
+}
+
+// KeysTapePlayed says "Played {name}."
+// in the language the app shows.
+func KeysTapePlayed(name string) string { return In(i18n.Locale()).KeysTapePlayed(name) }
+
+// KeysTapePlayed says "Played {name}."
+// in the language of msgs.
+func (msgs Messages) KeysTapePlayed(name string) string {
+	return Catalog.Format(msgs.locale, "keysTapePlayed", map[string]any{"name": name})
+}
+
+// KeysTapeSkipped says "Played {name}. Commands only the TUI runs were left out: {n}."
+// in the language the app shows.
+func KeysTapeSkipped(name string, n string) string { return In(i18n.Locale()).KeysTapeSkipped(name, n) }
+
+// KeysTapeSkipped says "Played {name}. Commands only the TUI runs were left out: {n}."
+// in the language of msgs.
+func (msgs Messages) KeysTapeSkipped(name string, n string) string {
+	return Catalog.Format(msgs.locale, "keysTapeSkipped", map[string]any{"name": name, "n": n})
+}
+
+// ScrollbackTitle says "Commands"
+// in the language the app shows.
+func ScrollbackTitle() string { return In(i18n.Locale()).ScrollbackTitle() }
+
+// ScrollbackTitle says "Commands"
+// in the language of msgs.
+func (msgs Messages) ScrollbackTitle() string {
+	return Catalog.Format(msgs.locale, "scrollbackTitle", nil)
+}
+
+// ScrollbackNoMarks says "This pane's shell does not mark its commands. Set up the tuios shell integration to use the scrollback browser."
+// in the language the app shows.
+func ScrollbackNoMarks() string { return In(i18n.Locale()).ScrollbackNoMarks() }
+
+// ScrollbackNoMarks says "This pane's shell does not mark its commands. Set up the tuios shell integration to use the scrollback browser."
+// in the language of msgs.
+func (msgs Messages) ScrollbackNoMarks() string {
+	return Catalog.Format(msgs.locale, "scrollbackNoMarks", nil)
+}
+
+// ScrollbackCopied says "Copied {n} characters."
+// in the language the app shows.
+func ScrollbackCopied(n string) string { return In(i18n.Locale()).ScrollbackCopied(n) }
+
+// ScrollbackCopied says "Copied {n} characters."
+// in the language of msgs.
+func (msgs Messages) ScrollbackCopied(n string) string {
+	return Catalog.Format(msgs.locale, "scrollbackCopied", map[string]any{"n": n})
+}
+
+// ScrollbackFooter says "j and k move. J and K scroll the output. y copies the output, c the command. Enter types the command again. / filters…"
+// in the language the app shows.
+func ScrollbackFooter() string { return In(i18n.Locale()).ScrollbackFooter() }
+
+// ScrollbackFooter says "j and k move. J and K scroll the output. y copies the output, c the command. Enter types the command again. / filters…"
+// in the language of msgs.
+func (msgs Messages) ScrollbackFooter() string {
+	return Catalog.Format(msgs.locale, "scrollbackFooter", nil)
+}

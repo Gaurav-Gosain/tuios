@@ -676,7 +676,7 @@ func (a *App) shortcuts(c *ui.Context) {
 		c.Toast(locales.ToastCopied())
 		a.copyText = ""
 	}
-	if a.pal.open || a.help.open || a.prompt != nil || a.picker.open || a.confirm != nil || a.wtAsk != nil {
+	if a.pal.open || a.help.open || a.xp.open || a.sbr.open || a.sb.on || a.prompt != nil || a.picker.open || a.confirm != nil || a.wtAsk != nil {
 		return
 	}
 	a.paletteShortcuts(c)

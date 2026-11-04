@@ -170,6 +170,15 @@ type App struct {
 	// nest sends every key to the pane, the leader too, until the nest
 	// exit key; spotlight dims every pane but the one the user is in.
 	nest, spotlight bool
+	// sb is the sidebar's keyboard mode, xp the transfers panel, calm calm
+	// mode with the notifications it held, dbg the debug card
+	// (keys_more.go).
+	sb       sidebarKeys
+	xp       transfersPanel
+	calm     bool
+	calmHeld int
+	dbg      debugCard
+	sbr      scrollBrowser
 	// prompt is an open one-line prompt (prompt.go), nil for none.
 	prompt *promptState
 	// help is the keys sheet (help.go).
@@ -366,6 +375,10 @@ func (a *App) event(h *host, cl *client.Client, m proto.Message) {
 		if s == nil || a.watching(n.Session) {
 			return
 		}
+		if a.calm {
+			a.calmHeld++
+			return
+		}
 		title := n.Title
 		if title == "" {
 			title = s.DisplayName(a.set.SessionName)
@@ -493,6 +506,10 @@ func (a *App) notify(first bool) {
 			if body == "" {
 				body = locales.NotifyFailedBody(s.PaneName())
 			}
+		case a.calm && s.Status == proto.Idle && prev == proto.Working && s.Unread && a.set.NotifyDone:
+			// Calm mode: only what needs the user notifies.
+			a.calmHeld++
+			continue
 		case s.Status == proto.Idle && prev == proto.Working && s.Unread && a.set.NotifyDone && (s.Agent != "" || s.Message != ""):
 			title, body = locales.NotifyDoneTitle(a.hostedName(s)), s.Message
 			if body == "" {
@@ -869,7 +886,7 @@ func (a *App) termOptions(id string, conn *gated) terminal.Options {
 		Theme:         light,
 		DarkTheme:     dark,
 		Cursor:        map[string]terminal.CursorStyle{"block": terminal.CursorBlock, "bar": terminal.CursorBar, "underline": terminal.CursorUnderline}[a.set.Cursor],
-		NoBlink:       !a.set.CursorBlink,
+		NoBlink:       !a.set.CursorBlink || a.calm,
 		OptionAsAlt:   a.set.OptionAsAlt,
 		ClipboardRead: map[string]terminal.ClipboardAccess{"ask": terminal.ClipboardAsk, "allow": terminal.ClipboardAllow, "deny": terminal.ClipboardDeny}[a.set.Clipboard],
 		RightClick:    map[string]terminal.RightClickAction{"menu": terminal.RightClickContextMenu, "paste": terminal.RightClickPaste, "copyOrPaste": terminal.RightClickCopyOrPaste}[a.set.RightClick],

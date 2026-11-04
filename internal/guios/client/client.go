@@ -271,3 +271,6 @@ func (e *OldDaemonError) Error() string {
 func NeedsNewerDaemon(verb, daemonVersion string) error {
 	return &OldDaemonError{Verb: verb, Version: daemonVersion}
 }
+
+// SessionName is the daemon's name of a session, by its id.
+func (c *Client) SessionName(sid string) string { return c.st.nameOf(sid) }

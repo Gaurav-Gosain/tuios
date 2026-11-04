@@ -86,6 +86,14 @@ func b2f(b bool) float32 {
 }
 
 func (a *App) view(c *ui.Context) {
+	if a.dbg.on {
+		t0 := time.Now()
+		defer func() { a.debugFrame(time.Since(t0)) }()
+	}
+	if a.calm {
+		// Calm mode: every frame is a still one.
+		c.DisableAnimations()
+	}
 	agoDue = time.Time{}
 	a.syncUsage()
 	defer func() {
@@ -219,6 +227,10 @@ func (a *App) view(c *ui.Context) {
 	toasts(c)
 	a.paletteView(c, pal)
 	a.helpView(c, pal)
+	a.transfersView(c, pal)
+	a.sidebarKeysView(c)
+	a.debugView(c, pal)
+	a.scrollbackView(c, pal)
 	a.promptView(c, pal)
 	a.pickerView(c, pal)
 	a.confirmView(c, pal)
@@ -520,6 +532,10 @@ func (a *App) sessionRow(c *ui.Context, pal *palette, s *proto.Session, n *int) 
 		row.Border(1, ui.Transparent)
 	}
 	bg := ui.Transparent
+	if a.sb.on && a.sb.cursor == s.ID {
+		// The sidebar's keyboard cursor (the prefix and e).
+		row.Border(1.5, pal.accent)
+	}
 	switch {
 	case selected:
 		bg = pal.rowSelected
