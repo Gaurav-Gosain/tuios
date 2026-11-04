@@ -23,8 +23,9 @@ import (
 // the slide starts as they show.
 //
 // The panes not live are drawn as they were, without their buttons, as
-// one cached bitmap clipped to the panes' area: they take no input, never
-// draw over the sidebar, and never resize their panes (gated.frozen).
+// one cached bitmap clipped to the panes' area: they take no input and
+// never draw over the sidebar. A copy is laid out as its live card is, so
+// the size its terminal view asks for is the pane's own.
 
 // wsSlide is a workspace switch on its way.
 type wsSlide struct {
