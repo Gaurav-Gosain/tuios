@@ -951,10 +951,19 @@ func (a *App) card(c *ui.Context, pal *palette, bar ui.TitleBar, shown float32) 
 				a.panes(c, pal, bar, shown, s, v.full)
 			})
 			if v.full {
-				// Quick look: the viewer floats over the panes, which keep
-				// their size, so no terminal rewraps under it.
-				ui.Row(c.Key("look-over")).Absolute().Left(0).Top(0).Bottom(0).Width(w).AlignItems(ui.Stretch).Children(func() {
-					a.viewerCard(c, pal, s, v, w)
+				// Quick look: the viewer floats over the panes as a panel,
+				// and the panes keep their size, so no terminal rewraps
+				// under it.
+				pw := min(max(w-2*lookInset, 320), lookPanelMax)
+				// A veil over the panes sets the panel apart; a click on
+				// it closes quick look, as a click outside a popover does.
+				veil := ui.Box(c.Key("look-veil")).Absolute().Left(0).Top(0).Bottom(0).Width(w).Radius(14).Background(pal.overlay.Alpha(0.5))
+				if veil.Clicked() {
+					sid := s.ID
+					a.defer_(func() { a.closeView(a.session(sid)) })
+				}
+				ui.Row(c.Key("look-over")).Absolute().Left((w-pw)/2).Top(lookInset/2).Bottom(lookInset/2).Width(pw).AlignItems(ui.Stretch).Children(func() {
+					a.viewerCard(c, pal, s, v, pw)
 				})
 				return
 			}

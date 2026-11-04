@@ -9913,3 +9913,73 @@ func LookAlertCaution() string { return In(i18n.Locale()).LookAlertCaution() }
 func (msgs Messages) LookAlertCaution() string {
 	return Catalog.Format(msgs.locale, "lookAlertCaution", nil)
 }
+
+// LookHintClose says "closes"
+// in the language the app shows.
+func LookHintClose() string { return In(i18n.Locale()).LookHintClose() }
+
+// LookHintClose says "closes"
+// in the language of msgs.
+func (msgs Messages) LookHintClose() string {
+	return Catalog.Format(msgs.locale, "lookHintClose", nil)
+}
+
+// LookHintHalf says "half a screen"
+// in the language the app shows.
+func LookHintHalf() string { return In(i18n.Locale()).LookHintHalf() }
+
+// LookHintHalf says "half a screen"
+// in the language of msgs.
+func (msgs Messages) LookHintHalf() string {
+	return Catalog.Format(msgs.locale, "lookHintHalf", nil)
+}
+
+// LookHintPage says "a page"
+// in the language the app shows.
+func LookHintPage() string { return In(i18n.Locale()).LookHintPage() }
+
+// LookHintPage says "a page"
+// in the language of msgs.
+func (msgs Messages) LookHintPage() string {
+	return Catalog.Format(msgs.locale, "lookHintPage", nil)
+}
+
+// LookHintFilm says "5 % of the film"
+// in the language the app shows.
+func LookHintFilm() string { return In(i18n.Locale()).LookHintFilm() }
+
+// LookHintFilm says "5 % of the film"
+// in the language of msgs.
+func (msgs Messages) LookHintFilm() string {
+	return Catalog.Format(msgs.locale, "lookHintFilm", nil)
+}
+
+// LookHintFrame says "a frame"
+// in the language the app shows.
+func LookHintFrame() string { return In(i18n.Locale()).LookHintFrame() }
+
+// LookHintFrame says "a frame"
+// in the language of msgs.
+func (msgs Messages) LookHintFrame() string {
+	return Catalog.Format(msgs.locale, "lookHintFrame", nil)
+}
+
+// LookHintView says "the next view"
+// in the language the app shows.
+func LookHintView() string { return In(i18n.Locale()).LookHintView() }
+
+// LookHintView says "the next view"
+// in the language of msgs.
+func (msgs Messages) LookHintView() string {
+	return Catalog.Format(msgs.locale, "lookHintView", nil)
+}
+
+// LookHintBeside says "beside the panes"
+// in the language the app shows.
+func LookHintBeside() string { return In(i18n.Locale()).LookHintBeside() }
+
+// LookHintBeside says "beside the panes"
+// in the language of msgs.
+func (msgs Messages) LookHintBeside() string {
+	return Catalog.Format(msgs.locale, "lookHintBeside", nil)
+}

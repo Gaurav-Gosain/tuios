@@ -31,6 +31,13 @@ import (
 // room with the viewer, t shows a film's filmstrip and v the file's next
 // view.
 
+// The quick look panel over the panes: its inset from their edges, and the
+// widest it gets.
+const (
+	lookInset    = 32
+	lookPanelMax = 1180
+)
+
 // editMax bounds the texts the viewer edits: a larger text shows through
 // the line index (preview.TextFile), read only.
 const editMax = 16 << 20
@@ -553,6 +560,36 @@ func (a *App) lookBar(c *ui.Context, pal *palette, l *fileLook) {
 		if meta := a.lookMeta(l); meta != "" {
 			ui.Text(c, meta).FontSize(12).FontFeatures("tnum").TextColor(pal.textFaint).SingleLine().Ellipsis("…").Shrink(1).MinWidth(0).Tooltip(meta)
 		}
+	})
+}
+
+// lookHints is the quick look panel's last row: the keys that work now,
+// in plain words.
+func (a *App) lookHints(c *ui.Context, pal *palette, l *fileLook) {
+	if l == nil || !l.detected {
+		return
+	}
+	unit := locales.LookHintHalf()
+	switch {
+	case l.current() != viewOwn:
+	case l.pdf != nil:
+		unit = locales.LookHintPage()
+	case l.film != nil:
+		unit = locales.LookHintFilm()
+	case l.img != nil && l.img.frames > 1:
+		unit = locales.LookHintFrame()
+	}
+	ui.Row(c.Key("look-hints")).Height(32).Shrink(0).Padding(0, 16).Gap(16).AlignItems(ui.Center).Children(func() {
+		hint := func(keys, what string) {
+			ui.Row(c).Gap(6).AlignItems(ui.Center).Shrink(0).Children(func() {
+				ui.Text(c, keys).FontSize(11).FontWeight(500).TextColor(pal.textMuted).Padding(1, 5).Radius(4).Background(pal.kbd).Border(1, pal.kbdBorder).SingleLine()
+				ui.Text(c, what).FontSize(12).TextColor(pal.textFaint).SingleLine()
+			})
+		}
+		hint("Esc", locales.LookHintClose())
+		hint("J K", unit)
+		hint("v", locales.LookHintView())
+		hint("f", locales.LookHintBeside())
 	})
 }
 

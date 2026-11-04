@@ -977,5 +977,12 @@
   "lookAlertTip": "ヒント",
   "lookAlertImportant": "重要",
   "lookAlertWarning": "警告",
-  "lookAlertCaution": "注意"
+  "lookAlertCaution": "注意",
+  "lookHintClose": "閉じる",
+  "lookHintHalf": "半画面",
+  "lookHintPage": "1 ページ",
+  "lookHintFilm": "動画の 5 %",
+  "lookHintFrame": "1 フレーム",
+  "lookHintView": "次の表示",
+  "lookHintBeside": "ペインの横"
 }

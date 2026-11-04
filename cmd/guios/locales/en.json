@@ -1822,5 +1822,12 @@
   "lookAlertTip": "Tip",
   "lookAlertImportant": "Important",
   "lookAlertWarning": "Warning",
-  "lookAlertCaution": "Caution"
+  "lookAlertCaution": "Caution",
+  "lookHintClose": "closes",
+  "lookHintHalf": "half a screen",
+  "lookHintPage": "a page",
+  "lookHintFilm": "5 % of the film",
+  "lookHintFrame": "a frame",
+  "lookHintView": "the next view",
+  "lookHintBeside": "beside the panes"
 }

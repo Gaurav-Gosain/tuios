@@ -419,6 +419,9 @@ func (a *App) viewerCard(c *ui.Context, pal *palette, s *proto.Session, v *sideV
 	card.Children(func() {
 		if v.kind == sideFiles && v.file != nil {
 			a.fileViewer(c, pal, s, v.file)
+			if v.full {
+				a.lookHints(c, pal, v.file.look)
+			}
 		} else {
 			a.changesViewer(c, pal, s, width)
 		}
@@ -429,7 +432,11 @@ func (a *App) viewerCard(c *ui.Context, pal *palette, s *proto.Session, v *sideV
 	if card.Shortcut(0, ui.KeyEscape) {
 		switch {
 		case v.full:
-			v.full = false
+			// Quick look closes, and the keys go back to the list.
+			a.closeView(s)
+			if a.rightShown() && a.sideTab() == sideFiles {
+				a.focusFiles()
+			}
 		case v.kind == sideFiles && a.rightShown() && a.sideTab() == sideFiles:
 			// Back to the list the file came from, as the TUI's quick
 			// look goes back from inside the file.

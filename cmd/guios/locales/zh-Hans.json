@@ -977,5 +977,12 @@
   "lookAlertTip": "提示",
   "lookAlertImportant": "重要",
   "lookAlertWarning": "警告",
-  "lookAlertCaution": "小心"
+  "lookAlertCaution": "小心",
+  "lookHintClose": "关闭",
+  "lookHintHalf": "半屏",
+  "lookHintPage": "一页",
+  "lookHintFilm": "视频的 5 %",
+  "lookHintFrame": "一帧",
+  "lookHintView": "下一个视图",
+  "lookHintBeside": "窗格旁边"
 }
