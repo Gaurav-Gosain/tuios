@@ -411,7 +411,7 @@ var nativeActions = map[string]bool{
 	"prefix_split_horizontal": true, "prefix_split_vertical": true, "split_horizontal": true, "split_vertical": true,
 	"prev_session": true, "next_session": true, "prefix_session_switcher": true, "goto_picker": true, "choose_tree": true,
 	"prefix_close_session": true, "prefix_command_palette": true, "prefix_settings": true, "prefix_keybinds": true,
-	"prefix_file_search": true, "prefix_selection": true, "prefix_help": true, "nest": true, "display_panes": true, "prefix_toggle_spotlight": true, "prefix_toggle_other_rail": true, "toggle_scratch": true, "prefix_agents_settings": true,
+	"prefix_file_search": true, "prefix_selection": true, "prefix_help": true, "nest": true, "hints": true, "display_panes": true, "prefix_toggle_spotlight": true, "prefix_toggle_other_rail": true, "toggle_scratch": true, "prefix_agents_settings": true,
 	"prefix_next_finished": true, "next_agent": true, "prev_agent": true, "prefix_jump_notif": true, "prefix_last_message": true,
 	"prefix_workspace_switcher": true, "paste_image": true, "paste_buffer": true, "choose_buffer": true,
 	"prefix_screenshot": true, "pick_path": true, "edit_scrollback": true, "prefix_rename_window": true, "window_prefix_rename": true, "workspace_prefix_rename": true, "set_note": true, "prefix_review": true, "prefix_inbox": true,
@@ -564,6 +564,9 @@ func (a *App) runKeyAction(action string) {
 		return
 	case "edit_scrollback":
 		a.editScrollback()
+		return
+	case "hints":
+		a.openHints()
 		return
 	case "nest":
 		a.nest = true

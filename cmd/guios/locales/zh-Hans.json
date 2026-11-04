@@ -1038,5 +1038,8 @@
   "keysScreenshotSaved": "截图已保存到 {path}。",
   "keysPickPathTitle": "输入文件的路径",
   "keysWorkspaceQuery": "工作区",
-  "keysNest": "现在所有按键都发送到窗格，{leader} 也是。按 {key} 退出。"
+  "keysNest": "现在所有按键都发送到窗格，{leader} 也是。按 {key} 退出。",
+  "copyModeHints": "提示",
+  "copyModeHintsHint": "输入标签以复制其文本。按 Esc 退出。",
+  "copyModeNoHints": "屏幕上没有可标记的内容。"
 }

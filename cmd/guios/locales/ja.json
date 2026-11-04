@@ -1038,5 +1038,8 @@
   "keysScreenshotSaved": "スクリーンショットを {path} に保存しました。",
   "keysPickPathTitle": "ファイルのパスを入力",
   "keysWorkspaceQuery": "ワークスペース",
-  "keysNest": "すべてのキーがペインに送られます ({leader} も)。{key} で終了します。"
+  "keysNest": "すべてのキーがペインに送られます ({leader} も)。{key} で終了します。",
+  "copyModeHints": "ヒント",
+  "copyModeHintsHint": "ラベルを入力すると、そのテキストをコピーします。Esc で終了します。",
+  "copyModeNoHints": "画面にラベルを付けるものがありません。"
 }

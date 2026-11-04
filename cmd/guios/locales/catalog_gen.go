@@ -10523,3 +10523,33 @@ func KeysNest(leader string, key string) string { return In(i18n.Locale()).KeysN
 func (msgs Messages) KeysNest(leader string, key string) string {
 	return Catalog.Format(msgs.locale, "keysNest", map[string]any{"leader": leader, "key": key})
 }
+
+// CopyModeHints says "Hints"
+// in the language the app shows.
+func CopyModeHints() string { return In(i18n.Locale()).CopyModeHints() }
+
+// CopyModeHints says "Hints"
+// in the language of msgs.
+func (msgs Messages) CopyModeHints() string {
+	return Catalog.Format(msgs.locale, "copyModeHints", nil)
+}
+
+// CopyModeHintsHint says "Type a label to copy its text. Press Esc to leave."
+// in the language the app shows.
+func CopyModeHintsHint() string { return In(i18n.Locale()).CopyModeHintsHint() }
+
+// CopyModeHintsHint says "Type a label to copy its text. Press Esc to leave."
+// in the language of msgs.
+func (msgs Messages) CopyModeHintsHint() string {
+	return Catalog.Format(msgs.locale, "copyModeHintsHint", nil)
+}
+
+// CopyModeNoHints says "Nothing on the screen to label."
+// in the language the app shows.
+func CopyModeNoHints() string { return In(i18n.Locale()).CopyModeNoHints() }
+
+// CopyModeNoHints says "Nothing on the screen to label."
+// in the language of msgs.
+func (msgs Messages) CopyModeNoHints() string {
+	return Catalog.Format(msgs.locale, "copyModeNoHints", nil)
+}

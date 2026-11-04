@@ -1,6 +1,7 @@
 package main
 
 import (
+	"regexp"
 	"strconv"
 	"strings"
 	"unicode"
@@ -55,6 +56,124 @@ type copyMode struct {
 
 	message string // the status line's message, until the next key
 	ref     ui.Handle
+
+	// hints are the labeled texts of hint mode (the prefix and F), nil
+	// outside it, and typed what of a label has been typed.
+	hints []copyHint
+	typed string
+}
+
+// copyHint is a text hint mode labels on the screen: a URL, a path, a
+// commit hash, an address.
+type copyHint struct {
+	y, x, n int
+	text    string
+	label   string
+}
+
+// hintPattern finds what hint mode labels, as the TUI's hints do.
+var hintPattern = regexp.MustCompile(`https?://[^\s'"<>()]+|(?:~|\.{1,2})?/[\w.@%+-]+(?:/[\w.@%+-]*)*|\b[0-9a-f]{7,40}\b|\b\d{1,3}(?:\.\d{1,3}){3}(?::\d+)?\b`)
+
+// hintLabels are the keys of the labels, the home row first.
+const hintLabels = "asdfghjklqwertyuiopzxcvbnm"
+
+// openHints labels the texts on the pane's screen to copy one by its
+// label: the prefix and F.
+func (a *App) openHints() {
+	a.openCopyMode()
+	cm := a.cm
+	if cm == nil {
+		return
+	}
+	first := max(0, len(cm.rows)-cm.shown)
+	var hints []copyHint
+	for y := first; y < len(cm.rows); y++ {
+		row := string(cm.rows[y])
+		for _, m := range hintPattern.FindAllStringIndex(row, -1) {
+			text := row[m[0]:m[1]]
+			if len(text) < 3 {
+				continue
+			}
+			x := utf8.RuneCountInString(row[:m[0]])
+			hints = append(hints, copyHint{y: y, x: x, n: utf8.RuneCountInString(text), text: text})
+		}
+	}
+	if len(hints) == 0 {
+		a.cm = nil
+		a.toast(locales.CopyModeNoHints())
+		return
+	}
+	two := len(hints) > len(hintLabels)
+	for i := range hints {
+		if two {
+			hints[i].label = string(hintLabels[i/len(hintLabels)%len(hintLabels)]) + string(hintLabels[i%len(hintLabels)])
+		} else {
+			hints[i].label = string(hintLabels[i])
+		}
+	}
+	cm.hints = hints
+	cm.top = first
+	cm.message = locales.CopyModeHintsHint()
+}
+
+// hintKey takes a key in hint mode: a label's letters copy its text.
+func (a *App) hintKey(k string) {
+	cm := a.cm
+	if k == "esc" || k == "q" && cm.typed == "" {
+		a.closeCopyMode()
+		return
+	}
+	if k == "backspace" && cm.typed != "" {
+		cm.typed = cm.typed[:len(cm.typed)-1]
+		return
+	}
+	if len(k) != 1 {
+		return
+	}
+	cm.typed += k
+	any := false
+	for _, h := range cm.hints {
+		if h.label == cm.typed {
+			a.copyText = h.text
+			a.addBuffer(h.text)
+			a.closeCopyMode()
+			return
+		}
+		any = any || strings.HasPrefix(h.label, cm.typed)
+	}
+	if !any {
+		cm.typed = ""
+	}
+}
+
+// hintSpans draws a row in hint mode: each text marked, its label over
+// its first characters.
+func (cm *copyMode) hintSpans(y int, pal *palette) []ui.Span {
+	row := cm.rows[y]
+	var spans []ui.Span
+	x := 0
+	for _, h := range cm.hints {
+		if h.y != y {
+			continue
+		}
+		if h.x > x {
+			spans = append(spans, ui.Span{Text: string(row[x:h.x])})
+		}
+		label := h.label
+		live := strings.HasPrefix(label, cm.typed)
+		rest := string(row[h.x+min(len(label), h.n) : h.x+h.n])
+		if live {
+			spans = append(spans, ui.Span{Text: label, Background: pal.accent, Color: pal.popover, Weight: 700})
+			spans = append(spans, ui.Span{Text: rest, Background: pal.attention.Alpha(0.3)})
+		} else {
+			spans = append(spans, ui.Span{Text: string(row[h.x : h.x+h.n])})
+		}
+		x = h.x + h.n
+	}
+	if x < len(row) {
+		spans = append(spans, ui.Span{Text: string(row[x:])})
+	}
+	return spans
 }
 
 // openCopyMode starts copy mode on the pane the user is in.
@@ -111,6 +230,10 @@ func (a *App) copyKey(k string) {
 		return
 	}
 	cm.message = ""
+	if cm.hints != nil {
+		a.hintKey(k)
+		return
+	}
 	if cm.searching {
 		a.copySearchKey(k)
 		return
@@ -707,7 +830,7 @@ func (a *App) copyView(c *ui.Context, pal *palette) {
 				n := max(len(row), cm.cx+1)
 				style := func(x int) int {
 					switch {
-					case y == cm.cy && x == cm.cx:
+					case y == cm.cy && x == cm.cx && cm.hints == nil:
 						return 3
 					case sel && x >= from && x < to:
 						return 2
@@ -742,6 +865,9 @@ func (a *App) copyView(c *ui.Context, pal *palette) {
 					spans = append(spans, sp)
 					x = end
 				}
+				if cm.hints != nil {
+					spans = cm.hintSpans(y, pal)
+				}
 				if len(spans) == 0 {
 					spans = []ui.Span{{Text: " "}}
 				}
@@ -750,6 +876,9 @@ func (a *App) copyView(c *ui.Context, pal *palette) {
 		})
 		ui.Row(c.Key("status")).Height(rowH + 6).Shrink(0).Gap(10).AlignItems(ui.Center).Children(func() {
 			mode := locales.CopyModeNormal()
+			if cm.hints != nil {
+				mode = locales.CopyModeHints()
+			}
 			switch cm.visual {
 			case visualChar:
 				mode = locales.CopyModeVisual()

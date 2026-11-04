@@ -1883,5 +1883,8 @@
   "keysScreenshotSaved": "Saved the screenshot to {path}.",
   "keysPickPathTitle": "Type the path of a file",
   "keysWorkspaceQuery": "workspace",
-  "keysNest": "Every key goes to the pane now, {leader} too. Press {key} to leave."
+  "keysNest": "Every key goes to the pane now, {leader} too. Press {key} to leave.",
+  "copyModeHints": "Hints",
+  "copyModeHintsHint": "Type a label to copy its text. Press Esc to leave.",
+  "copyModeNoHints": "Nothing on the screen to label."
 }
