@@ -6678,21 +6678,21 @@ func (msgs Messages) CockpitBack() string {
 	return Catalog.Format(msgs.locale, "cockpitBack", nil)
 }
 
-// CockpitIdle says "idle"
+// CockpitIdle says "Idle"
 // in the language the app shows.
 func CockpitIdle() string { return In(i18n.Locale()).CockpitIdle() }
 
-// CockpitIdle says "idle"
+// CockpitIdle says "Idle"
 // in the language of msgs.
 func (msgs Messages) CockpitIdle() string {
 	return Catalog.Format(msgs.locale, "cockpitIdle", nil)
 }
 
-// CockpitToReview says "to review"
+// CockpitToReview says "To review"
 // in the language the app shows.
 func CockpitToReview() string { return In(i18n.Locale()).CockpitToReview() }
 
-// CockpitToReview says "to review"
+// CockpitToReview says "To review"
 // in the language of msgs.
 func (msgs Messages) CockpitToReview() string {
 	return Catalog.Format(msgs.locale, "cockpitToReview", nil)
@@ -6826,6 +6826,16 @@ func CockpitNoTranscriptDetail() string { return In(i18n.Locale()).CockpitNoTran
 // in the language of msgs.
 func (msgs Messages) CockpitNoTranscriptDetail() string {
 	return Catalog.Format(msgs.locale, "cockpitNoTranscriptDetail", nil)
+}
+
+// CockpitNoActivity says "No activity"
+// in the language the app shows.
+func CockpitNoActivity() string { return In(i18n.Locale()).CockpitNoActivity() }
+
+// CockpitNoActivity says "No activity"
+// in the language of msgs.
+func (msgs Messages) CockpitNoActivity() string {
+	return Catalog.Format(msgs.locale, "cockpitNoActivity", nil)
 }
 
 // CockpitOlder says "Show older messages"

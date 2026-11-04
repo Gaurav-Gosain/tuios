@@ -59,6 +59,17 @@ func (a *App) ckSetTab(t string) {
 	a.ckTabOpened()
 }
 
+// ckSourceShown tells that where an agent's state came from is worth
+// saying: not its own report, and not tuios's inner guesses (a stall, a
+// detection, activity), which say nothing to the person.
+func ckSourceShown(src string) bool {
+	switch src {
+	case "", "report", "stall", "detect", "activity", "hook", "recent":
+		return false
+	}
+	return true
+}
+
 // ckStatePill is a state's word and colour.
 func ckStatePill(pal *palette, ag client.Agent, it *session.AttentionItem) (string, ui.Color) {
 	st, unread := ckStatus(ag, it)
@@ -140,7 +151,7 @@ func (a *App) cockpitFocus(c *ui.Context, pal *palette) {
 		if ag.Cwd != "" {
 			where = append(where, a.local().shortDir(ag.Cwd))
 		}
-		if ag.Source != "" && ag.Source != "report" {
+		if ckSourceShown(ag.Source) {
 			where = append(where, locales.CockpitStateFrom(ag.Source))
 		}
 		oneLine(c, strings.Join(where, " · "), fsSmall, 0).TextColor(pal.textFaint)

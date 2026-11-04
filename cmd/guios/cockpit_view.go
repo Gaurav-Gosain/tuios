@@ -29,7 +29,7 @@ const (
 	// it shows twice: the counts in its header, the harness by the name.
 	ckNarrowBelow = 440
 	ckSideW       = 268
-	ckRowH        = 46
+	ckRowH        = hRow2
 	ckRowH1       = 30
 )
 
@@ -334,22 +334,18 @@ func ckLine2(ag client.Agent, it *session.AttentionItem) (verb, rest string) {
 func (a *App) ckRowView(c *ui.Context, pal *palette, r ckRow) {
 	ck := &a.ck
 	ag := ck.rowAgent(r)
-	name, harness, sess := ag.Name, ag.Harness, ag.Session
+	name, harness := ag.Name, ag.Harness
 	if r.item != nil && r.agent < 0 {
-		name, harness, sess = r.item.Name, r.item.Harness, r.item.Session
-		if r.item.Host != "" {
-			sess = r.item.Host + ":" + sess
-		}
+		name, harness = r.item.Name, r.item.Harness
 	}
 	if name == "" {
 		name = locales.CockpitUnnamed()
 	}
 	verb, rest := ckLine2(ag, r.item)
-	two := (verb != "" || rest != "") && r.group != ckIdle && r.group != ckSettled
-	h := float32(ckRowH1)
-	if two {
-		h = ckRowH
-	}
+	// Every agent's row is two lines high, an idle one too: a row with
+	// nothing to say says so, so that the rows keep one height (council
+	// round 1, visual 23).
+	h := float32(ckRowH)
 	sel := r.key == ck.sel
 	row := ui.Row(c.Key(r.key)).Height(h).Padding(0, 10, 0, 8).Gap(10).AlignItems(ui.Center).Radius(rControl).Margin(0, 0, 1, 0)
 	if pal.dark {
@@ -391,15 +387,14 @@ func (a *App) ckRowView(c *ui.Context, pal *palette, r ckRow) {
 	if unread || r.group == ckNeeds {
 		weight = wSemibold
 	}
-	// The name keeps its room: the session gives way first, then the
-	// harness's name, which its icon still tells (DESIGN.md section 7).
-	// The row's content: the column less the list's and the row's
-	// padding and edge, then the mark, the name, the age and five gaps.
-	room := ck.fleetW - 16 - 18 - 2 - 14 - 5*7 - natural(c, age, fsSmall, 0) - natural(c, name, fsBody, weight)
+	// The name keeps its room: the harness's name gives way first, which
+	// its icon still tells (DESIGN.md section 7). The trailing slot holds
+	// the age alone: the session is the focus column's to say. The row's
+	// content: the column less the list's and the row's padding and edge,
+	// then the mark, the name, the age and four gaps.
+	room := ck.fleetW - 16 - 18 - 2 - 14 - 4*7 - natural(c, age, fsSmall, 0) - natural(c, name, fsBody, weight)
 	harnessW := 12 + 4 + natural(c, harnessName(harness), fsSmall, 0)
-	sessW := min(natural(c, sess, fsSmall, 0), 90) + 7
 	showHarness := room >= harnessW
-	showSess := sess != "" && room >= harnessW+sessW
 	row.Children(func() {
 		ui.Column(c).Grow(1).MinWidth(0).Gap(3).Children(func() {
 			ui.Row(c).Gap(7).AlignItems(ui.Center).Children(func() {
@@ -414,13 +409,12 @@ func (a *App) ckRowView(c *ui.Context, pal *palette, r ckRow) {
 					}
 				})
 				ui.Spacer(c)
-				if showSess {
-					oneLine(c, sess, fsSmall, 0).TextColor(pal.textFaint).Shrink(2).MaxWidth(90)
-				}
 				ui.Text(c, age).FontSize(fsSmall).TextColor(pal.textFaint).FontFeatures("tnum").SingleLine().Shrink(0)
 			})
-			if two {
+			if verb != "" || rest != "" {
 				ui.RichText(c, ckLine2Spans(pal, verb, flat(rest))...).FontSize(fsSmall).SingleLine().Ellipsis("…").MinWidth(0).Margin(0, 0, 0, 21)
+			} else {
+				ui.Text(c, locales.CockpitNoActivity()).FontSize(fsSmall).TextColor(pal.textFaint).SingleLine().Margin(0, 0, 0, 21)
 			}
 		})
 	})

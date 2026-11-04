@@ -38,8 +38,8 @@ func (a *App) cockpitSide(c *ui.Context, pal *palette) {
 		row(locales.CockpitDetailState(), word)
 		// Where the state came from matters only when it is not the
 		// agent's own report, as the row's tooltip says.
-		if ag.Source != "" && ag.Source != "report" {
-			row(locales.CockpitDetailSource(), locales.CockpitStateFrom(ag.Source))
+		if ckSourceShown(ag.Source) {
+			row(locales.CockpitDetailSource(), ag.Source)
 		}
 		if ag.Unread > 0 {
 			row(locales.CockpitDetailMail(), fmt.Sprint(ag.Unread))
