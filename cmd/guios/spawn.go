@@ -89,7 +89,10 @@ type spawnMachine struct {
 
 // spawnSheet is the open sheet, or a closed one kept as the draft.
 type spawnSheet struct {
-	open bool
+	// byKeyAt is when n in a list opened the sheet: text typed into it
+	// within guardWindow was prose, not a task (cockpit_guard.go).
+	byKeyAt time.Time
+	open    bool
 	// task is the task and its images, as the reply box holds a message.
 	task                ckDraft
 	model, branch, base string

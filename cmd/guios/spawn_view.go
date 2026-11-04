@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/Gaurav-Gosain/mygo/ui"
 
@@ -178,7 +179,16 @@ func (a *App) spawnTask(c *ui.Context, pal *palette, s *spawnSheet, h *spawnHand
 				}
 				return a.pasteImageInto(&s.task)
 			})
-			if in.Changed() {
+			if in.Changed() && !s.byKeyAt.IsZero() && time.Since(s.byKeyAt) < guardWindow {
+				// n opened the sheet in the middle of typed prose: take
+				// it back, and the rest of the prose goes nowhere.
+				s.task.text, s.byKeyAt = "", time.Time{}
+				a.ck.guard.last = time.Now()
+				a.ck.guard.hinted = true
+				a.spawnClose()
+				a.toast(locales.CockpitKeysToList())
+				c.Invalidate()
+			} else if in.Changed() {
 				s.followTask()
 				if s.noticeAt == spTask {
 					s.notice = ""
