@@ -61,7 +61,9 @@ func lead(bar ui.TitleBar) float32 {
 	return bar.Left + cardGap
 }
 
-var sidebarMotion = ui.Animation{Duration: 260 * time.Millisecond, Ease: ui.CubicBezier(0.25, 1, 0.5, 1)}
+// sidebarMotion slides the sidebars in and out: motionLayout's length,
+// on a curve that settles without a long tail.
+var sidebarMotion = ui.Animation{Duration: motionLayout.Duration, Ease: ui.CubicBezier(0.25, 1, 0.5, 1)}
 
 func chromeFor(progress, width float32, bar ui.TitleBar) chrome {
 	round := func(v float32) float32 { return float32(math.Round(float64(v))) }
@@ -116,7 +118,7 @@ func (a *App) view(c *ui.Context) {
 	backdrop(c, row)
 	// A curve, not a spring: a spring's long tail crawls under a pixel a
 	// frame, which whole pixels turn into hops and holds, a shake as it
-	// settles. This one lands in about 13 frames, moving in every one.
+	// settles. This one lands in 200 ms, moving in every frame.
 	progress := row.AnimateTo("sidebar", b2f(!a.prefs.SidebarHidden), sidebarMotion)
 	a.chrome = chromeFor(progress, a.prefs.SidebarWidth, bar)
 	shown := a.chrome.shown
@@ -138,8 +140,14 @@ func (a *App) view(c *ui.Context) {
 		a.side.forced = false
 	}
 	right := float32(0)
-	if p := row.AnimateTo("right", b2f(a.rightShown()), sidebarMotion); work != nil {
+	p := row.AnimateTo("right", b2f(a.rightShown()), sidebarMotion)
+	if work != nil {
 		right = float32(math.Round(float64(rightW * min(max(p, 0), 1))))
+	}
+	// The panes' terminals keep their grids while a sidebar slides, and
+	// take the new size once, as it lands.
+	if moving := func(v float32) bool { return v > 0 && v < 1 }; moving(progress) || moving(p) {
+		holdLeases(80 * time.Millisecond)
 	}
 	a.side.barW = right
 	// The gaps around the cards move the window too; the right one closes
@@ -197,6 +205,8 @@ func (a *App) view(c *ui.Context) {
 			})
 		}
 	}
+	keepOverlay(c)
+	toasts(c)
 	a.paletteView(c, pal)
 	a.pickerView(c, pal)
 	a.confirmView(c, pal)

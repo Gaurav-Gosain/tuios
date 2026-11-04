@@ -47,6 +47,7 @@ func (a *App) worktreeView(c *ui.Context, pal *palette) {
 	}
 	create := false
 	ui.DialogBase(c.Key("worktree"), &w.open, func(backdrop, panel ui.Element) {
+		dialogMotion(backdrop, panel)
 		backdrop.Background(pal.overlay)
 		floating(panel.Width(420).Padding(22).Gap(8).Radius(14).Background(pal.popover), pal).Label(locales.WorktreeTitle())
 		ui.Text(c, locales.WorktreeTitle()).FontSize(15).FontWeight(650).TextColor(pal.text)

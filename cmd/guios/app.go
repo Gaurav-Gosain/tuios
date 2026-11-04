@@ -89,6 +89,8 @@ type App struct {
 	quitting bool
 	// ck is the agent cockpit (cockpit.go).
 	ck cockpit
+	// motion notes what moves the panes from frame to frame (motion.go).
+	motion motionWatch
 	// usage is the last reading of the resource views, usageOpen whether
 	// the sidebar's usage panel shows, and sampler what reads them
 	// (usage.go).

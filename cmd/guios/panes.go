@@ -1,7 +1,10 @@
 package main
 
 import (
+	"fmt"
 	"math"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/egoist/mygo/plugins/terminal"
@@ -96,18 +99,55 @@ func (a *App) panes(c *ui.Context, pal *palette, bar ui.TitleBar, shown float32,
 		a.emptyWorkspace(c, pal, s)
 		return
 	}
-	multi := len(s.Panes) > 1
-	if z := s.PaneByID(s.Zoomed); z != nil || s.Layout == nil || !multi {
-		p := z
-		if p == nil {
-			p = s.FocusPane()
-		}
-		if p != nil {
-			a.paneCard(c, pal, bar, shown, s, p, true, true, right, multi)
-		}
-		return
+	// A divider dragged moves the panes under the pointer, not after it.
+	view, sig := s.ID+"/"+strconv.Itoa(s.Workspace), layoutSig(s)
+	if a.layoutDrag.split != "" {
+		c.DisableAnimations()
+		// The frames of a drag resize the panes as they go.
+		a.motion.layout = sig
 	}
-	a.layoutNode(c, pal, bar, shown, s, s.Layout, "", true, true, right)
+	a.watchPanes(view, sig)
+	// One parent for each session and workspace: another one shown comes
+	// at once, while panes opened, closed or moved within it animate
+	// (paneTransition).
+	ui.Column(c.Key("ws-" + view)).Grow(1).Basis(0).MinWidth(0).MinHeight(0).AlignItems(ui.Stretch).Children(func() {
+		multi := len(s.Panes) > 1
+		if z := s.PaneByID(s.Zoomed); z != nil || s.Layout == nil || !multi {
+			p := z
+			if p == nil {
+				p = s.FocusPane()
+			}
+			if p != nil {
+				a.paneCard(c, pal, bar, shown, s, p, true, true, right, multi)
+			}
+			return
+		}
+		a.layoutNode(c, pal, bar, shown, s, s.Layout, "", true, true, right)
+	})
+}
+
+// layoutSig is what lays out the panes a session shows: the zoomed pane,
+// or the split tree with its ratios. A change animates them.
+func layoutSig(s *proto.Session) string {
+	var b strings.Builder
+	b.WriteString(s.Zoomed)
+	if z := s.PaneByID(s.Zoomed); z == nil && s.Layout != nil && len(s.Panes) > 1 {
+		var walk func(l *proto.Layout)
+		walk = func(l *proto.Layout) {
+			if l.Leaf() {
+				b.WriteString(" " + l.Pane)
+				return
+			}
+			fmt.Fprintf(&b, " (%t %.3f", l.Row, l.Ratio)
+			walk(l.A)
+			walk(l.B)
+			b.WriteString(")")
+		}
+		walk(s.Layout)
+	} else if p := s.FocusPane(); z == nil && p != nil {
+		b.WriteString(" " + p.ID)
+	}
+	return b.String()
 }
 
 func (a *App) layoutNode(c *ui.Context, pal *palette, bar ui.TitleBar, shown float32, s *proto.Session, l *proto.Layout, path string, top, left, right bool) {
@@ -131,6 +171,20 @@ func (a *App) layoutNode(c *ui.Context, pal *palette, bar ui.TitleBar, shown flo
 		box = ui.Column(c.Key(key))
 	}
 	box.Grow(1).Basis(0).MinWidth(0).MinHeight(0).AlignItems(ui.Stretch).Bind(a.paneRef(key))
+	// A pane split off grows out of the other's edge: the split starts
+	// with all its room on the other's side. The ratio moves on the frame
+	// clock after that, as when the splits are evened out.
+	fresh := func(n *proto.Layout) bool { return n.Leaf() && a.motion.isNew(n.Pane) }
+	if fa, fb := fresh(l.A), fresh(l.B); fa != fb {
+		box.Jump("ratio", b2f(fb))
+		if a.motion.growing == nil {
+			a.motion.growing = map[string]bool{}
+		}
+		for _, id := range append(l.A.Panes(), l.B.Panes()...) {
+			a.motion.growing[id] = true
+		}
+	}
+	ratio = box.AnimateTo("ratio", ratio, motionLayout)
 	box.Children(func() {
 		ui.Column(c.Key("a")).Grow(ratio).Basis(0).MinWidth(0).MinHeight(0).AlignItems(ui.Stretch).Children(func() {
 			a.layoutNode(c, pal, bar, shown, s, l.A, path+"a", top, left, right && !l.Row)
@@ -207,6 +261,12 @@ func (a *App) paneCard(c *ui.Context, pal *palette, bar ui.TitleBar, shown float
 		bg = pal.cardDim
 	}
 	card := ui.Column(c.Key("pane-" + p.ID)).Grow(1).Basis(0).MinWidth(0).MinHeight(0).Radius(14).Clip().Bind(a.paneRef("card-" + p.ID))
+	if !a.motion.growing[p.ID] {
+		card.Transition(paneTransition(p.ID))
+	}
+	if k := a.paneArrival(c, p.ID); k < 1 {
+		card.Opacity(k).Scale(0.96+0.04*k, 0.96+0.04*k)
+	}
 	paned(card.Background(card.AnimateColor("bg", bg, ui.Animation{Duration: 140 * time.Millisecond})), pal)
 	hovered := card.Hovered()
 	if a.set.FocusFollowsMouse && multi {

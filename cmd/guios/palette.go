@@ -503,6 +503,7 @@ func (a *App) paletteView(c *ui.Context, pal *palette) {
 		width = min(width, w-32)
 	}
 	ui.DialogBase(c.Key("palette"), &a.pal.open, func(backdrop, panel ui.Element) {
+		dialogMotion(backdrop, panel)
 		backdrop.Background(pal.overlay).Justify(ui.Start).Padding(84, 0, 0, 0)
 		floating(panel.Width(width).MaxHeight(480).Radius(14).Background(pal.popover), pal).Clip().
 			Label(label)
@@ -605,6 +606,7 @@ func confirmDialog(c *ui.Context, pal *palette, pending **confirmation) bool {
 	cf := *pending
 	run, alt := false, false
 	ui.DialogBase(c.Key("confirm"), &cf.open, func(backdrop, panel ui.Element) {
+		dialogMotion(backdrop, panel)
 		backdrop.Background(pal.overlay)
 		width := float32(380)
 		if cf.alt != "" {

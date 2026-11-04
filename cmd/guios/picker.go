@@ -132,6 +132,7 @@ func (a *App) pickerView(c *ui.Context, pal *palette) {
 	p.index = min(max(p.index, 0), max(len(items)-1, 0))
 	var goTo, openDir string
 	ui.DialogBase(c.Key("picker"), &p.open, func(backdrop, panel ui.Element) {
+		dialogMotion(backdrop, panel)
 		backdrop.Background(pal.overlay).Justify(ui.Start).Padding(84, 0, 0, 0)
 		floating(panel.Width(600).MaxHeight(500).Radius(14).Background(pal.popover), pal).Clip().
 			Label(locales.PickerTitle(h.label()))
