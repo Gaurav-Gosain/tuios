@@ -5,6 +5,8 @@ import (
 
 	"github.com/Gaurav-Gosain/mygo/ui"
 
+	"github.com/Gaurav-Gosain/tuios/internal/guios/client"
+
 	"github.com/Gaurav-Gosain/tuios/cmd/guios/locales"
 )
 
@@ -135,10 +137,27 @@ func (a *App) humanMailView(c *ui.Context, pal *palette) {
 		})
 		if m.replyTo != 0 {
 			for _, msg := range mine {
-				if msg.ID == m.replyTo && msg.Session == m.replySess {
+				if msg.ID != m.replyTo || msg.Session != m.replySess {
+					continue
+				}
+				// The agent's own reply box, as the thread has it, set
+				// to mail; a sender that is no agent here gets the line.
+				if ag, ok := ck.agentByWindow(msg.Session, msg.From); ok {
+					a.replyBox(c, pal, ag)
+				} else {
 					a.mailCompose(c, pal, m, msg.Session, msg.From, msg.FromName)
 				}
 			}
 		}
 	})
+}
+
+// agentByWindow is the agent of this machine in a session's pane.
+func (ck *cockpit) agentByWindow(sess, window string) (client.Agent, bool) {
+	for _, ag := range ck.agents {
+		if ag.Host == "" && ag.Session == sess && ag.Window == window {
+			return ag, true
+		}
+	}
+	return client.Agent{}, false
 }

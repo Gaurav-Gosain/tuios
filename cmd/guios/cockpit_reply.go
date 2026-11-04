@@ -37,6 +37,9 @@ type ckReply struct {
 	box    ui.Handle
 	queued map[string][]ckQueued // by agent, as list-queued said
 	asked  map[string]bool       // the agents whose queue was read
+	// focusNext puts the keys in the box once it is built: the Mail view
+	// builds it only when a reply starts.
+	focusNext bool
 	// asMail holds, by agent, that the box sends mail to the agent's
 	// inbox rather than a prompt typed into its pane.
 	asMail map[string]bool
@@ -155,7 +158,7 @@ func (a *App) replyBox(c *ui.Context, pal *palette, ag client.Agent) {
 				if mail {
 					note = locales.CockpitMailInbox(ag.Name)
 					if m := a.ck.tabs.mail; m != nil && m.replyTo != 0 {
-						note = locales.CockpitMailReply(int(m.replyTo))
+						note = locales.CockpitMailReplyTo(ag.Name)
 					}
 				}
 				oneLine(c, note, fsSmall, 0).TextColor(pal.textFaint).Shrink(2)
@@ -169,6 +172,10 @@ func (a *App) replyBox(c *ui.Context, pal *palette, ag client.Agent) {
 			}
 			in := ui.TextAreaBase(c.Key("text-"+ag.Key()), &d.text).Bind(&r.box).Lines(2, 8).
 				FontSize(fsProse).LineHeight(1.5).TextColor(pal.text).Placeholder(locales.CockpitReplyPlaceholder()).ReadOnly(d.sending)
+			if r.focusNext {
+				r.focusNext = false
+				r.box.Focus()
+			}
 			in.OnPaste(func(text string) bool {
 				if text != "" {
 					return false
@@ -193,6 +200,12 @@ func (a *App) replyBox(c *ui.Context, pal *palette, ag client.Agent) {
 					k.SetText(d.last)
 					return true
 				case k.Key == ui.KeyEscape:
+					if m := a.ck.tabs.mail; a.ck.view == viewMail && m != nil {
+						// In the Mail view, Escape drops the reply.
+						m.replyTo = 0
+						m.focus.Focus()
+						return true
+					}
 					a.ck.fleetFocus.Focus()
 					return true
 				}
