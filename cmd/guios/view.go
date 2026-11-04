@@ -681,11 +681,12 @@ func (a *App) sessionRow(c *ui.Context, pal *palette, s *proto.Session, n *int) 
 					// under the name, not the folder again.
 					line = f.Shell
 				}
-				fg := pal.textFaint
+				// A detail line is text2, 4.5:1 on every ground (DESIGN.md
+				// section 6): a message reads stronger by its weight.
+				t := ui.Text(c, flat(line)).FontSize(fsSmall).TextColor(pal.textMuted).SingleLine().Ellipsis("…").MinWidth(0)
 				if msg {
-					fg = pal.textMuted
+					t.FontWeight(wMedium)
 				}
-				ui.Text(c, flat(line)).FontSize(fsSmall).TextColor(fg).SingleLine().Ellipsis("…").MinWidth(0)
 			})
 		} else {
 			name()
