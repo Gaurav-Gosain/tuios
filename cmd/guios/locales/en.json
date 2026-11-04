@@ -1876,6 +1876,20 @@
   "copyModeLabel": "Copy mode",
   "copyModeNormal": "Copy",
   "copyModeVisual": "Visual",
+  "copyModeWhere": "Line {line} of {lines}, column {column}",
+  "@copyModeWhere": {
+    "placeholders": {
+      "line": {
+        "type": "int"
+      },
+      "lines": {
+        "type": "int"
+      },
+      "column": {
+        "type": "int"
+      }
+    }
+  },
   "copyModeVisualLine": "Visual line",
   "copyModeVisualBlock": "Visual block",
   "copyModeHint": "Move with h, j, k and l. Press v to select and y to copy. Press q to leave.",

@@ -1024,6 +1024,7 @@
   "copyModeLabel": "コピーモード",
   "copyModeNormal": "コピー",
   "copyModeVisual": "ビジュアル",
+  "copyModeWhere": "{line} / {lines} 行、{column} 列",
   "copyModeVisualLine": "ビジュアル行",
   "copyModeVisualBlock": "ビジュアル矩形",
   "copyModeHint": "h、j、k、l で移動します。v で選択し、y でコピーします。q で終了します。",

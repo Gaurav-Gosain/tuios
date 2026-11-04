@@ -10374,6 +10374,18 @@ func (msgs Messages) CopyModeVisual() string {
 	return Catalog.Format(msgs.locale, "copyModeVisual", nil)
 }
 
+// CopyModeWhere says "Line {line} of {lines}, column {column}"
+// in the language the app shows.
+func CopyModeWhere(line int, lines int, column int) string {
+	return In(i18n.Locale()).CopyModeWhere(line, lines, column)
+}
+
+// CopyModeWhere says "Line {line} of {lines}, column {column}"
+// in the language of msgs.
+func (msgs Messages) CopyModeWhere(line int, lines int, column int) string {
+	return Catalog.Format(msgs.locale, "copyModeWhere", map[string]any{"line": line, "lines": lines, "column": column})
+}
+
 // CopyModeVisualLine says "Visual line"
 // in the language the app shows.
 func CopyModeVisualLine() string { return In(i18n.Locale()).CopyModeVisualLine() }

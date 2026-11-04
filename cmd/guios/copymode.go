@@ -954,8 +954,9 @@ func (a *App) copyView(c *ui.Context, pal *palette) {
 				ui.Text(c, cm.message).FontSize(12).TextColor(pal.textMuted).SingleLine().Ellipsis("…").Shrink(1).MinWidth(0)
 			}
 			ui.Spacer(c)
-			ui.Text(c, strconv.Itoa(cm.cy+1)+":"+strconv.Itoa(cm.cx+1)+"  "+strconv.Itoa(len(cm.rows))).
-				Font(mono).FontSize(11.5).TextColor(pal.textFaint).SingleLine().Shrink(0)
+			// Where the cursor is, in words: "7:23 7" said nothing.
+			ui.Text(c, locales.CopyModeWhere(cm.cy+1, len(cm.rows), cm.cx+1)).
+				FontSize(fsSmall).FontFeatures("tnum").TextColor(pal.textMuted).SingleLine().Shrink(0)
 		})
 	})
 }
