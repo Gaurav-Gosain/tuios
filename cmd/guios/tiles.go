@@ -195,6 +195,7 @@ func (a *App) tiled(c *ui.Context, pal *palette, bar ui.TitleBar, shown float32,
 			} else {
 				x, y, w, h := px(shownAt[id])
 				wrap.Left(x).Top(y).Width(w).Height(h)
+				a.motion.width[id] = w
 			}
 			a.motion.placed[id] = true
 			top, left := t.y < eps, t.x < eps

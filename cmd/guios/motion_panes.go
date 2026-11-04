@@ -107,6 +107,8 @@ type motionWatch struct {
 	// placed are the panes the tiles place in this frame (tiles.go): they
 	// move by their rectangles, not by a Match.
 	placed map[string]bool
+	// width is each placed pane's width in this frame, in DIPs.
+	width map[string]float32
 	// top is the pane zoomed, or the one last zoomed while it shrinks
 	// back: drawn over the others.
 	top string
@@ -129,7 +131,7 @@ func (a *App) watchPanes(view, layout string) {
 			holdLeases(motionLayout.Duration + 40*time.Millisecond)
 		}
 	}
-	m.view, m.layout, m.now, m.placed = view, layout, map[string]bool{}, map[string]bool{}
+	m.view, m.layout, m.now, m.placed, m.width = view, layout, map[string]bool{}, map[string]bool{}, map[string]float32{}
 }
 
 // notePane notes that the frame shows pane id.

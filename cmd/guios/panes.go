@@ -879,7 +879,13 @@ func (a *App) planHeader(c *ui.Context, p *proto.Pane, title, dir string, showDi
 		gitN, gitMin, gitCompact = a.gitWidths(c, p.Git)
 	}
 
-	w := a.paneRef("card-" + p.ID).Bounds(c).W
+	// The width the tiles give the card in this frame, while they move
+	// it: the last frame's lags behind, and a header planned for it ran
+	// under the window controls as a split grew the pane.
+	w, ok := a.motion.width[p.ID]
+	if !ok {
+		w = a.paneRef("card-" + p.ID).Bounds(c).W
+	}
 	if w <= 0 {
 		return headerPlan{titleW: titleN, folderW: folderN, gitW: gitN, stateW: stateN, processW: processN,
 			state: msg != "", git: p.Git != nil, process: process, controls: true}
