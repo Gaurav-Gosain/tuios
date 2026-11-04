@@ -1,6 +1,7 @@
 package composer
 
 import (
+	"slices"
 	"strconv"
 	"strings"
 
@@ -182,8 +183,8 @@ func (m *Model) OpenHistorySearch() bool {
 func (m *Model) historyMatches() []int {
 	q := strings.ToLower(m.hsearch.query)
 	var out []int
-	for i := len(m.hist) - 1; i >= 0; i-- {
-		if q == "" || strings.Contains(strings.ToLower(JoinParts(m.hist[i].Parts)), q) {
+	for i, v := range slices.Backward(m.hist) {
+		if q == "" || strings.Contains(strings.ToLower(JoinParts(v.Parts)), q) {
 			out = append(out, i)
 		}
 	}
