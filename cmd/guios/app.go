@@ -15,6 +15,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/Gaurav-Gosain/mygo"
@@ -117,10 +118,12 @@ type App struct {
 	// what they hold, each host's sessions and projects after the one's
 	// before, and owner the host of each session, pane and project.
 	hosts []*host
-	// hostsGen counts the watches of this machine's daemon's links, so a
-	// watch of a daemon gone stops; hostsKnown says the daemon told its
-	// links once; localLoad is this machine's load, as it told it.
-	hostsGen int
+	// hostsKnown says the daemon told its links once; localLoad is this
+	// machine's load, as it told it.
+	// hostsWatch counts the watches of the links, read off the main
+	// thread by the tick; hostsTicking says the tick runs (hosts.go).
+	hostsWatch   atomic.Int64
+	hostsTicking atomic.Bool
 	// hostsMu guards hostsKey, what the app last showed of the links
 	// (hostsShown), which refreshHosts reads off the main thread.
 	hostsMu    sync.Mutex

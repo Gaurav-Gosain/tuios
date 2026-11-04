@@ -200,10 +200,14 @@ const hostsEvery = 60 * time.Second
 // refreshHosts asks this machine's daemon how its links stand, off the main
 // thread, and follows the answer.
 func (a *App) refreshHosts() {
-	cl := a.local().cl
-	if cl == nil {
-		return
+	if cl := a.local().cl; cl != nil {
+		a.refreshHostsOn(cl)
 	}
+}
+
+// refreshHostsOn asks cl's daemon for its links, off the main thread, and
+// draws again only when what the app shows of them changed.
+func (a *App) refreshHostsOn(cl *client.Client) {
 	go func() {
 		reps, load, err := cl.Hosts()
 		if err != nil {
@@ -256,23 +260,35 @@ func hostsShown(reps []client.HostReport) string {
 }
 
 // watchHosts follows the links of this machine's daemon: on its events,
-// and every hostsEvery while it links any machine.
+// and every hostsEvery while it links any machine, for the load and the
+// round trip, which change with no event. With no machine linked nothing
+// runs between events: no timer, no frame.
 func (a *App) watchHosts(cl *client.Client) {
-	cl.WatchHosts(func() { a.update(a.refreshHosts) })
-	a.refreshHosts()
-	a.hostsGen++
-	gen := a.hostsGen
+	cl.WatchHosts(func() { a.refreshHostsOn(cl) })
+	a.refreshHostsOn(cl)
+	a.hostsWatch.Add(1)
+	a.tickHosts(cl)
+}
+
+// tickHosts starts the hostsEvery tick, unless it runs: it runs off the
+// main thread, and stops once the daemon links no machine (applyHosts
+// starts it again when one comes).
+func (a *App) tickHosts(cl *client.Client) {
+	if !a.hostsTicking.CompareAndSwap(false, true) {
+		return
+	}
+	gen := a.hostsWatch.Load()
 	var tick func()
 	tick = func() {
-		a.update(func() {
-			if gen != a.hostsGen || a.local().cl != cl {
-				return
-			}
-			if len(a.hosts) > 1 || a.ss.page == "hosts" {
-				a.refreshHosts()
-			}
-			time.AfterFunc(hostsEvery, tick)
-		})
+		a.hostsMu.Lock()
+		linked := len(a.hostsLast) > 0
+		a.hostsMu.Unlock()
+		if gen != a.hostsWatch.Load() || !linked {
+			a.hostsTicking.Store(false)
+			return
+		}
+		a.refreshHostsOn(cl)
+		time.AfterFunc(hostsEvery, tick)
 	}
 	time.AfterFunc(hostsEvery, tick)
 }
@@ -281,6 +297,9 @@ func (a *App) watchHosts(cl *client.Client) {
 // and how each stands, and connects to those whose link is up.
 func (a *App) applyHosts(reps []client.HostReport, load client.HostReport) {
 	a.localLoad = load
+	if cl := a.local().cl; cl != nil && len(reps) > 0 {
+		a.tickHosts(cl)
+	}
 	keep := []*host{a.local()}
 	for _, r := range reps {
 		h := a.hostNamed(r.Host)
