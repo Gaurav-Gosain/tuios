@@ -5158,6 +5158,46 @@ func (msgs Messages) HostRefused(host string) string {
 	return Catalog.Format(msgs.locale, "hostRefused", map[string]any{"host": host})
 }
 
+// HostReasonNoTuios says "tuios is not installed on this machine."
+// in the language the app shows.
+func HostReasonNoTuios() string { return In(i18n.Locale()).HostReasonNoTuios() }
+
+// HostReasonNoTuios says "tuios is not installed on this machine."
+// in the language of msgs.
+func (msgs Messages) HostReasonNoTuios() string {
+	return Catalog.Format(msgs.locale, "hostReasonNoTuios", nil)
+}
+
+// HostReasonRefused says "The machine refused the connection."
+// in the language the app shows.
+func HostReasonRefused() string { return In(i18n.Locale()).HostReasonRefused() }
+
+// HostReasonRefused says "The machine refused the connection."
+// in the language of msgs.
+func (msgs Messages) HostReasonRefused() string {
+	return Catalog.Format(msgs.locale, "hostReasonRefused", nil)
+}
+
+// HostReasonTimeout says "The machine did not answer."
+// in the language the app shows.
+func HostReasonTimeout() string { return In(i18n.Locale()).HostReasonTimeout() }
+
+// HostReasonTimeout says "The machine did not answer."
+// in the language of msgs.
+func (msgs Messages) HostReasonTimeout() string {
+	return Catalog.Format(msgs.locale, "hostReasonTimeout", nil)
+}
+
+// HostReasonAuth says "The machine did not accept the sign-in."
+// in the language the app shows.
+func HostReasonAuth() string { return In(i18n.Locale()).HostReasonAuth() }
+
+// HostReasonAuth says "The machine did not accept the sign-in."
+// in the language of msgs.
+func (msgs Messages) HostReasonAuth() string {
+	return Catalog.Format(msgs.locale, "hostReasonAuth", nil)
+}
+
 // HostAuthHint says "guios signs in with your SSH keys and agent, and never asks for a password. To trust a host's key, run ssh {address} …"
 // in the language the app shows.
 func HostAuthHint(address string) string { return In(i18n.Locale()).HostAuthHint(address) }

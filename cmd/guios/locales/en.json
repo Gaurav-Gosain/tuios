@@ -726,6 +726,10 @@
       }
     }
   },
+  "hostReasonNoTuios": "tuios is not installed on this machine.",
+  "hostReasonRefused": "The machine refused the connection.",
+  "hostReasonTimeout": "The machine did not answer.",
+  "hostReasonAuth": "The machine did not accept the sign-in.",
   "hostAuthHint": "guios signs in with your SSH keys and agent, and never asks for a password. To trust a host's key, run ssh {address} once in a terminal.",
   "@hostAuthHint": {
     "placeholders": {

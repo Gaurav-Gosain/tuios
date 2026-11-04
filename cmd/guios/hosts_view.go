@@ -131,7 +131,7 @@ func (a *App) machineRow(c *ui.Context, pal *palette, h *host) {
 				// line says in plain words what is wrong.
 				say := t
 				if rawReason(t) {
-					say = a.hostStatusWord(h)
+					say = plainReason(t, a.hostStatusWord(h))
 				}
 				line := ui.Text(c, say).FontSize(fsSmall).TextColor(pal.textMuted).LineHeight(1.35).Selectable()
 				if say != t {
@@ -332,6 +332,23 @@ func (a *App) hostFixes(c *ui.Context, pal *palette, h *host) {
 // "sh: tuios: command not found", not a sentence of the app's.
 func rawReason(t string) bool {
 	return strings.Contains(t, ": ") || strings.Contains(t, "\n") || strings.Contains(t, "exit status")
+}
+
+// plainReason says a program's raw reason in the app's words, or word
+// where it knows no better.
+func plainReason(raw, word string) string {
+	l := strings.ToLower(raw)
+	switch {
+	case strings.Contains(l, "command not found") || strings.Contains(l, "not found") && strings.Contains(l, "tuios"):
+		return locales.HostReasonNoTuios()
+	case strings.Contains(l, "connection refused"):
+		return locales.HostReasonRefused()
+	case strings.Contains(l, "timed out") || strings.Contains(l, "no route to host"):
+		return locales.HostReasonTimeout()
+	case strings.Contains(l, "permission denied") || strings.Contains(l, "host key"):
+		return locales.HostReasonAuth()
+	}
+	return word
 }
 
 // smallButton is a button for a sidebar's note.
