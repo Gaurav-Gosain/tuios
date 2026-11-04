@@ -2132,7 +2132,7 @@ except the hunk and file motions and the stage keys, which are in
 | `A` / `D` | Stage or unstage the whole file (`review_stage_file`, `review_unstage_file`) |
 | `z` | Undo the last stage or unstage (`review_undo_stage`) |
 | `s` | One column, or the old and new sides next to each other where the diff column is wide enough (about 120 columns of screen) |
-| `h` / `l`, `left` / `right` | Scroll the code sideways |
+| `h` / `l`, `left` / `right` | Scroll the focused panel sideways. In the diff, scroll the code. In the file list, scroll the paths to show the start of a long path |
 | `tab` | Focus the file list or the diff. A review opens on the diff, or on the list with `[review] focus = "files"` (see [CONFIGURATION.md](CONFIGURATION.md#where-a-review-opens)) |
 | `enter` | In the file list: open that file |
 | `c` | A note on the line under the cursor |

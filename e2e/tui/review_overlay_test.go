@@ -901,3 +901,50 @@ func TestReviewOverlayStagesAHunk(t *testing.T) {
 		t.Fatalf("esc did not close the review: %v\n%s", err, term.Snapshot())
 	}
 }
+
+// With the file list focused, h and l scroll the list's paths and leave the
+// diff where it is (#1581). The path is wider than the list, which shows its
+// end, and the file's one line is wider than the diff column. How that could
+// pass wrongly:
+//   - l could scroll the code as before while the list looks the same. The
+//     line's start must stay on screen after l.
+//   - The path's start could be shown somewhere else, such as a header. It
+//     must be off screen before h, and on screen after it.
+//   - h could reach the start only for the first step. Two steps of h must
+//     show the very first directory.
+func TestReviewListKeysScrollThePaths(t *testing.T) {
+	base, repo := fanFixture(t)
+	writeConfig(t, base, "[review]\nfocus = \"files\"\n")
+	session, path := reviewFanAt(t, base, repo, "rx")
+	const dir = "startdir/second/third/fourth/fifth/sixth/seventh/eighth/ninth"
+	if err := os.MkdirAll(filepath.Join(path, dir), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	line := "LINESTART " + strings.Repeat("wide ", 60) + "LINEEND\n"
+	if err := os.WriteFile(filepath.Join(path, dir, "tenth_file.txt"), []byte(line), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	term := attachIn(t, base, session, startOpts{})
+	sendKeys(t, term, tuitest.Ctrl('b'), "v")
+	waitScreen(t, term, "the review never opened on the list", "Review", "tenth_file.txt", "LINESTART", "open file")
+	if strings.Contains(term.Screen().Text(), "startdir") {
+		t.Fatalf("the list shows the start of a path wider than it before h\n%s", term.Snapshot())
+	}
+	sendKeys(t, term, "l", tuitest.Right)
+	time.Sleep(500 * time.Millisecond)
+	if !strings.Contains(term.Screen().Text(), "LINESTART") {
+		t.Fatalf("l scrolled the diff while the file list had the keys\n%s", term.Snapshot())
+	}
+	sendKeys(t, term, "h", tuitest.Left, "h", "h", "h", "h", "h", "h")
+	waitScreen(t, term, "h did not scroll the list back to the start of the path", "startdir/", "LINESTART")
+	saveFrame(t, term, "review-list-scrolled")
+
+	sendKeys(t, term, tuitest.Tab, "l")
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		text := s.Text()
+		return !strings.Contains(text, "LINESTART") && !strings.Contains(text, "startdir")
+	}, uiTimeout); err != nil {
+		t.Fatalf("with the diff focused, l did not scroll the code or the list kept its scroll: %v\n%s", err, term.Snapshot())
+	}
+}

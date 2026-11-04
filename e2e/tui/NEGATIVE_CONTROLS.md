@@ -12771,3 +12771,16 @@ screen 120 cells wide. The fixed build passes in 9 s.
 The frames are `before-new-pane`, `after-new-pane` and `after-navigator`
 under `TUIOS_E2E_FRAMES`, in the test's folder. Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestScrollingRevealsANewPane$' -v .`.
+## The review's file list scrolls its own paths
+
+`TestReviewListKeysScrollThePaths` opens a review on the file list, with one
+file whose path is wider than the list and whose line is wider than the diff
+column. `l` must leave the line's start on screen, `h` must show the start of
+the path, and with the diff focused `l` must scroll the code. Run on
+2026-11-04 on Linux:
+
+| Control | Where it fails | Verdict |
+|---|---|---|
+| A build of main at 91a743c5a | "l scrolled the diff while the file list had the keys" | **caught** |
+
+The frame is `review-list-scrolled` under `TUIOS_E2E_FRAMES`.
