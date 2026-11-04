@@ -3284,6 +3284,10 @@ Params:
   [The size lease](#the-size-lease).
 - `yield` (optional bool): make the lease a viewer's lease that yields. See
   [The size lease](#the-size-lease).
+- `repaint_on_resize` (optional bool): where the pane changes size, send an
+  `S` snapshot of the daemon's screen at the new size in place of the `R`
+  frame. The client then reflows nothing itself, so its screen stays the
+  daemon's: a prompt the daemon keeps whole on a resize stays whole there.
 - `cell_width`, `cell_height` (optional ints): the cell of the client in
   pixels. See [The size lease](#the-size-lease).
 - `viewer` (optional object): the terminal the stream shows the pane in:

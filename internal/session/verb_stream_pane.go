@@ -135,6 +135,13 @@ type paneStream struct {
 	// reported its terminal. See pane_lease.go and pane_viewers.go.
 	fit   bool
 	yield bool
+	// repaint answers a resize with a snapshot of the daemon's screen at
+	// the new size, not an 'R' frame. A client that reflowed its own copy
+	// at an 'R' laid the screen out by its emulator's rules, not the
+	// daemon's: a prompt the daemon's emulator keeps whole (OSC 133, see
+	// freezePrompt) reflowed there, and the shell's repaint, right for the
+	// daemon's screen, left the prompt on the client's twice (QA-011).
+	repaint bool
 	// keep says the lease never expires by paneLeaseTTL: a yielding lease
 	// over this machine's unix socket, which ends when the stream closes. A
 	// desktop app then holds a pane without a wakeup every few seconds, and
@@ -195,6 +202,9 @@ func (d *Daemon) verbStreamPane(cs *connState, params json.RawMessage) (any, *ve
 		Fit bool `json:"fit"`
 		// Yield makes a fit lease give way to TUI clients completely.
 		Yield bool `json:"yield"`
+		// Repaint sends a snapshot where the pane changed size, in place of
+		// the 'R' frame. See paneStream.repaint.
+		Repaint bool `json:"repaint_on_resize"`
 		// CellWidth and CellHeight are the viewer's cell in pixels.
 		CellWidth  int `json:"cell_width"`
 		CellHeight int `json:"cell_height"`
@@ -236,7 +246,7 @@ func (d *Daemon) verbStreamPane(cs *connState, params json.RawMessage) (any, *ve
 	}
 	win := state.Windows[idx]
 	ps := &paneStream{d: d, cs: cs, sess: sess, window: win.ID, pty: pty, subID: cs.clientID,
-		fit: p.Fit || p.Yield, yield: p.Yield, keep: p.Yield && cs.peerUIDOK && !cs.viaLink, cellW: min(max(p.CellWidth, 0), maxLeaseDim), cellH: min(max(p.CellHeight, 0), maxLeaseDim), inputQ: make(chan []byte, paneInputQueue), quit: make(chan struct{})}
+		fit: p.Fit || p.Yield, yield: p.Yield, repaint: p.Repaint, keep: p.Yield && cs.peerUIDOK && !cs.viaLink, cellW: min(max(p.CellWidth, 0), maxLeaseDim), cellH: min(max(p.CellHeight, 0), maxLeaseDim), inputQ: make(chan []byte, paneInputQueue), quit: make(chan struct{})}
 	if p.LeaseCols > 0 {
 		if verr := ps.admitLease(p.LeaseCols, p.LeaseRows); verr != nil {
 			return nil, verr
@@ -471,6 +481,9 @@ func (ps *paneStream) stream(gone <-chan struct{}) error {
 				return nil
 			}
 			ps.cols, ps.rows = c.width, c.height
+			if ps.repaint {
+				return ps.resnap()
+			}
 			return ps.writeResize()
 		}
 		data := takeChunk(nil, c, ps.sub)
@@ -576,6 +589,19 @@ func (ps *paneStream) recoverGap() error {
 		ps.setSub(sub)
 		return nil
 	}
+	if verr := ps.snapshotSubscribe(); verr != nil {
+		if verr.Code == ErrVerbBusy {
+			return &paneExit{reason: "busy: " + verr.Message}
+		}
+		return ps.exitReason()
+	}
+	return ps.writeSnap()
+}
+
+// resnap sends the pane as the daemon's emulator shows it now, and goes
+// on from there: the subscription starts again where the snapshot was taken.
+func (ps *paneStream) resnap() error {
+	ps.pty.unsubscribeSub(ps.subID, ps.sub)
 	if verr := ps.snapshotSubscribe(); verr != nil {
 		if verr.Code == ErrVerbBusy {
 			return &paneExit{reason: "busy: " + verr.Message}
