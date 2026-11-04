@@ -39,6 +39,7 @@ func (d *Daemon) verbAgentTranscript(cs *connState, params json.RawMessage) (any
 		After      string `json:"after"`
 		Before     string `json:"before"`
 		Limit      *int   `json:"limit"`
+		Image      string `json:"image"`
 	}
 	if verr := decodeParams(params, &p); verr != nil {
 		return nil, verr
@@ -95,6 +96,9 @@ func (d *Daemon) verbAgentTranscript(cs *connState, params json.RawMessage) (any
 	if tr := reg.TranscriptFor(harnessID); tr == nil || tr.Reader != format || !transcriptview.Known(format) {
 		return nil, unsupportedHarnessError(harnessID)
 	}
+	if p.Image != "" {
+		return d.transcriptImage(sess, w.ID, path, format, p.Image)
+	}
 	page, err := transcriptview.Read(path, transcriptview.Options{
 		After:      p.After,
 		Before:     p.Before,
@@ -142,6 +146,29 @@ func (d *Daemon) verbAgentTranscript(cs *connState, params json.RawMessage) (any
 		"untrusted": true,
 	}
 	return out, nil
+}
+
+// transcriptImage reads the data of an image a page named, by its entry id.
+// It reaches only the file of the pane's join, as a page read does.
+func (d *Daemon) transcriptImage(sess *Session, window, path, format, id string) (any, *verbError) {
+	mediaType, data, err := transcriptview.ReadImage(path, format, id)
+	switch {
+	case errors.Is(err, transcriptview.ErrNoFile):
+		return nil, newVerbError(ErrVerbNoTranscript, "the transcript of window "+echoName(window)+" is gone")
+	case errors.Is(err, transcriptview.ErrNoImage):
+		return nil, invalidParam("image", "no image has the id "+echoName(id))
+	case err != nil:
+		return nil, newVerbError(ErrVerbInternal, "could not read the transcript")
+	}
+	return map[string]any{
+		"type":       "agent_transcript_image",
+		"session":    sess.Name(),
+		"window":     window,
+		"image":      id,
+		"media_type": mediaType,
+		"data":       data,
+		"untrusted":  true,
+	}, nil
 }
 
 // unsupportedHarnessError refuses a pane whose harness has no transcript this

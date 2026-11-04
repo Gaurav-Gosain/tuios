@@ -142,6 +142,10 @@ type Entry struct {
 	Diff      *Diff  `json:"diff,omitempty"`
 	Plan      string `json:"plan,omitempty"`
 	Todos     []Todo `json:"todos,omitempty"`
+	// Image is set on the "[image]" text entry of an image a client can
+	// fetch with ReadImage, by the entry's ID. The data stays in the
+	// transcript, so a page carries only its media type.
+	Image *Image `json:"image,omitempty"`
 
 	// line is the byte offset of the record the entry came from, and sub its
 	// place among that record's entries. They place a page's cursor and are
@@ -238,6 +242,11 @@ type DiffLine struct {
 	Text  string  `json:"text"`
 	Spans []Span  `json:"spans,omitempty"`
 	Words []Range `json:"words,omitempty"`
+}
+
+// Image is an image in the conversation.
+type Image struct {
+	MediaType string `json:"media_type"`
 }
 
 // Todo is one item of a todo list.

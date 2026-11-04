@@ -110,6 +110,7 @@ var exampleOutcomes = map[string]exampleOutcome{
 	"reply-history#0":     {errCode: ErrVerbNotHuman, why: "only a client attached right now reads the reply history, and none is"},
 	"add-reply-history#0": {errCode: ErrVerbNotHuman, why: "only a client attached right now adds to the reply history, and none is"},
 	"agent-transcript#2":  {errCode: ErrVerbNotHuman, why: "only a client attached right now may read a transcript, and none is"},
+	"agent-transcript#3":  {errCode: ErrVerbNotHuman, why: "only a client attached right now may read a transcript, and none is"},
 	// The phones for Web Push are the person's, and the example's nonce is a
 	// placeholder. e2e/tui/webpush_test.go registers one with a real nonce.
 	"register-push#0": {errCode: ErrVerbNotHuman, why: "only the person may register a phone, with a live nonce"},
