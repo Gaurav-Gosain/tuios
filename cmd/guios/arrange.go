@@ -338,8 +338,17 @@ func (a *App) masterLine(c *ui.Context, pal *palette, s *proto.Session, b ui.Rec
 	} else {
 		line.Top(pos - paneGap/2).Left(0).Right(0).Height(paneGap).Cursor(ui.CursorResizeRow)
 	}
-	if line.Hovered() || line.Pressed() || md.session == s.ID {
+	held := md.session == s.ID
+	if line.Hovered() || line.Pressed() || held {
 		line.Draw(func(p *ui.Painter, r ui.Rect) {
+			if held {
+				// Where the masters will end when it is let go.
+				if ml.Vertical {
+					p.Fill(ui.Rect{X: r.X + r.W/2 - 1, Y: r.Y, W: 2, H: r.H}, pal.accent.Alpha(0.8), 1)
+				} else {
+					p.Fill(ui.Rect{X: r.X, Y: r.Y + r.H/2 - 1, W: r.W, H: 2}, pal.accent.Alpha(0.8), 1)
+				}
+			}
 			if ml.Vertical {
 				p.Fill(ui.Rect{X: r.X + r.W/2 - 1.5, Y: r.Y + r.H/2 - 18, W: 3, H: 36}, pal.textFaint.Alpha(0.7), 1.5)
 			} else {
@@ -405,7 +414,9 @@ func paneOrder(s *proto.Session) []string {
 	return ids
 }
 
-// arrange asks the session's host for a change to the shown layout.
+// arrange asks the session's host for a change to the shown layout. A
+// change that moved the focus, as the strip's focus actions do, puts the
+// keyboard there.
 func (a *App) arrange(s *proto.Session, op string, set func(*proto.ArrangeParams)) {
 	if s == nil {
 		return
@@ -414,9 +425,28 @@ func (a *App) arrange(s *proto.Session, op string, set func(*proto.ArrangeParams
 	if set != nil {
 		set(&p)
 	}
-	a.call(s.ID, "arrange", p, func(err error) {
-		if err != nil {
-			a.toast(err.Error())
-		}
-	})
+	cl := a.hostOf(s.ID).cl
+	if cl == nil {
+		return
+	}
+	sid := s.ID
+	go func() {
+		var res proto.ArrangeResult
+		err := cl.Call("arrange", p, &res)
+		a.update(func() {
+			if err != nil {
+				a.toast(err.Error())
+				return
+			}
+			if s := a.session(sid); s != nil && res.Focus != "" && s.PaneByID(res.Focus) != nil {
+				if a.focus == nil {
+					a.focus = map[string]string{}
+				}
+				a.focus[sid] = res.Focus
+				s.Focus = res.Focus
+				a.paneRef(res.Focus).Focus()
+				a.wantFocus = res.Focus
+			}
+		})
+	}()
 }

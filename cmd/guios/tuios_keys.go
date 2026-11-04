@@ -507,7 +507,8 @@ func (a *App) runKeyAction(action string) {
 		a.stepWorkspace(s, -1)
 	case "prefix_exit_mode", "workspace_prefix_cancel", "window_prefix_cancel", "layout_prefix_cancel", "minimize_prefix_cancel":
 	case "scroll_focus_left", "scroll_focus_right":
-		a.focusDirection(strings.TrimPrefix(action, "scroll_focus_"))
+		// The strip's columns, as the TUI's scroll focus keys move.
+		a.arrange(s, "scroll."+strings.TrimPrefix(action, "scroll_focus_"), nil)
 	case "snap_left", "snap_right":
 		// As the TUI's: a snap with tiling off, else a move of the focus.
 		if s != nil && s.LayoutMode == "floating" {
