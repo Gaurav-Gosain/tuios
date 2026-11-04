@@ -177,6 +177,13 @@ func durationWords(d time.Duration) string {
 	return locales.DurDays(int(d.Hours() / 24))
 }
 
+// closeSettings closes the Settings window.
+func (a *App) closeSettings() {
+	if a.setWin != nil {
+		a.setWin.Close()
+	}
+}
+
 func (a *App) settingsView(c *ui.Context) {
 	a.looks()
 	pal := paletteFor(c)
@@ -187,6 +194,22 @@ func (a *App) settingsView(c *ui.Context) {
 	}
 	found := a.searchSettings()
 	c.OnShortcut(ui.Cmd, ui.KeyF, func() { a.ss.searchRef.Focus(c) })
+	// Escape and Ctrl+W (Cmd+W on macOS, Ctrl+Shift+W too elsewhere)
+	// close the window, as a dialog's do. Escape first empties the search,
+	// and a shortcut being recorded takes every key.
+	if a.ss.recording == "" {
+		c.OnShortcut(0, ui.KeyEscape, func() {
+			if a.ss.query != "" {
+				a.ss.query = ""
+				return
+			}
+			a.closeSettings()
+		})
+		c.OnShortcut(ui.Cmd, ui.KeyW, a.closeSettings)
+		if runtime.GOOS != "darwin" {
+			c.OnShortcut(ui.Ctrl|ui.Shift, ui.KeyW, a.closeSettings)
+		}
+	}
 	row := ui.Row(c).Fill().AlignItems(ui.Stretch)
 	backdrop(c, row)
 	row.Children(func() {
@@ -344,7 +367,14 @@ func (a *App) settingsSearch(c *ui.Context, pal *palette) {
 		ui.Icon(c, searchIcon).Size(14, 14).TextColor(pal.textFaint).Shrink(0)
 		in = ui.TextInputBase(c.Key("in"), &a.ss.query).Bind(&a.ss.searchRef).Grow(1).MinWidth(0).AlignSelf(ui.Stretch).FontSize(fsBody).
 			Placeholder(locales.CommonSearch()).Label(locales.SettingsSearchLabel())
-		in.OnShortcut(0, ui.KeyEscape, func() { a.ss.query = "" })
+		// Escape empties the search, and with it empty closes the window.
+		in.OnShortcut(0, ui.KeyEscape, func() {
+			if a.ss.query == "" {
+				a.closeSettings()
+				return
+			}
+			a.ss.query = ""
+		})
 		if a.ss.query != "" {
 			x := ui.ButtonBase(c.Key("clear")).Size(16, 16).Radius(8).Center().Shrink(0).Label(locales.SettingsClearSearch()).
 				Background(pal.textFaint.Alpha(0.55)).TextColor(pal.card)
