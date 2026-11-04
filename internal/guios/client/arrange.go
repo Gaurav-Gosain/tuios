@@ -1,6 +1,7 @@
 package client
 
 import (
+	"encoding/json"
 	"errors"
 	"os"
 	"slices"
@@ -968,9 +969,20 @@ func (e *engine) minimize(p proto.ArrangeParams) error {
 		}
 		return set(e.focus, true)
 	}
-	e.c.st.mu.Lock()
-	mins := slices.Clone(e.c.st.minimized[p.Session])
-	e.c.st.mu.Unlock()
+	// Read from the session now: the state the app last built can be
+	// older than the minimize just before this.
+	var mins []string
+	if raw, err := e.c.verb("list-windows", map[string]any{"session": e.name}); err == nil {
+		var wl struct {
+			Windows []windowRow `json:"windows"`
+		}
+		_ = json.Unmarshal(raw, &wl)
+		for _, w := range wl.Windows {
+			if w.Minimized && w.Workspace == e.ti.ws {
+				mins = append(mins, w.ID)
+			}
+		}
+	}
 	if p.Delta > 0 {
 		if p.Delta > len(mins) {
 			return nil

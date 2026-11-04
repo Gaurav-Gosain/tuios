@@ -91,9 +91,6 @@ type stateKeeper struct {
 	layouts map[string]*proto.Layout // by session id
 	trees   map[string]treeInfo      // the shown workspace's tree, by session id
 	shown   map[string][]windowRow   // the shown workspace's panes, by session id
-	// minimized is the shown workspace's minimized panes, by session id,
-	// in the session's order.
-	minimized map[string][]string
 	// prevFocus is the focus each session had at the last build, which a
 	// new pane splits; pending the split guios asked for, by session id.
 	prevFocus map[string]string
@@ -116,7 +113,7 @@ type stateKeeper struct {
 
 func newStateKeeper(c *Client) *stateKeeper {
 	k := &stateKeeper{c: c, layouts: map[string]*proto.Layout{}, trees: map[string]treeInfo{}, zoom: map[string]string{}, unread: map[string]bool{},
-		shown: map[string][]windowRow{}, minimized: map[string][]string{}, prevFocus: map[string]string{}, pending: map[string]pendingSplit{},
+		shown: map[string][]windowRow{}, prevFocus: map[string]string{}, pending: map[string]pendingSplit{},
 		paneSession: map[string]string{}, sessionName: map[string]string{}, kick: make(chan struct{}, 1),
 		exits: map[string]bool{}, closing: map[string]bool{},
 		started: time.Now().UnixMilli()}
@@ -216,7 +213,6 @@ func (k *stateKeeper) build() (*proto.State, error) {
 		// The panes of the workspace the session shows; the others are
 		// counted on their workspaces.
 		var shown []windowRow
-		var minimized []string
 		counts := map[int]*proto.Workspace{}
 		for _, w := range wl.Windows {
 			paneSession[w.ID] = s.ID
@@ -234,9 +230,6 @@ func (k *stateKeeper) build() (*proto.State, error) {
 			cw.Unread = cw.Unread || p.Unread
 			if statusRank(p.Status) > statusRank(cw.Status) {
 				cw.Status = p.Status
-			}
-			if w.Minimized && w.Workspace == ws {
-				minimized = append(minimized, w.ID)
 			}
 			if w.Minimized || w.Workspace != ws {
 				// A minimized pane stays out until it is restored.
@@ -271,7 +264,6 @@ func (k *stateKeeper) build() (*proto.State, error) {
 		k.mu.Lock()
 		k.trees[s.ID] = ti
 		k.shown[s.ID] = shown
-		k.minimized[s.ID] = minimized
 		k.mu.Unlock()
 		if i := proto.Lead(ks.Panes, ks.Focus); i >= 0 && i < len(ks.Panes) {
 			ks.Pane = ks.Panes[i]
