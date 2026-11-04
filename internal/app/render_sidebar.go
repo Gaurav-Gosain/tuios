@@ -1623,10 +1623,11 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 	// move, and the bottom was unreachable. So the budget is laid out for the
 	// attached session's rows either way, and the peeked list is fitted into
 	// the lines that buys, padded when it is shorter and cut to a "+N" when it
-	// is longer. peekRows is the peeked list's own count, which the windowing
-	// below uses once the budget is settled. An attached session with no rows
-	// of its own holds nothing: there is no section to hold, and a peek that
-	// could not show anything would not be one.
+	// is longer. Below the sessions section the fit is widened afterwards, by
+	// the second budget below. peekRows is the peeked list's own count, which
+	// the windowing below uses once the budget is settled. An attached session
+	// with no rows of its own holds nothing: there is no section to hold, and
+	// a peek that could not show anything would not be one.
 	peekRows := nT
 	if peeking {
 		resting := m.sidebarTerminals(sessions, m.sidebarCurrentSessionID())
@@ -1775,6 +1776,29 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 		}
 	}
 	budget := sidebarBudgetLines(avail, plans, planRows, planRowH)
+	// With the terminals section below the sessions one, the resting demand the
+	// pin laid out cuts a longer peek to a "+N" row even when the rail has room
+	// for every pane. The cut buys nothing there: the session rows cannot move,
+	// and the viewport holds because every other section keeps its resting
+	// lines. So the peek grows into the lines no other section claimed at rest,
+	// and is cut only when its panes outrun that height. Above the sessions
+	// section the growth would push the row under the pointer down, which peeks
+	// another session and grows the section again, so there the pin holds.
+	if peeking && !sidebarLayoutStacksAbove(plans, sidebarSectionTerminals, sidebarSectionSessions) {
+		if at := slices.IndexFunc(plans, func(p sidebarSectionPlan) bool {
+			return !p.Spacer && p.Section == sidebarSectionTerminals
+		}); at >= 0 {
+			others := 0
+			for i, p := range plans {
+				if !p.Spacer && p.Section != sidebarSectionTerminals {
+					others += budget[i]
+				}
+			}
+			nT = min(max(peekRows, nT), max(avail-others, budget[at]))
+			planRows[at] = nT
+			budget = sidebarBudgetLines(avail, plans, planRows, planRowH)
+		}
+	}
 	// The row heights before the tall test, which is what the divider's drag
 	// re-runs the test against.
 	shortRowH := make([]int, len(planRowH))
