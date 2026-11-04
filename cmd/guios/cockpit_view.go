@@ -196,6 +196,11 @@ func (a *App) cockpitHeader(c *ui.Context, pal *palette, bar ui.TitleBar, shown 
 		if ck.err != "" {
 			oneLine(c, ck.err, fsSmall, 0).TextColor(pal.dangerText).MaxWidth(320)
 		}
+		if ck.narrow {
+			iconButton(c, "ck-new", plusIcon, a.tip(locales.CockpitNewAgent(), "agents.new")+" (n)", pal, a.newAgent)
+		} else if newAgentButton(c, pal, a.tip(locales.CockpitNewAgent(), "agents.new")) {
+			a.newAgent()
+		}
 		iconButton(c, "ck-close", closeIcon, a.tip(locales.CockpitClose(), "agents.toggle"), pal, a.closeCockpit)
 		a.controlsRoom(c, 0)
 	})
@@ -254,7 +259,11 @@ func (a *App) cockpitFleet(c *ui.Context, pal *palette, width float32, shown boo
 
 // cockpitEmpty says no agent runs, and how to start one.
 func (a *App) cockpitEmpty(c *ui.Context, pal *palette) {
-	emptyBlock(c, pal, agentsIcon, locales.CockpitEmptyTitle(), locales.CockpitEmptyDetail(), false, nil)
+	emptyBlock(c, pal, agentsIcon, locales.CockpitEmptyTitle(), locales.CockpitEmptyDetail(), false, func() {
+		if button(c, "ck-empty-new", locales.CockpitNewAgent(), "n", true, pal) {
+			a.newAgent()
+		}
+	})
 }
 
 // ckHead is a group's heading: its title, its count and a fold mark. A
@@ -551,6 +560,10 @@ func (a *App) cockpitKeys(c *ui.Context, col ui.Element) {
 		a.ckSetTab(tabChanges)
 	case key(0, ui.KeyF):
 		ck.needsOnly = !ck.needsOnly
+	case key(0, ui.KeyN):
+		a.newAgent()
+	case key(0, ui.KeyC):
+		a.openCompare()
 	case key(0, ui.KeyBracketRight):
 		a.ckStepTab(1)
 	case key(0, ui.KeyBracketLeft):
@@ -588,6 +601,9 @@ func (a *App) cockpitHints(c *ui.Context, pal *palette) {
 			hint("↵", locales.CockpitHintOpen())
 			hint("→", locales.CockpitHintDetails())
 		default:
+			if ag, ok := a.ckSelectedAgent(); ok && a.ckHasSiblings(ag) {
+				hint("c", locales.CockpitHintCompare())
+			}
 			ckAllHints(hint)
 		}
 		ui.Spacer(c)
@@ -612,6 +628,7 @@ func ckAllHints(hint func(k, what string)) {
 	hint("r", locales.CockpitHintReply())
 	hint("D", locales.CockpitHintSettle())
 	hint("z", locales.CockpitHintSnooze())
+	hint("n", locales.CockpitHintNewAgent())
 	hint("f", locales.CockpitHintFilter())
 	hint("[ ]", locales.CockpitHintTabs())
 }
@@ -655,7 +672,7 @@ func (a *App) agentsRow(c *ui.Context, pal *palette) {
 		row.Background(pal.rowHover)
 	}
 	pointerTooltip(c, row, "agents-tip", a.tip(locales.ActionAgents(), "agents.toggle"))
-	if row.Clicked() {
+	if row.Clicked() && !a.ck.newHover {
 		c.Invalidate()
 		a.toggleCockpit()
 	}
@@ -665,6 +682,21 @@ func (a *App) agentsRow(c *ui.Context, pal *palette) {
 		ui.Spacer(c)
 		if waiting > 0 {
 			countBadge(c, waiting, pal.attention, pal.onDone)
+		}
+		// New agent, in space the row keeps for it: it shows while the
+		// pointer is over the row, and its place never moves the badge.
+		nb := ui.ButtonBase(c.Key("agents-new")).Size(22, 22).Radius(rRow).Center().Shrink(0).
+			Label(locales.CockpitNewAgent()).Tooltip(a.tip(locales.CockpitNewAgent(), "agents.new"))
+		if !row.Hovered() && !nb.Hovered() {
+			nb.Opacity(0)
+		} else if nb.Hovered() {
+			nb.Background(pal.rowHover)
+		}
+		a.ck.newHover = nb.Hovered()
+		nb.Children(func() { ui.Icon(c, plusIcon).Size(14, 14).TextColor(pal.textMuted) })
+		if nb.Clicked() {
+			c.Invalidate()
+			a.newAgent()
 		}
 	})
 }
@@ -727,4 +759,20 @@ func ckMark(c *ui.Context, pal *palette, st proto.Status, unread bool, size floa
 // section 9).
 func (a *App) ckSide(min float32) float32 {
 	return max(min, (a.ck.focusW-threadW)/2)
+}
+
+// newAgentButton is the agents view's New agent button: a plus and its
+// label, with n as its key.
+func newAgentButton(c *ui.Context, pal *palette, tip string) bool {
+	b := ui.ButtonBase(c.Key("ck-new")).Height(hControlSm).Padding(0, 10, 0, 8).Gap(6).Radius(rControl).AlignItems(ui.Center).Shrink(0).
+		Label(locales.CockpitNewAgent()).Tooltip(tip + " (n)")
+	face(b, pal, pal.control)
+	if b.Hovered() {
+		b.Background(pal.controlHover)
+	}
+	b.Children(func() {
+		ui.Icon(c, plusIcon).Size(14, 14).TextColor(pal.text).Shrink(0)
+		ui.Text(c, locales.CockpitNewAgent()).FontSize(fsBody).FontWeight(wMedium).TextColor(pal.text).SingleLine()
+	})
+	return b.Clicked()
 }

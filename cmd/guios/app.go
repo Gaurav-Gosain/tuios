@@ -65,6 +65,9 @@ type prefs struct {
 	ArchivedOpen bool `json:"archivedOpen,omitempty"`
 	// QuickSession is the session the quick terminal shows (quick.go).
 	QuickSession string `json:"quickSession,omitempty"`
+	// Spawn is what the New agent sheet remembers, by folder (spawn.go);
+	// "" holds the agent the last start used.
+	Spawn map[string]spawnPreset `json:"spawn,omitempty"`
 }
 
 const (

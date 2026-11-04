@@ -1924,5 +1924,199 @@
   "scrollbackTitle": "Commands",
   "scrollbackNoMarks": "This pane's shell does not mark its commands. Set up the tuios shell integration to use the scrollback browser.",
   "scrollbackCopied": "Copied {n} characters.",
-  "scrollbackFooter": "j and k move. J and K scroll the output. y copies the output, c the command. Enter types the command again. / filters. Esc closes."
+  "scrollbackFooter": "j and k move. J and K scroll the output. y copies the output, c the command. Enter types the command again. / filters. Esc closes.",
+  "actionNewAgent": "New agent…",
+  "cockpitNewAgent": "New agent",
+  "cockpitHintNewAgent": "new agent",
+  "cockpitCompare": "Compare attempts",
+  "cockpitHintCompare": "compare",
+  "paletteNewAgent": "Start a new agent",
+  "spawnTitle": "New agent",
+  "spawnClose": "Close",
+  "spawnFrom": "from {repo}",
+  "spawnFromBranch": "from {repo} / {branch}",
+  "spawnIn": "in {folder}",
+  "spawnTask": "Task",
+  "spawnTaskPlaceholder": "What should the agent do?",
+  "spawnAgent": "Agent",
+  "spawnMoreAgents": "More",
+  "spawnNoAgentFound": "No agent found. Install one, such as claude or codex.",
+  "spawnAgentRunning": "{count} running",
+  "@spawnAgentRunning": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "spawnAgentInstalled": "Installed",
+  "spawnAgentMissing": "Not installed here",
+  "spawnModel": "Model",
+  "spawnModelDefault": "The agent's default",
+  "spawnModelPassed": "Goes as --model",
+  "spawnWhere": "Where it works",
+  "spawnNewWorktree": "New worktree",
+  "spawnThisFolder": "This folder",
+  "spawnBranch": "Branch",
+  "spawnFromTask": "From the task",
+  "spawnBase": "Base",
+  "spawnDirty": "{count, plural, one {# uncommitted file stays here} other {# uncommitted files stay here}}",
+  "@spawnDirty": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "spawnMachine": "Machine",
+  "spawnBestFit": "Best fit first",
+  "spawnNotConnected": "Not connected",
+  "spawnCoresWorking": "{cores} cores · {working} working",
+  "@spawnCoresWorking": {
+    "placeholders": {
+      "cores": {
+        "type": "int"
+      },
+      "working": {
+        "type": "int"
+      }
+    }
+  },
+  "spawnWorking": "{working} working",
+  "@spawnWorking": {
+    "placeholders": {
+      "working": {
+        "type": "int"
+      }
+    }
+  },
+  "spawnThisMachine": "this machine",
+  "spawnAgentReady": "{agent} ready",
+  "spawnOrderHolds": "The order stays the same while this sheet is open.",
+  "spawnAttempts": "Attempts",
+  "spawnFewer": "Fewer attempts",
+  "spawnMore": "More attempts",
+  "spawnOneAttempt": "One agent works on the task.",
+  "spawnManyAttempts": "{count} agents work on the task, each in its own worktree and branch.",
+  "@spawnManyAttempts": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "spawnAttemptChip": "Attempt {letter}: {agent}",
+  "spawnAttemptNext": "Click to use the next agent for this attempt.",
+  "spawnVary": "Vary agents",
+  "spawnHintStart": "start",
+  "spawnHintNext": "next field",
+  "spawnHintPreset": "remember for this folder",
+  "spawnStartOne": "Start agent",
+  "spawnStartMany": "Start {count} agents",
+  "@spawnStartMany": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "spawnSavedPreset": "This folder keeps these choices for the next agent.",
+  "spawnNoDaemon": "The tuios daemon is not connected. Start it, then try again.",
+  "spawnReading": "Reading the folder. Try again in a moment.",
+  "spawnReadingAll": "Reading the folder and the agents.",
+  "spawnNoRepo": "This folder is not in a git repository.",
+  "spawnNoOrigin": "The repository has no origin remote, so {host} cannot find it.",
+  "spawnFarWorktree": "On another machine, the agent works in a new worktree.",
+  "spawnStarting": "This sheet is starting its agents. Wait for the result.",
+  "spawnWriteTask": "Write the task first.",
+  "spawnNoAgent": "No agent is known on this machine.",
+  "spawnNotInstalled": "{agent} is not installed on this machine.",
+  "spawnBadModel": "A model name cannot start with -.",
+  "spawnWriteBranch": "Write a branch name.",
+  "spawnBranchChars": "A branch name can have only the letters A to Z and a to z, the digits 0 to 9, and / . _ -.",
+  "spawnBranchGit": "Git does not accept this branch name.",
+  "spawnBadBase": "A base cannot start with -.",
+  "spawnFarImages": "Images go only to an agent on this machine. Remove them, or pick this machine.",
+  "spawnImagesNotSaved": "The images were not saved: {why}",
+  "spawnStartingFolder": "Starting {agent} in this folder.",
+  "spawnStartingFan": "Starting {count} agents in new worktrees.",
+  "@spawnStartingFan": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "spawnStartingWorktree": "Starting {agent} in a new worktree.",
+  "spawnFailed": "The agent did not start: {why}. Press n in the agents view to change the sheet.",
+  "spawnStartedFan": "Started {count} agents on {group}.",
+  "@spawnStartedFan": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "spawnStartedWorktree": "Started {branch}. The task goes in when the agent is ready.",
+  "spawnNotReady": "Started {agent} in {session}. It is not ready: {why}",
+  "spawnTaskNotSent": "Started {agent} in {session}. The task was not sent: {why}",
+  "spawnStartedIn": "Started {agent} in {session}.",
+  "compareTitle": "Compare attempts",
+  "compareSelectAttempt": "Select an attempt of a fan to compare its attempts.",
+  "compareCannotRead": "tuios cannot compare the attempts now: {why}",
+  "compareChanged": "The attempts changed after the last read. Check them, then press k again.",
+  "compareOneLeft": "One attempt is left. There is nothing to judge.",
+  "compareJudgeFailed": "The judge did not start: {why}",
+  "compareJudgeNotReady": "The judge in {session} is not ready: {why}",
+  "compareJudgeStarted": "A judge reads the attempts in {session}. Its verdict shows here when it reports.",
+  "compareOldDaemon": "This daemon is older than guios. Restart it, then try again.",
+  "compareKeepFailed": "The attempt was not kept: {why}",
+  "compareKept": "{count, plural, one {Kept {letter}, {session}. Removed # other attempt. Its branch stays.} other {Kept {letter}, {session}. Removed # other attempts. Their branches stay.}}",
+  "@compareKept": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "compareKeptLeft": "{count} could not be removed. Run tuios worktree ls to see them.",
+  "@compareKeptLeft": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "compareNoPane": "The pane of {session} is not in the list.",
+  "compareFromBase": "{group} from {base}",
+  "compareBack": "Back",
+  "compareVerdictPick": "The judge picks {pick}",
+  "compareJudgePick": "Judge's pick",
+  "compareFiles": "{count, plural, one {# file} other {# files}}",
+  "@compareFiles": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "compareVerify": "Verify: {state}",
+  "compareNoChanges": "No changes yet.",
+  "compareGone": "Gone",
+  "compareDone": "Done",
+  "compareKeepWarn": "Press k again to keep {letter}. This removes {others}. Their changes are stashed, and their branches stay.",
+  "compareKeepIgnored": "{count, plural, one {It also deletes # file that git ignores in them.} other {It also deletes # files that git ignores in them.}}",
+  "@compareKeepIgnored": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "compareIgnoredFailed": "tuios cannot list the ignored files of {list}. Press k to read them again.",
+  "compareHintPick": "pick",
+  "compareHintRead": "read again",
+  "compareJudge": "Judge",
+  "compareKeep": "Keep {letter}",
+  "compareKeepAgain": "Keep {letter} now"
 }

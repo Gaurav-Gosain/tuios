@@ -10863,3 +10863,1101 @@ func ScrollbackFooter() string { return In(i18n.Locale()).ScrollbackFooter() }
 func (msgs Messages) ScrollbackFooter() string {
 	return Catalog.Format(msgs.locale, "scrollbackFooter", nil)
 }
+
+// ActionNewAgent says "New agent…"
+// in the language the app shows.
+func ActionNewAgent() string { return In(i18n.Locale()).ActionNewAgent() }
+
+// ActionNewAgent says "New agent…"
+// in the language of msgs.
+func (msgs Messages) ActionNewAgent() string {
+	return Catalog.Format(msgs.locale, "actionNewAgent", nil)
+}
+
+// CockpitNewAgent says "New agent"
+// in the language the app shows.
+func CockpitNewAgent() string { return In(i18n.Locale()).CockpitNewAgent() }
+
+// CockpitNewAgent says "New agent"
+// in the language of msgs.
+func (msgs Messages) CockpitNewAgent() string {
+	return Catalog.Format(msgs.locale, "cockpitNewAgent", nil)
+}
+
+// CockpitHintNewAgent says "new agent"
+// in the language the app shows.
+func CockpitHintNewAgent() string { return In(i18n.Locale()).CockpitHintNewAgent() }
+
+// CockpitHintNewAgent says "new agent"
+// in the language of msgs.
+func (msgs Messages) CockpitHintNewAgent() string {
+	return Catalog.Format(msgs.locale, "cockpitHintNewAgent", nil)
+}
+
+// CockpitCompare says "Compare attempts"
+// in the language the app shows.
+func CockpitCompare() string { return In(i18n.Locale()).CockpitCompare() }
+
+// CockpitCompare says "Compare attempts"
+// in the language of msgs.
+func (msgs Messages) CockpitCompare() string {
+	return Catalog.Format(msgs.locale, "cockpitCompare", nil)
+}
+
+// CockpitHintCompare says "compare"
+// in the language the app shows.
+func CockpitHintCompare() string { return In(i18n.Locale()).CockpitHintCompare() }
+
+// CockpitHintCompare says "compare"
+// in the language of msgs.
+func (msgs Messages) CockpitHintCompare() string {
+	return Catalog.Format(msgs.locale, "cockpitHintCompare", nil)
+}
+
+// PaletteNewAgent says "Start a new agent"
+// in the language the app shows.
+func PaletteNewAgent() string { return In(i18n.Locale()).PaletteNewAgent() }
+
+// PaletteNewAgent says "Start a new agent"
+// in the language of msgs.
+func (msgs Messages) PaletteNewAgent() string {
+	return Catalog.Format(msgs.locale, "paletteNewAgent", nil)
+}
+
+// SpawnTitle says "New agent"
+// in the language the app shows.
+func SpawnTitle() string { return In(i18n.Locale()).SpawnTitle() }
+
+// SpawnTitle says "New agent"
+// in the language of msgs.
+func (msgs Messages) SpawnTitle() string {
+	return Catalog.Format(msgs.locale, "spawnTitle", nil)
+}
+
+// SpawnClose says "Close"
+// in the language the app shows.
+func SpawnClose() string { return In(i18n.Locale()).SpawnClose() }
+
+// SpawnClose says "Close"
+// in the language of msgs.
+func (msgs Messages) SpawnClose() string {
+	return Catalog.Format(msgs.locale, "spawnClose", nil)
+}
+
+// SpawnFrom says "from {repo}"
+// in the language the app shows.
+func SpawnFrom(repo string) string { return In(i18n.Locale()).SpawnFrom(repo) }
+
+// SpawnFrom says "from {repo}"
+// in the language of msgs.
+func (msgs Messages) SpawnFrom(repo string) string {
+	return Catalog.Format(msgs.locale, "spawnFrom", map[string]any{"repo": repo})
+}
+
+// SpawnFromBranch says "from {repo} / {branch}"
+// in the language the app shows.
+func SpawnFromBranch(repo string, branch string) string {
+	return In(i18n.Locale()).SpawnFromBranch(repo, branch)
+}
+
+// SpawnFromBranch says "from {repo} / {branch}"
+// in the language of msgs.
+func (msgs Messages) SpawnFromBranch(repo string, branch string) string {
+	return Catalog.Format(msgs.locale, "spawnFromBranch", map[string]any{"repo": repo, "branch": branch})
+}
+
+// SpawnIn says "in {folder}"
+// in the language the app shows.
+func SpawnIn(folder string) string { return In(i18n.Locale()).SpawnIn(folder) }
+
+// SpawnIn says "in {folder}"
+// in the language of msgs.
+func (msgs Messages) SpawnIn(folder string) string {
+	return Catalog.Format(msgs.locale, "spawnIn", map[string]any{"folder": folder})
+}
+
+// SpawnTask says "Task"
+// in the language the app shows.
+func SpawnTask() string { return In(i18n.Locale()).SpawnTask() }
+
+// SpawnTask says "Task"
+// in the language of msgs.
+func (msgs Messages) SpawnTask() string {
+	return Catalog.Format(msgs.locale, "spawnTask", nil)
+}
+
+// SpawnTaskPlaceholder says "What should the agent do?"
+// in the language the app shows.
+func SpawnTaskPlaceholder() string { return In(i18n.Locale()).SpawnTaskPlaceholder() }
+
+// SpawnTaskPlaceholder says "What should the agent do?"
+// in the language of msgs.
+func (msgs Messages) SpawnTaskPlaceholder() string {
+	return Catalog.Format(msgs.locale, "spawnTaskPlaceholder", nil)
+}
+
+// SpawnAgent says "Agent"
+// in the language the app shows.
+func SpawnAgent() string { return In(i18n.Locale()).SpawnAgent() }
+
+// SpawnAgent says "Agent"
+// in the language of msgs.
+func (msgs Messages) SpawnAgent() string {
+	return Catalog.Format(msgs.locale, "spawnAgent", nil)
+}
+
+// SpawnMoreAgents says "More"
+// in the language the app shows.
+func SpawnMoreAgents() string { return In(i18n.Locale()).SpawnMoreAgents() }
+
+// SpawnMoreAgents says "More"
+// in the language of msgs.
+func (msgs Messages) SpawnMoreAgents() string {
+	return Catalog.Format(msgs.locale, "spawnMoreAgents", nil)
+}
+
+// SpawnNoAgentFound says "No agent found. Install one, such as claude or codex."
+// in the language the app shows.
+func SpawnNoAgentFound() string { return In(i18n.Locale()).SpawnNoAgentFound() }
+
+// SpawnNoAgentFound says "No agent found. Install one, such as claude or codex."
+// in the language of msgs.
+func (msgs Messages) SpawnNoAgentFound() string {
+	return Catalog.Format(msgs.locale, "spawnNoAgentFound", nil)
+}
+
+// SpawnAgentRunning says "{count} running"
+// in the language the app shows.
+func SpawnAgentRunning(count int) string { return In(i18n.Locale()).SpawnAgentRunning(count) }
+
+// SpawnAgentRunning says "{count} running"
+// in the language of msgs.
+func (msgs Messages) SpawnAgentRunning(count int) string {
+	return Catalog.Format(msgs.locale, "spawnAgentRunning", map[string]any{"count": count})
+}
+
+// SpawnAgentInstalled says "Installed"
+// in the language the app shows.
+func SpawnAgentInstalled() string { return In(i18n.Locale()).SpawnAgentInstalled() }
+
+// SpawnAgentInstalled says "Installed"
+// in the language of msgs.
+func (msgs Messages) SpawnAgentInstalled() string {
+	return Catalog.Format(msgs.locale, "spawnAgentInstalled", nil)
+}
+
+// SpawnAgentMissing says "Not installed here"
+// in the language the app shows.
+func SpawnAgentMissing() string { return In(i18n.Locale()).SpawnAgentMissing() }
+
+// SpawnAgentMissing says "Not installed here"
+// in the language of msgs.
+func (msgs Messages) SpawnAgentMissing() string {
+	return Catalog.Format(msgs.locale, "spawnAgentMissing", nil)
+}
+
+// SpawnModel says "Model"
+// in the language the app shows.
+func SpawnModel() string { return In(i18n.Locale()).SpawnModel() }
+
+// SpawnModel says "Model"
+// in the language of msgs.
+func (msgs Messages) SpawnModel() string {
+	return Catalog.Format(msgs.locale, "spawnModel", nil)
+}
+
+// SpawnModelDefault says "The agent's default"
+// in the language the app shows.
+func SpawnModelDefault() string { return In(i18n.Locale()).SpawnModelDefault() }
+
+// SpawnModelDefault says "The agent's default"
+// in the language of msgs.
+func (msgs Messages) SpawnModelDefault() string {
+	return Catalog.Format(msgs.locale, "spawnModelDefault", nil)
+}
+
+// SpawnModelPassed says "Goes as --model"
+// in the language the app shows.
+func SpawnModelPassed() string { return In(i18n.Locale()).SpawnModelPassed() }
+
+// SpawnModelPassed says "Goes as --model"
+// in the language of msgs.
+func (msgs Messages) SpawnModelPassed() string {
+	return Catalog.Format(msgs.locale, "spawnModelPassed", nil)
+}
+
+// SpawnWhere says "Where it works"
+// in the language the app shows.
+func SpawnWhere() string { return In(i18n.Locale()).SpawnWhere() }
+
+// SpawnWhere says "Where it works"
+// in the language of msgs.
+func (msgs Messages) SpawnWhere() string {
+	return Catalog.Format(msgs.locale, "spawnWhere", nil)
+}
+
+// SpawnNewWorktree says "New worktree"
+// in the language the app shows.
+func SpawnNewWorktree() string { return In(i18n.Locale()).SpawnNewWorktree() }
+
+// SpawnNewWorktree says "New worktree"
+// in the language of msgs.
+func (msgs Messages) SpawnNewWorktree() string {
+	return Catalog.Format(msgs.locale, "spawnNewWorktree", nil)
+}
+
+// SpawnThisFolder says "This folder"
+// in the language the app shows.
+func SpawnThisFolder() string { return In(i18n.Locale()).SpawnThisFolder() }
+
+// SpawnThisFolder says "This folder"
+// in the language of msgs.
+func (msgs Messages) SpawnThisFolder() string {
+	return Catalog.Format(msgs.locale, "spawnThisFolder", nil)
+}
+
+// SpawnBranch says "Branch"
+// in the language the app shows.
+func SpawnBranch() string { return In(i18n.Locale()).SpawnBranch() }
+
+// SpawnBranch says "Branch"
+// in the language of msgs.
+func (msgs Messages) SpawnBranch() string {
+	return Catalog.Format(msgs.locale, "spawnBranch", nil)
+}
+
+// SpawnFromTask says "From the task"
+// in the language the app shows.
+func SpawnFromTask() string { return In(i18n.Locale()).SpawnFromTask() }
+
+// SpawnFromTask says "From the task"
+// in the language of msgs.
+func (msgs Messages) SpawnFromTask() string {
+	return Catalog.Format(msgs.locale, "spawnFromTask", nil)
+}
+
+// SpawnBase says "Base"
+// in the language the app shows.
+func SpawnBase() string { return In(i18n.Locale()).SpawnBase() }
+
+// SpawnBase says "Base"
+// in the language of msgs.
+func (msgs Messages) SpawnBase() string {
+	return Catalog.Format(msgs.locale, "spawnBase", nil)
+}
+
+// SpawnDirty says "{count, plural, one {# uncommitted file stays here} other {# uncommitted files stay here}}"
+// in the language the app shows.
+func SpawnDirty(count int) string { return In(i18n.Locale()).SpawnDirty(count) }
+
+// SpawnDirty says "{count, plural, one {# uncommitted file stays here} other {# uncommitted files stay here}}"
+// in the language of msgs.
+func (msgs Messages) SpawnDirty(count int) string {
+	return Catalog.Format(msgs.locale, "spawnDirty", map[string]any{"count": count})
+}
+
+// SpawnMachine says "Machine"
+// in the language the app shows.
+func SpawnMachine() string { return In(i18n.Locale()).SpawnMachine() }
+
+// SpawnMachine says "Machine"
+// in the language of msgs.
+func (msgs Messages) SpawnMachine() string {
+	return Catalog.Format(msgs.locale, "spawnMachine", nil)
+}
+
+// SpawnBestFit says "Best fit first"
+// in the language the app shows.
+func SpawnBestFit() string { return In(i18n.Locale()).SpawnBestFit() }
+
+// SpawnBestFit says "Best fit first"
+// in the language of msgs.
+func (msgs Messages) SpawnBestFit() string {
+	return Catalog.Format(msgs.locale, "spawnBestFit", nil)
+}
+
+// SpawnNotConnected says "Not connected"
+// in the language the app shows.
+func SpawnNotConnected() string { return In(i18n.Locale()).SpawnNotConnected() }
+
+// SpawnNotConnected says "Not connected"
+// in the language of msgs.
+func (msgs Messages) SpawnNotConnected() string {
+	return Catalog.Format(msgs.locale, "spawnNotConnected", nil)
+}
+
+// SpawnCoresWorking says "{cores} cores · {working} working"
+// in the language the app shows.
+func SpawnCoresWorking(cores int, working int) string {
+	return In(i18n.Locale()).SpawnCoresWorking(cores, working)
+}
+
+// SpawnCoresWorking says "{cores} cores · {working} working"
+// in the language of msgs.
+func (msgs Messages) SpawnCoresWorking(cores int, working int) string {
+	return Catalog.Format(msgs.locale, "spawnCoresWorking", map[string]any{"cores": cores, "working": working})
+}
+
+// SpawnWorking says "{working} working"
+// in the language the app shows.
+func SpawnWorking(working int) string { return In(i18n.Locale()).SpawnWorking(working) }
+
+// SpawnWorking says "{working} working"
+// in the language of msgs.
+func (msgs Messages) SpawnWorking(working int) string {
+	return Catalog.Format(msgs.locale, "spawnWorking", map[string]any{"working": working})
+}
+
+// SpawnThisMachine says "this machine"
+// in the language the app shows.
+func SpawnThisMachine() string { return In(i18n.Locale()).SpawnThisMachine() }
+
+// SpawnThisMachine says "this machine"
+// in the language of msgs.
+func (msgs Messages) SpawnThisMachine() string {
+	return Catalog.Format(msgs.locale, "spawnThisMachine", nil)
+}
+
+// SpawnAgentReady says "{agent} ready"
+// in the language the app shows.
+func SpawnAgentReady(agent string) string { return In(i18n.Locale()).SpawnAgentReady(agent) }
+
+// SpawnAgentReady says "{agent} ready"
+// in the language of msgs.
+func (msgs Messages) SpawnAgentReady(agent string) string {
+	return Catalog.Format(msgs.locale, "spawnAgentReady", map[string]any{"agent": agent})
+}
+
+// SpawnOrderHolds says "The order stays the same while this sheet is open."
+// in the language the app shows.
+func SpawnOrderHolds() string { return In(i18n.Locale()).SpawnOrderHolds() }
+
+// SpawnOrderHolds says "The order stays the same while this sheet is open."
+// in the language of msgs.
+func (msgs Messages) SpawnOrderHolds() string {
+	return Catalog.Format(msgs.locale, "spawnOrderHolds", nil)
+}
+
+// SpawnAttempts says "Attempts"
+// in the language the app shows.
+func SpawnAttempts() string { return In(i18n.Locale()).SpawnAttempts() }
+
+// SpawnAttempts says "Attempts"
+// in the language of msgs.
+func (msgs Messages) SpawnAttempts() string {
+	return Catalog.Format(msgs.locale, "spawnAttempts", nil)
+}
+
+// SpawnFewer says "Fewer attempts"
+// in the language the app shows.
+func SpawnFewer() string { return In(i18n.Locale()).SpawnFewer() }
+
+// SpawnFewer says "Fewer attempts"
+// in the language of msgs.
+func (msgs Messages) SpawnFewer() string {
+	return Catalog.Format(msgs.locale, "spawnFewer", nil)
+}
+
+// SpawnMore says "More attempts"
+// in the language the app shows.
+func SpawnMore() string { return In(i18n.Locale()).SpawnMore() }
+
+// SpawnMore says "More attempts"
+// in the language of msgs.
+func (msgs Messages) SpawnMore() string {
+	return Catalog.Format(msgs.locale, "spawnMore", nil)
+}
+
+// SpawnOneAttempt says "One agent works on the task."
+// in the language the app shows.
+func SpawnOneAttempt() string { return In(i18n.Locale()).SpawnOneAttempt() }
+
+// SpawnOneAttempt says "One agent works on the task."
+// in the language of msgs.
+func (msgs Messages) SpawnOneAttempt() string {
+	return Catalog.Format(msgs.locale, "spawnOneAttempt", nil)
+}
+
+// SpawnManyAttempts says "{count} agents work on the task, each in its own worktree and branch."
+// in the language the app shows.
+func SpawnManyAttempts(count int) string { return In(i18n.Locale()).SpawnManyAttempts(count) }
+
+// SpawnManyAttempts says "{count} agents work on the task, each in its own worktree and branch."
+// in the language of msgs.
+func (msgs Messages) SpawnManyAttempts(count int) string {
+	return Catalog.Format(msgs.locale, "spawnManyAttempts", map[string]any{"count": count})
+}
+
+// SpawnAttemptChip says "Attempt {letter}: {agent}"
+// in the language the app shows.
+func SpawnAttemptChip(letter string, agent string) string {
+	return In(i18n.Locale()).SpawnAttemptChip(letter, agent)
+}
+
+// SpawnAttemptChip says "Attempt {letter}: {agent}"
+// in the language of msgs.
+func (msgs Messages) SpawnAttemptChip(letter string, agent string) string {
+	return Catalog.Format(msgs.locale, "spawnAttemptChip", map[string]any{"letter": letter, "agent": agent})
+}
+
+// SpawnAttemptNext says "Click to use the next agent for this attempt."
+// in the language the app shows.
+func SpawnAttemptNext() string { return In(i18n.Locale()).SpawnAttemptNext() }
+
+// SpawnAttemptNext says "Click to use the next agent for this attempt."
+// in the language of msgs.
+func (msgs Messages) SpawnAttemptNext() string {
+	return Catalog.Format(msgs.locale, "spawnAttemptNext", nil)
+}
+
+// SpawnVary says "Vary agents"
+// in the language the app shows.
+func SpawnVary() string { return In(i18n.Locale()).SpawnVary() }
+
+// SpawnVary says "Vary agents"
+// in the language of msgs.
+func (msgs Messages) SpawnVary() string {
+	return Catalog.Format(msgs.locale, "spawnVary", nil)
+}
+
+// SpawnHintStart says "start"
+// in the language the app shows.
+func SpawnHintStart() string { return In(i18n.Locale()).SpawnHintStart() }
+
+// SpawnHintStart says "start"
+// in the language of msgs.
+func (msgs Messages) SpawnHintStart() string {
+	return Catalog.Format(msgs.locale, "spawnHintStart", nil)
+}
+
+// SpawnHintNext says "next field"
+// in the language the app shows.
+func SpawnHintNext() string { return In(i18n.Locale()).SpawnHintNext() }
+
+// SpawnHintNext says "next field"
+// in the language of msgs.
+func (msgs Messages) SpawnHintNext() string {
+	return Catalog.Format(msgs.locale, "spawnHintNext", nil)
+}
+
+// SpawnHintPreset says "remember for this folder"
+// in the language the app shows.
+func SpawnHintPreset() string { return In(i18n.Locale()).SpawnHintPreset() }
+
+// SpawnHintPreset says "remember for this folder"
+// in the language of msgs.
+func (msgs Messages) SpawnHintPreset() string {
+	return Catalog.Format(msgs.locale, "spawnHintPreset", nil)
+}
+
+// SpawnStartOne says "Start agent"
+// in the language the app shows.
+func SpawnStartOne() string { return In(i18n.Locale()).SpawnStartOne() }
+
+// SpawnStartOne says "Start agent"
+// in the language of msgs.
+func (msgs Messages) SpawnStartOne() string {
+	return Catalog.Format(msgs.locale, "spawnStartOne", nil)
+}
+
+// SpawnStartMany says "Start {count} agents"
+// in the language the app shows.
+func SpawnStartMany(count int) string { return In(i18n.Locale()).SpawnStartMany(count) }
+
+// SpawnStartMany says "Start {count} agents"
+// in the language of msgs.
+func (msgs Messages) SpawnStartMany(count int) string {
+	return Catalog.Format(msgs.locale, "spawnStartMany", map[string]any{"count": count})
+}
+
+// SpawnSavedPreset says "This folder keeps these choices for the next agent."
+// in the language the app shows.
+func SpawnSavedPreset() string { return In(i18n.Locale()).SpawnSavedPreset() }
+
+// SpawnSavedPreset says "This folder keeps these choices for the next agent."
+// in the language of msgs.
+func (msgs Messages) SpawnSavedPreset() string {
+	return Catalog.Format(msgs.locale, "spawnSavedPreset", nil)
+}
+
+// SpawnNoDaemon says "The tuios daemon is not connected. Start it, then try again."
+// in the language the app shows.
+func SpawnNoDaemon() string { return In(i18n.Locale()).SpawnNoDaemon() }
+
+// SpawnNoDaemon says "The tuios daemon is not connected. Start it, then try again."
+// in the language of msgs.
+func (msgs Messages) SpawnNoDaemon() string {
+	return Catalog.Format(msgs.locale, "spawnNoDaemon", nil)
+}
+
+// SpawnReading says "Reading the folder. Try again in a moment."
+// in the language the app shows.
+func SpawnReading() string { return In(i18n.Locale()).SpawnReading() }
+
+// SpawnReading says "Reading the folder. Try again in a moment."
+// in the language of msgs.
+func (msgs Messages) SpawnReading() string {
+	return Catalog.Format(msgs.locale, "spawnReading", nil)
+}
+
+// SpawnReadingAll says "Reading the folder and the agents."
+// in the language the app shows.
+func SpawnReadingAll() string { return In(i18n.Locale()).SpawnReadingAll() }
+
+// SpawnReadingAll says "Reading the folder and the agents."
+// in the language of msgs.
+func (msgs Messages) SpawnReadingAll() string {
+	return Catalog.Format(msgs.locale, "spawnReadingAll", nil)
+}
+
+// SpawnNoRepo says "This folder is not in a git repository."
+// in the language the app shows.
+func SpawnNoRepo() string { return In(i18n.Locale()).SpawnNoRepo() }
+
+// SpawnNoRepo says "This folder is not in a git repository."
+// in the language of msgs.
+func (msgs Messages) SpawnNoRepo() string {
+	return Catalog.Format(msgs.locale, "spawnNoRepo", nil)
+}
+
+// SpawnNoOrigin says "The repository has no origin remote, so {host} cannot find it."
+// in the language the app shows.
+func SpawnNoOrigin(host string) string { return In(i18n.Locale()).SpawnNoOrigin(host) }
+
+// SpawnNoOrigin says "The repository has no origin remote, so {host} cannot find it."
+// in the language of msgs.
+func (msgs Messages) SpawnNoOrigin(host string) string {
+	return Catalog.Format(msgs.locale, "spawnNoOrigin", map[string]any{"host": host})
+}
+
+// SpawnFarWorktree says "On another machine, the agent works in a new worktree."
+// in the language the app shows.
+func SpawnFarWorktree() string { return In(i18n.Locale()).SpawnFarWorktree() }
+
+// SpawnFarWorktree says "On another machine, the agent works in a new worktree."
+// in the language of msgs.
+func (msgs Messages) SpawnFarWorktree() string {
+	return Catalog.Format(msgs.locale, "spawnFarWorktree", nil)
+}
+
+// SpawnStarting says "This sheet is starting its agents. Wait for the result."
+// in the language the app shows.
+func SpawnStarting() string { return In(i18n.Locale()).SpawnStarting() }
+
+// SpawnStarting says "This sheet is starting its agents. Wait for the result."
+// in the language of msgs.
+func (msgs Messages) SpawnStarting() string {
+	return Catalog.Format(msgs.locale, "spawnStarting", nil)
+}
+
+// SpawnWriteTask says "Write the task first."
+// in the language the app shows.
+func SpawnWriteTask() string { return In(i18n.Locale()).SpawnWriteTask() }
+
+// SpawnWriteTask says "Write the task first."
+// in the language of msgs.
+func (msgs Messages) SpawnWriteTask() string {
+	return Catalog.Format(msgs.locale, "spawnWriteTask", nil)
+}
+
+// SpawnNoAgent says "No agent is known on this machine."
+// in the language the app shows.
+func SpawnNoAgent() string { return In(i18n.Locale()).SpawnNoAgent() }
+
+// SpawnNoAgent says "No agent is known on this machine."
+// in the language of msgs.
+func (msgs Messages) SpawnNoAgent() string {
+	return Catalog.Format(msgs.locale, "spawnNoAgent", nil)
+}
+
+// SpawnNotInstalled says "{agent} is not installed on this machine."
+// in the language the app shows.
+func SpawnNotInstalled(agent string) string { return In(i18n.Locale()).SpawnNotInstalled(agent) }
+
+// SpawnNotInstalled says "{agent} is not installed on this machine."
+// in the language of msgs.
+func (msgs Messages) SpawnNotInstalled(agent string) string {
+	return Catalog.Format(msgs.locale, "spawnNotInstalled", map[string]any{"agent": agent})
+}
+
+// SpawnBadModel says "A model name cannot start with -."
+// in the language the app shows.
+func SpawnBadModel() string { return In(i18n.Locale()).SpawnBadModel() }
+
+// SpawnBadModel says "A model name cannot start with -."
+// in the language of msgs.
+func (msgs Messages) SpawnBadModel() string {
+	return Catalog.Format(msgs.locale, "spawnBadModel", nil)
+}
+
+// SpawnWriteBranch says "Write a branch name."
+// in the language the app shows.
+func SpawnWriteBranch() string { return In(i18n.Locale()).SpawnWriteBranch() }
+
+// SpawnWriteBranch says "Write a branch name."
+// in the language of msgs.
+func (msgs Messages) SpawnWriteBranch() string {
+	return Catalog.Format(msgs.locale, "spawnWriteBranch", nil)
+}
+
+// SpawnBranchChars says "A branch name can have only the letters A to Z and a to z, the digits 0 to 9, and / . _ -."
+// in the language the app shows.
+func SpawnBranchChars() string { return In(i18n.Locale()).SpawnBranchChars() }
+
+// SpawnBranchChars says "A branch name can have only the letters A to Z and a to z, the digits 0 to 9, and / . _ -."
+// in the language of msgs.
+func (msgs Messages) SpawnBranchChars() string {
+	return Catalog.Format(msgs.locale, "spawnBranchChars", nil)
+}
+
+// SpawnBranchGit says "Git does not accept this branch name."
+// in the language the app shows.
+func SpawnBranchGit() string { return In(i18n.Locale()).SpawnBranchGit() }
+
+// SpawnBranchGit says "Git does not accept this branch name."
+// in the language of msgs.
+func (msgs Messages) SpawnBranchGit() string {
+	return Catalog.Format(msgs.locale, "spawnBranchGit", nil)
+}
+
+// SpawnBadBase says "A base cannot start with -."
+// in the language the app shows.
+func SpawnBadBase() string { return In(i18n.Locale()).SpawnBadBase() }
+
+// SpawnBadBase says "A base cannot start with -."
+// in the language of msgs.
+func (msgs Messages) SpawnBadBase() string {
+	return Catalog.Format(msgs.locale, "spawnBadBase", nil)
+}
+
+// SpawnFarImages says "Images go only to an agent on this machine. Remove them, or pick this machine."
+// in the language the app shows.
+func SpawnFarImages() string { return In(i18n.Locale()).SpawnFarImages() }
+
+// SpawnFarImages says "Images go only to an agent on this machine. Remove them, or pick this machine."
+// in the language of msgs.
+func (msgs Messages) SpawnFarImages() string {
+	return Catalog.Format(msgs.locale, "spawnFarImages", nil)
+}
+
+// SpawnImagesNotSaved says "The images were not saved: {why}"
+// in the language the app shows.
+func SpawnImagesNotSaved(why string) string { return In(i18n.Locale()).SpawnImagesNotSaved(why) }
+
+// SpawnImagesNotSaved says "The images were not saved: {why}"
+// in the language of msgs.
+func (msgs Messages) SpawnImagesNotSaved(why string) string {
+	return Catalog.Format(msgs.locale, "spawnImagesNotSaved", map[string]any{"why": why})
+}
+
+// SpawnStartingFolder says "Starting {agent} in this folder."
+// in the language the app shows.
+func SpawnStartingFolder(agent string) string { return In(i18n.Locale()).SpawnStartingFolder(agent) }
+
+// SpawnStartingFolder says "Starting {agent} in this folder."
+// in the language of msgs.
+func (msgs Messages) SpawnStartingFolder(agent string) string {
+	return Catalog.Format(msgs.locale, "spawnStartingFolder", map[string]any{"agent": agent})
+}
+
+// SpawnStartingFan says "Starting {count} agents in new worktrees."
+// in the language the app shows.
+func SpawnStartingFan(count int) string { return In(i18n.Locale()).SpawnStartingFan(count) }
+
+// SpawnStartingFan says "Starting {count} agents in new worktrees."
+// in the language of msgs.
+func (msgs Messages) SpawnStartingFan(count int) string {
+	return Catalog.Format(msgs.locale, "spawnStartingFan", map[string]any{"count": count})
+}
+
+// SpawnStartingWorktree says "Starting {agent} in a new worktree."
+// in the language the app shows.
+func SpawnStartingWorktree(agent string) string {
+	return In(i18n.Locale()).SpawnStartingWorktree(agent)
+}
+
+// SpawnStartingWorktree says "Starting {agent} in a new worktree."
+// in the language of msgs.
+func (msgs Messages) SpawnStartingWorktree(agent string) string {
+	return Catalog.Format(msgs.locale, "spawnStartingWorktree", map[string]any{"agent": agent})
+}
+
+// SpawnFailed says "The agent did not start: {why}. Press n in the agents view to change the sheet."
+// in the language the app shows.
+func SpawnFailed(why string) string { return In(i18n.Locale()).SpawnFailed(why) }
+
+// SpawnFailed says "The agent did not start: {why}. Press n in the agents view to change the sheet."
+// in the language of msgs.
+func (msgs Messages) SpawnFailed(why string) string {
+	return Catalog.Format(msgs.locale, "spawnFailed", map[string]any{"why": why})
+}
+
+// SpawnStartedFan says "Started {count} agents on {group}."
+// in the language the app shows.
+func SpawnStartedFan(count int, group string) string {
+	return In(i18n.Locale()).SpawnStartedFan(count, group)
+}
+
+// SpawnStartedFan says "Started {count} agents on {group}."
+// in the language of msgs.
+func (msgs Messages) SpawnStartedFan(count int, group string) string {
+	return Catalog.Format(msgs.locale, "spawnStartedFan", map[string]any{"count": count, "group": group})
+}
+
+// SpawnStartedWorktree says "Started {branch}. The task goes in when the agent is ready."
+// in the language the app shows.
+func SpawnStartedWorktree(branch string) string {
+	return In(i18n.Locale()).SpawnStartedWorktree(branch)
+}
+
+// SpawnStartedWorktree says "Started {branch}. The task goes in when the agent is ready."
+// in the language of msgs.
+func (msgs Messages) SpawnStartedWorktree(branch string) string {
+	return Catalog.Format(msgs.locale, "spawnStartedWorktree", map[string]any{"branch": branch})
+}
+
+// SpawnNotReady says "Started {agent} in {session}. It is not ready: {why}"
+// in the language the app shows.
+func SpawnNotReady(agent string, session string, why string) string {
+	return In(i18n.Locale()).SpawnNotReady(agent, session, why)
+}
+
+// SpawnNotReady says "Started {agent} in {session}. It is not ready: {why}"
+// in the language of msgs.
+func (msgs Messages) SpawnNotReady(agent string, session string, why string) string {
+	return Catalog.Format(msgs.locale, "spawnNotReady", map[string]any{"agent": agent, "session": session, "why": why})
+}
+
+// SpawnTaskNotSent says "Started {agent} in {session}. The task was not sent: {why}"
+// in the language the app shows.
+func SpawnTaskNotSent(agent string, session string, why string) string {
+	return In(i18n.Locale()).SpawnTaskNotSent(agent, session, why)
+}
+
+// SpawnTaskNotSent says "Started {agent} in {session}. The task was not sent: {why}"
+// in the language of msgs.
+func (msgs Messages) SpawnTaskNotSent(agent string, session string, why string) string {
+	return Catalog.Format(msgs.locale, "spawnTaskNotSent", map[string]any{"agent": agent, "session": session, "why": why})
+}
+
+// SpawnStartedIn says "Started {agent} in {session}."
+// in the language the app shows.
+func SpawnStartedIn(agent string, session string) string {
+	return In(i18n.Locale()).SpawnStartedIn(agent, session)
+}
+
+// SpawnStartedIn says "Started {agent} in {session}."
+// in the language of msgs.
+func (msgs Messages) SpawnStartedIn(agent string, session string) string {
+	return Catalog.Format(msgs.locale, "spawnStartedIn", map[string]any{"agent": agent, "session": session})
+}
+
+// CompareTitle says "Compare attempts"
+// in the language the app shows.
+func CompareTitle() string { return In(i18n.Locale()).CompareTitle() }
+
+// CompareTitle says "Compare attempts"
+// in the language of msgs.
+func (msgs Messages) CompareTitle() string {
+	return Catalog.Format(msgs.locale, "compareTitle", nil)
+}
+
+// CompareSelectAttempt says "Select an attempt of a fan to compare its attempts."
+// in the language the app shows.
+func CompareSelectAttempt() string { return In(i18n.Locale()).CompareSelectAttempt() }
+
+// CompareSelectAttempt says "Select an attempt of a fan to compare its attempts."
+// in the language of msgs.
+func (msgs Messages) CompareSelectAttempt() string {
+	return Catalog.Format(msgs.locale, "compareSelectAttempt", nil)
+}
+
+// CompareCannotRead says "tuios cannot compare the attempts now: {why}"
+// in the language the app shows.
+func CompareCannotRead(why string) string { return In(i18n.Locale()).CompareCannotRead(why) }
+
+// CompareCannotRead says "tuios cannot compare the attempts now: {why}"
+// in the language of msgs.
+func (msgs Messages) CompareCannotRead(why string) string {
+	return Catalog.Format(msgs.locale, "compareCannotRead", map[string]any{"why": why})
+}
+
+// CompareChanged says "The attempts changed after the last read. Check them, then press k again."
+// in the language the app shows.
+func CompareChanged() string { return In(i18n.Locale()).CompareChanged() }
+
+// CompareChanged says "The attempts changed after the last read. Check them, then press k again."
+// in the language of msgs.
+func (msgs Messages) CompareChanged() string {
+	return Catalog.Format(msgs.locale, "compareChanged", nil)
+}
+
+// CompareOneLeft says "One attempt is left. There is nothing to judge."
+// in the language the app shows.
+func CompareOneLeft() string { return In(i18n.Locale()).CompareOneLeft() }
+
+// CompareOneLeft says "One attempt is left. There is nothing to judge."
+// in the language of msgs.
+func (msgs Messages) CompareOneLeft() string {
+	return Catalog.Format(msgs.locale, "compareOneLeft", nil)
+}
+
+// CompareJudgeFailed says "The judge did not start: {why}"
+// in the language the app shows.
+func CompareJudgeFailed(why string) string { return In(i18n.Locale()).CompareJudgeFailed(why) }
+
+// CompareJudgeFailed says "The judge did not start: {why}"
+// in the language of msgs.
+func (msgs Messages) CompareJudgeFailed(why string) string {
+	return Catalog.Format(msgs.locale, "compareJudgeFailed", map[string]any{"why": why})
+}
+
+// CompareJudgeNotReady says "The judge in {session} is not ready: {why}"
+// in the language the app shows.
+func CompareJudgeNotReady(session string, why string) string {
+	return In(i18n.Locale()).CompareJudgeNotReady(session, why)
+}
+
+// CompareJudgeNotReady says "The judge in {session} is not ready: {why}"
+// in the language of msgs.
+func (msgs Messages) CompareJudgeNotReady(session string, why string) string {
+	return Catalog.Format(msgs.locale, "compareJudgeNotReady", map[string]any{"session": session, "why": why})
+}
+
+// CompareJudgeStarted says "A judge reads the attempts in {session}. Its verdict shows here when it reports."
+// in the language the app shows.
+func CompareJudgeStarted(session string) string {
+	return In(i18n.Locale()).CompareJudgeStarted(session)
+}
+
+// CompareJudgeStarted says "A judge reads the attempts in {session}. Its verdict shows here when it reports."
+// in the language of msgs.
+func (msgs Messages) CompareJudgeStarted(session string) string {
+	return Catalog.Format(msgs.locale, "compareJudgeStarted", map[string]any{"session": session})
+}
+
+// CompareOldDaemon says "This daemon is older than guios. Restart it, then try again."
+// in the language the app shows.
+func CompareOldDaemon() string { return In(i18n.Locale()).CompareOldDaemon() }
+
+// CompareOldDaemon says "This daemon is older than guios. Restart it, then try again."
+// in the language of msgs.
+func (msgs Messages) CompareOldDaemon() string {
+	return Catalog.Format(msgs.locale, "compareOldDaemon", nil)
+}
+
+// CompareKeepFailed says "The attempt was not kept: {why}"
+// in the language the app shows.
+func CompareKeepFailed(why string) string { return In(i18n.Locale()).CompareKeepFailed(why) }
+
+// CompareKeepFailed says "The attempt was not kept: {why}"
+// in the language of msgs.
+func (msgs Messages) CompareKeepFailed(why string) string {
+	return Catalog.Format(msgs.locale, "compareKeepFailed", map[string]any{"why": why})
+}
+
+// CompareKept says "{count, plural, one {Kept {letter}, {session}. Removed # other attempt. Its branch stays.} other {Kept {letter}, {ses…"
+// in the language the app shows.
+func CompareKept(count int, letter string, session string) string {
+	return In(i18n.Locale()).CompareKept(count, letter, session)
+}
+
+// CompareKept says "{count, plural, one {Kept {letter}, {session}. Removed # other attempt. Its branch stays.} other {Kept {letter}, {ses…"
+// in the language of msgs.
+func (msgs Messages) CompareKept(count int, letter string, session string) string {
+	return Catalog.Format(msgs.locale, "compareKept", map[string]any{"count": count, "letter": letter, "session": session})
+}
+
+// CompareKeptLeft says "{count} could not be removed. Run tuios worktree ls to see them."
+// in the language the app shows.
+func CompareKeptLeft(count int) string { return In(i18n.Locale()).CompareKeptLeft(count) }
+
+// CompareKeptLeft says "{count} could not be removed. Run tuios worktree ls to see them."
+// in the language of msgs.
+func (msgs Messages) CompareKeptLeft(count int) string {
+	return Catalog.Format(msgs.locale, "compareKeptLeft", map[string]any{"count": count})
+}
+
+// CompareNoPane says "The pane of {session} is not in the list."
+// in the language the app shows.
+func CompareNoPane(session string) string { return In(i18n.Locale()).CompareNoPane(session) }
+
+// CompareNoPane says "The pane of {session} is not in the list."
+// in the language of msgs.
+func (msgs Messages) CompareNoPane(session string) string {
+	return Catalog.Format(msgs.locale, "compareNoPane", map[string]any{"session": session})
+}
+
+// CompareFromBase says "{group} from {base}"
+// in the language the app shows.
+func CompareFromBase(group string, base string) string {
+	return In(i18n.Locale()).CompareFromBase(group, base)
+}
+
+// CompareFromBase says "{group} from {base}"
+// in the language of msgs.
+func (msgs Messages) CompareFromBase(group string, base string) string {
+	return Catalog.Format(msgs.locale, "compareFromBase", map[string]any{"group": group, "base": base})
+}
+
+// CompareBack says "Back"
+// in the language the app shows.
+func CompareBack() string { return In(i18n.Locale()).CompareBack() }
+
+// CompareBack says "Back"
+// in the language of msgs.
+func (msgs Messages) CompareBack() string {
+	return Catalog.Format(msgs.locale, "compareBack", nil)
+}
+
+// CompareVerdictPick says "The judge picks {pick}"
+// in the language the app shows.
+func CompareVerdictPick(pick string) string { return In(i18n.Locale()).CompareVerdictPick(pick) }
+
+// CompareVerdictPick says "The judge picks {pick}"
+// in the language of msgs.
+func (msgs Messages) CompareVerdictPick(pick string) string {
+	return Catalog.Format(msgs.locale, "compareVerdictPick", map[string]any{"pick": pick})
+}
+
+// CompareJudgePick says "Judge's pick"
+// in the language the app shows.
+func CompareJudgePick() string { return In(i18n.Locale()).CompareJudgePick() }
+
+// CompareJudgePick says "Judge's pick"
+// in the language of msgs.
+func (msgs Messages) CompareJudgePick() string {
+	return Catalog.Format(msgs.locale, "compareJudgePick", nil)
+}
+
+// CompareFiles says "{count, plural, one {# file} other {# files}}"
+// in the language the app shows.
+func CompareFiles(count int) string { return In(i18n.Locale()).CompareFiles(count) }
+
+// CompareFiles says "{count, plural, one {# file} other {# files}}"
+// in the language of msgs.
+func (msgs Messages) CompareFiles(count int) string {
+	return Catalog.Format(msgs.locale, "compareFiles", map[string]any{"count": count})
+}
+
+// CompareVerify says "Verify: {state}"
+// in the language the app shows.
+func CompareVerify(state string) string { return In(i18n.Locale()).CompareVerify(state) }
+
+// CompareVerify says "Verify: {state}"
+// in the language of msgs.
+func (msgs Messages) CompareVerify(state string) string {
+	return Catalog.Format(msgs.locale, "compareVerify", map[string]any{"state": state})
+}
+
+// CompareNoChanges says "No changes yet."
+// in the language the app shows.
+func CompareNoChanges() string { return In(i18n.Locale()).CompareNoChanges() }
+
+// CompareNoChanges says "No changes yet."
+// in the language of msgs.
+func (msgs Messages) CompareNoChanges() string {
+	return Catalog.Format(msgs.locale, "compareNoChanges", nil)
+}
+
+// CompareGone says "Gone"
+// in the language the app shows.
+func CompareGone() string { return In(i18n.Locale()).CompareGone() }
+
+// CompareGone says "Gone"
+// in the language of msgs.
+func (msgs Messages) CompareGone() string {
+	return Catalog.Format(msgs.locale, "compareGone", nil)
+}
+
+// CompareDone says "Done"
+// in the language the app shows.
+func CompareDone() string { return In(i18n.Locale()).CompareDone() }
+
+// CompareDone says "Done"
+// in the language of msgs.
+func (msgs Messages) CompareDone() string {
+	return Catalog.Format(msgs.locale, "compareDone", nil)
+}
+
+// CompareKeepWarn says "Press k again to keep {letter}. This removes {others}. Their changes are stashed, and their branches stay."
+// in the language the app shows.
+func CompareKeepWarn(letter string, others string) string {
+	return In(i18n.Locale()).CompareKeepWarn(letter, others)
+}
+
+// CompareKeepWarn says "Press k again to keep {letter}. This removes {others}. Their changes are stashed, and their branches stay."
+// in the language of msgs.
+func (msgs Messages) CompareKeepWarn(letter string, others string) string {
+	return Catalog.Format(msgs.locale, "compareKeepWarn", map[string]any{"letter": letter, "others": others})
+}
+
+// CompareKeepIgnored says "{count, plural, one {It also deletes # file that git ignores in them.} other {It also deletes # files that git ignore…"
+// in the language the app shows.
+func CompareKeepIgnored(count int) string { return In(i18n.Locale()).CompareKeepIgnored(count) }
+
+// CompareKeepIgnored says "{count, plural, one {It also deletes # file that git ignores in them.} other {It also deletes # files that git ignore…"
+// in the language of msgs.
+func (msgs Messages) CompareKeepIgnored(count int) string {
+	return Catalog.Format(msgs.locale, "compareKeepIgnored", map[string]any{"count": count})
+}
+
+// CompareIgnoredFailed says "tuios cannot list the ignored files of {list}. Press k to read them again."
+// in the language the app shows.
+func CompareIgnoredFailed(list string) string { return In(i18n.Locale()).CompareIgnoredFailed(list) }
+
+// CompareIgnoredFailed says "tuios cannot list the ignored files of {list}. Press k to read them again."
+// in the language of msgs.
+func (msgs Messages) CompareIgnoredFailed(list string) string {
+	return Catalog.Format(msgs.locale, "compareIgnoredFailed", map[string]any{"list": list})
+}
+
+// CompareHintPick says "pick"
+// in the language the app shows.
+func CompareHintPick() string { return In(i18n.Locale()).CompareHintPick() }
+
+// CompareHintPick says "pick"
+// in the language of msgs.
+func (msgs Messages) CompareHintPick() string {
+	return Catalog.Format(msgs.locale, "compareHintPick", nil)
+}
+
+// CompareHintRead says "read again"
+// in the language the app shows.
+func CompareHintRead() string { return In(i18n.Locale()).CompareHintRead() }
+
+// CompareHintRead says "read again"
+// in the language of msgs.
+func (msgs Messages) CompareHintRead() string {
+	return Catalog.Format(msgs.locale, "compareHintRead", nil)
+}
+
+// CompareJudge says "Judge"
+// in the language the app shows.
+func CompareJudge() string { return In(i18n.Locale()).CompareJudge() }
+
+// CompareJudge says "Judge"
+// in the language of msgs.
+func (msgs Messages) CompareJudge() string {
+	return Catalog.Format(msgs.locale, "compareJudge", nil)
+}
+
+// CompareKeep says "Keep {letter}"
+// in the language the app shows.
+func CompareKeep(letter string) string { return In(i18n.Locale()).CompareKeep(letter) }
+
+// CompareKeep says "Keep {letter}"
+// in the language of msgs.
+func (msgs Messages) CompareKeep(letter string) string {
+	return Catalog.Format(msgs.locale, "compareKeep", map[string]any{"letter": letter})
+}
+
+// CompareKeepAgain says "Keep {letter} now"
+// in the language the app shows.
+func CompareKeepAgain(letter string) string { return In(i18n.Locale()).CompareKeepAgain(letter) }
+
+// CompareKeepAgain says "Keep {letter} now"
+// in the language of msgs.
+func (msgs Messages) CompareKeepAgain(letter string) string {
+	return Catalog.Format(msgs.locale, "compareKeepAgain", map[string]any{"letter": letter})
+}

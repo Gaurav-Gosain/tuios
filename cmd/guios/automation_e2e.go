@@ -86,6 +86,10 @@ func startProbe(a *App) {
 					// compositor has no clipboard to paste from.
 					if p, ok := strings.CutPrefix(sc.Text(), "image "); ok {
 						a.update(func() {
+							if s := a.ck.spawn; s != nil && s.open {
+								a.addImageFiles(&s.task, []string{p})
+								return
+							}
 							if ag, ok := a.ckSelectedAgent(); ok {
 								a.addImageFiles(a.draftFor(ag), []string{p})
 							}

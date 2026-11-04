@@ -156,6 +156,22 @@ type cockpit struct {
 	threads map[string]*ckThread
 	reply   ckReply
 	tabs    ckTabs
+
+	// spawn is the open New agent sheet, spawnDraft a closed one kept for
+	// the next, spawnGen counts the sheets opened, spawnLast is the agent
+	// the last start used, and spawnUI holds its fields' focus.
+	spawn, spawnDraft *spawnSheet
+	spawnGen          uint64
+	spawnLast         string
+	spawnUI           spawnHandles
+	// selectWhenSeen is the key of an agent just started: the list selects
+	// its row once it shows.
+	selectWhenSeen string
+	// cmp is the open comparison of a fan's attempts.
+	cmp *ckCompare
+	// newHover is the sidebar's New agent button under the pointer, so a
+	// click on it does not also toggle the agents view.
+	newHover bool
 }
 
 // ckUndo is a settle the person can take back.
@@ -195,6 +211,12 @@ func (a *App) closeCockpit() {
 func (a *App) cockpitEvent(ev *proto.DaemonEvent) {
 	if !a.ck.open || ev == nil {
 		return
+	}
+	// A verdict comes with no event of its own: the judge's state and the
+	// sessions' changes read the comparison again, never the activity
+	// ticks, which come many times a second.
+	if ev.Type != "agent-activity" && ev.Type != "transcript" {
+		a.compareEvent()
 	}
 	switch ev.Type {
 	case "transcript":
@@ -408,6 +430,15 @@ func (r ckRow) selectable() bool {
 // row of the same agent, else the first row that needs the person.
 func (a *App) ckClamp() {
 	ck := &a.ck
+	if k := ck.selectWhenSeen; k != "" {
+		for _, r := range ck.rows {
+			if r.agent >= 0 && ck.agents[r.agent].Key() == k {
+				ck.selectWhenSeen = ""
+				a.ckSelect(r)
+				return
+			}
+		}
+	}
 	if i := ck.index(ck.sel); i >= 0 {
 		return
 	}

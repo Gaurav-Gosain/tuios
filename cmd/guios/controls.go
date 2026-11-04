@@ -282,6 +282,12 @@ func (a *App) searchPopup(c *ui.Context, key, value string, options []string, wi
 // field styles a text field's frame, around its input.
 func field(c *ui.Context, frame ui.Element, focused bool, pal *palette) ui.Element {
 	frame.Height(controlH+2).Padding(0, 8).Gap(6).Radius(rControl).AlignItems(ui.Center)
+	return fieldFace(frame, focused, pal)
+}
+
+// fieldFace is a field's look on a frame of any height: the task box of
+// the New agent sheet grows with its text.
+func fieldFace(frame ui.Element, focused bool, pal *palette) ui.Element {
 	stroke := ui.RGBA(0, 0, 0, 0.13)
 	bg := ui.Hex("#ffffff")
 	if pal.dark {

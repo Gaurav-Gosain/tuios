@@ -225,6 +225,8 @@ func (a *App) view(c *ui.Context) {
 	}
 	keepOverlay(c)
 	toasts(c)
+	a.spawnView(c, pal)
+	a.compareView(c, pal)
 	a.paletteView(c, pal)
 	a.warmPalette(c)
 	a.helpView(c, pal)

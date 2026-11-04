@@ -301,6 +301,7 @@ var paletteTitles = map[string]func() string{
 	"text.smaller":  locales.PaletteTextSmaller,
 	"text.reset":    locales.PaletteTextReset,
 	"agents.toggle": locales.PaletteAgents,
+	"agents.new":    locales.PaletteNewAgent,
 }
 
 // commandItems are the commands: guios's actions with their shortcut and

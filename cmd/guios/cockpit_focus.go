@@ -136,6 +136,11 @@ func (a *App) cockpitFocus(c *ui.Context, pal *palette) {
 				ui.Box(c).Size(6, 6).Radius(3).Background(col).Shrink(0)
 				ui.Text(c, word).FontSize(fsSmall).FontWeight(wMedium).SingleLine()
 			}).Shrink(0)
+			if a.ckHasSiblings(ag) && !ck.narrow {
+				if sizedButton(c, "ck-compare", locales.CockpitCompare(), "c", false, hControlSm, rControl, pal) {
+					a.openCompare()
+				}
+			}
 			switch {
 			case ag.Window == "":
 			case ck.narrow:
