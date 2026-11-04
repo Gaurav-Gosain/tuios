@@ -224,7 +224,7 @@ func (a *App) view(c *ui.Context) {
 		}
 	}
 	keepOverlay(c)
-	toastsAt(c, a.ck.open)
+	toastsAt(c, a.toastBox())
 	a.spawnView(c, pal)
 	a.compareView(c, pal)
 	a.paletteView(c, pal)
@@ -1221,4 +1221,15 @@ func (a *App) cmdHeld(c *ui.Context) bool {
 		return false
 	}
 	return true
+}
+
+// toastBox is where toasts show: over the foot of the agents list while
+// the agents view shows its list, else at the bottom centre.
+func (a *App) toastBox() *ui.Rect {
+	ck := &a.ck
+	if !ck.open || ck.view != viewAgents || ck.stacked || ck.fleetRect.W <= 0 {
+		return nil
+	}
+	r := ck.fleetRect
+	return &r
 }
