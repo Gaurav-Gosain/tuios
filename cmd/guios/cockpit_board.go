@@ -110,8 +110,12 @@ func (b *ckBoard) column(stage string) []session.TaskRow {
 	return out
 }
 
+//
+// No column folds now: the board has the whole card, and a column that
+// shows a count draws its cards. b.opened stays for a person who folds
+// Done by hand.
 func (b *ckBoard) folded(stage string) bool {
-	return stage == "done" && !b.opened[stage]
+	return stage == "done" && b.opened[stage+"-folded"]
 }
 
 // cursor is the selected card's column and row, -1 when none is.
@@ -190,7 +194,7 @@ func (a *App) boardView(c *ui.Context, pal *palette, sess string) {
 // The board takes the whole card, so its seven stages fit a 1440 px
 // window beside the sidebar.
 const (
-	boardColMin    = 148
+	boardColMin    = 140
 	boardColMax    = 300
 	boardColNarrow = 104
 	boardEdgeW     = 34
@@ -378,7 +382,7 @@ func (a *App) boardColumn(c *ui.Context, pal *palette, b *ckBoard, ci int, st st
 		if head.Clicked() {
 			c.Invalidate()
 			if st == "done" {
-				b.opened[st] = !b.opened[st]
+				b.opened[st+"-folded"] = !b.opened[st+"-folded"]
 			}
 			b.col = ci
 		}
