@@ -133,6 +133,12 @@ type motionWatch struct {
 	// (tiles.go), and moved tells that they moved in the last frame.
 	tiles map[string]*tileAnim
 	moved bool
+	// dragging is the pane whose title the pointer drags in this frame,
+	// ghost its copy under the pointer as the last frame drew it, and
+	// landing the copy let go on a drop, which the pane flies from.
+	dragging string
+	ghost    paneGhost
+	landing  paneGhost
 	// guess is the guessed card of a split (splitGuess) as the last frame
 	// showed it.
 	guess guessShown
@@ -159,6 +165,7 @@ func (a *App) watchPanes(view, layout string) {
 		}
 	}
 	m.view, m.layout, m.now, m.placed, m.width = view, layout, map[string]bool{}, map[string]bool{}, map[string]float32{}
+	m.dragging = ""
 }
 
 // notePane notes that the frame shows pane id.
@@ -172,4 +179,12 @@ func (m *motionWatch) notePane(id string) {
 type guessShown struct {
 	id string
 	at frac
+}
+
+// paneGhost is a pane's copy under the pointer as it is dragged: where it
+// shows, in fractions of the tiles' area.
+type paneGhost struct {
+	pane string
+	at   frac
+	when time.Time
 }

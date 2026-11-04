@@ -149,7 +149,7 @@ func (a *App) slideOf(c *ui.Context, s *proto.Session) (*wsSlide, float32) {
 // bitmap, and no size of theirs goes to the daemon.
 func (a *App) frozenPanes(c *ui.Context, pal *palette, s *proto.Session, key string, x, w, h float32) {
 	out := ui.Box(c.Key(key)).Absolute().Left(0).Top(0).Width(w-cardGap).Height(h).
-		Translate(x, 0).Cache().PassThrough()
+		Translate(x, 0).Cache().IgnoreInput(true)
 	ew, eh := float64(w), float64(h)+paneGap
 	rects := map[string]frac{}
 	whole := frac{0, 0, 1, 1}

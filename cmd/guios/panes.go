@@ -307,6 +307,10 @@ func (a *App) paneCard(c *ui.Context, pal *palette, bar ui.TitleBar, shown float
 		if d, ok := ui.Drop[paneDrag](card); ok && d.session == s.ID && d.pane != p.ID {
 			sid, target := s.ID, p.ID
 			drop := a.lastZone
+			// The pane lands from where its copy was let go.
+			if g := a.motion.ghost; g.pane == d.pane {
+				a.motion.landing = g
+			}
 			a.defer_(func() { a.movePane(sid, d.pane, target, drop) })
 		}
 	}
@@ -354,7 +358,7 @@ func (a *App) paneCard(c *ui.Context, pal *palette, bar ui.TitleBar, shown float
 	// them again in each frame. A pane moved goes to its new place with
 	// the tiles' motion (tiles.go), or its Match.
 	if k := card.AnimateTo("drag", b2f(dragging), motionQuick); k > 0 {
-		card.Cache().Opacity(1-0.55*k).Scale(1-0.015*k, 1-0.015*k)
+		card.Cache().Opacity(1-0.6*k).Scale(1-0.015*k, 1-0.015*k)
 	}
 }
 
@@ -559,8 +563,11 @@ func (a *App) paneHeader(c *ui.Context, pal *palette, bar ui.TitleBar, shown flo
 			dragging = grip.Dragging()
 			switch {
 			case dragging:
-				// What follows the pointer is a copy of the grip: a chip.
-				floating(grip.Background(pal.popover), pal)
+				// What follows the pointer is a copy of the pane, drawn
+				// by the tiles (dragGhost): MyGo's copy of the grip shows
+				// nothing.
+				grip.Opacity(0)
+				a.motion.dragging = p.ID
 			case grip.Hovered():
 				grip.Background(pal.rowHover).Cursor(ui.CursorGrab)
 			}
