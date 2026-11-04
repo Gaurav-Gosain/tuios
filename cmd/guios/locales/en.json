@@ -1862,5 +1862,8 @@
   "copyModeVisualBlock": "Visual block",
   "copyModeHint": "Move with h, j, k and l. Press v to select and y to copy. Press q to leave.",
   "copyModeNotFound": "\"{query}\" is not in the pane.",
-  "copyModeYanked": "Copied {n} characters."
+  "copyModeYanked": "Copied {n} characters.",
+  "helpTitle": "Keys",
+  "helpPlaceholder": "Find a key or what it does…",
+  "helpFooter": "Your tuios config.toml sets the tuios keys. Settings, Keyboard sets the guios keys. Press Esc to close."
 }

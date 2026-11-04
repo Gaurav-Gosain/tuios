@@ -1017,5 +1017,8 @@
   "copyModeVisualBlock": "可视块",
   "copyModeHint": "用 h、j、k、l 移动。按 v 选择，按 y 复制。按 q 退出。",
   "copyModeNotFound": "窗格中没有“{query}”。",
-  "copyModeYanked": "已复制 {n} 个字符。"
+  "copyModeYanked": "已复制 {n} 个字符。",
+  "helpTitle": "按键",
+  "helpPlaceholder": "查找按键或功能…",
+  "helpFooter": "tuios 按键由 tuios 的 config.toml 设置。guios 按键在设置的键盘页设置。按 Esc 关闭。"
 }

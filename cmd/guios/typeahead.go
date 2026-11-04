@@ -101,7 +101,7 @@ func keyInput(mods ui.Modifiers, key ui.Key) []byte {
 // It tries once each time the keyboard is lost, so a pane that cannot take
 // it costs no frames.
 func (a *App) keepKeyboard(root ui.Element) {
-	if !a.focused || a.pal.open || a.picker.open || a.confirm != nil || a.wtAsk != nil || a.ck.open || a.tk.live() {
+	if !a.focused || a.pal.open || a.help.open || a.picker.open || a.confirm != nil || a.wtAsk != nil || a.ck.open || a.tk.live() {
 		return
 	}
 	if root.FocusWithin() {

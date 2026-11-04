@@ -10313,3 +10313,33 @@ func CopyModeYanked(n string) string { return In(i18n.Locale()).CopyModeYanked(n
 func (msgs Messages) CopyModeYanked(n string) string {
 	return Catalog.Format(msgs.locale, "copyModeYanked", map[string]any{"n": n})
 }
+
+// HelpTitle says "Keys"
+// in the language the app shows.
+func HelpTitle() string { return In(i18n.Locale()).HelpTitle() }
+
+// HelpTitle says "Keys"
+// in the language of msgs.
+func (msgs Messages) HelpTitle() string {
+	return Catalog.Format(msgs.locale, "helpTitle", nil)
+}
+
+// HelpPlaceholder says "Find a key or what it does…"
+// in the language the app shows.
+func HelpPlaceholder() string { return In(i18n.Locale()).HelpPlaceholder() }
+
+// HelpPlaceholder says "Find a key or what it does…"
+// in the language of msgs.
+func (msgs Messages) HelpPlaceholder() string {
+	return Catalog.Format(msgs.locale, "helpPlaceholder", nil)
+}
+
+// HelpFooter says "Your tuios config.toml sets the tuios keys. Settings, Keyboard sets the guios keys. Press Esc to close."
+// in the language the app shows.
+func HelpFooter() string { return In(i18n.Locale()).HelpFooter() }
+
+// HelpFooter says "Your tuios config.toml sets the tuios keys. Settings, Keyboard sets the guios keys. Press Esc to close."
+// in the language of msgs.
+func (msgs Messages) HelpFooter() string {
+	return Catalog.Format(msgs.locale, "helpFooter", nil)
+}

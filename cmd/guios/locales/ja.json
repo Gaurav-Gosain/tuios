@@ -1017,5 +1017,8 @@
   "copyModeVisualBlock": "ビジュアル矩形",
   "copyModeHint": "h、j、k、l で移動します。v で選択し、y でコピーします。q で終了します。",
   "copyModeNotFound": "「{query}」はペインにありません。",
-  "copyModeYanked": "{n} 文字をコピーしました。"
+  "copyModeYanked": "{n} 文字をコピーしました。",
+  "helpTitle": "キー",
+  "helpPlaceholder": "キーや機能を検索…",
+  "helpFooter": "tuios のキーは tuios の config.toml で設定します。guios のキーは設定のキーボードで設定します。Esc で閉じます。"
 }
