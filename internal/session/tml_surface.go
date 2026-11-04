@@ -1230,11 +1230,12 @@ func (d *Daemon) tmlReach(cs *connState, s *tmlSurface, verb string, write bool)
 	if pa == nil || pa.grants.Has(GrantAdmin) {
 		return nil
 	}
-	// The pane that opened a surface reaches it, with write alone.
+	// The pane that opened a surface reaches it, with write alone. A plugin is in no
+	// pane, so only its own surfaces are its.
 	d.tml.mu.Lock()
 	owner := s.caller
 	d.tml.mu.Unlock()
-	if (pa.window != "" && pa.window == owner) || (pa.plugin != "" && "plugin:"+pa.plugin == owner) {
+	if (pa.plugin == "" && pa.window != "" && pa.window == owner) || (pa.plugin != "" && "plugin:"+pa.plugin == owner) {
 		return nil
 	}
 	if !d.sessionInScope(pa.session, target) {

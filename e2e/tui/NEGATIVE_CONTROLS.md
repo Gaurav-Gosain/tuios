@@ -12324,6 +12324,13 @@ control against the branch head with one change:
 | A cell must be in the manifest | the manifest check cut | "other with the ui grant" | **caught** |
 | A notice arrives after a cell | the client listener not armed again | "the notice did not show" | **caught** |
 
+Added on 2026-11-04, each control against the branch head:
+
+| Claim | Control | Where it fails | Verdict |
+|---|---|---|---|
+| A plugin does not read a form a hook opened | the `tmlReach` call in `verbTMLGet` cut (`internal/session/tml_surface.go:1136`), run on 2026-11-04 | "hook with the ui grant: exit 0, want a refusal with "refused for plugin e2e.ui"", and the form comes back with the person's typed value | **caught** |
+| A plugin reads its own panel | the plugin half of the owner match in `tmlReach` cut (`internal/session/tml_surface.go:1230`), run on 2026-11-04 | "the plugin's tml get of its own panel: exit 1, want 0 and the panel", with "tml-get is refused for plugin e2e.ui" | **caught** |
+
 ## A Claude Code notification prompt clears when the prompt goes
 
 `TestClaudeNotificationPromptClearsWhenThePromptGoes` runs Claude Code's real hook against a pane that draws Claude Code's screens, with the hooks in the order Claude Code sends them: `PermissionRequest`, the menu, then a `permission_prompt` notification the daemon refuses, since the pane is on `needs_input` already. The pane has to hold while the menu is drawn again, and end once the menu is replaced by the empty prompt box, as Esc leaves it. Then an `agent_needs_input` notification, a background agent's question, has to end the same way once the pane draws the empty prompt box. Claude Code sends nothing when either prompt goes without a tool running. The steps and the pane's state after each go to `claude-notification-stale.log` in the test's artifact directory.
