@@ -1865,5 +1865,13 @@
   "copyModeYanked": "Copied {n} characters.",
   "helpTitle": "Keys",
   "helpPlaceholder": "Find a key or what it does…",
-  "helpFooter": "Your tuios config.toml sets the tuios keys. Settings, Keyboard sets the guios keys. Press Esc to close."
+  "helpFooter": "Your tuios config.toml sets the tuios keys. Settings, Keyboard sets the guios keys. Press Esc to close.",
+  "promptRenamePane": "Rename the pane",
+  "promptRenamePaneDetail": "Every client shows this name. Leave it empty to show the program's title again.",
+  "promptRenameWorkspace": "Rename workspace {n}",
+  "promptRenameWorkspaceDetail": "The workspace keeps its number. Leave the name empty to show the number again.",
+  "promptNote": "Note for the session",
+  "promptNoteDetail": "One short line: what the session is for, or what comes next. Leave it empty to remove the note.",
+  "promptNotePlaceholder": "Write a note",
+  "promptSave": "Save"
 }

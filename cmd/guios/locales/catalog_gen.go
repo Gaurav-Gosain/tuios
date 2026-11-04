@@ -10343,3 +10343,83 @@ func HelpFooter() string { return In(i18n.Locale()).HelpFooter() }
 func (msgs Messages) HelpFooter() string {
 	return Catalog.Format(msgs.locale, "helpFooter", nil)
 }
+
+// PromptRenamePane says "Rename the pane"
+// in the language the app shows.
+func PromptRenamePane() string { return In(i18n.Locale()).PromptRenamePane() }
+
+// PromptRenamePane says "Rename the pane"
+// in the language of msgs.
+func (msgs Messages) PromptRenamePane() string {
+	return Catalog.Format(msgs.locale, "promptRenamePane", nil)
+}
+
+// PromptRenamePaneDetail says "Every client shows this name. Leave it empty to show the program's title again."
+// in the language the app shows.
+func PromptRenamePaneDetail() string { return In(i18n.Locale()).PromptRenamePaneDetail() }
+
+// PromptRenamePaneDetail says "Every client shows this name. Leave it empty to show the program's title again."
+// in the language of msgs.
+func (msgs Messages) PromptRenamePaneDetail() string {
+	return Catalog.Format(msgs.locale, "promptRenamePaneDetail", nil)
+}
+
+// PromptRenameWorkspace says "Rename workspace {n}"
+// in the language the app shows.
+func PromptRenameWorkspace(n string) string { return In(i18n.Locale()).PromptRenameWorkspace(n) }
+
+// PromptRenameWorkspace says "Rename workspace {n}"
+// in the language of msgs.
+func (msgs Messages) PromptRenameWorkspace(n string) string {
+	return Catalog.Format(msgs.locale, "promptRenameWorkspace", map[string]any{"n": n})
+}
+
+// PromptRenameWorkspaceDetail says "The workspace keeps its number. Leave the name empty to show the number again."
+// in the language the app shows.
+func PromptRenameWorkspaceDetail() string { return In(i18n.Locale()).PromptRenameWorkspaceDetail() }
+
+// PromptRenameWorkspaceDetail says "The workspace keeps its number. Leave the name empty to show the number again."
+// in the language of msgs.
+func (msgs Messages) PromptRenameWorkspaceDetail() string {
+	return Catalog.Format(msgs.locale, "promptRenameWorkspaceDetail", nil)
+}
+
+// PromptNote says "Note for the session"
+// in the language the app shows.
+func PromptNote() string { return In(i18n.Locale()).PromptNote() }
+
+// PromptNote says "Note for the session"
+// in the language of msgs.
+func (msgs Messages) PromptNote() string {
+	return Catalog.Format(msgs.locale, "promptNote", nil)
+}
+
+// PromptNoteDetail says "One short line: what the session is for, or what comes next. Leave it empty to remove the note."
+// in the language the app shows.
+func PromptNoteDetail() string { return In(i18n.Locale()).PromptNoteDetail() }
+
+// PromptNoteDetail says "One short line: what the session is for, or what comes next. Leave it empty to remove the note."
+// in the language of msgs.
+func (msgs Messages) PromptNoteDetail() string {
+	return Catalog.Format(msgs.locale, "promptNoteDetail", nil)
+}
+
+// PromptNotePlaceholder says "Write a note"
+// in the language the app shows.
+func PromptNotePlaceholder() string { return In(i18n.Locale()).PromptNotePlaceholder() }
+
+// PromptNotePlaceholder says "Write a note"
+// in the language of msgs.
+func (msgs Messages) PromptNotePlaceholder() string {
+	return Catalog.Format(msgs.locale, "promptNotePlaceholder", nil)
+}
+
+// PromptSave says "Save"
+// in the language the app shows.
+func PromptSave() string { return In(i18n.Locale()).PromptSave() }
+
+// PromptSave says "Save"
+// in the language of msgs.
+func (msgs Messages) PromptSave() string {
+	return Catalog.Format(msgs.locale, "promptSave", nil)
+}

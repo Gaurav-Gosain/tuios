@@ -1020,5 +1020,13 @@
   "copyModeYanked": "{n} 文字をコピーしました。",
   "helpTitle": "キー",
   "helpPlaceholder": "キーや機能を検索…",
-  "helpFooter": "tuios のキーは tuios の config.toml で設定します。guios のキーは設定のキーボードで設定します。Esc で閉じます。"
+  "helpFooter": "tuios のキーは tuios の config.toml で設定します。guios のキーは設定のキーボードで設定します。Esc で閉じます。",
+  "promptRenamePane": "ペインの名前を変更",
+  "promptRenamePaneDetail": "すべてのクライアントにこの名前が表示されます。空にするとプログラムのタイトルに戻ります。",
+  "promptRenameWorkspace": "ワークスペース {n} の名前を変更",
+  "promptRenameWorkspaceDetail": "ワークスペースの番号は変わりません。空にすると番号の表示に戻ります。",
+  "promptNote": "セッションのメモ",
+  "promptNoteDetail": "短い一行で、セッションの目的や次にすることを書きます。空にするとメモを削除します。",
+  "promptNotePlaceholder": "メモを書く",
+  "promptSave": "保存"
 }

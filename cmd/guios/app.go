@@ -167,6 +167,8 @@ type App struct {
 	// early are the keys typed into panes whose terminal is attaching
 	// (typeahead.go).
 	early map[string][]byte
+	// prompt is an open one-line prompt (prompt.go), nil for none.
+	prompt *promptState
 	// help is the keys sheet (help.go).
 	help helpState
 	// cm is copy mode, on one pane, nil while off (copymode.go).

@@ -219,6 +219,7 @@ func (a *App) view(c *ui.Context) {
 	toasts(c)
 	a.paletteView(c, pal)
 	a.helpView(c, pal)
+	a.promptView(c, pal)
 	a.pickerView(c, pal)
 	a.confirmView(c, pal)
 	a.worktreeView(c, pal)

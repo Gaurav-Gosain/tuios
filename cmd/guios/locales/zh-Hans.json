@@ -1020,5 +1020,13 @@
   "copyModeYanked": "已复制 {n} 个字符。",
   "helpTitle": "按键",
   "helpPlaceholder": "查找按键或功能…",
-  "helpFooter": "tuios 按键由 tuios 的 config.toml 设置。guios 按键在设置的键盘页设置。按 Esc 关闭。"
+  "helpFooter": "tuios 按键由 tuios 的 config.toml 设置。guios 按键在设置的键盘页设置。按 Esc 关闭。",
+  "promptRenamePane": "重命名窗格",
+  "promptRenamePaneDetail": "所有客户端都显示此名称。留空则重新显示程序的标题。",
+  "promptRenameWorkspace": "重命名工作区 {n}",
+  "promptRenameWorkspaceDetail": "工作区保留其编号。留空则重新显示编号。",
+  "promptNote": "会话备注",
+  "promptNoteDetail": "简短的一行：会话的用途或下一步要做的事。留空则删除备注。",
+  "promptNotePlaceholder": "写一条备注",
+  "promptSave": "保存"
 }

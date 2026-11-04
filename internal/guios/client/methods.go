@@ -98,6 +98,38 @@ func (c *Client) dispatch(method string, params any) (any, error) {
 		_, err = c.verb("rename-session", map[string]any{"session": c.st.nameOf(p.ID), "name": p.Name})
 		return true, err
 
+	case "pane.rename":
+		p, err := decode[proto.RenameParams](params)
+		if err != nil {
+			return nil, err
+		}
+		_, name, ok := c.st.lookup(p.ID)
+		if !ok {
+			return nil, errors.New("no such pane")
+		}
+		_, err = c.verb("set-window", map[string]any{"session": name, "window": p.ID, "name": p.Name})
+		return true, err
+
+	case "workspace.rename":
+		p, err := decode[proto.NameWorkspaceParams](params)
+		if err != nil {
+			return nil, err
+		}
+		_, err = c.verb("set-workspace-name", map[string]any{"session": c.st.nameOf(p.Session), "workspace": p.Workspace, "name": p.Name})
+		return true, err
+
+	case "note":
+		p, err := decode[proto.NoteParams](params)
+		if err != nil {
+			return nil, err
+		}
+		args := map[string]any{"session": c.st.nameOf(p.Session), "note": p.Note}
+		if p.Pane != "" {
+			args["window"] = p.Pane
+		}
+		_, err = c.verb("set-note", args)
+		return true, err
+
 	case "focus":
 		p, err := decode[proto.FocusParams](params)
 		if err != nil {

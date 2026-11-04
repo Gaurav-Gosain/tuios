@@ -438,6 +438,22 @@ type WorkspaceParams struct {
 	Workspace int    `json:"workspace"`
 }
 
+// NameWorkspaceParams names one of a session's workspaces; an empty Name
+// clears it.
+type NameWorkspaceParams struct {
+	Session   string `json:"session"`
+	Workspace int    `json:"workspace"`
+	Name      string `json:"name"`
+}
+
+// NoteParams sets a session's note, or a pane's with Pane; an empty Note
+// clears it.
+type NoteParams struct {
+	Session string `json:"session"`
+	Pane    string `json:"pane,omitempty"`
+	Note    string `json:"note"`
+}
+
 // CommandParams runs a tuios keymap action, as `tuios run-command` does,
 // in a session.
 type CommandParams struct {
