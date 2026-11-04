@@ -10,7 +10,6 @@ import (
 	"io"
 	"math"
 	"os"
-	"path/filepath"
 	"runtime/debug"
 	"strconv"
 	"strings"
@@ -215,16 +214,6 @@ func (l *Live) Resize(area Area) {
 			l.sendFinal()
 		}
 	}
-}
-
-// Redraw draws the diagram again where it is, as after the screen was cleared.
-func (l *Live) Redraw() { l.Resize(l.Area()) }
-
-// Area is where the view draws.
-func (l *Live) Area() Area {
-	l.mu.Lock()
-	defer l.mu.Unlock()
-	return l.area
 }
 
 // Close stops the view and removes the picture. It returns within wait even
@@ -533,6 +522,3 @@ func (l *Live) Write(p []byte) (int, error) {
 	defer l.out.Unlock()
 	return l.opt.Out.Write(p)
 }
-
-// TempDir is where FileMedium writes, for a terminal that checks the place.
-func TempDir() string { return filepath.Clean(os.TempDir()) }
