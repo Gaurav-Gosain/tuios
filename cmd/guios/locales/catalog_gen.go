@@ -10233,3 +10233,83 @@ func ToastPaneTooSmall() string { return In(i18n.Locale()).ToastPaneTooSmall() }
 func (msgs Messages) ToastPaneTooSmall() string {
 	return Catalog.Format(msgs.locale, "toastPaneTooSmall", nil)
 }
+
+// CopyModeLabel says "Copy mode"
+// in the language the app shows.
+func CopyModeLabel() string { return In(i18n.Locale()).CopyModeLabel() }
+
+// CopyModeLabel says "Copy mode"
+// in the language of msgs.
+func (msgs Messages) CopyModeLabel() string {
+	return Catalog.Format(msgs.locale, "copyModeLabel", nil)
+}
+
+// CopyModeNormal says "Copy"
+// in the language the app shows.
+func CopyModeNormal() string { return In(i18n.Locale()).CopyModeNormal() }
+
+// CopyModeNormal says "Copy"
+// in the language of msgs.
+func (msgs Messages) CopyModeNormal() string {
+	return Catalog.Format(msgs.locale, "copyModeNormal", nil)
+}
+
+// CopyModeVisual says "Visual"
+// in the language the app shows.
+func CopyModeVisual() string { return In(i18n.Locale()).CopyModeVisual() }
+
+// CopyModeVisual says "Visual"
+// in the language of msgs.
+func (msgs Messages) CopyModeVisual() string {
+	return Catalog.Format(msgs.locale, "copyModeVisual", nil)
+}
+
+// CopyModeVisualLine says "Visual line"
+// in the language the app shows.
+func CopyModeVisualLine() string { return In(i18n.Locale()).CopyModeVisualLine() }
+
+// CopyModeVisualLine says "Visual line"
+// in the language of msgs.
+func (msgs Messages) CopyModeVisualLine() string {
+	return Catalog.Format(msgs.locale, "copyModeVisualLine", nil)
+}
+
+// CopyModeVisualBlock says "Visual block"
+// in the language the app shows.
+func CopyModeVisualBlock() string { return In(i18n.Locale()).CopyModeVisualBlock() }
+
+// CopyModeVisualBlock says "Visual block"
+// in the language of msgs.
+func (msgs Messages) CopyModeVisualBlock() string {
+	return Catalog.Format(msgs.locale, "copyModeVisualBlock", nil)
+}
+
+// CopyModeHint says "Move with h, j, k and l. Press v to select and y to copy. Press q to leave."
+// in the language the app shows.
+func CopyModeHint() string { return In(i18n.Locale()).CopyModeHint() }
+
+// CopyModeHint says "Move with h, j, k and l. Press v to select and y to copy. Press q to leave."
+// in the language of msgs.
+func (msgs Messages) CopyModeHint() string {
+	return Catalog.Format(msgs.locale, "copyModeHint", nil)
+}
+
+// CopyModeNotFound says "\"{query}\" is not in the pane."
+// in the language the app shows.
+func CopyModeNotFound(query string) string { return In(i18n.Locale()).CopyModeNotFound(query) }
+
+// CopyModeNotFound says "\"{query}\" is not in the pane."
+// in the language of msgs.
+func (msgs Messages) CopyModeNotFound(query string) string {
+	return Catalog.Format(msgs.locale, "copyModeNotFound", map[string]any{"query": query})
+}
+
+// CopyModeYanked says "Copied {n} characters."
+// in the language the app shows.
+func CopyModeYanked(n string) string { return In(i18n.Locale()).CopyModeYanked(n) }
+
+// CopyModeYanked says "Copied {n} characters."
+// in the language of msgs.
+func (msgs Messages) CopyModeYanked(n string) string {
+	return Catalog.Format(msgs.locale, "copyModeYanked", map[string]any{"n": n})
+}

@@ -388,7 +388,7 @@ var nativeActions = map[string]bool{
 	"prefix_split_horizontal": true, "prefix_split_vertical": true, "split_horizontal": true, "split_vertical": true,
 	"prev_session": true, "next_session": true, "prefix_session_switcher": true, "goto_picker": true, "choose_tree": true,
 	"prefix_close_session": true, "prefix_command_palette": true, "prefix_settings": true, "prefix_keybinds": true,
-	"prefix_file_search": true, "prefix_review": true, "prefix_inbox": true,
+	"prefix_file_search": true, "prefix_selection": true, "prefix_review": true, "prefix_inbox": true,
 	"prefix_next_attention": true, "prefix_mail": true,
 	"workspace_prefix_switch_1": true, "workspace_prefix_move_1": true, "new_workspace": true,
 	"prev_workspace": true, "next_workspace": true,
@@ -487,6 +487,9 @@ func (a *App) runKeyAction(action string) {
 		a.newWorktreeSession()
 	case "prefix_close_session":
 		a.closeSession(a.selected, true)
+	case "prefix_selection":
+		a.openCopyMode()
+		return
 	case "prefix_settings":
 		a.openSettings("")
 	case "prefix_keybinds":

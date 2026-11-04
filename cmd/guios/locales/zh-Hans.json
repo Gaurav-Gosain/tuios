@@ -1009,5 +1009,13 @@
   "lookViewPage": "页面",
   "cockpitReadingPrompt": "tuios 仍在读取提示。请再按一次键。",
   "cockpitAnswerFailed": "tuios 无法发送回答。请打开窗格回答。",
-  "toastPaneTooSmall": "此窗格太小,无法拆分。请关闭一个窗格或加宽窗口。"
+  "toastPaneTooSmall": "此窗格太小,无法拆分。请关闭一个窗格或加宽窗口。",
+  "copyModeLabel": "复制模式",
+  "copyModeNormal": "复制",
+  "copyModeVisual": "可视",
+  "copyModeVisualLine": "可视行",
+  "copyModeVisualBlock": "可视块",
+  "copyModeHint": "用 h、j、k、l 移动。按 v 选择，按 y 复制。按 q 退出。",
+  "copyModeNotFound": "窗格中没有“{query}”。",
+  "copyModeYanked": "已复制 {n} 个字符。"
 }

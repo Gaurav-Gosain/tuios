@@ -167,6 +167,8 @@ type App struct {
 	// early are the keys typed into panes whose terminal is attaching
 	// (typeahead.go).
 	early map[string][]byte
+	// cm is copy mode, on one pane, nil while off (copymode.go).
+	cm *copyMode
 	// refocused is the pane keepKeyboard last gave the keyboard back to.
 	refocused string
 
@@ -692,6 +694,9 @@ func (a *App) dropTerm(id string) {
 		delete(a.terms, id)
 	}
 	delete(a.early, id)
+	if a.cm != nil && a.cm.pane == id {
+		a.cm = nil
+	}
 	if a.find.pane == id {
 		a.find.pane = ""
 	}

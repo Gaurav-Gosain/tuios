@@ -802,6 +802,8 @@ func (a *App) paneTerminal(c *ui.Context, pal *palette, s *proto.Session, p *pro
 	// program's background reaches the card's edges.
 	ui.Box(c.Key("body")).Grow(1).MinHeight(0).Children(func() {
 		switch {
+		case e != nil && e.term != nil && a.cm != nil && a.cm.pane == p.ID:
+			a.copyView(c, pal)
 		case e != nil && e.term != nil:
 			ref := a.paneRef(p.ID)
 			terminal.View(c.Key("term"), e.term).Fill().Bind(ref)

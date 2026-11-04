@@ -1854,5 +1854,13 @@
   "lookViewPage": "Page",
   "cockpitReadingPrompt": "tuios is still reading the prompt. Press the key again.",
   "cockpitAnswerFailed": "tuios could not send the answer. Open the pane to answer it.",
-  "toastPaneTooSmall": "This pane is too small to split. Close a pane or make the window wider."
+  "toastPaneTooSmall": "This pane is too small to split. Close a pane or make the window wider.",
+  "copyModeLabel": "Copy mode",
+  "copyModeNormal": "Copy",
+  "copyModeVisual": "Visual",
+  "copyModeVisualLine": "Visual line",
+  "copyModeVisualBlock": "Visual block",
+  "copyModeHint": "Move with h, j, k and l. Press v to select and y to copy. Press q to leave.",
+  "copyModeNotFound": "\"{query}\" is not in the pane.",
+  "copyModeYanked": "Copied {n} characters."
 }

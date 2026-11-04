@@ -456,6 +456,14 @@ func renewLoop() {
 	}
 }
 
+// CellSize is the size of a cell in pixels, as the view last gave it:
+// 0, 0 before it did.
+func (s *Stream) CellSize() (w, h int) {
+	s.leaseMu.Lock()
+	defer s.leaseMu.Unlock()
+	return s.lease[2], s.lease[3]
+}
+
 // Claim makes the pane take this view's size, which ResizePixels does at
 // once with the daemon: nothing more to tell.
 func (s *Stream) Claim() error { return nil }
