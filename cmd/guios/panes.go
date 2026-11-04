@@ -927,12 +927,22 @@ func (a *App) split(s *proto.Session, p proto.CreateParams) {
 	if pane := s.PaneByID(p.Split); pane != nil && !pane.Browser() {
 		// Two halves too small to read a prompt help no one: the pane
 		// stays whole, and the toast says what to do instead.
+		// The pane's size is its terminal's grid, what the person sees.
+		// Pane.Cols and Rows are the rectangle the layout last gave the
+		// window in the session's cells, which a session guios made sets
+		// from the pane it came from, as small as 20 by 12.
+		cols, rows := pane.Cols, pane.Rows
+		if t := a.termFor(pane.ID); t != nil {
+			if c, r := t.Size(); c > 0 && r > 0 {
+				cols, rows = c, r
+			}
+		}
 		down := p.Direction == "down" || p.Direction == "up"
-		if pane.Cols > 0 && pane.Rows > 0 && (down && pane.Rows/2 < minPaneRows || !down && pane.Cols/2 < minPaneCols) {
+		if cols > 0 && rows > 0 && (down && rows/2 < minPaneRows || !down && cols/2 < minPaneCols) {
 			a.toast(locales.ToastPaneTooSmall())
 			return
 		}
-		p.Cols, p.Rows = pane.Cols, pane.Rows
+		p.Cols, p.Rows = cols, rows
 		if p.Direction == "down" || p.Direction == "up" {
 			p.Rows = max(p.Rows/2, 4)
 		} else {
