@@ -89,7 +89,14 @@ func (a *App) view(c *ui.Context) {
 		// A frame when the first "ago" label shown changes, and none while
 		// no label would.
 		if !agoDue.IsZero() {
-			c.After(agoDue.Sub(c.Now()))
+			// One frame a minute at most, on the minute, for every label
+			// due in it, as the TUI's minute tick: the agents view shows
+			// many ages, each of which would cost a frame of its own.
+			due := agoDue
+			if t := due.Truncate(time.Minute); !t.Equal(due) {
+				due = t.Add(time.Minute)
+			}
+			c.After(due.Sub(c.Now()))
 		}
 	}()
 	a.looks()

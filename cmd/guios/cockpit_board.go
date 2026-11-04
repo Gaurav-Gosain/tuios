@@ -279,7 +279,7 @@ func (a *App) boardCard(c *ui.Context, pal *palette, b *ckBoard, t session.TaskR
 				ui.Text(c, locales.CockpitBlocked()).FontSize(11.5).FontWeight(650).TextColor(pal.danger).SingleLine()
 			case t.Holder != nil:
 				st, unread := ckStateStatus(t.Holder.State)
-				statusIcon(c, pal, st, unread, 11)
+				ckMark(c, pal, st, unread, 11)
 				name := t.Holder.Name
 				if name == "" {
 					name = t.Holder.Window[:min(8, len(t.Holder.Window))]

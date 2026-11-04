@@ -127,7 +127,7 @@ func (a *App) cockpitHeader(c *ui.Context, pal *palette, bar ui.TitleBar, shown 
 				b.Background(pal.rowHover)
 			}
 			b.Children(func() {
-				statusIcon(c, pal, st, unread, 12)
+				ckMark(c, pal, st, unread, 12)
 				ui.Text(c, itoa(n[g])).FontSize(12.5).FontWeight(650).TextColor(pal.text).FontFeatures("tnum")
 				ui.Text(c, label).FontSize(12.5).TextColor(pal.textMuted)
 			})
@@ -317,7 +317,7 @@ func (a *App) ckRowView(c *ui.Context, pal *palette, r ckRow) {
 	row.Children(func() {
 		ui.Column(c).Grow(1).MinWidth(0).Gap(3).Children(func() {
 			ui.Row(c).Gap(7).AlignItems(ui.Center).Children(func() {
-				statusIcon(c, pal, st, unread, 13)
+				ckMark(c, pal, st, unread, 13)
 				nm := ui.Text(c, name).FontSize(13.5).SingleLine().Ellipsis("…").Shrink(1).MinWidth(0).TextColor(pal.text)
 				if unread || r.group == ckNeeds {
 					nm.FontWeight(650)
@@ -605,4 +605,41 @@ func ckCodeBg(pal *palette) ui.Color {
 		return pal.card.Mix(ui.Hex("#000000"), 0.28)
 	}
 	return pal.card.Mix(pal.sidebar, 0.75)
+}
+
+// ckMark is a state's mark as the cockpit draws it: the sidebar's shapes,
+// held still. The sidebar's working ring turns and its needs-you dot
+// pulses, which draws 60 frames a second for as long as one shows; the
+// cockpit lists many agents and keeps the TUI's rule of no spinners, so it
+// costs no frame while nothing changes.
+func ckMark(c *ui.Context, pal *palette, st proto.Status, unread bool, size float32) ui.Element {
+	if st != proto.Working && st != proto.Waiting {
+		return statusIcon(c, pal, st, unread, size)
+	}
+	box := ui.Box(c).Size(size, size).Shrink(0)
+	if st == proto.Working {
+		box.Label(locales.StatusWorking())
+	} else {
+		box.Label(locales.StatusNeedsYou())
+	}
+	box.Draw(func(p *ui.Painter, r ui.Rect) {
+		cx, cy := r.X+r.W/2, r.Y+r.H/2
+		rad := min(r.W, r.H)/2 - 1
+		var ring ui.Path
+		ring.Circle(cx, cy, rad)
+		if st == proto.Working {
+			p.StrokePath(&ring, 1.7, pal.accent.Alpha(0.25))
+			p.Transform(ui.Rotation(-90), cx, cy, func() {
+				var arc ui.Path
+				arc.Circle(cx, cy, rad)
+				p.StrokePath(arc.Trim(0, 0.35), 1.7, pal.accent)
+			})
+			return
+		}
+		p.StrokePath(&ring, 1.7, pal.attention)
+		var dot ui.Path
+		dot.Circle(cx, cy, rad*0.42)
+		p.FillPath(&dot, pal.attention)
+	})
+	return box
 }
