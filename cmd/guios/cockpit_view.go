@@ -378,11 +378,9 @@ func (a *App) ckRowView(c *ui.Context, pal *palette, r ckRow) {
 		a.goToAgent(ag)
 	}
 	row.ContextMenu(func(m *ui.Menu) { a.ckRowMenu(m, r) })
-	tip := filepath.Clean(ag.Cwd)
-	if ag.Source != "" && ag.Source != "report" {
-		tip += "\n" + locales.CockpitStateFrom(ag.Source)
-	}
-	pointerTooltip(c, row, "ck-tip-"+r.key, tip)
+	// The folder, beside the row: the state's source is the Details
+	// column's, not the tooltip's.
+	rowTooltip(c, row, "ck-tip-"+r.key, a.hostOf(ag.Session).shortDir(filepath.Clean(ag.Cwd)))
 	st, unread := ckStatus(ag, r.item)
 	since := ag.StateAt / int64(time.Millisecond)
 	if r.item != nil && r.item.Since > 0 {

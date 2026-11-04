@@ -340,6 +340,42 @@ func pointerTooltip(c *ui.Context, el ui.Element, key, s string) {
 	}
 }
 
+// rowTooltip is a list row's tooltip: beside the row, to its right, so
+// that it covers neither the row's own text nor the rows around it
+// (QA-062). Each line is one line: a path cut at its start, so that its
+// last folders stay (DESIGN.md section 7, rule 4).
+func rowTooltip(c *ui.Context, el ui.Element, key, s string) {
+	el.Description(s)
+	ui.TooltipBase(c, el, func(tip ui.Element) {
+		th := c.Theme()
+		fill, text := th.Inverse, th.InverseText
+		if fill == ui.Transparent {
+			fill = th.Text
+		}
+		if text == ui.Transparent {
+			text = th.Background
+		}
+		size := th.FontSize - 1
+		tip.Padding(th.Space(1.25), th.Space(2)).Radius(th.Space(1.25)).Margin(0, 0, 0, sp2).
+			Background(fill).TextColor(text).FontSize(size).Shadow(0, 2, 8, 0, ui.RGBA(0, 0, 0, 0.2)).
+			AttachTo(el, ui.AnchorRight, ui.AnchorLeft)
+		tip.Children(func() {
+			ui.Column(c).Gap(2).Children(func() {
+				for _, l := range strings.Split(s, "\n") {
+					cut := l
+					if strings.ContainsRune(l, '/') {
+						cut = startCut(c, l, size, rowTipMax)
+					}
+					ui.Text(c, cut).FontSize(size).SingleLine().Ellipsis("…").MaxWidth(rowTipMax)
+				}
+			})
+		})
+	})
+}
+
+// rowTipMax is the widest line of a row's tooltip.
+const rowTipMax = 360
+
 // kbd is a key cap: 18 high, at least as wide, in a ring.
 func kbd(c *ui.Context, pal *palette, keys string) {
 	ui.Row(c).Height(hKbd).MinWidth(hKbd).Padding(0, 5).Radius(rChip).Background(pal.kbd).Border(1, pal.kbdBorder).
@@ -566,7 +602,7 @@ func (a *App) sessionRow(c *ui.Context, pal *palette, s *proto.Session, n *int) 
 	if g != nil {
 		tip += "\n" + gitSummary(g)
 	}
-	pointerTooltip(c, row, "tip-"+s.ID, tip)
+	rowTooltip(c, row, "tip-"+s.ID, tip)
 	row.ContextMenu(func(m *ui.Menu) { a.sessionMenu(m, s) })
 	row.Children(func() {
 		if a.renaming == s.ID {

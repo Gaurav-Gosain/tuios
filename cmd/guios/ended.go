@@ -133,7 +133,7 @@ func (a *App) endedSection(c *ui.Context, pal *palette, key, title string, list 
 func (a *App) endedRow(c *ui.Context, pal *palette, h *host, cv proto.Conversation, now time.Time) {
 	key := "e-" + h.name + "-" + cv.Agent + "-" + cv.ID
 	row := ui.Row(c.Key(key)).Height(44).Padding(0, 6, 0, rowInset).Gap(10).Radius(rControl).AlignItems(ui.Center)
-	pointerTooltip(c, row, "tip-"+key, h.shortDir(cv.Dir))
+	rowTooltip(c, row, "tip-"+key, h.shortDir(cv.Dir))
 	hovered := row.Hovered()
 	if hovered {
 		row.Background(pal.rowHover)
