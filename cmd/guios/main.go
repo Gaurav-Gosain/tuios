@@ -131,7 +131,6 @@ func runApp() {
 		mygo.App.SetActivationPolicy(activationPolicy(a.set))
 	}
 	mygo.App.WhenReady(func() {
-		installGLibPoll()
 		a.openWindow()
 		if onNewApp != nil {
 			onNewApp(a)
