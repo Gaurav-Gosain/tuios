@@ -1598,7 +1598,7 @@ func buildVerbRegistry() map[string]verbEntry {
 			handler: (*Daemon).verbSendText,
 		},
 		"run": {
-			description: "Type one command line at a pane's shell prompt, wait for the shell to report it finished, and return its exit code and output. Needs a shell that marks its commands with OSC 133, and refuses with no_shell_integration one that marks only its prompts; refuses with not_at_prompt when a command, or another run, is already running there.",
+			description: "Type one command line at a pane's shell prompt, wait for the shell to report it finished, and return its exit code and output. Needs a shell that marks its commands with OSC 133, and refuses with no_shell_integration one that marks only its prompts; refuses with not_at_prompt when a command, or another run, is already running there. From a pane, window is required.",
 			params: []verbParam{
 				sessionParam,
 				windowParam,

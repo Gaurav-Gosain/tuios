@@ -10009,6 +10009,14 @@ Run on 2026-10-24 against a build of origin/main (c5e6439de).
 |---|---|---|---|---|
 | A pane's `send-text` and `send-keys` without `-w` typed into the person's focused pane | `typingNeedsWindow` | Build of origin/main | `TestAPaneTypesOnlyWhereItAimsAndNotIntoAPrompt` ("a call without -w typed into the focused pane": `NOWIN_TEXTNOWIN` in the plain pane) | **caught** |
 | A pane with respond typed into a pane on needs_input with no sign it read the prompt | `typingBlocked` | Build of origin/main | `TestAPaneTypesOnlyWhereItAimsAndNotIntoAPrompt` (`REFUSED_TEXT`, `QZ` and `BUFFER_TEXT` in the waiting pane's log), `TestAPaneCannotMarkAnotherPaneToAnswerItsPrompt` (`SK3_EXIT=0`, `ANSWERED:y`) | **caught** |
+
+The plain pane is now a bash that marks its commands, and the probe also
+calls `run` with no `-w`. Run on 2026-11-04 against a build of origin/main
+(23003ac3a) with `run` taken out of the `-w` check in `holdTypingTarget`.
+
+| Bug | Fix removed | How | Tests that fail | Verdict |
+|---|---|---|---|---|
+| A pane's `run` without `-w` ran the command in the person's focused shell | `run` in the `typingNeedsWindow` check | One-line revert | `TestAPaneTypesOnlyWhereItAimsAndNotIntoAPrompt` ("nowin-run from a pane without -w was not refused", and `$ echo NOWIN_RUN` in the plain pane) | **caught** |
 ## wait-for window-output --new ignores old output
 
 `TestWaitForWindowOutputNewIgnoresOldOutput` prints `DONE-7` in a pane and

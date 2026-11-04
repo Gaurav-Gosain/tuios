@@ -103,6 +103,9 @@ few lines in their startup file. 'tuios doctor shell' prints those lines for
 your shell. A pane whose shell sends no marks is refused with
 no_shell_integration, and nothing is typed.
 
+From inside a pane, -w is required. Without it the command would go to the
+pane the person has in focus.
+
 It types only at a prompt. A pane already running a command is refused with
 not_at_prompt, and nothing is typed. The words after -- are joined with spaces
 into one line that the shell parses, so quote for the shell as you would when

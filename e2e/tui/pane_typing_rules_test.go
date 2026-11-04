@@ -1,6 +1,7 @@
 package tuie2e
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -11,8 +12,8 @@ import (
 // Two rules for a pane that types into another pane, on a real daemon in the
 // default open mode:
 //
-//   - send-text and send-keys from a pane need -w. Without it they used to
-//     type into the pane the person has in focus.
+//   - send-text, send-keys and run from a pane need -w. Without it they used
+//     to type into the pane the person has in focus.
 //   - From a pane, they do not type into a pane on needs_input without
 //     --allow-blocked, even when the caller holds respond. ask-agent already
 //     had this rule.
@@ -34,6 +35,10 @@ import (
 //   - The focused pane could not be the plain pane, and text without -w would
 //     land somewhere the test does not read. The plain pane is created with
 //     the focus, and the test checks that it still has it.
+//   - run could be refused for a reason that is not the rule: a shell with no
+//     OSC 133 marks, or one not yet at its prompt. The plain pane is a bash
+//     that marks its commands, and the probe starts only once list-windows
+//     says it is at its prompt.
 
 // blockedPrompt reports needs_input for its own pane, shows a prompt, and
 // appends every byte typed into it to the log named by $1.
@@ -54,6 +59,7 @@ until [ -e "$out/go" ]; do sleep 0.05; done
 run() { name=$1; shift; "$bin" "$@" > "$out/$name" 2>&1; echo "exit=$?" >> "$out/$name"; }
 run nowin-text send-text -s "$s" 'NOWIN_TEXT'
 run nowin-keys send-keys -s "$s" 'N O W I N'
+run nowin-run run -s "$s" --timeout 5000 -- echo NOWIN''_RUN
 run plain-text send-text -s "$s" -w plain 'echo WITH''_WINDOW
 '
 run blocked-text send-text -s "$s" -w blocked 'REFUSED_TEXT'
@@ -70,7 +76,8 @@ exec sleep 600
 //
 // Negative control: on origin/main the calls without -w exit 0 and
 // NOWIN_TEXT lands in the focused plain pane, and the calls into the blocked
-// pane exit 0 and land in its log.
+// pane exit 0 and land in its log. With run left out of the -w rule, run
+// exits 0 and NOWIN_RUN lands in the plain pane.
 func TestAPaneTypesOnlyWhereItAimsAndNotIntoAPrompt(t *testing.T) {
 	base := t.TempDir()
 	killDaemon(t, base)
@@ -82,7 +89,11 @@ func TestAPaneTypesOnlyWhereItAimsAndNotIntoAPrompt(t *testing.T) {
 	log := filepath.Join(out, "blocked.log")
 	blocked := newPaneRunning(t, base, sess, "blocked", "bash", writeAgentScript(t, base, "blocked.sh", blockedPrompt), log, tuiosBin)
 	probe := newPaneRunning(t, base, sess, "probe", "bash", writeAgentScript(t, base, "probe.sh", typingProbe), out, tuiosBin, sess)
-	o, err := tuiosCLI(t, base, "new-window", "-s", sess, "--print-id", "plain", "--", "sh")
+	rc := filepath.Join(base, "markedrc")
+	if err := os.WriteFile(rc, []byte(markedRC), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	o, err := tuiosCLI(t, base, "new-window", "-s", sess, "--print-id", "plain", "--", "bash", "--noprofile", "--rcfile", rc, "-i")
 	if err != nil {
 		t.Fatalf("new-window plain: %v\n%s", err, o)
 	}
@@ -99,6 +110,7 @@ func TestAPaneTypesOnlyWhereItAimsAndNotIntoAPrompt(t *testing.T) {
 	if focused, _ := tuiosCLI(t, base, "list-windows", "-s", sess, "--json"); !strings.Contains(focused, `"focused_window_id": "`+plain+`"`) {
 		t.Fatalf("the plain pane %s does not have the focus:\n%s", plain, focused)
 	}
+	waitPlainAtPrompt(t, base, sess, plain)
 
 	if err := os.WriteFile(filepath.Join(out, "go"), nil, 0o644); err != nil {
 		t.Fatal(err)
@@ -135,7 +147,7 @@ func TestAPaneTypesOnlyWhereItAimsAndNotIntoAPrompt(t *testing.T) {
 		t.Errorf("ASSERTION: send-text --allow-blocked never reached the blocked pane: %q", got)
 	}
 
-	for _, name := range []string{"nowin-text", "nowin-keys"} {
+	for _, name := range []string{"nowin-text", "nowin-keys", "nowin-run"} {
 		if r := read(name); !strings.Contains(r, "exit=1") || !strings.Contains(r, "-w") {
 			t.Errorf("ASSERTION: %s from a pane without -w was not refused with a hint to pass -w:\n%s", name, r)
 		}
@@ -166,5 +178,32 @@ func TestAPaneTypesOnlyWhereItAimsAndNotIntoAPrompt(t *testing.T) {
 		if strings.Contains(got, refused) {
 			t.Errorf("ASSERTION: %q reached the pane on needs_input without --allow-blocked: %q", refused, got)
 		}
+	}
+}
+
+// waitPlainAtPrompt waits until list-windows says the pane's shell is at its
+// prompt, so a run into it is refused only by the rule under test.
+func waitPlainAtPrompt(t *testing.T, base, sess, id string) {
+	t.Helper()
+	deadline := time.Now().Add(shellTimeout)
+	for {
+		out, _ := tuiosCLI(t, base, "list-windows", "-s", sess, "--json")
+		var got struct {
+			Windows []struct {
+				ID       string `json:"window_id"`
+				AtPrompt bool   `json:"at_prompt"`
+			} `json:"windows"`
+		}
+		if err := json.Unmarshal([]byte(out), &got); err == nil {
+			for _, w := range got.Windows {
+				if w.ID == id && w.AtPrompt {
+					return
+				}
+			}
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("the plain pane %s never reached its prompt:\n%s", id, out)
+		}
+		time.Sleep(50 * time.Millisecond)
 	}
 }

@@ -949,7 +949,7 @@ func (d *Daemon) holdTypingTarget(cs *connState, verb string, pa *paneAuth, para
 		return s
 	}
 	window := str("window")
-	if window == "" && (verb == "send-text" || verb == "send-keys") && pa.inPane() {
+	if window == "" && (verb == "send-text" || verb == "send-keys" || verb == "run") && pa.inPane() {
 		return nil, typingNeedsWindow(verb)
 	}
 	sess := d.findTargetSession(cs, str("session"))
@@ -1182,9 +1182,9 @@ var typingAllowBlockedParam = verbParam{
 // paneTypingVerbs are the typing verbs that type into a pane on needs_input
 // only with allow_blocked. ask-agent has the rule of its own, and run and the
 // queue type only at a shell prompt or into an agent at rest. Of these,
-// send-text and send-keys also need a window from a pane (typingNeedsWindow).
-// paste-buffer does not: tmux's paste-buffer pastes into the caller's own
-// pane, and scripts use it so.
+// send-text and send-keys also need a window from a pane (typingNeedsWindow),
+// and so does run. paste-buffer does not: tmux's paste-buffer pastes into the
+// caller's own pane, and scripts use it so.
 var paneTypingVerbs = map[string]bool{
 	"send-text":    true,
 	"send-keys":    true,
