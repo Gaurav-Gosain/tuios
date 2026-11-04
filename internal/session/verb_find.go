@@ -485,5 +485,18 @@ func findVerbs() map[string]verbEntry {
 			},
 			handler: (*Daemon).verbListPorts,
 		},
+		"pane-usage": {
+			description: "Report the CPU and memory of the processes in each pane on this machine, and the machine's load. Linux and macOS only. Readings closer than 0.4 seconds share one.",
+			params: []verbParam{
+				{Name: "session", Type: "string", Description: "Report only this session's panes. Omit to report every session."},
+			},
+			returns: []verbParam{
+				{Name: "supported", Type: "bool", Description: "False on a system where tuios cannot read processes. panes is then empty."},
+				{Name: "panes", Type: "[]object", Description: "One entry per pane: session, window, pid, cpu_pct (percent of one core since the reading before, 0 on the first), rss (bytes) and procs."},
+				{Name: "machine", Type: "object", Description: "cores, load1, mem_pct and load_ok."},
+			},
+			examples: []string{`{"id":1,"verb":"pane-usage","params":{"session":"work"}}`},
+			handler:  (*Daemon).verbPaneUsage,
+		},
 	}
 }

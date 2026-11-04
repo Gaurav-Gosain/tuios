@@ -141,6 +141,7 @@ var verbScopes = map[string]scopeKind{
 	"list-windows":    scopeRead,
 	"command-history": scopeRead,
 	"list-ports":      scopeRead,
+	"pane-usage":      scopeRead,
 	"get-window":      scopeRead,
 	"list-workspaces": scopeRead,
 	"layout-tree":     scopeRead,

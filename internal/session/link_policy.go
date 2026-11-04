@@ -109,6 +109,7 @@ var verbCapabilities = map[string]linkCaps{
 	"search-panes":         {config.LinkAllowList},
 	"command-history":      {config.LinkAllowList},
 	"list-ports":           {config.LinkAllowList},
+	"pane-usage":           {config.LinkAllowList},
 	"get-window":           {config.LinkAllowList},
 	"list-workspaces":      {config.LinkAllowList},
 	"layout-tree":          {config.LinkAllowList},

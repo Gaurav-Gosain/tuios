@@ -436,6 +436,8 @@ type Daemon struct {
 	paneCreators sync.Map
 	// ports is list-ports' last reading of the system. See verb_ports.go.
 	ports portsCache
+	// usage is pane-usage's last reading. See verb_usage.go.
+	usage usageCache
 
 	// evidenceClock is the time the detection verbs measure evidence_age_ms
 	// against. Nil means time.Now; tests replace it. See agent_evidence.go.
