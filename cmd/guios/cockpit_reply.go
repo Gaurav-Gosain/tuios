@@ -328,6 +328,7 @@ func (a *App) sendReply(ag client.Agent, d *ckDraft, now bool) {
 				a.toast(locales.CockpitQueuedFor(ag.Name))
 			}
 			a.fetchQueued(ag)
+			a.ckAdvanceAfter(ag)
 		})
 	}()
 }

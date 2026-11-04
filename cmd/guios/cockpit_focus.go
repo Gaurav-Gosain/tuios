@@ -658,6 +658,7 @@ func (a *App) ckSend(it session.AttentionItem, ag client.Agent, decision, messag
 				a.toast(locales.CockpitNotApplied(out.Reason))
 			} else {
 				a.toast(locales.CockpitAnswered(name, ckDecisionWords(decision)))
+				a.ckAdvanceAfter(ag)
 			}
 			a.ck.peek = nil
 			a.refreshCockpit()

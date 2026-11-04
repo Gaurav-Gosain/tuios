@@ -85,6 +85,7 @@ func (a *App) cockpitCard(c *ui.Context, pal *palette, bar ui.TitleBar, shown fl
 	ck.rows = a.buildCockpitRows(c)
 	a.ckTakeJump()
 	a.ckClamp()
+	a.ckTakeAdvance(c)
 	// The card's own width, as the frame lays it out: the window less
 	// both sidebars and the gaps (view.go).
 	cw := a.side.rowW

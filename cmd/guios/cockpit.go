@@ -113,6 +113,10 @@ type cockpit struct {
 	jumpTo *ckJump
 	// focusView asks the view just shown to take the keys.
 	focusView bool
+	// advance is the agent the person just answered from a Needs you
+	// row, and when: once its row has moved, the next one is selected.
+	advance   string
+	advanceAt time.Time
 	// lightbox is an image of a thread shown whole.
 	lightbox *ckThreadImage
 
@@ -711,4 +715,47 @@ func ckStatus(ag client.Agent, it *session.AttentionItem) (proto.Status, bool) {
 		return proto.Idle, ag.FinishedUnread
 	}
 	return proto.Idle, false
+}
+
+// ckAdvanceAfter notes an answer to an agent on a Needs you row: once its
+// row leaves Needs you, the cursor moves to the next row there.
+func (a *App) ckAdvanceAfter(ag client.Agent) {
+	r, ok := a.ckSelected()
+	if !ok || r.group != ckNeeds || ag.Key() != a.ck.selAgt {
+		return
+	}
+	a.ck.advance, a.ck.advanceAt = ag.Key(), time.Now()
+}
+
+// ckTakeAdvance moves the cursor to the next Needs you row once the
+// answered agent's row has left the group, after the row hold. With none
+// left, the cursor stays.
+func (a *App) ckTakeAdvance(c *ui.Context) {
+	ck := &a.ck
+	if ck.advance == "" {
+		return
+	}
+	now := c.Now()
+	if due := ck.advanceAt.Add(ckHold + 50*time.Millisecond); now.Before(due) {
+		c.After(due.Sub(now))
+		return
+	}
+	if now.Sub(ck.advanceAt) > 5*time.Second || ck.selAgt != ck.advance {
+		// The person moved on, or the row never left.
+		ck.advance = ""
+		return
+	}
+	r, ok := a.ckSelected()
+	if ok && r.group == ckNeeds {
+		// Still waiting: the refresh has not come yet.
+		c.After(100 * time.Millisecond)
+		return
+	}
+	ck.advance = ""
+	for _, n := range ck.rows {
+		if n.group == ckNeeds && (n.kind == ckRowAgent || n.kind == ckRowItem) {
+			a.ckSelect(n)
+			return
+		}
+	}
 }
