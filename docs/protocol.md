@@ -3711,6 +3711,18 @@ Params: `session`, `workspace` (default: the current one).
   children. Its `window_id` is a number of the session.
 - `leaves` gives the window id of each leaf number.
 - `workspaces` gives the workspace of each window of the session.
+- `mode` is the layout of the workspace: `bsp`, `master-stack` or
+  `scrolling`. It is empty when no client has set one.
+- `tiling` is false when every pane floats.
+- `box` is the cells the panes are laid out in: `x`, `y`, `w` and `h`.
+- `gap` is the cells kept between panes.
+- `master` is the master-stack shape and splits the workspace holds:
+  `position`, `count`, `no_grid`, `ratio`, `stack_ratio` and `splits`. A
+  missing key means the default.
+- `scroll` is the scrolling strip: `columns`, `viewport_x` and
+  `column_width`.
+- `z` gives the place of each window of the workspace in the stacking order,
+  and `unplaced` names the windows no client has placed.
 
 The event `layout-changed` tells a subscriber when to read again.
 
@@ -3731,6 +3743,27 @@ window is gone, or named twice, is dropped.
 
 Errors: `invalid_params` for a tree that is too large or deep, or a workspace
 out of range.
+
+### set-layout-state
+
+Set the rest of the layout of a workspace. Every attached client lays the
+workspace out again. When something changed, `layout-changed` fires for the
+workspace. A param that is left out is not changed.
+
+Params: `session`, `workspace` (default: the current one), `mode` (`bsp`,
+`master-stack` or `scrolling`), `tiling`, `master_ratio`, `stack_ratio`,
+`master_splits`, `master_position`, `master_count`, `scroll_columns` (as
+`layout-tree` returns them), `viewport_x` (the current workspace only),
+`order` (window ids in the order the master-stack layout takes them) and
+`windows` (each `window`, `x`, `y`, `width`, `height` in the cells of the box,
+and `floating`).
+
+```json
+{"result": {"type": "layout_state_set", "session": "work", "workspace": 1, "changed": true}}
+```
+
+Errors: `invalid_params` for a mode, position, count or ratio out of range, a
+window that is not on the workspace, or a rectangle with no area.
 
 ### list-push
 
@@ -6809,7 +6842,7 @@ the one before. The configuration is in
 | `list` | `list-*`, `session-info`, `layout-tree`, `ssh-agent-path`, `display-env`, `get-window`, `capture-pane`, `screenshot`, `get-option`, `get-agent-state`, `resolve-pane`, `explain-agent-*`, `wait-for`, `subscribe`, `unsubscribe`, `peek-prompt`, `read-dir`, `wait-dir`, `compare-fan`, `agent-activity`, `get-approval`, `file-stat`, `file-list`, `list-tasks`, `get-task` |
 | `mail` | `send-agent-message`, `read-agent-messages`, `agent-mail-notice`, `stash-put`, `stash-list`, `stash-get` |
 | `open` | `new-session`, `new-window`, `split-window`, `popup`, `new-worktree`, `fan`, `start-agent`, `open-pane`, `resize-pane`, `close-pane`, `pane-cwd`, `pane-agent`, `pane-calls` |
-| `write` | `send-keys`, `send-text`, `ask-agent`, `run-command`, `switch-session`, `detach-client`, `close-window`, `close-workspace`, `kill-session`, `focus-window`, `move-window`, `set-window`, `select-workspace`, `set-layout`, `set-layout-tree`, `resize`, `set-option`, `set-session-*`, `set-workspace-*`, `set-agent-*`, `resume-agent`, `forget-conversation`, `request-approval`, `refresh-dock`, `pip`, `remove-worktree`, `bundle-worktree`, `run`, `ask-human` (whose handler refuses a link caller anyway), `review-diff` (it returns file contents), `review-note`, `review-stage`, `send-review`, `queue-prompt`, `cancel-queued`, `keep-fan`, `add-task`, `claim-task`, `finish-task`, `set-task-stage`, `block-task`, `release-task`, `remove-task` |
+| `write` | `send-keys`, `send-text`, `ask-agent`, `run-command`, `switch-session`, `detach-client`, `close-window`, `close-workspace`, `kill-session`, `focus-window`, `move-window`, `set-window`, `select-workspace`, `set-layout`, `set-layout-tree`, `set-layout-state`, `resize`, `set-option`, `set-session-*`, `set-workspace-*`, `set-agent-*`, `resume-agent`, `forget-conversation`, `request-approval`, `refresh-dock`, `pip`, `remove-worktree`, `bundle-worktree`, `run`, `ask-human` (whose handler refuses a link caller anyway), `review-diff` (it returns file contents), `review-note`, `review-stage`, `send-review`, `queue-prompt`, `cancel-queued`, `keep-fan`, `add-task`, `claim-task`, `finish-task`, `set-task-stage`, `block-task`, `release-task`, `remove-task` |
 | `open` and `write` | `verify-fan` |
 | `open` and `files` | `paste-pane-image` |
 | `write` and `files` | `paste-image` |

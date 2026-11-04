@@ -2,6 +2,7 @@ package session
 
 import (
 	"encoding/json"
+	"maps"
 	"strconv"
 )
 
@@ -46,7 +47,7 @@ func (d *Daemon) verbLayoutTree(cs *connState, params json.RawMessage) (any, *ve
 	for i := range state.Windows {
 		workspaces[state.Windows[i].ID] = state.Windows[i].Workspace
 	}
-	return map[string]any{
+	out := map[string]any{
 		"type":       "layout_tree",
 		"session":    sess.Name(),
 		"workspace":  ws,
@@ -54,7 +55,9 @@ func (d *Daemon) verbLayoutTree(cs *connState, params json.RawMessage) (any, *ve
 		"tree":       tree,
 		"leaves":     leaves,
 		"workspaces": workspaces,
-	}, nil
+	}
+	maps.Copy(out, layoutStateOf(sess, state, ws))
+	return out, nil
 }
 
 // verbSetLayoutTree answers set-layout-tree.

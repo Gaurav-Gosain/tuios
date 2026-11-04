@@ -274,6 +274,7 @@ var verbScopes = map[string]scopeKind{
 	"select-workspace":     scopeDeny,
 	"set-layout":           scopeDeny,
 	"set-layout-tree":      scopeDeny,
+	"set-layout-state":     scopeDeny,
 	"forget-conversation":  scopeDeny,
 	"run-command":          scopeDeny,
 	"close-window":         scopeDeny,
