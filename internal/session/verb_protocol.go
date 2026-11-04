@@ -769,7 +769,6 @@ func buildVerbRegistry() map[string]verbEntry {
 			}, setupReturns...),
 			examples: []string{
 				`{"id":1,"verb":"new-worktree","params":{"repo":"/src/api","branch":"feat/retry"}}`,
-				`{"id":1,"verb":"new-worktree","params":{"repo":"/src/api","branch":"feat/retry","command":["claude"],"setup":"pnpm i"}}`,
 				`{"id":1,"verb":"new-worktree","params":{"repo":"/src/api","branch":"feat/retry","base":"main","command":["claude"]}}`,
 				`{"id":1,"verb":"new-worktree","params":{"repo_url":"git@github.com:acme/api.git","repos_root":"~/src","branch":"feat/retry"}}`,
 			},

@@ -753,6 +753,8 @@ func (m *OS) settingsCategories() []settingsCategory {
 			opt("workspaces.return_when_empty"),
 			opt("workspaces.new_window_when_empty"),
 			opt("worktree.path"),
+			opt("worktree.setup"),
+			opt("worktree.setup_async"),
 		}),
 	}
 
