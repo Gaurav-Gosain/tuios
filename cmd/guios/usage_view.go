@@ -79,10 +79,21 @@ func trendline(c *ui.Context, pal *palette, key string, s series, top float32, w
 		case n == 1:
 			p.Line(r.X, chart.Y(r, ys[0]), r.X+r.W, chart.Y(r, ys[0]), 1.25, pal.textMuted)
 		case n > 1:
+			p.FillPath(chart.Area(r, xs, nil, ys, chart.CurveMonotone), pal.textMuted.Alpha(0.12))
 			p.StrokePath(chart.Line(r, xs, ys, chart.CurveMonotone), 1.25, pal.textMuted)
 		}
 	})
 	return box
+}
+
+// moves tells that a series has three readings or more that differ by
+// more than a hair: a trend worth a line.
+func moves(s series) bool {
+	if len(s) < 3 {
+		return false
+	}
+	lo, hi := slices.Min(s), slices.Max(s)
+	return hi-lo > max(hi*0.02, 1e-3)
 }
 
 // meter draws a fraction as a short bar.
@@ -97,7 +108,12 @@ func meter(c *ui.Context, pal *palette, frac float64, col ui.Color, w float32) {
 func usageFigure(c *ui.Context, pal *palette, key, label string, s series, top float32, figure string) {
 	ui.Row(c.Key(key)).Gap(7).AlignItems(ui.Center).Shrink(0).Children(func() {
 		ui.Text(c, label).FontSize(fsSmall).TextColor(pal.textFaint).SingleLine()
-		trendline(c, pal, "spark", s, top, 24, 14)
+		// A trend only once it has one: a flat line on its baseline read
+		// as a blank, "CPU ___ 0%" (council round 2, S4). Until then the
+		// label and the value say it.
+		if moves(s) {
+			trendline(c, pal, "spark", s, top, 32, 14)
+		}
 		ui.Text(c, figure).FontSize(fsSmall).FontWeight(wSemibold).TextColor(pal.text).FontFeatures("tnum").SingleLine()
 	})
 }
