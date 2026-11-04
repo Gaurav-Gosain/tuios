@@ -73,6 +73,10 @@ func (a *App) setFocus(s *proto.Session, pane string) {
 	}
 	a.focus[s.ID] = pane
 	s.Focus = pane
+	if pane != a.wantFocus {
+		// The person chose another pane before a new one was drawn.
+		a.wantFocus = ""
+	}
 	if s.Zoomed != "" {
 		s.Zoomed = pane
 	}
