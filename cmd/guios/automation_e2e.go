@@ -19,6 +19,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/egoist/mygo"
 	_ "github.com/egoist/mygo/plugins/automation"
 	"github.com/egoist/mygo/plugins/terminal"
 )
@@ -82,6 +83,20 @@ func startProbe(a *App) {
 							a.update(func() { a.win.SetSize(w, h) })
 						}
 						conn.Write([]byte("ok\n"))
+						continue
+					}
+					// "clip" answers the clipboard's text, read through the
+					// app as a paste reads it, and "clip TEXT" writes it.
+					if sc.Text() == "clip" || strings.HasPrefix(sc.Text(), "clip ") {
+						set, write := strings.CutPrefix(sc.Text(), "clip ")
+						got := make(chan string, 1)
+						a.update(func() {
+							if write {
+								mygo.Clipboard.WriteText(set)
+							}
+							got <- mygo.Clipboard.ReadText()
+						})
+						conn.Write([]byte(strconv.Quote(<-got) + "\n"))
 						continue
 					}
 					c, ok := strings.CutPrefix(sc.Text(), "count ")
