@@ -125,7 +125,10 @@ func AttachVia(d Dialer, id string) (*Stream, error) {
 	// session (fit, yield). While one does, the pane keeps the size the
 	// TUI gave it, and the view draws that grid: a TUI's panes never change
 	// size because guios shows them.
-	params := map[string]any{"session_id": sid, "session": name, "fit": true, "yield": true}
+	// The pane comes as a snapshot of the daemon's screen where it changes
+	// size: the terminal here reflows nothing itself, so it shows what
+	// the daemon's emulator laid out (QA-011).
+	params := map[string]any{"session_id": sid, "session": name, "fit": true, "yield": true, "repaint_on_resize": true}
 	if window != "" {
 		params["window"] = window
 	}
@@ -153,12 +156,22 @@ func openPane(host string, params map[string]any) (*session.PaneStream, session.
 	}
 	ps, reply, err := vc.OpenPaneStream(params)
 	renew := false
-	if err != nil && strings.Contains(err.Error(), "parameter yield") {
-		// A daemon from before yielding leases: its fit lease holds a TUI
-		// client's pane at most at this view's size.
-		delete(params, "yield")
+	// An older daemon refuses a parameter it does not know, one at a time.
+	for range 2 {
+		switch {
+		case err != nil && strings.Contains(err.Error(), "parameter repaint_on_resize"):
+			// From before repaints: the terminal here reflows at the
+			// 'R' frames, as it did.
+			delete(params, "repaint_on_resize")
+		case err != nil && strings.Contains(err.Error(), "parameter yield"):
+			// From before yielding leases: its fit lease holds a TUI
+			// client's pane at most at this view's size.
+			delete(params, "yield")
+			renew = true
+		default:
+			continue
+		}
 		ps, reply, err = vc.OpenPaneStream(params)
-		renew = true
 	}
 	if err != nil {
 		_ = vc.Close()
