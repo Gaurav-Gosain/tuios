@@ -55,6 +55,11 @@ type Stream struct {
 	// OnResized, when set, gets the sizes the pane takes, within Read,
 	// before the output after them: set it before the first Read.
 	OnResized func(cols, rows int)
+	// OnHistory, when set, hears with each snapshot, within Read, whether
+	// the daemon numbers the pane's history rows: then FetchHistory can
+	// bring back what the terminal's scrollback lets go of. Set it before
+	// the first Read.
+	OnHistory func(ids bool)
 	// OnLink, when set, hears that a linked machine's stream lost its
 	// connection (false) and has it again (true).
 	OnLink func(up bool)
@@ -243,7 +248,10 @@ func (s *Stream) Read(p []byte) (int, error) {
 				continue
 			}
 			cols, rows := int(binary.BigEndian.Uint16(payload[8:])), int(binary.BigEndian.Uint16(payload[10:]))
-			s.hist.snapshot()
+			ids := s.hist.snapshot()
+			if s.OnHistory != nil {
+				s.OnHistory(ids)
+			}
 			if s.OnResized != nil {
 				s.OnResized(cols, rows)
 			}

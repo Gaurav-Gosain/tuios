@@ -362,6 +362,22 @@ func target(path string) string {
 // Clone returns a copy that shares nothing with s.
 func (s Settings) Clone() Settings { return clone(s) }
 
+// fetchedScrollback is the most a pane's terminal keeps of its own while
+// the daemon keeps the pane's history and gives its rows ids: the rest is
+// fetched as the view nears the top. At 4 MB, six panes that printed a lot
+// held 15 MB more than at 1 MB.
+const fetchedScrollback = 1 << 20
+
+// PaneScrollback is the scrollback limit of a pane's terminal: the
+// setting's, or no more than fetchedScrollback when ids says the daemon
+// numbers the pane's history rows.
+func (s Settings) PaneScrollback(ids bool) int {
+	if n := s.ScrollbackBytes(); !ids || n < fetchedScrollback {
+		return n
+	}
+	return fetchedScrollback
+}
+
 // ScrollbackBytes is a terminal's terminal.Options.Scrollback for the
 // scrollback-limit, the same in kerod's copy of a pane and the app's: -1
 // keeps none, as 0 would take the terminal's default.
