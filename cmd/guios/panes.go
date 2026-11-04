@@ -592,9 +592,6 @@ func (a *App) paneHeader(c *ui.Context, pal *palette, bar ui.TitleBar, shown flo
 		// The button that shows the right sidebar sits by the pane's own,
 		// as one row of buttons.
 		ui.Row(c.Key("buttons")).AlignItems(ui.Center).Shrink(0).Children(func() {
-			if plan.controls {
-				a.paneControls(c, pal, s, p, hovered && !dragging, multi)
-			}
 			if top && right {
 				a.showRightButton(c, pal)
 			}
@@ -602,8 +599,43 @@ func (a *App) paneHeader(c *ui.Context, pal *palette, bar ui.TitleBar, shown flo
 		if top && right {
 			a.controlsRoom(c, 8)
 		}
+		// The pane's buttons float over the header's right end while the
+		// pointer is over the pane, on a raised strip of their own: the
+		// chips take the header's whole width meanwhile, and nothing in
+		// it moves as the buttons come and go (DESIGN.md principle 3;
+		// council round 1, visual 2).
+		if plan.controls {
+			show := hovered && !dragging
+			strip := ui.Row(c.Key("controls-over")).Absolute().Top(0).Bottom(0).Right(10 + a.cornerW(top && right)).AlignItems(ui.Center)
+			if !show {
+				strip.PassThrough()
+			}
+			strip.Opacity(strip.Animate("shown", b2f(show), dHoverOut)).Children(func() {
+				ui.Row(c.Key("controls-strip")).Radius(rControl).Padding(1).Background(pal.popover).Border(1, pal.kbdBorder).
+					Shadow(0, 1, 3, 0, pal.cardShadow).Children(func() {
+					a.paneControls(c, pal, s, p, show, multi)
+				})
+			})
+		}
 	})
 	return dragging
+}
+
+// cornerW is the room the window's corner takes at the right end of the
+// top right pane's header: the button that shows the right sidebar and
+// the window's controls, with the gap before them.
+func (a *App) cornerW(corner bool) float32 {
+	if !corner {
+		return 0
+	}
+	w := float32(0)
+	if !a.rightShown() {
+		w += hControl + sp2
+	}
+	if ownControls && a.win != nil {
+		w += max(controlsW+6+sp2-a.side.barW, 0)
+	}
+	return w
 }
 
 // sidebarButtons are the sidebar's buttons, which the header at the
@@ -847,20 +879,12 @@ func (a *App) planHeader(c *ui.Context, p *proto.Pane, title, dir string, showDi
 	// The header's own room: its padding, the grip's status mark and gap,
 	// the stretch that moves the window and the gaps around it.
 	room := w - pad - 10 - (14 + sp2 + sp2) - 2*sp2
-	// The pane's buttons keep their room only where a pane has it: below
-	// 260 DIPs they leave the header, and the Pane menu, the pane's own
-	// right-click menu and the keys still reach them.
-	if w >= 260 {
-		plan.controls = true
-		buttons := float32(2)
-		if multi {
-			buttons = 4
-		}
-		room -= buttons * hControl
-	}
-	if corner {
-		room -= controlsW + 6 + sp2 + hControl
-	}
+	// The pane's buttons float over the header while the pointer is
+	// over the pane, so they take none of its room. Below 260 DIPs they
+	// leave the header, and the Pane menu, the pane's own right-click menu
+	// and the keys still reach them.
+	plan.controls = w >= 260
+	room -= a.cornerW(corner)
 	titleMin := min(titleN, titleKeep)
 	room -= titleMin
 	plan.titleW = titleMin
