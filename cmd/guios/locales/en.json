@@ -105,7 +105,7 @@
       }
     }
   },
-  "confirmCloseAllSessionsDetail": "{count, plural, one {The project stays; its # session ends, with what runs in it.} other {The project stays; its # sessions end, with what runs in them.}}",
+  "confirmCloseAllSessionsDetail": "{count, plural, one {The project stays. Its # session ends, with what runs in it.} other {The project stays. Its # sessions end, with what runs in them.}}",
   "@confirmCloseAllSessionsDetail": {
     "placeholders": {
       "count": {
@@ -149,7 +149,7 @@
       }
     }
   },
-  "restartServiceDetail": "Every pane’s program ends; the shells start again in their folders, under their history.",
+  "restartServiceDetail": "The program in each pane ends. The shells start again in their folders, below their history.",
   "sidebarOtherProject": "Other",
   "sidebarHide": "Hide Sidebar",
   "sidebarShow": "Show Sidebar",
@@ -339,7 +339,7 @@
   "settingsSearchLabel": "Search settings",
   "settingsClearSearch": "Clear the search",
   "setSessions": "Sessions",
-  "setSessionsDetail": "Sessions keep running in the background when guios quits; {action} ends them.",
+  "setSessionsDetail": "Sessions keep running in the background when guios quits. {action} ends them.",
   "setNewSessionsStartIn": "New sessions start in",
   "setDirCurrent": "Current Folder",
   "setDirProject": "Project",
@@ -518,7 +518,7 @@
   "setResetAction": "Reset",
   "setKeyboardSearch": "Search actions or shortcuts",
   "setRestoreDefaults": "Restore Defaults",
-  "setKeyboardHelp": "Click a shortcut, then type the new one. Delete removes it; Escape keeps it.",
+  "setKeyboardHelp": "Click a shortcut, then type the new one. Press Delete to remove it. Press Escape to keep it.",
   "setUseDefault": "Use the default, {keys}",
   "setDefaultKeys": "Default: {keys}",
   "setShortcutFor": "Shortcut for {action}",
@@ -1009,7 +1009,7 @@
   "setHostsNoneDetail": "Add a machine you reach with ssh. If guios isn't installed there, guios offers to install it.",
   "setHostsDocs": "Setting up hosts",
   "setHostAdd": "Add a Host",
-  "setHostAddDetail": "me@devbox or ssh://me@devbox:2222 over SSH, as ssh takes it with your ~/.ssh/config; wsl://Ubuntu for a WSL distribution; http://devbox:7373 or https://devbox.tail1234.ts.net for the tuios daemon's tailnet listener.",
+  "setHostAddDetail": "Over SSH: me@devbox or ssh://me@devbox:2222, as ssh reads them with your ~/.ssh/config. For a WSL distribution: wsl://Ubuntu. For the tailnet listener of the tuios daemon: http://devbox:7373 or https://devbox.tail1234.ts.net.",
   "setHostAddressPlaceholder": "me@devbox",
   "setHostNamePlaceholder": "Name: {name}",
   "@setHostNamePlaceholder": {
@@ -1163,7 +1163,7 @@
       }
     }
   },
-  "endedDeleteAllDetail": "guios forgets them; each agent keeps its own history of the conversation.",
+  "endedDeleteAllDetail": "guios forgets them. Each agent keeps its own history of the conversation.",
   "endedSetUpSkill": "Set up the tuios integration for your agents to list their ended conversations here",
   "actionQuickTerminal": "Quick Terminal",
   "toastGlobalShortcutFailed": "Couldn’t use {keys} for the quick terminal: {error}",

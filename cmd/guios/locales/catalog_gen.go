@@ -960,13 +960,13 @@ func (msgs Messages) ConfirmCloseProjectDetail(count int) string {
 	return Catalog.Format(msgs.locale, "confirmCloseProjectDetail", map[string]any{"count": count})
 }
 
-// ConfirmCloseAllSessionsDetail says "{count, plural, one {The project stays; its # session ends, with what runs in it.} other {The project stays; its # se…"
+// ConfirmCloseAllSessionsDetail says "{count, plural, one {The project stays. Its # session ends, with what runs in it.} other {The project stays. Its # se…"
 // in the language the app shows.
 func ConfirmCloseAllSessionsDetail(count int) string {
 	return In(i18n.Locale()).ConfirmCloseAllSessionsDetail(count)
 }
 
-// ConfirmCloseAllSessionsDetail says "{count, plural, one {The project stays; its # session ends, with what runs in it.} other {The project stays; its # se…"
+// ConfirmCloseAllSessionsDetail says "{count, plural, one {The project stays. Its # session ends, with what runs in it.} other {The project stays. Its # se…"
 // in the language of msgs.
 func (msgs Messages) ConfirmCloseAllSessionsDetail(count int) string {
 	return Catalog.Format(msgs.locale, "confirmCloseAllSessionsDetail", map[string]any{"count": count})
@@ -1066,11 +1066,11 @@ func (msgs Messages) RestartStaleDetail(was string, version string, running stri
 	return Catalog.Format(msgs.locale, "restartStaleDetail", map[string]any{"was": was, "version": version, "running": running})
 }
 
-// RestartServiceDetail says "Every pane’s program ends; the shells start again in their folders, under their history."
+// RestartServiceDetail says "The program in each pane ends. The shells start again in their folders, below their history."
 // in the language the app shows.
 func RestartServiceDetail() string { return In(i18n.Locale()).RestartServiceDetail() }
 
-// RestartServiceDetail says "Every pane’s program ends; the shells start again in their folders, under their history."
+// RestartServiceDetail says "The program in each pane ends. The shells start again in their folders, below their history."
 // in the language of msgs.
 func (msgs Messages) RestartServiceDetail() string {
 	return Catalog.Format(msgs.locale, "restartServiceDetail", nil)
@@ -1970,11 +1970,11 @@ func (msgs Messages) SetSessions() string {
 	return Catalog.Format(msgs.locale, "setSessions", nil)
 }
 
-// SetSessionsDetail says "Sessions keep running in the background when guios quits; {action} ends them."
+// SetSessionsDetail says "Sessions keep running in the background when guios quits. {action} ends them."
 // in the language the app shows.
 func SetSessionsDetail(action string) string { return In(i18n.Locale()).SetSessionsDetail(action) }
 
-// SetSessionsDetail says "Sessions keep running in the background when guios quits; {action} ends them."
+// SetSessionsDetail says "Sessions keep running in the background when guios quits. {action} ends them."
 // in the language of msgs.
 func (msgs Messages) SetSessionsDetail(action string) string {
 	return Catalog.Format(msgs.locale, "setSessionsDetail", map[string]any{"action": action})
@@ -3694,11 +3694,11 @@ func (msgs Messages) SetRestoreDefaults() string {
 	return Catalog.Format(msgs.locale, "setRestoreDefaults", nil)
 }
 
-// SetKeyboardHelp says "Click a shortcut, then type the new one. Delete removes it; Escape keeps it."
+// SetKeyboardHelp says "Click a shortcut, then type the new one. Press Delete to remove it. Press Escape to keep it."
 // in the language the app shows.
 func SetKeyboardHelp() string { return In(i18n.Locale()).SetKeyboardHelp() }
 
-// SetKeyboardHelp says "Click a shortcut, then type the new one. Delete removes it; Escape keeps it."
+// SetKeyboardHelp says "Click a shortcut, then type the new one. Press Delete to remove it. Press Escape to keep it."
 // in the language of msgs.
 func (msgs Messages) SetKeyboardHelp() string {
 	return Catalog.Format(msgs.locale, "setKeyboardHelp", nil)
@@ -5496,11 +5496,11 @@ func (msgs Messages) SetHostAdd() string {
 	return Catalog.Format(msgs.locale, "setHostAdd", nil)
 }
 
-// SetHostAddDetail says "me@devbox or ssh://me@devbox:2222 over SSH, as ssh takes it with your ~/.ssh/config; wsl://Ubuntu for a WSL distribut…"
+// SetHostAddDetail says "Over SSH: me@devbox or ssh://me@devbox:2222, as ssh reads them with your ~/.ssh/config. For a WSL distribution: wsl:/…"
 // in the language the app shows.
 func SetHostAddDetail() string { return In(i18n.Locale()).SetHostAddDetail() }
 
-// SetHostAddDetail says "me@devbox or ssh://me@devbox:2222 over SSH, as ssh takes it with your ~/.ssh/config; wsl://Ubuntu for a WSL distribut…"
+// SetHostAddDetail says "Over SSH: me@devbox or ssh://me@devbox:2222, as ssh reads them with your ~/.ssh/config. For a WSL distribution: wsl:/…"
 // in the language of msgs.
 func (msgs Messages) SetHostAddDetail() string {
 	return Catalog.Format(msgs.locale, "setHostAddDetail", nil)
@@ -6062,11 +6062,11 @@ func (msgs Messages) EndedDeleteAllTitle(n int) string {
 	return Catalog.Format(msgs.locale, "endedDeleteAllTitle", map[string]any{"n": n})
 }
 
-// EndedDeleteAllDetail says "guios forgets them; each agent keeps its own history of the conversation."
+// EndedDeleteAllDetail says "guios forgets them. Each agent keeps its own history of the conversation."
 // in the language the app shows.
 func EndedDeleteAllDetail() string { return In(i18n.Locale()).EndedDeleteAllDetail() }
 
-// EndedDeleteAllDetail says "guios forgets them; each agent keeps its own history of the conversation."
+// EndedDeleteAllDetail says "guios forgets them. Each agent keeps its own history of the conversation."
 // in the language of msgs.
 func (msgs Messages) EndedDeleteAllDetail() string {
 	return Catalog.Format(msgs.locale, "endedDeleteAllDetail", nil)
