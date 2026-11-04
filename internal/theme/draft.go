@@ -62,15 +62,6 @@ func ColourKeys() []string { return colourKeys[:] }
 // ColourOf is t's pane colour i, in ColourKeys order.
 func ColourOf(t *tint.Tint, i int) *tint.Color { return *themeColours(t)[i] }
 
-// SettableRoles are the chrome roles a theme file may set, in file order.
-func SettableRoles() []Role {
-	out := make([]Role, 0, roleLastSettable)
-	for r := RoleAccent; r <= roleLastSettable; r++ {
-		out = append(out, r)
-	}
-	return out
-}
-
 // ValidThemeID reports whether id can name a theme file: 1 to 64 of a-z,
 // 0-9, '_', '.' and '-', starting with a letter or a digit. A loop, not a
 // regexp: a package-level pattern compiles at init in every tuios process.
