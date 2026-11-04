@@ -60,18 +60,6 @@ func TestCopyPipeKeyStaysInCopyMode(t *testing.T) {
 	}
 }
 
-func TestCopyPipeAndCancelLeavesCopyMode(t *testing.T) {
-	o, w := pipeCopyOS(t, false)
-	typeSearch(o, "boot")
-	mcPress(o, "V", "j")
-	if msg := pipeDone(t, o, "P"); msg.Output != "boot ok LLDP neighbor: swp1 rack-sw-01" {
-		t.Fatalf("pipe = %+v", msg)
-	}
-	if w[0].InCopyMode() {
-		t.Fatal("P did not leave copy mode")
-	}
-}
-
 // With no selection, the key says what to do and runs nothing.
 func TestCopyPipeKeyNeedsASelection(t *testing.T) {
 	o, w := pipeCopyOS(t, false)

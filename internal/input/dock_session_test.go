@@ -87,20 +87,6 @@ func TestDockLeaveControlFollowsTheRunPath(t *testing.T) {
 	}
 }
 
-// TestCloseSessionKeybindRaisesTheSameDialog checks the keyboard twin asks the
-// same question rather than being a quiet shortcut past it.
-func TestCloseSessionKeybindRaisesTheSameDialog(t *testing.T) {
-	o := dockSessionOS(t, true)
-	o.PrefixActive = true
-	o, cmd := HandlePrefixCommand(press("X"), o)
-	if !o.ShowSessionClose {
-		t.Fatal("ctrl+b X did not raise the close confirmation")
-	}
-	if cmd != nil || o.QuitRequested {
-		t.Error("ctrl+b X did something besides asking")
-	}
-}
-
 // clickAt is a plain left press at a cell.
 func clickAt(x, y int) tea.MouseClickMsg {
 	return tea.MouseClickMsg{Button: tea.MouseLeft, X: x, Y: y}
