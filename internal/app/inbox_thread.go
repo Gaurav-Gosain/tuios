@@ -232,6 +232,12 @@ func (m *OS) InboxThreadFetch() tea.Cmd {
 	if m.ShowInbox {
 		m.cockpitSync()
 	}
+	// The thread on screen is viewed: its row's unseen mark goes.
+	if m.threadShown() {
+		if e, ok := m.cockpitAgent(); ok {
+			m.markAgentViewed(e)
+		}
+	}
 	if !m.threadShown() || (m.DaemonClient == nil && m.Inbox.call == nil) {
 		m.stopThreadWatch()
 		return nil

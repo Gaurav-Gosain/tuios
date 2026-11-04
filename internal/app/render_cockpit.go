@@ -148,6 +148,7 @@ var (
 	ckGlyphImage   = ckGlyph{"\U000f02e9", "[img]", "[img]"}
 	ckGlyphPR      = ckGlyph{"\uf407", "PR", "PR"}
 	ckGlyphFan     = ckGlyph{"\uf192", "+", "+"}
+	ckGlyphUnseen  = ckGlyph{"•", "•", "*"}
 )
 
 // g picks the form the terminal can draw.
@@ -981,7 +982,14 @@ func (m *OS) drawFleetRow(c *ckCanvas, l ckLook, r ckRow, cursor, hover bool, x,
 	if r.lines != 1 || w >= 48 {
 		nx = max(nx, x+5)
 	}
-	c.text(nx, y, nx+nameW-1, ckSeg{t: ckTrunc(name, nameW-1), fg: ink(nameInk), attrs: ckBold})
+	if r.agent >= 0 && m.agentRowUnseen(e) {
+		// Finished or failed since the person last viewed the thread: the
+		// unseen mark follows the name.
+		ex := c.text(nx, y, nx+nameW-1, ckSeg{t: ckTrunc(name, nameW-3), fg: ink(nameInk), attrs: ckBold})
+		c.text(ex+1, y, nx+nameW-1, ckSeg{t: l.g(ckGlyphUnseen), fg: ink(pal.AccentBright), attrs: ckBold})
+	} else {
+		c.text(nx, y, nx+nameW-1, ckSeg{t: ckTrunc(name, nameW-1), fg: ink(nameInk), attrs: ckBold})
+	}
 	rx := c.textR(right, y, ckSeg{t: wait, fg: ink(pal.FgMute)})
 	if r.agent >= 0 && m.ckArtifactNew(e, false) {
 		// A surface the person has not seen: the chip opens it.

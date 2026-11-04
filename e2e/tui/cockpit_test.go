@@ -144,13 +144,16 @@ func openCockpitClient(t *testing.T, base string, cols, rows int, env []string) 
 // come in the order of what each needs from the person, the approval's row
 // says the verb and the command, a click selects a row and leaves the cockpit
 // open, a answers the approval from the card, D settles an agent (see
-// cockpitSettleRoundTrip), and a double-click goes to the pane.
+// cockpitSettleRoundTrip), and a double-click goes to the pane. The rows of
+// agents that finished or failed since their thread was viewed wear the
+// unseen mark (see cockpitUnseenMarks).
 //
 // Negative controls, each recorded in NEGATIVE_CONTROLS.md: with the groups
 // drawn in the rail's state order the order check fails; with a click going
 // to the pane (the agents view's old rule) the click check fails; with the
 // daemon's wake of a settled agent cut, the agent goes back on the shelf;
-// with the settle's carry across a client push cut, the push clears it.
+// with the settle's carry across a client push cut, the push clears it;
+// with markAgentViewed doing nothing, the unseen mark stays after a view.
 func TestCockpitGroupsTheFleet(t *testing.T) {
 	term, base, hookOut, exited := startCockpitFleet(t, 200, 55, nil)
 	s := term.Screen()
@@ -177,6 +180,8 @@ func TestCockpitGroupsTheFleet(t *testing.T) {
 	}
 	_ = term.WaitFor(func(s tuitest.Screen) bool { return !strings.Contains(s.Text(), "Reading...") }, uiTimeout)
 	saveCockpitFrames(t, term, "cockpit-200x55")
+
+	cockpitUnseenMarks(t, term, base)
 
 	// A click on a working agent selects it: the focus shows it, and the
 	// cockpit stays open.
@@ -220,6 +225,64 @@ func TestCockpitGroupsTheFleet(t *testing.T) {
 		t.Fatalf("ASSERTION: a double-click did not go to the pane: %v\n%s", err, term.Snapshot())
 	}
 	alive(t, term, "after the cockpit round trip")
+}
+
+// unseenOn reports whether the fleet row of name draws the unseen mark after
+// the name.
+func unseenOn(s tuitest.Screen, name string) bool {
+	r := fleetRowWith(s, name)
+	if r < 0 {
+		return false
+	}
+	line := []rune(s.Line(r))
+	return strings.Contains(string(line[:min(len(line), 56)]), "•")
+}
+
+// cockpitUnseenMarks checks the unseen mark. The turns ready for review were
+// never viewed, so their rows wear it, and an agent that fails wears it too.
+// A working agent and the approval do not. Viewing a thread clears its row's
+// mark and only that one, and a new client reads the same marks from the
+// state file.
+func cockpitUnseenMarks(t *testing.T, term *tuitest.Terminal, base string) {
+	t.Helper()
+	if out, err := tuiosCLI(t, base, "set-agent-state", "errored", "-s", "misc", "-w", "release-notes", "--harness", "goose", "-m", "the build failed"); err != nil {
+		t.Fatalf("report release-notes errored: %v\n%s", err, out)
+	}
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		return unseenOn(s, "docs-cli") && unseenOn(s, "vt-sixel") && unseenOn(s, "release-not")
+	}, uiTimeout); err != nil {
+		t.Fatalf("ASSERTION: the finished and failed agents do not wear the unseen mark: %v\n%s", err, term.Snapshot())
+	}
+	if s := term.Screen(); unseenOn(s, "bench-idle") || unseenOn(s, "api-auth") {
+		t.Fatalf("ASSERTION: a working agent or the approval wears the unseen mark\n%s", term.Snapshot())
+	}
+	saveCockpitFrames(t, term, "cockpit-unseen")
+
+	// The thread on screen is viewed.
+	for _, name := range []string{"docs-cli", "release-not"} {
+		row, col := findText(t, term, name)
+		mouseClick(t, term, col, row, tuitest.MouseLeft, 0)
+		if err := term.WaitFor(func(s tuitest.Screen) bool { return !unseenOn(s, name) }, uiTimeout); err != nil {
+			t.Fatalf("ASSERTION: viewing the thread of %s did not clear its mark: %v\n%s", name, err, term.Snapshot())
+		}
+	}
+	row, col := findText(t, term, "cache-1")
+	mouseClick(t, term, col, row, tuitest.MouseLeft, 0)
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		return !unseenOn(s, "docs-cli") && !unseenOn(s, "release-not") && unseenOn(s, "vt-sixel") && unseenOn(s, "rail-tokens")
+	}, uiTimeout); err != nil {
+		t.Fatalf("ASSERTION: after the views the marks are not on the unviewed rows alone: %v\n%s", err, term.Snapshot())
+	}
+	saveCockpitFrames(t, term, "cockpit-unseen-viewed")
+
+	// A new client keeps the watermark.
+	again := openCockpitClient(t, base, 200, 55, nil)
+	if err := again.WaitFor(func(s tuitest.Screen) bool {
+		return unseenOn(s, "vt-sixel") && !unseenOn(s, "docs-cli") && !unseenOn(s, "release-not")
+	}, uiTimeout); err != nil {
+		t.Fatalf("ASSERTION: a new client does not keep the viewed marks: %v\n%s", err, again.Snapshot())
+	}
+	_ = again.Close()
 }
 
 // TestCockpitNarrowFoldsRows opens the cockpit at 100x30: the fleet's rows are

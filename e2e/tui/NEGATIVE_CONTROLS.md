@@ -12623,3 +12623,20 @@ control against the branch head with one change:
 The frames are `thread-codex-commands` under `TUIOS_E2E_FRAMES`. Repeat from
 `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestCockpitThreadOtherHarnesses$/codex' -v .`.
+## Unseen marks and the alert baseline
+
+`TestCockpitGroupsTheFleet` (through `cockpitUnseenMarks`) checks that the rows
+of agents that finished or failed since their thread was viewed wear the unseen
+mark, that viewing a thread clears only that row's mark, and that a new client
+reads the same marks. `TestHostFocusHoldsAlertsForThePaneYouAreLookingAt`
+checks that a client attached after a turn alerted does not alert for the same
+turn's done again. Run on 2026-11-04 on Linux, each control against the branch
+head with one change:
+
+| Control | Where it fails | Verdict |
+|---|---|---|
+| `markAgentViewed` returns before it moves the watermark | `TestCockpitGroupsTheFleet`: "viewing the thread of docs-cli did not clear its mark" | **caught** |
+| The `Baseline` call cut from `considerAgentAlert` | `TestHostFocusHoldsAlertsForThePaneYouAreLookingAt`: "the new client alerted again for a run that had alerted: [\"AGENT done\"]" | **caught** |
+
+The frames are `cockpit-unseen` and `cockpit-unseen-viewed` under the test's
+artifact folder.

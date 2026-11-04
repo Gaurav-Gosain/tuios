@@ -13,6 +13,7 @@ import (
 	"time"
 
 	tea "charm.land/bubbletea/v2"
+	"github.com/Gaurav-Gosain/tuios/internal/agentseen"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/federation"
 	"github.com/Gaurav-Gosain/tuios/internal/hooks"
@@ -1884,6 +1885,14 @@ type OS struct {
 	// is the moment they looked away: where "while you were away" starts.
 	// Persisted beside SidebarAgentSeenSeq, and per client for the same reason.
 	SidebarAgentSeenAt map[string]int64
+	// SidebarAgentViewed is, by window ID, the agent's state-entry time
+	// (AgentStateAt) when this client's user last had its thread on screen
+	// in the agents view. A row whose agent finished or failed after it draws
+	// the unseen mark. See agent_unseen.go.
+	SidebarAgentViewed map[string]int64
+	// agentAlertRuns is the run each agent last alerted for, and the state a
+	// client first saw it in. See agentseen.AlertLedger.
+	agentAlertRuns agentseen.AlertLedger
 	// sidebarStateSocket is the daemon socket the persisted window-keyed maps
 	// were written against, and the guard on pruning them: window IDs mean
 	// nothing outside the daemon that issued them.

@@ -61,6 +61,9 @@ type sidebarStateFile struct {
 	// agent pane in front of them (Unix nanoseconds): the start of "while you
 	// were away" for that pane.
 	AgentSeenAt map[string]int64 `json:"agent_seen_at,omitempty"`
+	// AgentViewed holds, by window ID, the agent's state-entry time when its
+	// thread was last on screen: the watermark of the unseen mark.
+	AgentViewed map[string]int64 `json:"agent_viewed,omitempty"`
 	// AgentsFilter and AgentsSort are the agents section's two header controls.
 	// Absent means the default ("all" and "priority"), so a file written before
 	// they existed needs no migration.
@@ -141,6 +144,9 @@ func (m *OS) loadSidebarState() {
 	}
 	if len(st.AgentSeenAt) > 0 {
 		m.SidebarAgentSeenAt = st.AgentSeenAt
+	}
+	if len(st.AgentViewed) > 0 {
+		m.SidebarAgentViewed = st.AgentViewed
 	}
 	m.SidebarAgentFilter, m.SidebarAgentSort = st.AgentsFilter, st.AgentsSort
 	m.SidebarAgentsSeen = st.AgentsSeen
@@ -233,6 +239,7 @@ func (m *OS) saveSidebarState() {
 		AgentSeen:             m.SidebarAgentSeen,
 		AgentSeenSeq:          m.SidebarAgentSeenSeq,
 		AgentSeenAt:           m.SidebarAgentSeenAt,
+		AgentViewed:           m.SidebarAgentViewed,
 		AgentsFilter:          m.SidebarAgentFilter,
 		AgentsSort:            m.SidebarAgentSort,
 		AgentsSeen:            m.SidebarAgentsSeen,
@@ -295,7 +302,7 @@ func (m *OS) ownsSidebarState() bool {
 // every start; the rail's signature folds every unread bit on every frame, so
 // the map's size is also a per-frame cost.
 func (m *OS) pruneWindowKeyedState() {
-	if len(m.SidebarAccents) == 0 && len(m.SidebarAgentSeen) == 0 && len(m.SidebarAgentSeenSeq) == 0 && len(m.SidebarAgentSeenAt) == 0 {
+	if len(m.SidebarAccents) == 0 && len(m.SidebarAgentSeen) == 0 && len(m.SidebarAgentSeenSeq) == 0 && len(m.SidebarAgentSeenAt) == 0 && len(m.SidebarAgentViewed) == 0 {
 		return
 	}
 	known, ok := m.knownWindowIDs()
@@ -324,6 +331,12 @@ func (m *OS) pruneWindowKeyedState() {
 	for id := range m.SidebarAgentSeenAt {
 		if !known[id] {
 			delete(m.SidebarAgentSeenAt, id)
+			changed = true
+		}
+	}
+	for id := range m.SidebarAgentViewed {
+		if !known[id] {
+			delete(m.SidebarAgentViewed, id)
 			changed = true
 		}
 	}

@@ -59,6 +59,23 @@ func waitHostFocus(t *testing.T, base, session, want string) {
 	t.Fatalf("host_focus is %q, want %q", got, want)
 }
 
+// waitNotified waits for an OSC 9 notification holding want after mark.
+func waitNotified(t *testing.T, term *tuitest.Terminal, stream *hostStream, mark int, want string) {
+	t.Helper()
+	deadline := time.Now().Add(uiTimeout)
+	for {
+		for _, n := range notifySince(stream, mark) {
+			if strings.Contains(n, want) {
+				return
+			}
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("no notification with %q: %q\n%s", want, notifySince(stream, mark), term.Snapshot())
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+}
+
 // notifySince returns the OSC 9 notifications on the host stream after mark.
 func notifySince(stream *hostStream, mark int) []string {
 	b := stream.bytes()
@@ -84,12 +101,15 @@ func notifySince(stream *hostStream, mark int) []string {
 // TestHostFocusHoldsAlertsForThePaneYouAreLookingAt: with suppress_focused on,
 // which is the default, a transition on the focused pane raises nothing while
 // the terminal has focus, and raises the notification and the daemon's hook
-// once the terminal has lost it.
+// once the terminal has lost it. A turn alerts once, and a client attached
+// after it does not alert for the same turn again.
 //
 // Negative controls: with the tea.FocusMsg and tea.BlurMsg cases in update.go
 // sending nothing, host_focus stays "unknown" and the first wait fails. With
 // HostLooking cut from considerAgentAlert's suppress check, the notification
-// is held after the blur too and the positive half fails.
+// is held after the blur too and the positive half fails. With the silent
+// baseline cut from considerAgentAlert, the client attached after the done
+// alerts for it a second time.
 func TestHostFocusHoldsAlertsForThePaneYouAreLookingAt(t *testing.T) {
 	const session = "e2e-focus"
 	base := t.TempDir()
@@ -168,6 +188,41 @@ func TestHostFocusHoldsAlertsForThePaneYouAreLookingAt(t *testing.T) {
 	_ = os.WriteFile(filepath.Join(dir, "unfocused-alert.ansi"), stream.bytes()[mark:], 0o644)
 	_ = os.WriteFile(filepath.Join(dir, "hook.log"), []byte(hookLines()), 0o644)
 	t.Logf("notifications after the blur: %q; artifacts in %s", got, dir)
+
+	// A run alerts once for each state, and a client that attaches starts
+	// from the states it finds. The turn ends with one alert. A new client
+	// alerts for the question, and the same turn's done reported again
+	// raises nothing. The after-agent-state hook is the daemon's, which sees
+	// every transition, so it is not counted here.
+	setState("working")
+	mark = len(stream.bytes())
+	setState("done")
+	waitNotified(t, term, stream, mark, "done")
+	if err := term.SendKeys(tuitest.Ctrl('b'), "d"); err != nil {
+		t.Fatalf("detach: %v", err)
+	}
+	waitExit(t, term, "after the detach")
+	again := &hostStream{}
+	term = attachIn(t, base, session, startOpts{out: again})
+	if err := term.Type("\x1b[O"); err != nil {
+		t.Fatal(err)
+	}
+	waitHostFocus(t, base, session, "unfocused")
+	mark = len(again.bytes())
+	setState("needs_input")
+	waitNotified(t, term, again, mark, "AGENT")
+	mark = len(again.bytes())
+	setState("done")
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		return !strings.Contains(s.Text(), needsInputGlyph)
+	}, uiTimeout); err != nil {
+		t.Fatalf("done never reached the new client: %v\n%s", err, term.Snapshot())
+	}
+	time.Sleep(2 * time.Second)
+	if got := notifySince(again, mark); len(got) > 0 {
+		t.Errorf("ASSERTION: the new client alerted again for a run that had alerted: %q", got)
+	}
+	_ = os.WriteFile(filepath.Join(dir, "reattach-alerts.ansi"), again.bytes(), 0o644)
 
 	// Focus back: host_focus follows.
 	if err := term.Type("\x1b[I"); err != nil {
