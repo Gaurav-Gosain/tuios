@@ -962,7 +962,7 @@ func (a *App) card(c *ui.Context, pal *palette, bar ui.TitleBar, shown float32) 
 					sid := s.ID
 					a.defer_(func() { a.closeView(a.session(sid)) })
 				}
-				ui.Row(c.Key("look-over")).Absolute().Left((w-pw)/2).Top(lookInset/2).Bottom(lookInset/2).Width(pw).AlignItems(ui.Stretch).Children(func() {
+				ui.Row(c.Key("look-over")).Absolute().Left((w - pw) / 2).Top(lookInset / 2).Bottom(lookInset / 2).Width(pw).AlignItems(ui.Stretch).Children(func() {
 					a.viewerCard(c, pal, s, v, pw)
 				})
 				return

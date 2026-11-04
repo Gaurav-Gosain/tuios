@@ -1,10 +1,7 @@
 package main
 
 import (
-	"bytes"
 	"context"
-	"image"
-	"image/png"
 	"math"
 	"sort"
 	"strconv"
@@ -22,9 +19,8 @@ import (
 // The page sizes are known when it opens, so every page has its place before
 // it is drawn, and only the pages in view (and one each side) are drawn: by
 // Quartz on macOS, by pdftoppm elsewhere, at the pixels the viewer shows
-// them at. A page shows as soon as it is drawn, then is packed as a PNG on
-// the side, so its pixels can leave the CPU once the GPU has them. Pages far
-// from the view are let go.
+// them at. A page shows as soon as it is drawn, and pages far from the view
+// are let go.
 //
 // J and K go a page, the wheel and the bar scroll, + - 0 and a pinch zoom
 // about the pointer, z goes between fit to width and fit to page, and :
@@ -36,7 +32,7 @@ const (
 	// pageAsksMax is the pages drawn at once.
 	pageAsksMax = 2
 	// pagesKept bounds the pages held drawn.
-	pagesKept = 12
+	pagesKept = 8
 )
 
 // lookPDF is a PDF's state.
@@ -66,14 +62,17 @@ type lookPDF struct {
 
 	goTo     bool
 	goToText string
+	// layoutTries counts the frames built before the view had a size.
+	layoutTries int
 }
 
-// pagePic is a page drawn at px pixels wide.
+// pagePic is a page drawn at px pixels wide. Its pixels stay on the CPU
+// too: packing pages as PNGs, so they could leave it, cost a hitch of 30 to
+// 50 ms each time a packed page came back into view (its upload and its
+// decode on the UI thread), so pagesKept bounds them instead.
 type pagePic struct {
-	bm     *ui.Bitmap
-	px     int
-	packed bool // the bitmap decodes from a PNG, and lets its pixels go
-	shown  int
+	bm *ui.Bitmap
+	px int
 }
 
 // pageAsk is a page being drawn.
@@ -252,6 +251,12 @@ func (a *App) pdfView(c *ui.Context, pal *palette, l *fileLook) {
 			}
 			c.Invalidate()
 		}
+		if pd.viewW == 0 && pd.layoutTries < 30 {
+			// Not laid out yet: the next frame knows the size, and asks
+			// for the pages at it.
+			pd.layoutTries++
+			c.Invalidate()
+		}
 		sc.HandleInput(func(ev ui.InputEvent) bool {
 			switch {
 			case ev.Kind == ui.InputZoom:
@@ -299,7 +304,7 @@ func (a *App) pdfPage(c *ui.Context, pal *palette, pd *lookPDF, i int, s, conten
 	x := (contentW - w) / 2
 	pic := pd.pics[i]
 	box := ui.Box(c.Key(i)).Absolute().Left(x).Top(pd.pageTop(i, s)).Width(w).Height(h).Radius(2).Background(ui.RGB(255, 255, 255)).
-		Shadow(0, 1, 4, 0, ui.RGBA(0, 0, 0, 0.18))
+		Border(1, pal.divider)
 	box.Draw(func(p *ui.Painter, r ui.Rect) {
 		pd.devScale = p.Scale()
 		if pic != nil {
@@ -310,17 +315,17 @@ func (a *App) pdfPage(c *ui.Context, pal *palette, pd *lookPDF, i int, s, conten
 		box.Children(func() {
 			ui.Text(c, itoa(i+1)).FontSize(13).TextColor(ui.RGBA(0, 0, 0, 0.3)).Absolute().Left(0).Right(0).Top(h/2 - 9).TextAlign(ui.Center)
 		})
-	} else if pic.packed {
-		if pic.shown++; pic.shown == 3 {
-			a.defer_(pic.bm.ReleasePixels)
-		}
 	}
 }
 
-// pdfWant asks for the pages in view drawn at the pixels they show at,
-// nearest first, and lets go of the pages far from the view.
+// pdfWant asks for the pages near the view, first to last, drawn at the
+// pixels they show at, nearest first, and lets go of the pages far from the
+// view.
 func (a *App) pdfWant(l *fileLook, first, last int, s float32) {
 	pd := l.pdf
+	if pd.viewW == 0 {
+		return // the scale is known from the first laid out frame
+	}
 	scale := pd.devScale
 	if scale == 0 {
 		scale = 2
@@ -397,28 +402,9 @@ func (a *App) pdfRender(l *fileLook, i, px int) {
 			if ctx.Err() != nil || err != nil {
 				return
 			}
-			pic := &pagePic{bm: bm, px: px}
-			pd.pics[i] = pic
-			l.mark("page " + itoa(i+1) + " drawn")
-			// Packed on the side: the PNG keeps a page in a fortieth of
-			// its pixels' room.
-			go func() {
-				var buf bytes.Buffer
-				if (&png.Encoder{CompressionLevel: png.BestSpeed}).Encode(&buf, img) != nil {
-					return
-				}
-				packed, err := ui.DecodeBitmap(buf.Bytes())
-				if err != nil {
-					return
-				}
-				a.update(func() {
-					if pd.pics[i] == pic {
-						pd.pics[i] = &pagePic{bm: packed, px: px, packed: true}
-					}
-				})
-			}()
+			pd.pics[i] = &pagePic{bm: bm, px: px}
+			l.mark("page " + itoa(i+1) + " drawn at " + itoa(px))
 		})
-		_ = image.Rect
 	}()
 }
 
