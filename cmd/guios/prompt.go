@@ -97,7 +97,7 @@ func (a *App) promptView(c *ui.Context, pal *palette) {
 			if button(c, "cancel", locales.CommonCancel(), "esc", false, pal) {
 				pr.open = false
 			}
-			if button(c, "ok", locales.PromptSave(), "↩", true, pal) {
+			if button(c, "ok", locales.PromptSave(), "↵", true, pal) {
 				done = true
 			}
 		})
