@@ -138,7 +138,14 @@ func runApp() {
 		a.applyTray()
 		a.applyGlobalShortcuts()
 		a.loadKeys()
-		a.idleTime = mygo.Power.IdleTime
+		// On Linux the idle time is two D-Bus calls on the main thread
+		// (Mutter's, then the screen saver's), each with a 3 s timeout:
+		// where neither answers, every call held the window for up to 6 s,
+		// and the keys typed meanwhile into a new pane went nowhere. The
+		// window's focus alone tells there (here).
+		if runtime.GOOS != "linux" {
+			a.idleTime = mygo.Power.IdleTime
+		}
 		a.connect()
 		a.syncHosts()
 		go a.watchConfig()
