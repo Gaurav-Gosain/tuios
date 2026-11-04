@@ -186,6 +186,9 @@ type Pane struct {
 	Runtime string `json:"runtime,omitempty"`
 	// Shell is the name of the pane's shell, as "fish".
 	Shell string `json:"shell,omitempty"`
+	// Workspace is the tuios workspace the pane is on, set for the panes
+	// of Session.Others.
+	Workspace int `json:"workspace,omitempty"`
 
 	Status Status `json:"status"`
 	// Unread: something happened that the user has not seen: the work
@@ -332,6 +335,12 @@ type Session struct {
 	// one, in the session's order.
 	Workspace  int         `json:"workspace,omitempty"`
 	Workspaces []Workspace `json:"workspaces,omitempty"`
+	// Others are the session's panes on its other workspaces, which the
+	// command palette goes to.
+	Others []Pane `json:"others,omitempty"`
+	// TUI tells that a tuios TUI client shows the session, which runs the
+	// keymap actions only a TUI has.
+	TUI bool `json:"tui,omitempty"`
 }
 
 // Workspace is one of a tuios session's workspaces: its number, its name

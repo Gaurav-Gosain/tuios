@@ -106,11 +106,11 @@ func (msgs Messages) ActionOpenProject() string {
 	return Catalog.Format(msgs.locale, "actionOpenProject", nil)
 }
 
-// ActionGoToSession says "Go to session…"
+// ActionGoToSession says "Command palette…"
 // in the language the app shows.
 func ActionGoToSession() string { return In(i18n.Locale()).ActionGoToSession() }
 
-// ActionGoToSession says "Go to session…"
+// ActionGoToSession says "Command palette…"
 // in the language of msgs.
 func (msgs Messages) ActionGoToSession() string {
 	return Catalog.Format(msgs.locale, "actionGoToSession", nil)
@@ -1496,21 +1496,21 @@ func (msgs Messages) PaletteOpenInBrowser() string {
 	return Catalog.Format(msgs.locale, "paletteOpenInBrowser", nil)
 }
 
-// PaletteLabel says "Go to session"
+// PaletteLabel says "Command palette"
 // in the language the app shows.
 func PaletteLabel() string { return In(i18n.Locale()).PaletteLabel() }
 
-// PaletteLabel says "Go to session"
+// PaletteLabel says "Command palette"
 // in the language of msgs.
 func (msgs Messages) PaletteLabel() string {
 	return Catalog.Format(msgs.locale, "paletteLabel", nil)
 }
 
-// PalettePlaceholder says "Go to session or run a command…"
+// PalettePlaceholder says "Find a session, a pane or a command…"
 // in the language the app shows.
 func PalettePlaceholder() string { return In(i18n.Locale()).PalettePlaceholder() }
 
-// PalettePlaceholder says "Go to session or run a command…"
+// PalettePlaceholder says "Find a session, a pane or a command…"
 // in the language of msgs.
 func (msgs Messages) PalettePlaceholder() string {
 	return Catalog.Format(msgs.locale, "palettePlaceholder", nil)
@@ -1586,6 +1586,226 @@ func PaletteConversationRunning() string { return In(i18n.Locale()).PaletteConve
 // in the language of msgs.
 func (msgs Messages) PaletteConversationRunning() string {
 	return Catalog.Format(msgs.locale, "paletteConversationRunning", nil)
+}
+
+// PaletteNewPane says "New pane"
+// in the language the app shows.
+func PaletteNewPane() string { return In(i18n.Locale()).PaletteNewPane() }
+
+// PaletteNewPane says "New pane"
+// in the language of msgs.
+func (msgs Messages) PaletteNewPane() string {
+	return Catalog.Format(msgs.locale, "paletteNewPane", nil)
+}
+
+// PaletteToggleTiling says "Toggle tiling"
+// in the language the app shows.
+func PaletteToggleTiling() string { return In(i18n.Locale()).PaletteToggleTiling() }
+
+// PaletteToggleTiling says "Toggle tiling"
+// in the language of msgs.
+func (msgs Messages) PaletteToggleTiling() string {
+	return Catalog.Format(msgs.locale, "paletteToggleTiling", nil)
+}
+
+// PaletteRotateSplit says "Rotate the split"
+// in the language the app shows.
+func PaletteRotateSplit() string { return In(i18n.Locale()).PaletteRotateSplit() }
+
+// PaletteRotateSplit says "Rotate the split"
+// in the language of msgs.
+func (msgs Messages) PaletteRotateSplit() string {
+	return Catalog.Format(msgs.locale, "paletteRotateSplit", nil)
+}
+
+// PaletteEqualizeSplits says "Make the splits equal"
+// in the language the app shows.
+func PaletteEqualizeSplits() string { return In(i18n.Locale()).PaletteEqualizeSplits() }
+
+// PaletteEqualizeSplits says "Make the splits equal"
+// in the language of msgs.
+func (msgs Messages) PaletteEqualizeSplits() string {
+	return Catalog.Format(msgs.locale, "paletteEqualizeSplits", nil)
+}
+
+// PaletteFloatPane says "Float or tile the pane"
+// in the language the app shows.
+func PaletteFloatPane() string { return In(i18n.Locale()).PaletteFloatPane() }
+
+// PaletteFloatPane says "Float or tile the pane"
+// in the language of msgs.
+func (msgs Messages) PaletteFloatPane() string {
+	return Catalog.Format(msgs.locale, "paletteFloatPane", nil)
+}
+
+// PaletteMasterSide says "Move the master pane to the next side"
+// in the language the app shows.
+func PaletteMasterSide() string { return In(i18n.Locale()).PaletteMasterSide() }
+
+// PaletteMasterSide says "Move the master pane to the next side"
+// in the language of msgs.
+func (msgs Messages) PaletteMasterSide() string {
+	return Catalog.Format(msgs.locale, "paletteMasterSide", nil)
+}
+
+// PaletteSwapMaster says "Swap the pane with the master pane"
+// in the language the app shows.
+func PaletteSwapMaster() string { return In(i18n.Locale()).PaletteSwapMaster() }
+
+// PaletteSwapMaster says "Swap the pane with the master pane"
+// in the language of msgs.
+func (msgs Messages) PaletteSwapMaster() string {
+	return Catalog.Format(msgs.locale, "paletteSwapMaster", nil)
+}
+
+// PaletteFocusMaster says "Go to the master pane"
+// in the language the app shows.
+func PaletteFocusMaster() string { return In(i18n.Locale()).PaletteFocusMaster() }
+
+// PaletteFocusMaster says "Go to the master pane"
+// in the language of msgs.
+func (msgs Messages) PaletteFocusMaster() string {
+	return Catalog.Format(msgs.locale, "paletteFocusMaster", nil)
+}
+
+// PaletteAddMaster says "Add a master pane"
+// in the language the app shows.
+func PaletteAddMaster() string { return In(i18n.Locale()).PaletteAddMaster() }
+
+// PaletteAddMaster says "Add a master pane"
+// in the language of msgs.
+func (msgs Messages) PaletteAddMaster() string {
+	return Catalog.Format(msgs.locale, "paletteAddMaster", nil)
+}
+
+// PaletteRemoveMaster says "Remove a master pane"
+// in the language the app shows.
+func PaletteRemoveMaster() string { return In(i18n.Locale()).PaletteRemoveMaster() }
+
+// PaletteRemoveMaster says "Remove a master pane"
+// in the language of msgs.
+func (msgs Messages) PaletteRemoveMaster() string {
+	return Catalog.Format(msgs.locale, "paletteRemoveMaster", nil)
+}
+
+// PaletteMinimizePane says "Minimize the pane"
+// in the language the app shows.
+func PaletteMinimizePane() string { return In(i18n.Locale()).PaletteMinimizePane() }
+
+// PaletteMinimizePane says "Minimize the pane"
+// in the language of msgs.
+func (msgs Messages) PaletteMinimizePane() string {
+	return Catalog.Format(msgs.locale, "paletteMinimizePane", nil)
+}
+
+// PaletteRestorePanes says "Restore all panes"
+// in the language the app shows.
+func PaletteRestorePanes() string { return In(i18n.Locale()).PaletteRestorePanes() }
+
+// PaletteRestorePanes says "Restore all panes"
+// in the language of msgs.
+func (msgs Messages) PaletteRestorePanes() string {
+	return Catalog.Format(msgs.locale, "paletteRestorePanes", nil)
+}
+
+// PaletteCloseWorkspace says "Close the workspace"
+// in the language the app shows.
+func PaletteCloseWorkspace() string { return In(i18n.Locale()).PaletteCloseWorkspace() }
+
+// PaletteCloseWorkspace says "Close the workspace"
+// in the language of msgs.
+func (msgs Messages) PaletteCloseWorkspace() string {
+	return Catalog.Format(msgs.locale, "paletteCloseWorkspace", nil)
+}
+
+// PaletteLastWorkspace says "Go to the last workspace"
+// in the language the app shows.
+func PaletteLastWorkspace() string { return In(i18n.Locale()).PaletteLastWorkspace() }
+
+// PaletteLastWorkspace says "Go to the last workspace"
+// in the language of msgs.
+func (msgs Messages) PaletteLastWorkspace() string {
+	return Catalog.Format(msgs.locale, "paletteLastWorkspace", nil)
+}
+
+// PaletteTextBigger says "Make the text bigger"
+// in the language the app shows.
+func PaletteTextBigger() string { return In(i18n.Locale()).PaletteTextBigger() }
+
+// PaletteTextBigger says "Make the text bigger"
+// in the language of msgs.
+func (msgs Messages) PaletteTextBigger() string {
+	return Catalog.Format(msgs.locale, "paletteTextBigger", nil)
+}
+
+// PaletteTextSmaller says "Make the text smaller"
+// in the language the app shows.
+func PaletteTextSmaller() string { return In(i18n.Locale()).PaletteTextSmaller() }
+
+// PaletteTextSmaller says "Make the text smaller"
+// in the language of msgs.
+func (msgs Messages) PaletteTextSmaller() string {
+	return Catalog.Format(msgs.locale, "paletteTextSmaller", nil)
+}
+
+// PaletteTextReset says "Reset the text size"
+// in the language the app shows.
+func PaletteTextReset() string { return In(i18n.Locale()).PaletteTextReset() }
+
+// PaletteTextReset says "Reset the text size"
+// in the language of msgs.
+func (msgs Messages) PaletteTextReset() string {
+	return Catalog.Format(msgs.locale, "paletteTextReset", nil)
+}
+
+// PaletteAgents says "Show or hide the agents view"
+// in the language the app shows.
+func PaletteAgents() string { return In(i18n.Locale()).PaletteAgents() }
+
+// PaletteAgents says "Show or hide the agents view"
+// in the language of msgs.
+func (msgs Messages) PaletteAgents() string {
+	return Catalog.Format(msgs.locale, "paletteAgents", nil)
+}
+
+// PaletteSessions says "Sessions"
+// in the language the app shows.
+func PaletteSessions() string { return In(i18n.Locale()).PaletteSessions() }
+
+// PaletteSessions says "Sessions"
+// in the language of msgs.
+func (msgs Messages) PaletteSessions() string {
+	return Catalog.Format(msgs.locale, "paletteSessions", nil)
+}
+
+// PalettePanes says "Panes"
+// in the language the app shows.
+func PalettePanes() string { return In(i18n.Locale()).PalettePanes() }
+
+// PalettePanes says "Panes"
+// in the language of msgs.
+func (msgs Messages) PalettePanes() string {
+	return Catalog.Format(msgs.locale, "palettePanes", nil)
+}
+
+// PaletteWorkspace says "Workspace {n}"
+// in the language the app shows.
+func PaletteWorkspace(n string) string { return In(i18n.Locale()).PaletteWorkspace(n) }
+
+// PaletteWorkspace says "Workspace {n}"
+// in the language of msgs.
+func (msgs Messages) PaletteWorkspace(n string) string {
+	return Catalog.Format(msgs.locale, "paletteWorkspace", map[string]any{"n": n})
+}
+
+// PaletteViaTui says "The tuios TUI runs it"
+// in the language the app shows.
+func PaletteViaTui() string { return In(i18n.Locale()).PaletteViaTui() }
+
+// PaletteViaTui says "The tuios TUI runs it"
+// in the language of msgs.
+func (msgs Messages) PaletteViaTui() string {
+	return Catalog.Format(msgs.locale, "paletteViaTui", nil)
 }
 
 // AgoNow says "now"

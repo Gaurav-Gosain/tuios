@@ -213,6 +213,11 @@ func (k *stateKeeper) build() (*proto.State, error) {
 				cw.Status = p.Status
 			}
 			if w.Minimized || w.Workspace != ws {
+				// A minimized pane stays out: guios cannot show it.
+				if !w.Minimized {
+					p.Workspace = w.Workspace
+					ks.Others = append(ks.Others, p)
+				}
 				continue
 			}
 			if w.Zoomed {
@@ -222,6 +227,7 @@ func (k *stateKeeper) build() (*proto.State, error) {
 			ks.Panes = append(ks.Panes, p)
 		}
 		ks.Workspaces = workspaceList(counts, ws, ti)
+		ks.TUI = ti.tui
 		ks.Layout = k.layoutOf(s.ID, s.Name, shown, wl.Focus, &ti)
 		ks.Zoomed = ti.zoomByTUI
 		if ks.Zoomed == "" {

@@ -8,6 +8,7 @@ import (
 
 	"github.com/Gaurav-Gosain/tuios/internal/guios/actions"
 	"github.com/Gaurav-Gosain/tuios/internal/guios/proto"
+	"github.com/Gaurav-Gosain/tuios/pkg/fuzzy"
 
 	"github.com/Gaurav-Gosain/tuios/cmd/guios/locales"
 )
@@ -96,8 +97,8 @@ func (a *App) pickerItems() []pickerItem {
 		if !e.Dir {
 			continue
 		}
-		sc := fuzzy(q, e.Name)
-		if sc < 0 {
+		sc, ok := fuzzy.Score(q, e.Name)
+		if !ok {
 			continue
 		}
 		found = append(found, scored{pickerItem{name: e.Name, path: p.host.joinPath(p.list.Dir, e.Name), repo: e.Repo}, sc})
