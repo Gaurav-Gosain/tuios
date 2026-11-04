@@ -130,7 +130,7 @@ func (c *Client) dispatch(method string, params any) (any, error) {
 		if err != nil {
 			return nil, err
 		}
-		return true, c.arrangeOp(p)
+		return c.arrangeOp(p)
 
 	case "workspace":
 		p, err := decode[proto.WorkspaceParams](params)

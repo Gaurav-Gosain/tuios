@@ -382,6 +382,12 @@ type Rect struct {
 	H int `json:"h"`
 }
 
+// ArrangeResult is what a change to the layout did beyond the layout:
+// Focus is the pane it moved the focus to, "" when it moved none.
+type ArrangeResult struct {
+	Focus string `json:"focus,omitempty"`
+}
+
 // ArrangeParams changes a session's layout: Op "mode" (Mode "bsp",
 // "master-stack", "scrolling" or "floating"), "next", "tiling", "rotate",
 // "equalize", "master.position", "master.add", "master.remove",

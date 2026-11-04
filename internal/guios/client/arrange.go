@@ -448,7 +448,7 @@ func masterLine(m, b layout.Rect, stack bool) *proto.MasterLine {
 
 // arrangeOp is one change to a workspace's layout, worked out on the
 // session's state and written back.
-func (c *Client) arrangeOp(p proto.ArrangeParams) error {
+func (c *Client) arrangeOp(p proto.ArrangeParams) (proto.ArrangeResult, error) {
 	// One at a time, in the order they came: each reads the layout the one
 	// before it wrote.
 	arrangeMu.Lock()
@@ -459,7 +459,7 @@ func (c *Client) arrangeOp(p proto.ArrangeParams) error {
 	wins := slices.Clone(c.st.shown[p.Session])
 	c.st.mu.Unlock()
 	if !ok || name == "" {
-		return errors.New("no such session")
+		return proto.ArrangeResult{}, errors.New("no such session")
 	}
 	// The layout as the session has it now, so ops in a row each build on
 	// the one before.
@@ -474,17 +474,19 @@ func (c *Client) arrangeOp(p proto.ArrangeParams) error {
 	}
 	e := &engine{c: c, name: name, ti: ti, wins: wins, focus: focus}
 	defer c.kickState()
-	return e.run(p)
+	err := e.run(p)
+	return e.result, err
 }
 
 // engine runs one op on a workspace.
 type engine struct {
-	c     *Client
-	name  string
-	ti    treeInfo
-	wins  []windowRow
-	focus string
-	state map[string]any // set-layout-state params gathered by the op
+	c      *Client
+	name   string
+	ti     treeInfo
+	wins   []windowRow
+	focus  string
+	state  map[string]any // set-layout-state params gathered by the op
+	result proto.ArrangeResult
 }
 
 func (e *engine) set(k string, v any) {
@@ -842,33 +844,42 @@ func (e *engine) scrollOp(p proto.ArrangeParams) error {
 	t := tiled(e.wins)
 	sl, ids := e.ti.strip(t, e.focus)
 	w := e.ti.bounds().W
-	reveal := true
+	// What the TUI's own actions do to the strip's offset: an action
+	// scrolls to the focused column, a focus that moved some other way
+	// only brings it on screen, a scroll moves it alone. The actions that
+	// move the focus to another window hand it to the session.
+	moves := false
 	switch p.Op {
 	case "scroll.left":
 		sl.FocusLeft()
+		moves = true
 	case "scroll.right":
 		sl.FocusRight()
+		moves = true
 	case "scroll.width":
 		sl.CycleWidth()
 	case "scroll.max":
 		sl.MaximizeColumn()
 	case "scroll.consume":
 		sl.ConsumeWindow()
+		moves = true
 	case "scroll.expel":
 		sl.ExpelWindow()
+		moves = true
 	case "scroll.moveLeft":
 		sl.MoveColumnLeft()
 	case "scroll.moveRight":
 		sl.MoveColumnRight()
+	}
+	switch p.Op {
 	case "scroll.view":
 		// A wheel or a drag over the strip: the cells it moves.
 		sl.ViewportX += p.Delta
-		reveal = false
 	case "scroll.reveal":
 		// The focus moved to Pane.
-	}
-	if reveal {
 		sl.EnsureFocusedVisible(w)
+	default:
+		sl.ScrollToFocusedColumn(w)
 	}
 	sl.ClampViewport(w)
 	e.set("scroll_columns", columns(sl, ids))
@@ -876,8 +887,8 @@ func (e *engine) scrollOp(p proto.ArrangeParams) error {
 	if err := e.flush(); err != nil {
 		return err
 	}
-	// The strip's focus is the session's focus.
-	if n := sl.GetFocusedWindowID(); reveal && n >= 1 && n <= len(ids) && ids[n-1] != e.focus {
+	if n := sl.GetFocusedWindowID(); moves && n >= 1 && n <= len(ids) && ids[n-1] != e.focus {
+		e.result.Focus = ids[n-1]
 		_, _ = e.c.verb("focus-window", map[string]any{"session": e.name, "window": ids[n-1]})
 	}
 	return nil
