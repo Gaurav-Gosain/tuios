@@ -47,13 +47,15 @@ func (h *history) idFrame(p []byte) {
 	h.mu.Unlock()
 }
 
-// snapshot takes an S frame: the terminal starts over with its rows.
-func (h *history) snapshot() {
+// snapshot takes an S frame: the terminal starts over with its rows. It
+// reports whether the daemon gave the rows ids.
+func (h *history) snapshot() bool {
 	h.mu.Lock()
+	defer h.mu.Unlock()
 	h.first, h.ok = h.next, h.nextOK
 	h.nextOK, h.done, h.unwritten = false, false, true
 	h.gen++
-	h.mu.Unlock()
+	return h.ok
 }
 
 // written says the terminal wrote what it read before.

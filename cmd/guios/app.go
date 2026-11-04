@@ -837,6 +837,10 @@ func (a *App) ensureTerm(id string) {
 		}
 		term.Resize(stream.Welcome.Cols, stream.Welcome.Rows)
 		stream.OnResized = term.Resize
+		// A daemon that numbers the history rows keeps them all, and the
+		// view fetches them as it nears the top: the terminal keeps a
+		// little of its own (QA-019).
+		stream.OnHistory = func(ids bool) { term.SetScrollback(a.set.PaneScrollback(ids)) }
 		// A pane of another machine says when its link drops and comes
 		// back (linkBadge).
 		stream.OnLink = func(up bool) {
