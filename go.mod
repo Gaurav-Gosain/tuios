@@ -20,6 +20,7 @@ require (
 	github.com/charmbracelet/x/windows v0.2.2
 	github.com/charmbracelet/x/xpty v0.1.4
 	github.com/coder/websocket v1.8.15
+	github.com/egoist/mygo v0.7.4
 	github.com/epilande/go-devicons v0.0.0-20250505162540-0661cab71a28
 	github.com/fsnotify/fsnotify v1.10.1
 	github.com/google/go-cmp v0.7.0
@@ -27,15 +28,16 @@ require (
 	github.com/lrstanley/bubbletint/v2 v2.0.2
 	github.com/lrstanley/go-nf v0.0.0-20260418212552-215ab243b591
 	github.com/pelletier/go-toml/v2 v2.4.3
+	github.com/rivo/uniseg v0.4.7
 	github.com/shirou/gopsutil/v4 v4.26.7
 	github.com/spf13/cobra v1.10.2
 	github.com/spf13/pflag v1.0.10
 	golang.org/x/crypto v0.57.0
-	golang.org/x/image v0.45.0
-	golang.org/x/sync v0.23.0
+	golang.org/x/image v0.46.0
+	golang.org/x/sync v0.24.0
 	golang.org/x/sys v0.48.0
 	golang.org/x/term v0.46.0
-	golang.org/x/text v0.42.0
+	golang.org/x/text v0.43.0
 	rsc.io/qr v0.2.0
 	tuios.dev/loom v0.2.3-0.20261104015133-7c2e19801778
 	tuios.dev/plot v0.2.3-0.20261101044251-193bbd706cd8
@@ -61,9 +63,10 @@ require (
 	github.com/creack/pty v1.1.24 // indirect
 	github.com/dlclark/regexp2/v2 v2.2.1 // indirect
 	github.com/dunglas/httpsfv v1.1.1 // indirect
-	github.com/ebitengine/purego v0.10.2 // indirect
+	github.com/ebitengine/purego v0.11.1 // indirect
 	github.com/go-logfmt/logfmt v0.6.1 // indirect
 	github.com/go-ole/go-ole v1.3.0 // indirect
+	github.com/go-text/typesetting v0.3.5 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/lucasb-eyer/go-colorful v1.4.1 // indirect
 	github.com/lufia/plan9stats v0.0.0-20260627054121-477a66015f15 // indirect
@@ -76,7 +79,6 @@ require (
 	github.com/quic-go/qpack v0.6.0 // indirect
 	github.com/quic-go/quic-go v0.63.0 // indirect
 	github.com/quic-go/webtransport-go v0.13.0 // indirect
-	github.com/rivo/uniseg v0.4.7 // indirect
 	github.com/tklauser/go-sysconf v0.4.0 // indirect
 	github.com/tklauser/numcpus v0.12.0 // indirect
 	github.com/xo/terminfo v1.2.0 // indirect

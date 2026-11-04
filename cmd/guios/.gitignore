@@ -1,0 +1,4 @@
+build/
+resources/darwin*/
+resources/linux*/
+resources/windows*/

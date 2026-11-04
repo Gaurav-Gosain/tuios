@@ -1,0 +1,13 @@
+guios includes or links the work of others:
+
+- MyGo (github.com/egoist/mygo), MIT licence, Copyright (c) EGOIST.
+  The pane painter follows the approach of MyGo's terminal plugin: shaped
+  glyphs kept per cell text and row caches built again only when a row's
+  cells change.
+- Inter, SIL Open Font License 1.1. See fonts/Inter-LICENSE.txt.
+- JetBrains Mono, SIL Open Font License 1.1. See
+  fonts/JetBrainsMono-LICENSE.txt.
+- Lucide icons, ISC licence. See icons/LICENSE-lucide.txt.
+
+Code adapted from kero (github.com/egoist/kero, MIT licence, Copyright (c)
+EGOIST) is credited here and in the commit that brings it in.
