@@ -121,6 +121,8 @@ type cockpit struct {
 	// row, and when: once its row has moved, the next one is selected.
 	advance   string
 	advanceAt time.Time
+	// fleetRect is the agents list's box in the last frame, for toasts.
+	fleetRect ui.Rect
 	// guard keeps typed prose from running as the lists' keys
 	// (cockpit_guard.go).
 	guard typingGuard

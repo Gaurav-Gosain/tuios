@@ -246,6 +246,12 @@ func (a *App) cockpitFleet(c *ui.Context, pal *palette, width float32, shown boo
 	ck := &a.ck
 	col := ui.Column(c.Key("fleet")).AlignItems(ui.Stretch).Background(ckGround(pal)).
 		Focusable().FocusRing(false).Bind(&ck.fleetFocus).Label(locales.CockpitTitle())
+	if shown && width > 0 {
+		// Toasts show over the foot of the list (toasts.go).
+		ck.fleetRect = col.Bounds()
+	} else {
+		ck.fleetRect = ui.Rect{}
+	}
 	switch {
 	case !shown:
 		col.Width(0).Shrink(0)
