@@ -31,8 +31,11 @@ type Settings struct {
 	// KeepHistory and ResumeAgents are the tuios daemon's: its config.toml
 	// holds them (daemon.persist_scrollback, daemon.resume_agents), and the
 	// app reads and writes them there, never in its own file.
-	KeepHistory    bool   `json:"-"`
-	ResumeAgents   string `json:"-"`              // "ask", "auto" or "off"
+	KeepHistory  bool   `json:"-"`
+	ResumeAgents string `json:"-"` // "ask", "auto" or "off"
+	// Approvals is agents.approvals in the same file: the agents view
+	// answers Claude Code's permission prompts while it is on.
+	Approvals      bool   `json:"-"`
 	SessionHistory bool   `json:"sessionHistory"` // the sidebar lists the agents' ended conversations
 	QuitConfirm    bool   `json:"quitConfirm"`    // tell, the first time, that quitting keeps sessions
 	AppIcon        string `json:"appIcon"`        // macOS: AppIcons; elsewhere the icon is always in the notification area

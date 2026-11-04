@@ -12485,3 +12485,33 @@ func CockpitMailReplyTo(name string) string { return In(i18n.Locale()).CockpitMa
 func (msgs Messages) CockpitMailReplyTo(name string) string {
 	return Catalog.Format(msgs.locale, "cockpitMailReplyTo", map[string]any{"name": name})
 }
+
+// SetApprovals says "Approvals"
+// in the language the app shows.
+func SetApprovals() string { return In(i18n.Locale()).SetApprovals() }
+
+// SetApprovals says "Approvals"
+// in the language of msgs.
+func (msgs Messages) SetApprovals() string {
+	return Catalog.Format(msgs.locale, "setApprovals", nil)
+}
+
+// SetApprovalsRow says "Answer Claude Code's permission prompts in Agents"
+// in the language the app shows.
+func SetApprovalsRow() string { return In(i18n.Locale()).SetApprovalsRow() }
+
+// SetApprovalsRow says "Answer Claude Code's permission prompts in Agents"
+// in the language of msgs.
+func (msgs Messages) SetApprovalsRow() string {
+	return Catalog.Format(msgs.locale, "setApprovalsRow", nil)
+}
+
+// SetApprovalsDetail says "A prompt waits in Agents until you allow or reject it, for up to 2 minutes. Then Claude Code asks in its pane. tuios …"
+// in the language the app shows.
+func SetApprovalsDetail() string { return In(i18n.Locale()).SetApprovalsDetail() }
+
+// SetApprovalsDetail says "A prompt waits in Agents until you allow or reject it, for up to 2 minutes. Then Claude Code asks in its pane. tuios …"
+// in the language of msgs.
+func (msgs Messages) SetApprovalsDetail() string {
+	return Catalog.Format(msgs.locale, "setApprovalsDetail", nil)
+}

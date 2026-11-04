@@ -1231,5 +1231,8 @@
   "cockpitWaitsAtPrompt": "此代理在其屏幕上的提示符处等待。在此发送的文本会等待该提示符。",
   "cockpitSentTo": "已发送给 {name}。",
   "cockpitYouTo": "你 → {name}",
-  "cockpitMailReplyTo": "回复 {name} 的邮件"
+  "cockpitMailReplyTo": "回复 {name} 的邮件",
+  "setApprovals": "批准",
+  "setApprovalsRow": "在代理中回答 Claude Code 的权限提示",
+  "setApprovalsDetail": "提示会在代理中等待你允许或拒绝,最长 2 分钟。之后 Claude Code 会在其窗格中询问。tuios 将此设置保存在 config.toml 中。"
 }

@@ -2260,5 +2260,8 @@
         "type": "String"
       }
     }
-  }
+  },
+  "setApprovals": "Approvals",
+  "setApprovalsRow": "Answer Claude Code's permission prompts in Agents",
+  "setApprovalsDetail": "A prompt waits in Agents until you allow or reject it, for up to 2 minutes. Then Claude Code asks in its pane. tuios saves this in its config.toml."
 }
