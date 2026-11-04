@@ -93,4 +93,3 @@ func BenchmarkWorktreeRowParallel(b *testing.B) {
 		_ = group.Wait()
 	}
 }
-
