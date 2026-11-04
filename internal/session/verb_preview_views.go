@@ -409,11 +409,8 @@ func previewDetails(ctx context.Context, f *os.File, fi os.FileInfo, path string
 	if st == "" || strings.HasPrefix(st, "??") {
 		return
 	}
-	diff, err := review.Git(ctx, dir, nil, append(safe, "diff", "--no-color", "--no-ext-diff", "--no-textconv", "HEAD", "--", name)...)
+	diff, err := review.GitHead(ctx, dir, nil, previewDiffMax, append(safe, "diff", "--no-color", "--no-ext-diff", "--no-textconv", "HEAD", "--", name)...)
 	if err == nil {
-		if len(diff) > previewDiffMax {
-			diff = diff[:previewDiffMax]
-		}
 		out["diff"] = strings.ToValidUTF8(diff, "")
 	}
 }

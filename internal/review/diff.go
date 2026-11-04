@@ -454,7 +454,42 @@ const gitWaitDelay = 2 * time.Second
 // git runs one git command in dir, bounded by ctx, and returns its stdout. A
 // failure carries git's own message.
 func git(ctx context.Context, dir string, extra []string, args ...string) (string, error) {
-	cmd := childproc.Git(ctx, dir, args...)
+	return gitHead(ctx, dir, extra, 0, args...)
+}
+
+// errHeadFull is what headWriter returns on the first byte past its limit, so
+// the copy of git's output stops.
+var errHeadFull = errors.New("output limit reached")
+
+// headWriter keeps the first limit bytes written to it. The first byte past
+// the limit marks it full, runs stop and fails the write so the copy ends.
+type headWriter struct {
+	buf   []byte
+	limit int
+	full  bool
+	stop  func()
+}
+
+func (w *headWriter) Write(p []byte) (int, error) {
+	room := w.limit - len(w.buf)
+	if len(p) <= room {
+		w.buf = append(w.buf, p...)
+		return len(p), nil
+	}
+	w.buf = append(w.buf, p[:room]...)
+	w.full = true
+	w.stop()
+	return room, errHeadFull
+}
+
+// gitHead is git that returns at most the first limit bytes of stdout. When
+// limit > 0 and git writes more, git and its descendants are killed at the
+// first byte past the limit and the kept bytes are the result with no error.
+// With limit <= 0 the whole output is returned.
+func gitHead(ctx context.Context, dir string, extra []string, limit int, args ...string) (string, error) {
+	runCtx, stop := context.WithCancel(ctx)
+	defer stop()
+	cmd := childproc.Git(runCtx, dir, args...)
 	// A child of git, such as git-remote-https on a remote that stopped
 	// answering, keeps the output pipes open after the context kills git.
 	// Without a delay, Run would wait for that child and the timeout would
@@ -463,9 +498,15 @@ func git(ctx context.Context, dir string, extra []string, args ...string) (strin
 	cmd.Cancel = killTree(cmd)
 	cmd.Env = gitEnv(cmd.Env, extra)
 	var stdout, stderr bytes.Buffer
-	cmd.Stdout = &stdout
+	var head *headWriter
+	if limit > 0 {
+		head = &headWriter{buf: make([]byte, 0, min(limit, 64<<10)), limit: limit, stop: stop}
+		cmd.Stdout = head
+	} else {
+		cmd.Stdout = &stdout
+	}
 	cmd.Stderr = &stderr
-	if err := cmd.Run(); err != nil {
+	if err := cmd.Run(); err != nil && (head == nil || !head.full) {
 		if ctx.Err() != nil {
 			return "", fmt.Errorf("git %s: %w", args[0], ctx.Err())
 		}
@@ -474,6 +515,9 @@ func git(ctx context.Context, dir string, extra []string, args ...string) (strin
 			msg = err.Error()
 		}
 		return "", fmt.Errorf("git %s: %s", firstArg(args), msg)
+	}
+	if head != nil {
+		return string(head.buf), nil
 	}
 	return stdout.String(), nil
 }
