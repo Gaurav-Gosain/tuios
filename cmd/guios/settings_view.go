@@ -915,7 +915,7 @@ func (a *App) terminalPage(c *ui.Context, pal *palette) {
 			if !slices.Contains(opts, family) {
 				opts = append([]string{family}, opts...)
 			}
-			a.searchPopup(c, "font", family, opts, 240, locales.SetUseFont, pal, func(v string) {
+			a.searchPopup(c, "font", family, opts, 300, locales.SetUseFont, pal, func(v string) {
 				switch v {
 				case bundledFont:
 					v = ""
