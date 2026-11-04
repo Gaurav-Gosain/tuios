@@ -2130,5 +2130,21 @@
   "cockpitNoMailForYou": "No mail for you",
   "cockpitNoMailForYouDetail": "Mail that an agent sends to you shows here.",
   "cockpitImage": "Image",
-  "cockpitImageOpen": "Show the image at full size (Space)"
+  "cockpitImageOpen": "Show the image at full size (Space)",
+  "hostDaemonStopped": "The tuios daemon on {name} stopped.",
+  "@hostDaemonStopped": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "hostOtherProtocol": "The tuios daemon on {name} speaks another version of the control protocol. Update tuios on {name}.",
+  "@hostOtherProtocol": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  }
 }

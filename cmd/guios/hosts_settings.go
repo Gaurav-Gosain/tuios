@@ -89,6 +89,9 @@ func (a *App) hostRow(c *ui.Context, pal *palette, h *host) {
 				ui.Spinner(c).Size(14, 14)
 				return
 			}
+			if h.rep.Status == client.HostUp && h.dialFail == dialStopped && button(c, "start-stopped", locales.HostStartDaemon(), "", true, pal) {
+				a.startHostDaemon(h)
+			}
 			switch h.rep.Status {
 			case client.HostNoDaemon:
 				if button(c, "start", locales.HostStartDaemon(), "", true, pal) {

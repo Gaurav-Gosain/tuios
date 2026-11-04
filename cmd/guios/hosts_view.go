@@ -306,6 +306,16 @@ func (a *App) hostFixes(c *ui.Context, pal *palette, h *host) {
 		return
 	}
 	ui.Row(c.Key("fixes")).Gap(6).Children(func() {
+		switch {
+		case h.rep.Status == client.HostUp && h.dialFail == dialStopped:
+			if smallButton(c, "start", locales.HostStartDaemon(), true, pal) {
+				a.startHostDaemon(h)
+			}
+		case h.rep.Status == client.HostUp && h.dialFail == dialProtocol:
+			if smallButton(c, "update", locales.CommonUpdate(), true, pal) {
+				a.offerHostUpdate(h)
+			}
+		}
 		switch h.rep.Status {
 		case client.HostNoDaemon:
 			if smallButton(c, "start", locales.HostStartDaemon(), false, pal) {

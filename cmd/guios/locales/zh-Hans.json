@@ -1191,5 +1191,7 @@
   "cockpitNoMailForYou": "没有给你的邮件",
   "cockpitNoMailForYouDetail": "代理发给你的邮件显示在这里。",
   "cockpitImage": "图片",
-  "cockpitImageOpen": "以原始大小显示图片 (Space)"
+  "cockpitImageOpen": "以原始大小显示图片 (Space)",
+  "hostDaemonStopped": "{name} 上的 tuios 守护进程已停止。",
+  "hostOtherProtocol": "{name} 上的 tuios 守护进程使用另一个版本的控制协议。请更新 {name} 上的 tuios。"
 }

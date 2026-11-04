@@ -12081,3 +12081,23 @@ func CockpitImageOpen() string { return In(i18n.Locale()).CockpitImageOpen() }
 func (msgs Messages) CockpitImageOpen() string {
 	return Catalog.Format(msgs.locale, "cockpitImageOpen", nil)
 }
+
+// HostDaemonStopped says "The tuios daemon on {name} stopped."
+// in the language the app shows.
+func HostDaemonStopped(name string) string { return In(i18n.Locale()).HostDaemonStopped(name) }
+
+// HostDaemonStopped says "The tuios daemon on {name} stopped."
+// in the language of msgs.
+func (msgs Messages) HostDaemonStopped(name string) string {
+	return Catalog.Format(msgs.locale, "hostDaemonStopped", map[string]any{"name": name})
+}
+
+// HostOtherProtocol says "The tuios daemon on {name} speaks another version of the control protocol. Update tuios on {name}."
+// in the language the app shows.
+func HostOtherProtocol(name string) string { return In(i18n.Locale()).HostOtherProtocol(name) }
+
+// HostOtherProtocol says "The tuios daemon on {name} speaks another version of the control protocol. Update tuios on {name}."
+// in the language of msgs.
+func (msgs Messages) HostOtherProtocol(name string) string {
+	return Catalog.Format(msgs.locale, "hostOtherProtocol", map[string]any{"name": name})
+}

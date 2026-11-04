@@ -14,6 +14,7 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/guios/client"
 	"github.com/Gaurav-Gosain/tuios/internal/guios/proto"
 	"github.com/Gaurav-Gosain/tuios/internal/guios/settings"
+	"github.com/Gaurav-Gosain/tuios/internal/session"
 
 	"github.com/Gaurav-Gosain/tuios/cmd/guios/locales"
 )
@@ -28,10 +29,14 @@ type host struct {
 	cfg  settings.Host // the app's own choices for a remote host: its color
 	// rep is how this machine's daemon says the host stands: its link, its
 	// version and its load.
-	rep       client.HostReport
-	cl        *client.Client
-	conn      connState
-	err       string // why the host's sessions don't show
+	rep  client.HostReport
+	cl   *client.Client
+	conn connState
+	err  string // why the host's sessions don't show
+	// dialFail is why the daemon of a host whose link is up did not take
+	// the app, when the app can fix it: the daemon stopped, or speaks
+	// another protocol.
+	dialFail  int
 	daemonApp string // the tuios version its daemon runs
 	daemonFP  string
 	info      proto.HostInfo
@@ -419,6 +424,33 @@ func (a *App) connectHost(h *host) {
 	}()
 }
 
+// Why a linked machine's daemon did not take the app.
+const (
+	dialOK = iota
+	dialStopped
+	dialProtocol
+)
+
+// hostDialError words why a linked machine's daemon did not take the app,
+// and says which of the cases above it is. The dial's own error is written for a
+// daemon on this machine: a link that hangs up before the hello answers
+// reads there as an old daemon, with "run tuios kill-server" as the fix,
+// which run here would end this machine's daemon and every pane.
+func hostDialError(name string, err error) (string, int) {
+	if pm, ok := errors.AsType[*session.ProtocolMismatchError](err); ok {
+		if _, refused := errors.AsType[*session.VerbCallError](pm.Cause); refused {
+			// The daemon there answered, and speaks another protocol.
+			return locales.HostOtherProtocol(name), dialProtocol
+		}
+		return locales.HostDaemonStopped(name), dialStopped
+	}
+	msg := err.Error()
+	if strings.Contains(msg, "kill-server") {
+		msg = strings.ReplaceAll(msg, "'tuios kill-server'", "'tuios kill-server' on "+name)
+	}
+	return msg, dialOK
+}
+
 // connected takes the result of connectHost.
 func (a *App) connected(h *host, gen int, cl *client.Client, err error) {
 	if h.gen != gen || !slices.Contains(a.hosts, h) {
@@ -438,7 +470,8 @@ func (a *App) connected(h *host, gen int, cl *client.Client, err error) {
 		if h.remote() && h.rep.Status == client.HostUp {
 			// The link is up and its daemon did not take the app: say
 			// why, and try again a little later.
-			h.conn, h.err = connFailed, err.Error()
+			h.conn = connFailed
+			h.err, h.dialFail = hostDialError(h.name, err)
 		} else if h.remote() {
 			a.followLink(h)
 		} else {
@@ -451,7 +484,7 @@ func (a *App) connected(h *host, gen int, cl *client.Client, err error) {
 		}
 		return
 	}
-	h.cl, h.conn, h.err, h.retries = cl, connReady, "", 0
+	h.cl, h.conn, h.err, h.retries, h.dialFail = cl, connReady, "", 0, dialOK
 	h.daemonApp, h.daemonFP = cl.Welcome.App, cl.Welcome.Build
 	cl.OnEvent(func(m proto.Message) { a.update(func() { a.event(h, cl, m) }) })
 	cl.Go("subscribe", nil, nil)
