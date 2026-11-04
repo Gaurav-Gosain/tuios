@@ -1080,12 +1080,25 @@ func (a *App) split(s *proto.Session, p proto.CreateParams) {
 			}
 		}
 		down := p.Direction == "down" || p.Direction == "up"
-		if cols > 0 && rows > 0 && (down && rows/2 < minPaneRows || !down && cols/2 < minPaneCols) {
+		fitsDown, fitsRight := rows/2 >= minPaneRows, cols/2 >= minPaneCols
+		fits := down && fitsDown || !down && fitsRight
+		if p.Direction == "" {
+			// The layout picks the side: check the side it will take, as
+			// the split tree splits a tall pane down. Where no side is
+			// taken (master-stack, scrolling), either one fitting will do.
+			if d, ok := h.autoSplitDown(s.ID, pane.ID); ok {
+				down = d
+				fits = down && fitsDown || !down && fitsRight
+			} else {
+				fits = fitsDown || fitsRight
+			}
+		}
+		if cols > 0 && rows > 0 && !fits {
 			a.toast(locales.ToastPaneTooSmall())
 			return
 		}
 		p.Cols, p.Rows = cols, rows
-		if p.Direction == "down" || p.Direction == "up" {
+		if down {
 			p.Rows = max(p.Rows/2, 4)
 		} else {
 			p.Cols = max(p.Cols/2, 10)
@@ -1333,6 +1346,16 @@ func (a *App) emptyWorkspace(c *ui.Context, pal *palette, s *proto.Session) {
 			})
 		})
 	})
+}
+
+// autoSplitDown reports which side a split with no side asked takes on
+// the host's session (client.AutoSplitDown); ok is false while the host
+// has no client.
+func (h *host) autoSplitDown(sid, pane string) (down, ok bool) {
+	if h == nil || h.cl == nil {
+		return false, false
+	}
+	return h.cl.AutoSplitDown(sid, pane)
 }
 
 // minPaneCols and minPaneRows are the least a split leaves each half.

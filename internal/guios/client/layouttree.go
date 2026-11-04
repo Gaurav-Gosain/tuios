@@ -325,3 +325,25 @@ func ids(wins []windowRow) []string {
 	}
 	return out
 }
+
+// AutoSplitDown reports which way a split that names no side splits pane:
+// down (true) or to the right, as layoutOf will put the new pane in the
+// workspace's tree. ok is false when the split tree does not lay the
+// workspace out (master-stack, scrolling, floating), where a new pane takes
+// no side of the one it splits.
+func (c *Client) AutoSplitDown(sid, pane string) (down, ok bool) {
+	c.st.mu.Lock()
+	ti, have := c.st.trees[sid]
+	c.st.mu.Unlock()
+	if !have || !ti.useTree {
+		return false, false
+	}
+	tree, leaves, nums := ti.bspTree()
+	bounds, gap := ti.bounds(), ti.ls.Gap
+	n := number(leaves, nums, pane)
+	if !tree.HasWindow(n) {
+		// A pane the tree lacks yet goes in as layoutOf puts it.
+		tree.InsertMissing([]int{n}, bounds, gap)
+	}
+	return tree.NextSplitDirection(n, bounds, gap) == "H", true
+}
