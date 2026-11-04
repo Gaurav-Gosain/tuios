@@ -547,6 +547,9 @@ func (a *App) cockpitKeys(c *ui.Context, col ui.Element) {
 		}
 		return
 	}
+	if a.ownedKeys(col) {
+		return
+	}
 	if k, ok := a.guard(c, col, &ck.guard, a.ckInstant); ok {
 		a.ckLetter(k)
 		c.Invalidate()
@@ -684,8 +687,14 @@ func (a *App) ckLetter(k ckKey) {
 		// The sheet takes the keys: what comes within guardWindow lands
 		// in its task, and the sheet takes itself back (spawnTyped).
 		a.newAgent()
-		if ck.spawn != nil {
-			ck.spawn.byKeyAt = time.Now()
+		if sp := ck.spawn; sp != nil {
+			sp.byKeyAt = time.Now()
+			g.setUndo(func() {
+				if ck.spawn == sp {
+					sp.task.text, sp.byKeyAt = "", time.Time{}
+					a.spawnClose()
+				}
+			})
 		}
 	case ui.KeyC:
 		a.openCompare()
