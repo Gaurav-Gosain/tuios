@@ -1223,11 +1223,11 @@ func (a *App) cmdHeld(c *ui.Context) bool {
 	return true
 }
 
-// toastBox is where toasts show: over the foot of the agents list while
-// the agents view shows its list, else at the bottom centre.
+// toastBox is where toasts show: over the foot of the agents list, or of
+// the Mail view's list, else at the bottom centre.
 func (a *App) toastBox() *ui.Rect {
 	ck := &a.ck
-	if !ck.open || ck.view != viewAgents || ck.stacked || ck.fleetRect.W <= 0 {
+	if !ck.open || ck.view == viewBoard || ck.stacked || ck.fleetRect.W <= 0 {
 		return nil
 	}
 	r := ck.fleetRect
