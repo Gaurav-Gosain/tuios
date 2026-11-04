@@ -10,7 +10,7 @@ The short version:
 git clone https://github.com/Gaurav-Gosain/tuios.git
 cd tuios
 
-go build -o tuios ./cmd/tuios   # pure Go backend, needs only go (1.26+)
+go build -o tuios ./cmd/tuios   # pure Go backend, needs only go (1.27.3+)
 go test ./...
 
 # Or build and install onto your PATH, pure Go emulator by default.
