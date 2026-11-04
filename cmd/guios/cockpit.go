@@ -111,6 +111,8 @@ type cockpit struct {
 	view int
 	// jumpTo is a row to select once the rows are built.
 	jumpTo *ckJump
+	// focusView asks the view just shown to take the keys.
+	focusView bool
 
 	agents []client.Agent
 	items  []session.AttentionItem

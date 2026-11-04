@@ -1,0 +1,140 @@
+package main
+
+import (
+	"sort"
+
+	"github.com/Gaurav-Gosain/mygo/ui"
+
+	"github.com/Gaurav-Gosain/tuios/cmd/guios/locales"
+)
+
+// The cockpit's views beside the agents: the task board of every session,
+// with every stage, and the mail agents sent to the person. Each takes the
+// whole card. b and Shift+M open them from the agents, Escape comes back,
+// and prefix M opens the mail.
+
+// ckSetView shows a view of the cockpit.
+func (a *App) ckSetView(v int) {
+	ck := &a.ck
+	ck.view = v
+	switch v {
+	case viewBoard:
+		a.fetchBoard()
+		ck.focusView = true
+	case viewMail:
+		a.fetchMail()
+		ck.focusView = true
+	default:
+		ck.fleetFocus.Focus()
+	}
+}
+
+// openMailView opens the cockpit on the mail for the person.
+func (a *App) openMailView() {
+	if !a.ck.open {
+		a.toggleCockpit()
+	}
+	a.ckSetView(viewMail)
+}
+
+// mailNeeds is how many agents have mail for the person: the Mail view's
+// count, from the list the badge reads.
+func (ck *cockpit) mailNeeds() int {
+	if !ck.loaded {
+		return 0
+	}
+	n := 0
+	for _, x := range ck.needs() {
+		if x.item != nil && x.tier == needMail {
+			n++
+		}
+	}
+	return n
+}
+
+// ckViewButton is a header button that shows a view, and the agents again
+// while the view shows.
+func (a *App) ckViewButton(c *ui.Context, pal *palette, v int, label string, n int, tip string) {
+	ck := &a.ck
+	on := ck.view == v
+	b := ui.ButtonBase(c.Key("view-"+label)).Height(hControlSm).Padding(0, 10).Gap(6).Radius(rRow).AlignItems(ui.Center).Shrink(0).Label(label)
+	switch {
+	case on:
+		chosen(b.Background(pal.rowSelected), pal)
+	case b.Hovered():
+		b.Background(pal.rowHover)
+	}
+	pointerTooltip(c, b, "view-tip-"+label, tip)
+	b.Children(func() {
+		col := pal.textMuted
+		if on {
+			col = pal.text
+		}
+		ui.Text(c, label).FontSize(fsBody).FontWeight(wMedium).TextColor(col).SingleLine()
+		if n > 0 {
+			countBadge(c, n, pal.attention, pal.onDone)
+		}
+	})
+	if b.Clicked() {
+		c.Invalidate()
+		if on {
+			a.ckSetView(viewAgents)
+		} else {
+			a.ckSetView(v)
+		}
+	}
+}
+
+// humanMailView lists every message to the person, unread first, newest
+// first within each, with a line to answer the one chosen.
+func (a *App) humanMailView(c *ui.Context, pal *palette) {
+	ck := &a.ck
+	m := ck.tabs.mail
+	if m == nil {
+		a.fetchMail()
+		m = ck.tabs.mail
+	}
+	var mine []ckMsg
+	for _, msg := range m.msgs {
+		if msg.To == "human" {
+			mine = append(mine, msg)
+		}
+	}
+	sort.SliceStable(mine, func(i, j int) bool {
+		if mine[i].Unread != mine[j].Unread {
+			return mine[i].Unread
+		}
+		return mine[i].SentAt > mine[j].SentAt
+	})
+	col := ui.Column(c.Key("human-mail")).Grow(1).Basis(0).MinWidth(0).AlignItems(ui.Stretch).
+		Focusable().FocusRing(false).Bind(&m.focus).Label(locales.CockpitMailForYou())
+	if ck.focusView {
+		ck.focusView = false
+		m.focus.Focus()
+	}
+	if m.focus.FocusWithin(c) && col.Shortcut(0, ui.KeyEscape) {
+		a.ckSetView(viewAgents)
+		c.Invalidate()
+	}
+	col.Children(func() {
+		if len(mine) == 0 {
+			emptyBlock(c, pal, nil, locales.CockpitNoMailForYou(), locales.CockpitNoMailForYouDetail(), false, nil)
+			return
+		}
+		ui.Scroll(c.Key("hm")).Grow(1).MinHeight(0).Padding(14, a.ckSide(24), 10, a.ckSide(24)).Children(func() {
+			ui.Column(c).Gap(12).Children(func() {
+				ui.Text(c, locales.CockpitMailForYou()).FontSize(fsTitle).FontWeight(wSemibold).TextColor(pal.text)
+				for _, msg := range mine {
+					a.mailCard(c, pal, m, msg, true)
+				}
+			})
+		})
+		if m.replyTo != 0 {
+			for _, msg := range mine {
+				if msg.ID == m.replyTo && msg.Session == m.replySess {
+					a.mailCompose(c, pal, m, msg.Session, msg.From, msg.FromName)
+				}
+			}
+		}
+	})
+}

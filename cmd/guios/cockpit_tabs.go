@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"slices"
+	"sort"
 	"strings"
 	"time"
 
@@ -111,21 +112,19 @@ func (a *App) ckTabOpened() {
 		}
 	case tabMail:
 		a.fetchMail()
-	case tabBoard:
-		a.fetchBoard()
 	}
 }
 
-// ckMailChanged reads the mail again when the Mail tab shows.
+// ckMailChanged reads the mail again when the Mail tab or view shows.
 func (a *App) ckMailChanged(*proto.DaemonEvent) {
-	if a.ck.tab == tabMail {
+	if a.ck.tab == tabMail || a.ck.view == viewMail {
 		a.fetchMail()
 	}
 }
 
-// ckTasksChanged reads the cards again when the Board shows.
+// ckTasksChanged reads the cards again when the board shows.
 func (a *App) ckTasksChanged() {
-	if a.ck.tab == tabBoard {
+	if a.ck.view == viewBoard {
 		a.fetchBoard()
 	}
 }
@@ -489,7 +488,12 @@ type ckMail struct {
 	msgs    []ckMsg
 	draft   string
 	replyTo int64
-	md      map[int64][]markdown.Block
+	md      map[string][]markdown.Block
+	// replySess is the session of the message replyTo names: ids are a
+	// session's own.
+	replySess string
+	// focus is the Mail view's focus binding.
+	focus ui.Handle
 }
 
 type ckMsg struct {
@@ -507,34 +511,70 @@ type ckMsg struct {
 	Held     bool   `json:"held"`
 }
 
+// fetchMail reads the mail of every session that has an agent here: the
+// Mail view lists what is for the person, and an agent's Mail tab what is
+// to and from it.
 func (a *App) fetchMail() {
 	cl := a.cockpitClient()
 	t := &a.ck.tabs
 	if t.mail == nil {
-		t.mail = &ckMail{md: map[int64][]markdown.Block{}}
+		t.mail = &ckMail{md: map[string][]markdown.Block{}}
 	}
 	m := t.mail
-	ag, ok := a.ckSelectedAgent()
-	if cl == nil || m.loading || !ok {
+	if cl == nil || m.loading {
 		return
+	}
+	var sessions []string
+	seen := map[string]bool{}
+	add := func(s string) {
+		if s != "" && !seen[s] {
+			seen[s] = true
+			sessions = append(sessions, s)
+		}
+	}
+	for _, ag := range a.ck.agents {
+		if ag.Host == "" {
+			add(ag.Session)
+		}
+	}
+	for _, it := range a.ck.items {
+		if it.Host == "" {
+			add(it.Session)
+		}
 	}
 	m.loading = true
 	go func() {
-		var out struct {
-			Messages []ckMsg `json:"messages"`
+		var all []ckMsg
+		var err error
+		for _, s := range sessions {
+			var out struct {
+				Messages []ckMsg `json:"messages"`
+			}
+			if e := cl.VerbInto("read-agent-messages", map[string]any{"session": s, "peek": true, "limit": 200}, false, &out); e != nil {
+				err = e
+				continue
+			}
+			for i := range out.Messages {
+				if out.Messages[i].Session == "" {
+					out.Messages[i].Session = s
+				}
+			}
+			all = append(all, out.Messages...)
 		}
-		err := cl.VerbInto("read-agent-messages", map[string]any{"session": ag.Session, "peek": true, "limit": 200}, false, &out)
+		sort.SliceStable(all, func(i, j int) bool { return all[i].SentAt < all[j].SentAt })
 		a.update(func() {
 			m.loading = false
-			if err != nil {
+			if err != nil && len(all) == 0 {
 				m.err = err.Error()
 				return
 			}
-			m.err, m.msgs = "", out.Messages
+			m.err, m.msgs = "", all
 		})
 	}()
 }
 
+// mailView is an agent's Mail tab: the mail to and from it, of the list
+// the Mail view reads.
 func (a *App) mailView(c *ui.Context, pal *palette, ag client.Agent) {
 	m := a.ck.tabs.mail
 	if m == nil {
@@ -543,68 +583,78 @@ func (a *App) mailView(c *ui.Context, pal *palette, ag client.Agent) {
 	}
 	var mine []ckMsg
 	for _, msg := range m.msgs {
-		if msg.From == ag.Window || msg.To == ag.Window || msg.To == "" {
+		if msg.Session == ag.Session && (msg.From == ag.Window || msg.To == ag.Window || msg.To == "") {
 			mine = append(mine, msg)
 		}
 	}
-	mono := a.termFamily()
 	ui.Scroll(c.Key("mail")).Grow(1).MinHeight(0).Padding(14, 24, 10, 24).Children(func() {
 		ui.Column(c).Gap(12).Children(func() {
 			if len(mine) == 0 {
 				a.ckMessage(c, pal, locales.CockpitNoMail(), locales.CockpitNoMailDetail(ag.Name))
 			}
 			for _, msg := range mine {
-				in := msg.To == ag.Window
-				ui.Column(c.Key(msg.ID)).Gap(6).Padding(10, 14).Radius(rCard).Background(ckGround(pal)).Children(func() {
-					ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
-						arrow := "→"
-						if in {
-							arrow = "←"
-						}
-						ui.Text(c, arrow).FontSize(fsBody).TextColor(pal.accent)
-						to := msg.ToName
-						if to == "" {
-							to = locales.CockpitEveryone()
-						}
-						ui.Text(c, msg.FromName).FontSize(fsBody).FontWeight(wSemibold).TextColor(pal.text)
-						ui.Text(c, "→ "+to).FontSize(fsSmall).TextColor(pal.textMuted)
-						if msg.Subject != "" {
-							ui.Text(c, "· "+msg.Subject).FontSize(fsSmall).TextColor(pal.textMuted).SingleLine().Ellipsis("…").MinWidth(0)
-						}
-						ui.Spacer(c)
-						if msg.Unread {
-							ui.Box(c).Size(7, 7).Radius(rChip).Background(pal.attention)
-						}
-						ui.Text(c, ago(msg.SentAt/int64(time.Millisecond), c.Now())).FontSize(fsSmall).TextColor(pal.textFaint)
-					})
-					blocks, ok := m.md[msg.ID]
-					if !ok {
-						blocks, _ = markdown.Parse(msg.Text)
-						m.md[msg.ID] = blocks
-					}
-					a.markdownView(c, pal, blocks, mono)
-					r := ui.Row(c.Key("reply")).Cursor(ui.CursorPointer)
-					if r.Clicked() {
-						c.Invalidate()
-						m.replyTo = msg.ID
-					}
-					r.Children(func() {
-						ui.Text(c, locales.CockpitReplyAsYou()).FontSize(fsSmall).TextColor(pal.accent)
-					})
-				})
+				a.mailCard(c, pal, m, msg, msg.To == ag.Window)
 			}
 		})
 	})
 	// Mail to the agent, as the person.
-	ui.Row(c.Key("mail-compose")).Shrink(0).Gap(8).AlignItems(ui.Center).Padding(8, 24, 8, 24).Children(func() {
-		ph := locales.CockpitMailTo(ag.Name)
+	a.mailCompose(c, pal, m, ag.Session, ag.Window, ag.Name)
+}
+
+// mailCard is one message: who to whom, the text, and a reply link.
+func (a *App) mailCard(c *ui.Context, pal *palette, m *ckMail, msg ckMsg, in bool) {
+	mono := a.termFamily()
+	ui.Column(c.Key(msg.Session+"/"+itoa(int(msg.ID)))).Gap(6).Padding(10, 14).Radius(rCard).Background(ckGround(pal)).Children(func() {
+		ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
+			arrow := "→"
+			if in {
+				arrow = "←"
+			}
+			ui.Text(c, arrow).FontSize(fsBody).TextColor(pal.accent)
+			to := msg.ToName
+			if to == "" {
+				to = locales.CockpitEveryone()
+			}
+			ui.Text(c, msg.FromName).FontSize(fsBody).FontWeight(wSemibold).TextColor(pal.text)
+			ui.Text(c, "→ "+to).FontSize(fsSmall).TextColor(pal.textMuted)
+			if msg.Subject != "" {
+				ui.Text(c, "· "+msg.Subject).FontSize(fsSmall).TextColor(pal.textMuted).SingleLine().Ellipsis("…").MinWidth(0)
+			}
+			ui.Spacer(c)
+			if msg.Unread {
+				ui.Box(c).Size(7, 7).Radius(rChip).Background(pal.attention)
+			}
+			ui.Text(c, ago(msg.SentAt/int64(time.Millisecond), c.Now())).FontSize(fsSmall).TextColor(pal.textFaint)
+		})
+		mk := msg.Session + "/" + itoa(int(msg.ID))
+		blocks, ok := m.md[mk]
+		if !ok {
+			blocks, _ = markdown.Parse(msg.Text)
+			m.md[mk] = blocks
+		}
+		a.markdownView(c, pal, blocks, mono)
+		r := ui.Row(c.Key("reply")).Cursor(ui.CursorPointer)
+		if r.Clicked() {
+			c.Invalidate()
+			m.replyTo, m.replySess = msg.ID, msg.Session
+		}
+		r.Children(func() {
+			ui.Text(c, locales.CockpitReplyAsYou()).FontSize(fsSmall).TextColor(pal.accent)
+		})
+	})
+}
+
+// mailCompose is the line that mails an agent, as the person.
+func (a *App) mailCompose(c *ui.Context, pal *palette, m *ckMail, sess, to, name string) {
+	ui.Row(c.Key("mail-compose")).Shrink(0).Gap(8).AlignItems(ui.Center).Padding(8, a.ckSide(24), 8, a.ckSide(24)).Children(func() {
+		ph := locales.CockpitMailTo(name)
 		if m.replyTo != 0 {
 			ph = locales.CockpitMailReply(int(m.replyTo))
 		}
 		in := textField(c, "mail-text", &m.draft, ph, 0, pal).Grow(1)
 		send := sizedButton(c, "mail-send", locales.CockpitSendMail(), "", false, 28, 7, pal)
 		if (in.Submitted() || send) && strings.TrimSpace(m.draft) != "" {
-			a.sendMail(ag, m)
+			a.sendMail(sess, to, m)
 		}
 		if in.Shortcut(0, ui.KeyEscape) {
 			m.replyTo = 0
@@ -612,12 +662,12 @@ func (a *App) mailView(c *ui.Context, pal *palette, ag client.Agent) {
 	})
 }
 
-func (a *App) sendMail(ag client.Agent, m *ckMail) {
+func (a *App) sendMail(sess, to string, m *ckMail) {
 	cl := a.cockpitClient()
 	if cl == nil {
 		return
 	}
-	p := map[string]any{"session": ag.Session, "to": ag.Window, "text": m.draft, "from": "human"}
+	p := map[string]any{"session": sess, "to": to, "text": m.draft, "from": "human"}
 	if m.replyTo != 0 {
 		p["reply_to"] = m.replyTo
 	}

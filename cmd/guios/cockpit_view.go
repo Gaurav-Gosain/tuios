@@ -103,6 +103,19 @@ func (a *App) cockpitCard(c *ui.Context, pal *palette, bar ui.TitleBar, shown fl
 		empty := ck.loaded && len(ck.rows) == 0
 		body := ui.Row(c).Grow(1).MinHeight(0).AlignItems(ui.Stretch)
 		body.Children(func() {
+			// The board and the mail for the person take the whole card.
+			// The agents column stays, zero wide: it holds the keys that
+			// come back to it.
+			switch ck.view {
+			case viewBoard:
+				a.cockpitFleet(c, pal, 0, false)
+				a.boardView(c, pal, "")
+				return
+			case viewMail:
+				a.cockpitFleet(c, pal, 0, false)
+				a.humanMailView(c, pal)
+				return
+			}
 			if empty {
 				a.cockpitFleet(c, pal, 0, true)
 				return
@@ -134,7 +147,7 @@ func (a *App) cockpitCard(c *ui.Context, pal *palette, bar ui.TitleBar, shown fl
 				a.cockpitSide(c, pal)
 			}
 		})
-		if !empty {
+		if !empty || ck.view != viewAgents {
 			ui.Box(c).Height(1).Shrink(0).Background(pal.divider)
 			a.cockpitHints(c, pal)
 		}
@@ -182,7 +195,9 @@ func (a *App) cockpitHeader(c *ui.Context, pal *palette, bar ui.TitleBar, shown 
 			}
 			if b.Clicked() {
 				c.Invalidate()
-				if g == ckNeeds {
+				if ck.view != viewAgents {
+					a.ckSetView(viewAgents)
+				} else if g == ckNeeds {
 					ck.needsOnly = !ck.needsOnly
 				} else if ck.folded[g] {
 					a.ckToggleFold(g)
@@ -193,6 +208,9 @@ func (a *App) cockpitHeader(c *ui.Context, pal *palette, bar ui.TitleBar, shown 
 		count("c-review", ckReview, proto.Idle, true, locales.CockpitCountReview())
 		count("c-working", ckWorking, proto.Working, false, locales.CockpitCountWorking())
 		count("c-idle", ckIdle, proto.Idle, false, locales.CockpitCountIdle())
+		ui.Box(c).Size(1, 16).Shrink(0).Background(pal.divider)
+		a.ckViewButton(c, pal, viewBoard, locales.CockpitTabBoard(), 0, locales.CockpitShowBoard())
+		a.ckViewButton(c, pal, viewMail, locales.CockpitTabMail(), a.ck.mailNeeds(), locales.CockpitShowMail())
 		ui.Spacer(c)
 		if ck.err != "" {
 			oneLine(c, ck.err, fsSmall, 0).TextColor(pal.dangerText).MaxWidth(320)
@@ -553,10 +571,12 @@ func (a *App) cockpitKeys(c *ui.Context, col ui.Element) {
 		if r, ok := a.ckSelected(); ok && r.item != nil && r.item.HeldID != 0 {
 			a.ckPassHeld(*r.item)
 		}
+	case key(ui.Shift, ui.KeyM):
+		a.ckSetView(viewMail)
 	case key(0, ui.KeyM):
 		a.ckSetTab(tabMail)
 	case key(0, ui.KeyB):
-		a.ckSetTab(tabBoard)
+		a.ckSetView(viewBoard)
 	case key(0, ui.KeyV):
 		a.ckSetTab(tabChanges)
 	case key(0, ui.KeyF):
@@ -570,7 +590,11 @@ func (a *App) cockpitKeys(c *ui.Context, col ui.Element) {
 	case key(0, ui.KeyBracketLeft):
 		a.ckStepTab(-1)
 	case key(0, ui.KeyEscape):
-		a.closeCockpit()
+		if ck.view != viewAgents {
+			a.ckSetView(viewAgents)
+		} else {
+			a.closeCockpit()
+		}
 	default:
 		return
 	}
@@ -594,6 +618,13 @@ func (a *App) cockpitHints(c *ui.Context, pal *palette) {
 			keyHint(c, pal, k, what)
 		}
 		switch {
+		case a.ck.view == viewBoard:
+			hint("h l", locales.CockpitHintColumns())
+			hint("⇧H ⇧L", locales.CockpitHintMoveCard())
+			hint("n", locales.CockpitHintAddCard())
+			hint("esc", locales.CockpitHintList())
+		case a.ck.view == viewMail:
+			hint("esc", locales.CockpitHintList())
 		case a.ck.reply.box.FocusWithin(c):
 			// The keys of the field that has them.
 			hint("↵", locales.CockpitHintSend())

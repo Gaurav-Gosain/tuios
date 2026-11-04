@@ -151,8 +151,12 @@ func (a *App) boardView(c *ui.Context, pal *palette, sess string) {
 		a.ckMessage(c, pal, locales.CockpitNoBoard(), b.err)
 		return
 	}
-	root := ui.Column(c.Key("board")).Grow(1).MinHeight(0).AlignItems(ui.Stretch).
+	root := ui.Column(c.Key("board")).Grow(1).Basis(0).MinWidth(0).MinHeight(0).AlignItems(ui.Stretch).
 		Focusable().FocusRing(false).Bind(&b.focus).Label(locales.CockpitTabBoard())
+	if a.ck.focusView {
+		a.ck.focusView = false
+		b.focus.Focus()
+	}
 	if a.boardKeys(root, b) {
 		c.Invalidate()
 	}
@@ -183,10 +187,12 @@ func (a *App) boardView(c *ui.Context, pal *palette, sess string) {
 // Board column widths: a column with cards is at least boardColMin wide
 // and grows to boardColMax with room to spare, an empty or folded one is
 // boardColNarrow. An edge button for hidden columns is boardEdgeW.
+// The board takes the whole card, so its seven stages fit a 1440 px
+// window beside the sidebar.
 const (
-	boardColMin    = 168
+	boardColMin    = 148
 	boardColMax    = 300
-	boardColNarrow = 124
+	boardColNarrow = 104
 	boardEdgeW     = 34
 	boardGap       = 10
 	boardPadX      = 32
@@ -538,12 +544,8 @@ func (a *App) boardKeys(root ui.Element, b *ckBoard) (handled bool) {
 		if t, ok := b.card(b.sel); ok {
 			a.takeCard(b, t)
 		}
-	case key(0, ui.KeyBracketLeft):
-		a.ckStepTab(-1)
-	case key(0, ui.KeyBracketRight):
-		a.ckStepTab(1)
 	case key(0, ui.KeyEscape):
-		a.ck.fleetFocus.Focus()
+		a.ckSetView(viewAgents)
 	default:
 		handled = false
 	}

@@ -621,15 +621,22 @@ func (a *App) runKeyAction(action string) {
 		a.toggleSide(sideFiles)
 	case "prefix_review":
 		a.toggleSide(sideChanges)
-	case "prefix_inbox", "prefix_mail":
+	case "prefix_inbox":
 		a.toggleCockpit()
 		if a.ck.open {
 			// The agents view holds the keys: n there starts an agent,
 			// as the TUI's prefix i then n.
 			return
 		}
+	case "prefix_mail":
+		a.openMailView()
+		return
 	case "prefix_next_attention":
 		a.jumpToAttention()
+		if a.ck.open {
+			// It went to a row of the agents view, which holds the keys.
+			return
+		}
 	case "new_workspace":
 		a.newWorkspace(s)
 	case "next_workspace":

@@ -11981,3 +11981,83 @@ func CockpitHintList() string { return In(i18n.Locale()).CockpitHintList() }
 func (msgs Messages) CockpitHintList() string {
 	return Catalog.Format(msgs.locale, "cockpitHintList", nil)
 }
+
+// CockpitShowBoard says "Show the task board of every session (b)"
+// in the language the app shows.
+func CockpitShowBoard() string { return In(i18n.Locale()).CockpitShowBoard() }
+
+// CockpitShowBoard says "Show the task board of every session (b)"
+// in the language of msgs.
+func (msgs Messages) CockpitShowBoard() string {
+	return Catalog.Format(msgs.locale, "cockpitShowBoard", nil)
+}
+
+// CockpitShowMail says "Show the mail that agents sent to you (Shift+M)"
+// in the language the app shows.
+func CockpitShowMail() string { return In(i18n.Locale()).CockpitShowMail() }
+
+// CockpitShowMail says "Show the mail that agents sent to you (Shift+M)"
+// in the language of msgs.
+func (msgs Messages) CockpitShowMail() string {
+	return Catalog.Format(msgs.locale, "cockpitShowMail", nil)
+}
+
+// CockpitHintColumns says "columns"
+// in the language the app shows.
+func CockpitHintColumns() string { return In(i18n.Locale()).CockpitHintColumns() }
+
+// CockpitHintColumns says "columns"
+// in the language of msgs.
+func (msgs Messages) CockpitHintColumns() string {
+	return Catalog.Format(msgs.locale, "cockpitHintColumns", nil)
+}
+
+// CockpitHintMoveCard says "move card"
+// in the language the app shows.
+func CockpitHintMoveCard() string { return In(i18n.Locale()).CockpitHintMoveCard() }
+
+// CockpitHintMoveCard says "move card"
+// in the language of msgs.
+func (msgs Messages) CockpitHintMoveCard() string {
+	return Catalog.Format(msgs.locale, "cockpitHintMoveCard", nil)
+}
+
+// CockpitHintAddCard says "add card"
+// in the language the app shows.
+func CockpitHintAddCard() string { return In(i18n.Locale()).CockpitHintAddCard() }
+
+// CockpitHintAddCard says "add card"
+// in the language of msgs.
+func (msgs Messages) CockpitHintAddCard() string {
+	return Catalog.Format(msgs.locale, "cockpitHintAddCard", nil)
+}
+
+// CockpitMailForYou says "Mail for you"
+// in the language the app shows.
+func CockpitMailForYou() string { return In(i18n.Locale()).CockpitMailForYou() }
+
+// CockpitMailForYou says "Mail for you"
+// in the language of msgs.
+func (msgs Messages) CockpitMailForYou() string {
+	return Catalog.Format(msgs.locale, "cockpitMailForYou", nil)
+}
+
+// CockpitNoMailForYou says "No mail for you"
+// in the language the app shows.
+func CockpitNoMailForYou() string { return In(i18n.Locale()).CockpitNoMailForYou() }
+
+// CockpitNoMailForYou says "No mail for you"
+// in the language of msgs.
+func (msgs Messages) CockpitNoMailForYou() string {
+	return Catalog.Format(msgs.locale, "cockpitNoMailForYou", nil)
+}
+
+// CockpitNoMailForYouDetail says "Mail that an agent sends to you shows here."
+// in the language the app shows.
+func CockpitNoMailForYouDetail() string { return In(i18n.Locale()).CockpitNoMailForYouDetail() }
+
+// CockpitNoMailForYouDetail says "Mail that an agent sends to you shows here."
+// in the language of msgs.
+func (msgs Messages) CockpitNoMailForYouDetail() string {
+	return Catalog.Format(msgs.locale, "cockpitNoMailForYouDetail", nil)
+}

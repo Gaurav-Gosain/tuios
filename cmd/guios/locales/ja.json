@@ -1181,5 +1181,13 @@
   "compareKeep": "{letter} を残す",
   "compareKeepAgain": "今すぐ {letter} を残す",
   "cockpitHintSend": "送信",
-  "cockpitHintList": "一覧に戻る"
+  "cockpitHintList": "一覧に戻る",
+  "cockpitShowBoard": "全セッションのタスクボードを表示 (b)",
+  "cockpitShowMail": "エージェントからあなたへのメールを表示 (Shift+M)",
+  "cockpitHintColumns": "列",
+  "cockpitHintMoveCard": "カードを移動",
+  "cockpitHintAddCard": "カードを追加",
+  "cockpitMailForYou": "あなたへのメール",
+  "cockpitNoMailForYou": "あなたへのメールはありません",
+  "cockpitNoMailForYouDetail": "エージェントがあなたに送ったメールがここに表示されます。"
 }

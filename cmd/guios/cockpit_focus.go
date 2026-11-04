@@ -29,7 +29,9 @@ const (
 	tabBoard       = "board"
 )
 
-var ckTabOrder = []string{tabThread, tabChanges, tabCheckpoints, tabMail, tabBoard}
+// ckTabOrder is the agent's tabs. The board is the session's, not the
+// agent's: it is a view of its own (ck.view).
+var ckTabOrder = []string{tabThread, tabChanges, tabCheckpoints, tabMail}
 
 func ckTabTitle(t string) string {
 	switch t {
@@ -97,10 +99,10 @@ func (a *App) ckTabFor(r ckRow) string {
 	if ag.State == "needs_input" || ag.State == "errored" {
 		return tabThread
 	}
-	if t, ok := ck.chosen[ag.Key()]; ok && r.agent >= 0 {
+	if t, ok := ck.chosen[ag.Key()]; ok && r.agent >= 0 && slices.Contains(ckTabOrder, t) {
 		return t
 	}
-	if ck.picked != "" {
+	if ck.picked != "" && slices.Contains(ckTabOrder, ck.picked) {
 		return ck.picked
 	}
 	return tabThread
@@ -127,10 +129,6 @@ func (a *App) cockpitFocus(c *ui.Context, pal *palette) {
 	ck := &a.ck
 	r, ok := a.ckSelected()
 	if !ok || r.kind == ckRowHead || r.kind == ckRowMore {
-		if ck.tab == tabBoard {
-			a.boardView(c, pal, "")
-			return
-		}
 		a.ckMessage(c, pal, locales.CockpitPickAgent(), locales.CockpitPickAgentDetail())
 		return
 	}
@@ -221,8 +219,6 @@ func (a *App) cockpitFocus(c *ui.Context, pal *palette) {
 			a.checkpointsView(c, pal, ag)
 		case tabMail:
 			a.mailView(c, pal, ag)
-		case tabBoard:
-			a.boardView(c, pal, ag.Session)
 		default:
 			a.threadView(c, pal, ag)
 		}

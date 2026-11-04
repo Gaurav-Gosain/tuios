@@ -2120,5 +2120,13 @@
   "compareKeep": "Keep {letter}",
   "compareKeepAgain": "Keep {letter} now",
   "cockpitHintSend": "send",
-  "cockpitHintList": "back to the list"
+  "cockpitHintList": "back to the list",
+  "cockpitShowBoard": "Show the task board of every session (b)",
+  "cockpitShowMail": "Show the mail that agents sent to you (Shift+M)",
+  "cockpitHintColumns": "columns",
+  "cockpitHintMoveCard": "move card",
+  "cockpitHintAddCard": "add card",
+  "cockpitMailForYou": "Mail for you",
+  "cockpitNoMailForYou": "No mail for you",
+  "cockpitNoMailForYouDetail": "Mail that an agent sends to you shows here."
 }

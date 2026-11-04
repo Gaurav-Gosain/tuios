@@ -1181,5 +1181,13 @@
   "compareKeep": "保留 {letter}",
   "compareKeepAgain": "立即保留 {letter}",
   "cockpitHintSend": "发送",
-  "cockpitHintList": "返回列表"
+  "cockpitHintList": "返回列表",
+  "cockpitShowBoard": "显示所有会话的任务板 (b)",
+  "cockpitShowMail": "显示代理发给你的邮件 (Shift+M)",
+  "cockpitHintColumns": "列",
+  "cockpitHintMoveCard": "移动卡片",
+  "cockpitHintAddCard": "添加卡片",
+  "cockpitMailForYou": "给你的邮件",
+  "cockpitNoMailForYou": "没有给你的邮件",
+  "cockpitNoMailForYouDetail": "代理发给你的邮件显示在这里。"
 }
