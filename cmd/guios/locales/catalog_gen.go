@@ -8627,3 +8627,303 @@ func NewPaneOn(host string) string { return In(i18n.Locale()).NewPaneOn(host) }
 func (msgs Messages) NewPaneOn(host string) string {
 	return Catalog.Format(msgs.locale, "newPaneOn", map[string]any{"host": host})
 }
+
+// ActionLayoutBsp says "Split tree layout"
+// in the language the app shows.
+func ActionLayoutBsp() string { return In(i18n.Locale()).ActionLayoutBsp() }
+
+// ActionLayoutBsp says "Split tree layout"
+// in the language of msgs.
+func (msgs Messages) ActionLayoutBsp() string {
+	return Catalog.Format(msgs.locale, "actionLayoutBsp", nil)
+}
+
+// ActionLayoutMaster says "Master and stack layout"
+// in the language the app shows.
+func ActionLayoutMaster() string { return In(i18n.Locale()).ActionLayoutMaster() }
+
+// ActionLayoutMaster says "Master and stack layout"
+// in the language of msgs.
+func (msgs Messages) ActionLayoutMaster() string {
+	return Catalog.Format(msgs.locale, "actionLayoutMaster", nil)
+}
+
+// ActionLayoutScrolling says "Scrolling layout"
+// in the language the app shows.
+func ActionLayoutScrolling() string { return In(i18n.Locale()).ActionLayoutScrolling() }
+
+// ActionLayoutScrolling says "Scrolling layout"
+// in the language of msgs.
+func (msgs Messages) ActionLayoutScrolling() string {
+	return Catalog.Format(msgs.locale, "actionLayoutScrolling", nil)
+}
+
+// ActionLayoutFloating says "Floating layout"
+// in the language the app shows.
+func ActionLayoutFloating() string { return In(i18n.Locale()).ActionLayoutFloating() }
+
+// ActionLayoutFloating says "Floating layout"
+// in the language of msgs.
+func (msgs Messages) ActionLayoutFloating() string {
+	return Catalog.Format(msgs.locale, "actionLayoutFloating", nil)
+}
+
+// ActionLayoutNext says "Next layout"
+// in the language the app shows.
+func ActionLayoutNext() string { return In(i18n.Locale()).ActionLayoutNext() }
+
+// ActionLayoutNext says "Next layout"
+// in the language of msgs.
+func (msgs Messages) ActionLayoutNext() string {
+	return Catalog.Format(msgs.locale, "actionLayoutNext", nil)
+}
+
+// ActionLayoutTiling says "Turn tiling on or off"
+// in the language the app shows.
+func ActionLayoutTiling() string { return In(i18n.Locale()).ActionLayoutTiling() }
+
+// ActionLayoutTiling says "Turn tiling on or off"
+// in the language of msgs.
+func (msgs Messages) ActionLayoutTiling() string {
+	return Catalog.Format(msgs.locale, "actionLayoutTiling", nil)
+}
+
+// ActionLayoutRotate says "Rotate split"
+// in the language the app shows.
+func ActionLayoutRotate() string { return In(i18n.Locale()).ActionLayoutRotate() }
+
+// ActionLayoutRotate says "Rotate split"
+// in the language of msgs.
+func (msgs Messages) ActionLayoutRotate() string {
+	return Catalog.Format(msgs.locale, "actionLayoutRotate", nil)
+}
+
+// ActionLayoutEqualize says "Make splits equal"
+// in the language the app shows.
+func ActionLayoutEqualize() string { return In(i18n.Locale()).ActionLayoutEqualize() }
+
+// ActionLayoutEqualize says "Make splits equal"
+// in the language of msgs.
+func (msgs Messages) ActionLayoutEqualize() string {
+	return Catalog.Format(msgs.locale, "actionLayoutEqualize", nil)
+}
+
+// ActionLayoutFloat says "Float or tile pane"
+// in the language the app shows.
+func ActionLayoutFloat() string { return In(i18n.Locale()).ActionLayoutFloat() }
+
+// ActionLayoutFloat says "Float or tile pane"
+// in the language of msgs.
+func (msgs Messages) ActionLayoutFloat() string {
+	return Catalog.Format(msgs.locale, "actionLayoutFloat", nil)
+}
+
+// ActionLayoutMasterPosition says "Move masters to next side"
+// in the language the app shows.
+func ActionLayoutMasterPosition() string { return In(i18n.Locale()).ActionLayoutMasterPosition() }
+
+// ActionLayoutMasterPosition says "Move masters to next side"
+// in the language of msgs.
+func (msgs Messages) ActionLayoutMasterPosition() string {
+	return Catalog.Format(msgs.locale, "actionLayoutMasterPosition", nil)
+}
+
+// ActionLayoutMasterAdd says "Add a master"
+// in the language the app shows.
+func ActionLayoutMasterAdd() string { return In(i18n.Locale()).ActionLayoutMasterAdd() }
+
+// ActionLayoutMasterAdd says "Add a master"
+// in the language of msgs.
+func (msgs Messages) ActionLayoutMasterAdd() string {
+	return Catalog.Format(msgs.locale, "actionLayoutMasterAdd", nil)
+}
+
+// ActionLayoutMasterRemove says "Remove a master"
+// in the language the app shows.
+func ActionLayoutMasterRemove() string { return In(i18n.Locale()).ActionLayoutMasterRemove() }
+
+// ActionLayoutMasterRemove says "Remove a master"
+// in the language of msgs.
+func (msgs Messages) ActionLayoutMasterRemove() string {
+	return Catalog.Format(msgs.locale, "actionLayoutMasterRemove", nil)
+}
+
+// ActionLayoutMasterSwap says "Swap with master"
+// in the language the app shows.
+func ActionLayoutMasterSwap() string { return In(i18n.Locale()).ActionLayoutMasterSwap() }
+
+// ActionLayoutMasterSwap says "Swap with master"
+// in the language of msgs.
+func (msgs Messages) ActionLayoutMasterSwap() string {
+	return Catalog.Format(msgs.locale, "actionLayoutMasterSwap", nil)
+}
+
+// ActionLayoutMasterFocus says "Go to master"
+// in the language the app shows.
+func ActionLayoutMasterFocus() string { return In(i18n.Locale()).ActionLayoutMasterFocus() }
+
+// ActionLayoutMasterFocus says "Go to master"
+// in the language of msgs.
+func (msgs Messages) ActionLayoutMasterFocus() string {
+	return Catalog.Format(msgs.locale, "actionLayoutMasterFocus", nil)
+}
+
+// ActionLayoutScrollWidth says "Next column width"
+// in the language the app shows.
+func ActionLayoutScrollWidth() string { return In(i18n.Locale()).ActionLayoutScrollWidth() }
+
+// ActionLayoutScrollWidth says "Next column width"
+// in the language of msgs.
+func (msgs Messages) ActionLayoutScrollWidth() string {
+	return Catalog.Format(msgs.locale, "actionLayoutScrollWidth", nil)
+}
+
+// ActionLayoutScrollMax says "Widest column"
+// in the language the app shows.
+func ActionLayoutScrollMax() string { return In(i18n.Locale()).ActionLayoutScrollMax() }
+
+// ActionLayoutScrollMax says "Widest column"
+// in the language of msgs.
+func (msgs Messages) ActionLayoutScrollMax() string {
+	return Catalog.Format(msgs.locale, "actionLayoutScrollMax", nil)
+}
+
+// ActionLayoutScrollConsume says "Pull next pane into column"
+// in the language the app shows.
+func ActionLayoutScrollConsume() string { return In(i18n.Locale()).ActionLayoutScrollConsume() }
+
+// ActionLayoutScrollConsume says "Pull next pane into column"
+// in the language of msgs.
+func (msgs Messages) ActionLayoutScrollConsume() string {
+	return Catalog.Format(msgs.locale, "actionLayoutScrollConsume", nil)
+}
+
+// ActionLayoutScrollExpel says "Move last pane to own column"
+// in the language the app shows.
+func ActionLayoutScrollExpel() string { return In(i18n.Locale()).ActionLayoutScrollExpel() }
+
+// ActionLayoutScrollExpel says "Move last pane to own column"
+// in the language of msgs.
+func (msgs Messages) ActionLayoutScrollExpel() string {
+	return Catalog.Format(msgs.locale, "actionLayoutScrollExpel", nil)
+}
+
+// ActionLayoutScrollMoveLeft says "Move column left"
+// in the language the app shows.
+func ActionLayoutScrollMoveLeft() string { return In(i18n.Locale()).ActionLayoutScrollMoveLeft() }
+
+// ActionLayoutScrollMoveLeft says "Move column left"
+// in the language of msgs.
+func (msgs Messages) ActionLayoutScrollMoveLeft() string {
+	return Catalog.Format(msgs.locale, "actionLayoutScrollMoveLeft", nil)
+}
+
+// ActionLayoutScrollMoveRight says "Move column right"
+// in the language the app shows.
+func ActionLayoutScrollMoveRight() string { return In(i18n.Locale()).ActionLayoutScrollMoveRight() }
+
+// ActionLayoutScrollMoveRight says "Move column right"
+// in the language of msgs.
+func (msgs Messages) ActionLayoutScrollMoveRight() string {
+	return Catalog.Format(msgs.locale, "actionLayoutScrollMoveRight", nil)
+}
+
+// ActionLayoutSnapLeft says "Snap to left half"
+// in the language the app shows.
+func ActionLayoutSnapLeft() string { return In(i18n.Locale()).ActionLayoutSnapLeft() }
+
+// ActionLayoutSnapLeft says "Snap to left half"
+// in the language of msgs.
+func (msgs Messages) ActionLayoutSnapLeft() string {
+	return Catalog.Format(msgs.locale, "actionLayoutSnapLeft", nil)
+}
+
+// ActionLayoutSnapRight says "Snap to right half"
+// in the language the app shows.
+func ActionLayoutSnapRight() string { return In(i18n.Locale()).ActionLayoutSnapRight() }
+
+// ActionLayoutSnapRight says "Snap to right half"
+// in the language of msgs.
+func (msgs Messages) ActionLayoutSnapRight() string {
+	return Catalog.Format(msgs.locale, "actionLayoutSnapRight", nil)
+}
+
+// ActionLayoutSnapFull says "Fill the pane area"
+// in the language the app shows.
+func ActionLayoutSnapFull() string { return In(i18n.Locale()).ActionLayoutSnapFull() }
+
+// ActionLayoutSnapFull says "Fill the pane area"
+// in the language of msgs.
+func (msgs Messages) ActionLayoutSnapFull() string {
+	return Catalog.Format(msgs.locale, "actionLayoutSnapFull", nil)
+}
+
+// ActionLayoutSnapUnsnap says "Unsnap"
+// in the language the app shows.
+func ActionLayoutSnapUnsnap() string { return In(i18n.Locale()).ActionLayoutSnapUnsnap() }
+
+// ActionLayoutSnapUnsnap says "Unsnap"
+// in the language of msgs.
+func (msgs Messages) ActionLayoutSnapUnsnap() string {
+	return Catalog.Format(msgs.locale, "actionLayoutSnapUnsnap", nil)
+}
+
+// MenuLayout says "Layout"
+// in the language the app shows.
+func MenuLayout() string { return In(i18n.Locale()).MenuLayout() }
+
+// MenuLayout says "Layout"
+// in the language of msgs.
+func (msgs Messages) MenuLayout() string {
+	return Catalog.Format(msgs.locale, "menuLayout", nil)
+}
+
+// MenuLayoutMaster says "Master and stack"
+// in the language the app shows.
+func MenuLayoutMaster() string { return In(i18n.Locale()).MenuLayoutMaster() }
+
+// MenuLayoutMaster says "Master and stack"
+// in the language of msgs.
+func (msgs Messages) MenuLayoutMaster() string {
+	return Catalog.Format(msgs.locale, "menuLayoutMaster", nil)
+}
+
+// MenuLayoutScrolling says "Scrolling"
+// in the language the app shows.
+func MenuLayoutScrolling() string { return In(i18n.Locale()).MenuLayoutScrolling() }
+
+// MenuLayoutScrolling says "Scrolling"
+// in the language of msgs.
+func (msgs Messages) MenuLayoutScrolling() string {
+	return Catalog.Format(msgs.locale, "menuLayoutScrolling", nil)
+}
+
+// MenuLayoutFloating says "Floating"
+// in the language the app shows.
+func MenuLayoutFloating() string { return In(i18n.Locale()).MenuLayoutFloating() }
+
+// MenuLayoutFloating says "Floating"
+// in the language of msgs.
+func (msgs Messages) MenuLayoutFloating() string {
+	return Catalog.Format(msgs.locale, "menuLayoutFloating", nil)
+}
+
+// LayoutSnapNeedsFloating says "Turn tiling off to snap a pane."
+// in the language the app shows.
+func LayoutSnapNeedsFloating() string { return In(i18n.Locale()).LayoutSnapNeedsFloating() }
+
+// LayoutSnapNeedsFloating says "Turn tiling off to snap a pane."
+// in the language of msgs.
+func (msgs Messages) LayoutSnapNeedsFloating() string {
+	return Catalog.Format(msgs.locale, "layoutSnapNeedsFloating", nil)
+}
+
+// ActionNewPane says "New pane"
+// in the language the app shows.
+func ActionNewPane() string { return In(i18n.Locale()).ActionNewPane() }
+
+// ActionNewPane says "New pane"
+// in the language of msgs.
+func (msgs Messages) ActionNewPane() string {
+	return Catalog.Format(msgs.locale, "actionNewPane", nil)
+}

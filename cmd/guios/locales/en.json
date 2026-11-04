@@ -1645,5 +1645,35 @@
         "type": "String"
       }
     }
-  }
+  },
+  "actionLayoutBsp": "Split tree layout",
+  "actionLayoutMaster": "Master and stack layout",
+  "actionLayoutScrolling": "Scrolling layout",
+  "actionLayoutFloating": "Floating layout",
+  "actionLayoutNext": "Next layout",
+  "actionLayoutTiling": "Turn tiling on or off",
+  "actionLayoutRotate": "Rotate split",
+  "actionLayoutEqualize": "Make splits equal",
+  "actionLayoutFloat": "Float or tile pane",
+  "actionLayoutMasterPosition": "Move masters to next side",
+  "actionLayoutMasterAdd": "Add a master",
+  "actionLayoutMasterRemove": "Remove a master",
+  "actionLayoutMasterSwap": "Swap with master",
+  "actionLayoutMasterFocus": "Go to master",
+  "actionLayoutScrollWidth": "Next column width",
+  "actionLayoutScrollMax": "Widest column",
+  "actionLayoutScrollConsume": "Pull next pane into column",
+  "actionLayoutScrollExpel": "Move last pane to own column",
+  "actionLayoutScrollMoveLeft": "Move column left",
+  "actionLayoutScrollMoveRight": "Move column right",
+  "actionLayoutSnapLeft": "Snap to left half",
+  "actionLayoutSnapRight": "Snap to right half",
+  "actionLayoutSnapFull": "Fill the pane area",
+  "actionLayoutSnapUnsnap": "Unsnap",
+  "menuLayout": "Layout",
+  "menuLayoutMaster": "Master and stack",
+  "menuLayoutScrolling": "Scrolling",
+  "menuLayoutFloating": "Floating",
+  "layoutSnapNeedsFloating": "Turn tiling off to snap a pane.",
+  "actionNewPane": "New pane"
 }

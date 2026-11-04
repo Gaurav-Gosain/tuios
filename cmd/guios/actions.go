@@ -87,6 +87,14 @@ func (a *App) run(id string, args map[string]string) {
 		a.findStep(false)
 	case "find.previous":
 		a.findStep(true)
+	case "pane.new":
+		// As the TUI's new window: the focused pane splits on the side
+		// the layout picks.
+		if s == nil {
+			a.run("session.new", args)
+			return
+		}
+		a.splitPane(s, "", "")
 	case "pane.split.right":
 		if s == nil {
 			a.run("session.new", args)
@@ -107,6 +115,33 @@ func (a *App) run(id string, args map[string]string) {
 		a.cyclePane(-1)
 	case "pane.left", "pane.right", "pane.up", "pane.down":
 		a.focusDirection(id[len("pane."):])
+	case "layout.bsp", "layout.master", "layout.scrolling", "layout.floating":
+		a.arrange(s, "mode", func(p *proto.ArrangeParams) { p.Mode = layoutModes[id] })
+	case "layout.next":
+		a.arrange(s, "next", nil)
+	case "layout.tiling":
+		a.arrange(s, "tiling", nil)
+	case "layout.rotate":
+		a.arrange(s, "rotate", nil)
+	case "layout.equalize":
+		a.arrange(s, "equalize", nil)
+	case "layout.float":
+		a.arrange(s, "float", nil)
+	case "layout.master.position", "layout.master.add", "layout.master.remove", "layout.master.swap":
+		a.arrange(s, strings.TrimPrefix(id, "layout."), nil)
+	case "layout.master.focus":
+		if s != nil && s.LayoutMode == "master-stack" && len(s.Panes) > 0 {
+			a.setFocus(s, paneOrder(s)[0])
+			a.focusTerminal()
+		}
+	case "layout.scroll.width", "layout.scroll.max", "layout.scroll.consume", "layout.scroll.expel", "layout.scroll.moveLeft", "layout.scroll.moveRight":
+		a.arrange(s, strings.TrimPrefix(id, "layout."), nil)
+	case "layout.snap.left", "layout.snap.right", "layout.snap.full", "layout.snap.unsnap":
+		if s != nil && s.LayoutMode != "floating" {
+			a.toast(locales.LayoutSnapNeedsFloating())
+			break
+		}
+		a.arrange(s, "snap", func(p *proto.ArrangeParams) { p.Mode = strings.TrimPrefix(id, "layout.snap.") })
 	case "workspace.next":
 		a.stepWorkspace(s, 1)
 	case "workspace.previous":
@@ -159,48 +194,72 @@ func (a *App) item(id string) *mygo.MenuItem {
 // actionTitles are the actions' titles in the language the app shows;
 // an Action's Title stays English, for `kero actions`.
 var actionTitles = map[string]func() string{
-	"settings.open":       locales.ActionSettings,
-	"cli.install":         locales.ActionInstallCli,
-	"app.quitAll":         locales.ActionQuitAll,
-	"session.new":         locales.ActionNewSession,
-	"session.newHome":     locales.ActionNewSessionHome,
-	"session.newWorktree": locales.ActionNewSessionWorktree,
-	"project.open":        locales.ActionOpenProject,
-	"palette.open":        locales.ActionGoToSession,
-	"conversation.resume": locales.ActionResumeConversation,
-	"session.attention":   locales.ActionJumpToAttention,
-	"agents.toggle":       locales.ActionAgents,
-	"session.next":        locales.ActionNextSession,
-	"session.previous":    locales.ActionPreviousSession,
-	"session.rename":      locales.ActionRenameSession,
-	"pane.restart":        locales.ActionRestartPane,
-	"pane.close":          locales.ActionClose,
-	"session.close":       locales.ActionCloseSession,
-	"find.open":           locales.ActionFind,
-	"find.next":           locales.ActionFindNext,
-	"find.previous":       locales.ActionFindPrevious,
-	"pane.split.right":    locales.ActionSplitRight,
-	"pane.split.down":     locales.ActionSplitDown,
-	"pane.browser":        locales.ActionNewBrowser,
-	"browser.address":     locales.ActionOpenLocation,
-	"pane.zoom":           locales.ActionZoomPane,
-	"pane.next":           locales.ActionNextPane,
-	"pane.previous":       locales.ActionPreviousPane,
-	"pane.left":           locales.ActionPaneLeft,
-	"pane.right":          locales.ActionPaneRight,
-	"pane.up":             locales.ActionPaneAbove,
-	"pane.down":           locales.ActionPaneBelow,
-	"sidebar.toggle":      locales.ActionToggleSidebar,
-	"changes.toggle":      locales.ActionToggleChanges,
-	"files.toggle":        locales.ActionToggleFiles,
-	"rightSidebar.toggle": locales.ActionToggleRightSidebar,
-	"text.bigger":         locales.ActionBigger,
-	"text.smaller":        locales.ActionSmaller,
-	"text.reset":          locales.ActionActualSize,
-	quickAction:           locales.ActionQuickTerminal,
-	"workspace.next":      locales.ActionNextWorkspace,
-	"workspace.previous":  locales.ActionPreviousWorkspace,
-	"workspace.new":       locales.WorkspaceNew,
+	"settings.open":           locales.ActionSettings,
+	"cli.install":             locales.ActionInstallCli,
+	"app.quitAll":             locales.ActionQuitAll,
+	"session.new":             locales.ActionNewSession,
+	"session.newHome":         locales.ActionNewSessionHome,
+	"session.newWorktree":     locales.ActionNewSessionWorktree,
+	"project.open":            locales.ActionOpenProject,
+	"palette.open":            locales.ActionGoToSession,
+	"conversation.resume":     locales.ActionResumeConversation,
+	"session.attention":       locales.ActionJumpToAttention,
+	"agents.toggle":           locales.ActionAgents,
+	"session.next":            locales.ActionNextSession,
+	"session.previous":        locales.ActionPreviousSession,
+	"session.rename":          locales.ActionRenameSession,
+	"pane.restart":            locales.ActionRestartPane,
+	"pane.close":              locales.ActionClose,
+	"session.close":           locales.ActionCloseSession,
+	"find.open":               locales.ActionFind,
+	"find.next":               locales.ActionFindNext,
+	"find.previous":           locales.ActionFindPrevious,
+	"pane.split.right":        locales.ActionSplitRight,
+	"pane.split.down":         locales.ActionSplitDown,
+	"pane.browser":            locales.ActionNewBrowser,
+	"browser.address":         locales.ActionOpenLocation,
+	"pane.zoom":               locales.ActionZoomPane,
+	"pane.next":               locales.ActionNextPane,
+	"pane.previous":           locales.ActionPreviousPane,
+	"pane.left":               locales.ActionPaneLeft,
+	"pane.right":              locales.ActionPaneRight,
+	"pane.up":                 locales.ActionPaneAbove,
+	"pane.down":               locales.ActionPaneBelow,
+	"sidebar.toggle":          locales.ActionToggleSidebar,
+	"changes.toggle":          locales.ActionToggleChanges,
+	"files.toggle":            locales.ActionToggleFiles,
+	"rightSidebar.toggle":     locales.ActionToggleRightSidebar,
+	"text.bigger":             locales.ActionBigger,
+	"text.smaller":            locales.ActionSmaller,
+	"text.reset":              locales.ActionActualSize,
+	quickAction:               locales.ActionQuickTerminal,
+	"workspace.next":          locales.ActionNextWorkspace,
+	"layout.bsp":              locales.ActionLayoutBsp,
+	"layout.master":           locales.ActionLayoutMaster,
+	"layout.scrolling":        locales.ActionLayoutScrolling,
+	"layout.floating":         locales.ActionLayoutFloating,
+	"layout.next":             locales.ActionLayoutNext,
+	"layout.tiling":           locales.ActionLayoutTiling,
+	"layout.rotate":           locales.ActionLayoutRotate,
+	"layout.equalize":         locales.ActionLayoutEqualize,
+	"layout.float":            locales.ActionLayoutFloat,
+	"layout.master.position":  locales.ActionLayoutMasterPosition,
+	"layout.master.add":       locales.ActionLayoutMasterAdd,
+	"layout.master.remove":    locales.ActionLayoutMasterRemove,
+	"layout.master.swap":      locales.ActionLayoutMasterSwap,
+	"layout.master.focus":     locales.ActionLayoutMasterFocus,
+	"layout.scroll.width":     locales.ActionLayoutScrollWidth,
+	"layout.scroll.max":       locales.ActionLayoutScrollMax,
+	"layout.scroll.consume":   locales.ActionLayoutScrollConsume,
+	"layout.scroll.expel":     locales.ActionLayoutScrollExpel,
+	"layout.scroll.moveLeft":  locales.ActionLayoutScrollMoveLeft,
+	"layout.scroll.moveRight": locales.ActionLayoutScrollMoveRight,
+	"layout.snap.left":        locales.ActionLayoutSnapLeft,
+	"layout.snap.right":       locales.ActionLayoutSnapRight,
+	"layout.snap.full":        locales.ActionLayoutSnapFull,
+	"layout.snap.unsnap":      locales.ActionLayoutSnapUnsnap,
+	"workspace.previous":      locales.ActionPreviousWorkspace,
+	"workspace.new":           locales.WorkspaceNew,
 }
 
 func init() {
@@ -275,14 +334,35 @@ func (a *App) menu() *mygo.Menu {
 			{Role: mygo.RoleCut}, {Role: mygo.RoleCopy}, {Role: mygo.RolePaste}, {Role: mygo.RoleSelectAll}, mygo.Separator()},
 			a.items("Edit", []string{"find.open", "find.next", "find.previous"})...)},
 		{Label: locales.MenuPane(), Submenu: a.items("Pane",
-			[]string{"pane.split.right", "pane.split.down"},
+			[]string{"pane.new", "pane.split.right", "pane.split.down"},
 			[]string{"pane.browser", "browser.address"},
 			[]string{"pane.zoom"},
 			[]string{"pane.next", "pane.previous", "pane.left", "pane.right", "pane.up", "pane.down"})},
+		{Label: locales.MenuLayout(), Submenu: a.layoutMenu()},
 		{Label: locales.MenuWorkspace(), Submenu: a.workspaceMenu()},
 		{Label: locales.MenuView(), Submenu: view},
 		{Role: mygo.RoleWindowMenu},
 	})
+}
+
+// layoutModes are the layout actions' modes, as the client names them.
+var layoutModes = map[string]string{
+	"layout.bsp": "bsp", "layout.master": "master-stack", "layout.scrolling": "scrolling", "layout.floating": "floating",
+}
+
+// layoutMenu is the Layout menu: the four layouts, then what each one
+// can change, in submenus by layout.
+func (a *App) layoutMenu() []*mygo.MenuItem {
+	items := a.items("Layout",
+		[]string{"layout.bsp", "layout.master", "layout.scrolling", "layout.floating", "layout.next", "layout.tiling"},
+		[]string{"layout.rotate", "layout.equalize", "layout.float"})
+	return append(items, mygo.Separator(),
+		&mygo.MenuItem{Label: locales.MenuLayoutMaster(), Submenu: a.items("Layout",
+			[]string{"layout.master.position", "layout.master.add", "layout.master.remove", "layout.master.swap", "layout.master.focus"})},
+		&mygo.MenuItem{Label: locales.MenuLayoutScrolling(), Submenu: a.items("Layout",
+			[]string{"layout.scroll.width", "layout.scroll.max", "layout.scroll.consume", "layout.scroll.expel", "layout.scroll.moveLeft", "layout.scroll.moveRight"})},
+		&mygo.MenuItem{Label: locales.MenuLayoutFloating(), Submenu: a.items("Layout",
+			[]string{"layout.snap.left", "layout.snap.right", "layout.snap.full", "layout.snap.unsnap"})})
 }
 
 // workspaceMenu is the Workspace menu: next, previous and new, each
@@ -359,7 +439,7 @@ func (a *App) fromMay(id string, args map[string]string) bool {
 	case id == "session.new" || id == "session.newHome":
 		p := args["project"]
 		return p == "" || a.hostOf(p) == h
-	case strings.HasPrefix(id, "pane.") || id == "changes.toggle" || id == "files.toggle" || id == "rightSidebar.toggle":
+	case strings.HasPrefix(id, "pane.") || strings.HasPrefix(id, "layout.") || id == "changes.toggle" || id == "files.toggle" || id == "rightSidebar.toggle":
 		return a.session(a.selected) != nil && a.selectedHost() == h
 	case id == quickAction:
 		return false // this machine's screen is no other's to drop on
