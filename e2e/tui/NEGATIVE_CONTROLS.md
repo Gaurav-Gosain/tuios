@@ -7752,6 +7752,15 @@ Run on 2026-10-18.
 | A tool result between two reads breaks the run | n/a, injected | the run stops at a `tool_result` entry | `TestCockpitThreadCards` ("the reads did not fold to one line") | **caught** |
 | The changed words are lit three cells early per tab | `ckCodeOffset`: the word offsets mapped on the raw text | the offsets taken on the text after the tab became four spaces | `TestCockpitThreadCards` ("the cell before the changed words is lit too") | **caught** |
 
+Turn folds, run on 2026-11-04: `cockpitTurnFolds` adds 29 turns to the
+transcript (reads, a search, edits and a command each, a failed command in
+turn 26, the last turn still at work) and reads it at 140x45.
+
+| Bug | Fix removed | How | Tests that fail | Verdict |
+|---|---|---|---|---|
+| A finished turn does not fold its work | `transcriptview.Turns` | `Finished` set to false for every turn | `TestCockpitThreadCards` ("the finished turn 28 shows its work") | **caught** |
+| A finished turn does not fold its work | the whole change | a build of origin/main at 2c03bb3c0 | `TestCockpitThreadCards` ("the finished turn 28 shows its work") | **caught** |
+
 ## The agents cockpit: reply area and image view
 
 `TestCockpitReplyAreaAndImageView` opens the reply area by a click, types,

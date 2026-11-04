@@ -14,6 +14,7 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/diffview"
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
+	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
 	"github.com/Gaurav-Gosain/tuios/internal/transcriptview"
 )
@@ -170,12 +171,35 @@ func (m *OS) threadCardLines(e sidebarAgentEntry, t *agentThread, width int, cha
 		t.cards[en.ID] = ckCard{key: key, item: it}
 		items = ckAddItem(items, it, blank)
 	}
+	// A finished turn folds its work to one line under its prompt. The
+	// Changes tab draws edits alone and folds nothing.
+	var steps []transcriptview.Step
+	var turns []transcriptview.Turn
+	var turnOf []int
+	if !changes {
+		steps, turns, turnOf = ckTurns(e, entries)
+	}
 	prevText := false
 	for i := 0; i < len(entries); i++ {
 		en := entries[i]
 		isEdit := en.Kind == "tool_call" && en.Diff != nil
 		if changes && !isEdit {
 			continue
+		}
+		if turnOf != nil {
+			tn := &turns[turnOf[i]]
+			id := "turn:" + entries[tn.Start].ID
+			open := t.expandAll || tn.Folds() == t.folded[id]
+			if tn.Finished && tn.Work() > 0 && i == ckTurnHead(steps, tn) {
+				what, span := tn.Summary(), tn.Span()
+				key := threadEntry{ID: id, Text: what, Plan: span}
+				key.sum = threadSum(&key)
+				cached(key, boolInt(open), func() []ckLine { return []ckLine{m.ckTurnLine(l, tn, id, what, span, width, open)} })
+				prevText = false
+			}
+			if !open && tn.Hidden(steps, i) {
+				continue
+			}
 		}
 		switch {
 		case en.Kind == "text" && en.Role == "user":
@@ -285,6 +309,59 @@ func (m *OS) threadCardLines(e sidebarAgentEntry, t *agentThread, width int, cha
 		}
 	}
 	return out, hits
+}
+
+// ckTurns splits a thread's entries into turns, and gives each entry its
+// turn. The last turn is finished once the agent rests on its answer.
+func ckTurns(e sidebarAgentEntry, entries []threadEntry) ([]transcriptview.Step, []transcriptview.Turn, []int) {
+	steps := make([]transcriptview.Step, len(entries))
+	for i := range entries {
+		en := &entries[i]
+		steps[i] = transcriptview.Step{Role: en.Role, Kind: en.Kind, Tool: en.Tool, Status: en.Status, Text: en.Text, Edit: en.Diff != nil, At: en.At}
+	}
+	turns := transcriptview.Turns(steps, e.State != string(session.AgentStateWorking))
+	turnOf := make([]int, len(entries))
+	for k, tn := range turns {
+		for i := tn.Start; i < tn.End; i++ {
+			turnOf[i] = k
+		}
+	}
+	return steps, turns, turnOf
+}
+
+// ckTurnHead is where a turn's summary line goes: under its prompt, or first
+// for a thread that starts inside the turn.
+func ckTurnHead(steps []transcriptview.Step, tn *transcriptview.Turn) int {
+	if s := steps[tn.Start]; s.Role == "user" && s.Kind == "text" && tn.Start+1 < tn.End {
+		return tn.Start + 1
+	}
+	return tn.Start
+}
+
+// ckTurnLine is a turn's summary line: the fold mark, what the turn did and
+// how long it took. A failure in it is lit. A click opens or closes the turn.
+func (m *OS) ckTurnLine(l ckLook, tn *transcriptview.Turn, id, what, span string, width int, open bool) ckLine {
+	pal := l.pal
+	mark := ckGlyphFold
+	if open {
+		mark = ckGlyphOpen
+	}
+	var fail string
+	if k := strings.LastIndex(what, " ("); k > 0 && (tn.Failed > 0 || tn.Interrupted) {
+		what, fail = what[:k], what[k:]
+	}
+	if span != "" {
+		span = sepWord() + span
+	}
+	room := max(width-ansi.StringWidth(fail+span)-4, 8)
+	segs := []ckSeg{{t: l.g(mark) + " ", fg: pal.FgMute}, {t: ckTrunc(what, room), fg: pal.FgDim}}
+	if fail != "" {
+		segs = append(segs, ckSeg{t: fail, fg: pal.Warn, attrs: ckBold})
+	}
+	if span != "" {
+		segs = append(segs, ckSeg{t: span, fg: pal.FgMute})
+	}
+	return ckLine{segs: segs, hit: "fold:" + id}
 }
 
 // ckItem is a card's lines and the lines drawn.

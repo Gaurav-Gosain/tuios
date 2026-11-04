@@ -639,11 +639,13 @@ func saveCockpitFrames(t *testing.T, term *tuitest.Terminal, name string, pics .
 // lit, the todo list is a plan with its count, and the failed command shows
 // its output. The agent's Markdown is drawn: strong, lists, a highlighted
 // code block and a link. A click on the diff's header folds it, and ] shows
-// the last turn's changes alone.
+// the last turn's changes alone. Then cockpitTurnFolds grows the thread to
+// 30 turns and checks that finished turns fold to a summary line.
 //
 // Negative controls, recorded in NEGATIVE_CONTROLS.md: with the changed
 // range left out of the diff lines the word check fails; with the todos
-// drawn as one line the plan check fails.
+// drawn as one line the plan check fails; with no turn finished the turn
+// fold check fails (see cockpitTurnFolds).
 func TestCockpitThreadCards(t *testing.T) {
 	base := t.TempDir()
 	killDaemon(t, base)
@@ -782,6 +784,194 @@ func TestCockpitThreadCards(t *testing.T) {
 		}
 		alive(t, term, "after the thread cards")
 	}
+	cockpitTurnFolds(t, base, path)
+}
+
+// claudeTurns writes turns 2 to n of a Claude Code transcript, after the
+// fixture's first turn. Each turn reads two files, searches, edits one or two
+// files and runs go test, then answers. Turn failed runs a command that
+// fails. The last turn is still at work: it reads and runs a command that has
+// no result yet.
+func claudeTurns(n, failed int) []byte {
+	var b bytes.Buffer
+	at := time.Date(2026, 10, 18, 10, 0, 0, 0, time.UTC)
+	rec := func(typ string, content any) {
+		line, _ := json.Marshal(map[string]any{"type": typ, "isSidechain": false, "sessionId": "9a1f0c2e-0000-4000-8000-00000000c0c0",
+			"uuid": fmt.Sprintf("u%d", b.Len()), "timestamp": at.Format("2006-01-02T15:04:05.000Z"),
+			"message": map[string]any{"role": typ, "content": content}})
+		b.Write(line)
+		b.WriteByte('\n')
+		at = at.Add(13 * time.Second)
+	}
+	call := func(id, name string, input map[string]any) {
+		rec("assistant", []any{map[string]any{"type": "tool_use", "id": id, "name": name, "input": input}})
+	}
+	result := func(id, text string, failed bool) {
+		rec("user", []any{map[string]any{"type": "tool_result", "tool_use_id": id, "content": text, "is_error": failed}})
+	}
+	for k := 2; k <= n; k++ {
+		at = time.Date(2026, 10, 18, 10, 0, 0, 0, time.UTC).Add(time.Duration(k) * 10 * time.Minute)
+		pkg := fmt.Sprintf("pkg%d", k)
+		rec("user", fmt.Sprintf("Task %d: make %s handle an empty token.", k, pkg))
+		rec("assistant", []any{map[string]any{"type": "thinking", "thinking": "Read " + pkg + " first.", "signature": "s"}})
+		for f, name := range []string{"token.go", "refresh.go"} {
+			id := fmt.Sprintf("r%d-%d", k, f)
+			call(id, "Read", map[string]any{"file_path": "/src/api/" + pkg + "/" + name})
+			result(id, "package "+pkg, false)
+		}
+		call(fmt.Sprintf("g%d", k), "Grep", map[string]any{"pattern": "Expired", "path": "/src/api/" + pkg})
+		result(fmt.Sprintf("g%d", k), "token.go", false)
+		for f := range 1 + k%2 {
+			id := fmt.Sprintf("e%d-%d", k, f)
+			call(id, "Edit", map[string]any{"file_path": fmt.Sprintf("/src/api/%s/edit%d.go", pkg, f), "old_string": "return false", "new_string": "return tok == \"\""})
+			result(id, "ok", false)
+		}
+		id := fmt.Sprintf("b%d", k)
+		call(id, "Bash", map[string]any{"command": "go test ./" + pkg + "/...", "description": "Test"})
+		if k == n {
+			break
+		}
+		if k == failed {
+			result(id, "--- FAIL: TestEmpty"+pkg+"\nexit status 1", true)
+		} else {
+			result(id, "ok  "+pkg, false)
+		}
+		rec("assistant", []any{map[string]any{"type": "text", "text": fmt.Sprintf("Task %d is done.", k)}})
+	}
+	return b.Bytes()
+}
+
+// cockpitTurnFolds grows the thread to 30 turns and reads it: each finished
+// turn folds its work to one summary line under its prompt, a turn with a
+// failed command stays open and says so, the live last turn stays open, e
+// opens every turn, and a click on a summary line opens that turn alone.
+//
+// Negative control, recorded in NEGATIVE_CONTROLS.md: with no turn finished
+// (Turns in internal/transcriptview), the finished turns show their work and
+// the summary check fails.
+func cockpitTurnFolds(t *testing.T, base, path string) {
+	t.Helper()
+	f, err := os.OpenFile(path, os.O_APPEND|os.O_WRONLY, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.Write(claudeTurns(30, 26)); err != nil {
+		t.Fatal(err)
+	}
+	f.Close()
+	if out, err := tuiosCLI(t, base, "new", "home140", "--detach"); err != nil {
+		t.Fatalf("create session home140: %v\n%s", err, out)
+	}
+	term := startIn(t, base, startOpts{args: []string{"attach", "home140"}, cols: 140, rows: 45, shippedLooks: true, env: []string{"TERM=xterm-256color", "COLORTERM=truecolor"}})
+	if err := term.WaitFor(func(s tuitest.Screen) bool { return countWindows(s) == 1 }, bootTimeout); err != nil {
+		t.Fatalf("client never attached: %v\n%s", err, term.Snapshot())
+	}
+	windowManagementMode(t, term)
+	if err := term.SendKeys(tuitest.Ctrl('b'), "i"); err != nil {
+		t.Fatalf("open the cockpit: %v", err)
+	}
+	// The live last turn shows its work: the command still runs.
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		return containsAll(s.Text(), "Task 30: make pkg30", "go test ./pkg30/...", "Task 29 is done.")
+	}, uiTimeout); err != nil {
+		t.Fatalf("ASSERTION: the thread never showed the live last turn: %v\n%s", err, term.Snapshot())
+	}
+	_ = term.WaitStable(uiTimeout)
+	saveCockpitFrames(t, term, "turns-140x45")
+	// Four actions: two are named, and the rest are counted. The span runs
+	// from the prompt to the answer, 13 s a record.
+	summary := func(k int) string {
+		if k%2 == 1 {
+			return "Edited 2 files, ran 1 command and 3 other actions · 3m 2s"
+		}
+		return "Edited 1 file, ran 1 command and 3 other actions · 2m 36s"
+	}
+	scrollTo := func(key, want string) {
+		t.Helper()
+		for range 60 {
+			if strings.Contains(term.Screen().Text(), want) {
+				return
+			}
+			if err := term.SendKeys(key); err != nil {
+				t.Fatal(err)
+			}
+			_ = term.WaitStable(uiTimeout)
+		}
+	}
+	// find scrolls down, then up, until want shows.
+	find := func(want string) {
+		t.Helper()
+		scrollTo("J", want)
+		scrollTo("K", want)
+	}
+	for k := 28; k <= 29; k++ {
+		find(fmt.Sprintf("Task %d: make", k))
+		_ = term.WaitStable(uiTimeout)
+		if k == 28 {
+			saveCockpitFrames(t, term, "turns-folded-140x45")
+		}
+		// A finished turn is its prompt, one summary line and its answer:
+		// no read, edit or command of it shows.
+		s := term.Screen()
+		if text := s.Text(); strings.Contains(text, fmt.Sprintf("go test ./pkg%d/", k)) || strings.Contains(text, fmt.Sprintf("pkg%d/edit0.go", k)) {
+			t.Fatalf("ASSERTION: the finished turn %d shows its work\n%s", k, term.Snapshot())
+		}
+		row := rowWith(s, fmt.Sprintf("Task %d: make", k))
+		if row < 0 || row+3 >= 45 {
+			t.Fatalf("ASSERTION: the prompt of turn %d is not on screen\n%s", k, term.Snapshot())
+		}
+		found := false
+		for r := row + 1; r < min(row+5, 45); r++ {
+			found = found || strings.Contains(s.Line(r), summary(k))
+		}
+		if !found {
+			t.Fatalf("ASSERTION: turn %d has no summary line under its prompt\n%s", k, term.Snapshot())
+		}
+	}
+	// The turn with the failed command stays open, and its summary says so.
+	find("Task 26: make")
+	find("TestEmptypkg26")
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		return containsAll(s.Text(), "go test ./pkg26/...", "--- FAIL: TestEmptypkg26", "(1 failed)")
+	}, uiTimeout); err != nil {
+		t.Fatalf("ASSERTION: the turn with the failed command is not open with its failure: %v\n%s", err, term.Snapshot())
+	}
+	// A click on a summary line opens that turn, and another closes it.
+	find("Task 27: make")
+	find(summary(27))
+	hr, hc := findText(t, term, summary(27))
+	mouseClick(t, term, hc, hr, tuitest.MouseLeft, 0)
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		return containsAll(s.Text(), "go test ./pkg27/...", "Read 2", "Thought")
+	}, uiTimeout); err != nil {
+		t.Fatalf("ASSERTION: a click on the summary line did not open the turn: %v\n%s", err, term.Snapshot())
+	}
+	_ = term.WaitStable(uiTimeout)
+	saveCockpitFrames(t, term, "turn-opened-140x45")
+	hr, hc = findText(t, term, summary(27))
+	mouseClick(t, term, hc, hr, tuitest.MouseLeft, 0)
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		return !strings.Contains(s.Text(), "go test ./pkg27/...")
+	}, uiTimeout); err != nil {
+		t.Fatalf("ASSERTION: a second click did not close the turn: %v\n%s", err, term.Snapshot())
+	}
+	// e opens every turn, and again folds them.
+	if err := term.SendKeys("e"); err != nil {
+		t.Fatal(err)
+	}
+	find("go test ./pkg28/...")
+	if err := term.WaitForText("go test ./pkg28/...", uiTimeout); err != nil {
+		t.Fatalf("ASSERTION: e did not open the finished turns: %v\n%s", err, term.Snapshot())
+	}
+	if err := term.SendKeys("e"); err != nil {
+		t.Fatal(err)
+	}
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		return !strings.Contains(s.Text(), "go test ./pkg28/...")
+	}, uiTimeout); err != nil {
+		t.Fatalf("ASSERTION: a second e did not fold the turns again: %v\n%s", err, term.Snapshot())
+	}
+	alive(t, term, "after the turn folds")
 }
 
 // cockpitMarkdown checks the agent's Markdown message of cockpit-auth.jsonl

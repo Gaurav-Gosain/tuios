@@ -111,7 +111,8 @@ type agentThread struct {
 	bodyAt threadBodyKey
 	// hits are what a click on each line of body does, "" for nothing.
 	hits []string
-	// folded are the cards whose fold the person flipped, by entry id;
+	// folded are the cards whose fold the person flipped, by entry id, and
+	// the turns, by "turn:" and the id of the turn's first entry;
 	// expandAll shows every line of every card (e); scroll is how many
 	// lines the thread is scrolled up from its newest.
 	folded    map[string]bool
@@ -130,6 +131,8 @@ type threadBodyKey struct {
 	ascii               bool
 	title, message      string
 	expand, changes     bool
+	// working is the agent's state: the last turn folds once it rests.
+	working bool
 }
 
 // threadsState is the threads kept and the transcript subscription.
@@ -540,6 +543,7 @@ func (m *OS) threadBody(e sidebarAgentEntry, width, room int, now time.Time) []s
 		width: width, minute: m.threadMinute(e, now), ascii: overlay.UseASCII(),
 		title: e.Title + "\x00" + e.Host, message: e.Message,
 		expand: t.expandAll, changes: m.cockpitTab() == "Changes",
+		working: e.State == string(session.AgentStateWorking),
 	}
 	if t.body != nil && t.bodyAt == key {
 		return t.body
