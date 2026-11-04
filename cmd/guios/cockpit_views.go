@@ -127,7 +127,10 @@ func (a *App) humanMailView(c *ui.Context, pal *palette) {
 			emptyBlock(c, pal, nil, locales.CockpitNoMailForYou(), locales.CockpitNoMailForYouDetail(), false, nil)
 			return
 		}
-		ui.Scroll(c.Key("hm")).Grow(1).MinHeight(0).Padding(14, a.ckSide(24), 10, a.ckSide(24)).Children(func() {
+		list := ui.Scroll(c.Key("hm")).Grow(1).MinHeight(0).Padding(14, a.ckSide(24), 10, a.ckSide(24))
+		// Toasts show over the foot of the list, above the reply box.
+		ck.fleetRect = list.Bounds()
+		list.Children(func() {
 			ui.Column(c).Gap(12).Children(func() {
 				ui.Text(c, locales.CockpitMailForYou()).FontSize(fsTitle).FontWeight(wSemibold).TextColor(pal.text)
 				for _, msg := range mine {
