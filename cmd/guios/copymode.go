@@ -37,8 +37,16 @@ const (
 
 // copyMode is the state of copy mode, on one pane at a time.
 type copyMode struct {
-	pane   string
-	rows   [][]rune
+	pane string
+	rows [][]rune
+	// hist is the terminal's rows as VT sequences, read as copy mode
+	// opened; styles are the style of each rune of rows, read from it in
+	// the theme of the window's darkness (dark), nil where the terminal
+	// gave none (a full-screen program's screen).
+	hist   []byte
+	cols   int
+	styles [][]cellStyle
+	dark   bool
 	cy, cx int // the cursor's row and column
 	top    int // the first row shown
 	shown  int // how many rows show, as the last frame laid them out
@@ -188,7 +196,14 @@ func (a *App) openCopyMode() {
 		return
 	}
 	cols, _ := e.term.Size()
-	cm := &copyMode{pane: id, rows: wrapRows(e.term.Text(), cols)}
+	cm := &copyMode{pane: id, cols: cols}
+	if cm.hist = e.term.History(); len(cm.hist) > 0 {
+		light, _ := a.termThemes()
+		lines, styles := styledLines(cm.hist, light)
+		cm.rows, cm.styles = wrapStyled(lines, styles, cols)
+	} else {
+		cm.rows = wrapRows(e.term.Text(), cols)
+	}
 	// The cursor starts on the last row with text, as the shell's prompt.
 	cm.cy = len(cm.rows) - 1
 	for cm.cy > 0 && len(cm.rows[cm.cy]) == 0 {
@@ -798,6 +813,28 @@ func (a *App) copyView(c *ui.Context, pal *palette) {
 		}
 	}
 	mono := a.termFamily()
+	if cm.hist != nil && cm.dark != pal.dark {
+		// The colours by index are the theme's of the window's darkness.
+		light, dark := a.termThemes()
+		th := light
+		if pal.dark {
+			th = dark
+		}
+		lines, styles := styledLines(cm.hist, th)
+		if _, st := wrapStyled(lines, styles, cm.cols); len(st) == len(cm.rows) {
+			cm.styles = st
+		}
+		cm.dark = pal.dark
+	}
+	var tfg, tbg ui.Color
+	{
+		light, dark := a.termThemes()
+		th := light
+		if pal.dark {
+			th = dark
+		}
+		tfg, tbg = th.Foreground, th.Background
+	}
 	q := []rune(cm.query)
 	fold := strings.ToLower(cm.query) == cm.query
 	box.Children(func() {
@@ -839,10 +876,21 @@ func (a *App) copyView(c *ui.Context, pal *palette) {
 					}
 					return 0
 				}
+				var rowSt []cellStyle
+				if y < len(cm.styles) {
+					rowSt = cm.styles[y]
+				}
+				cell := func(x int) cellStyle {
+					if x < len(rowSt) {
+						return rowSt[x]
+					}
+					return cellStyle{}
+				}
 				for x := 0; x < n; {
 					st := style(x)
+					cs := cell(x)
 					end := x + 1
-					for end < n && style(end) == st {
+					for end < n && style(end) == st && cell(end) == cs {
 						end++
 					}
 					var text string
@@ -853,7 +901,9 @@ func (a *App) copyView(c *ui.Context, pal *palette) {
 							text += " "
 						}
 					}
-					sp := ui.Span{Text: text}
+					// The terminal's own colours and attributes, and copy
+					// mode's marks on top.
+					sp := cs.span(text, tfg, tbg)
 					switch st {
 					case 1:
 						sp.Background = pal.attention.Alpha(0.35)
