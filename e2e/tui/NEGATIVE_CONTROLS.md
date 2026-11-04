@@ -12640,3 +12640,15 @@ head with one change:
 
 The frames are `cockpit-unseen` and `cockpit-unseen-viewed` under the test's
 artifact folder.
+## Send now or queue in the reply box
+
+`TestCockpitReplyEditorStdout` (its `replySendNowOrQueue` half) opens the
+reply box on an agent at rest, then sets it working. enter queues a reply.
+alt+enter types a second reply into the pane while the agent still works, and
+the queue keeps only the first. Run on 2026-11-04:
+
+| Control | Test | Where it fails | Verdict |
+|---|---|---|---|
+| `composer.EventSendNow` routed to `InboxReplySend`, the queue path | `TestCockpitReplyEditorStdout` | "ASSERTION: alt+enter did not type the reply into the working agent's pane" | **caught** |
+
+The frames are `reply-send-*` under the test's artifact folder.

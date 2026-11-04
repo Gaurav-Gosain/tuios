@@ -32,7 +32,18 @@ func (m *OS) drawReplyArea(c *ckCanvas, l ckLook, e sidebarAgentEntry, name stri
 	hints := []ckSeg{{t: "@", fg: pal.AccentBright, attrs: ckBold}, {t: " mention   ", fg: pal.FgMute},
 		{t: "ctrl+v", fg: pal.AccentBright, attrs: ckBold}, {t: " image   ", fg: pal.FgMute},
 		{t: "ctrl+j", fg: pal.AccentBright, attrs: ckBold}, {t: " new line", fg: pal.FgMute}}
-	send := ckSeg{t: " " + overlay.EnterGlyph + " Send ", fg: overlay.Readable(pal.Fg, pal.Card), bg: pal.Card, attrs: ckBold}
+	// While the agent works, enter queues the reply and alt+enter sends it
+	// now. The button names what enter does, and the send-now hint goes
+	// first, so a narrow area cuts the other hints before it. A bulk reply
+	// and a reply to a linked machine have no send now.
+	verb := "Send"
+	if replyEnterQueues(e.State) {
+		verb = "Queue"
+		if ed := st.reply.editor; e.Host == "" && (ed == nil || (ed.host == "" && len(ed.targets) == 0)) {
+			hints = append([]ckSeg{{t: "alt+" + overlay.EnterGlyph, fg: pal.AccentBright, attrs: ckBold}, {t: " send now   ", fg: pal.FgMute}}, hints...)
+		}
+	}
+	send := ckSeg{t: " " + overlay.EnterGlyph + " " + verb + " ", fg: overlay.Readable(pal.Fg, pal.Card), bg: pal.Card, attrs: ckBold}
 
 	ed := st.reply.editor
 	if ed == nil || m.cockpitReplyMismatch() {
@@ -83,6 +94,10 @@ func (m *OS) drawReplyArea(c *ckCanvas, l ckLook, e sidebarAgentEntry, name stri
 		// A reply to an agent at work waits, and the line says so before
 		// it is sent.
 		ctx = "typed when it rests" + sepWord() + ctx
+	} else if replyEnterQueues(e.State) {
+		// The agent went to work after the editor opened: the context
+		// it opened with is old, and enter now queues.
+		ctx = "typed when it rests"
 	}
 	if ctx != "" {
 		c.textR(right-2, y, ckSeg{t: ctx, fg: pal.FgDim})

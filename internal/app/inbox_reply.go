@@ -171,7 +171,10 @@ type InboxRepliedMsg struct {
 	Send uint64
 	// Parts is the reply in parts, nil for one sent as text.
 	Parts []composer.Part
-	Err   error
+	// Now marks a reply typed into the pane at once with send-text, not
+	// queued. See inbox_reply_now.go.
+	Now bool
+	Err error
 }
 
 // InboxQueueDroppedMsg is the answer to the x on a rail row.
@@ -236,7 +239,7 @@ func (m *OS) openInboxReply(sessionID, windowID, who, context string, closeAfter
 	m.Inbox.approvals.armed = inboxArmed{}
 	comp := m.takeInboxDraft(sessionID, windowID)
 	if comp == nil {
-		comp = composer.New(composer.Options{MaxRows: inboxReplyRows, Placeholder: "Type your reply.", Images: true})
+		comp = composer.New(composer.Options{MaxRows: inboxReplyRows, Placeholder: "Type your reply.", Images: true, SendNow: true})
 	}
 	m.Inbox.reply.editor = &inboxReplyEditor{
 		draftWires: m.wireDraft(comp, sessionID, windowID, true),
@@ -413,6 +416,8 @@ func (m *OS) InboxReplyKey(msg tea.KeyPressMsg) tea.Cmd {
 	switch ed.comp.Update(msg, m.ProcessingRemoteKeys) {
 	case composer.EventSend:
 		cmd = m.InboxReplySend()
+	case composer.EventSendNow:
+		cmd = m.InboxReplySendNow()
 	case composer.EventClose:
 		m.InboxReplyCancel()
 	case composer.EventPaste:
@@ -673,6 +678,10 @@ func (m *OS) applyInboxReplied(msg InboxRepliedMsg) {
 			m.restoreInboxDraft(msg.Session, msg.Window, comp)
 		}
 	}
+	if msg.Err != nil && msg.Now {
+		m.ShowNotification("The reply to "+msg.Who+" was not sent: "+msg.Err.Error()+". Your draft is kept", "error", m.Settings.NotificationDuration*2)
+		return
+	}
 	if msg.Err != nil {
 		if callErr, ok := errors.AsType[*session.VerbCallError](msg.Err); ok {
 			switch callErr.Code {
@@ -709,6 +718,8 @@ func (m *OS) applyInboxReplied(msg InboxRepliedMsg) {
 	}
 	m.rememberInboxReply(msg.ID, inboxSentReply{text: msg.Text, parts: msg.Parts})
 	switch {
+	case msg.Now:
+		m.ShowNotification("Sent your reply to "+msg.Who+" now", "success", m.Settings.NotificationDuration)
 	case msg.Delivering:
 		m.ShowNotification("Typing your reply to "+msg.Who, "success", m.Settings.NotificationDuration)
 	case msg.Queued <= 1:
