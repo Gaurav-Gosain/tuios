@@ -778,5 +778,8 @@
   "usageReading": "使用状況を読み込んでいます。",
   "usageCores": "{n} コア",
   "usageOffline": "未接続",
-  "usageNoPanes": "ここで動いているペインはありません。"
+  "usageNoPanes": "ここで動いているペインはありません。",
+  "workspaceEmptyTitle": "ワークスペース {n} にペインはありません",
+  "workspaceEmptyDetail": "ここでペインを開くか、別のワークスペースに移動します。",
+  "workspaceNewPane": "新しいペイン"
 }

@@ -7911,3 +7911,33 @@ func UsageNoPanes() string { return In(i18n.Locale()).UsageNoPanes() }
 func (msgs Messages) UsageNoPanes() string {
 	return Catalog.Format(msgs.locale, "usageNoPanes", nil)
 }
+
+// WorkspaceEmptyTitle says "Workspace {n} has no panes"
+// in the language the app shows.
+func WorkspaceEmptyTitle(n int) string { return In(i18n.Locale()).WorkspaceEmptyTitle(n) }
+
+// WorkspaceEmptyTitle says "Workspace {n} has no panes"
+// in the language of msgs.
+func (msgs Messages) WorkspaceEmptyTitle(n int) string {
+	return Catalog.Format(msgs.locale, "workspaceEmptyTitle", map[string]any{"n": n})
+}
+
+// WorkspaceEmptyDetail says "Open a pane here, or go to another workspace."
+// in the language the app shows.
+func WorkspaceEmptyDetail() string { return In(i18n.Locale()).WorkspaceEmptyDetail() }
+
+// WorkspaceEmptyDetail says "Open a pane here, or go to another workspace."
+// in the language of msgs.
+func (msgs Messages) WorkspaceEmptyDetail() string {
+	return Catalog.Format(msgs.locale, "workspaceEmptyDetail", nil)
+}
+
+// WorkspaceNewPane says "New Pane"
+// in the language the app shows.
+func WorkspaceNewPane() string { return In(i18n.Locale()).WorkspaceNewPane() }
+
+// WorkspaceNewPane says "New Pane"
+// in the language of msgs.
+func (msgs Messages) WorkspaceNewPane() string {
+	return Catalog.Format(msgs.locale, "workspaceNewPane", nil)
+}

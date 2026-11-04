@@ -92,6 +92,10 @@ func (a *App) focusTerminal() {
 // right tells that they reach the window's right edge, which the side
 // panel takes while it shows.
 func (a *App) panes(c *ui.Context, pal *palette, bar ui.TitleBar, shown float32, s *proto.Session, right bool) {
+	if len(s.Panes) == 0 {
+		a.emptyWorkspace(c, pal, s)
+		return
+	}
 	multi := len(s.Panes) > 1
 	if z := s.PaneByID(s.Zoomed); z != nil || s.Layout == nil || !multi {
 		p := z
@@ -666,6 +670,11 @@ func (a *App) splitPane(s *proto.Session, at, direction string) {
 	if at == "" {
 		at = a.focusOf(s)
 	}
+	if at == "" {
+		// An empty workspace: the session itself, so the new pane opens
+		// alone in the workspace it shows.
+		at = s.ID
+	}
 	a.split(s, proto.CreateParams{Split: at, Direction: direction})
 }
 
@@ -862,4 +871,16 @@ func (a *App) closeFocused() {
 		return
 	}
 	a.closePane(s, a.focusOf(s), true)
+}
+
+// emptyWorkspace fills the pane area of a workspace that holds no pane.
+func (a *App) emptyWorkspace(c *ui.Context, pal *palette, s *proto.Session) {
+	ui.Column(c).Fill().Center().Gap(0).Padding(24).Children(func() {
+		ui.Text(c, locales.WorkspaceEmptyTitle(s.Workspace)).FontSize(17).FontWeight(600).TextColor(pal.text)
+		ui.Text(c, locales.WorkspaceEmptyDetail()).
+			FontSize(13).TextColor(pal.textMuted).MaxWidth(380).TextAlign(ui.Center).LineHeight(1.45).Margin(8, 0, 18, 0)
+		if button(c, "ws-empty-new", locales.WorkspaceNewPane(), a.keys("pane.split.right"), true, pal) {
+			a.splitPane(s, "", "right")
+		}
+	})
 }

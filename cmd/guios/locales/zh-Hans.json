@@ -778,5 +778,8 @@
   "usageReading": "正在读取使用情况。",
   "usageCores": "{n} 个核心",
   "usageOffline": "未连接",
-  "usageNoPanes": "这里没有运行的窗格。"
+  "usageNoPanes": "这里没有运行的窗格。",
+  "workspaceEmptyTitle": "工作区 {n} 没有窗格",
+  "workspaceEmptyDetail": "在这里打开一个窗格，或转到另一个工作区。",
+  "workspaceNewPane": "新建窗格"
 }
