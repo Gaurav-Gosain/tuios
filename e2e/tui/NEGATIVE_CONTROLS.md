@@ -13556,3 +13556,34 @@ The frames are `agent-child-rows`, `agent-kin-rows`, `agent-kin-folded`,
 `agent-kin-pill-selected`, `agent-kin-child-thread` and their `agent-kin-16-`
 forms under both. Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestChildAgentRowsNestUnderTheirParent$' -v .`.
+## A child's question goes to its parent first, and children that finish together wake the parent once
+
+`TestDelegatedChildrenRouteTheirAttention` delegates two tasks from a stand-in
+parent agent: one child stops on an approval, the other asks a question. Both
+Inbox items must name the parent as parent and root. The question must reach
+the parent as one mail. It must be listed with `with_parent_until` set and left
+out of the counts, and the agents view must show it as "With the parent agent".
+After the test's hold it must be released, counted and moved to Needs you. A
+pane that holds `respond` must be refused when it types into the child's
+approval or calls `respond` on it. `TestChildrenThatFinishTogetherWakeTheParentOnce`
+lets three delegated children finish together. The parent must show one wake
+line that counts them: `Child agents finished: 3 done.`
+
+Run on 2026-11-04 on Linux. Each control is the branch build with one change:
+
+| Control | Test | Where it fails | Verdict |
+| --- | --- | --- | --- |
+| The question gets no `WithParentUntil` (`parentHoldUntilLocked` result dropped) | `TestDelegatedChildrenRouteTheirAttention` | "the child's question is not held for the parent, or it is counted": `with_parent_until` 0, `question` count 1 | **caught** |
+| The release timer returns without releasing (`parentFired`) | `TestDelegatedChildrenRouteTheirAttention` | "the question was never released to the person", still held 30 s after a 20 s hold | **caught** |
+| The wake's grace, its gap and a queued wake's cover of later mail are all cut (`mail_wake.go`) | `TestChildrenThatFinishTogetherWakeTheParentOnce` | "the parent was typed 3 lines for three children, want 1" | **caught** |
+| `childTally` returns nothing | `TestChildrenThatFinishTogetherWakeTheParentOnce` | "the wake line does not count the three finished children" | **caught** |
+
+The grace alone cut is not enough to fail it: a wake already queued still
+covers the mail that comes after it, so the parent still gets one line.
+
+The unit test `TestNoPaneAnswersAChildAgentsApproval` in `internal/session`
+fails at its first send-keys when `childApprovalRefusal` refuses nothing.
+
+The records are `child-route.log`, the frames `child-question-held` and
+`child-question-released`, and `children-wake.txt` in each test's artifact
+folder.
