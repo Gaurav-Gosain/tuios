@@ -13,6 +13,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/Gaurav-Gosain/tuios/internal/gitstate"
 	"github.com/Gaurav-Gosain/tuios/internal/guios/proto"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 )
@@ -349,6 +350,18 @@ func (k *stateKeeper) pane(w windowRow) proto.Pane {
 		delete(k.unread, w.ID)
 		k.mu.Unlock()
 	}
+	// The worktree the pane's folder is in, read from its files (no git
+	// process but for the upstream counts, which gitstate caches): the
+	// Changes and Files tabs show only a pane with one.
+	if g, ok := gitstate.Read(p.WorkDir()); ok && p.WorkDir() != "" {
+		gi := &proto.GitInfo{Root: g.Root, Upstream: g.Upstream, Ahead: g.Ahead, Behind: g.Behind}
+		if !g.Detached {
+			gi.Branch = g.Branch
+		} else {
+			gi.Head = g.Branch
+		}
+		p.Git = gi
+	}
 	for _, r := range w.Program {
 		rec := proto.Record{Progress: -1}
 		b, _ := json.Marshal(r)
@@ -610,4 +623,13 @@ func userName(name string) string {
 		return ""
 	}
 	return name
+}
+
+// Refresh builds the state anew: for what changes with no event, as a
+// shell's folder after cd, when the person opens a view that shows it.
+func (c *Client) Refresh() {
+	select {
+	case c.st.kick <- struct{}{}:
+	default:
+	}
 }

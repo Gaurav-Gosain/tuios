@@ -158,6 +158,11 @@ func (a *App) showTab(tab string) {
 // when the sidebar shows it, hides the sidebar, closing the viewer with
 // what the tab opened in it.
 func (a *App) toggleSide(tab string) {
+	// A shell's folder changes with no event: read the panes again, so
+	// the tab shows the worktree the pane is in now.
+	if h := a.local(); h != nil && h.cl != nil {
+		h.cl.Refresh()
+	}
 	s := a.session(a.selected)
 	if a.prefs.Side == tab && a.rightShown() {
 		a.prefs.Side, a.prefs.SideTab = "", tab
