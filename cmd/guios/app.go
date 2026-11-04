@@ -185,6 +185,8 @@ type App struct {
 		at   time.Time
 		done bool
 	}
+	// sidebarSlide is the left sidebar's slide (view.go).
+	sidebarSlide sideSlide
 	// cmdAt is when Cmd (Ctrl elsewhere) went down alone (cmdHeld).
 	cmdAt time.Time
 	// wantFocus is a new pane the keyboard goes to once its terminal is

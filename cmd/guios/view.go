@@ -61,6 +61,47 @@ func lead(bar ui.TitleBar) float32 {
 	return bar.Left + cardGap
 }
 
+// sideSlide is the left sidebar's slide: 0 hidden, 1 shown. guios eases
+// it itself, not with AnimateTo, so that it moves in the frame that takes
+// the key (AnimateTo's first frame shows the value it starts from), and
+// stops in the frame whose width rounds to the target.
+type sideSlide struct {
+	from, cur, to float32
+	start         time.Time
+	set           bool
+}
+
+// sideLead is how far the slide is already on its way in the frame that
+// starts it: half a frame, as the key came between frames.
+const sideLead = 8 * time.Millisecond
+
+// step returns how far the sidebar shows in this frame, on its way to
+// target, for a sidebar w DIPs wide.
+func (s *sideSlide) step(c *ui.Context, target, w float32) float32 {
+	now := c.Now()
+	switch {
+	case !s.set:
+		s.cur, s.to, s.set = target, target, true
+	case target != s.to:
+		s.from, s.to, s.start = s.cur, target, now.Add(-sideLead)
+	}
+	if s.cur == s.to {
+		return s.cur
+	}
+	k := float32(now.Sub(s.start)) / float32(sidebarMotion.Duration)
+	if k >= 1 || c.Instant() || c.Preferences().ReduceMotion {
+		s.cur = s.to
+		return s.cur
+	}
+	s.cur = s.from + (s.to-s.from)*sidebarMotion.Ease(max(k, 0))
+	if d := s.to - s.cur; d*w < 0.5 && d*w > -0.5 {
+		s.cur = s.to
+		return s.cur
+	}
+	c.AnimationFrame()
+	return s.cur
+}
+
 // sidebarMotion slides the sidebars in and out: motionLayout's length,
 // on a curve that settles without a long tail.
 var sidebarMotion = ui.Animation{Duration: motionLayout.Duration, Ease: ui.CubicBezier(0.25, 1, 0.5, 1)}
@@ -134,7 +175,7 @@ func (a *App) view(c *ui.Context) {
 	if !a.leftCrowded {
 		a.leftForced = false
 	}
-	progress := row.AnimateTo("sidebar", b2f(a.sidebarShown()), sidebarMotion)
+	progress := a.sidebarSlide.step(c, b2f(a.sidebarShown()), a.prefs.SidebarWidth)
 	a.chrome = chromeFor(progress, a.prefs.SidebarWidth, bar)
 	shown := a.chrome.shown
 	// The right sidebar, beside a session's panes, comes and goes as the
