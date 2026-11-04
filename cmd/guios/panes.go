@@ -243,7 +243,7 @@ func (a *App) paneCard(c *ui.Context, pal *palette, bar ui.TitleBar, shown float
 	if dim < 1 {
 		card.Opacity(dim)
 	}
-	paned(card.Background(card.AnimateColor("bg", bg, ui.Animation{Duration: dArrive})), pal)
+	paned(card.Background(card.AnimateColor("bg", bg, ui.Animation{Duration: dFade})), pal)
 	hovered := card.Hovered()
 	if a.set.FocusFollowsMouse && multi {
 		a.followMouse(c, s, p, card, hovered, focused)
@@ -290,7 +290,7 @@ func (a *App) paneCard(c *ui.Context, pal *palette, bar ui.TitleBar, shown float
 		if multi && !p.Browser() && a.set.DimUnfocused {
 			// The terminals the user is not in fade, text and all.
 			v := ui.Box(c.Key("veil")).Absolute().Top(0).Left(0).Right(0).Bottom(0).PassThrough().Background(pal.veil)
-			v.Opacity(v.Animate("on", b2f(!focused), dArrive))
+			v.Opacity(v.Animate("on", b2f(!focused), dFade))
 		}
 		if zone != zoneNone {
 			a.dropPreview(c, pal, p.ID, zone)
