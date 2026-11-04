@@ -521,7 +521,7 @@ func (a *App) paneHeader(c *ui.Context, pal *palette, bar ui.TitleBar, shown flo
 		planDir = hostOf.name + "\u2003\u2003" + dir
 	}
 	plan := a.planHeader(c, p, title, planDir, showDir, pad, multi, top && right)
-	h := ui.Row(c.Key("hdr")).Height(headerH).Shrink(0).AlignItems(ui.Center).Padding(0, 10, 0, pad).Gap(sp2)
+	h := ui.Row(c.Key("hdr")).Height(headerH).Shrink(0).AlignItems(ui.Center).Padding(0, headerEnd, 0, pad).Gap(sp2)
 	if h.Pressed() && !focused {
 		a.setFocus(s, p.ID)
 		a.paneRef(p.ID).Focus()
@@ -558,6 +558,12 @@ func (a *App) paneHeader(c *ui.Context, pal *palette, bar ui.TitleBar, shown flo
 				statusIconP(c, pal, p.Status, p.Unread, p.Progress, 14)
 			} else {
 				ui.Icon(c, programIcon(p)).Size(14, 14).TextColor(pal.textFaint)
+			}
+			if plan.noTitle {
+				// Too narrow for any of the title: the mark alone, and
+				// the name in its tooltip.
+				grip.Tooltip(title)
+				return
 			}
 			// The title gives way last: it keeps its first titleKeep DIPs
 			// while the chips and the folder go before it.
@@ -631,7 +637,7 @@ func (a *App) paneHeader(c *ui.Context, pal *palette, bar ui.TitleBar, shown flo
 		// council round 1, visual 2).
 		if plan.controls {
 			show := hovered && !dragging
-			strip := ui.Row(c.Key("controls-over")).Absolute().Top(0).Bottom(0).Right(10 + a.cornerW(top && right)).AlignItems(ui.Center)
+			strip := ui.Row(c.Key("controls-over")).Absolute().Top(0).Bottom(0).Right(headerEnd + a.cornerW(top && right)).AlignItems(ui.Center)
 			if !show {
 				strip.PassThrough()
 			}
@@ -776,7 +782,17 @@ type headerPlan struct {
 	sized                                     bool
 	titleW, folderW, gitW, stateW, processW   float32
 	state, git, gitCompact, process, controls bool
+	// noTitle leaves the status mark alone in a header too narrow for
+	// any of the title: its name goes to the mark's tooltip.
+	noTitle bool
 }
+
+// headerEnd is a pane header's padding at its end.
+const headerEnd = 12
+
+// titleLeast is the least of a title worth showing; below it the header
+// shows the status mark alone.
+const titleLeast = 28
 
 // chipPad is a chip's padding on both sides.
 const chipPad = 2 * 7
@@ -909,14 +925,21 @@ func (a *App) planHeader(c *ui.Context, p *proto.Pane, title, dir string, showDi
 	plan := headerPlan{sized: true}
 	// The header's own room: its padding, the grip's status mark and gap,
 	// the stretch that moves the window and the gaps around it.
-	room := w - pad - 10 - (14 + sp2 + sp2) - 2*sp2
+	room := w - pad - headerEnd - (14 + sp2 + sp2) - 2*sp2
 	// The pane's buttons float over the header while the pointer is
 	// over the pane, so they take none of its room. Below 260 DIPs they
 	// leave the header, and the Pane menu, the pane's own right-click menu
 	// and the keys still reach them.
 	plan.controls = w >= 260
 	room -= a.cornerW(corner)
-	titleMin := min(titleN, titleKeep)
+	// The title takes no more than the header has: in a pane too narrow
+	// for its least it was cut mid-word by the card's edge, with no
+	// ellipsis (council round 2, N1).
+	titleMin := min(titleN, titleKeep, max(room, 0))
+	if w < 120 || titleMin < min(titleN, titleLeast) {
+		plan.noTitle = true
+		titleMin = 0
+	}
 	room -= titleMin
 	plan.titleW = titleMin
 	// Each part at its least, in order, each with the gap before it.
@@ -951,7 +974,9 @@ func (a *App) planHeader(c *ui.Context, p *proto.Pane, title, dir string, showDi
 			room -= more
 		}
 	}
-	grow(&plan.titleW, titleN)
+	if !plan.noTitle {
+		grow(&plan.titleW, titleN)
+	}
 	if plan.state {
 		grow(&plan.stateW, stateN)
 	}
