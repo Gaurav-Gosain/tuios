@@ -6,7 +6,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Gaurav-Gosain/mygo"
 	"github.com/Gaurav-Gosain/mygo/ui"
 
 	"github.com/Gaurav-Gosain/tuios/internal/guios/cli"
@@ -331,7 +330,7 @@ func (a *App) hostFixes(c *ui.Context, pal *palette, h *host) {
 			}
 		case client.HostSignIn:
 			if h.rep.ApprovalURL != "" && smallButton(c, "signin", locales.HostSignIn(), false, pal) {
-				mygo.Shell.OpenExternal(h.rep.ApprovalURL)
+				a.openExternal(h.rep.ApprovalURL)
 			}
 		}
 		switch h.rep.Status {
@@ -522,7 +521,11 @@ func (a *App) startHostDaemon(h *host) {
 			return
 		}
 		if local := a.local().cl; local != nil {
-			go local.RetryHost(name)
+			go func() {
+				if err := local.RetryHost(name); err != nil {
+					a.update(func() { a.toast(err.Error()) })
+				}
+			}()
 		}
 	}, "hosts", "test", name, "--start")
 }

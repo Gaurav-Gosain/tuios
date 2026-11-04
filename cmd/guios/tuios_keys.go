@@ -303,16 +303,6 @@ func (a *App) arm(pane string) {
 	}
 }
 
-// disarm ends the prefix.
-func (a *App) disarm() {
-	tk := &a.tk
-	tk.mu.Lock()
-	tk.armed.Store(false)
-	tk.repeat.Store(0)
-	tk.menu = ""
-	tk.mu.Unlock()
-}
-
 // takeTyped is gated.Write's: text a terminal writes while the prefix is
 // armed is the prefix's next key. It reports whether it took the bytes.
 func (a *App) takeTyped(p []byte) bool {

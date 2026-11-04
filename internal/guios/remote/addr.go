@@ -1,17 +1,6 @@
-// Package remote connects Kero to kerod on another machine: an Addr names
-// the host and how to reach it, Dial opens one connection that carries
-// every stream a client needs (proto.MuxHello), and Server answers one,
-// for `kero __bridge` and kerod's network listeners.
-//
-// Three ways reach a host:
-//
-//   - ssh://[user@]host[:port], or just [user@]host: OpenSSH runs `kero
-//     __bridge` on the host, with the user's ~/.ssh/config, keys and agent,
-//     and nothing to set up there but Kero itself.
-//   - wsl://[distro]: Kero in a WSL distribution of this Windows machine,
-//     through wsl.exe, as SSH would.
-//   - http://host:port and https://host[:port]: one of kerod's network
-//     listeners, which Tailscale tells the caller of (see package daemon).
+// Package remote reads a host's address, as the settings file keeps one,
+// and the network listeners the settings name: ssh://[user@]host[:port] or
+// [user@]host, wsl://[distro], and http(s)://host[:port].
 package remote
 
 import (
@@ -129,35 +118,6 @@ func (a Addr) String() string {
 		b.WriteString("?kero=" + url.QueryEscape(a.Kero))
 	}
 	return b.String()
-}
-
-// Bridged tells an address whose host runs `kero __bridge` for the
-// client: ssh and wsl.
-func (a Addr) Bridged() bool { return a.Scheme == "ssh" || a.Scheme == "wsl" }
-
-// hostPort is where an http(s) address connects.
-func (a Addr) hostPort() string {
-	port := a.Port
-	if port == "" {
-		port = DefaultPort
-		if a.Scheme == "https" {
-			port = "443"
-		}
-	}
-	return net.JoinHostPort(a.Host, port)
-}
-
-// Label is a short name for the host, as a new host takes by default: the
-// host's first label, the distribution for WSL.
-func (a Addr) Label() string {
-	h := a.Host
-	if a.Scheme == "wsl" && h == "" {
-		return "wsl"
-	}
-	if net.ParseIP(h) == nil {
-		h, _, _ = strings.Cut(h, ".")
-	}
-	return h
 }
 
 // ValidName reports whether a name may name a saved host: letters,

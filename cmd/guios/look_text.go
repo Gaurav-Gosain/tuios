@@ -9,7 +9,6 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/Gaurav-Gosain/mygo"
 	"github.com/Gaurav-Gosain/mygo/ui"
 	"github.com/Gaurav-Gosain/mygo/ui/markdown"
 	"github.com/Gaurav-Gosain/mygo/ui/markdown/parser"
@@ -167,7 +166,7 @@ func (a *App) mdLink(l *fileLook, url string) {
 		}
 	case strings.Contains(url, "://") || strings.HasPrefix(url, "mailto:"):
 		if ui.SafeToOpen(url) {
-			mygo.Shell.OpenExternal(url)
+			a.openExternal(url)
 		}
 	default:
 		p := url
@@ -178,7 +177,7 @@ func (a *App) mdLink(l *fileLook, url string) {
 			p = filepath.Join(filepath.Dir(l.path), filepath.FromSlash(p))
 		}
 		if _, err := os.Stat(p); err == nil {
-			openPath(p)
+			a.openPath(p)
 		}
 	}
 }

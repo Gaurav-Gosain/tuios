@@ -52,7 +52,6 @@ var (
 	usageIcon        = glyph("usage-wave")
 	branchIcon       = glyph("f7-arrow-branch")
 	diffIcon         = glyph("octicon-file-diff-16")
-	treeIcon         = glyph("f7-list-bullet-indent")
 	collapseIcon     = glyph("f7-rectangle-compress-vertical")
 	expandIcon       = glyph("f7-rectangle-expand-vertical")
 	revertIcon       = glyph("f7-arrow-uturn-left")

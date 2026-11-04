@@ -24,22 +24,38 @@ func fileManager() string {
 }
 
 // openPath opens a file or folder in the app that opens it.
-func openPath(path string) { mygo.Shell.OpenPath(path) }
+func (a *App) openPath(path string) {
+	if err := mygo.Shell.OpenPath(path); err != nil {
+		a.toast(locales.ToastOpenFailed(err.Error()))
+	}
+}
+
+// openExternal opens a link in the browser.
+func (a *App) openExternal(url string) {
+	if err := mygo.Shell.OpenExternal(url); err != nil {
+		a.toast(locales.ToastOpenFailed(err.Error()))
+	}
+}
 
 // revealPath shows a file in the file manager.
 func revealPath(path string) { mygo.Shell.ShowItemInFolder(path) }
 
 // openTextFile opens a text file, as the configuration, which has no
 // extension to tell its app by, in the text editor.
-func openTextFile(path string) {
+func (a *App) openTextFile(path string) {
+	cmd := exec.Command("xdg-open", path)
 	switch runtime.GOOS {
 	case "darwin":
-		exec.Command("/usr/bin/open", "-t", path).Start()
+		cmd = exec.Command("/usr/bin/open", "-t", path)
 	case "windows":
-		exec.Command("notepad.exe", path).Start()
-	default:
-		exec.Command("xdg-open", path).Start()
+		cmd = exec.Command("notepad.exe", path)
 	}
+	if err := cmd.Start(); err != nil {
+		a.toast(locales.ToastOpenFailed(err.Error()))
+		return
+	}
+	// The editor runs on its own: wait for it so it leaves no zombie.
+	go func() { _ = cmd.Wait() }()
 }
 
 // ownControls tells that Kero draws the window controls itself: on

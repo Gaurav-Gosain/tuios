@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"github.com/Gaurav-Gosain/mygo/ui"
+	"github.com/Gaurav-Gosain/tuios/cmd/guios/locales"
 )
 
 // Typeahead: keys typed into a pane before its terminal is there.
@@ -61,7 +62,11 @@ func (a *App) flushTypeahead(id string, e *termEntry) {
 	b := a.early[id]
 	delete(a.early, id)
 	if len(b) > 0 && e.stream != nil {
-		go e.stream.Write(b)
+		go func() {
+			if _, err := e.stream.Write(b); err != nil {
+				a.update(func() { a.toast(locales.ToastTypeaheadLost(err.Error())) })
+			}
+		}()
 	}
 	// The selected session's: a session another machine shares shows
 	// under each of its hosts, with the same panes.

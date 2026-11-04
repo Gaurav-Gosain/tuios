@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"slices"
@@ -195,10 +196,8 @@ func writeBackup(vb viewerBackup) {
 		return
 	}
 	// Private: it holds what the user typed.
-	os.MkdirAll(proto.Dir(), 0o700)
-	tmp := path + ".tmp"
-	if os.WriteFile(tmp, b, 0o600) == nil {
-		os.Rename(tmp, path)
+	if err := writePrivate(path, b); err != nil {
+		log.Printf("guios: save %s: %v", path, err)
 	}
 }
 

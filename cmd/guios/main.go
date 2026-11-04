@@ -83,7 +83,6 @@ func runApp() {
 	if !mygo.App.RequestSingleInstanceLock() {
 		return
 	}
-	cli.SyncSkill()
 	// The updater's menu and settings need the plugin. With no updates
 	// in mygo.json it checks nothing: guios has no signed releases yet.
 	mygo.Use(native.Plugin)
@@ -143,14 +142,6 @@ func runApp() {
 		a.applyTray()
 		a.applyGlobalShortcuts()
 		a.loadKeys()
-		// On Linux the idle time is two D-Bus calls on the main thread
-		// (Mutter's, then the screen saver's), each with a 3 s timeout:
-		// where neither answers, every call held the window for up to 6 s,
-		// and the keys typed meanwhile into a new pane went nowhere. The
-		// window's focus alone tells there (here).
-		if runtime.GOOS != "linux" {
-			a.idleTime = mygo.Power.IdleTime
-		}
 		a.connect()
 		a.syncHosts()
 		go a.watchConfig()
@@ -176,7 +167,7 @@ func (a *App) openWindow() {
 	}))
 	a.winOpen = true
 	a.updateTitle()
-	a.win.OnFocus(func() { a.update(func() { a.focused = true; a.claimShown(); a.reportView(); a.loadKeys() }) })
+	a.win.OnFocus(func() { a.update(func() { a.focused = true; a.reportView(); a.loadKeys() }) })
 	a.win.OnBlur(func() { a.update(func() { a.focused = false; a.reportView() }) })
 	a.win.OnClosed(a.windowClosed)
 }

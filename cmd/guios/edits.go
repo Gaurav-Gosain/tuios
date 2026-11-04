@@ -254,6 +254,6 @@ func closeButton(c *ui.Context, pal *palette, label string, dirty bool, fn func(
 // bufferText is a buffer's text as its file has it, its line endings too.
 func bufferText(b *editor.Buffer) string {
 	var sb strings.Builder
-	b.WriteTo(&sb)
+	_, _ = b.WriteTo(&sb) // a strings.Builder never fails a write
 	return sb.String()
 }

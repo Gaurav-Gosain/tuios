@@ -585,23 +585,3 @@ var header = []string{
 	"# it in place, keeping your comments; what you save here applies at once.",
 	"",
 }
-
-// Reference writes every key with its value in s, and what it does, as
-// `kero config show` prints it.
-func Reference(s Settings) string {
-	var b strings.Builder
-	for _, k := range keys {
-		if k.doc != "" {
-			b.WriteString("# " + k.doc + "\n")
-		}
-		vals := k.get(&s)
-		if len(vals) == 0 {
-			b.WriteString("# " + k.name + " =\n")
-		}
-		for _, v := range vals {
-			b.WriteString(k.name + " = " + quote(v) + "\n")
-		}
-		b.WriteString("\n")
-	}
-	return b.String()
-}

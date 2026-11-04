@@ -36,9 +36,14 @@ func (a *App) installCLI() {
 		link := "/usr/local/bin/tuios"
 		if runtime.GOOS != "darwin" {
 			link = filepath.Join(proto.Home(), ".local/bin/tuios")
-			os.MkdirAll(filepath.Dir(link), 0o755)
+			if err := os.MkdirAll(filepath.Dir(link), 0o755); err != nil { //nolint:gosec // ~/.local/bin, a folder on PATH, which other tools read
+				a.update(func() { a.toast(err.Error()) })
+				return
+			}
 		}
-		os.Remove(link)
+		// An old link goes first. A remove that fails shows in the
+		// Symlink after it, which then finds the link still there.
+		_ = os.Remove(link)
 		err := os.Symlink(exe, link)
 		if err != nil && runtime.GOOS == "darwin" {
 			// The paths go in as arguments, quoted by AppleScript itself,

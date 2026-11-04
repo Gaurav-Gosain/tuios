@@ -307,7 +307,6 @@ func ckShownKey(it session.AttentionItem) string {
 type ckPeek struct {
 	window, promptID string
 	lines            []string
-	options          []string
 	actions          []string
 	risk             []string
 	loading          bool

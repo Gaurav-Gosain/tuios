@@ -1,5 +1,5 @@
 // Package cli is what the app needs of a command line: the agent
-// integrations and stopping the daemon. tuios has the command line, so this
+// integrations and restarting the daemon. tuios has the command line, so this
 // package runs the tuios binary (Tuios) rather than carrying one of its own.
 package cli
 
@@ -11,20 +11,6 @@ import (
 
 // Tuios is the tuios binary the app found, set at start.
 var Tuios = "tuios"
-
-// IsCommand reports whether args name a command guios runs itself. tuios
-// is the command line, so none.
-func IsCommand(string) bool { return false }
-
-// Run runs a command. Unused: see IsCommand.
-func Run([]string) int { return 2 }
-
-// SyncSkill keeps the agents' integrations current. tuios updates its own
-// hooks with `tuios integration install`, so nothing runs at start.
-func SyncSkill() {}
-
-// StopDaemon stops the tuios daemon and every session in it.
-func StopDaemon() error { return exec.Command(Tuios, "kill-server").Run() }
 
 // RestartDaemon restarts the tuios daemon. Every program in every pane
 // ends. Each session comes back with its layout, its history and new

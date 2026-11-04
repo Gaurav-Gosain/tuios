@@ -2,7 +2,6 @@ package git
 
 import (
 	"context"
-	"errors"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -22,24 +21,13 @@ func (r Repo) Main() string {
 	return filepath.Dir(r.Common)
 }
 
-// CheckBranch reports whether name may name a new branch.
-func CheckBranch(ctx context.Context, dir, name string) error {
-	if name == "" || strings.HasPrefix(name, "-") {
-		return errors.New("a branch needs a name")
-	}
-	if _, err := run(ctx, dir, nil, "check-ref-format", "--branch", name); err != nil {
-		return errors.New("“" + name + "” can't name a branch")
-	}
-	return nil
-}
-
 // HasBranch reports whether the repository has a local branch name.
 func (r Repo) HasBranch(name string) bool { return r.hasRef("refs/heads/" + name) }
 
 // AddWorktree checks out a new branch from base in a linked worktree at
 // path; an existing branch, with base "", as it is.
 func (r Repo) AddWorktree(ctx context.Context, path, branch, base string) error {
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(path), 0o750); err != nil {
 		return err
 	}
 	args := []string{"worktree", "add"}
@@ -66,10 +54,10 @@ func (r Repo) Exclude(pattern string) error {
 		b = append(b, '\n')
 	}
 	b = append(b, pattern+"\n"...)
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(path), 0o750); err != nil {
 		return err
 	}
-	return os.WriteFile(path, b, 0o644)
+	return os.WriteFile(path, b, 0o644) //nolint:gosec // the repository's own file, with the mode git gives it
 }
 
 // WorktreeState is what removing a linked worktree would lose.
@@ -109,22 +97,4 @@ func (r Repo) State(ctx context.Context, branch, base string) (WorktreeState, er
 		ws.Merged = err == nil
 	}
 	return ws, nil
-}
-
-// RemoveWorktree removes the linked worktree at path, what it holds
-// included, from the repository whose main checkout is main; then its
-// branch, when base has every commit of it.
-func RemoveWorktree(ctx context.Context, main, path, branch, base string) error {
-	if _, err := run(ctx, main, nil, "worktree", "remove", "--force", "--", path); err != nil {
-		return err
-	}
-	if branch == "" || base == "" {
-		return nil
-	}
-	ref := "refs/heads/" + branch
-	if _, err := run(ctx, main, nil, "merge-base", "--is-ancestor", ref, base); err != nil {
-		return nil // not merged: the branch stays, with its commits
-	}
-	_, err := run(ctx, main, nil, "branch", "-D", "--", branch)
-	return err
 }

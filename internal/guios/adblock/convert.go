@@ -45,9 +45,6 @@ type Rules struct {
 	Block, Hide, Except, Important []Rule
 }
 
-// Len returns how many rules there are.
-func (r *Rules) Len() int { return len(r.Block) + len(r.Hide) + len(r.Except) + len(r.Important) }
-
 // Lists splits the rules into lists of at most MaxRules rules, in
 // WebKit's JSON: each list has some of the rules that block and hide,
 // and all of the exceptions and important ones, since a list's exceptions

@@ -173,14 +173,14 @@ func fsCreate(p proto.FSCreateParams) error {
 	if err != nil {
 		return err
 	}
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil { //nolint:gosec // folders in the person's own tree, as mkdir makes them
 		return err
 	}
 	if p.Dir {
-		err = os.Mkdir(path, 0o755)
+		err = os.Mkdir(path, 0o755) //nolint:gosec // a folder the person makes in their own tree, as mkdir makes it
 	} else {
 		var f *os.File
-		if f, err = os.OpenFile(path, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o644); err == nil {
+		if f, err = os.OpenFile(path, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o644); err == nil { //nolint:gosec // a file the person makes in their own folder, as touch makes it
 			err = f.Close()
 		}
 	}
@@ -209,7 +209,7 @@ func fsRename(p proto.FSRenameParams) error {
 			return fmt.Errorf("%s is there already", filepath.Base(to))
 		}
 	}
-	if err := os.MkdirAll(filepath.Dir(to), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(to), 0o755); err != nil { //nolint:gosec // folders in the person's own tree, as mkdir makes them
 		return err
 	}
 	if err := os.Rename(from, to); err != nil {
@@ -237,7 +237,7 @@ func fsDelete(p proto.FSDeleteParams) error {
 }
 
 // maxPaste bounds a pasted file, which comes in a request of a control
-// connection, base64 (proto.MaxLine).
+// connection, base64.
 const maxPaste = 32 << 20
 
 // pasteDir is where files pasted into panes go: a directory of the
@@ -281,7 +281,7 @@ func privateDir(dir string) error {
 		return errors.New("the directory for pasted files is not yours alone: " + dir)
 	}
 	if runtime.GOOS != "windows" && st.Mode().Perm()&0o077 != 0 {
-		return os.Chmod(dir, 0o700)
+		return os.Chmod(dir, 0o700) //nolint:gosec // a directory: 0700 is the owner alone
 	}
 	return nil
 }

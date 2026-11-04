@@ -129,12 +129,6 @@ func menuPanel(panel ui.Element, pal *palette) ui.Element {
 	return menu(panel.Padding(menuPad).Radius(rControl+2), pal)
 }
 
-// menuItem styles an item of a menu: a check by the current one, and the
-// accent behind the one the pointer or the arrows are on.
-func menuItem(c *ui.Context, item ui.Element, label string, current bool, pal *palette) {
-	menuRow(c, item, label, current, item.Highlighted(), pal)
-}
-
 func menuRow(c *ui.Context, item ui.Element, label string, current, highlighted bool, pal *palette) {
 	item.Height(menuItemH).Padding(0, 12, 0, 6).Gap(5).Radius(rRow).AlignItems(ui.Center)
 	fg := pal.text

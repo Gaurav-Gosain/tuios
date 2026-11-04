@@ -98,7 +98,6 @@ func (a *App) focusTerminal() {
 		if id := a.focusOf(s); id != "" {
 			a.paneRef(id).Focus()
 		}
-		a.claimShown()
 	}
 }
 

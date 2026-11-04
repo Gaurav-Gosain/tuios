@@ -33,7 +33,9 @@ func stamp(exe string) (string, error) {
 	return fmt.Sprintf("%s\n%d\n%d\n", exe, st.Size(), st.ModTime().UnixNano()), nil
 }
 
-func link(exe, bin string) error {
+// Link makes bin's kero run exe, unless it does already. Only Windows
+// needs it: elsewhere the CLI is tuios itself.
+func Link(exe, bin string) error {
 	if strings.EqualFold(filepath.Dir(exe), filepath.Clean(bin)) {
 		return nil // the command itself, which started kerod
 	}

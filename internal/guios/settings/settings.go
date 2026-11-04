@@ -7,6 +7,7 @@ package settings
 import (
 	"encoding/json"
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"slices"
@@ -288,7 +289,11 @@ func migrate() {
 	}
 	s.normalize()
 	if write(s) == nil {
-		os.Rename(legacyPath(), legacyPath()+".migrated")
+		// A file not moved aside is read again at the next start, which
+		// writes the same settings: nothing is lost.
+		if err := os.Rename(legacyPath(), legacyPath()+".migrated"); err != nil {
+			log.Printf("guios: settings: %v", err)
+		}
 	}
 }
 
@@ -316,7 +321,7 @@ func write(s Settings) error {
 	path := Target()
 	old, _ := os.ReadFile(path)
 	data := format(s, string(old))
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		return err
 	}
 	mode := os.FileMode(0o644)

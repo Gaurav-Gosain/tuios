@@ -51,7 +51,7 @@ func (a *App) hostsPage(c *ui.Context, pal *palette) {
 			ui.Text(c, d.err).FontSize(12).TextColor(pal.dangerText).Padding(0, 0, 10, 0).Selectable()
 		}
 	})
-	docLink(c, pal, "hosts-docs", locales.SetHostsDocs(), "https://tuios.dev/docs")
+	a.docLink(c, pal, "hosts-docs", locales.SetHostsDocs(), "https://tuios.dev/docs")
 }
 
 // hostRow is a host in Settings › Hosts: its address, how its link stands,

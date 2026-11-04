@@ -529,7 +529,7 @@ func (a *App) fileViewer(c *ui.Context, pal *palette, s *proto.Session, fv *file
 		}
 		if !h.remote() && !fv.gone {
 			full := fv.path
-			iconButton(c, "open", openFileIcon, locales.ChangesOpenFile(), pal, func() { openPath(full) })
+			iconButton(c, "open", openFileIcon, locales.ChangesOpenFile(), pal, func() { a.openPath(full) })
 		}
 	})
 	a.lookBar(c, pal, l)

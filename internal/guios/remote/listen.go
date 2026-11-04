@@ -62,10 +62,3 @@ func ListenPort() string {
 	}
 	return DefaultPort
 }
-
-func (l Listen) String() string {
-	if l.Kind == "tailnet" {
-		return "tailnet://:" + l.Port
-	}
-	return "tailnet-serve://" + l.Path
-}

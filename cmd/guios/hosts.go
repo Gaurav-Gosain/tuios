@@ -3,13 +3,12 @@ package main
 import (
 	"errors"
 	"fmt"
+	"log"
 	"path"
 	"runtime"
 	"slices"
 	"strings"
 	"time"
-
-	"github.com/Gaurav-Gosain/mygo"
 
 	"github.com/Gaurav-Gosain/tuios/internal/guios/client"
 	"github.com/Gaurav-Gosain/tuios/internal/guios/proto"
@@ -85,14 +84,6 @@ func (h *host) label() string {
 	return h.name
 }
 
-// home is the host's home directory, as far as the app knows it.
-func (h *host) home() string {
-	if !h.remote() {
-		return proto.Home()
-	}
-	return h.info.Home
-}
-
 // windows reports whether the host runs Windows, whose paths have drives
 // and backslashes.
 func (h *host) windows() bool {
@@ -147,18 +138,6 @@ func (h *host) version() string {
 	}
 	return h.daemonApp
 }
-
-// behind reports whether tuios on a remote host is of another version than
-// this machine's daemon: tuios hosts sync installs this one's there.
-func (h *host) behind() bool { return h.remote() && h.rep.Status == client.HostIncompatible }
-
-// relaunchForKerod is kero's relaunch into a newer app after its daemon
-// updated it: tuios updates itself otherwise, so nothing happens.
-func relaunchForKerod(string) {}
-
-// released tells a version of tuios that has a release to install: not a
-// development build's.
-func released(v string) bool { return v != "" && !strings.Contains(v, "dev") && !mygo.IsDev() }
 
 func (a *App) local() *host { return a.hosts[0] }
 
@@ -600,7 +579,14 @@ func (a *App) pokeHost(h *host) {
 		return
 	}
 	h.poked = time.Now()
-	go local.RetryHost(h.name)
+	name := h.name
+	go func() {
+		// A poke that fails changes nothing: the link's state, which
+		// list-hosts tells, says why the machine is not up.
+		if err := local.RetryHost(name); err != nil {
+			log.Printf("guios: dial %s: %v", name, err)
+		}
+	}()
 }
 
 // pokeWhileLost pokes the machine of a pane whose stream lost its link,
@@ -629,16 +615,6 @@ func (a *App) pokeWhileLost(id string, st *client.Stream) {
 
 // pokeEvery is the least time between two pokes of one machine.
 const pokeEvery = 5 * time.Second
-
-// pokeHosts pokes every machine whose link is down, as when the window
-// comes back to the front after the computer slept.
-func (a *App) pokeHosts() {
-	for _, h := range a.hosts[1:] {
-		if h.conn != connReady && h.busy == "" && h.rep.Status != client.HostConnecting {
-			a.pokeHost(h)
-		}
-	}
-}
 
 // dropTerms lets go of a host's terminals, which attach again as they
 // show.

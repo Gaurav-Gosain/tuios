@@ -150,7 +150,7 @@ func (a *App) slideQuick(r mygo.Rectangle, from, to int, done func()) {
 				return // another slide took over
 			}
 			p := min(float64(time.Since(start))/float64(quickSlide), 1)
-			ease := 1 - math.Pow(1-p, 3)
+			ease := 1 - (1-p)*(1-p)*(1-p)
 			q.win.SetPosition(r.X, from+int(math.Round(float64(to-from)*ease)))
 			if p == 1 {
 				if done != nil {
@@ -275,9 +275,6 @@ func (a *App) attachQuick() {
 				return
 			}
 			e.term, e.stream = term, stream
-			// It takes the panel's size, which another window may have
-			// given another.
-			go stream.Claim()
 			q.ref.Focus()
 		})
 		// The pane ended, as its shell exited: the next show starts

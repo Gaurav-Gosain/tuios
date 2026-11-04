@@ -11,6 +11,7 @@ import (
 	"image"
 	"image/color"
 	"io"
+	"log"
 	"net/http"
 	"net/url"
 	"os"
@@ -433,10 +434,8 @@ func writeFavicon(origin, u string, data []byte) {
 	if u == "" || strings.Contains(u, "\n") {
 		return
 	}
-	os.MkdirAll(faviconDir(), 0o700)
-	p := faviconPath(origin)
-	tmp := p + ".tmp"
-	if os.WriteFile(tmp, append([]byte(u+"\n"), data...), 0o600) == nil {
-		os.Rename(tmp, p)
+	// A cache: an icon not written is fetched again next time.
+	if err := writePrivate(faviconPath(origin), append([]byte(u+"\n"), data...)); err != nil {
+		log.Printf("guios: favicon: %v", err)
 	}
 }

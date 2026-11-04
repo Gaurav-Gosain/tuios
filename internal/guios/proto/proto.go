@@ -10,12 +10,10 @@ package proto
 
 import (
 	"fmt"
-	"hash/fnv"
 	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
-	"time"
 
 	"github.com/Gaurav-Gosain/mygo"
 )
@@ -673,13 +671,6 @@ func CleanTitle(t string) string {
 	return t
 }
 
-// TitleBusy reports whether a title shows a spinner, as agents' titles do
-// while they work: a braille pattern, or a spinner's star.
-func TitleBusy(t string) bool {
-	r, _ := firstRune(strings.TrimSpace(t))
-	return r > 0x2800 && r <= 0x28FF || strings.ContainsRune("◐◓◑◒", r)
-}
-
 func firstRune(s string) (rune, int) {
 	for _, r := range s {
 		return r, len(string(r))
@@ -799,65 +790,6 @@ func Dir() string {
 		base = filepath.Join(Home(), ".config")
 	}
 	return filepath.Join(base, Name())
-}
-
-// SocketPath returns the daemon's socket: $KERO_SOCKET, else kerod.sock in
-// Dir.
-func SocketPath() string {
-	if s := os.Getenv("KERO_SOCKET"); s != "" {
-		return s
-	}
-	p := filepath.Join(Dir(), "kerod.sock")
-	if len(p) > 100 {
-		// Past what a Unix socket's address holds (104 bytes on macOS):
-		// a short path of the user's, named after the directory.
-		h := fnv.New32a()
-		h.Write([]byte(Dir()))
-		if runtime.GOOS == "windows" {
-			// Its temporary directory is the user's.
-			return filepath.Join(os.TempDir(), fmt.Sprintf("kero-%08x.sock", h.Sum32()))
-		}
-		p = fmt.Sprintf("/tmp/kero-%d-%08x.sock", os.Getuid(), h.Sum32())
-	}
-	return p
-}
-
-// StopEvent names the event that asks the daemon of a pid to stop on
-// Windows, where it has no signals.
-func StopEvent(pid int) string { return fmt.Sprintf(`Local\kerod-stop-%d`, pid) }
-
-// Ago writes how long ago a time was, as the sidebar shows it: "now",
-// "4m", "2h", "3d".
-func Ago(ms int64, now time.Time) string {
-	if ms == 0 {
-		return ""
-	}
-	d := now.Sub(time.UnixMilli(ms))
-	switch {
-	case d < time.Minute:
-		return "now"
-	case d < time.Hour:
-		return itoa(int(d/time.Minute)) + "m"
-	case d < 24*time.Hour:
-		return itoa(int(d/time.Hour)) + "h"
-	case d < 7*24*time.Hour:
-		return itoa(int(d/(24*time.Hour))) + "d"
-	}
-	return itoa(int(d/(7*24*time.Hour))) + "w"
-}
-
-func itoa(n int) string {
-	if n == 0 {
-		return "0"
-	}
-	var b [20]byte
-	i := len(b)
-	for n > 0 {
-		i--
-		b[i] = byte('0' + n%10)
-		n /= 10
-	}
-	return string(b[i:])
 }
 
 // Params of the control methods.

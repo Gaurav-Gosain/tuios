@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"maps"
 	"net/url"
 	"os"
@@ -216,10 +217,6 @@ type App struct {
 	active   bool
 	focused  bool
 	statuses map[string]proto.Status // as last seen, for notifications
-	// idleTime tells how long the user has not used the machine's keyboard
-	// or mouse (mygo.Power.IdleTime), 0 when the system does not tell; nil
-	// in tests.
-	idleTime func() time.Duration
 
 	renaming        string
 	renamingProject string
@@ -301,7 +298,11 @@ func prefsPath() string { return filepath.Join(proto.Dir(), "app.json") }
 
 func (a *App) loadPrefs() {
 	if b, err := os.ReadFile(prefsPath()); err == nil {
-		json.Unmarshal(b, &a.prefs)
+		// A file that does not parse leaves the defaults, and the next
+		// save writes a good one over it.
+		if err := json.Unmarshal(b, &a.prefs); err != nil {
+			log.Printf("guios: %s: %v", prefsPath(), err)
+		}
 	}
 	if a.prefs.SidebarWidth == 0 {
 		a.prefs.SidebarWidth = defaultSidebar
@@ -324,11 +325,22 @@ func (a *App) savePrefs() {
 	if err != nil {
 		return
 	}
-	os.MkdirAll(proto.Dir(), 0o700)
-	tmp := prefsPath() + ".tmp"
-	if os.WriteFile(tmp, b, 0o600) == nil {
-		os.Rename(tmp, prefsPath())
+	if err := writePrivate(prefsPath(), b); err != nil {
+		log.Printf("guios: save %s: %v", prefsPath(), err)
 	}
+}
+
+// writePrivate writes a file of the app's own, the person's alone, in
+// proto.Dir: whole or not at all, through a file beside it.
+func writePrivate(path string, b []byte) error {
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		return err
+	}
+	tmp := path + ".tmp"
+	if err := os.WriteFile(tmp, b, 0o600); err != nil {
+		return err
+	}
+	return os.Rename(tmp, path)
 }
 
 // update runs fn on the main thread, and draws.
@@ -496,7 +508,11 @@ func (a *App) showNotification(id, title, body string) {
 		})
 		n.Close()
 	})
-	go n.Show()
+	go func() {
+		if err := n.Show(); err != nil {
+			log.Printf("guios: notification: %v", err)
+		}
+	}()
 }
 
 // notify tells about sessions that came to need the user, or finished,
@@ -831,51 +847,11 @@ func (a *App) ensureTerm(id string) {
 			}
 			e.term, e.stream = term, stream
 			a.flushTypeahead(id, e)
-			// Shown, it takes the window's size (claimShown).
-			if s := a.session(a.selected); s != nil && a.here() && slices.Contains(shownPanes(s), id) {
-				go stream.Claim()
-			}
 			if a.selected == id {
 				a.focusTerminal()
 			}
 		})
 	}()
-}
-
-// hereIdle is how long after the user's last input, on the keyboard or
-// mouse, they are taken to be at this machine still.
-//
-// Kero's app also polled the idle time every second to claim the panes
-// again as the user came back. Stream.Claim does nothing on tuios, whose
-// ResizePixels sizes the pane at once, so that poll only woke the app
-// (a D-Bus call on the main thread on Linux): it is gone.
-const hereIdle = 2 * time.Second
-
-// here reports whether the user is at this window: it is focused, and
-// they used the machine just now. A window stays focused on a machine the
-// user left, whose app then moves its panes without them, as when the
-// session it showed closed: the idle time the system tells says they
-// left. A system that tells none leaves it to the window's focus.
-func (a *App) here() bool {
-	if !a.focused {
-		return false
-	}
-	return a.idleTime == nil || a.idleTime() < hereIdle
-}
-
-// claimShown gives the panes the window shows the window's sizes, which
-// another machine's app may have taken (client.Stream.Claim), while the
-// user is here.
-func (a *App) claimShown() {
-	s := a.session(a.selected)
-	if s == nil || !a.here() {
-		return
-	}
-	for _, id := range shownPanes(s) {
-		if e := a.terms[id]; e != nil && e.stream != nil {
-			go e.stream.Claim()
-		}
-	}
 }
 
 func (a *App) termFont() terminal.Font {
@@ -937,7 +913,11 @@ func (a *App) termOptions(id string, conn *gated) terminal.Options {
 		// session's: cleared here alone, kerod's next frames, drawn from a
 		// screen still full, would put rows back wrong.
 		OnClear: func(terminal.Clear) bool {
-			conn.Clear(proto.ClearScreen)
+			go func() {
+				if err := conn.Clear(proto.ClearScreen); err != nil {
+					a.update(func() { a.toast(err.Error()) })
+				}
+			}()
 			return true
 		},
 		// ⌘⌫ clears the line the shell is on, and ⌘← and ⌘→ go to its
@@ -961,13 +941,6 @@ func (a *App) termOptions(id string, conn *gated) terminal.Options {
 			}
 			t.Send([]byte{b})
 			return true
-		},
-		// The wheel, the user's even over a window not focused, tells they
-		// are in this pane, which then takes this window's size back from
-		// another machine's app (Stream.Claim); it scrolls as it would.
-		OnScroll: func(int) bool {
-			go conn.Claim()
-			return false
 		},
 		// The stream brings the last 500 rows of the pane's history: the
 		// rows above come as the view nears them.
@@ -1133,7 +1106,7 @@ func (a *App) apply(s settings.Settings, save bool) {
 func (a *App) watchConfig() {
 	dir := filepath.Dir(settings.Path())
 	for {
-		if err := os.MkdirAll(dir, 0o755); err != nil {
+		if err := os.MkdirAll(dir, 0o700); err != nil {
 			return
 		}
 		ctx, stop := context.WithCancel(context.Background())
@@ -1236,7 +1209,7 @@ func (a *App) openLink(id, link string) bool {
 	if path == "" {
 		return false
 	}
-	openPath(path)
+	a.openPath(path)
 	return true
 }
 
@@ -1665,7 +1638,9 @@ func (a *App) quitAndEnd() {
 			cl := a.local().cl
 			go func() {
 				if cl != nil {
-					cl.Call("shutdown", nil, nil)
+					if err := cl.Call("shutdown", nil, nil); err != nil {
+						log.Printf("guios: stop the daemon: %v", err)
+					}
 				}
 				mygo.App.Quit()
 			}()

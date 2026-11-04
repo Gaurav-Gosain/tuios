@@ -23,7 +23,7 @@ func HTMLToMarkdown(src string) string {
 	}
 	w := &mdWriter{}
 	if t := findTitle(doc); t != "" && !hasH1(doc) {
-		w.b.WriteString("# " + t + "\n\n")
+		w.put("# ", t, "\n\n")
 	}
 	w.block(doc, 0)
 	return strings.TrimSpace(w.b.String()) + "\n"
@@ -97,21 +97,21 @@ func (w *mdWriter) block(n *html.Node, indent int) {
 		pad := strings.Repeat(" ", indent)
 		switch c.Data {
 		case "h1", "h2", "h3", "h4", "h5", "h6":
-			w.b.WriteString(pad + strings.Repeat("#", int(c.Data[1]-'0')) + " " + strings.TrimSpace(w.inline(c)) + "\n\n")
+			w.put(pad, strings.Repeat("#", int(c.Data[1]-'0')), " ", strings.TrimSpace(w.inline(c)), "\n\n")
 		case "p", "figcaption", "summary", "dt", "dd", "caption":
 			w.para(w.inline(c), indent)
 		case "br":
 			w.b.WriteString("\n")
 		case "hr":
-			w.b.WriteString(pad + "---\n\n")
+			w.put(pad, "---\n\n")
 		case "pre":
-			w.b.WriteString(pad + "```" + codeLang(c) + "\n" + strings.TrimRight(textOf(c), "\n") + "\n" + pad + "```\n\n")
+			w.put(pad, "```", codeLang(c), "\n", strings.TrimRight(textOf(c), "\n"), "\n", pad, "```\n\n")
 		case "blockquote":
 			sub := &mdWriter{nodes: w.nodes}
 			sub.block(c, 0)
 			w.nodes = sub.nodes
 			for _, line := range strings.Split(strings.TrimSpace(sub.b.String()), "\n") {
-				w.b.WriteString(pad + "> " + line + "\n")
+				w.put(pad, "> ", line, "\n")
 			}
 			w.b.WriteString("\n")
 		case "ul", "ol":
@@ -155,7 +155,7 @@ func (w *mdWriter) item(li *html.Node, indent int, mark string) {
 		}
 		text.WriteString(w.inlineNode(c))
 	}
-	w.b.WriteString(pad + mark + strings.TrimSpace(collapse(text.String())) + "\n")
+	w.put(pad, mark, strings.TrimSpace(collapse(text.String())), "\n")
 	for _, c := range rest {
 		holder := &html.Node{Type: html.ElementNode, Data: "div"}
 		cp := *c
@@ -174,7 +174,7 @@ func (w *mdWriter) para(s string, indent int) {
 		return
 	}
 	pad := strings.Repeat(" ", indent)
-	w.b.WriteString(pad + strings.ReplaceAll(s, "\n", "\n"+pad) + "\n\n")
+	w.put(pad, strings.ReplaceAll(s, "\n", "\n"+pad), "\n\n")
 }
 
 func (w *mdWriter) table(t *html.Node, pad string) {
@@ -219,10 +219,10 @@ func (w *mdWriter) table(t *html.Node, pad string) {
 		for len(r) < cols {
 			r = append(r, "")
 		}
-		w.b.WriteString(pad + "| " + strings.Join(r, " | ") + " |\n")
+		w.put(pad, "| ", strings.Join(r, " | "), " |\n")
 	}
 	line(rows[0])
-	w.b.WriteString(pad + "|" + strings.Repeat(" --- |", cols) + "\n")
+	w.put(pad, "|", strings.Repeat(" --- |", cols), "\n")
 	for _, r := range rows[1:] {
 		line(r)
 	}
@@ -359,4 +359,11 @@ func collapse(s string) string {
 func escapeMD(s string) string {
 	r := strings.NewReplacer(`\`, `\\`, "*", `\*`, "_", `\_`, "`", "\\`", "[", `\[`, "]", `\]`, "<", "&lt;", "#", `\#`)
 	return r.Replace(s)
+}
+
+// put writes each part in turn, with no string built of them first.
+func (w *mdWriter) put(parts ...string) {
+	for _, s := range parts {
+		w.b.WriteString(s)
+	}
 }

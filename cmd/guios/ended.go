@@ -186,7 +186,7 @@ func (a *App) endedMenu(m *ui.Menu, h *host, cv proto.Conversation) {
 		a.copyText = cv.Dir
 	}
 	if m.Item(locales.SessionRevealIn(fileManager())).Disabled(cv.Dir == "" || h.remote()).Chosen() {
-		openPath(cv.Dir)
+		a.openPath(cv.Dir)
 	}
 	m.Separator()
 	if m.Item(locales.EndedDelete()).Chosen() {

@@ -8,7 +8,6 @@ import (
 	"image"
 	"strconv"
 	"strings"
-	"sync"
 )
 
 // Doc is a PDF document open for its pages. Its methods are safe from any
@@ -56,7 +55,6 @@ type popplerDoc struct {
 	path  string
 	pages int
 	sizes [][2]float64 // by page; the last size stands for the pages past it
-	mu    sync.Mutex
 }
 
 // maxSizedPages bounds the pages whose sizes pdfinfo lists; the pages past

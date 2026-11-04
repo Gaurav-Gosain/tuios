@@ -23,6 +23,7 @@ import (
 	"github.com/Gaurav-Gosain/mygo"
 	_ "github.com/Gaurav-Gosain/mygo/plugins/automation"
 	"github.com/Gaurav-Gosain/mygo/plugins/terminal"
+	"github.com/Gaurav-Gosain/mygo/ui"
 )
 
 func init() {
@@ -141,4 +142,13 @@ func startProbe(a *App) {
 			}()
 		}
 	}()
+}
+
+// scaleMotion makes every animation of motion.go k times as long: the e2e
+// build's GUIOS_MOTION_SCALE slows them down to capture frames on the way.
+func scaleMotion(k float64) {
+	for _, a := range []*ui.Animation{&motionQuick, &motionOut, &motionBase, &motionLayout, &sidebarMotion} {
+		a.Duration = time.Duration(float64(a.Duration) * k)
+	}
+	enterKeys = []ui.Keyframe{{At: 0, Value: 0}, {At: motionQuick.Duration, Value: 1, Ease: easeOut}}
 }

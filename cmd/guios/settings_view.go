@@ -1,6 +1,7 @@
 package main
 
 import (
+	"log"
 	"math"
 	"os"
 	"reflect"
@@ -145,7 +146,9 @@ func (a *App) refreshService() {
 		line := locales.SvcNotRunning()
 		if c, err := client.Connect(true); err == nil {
 			var st proto.State
-			c.Call("state", nil, &st)
+			if err := c.Call("state", nil, &st); err != nil {
+				log.Printf("guios: daemon state: %v", err)
+			}
 			panes := 0
 			for _, s := range st.Sessions {
 				panes += len(s.Panes)
@@ -1183,9 +1186,9 @@ func (a *App) agentsPage(c *ui.Context, pal *palette) {
 	codeBlock(c, pal, "tuios status working --msg \"Deploying\" --progress 40\ntuios status blocked --kind permission --msg \"Approve the migration?\"\ntuios status done --msg \"Deployed\"")
 }
 
-// docLink opens a page of Kero's documentation in the browser: the
+// docLink opens a page of the documentation in the browser: the
 // accent's words and an arrow, under the group it tells more of.
-func docLink(c *ui.Context, pal *palette, key, label, url string) {
+func (a *App) docLink(c *ui.Context, pal *palette, key, label, url string) {
 	b := ui.ButtonBase(c.Key(key)).AlignSelf(ui.Start).Padding(2, 4).Gap(3).Radius(rChip).AlignItems(ui.Center).Label(label).Tooltip(url)
 	col := pal.accent
 	if b.Hovered() {
@@ -1196,7 +1199,7 @@ func docLink(c *ui.Context, pal *palette, key, label, url string) {
 		ui.Icon(c, linkIcon).Size(12, 12)
 	})
 	if b.Clicked() {
-		mygo.Shell.OpenExternal(url)
+		a.openExternal(url)
 	}
 }
 
@@ -1243,7 +1246,7 @@ func (a *App) advancedPage(c *ui.Context, pal *palette) {
 	settingsGroup(c, pal, locales.SetData(), locales.SetDataDetail(), func() {
 		settingPathRow(c, pal, locales.SetFolder(), proto.ShortDir(proto.Dir()), func() {
 			if button(c, "reveal", locales.CommonShowIn(fileManager()), "", false, pal) {
-				openPath(proto.Dir())
+				a.openPath(proto.Dir())
 			}
 		})
 		settingRow(c, pal, locales.SetReset(), locales.SetResetDetail(), func() {
@@ -1261,14 +1264,16 @@ func (a *App) advancedPage(c *ui.Context, pal *palette) {
 // there is none yet, so that there is a file to open.
 func (a *App) ensureConfig() {
 	if _, err := os.Stat(settings.Path()); err != nil {
-		settings.Save(a.set)
+		if err := settings.Save(a.set); err != nil {
+			a.toast(err.Error())
+		}
 	}
 }
 
 // openConfig opens the configuration in the user's text editor.
 func (a *App) openConfig() {
 	a.ensureConfig()
-	openTextFile(settings.Path())
+	a.openTextFile(settings.Path())
 }
 
 // toastIn shows a short message in the window c is of.

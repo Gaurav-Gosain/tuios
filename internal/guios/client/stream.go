@@ -46,7 +46,6 @@ type Stream struct {
 	psMu sync.RWMutex
 	ps   *session.PaneStream
 
-	mu     sync.Mutex
 	buf    []byte
 	closed chan struct{}
 	once   sync.Once
@@ -79,9 +78,6 @@ type Stream struct {
 // leaseRenew is how often a lease is sent again on a daemon without yield,
 // well inside its 30 s TTL.
 const leaseRenew = 10 * time.Second
-
-// Attach opens a pane's stream on this machine's daemon.
-func Attach(id string) (*Stream, error) { return AttachVia(Local{NoStart: true}, id) }
 
 // clients are the clients the app connected last, by host ("" for this
 // machine), for the panes' streams.
@@ -482,10 +478,6 @@ func (s *Stream) CellSize() (w, h int) {
 	defer s.leaseMu.Unlock()
 	return s.lease[2], s.lease[3]
 }
-
-// Claim makes the pane take this view's size, which ResizePixels does at
-// once with the daemon: nothing more to tell.
-func (s *Stream) Claim() error { return nil }
 
 // UseTheme tells the daemon the colours the view shows, so a program that
 // asks the terminal for them (OSC 10, 11 and 4) gets this view's while no

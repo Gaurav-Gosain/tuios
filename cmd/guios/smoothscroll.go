@@ -122,7 +122,7 @@ func (s *smoothScroll) at(now time.Time) float64 {
 		}
 		// A notch that came on the way glides on to the new target.
 		s.glideTo = s.target
-		return s.glideFrom + (s.glideTo-s.glideFrom)*(1-math.Pow(1-k, 3))
+		return s.glideFrom + (s.glideTo-s.glideFrom)*(1-(1-k)*(1-k)*(1-k))
 	case s.n > 0:
 		return s.resample(now)
 	}

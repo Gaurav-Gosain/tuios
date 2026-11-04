@@ -45,8 +45,6 @@ type lookFilm struct {
 	stripPics    [stripFrames]*ui.Bitmap
 	stripReading bool
 	stripRead    bool
-
-	dragging bool
 }
 
 // startFilm reads the film's facts, then its frame 5 % in.

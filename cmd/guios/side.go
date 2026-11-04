@@ -1073,7 +1073,7 @@ func (a *App) fileHeader(c *ui.Context, pal *palette, scope, root string, f prot
 		}
 		if f.Status != "deleted" {
 			full := filepath.Join(root, filepath.FromSlash(f.Path))
-			iconButton(c, "open", openFileIcon, locales.ChangesOpenFile(), pal, func() { openPath(full) })
+			iconButton(c, "open", openFileIcon, locales.ChangesOpenFile(), pal, func() { a.openPath(full) })
 		}
 	})
 }
