@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"os"
 	"strings"
 	"time"
 
@@ -223,29 +224,45 @@ func (d *Daemon) autoResume(o resumeOffer, delay time.Duration) {
 	if err != nil {
 		return
 	}
-	deadline := time.Now().Add(resumeShellWait)
-	for waitShellPrompt(d.ctx, pty, deadline, resumeShellQuiet) {
-		if d.ctx.Err() != nil || pty.IsExited() {
-			return
-		}
-		if _, err = d.typeResume(sess, o.window); err == nil {
-			return
-		}
-		if !errors.Is(err, errResumeBusy) || !time.Now().Before(deadline) {
-			break
-		}
-		select {
-		case <-time.After(min(resumePromptPoll, time.Until(deadline))):
-		case <-d.ctx.Done():
-			return
-		}
+	if err = d.typeResumeWhenReady(sess, pty, o.window); err == nil {
+		return
 	}
 	if d.ctx.Err() == nil && !pty.IsExited() {
-		if err != nil {
+		if !errors.Is(err, errResumeGone) {
 			LogError("Automatic resume of %s in %s failed, asking instead: %v", o.harness, shortID(o.window), err)
 		}
 		d.attention.openResume(d.resumeItem(o))
 	}
+}
+
+// errResumeGone says the pane or the daemon went before the shell was ready.
+var errResumeGone = errors.New("the pane closed")
+
+// typeResumeWhenReady types a window's resume command once its shell is at
+// its prompt, retrying a busy pane until resumeShellWait has passed.
+func (d *Daemon) typeResumeWhenReady(sess *Session, pty *PTY, window string) error {
+	err := errResumeBusy
+	deadline := time.Now().Add(resumeShellWait)
+	for waitShellPrompt(d.ctx, pty, deadline, resumeShellQuiet) {
+		if d.ctx.Err() != nil || pty.IsExited() {
+			return errResumeGone
+		}
+		if _, err = d.typeResume(sess, window); err == nil {
+			return nil
+		}
+		if !errors.Is(err, errResumeBusy) || !time.Now().Before(deadline) {
+			return err
+		}
+		select {
+		case <-time.After(min(resumePromptPoll, time.Until(deadline))):
+		case <-d.ctx.Done():
+			return errResumeGone
+		}
+	}
+	if d.ctx.Err() != nil || pty.IsExited() {
+		return errResumeGone
+	}
+	return err
 }
 
 // waitShellPrompt waits for a fresh A or B prompt mark, or quiet output from
@@ -379,6 +396,11 @@ func (d *Daemon) verbResumeAgent(cs *connState, params json.RawMessage) (any, *v
 		Session string `json:"session"`
 		Window  string `json:"window"`
 		DryRun  bool   `json:"dry_run"`
+		// Conversation and Harness name an ended conversation
+		// (conversations.go), which starts in a new window of the session.
+		Conversation string `json:"conversation"`
+		Harness      string `json:"harness"`
+		Workspace    int    `json:"workspace"`
 	}
 	if verr := decodeParams(params, &p); verr != nil {
 		return nil, verr
@@ -389,7 +411,15 @@ func (d *Daemon) verbResumeAgent(cs *connState, params json.RawMessage) (any, *v
 	}
 	var plan resumePlan
 	var err error
-	if p.DryRun {
+	if p.Conversation != "" {
+		if p.Window != "" {
+			return nil, invalidParam("window", "give window or conversation, not both")
+		}
+		plan, verr = d.resumeConversation(cs, sess, p.Harness, p.Conversation, p.Workspace, p.DryRun)
+		if verr != nil {
+			return nil, verr
+		}
+	} else if p.DryRun {
 		plan, err = d.planResume(sess, p.Window)
 	} else {
 		plan, err = d.typeResume(sess, p.Window)
@@ -408,6 +438,68 @@ func (d *Daemon) verbResumeAgent(cs *connState, params json.RawMessage) (any, *v
 		"warning":          ResumeWarning(plan.risky),
 		"typed":            !p.DryRun,
 	}, nil
+}
+
+// resumeConversation starts an ended conversation again: a new window of
+// sess in the conversation's folder, which is given the conversation as a
+// pane of its own, and the pane's resume typed once its shell is at its
+// prompt. The command and every check are a pane's (planResume, typeResume).
+// Opening the window needs what new-window needs.
+func (d *Daemon) resumeConversation(cs *connState, sess *Session, harnessID, id string, ws int, dryRun bool) (resumePlan, *verbError) {
+	c, ok := d.conversations.find(harnessID, id)
+	if !ok {
+		return resumePlan{}, hintedVerbError(ErrVerbNotResumable, "no ended conversation has id "+echoName(id), &VerbHint{
+			Verb: "list-conversations", Command: "tuios call list-conversations",
+		})
+	}
+	argv, err := d.agentMatcher.registry.ResumeArgv(c.Harness, c.ID, c.Flags)
+	plan := resumePlan{harness: c.Harness, sessionID: c.ID, argv: argv, risky: d.agentMatcher.registry.RiskyFlags(c.Harness, argv)}
+	if err != nil {
+		return plan, d.resumeError(sess, plan, err)
+	}
+	if dryRun {
+		return plan, nil
+	}
+	admit, _ := json.Marshal(map[string]any{"session": sess.Name(), "cwd": c.Cwd})
+	if _, _, verr := d.admitVerb(cs, "new-window", admit); verr != nil {
+		return plan, verr
+	}
+	if ws <= 0 {
+		ws = d.callerWorkspaceIn(cs, sess)
+	}
+	if _, statErr := os.Stat(c.Cwd); statErr != nil {
+		c.Cwd = ""
+	}
+	win, verr, err := d.addWindowFor(cs, "resume-agent", sess, NewWindowOptions{Cwd: c.Cwd, Workspace: ws, Focus: true},
+		func(ptyID string) { d.notifyPTYClosed(sess.ID, ptyID) })
+	if verr != nil {
+		return plan, verr
+	}
+	if err != nil {
+		return plan, newWindowErr(err, sess, ws)
+	}
+	_ = sess.mutateState(func(st *SessionState) error {
+		idx, err := findWindowStateIndex(st.Windows, win.ID)
+		if err != nil {
+			return err
+		}
+		w := &st.Windows[idx]
+		w.AgentSessionID, w.AgentSessionHarness = c.ID, c.Harness
+		w.AgentFlags = &KeptFlags{Harness: c.Harness, Flags: c.Flags}
+		return nil
+	})
+	if win.Unplaced && d.findTUIClient(sess.ID) != nil {
+		d.awaitPlacement(sess, win.ID, win.PTYID, newWindowPlaceWait)
+	}
+	plan.window = win
+	pty := sess.GetPTY(win.PTYID)
+	if pty == nil {
+		return plan, newVerbError(ErrVerbPTYNotFound, "the new window closed")
+	}
+	if err := d.typeResumeWhenReady(sess, pty, win.ID); err != nil {
+		return plan, d.resumeError(sess, plan, err)
+	}
+	return plan, nil
 }
 
 // resumeError maps a failed resume onto the error a caller can act on.

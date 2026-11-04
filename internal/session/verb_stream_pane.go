@@ -126,8 +126,13 @@ type paneStream struct {
 	snap   *TerminalState // the snapshot to send first, nil in resume mode
 	// fit makes the stream's lease a viewer's, and viewer says the stream
 	// reported its terminal. See pane_lease.go and pane_viewers.go.
-	fit    bool
-	yield  bool
+	fit   bool
+	yield bool
+	// keep says the lease never expires by paneLeaseTTL: a yielding lease
+	// over this machine's unix socket, which ends when the stream closes. A
+	// desktop app then holds a pane without a wakeup every few seconds, and
+	// a local socket does not die silently as a phone's network does.
+	keep   bool
 	viewer bool
 	// cellW and cellH are the client's cell in pixels, 0 when unknown.
 	// Guarded by leaseMu once the stream runs.
@@ -224,7 +229,7 @@ func (d *Daemon) verbStreamPane(cs *connState, params json.RawMessage) (any, *ve
 	}
 	win := state.Windows[idx]
 	ps := &paneStream{d: d, cs: cs, sess: sess, window: win.ID, pty: pty, subID: cs.clientID,
-		fit: p.Fit || p.Yield, yield: p.Yield, cellW: min(max(p.CellWidth, 0), maxLeaseDim), cellH: min(max(p.CellHeight, 0), maxLeaseDim), inputQ: make(chan []byte, paneInputQueue), quit: make(chan struct{})}
+		fit: p.Fit || p.Yield, yield: p.Yield, keep: p.Yield && cs.peerUIDOK && !cs.viaLink, cellW: min(max(p.CellWidth, 0), maxLeaseDim), cellH: min(max(p.CellHeight, 0), maxLeaseDim), inputQ: make(chan []byte, paneInputQueue), quit: make(chan struct{})}
 	if p.LeaseCols > 0 {
 		if verr := ps.admitLease(p.LeaseCols, p.LeaseRows); verr != nil {
 			return nil, verr
@@ -867,7 +872,7 @@ func (ps *paneStream) followHomeLocked() *Session {
 // lease_expired. An L frame sets the lease again.
 func (ps *paneStream) expireLease() {
 	ps.leaseMu.Lock()
-	if !ps.leased || ps.closed || time.Since(time.Unix(0, ps.leaseAt)) < paneLeaseTTL {
+	if !ps.leased || ps.closed || ps.keep || time.Since(time.Unix(0, ps.leaseAt)) < paneLeaseTTL {
 		ps.leaseMu.Unlock()
 		return
 	}

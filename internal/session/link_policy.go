@@ -111,6 +111,8 @@ var verbCapabilities = map[string]linkCaps{
 	"list-ports":           {config.LinkAllowList},
 	"get-window":           {config.LinkAllowList},
 	"list-workspaces":      {config.LinkAllowList},
+	"layout-tree":          {config.LinkAllowList},
+	"list-conversations":   {config.LinkAllowList},
 	"capture-pane":         {config.LinkAllowList},
 	// stream-pane reads a pane. Its input and lease frames are checked
 	// as send-text and resize, frame by frame, so they need write.
@@ -236,6 +238,7 @@ var verbCapabilities = map[string]linkCaps{
 	"set-agent-quiet":  {config.LinkAllowWrite, config.LinkAllowRespond},
 	"select-workspace": {config.LinkAllowWrite},
 	"set-layout":       {config.LinkAllowWrite},
+	"set-layout-tree":  {config.LinkAllowWrite},
 	"run-command":      {config.LinkAllowWrite},
 	"switch-session":   {config.LinkAllowWrite},
 	"detach-client":    {config.LinkAllowWrite},
@@ -265,6 +268,7 @@ var verbCapabilities = map[string]linkCaps{
 	"set-agent-session":   {config.LinkAllowWrite},
 	"set-agent-meta":      {config.LinkAllowWrite},
 	"resume-agent":        {config.LinkAllowWrite},
+	"forget-conversation": {config.LinkAllowWrite},
 	"request-approval":    {config.LinkAllowWrite},
 	"run":                 {config.LinkAllowWrite},
 	// set-agent-state's activity with no state, so the same capability.

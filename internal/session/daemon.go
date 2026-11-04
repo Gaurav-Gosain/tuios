@@ -315,6 +315,9 @@ type Daemon struct {
 	// replyHistory is what the person sent to each agent, in memory only.
 	// See reply_history.go.
 	replyHistory replyHistory
+	// conversations are the agent conversations that ended
+	// (conversations.go).
+	conversations conversationLog
 	// buffers holds the paste buffers every client and session shares. See
 	// verb_buffers.go.
 	buffers     *pastebuf.Store
@@ -1312,6 +1315,14 @@ func (d *Daemon) onSessionCreated(s *Session) {
 		if (ev.Type == EventAgentState || ev.Type == eventAttentionDetail) && ev.hookKind == "approval" {
 			ev.hookRoot = s.windowApprovalRoot(ev.hookWorktree, ev.Window, ev.hookAgentSession)
 			ev.hookRunDir = resolvedRunDir(s.paneRunDir(ev.PTYID))
+		}
+		// An ended conversation goes on the list, off this path, since the
+		// list is saved to disk.
+		if ev.Type == eventConversationEnded {
+			if !d.agentsOff.Load() {
+				go d.conversations.add(*ev.conversation)
+			}
+			return
 		}
 		// A new layout is news for the stream only: no hook, Inbox, queue or
 		// activity ring reads it, and it fires on every step of a drag.

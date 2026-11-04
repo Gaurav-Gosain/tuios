@@ -312,6 +312,8 @@ type SessionEvent struct {
 	// gives it, and why it was let go (task.go).
 	taskRow    *TaskRow
 	taskReason string
+	// conversation is an eventConversationEnded's record (conversations.go).
+	conversation *Conversation
 }
 
 // eventCompletionSeen is raised when an attached client's state push shows it

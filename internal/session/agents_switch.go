@@ -56,6 +56,7 @@ var agentOnlyVerbs = []string{
 	// Agents and fleets.
 	"start-agent", "fan", "compare-fan", "verify-fan", "keep-fan", "set-fan-verdict", "judge-fan",
 	"list-agents", "list-host-agents", "resume-agent", "ask-agent",
+	"list-conversations", "forget-conversation",
 	"explain-agent-detect", "explain-agent-screen",
 	// Agent state, as a pane reports it and as a reader reads it.
 	"set-agent-state", "set-agent-session", "set-agent-meta", "set-agent-quiet",
