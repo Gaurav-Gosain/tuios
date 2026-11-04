@@ -688,7 +688,7 @@ A refused call answers error `forbidden`, and nothing changes.
 | `session.snapshot` | `list-windows` for each session | `layouts` gives each pane's rectangle. `splits` is always empty |
 | `workspace.list`, `workspace.get` | `list-windows` | |
 | `workspace.create` | `new-session`, `set-session-name` | `label` is the display name. `focus` does nothing |
-| `workspace.rename` | `set-session-name` | |
+| `workspace.rename` | `set-session-name` | sends one `workspace_renamed` with the new label |
 | `workspace.close` | `kill-session` | |
 | `workspace.focus` | `select-workspace` grant, then the attached client | the client shows the session, as the session switcher does. The client is the one that shows the caller's session, else the one that shows the active workspace. Without a client it fails with `no_client` |
 | `tab.list`, `tab.get` | `list-windows` | |
@@ -930,8 +930,9 @@ event is `{"event":"pane.agent_status_changed","data":{...}}`.
 
 | tuios event | herdr event |
 | --- | --- |
-| `session-created` | `workspace_created`, or `workspace_renamed` after a rename |
-| `session-closed` | `workspace_closed` |
+| `session-created` | `workspace_created`, or one `workspace_renamed` after `rename-session` |
+| `session-closed` | `workspace_closed`, or nothing for the old name of a rename |
+| `session-labelled` | `workspace_renamed`, when the label the workspace shows changed |
 | `window-created` | `pane_created`, and `tab_created` for a new tab |
 | `window-closed` | `pane_closed`, and `tab_closed` for a tab that is gone |
 | `window-exit` | `pane_exited` |
@@ -942,6 +943,12 @@ event is `{"event":"pane.agent_status_changed","data":{...}}`.
 | `client-session-changed` | `workspace_focused`, `tab_focused` and `pane_focused` when a client moves from one session to another, for the new session, its tab and its focused pane. A first attach sends none |
 | `agent-state` | `pane_agent_detected` when an agent comes or goes, and `pane.agent_status_changed` when its status changes |
 | `agent-seen` | `pane.agent_status_changed` from `done` to `idle` when the pane is looked at, and back when it is marked unread |
+
+A workspace's label is its session's display name, or the session's name
+when it has none. `workspace_renamed` carries the label the snapshot shows
+after the change. `workspace.create` with a `label` sets the display name
+after the session opens, so its `workspace_created` may carry the session's
+name and a `workspace_renamed` with the label follow it.
 
 `pane.agent_status_changed` needs a `pane_id`. `pane.scroll_changed` and
 `pane.output_matched` fail with `unsupported`: use `pane.wait_for_output`. A

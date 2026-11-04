@@ -26,8 +26,9 @@ import (
 // pane without admin sees only the sessions it may read (eventInScope).
 //
 //	tuios event         herdr event
-//	session-created     workspace_created
-//	session-closed      workspace_closed (workspace_renamed after a rename)
+//	session-created     workspace_created, or workspace_renamed after a rename
+//	session-closed      workspace_closed, or nothing for the old name of a rename
+//	session-labelled    workspace_renamed, when the label it shows changed
 //	window-created      pane_created, and tab_created for a new tab
 //	window-closed       pane_closed, and tab_closed for a tab left empty
 //	window-exit         pane_exited
@@ -78,6 +79,7 @@ var herdrHubTypes = map[string]bool{
 	EventWindowClosed: true, EventWindowExit: true, EventWindowRetitled: true,
 	EventWindowFocused: true, EventWindowMoved: true, EventWorkspaceSwitched: true,
 	EventAgentState: true, EventAgentSeen: true, EventClientSessionChanged: true,
+	EventSessionLabelled: true,
 }
 
 // herdrParseSubscriptions reads and checks events.subscribe's list. One
@@ -166,10 +168,13 @@ type herdrTranslator struct {
 	// in is the session id each client is in now. A detach drops it, which
 	// shows does not.
 	in map[string]string
+	// labels is each workspace's label as the stream last told it, so a
+	// session-labelled that leaves the label as it was sends nothing.
+	labels map[string]string // session id -> label
 }
 
 func (d *Daemon) newHerdrTranslator() *herdrTranslator {
-	t := &herdrTranslator{d: d, panes: map[string]herdrPaneMemo{}, sessions: map[string]string{}, shows: map[string]string{}, in: map[string]string{}}
+	t := &herdrTranslator{d: d, panes: map[string]herdrPaneMemo{}, sessions: map[string]string{}, shows: map[string]string{}, in: map[string]string{}, labels: map[string]string{}}
 	for _, s := range d.manager.AllSessions() {
 		t.remember(s)
 	}
@@ -237,6 +242,7 @@ func (t *herdrTranslator) active(sessionID string) bool {
 func (t *herdrTranslator) remember(s *Session) {
 	t.sessions[s.Name()] = s.ID
 	st := s.GetState()
+	t.labels[s.ID] = herdrWorkspaceLabel(s, st)
 	for _, w := range st.Windows {
 		if !herdrScratch(&w) {
 			t.panes[w.ID] = herdrMemoOf(s, st, &w)
@@ -276,8 +282,12 @@ func (t *herdrTranslator) translate(ev streamEvent) []herdrEvent {
 			return nil
 		}
 		renamed := false
-		for _, id := range t.sessions {
-			renamed = renamed || id == sess.ID
+		for name, id := range t.sessions {
+			if id == sess.ID {
+				// The old name of a rename, which its session-closed kept.
+				renamed = true
+				delete(t.sessions, name)
+			}
 		}
 		t.remember(sess)
 		w := &t.view(sess).workspaces[0]
@@ -290,18 +300,34 @@ func (t *herdrTranslator) translate(ev streamEvent) []herdrEvent {
 		if !ok {
 			return nil
 		}
-		delete(t.sessions, ev.Session)
 		if t.d.manager.GetSessionByID(id) != nil {
 			// A rename closes the old name. The session lives on, and its
-			// session-created under the new name says so.
+			// session-created under the new name says so as one
+			// workspace_renamed, which it can tell only while the old name
+			// is still known.
 			return nil
 		}
+		delete(t.sessions, ev.Session)
+		delete(t.labels, id)
 		for w, m := range t.panes {
 			if m.sessionID == id {
 				delete(t.panes, w)
 			}
 		}
 		return []herdrEvent{global("workspace_closed", &herdrEventData{WorkspaceID: herdrWorkspaceID(id)})}
+	case EventSessionLabelled:
+		// herdr's workspace.rename sets the label in place and sends
+		// workspace_renamed. tuios's is set-session-name, which no session
+		// closes or opens for.
+		if sess == nil {
+			return nil
+		}
+		label := herdrWorkspaceLabel(sess, sess.GetState())
+		if prev, ok := t.labels[sess.ID]; !ok || prev == label {
+			return nil
+		}
+		t.labels[sess.ID] = label
+		return []herdrEvent{global("workspace_renamed", &herdrEventData{WorkspaceID: herdrWorkspaceID(sess.ID), Label: label})}
 	case EventWindowClosed, EventWindowExit:
 		return t.closed(ev)
 	case EventClientSessionChanged:

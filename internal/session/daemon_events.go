@@ -73,7 +73,11 @@ const (
 	// took the panes over.
 	EventDaemonUpgraded = "daemon-upgraded"
 	EventSessionClosed  = "session-closed" // a session was terminated
-	EventGap            = "gap"            // slow-subscriber marker: N events were dropped
+	// EventSessionLabelled: a session's display name was set, changed or
+	// cleared. Title is the new display name, absent when cleared. A rename
+	// raises session-closed and session-created instead.
+	EventSessionLabelled = "session-labelled"
+	EventGap             = "gap" // slow-subscriber marker: N events were dropped
 	// EventClientSessionChanged reports a client attaching, detaching or switching.
 	EventClientSessionChanged = "client-session-changed"
 	// EventAttention is a change to the Inbox, the daemon's attention queue:

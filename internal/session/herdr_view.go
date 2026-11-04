@@ -340,14 +340,17 @@ func (d *Daemon) buildHerdrView(cs *connState) *herdrView {
 	return v
 }
 
+// herdrWorkspaceLabel is the label a session shows as a herdr workspace:
+// its display name, or its name when it has none.
+func herdrWorkspaceLabel(sess *Session, st *SessionState) string {
+	return cmp.Or(st.DisplayName, sess.Name())
+}
+
 // addHerdrSession adds one session, as a herdr workspace numbered number, and
 // its tabs, panes and agents.
 func (d *Daemon) addHerdrSession(v *herdrView, sess *Session, st *SessionState, number int, active bool) {
 	wsID := herdrWorkspaceID(sess.ID)
-	label := st.DisplayName
-	if label == "" {
-		label = sess.Name()
-	}
+	label := herdrWorkspaceLabel(sess, st)
 	tabs := herdrOrderedTabs(st)
 	activeTab := herdrTabID(sess.ID, st.WorkspaceTabKey(max(st.CurrentWorkspace, 1)))
 	if IsScratchWorkspace(st.CurrentWorkspace) && len(tabs) > 0 {

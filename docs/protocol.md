@@ -211,6 +211,18 @@ The herdr stream also sends `workspace_focused`, `tab_focused` and
 order, as herdr does when its active workspace changes. A window focused in a
 session no client shows sends no `pane_focused`.
 
+**`set-session-name` raises the new event `session-labelled`.** Before, a
+display name changed with no event, so a subscriber, and herdr's
+`workspace.renamed` through it, never heard of it. A subscriber that names no
+types gets it.
+
+**The herdr socket sends `workspace_renamed` for a rename.** `rename-session`
+sent `workspace_created` for the new name, for a workspace the herdr client
+already had, and `workspace.rename` sent nothing. Each now sends one
+`workspace_renamed` with the label `session.snapshot` then shows, as herdr's
+`workspace.rename` does. See
+[AGENT_STATE.md](AGENT_STATE.md#herdr-compatibility).
+
 **The new event `agent-seen`** says a finished pane was looked at, or marked
 unread again. A subscriber that names no types gets it.
 
@@ -7661,6 +7673,7 @@ Event types:
 | `mode-changed` | A terminal mode toggled (for example alt-screen). | `session`, `window`, `mode`, `enabled` |
 | `session-created` | A session was created. | `session` |
 | `session-closed` | A session was terminated. | `session` |
+| `session-labelled` | A session's display name was set, changed or cleared, by `set-session-name` or any other route. `title` is the new display name, absent when it was cleared. A rename (`rename-session`) raises `session-closed` and `session-created` instead. | `session`, `title` |
 | `client-session-changed` | A daemon connection attached, detached or switched sessions. `session` is the session entered or left. `attached` is `true` when entering and `false` when leaving, including a disconnect while attached. A rename sends `attached: true` with the new name to each client in the session. | `client_id`, `pid`, `session`, `attached` |
 | `gap` | Some events were not delivered to this connection. `reason` says why (see below). A gap has no `seq`. | `reason`, `dropped`, `boot_id` |
 | `attention` | An Inbox item opened, changed or closed. `action` is `open`, `update` or `close`, and `attention` is the item as `list-attention` returns it. On `close` the item carries `closed`: `resolved`, `seen`, `read`, `dismissed`, `answered`, `superseded`, `window_closed`, `session_closed`, `evicted`, `host_removed`, `agents_disabled` (the person turned the agent features off) or `snoozed` (the person snoozed it; it opens again with the same id). An `answered` item also carries `answer` and `answered_by`; the close of a linked host's item never reads `answered` here. `session` and `window` are the item's, so the usual filters apply. An item of a linked host also sets `host`, and a subscriber that filters on a session, window or pane does not get it unless it subscribed with `hosts`. | `session`, `window`, `host`, `action`, `attention` |
@@ -7702,7 +7715,7 @@ it, so:
 Ordering within a single mutation is stable: closes, then creates, then
 per-window changes (`window-retitled`, `window-moved`,
 `window-minimized`/`window-restored`), then `workspace-renamed`, then
-`workspace-switched`, then `window-focused`. Focus comes last because it is usually a consequence of an
+`session-labelled`, then `workspace-switched`, then `window-focused`. Focus comes last because it is usually a consequence of an
 earlier event in the same batch, so a consumer building a model from the stream
 already knows about the window being focused by the time it is told to focus it.
 

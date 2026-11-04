@@ -86,6 +86,28 @@ was a flake on CI. Run on 2026-11-05: with the pane command changed to
 `(sleep 1; exec setsid sleep 600) &`, the test without the wait failed 3 of 3
 runs with that message, and the test with the wait passed 3 of 3. With the
 wait in place, `KillMode=control-group` still fails it.
+## The herdr socket sends workspace_renamed for a rename
+
+`TestHerdrWorkspaceRenamed` holds the herdr event stream to herdr 0.9.5's
+`workspace.renamed`: a workspace whose label changes sends one
+`workspace_renamed` with its id and the label `session.snapshot` then shows.
+`rename-session` and herdr's `workspace.rename` must each send exactly that,
+read as the stream's next event, and a new session afterwards must arrive as
+the next event, a `workspace_created`.
+
+Run on 2026-11-04 on macOS (darwin/arm64). The test passes on the fixed build,
+and a binary of main (46c9a434e) fails it. Each control was built into its own
+binary.
+
+| Control: what was cut | Where it fails | Verdict |
+| --- | --- | --- |
+| Main without the fix | "rename-session sends workspace_renamed: got workspace_created for the workspace labelled herdr-ren-two" | **caught** |
+| The old name forgotten in the `session-closed` case of `herdrTranslator.translate` again | The same failure as on main | **caught** |
+| The `session-labelled` case cut from `herdrTranslator.translate` | "workspace.rename sends workspace_renamed: no event arrived", after the rename-session one | **caught** |
+
+The event stream is `herdr-workspace-renamed-stream` under
+`TUIOS_E2E_FRAMES`. Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestHerdrWorkspaceRenamed$' -v .`.
 
 ## A pasted path reads back in fish behind tmux
 

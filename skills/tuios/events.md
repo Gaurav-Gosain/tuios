@@ -110,6 +110,7 @@ Every type, and what it reports:
 | `layout-changed` | The panes on a workspace sit differently. Opt-in |
 | `mode-changed` | A client switches between window and terminal mode |
 | `session-created`, `session-closed` | A session is made or ends |
+| `session-labelled` | A session's display name is set, changed or cleared (`title`); a rename raises `session-closed` and `session-created` instead |
 | `client-session-changed` | A client enters or leaves a session |
 | `agent-state`, `agent-message`, `agent-activity` | An agent changes state, gets mail, or logs activity |
 | `agent-seen` | A finished pane is looked at (`action` `seen`) or marked unread again (`action` `unread`) |

@@ -373,7 +373,7 @@ var EventTypes = []string{
 	"window-focused", "window-moved", "window-minimized", "window-restored",
 	"workspace-switched", "workspace-renamed", "layout-changed", "agent-state", "agent-seen", "agent-message",
 	"output", "bell", "notification", "mode-changed",
-	"session-created", "session-closed", "client-session-changed", "gap", "attention",
+	"session-created", "session-closed", "session-labelled", "client-session-changed", "gap", "attention",
 	"host-changed", "prompt", "command-started", "command-finished",
 	"agent-activity", "transcript", "daemon-upgraded",
 	// The daemon sends no transfer event to a restricted connection, which
