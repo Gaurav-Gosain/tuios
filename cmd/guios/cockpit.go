@@ -129,8 +129,11 @@ type cockpit struct {
 	opened map[int]bool
 	// needsOnly is the f filter: the Needs you group alone.
 	needsOnly bool
-	// tab is the focus area's tab.
-	tab string
+	// tab is the focus area's tab; picked the one the person chose last,
+	// and chosen the one they chose for each agent, by its key.
+	tab    string
+	picked string
+	chosen map[string]string
 	// stacked is a card too narrow for both columns, which then shows one
 	// at a time: the agents, or with stackFocus the chosen agent.
 	stacked, stackFocus bool
@@ -497,6 +500,10 @@ func (a *App) ckSelect(r ckRow) {
 		ag := ck.agents[r.agent]
 		ck.selAgt = ag.Key()
 		a.fetchThread(ag, true)
+	}
+	if t := a.ckTabFor(r); t != ck.tab {
+		ck.tab = t
+		a.ckTabOpened()
 	}
 }
 

@@ -54,8 +54,18 @@ func (a *App) ckStepTab(d int) {
 	a.ckSetTab(ckTabOrder[(i+d+len(ckTabOrder))%len(ckTabOrder)])
 }
 
+// ckSetTab shows a tab the person chose. It stays for that agent: the
+// next agent opens on what it asks for (ckTabFor).
 func (a *App) ckSetTab(t string) {
-	a.ck.tab = t
+	ck := &a.ck
+	ck.tab = t
+	ck.picked = t
+	if ck.chosen == nil {
+		ck.chosen = map[string]string{}
+	}
+	if ag, ok := a.ckSelectedAgent(); ok {
+		ck.chosen[ag.Key()] = t
+	}
 	a.ckTabOpened()
 }
 
@@ -68,6 +78,32 @@ func ckSourceShown(src string) bool {
 		return false
 	}
 	return true
+}
+
+// ckTabFor is the tab a row opens on: what its agent asks for, mail on
+// Mail and an approval, a question or an error on Thread with its card;
+// else the tab the person chose for that agent; else the tab they chose
+// last.
+func (a *App) ckTabFor(r ckRow) string {
+	ck := &a.ck
+	it := r.item
+	if it != nil && needItemKind(it) {
+		if it.Kind == session.AttentionMail {
+			return tabMail
+		}
+		return tabThread
+	}
+	ag := ck.rowAgent(r)
+	if ag.State == "needs_input" || ag.State == "errored" {
+		return tabThread
+	}
+	if t, ok := ck.chosen[ag.Key()]; ok && r.agent >= 0 {
+		return t
+	}
+	if ck.picked != "" {
+		return ck.picked
+	}
+	return tabThread
 }
 
 // ckStatePill is a state's word and colour.
