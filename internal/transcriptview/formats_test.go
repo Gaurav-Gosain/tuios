@@ -20,6 +20,7 @@ package transcriptview
 
 import (
 	"bytes"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -504,5 +505,54 @@ func TestGeminiRewrites(t *testing.T) {
 	}
 	if strings.Contains(strings.Join(got, "\n"), "second") || !strings.Contains(strings.Join(got, "\n"), "again") {
 		t.Errorf("after the rewind:\n%s\nwant the message taken back gone and the new one there", strings.Join(got, "\n"))
+	}
+}
+
+// TestClaudeImage checks that a pasted image is named on its entry and read
+// back by the entry's id, and that an id that names no image reads nothing.
+// Ways it can fail: the id is not the record's offset, so the read lands in
+// another record; a block that is not an image, or not base64, reads as one;
+// a media type a client must not draw passes.
+func TestClaudeImage(t *testing.T) {
+	png := []byte("\x89PNG\r\n\x1a\nfake")
+	b64 := base64.StdEncoding.EncodeToString(png)
+	lines := []string{
+		`{"type":"user","message":{"role":"user","content":"first"},"timestamp":"2026-11-04T10:00:00Z"}`,
+		`{"type":"user","message":{"role":"user","content":[{"type":"text","text":"look"},{"type":"image","source":{"type":"base64","media_type":"image/png","data":"` + b64 + `"}}]},"timestamp":"2026-11-04T10:00:01Z"}`,
+		`{"type":"user","message":{"role":"user","content":[{"type":"image","source":{"type":"base64","media_type":"image/svg+xml","data":"` + b64 + `"}}]},"timestamp":"2026-11-04T10:00:02Z"}`,
+	}
+	path := filepath.Join(t.TempDir(), "t.jsonl")
+	if err := os.WriteFile(path, []byte(strings.Join(lines, "\n")+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	page, err := Read(path, Options{Format: FormatClaude})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var ids []string
+	for _, e := range page.Entries {
+		if e.Text == "[image]" {
+			if e.Image != nil {
+				ids = append(ids, e.ID)
+			} else {
+				ids = append(ids, "")
+			}
+		}
+	}
+	if len(ids) != 2 || ids[0] == "" || ids[1] != "" {
+		t.Fatalf("image entries %q: want the png named and the svg not", ids)
+	}
+	mt, data, err := ReadImage(path, FormatClaude, ids[0])
+	if err != nil || mt != "image/png" || !bytes.Equal(data, png) {
+		t.Fatalf("ReadImage = %q %q %v", mt, data, err)
+	}
+	off, _, _ := strings.Cut(ids[0], "-")
+	for _, bad := range []string{off + "-0", off + "-9", "1-1", "zz", "0-0", ids[0] + "x"} {
+		if _, _, err := ReadImage(path, FormatClaude, bad); err == nil {
+			t.Errorf("ReadImage(%q) read an image", bad)
+		}
+	}
+	if _, _, err := ReadImage(path, FormatCodex, ids[0]); err == nil {
+		t.Error("ReadImage read a codex transcript")
 	}
 }

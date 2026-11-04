@@ -41,6 +41,12 @@ type ccBlock struct {
 	ToolUseID string          `json:"tool_use_id"`
 	Content   ccResultContent `json:"content"`
 	IsError   bool            `json:"is_error"`
+	// Source is an image block's source. Its data is not decoded here:
+	// a page carries only the media type, and ReadImage reads the data.
+	Source struct {
+		Type      string `json:"type"`
+		MediaType string `json:"media_type"`
+	} `json:"source"`
 }
 
 // ccContent is a message's content: a plain string, or blocks.
@@ -226,7 +232,11 @@ func (r *reader) blockEntry(rec *ccRecord, b *ccBlock) (Entry, bool) {
 		}
 		return Entry{Role: role, Kind: KindText, raw: rawText(b.Text)}, true
 	case "image":
-		return Entry{Role: role, Kind: KindText, Text: "[image]"}, true
+		e := Entry{Role: role, Kind: KindText, Text: "[image]"}
+		if b.Source.Type == "base64" && imageType(b.Source.MediaType) {
+			e.Image = &Image{MediaType: b.Source.MediaType}
+		}
+		return e, true
 	case "thinking":
 		if strings.TrimSpace(b.Thinking) == "" {
 			return Entry{}, false
