@@ -12507,3 +12507,12 @@ window. On 2026-11-04 the control below ran against it.
 reads the attached client's screen: the first pane goes from 60 columns to 30
 at a ratio of 0.25. The rectangles in `list-windows` do not follow until the
 client pushes again, so the test reads the screen.
+
+It then turns tiling off and moves the first pane with `set-layout-state`:
+`layout-tree` reports `"tiling":false`, and the attached client draws the
+pane's corner at the rectangle it was given (4,3). On 2026-11-04 the control
+was a build of the branch base (ee08a49cf), which has no `set-layout-state`.
+
+| Control: what was put back | Test | Result |
+| --- | --- | --- |
+| A daemon with no `set-layout-state` verb | `TestLayoutChangedFollowsASplit` | **caught**: "set-layout-state: exit status 1", `unknown verb set-layout-state` |

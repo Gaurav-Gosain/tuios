@@ -273,5 +273,40 @@ func TestLayoutChangedFollowsASplit(t *testing.T) {
 	}
 	fmt.Fprintf(&log, "first pane on screen: %d columns, was %d\n", split(), before.Width)
 	saveArtifact(t, term, dir, "after-set-layout-tree")
+
+	// The rest of the layout goes the same way, through set-layout-state:
+	// tiling off, and the first pane moved to a rectangle of its own. The
+	// attached client takes both, and draws the pane's corner there.
+	at := layoutRect{X: before.X + 4, Y: before.Y + 3, Width: 30, Height: 8}
+	params, _ = json.Marshal(map[string]any{"session": sess, "tiling": false,
+		"windows": []map[string]any{{"window": first, "x": at.X, "y": at.Y, "width": at.Width, "height": at.Height}}})
+	out, err = tuiosCLI(t, base, "call", "set-layout-state", string(params))
+	fmt.Fprintf(&log, "$ tuios call set-layout-state\n%s\n", out)
+	if err != nil || !strings.Contains(out, `"changed":true`) {
+		t.Fatalf("set-layout-state: %v\n%s", err, out)
+	}
+	waitEvent("layout-changed", uiTimeout)
+	out, err = tuiosCLI(t, base, "call", "layout-tree", `{"session":"`+sess+`"}`)
+	fmt.Fprintf(&log, "$ tuios call layout-tree\n%s\n", out)
+	if err != nil || !strings.Contains(out, `"tiling":false`) {
+		t.Errorf("layout-tree does not report tiling off: %v\n%s", err, out)
+	}
+	corner := func() bool {
+		rows := strings.Split(term.Snapshot(), "\n")
+		if at.Y >= len(rows) {
+			return false
+		}
+		row := []rune(rows[at.Y])
+		return at.X < len(row) && row[at.X] == '╭'
+	}
+	deadline = time.Now().Add(uiTimeout)
+	for !corner() {
+		if time.Now().After(deadline) {
+			t.Fatalf("the attached client did not draw the pane at %d,%d\n%s", at.X, at.Y, term.Snapshot())
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	fmt.Fprintf(&log, "first pane's corner on screen at %d,%d\n", at.X, at.Y)
+	saveArtifact(t, term, dir, "after-set-layout-state")
 	_ = os.WriteFile(filepath.Join(dir, "layout-tree.txt"), []byte(log.String()), 0o644)
 }
