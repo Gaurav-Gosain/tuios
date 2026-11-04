@@ -408,8 +408,13 @@ func (a *App) sideEdge(c *ui.Context, pal *palette, row float32) {
 // the window's right edge, whose header keeps room for the window's
 // controls (controlsRoom).
 func (a *App) viewerCard(c *ui.Context, pal *palette, s *proto.Session, v *sideView, width float32) {
-	card := paned(ui.Column(c.Key("side")).Width(width).Shrink(0).MinHeight(0).Radius(14).Clip().Background(pal.card), pal).
-		Focusable().Bind(a.paneRef("side-card"))
+	card := ui.Column(c.Key("side")).Width(width).Shrink(0).MinHeight(0).Radius(14).Clip().Background(pal.card)
+	if v.full {
+		floating(card, pal)
+	} else {
+		paned(card, pal)
+	}
+	card.Focusable().Bind(a.paneRef("side-card"))
 	a.side.focused = card.FocusWithin()
 	card.Children(func() {
 		if v.kind == sideFiles && v.file != nil {

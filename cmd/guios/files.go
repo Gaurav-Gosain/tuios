@@ -375,7 +375,13 @@ func (a *App) treeKeys(tree ui.Element, ls *ui.ListState, s *proto.Session, item
 		case v != nil && v.kind == sideFiles && v.file != nil && v.file.path == it.path:
 			a.closeView(s)
 		default:
+			// Quick look: over the panes, so no terminal rewraps, unless
+			// the viewer already shows beside them.
+			quick := v == nil || v.kind != sideFiles
 			open(it, false)
+			if v := a.viewOf(s); v != nil && quick {
+				v.full = true
+			}
 		}
 	case tree.Shortcut(0, ui.KeyEnter):
 		if it.Dir {

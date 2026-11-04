@@ -50,7 +50,7 @@ func (a *App) startTable(l *fileLook) {
 			}
 			t.data = d
 			l.mark("parsed " + itoa(len(d.Rows)) + " rows")
-			t.cols = append(t.cols, ui.TableColumn{Title: "#", ID: "#", Width: max(float32(len(itoa(len(d.Rows))))*8+16, 36), Align: ui.End, Fixed: true})
+			t.cols = append(t.cols, ui.TableColumn{Title: "#", ID: "#", Width: max(float32(len(itoa(len(d.Rows))))*8+16, 36), Align: ui.End, Fixed: true, RowHeader: true})
 			for i := range d.Width {
 				title := ""
 				if i < len(d.Header) {
@@ -60,7 +60,8 @@ func (a *App) startTable(l *fileLook) {
 				if d.Numeric[i] {
 					align = ui.End
 				}
-				w := min(max(float32(d.Width[i])*7.4+24, 56), 360)
+				// The header is bolder than the cells: its runes take more.
+				w := min(max(float32(d.Width[i])*7.4+24, float32(len([]rune(title)))*8.2+30, 56), 360)
 				t.cols = append(t.cols, ui.TableColumn{Title: title, ID: itoa(i), Width: w, MinWidth: 40, Align: align})
 			}
 		})
