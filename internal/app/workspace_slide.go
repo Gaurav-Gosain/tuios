@@ -8,7 +8,9 @@ import (
 	uv "github.com/charmbracelet/ultraviolet"
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
+	"github.com/Gaurav-Gosain/tuios/internal/theme"
 )
 
 // A workspace switch slides. Going to a higher workspace number moves the
@@ -38,7 +40,15 @@ import (
 // layers from the cells the compositor already holds. The snapshot is one
 // compose without the rail or the dock, once per switch.
 //
-// When it is a cut. appearance.motion = none, calm mode, a tape or a remote
+// The fade. appearance.workspace_transition = "fade" keeps the same snapshot
+// and the same clock, but the new panes are drawn in place and each kept cell
+// is blended into the cell the compositor drew (themeBlendCell, the theme
+// fade's mix and its table), so a frame costs one pass over the pane area and
+// no allocation beyond the slide's. appearance.workspace_transition_ms sets
+// the length and animation_speed scales it.
+//
+// When it is a cut. appearance.workspace_transition = none or a length of 0,
+// a fade at 16 colours, appearance.motion = none, calm mode, a tape or a remote
 // command (MotionAllows), the screen saver, a first frame not yet drawn, a
 // scratch group shown or hidden, and a client too slow to draw the slide: one
 // whose frame rate gives the slide fewer than slideMinFrames frames, or whose
@@ -48,8 +58,6 @@ import (
 
 // Slide timing.
 const (
-	// slideDuration is how long a slide takes at animation_speed 100.
-	slideDuration = 200 * time.Millisecond
 	// slideRemoteFPS caps the frame rate for a client across a network.
 	slideRemoteFPS = 30
 	// slideMinFrames is the fewest frames a slide may be drawn in. Fewer
@@ -74,6 +82,9 @@ type workspaceSlide struct {
 	// old is the pane area of the workspace being left. spare is the buffer
 	// the next snapshot is taken into, so a retarget allocates nothing.
 	old, spare *uv.Buffer
+	// fade is set when the switch is a cross-fade: the new panes stay in
+	// place and the kept cells blend into them, with no offset.
+	fade bool
 	// still turns the slide pass off while a snapshot is composed.
 	still bool
 	// cost is how long a frame takes to compose, smoothed over the last few
@@ -88,6 +99,7 @@ func (s *workspaceSlide) running() bool { return s.old != nil }
 func (s *workspaceSlide) end() {
 	s.old, s.spare = nil, nil
 	s.start = time.Time{}
+	s.fade = false
 }
 
 // slideEase is ease-out cubic: fast at first, settling onto the end with no
@@ -135,19 +147,19 @@ func (m *OS) slideRemote() bool {
 	return m.BrowserClient || (m.RemoteClient && !m.SSHIsLoopback)
 }
 
-// slideDur is the slide's length, scaled by appearance.animation_speed.
+// slideDur is the transition's length: appearance.workspace_transition_ms,
+// scaled by appearance.animation_speed.
 func (m *OS) slideDur() time.Duration {
-	speed := m.Settings.AnimationSpeed
-	if speed == 0 {
-		speed = config.AnimationSpeedDefault
-	}
-	speed = min(max(speed, config.AnimationSpeedMin), config.AnimationSpeedMax)
-	return slideDuration * config.AnimationSpeedDefault / time.Duration(speed)
+	return m.Settings.WorkspaceTransitionDuration()
 }
 
 // slideAllowed reports whether a switch made now slides.
 func (m *OS) slideAllowed() bool {
-	if !m.Settings.MotionAllows(config.MotionBasic) || m.screensaver.active || m.themeFx.lastFrame == "" {
+	if m.Settings.WorkspaceTransitionStyle() == config.WorkspaceTransitionNone || m.screensaver.active || m.themeFx.lastFrame == "" {
+		return false
+	}
+	// A fade mixes colours, which 16 colours cannot show: it is a cut.
+	if m.Settings.WorkspaceTransitionStyle() == config.WorkspaceTransitionFade && theme.Depth() == overlay.Depth16 {
 		return false
 	}
 	frame := m.slideFrameInterval()
@@ -208,6 +220,7 @@ func (m *OS) beginWorkspaceSlide(from, to int) {
 		return
 	}
 	s.dir, s.from, s.to = dir, from, to
+	s.fade = m.Settings.WorkspaceTransitionStyle() == config.WorkspaceTransitionFade
 	s.start, s.at, s.area = now, at, area
 	s.dur = time.Duration(float64(m.slideDur()) * (1 - at))
 	m.renderSkipped = false
@@ -255,6 +268,10 @@ type slideFrame struct {
 	newClip   image.Rectangle
 	oldClip   image.Rectangle
 	oldOrigin int
+	// fade is how much of the new workspace shows, out of themeMixLevels,
+	// when the switch is a cross-fade. A fade has no shift and no clip.
+	fade   uint8
+	isFade bool
 }
 
 // slideAt works out the slide for a frame composed at now. It ends a slide
@@ -272,6 +289,14 @@ func (m *OS) slideAt(now time.Time) (slideFrame, bool) {
 	}
 	a := s.area
 	w := a.Dx()
+	if s.fade {
+		level := uint8(math.Round(e * themeMixLevels))
+		if level >= themeMixLevels {
+			s.end()
+			return slideFrame{}, false
+		}
+		return slideFrame{area: a, newClip: a, fade: level, isFade: true}, true
+	}
 	moved := int(math.Round(e * float64(w)))
 	if moved >= w {
 		s.end()
@@ -298,6 +323,20 @@ func (m *OS) slideAt(now time.Time) (slideFrame, bool) {
 // the pane area it still holds, and repairs the wide glyphs cut at the seam.
 func (m *OS) drawSlideOld(canvas *frameCanvas, f slideFrame) {
 	old := m.wsSlide.old
+	if f.isFade {
+		a := f.area
+		for y := a.Min.Y; y < a.Max.Y && y < len(canvas.Lines); y++ {
+			line := canvas.Lines[y][a.Min.X:a.Max.X]
+			src := old.Lines[y-a.Min.Y]
+			for x := range line {
+				m.themeBlendCell(&line[x], &src[x], f.fade)
+			}
+			// The glyph changes cell by cell at half way, which can split a
+			// wide glyph from its second half.
+			fixWideEdges(line, 0, len(line))
+		}
+		return
+	}
 	r := f.oldClip
 	for y := r.Min.Y; y < r.Max.Y && y < len(canvas.Lines); y++ {
 		line := canvas.Lines[y]

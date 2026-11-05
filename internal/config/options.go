@@ -582,6 +582,17 @@ var optionSpecs = []Option{
 		Min:         ThemeTransitionMsMin, Max: ThemeTransitionMsMax,
 	},
 	{
+		Path: "appearance.workspace_transition", Type: OptionString, Section: "appearance",
+		Description: "How tuios shows a workspace switch: slide, fade or none",
+		Accepted:    WorkspaceTransitions, Default: WorkspaceTransitionSlide,
+	},
+	{
+		Path: "appearance.workspace_transition_ms", Type: OptionInt, Section: "appearance",
+		Description: "Milliseconds a workspace transition takes at animation speed 100. 0 is a cut.",
+		Default:     strconv.Itoa(WorkspaceTransitionMsDefault),
+		Min:         0, Max: WorkspaceTransitionMsMax,
+	},
+	{
 		Path: "appearance.scroll_column_max", Type: OptionInt, Section: "appearance",
 		Description: "Highest a column's width may be set to in the scrolling layout, as a percent. 100 lets a column fill the screen, at the cost of the next one peeking in at the edge.",
 		Default:     strconv.Itoa(ScrollColumnWidthMax),

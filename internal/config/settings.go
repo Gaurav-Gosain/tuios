@@ -833,6 +833,14 @@ type Settings struct {
 	// 100. Read it through ThemeTransitionDuration.
 	ThemeTransitionMs int
 
+	// WorkspaceTransition is how a workspace switch is shown: slide, fade or
+	// none. Read it through WorkspaceTransitionStyle, which also honours
+	// appearance.motion.
+	WorkspaceTransition string
+	// WorkspaceTransitionMs is how long it takes at animation speed 100. Zero
+	// is a cut. Read it through WorkspaceTransitionDuration.
+	WorkspaceTransitionMs int
+
 	// ZoomBorderless makes a zoom the whole pane region with no chrome: the
 	// zoomed pane drops its border and title bar, and its guest is told the
 	// full size of the region. zoom_size and zoom_max_width do not apply while
@@ -1097,6 +1105,8 @@ func DefaultSettings() Settings {
 		AnimationSpeed:              AnimationSpeedDefault,
 		ThemeTransition:             ThemeTransitionNone,
 		ThemeTransitionMs:           ThemeTransitionMsDefault,
+		WorkspaceTransition:         WorkspaceTransitionSlide,
+		WorkspaceTransitionMs:       WorkspaceTransitionMsDefault,
 		ZoomFollowsFocus:            true,
 		WindowButtonZoom:            true,
 		DimUnfocused:                0,

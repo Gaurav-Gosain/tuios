@@ -592,6 +592,25 @@ Calm mode sits over `appearance.motion`. When you turn calm mode off, the
 motion level you set comes back. See
 [KEYBINDINGS.md](KEYBINDINGS.md#calm-mode) for what calm mode changes.
 
+## Workspace transition
+
+`appearance.workspace_transition` sets how tuios shows a switch between
+workspaces.
+
+- `slide` moves the old workspace out and the new one in. This is the default.
+- `fade` blends the cells of the old workspace into the new workspace. At 16
+  colors it is a cut.
+- `none` shows the new workspace in one frame.
+
+```toml
+[appearance]
+workspace_transition = "fade"
+workspace_transition_ms = 200   # milliseconds, from 0 to 1000. 0 is a cut.
+```
+
+`appearance.animation_speed` also applies to the length. `appearance.motion =
+"none"` and calm mode always give a cut.
+
 ## Theme transition
 
 `appearance.theme_transition` sets how tuios shows a change of theme. The

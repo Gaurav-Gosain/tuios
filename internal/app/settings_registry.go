@@ -157,6 +157,8 @@ var settingLabels = map[string]string{
 	"appearance.animation_speed":                "Animation speed",
 	"appearance.theme_transition":               "Theme transition",
 	"appearance.theme_transition_duration":      "Theme transition time (ms)",
+	"appearance.workspace_transition":           "Workspace transition",
+	"appearance.workspace_transition_ms":        "Workspace transition time (ms)",
 	"appearance.zoom_borderless":                "Borderless zoom",
 	"appearance.zoom_follows_focus":             "Zoom follows focus",
 	"appearance.window_button_zoom":             "Tiled zoom button",
@@ -251,6 +253,7 @@ var settingSteps = map[string]int{
 	"appearance.popup_dim":                 5,
 	"appearance.animation_speed":           25,
 	"appearance.theme_transition_duration": 50,
+	"appearance.workspace_transition_ms":   50,
 	"hints.dim":                            5,
 	"appearance.sidebar.width":             2,
 }

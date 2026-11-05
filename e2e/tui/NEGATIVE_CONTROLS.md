@@ -13124,6 +13124,19 @@ Run on 2026-11-05 on Linux on the branch feat/workspace-slide.
 | Main (a3da6ab91) | `full`: "up: only 0 presented frames showed both workspaces; the switch was a cut" | **caught** |
 | The direction flipped in `beginWorkspaceSlide` (`to > from` gives -1) | `full`: "up: frame 1 has the A workspace at column 95, right of the B one at 0" | **caught** |
 
+The fade, none and duration subtests start a client with
+`appearance.workspace_transition` and `workspace_transition_ms` set. A fade must
+present at least two frames whose ink is neither workspace's own, and no frame
+with both workspaces side by side. The last frame must equal the settled pane
+area, colours included. `none` and a length of 0 must present no mid frame. A
+length of 1000 ms must present more mid frames than 100 ms.
+
+Run on 2026-11-05 on Linux on the branch feat/workspace-transition-style.
+
+| Control | Where it fails | Verdict |
+| --- | --- | --- |
+| The fade's `themeBlendCell` call in `drawSlideOld` removed | `fade`: "only 0 frames showed blended colours; the switch was a cut" | **caught** |
+
 Frames, the settled screens and PNGs are under `TUIOS_E2E_FRAMES`, in the
 test's folder. Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestWorkspaceSwitchSlides$' -v .`.

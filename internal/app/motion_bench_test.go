@@ -166,6 +166,26 @@ func BenchmarkWorkspaceSlideFrame(b *testing.B) {
 			b.Fatal("the slide ended during the run")
 		}
 	})
+	b.Run("fade", func(b *testing.B) {
+		m := setup(b)
+		prev := m.Settings.WorkspaceTransition
+		m.Settings.WorkspaceTransition = config.WorkspaceTransitionFade
+		b.Cleanup(func() { m.Settings.WorkspaceTransition = prev })
+		m.beginWorkspaceSlide(1, 2)
+		if !m.wsSlide.running() || !m.wsSlide.fade {
+			b.Fatal("the fade did not start")
+		}
+		m.CurrentWorkspace = 2
+		m.wsSlide.dur = time.Hour
+		m.composeFrame()
+		b.ReportAllocs()
+		b.ResetTimer()
+		for b.Loop() {
+			m.wsSlide.start = time.Now().Add(-time.Hour / 5)
+			flood(b, m)
+			_ = m.composeFrame()
+		}
+	})
 	b.Run("begin", func(b *testing.B) {
 		m := setup(b)
 		b.ReportAllocs()
