@@ -1280,7 +1280,17 @@ func (m *OS) cockpitAction(action string) tea.Cmd {
 	case "follow":
 		m.CockpitThreadBottom()
 	case "a", "A", "r":
+		// A click on the card's button is no typed text: it answers at
+		// once. On a risky call it asks, as a key does, and a second click
+		// on the same button (or enter) answers.
+		decision := map[string]string{"a": session.ApprovalOnce, "A": session.ApprovalAlways, "r": session.ApprovalDeny}[action]
+		if m.InboxConfirmOpen() && m.Inbox.approvals.confirm.decision == decision {
+			return m.InboxConfirmKey("enter")
+		}
 		cmd, _ := m.CockpitAnswerLetter(action)
+		if it, ok := m.inboxSelected(); ok && m.InboxConfirmOpen() && !inboxRisky(it) {
+			return m.InboxConfirmKey("enter")
+		}
 		return cmd
 	case "R":
 		m.cockpitSync()

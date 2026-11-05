@@ -280,7 +280,7 @@ func (m *OS) renderCockpit() (string, int, int, int) {
 	// A state that moves with the clock or the keyboard is drawn afresh.
 	// The reply editor is not one: what it draws is in the key.
 	transient := st.ck.img != nil || ck.spawn != nil || ck.kb.add != nil || ck.kb.drag != nil || st.Peek != nil || st.selectEditing || m.InboxSnoozePicking() || st.agents.sheet != nil ||
-		st.approvals.reason != nil || st.approvals.armed.key != ""
+		st.approvals.reason != nil || st.approvals.armed.key != "" || st.approvals.confirm != nil
 	if !transient && ck.frame != "" && ck.frameAt == key {
 		return ck.frame, top, w, h
 	}
@@ -1756,6 +1756,8 @@ func (m *OS) cockpitHints(now time.Time) []overlay.Hint {
 		return inboxSnoozeHints()
 	case st.agents.sheet != nil:
 		return m.bulkSheetHints()
+	case st.approvals.confirm != nil:
+		return inboxConfirmHints(st.approvals.confirm.decision)
 	case len(st.agents.marks) > 0:
 		return m.bulkHints()
 	case st.Peek != nil:
@@ -2241,6 +2243,11 @@ func (m *OS) ckApprovalLines(it session.AttentionItem, where string, width int, 
 		}
 	}
 	detail = append(detail, inboxRiskLines(it, width)...)
+	if line, ok := m.inboxConfirmLine(it); ok {
+		for _, l := range wrapPlain(line, width) {
+			detail = append(detail, "  "+l)
+		}
+	}
 	if key, armed := m.inboxArmedFor(it, now); armed {
 		press := m.Inbox.approvals.armed.press
 		if press == "" {

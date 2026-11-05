@@ -24,7 +24,7 @@ func TestInboxDigitsFromSendKeysAnswerNothing(t *testing.T) {
 	m, r := approvalsOS(t, heldApproval("1", "r1", session.ApprovalOnce, session.ApprovalAlways, session.ApprovalDeny))
 	m.ProcessingRemoteKeys = true
 	press(m, "1")
-	if cmd := m.InboxNumber(1); cmd != nil {
+	if cmd := numberEnter(m, 1); cmd != nil {
 		cmd()
 		t.Fatalf("a 1 from send-keys answered a held approval: %v", r.replies())
 	}
@@ -33,33 +33,32 @@ func TestInboxDigitsFromSendKeysAnswerNothing(t *testing.T) {
 	}
 	m.ProcessingRemoteKeys = false
 	press(m, "1")
-	if cmd := m.InboxNumber(1); cmd == nil {
+	if cmd := numberEnter(m, 1); cmd == nil {
 		t.Fatalf("a 1 from the keyboard did not answer: %q", lastNote(m))
 	}
 }
 
-// TestInboxRiskySecondPressFromSendKeysAnswersNothing: the first press of an
-// allow on a risky approval arms it, and the second sends it. A second press
-// that send-keys typed must not complete what the person started.
+// TestInboxRiskySecondPressFromSendKeysAnswersNothing: the person's 1 on a
+// risky approval asks, and enter sends it. An enter that send-keys typed must
+// not complete what the person started, and a 1 from send-keys must not ask
+// for the person's next enter.
 func TestInboxRiskySecondPressFromSendKeysAnswersNothing(t *testing.T) {
 	m, r := approvalsOS(t, riskyHeld())
 	press(m, "1")
-	if cmd := m.InboxNumber(1); cmd != nil {
-		t.Fatal("the first press on a risky approval sent it")
+	if cmd := m.InboxNumber(1); cmd != nil || !m.InboxConfirmOpen() {
+		t.Fatal("the person's 1 on a risky approval did not ask")
 	}
 	m.ProcessingRemoteKeys = true
-	press(m, "1")
-	if cmd := m.InboxNumber(1); cmd != nil {
+	if cmd := m.InboxConfirmKey("enter"); cmd != nil {
 		cmd()
-		t.Fatalf("a second press from send-keys allowed a risky call: %v", r.replies())
+		t.Fatalf("an enter from send-keys allowed a risky call: %v", r.replies())
 	}
-	// Nor may send-keys arm it for the person's next press.
+	// Nor may send-keys ask for the person's next enter.
 	press(m, "1")
 	m.InboxNumber(1)
 	m.ProcessingRemoteKeys = false
-	press(m, "1")
-	if cmd := m.InboxNumber(1); cmd != nil {
-		t.Fatal("a press from send-keys armed a risky allow for the person's next press")
+	if m.InboxConfirmOpen() {
+		t.Fatal("a 1 from send-keys asked for the person's next enter")
 	}
 }
 
@@ -72,12 +71,12 @@ func TestInboxQuestionDigitFromSendKeysAnswersNothing(t *testing.T) {
 	m.renderInbox()
 	settleShown(m)
 	m.ProcessingRemoteKeys = true
-	m.InboxNumber(1)
+	numberEnter(m, 1)
 	if reachedSend(m) {
 		t.Fatal("a digit from send-keys answered a question")
 	}
 	m.ProcessingRemoteKeys = false
-	m.InboxNumber(1)
+	numberEnter(m, 1)
 	if !reachedSend(m) {
 		t.Fatalf("a digit from the keyboard did not answer: %q", lastNote(m))
 	}
@@ -113,7 +112,7 @@ func TestThePersonsKeyAnswersDuringASendKeysRun(t *testing.T) {
 	prev := getInputHandler()
 	SetInputHandler(func(msg tea.Msg, o *OS) (tea.Model, tea.Cmd) {
 		o.InboxKeyPressed("1")
-		answered = o.InboxNumber(1)
+		answered = numberEnter(o, 1)
 		return o, nil
 	})
 	t.Cleanup(func() { SetInputHandler(prev) })

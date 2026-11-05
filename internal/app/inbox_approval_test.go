@@ -27,7 +27,7 @@ func TestInboxReplyApprovalOnlySendsWhatThePromptTakes(t *testing.T) {
 		item("2", session.AttentionErrored, "work", "w-2", "boom", 1),
 	}})
 	m.OpenInbox("")
-	if cmd := m.InboxReplyApproval(session.ApprovalAlways); cmd != nil {
+	if cmd := replyEnter(m, session.ApprovalAlways); cmd != nil {
 		t.Fatal("always was sent for a prompt that does not offer it")
 	}
 	if n := len(m.Notifications); n != 1 || !strings.Contains(m.Notifications[0].Message, "does not offer always") {
@@ -35,7 +35,7 @@ func TestInboxReplyApprovalOnlySendsWhatThePromptTakes(t *testing.T) {
 	}
 
 	m.InboxMove(1)
-	if cmd := m.InboxReplyApproval(session.ApprovalOnce); cmd != nil {
+	if cmd := replyEnter(m, session.ApprovalOnce); cmd != nil {
 		t.Fatal("an errored item was answered")
 	}
 	if !strings.Contains(m.Notifications[len(m.Notifications)-1].Message, "answer a held approval") {
@@ -45,7 +45,7 @@ func TestInboxReplyApprovalOnlySendsWhatThePromptTakes(t *testing.T) {
 	// With no daemon connection there is no nonce, so nothing can be sent
 	// as the person.
 	m.InboxMove(-1)
-	if cmd := m.InboxReplyApproval(session.ApprovalOnce); cmd != nil {
+	if cmd := replyEnter(m, session.ApprovalOnce); cmd != nil {
 		t.Fatal("an answer was sent with no daemon client to vouch for it")
 	}
 }
@@ -124,7 +124,7 @@ func TestInboxSelectionFollowsTheItem(t *testing.T) {
 		t.Fatalf("after a re-sort the cursor is on %s (%q), want the selected item 2", it.ID, it.Summary)
 	}
 	settleShown(m)
-	m.InboxReplyApproval(session.ApprovalOnce)
+	replyEnter(m, session.ApprovalOnce)
 	if !reachedSend(m) {
 		t.Fatalf("the selected, settled prompt was not answered: %q", lastNote(m))
 	}
@@ -137,7 +137,7 @@ func TestInboxSelectionFollowsTheItem(t *testing.T) {
 	if it, _ := m.inboxSelected(); it.ID == "2" {
 		t.Fatal("the cursor is on a closed item")
 	}
-	m.InboxReplyApproval(session.ApprovalOnce)
+	replyEnter(m, session.ApprovalOnce)
 	if reachedSend(m) {
 		t.Fatal("a prompt that moved under the cursor was answered before it was drawn")
 	}
@@ -153,19 +153,19 @@ func TestInboxAnswersOnlyWhatWasOnScreen(t *testing.T) {
 	m.OpenInbox("")
 
 	// Never drawn.
-	m.InboxReplyApproval(session.ApprovalOnce)
+	replyEnter(m, session.ApprovalOnce)
 	if reachedSend(m) || !strings.Contains(lastNote(m), "just changed") {
 		t.Fatalf("a prompt never drawn was answered: %q", lastNote(m))
 	}
 	// Drawn this instant.
 	m.renderInbox()
-	m.InboxReplyApproval(session.ApprovalOnce)
+	replyEnter(m, session.ApprovalOnce)
 	if reachedSend(m) {
 		t.Fatal("a prompt drawn this instant was answered")
 	}
 	// Drawn and read.
 	settleShown(m)
-	m.InboxReplyApproval(session.ApprovalOnce)
+	replyEnter(m, session.ApprovalOnce)
 	if !reachedSend(m) {
 		t.Fatalf("a settled prompt was not answered: %q", lastNote(m))
 	}
@@ -174,13 +174,13 @@ func TestInboxAnswersOnlyWhatWasOnScreen(t *testing.T) {
 	changed := held
 	changed.Summary = "approve Bash: rm -rf ~"
 	m.applyInboxEvents(InboxEventsMsg{Events: []InboxEvent{{Action: session.AttentionUpdated, Item: &changed}}})
-	m.InboxReplyApproval(session.ApprovalOnce)
+	replyEnter(m, session.ApprovalOnce)
 	if reachedSend(m) {
 		t.Fatal("a key answered a line that was never drawn")
 	}
 	m.renderInbox()
 	settleShown(m)
-	m.InboxReplyApproval(session.ApprovalOnce)
+	replyEnter(m, session.ApprovalOnce)
 	if !reachedSend(m) {
 		t.Fatalf("the new line, once read, was not answered: %q", lastNote(m))
 	}
@@ -189,7 +189,7 @@ func TestInboxAnswersOnlyWhatWasOnScreen(t *testing.T) {
 	renewed := changed
 	renewed.RequestID = "r2"
 	m.applyInboxEvents(InboxEventsMsg{Events: []InboxEvent{{Action: session.AttentionUpdated, Item: &renewed}}})
-	m.InboxReplyApproval(session.ApprovalOnce)
+	replyEnter(m, session.ApprovalOnce)
 	if reachedSend(m) {
 		t.Fatal("a new hold was answered before it was drawn")
 	}
@@ -226,7 +226,7 @@ func TestInboxShowsTheWholePrompt(t *testing.T) {
 		t.Errorf("a line with a hidden character reads as answerable:\n%s", ansi.Strip(out))
 	}
 	settleShown(m)
-	m.InboxReplyApproval(session.ApprovalOnce)
+	replyEnter(m, session.ApprovalOnce)
 	if reachedSend(m) || !strings.Contains(lastNote(m), "cannot be shown whole") {
 		t.Fatalf("a line with a hidden character was answered: %q", lastNote(m))
 	}

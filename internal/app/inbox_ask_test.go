@@ -25,7 +25,7 @@ func TestInboxAnswersAQuestionWithItsDigits(t *testing.T) {
 	m.applyInboxSnapshot(InboxSnapshotMsg{Items: []session.AttentionItem{askItem("1", "work", "w-9", "yes", "no", "later")}})
 	m.OpenInbox("")
 
-	m.InboxNumber(2)
+	numberEnter(m, 2)
 	if reachedSend(m) || !strings.Contains(lastNote(m), "just appeared") {
 		t.Fatalf("a question never drawn was answered: %q", lastNote(m))
 	}
@@ -37,11 +37,11 @@ func TestInboxAnswersAQuestionWithItsDigits(t *testing.T) {
 		}
 	}
 	settleShown(m)
-	m.InboxNumber(4)
+	numberEnter(m, 4)
 	if reachedSend(m) || !strings.Contains(lastNote(m), "takes 1 to 3") {
 		t.Fatalf("a digit the question does not take: %q", lastNote(m))
 	}
-	m.InboxNumber(2)
+	numberEnter(m, 2)
 	if !reachedSend(m) {
 		t.Fatalf("a settled question was not answered: %q", lastNote(m))
 	}

@@ -13150,3 +13150,19 @@ Run on 2026-11-05 on Linux, on the shared step model (Flow, Prompt and Bridge in
 
 Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestSetUpAMachineOnATerminal$' -v .`.
+
+## A key in the agents view asks before it answers a held approval
+
+`TestInboxRiskyApprovalTakesTwoPresses` holds a risky `rm -rf build/` through
+the real hook. `1` must ask ("Press enter to allow") and send nothing. Then
+`2` and "please also", one key every 400 ms, must answer nothing and leave no
+answer waiting. `1` and enter must allow it.
+
+Run on 2026-11-05 on Linux. The fixed build passes.
+
+| Control | Where it fails | Verdict |
+| --- | --- | --- |
+| origin/main before the change, where a key answers at once | "the key did not ask before it allowed": the first `1` arms the old second press and nothing asks | **caught** |
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestInboxRiskyApprovalTakesTwoPresses$' -v .`.

@@ -13,8 +13,8 @@ import (
 // Every action is a binding in [keybindings.inbox], and these are the
 // defaults: j and k move, space reads the prompt of an approval or a
 // question, enter goes to the agent's pane (or opens its mail thread), a A r
-// R and 1 2 3 answer a held approval (allow once, always allow, reject; R
-// rejects and says why), 1 to 9 pick the answer to a question ask-human put
+// and 1 2 3 ask to answer a held approval (allow once, always allow,
+// reject), and enter then answers it (R rejects and says why), 1 to 9 pick the answer to a question ask-human put
 // to the person, r or i replies to an agent or to mail, tab writes a reply,
 // n starts a new agent, d dismisses, y resumes a conversation a restart
 // left, p passes on held mail, f steps the filter, / searches, m opens the
@@ -51,8 +51,13 @@ func handleInboxInput(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	if o.CockpitNewCardOpen() {
 		return o, o.CockpitNewCardKey(msg)
 	}
-	// A risky allow's first press waits for the same key again; any other
-	// key resets it.
+	// An answer key only asks: enter sends the answer, and any other key
+	// drops it and does nothing else.
+	if o.InboxConfirmOpen() {
+		return o, o.InboxConfirmKey(msg.String())
+	}
+	// A risky allow's first press in the peek waits for the same key again;
+	// any other key resets it.
 	o.InboxKeyPressed(msg.String())
 	if o.InboxPeeking() {
 		return handleInboxPeekInput(msg, o)
@@ -219,8 +224,14 @@ func handleInboxPeekInput(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	if o.InboxPeekComposing() {
 		return o, o.InboxPeekTextKey(msg)
 	}
+	// A key that answers the prompt only asks: enter answers, and any other
+	// key drops it and does nothing else.
+	if o.InboxPeekAskOpen() {
+		return o, o.InboxPeekAskKey(key)
+	}
 	if len(key) == 1 && key[0] >= '1' && key[0] <= '9' {
-		return o, o.InboxAnswer(harness.ActionChoose, key)
+		o.InboxPeekAsk(harness.ActionChoose, key)
+		return o, nil
 	}
 	action := lookupAction(o, msg, overlayKeys(o).GetInboxPeekAction)
 	if action == "" {
@@ -233,11 +244,11 @@ func handleInboxPeekInput(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	case config.ActionPeekGo:
 		o.InboxPeekGo()
 	case config.ActionPeekApprove:
-		return o, o.InboxAnswer(harness.ActionApprove, "")
+		o.InboxPeekAsk(harness.ActionApprove, "")
 	case config.ActionPeekApproveAlways:
-		return o, o.InboxAnswer(harness.ActionApproveAlways, "")
+		o.InboxPeekAsk(harness.ActionApproveAlways, "")
 	case config.ActionPeekDeny:
-		return o, o.InboxAnswer(harness.ActionDeny, "")
+		o.InboxPeekAsk(harness.ActionDeny, "")
 	case config.ActionPeekType:
 		o.InboxPeekStartText()
 	case config.ActionPeekReadAgain:

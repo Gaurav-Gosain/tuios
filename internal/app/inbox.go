@@ -1539,12 +1539,15 @@ func (m *OS) InboxReplyApproval(decision string) tea.Cmd {
 		m.ShowNotification("This prompt just changed. Read it, then answer", "warning", m.Settings.NotificationDuration)
 		return nil
 	}
-	// A risky allow takes a second press, and a plan is approved only once
-	// it has been read to its end. See inbox_approvals_ext.go.
+	// A plan is approved only once it has been read to its end. See
+	// inbox_approvals_ext.go.
 	if m.inboxApprovalGate(it, decision) {
 		return nil
 	}
-	return m.inboxReplyCmd(it, decision)
+	// The key only asks: enter answers (InboxConfirmKey).
+	m.Inbox.approvals.armed = inboxArmed{}
+	m.Inbox.approvals.confirm = &inboxConfirm{decision: decision, itemID: it.ID, shown: inboxShownKey(it)}
+	return nil
 }
 
 // inboxNotHeldWords is what an answer key says on an item that no hold

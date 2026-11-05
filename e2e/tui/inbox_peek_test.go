@@ -91,7 +91,8 @@ func TestInboxPeekAnswersAnApproval(t *testing.T) {
 		t.Fatalf("the peek did not open again: %v\n%s", err, term.Snapshot())
 	}
 
-	if err := term.SendKeys("a"); err != nil {
+	// a asks, and enter answers.
+	if err := term.SendKeys("a", tuitest.Enter); err != nil {
 		t.Fatalf("approve: %v", err)
 	}
 	deadline := time.Now().Add(uiTimeout)

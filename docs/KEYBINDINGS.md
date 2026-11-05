@@ -2088,10 +2088,10 @@ not offered and do what an unbound key does: after `ctrl+b` in terminal mode,
 | `v` | rail agent row | Review the pane's changes |
 | `x` | rail agent row with messages queued | Drop the newest queued message still waiting; `u` on the row within 10 seconds queues it again. On a row with nothing queued, `x` opens the rail's menu as before. From `send-keys` or a tape, neither `x` nor the undo touches the queue, since both act as the person |
 
-On a risky approval (one a [risk rule](AGENT_STATE.md#risk-rules) matched),
-`1` and `2` allow only on a second press of the same key within 3 seconds, and
-so do `a`, `A` and a digit in the peek; any other key resets the first press.
-The line the first press shows names the time it lapses.
+A key never answers a held approval alone. `1`, `2`, `3`, `a`, `A` and `r`
+ask first, and so do `a`, `A`, `d` and a digit in the peek: the card says what
+will happen, `enter` answers, and any other key cancels and does nothing
+else. A sentence typed into the list by mistake answers nothing.
 On a plan, `1` approves, `2` approves and accepts edits for the session, and
 `3` keeps it planning; `1` and `2` work once the plan's last line has been
 shown. The digits are not bindings.

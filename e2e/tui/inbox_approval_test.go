@@ -104,7 +104,8 @@ func TestInboxAnswersAHeldApproval(t *testing.T) {
 	// read, so wait past that before answering.
 	time.Sleep(answerSettle)
 
-	if err := term.SendKeys("1"); err != nil {
+	// The key asks, and enter answers.
+	if err := term.SendKeys("1", tuitest.Enter); err != nil {
 		t.Fatalf("answer: %v", err)
 	}
 	select {

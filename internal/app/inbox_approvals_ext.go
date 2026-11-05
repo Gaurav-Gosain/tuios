@@ -24,11 +24,15 @@ import (
 // (risk_ack and plan_sha, see session/approval_risk.go); this is the side the
 // person sees.
 //
+//   - A key in the list never answers alone. 1 2 3 and a A r ask first: the
+//     card says what will happen, enter does it, and any other key, esc
+//     among them, drops it and does nothing else. A sentence typed while the
+//     list has the keys, as by a person who thinks a reply box has them,
+//     cannot answer an approval however slowly it is typed.
 //   - An approval whose command matched a risk rule reads "risky:" on its row
-//     and names each rule, and why, in the detail. 1 and 2 allow it only on a
-//     second press of the same key within inboxRiskPressWindow; the first
-//     press says so in the detail. Any other key resets it. 3 denies at once.
-//     The peek holds its approving keys to the same rule.
+//     and names each rule, and why, in the detail. The peek allows it only
+//     on a second press of the same key within inboxRiskPressWindow; any
+//     other key resets it.
 //   - n on a held approval or plan whose harness takes a reason opens a
 //     "Reason:" line; enter denies with what was typed.
 //   - A plan is listed under Plans and shown whole in the detail, scrolled
@@ -54,6 +58,136 @@ type inboxApprovalState struct {
 	reason *inboxReasonLine
 	// plan is the plan shown in the detail.
 	plan inboxPlanView
+	// confirm is the answer a list key asked for, waiting for enter.
+	confirm *inboxConfirm
+	// peekAsk is the answer a key in the peek asked for, waiting for
+	// enter, and peekConfirmed holds that its enter answers now.
+	peekAsk       *inboxPeekAsk
+	peekConfirmed bool
+}
+
+// inboxPeekAsk is an answer a key in the peek asked for.
+type inboxPeekAsk struct {
+	action, value string
+}
+
+// InboxPeekAsk asks before a key in the peek answers the prompt: the peek
+// says what enter does, and any other key drops it. Typed text (t) is a
+// whole answer typed on purpose, and is not asked about.
+func (m *OS) InboxPeekAsk(action, value string) {
+	p := m.Inbox.Peek
+	if p == nil {
+		return
+	}
+	m.Inbox.approvals.armed = inboxArmed{}
+	m.Inbox.approvals.peekAsk = &inboxPeekAsk{action: action, value: value}
+	what := "Answer the prompt"
+	switch action {
+	case harness.ActionApprove:
+		what = "Allow it"
+	case harness.ActionApproveAlways:
+		what = "Always allow it"
+	case harness.ActionDeny:
+		what = "Reject it"
+	case harness.ActionChoose:
+		what = "Choose " + value
+	}
+	p.Note = what + "? Press enter to do it. Press esc to cancel."
+}
+
+// InboxPeekAskOpen reports whether an answer in the peek waits for enter.
+func (m *OS) InboxPeekAskOpen() bool {
+	return m.Inbox.Peek != nil && m.Inbox.approvals.peekAsk != nil
+}
+
+// InboxPeekAskKey takes the key after an answer key in the peek: enter
+// sends the answer, any other key drops it and does nothing else.
+func (m *OS) InboxPeekAskKey(key string) tea.Cmd {
+	a := m.Inbox.approvals.peekAsk
+	m.Inbox.approvals.peekAsk = nil
+	if p := m.Inbox.Peek; p != nil {
+		p.Note = ""
+	}
+	if a == nil || key != "enter" {
+		return nil
+	}
+	m.Inbox.approvals.peekConfirmed = true
+	defer func() { m.Inbox.approvals.peekConfirmed = false }()
+	return m.InboxAnswer(a.action, a.value)
+}
+
+// inboxConfirm is an answer a list key asked for. It answers the item as it
+// was drawn (inboxShownKey) or nothing.
+type inboxConfirm struct {
+	decision string
+	itemID   string
+	shown    string
+}
+
+// InboxConfirmOpen reports whether an answer waits for enter. It goes when
+// its item is no longer under the cursor.
+func (m *OS) InboxConfirmOpen() bool {
+	c := m.Inbox.approvals.confirm
+	if c == nil {
+		return false
+	}
+	if it, ok := m.inboxSelected(); !ok || it.ID != c.itemID {
+		m.Inbox.approvals.confirm = nil
+		return false
+	}
+	return true
+}
+
+// InboxConfirmKey takes the key after an answer key: enter sends the
+// answer, and any other key drops it and does nothing else.
+func (m *OS) InboxConfirmKey(key string) tea.Cmd {
+	c := m.Inbox.approvals.confirm
+	m.Inbox.approvals.confirm = nil
+	if c == nil || key != "enter" {
+		return nil
+	}
+	if m.refuseRemoteAnswer("An answer") {
+		return nil
+	}
+	it, ok := m.inboxSelected()
+	if !ok || it.ID != c.itemID || inboxShownKey(it) != c.shown {
+		m.ShowNotification("This prompt just changed. Read it, then answer", "warning", m.Settings.NotificationDuration)
+		return nil
+	}
+	return m.inboxReplyCmd(it, c.decision)
+}
+
+// inboxConfirmLine is what the open confirm says on it, if one is open.
+func (m *OS) inboxConfirmLine(it session.AttentionItem) (string, bool) {
+	c := m.Inbox.approvals.confirm
+	if c == nil || c.itemID != it.ID {
+		return "", false
+	}
+	target := printableTitle(inboxRiskTarget(it))
+	if r := []rune(target); len(r) > 60 {
+		target = string(r[:59]) + "…"
+	}
+	switch c.decision {
+	case session.ApprovalOnce:
+		return "Allow " + target + "? Press enter to allow. Press esc to cancel.", true
+	case session.ApprovalAlways:
+		return "Always allow " + target + "? Press enter to allow it always. Press esc to cancel.", true
+	case session.ApprovalAsk:
+		return "Hand " + target + " back to the pane? Press enter to do it. Press esc to cancel.", true
+	}
+	return "Reject " + target + "? Press enter to reject. Press esc to cancel.", true
+}
+
+// inboxConfirmHints are the hints while an answer waits for enter.
+func inboxConfirmHints(decision string) []overlay.Hint {
+	word := "reject"
+	switch decision {
+	case session.ApprovalOnce, session.ApprovalAlways:
+		word = "allow"
+	case session.ApprovalAsk:
+		word = "hand back"
+	}
+	return []overlay.Hint{{Key: overlay.EnterKey(), Label: word}, {Key: "esc", Label: "cancel"}}
 }
 
 // inboxArmed is one press waiting for its second.
@@ -159,9 +293,8 @@ func (m *OS) inboxArmedFor(it session.AttentionItem, now time.Time) (string, boo
 }
 
 // inboxApprovalGate runs the safer-approval checks on an answer from the list
-// keys. It returns stop true when the answer must not be sent now: a first
-// press of an allow on a risky item, or an allow of a plan whose end has not
-// been on screen.
+// keys. It returns stop true when the answer must not be asked for now: an
+// allow of a plan whose end has not been on screen.
 func (m *OS) inboxApprovalGate(it session.AttentionItem, decision string) (stop bool) {
 	// A key send-keys typed neither answers nor arms a second press.
 	if m.refuseRemoteAnswer("An answer") {
@@ -177,10 +310,6 @@ func (m *OS) inboxApprovalGate(it session.AttentionItem, decision string) (stop 
 			msg += ", " + strconv.Itoa(more) + " more below"
 		}
 		m.ShowNotification(msg, "info", m.Settings.NotificationDuration)
-		return true
-	}
-	if inboxRisky(it) && !m.inboxArm(decision, it, time.Now()) {
-		// The detail says what the second press does. Nothing is sent.
 		return true
 	}
 	return false
@@ -586,6 +715,11 @@ func (m *OS) inboxDetailExtra(it session.AttentionItem) (detail func(width int) 
 				return lines
 			}
 			lines = append(lines, inboxRiskLines(it, max(width-2, 8))...)
+			if line, ok := m.inboxConfirmLine(it); ok {
+				for _, l := range wrapPlain(line, max(width-2, 8)) {
+					lines = append(lines, "  "+l)
+				}
+			}
 			if key, armed := m.inboxArmedFor(it, now); armed {
 				press := m.Inbox.approvals.armed.press
 				if press == "" {
@@ -643,6 +777,10 @@ func (m *OS) inboxPeekRiskGate(p *inboxPeek, action, value string) ([]string, bo
 	}
 	if !inboxPeekApproves(action) {
 		return nil, true
+	}
+	if m.Inbox.approvals.peekConfirmed {
+		// Enter after the peek asked is the second step.
+		return slices.Clone(cur.Risk), true
 	}
 	key := "peek:" + action
 	if action == harness.ActionChoose {

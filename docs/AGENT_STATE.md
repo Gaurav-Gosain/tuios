@@ -2391,8 +2391,8 @@ model and state, its branch, session, diff, context and cost, then its thread,
 and at the bottom the card of what it asks. A held approval's card shows the
 command whole, where it runs, and the buttons that answer it: `a` allows once,
 `A` always, `r` rejects and `R` rejects with a reason. `1`, `2` and `3` still
-work. A key does nothing until the card has been on screen for a moment, a
-risky allow needs a second press, and a plan is approved only once its last
+work. A key does nothing until the card has been on screen for a moment, a key
+only asks and `enter` answers, and a plan is approved only once its last
 line was on screen. A command too long for the card is never answered there:
 the card says `Too long to show here. Press enter to answer in the pane.`, and
 the keys refuse.
@@ -2653,7 +2653,7 @@ Inside the agents view:
 | `g` / `G` | First and last item. |
 | `enter` | Go to the item's pane, switching session and workspace. On mail, open the thread. On a held approval, give the prompt back to the pane first, so the harness shows it there. |
 | `space` | On an approval or a question, read the prompt without leaving the agents view, and answer it from there. See [Answering a prompt without attaching](#answering-a-prompt-without-attaching). Not on a held approval, which has no prompt on the screen: answer that one with `1`, `2` or `3`. |
-| `1` / `2` / `3` | Answer the held approval under the cursor: allow once, always allow, reject. The same order as the harness's own menu. Only the keys the prompt offers work, and only once the prompt has been on screen as it is for 0.4 seconds. The whole prompt, and what `2` adds, is shown under the list. On a risky approval, `1` and `2` need a second press of the same key within 3 seconds. On a plan they are approve and approve with accept edits, and work once the plan's last line has been shown; `3` keeps it planning. See [Approvals from the Inbox](#approvals-from-the-inbox), [Risk rules](#risk-rules) and [Plans](#plans). |
+| `1` / `2` / `3` | Answer the held approval under the cursor: allow once, always allow, reject. The same order as the harness's own menu. Only the keys the prompt offers work, and only once the prompt has been on screen as it is for 0.4 seconds. The whole prompt, and what `2` adds, is shown under the list. Each key asks first: the card says what will happen, and `enter` answers. Any other key cancels. On a plan they are approve and approve with accept edits, and work once the plan's last line has been shown; `3` keeps it planning. See [Approvals from the Inbox](#approvals-from-the-inbox), [Risk rules](#risk-rules) and [Plans](#plans). |
 | `a` / `A` / `r` | Answer the held approval under the cursor, as its card's buttons do: allow once, always allow, reject. The same rules as `1`, `2` and `3`. |
 | `R` | On a held approval or plan whose harness takes a reason: reject, or keep planning, with a reason you type on the `Reason:` line. `enter` sends it, `esc` drops it. See [Reject with a reason](#reject-with-a-reason). |
 | `n` | Open the New agent sheet. |

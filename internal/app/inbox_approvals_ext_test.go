@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	tea "charm.land/bubbletea/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/harness"
 	"github.com/Gaurav-Gosain/tuios/internal/risk"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
@@ -79,32 +80,71 @@ func drawn(m *OS) string {
 	return ansi.Strip(out)
 }
 
-// TestRiskyPressResets: a second press after the window, after another key,
-// or on another key is a first press again.
-func TestRiskyPressResets(t *testing.T) {
+// TestAnswerKeyAsksFirst: a list key only asks. The card says what enter
+// does, any other key drops it without an answer, and enter answers. A
+// sentence typed into the list therefore answers nothing, however slowly it
+// is typed.
+//
+// Negative control: with InboxReplyApproval sending at once, the first 1
+// sends the allow.
+func TestAnswerKeyAsksFirst(t *testing.T) {
 	m, r := approvalsOS(t, riskyHeld())
 
-	press(m, "1")
-	m.InboxNumber(1)
-	m.Inbox.approvals.armed.at = time.Now().Add(-inboxRiskPressWindow - time.Second)
-	press(m, "1")
-	if cmd := m.InboxNumber(1); cmd != nil {
-		t.Error("a second press after the window sent the allow")
+	if cmd := m.InboxNumber(1); cmd != nil || !m.InboxConfirmOpen() {
+		t.Fatal("ASSERTION: 1 answered without asking")
 	}
-
-	press(m, "j")
-	press(m, "1")
-	if cmd := m.InboxNumber(1); cmd != nil {
-		t.Error("a press after another key sent the allow")
+	if !strings.Contains(drawn(m), "Press enter to allow") {
+		t.Fatalf("the card does not say what enter does:\n%s", drawn(m))
 	}
-
-	press(m, "2")
-	if cmd := m.InboxNumber(2); cmd != nil {
-		t.Error("2 after an armed 1 sent always")
+	if cmd := m.InboxConfirmKey("p"); cmd != nil || m.InboxConfirmOpen() {
+		t.Fatal("ASSERTION: a letter after the ask answered or left it open")
+	}
+	for _, k := range "lease also" {
+		if string(k) == "a" {
+			if cmd, _ := m.CockpitAnswerLetter("a"); cmd != nil {
+				t.Fatal("ASSERTION: a sent the allow")
+			}
+			continue
+		}
+		if m.InboxConfirmOpen() {
+			if cmd := m.InboxConfirmKey(string(k)); cmd != nil {
+				t.Fatal("ASSERTION: a typed letter answered")
+			}
+		}
 	}
 	if len(r.replies()) != 0 {
-		t.Fatalf("replies %v", r.replies())
+		t.Fatalf("typed text sent %v", r.replies())
 	}
+	if cmd := numberEnter(m, 1); cmd == nil {
+		t.Fatalf("1 then enter sent nothing: %q", lastNote(m))
+	}
+}
+
+// numberEnter is a digit and then enter, as a person answers.
+func numberEnter(m *OS, n int) tea.Cmd {
+	cmd := m.InboxNumber(n)
+	if m.InboxConfirmOpen() {
+		return m.InboxConfirmKey("enter")
+	}
+	return cmd
+}
+
+// replyEnter is an answer key and then enter.
+func replyEnter(m *OS, decision string) tea.Cmd {
+	cmd := m.InboxReplyApproval(decision)
+	if m.InboxConfirmOpen() {
+		return m.InboxConfirmKey("enter")
+	}
+	return cmd
+}
+
+// letterEnter is a letter on an approval and then enter.
+func letterEnter(m *OS, key string) (tea.Cmd, bool) {
+	cmd, ok := m.CockpitAnswerLetter(key)
+	if m.InboxConfirmOpen() {
+		return m.InboxConfirmKey("enter"), ok
+	}
+	return cmd, ok
 }
 
 // planItem is a held plan of n lines.
@@ -157,7 +197,7 @@ func TestPlanApprovesOnlyOnceReadToTheEnd(t *testing.T) {
 	}
 	settleShown(m)
 	press(m, "1")
-	if cmd := m.InboxNumber(1); cmd != nil {
+	if cmd := numberEnter(m, 1); cmd != nil {
 		t.Fatal("ASSERTION: 1 approved a plan whose end was never shown")
 	}
 	if !strings.Contains(lastNote(m), "Read the plan to its end") {
@@ -172,7 +212,7 @@ func TestPlanApprovesOnlyOnceReadToTheEnd(t *testing.T) {
 	}
 	settleShown(m)
 	press(m, "1")
-	cmd := m.InboxNumber(1)
+	cmd := numberEnter(m, 1)
 	if cmd == nil {
 		t.Fatalf("1 on a plan read to its end sent nothing: %q", lastNote(m))
 	}
@@ -190,7 +230,7 @@ func TestPlanApprovesOnlyOnceReadToTheEnd(t *testing.T) {
 	drawn(m2)
 	settleShown(m2)
 	press(m2, "3")
-	if cmd := m2.InboxNumber(3); cmd == nil {
+	if cmd := numberEnter(m2, 3); cmd == nil {
 		t.Fatal("3 on an unread plan did not keep it planning")
 	}
 }
@@ -209,7 +249,7 @@ func TestPlanOfAnotherDigestIsNotShown(t *testing.T) {
 	}
 	settleShown(m)
 	press(m, "1")
-	if cmd := m.InboxNumber(1); cmd != nil {
+	if cmd := numberEnter(m, 1); cmd != nil {
 		t.Fatal("a plan of another digest was approved")
 	}
 }
@@ -269,7 +309,7 @@ func TestPlanOnAShortScreenIsNotReadToTheEnd(t *testing.T) {
 	}
 	settleShown(m)
 	press(m, "1")
-	if cmd := m.InboxNumber(1); cmd != nil {
+	if cmd := numberEnter(m, 1); cmd != nil {
 		t.Fatal("ASSERTION: 1 approved a plan drawn on a screen too short to show it")
 	}
 	if m.inboxPlanReadToEnd(it) {
@@ -282,7 +322,7 @@ func TestPlanOnAShortScreenIsNotReadToTheEnd(t *testing.T) {
 	}
 	settleShown(m)
 	press(m, "1")
-	cmd := m.InboxNumber(1)
+	cmd := numberEnter(m, 1)
 	if cmd == nil {
 		t.Fatalf("1 on a plan read to its end sent nothing: %q", lastNote(m))
 	}

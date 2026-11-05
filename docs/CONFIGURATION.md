@@ -2825,9 +2825,9 @@ max_untracked_mb = 50
   command, and a line with no tool; naming one file tool, such as `Write`,
   covers every file tool, including a protocol pane's `edit`. A daemon that
   could read no config file at all still uses the shipped rules. A rule with no name or a pattern that does not compile is
-  ignored, with a warning. An allow of a risky approval takes a second press
-  of the same key in the Inbox, and the daemon refuses one that does not name
-  the rules. `panes_may_allow` lets a pane holding the `respond` grant allow a
+  ignored, with a warning. An allow of a risky approval in the Inbox asks
+  first and takes `enter`, and the daemon refuses one that does not name the
+  rules. `panes_may_allow` lets a pane holding the `respond` grant allow a
   risky call; it is off, so only you can. The shipped rules are listed under
   [Risk rules](AGENT_STATE.md#risk-rules). They are a speed bump, not a
   sandbox. The daemon reads the risk rules again when the file changes. A

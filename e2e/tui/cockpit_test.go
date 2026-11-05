@@ -202,7 +202,8 @@ func TestCockpitGroupsTheFleet(t *testing.T) {
 	row, col = findText(t, term, "api-auth")
 	mouseClick(t, term, col, row, tuitest.MouseLeft, 0)
 	time.Sleep(1500 * time.Millisecond)
-	if err := term.SendKeys("a"); err != nil {
+	// The key asks, and enter answers.
+	if err := term.SendKeys("a", tuitest.Enter); err != nil {
 		t.Fatalf("press a: %v", err)
 	}
 	select {
