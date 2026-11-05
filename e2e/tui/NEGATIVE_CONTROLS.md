@@ -12953,3 +12953,14 @@ cuts one call site from the branch head:
 | zoom-window sets the zoom | `x.Zoomed = z` cut from `zoomPane` | "tests is not zoomed with no client attached", and the client shows logs | **caught** |
 | A client lays out the daemon's tree | `e.commit()` cut from `arrangeLayout` | headless and attached layouts both lack the swap and the resize | **caught** |
 | A client reports the layout it took from the daemon | the `SyncStateToDaemon` call cut from `ApplyStateSyncFrom` | "the client's layout is not the agent's": list-windows keeps the zoomed rectangles | **caught** |
+## A switch made before the new pane arrives
+
+`TestScreenPresetLeaderTwiceAndSend` holds the pane that ctrl+a c asks for
+in the daemon for one second (`TUIOS_E2E_HOLD_NEW_WINDOW`). ctrl+a ctrl+a
+then reaches the daemon before the client has seen the pane, as on a slow CI
+runner. The control was run on 2026-11-05 on Linux on the branch
+fix/workspace-switch-during-new-pane.
+
+| Bug | Fix removed | How | Tests that fail | Verdict |
+|---|---|---|---|---|
+| A switch after a new-window key went back to the new pane's workspace | the new window's `focusAskedBy` | passed `""` in `handleExecuteCommand`, with the hold kept | `TestScreenPresetLeaderTwiceAndSend` ("screenkeys is on workspace 2, want 1"), 5 of 5 runs | **caught** |
