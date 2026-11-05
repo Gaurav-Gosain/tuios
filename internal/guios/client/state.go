@@ -469,6 +469,9 @@ func (k *stateKeeper) watch() {
 		"window-retitled", "window-exit", "window-moved", "window-focused", "window-minimized", "window-restored",
 		"agent-state", "agent-seen", "notification", "bell", "attention", "prompt", "command-finished",
 		"workspace-switched", "layout-changed",
+		// A command starting or ending in a pane: its name in the panes'
+		// headers and the sidebar.
+		"window-foreground",
 		// For the agent cockpit only: they change no pane.
 		"transcript", "agent-message", "task-claimed", "task-finished", "task-changed", "agent-activity",
 		// A judge's verdict, which the fan comparison reads again on.
