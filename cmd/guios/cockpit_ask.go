@@ -5,6 +5,8 @@ import (
 
 	"github.com/Gaurav-Gosain/mygo/ui"
 
+	"github.com/Gaurav-Gosain/tuios/internal/guios/client"
+
 	"github.com/Gaurav-Gosain/tuios/cmd/guios/locales"
 )
 
@@ -159,6 +161,12 @@ func (a *App) ckQuestionRun() {
 // a call that is not risky at once, as a chord no typed text makes. A risky
 // call still asks.
 func (a *App) ckAllowChord() {
+	if ag, d, ok := a.ckDraftWaiting(); ok {
+		// The reply box holds text: Ctrl+Enter sends it now, as it does in
+		// the box and in most chat apps, and never allows.
+		a.sendReply(ag, d, true)
+		return
+	}
 	r, ok := a.ckSelected()
 	if !ok || r.item == nil || !ckAnswerable(*r.item) {
 		return
@@ -174,6 +182,21 @@ func (a *App) ckAllowChord() {
 	a.ck.confirmed = true
 	a.ckAnswer("once")
 	a.ck.confirmed = false
+}
+
+// ckDraftWaiting is the selected agent's reply draft when it holds text or
+// images: while it does, Ctrl+Enter sends it and allows nothing. A state,
+// not a time: the box is empty or it is not.
+func (a *App) ckDraftWaiting() (client.Agent, *ckDraft, bool) {
+	ag, ok := a.ckSelectedAgent()
+	if !ok || ag.Window == "" || ag.Host != "" || a.ck.reply.asMail[ag.Key()] {
+		return client.Agent{}, nil, false
+	}
+	d := a.draftFor(ag)
+	if strings.TrimSpace(d.text) == "" && len(d.images) == 0 {
+		return client.Agent{}, nil, false
+	}
+	return ag, d, true
 }
 
 // ckQuestionLine draws the open confirm step in the key line: the

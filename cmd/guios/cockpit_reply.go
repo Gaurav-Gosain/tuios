@@ -200,6 +200,11 @@ func (a *App) replyBox(c *ui.Context, pal *palette, ag client.Agent) {
 			})
 			in.OnTextKey(func(k ui.TextKey) bool {
 				switch {
+				case k.Key == ui.KeyEnter && k.Mods == ui.Cmd && !mail && strings.TrimSpace(k.Text()) == "" && len(d.images) == 0:
+					// An empty box sends nothing: Ctrl+Enter allows, as it
+					// does in the list.
+					a.ckAllowChord()
+					return true
 				case k.Key == ui.KeyEnter && k.Mods == ui.Cmd && !mail:
 					d.text = k.Text()
 					a.sendReply(ag, d, true)

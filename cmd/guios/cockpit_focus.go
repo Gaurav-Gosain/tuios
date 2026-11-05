@@ -451,7 +451,7 @@ func (a *App) approvalCard(c *ui.Context, pal *palette, ag client.Agent, it sess
 				asked = q.decision
 			}
 			for _, o := range opts {
-				primary, keys := o == "once" && !risky, ckDecisionKey(o)
+				primary, keys := o == "once" && !risky, a.ckDecisionKey(o)
 				fade := float32(1)
 				switch {
 				case asked == o:
@@ -519,9 +519,13 @@ func ckDecisionWords(d string) string {
 	return locales.CockpitReject()
 }
 
-func ckDecisionKey(d string) string {
+func (a *App) ckDecisionKey(d string) string {
 	switch d {
 	case "once":
+		if _, _, waiting := a.ckDraftWaiting(); waiting {
+			// Ctrl+Enter sends the reply while the box holds text.
+			return ""
+		}
 		return chordName(chAllow)
 	case "always":
 		return chordName(chAlways)

@@ -790,8 +790,13 @@ func (a *App) ckAllHints(hint func(k, what string)) {
 	r, ok := a.ckSelected()
 	item := ok && r.item != nil
 	answerable := item && ckAnswerable(*r.item)
-	if answerable {
+	if _, _, waiting := a.ckDraftWaiting(); waiting {
+		// The reply box holds text: Ctrl+Enter sends it.
+		hint(chordName(chAllow), locales.CockpitHintSendNow())
+	} else if answerable {
 		hint(chordName(chAllow), locales.CockpitHintAllow())
+	}
+	if answerable {
 		if a.ckCanReject() {
 			hint(chordName(chReject), locales.CockpitHintReject())
 		}
