@@ -381,7 +381,7 @@ func (d *Daemon) openWindow(cs *connState, p *newWindowParams, split *splitAsk) 
 		return nil, verr
 	}
 	if p.Workspace < 0 {
-		return nil, invalidParam("workspace", "workspace is a workspace number, e.g. 2. Omit it for the current one")
+		return nil, invalidParam("workspace", "workspace is a workspace number, e.g. 2. Omit it for the calling pane's workspace, else the one the session shows")
 	}
 	// From inside a pane of this session, the default is the pane's own
 	// workspace (#1494). Outside every pane it stays the one the session shows.

@@ -2594,7 +2594,8 @@ Response:
 Create a new window in a session.
 
 Params, all optional: `session`, `name` (window name; omit to use the shell's
-title), `workspace` (workspace number; omit for the current one), `cwd`
+title), `workspace` (workspace number; omit for the calling pane's workspace,
+else the one the session shows), `cwd`
 (directory to start in; omit for the caller's directory when the caller runs
 in a pane, else the focused pane's), `focus` (default true;
 pass false to leave the focus where it is), `command` (argv to exec instead of a

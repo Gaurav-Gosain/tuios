@@ -1339,7 +1339,7 @@ func buildVerbRegistry() map[string]verbEntry {
 			params: []verbParam{
 				sessionParam,
 				{Name: "name", Type: "string", Description: "Name for the new window. Omit to use the shell's title."},
-				{Name: "workspace", Type: "int", Description: "Workspace number to create the window on. Omit for the current workspace."},
+				{Name: "workspace", Type: "int", Description: "Workspace number to create the window on. Omit for the calling pane's workspace, else the one the session shows."},
 				{Name: "cwd", Type: "string", Description: "Directory to start the shell in. Omit to use the calling pane's directory, or outside a pane the focused pane's."},
 				{Name: "focus", Type: "bool", Description: "Focus the new window. Pass false to leave the focus where it is.", Default: "true"},
 				{Name: "command", Type: "[]string", Description: "Argv to exec as the window's process instead of a shell. No shell parses it, so nothing needs quoting. The window closes when the program exits, unless keep_open is set."},
