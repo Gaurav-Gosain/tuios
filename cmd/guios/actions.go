@@ -51,6 +51,14 @@ func (a *App) run(id string, args map[string]string) {
 	case "agents.toggle":
 		a.toggleCockpit()
 	case "agents.new":
+		// On the board, with a card selected, the agent starts on the
+		// card, as n did.
+		if b := a.ck.tabs.board; a.ck.open && a.ck.view == viewBoard && b != nil {
+			if t, ok := b.card(b.sel); ok {
+				a.newAgentFor(t)
+				return
+			}
+		}
 		a.newAgent()
 	case "session.next":
 		a.selectOffset(1)

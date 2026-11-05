@@ -60,15 +60,9 @@ func (a *App) spawnView(c *ui.Context, pal *palette) {
 		ww, wh := c.Size()
 		w := min(float32(spawnW), ww-2*sp4)
 		floating(panel.Width(w).MaxHeight(wh-2*sp4).Padding(sp5).Gap(sp4).Radius(rSheet).Background(pal.popover), pal).Label(locales.SpawnTitle())
-		if (s.byKeyFresh || s.byKeyText) && !s.focusAgain && (!h.task.FocusWithin(c) || panel.Pressed()) {
-			// A click, or another field: the person works in the sheet.
-			s.byKeyFresh, s.byKeyText = false, false
-		}
 		switch {
 		case c.Shortcut(ui.Cmd, ui.KeyEnter):
 			start = true
-		case c.Shortcut(0, ui.KeyEnter) && s.byKey:
-			s.notice, s.noticeAt = locales.SpawnStartChord(keyName("CmdOrCtrl+Enter")), spTask
 		case c.Shortcut(0, ui.KeyEnter):
 			start = true
 		case c.Shortcut(ui.Cmd, ui.KeyS):
@@ -138,15 +132,19 @@ func (a *App) spawnView(c *ui.Context, pal *palette) {
 func (a *App) spawnHeader(c *ui.Context, pal *palette, s *spawnSheet) {
 	ui.Row(c).Gap(sp3).AlignItems(ui.Center).Shrink(0).Children(func() {
 		ui.Text(c, locales.SpawnTitle()).FontSize(fsTitle).FontWeight(wSemibold).TextColor(pal.text).SingleLine().Shrink(0)
-		from := ""
-		switch {
-		case s.repo != "" && s.head != "":
-			from = locales.SpawnFromBranch(s.repo, s.head)
-		case s.repo != "":
-			from = locales.SpawnFrom(s.repo)
-		case s.folder != "":
-			from = locales.SpawnIn(a.local().shortDir(s.folder))
+		// The real target: the folder, then the session it goes in, then
+		// the branch it starts from (council round 4, workflow S1).
+		var parts []string
+		if s.folder != "" {
+			parts = append(parts, locales.SpawnIn(a.local().shortDir(s.folder)))
 		}
+		if l := a.spawnSessionLabel(s.session); l != "" {
+			parts = append(parts, l)
+		}
+		if s.repo != "" && s.head != "" {
+			parts = append(parts, locales.SpawnFromBranch(s.repo, s.head))
+		}
+		from := strings.Join(parts, " · ")
 		if s.card != nil {
 			from += " · " + locales.SpawnForCard(s.card.id)
 		}
@@ -199,12 +197,6 @@ func (a *App) spawnTask(c *ui.Context, pal *palette, s *spawnSheet, h *spawnHand
 				}
 				return a.pasteImageInto(&s.task)
 			})
-			if in.Changed() && s.byKeyFresh {
-				// n opened the sheet, and text came at once: a task, or
-				// a sentence meant for the reply box. It stays in the
-				// task, and the sheet offers Esc to move it.
-				s.byKeyFresh, s.byKeyText = false, true
-			}
 			if in.Changed() {
 				s.followTask()
 				if s.noticeAt == spTask {
@@ -217,14 +209,6 @@ func (a *App) spawnTask(c *ui.Context, pal *palette, s *spawnSheet, h *spawnHand
 					// first for itself, and the sheet stayed open.
 					s.task.text = k.Text()
 					a.update(a.spawnClose)
-					return true
-				}
-				if k.Key == ui.KeyEnter && k.Mods == 0 && s.byKey {
-					// A letter in a list opened the sheet: the task may be
-					// a sentence meant for a reply box.
-					s.task.text = k.Text()
-					s.notice, s.noticeAt = locales.SpawnStartChord(keyName("CmdOrCtrl+Enter")), spTask
-					a.update(func() {})
 					return true
 				}
 				if k.Key == ui.KeyEnter && (k.Mods == 0 || k.Mods == ui.Cmd) {
@@ -242,10 +226,7 @@ func (a *App) spawnTask(c *ui.Context, pal *palette, s *spawnSheet, h *spawnHand
 				keyHint(c, pal, "⇧↵", locales.CockpitHintNewLine())
 			})
 		})
-		if s.byKeyText && strings.TrimSpace(s.task.text) != "" {
-			// One plain line under the box (QA-073).
-			ui.Text(c, locales.SpawnMeantToReply()).FontSize(fsSmall).TextColor(pal.textMuted).MaxLines(2)
-		}
+
 	})
 	return start
 }
@@ -711,12 +692,7 @@ func (a *App) spawnFoot(c *ui.Context, pal *palette, s *spawnSheet, h *spawnHand
 	}
 	ui.Row(c).Gap(sp3).AlignItems(ui.Center).Shrink(0).Children(func() {
 		ui.Row(c).Gap(sp3).AlignItems(ui.Center).Grow(1).MinWidth(0).Clip().Children(func() {
-			startKey := "↵"
-			if s.byKey {
-				// Enter does not start a sheet a list letter opened.
-				startKey = keyName("CmdOrCtrl+Enter")
-			}
-			keyHint(c, pal, startKey, locales.SpawnHintStart())
+			keyHint(c, pal, "↵", locales.SpawnHintStart())
 			keyHint(c, pal, "Tab", locales.SpawnHintNext())
 			keyHint(c, pal, keyName("CmdOrCtrl+S"), locales.SpawnHintPreset())
 		})

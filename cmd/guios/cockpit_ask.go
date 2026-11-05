@@ -8,12 +8,10 @@ import (
 	"github.com/Gaurav-Gosain/tuios/cmd/guios/locales"
 )
 
-// The confirm step. A letter in the agents list that would change
-// something (allow, allow always, reject, settle, snooze, dismiss, pass
-// mail on) asks first: the card and the key line say what will happen, Enter does
-// it and Escape drops it. A letter typed meanwhile drops it too and goes to
-// the reply box, so a sentence typed into the list never answers anything
-// (council round 3, M1).
+// The confirm step. The chord that allows a risky call asks first, and so
+// do always allow and the menu's allow: the key line says what will run,
+// Enter does it and Escape drops it. Typed text drops it too and goes to the
+// reply box (cockpit_guard.go).
 
 // askWhat is what a confirm step does on Enter.
 type askWhat int
@@ -22,11 +20,6 @@ const (
 	askOnce askWhat = iota
 	askAlways
 	askDeny
-	askReason
-	askSettle
-	askDismiss
-	askPass
-	askSnooze
 )
 
 // ckQuestion is the open confirm step.
@@ -42,10 +35,6 @@ type ckQuestion struct {
 	word string
 	// decision is the card's button the step asks about, if any.
 	decision string
-	// opener is the text of the letters that opened the step, "" for the
-	// menu, and openerUndo takes back what the letters before it did.
-	opener     string
-	openerUndo func()
 }
 
 // ckTarget is the \x00 a locale string gets for its target, so that the
@@ -90,44 +79,6 @@ func (a *App) ckAskFor(what askWhat) {
 		q.ask = map[askWhat]func(string) string{
 			askOnce: locales.CockpitAskAllow, askAlways: locales.CockpitAskAllowAlways, askDeny: locales.CockpitAskReject,
 		}[what](ckTarget)
-	case askReason:
-		q.target, q.mono, q.decision = command, true, "reason"
-		q.word = locales.CockpitReject()
-		q.ask = locales.CockpitAskRejectWhy(ckTarget)
-	case askSettle:
-		ag, ok := a.ckSelectedAgent()
-		if !ok {
-			a.toast(locales.CockpitSettleOnlyAgent())
-			return
-		}
-		q.target = ag.Name
-		q.ask, q.word = locales.CockpitAskSettle(ckTarget), locales.CockpitSettle()
-		if ag.Settled {
-			q.ask, q.word = locales.CockpitAskUnsettle(ckTarget), locales.CockpitUnsettle()
-		}
-	case askDismiss:
-		if r.item == nil {
-			return
-		}
-		q.ask, q.word = locales.CockpitAskDismiss(ckTarget), locales.CockpitDismiss()
-	case askPass:
-		if r.item == nil || r.item.HeldID == 0 {
-			return
-		}
-		q.ask, q.word = locales.CockpitAskPass(ckTarget), locales.CockpitPassMail()
-	case askSnooze:
-		if r.item != nil && ckHeld(*r.item) {
-			a.toast(locales.CockpitNoSnoozeHeld())
-			return
-		}
-		if r.item == nil {
-			a.toast(locales.CockpitSnoozeOnlyItem())
-			return
-		}
-		q.ask, q.word = locales.CockpitAskSnooze(ckTarget), locales.CockpitSnooze()
-		if r.item.SnoozedUntil != 0 {
-			q.ask, q.word = locales.CockpitAskWake(ckTarget), locales.CockpitWake()
-		}
 	}
 	ck.question = q
 	ck.armed = ckArmed{}
@@ -156,25 +107,12 @@ func (a *App) ckQuestionKeys(c *ui.Context, col ui.Element) bool {
 	case col.Shortcut(0, ui.KeyEscape):
 		ck.question = nil
 	default:
-		if k, ok := takeProse(col); ok {
-			// Typed text: never an answer. It goes to the reply box with
-			// the letter that opened the step, which was its first letter:
-			// "ask it" lands whole, not as "sk it" (council round 4, feel
-			// S1).
-			q := ck.question
+		if text, ok := typedText(col); ok {
+			// Typed text: never an answer. The step goes, and the text
+			// goes to the reply box.
 			ck.question = nil
-			text := ""
-			if q != nil {
-				if q.openerUndo != nil {
-					q.openerUndo()
-				}
-				text = q.opener
-			}
-			if ch := keyRune(k); ch != 0 {
-				text += string(ch)
-			}
-			if text == "" || !a.ckProse(text) {
-				a.toast(locales.CockpitKeysToList())
+			if !a.ckProse(text) {
+				a.toast(locales.CockpitKeysNeedAgent())
 			}
 		} else {
 			// Another key: the step goes, and the key does what it does.
@@ -214,22 +152,6 @@ func (a *App) ckQuestionRun() {
 		answer("always")
 	case askDeny:
 		answer("deny")
-	case askReason:
-		if it := r.item; it != nil && ck.reasonFor == it.ID {
-			a.ckSend(*it, ck.rowAgent(r), "deny", ck.reason)
-			ck.reasonFor, ck.reason = "", ""
-			ck.fleetFocus.Focus()
-		}
-	case askSettle:
-		a.ckSettle()
-	case askDismiss:
-		a.ckDismiss()
-	case askPass:
-		if r.item != nil {
-			a.ckPassHeld(*r.item)
-		}
-	case askSnooze:
-		a.ckSnooze()
 	}
 }
 

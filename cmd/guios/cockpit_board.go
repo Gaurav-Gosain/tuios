@@ -5,6 +5,7 @@ import (
 	"slices"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/Gaurav-Gosain/mygo/ui"
 
@@ -59,6 +60,11 @@ type ckBoard struct {
 	focus   ui.Handle
 	adding  int // the column a new card is typed into, -1 for none
 	draft   string
+	// caretEnd puts the caret after the draft once the field shows: typed
+	// text opened it. addNote says Enter adds nothing here.
+	caretEnd, addNote bool
+	// ask is the card the claim chord asks to give to the selected agent.
+	ask string
 	// first is the first column the board shows, and width the width it
 	// had in the last frame.
 	first int
@@ -450,13 +456,42 @@ func (a *App) boardColumn(c *ui.Context, pal *palette, b *ckBoard, ci int, st st
 			}
 		})
 		if b.adding == ci {
+			// The card is added only on Ctrl+Enter or Add: typed text that
+			// opened the field adds nothing by itself (council round 4,
+			// workflow M2).
+			add := func() {
+				if strings.TrimSpace(b.draft) != "" {
+					a.addCard(b, st, b.draft)
+					b.adding, b.addNote = -1, false
+					b.focus.Focus()
+				}
+			}
 			in := textField(c, "new-card", &b.draft, locales.CockpitCardPlaceholder(), 0, pal).AutoFocus()
-			if in.Submitted() && strings.TrimSpace(b.draft) != "" {
-				a.addCard(b, st, b.draft)
-				b.adding = -1
-			} else if in.Shortcut(0, ui.KeyEscape) {
-				b.adding = -1
+			if b.caretEnd {
+				b.caretEnd = false
+				n := utf8.RuneCountInString(b.draft)
+				in.Focus().SetTextSelection(n, n)
+			}
+			switch {
+			case chordHit(in, chAddCard):
+				add()
+			case in.Submitted():
+				b.addNote = true
+			case in.Shortcut(0, ui.KeyEscape):
+				b.adding, b.addNote = -1, false
 				b.focus.Focus()
+			}
+			if b.adding == ci {
+				ui.Row(c).Gap(6).AlignItems(ui.Center).Children(func() {
+					if b.addNote {
+						ui.Text(c, locales.CockpitAddCardChord(chordName(chAddCard))).FontSize(fsSmall).TextColor(pal.textMuted).Grow(1).MinWidth(0).MaxLines(2)
+					} else {
+						ui.Spacer(c)
+					}
+					if sizedButton(c, "add-card", locales.CommonAdd(), chordName(chAddCard), true, hControlSm, rControl, pal) {
+						add()
+					}
+				})
 			}
 		}
 		if folded {
@@ -600,78 +635,67 @@ func (a *App) boardKeys(c *ui.Context, root ui.Element, b *ckBoard) (handled boo
 		}
 		b.sel = cards[min(max(ri, 0), len(cards)-1)].ID
 	}
-	// Letters go through the typing guard (cockpit_guard.go): a letter
-	// the board has no use for is typed text, and runs nothing. A card's
-	// moves can be moved back; n opens a sheet that a letter cannot start.
-	kind := func(k ckKey) keyKind {
-		_, onCard := b.card(b.sel)
+	// A printable key never acts here: it opens the card field of the
+	// column with the text, and the card is added only on Ctrl+Enter or
+	// Add (cockpit_guard.go). The chords of ckChords act.
+	if b.ask != "" {
 		switch {
-		case !k.shift && (k.key == ui.KeyH || k.key == ui.KeyJ || k.key == ui.KeyK || k.key == ui.KeyL):
-			return kindMove
-		case k.shift && (k.key == ui.KeyH || k.key == ui.KeyL) && onCard:
-			return kindView
-		case !k.shift && k.key == ui.KeyN:
-			return kindView
-		case !k.shift && k.key == ui.KeyT && onCard:
-			return kindView
-		}
-		return kindProse
-	}
-	lk := listKeys{kind: kind, hint: locales.CockpitKeysToBoard}
-	if k, ok := a.guard(root, &a.ck.guard, lk); ok {
-		switch {
-		case k.shift && k.key == ui.KeyH:
-			if t, ok := b.card(b.sel); ok && ci > 0 {
-				a.moveCard(b, t.ID, ckStages[ci-1])
-			}
-		case k.shift && k.key == ui.KeyL:
-			if t, ok := b.card(b.sel); ok && ci < len(ckStages)-1 {
-				a.moveCard(b, t.ID, ckStages[ci+1])
-			}
-		case k.shift:
-		case k.key == ui.KeyH:
-			pick(ci-1, max(ri, 0))
-		case k.key == ui.KeyL:
-			pick(ci+1, max(ri, 0))
-		case k.key == ui.KeyJ:
-			pick(ci, ri+1)
-		case k.key == ui.KeyK:
-			pick(ci, ri-1)
-		case k.key == ui.KeyN:
-			// n on a card starts an agent on it, as the TUI's; on an
-			// empty column it adds a card there.
-			if t, ok := b.card(b.sel); ok {
-				a.newAgentFor(t)
-				if sp := a.ck.spawn; sp != nil {
-					sp.byKey = true
-				}
-			} else {
-				b.adding, b.draft = ci, ""
-			}
-		case k.key == ui.KeyT:
-			if t, ok := b.card(b.sel); ok {
+		case key(0, ui.KeyEnter):
+			id := b.ask
+			b.ask = ""
+			if t, ok := b.card(id); ok && b.sel == id {
 				a.takeCard(b, t)
+			}
+			return true
+		case key(0, ui.KeyEscape):
+			b.ask = ""
+			return true
+		}
+		if _, ok := typedText(root); ok {
+			b.ask = ""
+		}
+	}
+	if text, ok := typedText(root); ok {
+		b.adding, b.draft, b.caretEnd, b.addNote = ci, text, true, false
+		return true
+	}
+	if d, to, ok := listMove(root); ok {
+		switch {
+		case to < 0:
+			pick(ci, 0)
+		case to > 0:
+			pick(ci, len(b.column(ckStages[ci]))-1)
+		default:
+			pick(ci, ri+d)
+		}
+		return true
+	}
+	switch {
+	case chordHit(root, chCardLeft):
+		if t, ok := b.card(b.sel); ok && ci > 0 {
+			a.moveCard(b, t.ID, ckStages[ci-1])
+		}
+		return true
+	case chordHit(root, chCardRight):
+		if t, ok := b.card(b.sel); ok && ci < len(ckStages)-1 {
+			a.moveCard(b, t.ID, ckStages[ci+1])
+		}
+		return true
+	case chordHit(root, chClaim):
+		if _, ok := b.card(b.sel); ok {
+			if _, ok := a.ckSelectedAgent(); ok {
+				b.ask = b.sel
+			} else {
+				a.toast(locales.CockpitTakeNeedsAgent())
 			}
 		}
 		return true
 	}
 	switch {
-	case key(ui.Shift, ui.KeyLeft):
-		if t, ok := b.card(b.sel); ok && ci > 0 {
-			a.moveCard(b, t.ID, ckStages[ci-1])
-		}
-	case key(ui.Shift, ui.KeyRight):
-		if t, ok := b.card(b.sel); ok && ci < len(ckStages)-1 {
-			a.moveCard(b, t.ID, ckStages[ci+1])
-		}
 	case key(0, ui.KeyLeft):
 		pick(ci-1, max(ri, 0))
 	case key(0, ui.KeyRight):
 		pick(ci+1, max(ri, 0))
-	case key(0, ui.KeyDown):
-		pick(ci, ri+1)
-	case key(0, ui.KeyUp):
-		pick(ci, ri-1)
 	case key(0, ui.KeyEnter):
 		if t, ok := b.card(b.sel); ok {
 			a.goToHolder(t)

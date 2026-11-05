@@ -52,7 +52,8 @@ type ckCompare struct {
 	// again for the keep to run.
 	armed    string
 	armedGen uint64
-	// askJudge holds that Shift+J asked to start a judge: Enter starts it.
+	// askJudge holds that the judge chord asked to start a judge: Enter
+	// starts it.
 	askJudge bool
 	confirm  bool
 	keepSig  string
@@ -331,7 +332,7 @@ func ckIgnoredFailed(rows []ckFanAttempt, keep int) string {
 	return strings.Join(parts, " · ")
 }
 
-// compareJudge is Shift+J: an agent that judges the attempts.
+// compareJudge starts an agent that judges the attempts.
 func (a *App) compareJudge() {
 	cp := a.ck.cmp
 	cl := a.cockpitClient()
@@ -386,7 +387,7 @@ func compareErr(err error) string {
 	return flat(err.Error())
 }
 
-// compareKeep is Shift+K or the Keep button: the first press says what a
+// compareKeep is the keep chord or the Keep button: the first says what a
 // keep does; Enter, or a second click, keeps the focused attempt and
 // removes the others (confirmed).
 func (a *App) compareKeep(confirmed bool) {
@@ -411,7 +412,7 @@ func (a *App) compareKeep(confirmed bool) {
 		return
 	}
 	if !confirmed {
-		// Shift+K again does nothing: Enter keeps.
+		// The chord again does nothing: Enter keeps.
 		return
 	}
 	if cp.loading || cp.confirm || cp.armedGen != cp.gen {
@@ -557,63 +558,48 @@ func (a *App) compareView(c *ui.Context, pal *palette) {
 	}
 }
 
-// compareKeys are the comparison's keys. h l j k and the arrows move
-// between the attempts, as j and k move the cursor in every other list.
-// Shift+J asks to start a judge and Shift+K asks to keep (council round 3,
-// S6): Enter does what was asked, Escape drops it, and a letter typed
-// meanwhile drops it too.
+// compareKeys are the comparison's keys. The arrows, Home, End and Tab
+// move between the attempts. Ctrl+Alt+J asks to start a judge and
+// Ctrl+Alt+K asks to keep: Enter does what was asked, and Escape or any
+// other key drops it. A printable key never acts (cockpit_guard.go).
 func (a *App) compareKeys(c *ui.Context, panel ui.Element, cp *ckCompare, n int) {
-	g := &a.ck.guard
 	step := func(d int) {
 		if f := min(max(cp.focus+d, 0), n-1); f != cp.focus && f >= 0 {
 			cp.focus, cp.armed, cp.askJudge = f, "", false
 		}
 	}
-	asking := cp.armed != "" || cp.askJudge
-	kind := func(k ckKey) keyKind {
-		switch {
-		case asking:
-			return kindProse
-		case !k.shift && (k.key == ui.KeyH || k.key == ui.KeyJ || k.key == ui.KeyK || k.key == ui.KeyL):
-			return kindMove
-		case !k.shift && k.key == ui.KeyR,
-			!k.shift && k.key >= ui.Key1 && k.key <= ui.Key9,
-			k.shift && k.key == ui.KeyJ,
-			k.shift && k.key == ui.KeyK:
-			return kindView
-		}
-		return kindProse
-	}
-	lk := listKeys{kind: kind, prose: func(string) bool {
-		// A letter drops what was asked, and runs nothing.
+	if _, ok := typedText(panel); ok {
+		// Compare has no field: the text drops what was asked, and runs
+		// nothing.
 		cp.armed, cp.askJudge = "", false
-		return asking
-	}, hint: locales.CompareKeysHere}
-	if k, ok := a.guard(panel, g, lk); ok {
-		switch {
-		case k.shift && k.key == ui.KeyJ:
-			if cp.busy == "" && cp.res != nil {
-				cp.armed, cp.askJudge = "", true
-			}
-		case k.shift && k.key == ui.KeyK:
-			a.compareKeep(false)
-		case k.key == ui.KeyH, k.key == ui.KeyK:
-			step(-1)
-		case k.key == ui.KeyL, k.key == ui.KeyJ:
-			step(1)
-		case k.key == ui.KeyR:
-			cp.armed, cp.askJudge = "", false
-			a.compareFetch()
-		case k.key >= ui.Key1 && k.key <= ui.Key9:
-			if i := int(k.key - ui.Key1); i < n {
-				cp.focus, cp.armed, cp.askJudge = i, "", false
-			}
-		}
+		a.toast(locales.CompareKeysHere())
 		c.Invalidate()
 		return
 	}
 	key := func(k ui.Key) bool { return panel.Shortcut(0, k) }
+	if d, to, ok := listMove(panel); ok || key(ui.KeyLeft) || key(ui.KeyRight) {
+		switch {
+		case key(ui.KeyLeft):
+			step(-1)
+		case key(ui.KeyRight):
+			step(1)
+		case to < 0:
+			step(-n)
+		case to > 0:
+			step(n)
+		default:
+			step(d)
+		}
+		c.Invalidate()
+		return
+	}
 	switch {
+	case chordHit(panel, chJudge):
+		if cp.busy == "" && cp.res != nil {
+			cp.armed, cp.askJudge = "", true
+		}
+	case chordHit(panel, chKeep):
+		a.compareKeep(false)
 	case key(ui.KeyEnter) && cp.askJudge:
 		cp.askJudge = false
 		a.compareJudge()
@@ -621,10 +607,6 @@ func (a *App) compareKeys(c *ui.Context, panel ui.Element, cp *ckCompare, n int)
 		a.compareKeep(true)
 	case key(ui.KeyEnter):
 		a.compareGo()
-	case key(ui.KeyLeft), key(ui.KeyUp), panel.Shortcut(ui.Shift, ui.KeyTab):
-		step(-1)
-	case key(ui.KeyRight), key(ui.KeyDown), key(ui.KeyTab):
-		step(1)
 	default:
 		return
 	}
@@ -824,12 +806,15 @@ func (a *App) compareFoot(c *ui.Context, pal *palette, cp *ckCompare) {
 	}
 	ui.Row(c).Gap(sp3).AlignItems(ui.Center).Shrink(0).Children(func() {
 		ui.Row(c).Gap(sp3).AlignItems(ui.Center).Grow(1).MinWidth(0).Clip().Children(func() {
-			keyHint(c, pal, "j k", locales.CompareHintPick())
+			keyHint(c, pal, "← →", locales.CompareHintPick())
 			keyHint(c, pal, "↵", locales.CockpitHintOpen())
-			keyHint(c, pal, "r", locales.CompareHintRead())
 			keyHint(c, pal, "esc", locales.CockpitHintBack())
 		})
-		if button(c, "cmp-judge", busyLabel(cp.busy == "judge", locales.CompareJudge()), "⇧J", false, pal) {
+		if button(c, "cmp-read", locales.CompareReadAgain(), "", false, pal) {
+			cp.armed, cp.askJudge = "", false
+			a.compareFetch()
+		}
+		if button(c, "cmp-judge", busyLabel(cp.busy == "judge", locales.CompareJudge()), chordName(chJudge), false, pal) {
 			a.compareJudge()
 		}
 		switch {
@@ -841,14 +826,14 @@ func (a *App) compareFoot(c *ui.Context, pal *palette, cp *ckCompare) {
 			face(b, pal, pal.control).TextColor(pal.textFaint)
 			b.Children(func() {
 				ui.Text(c, label).FontSize(fsBody).FontWeight(wMedium).SingleLine()
-				ui.Text(c, "⇧K").FontSize(fsSmall).SingleLine()
+				ui.Text(c, chordName(chKeep)).FontSize(fsSmall).SingleLine()
 			})
 		case ok:
 			label := locales.CompareKeep(ckLetter(cp.focus))
 			if cp.armed == r.Session {
 				label = locales.CompareKeepAgain(ckLetter(cp.focus))
 			}
-			if kindButton(c, "cmp-keep", busyLabel(cp.busy == "keep", label), "⇧K", btnDanger, hControl, rControl, pal, false) {
+			if kindButton(c, "cmp-keep", busyLabel(cp.busy == "keep", label), chordName(chKeep), btnDanger, hControl, rControl, pal, false) {
 				a.compareKeep(cp.armed == r.Session)
 			}
 		}

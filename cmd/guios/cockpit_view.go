@@ -2,6 +2,7 @@ package main
 
 import (
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 
@@ -222,7 +223,7 @@ func (a *App) cockpitHeader(c *ui.Context, pal *palette, bar ui.TitleBar, shown 
 			oneLine(c, ck.err, fsSmall, 0).TextColor(pal.dangerText).MaxWidth(320)
 		}
 		if ck.narrow {
-			iconButton(c, "ck-new", plusIcon, a.tip(locales.CockpitNewAgent(), "agents.new")+" (n)", pal, a.newAgent)
+			iconButton(c, "ck-new", plusIcon, a.tip(locales.CockpitNewAgent(), "agents.new"), pal, a.newAgent)
 		} else if newAgentButton(c, pal, a.tip(locales.CockpitNewAgent(), "agents.new")) {
 			a.newAgent()
 		}
@@ -291,7 +292,7 @@ func (a *App) cockpitFleet(c *ui.Context, pal *palette, width float32, shown boo
 // cockpitEmpty says no agent runs, and how to start one.
 func (a *App) cockpitEmpty(c *ui.Context, pal *palette) {
 	emptyBlock(c, pal, agentsIcon, locales.CockpitEmptyTitle(), locales.CockpitEmptyDetail(), false, func() {
-		if button(c, "ck-empty-new", locales.CockpitNewAgent(), "n", true, pal) {
+		if button(c, "ck-empty-new", locales.CockpitNewAgent(), chordName(chNewAgent), true, pal) {
 			a.newAgent()
 		}
 	})
@@ -406,7 +407,6 @@ func (a *App) ckRowView(c *ui.Context, pal *palette, r ckRow) {
 	if row.Pressed() || row.Clicked() {
 		a.ckSelect(r)
 		ck.fleetFocus.Focus()
-		ck.guard.prev = nil
 	}
 	if row.Clicked() && ck.stacked {
 		ck.stackFocus = true
@@ -558,8 +558,9 @@ func (a *App) ckRowMenu(m *ui.Menu, r ckRow) {
 	}
 }
 
-// cockpitKeys are the fleet's keys, as the TUI's cockpit has them. They act
-// while the fleet holds the focus, so a key typed in the reply box is text.
+// cockpitKeys are the fleet's keys while it holds the focus. A printable
+// key goes to the reply box (cockpit_guard.go). The rest are the list's
+// moves, Enter and Escape, and the chords of ckChords.
 func (a *App) cockpitKeys(c *ui.Context, col ui.Element) {
 	ck := &a.ck
 	if !ck.fleetFocus.FocusWithin(c) {
@@ -567,7 +568,7 @@ func (a *App) cockpitKeys(c *ui.Context, col ui.Element) {
 	}
 	key := func(mods ui.Modifiers, k ui.Key) bool { return col.Shortcut(mods, k) }
 	if ck.lightbox != nil {
-		if key(0, ui.KeyEscape) || key(0, ui.KeySpace) {
+		if key(0, ui.KeyEscape) {
 			ck.lightbox = nil
 			c.Invalidate()
 		}
@@ -579,20 +580,25 @@ func (a *App) cockpitKeys(c *ui.Context, col ui.Element) {
 	if ck.question != nil && a.ckQuestionKeys(c, col) {
 		return
 	}
-	if k, ok := a.guard(col, &ck.guard, a.ckListKeys()); ok {
-		a.ckLetter(k)
+	if text, ok := typedText(col); ok {
+		// Typed text: it never acts. It goes to the selected agent's
+		// reply box, which takes the keys that follow.
+		if !a.ckProse(text) {
+			a.toast(locales.CockpitKeysNeedAgent())
+		}
+		c.Invalidate()
+		return
+	}
+	if d, to, ok := listMove(col); ok {
+		a.ckMoveBy(d, to)
+		c.Invalidate()
+		return
+	}
+	if a.ckChordKeys(col) {
 		c.Invalidate()
 		return
 	}
 	switch {
-	case key(ui.Cmd, ui.KeyEnter):
-		// The chord allows a call that is not risky at once; a risky one
-		// still asks.
-		a.ckAllowChord()
-	case key(0, ui.KeyDown):
-		a.ckMove(1)
-	case key(0, ui.KeyUp):
-		a.ckMove(-1)
 	case key(0, ui.KeyEnter):
 		if r, ok := a.ckSelected(); ok {
 			switch {
@@ -610,16 +616,6 @@ func (a *App) cockpitKeys(c *ui.Context, col ui.Element) {
 		if r, ok := a.ckSelected(); ok && r.kind == ckRowHead {
 			a.ckToggleFold(r.group)
 		}
-	case key(0, ui.KeyBracketRight):
-		a.ckStepTab(1)
-		ck.guard.setPrev(']', func() { a.ckStepTab(-1) }, a.ckProse)
-		c.Invalidate()
-		return
-	case key(0, ui.KeyBracketLeft):
-		a.ckStepTab(-1)
-		ck.guard.setPrev('[', func() { a.ckStepTab(1) }, a.ckProse)
-		c.Invalidate()
-		return
 	case key(0, ui.KeyEscape):
 		if ck.view != viewAgents {
 			a.ckSetView(viewAgents)
@@ -629,146 +625,87 @@ func (a *App) cockpitKeys(c *ui.Context, col ui.Element) {
 	default:
 		return
 	}
-	// A key that is no letter: what ran before it was no sentence's start.
-	ck.guard.prev = nil
 	// The key came in this build: build again to show what it did.
 	c.Invalidate()
 }
 
-// ckLetter runs a list's letter or Space that the typing guard let
-// through (cockpit_guard.go). A letter that changes something only asks:
-// the confirm step does it on Enter (cockpit_ask.go).
-func (a *App) ckLetter(k ckKey) {
+// ckMoveBy moves the cursor by d selectable rows, or to the first (to -1)
+// or the last (to 1).
+func (a *App) ckMoveBy(d, to int) {
 	ck := &a.ck
-	defer func() {
-		// The letter that opened a confirm step goes with the text, if
-		// the next key shows the person was typing.
-		if q := ck.question; q != nil && q.opener == "" {
-			q.opener = string(keyRune(k))
-			if b := ck.guard.before; b != nil {
-				// A move or view letter came first: it is the sentence's
-				// first letter, and is taken back with the step.
-				q.opener, q.openerUndo = string(b.r)+q.opener, b.undo
+	switch to {
+	case -1:
+		for _, r := range ck.rows {
+			if r.selectable() {
+				a.ckSelect(r)
+				return
 			}
 		}
-		ck.guard.before = nil
-	}()
-	// A move or view letter may be the first letter of a sentence: it
-	// notes how to take itself back, and typed text right after it does
-	// (cockpit_guard.go).
-	g := &ck.guard
-	prev := func(undo func()) { g.setPrev(keyRune(k), undo, a.ckProse) }
-	sel := ck.sel
-	backSel := func() {
-		if i := ck.index(sel); i >= 0 {
-			a.ckSelect(ck.rows[i])
+	case 1:
+		for _, r := range slices.Backward(ck.rows) {
+			if r.selectable() {
+				a.ckSelect(r)
+				return
+			}
 		}
 	}
-	view, tab := ck.view, ck.tab
-	backView := func() { a.ckSetView(view); ck.fleetFocus.Focus() }
-	backTab := func() { a.ckSetTab(tab) }
-	if k.shift {
-		switch k.key {
-		case ui.KeyA:
-			a.ckAskFor(askAlways)
-		case ui.KeyR:
-			a.ckOpenReason()
-		case ui.KeyD:
-			a.ckAskFor(askSettle)
-		case ui.KeyM:
-			a.ckSetView(viewMail)
-			prev(backView)
-		}
-		return
+	step := 1
+	if d < 0 {
+		step, d = -1, -d
 	}
-	switch k.key {
-	case ui.KeyJ:
-		a.ckMove(1)
-		prev(backSel)
-	case ui.KeyK:
-		a.ckMove(-1)
-		prev(backSel)
-	case ui.KeyH:
-		if ck.stacked && ck.stackFocus {
-			ck.stackFocus = false
-			prev(func() { ck.stackFocus = true })
-		}
-	case ui.KeyL:
-		if ck.stacked && !ck.stackFocus && a.ckOnAgent() {
-			ck.stackFocus = true
-			prev(func() { ck.stackFocus = false })
-		}
-	case ui.KeySpace:
-		if r, ok := a.ckSelected(); ok && r.kind == ckRowHead {
-			a.ckToggleFold(r.group)
-			prev(func() { a.ckToggleFold(r.group) })
-		} else if im := a.ckNewestImage(); im != nil {
-			// Space shows the agent's newest image whole.
-			ck.lightbox = im
-			prev(func() { ck.lightbox = nil })
-		}
-	case ui.KeyA:
-		a.ckAskFor(askOnce)
-	case ui.KeyR:
-		// r rejects an approval the card answers, as the TUI's, after the
-		// confirm step; on any other row it puts the keys in the reply box.
-		if !a.ckCanReject() {
-			a.ckWriteAfter(k)
-		} else {
-			a.ckAskFor(askDeny)
-		}
-	case ui.KeyI:
-		a.ckWriteAfter(k)
-	case ui.KeyD:
-		a.ckAskFor(askSettle)
-	case ui.KeyU:
-		a.ckUndoSettle()
-	case ui.KeyZ:
-		a.ckAskFor(askSnooze)
-	case ui.KeyX:
-		a.ckAskFor(askDismiss)
-	case ui.KeyP:
-		a.ckAskFor(askPass)
-	case ui.KeyM:
-		a.ckSetTab(tabMail)
-		prev(backTab)
-	case ui.KeyB:
-		a.ckSetView(viewBoard)
-		prev(backView)
-	case ui.KeyV:
-		a.ckSetTab(tabChanges)
-		prev(backTab)
-	case ui.KeyF:
-		ck.needsOnly = !ck.needsOnly
-		prev(func() { ck.needsOnly = !ck.needsOnly })
-	case ui.KeyN:
-		// A sheet a letter opened starts only on Ctrl+Enter or a click:
-		// typed text that lands in its task never starts an agent.
-		a.newAgent()
-		if sp := ck.spawn; sp != nil {
-			sp.byKey = true
-			sp.byKeyFresh = strings.TrimSpace(sp.task.text) == ""
-		}
-	case ui.KeyC:
-		a.openCompare()
+	for range d {
+		a.ckMove(step)
 	}
 }
 
-// ckWriteAfter is i, or r where it writes: the keys go to the reply box.
-// Right after a move or view letter it is a sentence's second letter, as
-// the i of "fix": both are taken back and go to the box with the text.
-func (a *App) ckWriteAfter(k ckKey) {
-	g := &a.ck.guard
-	if b := g.before; b != nil {
-		g.before = nil
-		if b.undo != nil {
-			b.undo()
-		}
-		if a.ckProse(string(b.r) + string(keyRune(k))) {
-			return
+// ckChordKeys runs the agents list's chords (ckChords). It reports whether
+// one came.
+func (a *App) ckChordKeys(col ui.Element) bool {
+	ck := &a.ck
+	for _, ch := range ckChords {
+		if ch.list && col.Shortcut(ch.mods, ch.key) {
+			switch ch.id {
+			case chAllow:
+				a.ckAllowChord()
+			case chAlways:
+				a.ckAskFor(askAlways)
+			case chReject:
+				if a.ckCanReject() {
+					a.ckAnswer("deny")
+				}
+			case chSettle:
+				a.ckSettle()
+			case chUndoSettle:
+				a.ckUndoSettle()
+			case chSnooze:
+				if r, ok := a.ckSelected(); ok && r.item != nil && !ckHeld(*r.item) {
+					a.ckSnooze()
+				} else {
+					a.toast(locales.CockpitNoSnoozeHeld())
+				}
+			case chBoard:
+				if ck.view == viewBoard {
+					a.ckSetView(viewAgents)
+				} else {
+					a.ckSetView(viewBoard)
+				}
+			case chMail:
+				if ck.view == viewMail {
+					a.ckSetView(viewAgents)
+				} else {
+					a.ckSetView(viewMail)
+				}
+			case chFilter:
+				ck.needsOnly = !ck.needsOnly
+			case chTabPrev:
+				a.ckStepTab(-1)
+			case chTabNext:
+				a.ckStepTab(1)
+			}
+			return true
 		}
 	}
-	a.ckFocusReply()
+	return false
 }
 
 // cockpitHints is the key line at the foot.
@@ -791,18 +728,30 @@ func (a *App) cockpitHints(c *ui.Context, pal *palette) {
 			a.ckQuestionLine(c, pal)
 			return
 		}
+		if b := a.ck.tabs.board; a.ck.view == viewBoard && b != nil && b.ask != "" {
+			// The board's give asks in the key line, as the list's
+			// confirm step does.
+			t, _ := b.card(b.ask)
+			ag, _ := a.ckSelectedAgent()
+			ui.Text(c, locales.CockpitAskGive(t.Title, ag.Name)).FontSize(fsSmall).FontWeight(wSemibold).TextColor(pal.text).SingleLine().Ellipsis("…").MinWidth(0).Shrink(1)
+			keyHint(c, pal, "↵", locales.CockpitGiveWord())
+			keyHint(c, pal, "esc", locales.CommonCancel())
+			return
+		}
 		switch {
 		case a.ck.view == viewBoard:
-			hint("h l", locales.CockpitHintColumns())
-			hint("⇧H ⇧L", locales.CockpitHintMoveCard())
-			hint("n", locales.CockpitHintAddCard())
+			hint("← →", locales.CockpitHintColumns())
+			hint(chordName(chCardLeft)+" "+chordName(chCardRight), locales.CockpitHintMoveCard())
+			hint(chordName(chClaim), locales.CockpitHintClaim())
+			hint(chordName(chNewAgent), locales.CockpitHintNewAgent())
+			hint(locales.CockpitHintTypeKey(), locales.CockpitHintAddCard())
 			hint("esc", locales.CockpitHintList())
 		case a.ck.view == viewMail && a.ck.reply.box.FocusWithin(c):
 			hint("↵", locales.CockpitHintSend())
 			hint("esc", locales.CockpitHintBack())
 		case a.ck.view == viewMail:
-			hint("j k", locales.CockpitHintMove())
-			hint("r", locales.CockpitHintReply())
+			hint("↑ ↓", locales.CockpitHintMove())
+			hint(locales.CockpitHintTypeKey(), locales.CockpitHintReply())
 			hint("esc", locales.CockpitHintList())
 		case a.ck.reply.box.FocusWithin(c):
 			// The keys of the field that has them.
@@ -812,15 +761,12 @@ func (a *App) cockpitHints(c *ui.Context, pal *palette) {
 			hint("esc", locales.CockpitHintList())
 		case a.ck.stacked && a.ck.stackFocus:
 			hint("esc", locales.CockpitHintBack())
-			hint("a", locales.CockpitHintAllow())
-			hint("r", locales.CockpitHintReply())
+			hint(chordName(chAllow), locales.CockpitHintAllow())
+			hint(locales.CockpitHintTypeKey(), locales.CockpitHintReply())
 		case a.ck.stacked:
 			hint("↵", locales.CockpitHintOpen())
 			hint("→", locales.CockpitHintDetails())
 		default:
-			if ag, ok := a.ckSelectedAgent(); ok && a.ckHasSiblings(ag) {
-				hint("c", locales.CockpitHintCompare())
-			}
 			a.ckAllHints(hint)
 		}
 		ui.Spacer(c)
@@ -838,31 +784,32 @@ func (a *App) cockpitHints(c *ui.Context, pal *palette) {
 }
 
 // ckAllHints is the key line of a cockpit wide enough for both
-// columns: only the keys that do something on the selected row (council
-// round 4, S4).
+// columns: the chords that do something on the selected row, Ctrl+Enter
+// allow first (council round 4, S2).
 func (a *App) ckAllHints(hint func(k, what string)) {
-	does := func(k ui.Key, shift bool) bool { return a.ckKind(ckKey{key: k, shift: shift}) != kindProse }
-	onAgent := a.ckOnAgent()
-	if onAgent {
+	r, ok := a.ckSelected()
+	item := ok && r.item != nil
+	answerable := item && ckAnswerable(*r.item)
+	if answerable {
+		hint(chordName(chAllow), locales.CockpitHintAllow())
+		if a.ckCanReject() {
+			hint(chordName(chReject), locales.CockpitHintReject())
+		}
+	}
+	if a.ckOnAgent() {
 		hint("↵", locales.CockpitHintOpen())
-	}
-	if does(ui.KeyA, false) {
-		hint("a", locales.CockpitHintAllow())
-	}
-	if onAgent {
-		hint("r", locales.CockpitHintReply())
+		hint(locales.CockpitHintTypeKey(), locales.CockpitHintReply())
 	}
 	if ag, ok := a.ckSelectedAgent(); ok && (ag.Settled || ag.State != "working") {
-		// A working agent has nothing to settle yet.
-		hint("D", locales.CockpitHintSettle())
+		hint(chordName(chSettle), locales.CockpitHintSettle())
 	}
-	if does(ui.KeyZ, false) {
-		hint("z", locales.CockpitHintSnooze())
+	if item && !ckHeld(*r.item) {
+		hint(chordName(chSnooze), locales.CockpitHintSnooze())
 	}
-	hint("n", locales.CockpitHintNewAgent())
-	hint("f", locales.CockpitHintFilter())
-	if onAgent {
-		hint("[ ]", locales.CockpitHintTabs())
+	hint(chordName(chNewAgent), locales.CockpitHintNewAgent())
+	hint(chordName(chFilter), locales.CockpitHintFilter())
+	if a.ckOnAgent() {
+		hint(chordName(chTabPrev)+" "+chordName(chTabNext), locales.CockpitHintTabs())
 	}
 }
 
@@ -978,7 +925,7 @@ func (a *App) ckSide(min float32) float32 {
 // label, with n as its key.
 func newAgentButton(c *ui.Context, pal *palette, tip string) bool {
 	b := ui.ButtonBase(c.Key("ck-new")).Height(hControlSm).Padding(0, 10, 0, 8).Gap(6).Radius(rControl).AlignItems(ui.Center).Shrink(0).
-		Label(locales.CockpitNewAgent()).Tooltip(tip + " (n)")
+		Label(locales.CockpitNewAgent()).Tooltip(tip)
 	face(b, pal, pal.control)
 	switch {
 	case b.Pressed():

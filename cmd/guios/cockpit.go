@@ -52,9 +52,10 @@ const ckSettleAfter = time.Hour
 // row. Needs you never folds.
 const ckFoldAt = 8
 
-// ckAnswerSettle is how long a held approval must have been on screen, as it
-// is, before a key or a click answers it (the TUI's inboxAnswerSettle).
-const ckAnswerSettle = 400 * time.Millisecond
+// ckNewFlash is how long a new prompt's card edge shows the accent. No time
+// guards an answer: a letter never answers (cockpit_guard.go), a risky call
+// asks first, and an answer goes only to the prompt the card drew.
+const ckNewFlash = 400 * time.Millisecond
 
 // ckRiskWindow is how long the first click of an allow on a risky approval
 // waits for the second (the TUI's inboxRiskPressWindow).
@@ -119,9 +120,6 @@ type cockpit struct {
 	advanceAt time.Time
 	// fleetRect is the agents list's box in the last frame, for toasts.
 	fleetRect ui.Rect
-	// guard keeps typed prose from running as the lists' keys
-	// (cockpit_guard.go).
-	guard typingGuard
 	// lightbox is an image of a thread shown whole.
 	lightbox *ckThreadImage
 

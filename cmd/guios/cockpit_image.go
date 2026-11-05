@@ -118,26 +118,6 @@ func (a *App) imageItem(c *ui.Context, pal *palette, th *ckThread, it *ckItem) {
 	})
 }
 
-// ckNewestImage is the newest image read in the selected agent's thread.
-func (a *App) ckNewestImage() *ckThreadImage {
-	ag, ok := a.ckSelectedAgent()
-	if !ok {
-		return nil
-	}
-	th := a.ck.threads[threadKey(ag)]
-	if th == nil {
-		return nil
-	}
-	for i := len(th.items) - 1; i >= 0; i-- {
-		if th.items[i].kind == ckItemImage {
-			if im := th.images[th.items[i].e.ID]; im != nil && im.bm != nil {
-				return im
-			}
-		}
-	}
-	return nil
-}
-
 // lightbox shows an image whole over the agents view. A click, Escape or
 // Space closes it.
 func (a *App) lightbox(c *ui.Context, pal *palette) {

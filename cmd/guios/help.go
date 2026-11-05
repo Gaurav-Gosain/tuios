@@ -70,6 +70,16 @@ func (a *App) helpRows() []helpRow {
 			}
 		}
 	}
+	// The agents view's keys: typed text goes to the reply box, and the
+	// actions are chords (cockpit_chords.go).
+	ag := locales.KeysAgentsGroup()
+	rows = append(rows,
+		helpRow{ag, locales.CockpitHintTypeKey(), locales.KeysTypeToReply()},
+		helpRow{ag, "↑ ↓ Home End Tab", locales.KeysListMove()},
+		helpRow{ag, "↵", locales.CockpitOpenPane()})
+	for _, ch := range ckChords {
+		rows = append(rows, helpRow{ag, chordName(ch.id), chordWords(ch.id)})
+	}
 	for _, act := range actions.All {
 		k := a.keys(act.ID)
 		if k == "" {

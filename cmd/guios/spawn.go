@@ -93,16 +93,7 @@ type spawnSheet struct {
 	// failed holds that the draft is a start the daemon refused: its
 	// notice says why when the sheet opens again.
 	failed bool
-	// byKey holds that a letter in a list opened the sheet: Enter in its
-	// task does not start, since the task may be a sentence meant for a
-	// reply box (cockpit_guard.go). Ctrl+Enter and Start do.
-	byKey bool
-	// byKeyFresh holds that the sheet n opened has had no key yet, and
-	// byKeyText that text came into its empty task at once: it may be a
-	// sentence meant for the reply box. The sheet then offers Esc to move
-	// "n" and the text there (QA-073). A click or another field ends both.
-	byKeyFresh, byKeyText bool
-	open                  bool
+	open   bool
 	// task is the task and its images, as the reply box holds a message.
 	task                ckDraft
 	model, branch, base string
@@ -183,6 +174,10 @@ func (a *App) newAgent() {
 		return
 	}
 	ck := &a.ck
+	// Opened from outside the agents view (a terminal, the palette), the
+	// sheet starts in the focused pane's session and folder, not in the
+	// agent the view had selected last (council round 4, workflow S1).
+	inAgents := ck.open
 	if !ck.open {
 		a.toggleCockpit()
 	}
@@ -192,7 +187,7 @@ func (a *App) newAgent() {
 	ck.cmp = nil
 	s := ck.spawnDraft
 	ck.spawnDraft = nil
-	folder, sess := a.spawnFolder()
+	folder, sess := a.spawnFolder(inAgents)
 	if s == nil || s.folder != folder {
 		// The common case is one step: Enter starts the last agent in
 		// this folder on this machine (council round 1, M1). A worktree,
@@ -203,7 +198,7 @@ func (a *App) newAgent() {
 	if !s.failed {
 		s.notice = ""
 	}
-	s.open, s.failed, s.starting, s.listOpen, s.card, s.byKey, s.byKeyFresh, s.byKeyText = true, false, false, false, nil, false, false, false
+	s.open, s.failed, s.starting, s.listOpen, s.card = true, false, false, false, nil
 	s.focusField, s.focusAgain, s.focusTries = spTask, true, 0
 	s.session = sess
 	ck.spawnGen++
@@ -283,8 +278,8 @@ func (a *App) spawnApplyPreset(s *spawnSheet, pr spawnPreset) {
 // started there goes in. In the agents view it is the selected agent's
 // folder and session (council round 3, S1); else the selected session's
 // focused pane, when it is on this machine, else home.
-func (a *App) spawnFolder() (string, string) {
-	if a.ck.open {
+func (a *App) spawnFolder(inAgents bool) (string, string) {
+	if inAgents {
 		if ag, ok := a.ckSelectedAgent(); ok && ag.Host == "" && ag.Cwd != "" && filepath.IsAbs(ag.Cwd) {
 			return filepath.Clean(ag.Cwd), ag.Session
 		}
@@ -690,17 +685,6 @@ func (a *App) spawnAgentName(task string) string {
 // spawnClose closes the sheet and keeps it as the draft the next open shows.
 func (a *App) spawnClose() {
 	ck := &a.ck
-	if sp := ck.spawn; sp != nil && sp.byKeyText && !sp.starting && strings.TrimSpace(sp.task.text) != "" {
-		// Text typed at once after n: closing the sheet moves "n" and the
-		// text to the reply box, so nothing is lost (QA-073).
-		text := "n" + sp.task.text
-		sp.open = false
-		ck.spawn, ck.spawnDraft = nil, nil
-		if !a.ckProse(text) {
-			ck.fleetFocus.Focus()
-		}
-		return
-	}
 	if ck.spawn != nil {
 		ck.spawn.open = false
 		ck.spawnDraft, ck.spawn = ck.spawn, nil
@@ -1051,9 +1035,9 @@ func (a *App) spawnStart() {
 			case verb == "fan":
 				out.text = locales.SpawnStartedWorktree(what)
 			case !res.Ready && res.Reason != "":
-				out.text, out.warn = locales.SpawnNotReady(what, res.Session, flat(res.Reason)), true
+				out.text, out.warn = locales.SpawnNotReady(what), true
 			case res.PromptStatus != "" && res.PromptStatus != session.PromptSent:
-				out.text, out.warn = locales.SpawnTaskNotSent(what, res.Session, flat(res.PromptNote)), true
+				out.text, out.warn = locales.SpawnTaskNotSent(what), true
 			default:
 				out.text = locales.SpawnStartedIn(what, res.Session)
 			}
@@ -1152,4 +1136,18 @@ func spawnTaskRefused(err *session.VerbCallError) bool {
 		return true
 	}
 	return false
+}
+
+// spawnSessionLabel is the name the sidebar shows for the session a start
+// goes in, by its daemon name: "" for a new session.
+func (a *App) spawnSessionLabel(name string) string {
+	if name == "" {
+		return ""
+	}
+	for i := range a.st.Sessions {
+		if s := &a.st.Sessions[i]; a.sessionName(s.ID) == name || s.Name == name {
+			return s.DisplayName(a.set.SessionName)
+		}
+	}
+	return name
 }

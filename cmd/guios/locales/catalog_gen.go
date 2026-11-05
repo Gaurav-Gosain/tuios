@@ -7740,11 +7740,11 @@ func (msgs Messages) CockpitMoreColumns() string {
 	return Catalog.Format(msgs.locale, "cockpitMoreColumns", nil)
 }
 
-// CockpitCardPlaceholder says "What is the card? Press Enter to add it"
+// CockpitCardPlaceholder says "New card"
 // in the language the app shows.
 func CockpitCardPlaceholder() string { return In(i18n.Locale()).CockpitCardPlaceholder() }
 
-// CockpitCardPlaceholder says "What is the card? Press Enter to add it"
+// CockpitCardPlaceholder says "New card"
 // in the language of msgs.
 func (msgs Messages) CockpitCardPlaceholder() string {
 	return Catalog.Format(msgs.locale, "cockpitCardPlaceholder", nil)
@@ -11666,28 +11666,24 @@ func (msgs Messages) SpawnStartedWorktree(branch string) string {
 	return Catalog.Format(msgs.locale, "spawnStartedWorktree", map[string]any{"branch": branch})
 }
 
-// SpawnNotReady says "Started {agent} in {session}. It is not ready: {why}"
+// SpawnNotReady says "{agent} did not show its prompt in time. Open the pane to see it."
 // in the language the app shows.
-func SpawnNotReady(agent string, session string, why string) string {
-	return In(i18n.Locale()).SpawnNotReady(agent, session, why)
-}
+func SpawnNotReady(agent string) string { return In(i18n.Locale()).SpawnNotReady(agent) }
 
-// SpawnNotReady says "Started {agent} in {session}. It is not ready: {why}"
+// SpawnNotReady says "{agent} did not show its prompt in time. Open the pane to see it."
 // in the language of msgs.
-func (msgs Messages) SpawnNotReady(agent string, session string, why string) string {
-	return Catalog.Format(msgs.locale, "spawnNotReady", map[string]any{"agent": agent, "session": session, "why": why})
+func (msgs Messages) SpawnNotReady(agent string) string {
+	return Catalog.Format(msgs.locale, "spawnNotReady", map[string]any{"agent": agent})
 }
 
-// SpawnTaskNotSent says "Started {agent} in {session}. The task was not sent: {why}"
+// SpawnTaskNotSent says "{agent} started, but the task was not typed in. Open the pane to see it."
 // in the language the app shows.
-func SpawnTaskNotSent(agent string, session string, why string) string {
-	return In(i18n.Locale()).SpawnTaskNotSent(agent, session, why)
-}
+func SpawnTaskNotSent(agent string) string { return In(i18n.Locale()).SpawnTaskNotSent(agent) }
 
-// SpawnTaskNotSent says "Started {agent} in {session}. The task was not sent: {why}"
+// SpawnTaskNotSent says "{agent} started, but the task was not typed in. Open the pane to see it."
 // in the language of msgs.
-func (msgs Messages) SpawnTaskNotSent(agent string, session string, why string) string {
-	return Catalog.Format(msgs.locale, "spawnTaskNotSent", map[string]any{"agent": agent, "session": session, "why": why})
+func (msgs Messages) SpawnTaskNotSent(agent string) string {
+	return Catalog.Format(msgs.locale, "spawnTaskNotSent", map[string]any{"agent": agent})
 }
 
 // SpawnStartedIn says "Started {agent} in {session}."
@@ -12574,11 +12570,11 @@ func (msgs Messages) SetApprovalsNeedsIntegration() string {
 	return Catalog.Format(msgs.locale, "setApprovalsNeedsIntegration", nil)
 }
 
-// CompareKeysHere says "Keys go to Compare. Press Escape to close it."
+// CompareKeysHere says "Keys go to Compare, and typed text does nothing here. Press Esc to close it."
 // in the language the app shows.
 func CompareKeysHere() string { return In(i18n.Locale()).CompareKeysHere() }
 
-// CompareKeysHere says "Keys go to Compare. Press Escape to close it."
+// CompareKeysHere says "Keys go to Compare, and typed text does nothing here. Press Esc to close it."
 // in the language of msgs.
 func (msgs Messages) CompareKeysHere() string {
 	return Catalog.Format(msgs.locale, "compareKeysHere", nil)
@@ -12800,4 +12796,196 @@ func SidebarFilesTip() string { return In(i18n.Locale()).SidebarFilesTip() }
 // in the language of msgs.
 func (msgs Messages) SidebarFilesTip() string {
 	return Catalog.Format(msgs.locale, "sidebarFilesTip", nil)
+}
+
+// CockpitKeysNeedAgent says "Select an agent to write to it."
+// in the language the app shows.
+func CockpitKeysNeedAgent() string { return In(i18n.Locale()).CockpitKeysNeedAgent() }
+
+// CockpitKeysNeedAgent says "Select an agent to write to it."
+// in the language of msgs.
+func (msgs Messages) CockpitKeysNeedAgent() string {
+	return Catalog.Format(msgs.locale, "cockpitKeysNeedAgent", nil)
+}
+
+// CockpitHintReject says "reject"
+// in the language the app shows.
+func CockpitHintReject() string { return In(i18n.Locale()).CockpitHintReject() }
+
+// CockpitHintReject says "reject"
+// in the language of msgs.
+func (msgs Messages) CockpitHintReject() string {
+	return Catalog.Format(msgs.locale, "cockpitHintReject", nil)
+}
+
+// CockpitHintTypeKey says "Type"
+// in the language the app shows.
+func CockpitHintTypeKey() string { return In(i18n.Locale()).CockpitHintTypeKey() }
+
+// CockpitHintTypeKey says "Type"
+// in the language of msgs.
+func (msgs Messages) CockpitHintTypeKey() string {
+	return Catalog.Format(msgs.locale, "cockpitHintTypeKey", nil)
+}
+
+// CockpitHintClaim says "give card"
+// in the language the app shows.
+func CockpitHintClaim() string { return In(i18n.Locale()).CockpitHintClaim() }
+
+// CockpitHintClaim says "give card"
+// in the language of msgs.
+func (msgs Messages) CockpitHintClaim() string {
+	return Catalog.Format(msgs.locale, "cockpitHintClaim", nil)
+}
+
+// CockpitAddCardChord says "Press {keys} or Add to add the card."
+// in the language the app shows.
+func CockpitAddCardChord(keys string) string { return In(i18n.Locale()).CockpitAddCardChord(keys) }
+
+// CockpitAddCardChord says "Press {keys} or Add to add the card."
+// in the language of msgs.
+func (msgs Messages) CockpitAddCardChord(keys string) string {
+	return Catalog.Format(msgs.locale, "cockpitAddCardChord", map[string]any{"keys": keys})
+}
+
+// CockpitAskGive says "Give {card} to {name}?"
+// in the language the app shows.
+func CockpitAskGive(card string, name string) string {
+	return In(i18n.Locale()).CockpitAskGive(card, name)
+}
+
+// CockpitAskGive says "Give {card} to {name}?"
+// in the language of msgs.
+func (msgs Messages) CockpitAskGive(card string, name string) string {
+	return Catalog.Format(msgs.locale, "cockpitAskGive", map[string]any{"card": card, "name": name})
+}
+
+// CockpitGiveWord says "Give"
+// in the language the app shows.
+func CockpitGiveWord() string { return In(i18n.Locale()).CockpitGiveWord() }
+
+// CockpitGiveWord says "Give"
+// in the language of msgs.
+func (msgs Messages) CockpitGiveWord() string {
+	return Catalog.Format(msgs.locale, "cockpitGiveWord", nil)
+}
+
+// CompareReadAgain says "Read again"
+// in the language the app shows.
+func CompareReadAgain() string { return In(i18n.Locale()).CompareReadAgain() }
+
+// CompareReadAgain says "Read again"
+// in the language of msgs.
+func (msgs Messages) CompareReadAgain() string {
+	return Catalog.Format(msgs.locale, "compareReadAgain", nil)
+}
+
+// KeysAgentsGroup says "guios · Agents"
+// in the language the app shows.
+func KeysAgentsGroup() string { return In(i18n.Locale()).KeysAgentsGroup() }
+
+// KeysAgentsGroup says "guios · Agents"
+// in the language of msgs.
+func (msgs Messages) KeysAgentsGroup() string {
+	return Catalog.Format(msgs.locale, "keysAgentsGroup", nil)
+}
+
+// KeysTypeToReply says "Write to the selected agent"
+// in the language the app shows.
+func KeysTypeToReply() string { return In(i18n.Locale()).KeysTypeToReply() }
+
+// KeysTypeToReply says "Write to the selected agent"
+// in the language of msgs.
+func (msgs Messages) KeysTypeToReply() string {
+	return Catalog.Format(msgs.locale, "keysTypeToReply", nil)
+}
+
+// KeysListMove says "Move in the list"
+// in the language the app shows.
+func KeysListMove() string { return In(i18n.Locale()).KeysListMove() }
+
+// KeysListMove says "Move in the list"
+// in the language of msgs.
+func (msgs Messages) KeysListMove() string {
+	return Catalog.Format(msgs.locale, "keysListMove", nil)
+}
+
+// KeysUndoSettle says "Take back the last settle"
+// in the language the app shows.
+func KeysUndoSettle() string { return In(i18n.Locale()).KeysUndoSettle() }
+
+// KeysUndoSettle says "Take back the last settle"
+// in the language of msgs.
+func (msgs Messages) KeysUndoSettle() string {
+	return Catalog.Format(msgs.locale, "keysUndoSettle", nil)
+}
+
+// KeysNeedsOnly says "Show only the agents that need you"
+// in the language the app shows.
+func KeysNeedsOnly() string { return In(i18n.Locale()).KeysNeedsOnly() }
+
+// KeysNeedsOnly says "Show only the agents that need you"
+// in the language of msgs.
+func (msgs Messages) KeysNeedsOnly() string {
+	return Catalog.Format(msgs.locale, "keysNeedsOnly", nil)
+}
+
+// KeysTabPrev says "Previous tab"
+// in the language the app shows.
+func KeysTabPrev() string { return In(i18n.Locale()).KeysTabPrev() }
+
+// KeysTabPrev says "Previous tab"
+// in the language of msgs.
+func (msgs Messages) KeysTabPrev() string {
+	return Catalog.Format(msgs.locale, "keysTabPrev", nil)
+}
+
+// KeysTabNext says "Next tab"
+// in the language the app shows.
+func KeysTabNext() string { return In(i18n.Locale()).KeysTabNext() }
+
+// KeysTabNext says "Next tab"
+// in the language of msgs.
+func (msgs Messages) KeysTabNext() string {
+	return Catalog.Format(msgs.locale, "keysTabNext", nil)
+}
+
+// KeysGiveCard says "Give the card to the selected agent"
+// in the language the app shows.
+func KeysGiveCard() string { return In(i18n.Locale()).KeysGiveCard() }
+
+// KeysGiveCard says "Give the card to the selected agent"
+// in the language of msgs.
+func (msgs Messages) KeysGiveCard() string {
+	return Catalog.Format(msgs.locale, "keysGiveCard", nil)
+}
+
+// KeysMoveCardLeft says "Move the card a column left"
+// in the language the app shows.
+func KeysMoveCardLeft() string { return In(i18n.Locale()).KeysMoveCardLeft() }
+
+// KeysMoveCardLeft says "Move the card a column left"
+// in the language of msgs.
+func (msgs Messages) KeysMoveCardLeft() string {
+	return Catalog.Format(msgs.locale, "keysMoveCardLeft", nil)
+}
+
+// KeysMoveCardRight says "Move the card a column right"
+// in the language the app shows.
+func KeysMoveCardRight() string { return In(i18n.Locale()).KeysMoveCardRight() }
+
+// KeysMoveCardRight says "Move the card a column right"
+// in the language of msgs.
+func (msgs Messages) KeysMoveCardRight() string {
+	return Catalog.Format(msgs.locale, "keysMoveCardRight", nil)
+}
+
+// KeysKeepAttempt says "Keep the attempt"
+// in the language the app shows.
+func KeysKeepAttempt() string { return In(i18n.Locale()).KeysKeepAttempt() }
+
+// KeysKeepAttempt says "Keep the attempt"
+// in the language of msgs.
+func (msgs Messages) KeysKeepAttempt() string {
+	return Catalog.Format(msgs.locale, "keysKeepAttempt", nil)
 }

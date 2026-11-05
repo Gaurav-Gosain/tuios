@@ -167,10 +167,10 @@ func (ck *cockpit) agentByWindow(sess, window string) (client.Agent, bool) {
 	return client.Agent{}, false
 }
 
-// mailKeys are the Mail view's keys while its list has them: j k and the
-// arrows move between the messages, r and Enter answer the one the cursor
-// is on, Escape goes back to the agents. Other letters are typed text: they
-// take back the key that opened the view, and run nothing.
+// mailKeys are the Mail view's keys while its list has them: the arrows,
+// Home, End and Tab move between the messages, Enter answers the one the
+// cursor is on, and Escape goes back to the agents. Typed text starts the
+// reply, with the text in it.
 func (a *App) mailKeys(c *ui.Context, col ui.Element, m *ckMail, mine []ckMsg) {
 	ck := &a.ck
 	at := -1
@@ -192,34 +192,38 @@ func (a *App) mailKeys(c *ui.Context, col ui.Element, m *ckMail, mine []ckMsg) {
 			a.mailReplyTo(m, mine[at])
 		}
 	}
-	kind := func(k ckKey) keyKind {
-		switch {
-		case !k.shift && (k.key == ui.KeyJ || k.key == ui.KeyK):
-			return kindMove
-		case !k.shift && k.key == ui.KeyR && at >= 0:
-			return kindView
+	if text, ok := typedText(col); ok {
+		// Typed text never acts: it starts the reply to the message the
+		// cursor is on, with the text, whole (council round 4, M1).
+		if at >= 0 {
+			msg := mine[at]
+			a.mailReplyTo(m, msg)
+			if _, ok := ck.agentByWindow(msg.Session, msg.From); ok {
+				ck.reply.insert = text
+				ck.reply.focusNext = true
+			} else {
+				m.draft += text
+			}
+		} else {
+			a.toast(locales.CockpitKeysToMail())
 		}
-		return kindProse
+		c.Invalidate()
+		return
 	}
-	lk := listKeys{kind: kind, hint: locales.CockpitKeysToMail}
-	if k, ok := a.guard(col, &ck.guard, lk); ok {
-		switch k.key {
-		case ui.KeyJ:
-			move(1)
-		case ui.KeyK:
-			move(-1)
-		case ui.KeyR:
-			reply()
+	if d, to, ok := listMove(col); ok {
+		switch {
+		case to < 0:
+			move(-len(mine))
+		case to > 0:
+			move(len(mine))
+		default:
+			move(d)
 		}
 		c.Invalidate()
 		return
 	}
 	key := func(k ui.Key) bool { return col.Shortcut(0, k) }
 	switch {
-	case key(ui.KeyDown):
-		move(1)
-	case key(ui.KeyUp):
-		move(-1)
 	case key(ui.KeyEnter):
 		reply()
 	case key(ui.KeyEscape):

@@ -178,7 +178,7 @@ func (a *App) cockpitFocus(c *ui.Context, pal *palette) {
 				ui.Text(c, word).FontSize(fsSmall).FontWeight(wMedium).SingleLine()
 			}).Shrink(0)
 			if a.ckHasSiblings(ag) && !ck.narrow {
-				if sizedButton(c, "ck-compare", locales.CockpitCompare(), "c", false, hControlSm, rControl, pal) {
+				if sizedButton(c, "ck-compare", locales.CockpitCompare(), "", false, hControlSm, rControl, pal) {
 					a.openCompare()
 				}
 			}
@@ -327,9 +327,12 @@ func (a *App) approvalCard(c *ui.Context, pal *palette, ag client.Agent, it sess
 		ck.shown = ckShown{key: key, since: now}
 		ck.armed = ckArmed{}
 	}
-	if d := ck.shown.since.Add(ckAnswerSettle).Sub(now); d > 0 {
-		// The buttons wake when the card has been read.
-		c.After(d)
+	// A new prompt in the card shows that it is new: its edge flashes the
+	// accent for ckNewFlash, so a fast chord that found a new prompt under
+	// it sees why (council round 4, S2).
+	fresh := now.Sub(ck.shown.since) < ckNewFlash
+	if fresh {
+		c.After(ckNewFlash - now.Sub(ck.shown.since))
 	}
 	held := ckHeld(it)
 	if !held {
@@ -337,7 +340,6 @@ func (a *App) approvalCard(c *ui.Context, pal *palette, ag client.Agent, it sess
 	}
 	question := !held && (it.Kind == session.AttentionQuestion || it.Kind == session.AttentionAsk)
 	pk := ck.peek
-	settled := now.Sub(ck.shown.since) >= ckAnswerSettle
 	risky := len(it.Risk) > 0 || pk != nil && len(pk.risk) > 0
 	// The card is the card's ground with one needs-you cue, its rounded
 	// edge: amber, red and blue do not meet on one brown fill, and the risk
@@ -345,6 +347,9 @@ func (a *App) approvalCard(c *ui.Context, pal *palette, ag client.Agent, it sess
 	// edge drew a second amber rule (council round 2, S3).
 	card := ui.Column(c.Key("approval")).Shrink(0).Margin(0, a.ckSide(24), 10, a.ckSide(24)).Padding(14, 16).Gap(10).Radius(rCard).
 		Background(pal.card).Border(1, pal.attention.Alpha(0.7))
+	if fresh {
+		card.Border(2, pal.accent)
+	}
 	card.Children(func() {
 		ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
 			ui.Box(c).Size(8, 8).Radius(4).Background(pal.attention).Shrink(0)
@@ -411,29 +416,22 @@ func (a *App) approvalCard(c *ui.Context, pal *palette, ag client.Agent, it sess
 		}
 		if ck.reasonFor == it.ID {
 			in := textField(c, "reason", &ck.reason, locales.CockpitReasonPlaceholder(), 0, pal).AutoFocus()
-			// R opens this line from the list, so a sentence can land in
-			// it: Enter asks first, and a second Enter rejects.
-			if q := ck.question; q != nil && q.what == askReason && in.Changed() {
-				ck.question = nil
-			}
-			if in.Submitted() {
-				if q := ck.question; q != nil && q.what == askReason {
-					a.ckQuestionRun()
-				} else if strings.TrimSpace(ck.reason) != "" {
-					a.ckAskFor(askReason)
-				}
+			if in.Submitted() && strings.TrimSpace(ck.reason) != "" {
+				a.ckSend(it, ag, "deny", ck.reason)
+				ck.reasonFor, ck.reason = "", ""
+				ck.fleetFocus.Focus()
 			} else if in.Shortcut(0, ui.KeyEscape) {
 				ck.reasonFor, ck.reason, ck.question = "", "", nil
 				ck.fleetFocus.Focus()
 			}
 		}
 		// The buttons wrap rather than cut the last in a narrow card.
-		ui.Row(c).Wrap().Gap(8).AlignItems(ui.Center).Opacity(map[bool]float32{true: 1, false: 0.55}[settled]).Children(func() {
+		ui.Row(c).Wrap().Gap(8).AlignItems(ui.Center).Children(func() {
 			opts := a.ckOptions(it, pk)
 			if question && (pk == nil || len(pk.actions) == 0) {
 				opts = nil
 				// Send, in the reply box under it, is the view's one primary.
-				if sizedButton(c, "ans-reply", locales.CockpitReply(), "r", false, hControl, rControl, pal) {
+				if sizedButton(c, "ans-reply", locales.CockpitReply(), "", false, hControl, rControl, pal) {
 					a.ckFocusReply()
 				}
 				oneLine(c, locales.CockpitAnswerByReply(), fsSmall, 0).TextColor(pal.textMuted).Shrink(2)
@@ -524,13 +522,13 @@ func ckDecisionWords(d string) string {
 func ckDecisionKey(d string) string {
 	switch d {
 	case "once":
-		return "a"
+		return chordName(chAllow)
 	case "always":
-		return "A"
-	case "reason":
-		return "R"
+		return chordName(chAlways)
+	case "deny":
+		return chordName(chReject)
 	}
-	return "r"
+	return ""
 }
 
 // ckFetchPeek reads the prompt on the pane's screen once per prompt.
@@ -571,11 +569,11 @@ func (a *App) ckFetchPeek(ag client.Agent, it session.AttentionItem) {
 	}()
 }
 
-// ckAnswer answers the selected row's prompt with decision, under the TUI's
-// rules: the card must have shown the prompt as it is for ckAnswerSettle,
-// and a click that allows a risky call takes a second click. Keys answer
-// only through the confirm step (cockpit_ask.go). It reports whether the
-// row had a prompt to answer.
+// ckAnswer answers the selected row's prompt with decision. It answers only
+// the prompt the card drew: one that arrived since, under a fast chord,
+// is not answered, and its card flashes as new. A click that allows a
+// risky call takes a second click; the chord asks first (cockpit_ask.go).
+// It reports whether the row had a prompt to answer.
 func (a *App) ckAnswer(decision string) bool {
 	ck := &a.ck
 	r, ok := a.ckSelected()
@@ -588,8 +586,8 @@ func (a *App) ckAnswer(decision string) bool {
 		ag = client.Agent{Session: it.Session, Window: it.Window, Name: it.Name}
 	}
 	now := time.Now()
-	if ck.shown.key != ckShownKey(it) || now.Sub(ck.shown.since) < ckAnswerSettle {
-		a.toast(locales.CockpitJustChanged())
+	if ck.shown.key != ckShownKey(it) {
+		// Not drawn yet: the card shows it next, flashing as new.
 		return true
 	}
 	if decision == "reason" {

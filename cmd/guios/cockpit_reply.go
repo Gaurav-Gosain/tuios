@@ -204,6 +204,11 @@ func (a *App) replyBox(c *ui.Context, pal *palette, ag client.Agent) {
 					d.text = k.Text()
 					a.sendReply(ag, d, true)
 					return true
+				case k.Key == ui.KeyEnter && k.Mods == 0 && strings.TrimSpace(k.Text()) == "" && len(d.images) == 0 && !mail:
+					// Enter in an empty box opens the agent's pane, as
+					// Enter in the list does.
+					a.goToAgent(ag)
+					return true
 				case k.Key == ui.KeyEnter && k.Mods == 0:
 					d.text = k.Text()
 					a.sendBox(ag, d, mail)
