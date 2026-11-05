@@ -1,13 +1,17 @@
 package main
 
 import (
+	"slices"
 	"sort"
+	"strings"
+	"time"
 
 	"github.com/Gaurav-Gosain/mygo/ui"
 
 	"github.com/Gaurav-Gosain/tuios/internal/guios/client"
 	"github.com/Gaurav-Gosain/tuios/internal/guios/proto"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
+	"github.com/Gaurav-Gosain/tuios/internal/sessiontree"
 
 	"github.com/Gaurav-Gosain/tuios/cmd/guios/locales"
 )
@@ -21,8 +25,12 @@ import (
 // sbAgentsMax is how many agents a session lists before "+N more".
 const sbAgentsMax = 5
 
-// sbAgentH is an agent row's height.
-const sbAgentH = 24
+// sbAgentH is an agent row's height: its name over its harness and what
+// it is at, as the TUI rail and the agents list show an agent.
+const sbAgentH = 38
+
+// sbMoreH is the height of a "+N more" row.
+const sbMoreH = 24
 
 // sbAgent is one agent row: the agent, and what needs the person, if
 // anything does.
@@ -68,7 +76,13 @@ func (a *App) sessionAgents(s *proto.Session, needs []ckNeed) []sbAgent {
 			}
 			return nx.since < ny.since
 		}
-		return ck.agents[out[x].i].Name < ck.agents[out[y].i].Name
+		// Then by the TUI rail's order: failed, done and not seen,
+		// working, done, idle.
+		ax, ay := ck.agents[out[x].i], ck.agents[out[y].i]
+		if rx, ry := sessiontree.AgentRank(ax.State, !ax.FinishedUnread), sessiontree.AgentRank(ay.State, !ay.FinishedUnread); rx != ry {
+			return rx > ry
+		}
+		return ax.Name < ay.Name
 	})
 	return out
 }
@@ -76,13 +90,16 @@ func (a *App) sessionAgents(s *proto.Session, needs []ckNeed) []sbAgent {
 // agentRows draws a session's agent rows.
 func (a *App) agentRows(c *ui.Context, pal *palette, s *proto.Session, needs []ckNeed) {
 	rows := a.sessionAgents(s, needs)
+	// An agent in Needs you shows there, at the top, and not again here:
+	// the session's mark says it waits.
+	rows = slices.DeleteFunc(rows, func(r sbAgent) bool { return r.need != nil })
 	if len(rows) == 0 {
 		return
 	}
 	ui.Column(c.Key("agents-"+s.ID)).Margin(0, 0, 4, 0).Children(func() {
 		for k, r := range rows {
 			if k == sbAgentsMax {
-				more := ui.Row(c.Key("more")).Height(sbAgentH).Padding(0, 10, 0, rowInset+24).AlignItems(ui.Center).Radius(rRow).Cursor(ui.CursorPointer)
+				more := ui.Row(c.Key("more")).Height(sbMoreH).Padding(0, 10, 0, rowInset+24).AlignItems(ui.Center).Radius(rRow).Cursor(ui.CursorPointer)
 				if more.Hovered() {
 					more.Background(pal.rowHover)
 				}
@@ -100,7 +117,9 @@ func (a *App) agentRows(c *ui.Context, pal *palette, s *proto.Session, needs []c
 	})
 }
 
-// agentRow is one agent under its session.
+// agentRow is one agent: under its session, or in Needs you. Line 1 is
+// its mark, its name and, while it waits or works, how long; line 2 is its
+// harness and what it is at, or what it asks.
 func (a *App) agentRow(c *ui.Context, pal *palette, ag client.Agent, need *ckNeed) {
 	var it *session.AttentionItem
 	if need != nil {
@@ -118,34 +137,66 @@ func (a *App) agentRow(c *ui.Context, pal *palette, ag client.Agent, need *ckNee
 		a.showInCockpit(ag.Key())
 	}
 	verb, rest := ckLine2(ag, it)
-	if need == nil {
-		verb, rest = "", ""
-	}
 	pointerTooltip(c, row, "ag-tip-"+ag.Window, locales.SidebarAgentTip())
 	st, unread := ckStatus(ag, it)
 	if need != nil && st != proto.Failed {
 		st, unread = proto.Waiting, true
 	}
+	if t, r, ok := cutTool(rest); ok {
+		rest = t + " " + r
+	}
 	row.Children(func() {
-		ckMark(c, pal, st, unread, 12)
-		if l := a.ckAttemptLetter(ag); l != "" {
-			attemptChip(c, pal, l)
-		}
-		name := oneLine(c, a.ckAgentName(ag), fsSmall, wMedium).TextColor(pal.text).Shrink(0).MaxWidth(130)
-		if need != nil {
-			name.FontWeight(wSemibold)
-		}
-		if t, r, ok := cutTool(rest); ok {
-			rest = t + " " + r
-		}
-		line := rest
-		if verb != "" {
-			line = verb + " " + rest
-		}
-		if line != "" {
-			ui.Text(c, flat(line)).FontSize(fsSmall).TextColor(pal.textMuted).SingleLine().Ellipsis("…").MinWidth(0).Shrink(1)
-		}
+		ui.Column(c).Width(12).Shrink(0).AlignSelf(ui.Start).Padding(4, 0, 0, 0).Children(func() {
+			ckMark(c, pal, st, unread, 12)
+		})
+		ui.Column(c).Grow(1).MinWidth(0).Gap(1).Children(func() {
+			ui.Row(c).Gap(6).AlignItems(ui.Center).Children(func() {
+				if l := a.ckAttemptLetter(ag); l != "" {
+					attemptChip(c, pal, l)
+				}
+				name := oneLine(c, sbAgentName(a.ckAgentName(ag), ag.Harness), fsSmall, wMedium).TextColor(pal.text)
+				if need != nil {
+					name.FontWeight(wSemibold)
+				}
+				ui.Spacer(c)
+				// How long it has waited or worked; ago asks for the frame
+				// its label changes in, and no other.
+				if ag.StateAt > 0 && (need != nil || st == proto.Working) {
+					ui.Text(c, ago(ag.StateAt/int64(time.Millisecond), c.Now())).FontSize(fsSmall).TextColor(pal.textFaint).FontFeatures("tnum").SingleLine().Shrink(0)
+				}
+			})
+			ui.Row(c).Gap(4).AlignItems(ui.Center).Children(func() {
+				if ag.Harness != "" {
+					ui.Icon(c, harnessIcon(ag.Harness)).Size(12, 12).TextColor(pal.textMuted).Shrink(0)
+					ui.Text(c, harnessName(ag.Harness)).FontSize(fsSmall).TextColor(pal.textMuted).SingleLine().Shrink(0)
+					if verb != "" || rest != "" {
+						ui.Text(c, "·").FontSize(fsSmall).TextColor(pal.textFaint).Shrink(0)
+					}
+				}
+				if verb != "" {
+					ui.Text(c, verb).FontSize(fsSmall).FontWeight(wMedium).TextColor(pal.attnText).SingleLine().Shrink(0)
+				}
+				if rest != "" {
+					ui.Text(c, flat(rest)).FontSize(fsSmall).TextColor(pal.textMuted).SingleLine().Ellipsis("…").MinWidth(0).Shrink(1)
+				}
+			})
+		})
 	})
+}
+
+// sbAgentName is an agent row's name: the agent's, or its harness's while
+// the pane's title is only a shell's prompt ("me@host:~/src"), which tells
+// nothing.
+func sbAgentName(name, harness string) string {
+	if at := strings.IndexByte(name, '@'); at > 0 && strings.Contains(name[at:], ":") && !strings.Contains(name[:at], " ") {
+		if harness != "" {
+			return harnessName(harness)
+		}
+	}
+	if name == "" {
+		return locales.CockpitUnnamed()
+	}
+	return name
 }
 
 // cutTool splits a second line that names a tool (ckLine2's "\x00").
