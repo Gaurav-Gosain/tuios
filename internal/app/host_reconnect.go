@@ -289,6 +289,10 @@ func (m *OS) resumeOnHost(client *session.TUIClient, state *session.SessionState
 	client.StartReadLoop()
 	m.AttachedHost = host
 	m.SessionName = client.SessionName()
+	// The far daemon kept every surface while the link was down, and the
+	// attach pushes each one whole. They win over this client's views. See
+	// tml_host.go.
+	m.tmlResync()
 
 	if m.samePaneSet(state) {
 		// The daemon on the host dropped every subscription when this client's

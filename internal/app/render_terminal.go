@@ -233,6 +233,9 @@ func (m *OS) renderTerminal(window *terminal.Window, isFocused bool, inTerminalM
 	if m.DrawsTML(window) {
 		return m.renderTML(window, dim)
 	}
+	if m.tmlHostTooOld(window) {
+		return m.renderTMLHostTooOld(window, dim)
+	}
 
 	// The guest has an open synchronized update (DEC 2026): it has begun a frame
 	// and does not want it seen half-drawn. The compositor holds the window's

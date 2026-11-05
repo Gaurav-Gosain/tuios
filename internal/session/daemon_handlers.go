@@ -107,6 +107,8 @@ func (d *Daemon) handleHello(cs *connState, msg *Message) error {
 		ListingPush: true,
 		// See pane_marks.go.
 		PaneMarks: true,
+		// See tml_surface.go, "Surfaces over a link".
+		TMLLink: !legacyTMLLink(),
 	})
 }
 

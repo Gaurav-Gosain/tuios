@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
 	"path/filepath"
 	"regexp"
 	"slices"
@@ -39,6 +40,52 @@ import (
 //
 // A surface does not survive a daemon restart: resurrection drops its window,
 // as it drops a popup.
+//
+// Surfaces over a link
+//
+// A client on another machine that attaches a session here (tuios attach
+// --host, or a session picked in its rail) is a client of this daemon like
+// any other: its own daemon relays the bytes of the attach over the link and
+// reads none of them. So it gets the same pushes, and this daemon stays the
+// one that holds each surface. What the person does on a surface comes back
+// on a second connection over the same link, as tml-input with the nonce of
+// that attach, and tml-get and tml-place come the same way. The welcome's
+// TMLLink tells the client this daemon takes them. A client of a daemon
+// without it says the daemon is too old, in place of a surface it could not
+// answer.
+//
+// What keeps a surface the person's and its owner's:
+//
+//   - tml-input and tml-place need the attach nonce of a client that came in
+//     on the link-human socket, through the same link proxy. A process in a
+//     pane on the other machine is issued none (human_sender.go).
+//   - The link policy holds each verb (link_policy.go): tml-get and tml-list
+//     need list, tml-input and tml-place need write, as a keystroke into the
+//     pane does. A pane() action in a tml-input is held to the verb it runs,
+//     so new-window needs open.
+//   - tmlReach holds a connection restricted to its own session to it.
+//   - Nothing over a link opens a surface or names its owner: tml-open,
+//     tml-patch, tml-replace and tml-close still need every relay
+//     capability. The owner stays the caller here that opened the surface,
+//     and its pane() actions run with that caller's grants.
+//
+// How it fails, and what happens then:
+//
+//   - The link drops with a surface open. The surface stays here and takes
+//     its owner's patches. An input on its way fails, and the client says
+//     what did not go through. When the link is back the client attaches
+//     again, the attach pushes every open surface whole, and the client takes
+//     each one as the truth, so a value it set and could not send goes back
+//     to this daemon's (see resumeOnHost in internal/app).
+//   - Order. Pushes go on the attach connection, in order, through one outbox
+//     per client. Inputs go on the second connection, one after the other. A
+//     client that misses a version reads the surface again with tml-get.
+//   - Two clients, here or on other machines, each get every push and send
+//     their own inputs. This daemon applies the inputs as they arrive.
+//   - A surface that closes while an input is on its way answers no_surface,
+//     and the close push takes its window away.
+//   - Size. The limits are this daemon's, the same for every client, and the
+//     outbox holds one push per surface for a slow link.
 
 // WindowKindTML is the kind of a window that draws a TML surface.
 const WindowKindTML = "tml"
@@ -126,6 +173,13 @@ type TMLEvent struct {
 	Version uint64 `json:"version"`
 }
 
+// legacyTMLLink makes this daemon answer as a build from before surfaces over
+// a link: its welcome leaves TMLLink out. It is TUIOS_TML_LINK_LEGACY=1, so a
+// client of an older far daemon can be tested without an old build.
+func legacyTMLLink() bool {
+	return os.Getenv("TUIOS_TML_LINK_LEGACY") == "1"
+}
+
 // TMLSurfaceID returns the surface a TML window's URI names, or "".
 func TMLSurfaceID(uri string) string {
 	id, ok := strings.CutPrefix(uri, TMLURIPrefix)
@@ -136,8 +190,9 @@ func TMLSurfaceID(uri string) string {
 }
 
 // tmlPlaceholderCommand is the program of a TML window. It prints what to do
-// for a client that does not draw the surface: a client attached through
-// another machine, or one that predates TML. q or esc ends it, and with it
+// for a client that does not draw the surface: one that predates TML, or one
+// on another machine that predates surfaces over a link. q or esc ends it,
+// and with it
 // the window, which dismisses the surface. It holds the alternate screen and
 // button-event mouse reporting (SGR), so a client that does draw TML sends
 // the wheel and clicks to the pane, where its TML code takes them before
@@ -161,7 +216,7 @@ while :; do
 		[ -z "$n" ] && exit 0 ;;
 	esac
 done`,
-		"tuios-tml", "This pane shows a TML surface. Open this session on its own machine to use it.",
+		"tuios-tml", "This pane shows a TML surface. This client cannot draw it. Update the tuios you attach with.",
 		"Press q to close it.", uri}
 }
 
@@ -721,6 +776,9 @@ func (d *Daemon) verbTMLInput(cs *connState, params json.RawMessage) (any, *verb
 			Detail: "A program changes a surface with tml-patch and closes it with tml-close.",
 		})
 	}
+	if verr := d.tmlReach(cs, s, "tml-input", true); verr != nil {
+		return nil, verr
+	}
 	// The limits are checked before anything applies, so a refused input
 	// changes nothing.
 	if len(p.Actions) > tmlActionsPerInput {
@@ -770,6 +828,15 @@ func (d *Daemon) verbTMLInput(cs *connState, params json.RawMessage) (any, *verb
 	}
 	var results []map[string]any
 	for _, a := range p.Actions {
+		// From another machine, the action is held to what that machine may
+		// do here itself: a surface does not let a link that may only type
+		// start a program. See "Surfaces over a link".
+		if verb, ok := tmlPaneVerbs[a.Verb]; ok {
+			if verr := d.checkLinkVerb(cs, verb); verr != nil {
+				results = append(results, map[string]any{"verb": a.Verb, "ok": false, "error": verr.Message, "code": verr.Code})
+				continue
+			}
+		}
 		results = append(results, d.runTMLPaneAction(s, a))
 	}
 	if p.Close {
@@ -1377,6 +1444,9 @@ func (d *Daemon) verbTMLPlace(cs *connState, params json.RawMessage) (any, *verb
 			Param:  "human_nonce",
 			Detail: "The person moves a surface between a popup and a pane. A program chooses the place once, with tml-open.",
 		})
+	}
+	if verr := d.tmlReach(cs, s, "tml-place", true); verr != nil {
+		return nil, verr
 	}
 	sess := d.manager.GetSessionByID(sessionID)
 	if sess == nil || windowID == "" {

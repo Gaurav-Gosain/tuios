@@ -191,18 +191,24 @@ var verbCapabilities = map[string]linkCaps{
 	"new-window":   {config.LinkAllowOpen},
 	"split-window": {config.LinkAllowOpen},
 	"popup":        {config.LinkAllowOpen},
-	// A link needs every relay capability for the TML verbs, which the
-	// default policy does not give: a surface names its owner on its frame,
-	// and a surface opened from another machine would need that machine's
-	// name there. tml-input acts as the person on this machine.
-	"tml-open":      {capRelay},
-	"tml-close":     {capRelay},
-	"tml-input":     {capRelay},
-	"tml-place":     {capRelay},
-	"tml-patch":     {capRelay},
-	"tml-replace":   {capRelay},
-	"tml-get":       {capRelay},
-	"tml-list":      {capRelay},
+	// A link needs every relay capability to open or change a surface,
+	// which the default policy does not give: a surface names its owner on
+	// its frame, and a surface opened from another machine would need that
+	// machine's name there.
+	"tml-open":    {capRelay},
+	"tml-close":   {capRelay},
+	"tml-patch":   {capRelay},
+	"tml-replace": {capRelay},
+	// A client attached over a link draws this machine's surfaces (see
+	// tml_surface.go, "Surfaces over a link"). Reading one is reading a
+	// screen. What the person does on one, and where it sits, is what the
+	// attach already does to a pane: tml-input and tml-place also need the
+	// attach nonce of a client on the link-human socket. A pane() action a
+	// tml-input carries is held to the verb it runs as well.
+	"tml-input":     {config.LinkAllowWrite},
+	"tml-place":     {config.LinkAllowWrite},
+	"tml-get":       {config.LinkAllowList},
+	"tml-list":      {config.LinkAllowList},
 	"artifact-list": {capRelay},
 	"tml-validate":  {},
 	"open-pane":     {config.LinkAllowOpen},

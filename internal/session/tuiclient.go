@@ -291,6 +291,8 @@ type TUIClient struct {
 	// dirWatchSupported says the daemon's welcome offered MsgWatchDir. See
 	// WatchDir.
 	dirWatchSupported bool
+	// tmlLink says the daemon's welcome set TMLLink. See DrawsTML.
+	tmlLink bool
 	// emptyWorkspacePanes says the daemon's welcome set EmptyWorkspacePanes.
 	emptyWorkspacePanes atomic.Bool
 	// dirChangedHandler takes the daemon's MsgDirChanged push. Guarded by
@@ -482,11 +484,12 @@ func (c *TUIClient) handshake(version string, width, height int, caps *ClientCap
 		// See daemon_goodbye.go.
 		Goodbye: true,
 	}
-	// A client draws TML surfaces of this machine's daemon only: what the
-	// person does on one goes back through this machine's socket, which
-	// holds no surface of a session on another machine. Through a host the
-	// window shows its placeholder line instead. See tml_surface.go.
-	hello.TMLSurfaces = c.viaHost == ""
+	// A client draws the TML surfaces of the daemon it attached to. Through
+	// a host, what the person does on one goes to that machine's daemon
+	// over the link, which a far daemon takes only when its welcome sets
+	// TMLLink. An older one still pushes its surfaces, and DrawsTML drops
+	// them. See tml_surface.go, "Surfaces over a link".
+	hello.TMLSurfaces = true
 	// Plugins run on this machine's daemon, and only the person here
 	// answers for them. See plugin_approval.go.
 	hello.PluginApprovals = c.viaHost == ""
@@ -586,6 +589,7 @@ func (c *TUIClient) handshake(version string, width, height int, caps *ClientCap
 	c.windowSize = welcome.WindowSize && hello.WindowSize
 	c.daemonDetachOthers = welcome.DetachOthers
 	c.dirWatchSupported = welcome.DirWatch
+	c.tmlLink = welcome.TMLLink
 	c.emptyWorkspacePanes.Store(welcome.EmptyWorkspacePanes)
 	c.daemonRefusesAnimation.Store(welcome.KittyAnimationRefusal)
 	c.requestIDs.Store(welcome.RequestIDs)
@@ -1358,9 +1362,15 @@ func (c *TUIClient) OnPluginApprovals(handler func(PluginApprovalsPayload)) {
 	}
 }
 
-// DrawsTML reports whether this client draws TML surfaces: only a client of
-// this machine's daemon does. See the hello.
-func (c *TUIClient) DrawsTML() bool { return c.viaHost == "" }
+// DrawsTML reports whether this client draws TML surfaces: a client of this
+// machine's daemon, or one through a host whose daemon takes what the person
+// does on a surface over the link. See the hello.
+func (c *TUIClient) DrawsTML() bool { return c.viaHost == "" || c.tmlLink }
+
+// TMLHostTooOld reports whether this client is attached through a host whose
+// daemon does not serve TML surfaces over a link. Its TML windows say so in
+// place of the surface.
+func (c *TUIClient) TMLHostTooOld() bool { return c.viaHost != "" && !c.tmlLink }
 
 // OnTMLSurface registers the handler for MsgTMLSurface, the daemon's push of
 // a TML surface when it opens, changes or closes, and of every open one when
@@ -2191,6 +2201,11 @@ func (c *TUIClient) handleMessage(msg *Message) {
 		}
 
 	case MsgTMLSurface:
+		// A far daemon that predates TMLLink pushes its surfaces to any
+		// client whose hello asks, but takes nothing back over the link.
+		if !c.DrawsTML() {
+			return
+		}
 		var payload TMLSurfacePayload
 		if msg.ParsePayload(&payload) != nil {
 			return

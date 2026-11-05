@@ -8434,7 +8434,7 @@ A control that sets a TML window's output flag on each render does not fail the 
 | `movableRefusal` lets a TML pane move to another session | `TestTMLProgramCloseIsNotThePersons` ("a TML pane moved to another session") | **caught** |
 | `tml-close` reports its value as the person's (`closed`) | `TestTMLProgramCloseIsNotThePersons` ("ended with <nil> after a program's close, want exit status 2") | **caught** |
 | `--name` stored with its control characters | `TestTMLProgramCloseIsNotThePersons` ("the window name kept its control characters") | **caught** |
-| A client attached through a host draws TML windows itself | `TestTMLSurfaceThroughAHostShowsThePlaceholder` ("the far surface did not show its placeholder line") | **caught** |
+| A client attached through a host draws TML windows itself | `TestTMLSurfaceThroughAHostShowsThePlaceholder` ("the far surface did not show its placeholder line") | **caught** (superseded: see "TML surfaces over a host link") |
 | A client attached through a host claims `tml_surfaces` in its hello | none: the client still does not draw the window, so the pushes it gets go unused | not caught |
 | The placeholder ends on any byte after an esc, not only on a lone esc | `TestTMLSurfaceThroughAHostShowsThePlaceholder` ("a click closed the far surface") | **caught** |
 
@@ -12981,3 +12981,40 @@ Run on 2026-11-05 on Linux. The control is this branch with
 "", want "host_key_new"`, and the reason reads `The host did not answer.` for
 all six. Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestHostTestReportsWhatSSHSaid$' -v .`.
+## TML surfaces over a host link
+
+`TestTMLSurfacesCrossAHostLink` runs a task program in a pane on a second
+daemon, reached over the fake ssh link. The program opens a sidebar as a pane,
+opens a review popup when the person clicks Review, and answers Approve and
+Send back with a patch to the sidebar and a close of the popup. This machine's
+client must draw both surfaces, a click here must reach the far program, and
+the far program's patch must be drawn here. The link then drops twice. A patch
+on the far machine while it is down must be drawn when it is back, and a click
+after that must still reach the far program. A value the person sets while it
+is down, which the far daemon never got, must give way to the far daemon's
+value when it is back.
+
+`TestTMLSurfaceThroughAHostShowsThePlaceholder` now starts the far daemon with
+`TUIOS_TML_LINK_LEGACY=1`, which leaves `tml_link` out of its welcome as an
+older build does. The client must say the far daemon is too old and name
+`tuios hosts sync build`, and q, esc and a click on the window must still reach
+the placeholder program.
+
+Run on 2026-11-05 on Linux. The fixed build passes both, in 11.5 s and 1.3 s.
+
+| Control | Where it fails | Verdict |
+| --- | --- | --- |
+| Main (43b372c23) | `TestTMLSurfacesCrossAHostLink` step 1: "the far program's sidebar is not drawn here" (the placeholder line shows) | **caught** |
+| Main (43b372c23) | `TestTMLSurfaceThroughAHostShowsThePlaceholder`: "the far surface did not say its daemon is too old" | **caught** |
+| `tml-input` back on `capRelay` in the link policy | step 2: "the click on Review never reached the far program" | **caught** |
+| The client sends its TML calls to its own daemon, not through the host | step 2: "the click on Review never reached the far program" | **caught** |
+| No `tmlResync` in `resumeOnHost` | step 6: "after the link came back, the client kept a value the far daemon never got" | **caught** |
+| The welcome sets `TMLLink` whatever `TUIOS_TML_LINK_LEGACY` says | `TestTMLSurfaceThroughAHostShowsThePlaceholder`: "the far surface did not say its daemon is too old" | **caught** |
+
+The far session's panes are made by the far daemon with no client, and this
+client leaves them floating. The test turns tiling on before it clicks: in the
+floating cascade a click on the top TML window did not reach it. That is filed
+on its own.
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^(TestTMLSurfacesCrossAHostLink|TestTMLSurfaceThroughAHostShowsThePlaceholder)$' -v .`.

@@ -2751,9 +2751,20 @@ The window is of kind `tml`, and `list-windows` reports it with `kind`, `uri`
 (`tuios://tml/<surface>`) and `surface`. Like a `view` window it has a PTY,
 whose program prints one line for a client that does not draw TML. A popup
 closes on an esc the document does not use. Focus, close-window and the
-layout treat it as any window, but it cannot move to another session. A
-client draws the surfaces of its own machine's daemon only: a client attached
-through a host shows the placeholder line.
+layout treat it as any window, but it cannot move to another session.
+
+A client attached through a host draws the far daemon's surfaces too. The far
+daemon holds them and pushes them over the link, as to any client, and the
+client sends `tml-input`, `tml-get` and `tml-place` back over the link. The
+far daemon's welcome sets `tml_link` when it takes them. Over a link,
+`tml-get` and `tml-list` need the `list` capability, and `tml-input` and
+`tml-place` need `write` and the attach nonce of a client on the link-human
+socket. A `pane()` action in a `tml-input` also needs what its verb needs over
+the link, so `new-window` needs `open`. `tml-open`, `tml-patch`,
+`tml-replace` and `tml-close` still need every relay capability. A client of a
+far daemon without `tml_link` says in the window that the daemon is too old.
+After a dropped link the client attaches again and takes each surface whole
+from the far daemon.
 
 The surface's local actions run in the client: tabs, sorting, the cursor,
 folding, scrolling, `set` and `toggle`. A change to the state goes back to the

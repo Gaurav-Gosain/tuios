@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net"
 	"os"
@@ -39,6 +40,21 @@ type VerbClient struct {
 // ErrVerbClientBroken is wrapped by every call on a connection an earlier
 // call left out of step. Dial again.
 var ErrVerbClientBroken = fmt.Errorf("the verb connection is out of step after an earlier failed call; dial again")
+
+// verbNotSentError is a call this client did not write whole: the connection
+// was broken before it, or the write failed. Its text is the cause's.
+type verbNotSentError struct{ err error }
+
+func (e *verbNotSentError) Error() string { return e.err.Error() }
+func (e *verbNotSentError) Unwrap() error { return e.err }
+
+// VerbNotSent reports whether a call failed before its request reached the
+// daemon, so the daemon did not run it. Such a call may go again on a new
+// connection. A call that failed later may have run.
+func VerbNotSent(err error) bool {
+	_, ok := errors.AsType[*verbNotSentError](err)
+	return ok
+}
 
 // VerbCallError is returned by VerbClient.Call when the daemon answers with an
 // error envelope. It exposes the stable string code and the structured hint
@@ -247,7 +263,7 @@ func (c *VerbClient) CallWithTimeout(verb string, params any, timeout time.Durat
 	c.callMu.Lock()
 	defer c.callMu.Unlock()
 	if c.broken != nil {
-		return nil, fmt.Errorf("%w (%v)", ErrVerbClientBroken, c.broken)
+		return nil, &verbNotSentError{fmt.Errorf("%w (%v)", ErrVerbClientBroken, c.broken)}
 	}
 
 	c.nextID++
@@ -276,7 +292,7 @@ func (c *VerbClient) CallWithTimeout(verb string, params any, timeout time.Durat
 	_ = c.conn.SetWriteDeadline(time.Now().Add(10 * time.Second))
 	if _, err := c.conn.Write(line); err != nil {
 		c.broken = err
-		return nil, fmt.Errorf("failed to send request: %w", err)
+		return nil, &verbNotSentError{fmt.Errorf("failed to send request: %w", err)}
 	}
 
 	_ = c.conn.SetReadDeadline(time.Now().Add(timeout))

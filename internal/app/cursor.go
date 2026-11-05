@@ -70,7 +70,7 @@ func (m *OS) paneCursor() (cur *tea.Cursor, hidden bool) {
 	// A TML window shows its surface, not its PTY: the guest's cursor sits
 	// in a screen nobody sees, so it would point at nothing. A surface's text
 	// field has no caret of its own yet, and takes no typing (queue 0v).
-	if m.DrawsTML(window) {
+	if m.DrawsTML(window) || m.tmlHostTooOld(window) {
 		return nil, false
 	}
 

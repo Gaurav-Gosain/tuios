@@ -70,6 +70,9 @@ type tmlClient struct {
 	// whose host keeps the surfaces in the tab. See learn_tml.go. Set once,
 	// before the program runs.
 	local inboxVerbCall
+	// far carries the TML verbs of a session on another machine. See
+	// tml_host.go.
+	far tmlFar
 }
 
 // TMLClockMsg is the minute tick of the surfaces that call ago().
@@ -569,19 +572,23 @@ func (m *OS) applyTMLSurface(p *session.TMLSurfacePayload) bool {
 }
 
 // DrawsTML reports whether this client draws w as a TML surface: a window of
-// kind tml, on a client of this machine's daemon or in Learn mode, where the
-// tab holds the surfaces. A client attached through a host shows the
-// window's placeholder line, since what the person does on a surface goes
-// back through this machine's socket.
+// kind tml, in Learn mode, where the tab holds the surfaces, or on a client
+// of a daemon that takes what the person does on it. Through a host that is
+// a far daemon with surfaces over a link. A window of an older one says so
+// instead; see renderTMLHostTooOld.
 func (m *OS) DrawsTML(w *terminal.Window) bool {
 	return w != nil && w.Kind == session.WindowKindTML && (m.tml.local != nil || m.DaemonClient != nil && m.DaemonClient.DrawsTML())
 }
 
 // tmlCaller is how the client half reaches the half that holds the
-// surfaces: Learn mode's host when there is one, else the daemon.
+// surfaces: Learn mode's host when there is one, the far daemon over the
+// link for a session on another machine, else this machine's daemon.
 func (m *OS) tmlCaller() inboxVerbCall {
 	if m.tml.local != nil {
 		return m.tml.local
+	}
+	if m.Inbox.call == nil && m.AttachedHost != "" && m.DaemonClient != nil {
+		return m.tml.far.caller(m.DaemonClient, m.verbDialer())
 	}
 	return m.inboxCaller()
 }

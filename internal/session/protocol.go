@@ -337,8 +337,9 @@ type HelloPayload struct {
 	// Goodbye says the client reads MsgGoodbye. See daemon_goodbye.go.
 	Goodbye bool `json:"goodbye,omitzero"`
 	// TMLSurfaces says the client draws TML surfaces: it reads
-	// MsgTMLSurface. The daemon sends it to no other client. See
-	// tml_surface.go.
+	// MsgTMLSurface. The daemon sends it to no other client. A client
+	// attached through a host sets it too, and draws them only when the
+	// welcome sets TMLLink. See tml_surface.go.
 	TMLSurfaces bool `json:"tml_surfaces,omitzero"`
 	// PluginApprovals says the client asks the person about native plugins
 	// that wait for approval: it reads MsgPluginApprovals. The daemon sends
@@ -411,6 +412,12 @@ type WelcomePayload struct {
 	// PaneMarks. A client that does not see it (a daemon that predates it)
 	// marks no tab for a pane it does not stream.
 	PaneMarks bool `json:"pane_marks,omitzero"`
+	// TMLLink says the daemon serves its TML surfaces to a client attached
+	// over a link: it takes tml-input, tml-get and tml-place from that
+	// machine. A client attached through a host draws a surface only when
+	// it sees this. Otherwise it says the far daemon is too old. See
+	// tml_surface.go, "Surfaces over a link".
+	TMLLink bool `json:"tml_link,omitzero"`
 }
 
 // AttachPayload requests attachment to a session.

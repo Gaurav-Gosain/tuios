@@ -107,6 +107,13 @@ name; the rest is passed as written. An unknown host is refused by name
 The person attaches with `tuios attach --host build api`, or `tuios new --host
 build`. The session is drawn in this client, with this machine's theme and keys.
 
+TML surfaces in that session work in this client too: the sidebars, popups and
+panes a program on build shows with `tuios tml show`. The daemon on build holds
+them, and what the person does on one goes back to the program on build. To
+show a surface in a session on build, run `tuios tml show` on build. A daemon on
+build that is too old shows a line that says so in the window. Update it with
+`tuios hosts sync build`.
+
 ## Mail and files across a link
 
 A message you send to a host is stored in that host's ring, marked as arrived

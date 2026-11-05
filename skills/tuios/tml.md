@@ -263,8 +263,8 @@ op that no longer matches is refused: read with `tml get`, then patch again.
 - The person may move it between a popup and a pane. Each surface you show is also listed in the agents view, on your Artifacts tab, where the person can answer it.
 - 100 patches a second per surface; past that, `rate_limited`. Put many
   operations in one patch.
-- A client attached through another machine shows a placeholder line, not the
-  surface.
+- A person attached to your session from another machine sees and answers your
+  surfaces as a person here does. Their events reach you the same way.
 
 ## Common errors
 
