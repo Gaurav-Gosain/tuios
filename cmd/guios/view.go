@@ -682,14 +682,28 @@ func (a *App) sessionRow(c *ui.Context, pal *palette, s *proto.Session, n *int) 
 			}
 			return
 		}
-		name := func() {
-			name := ui.Text(c, s.DisplayName(a.set.SessionName)).FontSize(fsBody).FontWeight(wMedium).SingleLine().Ellipsis("…").Shrink(1).MinWidth(0).TextColor(pal.text)
-			if s.Unread || selected {
-				name.FontWeight(wSemibold)
+		// room is the width the name has: the line's, less what follows
+		// it there, from the last frame; 0 while unknown.
+		name := func(room float32) {
+			full := s.DisplayName(a.set.SessionName)
+			weight := wMedium
+			if s.Unread || lit {
+				weight = wSemibold
+			}
+			// Cut in the middle: the end of a name tells a fan's
+			// attempts apart, as "-2" (council round 3, visual S5).
+			shown := midCut(c, full, fsBody, weight, room)
+			name := ui.Text(c, shown).FontSize(fsBody).FontWeight(weight).SingleLine().Ellipsis("…").Shrink(1).MinWidth(0).TextColor(pal.text)
+			if shown != full {
+				name.Tooltip(full)
 			}
 			if s.Status == proto.Exited && !s.Unread {
 				name.TextColor(pal.textMuted)
 			}
+		}
+		whenText := ago(s.Since, c.Now())
+		if index <= 9 && a.cmdHeld(c) {
+			whenText = actions.Glyphs(fmt.Sprintf("CmdOrCtrl+%d", index))
 		}
 		when := func() {
 			if index <= 9 && a.cmdHeld(c) {
@@ -704,8 +718,13 @@ func (a *App) sessionRow(c *ui.Context, pal *palette, s *proto.Session, n *int) 
 			// at, on a line of the whole row's width, so that a long
 			// branch reads as far as it can.
 			ui.Column(c).Grow(1).MinWidth(0).Gap(2).Children(func() {
-				ui.Row(c).Gap(sp2).AlignItems(ui.Center).Children(func() {
-					name()
+				line1 := ui.Row(c.Key("line1")).Gap(sp2).AlignItems(ui.Center)
+				room := float32(0)
+				if b := line1.Bounds(); b.W > 0 {
+					room = b.W - natural(c, whenText, fsSmall, 0) - 14 - 3*sp2
+				}
+				line1.Children(func() {
+					name(room)
 					ui.Spacer(c)
 					when()
 					statusIconP(c, pal, s.Status, s.Unread, s.Progress, 14)

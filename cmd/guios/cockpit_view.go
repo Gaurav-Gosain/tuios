@@ -374,7 +374,7 @@ func ckLine2(ag client.Agent, it *session.AttentionItem) (verb, rest string) {
 func (a *App) ckRowView(c *ui.Context, pal *palette, r ckRow) {
 	ck := &a.ck
 	ag := ck.rowAgent(r)
-	name, harness := ag.Name, ag.Harness
+	name, harness := a.ckAgentName(ag), ag.Harness
 	if r.item != nil && r.agent < 0 {
 		name, harness = r.item.Name, r.item.Harness
 	}

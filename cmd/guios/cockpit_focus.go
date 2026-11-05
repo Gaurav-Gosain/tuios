@@ -160,7 +160,7 @@ func (a *App) cockpitFocus(c *ui.Context, pal *palette) {
 			if l := a.ckAttemptLetter(ag); l != "" {
 				attemptChip(c, pal, l)
 			}
-			name := oneLine(c, ag.Name, fsTitle, wSemibold).TextColor(pal.text).Cursor(ui.CursorPointer)
+			name := oneLine(c, a.ckAgentName(ag), fsTitle, wSemibold).TextColor(pal.text).Cursor(ui.CursorPointer)
 			pointerTooltip(c, name, "ck-name", locales.CockpitOpenPane())
 			if name.Clicked() && ag.Window != "" {
 				a.goToAgent(ag)

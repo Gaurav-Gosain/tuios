@@ -162,6 +162,31 @@ func (a *App) ckAttemptLetter(ag client.Agent) string {
 	return a.ck.letters[ag.Session]
 }
 
+// ckAgentName is the name an agent's row shows. An attempt of a fan
+// shows the fan's task, with its letter beside it: the attempts' own
+// names are the harness's, "claude" twice (council round 3, visual S5).
+func (a *App) ckAgentName(ag client.Agent) string {
+	if a.ckAttemptLetter(ag) == "" {
+		return ag.Name
+	}
+	if p, _ := ag.Meta["prompt"].(string); strings.TrimSpace(p) != "" {
+		line, _, _ := strings.Cut(strings.TrimSpace(p), "\n")
+		return line
+	}
+	// The fan's group is its task as a slug: "fan/try-two-ways".
+	g := ag.Group
+	if i := strings.LastIndexByte(g, '/'); i >= 0 {
+		g = g[i+1:]
+	}
+	if i := strings.LastIndex(g, "fan-"); i >= 0 && i+4 < len(g) {
+		g = g[i+4:]
+	}
+	if g = strings.TrimSpace(strings.ReplaceAll(g, "-", " ")); g != "" {
+		return g
+	}
+	return ag.Name
+}
+
 // ckFanOf reports whether the agent is an attempt of a fan on this machine.
 func ckFanOf(ag client.Agent) bool { return ag.Group != "" && ag.Host == "" && ag.Session != "" }
 

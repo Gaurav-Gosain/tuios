@@ -131,7 +131,7 @@ func (a *App) agentRow(c *ui.Context, pal *palette, ag client.Agent, need *ckNee
 		if l := a.ckAttemptLetter(ag); l != "" {
 			attemptChip(c, pal, l)
 		}
-		name := oneLine(c, ag.Name, fsSmall, wMedium).TextColor(pal.text).Shrink(0).MaxWidth(130)
+		name := oneLine(c, a.ckAgentName(ag), fsSmall, wMedium).TextColor(pal.text).Shrink(0).MaxWidth(130)
 		if need != nil {
 			name.FontWeight(wSemibold)
 		}

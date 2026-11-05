@@ -175,6 +175,36 @@ func startCut(c *ui.Context, s string, size float32, width float32) string {
 	return t
 }
 
+// midCut is a name cut in its middle, so that its start and its end stay:
+// "demo-fan-…-ways-2", where the end is what tells two attempts of a fan
+// apart (council round 3, visual S5). width is the room it has, in DIPs.
+func midCut(c *ui.Context, s string, size float32, weight int, width float32) string {
+	if width <= 0 || natural(c, s, size, weight) <= width {
+		return s
+	}
+	k := cutKey{s + "\x00mid", size + float32(weight)/10000, int(width)}
+	if t, ok := cuts[k]; ok {
+		return t
+	}
+	if len(cuts) > 1024 {
+		clear(cuts)
+	}
+	r := []rune(s)
+	t := "…"
+	for n := len(r) - 1; n >= 2; n-- {
+		head := n / 2
+		cand := string(r[:head]) + "…" + string(r[len(r)-(n-head):])
+		fits := natural(c, cand, size, weight) <= width
+		delete(measured, measureKey{cand, size, weight})
+		if fits {
+			t = cand
+			break
+		}
+	}
+	cuts[k] = t
+	return t
+}
+
 type cutKey struct {
 	s     string
 	size  float32
