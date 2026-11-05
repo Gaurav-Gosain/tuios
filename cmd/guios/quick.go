@@ -278,7 +278,7 @@ func (a *App) hideDrop() {
 func (a *App) openScratch(s *proto.Session) {
 	q := &a.quick
 	if !scratchFocused(s) {
-		q.back = a.focusOf(s)
+		q.back = keysPane(a, s)
 	}
 	if p := scratchPane(s); p != nil {
 		a.call(s.ID, "focus", proto.FocusParams{Session: s.ID, Pane: p.ID}, nil)
@@ -313,7 +313,9 @@ func (a *App) leaveScratch(s *proto.Session) {
 		return
 	}
 	if back := a.backPane(s); back != "" {
-		a.call(s.ID, "focus", proto.FocusParams{Session: s.ID, Pane: back}, nil)
+		// guios's own focus follows, so what gives the keyboard back to
+		// the pane the user is in gives it to this one.
+		a.setFocus(s, back)
 		return
 	}
 	a.call(s.ID, "workspace", proto.WorkspaceParams{Session: s.ID, Workspace: s.Workspace}, nil)
@@ -324,6 +326,16 @@ func (a *App) leaveScratch(s *proto.Session) {
 func (a *App) backPane(s *proto.Session) string {
 	if s.PaneByID(a.quick.back) != nil {
 		return a.quick.back
+	}
+	return keysPane(a, s)
+}
+
+// keysPane is the pane that has the keys: the daemon's focus, which a
+// workspace switch moves, else guios's own. After a tour of workspaces
+// guios's own can still name the pane the workspace had before.
+func keysPane(a *App, s *proto.Session) string {
+	if p := s.PaneByID(s.Focus); p != nil {
+		return p.ID
 	}
 	return a.focusOf(s)
 }
