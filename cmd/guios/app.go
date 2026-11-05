@@ -202,8 +202,14 @@ type App struct {
 	// the focused terminal's box and grid in the last frame.
 	cell     cellSize
 	cellSeen [4]float32
-	// winSeen is the window's size in the last frame (view.go).
-	winSeen [2]float32
+	// winSeen is the window's size in the last frame (view.go), and
+	// winGrew how much it changed in this one.
+	winSeen, winGrew [2]float32
+	// panesCrowded says the split tree does not fit beside the
+	// sidebars, which then hide before any pane does (tiles.go), and
+	// narrowed which sessions hide panes now, by id.
+	panesCrowded, crowdedLast bool
+	narrowed                  map[string]bool
 	// early are the keys typed into panes whose terminal is attaching
 	// (typeahead.go).
 	early map[string][]byte

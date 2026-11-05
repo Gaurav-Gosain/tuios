@@ -172,7 +172,11 @@ func (a *App) view(c *ui.Context) {
 	// frame, which whole pixels turn into hops and holds, a shake as it
 	// settles. This one lands in 200 ms, moving in every frame.
 	winW0, winH0 := c.Size()
+	a.winGrew = [2]float32{}
 	if ws := [2]float32{winW0, winH0}; ws != a.winSeen {
+		if a.winSeen[0] > 0 {
+			a.winGrew = [2]float32{ws[0] - a.winSeen[0], ws[1] - a.winSeen[1]}
+		}
 		// A frame laid out at a new window size places the panes from the
 		// boxes of the frame before it (Bounds): one more frame places
 		// them in this one's (QA-072).
@@ -181,7 +185,11 @@ func (a *App) view(c *ui.Context) {
 	}
 	// In a narrow window the sidebar gets out of the panes' way, as the
 	// right one does, until the person shows it there (toggleSidebar).
-	a.leftCrowded = winW0 > 0 && winW0 < narrowWindow
+	// So does it when the panes do not fit beside it: it goes before
+	// any pane does (council round 4, feel M2).
+	a.leftCrowded = winW0 > 0 && (winW0 < narrowWindow || a.panesCrowded)
+	// The tiles say it again in this frame, when they show.
+	a.crowdedLast, a.panesCrowded = a.panesCrowded, false
 	if !a.leftCrowded {
 		a.leftForced = false
 	}
@@ -201,7 +209,7 @@ func (a *App) view(c *ui.Context) {
 	if a.sidebarShown() {
 		leftW = a.prefs.SidebarWidth
 	}
-	a.side.crowded = winW > 0 && winW-leftW-rightW < minCards
+	a.side.crowded = winW > 0 && (winW-leftW-rightW < minCards || a.crowdedLast)
 	if !a.side.crowded {
 		a.side.forced = false
 	}

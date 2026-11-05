@@ -187,6 +187,11 @@ func (a *App) tiled(c *ui.Context, pal *palette, bar ui.TitleBar, shown float32,
 	key := "tiles-" + s.ID
 	area := ui.Box(c.Key(key)).Absolute().Left(0).Top(0).Right(0).Bottom(0).Bind(a.paneRef(key))
 	b := a.paneRef(key).Bounds(c)
+	if b.W > 0 {
+		// The boxes are the last frame's: a window resized in this one
+		// has its panes placed for its new size, not a frame late.
+		b.W, b.H = max(b.W+a.winGrew[0], 1), max(b.H+a.winGrew[1], 1)
+	}
 	ew, eh := float64(b.W)+paneGap, float64(b.H)+paneGap
 
 	lay := s.Layout
@@ -218,17 +223,91 @@ func (a *App) tiled(c *ui.Context, pal *palette, bar ui.TitleBar, shown float32,
 		target[z.ID] = whole
 		a.motion.top = z.ID
 	}
-	// A window too small for every pane at the smallest pane size shows
-	// the focused pane alone, as zoom does, until it grows again (QA-006).
-	// The session is not zoomed: the TUI on it keeps its layout.
-	hidden := 0
-	if f := a.focusOf(s); zoomed == "" && g == nil && multi && b.W > 0 && a.tooSmall(target, ew, eh) {
-		if _, ok := target[f]; ok {
-			zoomed, hidden = f, len(target)-1
-			target[f] = whole
-			a.motion.top = f
+	// A window too small for every pane at the smallest pane size (20 by 5
+	// cells, the TUI's) hides the panes that do not fit and lists them in
+	// a strip of chips under the others, until it grows again (QA-006;
+	// council round 4, visual M1). It never hides attention: the panes
+	// that need the person go last, and the first of them stays in view
+	// beside the focused pane, which keeps the keyboard. The session's
+	// layout does not change: the TUI on it keeps all its panes.
+	var hidden []string
+	// The narrow view comes at the smallest pane size and goes only at 2
+	// columns and 1 row more, so a window dragged across the edge does
+	// not flip between the two (council round 4, feel M2).
+	was := a.narrowed[s.ID]
+	dc, dr := 0.0, 0.0
+	if was {
+		dc, dr = 2, 1
+	}
+	if zoomed == "" && g == nil && multi && b.W > 0 && lay != nil {
+		// Whether the panes fit beside the sidebars at their widths, shown
+		// or not: if not, they hide first (view.go).
+		left := !a.prefs.SidebarHidden && !a.leftForced
+		rside := a.prefs.Side != "" && !a.side.forced && !a.ck.open
+		if left || rside {
+			with := ew
+			if left {
+				with += float64(a.chrome.sideW - a.prefs.SidebarWidth)
+			}
+			if rside {
+				with += float64(a.side.barW - a.rightWidth())
+			}
+			m := 0.0
+			if a.crowdedLast {
+				m = 2
+			}
+			crowded := a.tooSmallBy(target, with, eh, m, m/2)
+			if crowded != a.crowdedLast {
+				// The sidebar comes or goes in the next frame.
+				c.AnimationFrame()
+			}
+			a.panesCrowded = crowded
 		}
 	}
+	if f := a.focusOf(s); zoomed == "" && g == nil && multi && b.W > 0 && lay != nil && a.tooSmallBy(target, ew, eh, dc, dr) {
+		room := frac{0, 0, 1, 1 - (stripH+paneGap)/eh}
+		keep := map[string]bool{f: true}
+		if fp := s.PaneByID(f); fp == nil || fp.Status != proto.Waiting {
+			for _, id := range lay.Panes() {
+				if p := s.PaneByID(id); p != nil && p.Status == proto.Waiting {
+					keep[id] = true
+					break
+				}
+			}
+		}
+		fit := lay
+		for {
+			at := map[string]frac{}
+			var sp []fracSplit
+			layoutFracs(fit, room, "split-"+s.ID, func(string) bool { return false }, at, map[string]frac{}, &sp)
+			// The smallest pane that does not fit goes, one that needs
+			// the person only when no other is left to go.
+			victim, best := "", [2]float64{2, math.Inf(1)}
+			for id, r := range at {
+				if keep[id] || !a.paneTooSmallBy(r, ew, eh, dc, dr) {
+					continue
+				}
+				waits := 0.0
+				if p := s.PaneByID(id); p != nil && p.Status == proto.Waiting {
+					waits = 1
+				}
+				if k := [2]float64{waits, r.w * r.h}; k[0] < best[0] || (k[0] == best[0] && k[1] < best[1]) {
+					victim, best = id, k
+				}
+			}
+			if victim == "" {
+				target, splits, from = at, sp, map[string]frac{}
+				break
+			}
+			fit = fit.Remove(victim)
+			hidden = append(hidden, victim)
+		}
+		lay = fit
+	}
+	if a.narrowed == nil {
+		a.narrowed = map[string]bool{}
+	}
+	a.narrowed[s.ID] = len(hidden) > 0
 
 	// The guessed card went as the daemon answered: the pane it made
 	// goes on from where the card showed.
@@ -244,7 +323,10 @@ func (a *App) tiled(c *ui.Context, pal *palette, bar ui.TitleBar, shown float32,
 	// target. A pane new to the tree starts in its slot.
 	shownAt := map[string]frac{}
 	now := c.Now()
-	instant := c.Instant() || c.Preferences().ReduceMotion || b.W <= 0
+	// In the narrow view, and as it comes and goes, the panes take their
+	// places at once: a pane shown in place of another does not slide over
+	// the others (council round 4, feel S3).
+	instant := c.Instant() || c.Preferences().ReduceMotion || b.W <= 0 || len(hidden) > 0 || was
 	if a.motion.tiles == nil {
 		a.motion.tiles = map[string]*tileAnim{}
 	}
@@ -379,10 +461,10 @@ func (a *App) tiled(c *ui.Context, pal *palette, bar ui.TitleBar, shown float32,
 			})
 		}
 		a.dragGhost(c, pal, s, area, shownAt, px)
-		if hidden > 0 && settledZoom {
-			narrowNote(c, pal, hidden)
+		if len(hidden) > 0 {
+			a.hiddenStrip(c, pal, s, hidden)
 		}
-		if zoomed != "" || b.W <= 0 {
+		if zoomed != "" || b.W <= 0 || len(hidden) > 0 {
 			return
 		}
 		for _, sp := range splits {
@@ -397,31 +479,108 @@ func (a *App) tiled(c *ui.Context, pal *palette, bar ui.TitleBar, shown float32,
 	})
 }
 
-// tooSmall reports whether a pane of the layout at target, in an area of
-// ew x eh DIPs, the gaps included, has fewer cells than the smallest pane
-// (minPaneCols by minPaneRows), measured with the cell reportGrid keeps.
-func (a *App) tooSmall(target map[string]frac, ew, eh float64) bool {
-	cw, ch := float64(a.cell.w), float64(a.cell.h)
-	if cw <= 0 || ch <= 0 {
-		return false
-	}
+// tooSmallBy reports whether a pane of the layout at target, in an area
+// of ew x eh DIPs, the gaps included, is smaller than the smallest pane
+// and dc columns and dr rows more.
+func (a *App) tooSmallBy(target map[string]frac, ew, eh, dc, dr float64) bool {
 	for _, f := range target {
-		if (f.w*ew-paneGap)/cw < minPaneCols || (f.h*eh-paneGap-headerH)/ch < minPaneRows {
+		if a.paneTooSmallBy(f, ew, eh, dc, dr) {
 			return true
 		}
 	}
 	return false
 }
 
-// narrowNote says, over the bottom of the pane area, how many panes the
-// window is too small to show.
-func narrowNote(c *ui.Context, pal *palette, hidden int) {
-	label := locales.PaneNarrow(hidden)
-	ui.Row(c.Key("narrow-note")).Absolute().Bottom(10).Left(0).Right(0).Justify(ui.Center).PassThrough().Children(func() {
-		ui.Row(c).Height(28).Padding(0, 12, 0, 12).AlignItems(ui.Center).Radius(14).
-			Background(pal.popover).Border(1, pal.edgeHigh).Label(label).Children(func() {
-			ui.Text(c, label).FontSize(fsSmall).TextColor(pal.textMuted).SingleLine()
+// paneTooSmallBy reports whether a pane at f has fewer cells than the
+// smallest pane (minPaneCols by minPaneRows) and dc columns and dr rows
+// more, measured with the cell reportGrid keeps.
+func (a *App) paneTooSmallBy(f frac, ew, eh, dc, dr float64) bool {
+	cw, ch := float64(a.cell.w), float64(a.cell.h)
+	if cw <= 0 || ch <= 0 {
+		return false
+	}
+	return (f.w*ew-paneGap)/cw < minPaneCols+dc || (f.h*eh-paneGap-headerH)/ch < minPaneRows+dr
+}
+
+// stripH is the height of the strip that lists the hidden panes.
+const stripH = 28
+
+// hiddenStrip is the strip under the panes that lists the ones the window
+// is too small for: a chip for each, its state mark and name, the ones
+// that need the person first. A click on a chip shows that pane, in place
+// of another one.
+func (a *App) hiddenStrip(c *ui.Context, pal *palette, s *proto.Session, hidden []string) {
+	order := slices.Clone(hidden)
+	slices.SortStableFunc(order, func(x, y string) int {
+		return b2i(s.PaneByID(y).Status == proto.Waiting) - b2i(s.PaneByID(x).Status == proto.Waiting)
+	})
+	waiting := 0
+	for _, id := range hidden {
+		if s.PaneByID(id).Status == proto.Waiting {
+			waiting++
+		}
+	}
+	label := locales.PaneNarrow(len(hidden))
+	if waiting > 0 {
+		label += " " + locales.PaneNarrowNeeds(waiting)
+	}
+	label += " " + locales.PaneNarrowPick(len(hidden))
+	show := func(pid string) {
+		sid := s.ID
+		a.defer_(func() {
+			if s := a.session(sid); s != nil {
+				a.setFocus(s, pid)
+				a.paneRef(pid).Focus()
+			}
 		})
+	}
+	ui.Row(c.Key("hidden-strip")).Absolute().Bottom(0).Left(0).Right(0).Height(stripH).
+		Padding(0, 3, 0, 3).Gap(sp2).AlignItems(ui.Center).Radius(rPane).ClipX().
+		Background(pal.chip).Border(1, pal.cardBorder).Children(func() {
+		// The note is a button too: it shows the first hidden pane, one
+		// that needs the person if one does.
+		note := ui.ButtonBase(c.Key("hidden-note")).Height(22).Padding(0, 7, 0, 7).AlignItems(ui.Center).
+			Radius(rRow).Shrink(0).Label(label)
+		if waiting > 0 {
+			note.Children(func() {
+				ui.Text(c, label).FontSize(fsSmall).FontWeight(wMedium).TextColor(pal.attnChip).SingleLine()
+			})
+		} else {
+			note.Children(func() { ui.Text(c, label).FontSize(fsSmall).TextColor(pal.textMuted).SingleLine() })
+		}
+		if note.Hovered() {
+			note.Background(pal.rowHover)
+		}
+		if note.Clicked() {
+			show(order[0])
+		}
+		for _, id := range order {
+			p := s.PaneByID(id)
+			if p == nil {
+				continue
+			}
+			bg, fg := pal.card, pal.text
+			if p.Status == proto.Waiting {
+				bg, fg = pal.attnSoft, pal.attnChip
+			}
+			name := p.PaneName()
+			chip := ui.ButtonBase(c.Key("hidden-"+id)).Height(22).Padding(0, 8, 0, 6).Gap(5).AlignItems(ui.Center).
+				Radius(rRow).Background(bg).Shrink(0).Label(name).Tooltip(name)
+			if chip.Hovered() {
+				chip.Background(bg.Mix(pal.rowHover, 0.5))
+			}
+			chip.Children(func() {
+				if p.Status != proto.Idle || p.Unread {
+					statusIconP(c, pal, p.Status, p.Unread, p.Progress, 12)
+				} else {
+					ui.Icon(c, programIcon(p)).Size(12, 12).TextColor(pal.textFaint)
+				}
+				oneLine(c, name, fsSmall, wMedium).TextColor(fg).MaxWidth(160)
+			})
+			if chip.Clicked() {
+				show(id)
+			}
+		}
 	})
 }
 

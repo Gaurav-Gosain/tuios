@@ -1808,14 +1808,34 @@ func (msgs Messages) PaneShowAll() string {
 	return Catalog.Format(msgs.locale, "paneShowAll", nil)
 }
 
-// PaneNarrow says "{count, plural, one {# more pane. Make the window larger to see it.} other {# more panes. Make the window larger to s…"
+// PaneNarrow says "{count, plural, one {# pane does not fit.} other {# panes do not fit.}}"
 // in the language the app shows.
 func PaneNarrow(count int) string { return In(i18n.Locale()).PaneNarrow(count) }
 
-// PaneNarrow says "{count, plural, one {# more pane. Make the window larger to see it.} other {# more panes. Make the window larger to s…"
+// PaneNarrow says "{count, plural, one {# pane does not fit.} other {# panes do not fit.}}"
 // in the language of msgs.
 func (msgs Messages) PaneNarrow(count int) string {
 	return Catalog.Format(msgs.locale, "paneNarrow", map[string]any{"count": count})
+}
+
+// PaneNarrowNeeds says "{count, plural, one {# needs you.} other {# need you.}}"
+// in the language the app shows.
+func PaneNarrowNeeds(count int) string { return In(i18n.Locale()).PaneNarrowNeeds(count) }
+
+// PaneNarrowNeeds says "{count, plural, one {# needs you.} other {# need you.}}"
+// in the language of msgs.
+func (msgs Messages) PaneNarrowNeeds(count int) string {
+	return Catalog.Format(msgs.locale, "paneNarrowNeeds", map[string]any{"count": count})
+}
+
+// PaneNarrowPick says "{count, plural, one {Select it to show it.} other {Select one to show it.}}"
+// in the language the app shows.
+func PaneNarrowPick(count int) string { return In(i18n.Locale()).PaneNarrowPick(count) }
+
+// PaneNarrowPick says "{count, plural, one {Select it to show it.} other {Select one to show it.}}"
+// in the language of msgs.
+func (msgs Messages) PaneNarrowPick(count int) string {
+	return Catalog.Format(msgs.locale, "paneNarrowPick", map[string]any{"count": count})
 }
 
 // PaneClose says "Close pane"
