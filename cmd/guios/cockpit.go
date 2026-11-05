@@ -102,6 +102,9 @@ type ckShown struct {
 type ckArmed struct {
 	decision, item string
 	at             time.Time
+	// seq is the typing guard's count at the first press: the second
+	// counts only as the very next key.
+	seq uint64
 }
 
 // cockpit is the agent cockpit's state.
@@ -629,18 +632,22 @@ func (a *App) goToAgent(ag client.Agent) {
 }
 
 // ckSettle puts the selected agent on the Settled shelf, or takes it off.
-func (a *App) ckSettle() {
+// It returns how to take that back: the typing guard does, when the key
+// turns out to be the first letter of a word.
+func (a *App) ckSettle() func() {
 	ag, ok := a.ckSelectedAgent()
 	cl := a.cockpitClient()
 	if !ok || cl == nil {
 		a.toast(locales.CockpitSettleOnlyAgent())
-		return
+		return nil
 	}
-	action := "settle"
+	action, back := "settle", "unsettle"
 	if ag.Settled {
-		action = "unsettle"
+		action, back = "unsettle", "settle"
 	}
+	done := make(chan struct{})
 	go func() {
+		defer close(done)
 		var out struct {
 			ID string `json:"id"`
 		}
@@ -657,6 +664,15 @@ func (a *App) ckSettle() {
 			a.refreshCockpit()
 		})
 	}()
+	return func() {
+		a.ck.undo = nil
+		go func() {
+			// After the first answer, so that the daemon gets them in order.
+			<-done
+			_, _ = cl.Verb("mark-attention", map[string]any{"session": ag.Session, "window": ag.Window, "action": back}, true)
+			a.update(a.refreshCockpit)
+		}()
+	}
 }
 
 // ckUndoSettle takes back the last settle, within 10 s.

@@ -116,7 +116,11 @@ func (a *App) humanMailView(c *ui.Context, pal *palette) {
 	}
 	if m.focus.FocusWithin(c) {
 		// Prose typed here takes back the key that opened the view.
-		_, _ = a.guard(c, col, &ck.guard, func(ckKey) bool { return false })
+		_, _ = a.guard(c, col, &ck.guard, listKeys{kind: func(ckKey) keyKind { return kindProse }, prose: func(text string) bool {
+			// The key that opened the view was taken back: the text
+			// belongs to the agent the list has.
+			return ck.view == viewAgents && a.ckProse(text)
+		}})
 	}
 	if m.focus.FocusWithin(c) && col.Shortcut(0, ui.KeyEscape) {
 		a.ckSetView(viewAgents)

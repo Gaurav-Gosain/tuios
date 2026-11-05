@@ -597,13 +597,14 @@ func (a *App) ckAnswer(decision string, click bool) bool {
 	if (decision == "once" || decision == "always") && len(rules) > 0 {
 		key := ckShownKey(it)
 		armed := ck.armed.decision == decision && ck.armed.item == key && now.Sub(ck.armed.at) <= ckRiskWindow
-		if armed && !click && now.Sub(ck.armed.at) < ckRiskPause {
-			// The second press of a key came too soon to be a choice:
-			// the first stays armed, and this one does nothing.
+		if armed && !click && ck.armed.seq+1 != ck.guard.cur {
+			// Another key came between the two presses: typed text, as
+			// "please also". The first press is spent.
+			ck.armed = ckArmed{}
 			return true
 		}
 		if !armed {
-			ck.armed = ckArmed{decision: decision, item: key, at: now}
+			ck.armed = ckArmed{decision: decision, item: key, at: now, seq: ck.guard.cur}
 			return true
 		}
 		ck.armed = ckArmed{}
@@ -611,6 +612,9 @@ func (a *App) ckAnswer(decision string, click bool) bool {
 	a.ckSend(it, ag, decision, "")
 	return true
 }
+
+// ckDisarm drops the first press of a risky allow.
+func (a *App) ckDisarm() { a.ck.armed = ckArmed{} }
 
 // ckOpenReason opens the line for a reject with a reason.
 func (a *App) ckOpenReason() {
@@ -688,10 +692,6 @@ func (a *App) ckSend(it session.AttentionItem, ag client.Agent, decision, messag
 }
 
 var _ = fmt.Sprint
-
-// ckRiskPause is the least time between the two key presses that allow a
-// risky call: a double letter in typed text comes sooner.
-const ckRiskPause = 500 * time.Millisecond
 
 // ckCanReject reports whether the selected row's card takes a reject: an
 // approval or a plan a hook holds, or a prompt on the screen whose rule

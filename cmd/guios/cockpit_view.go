@@ -264,6 +264,7 @@ func (a *App) cockpitFleet(c *ui.Context, pal *palette, width float32, shown boo
 	if !shown {
 		return
 	}
+	keysRing(col, ck.fleetFocus.FocusWithin(c) && ck.lightbox == nil && !a.keysOwned(), pal)
 	col.Children(func() {
 		if !ck.loaded {
 			ui.Column(c).Grow(1).Center().Children(func() { ui.Spinner(c) })
@@ -405,6 +406,7 @@ func (a *App) ckRowView(c *ui.Context, pal *palette, r ckRow) {
 	if row.Pressed() || row.Clicked() {
 		a.ckSelect(r)
 		ck.fleetFocus.Focus()
+		ck.guard.boundary()
 	}
 	if row.Clicked() && ck.stacked {
 		ck.stackFocus = true
@@ -569,13 +571,14 @@ func (a *App) cockpitKeys(c *ui.Context, col ui.Element) {
 	if a.ownedKeys(col) {
 		return
 	}
-	if k, ok := a.guard(c, col, &ck.guard, a.ckInstant); ok {
+	if k, ok := a.guard(c, col, &ck.guard, a.ckListKeys()); ok {
 		a.ckLetter(k)
 		c.Invalidate()
 		return
 	}
 	if ck.guard.typing(time.Now()) && (key(0, ui.KeyEnter) || key(0, ui.KeyBracketRight) || key(0, ui.KeyBracketLeft)) {
 		// Enter after typed text is the end of a sentence, not a command.
+		ck.guard.boundary()
 		return
 	}
 	switch {
@@ -613,6 +616,8 @@ func (a *App) cockpitKeys(c *ui.Context, col ui.Element) {
 	default:
 		return
 	}
+	// A key that is no letter ends the run of letters.
+	ck.guard.boundary()
 	// The key came in this build: build again to show what it did.
 	c.Invalidate()
 }
@@ -626,10 +631,12 @@ func (a *App) ckLetter(k ckKey) {
 		switch k.key {
 		case ui.KeyA:
 			a.ckAnswer("always", false)
+			g.setUndo(a.ckDisarm)
 		case ui.KeyR:
 			a.ckOpenReason()
+			g.setUndo(func() { ck.reasonFor, ck.reason = "", "" })
 		case ui.KeyD:
-			a.ckSettle()
+			g.setUndo(a.ckSettle())
 		case ui.KeyM:
 			view := ck.view
 			a.ckSetView(viewMail)
@@ -642,18 +649,28 @@ func (a *App) ckLetter(k ckKey) {
 		ck.tab = tab
 		ck.fleetFocus.Focus()
 	}
+	sel := ck.sel
+	backSel := func() {
+		if i := ck.index(sel); i >= 0 {
+			a.ckSelect(ck.rows[i])
+		}
+	}
 	switch k.key {
 	case ui.KeyJ:
 		a.ckMove(1)
+		g.setUndo(backSel)
 	case ui.KeyK:
 		a.ckMove(-1)
+		g.setUndo(backSel)
 	case ui.KeyH:
 		if ck.stacked && ck.stackFocus {
 			ck.stackFocus = false
+			g.setUndo(func() { ck.stackFocus = true })
 		}
 	case ui.KeyL:
 		if ck.stacked && !ck.stackFocus && a.ckOnAgent() {
 			ck.stackFocus = true
+			g.setUndo(func() { ck.stackFocus = false })
 		}
 	case ui.KeySpace:
 		if r, ok := a.ckSelected(); ok && r.kind == ckRowHead {
@@ -666,19 +683,22 @@ func (a *App) ckLetter(k ckKey) {
 		}
 	case ui.KeyA:
 		a.ckAnswer("once", false)
+		g.setUndo(a.ckDisarm)
 	case ui.KeyR:
 		// r rejects an approval the card answers, as the TUI's; on any
 		// other row it puts the keys in the reply box, where the rest of
 		// what is typed belongs.
 		if !a.ckCanReject() {
 			a.ckFocusReply()
+			g.setUndo(func() { ck.fleetFocus.Focus() })
 		} else {
 			a.ckAnswer("deny", false)
 		}
 	case ui.KeyI:
 		a.ckFocusReply()
+		g.setUndo(func() { ck.fleetFocus.Focus() })
 	case ui.KeyD:
-		a.ckSettle()
+		g.setUndo(a.ckSettle())
 	case ui.KeyU:
 		a.ckUndoSettle()
 	case ui.KeyZ:
@@ -717,6 +737,7 @@ func (a *App) ckLetter(k ckKey) {
 		}
 	case ui.KeyC:
 		a.openCompare()
+		g.setUndo(func() { ck.cmp = nil })
 	}
 }
 
