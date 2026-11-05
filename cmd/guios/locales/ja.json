@@ -1244,5 +1244,7 @@
   "setApprovalsRow": "Claude Code の許可プロンプトにエージェントで答える",
   "setApprovalsDetail": "プロンプトは許可または拒否するまで最大 2 分間エージェントで待ちます。その後 Claude Code はペインで尋ねます。tuios はこれを config.toml に保存します。",
   "cockpitKeysToBoard": "キーはボードに送られます。",
-  "cockpitTypedNoCommand": "入力中の文字はコマンドを実行しません。少し待ってからもう一度キーを押してください。"
+  "cockpitTypedNoCommand": "入力中の文字はコマンドを実行しません。少し待ってからもう一度キーを押してください。",
+  "cockpitHintMove": "移動",
+  "cockpitKeysToMail": "キーはメール一覧に送られます。返信するには r を押してください。"
 }

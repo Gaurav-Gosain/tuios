@@ -2259,5 +2259,7 @@
   "setApprovalsRow": "Answer Claude Code's permission prompts in Agents",
   "setApprovalsDetail": "A prompt waits in Agents until you allow or reject it, for up to 2 minutes. Then Claude Code asks in its pane. tuios saves this in its config.toml.",
   "cockpitKeysToBoard": "Keys go to the board.",
-  "cockpitTypedNoCommand": "Typed text runs no command. Pause, then press the key again."
+  "cockpitTypedNoCommand": "Typed text runs no command. Pause, then press the key again.",
+  "cockpitHintMove": "move",
+  "cockpitKeysToMail": "Keys go to the mail list. Press r to reply."
 }

@@ -1244,5 +1244,7 @@
   "setApprovalsRow": "在代理中回答 Claude Code 的权限提示",
   "setApprovalsDetail": "提示会在代理中等待你允许或拒绝,最长 2 分钟。之后 Claude Code 会在其窗格中询问。tuios 将此设置保存在 config.toml 中。",
   "cockpitKeysToBoard": "按键发送到看板。",
-  "cockpitTypedNoCommand": "输入的文字不会运行命令。请稍等，然后再按一次该键。"
+  "cockpitTypedNoCommand": "输入的文字不会运行命令。请稍等，然后再按一次该键。",
+  "cockpitHintMove": "移动",
+  "cockpitKeysToMail": "按键发送到邮件列表。按 r 回复。"
 }

@@ -316,11 +316,16 @@ func (a *App) sendBox(ag client.Agent, d *ckDraft, mail bool) {
 			}
 			d.last = text
 			d.text = ""
+			var id int64
 			if m != nil {
+				id = m.replyTo
 				m.replyTo = 0
 			}
 			a.mailAnswered(ag.Session, ag.Window, ag.Name)
 			a.ckAdvanceAfter(ag)
+			if id != 0 {
+				a.mailReplied(m, ag.Session, id)
+			}
 		})
 	}()
 }
