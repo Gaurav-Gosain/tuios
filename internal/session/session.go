@@ -475,6 +475,15 @@ type SessionState struct {
 	// session's, and clears the field. Zero is a client too old to say. See
 	// layout_gen.go.
 	LayoutGen uint64 `json:"layout_gen,omitempty"`
+	// DaemonLayout is the Version at which the daemon last changed a split
+	// tree or a zoom itself (split-window, zoom-window, swap-window,
+	// resize-window, move-window --beside), zero when it never has. A client
+	// that applies a state carrying a newer one than it has seen sends its
+	// rectangles of the new layout, which the daemon does not compute while
+	// a client shows the session. A tree that another client changed leaves
+	// it alone, so that client's push is not answered with a stale one. A
+	// push does not carry it.
+	DaemonLayout int `json:"daemon_layout,omitempty"`
 	// Accent is an optional accent for the session, recorded verbatim the way
 	// Options are: the daemon has no palette and does not interpret it. Clients
 	// read it as a colour name from the ANSI sixteen or as a hex literal, and an

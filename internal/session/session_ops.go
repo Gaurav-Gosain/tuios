@@ -603,6 +603,7 @@ func (s *Session) AddDaemonWindowWith(opts NewWindowOptions, onExit func(ptyID s
 			t.SplitWindowAt(split.leaf(windowID), split.leaf(opts.Split.Target), opts.Split.Side, opts.Split.Share)
 			split.commit()
 			s.noteTreeOpLocked(state.Version+1, "", workspace)
+			state.DaemonLayout = state.Version + 1
 			if opts.Split.Place {
 				sizes = split.place()
 				win = state.Windows[len(state.Windows)-1]

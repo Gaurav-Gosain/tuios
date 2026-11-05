@@ -1043,6 +1043,11 @@ type OS struct {
 	// terminal is then a popup, as before. See scratch_legacy.go.
 	sessionScratchWSOff bool
 
+	// daemonLayoutSeen is the newest SessionState.DaemonLayout this client
+	// has applied: the last layout change the daemon made itself that this
+	// client sent its rectangles for.
+	daemonLayoutSeen int
+
 	// applyingPeerSync is set while ApplyStateSync is folding a state that came
 	// from somewhere else into this client. It is what makes a sync loop
 	// impossible rather than unlikely: no push may leave this client while it is

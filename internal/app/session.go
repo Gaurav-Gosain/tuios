@@ -1137,8 +1137,17 @@ func (m *OS) ApplyStateSyncFrom(state *session.SessionState, sourceID string) er
 	// of the rectangles is then the old layout's, which list-windows and
 	// herdr's pane.layout report, so the new ones are sent. Every client of
 	// the session lays the tree out in the same box, so they agree.
-	if (treeRetile || zoomRetile) && !fromPeer {
-		m.SyncStateToDaemon()
+	//
+	// Only for a change the daemon made (SessionState.DaemonLayout). A tree
+	// op of another client reaches this client with no source too, ahead of
+	// that client's push. Pushing on it sent this client's older snapshot,
+	// which landed after that push and undid it: a pane moved to another
+	// workspace went back, and a minimise or a float was lost.
+	if state.DaemonLayout > m.daemonLayoutSeen {
+		m.daemonLayoutSeen = state.DaemonLayout
+		if treeRetile || zoomRetile {
+			m.SyncStateToDaemon()
+		}
 	}
 
 	// A pane a switch to an empty workspace asked for has arrived.

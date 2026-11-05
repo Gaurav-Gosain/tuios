@@ -226,6 +226,8 @@ func (s *Session) arrangeLayout(place bool, edit func(state *SessionState, e *la
 		if place {
 			sizes = e.place()
 		}
+		// A zoom changes no tree and still moves the panes.
+		state.DaemonLayout = state.Version + 1
 		return nil
 	})
 	s.resizePanes(sizes)
