@@ -1316,7 +1316,7 @@
   "cockpitAnswerInPane": "tuios cannot read this prompt on the screen. Open the pane to answer it.",
   "cockpitAllowTool": "Allow {tool}",
   "cockpitQuestion": "Answer the agent",
-  "cockpitQueued": "Waiting",
+  "cockpitQueued": "Queued",
   "cockpitCancelQueued": "Drop",
   "cockpitTo": "To",
   "cockpitNextTurn": "Sent when the agent rests",
@@ -1346,7 +1346,7 @@
   "cockpitImageTooBig": "{name} is larger than 8 MB.",
   "cockpitNowNoImages": "Images go only with a queued message. Press Enter to queue it.",
   "cockpitSentNow": "Sent to {name}.",
-  "cockpitQueuedFor": "{name} gets the message when it rests.",
+  "cockpitQueuedFor": "Queued for {name}. It gets it when it rests.",
   "cockpitSendNotes": "Send notes to the agent",
   "cockpitNoChanges": "No changes",
   "cockpitFilesChanged": "{count, plural, one {# file changed} other {# files changed}}",
@@ -2239,14 +2239,6 @@
   "cockpitStartOnCard": "Start an agent on it",
   "cockpitKeysToList": "Keys go to the list. Press r to write.",
   "cockpitWaitsAtPrompt": "This agent waits at a prompt on its screen. Text you send here waits for that.",
-  "cockpitSentTo": "Sent to {name}.",
-  "@cockpitSentTo": {
-    "placeholders": {
-      "name": {
-        "type": "String"
-      }
-    }
-  },
   "cockpitYouTo": "You → {name}",
   "@cockpitYouTo": {
     "placeholders": {
