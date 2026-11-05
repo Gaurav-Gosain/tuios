@@ -162,55 +162,12 @@ var darkPalette = palette{
 // paletteFor is the colors of the window c draws, from its theme.
 func paletteFor(c *ui.Context) *palette { return lookFor(c).pal }
 
-// Terminal themes on the card's color, with palettes tuned to read on it:
-// Apple's system colors, a little deeper in the light.
-var lightTermTheme = &terminal.Theme{
-	Foreground:    ui.Hex("#1d1d1f"),
-	Background:    lightPalette.card,
-	Cursor:        ui.Hex("#1d1d1f"),
-	CursorText:    ui.Hex("#ffffff"),
-	Selection:     ui.Hex("#cfdcfb"),
-	SelectionText: ui.Hex("#1d1d1f"),
-	Palette: [16]ui.Color{
-		ui.Hex("#1d1d1f"), ui.Hex("#d3302f"), ui.Hex("#22863a"), ui.Hex("#b08800"),
-		ui.Hex("#2f5bd8"), ui.Hex("#a033c4"), ui.Hex("#0f8199"), ui.Hex("#8e8e93"),
-		ui.Hex("#5f5f66"), ui.Hex("#ef4444"), ui.Hex("#2fa84f"), ui.Hex("#d4a017"),
-		ui.Hex("#3b82f6"), ui.Hex("#c04ee0"), ui.Hex("#14a3bf"), ui.Hex("#b4b4bb"),
-	},
-}
-
-var darkTermTheme = &terminal.Theme{
-	Foreground:    ui.Hex("#e6e6ea"),
-	Background:    darkPalette.card,
-	Cursor:        ui.Hex("#e6e6ea"),
-	CursorText:    ui.Hex("#161618"),
-	Selection:     ui.Hex("#2f4170"),
-	SelectionText: ui.Hex("#ffffff"),
-	Palette: [16]ui.Color{
-		ui.Hex("#3a3a40"), ui.Hex("#ff6b64"), ui.Hex("#4fd17a"), ui.Hex("#f2c14e"),
-		ui.Hex("#6b9bff"), ui.Hex("#d07cf0"), ui.Hex("#4cc9e0"), ui.Hex("#c9c9cf"),
-		ui.Hex("#6c6c78"), ui.Hex("#ff8a84"), ui.Hex("#74e397"), ui.Hex("#ffd479"),
-		ui.Hex("#8fb3ff"), ui.Hex("#e09cf7"), ui.Hex("#7fdcec"), ui.Hex("#f5f5f7"),
-	},
-}
-
 // backdrop paints the window's wash of color, under the sidebar and
 // between the cards: the base on the root, a glow from the top right on
 // row, which holds everything else. It lies over the window's material,
-// which shows through a little; the plain one is the material alone.
+// which shows through a little.
 func backdrop(c *ui.Context, row ui.Element) {
 	l := lookFor(c)
-	if l.plain {
-		// The material alone is as light or as dark as the wallpaper
-		// under it: a base of the sidebar's color keeps the text legible,
-		// letting the desktop show a little.
-		bg := l.pal.sidebar
-		if c.Vibrancy() {
-			bg = bg.Alpha(0.82)
-		}
-		c.Root().Background(bg)
-		return
-	}
 	base := l.base
 	if c.Vibrancy() {
 		stops := make([]ui.GradientStop, len(base.Stops))
@@ -225,14 +182,12 @@ func backdrop(c *ui.Context, row ui.Element) {
 
 // A look is a theme in one appearance, which colors the whole window: a
 // terminal theme, whose background the panes' cards take and whose
-// foreground their text, with an accent and the wash under the cards.
-// kero's themes are one per wash (washTable); a Ghostty theme washes the
-// window in its own background.
+// foreground their text, with an accent and the wash under the cards: a
+// tuios theme washes the window in its own background (ghosttyLook).
 type look struct {
 	term       *terminal.Theme
 	pal        *palette
 	base, glow ui.LinearGradient
-	plain      bool // the window's material, under the sidebar's color
 }
 
 // looks are the window's in the light and in the dark, as the settings
@@ -245,14 +200,9 @@ type looks struct {
 var currentLooks atomic.Pointer[looks]
 
 // looks returns the window's looks, as the settings choose them: the
-// theme of each appearance, kero's (the background's) or a Ghostty one.
+// tuios theme of each appearance (themeKey).
 func (a *App) looks() *looks {
-	key := a.set.LightTheme + "\x00" + a.set.DarkTheme
-	if a.set.LightTheme == tuiosThemeName || a.set.DarkTheme == tuiosThemeName {
-		// The tuios theme changes with config.toml and Omarchy, under
-		// the same setting.
-		key += "\x00" + itoa(int(tuiosThemeGen.Load()))
-	}
+	key := a.themeKey()
 	if l := currentLooks.Load(); l != nil && l.key == key {
 		return l
 	}
@@ -267,107 +217,48 @@ func lookFor(c *ui.Context) *look {
 	l := currentLooks.Load()
 	switch {
 	case l == nil:
-		return keroLook("paper", dark)
+		return paperLook(dark)
 	case dark:
 		return l.dark
 	}
 	return l.light
 }
 
-// lookNamed is the look of a theme: one of kero's by its name, else a
-// Ghostty one by its name, else kero's default.
+// lookNamed is the look of a guios theme setting: the tuios theme it
+// shows (themeID), else guios's own where tuios names none.
 func lookNamed(name string, dark bool) *look {
-	if name == tuiosThemeName {
-		l := tuiosLook(dark)
-		tuiosNamesNone[b2i(dark)].Store(l == nil)
-		if l != nil {
-			return l
-		}
-		return keroLook("paper", dark)
+	if l := tuiosLook(themeID(name, dark)); l != nil {
+		return l
 	}
-	if id := keroID(name); id != "" {
-		return keroLook(id, dark)
-	}
-	if th, err := terminal.GhosttyTheme(name); err == nil {
-		return ghosttyLook(th)
-	}
-	return keroLook("paper", dark)
+	return paperLook(dark)
 }
 
-// keroID is the wash of one of kero's themes by its name in the
-// configuration, where Rex's is "petal"; "" for a name of none of
-// kero's. Only the lowercase names are kero's, as Ghostty's Aurora is
-// "Aurora".
-func keroID(name string) string {
-	if name == "petal" {
-		return "rex"
+// paperLooks are guios's own colors, light and dark: white paper on a
+// desk of light gray, in ink, flat and quiet. They show where tuios
+// names no theme.
+var paperLooks = func() [2]*look {
+	var both [2]*look
+	for i, ground := range []string{"#f6f6f7", "#141416"} {
+		// One flat ground: a gradient of one level steps in bands across
+		// the sidebar (council round 1, visual 21).
+		g := ui.Hex(ground)
+		l := &look{base: ui.LinearGradient{Angle: 180, Oklab: true, Stops: []ui.GradientStop{{Color: g, At: 0}, {Color: g, At: 1}}}, glow: glowOf(g.Alpha(0))}
+		var accent ui.Color
+		l.term, accent = toneTheme(tone{260, 0, 0.9, 262}, i == 1)
+		l.pal = tinted(l.term, accent)
+		both[i] = l
 	}
-	if _, ok := washTable[name]; ok && name != "rex" {
-		return name
-	}
-	return ""
-}
-
-// keroName is a kero theme's name in the configuration (keroID).
-func keroName(id string) string {
-	if id == "rex" {
-		return "petal"
-	}
-	return id
-}
-
-// keroLook is kero's theme of a wash.
-func keroLook(id string, dark bool) *look {
-	l, ok := keroLooks[id]
-	if !ok {
-		l = keroLooks["paper"]
-	}
-	if dark {
-		return l[1]
-	}
-	return l[0]
-}
-
-var keroLooks = func() map[string][2]*look {
-	m := map[string][2]*look{}
-	for id, w := range washTable {
-		var both [2]*look
-		for i, dark := range []bool{false, true} {
-			hexes, glow := w.light, w.lightGlow
-			if dark {
-				hexes, glow = w.dark, w.darkGlow
-			}
-			stops := make([]ui.GradientStop, len(hexes))
-			for j, h := range hexes {
-				stops[j] = ui.GradientStop{Color: ui.Hex(h), At: float32(j) / float32(len(hexes)-1)}
-			}
-			l := &look{base: ui.LinearGradient{Angle: 180, Oklab: true, Stops: stops}, glow: glowOf(glow), plain: id == "plain"}
-			if l.plain {
-				// kero's colors as they were, on the card's white or gray.
-				pal := lightPalette
-				l.term = lightTermTheme
-				if dark {
-					pal, l.term = darkPalette, darkTermTheme
-				}
-				pal.finish(l.term.Foreground, pal.card)
-				l.pal = &pal
-			} else {
-				var accent ui.Color
-				l.term, accent = toneTheme(w.tone, dark)
-				l.pal = tinted(l.term, accent)
-			}
-			both[i] = l
-		}
-		m[id] = both
-	}
-	return m
+	return both
 }()
+
+// paperLook is guios's own look for windows of an appearance.
+func paperLook(dark bool) *look { return paperLooks[b2i(dark)] }
 
 func glowOf(c ui.Color) ui.LinearGradient {
 	return ui.LinearGradient{Angle: 225, Oklab: true, Stops: []ui.GradientStop{{Color: c, At: 0}, {Color: c.Alpha(0), At: 0.5}}}
 }
 
-// ghosttyLook washes the window in a Ghostty theme's background, a shade
+// ghosttyLook washes the window in a terminal theme's background, a shade
 // under its cards, with its cursor's color as its accent, unless that is
 // a gray, as many themes' cursors are, when blue is.
 func ghosttyLook(th *terminal.Theme) *look {
@@ -441,23 +332,38 @@ func (p *palette) finish(fg, bg ui.Color) {
 		p.focusLine = fg.Alpha(0.16)
 	}
 	worst := p.worstSurface(bg)
+	// text3 carries information (ages, labels, hints, counts) on the
+	// cards, the lists and the sidebar, on the ground a shade under the
+	// cards: every tier keeps 4.5:1 there, in every theme (DESIGN.md
+	// section 1). The tiers aim at 5:1: a small regular face draws its
+	// strokes' cores a little lighter than the token, so 5:1 on the token
+	// reads 4.5:1 on the frame's pixels (council round 3, visual M2).
+	grounds := []ui.Color{bg, darker(bg, 0.04), darker(bg, 0.03)}
+	if !p.dark {
+		grounds = append(grounds, bg.Mix(p.sidebar, 0.6))
+	}
+	least := func(c ui.Color) float64 {
+		m := math.Inf(1)
+		for _, g := range grounds {
+			m = min(m, contrast(c, g))
+		}
+		return m
+	}
+	// A theme whose own foreground falls under that gets a text a step
+	// further from its background; the terminals keep the theme's.
+	for _, g := range append(grounds, worst) {
+		p.text = apart(p.text, g, 5)
+	}
+	fg = p.text
 	p.textMuted = legible(fg.Mix(bg, 0.38), fg, worst, 4.5)
 	p.textFaint = legible(fg.Mix(bg, 0.56), fg, worst, 3)
-	if !p.dark {
-		// In the light text3 carries information (ages, labels, hints,
-		// counts) on the cards, the lists and the sidebar, a shade under
-		// the cards (the agents view's ckGround): it keeps 4.5:1 there
-		// (council round 3, visual M2). The token aims at 5:1: a small
-		// regular face draws its strokes' cores a little lighter than the
-		// token, so 5:1 on the token reads 4.5:1 on the frame's pixels.
-		// text2 stays darker, so the tiers hold.
-		ground := bg.Mix(p.sidebar, 0.6)
-		for i := 0; i < 40 && (contrast(p.textFaint, ground) < 5 || contrast(p.textFaint, bg) < 5); i++ {
-			p.textFaint = p.textFaint.Mix(fg, 0.04)
-		}
-		for i := 0; i < 20 && contrast(p.textMuted, bg) < contrast(p.textFaint, bg)+1; i++ {
-			p.textMuted = p.textMuted.Mix(fg, 0.08)
-		}
+	// Short of 5:1, a tier moves toward text until it has it, or is text.
+	for i := 0; i < 60 && least(p.textFaint) < 5; i++ {
+		p.textFaint = p.textFaint.Mix(fg, 0.06)
+	}
+	// text2 stays a step stronger than text3, so the tiers hold.
+	for i := 0; i < 60 && (least(p.textMuted) < 5 || contrast(p.textMuted, bg) < contrast(p.textFaint, bg)+1); i++ {
+		p.textMuted = p.textMuted.Mix(fg, 0.06)
 	}
 	// An attempt's letter on its accent chip keeps 5:1 (visual M2).
 	p.accentText = deepen(p.accent, p.accent.Alpha(0.16).Over(worst), 5)
@@ -518,6 +424,25 @@ func deepen(c, bg ui.Color, ratio float64) ui.Color {
 			l += 0.01
 		}
 		if l <= 0 || l >= 1 {
+			break
+		}
+		c = ui.Oklch(l, ch, h)
+	}
+	return c
+}
+
+// apart is c with its hue and chroma kept and its lightness moved away
+// from bg, the way c already lies from it, until it has ratio of contrast
+// on bg.
+func apart(c, bg ui.Color, ratio float64) ui.Color {
+	l, ch, h := oklch(c)
+	lb, _, _ := oklch(bg)
+	step := float32(0.01)
+	if l < lb {
+		step = -step
+	}
+	for i := 0; i < 100 && contrast(c, bg) < ratio; i++ {
+		if l += step; l <= 0 || l >= 1 {
 			break
 		}
 		c = ui.Oklch(l, ch, h)
@@ -636,71 +561,6 @@ func oklch(c ui.Color) (l, ch, h float32) {
 	hue := math.Mod(math.Atan2(B, A)*180/math.Pi+360, 360)
 	return float32(L), float32(math.Hypot(A, B)), float32(hue)
 }
-
-type wash struct {
-	light, dark         []string
-	lightGlow, darkGlow ui.Color
-	tone                tone
-}
-
-var washTable = map[string]wash{
-	// Rex's: pink lavender above, rose at the top right, butter cream below.
-	"rex": {
-		light: []string{"#ebe0f3", "#f3e7f1", "#f7eee4", "#f6efcf"}, lightGlow: ui.RGBA(247, 220, 241, 0.75),
-		dark: []string{"#240f1d", "#26111a", "#271610"}, darkGlow: ui.RGBA(142, 58, 110, 0.3),
-		tone: tone{350, 1, 0.95, 350},
-	},
-	"mist": {
-		light: []string{"#e3e9f4", "#ebeff6", "#f1f2f3", "#f2f1ec"}, lightGlow: ui.RGBA(210, 225, 248, 0.75),
-		dark: []string{"#0c1628", "#0d1827", "#111b23"}, darkGlow: ui.RGBA(46, 91, 166, 0.3),
-		tone: tone{255, 1, 0.8, 255},
-	},
-	"meadow": {
-		light: []string{"#e2eee5", "#ebf2e7", "#f3f2e2", "#f5f0d6"}, lightGlow: ui.RGBA(214, 240, 222, 0.75),
-		dark: []string{"#081c0d", "#101d0c", "#1b1c0b"}, darkGlow: ui.RGBA(6, 113, 50, 0.3),
-		tone: tone{140, 1, 0.9, 140},
-	},
-	"dusk": {
-		light: []string{"#e4dbf3", "#efdeee", "#f6e3dc", "#f7e6cf"}, lightGlow: ui.RGBA(246, 206, 222, 0.8),
-		dark: []string{"#190f2e", "#260f24", "#2d140b"}, darkGlow: ui.RGBA(125, 65, 138, 0.3),
-		tone: tone{315, 1, 1.1, 315},
-	},
-	// Sea glass: aqua above, a pale tide line below.
-	"tide": {
-		light: []string{"#dbebef", "#e3eff1", "#ecf3f0", "#f2f2e8"}, lightGlow: ui.RGBA(194, 232, 238, 0.75),
-		dark: []string{"#001b22", "#001e1f", "#0b1e1b"}, darkGlow: ui.RGBA(0, 112, 128, 0.3),
-		tone: tone{205, 1, 0.85, 205},
-	},
-	"apricot": {
-		light: []string{"#f5e1d6", "#f8e7dc", "#f8eedf", "#f6f0da"}, lightGlow: ui.RGBA(252, 212, 194, 0.78),
-		dark: []string{"#2a1207", "#291507", "#25190a"}, darkGlow: ui.RGBA(151, 62, 22, 0.3),
-		tone: tone{50, 1, 1.05, 50},
-	},
-	// Mint at the top, fading through blue to violet.
-	"aurora": {
-		light: []string{"#dbefe8", "#e1ebf2", "#e8e4f4", "#f0e6f1"}, lightGlow: ui.RGBA(198, 238, 224, 0.75),
-		dark: []string{"#001f13", "#06192b", "#1e122a"}, darkGlow: ui.RGBA(0, 115, 75, 0.3),
-		tone: tone{170, 1, 1.15, 170},
-	},
-	"dune": {
-		light: []string{"#ede4d8", "#f1e9de", "#f4eee4", "#f3efe8"}, lightGlow: ui.RGBA(242, 222, 194, 0.7),
-		dark: []string{"#22190b", "#211a0e", "#201b12"}, darkGlow: ui.RGBA(135, 79, 0, 0.3),
-		tone: tone{80, 0.7, 0.55, 80},
-	},
-	// White paper on a desk of light gray, in ink, flat and quiet.
-	"paper": {
-		// One flat ground: a gradient of one level steps in bands across
-		// the sidebar (council round 1, visual 21).
-		light: []string{"#f6f6f7", "#f6f6f7"}, lightGlow: ui.RGBA(255, 255, 255, 0),
-		dark: []string{"#141416", "#141416"}, darkGlow: ui.RGBA(0, 0, 0, 0),
-		tone: tone{260, 0, 0.9, 262},
-	},
-	"plain": {
-		light: []string{"#eceef4", "#eceef4"}, lightGlow: ui.RGBA(0, 0, 0, 0),
-		dark: []string{"#141418", "#141418"}, darkGlow: ui.RGBA(0, 0, 0, 0),
-	},
-}
-
 // onAttention is the ink of a count on the needs-you amber: the dark ink
 // or white, whichever reads better on it. White on the light theme's amber
 // was 3.42:1 (council round 4, S1); the dark ink is 5:1.

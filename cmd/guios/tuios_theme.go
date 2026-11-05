@@ -3,7 +3,9 @@ package main
 import (
 	"context"
 	"image/color"
+	"os"
 	"path/filepath"
+	"sync"
 	"sync/atomic"
 
 	"github.com/Gaurav-Gosain/mygo"
@@ -15,48 +17,133 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
 )
 
-// `theme = tuios` colors guios with the theme the TUI has: the one
-// config.toml names in appearance.theme (appearance.theme_light while the
-// window is light), Omarchy's while tuios follows Omarchy. Every role of
-// the palette derives from it as from a Ghostty theme (ghosttyLook), so a
-// ricer's theme reaches the sidebar, the chips, the menus and the agents
-// view as well as the terminals (DESIGN.md section 1). It follows a change
-// of config.toml, and a switch of the Omarchy theme, live.
+// guios takes its theme from tuios. A setting of `theme = tuios` (the
+// default) colors guios with the theme the TUI has: the one config.toml
+// names in appearance.theme (appearance.theme_light while the window is
+// light), Omarchy's while tuios follows Omarchy, or the one `tuios
+// set-config` gave the daemon since. Any other setting names one tuios
+// theme by its id, as `tuios list-themes` prints it. Every role of the
+// palette derives from the theme's terminal colors (ghosttyLook), so the
+// theme reaches the sidebar, the chips, the menus and the agents view as
+// well as the terminals (DESIGN.md section 1). Where tuios names no theme,
+// guios shows its own (paperLook).
+//
+// The theme follows three things live, and none of them polls: a change
+// of config.toml (one inotify watch on its folder), an option-set event of
+// the daemon (on the event connection guios has open anyway), and a switch
+// of the Omarchy theme (swatch's watch, one inotify watch). Each reads what
+// it must off the main thread and redraws only when a color changed.
 
 const tuiosThemeName = "tuios"
 
-// tuiosThemeGen counts changes of the tuios theme, for the looks' key.
-var tuiosThemeGen atomic.Uint64
+// tuiosSource is where the tuios theme comes from: config.toml's
+// appearance.theme and theme_light ([0] and [1]), and the values
+// set-option told the daemon after the file last changed them. The newer
+// of the two wins, as the TUI applies whichever came last.
+type tuiosSource struct {
+	mu   sync.Mutex
+	file [2]string
+	told [2]*string
+}
 
-// tuiosNamesNone tells, per appearance (0 light, 1 dark), that the tuios
-// theme fell back to paper as the looks were last built: Settings then
-// marks Paper as the theme in force.
-var tuiosNamesNone [2]atomic.Bool
+var tuiosSrc tuiosSource
 
-// tuiosLook is the look of the tuios theme, nil while tuios names no
-// theme guios can read.
-func tuiosLook(dark bool) *look {
-	th := tuiosTermTheme(dark)
+// omarchyGen counts switches of the Omarchy theme guios saw: the omarchy
+// id keeps its name while its colors change.
+var omarchyGen atomic.Uint64
+
+func init() {
+	tuiosSrc.file[0], tuiosSrc.file[1] = readTuiosFile()
+}
+
+// readTuiosFile is appearance.theme and theme_light as config.toml has
+// them, both empty when there is no config.toml. It never writes one.
+func readTuiosFile() (string, string) {
+	path, err := config.GetConfigPath()
+	if err != nil {
+		return "", ""
+	}
+	if _, err := os.Stat(path); err != nil {
+		return "", ""
+	}
+	cfg, err := config.LoadUserConfig()
+	if err != nil {
+		return "", ""
+	}
+	return cfg.Appearance.Theme, cfg.Appearance.ThemeLight
+}
+
+// resolve is the id of the tuios theme for windows of an appearance, ""
+// for none. The caller holds s.mu.
+func (s *tuiosSource) resolve(dark bool) string {
+	pick := func(i int) string {
+		if s.told[i] != nil {
+			return *s.told[i]
+		}
+		return s.file[i]
+	}
+	id := pick(0)
+	if l := pick(1); !dark && l != "" {
+		id = l
+	}
+	if theme.FollowsOmarchy(id) {
+		id = theme.OmarchyID
+	}
+	if id == theme.NoneID {
+		id = ""
+	}
+	return id
+}
+
+// tuiosThemeID is the tuios theme in force for windows of an appearance.
+func tuiosThemeID(dark bool) string {
+	tuiosSrc.mu.Lock()
+	defer tuiosSrc.mu.Unlock()
+	return tuiosSrc.resolve(dark)
+}
+
+// themeID is the tuios theme a guios setting shows: the TUI's for
+// "tuios", else the one it names. A name tuios does not know (one of
+// kero's or a Ghostty theme, as older settings have it) shows the TUI's.
+func themeID(setting string, dark bool) string {
+	if setting != tuiosThemeName && tuiosThemeExists(setting) {
+		return setting
+	}
+	return tuiosThemeID(dark)
+}
+
+func tuiosThemeExists(id string) bool {
+	if id == "" {
+		return false
+	}
+	theme.EnsureRegistry()
+	return theme.Exists(id)
+}
+
+// themeKey is what the looks are built from: the tuios themes the
+// settings show, and the Omarchy theme's switches while one is Omarchy's.
+func (a *App) themeKey() string {
+	ids := [2]string{themeID(a.set.LightTheme, false), themeID(a.set.DarkTheme, true)}
+	key := ids[0] + "\x00" + ids[1]
+	if ids[0] == theme.OmarchyID || ids[1] == theme.OmarchyID {
+		key += "\x00" + itoa(int(omarchyGen.Load()))
+	}
+	return key
+}
+
+// tuiosLook is the look of a tuios theme, nil for none or one guios
+// cannot read.
+func tuiosLook(id string) *look {
+	th := tuiosTermTheme(id)
 	if th == nil {
 		return nil
 	}
 	return ghosttyLook(th)
 }
 
-// tuiosTermTheme is the tuios theme as a terminal theme.
-func tuiosTermTheme(dark bool) *terminal.Theme {
-	cfg, err := config.LoadUserConfig()
-	if err != nil {
-		return nil
-	}
-	id := cfg.Appearance.Theme
-	if !dark && cfg.Appearance.ThemeLight != "" {
-		id = cfg.Appearance.ThemeLight
-	}
-	if theme.FollowsOmarchy(id) {
-		id = theme.OmarchyID
-	}
-	if id == "" || id == theme.NoneID {
+// tuiosTermTheme is a tuios theme as a terminal theme, nil for none.
+func tuiosTermTheme(id string) *terminal.Theme {
+	if id == "" {
 		return nil
 	}
 	theme.EnsureRegistry()
@@ -85,20 +172,56 @@ func uiColor(c color.Color) ui.Color {
 	return ui.RGB(uint8(r>>8), uint8(g>>8), uint8(b>>8))
 }
 
-// followTuiosTheme watches config.toml's folder, and the applied Omarchy
-// theme on a machine with Omarchy, and recolors the app as they change
-// while it shows the tuios theme. Each watch is one inotify watch and a
-// goroutine blocked on it: no timer runs.
-func (a *App) followTuiosTheme() {
-	changed := func() {
-		a.update(func() {
-			if a.set.LightTheme != tuiosThemeName && a.set.DarkTheme != tuiosThemeName {
-				return
-			}
-			tuiosThemeGen.Add(1)
-			a.retheme()
-		})
+// previewLooks are the looks Settings previews, by theme id, built once
+// for each until a theme changes its colors.
+var previewLooks struct {
+	sync.Mutex
+	gen   uint64
+	looks map[string]*look
+}
+
+// previewLook is the look of a tuios theme for a preview, paper's for
+// none.
+func previewLook(id string, dark bool) *look {
+	gen := omarchyGen.Load()
+	previewLooks.Lock()
+	defer previewLooks.Unlock()
+	if previewLooks.looks == nil || previewLooks.gen != gen {
+		previewLooks.looks, previewLooks.gen = map[string]*look{}, gen
 	}
+	key := id
+	if id == "" {
+		key = "\x00" + string(rune('0'+b2i(dark)))
+	}
+	if l, ok := previewLooks.looks[key]; ok {
+		return l
+	}
+	l := tuiosLook(id)
+	if l == nil {
+		l = paperLook(dark)
+	}
+	previewLooks.looks[key] = l
+	return l
+}
+
+// tuiosOptionSet takes a theme option that set-option gave the daemon.
+func (a *App) tuiosOptionSet(key, value string) {
+	i := 0
+	if key == "appearance.theme_light" {
+		i = 1
+	}
+	tuiosSrc.mu.Lock()
+	v := value
+	tuiosSrc.told[i] = &v
+	tuiosSrc.mu.Unlock()
+	a.retheme()
+}
+
+// followTuiosTheme watches config.toml's folder, and the applied Omarchy
+// theme on a machine with Omarchy, and recolors the app as they change.
+// Each watch is one inotify watch and a goroutine blocked on it: no timer
+// runs, and an event that changes no theme draws nothing.
+func (a *App) followTuiosTheme() {
 	if path, err := config.GetConfigPath(); err == nil {
 		go func() {
 			w, err := mygo.WatchFiles(context.Background(), filepath.Dir(path), mygo.FileWatchOptions{HintsOnly: true})
@@ -110,7 +233,19 @@ func (a *App) followTuiosTheme() {
 				if _, err := w.Next(context.Background()); err != nil {
 					return
 				}
-				changed()
+				th, light := readTuiosFile()
+				tuiosSrc.mu.Lock()
+				moved := false
+				for i, v := range [2]string{th, light} {
+					if v != tuiosSrc.file[i] {
+						// The file's newer value wins over set-option's.
+						tuiosSrc.file[i], tuiosSrc.told[i], moved = v, nil, true
+					}
+				}
+				tuiosSrc.mu.Unlock()
+				if moved {
+					a.update(a.retheme)
+				}
 			}
 		}()
 	}
@@ -118,8 +253,10 @@ func (a *App) followTuiosTheme() {
 		if w, err := swatch.Watch(theme.OmarchySource()); err == nil {
 			go func() {
 				for p := range w.Changes() {
-					theme.SetOmarchyPalette(p)
-					changed()
+					if theme.SetOmarchyPalette(p) {
+						omarchyGen.Add(1)
+						a.update(a.retheme)
+					}
 				}
 			}()
 		}
@@ -127,8 +264,14 @@ func (a *App) followTuiosTheme() {
 }
 
 // retheme gives every terminal the window's terminal themes again, and
-// draws the windows anew: the looks changed without a setting changing.
+// draws the windows anew, when the themes the settings show changed
+// colors without a setting changing. It runs on the main thread, and does
+// nothing when the looks stay the same.
 func (a *App) retheme() {
+	old := currentLooks.Load()
+	if l := a.looks(); l == old {
+		return
+	}
 	light, dark := a.termThemes()
 	for _, e := range a.terms {
 		if e.term != nil {

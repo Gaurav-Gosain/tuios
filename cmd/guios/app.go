@@ -388,6 +388,11 @@ func (a *App) event(h *host, cl *client.Client, m proto.Message) {
 			a.nudgeUsage()
 		}
 	case "daemon":
+		if !h.remote() && m.Daemon != nil && m.Daemon.Type == "option-set" {
+			// tuios set-config on a theme: guios follows the TUI's theme.
+			a.tuiosOptionSet(m.Daemon.Key, m.Daemon.Value)
+			return
+		}
 		if !h.remote() {
 			a.cockpitEvent(m.Daemon)
 			a.nudgeUsage()
