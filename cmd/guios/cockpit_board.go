@@ -466,7 +466,11 @@ func (a *App) boardColumn(c *ui.Context, pal *palette, b *ckBoard, ci int, st st
 					b.focus.Focus()
 				}
 			}
-			in := textField(c, "new-card", &b.draft, locales.CockpitCardPlaceholder(), 0, pal).AutoFocus()
+			var in ui.Element
+			// In a row: the field grows across the column, not down it.
+			ui.Row(c).Shrink(0).Children(func() {
+				in = textField(c, "new-card", &b.draft, locales.CockpitCardPlaceholder(), 0, pal).AutoFocus()
+			})
 			if b.caretEnd {
 				b.caretEnd = false
 				n := utf8.RuneCountInString(b.draft)
