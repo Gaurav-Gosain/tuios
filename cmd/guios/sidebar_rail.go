@@ -138,10 +138,11 @@ func (a *App) paneRows(c *ui.Context, pal *palette, s *proto.Session) {
 	// Panes that would read the same, as three shells, get a detail:
 	// their folder within the session's, else their number, as the
 	// palette's Ctrl+B 1, 2, 3 (council round 5, visual M2).
+	h := a.hostOf(s.ID)
 	details := make([]string, len(panes))
 	seen := map[string]int{}
 	for k, p := range panes {
-		details[k] = paneFolder(s, p)
+		details[k] = paneFolder(s, p, h)
 		seen[p.PaneName()+"\x00"+details[k]]++
 	}
 	for k, p := range panes {
@@ -156,7 +157,6 @@ func (a *App) paneRows(c *ui.Context, pal *palette, s *proto.Session) {
 	if f := a.focus[s.ID]; f != "" {
 		focus = f
 	}
-	h := a.hostOf(s.ID)
 	ui.Column(c.Key("panes-"+s.ID)).Margin(0, 0, 2, 0).Children(func() {
 		for k, p := range panes {
 			if k == sbPanesMax {
@@ -171,11 +171,15 @@ func (a *App) paneRows(c *ui.Context, pal *palette, s *proto.Session) {
 
 // paneFolder is a pane's folder within its session's, as "docs" or
 // "src/api", "" for the session's own; a folder outside it goes by its
-// last name.
-func paneFolder(s *proto.Session, p *proto.Pane) string {
+// last name, and the home folder of h is "~", as the header and the TUI
+// name it.
+func paneFolder(s *proto.Session, p *proto.Pane, h *host) string {
 	d, root := p.WorkDir(), s.WorkDir()
 	if d == "" || d == root {
 		return ""
+	}
+	if h != nil && h.shortDir(d) == "~" {
+		return "~"
 	}
 	if r, err := filepath.Rel(root, d); err == nil && root != "" && !strings.HasPrefix(r, "..") {
 		return filepath.ToSlash(r)
