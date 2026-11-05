@@ -137,11 +137,15 @@ type syncResult struct {
 	Error          string   `json:"error,omitempty"`
 	// ErrorKind names an error a script can act on: "tailscale_check" for a
 	// login that waits for an approval, "tailscale_policy" for a login the
-	// tailnet policy refuses. Empty for any other error.
+	// tailnet policy refuses, or the class of an ssh failure
+	// (federation.SSHFailure). Empty for any other error.
 	ErrorKind string `json:"error_kind,omitempty"`
 	// ApprovalURL is where the person approves the login, with
 	// "tailscale_check".
 	ApprovalURL string `json:"approval_url,omitempty"`
+	// Fix says what to do about an ssh failure of a kind federation
+	// classifies (host_key_new, auth, dns and the others).
+	Fix string `json:"fix,omitempty"`
 	// Service is the daemon service on the host: "installed", "none",
 	// "unsupported", or empty when the probe did not say.
 	Service string `json:"service,omitempty"`
@@ -193,6 +197,10 @@ func (t *syncTarget) fail(err error) {
 	if ge := gateErrorOf(err); ge != nil {
 		t.res.ErrorKind = ge.Gate.Kind
 		t.res.ApprovalURL = ge.Gate.URL
+	}
+	if fe, ok := errors.AsType[*sshFailError](err); ok {
+		t.res.ErrorKind = string(fe.failure)
+		t.res.Fix = fe.failure.Fix(t.host.Addr)
 	}
 }
 
@@ -1201,6 +1209,9 @@ func printSyncReport(w io.Writer, rep syncReport, opts syncOptions) {
 	for _, h := range rep.Hosts {
 		if h.Error != "" {
 			fmt.Fprintf(w, "%s (%s): %s\n", h.Host, h.Addr, h.Error)
+		}
+		if h.Fix != "" {
+			fmt.Fprintf(w, "  %s\n", h.Fix)
 		}
 		for _, n := range h.Notes {
 			fmt.Fprintf(w, "%s: %s\n", h.Host, n)

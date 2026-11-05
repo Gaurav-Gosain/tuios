@@ -12964,3 +12964,20 @@ fix/workspace-switch-during-new-pane.
 | Bug | Fix removed | How | Tests that fail | Verdict |
 |---|---|---|---|---|
 | A switch after a new-window key went back to the new pane's workspace | the new window's `focusAskedBy` | passed `""` in `handleExecuteCommand`, with the hold kept | `TestScreenPresetLeaderTwiceAndSend` ("screenkeys is on workspace 2, want 1"), 5 of 5 runs | **caught** |
+
+## A failed link names the ssh failure and its fix
+
+`TestHostTestReportsWhatSSHSaid` adds one host for each class of ssh failure:
+an unknown host key, a changed host key, a refused key, a name that does not
+resolve, a refused port and a machine that does not answer. The ssh stand-in
+prints the words OpenSSH 10.6 printed for each class and exits 255.
+`tuios hosts test NAME --json` must name the class in `failure`, say it in
+`reason`, and carry the fix in `fix` and `fix_command`. The plain output must
+print the fix.
+
+Run on 2026-11-05 on Linux. The control is this branch with
+`ClassifySSHFailure` made to return no class. Every case fails, the first with
+`ssh said "No ED25519 host key is known ..." and the report named the failure
+"", want "host_key_new"`, and the reason reads `The host did not answer.` for
+all six. Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestHostTestReportsWhatSSHSaid$' -v .`.

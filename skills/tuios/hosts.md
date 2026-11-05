@@ -46,6 +46,13 @@ or on the host's `tailscale_login`. Any other is reported as
 refuses has `"error_kind": "tailscale_policy"`, and the fix is the user in the
 host's `addr`.
 
+A host that ssh cannot reach reports `unreachable`, and its row in
+`tuios hosts --json` and `hosts test NAME --json` names the cause in
+`failure`: `host_key_new`, `host_key_changed`, `auth`, `dns`, `refused` or
+`timeout`, with `fix` and, for some, `fix_command`. `host_key_new` and `auth`
+need the person: a host key to check, or a password for `ssh-copy-id`. Give
+them the `fix_command`. Never accept a host key or type a password yourself.
+
 A host with tuios and no daemon reports `no_daemon`. `hosts test NAME --start`
 starts the daemon there over ssh. It does nothing on a host that already runs
 one, and it starts nothing on a host with no tuios. `hosts sync NAME --start`

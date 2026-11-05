@@ -376,6 +376,9 @@ func remoteRunError(what, stderr string, err error) error {
 		return ge
 	}
 	if exit, ok := errors.AsType[*exec.ExitError](err); ok && exit.ExitCode() == 255 {
+		if f := federation.ClassifySSHFailure(stderr); f != "" {
+			return &sshFailError{what: what, failure: f, said: plainLine(lastLine(stderr))}
+		}
 		what += ": ssh could not connect"
 	} else if errors.Is(err, context.DeadlineExceeded) {
 		what += ": it did not answer in time"
@@ -384,6 +387,18 @@ func remoteRunError(what, stderr string, err error) error {
 		return fmt.Errorf("%s. ssh reported: %s", what, plainLine(lastLine(stderr)))
 	}
 	return fmt.Errorf("%s: %v", what, err)
+}
+
+// sshFailError is a script that ssh could not run, for a reason ssh named.
+// Its kind is the error kind hosts sync reports.
+type sshFailError struct {
+	what    string
+	failure federation.SSHFailure
+	said    string
+}
+
+func (e *sshFailError) Error() string {
+	return fmt.Sprintf("%s: %s ssh reported: %s", e.what, e.failure.Reason(), e.said)
 }
 
 func lastLine(s string) string {

@@ -31,6 +31,7 @@ type hostReport struct {
 	Status        string  `json:"status"`
 	Reason        string  `json:"reason"`
 	Detail        string  `json:"detail"`
+	Fix           string  `json:"fix"`
 	DaemonVersion string  `json:"daemon_version"`
 	Protocol      int     `json:"protocol"`
 	MinProtocol   int     `json:"min_protocol"`
@@ -156,6 +157,9 @@ func printHostList(w io.Writer, raw json.RawMessage) error {
 			// The detail comes from ssh or from the other machine. It is
 			// labelled so a reader cannot mistake it for something tuios said.
 			fmt.Fprintf(w, "  the link reported: %s\n", h.Detail)
+		}
+		if h.Fix != "" {
+			fmt.Fprintf(w, "  %s\n", h.Fix)
 		}
 		if h.Status == string(federation.StatusNoBinary) {
 			fmt.Fprintf(w, "  Run 'tuios hosts test %s' to see where the link looked.\n", h.Host)

@@ -116,6 +116,10 @@ type link struct {
 	// purpose: it lands in `tuios hosts` and in the sidebar.
 	reason string
 	detail string
+	// failure is the class of the ssh failure behind an unreachable status,
+	// read from ssh's own words. Empty for any other status, and when the
+	// words match no class. See sshfail.go.
+	failure SSHFailure
 	// approvalURL is the Tailscale SSH check URL while status is
 	// StatusApproval.
 	approvalURL string
@@ -214,11 +218,28 @@ func (l *link) markSettled() { l.settledOnce.Do(func() { close(l.settled) }) }
 // every listing wait out its own context against a host that is working, which
 // is the opposite of what the wait is for.
 func (l *link) set(status Status, reason, detail string) {
+	l.setFailure(status, reason, detail, "")
+}
+
+// setUnreachable is set for a dial that ssh itself gave up on. When ssh's
+// words name a class of failure, the class's sentence replaces reason, so the
+// person reads which of the six things went wrong instead of "did not answer".
+func (l *link) setUnreachable(reason, detail string) {
+	f := ClassifySSHFailure(detail)
+	if f != "" {
+		reason = f.Reason()
+	}
+	l.setFailure(StatusUnreachable, reason, detail, f)
+}
+
+// setFailure is set with the class of the failure.
+func (l *link) setFailure(status Status, reason, detail string, failure SSHFailure) {
 	l.mu.Lock()
 	changed := l.status != status
 	l.status = status
 	l.reason = reason
 	l.detail = detail
+	l.failure = failure
 	if status != StatusApproval {
 		l.approvalURL = ""
 		l.approvalRefused = false
@@ -268,6 +289,7 @@ func (l *link) report() HostReport {
 		Status:          l.status,
 		Reason:          l.reason,
 		Detail:          l.detail,
+		Failure:         l.failure,
 		ApprovalURL:     l.approvalURL,
 		ApprovalRefused: l.approvalRefused,
 		DaemonVersion:   l.shake.DaemonVersion,
@@ -286,6 +308,10 @@ func (l *link) report() HostReport {
 		r.LoadOK = l.load.LoadOK
 		r.LoadAt = l.loadAt.Unix()
 		r.RTTMillis = max(l.rtt.Milliseconds(), 1)
+	}
+	if l.failure != "" {
+		r.Fix = l.failure.Fix(l.host.Addr)
+		r.FixCommand = l.failure.FixCommand(l.host.Addr, l.host.SSHOptions)
 	}
 	if !l.lastOK.IsZero() {
 		r.LastOK = l.lastOK.Unix()
@@ -446,7 +472,7 @@ func (l *link) attempt(ctx context.Context) bool {
 
 	tr, err := l.opts.Dial(dialCtx, h)
 	if err != nil {
-		l.set(StatusUnreachable, "The host did not answer.", trimDetail(err.Error()))
+		l.setUnreachable("The host did not answer.", trimDetail(err.Error()))
 		return false
 	}
 
@@ -496,6 +522,10 @@ preamble:
 					// and it is reported as its own status so the listing says
 					// where the problem is.
 					l.set(StatusNoBinary, "The link cannot find tuios on the host.", trimDetail(tr.Diagnostic()))
+				case exited && code == sshExitCode:
+					// 255 is ssh's own code, so the words on stderr are
+					// ssh's and say which failure it was.
+					l.setUnreachable("The host did not answer.", trimDetail(tr.Diagnostic()))
 				case exited:
 					l.set(StatusUnreachable, "The host did not answer.", trimDetail(tr.Diagnostic()))
 				default:

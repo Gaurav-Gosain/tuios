@@ -4709,6 +4709,22 @@ the daemon. The JSON is the host report, with `action` (`daemon started`,
 `would start daemon`, `none` or `start failed`), `before` (the status before
 the start) and `start_command`.
 
+When ssh cannot reach the host, the output names what went wrong and how to
+fix it. The JSON has `failure` and `fix`, and `fix_command` when a command
+fixes it:
+
+| `failure` | What happened | The fix |
+|-----------|---------------|---------|
+| `host_key_new` | ssh does not know the host key | Connect one time with `ssh ADDR true` and check the key |
+| `host_key_changed` | The host key changed. This can be an attack | Check the new key with the owner of the host |
+| `auth` | The host refused your ssh key | Copy your key with `ssh-copy-id ADDR` |
+| `dns` | ssh cannot find the address | Check the address |
+| `refused` | No ssh server answers on the port | Start the ssh server, or check the port |
+| `timeout` | The host does not answer | Turn on the host, or connect to its network |
+
+`tuios hosts` prints the same fix under the table, and a `hosts sync --json`
+row has the class as `error_kind`, with `fix`.
+
 `--speed` measures the link that the daemon holds to the host, the way a copy
 uses it. It needs a running daemon and a link that is up. It takes the middle
 of five round trips of a small call. Then it sends 64 MiB of random bytes up

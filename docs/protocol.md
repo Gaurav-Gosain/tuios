@@ -296,6 +296,16 @@ session works on.
 `harness`, `message`, `kind`, `meta` and `subagents`, at most 32 a session.
 The agents view draws them as rows.
 
+**list-hosts names the ssh failure of a host it cannot reach.** A row with
+status `unreachable` gains `failure`, `fix` and, for some, `fix_command`,
+when ssh's own words name the failure. `failure` is one of `host_key_new`,
+`host_key_changed`, `auth`, `dns`, `refused` and `timeout`. `fix` is one
+plain sentence. `fix_command` is the command that fixes it, as a person types
+it: `ssh ADDR true` for `host_key_new` and `ssh-copy-id ADDR` for `auth`. The
+`reason` of such a row is the sentence of its class, in place of "The host
+did not answer." The status value is unchanged. A row whose words match no
+class has none of the three fields.
+
 **list-hosts reports each host's load.** A host row gains `cores`, `load1`,
 `mem_pct`, `agents_working`, `load_ok`, `load_at` and `rtt_ms`, from the last hello on the
 link: the handshake, then the heartbeat. A link that carries traffic is not

@@ -533,9 +533,11 @@ func writeHostTest(w io.Writer, r federation.HostReport, starting bool) error {
 	case federation.StatusIncompatible:
 		fmt.Fprintln(w, "Upgrade tuios on one of the two machines.")
 	default:
-		// A policy refusal is already said in full. Anything else is said
-		// best by ssh itself.
-		if g := federation.ParseSSHGate(r.Detail); g == nil || g.Kind != federation.GateTailscalePolicy {
+		// A class of ssh failure has its own fix. A policy refusal is
+		// already said in full. Anything else is said best by ssh itself.
+		if r.Fix != "" {
+			fmt.Fprintln(w, r.Fix)
+		} else if g := federation.ParseSSHGate(r.Detail); g == nil || g.Kind != federation.GateTailscalePolicy {
 			fmt.Fprintln(w, "Run ssh to the machine by hand to see the whole error.")
 		}
 	}
