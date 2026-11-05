@@ -3,8 +3,8 @@ package session
 import (
 	"os"
 	"strconv"
-	"strings"
 	"time"
+	"unsafe"
 
 	uv "github.com/charmbracelet/ultraviolet"
 
@@ -116,32 +116,95 @@ func (p *PTY) tailShown(lines int) (tail, shown []string) {
 	}
 	t := p.terminal
 	w, h := t.Width(), t.Height()
-	var plain, faintless strings.Builder
-	for y := h - 1; y >= 0 && len(tail) < lines; y-- {
-		plain.Reset()
-		faintless.Reset()
+	if w <= 0 || h <= 0 {
+		return nil, nil
+	}
+	// One pass, each cell read once, as vt's TailText: the plain text and the
+	// faintless text each go to one byte buffer, trailing blanks are cut by
+	// moving its length back, and a row with no plain text rewinds both. The
+	// rows are cut from the buffers with unsafe.String, which is safe because
+	// neither buffer is written after the cut or kept. The buffers and the
+	// ends are bounded by the screen, not by lines, which can come from a client
+	// and exceed it.
+	m := min(lines, h)
+	var plainStack, shownStack [64]int
+	plainEnds, shownEnds := plainStack[:0], shownStack[:0]
+	if m > len(plainStack) {
+		plainEnds = make([]int, 0, m)
+		shownEnds = make([]int, 0, m)
+	}
+	plain := make([]byte, 0, m*w)
+	faintless := make([]byte, 0, m*w)
+	plainLast, shownLast := w, w
+	for y := h - 1; y >= 0 && len(plainEnds) < lines; y-- {
+		ps, fs := len(plain), len(faintless)
+		rows := min(lines-len(plainEnds), y+1)
+		if cap(plain)-ps < plainLast {
+			plain = regrowBytes(plain, rows*plainLast)
+		}
+		if cap(faintless)-fs < shownLast {
+			faintless = regrowBytes(faintless, rows*shownLast)
+		}
 		for x := range w {
 			c := t.CellAt(x, y)
 			if c == nil {
 				continue
 			}
 			text := vt.CellText(c.Content)
-			plain.WriteString(text)
+			plain = append(plain, text...)
 			if c.Style.Attrs&uv.AttrFaint != 0 {
-				text = strings.Repeat(" ", max(c.Width, 1))
+				for range max(c.Width, 1) {
+					faintless = append(faintless, ' ')
+				}
+				continue
 			}
-			faintless.WriteString(text)
+			faintless = append(faintless, text...)
 		}
-		if line := strings.TrimRight(plain.String(), " \t"); line != "" {
-			tail = append(tail, line)
-			shown = append(shown, strings.TrimRight(faintless.String(), " \t"))
+		plainLast = max(plainLast, len(plain)-ps)
+		shownLast = max(shownLast, len(faintless)-fs)
+		pe := trimBlanks(plain, ps)
+		plain = plain[:pe]
+		if pe == ps {
+			faintless = faintless[:fs]
+			continue
 		}
+		se := trimBlanks(faintless, fs)
+		faintless = faintless[:se]
+		plainEnds = append(plainEnds, pe)
+		shownEnds = append(shownEnds, se)
 	}
-	for i, j := 0, len(tail)-1; i < j; i, j = i+1, j-1 {
-		tail[i], tail[j] = tail[j], tail[i]
-		shown[i], shown[j] = shown[j], shown[i]
+	k := len(plainEnds)
+	if k == 0 {
+		return nil, nil
+	}
+	tail = make([]string, k)
+	shown = make([]string, k)
+	ps := unsafe.String(unsafe.SliceData(plain), len(plain))
+	fs := unsafe.String(unsafe.SliceData(faintless), len(faintless))
+	pprev, sprev := 0, 0
+	for i := range k {
+		tail[k-1-i] = ps[pprev:plainEnds[i]]
+		shown[k-1-i] = fs[sprev:shownEnds[i]]
+		pprev, sprev = plainEnds[i], shownEnds[i]
 	}
 	return tail, shown
+}
+
+// trimBlanks is the end of buf[start:] once the blanks and tabs at its end are
+// cut.
+func trimBlanks(buf []byte, start int) int {
+	i := len(buf)
+	for i > start && (buf[i-1] == ' ' || buf[i-1] == '\t') {
+		i--
+	}
+	return i
+}
+
+// regrowBytes copies buf into a new slice with room for extra more bytes.
+func regrowBytes(buf []byte, extra int) []byte {
+	nb := make([]byte, len(buf), len(buf)+extra)
+	copy(nb, buf)
+	return nb
 }
 
 // holdLocked decides whether the person's typing or draft holds the pane's

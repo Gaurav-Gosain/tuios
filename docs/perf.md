@@ -5314,6 +5314,71 @@ pane stays scrolled.
 The libghostty backend's `scrollCache` (`vt/ghostty_scrollback.go`) holds the
 same kind of cache and is not covered.
 
+## 2026-11 a screen's tail text is built in one buffer
+
+`Emulator.TailText` and `PTY.tailShown` read the last rows of a pane's screen on
+every agent look, about four times a second for a streaming pane. Both reset a
+`strings.Builder` for each row, which drops its buffer, so every row allocated
+its own text and the builder's growth steps. They now make one pass and read
+each cell once. The rows go to one byte buffer, in the order they are visited
+(bottom up). A row's trailing blanks and tabs are cut by moving the length back,
+so a blank row rewinds to its start and costs nothing. Each row's end offset
+goes in a `[64]int` array on the stack (a heap slice only past 64 rows), and the
+buffer is regrown between rows in sized steps from the widest row seen so far.
+After the last row the rows are cut from the buffer with `unsafe.String`, which
+does not copy, and handed back top-down. That is safe because the buffer is
+never written after the cut and is never kept: the rows hold it alive, as the
+base's `strings.Builder.String` did for its own. `tailShown` does this with two
+buffers, the plain text and the text with faint cells blanked. The out slices
+have the capacity of the rows kept, not of the `n` asked for: `n` can come from
+a client and can exceed the screen, and the base sized its slice by it. The row
+strings are byte for byte the base's. The libghostty backend's `TailText` has
+its own copy of the loop and is not built on this host. A row now keeps the
+whole buffer alive, at most the widest raw row times the rows kept; no caller
+keeps the rows beyond the call.
+
+A form that reads the visited rows twice (once to size, once to write) was
+measured and is 2.5 to 4 times slower than the base, because the second read of
+every cell costs more than the allocations it saves.
+
+Method: the base and the change compiled into one test binary per package on Go
+1.27.3 and run interleaved per row, ten alternating passes of 0.5 s on one core,
+compared with `benchstat`. One `Emulator` per case, the rows below at 120x40
+unless named, `ASCII` rows of 100 characters, `box` rows of 100 U+2500 cells,
+`padded` ten text rows, four box rows and blank rows below, `4 cols` 4x40.
+
+| `TailText` case | time before | time after | B/op before | B/op after | allocs before | allocs after |
+|---|---|---|---|---|---|---|
+| ASCII, n=10 | 10.87 us | 9.21 us | 2,640 | 1,440 | 51 | 2 |
+| ASCII, n=40 | 41.98 us | 36.28 us | 10,624 | 5,568 | 201 | 2 |
+| ASCII, n=200 | 41.86 us | 36.85 us | 13,376 | 5,568 | 201 | 2 |
+| 120x20 ASCII, n=10 | 11.33 us | 9.68 us | 2,640 | 1,440 | 51 | 2 |
+| 120x20 ASCII, n=40 | 23.21 us | 19.46 us | 5,664 | 3,008 | 101 | 2 |
+| 120x20 ASCII, n=200 | 24.68 us | 19.55 us | 8,416 | 3,008 | 101 | 2 |
+| box, n=10 | 9.51 us | 6.49 us | 10,320 | 4,640 | 71 | 3 |
+| box, n=40 | 39.34 us | 27.85 us | 41,344 | 19,136 | 281 | 3 |
+| box, n=200 | 40.18 us | 26.70 us | 44,096 | 19,136 | 281 | 3 |
+| padded, n=10 | 29.93 us | 22.03 us | 10,112 | 2,720 | 185 | 3 |
+| padded, n=40 | 33.81 us | 24.75 us | 11,648 | 5,088 | 205 | 2 |
+| padded, n=200 | 34.24 us | 28.87 us | 14,400 | 5,088 | 205 | 2 |
+| 4 cols, n=10 | 728 ns | 484 ns | 240 | 208 | - | - |
+| 4 cols, n=40 | 2.79 us | 1.70 us | 1,024 | 864 | - | - |
+| 4 cols, n=200 | 3.29 us | 1.55 us | 3,776 | 864 | - | - |
+
+| `tailShown` case | time before | time after | B/op before | B/op after | allocs before | allocs after |
+|---|---|---|---|---|---|---|
+| ASCII, n=10 | 18.52 us | 13.22 us | 5,856 | 2,880 | 106 | 4 |
+| ASCII, n=40 | 77.72 us | 52.02 us | 24,064 | 11,136 | 410 | 4 |
+| box, n=10 | 20.49 us | 14.80 us | 21,216 | 9,280 | 146 | 6 |
+| box, n=40 | 93.68 us | 55.21 us | 85,504 | 38,272 | 570 | 6 |
+| padded, n=10 | 55.53 us | 45.66 us | 20,800 | 5,440 | 374 | 6 |
+
+Over the `TailText` rows the geometric mean is 26% less time, 54% fewer bytes
+and 98% fewer allocations; over the `tailShown` rows 30% less time and 59%
+fewer bytes. No row is slower or allocates more bytes. The base's time varies by
+up to 72% from run to run on the shortest rows (box, n=10), and the gains on the
+ASCII and 120x20 rows (12% to 21%) are the smallest.
+
 ## 2026-10 an ended session's timers
 
 An SSH or web session that ends is let go at once, not when its timers fire.
