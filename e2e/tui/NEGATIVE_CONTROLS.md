@@ -12889,3 +12889,18 @@ once must answer the approval. Run on 2026-11-04 on Linux:
 
 The frames are `inbox-approval-typing-held` and `inbox-approval-typing-released`
 under the test's artifact folder.
+
+## A spinner frame sends no listing push
+
+`TestIdleCostStaysLow/agent_spinner_in_a_watched_pane` runs an agent whose
+title spinner moves every 0.3 s. The daemon looks at the listing every 3 s.
+The old spinner took 1 s for its four frames, so each look saw the same frame,
+and the test could not see a push for each frame. Run on 2026-11-05 on Linux
+against the branch head:
+
+| Control | Where it fails | Verdict |
+| --- | --- | --- |
+| `listingNotifier` hashes `d.listSessions()` with the titles as they are (main before the fix) | "3 ticks ran the full scans (budget 1): the idle gate is not holding", twice in two runs | **caught** |
+
+With the fix the window measured work=0 in five of five runs, and about 650
+context switches against about 790 before.

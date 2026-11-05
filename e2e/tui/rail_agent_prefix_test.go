@@ -251,8 +251,12 @@ done
 `
 
 // spinningTitleScript is a stand-in agent at work: the title's spinner moves
-// four times a second, and the name after it stays. It writes the title and
-// nothing else, which is how a real agent's title moves during a long turn.
+// every 0.3 s, and the name after it stays. It writes the title and nothing
+// else, which is how a real agent's title moves during a long turn.
+//
+// Four frames of 0.25 s made a cycle of 1 s, and the daemon looks at the
+// listing every 3 s, so each look saw the same frame and a listing that sends
+// every frame looked quiet. A cycle of 1.2 s puts a new frame in each look.
 const spinningTitleScript = `#!/bin/sh
 stty -echo
 printf '\033[2J\033[H'
@@ -260,7 +264,7 @@ printf 'TITLE-AGENT-UP\n'
 while :; do
 	for f in '⠋' '⠙' '⠹' '⠸'; do
 		printf '\033]2;%s spinning-agent\007' "$f"
-		sleep 0.25
+		sleep 0.3
 	done
 done
 `
