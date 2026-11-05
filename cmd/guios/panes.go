@@ -658,7 +658,7 @@ func (a *App) paneHeader(c *ui.Context, pal *palette, bar ui.TitleBar, shown flo
 		// The button that shows the right sidebar sits by the pane's own,
 		// as one row of buttons.
 		ui.Row(c.Key("buttons")).AlignItems(ui.Center).Shrink(0).Children(func() {
-			if top && right {
+			if top && right && !plan.noShowRight {
 				a.showRightButton(c, pal)
 			}
 		})
@@ -867,6 +867,10 @@ type headerPlan struct {
 	// noTitle leaves the status mark alone in a header too narrow for
 	// any of the title: its name goes to the mark's tooltip.
 	noTitle bool
+	// noShowRight leaves out the button that shows the right sidebar, in
+	// a top right header too narrow for it and the window controls: it
+	// ran under Minimize. The View menu and the keys still show it.
+	noShowRight bool
 }
 
 // headerEnd is a pane header's padding at its end.
@@ -1057,6 +1061,10 @@ func (a *App) planHeader(c *ui.Context, p *proto.Pane, title, dir string, showDi
 	// and the keys still reach them.
 	plan.controls = w >= 260
 	room -= a.cornerW(corner)
+	if corner && room < 0 && !a.rightShown() {
+		plan.noShowRight = true
+		room += hControl + sp2
+	}
 	// The title takes no more than the header has: in a pane too narrow
 	// for its least it was cut mid-word by the card's edge, with no
 	// ellipsis (council round 2, N1).
