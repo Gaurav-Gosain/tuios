@@ -129,6 +129,11 @@ func (s *Setup) reverse(ctx context.Context, c Choices, a Asker) (*Reverse, erro
 	if here == nil {
 		here = ReadHere(ctx)
 	}
+	if c.As != "" {
+		h := *here
+		h.Name = c.As
+		here = &h
+	}
 	bin := s.probe.Tuios
 	rev := &Reverse{Name: here.Name, Candidates: s.candidates(c, here)}
 	fail := func(why string) (*Reverse, error) {

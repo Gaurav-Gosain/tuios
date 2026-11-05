@@ -31,12 +31,21 @@ import (
 // way a real machine has its own tuios installed.
 func writeSetupSSH(t *testing.T, here, far string) string {
 	t.Helper()
+	// This machine's own tuios, on its PATH by that name, whatever the test
+	// binary is called: the far side's link looks for "tuios".
+	hereBin := filepath.Join(here, "bin")
+	if err := os.MkdirAll(hereBin, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(tuiosBin, filepath.Join(hereBin, "tuios")); err != nil && !os.IsExist(err) {
+		t.Fatal(err)
+	}
 	var b strings.Builder
 	b.WriteString("#!/bin/sh\nwhile [ $# -gt 0 ]; do case \"$1\" in -o) shift 2 ;; -T|-t) shift ;; --) shift; break ;; *) break ;; esac; done\n")
 	b.WriteString("addr=\"$1\"\nshift\ncase \"$addr\" in\n")
 	for _, m := range []struct{ addr, base, path string }{
 		{"someone@buildbox", far, filepath.Join(xdgDir(far, "HOME"), ".local", "bin") + ":/usr/bin:/bin"},
-		{"someone@laptopbox", here, filepath.Dir(tuiosBin) + ":/usr/bin:/bin"},
+		{"someone@laptopbox", here, hereBin + ":/usr/bin:/bin"},
 	} {
 		fmt.Fprintf(&b, "  %s)\n", m.addr)
 		for _, key := range xdgKeys {
@@ -146,7 +155,7 @@ func TestSetUpAMachineBothWays(t *testing.T) {
 	t.Logf("dry run:\n%s", out)
 
 	// 3. The setup itself.
-	out, err = tuiosCLIEnv(t, here, env, "hosts", "setup", "someone@buildbox", "--name", "build", "--install", "copy", "--both-ways", "--address", "someone@laptopbox", "--yes", "--json")
+	out, err = tuiosCLIEnv(t, here, env, "hosts", "setup", "someone@buildbox", "--name", "build", "--install", "copy", "--both-ways", "--address", "someone@laptopbox", "--as", "laptop", "--yes", "--json")
 	t.Logf("tuios hosts setup --json:\n%s", out)
 	if err != nil {
 		t.Fatalf("ASSERTION: the setup failed: %v", err)
@@ -158,7 +167,7 @@ func TestSetUpAMachineBothWays(t *testing.T) {
 	if r.Host == nil || r.Host.Status != "up" {
 		t.Fatalf("ASSERTION: the link to build is not up at the end of the setup: %+v", r.Host)
 	}
-	if r.BothWays == nil || !r.BothWays.Added || r.BothWays.Status != "up" || r.BothWays.Addr != "someone@laptopbox" {
+	if r.BothWays == nil || !r.BothWays.Added || r.BothWays.Status != "up" || r.BothWays.Addr != "someone@laptopbox" || r.BothWays.Name != "laptop" {
 		t.Fatalf("ASSERTION: this machine was not added on buildbox with a link that is up: %+v", r.BothWays)
 	}
 	if _, statErr := os.Stat(farBin); statErr != nil {
@@ -269,4 +278,51 @@ func TestSetUpTailnetMachines(t *testing.T) {
 	waitForHostListing(t, here, func(s string) bool {
 		return containsAll(s, "buildbox", "up")
 	}, "the daemon here never reported buildbox up after the tailnet setup")
+}
+
+// TestSetUpOffersNoReleaseForADevBuild is a tuios built from a checkout at a
+// Go pseudo-version. The version parses as one with a prerelease, and no
+// release of that name exists, so the setup must offer a copy and never the
+// release.
+func TestSetUpOffersNoReleaseForADevBuild(t *testing.T) {
+	const pseudo = "v0.12.2-0.20261105101010-abcdef123456"
+	dir := t.TempDir()
+	bin := filepath.Join(dir, "tuios")
+	build := exec.Command("go", "build", "-trimpath", "-ldflags", "-X main.version="+pseudo, "-o", bin, "./cmd/tuios")
+	build.Dir = "../.."
+	if out, err := build.CombinedOutput(); err != nil {
+		t.Fatalf("build the pseudo-version tuios: %v\n%s", err, out)
+	}
+	here := remoteMachine(t)
+	far := remoteMachine(t)
+	env := []string{"TUIOS_SSH=" + writeSetupSSH(t, here, far)}
+	cmd := exec.Command(bin, "hosts", "setup", "someone@buildbox", "--name", "build", "--dry-run", "--json")
+	cmd.Env = append(os.Environ(), "SHELL=/bin/sh")
+	for _, key := range xdgKeys {
+		cmd.Env = append(cmd.Env, key+"="+xdgDir(here, key))
+	}
+	cmd.Env = append(cmd.Env, env...)
+	out, _ := cmd.CombinedOutput()
+	t.Logf("a dry run of a pseudo-version build:\n%s", out)
+	var r struct {
+		Options []struct {
+			ID        string `json:"id"`
+			Available bool   `json:"available"`
+		} `json:"options"`
+	}
+	if err := json.NewDecoder(strings.NewReader(string(out[strings.IndexByte(string(out), '{'):]))).Decode(&r); err != nil {
+		t.Fatalf("no JSON: %v", err)
+	}
+	copyOK := false
+	for _, o := range r.Options {
+		if o.ID == "release" {
+			t.Errorf("ASSERTION: a pseudo-version build offers the release %s, which does not exist", pseudo)
+		}
+		if o.ID == "copy" && o.Available {
+			copyOK = true
+		}
+	}
+	if !copyOK {
+		t.Errorf("ASSERTION: a pseudo-version build does not offer a copy of itself: %+v", r.Options)
+	}
 }

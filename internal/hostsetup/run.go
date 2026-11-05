@@ -48,6 +48,9 @@ type Event struct {
 	// Done and Total count the bytes of a copy.
 	Done  int64 `json:"done,omitempty"`
 	Total int64 `json:"total,omitempty"`
+	// Probe is what the probe found, on the event that ends it, for a
+	// front end that draws the facts. The JSON has it in the result.
+	Probe *Probe `json:"-"`
 }
 
 // Choices are the answers a front end already has, from flags or from the
@@ -65,6 +68,9 @@ type Choices struct {
 	// Address is this machine's address for the far side. Empty tries the
 	// candidates.
 	Address string
+	// As is the name this machine gets on the far side. Empty takes it
+	// from the tailnet or the host name.
+	As string
 	// Yes agrees to every step the choices name.
 	Yes bool
 	// DryRun probes and plans, and changes nothing.
@@ -194,6 +200,11 @@ const (
 func (s *Setup) Run(ctx context.Context, c Choices, a Asker) (res *Result, err error) {
 	res = &Result{Dest: s.opts.Dest, Name: s.name, DryRun: c.DryRun}
 	s.res, s.asker = res, a
+	if c.As != "" {
+		if err := federation.ValidHostName(c.As); err != nil {
+			return res, err
+		}
+	}
 	defer func() {
 		res.OK = err == nil
 		if err != nil {
@@ -269,7 +280,7 @@ func (s *Setup) Run(ctx context.Context, c Choices, a Asker) (res *Result, err e
 	case federation.StatusIncompatible:
 		said = "tuios " + p.TuiosVersion + " on " + s.name + " is too old for this machine."
 	}
-	s.say(StepProbe, StateOK, p.System+", "+p.Arch+". "+strings.Join(append(p.Managers, p.Service), ", ")+". "+said)
+	s.emit(Event{Step: StepProbe, State: StateOK, Text: p.System + ", " + p.Arch + ". " + strings.Join(append(p.Managers, p.Service), ", ") + ". " + said, Probe: p})
 
 	// 4. Install, when it is missing or too old.
 	installed := false
@@ -364,7 +375,7 @@ func (s *Setup) install(ctx context.Context, c Choices, a Asker, res *Result) er
 		}
 		// In a bulk run a copy means this version: a machine of another
 		// platform gets the release of it.
-		if pick.ID == InstallCopy && !pick.Available && c.bulk && opts[1].Available {
+		if pick.ID == InstallCopy && !pick.Available && c.bulk && len(opts) > 1 && opts[1].ID == InstallRelease && opts[1].Available {
 			pick = opts[1]
 			res.Note = s.name + " is " + s.probe.Platform() + ". tuios sent the v" + strings.TrimPrefix(s.opts.Version, "v") + " release, checked with its sha256."
 		}

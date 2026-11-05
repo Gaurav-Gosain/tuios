@@ -41,6 +41,8 @@ type Probe struct {
 	Service          string `json:"service,omitempty"`
 	ServiceInstalled bool   `json:"service_installed,omitempty"`
 
+	// Home is the far login's HOME, so a path under it can show as ~/...
+	Home string `json:"home,omitempty"`
 	// From is the address this machine came from, as the far side sees it:
 	// the first word of SSH_CONNECTION.
 	From string `json:"from,omitempty"`
@@ -50,6 +52,14 @@ type Probe struct {
 
 // Has reports whether the probe found the package manager m.
 func (p *Probe) Has(m string) bool { return slices.Contains(p.Managers, m) }
+
+// Short is path with the far HOME written as ~, the way a person reads it.
+func (p *Probe) Short(path string) string {
+	if rest, ok := strings.CutPrefix(path, p.Home+"/"); ok && p.Home != "" && p.Home != "/" {
+		return "~/" + rest
+	}
+	return path
+}
 
 // Platform is OS/Arch, as tuios names a release.
 func (p *Probe) Platform() string { return p.OS + "/" + p.Arch }
@@ -106,6 +116,7 @@ func parseProbe(f hostsync.Facts) *Probe {
 		Tuios:            f.Get("path"),
 		Writable:         f.Has("dirw"),
 		From:             f.Get("from"),
+		Home:             f.Get("home"),
 		ServiceInstalled: f.Get("svc") == "installed",
 		System:           cmp.Or(f.Get("pretty"), f.Get("macos")),
 	}

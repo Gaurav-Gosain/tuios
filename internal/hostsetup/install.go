@@ -88,8 +88,11 @@ var recipes = []recipe{
 func (s *Setup) installOptions() []InstallOption {
 	p := s.probe
 	here := runtime.GOOS + "/" + runtime.GOARCH
-	_, isRelease := release.ParseVersion(s.opts.Version)
+	isRelease := IsRelease(s.opts.Version)
 	tag := "v" + strings.TrimPrefix(s.opts.Version, "v")
+	if !isRelease {
+		tag = s.opts.Version
+	}
 	asset, assetErr := release.AssetName("tuios", tag, p.OS, p.Arch)
 	fetch := map[string]string{"curl": "curl -fsSL", "wget": "wget -qO-"}[p.Fetch]
 	at, nixat := "latest", ""
@@ -112,10 +115,11 @@ func (s *Setup) installOptions() []InstallOption {
 			}
 		case "release":
 			o.Commands = []Command{{"here", "download " + asset + ", check it against " + release.ChecksumFile + ", send it to " + target}}
-			switch {
-			case !isRelease:
-				o.Available, o.WhyNot = false, "This tuios is a dev build. It has no release."
-			case assetErr != nil:
+			if !isRelease {
+				// A dev build has no release to fetch, so it is never offered.
+				continue
+			}
+			if assetErr != nil {
 				o.Available, o.WhyNot = false, "tuios has no release for "+p.Uname+"."
 			}
 		case "fetch":
@@ -176,4 +180,27 @@ func (s *Setup) runRemote(ctx context.Context, remote string) (string, error) {
 		return out, errfmt.Errorf("%s failed on %s: %s", remote, s.name, tail)
 	}
 	return out, nil
+}
+
+// IsRelease says version is a published release tag, such as v0.12.1 or
+// v0.13.0-rc1. A dev build ("dev", "dev+abc123") is not, and neither is a Go
+// pseudo-version such as v0.12.2-0.20261105101010-abcdef123456: it parses as
+// a version with a prerelease, and no release of that name exists.
+func IsRelease(version string) bool {
+	v, ok := release.ParseVersion(version)
+	if !ok {
+		return false
+	}
+	digits := 0
+	for _, r := range v.Pre {
+		if r >= '0' && r <= '9' {
+			digits++
+			if digits == 14 {
+				return false
+			}
+		} else {
+			digits = 0
+		}
+	}
+	return true
 }

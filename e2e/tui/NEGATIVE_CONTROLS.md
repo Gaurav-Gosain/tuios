@@ -13091,3 +13091,15 @@ Run on 2026-11-05 on Linux. The fixed build passes in about 60 s.
 
 Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestMachineOfferOnSSHLogin$' -v .`.
+## A dev build never offers a release
+
+`TestSetUpOffersNoReleaseForADevBuild` builds tuios at a Go pseudo-version,
+`v0.12.2-0.20261105101010-abcdef123456`, and runs `hosts setup --dry-run
+--json`. The install options must hold an available copy and no release: a
+pseudo-version parses as a version with a prerelease, and no release of that
+name exists.
+
+Run on 2026-11-05 on Linux. The control makes `IsRelease` return what
+`release.ParseVersion` says. The test fails with `a pseudo-version build
+offers the release v0.12.2-0.20261105101010-abcdef123456, which does not
+exist`.

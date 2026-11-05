@@ -42,6 +42,7 @@ type hostSetupOptions struct {
 	bothWays   bool
 	oneWay     bool
 	address    string
+	as         string
 	yes        bool
 	dryRun     bool
 	json       bool
@@ -123,6 +124,7 @@ tuios never takes a password. It never accepts a changed host key.`,
 	f.BoolVar(&o.bothWays, "both-ways", false, "Add this machine on the other machine too")
 	f.BoolVar(&o.oneWay, "one-way", false, "Do not add this machine on the other machine")
 	f.StringVar(&o.address, "address", "", "This machine's address for the other machine, with --both-ways")
+	f.StringVar(&o.as, "as", "", "This machine's name on the other machine, with --both-ways (default: its tailnet or host name)")
 	f.BoolVarP(&o.yes, "yes", "y", false, "Agree to every step the flags name")
 	f.BoolVar(&o.dryRun, "dry-run", false, "Test ssh and print the plan. Change nothing")
 	f.BoolVar(&o.json, "json", false, "Print the steps and the result as JSON")
@@ -139,7 +141,7 @@ tuios never takes a password. It never accepts a changed host key.`,
 
 // choices turns the flags into the engine's choices.
 func (o hostSetupOptions) choices() hostsetup.Choices {
-	c := hostsetup.Choices{Install: o.install, Manager: o.manager, Address: o.address, Yes: o.yes, DryRun: o.dryRun, Keep: o.keep}
+	c := hostsetup.Choices{Install: o.install, Manager: o.manager, Address: o.address, As: o.as, Yes: o.yes, DryRun: o.dryRun, Keep: o.keep}
 	switch {
 	case o.service:
 		c.Service = new(true)
