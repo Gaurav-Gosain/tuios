@@ -330,6 +330,10 @@ type Session struct {
 	// Others are the session's panes on its other workspaces, which the
 	// command palette goes to.
 	Others []Pane `json:"others,omitempty"`
+	// Scratch are the panes of the session's scratch terminal, the TUI's
+	// toggle_scratch group: on a scratch workspace, in no list, shown over
+	// the panes as the scratch dropdown.
+	Scratch []Pane `json:"scratch,omitempty"`
 	// TUI tells that a tuios TUI client shows the session, which runs the
 	// keymap actions only a TUI has.
 	TUI bool `json:"tui,omitempty"`
@@ -867,6 +871,12 @@ type (
 	FocusParams struct {
 		Session string `json:"session"`
 		Pane    string `json:"pane"`
+	}
+	// ScratchParams start a session's scratch terminal (scratch), in Dir:
+	// the TUI's toggle_scratch group, on a scratch workspace.
+	ScratchParams struct {
+		Session string `json:"session"`
+		Dir     string `json:"dir,omitempty"`
 	}
 	LayoutParams struct {
 		Session string  `json:"session"`

@@ -84,6 +84,13 @@ func (a *App) heldPanes(live map[string]bool) {
 			live[p.ID] = true
 		}
 	}
+	// The scratch of the session shown keeps its terminal, so that the
+	// dropdown shows at once.
+	if s := a.session(a.selected); s != nil {
+		for _, p := range s.Scratch {
+			live[p.ID] = true
+		}
+	}
 }
 
 // shownSession is the session to draw: the held one while the panes of

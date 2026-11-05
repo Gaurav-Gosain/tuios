@@ -6240,6 +6240,16 @@ func (msgs Messages) ScratchHide(keys string) string {
 	return Catalog.Format(msgs.locale, "scratchHide", map[string]any{"keys": keys})
 }
 
+// ScratchNoSession says "Open a session to use the scratch terminal."
+// in the language the app shows.
+func ScratchNoSession() string { return In(i18n.Locale()).ScratchNoSession() }
+
+// ScratchNoSession says "Open a session to use the scratch terminal."
+// in the language of msgs.
+func (msgs Messages) ScratchNoSession() string {
+	return Catalog.Format(msgs.locale, "scratchNoSession", nil)
+}
+
 // ToastGlobalShortcutFailed says "Couldn’t use {keys} for the quick terminal: {error}"
 // in the language the app shows.
 func ToastGlobalShortcutFailed(keys string, error string) string {

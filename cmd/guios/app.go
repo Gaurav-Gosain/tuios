@@ -63,8 +63,6 @@ type prefs struct {
 	// agents' ended conversations unfolded (session-history).
 	EndedOpen    bool `json:"endedOpen,omitempty"`
 	ArchivedOpen bool `json:"archivedOpen,omitempty"`
-	// QuickSession is the session the quick terminal shows (quick.go).
-	QuickSession string `json:"quickSession,omitempty"`
 	// Spawn is what the New agent sheet remembers, by folder (spawn.go);
 	// "" holds the agent the last start used.
 	Spawn map[string]spawnPreset `json:"spawn,omitempty"`
@@ -622,7 +620,7 @@ func (a *App) hostGroups(h *host) []group {
 		known[p.ID] = true
 		g := group{host: h, project: p}
 		for i := range a.st.Sessions {
-			if a.st.Sessions[i].Project == p.ID && a.listed(&a.st.Sessions[i]) {
+			if a.st.Sessions[i].Project == p.ID {
 				g.sessions = append(g.sessions, &a.st.Sessions[i])
 			}
 		}
@@ -630,7 +628,7 @@ func (a *App) hostGroups(h *host) []group {
 	}
 	other := group{host: h, project: proto.Project{ID: "", Name: locales.SidebarOtherProject()}}
 	for i := range a.st.Sessions {
-		if s := &a.st.Sessions[i]; !known[s.Project] && a.hostOf(s.ID) == h && a.listed(s) {
+		if s := &a.st.Sessions[i]; !known[s.Project] && a.hostOf(s.ID) == h {
 			other.sessions = append(other.sessions, s)
 		}
 	}
@@ -701,8 +699,6 @@ func (a *App) reportView() {
 		}
 		id := ""
 		switch {
-		case a.quick.shown && h == a.local():
-			id = a.prefs.QuickSession
 		case a.watching(a.selected) && h == shown:
 			id = a.selected
 		}

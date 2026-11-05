@@ -10,6 +10,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/guios/git"
 	"github.com/Gaurav-Gosain/tuios/internal/guios/proto"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
@@ -191,6 +192,20 @@ func (c *Client) dispatch(method string, params any) (any, error) {
 			return nil, err
 		}
 		return c.arrangeOp(p)
+
+	case "scratch":
+		// The TUI's scratch terminal (toggle_scratch): the built-in scratch
+		// group, which the daemon puts on a scratch workspace and focuses.
+		p, err := decode[proto.ScratchParams](params)
+		if err != nil {
+			return nil, err
+		}
+		args := map[string]any{"session": c.st.nameOf(p.Session), "scratch": true, "scratch_name": config.DefaultScratchName}
+		if p.Dir != "" {
+			args["cwd"] = p.Dir
+		}
+		_, err = c.verb("popup", args)
+		return true, err
 
 	case "workspace":
 		p, err := decode[proto.WorkspaceParams](params)

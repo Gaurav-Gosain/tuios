@@ -13,6 +13,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/gitstate"
 	"github.com/Gaurav-Gosain/tuios/internal/guios/proto"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
@@ -56,6 +57,7 @@ type windowRow struct {
 	Zoomed      bool             `json:"zoomed"`
 	Floating    bool             `json:"floating"`
 	Scratch     bool             `json:"scratch"`
+	ScratchName string           `json:"scratch_name"`
 	Rail        string           `json:"rail"`
 	Workspace   int              `json:"workspace"`
 	X           int              `json:"x"`
@@ -216,6 +218,13 @@ func (k *stateKeeper) build() (*proto.State, error) {
 		counts := map[int]*proto.Workspace{}
 		for _, w := range wl.Windows {
 			paneSession[w.ID] = s.ID
+			if w.Scratch && w.ScratchName == config.DefaultScratchName && session.IsScratchWorkspace(w.Workspace) && !(hide && slices.Contains(gone, w.ID)) {
+				// The built-in scratch terminal's group, as the TUI's
+				// toggle_scratch shows it: a pane of no workspace's.
+				p := k.pane(w)
+				p.Workspace = w.Workspace
+				ks.Scratch = append(ks.Scratch, p)
+			}
 			if w.Scratch || w.Rail != "" || hide && slices.Contains(gone, w.ID) {
 				continue
 			}

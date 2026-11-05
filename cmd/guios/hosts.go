@@ -667,6 +667,9 @@ func (a *App) mergeState(h *host, st proto.State) {
 			for _, p := range s.Panes {
 				owner[p.ID] = o
 			}
+			for _, p := range s.Scratch {
+				owner[p.ID] = o
+			}
 		}
 		projects = append(projects, ps...)
 		sessions = append(sessions, ss...)

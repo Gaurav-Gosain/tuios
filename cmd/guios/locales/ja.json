@@ -613,6 +613,7 @@
   "actionQuickTerminal": "クイックターミナル",
   "scratchTerminal": "スクラッチターミナル",
   "scratchHide": "{keys} で隠します。",
+  "scratchNoSession": "スクラッチターミナルを使うには、セッションを開いてください。",
   "toastGlobalShortcutFailed": "{keys} をクイックターミナルに使えませんでした: {error}",
   "setShortcutGlobal": "どのアプリでも使えます",
   "menuWorkspace": "ワークスペース",

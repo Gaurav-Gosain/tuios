@@ -1174,6 +1174,7 @@
   "actionQuickTerminal": "Quick terminal",
   "scratchTerminal": "Scratch terminal",
   "scratchHide": "Press {keys} to hide it.",
+  "scratchNoSession": "Open a session to use the scratch terminal.",
   "toastGlobalShortcutFailed": "Couldn’t use {keys} for the quick terminal: {error}",
   "setShortcutGlobal": "Works in every app",
   "menuWorkspace": "Workspace",

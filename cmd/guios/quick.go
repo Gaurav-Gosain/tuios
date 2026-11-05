@@ -17,13 +17,20 @@ import (
 	"github.com/Gaurav-Gosain/tuios/cmd/guios/locales"
 )
 
-// The quick terminal drops down from the top of the screen as its global
-// shortcut is pressed, over every app, full-screen ones included, and goes
-// back up as it is pressed again or as the user goes elsewhere, as
-// Ghostty's quick terminal and Quake's console do. It shows a session of
-// this machine's kerod, as the window does, so that it keeps running as it
-// hides, as Kero quits and as it updates; the sidebar lists it with the
-// others.
+// The scratch terminal is the TUI's: toggle_scratch (the prefix and g)
+// shows the session's scratch group, a pane on a scratch workspace that no
+// list, pill or session key reaches, over the workspace the user is on. The
+// daemon makes it, started in the focused pane's folder, and focuses it.
+// The focus on a scratch pane is what tells every client to show it, so a
+// TUI on the same session shows the same scratch, and guios shows its
+// dropdown as a TUI shows the scratch: guios follows the daemon's focus.
+// Hiding it gives the focus back to the pane the user was in.
+//
+// guios shows it two ways: as a dropdown over the panes in the main window
+// (the prefix and g), and as the quick terminal, a panel that drops down
+// from the top of the screen as its global shortcut is pressed, over every
+// app, as Ghostty's quick terminal and Quake's console do. Both show the
+// scratch of the session the window shows.
 
 const (
 	quickAction = "quickTerminal.toggle"
@@ -31,21 +38,27 @@ const (
 	quickSlide  = 180 * time.Millisecond
 )
 
-// quickTerm is the quick terminal's state, on the main thread.
+// quickTerm is the scratch's state, on the main thread.
 type quickTerm struct {
 	win   *mygo.Window // the panel, made as it first shows
-	shown bool         // shown, or sliding down
-	// drop says the terminal shows as the scratch: a dropdown over the
-	// panes in the main window (the prefix and g), not the panel. inWin
-	// says the attached terminal was made for the main window.
-	drop, inWin bool
-	// focusDrop asks the dropdown's terminal for the keyboard once it is
-	// built.
-	focusDrop bool
-	pane      string     // the pane its terminal shows
+	shown bool         // the panel shows, or slides down
+	// drop says the dropdown shows over the panes of session, and
+	// focusDrop that its terminal takes the keyboard once it is built.
+	drop, focusDrop bool
+	session         string
+	// back is the pane the focus goes back to as the scratch hides.
+	back string
+	// creating says the daemon makes the session's scratch, until its pane
+	// shows in the state.
+	creating bool
+	// seen is the session the last state showed, and seenFocus whether its
+	// focus was on its scratch: a change of it is the daemon's, as a TUI
+	// shows or hides the scratch.
+	seen      string
+	seenFocus bool
+	pane      string     // the pane the panel's terminal shows
 	e         *termEntry // that terminal, attached
 	ref       ui.Handle
-	creating  bool // its session is being made
 	err       string
 	// keys is the global shortcut registered, and asked what the settings
 	// asked for last, which failed when it is not keys.
@@ -90,10 +103,35 @@ func (a *App) toggleQuick() {
 	}
 }
 
-// toggleScratch is the TUI's scratch key (toggle_scratch, the prefix and
-// g): the quick terminal's session as a dropdown over the panes of the
-// main window, shown and hidden by the same key, as the TUI's scratch
-// shows over the workspace.
+// scratchPane is the pane of a session's scratch to show: the one with the
+// focus, else its first, nil for none.
+func scratchPane(s *proto.Session) *proto.Pane {
+	if s == nil || len(s.Scratch) == 0 {
+		return nil
+	}
+	for i := range s.Scratch {
+		if s.Scratch[i].ID == s.Focus {
+			return &s.Scratch[i]
+		}
+	}
+	return &s.Scratch[0]
+}
+
+// scratchFocused reports whether the daemon's focus is on the session's
+// scratch, which every client then shows.
+func scratchFocused(s *proto.Session) bool {
+	if s == nil {
+		return false
+	}
+	for _, p := range s.Scratch {
+		if p.ID == s.Focus {
+			return true
+		}
+	}
+	return false
+}
+
+// toggleScratch is the TUI's scratch key (toggle_scratch).
 func (a *App) toggleScratch() {
 	if a.quick.drop {
 		a.hideDrop()
@@ -102,19 +140,20 @@ func (a *App) toggleScratch() {
 	}
 }
 
-// showDrop shows the scratch dropdown, starting its session first if it
-// has none.
+// showDrop shows the scratch dropdown over the panes, starting the scratch
+// first if the session has none.
 func (a *App) showDrop() {
 	q := &a.quick
+	s := a.session(a.selected)
+	if s == nil {
+		a.toast(locales.ScratchNoSession())
+		return
+	}
 	if q.shown {
 		a.hideQuick()
 	}
-	if q.e != nil && !q.inWin {
-		// The panel's terminal: the main window makes its own.
-		a.dropQuick()
-	}
-	q.drop, q.err, q.focusDrop = true, "", true
-	a.attachQuick()
+	q.drop, q.focusDrop, q.session = true, true, s.ID
+	a.openScratch(s)
 	if a.win != nil {
 		a.win.Invalidate()
 	}
@@ -128,54 +167,119 @@ func (a *App) hideDrop() {
 		return
 	}
 	q.drop = false
+	a.leaveScratch(a.session(q.session))
 	a.defer_(a.focusTerminal)
 	if a.win != nil {
 		a.win.Invalidate()
 	}
 }
 
-// quickPost runs fn on the main thread, through the window the quick
-// terminal shows in.
-func (a *App) quickPost(fn func()) {
-	if q := &a.quick; q.win != nil && !q.drop {
-		q.win.Update(fn)
+// openScratch puts the daemon's focus on the session's scratch, or has the
+// daemon start it, in the focused pane's folder, as the TUI's scratchDir.
+// It remembers the pane to go back to.
+func (a *App) openScratch(s *proto.Session) {
+	q := &a.quick
+	if !scratchFocused(s) {
+		q.back = a.focusOf(s)
+	}
+	if p := scratchPane(s); p != nil {
+		if !scratchFocused(s) {
+			a.call(s.ID, "focus", proto.FocusParams{Session: s.ID, Pane: p.ID}, nil)
+		}
 		return
 	}
-	a.update(fn)
-}
-
-// listed reports whether the sidebar lists a session, and the session keys
-// go to it: the quick terminal's session is the scratch, which shows only
-// as the dropdown or the panel, as the TUI's scratch is in no list.
-func (a *App) listed(s *proto.Session) bool {
-	return s.ID != a.prefs.QuickSession || a.prefs.QuickSession == ""
-}
-
-// quickSession returns the session the quick terminal shows, nil while it
-// has none: kerod lost it, or the user closed it.
-func (a *App) quickSession() *proto.Session {
-	s := a.session(a.prefs.QuickSession)
-	if s == nil || a.hostOf(s.ID) != a.local() {
-		return nil
+	if q.creating {
+		return
 	}
-	return s
+	dir := ""
+	if p := s.FocusPane(); p != nil {
+		dir = p.Dir
+	}
+	if dir == "" {
+		dir = s.Pane.Dir
+	}
+	q.creating = true
+	a.call(s.ID, "scratch", proto.ScratchParams{Session: s.ID, Dir: dir}, func(err error) {
+		if err != nil {
+			q.creating = false
+			q.drop = false
+			a.hidePanel()
+			a.toast(err.Error())
+		}
+	})
+}
+
+// leaveScratch gives the daemon's focus back from the session's scratch to
+// the pane the user was in, which hides it in every client.
+func (a *App) leaveScratch(s *proto.Session) {
+	if !scratchFocused(s) {
+		return
+	}
+	back := a.quick.back
+	if s.PaneByID(back) == nil {
+		back = a.focusOf(s)
+	}
+	if back != "" {
+		a.call(s.ID, "focus", proto.FocusParams{Session: s.ID, Pane: back}, nil)
+	}
+}
+
+// quickChanged follows a state of the daemon: the dropdown shows while the
+// shown session's focus is on its scratch, as a TUI shows it, and the
+// panel follows the scratch's pane.
+func (a *App) quickChanged() {
+	q := &a.quick
+	s := a.session(a.selected)
+	f := scratchFocused(s)
+	if s != nil && scratchPane(s) != nil {
+		q.creating = false
+	}
+	switch {
+	case s == nil || s.ID != q.seen:
+		// Another session: its scratch shows if its focus is there.
+		q.seen, q.seenFocus = "", f
+		if s != nil {
+			q.seen = s.ID
+		}
+		if !q.shown && q.drop != f {
+			q.drop, q.focusDrop = f, f
+		}
+		if s != nil {
+			q.session = s.ID
+		}
+	case f != q.seenFocus:
+		q.seenFocus = f
+		if !q.shown && q.drop != f {
+			q.drop, q.focusDrop, q.session = f, f, s.ID
+			if !f {
+				a.defer_(a.focusTerminal)
+			}
+		}
+	}
+	if q.drop && scratchPane(s) == nil && !q.creating {
+		// The scratch's shell exited.
+		q.drop = false
+		a.defer_(a.focusTerminal)
+	}
+	if q.shown {
+		a.attachQuick()
+	}
 }
 
 // showQuick drops the quick terminal down on the display with the pointer,
-// starting its session first if it has none.
+// starting the scratch first if the session has none.
 func (a *App) showQuick() {
 	q := &a.quick
 	if q.drop {
-		a.hideDrop()
-	}
-	if q.e != nil && q.inWin {
-		// The dropdown's terminal: the panel makes its own.
-		a.dropQuick()
+		q.drop = false // the panel shows it now; the focus stays on it
 	}
 	if q.win == nil {
 		a.makeQuick()
 	}
 	q.err = ""
+	if s := a.session(a.selected); s != nil {
+		a.openScratch(s)
+	}
 	a.attachQuick()
 	d := mygo.Screen.DisplayNearestPoint(mygo.Screen.CursorScreenPoint())
 	wa := d.WorkArea
@@ -185,12 +289,21 @@ func (a *App) showQuick() {
 	a.slideQuick(r, wa.Y-r.Height, wa.Y, nil)
 	q.win.Show()
 	q.win.Focus()
-	a.reportView()
 }
 
 // hideQuick slides the quick terminal back up, which gives the keyboard
-// back to the app the user was in.
+// back to the app the user was in, and the daemon's focus back to the pane
+// the user was in.
 func (a *App) hideQuick() {
+	if !a.quick.shown {
+		return
+	}
+	a.hidePanel()
+	a.leaveScratch(a.session(a.selected))
+}
+
+// hidePanel slides the panel up, and leaves the daemon's focus be.
+func (a *App) hidePanel() {
 	q := &a.quick
 	if !q.shown {
 		return
@@ -198,7 +311,6 @@ func (a *App) hideQuick() {
 	q.shown = false
 	r := q.win.Bounds()
 	a.slideQuick(r, r.Y, r.Y-r.Height, q.win.Hide)
-	a.reportView()
 }
 
 // slideQuick moves the panel, as big as r, from the top edge from to to,
@@ -268,41 +380,14 @@ func (a *App) makeQuick() {
 	q.win.OnBlur(a.hideQuick)
 }
 
-// attachQuick attaches the quick terminal to its session's pane, the one
-// the user was in, making the session first if there is none.
+// attachQuick attaches the panel's terminal to the scratch pane of the
+// session the window shows.
 func (a *App) attachQuick() {
 	q := &a.quick
-	h := a.local()
-	s := a.quickSession()
-	if s == nil {
+	s := a.session(a.selected)
+	p := scratchPane(s)
+	if p == nil {
 		a.dropQuick()
-		// Until kerod tells its sessions, the one of the last run may be
-		// among them: the panel waits, and attaches as they come.
-		if q.creating || h.cl == nil || h.conn != connReady || !h.loaded {
-			return
-		}
-		q.creating = true
-		cl := h.cl
-		go func() {
-			var s proto.Session
-			err := cl.Call("create", proto.CreateParams{Dir: proto.Home(), Name: locales.ActionQuickTerminal()}, &s)
-			a.quickPost(func() {
-				q.creating = false
-				if err != nil {
-					q.err = err.Error()
-					return
-				}
-				a.addPending(h, s)
-				a.prefs.QuickSession = s.ID
-				a.savePrefs()
-				a.attachQuick()
-				a.update(func() {}) // the panes and the dropdown show it
-			})
-		}()
-		return
-	}
-	p := s.FocusPane()
-	if p == nil || p.Browser() {
 		return
 	}
 	if q.e != nil && q.pane == p.ID && q.e.err == "" {
@@ -310,11 +395,14 @@ func (a *App) attachQuick() {
 	}
 	a.dropQuick()
 	e := &termEntry{started: time.Now()}
-	q.e, q.pane, q.inWin = e, p.ID, q.drop
+	q.e, q.pane = e, p.ID
 	id := p.ID
-	inWin := q.drop
-	dialer := h.dialer()
-	post := a.quickPost
+	dialer := a.hostOf(s.ID).dialer()
+	post := func(fn func()) {
+		if q.win != nil {
+			q.win.Update(fn)
+		}
+	}
 	go func() {
 		stream, err := client.AttachVia(dialer, id)
 		if err != nil {
@@ -331,9 +419,7 @@ func (a *App) attachQuick() {
 		// No card under it: the terminal paints its background.
 		o.Transparent = false
 		o.Padding = terminal.Padding{X: 16, Y: 10}
-		if !inWin {
-			o.OnCopy = nil // the window's toast is not in sight
-		}
+		o.OnCopy = nil // the window's toast is not in sight
 		term, err := terminal.New(o)
 		if err != nil {
 			stream.Close()
@@ -356,20 +442,18 @@ func (a *App) attachQuick() {
 			e.term, e.stream = term, stream
 			q.ref.Focus()
 		})
-		// The pane ended, as its shell exited: the next show starts
-		// another, or shows the session's next pane.
+		// The pane ended, as its shell exited: the panel goes up.
 		<-term.Done()
 		post(func() {
 			if q.e == e {
 				a.dropQuick()
-				a.hideQuick()
-				a.hideDrop()
+				a.hidePanel()
 			}
 		})
 	}()
 }
 
-// dropQuick lets go of the quick terminal's terminal.
+// dropQuick lets go of the panel's terminal.
 func (a *App) dropQuick() {
 	q := &a.quick
 	if q.e == nil {
@@ -381,58 +465,26 @@ func (a *App) dropQuick() {
 	if q.e.stream != nil {
 		q.e.stream.Close()
 	}
-	q.e, q.pane, q.inWin = nil, "", false
-}
-
-// quickChanged follows a state of kerod: the quick terminal attaches
-// again when its pane is gone, as to the session's next one.
-func (a *App) quickChanged() {
-	q := &a.quick
-	if q.e == nil {
-		if (q.shown || q.drop) && q.err == "" {
-			a.attachQuick()
-		}
-		return
-	}
-	s := a.quickSession()
-	if s == nil || s.PaneByID(q.pane) == nil {
-		a.dropQuick()
-		if q.shown || q.drop {
-			a.attachQuick()
-		}
-	}
+	q.e, q.pane = nil, ""
 }
 
 // quickView is the panel's content: the terminal, or what keeps it.
 func (a *App) quickView(c *ui.Context) {
+	q := &a.quick
 	a.looks()
 	pal := paletteFor(c)
 	c.Root().Background(lookFor(c).term.Background)
-	a.quickBody(c, pal, false)
-}
-
-// quickBody is the quick terminal's terminal, or what keeps it: in the
-// panel and in the dropdown. focus gives the dropdown's terminal the
-// keyboard once, as it comes to rest: a cached layer takes no focus while
-// it slides.
-func (a *App) quickBody(c *ui.Context, pal *palette, focus bool) {
-	q := &a.quick
 	switch {
 	case q.e != nil && q.e.term != nil:
 		terminal.View(c.Key("term"), q.e.term).Fill().Bind(&q.ref)
-		if focus && q.focusDrop {
-			q.focusDrop = false
-			q.ref.Focus()
-		}
-	case q.err != "" || q.e != nil && q.e.err != "":
-		detail := q.err
-		if q.e != nil {
-			detail = q.e.err
-		}
-		a.message(c, pal, locales.PaneCantShow(), detail, locales.CommonTryAgain(), func() {
-			q.err = ""
+	case q.e != nil && q.e.err != "":
+		a.message(c, pal, locales.PaneCantShow(), q.e.err, locales.CommonTryAgain(), func() {
 			a.dropQuick()
 			a.attachQuick()
+		})
+	case a.session(a.selected) == nil:
+		ui.Column(c).Fill().Center().Children(func() {
+			ui.Text(c, locales.ScratchNoSession()).FontSize(fsBody).TextColor(pal.textMuted)
 		})
 	default:
 		ui.Column(c).Fill().Center().Children(func() { ui.Spinner(c) })
@@ -448,7 +500,8 @@ const (
 
 // dropView is the scratch dropdown over the panes, h DIPs high: it slides
 // down from the top of the card as it shows and back up as it hides. At
-// rest while hidden it builds nothing.
+// rest while hidden it builds nothing. Its terminal is the main window's
+// terminal of the scratch pane, as a pane's is.
 func (a *App) dropView(c *ui.Context, pal *palette, stack ui.Element, h float32) {
 	q := &a.quick
 	k := stack.AnimateTo("scratch", b2f(q.drop), motionBase)
@@ -465,11 +518,15 @@ func (a *App) dropView(c *ui.Context, pal *palette, stack ui.Element, h float32)
 	if !q.drop {
 		panel.PassThrough()
 	}
+	p := scratchPane(a.session(q.session))
 	panel.Children(func() {
 		// A header as a pane's: what it is, and the key that hides it.
 		ui.Row(c.Key("scratch-head")).Height(headerH).Shrink(0).AlignItems(ui.Center).Gap(8).Padding(0, 10, 0, 16).Children(func() {
 			ui.Icon(c, terminalIcon).Size(14, 14).TextColor(pal.textMuted).Shrink(0)
 			ui.Text(c, locales.ScratchTerminal()).FontSize(fsSmall).FontWeight(wSemibold).TextColor(pal.text).SingleLine()
+			if p != nil && p.Dir != "" {
+				ui.Text(c, proto.ShortDir(p.Dir)).FontSize(fsSmall).TextColor(pal.textMuted).SingleLine().Ellipsis("…").MinWidth(0).Shrink(2)
+			}
 			if keys := a.scratchKeys(); keys != "" {
 				ui.Text(c, locales.ScratchHide(keys)).FontSize(fsSmall).TextColor(pal.textFaint).SingleLine().Ellipsis("…").MinWidth(0)
 			}
@@ -477,7 +534,26 @@ func (a *App) dropView(c *ui.Context, pal *palette, stack ui.Element, h float32)
 			a.controlsRoom(c, 0)
 		})
 		ui.Column(c.Key("scratch-body")).Grow(1).MinHeight(0).AlignItems(ui.Stretch).Children(func() {
-			a.quickBody(c, pal, q.drop && k >= 1)
+			var e *termEntry
+			if p != nil {
+				a.ensureTerm(p.ID)
+				e = a.terms[p.ID]
+			}
+			switch {
+			case e != nil && e.term != nil:
+				ref := a.paneRef(p.ID)
+				terminal.View(c.Key("term-"+p.ID), e.term).Fill().Bind(ref)
+				if q.focusDrop && q.drop && k >= 1 {
+					// A cached layer takes no focus while it slides.
+					q.focusDrop = false
+					a.touch(p.ID)
+					ref.Focus()
+				}
+			case e != nil && e.err != "":
+				a.message(c, pal, locales.PaneCantShow(), e.err, "", nil)
+			default:
+				ui.Column(c).Fill().Center().Children(func() { ui.Spinner(c) })
+			}
 		})
 	})
 }
@@ -496,8 +572,7 @@ func (a *App) scratchKeys() string {
 	return chordLabel(tk.leader) + " " + ks[0]
 }
 
-// quickTermFor returns the quick terminal's terminal when it shows a pane,
-// else nil.
+// quickTermFor returns the panel's terminal when it shows a pane, else nil.
 func (a *App) quickTermFor(id string) *terminal.Terminal {
 	if q := &a.quick; q.pane == id && q.e != nil {
 		return q.e.term
@@ -505,8 +580,8 @@ func (a *App) quickTermFor(id string) *terminal.Terminal {
 	return nil
 }
 
-// termFor returns the terminal of a pane, the window's or the quick
-// terminal's, else nil.
+// termFor returns the terminal of a pane, the window's or the panel's,
+// else nil.
 func (a *App) termFor(id string) *terminal.Terminal {
 	if e := a.terms[id]; e != nil && e.term != nil {
 		return e.term
