@@ -80,6 +80,7 @@ A retry without a change fails the same way, except for `busy`, `too_many_connec
 | `not_resumable` | The pane has no conversation `resume-agent` can bring back. Nothing was typed. |
 | `no_shell_integration`, `not_at_prompt` | From `run`: the shell sends no OSC 133 marks, or is busy. Nothing was typed. Use `send-text` and a marker, or `wait-for command-finished`. |
 | `full_screen` | From `clear-history`: a full-screen program uses the pane. Nothing was cleared. Wait for the program to exit. |
+| `no_row_ids` | From `pane-history`: the pane's emulator gives its history rows no ids. Nothing was read. Read the history with `capture-pane`. |
 | `confirm_required` | A write by selector, or a `ship-push` or `ship-pr`. The hint lists the panes, or what would be sent, and a token. Check them, then call again with the token. |
 | `no_transcript`, `unsupported_harness` | From `agent-transcript`: the pane is not joined to a transcript, or its harness keeps none this daemon reads. Read the pane with `capture-pane`. |
 | `protocol_mismatch` | The caller's protocol version is outside what this daemon accepts. Use a matching tuios. |
