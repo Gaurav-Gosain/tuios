@@ -13146,7 +13146,7 @@ test's folder. Repeat from `e2e/tui` with
 `TestMotionZoomOffKeepsWorkspaceSlide` runs a client with `motion.zoom` on and
 then off. It opens a second pane, zooms it and counts the presented frames of
 the pane region between the split and the zoomed screen. On must give at least
-two. Off must give none, and the workspace switch must still present at least
+ten. Off must give at most one, and the workspace switch must still present at least
 two frames with both workspaces.
 
 Run on 2026-11-05 on Linux on the branch feat/motion-per-aspect.

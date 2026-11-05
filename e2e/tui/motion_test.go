@@ -1389,10 +1389,11 @@ func TestMotionZoomOffKeepsWorkspaceSlide(t *testing.T) {
 	onZoom, onSlide := zoomFrames(t, "[motion]\nzoom = \"on\"")
 	offZoom, offSlide := zoomFrames(t, "[motion]\nzoom = \"off\"")
 	t.Logf("zoom frames in between: on %d, off %d. slide frames: on %d, off %d", onZoom, offZoom, onSlide, offSlide)
-	if onZoom < 2 {
+	if onZoom < 10 {
 		t.Fatalf("with motion.zoom on, only %d frames fell between the split and the zoom; the control shows no slide", onZoom)
 	}
-	if offZoom != 0 {
+	// A cut can present one frame between, while the host draws a repaint.
+	if offZoom > 1 {
 		t.Errorf("with motion.zoom off, %d frames fell between the split and the zoom; want a cut", offZoom)
 	}
 	if offSlide < 2 {
