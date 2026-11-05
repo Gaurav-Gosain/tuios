@@ -894,6 +894,8 @@ type DaemonConfig struct {
 	// the client that made its session named none. Empty falls back to $SHELL
 	// and then the platform default, the same order a standalone pane uses.
 	PreferredShell string
+	// ShellIntegration is [shell] integration: auto or off.
+	ShellIntegration string
 	// HerdrProtocol is [agents] herdr_protocol: which panes are told about
 	// the herdr protocol socket. See Manager.HerdrEnv.
 	HerdrProtocol string
@@ -1090,6 +1092,7 @@ func NewDaemon(cfg *DaemonConfig) *Daemon {
 	d.manager.SetHistoryPolicy(cfg.History)
 	d.manager.SetNewWindowInheritCwd(cfg.NewWindowInheritCwd)
 	d.manager.SetPreferredShell(cfg.PreferredShell)
+	d.manager.SetShellIntegration(cfg.ShellIntegration)
 	d.manager.SetHerdrProtocol(cfg.HerdrProtocol)
 	d.manager.SetReturnWhenEmpty(!cfg.StayOnEmptyWorkspace)
 	d.manager.SetDragAndDrop(cfg.DragAndDrop)

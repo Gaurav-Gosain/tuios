@@ -73,6 +73,9 @@ func DaemonConfigFromUser(uc *config.UserConfig) *DaemonConfig {
 	// The daemon spawns every pane, so the shell the user asked for has to
 	// reach it, not only standalone panes.
 	cfg.PreferredShell = uc.Appearance.PreferredShell
+	// The daemon starts every shell, so it is the side that sets up the
+	// prompt marks.
+	cfg.ShellIntegration = uc.Shell.Integration
 	// The daemon owns the window set, so it sees the workspace on screen
 	// lose its last pane, with or without a client attached.
 	cfg.StayOnEmptyWorkspace = !uc.Workspaces.ReturnsWhenEmpty()

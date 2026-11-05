@@ -129,6 +129,7 @@ var settingLabels = map[string]string{
 	"launcher.gui_command":                "Launcher GUI command",
 	"launcher.keep_open":                  "Keep launched panes open",
 	"workspaces.return_when_empty":        "Go back from an empty workspace",
+	"shell.integration":                   "Shell integration",
 	"workspaces.new_window_when_empty":    "Open a pane on an empty workspace",
 	"worktree.path":                       "Worktree folder",
 	"review.focus":                        "Review opens on",

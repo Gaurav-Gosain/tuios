@@ -245,6 +245,8 @@ var hostReaching = map[string]bool{
 	"appearance.selection.osc52_write":  true,
 	"appearance.sidebar.editor":         true,
 	"appearance.sidebar.file_delete":    true,
+	// It decides which files a new shell reads when it starts.
+	"shell.integration": true,
 }
 
 // ReachesHost reports whether the option at path runs a program, names a file

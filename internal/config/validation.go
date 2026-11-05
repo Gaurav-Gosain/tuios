@@ -146,6 +146,7 @@ func ValidateConfig(cfg *UserConfig) *ValidationResult {
 	validateSSH(cfg, result)
 	validateDisplay(cfg, result)
 	validateKeepAwake(cfg, result)
+	warnEnum(result, "shell", "integration", cfg.Shell.Integration, ShellIntegrationModes, ShellIntegrationAuto)
 	validateLinkPolicies(cfg, result)
 	validatePanePermissions(cfg, result)
 	validateAgentWork(cfg, result)

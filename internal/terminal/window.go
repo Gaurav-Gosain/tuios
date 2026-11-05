@@ -25,6 +25,7 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/guestenv"
 	"github.com/Gaurav-Gosain/tuios/internal/ptyspawn"
 	"github.com/Gaurav-Gosain/tuios/internal/sessiontree"
+	"github.com/Gaurav-Gosain/tuios/internal/shellinteg"
 	"tuios.dev/vt"
 )
 
@@ -875,10 +876,12 @@ func NewWindowIn(dir, id, title string, x, y, width, height, z int, exitChan cha
 	ptyInstance, cmd, err := ptyspawn.Spawn(terminalWidth, terminalHeight, func() *exec.Cmd {
 		// #nosec G204 - the command is the user's own shell or a program they chose
 		var cmd *exec.Cmd
+		shell, integration := "", false
 		if len(command) > 0 {
 			cmd = exec.Command(command[0], command[1:]...)
 		} else {
-			cmd = exec.Command(detectShell())
+			shell, integration = detectShell()
+			cmd = exec.Command(shell)
 		}
 		cmd.Dir = dir
 		cmd.Env = append(guestBaseEnv(),
@@ -889,6 +892,13 @@ func NewWindowIn(dir, id, title string, x, y, width, height, z int, exitChan cha
 			"TUIOS_WINDOW_ID="+id,
 			guestKittyAnimation(), // whether a=f frame edits reach the host
 		)
+		// The shell starts with the prompt marks on, as a daemon pane's does.
+		if integration {
+			if args, env, ok := shellinteg.Setup(shell, cmd.Env); ok {
+				cmd.Args = append(cmd.Args, args...)
+				cmd.Env = env
+			}
+		}
 		return cmd
 	}, debugLine)
 	if err != nil {

@@ -7,6 +7,34 @@ below. Two of them are **not** caught here; that is written down rather than
 papered over, because a suite whose real coverage is unknown is worse than no
 suite.
 
+## Shell integration by default
+
+`shell_integration_test.go` runs real bash 5.3 and zsh 5.9 in a daemon pane,
+with the user's startup files in the test's home. The tests check that a fresh
+pane marks its commands, that `tuios run` works there, that the user's prompt,
+`PROMPT_COMMAND`, `precmd`, `.zshenv` and `ZDOTDIR` still take effect, that
+`[shell] integration = "off"` and `--shell-integration off` give no marks, that
+a setup that marks itself is not marked twice, and that a narrowed pane shows
+its prompt once.
+
+Run on 2026-11-05 on Linux. The branch passes all five tests. Three controls:
+a binary of main (dc6d566fb), and this branch with one change each.
+
+| Control | Test | Failure | Verdict |
+| --- | --- | --- | --- |
+| Main | `TestShellIntegrationBashByDefault` | `run "echo RUN-''WORKS": exit 1: ... has not sent OSC 133 marks` | **caught** |
+| Main | `TestShellIntegrationZshByDefault` | `run "true": exit 1: ... has not sent OSC 133 marks` | **caught** |
+| Main | `TestShellIntegrationNarrowPaneKeepsOnePrompt` | `the narrowed pane shows the prompt 2 times, want 1` | **caught** |
+| Main | `TestShellIntegrationOff` | the run refusal passes, as it must; the doctor check fails (main has no `integration` field) | not a control of the option |
+| Main | `TestShellIntegrationLeavesAMarkingSetupAlone` | passes: main adds no marks to count | not a control |
+| `shellIntegrationFor` always true | `TestShellIntegrationOff` | `run in a pane with integration off exited 0, want a refusal for no marks` | **caught** |
+| The scripts send every mark, with no look at the user's setup | `TestShellIntegrationLeavesAMarkingSetupAlone` | bash and zsh: `the pane sent 4 C marks, want 2, one set: map[A:6 B:3 C:4 D:6]` | **caught** |
+
+The pane captures and the raw pane logs are under `TUIOS_E2E_FRAMES`, in each
+test's folder. Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestShellIntegration' -v .`.
+The zsh cases skip when zsh is not installed.
+
 ## The daemon service keeps what outlives the daemon, and stays stopped after kill-server
 
 `TestDaemonRunsAsAService` installs the daemon as a systemd user unit under a

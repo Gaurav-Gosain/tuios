@@ -2610,7 +2610,10 @@ line that shows the exit status under the last output; not with
 another machine), `timeout` (with `wait`, milliseconds before the
 `timeout` error; 0 waits with no limit), and `env` (an object of variables
 to set in the process; checked as `start-agent` checks its `env`; not for a
-window on another machine, and refused from another machine). `new-session`
+window on another machine, and refused from another machine), and
+`shell_integration` (`auto` or `off`: whether the pane's bash or zsh starts
+with OSC 133 prompt marks on; omit it for `[shell] integration`; no effect on
+a window that runs a command). `new-session`
 takes the same `env` for its first window, and refuses it with `window` false.
 
 A daemon that does not know `keep_open` and `wait` refuses them with
@@ -2642,8 +2645,8 @@ and a client that attaches later shows it.
 `side` (`left`, `right`, `up` or `down`: the side of the pane the new pane
 takes) or `direction` (`vertical` for right, `horizontal` for below), `ratio`
 (the new pane's share in percent, 1 to 99; omit for half), and `name`,
-`command`, `cwd`, `focus`, `keep_open`, `close_on_exit`, `env`, `host` and
-`grants` as for `new-window`. Without `cwd`, the pane starts in the caller's
+`command`, `cwd`, `focus`, `keep_open`, `close_on_exit`, `env`, `host`,
+`shell_integration` and `grants` as for `new-window`. Without `cwd`, the pane starts in the caller's
 directory when the caller runs in a pane. The new pane is on the workspace of
 the pane it cuts. A floating, minimized or popup pane cannot be split
 (`invalid_params`). The verb turns tiling on when it is off. The result is

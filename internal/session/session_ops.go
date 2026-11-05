@@ -316,6 +316,10 @@ type NewWindowOptions struct {
 	// then drew its prompt twice (#1205). A popup ignores them: it has a
 	// size of its own.
 	Cols, Rows int
+	// ShellIntegration is auto or off for this pane's shell, "" for [shell]
+	// integration. It means nothing for a window that runs a command. It is
+	// not saved: a restored pane follows the config.
+	ShellIntegration string
 }
 
 // WindowKinds are the kinds a window can be. Empty is "terminal".
@@ -455,6 +459,7 @@ func (s *Session) AddDaemonWindowWith(opts NewWindowOptions, onExit func(ptyID s
 		windowID: windowID, cwd: cwd, command: opts.Command, env: opts.Env, host: opts.Host,
 		onExit: onExit, stdout: opts.stdout, extraFiles: opts.extraFiles, grants: opts.Grants, keepOpen: opts.keepOpen,
 		workspace: opts.Workspace, noStartDir: noStartDir, closeOnExit: opts.closeOnExit,
+		shellIntegration: opts.ShellIntegration,
 	})
 	if err != nil {
 		return WindowState{}, err

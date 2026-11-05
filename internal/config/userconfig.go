@@ -88,6 +88,10 @@ type UserConfig struct {
 	// a file with. See files_open.go.
 	Files FilesConfig `toml:"files"`
 
+	// Shell is the [shell] table: whether tuios turns on prompt marks in the
+	// shells it starts. See shell_integration.go.
+	Shell ShellConfig `toml:"shell"`
+
 	// YieldedDefaults are the new default bindings left off because the key
 	// was already the user's for another action in the same table. It is
 	// worked out on load and never written. See yieldingDefaults.
@@ -1299,6 +1303,7 @@ func DefaultConfig() *UserConfig {
 		PasteBuffers: defaultPasteBuffersConfig(),
 		Review:       defaultReviewConfig(),
 		Agents:       AgentsConfig{ViewList: AgentsViewListColumn},
+		Shell:        ShellConfig{Integration: ShellIntegrationAuto},
 		Keybindings: KeybindingsConfig{
 			LeaderKey: "ctrl+b",
 			WindowManagement: map[string][]string{

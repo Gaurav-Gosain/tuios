@@ -1203,6 +1203,7 @@ func buildVerbRegistry() map[string]verbEntry {
 				{Name: "kind", Type: "string", Description: "What draws the window: terminal, or view, web or app for a window a native renderer (tuios-gpui) draws itself. Such a window runs a placeholder that shows its uri in a terminal client.", Default: "terminal", Accepted: WindowKinds},
 				{Name: "uri", Type: "string", Description: "What a view, web or app window shows, such as tuios://review/<pane> or a page. Needed for those kinds."},
 				{Name: "env", Type: "object", Description: "Environment variables for the window's process, name to value, on top of the daemon's. TUIOS_ names, TMUX and TMUX_PANE are refused, and a call from another machine may not pass env. Not for a window on another machine. Not saved: a restored pane starts without it."},
+				{Name: "shell_integration", Type: "string", Description: "Whether the pane's bash or zsh starts with OSC 133 prompt marks on: auto or off. Omit it to use [shell] integration. Has no effect on a window that runs a command. Not saved: a restored pane uses the config.", Accepted: config.ShellIntegrationModes},
 			},
 			returns: []verbParam{
 				{Name: "window_id", Type: "string", Description: "Id of the new window. Use it to address the window in later calls."},
@@ -1445,6 +1446,7 @@ func buildVerbRegistry() map[string]verbEntry {
 				{Name: "close_on_exit", Type: "bool", Description: "Close the pane when its process exits, as for new-window.", Default: "false"},
 				{Name: "env", Type: "object", Description: "Environment variables for the pane's process, as for new-window."},
 				{Name: "host", Type: "string", Description: "Run the pane's process on another machine, as for new-window."},
+				{Name: "shell_integration", Type: "string", Description: "Whether the pane's shell starts with OSC 133 prompt marks on, as for new-window.", Accepted: config.ShellIntegrationModes},
 				grantsParam,
 			},
 			returns: []verbParam{

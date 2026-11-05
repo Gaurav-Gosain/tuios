@@ -1252,6 +1252,7 @@ It also needs the respond grant.`,
 	var newWindowKind, newWindowURI string
 	var newWindowKeepOpen, newWindowWait bool
 	var newWindowTimeout int
+	var newWindowShellIntegration string
 	newWindowCmd := &cobra.Command{
 		Use:   "new-window [name] [command...]",
 		Short: "Open a new window in a session",
@@ -1292,6 +1293,10 @@ lists, scripts and restores like any other.
 --grants says what the window's process may do through tuios: read, write,
 fan, respond, admin, or none. Without it the window holds the default of
 [agents.permissions]. See 'tuios pane-grants'.
+
+--shell-integration off starts this pane's bash or zsh without the prompt marks
+tuios adds, and auto adds them when [shell] integration is off. It has no effect
+on a window that runs a command.
 
 --kind makes a window that a native renderer (tuios-gpui) draws itself: view,
 web or app, with --uri naming what it shows. A terminal client shows such a
@@ -1336,6 +1341,7 @@ window as one line with its uri.`,
 				focus: !newWindowNoFocus, command: command, host: newWindowHost, grants: newWindowGrants,
 				kind: newWindowKind, uri: newWindowURI, jsonOut: newWindowJSON, printID: newWindowPrintID,
 				keepOpen: newWindowKeepOpen, wait: newWindowWait, timeout: newWindowTimeout,
+				shellIntegration: newWindowShellIntegration,
 			})
 		},
 	}
@@ -1352,11 +1358,13 @@ window as one line with its uri.`,
 	newWindowCmd.Flags().BoolVar(&newWindowKeepOpen, "keep-open", false, "Keep the window after its program exits, with a line that shows the exit status")
 	newWindowCmd.Flags().BoolVar(&newWindowWait, "wait", false, "Wait for the program to exit, and exit with its status")
 	newWindowCmd.Flags().IntVar(&newWindowTimeout, "timeout", 0, "With --wait: milliseconds to wait before failing (default: no limit)")
+	newWindowCmd.Flags().StringVar(&newWindowShellIntegration, "shell-integration", "", "Prompt marks in this pane's shell: auto or off (default: [shell] integration)")
 	newWindowCmd.MarkFlagsMutuallyExclusive("json", "print-id")
 	newWindowCmd.MarkFlagsMutuallyExclusive("wait", "print-id")
 	_ = newWindowCmd.RegisterFlagCompletionFunc("session", completeSessionNames)
 	_ = newWindowCmd.RegisterFlagCompletionFunc("host", completeHostNames)
 	_ = newWindowCmd.RegisterFlagCompletionFunc("grants", completeGrantNames)
+	_ = newWindowCmd.RegisterFlagCompletionFunc("shell-integration", cobra.FixedCompletions(config.ShellIntegrationModes, cobra.ShellCompDirectiveNoFileComp))
 
 	var popupSession string
 	var popupWidth string

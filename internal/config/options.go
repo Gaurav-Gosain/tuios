@@ -1728,6 +1728,12 @@ var optionSpecs = []Option{
 		Description: "When the last pane on the workspace on screen closes, show the workspace you came from. Off shows the splash screen",
 		Default:     "true",
 	},
+	// [shell]. The daemon reads it each time it starts a pane.
+	{
+		Path: "shell.integration", Type: OptionString, Section: "appearance",
+		Description: "Turn on prompt marks in the bash and zsh shells that new panes start. Your files do not change. off starts each shell as it is",
+		Accepted:    ShellIntegrationModes, Default: ShellIntegrationAuto,
+	},
 	// [paste_buffers]. The daemon reads it when it starts and when the file
 	// changes, and so does a client with no daemon.
 	{

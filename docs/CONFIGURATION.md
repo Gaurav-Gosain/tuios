@@ -1612,6 +1612,52 @@ border back. You can also set it on the settings page, in the Advanced section,
 or with `tuios set-config appearance.zoom_borderless true`. The change applies
 at once.
 
+## Shell integration
+
+tuios turns on OSC 133 prompt marks in the bash and zsh shells that it starts
+in panes, as Ghostty and kitty do. The marks tell tuios where a prompt starts,
+where a command starts, and how the command ended. `tuios run`,
+`wait-for command-finished`, `capture-pane --last-command`, the scrollback
+browser and copy mode read them. A pane with marks also keeps one copy of its
+prompt when you make the pane narrower.
+
+tuios does not change your files:
+
+- **zsh**: tuios starts zsh with `ZDOTDIR` set to a folder of its own. The
+  `.zshenv` there sets `ZDOTDIR` back to your value, reads your `.zshenv`, and
+  adds the marks. zsh then reads your `.zprofile`, `.zshrc` and `.zlogin` as
+  usual. Programs in the pane see your own `ZDOTDIR`.
+- **bash**: tuios starts bash with `--rcfile` set to a file of its own. That
+  file reads your `~/.bashrc` and then adds the marks. Your `PS1`, `PS0`,
+  `PROMPT_COMMAND` (a string or an array), traps, `BASH_ENV` and `set -e` or
+  `set -u` stay as they are. This needs bash 4.4 or newer. An older bash
+  starts with no marks.
+- **fish 4** and **nushell** send the marks themselves, so tuios adds nothing.
+- Other shells start as they are.
+
+When your own setup already sends a mark, for example from a prompt theme or
+your own `precmd`, tuios does not send that mark again.
+
+The files are in `$XDG_STATE_HOME/tuios/shell-integration`, by default
+`~/.local/state/tuios/shell-integration`. tuios writes them once and checks
+them the first time it starts a shell. A shell starts less than 1 ms slower.
+
+To turn it off:
+
+```toml
+[shell]
+integration = "off"   # default: "auto"
+```
+
+The change applies to new panes. To choose for one pane, use
+`tuios new-window --shell-integration off`, or `auto` when the config is off.
+`tuios doctor shell` shows which panes send marks.
+
+tuios does not set up the shell of a remote pane: a pane that runs `ssh`, or a
+window on another machine (`--host`). To get marks there, add the lines that
+`tuios doctor shell` prints to the rc file on that machine. Then open a new
+pane.
+
 ## Splits that follow ssh
 
 The actions `split_ssh_horizontal`, `split_ssh_vertical` and `new_window_ssh`

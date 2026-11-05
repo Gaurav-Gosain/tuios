@@ -32,6 +32,7 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/memtrim"
 	"github.com/Gaurav-Gosain/tuios/internal/ptyspawn"
 	"github.com/Gaurav-Gosain/tuios/internal/serverscope"
+	"github.com/Gaurav-Gosain/tuios/internal/shellinteg"
 	"tuios.dev/progstatus"
 	"tuios.dev/vt"
 	"tuios.dev/vt/snapshot"
@@ -1864,6 +1865,10 @@ type SessionConfig struct {
 	// reaches the next pane. Nil, or an empty answer, means $SHELL and then
 	// the platform default.
 	PreferredShell func() string
+	// ShellIntegration reports whether [shell] integration is on, read at
+	// each spawn so a reload reaches the next pane. Nil means on. See
+	// internal/shellinteg.
+	ShellIntegration func() bool
 	// ReturnWhenEmpty reports workspaces.return_when_empty. The manager
 	// stamps it with its own getter, so a config reload reaches every
 	// session. Nil means on.
@@ -2478,6 +2483,9 @@ type ptySpawn struct {
 	keepOpen bool
 	// closeOnExit is new-window's close_on_exit. See PTY.ownShell.
 	closeOnExit bool
+	// shellIntegration is new-window's shell_integration: auto or off for
+	// this pane, "" for [shell] integration. See shellIntegrationFor.
+	shellIntegration string
 	// cellWidth and cellHeight are the session's cell in pixels, read by
 	// createPTY before the process starts. See ptyspawn.SpawnTTY.
 	cellWidth, cellHeight int
@@ -2594,6 +2602,14 @@ func (s *Session) createPTY(width, height int, sp ptySpawn) (*PTY, error) {
 				cmd = exec.Command(shell)
 			}
 			cmd.Env = s.buildEnvFor(sp.windowID, sp.workspace, sp.restored != nil, sp.env, sp.command)
+			// The user's own shell starts with the prompt marks on. A command
+			// is the caller's program, run as it was named.
+			if len(sp.command) == 0 && s.shellIntegrationFor(sp.shellIntegration) {
+				if args, env, ok := shellinteg.Setup(shell, cmd.Env); ok {
+					cmd.Args = append(cmd.Args, args...)
+					cmd.Env = env
+				}
+			}
 			// The pane's terminal, so a tuios client can tell whether it runs
 			// on it or only inherited the pane's variables. See
 			// nested_attach.go.
@@ -4183,6 +4199,15 @@ func (s *Session) resolveShell() (shell, missing string) {
 		missing = preferred
 	}
 	return shell, missing
+}
+
+// shellIntegrationFor reports whether a pane's shell starts with the prompt
+// marks on: the pane's own choice when it made one, else [shell] integration.
+func (s *Session) shellIntegrationFor(pane string) bool {
+	if pane != "" {
+		return config.ShellIntegrationOn(pane)
+	}
+	return s.config == nil || s.config.ShellIntegration == nil || s.config.ShellIntegration()
 }
 
 func (s *Session) buildEnv(windowID string, restored bool) []string {

@@ -59,14 +59,14 @@ func guestBaseEnv() []string {
 }
 
 // detectShell returns the shell a standalone pane runs, honouring
-// appearance.preferred_shell. The config is read on every call so an edit
-// applies to the next pane.
-func detectShell() string {
+// appearance.preferred_shell, and whether [shell] integration is on. The
+// config is read on every call so an edit applies to the next pane.
+func detectShell() (shell string, integration bool) {
 	cfg, err := config.LoadUserConfig()
 	if err != nil {
 		cfg = nil
 	}
-	return config.ResolveShell(cfg)
+	return config.ResolveShell(cfg), cfg == nil || config.ShellIntegrationOn(cfg.Shell.Integration)
 }
 
 // getTerminalEnv returns TERM and COLORTERM values for the current environment.
