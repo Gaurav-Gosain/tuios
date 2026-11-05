@@ -40,6 +40,8 @@ const (
 // sideState is the right sidebar's and the viewer's, beside the prefs
 // that show them and size them.
 type sideState struct {
+	// sliding says a sidebar slid in the last frame (view.go).
+	sliding bool
 	// focusNext gives the viewer the keyboard as it is built: asked for
 	// before its card exists, the focus went nowhere, and the pane kept
 	// the keyboard, so Esc never reached the viewer.

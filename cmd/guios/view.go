@@ -206,9 +206,15 @@ func (a *App) view(c *ui.Context) {
 		right = float32(math.Round(float64(rightW * min(max(p, 0), 1))))
 	}
 	// The panes' terminals keep their grids while a sidebar slides, and
-	// take the new size once, as it lands.
+	// take the new size once, in the frame it lands in, as a layout move's
+	// do (releaseLeases): a hold left to run out sent it 80 ms later, a
+	// step of its own after the slide.
 	if moving := func(v float32) bool { return v > 0 && v < 1 }; moving(progress) || moving(p) {
 		holdLeases(80 * time.Millisecond)
+		a.side.sliding = true
+	} else if a.side.sliding {
+		a.side.sliding = false
+		releaseLeases()
 	}
 	a.side.barW = right
 	// The gaps around the cards move the window too; the right one closes
