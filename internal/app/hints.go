@@ -67,6 +67,9 @@ type hintMatch struct {
 	text  string
 	kind  string
 	label string
+	// target is the address a link rule built for the match. Empty for every
+	// other match, whose text is what Ctrl and a label opens.
+	target string
 	// cells are the cells the match covers, first to last in reading order.
 	// A match that wraps covers the end of one row and the start of the next.
 	cells []hintCell
@@ -194,6 +197,9 @@ func (m *OS) openHints(all bool) {
 	cfg := m.hintsConfig()
 	builtins, _ := hints.ParseBuiltins(cfg.Builtins)
 	matcher, errs := hints.New(builtins, cfg.Patterns)
+	if m.Settings.Links == config.LinksAll {
+		matcher.WithLinkRules(m.Settings.LinkRules)
+	}
 	for _, err := range errs {
 		m.LogError("hints: %v", err)
 	}
@@ -393,9 +399,18 @@ func hintPaneScoped(match hintMatch) bool {
 	case hints.Path, hints.Diff:
 		return true
 	case hints.URL:
-		return strings.HasPrefix(strings.ToLower(match.text), "file:")
+		return strings.HasPrefix(strings.ToLower(match.openURL()), "file:")
 	}
 	return false
+}
+
+// openURL is the address Ctrl and a label opens for a URL match: the target a
+// link rule built, or the text itself.
+func (match hintMatch) openURL() string {
+	if match.target != "" {
+		return match.target
+	}
+	return match.text
 }
 
 // CloseHints closes hints mode. The pane is drawn from its own cells again on
@@ -601,9 +616,10 @@ func (m *OS) openHint(window *terminal.Window, match hintMatch) tea.Cmd {
 	}
 	switch match.kind {
 	case hints.URL:
-		if !strings.HasPrefix(strings.ToLower(match.text), "file:") {
+		target := match.openURL()
+		if !strings.HasPrefix(strings.ToLower(target), "file:") {
 			m.CancelPendingCopy()
-			return m.OpenLink(match.text)
+			return m.OpenLink(target)
 		}
 		if why := m.hintFileBlocked(window); why != "" {
 			return m.copyHint(window, match, why+" Copied the link")

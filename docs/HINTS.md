@@ -172,6 +172,11 @@ Your own patterns come before the built-in patterns. tuios warns about a
 pattern that does not compile when it reads the config, and hints mode skips
 that pattern.
 
+A match of a link rule (`[[links.rules]]`, see
+[CONFIGURATION.md](CONFIGURATION.md#link-rules)) is labelled as a URL. The
+label copies the text on screen, and `Ctrl` and the label opens the address
+the rule builds.
+
 `hints.builtins`, `hints.alphabet`, `hints.open`, `hints.dim` and
 `hints.all_panes` are also on the settings page (Selection tab) and work with
 `tuios set-config`.

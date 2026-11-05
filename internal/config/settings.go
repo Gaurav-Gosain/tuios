@@ -3,6 +3,7 @@ package config
 import (
 	"time"
 
+	"github.com/Gaurav-Gosain/tuios/internal/hints"
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
 )
 
@@ -192,6 +193,11 @@ type Settings struct {
 	// LinkHover is the hover highlight policy: one of the LinkHover*
 	// constants. Set via appearance.link_hover.
 	LinkHover string
+
+	// LinkRules are the compiled [[links.rules]]: plain text that is turned
+	// into a link with a target built from the match. Nil when there are
+	// none, which is what keeps the frame from scanning lines for them.
+	LinkRules *hints.LinkRules
 
 	// DropPreview is what a BSP drag draws where the pane would land: one of
 	// the DropPreview* constants. Set via appearance.drop_preview.

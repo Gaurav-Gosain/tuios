@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
+	"github.com/Gaurav-Gosain/tuios/internal/hints"
 	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 	"github.com/Gaurav-Gosain/tuios/internal/sortx"
@@ -47,6 +48,9 @@ type UserConfig struct {
 	// Hints is the [hints] table: what hints mode labels on a pane. See
 	// hints.go.
 	Hints HintsConfig `toml:"hints"`
+	// Links is the [links] table: rules that turn plain text, such as a
+	// ticket ID, into links. See links.go.
+	Links LinksConfig `toml:"links"`
 	// Panes is the [panes] table: the keys display_panes labels the panes
 	// with. See panes.go.
 	Panes PanesConfig `toml:"panes"`
@@ -2753,6 +2757,9 @@ func ApplyAppearanceConfig(cfg *UserConfig, s *Settings) {
 	s.Links = closedSetValue(cfg.Appearance.Links, LinkModes, s.Links, LinksAll)
 	s.LinkClick = closedSetValue(cfg.Appearance.LinkClick, LinkClickModes, s.LinkClick, LinkClickBoth)
 	s.LinkHover = closedSetValue(cfg.Appearance.LinkHover, LinkHoverModes, s.LinkHover, LinkHoverSafe)
+	// Rules that do not compile are skipped here and reported by the
+	// validator, so a reload with a typo keeps the rest working.
+	s.LinkRules, _ = hints.CompileLinkRules(cfg.Links.Specs())
 	s.LinkOpener = strings.TrimSpace(cfg.Appearance.LinkOpener)
 	// A typo lands on the default, which is what the validator says.
 	if slices.Contains(DropPreviewModes, cfg.Appearance.DropPreview) {

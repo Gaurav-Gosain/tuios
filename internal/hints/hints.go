@@ -47,6 +47,9 @@ func Names() []string {
 type Match struct {
 	Start, End int
 	Kind       string
+	// Target is the address a link rule built for the match. It is empty for
+	// every other match, whose text is what Ctrl and a label opens.
+	Target string
 }
 
 // pattern is one compiled rule.
@@ -74,6 +77,16 @@ type pattern struct {
 type Matcher struct {
 	custom  []pattern
 	builtin []pattern
+	links   *LinkRules
+}
+
+// WithLinkRules makes the matcher label the matches of the link rules too, as
+// URL matches that open the address the rule built. It returns the matcher.
+func (m *Matcher) WithLinkRules(rules *LinkRules) *Matcher {
+	if m != nil && !rules.Empty() {
+		m.links = rules
+	}
+	return m
 }
 
 // ParseBuiltins reads the hints.builtins value: "all" (or empty), "none", or
@@ -145,27 +158,32 @@ type candidate struct {
 	claimStart, claimEnd int // the range the pattern claimed on the line
 	start, end           int // the range to copy
 	kind                 string
-	rank                 int // position of the pattern in its list
+	rank                 int    // position of the pattern in its list
+	target               string // what a link rule match opens
 }
 
 // Find returns the matches on one line, sorted by position, none overlapping.
 //
-// The user's patterns are settled first, so a pattern somebody wrote for
-// their own work wins over a built-in that happens to cover the same text.
-// Among the built-ins the longest claim wins, then the pattern listed first:
-// a URL beats the path inside it, and a diff header beats the plain path it
-// contains.
+// Link rule matches are settled first: the detector already gave the URLs
+// they overlap the win, and the rule is what makes the text open somewhere.
+// The user's patterns come next, so a pattern somebody wrote for their own
+// work wins over a built-in that happens to cover the same text. Among the
+// built-ins the longest claim wins, then the pattern listed first: a URL beats
+// the path inside it, and a diff header beats the plain path it contains.
 func (m *Matcher) Find(line string) []Match {
 	if m == nil || line == "" {
 		return nil
 	}
 	var taken []candidate
+	for _, l := range RuleLinks(line, m.links) {
+		taken = append(taken, candidate{claimStart: l.Start, claimEnd: l.End, start: l.Start, end: l.End, kind: URL, target: l.Target})
+	}
 	taken = settle(taken, collect(m.custom, line))
 	taken = settle(taken, collect(m.builtin, line))
 	sortx.SortFunc(taken, func(a, b candidate) int { return a.start - b.start })
 	out := make([]Match, 0, len(taken))
 	for _, c := range taken {
-		out = append(out, Match{Start: c.start, End: c.end, Kind: c.kind})
+		out = append(out, Match{Start: c.start, End: c.end, Kind: c.kind, Target: c.target})
 	}
 	return out
 }

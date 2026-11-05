@@ -7,6 +7,7 @@ import (
 
 	"charm.land/lipgloss/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/hints"
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 	"github.com/Gaurav-Gosain/tuios/internal/pool"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
@@ -403,7 +404,16 @@ func (m *OS) renderTerminal(window *terminal.Window, isFocused bool, inTerminalM
 	// and the line drawn again with them. Most lines hold none and are drawn
 	// once, which is the whole cost of the feature on them.
 	findBare := m.Settings.Links == config.LinksAll
+	// linkRules are the [[links.rules]] in force. A rule can match text with
+	// no "://" in it, so with rules every logical line is scanned. Nil when
+	// there are none, which keeps the cost above for everybody else.
+	var linkRules *hints.LinkRules
+	if findBare && !m.Settings.LinkRules.Empty() {
+		linkRules = m.Settings.LinkRules
+	}
 	var bareRows [][]paneBareSpan
+	// linkScratch is reused for every line this frame scans.
+	var linkScratch linkScan
 	// lineTop is the first row of the logical line the loop is in, or -1 when
 	// it is not known. It is looked up only for a line that has to be scanned:
 	// asking the emulator whether a row wraps costs allocations on the ghostty
@@ -1002,9 +1012,9 @@ func (m *OS) renderTerminal(window *terminal.Window, isFocused bool, inTerminalM
 				lineTop = y + 1
 				lineScanned, lineHasScheme = false, false
 			}
-		case lineHasScheme || (lineTop == 0 && cutAbove) || (y == maxY-1 && cutBelow):
-			// The line holds "://", or the viewport cuts it: it has to be
-			// scanned once it ends.
+		case lineHasScheme || linkRules != nil || (lineTop == 0 && cutAbove) || (y == maxY-1 && cutBelow):
+			// The line holds "://", a link rule may match anywhere in it,
+			// or the viewport cuts it: it has to be scanned once it ends.
 			if lineTop < 0 {
 				lineTop = y
 				for lineTop > 0 && paneRowWraps(window, lineTop-1) {
@@ -1019,7 +1029,16 @@ func (m *OS) renderTerminal(window *terminal.Window, isFocused bool, inTerminalM
 			if bareRows == nil {
 				bareRows = make([][]paneBareSpan, maxY)
 			}
-			bareRows = appendBareSpans(bareRows, window, lineTop, y, maxX, maxY)
+			spansBefore := bareSpanCount(bareRows, lineTop, y)
+			bareRows = appendBareSpans(bareRows, window, lineTop, y, maxX, maxY, linkRules, &linkScratch)
+			if bareSpanCount(bareRows, lineTop, y) == spansBefore {
+				// Nothing to link on the line: it is drawn already, as it is.
+				// Link rules scan every line, so this keeps a screen of
+				// ordinary output from being drawn twice.
+				lineTop = y + 1
+				lineHasScheme = false
+				break
+			}
 			lineScanned, scannedEnd = true, y
 			lineStart := rowStart[lineTop]
 			builder.Truncate(lineStart)

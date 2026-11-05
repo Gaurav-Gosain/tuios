@@ -283,6 +283,45 @@ WSL, and `xdg-open` on other systems. tuios runs no shell. It gives the URL to
 the opener as one argument. If the opener fails, tuios shows a message and
 puts the URL on your clipboard.
 
+### Link rules
+
+A link rule turns plain text that is not a URL into a link, such as a ticket
+ID that opens its page in an issue tracker. It works like
+[WezTerm's implicit hyperlinks](https://wezterm.org/hyperlinks.html#implicit-hyperlinks).
+
+```toml
+[[links.rules]]
+regex = '\b([A-Z][A-Z0-9_]+-[1-9][0-9]*)\b'
+url = "https://jira.example.com/browse/$1"
+```
+
+- `regex` is a regular expression in Go syntax.
+- `url` is the address a match opens. `$0` is the whole match, and `$1`, `$2`
+  and so on are its groups. A named group is `${name}`. A group followed by a
+  letter, a digit or `_` needs braces: write `${1}_x`, because `$1_x` names a
+  group called `1_x`. tuios warns about a url that names a group the regex
+  does not have.
+- Keep the scheme and the host fixed in `url`, and put groups in the path or
+  the query only, as in the example. A group before the path, such as
+  `https://example.com$1`, lets the text on screen choose the host.
+- A match is a link like a bare URL: the hover underline and label (which
+  shows the address), the click in `link_click`, `link_opener`, the OSC 8
+  output to your terminal, and `Ctrl` and a label in hints mode. A label
+  without `Ctrl` copies the text on screen.
+- Rules apply when `links` is `all`, as bare URLs do.
+- A real URL wins when a rule matches text inside it. An earlier rule wins
+  over a later one.
+- The address a rule builds goes through the same check as every link. A rule
+  whose address is not `http`, `https`, `mailto`, `ftp` or `ftps`, or that
+  holds a byte a bare URL cannot hold (a space, a quote, a backtick, an angle
+  bracket, `|`, `^`, `{`, `}`, `\` or a control character), makes no link.
+- A rule that does not compile, or that matches empty text, is skipped, and
+  tuios shows a warning when it reads the config.
+- With rules, tuios reads every line of a pane for them, not only the lines
+  that hold `://`. With no rules, nothing changes.
+- As with bare URLs, the OSC 8 output carries the rule links of the focused
+  pane only. In another pane they are found on hover and click.
+
 ### Which machine opens the link
 
 - A local client opens the link on your machine.
