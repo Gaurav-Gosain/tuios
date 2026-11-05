@@ -1246,5 +1246,6 @@
   "cockpitKeysToBoard": "キーはボードに送られます。",
   "cockpitTypedNoCommand": "入力中の文字はコマンドを実行しません。少し待ってからもう一度キーを押してください。",
   "cockpitHintMove": "移動",
-  "cockpitKeysToMail": "キーはメール一覧に送られます。返信するには r を押してください。"
+  "cockpitKeysToMail": "キーはメール一覧に送られます。返信するには r を押してください。",
+  "setApprovalsNeedsIntegration": "Claude Code 連携が必要です。プロンプトをここで受け取るにはインストールしてください。"
 }
