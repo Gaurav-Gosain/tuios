@@ -67,13 +67,59 @@ func (a *App) startMD(l *fileLook) {
 				m.err = lookErrText(err)
 				return
 			}
-			m.src = strings.ToValidUTF8(string(data), "\uFFFD")
+			m.src = detabFences(strings.ToValidUTF8(string(data), "\uFFFD"))
 			if html {
 				m.src = htmlSrc
 			}
 			l.mark("read")
 		})
 	}()
+}
+
+// detabFences expands the tabs in a document's fenced code blocks to
+// stops of 4 columns. The text engine gives a tab at the start of a run no
+// width, so Go's indented lines drew flush left (council round 3, visual
+// S9); the thread and the text preview go through detab for the same.
+func detabFences(src string) string {
+	if !strings.Contains(src, "\t") {
+		return src
+	}
+	lines := strings.SplitAfter(src, "\n")
+	fence := ""
+	for i, ln := range lines {
+		t := strings.TrimLeft(ln, " ")
+		if fence == "" {
+			if strings.HasPrefix(t, "```") || strings.HasPrefix(t, "~~~") {
+				fence = t[:3]
+			}
+			continue
+		}
+		if strings.HasPrefix(t, fence) {
+			fence = ""
+			continue
+		}
+		if strings.Contains(ln, "\t") {
+			lines[i] = expandTabs(ln, 4)
+		}
+	}
+	return strings.Join(lines, "")
+}
+
+// expandTabs puts spaces for each tab in s, to the next stop of width.
+func expandTabs(s string, width int) string {
+	var b strings.Builder
+	col := 0
+	for _, r := range s {
+		if r == '\t' {
+			n := width - col%width
+			b.WriteString(strings.Repeat(" ", n))
+			col += n
+			continue
+		}
+		b.WriteRune(r)
+		col++
+	}
+	return b.String()
 }
 
 // mdTheme is the Markdown theme of the design: prose at 14 on 1.6, GitHub's
