@@ -13198,3 +13198,20 @@ Run on 2026-11-05 on Linux. The fixed build passes.
 
 Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestInboxRiskyApprovalTakesTwoPresses$' -v .`.
+
+## The text under a kitty image keeps its row through a reattach
+
+`TestKittyImageRowsSurviveAReattach` prints a line, draws an image with
+kitten icat (printf with `c=8,r=4` where icat is not installed), and prints
+a second line. It detaches, attaches a new client and resizes it. The two
+lines must stay on their rows after the reattach, and as far apart after
+the resize.
+
+Run on 2026-11-06 on Linux with kitten icat. The fixed build passes.
+
+| Control | Where it fails | Verdict |
+| --- | --- | --- |
+| The branch before the fix, where the client put the cursor at column 0 under the image | "after the reattach the lines are on rows 3 and 6, want 3 and 7" | **caught** |
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestKittyImageRowsSurviveAReattach$' -v .`.
