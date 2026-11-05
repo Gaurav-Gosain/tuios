@@ -612,7 +612,7 @@
   "endedSetUpSkill": "设置智能体技能后，已结束的智能体对话会显示在这里",
   "actionQuickTerminal": "快速终端",
   "scratchTerminal": "临时终端",
-  "scratchHide": "按 {keys} 隐藏。",
+  "scratchHide": "隐藏",
   "scratchNoSession": "请先打开一个会话，再使用临时终端。",
   "toastGlobalShortcutFailed": "无法将 {keys} 用于快速终端：{error}",
   "setShortcutGlobal": "在任何应用中都可用",

@@ -1173,7 +1173,7 @@
   "endedSetUpSkill": "Set up the tuios integration for your agents to list their ended conversations here",
   "actionQuickTerminal": "Quick terminal",
   "scratchTerminal": "Scratch terminal",
-  "scratchHide": "Press {keys} to hide it.",
+  "scratchHide": "hide",
   "scratchNoSession": "Open a session to use the scratch terminal.",
   "toastGlobalShortcutFailed": "Couldn’t use {keys} for the quick terminal: {error}",
   "setShortcutGlobal": "Works in every app",

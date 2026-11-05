@@ -6230,14 +6230,14 @@ func (msgs Messages) ScratchTerminal() string {
 	return Catalog.Format(msgs.locale, "scratchTerminal", nil)
 }
 
-// ScratchHide says "Press {keys} to hide it."
+// ScratchHide says "hide"
 // in the language the app shows.
-func ScratchHide(keys string) string { return In(i18n.Locale()).ScratchHide(keys) }
+func ScratchHide() string { return In(i18n.Locale()).ScratchHide() }
 
-// ScratchHide says "Press {keys} to hide it."
+// ScratchHide says "hide"
 // in the language of msgs.
-func (msgs Messages) ScratchHide(keys string) string {
-	return Catalog.Format(msgs.locale, "scratchHide", map[string]any{"keys": keys})
+func (msgs Messages) ScratchHide() string {
+	return Catalog.Format(msgs.locale, "scratchHide", nil)
 }
 
 // ScratchNoSession says "Open a session to use the scratch terminal."

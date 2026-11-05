@@ -528,7 +528,9 @@ func (a *App) dropView(c *ui.Context, pal *palette, stack ui.Element, h float32)
 				ui.Text(c, proto.ShortDir(p.Dir)).FontSize(fsSmall).TextColor(pal.textMuted).SingleLine().Ellipsis("…").MinWidth(0).Shrink(2)
 			}
 			if keys := a.scratchKeys(); keys != "" {
-				ui.Text(c, locales.ScratchHide(keys)).FontSize(fsSmall).TextColor(pal.textFaint).SingleLine().Ellipsis("…").MinWidth(0)
+				// A key cap and its word, as every other hint (council
+				// round 3, visual n3).
+				keyHint(c, pal, keys, locales.ScratchHide())
 			}
 			ui.Spacer(c)
 			a.controlsRoom(c, 0)
