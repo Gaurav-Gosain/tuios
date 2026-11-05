@@ -83,9 +83,10 @@ type previewPicture struct {
 	png   []byte
 }
 
-// size is the bytes the picture holds: the capacity of the PNG, which is what
-// a bytes.Buffer keeps past its length, and the glyph lines. A nil picture
-// holds nothing.
+// size is the bytes the picture holds: the capacity of the PNG and the glyph
+// lines. preparePicture keeps the PNG at its length, so the capacity equals it;
+// counting the capacity stays right if a later change keeps a larger buffer. A
+// nil picture holds nothing.
 func (pic *previewPicture) size() int {
 	if pic == nil {
 		return 0
@@ -335,8 +336,9 @@ func (m *OS) applyReplyPreview(msg replyPreviewMsg) {
 }
 
 // preparePicture decodes img and draws it for k: as glyph lines, or as PNG
-// bytes of the box's size in pixels. It returns nil for an image this build
-// cannot decode, such as WebP, which is then shown blank.
+// bytes of the box's size in pixels. The PNG is copied into a slice of exactly
+// its length, so the encoder's larger buffer is not kept. It returns nil for an
+// image this build cannot decode, such as WebP, which is then shown blank.
 func preparePicture(img *composer.Image, k previewKey, cellW, cellH int, ground color.Color) *previewPicture {
 	if img.Width <= 0 || img.Height <= 0 || img.Width > replyPreviewMaxPixels/img.Height {
 		return nil
@@ -351,7 +353,9 @@ func preparePicture(img *composer.Image, k previewKey, cellW, cellH int, ground 
 		if png.Encode(&b, dst) != nil {
 			return nil
 		}
-		return &previewPicture{png: b.Bytes()}
+		out := make([]byte, b.Len())
+		copy(out, b.Bytes())
+		return &previewPicture{png: out}
 	}
 	// Four by eight pixels a cell is enough for every glyph set, octants
 	// included, and keeps the palette small.
