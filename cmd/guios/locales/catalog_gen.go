@@ -3494,36 +3494,6 @@ func (msgs Messages) SetNotifyError(error string) string {
 	return Catalog.Format(msgs.locale, "setNotifyError", map[string]any{"error": error})
 }
 
-// SetRemoteControl says "Remote control"
-// in the language the app shows.
-func SetRemoteControl() string { return In(i18n.Locale()).SetRemoteControl() }
-
-// SetRemoteControl says "Remote control"
-// in the language of msgs.
-func (msgs Messages) SetRemoteControl() string {
-	return Catalog.Format(msgs.locale, "setRemoteControl", nil)
-}
-
-// SetRemoteControlRow says "Let commands drive this window"
-// in the language the app shows.
-func SetRemoteControlRow() string { return In(i18n.Locale()).SetRemoteControlRow() }
-
-// SetRemoteControlRow says "Let commands drive this window"
-// in the language of msgs.
-func (msgs Messages) SetRemoteControlRow() string {
-	return Catalog.Format(msgs.locale, "setRemoteControlRow", nil)
-}
-
-// SetRemoteControlDetail says "tuios do and tuios focus run the app’s actions, as its menus do: splitting, switching sessions, opening the palette…"
-// in the language the app shows.
-func SetRemoteControlDetail() string { return In(i18n.Locale()).SetRemoteControlDetail() }
-
-// SetRemoteControlDetail says "tuios do and tuios focus run the app’s actions, as its menus do: splitting, switching sessions, opening the palette…"
-// in the language of msgs.
-func (msgs Messages) SetRemoteControlDetail() string {
-	return Catalog.Format(msgs.locale, "setRemoteControlDetail", nil)
-}
-
 // SetCli says "Command line tool"
 // in the language the app shows.
 func SetCli() string { return In(i18n.Locale()).SetCli() }
@@ -5726,28 +5696,6 @@ func SetHostNeedsAddress() string { return In(i18n.Locale()).SetHostNeedsAddress
 // in the language of msgs.
 func (msgs Messages) SetHostNeedsAddress() string {
 	return Catalog.Format(msgs.locale, "setHostNeedsAddress", nil)
-}
-
-// SetHostRemoteControl says "Remote control"
-// in the language the app shows.
-func SetHostRemoteControl() string { return In(i18n.Locale()).SetHostRemoteControl() }
-
-// SetHostRemoteControl says "Remote control"
-// in the language of msgs.
-func (msgs Messages) SetHostRemoteControl() string {
-	return Catalog.Format(msgs.locale, "setHostRemoteControl", nil)
-}
-
-// SetHostRemoteControlDetail says "Let programs on {host} show sessions and run the app's actions (tuios focus, tuios do)"
-// in the language the app shows.
-func SetHostRemoteControlDetail(host string) string {
-	return In(i18n.Locale()).SetHostRemoteControlDetail(host)
-}
-
-// SetHostRemoteControlDetail says "Let programs on {host} show sessions and run the app's actions (tuios focus, tuios do)"
-// in the language of msgs.
-func (msgs Messages) SetHostRemoteControlDetail(host string) string {
-	return Catalog.Format(msgs.locale, "setHostRemoteControlDetail", map[string]any{"host": host})
 }
 
 // SetListenTitle says "This computer as a host"

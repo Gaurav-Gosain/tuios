@@ -228,15 +228,11 @@ var keys = []key{
 	boolKey("dock-badge", "the number of sessions that need you", func(s *Settings) *bool { return &s.DockBadge }),
 	boolKey("dock-bounce", "once, when a session comes to need you", func(s *Settings) *bool { return &s.BounceDock }),
 
-	boolKey("remote-control", "programs in panes may drive the app", func(s *Settings) *bool { return &s.RemoteControl }),
-	{name: "host", doc: "another machine whose sessions the app shows, as name=address: [user@]host or ssh://… over SSH, wsl://distro, http(s)://… for the tuios daemon's tailnet listener; add remote-control after it to let its programs drive the app, and color=red, orange, amber, green, teal, blue, purple or pink to mark its sessions; repeat it", list: true,
+	{name: "host", doc: "another machine whose sessions the app shows, as name=address: [user@]host or ssh://… over SSH, wsl://distro, http(s)://… for the tuios daemon's tailnet listener; add color=red, orange, amber, green, teal, blue, purple or pink to mark its sessions; repeat it", list: true,
 		get: func(s *Settings) []string {
 			var out []string
 			for _, h := range s.Hosts {
 				v := h.Name + "=" + h.Addr
-				if h.RemoteControl {
-					v += " remote-control"
-				}
 				if h.Color != "" {
 					v += " color=" + h.Color
 				}
@@ -390,6 +386,11 @@ func keroThemeNames() []string {
 // it, and format writes theme in its place.
 const legacyBackground = "background"
 
+// legacyRemoteControl let programs drive the app through kero focus and
+// kero do, which tuios has no commands for: the key, and the host option of
+// that name, are read and dropped, so an older configuration still loads.
+const legacyRemoteControl = "remote-control"
+
 func adListIDs() []string {
 	var ids []string
 	for _, s := range adblock.Catalog {
@@ -494,7 +495,7 @@ func parse(data string) (Settings, []string) {
 	values := map[string][]string{}
 	var order []string
 	for n, l := range parseLines(data) {
-		if l.key == "" {
+		if l.key == "" || l.key == legacyRemoteControl {
 			continue
 		}
 		if findKey(l.key) == nil && l.key != legacyBackground {

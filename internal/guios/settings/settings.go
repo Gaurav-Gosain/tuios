@@ -81,9 +81,6 @@ type Settings struct {
 	DockBadge     bool `json:"dockBadge"`
 	BounceDock    bool `json:"bounceDock"`
 
-	// Agents
-	RemoteControl bool `json:"remoteControl"` // kero focus and kero do drive the app
-
 	// Git
 	GitStatus  bool   `json:"gitStatus"`  // each pane's branch and changes, which kerod follows
 	DiffLayout string `json:"diffLayout"` // the changes panel's diffs: "auto", "unified" or "split"
@@ -123,10 +120,6 @@ type Settings struct {
 type Host struct {
 	Name string `json:"name"`
 	Addr string `json:"addr"`
-	// RemoteControl lets the host's programs drive the app, as kero focus
-	// and kero do, which remote-control lets this machine's: off unless the
-	// user trusts the host with it.
-	RemoteControl bool `json:"remoteControl,omitempty"`
 	// Color marks the host's sessions in the sidebar and its panes: one of
 	// HostColors, "" for the one its name picks.
 	Color string `json:"color,omitempty"`
@@ -182,7 +175,6 @@ func Default() Settings {
 		NotifyDone:      true,
 		NotifyFailed:    true,
 		DockBadge:       true,
-		RemoteControl:   true,
 		GitStatus:       true,
 		DiffLayout:      "auto",
 		WorktreeBase:    "default",
@@ -468,8 +460,9 @@ func keroThemeName(bg string) string {
 }
 
 // ParseHost reads a host as the configuration's host key writes it:
-// name=address, then its options: remote-control, color=<one of
-// HostColors>.
+// name=address, then its options: color=<one of HostColors>.
+// remote-control, an option of kero's that tuios has no commands for, is
+// read and dropped, so an older configuration still loads.
 func ParseHost(line string) (Host, error) {
 	name, rest, ok := strings.Cut(strings.TrimSpace(line), "=")
 	name = strings.TrimSpace(name)
@@ -487,14 +480,13 @@ func ParseHost(line string) (Host, error) {
 	h := Host{Name: name, Addr: a.String()}
 	for _, o := range fields[1:] {
 		switch k, v, _ := strings.Cut(o, "="); {
-		case o == "remote-control":
-			h.RemoteControl = true
+		case o == legacyRemoteControl:
 		case k == "color" && slices.Contains(HostColors, v):
 			h.Color = v
 		case k == "color":
 			return Host{}, fmt.Errorf("%s: no color %q (%s)", name, v, strings.Join(HostColors, ", "))
 		default:
-			return Host{}, fmt.Errorf("%s: no option %q (remote-control, color=…)", name, o)
+			return Host{}, fmt.Errorf("%s: no option %q (color=…)", name, o)
 		}
 	}
 	return h, nil

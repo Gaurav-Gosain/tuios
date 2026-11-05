@@ -1,7 +1,6 @@
 package main
 
 import (
-	"errors"
 	"runtime"
 	"time"
 	"unicode/utf8"
@@ -40,14 +39,9 @@ type webEntry struct {
 	found    mygo.FindResult
 	findSeq  int
 	findText string
-	// loads are kero browser's calls waiting for the page's load to end.
-	loads []chan error
 	// iconURL is the URL of the icon the page told: until it does, its
 	// site's last shows.
 	iconURL string
-	// staged lays the page out unseen, for kero browser screenshot of a
-	// pane never shown, which has no size, and so no picture.
-	staged bool
 }
 
 // browserUA makes the page look like Safari's on macOS: sites serve a bare
@@ -120,7 +114,6 @@ func (a *App) ensureWeb(p *proto.Pane) *webEntry {
 	page.OnDidFinishLoad(func() {
 		a.update(func() {
 			e.syncNav()
-			e.loadEnded(nil)
 			a.findFavicon(e)
 		})
 	})
@@ -131,7 +124,6 @@ func (a *App) ensureWeb(p *proto.Pane) *webEntry {
 			// one that left it ends later.
 			if err.Code != -999 && err.Description != "" {
 				e.err = err.Description
-				e.loadEnded(errors.New(err.Description))
 			}
 		})
 	})

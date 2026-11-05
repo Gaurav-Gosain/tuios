@@ -498,9 +498,6 @@
   "setTestNotification": "Send a test notification",
   "setTestNotificationBody": "Notifications work.",
   "setNotifyError": "Couldn’t notify: {error}",
-  "setRemoteControl": "Remote control",
-  "setRemoteControlRow": "Let commands drive this window",
-  "setRemoteControlDetail": "tuios do and tuios focus run the app’s actions, as its menus do: splitting, switching sessions, opening the palette. tuios browser clicks, types and reads in browser panes.",
   "setCli": "Command line tool",
   "setCliDetail": "Inside guios, every pane has the tuios command on its PATH already.",
   "setCliNotInstalled": "Not installed: other terminals don’t know the tuios command.",
@@ -1046,15 +1043,6 @@
     }
   },
   "setHostNeedsAddress": "Type the host's address",
-  "setHostRemoteControl": "Remote control",
-  "setHostRemoteControlDetail": "Let programs on {host} show sessions and run the app's actions (tuios focus, tuios do)",
-  "@setHostRemoteControlDetail": {
-    "placeholders": {
-      "host": {
-        "type": "String"
-      }
-    }
-  },
   "setListenTitle": "This computer as a host",
   "setListen": "Let other machines connect",
   "setListenDetail": "The tuios daemon listens at this computer's Tailscale addresses, for guios on your other machines. Only your Tailscale account may connect.",

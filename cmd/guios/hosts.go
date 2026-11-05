@@ -687,17 +687,6 @@ func (a *App) own(h *host, s proto.Session) {
 	}
 }
 
-// remoteControl reports whether a host's programs may drive the app (kero
-// focus, kero do): this machine's as Settings › Agents says, another's as
-// Settings › Hosts does.
-func (a *App) remoteControl(h *host) bool {
-	if !h.remote() {
-		return a.set.RemoteControl
-	}
-	// A program on another machine never drives this app.
-	return false
-}
-
 // hostedName is a session's name, with its host's for a remote one, as
 // a notification and the window's title say it, so that a host cannot
 // pass for this machine.
@@ -718,15 +707,6 @@ func (a *App) allLoaded() bool {
 		}
 	}
 	return true
-}
-
-// actionHost is the host an action runs for: the one whose program asked
-// for it (kero do), else the shown session's.
-func (a *App) actionHost() *host {
-	if a.from != nil {
-		return a.from
-	}
-	return a.selectedHost()
 }
 
 // neighbor is the session that takes a gone one's place: the next in order

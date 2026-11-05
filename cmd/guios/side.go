@@ -178,10 +178,7 @@ func (a *App) toggleSide(tab string) {
 		a.side.forced = a.side.crowded
 		if tab == sideChanges && s != nil {
 			a.openView(s, sideChanges, nil)
-			// A program asking through kero do leaves the user's keyboard be.
-			if a.from == nil {
-				a.focusViewer()
-			}
+			a.focusViewer()
 		}
 	}
 	a.savePrefs()

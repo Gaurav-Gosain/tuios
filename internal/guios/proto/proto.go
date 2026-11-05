@@ -72,19 +72,10 @@ type Message struct {
 	Result any    `json:"result,omitempty"`
 	Error  string `json:"error,omitempty"`
 
-	Event string `json:"event,omitempty"` // "state", "select", "action", "notice", "browser"
+	Event string `json:"event,omitempty"` // "state", "notice", "daemon"
 	State *State `json:"state,omitempty"`
-	// Select asks the app to show a session ("kero focus").
-	Select string `json:"select,omitempty"`
-	// Action asks the app to run one of its actions ("kero do"), with
-	// Args, when the user allows Remote Control.
-	Action string            `json:"action,omitempty"`
-	Args   map[string]string `json:"args,omitempty"`
 	// Notice is a program's desktop notification, to show as it is.
 	Notice *Notice `json:"notice,omitempty"`
-	// Browser asks the app to do something on a browser pane's page
-	// ("kero browser"), which it answers with browser.answer.
-	Browser *BrowserRequest `json:"browser,omitempty"`
 	// Daemon is a tuios daemon event the agent cockpit reads, with Event
 	// "daemon": an agent's state, the Inbox, a transcript, mail or a task
 	// card changed.
@@ -887,67 +878,6 @@ type (
 		ID    string `json:"id"`
 		URL   string `json:"url"`
 		Title string `json:"title,omitempty"`
-	}
-	// BrowserParams ask a browser pane's page to do something (browser),
-	// which the app showing it does.
-	BrowserParams struct {
-		ID string `json:"id"`
-		// Op is what to do: open, back, forward, reload, text, html,
-		// snapshot, click, type, wait, eval, screenshot or cookies.
-		Op       string `json:"op"`
-		Selector string `json:"selector,omitempty"`
-		// Ref names the element a snapshot gave a ref, in place of a
-		// selector.
-		Ref string `json:"ref,omitempty"`
-		// Text is the URL to open, the text to type or wait for, the
-		// script to evaluate, or what to do with cookies: save or load.
-		Text  string `json:"text,omitempty"`
-		Enter bool   `json:"enter,omitempty"` // press Enter after typing
-		// Domain keeps the cookies saved to those of a domain and its
-		// subdomains.
-		Domain string `json:"domain,omitempty"`
-		// Cookies are the cookies to load.
-		Cookies []Cookie `json:"cookies,omitempty"`
-		// Timeout is how long to wait for the element, or the page to
-		// load, in ms: 0 for the app's default.
-		Timeout int64 `json:"timeout,omitempty"`
-	}
-	// BrowserRequest is a browser call as kerod hands it to the app: Req
-	// is what the app answers it by, and Pane the browser pane's id.
-	BrowserRequest struct {
-		Req  int64  `json:"req"`
-		Pane string `json:"pane"`
-		BrowserParams
-	}
-	// BrowserResult is what the page answered: text for text, html,
-	// snapshot and eval, an image for screenshot, the cookies saved.
-	BrowserResult struct {
-		Text    string   `json:"text,omitempty"`
-		PNG     []byte   `json:"png,omitempty"`
-		Cookies []Cookie `json:"cookies,omitempty"`
-	}
-	// Cookie is a cookie of the browser panes' pages, in the shape of
-	// Playwright's storage state.
-	Cookie struct {
-		Name  string `json:"name"`
-		Value string `json:"value"`
-		// Domain is the host the cookie goes to, or with a leading dot,
-		// the domain whose subdomains get it too.
-		Domain string `json:"domain"`
-		Path   string `json:"path"`
-		// Expires is when the cookie expires, in Unix seconds: -1 for one
-		// that lasts until the app quits.
-		Expires  float64 `json:"expires"`
-		HTTPOnly bool    `json:"httpOnly"`
-		Secure   bool    `json:"secure"`
-		SameSite string  `json:"sameSite"` // Strict, Lax or None
-	}
-	// BrowserAnswer answers a BrowserRequest (browser.answer): a result,
-	// or why there is none.
-	BrowserAnswer struct {
-		Req    int64          `json:"req"`
-		Result *BrowserResult `json:"result,omitempty"`
-		Error  string         `json:"error,omitempty"`
 	}
 	NotifyParams struct {
 		ID    string `json:"id"`

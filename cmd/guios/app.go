@@ -24,7 +24,6 @@ import (
 	"github.com/Gaurav-Gosain/mygo/transfer"
 	"github.com/Gaurav-Gosain/mygo/ui"
 
-	"github.com/Gaurav-Gosain/tuios/internal/guios/actions"
 	"github.com/Gaurav-Gosain/tuios/internal/guios/cli"
 	"github.com/Gaurav-Gosain/tuios/internal/guios/client"
 	"github.com/Gaurav-Gosain/tuios/internal/guios/proto"
@@ -266,9 +265,7 @@ type App struct {
 	previewShown bool
 	copyText     string
 	peek         peek // the image a path Command hovers shows
-	// from is the host whose program asked for the action being run (kero
-	// do), nil for the user's.
-	from   *host
+
 	picker folderPicker // the folders of a host, to open a project in
 	side   sideState    // the side panel, beside a session's panes
 	quick  quickTerm    // the terminal the global shortcut drops down
@@ -372,41 +369,6 @@ func (a *App) event(h *host, cl *client.Client, m proto.Message) {
 		if !h.remote() {
 			// A pane started or ended something: its usage may move.
 			a.nudgeUsage()
-		}
-	case "select":
-		// A host shows its own sessions, none of another machine.
-		if !a.remoteControl(h) || a.hostOf(m.Select) != h {
-			return
-		}
-		// In the pane kerod has it focus, as kero focus <pane> asks: the
-		// state with it came just before.
-		if s := a.session(m.Select); s != nil && s.PaneByID(s.Focus) != nil {
-			a.focus[s.ID] = s.Focus
-		}
-		a.selectSession(m.Select)
-		if a.win != nil {
-			a.showWindow()
-		}
-	case "action":
-		if !a.remoteControl(h) {
-			return
-		}
-		if act, ok := actions.Find(m.Action); ok && act.Remote {
-			a.from = h
-			a.run(act.ID, m.Args)
-			a.from = nil
-		}
-	case "browser":
-		// kero browser waits on the answer, which refuses when Remote
-		// Control is off, not as an action does, silently.
-		if r := m.Browser; r != nil {
-			a.browse(h, r, func(res *proto.BrowserResult, err error) {
-				ans := proto.BrowserAnswer{Req: r.Req, Result: res}
-				if err != nil {
-					ans.Result, ans.Error = nil, err.Error()
-				}
-				cl.Go("browser.answer", ans, nil)
-			})
 		}
 	case "daemon":
 		if !h.remote() {

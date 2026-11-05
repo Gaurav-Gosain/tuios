@@ -1396,14 +1396,13 @@ func chip(c *ui.Context, pal *palette, bg, fg ui.Color, fn func()) ui.Element {
 }
 
 // closeFocused closes what the user is in: the viewer while it has the
-// keyboard, else the pane, or the session with its last pane. A program
-// asking through kero do means the pane, wherever the keyboard happens to be.
+// keyboard, else the pane, or the session with its last pane.
 func (a *App) closeFocused() {
 	s := a.session(a.selected)
 	if s == nil {
 		return
 	}
-	if a.side.focused && a.from == nil && a.viewOf(s) != nil {
+	if a.side.focused && a.viewOf(s) != nil {
 		a.closeView(s)
 		return
 	}
