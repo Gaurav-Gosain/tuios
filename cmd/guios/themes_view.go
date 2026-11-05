@@ -1,6 +1,8 @@
 package main
 
 import (
+	"strings"
+
 	"github.com/Gaurav-Gosain/mygo/ui"
 
 	"github.com/Gaurav-Gosain/tuios/cmd/guios/locales"
@@ -33,10 +35,10 @@ func (a *App) themeRow(c *ui.Context, pal *palette, themes []string, dark bool) 
 	// A theme for guios alone comes from an older setting: the row offers
 	// Same as tuios to end it. guios offers no such choice of its own.
 	pinned := tuiosThemeExists(*slot)
-	value, options := tuiosID, themes
+	value, options := tuiosID, themesFor(themes, dark)
 	switch {
 	case pinned:
-		value, options = *slot, append([]string{same}, themes...)
+		value, options = *slot, append([]string{same}, options...)
 	case tuiosID == "":
 		value = same
 	}
@@ -56,6 +58,20 @@ func (a *App) themeRow(c *ui.Context, pal *palette, themes []string, dark bool) 
 	case tuiosID == "":
 		detail = locales.SetThemeFollowsNone()
 	}
+	if a.ss.menus == nil {
+		a.ss.menus = map[string]*searchMenu{}
+	}
+	if a.ss.menus[key] == nil {
+		a.ss.menus[key] = &searchMenu{}
+	}
+	m := a.ss.menus[key]
+	m.label = func(o string) string {
+		if o == same {
+			return o
+		}
+		return themeName(o)
+	}
+	m.lead = themeSwatches
 	settingRowWith(c, pal, label, func() {
 		ui.Text(c, detail).FontSize(fsSmall).TextColor(pal.textMuted).LineHeight(1.4)
 		a.themePreview(c, previewLook(id, dark))
@@ -110,4 +126,51 @@ func (a *App) themePreview(c *ui.Context, l *look) {
 			}
 		})
 	})
+}
+
+// themesFor is the themes with the ones of an appearance's kind first:
+// dark themes first in the Dark windows menu, light ones in the Light.
+func themesFor(themes []string, dark bool) []string {
+	out := make([]string, 0, len(themes))
+	for _, pass := range []bool{true, false} {
+		for _, id := range themes {
+			if d, ok := theme.ThemeIsDark(id); (ok && d == dark) == pass {
+				out = append(out, id)
+			}
+		}
+	}
+	return out
+}
+
+// themeSwatches is a theme's row in the menu: four swatches of its own
+// colors, the ground, the text, the cursor and red.
+func themeSwatches(c *ui.Context, id string) {
+	th := swatchTheme(id)
+	if th == nil {
+		ui.Box(c).Size(4*10+3*2, 10).Shrink(0)
+		return
+	}
+	ui.Row(c).Gap(2).Shrink(0).Children(func() {
+		for _, col := range []ui.Color{th.Background, th.Foreground, th.Cursor, th.Palette[1]} {
+			ui.Box(c).Size(10, 10).Radius(2).Background(col).InsetShadow(0, 0, 0, 1, ui.RGBA(128, 128, 128, 0.35))
+		}
+	})
+}
+
+// themeName is a theme's name for people. A theme that gives only an id
+// for a name, as "rose-pine-moon" or "tokyonight", gets it in words with
+// capitals: "Rose Pine Moon", "Tokyonight".
+func themeName(id string) string {
+	n := theme.DisplayName(id)
+	if strings.ToLower(n) != n || strings.Contains(n, " ") {
+		return n
+	}
+	words := strings.FieldsFunc(n, func(r rune) bool { return r == '-' || r == '_' })
+	for i, w := range words {
+		words[i] = strings.ToUpper(w[:1]) + w[1:]
+	}
+	if len(words) == 0 {
+		return n
+	}
+	return strings.Join(words, " ")
 }

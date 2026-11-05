@@ -77,6 +77,16 @@ func CurrentThemeID() string {
 	return t.ID
 }
 
+// DisplayName is a registered theme's name for people, "Tokyo Night
+// Storm" for tokyo_night_storm, and the id for a theme with none.
+func DisplayName(id string) string {
+	EnsureRegistry()
+	if t, ok := tint.GetTint(id); ok && t != nil && t.DisplayName != "" {
+		return t.DisplayName
+	}
+	return id
+}
+
 // ThemeIsDark reports whether a registered theme is a dark one, as its file or
 // the built-in table says.
 func ThemeIsDark(id string) (dark, ok bool) {

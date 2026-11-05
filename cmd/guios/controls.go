@@ -130,16 +130,25 @@ func menuPanel(panel ui.Element, pal *palette) ui.Element {
 }
 
 func menuRow(c *ui.Context, item ui.Element, label string, current, highlighted bool, pal *palette) {
+	menuRowWith(c, item, label, current, highlighted, pal, nil)
+}
+
+// menuRowWith is menuRow with lead, when set, drawn between the check
+// mark and the label: a theme's swatches.
+func menuRowWith(c *ui.Context, item ui.Element, label string, current, highlighted bool, pal *palette, lead func()) {
 	item.Height(menuItemH).Padding(0, 12, 0, 6).Gap(5).Radius(rRow).AlignItems(ui.Center)
 	fg := pal.text
 	if highlighted {
-		item.Background(pal.accent)
-		fg = onAccent(pal)
+		item.Background(pal.accentFill)
+		fg = pal.accentInk
 	}
 	item.TextColor(fg).Children(func() {
 		mark := ui.Icon(c, checkIcon).Size(12, 12).Shrink(0)
 		if !current {
 			mark.Opacity(0)
+		}
+		if lead != nil {
+			lead()
 		}
 		ui.Text(c, label).FontSize(fsBody).SingleLine().Ellipsis("…").MinWidth(0)
 	})
@@ -151,10 +160,14 @@ type searchMenu struct {
 	open    bool
 	query   string
 	hi      int
-	hovered string  // the item the pointer came to last
-	lit     string  // the item highlighted as the menu was last built
-	reveal  bool    // the highlighted item scrolls into view, once
-	at      ui.Rect // the button's bounds as the menu opened
+	hovered string // the item the pointer came to last
+	lit     string // the item highlighted as the menu was last built
+	reveal  bool   // the highlighted item scrolls into view, once
+	// label names an option for people where its value is an id, and
+	// lead draws beside it in the list; both optional, set by the caller.
+	label func(string) string
+	lead  func(c *ui.Context, option string)
+	at    ui.Rect // the button's bounds as the menu opened
 }
 
 // searchPopup chooses value among options as a pop-up button, whose menu
@@ -194,7 +207,11 @@ func (a *App) searchPopup(c *ui.Context, key, value string, options []string, wi
 			}
 		})
 	}
-	popupFace(c, trig, value, m.open, pal)
+	face := value
+	if m.label != nil {
+		face = m.label(value)
+	}
+	popupFace(c, trig, face, m.open, pal)
 	// The list takes what the window has below the button, or above it,
 	// where the menu goes when there is more room there, less the search
 	// field and the menu's padding.
@@ -209,12 +226,17 @@ func (a *App) searchPopup(c *ui.Context, key, value string, options []string, wi
 		var shown []string
 		exact := false
 		for _, o := range options {
-			if q == "" || strings.Contains(strings.ToLower(o), q) {
+			if q == "" || strings.Contains(strings.ToLower(o), q) || m.label != nil && strings.Contains(strings.ToLower(m.label(o)), q) {
 				shown = append(shown, o)
 			}
 			exact = exact || strings.ToLower(o) == q
 		}
 		labels := slices.Clone(shown)
+		if m.label != nil {
+			for i, o := range shown {
+				labels[i] = m.label(o)
+			}
+		}
 		if custom != nil && q != "" && !exact {
 			shown = append(shown, strings.TrimSpace(m.query))
 			labels = append(labels, custom(strings.TrimSpace(m.query)))
@@ -267,7 +289,11 @@ func (a *App) searchPopup(c *ui.Context, key, value string, options []string, wi
 				if row.Clicked() {
 					pick(i)
 				}
-				menuRow(c, row, labels[i], o == value, i == m.hi, pal)
+				var lead func()
+				if m.lead != nil {
+					lead = func() { m.lead(c, o) }
+				}
+				menuRowWith(c, row, labels[i], o == value, i == m.hi, pal, lead)
 				if reveal && i == m.hi {
 					row.ScrollIntoView()
 				}

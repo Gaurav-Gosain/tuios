@@ -180,6 +180,26 @@ var previewLooks struct {
 	sync.Mutex
 	gen   uint64
 	looks map[string]*look
+	// terms are the menu's swatches, by theme id.
+	termGen uint64
+	terms   map[string]*terminal.Theme
+}
+
+// swatchTheme is a tuios theme as a terminal theme, kept for the menu's
+// swatches, which draw every theme while the menu is open.
+func swatchTheme(id string) *terminal.Theme {
+	gen := omarchyGen.Load()
+	previewLooks.Lock()
+	defer previewLooks.Unlock()
+	if previewLooks.terms == nil || previewLooks.termGen != gen {
+		previewLooks.terms, previewLooks.termGen = map[string]*terminal.Theme{}, gen
+	}
+	th, ok := previewLooks.terms[id]
+	if !ok {
+		th = tuiosTermTheme(id)
+		previewLooks.terms[id] = th
+	}
+	return th
 }
 
 // previewLook is the look of a tuios theme for a preview, paper's for
