@@ -2,8 +2,9 @@ package session
 
 import (
 	"errors"
-	"fmt"
 	"os"
+
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 )
 
 // Whether the sidebar rail is shown, as an op.
@@ -70,7 +71,7 @@ func (s *Session) ApplySidebarVisibility(p *SidebarVisibilityPayload) (bool, err
 	snap, err := s.mutateStateLocked(func(state *SessionState) error {
 		s.notePushLocked(p.PushOrigin, p.PushSeq)
 		if !validSidebarVisibility(p.Visibility) {
-			return fmt.Errorf("sidebar visibility %q is not valid", p.Visibility)
+			return errfmt.Errorf("sidebar visibility %q is not valid", p.Visibility)
 		}
 		if (state.Sidebar != "" && p.IfAbsent) || state.Sidebar == p.Visibility {
 			return errSidebarSame
@@ -120,7 +121,7 @@ func (d *Daemon) handleSidebarVisibility(cs *connState, msg *Message) error {
 	}
 	var p SidebarVisibilityPayload
 	if err := msg.ParsePayload(&p); err != nil {
-		return fmt.Errorf("invalid sidebar payload: %w", err)
+		return errfmt.Errorf("invalid sidebar payload: %w", err)
 	}
 	d.notePushOrigin(cs, session, p.PushOrigin)
 	applied, err := session.ApplySidebarVisibility(&p)

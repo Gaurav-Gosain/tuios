@@ -2,10 +2,11 @@ package session
 
 import (
 	"encoding/json"
-	"fmt"
 	"strings"
 	"unicode"
 	"unicode/utf8"
+
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 )
 
 // Return notes.
@@ -95,7 +96,7 @@ func (d *Daemon) verbGetNote(cs *connState, params json.RawMessage) (any, *verbE
 	}
 	idx, err := findWindowStateIndex(state.Windows, p.Window)
 	if err == nil && idx < 0 {
-		err = fmt.Errorf("no window found matching %q", p.Window)
+		err = errfmt.Errorf("no window found matching %q", p.Window)
 	}
 	if err != nil {
 		return nil, mapResolveErr(err, sess)

@@ -7,6 +7,8 @@ import (
 
 	"charm.land/lipgloss/v2"
 	"charm.land/lipgloss/v2/table"
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
+	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 	"github.com/Gaurav-Gosain/tuios/internal/plural"
 )
 
@@ -59,8 +61,8 @@ func printHookList(raw json.RawMessage) error {
 		Events         []string  `json:"events"`
 		ClientAttached bool      `json:"client_attached"`
 	}
-	if err := json.Unmarshal(raw, &res); err != nil {
-		return fmt.Errorf("failed to parse response: %w", err)
+	if err := jsonx.Unmarshal(raw, &res); err != nil {
+		return errfmt.Errorf("failed to parse response: %w", err)
 	}
 	if len(res.Hooks) == 0 {
 		fmt.Println("No hooks are registered. Add a [hooks] table to your config.")

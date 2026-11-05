@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -202,5 +203,86 @@ func TestPluginsFromRelease(t *testing.T) {
 	base = third
 	if out, err := cli(next, "plugins", "install", "--yes"); err == nil || !strings.Contains(out, "different from the ones plugins.lock pins") {
 		t.Errorf("install from plugins.lock after the asset changed: %v\n%s", err, out)
+	}
+}
+
+// On a release build, a name of the release installs the release's plugin,
+// also in a folder that holds a folder of that name. That folder installs as
+// ./NAME, and uninstall by the name there removes it. A dev build has no
+// release to take, so there the name keeps meaning the folder.
+//
+// The negative controls are in NEGATIVE_CONTROLS.md, "The sketch plugin",
+// "The plan names the sketch program, and a release name is the release".
+func TestPluginsReleaseNameBeatsAFolder(t *testing.T) {
+	var rel fakeReleases
+	srv := httptest.NewServer(&rel)
+	defer srv.Close()
+	t.Setenv("TUIOS_RELEASE_API", srv.URL)
+	rel.add(t, "v0.99.0", nil, nil)
+	stamped := stampedTuios(t, "0.99.0")
+	base := t.TempDir()
+	writeConfig(t, base, "")
+	killDaemon(t, base)
+
+	// A folder pr-status with the release plugin's id, whose build leaves a
+	// file outside it.
+	dir := t.TempDir()
+	marker := filepath.Join(t.TempDir(), "built")
+	if err := os.Mkdir(filepath.Join(dir, "pr-status"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	writeFiles(t, filepath.Join(dir, "pr-status"), map[string]string{"tuios-plugin.toml": "api = 1\nid = \"tuios.pr-status\"\nname = \"PR status\"\nversion = \"0.0.1\"\n\n[[build]]\ncommand = [\"touch\", " + strconv.Quote(marker) + "]\n"})
+	cli := func(args ...string) (string, error) {
+		t.Helper()
+		cmd := exec.Command(stamped, args...)
+		cmd.Dir = dir
+		cmd.Env = append(os.Environ(), "SHELL=/bin/sh")
+		for _, key := range xdgKeys {
+			cmd.Env = append(cmd.Env, key+"="+xdgDir(base, key))
+		}
+		out, err := cmd.CombinedOutput()
+		return string(out), err
+	}
+	lockPath := filepath.Join(xdgDir(base, "XDG_CONFIG_HOME"), "tuios", "plugins.lock")
+	lock := func() string { b, _ := os.ReadFile(lockPath); return string(b) }
+	fromFolder := func() bool {
+		for line := range strings.Lines(lock()) {
+			line = strings.TrimSpace(line)
+			if strings.HasPrefix(line, "source = 'path:") && strings.HasSuffix(line, "/pr-status'") {
+				return true
+			}
+		}
+		return false
+	}
+	built := func() bool { _, err := os.Stat(marker); return err == nil }
+
+	if out, err := cli("new", "rel", "--detach"); err != nil {
+		t.Fatalf("create session: %v\n%s", err, out)
+	}
+	out, err := cli("plugins", "install", "pr-status", "--yes")
+	if err != nil || !strings.Contains(lock(), `source = 'release:pr-status'`) {
+		t.Errorf("install pr-status in a folder that holds pr-status/: %v\n%s\n%s", err, out, lock())
+	}
+	if built() {
+		t.Errorf("install pr-status built the folder pr-status/:\n%s", out)
+	}
+
+	// The folder, given as ./pr-status, replaces the release's plugin.
+	if err := os.Remove(marker); err != nil && !os.IsNotExist(err) {
+		t.Fatal(err)
+	}
+	out, err = cli("plugins", "install", "./pr-status", "--yes", "--replace")
+	if err != nil || !fromFolder() || !built() {
+		t.Errorf("install ./pr-status: %v, built %v\n%s\n%s", err, built(), out, lock())
+	}
+	out, err = cli("plugins", "uninstall", "pr-status", "--yes")
+	if err != nil || fromFolder() {
+		t.Errorf("uninstall pr-status in that folder: %v\n%s\n%s", err, out, lock())
+	}
+
+	// A dev build installs the folder, as before.
+	out, err = tuiosCLIIn(t, base, dir, "plugins", "install", "pr-status", "--yes")
+	if err != nil || !fromFolder() {
+		t.Errorf("install pr-status on a dev build: %v\n%s\n%s", err, out, lock())
 	}
 }

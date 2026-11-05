@@ -1259,7 +1259,7 @@ func (d *Daemon) askAgent(cs *connState, sess *Session, state *SessionState, tar
 
 	// Step four: wait for the target to have dealt with it.
 	stall := durationOr(p.StallTimeout, d.promptStall())
-	settledBy, endState := d.waitAgentSettled(sess, target.ID, pty, gate, settle, timeout, stall)
+	settledBy, endState := d.waitAgentSettled(sess, target.ID, pty, gate, settle, timeout, stall, gone)
 
 	after := pty.CaptureContent(true, false)
 	reply, truncated := tailLines(after, before, lines)
@@ -1495,7 +1495,10 @@ func (d *Daemon) waitAgentRest(sess *Session, windowID string, timeout time.Dura
 // question, because a pane that never took it is also quiet and also at rest.
 // If the gate has seen nothing when stall runs out, the wait ends with
 // askSettledStalled. See prompt_gate.go.
-func (d *Daemon) waitAgentSettled(sess *Session, windowID string, pty *PTY, gate *promptGate, settle, timeout, stall time.Duration) (string, string) {
+//
+// gone ends the wait with askSettledCallerGone: the ask holds the pane's turn
+// while it waits, so a caller that left must not keep it until timeout.
+func (d *Daemon) waitAgentSettled(sess *Session, windowID string, pty *PTY, gate *promptGate, settle, timeout, stall time.Duration, gone <-chan struct{}) (string, string) {
 	sentAt := gate.submittedAt
 	sub := d.events.subscribe(eventFilter{
 		session: sess.Name(),
@@ -1548,6 +1551,8 @@ func (d *Daemon) waitAgentSettled(sess *Session, windowID string, pty *PTY, gate
 			return "timeout", currentState()
 		case <-d.ctx.Done():
 			return "shutdown", currentState()
+		case <-gone:
+			return askSettledCallerGone, currentState()
 		case <-sub.ch:
 			resetSettle()
 		case <-poll.C:
@@ -1601,6 +1606,10 @@ func (d *Daemon) waitAgentSettled(sess *Session, windowID string, pty *PTY, gate
 // nothing. It never reaches a caller as a result: ask-agent turns it into
 // prompt_stalled.
 const askSettledStalled = "stalled"
+
+// askSettledCallerGone is the settled_by of an ask whose caller went away
+// after the question was typed. No one reads the reply.
+const askSettledCallerGone = "caller-gone"
 
 // contentLines counts a capture up to its last line with anything on it.
 //

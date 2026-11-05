@@ -2,17 +2,17 @@ package client
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
-	"fmt"
 	"os"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"github.com/Gaurav-Gosain/tuios/internal/guios/git"
 	"github.com/Gaurav-Gosain/tuios/internal/guios/proto"
+	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 )
 
@@ -22,7 +22,7 @@ import (
 var ErrNeedsTUI = errors.New("this action needs the tuios TUI on the session")
 
 func errNotYet(what string) error {
-	return fmt.Errorf("%s is not available with the tuios daemon yet", what)
+	return errfmt.Errorf("%s is not available with the tuios daemon yet", what)
 }
 
 var watchOnce sync.Map // *Client to *sync.Once
@@ -328,7 +328,7 @@ func (c *Client) dispatch(method string, params any) (any, error) {
 	case "git.changes", "git.file", "git.revert":
 		return c.gitDispatch(method, params)
 	}
-	return nil, fmt.Errorf("unknown method %q", method)
+	return nil, errfmt.Errorf("unknown method %q", method)
 }
 
 // localWrite serves the methods that write files on this machine.
@@ -365,18 +365,18 @@ func (c *Client) localWrite(method string, params any) (any, error) {
 		}
 		return pasteFile(p)
 	}
-	return nil, fmt.Errorf("unknown method %q", method)
+	return nil, errfmt.Errorf("unknown method %q", method)
 }
 
 func (c *Client) gitDispatch(method string, params any) (any, error) {
 	switch method {
 	case "git.changes", "git.file", "git.revert":
 		if c.host != "" {
-			return nil, fmt.Errorf("changes of a pane on %s are not available yet", c.host)
+			return nil, errfmt.Errorf("changes of a pane on %s are not available yet", c.host)
 		}
 		return c.gitCall(method, params)
 	}
-	return nil, fmt.Errorf("unknown method %q", method)
+	return nil, errfmt.Errorf("unknown method %q", method)
 }
 
 // kickState has the state sent anew, as after an event.
@@ -414,7 +414,7 @@ func (c *Client) create(p proto.CreateParams) (proto.Session, error) {
 		Name string `json:"session"`
 		ID   string `json:"session_id"`
 	}
-	_ = json.Unmarshal(raw, &res)
+	_ = jsonx.Unmarshal(raw, &res)
 	if space := c.spaceOf(p.Project); space != "" && space != defaultProject {
 		_, _ = c.verb("set-session-space", map[string]any{"session": res.Name, "space": space})
 	}
@@ -553,7 +553,7 @@ func (c *Client) sessionNamed(name, id string) (proto.Session, error) {
 			return s, nil
 		}
 	}
-	return proto.Session{}, fmt.Errorf("the session %q did not appear", name)
+	return proto.Session{}, errfmt.Errorf("the session %q did not appear", name)
 }
 
 func (c *Client) paneDir(sid, pane string) string {
@@ -596,7 +596,7 @@ func (c *Client) gitCall(method string, params any) (any, error) {
 			return nil, err
 		}
 		if !changed {
-			return nil, fmt.Errorf("%s has no changes to revert", p.Path)
+			return nil, errfmt.Errorf("%s has no changes to revert", p.Path)
 		}
 		if err := r.Write(p.Path, p.Hash, p.Text); err != nil {
 			return nil, err
@@ -635,7 +635,7 @@ func (c *Client) gitCall(method string, params any) (any, error) {
 func (c *Client) repoOf(ctx context.Context, pane, base string) (git.Repo, string, string, error) {
 	sid, _, ok := c.st.lookup(pane)
 	if !ok {
-		return git.Repo{}, "", "", fmt.Errorf("no session or pane %q", pane)
+		return git.Repo{}, "", "", errfmt.Errorf("no session or pane %q", pane)
 	}
 	dir := c.paneDir(sid, pane)
 	if dir == "" {

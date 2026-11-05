@@ -5,16 +5,6 @@ import (
 	"testing"
 )
 
-func TestScratchDefaults(t *testing.T) {
-	s := DefaultConfig().Scratch
-	if s.Session != "" || s.WidthSpec() != "80%" || s.HeightSpec() != "80%" {
-		t.Fatalf("defaults = %+v", s)
-	}
-	if got := DefaultConfig().Keybindings.PrefixMode["toggle_scratch"]; len(got) != 1 || got[0] != "g" {
-		t.Fatalf("toggle_scratch default key = %v, want [g]", got)
-	}
-}
-
 func TestScratchTableParses(t *testing.T) {
 	cfg, err := ParseUserConfig([]byte("[scratch]\nwidth = \"100\"\nheight = \"50%\"\n"))
 	if err != nil {

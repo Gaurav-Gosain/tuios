@@ -590,6 +590,11 @@ func (m *OS) fileRowMenu(t fileMenuTarget) (string, []ContextMenuItem) {
 	if t.Name != "" && !t.IsDir && !t.Up {
 		rows = append(rows, m.item(glyphFile, "Edit", "file_edit", !canOpen))
 	}
+	// Live on a far listing too, so the row says why it can not open there
+	// instead of being a dimmed row with no reason.
+	if t.Name != "" && !t.Up {
+		rows = append(rows, m.item(glyphFile, "Open with system", "file_open_system", !canOpen))
+	}
 	// A file's first row already copies its path. A folder's opens it, so the
 	// copy is a row of its own (issue #414).
 	if t.Name != "" && t.IsDir && !t.Up {

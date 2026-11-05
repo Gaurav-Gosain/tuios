@@ -34,6 +34,15 @@ the change on screen; when false, `reason` says whether nobody is attached (it
 applies on the next attach) or the client refused it. `get-config` answers with
 the value in effect and its `source`.
 
+A change you make for a moment, such as a hook that hides the rail on one
+workspace, takes `--no-save`. The client applies it and no config file gets
+it, now or on a later save. It lasts until the client exits or the option is
+set again without `--no-save`:
+
+```sh
+tuios set-config --no-save appearance.sidebar.enabled false
+```
+
 Everything here is also reachable by the person on the settings page (`,` in
 window mode), whose rows come from the same registry. Say so when you change
 something for someone: there is a control they can adjust.
@@ -193,6 +202,11 @@ question about the screen. Do not change them unless the person asks.
   Markdown, a picture, a PDF page or a folder. `j` and `k` move it to the
   next row. `space` or `esc` closes it. A row of a listing on another machine
   is read on that machine, and needs the `files` grant there.
+- In the rail's files section, `o` opens the row with the system opener
+  (`xdg-open`, `open`, `wslview`, or the Windows handler), or with the
+  command of the first `[[files.open]]` rule that matches. It opens only
+  files on the machine of the client. For a row on another machine, or a
+  remote client, it says so and starts nothing.
 - When the last pane on the workspace on screen closes, the session shows
   the workspace the person came from: the one that ran `xpanes`, else the
   ones shown before, else the lowest with panes. `workspaces.return_when_empty
@@ -388,7 +402,7 @@ popup; `tuios popup --dim` overrides it.
 
 `appearance.modal_dim` (0 to 90, default 30) darkens the screen behind an open
 panel such as the command palette; 0 turns it off. `appearance.motion` is
-`none`, `basic` (window slides and the copy sweep) or `full` (the default: also the panel
+`none`, `basic` (window slides, workspace slides and the copy sweep) or `full` (the default: also the panel
 fade-in and the shimmer on a working agent's rail row). The old
 `animations_enabled` still works and maps `false` to `none`.
 

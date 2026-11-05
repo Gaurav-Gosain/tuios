@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"tuios.dev/plot"
 	sketch "tuios.dev/sketch/core"
 	sketchtext "tuios.dev/sketch/text"
@@ -286,7 +287,7 @@ func readPlotTable(data []byte, name string, noHeader bool) (*plotTable, error) 
 				break
 			}
 			if err != nil {
-				return nil, fmt.Errorf("cannot read the CSV: %w", err)
+				return nil, errfmt.Errorf("cannot read the CSV: %w", err)
 			}
 			if len(rec) == 1 && strings.TrimSpace(rec[0]) == "" {
 				continue
@@ -411,7 +412,7 @@ func (t *plotTable) pick(list string) error {
 			for _, s := range t.series {
 				names = append(names, s.name)
 			}
-			return fmt.Errorf("no number column %q. The number columns are: %s", want, strings.Join(names, ", "))
+			return errfmt.Errorf("no number column %q. The number columns are: %s", want, strings.Join(names, ", "))
 		}
 	}
 	t.series = out
@@ -517,7 +518,7 @@ func (t *plotTable) draw(o plotOptions, m plot.Mode, w, termRows int) (*plot.Gri
 		h := fit(int(math.Round(float64(w) * 144 / 360 / 2.2 * 2)))
 		return withLegend(mp.Draw(w, max(h-1, 2), m), mp.Legend(m), m), nil
 	}
-	return nil, fmt.Errorf("unknown kind %q", o.kind)
+	return nil, errfmt.Errorf("unknown kind %q", o.kind)
 }
 
 // withLegend puts a legend row above g.

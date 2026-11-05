@@ -3,12 +3,13 @@ package session
 import (
 	"bufio"
 	"encoding/binary"
-	"encoding/json"
-	"fmt"
 	"io"
 	"net"
 	"sync"
 	"time"
+
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
+	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 )
 
 // The client end of stream-pane, for a viewer that is not a tuios client.
@@ -76,11 +77,11 @@ func (c *VerbClient) OpenPaneStream(params map[string]any) (*PaneStream, PaneStr
 	if err != nil {
 		return nil, reply, err
 	}
-	if err := json.Unmarshal(raw, &reply); err != nil {
-		return nil, reply, fmt.Errorf("failed to read the stream-pane reply: %w", err)
+	if err := jsonx.Unmarshal(raw, &reply); err != nil {
+		return nil, reply, errfmt.Errorf("failed to read the stream-pane reply: %w", err)
 	}
 	c.callMu.Lock()
-	c.broken = fmt.Errorf("the connection carries a pane stream")
+	c.broken = errfmt.Errorf("the connection carries a pane stream")
 	c.callMu.Unlock()
 	_ = c.conn.SetReadDeadline(time.Time{})
 	_ = c.conn.SetWriteDeadline(time.Time{})
@@ -95,7 +96,7 @@ func (s *PaneStream) ReadFrame() (byte, []byte, error) {
 	}
 	n := binary.BigEndian.Uint32(head[1:])
 	if n > paneFrameMax {
-		return 0, nil, fmt.Errorf("a %c frame of %d bytes is larger than any the daemon sends", head[0], n)
+		return 0, nil, errfmt.Errorf("a %c frame of %d bytes is larger than any the daemon sends", head[0], n)
 	}
 	payload := make([]byte, n)
 	if _, err := io.ReadFull(s.r, payload); err != nil {
@@ -150,7 +151,7 @@ func (s *PaneStream) LeaseCell(cols, rows, cellW, cellH int) error {
 
 // Viewer replaces the stream's viewer report, as after a theme change.
 func (s *PaneStream) Viewer(r ViewerReport) error {
-	b, err := json.Marshal(r)
+	b, err := jsonx.Marshal(r)
 	if err != nil {
 		return err
 	}

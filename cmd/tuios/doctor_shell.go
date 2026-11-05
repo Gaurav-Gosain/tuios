@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/spf13/cobra"
 )
@@ -113,7 +114,7 @@ func liveShellPanes(only string) ([]shellPane, bool) {
 				Name string `json:"name"`
 			} `json:"sessions"`
 		}
-		if json.Unmarshal(raw, &sessions) != nil {
+		if jsonx.Unmarshal(raw, &sessions) != nil {
 			return nil, true
 		}
 		names = names[:0]
@@ -137,7 +138,7 @@ func liveShellPanes(only string) ([]shellPane, bool) {
 				PromptOnly    bool    `json:"prompt_marks_only"`
 			} `json:"windows"`
 		}
-		if json.Unmarshal(raw, &res) != nil {
+		if jsonx.Unmarshal(raw, &res) != nil {
 			continue
 		}
 		for _, w := range res.Windows {

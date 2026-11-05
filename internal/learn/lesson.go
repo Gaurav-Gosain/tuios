@@ -9,6 +9,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"github.com/Gaurav-Gosain/tuios/internal/learn/lessons"
 )
 
@@ -165,7 +166,7 @@ func (r *Lessons) Command(name string, args ...string) (any, error) {
 		from := 0
 		if s := arg(1); s != "" {
 			if _, err := fmt.Sscan(s, &from); err != nil {
-				return nil, fmt.Errorf("start: from %q is not a number", s)
+				return nil, errfmt.Errorf("start: from %q is not a number", s)
 			}
 		}
 		return nil, r.start(arg(0), from)
@@ -194,7 +195,7 @@ func (r *Lessons) Command(name string, args ...string) (any, error) {
 			return append([]any(nil), r.log...), nil
 		}
 	default:
-		return nil, fmt.Errorf("unknown lesson command %q", name)
+		return nil, errfmt.Errorf("unknown lesson command %q", name)
 	}
 	return nil, nil
 }
@@ -226,10 +227,10 @@ func (r *Lessons) State() map[string]any {
 func (r *Lessons) start(id string, from int) error {
 	t := r.file.Find(id)
 	if t == nil {
-		return fmt.Errorf("no track %q", id)
+		return errfmt.Errorf("no track %q", id)
 	}
 	if from < 0 || from > len(t.Steps) {
-		return fmt.Errorf("start: step %d is outside the track", from)
+		return errfmt.Errorf("start: step %d is outside the track", from)
 	}
 	r.mu.Lock()
 	r.gen++

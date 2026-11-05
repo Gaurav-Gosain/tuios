@@ -8,6 +8,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
+	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 	"github.com/spf13/cobra"
 )
 
@@ -74,8 +76,8 @@ func runAskHuman(o askHumanOptions) error {
 // anything else on errs with a status that says what happened.
 func printAskHuman(out, errs io.Writer, raw json.RawMessage) error {
 	var res askHumanResult
-	if err := json.Unmarshal(raw, &res); err != nil {
-		return fmt.Errorf("failed to parse response: %w", err)
+	if err := jsonx.Unmarshal(raw, &res); err != nil {
+		return errfmt.Errorf("failed to parse response: %w", err)
 	}
 	switch res.Status {
 	case "answered":
@@ -132,7 +134,7 @@ without one (dismissed, superseded, or its pane closed).`,
 				o.question = args[0]
 			}
 			if o.requestID == "" && (o.question == "" || len(o.options) == 0) {
-				return fmt.Errorf("ask-human needs a question and at least one -o answer, e.g. tuios ask-human 'Deploy?' -o yes -o no")
+				return errfmt.Errorf("ask-human needs a question and at least one -o answer, e.g. tuios ask-human 'Deploy?' -o yes -o no")
 			}
 			return runAskHuman(o)
 		},

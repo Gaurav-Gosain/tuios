@@ -4,13 +4,14 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
-	"fmt"
 	"io"
 	"os"
 	"path/filepath"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 )
 
 // This file holds the session stash: a daemon-owned file store an agent can put
@@ -213,7 +214,7 @@ func (s *stashStore) put(sessionID, src string, referenced func() map[string]boo
 		return stashResult{}, errStashNotRegular
 	}
 	if info.Size() > stashMaxFileBytes {
-		return stashResult{}, fmt.Errorf("file is %d bytes and the cap is %d bytes", info.Size(), stashMaxFileBytes)
+		return stashResult{}, errfmt.Errorf("file is %d bytes and the cap is %d bytes", info.Size(), stashMaxFileBytes)
 	}
 
 	f, err := os.Open(src)
@@ -266,7 +267,7 @@ func (s *stashStore) putFrom(sessionID, src string, r io.Reader, referenced func
 		return stashResult{}, err
 	}
 	if written > stashMaxFileBytes {
-		return stashResult{}, fmt.Errorf("file is larger than %d bytes", stashMaxFileBytes)
+		return stashResult{}, errfmt.Errorf("file is larger than %d bytes", stashMaxFileBytes)
 	}
 	if err := tmp.Close(); err != nil {
 		return stashResult{}, err
@@ -306,7 +307,7 @@ func (s *stashStore) putFrom(sessionID, src string, r io.Reader, referenced func
 		}
 		evicted = b.evict(written, keep)
 		if b.bytes+written > stashMaxSessionBytes {
-			return stashResult{}, fmt.Errorf(
+			return stashResult{}, errfmt.Errorf(
 				"this session's stash holds %d bytes of %d and nothing else can be dropped",
 				b.bytes, stashMaxSessionBytes)
 		}

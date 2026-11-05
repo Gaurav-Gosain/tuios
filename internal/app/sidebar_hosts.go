@@ -1,7 +1,6 @@
 package app
 
 import (
-	"encoding/json"
 	"strconv"
 	"strings"
 	"time"
@@ -9,6 +8,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/federation"
+	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/sessiontree"
@@ -230,7 +230,7 @@ func refreshFederationCmd() tea.Cmd {
 				} `json:"sessions"`
 			} `json:"hosts"`
 		}
-		if json.Unmarshal(raw, &res) != nil {
+		if jsonx.Unmarshal(raw, &res) != nil {
 			return FederationHostsMsg{}
 		}
 
@@ -297,7 +297,7 @@ func hostStatusReports(client *session.VerbClient) ([]federation.HostReport, boo
 		EventsPush bool                    `json:"events_push"`
 		Load       *federation.Load        `json:"load"`
 	}
-	if json.Unmarshal(raw, &res) != nil {
+	if jsonx.Unmarshal(raw, &res) != nil {
 		return nil, false, federation.Load{}
 	}
 	var load federation.Load

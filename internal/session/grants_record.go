@@ -15,6 +15,7 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/atomicfile"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/federation"
+	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 )
 
 // What panes held on the default when the daemon last ran.
@@ -41,7 +42,7 @@ func appliedGrantsPath() string {
 
 // recordAppliedGrants writes the default now in force.
 func (d *Daemon) recordAppliedGrants(r config.ResolvedPermissions) {
-	data, err := json.Marshal(appliedGrants{Strict: r.Strict, Grants: r.Grants})
+	data, err := jsonx.Marshal(appliedGrants{Strict: r.Strict, Grants: r.Grants})
 	if err != nil {
 		return
 	}
@@ -66,7 +67,7 @@ func (d *Daemon) checkGrantsSinceLastRun() {
 	now := d.manager.grants.inForce()
 	if data, err := os.ReadFile(appliedGrantsPath()); err == nil {
 		var prev appliedGrants
-		if json.Unmarshal(data, &prev) == nil {
+		if jsonx.Unmarshal(data, &prev) == nil {
 			was := policyDefaults(config.ResolvedPermissions{Strict: prev.Strict, Grants: prev.Grants})
 			if !was.Covers(policyDefaults(now)) {
 				d.grantsWidenedAtStart.Store(true)

@@ -9,6 +9,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 )
 
 // The key tables are built on first use, not at package init, so a tuios
@@ -168,14 +169,14 @@ var (
 func CheckChord(chord string) error {
 	keyTables()
 	if chord == "" {
-		return fmt.Errorf("an empty key")
+		return errfmt.Errorf("an empty key")
 	}
 	parts := ChordParts(chord)
 	base := parts[len(parts)-1]
 	seen := map[string]bool{}
 	for _, m := range parts[:len(parts)-1] {
 		if !chordMods[m] || seen[m] {
-			return fmt.Errorf("key %q: %q is not a modifier, or it comes twice", chord, m)
+			return errfmt.Errorf("key %q: %q is not a modifier, or it comes twice", chord, m)
 		}
 		seen[m] = true
 	}
@@ -185,7 +186,7 @@ func CheckChord(chord string) error {
 	if f := strings.TrimPrefix(base, "f"); f != base && len(f) <= 2 && strings.Trim(f, "0123456789") == "" {
 		return nil
 	}
-	return fmt.Errorf("key %q: %q is not a character or a named key", chord, base)
+	return errfmt.Errorf("key %q: %q is not a character or a named key", chord, base)
 }
 
 func initChordMods() {

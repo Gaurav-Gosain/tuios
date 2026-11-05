@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"github.com/Gaurav-Gosain/tuios/internal/plural"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 )
@@ -55,7 +56,7 @@ func keybindsUnbind(action, key string) error {
 
 	note, err := config.SaveUserConfig(cfg)
 	if err != nil {
-		return fmt.Errorf("failed to save config: %w", err)
+		return errfmt.Errorf("failed to save config: %w", err)
 	}
 	printWriteNote(note)
 
@@ -86,7 +87,7 @@ func keybindsFree(key string) error {
 	if len(removed) > 0 {
 		note, err := config.SaveUserConfig(cfg)
 		if err != nil {
-			return fmt.Errorf("failed to save config: %w", err)
+			return errfmt.Errorf("failed to save config: %w", err)
 		}
 		printWriteNote(note)
 		fmt.Printf("Took %s off %s:\n", key, plural.Count(len(removed), "action"))

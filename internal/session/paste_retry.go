@@ -2,10 +2,11 @@ package session
 
 import (
 	"errors"
-	"fmt"
 	"log"
 	"net"
 	"time"
+
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 )
 
 // A large input from the client, such as a paste, can be refused by the
@@ -137,7 +138,7 @@ func (c *TUIClient) connLost() error {
 		return nil
 	}
 	if err := c.lostErr.Load(); err != nil {
-		return fmt.Errorf("the connection to the daemon was lost: %w", *err)
+		return errfmt.Errorf("the connection to the daemon was lost: %w", *err)
 	}
 	return net.ErrClosed
 }

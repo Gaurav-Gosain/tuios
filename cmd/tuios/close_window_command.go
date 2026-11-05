@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"github.com/spf13/cobra"
 )
 
@@ -53,7 +54,7 @@ func runCloseWindow(sessionName, window string, jsonOutput bool) error {
 	}
 	defer t.Close()
 	if t.window == "" {
-		return fmt.Errorf("name the pane to close")
+		return errfmt.Errorf("name the pane to close")
 	}
 	raw, err := t.client.Call("close-window", t.params(map[string]any{"window": nil}))
 	if err != nil {

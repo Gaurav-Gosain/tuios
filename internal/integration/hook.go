@@ -14,9 +14,10 @@
 package integration
 
 import (
-	"encoding/json"
 	"strconv"
 	"strings"
+
+	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 )
 
 // Harness ids, as the manifests in internal/harness name them.
@@ -342,7 +343,7 @@ func contextFor(id, event string) ContextOutput {
 // ContextJSONOutput is the stdout that adds text to the agent's context for
 // an event read as ContextJSON.
 func ContextJSONOutput(event, text string) string {
-	out, _ := json.Marshal(map[string]any{
+	out, _ := jsonx.Marshal(map[string]any{
 		"hookSpecificOutput": map[string]any{
 			"hookEventName":     event,
 			"additionalContext": text,
@@ -413,7 +414,7 @@ func Translate(harnessName string, in Input) Decision {
 	if !strings.HasPrefix(trimmed, "{") {
 		return skip(id, in.Event, "payload is not a JSON object")
 	}
-	if err := json.Unmarshal([]byte(trimmed), &payload); err != nil {
+	if err := jsonx.Unmarshal([]byte(trimmed), &payload); err != nil {
 		return skip(id, in.Event, "payload is not a JSON object: "+err.Error())
 	}
 	p := fields(payload)

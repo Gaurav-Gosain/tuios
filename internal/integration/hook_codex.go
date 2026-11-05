@@ -6,6 +6,8 @@ import (
 	"io"
 	"os"
 	"strings"
+
+	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 )
 
 // The Codex event map. Sources: the Codex hooks guide
@@ -169,7 +171,7 @@ func codexAutoReviews(path string) bool {
 			ApprovalsReviewer string          `json:"approvals_reviewer"`
 		} `json:"payload"`
 	}
-	if json.Unmarshal(line, &rec) != nil || rec.Type != "turn_context" {
+	if jsonx.Unmarshal(line, &rec) != nil || rec.Type != "turn_context" {
 		return false
 	}
 	switch rec.Payload.ApprovalsReviewer {
@@ -178,11 +180,11 @@ func codexAutoReviews(path string) bool {
 		return false
 	}
 	var policy string
-	if json.Unmarshal(rec.Payload.ApprovalPolicy, &policy) == nil {
+	if jsonx.Unmarshal(rec.Payload.ApprovalPolicy, &policy) == nil {
 		return policy == "on-request"
 	}
 	var granular map[string]json.RawMessage
-	if json.Unmarshal(rec.Payload.ApprovalPolicy, &granular) == nil {
+	if jsonx.Unmarshal(rec.Payload.ApprovalPolicy, &granular) == nil {
 		_, ok := granular["granular"]
 		return ok
 	}

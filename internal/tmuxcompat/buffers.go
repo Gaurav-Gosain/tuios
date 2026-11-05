@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"tuios.dev/vt"
 )
 
@@ -153,7 +154,7 @@ func (s *Shim) writeBuffer(name, data string) error {
 		return nil
 	}
 	if len(data) > maxBufferBytes {
-		return fmt.Errorf("buffer is too large: %d bytes, the limit is %d", len(data), maxBufferBytes)
+		return errfmt.Errorf("buffer is too large: %d bytes, the limit is %d", len(data), maxBufferBytes)
 	}
 	if s.daemonBuffers() {
 		return s.daemonBufferWrite(name, data, false)
@@ -336,14 +337,14 @@ func (s *Shim) loadBuffer(name string, args []string) (string, []string, error) 
 		}
 		f, err := os.Open(path)
 		if err != nil {
-			return OutcomeError, detail, fmt.Errorf("%s: %w", p.Args[0], errors.Unwrap(err))
+			return OutcomeError, detail, errfmt.Errorf("%s: %w", p.Args[0], errors.Unwrap(err))
 		}
 		defer f.Close()
 		r = f
 	}
 	data, err := io.ReadAll(io.LimitReader(r, maxBufferBytes+1))
 	if err != nil {
-		return OutcomeError, detail, fmt.Errorf("load-buffer: %w", err)
+		return OutcomeError, detail, errfmt.Errorf("load-buffer: %w", err)
 	}
 	buf, ok := p.Value('b')
 	if !ok {
@@ -352,7 +353,7 @@ func (s *Shim) loadBuffer(name string, args []string) (string, []string, error) 
 		}
 	}
 	if err := s.writeBuffer(buf, string(data)); err != nil {
-		return OutcomeError, detail, fmt.Errorf("load-buffer: %w", err)
+		return OutcomeError, detail, errfmt.Errorf("load-buffer: %w", err)
 	}
 	return outcomeFor(detail), detail, nil
 }
@@ -385,7 +386,7 @@ func (s *Shim) setBuffer(name string, args []string) (string, []string, error) {
 			// The daemon appends in one step, so nothing set between a
 			// read and a write here is lost.
 			if err := s.daemonBufferWrite(buf, data, true); err != nil {
-				return OutcomeError, detail, fmt.Errorf("set-buffer: %w", err)
+				return OutcomeError, detail, errfmt.Errorf("set-buffer: %w", err)
 			}
 			return outcomeFor(detail), detail, nil
 		}
@@ -396,7 +397,7 @@ func (s *Shim) setBuffer(name string, args []string) (string, []string, error) {
 		data = old + data
 	}
 	if err := s.writeBuffer(buf, data); err != nil {
-		return OutcomeError, detail, fmt.Errorf("set-buffer: %w", err)
+		return OutcomeError, detail, errfmt.Errorf("set-buffer: %w", err)
 	}
 	return outcomeFor(detail), detail, nil
 }
@@ -431,7 +432,7 @@ func (s *Shim) pasteBuffer(name string, args []string) (string, []string, error)
 		return OutcomeError, nil, err
 	}
 	if !found {
-		return OutcomeError, nil, fmt.Errorf("no buffer %s", buf)
+		return OutcomeError, nil, errfmt.Errorf("no buffer %s", buf)
 	}
 	v, err := s.loadView()
 	if err != nil {
@@ -498,7 +499,7 @@ func (s *Shim) deleteBuffer(name string, args []string) (string, []string, error
 	if _, found, err := s.readBuffer(buf); err != nil {
 		return OutcomeError, nil, err
 	} else if !found {
-		return OutcomeError, nil, fmt.Errorf("no buffer %s", buf)
+		return OutcomeError, nil, errfmt.Errorf("no buffer %s", buf)
 	}
 	if err := s.removeBuffer(buf); err != nil {
 		return OutcomeError, nil, err

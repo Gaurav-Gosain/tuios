@@ -3,7 +3,6 @@ package transcriptview
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -21,6 +20,7 @@ import (
 	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/childproc"
+	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 	"github.com/Gaurav-Gosain/tuios/internal/transcript"
 )
 
@@ -267,7 +267,7 @@ func readServiceFile(path string) (openCodeService, *url.URL, error) {
 	if err != nil {
 		return svc, nil, err
 	}
-	if json.Unmarshal(data, &svc) != nil || svc.Password == "" {
+	if jsonx.Unmarshal(data, &svc) != nil || svc.Password == "" {
 		return svc, nil, ErrService
 	}
 	u, err := url.Parse(svc.URL)

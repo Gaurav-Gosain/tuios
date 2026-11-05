@@ -196,6 +196,15 @@ is an answer, and each entry says which.
 `exited`, `exit_code` and `signal` once its process exited, and `keep_open`
 when the window stays after the exit. Other entries keep their shape.
 
+**herdr's `pane.focus` and `agent.focus` show the pane's session.** A
+focused pane in a session that no client shows now moves the attached client
+to that session, as `workspace.focus` does, so the pane is on screen. Before,
+the pane was focused in its session and the client stayed where it was.
+The herdr stream also sends `workspace_focused`, `tab_focused` and
+`pane_focused` when a client moves to another session, once each and in that
+order, as herdr does when its active workspace changes. A window focused in a
+session no client shows sends no `pane_focused`.
+
 **The new event `agent-seen`** says a finished pane was looked at, or marked
 unread again. A subscriber that names no types gets it.
 
@@ -209,6 +218,9 @@ changes for a herdr client:
 - `pane.agent_status_changed` fires when a pane is looked at or marked unread.
 - `pane.focus` and `agent.focus` mark the pane seen, with or without a client.
 - `agent.wait`, `events.wait` and `agent.prompt` with `wait` match that status.
+
+**The new verb [report-program-status](#report-program-status)** applies an
+OSC 7501 report to a pane. `tuios status` sends it when it has no terminal.
 
 **The new verb [list-routes](#list-routes)** lists this machine's addresses.
 
@@ -287,6 +299,16 @@ session works on.
 `agents`, one entry per agent pane: `id`, `title`, `state`, `state_at`,
 `harness`, `message`, `kind`, `meta` and `subagents`, at most 32 a session.
 The agents view draws them as rows.
+
+**list-hosts names the ssh failure of a host it cannot reach.** A row with
+status `unreachable` gains `failure`, `fix` and, for some, `fix_command`,
+when ssh's own words name the failure. `failure` is one of `host_key_new`,
+`host_key_changed`, `auth`, `dns`, `refused` and `timeout`. `fix` is one
+plain sentence. `fix_command` is the command that fixes it, as a person types
+it: `ssh ADDR true` for `host_key_new` and `ssh-copy-id ADDR` for `auth`. The
+`reason` of such a row is the sentence of its class, in place of "The host
+did not answer." The status value is unchanged. A row whose words match no
+class has none of the three fields.
 
 **list-hosts reports each host's load.** A host row gains `cores`, `load1`,
 `mem_pct`, `agents_working`, `load_ok`, `load_at` and `rtt_ms`, from the last hello on the
@@ -1958,9 +1980,9 @@ What a restricted connection may call:
 | Class | Verbs | Under `own` | Under `read_only` |
 |---|---|---|---|
 | open | `hello`, `list-verbs`, `unsubscribe`, `restrict-connection` | allowed | allowed |
-| across sessions | `list-sessions`, `list-clients`, `list-attention`, `list-conversations`, `list-worktrees`, `list-hosts`, `list-host-sessions`, `list-host-agents`, `list-themes`, `list-glyphs`, `list-hooks` | `forbidden` | allowed |
+| across sessions | `list-sessions`, `list-clients`, `list-attention`, `list-conversations`, `list-worktrees`, `list-hosts`, `list-host-sessions`, `list-host-agents`, `list-themes`, `list-glyphs`, `list-hooks`, `get-keep-awake` | `forbidden` | allowed |
 | read one session | `session-info`, `list-windows`, `get-window`, `list-workspaces`, `layout-tree`, `capture-pane`, `get-agent-state`, `list-agents`, `wait-for`, `subscribe`, `peek-prompt`, `read-agent-messages`, `explain-agent-screen`, `list-options`, `get-option`, `stash-list`, `stash-get`, `ssh-agent-path`, `display-env` | session in reach | allowed |
-| own pane's record | `set-agent-state`, `set-agent-meta`, `set-agent-session`, `report-agent-activity`, `agent-mail-notice`, `ask-human` | own pane only | allowed |
+| own pane's record | `set-agent-state`, `set-agent-meta`, `set-agent-session`, `report-agent-activity`, `report-program-status`, `agent-mail-notice`, `ask-human` | own pane only | allowed |
 | mail and stash | `send-agent-message`, `stash-put` | session in reach, sent as the own pane | allowed |
 | type into a pane | `send-text`, `send-keys`, `ask-agent`, `respond`, `run` | session in reach | `forbidden` |
 | start sessions | `fan`, `start-agent` | needs a pane; `start-agent` opens its pane in a session in reach | `forbidden` |
@@ -1982,9 +2004,9 @@ Under `own`:
   caller's own session: a selector reaches every session.
 - A `host` naming another machine, such as `send-agent-message`'s outbox
   delivery, is refused: no session on another machine is in reach.
-- `set-agent-state`, `set-agent-meta`, `set-agent-session` and
-  `report-agent-activity` with no `window` land on the caller's own pane, and
-  naming another pane is refused.
+- `set-agent-state`, `set-agent-meta`, `set-agent-session`,
+  `report-agent-activity` and `report-program-status` with no `window` land on
+  the caller's own pane, and naming another pane is refused.
 - `send-agent-message` and `ask-agent` in the caller's own session get `from`
   set to the caller's pane, and a different `from` is refused.
   `read-agent-messages` may name only the caller's own inbox in `to`.
@@ -2369,6 +2391,62 @@ Response:
 has no display to give. The verb reads one session: a pane needs `read` and
 the session in reach. Over a link it needs `list`.
 
+### get-keep-awake
+
+Report whether the daemon holds the machine awake. `[daemon] keep_awake` is
+`off` (the default), `on`, which holds the machine awake while the daemon
+runs, or `agents`, which holds it while an agent pane of this machine has
+the state `working`. A pane whose program runs on another machine
+(`host` set) does not count, and with the agent features off no pane works.
+
+Params: none.
+
+Request:
+
+```json
+{"verb": "get-keep-awake"}
+```
+
+Response:
+
+```json
+{"result": {"type": "keep_awake", "mode": "agents", "held": true, "working": 2, "method": "systemd-inhibit"}}
+```
+
+`method` is how the daemon holds the machine: `systemd-inhibit` (an inhibitor
+lock on idle and sleep) on Linux, `caffeinate` on macOS,
+`SetThreadExecutionState` on Windows, and `none` elsewhere. `error` says why
+the machine could not be held awake, when it could not: for example, logind
+refused the lock. The daemon does not try again until the mode changes.
+`working` counts the working agent panes in every mode. The verb reads no
+session and is allowed under `read_only`. Over a link it needs `list`.
+
+### set-keep-awake
+
+Set `[daemon] keep_awake` and apply it at once. The daemon also writes the
+key to config.toml, so the settings page, the file and every client show one
+value. A client that offers a keep awake switch, such as the desktop app,
+calls this verb and listens for the `keep-awake` event.
+
+Params: `mode` (required): `off`, `on` or `agents`.
+
+Request:
+
+```json
+{"verb": "set-keep-awake", "params": {"mode": "agents"}}
+```
+
+Response:
+
+```json
+{"result": {"type": "keep_awake", "mode": "agents", "held": false, "working": 0, "method": "systemd-inhibit", "saved": true}}
+```
+
+The response says the hold after the change. `saved` is false, with
+`save_error`, when config.toml could not be written. The mode then applies
+until the daemon stops. The verb is refused on a restricted connection. Over
+a link it needs `write`.
+
 ### session-info
 
 Report details about one session.
@@ -2517,7 +2595,8 @@ Create a new window in a session.
 
 Params, all optional: `session`, `name` (window name; omit to use the shell's
 title), `workspace` (workspace number; omit for the current one), `cwd`
-(directory to start in; omit to inherit the daemon's), `focus` (default true;
+(directory to start in; omit for the caller's directory when the caller runs
+in a pane, else the focused pane's), `focus` (default true;
 pass false to leave the focus where it is), `command` (argv to exec instead of a
 shell, not parsed by any shell; with a client attached, the window closes when
 it exits), `host` (run the window's process on a machine from the `[hosts]`
@@ -2551,6 +2630,52 @@ Response:
 
 ```json
 {"result": {"type": "window_created", "window_id": "9a3c...", "name": "build"}}
+```
+
+### split-window, zoom-window, swap-window, resize-window
+
+The layout verbs. Each one names a pane with `window`. Without `window`, a
+caller in a pane of the session acts on its own pane, and any other caller on
+the focused pane. The daemon changes the layout itself, so these work with no
+client attached. An attached client lays its panes out again from the result,
+and a client that attaches later shows it.
+
+`split-window` cuts a pane in two and opens a new window in the new half. Params:
+`side` (`left`, `right`, `up` or `down`: the side of the pane the new pane
+takes) or `direction` (`vertical` for right, `horizontal` for below), `ratio`
+(the new pane's share in percent, 1 to 99; omit for half), and `name`,
+`command`, `cwd`, `focus`, `keep_open`, `close_on_exit`, `env`, `host` and
+`grants` as for `new-window`. Without `cwd`, the pane starts in the caller's
+directory when the caller runs in a pane. The new pane is on the workspace of
+the pane it cuts. A floating, minimized or popup pane cannot be split
+(`invalid_params`). The verb turns tiling on when it is off. The result is
+new-window's, with `type` `window_split`, `side` and `direction`.
+
+`zoom-window` zooms a pane to fill its workspace. Params: `zoom` (true or false;
+omit to toggle). Zooming a pane on the workspace the session shows focuses it.
+The result has `window_id`, `zoomed` and `changed`.
+
+`swap-window` swaps two tiled panes. Params: `with` (required, the other pane).
+The panes must be on one workspace. The focus does not move.
+
+`resize-window` moves one border of a tiled pane. Params: `direction` (required:
+`right` and `down` move a border right or down, `left` and `up` move it left
+or up) and `amount` (percent of the layout's width or height, 1 to 50;
+default 5). The border is the one on that side of the pane, or the one on the
+other side when the pane is at the edge there. The result has `changed`,
+false when no border could move.
+
+`move-window` takes `beside` (a pane), `side` (default `right`) and `ratio`:
+the window leaves its place and splits that pane, on that pane's workspace.
+
+In the master-stack and scrolling layouts, which place panes by order, an
+attached client does the swap and the resize.
+
+```json
+{"verb": "split-window", "params": {"session": "work", "window": "build", "side": "down", "ratio": 30, "focus": false, "command": ["tail", "-f", "app.log"]}}
+{"verb": "swap-window", "params": {"session": "work", "window": "build", "with": "logs"}}
+{"verb": "resize-window", "params": {"session": "work", "window": "logs", "direction": "up", "amount": 10}}
+{"verb": "zoom-window", "params": {"session": "work", "window": "build", "zoom": true}}
 ```
 
 ### popup
@@ -2638,9 +2763,20 @@ The window is of kind `tml`, and `list-windows` reports it with `kind`, `uri`
 (`tuios://tml/<surface>`) and `surface`. Like a `view` window it has a PTY,
 whose program prints one line for a client that does not draw TML. A popup
 closes on an esc the document does not use. Focus, close-window and the
-layout treat it as any window, but it cannot move to another session. A
-client draws the surfaces of its own machine's daemon only: a client attached
-through a host shows the placeholder line.
+layout treat it as any window, but it cannot move to another session.
+
+A client attached through a host draws the far daemon's surfaces too. The far
+daemon holds them and pushes them over the link, as to any client, and the
+client sends `tml-input`, `tml-get` and `tml-place` back over the link. The
+far daemon's welcome sets `tml_link` when it takes them. Over a link,
+`tml-get` and `tml-list` need the `list` capability, and `tml-input` and
+`tml-place` need `write` and the attach nonce of a client on the link-human
+socket. A `pane()` action in a `tml-input` also needs what its verb needs over
+the link, so `new-window` needs `open`. `tml-open`, `tml-patch`,
+`tml-replace` and `tml-close` still need every relay capability. A client of a
+far daemon without `tml_link` says in the window that the daemon is too old.
+After a dropped link the client attaches again and takes each surface whole
+from the far daemon.
 
 The surface's local actions run in the client: tabs, sorting, the cursor,
 folding, scrolling, `set` and `toggle`. A change to the state goes back to the
@@ -3430,6 +3566,13 @@ client is limited to the lease. When the stream releases the lease with
 `L 0 0`, or the connection closes, the pane goes back to the size that the
 clients asked for last. Other panes and the session size do not change. An
 attached tuios client shows the smaller pane in the same rectangle.
+
+A stream that came over a link is the exception. When the link drops, its
+lease stays for 15 seconds after the connection closes. A viewer that opens
+the stream again in that time holds the pane at the same size, so the program
+in the pane does not redraw twice. When the far side closes the stream on
+purpose, `tuios stdio-proxy` tells the daemon first (see `closes` under
+[What a linked machine may do here](#what-a-linked-machine-may-do-here)), and the lease ends at once.
 
 When two streams hold a lease on one pane, the smaller lease applies in each
 dimension.
@@ -4419,7 +4562,8 @@ The session `session` names is created when it does not exist. With no
 harness or program when there is none. The pane starts in `cwd`, or in the
 main checkout of the repository `repo` or `repo_url` names (see
 [new-worktree](#new-worktree) for `repo_url`, `repos_root` and `clone`), or
-else in the focused pane's directory. Passing `cwd` and a repository is
+else in the caller's directory when the caller runs in a pane, or else in the
+focused pane's directory. Passing `cwd` and a repository is
 `invalid_params`. From another machine it is reached like every session verb,
 with a host-qualified session, and names the repository by `repo_url`.
 
@@ -5254,7 +5398,16 @@ live renderer; `applied` reports whether that live apply succeeded. With no TUI
 attached, `applied` is false and the value waits. The next TUI that attaches
 applies it.
 
-Params: `session` (optional), `key` (required), `value` (optional).
+Params: `session` (optional), `key` (required), `value` (optional), `no_save`
+(optional bool).
+
+With `no_save` true, the client applies the value and does not write it to a
+config file. Later saves of other settings leave the key alone too. The value
+stays until the client exits, or until the option is set again without
+`no_save`. A value that waits for a client keeps `no_save`. The response
+always has `no_save`. A daemon that predates the param leaves it out of the
+response and saves the value. `no_save` is refused with `invalid_params` for
+`agents.enabled`, and when the attached client is too old to hold a value.
 
 Request:
 
@@ -5265,7 +5418,7 @@ Request:
 Response:
 
 ```json
-{"result": {"type": "option_set", "key": "border_style", "value": "rounded", "applied": true}}
+{"result": {"type": "option_set", "key": "border_style", "value": "rounded", "applied": true, "no_save": false}}
 ```
 
 ### get-option
@@ -5724,6 +5877,40 @@ Response:
 
 `get-agent-state` and each `list-agents` entry carry the same `meta` object,
 and `subagents`, the count `meta`'s `subagents` key states, as a number.
+
+### report-program-status
+
+Apply one OSC 7501 report, the Program Status Protocol, to a pane. The daemon
+handles it as if the pane's emulator read it from the pane's output. It uses
+the same parser, the same records and the same lifetime rules. See
+[PROGRAM_STATUS.md](PROGRAM_STATUS.md).
+
+`tuios status` sends this verb when the process has no controlling terminal,
+such as the shell tool of an agent. That tool captures standard output, so a
+sequence written there does not reach the pane.
+
+Params: `session` (optional), `window` (optional, default the caller's pane,
+or the focused pane outside every pane), `report` (required). `report` is the
+body of the sequence: the text between `ESC ] 7501;` and the string
+terminator. A report that a terminal must discard is `invalid_params`, and
+nothing is recorded.
+
+The record gets the process group that holds the pane's terminal when the call
+arrives, as a report the pane writes does. So a `working` record from a program
+in the foreground ends when that program exits. A pane may report only for
+itself, as with `set-agent-state`.
+
+Request:
+
+```json
+{"verb": "report-program-status", "params": {"session": "work", "window": "build", "report": "state=working:app=build:msg=Q29tcGlsaW5n"}}
+```
+
+Response:
+
+```json
+{"result": {"type": "program_status_reported", "window_id": "3f2a9c1e", "program_status": [{"state": "working", "progress": -1, "app": "build", "msg": "Compiling", "at": 1767225600000000000}]}}
+```
 
 Keys tuios writes itself, each only when the harness states it: `model`,
 `context` (`42%`), `cost` (`$1.20`, or the amount and an ISO 4217 code for
@@ -6570,7 +6757,7 @@ this section is the contract around them.
 | `file-stat` | Describes one path: `exists`, `size`, and `info` (name, path, kind `file`, `dir`, `symlink` or `other`, `link_kind` and `link` for a link, size, `mtime` in Unix ms, `mode` as `ls` prints it, `perm` as a number, `hidden`). With `part`, it describes the part file of a copy to the path instead. |
 | `file-list` | Lists a folder a page at a time (`offset`, `limit` up to 5000, `hidden`): folders first, then names in natural order (`file2` before `file10`). It reads at most 50000 names (`capped`). Part files are not listed. |
 | `file-read` | Up to 4 MiB of a regular file, base64, from `offset`. |
-| `file-preview` | What Quick Look in the GUI shows of one file, made on the machine the file is on. An image comes back scaled to `max_px` (default 1600, at most 4096) on its long side, a PDF page (`page`, with `pages_known` to skip the count) and a film frame as an image when that machine has `pdftoppm` and `ffmpeg`, the words of a PDF page from `pdftotext` when `words` is set, the film frame at `at_ms` (with `duration_known` to skip `ffprobe`, and `no_frame` for only the facts), a JSON file laid out when `format` is set, the listing of a tar, tar.gz or zip file (`kind` `archive`), one GIF frame by `page`, permissions, git state, diff and PDF words when `details` is set, text as its first 256 KiB, and anything else as its type and size (`kind` `binary`). Without `pdftoppm` a PDF up to 8 MiB is sent as it is. A WebP or a BMP, and a picture whose decode would take more than 256 MB here (a large progressive JPEG), is sent as it is, up to 16 MiB, with its own `mime`, for the client to decode. The file is opened once, with the read rules of `file-read`, and the tools read that open file, not the path. ffmpeg and ffprobe open only the file and only the MP4, QuickTime, Matroska, WebM and AVI containers. A pipe or a device is described, not read. |
+| `file-preview` | What Quick Look in the GUI shows of one file, made on the machine the file is on. An image comes back scaled to `max_px` (default 1600, at most 4096) on its long side, a PDF page (`page`, with `pages_known` to skip the count) and a film frame as an image when that machine has `pdftoppm` and `ffmpeg`, the words of a PDF page from `pdftotext` when `words` is set, the film frame at `at_ms` (with `duration_known` to skip `ffprobe`, and `no_frame` for only the facts), a JSON file laid out when `format` is set, the listing of a tar, tar.gz or zip file (`kind` `archive`), one GIF frame by `page`, permissions, git state, diff and PDF words when `details` is set, text as its first 256 KiB, and anything else as its type and size (`kind` `binary`). Without `pdftoppm` a PDF up to 8 MiB is sent as it is. A WebP or a BMP, and a picture whose decode would take more than 256 MB here (a large progressive JPEG), is sent as it is, up to 16 MiB, with its own `mime`, for the client to decode. The file is opened once, with the read rules of `file-read`, and the tools read that open file, not the path. ffmpeg and ffprobe open only the file and only the MP4, QuickTime, Matroska, WebM and AVI containers. A pipe or a device is described, not read. Names in an archive listing are cut at 4096 bytes with "...", a JSON layout over 16 MiB comes back unformatted, and a GIF whose frames with the canvas would pass the decode cap comes back with its first frame only. |
 | `file-hash` | The sha256 of a file, of a range of it (`offset`, `length`), or of a copy's part (`part`, `part_id`). |
 | `file-walk` | Every file and folder under a folder, for a folder copy, at most 20000 entries. With `stream`, up to 1000000 entries, one JSON line each after the reply, then a last line `{end, bytes, skipped, skipped_count, denied}`, or `{end, code, error}`. Each entry has `rel` (slash separated), `size`, `dir`, `perm` and `mtime`. Links are not followed. A link, a named pipe, a socket and a device are not copied: `skipped` names the first 200 with `rel` and `kind`, and `skipped_count` counts all of them. Over a link, an entry in the read deny list is left out and not named. `denied` counts those entries, and a denied folder counts once. |
 | `file-mkdir` | Makes a folder and its parents. With `receive`, it ignores `path` and makes the receive folder: where a copy from the caller lands when it names no folder. For a linked machine that is the first folder of its `files_roots`, else `~/Downloads/tuios`. The reply's `path` names it. |
@@ -6877,10 +7064,10 @@ the one before. The configuration is in
 | Capability | Verbs |
 | --- | --- |
 | none | `hello`, `list-verbs`, `link-peer`, `restrict-connection`, `pane-grants` (which says no pane grants apply over a link) |
-| `list` | `list-*`, `session-info`, `layout-tree`, `ssh-agent-path`, `display-env`, `get-window`, `capture-pane`, `screenshot`, `get-option`, `get-agent-state`, `resolve-pane`, `explain-agent-*`, `wait-for`, `subscribe`, `unsubscribe`, `peek-prompt`, `read-dir`, `wait-dir`, `compare-fan`, `agent-activity`, `get-approval`, `file-stat`, `file-list`, `list-tasks`, `get-task` |
+| `list` | `list-*`, `session-info`, `layout-tree`, `ssh-agent-path`, `display-env`, `get-keep-awake`, `get-window`, `capture-pane`, `screenshot`, `get-option`, `get-agent-state`, `resolve-pane`, `explain-agent-*`, `wait-for`, `subscribe`, `unsubscribe`, `peek-prompt`, `read-dir`, `wait-dir`, `compare-fan`, `agent-activity`, `get-approval`, `file-stat`, `file-list`, `list-tasks`, `get-task` |
 | `mail` | `send-agent-message`, `read-agent-messages`, `agent-mail-notice`, `stash-put`, `stash-list`, `stash-get` |
 | `open` | `new-session`, `new-window`, `split-window`, `popup`, `new-worktree`, `fan`, `start-agent`, `open-pane`, `resize-pane`, `close-pane`, `pane-cwd`, `pane-agent`, `pane-calls` |
-| `write` | `send-keys`, `send-text`, `ask-agent`, `run-command`, `switch-session`, `detach-client`, `close-window`, `close-workspace`, `kill-session`, `focus-window`, `move-window`, `set-window`, `select-workspace`, `set-layout`, `set-layout-tree`, `set-layout-state`, `resize`, `set-option`, `set-session-*`, `set-workspace-*`, `set-agent-*`, `resume-agent`, `forget-conversation`, `request-approval`, `refresh-dock`, `pip`, `remove-worktree`, `bundle-worktree`, `run`, `ask-human` (whose handler refuses a link caller anyway), `review-diff` (it returns file contents), `review-note`, `review-stage`, `send-review`, `queue-prompt`, `cancel-queued`, `keep-fan`, `add-task`, `claim-task`, `finish-task`, `set-task-stage`, `block-task`, `release-task`, `remove-task` |
+| `write` | `send-keys`, `send-text`, `ask-agent`, `run-command`, `switch-session`, `detach-client`, `close-window`, `close-workspace`, `kill-session`, `focus-window`, `move-window`, `set-window`, `select-workspace`, `set-layout`, `set-layout-tree`, `set-layout-state`, `zoom-window`, `swap-window`, `resize-window`, `resize`, `set-option`, `set-keep-awake`, `set-session-*`, `set-workspace-*`, `set-agent-*`, `resume-agent`, `forget-conversation`, `request-approval`, `refresh-dock`, `pip`, `remove-worktree`, `bundle-worktree`, `run`, `ask-human` (whose handler refuses a link caller anyway), `review-diff` (it returns file contents), `review-note`, `review-stage`, `send-review`, `queue-prompt`, `cancel-queued`, `keep-fan`, `add-task`, `claim-task`, `finish-task`, `set-task-stage`, `block-task`, `release-task`, `remove-task` |
 | `open` and `write` | `verify-fan` |
 | `open` and `files` | `paste-pane-image` |
 | `write` and `files` | `paste-image` |
@@ -6925,6 +7112,13 @@ When the link's ssh forwards an agent, the proxy also sends the
 to that socket, under the same checks as a local client's socket. A daemon
 too old to know the parameter refuses it with `invalid_params`, and the proxy
 sends `link-peer` again without it.
+
+The reply holds a `close_token` for the connection. When the far side closes
+a stream on purpose, the proxy opens one more connection and sends `link-peer`
+with that token as `closes` before it ends the stream's connection. The daemon
+then ends the stream's size lease at once. A stream that ends without it
+ended because the link dropped, and its lease stays for 15 seconds. A daemon
+too old to give a token gets no `closes`.
 
 Only a pinned name is a boundary. A hub whose ssh key may run any command can
 run a shell, and can claim any name. Pin it in `authorized_keys` on this
@@ -7665,6 +7859,7 @@ Event types:
 | `task-finished` | A task card was marked done. `window` is the pane that held it, empty when none did. | `session`, `window`, `task` |
 | `task-changed` | A task card was `added`, `staged`, `blocked`, `unblocked`, `released` or `removed` (`action`). A release tuios made on its own carries `reason`: `pane closed`, `agent left` or `restart`; a stage move it made on its own carries the fact (see [Task verbs](#task-verbs)); a block carries its reason too. `removed` carries the card's last row. | `session`, `action`, `reason`, `task` |
 | `fan-verdict` | A judge recorded its verdict on a fan with `set-fan-verdict`. One event for each attempt: `session` is the attempt, `title` the session the verdict picks. Read it with `compare-fan`. | `session`, `title` |
+| `keep-awake` | The daemon took or dropped its hold that keeps the machine awake, the number of working agent panes changed while `keep_awake` is `agents`, or `keep_awake` changed. `mode` is `off`, `on` or `agents`, `state` is `held` or `released`, `working` counts the working agent panes on this machine, and `reason` says why the machine could not be held awake, when it could not. See [get-keep-awake](#get-keep-awake). It names no session. | `mode`, `state`, `working`, `reason` |
 | `tml-event` | What a person did on a TML surface that its owner hears: an `emit` action in the document, or the close, which is the surface's last event. `tml` has `surface`, `name` (the emit's name, or `close`), `value` (absent when null), `reason` (on a close: `closed`, `program` or `dismissed`) and `version`. `window` is the TML window. Opt-in: only a subscription whose `types` names it receives it, and a `tml-open` with `events` gets the events of its own surface. | `tml` |
 | `option-set` | `set-option` recorded a value for a session. `key` is the option's path and `value` the value. It fires whether or not an attached client applied the value. Opt-in: only a subscription whose `types` names it receives it. | `session`, `key`, `value` |
 
@@ -7724,7 +7919,7 @@ Params:
 - `window` (optional): only events about this window id. The filter compares
   window ids, so a window name matches nothing.
 - `types` (optional): event types to include; empty means all.
-- `queue` (optional): per-connection queue size; defaults to 256.
+- `queue` (optional): per-connection queue size; defaults to 256. A size above 4096 is lowered to 4096.
 - `after_seq` (optional): resume. Replay the retained events with a higher
   `seq` before streaming live. `0` replays everything the daemon still holds.
 - `boot_id` (optional, needs `after_seq`): the boot id `after_seq` came with.

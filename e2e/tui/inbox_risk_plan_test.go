@@ -5,7 +5,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -110,25 +109,51 @@ func TestInboxRiskyApprovalTakesTwoPresses(t *testing.T) {
 	saveFrame(t, term, "inbox-risky-held")
 	time.Sleep(answerSettle)
 
+	// A key only asks: the card says what enter does, and nothing is sent.
 	if err := term.SendKeys("1"); err != nil {
 		t.Fatalf("first press: %v", err)
 	}
-	if err := term.WaitForText(" to allow rm -rf build/", uiTimeout); err != nil {
-		t.Fatalf("the first press did not say what the second does: %v\n%s", err, term.Snapshot())
-	}
-	// The line names when the press lapses, since nothing redraws it then.
-	if snap := term.Snapshot(); !regexp.MustCompile(`Press 1 again by \d\d:\d\d:\d\d to allow rm -rf build/`).MatchString(snap) {
-		t.Fatalf("the first press does not say until when the second is taken:\n%s", snap)
+	if err := term.WaitForText("Press enter to allow", uiTimeout); err != nil {
+		t.Fatalf("the key did not ask before it allowed: %v\n%s", err, term.Snapshot())
 	}
 	select {
 	case err := <-hook.exited:
-		t.Fatalf("ASSERTION: the first press answered: %v, printed %q", err, hook.stdout.String())
+		t.Fatalf("ASSERTION: the key answered without enter: %v, printed %q", err, hook.stdout.String())
 	case <-time.After(time.Second):
 	}
-	saveFrame(t, term, "inbox-risky-armed")
+	saveFrame(t, term, "inbox-risky-asks")
+
+	// A sentence typed slowly into the list, by a person who thinks a reply
+	// box has the keys, answers nothing: "please also" holds two a and a 1
+	// would have armed. One key every 400 ms is a slow typist; a guard on
+	// the time between keys let such a typist allow the call.
+	if err := term.SendKeys("2"); err != nil {
+		t.Fatalf("2: %v", err)
+	}
+	for _, ch := range "please also" {
+		if err := term.SendKeys(string(ch)); err != nil {
+			t.Fatalf("type %q: %v", ch, err)
+		}
+		time.Sleep(400 * time.Millisecond)
+	}
+	select {
+	case err := <-hook.exited:
+		t.Fatalf("ASSERTION: a sentence typed into the list answered the approval: %v, printed %q", err, hook.stdout.String())
+	case <-time.After(time.Second):
+	}
+	if strings.Contains(term.Screen().Text(), "Press enter to allow") {
+		t.Fatalf("ASSERTION: the typed sentence left the allow waiting for enter:\n%s", term.Snapshot())
+	}
+	saveFrame(t, term, "inbox-risky-after-prose")
 
 	if err := term.SendKeys("1"); err != nil {
-		t.Fatalf("second press: %v", err)
+		t.Fatalf("ask again: %v", err)
+	}
+	if err := term.WaitForText("Press enter to allow", uiTimeout); err != nil {
+		t.Fatalf("the key did not ask again: %v\n%s", err, term.Snapshot())
+	}
+	if err := term.SendKeys(tuitest.Enter); err != nil {
+		t.Fatalf("enter: %v", err)
 	}
 	select {
 	case err := <-hook.exited:
@@ -136,7 +161,7 @@ func TestInboxRiskyApprovalTakesTwoPresses(t *testing.T) {
 			t.Fatalf("the hook failed: %v", err)
 		}
 	case <-time.After(uiTimeout):
-		t.Fatalf("the hook never returned after the second press\n%s", term.Snapshot())
+		t.Fatalf("the hook never returned after enter\n%s", term.Snapshot())
 	}
 	if out := hook.stdout.String(); !strings.Contains(out, `"behavior":"allow"`) {
 		t.Fatalf("the hook printed %q, want Claude Code's allow", out)

@@ -98,8 +98,10 @@ release or a stage move tuios made on its own carries the reason in `reason`.
 that holds a card in verify; a done card has no holder.
 
 `tuios task ls --all-sessions` lists every session's cards. The person sees
-them as the board: `b` in the agents view (`ctrl+b i`) groups the cards by
-stage, with each holder's state beside its card.
+them as the board: `b` in the agents view (`ctrl+b i`) shows one column for
+each stage, with each holder's state on its card. The person moves a card
+there by key or by drag, and the move is a `task-changed` event with action
+`staged`, like `tuios task stage`.
 
 ## Grants
 

@@ -6,6 +6,8 @@ import (
 	"slices"
 	"strings"
 	"time"
+
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 )
 
 // The tables of the agent review, triage, queue and approval work:
@@ -240,6 +242,10 @@ func validateAgentWork(cfg *UserConfig, result *ValidationResult) {
 		warn("agents", "host_program_status", fmt.Sprintf("'%s' is not a valid value (allowed: %s, %s); read as %s",
 			cfg.Agents.HostProgramStatus, HostProgramStatusAuto, HostProgramStatusOff, HostProgramStatusAuto))
 	}
+	if v := strings.ToLower(strings.TrimSpace(cfg.Agents.ViewList)); v != "" && v != NormalizeAgentsViewList(v) {
+		warn("agents", "view_list", fmt.Sprintf("'%s' is not a valid value (allowed: %s); read as %s",
+			cfg.Agents.ViewList, strings.Join(AgentsViewLists, ", "), AgentsViewListColumn))
+	}
 	if v := strings.ToLower(strings.TrimSpace(cfg.Agents.SilentAfter)); v != "" && v != "off" {
 		if _, err := time.ParseDuration(v); err != nil {
 			warn("agents", "silent_after", fmt.Sprintf("'%s' is not a duration such as 10m; read as %s", cfg.Agents.SilentAfter, DefaultSilentAfter))
@@ -294,7 +300,7 @@ func ParseAgentRestFold(v string) (d time.Duration, ok bool) {
 // neither a duration nor off.
 func checkAgentRestFold(v string) error {
 	if _, ok := ParseAgentRestFold(v); !ok {
-		return fmt.Errorf("%q is not a duration such as 1h, or off", v)
+		return errfmt.Errorf("%q is not a duration such as 1h, or off", v)
 	}
 	return nil
 }

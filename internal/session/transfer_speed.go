@@ -9,6 +9,8 @@ import (
 	"io"
 	"slices"
 	"time"
+
+	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 )
 
 // The speed test of a link: what a copy to a host can get.
@@ -50,7 +52,7 @@ func (d *Daemon) verbSpeedTest(cs *connState, params json.RawMessage) (any, *ver
 			if err != nil {
 				out["error"] = err.Error()
 			}
-			line, _ := json.Marshal(out)
+			line, _ := jsonx.Marshal(out)
 			_ = cs.conn.SetWriteDeadline(time.Now().Add(10 * time.Second))
 			_, _ = cs.conn.Write(append(line, '\n'))
 			_ = cs.conn.Close()
@@ -171,7 +173,7 @@ func (d *Daemon) speedUp(ctx context.Context, host string, n int64) (time.Durati
 		Bytes int64  `json:"bytes"`
 		Error string `json:"error"`
 	}
-	if err := json.Unmarshal(line, &r); err != nil {
+	if err := jsonx.Unmarshal(line, &r); err != nil {
 		return 0, err
 	}
 	if r.Error != "" || r.Bytes != n {

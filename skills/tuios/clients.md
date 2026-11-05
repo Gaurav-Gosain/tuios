@@ -23,9 +23,10 @@ tuios list-clients --json
 - `tuios ls --json` says only whether a session has a client. Use
   `list-clients` to learn which session each client shows.
 
-Geometry verbs (`split-window`, `set-layout`, `popup`, `pip`) need a client
-attached to the session, and fail with `needs_client` without one. Check
-before you call them:
+Some geometry verbs (`set-layout`, `popup`, `pip`) need a client attached
+to the session, and fail with `needs_client` without one. `split-window`,
+`zoom-window`, `swap-window`, `resize-window` and `move-window` do not. Check
+before you call one that does:
 
 ```sh
 tuios list-clients --json | jq -e --arg s "$TUIOS_SESSION" 'any(.[]; .session == $s)'

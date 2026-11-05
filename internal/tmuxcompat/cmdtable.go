@@ -1,8 +1,9 @@
 package tmuxcompat
 
 import (
-	"fmt"
 	"strings"
+
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 )
 
 // tmuxCommand is one entry of tmux's command table.
@@ -131,7 +132,7 @@ func lookupCommand(word string) (string, error) {
 		}
 	}
 	if found == "" || word == "" {
-		return "", fmt.Errorf("unknown command: %s", word)
+		return "", errfmt.Errorf("unknown command: %s", word)
 	}
 	if !ambiguous {
 		return found, nil
@@ -142,5 +143,5 @@ func lookupCommand(word string) (string, error) {
 			names = append(names, c.name)
 		}
 	}
-	return "", fmt.Errorf("ambiguous command: %s, could be: %s", word, strings.Join(names, ", "))
+	return "", errfmt.Errorf("ambiguous command: %s, could be: %s", word, strings.Join(names, ", "))
 }

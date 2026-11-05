@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 )
 
 // This file implements the headless execution path for the mutating control
@@ -33,7 +35,7 @@ func focusedWindowID(state *SessionState) (string, error) {
 	if len(state.Windows) > 0 {
 		return state.Windows[0].ID, nil
 	}
-	return "", fmt.Errorf("session has no windows")
+	return "", errfmt.Errorf("session has no windows")
 }
 
 // executeDaemonCommand runs a structural tape command against daemon-owned
@@ -101,7 +103,7 @@ func (d *Daemon) executeDaemonCommandEnv(sess *Session, commandType string, args
 
 	case "FocusWindow":
 		if len(args) < 1 {
-			return nil, fmt.Errorf("FocusWindow requires a window name or ID")
+			return nil, errfmt.Errorf("FocusWindow requires a window name or ID")
 		}
 		return nil, sess.FocusDaemonWindow(args[0])
 
@@ -116,7 +118,7 @@ func (d *Daemon) executeDaemonCommandEnv(sess *Session, commandType string, args
 		case 2:
 			return nil, sess.RenameDaemonWindow(args[0], args[1])
 		default:
-			return nil, fmt.Errorf("RenameWindow requires <new-name> or <target> <new-name>")
+			return nil, errfmt.Errorf("RenameWindow requires <new-name> or <target> <new-name>")
 		}
 
 	case "MinimizeWindow", "RestoreWindow":
@@ -190,11 +192,11 @@ func (d *Daemon) executeDaemonCommandEnv(sess *Session, commandType string, args
 // parseWorkspaceArg extracts a 1-9 workspace number from a command's args.
 func parseWorkspaceArg(args []string) (int, error) {
 	if len(args) < 1 {
-		return 0, fmt.Errorf("workspace number required")
+		return 0, errfmt.Errorf("workspace number required")
 	}
 	ws, err := strconv.Atoi(strings.TrimSpace(args[0]))
 	if err != nil {
-		return 0, fmt.Errorf("invalid workspace number %q", args[0])
+		return 0, errfmt.Errorf("invalid workspace number %q", args[0])
 	}
 	return ws, nil
 }
@@ -231,11 +233,11 @@ func (d *Daemon) resolvePTYForTarget(sess *Session, target string) (*PTY, error)
 	}
 	ptyID := state.Windows[idx].PTYID
 	if ptyID == "" {
-		return nil, fmt.Errorf("window %q has no PTY", target)
+		return nil, errfmt.Errorf("window %q has no PTY", target)
 	}
 	pty := sess.GetPTY(ptyID)
 	if pty == nil {
-		return nil, fmt.Errorf("PTY for window %q is gone", target)
+		return nil, errfmt.Errorf("PTY for window %q is gone", target)
 	}
 	return pty, nil
 }

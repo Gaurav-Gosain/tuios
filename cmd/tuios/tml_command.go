@@ -7,6 +7,8 @@ import (
 	"os"
 	"time"
 
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
+	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/spf13/cobra"
 	"tuios.dev/tml"
@@ -128,7 +130,7 @@ func readTMLSource(name string, stdin io.Reader) ([]byte, error) {
 		return nil, err
 	}
 	if len(data) > limit {
-		return nil, fmt.Errorf("the document is larger than %d bytes, the limit", limit)
+		return nil, errfmt.Errorf("the document is larger than %d bytes, the limit", limit)
 	}
 	return data, nil
 }
@@ -142,7 +144,7 @@ func checkTMLSource(name string, src []byte, w io.Writer) error {
 		fmt.Fprintf(w, "%s:%s\n", name, p.String())
 	}
 	if err != nil {
-		return fmt.Errorf("%s is not a valid TML document: %w", name, err)
+		return errfmt.Errorf("%s is not a valid TML document: %w", name, err)
 	}
 	return nil
 }
@@ -209,8 +211,8 @@ func runTMLShow(name string, o tmlShowOptions, stdin io.Reader, stdout io.Writer
 		Reason   string          `json:"reason"`
 		Value    json.RawMessage `json:"value"`
 	}
-	if err := json.Unmarshal(raw, &res); err != nil {
-		return fmt.Errorf("failed to parse response: %w", err)
+	if err := jsonx.Unmarshal(raw, &res); err != nil {
+		return errfmt.Errorf("failed to parse response: %w", err)
 	}
 	if !o.wait {
 		fmt.Fprintf(stdout, "%s  %s\n", res.Surface, shortWindowID(res.WindowID))
@@ -247,7 +249,7 @@ it from the person's answer. Without VALUE it prints null.`,
 			params := map[string]any{"surface": args[0]}
 			if len(args) == 2 {
 				if !json.Valid([]byte(args[1])) {
-					return fmt.Errorf("VALUE is not JSON. Quote a string, such as '\"done\"'")
+					return errfmt.Errorf("VALUE is not JSON. Quote a string, such as '\"done\"'")
 				}
 				params["value"] = json.RawMessage(args[1])
 			}
@@ -301,13 +303,13 @@ func streamTMLEvents(client *session.VerbClient, raw json.RawMessage, stdout io.
 	for {
 		line, err := client.ReadEventLine(0)
 		if err != nil {
-			return fmt.Errorf("the event stream ended: %w", err)
+			return errfmt.Errorf("the event stream ended: %w", err)
 		}
 		fmt.Fprintln(stdout, string(line))
 		var ev struct {
 			TML *session.TMLEvent `json:"tml"`
 		}
-		if json.Unmarshal(line, &ev) == nil && ev.TML != nil && ev.TML.Name == "close" {
+		if jsonx.Unmarshal(line, &ev) == nil && ev.TML != nil && ev.TML.Name == "close" {
 			return nil
 		}
 	}
@@ -355,7 +357,7 @@ send the patch again.`,
 				return err
 			}
 			if !json.Valid(ops) {
-				return fmt.Errorf("OPS is not JSON. Give a JSON Patch, such as '[{\"op\":\"replace\",\"path\":\"/n\",\"value\":1}]'")
+				return errfmt.Errorf("OPS is not JSON. Give a JSON Patch, such as '[{\"op\":\"replace\",\"path\":\"/n\",\"value\":1}]'")
 			}
 			return tmlCall("tml-patch", map[string]any{"surface": args[0], "ops": json.RawMessage(ops)})
 		},

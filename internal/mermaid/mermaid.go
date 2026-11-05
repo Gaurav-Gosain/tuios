@@ -6,7 +6,6 @@ package mermaid
 import (
 	"bytes"
 	"encoding/base64"
-	"fmt"
 	"image/color"
 	"io"
 	"regexp"
@@ -15,6 +14,7 @@ import (
 
 	sketch "tuios.dev/sketch/core"
 
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 )
 
@@ -153,7 +153,7 @@ func ThemeFor(name string, pal overlay.Palette, ansi [16]color.Color, bg, fg col
 	if t, ok := sketch.ThemeNamed(name); ok {
 		return t, nil
 	}
-	return nil, fmt.Errorf("no theme named %q. Use one of: %s", name, strings.Join(ThemeNames(), ", "))
+	return nil, errfmt.Errorf("no theme named %q. Use one of: %s", name, strings.Join(ThemeNames(), ", "))
 }
 
 var reFence = regexp.MustCompile("(?ms)^[ \t]*(```+|~~~+)[ \t]*mermaid[^\n]*\n(.*?)^[ \t]*(```+|~~~+)[ \t]*$")

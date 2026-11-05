@@ -3,7 +3,6 @@ package session
 import (
 	"context"
 	"errors"
-	"fmt"
 	"log"
 	"net"
 	"os"
@@ -11,6 +10,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"github.com/Gaurav-Gosain/tuios/internal/ptyspawn"
 	"tuios.dev/vt"
 )
@@ -227,6 +227,9 @@ func (r *handoffRun) prepare() error {
 	if d.federation != nil {
 		d.federation.Stop()
 	}
+	// The keep awake holder is a child too. The new image takes the hold
+	// again once its panes are in place (serve).
+	d.awake.stop()
 	// A hook that started since the refusal check is waited for here. One
 	// fired later either holds a pipe when the holds shut below, and the
 	// handoff is refused, or waits on them: a put-back starts it, and the
@@ -240,6 +243,7 @@ func (r *handoffRun) prepare() error {
 		}
 		d.fleet.start(d.ctx)
 		d.plugins.restart()
+		d.awake.start(d.ctx)
 	})
 
 	// The reaps first: a reap in progress runs the pane's exit, which may
@@ -307,7 +311,7 @@ func (r *handoffRun) prepare() error {
 				continue
 			}
 			if p.host != "" {
-				return fmt.Errorf("window %s runs on %s, and a pane on another machine cannot be handed over. Close it first", shortID(w.ID), p.host)
+				return errfmt.Errorf("window %s runs on %s, and a pane on another machine cannot be handed over. Close it first", shortID(w.ID), p.host)
 			}
 			refs = append(refs, handoffPaneRef{sess: sess, pty: p, window: w.ID})
 		}
@@ -319,7 +323,7 @@ func (r *handoffRun) prepare() error {
 	// starts before any pane stops, and its start is no part of the pause.
 	f, err := newHandoffFile(handoffDir())
 	if err != nil {
-		return fmt.Errorf("making the handoff manifest: %w", err)
+		return errfmt.Errorf("making the handoff manifest: %w", err)
 	}
 	r.file = f
 	r.undo = append(r.undo, func() { _ = f.Close() })
@@ -328,7 +332,7 @@ func (r *handoffRun) prepare() error {
 	restore := append([]string{bin}, d.handoffArgs(int(f.Fd()))...) //nolint:gosec // a descriptor number
 	k, err := startKeeper(bin, hold, restore)
 	if err != nil {
-		return fmt.Errorf("starting the handoff keeper: %w", err)
+		return errfmt.Errorf("starting the handoff keeper: %w", err)
 	}
 	d.setKeeper(k)
 	r.undo = append(r.undo, d.releaseKeeper)
@@ -348,7 +352,7 @@ func (r *handoffRun) prepare() error {
 	if err := forEachBounded(len(refs), handoffWorkers, func(i int) error {
 		quiesced[i] = refs[i].pty
 		if err := refs[i].pty.Quiesce(ctx); err != nil {
-			return fmt.Errorf("stopping pane %s: %w", shortID(refs[i].window), err)
+			return errfmt.Errorf("stopping pane %s: %w", shortID(refs[i].window), err)
 		}
 		return nil
 	}); err != nil {
@@ -365,7 +369,7 @@ func (r *handoffRun) prepare() error {
 	}
 
 	if err := r.writeManifest(sessions, refs); err != nil {
-		return fmt.Errorf("writing the handoff manifest: %w", err)
+		return errfmt.Errorf("writing the handoff manifest: %w", err)
 	}
 	return nil
 }
@@ -408,7 +412,7 @@ func (r *handoffRun) writeManifest(sessions []*Session, refs []handoffPaneRef) e
 			ref := refs[start+i]
 			rec, ok := ref.pty.handoffRecord(ref.sess, ref.window)
 			if !ok {
-				return fmt.Errorf("pane %s has no terminal device here", shortID(ref.window))
+				return errfmt.Errorf("pane %s has no terminal device here", shortID(ref.window))
 			}
 			rec.State, rec.Live = ref.pty.handoffCapture()
 			var err error
@@ -446,7 +450,7 @@ func (r *handoffRun) writeManifest(sessions []*Session, refs []handoffPaneRef) e
 	for name, l := range d.namedListeners() {
 		var fd int
 		if !listenerFD(l, func(n int) { fd = n }) {
-			return fmt.Errorf("the %s socket has no descriptor to hand over", name)
+			return errfmt.Errorf("the %s socket has no descriptor to hand over", name)
 		}
 		dr.Listeners[name] = fd
 		r.fds = append(r.fds, fd)
@@ -581,7 +585,7 @@ func (r *handoffRun) commit() error {
 	r.bin.close()
 	r.putBack()
 	d.handoffMu.Unlock()
-	return fmt.Errorf("exec %s: %w", r.bin.path, err)
+	return errfmt.Errorf("exec %s: %w", r.bin.path, err)
 }
 
 // abandon puts back a prepared run that was never committed. It reports

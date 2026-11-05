@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"github.com/Gaurav-Gosain/tuios/internal/worktree"
 )
 
@@ -568,7 +569,7 @@ func NewWorktree(repoRoot, branch string) (path, session string, err error) {
 	ready()
 	branch = strings.TrimSpace(branch)
 	if repoRoot != repo.root {
-		return "", "", fmt.Errorf("%s is not a git repository", prettyPath(repoRoot))
+		return "", "", errfmt.Errorf("%s is not a git repository", prettyPath(repoRoot))
 	}
 	if err := validBranch(branch); err != nil {
 		return "", "", err
@@ -579,11 +580,11 @@ func NewWorktree(repoRoot, branch string) (path, session string, err error) {
 	for _, c := range checkouts() {
 		if c.branch == branch {
 			fsMu.Unlock()
-			return "", "", fmt.Errorf("a branch named %s already exists", branch)
+			return "", "", errfmt.Errorf("a branch named %s already exists", branch)
 		}
 		if c.root == path {
 			fsMu.Unlock()
-			return "", "", fmt.Errorf("%s already exists", prettyPath(path))
+			return "", "", errfmt.Errorf("%s already exists", prettyPath(path))
 		}
 	}
 	c := &checkout{
@@ -613,11 +614,11 @@ func NewWorktree(repoRoot, branch string) (path, session string, err error) {
 func validBranch(name string) error {
 	switch {
 	case name == "":
-		return fmt.Errorf("type a branch name")
+		return errfmt.Errorf("type a branch name")
 	case strings.ContainsAny(name, " ~^:?*[\\") || strings.Contains(name, ".."),
 		strings.HasPrefix(name, "-"), strings.HasPrefix(name, "/"), strings.HasSuffix(name, "/"),
 		strings.HasSuffix(name, ".lock"), strings.HasSuffix(name, "."):
-		return fmt.Errorf("%q is not a valid branch name", name)
+		return errfmt.Errorf("%q is not a valid branch name", name)
 	}
 	return nil
 }

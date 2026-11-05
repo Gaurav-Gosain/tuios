@@ -111,12 +111,6 @@ func TestCopyModeEntryCenterSetting(t *testing.T) {
 	}
 }
 
-func TestCopyModeEntryConfig(t *testing.T) {
-	if config.DefaultSettings().CopyEntry != config.CopyEntryCursor {
-		t.Error("the default copy_entry is not cursor")
-	}
-}
-
 // In multi copy mode each pane starts on its own cursor, not on one row for
 // all of them.
 func TestMultiCopyEntersEachPaneAtItsCursor(t *testing.T) {

@@ -3,11 +3,11 @@
 package winjob
 
 import (
-	"fmt"
 	"os/exec"
 	"syscall"
 	"unsafe"
 
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"golang.org/x/sys/windows"
 )
 
@@ -45,7 +45,7 @@ func Resume(h windows.Handle) error {
 	}
 	r, _, _ := procNtResumeProcess.Call(uintptr(h))
 	if r != 0 {
-		return fmt.Errorf("NtResumeProcess: NTSTATUS 0x%08x", uint32(r))
+		return errfmt.Errorf("NtResumeProcess: NTSTATUS 0x%08x", uint32(r))
 	}
 	return nil
 }
@@ -59,7 +59,7 @@ func Resume(h windows.Handle) error {
 func RunTree(cmd *exec.Cmd) error {
 	job, err := New(windows.JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE)
 	if err != nil {
-		return fmt.Errorf("could not make a job: %w", err)
+		return errfmt.Errorf("could not make a job: %w", err)
 	}
 	// Closing the last handle kills what is still in the job.
 	defer func() { _ = windows.CloseHandle(job) }()
@@ -89,11 +89,11 @@ func enter(job windows.Handle, pid int) error {
 	h, err := windows.OpenProcess(windows.PROCESS_SET_QUOTA|windows.PROCESS_TERMINATE|windows.PROCESS_SUSPEND_RESUME,
 		false, uint32(pid)) //nolint:gosec // a process id fits
 	if err != nil {
-		return fmt.Errorf("could not open the process: %w", err)
+		return errfmt.Errorf("could not open the process: %w", err)
 	}
 	defer func() { _ = windows.CloseHandle(h) }()
 	if err := windows.AssignProcessToJobObject(job, h); err != nil {
-		return fmt.Errorf("could not put the process in a job: %w", err)
+		return errfmt.Errorf("could not put the process in a job: %w", err)
 	}
 	return Resume(h)
 }

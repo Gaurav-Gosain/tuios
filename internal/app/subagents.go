@@ -123,10 +123,10 @@ func subagentName(s sessiontree.Subagent) string {
 func subagentNote(s sessiontree.Subagent) string {
 	switch s.State {
 	case session.SubagentRunning:
-		if now := printableTitle(s.Now); now != "" {
+		if now := printableTitle(toolLineLabel(s.Now)); now != "" {
 			return now
 		}
-		return printableTitle(s.Last)
+		return printableTitle(toolLineLabel(s.Last))
 	case session.SubagentDone:
 		return "done" + subagentToolCount(s.Tools)
 	case session.SubagentFailed:

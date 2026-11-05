@@ -7,6 +7,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 )
 
 // The dock's built-in component names. Every segment the bar has ever drawn is
@@ -412,13 +414,13 @@ func ParseDockRefresh(s string) (DockRefresh, error) {
 			}
 		}
 		if len(events) == 0 {
-			return DockRefresh{}, fmt.Errorf("refresh %q names no event type", s)
+			return DockRefresh{}, errfmt.Errorf("refresh %q names no event type", s)
 		}
 		return DockRefresh{Kind: DockRefreshEvent, Events: events}, nil
 	}
 	d, err := time.ParseDuration(s)
 	if err != nil {
-		return DockRefresh{}, fmt.Errorf("refresh %q is not once, push, event:TYPE or a duration", s)
+		return DockRefresh{}, errfmt.Errorf("refresh %q is not once, push, event:TYPE or a duration", s)
 	}
 	if d < DockCustomMinInterval {
 		d = DockCustomMinInterval

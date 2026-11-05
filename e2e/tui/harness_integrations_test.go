@@ -572,7 +572,8 @@ func TestQwenApprovalFromTheInbox(t *testing.T) {
 	}
 	saveFrame(t, term, "qwen-approval-held")
 	time.Sleep(answerSettle)
-	if err := term.SendKeys("1"); err != nil {
+	// The key asks, and enter answers.
+	if err := term.SendKeys("1", tuitest.Enter); err != nil {
 		t.Fatalf("answer: %v", err)
 	}
 	select {

@@ -395,6 +395,8 @@ func handleSidebarFileAction(action string, o *app.OS) tea.Cmd {
 		o.SidebarFileInsert()
 	case sidebarActFileQuickLook:
 		return o.SidebarQuickLook()
+	case sidebarActFileOpenSystem:
+		return o.SidebarFileOpenSystem()
 	}
 	return nil
 }

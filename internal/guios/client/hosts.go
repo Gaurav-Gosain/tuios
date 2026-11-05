@@ -1,8 +1,9 @@
 package client
 
 import (
-	"encoding/json"
 	"time"
+
+	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 )
 
 // The machines this machine's daemon links (tuios hosts). The daemon holds
@@ -69,7 +70,7 @@ func (c *Client) Hosts() ([]HostReport, HostReport, error) {
 		Hosts []HostReport `json:"hosts"`
 		Load  *HostReport  `json:"load"`
 	}
-	if err := json.Unmarshal(raw, &res); err != nil {
+	if err := jsonx.Unmarshal(raw, &res); err != nil {
 		return nil, HostReport{}, err
 	}
 	var local HostReport

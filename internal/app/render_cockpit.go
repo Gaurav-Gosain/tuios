@@ -148,6 +148,7 @@ var (
 	ckGlyphImage   = ckGlyph{"\U000f02e9", "[img]", "[img]"}
 	ckGlyphPR      = ckGlyph{"\uf407", "PR", "PR"}
 	ckGlyphFan     = ckGlyph{"\uf192", "+", "+"}
+	ckGlyphUnseen  = ckGlyph{"•", "•", "*"}
 )
 
 // g picks the form the terminal can draw.
@@ -278,8 +279,8 @@ func (m *OS) renderCockpit() (string, int, int, int) {
 	}
 	// A state that moves with the clock or the keyboard is drawn afresh.
 	// The reply editor is not one: what it draws is in the key.
-	transient := st.ck.img != nil || ck.spawn != nil || st.Peek != nil || st.selectEditing || m.InboxSnoozePicking() || st.agents.sheet != nil ||
-		st.approvals.reason != nil || st.approvals.armed.key != ""
+	transient := st.ck.img != nil || ck.spawn != nil || ck.kb.add != nil || ck.kb.drag != nil || st.Peek != nil || st.selectEditing || m.InboxSnoozePicking() || st.agents.sheet != nil ||
+		st.approvals.reason != nil || st.approvals.armed.key != "" || st.approvals.confirm != nil
 	if !transient && ck.frame != "" && ck.frameAt == key {
 		return ck.frame, top, w, h
 	}
@@ -335,6 +336,7 @@ func (m *OS) drawCockpitUnderSheet(c *ckCanvas, l ckLook, top int, now time.Time
 func (m *OS) drawCockpit(c *ckCanvas, l ckLook, top int, now time.Time) {
 	st := &m.Inbox
 	ck := &st.ck
+	ck.stripShown = false
 	hdrY := 0
 	if c.h >= 32 {
 		hdrY = 1
@@ -357,6 +359,11 @@ func (m *OS) drawCockpit(c *ckCanvas, l ckLook, top int, now time.Time) {
 	}
 	m.drawCockpitHeader(c, l, hdrY, top)
 
+	if m.kanbanOn() && m.kanbanDrawable() {
+		m.drawKanban(c, l, colTop, colBot, top)
+		m.drawCockpitHints(c, l, hintsY, now)
+		return
+	}
 	if empty := m.cockpitEmptyLines(rows); empty != nil {
 		m.drawCockpitEmpty(c, l, colTop, colBot, top, empty)
 		m.drawCockpitHints(c, l, hintsY, now)
@@ -375,7 +382,19 @@ func (m *OS) drawCockpit(c *ckCanvas, l ckLook, top int, now time.Time) {
 	}
 	// The strip draws no headings, so a folded group keeps the fleet
 	// column: it shows the fold, and the cursor can open it there.
-	strip := c.w >= ckOneColumn && agents <= 2 && !folded && !ck.board && !ck.needsOnly && st.Filter == "" && st.Select == "" && st.agents.query == ""
+	// [agents] view_list and the list key choose between the column and
+	// the strip; auto folds a fleet of two or fewer. The strip takes only a
+	// fleet whose chips fit on its row.
+	strip := c.w >= ckOneColumn && !folded && !ck.board && !ck.needsOnly && st.Filter == "" && st.Select == "" && st.agents.query == ""
+	switch m.ckListMode() {
+	case config.AgentsViewListStrip:
+		strip = strip && m.ckStripWidth(l) <= c.w-4
+	case config.AgentsViewListAuto:
+		strip = strip && agents <= 2
+	default:
+		strip = false
+	}
+	ck.stripShown = strip
 	focusX, focusW := fleetW+3, c.w-fleetW-5
 	switch {
 	case strip:
@@ -976,7 +995,14 @@ func (m *OS) drawFleetRow(c *ckCanvas, l ckLook, r ckRow, cursor, hover bool, x,
 	if r.lines != 1 || w >= 48 {
 		nx = max(nx, x+5)
 	}
-	c.text(nx, y, nx+nameW-1, ckSeg{t: ckTrunc(name, nameW-1), fg: ink(nameInk), attrs: ckBold})
+	if r.agent >= 0 && m.agentRowUnseen(e) {
+		// Finished or failed since the person last viewed the thread: the
+		// unseen mark follows the name.
+		ex := c.text(nx, y, nx+nameW-1, ckSeg{t: ckTrunc(name, nameW-3), fg: ink(nameInk), attrs: ckBold})
+		c.text(ex+1, y, nx+nameW-1, ckSeg{t: l.g(ckGlyphUnseen), fg: ink(pal.AccentBright), attrs: ckBold})
+	} else {
+		c.text(nx, y, nx+nameW-1, ckSeg{t: ckTrunc(name, nameW-1), fg: ink(nameInk), attrs: ckBold})
+	}
 	rx := c.textR(right, y, ckSeg{t: wait, fg: ink(pal.FgMute)})
 	if r.agent >= 0 && m.ckArtifactNew(e, false) {
 		// A surface the person has not seen: the chip opens it.
@@ -1256,7 +1282,7 @@ func (m *OS) ckRowLine2(l ckLook, r ckRow, e sidebarAgentEntry) (verb, rest stri
 		return "", silentNote(e.StateAt, time.Now()), pal.Warn, right
 	case e.State == "working":
 		if now := ckMeta(e, "now"); now != "" {
-			if tool, target, ok := strings.Cut(now, ": "); ok {
+			if tool, target, ok := strings.Cut(toolLineLabel(now), ": "); ok {
 				return tool, target, ink, right
 			}
 			return now, "", ink, right
@@ -1340,7 +1366,9 @@ func ckItemVerb(it session.AttentionItem) (verb, rest string) {
 	switch it.Kind {
 	case session.AttentionApproval:
 		if tool, text := risk.ParseSummary(it.Summary); tool != "" {
-			return "Allow " + printableTitle(tool), printableTitle(text)
+			// The row names the program. The card under it shows the
+			// command whole, which is what an allow runs.
+			return "Allow " + printableTitle(tool), printableTitle(ckToolTarget(tool, text))
 		}
 		return "Allow", sum
 	case session.AttentionPlan:
@@ -1521,35 +1549,65 @@ func (m *OS) drawCockpitStrip(c *ckCanvas, l ckLook, y, top int) int {
 		if !r.selectable() {
 			continue
 		}
-		var e sidebarAgentEntry
-		if r.agent >= 0 {
-			e = ck.agents[r.agent]
-		}
-		name, _, _, _ := m.ckRowFacts(r, e)
-		g, gInk := l.ckMark(e.State, e.DoneSeen)
-		if r.hasItem {
-			g, gInk = l.ckItemMark(r.item)
-		}
-		if m.ckArtFormRow(r, e) != "" {
-			g, gInk = l.g(ckGlyphNeeds), pal.Attention
-		}
-		bg, nameInk := l.panel, pal.FgDim
-		if r.key == sel.key {
-			bg, nameInk = l.cursor, pal.Fg
-		}
+		chip, art := m.ckStripChip(l, r, r.key == sel.key)
 		x0 := x
-		x = c.text(x, y, 0, ckSeg{t: " " + g + " ", fg: gInk, bg: bg}, ckSeg{t: name + " ", fg: overlay.Readable(nameInk, bg), bg: bg, attrs: ckBold})
+		x = c.text(x, y, 0, chip...)
 		c.mark(pal, x0, y, x-x0, 1, overlay.RowState{Cursor: r.key == sel.key, Focused: true})
 		ck.hits = append(ck.hits, ckHit{x0: x0, y0: top + y, x1: x, y1: top + y + 1, kind: ckHitRow, key: r.key})
-		if r.agent >= 0 && m.ckArtifactNew(e, false) {
+		if art != nil {
 			// A surface the person has not seen: the chip opens it.
 			cx := x + 1
-			x = c.text(cx, y, 0, ckSeg{t: l.g(ckGlyphNeeds) + " " + ckArtChip, fg: pal.Attention, attrs: ckBold})
+			x = c.text(cx, y, 0, art...)
 			ck.hits = append([]ckHit{{x0: cx, y0: top + y, x1: x, y1: top + y + 1, kind: ckHitAction, action: "artrow:" + r.key}}, ck.hits...)
 		}
 		x += 2
 	}
 	return y + 1
+}
+
+// ckStripChip is the strip's chip for row r: its mark and name, and the
+// new artifact chip after it, nil when there is none.
+func (m *OS) ckStripChip(l ckLook, r ckRow, cursor bool) (chip, art []ckSeg) {
+	ck := &m.Inbox.ck
+	pal := l.pal
+	var e sidebarAgentEntry
+	if r.agent >= 0 {
+		e = ck.agents[r.agent]
+	}
+	name, _, _, _ := m.ckRowFacts(r, e)
+	g, gInk := l.ckMark(e.State, e.DoneSeen)
+	if r.hasItem {
+		g, gInk = l.ckItemMark(r.item)
+	}
+	if m.ckArtFormRow(r, e) != "" {
+		g, gInk = l.g(ckGlyphNeeds), pal.Attention
+	}
+	bg, nameInk := l.panel, pal.FgDim
+	if cursor {
+		bg, nameInk = l.cursor, pal.Fg
+	}
+	chip = []ckSeg{{t: " " + g + " ", fg: gInk, bg: bg}, {t: name + " ", fg: overlay.Readable(nameInk, bg), bg: bg, attrs: ckBold}}
+	if r.agent >= 0 && m.ckArtifactNew(e, false) {
+		art = []ckSeg{{t: l.g(ckGlyphNeeds) + " " + ckArtChip, fg: pal.Attention, attrs: ckBold}}
+	}
+	return chip, art
+}
+
+// ckStripWidth is how many cells the strip's chips take, from its first chip
+// to the end of its last.
+func (m *OS) ckStripWidth(l ckLook) int {
+	w := 0
+	for _, r := range m.Inbox.ck.rows {
+		if !r.selectable() {
+			continue
+		}
+		chip, art := m.ckStripChip(l, r, false)
+		w += ckWidth(chip...) + 2
+		if art != nil {
+			w += 1 + ckWidth(art...)
+		}
+	}
+	return max(w-2, 0)
 }
 
 // cockpitEmptyLines is what the cockpit says when it has no rows, nil when it
@@ -1698,6 +1756,8 @@ func (m *OS) cockpitHints(now time.Time) []overlay.Hint {
 		return inboxSnoozeHints()
 	case st.agents.sheet != nil:
 		return m.bulkSheetHints()
+	case st.approvals.confirm != nil:
+		return inboxConfirmHints(st.approvals.confirm.decision)
 	case len(st.agents.marks) > 0:
 		return m.bulkHints()
 	case st.Peek != nil:
@@ -1712,6 +1772,9 @@ func (m *OS) cockpitHints(now time.Time) []overlay.Hint {
 	// Resume all comes first while the fleet shows more than one offer:
 	// after a restart it is the one thing to do.
 	hints := m.resumeAllHint()
+	if m.kanbanOn() && m.kanbanDrawable() {
+		return append(hints, m.kanbanHints()...)
+	}
 	r, ok := m.cockpitSelected()
 	if ok && r.kind == ckRowHead {
 		hints = append(hints, m.keyHints(config.ActionInboxFold, "open group")...)
@@ -1785,8 +1848,19 @@ func (m *OS) cockpitHints(now time.Time) []overlay.Hint {
 	if st.ck.board {
 		board = "agents"
 	}
-	hints = append(hints, m.keyHints(config.ActionInboxNewAgent, "new agent", config.ActionInboxBoard, board, config.ActionInboxReview, "review",
-		config.ActionInboxFilter, "filter", config.ActionInboxSelect, "search")...)
+	hints = append(hints, m.keyHints(config.ActionInboxNewAgent, "new agent", config.ActionInboxBoard, board)...)
+	if st.ck.board && m.GetRenderWidth() >= ckOneColumn {
+		hints = append(hints, m.keyHints(config.ActionInboxBoardLayout, "columns")...)
+	}
+	if !st.ck.board && m.GetRenderWidth() >= ckOneColumn {
+		// Optional, so a narrow footer gives it up first: ? lists it too.
+		list := "strip"
+		if st.ck.stripShown {
+			list = "list"
+		}
+		hints = append(hints, overlay.Optional(m.keyHints(config.ActionInboxViewList, list))...)
+	}
+	hints = append(hints, m.keyHints(config.ActionInboxReview, "review", config.ActionInboxFilter, "filter", config.ActionInboxSelect, "search")...)
 	if ok && r.kind != ckRowHead {
 		// Optional, so a narrow footer gives it up first: ? lists it too.
 		hints = append(hints, overlay.Optional(m.keyHints(config.ActionInboxFold, "fold group"))...)
@@ -2028,28 +2102,37 @@ func (m *OS) drawFocus(c *ckCanvas, l ckLook, x, y, w, y1, top int, now time.Tim
 	if r.agent >= 0 && cardTop-bodyTop > 1 {
 		room := cardTop - bodyTop - 1
 		t := st.threads.byKey[agentKey(e)]
-		scroll := 0
+		up := 0
 		if t != nil {
-			scroll = t.scroll
+			up = max(t.follow.Up, 0)
 		}
-		lines := m.threadBody(e, w, room+scroll, now)
+		// The live activity row sits under the newest line, where the
+		// thread's last line would be, while the agent works.
+		base := cardTop - 1
+		if room > 2 && m.drawThreadActivity(c, l, e, t, x, base-1, w, now) {
+			room--
+			base--
+		}
+		lines := m.threadBody(e, w, room+up, now)
 		var hits []string
 		if t != nil && len(t.hits) == len(lines) {
 			hits = t.hits
 		}
-		if t != nil {
-			// The thread scrolls no further than its first line.
-			t.scroll = min(scroll, max(len(lines)-room, 0))
-			scroll = t.scroll
+		start, end := max(len(lines)-room, 0), len(lines)
+		if t != nil && (t.read || t.recap != nil) {
+			t.follow.Apply(threadLayout(t, len(lines), room))
+			start, end = t.follow.Window()
 		}
-		end := len(lines) - scroll
-		start := max(end-room, 0)
-		ty := cardTop - 1 - (end - start)
-		for i := start; i < end; i++ {
-			c.draw(x, ty+i-start, w, lines[i])
+		for i := start; i < min(end, len(lines)); i++ {
+			y := base - (end - i)
+			c.draw(x, y, w, lines[i])
 			if hits != nil && hits[i] != "" {
-				st.ck.hits = append(st.ck.hits, ckHit{x0: x, y0: top + ty + i - start, x1: right, y1: top + ty + i - start + 1, kind: ckHitAction, action: hits[i]})
+				st.ck.hits = append(st.ck.hits, ckHit{x0: x, y0: top + y, x1: right, y1: top + y + 1, kind: ckHitAction, action: hits[i]})
 			}
+		}
+		if t != nil {
+			m.drawThreadUnseen(c, l, t, x, w, base-1, top)
+			drawThreadRuler(c, l, t, x+w-1, base-room, room, len(lines), start)
 		}
 	}
 }
@@ -2152,10 +2235,19 @@ func (m *OS) ckApprovalLines(it session.AttentionItem, where string, width int, 
 	detail = append(detail, "  in "+where)
 	if slices.Contains(it.Options, session.ApprovalAlways) && len(it.AlwaysScope) > 0 {
 		for _, rule := range it.AlwaysScope {
-			detail = append(detail, wrapPlain("  Always also allows "+printableTitle(rule), width)...)
+			// wrapPlain drops the indent of a line it wraps, so it is added
+			// to each line after.
+			for _, l := range wrapPlain("Always also allows "+printableTitle(rule), max(width-2, 8)) {
+				detail = append(detail, "  "+l)
+			}
 		}
 	}
 	detail = append(detail, inboxRiskLines(it, width)...)
+	if line, ok := m.inboxConfirmLine(it); ok {
+		for _, l := range wrapPlain(line, width) {
+			detail = append(detail, "  "+l)
+		}
+	}
 	if key, armed := m.inboxArmedFor(it, now); armed {
 		press := m.Inbox.approvals.armed.press
 		if press == "" {
@@ -2346,7 +2438,12 @@ func (m *OS) drawItemCard(c *ckCanvas, l ckLook, r ckRow, x, w, y0, y1, top int,
 	if cut && answerable {
 		st.ck.cutKey = inboxShownKey(it)
 	}
-	m.noteInboxShown(it, held && inboxShowsWhole(it) && !(cut && answerable), now)
+	// An item that arrived while the person types a reply is drawn held,
+	// with words in place of its buttons, and is not counted as shown until
+	// the hold ends: the settle starts then.
+	typing, _ := m.inboxTypingHeld(it, now)
+	typing = typing && answerable && !cut
+	m.noteInboxShown(it, held && inboxShowsWhole(it) && !(cut && answerable) && !typing, now)
 	cy := max(y1-h, y0)
 	c.fill(x, cy, w, y1-cy, l.panel)
 	barInk := pal.Attention
@@ -2423,6 +2520,11 @@ func (m *OS) drawItemCard(c *ckCanvas, l ckLook, r ckRow, x, w, y0, y1, top int,
 			c.text(x+1, yy, x+w-2, ckSeg{t: s, fg: ink})
 		}
 		yy++
+	}
+	if typing && len(btns) > 0 && yy+1 < y1 {
+		bx := c.text(x+3, yy+1, x+w-2, ckSeg{t: " " + inboxTypingWords + " ", fg: overlay.Readable(pal.Attention, l.cursor), bg: l.cursor, attrs: ckBold})
+		c.text(bx+2, yy+1, x+w-2, ckSeg{t: "Stop typing to answer.", fg: pal.FgMute})
+		btns = nil
 	}
 	if len(btns) > 0 && yy+1 < y1 {
 		bx := x + 3

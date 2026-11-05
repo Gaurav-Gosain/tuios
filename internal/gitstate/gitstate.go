@@ -20,6 +20,8 @@
 // HEAD and refs are asked of git instead. Those answers are kept until the
 // reftable's table list changes, so that check is a file read too. See
 // reftable.go.
+//
+// A jj workspace, colocated or not, is read through jj instead. See jj.go.
 package gitstate
 
 import (
@@ -55,6 +57,12 @@ type State struct {
 	// Ahead and Behind are commits on one side of the fork point and not the
 	// other. Both are zero when Upstream is empty.
 	Ahead, Behind int
+	// The rest is said only about a jj workspace, where Branch names the
+	// stack rather than a checked out branch and Upstream is "trunk()".
+	// Unbookmarked is commits above the bookmark Branch names, which a push
+	// of that bookmark leaves behind. Conflicts and Divergent are commits
+	// between trunk and the working copy that jj lets stand without a word.
+	Unbookmarked, Conflicts, Divergent int
 }
 
 // HasUpstream reports whether the divergence counts mean anything.
@@ -102,6 +110,18 @@ func Read(dir string) (State, bool) {
 	}
 
 	gitdir, commondir, root, ok := Locate(dir)
+	// A jj workspace wins over the git directory beside it or above it: in a
+	// colocated one git's HEAD is a bare hash that names nothing.
+	if jroot, repoDir, jok := locateJJ(dir); jok && jjWins(jroot, root, ok) {
+		if st, found := readJJ(jroot, repoDir); found {
+			if missed {
+				mu.Lock()
+				delete(misses, dir)
+				mu.Unlock()
+			}
+			return st, true
+		}
+	}
 	if !ok {
 		// Remember it. Otherwise every refresh walks from a home directory to
 		// the filesystem root, stat-ing a ".git" at every level, for a pane
@@ -167,6 +187,7 @@ func Read(dir string) (State, bool) {
 func Forget() {
 	mu.Lock()
 	clear(cache)
+	clear(jjCache)
 	clear(misses)
 	mu.Unlock()
 	reftableMu.Lock()
@@ -413,6 +434,12 @@ func (d Dirty) Any() bool { return d.Staged > 0 || d.Modified > 0 || d.Untracked
 // gate it on. The caller's refresh interval is the only bound.
 func ReadDirty(root string) (Dirty, bool) {
 	if root == "" {
+		return Dirty{}, false
+	}
+	// In a jj workspace git's index is jj's export, not a record of what was
+	// staged, and a sparse workspace leaves every path outside its patterns
+	// in it: git status called 142801 files deleted on one, at 1.5 s a read.
+	if st, err := os.Stat(filepath.Join(root, ".jj")); err == nil && st.IsDir() {
 		return Dirty{}, false
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), countTimeout)

@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/childproc"
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 )
 
 // Native image clipboard.
@@ -92,7 +93,7 @@ func detectImageRoute() ClipboardRoute {
 func CopyImage(path string, data []byte, mediaType string) (string, error) {
 	r := ImageRoute()
 	if !r.Available {
-		return "", fmt.Errorf("%s", r.Reason)
+		return "", errfmt.Errorf("%s", r.Reason)
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), clipboardTimeout)
 	defer cancel()
@@ -111,20 +112,20 @@ func CopyImage(path string, data []byte, mediaType string) (string, error) {
 		detach(cmd)
 	case "osascript":
 		if mediaType != "image/png" {
-			return "", fmt.Errorf("this machine can only copy PNG images")
+			return "", errfmt.Errorf("this machine can only copy PNG images")
 		}
 		script := fmt.Sprintf(`set the clipboard to (read (POSIX file %q) as «class PNGf»)`, path)
 		cmd = childproc.CommandContext(ctx, "osascript", "-e", script)
 	case "powershell":
 		if mediaType != "image/png" {
-			return "", fmt.Errorf("this machine can only copy PNG images")
+			return "", errfmt.Errorf("this machine can only copy PNG images")
 		}
 		script := fmt.Sprintf(
 			`Add-Type -AssemblyName System.Windows.Forms;`+
 				`[System.Windows.Forms.Clipboard]::SetImage([System.Drawing.Image]::FromFile(%q))`, path)
 		cmd = childproc.CommandContext(ctx, "powershell", "-NoProfile", "-Command", script)
 	default:
-		return "", fmt.Errorf("no clipboard helper")
+		return "", errfmt.Errorf("no clipboard helper")
 	}
 
 	// Run, not CombinedOutput, and no pipes on stdout or stderr.
@@ -141,7 +142,7 @@ func CopyImage(path string, data []byte, mediaType string) (string, error) {
 	// The parent's exit code still reports whether the write was accepted, so
 	// nothing is lost by not reading its output.
 	if err := cmd.Run(); err != nil {
-		return "", fmt.Errorf("%s could not copy: %s", r.Tool, err.Error())
+		return "", errfmt.Errorf("%s could not copy: %s", r.Tool, err.Error())
 	}
 	return r.Tool, nil
 }

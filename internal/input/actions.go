@@ -75,6 +75,9 @@ const (
 	// sidebarActFileQuickLook opens and closes the preview of the row. It
 	// reads and changes nothing, so it is live while file actions are off.
 	sidebarActFileQuickLook = "file_quick_look"
+	// sidebarActFileOpenSystem opens the row with a program on the desktop:
+	// the first [[files.open]] rule that matches, or the system opener.
+	sidebarActFileOpenSystem = "file_open_system"
 	// jump_1..jump_9 are matched by prefix; see HandleSidebarKey.
 	sidebarActJumpPrefix = "jump_"
 )
@@ -285,6 +288,7 @@ func (d *ActionDispatcher) registerHandlers() {
 		sidebarActFileDeleteAll, sidebarActFileCopy, sidebarActFileCut,
 		sidebarActFilePaste, sidebarActFileOpen, sidebarActFileEdit,
 		sidebarActFileCopyPath, sidebarActFileSend, sidebarActFileInsertPath, sidebarActFileQuickLook,
+		sidebarActFileOpenSystem,
 	} {
 		d.Register(action, makeSidebarFileHandler(action))
 	}

@@ -14,6 +14,7 @@ import (
 	"unicode/utf8"
 
 	"charm.land/lipgloss/v2"
+	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
@@ -273,7 +274,7 @@ func (f *follower) add(r copyRow) {
 }
 
 func (f *follower) emit(v map[string]any) {
-	line, _ := json.Marshal(v)
+	line, _ := jsonx.Marshal(v)
 	_, _ = fmt.Fprintln(f.stdout, jsonSafe(string(line)))
 }
 
@@ -355,7 +356,7 @@ func (f *follower) event(line json.RawMessage) {
 		Transfer *copyRow              `json:"transfer"`
 		File     *session.TransferFile `json:"file"`
 	}
-	if json.Unmarshal(line, &ev) != nil {
+	if jsonx.Unmarshal(line, &ev) != nil {
 		return
 	}
 	switch {
@@ -568,7 +569,7 @@ func (f *follower) refresh() {
 		var out struct {
 			Transfers []copyRow `json:"transfers"`
 		}
-		if json.Unmarshal(raw, &out) == nil && len(out.Transfers) == 1 {
+		if jsonx.Unmarshal(raw, &out) == nil && len(out.Transfers) == 1 {
 			f.update(out.Transfers[0])
 		}
 	}
@@ -599,7 +600,7 @@ func (f *follower) answerConflicts() {
 				var out struct {
 					Transfers []copyRow `json:"transfers"`
 				}
-				if json.Unmarshal(raw, &out) == nil && len(out.Transfers) == 1 {
+				if jsonx.Unmarshal(raw, &out) == nil && len(out.Transfers) == 1 {
 					f.update(out.Transfers[0])
 				}
 			}

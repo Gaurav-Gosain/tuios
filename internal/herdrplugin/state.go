@@ -2,13 +2,13 @@ package herdrplugin
 
 import (
 	"errors"
-	"fmt"
 	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
 	"time"
 
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"github.com/pelletier/go-toml/v2"
 )
 
@@ -87,7 +87,7 @@ func (s *State) Live(le LockEntry) (dir string, built, ok bool) {
 func CheckDir(id, dir string) error {
 	rest, ok := strings.CutPrefix(dir, "plugins/"+PathComponent(id)+"/")
 	if !ok || rest == "" || rest == "." || rest == ".." || strings.ContainsAny(rest, `/\:`) || hasControl(rest) {
-		return fmt.Errorf("the state of %s names an invalid folder %q", id, dir)
+		return errfmt.Errorf("the state of %s names an invalid folder %q", id, dir)
 	}
 	return nil
 }
@@ -103,7 +103,7 @@ func ReadState(p string) (*State, error) {
 		err = toml.Unmarshal(data, &s)
 	}
 	if err != nil {
-		return nil, fmt.Errorf("%s cannot be read: %w", p, err)
+		return nil, errfmt.Errorf("%s cannot be read: %w", p, err)
 	}
 	return &s, nil
 }

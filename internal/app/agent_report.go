@@ -1,9 +1,9 @@
 package app
 
 import (
-	"fmt"
 	"time"
 
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 )
 
@@ -37,14 +37,14 @@ type AgentReportMsg AgentReport
 func (m *OS) ReportAgentState(r AgentReport) error {
 	state, ok := session.ParseAgentState(r.State)
 	if !ok {
-		return fmt.Errorf("unknown agent state %q", r.State)
+		return errfmt.Errorf("unknown agent state %q", r.State)
 	}
 	if r.Kind != "" && state != session.AgentStateNeedsInput {
-		return fmt.Errorf("kind describes a needs_input state, and this report is %s", r.State)
+		return errfmt.Errorf("kind describes a needs_input state, and this report is %s", r.State)
 	}
 	w := m.windowByID(r.WindowID)
 	if w == nil {
-		return fmt.Errorf("no window %q", r.WindowID)
+		return errfmt.Errorf("no window %q", r.WindowID)
 	}
 	to := string(state)
 	if w.AgentState != to {

@@ -15,6 +15,7 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/app"
 	"github.com/Gaurav-Gosain/tuios/internal/cliflags"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"github.com/Gaurav-Gosain/tuios/internal/fang"
 	"github.com/Gaurav-Gosain/tuios/internal/guestenv"
 	"github.com/Gaurav-Gosain/tuios/internal/herdrplugin"
@@ -363,10 +364,10 @@ sessions that 'tuios ls' and the sidebar list together.`,
 			}
 			if newHost != "" {
 				if newCwd != "" {
-					return fmt.Errorf("--cwd is a directory on this machine, so it cannot be used with --host")
+					return errfmt.Errorf("--cwd is a directory on this machine, so it cannot be used with --host")
 				}
 				if newSpace != "" {
-					return fmt.Errorf("--space cannot be used with --host. Run 'tuios set-session-space' on the host after you create the session")
+					return errfmt.Errorf("--space cannot be used with --host. Run 'tuios set-session-space' on the host after you create the session")
 				}
 				return runNewOnHost(newHost, name, newDetach, newHold, newSSH)
 			}
@@ -510,6 +511,7 @@ run this command manually.`,
 	var daemonLogLevel string
 	var daemonNoRestore bool
 	var daemonAdoptFD int
+	var daemonService bool
 	daemonCmd := &cobra.Command{
 		Use:   "daemon",
 		Short: "Run the TUIOS daemon in the foreground",
@@ -542,6 +544,9 @@ Debug log levels:
 			if daemonAdoptFD > 0 {
 				return runAdoptingDaemon(daemonAdoptFD)
 			}
+			if daemonService {
+				return runServiceDaemon(daemonNoRestore)
+			}
 			return runDaemon(true, daemonNoRestore)
 		},
 	}
@@ -551,7 +556,12 @@ Debug log levels:
 	// descriptor of the manifest its predecessor wrote. See daemon_upgrade.go.
 	daemonCmd.Flags().IntVar(&daemonAdoptFD, adoptFDFlag, 0, "Adopt the panes a live upgrade handed over on this descriptor")
 	_ = daemonCmd.Flags().MarkHidden(adoptFDFlag)
-	daemonCmd.AddCommand(handoffAcceptsCommand(), handoffKeeperCommand(), daemonUpgradeCommand())
+	// Set only by the service that install-service writes. A live upgrade
+	// keeps it, since handoffArgs keeps the daemon's own arguments.
+	daemonCmd.Flags().BoolVar(&daemonService, "service", false, "A service manager started this daemon")
+	_ = daemonCmd.Flags().MarkHidden("service")
+	daemonCmd.AddCommand(handoffAcceptsCommand(), handoffKeeperCommand(), daemonUpgradeCommand(),
+		newDaemonInstallServiceCommand(), newDaemonUninstallServiceCommand(), newDaemonServiceStatusCommand())
 
 	var killRestart bool
 	killDaemonCmd := &cobra.Command{
@@ -879,7 +889,7 @@ exists: get-window and list-windows read windows with the read grant.`,
 				return nil
 			}
 			if len(args) == 0 {
-				return fmt.Errorf("command name required (use --list to see available commands)")
+				return errfmt.Errorf("command name required (use --list to see available commands)")
 			}
 			return runCommand(runCommandSession, args[0], args[1:], runCommandJSON)
 		},
@@ -901,6 +911,7 @@ exists: get-window and list-windows read windows with the read grant.`,
 
 	var setConfigSession string
 	var setConfigJSON bool
+	var setConfigNoSave bool
 	setConfigCmd := &cobra.Command{
 		Use:   "set-config <path> <value>",
 		Short: "Set a configuration option in a running TUIOS session",
@@ -917,7 +928,13 @@ session. The next client that attaches applies it and writes it to config.toml.
 The command then says so on stderr, and --json reports "applied": false with
 the reason.
 
+--no-save applies the value and does not write it to a config file. Later
+saves of other settings do not write it either. The value stays until the
+client exits, or until you set the option again without --no-save. Use it in
+a hook that changes the display for a moment.
+
 agents.enabled is the person's switch. A process in a pane cannot set it.
+--no-save does not apply to it.
 
   tuios set-config appearance.border_style rounded
   tuios set-config appearance.dockbar_position top`,
@@ -931,14 +948,18 @@ agents.enabled is the person's switch. A process in a pane cannot set it.
   tuios set-config motion none
 
   # Hide window buttons
-  tuios set-config hide_window_buttons true`,
+  tuios set-config hide_window_buttons true
+
+  # Hide the sidebar for now and keep config.toml as it is
+  tuios set-config --no-save appearance.sidebar.enabled false`,
 		Args: cobra.ExactArgs(2),
 		RunE: func(_ *cobra.Command, args []string) error {
-			return runSetConfig(setConfigSession, args[0], args[1], setConfigJSON)
+			return runSetConfig(setConfigSession, args[0], args[1], setConfigJSON, setConfigNoSave)
 		},
 	}
 	setConfigCmd.Flags().StringVarP(&setConfigSession, "session", "s", "", "Target session (default: this pane's session, else the most recently active)")
 	setConfigCmd.Flags().BoolVar(&setConfigJSON, "json", false, "Output result as JSON, with applied and the reason when it is false")
+	setConfigCmd.Flags().BoolVar(&setConfigNoSave, "no-save", false, "Apply the value and keep it out of the config files until the client exits")
 	_ = setConfigCmd.RegisterFlagCompletionFunc("session", completeSessionNames)
 
 	var getConfigSession string
@@ -1053,7 +1074,7 @@ activity the harness hooks report, and are refused here.`,
   tuios set-agent-meta --source statusline --clear`,
 		Args: func(_ *cobra.Command, args []string) error {
 			if len(args) == 0 && !setAgentMetaClear {
-				return fmt.Errorf("give at least one key=value, or --clear")
+				return errfmt.Errorf("give at least one key=value, or --clear")
 			}
 			return nil
 		},
@@ -1243,7 +1264,9 @@ when the program exits, unless you add --keep-open. Put -- before a command that
 tuios reads them as its own flags: tuios new-window log -- git log --oneline.
 
 --workspace picks the workspace, --cwd sets the starting directory, and
---no-focus leaves the focus where it is.
+--no-focus leaves the focus where it is. Run in a pane without --cwd, the
+window starts in the directory you run the command from. Outside a pane it
+starts in the focused pane's directory.
 
 --keep-open keeps the window after its program exits. The window shows a line
 with the exit status under the last output. Close the window to remove it.
@@ -1315,7 +1338,7 @@ window as one line with its uri.`,
 	}
 	newWindowCmd.Flags().StringVarP(&newWindowSession, "session", "s", "", "Target session (default: this pane's session, else the most recently active)")
 	newWindowCmd.Flags().IntVar(&newWindowWorkspace, "workspace", 0, "Workspace to open the window on (default: the calling pane's workspace, else the one the session shows)")
-	newWindowCmd.Flags().StringVar(&newWindowCwd, "cwd", "", "Directory to start the shell in (default: the daemon's)")
+	newWindowCmd.Flags().StringVar(&newWindowCwd, "cwd", "", "Directory to start the shell in (default: the calling pane's, else the focused pane's)")
 	newWindowCmd.Flags().BoolVar(&newWindowNoFocus, "no-focus", false, "Leave the focus where it is")
 	newWindowCmd.Flags().StringVar(&newWindowHost, "host", "", "Run the window's process on this machine from the [hosts] table (default: this machine)")
 	newWindowCmd.Flags().StringSliceVar(&newWindowGrants, "grants", nil, "What the window's process may do through tuios, comma separated: read, write, fan, files, task, respond, admin, or none (default: [agents.permissions])")
@@ -1428,45 +1451,6 @@ popup. Omit it to follow the config (default: 0); --dim 0 disables dimming.`,
 	popupCmd.Flags().BoolVar(&popupJSON, "json", false, "Output result as JSON")
 	_ = popupCmd.RegisterFlagCompletionFunc("session", completeSessionNames)
 
-	var splitWindowSession string
-	var splitWindowWindow string
-	var splitWindowName string
-	var splitWindowJSON bool
-	splitWindowCmd := &cobra.Command{
-		Use:   "split-window <horizontal|vertical|left|right|up|down>",
-		Short: "Divide a pane and open a new one beside it",
-		Long: `Split a pane along an axis and print the id of the new pane.
-
-horizontal and vertical put the new pane below or to the right. left, right,
-up and down name the side of the pane the new pane takes.
-
-Needs an attached client and tiling on. The split goes through the renderer's
-own path, so the new pane lands in the layout exactly as one opened from the
-keyboard does.`,
-		Example: `  # Split the focused pane left/right
-  tuios split-window vertical
-
-  # Put the new pane to the left of the focused one
-  tuios split-window left
-
-  # Split a named pane and name what comes out of it
-  tuios split-window horizontal -w build --name logs
-
-  # Capture the new pane's id for scripting
-  tuios split-window vertical --json | jq -r .window_id`,
-		Args:      cobra.ExactArgs(1),
-		ValidArgs: []string{"horizontal", "vertical", "left", "right", "up", "down"},
-		RunE: func(_ *cobra.Command, args []string) error {
-			return runSplitWindow(splitWindowSession, splitWindowWindow, args[0],
-				splitWindowName, splitWindowJSON)
-		},
-	}
-	splitWindowCmd.Flags().StringVarP(&splitWindowSession, "session", "s", "", "Target session (default: this pane's session, else the most recently active)")
-	splitWindowCmd.Flags().StringVarP(&splitWindowWindow, "window", "w", "", "Pane to split by name or ID (default: focused)")
-	splitWindowCmd.Flags().StringVar(&splitWindowName, "name", "", "Name for the new pane")
-	splitWindowCmd.Flags().BoolVar(&splitWindowJSON, "json", false, "Output result as JSON")
-	_ = splitWindowCmd.RegisterFlagCompletionFunc("session", completeSessionNames)
-
 	var focusWindowSession string
 	var focusWindowRelative string
 	var focusWindowDirection string
@@ -1516,6 +1500,8 @@ layout to the pane on the far side.`,
 	var moveWindowToSession string
 	var moveWindowFollow bool
 	var moveWindowJSON bool
+	var moveWindowBeside, moveWindowSide string
+	var moveWindowRatio int
 	moveWindowCmd := &cobra.Command{
 		Use:   "move-window [workspace]",
 		Short: "Move a window to another workspace or session",
@@ -1528,7 +1514,12 @@ With --to-session, the window moves to another session. The program in it
 keeps running, and the window keeps its id and its scrollback. The workspace
 is optional then: without it, the window goes to the workspace that session
 shows. A popup, a scratch pane, a TML pane and a pane on another machine
-cannot move.`,
+cannot move.
+
+With --beside, the window moves next to another pane, on the side --side
+names (default: right), on that pane's workspace. --ratio gives it that share
+of the space in percent. Without -w, this moves the pane you run it in, or the
+focused pane outside every pane.`,
 		Example: `  # Move the focused window to workspace 3
   tuios move-window 3
 
@@ -1539,19 +1530,30 @@ cannot move.`,
   tuios move-window -s work -w build --to-session review
 
   # Move it to workspace 2 of "review" and focus it there
-  tuios move-window 2 -w build --to-session review --follow`,
+  tuios move-window 2 -w build --to-session review --follow
+
+  # Put the pane named logs below the pane named editor, at 30 percent
+  tuios move-window -w logs --beside editor --side down --ratio 30`,
 		Args: cobra.RangeArgs(0, 1),
 		RunE: func(_ *cobra.Command, args []string) error {
 			workspace := 0
 			if len(args) == 1 {
 				n, err := strconv.Atoi(args[0])
 				if err != nil || n < 1 {
-					return fmt.Errorf("workspace must be a number from 1, got %q", args[0])
+					return errfmt.Errorf("workspace must be a number from 1, got %q", args[0])
 				}
 				workspace = n
 			}
+			if moveWindowBeside != "" {
+				if workspace != 0 || moveWindowToSession != "" || moveWindowFollow {
+					return errors.New("--beside moves the window next to a pane of its session. Leave out the workspace, --to-session and --follow")
+				}
+				return runLayoutVerb("move-window", moveWindowSession, moveWindowWindow, map[string]any{
+					"beside": moveWindowBeside, "side": moveWindowSide, "ratio": moveWindowRatio,
+				}, moveWindowJSON, func(map[string]any) string { return "moved beside " + moveWindowBeside })
+			}
 			if workspace == 0 && moveWindowToSession == "" {
-				return errors.New("give the workspace to move the window to, or a session with --to-session")
+				return errors.New("give the workspace to move the window to, a session with --to-session, or a pane with --beside")
 			}
 			return runMoveWindow(moveWindowSession, moveWindowWindow, moveWindowToSession, workspace,
 				moveWindowFollow, moveWindowJSON)
@@ -1561,6 +1563,9 @@ cannot move.`,
 	moveWindowCmd.Flags().StringVarP(&moveWindowWindow, "window", "w", "", "Window to move by name or ID (default: focused)")
 	moveWindowCmd.Flags().StringVar(&moveWindowToSession, "to-session", "", "Session to move the window to")
 	moveWindowCmd.Flags().BoolVar(&moveWindowFollow, "follow", false, "Switch to that workspace after moving")
+	moveWindowCmd.Flags().StringVar(&moveWindowBeside, "beside", "", "Pane to move the window next to")
+	moveWindowCmd.Flags().StringVar(&moveWindowSide, "side", "", "With --beside: left, right, up or down (default: right)")
+	moveWindowCmd.Flags().IntVar(&moveWindowRatio, "ratio", 0, "With --beside: the window's share of the space, in percent (default: half)")
 	moveWindowCmd.Flags().BoolVar(&moveWindowJSON, "json", false, "Output result as JSON")
 	_ = moveWindowCmd.RegisterFlagCompletionFunc("session", completeSessionNames)
 	_ = moveWindowCmd.RegisterFlagCompletionFunc("to-session", completeSessionNames)
@@ -1591,7 +1596,7 @@ sets as the title.`,
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			if setWindowMinimize && setWindowRestore {
-				return fmt.Errorf("--minimize and --restore ask for opposite things. Pass one")
+				return errfmt.Errorf("--minimize and --restore ask for opposite things. Pass one")
 			}
 			// An unset flag has to stay unset rather than send its zero value:
 			// --name "" is a request to clear the name, which is not the same as
@@ -1634,7 +1639,7 @@ This changes which workspace is displayed. To label one use
 		RunE: func(_ *cobra.Command, args []string) error {
 			workspace, err := strconv.Atoi(args[0])
 			if err != nil {
-				return fmt.Errorf("workspace must be a number, got %q", args[0])
+				return errfmt.Errorf("workspace must be a number, got %q", args[0])
 			}
 			return runSelectWorkspace(selectWorkspaceSession, workspace, selectWorkspaceJSON)
 		},
@@ -1706,7 +1711,7 @@ only mean something while the panes are tiled.`,
 			if cmd.Flags().Changed("tiling") {
 				parsed, err := strconv.ParseBool(setLayoutTiling)
 				if err != nil {
-					return fmt.Errorf("--tiling takes true or false, got %q", setLayoutTiling)
+					return errfmt.Errorf("--tiling takes true or false, got %q", setLayoutTiling)
 				}
 				tiling = &parsed
 			}
@@ -2307,7 +2312,7 @@ number. The number stays the workspace's identity. Pass no name to clear it.`,
 		RunE: func(_ *cobra.Command, args []string) error {
 			workspace, err := strconv.Atoi(args[0])
 			if err != nil {
-				return fmt.Errorf("workspace must be a number, got %q", args[0])
+				return errfmt.Errorf("workspace must be a number, got %q", args[0])
 			}
 			name := ""
 			if len(args) > 1 {
@@ -2694,12 +2699,12 @@ would accept a question right now.`,
 		RunE: func(_ *cobra.Command, _ []string) error {
 			if listAgentsAllHosts || listAgentsHost != "" {
 				if listAgentsSession != "" {
-					return fmt.Errorf("--session names one machine's session, so it cannot be used with --all-hosts or --host. Every session on each host is listed, and each row names its session")
+					return errfmt.Errorf("--session names one machine's session, so it cannot be used with --all-hosts or --host. Every session on each host is listed, and each row names its session")
 				}
 				return runListAgentsAllHosts(listAgentsHost, listAgentsAll, listAgentsSelect, listAgentsJSON)
 			}
 			if listAgentsAllSessions && listAgentsSession != "" {
-				return fmt.Errorf("--all-sessions lists every session, so it takes no --session")
+				return errfmt.Errorf("--all-sessions lists every session, so it takes no --session")
 			}
 			return runListAgents(listAgentsSession, listAgentsAll, listAgentsAllSessions, listAgentsSelect, listAgentsJSON)
 		},
@@ -2780,13 +2785,13 @@ list-agents printed for the same selector.`,
 			sendMsgFrom = senderPane(sendMsgFrom)
 			if sendMsgSelect != "" {
 				if sendMsgTo != "" || sendMsgSession != "" || sendMsgReplyTo != 0 {
-					return fmt.Errorf("--select names the recipients in every session, so it takes no --window, --session or --reply-to")
+					return errfmt.Errorf("--select names the recipients in every session, so it takes no --window, --session or --reply-to")
 				}
 				return runSendAgentMessageSelect(sendMsgSelect, sendMsgFrom, sendMsgSubject, args[0], sendMsgAttach,
 					stdinConfirm(sendMsgYes, sendMsgConfirm), sendMsgJSON)
 			}
 			if sendMsgYes || sendMsgConfirm != "" {
-				return fmt.Errorf("--yes and --confirm go with --select")
+				return errfmt.Errorf("--yes and --confirm go with --select")
 			}
 			return runSendAgentMessage(sendMsgSession, sendMsgTo, sendMsgFrom,
 				sendMsgSubject, args[0], sendMsgReplyTo, sendMsgAttach, sendMsgJSON)
@@ -2916,13 +2921,13 @@ others still answer.`,
 			askFrom = senderPane(askFrom)
 			if askSelect != "" {
 				if askWindow != "" || askSession != "" {
-					return fmt.Errorf("--select names the agents in every session, so it takes no --window or --session")
+					return errfmt.Errorf("--select names the agents in every session, so it takes no --window or --session")
 				}
 				return runAskAgentSelect(askSelect, askFrom, args[0], askReadyTimeout, askSettle, askTimeout, askLines,
 					askStallTimeout, askForce, askAllowBlocked, stdinConfirm(askYes, askConfirm), askJSON)
 			}
 			if askYes || askConfirm != "" {
-				return fmt.Errorf("--yes and --confirm go with --select")
+				return errfmt.Errorf("--yes and --confirm go with --select")
 			}
 			return runAskAgent(askSession, askWindow, askFrom, args[0],
 				askReadyTimeout, askSettle, askTimeout, askLines, askStallTimeout, askForce, askAllowBlocked, askJSON)
@@ -3089,6 +3094,7 @@ command in authorized_keys to make the policy a boundary:
 	rootCmd.AddCommand(newDetachClientCmd())
 	rootCmd.AddCommand(newSSHAgentPathCmd())
 	rootCmd.AddCommand(newDisplayEnvCmd())
+	rootCmd.AddCommand(newKeepAwakeCmd())
 	rootCmd.AddCommand(startDaemonCmd, daemonCmd, killDaemonCmd, newRestartServerCommand(), newDaemonAppCommand())
 	rootCmd.AddCommand(sendKeysCmd, runCommandCmd, setConfigCmd, getConfigCmd, logsCmd, capturePaneCmd, screenshotCmd)
 	rootCmd.AddCommand(setAgentStateCmd, setAgentMetaCmd, setAgentSessionCmd, newResumeAgentCommand(), getAgentStateCmd, explainAgentDetectCmd, explainAgentScreenCmd)
@@ -3096,7 +3102,8 @@ command in authorized_keys to make the policy a boundary:
 		newPeekPromptCommand(), newRespondCommand(), newQueueCommand(), newTaskCommand(), newReviewCommand(), newCheckpointCommand(), newShipCommand())
 	rootCmd.AddCommand(sendTextCmd, newWindowCmd, waitForCmd, newSubscribeCommand(), newRunCommand(), newAskHumanCommand())
 	rootCmd.AddCommand(renameSessionCmd, setSessionNameCmd, setSessionAccentCmd, setSessionSpaceCmd, setSessionOrderCmd, setWorkspaceNameCmd, newNoteCommand())
-	rootCmd.AddCommand(splitWindowCmd, popupCmd, focusWindowCmd, moveWindowCmd, setWindowCmd, newSetAgentQuietCommand(), newPiPCommand(), newCallCommand(), newPaneViewCommand())
+	rootCmd.AddCommand(newLayoutCommands()...)
+	rootCmd.AddCommand(newSplitWindowCommand(), popupCmd, focusWindowCmd, moveWindowCmd, setWindowCmd, newSetAgentQuietCommand(), newPiPCommand(), newCallCommand(), newPaneViewCommand())
 	rootCmd.AddCommand(selectWorkspaceCmd, listWorkspacesCmd, setLayoutCmd)
 	rootCmd.AddCommand(listWindowsCmd, getWindowCmd, sessionInfoCmd, listVerbsCmd, listOptionsCmd, listThemesCmd, listGlyphsCmd, importThemeCmd, themeCmd)
 	rootCmd.AddCommand(listDockComponentsCmd, refreshDockCmd, listHooksCmd)
@@ -3169,5 +3176,5 @@ func findLayoutTemplate(name string) (app.LayoutTemplate, error) {
 			return t, nil
 		}
 	}
-	return app.LayoutTemplate{}, fmt.Errorf("no layout named %q. Run 'tuios layout list' to see the saved layouts", name)
+	return app.LayoutTemplate{}, errfmt.Errorf("no layout named %q. Run 'tuios layout list' to see the saved layouts", name)
 }

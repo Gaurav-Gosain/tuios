@@ -10,6 +10,7 @@ import (
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/harness"
+	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 	"github.com/Gaurav-Gosain/tuios/internal/procinfo"
 	"github.com/Gaurav-Gosain/tuios/internal/tape"
 )
@@ -476,11 +477,11 @@ func (d *Daemon) addressesHostedPane(verb string, params json.RawMessage) bool {
 		return false
 	}
 	var fields map[string]json.RawMessage
-	if json.Unmarshal(params, &fields) != nil {
+	if jsonx.Unmarshal(params, &fields) != nil {
 		return false
 	}
 	var addr string
-	if raw, ok := fields[field]; !ok || json.Unmarshal(raw, &addr) != nil {
+	if raw, ok := fields[field]; !ok || jsonx.Unmarshal(raw, &addr) != nil {
 		return false
 	}
 	return d.hostedPaneByAddress(addr) != nil
@@ -938,18 +939,18 @@ var typingVerbs = map[string]bool{
 // target that does not resolve is left for the handler to report.
 func (d *Daemon) holdTypingTarget(cs *connState, verb string, pa *paneAuth, params json.RawMessage, deny func(string) *verbError) (json.RawMessage, *verbError) {
 	var m map[string]json.RawMessage
-	if err := json.Unmarshal(params, &m); err != nil || m == nil {
+	if err := jsonx.Unmarshal(params, &m); err != nil || m == nil {
 		return params, nil
 	}
 	str := func(name string) string {
 		var s string
 		if raw, ok := m[name]; ok {
-			_ = json.Unmarshal(raw, &s)
+			_ = jsonx.Unmarshal(raw, &s)
 		}
 		return s
 	}
 	window := str("window")
-	if window == "" && (verb == "send-text" || verb == "send-keys") && pa.inPane() {
+	if window == "" && (verb == "send-text" || verb == "send-keys" || verb == "run") && pa.inPane() {
 		return nil, typingNeedsWindow(verb)
 	}
 	sess := d.findTargetSession(cs, str("session"))
@@ -976,7 +977,7 @@ func (d *Daemon) holdTypingTarget(cs *connState, verb string, pa *paneAuth, para
 	target := state.Windows[idx]
 	var allowBlocked bool
 	if raw, ok := m["allow_blocked"]; ok {
-		_ = json.Unmarshal(raw, &allowBlocked)
+		_ = jsonx.Unmarshal(raw, &allowBlocked)
 	}
 	// ask-agent refuses a pane on needs_input itself, with agent_blocked, and
 	// checks again right before it types. Only allow_blocked takes it past.
@@ -998,9 +999,9 @@ func (d *Daemon) holdTypingTarget(cs *connState, verb string, pa *paneAuth, para
 		// its send-keys still goes through the attached client.
 		return params, nil
 	}
-	raw, _ := json.Marshal(target.ID)
+	raw, _ := jsonx.Marshal(target.ID)
 	m["window"] = raw
-	out, err := json.Marshal(m)
+	out, err := jsonx.Marshal(m)
 	if err != nil {
 		return nil, newVerbError(ErrVerbInternal, "could not encode params")
 	}
@@ -1046,7 +1047,7 @@ func (d *Daemon) holdOwnRecord(verb string, pa *paneAuth, params json.RawMessage
 	}
 	var m map[string]json.RawMessage
 	if len(strings.TrimSpace(string(params))) > 0 {
-		if err := json.Unmarshal(params, &m); err != nil {
+		if err := jsonx.Unmarshal(params, &m); err != nil {
 			return nil, invalidParam("params", "params must be an object")
 		}
 	}
@@ -1056,7 +1057,7 @@ func (d *Daemon) holdOwnRecord(verb string, pa *paneAuth, params json.RawMessage
 	str := func(name string) string {
 		var s string
 		if raw, ok := m[name]; ok {
-			_ = json.Unmarshal(raw, &s)
+			_ = jsonx.Unmarshal(raw, &s)
 		}
 		return s
 	}
@@ -1088,14 +1089,14 @@ func (d *Daemon) holdOwnRecord(verb string, pa *paneAuth, params json.RawMessage
 		}
 	}
 	set := func(name, value string) {
-		raw, _ := json.Marshal(value)
+		raw, _ := jsonx.Marshal(value)
 		m[name] = raw
 	}
 	if session != "" {
 		set("session", session)
 	}
 	set("window", pa.window)
-	out, err := json.Marshal(m)
+	out, err := jsonx.Marshal(m)
 	if err != nil {
 		return nil, newVerbError(ErrVerbInternal, "could not encode params")
 	}
@@ -1182,9 +1183,9 @@ var typingAllowBlockedParam = verbParam{
 // paneTypingVerbs are the typing verbs that type into a pane on needs_input
 // only with allow_blocked. ask-agent has the rule of its own, and run and the
 // queue type only at a shell prompt or into an agent at rest. Of these,
-// send-text and send-keys also need a window from a pane (typingNeedsWindow).
-// paste-buffer does not: tmux's paste-buffer pastes into the caller's own
-// pane, and scripts use it so.
+// send-text and send-keys also need a window from a pane (typingNeedsWindow),
+// and so does run. paste-buffer does not: tmux's paste-buffer pastes into the
+// caller's own pane, and scripts use it so.
 var paneTypingVerbs = map[string]bool{
 	"send-text":    true,
 	"send-keys":    true,

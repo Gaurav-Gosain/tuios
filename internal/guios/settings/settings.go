@@ -5,8 +5,6 @@
 package settings
 
 import (
-	"encoding/json"
-	"fmt"
 	"log"
 	"os"
 	"path/filepath"
@@ -14,9 +12,11 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"github.com/Gaurav-Gosain/tuios/internal/guios/adblock"
 	"github.com/Gaurav-Gosain/tuios/internal/guios/proto"
 	"github.com/Gaurav-Gosain/tuios/internal/guios/remote"
+	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 )
 
 // Settings are the user's choices. The zero value of a field is never a
@@ -276,7 +276,7 @@ func migrate() {
 		Background string `json:"background"`
 	}{Settings: Default()}
 	old.LightTheme, old.DarkTheme = "kero", "kero"
-	if json.Unmarshal(b, &old) != nil {
+	if jsonx.Unmarshal(b, &old) != nil {
 		return
 	}
 	s := old.Settings
@@ -468,10 +468,10 @@ func ParseHost(line string) (Host, error) {
 	name = strings.TrimSpace(name)
 	fields := strings.Fields(rest)
 	if !ok || len(fields) == 0 {
-		return Host{}, fmt.Errorf("%q is not name=address", line)
+		return Host{}, errfmt.Errorf("%q is not name=address", line)
 	}
 	if !remote.ValidName(name) {
-		return Host{}, fmt.Errorf("%q can't name a host: use letters, digits, dots and dashes (and not local)", name)
+		return Host{}, errfmt.Errorf("%q can't name a host: use letters, digits, dots and dashes (and not local)", name)
 	}
 	a, err := remote.ParseAddr(fields[0])
 	if err != nil {
@@ -484,9 +484,9 @@ func ParseHost(line string) (Host, error) {
 		case k == "color" && slices.Contains(HostColors, v):
 			h.Color = v
 		case k == "color":
-			return Host{}, fmt.Errorf("%s: no color %q (%s)", name, v, strings.Join(HostColors, ", "))
+			return Host{}, errfmt.Errorf("%s: no color %q (%s)", name, v, strings.Join(HostColors, ", "))
 		default:
-			return Host{}, fmt.Errorf("%s: no option %q (color=…)", name, o)
+			return Host{}, errfmt.Errorf("%s: no option %q (color=…)", name, o)
 		}
 	}
 	return h, nil

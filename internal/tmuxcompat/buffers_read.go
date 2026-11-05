@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"github.com/Gaurav-Gosain/tuios/internal/sortx"
 )
 
@@ -36,7 +37,7 @@ func (s *Shim) bufferOrError(p Parsed) (string, error) {
 		return "", err
 	}
 	if !found {
-		return "", fmt.Errorf("no buffer %s", buf)
+		return "", errfmt.Errorf("no buffer %s", buf)
 	}
 	return data, nil
 }
@@ -78,7 +79,7 @@ func (s *Shim) saveBuffer(name string, args []string) (string, []string, error) 
 		path = filepath.Join(s.Cwd, path)
 	}
 	if s.Dir != "" && (InShimDir(path, s.Dir) || canonPath(path) == canonPath(s.Dir)) {
-		return OutcomeError, nil, fmt.Errorf("%s: refused, it is in the tmux shim's own directory", p.Args[0])
+		return OutcomeError, nil, errfmt.Errorf("%s: refused, it is in the tmux shim's own directory", p.Args[0])
 	}
 	flags := os.O_WRONLY | os.O_CREATE | os.O_TRUNC
 	if p.Has('a') {
@@ -86,14 +87,14 @@ func (s *Shim) saveBuffer(name string, args []string) (string, []string, error) 
 	}
 	f, err := os.OpenFile(path, flags, 0o600)
 	if err != nil {
-		return OutcomeError, nil, fmt.Errorf("%s: %w", p.Args[0], errors.Unwrap(err))
+		return OutcomeError, nil, errfmt.Errorf("%s: %w", p.Args[0], errors.Unwrap(err))
 	}
 	if _, err := f.WriteString(data); err != nil {
 		_ = f.Close()
-		return OutcomeError, nil, fmt.Errorf("%s: %w", p.Args[0], err)
+		return OutcomeError, nil, errfmt.Errorf("%s: %w", p.Args[0], err)
 	}
 	if err := f.Close(); err != nil {
-		return OutcomeError, nil, fmt.Errorf("%s: %w", p.Args[0], err)
+		return OutcomeError, nil, errfmt.Errorf("%s: %w", p.Args[0], err)
 	}
 	return OutcomeOK, nil, nil
 }

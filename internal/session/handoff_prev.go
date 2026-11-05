@@ -4,13 +4,14 @@ import (
 	"bytes"
 	"crypto/sha256"
 	"errors"
-	"fmt"
 	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strconv"
+
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 )
 
 // The binary a handoff falls back to.
@@ -170,7 +171,7 @@ func (d *Daemon) checkPrevBinary() (*prevBinary, error) {
 	// drops the link count, which moves it.
 	id, err := statFileID(prev.path)
 	if err != nil || id.withoutChange() != prev.file.withoutChange() {
-		return nil, fmt.Errorf("the copy of this daemon's binary kept for a fallback, %s, has changed since the daemon started, so a failed upgrade would have nothing to return to. The upgrade is refused. %s", prev.path, restartAdvice())
+		return nil, errfmt.Errorf("the copy of this daemon's binary kept for a fallback, %s, has changed since the daemon started, so a failed upgrade would have nothing to return to. The upgrade is refused. %s", prev.path, restartAdvice())
 	}
 	if prev.sum != nil {
 		f, err := os.Open(prev.path)
@@ -181,7 +182,7 @@ func (d *Daemon) checkPrevBinary() (*prevBinary, error) {
 		_, err = io.Copy(h, f)
 		_ = f.Close()
 		if err != nil || !bytes.Equal(h.Sum(nil), prev.sum) {
-			return nil, fmt.Errorf("the copy of this daemon's binary kept for a fallback, %s, has changed since the daemon started, so a failed upgrade would have nothing to return to. The upgrade is refused. %s", prev.path, restartAdvice())
+			return nil, errfmt.Errorf("the copy of this daemon's binary kept for a fallback, %s, has changed since the daemon started, so a failed upgrade would have nothing to return to. The upgrade is refused. %s", prev.path, restartAdvice())
 		}
 	}
 	return prev, nil

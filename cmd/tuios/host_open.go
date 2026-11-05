@@ -2,7 +2,6 @@ package main
 
 import (
 	"bufio"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -12,7 +11,9 @@ import (
 	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"github.com/Gaurav-Gosain/tuios/internal/federation"
+	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/spf13/cobra"
 )
@@ -38,7 +39,7 @@ import (
 func resolveConfiguredHost(name string) (federation.Host, error) {
 	path, err := config.GetConfigPath()
 	if err != nil {
-		return federation.Host{}, fmt.Errorf("cannot find the config file: %w", err)
+		return federation.Host{}, errfmt.Errorf("cannot find the config file: %w", err)
 	}
 	hosts, err := config.HostsInFile(path)
 	if err != nil {
@@ -52,9 +53,9 @@ func resolveConfiguredHost(name string) (federation.Host, error) {
 		}
 		sort.Strings(names)
 		if len(names) == 0 {
-			return federation.Host{}, fmt.Errorf("no host is named %q. No hosts are configured. Add one with 'tuios hosts add %s user@machine'", name, name)
+			return federation.Host{}, errfmt.Errorf("no host is named %q. No hosts are configured. Add one with 'tuios hosts add %s user@machine'", name, name)
 		}
-		return federation.Host{}, fmt.Errorf("no host is named %q. Configured hosts: %s", name, strings.Join(names, ", "))
+		return federation.Host{}, errfmt.Errorf("no host is named %q. Configured hosts: %s", name, strings.Join(names, ", "))
 	}
 	table, problems := federation.NewTable([]federation.Host{{
 		Name:           name,
@@ -114,8 +115,8 @@ func runNewOnHostDetached(host, name string) error {
 	var res struct {
 		Session string `json:"session"`
 	}
-	if err := json.Unmarshal(raw, &res); err != nil || res.Session == "" {
-		return fmt.Errorf("tuios on %s created the session and sent a reply this build cannot read", host)
+	if err := jsonx.Unmarshal(raw, &res); err != nil || res.Session == "" {
+		return errfmt.Errorf("tuios on %s created the session and sent a reply this build cannot read", host)
 	}
 	fmt.Printf("Created detached session '%s' on %s. Attach with 'tuios attach --host %s %s'.\n", res.Session, host, host, res.Session)
 	return nil
@@ -199,9 +200,9 @@ func explainMissingHostSession(host, name string, names []string, err error) err
 func explainHostVerbError(host, verb string, err error) error {
 	var call *session.VerbCallError
 	if errors.As(err, &call) && call.Code == session.ErrVerbUnknownVerb {
-		return fmt.Errorf("tuios on %s is too old for %s. Upgrade tuios on %s", host, verb, host)
+		return errfmt.Errorf("tuios on %s is too old for %s. Upgrade tuios on %s", host, verb, host)
 	}
-	return fmt.Errorf("tuios on %s: %w", host, err)
+	return errfmt.Errorf("tuios on %s: %w", host, err)
 }
 
 // runOnHost runs the host's tuios with remote as its arguments over one ssh,
@@ -234,7 +235,7 @@ func runOnHost(hostName string, hold, tty bool, remote ...string) error {
 func explainRemoteFailure(host, addr string, remote []string, err error) error {
 	var exit *exec.ExitError
 	if !errors.As(err, &exit) {
-		return fmt.Errorf("could not run %s: %w. Set TUIOS_SSH to the ssh program to use", federation.SSHBinary(), err)
+		return errfmt.Errorf("could not run %s: %w. Set TUIOS_SSH to the ssh program to use", federation.SSHBinary(), err)
 	}
 	verb := "open"
 	if len(remote) > 0 && remote[0] == "new" {
@@ -243,13 +244,13 @@ func explainRemoteFailure(host, addr string, remote []string, err error) error {
 	switch exit.ExitCode() {
 	case 255:
 		// ssh's own code: it never reached a shell on the far side.
-		return fmt.Errorf("ssh could not reach %s (%s). Run 'tuios hosts test %s' to see why", host, addr, host)
+		return errfmt.Errorf("ssh could not reach %s (%s). Run 'tuios hosts test %s' to see why", host, addr, host)
 	case 127:
 		// The probe's own code when it found nothing, and the shell's when a
 		// configured command is not there.
-		return fmt.Errorf("tuios was not found on %s. Run 'tuios hosts test %s' to see where the link looked", host, host)
+		return errfmt.Errorf("tuios was not found on %s. Run 'tuios hosts test %s' to see where the link looked", host, host)
 	default:
-		return fmt.Errorf("tuios on %s could not %s the session. Its message is above", host, verb)
+		return errfmt.Errorf("tuios on %s could not %s the session. Its message is above", host, verb)
 	}
 }
 

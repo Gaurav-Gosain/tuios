@@ -13,6 +13,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 	"github.com/Gaurav-Gosain/tuios/internal/lazyre"
 )
 
@@ -91,6 +92,8 @@ var hostedCallVerbs = map[string]string{
 	// set-agent-state's activity with no state, about the same pane.
 	"report-agent-activity": "window",
 	"agent-mail-notice":     "window",
+	// An OSC 7501 report from a process with no terminal, about the same pane.
+	"report-program-status": "window",
 }
 
 // hostedCallDropped are parameters removed from a forwarded call before the
@@ -256,7 +259,7 @@ func (c *hostedCallChannel) call(ctx context.Context, verb string, params json.R
 		c.mu.Unlock()
 	}()
 
-	line, err := json.Marshal(hostedCallRequest{ID: id, Verb: verb, Params: params})
+	line, err := jsonx.Marshal(hostedCallRequest{ID: id, Verb: verb, Params: params})
 	if err != nil {
 		return nil, newVerbError(ErrVerbInternal, "could not encode the call: "+err.Error())
 	}
@@ -290,7 +293,7 @@ func (c *hostedCallChannel) readLoop(br *bufio.Reader) {
 			return
 		}
 		var r hostedCallReply
-		if json.Unmarshal(line, &r) != nil {
+		if jsonx.Unmarshal(line, &r) != nil {
 			continue
 		}
 		c.mu.Lock()
@@ -400,11 +403,11 @@ func (d *Daemon) forwardHostedCall(cs *connState, verb string, params json.RawMe
 		return nil, nil, false
 	}
 	var fields map[string]json.RawMessage
-	if json.Unmarshal(params, &fields) != nil {
+	if jsonx.Unmarshal(params, &fields) != nil {
 		return nil, nil, false
 	}
 	var addr string
-	if raw, ok := fields[field]; !ok || json.Unmarshal(raw, &addr) != nil {
+	if raw, ok := fields[field]; !ok || jsonx.Unmarshal(raw, &addr) != nil {
 		return nil, nil, false
 	}
 	hp := d.hostedPaneByAddress(addr)
@@ -415,7 +418,7 @@ func (d *Daemon) forwardHostedCall(cs *connState, verb string, params json.RawMe
 	if verb == "wait-for" {
 		var cond string
 		if raw, ok := fields["condition"]; ok {
-			_ = json.Unmarshal(raw, &cond)
+			_ = jsonx.Unmarshal(raw, &cond)
 		}
 		if cond != "agent-message" {
 			return nil, hintedVerbError(ErrVerbForbidden, "a pane on another machine can wait only for agent-message on its own inbox", &VerbHint{
@@ -425,7 +428,7 @@ func (d *Daemon) forwardHostedCall(cs *connState, verb string, params json.RawMe
 		}
 		ms := int64(30000)
 		if raw, ok := fields["timeout"]; ok {
-			_ = json.Unmarshal(raw, &ms)
+			_ = jsonx.Unmarshal(raw, &ms)
 		}
 		budget = min(time.Duration(max(ms, 0))*time.Millisecond+5*time.Second, hostedWaitMax)
 	}
@@ -495,16 +498,20 @@ func (d *Daemon) hostedCallsOnce(s *Session, windowID string, p *remotePane) err
 	}
 	stop := context.AfterFunc(d.ctx, func() { _ = stream.Close() })
 	defer stop()
+	// The watcher ends with this call. Without exit it would wait for the pane
+	// to close, and every retry after a channel end would add one more.
+	exit := make(chan struct{})
+	defer close(exit)
 	go func() {
 		select {
 		case <-p.done:
 			_ = stream.Close()
-		case <-d.ctx.Done():
+		case <-exit:
 		}
 	}()
 	defer func() { _ = stream.Close() }()
 
-	req, _ := json.Marshal(verbRequest{
+	req, _ := jsonx.Marshal(verbRequest{
 		ID:     json.RawMessage(`1`),
 		Verb:   "pane-calls",
 		Params: mustJSON(map[string]string{"pane": p.id, "token": p.callsToken}),
@@ -520,7 +527,7 @@ func (d *Daemon) hostedCallsOnce(s *Session, windowID string, p *remotePane) err
 	var resp struct {
 		Error *verbError `json:"error"`
 	}
-	if err := json.Unmarshal(line, &resp); err != nil {
+	if err := jsonx.Unmarshal(line, &resp); err != nil {
 		return errHostedCallsFinal
 	}
 	if resp.Error != nil {
@@ -546,11 +553,11 @@ func (d *Daemon) hostedCallsOnce(s *Session, windowID string, p *remotePane) err
 			return err
 		}
 		var call hostedCallRequest
-		if json.Unmarshal(line, &call) != nil {
+		if jsonx.Unmarshal(line, &call) != nil {
 			continue
 		}
 		reply := func(r hostedCallReply) {
-			out, err := json.Marshal(r)
+			out, err := jsonx.Marshal(r)
 			if err != nil {
 				return
 			}
@@ -569,7 +576,7 @@ func (d *Daemon) hostedCallsOnce(s *Session, windowID string, p *remotePane) err
 			result, verr := d.runHostedCall(s, windowID, p.host, call.Verb, call.Params, ended)
 			r := hostedCallReply{ID: call.ID, Error: verr}
 			if verr == nil {
-				raw, err := json.Marshal(result)
+				raw, err := jsonx.Marshal(result)
 				if err != nil {
 					r.Error = newVerbError(ErrVerbInternal, "could not encode the answer")
 				} else {
@@ -603,7 +610,7 @@ func (d *Daemon) runHostedCall(s *Session, windowID, host, verb string, params j
 	}
 	fields := map[string]json.RawMessage{}
 	if len(params) > 0 {
-		if err := json.Unmarshal(params, &fields); err != nil {
+		if err := jsonx.Unmarshal(params, &fields); err != nil {
 			return nil, invalidParam("params", "params must be an object")
 		}
 	}
@@ -618,7 +625,7 @@ func (d *Daemon) runHostedCall(s *Session, windowID, host, verb string, params j
 	}
 	if verb == "wait-for" {
 		var cond string
-		_ = json.Unmarshal(fields["condition"], &cond)
+		_ = jsonx.Unmarshal(fields["condition"], &cond)
 		if cond != "agent-message" {
 			return nil, newVerbError(ErrVerbForbidden, "a pane on another machine can wait only for agent-message on its own inbox")
 		}
@@ -629,7 +636,7 @@ func (d *Daemon) runHostedCall(s *Session, windowID, host, verb string, params j
 		// person included, is refused rather than quietly rewritten, so the
 		// caller learns its message did not go out as it asked.
 		var from string
-		_ = json.Unmarshal(fields["from"], &from)
+		_ = jsonx.Unmarshal(fields["from"], &from)
 		if from != "" && from != windowID {
 			return nil, hintedVerbError(ErrVerbForbidden, "a pane on another machine can send only as itself", &VerbHint{
 				Param:  "from",
@@ -653,7 +660,7 @@ func (d *Daemon) runHostedCall(s *Session, windowID, host, verb string, params j
 // it. A missing, zero or unreadable timeout keeps wait-for's default.
 func clampHostedWait(raw json.RawMessage) int {
 	var ms int64
-	if len(raw) > 0 && json.Unmarshal(raw, &ms) != nil {
+	if len(raw) > 0 && jsonx.Unmarshal(raw, &ms) != nil {
 		ms = 0
 	}
 	if ms <= 0 {
@@ -676,7 +683,7 @@ func windowOnHost(s *Session, windowID, host string) bool {
 
 // mustJSON marshals a value that cannot fail to marshal.
 func mustJSON(v any) json.RawMessage {
-	raw, err := json.Marshal(v)
+	raw, err := jsonx.Marshal(v)
 	if err != nil {
 		return json.RawMessage(`null`)
 	}

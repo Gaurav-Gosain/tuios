@@ -178,7 +178,8 @@ func TestCockpitApprovalCardOnEveryTab(t *testing.T) {
 	}
 	saveCockpitFrames(t, term, "approval-on-live-tab")
 	time.Sleep(answerSettle)
-	if err := term.SendKeys("a"); err != nil {
+	// The key asks, and enter answers.
+	if err := term.SendKeys("a", tuitest.Enter); err != nil {
 		t.Fatal(err)
 	}
 	deadline := time.Now().Add(uiTimeout)

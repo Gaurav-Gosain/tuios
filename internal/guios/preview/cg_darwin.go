@@ -4,11 +4,11 @@ package preview
 
 import (
 	"errors"
-	"fmt"
 	"image"
 	"sync"
 	"unsafe"
 
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"github.com/ebitengine/purego"
 )
 
@@ -86,7 +86,7 @@ func loadCG() error {
 		defer func() {
 			// RegisterLibFunc panics on a symbol it cannot find.
 			if r := recover(); r != nil {
-				cg.err = fmt.Errorf("macOS graphics frameworks: %v", r)
+				cg.err = errfmt.Errorf("macOS graphics frameworks: %v", r)
 			}
 		}()
 		open := func(name string) uintptr {

@@ -12,6 +12,7 @@ import (
 
 	"github.com/Gaurav-Gosain/tuios/internal/app"
 	"github.com/Gaurav-Gosain/tuios/internal/harness"
+	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/webshell"
 )
@@ -276,7 +277,7 @@ func (f *fleet) call(verb string, params map[string]any, _ time.Duration) (json.
 }
 
 func reply(v any) (json.RawMessage, error) {
-	b, err := json.Marshal(v)
+	b, err := jsonx.Marshal(v)
 	return b, err
 }
 
@@ -593,7 +594,7 @@ func (f *fleet) judge(name string) (json.RawMessage, error) {
 			State   string `json:"state"`
 		} `json:"rows"`
 	}
-	_ = json.Unmarshal(raw, &res)
+	_ = jsonx.Unmarshal(raw, &res)
 	pick, most := "", -1
 	for _, r := range res.Rows {
 		if r.State == "done" && r.Added > most {

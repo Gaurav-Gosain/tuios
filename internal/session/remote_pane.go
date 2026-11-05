@@ -5,11 +5,13 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"io"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
+	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 )
 
 // A pane in this daemon's session whose process runs on another machine: the
@@ -143,7 +145,7 @@ func (p *remotePane) isClosed() bool {
 // openRemotePane starts a process on host and returns the pane it speaks to.
 func openRemotePane(ctx context.Context, fed paneFederation, host string, spec hostedPaneSpec) (*remotePane, error) {
 	if fed == nil {
-		return nil, fmt.Errorf("this daemon has no links, so it cannot put a pane on %s", host)
+		return nil, errfmt.Errorf("this daemon has no links, so it cannot put a pane on %s", host)
 	}
 	stream, err := fed.OpenConnection(ctx, host)
 	if err != nil {
@@ -153,7 +155,7 @@ func openRemotePane(ctx context.Context, fed paneFederation, host string, spec h
 	opened, br, err := openPaneReply(stream, spec)
 	if err != nil {
 		_ = stream.Close()
-		return nil, fmt.Errorf("tuios on %s could not start a pane: %w", host, err)
+		return nil, errfmt.Errorf("tuios on %s could not start a pane: %w", host, err)
 	}
 	p := &remotePane{
 		host: host, id: opened.Pane, fed: fed, stream: stream, br: br,
@@ -241,12 +243,12 @@ func openPaneReply(stream io.ReadWriteCloser, spec hostedPaneSpec) (paneOpened, 
 	}
 	if resp.Error != nil {
 		if resp.Error.Code == ErrVerbUnknownVerb {
-			return paneOpened{}, nil, fmt.Errorf("that machine's tuios is too old to host a pane. Update it, then restart its daemon with 'tuios kill-server'")
+			return paneOpened{}, nil, errfmt.Errorf("that machine's tuios is too old to host a pane. Update it, then restart its daemon with 'tuios kill-server'")
 		}
 		return paneOpened{}, nil, resp.Error
 	}
 	if resp.Result == nil || resp.Result.Pane == "" {
-		return paneOpened{}, nil, fmt.Errorf("the reply named no pane")
+		return paneOpened{}, nil, errfmt.Errorf("the reply named no pane")
 	}
 	return *resp.Result, br, nil
 }
@@ -260,11 +262,11 @@ type openPaneResponse struct {
 // sendOpenPane writes one open-pane request for spec and reads its reply
 // through br, which must be the only reader of stream.
 func sendOpenPane(stream io.Writer, br *bufio.Reader, spec hostedPaneSpec) (openPaneResponse, error) {
-	params, err := json.Marshal(spec)
+	params, err := jsonx.Marshal(spec)
 	if err != nil {
 		return openPaneResponse{}, err
 	}
-	req, err := json.Marshal(verbRequest{
+	req, err := jsonx.Marshal(verbRequest{
 		ID:     json.RawMessage(`1`),
 		Verb:   "open-pane",
 		Params: params,
@@ -273,15 +275,15 @@ func sendOpenPane(stream io.Writer, br *bufio.Reader, spec hostedPaneSpec) (open
 		return openPaneResponse{}, err
 	}
 	if _, err := stream.Write(append(req, '\n')); err != nil {
-		return openPaneResponse{}, fmt.Errorf("cannot ask for a pane: %w", err)
+		return openPaneResponse{}, errfmt.Errorf("cannot ask for a pane: %w", err)
 	}
 	line, err := readLimitedLine(br, maxRemotePaneReply)
 	if err != nil {
-		return openPaneResponse{}, fmt.Errorf("no answer to the pane request: %w", err)
+		return openPaneResponse{}, errfmt.Errorf("no answer to the pane request: %w", err)
 	}
 	var resp openPaneResponse
-	if err := json.Unmarshal(line, &resp); err != nil {
-		return openPaneResponse{}, fmt.Errorf("the reply cannot be read by this build: %w", err)
+	if err := jsonx.Unmarshal(line, &resp); err != nil {
+		return openPaneResponse{}, errfmt.Errorf("the reply cannot be read by this build: %w", err)
 	}
 	return resp, nil
 }
@@ -606,7 +608,7 @@ func (s *Session) SetRemotePaneHook(hook func(windowID string, p *remotePane)) {
 func (s *Session) openRemotePaneFor(windowID, host string, width, height int, cwd string, command []string) (paneIO, error) {
 	fed := s.fed
 	if fed == nil {
-		return nil, fmt.Errorf("this daemon has no links, so a window cannot be put on %s. Add it to the [hosts] table in the config", host)
+		return nil, errfmt.Errorf("this daemon has no links, so a window cannot be put on %s. Add it to the [hosts] table in the config", host)
 	}
 	spec := hostedPaneSpec{
 		Width:   width,
@@ -716,7 +718,7 @@ func (p *remotePane) refreshForeground() {
 		PID      int      `json:"pid"`
 		ShellPID int      `json:"shell_pid"`
 	}
-	if json.Unmarshal(raw, &res) != nil {
+	if jsonx.Unmarshal(raw, &res) != nil {
 		return
 	}
 	p.fg = foregroundInfo{
@@ -788,7 +790,7 @@ func (p *remotePane) refreshCwd() {
 		Cwd string `json:"cwd"`
 	}
 	changed := false
-	if json.Unmarshal(raw, &res) == nil && res.Cwd != "" && res.Cwd != p.cwd {
+	if jsonx.Unmarshal(raw, &res) == nil && res.Cwd != "" && res.Cwd != p.cwd {
 		p.cwd, changed = res.Cwd, true
 	}
 	notify := p.onCwdChange

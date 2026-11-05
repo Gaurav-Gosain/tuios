@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"encoding/json"
 	"strings"
+
+	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 )
 
 // A Gemini CLI chat, as packages/core/src/services/chatRecordingService.ts
@@ -199,7 +201,7 @@ func geminiDoc(data []byte) []byte {
 	var doc struct {
 		Messages []json.RawMessage `json:"messages"`
 	}
-	if json.Unmarshal(data, &doc) != nil {
+	if jsonx.Unmarshal(data, &doc) != nil {
 		return nil
 	}
 	return docLines(doc.Messages)

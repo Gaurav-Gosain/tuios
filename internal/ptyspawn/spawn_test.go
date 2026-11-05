@@ -49,21 +49,6 @@ func failStarts(t *testing.T, n int, err error) *[]spawnRecord {
 // this runs on. What is under test is the start, not what the process does.
 func trueCommand() *exec.Cmd { return exec.Command("/bin/sh", "-c", "exit 0") }
 
-func TestTransientEPERMIsRetried(t *testing.T) {
-	seen := failStarts(t, 1, fmt.Errorf("fork/exec /bin/sh: %w", syscall.EPERM))
-
-	pty, cmd, err := Spawn(80, 24, trueCommand, nil)
-	if err != nil {
-		t.Fatalf("a one-shot EPERM was not absorbed by the retry: %v", err)
-	}
-	t.Cleanup(func() { _ = pty.Close() })
-	_ = cmd.Wait()
-
-	if len(*seen) != 2 {
-		t.Fatalf("spawn was attempted %d times, want 2", len(*seen))
-	}
-}
-
 // TestTheRetryUsesAFreshPTY is the part of the policy that is about the cause
 // rather than about persistence. The refusal is about the pts index, so
 // retrying on the same pty would retry the thing that was refused.

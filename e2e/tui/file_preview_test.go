@@ -1,7 +1,11 @@
 package tuie2e
 
 import (
+	"archive/tar"
+	"archive/zip"
+	"bufio"
 	"bytes"
+	"compress/gzip"
 	"compress/zlib"
 	"encoding/base64"
 	"encoding/binary"
@@ -11,6 +15,7 @@ import (
 	"hash/crc32"
 	"image"
 	"image/color"
+	"image/gif"
 	"image/jpeg"
 	"image/png"
 	"net"
@@ -23,6 +28,7 @@ import (
 	"syscall"
 	"testing"
 	"time"
+	"unicode/utf8"
 )
 
 // file-preview: what Quick Look in the GUI shows, made on the machine the
@@ -522,6 +528,489 @@ func TestFilePreviewHoldsItsDecodeCap(t *testing.T) {
 		t.Errorf("ASSERTION: the WebP was not sent as it is: %s %s %d bytes", w.Kind, w.Mime, len(wsent))
 	}
 	saveTransferArtifact(t, "file-preview-decode-cap", record)
+}
+
+// craftedPreview is the part of a file-preview answer the crafted files are
+// read by: a listing, a JSON layout and a GIF's frames.
+type craftedPreview struct {
+	Kind    string `json:"kind"`
+	Entries []struct {
+		Name string `json:"name"`
+		Size int64  `json:"size"`
+		Dir  bool   `json:"dir"`
+	} `json:"entries"`
+	Capped    bool   `json:"capped"`
+	Formatted bool   `json:"formatted"`
+	Text      string `json:"text"`
+	Pages     int    `json:"pages"`
+	Page      int    `json:"page"`
+}
+
+// summary is what the artifact keeps of an answer.
+func (p craftedPreview) summary() map[string]any {
+	s := map[string]any{"kind": p.Kind, "entries": len(p.Entries), "capped": p.Capped, "formatted": p.Formatted, "text_bytes": len(p.Text), "pages": p.Pages, "page": p.Page}
+	if n := len(p.Entries); n > 0 {
+		s["first_name_bytes"], s["last_name_bytes"] = len(p.Entries[0].Name), len(p.Entries[n-1].Name)
+	}
+	return s
+}
+
+// names is the names of a listing, in its order.
+func (p craftedPreview) names() []string {
+	out := make([]string, len(p.Entries))
+	for i, e := range p.Entries {
+		out[i] = e.Name
+	}
+	return out
+}
+
+// manyEntryName is the name of entry i of writeManyEntryZip's zip.
+func manyEntryName(i int) string { return fmt.Sprintf("e%07d.txt", i) }
+
+// writeManyEntryZip writes a zip64 of n empty stored files, by hand: a local
+// header for each, the central directory, the zip64 end record and its
+// locator, and an end record whose count says to read them. zip.Writer
+// would hold every header in the test's memory.
+func writeManyEntryZip(t *testing.T, path string, n int) {
+	t.Helper()
+	f, err := os.Create(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	w := bufio.NewWriterSize(f, 1<<20)
+	le := binary.LittleEndian
+	var off uint64
+	at := make([]uint32, n)
+	for i := range n {
+		name := manyEntryName(i)
+		h := make([]byte, 30, 30+len(name))
+		le.PutUint32(h[0:], 0x04034b50)
+		le.PutUint16(h[4:], 20)
+		le.PutUint16(h[12:], 0x21)
+		le.PutUint16(h[26:], uint16(len(name)))
+		_, _ = w.Write(append(h, name...))
+		at[i] = uint32(off)
+		off += uint64(len(h) + len(name))
+	}
+	dirAt := off
+	for i := range n {
+		name := manyEntryName(i)
+		h := make([]byte, 46, 46+len(name))
+		le.PutUint32(h[0:], 0x02014b50)
+		le.PutUint16(h[4:], 20)
+		le.PutUint16(h[6:], 20)
+		le.PutUint16(h[14:], 0x21)
+		le.PutUint16(h[28:], uint16(len(name)))
+		le.PutUint32(h[42:], at[i])
+		_, _ = w.Write(append(h, name...))
+		off += uint64(len(h) + len(name))
+	}
+	dirSize := off - dirAt
+	end64 := make([]byte, 56)
+	le.PutUint32(end64[0:], 0x06064b50)
+	le.PutUint64(end64[4:], 44)
+	le.PutUint16(end64[12:], 45)
+	le.PutUint16(end64[14:], 45)
+	le.PutUint64(end64[24:], uint64(n))
+	le.PutUint64(end64[32:], uint64(n))
+	le.PutUint64(end64[40:], dirSize)
+	le.PutUint64(end64[48:], dirAt)
+	loc := make([]byte, 20)
+	le.PutUint32(loc[0:], 0x07064b50)
+	le.PutUint64(loc[8:], off)
+	le.PutUint32(loc[16:], 1)
+	end := make([]byte, 22)
+	le.PutUint32(end[0:], 0x06054b50)
+	le.PutUint16(end[8:], 0xffff)
+	le.PutUint16(end[10:], 0xffff)
+	le.PutUint32(end[12:], uint32(dirSize))
+	le.PutUint32(end[16:], uint32(dirAt))
+	for _, b := range [][]byte{end64, loc, end} {
+		_, _ = w.Write(b)
+	}
+	if err := w.Flush(); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.Close(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// smallZip is a zip of empty files with these names, behind prefix. With at,
+// the zip's offsets count the prefix, as zip.Writer.SetOffset makes them;
+// without, they start at the zip, as a self-extracting archive has them.
+func smallZip(t *testing.T, prefix []byte, at bool, names ...string) []byte {
+	t.Helper()
+	var b bytes.Buffer
+	b.Write(prefix)
+	zw := zip.NewWriter(&b)
+	if at {
+		zw.SetOffset(int64(len(prefix)))
+	}
+	for _, name := range names {
+		if _, err := zw.Create(name); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := zw.Close(); err != nil {
+		t.Fatal(err)
+	}
+	return b.Bytes()
+}
+
+// TestFilePreviewHoldsCraftedFilesToItsBounds previews small files made to
+// cost a great deal, each in a daemon of its own, on the daemon socket as the
+// GUI asks. A zip that names a million files must be listed from its first
+// 2000 headers, four previews at once keeping the daemon under 256 MB (they
+// took it past 1 GB reading the whole directory). A GIF whose frames are
+// small but whose screen is 10000 x 10000 must not be stepped: the canvas and
+// its copy are 800 MB. A JSON file nested 10000 deep, 20 KB, lays out to
+// 200 MB, and must come back as it is. An archive's names are cut to 4096
+// bytes, at a character, with "...". Each case has its ordinary file in the
+// same daemon: a zip in its own order and behind a prefix, a GIF that steps,
+// JSON that is laid out, and names that are listed whole.
+func TestFilePreviewHoldsCraftedFilesToItsBounds(t *testing.T) {
+	daemon := func(t *testing.T) string {
+		base := t.TempDir()
+		killDaemon(t, base)
+		if out, err := tuiosCLI(t, base, "new", "home", "--detach"); err != nil {
+			t.Fatalf("start the daemon: %v\n%s", err, out)
+		}
+		return base
+	}
+	preview := func(t *testing.T, base string, params map[string]any) craftedPreview {
+		t.Helper()
+		var p craftedPreview
+		dialFileVerbs(t, base).must("file-preview", params, &p)
+		return p
+	}
+
+	t.Run("zip", func(t *testing.T) {
+		base := daemon(t)
+		record := map[string]any{}
+		many := filepath.Join(base, "many.zip")
+		writeManyEntryZip(t, many, 1_000_000)
+		answers := make([]craftedPreview, 4)
+		errs := make([]error, 4)
+		// The connections are made here: a failed dial stops the test, which
+		// only the test's own goroutine may do.
+		conns := make([]*fileVerbConn, len(answers))
+		for i := range conns {
+			conns[i] = dialFileVerbs(t, base)
+		}
+		var wg sync.WaitGroup
+		for i := range answers {
+			wg.Go(func() {
+				raw, err := conns[i].call("file-preview", map[string]any{"path": many})
+				if err == nil {
+					err = json.Unmarshal(raw, &answers[i])
+				}
+				errs[i] = err
+			})
+		}
+		wg.Wait()
+		peak := daemonPeakKB(t, base)
+		record["million"] = answers[0].summary()
+		record["daemon_peak_kb"] = peak
+		t.Logf("daemon peak %d kB after four previews of a zip of a million files", peak)
+		for i, p := range answers {
+			if errs[i] != nil {
+				t.Errorf("ASSERTION: a preview of the zip of a million files failed: %v", errs[i])
+				continue
+			}
+			if p.Kind != "archive" || len(p.Entries) != 2000 || !p.Capped {
+				t.Errorf("ASSERTION: the zip of a million files is %s with %d entries, capped %v, want archive with 2000, capped", p.Kind, len(p.Entries), p.Capped)
+				continue
+			}
+			if p.Entries[0].Name != manyEntryName(0) || p.Entries[1999].Name != manyEntryName(1999) {
+				t.Errorf("ASSERTION: the zip of a million files lists %q first and %q 2000th, want %q and %q", p.Entries[0].Name, p.Entries[1999].Name, manyEntryName(0), manyEntryName(1999))
+			}
+		}
+		if peak > 256<<10 {
+			t.Errorf("ASSERTION: four previews of a zip of a million files took the daemon to %d MB", peak>>10)
+		}
+
+		// The order is the central directory's, not the names'.
+		names := []string{"notes.txt", "app/", "app/main.go"}
+		stub := bytes.Repeat([]byte{'#'}, 100)
+		for _, c := range []struct {
+			name string
+			body []byte
+		}{
+			{"small.zip", smallZip(t, nil, false, names...)},
+			{"prefixed.zip", smallZip(t, stub, false, names...)},
+			{"offset.zip", smallZip(t, stub, true, names...)},
+		} {
+			path := filepath.Join(base, c.name)
+			if err := os.WriteFile(path, c.body, 0o644); err != nil {
+				t.Fatal(err)
+			}
+			p := preview(t, base, map[string]any{"path": path})
+			record[c.name] = p.summary()
+			if got := p.names(); p.Kind != "archive" || p.Capped || strings.Join(got, "|") != strings.Join(names, "|") {
+				t.Errorf("ASSERTION: %s is %s %q, capped %v, want archive %q, not capped", c.name, p.Kind, got, p.Capped, names)
+				continue
+			}
+			// app/ is a folder; the files are empty.
+			for i, e := range p.Entries {
+				if dir := strings.HasSuffix(names[i], "/"); e.Dir != dir || e.Size != 0 {
+					t.Errorf("ASSERTION: %s lists %s as folder %v, %d bytes, want folder %v, 0 bytes", c.name, e.Name, e.Dir, e.Size, dir)
+				}
+			}
+		}
+
+		// A directory that ends before the count its end record gives is not
+		// a zip, and shows as a binary file: the small zip above, whose end
+		// record says 5 for its 3 headers.
+		short := smallZip(t, nil, false, names...)
+		le := binary.LittleEndian
+		le.PutUint16(short[len(short)-22+8:], 5)
+		le.PutUint16(short[len(short)-22+10:], 5)
+		shortPath := filepath.Join(base, "short.zip")
+		if err := os.WriteFile(shortPath, short, 0o644); err != nil {
+			t.Fatal(err)
+		}
+		p := preview(t, base, map[string]any{"path": shortPath})
+		record["short.zip"] = p.summary()
+		if p.Kind != "binary" {
+			t.Errorf("ASSERTION: a zip of 3 headers whose end record says 5 is %s with %d entries, capped %v, want binary", p.Kind, len(p.Entries), p.Capped)
+		}
+
+		// The end record keeps its count modulo 65536 when there is no zip64
+		// record: a zip of 65537 files says 1, and is still capped.
+		wide := filepath.Join(base, "wide.zip")
+		files := 65537
+		writeManyEntryZip(t, wide, files)
+		f, err := os.OpenFile(wide, os.O_RDWR, 0)
+		if err != nil {
+			t.Fatal(err)
+		}
+		fi, err := f.Stat()
+		if err != nil {
+			t.Fatal(err)
+		}
+		// Swap the zip64 end record, its locator and the end record for one
+		// plain end record.
+		tail := make([]byte, 56+20+22)
+		at := fi.Size() - int64(len(tail))
+		if _, err := f.ReadAt(tail, at); err != nil {
+			t.Fatal(err)
+		}
+		end := make([]byte, 22)
+		le.PutUint32(end[0:], 0x06054b50)
+		le.PutUint16(end[8:], uint16(files))
+		le.PutUint16(end[10:], uint16(files))
+		le.PutUint32(end[12:], uint32(le.Uint64(tail[40:])))
+		le.PutUint32(end[16:], uint32(le.Uint64(tail[48:])))
+		if _, err := f.WriteAt(end, at); err != nil {
+			t.Fatal(err)
+		}
+		if err := f.Truncate(at + int64(len(end))); err != nil {
+			t.Fatal(err)
+		}
+		if err := f.Close(); err != nil {
+			t.Fatal(err)
+		}
+		p = preview(t, base, map[string]any{"path": wide})
+		record["wide.zip"] = p.summary()
+		if p.Kind != "archive" || len(p.Entries) != 2000 || !p.Capped {
+			t.Errorf("ASSERTION: a zip of 65537 files whose end record says 1 is %s with %d entries, capped %v, want archive with 2000, capped", p.Kind, len(p.Entries), p.Capped)
+		} else if p.Entries[1999].Name != manyEntryName(1999) {
+			t.Errorf("ASSERTION: a zip of 65537 files lists %q 2000th, want %q", p.Entries[1999].Name, manyEntryName(1999))
+		}
+
+		// The cut is at 2000 entries: 2000 are all of them, 2001 are capped.
+		for _, n := range []int{2000, 2001} {
+			list := make([]string, n)
+			for i := range list {
+				list[i] = manyEntryName(i)
+			}
+			path := filepath.Join(base, fmt.Sprintf("n%d.zip", n))
+			if err := os.WriteFile(path, smallZip(t, nil, false, list...), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			p := preview(t, base, map[string]any{"path": path})
+			record[fmt.Sprintf("n%d", n)] = p.summary()
+			if len(p.Entries) != 2000 || p.Capped != (n > 2000) {
+				t.Errorf("ASSERTION: a zip of %d files lists %d entries, capped %v, want 2000, capped %v", n, len(p.Entries), p.Capped, n > 2000)
+			} else if p.Entries[1999].Name != manyEntryName(1999) {
+				t.Errorf("ASSERTION: a zip of %d files lists %q 2000th, want %q", n, p.Entries[1999].Name, manyEntryName(1999))
+			}
+		}
+		saveTransferArtifact(t, "file-preview-crafted-zip", record)
+	})
+
+	t.Run("gif", func(t *testing.T) {
+		base := daemon(t)
+		record := map[string]any{}
+		pal := color.Palette{color.Black, color.White}
+		writeGIF := func(name string, w, h int, frames []*image.Paletted, disposal byte) string {
+			g := &gif.GIF{Image: frames, Config: image.Config{ColorModel: pal, Width: w, Height: h}}
+			for range frames {
+				g.Delay = append(g.Delay, 10)
+				g.Disposal = append(g.Disposal, disposal)
+			}
+			var b bytes.Buffer
+			if err := gif.EncodeAll(&b, g); err != nil {
+				t.Fatal(err)
+			}
+			path := filepath.Join(base, name)
+			if err := os.WriteFile(path, b.Bytes(), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			record[name+"_bytes"] = b.Len()
+			return path
+		}
+		dot := func(w, h int, c uint8) *image.Paletted {
+			m := image.NewPaletted(image.Rect(0, 0, w, h), pal)
+			for i := range m.Pix {
+				m.Pix[i] = c
+			}
+			return m
+		}
+
+		huge := writeGIF("screen.gif", 10000, 10000, []*image.Paletted{dot(1, 1, 1), dot(1, 1, 0)}, gif.DisposalPrevious)
+		p := preview(t, base, map[string]any{"path": huge, "page": 2})
+		record["screen"] = p.summary()
+		if p.Pages != 0 || p.Page == 2 {
+			t.Errorf("ASSERTION: a GIF of two 1 x 1 frames on a 10000 x 10000 screen was stepped to frame %d of %d, want its first frame only", p.Page, p.Pages)
+		}
+
+		small := writeGIF("spin.gif", 40, 40, []*image.Paletted{dot(40, 40, 0), dot(40, 40, 1), dot(40, 40, 0)}, gif.DisposalNone)
+		q := preview(t, base, map[string]any{"path": small, "page": 2})
+		record["spin"] = q.summary()
+		if q.Kind != "image" || q.Pages != 3 || q.Page != 2 {
+			t.Errorf("ASSERTION: a 40 x 40 GIF of 3 frames gave %s frame %d of %d, want image frame 2 of 3", q.Kind, q.Page, q.Pages)
+		}
+		record["daemon_peak_kb"] = daemonPeakKB(t, base)
+		saveTransferArtifact(t, "file-preview-crafted-gif", record)
+	})
+
+	t.Run("json", func(t *testing.T) {
+		base := daemon(t)
+		record := map[string]any{}
+		deep := filepath.Join(base, "deep.json")
+		nested := strings.Repeat("[", 10000) + "0" + strings.Repeat("]", 10000)
+		if err := os.WriteFile(deep, []byte(nested), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		p := preview(t, base, map[string]any{"path": deep, "format": true})
+		record["deep"] = p.summary()
+		if p.Formatted {
+			t.Errorf("ASSERTION: JSON nested 10000 deep was laid out, %d bytes of text", len(p.Text))
+		}
+
+		var flat bytes.Buffer
+		flat.WriteByte('[')
+		for i := 0; flat.Len() < 900<<10; i++ {
+			if i > 0 {
+				flat.WriteByte(',')
+			}
+			fmt.Fprintf(&flat, `{"id":%d,"name":"row %d","tags":["a","b"]}`, i, i)
+		}
+		flat.WriteByte(']')
+		var want bytes.Buffer
+		if err := json.Indent(&want, flat.Bytes(), "", "  "); err != nil {
+			t.Fatal(err)
+		}
+		plain := filepath.Join(base, "rows.json")
+		if err := os.WriteFile(plain, flat.Bytes(), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		q := preview(t, base, map[string]any{"path": plain, "format": true})
+		record["rows"] = q.summary()
+		record["rows_file_bytes"] = flat.Len()
+		if !q.Formatted || q.Text != want.String() {
+			t.Errorf("ASSERTION: 900 KB of ordinary JSON came back formatted %v with %d bytes, want laid out with a two-space indent, %d bytes", q.Formatted, len(q.Text), want.Len())
+		}
+		record["daemon_peak_kb"] = daemonPeakKB(t, base)
+		saveTransferArtifact(t, "file-preview-crafted-json", record)
+	})
+
+	t.Run("names", func(t *testing.T) {
+		base := daemon(t)
+		record := map[string]any{}
+		// byte 4093 of the last short name falls inside a three-byte rune.
+		short := []string{
+			"src/a/b/c.txt",
+			strings.Repeat("x", 4096),
+			strings.Repeat("y", 4097),
+			"ab" + strings.Repeat("€", 2000),
+		}
+		long := make([]string, 100)
+		for i := range long {
+			long[i] = fmt.Sprintf("long/%03d-", i) + strings.Repeat("n", 900<<10)
+		}
+		all := append(append([]string{}, short...), long...)
+		var tgz bytes.Buffer
+		gz := gzip.NewWriter(&tgz)
+		tw := tar.NewWriter(gz)
+		for _, name := range all {
+			if err := tw.WriteHeader(&tar.Header{Name: name, Mode: 0o644, Typeflag: tar.TypeReg}); err != nil {
+				t.Fatal(err)
+			}
+		}
+		if err := tw.Close(); err != nil {
+			t.Fatal(err)
+		}
+		if err := gz.Close(); err != nil {
+			t.Fatal(err)
+		}
+		tarPath := filepath.Join(base, "names.tar.gz")
+		if err := os.WriteFile(tarPath, tgz.Bytes(), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		record["tar_gz_bytes"] = tgz.Len()
+
+		// cut checks one listed name against the name in the archive: a name of
+		// at most 4096 bytes is listed whole, a longer one as its start, whole
+		// characters only, and "...", 4096 bytes at most. It reports whether
+		// the name was listed so.
+		cut := func(where, got, name string) bool {
+			t.Helper()
+			if len(name) <= 4096 {
+				if got != name {
+					t.Errorf("ASSERTION: in %s a name of %d bytes is listed as %d bytes, want it whole", where, len(name), len(got))
+					return false
+				}
+				return true
+			}
+			head, marked := strings.CutSuffix(got, "...")
+			if len(got) > 4096 || !marked || !utf8.ValidString(got) || !strings.HasPrefix(name, head) {
+				t.Errorf("ASSERTION: in %s a name of %d bytes is listed as %d bytes (ends in ...: %v, valid UTF-8: %v, its start: %v), want at most 4096 bytes of its start and ...", where, len(name), len(got), marked, utf8.ValidString(got), strings.HasPrefix(name, head))
+				return false
+			}
+			return true
+		}
+
+		p := preview(t, base, map[string]any{"path": tarPath})
+		record["tar"] = p.summary()
+		if p.Kind != "archive" || len(p.Entries) != len(all) {
+			t.Fatalf("ASSERTION: the tar.gz of long names is %s with %d entries, want archive with %d", p.Kind, len(p.Entries), len(all))
+		}
+		// One of the hundred long names is enough to report.
+		for i, e := range p.Entries {
+			if !cut("the tar.gz", e.Name, all[i]) && i >= len(short) {
+				break
+			}
+		}
+
+		zipNames := []string{"src/a/b/c.txt", strings.Repeat("z", 5000)}
+		zipPath := filepath.Join(base, "names.zip")
+		if err := os.WriteFile(zipPath, smallZip(t, nil, false, zipNames...), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		q := preview(t, base, map[string]any{"path": zipPath})
+		record["zip"] = q.summary()
+		if q.Kind != "archive" || len(q.Entries) != len(zipNames) {
+			t.Fatalf("ASSERTION: the zip of a long name is %s with %d entries, want archive with %d", q.Kind, len(q.Entries), len(zipNames))
+		}
+		for i, e := range q.Entries {
+			_ = cut("the zip", e.Name, zipNames[i])
+		}
+		record["daemon_peak_kb"] = daemonPeakKB(t, base)
+		saveTransferArtifact(t, "file-preview-crafted-names", record)
+	})
 }
 
 // TestFilePreviewOpensOnlyFilmContainers previews a file named .mp4 that is an

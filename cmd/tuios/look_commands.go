@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
 )
@@ -223,11 +224,11 @@ func runLookApply(w io.Writer, source string, prompt lookPrompt) error {
 	}
 	lk, err := config.ParseLook(data)
 	if err != nil {
-		return fmt.Errorf("tuios cannot use the look: %w", err)
+		return errfmt.Errorf("tuios cannot use the look: %w", err)
 	}
 	mainPath, err := config.GetConfigPath()
 	if err != nil {
-		return fmt.Errorf("could not determine config path: %w", err)
+		return errfmt.Errorf("could not determine config path: %w", err)
 	}
 	plan, err := config.PlanLook(mainPath, lk, shown)
 	if err != nil {
@@ -286,7 +287,7 @@ func runLookApply(w io.Writer, source string, prompt lookPrompt) error {
 func runLookRemove(w io.Writer, prompt lookPrompt) error {
 	mainPath, err := config.GetConfigPath()
 	if err != nil {
-		return fmt.Errorf("could not determine config path: %w", err)
+		return errfmt.Errorf("could not determine config path: %w", err)
 	}
 	plan, err := config.PlanLookRemove(mainPath)
 	if err != nil {
@@ -333,7 +334,7 @@ func runLookRemove(w io.Writer, prompt lookPrompt) error {
 func runLookShow(w io.Writer) error {
 	mainPath, err := config.GetConfigPath()
 	if err != nil {
-		return fmt.Errorf("could not determine config path: %w", err)
+		return errfmt.Errorf("could not determine config path: %w", err)
 	}
 	il, err := config.ReadInstalledLook(mainPath)
 	if err != nil {
@@ -538,13 +539,13 @@ func resolveLookSource(source string, exists func(string) bool) (lookSource, err
 		id := s[strings.Index(s, "/r/")+3:]
 		id = strings.TrimSuffix(id, ".toml")
 		if !validGalleryID(id) {
-			return lookSource{}, fmt.Errorf("%q is not a gallery id", id)
+			return lookSource{}, errfmt.Errorf("%q is not a gallery id", id)
 		}
 		return lookSource{remote: true, where: lookGalleryURL(id)}, nil
 	case strings.HasPrefix(s, "https://"):
 		u, err := url.Parse(s)
 		if err != nil || u.Host == "" {
-			return lookSource{}, fmt.Errorf("%q is not a URL", s)
+			return lookSource{}, errfmt.Errorf("%q is not a URL", s)
 		}
 		return lookSource{remote: true, where: u.String()}, nil
 	case strings.Contains(s, "://"):
@@ -554,7 +555,7 @@ func resolveLookSource(source string, exists func(string) bool) (lookSource, err
 	case validGalleryID(s):
 		return lookSource{remote: true, where: lookGalleryURL(s)}, nil
 	}
-	return lookSource{}, fmt.Errorf("%s is not a file, an https URL or a gallery id", s)
+	return lookSource{}, errfmt.Errorf("%s is not a file, an https URL or a gallery id", s)
 }
 
 // validGalleryID reports whether id can be a gallery id: 1 to 64 of a-z, A-Z,
@@ -587,10 +588,10 @@ func readLookFile(path string) ([]byte, error) {
 func readCapped(r io.Reader) ([]byte, error) {
 	data, err := io.ReadAll(io.LimitReader(r, config.MaxLookBytes+1))
 	if err != nil {
-		return nil, fmt.Errorf("failed to read the look: %w", err)
+		return nil, errfmt.Errorf("failed to read the look: %w", err)
 	}
 	if len(data) > config.MaxLookBytes {
-		return nil, fmt.Errorf("the look is larger than %d KiB", config.MaxLookBytes>>10)
+		return nil, errfmt.Errorf("the look is larger than %d KiB", config.MaxLookBytes>>10)
 	}
 	return data, nil
 }
@@ -620,14 +621,14 @@ func fetchLook(u string) ([]byte, error) {
 	req.Header.Set("User-Agent", "tuios/"+version)
 	resp, err := lookHTTP.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("failed to download the look: %w", err)
+		return nil, errfmt.Errorf("failed to download the look: %w", err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode == http.StatusNotFound {
-		return nil, fmt.Errorf("%s has no look", u)
+		return nil, errfmt.Errorf("%s has no look", u)
 	}
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("failed to download the look: %s", resp.Status)
+		return nil, errfmt.Errorf("failed to download the look: %s", resp.Status)
 	}
 	return readCapped(resp.Body)
 }

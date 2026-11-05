@@ -110,6 +110,9 @@ type ckRow struct {
 	// rows the fold hides, for the marks on the heading and the focus.
 	folded bool
 	hidden []ckRow
+	// rest lets the cursor rest on a heading: a column of the board's
+	// columns that shows no card.
+	rest bool
 }
 
 // selectable reports whether the row is an agent's, an item's or a card's:
@@ -121,7 +124,7 @@ func (r ckRow) selectable() bool {
 // cursorable reports whether the cursor can rest on the row: a selectable
 // row, or the heading of a folded group, so a key can open it again.
 func (r ckRow) cursorable() bool {
-	return r.selectable() || r.kind == ckRowHead && r.folded
+	return r.selectable() || r.kind == ckRowHead && (r.folded || r.rest)
 }
 
 // cockpitState is the cockpit's own state, beside the Inbox's.
@@ -277,6 +280,16 @@ type cockpitState struct {
 	heldGen   uint64
 	stages    string
 	stagesCfg *config.UserConfig
+	// boardList says the person chose the board's list over its columns.
+	// kb is the columns' own state. See cockpit_kanban.go.
+	boardList bool
+	kb        ckKanban
+	// listMode is the list layout the person chose with the list key: one
+	// of the [agents] view_list values, and "" for no choice, where the
+	// config decides. It is kept in the state file. stripShown says the last
+	// frame folded the list into the strip, which the key turns around.
+	listMode   string
+	stripShown bool
 }
 
 // ckBack is the cursor and the scroll to open the view on again.
@@ -308,6 +321,8 @@ type ckRowsKey struct {
 	cards  uint64
 	board  bool
 	stages string
+	// kanban says the board is drawn as columns.
+	kanban bool
 }
 
 // ckHit is a click target: a fleet row, a group heading, a button.
@@ -328,6 +343,8 @@ const (
 	ckHitAction
 	ckHitTab
 	ckHitMark
+	// ckHitColumn is a column of the board's columns, behind its cards.
+	ckHitColumn
 )
 
 // cockpitTouch marks the cockpit's own state changed.
@@ -361,7 +378,7 @@ func (m *OS) cockpitRows() []ckRow {
 	key := ckRowsKey{
 		list: m.Inbox.agents.listAt, inbox: m.Inbox.Gen, gen: ck.rowsGen, colH: ck.colH, arts: m.tml.setGen<<20 + ck.art.gen,
 		oneLine: ck.oneLine, minute: now.Unix() / 60, foldWorking: m.ckFoldWorking(),
-		cards: ck.cardsGen, board: ck.board, stages: m.ckStagesShown(),
+		cards: ck.cardsGen, board: ck.board, stages: m.ckStagesShown(), kanban: m.kanbanOn(),
 	}
 	if ck.rows != nil && ck.rowsAt == key {
 		return ck.rows
@@ -376,9 +393,12 @@ func (m *OS) cockpitRows() []ckRow {
 			ck.machines[e.Host]++
 		}
 	}
-	if ck.board {
+	switch {
+	case key.kanban:
+		ck.rows = m.buildKanbanRows(list)
+	case ck.board:
 		ck.rows = m.buildBoardRows(list)
-	} else {
+	default:
 		ck.rows = m.buildCockpitRows(list, now)
 	}
 	ck.rowsAt = key
@@ -1071,6 +1091,30 @@ func (m *OS) CockpitCycleFilter() {
 	m.cockpitTouchRows()
 }
 
+// ckListMode is the list layout in force: the person's choice, else [agents]
+// view_list.
+func (m *OS) ckListMode() string {
+	if mode := m.Inbox.ck.listMode; mode != "" {
+		return mode
+	}
+	if m.UserConfig == nil {
+		return config.AgentsViewListColumn
+	}
+	return m.UserConfig.Agents.ViewListMode()
+}
+
+// CockpitToggleList is the list key: the strip when the view shows the
+// column, and the column when it shows the strip. The choice is kept.
+func (m *OS) CockpitToggleList() {
+	ck := &m.Inbox.ck
+	ck.listMode = config.AgentsViewListStrip
+	if ck.stripShown {
+		ck.listMode = config.AgentsViewListColumn
+	}
+	m.cockpitTouchRows()
+	m.saveSidebarState()
+}
+
 // CockpitNeedsOnly reports whether the f filter shows only Needs you.
 func (m *OS) CockpitNeedsOnly() bool { return m.Inbox.ck.needsOnly }
 
@@ -1185,7 +1229,10 @@ func (m *OS) CockpitClick(x, y int) (tea.Cmd, bool) {
 			m.CockpitToggleGroup(h.group, false)
 		case ckHitMore:
 			m.CockpitToggleGroup(h.group, true)
+		case ckHitColumn:
+			m.kanbanFocusColumn(h.group)
 		case ckHitRow:
+			m.kanbanPress(h, x, y)
 			if ck.cmp != nil {
 				// A row of the fleet leaves the comparison for its agent.
 				m.CockpitCompareClose()
@@ -1230,8 +1277,20 @@ func (m *OS) cockpitAction(action string) tea.Cmd {
 		m.cockpitNextScope()
 	case "needs":
 		m.CockpitCycleFilter()
+	case "follow":
+		m.CockpitThreadBottom()
 	case "a", "A", "r":
+		// A click on the card's button is no typed text: it answers at
+		// once. On a risky call it asks, as a key does, and a second click
+		// on the same button (or enter) answers.
+		decision := map[string]string{"a": session.ApprovalOnce, "A": session.ApprovalAlways, "r": session.ApprovalDeny}[action]
+		if m.InboxConfirmOpen() && m.Inbox.approvals.confirm.decision == decision {
+			return m.InboxConfirmKey("enter")
+		}
 		cmd, _ := m.CockpitAnswerLetter(action)
+		if it, ok := m.inboxSelected(); ok && m.InboxConfirmOpen() && !inboxRisky(it) {
+			return m.InboxConfirmKey("enter")
+		}
 		return cmd
 	case "R":
 		m.cockpitSync()
@@ -1324,6 +1383,9 @@ func (m *OS) CockpitHover(x, y int) {
 	if ck.spawn != nil {
 		return
 	}
+	if m.kanbanDragTo(x, y) {
+		return
+	}
 	key := ""
 	for _, h := range ck.hits {
 		if h.kind == ckHitRow && x >= h.x0 && x < h.x1 && y >= h.y0 && y < h.y1 {
@@ -1354,6 +1416,9 @@ func (m *OS) CockpitWheel(x, y int, up bool) {
 		m.queueTMLCmd(cmd)
 		return
 	}
+	if m.kanbanWheel(x, y, up) {
+		return
+	}
 	if x < ck.fleetW {
 		if up {
 			ck.scroll = max(ck.scroll-3, 0)
@@ -1365,11 +1430,7 @@ func (m *OS) CockpitWheel(x, y int, up bool) {
 		return
 	}
 	if t := m.cockpitThread(); t != nil {
-		if up {
-			t.scroll += 3
-		} else {
-			t.scroll = max(t.scroll-3, 0)
-		}
+		t.follow.Scroll(-3 * wheelDelta(up))
 		m.cockpitTouch()
 		return
 	}
@@ -1426,7 +1487,7 @@ func (m *OS) CockpitTab(delta int) {
 	i := ((m.cockpitTabIndex()+delta)%n + n) % n
 	m.Inbox.ck.tab, _, _ = strings.Cut(tabs[i], " ")
 	if t := m.cockpitThread(); t != nil {
-		t.scroll = 0
+		t.follow.Bottom()
 	}
 	m.cockpitTouch()
 }
@@ -1445,6 +1506,9 @@ func (m *OS) cockpitGroupHides(g int) bool {
 // approval answers, the focus on a narrow screen, help, n, and tab. handled
 // is false for any other action.
 func (m *OS) CockpitKey(action string) (tea.Cmd, bool) {
+	if cmd, ok := m.kanbanKey(action); ok {
+		return cmd, true
+	}
 	switch action {
 	case config.ActionInboxAllow, config.ActionInboxAllowAlways, config.ActionInboxReply:
 		letter := "r"
@@ -1520,12 +1584,11 @@ func (m *OS) CockpitKey(action string) (tea.Cmd, bool) {
 		if t == nil || len(t.entries) == 0 {
 			return nil, false
 		}
-		if action == config.ActionInboxDetailUp {
-			t.scroll += 3
-		} else {
-			t.scroll = max(t.scroll-3, 0)
-		}
+		t.follow.Scroll(-3 * d)
 		m.cockpitTouch()
+		return nil, true
+	case config.ActionInboxPromptPrev, config.ActionInboxPromptNext:
+		m.CockpitPromptJump(action == config.ActionInboxPromptNext)
 		return nil, true
 	case config.ActionInboxNewAgent:
 		if _, c, ok := m.cockpitCard(); ok {
@@ -1534,6 +1597,9 @@ func (m *OS) CockpitKey(action string) (tea.Cmd, bool) {
 		return m.CockpitNewAgent(), true
 	case config.ActionInboxBoard:
 		m.CockpitToggleBoard()
+		return nil, true
+	case config.ActionInboxViewList:
+		m.CockpitToggleList()
 		return nil, true
 	case config.ActionInboxTake:
 		return m.CockpitTake(), true
@@ -1571,6 +1637,10 @@ func (m *OS) CockpitKey(action string) (tea.Cmd, bool) {
 		case config.ActionInboxFirst:
 			d = -1 << 20
 		case config.ActionInboxLast:
+			// G shows a held thread's newest lines first, then moves.
+			if m.CockpitThreadBottom() {
+				return nil, true
+			}
 			d = 1 << 20
 		}
 		m.CockpitMove(d)

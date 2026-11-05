@@ -2,7 +2,6 @@ package session
 
 import (
 	"cmp"
-	"encoding/json"
 	"os"
 	"path/filepath"
 	"slices"
@@ -14,6 +13,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/Gaurav-Gosain/tuios/internal/atomicfile"
+	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 	"github.com/Gaurav-Gosain/tuios/internal/lazyre"
 	"github.com/Gaurav-Gosain/tuios/internal/risk"
 	"github.com/Gaurav-Gosain/tuios/internal/sortx"
@@ -1153,7 +1153,7 @@ func (a *attentionStore) encodeLocked() []byte {
 	for _, id := range a.snoozedIDsLocked() {
 		f.Items = append(f.Items, *a.snoozed[id])
 	}
-	data, err := json.Marshal(f)
+	data, err := jsonx.Marshal(f)
 	if err != nil {
 		return nil
 	}
@@ -1243,7 +1243,7 @@ func (a *attentionStore) loadKeeping(path string, live, waiting func(session, wi
 	var f attentionFile
 	data, err := os.ReadFile(path)
 	if err == nil {
-		if err := json.Unmarshal(data, &f); err != nil || f.Version != 1 {
+		if err := jsonx.Unmarshal(data, &f); err != nil || f.Version != 1 {
 			LogError("Discarding the saved attention queue, it could not be read: %v", err)
 			f = attentionFile{}
 		}

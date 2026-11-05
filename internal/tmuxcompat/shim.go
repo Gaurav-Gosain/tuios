@@ -9,6 +9,9 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
+	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 )
 
 // Caller makes one tuios verb call. *session.VerbClient satisfies it.
@@ -382,10 +385,10 @@ func (s *Shim) runOne(word string, args []string) (string, []string, error) {
 		return OutcomeIgnored, nil, nil
 	}
 	if slices.Contains(refusedCommands, name) {
-		return OutcomeUnsupported, nil, fmt.Errorf("%s: refused, the tuios tmux shim does not start, attach or end sessions", name)
+		return OutcomeUnsupported, nil, errfmt.Errorf("%s: refused, the tuios tmux shim does not start, attach or end sessions", name)
 	}
 	// A tmux command the shim does not answer, named in full.
-	return OutcomeUnsupported, nil, fmt.Errorf("unknown command: %s", name)
+	return OutcomeUnsupported, nil, errfmt.Errorf("unknown command: %s", name)
 }
 
 // logAs is an error printed as err and logged as log, for an error whose
@@ -502,12 +505,12 @@ func (s *Shim) newPane(sess string, ws int, focus bool, cwd string, cmd, env []s
 	}
 	raw, err := s.Caller.Call("new-window", params)
 	if err != nil {
-		return "", fmt.Errorf("create pane failed: %w", err)
+		return "", errfmt.Errorf("create pane failed: %w", err)
 	}
 	var res struct {
 		ID string `json:"window_id"`
 	}
-	if err := json.Unmarshal(raw, &res); err != nil || res.ID == "" {
+	if err := jsonx.Unmarshal(raw, &res); err != nil || res.ID == "" {
 		return "", errors.New("create pane failed: new-window returned no window id")
 	}
 	return res.ID, nil
@@ -601,10 +604,10 @@ func (s *Shim) newWindow(name string, args []string) (string, []string, error) {
 	if win != "" {
 		n, err := sv.workspaceOf(win)
 		if err != nil {
-			return OutcomeError, nil, fmt.Errorf("create window failed: tuios has no workspace %s", win)
+			return OutcomeError, nil, errfmt.Errorf("create window failed: tuios has no workspace %s", win)
 		}
 		if sv.wsCount[n] > 0 {
-			return OutcomeError, nil, fmt.Errorf("create window failed: index %d in use", n)
+			return OutcomeError, nil, errfmt.Errorf("create window failed: index %d in use", n)
 		}
 		ws = n
 	} else {
@@ -625,7 +628,7 @@ func (s *Shim) newWindow(name string, args []string) (string, []string, error) {
 	}
 	if n, ok := p.Value('n'); ok {
 		if _, err := s.Caller.Call("set-workspace-name", map[string]any{"session": sv.name, "workspace": ws, "name": n}); err != nil {
-			return OutcomeError, nil, fmt.Errorf("name window failed: %w", err)
+			return OutcomeError, nil, errfmt.Errorf("name window failed: %w", err)
 		}
 	}
 	if !p.Has('P') {
@@ -656,7 +659,7 @@ func (s *Shim) sendKeys(name string, args []string) (string, []string, error) {
 	if n, ok := p.Value('N'); ok {
 		count, err := strconv.Atoi(n)
 		if err != nil || count < 1 || count > 10000 {
-			return OutcomeError, detail, fmt.Errorf("send-keys: repeat count %q is not 1 to 10000", n)
+			return OutcomeError, detail, errfmt.Errorf("send-keys: repeat count %q is not 1 to 10000", n)
 		}
 		text = strings.Repeat(text, count)
 	}
@@ -695,8 +698,8 @@ func (s *Shim) capture(p *pane, source string, styled bool) ([]string, error) {
 	var res struct {
 		Content string `json:"content"`
 	}
-	if err := json.Unmarshal(raw, &res); err != nil {
-		return nil, fmt.Errorf("read capture-pane: %w", err)
+	if err := jsonx.Unmarshal(raw, &res); err != nil {
+		return nil, errfmt.Errorf("read capture-pane: %w", err)
 	}
 	return splitLines(res.Content), nil
 }
@@ -709,7 +712,7 @@ func captureLine(val string, dash int) (int, error) {
 	}
 	n, err := strconv.Atoi(val)
 	if err != nil {
-		return 0, fmt.Errorf("capture-pane: %q is not a line number", val)
+		return 0, errfmt.Errorf("capture-pane: %q is not a line number", val)
 	}
 	return n, nil
 }
@@ -893,7 +896,7 @@ func (s *Shim) listWindows(name string, args []string) (string, []string, error)
 		if tv, ok := p.Value('t'); ok && tv != "" {
 			named, found := v.sessionOf(strings.TrimSuffix(tv, ":"))
 			if !found {
-				return OutcomeError, nil, fmt.Errorf("can't find session: %s", tv)
+				return OutcomeError, nil, errfmt.Errorf("can't find session: %s", tv)
 			}
 			sv = named
 		}
@@ -963,7 +966,7 @@ func (s *Shim) hasSession(name string, args []string) (string, []string, error) 
 		if sess == "" || strings.TrimPrefix(sess, "=") == s.Session || sess == "$0" {
 			return OutcomeOK, nil, nil
 		}
-		return OutcomeOK, nil, fmt.Errorf("can't find session: %s", sess)
+		return OutcomeOK, nil, errfmt.Errorf("can't find session: %s", sess)
 	}
 	v, err := s.loadView()
 	if err != nil {
@@ -972,7 +975,7 @@ func (s *Shim) hasSession(name string, args []string) (string, []string, error) 
 	if sess == "" && v.def != nil || v.isSession(sess) {
 		return OutcomeOK, nil, nil
 	}
-	return OutcomeOK, nil, fmt.Errorf("can't find session: %s", sess)
+	return OutcomeOK, nil, errfmt.Errorf("can't find session: %s", sess)
 }
 
 // killPane closes the target pane.
@@ -1146,10 +1149,10 @@ func (s *Shim) respawnPane(name string, args []string) (string, []string, error)
 		return OutcomeError, nil, err
 	}
 	if !p.Has('k') {
-		return OutcomeError, nil, fmt.Errorf("respawn pane failed: pane %s still active", PaneID(target.ID))
+		return OutcomeError, nil, errfmt.Errorf("respawn pane failed: pane %s still active", PaneID(target.ID))
 	}
 	if err := s.mayRespawn(target.ID); err != nil {
-		return OutcomeError, nil, fmt.Errorf("respawn pane failed: %w", err)
+		return OutcomeError, nil, errfmt.Errorf("respawn pane failed: %w", err)
 	}
 	cwd, _ := p.Value('c')
 	req := RespawnRequest{Command: p.Args, Cwd: cwd, Env: append(s.paneEnvFor(target.sess), p.Values('e')...)}
@@ -1158,7 +1161,7 @@ func (s *Shim) respawnPane(name string, args []string) (string, []string, error)
 		send = RequestRespawn
 	}
 	if err := send(s.Dir, target.ID, req); err != nil {
-		return OutcomeError, nil, fmt.Errorf("respawn pane failed: %w", err)
+		return OutcomeError, nil, errfmt.Errorf("respawn pane failed: %w", err)
 	}
 	return OutcomeOK, nil, nil
 }
@@ -1214,7 +1217,7 @@ func respawnGrantsAllow(c Caller, params map[string]any, peerPID int, target str
 		if errors.As(err, &coded) && coded.ErrorCode() == "unknown_verb" {
 			return nil
 		}
-		return fmt.Errorf("could not read the caller's grants: %w", err)
+		return errfmt.Errorf("could not read the caller's grants: %w", err)
 	}
 	var pg struct {
 		Pane    bool     `json:"pane"`
@@ -1223,8 +1226,8 @@ func respawnGrantsAllow(c Caller, params map[string]any, peerPID int, target str
 		Admin   bool     `json:"admin"`
 		PeerPID int      `json:"peer_pid"`
 	}
-	if err := json.Unmarshal(raw, &pg); err != nil {
-		return fmt.Errorf("read pane-grants: %w", err)
+	if err := jsonx.Unmarshal(raw, &pg); err != nil {
+		return errfmt.Errorf("read pane-grants: %w", err)
 	}
 	if peerPID > 0 && pg.PeerPID != peerPID {
 		// A daemon that does not know peer_pid answers about the holder
@@ -1237,7 +1240,7 @@ func respawnGrantsAllow(c Caller, params map[string]any, peerPID int, target str
 	if pg.Window == "" {
 		return errors.New("the caller runs in another pane without the admin grant, and replacing the process of another pane needs admin (see tuios pane-grants)")
 	}
-	return fmt.Errorf("pane %s holds %s, and replacing the process of another pane needs the admin grant (see tuios pane-grants)",
+	return errfmt.Errorf("pane %s holds %s, and replacing the process of another pane needs the admin grant (see tuios pane-grants)",
 		PaneID(pg.Window), strings.Join(pg.Grants, ","))
 }
 

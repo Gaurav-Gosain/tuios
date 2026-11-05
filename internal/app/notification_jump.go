@@ -34,6 +34,9 @@ type notifHitZones struct {
 	Drawn Notification
 	// Cut says the block showed only the start of the message.
 	Cut bool
+	// Choices are the columns of an offer's choices, absolute. See
+	// machine_offer.go.
+	Choices []notifSpan
 }
 
 // notifTargetedIndex is the newest message carrying a target, or -1. Activation
@@ -79,6 +82,12 @@ func (m *OS) jumpToNotifTarget(t NotifTarget) {
 	// The version notice is answered with the restart dialog.
 	if t.DaemonRestart {
 		m.OpenDaemonRestart()
+		return
+	}
+	// The offer to add a machine is answered with Add: the jump key is the
+	// keyboard's Add.
+	if t.OfferTarget != "" {
+		m.answerMachineOffer(t, offerAdd)
 		return
 	}
 	// An integration notice is answered with the question that installs.
@@ -156,6 +165,20 @@ func (m *OS) NotificationClick(x, y int) bool {
 	z := m.notifHit
 	if !z.Active || len(m.Notifications) == 0 || y != z.Y || x < z.X0 || x >= z.X1 {
 		return false
+	}
+	// The offer to add a machine is answered by its choices only. The rest
+	// of it does nothing, so a click aimed at the dock adds no machine.
+	if top := m.Notifications[len(m.Notifications)-1]; isMachineOffer(top.Target) && sameDrawnNotification(top, z.Drawn) {
+		for i, c := range z.Choices {
+			if x >= c.X0 && x < c.X1 {
+				m.answerMachineOffer(*top.Target, i)
+				return true
+			}
+		}
+		if x >= z.DismissX0 {
+			m.answerMachineOffer(*top.Target, offerNotNow)
+		}
+		return true
 	}
 	if x >= z.DismissX0 {
 		// The one explicit dismissal: a click on the dismiss end of a message

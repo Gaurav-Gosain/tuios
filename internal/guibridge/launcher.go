@@ -2,11 +2,11 @@ package guibridge
 
 import (
 	"errors"
-	"fmt"
 
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/Gaurav-Gosain/tuios/internal/app"
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"github.com/Gaurav-Gosain/tuios/pkg/applist"
 )
 
@@ -77,7 +77,7 @@ func (m *model) launch(path string, typeIt bool) (tea.Cmd, error) {
 		}
 		return m.os.RunProgram(e), nil
 	}
-	return nil, fmt.Errorf("no program %s in the launcher", path)
+	return nil, errfmt.Errorf("no program %s in the launcher", path)
 }
 
 // isPathApps says whether a message is a finished launcher scan.

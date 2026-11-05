@@ -1,7 +1,6 @@
 package tape
 
 import (
-	"fmt"
 	"regexp"
 	"strconv"
 	"strings"
@@ -9,6 +8,7 @@ import (
 	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 )
 
 // argSpec is what one command takes: how many arguments, and a check of their
@@ -78,7 +78,7 @@ var argSpecs = map[CommandType]argSpec{
 	CommandTypeSetBorderStyle:     {1, 1, "a border style name", nil},
 	CommandTypeShowNotification:   {1, 2, "a message and an optional type: info, success, warning or error", nil},
 	CommandTypeOutput: {1, 1, "a file name", func([]string) (int, error) {
-		return -1, fmt.Errorf("tuios does not render tapes to a file, so Output does nothing. Remove the line, or use Screenshot")
+		return -1, errfmt.Errorf("tuios does not render tapes to a file, so Output does nothing. Remove the line, or use Screenshot")
 	}},
 	CommandTypeSource: {1, 1, "a tape file to include", nil},
 
@@ -104,7 +104,7 @@ func checkEach(check func(string) error) func([]string) (int, error) {
 func checkPositiveInt(s string) error {
 	n, err := strconv.Atoi(s)
 	if err != nil || n < 1 {
-		return fmt.Errorf("%q is not a positive whole number", s)
+		return errfmt.Errorf("%q is not a positive whole number", s)
 	}
 	return nil
 }
@@ -116,7 +116,7 @@ func checkOneOf(values ...string) func(string) error {
 				return nil
 			}
 		}
-		return fmt.Errorf("%q is not one of %s", s, strings.Join(values, ", "))
+		return errfmt.Errorf("%q is not one of %s", s, strings.Join(values, ", "))
 	}
 }
 
@@ -127,7 +127,7 @@ func checkAction(name string) error {
 	if IsActionName(name) {
 		return nil
 	}
-	return fmt.Errorf("%q is not an action. Run 'tuios keybinds list' for the action names", name)
+	return errfmt.Errorf("%q is not an action. Run 'tuios keybinds list' for the action names", name)
 }
 
 // IsActionName reports whether name is a keybinding action a tape may run:
@@ -174,20 +174,20 @@ func checkArgs(cmd *Command) (int, error) {
 	}
 	n := len(cmd.Args)
 	if n < spec.min {
-		return -1, fmt.Errorf("%s needs %s", cmd.Type, spec.usage)
+		return -1, errfmt.Errorf("%s needs %s", cmd.Type, spec.usage)
 	}
 	if spec.max != unlimited && n > spec.max {
 		if spec.max == 0 {
-			return spec.max, fmt.Errorf("%s takes no arguments", cmd.Type)
+			return spec.max, errfmt.Errorf("%s takes no arguments", cmd.Type)
 		}
-		return spec.max, fmt.Errorf("%s takes %s, and %q is one too many", cmd.Type, spec.usage, cmd.Args[spec.max])
+		return spec.max, errfmt.Errorf("%s takes %s, and %q is one too many", cmd.Type, spec.usage, cmd.Args[spec.max])
 	}
 	if spec.check != nil && n > 0 {
 		if i, err := spec.check(cmd.Args); err != nil {
 			if strings.HasPrefix(err.Error(), string(cmd.Type)) {
 				return i, err
 			}
-			return i, fmt.Errorf("%s: %v", cmd.Type, err)
+			return i, errfmt.Errorf("%s: %v", cmd.Type, err)
 		}
 	}
 	return -1, nil
@@ -229,12 +229,12 @@ var conditionKinds = map[string]bool{
 func ParseCondition(cmd *Command) (Condition, error) {
 	var c Condition
 	if len(cmd.Args) == 0 {
-		return c, fmt.Errorf("%s needs a condition: text, pane, gone, focus, panes, agent, workspace or mode", cmd.Type)
+		return c, errfmt.Errorf("%s needs a condition: text, pane, gone, focus, panes, agent, workspace or mode", cmd.Type)
 	}
 	c.Kind = strings.ToLower(cmd.Args[0])
 	takesPane, ok := conditionKinds[c.Kind]
 	if !ok {
-		return c, fmt.Errorf("%q is not a condition. Use text, pane, gone, focus, panes, agent, workspace or mode", cmd.Args[0])
+		return c, errfmt.Errorf("%q is not a condition. Use text, pane, gone, focus, panes, agent, workspace or mode", cmd.Args[0])
 	}
 	if cmd.Type == CommandTypeWaitFor {
 		c.Timeout = DefaultWaitTimeout
@@ -246,17 +246,17 @@ func ParseCondition(cmd *Command) (Condition, error) {
 		switch {
 		case strings.EqualFold(a, "in") && i+1 < len(rest):
 			if !takesPane {
-				return c, fmt.Errorf("%s %s does not take a pane", cmd.Type, c.Kind)
+				return c, errfmt.Errorf("%s %s does not take a pane", cmd.Type, c.Kind)
 			}
 			c.Pane = rest[i+1]
 			i++
 		case isDuration(a):
 			if cmd.Type != CommandTypeWaitFor {
-				return c, fmt.Errorf("%s checks once and takes no timeout. Use WaitFor to wait", cmd.Type)
+				return c, errfmt.Errorf("%s checks once and takes no timeout. Use WaitFor to wait", cmd.Type)
 			}
 			d, _ := time.ParseDuration(a)
 			if d <= 0 {
-				return c, fmt.Errorf("the timeout %q must be more than zero", a)
+				return c, errfmt.Errorf("the timeout %q must be more than zero", a)
 			}
 			c.Timeout = d
 		default:
@@ -264,26 +264,26 @@ func ParseCondition(cmd *Command) (Condition, error) {
 		}
 	}
 	if len(values) != 1 {
-		return c, fmt.Errorf("%s %s needs one value, got %d", cmd.Type, c.Kind, len(values))
+		return c, errfmt.Errorf("%s %s needs one value, got %d", cmd.Type, c.Kind, len(values))
 	}
 	c.Value = values[0]
 	switch c.Kind {
 	case "text":
 		re, err := regexp.Compile(c.Value)
 		if err != nil {
-			return c, fmt.Errorf("the pattern %q is not a regular expression: %v", c.Value, err)
+			return c, errfmt.Errorf("the pattern %q is not a regular expression: %v", c.Value, err)
 		}
 		c.Pattern = re
 	case "panes", "workspace":
 		n, err := strconv.Atoi(c.Value)
 		if err != nil || n < 0 {
-			return c, fmt.Errorf("%s %s needs a number, got %q", cmd.Type, c.Kind, c.Value)
+			return c, errfmt.Errorf("%s %s needs a number, got %q", cmd.Type, c.Kind, c.Value)
 		}
 		c.Count = n
 	case "mode":
 		v := strings.ToLower(c.Value)
 		if v != "terminal" && v != "window" {
-			return c, fmt.Errorf("%s mode needs terminal or window, got %q", cmd.Type, c.Value)
+			return c, errfmt.Errorf("%s mode needs terminal or window, got %q", cmd.Type, c.Value)
 		}
 		c.Value = v
 	}

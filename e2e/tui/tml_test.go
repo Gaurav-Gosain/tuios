@@ -506,15 +506,17 @@ func TestTMLProgramCloseIsNotThePersons(t *testing.T) {
 	}
 }
 
-// TestTMLSurfaceThroughAHostShowsThePlaceholder attaches through another
-// machine, where the person's input on a surface could not reach the
-// surface's daemon. The client must not draw the surface or take its keys: it
-// shows the placeholder, which says what to do, and q on it dismisses the
-// surface on the far machine.
+// TestTMLSurfaceThroughAHostShowsThePlaceholder attaches through a machine
+// whose daemon predates TML surfaces over a link (TUIOS_TML_LINK_LEGACY=1
+// stands in for an old build). That daemon takes no input on a surface over
+// the link, so the client must not draw the surface or take its keys. The
+// window says the far daemon is too old and what to do, and q on it still
+// reaches the placeholder program and dismisses the surface on the far
+// machine. TestTMLSurfacesCrossAHostLink is the current daemon.
 func TestTMLSurfaceThroughAHostShowsThePlaceholder(t *testing.T) {
 	base := t.TempDir()
 	remote := remoteMachine(t)
-	if out, err := tuiosCLI(t, remote, "new", "far", "--detach"); err != nil {
+	if out, err := tuiosCLIEnv(t, remote, []string{"TUIOS_TML_LINK_LEGACY=1"}, "new", "far", "--detach"); err != nil {
 		t.Fatalf("create the far session: %v\n%s", err, out)
 	}
 	env := hubWithBuild(t, base, remote)
@@ -524,8 +526,11 @@ func TestTMLSurfaceThroughAHostShowsThePlaceholder(t *testing.T) {
 	}
 	doc := writeTMLDoc(t, remote, "run.tml", tmlRunDoc)
 	shown := startCLIBackground(t, remote, "tml", "show", doc, "--wait", "-s", "far", "--width", "90", "--height", "24")
-	if err := term.WaitForText("Open this session on its own machine to use it.", uiTimeout); err != nil {
-		t.Fatalf("the far surface did not show its placeholder line: %v\n%s", err, term.Snapshot())
+	if err := term.WaitForText("tuios on build is too old to send this surface here.", uiTimeout); err != nil {
+		t.Fatalf("the far surface did not say its daemon is too old: %v\n%s", err, term.Snapshot())
+	}
+	if !strings.Contains(term.Screen().Text(), "tuios hosts sync build") {
+		t.Fatalf("the too-old message does not name the fix\n%s", term.Snapshot())
 	}
 	if screenHas(term.Screen(), "Picked: none") {
 		t.Fatalf("a client attached through a host drew a surface it cannot answer for\n%s", term.Snapshot())
@@ -549,11 +554,11 @@ func TestTMLSurfaceThroughAHostShowsThePlaceholder(t *testing.T) {
 	// esc does the same, and a click does not: the mouse report that starts
 	// with an esc is told apart.
 	again := startCLIBackground(t, remote, "tml", "show", doc, "--wait", "-s", "far", "--width", "90", "--height", "24")
-	if err := term.WaitForText("Press q to close it.", uiTimeout); err != nil {
-		t.Fatalf("the second far surface did not show its placeholder: %v\n%s", err, term.Snapshot())
+	if err := term.WaitForText("Press q to close the surface.", uiTimeout); err != nil {
+		t.Fatalf("the second far surface did not show its message: %v\n%s", err, term.Snapshot())
 	}
 	time.Sleep(300 * time.Millisecond)
-	col, row := tmlLocate(t, term, "Press q to close it.")
+	col, row := tmlLocate(t, term, "Press q to close the surface.")
 	mouseClick(t, term, col, row, tuitest.MouseLeft, 0)
 	time.Sleep(500 * time.Millisecond)
 	select {

@@ -25,6 +25,7 @@ import (
 	sketchtext "tuios.dev/sketch/text"
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"github.com/Gaurav-Gosain/tuios/internal/mermaid"
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
 )
@@ -115,7 +116,7 @@ is a Go port of pele and draws flowcharts, sequence diagrams, state diagrams, cl
 			}
 			if lo.watch || lo.demo {
 				if lo.watch && (name == "" || name == "-") {
-					return fmt.Errorf("--watch needs a file")
+					return errfmt.Errorf("--watch needs a file")
 				}
 				th, err := mermaidTheme(o.theme)
 				if err != nil {
@@ -131,7 +132,7 @@ is a Go port of pele and draws flowcharts, sequence diagrams, state diagrams, cl
 				return runMermaidLive(name, o, lo, th, os.Stdout)
 			}
 			if name == "" {
-				return fmt.Errorf("give a file, or - for standard input")
+				return errfmt.Errorf("give a file, or - for standard input")
 			}
 			return runMermaid(name, o, os.Stdout)
 		},
@@ -168,15 +169,15 @@ is a Go port of pele and draws flowcharts, sequence diagrams, state diagrams, cl
 func runMermaid(name string, o mermaidOptions, stdout *os.File) error {
 	data, err := mermaid.ReadSource(name)
 	if err != nil {
-		return fmt.Errorf("cannot read %s: %w", name, err)
+		return errfmt.Errorf("cannot read %s: %w", name, err)
 	}
 	sources := mermaid.Sources(name, data)
 	if len(sources) == 0 {
-		return fmt.Errorf("%s has no Mermaid diagram", name)
+		return errfmt.Errorf("%s has no Mermaid diagram", name)
 	}
 	if o.diagram > 0 {
 		if o.diagram > len(sources) {
-			return fmt.Errorf("%s has %d diagrams, not %d", name, len(sources), o.diagram)
+			return errfmt.Errorf("%s has %d diagrams, not %d", name, len(sources), o.diagram)
 		}
 		sources = sources[o.diagram-1 : o.diagram]
 	}
@@ -207,7 +208,7 @@ func runMermaid(name string, o mermaidOptions, stdout *os.File) error {
 		case ".png":
 			format = "png"
 		default:
-			return fmt.Errorf("give --format svg or png for %s", o.out)
+			return errfmt.Errorf("give --format svg or png for %s", o.out)
 		}
 	}
 	if format == "" {
@@ -223,10 +224,10 @@ func runMermaid(name string, o mermaidOptions, stdout *os.File) error {
 	switch format {
 	case "svg", "png", "kitty", "text":
 	default:
-		return fmt.Errorf("unknown format %q: use svg, png, kitty or text", o.format)
+		return errfmt.Errorf("unknown format %q: use svg, png, kitty or text", o.format)
 	}
 	if o.out != "" && format != "svg" && format != "png" {
-		return fmt.Errorf("--out takes svg or png, not %s", format)
+		return errfmt.Errorf("--out takes svg or png, not %s", format)
 	}
 
 	failed := 0
@@ -246,7 +247,7 @@ func runMermaid(name string, o mermaidOptions, stdout *os.File) error {
 		}
 	}
 	if failed > 0 {
-		return fmt.Errorf("%d of %d diagrams could not be drawn", failed, len(sources))
+		return errfmt.Errorf("%d of %d diagrams could not be drawn", failed, len(sources))
 	}
 	return nil
 }
@@ -282,7 +283,7 @@ func mermaidBackground(flag string) (string, error) {
 	case "none":
 		return "none", nil
 	}
-	return "", fmt.Errorf("unknown background %q: use theme or none", name)
+	return "", errfmt.Errorf("unknown background %q: use theme or none", name)
 }
 
 // diagramKinds are the names the help text and the docs give each diagram type.
@@ -402,7 +403,7 @@ func writeMermaid(out sketch.SVG, src string, i, n int, format string, o mermaid
 	if format == "png" {
 		img, err := raster.Draw(out.Data, raster.Options{Scale: o.scale, Background: background, Readable: true})
 		if err != nil {
-			return fmt.Errorf("cannot draw diagram %d: %w", i+1, err)
+			return errfmt.Errorf("cannot draw diagram %d: %w", i+1, err)
 		}
 		var b bytes.Buffer
 		if err := png.Encode(&b, img); err != nil {
@@ -423,7 +424,7 @@ func writeMermaid(out sketch.SVG, src string, i, n int, format string, o mermaid
 	scale := kittyScale(out.Width, out.Height, cols, maxRows, cellW, cellH)
 	img, err := raster.Draw(out.Data, raster.Options{Scale: scale, Background: background, Readable: true})
 	if err != nil {
-		return fmt.Errorf("cannot draw diagram %d: %w", i+1, err)
+		return errfmt.Errorf("cannot draw diagram %d: %w", i+1, err)
 	}
 	box, c, r := cellBox(img, cellW, cellH, cols, maxRows, background, th)
 	var b bytes.Buffer

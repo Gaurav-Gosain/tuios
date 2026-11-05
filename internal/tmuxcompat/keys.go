@@ -1,9 +1,10 @@
 package tmuxcompat
 
 import (
-	"fmt"
 	"strconv"
 	"strings"
+
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 )
 
 // send-keys: tmux key names to the bytes a terminal sends for them.
@@ -129,7 +130,7 @@ func sendKeysText(args []string, literal, hex bool) (string, error) {
 		case hex:
 			n, err := strconv.ParseUint(strings.TrimPrefix(strings.ToLower(a), "0x"), 16, 8)
 			if err != nil {
-				return "", logAs{err: fmt.Errorf("send-keys: invalid hex key %q", a), log: "send-keys: invalid hex key"}
+				return "", logAs{err: errfmt.Errorf("send-keys: invalid hex key %q", a), log: "send-keys: invalid hex key"}
 			}
 			b.WriteByte(byte(n))
 		case literal:

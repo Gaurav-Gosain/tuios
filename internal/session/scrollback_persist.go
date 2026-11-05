@@ -44,6 +44,7 @@ import (
 	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/atomicfile"
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"tuios.dev/vt"
 	"tuios.dev/vt/snapshot"
 )
@@ -509,7 +510,7 @@ func decodeHistory(r io.Reader) (*savedHistory, error) {
 	}
 	if st := h.State; st == nil || st.Width <= 0 || st.Height <= 0 ||
 		st.Width > maxHistoryDim || st.Height > maxHistoryDim || st.Width*st.Height > maxHistoryCells {
-		return nil, fmt.Errorf("history screen size is out of bounds")
+		return nil, errfmt.Errorf("history screen size is out of bounds")
 	}
 	return &h, nil
 }

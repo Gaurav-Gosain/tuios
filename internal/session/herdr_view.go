@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/gitstate"
+	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 )
 
 // herdr's records of tuios's objects: the shapes of herdr's
@@ -268,7 +269,7 @@ func (d *Daemon) herdrSessions(cs *connState) []*Session {
 
 // herdrSessionParams names a session for a verb call.
 func herdrSessionParams(sess *Session) json.RawMessage {
-	raw, _ := json.Marshal(map[string]string{"session": sess.Name()})
+	raw, _ := jsonx.Marshal(map[string]string{"session": sess.Name()})
 	return raw
 }
 

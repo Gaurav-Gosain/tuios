@@ -2,12 +2,12 @@ package client
 
 import (
 	"encoding/base64"
-	"encoding/json"
-	"fmt"
 	"path"
 	"strings"
 
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"github.com/Gaurav-Gosain/tuios/internal/guios/proto"
+	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 )
 
 // A linked machine's files, through its daemon's file verbs (file-list,
@@ -35,7 +35,7 @@ func (c *Client) remoteFSList(p proto.FSListParams) (proto.FSList, error) {
 			LinkKind string `json:"link_kind"`
 		} `json:"entries"`
 	}
-	if err := json.Unmarshal(raw, &res); err != nil {
+	if err := jsonx.Unmarshal(raw, &res); err != nil {
 		return proto.FSList{}, err
 	}
 	out := proto.FSList{Dir: res.Dir, Parent: res.Parent, Home: res.Home, Entries: make([]proto.FSEntry, 0, len(res.Entries))}
@@ -65,7 +65,7 @@ func (c *Client) remoteFSStat(p proto.FSStatParams) (proto.FSStat, error) {
 			LinkKind string `json:"link_kind"`
 		} `json:"info"`
 	}
-	if err := json.Unmarshal(raw, &res); err != nil {
+	if err := jsonx.Unmarshal(raw, &res); err != nil {
 		return proto.FSStat{Path: pth}, err
 	}
 	dir := res.Info.Kind == "dir" || res.Info.Kind == "symlink" && res.Info.LinkKind == "dir"
@@ -85,7 +85,7 @@ func (c *Client) remoteFSRead(p proto.FSReadParams) (proto.FSRead, error) {
 	var res struct {
 		Content string `json:"content"`
 	}
-	if err := json.Unmarshal(raw, &res); err != nil {
+	if err := jsonx.Unmarshal(raw, &res); err != nil {
 		return proto.FSRead{}, err
 	}
 	b, err := base64.StdEncoding.DecodeString(res.Content)
@@ -94,7 +94,7 @@ func (c *Client) remoteFSRead(p proto.FSReadParams) (proto.FSRead, error) {
 
 // errRemoteWrite answers a file write on a linked machine.
 func (c *Client) errRemoteWrite() error {
-	return fmt.Errorf("guios does not change files on %s from here. Copy files there with Copy to %s", c.host, c.host)
+	return errfmt.Errorf("guios does not change files on %s from here. Copy files there with Copy to %s", c.host, c.host)
 }
 
 // HostInfo is what the app knows of the machine of the client's daemon:
@@ -113,6 +113,6 @@ func (c *Client) HostInfo() (goos, home string) {
 	var res struct {
 		Dir string `json:"dir"`
 	}
-	_ = json.Unmarshal(raw, &res)
+	_ = jsonx.Unmarshal(raw, &res)
 	return goos, res.Dir
 }

@@ -1,11 +1,12 @@
 package harness
 
 import (
-	"fmt"
 	"os"
 	"path/filepath"
 	"slices"
 	"strings"
+
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 )
 
 // Transcript says where a harness keeps its own record of a session, so the
@@ -60,7 +61,7 @@ const ReaderJSONL = "claude-code-jsonl"
 
 // knownReaders is the set a manifest may name. Each is a format of
 // internal/transcriptview, which this package does not import, so the names
-// are kept in step by the session package's tests.
+// are kept in step by hand.
 var knownReaders = map[string]struct{}{
 	ReaderJSONL:        {},
 	"codex-rollout":    {},
@@ -71,16 +72,6 @@ var knownReaders = map[string]struct{}{
 	"opencode-service": {},
 	"cursor-jsonl":     {},
 	"pi-jsonl":         {},
-}
-
-// KnownReaders returns the reader names a manifest may give.
-func KnownReaders() []string {
-	out := make([]string, 0, len(knownReaders))
-	for name := range knownReaders {
-		out = append(out, name)
-	}
-	slices.Sort(out)
-	return out
 }
 
 // verifiableFields are the record fields Verify may name. They are the agent's
@@ -114,38 +105,38 @@ func checkTranscript(file, id string, t *Transcript) error {
 		return nil
 	}
 	if _, ok := knownReaders[t.Reader]; !ok {
-		return fmt.Errorf("%s: manifest %q transcript reader %q is not one this build has",
+		return errfmt.Errorf("%s: manifest %q transcript reader %q is not one this build has",
 			file, id, t.Reader)
 	}
 	if t.Dir == "" || t.Glob == "" {
-		return fmt.Errorf("%s: manifest %q transcript needs both dir and glob", file, id)
+		return errfmt.Errorf("%s: manifest %q transcript needs both dir and glob", file, id)
 	}
 	if _, err := placeholders(t.Dir); err != nil {
-		return fmt.Errorf("%s: manifest %q transcript dir: %w", file, id, err)
+		return errfmt.Errorf("%s: manifest %q transcript dir: %w", file, id, err)
 	}
 	for _, f := range t.Verify {
 		if _, ok := verifiableFields[f]; !ok {
-			return fmt.Errorf("%s: manifest %q transcript verify names unknown field %q",
+			return errfmt.Errorf("%s: manifest %q transcript verify names unknown field %q",
 				file, id, f)
 		}
 	}
 	if _, err := filepath.Match(t.Glob, "probe"); err != nil {
-		return fmt.Errorf("%s: manifest %q transcript glob %q: %w", file, id, t.Glob, err)
+		return errfmt.Errorf("%s: manifest %q transcript glob %q: %w", file, id, t.Glob, err)
 	}
 	for _, ex := range t.Exclude {
 		if _, err := filepath.Match(ex, "probe"); err != nil || strings.ContainsRune(ex, '/') {
-			return fmt.Errorf("%s: manifest %q transcript exclude %q must be a file name pattern", file, id, ex)
+			return errfmt.Errorf("%s: manifest %q transcript exclude %q must be a file name pattern", file, id, ex)
 		}
 	}
 	if strings.ContainsRune(t.Glob, '/') && strings.Contains(baseless(t.Dir), "{") {
-		return fmt.Errorf("%s: manifest %q transcript glob %q spans folders, so dir may name no placeholder but {home}", file, id, t.Glob)
+		return errfmt.Errorf("%s: manifest %q transcript glob %q spans folders, so dir may name no placeholder but {home}", file, id, t.Glob)
 	}
 	if t.SessionFile != "" {
 		if strings.Count(t.SessionFile, "{session_id}") != 1 || strings.ContainsAny(strings.ReplaceAll(t.SessionFile, "{session_id}", ""), `/\{}`) {
-			return fmt.Errorf("%s: manifest %q transcript session_file %q must be a file name with {session_id} once", file, id, t.SessionFile)
+			return errfmt.Errorf("%s: manifest %q transcript session_file %q must be a file name with {session_id} once", file, id, t.SessionFile)
 		}
 		if strings.Contains(baseless(t.Dir), "{") {
-			return fmt.Errorf("%s: manifest %q transcript session_file needs a dir with no placeholder but {home}", file, id)
+			return errfmt.Errorf("%s: manifest %q transcript session_file needs a dir with no placeholder but {home}", file, id)
 		}
 	}
 	return nil
@@ -359,11 +350,11 @@ func placeholders(tmpl string) ([]string, error) {
 		}
 		close := strings.Index(rest[open:], "}")
 		if close < 0 {
-			return nil, fmt.Errorf("unclosed placeholder in %q", tmpl)
+			return nil, errfmt.Errorf("unclosed placeholder in %q", tmpl)
 		}
 		ph := rest[open : open+close+1]
 		if _, ok := knownPlaceholders[ph]; !ok {
-			return nil, fmt.Errorf("unknown placeholder %s", ph)
+			return nil, errfmt.Errorf("unknown placeholder %s", ph)
 		}
 		out = append(out, ph)
 		rest = rest[open+close+1:]

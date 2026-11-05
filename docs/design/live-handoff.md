@@ -36,7 +36,7 @@ Status: implemented as PR 2 to PR 5 on the branch `feat/live-handoff-impl`; sect
 - **One upgrade path: kill and restore.**
   - `tuios update` leaves the old daemon running and tells the user to `kill-server`: "Panes are restored, but programs running in them are not" (`cmd/tuios/update.go:456-460`).
   - `scripts/install.sh` asks whether to stop the daemon (`scripts/install.sh:216-246`). `just install` passes `--keep-server` (`justfile:96-97`). `just restart` is `kill-server` plus `start-server` (`justfile:131-134`).
-  - `tuios hosts sync --restart` runs `kill-server`, `mv`, `start-server` on each host (`cmd/tuios/host_sync_remote.go:179-199`).
+  - `tuios hosts sync --restart` runs `kill-server`, `mv`, `start-server` on each host (`internal/hostsync/remote.go:192-218`).
 - **A version mismatch between client and daemon is expected and warned about.**
   - The daemon outlives an upgrade by design (`internal/session/tuiclient.go:484-496`).
   - The TUI (terminal user interface) shows a toast that says to run `kill-server` (`internal/app/session.go:2320-2336`).
@@ -103,7 +103,7 @@ Where tuios can do better than herdr:
   - `scripts/install.sh` gains a third answer at its existing prompt, "upgrade live (experimental)", next to keep and kill (`scripts/install.sh:216-246`).
   - `tuios update` prints `tuios daemon upgrade` before the kill-server advice (`cmd/tuios/update.go:456-460`).
   - `just install-live`.
-  - `tuios hosts sync --restart --live` runs `daemon upgrade` on the remote instead of kill/mv/start (`cmd/tuios/host_sync_remote.go:179-199`).
+  - `tuios hosts sync --restart --live` runs `daemon upgrade` on the remote instead of kill/mv/start (`internal/hostsync/remote.go:192-218`).
 - **Opt-in vs default.** Opt-in while it is experimental. It becomes the default answer in install.sh only after the cross-version E2E (versions-span step) has run green across at least two release boundaries.
 
 ### 1.3 How it reads to a user

@@ -291,7 +291,7 @@
     {
       "path": "appearance.motion",
       "type": "string",
-      "description": "How much moves: none, basic (window slides and the copy sweep), or full (also overlay fades and the working-agent shimmer)",
+      "description": "How much moves: none, basic (window slides, workspace slides and the copy sweep), or full (also overlay fades and the working-agent shimmer)",
       "default": "full",
       "accepted": [
         "none",

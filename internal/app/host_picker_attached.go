@@ -1,11 +1,10 @@
 package app
 
 import (
-	"encoding/json"
-
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/Gaurav-Gosain/tuios/internal/federation"
+	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 )
 
@@ -102,7 +101,7 @@ func fetchAttachedHosts(host, build string) attachedHostView {
 	var res struct {
 		Hosts []federation.HostReport `json:"hosts"`
 	}
-	if err := json.Unmarshal(raw, &res); err != nil {
+	if err := jsonx.Unmarshal(raw, &res); err != nil {
 		view.Err = err
 		return view
 	}
@@ -130,7 +129,7 @@ func localDaemonInstance() string {
 	var res struct {
 		Instance string `json:"instance"`
 	}
-	if json.Unmarshal(raw, &res) != nil {
+	if jsonx.Unmarshal(raw, &res) != nil {
 		return ""
 	}
 	return res.Instance

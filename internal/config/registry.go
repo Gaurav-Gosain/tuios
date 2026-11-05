@@ -636,6 +636,7 @@ var ActionDescriptions = map[string]string{
 	"file_edit":           "Files: edit this text file in a new pane",
 	"file_copy_path":      "Files: copy the path of this file or folder",
 	"file_quick_look":     "Files: show a preview of this file or folder",
+	"file_open_system":    "Files: open this file or folder with the system opener",
 	"seek_down":           "Preview: move forward in the file",
 	"seek_up":             "Preview: move back in the file",
 	"half_down":           "Preview: move half a page forward",
@@ -718,9 +719,15 @@ var ActionDescriptions = map[string]string{
 	"inbox_tab_next":     "Agents view: the focus's tab to the right",
 	"inbox_expand":       "Agents view: show every line of every card in the thread, or fold them again",
 	"inbox_fold":         "Agents view: fold or open the group of the row under the cursor",
+	"inbox_prompt_prev":  "Agents view: show the thread's previous prompt at the top",
+	"inbox_prompt_next":  "Agents view: show the thread's next prompt at the top",
 	"inbox_compare":      "Agents view: compare the attempts of the fan under the cursor, ask a judge, keep one",
 	"inbox_board":        "Agents view: show the task board, or the agents again",
 	"inbox_take":         "Agents view: take the card for the focused pane",
+	"inbox_stage_prev":   "Agents view: move the card to the stage before",
+	"inbox_stage_next":   "Agents view: move the card to the stage after",
+	"inbox_board_layout": "Agents view: show the board as columns or as a list",
+	"inbox_view_list":    "Agents view: show the agents as a column or as a strip above the focus",
 	"inbox_artifact":     "Agents view: open what the agent has shown, such as a TML form, and use it",
 
 	// The rail's agent rows. They act only while the cursor is on an agent

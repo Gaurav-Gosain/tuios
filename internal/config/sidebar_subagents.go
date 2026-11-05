@@ -5,6 +5,8 @@ import (
 	"slices"
 	"strings"
 	"time"
+
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 )
 
 // The subagent options of a rail: how the rows under an agent row look, which
@@ -269,9 +271,9 @@ func CheckSubagentFields(v string) error {
 	_, bad, none := ParseSubagentFields(v)
 	switch {
 	case len(bad) > 0:
-		return fmt.Errorf("unknown field %s; the fields are %s", strings.Join(bad, ", "), strings.Join(SubagentFieldNames, ", "))
+		return errfmt.Errorf("unknown field %s; the fields are %s", strings.Join(bad, ", "), strings.Join(SubagentFieldNames, ", "))
 	case none:
-		return fmt.Errorf("names no field; the fields are %s", strings.Join(SubagentFieldNames, ", "))
+		return errfmt.Errorf("names no field; the fields are %s", strings.Join(SubagentFieldNames, ", "))
 	}
 	return nil
 }
@@ -280,7 +282,7 @@ func CheckSubagentFields(v string) error {
 // neither a duration nor off.
 func CheckSubagentHide(v string) error {
 	if _, _, ok := ParseSubagentHide(v); !ok {
-		return fmt.Errorf("%q is not a duration such as 30s, or off", v)
+		return errfmt.Errorf("%q is not a duration such as 30s, or off", v)
 	}
 	return nil
 }

@@ -3,13 +3,14 @@ package shimlink
 import (
 	"bytes"
 	"errors"
-	"fmt"
 	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
+
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 )
 
 // Method is how InstallFile made the program at the link's path.
@@ -135,11 +136,11 @@ func InstallFile(fsys FS, link, exe, tag string) (Method, error) {
 			m = try.m
 			break
 		}
-		errs = append(errs, fmt.Errorf("%s: %w", try.m, err))
+		errs = append(errs, errfmt.Errorf("%s: %w", try.m, err))
 		_ = fsys.Remove(tmp)
 	}
 	if m == "" {
-		return "", fmt.Errorf("could not make %s: %w", link, errors.Join(errs...))
+		return "", errfmt.Errorf("could not make %s: %w", link, errors.Join(errs...))
 	}
 
 	if err := fsys.Rename(tmp, link); err != nil {
@@ -148,12 +149,12 @@ func InstallFile(fsys FS, link, exe, tag string) (Method, error) {
 		_ = fsys.Remove(aside)
 		if aerr := fsys.Rename(link, aside); aerr != nil {
 			_ = fsys.Remove(tmp)
-			return "", fmt.Errorf("could not replace %s: %w", link, errors.Join(err, aerr))
+			return "", errfmt.Errorf("could not replace %s: %w", link, errors.Join(err, aerr))
 		}
 		if err := fsys.Rename(tmp, link); err != nil {
 			_ = fsys.Rename(aside, link)
 			_ = fsys.Remove(tmp)
-			return "", fmt.Errorf("could not replace %s: %w", link, err)
+			return "", errfmt.Errorf("could not replace %s: %w", link, err)
 		}
 		_ = fsys.Remove(aside)
 	}

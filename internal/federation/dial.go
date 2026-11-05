@@ -2,7 +2,6 @@ package federation
 
 import (
 	"context"
-	"fmt"
 	"io"
 	"os/exec"
 	"strconv"
@@ -11,6 +10,7 @@ import (
 	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/childproc"
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 )
 
 // Transport is one open pipe to a remote proxy. Diagnostic carries whatever the
@@ -213,7 +213,7 @@ func commandDialerEnv(env []string, name string, args ...string) Dialer {
 		t := &cmdTransport{cmd: cmd, in: stdin, out: stdout, done: make(chan struct{})}
 		cmd.Stderr = &boundedBuffer{limit: diagnosticLimit}
 		if err := cmd.Start(); err != nil {
-			return nil, fmt.Errorf("could not run %s: %w", name, err)
+			return nil, errfmt.Errorf("could not run %s: %w", name, err)
 		}
 		go func() {
 			t.exitErr = cmd.Wait()

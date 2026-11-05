@@ -2,7 +2,6 @@ package main
 
 import (
 	"bufio"
-	"bytes"
 	"cmp"
 	"context"
 	"encoding/json"
@@ -11,10 +10,8 @@ import (
 	"io"
 	"maps"
 	"os"
-	"path"
 	"path/filepath"
 	"slices"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -22,7 +19,9 @@ import (
 	"charm.land/lipgloss/v2"
 	"charm.land/lipgloss/v2/table"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"github.com/Gaurav-Gosain/tuios/internal/federation"
+	"github.com/Gaurav-Gosain/tuios/internal/hostsync"
 	"github.com/Gaurav-Gosain/tuios/internal/plural"
 	"github.com/Gaurav-Gosain/tuios/internal/release"
 	"github.com/Gaurav-Gosain/tuios/internal/restartplan"
@@ -57,8 +56,8 @@ const syncParallel = 4
 // Budgets for each step on one host.
 const (
 	syncProbeTimeout   = 90 * time.Second
-	syncInstallTimeout = 15 * time.Minute
-	syncRestartTimeout = 90 * time.Second
+	syncInstallTimeout = hostsync.InstallTimeout
+	syncRestartTimeout = hostsync.RestartTimeout
 )
 
 // syncOptions are the flags.
@@ -69,6 +68,7 @@ type syncOptions struct {
 	binary  string
 	restart bool
 	start   bool
+	service bool
 	yes     bool
 	dryRun  bool
 	json    bool
@@ -82,12 +82,24 @@ type syncOptions struct {
 	tty *bool
 }
 
+// The sync types are hostsync's, which tuios hosts setup shares.
+type (
+	syncDaemon = hostsync.Daemon
+	syncResult = hostsync.Result
+	syncTarget = hostsync.Target
+)
+
 // Daemon states.
 const (
-	daemonRunning = "running"
-	daemonStopped = "stopped"
-	daemonUnknown = "unknown"
+	daemonRunning = hostsync.DaemonRunning
+	daemonStopped = hostsync.DaemonStopped
+	daemonUnknown = hostsync.DaemonUnknown
 )
+
+// planOptions are the sync flags the plan reads.
+func (o syncOptions) planOptions() hostsync.PlanOptions {
+	return hostsync.PlanOptions{Restart: o.restart, Start: o.start, Service: o.service, DryRun: o.dryRun}
+}
 
 // syncSession is one session on a daemon, with the panes that run a program
 // and the agents that can resume. restart-server reports the same shape.
@@ -98,133 +110,6 @@ type syncPane = restartplan.Pane
 
 // syncAgent is an agent pane whose conversation can resume after a restart.
 type syncAgent = restartplan.Agent
-
-// syncDaemon is the daemon on a host.
-type syncDaemon struct {
-	State        string        `json:"state"`
-	Version      string        `json:"version,omitempty"`
-	PID          int           `json:"pid,omitzero"`
-	SessionCount int           `json:"session_count"`
-	Sessions     []syncSession `json:"sessions,omitempty"`
-	// Unread says the sessions could not be listed, so a restart's cost is
-	// not known.
-	Unread    bool `json:"unread,omitzero"`
-	Restarted bool `json:"restarted"`
-	// Started says --start started a daemon that was not running.
-	Started bool `json:"started"`
-}
-
-// syncResult is one host's row.
-type syncResult struct {
-	Host          string     `json:"host"`
-	Addr          string     `json:"addr"`
-	Local         bool       `json:"local,omitzero"`
-	OS            string     `json:"os,omitempty"`
-	Arch          string     `json:"arch,omitempty"`
-	Path          string     `json:"path,omitempty"`
-	Before        string     `json:"before,omitempty"`
-	BeforeBackend string     `json:"before_backend,omitempty"`
-	After         string     `json:"after,omitempty"`
-	InstallPath   string     `json:"install_path,omitempty"`
-	Installed     bool       `json:"installed"`
-	Daemon        syncDaemon `json:"daemon"`
-	// Action is what was done, or with --dry-run what would be done.
-	Action         string   `json:"action"`
-	RestartNeeded  bool     `json:"restart_needed"`
-	RestartCommand string   `json:"restart_command,omitempty"`
-	Notes          []string `json:"notes,omitempty"`
-	Error          string   `json:"error,omitempty"`
-	// ErrorKind names an error a script can act on: "tailscale_check" for a
-	// login that waits for an approval, "tailscale_policy" for a login the
-	// tailnet policy refuses. Empty for any other error.
-	ErrorKind string `json:"error_kind,omitempty"`
-	// ApprovalURL is where the person approves the login, with
-	// "tailscale_check".
-	ApprovalURL string `json:"approval_url,omitempty"`
-}
-
-// syncTarget is one machine being worked on.
-type syncTarget struct {
-	name   string
-	host   federation.Host
-	local  bool
-	runner syncRunner
-	res    syncResult
-
-	// From the probe.
-	home        string
-	configured  string
-	symlink     bool
-	dirWritable bool
-	sha         string
-
-	// The plan.
-	platform   string
-	install    bool
-	targetArg  string
-	restart    bool
-	start      bool
-	oldArg     string
-	newVersion string
-	failed     bool
-	// daemonNote is why the link could not read the daemon. It is kept
-	// apart because it says nothing new when the probe already failed or
-	// found no tuios.
-	daemonNote string
-	mu         sync.Mutex
-}
-
-func (t *syncTarget) note(s string) {
-	t.mu.Lock()
-	defer t.mu.Unlock()
-	t.res.Notes = append(t.res.Notes, s)
-}
-
-func (t *syncTarget) fail(err error) {
-	t.failed = true
-	t.res.Error = err.Error()
-	if ge := gateErrorOf(err); ge != nil {
-		t.res.ErrorKind = ge.Gate.Kind
-		t.res.ApprovalURL = ge.Gate.URL
-	}
-}
-
-// Where the binary comes from.
-const (
-	sourceRelease = "release"
-	sourceDev     = "dev"
-	sourceBinary  = "binary"
-)
-
-// syncBinary is one binary for one platform.
-type syncBinary struct {
-	data    []byte
-	sha     string
-	version string
-}
-
-// syncSource makes binaries.
-type syncSource struct {
-	kind    string
-	srcDir  string
-	binPath string
-	// version is what the binary reports, or "" when it cannot be known
-	// here (a --binary for another platform).
-	version string
-	// platform is the one platform a --binary is for.
-	platform string
-
-	commit   string
-	date     string
-	tmpDir   string
-	rel      *release.Release
-	sums     release.Checksums
-	mu       sync.Mutex
-	built    map[string]*syncBinary
-	errs     map[string]error
-	errOut   io.Writer
-	explicit bool
-}
 
 // syncReport is the JSON result.
 type syncReport struct {
@@ -273,6 +158,11 @@ the command to restart them.
 with no tuios, sync installs tuios first and then starts the daemon. sync
 never starts a daemon where tuios is missing.
 
+--service installs the daemon service on each host that has none (see
+'tuios daemon install-service'). Then the daemon starts at boot, or at login
+on macOS, and runs after the ssh session ends. A host without the service
+gets a note with the command.
+
 --restart restarts each daemon whose version is different. First it lists the
 sessions and the panes with a running program on each host. Then it asks you
 to agree. Without a terminal, add --yes. A daemon with no sessions restarts
@@ -294,6 +184,9 @@ scripts/install.sh ghostty.`,
   # Install where tuios is missing, and start every daemon that is not running
   tuios hosts sync --start
 
+  # Start the daemon at boot on every host
+  tuios hosts sync --service
+
   # Install on two hosts, and restart their daemons
   tuios hosts sync build lab --restart
 
@@ -311,6 +204,7 @@ scripts/install.sh ghostty.`,
 	f.StringVar(&opts.binary, "binary", "", "Send this tuios binary")
 	f.BoolVar(&opts.restart, "restart", false, "Restart each daemon whose version is different")
 	f.BoolVar(&opts.start, "start", false, "Start the daemon on each host where it does not run")
+	f.BoolVar(&opts.service, "service", false, "Install the daemon service on each host that has none")
 	f.BoolVarP(&opts.yes, "yes", "y", false, "Restart without a question. Needed for --restart without a terminal")
 	f.BoolVar(&opts.dryRun, "dry-run", false, "Show the plan and change nothing")
 	f.BoolVar(&opts.json, "json", false, "Print the result as JSON")
@@ -343,22 +237,22 @@ func runHostsSync(opts syncOptions) error {
 		return err
 	}
 	// The ssh calls of this run share one connection per host, so one
-	// Tailscale SSH approval covers the run. See host_gate.go.
-	share := newSSHShare(os.Getenv("TUIOS_SSH"))
-	defer share.close()
-	desk := newApprovalDesk(opts.errOut, opts.in, syncIsTTY(opts) && !opts.json)
+	// Tailscale SSH approval covers the run. See internal/hostsync/gate.go.
+	share := hostsync.NewShare(os.Getenv("TUIOS_SSH"))
+	defer share.Close()
+	desk := hostsync.NewApprovalDesk(opts.errOut, opts.in, syncIsTTY(opts) && !opts.json)
 	for _, t := range targets {
-		if t.local {
+		if t.Local {
 			continue
 		}
-		share.share(&t.host)
-		t.runner = sshSyncRunner{host: t.host, desk: desk}
+		share.Share(&t.Host)
+		t.Runner = hostsync.SSHRunner{Host: t.Host, Desk: desk}
 	}
 	src, err := chooseSyncSource(opts)
 	if err != nil {
 		return err
 	}
-	defer src.cleanup()
+	defer src.Cleanup()
 
 	// 1. Probe. The probe goes first and the daemon is read after it, so the
 	// probe's connection is the one the link shares, and a host that
@@ -366,14 +260,14 @@ func runHostsSync(opts syncOptions) error {
 	forEachTarget(targets, func(t *syncTarget) {
 		ctx, cancel := context.WithTimeout(context.Background(), syncProbeTimeout)
 		defer cancel()
-		probeErr := probeHostBinary(ctx, t)
-		if gateErrorOf(probeErr) != nil {
-			t.res.Daemon.State = daemonUnknown
+		probeErr := hostsync.ProbeBinary(ctx, t)
+		if hostsync.GateErrorOf(probeErr) != nil {
+			t.Res.Daemon.State = daemonUnknown
 		} else {
 			// The approval wait does not count against the probe's budget,
 			// so the daemon gets a budget of its own.
 			dctx, dcancel := context.WithTimeout(context.Background(), syncProbeTimeout)
-			if t.local {
+			if t.Local {
 				readLocalDaemon(dctx, t)
 			} else {
 				readHostDaemon(dctx, t)
@@ -382,40 +276,40 @@ func runHostsSync(opts syncOptions) error {
 		}
 		switch {
 		case probeErr != nil:
-			t.fail(probeErr)
-		case t.res.Path == "":
+			t.Fail(probeErr)
+		case t.Res.Path == "":
 			// No tuios, so no daemon the link could reach.
-			t.res.Daemon = syncDaemon{State: daemonStopped}
-		case t.daemonNote != "":
-			t.note(t.daemonNote)
+			t.Res.Daemon = syncDaemon{State: daemonStopped}
+		case t.DaemonNote != "":
+			t.Note(t.DaemonNote)
 		}
 	})
 
 	// 2. Plan.
 	needed := map[string]bool{}
 	for _, t := range targets {
-		if t.failed {
+		if t.Failed {
 			continue
 		}
-		planSyncTarget(t, src, opts)
-		if t.install && !t.failed {
-			needed[t.platform] = true
+		hostsync.Plan(t, src, opts.planOptions())
+		if t.Install && !t.Failed {
+			needed[t.Platform] = true
 		}
 	}
 	if !opts.dryRun {
-		if err := src.prepare(slices.Sorted(maps.Keys(needed))); err != nil {
+		if err := src.Prepare(slices.Sorted(maps.Keys(needed))); err != nil {
 			return err
 		}
 		for _, t := range targets {
-			if t.install && !t.failed {
-				if err := src.errFor(t.platform); err != nil {
-					t.fail(err)
+			if t.Install && !t.Failed {
+				if err := src.ErrFor(t.Platform); err != nil {
+					t.Fail(err)
 				}
 			}
 		}
-	} else if src.kind == sourceRelease {
+	} else if src.Kind == hostsync.KindRelease {
 		// The plan should not promise a release that does not exist.
-		if err := src.lookupRelease(); err != nil {
+		if err := src.LookupRelease(); err != nil {
 			return err
 		}
 	}
@@ -428,25 +322,25 @@ func runHostsSync(opts syncOptions) error {
 	// 3. Apply.
 	if !opts.dryRun {
 		forEachTarget(targets, func(t *syncTarget) {
-			if t.failed {
+			if t.Failed {
 				return
 			}
-			applySyncTarget(t, src)
+			hostsync.Apply(t, src)
 		})
 	}
 	for _, t := range targets {
-		finishSyncTarget(t, src, opts)
+		hostsync.Finish(t, src, opts.planOptions())
 	}
 
 	// 4. Report.
-	report := syncReport{Version: src.displayVersion(), Source: src.kind, DryRun: opts.dryRun, OK: true}
+	report := syncReport{Version: src.DisplayVersion(), Source: src.Kind, DryRun: opts.dryRun, OK: true}
 	failed := 0
 	for _, t := range targets {
-		if t.res.Error != "" {
+		if t.Res.Error != "" {
 			failed++
 			report.OK = false
 		}
-		report.Hosts = append(report.Hosts, t.res)
+		report.Hosts = append(report.Hosts, t.Res)
 	}
 	if opts.json {
 		enc := json.NewEncoder(opts.out)
@@ -461,7 +355,7 @@ func runHostsSync(opts syncOptions) error {
 		if opts.json {
 			return &diagnosticError{What: plural.Count(failed, "host") + " failed.", Status: 1}
 		}
-		return fmt.Errorf("%d of %s failed. The rows above say why", failed, plural.Count(len(targets), "host"))
+		return errfmt.Errorf("%d of %s failed. The rows above say why", failed, plural.Count(len(targets), "host"))
 	}
 	return nil
 }
@@ -485,7 +379,7 @@ func forEachTarget(targets []*syncTarget, fn func(*syncTarget)) {
 func resolveSyncTargets(opts syncOptions) ([]*syncTarget, error) {
 	cfgPath, err := config.GetConfigPath()
 	if err != nil {
-		return nil, fmt.Errorf("cannot find the config file: %w", err)
+		return nil, errfmt.Errorf("cannot find the config file: %w", err)
 	}
 	hosts, err := config.HostsInFile(cfgPath)
 	if err != nil {
@@ -508,7 +402,7 @@ func resolveSyncTargets(opts syncOptions) ([]*syncTarget, error) {
 				continue
 			}
 			if _, ok := hosts[n]; !ok {
-				return nil, fmt.Errorf("no host is named %q in the config. Run 'tuios hosts' to see the names", n)
+				return nil, errfmt.Errorf("no host is named %q in the config. Run 'tuios hosts' to see the names", n)
 			}
 			if !slices.Contains(names, n) {
 				names = append(names, n)
@@ -525,31 +419,32 @@ func resolveSyncTargets(opts syncOptions) ([]*syncTarget, error) {
 			return nil, err
 		}
 		targets = append(targets, &syncTarget{
-			name:   n,
-			host:   h,
-			runner: sshSyncRunner{host: h},
-			res:    syncResult{Host: n, Addr: h.Addr},
+			Name:   n,
+			Host:   h,
+			Runner: hostsync.SSHRunner{Host: h},
+			Res:    syncResult{Host: n, Addr: h.Addr},
 		})
 	}
 	if local {
 		targets = append(targets, &syncTarget{
-			name:   federation.LocalHostName,
-			local:  true,
-			runner: localSyncRunner{},
-			res:    syncResult{Host: federation.LocalHostName, Addr: "this machine", Local: true},
+			Name:   federation.LocalHostName,
+			Local:  true,
+			Runner: hostsync.LocalRunner{},
+			Res:    syncResult{Host: federation.LocalHostName, Addr: "this machine", Local: true},
 		})
 	}
 	return targets, nil
 }
 
 // chooseSyncSource decides where the binaries come from.
-func chooseSyncSource(opts syncOptions) (*syncSource, error) {
-	src := &syncSource{built: map[string]*syncBinary{}, errs: map[string]error{}, errOut: opts.errOut}
+func chooseSyncSource(opts syncOptions) (*hostsync.Source, error) {
+	src := hostsync.NewSource(opts.errOut)
+	src.Releases = updateReleases{}
 	if opts.binary != "" {
 		if opts.dev || opts.src != "" {
 			return nil, errors.New("--binary sends a given file, and --dev and --src build one. Pass one or the other")
 		}
-		return src, src.loadBinary(opts.binary)
+		return src, src.LoadBinary(opts.binary)
 	}
 	if opts.dev || opts.src != "" {
 		dir := opts.src
@@ -558,7 +453,7 @@ func chooseSyncSource(opts syncOptions) (*syncSource, error) {
 			if err != nil {
 				return nil, err
 			}
-			found, ok := findTuiosCheckout(cwd)
+			found, ok := hostsync.FindTuiosCheckout(cwd)
 			if !ok {
 				return nil, &diagnosticError{
 					What: "--dev builds from a tuios checkout, and the current folder is not in one.",
@@ -571,24 +466,24 @@ func chooseSyncSource(opts syncOptions) (*syncSource, error) {
 			if err != nil {
 				return nil, err
 			}
-			found, ok := findTuiosCheckout(abs)
+			found, ok := hostsync.FindTuiosCheckout(abs)
 			if !ok || found != abs {
-				return nil, fmt.Errorf("%s is not a tuios checkout. --src names the folder that holds its go.mod", dir)
+				return nil, errfmt.Errorf("%s is not a tuios checkout. --src names the folder that holds its go.mod", dir)
 			}
 			dir = found
 		}
-		src.explicit = opts.src != ""
-		return src, src.initDev(dir)
+		src.Explicit = opts.src != ""
+		return src, src.InitDev(dir)
 	}
 	if _, ok := release.ParseVersion(version); ok {
-		src.kind = sourceRelease
-		src.version = version
+		src.Kind = hostsync.KindRelease
+		src.Version = version
 		return src, nil
 	}
 	// A dev build has no release to fetch. In a checkout it builds that.
 	if cwd, err := os.Getwd(); err == nil {
-		if dir, ok := findTuiosCheckout(cwd); ok {
-			return src, src.initDev(dir)
+		if dir, ok := hostsync.FindTuiosCheckout(cwd); ok {
+			return src, src.InitDev(dir)
 		}
 	}
 	return nil, &diagnosticError{
@@ -598,220 +493,22 @@ func chooseSyncSource(opts syncOptions) (*syncSource, error) {
 	}
 }
 
-// findTuiosCheckout walks up from dir to the folder whose go.mod is the
-// tuios module.
-func findTuiosCheckout(dir string) (string, bool) {
-	for {
-		data, err := os.ReadFile(filepath.Join(dir, "go.mod"))
-		if err == nil {
-			line, _, _ := strings.Cut(string(data), "\n")
-			if strings.TrimSpace(line) == "module github.com/"+release.Repo {
-				if _, err := os.Stat(filepath.Join(dir, "cmd", "tuios")); err == nil {
-					return dir, true
-				}
-			}
-			return "", false
-		}
-		parent := filepath.Dir(dir)
-		if parent == dir {
-			return "", false
-		}
-		dir = parent
-	}
+// updateReleases gives hosts sync the release helpers of tuios update, so a
+// failed lookup or download reads the same in both commands.
+type updateReleases struct{}
+
+func (updateReleases) ExplainLookupError(err error) error { return explainLookupError(err, false) }
+
+func (updateReleases) FetchChecksums(ctx context.Context, src release.Source, rel release.Release) (release.Checksums, error) {
+	return fetchChecksums(ctx, src, rel)
 }
 
-func (s *syncSource) cleanup() {
-	if s.tmpDir != "" {
-		_ = os.RemoveAll(s.tmpDir)
-	}
+func (updateReleases) ReadAsset(ctx context.Context, src release.Source, asset release.Asset) ([]byte, error) {
+	return readAsset(ctx, src, asset)
 }
 
-// displayVersion is the version the hosts are synced to.
-func (s *syncSource) displayVersion() string {
-	if s.version == "" {
-		return "unknown"
-	}
-	return s.version
-}
-
-// errFor is the error making the binary for one platform hit.
-func (s *syncSource) errFor(platform string) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if err := s.errs[platform]; err != nil {
-		return err
-	}
-	if s.built[platform] == nil {
-		return fmt.Errorf("no binary was made for %s", platform)
-	}
-	return nil
-}
-
-func (s *syncSource) binaryFor(platform string) *syncBinary {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return s.built[platform]
-}
-
-// prepare makes the binary for each platform, once each.
-func (s *syncSource) prepare(platforms []string) error {
-	if len(platforms) == 0 {
-		return nil
-	}
-	switch s.kind {
-	case sourceRelease:
-		if err := s.lookupRelease(); err != nil {
-			return err
-		}
-	case sourceDev:
-		dir, err := os.MkdirTemp("", "tuios-hosts-sync-")
-		if err != nil {
-			return err
-		}
-		s.tmpDir = dir
-	}
-	for _, p := range platforms {
-		var b *syncBinary
-		var err error
-		switch s.kind {
-		case sourceRelease:
-			b, err = s.fetchRelease(p)
-		case sourceDev:
-			b, err = s.buildDev(p)
-		case sourceBinary:
-			if p == s.platform {
-				b = s.built[p]
-			}
-		}
-		s.mu.Lock()
-		if err != nil {
-			s.errs[p] = err
-		} else if b != nil {
-			s.built[p] = b
-		}
-		s.mu.Unlock()
-	}
-	return nil
-}
-
-// planSyncTarget decides what one host needs.
-func planSyncTarget(t *syncTarget, src *syncSource, opts syncOptions) {
-	t.platform = t.res.OS + "/" + t.res.Arch
-	if src.kind == sourceBinary && t.platform != src.platform {
-		t.fail(fmt.Errorf("the binary is for %s and %s runs %s", src.platform, t.name, t.platform))
-		return
-	}
-	t.newVersion = src.version
-	// A binary that cannot run here tells its version only where it is
-	// installed: the same bytes on the host report it.
-	if t.newVersion == "" && src.kind == sourceBinary && t.sha != "" && t.sha == src.built[src.platform].sha {
-		t.newVersion = t.res.Before
-	}
-
-	current := t.res.Path != "" && (sameVersion(t.res.Before, t.newVersion) ||
-		(t.sha != "" && src.kind == sourceBinary && t.sha == src.built[src.platform].sha))
-	t.install = !current
-
-	// Where it goes.
-	t.targetArg, t.res.InstallPath = syncInstallTarget(t)
-	t.oldArg = "-"
-	if t.res.Path != "" && federation.SafeRemoteArg(t.res.Path) {
-		t.oldArg = t.res.Path
-	}
-
-	// The daemon.
-	d := &t.res.Daemon
-	mismatched := d.State == daemonRunning && !sameVersion(d.Version, t.newVersion)
-	if d.State == daemonRunning && t.newVersion == "" {
-		// Nothing to compare against: the version of the new binary is not
-		// known until it is installed.
-		mismatched = false
-		if opts.restart {
-			t.note("The version of the binary is not known here, so the daemon is not restarted. Install it first, then run the restart.")
-		}
-	}
-	t.res.RestartNeeded = mismatched
-	if mismatched {
-		t.res.RestartCommand = syncRestartCommand(t, src)
-		if opts.restart {
-			switch {
-			case t.local && os.Getenv("TUIOS_PANE_ID") != "":
-				t.note("This command runs in a pane of the daemon on this machine, so it does not restart that daemon. Run the restart from a terminal outside tuios.")
-			case d.Unread && d.SessionCount != 0:
-				t.note("The sessions of the daemon could not be read, so it is not restarted. Restart it by hand on the host.")
-			default:
-				t.restart = true
-			}
-		}
-	}
-	if opts.start {
-		switch d.State {
-		case daemonStopped:
-			t.start = true
-		case daemonUnknown:
-			t.note("The state of the daemon is not known, so sync does not start one.")
-		}
-	}
-}
-
-// sameVersion reports whether two version strings name the same build. A
-// bare "dev" names no build in particular, so it matches nothing.
-func sameVersion(a, b string) bool {
-	if a == "" || b == "" || a == "dev" || b == "dev" {
-		return false
-	}
-	return strings.TrimPrefix(a, "v") == strings.TrimPrefix(b, "v")
-}
-
-// syncInstallTarget is where a host's new binary goes, as the install script
-// reads it and as a person reads it.
-func syncInstallTarget(t *syncTarget) (arg, display string) {
-	home := strings.TrimSuffix(t.home, "/")
-	fallback := func(why string) (string, string) {
-		if why != "" {
-			t.note(why)
-		}
-		return "-", home + "/.local/bin/tuios"
-	}
-	// A configured command is what the link runs, so a binary goes there.
-	if cmdArg, ok := syncCommandArg(t.host.Command); ok && cmdArg != "-" {
-		p := t.configured
-		if t.res.Path != "" && !t.dirWritable {
-			return fallback(fmt.Sprintf("You cannot write the folder of %s, so sync installs to ~/.local/bin. The config still runs %s.", p, t.host.Command))
-		}
-		return cmdArg, p
-	}
-	p := t.res.Path
-	switch {
-	case p == "":
-		return fallback("")
-	case !federation.SafeRemoteArg(p):
-		return fallback(fmt.Sprintf("The path %s has characters sync does not send to a shell, so sync installs to ~/.local/bin.", p))
-	case strings.HasPrefix(p, "/nix/"):
-		return fallback(fmt.Sprintf("Nix owns %s, so sync installs to ~/.local/bin.", p))
-	case t.symlink && p != home+"/.local/bin/tuios":
-		return fallback(fmt.Sprintf("%s is a link that another installer may own, so sync installs to ~/.local/bin.", p))
-	case !t.dirWritable:
-		return fallback(fmt.Sprintf("You cannot write the folder of %s, and sync does not use sudo. It installs to ~/.local/bin.", p))
-	}
-	return p, p
-}
-
-// syncRestartCommand is the command that restarts one daemon later, with the
-// same source as this run.
-func syncRestartCommand(t *syncTarget, src *syncSource) string {
-	parts := []string{"tuios", "hosts", "sync", t.name, "--restart"}
-	switch src.kind {
-	case sourceDev:
-		if src.explicit {
-			parts = append(parts, "--src", src.srcDir)
-		} else {
-			parts = append(parts, "--dev")
-		}
-	case sourceBinary:
-		parts = append(parts, "--binary", src.binPath)
-	}
-	return strings.Join(parts, " ")
+func (updateReleases) ExplainChecksumError(err error, rel release.Release) error {
+	return explainChecksumError(err, rel)
 }
 
 // confirmSyncRestarts lists what the planned restarts end and asks before any
@@ -820,7 +517,7 @@ func syncRestartCommand(t *syncTarget, src *syncSource) string {
 func confirmSyncRestarts(targets []*syncTarget, opts syncOptions) error {
 	var costly []*syncTarget
 	for _, t := range targets {
-		if t.restart && !t.failed && t.res.Daemon.SessionCount > 0 {
+		if t.Restart && !t.Failed && t.Res.Daemon.SessionCount > 0 {
 			costly = append(costly, t)
 		}
 	}
@@ -862,8 +559,8 @@ func syncIsTTY(opts syncOptions) bool {
 
 // writeRestartCost writes what a restart of one daemon ends.
 func writeRestartCost(w io.Writer, t *syncTarget) {
-	d := t.res.Daemon
-	fmt.Fprintf(w, "%s (daemon %s, %s):\n", t.name, cmp.Or(d.Version, "unknown"), plural.Count(d.SessionCount, "session"))
+	d := t.Res.Daemon
+	fmt.Fprintf(w, "%s (daemon %s, %s):\n", t.Name, cmp.Or(d.Version, "unknown"), plural.Count(d.SessionCount, "session"))
 	if d.Unread {
 		fmt.Fprintln(w, "  The sessions could not be read.")
 		return
@@ -885,201 +582,6 @@ func writeSessionCost(w io.Writer, sessions []syncSession) {
 		}
 		fmt.Fprintf(w, "  session %s: %s. Running: %s\n", s.Name, plural.Count(s.Panes, "pane"), strings.Join(progs, ", "))
 	}
-}
-
-// applySyncTarget installs and restarts on one host.
-func applySyncTarget(t *syncTarget, src *syncSource) {
-	if t.install {
-		b := src.binaryFor(t.platform)
-		if b == nil {
-			t.fail(fmt.Errorf("no binary was made for %s", t.platform))
-			return
-		}
-		if t.newVersion == "" {
-			t.newVersion = b.version
-		}
-		restart := "0"
-		if t.restart {
-			restart = "1"
-		}
-		ctx, cancel := context.WithTimeout(context.Background(), syncInstallTimeout)
-		defer cancel()
-		out, stderr, err := t.runner.run(ctx, syncInstallScript(),
-			[]string{t.targetArg, b.sha, strconv.Itoa(len(b.data)), restart, t.oldArg},
-			bytes.NewReader(b.data))
-		f := parseSyncFacts(out)
-		if err != nil || f.has("fail") {
-			t.fail(installError(f, stderr, err))
-			return
-		}
-		t.res.Installed = true
-		t.res.InstallPath = f.get("target")
-		staged, _ := parseVersionLine(f.get("staged"))
-		after, _ := parseVersionLine(f.get("after"))
-		t.res.After = after
-		if after == "" || after != staged {
-			t.fail(fmt.Errorf("the installed binary did not run after the install. It reported %q", f.get("after")))
-			return
-		}
-		if t.newVersion == "" {
-			t.newVersion = after
-		}
-		if login := f.get("login"); login != t.res.InstallPath {
-			if login == "" {
-				t.note(fmt.Sprintf("A login shell on %s does not find tuios. Add %s to the PATH there. The link finds it anyway.", t.name, path.Dir(t.res.InstallPath)))
-			} else {
-				t.note(fmt.Sprintf("A login shell on %s runs %s, not %s.", t.name, login, t.res.InstallPath))
-			}
-		}
-		if t.restart {
-			restartResult(t, f)
-		}
-		startSyncDaemon(t)
-		return
-	}
-	t.res.After = t.res.Before
-	if t.restart {
-		ctx, cancel := context.WithTimeout(context.Background(), syncRestartTimeout)
-		defer cancel()
-		arg := t.oldArg
-		if arg == "-" {
-			arg = t.targetArg
-		}
-		out, stderr, err := t.runner.run(ctx, syncRestartScript(), []string{arg}, nil)
-		f := parseSyncFacts(out)
-		if err != nil && !f.has("stopfail") && !f.has("startfail") {
-			t.fail(remoteRunError("the restart failed", stderr, err))
-			return
-		}
-		restartResult(t, f)
-	}
-	startSyncDaemon(t)
-}
-
-// startSyncDaemon starts the daemon on a host where it does not run, with the
-// binary the host has now: the one just installed, or else the one it had.
-func startSyncDaemon(t *syncTarget) {
-	if !t.start || t.failed {
-		return
-	}
-	arg, shown := t.oldArg, t.res.Path
-	if t.res.Installed {
-		arg, shown = t.res.InstallPath, t.res.InstallPath
-		if !federation.SafeRemoteArg(arg) {
-			arg = t.targetArg
-		}
-	}
-	if arg == "-" {
-		arg = t.targetArg
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), syncRestartTimeout)
-	defer cancel()
-	if err := startDaemonWith(ctx, t.runner, arg, shown); err != nil {
-		t.fail(err)
-		return
-	}
-	d := &t.res.Daemon
-	d.Started = true
-	d.State = daemonRunning
-	d.Version = t.res.After
-	t.res.RestartNeeded = false
-	t.res.RestartCommand = ""
-}
-
-// restartResult reads what the install or restart script said about the
-// daemon.
-func restartResult(t *syncTarget, f syncFacts) {
-	switch {
-	case f.has("stopfail"):
-		t.fail(errors.New("the old daemon did not stop. It still runs the old version"))
-	case f.has("startfail"):
-		t.fail(errors.New("the old daemon stopped and the new one did not start. Run 'tuios start-server' on the host. The sessions come back then"))
-	case f.has("started"):
-		t.res.Daemon.Restarted = true
-		t.res.RestartNeeded = false
-		t.res.RestartCommand = ""
-	}
-}
-
-// installError is one plain sentence for a failed install.
-func installError(f syncFacts, stderr string, err error) error {
-	switch f.get("fail") {
-	case "mkdir", "mktemp":
-		return errors.New("the install folder could not be written. Nothing was changed")
-	case "write", "size":
-		return errors.New("the binary did not arrive whole. Nothing was changed")
-	case "hash":
-		return errors.New("the binary that arrived is not the one that was sent. Nothing was changed")
-	case "run":
-		out := strings.Join(f["out"], " ")
-		return fmt.Errorf("the new binary did not run on the host, so it was not installed. It said: %s", plainLine(out))
-	case "move":
-		return errors.New("the new binary could not be renamed into place. The old one is still there")
-	}
-	if err == nil {
-		return errors.New("the install did not finish")
-	}
-	return remoteRunError("the install failed", stderr, err)
-}
-
-// finishSyncTarget writes the action and the notes for the daemon.
-func finishSyncTarget(t *syncTarget, src *syncSource, opts syncOptions) {
-	r := &t.res
-	if r.Error != "" {
-		r.Action = "failed"
-		if r.ErrorKind == federation.GateTailscaleCheck {
-			r.Action = "needs approval"
-		}
-		return
-	}
-	var parts []string
-	switch {
-	case opts.dryRun && t.install && r.Path == "":
-		parts = append(parts, "would install")
-	case opts.dryRun && t.install:
-		parts = append(parts, "would update")
-	case t.install:
-		parts = append(parts, "installed")
-	default:
-		parts = append(parts, "up to date")
-	}
-	if opts.dryRun {
-		if t.install {
-			r.After = src.version
-		} else {
-			r.After = r.Before
-		}
-	}
-	d := r.Daemon
-	switch {
-	case d.Started:
-		parts = append(parts, "daemon started")
-	case opts.dryRun && t.start:
-		parts = append(parts, "would start daemon")
-	case d.State == daemonStopped && !opts.start && !t.local:
-		t.note(fmt.Sprintf("The daemon does not run. To start it, run: tuios hosts sync %s --start", t.name))
-	case d.Restarted:
-		parts = append(parts, "daemon restarted")
-		if d.SessionCount == 0 {
-			t.note("The daemon held no sessions, so it restarted without a question.")
-		}
-	case opts.dryRun && t.restart:
-		parts = append(parts, "would restart daemon")
-	case r.RestartNeeded:
-		parts = append(parts, "daemon restart needed")
-		if !t.restart {
-			if d.SessionCount == 0 && !d.Unread {
-				t.note(fmt.Sprintf("The daemon still runs %s and holds no sessions. A restart loses nothing. Run: %s", cmp.Or(d.Version, "unknown"), r.RestartCommand))
-			} else {
-				t.note(fmt.Sprintf("The daemon still runs %s. Its %s %s running. A client of the new version can refuse to connect to it if the protocol changed. To restart it, run: %s. A restart ends the programs in its panes.",
-					cmp.Or(d.Version, "unknown"), plural.Count(d.SessionCount, "session"), plural.Word(d.SessionCount, "keeps", "keep"), r.RestartCommand))
-			}
-		}
-	}
-	if r.BeforeBackend == "ghostty" && t.install {
-		t.note("The old binary used the ghostty backend. The new one uses the pure Go backend.")
-	}
-	r.Action = strings.Join(parts, ", ")
 }
 
 // printSyncReport writes the table and the notes.
@@ -1131,6 +633,9 @@ func printSyncReport(w io.Writer, rep syncReport, opts syncOptions) {
 		if h.Error != "" {
 			fmt.Fprintf(w, "%s (%s): %s\n", h.Host, h.Addr, h.Error)
 		}
+		if h.Fix != "" {
+			fmt.Fprintf(w, "  %s\n", h.Fix)
+		}
 		for _, n := range h.Notes {
 			fmt.Fprintf(w, "%s: %s\n", h.Host, n)
 		}
@@ -1139,9 +644,9 @@ func printSyncReport(w io.Writer, rep syncReport, opts syncOptions) {
 
 func sourceWords(kind string) string {
 	switch kind {
-	case sourceRelease:
+	case hostsync.KindRelease:
 		return "the release on GitHub"
-	case sourceDev:
+	case hostsync.KindDev:
 		return "a build of the checkout"
 	}
 	return "the given binary"

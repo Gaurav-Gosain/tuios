@@ -21,7 +21,7 @@ visible consumer, idle CPU under ~0.5%.
   ~nothing to the wire (render count bounded). `TUIOS_STATS_FILE` makes the
   process dump its tick counters on clean exit.
 - `scripts/binary-size.sh`: builds the stripped release binary for
-  linux/amd64 and darwin/arm64 and fails over the 47 MB ceiling. See "Binary
+  linux/amd64 and darwin/arm64 and fails over the 50 MB ceiling. See "Binary
   size budget" below.
 
 ## Numbers
@@ -2358,10 +2358,11 @@ it. It builds tuios the way the release does
 darwin/arm64 with the Go version go.mod names, prints the size, and fails when
 a binary is over the ceiling.
 
-Since 2026-10-22 the ceiling is the only limit. Since 2026-11-02 it is
-47,000,000 bytes for each target, down from 50,000,000, after the rare diagram
-types moved to the sketch plugin. That keeps the saving saved: a new runtime,
-such as wazero, needs a deliberate raise in its own commit. There are no per-target budgets to raise. On a pull request, the job
+Since 2026-10-22 the ceiling is the only limit. On 2026-11-02 it went down to
+47,000,000 bytes after the rare diagram types moved to the sketch plugin. Since
+2026-11-04 it is 50,000,000 bytes for each target again. The headroom is not a
+budget to spend: each pull request still reports its size delta and trims what
+it can. There are no per-target budgets to raise. On a pull request, the job
 compares each size with main's last measured size. It writes the size, the
 change against main and the room under the ceiling to the job summary, and to
 one comment on the pull request that each run updates.
@@ -2421,6 +2422,40 @@ of arrays of constants compiles to data. `verbCapabilities` uses this form.
 first use. Lessons take 357 us and 283 KB of short-lived memory on the first
 read. Plugin files take 207 us and 139 KB. Neither runs unless the tutor, Learn
 mode or an integration command runs.
+
+The compiler inlines some standard library calls at every call site.
+`fmt.Errorf` carries the `errors.New` it falls back to, and `json.Marshal` and
+`json.Unmarshal` carry the default options they pass to encoding/json/v2.
+`internal/errfmt` and `internal/jsonx` hold the same functions behind
+`//go:noinline`, and `internal/lint` rejects the direct calls. On main at
+dc6d566f (Go 1.27.3) the move of about 2,390 calls saved 278,528 bytes on
+linux/amd64, 247,440 on darwin/arm64 and 268,288 on windows/amd64. The calls
+are on error paths and on paths that encode or decode, where one more call
+does not show. staticcheck's ST1005 checks error strings by the name of the
+call, so it no longer sees these calls. `internal/lint` applies the same rule to
+`errfmt.Errorf`. To find more of these, run `go tool objdump` on a build without
+`-s -w`, add up the bytes per source line inside tuios functions, and look for
+a standard library line with a large total over hundreds of functions.
+
+`draw` in `sketch/text` named the text drawer of all 33 diagram types, so every
+program that links the package kept the drawers of the 25 rare types, and
+tuios cannot parse a rare type. `draw` now names the eight types that
+`sketch/core` parses, and the others draw through `text.Rare()`, which the
+sketch command calls first. Release mode (`CGO_ENABLED=0`, `-trimpath`,
+`-ldflags "-s -w"`, Go 1.27.3, built without go.work against the pinned
+libraries), main at 3559788a and the change:
+
+| target | main | change | delta |
+|---|---:|---:|---:|
+| tuios linux/amd64 | 46,952,608 | 46,649,504 | -303,104 (-296.0 KiB) |
+| tuios darwin/arm64 | 43,757,394 | 43,523,314 | -234,080 (-228.6 KiB) |
+| tuios-web linux/amd64 | 50,286,752 | 49,979,552 | -307,200 (-300.0 KiB) |
+| tuios-web darwin/arm64 | 47,579,650 | 47,329,058 | -250,592 (-244.7 KiB) |
+
+The output is the same: the sketch command over the 522 corpus sources (`-f
+cells` at 80 and 40 columns, `-f text`: 1,566 drawings) and `tuios mermaid` over
+the same sources as text and SVG matches main byte for byte: 526 drawings of the
+263 core-type sources, and the same plugin message for the other 259.
 
 The per-target budgets below are history. Every pull request had to edit them,
 so every landing made the open pull requests rebase on a conflict in

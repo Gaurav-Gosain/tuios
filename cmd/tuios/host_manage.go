@@ -11,9 +11,12 @@ import (
 	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"github.com/Gaurav-Gosain/tuios/internal/federation"
+	"github.com/Gaurav-Gosain/tuios/internal/hostsetup"
+	"github.com/Gaurav-Gosain/tuios/internal/hostsync"
+	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 	"github.com/Gaurav-Gosain/tuios/internal/plural"
-	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/units"
 	"github.com/spf13/cobra"
 )
@@ -161,14 +164,14 @@ down. It needs the daemon and the link up.`,
 	testCmd.Flags().BoolVar(&testOpts.dryRun, "dry-run", false, "Show what --start would do and change nothing")
 	testCmd.Flags().BoolVar(&testOpts.json, "json", false, "Print the result as JSON")
 
-	return []*cobra.Command{addCmd, removeCmd, testCmd, newHostsTailnetCommand(), newHostsSyncCommand(), newHostsSigninCommand()}
+	return []*cobra.Command{addCmd, removeCmd, testCmd, newHostsTailnetCommand(), newHostsSyncCommand(), newHostsSigninCommand(), newHostsSetupCommand()}
 }
 
 // runHostAdd writes one [hosts.NAME] table.
 func runHostAdd(name, addr string, flags hostAddFlags) error {
 	path, err := config.GetConfigPath()
 	if err != nil {
-		return fmt.Errorf("cannot find the config file: %w", err)
+		return errfmt.Errorf("cannot find the config file: %w", err)
 	}
 	if err := federation.ValidHostName(name); err != nil {
 		return err
@@ -180,21 +183,21 @@ func runHostAdd(name, addr string, flags hostAddFlags) error {
 		// even if it is one the suggestion list would have left out.
 		found, ok := tailnetAddrFor(name)
 		if !ok {
-			return fmt.Errorf("no machine called %q on your tailnet.\nRun 'tuios hosts tailnet' to see what is there", name)
+			return errfmt.Errorf("no machine called %q on your tailnet.\nRun 'tuios hosts tailnet' to see what is there", name)
 		}
 		if addr != "" && addr != found {
-			return fmt.Errorf("host %q was given the address %s and --tailnet, which says %s.\nPass one or the other", name, addr, found)
+			return errfmt.Errorf("host %q was given the address %s and --tailnet, which says %s.\nPass one or the other", name, addr, found)
 		}
 		addr = found
 	}
 	if addr == "" {
-		return fmt.Errorf("host %q needs an address.\n%s", name, addrHelp())
+		return errfmt.Errorf("host %q needs an address.\n%s", name, addrHelp())
 	}
 	if strings.HasPrefix(strings.TrimSpace(addr), "-") || strings.HasPrefix(strings.TrimSpace(flags.command), "-") {
-		return fmt.Errorf("host %q was not added: the address and --command may not start with a dash, because ssh would read them as options", name)
+		return errfmt.Errorf("host %q was not added: the address and --command may not start with a dash, because ssh would read them as options", name)
 	}
 	if err := federation.CheckSSHOptions(flags.sshOptions); err != nil {
-		return fmt.Errorf("host %q was not added: %w", name, err)
+		return errfmt.Errorf("host %q was not added: %w", name, err)
 	}
 
 	existing, err := config.HostsInFile(path)
@@ -272,16 +275,21 @@ func probeAddedHost(name string) {
 func runHostRemove(name string) error {
 	path, err := config.GetConfigPath()
 	if err != nil {
-		return fmt.Errorf("cannot find the config file: %w", err)
+		return errfmt.Errorf("cannot find the config file: %w", err)
 	}
 	removed, err := config.RemoveHostFromFile(path, name)
 	if err != nil {
 		return err
 	}
 	if !removed {
-		return fmt.Errorf("no host is named %q. Run 'tuios hosts' to see the names", name)
+		return errfmt.Errorf("no host is named %q. Run 'tuios hosts' to see the names", name)
 	}
 	fmt.Printf("Host %s is removed. A running daemon closes the link now.\n", name)
+	// A key that tuios hosts setup --both-ways allowed for this machine goes
+	// with it.
+	if n, err := hostsetup.RemoveAuthorizedKeys(hostsetup.AuthorizedKeysPath(), name); err == nil && n > 0 {
+		fmt.Printf("The ssh key of %s that tuios added is removed from ~/.ssh/authorized_keys.\n", name)
+	}
 	return nil
 }
 
@@ -404,7 +412,7 @@ func startHostDaemon(host federation.Host, res *hostTestResult, dryRun bool) err
 		// nothing to start, and the report says what is wrong.
 		return nil
 	}
-	arg, ok := syncCommandArg(res.Command)
+	arg, ok := hostsync.CommandArg(res.Command)
 	if !ok || arg == "-" {
 		return &diagnosticError{
 			What: fmt.Sprintf("The link runs %q on %s, which is not one path, so --start cannot run it.", res.Command, res.Host),
@@ -417,7 +425,7 @@ func startHostDaemon(host federation.Host, res *hostTestResult, dryRun bool) err
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), syncRestartTimeout)
 	defer cancel()
-	if err := startDaemonWith(ctx, sshSyncRunner{host: host}, arg, res.Command); err != nil {
+	if err := hostsync.StartDaemonWith(ctx, hostsync.SSHRunner{Host: host}, arg, res.Command); err != nil {
 		res.Action = testActionStartFail
 		return err
 	}
@@ -439,7 +447,7 @@ func startHostDaemon(host federation.Host, res *hostTestResult, dryRun bool) err
 	}
 	res.HostReport = after
 	if after.Status != federation.StatusUp {
-		return fmt.Errorf("start-server ran on %s, and the link still reports %s", res.Host, after.Status)
+		return errfmt.Errorf("start-server ran on %s, and the link still reports %s", res.Host, after.Status)
 	}
 	return nil
 }
@@ -456,25 +464,9 @@ func remoteStartCommand(binary string) string {
 // dialHostOnce opens one link to the host in this process, waits for its
 // first attempt to settle, and returns the report.
 func dialHostOnce(host federation.Host, budget time.Duration) (federation.HostReport, error) {
-	table, _ := federation.NewTable([]federation.Host{host})
-
-	m := federation.New(table, federation.Options{
-		Dial:            federation.SSHDialer(os.Getenv("TUIOS_SSH")),
-		ClientName:      "tuios-hosts-test",
-		ClientVersion:   version,
-		VerbProtocol:    session.VerbProtocolVersion,
-		MinVerbProtocol: session.MinVerbProtocolVersion,
-	})
 	ctx, cancel := context.WithTimeout(context.Background(), budget)
 	defer cancel()
-	m.Start(ctx)
-	reports := m.Reports(ctx)
-	m.Stop()
-
-	if len(reports) == 0 {
-		return federation.HostReport{}, fmt.Errorf("host %s did not report a state. Run 'tuios hosts' to see the links", host.Name)
-	}
-	return reports[0], nil
+	return hostsetup.DialOnce(ctx, host, version)
 }
 
 // printHostTest prints one dial's result and fails the command when the host is
@@ -493,7 +485,7 @@ func writeHostTest(w io.Writer, r federation.HostReport, starting bool) error {
 		// gives says it waits, which is true only of the daemon's link.
 		gate := federation.SSHGate{Kind: federation.GateTailscaleCheck, URL: r.ApprovalURL}
 		fmt.Fprintln(w, gate.Sentence())
-		return fmt.Errorf("host %s waits for a Tailscale approval", r.Host)
+		return errfmt.Errorf("host %s waits for a Tailscale approval", r.Host)
 	}
 	if r.Reason != "" {
 		fmt.Fprintln(w, r.Reason)
@@ -533,16 +525,18 @@ func writeHostTest(w io.Writer, r federation.HostReport, starting bool) error {
 	case federation.StatusIncompatible:
 		fmt.Fprintln(w, "Upgrade tuios on one of the two machines.")
 	default:
-		// A policy refusal is already said in full. Anything else is said
-		// best by ssh itself.
-		if g := federation.ParseSSHGate(r.Detail); g == nil || g.Kind != federation.GateTailscalePolicy {
+		// A class of ssh failure has its own fix. A policy refusal is
+		// already said in full. Anything else is said best by ssh itself.
+		if r.Fix != "" {
+			fmt.Fprintln(w, r.Fix)
+		} else if g := federation.ParseSSHGate(r.Detail); g == nil || g.Kind != federation.GateTailscalePolicy {
 			fmt.Fprintln(w, "Run ssh to the machine by hand to see the whole error.")
 		}
 	}
 	if r.Status == federation.StatusNoBinary {
-		return fmt.Errorf("host %s has no tuios that the link can find", r.Host)
+		return errfmt.Errorf("host %s has no tuios that the link can find", r.Host)
 	}
-	return fmt.Errorf("host %s is %s", r.Host, r.Status)
+	return errfmt.Errorf("host %s is %s", r.Host, r.Status)
 }
 
 // addrHelp is what to type for an address, with the ssh_config aliases this
@@ -633,7 +627,7 @@ func describeConfigApplied(raw []byte) string {
 		Changes       []string `json:"changes"`
 		DroppedKeys   []string `json:"dropped_keys"`
 	}
-	if err := json.Unmarshal(raw, &res); err != nil {
+	if err := jsonx.Unmarshal(raw, &res); err != nil {
 		return "The daemon applied config.toml.\n"
 	}
 	var b strings.Builder
@@ -685,12 +679,12 @@ func runHostSpeed(name string, jsonOut bool) error {
 		Up    float64 `json:"up"`
 		Down  float64 `json:"down"`
 	}
-	if err := json.Unmarshal(raw, &r); err != nil {
+	if err := jsonx.Unmarshal(raw, &r); err != nil {
 		return err
 	}
 	if jsonOut {
 		var v any
-		_ = json.Unmarshal(raw, &v)
+		_ = jsonx.Unmarshal(raw, &v)
 		outputJSON(v)
 		return nil
 	}

@@ -23,8 +23,8 @@ printf '\e]7501;state=blocked:kind=permission:app=terraform:msg=QXBwbHkgMyB0byBh
 
 ## Report from a script
 
-Use `tuios status`. It writes the sequence and does the base64 for you. It
-needs no daemon, so a script can use it in any terminal.
+Use `tuios status`. It writes the sequence and does the base64 for you. A
+script can use it in any terminal.
 
 ```sh
 tuios status working --app build --msg 'Compiling' --progress 40
@@ -49,6 +49,11 @@ tuios status --clear
 The sequence goes to the controlling terminal (`/dev/tty`), so it is not lost
 when the script's output goes to a file or a pipe. `tuios status` refuses a
 report that a terminal must discard, and says why.
+
+Some processes have no controlling terminal, such as the shell tool of an
+agent. In a tuios pane, such a process sends the report to the tuios daemon
+for its pane, with the verb `report-program-status`. Outside tuios, or when
+the daemon does not take the report, the sequence goes to standard output.
 
 Each report replaces its record. A key that a report does not send is gone from
 the record. Send `--app` and `--title` in every report that must keep them.

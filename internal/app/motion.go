@@ -128,6 +128,9 @@ func (m *OS) motionInterval() time.Duration {
 	if m.themeFx.running() {
 		return m.themeTransitionFrame()
 	}
+	if m.wsSlide.running() {
+		return m.slideFrameInterval()
+	}
 	// A copy sweep, at the fade's rate: it crosses the block in under half a
 	// second, and at the maintenance tick's idle rate that was four frames.
 	if m.copyFlash != nil {
@@ -161,7 +164,7 @@ func (m *OS) handleMotionFrame(msg motionFrameMsg) {
 	// output drew a frame within the last interval, that frame carried the
 	// band already, so this tick draws nothing.
 	coalesce := shimmer && m.motion.fading == 0 && !flash && !m.themeFx.running() &&
-		m.copyFlash == nil && m.shimmerCovered(now)
+		!m.wsSlide.running() && m.copyFlash == nil && m.shimmerCovered(now)
 	need := m.motion.fading > 0 || (shimmer && !coalesce) || flash
 	if need {
 		m.motion.drawn = now
@@ -169,6 +172,7 @@ func (m *OS) handleMotionFrame(msg motionFrameMsg) {
 	// A transition still asks for a frame on the tick it ends, so the last
 	// one drawn is the new theme on the whole screen.
 	need = m.expireThemeTransition(time.Now()) || need
+	need = m.expireWorkspaceSlide(time.Now()) || need
 	if m.motion.fading > 0 {
 		m.retireFades(time.Now())
 	}

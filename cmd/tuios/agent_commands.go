@@ -12,7 +12,9 @@ import (
 
 	"charm.land/lipgloss/v2"
 	"charm.land/lipgloss/v2/table"
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"github.com/Gaurav-Gosain/tuios/internal/invisible"
+	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 	"github.com/Gaurav-Gosain/tuios/internal/plural"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 )
@@ -140,8 +142,8 @@ func printAgentList(w io.Writer, raw json.RawMessage, all bool, on string) error
 		Select      string     `json:"select"`
 		Confirm     string     `json:"confirm"`
 	}
-	if err := json.Unmarshal(raw, &res); err != nil {
-		return fmt.Errorf("failed to parse response: %w", err)
+	if err := jsonx.Unmarshal(raw, &res); err != nil {
+		return errfmt.Errorf("failed to parse response: %w", err)
 	}
 	if len(res.Agents) == 0 && res.Select != "" {
 		fmt.Fprintf(w, "No pane matches the selector %q.\n", plainLine(res.Select))
@@ -300,8 +302,8 @@ func runSendAgentMessage(sessionName, to, from, subject, text string, replyTo ui
 		ThreadID       uint64 `json:"thread_id"`
 		ReplyToMissing bool   `json:"reply_to_missing"`
 	}
-	if err := json.Unmarshal(raw, &res); err != nil {
-		return fmt.Errorf("failed to parse response: %w", err)
+	if err := jsonx.Unmarshal(raw, &res); err != nil {
+		return errfmt.Errorf("failed to parse response: %w", err)
 	}
 	// The thread is worth printing only when it is not the message itself, which
 	// is every reply and no first message.
@@ -337,7 +339,7 @@ func hostUnreachable(err error) bool {
 // machine that cannot be asked is not known here.
 func queueAgentMessage(host, sess, window, from, subject, text string, replyTo uint64, attachments []string, jsonOutput bool) error {
 	if sess == "" {
-		return fmt.Errorf("the link to %s is down, so a message can only wait for it with the session named: -s %s:SESSION", host, host)
+		return errfmt.Errorf("the link to %s is down, so a message can only wait for it with the session named: -s %s:SESSION", host, host)
 	}
 	client, err := dialVerb()
 	if err != nil {
@@ -372,8 +374,8 @@ func queueAgentMessage(host, sess, window, from, subject, text string, replyTo u
 		MessageID uint64 `json:"message_id"`
 		Waiting   int    `json:"waiting"`
 	}
-	if err := json.Unmarshal(raw, &res); err != nil {
-		return fmt.Errorf("failed to parse response: %w", err)
+	if err := jsonx.Unmarshal(raw, &res); err != nil {
+		return errfmt.Errorf("failed to parse response: %w", err)
 	}
 	if !res.Queued {
 		// The link came back between the two calls and the message went.
@@ -465,8 +467,8 @@ func printAgentMessages(w io.Writer, raw json.RawMessage, on string) error {
 		Inbox         string            `json:"inbox"`
 		Thread        uint64            `json:"thread"`
 	}
-	if err := json.Unmarshal(raw, &res); err != nil {
-		return fmt.Errorf("failed to parse response: %w", err)
+	if err := jsonx.Unmarshal(raw, &res); err != nil {
+		return errfmt.Errorf("failed to parse response: %w", err)
 	}
 	dropped := droppedLine(res.Inbox, res.Evicted, res.EvictedUnread)
 	if len(res.Messages) == 0 {
@@ -708,8 +710,8 @@ func printAskReply(w io.Writer, raw json.RawMessage, host string) error {
 		QueuedBehind int   `json:"queued_behind"`
 		WaitedTurnMS int64 `json:"waited_turn_ms"`
 	}
-	if err := json.Unmarshal(raw, &res); err != nil {
-		return fmt.Errorf("failed to parse response: %w", err)
+	if err := jsonx.Unmarshal(raw, &res); err != nil {
+		return errfmt.Errorf("failed to parse response: %w", err)
 	}
 
 	who := fmt.Sprintf("%s (%s)", orNone(plainLine(res.Name)), shortWindowID(res.Window))

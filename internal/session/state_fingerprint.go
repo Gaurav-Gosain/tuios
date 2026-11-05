@@ -192,6 +192,15 @@ func StateFingerprint(s *SessionState) uint64 {
 		flag(w.Scratch)
 		str(w.ScratchName)
 		str(w.ForegroundCmd)
+		if o := w.SSHOffer; o != nil {
+			str(o.Dest)
+			str(o.Machine)
+			str(o.Target)
+		} else {
+			str("")
+			str("")
+			str("")
+		}
 		num(w.ShellPID)
 		if w.StartedBy != nil {
 			str(w.StartedBy.Session)

@@ -8,6 +8,8 @@ import (
 	"sync"
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
+	"github.com/Gaurav-Gosain/tuios/internal/layout"
 	"github.com/Gaurav-Gosain/tuios/internal/worktree"
 	"github.com/google/uuid"
 )
@@ -48,7 +50,7 @@ func (s *SessionState) workspaceBound() int {
 // when there is no match, and an error when a name or prefix is ambiguous.
 func findWindowStateIndex(windows []WindowState, target string) (int, error) {
 	if target == "" {
-		return -1, fmt.Errorf("empty window target")
+		return -1, errfmt.Errorf("empty window target")
 	}
 
 	// Exact ID.
@@ -92,7 +94,7 @@ func findWindowStateIndex(windows []WindowState, target string) (int, error) {
 			return nameIdx, nil
 		}
 		if nameCount > 1 {
-			return -1, fmt.Errorf("ambiguous window name %q matches %d windows: %s. Use the id, or rename one with set-window --name", target, nameCount,
+			return -1, errfmt.Errorf("ambiguous window name %q matches %d windows: %s. Use the id, or rename one with set-window --name", target, nameCount,
 				describeWindows(windows, byName))
 		}
 	}
@@ -109,11 +111,11 @@ func findWindowStateIndex(windows []WindowState, target string) (int, error) {
 		return prefixIdx, nil
 	}
 	if prefixCount > 1 {
-		return -1, fmt.Errorf("ambiguous window ID prefix %q matches %d windows: %s. Use more of the id", target, prefixCount,
+		return -1, errfmt.Errorf("ambiguous window ID prefix %q matches %d windows: %s. Use more of the id", target, prefixCount,
 			describeWindows(windows, func(w WindowState) bool { return strings.HasPrefix(w.ID, target) }))
 	}
 
-	return -1, fmt.Errorf("no window found matching %q", target)
+	return -1, errfmt.Errorf("no window found matching %q", target)
 }
 
 // WindowIndexTarget reports whether a window target is an all-digit position
@@ -198,6 +200,10 @@ type NewWindowOptions struct {
 	// Cwd is the directory the shell starts in. Empty inherits the daemon's,
 	// which is what every window did before this existed.
 	Cwd string
+	// CallerCwd is the folder of the pane process that asked for the window,
+	// "" for a caller in no pane. With no Cwd it is inherited in place of the
+	// focused pane's folder. See Daemon.callerCwd.
+	CallerCwd string
 	// Workspace is the workspace to place the window on. Zero means whichever
 	// workspace is current, so a caller that does not care keeps the old
 	// behaviour.
@@ -274,6 +280,10 @@ type NewWindowOptions struct {
 	// as a focus move. See ExecuteCommandPayload.FocusIfShown. It means
 	// nothing with Focus set.
 	FocusIfShown bool
+	// focusAskedBy is the push origin of the client connection that asked
+	// for the window, empty for none. With Focus set, the focus move counts
+	// as that client's own. See pushOwnsFocusLocked.
+	focusAskedBy string
 	// TabKey names the workspace by its tab key, which follows it through a
 	// renumber, when the caller read the workspace's number before one it
 	// may not have seen. Zero names it by Workspace alone. See
@@ -295,6 +305,10 @@ type NewWindowOptions struct {
 	// WindowState.Kind. With no Command, its program is the placeholder.
 	Kind string
 	URI  string
+	// Split puts the window beside a pane in the split tree of that pane's
+	// workspace, in the same change that adds it, so no client ever holds
+	// the window without its place. Workspace must be the pane's.
+	Split *SplitPlacement
 	// Cols and Rows are the content size the client that asked will give the
 	// pane, zero when it did not say. The process starts at that size. A
 	// shell started at the session's size and then resized once the client
@@ -381,7 +395,7 @@ func (s *Session) AddDaemonWindowWith(opts NewWindowOptions, onExit func(ptyID s
 	// that then fails to be placed is a process nothing owns.
 	if opts.Workspace != 0 {
 		if st := s.GetState(); !st.workspaceAccepts(opts.Workspace) {
-			return WindowState{}, fmt.Errorf("workspace %d out of range (1-%d)", opts.Workspace, st.workspaceBound())
+			return WindowState{}, errfmt.Errorf("workspace %d out of range (1-%d)", opts.Workspace, st.workspaceBound())
 		}
 	}
 
@@ -395,7 +409,7 @@ func (s *Session) AddDaemonWindowWith(opts NewWindowOptions, onExit func(ptyID s
 	// unrelated on the rare occasion the path happens to exist there, so a
 	// window with a host inherits nothing and starts where its own shell would.
 	if cwd == "" && opts.Host == "" {
-		cwd = s.inheritedCwd()
+		cwd = s.inheritedCwd(opts.CallerCwd)
 	}
 	// With nothing to inherit, use the directory set when the session was
 	// created. A local path, so a window with a host skips it
@@ -473,6 +487,12 @@ func (s *Session) AddDaemonWindowWith(opts NewWindowOptions, onExit func(ptyID s
 	}
 
 	var win WindowState
+	var split *layoutEdit
+	var sizes []paneSize
+	box := layout.Rect{}
+	if opts.Split != nil {
+		box = s.layoutBox()
+	}
 	err = s.mutateState(func(state *SessionState) error {
 		// One scratch terminal per session, checked under the state lock so
 		// two calls that race cannot both add one.
@@ -573,7 +593,27 @@ func (s *Session) AddDaemonWindowWith(opts NewWindowOptions, onExit func(ptyID s
 		if opts.Host == "" {
 			win.Grants = grantNamesPtr(opts.Grants)
 		}
+		if opts.Split != nil {
+			// The tree is opened before the window joins the state, so the
+			// window goes in beside its pane and not where the scheme puts
+			// a pane the tree has not heard of.
+			split = newLayoutEdit(state, box)
+			if !split.tree(workspace).HasWindow(split.leaf(opts.Split.Target)) {
+				return errSplitNotTiled
+			}
+		}
 		state.Windows = append(state.Windows, win)
+		if split != nil {
+			t := split.tree(workspace)
+			t.SplitWindowAt(split.leaf(windowID), split.leaf(opts.Split.Target), opts.Split.Side, opts.Split.Share)
+			split.commit()
+			s.noteTreeOpLocked(state.Version+1, "", workspace)
+			state.DaemonLayout = state.Version + 1
+			if opts.Split.Place {
+				sizes = split.place()
+				win = state.Windows[len(state.Windows)-1]
+			}
+		}
 		// The workspace's own focus points at the new window either way: it is
 		// the only sensible thing to focus when that workspace is next shown.
 		// Session focus moves only when the caller asked for it, so a pane opened
@@ -581,6 +621,7 @@ func (s *Session) AddDaemonWindowWith(opts NewWindowOptions, onExit func(ptyID s
 		state.WorkspaceFocus[workspace] = windowID
 		if opts.Focus {
 			s.markFocusIntentLocked()
+			s.focusAskedBy = opts.focusAskedBy
 			state.FocusedWindowID = windowID
 			// A scratch workspace is never the session's current one: a
 			// client shows it over the workspace it is on.
@@ -598,6 +639,7 @@ func (s *Session) AddDaemonWindowWith(opts NewWindowOptions, onExit func(ptyID s
 		return nil
 	})
 	markAdded()
+	s.resizePanes(sizes)
 	if err != nil {
 		// The shell started for a window that was refused has no owner.
 		_ = s.ClosePTY(pty.ID)
@@ -711,7 +753,7 @@ func (s *Session) FocusDaemonWindow(target string) error {
 		win := state.Windows[idx]
 		// No focus goes to a scratch workspace a client cannot show.
 		if IsScratchWorkspace(win.Workspace) && s.scratchWSOff {
-			return fmt.Errorf("an older tuios client is attached to this session, so a scratch pane cannot take the focus")
+			return errfmt.Errorf("an older tuios client is attached to this session, so a scratch pane cannot take the focus")
 		}
 		s.markFocusIntentLocked()
 		state.FocusedWindowID = win.ID
@@ -752,7 +794,7 @@ func (s *Session) CycleDaemonFocus(delta int) error {
 			order = append(order, i)
 		}
 		if len(order) == 0 {
-			return fmt.Errorf("no windows on workspace %d", state.CurrentWorkspace)
+			return errfmt.Errorf("no windows on workspace %d", state.CurrentWorkspace)
 		}
 		if current == -1 {
 			current = 0
@@ -827,7 +869,7 @@ func (s *Session) RenameDaemonWindow(target, name string) error {
 func (s *Session) MoveDaemonWindowToWorkspace(target string, ws int) error {
 	return s.mutateState(func(state *SessionState) error {
 		if ws < 1 || ws > state.workspaceBound() {
-			return fmt.Errorf("workspace %d out of range (1-%d)", ws, state.workspaceBound())
+			return errfmt.Errorf("workspace %d out of range (1-%d)", ws, state.workspaceBound())
 		}
 		idx, err := findWindowStateIndex(state.Windows, target)
 		if err != nil {
@@ -856,7 +898,7 @@ func (s *Session) MoveDaemonWindowToWorkspace(target string, ws int) error {
 func (s *Session) SetDaemonWorkspaceName(ws int, name string) error {
 	return s.mutateState(func(state *SessionState) error {
 		if ws < 1 || ws > state.workspaceBound() {
-			return fmt.Errorf("workspace %d out of range (1-%d)", ws, state.workspaceBound())
+			return errfmt.Errorf("workspace %d out of range (1-%d)", ws, state.workspaceBound())
 		}
 		if name == "" {
 			delete(state.WorkspaceNames, ws)
@@ -875,7 +917,7 @@ func (s *Session) SetDaemonWorkspaceName(ws int, name string) error {
 func (s *Session) SwitchDaemonWorkspace(ws int) error {
 	return s.mutateState(func(state *SessionState) error {
 		if ws < 1 || ws > state.workspaceBound() {
-			return fmt.Errorf("workspace %d out of range (1-%d)", ws, state.workspaceBound())
+			return errfmt.Errorf("workspace %d out of range (1-%d)", ws, state.workspaceBound())
 		}
 		s.markFocusIntentLocked()
 		state.CurrentWorkspace = ws

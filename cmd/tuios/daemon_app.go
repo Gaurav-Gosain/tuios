@@ -32,6 +32,7 @@ import (
 	"runtime"
 	"strings"
 
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"github.com/spf13/cobra"
 )
 
@@ -127,7 +128,7 @@ func daemonAppTarget(app string) (string, error) {
 	}
 	target := strings.TrimSpace(string(data))
 	if !filepath.IsAbs(target) {
-		return "", fmt.Errorf("%s does not hold an absolute path", daemonAppTargetFile)
+		return "", errfmt.Errorf("%s does not hold an absolute path", daemonAppTargetFile)
 	}
 	return target, nil
 }
@@ -201,15 +202,15 @@ func newDaemonAppInstallCommand() *cobra.Command {
 			if binary == "" {
 				b, err := stableTuiosPath()
 				if err != nil {
-					return fmt.Errorf("find the tuios binary: %w", err)
+					return errfmt.Errorf("find the tuios binary: %w", err)
 				}
 				binary = b
 			}
 			if !filepath.IsAbs(binary) {
-				return fmt.Errorf("--binary must be an absolute path, not %q", binary)
+				return errfmt.Errorf("--binary must be an absolute path, not %q", binary)
 			}
 			if _, err := os.Stat(binary); err != nil {
-				return fmt.Errorf("--binary: %w", err)
+				return errfmt.Errorf("--binary: %w", err)
 			}
 			if err := installDaemonApp(appPath, binary, force); err != nil {
 				return err
@@ -258,12 +259,12 @@ func installDaemonApp(app, binary string, force bool) error {
 			}
 		}
 		if !isDaemonApp(app) {
-			return fmt.Errorf("%s is not a TUIOS Daemon app. Remove it yourself", app)
+			return errfmt.Errorf("%s is not a TUIOS Daemon app. Remove it yourself", app)
 		}
 	}
 	exe, err := os.Executable()
 	if err != nil {
-		return fmt.Errorf("find this binary: %w", err)
+		return errfmt.Errorf("find this binary: %w", err)
 	}
 	parent := filepath.Dir(app)
 	if err := os.MkdirAll(parent, 0o700); err != nil {
@@ -292,10 +293,10 @@ func installDaemonApp(app, binary string, force bool) error {
 		}
 	}
 	if err := copyExecutable(exe, filepath.Join(contents, "MacOS", daemonAppExecutable)); err != nil {
-		return fmt.Errorf("copy %s into the app: %w", exe, err)
+		return errfmt.Errorf("copy %s into the app: %w", exe, err)
 	}
 	if out, err := exec.Command("/usr/bin/codesign", "--force", "--sign", "-", "--identifier", daemonAppBundleID, staged).CombinedOutput(); err != nil {
-		return fmt.Errorf("sign the app: %w: %s", err, strings.TrimSpace(string(out)))
+		return errfmt.Errorf("sign the app: %w: %s", err, strings.TrimSpace(string(out)))
 	}
 	if force {
 		if err := os.RemoveAll(app); err != nil {
@@ -306,7 +307,7 @@ func installDaemonApp(app, binary string, force bool) error {
 		return err
 	}
 	if out, err := exec.Command("/usr/bin/codesign", "--verify", "--strict", app).CombinedOutput(); err != nil {
-		return fmt.Errorf("check the signature of %s: %w: %s", app, err, strings.TrimSpace(string(out)))
+		return errfmt.Errorf("check the signature of %s: %w: %s", app, err, strings.TrimSpace(string(out)))
 	}
 	return nil
 }
@@ -386,7 +387,7 @@ func newDaemonAppUninstallCommand() *cobra.Command {
 			out := cmd.OutOrStdout()
 			if _, err := os.Stat(appPath); err == nil {
 				if !isDaemonApp(appPath) {
-					return fmt.Errorf("%s is not a TUIOS Daemon app. Remove it yourself", appPath)
+					return errfmt.Errorf("%s is not a TUIOS Daemon app. Remove it yourself", appPath)
 				}
 				if err := os.RemoveAll(appPath); err != nil {
 					return err

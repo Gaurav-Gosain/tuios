@@ -186,6 +186,7 @@ func (d *Daemon) verbStartAgent(cs *connState, params json.RawMessage) (any, *ve
 		Title:     p.Name,
 		Name:      p.Name,
 		Cwd:       cwd,
+		CallerCwd: d.callerCwd(cs),
 		Workspace: p.Workspace,
 		// Not focused unless asked: an agent starting a helper should not
 		// pull the person out of the pane they are in.

@@ -13,6 +13,8 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
+	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 	"github.com/Gaurav-Gosain/tuios/internal/sortx"
 )
 
@@ -105,7 +107,7 @@ func readLookSaved(mainPath string) (*lookSaved, error) {
 		return nil, broken(err.Error())
 	}
 	var s lookSaved
-	if err := json.Unmarshal(data, &s); err != nil {
+	if err := jsonx.Unmarshal(data, &s); err != nil {
 		return nil, broken(err.Error())
 	}
 	if s.Version != lookSavedVersion {
@@ -197,7 +199,7 @@ func (p *LookPlan) PlanTakeOver() (*LookTakeOver, error) {
 		}
 		out, removed, ok, err := takeOverEdit(l, keys)
 		if err != nil {
-			return nil, fmt.Errorf("failed to parse %s: %w", shown, err)
+			return nil, errfmt.Errorf("failed to parse %s: %w", shown, err)
 		}
 		if !ok {
 			keep()
@@ -360,7 +362,7 @@ func planRestore(mainPath string, skip func(string) bool) (*LookRestore, error) 
 		}
 		values, err := parseLayer(cur)
 		if err != nil {
-			return nil, fmt.Errorf("failed to parse %s: %w", shown, err)
+			return nil, errfmt.Errorf("failed to parse %s: %w", shown, err)
 		}
 		var changes []configChange
 		for _, k := range back {
@@ -375,7 +377,7 @@ func planRestore(mainPath string, skip func(string) bool) (*LookRestore, error) 
 		if len(changes) > 0 {
 			out, _, ok, err := editFile(cur, changes)
 			if err != nil {
-				return nil, fmt.Errorf("failed to parse %s: %w", shown, err)
+				return nil, errfmt.Errorf("failed to parse %s: %w", shown, err)
 			}
 			var put [][]string
 			for _, ch := range changes {
@@ -521,7 +523,7 @@ func stageFile(path string, data []byte, config bool) (stagedWrite, error) {
 	}
 	f, err := os.CreateTemp(dir, "."+filepath.Base(target)+".*.tmp")
 	if err != nil {
-		return stagedWrite{}, fmt.Errorf("failed to write %s: %w", path, err)
+		return stagedWrite{}, errfmt.Errorf("failed to write %s: %w", path, err)
 	}
 	err = f.Chmod(mode)
 	if err == nil {
@@ -535,7 +537,7 @@ func stageFile(path string, data []byte, config bool) (stagedWrite, error) {
 	}
 	if err != nil {
 		_ = os.Remove(f.Name())
-		return stagedWrite{}, fmt.Errorf("failed to write %s: %w", path, err)
+		return stagedWrite{}, errfmt.Errorf("failed to write %s: %w", path, err)
 	}
 	return stagedWrite{target: target, tmp: f.Name(), data: data, config: config}, nil
 }
@@ -601,7 +603,7 @@ func (p *LookPlan) commitFiles(look []byte, before func() error) error {
 		}
 		if existed != w.disk.existed || !bytes.Equal(data, w.disk.data) {
 			drop()
-			return fmt.Errorf("%s changed while tuios asked. tuios did not change the look. Run the command again", w.shown)
+			return errfmt.Errorf("%s changed while tuios asked. tuios did not change the look. Run the command again", w.shown)
 		}
 	}
 	if before != nil {
@@ -619,7 +621,7 @@ func (p *LookPlan) commitFiles(look []byte, before func() error) error {
 			for _, rest := range staged[i:] {
 				_ = os.Remove(rest.tmp)
 			}
-			return fmt.Errorf("failed to write %s: %w", s.target, err)
+			return errfmt.Errorf("failed to write %s: %w", s.target, err)
 		}
 		dirs[filepath.Dir(s.target)] = true
 	}

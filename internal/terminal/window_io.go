@@ -13,6 +13,7 @@ import (
 
 	"github.com/Gaurav-Gosain/tuios/internal/crashexit"
 	"github.com/Gaurav-Gosain/tuios/internal/debuglog"
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"github.com/Gaurav-Gosain/tuios/internal/memtrim"
 	"github.com/Gaurav-Gosain/tuios/internal/pool"
 	"tuios.dev/vt"
@@ -1013,7 +1014,7 @@ func (w *Window) handleIOOperations() {
 // SendInput sends input to the window's terminal with enhanced error handling.
 func (w *Window) SendInput(input []byte) error {
 	if w == nil {
-		return fmt.Errorf("window is nil")
+		return errfmt.Errorf("window is nil")
 	}
 
 	if len(input) == 0 {
@@ -1027,7 +1028,7 @@ func (w *Window) SendInput(input []byte) error {
 				debugLogf("[%s] SendInput: DaemonWriteFunc is nil! PTYID=%s\n",
 					time.Now().Format("15:04:05.000"), w.PTYID)
 			}
-			return fmt.Errorf("daemon write function not set")
+			return errfmt.Errorf("daemon write function not set")
 		}
 		return w.DaemonWriteFunc(input)
 	}
@@ -1057,16 +1058,16 @@ func (w *Window) SendInput(input []byte) error {
 	w.ioMu.RUnlock()
 
 	if pty == nil {
-		return fmt.Errorf("no PTY available")
+		return errfmt.Errorf("no PTY available")
 	}
 
 	n, err := pty.Write(input)
 	if err != nil {
-		return fmt.Errorf("failed to write to PTY: %w", err)
+		return errfmt.Errorf("failed to write to PTY: %w", err)
 	}
 
 	if n != len(input) {
-		return fmt.Errorf("partial write to PTY: wrote %d of %d bytes", n, len(input))
+		return errfmt.Errorf("partial write to PTY: wrote %d of %d bytes", n, len(input))
 	}
 
 	// Only mark as dirty. Don't clear cache here, for better input performance.

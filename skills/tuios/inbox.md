@@ -14,7 +14,7 @@ the prompts only the person may answer.
   approval. The `get-approval` verb reads the plan text
   while it is held. Only the person approves it, from the Inbox
 - an approval whose command matched a risk rule carries `risk`, the rule
-  names. The Inbox allows it on a second press; an agent with the `respond`
+  names. The person allows it in the Inbox with a key and `enter`; an agent with the `respond`
   grant may deny it and never allow it
 - a question an agent asked with `ask-human` (kind `ask`)
 - mail to `human`
@@ -197,7 +197,7 @@ A call that matches a risk rule (a recursive delete, a force push, a pipe to a
 shell, a write outside the pane's root, and the like) carries `risk`, and so
 does an unheld approval whose line does not show the whole call, because it
 was clipped or redacted (`cut short`). The person
-allows it only with a second press. With the `respond` grant you may deny a
+allows it with a key and then `enter`. With the `respond` grant you may deny a
 risky prompt with `tuios respond`, and an allow is refused with `forbidden`.
 
 The pane's root is where the pane started, or the session's worktree when tuios

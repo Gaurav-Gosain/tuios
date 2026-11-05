@@ -11,6 +11,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/diffview"
+	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 	"github.com/Gaurav-Gosain/tuios/internal/plural"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
@@ -344,7 +345,7 @@ func (m *OS) quickLookWindow() tea.Cmd {
 			if t.host == "" {
 				var out map[string]any
 				if out, err = session.PreviewLocalSeek(context.Background(), t.path, seek); err == nil {
-					raw, err = json.Marshal(out)
+					raw, err = jsonx.Marshal(out)
 				}
 			} else {
 				if ask {
@@ -355,7 +356,7 @@ func (m *OS) quickLookWindow() tea.Cmd {
 				}
 				raw, err = call(t.host, "file-preview", map[string]any{"path": t.path, "find": seek.Find, "from": seek.From, "back": seek.Back, "line": seek.Line})
 			}
-			if err != nil || json.Unmarshal(raw, &msg.sought) != nil {
+			if err != nil || jsonx.Unmarshal(raw, &msg.sought) != nil {
 				msg.failed = true
 				return msg
 			}
@@ -368,7 +369,7 @@ func (m *OS) quickLookWindow() tea.Cmd {
 		case t.host == "":
 			var out map[string]any
 			if out, err = session.PreviewLocalWindow(t.path, offset, limit); err == nil {
-				raw, err = json.Marshal(out)
+				raw, err = jsonx.Marshal(out)
 			}
 		default:
 			if ask && move != quickLookSeek {
@@ -379,7 +380,7 @@ func (m *OS) quickLookWindow() tea.Cmd {
 			}
 			raw, err = call(t.host, "file-preview", map[string]any{"path": t.path, "offset": offset, "limit": limit})
 		}
-		if err != nil || json.Unmarshal(raw, &msg.reply) != nil {
+		if err != nil || jsonx.Unmarshal(raw, &msg.reply) != nil {
 			msg.failed = true
 			return msg
 		}
@@ -417,7 +418,7 @@ func quickLookHostHasParam(call func(host, verb string, params map[string]any) (
 			} `json:"params"`
 		} `json:"verbs"`
 	}
-	if json.Unmarshal(raw, &res) != nil {
+	if jsonx.Unmarshal(raw, &res) != nil {
 		return true
 	}
 	for _, v := range res.Verbs {

@@ -26,7 +26,7 @@ func TestAnOptionLeftWaitingDuringAnAttachReachesTheAttachingClient(t *testing.T
 	c := attachTUI(t, sp, "opt")
 	waitForHandlerIdle(t, c)
 	// set-option leaves its value waiting and lets go.
-	sess.waitOption("appearance.border_style", "rounded")
+	sess.waitOption("appearance.border_style", "rounded", false)
 	sess.optionApplyMu.Unlock()
 
 	got := make(chan *RemoteCommandPayload, 4)

@@ -1,9 +1,10 @@
 package config
 
 import (
-	"fmt"
 	"strings"
 	"time"
+
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 )
 
 // Drop preview styles. See AppearanceConfig.DropPreview.
@@ -47,7 +48,7 @@ func ParseDropPreviewDelay(v string) (d time.Duration, ok bool) {
 // not a duration.
 func checkDropPreviewDelay(v string) error {
 	if _, ok := ParseDropPreviewDelay(v); !ok {
-		return fmt.Errorf("%q is not a duration such as 120ms, or 0", v)
+		return errfmt.Errorf("%q is not a duration such as 120ms, or 0", v)
 	}
 	return nil
 }

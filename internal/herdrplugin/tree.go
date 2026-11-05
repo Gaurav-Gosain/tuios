@@ -2,11 +2,12 @@ package herdrplugin
 
 import (
 	"context"
-	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"time"
+
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 )
 
 // RunTree runs cmd and waits for it. When ctx ends, it kills the command
@@ -65,7 +66,7 @@ func HoldLock(p string) (release func(), err error) {
 		}
 		if time.Now().After(deadline) {
 			_ = f.Close()
-			return nil, fmt.Errorf("another tuios plugins command runs now. Wait for it to finish (%s)", p)
+			return nil, errfmt.Errorf("another tuios plugins command runs now. Wait for it to finish (%s)", p)
 		}
 		time.Sleep(100 * time.Millisecond)
 	}

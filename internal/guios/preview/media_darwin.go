@@ -5,7 +5,6 @@ package preview
 import (
 	"bytes"
 	"context"
-	"fmt"
 	"image"
 	"math"
 	"runtime"
@@ -13,6 +12,7 @@ import (
 	"sync"
 	"unsafe"
 
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"github.com/ebitengine/purego"
 	"github.com/ebitengine/purego/objc"
 )
@@ -66,7 +66,7 @@ func loadAV() error {
 	av.once.Do(func() {
 		defer func() {
 			if r := recover(); r != nil {
-				av.err = fmt.Errorf("AVFoundation: %v", r)
+				av.err = errfmt.Errorf("AVFoundation: %v", r)
 			}
 		}()
 		if err := loadCG(); err != nil {

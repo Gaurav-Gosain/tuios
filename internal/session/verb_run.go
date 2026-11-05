@@ -3,12 +3,12 @@ package session
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"maps"
 	"strconv"
 	"time"
 	"unicode"
 
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"github.com/Gaurav-Gosain/tuios/internal/harness"
 )
 
@@ -58,7 +58,7 @@ func (d *Daemon) resolveWindowPTY(sess *Session, target string) (WindowState, *P
 	w := state.Windows[idx]
 	pty := sess.GetPTY(w.PTYID)
 	if pty == nil {
-		return WindowState{}, nil, mapResolveErr(fmt.Errorf("PTY for window %q is gone", target), sess)
+		return WindowState{}, nil, mapResolveErr(errfmt.Errorf("PTY for window %q is gone", target), sess)
 	}
 	return w, pty, nil
 }
@@ -297,12 +297,10 @@ func (d *Daemon) verbRun(cs *connState, params json.RawMessage) (any, *verbError
 	}, defaultEventQueue)
 	defer d.events.unsubscribe(sub)
 
-	// A call from a pane on another machine ends with the report channel it
-	// came on, the rule wait-for follows.
-	var gone <-chan struct{}
-	if cs != nil && cs.hostedEnded != nil {
-		gone = cs.hostedEnded
-	}
+	// The wait ends when the caller leaves: its connection closes, or the
+	// report channel a pane on another machine called on ends.
+	gone, stopGone := askCancel(cs)
+	defer stopGone()
 
 	// A shell that has sent nothing yet may be one still starting. Give it
 	// a moment to draw its first prompt before deciding it has no marks.

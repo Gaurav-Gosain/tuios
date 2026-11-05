@@ -11,6 +11,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"github.com/Gaurav-Gosain/tuios/internal/federation"
 	"github.com/Gaurav-Gosain/tuios/internal/hooks"
 	"github.com/Gaurav-Gosain/tuios/internal/plural"
@@ -163,6 +164,7 @@ type RemoteCommandMsg struct {
 	WindowTarget string   // For send_keys (target window by name or ID)
 	ConfigPath   string   // For set_config
 	ConfigValue  string   // For set_config
+	ConfigNoSave bool     // For set_config: apply without saving (set-config --no-save)
 	RequestID    string   // For response tracking
 }
 
@@ -1313,6 +1315,9 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 	case ckTakeMsg:
 		m.applyTake(msg)
 		return m, nil
+	case ckCardMsg:
+		m.applyCardReply(msg)
+		return m, nil
 	case ckCompareMsg:
 		return m, m.applyCompare(msg)
 	case ckFanActMsg:
@@ -1698,6 +1703,16 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 
 	case linkOpenFailedMsg:
 		return m, m.handleLinkOpenFailed(msg)
+
+	case fileOpenSystemMsg:
+		cmd := m.handleFileOpenSystem(msg)
+		m.renderSkipped = false
+		return m, cmd
+
+	case fileOpenFailedMsg:
+		m.handleFileOpenFailed(msg)
+		m.renderSkipped = false
+		return m, nil
 
 	case NotificationMsg:
 		// Guest desktop notification or bell delivered off the PTY goroutine;
@@ -2657,6 +2672,9 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		m.applyInboxAlertDue(msg)
 		return m, nil
 
+	case inboxTypingReleaseMsg:
+		return m, m.applyInboxTypingRelease(msg)
+
 	case InboxDismissedMsg:
 		m.applyInboxDismissed(msg)
 		return m, nil
@@ -3228,17 +3246,30 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 			// Show what config is being changed
 			notificationMsg = fmt.Sprintf("Remote: set %s=%s", msg.ConfigPath, msg.ConfigValue)
 
-			err = m.SetConfig(msg.ConfigPath, msg.ConfigValue)
-			// Write it down, the way the settings panel does. Without this the
-			// routed path changed the running session and nothing else, so
-			// set-config reported success, get-config read the value back from
-			// memory, and the file never grew the section. Every value set this
-			// way was lost on the next restart, in every section, which is why
-			// this reuses persistSettings rather than fixing one of them: it
-			// carries the read-only gating for remote clients and the
-			// stale-write sequencing with it.
-			if err == nil {
-				persistCmd = m.persistSettings()
+			if msg.ConfigNoSave {
+				// set-config --no-save: the value applies here and every
+				// later save leaves its keys alone, so a hook can change the
+				// display without touching the config files. See
+				// config/hold.go.
+				notificationMsg += " (not saved)"
+				err = m.UserConfig.HoldOption(msg.ConfigPath, func() error {
+					return m.SetConfig(msg.ConfigPath, msg.ConfigValue)
+				})
+			} else {
+				// A set that saves ends a hold on the same option.
+				m.UserConfig.ReleaseOption(msg.ConfigPath)
+				err = m.SetConfig(msg.ConfigPath, msg.ConfigValue)
+				// Write it down, the way the settings panel does. Without this the
+				// routed path changed the running session and nothing else, so
+				// set-config reported success, get-config read the value back from
+				// memory, and the file never grew the section. Every value set this
+				// way was lost on the next restart, in every section, which is why
+				// this reuses persistSettings rather than fixing one of them: it
+				// carries the read-only gating for remote clients and the
+				// stale-write sequencing with it.
+				if err == nil {
+					persistCmd = m.persistSettings()
+				}
 			}
 			// Retile if in tiling mode after config change
 			if m.AutoTiling {
@@ -3304,14 +3335,14 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 			// herdr's pane.swap: the daemon names the pair. TapeArgs are the
 			// source and the target window ids.
 			if len(msg.TapeArgs) != 2 {
-				err = fmt.Errorf("swap_windows needs two window ids")
+				err = errfmt.Errorf("swap_windows needs two window ids")
 			} else {
 				err = m.SwapWindowsByID(msg.TapeArgs[0], msg.TapeArgs[1])
 			}
 		case "zoom_window":
 			// herdr's pane.zoom: TapeArgs are the window id and on or off.
 			if len(msg.TapeArgs) != 2 {
-				err = fmt.Errorf("zoom_window needs a window id and on or off")
+				err = errfmt.Errorf("zoom_window needs a window id and on or off")
 			} else {
 				err = m.ZoomWindowByID(msg.TapeArgs[0], msg.TapeArgs[1] == "on")
 			}
@@ -3320,12 +3351,12 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 			// border moves, and the share of the pane region it moves by.
 			// The answer says whether the pane changed.
 			if len(msg.TapeArgs) != 3 {
-				err = fmt.Errorf("resize_window needs a window id, a direction and an amount")
+				err = errfmt.Errorf("resize_window needs a window id, a direction and an amount")
 				break
 			}
 			amount, perr := strconv.ParseFloat(msg.TapeArgs[2], 64)
 			if perr != nil {
-				err = fmt.Errorf("resize_window: bad amount %q", msg.TapeArgs[2])
+				err = errfmt.Errorf("resize_window: bad amount %q", msg.TapeArgs[2])
 				break
 			}
 			var changed bool
@@ -3347,7 +3378,7 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 			// another machine the host, "create" or "", and the directory
 			// of a session create makes there.
 			if len(msg.TapeArgs) < 1 || msg.TapeArgs[0] == "" {
-				err = fmt.Errorf("switch_session needs a session name")
+				err = errfmt.Errorf("switch_session needs a session name")
 				break
 			}
 			name := msg.TapeArgs[0]
@@ -3410,7 +3441,7 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 				return m, tea.Batch(cmd, relisten)
 			}
 		default:
-			err = fmt.Errorf("unknown remote command type: %s", msg.CommandType)
+			err = errfmt.Errorf("unknown remote command type: %s", msg.CommandType)
 		}
 
 		m.MarkAllDirty()

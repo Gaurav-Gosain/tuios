@@ -7,7 +7,9 @@ import (
 	"strings"
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"github.com/Gaurav-Gosain/tuios/internal/explore"
+	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 	"github.com/Gaurav-Gosain/tuios/internal/sortx"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
@@ -137,7 +139,7 @@ Type tuios help [path to command] for full details.
 				return
 			}
 			if target == nil || err != nil {
-				cobra.CheckErr(fmt.Errorf("no command %q. Run tuios help to list the commands", strings.Join(args, " ")))
+				cobra.CheckErr(errfmt.Errorf("no command %q. Run tuios help to list the commands", strings.Join(args, " ")))
 				return
 			}
 			docs := commandDocs(target)
@@ -256,8 +258,8 @@ func loadConfigOptions(sessionName string) ([]configOption, error) {
 	var res struct {
 		Options []optionRow `json:"options"`
 	}
-	if err := json.Unmarshal(raw, &res); err != nil {
-		return nil, fmt.Errorf("failed to parse the option list: %w", err)
+	if err := jsonx.Unmarshal(raw, &res); err != nil {
+		return nil, errfmt.Errorf("failed to parse the option list: %w", err)
 	}
 	out := make([]configOption, 0, len(res.Options))
 	for _, o := range res.Options {
@@ -285,7 +287,7 @@ func readConfigValue(call func(string, any) (json.RawMessage, error), sessionNam
 		Value  string `json:"value"`
 		Source string `json:"source"`
 	}
-	_ = json.Unmarshal(raw, &v)
+	_ = jsonx.Unmarshal(raw, &v)
 	return v.Value, v.Source
 }
 

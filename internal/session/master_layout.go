@@ -2,11 +2,11 @@ package session
 
 import (
 	"errors"
-	"fmt"
 	"maps"
 	"slices"
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"github.com/Gaurav-Gosain/tuios/internal/layout"
 )
 
@@ -69,10 +69,10 @@ func checkMasterLayout(state *SessionState, ws int, st MasterLayoutState) error 
 		ok = countOnWorkspace(state, ws) > 0
 	}
 	if !ok {
-		return fmt.Errorf("workspace %d is out of range", ws)
+		return errfmt.Errorf("workspace %d is out of range", ws)
 	}
 	if st.Count < config.MasterCountMin || st.Count > config.MasterCountMax || !slices.Contains(config.MasterPositions, st.Position) {
-		return fmt.Errorf("master layout %+v is not valid", st)
+		return errfmt.Errorf("master layout %+v is not valid", st)
 	}
 	return nil
 }
@@ -122,7 +122,7 @@ func (s *Session) ApplyMasterLayout(p *MasterLayoutPayload) (bool, error) {
 			return errMasterLayoutSame
 		}
 		if !had && len(state.WorkspaceMasterLayout) >= maxMasterLayouts {
-			return fmt.Errorf("the session already holds %d master layouts", maxMasterLayouts)
+			return errfmt.Errorf("the session already holds %d master layouts", maxMasterLayouts)
 		}
 		// The snapshot handed out before this aliases the map, so it is
 		// cloned before the write.
@@ -160,7 +160,7 @@ func (d *Daemon) handleMasterLayout(cs *connState, msg *Message) error {
 	}
 	var p MasterLayoutPayload
 	if err := msg.ParsePayload(&p); err != nil {
-		return fmt.Errorf("invalid master layout payload: %w", err)
+		return errfmt.Errorf("invalid master layout payload: %w", err)
 	}
 	d.notePushOrigin(cs, session, p.PushOrigin)
 	applied, err := session.ApplyMasterLayout(&p)

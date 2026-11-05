@@ -115,6 +115,7 @@ func (m *OS) noteAgentState(w *terminal.Window, to string) {
 	if focused {
 		m.markAgentSeenSeq(w.ID, w.AgentCompletionSeq)
 	}
+	m.noteThreadViewedLive(w)
 
 	m.considerAgentAlert(w, from, to)
 }
@@ -146,6 +147,7 @@ func (m *OS) noteAgentTurnWithin(w *terminal.Window) {
 		delete(m.SidebarAgentSeen, w.ID)
 		m.saveSidebarState()
 	}
+	m.noteThreadViewedLive(w)
 	m.considerAgentAlert(w, "working", w.AgentState)
 }
 

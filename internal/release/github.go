@@ -13,6 +13,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 )
 
 // HTTPError is any other refusal from the release API, kept with its status so
@@ -178,7 +180,7 @@ func (g *GitHub) getJSON(ctx context.Context, url string, into any) error {
 	// read into memory. A release listing is a few tens of kilobytes.
 	body := io.LimitReader(resp.Body, 4<<20)
 	if err := json.NewDecoder(body).Decode(into); err != nil {
-		return fmt.Errorf("failed to read the release listing: %w", err)
+		return errfmt.Errorf("failed to read the release listing: %w", err)
 	}
 	return nil
 }

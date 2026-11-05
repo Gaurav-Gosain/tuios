@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"context"
 	"errors"
-	"fmt"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -13,6 +12,7 @@ import (
 	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/childproc"
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 
 	"github.com/adrg/xdg"
 )
@@ -238,22 +238,22 @@ var ErrCloneURL = errors.New("not a network git URL")
 func ValidCloneURL(raw string) error {
 	s := strings.TrimSpace(raw)
 	if s == "" || s != raw || strings.HasPrefix(s, "-") || strings.ContainsAny(s, " \t\r\n\x00") || strings.Contains(s, "::") {
-		return fmt.Errorf("%w: %q", ErrCloneURL, raw)
+		return errfmt.Errorf("%w: %q", ErrCloneURL, raw)
 	}
 	if strings.Contains(s, "://") {
 		u, err := url.Parse(s)
 		if err != nil || u.Hostname() == "" || strings.HasPrefix(u.Hostname(), "-") {
-			return fmt.Errorf("%w: %q", ErrCloneURL, raw)
+			return errfmt.Errorf("%w: %q", ErrCloneURL, raw)
 		}
 		switch u.Scheme {
 		case "https", "ssh", "git":
 			return nil
 		}
-		return fmt.Errorf("%w: %q uses %s. Only https, ssh and git URLs are cloned", ErrCloneURL, raw, u.Scheme)
+		return errfmt.Errorf("%w: %q uses %s. Only https, ssh and git URLs are cloned", ErrCloneURL, raw, u.Scheme)
 	}
 	host, path, ok := scpLike(s)
 	if !ok || path == "" || strings.HasPrefix(host, "-") {
-		return fmt.Errorf("%w: %q", ErrCloneURL, raw)
+		return errfmt.Errorf("%w: %q", ErrCloneURL, raw)
 	}
 	return nil
 }
@@ -290,7 +290,7 @@ func Clone(remote, parent string) (string, error) {
 func clone(remote, parent, protocols string) (string, error) {
 	dest := filepath.Join(parent, RepoName(remote))
 	if _, err := os.Lstat(dest); err == nil {
-		return "", fmt.Errorf("%s already exists and its origin is not %s", dest, remote)
+		return "", errfmt.Errorf("%s already exists and its origin is not %s", dest, remote)
 	}
 	if err := os.MkdirAll(parent, 0o755); err != nil { //nolint:gosec // a folder in the user's own tree, with ordinary permissions
 		return "", err
@@ -312,7 +312,7 @@ func clone(remote, parent, protocols string) (string, error) {
 			msg = err.Error()
 		}
 		_ = os.RemoveAll(dest)
-		return "", fmt.Errorf("git clone: %s", msg)
+		return "", errfmt.Errorf("git clone: %s", msg)
 	}
 	return dest, nil
 }

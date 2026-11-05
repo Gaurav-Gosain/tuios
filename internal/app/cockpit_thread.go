@@ -14,7 +14,9 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/diffview"
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
+	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
+	"github.com/Gaurav-Gosain/tuios/internal/transcriptview"
 )
 
 // The thread as cards: what the selected agent said and did, drawn from its
@@ -138,6 +140,8 @@ func (m *OS) threadCardLines(e sidebarAgentEntry, t *agentThread, width int, cha
 	// Each item carries its lines drawn: a line is drawn once, when its
 	// card is built, and a rebuild only joins them.
 	var items []ckItem
+	// prompts are the items that are prompts, for the thread's ruler.
+	var prompts []int
 	var c *ckCanvas
 	draw := func(ls []ckLine) []string {
 		out := make([]string, len(ls))
@@ -169,6 +173,14 @@ func (m *OS) threadCardLines(e sidebarAgentEntry, t *agentThread, width int, cha
 		t.cards[en.ID] = ckCard{key: key, item: it}
 		items = ckAddItem(items, it, blank)
 	}
+	// A finished turn folds its work to one line under its prompt. The
+	// Changes tab draws edits alone and folds nothing.
+	var steps []transcriptview.Step
+	var turns []transcriptview.Turn
+	var turnOf []int
+	if !changes {
+		steps, turns, turnOf = ckTurns(e, entries)
+	}
 	prevText := false
 	for i := 0; i < len(entries); i++ {
 		en := entries[i]
@@ -176,9 +188,25 @@ func (m *OS) threadCardLines(e sidebarAgentEntry, t *agentThread, width int, cha
 		if changes && !isEdit {
 			continue
 		}
+		if turnOf != nil {
+			tn := &turns[turnOf[i]]
+			id := "turn:" + entries[tn.Start].ID
+			open := t.expandAll || tn.Folds() == t.folded[id]
+			if tn.Finished && tn.Work() > 0 && i == ckTurnHead(steps, tn) {
+				what, span := tn.Summary(), tn.Span()
+				key := threadEntry{ID: id, Text: what, Plan: span}
+				key.sum = threadSum(&key)
+				cached(key, boolInt(open), func() []ckLine { return []ckLine{m.ckTurnLine(l, tn, id, what, span, width, open)} })
+				prevText = false
+			}
+			if !open && tn.Hidden(steps, i) {
+				continue
+			}
+		}
 		switch {
 		case en.Kind == "text" && en.Role == "user":
 			turn++
+			prompts = append(prompts, len(items))
 			cached(en, turn, func() []ckLine {
 				label := []ckSeg{{t: "You", fg: pal.AccentBright, attrs: ckBold}, {t: "  " + ckClock(en.At), fg: pal.FgMute}}
 				if turn > 1 {
@@ -252,7 +280,7 @@ func (m *OS) threadCardLines(e sidebarAgentEntry, t *agentThread, width int, cha
 			}
 			add(ls...)
 		case en.Kind == "tool_call":
-			ls := []ckLine{m.ckToolLine(l, printableTitle(en.Tool), printableTitle(en.Target), en.Status, width)}
+			ls := []ckLine{m.ckToolLine(l, printableTitle(en.Tool), printableTitle(ckToolTarget(en.Tool, en.Target)), en.Status, width)}
 			if en.Status == "error" {
 				if res, ok := results[en.ToolID]; ok && res.Text != "" {
 					out := threadWrap(res.Text, max(width-6, 8))
@@ -277,13 +305,70 @@ func (m *OS) threadCardLines(e sidebarAgentEntry, t *agentThread, width int, cha
 	// Every item, oldest first. The thread keeps the lines until it, the
 	// width or a fold changes; scrolling picks from them.
 	var out, hits []string
-	for _, it := range items {
+	for i, it := range items {
+		if len(prompts) > 0 && prompts[0] == i {
+			prompts = prompts[1:]
+			t.prompts = append(t.prompts, len(out))
+		}
 		out = append(out, it.out...)
 		for _, ln := range it.lines {
 			hits = append(hits, ln.hit)
 		}
 	}
 	return out, hits
+}
+
+// ckTurns splits a thread's entries into turns, and gives each entry its
+// turn. The last turn is finished once the agent rests on its answer.
+func ckTurns(e sidebarAgentEntry, entries []threadEntry) ([]transcriptview.Step, []transcriptview.Turn, []int) {
+	steps := make([]transcriptview.Step, len(entries))
+	for i := range entries {
+		en := &entries[i]
+		steps[i] = transcriptview.Step{Role: en.Role, Kind: en.Kind, Tool: en.Tool, Status: en.Status, Text: en.Text, Edit: en.Diff != nil, At: en.At}
+	}
+	turns := transcriptview.Turns(steps, e.State != string(session.AgentStateWorking))
+	turnOf := make([]int, len(entries))
+	for k, tn := range turns {
+		for i := tn.Start; i < tn.End; i++ {
+			turnOf[i] = k
+		}
+	}
+	return steps, turns, turnOf
+}
+
+// ckTurnHead is where a turn's summary line goes: under its prompt, or first
+// for a thread that starts inside the turn.
+func ckTurnHead(steps []transcriptview.Step, tn *transcriptview.Turn) int {
+	if s := steps[tn.Start]; s.Role == "user" && s.Kind == "text" && tn.Start+1 < tn.End {
+		return tn.Start + 1
+	}
+	return tn.Start
+}
+
+// ckTurnLine is a turn's summary line: the fold mark, what the turn did and
+// how long it took. A failure in it is lit. A click opens or closes the turn.
+func (m *OS) ckTurnLine(l ckLook, tn *transcriptview.Turn, id, what, span string, width int, open bool) ckLine {
+	pal := l.pal
+	mark := ckGlyphFold
+	if open {
+		mark = ckGlyphOpen
+	}
+	var fail string
+	if k := strings.LastIndex(what, " ("); k > 0 && (tn.Failed > 0 || tn.Interrupted) {
+		what, fail = what[:k], what[k:]
+	}
+	if span != "" {
+		span = sepWord() + span
+	}
+	room := max(width-ansi.StringWidth(fail+span)-4, 8)
+	segs := []ckSeg{{t: l.g(mark) + " ", fg: pal.FgMute}, {t: ckTrunc(what, room), fg: pal.FgDim}}
+	if fail != "" {
+		segs = append(segs, ckSeg{t: fail, fg: pal.Warn, attrs: ckBold})
+	}
+	if span != "" {
+		segs = append(segs, ckSeg{t: span, fg: pal.FgMute})
+	}
+	return ckLine{segs: segs, hit: "fold:" + id}
 }
 
 // ckItem is a card's lines and the lines drawn.
@@ -371,6 +456,24 @@ func ckClock(at int64) string {
 		return ""
 	}
 	return time.UnixMilli(at).Format("15:04")
+}
+
+// ckToolTarget is what a tool line says the call acted on: for a shell
+// call, the program it ran without bash -lc, cd dir && and the like.
+func ckToolTarget(tool, target string) string {
+	if transcriptview.ShellTool(tool) {
+		return transcriptview.CommandLabel(target)
+	}
+	return target
+}
+
+// toolLineLabel is a "Tool: target" line, as the daemon writes what an agent
+// or a subagent runs now, with a shell call's target as its command label.
+func toolLineLabel(line string) string {
+	if tool, target, ok := strings.Cut(line, ": "); ok && transcriptview.ShellTool(tool) {
+		return tool + ": " + transcriptview.CommandLabel(target)
+	}
+	return line
 }
 
 // ckToolLine is a folded tool call: the fold mark, the kind, what it acted
@@ -677,4 +780,60 @@ func ckRender(c *ckCanvas, width int, ln ckLine) string {
 		c.text(ln.indent, 0, right, ln.segs...)
 	}
 	return c.render()
+}
+
+// drawThreadActivity draws the live activity row at row y, under the
+// thread's newest line, and reports whether it drew one. The row says what
+// the agent does now ("Running go test ./... · 3m"), from the daemon's now
+// key, which a hook or a protocol pane sets, or from a working program's OSC
+// 7501 message. transcriptview.ActivityShown decides when it shows. The time
+// is how long the activity has run as of this frame, drawn only when the
+// thread saw it start. It rides the redraws the cockpit already makes,
+// the minute tick among them, and no timer of its own.
+func (m *OS) drawThreadActivity(c *ckCanvas, l ckLook, e sidebarAgentEntry, t *agentThread, x, y, w int, now time.Time) bool {
+	if e.Host != "" {
+		return false
+	}
+	tool, target := "", ""
+	if v := ckMeta(e, "now"); v != "" {
+		tool, target, _ = strings.Cut(v, ": ")
+	} else if sum, ok := programSummary(e.Program); ok && sum.State == "working" {
+		target = printableTitle(firstNonEmptyStr(sum.Msg, sum.Title))
+	}
+	var last *transcriptview.Entry
+	if t != nil && m.threadReadsTranscript(e) {
+		for i := len(t.entries) - 1; i >= 0; i-- {
+			if en := &t.entries[i]; en.Kind == transcriptview.KindToolCall {
+				last = &transcriptview.Entry{Kind: en.Kind, Tool: en.Tool, Target: en.Target}
+				break
+			}
+		}
+	}
+	text := ""
+	if transcriptview.ActivityShown(e.State, tool, target, last) {
+		text = transcriptview.ActivityRow(tool, target)
+	}
+	if t != nil && (t.act != text || !t.actSeen) {
+		// The first frame that draws a thread finds its activity under way,
+		// so it has no time. Every later change is a start the thread saw.
+		t.act, t.actAt, t.actTimed, t.actSeen = text, now, t.actSeen, true
+	}
+	if text == "" {
+		return false
+	}
+	pal := l.pal
+	verb, rest, _ := strings.Cut(text, " ")
+	var right []ckSeg
+	if t != nil && t.actTimed {
+		if age := agentElapsed("working", t.actAt.UnixNano(), now); age != "" {
+			right = []ckSeg{{t: " · " + age, fg: pal.FgMute}}
+		}
+	}
+	room := max(w-ansi.StringWidth(verb)-ckWidth(right...)-5, 4)
+	segs := []ckSeg{{t: l.g(ckGlyphWorking) + " ", fg: pal.Busy}, {t: verb, fg: pal.FgDim, attrs: ckBold}}
+	if rest != "" {
+		segs = append(segs, ckSeg{t: " " + ckTrunc(rest, room), fg: pal.FgMute})
+	}
+	c.text(c.text(x+2, y, x+w, segs...), y, x+w, right...)
+	return true
 }

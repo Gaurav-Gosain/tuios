@@ -8,6 +8,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"github.com/Gaurav-Gosain/tuios/internal/integration"
 	"github.com/spf13/cobra"
 )
@@ -42,7 +43,7 @@ func integrationTargets(env integration.Env, args []string, all, onlyPresent boo
 	for _, a := range args {
 		t, ok := integration.LookupTarget(a)
 		if !ok {
-			return nil, fmt.Errorf("no integration for %q. Available: %s", a, strings.Join(integration.HarnessIDs(), ", "))
+			return nil, errfmt.Errorf("no integration for %q. Available: %s", a, strings.Join(integration.HarnessIDs(), ", "))
 		}
 		out = append(out, t)
 	}
@@ -147,14 +148,14 @@ stays as it was. Uninstall puts your command back.`,
 			if statusLine && !all {
 				for _, t := range targets {
 					if !t.SupportsStatusLine() {
-						return fmt.Errorf("%s has no status line command tuios can feed from. Only Claude Code does", t.Name)
+						return errfmt.Errorf("%s has no status line command tuios can feed from. Only Claude Code does", t.Name)
 					}
 				}
 			}
 			if mcp && !all {
 				for _, t := range targets {
 					if !t.SupportsMCP() {
-						return fmt.Errorf("tuios cannot register an MCP server with %s. It can with %s", t.Name, strings.Join(integration.MCPHarnessIDs(), ", "))
+						return errfmt.Errorf("tuios cannot register an MCP server with %s. It can with %s", t.Name, strings.Join(integration.MCPHarnessIDs(), ", "))
 					}
 				}
 			}
@@ -203,7 +204,7 @@ stays as it was. Uninstall puts your command back.`,
 				}
 			}
 			if len(failed) > 0 {
-				return fmt.Errorf("install failed for %s", strings.Join(failed, ", "))
+				return errfmt.Errorf("install failed for %s", strings.Join(failed, ", "))
 			}
 			return nil
 		},
@@ -325,7 +326,7 @@ named, give --all.`,
 				}
 			}
 			if len(failed) > 0 {
-				return fmt.Errorf("uninstall failed for %s", strings.Join(failed, ", "))
+				return errfmt.Errorf("uninstall failed for %s", strings.Join(failed, ", "))
 			}
 			return nil
 		},

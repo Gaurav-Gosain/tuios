@@ -1,10 +1,11 @@
 package config
 
 import (
-	"fmt"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 )
 
 // AgentAlertsConfig is the [notifications.agent] table: what tuios does when a
@@ -294,7 +295,7 @@ func ParseQuietHours(s string) (from, to int, err error) {
 	}
 	start, end, ok := strings.Cut(s, "-")
 	if !ok {
-		return 0, 0, fmt.Errorf("want HH:MM-HH:MM, got %q", s)
+		return 0, 0, errfmt.Errorf("want HH:MM-HH:MM, got %q", s)
 	}
 	if from, err = parseClock(start); err != nil {
 		return 0, 0, err
@@ -309,15 +310,15 @@ func ParseQuietHours(s string) (from, to int, err error) {
 func parseClock(s string) (int, error) {
 	h, m, ok := strings.Cut(strings.TrimSpace(s), ":")
 	if !ok {
-		return 0, fmt.Errorf("want HH:MM, got %q", s)
+		return 0, errfmt.Errorf("want HH:MM, got %q", s)
 	}
 	hours, err := strconv.Atoi(h)
 	if err != nil || hours < 0 || hours > 23 {
-		return 0, fmt.Errorf("hour out of range in %q", s)
+		return 0, errfmt.Errorf("hour out of range in %q", s)
 	}
 	mins, err := strconv.Atoi(m)
 	if err != nil || mins < 0 || mins > 59 {
-		return 0, fmt.Errorf("minute out of range in %q", s)
+		return 0, errfmt.Errorf("minute out of range in %q", s)
 	}
 	return hours*60 + mins, nil
 }

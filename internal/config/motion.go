@@ -15,7 +15,8 @@ const (
 	// shimmer, and confetti is a still sparkle.
 	MotionNone = "none"
 	// MotionBasic keeps the motion that carries information: windows slide
-	// between positions and a zoom grows from its tile.
+	// between positions, a zoom grows from its tile, and a workspace switch
+	// slides the new workspace in.
 	MotionBasic = "basic"
 	// MotionFull adds the decorative motion: an overlay fades in, a working
 	// agent's row shimmers, and confetti flies. It is the default.

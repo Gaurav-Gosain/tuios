@@ -14,6 +14,7 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/app"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/debuglog"
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"github.com/Gaurav-Gosain/tuios/internal/input"
 	"github.com/Gaurav-Gosain/tuios/internal/server"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
@@ -181,7 +182,7 @@ func runLocal() error {
 	finish()
 
 	if err != nil {
-		return fmt.Errorf("program error: %w", err)
+		return errfmt.Errorf("program error: %w", err)
 	}
 
 	return nil
@@ -213,7 +214,7 @@ func (f sshServerFlags) checkLimits() error {
 		v    *time.Duration
 	}{{"--handshake-timeout", f.handshakeTimeout}, {"--idle-timeout", f.idleTimeout}} {
 		if d.v != nil && *d.v < 0 {
-			return fmt.Errorf("%s is negative. Give a duration such as 2m, or 0 to turn the limit off", d.name)
+			return errfmt.Errorf("%s is negative. Give a duration such as 2m, or 0 to turn the limit off", d.name)
 		}
 	}
 	for _, c := range []struct {
@@ -221,7 +222,7 @@ func (f sshServerFlags) checkLimits() error {
 		v    *int
 	}{{"--max-handshakes", f.maxHandshakes}, {"--max-sessions", f.maxSessions}} {
 		if c.v != nil && *c.v < 0 {
-			return fmt.Errorf("%s is negative. Give a count, or 0 to turn the limit off", c.name)
+			return errfmt.Errorf("%s is negative. Give a count, or 0 to turn the limit off", c.name)
 		}
 	}
 	return nil
@@ -286,7 +287,7 @@ func runSSHServer(f sshServerFlags) error {
 		Overrides: flagOverrides(),
 	}
 	if err := server.StartSSHServer(ctx, cfg); err != nil {
-		return fmt.Errorf("SSH server error: %w", err)
+		return errfmt.Errorf("SSH server error: %w", err)
 	}
 	return nil
 }

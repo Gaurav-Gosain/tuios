@@ -12,6 +12,8 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
+	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 	"github.com/Gaurav-Gosain/tuios/internal/plural"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 )
@@ -161,8 +163,8 @@ func runAgentLog(o agentLogOptions, w io.Writer) error {
 // and on what.
 func printAgentLog(w io.Writer, raw json.RawMessage) error {
 	var res agentLogResult
-	if err := json.Unmarshal(raw, &res); err != nil {
-		return fmt.Errorf("failed to parse response: %w", err)
+	if err := jsonx.Unmarshal(raw, &res); err != nil {
+		return errfmt.Errorf("failed to parse response: %w", err)
 	}
 	if len(res.Entries) == 0 {
 		fmt.Fprintln(w, "No activity recorded for this pane. It fills from the harness's hooks: see 'tuios integration install'.")
@@ -313,8 +315,8 @@ func listFiles(files []string, total, show int) string {
 //	Now: done
 func printAgentRecap(w io.Writer, raw json.RawMessage, now time.Time) error {
 	var res agentLogResult
-	if err := json.Unmarshal(raw, &res); err != nil {
-		return fmt.Errorf("failed to parse response: %w", err)
+	if err := jsonx.Unmarshal(raw, &res); err != nil {
+		return errfmt.Errorf("failed to parse response: %w", err)
 	}
 	rc := res.Recap
 	if rc == nil {

@@ -1,7 +1,6 @@
 package theme
 
 import (
-	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -14,6 +13,8 @@ import (
 	"unicode/utf8"
 
 	"charm.land/lipgloss/v2"
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
+	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 	"github.com/adrg/xdg"
 	"github.com/charmbracelet/x/ansi"
@@ -237,7 +238,7 @@ var builtinGlyphSets = map[string]*GlyphSet{
 func GetGlyphsDir() (string, error) {
 	keepFile, err := xdg.ConfigFile("tuios/glyphs/.keep")
 	if err != nil {
-		return "", fmt.Errorf("failed to get glyphs directory: %w", err)
+		return "", errfmt.Errorf("failed to get glyphs directory: %w", err)
 	}
 	return filepath.Dir(keepFile), nil
 }
@@ -312,18 +313,18 @@ func loadGlyphSetFile(path string) (*GlyphSet, []string, error) {
 	// #nosec G304 - path comes from the user's own config directory
 	data, err := os.ReadFile(path)
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to read glyph set: %w", err)
+		return nil, nil, errfmt.Errorf("failed to read glyph set: %w", err)
 	}
 	var set GlyphSet
-	if err := json.Unmarshal(data, &set); err != nil {
-		return nil, nil, fmt.Errorf("failed to parse glyph set JSON: %w", err)
+	if err := jsonx.Unmarshal(data, &set); err != nil {
+		return nil, nil, errfmt.Errorf("failed to parse glyph set JSON: %w", err)
 	}
 	if set.ID == "" {
 		base := filepath.Base(path)
 		set.ID = strings.ToLower(strings.TrimSuffix(base, filepath.Ext(base)))
 	}
 	if set.ID == "" {
-		return nil, nil, fmt.Errorf("glyph set has no id")
+		return nil, nil, errfmt.Errorf("glyph set has no id")
 	}
 	if set.DisplayName == "" {
 		set.DisplayName = set.ID

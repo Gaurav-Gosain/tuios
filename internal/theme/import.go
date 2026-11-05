@@ -1,11 +1,11 @@
 package theme
 
 import (
-	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	tint "github.com/lrstanley/bubbletint/v2"
 	"tuios.dev/swatch"
 	"tuios.dev/swatch/termconfig"
@@ -37,11 +37,11 @@ func Import(path, id string) (*tint.Tint, ImportFormat, error) {
 	// #nosec G304 - the caller names a file it already has; reading it is the point
 	data, err := os.ReadFile(path)
 	if err != nil {
-		return nil, "", fmt.Errorf("read %s: %w", path, err)
+		return nil, "", errfmt.Errorf("read %s: %w", path, err)
 	}
 	p, format, err := termconfig.Parse(data)
 	if err != nil {
-		return nil, "", fmt.Errorf("%s: %w", path, err)
+		return nil, "", errfmt.Errorf("%s: %w", path, err)
 	}
 
 	if id == "" {
@@ -64,7 +64,7 @@ func WriteTheme(t *tint.Tint) (string, error) {
 	// The id becomes a file name in the themes directory. A shared theme
 	// names its own id, so one with a path in it could write elsewhere.
 	if t.ID == "" || t.ID != filepath.Base(t.ID) || strings.HasPrefix(t.ID, ".") || strings.ContainsAny(t.ID, `/\`) {
-		return "", fmt.Errorf("theme name %q cannot be a file name. Use a name with no / or \\ that does not start with a dot", t.ID)
+		return "", errfmt.Errorf("theme name %q cannot be a file name. Use a name with no / or \\ that does not start with a dot", t.ID)
 	}
 	dir, err := GetThemesDir()
 	if err != nil {
@@ -74,7 +74,7 @@ func WriteTheme(t *tint.Tint) (string, error) {
 	body := fullDoc(t, chromeRaw{}).encode(true)
 	path := filepath.Join(dir, t.ID+".json")
 	if err := os.WriteFile(path, body, 0o600); err != nil {
-		return "", fmt.Errorf("write %s: %w", path, err)
+		return "", errfmt.Errorf("write %s: %w", path, err)
 	}
 	// Register it here as well as on disk so the process that imported it can
 	// select the theme without re-reading the directory.

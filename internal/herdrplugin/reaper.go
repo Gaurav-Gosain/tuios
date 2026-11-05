@@ -59,24 +59,3 @@ func reaperEnv(env []string) []string {
 	}
 	return append(out, "GODEBUG="+godebug, reaperGodebugEnv+"="+keep)
 }
-
-// commandEnv is the reaper's environment as the command gets it: GODEBUG as
-// the runner had it before reaperEnv.
-func commandEnv(env []string) []string {
-	keep := ""
-	out := make([]string, 0, len(env))
-	for _, kv := range env {
-		if v, ok := strings.CutPrefix(kv, reaperGodebugEnv+"="); ok {
-			keep = v
-			continue
-		}
-		if strings.HasPrefix(kv, "GODEBUG=") {
-			continue
-		}
-		out = append(out, kv)
-	}
-	if v, ok := strings.CutPrefix(keep, "set:"); ok {
-		out = append(out, "GODEBUG="+v)
-	}
-	return out
-}

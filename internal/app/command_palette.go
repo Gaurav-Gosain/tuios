@@ -55,6 +55,9 @@ func (m *OS) ApplyReloadedConfig(cfg *config.UserConfig) tea.Cmd {
 	if m.ReloadFilter != nil {
 		cfg = m.ReloadFilter(cfg)
 	}
+	// A value set with set-config --no-save stays in force over the file
+	// until the client exits or the option is saved. See config/hold.go.
+	cfg.KeepHolds(m.UserConfig)
 	themeBefore := theme.Generation()
 	config.ApplyAppearanceConfig(cfg, &m.Settings)
 	m.ListKeys = listKeymap(cfg)

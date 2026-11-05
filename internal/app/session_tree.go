@@ -491,9 +491,14 @@ func getSessionPaletteItems(m *OS) []CommandPaletteItem {
 // focusWindowByID focuses the pane with the given ID among the windows this
 // client holds, and says nothing when it holds none: after a session switch the
 // daemon's listing can name a pane the restored state no longer has.
+//
+// Every caller is a jump the user asked for by name (the palette, the
+// navigator, a host switch landing), so the scrolling strip shows the whole
+// column, as it does for a focus key. See RevealFocusedColumn.
 func (m *OS) focusWindowByID(id string) {
 	if i := m.windowIndexByID(id); i >= 0 {
 		m.FocusWindow(i)
+		m.RevealFocusedColumn()
 	}
 }
 

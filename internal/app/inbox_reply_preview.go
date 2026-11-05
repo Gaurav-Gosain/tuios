@@ -42,12 +42,17 @@ import (
 //
 // Decoding and scaling are CPU work, so they run in a tea.Cmd, once per image
 // and size, and the result is kept for the life of the client, bounded by
-// replyPreviewMax. Nothing runs on a timer, and with no image in an open reply
-// nothing here runs at all.
+// replyPreviewMax pictures and replyPreviewBytes bytes. Nothing runs on a
+// timer, and with no image in an open reply nothing here runs at all.
 
-// replyPreviewMax bounds the pictures kept. Each is a thumbnail or one view,
-// tens of kilobytes at most.
+// replyPreviewMax bounds the pictures kept. A thumbnail is tens of kilobytes;
+// a view of a large photo is megabytes, which is why the bytes are bounded too.
 const replyPreviewMax = 64
+
+// replyPreviewBytes bounds the memory the pictures kept hold, counted the way
+// previewPicture.size does. A picture on screen is never dropped for it, so a
+// view larger than this still shows; the rest wait their turn oldest first.
+const replyPreviewBytes = 32 << 20
 
 // replyPreviewMaxPixels bounds the images a preview decodes, by the size the
 // header gives. A small file can declare a huge image, and decoding it would
@@ -78,6 +83,20 @@ type previewPicture struct {
 	png   []byte
 }
 
+// size is the bytes the picture holds: the capacity of the PNG, which is what
+// a bytes.Buffer keeps past its length, and the glyph lines. A nil picture
+// holds nothing.
+func (pic *previewPicture) size() int {
+	if pic == nil {
+		return 0
+	}
+	n := cap(pic.png)
+	for _, l := range pic.lines {
+		n += len(l)
+	}
+	return n
+}
+
 // replyPreview is the client's previewer. It is reached from the Update
 // goroutine and from the render; the decode commands only build pictures and
 // hand them back as messages.
@@ -88,7 +107,9 @@ type replyPreview struct {
 	version uint64
 	pics    map[previewKey]*previewPicture
 	order   []previewKey
-	asked   map[previewKey]bool
+	// held is the bytes of the pictures in pics, by previewPicture.size.
+	held  int
+	asked map[previewKey]bool
 	// hostID is the kitty image id a picture was uploaded under, hostOrder the
 	// same pictures oldest first, and shown what is placed on the host now. See
 	// inbox_reply_preview_unix.go.
@@ -268,14 +289,38 @@ func (m *OS) applyReplyPreview(msg replyPreviewMsg) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	for k, pic := range msg.pics {
-		if _, ok := p.pics[k]; !ok {
+		if old, ok := p.pics[k]; ok {
+			p.held -= old.size()
+		} else {
 			p.order = append(p.order, k)
 		}
 		p.pics[k] = pic
+		p.held += pic.size()
 	}
-	for len(p.order) > replyPreviewMax {
-		old := p.order[0]
-		p.order = p.order[1:]
+	if len(p.order) <= replyPreviewMax && p.held <= replyPreviewBytes {
+		p.version++
+		return
+	}
+	// A picture on screen stays whatever its size: the message just applied,
+	// and what the host shows now. In cells mode, and on builds without kitty
+	// placements, a glyph picture from an earlier message is not protected;
+	// glyph pictures are small, so that is accepted.
+	onScreen := make(map[previewKey]bool, len(msg.pics)+len(p.shown))
+	for k := range msg.pics {
+		onScreen[k] = true
+	}
+	for _, pl := range p.shown {
+		onScreen[pl.key] = true
+	}
+	count := len(p.order)
+	kept := p.order[:0]
+	for _, old := range p.order {
+		if (count <= replyPreviewMax && p.held <= replyPreviewBytes) || onScreen[old] {
+			kept = append(kept, old)
+			continue
+		}
+		count--
+		p.held -= p.pics[old].size()
 		delete(p.pics, old)
 		delete(p.asked, old)
 		if id, up := p.hostID[old]; up {
@@ -284,6 +329,8 @@ func (m *OS) applyReplyPreview(msg replyPreviewMsg) {
 			p.gone = append(p.gone, id)
 		}
 	}
+	clear(p.order[len(kept):])
+	p.order = kept
 	p.version++
 }
 

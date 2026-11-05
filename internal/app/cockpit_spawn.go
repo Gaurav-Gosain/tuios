@@ -23,6 +23,7 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/federation"
 	"github.com/Gaurav-Gosain/tuios/internal/gitstate"
 	"github.com/Gaurav-Gosain/tuios/internal/harness"
+	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/sortx"
 	"github.com/Gaurav-Gosain/tuios/internal/worktree"
@@ -1115,7 +1116,7 @@ func (m *OS) spawnStart() tea.Cmd {
 			Task                    *session.TaskRow `json:"task"`
 			TaskNote                string           `json:"task_note"`
 		}
-		_ = json.Unmarshal(raw, &res)
+		_ = jsonx.Unmarshal(raw, &res)
 		held := spawnClaim(call, nonce, card, res.Session, res.WindowID)
 		switch {
 		case res.Task != nil && verb == "start-agent":

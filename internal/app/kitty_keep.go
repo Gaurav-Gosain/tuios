@@ -4,13 +4,13 @@ import (
 	"bytes"
 	"compress/zlib"
 	"errors"
-	"fmt"
 	"image"
 	"image/png"
 	"io"
 	"os"
 	"path/filepath"
 
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"tuios.dev/vt"
 )
 
@@ -282,7 +282,7 @@ func readKittyMedium(path string, offset, size, limit int, recheck bool) ([]byte
 	}
 	defer func() { _ = f.Close() }()
 	if n > int64(limit) {
-		return nil, fmt.Errorf("%d bytes is outside the limit", n)
+		return nil, errfmt.Errorf("%d bytes is outside the limit", n)
 	}
 	data := make([]byte, n)
 	if _, err := io.ReadFull(f, data); err != nil {
@@ -336,7 +336,7 @@ func openKittyMedium(path string, offset, size int, recheck bool) (*os.File, int
 	}
 	if n <= 0 {
 		_ = f.Close()
-		return nil, 0, fmt.Errorf("%d bytes is outside the file", n)
+		return nil, 0, errfmt.Errorf("%d bytes is outside the file", n)
 	}
 	if offset > 0 {
 		if _, err := f.Seek(int64(offset), io.SeekStart); err != nil {
@@ -398,7 +398,7 @@ func (k *keptImage) decode(maxPixels int) (image.Image, error) {
 			}
 		}
 		if len(data) < want {
-			return nil, fmt.Errorf("payload has %d bytes, the image needs %d", len(data), want)
+			return nil, errfmt.Errorf("payload has %d bytes, the image needs %d", len(data), want)
 		}
 		if bpp == 4 {
 			// Kitty's RGBA is not premultiplied, which is what NRGBA is.
@@ -410,7 +410,7 @@ func (k *keptImage) decode(maxPixels int) (image.Image, error) {
 		}
 		return out, nil
 	}
-	return nil, fmt.Errorf("unknown kitty image format %d", k.format)
+	return nil, errfmt.Errorf("unknown kitty image format %d", k.format)
 }
 
 // pixels is the image's area as the guest declared it, 0 when it did not.

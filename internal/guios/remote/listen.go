@@ -1,12 +1,12 @@
 package remote
 
 import (
-	"fmt"
 	"net/url"
 	"strconv"
 	"strings"
 
 	"github.com/Gaurav-Gosain/mygo"
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 )
 
 // Listen is one of kerod's network listeners, as the configuration's
@@ -29,28 +29,28 @@ type Listen struct {
 func ParseListen(s string) (Listen, error) {
 	u, err := url.Parse(strings.TrimSpace(s))
 	if err != nil {
-		return Listen{}, fmt.Errorf("%q is not a listener: %v", s, err)
+		return Listen{}, errfmt.Errorf("%q is not a listener: %v", s, err)
 	}
 	switch u.Scheme {
 	case "tailnet":
 		if u.Hostname() != "" {
-			return Listen{}, fmt.Errorf("%q: a tailnet listener takes the machine's Tailscale addresses: write tailnet://:port", s)
+			return Listen{}, errfmt.Errorf("%q: a tailnet listener takes the machine's Tailscale addresses: write tailnet://:port", s)
 		}
 		l := Listen{Kind: "tailnet", Port: u.Port()}
 		if l.Port == "" {
 			l.Port = ListenPort()
 		}
 		if n, err := strconv.Atoi(l.Port); err != nil || n < 1 || n > 65535 {
-			return Listen{}, fmt.Errorf("%q: a port is 1 to 65535", s)
+			return Listen{}, errfmt.Errorf("%q: a port is 1 to 65535", s)
 		}
 		return l, nil
 	case "tailnet-serve":
 		if u.Host != "" {
-			return Listen{}, fmt.Errorf("%q: write tailnet-serve:///path/to/socket", s)
+			return Listen{}, errfmt.Errorf("%q: write tailnet-serve:///path/to/socket", s)
 		}
 		return Listen{Kind: "tailnet-serve", Path: u.Path}, nil
 	}
-	return Listen{}, fmt.Errorf("%q: kerod listens on tailnet://:port or tailnet-serve:///socket", s)
+	return Listen{}, errfmt.Errorf("%q: kerod listens on tailnet://:port or tailnet-serve:///socket", s)
 }
 
 // ListenPort is the port a tailnet listener takes when it names none:

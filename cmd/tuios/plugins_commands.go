@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"github.com/Gaurav-Gosain/tuios/internal/herdrcli"
 	"github.com/Gaurav-Gosain/tuios/internal/herdrplugin"
 	"github.com/spf13/cobra"
@@ -76,7 +77,7 @@ func inPane() bool {
 
 // errFromPane is the refusal of a trust change from inside a pane.
 func errFromPane(what string) error {
-	return fmt.Errorf("tuios plugins %s is for the person, and this command runs inside a tuios pane. Nothing was changed. Run it from a terminal outside tuios", what)
+	return errfmt.Errorf("tuios plugins %s is for the person, and this command runs inside a tuios pane. Nothing was changed. Run it from a terminal outside tuios", what)
 }
 
 // pluginCall sends one plugin method to the daemon's herdr socket. ok is
@@ -91,10 +92,10 @@ func pluginCall(method string, params map[string]any, timeout time.Duration) (ma
 		if herdrcli.NotRunning(err) {
 			return nil, false, nil
 		}
-		return nil, false, fmt.Errorf("%s: %v", method, err)
+		return nil, false, errfmt.Errorf("%s: %v", method, err)
 	}
 	if e, ok := resp["error"].(map[string]any); ok {
-		return nil, true, fmt.Errorf("%v (%v)", e["message"], e["code"])
+		return nil, true, errfmt.Errorf("%v (%v)", e["message"], e["code"])
 	}
 	result, _ := resp["result"].(map[string]any)
 	return result, true, nil
@@ -200,7 +201,7 @@ func newPluginsInfoCommand() *cobra.Command {
 				}
 			}
 			if found == nil {
-				return fmt.Errorf("no plugin has the id %s. Run tuios plugins list to see the ids", args[0])
+				return errfmt.Errorf("no plugin has the id %s. Run tuios plugins list to see the ids", args[0])
 			}
 			out := cmd.OutOrStdout()
 			if asJSON {
@@ -299,10 +300,10 @@ func newPluginsEnableCommand(on bool) *cobra.Command {
 			}
 			e := herdrplugin.Find(entries, id)
 			if e == nil {
-				return fmt.Errorf("no plugin has the id %s. Run tuios plugins list to see the ids", id)
+				return errfmt.Errorf("no plugin has the id %s. Run tuios plugins list to see the ids", id)
 			}
 			if on && e.Plugin == nil {
-				return fmt.Errorf("the plugin %s cannot be enabled: %s", id, e.Err.Msg)
+				return errfmt.Errorf("the plugin %s cannot be enabled: %s", id, e.Err.Msg)
 			}
 			_, running, err := pluginCall(method, map[string]any{"plugin_id": id}, 10*time.Second)
 			if err != nil {
@@ -340,7 +341,7 @@ func newPluginsLinkCommand() *cobra.Command {
 			}
 			p, perr := herdrplugin.Load(args[0])
 			if perr != nil {
-				return fmt.Errorf("the plugin cannot be read: %s", perr.Msg)
+				return errfmt.Errorf("the plugin cannot be read: %s", perr.Msg)
 			}
 			_, running, err := pluginCall("plugin.link", map[string]any{"path": p.PluginRoot, "enabled": enable}, 10*time.Second)
 			if err != nil {
@@ -432,7 +433,7 @@ func newPluginsBuildCommand() *cobra.Command {
 			}
 			e := herdrplugin.Find(entries, args[0])
 			if e == nil || e.Plugin == nil {
-				return fmt.Errorf("no plugin with the id %s can be read. Run tuios plugins list to see the ids", args[0])
+				return errfmt.Errorf("no plugin with the id %s can be read. Run tuios plugins list to see the ids", args[0])
 			}
 			path, err := pluginsConfigPath()
 			if err != nil {
@@ -500,7 +501,7 @@ func newPluginsRunCommand() *cobra.Command {
 						fmt.Fprint(cmd.ErrOrStderr(), s)
 					}
 					if m["status"] != "succeeded" {
-						return fmt.Errorf("the action failed: exit code %v %v", m["exit_code"], m["error"])
+						return errfmt.Errorf("the action failed: exit code %v %v", m["exit_code"], m["error"])
 					}
 					return nil
 				}
@@ -605,7 +606,7 @@ func newPluginsLogCommand() *cobra.Command {
 func pluginConfigDir(id string) (string, error) {
 	n, ok := herdrplugin.NormalizeID(id)
 	if !ok {
-		return "", fmt.Errorf("invalid plugin id %q", id)
+		return "", errfmt.Errorf("invalid plugin id %q", id)
 	}
 	path, err := pluginsConfigPath()
 	if err != nil {

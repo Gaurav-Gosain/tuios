@@ -38,8 +38,16 @@ func readFirstLine(path string) (string, error) {
 //
 // It is stricter than Read about a detached HEAD: the line must be a full
 // hexadecimal object name before its first seven characters are shown.
+//
+// In a jj workspace git's HEAD names no branch, so the answer is Read's name
+// for the stack, which runs jj only when jj's operation log has moved.
 func Branch(dir string) string {
 	gitdir, commondir, root, ok := Locate(dir)
+	if jroot, repoDir, jok := locateJJ(dir); jok && jjWins(jroot, root, ok) {
+		if st, found := readJJ(jroot, repoDir); found {
+			return st.Branch
+		}
+	}
 	if !ok {
 		return ""
 	}

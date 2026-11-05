@@ -25,6 +25,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/app"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"github.com/Gaurav-Gosain/tuios/internal/fuzz"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 	"github.com/adrg/xdg"
@@ -181,7 +182,7 @@ func (t *Target) addPane() error {
 	id := fmt.Sprintf("fuzzpane%04d", t.seq)
 	win := terminal.NewDaemonWindow(id, "fuzz", 0, 0, 60, 20, 0, "pty-"+id, t.m.PTYDataChan, config.DefaultScrollbackLines)
 	if win == nil {
-		return fmt.Errorf("NewDaemonWindow(%s) returned nil", id)
+		return errfmt.Errorf("NewDaemonWindow(%s) returned nil", id)
 	}
 	rec := &announcedSize{}
 	win.DaemonResizeFunc = func(w, h int) error {

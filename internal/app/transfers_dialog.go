@@ -14,6 +14,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/Gaurav-Gosain/tuios/internal/federation"
+	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/textedit"
@@ -362,7 +363,7 @@ func (m *OS) startSendCmd(src session.Endpoint, name, host, dir string) tea.Cmd 
 		msg := transferCallMsg{Verb: "transfer-start", Name: name, Err: err}
 		if err == nil {
 			var row session.TransferRow
-			if json.Unmarshal(raw, &row) == nil && row.ID != "" {
+			if jsonx.Unmarshal(raw, &row) == nil && row.ID != "" {
 				msg.Row = &row
 			}
 		}
@@ -479,7 +480,7 @@ func (m *OS) sendDropCmd(ask *dropAsk) tea.Cmd {
 			Paths     []string              `json:"paths"`
 			Transfers []session.TransferRow `json:"transfers"`
 		}
-		if err := json.Unmarshal(raw, &res); err != nil {
+		if err := jsonx.Unmarshal(raw, &res); err != nil {
 			return dropSentMsg{ask: a, err: err}
 		}
 		return dropSentMsg{ask: a, paths: res.Paths, rows: res.Transfers}

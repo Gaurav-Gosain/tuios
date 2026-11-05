@@ -3,10 +3,10 @@
 package session
 
 import (
-	"fmt"
 	"os"
 	"path/filepath"
 
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"github.com/Gaurav-Gosain/tuios/internal/serverscope"
 )
 
@@ -34,14 +34,14 @@ func defaultSocketPath() (string, error) {
 		// Fallback to user profile
 		userProfile := os.Getenv("USERPROFILE")
 		if userProfile == "" {
-			return "", fmt.Errorf("cannot determine user directory: LOCALAPPDATA and USERPROFILE not set")
+			return "", errfmt.Errorf("cannot determine user directory: LOCALAPPDATA and USERPROFILE not set")
 		}
 		localAppData = filepath.Join(userProfile, "AppData", "Local")
 	}
 
 	socketDir := serverscope.SocketDir(filepath.Join(localAppData, "tuios"))
 	if err := os.MkdirAll(socketDir, 0700); err != nil {
-		return "", fmt.Errorf("failed to create socket directory: %w", err)
+		return "", errfmt.Errorf("failed to create socket directory: %w", err)
 	}
 
 	return filepath.Join(socketDir, "tuios.sock"), nil

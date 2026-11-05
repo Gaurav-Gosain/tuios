@@ -1,8 +1,9 @@
 package layout
 
 import (
-	"fmt"
 	"math"
+
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 )
 
 // Arrangements rebuild a BSP tree so its panes sit in one of tmux's
@@ -40,7 +41,7 @@ func (t *BSPTree) ArrangeTree(kind string, windowIDs []int) error {
 	case ArrangeTiled:
 		root = tiledGrid(windowIDs)
 	default:
-		return fmt.Errorf("unknown layout %q (use tiled, even-horizontal or even-vertical)", kind)
+		return errfmt.Errorf("unknown layout %q (use tiled, even-horizontal or even-vertical)", kind)
 	}
 	t.Root = root
 	t.WindowToNode = make(map[int]*TileNode, len(windowIDs))

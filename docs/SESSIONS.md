@@ -20,6 +20,7 @@ what does and does not come back after each kind of interruption.
 - [Return Notes](#return-notes)
 - [What Survives](#what-survives)
 - [Upgrading the Daemon Without Ending Programs](#upgrading-the-daemon-without-ending-programs)
+- [Running the Daemon as a Service](#running-the-daemon-as-a-service)
 - [Resurrection](#resurrection)
 - [The resurrect Command](#the-resurrect-command)
 - [Windows on Another Machine](#windows-on-another-machine)
@@ -588,6 +589,77 @@ Run from inside a pane, the upgrade asks you first. The binary named runs as the
 
 The command, its output and everything it keeps and ends are in [CLI_REFERENCE.md](CLI_REFERENCE.md#tuios-daemon-upgrade). The design is in [design/live-handoff.md](design/live-handoff.md).
 
+## Running the Daemon as a Service
+
+A client starts the daemon when none runs. Nothing starts it at boot, and on
+Linux a logout can end it. `tuios daemon install-service` makes the daemon a
+service of your user, so it starts without a client:
+
+```sh
+tuios daemon install-service --dry-run   # show the file, change nothing
+tuios daemon install-service
+tuios daemon service-status
+tuios daemon uninstall-service
+```
+
+| System | Service | Starts |
+|--------|---------|--------|
+| Linux | a systemd user unit, `tuios-daemon.service` | at boot with linger on, else at login |
+| macOS | a launchd agent, `dev.tuios.tuios-daemon` | at login |
+| Windows | a Task Scheduler task, `\TUIOS\tuios-daemon` | at logon |
+
+A named server gets a service of its own, `tuios-daemon-NAME`. When a service
+is installed, tuios starts each new daemon through it, so `tuios
+restart-server` and a bare `tuios` start the daemon under the service. Set
+`TUIOS_NO_SERVICE=1` to start a daemon directly.
+
+On Linux, turn linger on. Without it, systemd stops the daemon when you log
+out, and does not start it at boot. `install-service` and `service-status`
+say when it is off:
+
+```sh
+loginctl enable-linger "$USER"
+```
+
+How the service and the daemon work together:
+
+- **A daemon that runs now continues.** `install-service` does not stop it,
+  because a stop ends the programs in its panes. It moves under the service
+  when it starts again, for example after `tuios restart-server`.
+- **Pane programs are not killed by the service manager.** The unit has
+  `KillMode=process`. The daemon stops its panes itself, after it saves them.
+  A program that outlives the daemon on purpose (one started with `nohup` or
+  `setsid` in a pane), the `restart-server` worker started from a pane, and
+  the keeper of a live upgrade stay in the unit. `KillMode=control-group`
+  would kill each of them when the daemon stops.
+- **A crash starts the daemon again. A stop does not.** The unit has
+  `Restart=on-failure`. `kill-server` and `restart-server` stop the daemon
+  with exit status 0, and it stays stopped until a client starts it.
+- **A live upgrade keeps the service.** `tuios daemon upgrade` execs the new
+  binary in the same process, so systemd and launchd see the same pid. If the
+  new binary fails and the keeper brings the old one back under a new pid,
+  the programs keep running. The service then shows as stopped while that
+  daemon runs. It is under the service again after the next restart.
+- **A second daemon exits.** The service runs `tuios daemon --service`. When
+  another daemon already serves the socket, it exits 0, and the service
+  manager does not start it again and again.
+- **The panes get the PATH of a login.** The service runs the daemon through
+  your login shell (`$SHELL -l -c`), so the programs in a pane find what a
+  terminal finds. The service runs the tuios it names. When tuios moves, run
+  `install-service` again.
+- **The display follows the client.** The unit removes `DISPLAY`,
+  `WAYLAND_DISPLAY` and `XAUTHORITY`. With `[daemon] display = "follow"`, the
+  default, each session gets the display of the local client that attached
+  last. A shell that already runs gets it with `eval "$(tuios display-env)"`.
+- **The panes do not see the service manager.** tuios removes
+  `INVOCATION_ID`, `JOURNAL_STREAM`, `NOTIFY_SOCKET`, `MANAGERPID` and
+  `SYSTEMD_EXEC_PID` from each pane.
+
+On macOS with the TUIOS Daemon app installed (see
+[Local Network Access on macOS](#local-network-access-on-macos)), the agent
+opens the app, so the panes keep local network access. `tuios hosts sync
+--service` installs the service on each host that has none.
+
 ## Resurrection
 
 Resurrection is how a session comes back after the daemon that held it is gone.
@@ -991,7 +1063,16 @@ tuios hosts sync build --start    # install tuios on build if needed, then start
 ```
 
 `hosts test --start` does not install tuios. On a host with no tuios, use
-`hosts sync --start`. See [`tuios hosts test`](CLI_REFERENCE.md#tuios-hosts-test).
+`hosts sync --start`.
+
+A daemon that a link started ends when the host restarts. To start it at boot,
+install the service on the host. `tuios hosts sync` says which hosts have none:
+
+```sh
+tuios hosts sync build --service    # install the daemon service on build
+```
+
+See [Running the Daemon as a Service](#running-the-daemon-as-a-service). See [`tuios hosts test`](CLI_REFERENCE.md#tuios-hosts-test).
 
 ## Adding a Phone
 

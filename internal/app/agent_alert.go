@@ -98,6 +98,18 @@ func (m *OS) considerAgentAlert(w *terminal.Window, from, to string) {
 	// back inside the settle window produces nothing rather than two alerts.
 	delete(m.pendingAgentAlerts, w.ID)
 
+	// The silent baseline: the state this client first sees the pane in is
+	// one it found there, from the attach or the reconnect that built the
+	// pane, and its run raises nothing more. That is the state it moves out
+	// of. A pane that had no state on this client found nothing: the state it
+	// arrives in is news, as a new agent's first error is. A run raises each
+	// keyed state once, so a repeated report of a state the run already
+	// alerted for, or a state seen again after an attach, is not news.
+	m.agentAlertRuns.Baseline(w.ID, from, w.AgentCompletionSeq)
+	if !m.agentAlertRuns.Due(w.ID, to, w.AgentCompletionSeq) {
+		return
+	}
+
 	if agentAlertQuiet(w, to) {
 		return
 	}
@@ -173,6 +185,15 @@ func (m *OS) fireAgentAlert(w *terminal.Window, from, to string, policy config.A
 	word, sev := agentTransitionNotice(to)
 	if word == "" {
 		return
+	}
+	// A parked alert is checked again: the run may have alerted while it
+	// waited.
+	if !m.agentAlertRuns.Due(w.ID, to, w.AgentCompletionSeq) {
+		return
+	}
+	m.agentAlertRuns.Note(w.ID, to, w.AgentCompletionSeq)
+	if n := m.agentAlertRuns.Len(); n > 2*len(m.Windows)+16 {
+		m.agentAlertRuns.Keep(func(id string) bool { return m.windowByID(id) != nil })
 	}
 	name := m.agentAlertName(w)
 	text := name + " " + word

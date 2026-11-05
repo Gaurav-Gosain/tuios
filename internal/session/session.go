@@ -8,6 +8,7 @@ import (
 	"io"
 
 	"github.com/Gaurav-Gosain/tuios/internal/dnd"
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 
 	"log"
 	"maps"
@@ -157,6 +158,9 @@ type WindowState struct {
 	DnDAccepts bool `json:"dnd_accepts,omitempty"`
 	DnDOffers  bool `json:"dnd_offers,omitempty"`
 	DnDID      int  `json:"dnd_id,omitempty"`
+	// DnDOwner is the process group the registration is bound to, which a
+	// client on this machine checks as the daemon does.
+	DnDOwner int `json:"dnd_owner,omitempty"`
 	// Unplaced marks a window the daemon created whose X/Y/Width/Height are a
 	// nominal box rather than a position anyone chose. The daemon has no viewport
 	// and cannot place a window; a client that receives an unplaced window puts it
@@ -350,6 +354,11 @@ type WindowState struct {
 	// so it costs no extra process reads and may be one poll out of date, which
 	// is fine for a label.
 	ForegroundCmd string `json:"foreground_cmd,omitempty"`
+	// SSHOffer is set while the pane's foreground program is an interactive
+	// ssh or mosh login to a machine that no [hosts] entry reaches, so the
+	// client can offer to add it. Nil otherwise. Daemon-owned and refreshed
+	// by the detection poll, like ForegroundCmd. See ssh_offer.go.
+	SSHOffer *SSHOffer `json:"ssh_offer,omitempty"`
 	// ShellPID is the process id of the pane's shell, as the daemon that spawned
 	// it knows it. Zero means the daemon has no live process for the pane, which
 	// is every window with no PTY and every window on a build that predates the
@@ -472,6 +481,15 @@ type SessionState struct {
 	// session's, and clears the field. Zero is a client too old to say. See
 	// layout_gen.go.
 	LayoutGen uint64 `json:"layout_gen,omitempty"`
+	// DaemonLayout is the Version at which the daemon last changed a split
+	// tree or a zoom itself (split-window, zoom-window, swap-window,
+	// resize-window, move-window --beside), zero when it never has. A client
+	// that applies a state carrying a newer one than it has seen sends its
+	// rectangles of the new layout, which the daemon does not compute while
+	// a client shows the session. A tree that another client changed leaves
+	// it alone, so that client's push is not answered with a stale one. A
+	// push does not carry it.
+	DaemonLayout int `json:"daemon_layout,omitempty"`
 	// Accent is an optional accent for the session, recorded verbatim the way
 	// Options are: the daemon has no palette and does not interpret it. Clients
 	// read it as a colour name from the ANSI sixteen or as a hex literal, and an
@@ -1208,6 +1226,9 @@ type PTY struct {
 	lastDetectScan atomic.Int64
 	detectSkips    atomic.Int32
 
+	// sshOffer is the check for the offer to add a machine. See ssh_offer.go.
+	sshOffer sshOfferCheck
+
 	// screenSettle is the one-shot that scans the screen after a pane goes quiet.
 	// It is a timer rather than a ticker so a silent pane costs nothing, which is
 	// the rule the whole daemon is built to.
@@ -1367,7 +1388,7 @@ type Session struct {
 	// set while no client was attached, guarded by stateMu. See
 	// option_pending.go.
 	optionApplyMu  sync.Mutex
-	optionsWaiting map[string]string
+	optionsWaiting map[string]waitingOption
 
 	// Identity
 	ID string
@@ -1451,6 +1472,13 @@ type Session struct {
 	// Version, so a move by one client is invisible to focusMovedVersion, and a
 	// stale push from another client built at that version may predate it.
 	clientFocusMoved map[string]int
+	// askedFocusMoved is, by push origin, the daemon mutations that moved
+	// the focus because that client asked for it (a new window with focus)
+	// and that the client's pushes have not yet shown it has seen, oldest
+	// first, guarded by stateMu. The client sent each request before any
+	// push it sends next, so such a push may keep a focus it moved since. See
+	// pushOwnsFocusLocked.
+	askedFocusMoved map[string]*askedFocusMoves
 	// workspaceTrail is the workspaces the session has shown, oldest first,
 	// each at most once, guarded by stateMu. When the workspace on screen
 	// loses its last pane the session goes back along it. See
@@ -1520,6 +1548,10 @@ type Session struct {
 	// count as a focus move, so a stale push still keeps its own focus. Only
 	// a FocusIfShown window sets it. See ExecuteCommandPayload.FocusIfShown.
 	focusNeutral bool
+	// focusAskedBy is set inside mutateState to the push origin of the client
+	// that asked for the mutation's focus move. The move then goes to
+	// askedFocusMoved, not to focusMovedVersion.
+	focusAskedBy string
 	// movingWindow is set inside mutateState by the half of a move to
 	// another session that runs here, guarded by stateMu. The window that
 	// leaves raises no window-closed, and the one that arrives raises
@@ -1541,6 +1573,9 @@ type Session struct {
 	// wakes are the daemon's idle latches, raised by this session's panes
 	// and state. Nil until the daemon adopts the session. See idle_wakes.go.
 	wakes atomic.Pointer[idleWakes]
+	// offerProbe is the daemon's check for the offer to add a machine. Nil
+	// until the daemon adopts the session. See ssh_offer.go.
+	offerProbe atomic.Pointer[sshOfferProbe]
 	// stateWake is closed by noteStateChangeLocked to wake WaitState. Guarded
 	// by stateWakeMu, which is never held with another lock taken after it.
 	stateWake   chan struct{}
@@ -1961,9 +1996,16 @@ func (s *Session) historyPolicy() HistoryPolicy {
 // has since cd'd to. The shell's process comes first, then the record, which a
 // snapshot fills with the shell's OSC 7 report; see windowCwd. "" is the
 // fallback after that, and the caller then uses the session's start directory.
-func (s *Session) inheritedCwd() string {
+//
+// caller is the folder of the process that asked, when it runs in a pane (see
+// Daemon.callerCwd). It wins over the focused pane: an agent in one pane that
+// opens another means its own folder, not the one the person is looking at.
+func (s *Session) inheritedCwd(caller string) string {
 	if s.config == nil || !s.config.InheritCwd {
 		return ""
+	}
+	if caller != "" {
+		return caller
 	}
 	return s.windowCwd(s.GetState().FocusedWindowID)
 }
@@ -2746,7 +2788,7 @@ func (s *Session) installPTY(ctx context.Context, cancel context.CancelFunc, id 
 			if cmd != dnd.Code || sp.host != "" || !s.dragAndDrop() {
 				return
 			}
-			if reply := pty.dnd.note(data); reply != nil {
+			if reply := pty.dnd.note(data, func() int { return ForegroundGroup(pty.ShellPID()) }); reply != nil {
 				terminal.WriteResponse(reply)
 			}
 		},
@@ -2922,7 +2964,7 @@ func (s *Session) ClosePTY(id string) error {
 
 	pty, exists := s.ptys[id]
 	if !exists {
-		return fmt.Errorf("PTY %s not found", id)
+		return errfmt.Errorf("PTY %s not found", id)
 	}
 
 	delete(s.ptys, id)
@@ -3014,7 +3056,7 @@ func (s *Session) fillLiveFacts(state *SessionState) {
 		w.CwdHost = place.elsewhere
 		// The drag and drop registration is live too, and the daemon's alone.
 		dnd := live[w.PTYID].dnd
-		w.DnDAccepts, w.DnDOffers, w.DnDID = dnd.accepts, dnd.offers, dnd.id
+		w.DnDAccepts, w.DnDOffers, w.DnDID, w.DnDOwner = dnd.accepts, dnd.offers, dnd.id, dnd.owner
 		switch {
 		case place.cwd != "":
 			w.Cwd = place.cwd
@@ -3305,7 +3347,7 @@ func (s *Session) SetNote(target, note string) (string, error) {
 			return err
 		}
 		if idx < 0 {
-			return fmt.Errorf("no window found matching %q", target)
+			return errfmt.Errorf("no window found matching %q", target)
 		}
 		st.Windows[idx].Note = note
 		id = st.Windows[idx].ID
@@ -3539,6 +3581,7 @@ func (s *Session) ForgetPush(origin string) {
 	defer s.stateMu.Unlock()
 	delete(s.pushSeen, origin)
 	delete(s.clientFocusMoved, origin)
+	delete(s.askedFocusMoved, origin)
 }
 
 // UpdateStateFrom is UpdateState for a push from a client that may or may not
@@ -3581,7 +3624,7 @@ func (s *Session) updateStateFrom(state *SessionState, seen bool) (accepted, beh
 		if state.BaseVersion != 0 && s.missedMutationLocked(state.BaseVersion, prev.Version) {
 			mine := focusViewOf(state)
 			reconcileStale(state, prev, s.hasLivePTY)
-			if s.pushOwnsFocusLocked(origin, state.BaseVersion) {
+			if s.pushOwnsFocusLocked(origin, state.BaseVersion, mine) {
 				// Nothing the client missed moved the focus, so the focus in
 				// the push is the person's latest move.
 				keepClientFocus(state, mine)
@@ -3613,6 +3656,12 @@ func (s *Session) updateStateFrom(state *SessionState, seen bool) (accepted, beh
 		// 0 without it, because the reply handed the current client the older
 		// client's tree after the older client had already taken the current
 		// one. A pair with a v0.8.0 client stays last-writer-wins.
+	}
+	if moves := s.askedFocusMoved[origin]; moves != nil && state.BaseVersion != 0 {
+		moves.seen(state.BaseVersion)
+		if moves.last() == 0 {
+			delete(s.askedFocusMoved, origin)
+		}
 	}
 	state.BaseVersion = 0
 
@@ -3655,11 +3704,21 @@ func (s *Session) updateStateFrom(state *SessionState, seen bool) (accepted, beh
 }
 
 // pushOwnsFocusLocked reports whether a stale push from origin, built at base,
-// may keep its own focus: no daemon move and no other client's move of the
-// focus landed at or after base. Such a move may postdate the push, and the
+// may keep its own focus, mine: no daemon move and no other client's move of
+// the focus landed at or after base. Such a move may postdate the push, and the
 // push would undo it. The origin's own earlier moves do not count: the push
-// is newer than they are. The caller holds stateMu.
-func (s *Session) pushOwnsFocusLocked(origin string, base int) bool {
+// is newer than they are.
+//
+// A daemon move the origin asked for is the origin's own as well, when the
+// push moved the focus away from where it was before that move. The client
+// sent the request first, so the push is the newer of the two. Without this,
+// a switch made just after a new-window key, before the client had seen the
+// window, was overridden: the session went back to the new window's
+// workspace. A push that still shows the focus from before the move did not
+// move it, and the window the client asked for keeps the focus.
+//
+// The caller holds stateMu.
+func (s *Session) pushOwnsFocusLocked(origin string, base int, mine focusView) bool {
 	if base < s.focusMovedVersion {
 		return false
 	}
@@ -3668,7 +3727,85 @@ func (s *Session) pushOwnsFocusLocked(origin string, base int) bool {
 			return false
 		}
 	}
+	for o, moves := range s.askedFocusMoved {
+		if o != origin {
+			if moves.last() > base {
+				return false
+			}
+			continue
+		}
+		// The focus the push would show had it not moved is the one from
+		// before the first move it has not seen.
+		m, ok := moves.firstAfter(base)
+		if !ok {
+			continue
+		}
+		if m.version == 0 || (mine.window == m.before.window && mine.workspace == m.before.workspace) {
+			return false
+		}
+	}
 	return true
+}
+
+// askedFocusMove is a daemon move of the focus that a client asked for:
+// the version it made, and the focus just before it.
+type askedFocusMove struct {
+	version int
+	before  focusView
+}
+
+// maxAskedFocusMoves bounds askedFocusMoves. A client that has more requests
+// in flight than this keeps the session's focus on a stale push.
+const maxAskedFocusMoves = 16
+
+// askedFocusMoves is one client's askedFocusMove records, oldest first.
+// dropped is the newest version let go to stay in bound.
+type askedFocusMoves struct {
+	moves   []askedFocusMove
+	dropped int
+}
+
+func (a *askedFocusMoves) add(m askedFocusMove) {
+	if len(a.moves) == maxAskedFocusMoves {
+		a.dropped = a.moves[0].version
+		a.moves = a.moves[1:]
+	}
+	a.moves = append(a.moves, m)
+}
+
+// last is the version of the newest record, zero for none.
+func (a *askedFocusMoves) last() int {
+	if len(a.moves) == 0 {
+		return max(a.dropped, 0)
+	}
+	return a.moves[len(a.moves)-1].version
+}
+
+// firstAfter returns the oldest record a push built at base has not seen.
+// ok is false when it has seen them all. A record with version zero means
+// the oldest unseen one was let go, and its focus is not known.
+func (a *askedFocusMoves) firstAfter(base int) (askedFocusMove, bool) {
+	if base < a.dropped {
+		return askedFocusMove{}, true
+	}
+	for _, m := range a.moves {
+		if m.version > base {
+			return m, true
+		}
+	}
+	return askedFocusMove{}, false
+}
+
+// seen drops the records a push built at base has seen.
+func (a *askedFocusMoves) seen(base int) {
+	if base >= a.dropped {
+		a.dropped = 0
+	}
+	i := 0
+	for i < len(a.moves) && a.moves[i].version <= base {
+		i++
+	}
+	a.moves = a.moves[i:]
 }
 
 // markFocusIntentLocked records, from inside a mutateState function, that the
@@ -3705,9 +3842,9 @@ func (s *Session) mutateStateLocked(fn func(state *SessionState) error) (*Sessio
 
 	before := snapshotLifecycle(s.state)
 	focusBefore := focusViewOf(s.state)
-	s.focusIntent, s.focusNeutral = false, false
+	s.focusIntent, s.focusNeutral, s.focusAskedBy = false, false, ""
 	if err := fn(s.state); err != nil {
-		s.focusIntent, s.focusNeutral = false, false
+		s.focusIntent, s.focusNeutral, s.focusAskedBy = false, false, ""
 		return nil, err
 	}
 	s.noteAgentTurnsLocked(before, time.Now().UnixNano())
@@ -3723,9 +3860,21 @@ func (s *Session) mutateStateLocked(fn func(state *SessionState) error) (*Sessio
 	// last.
 	s.state.Version++
 	if !s.focusNeutral && (s.focusIntent || !focusBefore.sameFocus(focusViewOf(s.state))) {
-		s.focusMovedVersion = s.state.Version
+		if s.focusAskedBy != "" {
+			if s.askedFocusMoved == nil {
+				s.askedFocusMoved = make(map[string]*askedFocusMoves)
+			}
+			moves := s.askedFocusMoved[s.focusAskedBy]
+			if moves == nil {
+				moves = &askedFocusMoves{}
+				s.askedFocusMoved[s.focusAskedBy] = moves
+			}
+			moves.add(askedFocusMove{version: s.state.Version, before: focusBefore})
+		} else {
+			s.focusMovedVersion = s.state.Version
+		}
 	}
-	s.focusIntent, s.focusNeutral = false, false
+	s.focusIntent, s.focusNeutral, s.focusAskedBy = false, false, ""
 	if s.noteWorkspacesLocked() {
 		s.noteRenumberLocked()
 	}
@@ -4558,7 +4707,7 @@ func (p *PTY) unsubscribe(clientID string, only *ptySubscriber) int64 {
 // that memory. See frame_budget.go.
 func (p *PTY) Write(data []byte) (int, error) {
 	if p.pty == nil {
-		return 0, fmt.Errorf("PTY not available")
+		return 0, errfmt.Errorf("PTY not available")
 	}
 	if len(data) > largeFrame {
 		if err := p.takeLargeSlot(); err != nil {

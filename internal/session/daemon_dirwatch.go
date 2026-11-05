@@ -17,6 +17,8 @@ import (
 	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/dirwatch"
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
+	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 )
 
 // Watching a listed folder for a client that cannot watch it itself.
@@ -90,7 +92,7 @@ func (cs *connState) stopDirWatch() { cs.dirWatch.replace(false) }
 func (d *Daemon) handleWatchDir(cs *connState, msg *Message) error {
 	var p WatchDirPayload
 	if err := msg.ParsePayload(&p); err != nil {
-		return fmt.Errorf("invalid watch-dir payload: %w", err)
+		return errfmt.Errorf("invalid watch-dir payload: %w", err)
 	}
 	if p.Dir == "" || !filepath.IsAbs(p.Dir) {
 		cs.dirWatch.replace(false)
@@ -228,8 +230,8 @@ func (d *Daemon) watchRemoteDir(host, dir string, done <-chan struct{}, notify f
 			Changed bool   `json:"changed"`
 			Names   string `json:"names"`
 		}
-		if err := json.Unmarshal(raw, &res); err != nil {
-			return fmt.Errorf("an answer this build cannot read: %w", err)
+		if err := jsonx.Unmarshal(raw, &res); err != nil {
+			return errfmt.Errorf("an answer this build cannot read: %w", err)
 		}
 		after = res.Names
 		timeout = remoteDirWaitMS

@@ -14,10 +14,10 @@
 package serverscope
 
 import (
-	"fmt"
 	"os"
 	"path/filepath"
 
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"github.com/adrg/xdg"
 )
 
@@ -65,16 +65,16 @@ func Name() string { return name }
 // is joined to is accepted.
 func Validate(s string) error {
 	if s == "" {
-		return fmt.Errorf("server name is empty")
+		return errfmt.Errorf("server name is empty")
 	}
 	if len(s) > MaxNameLen {
-		return fmt.Errorf("server name %q is longer than %d characters", s, MaxNameLen)
+		return errfmt.Errorf("server name %q is longer than %d characters", s, MaxNameLen)
 	}
 	for _, r := range s {
 		switch {
 		case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r >= '0' && r <= '9', r == '-', r == '_':
 		default:
-			return fmt.Errorf("server name %q may only contain letters, digits, '-' and '_'", s)
+			return errfmt.Errorf("server name %q may only contain letters, digits, '-' and '_'", s)
 		}
 	}
 	return nil
@@ -112,7 +112,7 @@ func Apply(s string) error {
 func ApplyEnv() error {
 	v := os.Getenv(Env)
 	if err := Apply(v); err != nil {
-		return fmt.Errorf("%s is %q, which is not a valid server name. A name is 1 to %d letters, digits, '-' and '_'. Unset %s or set it to a valid name", Env, v, MaxNameLen, Env)
+		return errfmt.Errorf("%s is %q, which is not a valid server name. A name is 1 to %d letters, digits, '-' and '_'. Unset %s or set it to a valid name", Env, v, MaxNameLen, Env)
 	}
 	return nil
 }

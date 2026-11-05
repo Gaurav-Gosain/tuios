@@ -140,14 +140,6 @@ func SetOmarchyPalette(p swatch.Palette) bool {
 	return true
 }
 
-// OmarchyPalette returns the palette the omarchy id holds, and false before
-// one was read.
-func OmarchyPalette() (swatch.Palette, bool) {
-	omarchyState.Lock()
-	defer omarchyState.Unlock()
-	return omarchyState.palette, omarchyState.valid
-}
-
 // registerOmarchyThemes registers every installed Omarchy theme as
 // omarchy/NAME, and the applied one as omarchy. Runs with the registry, once.
 func registerOmarchyThemes() {

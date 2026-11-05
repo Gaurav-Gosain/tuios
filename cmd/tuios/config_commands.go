@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
@@ -213,7 +214,7 @@ include list. Use --dry-run to see the keys first.`,
 func printConfigPath() error {
 	path, err := config.GetConfigPath()
 	if err != nil {
-		return fmt.Errorf("could not determine config path: %w", err)
+		return errfmt.Errorf("could not determine config path: %w", err)
 	}
 	fmt.Println(path)
 	return nil
@@ -224,14 +225,14 @@ func printConfigPath() error {
 func editConfigFile() error {
 	configPath, err := config.GetConfigPath()
 	if err != nil {
-		return fmt.Errorf("could not determine config path: %w", err)
+		return errfmt.Errorf("could not determine config path: %w", err)
 	}
 
 	if _, err := os.Stat(configPath); os.IsNotExist(err) {
 		fmt.Printf("Config file doesn't exist, creating default at: %s\n", configPath)
 		_, err := config.LoadUserConfig()
 		if err != nil {
-			return fmt.Errorf("could not create config file: %w", err)
+			return errfmt.Errorf("could not create config file: %w", err)
 		}
 	}
 
@@ -248,7 +249,7 @@ func editConfigFile() error {
 		}
 	}
 	if editor == "" {
-		return fmt.Errorf("no editor found. Please set $EDITOR environment variable")
+		return errfmt.Errorf("no editor found. Please set $EDITOR environment variable")
 	}
 
 	cmd := exec.Command(editor, configPath)
@@ -257,7 +258,7 @@ func editConfigFile() error {
 	cmd.Stderr = os.Stderr
 
 	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("failed to open editor: %w", err)
+		return errfmt.Errorf("failed to open editor: %w", err)
 	}
 	return nil
 }
@@ -268,7 +269,7 @@ func editConfigFile() error {
 func resetConfigToDefaults() error {
 	configPath, err := config.GetConfigPath()
 	if err != nil {
-		return fmt.Errorf("could not determine config path: %w", err)
+		return errfmt.Errorf("could not determine config path: %w", err)
 	}
 
 	if _, err := os.Stat(configPath); err == nil {
@@ -290,7 +291,7 @@ func resetConfigToDefaults() error {
 	// every file the config includes applies. The include list stays: it is
 	// where the rest of the config is, not a setting.
 	if err := config.ResetConfig(configPath); err != nil {
-		return fmt.Errorf("failed to write config file: %w", err)
+		return errfmt.Errorf("failed to write config file: %w", err)
 	}
 	fmt.Printf("Configuration reset to defaults\n")
 	fmt.Printf("  Location: %s\n", configPath)
@@ -319,15 +320,15 @@ func resetConfigToDefaults() error {
 // bright ANSI colors with their RGB values and hexadecimal representations.
 func previewThemeColors(themeName string) error {
 	if !slices.Contains(theme.AvailableThemes(), themeName) {
-		return fmt.Errorf("no theme named %q. Run 'tuios list-themes' to see the themes", themeName)
+		return errfmt.Errorf("no theme named %q. Run 'tuios list-themes' to see the themes", themeName)
 	}
 	if err := theme.Initialize(themeName); err != nil {
-		return fmt.Errorf("failed to initialize theme: %w", err)
+		return errfmt.Errorf("failed to initialize theme: %w", err)
 	}
 
 	currentTheme := theme.Current()
 	if currentTheme == nil {
-		return fmt.Errorf("no theme named %q. Run 'tuios list-themes' to see the themes", themeName)
+		return errfmt.Errorf("no theme named %q. Run 'tuios list-themes' to see the themes", themeName)
 	}
 
 	fmt.Printf("Theme: %s\n\n", themeName)

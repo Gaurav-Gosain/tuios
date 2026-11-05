@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"github.com/Gaurav-Gosain/tuios/internal/herdrplugin"
 	"github.com/spf13/cobra"
 )
@@ -50,15 +51,15 @@ func approvePlugin(out io.Writer, id string, allow, admin, yes bool) error {
 	e := herdrplugin.Find(entries, id)
 	switch {
 	case e == nil:
-		return fmt.Errorf("no plugin has the id %s. Run tuios plugins list to see the ids", id)
+		return errfmt.Errorf("no plugin has the id %s. Run tuios plugins list to see the ids", id)
 	case e.Plugin == nil:
-		return fmt.Errorf("the manifest of %s cannot be read: %s", id, e.Err.Msg)
+		return errfmt.Errorf("the manifest of %s cannot be read: %s", id, e.Err.Msg)
 	case e.Plugin.Format != herdrplugin.FormatTuios:
-		return fmt.Errorf("%s is a herdr plugin. Only a tuios plugin needs an approval. Run tuios plugins enable %s", id, id)
+		return errfmt.Errorf("%s is a herdr plugin. Only a tuios plugin needs an approval. Run tuios plugins enable %s", id, id)
 	}
 	p := e.Plugin
 	if allow && slices.Contains(p.Grants, "admin") && !admin {
-		return fmt.Errorf("%s asks for the admin grant, which reaches every pane and verb. To give it, run the command again with --grant admin", id)
+		return errfmt.Errorf("%s asks for the admin grant, which reaches every pane and verb. To give it, run the command again with --grant admin", id)
 	}
 	if allow {
 		fmt.Fprintf(out, "\nAllow %s %s (tuios plugin)\n", p.PluginID, shownArgv(p.Version))

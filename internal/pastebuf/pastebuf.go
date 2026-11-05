@@ -39,6 +39,8 @@ import (
 	"time"
 	"unicode"
 	"unicode/utf8"
+
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 )
 
 // The defaults, used when the config says nothing.
@@ -266,7 +268,7 @@ func (s *Store) set(name, data string, appendTo bool, owner Owner, change Filter
 	if name != "" {
 		idx = s.index(name)
 		if change != nil && (idx < 0 || !change(s.bufs[idx])) {
-			return Buffer{}, fmt.Errorf("%w: %s", ErrNotFound, name)
+			return Buffer{}, errfmt.Errorf("%w: %s", ErrNotFound, name)
 		}
 		if idx < 0 && automaticName(name) {
 			return Buffer{}, ErrReservedName
@@ -279,7 +281,7 @@ func (s *Store) set(name, data string, appendTo bool, owner Owner, change Filter
 		data = s.bufs[idx].Data + data
 	}
 	if len(data) > s.maxBytes {
-		return Buffer{}, fmt.Errorf("%w: %d bytes, the cap is %d", ErrTooLarge, len(data), s.maxBytes)
+		return Buffer{}, errfmt.Errorf("%w: %d bytes, the cap is %d", ErrTooLarge, len(data), s.maxBytes)
 	}
 	b := Buffer{Name: name, Data: data, Created: time.Now(), Owner: owner, Version: newVersion()}
 	if idx >= 0 {
@@ -355,7 +357,7 @@ func (s *Store) find(name string, f Filter) (int, error) {
 	if i := s.index(name); i >= 0 && f.sees(s.bufs[i]) {
 		return i, nil
 	}
-	return -1, fmt.Errorf("%w: %s", ErrNotFound, name)
+	return -1, errfmt.Errorf("%w: %s", ErrNotFound, name)
 }
 
 // Get returns the buffer called name, or the newest automatic one when name
@@ -370,7 +372,7 @@ func (s *Store) Get(name string, version uint64, f Filter) (Buffer, error) {
 	}
 	b := s.bufs[i]
 	if version != 0 && b.Version != version {
-		return Buffer{}, fmt.Errorf("%w: %s", ErrChanged, b.Name)
+		return Buffer{}, errfmt.Errorf("%w: %s", ErrChanged, b.Name)
 	}
 	return b, nil
 }
@@ -401,7 +403,7 @@ func (s *Store) Delete(name string, version uint64, change Filter) (Buffer, erro
 	}
 	b := s.bufs[i]
 	if version != 0 && b.Version != version {
-		return Buffer{}, fmt.Errorf("%w: %s", ErrChanged, b.Name)
+		return Buffer{}, errfmt.Errorf("%w: %s", ErrChanged, b.Name)
 	}
 	s.remove(i)
 	return b, nil

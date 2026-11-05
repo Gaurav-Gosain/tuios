@@ -1,8 +1,9 @@
 package harness
 
 import (
-	"fmt"
 	"strings"
+
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 )
 
 // Input is how the daemon types a prompt into this harness: the key that
@@ -63,14 +64,14 @@ func (in *Input) normalize() error {
 		in.Submit = SubmitCR
 	case SubmitCR, SubmitLF:
 	default:
-		return fmt.Errorf("submit %q (cr or lf)", in.Submit)
+		return errfmt.Errorf("submit %q (cr or lf)", in.Submit)
 	}
 	switch in.Images = strings.ToLower(strings.TrimSpace(in.Images)); in.Images {
 	case "":
 		in.Images = ImagesPathText
 	case ImagesPathPaste, ImagesPathText, ImagesNone:
 	default:
-		return fmt.Errorf("images %q (path_paste, path_text or none)", in.Images)
+		return errfmt.Errorf("images %q (path_paste, path_text or none)", in.Images)
 	}
 	return nil
 }

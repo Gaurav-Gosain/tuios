@@ -85,11 +85,21 @@ func TestTmuxPresetDrivesWorkspaces(t *testing.T) {
 // a workspace, ctrl+a ctrl+a goes back to the last one, and ctrl+a a sends a
 // literal ctrl+a to the pane, which cat -v prints as ^A.
 //
+// The daemon holds the pane ctrl+a c asks for, so ctrl+a ctrl+a reaches it
+// before the client has seen that pane, as on a slow machine. The session
+// must still end on workspace 1, with the new pane on workspace 2.
+//
 // Negative control: with leader_twice = "send" in the config, ctrl+a ctrl+a
-// sends ^A instead and the session stays on workspace 2.
+// sends ^A instead and the session stays on workspace 2. With the daemon
+// counting the new pane's focus move as its own (no focusAskedBy in
+// handleExecuteCommand), the held switch is overridden and the session ends
+// on workspace 2.
 func TestScreenPresetLeaderTwiceAndSend(t *testing.T) {
+	hold := filepath.Join(t.TempDir(), "hold-new-window")
+	t.Setenv("TUIOS_E2E_HOLD_NEW_WINDOW", hold)
 	term, base := panesSession(t, "screenkeys", "\n[keybindings]\npreset = \"screen\"\n")
 	waitForSettledGeometryIn(t, base, "screenkeys", 1)
+	setHold(t, hold, "1000")
 	if err := term.SendKeys(tuitest.Ctrl('a'), "c"); err != nil {
 		t.Fatalf("press ctrl+a c: %v", err)
 	}
@@ -98,6 +108,19 @@ func TestScreenPresetLeaderTwiceAndSend(t *testing.T) {
 		t.Fatalf("press ctrl+a ctrl+a: %v", err)
 	}
 	waitWorkspace(t, base, "screenkeys", 1)
+	deadline := time.Now().Add(uiTimeout)
+	for !slices.ContainsFunc(slices.Collect(maps.Values(listPanes(t, base, "screenkeys"))), func(p paneRow) bool { return p.Workspace == 2 }) {
+		if time.Now().After(deadline) {
+			t.Fatalf("ctrl+a c opened no pane on workspace 2")
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	if err := os.Remove(hold); err != nil {
+		t.Fatal(err)
+	}
+	if info := sessionInfoOf(t, base, "screenkeys"); info.CurrentWorkspace != 1 {
+		t.Fatalf("ASSERTION: the pane ctrl+a c opened took the session back to workspace %d, want 1", info.CurrentWorkspace)
+	}
 
 	enterTerminalMode(t, term)
 	if err := term.SendKeys("cat -v", tuitest.Enter); err != nil {

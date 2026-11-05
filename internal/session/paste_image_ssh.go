@@ -3,7 +3,6 @@ package session
 import (
 	"cmp"
 	"context"
-	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
@@ -12,6 +11,7 @@ import (
 	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/federation"
+	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 )
 
 // Pasting an image into a pane of this daemon whose shell is on another
@@ -85,45 +85,14 @@ func (d *Daemon) paneRemoteHost(pty *PTY) (host string, ok bool, err error) {
 		return "", false, nil
 	}
 	machine := destHost(login.dest)
-	var args []string
-	if !login.mosh {
-		args = append(args, login.opts...)
-	}
-	want, resolved := resolveSSH(append(args, "--", login.dest))
-	if !resolved || !want.Target.Complete() {
+	want, entries, matches, resolved := d.loginHosts(login)
+	if !resolved {
 		return "", true, pasteRefusal{detail: "The pane runs on " + machine + ", and ssh cannot tell where that is. Nothing was pasted."}
-	}
-
-	type entry struct {
-		name   string
-		host   federation.Host
-		target federation.SSHTarget
-	}
-	var entries []entry
-	if d.federation != nil {
-		table := d.federation.Table()
-		for _, name := range table.Names() {
-			h, err := table.Lookup(name)
-			if err != nil || h.Addr == "" {
-				continue
-			}
-			e := entry{name: name, host: h}
-			if c, ok := readHostSSH(h); ok {
-				e.target = c.Target
-			}
-			entries = append(entries, e)
-		}
-	}
-	var matches []string
-	for _, e := range entries {
-		if e.target.Complete() && e.target == want.Target {
-			matches = append(matches, e.name)
-		}
 	}
 
 	// ssh inside ssh: the shell over there reports a machine that is another
 	// entry, not the one the login reaches.
-	if report := strings.ToLower(pty.place.Elsewhere()); report != "" && !reportIsLogin(report, machine, want.Target.HostName) {
+	if report := strings.ToLower(pty.place.Elsewhere()); report != "" && !reportIsLogin(report, machine, want.HostName) {
 		for _, e := range entries {
 			if slices.Contains(matches, e.name) {
 				continue
@@ -142,6 +111,50 @@ func (d *Daemon) paneRemoteHost(pty *PTY) (host string, ok bool, err error) {
 	default:
 		return "", true, pasteRefusal{detail: "The pane runs on " + machine + ", and the hosts " + strings.Join(matches, " and ") + " are all that machine. Keep one of them in [hosts]."}
 	}
+}
+
+// hostEntry is a [hosts] entry with the target ssh -G resolves it to.
+type hostEntry struct {
+	name   string
+	host   federation.Host
+	target federation.SSHTarget
+}
+
+// loginHosts resolves an ssh or mosh login with ssh -G, and names every
+// [hosts] entry that resolves to the same target. entries is every entry with
+// an address, resolved or not. ok is false when ssh cannot say where the
+// login goes. The paste into a pane on another machine and the offer to add a
+// machine both decide with it, so they cannot disagree on what "a machine
+// here" is.
+func (d *Daemon) loginHosts(login remoteLogin) (want federation.SSHTarget, entries []hostEntry, matches []string, ok bool) {
+	var args []string
+	if !login.mosh {
+		args = append(args, login.opts...)
+	}
+	c, resolved := resolveSSH(append(args, "--", login.dest))
+	if !resolved || !c.Target.Complete() {
+		return federation.SSHTarget{}, nil, nil, false
+	}
+	if d.federation != nil {
+		table := d.federation.Table()
+		for _, name := range table.Names() {
+			h, err := table.Lookup(name)
+			if err != nil || h.Addr == "" {
+				continue
+			}
+			e := hostEntry{name: name, host: h}
+			if hc, ok := readHostSSH(h); ok {
+				e.target = hc.Target
+			}
+			entries = append(entries, e)
+		}
+	}
+	for _, e := range entries {
+		if e.target.Complete() && e.target == c.Target {
+			matches = append(matches, e.name)
+		}
+	}
+	return c.Target, entries, matches, true
 }
 
 // reportIsLogin reports whether an OSC 7 host names the login's machine: its
@@ -194,7 +207,7 @@ func (d *Daemon) pasteToHost(ctx context.Context, host string, data []byte) (str
 		select {
 		case <-tick.C:
 		case <-ctx.Done():
-			params, _ := json.Marshal(map[string]string{"id": j.id})
+			params, _ := jsonx.Marshal(map[string]string{"id": j.id})
 			_, _ = transferControl("cancel")(d, nil, params)
 			return "", ctx.Err()
 		}

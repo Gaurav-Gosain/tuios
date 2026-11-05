@@ -246,12 +246,14 @@ func generateAgentBindings(registry *config.KeybindRegistry, s *config.Settings)
 	for _, action := range []string{
 		config.ActionInboxAllow, config.ActionInboxAllowAlways, config.ActionInboxReply, config.ActionInboxDenyReason,
 		config.ActionInboxPeek, config.ActionInboxGo, config.ActionInboxWrite, config.ActionInboxNewAgent, config.ActionInboxCompare, config.ActionInboxArtifact,
-		config.ActionInboxBoard, config.ActionInboxTake,
+		config.ActionInboxBoard, config.ActionInboxBoardLayout, config.ActionInboxViewList, config.ActionInboxTake,
+		config.ActionInboxStagePrev, config.ActionInboxStageNext,
 		config.ActionInboxDismiss, config.ActionInboxResume, config.ActionInboxPassOn, config.ActionInboxFilter,
 		config.ActionInboxSelect, config.ActionInboxMailbox, config.ActionInboxReview, config.ActionInboxSnooze,
 		config.ActionInboxSettle, config.ActionInboxUndo, config.ActionInboxShowSnoozed, config.ActionInboxMark, config.ActionInboxMarkAll,
 		config.ActionInboxViewPane, config.ActionInboxOpen, config.ActionInboxBack,
 		config.ActionInboxTabPrev, config.ActionInboxTabNext, config.ActionInboxExpand, config.ActionInboxFold,
+		config.ActionInboxPromptPrev, config.ActionInboxPromptNext,
 		config.ActionInboxDetailDown, config.ActionInboxDetailUp,
 	} {
 		inbox(action, config.ActionDescriptions[action])
@@ -552,6 +554,7 @@ func generateSidebarBindings(registry *config.KeybindRegistry, s *config.Setting
 		fileRow("file_send", "Files: send the file or folder to a host"),
 		fileRow("file_insert_path", "Files: paste the path into the focused pane"),
 		fileRow("file_quick_look", "Files: show a preview of the file or folder"),
+		fileRow("file_open_system", "Files: open with the system opener"),
 		quickLookRow("seek_down", "Preview: move forward in the file"),
 		quickLookRow("seek_up", "Preview: move back in the file"),
 		quickLookRow("go_inside", "Preview: move the keyboard inside the file"),

@@ -2,13 +2,14 @@ package session
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"io"
 	"os"
 	"path/filepath"
 	"sort"
 	"strings"
+
+	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 )
 
 // The daemon's half of the rail's file section.
@@ -309,7 +310,7 @@ func (d *Daemon) remoteListing(host, dir string, maxEntries int) *DirListingPayl
 		return &DirListingPayload{Dir: dir, Err: message}
 	}
 	var out DirListingPayload
-	if json.Unmarshal(raw, &out) != nil {
+	if jsonx.Unmarshal(raw, &out) != nil {
 		return &DirListingPayload{Dir: dir, Err: host + " sent a listing this build cannot read."}
 	}
 	if out.Dir == "" {

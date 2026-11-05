@@ -35,11 +35,12 @@ package transcript
 
 import (
 	"bytes"
-	"encoding/json"
 	"errors"
 	"io"
 	"os"
 	"sync"
+
+	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 )
 
 // Turn is what the transcript says about the agent's current turn. It is
@@ -292,7 +293,7 @@ func (r *Reader) scan(buf []byte, atBoundary bool) (Observation, bool, int) {
 			continue
 		}
 		var rec record
-		if err := json.Unmarshal(line, &rec); err != nil {
+		if err := jsonx.Unmarshal(line, &rec); err != nil {
 			// Dropped without the error, which would quote the line. The count is
 			// the whole diagnostic this package is willing to keep.
 			r.skipped++

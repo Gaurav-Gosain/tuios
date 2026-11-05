@@ -16,6 +16,7 @@ import (
 	"github.com/Gaurav-Gosain/mygo/plugins/terminal"
 	"github.com/Gaurav-Gosain/mygo/ui"
 
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"github.com/Gaurav-Gosain/tuios/internal/guios/proto"
 	"github.com/Gaurav-Gosain/tuios/internal/memtrim"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
@@ -114,7 +115,7 @@ func AttachVia(d Dialer, id string) (*Stream, error) {
 	c := currentOf(host)
 	if c == nil {
 		if host != "" {
-			return nil, fmt.Errorf("not connected to the tuios daemon on %s", host)
+			return nil, errfmt.Errorf("not connected to the tuios daemon on %s", host)
 		}
 		return nil, errors.New("not connected to the tuios daemon")
 	}

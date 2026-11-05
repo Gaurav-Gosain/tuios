@@ -1,7 +1,6 @@
 package herdrplugin
 
 import (
-	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -10,6 +9,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 	"github.com/Gaurav-Gosain/tuios/internal/winpath"
 )
 
@@ -123,8 +123,8 @@ func PathComponent(id string) string {
 		fmt.Fprintf(&b, "%%%02X", c)
 	}
 	s := b.String()
-	if strings.HasSuffix(s, ".") {
-		s = strings.TrimSuffix(s, ".") + "%2E"
+	if before, ok := strings.CutSuffix(s, "."); ok {
+		s = before + "%2E"
 	}
 	switch {
 	case s == "":
@@ -257,7 +257,7 @@ func Discover(d Dirs, enabled []string) []Entry {
 	if d.HerdrConfig != "" {
 		var reg []registryEntry
 		if data, err := os.ReadFile(filepath.Join(d.HerdrConfig, "plugins.json")); err == nil {
-			_ = json.Unmarshal(data, &reg)
+			_ = jsonx.Unmarshal(data, &reg)
 		}
 		for _, r := range reg {
 			if r.ManifestPath == "" {

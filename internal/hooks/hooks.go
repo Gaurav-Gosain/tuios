@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/childproc"
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 )
 
 // Event represents a hook event type.
@@ -417,7 +418,7 @@ func executeHook(cmdStr string, ctx Context, timeout time.Duration) hookResult {
 	err := cmd.Run()
 	res := hookResult{duration: time.Since(start), stderr: tail.String()}
 	if timeout > 0 && errors.Is(cctx.Err(), context.DeadlineExceeded) {
-		res.err = fmt.Errorf("it did not finish in %s and was stopped", timeout)
+		res.err = errfmt.Errorf("it did not finish in %s and was stopped", timeout)
 		res.exitCode = -1
 		return res
 	}

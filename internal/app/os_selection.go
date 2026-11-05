@@ -3,8 +3,6 @@ package app
 import (
 	"bufio"
 	"bytes"
-	"encoding/json"
-	"fmt"
 	"io"
 	"os"
 	"os/exec"
@@ -14,6 +12,8 @@ import (
 	"time"
 
 	tea "charm.land/bubbletea/v2"
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
+	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 	uv "github.com/charmbracelet/ultraviolet"
 	"tuios.dev/vt"
@@ -260,8 +260,8 @@ func captureScrollbackToFile(req scrollbackCaptureRequest, path string) (int, in
 		Content     string `json:"content"`
 		HistoryRows int    `json:"history_rows"`
 	}
-	if err := json.Unmarshal(raw, &res); err != nil {
-		return 0, 0, fmt.Errorf("read the capture: %w", err)
+	if err := jsonx.Unmarshal(raw, &res); err != nil {
+		return 0, 0, errfmt.Errorf("read the capture: %w", err)
 	}
 	_, lines, err := writeScrollbackFile(path, func(out io.Writer) (int, error) {
 		_, err := io.WriteString(out, vt.StripKittyPlaceholders(res.Content))

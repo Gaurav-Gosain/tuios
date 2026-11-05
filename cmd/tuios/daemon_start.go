@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 )
 
@@ -41,7 +42,7 @@ func ensureDaemon() error {
 			What:  fmt.Sprintf("The TUIOS daemon could not be started: %v.", err),
 			Cause: "the tuios binary could not be re-executed, or the socket directory is not writable.",
 			Fix:   "run 'tuios daemon' in another terminal to see why it fails to start.",
-			Err:   fmt.Errorf("%w: %w", errDaemonUnreachable, err),
+			Err:   errfmt.Errorf("%w: %w", errDaemonUnreachable, err),
 		}
 	}
 	return nil
@@ -89,6 +90,13 @@ var spawnDaemon = func() error { return startDaemonBackground() }
 // that starts a daemon on the way to attaching keeps its own --pprof, and
 // handing the address on would make the two processes race to bind it.
 func startDaemonBackground(daemonArgs ...string) error {
+	// An installed service starts the daemon, so the daemon runs under the
+	// service manager and not in the scope of this terminal. A start with
+	// arguments of its own cannot go through the service.
+	if len(daemonArgs) == 0 && startDaemonThroughService() {
+		return nil
+	}
+
 	// On macOS, the TUIOS Daemon app (when installed) starts the daemon, so
 	// its panes keep local network access after the terminal quits.
 	if handled, err := startDaemonThroughApp(daemonArgs); handled {
@@ -97,7 +105,7 @@ func startDaemonBackground(daemonArgs ...string) error {
 
 	executable, err := os.Executable()
 	if err != nil {
-		return fmt.Errorf("failed to get executable path: %w", err)
+		return errfmt.Errorf("failed to get executable path: %w", err)
 	}
 
 	cmd := exec.Command(executable, append([]string{"daemon"}, daemonArgs...)...)
@@ -107,7 +115,7 @@ func startDaemonBackground(daemonArgs ...string) error {
 	cmd.SysProcAttr = daemonSysProcAttr()
 
 	if err := cmd.Start(); err != nil {
-		return fmt.Errorf("failed to start daemon: %w", err)
+		return errfmt.Errorf("failed to start daemon: %w", err)
 	}
 
 	// Reap the child. A daemon that loses the start race exits at once, and
@@ -142,9 +150,23 @@ func startDaemonBackground(daemonArgs ...string) error {
 
 	if childGone {
 		if childErr != nil {
-			return fmt.Errorf("the daemon exited immediately: %w", childErr)
+			return errfmt.Errorf("the daemon exited immediately: %w", childErr)
 		}
 		return errors.New("the daemon exited immediately without taking the socket")
 	}
-	return fmt.Errorf("daemon did not start within %v", daemonStartTimeout)
+	return errfmt.Errorf("daemon did not start within %v", daemonStartTimeout)
+}
+
+// waitForDaemon waits up to timeout for a daemon to answer on the socket.
+func waitForDaemon(timeout time.Duration) bool {
+	deadline := time.Now().Add(timeout)
+	for {
+		if session.IsDaemonRunning() {
+			return true
+		}
+		if time.Now().After(deadline) {
+			return false
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
 }

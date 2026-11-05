@@ -6,6 +6,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 )
 
@@ -86,7 +87,7 @@ func (c *Client) cockpit() (*cockpitConn, error) {
 	var p struct {
 		Nonce string `json:"human_nonce"`
 	}
-	if json.Unmarshal(raw, &p) != nil || p.Nonce == "" {
+	if jsonx.Unmarshal(raw, &p) != nil || p.Nonce == "" {
 		vc.Close()
 		return nil, ErrNotHuman
 	}
@@ -139,7 +140,7 @@ func (c *Client) VerbInto(name string, params map[string]any, human bool, out an
 	if out == nil {
 		return nil
 	}
-	return json.Unmarshal(raw, out)
+	return jsonx.Unmarshal(raw, out)
 }
 
 // Agents lists every agent of every session, and the Inbox.

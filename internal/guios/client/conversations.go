@@ -1,13 +1,13 @@
 package client
 
 import (
-	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
 	"sync"
 
 	"github.com/Gaurav-Gosain/tuios/internal/guios/proto"
+	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 )
 
 // The agents' ended conversations come from the daemon (list-conversations),
@@ -35,7 +35,7 @@ func (c *Client) conversations() ([]proto.Conversation, error) {
 			EndedAt int64  `json:"ended_at"`
 		} `json:"conversations"`
 	}
-	if err := json.Unmarshal(raw, &res); err != nil {
+	if err := jsonx.Unmarshal(raw, &res); err != nil {
 		return nil, err
 	}
 	arch := archivedSet()
@@ -58,7 +58,7 @@ func (c *Client) resumeConversation(p proto.ConversationParams) (proto.Session, 
 		Name string `json:"session"`
 		ID   string `json:"session_id"`
 	}
-	_ = json.Unmarshal(raw, &ns)
+	_ = jsonx.Unmarshal(raw, &ns)
 	if _, err := c.verb("resume-agent", map[string]any{"session": ns.Name, "conversation": p.ID, "harness": harnessOf(p.Agent)}); err != nil {
 		_, _ = c.verb("kill-session", map[string]any{"session": ns.Name})
 		return proto.Session{}, err
@@ -76,7 +76,7 @@ func archivedSet() map[string]bool {
 	defer archivedMu.Unlock()
 	m := map[string]bool{}
 	if b, err := os.ReadFile(archivedPath()); err == nil {
-		_ = json.Unmarshal(b, &m)
+		_ = jsonx.Unmarshal(b, &m)
 	}
 	return m
 }
@@ -94,7 +94,7 @@ func setArchived(agent, id string, on bool) {
 	}
 	archivedMu.Lock()
 	defer archivedMu.Unlock()
-	if b, err := json.Marshal(m); err == nil {
+	if b, err := jsonx.Marshal(m); err == nil {
 		_ = os.MkdirAll(proto.Dir(), 0o700)
 		_ = os.WriteFile(archivedPath(), b, 0o600)
 	}

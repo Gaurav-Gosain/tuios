@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"github.com/Gaurav-Gosain/tuios/internal/guios/git"
 	"github.com/Gaurav-Gosain/tuios/internal/guios/proto"
 )
@@ -123,9 +124,9 @@ func fsRead(p proto.FSReadParams) (proto.FSRead, error) {
 	}
 	defer f.Close()
 	if st, err := f.Stat(); err != nil || st.IsDir() {
-		return proto.FSRead{}, fmt.Errorf("%s is no file", p.Path)
+		return proto.FSRead{}, errfmt.Errorf("%s is no file", p.Path)
 	} else if st.Size() > limit {
-		return proto.FSRead{}, fmt.Errorf("%s is larger than %d bytes", p.Path, limit)
+		return proto.FSRead{}, errfmt.Errorf("%s is larger than %d bytes", p.Path, limit)
 	}
 	b, err := io.ReadAll(io.LimitReader(f, limit))
 	return proto.FSRead{Data: b}, err
@@ -158,11 +159,11 @@ func pokeAt(string) {}
 // delete: absolute, and neither the root of its volume nor the home.
 func changeable(p string) (string, error) {
 	if !filepath.IsAbs(p) {
-		return "", fmt.Errorf("%s is not an absolute path", p)
+		return "", errfmt.Errorf("%s is not an absolute path", p)
 	}
 	p = filepath.Clean(p)
 	if filepath.Dir(p) == p || p == filepath.Clean(proto.Home()) {
-		return "", fmt.Errorf("%s can't change", p)
+		return "", errfmt.Errorf("%s can't change", p)
 	}
 	return p, nil
 }
@@ -185,7 +186,7 @@ func fsCreate(p proto.FSCreateParams) error {
 		}
 	}
 	if errors.Is(err, os.ErrExist) {
-		return fmt.Errorf("%s is there already", filepath.Base(path))
+		return errfmt.Errorf("%s is there already", filepath.Base(path))
 	}
 	if err == nil {
 		pokeAt(path)
@@ -206,7 +207,7 @@ func fsRename(p proto.FSRenameParams) error {
 	}
 	if st, err := os.Lstat(to); err == nil {
 		if fst, ferr := os.Lstat(from); ferr != nil || !os.SameFile(st, fst) {
-			return fmt.Errorf("%s is there already", filepath.Base(to))
+			return errfmt.Errorf("%s is there already", filepath.Base(to))
 		}
 	}
 	if err := os.MkdirAll(filepath.Dir(to), 0o755); err != nil { //nolint:gosec // folders in the person's own tree, as mkdir makes them
@@ -291,7 +292,7 @@ func privateDir(dir string) error {
 // than a week.
 func pasteFile(p proto.PasteFileParams) (proto.PasteFile, error) {
 	if len(p.Data) > maxPaste {
-		return proto.PasteFile{}, fmt.Errorf("a pasted file is at most %d MB", maxPaste>>20)
+		return proto.PasteFile{}, errfmt.Errorf("a pasted file is at most %d MB", maxPaste>>20)
 	}
 	// Its last element, of no directory, with nothing a shell or a system
 	// would take otherwise.

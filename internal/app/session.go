@@ -561,6 +561,12 @@ func (m *OS) ApplyStateSyncFrom(state *session.SessionState, sourceID string) er
 	// A renumber goes first, so everything below reads the windows and the
 	// workspace maps under the numbers the state uses.
 	m.adoptWorkspaceRenumbering(state)
+	// A switch made elsewhere (tuios select-workspace, another client this
+	// one follows) slides like one made here. The workspace being left is
+	// kept before anything below changes it. See workspace_slide.go.
+	if to := clampWorkspace(state.CurrentWorkspace); to != m.CurrentWorkspace {
+		m.beginWorkspaceSlide(m.CurrentWorkspace, to)
+	}
 
 	// The daemon now holds what arrived here, which is not necessarily what
 	// this client last pushed, so the record of that push no longer describes
@@ -1054,7 +1060,9 @@ func (m *OS) ApplyStateSyncFrom(state *session.SessionState, sourceID string) er
 	// offset stays a snapshot field a retile can write, so this ordering is the
 	// only thing telling the two apart. The end state is an op, "the user
 	// scrolled the strip to X", after which a recompute has nothing to say.
-	m.adoptScrollStrip(state.ScrollStrip, focusChanged)
+	m.adoptScrollStrip(state.ScrollStrip, focusChanged, focusChanged && slices.ContainsFunc(created, func(w *terminal.Window) bool {
+		return w.ID == focusAfter
+	}))
 
 	// A sync carries the peer's pane rectangles, and a rectangle is not shared
 	// state: it is what the peer's own render size and the shared tree came to
@@ -1095,13 +1103,14 @@ func (m *OS) ApplyStateSyncFrom(state *session.SessionState, sourceID string) er
 		m.settleBorderMode(m.CurrentWorkspace)
 	}
 
+	zoomRetile := false
 	m.settleSizes(func() {
 		// A popup that arrived in this sync, and every popup already open, is
 		// centred against this client's own bounds. Unconditional for the reason
 		// applyZoomState is: the box moves when the region does, not only when
 		// the flag changes.
 		m.applyPopupRects(false)
-		zoomRetile := m.applyZoomState(unzoomed)
+		zoomRetile = m.applyZoomState(unzoomed)
 		// Tiling switched by a peer. The rectangles arrive in this sync, but the
 		// border each pane draws is this client's own flag, and nothing else
 		// here writes it: a peer turning tiling off left every pane on this
@@ -1127,6 +1136,25 @@ func (m *OS) ApplyStateSyncFrom(state *session.SessionState, sourceID string) er
 			m.ClampWindowsToView()
 		}
 	})
+
+	// A tree or a zoom the daemon changed itself (swap-window, resize-window,
+	// zoom-window) moved the panes, and the push this sync owes carries
+	// no rectangles of a layout this client did not make. The daemon's copy
+	// of the rectangles is then the old layout's, which list-windows and
+	// herdr's pane.layout report, so the new ones are sent. Every client of
+	// the session lays the tree out in the same box, so they agree.
+	//
+	// Only for a change the daemon made (SessionState.DaemonLayout). A tree
+	// op of another client reaches this client with no source too, ahead of
+	// that client's push. Pushing on it sent this client's older snapshot,
+	// which landed after that push and undid it: a pane moved to another
+	// workspace went back, and a minimise or a float was lost.
+	if state.DaemonLayout > m.daemonLayoutSeen {
+		m.daemonLayoutSeen = state.DaemonLayout
+		if treeRetile || zoomRetile {
+			m.SyncStateToDaemon()
+		}
+	}
 
 	// A pane a switch to an empty workspace asked for has arrived.
 	m.settlePaneRequests()
@@ -1404,6 +1432,7 @@ func (m *OS) updateWindowFromState(w *terminal.Window, ws *session.WindowState) 
 	m.noteQuietLifted(w, fromState, fromQuiet, fromKind)
 	m.markHostProgramStatus()
 	w.ForegroundCmd = ws.ForegroundCmd
+	m.noteMachineOffer(w, ws.SSHOffer)
 	// The shell's pid, as the daemon that spawned it knows it, and the only
 	// second source a daemon-backed pane has for the directory it reports over
 	// OSC 7. A locally spawned pane records its own at spawn time, so the daemon
@@ -1570,6 +1599,7 @@ func (m *OS) newWindowFromState(ws *session.WindowState) *terminal.Window {
 	}
 
 	adoptWindowState(window, *ws)
+	m.noteMachineOffer(window, ws.SSHOffer)
 
 	m.installPassthroughs(window)
 	m.setupCwdWatch(window)

@@ -9,6 +9,7 @@ import (
 	"charm.land/lipgloss/v2"
 	"charm.land/lipgloss/v2/table"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"github.com/Gaurav-Gosain/tuios/internal/plural"
 	"github.com/spf13/cobra"
 )
@@ -234,7 +235,7 @@ removes keybindings.leader_key, so the leader is the preset's.`,
 			case len(args) == 1:
 				return keybindsPreset(args[0])
 			}
-			return fmt.Errorf("use: tuios keybinds preset [name | list | show NAME]")
+			return errfmt.Errorf("use: tuios keybinds preset [name | list | show NAME]")
 		},
 	}
 }
@@ -404,7 +405,7 @@ func keybindTableRows(rows []keybindRow) [][]string {
 func listCustomKeybindings() error {
 	userConfig, err := config.LoadUserConfig()
 	if err != nil {
-		return fmt.Errorf("error loading config: %w", err)
+		return errfmt.Errorf("error loading config: %w", err)
 	}
 
 	defaultConfig := config.DefaultConfig()

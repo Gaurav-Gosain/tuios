@@ -2,11 +2,11 @@ package app
 
 import (
 	"errors"
-	"fmt"
 
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"github.com/Gaurav-Gosain/tuios/internal/layout"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
@@ -42,14 +42,14 @@ func (m *OS) treeEditTarget() (*layout.BSPTree, error) {
 func (m *OS) tiledLeaf(tree *layout.BSPTree, id string) (*terminal.Window, int, error) {
 	w := m.windowByID(id)
 	if w == nil {
-		return nil, 0, fmt.Errorf("no pane %s", id)
+		return nil, 0, errfmt.Errorf("no pane %s", id)
 	}
 	if w.Workspace != m.CurrentWorkspace {
-		return nil, 0, fmt.Errorf("pane %s is on workspace %d, not on the workspace on screen", id, w.Workspace)
+		return nil, 0, errfmt.Errorf("pane %s is on workspace %d, not on the workspace on screen", id, w.Workspace)
 	}
 	n := m.GetWindowIntID(id)
 	if !tree.HasWindow(n) {
-		return nil, 0, fmt.Errorf("pane %s is not tiled", id)
+		return nil, 0, errfmt.Errorf("pane %s is not tiled", id)
 	}
 	return w, n, nil
 }
@@ -78,7 +78,7 @@ func (m *OS) MovePaneBeside(id, target string, side layout.Side) error {
 		return err
 	}
 	if n == tn {
-		return fmt.Errorf("pane %s cannot move beside itself", id)
+		return errfmt.Errorf("pane %s cannot move beside itself", id)
 	}
 	// MoveWindow refuses a move that would rebuild the tree it started from,
 	// the pane already on that side of the target. Nothing changes then, and
@@ -101,7 +101,7 @@ func (m *OS) MovePaneToRoot(id string, side layout.Side) error {
 		return err
 	}
 	if !tree.MoveWindowToRoot(n, side) {
-		return fmt.Errorf("pane %s is the only tiled pane", id)
+		return errfmt.Errorf("pane %s is the only tiled pane", id)
 	}
 	_ = m.FocusWindowByID(id)
 	m.finishTreeEdit()
@@ -117,7 +117,7 @@ func (m *OS) SetSplitRatio(split uint64, ratio float64) (float64, error) {
 	}
 	got, ok := tree.SetSplitRatio(split, ratio, m.GetBSPBounds(), m.separatorGap())
 	if !ok {
-		return 0, fmt.Errorf("no split %d on the workspace on screen", split)
+		return 0, errfmt.Errorf("no split %d on the workspace on screen", split)
 	}
 	m.finishTreeEdit()
 	return got, nil
@@ -128,10 +128,10 @@ func (m *OS) SetSplitRatio(split uint64, ratio float64) (float64, error) {
 func (m *OS) SetFloatingGeometry(id string, x, y, width, height int) error {
 	w := m.windowByID(id)
 	if w == nil {
-		return fmt.Errorf("no pane %s", id)
+		return errfmt.Errorf("no pane %s", id)
 	}
 	if m.AutoTiling && !w.IsFloating {
-		return fmt.Errorf("pane %s is tiled, not floating", id)
+		return errfmt.Errorf("pane %s is tiled, not floating", id)
 	}
 	width = max(width, config.DefaultWindowWidth)
 	height = max(height, config.DefaultWindowHeight)
@@ -151,13 +151,13 @@ func (m *OS) SetFloatingGeometry(id string, x, y, width, height int) error {
 func (m *OS) ToggleFloatingByID(id string) error {
 	w := m.windowByID(id)
 	if w == nil {
-		return fmt.Errorf("no pane %s", id)
+		return errfmt.Errorf("no pane %s", id)
 	}
 	if w.IsPopup || w.IsScratch {
-		return fmt.Errorf("pane %s is a popup or a scratch pane, and always floats", id)
+		return errfmt.Errorf("pane %s is a popup or a scratch pane, and always floats", id)
 	}
 	if w.Workspace != m.CurrentWorkspace {
-		return fmt.Errorf("pane %s is on workspace %d, not on the workspace on screen", id, w.Workspace)
+		return errfmt.Errorf("pane %s is on workspace %d, not on the workspace on screen", id, w.Workspace)
 	}
 	m.requireRealLayout()
 	_ = m.FocusWindowByID(id)

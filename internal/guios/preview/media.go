@@ -3,13 +3,14 @@ package preview
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"errors"
 	"image"
 	_ "image/jpeg" // ffmpeg's frames
 	"math"
 	"strconv"
 	"strings"
+
+	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 )
 
 // Films and sound: ffprobe says what a file holds, and ffmpeg reads one
@@ -101,7 +102,7 @@ func MediaFacts(ctx context.Context, path string) (Facts, error) {
 			} `json:"disposition"`
 		} `json:"streams"`
 	}
-	if err := json.Unmarshal(out, &probe); err != nil {
+	if err := jsonx.Unmarshal(out, &probe); err != nil {
 		return Facts{}, ErrUnreadable
 	}
 	f := Facts{Engine: "ffprobe", Tags: map[string]string{}}

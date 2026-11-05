@@ -4,8 +4,10 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"strings"
+
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
+	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 )
 
 // orderedObject is a JSON object that keeps its keys in the order it read
@@ -145,8 +147,8 @@ type managedEntry struct {
 // understand.
 func hookGroups(event string, raw json.RawMessage) ([]json.RawMessage, error) {
 	var groups []json.RawMessage
-	if err := json.Unmarshal(raw, &groups); err != nil {
-		return nil, fmt.Errorf("hooks.%s is not an array", event)
+	if err := jsonx.Unmarshal(raw, &groups); err != nil {
+		return nil, errfmt.Errorf("hooks.%s is not an array", event)
 	}
 	return groups, nil
 }
@@ -159,7 +161,7 @@ func groupCommands(group json.RawMessage) []string {
 			Command string `json:"command"`
 		} `json:"hooks"`
 	}
-	if json.Unmarshal(group, &g) != nil {
+	if jsonx.Unmarshal(group, &g) != nil {
 		return nil
 	}
 	var out []string
@@ -183,7 +185,7 @@ func findManaged(doc []byte) ([]managedEntry, error) {
 	}
 	hooks, err := parseObject(raw)
 	if err != nil {
-		return nil, fmt.Errorf("hooks is not an object: %w", err)
+		return nil, errfmt.Errorf("hooks is not an object: %w", err)
 	}
 	var out []managedEntry
 	for _, event := range hooks.keys {
@@ -216,7 +218,7 @@ func stripManaged(group json.RawMessage) (json.RawMessage, bool, error) {
 		return group, false, nil
 	}
 	var items []json.RawMessage
-	if json.Unmarshal(rawHooks, &items) != nil {
+	if jsonx.Unmarshal(rawHooks, &items) != nil {
 		return group, false, nil
 	}
 	kept := items[:0:0]
@@ -225,7 +227,7 @@ func stripManaged(group json.RawMessage) (json.RawMessage, bool, error) {
 		var h struct {
 			Command string `json:"command"`
 		}
-		if json.Unmarshal(item, &h) == nil && isManagedCommand(h.Command) {
+		if jsonx.Unmarshal(item, &h) == nil && isManagedCommand(h.Command) {
 			removed = true
 			continue
 		}
@@ -292,7 +294,7 @@ func editHooks(doc []byte, events []HookEvent, command string, install bool, mat
 	if raw, ok := root.get("hooks"); ok {
 		hadHooks = true
 		if hooks, err = parseObject(raw); err != nil {
-			return nil, false, fmt.Errorf("hooks is not an object: %w", err)
+			return nil, false, errfmt.Errorf("hooks is not an object: %w", err)
 		}
 	}
 	removedAny := false

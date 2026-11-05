@@ -11,6 +11,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/composer"
+	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 )
@@ -336,7 +337,7 @@ func (m *OS) deliverImageCmd(window string, data []byte) tea.Cmd {
 			Path string `json:"path"`
 			Host string `json:"host"`
 		}
-		if err := json.Unmarshal(raw, &res); err != nil {
+		if err := jsonx.Unmarshal(raw, &res); err != nil {
 			return ImagePastedMsg{Window: window, Err: err}
 		}
 		if res.Path == "" {

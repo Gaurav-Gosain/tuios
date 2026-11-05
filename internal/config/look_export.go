@@ -11,6 +11,8 @@ import (
 
 	"github.com/pelletier/go-toml/v2"
 
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
+	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
 )
 
@@ -62,15 +64,15 @@ func LoadLookConfig(mainPath string) (*UserConfig, error) {
 // ExportLook writes the look of cfg as a look file.
 func ExportLook(cfg *UserConfig, opts LookExportOptions) (*LookExport, error) {
 	if cfg == nil {
-		return nil, fmt.Errorf("no configuration is loaded")
+		return nil, errfmt.Errorf("no configuration is loaded")
 	}
 	for key, v := range map[string]string{"name": opts.Name, "author": opts.Author} {
 		if hasControlChar(v) || len(v) > maxLookString {
-			return nil, fmt.Errorf("the %s must be one line of at most %d bytes", key, maxLookString)
+			return nil, errfmt.Errorf("the %s must be one line of at most %d bytes", key, maxLookString)
 		}
 	}
 	if utf8.RuneCountInString(opts.Name) > MaxLookName {
-		return nil, fmt.Errorf("the name must be at most %d characters", MaxLookName)
+		return nil, errfmt.Errorf("the name must be at most %d characters", MaxLookName)
 	}
 	base, err := ParseUserConfig(nil)
 	if err != nil {
@@ -137,7 +139,7 @@ func ExportLook(cfg *UserConfig, opts LookExportOptions) (*LookExport, error) {
 			return nil, err
 		}
 		if _, err := ParseLook(text); err != nil {
-			return nil, fmt.Errorf("tuios cannot make a look of this config: %w", err)
+			return nil, errfmt.Errorf("tuios cannot make a look of this config: %w", err)
 		}
 	}
 	ex.Text = text
@@ -165,7 +167,7 @@ func (ex *LookExport) embedTheme(values, assets map[string]any) error {
 	}
 	table, err := lookAssetTable(data)
 	if err != nil {
-		return fmt.Errorf("theme %s: %w", id, err)
+		return errfmt.Errorf("theme %s: %w", id, err)
 	}
 	own := strings.TrimPrefix(id, LookAssetPrefix)
 	table["id"] = own
@@ -194,7 +196,7 @@ func (ex *LookExport) embedGlyphs(values, assets map[string]any) error {
 	}
 	table, err := lookAssetTable(data)
 	if err != nil {
-		return fmt.Errorf("glyph set %s: %w", id, err)
+		return errfmt.Errorf("glyph set %s: %w", id, err)
 	}
 	// Computed on load, never read from a file.
 	delete(table, "ascii")
@@ -288,7 +290,7 @@ func lookKeyValue(cfg *UserConfig, path string) (any, error) {
 	}
 	opt, ok := LookupOption(path)
 	if !ok {
-		return nil, fmt.Errorf("not an option")
+		return nil, errfmt.Errorf("not an option")
 	}
 	text, _ := GetOptionValue(cfg, path)
 	switch opt.Type {
@@ -297,7 +299,7 @@ func lookKeyValue(cfg *UserConfig, path string) (any, error) {
 	case OptionInt:
 		n, err := strconv.ParseInt(strings.TrimSpace(text), 10, 64)
 		if err != nil {
-			return nil, fmt.Errorf("%q is not a whole number", text)
+			return nil, errfmt.Errorf("%q is not a whole number", text)
 		}
 		return n, nil
 	}
@@ -308,7 +310,7 @@ func lookKeyValue(cfg *UserConfig, path string) (any, error) {
 func lookFileValue(cfg *UserConfig, path string, spec lookFileKey) (any, error) {
 	field, ok := resolveOptionField(cfg, path)
 	if !ok {
-		return nil, fmt.Errorf("not an option")
+		return nil, errfmt.Errorf("not an option")
 	}
 	if field.Kind() == reflect.Pointer {
 		if field.IsNil() {
@@ -329,11 +331,11 @@ func lookFileValue(cfg *UserConfig, path string, spec lookFileKey) (any, error) 
 	case reflect.Slice:
 		items, ok := field.Interface().([]string)
 		if !ok {
-			return nil, fmt.Errorf("not a list of text")
+			return nil, errfmt.Errorf("not a list of text")
 		}
 		return append([]string{}, items...), nil
 	}
-	return nil, fmt.Errorf("a value of kind %s", field.Kind())
+	return nil, errfmt.Errorf("a value of kind %s", field.Kind())
 }
 
 // lookDefaultValue is the default of a look key the registry does not carry.
@@ -344,7 +346,7 @@ func lookDefaultValue(spec lookFileKey) (any, error) {
 	case LookList:
 		var items []string
 		if spec.Default != "" {
-			if err := json.Unmarshal([]byte(spec.Default), &items); err != nil {
+			if err := jsonx.Unmarshal([]byte(spec.Default), &items); err != nil {
 				return nil, err
 			}
 		}

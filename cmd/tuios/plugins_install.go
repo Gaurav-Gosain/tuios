@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"github.com/Gaurav-Gosain/tuios/internal/herdrplugin"
 	"github.com/Gaurav-Gosain/tuios/internal/review"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
@@ -49,7 +50,7 @@ func newPluginsInstallCommand() *cobra.Command {
 		Short: "Install, build and enable a plugin from git or a folder",
 		Long: `Install a plugin, build it and enable it.
 
-SOURCE is the name of a plugin of the tuios release, such as pr-status, or owner/repo[/dir][@ref] on github.com, a git URL (https, ssh, git@host:path or file) with an optional @ref, or a folder on this machine. Without a ref, tuios uses the default branch. tuios writes the commit to plugins.lock in the config folder.
+SOURCE is the name of a plugin of the tuios release, such as pr-status (give a folder of that name as ./pr-status), or owner/repo[/dir][@ref] on github.com, a git URL (https, ssh, git@host:path or file) with an optional @ref, or a folder on this machine. Without a ref, tuios uses the default branch. tuios writes the commit to plugins.lock in the config folder.
 
 Without SOURCE, tuios installs each plugin in plugins.lock at its commit. It does not enable them.
 
@@ -103,6 +104,15 @@ func parsePluginSource(arg string, o installOpts) (pluginSource, error) {
 	var s pluginSource
 	p := herdrplugin.ExpandHome(arg)
 	_, statErr := os.Stat(p)
+	// On a release build a name of the release is the release's plugin, also
+	// when a folder of that name is in this folder; give the folder as ./NAME.
+	// A dev build has no release to take, so it keeps the folder.
+	if _, ok := firstParty[arg]; ok && statErr == nil {
+		if _, err := runningTag(); err == nil {
+			s.release = arg
+			return s, nil
+		}
+	}
 	if strings.HasPrefix(arg, ".") || strings.HasPrefix(arg, "~") || strings.HasPrefix(arg, "/") || filepath.IsAbs(p) || statErr == nil {
 		if o.ref != "" || o.subdir != "" {
 			return s, errors.New("--ref and --subdir need a git source. tuios uses a folder as it is")
@@ -136,11 +146,11 @@ func parsePluginSource(arg string, o installOpts) (pluginSource, error) {
 				s.release = arg
 				return s, nil
 			}
-			return s, fmt.Errorf("tuios has no plugin catalog yet, so it cannot find %s. tuios plugins install takes these names: %s. For another plugin, give owner/repo, a git URL or a folder", arg, firstPartyNames())
+			return s, errfmt.Errorf("tuios has no plugin catalog yet, so it cannot find %s. tuios plugins install takes these names: %s. For another plugin, give owner/repo, a git URL or a folder", arg, firstPartyNames())
 		}
 		for _, part := range parts[:2] {
 			if part == "" || part == "." || part == ".." {
-				return s, fmt.Errorf("%q is not owner/repo", arg)
+				return s, errfmt.Errorf("%q is not owner/repo", arg)
 			}
 		}
 		s.url = "https://github.com/" + parts[0] + "/" + parts[1]
@@ -169,7 +179,7 @@ func git(dir string, args ...string) (string, error) {
 	defer cancel()
 	out, err := review.Git(ctx, dir, []string{"GIT_ALLOW_PROTOCOL=https:ssh:git:file"}, args...)
 	if ctx.Err() != nil {
-		return "", fmt.Errorf("git %s did not finish in %s. Check the network and the source, then try again", args[0], gitTimeout)
+		return "", errfmt.Errorf("git %s did not finish in %s. Check the network and the source, then try again", args[0], gitTimeout)
 	}
 	if err != nil {
 		if _, lerr := exec.LookPath("git"); lerr != nil {
@@ -213,16 +223,16 @@ func fetchInto(dir, url, ref, subdir string, history bool) (commit, tree string,
 		}
 	}
 	if err != nil {
-		return "", "", fmt.Errorf("%w %s. Check the network, the URL and the ref: %w", errFetchFailed, shownSource(url), err)
+		return "", "", errfmt.Errorf("%w %s. Check the network, the URL and the ref: %w", errFetchFailed, shownSource(url), err)
 	}
 	if commit, err = git(dir, "rev-parse", "--verify", "-q", rev); err != nil {
-		return "", "", fmt.Errorf("the commit %.12s is not on %s", ref, shownSource(url))
+		return "", "", errfmt.Errorf("the commit %.12s is not on %s", ref, shownSource(url))
 	}
 	treeOf := commit + "^{tree}"
 	if subdir != "" {
 		treeOf = commit + ":" + subdir
 		if t, _ := git(dir, "cat-file", "-t", treeOf); t != "tree" {
-			return "", "", fmt.Errorf("the repository has no folder %s at %.12s", subdir, commit)
+			return "", "", errfmt.Errorf("the repository has no folder %s at %.12s", subdir, commit)
 		}
 	}
 	if tree, err = git(dir, "rev-parse", "--verify", treeOf); err == nil {
@@ -237,7 +247,7 @@ func fetchInto(dir, url, ref, subdir string, history bool) (commit, tree string,
 func loadInside(root, checkout string) (*herdrplugin.Plugin, error) {
 	p, perr := herdrplugin.Load(root)
 	if perr != nil {
-		return nil, fmt.Errorf("the plugin cannot be read: %s", perr.Msg)
+		return nil, errfmt.Errorf("the plugin cannot be read: %s", perr.Msg)
 	}
 	if checkout != "" && !herdrplugin.Inside(p.ManifestPath, checkout) {
 		return nil, errors.New("the plugin manifest is a link to a file outside the repository. tuios does not install it")
@@ -309,12 +319,28 @@ func (in *installer) fetch(url, ref, subdir string) (string, *herdrplugin.LockEn
 	if e.Commit, e.Tree, err = fetchInto(work, url, ref, subdir, in.history); err != nil {
 		return work, nil, nil, err
 	}
+	if ref != "" && !herdrplugin.IsCommit(ref) {
+		e.Tag = fetchedTag(work)
+	}
 	root := filepath.Join(work, filepath.FromSlash(subdir))
 	if !herdrplugin.HasManifest(root) {
 		return work, nil, nil, errNoManifest(work, url, subdir)
 	}
 	p, err := loadInside(root, work)
 	return work, e, p, err
+}
+
+// fetchedTag reports whether the fetch in work got a tag. git writes "tag
+// 'NAME' of URL" in FETCH_HEAD for a tag in any spelling, annotated or not,
+// and "branch 'NAME' of URL" for a branch.
+func fetchedTag(work string) bool {
+	data, err := os.ReadFile(filepath.Join(work, ".git", "FETCH_HEAD")) //nolint:gosec // the fetch folder tuios made
+	if err != nil {
+		return false
+	}
+	line, _, _ := strings.Cut(string(data), "\n")
+	fields := strings.Split(line, "\t")
+	return len(fields) > 2 && strings.HasPrefix(fields[2], "tag '")
 }
 
 // errNoManifest says that the folder asked for holds no plugin manifest, and
@@ -336,7 +362,7 @@ func errNoManifest(work, url, subdir string) error {
 	if len(folders) == 0 {
 		return errors.New(msg + ". Check that this repository holds a tuios plugin")
 	}
-	return fmt.Errorf("%s. A manifest is in %s. Add --subdir %s", msg, shownArgv(strings.Join(folders[:min(5, len(folders))], ", ")), shownArgv(folders[0]))
+	return errfmt.Errorf("%s. A manifest is in %s. Add --subdir %s", msg, shownArgv(strings.Join(folders[:min(5, len(folders))], ", ")), shownArgv(folders[0]))
 }
 
 // finish shows the plan and asks. Then it builds into a new build folder
@@ -417,7 +443,7 @@ func (in *installer) finish(e herdrplugin.LockEntry, p *herdrplugin.Plugin, fetc
 	built := !slices.ContainsFunc(p.Build, func(b herdrplugin.Command) bool { return p.Supported(b.Platforms, "build") == nil })
 	if !in.o.noBuild && !built {
 		if err := runPluginBuild(in.sig.ctx, in.cmd, p, in.dirs); err != nil {
-			return fail(fmt.Errorf("%w. The plugin is not installed", err))
+			return fail(errfmt.Errorf("%w. The plugin is not installed", err))
 		}
 		// A build step can write the manifest. What runs must be what the
 		// person approved.
@@ -627,7 +653,7 @@ func installPlugin(cmd *cobra.Command, arg string, o installOpts) error {
 		}
 		for _, le := range lock.Plugins {
 			if le.Source == herdrplugin.ReleasePrefix+src.release {
-				return fmt.Errorf("the plugin %s is installed. Run tuios plugins update %s to move it to this tuios", le.ID, le.ID)
+				return errfmt.Errorf("the plugin %s is installed. Run tuios plugins update %s to move it to this tuios", le.ID, le.ID)
 			}
 		}
 		return in.installFirstParty(src.release)
@@ -665,7 +691,7 @@ func installPlugin(cmd *cobra.Command, arg string, o installOpts) error {
 		return nil
 	}
 	if old != nil && old.Source == e.Source && old.Subdir == e.Subdir && old.Ref == e.Ref && old.Commit != e.Commit && !e.Local() {
-		return fmt.Errorf("the plugin %s is installed from this source. Run tuios plugins update %s to see the new commits and move to them", e.ID, e.ID)
+		return errfmt.Errorf("the plugin %s is installed from this source. Run tuios plugins update %s to see the new commits and move to them", e.ID, e.ID)
 	}
 	return in.finish(*e, p, fetched)
 }
@@ -693,10 +719,10 @@ func checkInstallConflict(entries []herdrplugin.Entry, old *herdrplugin.LockEntr
 		if e.Local() && herdrplugin.SamePath(filepath.Dir(x.Path), strings.TrimPrefix(e.Source, herdrplugin.LocalPrefix)) {
 			continue
 		}
-		return fmt.Errorf("another plugin with the id %s is in %s. Unlink or remove it first", e.ID, filepath.Dir(x.Path))
+		return errfmt.Errorf("another plugin with the id %s is in %s. Unlink or remove it first", e.ID, filepath.Dir(x.Path))
 	}
 	if old != nil && (old.Source != e.Source || old.Subdir != e.Subdir) && !replace {
-		return fmt.Errorf("the plugin %s is installed from %s. To install it from %s, add --replace", e.ID, shownSource(old.Source), shownSource(e.Source))
+		return errfmt.Errorf("the plugin %s is installed from %s. To install it from %s, add --replace", e.ID, shownSource(old.Source), shownSource(e.Source))
 	}
 	return nil
 }
@@ -804,7 +830,7 @@ func runPluginBuild(ctx context.Context, cmd *cobra.Command, p *herdrplugin.Plug
 		prog, perr := herdrplugin.ResolveProgram(b.Command[0], p.PluginRoot)
 		if perr != nil {
 			fmt.Fprintln(log, perr.Msg)
-			return fmt.Errorf("the build failed: %s. See %s", perr.Msg, logPath)
+			return errfmt.Errorf("the build failed: %s. See %s", perr.Msg, logPath)
 		}
 		bctx, cancel := context.WithTimeout(ctx, buildTimeout)
 		c := exec.Command(prog, b.Command[1:]...) //nolint:gosec // the person approved this build
@@ -814,12 +840,12 @@ func runPluginBuild(ctx context.Context, cmd *cobra.Command, p *herdrplugin.Plug
 		c.WaitDelay = 5 * time.Second
 		err := herdrplugin.RunTree(bctx, c)
 		if errors.Is(bctx.Err(), context.DeadlineExceeded) {
-			err = fmt.Errorf("it ran for more than %v", buildTimeout)
+			err = errfmt.Errorf("it ran for more than %v", buildTimeout)
 		}
 		cancel()
 		if err != nil {
 			fmt.Fprintln(log, err)
-			return fmt.Errorf("the build command failed: %v. See %s", err, logPath)
+			return errfmt.Errorf("the build command failed: %v. See %s", err, logPath)
 		}
 		ran++
 	}
@@ -859,7 +885,7 @@ func installFromLock(cmd *cobra.Command, o installOpts) error {
 		}
 	}
 	if len(failed) > 0 {
-		return fmt.Errorf("these plugins are not installed: %s", strings.Join(failed, ", "))
+		return errfmt.Errorf("these plugins are not installed: %s", strings.Join(failed, ", "))
 	}
 	return nil
 }
@@ -885,10 +911,10 @@ func (in *installer) installPinned(e herdrplugin.LockEntry) error {
 	fetched, got, p, err := in.fetch(e.Source, e.Commit, e.Subdir)
 	defer os.RemoveAll(fetched)
 	if err != nil {
-		return fmt.Errorf("%w. If the pinned commit is gone, install the plugin again from its source", err)
+		return errfmt.Errorf("%w. If the pinned commit is gone, install the plugin again from its source", err)
 	}
 	if p.PluginID != e.ID {
-		return fmt.Errorf("the commit names the plugin %s, not %s", p.PluginID, e.ID)
+		return errfmt.Errorf("the commit names the plugin %s, not %s", p.PluginID, e.ID)
 	}
 	e.Tree = got.Tree
 	return in.finish(e, p, fetched)
@@ -898,7 +924,7 @@ func (in *installer) installPinned(e herdrplugin.LockEntry) error {
 // did not type --grant admin. Load refuses one that needs a newer tuios.
 func checkNativeAsks(p *herdrplugin.Plugin, o installOpts) error {
 	if slices.Contains(p.Grants, "admin") && !slices.Contains(o.grants, "admin") {
-		return fmt.Errorf("%s asks for the admin grant, which reaches every pane and verb. To give it, run the command again with --grant admin", p.PluginID)
+		return errfmt.Errorf("%s asks for the admin grant, which reaches every pane and verb. To give it, run the command again with --grant admin", p.PluginID)
 	}
 	return nil
 }
@@ -921,12 +947,12 @@ func confirmPerson() error {
 	for _, sock := range socks {
 		client, err := session.DialVerbClientAt(sock, version)
 		if err != nil {
-			return fmt.Errorf("tuios could not ask the daemon at %s to confirm that you run this command: %w", sock, err)
+			return errfmt.Errorf("tuios could not ask the daemon at %s to confirm that you run this command: %w", sock, err)
 		}
 		_, err = client.CallWithTimeout("attach-presence", nil, 5*time.Second)
 		_ = client.Close()
 		if err != nil {
-			return fmt.Errorf("only you, from a terminal outside tuios, can approve a plugin. The daemon said: %w", err)
+			return errfmt.Errorf("only you, from a terminal outside tuios, can approve a plugin. The daemon said: %w", err)
 		}
 	}
 	return nil

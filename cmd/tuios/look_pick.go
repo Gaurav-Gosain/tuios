@@ -19,6 +19,8 @@ import (
 	"github.com/charmbracelet/x/ansi"
 	"github.com/pelletier/go-toml/v2"
 
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
+	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 	"github.com/Gaurav-Gosain/tuios/internal/listnav"
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
 )
@@ -53,7 +55,7 @@ func lookGalleryBase() (string, error) {
 	}
 	u, err := url.Parse(base)
 	if err != nil || u.Host == "" {
-		return "", fmt.Errorf("%s is not a URL", lookGalleryEnv)
+		return "", errfmt.Errorf("%s is not a URL", lookGalleryEnv)
 	}
 	switch u.Scheme {
 	case "https":
@@ -65,7 +67,7 @@ func lookGalleryBase() (string, error) {
 			return base, nil
 		}
 	}
-	return "", fmt.Errorf("%s must be an https URL", lookGalleryEnv)
+	return "", errfmt.Errorf("%s must be an https URL", lookGalleryEnv)
 }
 
 // lookGalleryURL is where the gallery serves the look with id.
@@ -149,11 +151,11 @@ type lookFeed struct {
 // each entry, so every text is cleaned and every colour checked.
 func parseLookFeed(data []byte) ([]galleryLook, error) {
 	var feed lookFeed
-	if err := json.Unmarshal(data, &feed); err != nil {
+	if err := jsonx.Unmarshal(data, &feed); err != nil {
 		return nil, err
 	}
 	if feed.Version != 1 {
-		return nil, fmt.Errorf("the feed is version %d", feed.Version)
+		return nil, errfmt.Errorf("the feed is version %d", feed.Version)
 	}
 	looks := []galleryLook{}
 	seen := map[string]bool{}
@@ -338,7 +340,7 @@ func (p *lookPicker) View() tea.View {
 			marker = "> "
 			text = lipgloss.NewStyle().Reverse(true).Bold(true).Render(text)
 		}
-		b.WriteString(marker + text + " " + lookSwatches(l.Colors) + "\n")
+		fmt.Fprintf(&b, "%s%s %s\n", marker, text, lookSwatches(l.Colors))
 	}
 	fmt.Fprintf(&b, "\n%d of %d. Up and down move.", p.cur+1, len(p.looks))
 	return tea.NewView(b.String())

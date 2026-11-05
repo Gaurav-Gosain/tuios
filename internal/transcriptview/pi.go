@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
-	"encoding/json"
 	"errors"
 	"io"
 	"os"
@@ -12,6 +11,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 	"github.com/Gaurav-Gosain/tuios/internal/transcript"
 )
 
@@ -168,7 +168,7 @@ func piProject(data []byte, leaf *string) ([]byte, error) {
 			ParentID *string `json:"parentId"`
 			Version  int     `json:"version"`
 		}
-		if json.Unmarshal(line, &rec) == nil {
+		if jsonx.Unmarshal(line, &rec) == nil {
 			if rec.Type == "session" {
 				if header != nil || len(line) > lineMax || (rec.Version != 2 && rec.Version != 3) {
 					return nil, ErrPiTree

@@ -6,6 +6,7 @@ import (
 	"log"
 	"time"
 
+	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 )
 
@@ -162,13 +163,13 @@ func readFleet(c *session.VerbClient) ([]byte, error) {
 	var a struct {
 		Agents json.RawMessage `json:"agents"`
 	}
-	if err := json.Unmarshal(rawSessions, &s); err != nil {
+	if err := jsonx.Unmarshal(rawSessions, &s); err != nil {
 		return nil, err
 	}
-	if err := json.Unmarshal(rawAgents, &a); err != nil {
+	if err := jsonx.Unmarshal(rawAgents, &a); err != nil {
 		return nil, err
 	}
-	return json.Marshal(Event{Type: "fleet", Fleet: &Fleet{Sessions: orEmpty(s.Sessions), Agents: orEmpty(a.Agents), Saved: savedSessions()}})
+	return jsonx.Marshal(Event{Type: "fleet", Fleet: &Fleet{Sessions: orEmpty(s.Sessions), Agents: orEmpty(a.Agents), Saved: savedSessions()}})
 }
 
 // orEmpty turns a missing or null list into an empty one.

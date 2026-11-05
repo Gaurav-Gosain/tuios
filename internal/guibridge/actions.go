@@ -1,10 +1,10 @@
 package guibridge
 
 import (
-	"fmt"
 	"strings"
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"github.com/Gaurav-Gosain/tuios/internal/layout"
 )
 
@@ -78,7 +78,7 @@ var numberedActions = []string{
 // checkAction says why the action command will not run name, or nil.
 func checkAction(name string) error {
 	if name == "" {
-		return fmt.Errorf("action needs name, an action name")
+		return errfmt.Errorf("action needs name, an action name")
 	}
 	if allowedActions[name] {
 		return nil
@@ -94,12 +94,12 @@ func checkAction(name string) error {
 		}
 	}
 	if _, gui := config.GUIActionDescriptions[name]; gui {
-		return fmt.Errorf("%s is a GUI action: the GUI runs it itself", name)
+		return errfmt.Errorf("%s is a GUI action: the GUI runs it itself", name)
 	}
 	if _, known := config.ActionDescriptions[name]; known {
-		return fmt.Errorf("%s shows something only a screen can show, so the bridge does not run it", name)
+		return errfmt.Errorf("%s shows something only a screen can show, so the bridge does not run it", name)
 	}
-	return fmt.Errorf("%q is not an action the bridge runs", name)
+	return errfmt.Errorf("%q is not an action the bridge runs", name)
 }
 
 // splitActions are the actions that split the focused pane, and the side the

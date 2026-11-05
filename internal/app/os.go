@@ -13,7 +13,9 @@ import (
 	"time"
 
 	tea "charm.land/bubbletea/v2"
+	"github.com/Gaurav-Gosain/tuios/internal/agentseen"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"github.com/Gaurav-Gosain/tuios/internal/federation"
 	"github.com/Gaurav-Gosain/tuios/internal/hooks"
 	"github.com/Gaurav-Gosain/tuios/internal/layout"
@@ -571,6 +573,9 @@ type OS struct {
 	// themeFx is the running theme transition, if any. See
 	// theme_transition.go.
 	themeFx themeTransition
+	// wsSlide is the running workspace slide, if any. See
+	// workspace_slide.go.
+	wsSlide workspaceSlide
 	// lastInteractionRender is when a motion event last produced a frame.
 	// Motion events arrive faster than a frame can be composed, so this
 	// bounds how often they are allowed to redraw.
@@ -636,8 +641,12 @@ type OS struct {
 	separatorMemo separatorMemo
 	// layerCells is each identified layer's string parsed to cells, kept across
 	// frames so an unchanged layer is copied rather than parsed. See compose.go.
-	layerCells     map[string]*cellLayer
-	composeGen     uint64
+	layerCells map[string]*cellLayer
+	composeGen uint64
+	// keepLayerCells skips dropping the cells of layers a compose did not
+	// draw. The workspace slide's snapshot composes the panes alone, and the
+	// rail's and the dock's cells are still wanted on the next frame.
+	keepLayerCells bool
 	composeScratch []composedLayer
 	// railFit is the rail's row budget scratch, reused by every row the rail
 	// draws. See railScratch.
@@ -1042,6 +1051,11 @@ type OS struct {
 	// off: an older daemon, or an older client attached. The scratch
 	// terminal is then a popup, as before. See scratch_legacy.go.
 	sessionScratchWSOff bool
+
+	// daemonLayoutSeen is the newest SessionState.DaemonLayout this client
+	// has applied: the last layout change the daemon made itself that this
+	// client sent its rectangles for.
+	daemonLayoutSeen int
 
 	// applyingPeerSync is set while ApplyStateSync is folding a state that came
 	// from somewhere else into this client. It is what makes a sync loop
@@ -1809,6 +1823,13 @@ type OS struct {
 	// agentNoticesDismissed holds the integration notices the person
 	// dismissed, by agentNoticeKey, persisted with the rail's state.
 	agentNoticesDismissed map[string]bool
+	// machineOffersShown holds the machines offered this run, by ssh
+	// target. machineOffersNever is the never list of sidebar.json, and
+	// machineOffersRemoved the targets taken off it this run, which the
+	// merge on save must not bring back. See machine_offer.go.
+	machineOffersShown   map[string]bool
+	machineOffersNever   map[string]bool
+	machineOffersRemoved map[string]bool
 	// settingsAgentsOpen is the Alerts tab's agent group opened or closed by
 	// hand; nil follows agentsSeen.
 	settingsAgentsOpen *bool
@@ -1885,6 +1906,14 @@ type OS struct {
 	// is the moment they looked away: where "while you were away" starts.
 	// Persisted beside SidebarAgentSeenSeq, and per client for the same reason.
 	SidebarAgentSeenAt map[string]int64
+	// SidebarAgentViewed is, by window ID, the agent's state-entry time
+	// (AgentStateAt) when this client's user last had its thread on screen
+	// in the agents view. A row whose agent finished or failed after it draws
+	// the unseen mark. See agent_unseen.go.
+	SidebarAgentViewed map[string]int64
+	// agentAlertRuns is the run each agent last alerted for, and the state a
+	// client first saw it in. See agentseen.AlertLedger.
+	agentAlertRuns agentseen.AlertLedger
 	// sidebarStateSocket is the daemon socket the persisted window-keyed maps
 	// were written against, and the guard on pruning them: window IDs mean
 	// nothing outside the daemon that issued them.
@@ -2224,6 +2253,10 @@ type NotifTarget struct {
 	// the target, so a message drawn with one text is not the same message as
 	// one holding another. See clickVisibleNotification.
 	ClipboardVersion uint64
+	// OfferTarget, OfferDest and OfferMachine are the offer to add a
+	// machine: the ssh target Never stores, the destination Add sets up, and
+	// the name the message shows. See machine_offer.go.
+	OfferTarget, OfferDest, OfferMachine string
 }
 
 // LogMessage represents a log entry with timestamp and level.
@@ -2274,10 +2307,10 @@ func (e *nestedSwitchError) Error() string {
 // that only goes one way.
 func (m *OS) SwitchToSession(targetSession string) error {
 	if m.DaemonClient == nil {
-		return fmt.Errorf("not in daemon mode")
+		return errfmt.Errorf("not in daemon mode")
 	}
 	if targetSession == "" {
-		return fmt.Errorf("session name cannot be empty")
+		return errfmt.Errorf("session name cannot be empty")
 	}
 	// A switch the person made ends a rail click that waits for another
 	// machine. See host_open.go.
@@ -2310,7 +2343,7 @@ func (m *OS) SwitchToSession(targetSession string) error {
 		}
 		// The detach never landed, so nothing was given up: this client is still
 		// on its own session with every pane streaming.
-		return fmt.Errorf("switch to %q failed: %w; still on %q", targetSession, err, m.SessionName)
+		return errfmt.Errorf("switch to %q failed: %w; still on %q", targetSession, err, m.SessionName)
 	}
 	from := lastSession{host: m.attachedMachine(), name: m.SessionName}
 	m.SessionName = m.DaemonClient.SessionName()

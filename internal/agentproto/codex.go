@@ -3,11 +3,13 @@ package agentproto
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"io"
 	"strconv"
 	"strings"
 	"sync"
+
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
+	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 )
 
 // The Codex app-server client, v2 threads and turns.
@@ -83,10 +85,10 @@ func (c *Codex) Start(ctx context.Context, cwd string) (Info, error) {
 		"capabilities": map[string]any{"experimentalApi": false, "requestAttestation": false},
 	}, &init)
 	if err != nil {
-		return Info{}, fmt.Errorf("initialize: %w", err)
+		return Info{}, errfmt.Errorf("initialize: %w", err)
 	}
 	if err := c.conn.Notify("initialized", nil); err != nil {
-		return Info{}, fmt.Errorf("initialized: %w", err)
+		return Info{}, errfmt.Errorf("initialized: %w", err)
 	}
 	info := Info{Agent: init.UserAgent}
 	var started struct {
@@ -100,10 +102,10 @@ func (c *Codex) Start(ctx context.Context, cwd string) (Info, error) {
 		params["cwd"] = cwd
 	}
 	if err := c.conn.Call(ctx, "thread/start", params, &started); err != nil {
-		return info, fmt.Errorf("thread/start: %w", err)
+		return info, errfmt.Errorf("thread/start: %w", err)
 	}
 	if started.Thread.ID == "" {
-		return info, fmt.Errorf("thread/start: codex returned no thread id")
+		return info, errfmt.Errorf("thread/start: codex returned no thread id")
 	}
 	c.mu.Lock()
 	c.thread = started.Thread.ID
@@ -198,7 +200,7 @@ func (c *Codex) onNotify(method string, params json.RawMessage) {
 			ItemID string `json:"itemId"`
 			Delta  string `json:"delta"`
 		}
-		if json.Unmarshal(params, &p) != nil || p.Delta == "" {
+		if jsonx.Unmarshal(params, &p) != nil || p.Delta == "" {
 			return
 		}
 		c.mu.Lock()
@@ -209,7 +211,7 @@ func (c *Codex) onNotify(method string, params json.RawMessage) {
 		var p struct {
 			Item codexItem `json:"item"`
 		}
-		if json.Unmarshal(params, &p) != nil {
+		if jsonx.Unmarshal(params, &p) != nil {
 			return
 		}
 		c.onItem(p.Item, method == "item/completed")
@@ -223,7 +225,7 @@ func (c *Codex) onNotify(method string, params json.RawMessage) {
 				} `json:"error"`
 			} `json:"turn"`
 		}
-		if json.Unmarshal(params, &p) != nil {
+		if jsonx.Unmarshal(params, &p) != nil {
 			return
 		}
 		r := TurnResult{Stop: StopFinished}
@@ -255,7 +257,7 @@ func (c *Codex) onNotify(method string, params json.RawMessage) {
 				ModelContextWindow *int64 `json:"modelContextWindow"`
 			} `json:"tokenUsage"`
 		}
-		if json.Unmarshal(params, &p) != nil {
+		if jsonx.Unmarshal(params, &p) != nil {
 			return
 		}
 		u := p.TokenUsage
@@ -270,7 +272,7 @@ func (c *Codex) onNotify(method string, params json.RawMessage) {
 				Status string `json:"status"`
 			} `json:"plan"`
 		}
-		if json.Unmarshal(params, &p) != nil {
+		if jsonx.Unmarshal(params, &p) != nil {
 			return
 		}
 		plan := Plan{Entries: []PlanEntry{}}
@@ -286,7 +288,7 @@ func (c *Codex) onNotify(method string, params json.RawMessage) {
 		var p struct {
 			ToModel string `json:"toModel"`
 		}
-		if json.Unmarshal(params, &p) == nil && p.ToModel != "" {
+		if jsonx.Unmarshal(params, &p) == nil && p.ToModel != "" {
 			c.emit(Usage{Model: p.ToModel})
 		}
 	case "error":
@@ -296,7 +298,7 @@ func (c *Codex) onNotify(method string, params json.RawMessage) {
 			} `json:"error"`
 			WillRetry bool `json:"willRetry"`
 		}
-		if json.Unmarshal(params, &p) != nil || p.Error.Message == "" {
+		if jsonx.Unmarshal(params, &p) != nil || p.Error.Message == "" {
 			return
 		}
 		msg := p.Error.Message
@@ -377,7 +379,7 @@ func (c *Codex) onRequest(r *Request) {
 			Reason                 *string         `json:"reason"`
 			NetworkApprovalContext json.RawMessage `json:"networkApprovalContext"`
 		}
-		if json.Unmarshal(r.Params, &p) != nil {
+		if jsonx.Unmarshal(r.Params, &p) != nil {
 			r.ReplyError(codeInvalidParams, "could not read the approval request")
 			return
 		}
@@ -417,7 +419,7 @@ func (c *Codex) onRequest(r *Request) {
 			Reason    *string `json:"reason"`
 			GrantRoot *string `json:"grantRoot"`
 		}
-		if json.Unmarshal(r.Params, &p) != nil {
+		if jsonx.Unmarshal(r.Params, &p) != nil {
 			r.ReplyError(codeInvalidParams, "could not read the approval request")
 			return
 		}

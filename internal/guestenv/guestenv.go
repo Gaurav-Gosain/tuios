@@ -181,6 +181,11 @@ func KittyAnimationVar(supported bool) string {
 // turned colour off in every pane, though tuios describes the pane through
 // TERM and COLORTERM. CODEX_HOME, CODEX_API_KEY and CLAUDE_CONFIG_DIR stay: they name
 // the user's folders and keys, not a session.
+//
+// A daemon that a service manager started (tuios daemon install-service) is
+// the last case. systemd gives it INVOCATION_ID, JOURNAL_STREAM and the
+// rest, which name the daemon's own unit and log stream. A program in a pane
+// that reads them would log to the daemon's journal or report to its unit.
 var hostMultiplexerVars = []string{
 	"TMUX", "TMUX_PANE", "HERDR_ENV", "HERDR_PANE_ID", "HERDR_TAB_ID", "HERDR_WORKSPACE_ID", "HERDR_BIN_PATH",
 	"TUIOS_SESSION", "TUIOS_SESSION_REMOTE", "TUIOS_SOCKET", "TUIOS_PANE_ID", "TUIOS_WINDOW_ID",
@@ -195,6 +200,7 @@ var hostMultiplexerVars = []string{
 	"CLAUDE_CODE_CHILD_SESSION", "CLAUDE_CODE_SESSION_ATTENDED", "CLAUDE_CODE_MESSAGING_SOCKET",
 	"CLAUDE_CODE_MESSAGING_TOKEN", "AI_AGENT",
 	"NO_COLOR", "CLICOLOR", "CLICOLOR_FORCE", "FORCE_COLOR",
+	"INVOCATION_ID", "JOURNAL_STREAM", "NOTIFY_SOCKET", "MANAGERPID", "SYSTEMD_EXEC_PID",
 }
 
 // WithoutHostMultiplexer returns env with every assignment of the variables

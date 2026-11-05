@@ -159,6 +159,7 @@ const dndMaxMimes = 64
 // of the gesture; nothing is sent until the pointer moves.
 func (m *OS) DnDNotePress(w *terminal.Window, x, y, termX, termY int) {
 	m.dndPress = nil
+	m.dndSweep()
 	if !m.dndSourceOK(w) {
 		return
 	}
@@ -616,6 +617,7 @@ func (m *OS) onDnDOffer(id string, p *dndPane, cmd dnd.Command) {
 	switch cmd.X {
 	case 1:
 		p.offers = true
+		p.owner = dndForeground(m.windowByID(id))
 		return
 	case 2:
 		p.offers = false
@@ -1012,6 +1014,9 @@ func (m *OS) dndLabelWhat() string {
 		if data, ok := d.presented[idx]; ok {
 			names := dndURILines(string(data))
 			if paths, ok := dndURIPaths(string(data)); ok {
+				// A line with a space splits into more than one path, and the drop
+				// splits the same way, so the label names the paths.
+				names = make([]string, len(paths))
 				for i, p := range paths {
 					names[i] = path.Base(p)
 				}

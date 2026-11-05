@@ -11,6 +11,7 @@ import (
 	"charm.land/lipgloss/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/app"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"github.com/Gaurav-Gosain/tuios/internal/input"
 	"github.com/Gaurav-Gosain/tuios/internal/plural"
 	"github.com/Gaurav-Gosain/tuios/internal/tape"
@@ -22,14 +23,14 @@ import (
 func runTapeInteractive(tapeFile string) error {
 	script, err := tape.LoadFile(tapeFile)
 	if err != nil {
-		return fmt.Errorf("failed to read tape file: %w", err)
+		return errfmt.Errorf("failed to read tape file: %w", err)
 	}
 	if len(script.Errors) > 0 {
 		fmt.Fprintf(os.Stderr, "Tape parsing errors:\n")
 		for _, err := range script.Errors {
 			fmt.Fprintf(os.Stderr, "  %s: %s\n", tapeFile, err)
 		}
-		return fmt.Errorf("the tape file has errors, listed above. Fix them, then run it again")
+		return errfmt.Errorf("the tape file has errors, listed above. Fix them, then run it again")
 	}
 	commands := script.Commands
 
@@ -101,10 +102,10 @@ func runTapeInteractive(tapeFile string) error {
 	finish()
 
 	if err != nil {
-		return fmt.Errorf("program error: %w", err)
+		return errfmt.Errorf("program error: %w", err)
 	}
 	if failure != "" {
-		return fmt.Errorf("the tape stopped at %s: %s", tapeFile, failure)
+		return errfmt.Errorf("the tape stopped at %s: %s", tapeFile, failure)
 	}
 
 	return nil
@@ -113,7 +114,7 @@ func runTapeInteractive(tapeFile string) error {
 func validateTapeFile(tapeFile string) error {
 	script, err := tape.LoadFile(tapeFile)
 	if err != nil {
-		return fmt.Errorf("failed to read tape file: %w", err)
+		return errfmt.Errorf("failed to read tape file: %w", err)
 	}
 
 	commands, parseErrors := script.Commands, script.Errors
@@ -123,7 +124,7 @@ func validateTapeFile(tapeFile string) error {
 		for _, err := range parseErrors {
 			fmt.Fprintf(os.Stderr, "  ✗ %s: %s\n", tapeFile, err)
 		}
-		return fmt.Errorf("the tape file has errors, listed above. Fix them, then validate it again")
+		return errfmt.Errorf("the tape file has errors, listed above. Fix them, then validate it again")
 	}
 
 	checkmark := lipgloss.NewStyle().Foreground(lipgloss.Color("10")).Render("✓")
@@ -170,7 +171,7 @@ func validateTapeFile(tapeFile string) error {
 func listTapeFiles(asJSON bool) error {
 	files, err := app.LoadTapeFiles()
 	if err != nil {
-		return fmt.Errorf("failed to load tape files: %w", err)
+		return errfmt.Errorf("failed to load tape files: %w", err)
 	}
 
 	tapeDir, _ := app.GetTapeDirectory()
@@ -220,7 +221,7 @@ func listTapeFiles(asJSON bool) error {
 func showTapeDirectory() error {
 	tapeDir, err := app.GetTapeDirectory()
 	if err != nil {
-		return fmt.Errorf("failed to get tape directory: %w", err)
+		return errfmt.Errorf("failed to get tape directory: %w", err)
 	}
 	fmt.Println(tapeDir)
 	return nil
@@ -229,7 +230,7 @@ func showTapeDirectory() error {
 func deleteTapeFile(name string) error {
 	files, err := app.LoadTapeFiles()
 	if err != nil {
-		return fmt.Errorf("failed to load tape files: %w", err)
+		return errfmt.Errorf("failed to load tape files: %w", err)
 	}
 
 	var targetFile *app.TapeFile
@@ -241,7 +242,7 @@ func deleteTapeFile(name string) error {
 	}
 
 	if targetFile == nil {
-		return fmt.Errorf("no tape file named %q. Run 'tuios tape list' to see the tape files", name)
+		return errfmt.Errorf("no tape file named %q. Run 'tuios tape list' to see the tape files", name)
 	}
 
 	fmt.Printf("Delete '%s'? (yes/no): ", targetFile.Name)
@@ -255,7 +256,7 @@ func deleteTapeFile(name string) error {
 	}
 
 	if err := app.DeleteTapeFile(targetFile.Path); err != nil {
-		return fmt.Errorf("failed to delete tape file: %w", err)
+		return errfmt.Errorf("failed to delete tape file: %w", err)
 	}
 
 	successStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("10"))
@@ -266,7 +267,7 @@ func deleteTapeFile(name string) error {
 func showTapeFile(name string) error {
 	files, err := app.LoadTapeFiles()
 	if err != nil {
-		return fmt.Errorf("failed to load tape files: %w", err)
+		return errfmt.Errorf("failed to load tape files: %w", err)
 	}
 
 	var targetFile *app.TapeFile
@@ -278,12 +279,12 @@ func showTapeFile(name string) error {
 	}
 
 	if targetFile == nil {
-		return fmt.Errorf("no tape file named %q. Run 'tuios tape list' to see the tape files", name)
+		return errfmt.Errorf("no tape file named %q. Run 'tuios tape list' to see the tape files", name)
 	}
 
 	content, err := os.ReadFile(targetFile.Path)
 	if err != nil {
-		return fmt.Errorf("failed to read tape file: %w", err)
+		return errfmt.Errorf("failed to read tape file: %w", err)
 	}
 
 	headerStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("4")).Bold(true)

@@ -23,6 +23,8 @@ It covers the whole `config.toml`: the `[appearance]` table and its `sidebar`, `
 
 `[notifications]` sets how many seconds a message stays up. `duration` is for info and success messages, and its default is 2. `warning_duration` (default 8) and `error_duration` (default 15) are for warnings and errors. Any value from 1 to 3600 is valid, and 0 uses the default. tuios warns about a negative value and uses the default. tuios warns about a value above 3600 and uses 3600. `style` sets how a message looks. `full` (the default) shows a coloured bar on the left of the message and a line above it that counts down. `plain` shows the icon and the text only. The icon keeps its colour, so an error still looks different from an info message. `level` sets the least severe message the dock shows: `info` (the default) shows every message, `warning` only warnings and errors, and `error` only errors. A message the dock does not show still goes to the log viewer (`Ctrl+B D l`), so the notice for a key that did nothing can be read there. Set `log_hidden = false` to keep those messages out of the log as well. Warnings and errors always go to the log. A message from a pane, an agent or mail does not use `level`. `[notifications.agent]` and `[notifications.mail]` control those messages.
 
+`machine_offer` (default `true`) shows a message when a pane logs in with ssh or mosh to a machine that no `[hosts]` entry reaches. The message is "buildbox is not a machine here. Add it?" with three choices. Add opens a new pane that runs `tuios hosts setup` for the machine. Not now hides the message for that machine until tuios starts again. Never adds the machine to a list in `sidebar.json`, and the Alerts tab of Settings shows that list. Select a machine in that list to remove it. A message that gets no answer goes away after `duration`, as Not now does. The message shows only for a login that reads your keys: a tunnel (`-N`, `-f`, `-n`, `-W`), `-s`, `-T` and a remote command without `-t` do not count. ssh that scp, rsync, git, sftp or sshfs starts does not count. The client must run for 5 seconds. This machine on port 22 and the git hosts (github.com, gitlab.com, bitbucket.org, codeberg.org) are never offered. The check works with `[agents] enabled = false`. Set `machine_offer = false` to turn it off.
+
 `[notifications.mail]` has `enabled`, `notify`, `dock`, `sound` and `between_agents`. Each key except `between_agents` follows the same key in `[notifications.agent]` while it is unset, so a config without the table alerts as before. `between_agents` (default `false`) also alerts on a message from one agent to another. Sound mode, cooldown, cue files and quiet hours always come from `[notifications.agent]`. `tuios set-config notifications.mail.KEY ""` clears a key, and `tuios get-config` then prints `(follows notifications.agent.KEY)`.
 
 `tuios list-options` describes every settable path with its type, default, and accepted values, straight from the registry the validator uses. The in-app settings page (`Ctrl+B ,`) edits and persists the same options, and its rows are derived from that same registry: an option an agent can set is an option a person can reach, and a test fails the build if one is not.
@@ -467,6 +469,28 @@ display = "follow"
 - `XAUTHORITY` must be a file that you own, in folders that pass the same checks.
 - The daemon removes its links when it stops and when you set the option to `"off"`. At start, it removes the links that a stopped daemon left.
 
+`keep_awake` in `[daemon]` (default `"off"`) keeps the machine from sleeping while agents work.
+
+| Value | The machine stays awake |
+|---|---|
+| `off` (default) | Never. The machine sleeps as its own settings say. |
+| `agents` | While an agent pane on this machine has the state `working`. |
+| `on` | While the daemon runs. |
+
+```toml
+[daemon]
+keep_awake = "agents"
+```
+
+- The daemon holds the machine awake, so it works when no client is attached, over ssh, and on a host.
+- On Linux the daemon runs `systemd-inhibit` for idle and sleep. `systemd-inhibit --list` shows a `tuios` row while it holds. On macOS it runs `caffeinate`. On Windows it calls `SetThreadExecutionState`.
+- Only sleep is held off. The display can still dim and lock. On a Mac, a closed lid still sleeps.
+- A pane whose program runs on another machine, in a global session, does not count. That machine runs the agent.
+- With `[agents] enabled = false`, no agent works, so `agents` holds nothing.
+- The daemon does no work while nothing changes. It counts the working panes only when the state of a pane changes or a pane closes.
+- When the daemon stops, or a live upgrade replaces it, the hold ends. The new daemon takes it again.
+- `tuios keep-awake agents` sets the value, applies it at once and saves it to the config file. `tuios keep-awake` shows the hold. `tuios doctor keep-awake` checks that this machine can be held awake. The Daemon tab of the settings has the same option. A change in the config file applies at once.
+
 `[hints]` sets what hints mode (`Ctrl+B F`) labels. See [HINTS.md](HINTS.md).
 
 `[panes]` sets `label_keys`, the keys that the pane labels (`Ctrl+B Q`) use. The default is `1234567890`. Letters `a` to `z` and digits are allowed. See [KEYBINDINGS.md](KEYBINDINGS.md#pane-labels).
@@ -478,6 +502,42 @@ display = "follow"
 `[panes] drag_and_drop_desktop = true`, with `drag_and_drop`, bridges drags to and from the desktop when tuios runs in a terminal that speaks the same protocol itself: kitty 0.47 or later. tuios asks its terminal once at startup and, when it answers, registers as a program that takes drops and offers drags. A file dragged from a file manager or a browser onto the tuios window then lands on the pane under the pointer, by the rules above: a program that speaks the protocol takes it itself, any other pane gets the path as a paste. A file a program in a pane drags, from yazi say, becomes the desktop's drag and can be dropped on any other window; the drag image the desktop shows is the file names and the pane they come from. While the bridge is up the terminal recognises the drag gesture and tuios answers only one whose press went to a pane that offers drags, so moving a pane, selecting text and dragging a row of the rail are as they were. The bridge is for a terminal on this machine: a client over SSH, through tuios-web or attached to another machine's daemon does not register. Both switches take effect without a restart: turning the bridge off takes the registration back, turning it on asks the terminal again. The default is `false`.
 
 `[path_picker]` sets `show_hidden`. With `true`, the path picker (`Alt+;`) shows the names that start with a dot when it opens. The default is `false`. `Alt+H` in the picker shows or hides them. See [KEYBINDINGS.md](KEYBINDINGS.md#pick-a-path).
+
+## Open files from the sidebar
+
+`o` in the sidebar's files section opens the selected file or folder. tuios uses
+the system opener: `xdg-open` on Linux, `open` on macOS, `wslview` under WSL,
+and the program for the file type on Windows.
+
+Add `[[files.open]]` rules to use another program for some files:
+
+```toml
+[[files.open]]
+match = "*.pdf"
+command = ["zathura", "{path}"]
+
+[[files.open]]
+match = "*/"            # every folder
+command = ["thunar", "{path}"]
+```
+
+- tuios uses the first rule that matches. With no match, it uses the system
+  opener.
+- `match` is a glob. Case does not matter. A pattern with no `/` matches the
+  file name. A pattern with a `/` matches the full path, for example
+  `"/home/me/papers/*.pdf"`.
+- A `/` at the end of the pattern matches folders only. A pattern without it
+  matches files only.
+- `command` is a list of words. tuios starts it directly, with no shell.
+  `{path}` in a word becomes the path. With no `{path}`, the path goes last.
+- tuios starts the command on the machine that runs the client. It does not
+  open a file in a listing of another machine, or for a remote client.
+- When the program stops with an error in the first 3 seconds, a message
+  says so. The log has the reason.
+- tuios skips a rule with no pattern, a pattern that is not a valid glob, or
+  no command, and shows a warning for it when it starts.
+- `appearance.link_opener` and `$BROWSER` do not apply to files. They name a
+  browser for web links.
 
 ## Drag a file into a pane
 
@@ -501,7 +561,7 @@ file_drag = false
 ## Animation speed
 
 `appearance.animation_speed` is the percent window animations run at: minimize
-and restore, snap, swap and zoom. 100 is the speed tuios ships with. 200 runs
+and restore, snap, swap, zoom and the workspace slide. 100 is the speed tuios ships with. 200 runs
 them in half the time, and 50 in twice the time.
 
 ```toml
@@ -2633,6 +2693,29 @@ fold_working = true   # default false
 choice wins over `fold_working`. The settings page has this option on the
 Behavior tab, as "Fold Working".
 
+## The agent list
+
+On a screen 80 columns or wider, the agents view (`ctrl+b i`) shows the list
+of agents as a column beside the focus. `view_list` sets that layout:
+
+```toml
+[agents]
+view_list = "column"   # default; "strip" or "auto"
+```
+
+| Value | What the view shows |
+|---|---|
+| `column` | The list column, for any number of agents |
+| `strip` | A strip of chips above the focus, when the chips fit on one row |
+| `auto` | The strip for two agents or fewer, and the column for more |
+
+The view shows the column for a folded group, the task board, a filter and a
+search. On a screen narrower than 80 columns the list fills the screen, and
+`l` opens the focus. `\` in the view switches between the column and the
+strip. tuios keeps that choice in `sidebar.json` in its state folder. The
+choice wins over `view_list`. The settings page has this option on the
+Behavior tab, as "Agent list".
+
 ## Report pane states to your terminal
 
 When tuios runs in a terminal that reads OSC 7501, the Program Status
@@ -2742,9 +2825,9 @@ max_untracked_mb = 50
   command, and a line with no tool; naming one file tool, such as `Write`,
   covers every file tool, including a protocol pane's `edit`. A daemon that
   could read no config file at all still uses the shipped rules. A rule with no name or a pattern that does not compile is
-  ignored, with a warning. An allow of a risky approval takes a second press
-  of the same key in the Inbox, and the daemon refuses one that does not name
-  the rules. `panes_may_allow` lets a pane holding the `respond` grant allow a
+  ignored, with a warning. An allow of a risky approval in the Inbox asks
+  first and takes `enter`, and the daemon refuses one that does not name the
+  rules. `panes_may_allow` lets a pane holding the `respond` grant allow a
   risky call; it is off, so only you can. The shipped rules are listed under
   [Risk rules](AGENT_STATE.md#risk-rules). They are a speed bump, not a
   sandbox. The daemon reads the risk rules again when the file changes. A
@@ -2879,10 +2962,11 @@ the feeds on, and there is nothing to configure for them.
 ## The task board
 
 `b` in the agents view shows the task board: the cards of every session,
-grouped by stage ([AGENT_STATE.md](AGENT_STATE.md#the-agents-view)). `[tasks]
-stages` picks the stages it shows. The order stays todo, plan, doing, verify,
+one column for each stage ([AGENT_STATE.md](AGENT_STATE.md#the-agents-view)).
+`B` shows the stages as a list instead. `[tasks] stages` picks the stages it
+shows. The order stays todo, plan, doing, verify,
 review, shipped, done whatever the list's order, and a stage the list leaves
-out has no head. Empty, or naming no known stage, shows every stage. An
+out has no column. Empty, or naming no known stage, shows every stage. An
 unknown name is reported as a config warning and ignored.
 
 ```toml

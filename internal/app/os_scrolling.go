@@ -643,9 +643,17 @@ func (m *OS) ScrollStripState() *session.ScrollStripState {
 // not otherwise, which is also what keeps it agreeing with the threshold it was
 // given in 5f3af88a: a column any of which is on screen is left alone.
 //
+// A focus that landed on a pane the same sync brought is the other rule. A
+// new pane takes the column after the focused one, which is the peek a
+// keyboard step leaves at the edge, so the least-scroll rule found some of it
+// on screen and left the pane the user had just opened cut off there (issue
+// 1507). Opening a pane is asking for it, as a focus key is, so focusOnNew
+// shows the whole column with ScrollToFocusedColumn. Every client works that
+// out from the same strip too.
+//
 // Called from inside a sync, so it never pushes. The answer owed to the daemon
 // for the whole sync is sent once, by ApplyStateSync.
-func (m *OS) adoptScrollStrip(strip *session.ScrollStripState, focusChanged bool) {
+func (m *OS) adoptScrollStrip(strip *session.ScrollStripState, focusChanged, focusOnNew bool) {
 	if !m.AutoTiling || !m.UseScrollingLayout {
 		return
 	}
@@ -677,7 +685,11 @@ func (m *OS) adoptScrollStrip(strip *session.ScrollStripState, focusChanged bool
 		// strip is. Every client works it out from the same strip and the same
 		// content width, so they all land on the same offset.
 		before := sl.ViewportX
-		sl.EnsureFocusedVisible(m.ScrollingViewWidth())
+		if focusOnNew {
+			sl.ScrollToFocusedColumn(m.ScrollingViewWidth())
+		} else {
+			sl.EnsureFocusedVisible(m.ScrollingViewWidth())
+		}
 		moved = moved || sl.ViewportX != before
 	}
 	if moved {

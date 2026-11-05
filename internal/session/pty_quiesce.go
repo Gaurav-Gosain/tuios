@@ -3,7 +3,8 @@ package session
 import (
 	"context"
 	"errors"
-	"fmt"
+
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 )
 
 // Quiescing a pane: stopping its reader with every byte it took accounted for.
@@ -106,7 +107,7 @@ func (p *PTY) Quiesce(ctx context.Context) error {
 		select {
 		case <-flushed:
 		case <-ctx.Done():
-			return fmt.Errorf("%w: %w", errRepliesUnwritten, ctx.Err())
+			return errfmt.Errorf("%w: %w", errRepliesUnwritten, ctx.Err())
 		}
 	}
 	p.winsizeMu.Lock()

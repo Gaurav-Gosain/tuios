@@ -4,10 +4,11 @@
 package adblock
 
 import (
-	"encoding/json"
 	"slices"
 	"sort"
 	"strings"
+
+	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 )
 
 // MaxRules is the most rules a list Lists makes holds: WebKit takes
@@ -56,7 +57,7 @@ func (r *Rules) Lists() []string {
 	unique := func(rules []Rule) []Rule {
 		var out []Rule
 		for _, rule := range rules {
-			key, _ := json.Marshal(rule)
+			key, _ := jsonx.Marshal(rule)
 			if !seen[string(key)] {
 				seen[string(key)] = true
 				out = append(out, rule)
@@ -69,7 +70,7 @@ func (r *Rules) Lists() []string {
 	head := unique(slices.Concat(r.Block, r.Hide))
 	for len(head) > 0 || lists == nil && len(tail) > 0 {
 		n := min(room, len(head))
-		data, _ := json.Marshal(slices.Concat(head[:n], tail))
+		data, _ := jsonx.Marshal(slices.Concat(head[:n], tail))
 		lists = append(lists, string(data))
 		head = head[n:]
 	}
@@ -306,7 +307,7 @@ func (c *converter) finish() {
 	var order []string
 	groups := map[string]*group{}
 	add := func(t Trigger, selector string) {
-		key, _ := json.Marshal(t)
+		key, _ := jsonx.Marshal(t)
 		k := string(key)
 		if pseudo(selector) {
 			k += "\x00" + selector // alone

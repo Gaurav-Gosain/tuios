@@ -4,7 +4,6 @@ package ptyspawn
 
 import (
 	"errors"
-	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -13,6 +12,7 @@ import (
 	"syscall"
 	"unsafe"
 
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"github.com/charmbracelet/x/xpty"
 	"golang.org/x/sys/windows"
 )
@@ -98,17 +98,17 @@ func loadConPTYDLL(dir string) (*conptyDLL, error) {
 		return nil, nil
 	}
 	if info, err := os.Stat(filepath.Join(dir, openConsoleName)); err != nil || !info.Mode().IsRegular() {
-		return nil, fmt.Errorf("%s has no %s beside it", path, openConsoleName)
+		return nil, errfmt.Errorf("%s has no %s beside it", path, openConsoleName)
 	}
 	mod, err := windows.LoadLibraryEx(path, 0, windows.LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR|windows.LOAD_LIBRARY_SEARCH_SYSTEM32)
 	if err != nil {
-		return nil, fmt.Errorf("failed to load %s: %w", path, err)
+		return nil, errfmt.Errorf("failed to load %s: %w", path, err)
 	}
 	lib := &windows.DLL{Name: path, Handle: mod}
 	find := func(name string) (*windows.Proc, error) {
 		proc, err := lib.FindProc(name)
 		if err != nil {
-			return nil, fmt.Errorf("failed to find %s in %s: %w", name, path, err)
+			return nil, errfmt.Errorf("failed to find %s in %s: %w", name, path, err)
 		}
 		return proc, nil
 	}
@@ -164,12 +164,12 @@ func (d *conptyDLL) open(width, height int) (_ *dllPty, err error) {
 	}
 	var inRead, inWrite, outRead, outWrite windows.Handle
 	if err := windows.CreatePipe(&inRead, &inWrite, nil, 0); err != nil {
-		return nil, fmt.Errorf("failed to create input pipe for %s: %w", d.path, err)
+		return nil, errfmt.Errorf("failed to create input pipe for %s: %w", d.path, err)
 	}
 	if err := windows.CreatePipe(&outRead, &outWrite, nil, 0); err != nil {
 		_ = windows.CloseHandle(inRead)
 		_ = windows.CloseHandle(inWrite)
-		return nil, fmt.Errorf("failed to create output pipe for %s: %w", d.path, err)
+		return nil, errfmt.Errorf("failed to create output pipe for %s: %w", d.path, err)
 	}
 	p := &dllPty{dll: d, input: inWrite, output: outRead, width: width, height: height}
 	r, _, _ := d.create.Call(coord(width, height), uintptr(inRead), uintptr(outWrite), 0, uintptr(unsafe.Pointer(&p.hpc)))
@@ -179,7 +179,7 @@ func (d *conptyDLL) open(width, height int) (_ *dllPty, err error) {
 	if err := hresult(r); err != nil {
 		_ = windows.CloseHandle(inWrite)
 		_ = windows.CloseHandle(outRead)
-		return nil, fmt.Errorf("failed to create a pseudo console on %s: %w", d.path, err)
+		return nil, errfmt.Errorf("failed to create a pseudo console on %s: %w", d.path, err)
 	}
 	defer func() {
 		if err != nil {
@@ -187,13 +187,13 @@ func (d *conptyDLL) open(width, height int) (_ *dllPty, err error) {
 		}
 	}()
 	if p.attrList, err = windows.NewProcThreadAttributeList(1); err != nil {
-		return nil, fmt.Errorf("failed to allocate the process attributes: %w", err)
+		return nil, errfmt.Errorf("failed to allocate the process attributes: %w", err)
 	}
 	// The attribute's value is the HPCON itself, a pointer the DLL allocated,
 	// so its bits are passed as one.
 	hpc := *(*unsafe.Pointer)(unsafe.Pointer(&p.hpc))
 	if err := p.attrList.Update(windows.PROC_THREAD_ATTRIBUTE_PSEUDOCONSOLE, hpc, unsafe.Sizeof(p.hpc)); err != nil {
-		return nil, fmt.Errorf("failed to attach the pseudo console to the process attributes: %w", err)
+		return nil, errfmt.Errorf("failed to attach the pseudo console to the process attributes: %w", err)
 	}
 	return p, nil
 }
@@ -219,7 +219,7 @@ func (p *dllPty) Write(b []byte) (int, error) {
 func (p *dllPty) Resize(width, height int) error {
 	r, _, _ := p.dll.resize.Call(uintptr(p.hpc), coord(width, height))
 	if err := hresult(r); err != nil {
-		return fmt.Errorf("failed to resize pseudo console: %w", err)
+		return errfmt.Errorf("failed to resize pseudo console: %w", err)
 	}
 	p.width, p.height = width, height
 	return nil
@@ -296,7 +296,7 @@ func (p *dllPty) Start(cmd *exec.Cmd) error {
 	flags |= windows.CREATE_UNICODE_ENVIRONMENT | windows.EXTENDED_STARTUPINFO_PRESENT
 	var pi windows.ProcessInformation
 	if err := windows.CreateProcess(argv0p, cmdlinep, nil, nil, false, flags, &env[0], dirp, &si.StartupInfo, &pi); err != nil {
-		return fmt.Errorf("failed to create process: %w", err)
+		return errfmt.Errorf("failed to create process: %w", err)
 	}
 	defer func() {
 		_ = windows.CloseHandle(pi.Thread)
@@ -307,7 +307,7 @@ func (p *dllPty) Start(cmd *exec.Cmd) error {
 	// it after ours are closed.
 	if cmd.Process, err = os.FindProcess(int(pi.ProcessId)); err != nil {
 		_ = windows.TerminateProcess(pi.Process, 1)
-		return fmt.Errorf("failed to find process after starting: %w", err)
+		return errfmt.Errorf("failed to find process after starting: %w", err)
 	}
 	return nil
 }

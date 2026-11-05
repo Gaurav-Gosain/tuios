@@ -298,9 +298,15 @@ func (m *mux) dropStream(id uint32) {
 	delete(m.streams, id)
 	m.mu.Unlock()
 	if s != nil {
+		s.closedByPeer.Store(true)
 		s.peerClosed(io.EOF)
 	}
 }
+
+// ClosedByPeer reports whether the far side closed the stream on purpose, with
+// a close frame on a link that is still up. A stream that ended because the
+// link dropped reports false, though its reader sees the same end of file.
+func (s *Stream) ClosedByPeer() bool { return s.closedByPeer.Load() }
 
 // run reads frames until the pipe ends or a protocol error occurs. It returns
 // the reason it stopped.
@@ -459,6 +465,11 @@ type Stream struct {
 	creditsOK atomic.Bool
 	read      atomic.Uint64
 	credited  atomic.Uint64
+
+	// closedByPeer says the far side ended the stream with a close frame,
+	// while the link stayed up. A stream the link took down with it, or one
+	// this side dropped, leaves it false. See ClosedByPeer.
+	closedByPeer atomic.Bool
 
 	mu       sync.Mutex
 	buf      []byte

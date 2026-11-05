@@ -5,6 +5,7 @@ import (
 
 	"tuios.dev/loom"
 
+	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
 	"github.com/Gaurav-Gosain/tuios/internal/tmldraw"
 )
@@ -30,7 +31,7 @@ func tmlDecodeView(raw json.RawMessage) *loom.View {
 		return nil
 	}
 	var v loom.View
-	if json.Unmarshal(raw, &v) != nil {
+	if jsonx.Unmarshal(raw, &v) != nil {
 		return nil
 	}
 	v.Text, v.Caret = nil, nil
@@ -59,7 +60,7 @@ func (d *Daemon) captureTMLWindow(w WindowState, cols, rows int, styled bool) (c
 	}
 	d.tml.mu.Lock()
 	doc := s.doc
-	state, _ := json.Marshal(s.store.State())
+	state, _ := jsonx.Marshal(s.store.State())
 	view := tmlDecodeView(s.view)
 	d.tml.mu.Unlock()
 	if doc == nil {

@@ -3,13 +3,14 @@ package integration
 import (
 	"encoding/json"
 	"errors"
-	"fmt"
 	"os"
 	"path/filepath"
 	"slices"
 	"strconv"
 	"strings"
 
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
+	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 	"github.com/Gaurav-Gosain/tuios/internal/lazyre"
 )
 
@@ -139,17 +140,17 @@ func readJSONEntry(shape mcpShape, raw json.RawMessage) (command string, args []
 		Command json.RawMessage `json:"command"`
 		Args    []string        `json:"args"`
 	}
-	if json.Unmarshal(raw, &e) != nil {
+	if jsonx.Unmarshal(raw, &e) != nil {
 		return "", nil, false
 	}
 	if shape == mcpOpenCodeJSON {
 		var argv []string
-		if json.Unmarshal(e.Command, &argv) != nil || len(argv) == 0 {
+		if jsonx.Unmarshal(e.Command, &argv) != nil || len(argv) == 0 {
 			return "", nil, false
 		}
 		return argv[0], argv[1:], true
 	}
-	if json.Unmarshal(e.Command, &command) != nil {
+	if jsonx.Unmarshal(e.Command, &command) != nil {
 		return "", nil, false
 	}
 	return command, e.Args, true
@@ -175,7 +176,7 @@ type MCPStatus struct {
 func (t *Target) mcpPlan(env Env, tuios string, write, install bool) (path string, have, out []byte, changed bool, err error) {
 	m, ok := mcpTargets[t.ID]
 	if !ok {
-		return "", nil, nil, false, fmt.Errorf("tuios cannot register an MCP server with %s. It can with %s", t.Name, strings.Join(MCPHarnessIDs(), ", "))
+		return "", nil, nil, false, errfmt.Errorf("tuios cannot register an MCP server with %s. It can with %s", t.Name, strings.Join(MCPHarnessIDs(), ", "))
 	}
 	path = m.path(t, env)
 	have, err = readOptional(path)
@@ -191,7 +192,7 @@ func (t *Target) mcpPlan(env Env, tuios string, write, install bool) (path strin
 		out, err = editMCPJSON(m.shape, have, tuios, write, install)
 	}
 	if err != nil {
-		return path, have, nil, false, fmt.Errorf("%s: %w. It was left unchanged", path, err)
+		return path, have, nil, false, errfmt.Errorf("%s: %w. It was left unchanged", path, err)
 	}
 	return path, have, out, string(out) != string(have), nil
 }
@@ -206,7 +207,7 @@ func (t *Target) InstallMCP(env Env, tuios string, write bool) (Result, error) {
 func (t *Target) installMCP(env Env, tuios string, write bool) (Result, error) {
 	res := Result{Harness: t.ID, Path: t.MCPPath(env)}
 	if st, err := os.Stat(t.ConfigDir(env)); err != nil || !st.IsDir() {
-		return res, fmt.Errorf("%w: %s. Install %s and run it once, then try again", ErrNoConfigDir, t.ConfigDir(env), t.Name)
+		return res, errfmt.Errorf("%w: %s. Install %s and run it once, then try again", ErrNoConfigDir, t.ConfigDir(env), t.Name)
 	}
 	path, have, out, changed, err := t.mcpPlan(env, tuios, write, true)
 	if err != nil {
@@ -316,7 +317,7 @@ func editMCPJSON(shape mcpShape, have []byte, tuios string, write, install bool)
 	servers := newObject()
 	if raw, ok := root.get(key); ok {
 		if servers, err = parseObject(raw); err != nil {
-			return nil, fmt.Errorf("%s is not an object: %w", key, err)
+			return nil, errfmt.Errorf("%s is not an object: %w", key, err)
 		}
 	}
 	if raw, ok := servers.get(MCPServerName); ok {
@@ -324,7 +325,7 @@ func editMCPJSON(shape mcpShape, have []byte, tuios string, write, install bool)
 			if !install {
 				return have, nil
 			}
-			return nil, fmt.Errorf("its %s server %q was not written by tuios, so it is left alone", key, MCPServerName)
+			return nil, errfmt.Errorf("its %s server %q was not written by tuios, so it is left alone", key, MCPServerName)
 		}
 	}
 	if install {
@@ -461,7 +462,7 @@ func editMCPTOML(have []byte, tuios string, write, install bool) ([]byte, error)
 		return []byte(outside), nil
 	}
 	if codexTableRe().MatchString(outside) {
-		return nil, fmt.Errorf("it defines [mcp_servers.%s] itself, so tuios leaves it alone", MCPServerName)
+		return nil, errfmt.Errorf("it defines [mcp_servers.%s] itself, so tuios leaves it alone", MCPServerName)
 	}
 	trimmed := strings.TrimRight(outside, "\n")
 	if trimmed != "" {

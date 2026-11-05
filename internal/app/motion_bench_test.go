@@ -1,7 +1,9 @@
 package app
 
 import (
+	"fmt"
 	"image"
+	"math/rand"
 	"testing"
 	"time"
 
@@ -87,4 +89,90 @@ func BenchmarkShimmerApply(b *testing.B) {
 		restore()
 		m.applyShimmer(canvas, now)
 	}
+}
+
+// BenchmarkWorkspaceSlideFrame is the frame budget for the workspace slide:
+// a 200x50 screen, four tiled panes on each of two workspaces, and every
+// pane of the workspace on screen repainted with a fresh flood each frame.
+// "cut" is that frame with no slide, "slide" the same frame half way through
+// one, and "begin" the snapshot a switch takes before it slides. A slide
+// frame has to hold 60 frames a second, so "slide" stays well under 16ms.
+// The floods are written with the timer stopped: what is timed is the frame,
+// with every pane on screen dirty.
+func BenchmarkWorkspaceSlideFrame(b *testing.B) {
+	const cols, rows = 200, 50
+	setup := func(b *testing.B) *OS {
+		m := &OS{
+			Settings:         config.Global,
+			WorkspaceFocus:   map[int]int{},
+			NumWorkspaces:    9,
+			CurrentWorkspace: 1,
+			Width:            cols,
+			Height:           rows,
+		}
+		m.Settings.Motion = config.MotionFull
+		w, h := cols/2, rows/2
+		for ws := 1; ws <= 2; ws++ {
+			for i := range 4 {
+				win := floodWindow(b, fmt.Sprintf("slide-%d-%d", ws, i), w-2, h-2)
+				win.X, win.Y, win.Width, win.Height = (i%2)*w, (i/2)*h, w, h
+				win.Workspace, win.Tiled = ws, true
+				m.Windows = append(m.Windows, win)
+			}
+		}
+		m.composeFrame()
+		return m
+	}
+	rng := rand.New(rand.NewSource(2))
+	flood := func(b *testing.B, m *OS) {
+		b.StopTimer()
+		defer b.StartTimer()
+		for _, w := range m.Windows {
+			if w.Workspace == m.CurrentWorkspace {
+				floodFrame(b, w, rng, w.Width-2, w.Height-2)
+				w.MarkContentDirty()
+			}
+		}
+	}
+	b.Run("cut", func(b *testing.B) {
+		m := setup(b)
+		m.CurrentWorkspace = 2
+		m.composeFrame()
+		b.ReportAllocs()
+		b.ResetTimer()
+		for b.Loop() {
+			flood(b, m)
+			_ = m.composeFrame()
+		}
+	})
+	b.Run("slide", func(b *testing.B) {
+		m := setup(b)
+		m.beginWorkspaceSlide(1, 2)
+		if !m.wsSlide.running() {
+			b.Fatal("the slide did not start")
+		}
+		m.CurrentWorkspace = 2
+		m.wsSlide.dur = time.Hour
+		m.composeFrame()
+		b.ReportAllocs()
+		b.ResetTimer()
+		for b.Loop() {
+			// Half way, every frame, so each one draws both workspaces.
+			m.wsSlide.start = time.Now().Add(-time.Hour / 5)
+			flood(b, m)
+			_ = m.composeFrame()
+		}
+		if !m.wsSlide.running() {
+			b.Fatal("the slide ended during the run")
+		}
+	})
+	b.Run("begin", func(b *testing.B) {
+		m := setup(b)
+		b.ReportAllocs()
+		b.ResetTimer()
+		for b.Loop() {
+			flood(b, m)
+			m.beginWorkspaceSlide(1, 2)
+		}
+	})
 }

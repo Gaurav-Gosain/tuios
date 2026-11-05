@@ -11,6 +11,8 @@ import (
 	"strconv"
 	"sync"
 	"time"
+
+	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 )
 
 // stream-pane: one pane as a byte stream, for a client that is not tuios.
@@ -387,13 +389,16 @@ func (ps *paneStream) close() {
 			ps.pty.unsubscribeSub(ps.subID, ps.sub)
 		}
 		ps.leaseMu.Lock()
-		if ps.leased && ps.cs.viaLink {
+		if ps.leased && ps.cs.viaLink && !ps.cs.linkClosedOnPurposeNow() {
 			// A stream over a link ends when the link drops, and its
 			// viewer opens it again when the link is back. Releasing the
 			// lease now would resize the pane twice, to its own size and
 			// back, and the program in it would redraw both times. The
 			// lease lingers for linkLeaseLinger: a viewer back by then
-			// holds the pane with its new stream's lease.
+			// holds the pane with its new stream's lease. A stream the
+			// far side closed on purpose, as a phone leaving the pane,
+			// has no viewer coming back, and stdio-proxy says so before
+			// it ends the connection. Its lease goes at once.
 			pty, holder := ps.pty, ps.subID
 			time.AfterFunc(linkLeaseLinger, func() { _ = pty.SetLease(holder, 0, 0) })
 		} else if ps.leased {
@@ -575,7 +580,7 @@ func (ps *paneStream) stream(gone <-chan struct{}) error {
 func (ps *paneStream) recheck() *verbError {
 	ps.admitMu.Lock()
 	defer ps.admitMu.Unlock()
-	params, _ := json.Marshal(map[string]string{"session": ps.home().Name(), "window": ps.window})
+	params, _ := jsonx.Marshal(map[string]string{"session": ps.home().Name(), "window": ps.window})
 	_, _, verr := ps.d.admitVerb(ps.cs, "stream-pane", params)
 	return verr
 }
@@ -687,7 +692,7 @@ func (ps *paneStream) write(parts ...[]byte) error {
 
 // writeError tells the client a frame it sent was refused.
 func (ps *paneStream) writeError(verr *verbError) {
-	body, _ := json.Marshal(map[string]string{"code": verr.Code, "message": verr.Message})
+	body, _ := jsonx.Marshal(map[string]string{"code": verr.Code, "message": verr.Message})
 	_ = ps.writeFrame(paneFrameError, body)
 }
 
@@ -754,7 +759,7 @@ func (ps *paneStream) admitInput() *verbError {
 	ps.admitMu.Lock()
 	defer ps.admitMu.Unlock()
 	home := ps.home()
-	params, _ := json.Marshal(map[string]string{"session": home.Name(), "window": ps.window})
+	params, _ := jsonx.Marshal(map[string]string{"session": home.Name(), "window": ps.window})
 	if _, _, verr := ps.d.admitVerb(ps.cs, "send-text", params); verr != nil {
 		return verr
 	}
@@ -812,7 +817,7 @@ func (ps *paneStream) lease(payload []byte) *verbError {
 func (ps *paneStream) admitLease(cols, rows int) *verbError {
 	ps.admitMu.Lock()
 	defer ps.admitMu.Unlock()
-	params, _ := json.Marshal(map[string]any{"session": ps.home().Name(), "window": ps.window, "width": cols, "height": rows})
+	params, _ := jsonx.Marshal(map[string]any{"session": ps.home().Name(), "window": ps.window, "width": cols, "height": rows})
 	_, _, verr := ps.d.admitVerb(ps.cs, "resize", params)
 	return verr
 }
@@ -837,7 +842,7 @@ func (ps *paneStream) setLease(cols, rows int) error {
 // report reads a 'V' frame and makes it the stream's viewer report.
 func (ps *paneStream) report(payload []byte) *verbError {
 	var r ViewerReport
-	if err := json.Unmarshal(payload, &r); err != nil {
+	if err := jsonx.Unmarshal(payload, &r); err != nil {
 		return newVerbError(ErrVerbInvalidRequest, "a viewer frame is a JSON viewer report: "+err.Error())
 	}
 	ps.leaseMu.Lock()

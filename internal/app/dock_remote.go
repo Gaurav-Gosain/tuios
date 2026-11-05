@@ -40,6 +40,7 @@ func (m *OS) QueueRemoteCommand(payload *session.RemoteCommandPayload) bool {
 		WindowTarget: payload.WindowTarget,
 		ConfigPath:   payload.ConfigPath,
 		ConfigValue:  payload.ConfigValue,
+		ConfigNoSave: payload.ConfigNoSave,
 		RequestID:    payload.RequestID,
 	}
 	select {

@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"os"
 	"syscall"
+
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 )
 
 // daemonSysProcAttr detaches the spawned daemon from this process group so it
@@ -30,11 +32,11 @@ func forceKillCommand(pid int) string { return fmt.Sprintf("kill -9 %d", pid) }
 func killDaemonProcess(pid int) error {
 	process, err := os.FindProcess(pid)
 	if err != nil {
-		return fmt.Errorf("failed to find daemon process: %w", err)
+		return errfmt.Errorf("failed to find daemon process: %w", err)
 	}
 
 	if err := process.Signal(syscall.SIGTERM); err != nil {
-		return fmt.Errorf("failed to stop daemon: %w", err)
+		return errfmt.Errorf("failed to stop daemon: %w", err)
 	}
 
 	fmt.Printf("Sent SIGTERM to daemon (PID %d)\n", pid)

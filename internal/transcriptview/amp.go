@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"encoding/json"
 	"strconv"
+
+	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 )
 
 // An Amp thread, ~/.local/share/amp/threads/T-<id>.json: one JSON document,
@@ -128,7 +130,7 @@ func ampDoc(data []byte) []byte {
 	var doc struct {
 		Messages []json.RawMessage `json:"messages"`
 	}
-	if json.Unmarshal(data, &doc) != nil {
+	if jsonx.Unmarshal(data, &doc) != nil {
 		return nil
 	}
 	var b bytes.Buffer

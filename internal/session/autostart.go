@@ -1,10 +1,11 @@
 package session
 
 import (
-	"fmt"
 	"net"
 	"sync"
 	"time"
+
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 )
 
 // Global daemon instance for in-process daemon
@@ -59,7 +60,7 @@ func EnsureDaemonRunningWith(version string, cfg *DaemonConfig) error {
 
 		// Start() is non-blocking: it starts goroutines and returns
 		if err := inProcessDaemon.Start(); err != nil {
-			inProcessDaemonErr = fmt.Errorf("failed to start in-process daemon: %w", err)
+			inProcessDaemonErr = errfmt.Errorf("failed to start in-process daemon: %w", err)
 			return
 		}
 	})
@@ -89,7 +90,7 @@ func waitForDaemon(timeout time.Duration) error {
 		time.Sleep(50 * time.Millisecond)
 	}
 
-	return fmt.Errorf("daemon did not start within %v", timeout)
+	return errfmt.Errorf("daemon did not start within %v", timeout)
 }
 
 // StopInProcessDaemon stops the in-process daemon if it was started.

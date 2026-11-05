@@ -3,6 +3,8 @@ package config
 import (
 	"fmt"
 	"strings"
+
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 )
 
 // The rail's custom section: a section whose rows are what a command of the
@@ -56,7 +58,7 @@ func ParseSidebarCustomRefresh(s string) (DockRefresh, error) {
 		return DockRefresh{}, err
 	}
 	if refresh.Kind == DockRefreshPush {
-		return DockRefresh{}, fmt.Errorf("refresh %q is refused for the rail section: "+
+		return DockRefresh{}, errfmt.Errorf("refresh %q is refused for the rail section: "+
 			"a command that stays running cannot see the focus or the section's size change; "+
 			"use once, a duration or event:TYPE", strings.TrimSpace(s))
 	}

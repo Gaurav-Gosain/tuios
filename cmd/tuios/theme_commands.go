@@ -10,6 +10,8 @@ import (
 	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
+	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
 )
 
@@ -125,8 +127,8 @@ func runListThemes(sessionName, themeName, filter string, jsonOutput bool) error
 			Followed  bool   `json:"followed"`
 		} `json:"omarchy"`
 	}
-	if err := json.Unmarshal(raw, &res); err != nil {
-		return fmt.Errorf("failed to parse response: %w", err)
+	if err := jsonx.Unmarshal(raw, &res); err != nil {
+		return errfmt.Errorf("failed to parse response: %w", err)
 	}
 
 	w := os.Stdout
@@ -243,7 +245,7 @@ func runThemeReload(jsonOutput bool) error {
 	}
 	stamp := filepath.Join(filepath.Dir(path), config.ThemeReloadStamp)
 	if err := os.WriteFile(stamp, []byte(time.Now().Format(time.RFC3339Nano)), 0o600); err != nil {
-		return fmt.Errorf("ask the clients to reload: %w", err)
+		return errfmt.Errorf("ask the clients to reload: %w", err)
 	}
 
 	if jsonOutput {
@@ -270,11 +272,11 @@ func runThemeExport(id, format string, full bool) error {
 		out, err = theme.ExportTheme(id, full)
 	case "base16":
 		if full {
-			return fmt.Errorf("--full is for the tuios format. A base16 scheme always has all its colours")
+			return errfmt.Errorf("--full is for the tuios format. A base16 scheme always has all its colours")
 		}
 		out, err = theme.ExportBase16(id)
 	default:
-		return fmt.Errorf("unknown format %q. Use tuios or base16", format)
+		return errfmt.Errorf("unknown format %q. Use tuios or base16", format)
 	}
 	if err != nil {
 		return err

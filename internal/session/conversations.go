@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/atomicfile"
+	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 )
 
 // Ended conversations.
@@ -89,13 +90,13 @@ func (l *conversationLog) loadLocked() {
 	}
 	l.loaded = true
 	if data, err := os.ReadFile(conversationsPath()); err == nil {
-		_ = json.Unmarshal(data, &l.list)
+		_ = jsonx.Unmarshal(data, &l.list)
 	}
 }
 
 // saveLocked writes the list. mu is held.
 func (l *conversationLog) saveLocked() {
-	data, err := json.Marshal(l.list)
+	data, err := jsonx.Marshal(l.list)
 	if err != nil {
 		return
 	}

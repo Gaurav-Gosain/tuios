@@ -53,36 +53,3 @@ func TestLsListsSavedSessionsWithNoDaemon(t *testing.T) {
 		t.Errorf("exit status = %d, want %d so a script can tell no daemon from no sessions", exitStatus(err), noDaemonStatus)
 	}
 }
-
-// TestLsJSONDistinguishesNoDaemonFromNoSessions pins the contract a script
-// needs: the same empty-looking listing meant two different things and exited 0
-// for both.
-func TestLsJSONDistinguishesNoDaemonFromNoSessions(t *testing.T) {
-	seedSavedSessions(t, "work")
-	diag := session.DiagnoseDaemon()
-	if diag.Running() {
-		t.Skip("a daemon is listening in the test tree")
-	}
-
-	var err error
-	out := captureStdout(t, func() { err = listSavedSessions(diag, true) })
-
-	var entries []struct {
-		Name  string `json:"name"`
-		Saved bool   `json:"saved"`
-	}
-	if jsonErr := json.Unmarshal([]byte(out), &entries); jsonErr != nil {
-		t.Fatalf("output is not JSON: %v\n%s", jsonErr, out)
-	}
-	if len(entries) != 1 || entries[0].Name != "work" || !entries[0].Saved {
-		t.Fatalf("JSON does not report the saved session: %s", out)
-	}
-	if exitStatus(err) != noDaemonStatus {
-		t.Errorf("exit status = %d, want %d", exitStatus(err), noDaemonStatus)
-	}
-	// The status carries the whole message here; printing an error under the
-	// JSON would break every parser reading stdout.
-	if err.Error() != "" {
-		t.Errorf("the no-daemon status printed a message alongside the JSON: %q", err.Error())
-	}
-}

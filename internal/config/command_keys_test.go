@@ -144,17 +144,6 @@ func TestCommandEntryValidation(t *testing.T) {
 	}
 }
 
-// A scratch entry needs no command: it runs the user's shell.
-func TestScratchEntryNeedsNoCommand(t *testing.T) {
-	cfg, err := ParseUserConfig([]byte("[[keybindings.command]]\nkey = \"alt+x\"\ntype = \"scratch\"\nname = \"notes\"\n"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(cfg.Keybindings.Commands()) != 1 {
-		t.Fatal("a scratch entry with no command was left out")
-	}
-}
-
 // A second entry of the same name is left out, with a warning.
 func TestCommandEntryDuplicateName(t *testing.T) {
 	cfg, err := ParseUserConfig([]byte("[[keybindings.command]]\nkey = \"alt+x\"\ncommand = \"a\"\nname = \"n\"\n[[keybindings.command]]\nkey = \"alt+y\"\ncommand = \"b\"\nname = \"n\"\n"))

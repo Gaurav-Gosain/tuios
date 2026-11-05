@@ -202,6 +202,7 @@ func retainDaemonExclusive(incoming, canonical *SessionState) {
 	// client ever sends it, so canonical is always the truth: carrying it over by
 	// id both preserves a live command and lets one that exited clear.
 	fgCmds := make(map[string]string, len(canonical.Windows))
+	var offers map[string]*SSHOffer
 	// The shell pid is daemon-owned for the same reason and carried the same way:
 	// only the daemon holds the process, and a client sync never reports one.
 	// Without this every client push would strip the pid the corroboration needs.
@@ -357,6 +358,12 @@ func retainDaemonExclusive(incoming, canonical *SessionState) {
 		if cmd := w.ForegroundCmd; cmd != "" {
 			fgCmds[w.ID] = cmd
 		}
+		if o := w.SSHOffer; o != nil {
+			if offers == nil {
+				offers = make(map[string]*SSHOffer)
+			}
+			offers[w.ID] = o
+		}
 		if pid := w.ShellPID; pid != 0 {
 			shellPIDs[w.ID] = pid
 		}
@@ -424,6 +431,7 @@ func retainDaemonExclusive(incoming, canonical *SessionState) {
 		// The foreground command is canonical's whatever the push says, empty
 		// included: a command that exited has to be able to clear.
 		w.ForegroundCmd = fgCmds[w.ID]
+		w.SSHOffer = offers[w.ID]
 		if c := completions[w.ID]; c > w.CompletionSeq {
 			w.CompletionSeq = c
 		}

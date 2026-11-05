@@ -1,6 +1,8 @@
 package session
 
-import "fmt"
+import (
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
+)
 
 // Scratch workspaces.
 //
@@ -59,7 +61,7 @@ func scratchNameOnWorkspace(state *SessionState, ws int) (string, bool) {
 // errNoScratchGroup refuses a window for a scratch workspace with no group on
 // it: the group ended, and its number means nothing now.
 func errNoScratchGroup(ws int) error {
-	return fmt.Errorf("scratch workspace %d has no panes. Press the scratch key to start it again", ws)
+	return errfmt.Errorf("scratch workspace %d has no panes. Press the scratch key to start it again", ws)
 }
 
 // SetScratchWorkspaces turns scratch workspaces on or off for the session:
@@ -115,4 +117,4 @@ func unfocusScratchLocked(state *SessionState) {
 }
 
 // errScratchPaneStays refuses to move a scratch pane to a workspace.
-var errScratchPaneStays = fmt.Errorf("a scratch pane stays in its scratch group. Move a different pane")
+var errScratchPaneStays = errfmt.Errorf("a scratch pane stays in its scratch group. Move a different pane")

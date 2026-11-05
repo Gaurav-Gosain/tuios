@@ -13,6 +13,7 @@ import (
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/herdrplugin"
+	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 )
 
 // herdr's plugin.* socket methods and popup.close, answered by the plugin
@@ -672,7 +673,7 @@ func (d *Daemon) herdrPluginPaneOpen(cs *connState, params json.RawMessage) (any
 			ctx = c
 		}
 	}
-	ctxJSON, _ := json.Marshal(ctx)
+	ctxJSON, _ := jsonx.Marshal(ctx)
 	cwd := in.Cwd
 	if cwd == "" {
 		cwd = e.Plugin.PluginRoot

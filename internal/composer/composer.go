@@ -52,6 +52,10 @@ type Options struct {
 	// line keys do nothing, a paste's line breaks become spaces, and a long
 	// paste is text, never a block. The line still wraps on screen.
 	SingleLine bool
+	// SendNow makes alt+enter ask for the message sent now (EventSendNow)
+	// rather than add a new line. The reply to an agent uses it: enter
+	// queues while the agent works, alt+enter types it at once.
+	SendNow bool
 }
 
 // Event is what a key asks the host to do.
@@ -76,6 +80,9 @@ const (
 	// EventCleared: ctrl+c cleared the draft. Cleared holds what it was,
 	// for the host to keep in the history.
 	EventCleared
+	// EventSendNow: the person wants the message sent now, without a wait
+	// (alt+enter, with Options.SendNow). The host calls Submit.
+	EventSendNow
 )
 
 // Model is one draft and its editor.
@@ -508,7 +515,14 @@ func (m *Model) Update(msg tea.KeyPressMsg, remote bool) Event {
 			return EventNone
 		}
 		return EventSend
-	case "ctrl+j", "shift+enter", "alt+enter", "ctrl+enter":
+	case "alt+enter":
+		if m.opt.SendNow {
+			return EventSendNow
+		}
+		if !m.opt.SingleLine {
+			m.typeKey("\n")
+		}
+	case "ctrl+j", "shift+enter", "ctrl+enter":
 		if !m.opt.SingleLine {
 			m.typeKey("\n")
 		}

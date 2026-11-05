@@ -47,15 +47,15 @@ require (
 	github.com/xo/terminfo v1.2.0 // indirect
 	github.com/yusufpapurcu/wmi v1.2.4 // indirect
 	go.mitchellh.com/libghostty v0.0.0-20260920220152-31b65cdc24cf // indirect
-	golang.org/x/image v0.46.0 // indirect
+	golang.org/x/image v0.47.0 // indirect
 	golang.org/x/sync v0.24.0 // indirect
 	golang.org/x/sys v0.49.0 // indirect
 	golang.org/x/term v0.47.0 // indirect
 	golang.org/x/text v0.43.0 // indirect
-	tuios.dev/loom v0.2.3-0.20261104015133-7c2e19801778 // indirect
+	tuios.dev/loom v0.2.3-0.20261105111208-410ee4d8c48d // indirect
 	tuios.dev/plot v0.2.3-0.20261101044251-193bbd706cd8 // indirect
 	tuios.dev/progstatus v0.1.2-0.20261030111253-c0f512aa3148 // indirect
-	tuios.dev/sketch v0.4.1-0.20261104015025-a5461c1d897b // indirect
+	tuios.dev/sketch v0.4.1-0.20261105111154-15cd83e19f4c // indirect
 	tuios.dev/swatch v0.1.2-0.20261030111253-c0f512aa3148 // indirect
 	tuios.dev/tml v0.1.2-0.20261104012002-e0cf866a6ddb // indirect
 )

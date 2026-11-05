@@ -25,7 +25,7 @@ func TestCockpitAnswersOnlyWhatItShowed(t *testing.T) {
 	}
 
 	// Not drawn yet: nothing is sent.
-	if cmd, _ := m.CockpitAnswerLetter("a"); cmd != nil {
+	if cmd, _ := letterEnter(m, "a"); cmd != nil {
 		runMsg(t, m, cmd)
 	}
 	if _, sent := q.last("reply-approval"); sent {
@@ -34,7 +34,7 @@ func TestCockpitAnswersOnlyWhatItShowed(t *testing.T) {
 
 	// Drawn just now: still too soon.
 	m.renderInbox()
-	if cmd, _ := m.CockpitAnswerLetter("a"); cmd != nil {
+	if cmd, _ := letterEnter(m, "a"); cmd != nil {
 		runMsg(t, m, cmd)
 	}
 	if _, sent := q.last("reply-approval"); sent {
@@ -43,7 +43,7 @@ func TestCockpitAnswersOnlyWhatItShowed(t *testing.T) {
 
 	// Shown for the settle time: 1 allows once, for that request.
 	m.Inbox.shown.since = time.Now().Add(-time.Second)
-	cmd, _ := m.CockpitAnswerLetter("a")
+	cmd, _ := letterEnter(m, "a")
 	if cmd == nil {
 		t.Fatalf("a settled approval was not answered: %q", lastNotice(m).Message)
 	}

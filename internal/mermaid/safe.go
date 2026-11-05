@@ -2,11 +2,12 @@ package mermaid
 
 import (
 	"errors"
-	"fmt"
 	"io"
 	"os"
 	"strings"
 	"syscall"
+
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 )
 
 // TermSafe is s with every character a terminal would act on written as
@@ -78,7 +79,7 @@ func ReadSource(name string) ([]byte, error) {
 			return nil, ErrNotRegular
 		}
 		if info.Size() > MaxSource {
-			return nil, fmt.Errorf("the file is larger than %d MiB", MaxSource>>20)
+			return nil, errfmt.Errorf("the file is larger than %d MiB", MaxSource>>20)
 		}
 		// O_NONBLOCK: a file swapped for a FIFO between the stat and the open
 		// would block a plain open until a writer came. Opened this way it
@@ -99,7 +100,7 @@ func ReadSource(name string) ([]byte, error) {
 		return nil, err
 	}
 	if len(data) > MaxSource {
-		return nil, fmt.Errorf("the input is larger than %d MiB", MaxSource>>20)
+		return nil, errfmt.Errorf("the input is larger than %d MiB", MaxSource>>20)
 	}
 	return data, nil
 }

@@ -3,7 +3,6 @@ package server
 
 import (
 	"context"
-	"fmt"
 	"io"
 	"log"
 	"net"
@@ -24,6 +23,7 @@ import (
 
 	"github.com/Gaurav-Gosain/tuios/internal/app"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"github.com/Gaurav-Gosain/tuios/internal/plural"
 	"github.com/Gaurav-Gosain/tuios/internal/served"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
@@ -139,7 +139,7 @@ func StartSSHServer(ctx context.Context, cfg *SSHServerConfig) error {
 		// Use default path in .ssh directory
 		homeDir, err := os.UserHomeDir()
 		if err != nil {
-			return fmt.Errorf("failed to get user home directory: %w", err)
+			return errfmt.Errorf("failed to get user home directory: %w", err)
 		}
 		hostKeyPath = filepath.Join(homeDir, ".ssh", "tuios_host_key")
 	}
@@ -205,7 +205,7 @@ func StartSSHServer(ctx context.Context, cfg *SSHServerConfig) error {
 
 	server, err := wish.NewServer(opts...)
 	if err != nil {
-		return fmt.Errorf("failed to create SSH server: %w", err)
+		return errfmt.Errorf("failed to create SSH server: %w", err)
 	}
 
 	// Start server

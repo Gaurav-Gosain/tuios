@@ -18,7 +18,9 @@ import (
 	"charm.land/lipgloss/v2/table"
 	"github.com/Gaurav-Gosain/tuios/internal/capture"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"github.com/Gaurav-Gosain/tuios/internal/harness"
+	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 	"github.com/Gaurav-Gosain/tuios/internal/plural"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/sortx"
@@ -49,8 +51,8 @@ func runListVerbs(verb string, jsonOutput bool) error {
 
 	if jsonOutput {
 		var pretty any
-		if err := json.Unmarshal(raw, &pretty); err != nil {
-			return fmt.Errorf("failed to parse response: %w", err)
+		if err := jsonx.Unmarshal(raw, &pretty); err != nil {
+			return errfmt.Errorf("failed to parse response: %w", err)
 		}
 		outputJSON(pretty)
 		return nil
@@ -78,8 +80,8 @@ func runListVerbs(verb string, jsonOutput bool) error {
 			Description string `json:"description"`
 		} `json:"error_codes"`
 	}
-	if err := json.Unmarshal(raw, &catalog); err != nil {
-		return fmt.Errorf("failed to parse response: %w", err)
+	if err := jsonx.Unmarshal(raw, &catalog); err != nil {
+		return errfmt.Errorf("failed to parse response: %w", err)
 	}
 
 	fmt.Printf("Control protocol version %d (daemon %s, oldest supported %d)\n\n",
@@ -125,8 +127,8 @@ func printVerbResult(raw json.RawMessage, jsonOutput bool) error {
 		return nil
 	}
 	var fields map[string]any
-	if err := json.Unmarshal(raw, &fields); err != nil {
-		return fmt.Errorf("failed to parse response: %w", err)
+	if err := jsonx.Unmarshal(raw, &fields); err != nil {
+		return errfmt.Errorf("failed to parse response: %w", err)
 	}
 	out := map[string]any{"success": true, "message": "command executed"}
 	for k, v := range fields {
@@ -209,7 +211,7 @@ func runSendKeys(sessionName, keys string, literal bool, raw bool, windowTarget 
 		Window   string `json:"window"`
 		Keys     int    `json:"keys"`
 	}
-	if err := json.Unmarshal(raw2, &res); err != nil || res.SentTo == "" {
+	if err := jsonx.Unmarshal(raw2, &res); err != nil || res.SentTo == "" {
 		// An older daemon answers {"type":"ok"} and nothing else.
 		return nil
 	}
@@ -326,8 +328,8 @@ func runNewWindow(o newWindowOptions) error {
 		ExitCode *int   `json:"exit_code"`
 		Signal   int    `json:"signal"`
 	}
-	if err := json.Unmarshal(raw, &res); err != nil {
-		return fmt.Errorf("failed to parse response: %w", err)
+	if err := jsonx.Unmarshal(raw, &res); err != nil {
+		return errfmt.Errorf("failed to parse response: %w", err)
 	}
 	// A daemon older than v0.8.0 ignores keep_open and wait, and opens an
 	// ordinary window. Say so, because the window closes on exit and the
@@ -393,65 +395,6 @@ func newWindowExitStatus(wait bool, code *int, signal int) error {
 	return nil
 }
 
-// runSplitWindow divides a pane and reports the id of the one the split made,
-// which is the only way to address it without diffing two window lists.
-func runSplitWindow(sessionName, windowTarget, direction, name string, jsonOutput bool) error {
-	client, err := dialVerb()
-	if err != nil {
-		return err
-	}
-	defer func() { _ = client.Close() }()
-
-	params := map[string]any{
-		"session": sessionName,
-		"window":  windowTarget,
-		"name":    name,
-	}
-	// A side is sent as side. An older daemon that knows only the two axes
-	// ignores the unknown param and refuses the call for want of a direction,
-	// so it never splits the wrong way. That refusal is reported below as
-	// the daemon being too old.
-	side := false
-	switch direction {
-	case "left", "right", "up", "down":
-		params["side"] = direction
-		side = true
-	default:
-		params["direction"] = direction
-	}
-	raw, err := client.Call("split-window", params)
-	if err != nil {
-		var callErr *session.VerbCallError
-		if side && errors.As(err, &callErr) && callErr.Code == session.ErrVerbInvalidParams &&
-			strings.Contains(callErr.Message, "direction is required") {
-			return reportVerbError(&diagnosticError{
-				What:  fmt.Sprintf("The running daemon cannot split toward %s.", direction),
-				Cause: "the daemon is older than this tuios. It knows only horizontal and vertical.",
-				Fix:   "run 'tuios restart-server'. Saved sessions come back with new shells.",
-				Err:   err,
-			}, jsonOutput)
-		}
-		return reportVerbError(explainVerbError("split-window", err), jsonOutput)
-	}
-	if jsonOutput {
-		return printVerbResult(raw, jsonOutput)
-	}
-	var res struct {
-		WindowID string `json:"window_id"`
-		Name     string `json:"name"`
-		Note     string `json:"note"`
-	}
-	if err := json.Unmarshal(raw, &res); err != nil {
-		return fmt.Errorf("failed to parse response: %w", err)
-	}
-	if res.WindowID == "" {
-		fmt.Println(res.Note)
-		return nil
-	}
-	fmt.Printf("%s  %s\n", shortWindowID(res.WindowID), res.Name)
-	return nil
-}
-
 // runFocusWindow moves the focus and says where it landed. A relative or
 // directional move does not name its pane in advance, so echoing the request
 // would confirm nothing.
@@ -478,8 +421,8 @@ func runFocusWindow(sessionName, windowTarget, relative, direction string, jsonO
 		FocusedWindowID string    `json:"focused_window_id"`
 		Window          windowRow `json:"window"`
 	}
-	if err := json.Unmarshal(raw, &res); err != nil {
-		return fmt.Errorf("failed to parse response: %w", err)
+	if err := jsonx.Unmarshal(raw, &res); err != nil {
+		return errfmt.Errorf("failed to parse response: %w", err)
 	}
 	if res.FocusedWindowID == "" {
 		fmt.Println("No window has the focus.")
@@ -523,8 +466,8 @@ func runMoveWindow(sessionName, windowTarget, toSession string, workspace int, f
 		Session     string `json:"session"`
 		FromSession string `json:"from_session"`
 	}
-	if err := json.Unmarshal(raw, &res); err != nil {
-		return fmt.Errorf("failed to parse response: %w", err)
+	if err := jsonx.Unmarshal(raw, &res); err != nil {
+		return errfmt.Errorf("failed to parse response: %w", err)
 	}
 	if res.FromSession != "" {
 		fmt.Printf("moved %s from session %s to session %s, workspace %d\n", shortWindowID(res.WindowID), res.FromSession, res.Session, res.To)
@@ -583,8 +526,8 @@ leaves an open question open, so mark workers before they ask.`,
 				Quiet    bool   `json:"quiet"`
 				Closed   int    `json:"closed"`
 			}
-			if err := json.Unmarshal(raw, &res); err != nil {
-				return fmt.Errorf("failed to parse response: %w", err)
+			if err := jsonx.Unmarshal(raw, &res); err != nil {
+				return errfmt.Errorf("failed to parse response: %w", err)
 			}
 			if !res.Quiet {
 				fmt.Printf("Window %s is not quiet.\n", shortWindowID(res.WindowID))
@@ -631,8 +574,8 @@ func runSetWindow(sessionName, windowTarget string, name *string, minimized *boo
 		return printVerbResult(raw, jsonOutput)
 	}
 	var res windowRow
-	if err := json.Unmarshal(raw, &res); err != nil {
-		return fmt.Errorf("failed to parse response: %w", err)
+	if err := jsonx.Unmarshal(raw, &res); err != nil {
+		return errfmt.Errorf("failed to parse response: %w", err)
 	}
 	state := "restored"
 	if res.Minimized {
@@ -664,8 +607,8 @@ func runSelectWorkspace(sessionName string, workspace int, jsonOutput bool) erro
 		Current     int `json:"current_workspace"`
 		WindowCount int `json:"window_count"`
 	}
-	if err := json.Unmarshal(raw, &res); err != nil {
-		return fmt.Errorf("failed to parse response: %w", err)
+	if err := jsonx.Unmarshal(raw, &res); err != nil {
+		return errfmt.Errorf("failed to parse response: %w", err)
 	}
 	fmt.Printf("workspace %d, %s\n", res.Current, plural.Count(res.WindowCount, "window"))
 	return nil
@@ -701,8 +644,8 @@ func printWorkspaceList(raw json.RawMessage) error {
 		} `json:"workspaces"`
 		Current int `json:"current_workspace"`
 	}
-	if err := json.Unmarshal(raw, &res); err != nil {
-		return fmt.Errorf("failed to parse response: %w", err)
+	if err := jsonx.Unmarshal(raw, &res); err != nil {
+		return errfmt.Errorf("failed to parse response: %w", err)
 	}
 	if len(res.Workspaces) == 0 {
 		fmt.Println("No workspaces.")
@@ -751,10 +694,10 @@ func printWorkspaceList(raw json.RawMessage) error {
 // take, before anything is sent.
 func checkSetLayoutMaster(position string, masters int, mastersSet bool) error {
 	if position != "" && !config.IsMasterPosition(position) {
-		return fmt.Errorf("--master-position takes %s, got %q", strings.Join(config.MasterPositions, ", "), position)
+		return errfmt.Errorf("--master-position takes %s, got %q", strings.Join(config.MasterPositions, ", "), position)
 	}
 	if mastersSet && !config.ValidMasterCount(masters) {
-		return fmt.Errorf("--masters takes a number from %d to %d, got %d", config.MasterCountMin, config.MasterCountMax, masters)
+		return errfmt.Errorf("--masters takes a number from %d to %d, got %d", config.MasterCountMin, config.MasterCountMax, masters)
 	}
 	return nil
 }
@@ -806,8 +749,8 @@ func runSetLayout(sessionName string, tiling *bool, equalize, rotate bool, maste
 		MasterPosition string  `json:"master_position"`
 		MasterCount    int     `json:"master_count"`
 	}
-	if err := json.Unmarshal(raw, &res); err != nil {
-		return fmt.Errorf("failed to parse response: %w", err)
+	if err := jsonx.Unmarshal(raw, &res); err != nil {
+		return errfmt.Errorf("failed to parse response: %w", err)
 	}
 	fmt.Printf("%s  layout %s  master %.2f", res.TilingMode, res.LayoutMode, res.MasterRatio)
 	if res.MasterCount > 0 {
@@ -842,8 +785,8 @@ func runSendText(sessionName, windowTarget, text string, allowBlocked, jsonOutpu
 	}
 	if jsonOutput {
 		var pretty any
-		if err := json.Unmarshal(raw, &pretty); err != nil {
-			return fmt.Errorf("failed to parse response: %w", err)
+		if err := jsonx.Unmarshal(raw, &pretty); err != nil {
+			return errfmt.Errorf("failed to parse response: %w", err)
 		}
 		return printJSON(pretty)
 	}
@@ -939,7 +882,7 @@ func runCapturePane(o captureOptions) error {
 		Unwrapped bool `json:"unwrapped"`
 		Trimmed   bool `json:"trimmed"`
 	}
-	if json.Unmarshal(raw, &echo) == nil && ((o.unwrap && !echo.Unwrapped) || (o.trim && !echo.Trimmed)) {
+	if jsonx.Unmarshal(raw, &echo) == nil && ((o.unwrap && !echo.Unwrapped) || (o.trim && !echo.Trimmed)) {
 		fmt.Fprintln(os.Stderr, "warning: "+errStaleCapture.Error()+".")
 	}
 	if (o.capped || o.explicitCommands) && !o.jsonOut {
@@ -965,7 +908,7 @@ func captureCapNote(raw json.RawMessage, explicit, stale bool) string {
 		Commands          []json.RawMessage `json:"commands"`
 		CommandsAvailable int               `json:"commands_available"`
 	}
-	if json.Unmarshal(raw, &res) != nil {
+	if jsonx.Unmarshal(raw, &res) != nil {
 		return ""
 	}
 	const tail = " To get the whole history, use --lines 0."
@@ -1034,8 +977,8 @@ func printCapture(w io.Writer, raw json.RawMessage, host, window string, keepEsc
 	var res struct {
 		Content string `json:"content"`
 	}
-	if err := json.Unmarshal(raw, &res); err != nil {
-		return fmt.Errorf("failed to parse response: %w", err)
+	if err := jsonx.Unmarshal(raw, &res); err != nil {
+		return errfmt.Errorf("failed to parse response: %w", err)
 	}
 	if host == "" {
 		fmt.Fprint(w, res.Content)
@@ -1087,7 +1030,7 @@ func runCommandRendered(sessionName, command string, args []string, jsonOutput b
 		RequestID:   requestID,
 	})
 	if err != nil {
-		return fmt.Errorf("failed to create message: %w", err)
+		return errfmt.Errorf("failed to create message: %w", err)
 	}
 
 	if err := sendAndWaitForResultWithFormat(client, msg, requestID, jsonOutput, render); err != nil {
@@ -1146,8 +1089,8 @@ func queryWindow(sessionName string, args []string, jsonOutput bool) error {
 		return reportVerbError(t.explain("get-window", err), jsonOutput)
 	}
 	var data map[string]any
-	if err := json.Unmarshal(t.result(raw), &data); err != nil {
-		return reportVerbError(fmt.Errorf("failed to parse response: %w", err), jsonOutput)
+	if err := jsonx.Unmarshal(t.result(raw), &data); err != nil {
+		return reportVerbError(errfmt.Errorf("failed to parse response: %w", err), jsonOutput)
 	}
 	delete(data, "type")
 	if jsonOutput {
@@ -1187,8 +1130,8 @@ func printWindowList(raw json.RawMessage, on string) error {
 		Windows []windowRow `json:"windows"`
 		Total   int         `json:"total"`
 	}
-	if err := json.Unmarshal(raw, &res); err != nil {
-		return fmt.Errorf("failed to parse response: %w", err)
+	if err := jsonx.Unmarshal(raw, &res); err != nil {
+		return errfmt.Errorf("failed to parse response: %w", err)
 	}
 	shown := res.Windows[:0]
 	for _, w := range res.Windows {
@@ -1270,13 +1213,13 @@ func shortWindowID(id string) string {
 
 // printWindowDetail renders one window as labelled lines.
 func printWindowDetail(data map[string]any) error {
-	encoded, err := json.Marshal(data)
+	encoded, err := jsonx.Marshal(data)
 	if err != nil {
-		return fmt.Errorf("failed to parse response: %w", err)
+		return errfmt.Errorf("failed to parse response: %w", err)
 	}
 	var w windowRow
-	if err := json.Unmarshal(encoded, &w); err != nil {
-		return fmt.Errorf("failed to parse response: %w", err)
+	if err := jsonx.Unmarshal(encoded, &w); err != nil {
+		return errfmt.Errorf("failed to parse response: %w", err)
 	}
 	fields := [][2]string{
 		{"name", windowLabel(w)},
@@ -1335,8 +1278,8 @@ func printSessionInfo(raw json.RawMessage) error {
 		HostFocus        string         `json:"host_focus"`
 		WindowSize       string         `json:"window_size"`
 	}
-	if err := json.Unmarshal(raw, &res); err != nil {
-		return fmt.Errorf("failed to parse response: %w", err)
+	if err := jsonx.Unmarshal(raw, &res); err != nil {
+		return errfmt.Errorf("failed to parse response: %w", err)
 	}
 
 	fields := [][2]string{
@@ -1433,8 +1376,8 @@ func runListOptions(sessionName, section, prefix, search string, jsonOutput bool
 		Sections []string    `json:"sections"`
 		Total    int         `json:"total"`
 	}
-	if err := json.Unmarshal(raw, &res); err != nil {
-		return fmt.Errorf("failed to parse response: %w", err)
+	if err := jsonx.Unmarshal(raw, &res); err != nil {
+		return errfmt.Errorf("failed to parse response: %w", err)
 	}
 	printOptionList(os.Stdout, res.Options, res.Sections, res.Total)
 	return nil
@@ -1509,15 +1452,23 @@ func printOptionList(w io.Writer, options []optionRow, sections []string, total 
 
 // runSetConfig sets a session option over the verb protocol. The value is
 // recorded in daemon-owned state and, when a TUI is attached, applied live.
-func runSetConfig(sessionName, path, value string, jsonOutput bool) error {
-	raw, err := setConfigOption(sessionName, path, value)
+func runSetConfig(sessionName, path, value string, jsonOutput, noSave bool) error {
+	raw, err := setConfigOptionWith(sessionName, path, value, noSave)
 	if err != nil {
 		return err
 	}
+	if noSave && !daemonHonoursNoSave(raw) {
+		return &diagnosticError{
+			What:  "The value is set, but the daemon saved it to the config file.",
+			Cause: "the daemon is older than this tuios and does not know --no-save.",
+			Extra: []string{"Upgrade the daemon before you use --no-save again."},
+			Fix:   "tuios daemon upgrade",
+		}
+	}
 	if jsonOutput {
 		var pretty any
-		if err := json.Unmarshal(raw, &pretty); err != nil {
-			return fmt.Errorf("failed to parse response: %w", err)
+		if err := jsonx.Unmarshal(raw, &pretty); err != nil {
+			return errfmt.Errorf("failed to parse response: %w", err)
 		}
 		return printJSON(pretty)
 	}
@@ -1531,6 +1482,16 @@ func runSetConfig(sessionName, path, value string, jsonOutput bool) error {
 	return nil
 }
 
+// daemonHonoursNoSave reports whether the set-option answer says the daemon
+// used no_save. A daemon that predates the field leaves it out and saves the
+// value.
+func daemonHonoursNoSave(raw json.RawMessage) bool {
+	var res struct {
+		NoSave *bool `json:"no_save"`
+	}
+	return jsonx.Unmarshal(raw, &res) == nil && res.NoSave != nil && *res.NoSave
+}
+
 // setConfigNote is what set-config says on stderr about the daemon's answer:
 // a value only recorded, and a deprecated path. It is empty when there is
 // nothing to say.
@@ -1540,7 +1501,7 @@ func setConfigNote(raw json.RawMessage) string {
 		Reason     string `json:"reason"`
 		Deprecated string `json:"deprecated"`
 	}
-	if json.Unmarshal(raw, &res) != nil {
+	if jsonx.Unmarshal(raw, &res) != nil {
 		return ""
 	}
 	var lines []string
@@ -1557,17 +1518,28 @@ func setConfigNote(raw json.RawMessage) string {
 // daemon's answer. tuios config browse sets a value through it too, so the
 // explorer has the same refusals as the command.
 func setConfigOption(sessionName, path, value string) (json.RawMessage, error) {
+	return setConfigOptionWith(sessionName, path, value, false)
+}
+
+// setConfigOptionWith is setConfigOption, with noSave for set-config --no-save.
+func setConfigOptionWith(sessionName, path, value string, noSave bool) (json.RawMessage, error) {
 	client, err := dialVerb()
 	if err != nil {
 		return nil, err
 	}
 	defer func() { _ = client.Close() }()
 
-	raw, err := client.Call("set-option", map[string]any{
+	params := map[string]any{
 		"session": sessionName,
 		"key":     path,
 		"value":   value,
-	})
+	}
+	// Sent only when set, so the call a plain set-config makes is the one an
+	// older daemon has always taken.
+	if noSave {
+		params["no_save"] = true
+	}
+	raw, err := client.Call("set-option", params)
 	if err != nil {
 		return nil, explainVerbError("set-option", err)
 	}
@@ -1593,12 +1565,12 @@ func runGetConfig(sessionName, path string, jsonOutput bool) error {
 	// wants, and printing anything else there would break every script using it.
 	if jsonOutput {
 		var pretty any
-		if err := json.Unmarshal(raw, &pretty); err != nil {
-			return fmt.Errorf("failed to parse response: %w", err)
+		if err := jsonx.Unmarshal(raw, &pretty); err != nil {
+			return errfmt.Errorf("failed to parse response: %w", err)
 		}
 		out, err := json.MarshalIndent(pretty, "", "  ")
 		if err != nil {
-			return fmt.Errorf("failed to render response: %w", err)
+			return errfmt.Errorf("failed to render response: %w", err)
 		}
 		fmt.Println(string(out))
 		return nil
@@ -1606,8 +1578,8 @@ func runGetConfig(sessionName, path string, jsonOutput bool) error {
 	var res struct {
 		Value string `json:"value"`
 	}
-	if err := json.Unmarshal(raw, &res); err != nil {
-		return fmt.Errorf("failed to parse response: %w", err)
+	if err := jsonx.Unmarshal(raw, &res); err != nil {
+		return errfmt.Errorf("failed to parse response: %w", err)
 	}
 	fmt.Println(getConfigText(path, res.Value))
 	return nil
@@ -1684,8 +1656,8 @@ func runSetAgentState(sessionName, windowTarget, state, message, source, harness
 		Source  string `json:"source"`
 		Reason  string `json:"reason"`
 	}
-	if err := json.Unmarshal(raw, &res); err != nil {
-		return fmt.Errorf("failed to parse response: %w", err)
+	if err := jsonx.Unmarshal(raw, &res); err != nil {
+		return errfmt.Errorf("failed to parse response: %w", err)
 	}
 	if !res.Applied {
 		fmt.Fprintf(os.Stderr, "Not applied: %s It still reports %s.\n", agentRefusalText(res.Reason), res.State)
@@ -1715,8 +1687,8 @@ func runSetAgentSession(sessionName, windowTarget, harness, sessionID string) er
 		ID      string `json:"agent_session_id"`
 		Reason  string `json:"reason"`
 	}
-	if err := json.Unmarshal(raw, &res); err != nil {
-		return fmt.Errorf("failed to parse response: %w", err)
+	if err := jsonx.Unmarshal(raw, &res); err != nil {
+		return errfmt.Errorf("failed to parse response: %w", err)
 	}
 	if !res.Applied {
 		fmt.Fprintf(os.Stderr, "Not applied: %s The pane keeps %q.\n", agentRefusalText(res.Reason), res.ID)
@@ -1758,19 +1730,19 @@ func agentMetaTokensJSON(args []string) (json.RawMessage, error) {
 	for i, arg := range args {
 		key, value, ok := strings.Cut(arg, "=")
 		if !ok || key == "" {
-			return nil, fmt.Errorf("%q is not key=value. Write key= to remove a key", arg)
+			return nil, errfmt.Errorf("%q is not key=value. Write key= to remove a key", arg)
 		}
 		if i > 0 {
 			b.WriteByte(',')
 		}
-		k, _ := json.Marshal(key)
+		k, _ := jsonx.Marshal(key)
 		b.Write(k)
 		b.WriteByte(':')
 		if value == "" {
 			b.WriteString("null")
 			continue
 		}
-		v, _ := json.Marshal(value)
+		v, _ := jsonx.Marshal(value)
 		b.Write(v)
 	}
 	b.WriteByte('}')
@@ -1807,12 +1779,12 @@ func runSetAgentMeta(sessionName, windowTarget string, args []string, source str
 	}
 	if jsonOutput {
 		var pretty any
-		if err := json.Unmarshal(raw, &pretty); err != nil {
-			return fmt.Errorf("failed to parse response: %w", err)
+		if err := jsonx.Unmarshal(raw, &pretty); err != nil {
+			return errfmt.Errorf("failed to parse response: %w", err)
 		}
 		out, err := json.MarshalIndent(pretty, "", "  ")
 		if err != nil {
-			return fmt.Errorf("failed to render response: %w", err)
+			return errfmt.Errorf("failed to render response: %w", err)
 		}
 		fmt.Println(string(out))
 		return nil
@@ -1820,8 +1792,8 @@ func runSetAgentMeta(sessionName, windowTarget string, args []string, source str
 	var res struct {
 		Truncated []string `json:"truncated"`
 	}
-	if err := json.Unmarshal(raw, &res); err != nil {
-		return fmt.Errorf("failed to parse response: %w", err)
+	if err := jsonx.Unmarshal(raw, &res); err != nil {
+		return errfmt.Errorf("failed to parse response: %w", err)
 	}
 	if len(res.Truncated) > 0 {
 		fmt.Fprintf(os.Stderr, "Cut to %d characters: %s\n", session.AgentMetaMaxValue, strings.Join(res.Truncated, ", "))
@@ -1910,8 +1882,8 @@ func runSetSessionOrder(order []string) error {
 	var res struct {
 		Order []string `json:"order"`
 	}
-	if err := json.Unmarshal(raw, &res); err != nil {
-		return fmt.Errorf("failed to parse response: %w", err)
+	if err := jsonx.Unmarshal(raw, &res); err != nil {
+		return errfmt.Errorf("failed to parse response: %w", err)
 	}
 	fmt.Printf("Sessions in order: %s.\n", strings.Join(res.Order, ", "))
 	return nil
@@ -1948,8 +1920,8 @@ func callAndReport(verb string, params map[string]any, report func(map[string]an
 		return t.explain(verb, err)
 	}
 	var res map[string]any
-	if err := json.Unmarshal(raw, &res); err != nil {
-		return fmt.Errorf("failed to parse response: %w", err)
+	if err := jsonx.Unmarshal(raw, &res); err != nil {
+		return errfmt.Errorf("failed to parse response: %w", err)
 	}
 	report(res)
 	return nil
@@ -2026,7 +1998,7 @@ func runWaitFor(sessionName, windowTarget, condition, pattern, until string, idl
 		var echo struct {
 			New bool `json:"new"`
 		}
-		if json.Unmarshal(raw, &echo) == nil && !echo.New {
+		if jsonx.Unmarshal(raw, &echo) == nil && !echo.New {
 			fmt.Fprintln(os.Stderr, "warning: "+errStaleWaitNew.Error()+". The match can be old output.")
 		}
 	}
@@ -2042,8 +2014,8 @@ func runWaitFor(sessionName, windowTarget, condition, pattern, until string, idl
 		Signal    int    `json:"signal"`
 		Cmdline   string `json:"cmdline"`
 	}
-	if err := json.Unmarshal(raw, &res); err != nil {
-		return fmt.Errorf("failed to parse response: %w", err)
+	if err := jsonx.Unmarshal(raw, &res); err != nil {
+		return errfmt.Errorf("failed to parse response: %w", err)
 	}
 	if res.Condition == "command-finished" {
 		status := "no exit status"
@@ -2104,8 +2076,8 @@ func runWaitForSelect(condition, until, selector string, every bool, timeout int
 			State   string `json:"state"`
 		} `json:"panes"`
 	}
-	if err := json.Unmarshal(raw, &res); err != nil {
-		return fmt.Errorf("failed to parse response: %w", err)
+	if err := jsonx.Unmarshal(raw, &res); err != nil {
+		return errfmt.Errorf("failed to parse response: %w", err)
 	}
 	if every {
 		fmt.Printf("all %d panes matching %q reached %s\n", len(res.Panes), selector, until)
@@ -2140,8 +2112,8 @@ func runGetAgentState(sessionName, windowTarget string, jsonOutput bool) error {
 	var res struct {
 		State string `json:"state"`
 	}
-	if err := json.Unmarshal(raw, &res); err != nil {
-		return fmt.Errorf("failed to parse response: %w", err)
+	if err := jsonx.Unmarshal(raw, &res); err != nil {
+		return errfmt.Errorf("failed to parse response: %w", err)
 	}
 	fmt.Println(res.State)
 	return nil
@@ -2204,8 +2176,8 @@ func runExplainAgentDetect(sessionName, windowTarget string, jsonOutput bool) er
 		return printVerbResult(raw, jsonOutput)
 	}
 	var res detectExplanation
-	if err := json.Unmarshal(raw, &res); err != nil {
-		return fmt.Errorf("failed to parse response: %w", err)
+	if err := jsonx.Unmarshal(raw, &res); err != nil {
+		return errfmt.Errorf("failed to parse response: %w", err)
 	}
 	printDetectExplanation(os.Stdout, res)
 	return nil
@@ -2363,8 +2335,8 @@ func runExplainAgentScreen(sessionName, windowTarget, harnessID string, lines in
 		return printVerbResult(raw, jsonOutput)
 	}
 	var res screenExplanation
-	if err := json.Unmarshal(raw, &res); err != nil {
-		return fmt.Errorf("failed to parse response: %w", err)
+	if err := jsonx.Unmarshal(raw, &res); err != nil {
+		return errfmt.Errorf("failed to parse response: %w", err)
 	}
 	printScreenExplanation(os.Stdout, res)
 	return nil
@@ -2508,16 +2480,16 @@ func runTapeExec(sessionName, filePath string, timeout time.Duration) error {
 
 	script, err := tape.LoadFile(filePath)
 	if err != nil {
-		return fmt.Errorf("failed to read tape file: %w", err)
+		return errfmt.Errorf("failed to read tape file: %w", err)
 	}
 	if len(script.Errors) > 0 {
 		for _, e := range script.Errors {
 			fmt.Fprintf(os.Stderr, "%s: %s\n", filePath, e)
 		}
-		return fmt.Errorf("the tape has errors, listed above. Run 'tuios tape validate %s' after you fix them", filePath)
+		return errfmt.Errorf("the tape has errors, listed above. Run 'tuios tape validate %s' after you fix them", filePath)
 	}
 	if len(script.Commands) == 0 {
-		return fmt.Errorf("the tape has no commands")
+		return errfmt.Errorf("the tape has no commands")
 	}
 
 	client := session.NewClient(&session.ClientConfig{
@@ -2539,35 +2511,35 @@ func runTapeExec(sessionName, filePath string, timeout time.Duration) error {
 		RequestID:   requestID,
 	})
 	if err != nil {
-		return fmt.Errorf("failed to create message: %w", err)
+		return errfmt.Errorf("failed to create message: %w", err)
 	}
 
 	resp, err := client.SendControlMessageWait(msg, timeout)
 	if err != nil {
 		if errors.Is(err, os.ErrDeadlineExceeded) {
-			return fmt.Errorf("the tape did not finish in %s. It may still be playing. Use --timeout to wait longer", timeout)
+			return errfmt.Errorf("the tape did not finish in %s. It may still be playing. Use --timeout to wait longer", timeout)
 		}
-		return fmt.Errorf("failed to run the tape: %w", err)
+		return errfmt.Errorf("failed to run the tape: %w", err)
 	}
 	switch resp.Type {
 	case session.MsgCommandResult:
 		var result session.CommandResultPayload
 		if err := resp.ParsePayload(&result); err != nil {
-			return fmt.Errorf("failed to parse response: %w", err)
+			return errfmt.Errorf("failed to parse response: %w", err)
 		}
 		if !result.Success {
-			return fmt.Errorf("the tape failed: %s", script.Locate(result.Message))
+			return errfmt.Errorf("the tape failed: %s", script.Locate(result.Message))
 		}
 		fmt.Printf("Tape finished: %d commands\n", len(script.Commands))
 		return nil
 	case session.MsgError:
 		var errPayload session.ErrorPayload
 		if err := resp.ParsePayload(&errPayload); err == nil && errPayload.Message != "" {
-			return fmt.Errorf("the tape did not run: %s", errPayload.Message)
+			return errfmt.Errorf("the tape did not run: %s", errPayload.Message)
 		}
-		return fmt.Errorf("the tape did not run, and the daemon did not say why. Run 'tuios logs' to read what it logged")
+		return errfmt.Errorf("the tape did not run, and the daemon did not say why. Run 'tuios logs' to read what it logged")
 	default:
-		return fmt.Errorf("unexpected response from the daemon: %v", resp.Type)
+		return errfmt.Errorf("unexpected response from the daemon: %v", resp.Type)
 	}
 }
 
@@ -2586,7 +2558,7 @@ func sendAndWaitForResultWithFormat(client *session.Client, msg *session.Message
 			})
 			return nil // Don't return error, we already output JSON
 		}
-		return fmt.Errorf("failed to send command: %w", err)
+		return errfmt.Errorf("failed to send command: %w", err)
 	}
 
 	// Check response type
@@ -2601,7 +2573,7 @@ func sendAndWaitForResultWithFormat(client *session.Client, msg *session.Message
 				})
 				return nil
 			}
-			return fmt.Errorf("failed to parse response: %w", err)
+			return errfmt.Errorf("failed to parse response: %w", err)
 		}
 		if jsonOutput {
 			output := map[string]any{
@@ -2617,7 +2589,7 @@ func sendAndWaitForResultWithFormat(client *session.Client, msg *session.Message
 			return nil
 		}
 		if !result.Success {
-			return fmt.Errorf("command failed: %s", result.Message)
+			return errfmt.Errorf("command failed: %s", result.Message)
 		}
 		if render != nil {
 			return render(result.Data)
@@ -2635,7 +2607,7 @@ func sendAndWaitForResultWithFormat(client *session.Client, msg *session.Message
 				})
 				return nil
 			}
-			return fmt.Errorf("the command failed, and the daemon did not say why. Run 'tuios logs' to read what it logged")
+			return errfmt.Errorf("the command failed, and the daemon did not say why. Run 'tuios logs' to read what it logged")
 		}
 		if jsonOutput {
 			outputJSON(map[string]any{
@@ -2645,7 +2617,7 @@ func sendAndWaitForResultWithFormat(client *session.Client, msg *session.Message
 			os.Exit(1)
 			return nil
 		}
-		return fmt.Errorf("command failed: %s", errPayload.Message)
+		return errfmt.Errorf("command failed: %s", errPayload.Message)
 
 	default:
 		// Command was sent, we got some response
@@ -3032,29 +3004,29 @@ func displayLogs(client *session.Client, count int, clear bool) (int64, error) {
 		Clear: clear,
 	})
 	if err != nil {
-		return 0, fmt.Errorf("failed to create message: %w", err)
+		return 0, errfmt.Errorf("failed to create message: %w", err)
 	}
 
 	resp, err := client.SendControlMessage(msg)
 	if err != nil {
-		return 0, fmt.Errorf("failed to get logs: %w", err)
+		return 0, errfmt.Errorf("failed to get logs: %w", err)
 	}
 
 	if resp.Type == session.MsgError {
 		var errPayload session.ErrorPayload
 		if err := resp.ParsePayload(&errPayload); err != nil {
-			return 0, fmt.Errorf("failed to get logs")
+			return 0, errfmt.Errorf("failed to get logs")
 		}
-		return 0, fmt.Errorf("failed to get logs: %s", errPayload.Message)
+		return 0, errfmt.Errorf("failed to get logs: %s", errPayload.Message)
 	}
 
 	if resp.Type != session.MsgLogsData {
-		return 0, fmt.Errorf("unexpected response type: %d", resp.Type)
+		return 0, errfmt.Errorf("unexpected response type: %d", resp.Type)
 	}
 
 	var logsData session.LogsDataPayload
 	if err := resp.ParsePayload(&logsData); err != nil {
-		return 0, fmt.Errorf("failed to parse logs: %w", err)
+		return 0, errfmt.Errorf("failed to parse logs: %w", err)
 	}
 
 	if len(logsData.Entries) == 0 {
@@ -3226,8 +3198,8 @@ func runScreenshot(req screenshotRequest) error {
 		Bytes    int      `json:"bytes"`
 		Warnings []string `json:"warnings"`
 	}
-	if err := json.Unmarshal(raw, &res); err != nil {
-		return fmt.Errorf("failed to parse response: %w", err)
+	if err := jsonx.Unmarshal(raw, &res); err != nil {
+		return errfmt.Errorf("failed to parse response: %w", err)
 	}
 
 	copied, copyNote := maybeCopyScreenshot(res.Path, res.Format, req)
@@ -3283,8 +3255,8 @@ func printPopupResult(w io.Writer, raw json.RawMessage) error {
 		ExitCode int    `json:"exit_code"`
 		Stdout   string `json:"stdout"`
 	}
-	if err := json.Unmarshal(raw, &res); err != nil {
-		return fmt.Errorf("failed to parse response: %w", err)
+	if err := jsonx.Unmarshal(raw, &res); err != nil {
+		return errfmt.Errorf("failed to parse response: %w", err)
 	}
 	fmt.Fprint(w, res.Stdout)
 	if res.ExitCode != 0 {
@@ -3324,10 +3296,10 @@ type popupOptions struct {
 // flag the user typed rather than the parameter the wire carries.
 func runPopup(o popupOptions) error {
 	if o.dim != nil && (o.dim.Percent < 0 || o.dim.Percent > config.PopupDimMax) {
-		return fmt.Errorf("--dim must be an integer from 0 to 90")
+		return errfmt.Errorf("--dim must be an integer from 0 to 90")
 	}
 	if len(o.command) == 0 {
-		return fmt.Errorf("popup needs a command to run, e.g. tuios popup -- fzf")
+		return errfmt.Errorf("popup needs a command to run, e.g. tuios popup -- fzf")
 	}
 	client, err := dialVerb()
 	if err != nil {
@@ -3391,8 +3363,8 @@ func runPopup(o popupOptions) error {
 		WindowID string `json:"window_id"`
 		Name     string `json:"name"`
 	}
-	if err := json.Unmarshal(raw, &res); err != nil {
-		return fmt.Errorf("failed to parse response: %w", err)
+	if err := jsonx.Unmarshal(raw, &res); err != nil {
+		return errfmt.Errorf("failed to parse response: %w", err)
 	}
 	fmt.Printf("%s  %s\n", shortWindowID(res.WindowID), res.Name)
 	return nil
@@ -3422,7 +3394,7 @@ func completeHostNames(_ *cobra.Command, _ []string, _ string) ([]string, cobra.
 			Status string `json:"status"`
 		} `json:"hosts"`
 	}
-	if err := json.Unmarshal(raw, &res); err != nil {
+	if err := jsonx.Unmarshal(raw, &res); err != nil {
 		return nil, cobra.ShellCompDirectiveNoFileComp
 	}
 	names := make([]string, 0, len(res.Hosts))

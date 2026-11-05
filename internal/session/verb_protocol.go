@@ -18,6 +18,7 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/guestenv"
 	"github.com/Gaurav-Gosain/tuios/internal/harness"
+	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 )
 
 // This file implements the typed, line-delimited JSON verb protocol layered
@@ -398,6 +399,35 @@ func buildVerbRegistry() map[string]verbEntry {
 				`{"id":1,"verb":"set-pane-grants","params":{"session":"work","window":"a1b2c3d4","reset":true}}`,
 			},
 			handler: (*Daemon).verbSetPaneGrants,
+		},
+		"get-keep-awake": {
+			description: "Report whether the daemon holds the machine awake: [daemon] keep_awake, the hold, the working agent panes on this machine, and the method the system uses.",
+			returns: []verbParam{
+				{Name: "mode", Type: "string", Description: "[daemon] keep_awake in force.", Accepted: config.KeepAwakeModes},
+				{Name: "held", Type: "bool", Description: "True while the daemon holds the machine awake."},
+				{Name: "working", Type: "int", Description: "Agent panes that work now on this machine."},
+				{Name: "method", Type: "string", Description: "How the hold is made: systemd-inhibit, caffeinate, SetThreadExecutionState, or none."},
+				{Name: "error", Type: "string", Description: "Why the machine could not be held awake. Absent when nothing failed."},
+			},
+			examples: []string{`{"id":1,"verb":"get-keep-awake"}`},
+			handler:  (*Daemon).verbGetKeepAwake,
+		},
+		"set-keep-awake": {
+			description: "Set [daemon] keep_awake: off, on (while the daemon runs) or agents (while an agent pane on this machine works). It applies at once and is saved to config.toml, so the settings page, the file and every client show one value.",
+			params: []verbParam{
+				{Name: "mode", Type: "string", Required: true, Description: "The new mode.", Accepted: config.KeepAwakeModes},
+			},
+			returns: []verbParam{
+				{Name: "mode", Type: "string", Description: "[daemon] keep_awake in force."},
+				{Name: "held", Type: "bool", Description: "True while the daemon holds the machine awake."},
+				{Name: "working", Type: "int", Description: "Agent panes that work now on this machine."},
+				{Name: "method", Type: "string", Description: "How the hold is made."},
+				{Name: "error", Type: "string", Description: "Why the machine could not be held awake. Absent when nothing failed."},
+				{Name: "saved", Type: "bool", Description: "True when config.toml now holds the mode."},
+				{Name: "save_error", Type: "string", Description: "Why config.toml could not be written. The mode applies until the daemon stops."},
+			},
+			examples: []string{`{"id":1,"verb":"set-keep-awake","params":{"mode":"agents"}}`},
+			handler:  (*Daemon).verbSetKeepAwake,
 		},
 		"apply-config": {
 			description: "Apply config.toml now, including the changes that give panes or linked machines more: [agents.permissions], [hosts] and their link policies. A change to the file applies only what narrows those; the rest waits for this verb or a daemon restart. Only the person may call it: it is refused from inside a pane and over a link.",
@@ -794,7 +824,7 @@ func buildVerbRegistry() map[string]verbEntry {
 				{Name: "agent", Type: "string", Description: "The agent, as one string: a harness id or program name (claude, codex, gemini), or any program, with its arguments after it. Split the way a shell splits words and exec'd directly; nothing is expanded."},
 				{Name: "args", Type: "[]string", Description: "More arguments after the agent's own, as an argv. No shell parses them."},
 				{Name: "name", Type: "string", Description: "The window's name, which list-agents shows and -w takes, so the caller can address the agent as, say, reviewer."},
-				{Name: "cwd", Type: "string", Description: "The directory the agent starts in. Omit for the focused pane's. Pass cwd or a repository, not both."},
+				{Name: "cwd", Type: "string", Description: "The directory the agent starts in. Omit to use the calling pane's directory, or outside a pane the focused pane's. Pass cwd or a repository, not both."},
 				{Name: "repo", Type: "string", Description: "A directory inside a repository: the agent starts in its main checkout."},
 				{Name: "workspace", Type: "int", Description: "The workspace to open the pane on. Omit for the current one."},
 				{Name: "focus", Type: "bool", Description: "Focus the new pane.", Default: "false"},
@@ -932,9 +962,11 @@ func buildVerbRegistry() map[string]verbEntry {
 				{Name: "peer", Type: "string", Description: "The machine's name: the one the hub gave for itself, or the one the proxy was pinned to with --as. Empty for none."},
 				{Name: "pinned", Type: "bool", Description: "The name came from stdio-proxy --as on this machine, not from the hub."},
 				{Name: "ssh_auth_sock", Type: "string", Description: "The SSH_AUTH_SOCK stdio-proxy runs with: the agent the link's ssh forwards. A client attached through the link uses it for ssh_agent = \"follow\"."},
+				{Name: "closes", Type: "string", Description: "The close_token of another link connection. The far side closed that connection's stream on purpose, so a size lease it holds ends at once and does not wait for a viewer to come back."},
 			},
 			returns: []verbParam{
 				{Name: "peer", Type: "string", Description: "The name the connection is held to."},
+				{Name: "close_token", Type: "string", Description: "The token stdio-proxy sends back as closes when the far side closes this connection's stream on purpose."},
 			},
 			examples: []string{`{"id":1,"verb":"link-peer","params":{"peer":"laptop"}}`},
 			handler:  (*Daemon).verbLinkPeer,
@@ -1159,7 +1191,7 @@ func buildVerbRegistry() map[string]verbEntry {
 				sessionParam,
 				{Name: "name", Type: "string", Description: "Name for the new window. Omit to use the shell's title."},
 				{Name: "workspace", Type: "int", Description: "Workspace number to create the window on. Omit for the current workspace."},
-				{Name: "cwd", Type: "string", Description: "Directory to start the shell in. Omit to inherit the daemon's."},
+				{Name: "cwd", Type: "string", Description: "Directory to start the shell in. Omit to use the calling pane's directory, or outside a pane the focused pane's."},
 				{Name: "focus", Type: "bool", Description: "Focus the new window. Pass false to leave the focus where it is.", Default: "true"},
 				{Name: "command", Type: "[]string", Description: "Argv to exec as the window's process instead of a shell. No shell parses it, so nothing needs quoting. The window closes when the program exits, unless keep_open is set."},
 				{Name: "host", Type: "string", Description: "Run the window's process on another machine, named as it is in the [hosts] config table. The window belongs to this session and is drawn and sized here; only the process is there. Omit, or pass \"local\", for this machine."},
@@ -1204,7 +1236,7 @@ func buildVerbRegistry() map[string]verbEntry {
 				{Name: "dim", Type: "int", Description: "Percent to dim the screen behind this popup, 0 to 90. Omit to inherit appearance.popup_dim (default 0); explicit 0 disables it. Scratch panes are unchanged."},
 				{Name: "name", Type: "string", Description: "Name for the popup. Omit to use the program's title."},
 				{Name: "cwd", Type: "string", Description: "Directory to run the command in. Omit to inherit the daemon's."},
-				{Name: "cwd_from", Type: "string", Description: "A window whose folder the command runs in, read from its process when the call comes. cwd wins over it."},
+				{Name: "cwd_from", Type: "string", Description: "A window whose folder the command runs in, read from its process when the call comes. It wins over cwd, which is the folder when the read gives none."},
 				{Name: "workspace", Type: "int", Description: "Workspace to open the popup on. Omit for the current one."},
 				{Name: "wait", Type: "bool", Description: "Keep the call open until the command exits, and return its exit_code in a popup_result.", Default: "false"},
 				{Name: "capture_stdout", Type: "bool", Description: "With wait: send the command's standard output to a pipe the daemon reads instead of the popup, and return it as stdout. A picker such as fzf draws on the terminal and prints only the choice, so the choice comes back. Not on Windows.", Default: "false"},
@@ -1400,25 +1432,80 @@ func buildVerbRegistry() map[string]verbEntry {
 			handler: (*Daemon).verbTMLValidate,
 		},
 		"split-window": {
-			description: "Split a pane and put a new one beside it. Needs an attached client and tiling on.",
+			description: "Split a pane and put a new one beside it. Works with no client attached, and turns tiling on when it is off. The new pane opens on the workspace of the pane it cuts, and starts in the caller's directory when cwd is left out.",
 			params: []verbParam{
 				sessionParam,
-				{Name: "window", Type: "string", Description: "Window to split. Omit to split the focused one."},
+				{Name: "window", Type: "string", Description: "Window to split. Omit to split the caller's own pane, or outside a pane the focused one."},
 				{Name: "direction", Type: "string", Description: "Axis to cut on. The new pane goes right or below. Pass this or side.", Accepted: splitDirections},
 				{Name: "side", Type: "string", Description: "Side of the pane the new pane takes. Pass this or direction.", Accepted: splitSides},
+				{Name: "ratio", Type: "int", Description: "The new pane's share of the space, in percent, from 1 to 99. Omit for an even split."},
 				{Name: "name", Type: "string", Description: "Name for the new window."},
+				{Name: "command", Type: "[]string", Description: "Argv to run in the new pane instead of a shell, as for new-window."},
+				{Name: "cwd", Type: "string", Description: "Directory to start in, as for new-window."},
+				{Name: "focus", Type: "bool", Description: "Focus the new pane. Pass false to leave the focus where it is.", Default: "true"},
+				{Name: "keep_open", Type: "bool", Description: "Keep the pane after its process exits, as for new-window.", Default: "false"},
+				{Name: "close_on_exit", Type: "bool", Description: "Close the pane when its process exits, as for new-window.", Default: "false"},
+				{Name: "env", Type: "object", Description: "Environment variables for the pane's process, as for new-window."},
+				{Name: "host", Type: "string", Description: "Run the pane's process on another machine, as for new-window."},
+				grantsParam,
 			},
 			returns: []verbParam{
 				{Name: "window_id", Type: "string", Description: "Id of the pane the split created."},
 				{Name: "direction", Type: "string", Description: "The axis that was cut."},
-				{Name: "side", Type: "string", Description: "The side the new pane took, when side was given."},
-				{Name: "name", Type: "string", Description: "The new pane's name, when one was given."},
+				{Name: "side", Type: "string", Description: "The side the new pane took."},
+				{Name: "name", Type: "string", Description: "The new pane's name."},
+				{Name: "workspace", Type: "int", Description: "Workspace the new pane is on."},
+				{Name: "unplaced", Type: "bool", Description: "True while a client has still to place the pane."},
 			},
 			examples: []string{
 				`{"id":1,"verb":"split-window","params":{"session":"work","window":"build","direction":"vertical","name":"logs"}}`,
-				`{"id":2,"verb":"split-window","params":{"session":"work","window":"build","side":"left"}}`,
+				`{"id":2,"verb":"split-window","params":{"session":"work","window":"build","side":"down","ratio":30,"focus":false,"command":["tail","-f","app.log"]}}`,
 			},
 			handler: (*Daemon).verbSplitWindow,
+		},
+		"zoom-window": {
+			description: "Zoom a pane to fill its workspace, or end the zoom. Works with no client attached. Zooming a pane on the workspace the session shows focuses it.",
+			params: []verbParam{
+				sessionParam,
+				{Name: "window", Type: "string", Description: "Window to zoom. Omit for the caller's own pane, or outside a pane the focused one."},
+				{Name: "zoom", Type: "bool", Description: "True to zoom, false to end the zoom on the window's workspace. Omit to toggle."},
+			},
+			returns: []verbParam{
+				{Name: "window_id", Type: "string", Description: "Id of the window."},
+				{Name: "zoomed", Type: "bool", Description: "Whether the window is zoomed now."},
+				{Name: "changed", Type: "bool", Description: "False when the zoom was already as asked."},
+			},
+			examples: []string{`{"id":1,"verb":"zoom-window","params":{"session":"work","window":"build","zoom":true}}`},
+			handler:  (*Daemon).verbZoomWindow,
+		},
+		"swap-window": {
+			description: "Swap two tiled panes of one workspace. Works with no client attached. The focus stays where it is.",
+			params: []verbParam{
+				sessionParam,
+				{Name: "window", Type: "string", Description: "One pane. Omit for the caller's own pane, or outside a pane the focused one."},
+				{Name: "with", Type: "string", Required: true, Description: "The other pane."},
+			},
+			returns: []verbParam{
+				{Name: "window_id", Type: "string", Description: "Id of the first pane."},
+				{Name: "with", Type: "string", Description: "Id of the other pane."},
+			},
+			examples: []string{`{"id":1,"verb":"swap-window","params":{"session":"work","window":"build","with":"review"}}`},
+			handler:  (*Daemon).verbSwapWindow,
+		},
+		"resize-window": {
+			description: "Move one border of a tiled pane. right and down move a border right or down, left and up move it left or up. The border is the one on that side of the pane, or the other one when the pane is at the edge there. Works with no client attached.",
+			params: []verbParam{
+				sessionParam,
+				{Name: "window", Type: "string", Description: "Pane to resize. Omit for the caller's own pane, or outside a pane the focused one."},
+				{Name: "direction", Type: "string", Required: true, Description: "The way the border moves.", Accepted: focusDirections},
+				{Name: "amount", Type: "int", Description: "How far the border moves, in percent of the layout's width or height, from 1 to 50.", Default: "5"},
+			},
+			returns: []verbParam{
+				{Name: "window_id", Type: "string", Description: "Id of the pane."},
+				{Name: "changed", Type: "bool", Description: "False when no border could move: the pane is alone, floating, or at the smallest or largest share."},
+			},
+			examples: []string{`{"id":1,"verb":"resize-window","params":{"session":"work","window":"build","direction":"right","amount":10}}`},
+			handler:  (*Daemon).verbResizeWindow,
 		},
 		"focus-window": {
 			description: "Move the focus to a pane. Pass exactly one of window, relative or direction.",
@@ -1440,13 +1527,16 @@ func buildVerbRegistry() map[string]verbEntry {
 			handler: (*Daemon).verbFocusWindow,
 		},
 		"move-window": {
-			description: "Move a window to another workspace, or with to_session to another session. The program in the window keeps running, and the window keeps its id and its scrollback.",
+			description: "Move a window to another workspace, or with to_session to another session, or with beside next to another pane. The program in the window keeps running, and the window keeps its id and its scrollback.",
 			params: []verbParam{
 				sessionParam,
 				{Name: "window", Type: "string", Description: "Window to move. Omit to move the focused one."},
 				{Name: "workspace", Type: "int", Description: "Workspace number to move the window to. Required without to_session. With to_session, omit it to use the workspace the destination shows."},
 				{Name: "follow", Type: "bool", Description: "Switch to that workspace after moving. With to_session, focus the window in the destination.", Default: "false"},
 				{Name: "to_session", Type: "string", Description: "Session to move the window to, by name or id. A popup, a scratch pane, a TML pane and a pane on another machine cannot move (pane_not_movable). The window's own session is refused (same_session)."},
+				{Name: "beside", Type: "string", Description: "Pane to put the window next to, in the layout of that pane's workspace. Without window, the caller's own pane moves. Not with workspace, to_session or follow. Works with no client attached."},
+				{Name: "side", Type: "string", Description: "With beside: the side of that pane the window takes.", Default: "right", Accepted: splitSides},
+				{Name: "ratio", Type: "int", Description: "With beside: the window's share of the space, in percent, from 1 to 99. Omit for an even split."},
 			},
 			returns: []verbParam{
 				{Name: "window_id", Type: "string", Description: "Id of the window that moved. A move to another session keeps it."},
@@ -1459,6 +1549,7 @@ func buildVerbRegistry() map[string]verbEntry {
 			examples: []string{
 				`{"id":1,"verb":"move-window","params":{"session":"work","window":"build","workspace":2,"follow":true}}`,
 				`{"id":1,"verb":"move-window","params":{"session":"work","window":"build","to_session":"review"}}`,
+				`{"id":1,"verb":"move-window","params":{"session":"work","window":"review","beside":"build","side":"down","ratio":30}}`,
 			},
 			handler: (*Daemon).verbMoveWindow,
 		},
@@ -1664,7 +1755,7 @@ func buildVerbRegistry() map[string]verbEntry {
 			handler: (*Daemon).verbSendText,
 		},
 		"run": {
-			description: "Type one command line at a pane's shell prompt, wait for the shell to report it finished, and return its exit code and output. Needs a shell that marks its commands with OSC 133, and refuses with no_shell_integration one that marks only its prompts; refuses with not_at_prompt when a command, or another run, is already running there.",
+			description: "Type one command line at a pane's shell prompt, wait for the shell to report it finished, and return its exit code and output. Needs a shell that marks its commands with OSC 133, and refuses with no_shell_integration one that marks only its prompts; refuses with not_at_prompt when a command, or another run, is already running there. From a pane, window is required.",
 			params: []verbParam{
 				sessionParam,
 				windowParam,
@@ -1927,17 +2018,20 @@ func buildVerbRegistry() map[string]verbEntry {
 				sessionParam,
 				{Name: "key", Type: "string", Description: `Option path, e.g. "appearance.sidebar.enabled". Call list-options for the full set.`},
 				{Name: "value", Type: "string", Description: "New value, as a string. Booleans take true/false/on/off/1/0/yes/no."},
+				{Name: "no_save", Type: "bool", Description: "Apply the value without saving it. Later saves of other settings leave the key in the config files alone. The value stays until the client exits or the option is set again without no_save."},
 			},
 			returns: []verbParam{
 				{Name: "key", Type: "string", Description: "The option that was set."},
 				{Name: "value", Type: "string", Description: "The value recorded."},
 				{Name: "applied", Type: "bool", Description: "Whether an attached client applied it to the live display."},
+				{Name: "no_save", Type: "bool", Description: "The no_save the daemon used. A daemon that does not return it saves the value."},
 				{Name: "reason", Type: "string", Description: "Why applied is false, when it is. Present only then."},
 				{Name: "deprecated", Type: "string", Description: "Why this path is deprecated and what replaced it. Present only for a deprecated path."},
 			},
 			examples: []string{
 				`{"id":1,"verb":"set-option","params":{"session":"work","key":"appearance.sidebar.enabled","value":"true"}}`,
 				`{"id":1,"verb":"set-option","params":{"session":"work","key":"appearance.dockbar_position","value":"top"}}`,
+				`{"id":1,"verb":"set-option","params":{"session":"work","key":"appearance.sidebar.enabled","value":"false","no_save":true}}`,
 			},
 			handler: (*Daemon).verbSetOption,
 		},
@@ -2007,7 +2101,7 @@ func buildVerbRegistry() map[string]verbEntry {
 				{Name: "session", Type: "string", Description: "Only deliver events from this session. Omit for events from every session. Unlike most verbs, an omitted session does not mean the most recently active one."},
 				{Name: "window", Type: "string", Description: "Only deliver events about this window id. Omit for every window."},
 				{Name: "types", Type: "[]string", Description: "Only deliver these event types. Omit for all of them.", Accepted: knownEventTypes},
-				{Name: "queue", Type: "int", Description: "Buffered events before the stream marks a gap.", Default: "256"},
+				{Name: "queue", Type: "int", Description: "Buffered events before the stream marks a gap. A size above 4096 is lowered to 4096.", Default: "256"},
 				{Name: "after_seq", Type: "int", Description: "Resume: replay the retained events with a seq above this one before streaming live. Pass the seq of the last event received. 0 replays everything the daemon still holds. Output events are not retained."},
 				{Name: "boot_id", Type: "string", Description: "The boot_id the after_seq came with. If the daemon has restarted since, the stream starts with a gap marker with reason boot_changed instead of a replay. Needs after_seq."},
 				{Name: "hosts", Type: "bool", Description: "Also deliver the agent-state, session-created and session-closed events this daemon relays from its linked hosts, each carrying host, and let session and window match events of other machines. Without it an event about another machine reaches only a subscriber that names no session or window, and only an attention or host-changed event.", Default: "false"},
@@ -2354,6 +2448,22 @@ func buildVerbRegistry() map[string]verbEntry {
 				`{"id":1,"verb":"set-agent-meta","params":{"session":"work","source":"statusline","clear":true}}`,
 			},
 			handler: (*Daemon).verbSetAgentMeta,
+		},
+		"report-program-status": {
+			description: "Apply one OSC 7501 report (the Program Status Protocol) to a pane, as if the pane's emulator read it from the pane's output. tuios status sends it when the process has no terminal, such as an agent's shell tool. The report gets the same checks, records and lifetime as one the pane writes. A pane may report only for itself, as with set-agent-state.",
+			params: []verbParam{
+				sessionParam,
+				{Name: "window", Type: "string", Description: "Window id or name. Omit from a pane for the pane itself, and from outside every pane for the focused window."},
+				{Name: "report", Type: "string", Description: "The body of the report: the text between ESC ] 7501; and the string terminator, such as state=working:app=build. A report a terminal would discard is refused, and nothing is recorded.", Required: true},
+			},
+			returns: []verbParam{
+				{Name: "window_id", Type: "string", Description: "The window the report was applied to."},
+				{Name: "program_status", Type: "[]object", Description: "The pane's records after the report, as get-agent-state reports them."},
+			},
+			examples: []string{
+				`{"id":1,"verb":"report-program-status","params":{"session":"work","report":"state=done:app=build:msg=QnVpbHQ="}}`,
+			},
+			handler: (*Daemon).verbReportProgramStatus,
 		},
 		"explain-agent-detect": {
 			description: "Say in plain words whether a pane runs an agent and on what evidence. Lists every agent name seen on the command line that did not count, what the detector read (comm, argv, executable, and the processes behind a wrapper), which harness manifest matched and on which predicate, and for each manifest that did not match, what it compared against.",
@@ -3020,7 +3130,7 @@ func (d *Daemon) dispatchVerbLine(cs *connState, line []byte, release func()) er
 	// A verb can change what the session listing shows.
 	d.wakes.listing.Set()
 	var req verbRequest
-	err := json.Unmarshal(line, &req)
+	err := jsonx.Unmarshal(line, &req)
 	if release != nil {
 		release()
 	}
@@ -3146,7 +3256,7 @@ func (d *Daemon) admitVerb(cs *connState, verb string, params json.RawMessage) (
 // daemon (the herdr socket) reuses a verb rather than doing its work again.
 // A verb that streams (subscribe) is not called this way.
 func (d *Daemon) callVerb(cs *connState, verb string, params any) (any, *verbError) {
-	raw, err := json.Marshal(params)
+	raw, err := jsonx.Marshal(params)
 	if err != nil {
 		return nil, newVerbError(ErrVerbInternal, "could not encode params")
 	}
@@ -3182,7 +3292,7 @@ func checkParamNames(verb string, entry verbEntry, params json.RawMessage) *verb
 	var got map[string]json.RawMessage
 	// A params value that is not an object at all is left to the handler's
 	// decode, which already reports it as invalid_params with the decode error.
-	if err := json.Unmarshal(params, &got); err != nil {
+	if err := jsonx.Unmarshal(params, &got); err != nil {
 		return nil
 	}
 
@@ -3239,7 +3349,7 @@ func (d *Daemon) writeVerbError(cs *connState, id json.RawMessage, verb string, 
 // writeVerbResponse serializes resp as one newline-terminated JSON line and
 // writes it under the connection's send mutex with a write deadline.
 func (d *Daemon) writeVerbResponse(cs *connState, resp *verbResponse) error {
-	data, err := json.Marshal(resp)
+	data, err := jsonx.Marshal(resp)
 	if err != nil {
 		// Should not happen; fall back to a minimal internal error line.
 		data = []byte(`{"error":{"code":"internal","message":"failed to encode response"}}`)

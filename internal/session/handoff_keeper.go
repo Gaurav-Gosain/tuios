@@ -1,10 +1,11 @@
 package session
 
 import (
-	"fmt"
 	"os"
 	"strconv"
 	"strings"
+
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 )
 
 // The keeper of a live handoff.
@@ -142,7 +143,7 @@ func keptDescriptors() (map[int]int, error) {
 		a, errA := strconv.Atoi(from)
 		b, errB := strconv.Atoi(to)
 		if !ok || errA != nil || errB != nil {
-			return nil, fmt.Errorf("%s holds %q, which is not a descriptor map", handoffKeptEnv, v)
+			return nil, errfmt.Errorf("%s holds %q, which is not a descriptor map", handoffKeptEnv, v)
 		}
 		out[a] = b
 	}
@@ -166,7 +167,7 @@ func keptAt(kept map[int]int, fd int) (int, error) {
 	}
 	to, ok := kept[fd]
 	if !ok {
-		return -1, fmt.Errorf("the keeper holds no copy of descriptor %d", fd)
+		return -1, errfmt.Errorf("the keeper holds no copy of descriptor %d", fd)
 	}
 	return to, nil
 }
@@ -208,7 +209,7 @@ func ParseKeeperHold(s string) ([]int, error) {
 	for f := range strings.SplitSeq(s, ",") {
 		fd, err := strconv.Atoi(f)
 		if err != nil || fd < 0 {
-			return nil, fmt.Errorf("%q is not a descriptor", f)
+			return nil, errfmt.Errorf("%q is not a descriptor", f)
 		}
 		out = append(out, fd)
 	}

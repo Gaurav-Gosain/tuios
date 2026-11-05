@@ -13,6 +13,7 @@ import (
 
 	"github.com/pelletier/go-toml/v2"
 
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"github.com/Gaurav-Gosain/tuios/internal/sortx"
 )
 
@@ -170,12 +171,12 @@ func loadLayered(mainPath string, allowMissing bool) (*LayeredConfig, error) {
 	}
 	if err == nil {
 		if info, serr := os.Stat(mainPath); serr == nil && info.IsDir() {
-			return nil, fmt.Errorf("%s is a directory. The config must be a file", mainPath)
+			return nil, errfmt.Errorf("%s is a directory. The config must be a file", mainPath)
 		}
 	}
 	values, err := parseLayer(data)
 	if err != nil {
-		return nil, fmt.Errorf("failed to parse config file: %w", err)
+		return nil, errfmt.Errorf("failed to parse config file: %w", err)
 	}
 	_, hasInclude := values[IncludeKey]
 
@@ -210,7 +211,7 @@ type layerLoader struct {
 func (l *layerLoader) includes(from string, values map[string]any, stack []string, depth int) error {
 	list, err := includeList(values[IncludeKey])
 	if err != nil {
-		return fmt.Errorf("%s: %w", from, err)
+		return errfmt.Errorf("%s: %w", from, err)
 	}
 	for _, name := range list {
 		optional := false
@@ -243,7 +244,7 @@ func (l *layerLoader) visit(path string, optional bool, kind LayerKind, from str
 		return nil
 	}
 	if info, err := os.Stat(path); err == nil && info.IsDir() {
-		return fmt.Errorf("%s includes %s, which is a directory. An include names one file. Put a directory of files in %s", l.show(from), l.show(path), DropInDirName)
+		return errfmt.Errorf("%s includes %s, which is a directory. An include names one file. Put a directory of files in %s", l.show(from), l.show(path), DropInDirName)
 	}
 	data, err := os.ReadFile(path) //nolint:gosec // a file the user's own config names
 	if err != nil {
@@ -261,11 +262,11 @@ func (l *layerLoader) visit(path string, optional bool, kind LayerKind, from str
 			l.lc.Warnings = append(l.lc.Warnings, fmt.Sprintf("tuios cannot read %s, so it skips it: %v", l.show(path), err))
 			return nil
 		}
-		return fmt.Errorf("failed to read %s: %w", path, err)
+		return errfmt.Errorf("failed to read %s: %w", path, err)
 	}
 	values, err := parseLayer(data)
 	if err != nil {
-		return fmt.Errorf("failed to parse %s: %w", path, err)
+		return errfmt.Errorf("failed to parse %s: %w", path, err)
 	}
 	l.seen[real] = true
 	l.warnNested(path, values)
@@ -384,13 +385,13 @@ func includeList(v any) ([]string, error) {
 		for _, e := range v {
 			s, ok := e.(string)
 			if !ok {
-				return nil, fmt.Errorf("include must be a list of file paths")
+				return nil, errfmt.Errorf("include must be a list of file paths")
 			}
 			out = append(out, s)
 		}
 		return out, nil
 	default:
-		return nil, fmt.Errorf("include must be a list of file paths")
+		return nil, errfmt.Errorf("include must be a list of file paths")
 	}
 }
 
@@ -509,7 +510,7 @@ func (lc *LayeredConfig) Bytes() ([]byte, error) {
 	}
 	data, err := toml.Marshal(lc.Merged())
 	if err != nil {
-		return nil, fmt.Errorf("failed to merge config files: %w", err)
+		return nil, errfmt.Errorf("failed to merge config files: %w", err)
 	}
 	return data, nil
 }

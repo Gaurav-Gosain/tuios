@@ -1,9 +1,7 @@
 package client
 
 import (
-	"encoding/json"
 	"errors"
-	"fmt"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -15,8 +13,10 @@ import (
 	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"github.com/Gaurav-Gosain/tuios/internal/gitstate"
 	"github.com/Gaurav-Gosain/tuios/internal/guios/proto"
+	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 )
 
@@ -170,7 +170,7 @@ func (k *stateKeeper) build() (*proto.State, error) {
 	var sl struct {
 		Sessions []sessionRow `json:"sessions"`
 	}
-	if err := json.Unmarshal(raw, &sl); err != nil {
+	if err := jsonx.Unmarshal(raw, &sl); err != nil {
 		return nil, err
 	}
 	st := &proto.State{Started: k.started, Conversations: k.convGen.Load() + 1}
@@ -208,7 +208,7 @@ func (k *stateKeeper) build() (*proto.State, error) {
 			Workspace int         `json:"current_workspace"`
 			Shell     string      `json:"shell"`
 		}
-		_ = json.Unmarshal(wraw, &wl)
+		_ = jsonx.Unmarshal(wraw, &wl)
 		ws := wl.Workspace
 		if ws <= 0 {
 			ws = 1
@@ -378,8 +378,8 @@ func (k *stateKeeper) pane(w windowRow) proto.Pane {
 	}
 	for _, r := range w.Program {
 		rec := proto.Record{Progress: -1}
-		b, _ := json.Marshal(r)
-		_ = json.Unmarshal(b, &rec)
+		b, _ := jsonx.Marshal(r)
+		_ = jsonx.Unmarshal(b, &rec)
 		p.Records = append(p.Records, rec)
 	}
 	if w.Exited && w.KeepOpen {
@@ -443,7 +443,7 @@ func layoutsPath() string {
 func (k *stateKeeper) loadLayouts() {
 	b, err := os.ReadFile(layoutsPath())
 	if err == nil {
-		_ = json.Unmarshal(b, &k.layouts)
+		_ = jsonx.Unmarshal(b, &k.layouts)
 	}
 	if k.layouts == nil {
 		k.layouts = map[string]*proto.Layout{}
@@ -456,7 +456,7 @@ func (k *stateKeeper) saveLayouts() {
 		return
 	}
 	k.mu.Lock()
-	b, err := json.Marshal(k.layouts)
+	b, err := jsonx.Marshal(k.layouts)
 	k.mu.Unlock()
 	if err != nil {
 		return
@@ -517,7 +517,7 @@ func (k *stateKeeper) watch() {
 			Key     string `json:"key"`
 			Value   string `json:"value"`
 		}
-		_ = json.Unmarshal(line, &ev)
+		_ = jsonx.Unmarshal(line, &ev)
 		if ev.Type == "option-set" {
 			// No pane changed. Only the theme options reach the app.
 			if slices.Contains(ThemeOptions, ev.Key) {
@@ -629,7 +629,7 @@ var ThemeOptions = []string{"appearance.theme", "appearance.theme_light"}
 // saved it to config.toml.
 func (c *Client) SetThemeOption(key, value string) (applied bool, err error) {
 	if !slices.Contains(ThemeOptions, key) {
-		return false, fmt.Errorf("%s is not a theme option", key)
+		return false, errfmt.Errorf("%s is not a theme option", key)
 	}
 	c.viewMu.Lock()
 	sid := c.viewing
@@ -645,7 +645,7 @@ func (c *Client) SetThemeOption(key, value string) (applied bool, err error) {
 	var res struct {
 		Applied bool `json:"applied"`
 	}
-	_ = json.Unmarshal(raw, &res)
+	_ = jsonx.Unmarshal(raw, &res)
 	return res.Applied, nil
 }
 
@@ -661,7 +661,7 @@ func sessionOption(vc *session.VerbClient, key string) (string, bool) {
 		Value  string `json:"value"`
 		Source string `json:"source"`
 	}
-	if json.Unmarshal(raw, &res) != nil || res.Source != "session" {
+	if jsonx.Unmarshal(raw, &res) != nil || res.Source != "session" {
 		return "", false
 	}
 	return res.Value, true
