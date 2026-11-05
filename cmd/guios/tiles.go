@@ -2,11 +2,10 @@ package main
 
 import (
 	"math"
-
-	"github.com/Gaurav-Gosain/mygo/plugins/terminal"
 	"slices"
 	"time"
 
+	"github.com/Gaurav-Gosain/mygo/plugins/terminal"
 	"github.com/Gaurav-Gosain/mygo/ui"
 
 	"github.com/Gaurav-Gosain/tuios/internal/guios/proto"
@@ -253,7 +252,7 @@ func (a *App) tiled(c *ui.Context, pal *palette, bar ui.TitleBar, shown float32,
 			// Retargeted on the way: on from where it shows.
 			an.from, an.to, an.start, an.spring = an.cur, t, now, false
 		}
-		if l := a.motion.landing; l.pane == id && an.start == now && t != l.at {
+		if l := a.motion.landing; l.pane == id && an.start.Equal(now) && t != l.at {
 			// Dropped: from where its copy was let go, on a spring.
 			an.from, an.cur, an.start, an.spring = l.at, l.at, now, true
 			a.motion.landing = paneGhost{}
