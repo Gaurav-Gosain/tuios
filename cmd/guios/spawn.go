@@ -285,10 +285,17 @@ func (a *App) spawnFolder() (string, string) {
 		}
 	}
 	if s := a.session(a.selected); s != nil && !a.hostOf(s.ID).remote() {
-		if dir := s.WorkDir(); dir != "" && filepath.IsAbs(dir) {
-			return filepath.Clean(dir), s.Name
+		// The daemon's name of the session, also for one the person did
+		// not name: without it the start would make a session or pick
+		// another (QA-071).
+		name := s.Name
+		if name == "" {
+			name = a.sessionName(s.ID)
 		}
-		return proto.Home(), s.Name
+		if dir := s.WorkDir(); dir != "" && filepath.IsAbs(dir) {
+			return filepath.Clean(dir), name
+		}
+		return proto.Home(), name
 	}
 	return proto.Home(), ""
 }
@@ -690,6 +697,17 @@ func (s *spawnSheet) spec(i int) string {
 	return cmd
 }
 
+// sessionNamed reports whether a session of this machine has the name:
+// start-agent would put the agent in it rather than make one.
+func (a *App) sessionNamed(name string) bool {
+	for i := range a.st.Sessions {
+		if a.st.Sessions[i].Name == name {
+			return true
+		}
+	}
+	return false
+}
+
 // spawnStarted is the daemon's answer to a Start.
 type spawnStarted struct {
 	text string
@@ -817,6 +835,11 @@ func (a *App) spawnStart() {
 		// and the agents view selects it as soon as its pane shows.
 		if name := strings.TrimPrefix(spawnBranchName(task), "agent/"); name != "" {
 			params["name"] = name
+			if s.session == "" && !a.sessionNamed(name) {
+				// The session the start makes is named after the task
+				// too; a session that was there keeps its name (QA-071).
+				params["session"] = name
+			}
 			ck := &a.ck
 			if ck.spawnTasks == nil {
 				ck.spawnTasks = map[string]string{}

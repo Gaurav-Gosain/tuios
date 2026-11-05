@@ -173,6 +173,9 @@ type Pane struct {
 	ProcessDir string `json:"processDir,omitempty"`
 	// Agent names the coding agent running in the foreground, when known.
 	Agent string `json:"agent,omitempty"`
+	// Named says the pane's title is a name given to the pane (set-window
+	// --name, or start-agent's name), not one its program set.
+	Named bool `json:"named,omitempty"`
 	// Runtime names the interpreter of a foreground script, as "node",
 	// when Process is the script's name.
 	Runtime string `json:"runtime,omitempty"`
@@ -621,7 +624,11 @@ func (s *Session) DisplayName(from string) string {
 			p = f
 		}
 	}
-	if p.Process != "" {
+	// A pane's own name, as start-agent gives an agent's pane, names the
+	// pane, not the session: a start into a session that was there keeps
+	// the session's name (QA-071). A session a start made carries the
+	// name the start gave it.
+	if p.Process != "" && !p.Named {
 		if t := CleanTitle(p.Title); t != "" && !looksLikePath(t) {
 			return t
 		}
