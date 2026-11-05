@@ -185,5 +185,5 @@ tuios.dev/swatch v0.1.2-0.20261030111253-c0f512aa3148 h1:fOdsKOC/IwE0npG2NRZ5OTs
 tuios.dev/swatch v0.1.2-0.20261030111253-c0f512aa3148/go.mod h1:+YERlhpL1niy5V1gEFcr7KKkxpGUvmug1kiGJDiS4j4=
 tuios.dev/tml v0.1.2-0.20261104012002-e0cf866a6ddb h1:DP5/OaO4rozuHjV38KHNc0+HRvHGxJBkS1bm3fvga+s=
 tuios.dev/tml v0.1.2-0.20261104012002-e0cf866a6ddb/go.mod h1:8F9rKdZTa4zslNLjGxEMDA+UUw3RODNSU/tbYDcSMdc=
-tuios.dev/vt v0.3.3-0.20261105200823-571d883a154c h1:CkI1oSBlUl6GF7gZekouLLiOQjdyHlkB5vLoIDx3WdQ=
-tuios.dev/vt v0.3.3-0.20261105200823-571d883a154c/go.mod h1:fKipZ0jUN3HNyKNIvijTji4y2caLJwqKPJm3R8ywWXU=
+tuios.dev/vt v0.3.3-0.20261105204842-7ee324d18829 h1:2tXWwoBwpOU99aI8qVIKGPONr/MTnulJUHZKW3OE8KY=
+tuios.dev/vt v0.3.3-0.20261105204842-7ee324d18829/go.mod h1:fKipZ0jUN3HNyKNIvijTji4y2caLJwqKPJm3R8ywWXU=
