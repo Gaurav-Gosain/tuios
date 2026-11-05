@@ -277,7 +277,7 @@ func (a *App) frozenPanes(c *ui.Context, pal *palette, s *proto.Session, key str
 				Width(float32(max(x1-x0, 0))).Height(float32(max(y1-y0, 0))).Radius(rPane).Clip().Background(pal.card)
 			paned(card, pal).Children(func() {
 				ui.Row(c).Height(headerH).Shrink(0).AlignItems(ui.Center).Padding(0, 10, 0, 16).Gap(sp2).Children(func() {
-					ui.Icon(c, programIcon(p)).Size(14, 14).TextColor(pal.textFaint)
+					a.paneIcon(c, pal, p, 14)
 					oneLine(c, p.PaneName(), fsBody, wSemibold).TextColor(pal.text)
 				})
 				if e := a.terms[p.ID]; e != nil && e.term != nil {

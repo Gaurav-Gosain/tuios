@@ -594,11 +594,7 @@ func (a *App) paneHeader(c *ui.Context, pal *palette, bar ui.TitleBar, shown flo
 			}
 		}
 		grip.Children(func() {
-			if p.Status != proto.Idle || p.Unread {
-				statusIconP(c, pal, p.Status, p.Unread, p.Progress, 14)
-			} else {
-				ui.Icon(c, programIcon(p)).Size(14, 14).TextColor(pal.textFaint)
-			}
+			a.paneIcon(c, pal, p, 14)
 			if plan.noTitle {
 				// Too narrow for any of the title: the mark alone, and
 				// the name in its tooltip.
@@ -687,6 +683,36 @@ func (a *App) paneHeader(c *ui.Context, pal *palette, bar ui.TitleBar, shown flo
 		}
 	})
 	return dragging
+}
+
+// paneMark is the state a pane is marked with, and whether it gets a mark
+// rather than the program's icon. An agent's pane keeps its agent's mark
+// as the sidebar draws it: the daemon reports a finished agent that was
+// seen, and one that waits for a task, as idle, which showed the plain
+// terminal icon where the sidebar showed the check or the ring.
+func (a *App) paneMark(p *proto.Pane) (st proto.Status, unread, mark bool) {
+	if p.Status != proto.Idle || p.Unread {
+		return p.Status, p.Unread, true
+	}
+	if a.ck.loaded && !a.hostOf(p.ID).remote() {
+		for _, ag := range a.ck.agents {
+			if ag.Host == "" && ag.Window == p.ID {
+				st, unread = ckStatus(ag, nil)
+				return st, unread, true
+			}
+		}
+	}
+	return proto.Idle, false, p.Agent != ""
+}
+
+// paneIcon is the icon that stands for a pane wherever it is named: its
+// state's mark, else its program's.
+func (a *App) paneIcon(c *ui.Context, pal *palette, p *proto.Pane, size float32) {
+	if st, unread, mark := a.paneMark(p); mark {
+		statusIconP(c, pal, st, unread, p.Progress, size)
+		return
+	}
+	ui.Icon(c, programIcon(p)).Size(size, size).TextColor(pal.textFaint)
 }
 
 // cornerW is the room the window's corner takes at the right end of the

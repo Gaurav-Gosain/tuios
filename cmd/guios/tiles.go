@@ -595,11 +595,7 @@ func (a *App) hiddenStrip(c *ui.Context, pal *palette, s *proto.Session, hidden 
 				chip.Background(bg.Mix(pal.rowHover, 0.5))
 			}
 			chip.Children(func() {
-				if p.Status != proto.Idle || p.Unread {
-					statusIconP(c, pal, p.Status, p.Unread, p.Progress, 12)
-				} else {
-					ui.Icon(c, programIcon(p)).Size(12, 12).TextColor(pal.textFaint)
-				}
+				a.paneIcon(c, pal, p, 12)
 				oneLine(c, name, fsSmall, wMedium).TextColor(fg).MaxWidth(160)
 			})
 			if chip.Clicked() {
@@ -644,7 +640,7 @@ func (a *App) dragGhost(c *ui.Context, pal *palette, s *proto.Session, area ui.E
 			Shadow(0, 14, 36, 0, pal.floatShadow)
 		paned(card, pal).Children(func() {
 			ui.Row(c).Height(headerH).Shrink(0).AlignItems(ui.Center).Padding(0, 10, 0, 16).Gap(sp2).Children(func() {
-				ui.Icon(c, programIcon(p)).Size(14, 14).TextColor(pal.textFaint)
+				a.paneIcon(c, pal, p, 14)
 				oneLine(c, p.PaneName(), fsBody, wSemibold).TextColor(pal.text)
 			})
 			if e := a.terms[id]; e != nil && e.term != nil {

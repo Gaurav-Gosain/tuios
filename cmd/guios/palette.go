@@ -639,11 +639,7 @@ func (a *App) paletteView(c *ui.Context, pal *palette) {
 				case paletteSession:
 					statusIcon(c, pal, it.session.Status, it.session.Unread, 14)
 				case palettePane:
-					if p := it.pane; p.Status != proto.Idle || p.Unread {
-						statusIcon(c, pal, p.Status, p.Unread, 14)
-					} else {
-						ui.Icon(c, programIcon(p)).Size(14, 14).TextColor(pal.textFaint)
-					}
+					a.paneIcon(c, pal, it.pane, 14)
 				case paletteConversation:
 					ui.Icon(c, programIcon(&proto.Pane{Agent: it.conv.Agent})).Size(14, 14).TextColor(pal.textFaint)
 				default:
