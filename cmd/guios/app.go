@@ -857,7 +857,7 @@ func (a *App) ensureTerm(id string) {
 
 // termPadX and termPadY are a pane terminal's padding, in DIPs.
 const (
-	termPadX = 16
+	termPadX = 10
 	termPadY = 6
 )
 
