@@ -47,7 +47,7 @@ require (
 	tuios.dev/sketch v0.4.1-0.20261104015025-a5461c1d897b
 	tuios.dev/swatch v0.1.2-0.20261030111253-c0f512aa3148
 	tuios.dev/tml v0.1.2-0.20261104012002-e0cf866a6ddb
-	tuios.dev/vt v0.3.3-0.20261104145721-e3510fe4191c
+	tuios.dev/vt v0.3.3-0.20261105073623-c5f5eedbbed6
 )
 
 require (
