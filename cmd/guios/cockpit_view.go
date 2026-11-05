@@ -681,10 +681,19 @@ func (a *App) ckChordKeys(col ui.Element) bool {
 			case chUndoSettle:
 				a.ckUndoSettle()
 			case chSnooze:
-				if r, ok := a.ckSelected(); ok && r.item != nil && !ckHeld(*r.item) {
+				r, ok := a.ckSelected()
+				switch {
+				case ok && r.item != nil && !ckHeld(*r.item):
 					a.ckSnooze()
-				} else {
+				case ok && r.item != nil:
 					a.toast(locales.CockpitNoSnoozeHeld())
+				default:
+					// Say what the press found: nothing to snooze here.
+					name := locales.CockpitUnnamed()
+					if ag, ok := a.ckSelectedAgent(); ok && ag.Name != "" {
+						name = ag.Name
+					}
+					a.toast(locales.CockpitNothingToSnooze(name))
 				}
 			case chBoard:
 				if ck.view == viewBoard {

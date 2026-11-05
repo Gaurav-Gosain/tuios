@@ -1288,5 +1288,6 @@
   "cockpitNothingWaits": "あなたを待っているものはありません。",
   "sidebarSameName": "同じ名前のセッションがほかにもあります。下の行で見分けられます。",
   "cockpitTypeToReply": "入力して返信",
-  "cockpitTypeToAddCard": "入力してカードを追加"
+  "cockpitTypeToAddCard": "入力してカードを追加",
+  "cockpitNothingToSnooze": "{name} にはスヌーズするものがありません。"
 }

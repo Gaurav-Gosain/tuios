@@ -2317,5 +2317,6 @@
   "cockpitNothingWaits": "Nothing waits for you.",
   "sidebarSameName": "Another session has the same name. The line under it tells them apart.",
   "cockpitTypeToReply": "Type to reply",
-  "cockpitTypeToAddCard": "Type to add a card"
+  "cockpitTypeToAddCard": "Type to add a card",
+  "cockpitNothingToSnooze": "{name} has nothing to snooze."
 }

@@ -13061,3 +13061,15 @@ func CockpitTypeToAddCard() string { return In(i18n.Locale()).CockpitTypeToAddCa
 func (msgs Messages) CockpitTypeToAddCard() string {
 	return Catalog.Format(msgs.locale, "cockpitTypeToAddCard", nil)
 }
+
+// CockpitNothingToSnooze says "{name} has nothing to snooze."
+// in the language the app shows.
+func CockpitNothingToSnooze(name string) string {
+	return In(i18n.Locale()).CockpitNothingToSnooze(name)
+}
+
+// CockpitNothingToSnooze says "{name} has nothing to snooze."
+// in the language of msgs.
+func (msgs Messages) CockpitNothingToSnooze(name string) string {
+	return Catalog.Format(msgs.locale, "cockpitNothingToSnooze", map[string]any{"name": name})
+}
