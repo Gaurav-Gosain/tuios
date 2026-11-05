@@ -755,7 +755,7 @@ func (a *App) cockpitHints(c *ui.Context, pal *palette) {
 			if ag, ok := a.ckSelectedAgent(); ok && a.ckHasSiblings(ag) {
 				hint("c", locales.CockpitHintCompare())
 			}
-			ckAllHints(hint)
+			a.ckAllHints(hint)
 		}
 		ui.Spacer(c)
 		if a.ck.narrow {
@@ -772,16 +772,32 @@ func (a *App) cockpitHints(c *ui.Context, pal *palette) {
 }
 
 // ckAllHints is the key line of a cockpit wide enough for both
-// columns.
-func ckAllHints(hint func(k, what string)) {
-	hint("↵", locales.CockpitHintOpen())
-	hint("a", locales.CockpitHintAllow())
-	hint("r", locales.CockpitHintReply())
-	hint("D", locales.CockpitHintSettle())
-	hint("z", locales.CockpitHintSnooze())
+// columns: only the keys that do something on the selected row (council
+// round 4, S4).
+func (a *App) ckAllHints(hint func(k, what string)) {
+	does := func(k ui.Key, shift bool) bool { return a.ckKind(ckKey{key: k, shift: shift}) != kindProse }
+	onAgent := a.ckOnAgent()
+	if onAgent {
+		hint("↵", locales.CockpitHintOpen())
+	}
+	if does(ui.KeyA, false) {
+		hint("a", locales.CockpitHintAllow())
+	}
+	if onAgent {
+		hint("r", locales.CockpitHintReply())
+	}
+	if ag, ok := a.ckSelectedAgent(); ok && (ag.Settled || ag.State != "working") {
+		// A working agent has nothing to settle yet.
+		hint("D", locales.CockpitHintSettle())
+	}
+	if does(ui.KeyZ, false) {
+		hint("z", locales.CockpitHintSnooze())
+	}
 	hint("n", locales.CockpitHintNewAgent())
 	hint("f", locales.CockpitHintFilter())
-	hint("[ ]", locales.CockpitHintTabs())
+	if onAgent {
+		hint("[ ]", locales.CockpitHintTabs())
+	}
 }
 
 // agentsRow is the sidebar's row that opens the cockpit, with how many
