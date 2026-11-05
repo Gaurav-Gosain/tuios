@@ -286,8 +286,10 @@ func (a *App) paneBrowser(c *ui.Context, pal *palette, bar ui.TitleBar, shown fl
 // clear of the traffic lights and the sidebar's buttons.
 func (a *App) browserBar(c *ui.Context, pal *palette, bar ui.TitleBar, shown float32, s *proto.Session, p *proto.Pane, e *webEntry, top, left, right, multi, focused, hovered bool) (ui.Element, bool) {
 	pad := float32(16)
+	strip := float32(0)
 	if top && left {
-		pad = a.chrome.headerPad
+		strip = a.stripRoom(c, s, p.ID)
+		pad = a.chrome.headerPad + strip
 	}
 	// The first button's icon starts where a header's title does.
 	h := ui.Row(c.Key("hdr")).Height(headerH).Shrink(0).AlignItems(ui.Center).Padding(0, 10, 0, pad-6).Gap(2)
@@ -298,7 +300,7 @@ func (a *App) browserBar(c *ui.Context, pal *palette, bar ui.TitleBar, shown flo
 	dragging := false
 	h.Children(func() {
 		if top && left {
-			a.sidebarButtons(c, pal, bar, shown)
+			a.sidebarButtons(c, pal, bar, shown, s, strip > 0)
 		}
 		navButton(c, "back", chevronLeftIcon, locales.BrowserBack(), e.back, pal, func() { e.view.Page().GoBack() })
 		navButton(c, "forward", chevronIcon, locales.BrowserForward(), e.fwd, pal, func() { e.view.Page().GoForward() })

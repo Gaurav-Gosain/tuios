@@ -191,7 +191,6 @@ func (a *App) workspaceBar(c *ui.Context, pal *palette, s *proto.Session) {
 	if len(s.Workspaces) < 2 && !selected || len(s.Workspaces) == 0 {
 		return
 	}
-	sid := s.ID
 	// The pills' numbers start where the session's name does.
 	inset := float32(rowInset - 8)
 	if pal.dark {
@@ -202,30 +201,37 @@ func (a *App) workspaceBar(c *ui.Context, pal *palette, s *proto.Session) {
 			a.workspacePill(c, pal, s, w)
 		}
 		if selected && freeWorkspace(s) > 0 {
-			b := ui.ButtonBase(c.Key("ws-new")).Size(22, 22).Radius(rRow).Center().TextColor(pal.textFaint).Label(locales.WorkspaceNew())
-			pointerTooltip(c, b, "ws-new-tip", locales.WorkspaceNewTip())
-			// An empty workspace has no pill: a pane dropped on the
-			// button goes to the first free workspace, as one dropped on
-			// a pill goes to that pill's.
-			if d, ok := ui.DragOver[paneDrag](b); ok && d.session == sid {
-				b.Background(pal.rowSelected).Border(1, pal.accent).TextColor(pal.text)
-			} else if b.Hovered() {
-				b.Background(pal.rowHover).TextColor(pal.text)
-			}
-			if d, ok := ui.Drop[paneDrag](b); ok && d.session == sid {
-				pane := d.pane
-				a.defer_(func() {
-					if s := a.session(sid); s != nil {
-						a.movePaneTo(s, pane, freeWorkspace(s))
-					}
-				})
-			}
-			b.Children(func() { ui.Icon(c, plusIcon).Size(12, 12) })
-			if b.Clicked() {
-				a.defer_(func() { a.newWorkspace(a.session(sid)) })
-			}
+			a.newWorkspaceButton(c, pal, s)
 		}
 	})
+}
+
+// newWorkspaceButton adds a workspace to s; a pane dropped on it moves
+// there.
+func (a *App) newWorkspaceButton(c *ui.Context, pal *palette, s *proto.Session) {
+	sid := s.ID
+	b := ui.ButtonBase(c.Key("ws-new")).Size(22, 22).Radius(rRow).Center().TextColor(pal.textFaint).Label(locales.WorkspaceNew())
+	pointerTooltip(c, b, "ws-new-tip", locales.WorkspaceNewTip())
+	// An empty workspace has no pill: a pane dropped on the
+	// button goes to the first free workspace, as one dropped on
+	// a pill goes to that pill's.
+	if d, ok := ui.DragOver[paneDrag](b); ok && d.session == sid {
+		b.Background(pal.rowSelected).Border(1, pal.accent).TextColor(pal.text)
+	} else if b.Hovered() {
+		b.Background(pal.rowHover).TextColor(pal.text)
+	}
+	if d, ok := ui.Drop[paneDrag](b); ok && d.session == sid {
+		pane := d.pane
+		a.defer_(func() {
+			if s := a.session(sid); s != nil {
+				a.movePaneTo(s, pane, freeWorkspace(s))
+			}
+		})
+	}
+	b.Children(func() { ui.Icon(c, plusIcon).Size(12, 12) })
+	if b.Clicked() {
+		a.defer_(func() { a.newWorkspace(a.session(sid)) })
+	}
 }
 
 func (a *App) workspacePill(c *ui.Context, pal *palette, s *proto.Session, w proto.Workspace) {
@@ -291,4 +297,72 @@ func workspaceDot(pal *palette, w proto.Workspace) ui.Color {
 		return pal.textFaint
 	}
 	return ui.Transparent
+}
+
+// The workspace strip stands in for the sidebar's workspace pills while
+// the sidebar hides, as the TUI's top bar does: the session's workspaces,
+// the button that adds one, and how many panes the shown one holds. It sits
+// in the top left pane's header after the sidebar's buttons, in the title
+// bar's line, so it takes no row of the panes' room.
+const (
+	stripLead     = 6  // from the sidebar's buttons to the first pill
+	stripCountGap = 6  // from the last button to the pane count
+	stripRule     = 14 // from the pane count to the rule before the title
+)
+
+// wsStripW is the room the strip takes at its full width, 0 when it does
+// not show: a header narrower than card for it and a title keeps none.
+func (a *App) wsStripW(c *ui.Context, s *proto.Session, card float32) float32 {
+	if s == nil || len(s.Workspaces) == 0 {
+		return 0
+	}
+	w := float32(stripLead)
+	for i, ws := range s.Workspaces {
+		weight := wMedium
+		if ws.N == s.Workspace {
+			weight = wSemibold
+		}
+		w += max(26, 2*8+min(natural(c, workspaceName(ws), fsSmall, weight), 96)+5+6)
+		if i > 0 {
+			w += 2
+		}
+	}
+	if freeWorkspace(s) > 0 {
+		w += 2 + 22
+	}
+	w += stripCountGap + natural(c, locales.SidebarPanes(stripPanes(s)), fsSmall, 0)
+	w += stripRule + 1
+	// The header keeps its buttons, its title's least and its state
+	// mark beside the strip; below that the strip goes whole.
+	if card > 0 && card < a.chrome.headerPad+w+titleKeep+120 {
+		return 0
+	}
+	return w
+}
+
+// stripPanes is the number of panes the shown workspace holds.
+func stripPanes(s *proto.Session) int {
+	for _, w := range s.Workspaces {
+		if w.N == s.Workspace && w.Panes > 0 {
+			return w.Panes
+		}
+	}
+	return len(s.Panes)
+}
+
+// workspaceStrip draws the strip, in the row of the sidebar's buttons.
+func (a *App) workspaceStrip(c *ui.Context, pal *palette, s *proto.Session) {
+	ui.Row(c.Key("ws-strip")).AlignItems(ui.Center).Gap(2).Margin(0, 0, 0, stripLead-2).Shrink(0).Children(func() {
+		for _, w := range s.Workspaces {
+			a.workspacePill(c, pal, s, w)
+		}
+		if freeWorkspace(s) > 0 {
+			a.newWorkspaceButton(c, pal, s)
+		}
+		ui.Text(c, locales.SidebarPanes(stripPanes(s))).FontSize(fsSmall).TextColor(pal.textFaint).FontFeatures("tnum").
+			SingleLine().Shrink(0).Margin(0, 0, 0, stripCountGap-2)
+		// A rule ends the strip, so that the pane's title after it does
+		// not read as one of the strip's labels.
+		ui.Box(c).Size(1, 14).Shrink(0).Margin(0, 0, 0, stripRule-2).Background(pal.kbdBorder)
+	})
 }
