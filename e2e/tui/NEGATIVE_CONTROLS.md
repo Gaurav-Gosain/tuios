@@ -13032,3 +13032,25 @@ control cuts one piece from the branch head.
 | `o` runs the action | the `file_open_system` case cut from `handleSidebarFileAction` | `TestSidebarFileOpenSystem`: "o on the rows of the listing started nothing" | **caught** |
 | A rule wins over the system opener | the `rules.OpenArgv` lookup cut from `startFileOpener` | `TestSidebarFileOpenSystem`: paper.pdf went to `xdg-open`, want `rule --page 1 .../paper.pdf` | **caught** |
 | A far row refuses with the reason | the host check in `fileOpenSystemRefusal` made false | `TestQuickLookOnAFarFile`: "o on a far file did not say why it did not open" | **caught** |
+
+## tuios hosts setup sets up a machine both ways
+
+`TestSetUpAMachineBothWays` starts with a daemon here and a far machine with
+no tuios: its own HOME, and a PATH with no tuios on it. One ssh stand-in
+routes both directions. With no terminal and no `--install`, the setup must
+exit 2, name the flag and install nothing. A dry run must print every command
+and write nothing. Then `hosts setup someone@buildbox --name build --install
+copy --both-ways --address someone@laptopbox --yes --json` must report a copy,
+a link up each way and this machine added on buildbox. The daemon here must
+list build up with no restart, and an agent that errors on buildbox must reach
+the Inbox here.
+
+Run on 2026-11-05 on Linux. The fixed build passes in about 1 s.
+
+| Control | Where it fails | Verdict |
+| --- | --- | --- |
+| The shared install path of hostsync is never run for the copy | "the setup failed: exit status 1": the probe after the install finds no tuios | **caught** |
+| The setup writes `[hosts.build]` and does not ask the daemon here to apply it | "the daemon here never reported build up after the setup" | **caught** |
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestSetUpAMachineBothWays$' -v .`.

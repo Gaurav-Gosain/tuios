@@ -32,6 +32,8 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/Gaurav-Gosain/tuios/internal/hostsetup"
+
 	"github.com/spf13/cobra"
 	"golang.org/x/crypto/ssh"
 	"golang.org/x/term"
@@ -1257,7 +1259,7 @@ func (s *pairServer) handle(r pairHTTP) (int, pairReply, *pairResult) {
 
 	command := s.tuiosPath + " stdio-proxy --as " + device
 	line := `command="` + command + `",restrict ` + strings.TrimSpace(string(ssh.MarshalAuthorizedKey(pub))) + " tuios-pair:" + device
-	if err := appendAuthorizedKey(s.keysPath, line); err != nil {
+	if err := hostsetup.AppendAuthorizedKey(s.keysPath, line); err != nil {
 		s.finish(nil, fmt.Errorf("cannot add the key to %s: %w. config.toml has a new [hosts.%s] table. Remove it before you pair this device again", s.keysPath, err, device))
 		return http.StatusInternalServerError, pairReply{Error: "The computer cannot save the key."}, nil
 	}
@@ -1495,28 +1497,6 @@ func checkAuthorizedKeysModes(path string, stderr io.Writer) error {
 		}
 	}
 	return nil
-}
-
-// appendAuthorizedKey adds one line to the file. It makes the folder (0700)
-// and the file (0600) when they are missing, and leaves the modes of ones
-// that exist alone.
-func appendAuthorizedKey(path, line string) error {
-	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
-		return err
-	}
-	prefix := ""
-	if data, err := os.ReadFile(path); err == nil && len(data) > 0 && data[len(data)-1] != '\n' { //nolint:gosec // the file the person names
-		prefix = "\n"
-	}
-	f, err := os.OpenFile(path, os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0o600) //nolint:gosec // the file the person names
-	if err != nil {
-		return err
-	}
-	if _, err := f.WriteString(prefix + line + "\n"); err != nil {
-		_ = f.Close()
-		return err
-	}
-	return f.Close()
 }
 
 // writePairReply writes the reply and its status line. The connection

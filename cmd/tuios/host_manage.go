@@ -12,9 +12,9 @@ import (
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/federation"
+	"github.com/Gaurav-Gosain/tuios/internal/hostsetup"
 	"github.com/Gaurav-Gosain/tuios/internal/hostsync"
 	"github.com/Gaurav-Gosain/tuios/internal/plural"
-	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/units"
 	"github.com/spf13/cobra"
 )
@@ -162,7 +162,7 @@ down. It needs the daemon and the link up.`,
 	testCmd.Flags().BoolVar(&testOpts.dryRun, "dry-run", false, "Show what --start would do and change nothing")
 	testCmd.Flags().BoolVar(&testOpts.json, "json", false, "Print the result as JSON")
 
-	return []*cobra.Command{addCmd, removeCmd, testCmd, newHostsTailnetCommand(), newHostsSyncCommand(), newHostsSigninCommand()}
+	return []*cobra.Command{addCmd, removeCmd, testCmd, newHostsTailnetCommand(), newHostsSyncCommand(), newHostsSigninCommand(), newHostsSetupCommand()}
 }
 
 // runHostAdd writes one [hosts.NAME] table.
@@ -283,6 +283,11 @@ func runHostRemove(name string) error {
 		return fmt.Errorf("no host is named %q. Run 'tuios hosts' to see the names", name)
 	}
 	fmt.Printf("Host %s is removed. A running daemon closes the link now.\n", name)
+	// A key that tuios hosts setup --both-ways allowed for this machine goes
+	// with it.
+	if n, err := hostsetup.RemoveAuthorizedKeys(hostsetup.AuthorizedKeysPath(), name); err == nil && n > 0 {
+		fmt.Printf("The ssh key of %s that tuios added is removed from ~/.ssh/authorized_keys.\n", name)
+	}
 	return nil
 }
 
@@ -457,25 +462,9 @@ func remoteStartCommand(binary string) string {
 // dialHostOnce opens one link to the host in this process, waits for its
 // first attempt to settle, and returns the report.
 func dialHostOnce(host federation.Host, budget time.Duration) (federation.HostReport, error) {
-	table, _ := federation.NewTable([]federation.Host{host})
-
-	m := federation.New(table, federation.Options{
-		Dial:            federation.SSHDialer(os.Getenv("TUIOS_SSH")),
-		ClientName:      "tuios-hosts-test",
-		ClientVersion:   version,
-		VerbProtocol:    session.VerbProtocolVersion,
-		MinVerbProtocol: session.MinVerbProtocolVersion,
-	})
 	ctx, cancel := context.WithTimeout(context.Background(), budget)
 	defer cancel()
-	m.Start(ctx)
-	reports := m.Reports(ctx)
-	m.Stop()
-
-	if len(reports) == 0 {
-		return federation.HostReport{}, fmt.Errorf("host %s did not report a state. Run 'tuios hosts' to see the links", host.Name)
-	}
-	return reports[0], nil
+	return hostsetup.DialOnce(ctx, host, version)
 }
 
 // printHostTest prints one dial's result and fails the command when the host is

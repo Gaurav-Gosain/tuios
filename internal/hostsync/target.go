@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path"
 	"strconv"
@@ -123,7 +124,9 @@ type Target struct {
 	// apart because it says nothing new when the probe already failed or
 	// found no tuios.
 	DaemonNote string
-	mu         sync.Mutex
+	// Progress, when set, hears the bytes of a binary as they are sent.
+	Progress func(done, total int64)
+	mu       sync.Mutex
 }
 
 func (t *Target) Note(s string) {
@@ -285,9 +288,12 @@ func Apply(t *Target, src *Source) {
 		}
 		ctx, cancel := context.WithTimeout(context.Background(), InstallTimeout)
 		defer cancel()
+		var body io.Reader = bytes.NewReader(b.Data)
+		if t.Progress != nil {
+			body = &countingReader{r: body, total: int64(len(b.Data)), tick: t.Progress}
+		}
 		out, stderr, err := t.Runner.Run(ctx, InstallScript(),
-			[]string{t.TargetArg, b.SHA, strconv.Itoa(len(b.Data)), restart, t.OldArg},
-			bytes.NewReader(b.Data))
+			[]string{t.TargetArg, b.SHA, strconv.Itoa(len(b.Data)), restart, t.OldArg}, body)
 		f := ParseFacts(out)
 		if err != nil || f.Has("fail") {
 			t.Fail(installError(f, stderr, err))
@@ -549,4 +555,20 @@ func ProbeBinary(ctx context.Context, t *Target) error {
 		t.Note("The tuios on the host did not report a version.")
 	}
 	return nil
+}
+
+// countingReader tells tick the bytes read through it.
+type countingReader struct {
+	r           io.Reader
+	done, total int64
+	tick        func(done, total int64)
+}
+
+func (c *countingReader) Read(p []byte) (int, error) {
+	n, err := c.r.Read(p)
+	c.done += int64(n)
+	if n > 0 {
+		c.tick(c.done, c.total)
+	}
+	return n, err
 }

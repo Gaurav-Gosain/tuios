@@ -1,8 +1,34 @@
 # Other machines
 
-The person names other machines with `tuios hosts add`. The daemon then holds an
-ssh link to each one, and sessions, panes, agents, mail and the Inbox reach
-across it.
+The person names other machines with `tuios hosts add`, or sets one up from
+nothing with `tuios hosts setup`. The daemon then holds an ssh link to each
+one, and sessions, panes, agents, mail and the Inbox reach across it.
+
+## Set up a machine
+
+`tuios hosts setup DEST` tests ssh, installs tuios when it is missing, starts
+the daemon, adds the machine and tests the link. Run the dry run first and show
+the person the plan. Then run it with the choices they made:
+
+```sh
+tuios hosts setup gaurav@buildbox --dry-run
+tuios hosts setup gaurav@buildbox --name build --install copy --yes --json
+tuios hosts setup gaurav@buildbox --install copy --service --both-ways --yes --json
+tuios hosts setup --tailnet --dry-run
+tuios hosts setup --tailnet --only nas,gpu --install copy --yes --json
+```
+
+- `--install` is `copy` (this tuios, or the release of this version for
+  another platform), `release`, `pkg` (with `--pkg yay`, `paru`, `brew`, `nix`
+  or `go`) or `script`. It is the one choice the setup cannot make. Without it
+  the command exits 2 and names the flag.
+- `--service` (start at boot) and `--both-ways` (add this machine on the other
+  one too) are off unless passed. Pass them only when the person asked.
+- Exit 3 means a step needs the person: a password, a host key to check, a
+  Tailscale sign-in. The JSON has `person` or `failure.fix_command`. Give it to
+  them. Never type a password or accept a host key yourself.
+- `--json` prints `ok`, `steps` (each `step` and `state`), `failure`, `host`
+  (the final link report) and `both_ways`.
 
 ## Hosts and links
 

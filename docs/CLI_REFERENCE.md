@@ -4428,7 +4428,8 @@ An enabled plugin runs with your rights. Grants are not a sandbox. See
 |---------|--------------|
 | `tuios hosts` | List the machines in the `[hosts]` config table and the state of each link. A host whose tuios is too old to stream its agents is named below the table, with what to update: its agents are polled and what waits there is not in the Inbox. A host with mail waiting here for its link says how many |
 | `tuios hosts add <name> <addr>` | Add a machine. `--tailnet` takes the address from your tailnet; `--command`, `--ssh-option` and `--connect-timeout` tune the link; `--repos-root DIR` says where the host keeps its checkouts, for `fan --host`, `worktree new --host` and `start-agent -s HOST:SESSION`, and is kept when the host is added again without it, as its link policy fields are |
-| `tuios hosts remove <name>` | Remove a machine |
+| `tuios hosts setup [DEST] [NAME]` | Set up a machine in one command: test ssh, install tuios when it is missing, start the daemon, add the machine and test the link. `--install copy\|release\|pkg\|script`, `--service`, `--both-ways`, `--tailnet` with `--all` or `--only`, `--yes`, `--dry-run`, `--json`. See [below](#tuios-hosts-setup) |
+| `tuios hosts remove <name>` | Remove a machine. A key that `hosts setup --both-ways` allowed for it is removed from `~/.ssh/authorized_keys` too |
 | `tuios hosts test <name>` | Open one link to a host and report what happened. `--start` starts the daemon there when it does not run. `--speed` measures how fast a copy to the host can be. `--dry-run`, `--json`. See [below](#tuios-hosts-test) |
 | `tuios cp SRC... DST` | Copy files and folders between this machine and its hosts, or between two hosts. See [below](#tuios-cp) |
 | `tuios transfers` | List the copies the daemon runs, and pause, resume, cancel, wait for or clear them (also `tuios copies`). See [below](#tuios-transfers) |
@@ -4738,6 +4739,52 @@ build: round trip 12.4 ms, up 48.2 MiB/s, down 51.7 MiB/s (64.0 MiB each way, ra
 With `--json` the result has `host`, `bytes` (each way), `rtt_ms`, `up` and
 `down` (bytes a second), `up_ms` and `down_ms`. The protocol verb is
 `host-speed-test` (see [protocol.md](protocol.md#files-and-transfers)).
+
+### `tuios hosts setup`
+
+Set up another machine for tuios in one command.
+
+```sh
+tuios hosts setup gaurav@buildbox --dry-run                           # test ssh and print the plan
+tuios hosts setup gaurav@buildbox --name build --install copy --yes   # install, start, add, test
+tuios hosts setup gaurav@buildbox --install copy --service --both-ways --yes --json
+tuios hosts setup --tailnet --dry-run                                 # the tailnet and each machine's state
+tuios hosts setup --tailnet --all --install copy --yes                # every machine that can be set up
+```
+
+The steps:
+
+1. Test ssh, with BatchMode on. A failure names its class and its one fix (see
+   [`tuios hosts test`](#tuios-hosts-test)).
+2. Install tuios when it is missing or too old. `--install copy` sends this
+   tuios. For a machine of another platform it sends the release of the same
+   version, checked with its sha256, and the result says so in `note`.
+   `release` sends the release of this version. `pkg` runs the package manager
+   there (`--pkg yay`, `paru`, `brew`, `nix` or `go`). `script` runs the install
+   script there. A package manager that asks for a password needs a terminal.
+3. With `--service`, install the daemon service there, which starts the
+   daemon. Without it, start the daemon.
+4. Write `[hosts.NAME]` here, and test the link. A link that does not come up
+   is removed again, unless `--keep` is given.
+5. With `--both-ways`, add this machine on the other one. That machine first
+   tests its way back with BatchMode, to each address of this machine, or to
+   `--address`. With `--yes`, the step may add that machine's ssh key to
+   `~/.ssh/authorized_keys` here. It prints the key's fingerprint and comment,
+   and tags the line, so `tuios hosts remove NAME` takes it out again. When
+   that machine cannot connect, nothing is added there.
+
+Without a terminal, every choice comes from a flag. `--install` is the only one
+that is required when tuios is missing. A missing choice stops the command
+before it changes anything, with exit status 2 and the flag to pass. A step
+that needs the person, such as a password or a host key to check, stops it with
+exit status 3 and the command to run. tuios never takes a password, and it
+never accepts a changed host key.
+
+`--tailnet` lists the machines on your tailnet with their state: tuios and its
+version, no tuios, a Tailscale sign-in first, no ssh, offline, or already
+added. An offline machine is never dialed. `--all` or `--only a,b` sets up the
+machines with one set of answers. At most 4 run at once, and one failure does
+not stop the others. The JSON has `machines`, `skipped` and `summary`.
 
 ### `tuios hosts sync`
 
