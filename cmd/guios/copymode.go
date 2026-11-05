@@ -77,6 +77,11 @@ type copyMode struct {
 
 // copyHint is a text hint mode labels on the screen: a URL, a path, a
 // commit hash, an address.
+// copyPadY and copyPadX are the copy mode view's padding: where its first
+// row and column start. They are the terminal's, so the text stays where it
+// was when copy mode opens.
+const copyPadY, copyPadX = termPadY, termPadX
+
 type copyHint struct {
 	y, x, n int
 	text    string
@@ -798,14 +803,45 @@ func (a *App) copyView(c *ui.Context, pal *palette) {
 	size := a.set.FontSize
 	// The terminal's rows: its cell's height, as the view last sized it.
 	rowH := float32(math.Ceil(float64(size * a.set.LineHeight * 1.32)))
+	cellW := float32(math.Ceil(float64(size * 0.6)))
 	if e := a.terms[cm.pane]; e != nil && e.stream != nil {
-		if _, h := e.stream.CellSize(); h > 0 {
+		w, h := e.stream.CellSize()
+		if h > 0 {
 			rowH = float32(h)
 		}
+		if w > 0 {
+			cellW = float32(w)
+		}
 	}
-	box := ui.Column(c.Key("copymode")).Fill().Padding(6, 16).Focusable().FocusRing(false).AutoFocus().Bind(&cm.ref).Clip().Label(locales.CopyModeLabel())
+	box := ui.Column(c.Key("copymode")).Fill().Padding(copyPadY, copyPadX).Focusable().FocusRing(false).AutoFocus().Bind(&cm.ref).Clip().Label(locales.CopyModeLabel())
 	box.HandleInput(func(ev ui.InputEvent) bool {
 		switch ev.Kind {
+		case ui.InputPointerDown, ui.InputPointerMove:
+			// A drag selects, as in the pane: the press puts the cursor
+			// under the pointer, and a move with the button held selects
+			// from there. y copies it.
+			if ev.Button != 0 || cm.hints != nil || cm.searching {
+				return ev.Kind == ui.InputPointerDown
+			}
+			y := cm.top + int(math.Floor(float64((ev.Y-copyPadY)/rowH)))
+			x := int(math.Floor(float64((ev.X - copyPadX) / cellW)))
+			if ev.Kind == ui.InputPointerDown {
+				cm.visual = visualNone
+				cm.cy, cm.cx = y, x
+				cm.clamp()
+				cm.ay, cm.ax = cm.cy, cm.cx
+			} else {
+				cm.cy, cm.cx = y, x
+				cm.clamp()
+				if cm.visual == visualNone && (cm.cy != cm.ay || cm.cx != cm.ax) {
+					cm.visual = visualChar
+				}
+			}
+			cm.message = ""
+			a.win.Invalidate()
+			return true
+		case ui.InputPointerUp:
+			return true
 		case ui.InputKeyDown:
 			if typesText(ev.Mods, ev.Key) {
 				return true // its text comes next
