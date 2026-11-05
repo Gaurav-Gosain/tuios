@@ -261,10 +261,12 @@ func (s *Stream) Read(p []byte) (int, error) {
 				s.OnResized(cols, rows)
 			}
 			// A full reset first: the snapshot paints a fresh terminal.
-			// The daemon keeps no sixel pixels: an image's cells come as
-			// marker characters, drawn blank, as the TUI draws them.
+			// The daemon keeps no pixels: an image's cells come as marker
+			// characters. The pictures this stream passed on are drawn
+			// again where their cells are now, and the rest are blank
+			// (images.go).
 			s.sixel.reset()
-			body := payload[12:]
+			body := s.sixel.keep.replay(payload[12:])
 			if bytes.Contains(body, []byte(vt.SixelMarkerLead)) {
 				body = []byte(vt.StripSixelMarkers(string(body)))
 			}

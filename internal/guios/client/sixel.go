@@ -36,6 +36,9 @@ type sixelConv struct {
 	// scanned is how far into held a sixel image was searched for its end,
 	// so a large image is not searched again from its start each frame.
 	scanned int
+	// keep sees the output passed on, in order, and keeps each picture
+	// for the next snapshot (images.go).
+	keep imageKeep
 }
 
 // reset drops what is held, for a snapshot, which paints a fresh terminal.
@@ -43,6 +46,13 @@ func (c *sixelConv) reset() {
 	c.held = nil
 	c.body = false
 	c.scanned = 0
+	c.keep.reset()
+}
+
+// pass appends output passed on as it came, and shows it to keep.
+func (c *sixelConv) pass(out, b []byte, cellW int) []byte {
+	c.keep.observe(b, cellW)
+	return append(out, b...)
 }
 
 // convert returns the output to pass on for in, with each complete sixel
@@ -50,9 +60,11 @@ func (c *sixelConv) reset() {
 // cell the daemon lays images out at.
 func (c *sixelConv) convert(in []byte, cellW, cellH int) []byte {
 	if len(c.held) == 0 && bytes.IndexByte(in, 0x1b) < 0 {
+		c.keep.observe(in, cellW)
 		return in
 	}
 	if len(c.held) == 0 && !bytes.Contains(in, []byte("\x1bP")) && in[len(in)-1] != 0x1b {
+		c.keep.observe(in, cellW)
 		return in
 	}
 	buf, owned, from := in, false, 2
@@ -69,14 +81,14 @@ func (c *sixelConv) convert(in []byte, cellW, cellH int) []byte {
 			i := bytes.Index(buf, []byte("\x1bP"))
 			if i < 0 {
 				if buf[len(buf)-1] == 0x1b {
-					out = append(out, buf[:len(buf)-1]...)
+					out = c.pass(out, buf[:len(buf)-1], cellW)
 					c.held = []byte{0x1b}
 				} else {
-					out = append(out, buf...)
+					out = c.pass(out, buf, cellW)
 				}
 				return out
 			}
-			out = append(out, buf[:i]...)
+			out = c.pass(out, buf[:i], cellW)
 			buf = buf[i:]
 			// The DCS is a sixel image when its parameters (digits and
 			// semicolons) end in 'q', with no intermediate byte.
@@ -89,7 +101,7 @@ func (c *sixelConv) convert(in []byte, cellW, cellH int) []byte {
 				return out
 			}
 			if buf[j] != 'q' {
-				out = append(out, buf[:2]...)
+				out = c.pass(out, buf[:2], cellW)
 				buf = buf[2:]
 				continue
 			}
@@ -118,7 +130,7 @@ func (c *sixelConv) convert(in []byte, cellW, cellH int) []byte {
 		if end < 0 {
 			if len(buf) > sixelMaxBody {
 				// Too large to hold: the terminal gets it as it came.
-				out = append(out, buf...)
+				out = c.pass(out, buf, cellW)
 				c.body = false
 				return out
 			}
@@ -130,7 +142,13 @@ func (c *sixelConv) convert(in []byte, cellW, cellH int) []byte {
 			return out
 		}
 		if !cancel {
-			out = appendSixelAsKitty(out, buf[2:end], cellW, cellH)
+			at := len(out)
+			var cols int
+			out, cols = appendSixelAsKitty(out, buf[2:end], cellW, cellH)
+			if n := bytes.LastIndex(out[at:], []byte("\x1b\\")); n >= 0 {
+				// The kitty commands, without the cursor moves after.
+				c.keep.keepSixel(out[at:at+n+2], cols)
+			}
 		}
 		buf = buf[next:]
 		c.body, from = false, 2
@@ -141,17 +159,17 @@ func (c *sixelConv) convert(in []byte, cellW, cellH int) []byte {
 // appendSixelAsKitty appends a kitty image for the sixel DCS body ("params q
 // data"), placed at the cursor, then moves the cursor to column 0 of the row
 // under the image, scrolling as needed, as the daemon's emulator does.
-func appendSixelAsKitty(out, body []byte, cellW, cellH int) []byte {
+func appendSixelAsKitty(out, body []byte, cellW, cellH int) ([]byte, int) {
 	cmd := vt.ParseSixelCommand(body)
 	if cmd == nil {
-		return out
+		return out, 0
 	}
 	if cellW <= 0 || cellH <= 0 {
 		cellW, cellH = vt.FallbackCellWidth, vt.FallbackCellHeight
 	}
 	rows, cols := vt.SixelCells(cmd, cellW, cellH)
 	if rows <= 0 || cols <= 0 {
-		return out
+		return out, 0
 	}
 	if img := vt.DecodeSixel(cmd); img != nil {
 		var z bytes.Buffer
@@ -186,5 +204,5 @@ func appendSixelAsKitty(out, body []byte, cellW, cellH int) []byte {
 	for range rows {
 		out = append(out, "\x1bD"...)
 	}
-	return out
+	return out, cols
 }
