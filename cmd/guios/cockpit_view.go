@@ -712,12 +712,12 @@ func (a *App) ckLetter(k ckKey) {
 		// r rejects an approval the card answers, as the TUI's, after the
 		// confirm step; on any other row it puts the keys in the reply box.
 		if !a.ckCanReject() {
-			a.ckFocusReply()
+			a.ckWriteAfter(k)
 		} else {
 			a.ckAskFor(askDeny)
 		}
 	case ui.KeyI:
-		a.ckFocusReply()
+		a.ckWriteAfter(k)
 	case ui.KeyD:
 		a.ckAskFor(askSettle)
 	case ui.KeyU:
@@ -750,6 +750,23 @@ func (a *App) ckLetter(k ckKey) {
 	case ui.KeyC:
 		a.openCompare()
 	}
+}
+
+// ckWriteAfter is i, or r where it writes: the keys go to the reply box.
+// Right after a move or view letter it is a sentence's second letter, as
+// the i of "fix": both are taken back and go to the box with the text.
+func (a *App) ckWriteAfter(k ckKey) {
+	g := &a.ck.guard
+	if b := g.before; b != nil {
+		g.before = nil
+		if b.undo != nil {
+			b.undo()
+		}
+		if a.ckProse(string(b.r) + string(keyRune(k))) {
+			return
+		}
+	}
+	a.ckFocusReply()
 }
 
 // cockpitHints is the key line at the foot.
