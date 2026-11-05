@@ -267,3 +267,73 @@ func TestZoomBorderless(t *testing.T) {
 		})
 	}
 }
+
+// Closing the zoomed pane hands the zoom to the pane that takes the focus
+// (#1626). Three panes, the focused one zoomed and closed: the pane that is
+// focused next must fill the whole region, which a tiled pane of two never
+// does. The shell size is the probe, as in TestZoomBorderless.
+//
+// Negative control: see NEGATIVE_CONTROLS.md, "Zoom survives a close".
+func TestZoomSurvivesClose(t *testing.T) {
+	for _, daemon := range []bool{true, false} {
+		name := "standalone"
+		if daemon {
+			name = "daemon"
+		}
+		t.Run(name, func(t *testing.T) {
+			base := t.TempDir()
+			writeConfig(t, base, "[startup]\ntiled = true\n[appearance]\nzoom_size = 100\nzoom_borderless = true\n[appearance.sidebar]\nenabled = false\n")
+			o := startOpts{cols: zoomBorderlessCols, rows: zoomBorderlessRows}
+			var term *tuitest.Terminal
+			if daemon {
+				if out, err := tuiosCLI(t, base, "new", "zoomclose", "--detach"); err != nil {
+					t.Fatalf("create session: %v: %s", err, out)
+				}
+				term = attachIn(t, base, "zoomclose", o)
+			} else {
+				term = startIn(t, base, o)
+				waitBoot(t, term)
+				newWindow(t, term)
+			}
+			newWindow(t, term)
+			newWindow(t, term)
+			waitWindowCount(t, term, 3, "three panes")
+			if err := term.WaitStable(uiTimeout); err != nil {
+				t.Fatalf("the frame never settled: %v", err)
+			}
+			if err := term.SendKeys("z"); err != nil {
+				t.Fatalf("send z: %v", err)
+			}
+			if err := term.WaitStable(uiTimeout); err != nil {
+				t.Fatalf("the frame never settled: %v", err)
+			}
+			if err := term.SendKeys("x"); err != nil {
+				t.Fatalf("send x: %v", err)
+			}
+			waitWindowCount(t, term, 2, "two panes after the close")
+			if err := term.WaitStable(uiTimeout); err != nil {
+				t.Fatalf("the frame never settled: %v", err)
+			}
+			enterTerminalMode(t, term)
+			if err := term.SendKeys(`clear; printf 'SZ%sx%s\n' "$(tput lines)" "$(tput cols)"`, tuitest.Enter); err != nil {
+				t.Fatalf("type the size probe: %v", err)
+			}
+			var rows, cols int
+			if err := term.WaitFor(func(s tuitest.Screen) bool {
+				m := shellSizeRe.FindStringSubmatch(s.Text())
+				if m == nil {
+					return false
+				}
+				rows, _ = strconv.Atoi(m[1])
+				cols, _ = strconv.Atoi(m[2])
+				return true
+			}, uiTimeout); err != nil {
+				t.Fatalf("the shell never reported its size: %v\n%s", err, term.Snapshot())
+			}
+			saveArtifact(t, term, artifactDir(t), "after-close")
+			if want := dockTop(term.Screen()); rows != want || cols != zoomBorderlessCols {
+				t.Fatalf("the pane after the close is %dx%d, want the zoomed %dx%d\n%s", cols, rows, zoomBorderlessCols, want, term.Snapshot())
+			}
+		})
+	}
+}

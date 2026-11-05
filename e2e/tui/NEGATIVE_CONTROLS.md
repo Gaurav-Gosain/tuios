@@ -13223,3 +13223,13 @@ Run on 2026-11-05 on Linux on the branch fix/far-transcript-read.
 
 Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^(TestThreadReadsAnAgentOnAHost|TestPersonReadsAgentTranscript)$' -v .`.
+## Zoom survives a close
+
+`TestZoomSurvivesClose` zooms one of three panes, closes it and reads the
+shell size of the pane that takes the focus. Run on 2026-11-05 against a
+build of main, which has no fix:
+
+| Claim | Control | Where it fails | Verdict |
+|---|---|---|---|
+| the next pane is zoomed (daemon) | the fix removed | "the pane after the close is 48x26, want the zoomed 100x28" | **caught** |
+| the next pane is zoomed (--standalone) | the fix removed | same message | **caught** |

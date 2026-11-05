@@ -711,6 +711,18 @@ func (s *Session) removeWindowLocked(state *SessionState, idx int) WindowState {
 	gone := state.Windows[idx]
 	workspace := gone.Workspace
 	state.Windows = append(state.Windows[:idx], state.Windows[idx+1:]...)
+	defer func() {
+		// The person was working zoomed, so the zoom goes to the pane that
+		// takes the focus. With no pane left there is nothing to zoom.
+		if !gone.Zoomed || gone.Popup || state.FocusedWindowID == "" {
+			return
+		}
+		for i := range state.Windows {
+			if w := &state.Windows[i]; w.ID == state.FocusedWindowID && w.Workspace == workspace && !w.Popup {
+				w.Zoomed = true
+			}
+		}
+	}()
 	state.FocusHistory = RemoveFocus(state.FocusHistory, gone.ID)
 
 	// Repair focus if we removed the focused window.
