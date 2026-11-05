@@ -13168,19 +13168,29 @@ Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestInboxRiskyApprovalTakesTwoPresses$' -v .`.
 ## tuios hosts setup --tailnet asks on a terminal
 
-`TestSetUpTailnetMachinesOnATerminal` runs `hosts setup --tailnet --no-service
---one-way` in a pty, with a fake `tailscale` that lists buildbox (online) and
-sleepy (offline). The checklist must show both, with sleepy dimmed. Space must
-tick buildbox ("1 ticked"), and enter must set it up. The end must be the
-summary box "1 machine is ready.", tuios on buildbox, buildbox up in the daemon
-here, and no dial of sleepy. Frames of the checklist and the summary go under
-artifactDir.
+`TestSetUpTailnetMachinesOnATerminal` runs `hosts setup --tailnet --install none
+--no-service --one-way` in a pty. A fake `tailscale` lists four machines:
+buildbox and checkbox with no tuios, authbox that refuses the ssh key, and
+sleepy offline. checkbox asks for a Tailscale sign-in until a file exists.
 
-Run on 2026-11-05 on Linux. The fixed build passes in about 6 s.
+- space ticks authbox. `o` gives buildbox and checkbox their own answers: a
+  copy. The shared answer installs nothing, so only `o` can make them ready.
+- At the fix of authbox, `s` skips it.
+- At the fix of checkbox, enter shows the sign-in page, the test makes the
+  file, and `t` on the person step tests again.
+
+The end must be the summary box "2 machines are ready. 1 needs you.", tuios
+on buildbox and checkbox, both up in the daemon here, and no dial of sleepy.
+Frames of the checklist and the summary go under artifactDir.
+
+Run on 2026-11-05 on Linux. The fixed build passes in about 14 s.
 
 | Control | Where it fails | Verdict |
 | --- | --- | --- |
-| Space in the checklist (`Prompt.Key` of `AskPeers`) does not tick the row | "waiting for buildbox ticked: timed out": the row stays unticked, and enter has nothing to set up | **caught** |
+| Space in the checklist (`Prompt.Key` of `AskPeers`) does not tick the row | "waiting for buildbox ticked: timed out": the row stays unticked (on the first version of this test) | **caught** |
+| `o` in `Prompt.Key` does nothing | "waiting for the install list of buildbox: timed out": no own answers open | **caught** |
+| `s` in `Prompt.Key` does nothing | "waiting for a fix: timed out": authbox stays at its fix, so the fix of checkbox never comes up | **caught** |
+| `t` on a person step in `Prompt.Key` does nothing | "waiting for the summary box: timed out": checkbox waits at its sign-in step, so the run never ends | **caught** |
 
 Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestSetUpTailnetMachinesOnATerminal$' -v .`.

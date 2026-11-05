@@ -677,9 +677,14 @@ func (m *setupModel) bulkEnded(res *hostsetup.BulkResult) {
 		case r.OK:
 			end.State, end.Text = hostsetup.StateOK, "ready, link up"
 		case r.Person != nil || (r.Failure != nil && r.Failure.NeedsPerson):
-			// The error says what is needed and the fix.
+			// The reason only: the fix is the command the setup asks again.
+			if r.Failure != nil {
+				why = plainLine(r.Failure.Reason)
+			} else {
+				why = plainLine(r.Person.Why)
+			}
 			end.State, end.Text = hostsetup.StatePerson, "needs you: "+why
-			m.box = append(m.box, mAttn+"! "+mText+r.Name+": "+mDim+why+" Then run "+mText+"tuios hosts setup "+r.Name)
+			m.box = append(m.box, mAttn+"! "+mText+r.Name+": "+mDim+why+" Fix it, then run "+mText+"tuios hosts setup "+r.Name)
 		default:
 			m.box = append(m.box, mFail+"✗ "+mText+r.Name+": "+mDim+why)
 		}
@@ -845,9 +850,18 @@ func (m *setupModel) machines() {
 		if len(f.Lines) > 0 {
 			l = f.Lines[len(f.Lines)-1]
 		}
+		// The bar shows how far the machine got: a machine that did not
+		// end ready keeps the bar of the last step it ran.
+		at := l.Step
+		if at == "end" && l.State != hostsetup.StateOK {
+			at = ""
+			if k := len(f.Lines) - 2; k >= 0 {
+				at = f.Lines[k].Step
+			}
+		}
 		n := 0
 		for i, s := range bulkSteps {
-			if s == l.Step {
+			if s == at {
 				n = 20 * (i + 1) / len(bulkSteps)
 			}
 		}
@@ -902,7 +916,12 @@ func (m *setupModel) cmdLine(bar int, c hostsetup.Command, indent string) {
 
 // askView writes the open question and its key hints.
 func (m *setupModel) askView(p *hostsetup.Prompt) {
-	who := cmp.Or(p.Machine, m.flows[0].Name)
+	// A prompt of a tailnet names its machine, also before the run, when
+	// there is no Flow yet.
+	who := p.Machine
+	if who == "" {
+		who = m.flows[0].Name
+	}
 	switch p.Kind {
 	case hostsetup.AskPick:
 		head := "Pick how to install tuios on " + who + "."
