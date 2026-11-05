@@ -176,6 +176,24 @@ func startProbe(a *App) {
 						conn.Write([]byte("ok\n"))
 						continue
 					}
+					// "texts" answers each pane's terminal text, by pane
+					// id, as one JSON line: the QA's check that a pane
+					// shows the daemon's screen.
+					if sc.Text() == "texts" {
+						got := make(chan map[string]string, 1)
+						a.update(func() {
+							m := map[string]string{}
+							for id, e := range a.terms {
+								if e.term != nil {
+									m[id] = e.term.Text()
+								}
+							}
+							got <- m
+						})
+						line, _ := json.Marshal(<-got)
+						conn.Write(append(line, '\n'))
+						continue
+					}
 					c, ok := strings.CutPrefix(sc.Text(), "count ")
 					if !ok {
 						continue
