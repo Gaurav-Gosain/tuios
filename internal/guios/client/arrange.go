@@ -406,10 +406,21 @@ func (ti *treeInfo) arrange(wins []windowRow, focus string) *proto.Arrange {
 			r.Y += step
 			step++
 		}
-		put(w.ID, r)
+		put(w.ID, inside(r, b))
 		a.Float = append(a.Float, w.ID)
 	}
 	return a
+}
+
+// inside is r moved and, if it must be, cut to lie in the box b: a
+// floating pane placed in a larger window shows whole in a smaller one, as
+// the TUI's ClampWindowsToView keeps it on the screen (QA-072). The
+// session keeps r, so the pane goes back to it as the window grows.
+func inside(r, b layout.Rect) layout.Rect {
+	r.W, r.H = min(r.W, b.W), min(r.H, b.H)
+	r.X = max(b.X, min(r.X, b.X+b.W-r.W))
+	r.Y = max(b.Y, min(r.Y, b.Y+b.H-r.H))
+	return r
 }
 
 // settle writes back what a build worked out that the session does not hold
