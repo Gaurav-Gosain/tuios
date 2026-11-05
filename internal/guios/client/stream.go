@@ -1,6 +1,7 @@
 package client
 
 import (
+	"bytes"
 	"encoding/binary"
 	"errors"
 	"fmt"
@@ -20,6 +21,7 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/guios/proto"
 	"github.com/Gaurav-Gosain/tuios/internal/memtrim"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
+	"tuios.dev/vt"
 )
 
 // Stream is a pane's terminal stream: an io.ReadWriteCloser for the terminal
@@ -47,7 +49,9 @@ type Stream struct {
 	psMu sync.RWMutex
 	ps   *session.PaneStream
 
-	buf    []byte
+	buf []byte
+	// sixel turns the output's sixel images into kitty images (sixel.go).
+	sixel  sixelConv
 	closed chan struct{}
 	once   sync.Once
 	// Gone is closed when the pane's program ended or its window closed.
@@ -257,11 +261,19 @@ func (s *Stream) Read(p []byte) (int, error) {
 				s.OnResized(cols, rows)
 			}
 			// A full reset first: the snapshot paints a fresh terminal.
-			s.buf = append([]byte("\x1bc"), payload[12:]...)
+			// The daemon keeps no sixel pixels: an image's cells come as
+			// marker characters, drawn blank, as the TUI draws them.
+			s.sixel.reset()
+			body := payload[12:]
+			if bytes.Contains(body, []byte(vt.SixelMarkerLead)) {
+				body = []byte(vt.StripSixelMarkers(string(body)))
+			}
+			s.buf = append([]byte("\x1bc"), body...)
 		case session.PaneFrameOutput:
 			if len(payload) > 8 {
-				s.buf = payload[8:]
-				outputRead(len(s.buf))
+				outputRead(len(payload) - 8)
+				cw, ch := s.CellSize()
+				s.buf = s.sixel.convert(payload[8:], cw, ch)
 			}
 		case session.PaneFrameResize:
 			if len(payload) >= 12 && s.OnResized != nil {
