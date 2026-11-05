@@ -828,7 +828,7 @@ func (a *App) agentsRow(c *ui.Context, pal *palette) {
 		oneLine(c, locales.ActionAgents(), fsBody, wMedium).TextColor(pal.text)
 		ui.Spacer(c)
 		if waiting > 0 {
-			countBadge(c, waiting, pal.attention, pal.onDone)
+			countBadge(c, waiting, pal.attention, onAttention(pal))
 		}
 		// New agent, in space the row keeps for it: it shows while the
 		// pointer is over the row, and its place never moves the badge.

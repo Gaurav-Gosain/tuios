@@ -700,3 +700,14 @@ var washTable = map[string]wash{
 		dark: []string{"#141418", "#141418"}, darkGlow: ui.RGBA(0, 0, 0, 0),
 	},
 }
+
+// onAttention is the ink of a count on the needs-you amber: the dark ink
+// or white, whichever reads better on it. White on the light theme's amber
+// was 3.42:1 (council round 4, S1); the dark ink is 5:1.
+func onAttention(pal *palette) ui.Color {
+	dark, white := ui.RGB(44, 44, 46), ui.Hex("#ffffff")
+	if contrast(white, pal.attention) > contrast(dark, pal.attention) {
+		return white
+	}
+	return dark
+}
