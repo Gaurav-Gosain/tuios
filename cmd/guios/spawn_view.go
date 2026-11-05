@@ -60,9 +60,9 @@ func (a *App) spawnView(c *ui.Context, pal *palette) {
 		ww, wh := c.Size()
 		w := min(float32(spawnW), ww-2*sp4)
 		floating(panel.Width(w).MaxHeight(wh-2*sp4).Padding(sp5).Gap(sp4).Radius(rSheet).Background(pal.popover), pal).Label(locales.SpawnTitle())
-		if s.byKeyFresh && !s.focusAgain && (!h.task.FocusWithin(c) || panel.Pressed()) {
+		if (s.byKeyFresh || s.byKeyText) && !s.focusAgain && (!h.task.FocusWithin(c) || panel.Pressed()) {
 			// A click, or another field: the person works in the sheet.
-			s.byKeyFresh = false
+			s.byKeyFresh, s.byKeyText = false, false
 		}
 		switch {
 		case c.Shortcut(ui.Cmd, ui.KeyEnter):
@@ -200,18 +200,10 @@ func (a *App) spawnTask(c *ui.Context, pal *palette, s *spawnSheet, h *spawnHand
 				return a.pasteImageInto(&s.task)
 			})
 			if in.Changed() && s.byKeyFresh {
-				// n opened the sheet, and text came at once: typed prose,
-				// not a task. n and the text go to the reply box.
-				text := s.task.text
-				s.byKeyFresh = false
-				s.task.text = ""
-				a.spawnClose()
-				a.ck.spawnDraft = nil
-				if !a.ckProse("n" + text) {
-					a.toast(locales.CockpitKeysToList())
-				}
-				c.Invalidate()
-				return
+				// n opened the sheet, and text came at once: a task, or
+				// a sentence meant for the reply box. It stays in the
+				// task, and the sheet offers Esc to move it.
+				s.byKeyFresh, s.byKeyText = false, true
 			}
 			if in.Changed() {
 				s.followTask()
@@ -250,6 +242,10 @@ func (a *App) spawnTask(c *ui.Context, pal *palette, s *spawnSheet, h *spawnHand
 				keyHint(c, pal, "⇧↵", locales.CockpitHintNewLine())
 			})
 		})
+		if s.byKeyText && strings.TrimSpace(s.task.text) != "" {
+			// One plain line under the box (QA-073).
+			ui.Text(c, locales.SpawnMeantToReply()).FontSize(fsSmall).TextColor(pal.textMuted).MaxLines(2)
+		}
 	})
 	return start
 }

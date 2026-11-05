@@ -97,12 +97,12 @@ type spawnSheet struct {
 	// task does not start, since the task may be a sentence meant for a
 	// reply box (cockpit_guard.go). Ctrl+Enter and Start do.
 	byKey bool
-	// byKeyFresh holds that the sheet n opened has had no key yet: the
-	// first text typed into its empty task is a sentence's second letter,
-	// so n and that text go to the reply box and the sheet closes
-	// (QA-073). A click or another field ends it.
-	byKeyFresh bool
-	open       bool
+	// byKeyFresh holds that the sheet n opened has had no key yet, and
+	// byKeyText that text came into its empty task at once: it may be a
+	// sentence meant for the reply box. The sheet then offers Esc to move
+	// "n" and the text there (QA-073). A click or another field ends both.
+	byKeyFresh, byKeyText bool
+	open                  bool
 	// task is the task and its images, as the reply box holds a message.
 	task                ckDraft
 	model, branch, base string
@@ -203,7 +203,7 @@ func (a *App) newAgent() {
 	if !s.failed {
 		s.notice = ""
 	}
-	s.open, s.failed, s.starting, s.listOpen, s.card, s.byKey, s.byKeyFresh = true, false, false, false, nil, false, false
+	s.open, s.failed, s.starting, s.listOpen, s.card, s.byKey, s.byKeyFresh, s.byKeyText = true, false, false, false, nil, false, false, false
 	s.focusField, s.focusAgain, s.focusTries = spTask, true, 0
 	s.session = sess
 	ck.spawnGen++
@@ -690,6 +690,17 @@ func (a *App) spawnAgentName(task string) string {
 // spawnClose closes the sheet and keeps it as the draft the next open shows.
 func (a *App) spawnClose() {
 	ck := &a.ck
+	if sp := ck.spawn; sp != nil && sp.byKeyText && !sp.starting && strings.TrimSpace(sp.task.text) != "" {
+		// Text typed at once after n: closing the sheet moves "n" and the
+		// text to the reply box, so nothing is lost (QA-073).
+		text := "n" + sp.task.text
+		sp.open = false
+		ck.spawn, ck.spawnDraft = nil, nil
+		if !a.ckProse(text) {
+			ck.fleetFocus.Focus()
+		}
+		return
+	}
 	if ck.spawn != nil {
 		ck.spawn.open = false
 		ck.spawnDraft, ck.spawn = ck.spawn, nil

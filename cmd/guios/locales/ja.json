@@ -1265,5 +1265,6 @@
   "compareAskJudge": "試行を読む判定役を開始しますか? 開始するには Enter を押してください。取り消すには Esc を押してください。",
   "cockpitAskSnooze": "{name} をスヌーズしますか?",
   "cockpitAskWake": "{name} をもう一度表示しますか?",
-  "cockpitNoSnoozeHeld": "保留中の承認はスヌーズできません。答えるか、ペインに戻してください。"
+  "cockpitNoSnoozeHeld": "保留中の承認はスヌーズできません。答えるか、ペインに戻してください。",
+  "spawnMeantToReply": "返信のつもりでしたか? Esc を押すと、このテキストを返信欄に移します。"
 }

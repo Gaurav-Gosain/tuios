@@ -12831,3 +12831,13 @@ func CockpitNoSnoozeHeld() string { return In(i18n.Locale()).CockpitNoSnoozeHeld
 func (msgs Messages) CockpitNoSnoozeHeld() string {
 	return Catalog.Format(msgs.locale, "cockpitNoSnoozeHeld", nil)
 }
+
+// SpawnMeantToReply says "Meant to reply? Press Esc to move this text to the reply box."
+// in the language the app shows.
+func SpawnMeantToReply() string { return In(i18n.Locale()).SpawnMeantToReply() }
+
+// SpawnMeantToReply says "Meant to reply? Press Esc to move this text to the reply box."
+// in the language of msgs.
+func (msgs Messages) SpawnMeantToReply() string {
+	return Catalog.Format(msgs.locale, "spawnMeantToReply", nil)
+}
