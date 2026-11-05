@@ -6756,16 +6756,6 @@ func (msgs Messages) CockpitJustChanged() string {
 	return Catalog.Format(msgs.locale, "cockpitJustChanged", nil)
 }
 
-// CockpitWasTyping says "You were typing. Press the key again to answer."
-// in the language the app shows.
-func CockpitWasTyping() string { return In(i18n.Locale()).CockpitWasTyping() }
-
-// CockpitWasTyping says "You were typing. Press the key again to answer."
-// in the language of msgs.
-func (msgs Messages) CockpitWasTyping() string {
-	return Catalog.Format(msgs.locale, "cockpitWasTyping", nil)
-}
-
 // CockpitMail says "Mail"
 // in the language the app shows.
 func CockpitMail() string { return In(i18n.Locale()).CockpitMail() }
@@ -6934,16 +6924,6 @@ func CockpitPlan() string { return In(i18n.Locale()).CockpitPlan() }
 // in the language of msgs.
 func (msgs Messages) CockpitPlan() string {
 	return Catalog.Format(msgs.locale, "cockpitPlan", nil)
-}
-
-// CockpitPressAgain says "This command is risky. Press {key} again to allow it. Another key cancels it."
-// in the language the app shows.
-func CockpitPressAgain(key string) string { return In(i18n.Locale()).CockpitPressAgain(key) }
-
-// CockpitPressAgain says "This command is risky. Press {key} again to allow it. Another key cancels it."
-// in the language of msgs.
-func (msgs Messages) CockpitPressAgain(key string) string {
-	return Catalog.Format(msgs.locale, "cockpitPressAgain", map[string]any{"key": key})
 }
 
 // CockpitReasonPlaceholder says "Type the reason, then press Enter to reject"
@@ -11990,13 +11970,13 @@ func (msgs Messages) CompareDone() string {
 	return Catalog.Format(msgs.locale, "compareDone", nil)
 }
 
-// CompareKeepWarn says "Press ⇧K again to keep {letter}. This removes {others}. Their changes are stashed, and their branches stay."
+// CompareKeepWarn says "Press Enter to keep {letter}. This removes {others}. Their changes are stashed, and their branches stay. Press Esc to…"
 // in the language the app shows.
 func CompareKeepWarn(letter string, others string) string {
 	return In(i18n.Locale()).CompareKeepWarn(letter, others)
 }
 
-// CompareKeepWarn says "Press ⇧K again to keep {letter}. This removes {others}. Their changes are stashed, and their branches stay."
+// CompareKeepWarn says "Press Enter to keep {letter}. This removes {others}. Their changes are stashed, and their branches stay. Press Esc to…"
 // in the language of msgs.
 func (msgs Messages) CompareKeepWarn(letter string, others string) string {
 	return Catalog.Format(msgs.locale, "compareKeepWarn", map[string]any{"letter": letter, "others": others})
@@ -12604,16 +12584,6 @@ func (msgs Messages) CockpitKeysToBoard() string {
 	return Catalog.Format(msgs.locale, "cockpitKeysToBoard", nil)
 }
 
-// CockpitTypedNoCommand says "Typed text runs no command. Pause, then press the key again."
-// in the language the app shows.
-func CockpitTypedNoCommand() string { return In(i18n.Locale()).CockpitTypedNoCommand() }
-
-// CockpitTypedNoCommand says "Typed text runs no command. Pause, then press the key again."
-// in the language of msgs.
-func (msgs Messages) CockpitTypedNoCommand() string {
-	return Catalog.Format(msgs.locale, "cockpitTypedNoCommand", nil)
-}
-
 // CockpitHintMove says "move"
 // in the language the app shows.
 func CockpitHintMove() string { return In(i18n.Locale()).CockpitHintMove() }
@@ -12688,4 +12658,116 @@ func CockpitThreadUnsupportedDetail() string {
 // in the language of msgs.
 func (msgs Messages) CockpitThreadUnsupportedDetail() string {
 	return Catalog.Format(msgs.locale, "cockpitThreadUnsupportedDetail", nil)
+}
+
+// CockpitAskAllow says "Allow {target}? Press Enter to allow. Press Esc to cancel."
+// in the language the app shows.
+func CockpitAskAllow(target string) string { return In(i18n.Locale()).CockpitAskAllow(target) }
+
+// CockpitAskAllow says "Allow {target}? Press Enter to allow. Press Esc to cancel."
+// in the language of msgs.
+func (msgs Messages) CockpitAskAllow(target string) string {
+	return Catalog.Format(msgs.locale, "cockpitAskAllow", map[string]any{"target": target})
+}
+
+// CockpitAskAllowAlways says "Always allow {target}? Press Enter to allow it always. Press Esc to cancel."
+// in the language the app shows.
+func CockpitAskAllowAlways(target string) string {
+	return In(i18n.Locale()).CockpitAskAllowAlways(target)
+}
+
+// CockpitAskAllowAlways says "Always allow {target}? Press Enter to allow it always. Press Esc to cancel."
+// in the language of msgs.
+func (msgs Messages) CockpitAskAllowAlways(target string) string {
+	return Catalog.Format(msgs.locale, "cockpitAskAllowAlways", map[string]any{"target": target})
+}
+
+// CockpitAskReject says "Reject {target}? Press Enter to reject. Press Esc to cancel."
+// in the language the app shows.
+func CockpitAskReject(target string) string { return In(i18n.Locale()).CockpitAskReject(target) }
+
+// CockpitAskReject says "Reject {target}? Press Enter to reject. Press Esc to cancel."
+// in the language of msgs.
+func (msgs Messages) CockpitAskReject(target string) string {
+	return Catalog.Format(msgs.locale, "cockpitAskReject", map[string]any{"target": target})
+}
+
+// CockpitAskRejectWhy says "Reject {target} with this reason? Press Enter to reject. Press Esc to cancel."
+// in the language the app shows.
+func CockpitAskRejectWhy(target string) string { return In(i18n.Locale()).CockpitAskRejectWhy(target) }
+
+// CockpitAskRejectWhy says "Reject {target} with this reason? Press Enter to reject. Press Esc to cancel."
+// in the language of msgs.
+func (msgs Messages) CockpitAskRejectWhy(target string) string {
+	return Catalog.Format(msgs.locale, "cockpitAskRejectWhy", map[string]any{"target": target})
+}
+
+// CockpitAskSettle says "Settle {name}? Press Enter to settle. Press Esc to cancel."
+// in the language the app shows.
+func CockpitAskSettle(name string) string { return In(i18n.Locale()).CockpitAskSettle(name) }
+
+// CockpitAskSettle says "Settle {name}? Press Enter to settle. Press Esc to cancel."
+// in the language of msgs.
+func (msgs Messages) CockpitAskSettle(name string) string {
+	return Catalog.Format(msgs.locale, "cockpitAskSettle", map[string]any{"name": name})
+}
+
+// CockpitAskUnsettle says "Take {name} off the shelf? Press Enter to do it. Press Esc to cancel."
+// in the language the app shows.
+func CockpitAskUnsettle(name string) string { return In(i18n.Locale()).CockpitAskUnsettle(name) }
+
+// CockpitAskUnsettle says "Take {name} off the shelf? Press Enter to do it. Press Esc to cancel."
+// in the language of msgs.
+func (msgs Messages) CockpitAskUnsettle(name string) string {
+	return Catalog.Format(msgs.locale, "cockpitAskUnsettle", map[string]any{"name": name})
+}
+
+// CockpitAskDismiss says "Dismiss this item of {name}? Press Enter to dismiss. Press Esc to cancel."
+// in the language the app shows.
+func CockpitAskDismiss(name string) string { return In(i18n.Locale()).CockpitAskDismiss(name) }
+
+// CockpitAskDismiss says "Dismiss this item of {name}? Press Enter to dismiss. Press Esc to cancel."
+// in the language of msgs.
+func (msgs Messages) CockpitAskDismiss(name string) string {
+	return Catalog.Format(msgs.locale, "cockpitAskDismiss", map[string]any{"name": name})
+}
+
+// CockpitAskPass says "Pass the held mail on to {name}? Press Enter to pass it on. Press Esc to cancel."
+// in the language the app shows.
+func CockpitAskPass(name string) string { return In(i18n.Locale()).CockpitAskPass(name) }
+
+// CockpitAskPass says "Pass the held mail on to {name}? Press Enter to pass it on. Press Esc to cancel."
+// in the language of msgs.
+func (msgs Messages) CockpitAskPass(name string) string {
+	return Catalog.Format(msgs.locale, "cockpitAskPass", map[string]any{"name": name})
+}
+
+// CockpitClickAgain says "This command is risky. Click again to allow it."
+// in the language the app shows.
+func CockpitClickAgain() string { return In(i18n.Locale()).CockpitClickAgain() }
+
+// CockpitClickAgain says "This command is risky. Click again to allow it."
+// in the language of msgs.
+func (msgs Messages) CockpitClickAgain() string {
+	return Catalog.Format(msgs.locale, "cockpitClickAgain", nil)
+}
+
+// SpawnStartChord says "Press {keys} to start. A letter in the list opened this sheet, so Enter does not start it."
+// in the language the app shows.
+func SpawnStartChord(keys string) string { return In(i18n.Locale()).SpawnStartChord(keys) }
+
+// SpawnStartChord says "Press {keys} to start. A letter in the list opened this sheet, so Enter does not start it."
+// in the language of msgs.
+func (msgs Messages) SpawnStartChord(keys string) string {
+	return Catalog.Format(msgs.locale, "spawnStartChord", map[string]any{"keys": keys})
+}
+
+// CompareAskJudge says "Start a judge that reads the attempts? Press Enter to start it. Press Esc to cancel."
+// in the language the app shows.
+func CompareAskJudge() string { return In(i18n.Locale()).CompareAskJudge() }
+
+// CompareAskJudge says "Start a judge that reads the attempts? Press Enter to start it. Press Esc to cancel."
+// in the language of msgs.
+func (msgs Messages) CompareAskJudge() string {
+	return Catalog.Format(msgs.locale, "compareAskJudge", nil)
 }

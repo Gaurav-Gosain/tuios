@@ -403,8 +403,10 @@ func (a *App) approvalCard(c *ui.Context, pal *palette, ag client.Agent, it sess
 			}
 			ui.Text(c, locales.CockpitRiskLine(name, why)).FontSize(fsSmall).TextColor(pal.dangerText).MaxLines(2)
 		}
-		if ck.armed.decision != "" && ck.armed.item == key && now.Sub(ck.armed.at) <= ckRiskWindow {
-			ui.Text(c, locales.CockpitPressAgain(ckDecisionKey(ck.armed.decision))).FontSize(fsSmall).FontWeight(wSemibold).TextColor(pal.attnText)
+		if q := ck.question; q != nil && q.item == key {
+			a.ckQuestionLine(c, pal)
+		} else if ck.armed.decision != "" && ck.armed.item == key && now.Sub(ck.armed.at) <= ckRiskWindow {
+			ui.Text(c, locales.CockpitClickAgain()).FontSize(fsSmall).FontWeight(wSemibold).TextColor(pal.attnText)
 			c.After(ck.armed.at.Add(ckRiskWindow).Sub(now))
 		}
 		if len(it.AlwaysScope) > 0 {
@@ -412,12 +414,19 @@ func (a *App) approvalCard(c *ui.Context, pal *palette, ag client.Agent, it sess
 		}
 		if ck.reasonFor == it.ID {
 			in := textField(c, "reason", &ck.reason, locales.CockpitReasonPlaceholder(), 0, pal).AutoFocus()
+			// R opens this line from the list, so a sentence can land in
+			// it: Enter asks first, and a second Enter rejects.
+			if q := ck.question; q != nil && q.what == askReason && in.Changed() {
+				ck.question = nil
+			}
 			if in.Submitted() {
-				a.ckSend(it, ag, "deny", ck.reason)
-				ck.reasonFor, ck.reason = "", ""
-				ck.fleetFocus.Focus()
+				if q := ck.question; q != nil && q.what == askReason {
+					a.ckQuestionRun()
+				} else if strings.TrimSpace(ck.reason) != "" {
+					a.ckAskFor(askReason)
+				}
 			} else if in.Shortcut(0, ui.KeyEscape) {
-				ck.reasonFor, ck.reason = "", ""
+				ck.reasonFor, ck.reason, ck.question = "", "", nil
 				ck.fleetFocus.Focus()
 			}
 		}
@@ -442,7 +451,7 @@ func (a *App) approvalCard(c *ui.Context, pal *palette, ag client.Agent, it sess
 			for _, o := range opts {
 				// A risky command gets no primary button to allow it.
 				if sizedButton(c, "ans-"+o, ckDecisionWords(o), ckDecisionKey(o), o == "once" && !risky, hControl, rControl, pal) {
-					a.ckAnswer(o, true)
+					a.ckAnswer(o)
 					ck.fleetFocus.Focus()
 				}
 			}
@@ -549,10 +558,10 @@ func (a *App) ckFetchPeek(ag client.Agent, it session.AttentionItem) {
 
 // ckAnswer answers the selected row's prompt with decision, under the TUI's
 // rules: the card must have shown the prompt as it is for ckAnswerSettle,
-// a key typed in the reply box a moment ago is not an answer, and an allow
-// of a risky call takes a second press. It reports whether the row had a
-// prompt to answer.
-func (a *App) ckAnswer(decision string, click bool) bool {
+// and a click that allows a risky call takes a second click. Keys answer
+// only through the confirm step (cockpit_ask.go). It reports whether the
+// row had a prompt to answer.
+func (a *App) ckAnswer(decision string) bool {
 	ck := &a.ck
 	r, ok := a.ckSelected()
 	if !ok || r.item == nil || !ckAnswerable(*r.item) {
@@ -564,10 +573,6 @@ func (a *App) ckAnswer(decision string, click bool) bool {
 		ag = client.Agent{Session: it.Session, Window: it.Window, Name: it.Name}
 	}
 	now := time.Now()
-	if !click && now.Sub(ck.typedAt) < ckTypingQuiet {
-		a.toast(locales.CockpitWasTyping())
-		return true
-	}
 	if ck.shown.key != ckShownKey(it) || now.Sub(ck.shown.since) < ckAnswerSettle {
 		a.toast(locales.CockpitJustChanged())
 		return true
@@ -594,17 +599,13 @@ func (a *App) ckAnswer(decision string, click bool) bool {
 	if !ckHeld(it) && ck.peek != nil {
 		rules = ck.peek.risk
 	}
-	if (decision == "once" || decision == "always") && len(rules) > 0 {
+	if (decision == "once" || decision == "always") && len(rules) > 0 && !ck.confirmed {
+		// A click allows a risky call only on a second click; a key does
+		// so only through the confirm step, which is the second step.
 		key := ckShownKey(it)
 		armed := ck.armed.decision == decision && ck.armed.item == key && now.Sub(ck.armed.at) <= ckRiskWindow
-		if armed && !click && ck.armed.seq+1 != ck.guard.cur {
-			// Another key came between the two presses: typed text, as
-			// "please also". The first press is spent.
-			ck.armed = ckArmed{}
-			return true
-		}
 		if !armed {
-			ck.armed = ckArmed{decision: decision, item: key, at: now, seq: ck.guard.cur}
+			ck.armed = ckArmed{decision: decision, item: key, at: now}
 			return true
 		}
 		ck.armed = ckArmed{}
@@ -612,9 +613,6 @@ func (a *App) ckAnswer(decision string, click bool) bool {
 	a.ckSend(it, ag, decision, "")
 	return true
 }
-
-// ckDisarm drops the first press of a risky allow.
-func (a *App) ckDisarm() { a.ck.armed = ckArmed{} }
 
 // ckOpenReason opens the line for a reject with a reason.
 func (a *App) ckOpenReason() {

@@ -1232,7 +1232,6 @@
   "cockpitIdle": "Idle",
   "cockpitToReview": "To review",
   "cockpitJustChanged": "This prompt just changed. Read it, then answer.",
-  "cockpitWasTyping": "You were typing. Press the key again to answer.",
   "cockpitMail": "Mail",
   "cockpitMore": "{count, plural, one {# more} other {# more}}",
   "@cockpitMore": {
@@ -1257,7 +1256,6 @@
   "cockpitPickAgent": "Select an agent",
   "cockpitPickAgentDetail": "Its conversation, changes and mail show here.",
   "cockpitPlan": "Plan",
-  "cockpitPressAgain": "This command is risky. Press {key} again to allow it. Another key cancels it.",
   "cockpitReasonPlaceholder": "Type the reason, then press Enter to reject",
   "cockpitReject": "Reject",
   "cockpitRejectWhy": "Reject and say why",
@@ -2121,7 +2119,7 @@
   "compareNoChanges": "No changes yet.",
   "compareGone": "Gone",
   "compareDone": "Done",
-  "compareKeepWarn": "Press ⇧K again to keep {letter}. This removes {others}. Their changes are stashed, and their branches stay.",
+  "compareKeepWarn": "Press Enter to keep {letter}. This removes {others}. Their changes are stashed, and their branches stay. Press Esc to cancel.",
   "compareKeepIgnored": "{count, plural, one {It also deletes # file that git ignores in them.} other {It also deletes # files that git ignores in them.}}",
   "@compareKeepIgnored": {
     "placeholders": {
@@ -2259,12 +2257,22 @@
   "setApprovalsRow": "Answer Claude Code's permission prompts in Agents",
   "setApprovalsDetail": "A prompt waits in Agents until you allow or reject it, for up to 2 minutes. Then Claude Code asks in its pane. tuios saves this in its config.toml.",
   "cockpitKeysToBoard": "Keys go to the board.",
-  "cockpitTypedNoCommand": "Typed text runs no command. Pause, then press the key again.",
   "cockpitHintMove": "move",
   "cockpitKeysToMail": "Keys go to the mail list. Press r to reply.",
   "setApprovalsNeedsIntegration": "Needs the Claude Code integration. Install it to get the prompts here.",
   "compareKeysHere": "Keys go to Compare. Press Escape to close it.",
   "compareNothingToKeep": "{letter} has nothing to keep yet. Keep works when the attempt stops with changes.",
   "cockpitThreadUnsupported": "tuios cannot show {harness} conversations yet",
-  "cockpitThreadUnsupportedDetail": "Open the pane to see it."
+  "cockpitThreadUnsupportedDetail": "Open the pane to see it.",
+  "cockpitAskAllow": "Allow {target}? Press Enter to allow. Press Esc to cancel.",
+  "cockpitAskAllowAlways": "Always allow {target}? Press Enter to allow it always. Press Esc to cancel.",
+  "cockpitAskReject": "Reject {target}? Press Enter to reject. Press Esc to cancel.",
+  "cockpitAskRejectWhy": "Reject {target} with this reason? Press Enter to reject. Press Esc to cancel.",
+  "cockpitAskSettle": "Settle {name}? Press Enter to settle. Press Esc to cancel.",
+  "cockpitAskUnsettle": "Take {name} off the shelf? Press Enter to do it. Press Esc to cancel.",
+  "cockpitAskDismiss": "Dismiss this item of {name}? Press Enter to dismiss. Press Esc to cancel.",
+  "cockpitAskPass": "Pass the held mail on to {name}? Press Enter to pass it on. Press Esc to cancel.",
+  "cockpitClickAgain": "This command is risky. Click again to allow it.",
+  "spawnStartChord": "Press {keys} to start. A letter in the list opened this sheet, so Enter does not start it.",
+  "compareAskJudge": "Start a judge that reads the attempts? Press Enter to start it. Press Esc to cancel."
 }

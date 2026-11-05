@@ -406,7 +406,6 @@ func (a *App) ckRowView(c *ui.Context, pal *palette, r ckRow) {
 	if row.Pressed() || row.Clicked() {
 		a.ckSelect(r)
 		ck.fleetFocus.Focus()
-		ck.guard.boundary()
 	}
 	if row.Clicked() && ck.stacked {
 		ck.stackFocus = true
@@ -527,11 +526,15 @@ func (a *App) ckRowMenu(m *ui.Menu, r ckRow) {
 	if r.item != nil {
 		m.Separator()
 		if held := ckHeld(*r.item); held {
+			// An allow from the menu asks as the keys do: the confirm
+			// step says what runs, and Enter does it.
 			if m.Item(locales.CockpitAllowOnce()).Chosen() {
-				a.ckAnswer("once", true)
+				a.ckSelect(r)
+				a.ckAskFor(askOnce)
 			}
 			if m.Item(locales.CockpitReject()).Chosen() {
-				a.ckAnswer("deny", true)
+				a.ckSelect(r)
+				a.ckAnswer("deny")
 			}
 		}
 		if r.item.HeldID != 0 && m.Item(locales.CockpitPassMail()).Chosen() {
@@ -571,17 +574,19 @@ func (a *App) cockpitKeys(c *ui.Context, col ui.Element) {
 	if a.ownedKeys(col) {
 		return
 	}
-	if k, ok := a.guard(c, col, &ck.guard, a.ckListKeys()); ok {
+	if ck.question != nil && a.ckQuestionKeys(c, col) {
+		return
+	}
+	if k, ok := a.guard(col, &ck.guard, a.ckListKeys()); ok {
 		a.ckLetter(k)
 		c.Invalidate()
 		return
 	}
-	if ck.guard.typing(time.Now()) && (key(0, ui.KeyEnter) || key(0, ui.KeyBracketRight) || key(0, ui.KeyBracketLeft)) {
-		// Enter after typed text is the end of a sentence, not a command.
-		ck.guard.boundary()
-		return
-	}
 	switch {
+	case key(ui.Cmd, ui.KeyEnter):
+		// The chord allows a call that is not risky at once; a risky one
+		// still asks.
+		a.ckAllowChord()
 	case key(0, ui.KeyDown):
 		a.ckMove(1)
 	case key(0, ui.KeyUp):
@@ -616,128 +621,87 @@ func (a *App) cockpitKeys(c *ui.Context, col ui.Element) {
 	default:
 		return
 	}
-	// A key that is no letter ends the run of letters.
-	ck.guard.boundary()
 	// The key came in this build: build again to show what it did.
 	c.Invalidate()
 }
 
 // ckLetter runs a list's letter or Space that the typing guard let
-// through (cockpit_guard.go). A view key notes how to take itself back.
+// through (cockpit_guard.go). A letter that changes something only asks:
+// the confirm step does it on Enter (cockpit_ask.go).
 func (a *App) ckLetter(k ckKey) {
 	ck := &a.ck
-	g := &ck.guard
 	if k.shift {
 		switch k.key {
 		case ui.KeyA:
-			a.ckAnswer("always", false)
-			g.setUndo(a.ckDisarm)
+			a.ckAskFor(askAlways)
 		case ui.KeyR:
 			a.ckOpenReason()
-			g.setUndo(func() { ck.reasonFor, ck.reason = "", "" })
 		case ui.KeyD:
-			g.setUndo(a.ckSettle())
+			a.ckAskFor(askSettle)
 		case ui.KeyM:
-			view := ck.view
 			a.ckSetView(viewMail)
-			g.setUndo(func() { a.ckSetView(view) })
 		}
 		return
-	}
-	tab := ck.tab
-	backTab := func() {
-		ck.tab = tab
-		ck.fleetFocus.Focus()
-	}
-	sel := ck.sel
-	backSel := func() {
-		if i := ck.index(sel); i >= 0 {
-			a.ckSelect(ck.rows[i])
-		}
 	}
 	switch k.key {
 	case ui.KeyJ:
 		a.ckMove(1)
-		g.setUndo(backSel)
 	case ui.KeyK:
 		a.ckMove(-1)
-		g.setUndo(backSel)
 	case ui.KeyH:
 		if ck.stacked && ck.stackFocus {
 			ck.stackFocus = false
-			g.setUndo(func() { ck.stackFocus = true })
 		}
 	case ui.KeyL:
 		if ck.stacked && !ck.stackFocus && a.ckOnAgent() {
 			ck.stackFocus = true
-			g.setUndo(func() { ck.stackFocus = false })
 		}
 	case ui.KeySpace:
 		if r, ok := a.ckSelected(); ok && r.kind == ckRowHead {
 			a.ckToggleFold(r.group)
-			g.setUndo(func() { a.ckToggleFold(r.group) })
 		} else if im := a.ckNewestImage(); im != nil {
 			// Space shows the agent's newest image whole.
 			ck.lightbox = im
-			g.setUndo(func() { ck.lightbox = nil })
 		}
 	case ui.KeyA:
-		a.ckAnswer("once", false)
-		g.setUndo(a.ckDisarm)
+		a.ckAskFor(askOnce)
 	case ui.KeyR:
-		// r rejects an approval the card answers, as the TUI's; on any
-		// other row it puts the keys in the reply box, where the rest of
-		// what is typed belongs.
+		// r rejects an approval the card answers, as the TUI's, after the
+		// confirm step; on any other row it puts the keys in the reply box.
 		if !a.ckCanReject() {
 			a.ckFocusReply()
-			g.setUndo(func() { ck.fleetFocus.Focus() })
 		} else {
-			a.ckAnswer("deny", false)
+			a.ckAskFor(askDeny)
 		}
 	case ui.KeyI:
 		a.ckFocusReply()
-		g.setUndo(func() { ck.fleetFocus.Focus() })
 	case ui.KeyD:
-		g.setUndo(a.ckSettle())
+		a.ckAskFor(askSettle)
 	case ui.KeyU:
 		a.ckUndoSettle()
 	case ui.KeyZ:
 		a.ckSnooze()
 	case ui.KeyX:
-		a.ckDismiss()
+		a.ckAskFor(askDismiss)
 	case ui.KeyP:
-		if r, ok := a.ckSelected(); ok && r.item != nil && r.item.HeldID != 0 {
-			a.ckPassHeld(*r.item)
-		}
+		a.ckAskFor(askPass)
 	case ui.KeyM:
 		a.ckSetTab(tabMail)
-		g.setUndo(backTab)
 	case ui.KeyB:
-		view := ck.view
 		a.ckSetView(viewBoard)
-		g.setUndo(func() { a.ckSetView(view) })
 	case ui.KeyV:
 		a.ckSetTab(tabChanges)
-		g.setUndo(backTab)
 	case ui.KeyF:
 		ck.needsOnly = !ck.needsOnly
-		g.setUndo(func() { ck.needsOnly = !ck.needsOnly })
 	case ui.KeyN:
-		// The sheet takes the keys: what comes within guardWindow lands
-		// in its task, and the sheet takes itself back (spawnTyped).
+		// A sheet a letter opened starts only on Ctrl+Enter or a click:
+		// typed text that lands in its task never starts an agent.
 		a.newAgent()
 		if sp := ck.spawn; sp != nil {
-			sp.byKeyAt = time.Now()
-			g.setUndo(func() {
-				if ck.spawn == sp {
-					sp.task.text, sp.byKeyAt = "", time.Time{}
-					a.spawnClose()
-				}
-			})
+			sp.byKey = true
 		}
 	case ui.KeyC:
 		a.openCompare()
-		g.setUndo(func() { ck.cmp = nil })
 	}
 }
 
@@ -755,6 +719,11 @@ func (a *App) cockpitHints(c *ui.Context, pal *palette) {
 			}
 			room -= need
 			keyHint(c, pal, k, what)
+		}
+		if a.ck.question != nil && a.ck.view == viewAgents {
+			// The open confirm step takes the key line: what Enter does.
+			a.ckQuestionLine(c, pal)
+			return
 		}
 		switch {
 		case a.ck.view == viewBoard:

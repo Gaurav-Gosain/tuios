@@ -2,7 +2,6 @@ package main
 
 import (
 	"sort"
-	"time"
 
 	"github.com/Gaurav-Gosain/mygo/ui"
 
@@ -198,12 +197,8 @@ func (a *App) mailKeys(c *ui.Context, col ui.Element, m *ckMail, mine []ckMsg) {
 		}
 		return kindProse
 	}
-	lk := listKeys{kind: kind, prose: func(text string) bool {
-		// The key that opened the view was taken back: the text
-		// belongs to the agent the list has.
-		return ck.view == viewAgents && a.ckProse(text)
-	}, hint: locales.CockpitKeysToMail}
-	if k, ok := a.guard(c, col, &ck.guard, lk); ok {
+	lk := listKeys{kind: kind, hint: locales.CockpitKeysToMail}
+	if k, ok := a.guard(col, &ck.guard, lk); ok {
 		switch k.key {
 		case ui.KeyJ:
 			move(1)
@@ -221,13 +216,12 @@ func (a *App) mailKeys(c *ui.Context, col ui.Element, m *ckMail, mine []ckMsg) {
 		move(1)
 	case key(ui.KeyUp):
 		move(-1)
-	case key(ui.KeyEnter) && !ck.guard.typing(time.Now()):
+	case key(ui.KeyEnter):
 		reply()
 	case key(ui.KeyEscape):
 		a.ckSetView(viewAgents)
 	default:
 		return
 	}
-	ck.guard.boundary()
 	c.Invalidate()
 }
