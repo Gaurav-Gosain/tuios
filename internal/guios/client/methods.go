@@ -201,7 +201,12 @@ func (c *Client) dispatch(method string, params any) (any, error) {
 			return nil, err
 		}
 		args := map[string]any{"session": c.st.nameOf(p.Session), "scratch": true, "scratch_name": config.DefaultScratchName}
-		if p.Dir != "" {
+		switch {
+		case p.From != "":
+			// The daemon reads the pane's folder now: guios's copy of it
+			// is from the last state, which a cd does not send.
+			args["cwd_from"] = p.From
+		case p.Dir != "":
 			args["cwd"] = p.Dir
 		}
 		_, err = c.verb("popup", args)

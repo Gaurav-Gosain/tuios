@@ -287,15 +287,12 @@ func (a *App) openScratch(s *proto.Session) {
 	if q.creating {
 		return
 	}
-	dir := ""
-	if p := s.FocusPane(); p != nil {
-		dir = p.Dir
-	}
-	if dir == "" {
-		dir = s.Pane.Dir
+	dir, from := s.Pane.Dir, ""
+	if p := s.PaneByID(a.backPane(s)); p != nil {
+		dir, from = p.Dir, p.ID
 	}
 	q.creating = true
-	a.call(s.ID, "scratch", proto.ScratchParams{Session: s.ID, Dir: dir}, func(err error) {
+	a.call(s.ID, "scratch", proto.ScratchParams{Session: s.ID, Dir: dir, From: from}, func(err error) {
 		if err != nil {
 			q.creating = false
 			q.drop = false

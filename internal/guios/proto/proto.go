@@ -877,6 +877,9 @@ type (
 	ScratchParams struct {
 		Session string `json:"session"`
 		Dir     string `json:"dir,omitempty"`
+		// From is the pane whose folder the daemon reads now, which it
+		// takes over Dir when it can read it.
+		From string `json:"from,omitempty"`
 	}
 	LayoutParams struct {
 		Session string  `json:"session"`
