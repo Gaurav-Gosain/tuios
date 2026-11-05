@@ -3,6 +3,7 @@ package main
 import (
 	"math"
 	"slices"
+	"strconv"
 	"time"
 
 	"github.com/Gaurav-Gosain/mygo/plugins/terminal"
@@ -15,12 +16,13 @@ import (
 // side as those of the one shown come in from the other, toward the left
 // for a higher number, on motionLayout's curve.
 //
-// A switch to the workspace last left starts in the frame of the key: its
-// panes come in as they last showed (wsLeft keeps them and their
-// terminals), and the daemon's answer puts the live panes in their place
-// on the way. A switch to another workspace waits for the daemon: the hold
-// keeps the last frame until its panes have attached (workspaces.go), and
-// the slide starts as they show.
+// A switch to a workspace the session showed before starts in the frame
+// of the key: its panes come in as they last showed (wsLeft keeps each
+// workspace the session shown left, and their terminals), and the
+// daemon's answer puts the live panes in their place on the way. A
+// workspace whose panes changed since, or one never shown, waits for the
+// daemon: the hold keeps the last frame until its panes have attached
+// (workspaces.go), and the slide starts as they show.
 //
 // The panes not live are drawn as they were, without their buttons, as
 // one cached bitmap clipped to the panes' area: they take no input and
@@ -53,14 +55,37 @@ func (a *App) leaveWorkspace(old proto.Session) {
 	if a.wsLeft == nil {
 		a.wsLeft = map[string]proto.Session{}
 	}
-	a.wsLeft[old.ID] = old
+	a.wsLeft[wsKey(old.ID, old.Workspace)] = old
+}
+
+// wsKey names a workspace of a session in wsLeft.
+func wsKey(session string, n int) string { return session + "\x00" + strconv.Itoa(n) }
+
+// stillLeft reports whether left, a workspace as it showed, holds the panes
+// the session has on it now: the same panes, none closed, none added.
+func stillLeft(s *proto.Session, left proto.Session) bool {
+	n := 0
+	for _, p := range s.Others {
+		if p.Workspace == left.Workspace {
+			n++
+			if left.PaneByID(p.ID) == nil {
+				return false
+			}
+		}
+	}
+	return n == len(left.Panes)
 }
 
 // slideNow starts the switch of s to workspace n in this frame, if the
-// session left n last: its panes come in as they showed.
+// session showed n before with the panes it has there now: they come in
+// as they showed.
 func (a *App) slideNow(s *proto.Session, n int) {
-	left, ok := a.wsLeft[s.ID]
-	if !ok || left.Workspace != n || a.calm || len(s.Panes) == 0 || a.area.W <= 0 {
+	left, ok := a.wsLeft[wsKey(s.ID, n)]
+	if ok && !stillLeft(s, left) {
+		delete(a.wsLeft, wsKey(s.ID, n))
+		ok = false
+	}
+	if !ok || a.calm || len(s.Panes) == 0 || a.area.W <= 0 {
 		return
 	}
 	if a.slides == nil {

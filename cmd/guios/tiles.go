@@ -237,6 +237,9 @@ func (a *App) tiled(c *ui.Context, pal *palette, bar ui.TitleBar, shown float32,
 		a.motion.tiles = map[string]*tileAnim{}
 	}
 	var left float64 // the largest distance still to go, in DIPs
+	// A move begins half a frame along, as a slide does (slideLead): the
+	// key came between frames, so the frame that answers it moves already.
+	lead := now.Add(-slideLead)
 	for id, t := range target {
 		// Shown, if under the zoomed pane: back from zoom, it is no pane
 		// new to the tree.
@@ -247,14 +250,14 @@ func (a *App) tiled(c *ui.Context, pal *palette, bar ui.TitleBar, shown float32,
 		case an == nil && !fresh:
 			an = &tileAnim{cur: t, to: t}
 		case an == nil || fresh:
-			an = &tileAnim{from: f, cur: f, to: t, start: now}
+			an = &tileAnim{from: f, cur: f, to: t, start: lead}
 		case an.to != t:
 			// Retargeted on the way: on from where it shows.
-			an.from, an.to, an.start, an.spring = an.cur, t, now, false
+			an.from, an.to, an.start, an.spring = an.cur, t, lead, false
 		}
-		if l := a.motion.landing; l.pane == id && an.start.Equal(now) && t != l.at {
+		if l := a.motion.landing; l.pane == id && an.start.Equal(lead) && t != l.at {
 			// Dropped: from where its copy was let go, on a spring.
-			an.from, an.cur, an.start, an.spring = l.at, l.at, now, true
+			an.from, an.cur, an.start, an.spring = l.at, l.at, lead, true
 			a.motion.landing = paneGhost{}
 		}
 		a.motion.tiles[id] = an
