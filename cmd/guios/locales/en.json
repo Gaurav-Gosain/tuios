@@ -2121,7 +2121,7 @@
   "compareNoChanges": "No changes yet.",
   "compareGone": "Gone",
   "compareDone": "Done",
-  "compareKeepWarn": "Press k again to keep {letter}. This removes {others}. Their changes are stashed, and their branches stay.",
+  "compareKeepWarn": "Press ⇧K again to keep {letter}. This removes {others}. Their changes are stashed, and their branches stay.",
   "compareKeepIgnored": "{count, plural, one {It also deletes # file that git ignores in them.} other {It also deletes # files that git ignores in them.}}",
   "@compareKeepIgnored": {
     "placeholders": {
@@ -2262,5 +2262,7 @@
   "cockpitTypedNoCommand": "Typed text runs no command. Pause, then press the key again.",
   "cockpitHintMove": "move",
   "cockpitKeysToMail": "Keys go to the mail list. Press r to reply.",
-  "setApprovalsNeedsIntegration": "Needs the Claude Code integration. Install it to get the prompts here."
+  "setApprovalsNeedsIntegration": "Needs the Claude Code integration. Install it to get the prompts here.",
+  "compareKeysHere": "Keys go to Compare. Press Escape to close it.",
+  "compareNothingToKeep": "{letter} has nothing to keep yet. Keep works when the attempt stops with changes."
 }

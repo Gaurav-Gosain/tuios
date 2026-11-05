@@ -11990,13 +11990,13 @@ func (msgs Messages) CompareDone() string {
 	return Catalog.Format(msgs.locale, "compareDone", nil)
 }
 
-// CompareKeepWarn says "Press k again to keep {letter}. This removes {others}. Their changes are stashed, and their branches stay."
+// CompareKeepWarn says "Press ⇧K again to keep {letter}. This removes {others}. Their changes are stashed, and their branches stay."
 // in the language the app shows.
 func CompareKeepWarn(letter string, others string) string {
 	return In(i18n.Locale()).CompareKeepWarn(letter, others)
 }
 
-// CompareKeepWarn says "Press k again to keep {letter}. This removes {others}. Their changes are stashed, and their branches stay."
+// CompareKeepWarn says "Press ⇧K again to keep {letter}. This removes {others}. Their changes are stashed, and their branches stay."
 // in the language of msgs.
 func (msgs Messages) CompareKeepWarn(letter string, others string) string {
 	return Catalog.Format(msgs.locale, "compareKeepWarn", map[string]any{"letter": letter, "others": others})
@@ -12642,4 +12642,26 @@ func SetApprovalsNeedsIntegration() string { return In(i18n.Locale()).SetApprova
 // in the language of msgs.
 func (msgs Messages) SetApprovalsNeedsIntegration() string {
 	return Catalog.Format(msgs.locale, "setApprovalsNeedsIntegration", nil)
+}
+
+// CompareKeysHere says "Keys go to Compare. Press Escape to close it."
+// in the language the app shows.
+func CompareKeysHere() string { return In(i18n.Locale()).CompareKeysHere() }
+
+// CompareKeysHere says "Keys go to Compare. Press Escape to close it."
+// in the language of msgs.
+func (msgs Messages) CompareKeysHere() string {
+	return Catalog.Format(msgs.locale, "compareKeysHere", nil)
+}
+
+// CompareNothingToKeep says "{letter} has nothing to keep yet. Keep works when the attempt stops with changes."
+// in the language the app shows.
+func CompareNothingToKeep(letter string) string {
+	return In(i18n.Locale()).CompareNothingToKeep(letter)
+}
+
+// CompareNothingToKeep says "{letter} has nothing to keep yet. Keep works when the attempt stops with changes."
+// in the language of msgs.
+func (msgs Messages) CompareNothingToKeep(letter string) string {
+	return Catalog.Format(msgs.locale, "compareNothingToKeep", map[string]any{"letter": letter})
 }

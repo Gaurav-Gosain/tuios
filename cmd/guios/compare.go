@@ -52,6 +52,9 @@ type ckCompare struct {
 	// again for the keep to run.
 	armed    string
 	armedGen uint64
+	// armedSeq is the typing guard's count at the first Shift+K: the
+	// second counts only as the very next key.
+	armedSeq uint64
 	confirm  bool
 	keepSig  string
 	// busy is what runs now ("judge", "keep"), note what last ended.
@@ -395,7 +398,12 @@ func (a *App) compareKeep() {
 	if !ok {
 		return
 	}
-	if cp.armed != r.Session {
+	if !ckKeepable(r) {
+		cp.armed, cp.note = "", locales.CompareNothingToKeep(ckLetter(cp.focus))
+		return
+	}
+	if cp.armed != r.Session || cp.armedSeq+1 != a.ck.guard.cur && !a.ck.clickKeep {
+		cp.armedSeq = a.ck.guard.cur
 		// The first k reads the attempts again: the warning lists the
 		// files a keep deletes as they are now.
 		cp.armed, cp.confirm, cp.note = r.Session, false, ""
@@ -510,33 +518,7 @@ func (a *App) compareView(c *ui.Context, pal *palette) {
 		ww, wh := c.Size()
 		w := min(1180, ww-2*sp4)
 		floating(panel.Width(w).Height(min(680, wh-2*sp4)).Padding(sp5).Gap(sp3).Radius(rSheet).Background(pal.popover), pal).Label(locales.CompareTitle())
-		key := func(k ui.Key) bool { return c.Shortcut(0, k) }
-		switch {
-		case key(ui.KeyLeft), key(ui.KeyH), c.Shortcut(ui.Shift, ui.KeyTab):
-			if cp.focus > 0 {
-				cp.focus--
-				cp.armed = ""
-			}
-		case key(ui.KeyRight), key(ui.KeyL), key(ui.KeyTab):
-			if cp.focus < n-1 {
-				cp.focus++
-				cp.armed = ""
-			}
-		case key(ui.KeyJ):
-			a.compareJudge()
-		case key(ui.KeyK):
-			a.compareKeep()
-		case key(ui.KeyR):
-			cp.armed = ""
-			a.compareFetch()
-		case key(ui.KeyEnter):
-			a.compareGo()
-		}
-		for k := ui.Key1; k <= ui.Key9; k++ {
-			if key(k) && int(k-ui.Key1) < n {
-				cp.focus, cp.armed = int(k-ui.Key1), ""
-			}
-		}
+		a.compareKeys(c, panel, cp, n)
 		a.compareHeader(c, pal, cp)
 		switch {
 		case cp.res == nil && cp.err != "":
@@ -570,6 +552,85 @@ func (a *App) compareView(c *ui.Context, pal *palette) {
 		a.ck.cmp = nil
 		a.ck.fleetFocus.Focus()
 	}
+}
+
+// compareKeys are the comparison's keys. h l j k and the arrows move
+// between the attempts, as j and k move the cursor in every other list;
+// Shift+J judges and Shift+K keeps, twice (council round 3, S6). Letters go
+// through the typing guard: a letter typed as text runs nothing.
+func (a *App) compareKeys(c *ui.Context, panel ui.Element, cp *ckCompare, n int) {
+	g := &a.ck.guard
+	step := func(d int) {
+		if f := min(max(cp.focus+d, 0), n-1); f != cp.focus && f >= 0 {
+			cp.focus, cp.armed = f, ""
+		}
+	}
+	kind := func(k ckKey) keyKind {
+		switch {
+		case !k.shift && (k.key == ui.KeyH || k.key == ui.KeyJ || k.key == ui.KeyK || k.key == ui.KeyL):
+			return kindMove
+		case !k.shift && k.key == ui.KeyR:
+			return kindView
+		case !k.shift && k.key >= ui.Key1 && k.key <= ui.Key9:
+			return kindMove
+		case k.shift && k.key == ui.KeyJ:
+			return kindAct
+		case k.shift && k.key == ui.KeyK:
+			if r, ok := cp.focused(); ok && ckKeepable(r) {
+				return kindAct
+			}
+		}
+		return kindProse
+	}
+	second := func(k ckKey) bool {
+		r, ok := cp.focused()
+		return k.shift && k.key == ui.KeyK && ok && cp.armed == r.Session && cp.armedSeq+1 == g.seq
+	}
+	lk := listKeys{kind: kind, second: second, hint: locales.CompareKeysHere}
+	if k, ok := a.guard(c, panel, g, lk); ok {
+		switch {
+		case k.shift && k.key == ui.KeyJ:
+			a.compareJudge()
+		case k.shift && k.key == ui.KeyK:
+			a.compareKeep()
+		case k.key == ui.KeyH, k.key == ui.KeyK:
+			step(-1)
+		case k.key == ui.KeyL, k.key == ui.KeyJ:
+			step(1)
+		case k.key == ui.KeyR:
+			cp.armed = ""
+			a.compareFetch()
+		case k.key >= ui.Key1 && k.key <= ui.Key9:
+			if i := int(k.key - ui.Key1); i < n {
+				cp.focus, cp.armed = i, ""
+			}
+		}
+		c.Invalidate()
+		return
+	}
+	key := func(k ui.Key) bool { return panel.Shortcut(0, k) }
+	switch {
+	case key(ui.KeyLeft), key(ui.KeyUp), panel.Shortcut(ui.Shift, ui.KeyTab):
+		step(-1)
+	case key(ui.KeyRight), key(ui.KeyDown), key(ui.KeyTab):
+		step(1)
+	case key(ui.KeyEnter) && !g.typing(time.Now()):
+		a.compareGo()
+	case key(ui.KeyEnter):
+	default:
+		return
+	}
+	g.boundary()
+	c.Invalidate()
+}
+
+// ckKeepable reports whether an attempt can be kept: it has stopped, with
+// changes to keep.
+func ckKeepable(r ckFanAttempt) bool {
+	if r.Gone || r.State == "working" {
+		return false
+	}
+	return len(r.FileList) > 0 || r.Files != nil && *r.Files > 0
 }
 
 // compareHeader is the title, the fan and its base, and close.
@@ -754,21 +815,34 @@ func (a *App) compareFoot(c *ui.Context, pal *palette, cp *ckCompare) {
 	}
 	ui.Row(c).Gap(sp3).AlignItems(ui.Center).Shrink(0).Children(func() {
 		ui.Row(c).Gap(sp3).AlignItems(ui.Center).Grow(1).MinWidth(0).Clip().Children(func() {
-			keyHint(c, pal, "← →", locales.CompareHintPick())
+			keyHint(c, pal, "j k", locales.CompareHintPick())
 			keyHint(c, pal, "↵", locales.CockpitHintOpen())
 			keyHint(c, pal, "r", locales.CompareHintRead())
 			keyHint(c, pal, "esc", locales.CockpitHintBack())
 		})
-		if button(c, "cmp-judge", busyLabel(cp.busy == "judge", locales.CompareJudge()), "j", false, pal) {
+		if button(c, "cmp-judge", busyLabel(cp.busy == "judge", locales.CompareJudge()), "⇧J", false, pal) {
 			a.compareJudge()
 		}
-		if ok {
+		switch {
+		case ok && !ckKeepable(r):
+			// Nothing to keep yet: the button shows, off, and says why.
+			label := locales.CompareKeep(ckLetter(cp.focus))
+			b := ui.ButtonBase(c.Key("cmp-keep")).Height(hControl).Padding(0, sp3).Gap(6).Radius(rControl).AlignItems(ui.Center).Shrink(0).
+				Label(label).Disabled(true).Tooltip(locales.CompareNothingToKeep(ckLetter(cp.focus)))
+			face(b, pal, pal.control).TextColor(pal.textFaint)
+			b.Children(func() {
+				ui.Text(c, label).FontSize(fsBody).FontWeight(wMedium).SingleLine()
+				ui.Text(c, "⇧K").FontSize(fsSmall).SingleLine()
+			})
+		case ok:
 			label := locales.CompareKeep(ckLetter(cp.focus))
 			if cp.armed == r.Session {
 				label = locales.CompareKeepAgain(ckLetter(cp.focus))
 			}
-			if kindButton(c, "cmp-keep", busyLabel(cp.busy == "keep", label), "k", btnDanger, hControl, rControl, pal, false) {
+			if kindButton(c, "cmp-keep", busyLabel(cp.busy == "keep", label), "⇧K", btnDanger, hControl, rControl, pal, false) {
+				a.ck.clickKeep = true
 				a.compareKeep()
+				a.ck.clickKeep = false
 			}
 		}
 		if button(c, "cmp-open", locales.CockpitOpenPane(), "↵", true, pal) {

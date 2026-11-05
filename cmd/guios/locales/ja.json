@@ -1183,7 +1183,7 @@
   "compareNoChanges": "まだ変更はありません。",
   "compareGone": "なし",
   "compareDone": "完了",
-  "compareKeepWarn": "もう一度 k を押すと {letter} を残します。{others} は削除されます。変更は stash され、ブランチは残ります。",
+  "compareKeepWarn": "もう一度 ⇧K を押すと {letter} を残します。{others} は削除されます。変更は stash され、ブランチは残ります。",
   "compareKeepIgnored": "git が無視するファイル {count} 個も削除します。",
   "compareIgnoredFailed": "tuios は {list} の無視ファイルを一覧にできません。k を押してもう一度読み込んでください。",
   "compareHintPick": "選ぶ",
@@ -1247,5 +1247,7 @@
   "cockpitTypedNoCommand": "入力中の文字はコマンドを実行しません。少し待ってからもう一度キーを押してください。",
   "cockpitHintMove": "移動",
   "cockpitKeysToMail": "キーはメール一覧に送られます。返信するには r を押してください。",
-  "setApprovalsNeedsIntegration": "Claude Code 連携が必要です。プロンプトをここで受け取るにはインストールしてください。"
+  "setApprovalsNeedsIntegration": "Claude Code 連携が必要です。プロンプトをここで受け取るにはインストールしてください。",
+  "compareKeysHere": "キーは比較に送られます。閉じるには Escape を押してください。",
+  "compareNothingToKeep": "{letter} にはまだ残すものがありません。試行が変更ありで止まると残せます。"
 }

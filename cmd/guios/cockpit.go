@@ -169,6 +169,9 @@ type cockpit struct {
 	// it, for a prompt no hook holds.
 	peek  *ckPeek
 	armed ckArmed
+	// clickKeep holds that Compare's Keep button, not a key, asks to keep:
+	// a click needs no key order.
+	clickKeep bool
 	// typedAt is when the person last typed in the reply box.
 	typedAt time.Time
 	// reason is the open "reject and say why" line, for the item id.
