@@ -1345,9 +1345,12 @@ func (a *App) cmdHeld(c *ui.Context) bool {
 // the Mail view's list, else at the bottom centre.
 func (a *App) toastBox() *ui.Rect {
 	ck := &a.ck
-	if !ck.open || ck.view == viewBoard || ck.stacked || ck.fleetRect.W <= 0 {
+	if !ck.open || ck.cardRect.W <= 0 {
 		return nil
 	}
-	r := ck.fleetRect
+	// Centred over the agents view's card, above its key line, in every
+	// view: one place for every toast (council round 5, visual S5).
+	r := ck.cardRect
+	r.H -= hRow
 	return &r
 }

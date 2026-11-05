@@ -118,8 +118,9 @@ type cockpit struct {
 	// row, and when: once its row has moved, the next one is selected.
 	advance   string
 	advanceAt time.Time
-	// fleetRect is the agents list's box in the last frame, for toasts.
-	fleetRect ui.Rect
+	// fleetRect is the agents list's box in the last frame, and cardRect
+	// the whole card's, for toasts.
+	fleetRect, cardRect ui.Rect
 	// lightbox is an image of a thread shown whole.
 	lightbox *ckThreadImage
 

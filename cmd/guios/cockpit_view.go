@@ -97,6 +97,9 @@ func (a *App) cockpitCard(c *ui.Context, pal *palette, bar ui.TitleBar, shown fl
 		ck.fleetW = cw - 2*cardGap
 	}
 	card := paned(ui.Column(c.Key("cockpit")).Grow(1).MinHeight(0).Radius(rPane).Background(pal.card), pal).Clip()
+	// Toasts sit in one place: centred over the card, above its key line
+	// (council round 5, visual S5).
+	ck.cardRect = card.Bounds()
 	card.Children(func() {
 		a.cockpitHeader(c, pal, bar, shown)
 		ui.Box(c).Height(1).Shrink(0).Background(pal.divider)
