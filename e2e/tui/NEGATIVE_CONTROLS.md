@@ -13321,3 +13321,25 @@ test step, and the offer must leave the dock.
 
 Run on 2026-11-05 on Linux. The control makes Add do nothing. The test fails
 with `Add did not open the sheet at its test step`.
+## o opens a copy of a far file
+
+`TestQuickLookOnAFarFile` runs the steps in `openFarCopies` at its end: two
+daemons over the fake ssh link, and the recording `xdg-open`. They replace the
+refusal row of the section above: `o` on a far row now offers a copy. The
+controls were run on 2026-11-05 on Linux on the branch
+feat/open-far-file-copy. Each control cuts one piece from the branch head.
+
+| Claim | Control | Where it fails | Verdict |
+| --- | --- | --- | --- |
+| `o` on a far row offers a copy | the build of origin/main | "o on a far file did not offer a copy" | **caught** |
+| An unchanged far file opens the copy with no new copy | the `rec.Far == far` case in `prepareFarOpen` made false | "the second open of an unchanged file made a copy: 2 copies of notes.md, want 1" | **caught** |
+| A changed far file is copied again | the `rec.Far == far` case made true | "the open after the far file changed: the copy holds" the old bytes | **caught** |
+| A file over the ask limit asks again with its size | the ask case in `prepareFarOpen` made false | "the size ask: markers [zbig.bin on build is 2.00 MiB. ...] never all on screen" | **caught** |
+| A crafted name lands as one name in its own folder | `/` and `\` taken out of the characters `SafeName` replaces | "the open of a crafted name: the record holds" `..\..\x.txt` in place of `.._.._x.txt` | **caught** |
+| A click on the offer keeps the rail's keyboard | the `FarOpenOfferAt` branch in the click handler cut | "the second offer: markers [notes.md is on build. ...] never all on screen" | **caught** |
+
+The folder copy leaving out the link `inner/escape` is the transfer engine's
+rule, which `file-walk` states. The test checks it and no control cuts it.
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestQuickLookOnAFarFile$' -v .`.
