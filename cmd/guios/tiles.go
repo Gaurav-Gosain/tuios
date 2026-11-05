@@ -8,6 +8,7 @@ import (
 	"github.com/Gaurav-Gosain/mygo/plugins/terminal"
 	"github.com/Gaurav-Gosain/mygo/ui"
 
+	"github.com/Gaurav-Gosain/tuios/cmd/guios/locales"
 	"github.com/Gaurav-Gosain/tuios/internal/guios/proto"
 )
 
@@ -217,6 +218,17 @@ func (a *App) tiled(c *ui.Context, pal *palette, bar ui.TitleBar, shown float32,
 		target[z.ID] = whole
 		a.motion.top = z.ID
 	}
+	// A window too small for every pane at the smallest pane size shows
+	// the focused pane alone, as zoom does, until it grows again (QA-006).
+	// The session is not zoomed: the TUI on it keeps its layout.
+	hidden := 0
+	if f := a.focusOf(s); zoomed == "" && g == nil && multi && b.W > 0 && a.tooSmall(target, ew, eh) {
+		if _, ok := target[f]; ok {
+			zoomed, hidden = f, len(target)-1
+			target[f] = whole
+			a.motion.top = f
+		}
+	}
 
 	// The guessed card went as the daemon answered: the pane it made
 	// goes on from where the card showed.
@@ -367,6 +379,9 @@ func (a *App) tiled(c *ui.Context, pal *palette, bar ui.TitleBar, shown float32,
 			})
 		}
 		a.dragGhost(c, pal, s, area, shownAt, px)
+		if hidden > 0 && settledZoom {
+			narrowNote(c, pal, hidden)
+		}
 		if zoomed != "" || b.W <= 0 {
 			return
 		}
@@ -379,6 +394,34 @@ func (a *App) tiled(c *ui.Context, pal *palette, bar ui.TitleBar, shown float32,
 			}
 			a.divider(c, pal, s, sp.l, sp.key, ui.Rect{X: x, Y: y, W: w, H: h}, float32(sp.r.w*ew), float32(sp.r.h*eh))
 		}
+	})
+}
+
+// tooSmall reports whether a pane of the layout at target, in an area of
+// ew x eh DIPs, the gaps included, has fewer cells than the smallest pane
+// (minPaneCols by minPaneRows), measured with the cell reportGrid keeps.
+func (a *App) tooSmall(target map[string]frac, ew, eh float64) bool {
+	cw, ch := float64(a.cell.w), float64(a.cell.h)
+	if cw <= 0 || ch <= 0 {
+		return false
+	}
+	for _, f := range target {
+		if (f.w*ew-paneGap)/cw < minPaneCols || (f.h*eh-paneGap-headerH)/ch < minPaneRows {
+			return true
+		}
+	}
+	return false
+}
+
+// narrowNote says, over the bottom of the pane area, how many panes the
+// window is too small to show.
+func narrowNote(c *ui.Context, pal *palette, hidden int) {
+	label := locales.PaneNarrow(hidden)
+	ui.Row(c.Key("narrow-note")).Absolute().Bottom(10).Left(0).Right(0).Justify(ui.Center).PassThrough().Children(func() {
+		ui.Row(c).Height(28).Padding(0, 12, 0, 12).AlignItems(ui.Center).Radius(14).
+			Background(pal.popover).Border(1, pal.edgeHigh).Label(label).Children(func() {
+			ui.Text(c, label).FontSize(fsSmall).TextColor(pal.textMuted).SingleLine()
+		})
 	})
 }
 

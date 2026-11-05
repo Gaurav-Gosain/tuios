@@ -1808,6 +1808,16 @@ func (msgs Messages) PaneShowAll() string {
 	return Catalog.Format(msgs.locale, "paneShowAll", nil)
 }
 
+// PaneNarrow says "{count, plural, one {# more pane. Make the window larger to see it.} other {# more panes. Make the window larger to s…"
+// in the language the app shows.
+func PaneNarrow(count int) string { return In(i18n.Locale()).PaneNarrow(count) }
+
+// PaneNarrow says "{count, plural, one {# more pane. Make the window larger to see it.} other {# more panes. Make the window larger to s…"
+// in the language of msgs.
+func (msgs Messages) PaneNarrow(count int) string {
+	return Catalog.Format(msgs.locale, "paneNarrow", map[string]any{"count": count})
+}
+
 // PaneClose says "Close pane"
 // in the language the app shows.
 func PaneClose() string { return In(i18n.Locale()).PaneClose() }
