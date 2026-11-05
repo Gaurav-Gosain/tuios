@@ -109,163 +109,190 @@ func (a *App) replyBox(c *ui.Context, pal *palette, ag client.Agent) {
 	}
 	ui.Column(c.Key("reply")).Shrink(0).Margin(0, a.ckSide(24), 12, a.ckSide(24)).Gap(8).Children(func() {
 		cardWaits := a.ckCardWaits(ag)
-		for _, q := range r.queued[ag.Key()] {
-			ui.Row(c.Key("q-"+q.ID)).Gap(8).AlignItems(ui.Center).Padding(6, 10).Radius(rControl).Background(ckGround(pal)).Children(func() {
-				ui.Column(c).Grow(1).MinWidth(0).Gap(2).Children(func() {
-					oneLine(c, q.Text, fsBody, 0).TextColor(pal.text)
-					// Why it waits, from the queue's state; a card that
-					// waits comes first.
-					why := ckQueuedWhy(q.State)
-					if cardWaits {
-						why = locales.CockpitWaitsForAnswer()
-					}
-					oneLine(c, why, fsSmall, 0).TextColor(pal.textMuted)
-				})
-				if full, ok := r.texts[q.ID]; ok && q.State != "delivering" && !cardWaits {
-					if sizedButton(c, "now", locales.CockpitSendNowButton(), "", true, hControlSm, rControl, pal) {
-						a.sendQueuedNow(ag, q.ID, full)
-					}
+		queued := r.queued[ag.Key()]
+		if len(queued) == 0 {
+			a.replyBoxBody(c, pal, ag, d)
+			return
+		}
+		// The queue scrolls past two and a half rows, so it never pushes
+		// the approval card's buttons or the box off the view (QA-079).
+		// The half row says there is more.
+		ui.Scroll(c.Key("queue")).Shrink(0).MaxHeight(ckQueueMaxH).Children(func() {
+			ui.Column(c).Gap(8).Children(func() {
+				a.queuedRows(c, pal, ag, queued, cardWaits)
+			})
+		})
+		a.replyBoxBody(c, pal, ag, d)
+	})
+}
+
+// ckQueueMaxH is the most height the queued messages take over the box.
+const ckQueueMaxH = 128
+
+// queuedRows draws the messages waiting in the agent's queue.
+func (a *App) queuedRows(c *ui.Context, pal *palette, ag client.Agent, queued []ckQueued, cardWaits bool) {
+	r := &a.ck.reply
+	for _, q := range queued {
+		ui.Row(c.Key("q-"+q.ID)).Gap(8).AlignItems(ui.Center).Padding(6, 10).Radius(rControl).Background(ckGround(pal)).Children(func() {
+			ui.Column(c).Grow(1).MinWidth(0).Gap(2).Children(func() {
+				oneLine(c, q.Text, fsBody, 0).TextColor(pal.text)
+				// Why it waits, from the queue's state; a card that
+				// waits comes first.
+				why := ckQueuedWhy(q.State)
+				if cardWaits {
+					why = locales.CockpitWaitsForAnswer()
 				}
-				if sizedButton(c, "cancel", locales.CockpitCancelQueued(), "", false, hControlSm, rControl, pal) {
-					a.cancelQueued(ag, q.ID)
+				oneLine(c, why, fsSmall, 0).TextColor(pal.textMuted)
+			})
+			if full, ok := r.texts[q.ID]; ok && q.State != "delivering" && !cardWaits {
+				if sizedButton(c, "now", locales.CockpitSendNowButton(), "", true, hControlSm, rControl, pal) {
+					a.sendQueuedNow(ag, q.ID, full)
+				}
+			}
+			if sizedButton(c, "cancel", locales.CockpitCancelQueued(), "", false, hControlSm, rControl, pal) {
+				a.cancelQueued(ag, q.ID)
+			}
+		})
+	}
+}
+
+// replyBoxBody draws the box a reply is written in, under the queue.
+func (a *App) replyBoxBody(c *ui.Context, pal *palette, ag client.Agent, d *ckDraft) {
+	r := &a.ck.reply
+	box := ui.Column(c).Radius(rCard).Padding(10, 12, 8, 12).Gap(8).Background(pal.control)
+	focused := r.box.FocusWithin(c)
+	if focused {
+		box.Border(1, pal.accent.Alpha(0.6))
+	} else {
+		box.Border(1, pal.divider)
+	}
+	if files := box.DroppedFiles(); len(files) > 0 {
+		a.addImageFiles(d, files)
+	}
+	if box.FileDragOver() {
+		box.Background(pal.accent.Alpha(0.08))
+	}
+	box.Children(func() {
+		mail := r.asMail[ag.Key()]
+		ui.Row(c).Gap(6).AlignItems(ui.Center).Children(func() {
+			// One box, two ways to reach the agent: a prompt typed
+			// into its pane, or mail to its inbox.
+			// The hints sit on the control's fill, the lightest surface
+			// in the dark: text2 keeps them at 4.5:1 there (council
+			// round 3, visual S3).
+			ui.Text(c, locales.CockpitSendAs()).FontSize(fsSmall).TextColor(pal.textMuted).SingleLine().Shrink(0)
+			// A segmented control, as Settings draws them: the chosen
+			// segment raised on a soft track, so that it shows on the
+			// light theme's white box too (council round 2, S5).
+			ui.Row(c).Gap(2).Padding(2).Radius(rControl).Background(pal.chip).Shrink(0).Children(func() {
+				a.sendAsChip(c, pal, ag, false, locales.CockpitSendAsPrompt())
+				a.sendAsChip(c, pal, ag, true, locales.CockpitSendAsMail())
+			})
+			ui.Spacer(c)
+			note := locales.CockpitNextTurn()
+			if r, ok := a.ckSelected(); ok && r.item != nil && !ckHeld(*r.item) && !a.ckCanReject() &&
+				(r.item.Kind == session.AttentionApproval || r.item.Kind == session.AttentionPlan) {
+				// An approval this app cannot answer: what is sent
+				// waits for the prompt on the agent's screen.
+				note = locales.CockpitWaitsAtPrompt()
+			}
+			if mail {
+				note = locales.CockpitMailInbox(ag.Name)
+				if m := a.ck.tabs.mail; m != nil && m.replyTo != 0 {
+					note = locales.CockpitMailReplyTo(ag.Name)
+				}
+			}
+			oneLine(c, note, fsSmall, 0).TextColor(pal.textMuted).Shrink(2)
+		})
+		if len(d.images) > 0 {
+			ui.Row(c).Gap(8).Wrap().Children(func() {
+				for i := range d.images {
+					a.imageChip(c, pal, d, i)
 				}
 			})
 		}
-		box := ui.Column(c).Radius(rCard).Padding(10, 12, 8, 12).Gap(8).Background(pal.control)
-		focused := r.box.FocusWithin(c)
-		if focused {
-			box.Border(1, pal.accent.Alpha(0.6))
-		} else {
-			box.Border(1, pal.divider)
+		insert := r.insert
+		if insert != "" && !d.sending {
+			d.text += insert
 		}
-		if files := box.DroppedFiles(); len(files) > 0 {
-			a.addImageFiles(d, files)
+		r.insert = ""
+		in := ui.TextAreaBase(c.Key("text-"+ag.Key()), &d.text).Bind(&r.box).Lines(2, 8).
+			FontSize(fsProse).LineHeight(1.5).TextColor(pal.text).Placeholder(locales.CockpitReplyPlaceholder()).PlaceholderColor(pal.textMuted).ReadOnly(d.sending)
+		if r.focusNext {
+			r.focusNext = false
+			r.box.Focus()
+			if insert != "" {
+				n := utf8.RuneCountInString(d.text)
+				in.SetTextSelection(n, n)
+			}
 		}
-		if box.FileDragOver() {
-			box.Background(pal.accent.Alpha(0.08))
-		}
-		box.Children(func() {
-			mail := r.asMail[ag.Key()]
-			ui.Row(c).Gap(6).AlignItems(ui.Center).Children(func() {
-				// One box, two ways to reach the agent: a prompt typed
-				// into its pane, or mail to its inbox.
-				// The hints sit on the control's fill, the lightest surface
-				// in the dark: text2 keeps them at 4.5:1 there (council
-				// round 3, visual S3).
-				ui.Text(c, locales.CockpitSendAs()).FontSize(fsSmall).TextColor(pal.textMuted).SingleLine().Shrink(0)
-				// A segmented control, as Settings draws them: the chosen
-				// segment raised on a soft track, so that it shows on the
-				// light theme's white box too (council round 2, S5).
-				ui.Row(c).Gap(2).Padding(2).Radius(rControl).Background(pal.chip).Shrink(0).Children(func() {
-					a.sendAsChip(c, pal, ag, false, locales.CockpitSendAsPrompt())
-					a.sendAsChip(c, pal, ag, true, locales.CockpitSendAsMail())
-				})
-				ui.Spacer(c)
-				note := locales.CockpitNextTurn()
-				if r, ok := a.ckSelected(); ok && r.item != nil && !ckHeld(*r.item) && !a.ckCanReject() &&
-					(r.item.Kind == session.AttentionApproval || r.item.Kind == session.AttentionPlan) {
-					// An approval this app cannot answer: what is sent
-					// waits for the prompt on the agent's screen.
-					note = locales.CockpitWaitsAtPrompt()
-				}
-				if mail {
-					note = locales.CockpitMailInbox(ag.Name)
-					if m := a.ck.tabs.mail; m != nil && m.replyTo != 0 {
-						note = locales.CockpitMailReplyTo(ag.Name)
-					}
-				}
-				oneLine(c, note, fsSmall, 0).TextColor(pal.textMuted).Shrink(2)
-			})
-			if len(d.images) > 0 {
-				ui.Row(c).Gap(8).Wrap().Children(func() {
-					for i := range d.images {
-						a.imageChip(c, pal, d, i)
-					}
-				})
-			}
-			insert := r.insert
-			if insert != "" && !d.sending {
-				d.text += insert
-			}
-			r.insert = ""
-			in := ui.TextAreaBase(c.Key("text-"+ag.Key()), &d.text).Bind(&r.box).Lines(2, 8).
-				FontSize(fsProse).LineHeight(1.5).TextColor(pal.text).Placeholder(locales.CockpitReplyPlaceholder()).PlaceholderColor(pal.textMuted).ReadOnly(d.sending)
-			if r.focusNext {
-				r.focusNext = false
-				r.box.Focus()
-				if insert != "" {
-					n := utf8.RuneCountInString(d.text)
-					in.SetTextSelection(n, n)
-				}
-			}
-			in.OnPaste(func(text string) bool {
-				if text != "" {
-					return false
-				}
-				return a.pasteImageInto(d)
-			})
-			in.OnTextKey(func(k ui.TextKey) bool {
-				switch {
-				case k.Key == ui.KeyEnter && k.Mods == ui.Cmd && !mail && strings.TrimSpace(k.Text()) == "" && len(d.images) == 0:
-					// An empty box sends nothing: Ctrl+Enter allows, as it
-					// does in the list.
-					a.ckAllowChord()
-					return true
-				case k.Key == ui.KeyEnter && k.Mods == ui.Cmd && !mail:
-					d.text = k.Text()
-					a.sendReply(ag, d, true)
-					return true
-				case k.Key == ui.KeyEnter && k.Mods == 0 && strings.TrimSpace(k.Text()) == "" && len(d.images) == 0 && !mail:
-					// Enter in an empty box opens the agent's pane, as
-					// Enter in the list does.
-					a.goToAgent(ag)
-					return true
-				case k.Key == ui.KeyEnter && k.Mods == 0:
-					d.text = k.Text()
-					a.sendBox(ag, d, mail)
-					return true
-				case k.Key == ui.KeyUp && k.Mods == 0 && k.Text() == "" && d.last != "":
-					// The last message sent, to send again or change.
-					k.SetText(d.last)
-					return true
-				case k.Key == ui.KeyEscape:
-					if m := a.ck.tabs.mail; a.ck.view == viewMail && m != nil {
-						// In the Mail view, Escape drops the reply.
-						m.replyTo = 0
-						m.focus.Focus()
-						return true
-					}
-					a.ck.fleetFocus.Focus()
-					return true
-				}
+		in.OnPaste(func(text string) bool {
+			if text != "" {
 				return false
-			})
-			ui.Row(c).Gap(sp3).AlignItems(ui.Center).Children(func() {
-				// The hints as key caps, as the hint bar draws them; they
-				// leave the row as it narrows, the send button stays.
-				ui.Row(c).Gap(sp3).AlignItems(ui.Center).Grow(1).MinWidth(0).Clip().Children(func() {
-					keyHint(c, pal, keyName("CmdOrCtrl+V"), locales.CockpitHintImage())
-					keyHint(c, pal, "⇧↵", locales.CockpitHintNewLine())
-					// Ctrl+↵ sends now only while the box has text: empty, it
-					// allows (cockpit_ask.go).
-					switch {
-					case strings.TrimSpace(d.text) == "" && len(d.images) == 0:
-					case a.ckCardWaits(ag):
-						keyHint(c, pal, keyName("CmdOrCtrl+Enter"), locales.CockpitHintQueue())
-					default:
-						keyHint(c, pal, keyName("CmdOrCtrl+Enter"), locales.CockpitHintSendNow())
-					}
-				})
-				// While the confirm step is open, its button owns Enter:
-				// Send drops its cap and its accent.
-				keys, primary := "↵", true
-				if a.ck.question != nil {
-					keys, primary = "", false
+			}
+			return a.pasteImageInto(d)
+		})
+		in.OnTextKey(func(k ui.TextKey) bool {
+			switch {
+			case k.Key == ui.KeyEnter && k.Mods == ui.Cmd && !mail && strings.TrimSpace(k.Text()) == "" && len(d.images) == 0:
+				// An empty box sends nothing: Ctrl+Enter allows, as it
+				// does in the list.
+				a.ckAllowChord()
+				return true
+			case k.Key == ui.KeyEnter && k.Mods == ui.Cmd && !mail:
+				d.text = k.Text()
+				a.sendReply(ag, d, true)
+				return true
+			case k.Key == ui.KeyEnter && k.Mods == 0 && strings.TrimSpace(k.Text()) == "" && len(d.images) == 0 && !mail:
+				// Enter in an empty box opens the agent's pane, as
+				// Enter in the list does.
+				a.goToAgent(ag)
+				return true
+			case k.Key == ui.KeyEnter && k.Mods == 0:
+				d.text = k.Text()
+				a.sendBox(ag, d, mail)
+				return true
+			case k.Key == ui.KeyUp && k.Mods == 0 && k.Text() == "" && d.last != "":
+				// The last message sent, to send again or change.
+				k.SetText(d.last)
+				return true
+			case k.Key == ui.KeyEscape:
+				if m := a.ck.tabs.mail; a.ck.view == viewMail && m != nil {
+					// In the Mail view, Escape drops the reply.
+					m.replyTo = 0
+					m.focus.Focus()
+					return true
 				}
-				if sizedButton(c, "send", locales.CockpitSend(), keys, primary, hControlSm, rControl, pal) {
-					a.sendBox(ag, d, mail)
+				a.ck.fleetFocus.Focus()
+				return true
+			}
+			return false
+		})
+		ui.Row(c).Gap(sp3).AlignItems(ui.Center).Children(func() {
+			// The hints as key caps, as the hint bar draws them; they
+			// leave the row as it narrows, the send button stays.
+			ui.Row(c).Gap(sp3).AlignItems(ui.Center).Grow(1).MinWidth(0).Clip().Children(func() {
+				keyHint(c, pal, keyName("CmdOrCtrl+V"), locales.CockpitHintImage())
+				keyHint(c, pal, "⇧↵", locales.CockpitHintNewLine())
+				// Ctrl+↵ sends now only while the box has text: empty, it
+				// allows (cockpit_ask.go).
+				switch {
+				case strings.TrimSpace(d.text) == "" && len(d.images) == 0:
+				case a.ckCardWaits(ag):
+					keyHint(c, pal, keyName("CmdOrCtrl+Enter"), locales.CockpitHintQueue())
+				default:
+					keyHint(c, pal, keyName("CmdOrCtrl+Enter"), locales.CockpitHintSendNow())
 				}
 			})
+			// While the confirm step is open, its button owns Enter:
+			// Send drops its cap and its accent.
+			keys, primary := "↵", true
+			if a.ck.question != nil {
+				keys, primary = "", false
+			}
+			if sizedButton(c, "send", locales.CockpitSend(), keys, primary, hControlSm, rControl, pal) {
+				a.sendBox(ag, d, mail)
+			}
 		})
 	})
 }
