@@ -7,8 +7,9 @@ one, and sessions, panes, agents, mail and the Inbox reach across it.
 ## Set up a machine
 
 `tuios hosts setup DEST` tests ssh, installs tuios when it is missing, starts
-the daemon, adds the machine and tests the link. Run the dry run first and show
-the person the plan. Then run it with the choices they made:
+the daemon, adds the machine and tests the link. On a terminal it asks the
+person each choice. An agent runs it without a terminal: run the dry run first
+and show the person the plan, then run it with the choices they made:
 
 ```sh
 tuios hosts setup gaurav@buildbox --dry-run
