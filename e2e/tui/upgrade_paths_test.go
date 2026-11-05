@@ -503,3 +503,17 @@ func TestOrRestartNeverRunsABinaryOthersCanWrite(t *testing.T) {
 		t.Errorf("ASSERTION: a daemon was started where none ran")
 	}
 }
+
+// writeTuiosScript writes an executable sh script named tuios, owned by this
+// user and writable by no one else, so the owner and mode check passes it.
+func writeTuiosScript(t *testing.T, body string) string {
+	t.Helper()
+	p := filepath.Join(t.TempDir(), "tuios")
+	if err := os.WriteFile(p, []byte("#!/bin/sh\n"+body), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(p, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	return p
+}

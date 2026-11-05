@@ -276,15 +276,17 @@ func upgradeDaemon(say func(string, ...any), binary string, orRestart bool) (upg
 	if !ok {
 		return o, err
 	}
-	if orRestart && notLive.unconfirmed {
-		// The daemon refused this caller because it runs in one of its
-		// panes, and a restart would end that pane with this command in it.
-		say("The daemon was not restarted, because a restart would end the pane this command runs in. It still runs %s.\n", cmp.Or(notLive.from, "the old version"))
-	}
-	if !orRestart || notLive.unconfirmed {
+	if !orRestart {
 		return upgradeOutcome{Action: upgradeActionRefused, Binary: binary, From: notLive.from, Reason: notLive.reason, Unconfirmed: notLive.unconfirmed}, err
 	}
 	say("Not upgraded live: %s.\n", notLive.reason)
+	// From a pane, kill-server ends the pane and this command in it before
+	// start-server runs, which leaves no daemon at all. So whatever stopped
+	// the live upgrade, a running daemon is left as it is.
+	if notLive.unconfirmed || notLive.running && os.Getenv("TUIOS_PANE_ID") != "" {
+		say("The daemon was not restarted, because a restart would end the pane this command runs in. It still runs %s.\n", cmp.Or(notLive.from, "the old version"))
+		return upgradeOutcome{Action: upgradeActionRefused, Binary: binary, From: notLive.from, Reason: notLive.reason, Unconfirmed: notLive.unconfirmed}, err
+	}
 	return restartDaemonWith(say, binary, notLive)
 }
 

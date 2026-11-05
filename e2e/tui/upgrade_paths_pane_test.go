@@ -212,3 +212,32 @@ func TestOrRestartFromAPaneNeverRestarts(t *testing.T) {
 		t.Errorf("ASSERTION: --or-restart from a pane moved the daemon: %+v then %+v, panes %v then %v", r.img, after, panes, afterPanes)
 	}
 }
+
+// TestOrRestartFromAPaneNeverRestartsForABinaryItCannotUpgradeTo: the same
+// from a pane, but the refusal is the binary's, not the dialog's. The binary
+// fails handoff-accepts and is a real tuios for every other command, so a
+// restart would run: its kill-server would end the pane and the command in it
+// before start-server, and leave no daemon. --or-restart must leave a running
+// daemon as it is for any refusal from a pane: the command fails, says the
+// daemon was not restarted, and the daemon and its panes are as they were.
+func TestOrRestartFromAPaneNeverRestartsForABinaryItCannotUpgradeTo(t *testing.T) {
+	r := newConfirmRig(t, "e2e-or-restart-pane-binary")
+	bin := writeTuiosScript(t, `if [ "$1 $2" = "daemon handoff-accepts" ]; then echo "no handoff here" >&2; exit 1; fi
+exec '`+tuiosBin+`' "$@"
+`)
+	panes := panePIDs(t, r.base, r.sess)
+	_ = mustCall(t, r.base, "send-text", map[string]any{"session": r.sess, "window": r.agent,
+		"text": tuiosBin + " daemon upgrade --binary " + bin + " --or-restart; echo OR_EXIT=$?\n"})
+	m := waitHandoffPane(t, r.base, r.sess, r.agent, regexp.MustCompile(`OR_EXIT=(\d+)`), 150*time.Second)
+	lines := mustScrollback(t, r.base, r.sess, r.agent)
+	after, afterPanes := helloImage(t, r.base), panePIDs(t, r.base, r.sess)
+	writeHandoffArtifact(t, map[string]any{"exit": m[1], "screen": lines, "before": r.img, "after": after, "panes_before": panes, "panes_after": afterPanes})
+
+	if m[1] == "0" || !screenLinesHave(lines, "cannot take the daemon over") ||
+		!screenLinesHave(lines, "The daemon was not restarted, because a restart would end the pane this command runs in.") {
+		t.Errorf("ASSERTION: --or-restart from a pane with a binary that cannot take the state did not fail saying why and that the daemon was not restarted (exit %s):\n%s", m[1], strings.Join(lines, "\n"))
+	}
+	if after != r.img || len(changedPIDs(panes, afterPanes)) != 0 {
+		t.Errorf("ASSERTION: --or-restart from a pane moved the daemon: %+v then %+v, panes %v then %v", r.img, after, panes, afterPanes)
+	}
+}
