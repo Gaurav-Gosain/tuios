@@ -9,6 +9,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 	"github.com/Gaurav-Gosain/tuios/internal/openedcopy"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/units"
@@ -185,7 +186,7 @@ func prepareFarOpen(ask farOpenAsk, files config.FilesConfig, hint string, onHos
 		return note("error", "tuios could not reach "+name+" on "+host+": "+verbErrText(err)+".")
 	}
 	var st farStat
-	if json.Unmarshal(raw, &st) != nil || !st.Exists {
+	if jsonx.Unmarshal(raw, &st) != nil || !st.Exists {
 		return note("warning", name+" is gone from "+host+". tuios did not open it.")
 	}
 	var size int64
@@ -206,7 +207,7 @@ func prepareFarOpen(ask farOpenAsk, files config.FilesConfig, hint string, onHos
 			return note("error", "tuios could not list "+name+" on "+host+": "+verbErrText(err)+".")
 		}
 		var w farWalk
-		if err := json.Unmarshal(raw, &w); err != nil {
+		if err := jsonx.Unmarshal(raw, &w); err != nil {
 			return note("error", "tuios could not read the list of "+name+" on "+host+".")
 		}
 		size, count = w.Bytes, 0
@@ -279,7 +280,7 @@ func prepareFarOpen(ask farOpenAsk, files config.FilesConfig, hint string, onHos
 		return note("error", "tuios could not start the copy of "+name+": "+verbErrText(err)+".")
 	}
 	var row session.TransferRow
-	if json.Unmarshal(raw, &row) != nil || row.ID == "" {
+	if jsonx.Unmarshal(raw, &row) != nil || row.ID == "" {
 		return note("error", "tuios could not start the copy of "+name+".")
 	}
 	return farOpenPreparedMsg{Row: &row, Job: farOpenJob{ask: ask, place: place, far: far}}

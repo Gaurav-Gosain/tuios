@@ -22,7 +22,6 @@ package openedcopy
 import (
 	"crypto/sha256"
 	"encoding/hex"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -32,6 +31,9 @@ import (
 	"strings"
 	"time"
 	"unicode/utf8"
+
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
+	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 )
 
 // recordExt is the suffix of a copy's record.
@@ -74,7 +76,7 @@ func PlaceFor(root, host, farPath, name string) (Place, error) {
 	// construction. It is checked anyway: the path is handed to the copy and
 	// then to a program, and a slip here would write outside the cache.
 	if !Inside(root, p.Path) || filepath.Dir(p.Path) != p.Dir {
-		return Place{}, fmt.Errorf("the copy of %q would land outside %s", name, root)
+		return Place{}, errfmt.Errorf("the copy of %q would land outside %s", name, root)
 	}
 	return p, nil
 }
@@ -152,7 +154,7 @@ func ReadRecord(path string) (Record, bool) {
 		return Record{}, false
 	}
 	var r Record
-	if json.Unmarshal(data, &r) != nil {
+	if jsonx.Unmarshal(data, &r) != nil {
 		return Record{}, false
 	}
 	return r, true
@@ -160,7 +162,7 @@ func ReadRecord(path string) (Record, bool) {
 
 // WriteRecord writes a copy's record, owner only.
 func WriteRecord(path string, r Record) error {
-	data, err := json.Marshal(r)
+	data, err := jsonx.Marshal(r)
 	if err != nil {
 		return err
 	}

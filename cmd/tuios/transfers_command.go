@@ -9,6 +9,7 @@ import (
 
 	"charm.land/lipgloss/v2"
 	"charm.land/lipgloss/v2/table"
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 	"github.com/Gaurav-Gosain/tuios/internal/openedcopy"
 	"github.com/Gaurav-Gosain/tuios/internal/plural"
@@ -331,11 +332,11 @@ func runTransfersClear(ids []string, jsonOut bool) error {
 func runClearOpened() error {
 	root, err := openedcopy.Root()
 	if err != nil {
-		return fmt.Errorf("tuios has no cache folder: %w", err)
+		return errfmt.Errorf("tuios has no cache folder: %w", err)
 	}
 	copies, size, err := openedcopy.Clear(root)
 	if err != nil {
-		return fmt.Errorf("tuios could not delete the copies in %s: %w", root, err)
+		return errfmt.Errorf("tuios could not delete the copies in %s: %w", root, err)
 	}
 	if copies == 0 && size == 0 {
 		fmt.Println("There are no copies of far files.")
