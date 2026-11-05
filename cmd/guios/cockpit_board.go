@@ -1,6 +1,7 @@
 package main
 
 import (
+	"math"
 	"slices"
 	"strings"
 	"time"
@@ -62,6 +63,9 @@ type ckBoard struct {
 	// had in the last frame.
 	first int
 	width float32
+	// heads are the widths the columns' headings need: the title, the
+	// count and the add button, measured in the last frame.
+	heads []float32
 }
 
 func (a *App) fetchBoard() {
@@ -166,6 +170,7 @@ func (a *App) boardView(c *ui.Context, pal *palette, sess string) {
 	root.Children(func() {
 		box := ui.Row(c.Key("cols")).Grow(1).MinHeight(0).AlignItems(ui.Stretch).Gap(boardGap).Padding(14, 16)
 		w := box.Bounds().W
+		b.heads = boardHeads(c, b)
 		first, last, widths := b.run(w)
 		if w != b.width {
 			// The run is worked out from the last frame's width: build
@@ -201,6 +206,22 @@ const (
 	boardPadX      = 32
 )
 
+// boardHeadPad is what a column's heading takes beside its title and
+// count: the column's padding (8 each side), the heading's (4 each side),
+// three gaps of 6 and the 20 DIP add button.
+const boardHeadPad = 16 + 8 + 18 + 20
+
+// boardHeads are the widths the columns' headings need, in stage order.
+func boardHeads(c *ui.Context, b *ckBoard) []float32 {
+	heads := make([]float32, len(ckStages))
+	for i, st := range ckStages {
+		tw := natural(c, ckStageTitle(st), fsSmall, wSemibold)
+		cw := natural(c, itoa(len(b.column(st))), fsSmall, wRegular)
+		heads[i] = float32(math.Ceil(float64(tw+cw))) + boardHeadPad + 1
+	}
+	return heads
+}
+
 // run is the columns the board shows in w DIPs, whole ones only: from
 // b.first on, moved so the cursor's column is in it, as the TUI's board
 // shows the run round the cursor. widths are the columns' widths, the room
@@ -213,6 +234,11 @@ func (b *ckBoard) run(w float32) (first, last int, widths []float32) {
 		need[i] = boardColNarrow
 		if !b.folded(st) && len(b.column(st)) > 0 {
 			need[i], wide[i] = boardColMin, true
+		}
+		// A column is never narrower than its heading: an empty column
+		// shows its whole title, as "Shipped 0".
+		if i < len(b.heads) {
+			need[i] = max(need[i], b.heads[i])
 		}
 	}
 	if w <= 0 {
