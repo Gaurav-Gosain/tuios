@@ -230,9 +230,6 @@ func countBadge(c *ui.Context, n int, bg, fg ui.Color) {
 	})
 }
 
-// onAccent is the color of text on the accent's fill (accentFill).
-func onAccent(pal *palette) ui.Color { return pal.accentInk }
-
 // pathLine is a path on one line, cut at its start so that its file's
 // name stays, with the whole path in a tooltip while it is cut. key
 // names its box, whose width the last frame measured.

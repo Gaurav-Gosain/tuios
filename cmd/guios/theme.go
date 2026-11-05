@@ -575,9 +575,6 @@ func oklch(c ui.Color) (l, ch, h float32) {
 	return float32(L), float32(math.Hypot(A, B)), float32(hue)
 }
 
-// onAttention is the ink of a count on the needs-you badge (attnFill).
-func onAttention(pal *palette) ui.Color { return pal.attnInk }
-
 // inkFill is a fill for a control and the ink of its text: dark ink or
 // white, whichever has more contrast on it. When neither reaches 5:1 on
 // the token, which reads 4.5:1 on the frame's pixels, the fill goes
