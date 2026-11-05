@@ -118,9 +118,9 @@ type App struct {
 	holds map[string]*wsHold
 	// slides are the workspace switches whose panes slide (slide.go).
 	slides map[string]*wsSlide
-	// wsLeft is each workspace the shown session left, by wsKey, kept with
-	// its terminals so that a switch back to it starts at once (slide.go).
-	wsLeft map[string]proto.Session
+	// wsLeft is the workspaces the shown session left, by wsKey, kept with
+	// their terminals so that a switch back starts at once (slide.go).
+	wsLeft map[string]leftWS
 	// area is the panes' area as the last frame laid it out, which a
 	// workspace switch slides by.
 	area ui.Rect

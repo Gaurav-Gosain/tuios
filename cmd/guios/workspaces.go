@@ -79,14 +79,14 @@ func (a *App) heldPanes(live map[string]bool) {
 			live[p.ID] = true
 		}
 	}
-	for k, s := range a.wsLeft {
+	for k, l := range a.wsLeft {
 		// Only the session shown keeps the workspaces it left, and their
 		// terminals: the others go, as their panes do.
-		if s.ID != a.selected {
+		if l.s.ID != a.selected {
 			delete(a.wsLeft, k)
 			continue
 		}
-		for _, p := range s.Panes {
+		for _, p := range l.s.Panes {
 			live[p.ID] = true
 		}
 	}

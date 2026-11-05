@@ -16,13 +16,14 @@ import (
 // side as those of the one shown come in from the other, toward the left
 // for a higher number, on motionLayout's curve.
 //
-// A switch to a workspace the session showed before starts in the frame
-// of the key: its panes come in as they last showed (wsLeft keeps each
-// workspace the session shown left, and their terminals), and the
-// daemon's answer puts the live panes in their place on the way. A
-// workspace whose panes changed since, or one never shown, waits for the
-// daemon: the hold keeps the last frame until its panes have attached
-// (workspaces.go), and the slide starts as they show.
+// A switch to a workspace the session showed lately starts in the frame
+// of the key: its panes come in as they last showed (wsLeft keeps the
+// workspace the session shown left last, and those it left in the last
+// leftKeep, with their terminals), and the daemon's answer puts the live
+// panes in their place on the way. A workspace whose panes changed since,
+// one let go, or one never shown, waits for the daemon: the hold keeps
+// the last frame until its panes have attached (workspaces.go), and the
+// slide starts as they show.
 //
 // The panes not live are drawn as they were, without their buttons, as
 // one cached bitmap clipped to the panes' area: they take no input and
@@ -46,6 +47,20 @@ type wsSlide struct {
 // frame, as the key came between frames.
 const slideLead = 8 * time.Millisecond
 
+// leftWS is a workspace the session left, as it showed, and when.
+type leftWS struct {
+	s  proto.Session
+	at time.Time
+}
+
+// leftKeep is how long a workspace left before the last one keeps its
+// terminals: each costs memory (QA-049). The one left last stays.
+const leftKeep = 60 * time.Second
+
+// leftPrune is the timer of the next workspace whose keep runs out, nil
+// while none is due: it never wakes the app at idle for nothing.
+var leftPrune *time.Timer
+
 // leaveWorkspace keeps old, the workspace the session leaves, and its
 // terminals, so that a switch back to it can start at once.
 func (a *App) leaveWorkspace(old proto.Session) {
@@ -53,9 +68,62 @@ func (a *App) leaveWorkspace(old proto.Session) {
 		return
 	}
 	if a.wsLeft == nil {
-		a.wsLeft = map[string]proto.Session{}
+		a.wsLeft = map[string]leftWS{}
 	}
-	a.wsLeft[wsKey(old.ID, old.Workspace)] = old
+	a.wsLeft[wsKey(old.ID, old.Workspace)] = leftWS{old, time.Now()}
+	a.pruneLeft()
+}
+
+// pruneLeft lets go of the workspaces left more than leftKeep ago, but
+// the one each session left last, and of their terminals. It sets the
+// timer for the next one due.
+func (a *App) pruneLeft() {
+	now := time.Now()
+	last := map[string]time.Time{}
+	for _, l := range a.wsLeft {
+		if l.at.After(last[l.s.ID]) {
+			last[l.s.ID] = l.at
+		}
+	}
+	var gone []string
+	var next time.Duration
+	for k, l := range a.wsLeft {
+		if l.at.Equal(last[l.s.ID]) {
+			continue
+		}
+		if left := leftKeep - now.Sub(l.at); left > 0 {
+			if next == 0 || left < next {
+				next = left
+			}
+			continue
+		}
+		delete(a.wsLeft, k)
+		for _, p := range l.s.Panes {
+			gone = append(gone, p.ID)
+		}
+	}
+	if len(gone) > 0 {
+		// Their terminals go, unless something else still shows them.
+		live := map[string]bool{}
+		for _, s := range a.st.Sessions {
+			for _, p := range s.Panes {
+				live[p.ID] = true
+			}
+		}
+		a.heldPanes(live)
+		for _, id := range gone {
+			if !live[id] {
+				a.dropTerm(id)
+			}
+		}
+	}
+	if leftPrune != nil {
+		leftPrune.Stop()
+		leftPrune = nil
+	}
+	if next > 0 {
+		leftPrune = time.AfterFunc(next+time.Second, func() { a.update(a.pruneLeft) })
+	}
 }
 
 // wsKey names a workspace of a session in wsLeft.
@@ -80,7 +148,8 @@ func stillLeft(s *proto.Session, left proto.Session) bool {
 // session showed n before with the panes it has there now: they come in
 // as they showed.
 func (a *App) slideNow(s *proto.Session, n int) {
-	left, ok := a.wsLeft[wsKey(s.ID, n)]
+	l, ok := a.wsLeft[wsKey(s.ID, n)]
+	left := l.s
 	if ok && !stillLeft(s, left) {
 		delete(a.wsLeft, wsKey(s.ID, n))
 		ok = false
