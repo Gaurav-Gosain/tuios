@@ -637,6 +637,7 @@ func (m *OS) settingsCategories() []settingsCategory {
 			custom("appearance.max_fps", m.maxFPSItem()),
 			opt("appearance.preferred_shell"),
 			opt("agents.fold_working"),
+			opt("agents.view_list"),
 			opt("review.focus"),
 			opt("review.scope"),
 			opt("pip.width"),

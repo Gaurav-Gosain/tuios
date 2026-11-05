@@ -727,6 +727,7 @@ var ActionDescriptions = map[string]string{
 	"inbox_stage_prev":   "Agents view: move the card to the stage before",
 	"inbox_stage_next":   "Agents view: move the card to the stage after",
 	"inbox_board_layout": "Agents view: show the board as columns or as a list",
+	"inbox_view_list":    "Agents view: show the agents as a column or as a strip above the focus",
 	"inbox_artifact":     "Agents view: open what the agent has shown, such as a TML form, and use it",
 
 	// The rail's agent rows. They act only while the cursor is on an agent

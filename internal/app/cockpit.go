@@ -284,6 +284,12 @@ type cockpitState struct {
 	// kb is the columns' own state. See cockpit_kanban.go.
 	boardList bool
 	kb        ckKanban
+	// listMode is the list layout the person chose with the list key: one
+	// of the [agents] view_list values, and "" for no choice, where the
+	// config decides. It is kept in the state file. stripShown says the last
+	// frame folded the list into the strip, which the key turns around.
+	listMode   string
+	stripShown bool
 }
 
 // ckBack is the cursor and the scroll to open the view on again.
@@ -1085,6 +1091,30 @@ func (m *OS) CockpitCycleFilter() {
 	m.cockpitTouchRows()
 }
 
+// ckListMode is the list layout in force: the person's choice, else [agents]
+// view_list.
+func (m *OS) ckListMode() string {
+	if mode := m.Inbox.ck.listMode; mode != "" {
+		return mode
+	}
+	if m.UserConfig == nil {
+		return config.AgentsViewListColumn
+	}
+	return m.UserConfig.Agents.ViewListMode()
+}
+
+// CockpitToggleList is the list key: the strip when the view shows the
+// column, and the column when it shows the strip. The choice is kept.
+func (m *OS) CockpitToggleList() {
+	ck := &m.Inbox.ck
+	ck.listMode = config.AgentsViewListStrip
+	if ck.stripShown {
+		ck.listMode = config.AgentsViewListColumn
+	}
+	m.cockpitTouchRows()
+	m.saveSidebarState()
+}
+
 // CockpitNeedsOnly reports whether the f filter shows only Needs you.
 func (m *OS) CockpitNeedsOnly() bool { return m.Inbox.ck.needsOnly }
 
@@ -1557,6 +1587,9 @@ func (m *OS) CockpitKey(action string) (tea.Cmd, bool) {
 		return m.CockpitNewAgent(), true
 	case config.ActionInboxBoard:
 		m.CockpitToggleBoard()
+		return nil, true
+	case config.ActionInboxViewList:
+		m.CockpitToggleList()
 		return nil, true
 	case config.ActionInboxTake:
 		return m.CockpitTake(), true

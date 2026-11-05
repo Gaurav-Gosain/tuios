@@ -57,6 +57,9 @@ func approvalsOS(t *testing.T, items ...session.AttentionItem) (*OS, *replyDaemo
 	t.Helper()
 	m := inboxOS(t, zeroSettle())
 	m.Height, m.Width = 24, 80
+	// The plan windows below are measured in a focus as wide as the screen,
+	// which the strip gives at 80 columns.
+	m.Inbox.ck.listMode = "strip"
 	m.applyInboxSnapshot(InboxSnapshotMsg{Items: items})
 	m.OpenInbox("")
 	r := &replyDaemon{}

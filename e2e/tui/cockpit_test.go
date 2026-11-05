@@ -720,6 +720,8 @@ func TestCockpitThreadCards(t *testing.T) {
 	base := t.TempDir()
 	killDaemon(t, base)
 	useShippedLooks(base)
+	// The cards below are read in a focus as wide as the screen.
+	writeConfig(t, base, "[agents]\nview_list = \"strip\"\n")
 	for _, s := range []string{"home200", "home100", "home160", "api"} {
 		if out, err := tuiosCLI(t, base, "new", s, "--detach"); err != nil {
 			t.Fatalf("create session %s: %v\n%s", s, err, out)
@@ -2180,6 +2182,11 @@ func waitSpawnRead(t *testing.T, term *tuitest.Terminal) {
 
 // TestCockpitSideTabs is the side column's pieces as focus tabs on a screen
 // narrower than it: Checkpoints lists them, and Pane shows the live pane.
+// Then cockpitListLayouts checks the list column and the strip on the same
+// one-agent fleet.
+//
+// Negative control, recorded in NEGATIVE_CONTROLS.md: with the strip chosen
+// for two agents or fewer again, the list column check fails at 160x40.
 func TestCockpitSideTabs(t *testing.T) {
 	base := t.TempDir()
 	killDaemon(t, base)
@@ -2213,6 +2220,55 @@ func TestCockpitSideTabs(t *testing.T) {
 	waitText(t, term, "the pane tab", "TAB-marker-3")
 	saveCockpitFrames(t, term, "pane-tab-100x30")
 	alive(t, term, "after the side tabs")
+	cockpitListLayouts(t, term)
+}
+
+// cockpitListLayouts reads the list layouts of a one-agent fleet. At 160x40
+// the agent is in the list column, beside the focus. \ folds the list into
+// the strip of chips above the focus, and \ again opens the column. Under 80
+// columns the list fills the screen, also with the strip chosen.
+func cockpitListLayouts(t *testing.T, term *tuitest.Terminal) {
+	t.Helper()
+	column := func(s tuitest.Screen) bool {
+		r := lineWith(s, "Working  1")
+		// The long search label shows only once the view draws at 160.
+		return r >= 0 && strings.Contains(s.Line(r), "worker") && containsAll(s.Text(), `\ strip`, "Search agents, sessions, machines")
+	}
+	strip := func(s tuitest.Screen) bool {
+		return !strings.Contains(s.Text(), "Working  1") && strings.Contains(s.Text(), "Thread") && strings.Contains(s.Text(), `\ list`)
+	}
+	wait := func(what string, cond func(tuitest.Screen) bool) {
+		t.Helper()
+		if err := term.WaitFor(cond, uiTimeout); err != nil {
+			t.Fatalf("ASSERTION: %s: %v\n%s", what, err, term.Snapshot())
+		}
+	}
+	if err := term.Resize(160, 40); err != nil {
+		t.Fatal(err)
+	}
+	wait("one agent at 160x40 is not in the list column", column)
+	saveCockpitFrames(t, term, "list-column-160x40")
+	if err := term.SendKeys(`\`); err != nil {
+		t.Fatal(err)
+	}
+	wait(`\ did not fold the list into the strip`, strip)
+	saveCockpitFrames(t, term, "list-strip-160x40")
+	if err := term.SendKeys(`\`); err != nil {
+		t.Fatal(err)
+	}
+	wait(`\ did not open the list column again`, column)
+	if err := term.SendKeys(`\`); err != nil {
+		t.Fatal(err)
+	}
+	wait(`\ did not fold the list into the strip a second time`, strip)
+	if err := term.Resize(70, 30); err != nil {
+		t.Fatal(err)
+	}
+	wait("the list does not fill a 70-column screen", func(s tuitest.Screen) bool {
+		return strings.Contains(s.Text(), "Working  1") && !strings.Contains(s.Text(), "Thread")
+	})
+	saveCockpitFrames(t, term, "list-narrow-70x30")
+	alive(t, term, "after the list layouts")
 }
 
 // TestCockpitSpawnSheet starts an agent from the New agent sheet, the way a

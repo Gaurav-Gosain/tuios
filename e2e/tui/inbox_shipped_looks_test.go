@@ -64,8 +64,9 @@ func TestInboxOnTheShippedLooks(t *testing.T) {
 	}
 	saveFrame(t, term, "inbox-shipped-looks")
 
-	// A double-click on the agent's tab goes to the item's session.
-	tab := rowWith(s, "New agent") + 2
+	// A double-click on the agent's row in the list goes to the item's
+	// session.
+	tab := rowWith(s, "Needs you  1") + 1
 	mouseClick(t, term, 4, tab, tuitest.MouseLeft, 0)
 	mouseClick(t, term, 4, tab, tuitest.MouseLeft, 0)
 	switched := func(rows []lsRow) bool {

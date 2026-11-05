@@ -240,6 +240,10 @@ func validateAgentWork(cfg *UserConfig, result *ValidationResult) {
 		warn("agents", "host_program_status", fmt.Sprintf("'%s' is not a valid value (allowed: %s, %s); read as %s",
 			cfg.Agents.HostProgramStatus, HostProgramStatusAuto, HostProgramStatusOff, HostProgramStatusAuto))
 	}
+	if v := strings.ToLower(strings.TrimSpace(cfg.Agents.ViewList)); v != "" && v != NormalizeAgentsViewList(v) {
+		warn("agents", "view_list", fmt.Sprintf("'%s' is not a valid value (allowed: %s); read as %s",
+			cfg.Agents.ViewList, strings.Join(AgentsViewLists, ", "), AgentsViewListColumn))
+	}
 	if v := strings.ToLower(strings.TrimSpace(cfg.Agents.SilentAfter)); v != "" && v != "off" {
 		if _, err := time.ParseDuration(v); err != nil {
 			warn("agents", "silent_after", fmt.Sprintf("'%s' is not a duration such as 10m; read as %s", cfg.Agents.SilentAfter, DefaultSilentAfter))

@@ -1274,6 +1274,7 @@ func DefaultConfig() *UserConfig {
 		Panes:        defaultPanesConfig(),
 		PasteBuffers: defaultPasteBuffersConfig(),
 		Review:       defaultReviewConfig(),
+		Agents:       AgentsConfig{ViewList: AgentsViewListColumn},
 		Keybindings: KeybindingsConfig{
 			LeaderKey: "ctrl+b",
 			WindowManagement: map[string][]string{
@@ -1800,6 +1801,9 @@ const (
 	ActionInboxStagePrev   = "inbox_stage_prev"
 	ActionInboxStageNext   = "inbox_stage_next"
 	ActionInboxBoardLayout = "inbox_board_layout"
+	// ActionInboxViewList folds the list column into a strip of chips above
+	// the focus, or opens it into the column again ([agents] view_list).
+	ActionInboxViewList = "inbox_view_list"
 	// ActionInboxArtifact opens what the agent under the cursor has shown,
 	// such as a TML form, on its Artifacts tab, and gives it the keys.
 	ActionInboxArtifact   = "inbox_artifact"
@@ -1897,6 +1901,7 @@ func getDefaultInboxKeybinds() map[string][]string {
 		ActionInboxStagePrev:   {"H", "shift+left"},
 		ActionInboxStageNext:   {"L", "shift+right"},
 		ActionInboxBoardLayout: {"B"},
+		ActionInboxViewList:    {"\\"},
 		ActionInboxArtifact:    {"o"},
 		ActionInboxDetailDown:  {"J", "ctrl+d"},
 		ActionInboxDetailUp:    {"K", "ctrl+u"},

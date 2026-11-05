@@ -2691,6 +2691,29 @@ fold_working = true   # default false
 choice wins over `fold_working`. The settings page has this option on the
 Behavior tab, as "Fold Working".
 
+## The agent list
+
+On a screen 80 columns or wider, the agents view (`ctrl+b i`) shows the list
+of agents as a column beside the focus. `view_list` sets that layout:
+
+```toml
+[agents]
+view_list = "column"   # default; "strip" or "auto"
+```
+
+| Value | What the view shows |
+|---|---|
+| `column` | The list column, for any number of agents |
+| `strip` | A strip of chips above the focus, when the chips fit on one row |
+| `auto` | The strip for two agents or fewer, and the column for more |
+
+The view shows the column for a folded group, the task board, a filter and a
+search. On a screen narrower than 80 columns the list fills the screen, and
+`l` opens the focus. `\` in the view switches between the column and the
+strip. tuios keeps that choice in `sidebar.json` in its state folder. The
+choice wins over `view_list`. The settings page has this option on the
+Behavior tab, as "Agent list".
+
 ## Report pane states to your terminal
 
 When tuios runs in a terminal that reads OSC 7501, the Program Status

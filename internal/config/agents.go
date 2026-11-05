@@ -68,6 +68,13 @@ type AgentsConfig struct {
 	// opens it. Nil means off. A fold or an open the person made with F or a
 	// click wins over it, and is kept in the client's state file.
 	FoldWorking *bool `toml:"fold_working,omitempty"`
+	// ViewList is how the agents view shows its list of agents on a screen
+	// wide enough for two columns: "column" (the default) keeps the list
+	// column beside the focus, "strip" folds the list into a row of chips
+	// above the focus, and "auto" folds it only for two agents or fewer. The
+	// list key (\ by default) switches it, and the choice is kept in the
+	// client's state file, where it wins over this value. See ViewListMode.
+	ViewList string `toml:"view_list,omitempty"`
 }
 
 // DefaultSilentAfter is the default of silent_after. A hooked harness reports
@@ -102,6 +109,29 @@ func (a AgentsConfig) On() bool { return a.Enabled == nil || *a.Enabled }
 
 // FoldWorkingOn reports whether the agents view folds Working by default.
 func (a AgentsConfig) FoldWorkingOn() bool { return a.FoldWorking != nil && *a.FoldWorking }
+
+// The values of [agents] view_list.
+const (
+	AgentsViewListColumn = "column"
+	AgentsViewListStrip  = "strip"
+	AgentsViewListAuto   = "auto"
+)
+
+// AgentsViewLists is every value [agents] view_list accepts.
+var AgentsViewLists = []string{AgentsViewListColumn, AgentsViewListStrip, AgentsViewListAuto}
+
+// NormalizeAgentsViewList reads an [agents] view_list value. Empty and
+// anything unrecognised mean the default, "column".
+func NormalizeAgentsViewList(v string) string {
+	switch v = strings.ToLower(strings.TrimSpace(v)); v {
+	case AgentsViewListStrip, AgentsViewListAuto:
+		return v
+	}
+	return AgentsViewListColumn
+}
+
+// ViewListMode is view_list with its default applied.
+func (a AgentsConfig) ViewListMode() string { return NormalizeAgentsViewList(a.ViewList) }
 
 // AgentsOffMessage is the one line a command, a verb or a key prints when it
 // is an agent feature and the agent features are off.

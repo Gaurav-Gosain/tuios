@@ -13054,3 +13054,20 @@ Run on 2026-11-05 on Linux. The fixed build passes in about 1 s.
 
 Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestSetUpAMachineBothWays$' -v .`.
+## The agents view keeps the list column
+
+`TestCockpitSideTabs` ends with `cockpitListLayouts`. It resizes the
+one-agent view to 160x40 and wants the agent in the list column, beside the
+focus. `\` must fold the list into the strip and open the column again. At
+70x30, with the strip chosen, the list must fill the screen.
+
+Run on 2026-11-05 on Linux on the branch feat/agents-view-list-column.
+
+| Bug | Fix removed | How | Tests that fail | Verdict |
+|---|---|---|---|---|
+| One or two agents fold into the strip on a wide screen | the whole change | the binary built from main | `TestCockpitSideTabs` ("one agent at 160x40 is not in the list column") | **caught** |
+| The strip is the default for two agents or fewer | `view_list` default | `NormalizeAgentsViewList` returns `auto` | `TestCockpitSideTabs` ("one agent at 160x40 is not in the list column") | **caught** |
+| The list key does nothing | the toggle | `CockpitToggleList` returns at once | `TestCockpitSideTabs` ("\ did not fold the list into the strip") | **caught** |
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestCockpitSideTabs$' -v .`.

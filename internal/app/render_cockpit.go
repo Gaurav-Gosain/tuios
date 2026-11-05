@@ -336,6 +336,7 @@ func (m *OS) drawCockpitUnderSheet(c *ckCanvas, l ckLook, top int, now time.Time
 func (m *OS) drawCockpit(c *ckCanvas, l ckLook, top int, now time.Time) {
 	st := &m.Inbox
 	ck := &st.ck
+	ck.stripShown = false
 	hdrY := 0
 	if c.h >= 32 {
 		hdrY = 1
@@ -381,7 +382,19 @@ func (m *OS) drawCockpit(c *ckCanvas, l ckLook, top int, now time.Time) {
 	}
 	// The strip draws no headings, so a folded group keeps the fleet
 	// column: it shows the fold, and the cursor can open it there.
-	strip := c.w >= ckOneColumn && agents <= 2 && !folded && !ck.board && !ck.needsOnly && st.Filter == "" && st.Select == "" && st.agents.query == ""
+	// [agents] view_list and the list key choose between the column and
+	// the strip; auto folds a fleet of two or fewer. The strip takes only a
+	// fleet whose chips fit on its row.
+	strip := c.w >= ckOneColumn && !folded && !ck.board && !ck.needsOnly && st.Filter == "" && st.Select == "" && st.agents.query == ""
+	switch m.ckListMode() {
+	case config.AgentsViewListStrip:
+		strip = strip && m.ckStripWidth(l) <= c.w-4
+	case config.AgentsViewListAuto:
+		strip = strip && agents <= 2
+	default:
+		strip = false
+	}
+	ck.stripShown = strip
 	focusX, focusW := fleetW+3, c.w-fleetW-5
 	switch {
 	case strip:
@@ -1536,35 +1549,65 @@ func (m *OS) drawCockpitStrip(c *ckCanvas, l ckLook, y, top int) int {
 		if !r.selectable() {
 			continue
 		}
-		var e sidebarAgentEntry
-		if r.agent >= 0 {
-			e = ck.agents[r.agent]
-		}
-		name, _, _, _ := m.ckRowFacts(r, e)
-		g, gInk := l.ckMark(e.State, e.DoneSeen)
-		if r.hasItem {
-			g, gInk = l.ckItemMark(r.item)
-		}
-		if m.ckArtFormRow(r, e) != "" {
-			g, gInk = l.g(ckGlyphNeeds), pal.Attention
-		}
-		bg, nameInk := l.panel, pal.FgDim
-		if r.key == sel.key {
-			bg, nameInk = l.cursor, pal.Fg
-		}
+		chip, art := m.ckStripChip(l, r, r.key == sel.key)
 		x0 := x
-		x = c.text(x, y, 0, ckSeg{t: " " + g + " ", fg: gInk, bg: bg}, ckSeg{t: name + " ", fg: overlay.Readable(nameInk, bg), bg: bg, attrs: ckBold})
+		x = c.text(x, y, 0, chip...)
 		c.mark(pal, x0, y, x-x0, 1, overlay.RowState{Cursor: r.key == sel.key, Focused: true})
 		ck.hits = append(ck.hits, ckHit{x0: x0, y0: top + y, x1: x, y1: top + y + 1, kind: ckHitRow, key: r.key})
-		if r.agent >= 0 && m.ckArtifactNew(e, false) {
+		if art != nil {
 			// A surface the person has not seen: the chip opens it.
 			cx := x + 1
-			x = c.text(cx, y, 0, ckSeg{t: l.g(ckGlyphNeeds) + " " + ckArtChip, fg: pal.Attention, attrs: ckBold})
+			x = c.text(cx, y, 0, art...)
 			ck.hits = append([]ckHit{{x0: cx, y0: top + y, x1: x, y1: top + y + 1, kind: ckHitAction, action: "artrow:" + r.key}}, ck.hits...)
 		}
 		x += 2
 	}
 	return y + 1
+}
+
+// ckStripChip is the strip's chip for row r: its mark and name, and the
+// new artifact chip after it, nil when there is none.
+func (m *OS) ckStripChip(l ckLook, r ckRow, cursor bool) (chip, art []ckSeg) {
+	ck := &m.Inbox.ck
+	pal := l.pal
+	var e sidebarAgentEntry
+	if r.agent >= 0 {
+		e = ck.agents[r.agent]
+	}
+	name, _, _, _ := m.ckRowFacts(r, e)
+	g, gInk := l.ckMark(e.State, e.DoneSeen)
+	if r.hasItem {
+		g, gInk = l.ckItemMark(r.item)
+	}
+	if m.ckArtFormRow(r, e) != "" {
+		g, gInk = l.g(ckGlyphNeeds), pal.Attention
+	}
+	bg, nameInk := l.panel, pal.FgDim
+	if cursor {
+		bg, nameInk = l.cursor, pal.Fg
+	}
+	chip = []ckSeg{{t: " " + g + " ", fg: gInk, bg: bg}, {t: name + " ", fg: overlay.Readable(nameInk, bg), bg: bg, attrs: ckBold}}
+	if r.agent >= 0 && m.ckArtifactNew(e, false) {
+		art = []ckSeg{{t: l.g(ckGlyphNeeds) + " " + ckArtChip, fg: pal.Attention, attrs: ckBold}}
+	}
+	return chip, art
+}
+
+// ckStripWidth is how many cells the strip's chips take, from its first chip
+// to the end of its last.
+func (m *OS) ckStripWidth(l ckLook) int {
+	w := 0
+	for _, r := range m.Inbox.ck.rows {
+		if !r.selectable() {
+			continue
+		}
+		chip, art := m.ckStripChip(l, r, false)
+		w += ckWidth(chip...) + 2
+		if art != nil {
+			w += 1 + ckWidth(art...)
+		}
+	}
+	return max(w-2, 0)
 }
 
 // cockpitEmptyLines is what the cockpit says when it has no rows, nil when it
@@ -1806,6 +1849,14 @@ func (m *OS) cockpitHints(now time.Time) []overlay.Hint {
 	hints = append(hints, m.keyHints(config.ActionInboxNewAgent, "new agent", config.ActionInboxBoard, board)...)
 	if st.ck.board && m.GetRenderWidth() >= ckOneColumn {
 		hints = append(hints, m.keyHints(config.ActionInboxBoardLayout, "columns")...)
+	}
+	if !st.ck.board && m.GetRenderWidth() >= ckOneColumn {
+		// Optional, so a narrow footer gives it up first: ? lists it too.
+		list := "strip"
+		if st.ck.stripShown {
+			list = "list"
+		}
+		hints = append(hints, overlay.Optional(m.keyHints(config.ActionInboxViewList, list))...)
 	}
 	hints = append(hints, m.keyHints(config.ActionInboxReview, "review", config.ActionInboxFilter, "filter", config.ActionInboxSelect, "search")...)
 	if ok && r.kind != ckRowHead {
@@ -2182,7 +2233,11 @@ func (m *OS) ckApprovalLines(it session.AttentionItem, where string, width int, 
 	detail = append(detail, "  in "+where)
 	if slices.Contains(it.Options, session.ApprovalAlways) && len(it.AlwaysScope) > 0 {
 		for _, rule := range it.AlwaysScope {
-			detail = append(detail, wrapPlain("  Always also allows "+printableTitle(rule), width)...)
+			// wrapPlain drops the indent of a line it wraps, so it is added
+			// to each line after.
+			for _, l := range wrapPlain("Always also allows "+printableTitle(rule), max(width-2, 8)) {
+				detail = append(detail, "  "+l)
+			}
 		}
 	}
 	detail = append(detail, inboxRiskLines(it, width)...)

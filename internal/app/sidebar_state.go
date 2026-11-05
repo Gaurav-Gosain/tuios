@@ -100,6 +100,9 @@ type sidebarStateFile struct {
 	// BoardList says the person chose the task board's list over its
 	// columns (B in the agents view).
 	BoardList bool `json:"board_list,omitempty"`
+	// AgentsList is the agents view's list layout the person chose with the
+	// list key, "column" or "strip". Absent means [agents] view_list decides.
+	AgentsList string `json:"agents_list,omitempty"`
 	// HostsOrder is the user's drag-defined order of the other machines' groups
 	// in the sessions section, and HostsCollapsed names the machines whose
 	// group is folded shut, sorted for the same reason ReposCollapsed is.
@@ -153,6 +156,9 @@ func (m *OS) loadSidebarState() {
 	m.Inbox.ck.spawnPreset = st.SpawnPreset
 	m.Inbox.ck.ckFoldsFromFile(st.AgentsFolds)
 	m.Inbox.ck.boardList = st.BoardList
+	if st.AgentsList == config.AgentsViewListColumn || st.AgentsList == config.AgentsViewListStrip {
+		m.Inbox.ck.listMode = st.AgentsList
+	}
 	if len(st.AgentNoticesDismissed) > 0 {
 		m.agentNoticesDismissed = make(map[string]bool, len(st.AgentNoticesDismissed))
 		for _, k := range st.AgentNoticesDismissed {
@@ -246,6 +252,7 @@ func (m *OS) saveSidebarState() {
 		SpawnPreset:           m.Inbox.ck.spawnPreset,
 		AgentsFolds:           m.Inbox.ck.ckFoldsToFile(),
 		BoardList:             m.Inbox.ck.boardList,
+		AgentsList:            m.Inbox.ck.listMode,
 		AgentNoticesDismissed: collapsedRepoList(m.agentNoticesDismissed),
 		Collapsed:             m.SidebarCollapsed,
 		SectionSplit:          m.SidebarSectionSplit,

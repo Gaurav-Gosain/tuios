@@ -1120,6 +1120,12 @@ var optionSpecs = []Option{
 		Description: "Fold the Working group of the agents view. F folds or opens a group, and the view keeps that choice.",
 		Default:     "false",
 	},
+	{
+		Path: "agents.view_list", Type: OptionString, Section: "agents",
+		Description: "How the agents view shows its list on a wide screen: a column beside the focus, a strip of chips above it, or a strip for two agents or fewer. The \\ key switches it, and the view keeps that choice.",
+		Accepted:    AgentsViewLists,
+		Default:     AgentsViewListColumn,
+	},
 
 	// [tasks]. The daemon reads it when it starts and when the file changes.
 	{

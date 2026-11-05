@@ -208,7 +208,8 @@ func TestInboxShowsTheWholePrompt(t *testing.T) {
 	m.OpenInbox("")
 	out, _, _ := m.renderInbox()
 	plain := ansi.Strip(out)
-	flat := strings.Join(strings.Fields(plain), " ")
+	// The card's edge starts each line it wraps onto.
+	flat := strings.Join(strings.Fields(strings.ReplaceAll(plain, "▌", " ")), " ")
 	for _, want := range []string{"the-end-of-the-command", "Always also allows Bash(go test:*) in .claude/settings.local.json"} {
 		if !strings.Contains(flat, want) {
 			t.Errorf("the Inbox does not show %q:\n%s", want, plain)
