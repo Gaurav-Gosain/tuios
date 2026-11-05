@@ -87,6 +87,9 @@ type DaemonEvent struct {
 	Type    string `json:"type"`
 	Session string `json:"session,omitempty"`
 	Window  string `json:"window,omitempty"`
+	// Key and Value are an option-set's option path and value.
+	Key   string `json:"key,omitempty"`
+	Value string `json:"value,omitempty"`
 }
 
 // Notice is a desktop notification a program in a session sent.

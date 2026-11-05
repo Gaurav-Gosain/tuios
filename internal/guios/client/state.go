@@ -474,6 +474,13 @@ func (k *stateKeeper) watch() {
 		return
 	}
 	defer vc.Close()
+	// The theme a session was told with set-option before guios came:
+	// option-set says the ones after.
+	for _, key := range ThemeOptions {
+		if v, ok := sessionOption(vc, key); ok {
+			k.c.emit(proto.Message{Event: "daemon", Daemon: &proto.DaemonEvent{Type: "option-set", Key: key, Value: v}})
+		}
+	}
 	if err := subscribeKnown(vc, []string{
 		"session-created", "session-closed", "client-session-changed", "window-created", "window-closed",
 		"window-retitled", "window-exit", "window-moved", "window-focused", "window-minimized", "window-restored",
@@ -486,6 +493,8 @@ func (k *stateKeeper) watch() {
 		"transcript", "agent-message", "task-claimed", "task-finished", "task-changed", "agent-activity",
 		// A judge's verdict, which the fan comparison reads again on.
 		"fan-verdict",
+		// tuios set-config on a theme, which guios follows.
+		"option-set",
 	}); err != nil {
 		k.c.end()
 		return
@@ -504,8 +513,17 @@ func (k *stateKeeper) watch() {
 			Title   string `json:"title"`
 			Body    string `json:"body"`
 			Message string `json:"message"`
+			Key     string `json:"key"`
+			Value   string `json:"value"`
 		}
 		_ = json.Unmarshal(line, &ev)
+		if ev.Type == "option-set" {
+			// No pane changed. Only the theme options reach the app.
+			if slices.Contains(ThemeOptions, ev.Key) {
+				k.c.emit(proto.Message{Event: "daemon", Daemon: &proto.DaemonEvent{Type: ev.Type, Session: ev.Session, Key: ev.Key, Value: ev.Value}})
+			}
+			continue
+		}
 		debugf("event %s: %s", k.c.host, ev.Type)
 		if ev.Type == "window-closed" || ev.Type == "agent-state" {
 			// The daemon records an ended conversation on either.
@@ -599,6 +617,27 @@ func firstOf(s ...string) string {
 func looksLikePrompt(t string) bool {
 	at, colon := strings.IndexByte(t, '@'), strings.IndexByte(t, ':')
 	return at > 0 && colon > at
+}
+
+// ThemeOptions are the session options that choose the tuios theme.
+var ThemeOptions = []string{"appearance.theme", "appearance.theme_light"}
+
+// sessionOption is the value set-option gave key on the daemon's default
+// session, and false when no set-option did: a value from config.toml or
+// the default is guios's to read from the file.
+func sessionOption(vc *session.VerbClient, key string) (string, bool) {
+	raw, err := vc.Call("get-option", map[string]any{"key": key})
+	if err != nil {
+		return "", false
+	}
+	var res struct {
+		Value  string `json:"value"`
+		Source string `json:"source"`
+	}
+	if json.Unmarshal(raw, &res) != nil || res.Source != "session" {
+		return "", false
+	}
+	return res.Value, true
 }
 
 // unknownEventType matches the daemon's refusal of an event type it does
