@@ -57,6 +57,8 @@ type quickTerm struct {
 	// shows or hides the scratch.
 	seen      string
 	seenFocus bool
+	// pressed is when the key last showed or hid the dropdown (quickHold).
+	pressed time.Time
 	// route sends what is typed to the scratch from the frame of the key
 	// that shows it, and back to the pane from the key that hides it, until
 	// the terminal that should have the keyboard has it (since routeAt).
@@ -208,16 +210,22 @@ func scratchFocused(s *proto.Session) bool {
 
 // toggleScratch is the TUI's scratch key (toggle_scratch).
 //
-// It follows the daemon: the scratch hides while the shown session's focus
-// is on it, or the dropdown shows it, and shows otherwise. So a toggle
-// never falls out of step with what the daemon and a TUI show.
+// It decides by what is on the screen alone, the dropdown: a press shows
+// it when it is not shown, and hides it when it is. The daemon's focus,
+// which a TUI moves too, comes in through quickChanged, and a hide always
+// takes the focus off the scratch, so the two never stay apart.
 func (a *App) toggleScratch() {
-	if a.quick.drop || scratchFocused(a.session(a.selected)) {
+	if a.quick.drop {
 		a.hideDrop()
 	} else {
 		a.showDrop()
 	}
 }
+
+// quickHold is how long after a press of the key the daemon's focus does
+// not move the dropdown: a state read before the press took effect would
+// flip it back, and the press would seem to do nothing.
+const quickHold = time.Second
 
 // showDrop shows the scratch dropdown over the panes, starting the scratch
 // first if the session has none.
@@ -232,6 +240,7 @@ func (a *App) showDrop() {
 		a.hideQuick()
 	}
 	q.drop, q.focusDrop, q.session = true, true, s.ID
+	q.pressed = time.Now()
 	a.openScratch(s)
 	// The keys go to the scratch from this frame on, though its view is
 	// built only in the next one.
@@ -258,6 +267,7 @@ func (a *App) hideDrop() {
 		return
 	}
 	q.drop = false
+	q.pressed = time.Now()
 	if s != nil {
 		if back := a.backPane(s); back != "" {
 			a.routeTo(back)
@@ -365,7 +375,7 @@ func (a *App) quickChanged() {
 		}
 	case f != q.seenFocus:
 		q.seenFocus = f
-		if !q.shown && q.drop != f {
+		if !q.shown && q.drop != f && time.Since(q.pressed) > quickHold {
 			q.drop, q.focusDrop, q.session = f, f, s.ID
 			if !f {
 				a.defer_(a.focusTerminal)
