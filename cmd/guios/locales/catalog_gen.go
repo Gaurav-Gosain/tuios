@@ -7290,11 +7290,11 @@ func (msgs Messages) CockpitQuestion() string {
 	return Catalog.Format(msgs.locale, "cockpitQuestion", nil)
 }
 
-// CockpitQueued says "Waiting"
+// CockpitQueued says "Queued"
 // in the language the app shows.
 func CockpitQueued() string { return In(i18n.Locale()).CockpitQueued() }
 
-// CockpitQueued says "Waiting"
+// CockpitQueued says "Queued"
 // in the language of msgs.
 func (msgs Messages) CockpitQueued() string {
 	return Catalog.Format(msgs.locale, "cockpitQueued", nil)
@@ -7450,11 +7450,11 @@ func (msgs Messages) CockpitSentNow(name string) string {
 	return Catalog.Format(msgs.locale, "cockpitSentNow", map[string]any{"name": name})
 }
 
-// CockpitQueuedFor says "{name} gets the message when it rests."
+// CockpitQueuedFor says "Queued for {name}. It gets it when it rests."
 // in the language the app shows.
 func CockpitQueuedFor(name string) string { return In(i18n.Locale()).CockpitQueuedFor(name) }
 
-// CockpitQueuedFor says "{name} gets the message when it rests."
+// CockpitQueuedFor says "Queued for {name}. It gets it when it rests."
 // in the language of msgs.
 func (msgs Messages) CockpitQueuedFor(name string) string {
 	return Catalog.Format(msgs.locale, "cockpitQueuedFor", map[string]any{"name": name})
@@ -12542,16 +12542,6 @@ func CockpitWaitsAtPrompt() string { return In(i18n.Locale()).CockpitWaitsAtProm
 // in the language of msgs.
 func (msgs Messages) CockpitWaitsAtPrompt() string {
 	return Catalog.Format(msgs.locale, "cockpitWaitsAtPrompt", nil)
-}
-
-// CockpitSentTo says "Sent to {name}."
-// in the language the app shows.
-func CockpitSentTo(name string) string { return In(i18n.Locale()).CockpitSentTo(name) }
-
-// CockpitSentTo says "Sent to {name}."
-// in the language of msgs.
-func (msgs Messages) CockpitSentTo(name string) string {
-	return Catalog.Format(msgs.locale, "cockpitSentTo", map[string]any{"name": name})
 }
 
 // CockpitYouTo says "You → {name}"

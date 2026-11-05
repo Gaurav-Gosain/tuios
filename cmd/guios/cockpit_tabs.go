@@ -644,6 +644,13 @@ func (a *App) mailCard(c *ui.Context, pal *palette, m *ckMail, msg ckMsg, in boo
 					ui.Column(c.Key("rep-"+itoa(int(rep.ID)))).Gap(4).Margin(4, 0, 0, 0).Padding(8, 12).Radius(rControl).Background(pal.accent.Alpha(0.10)).Children(func() {
 						ui.Row(c).Gap(6).AlignItems(ui.Center).Children(func() {
 							ui.Text(c, locales.CockpitYouTo(rep.ToName)).FontSize(fsSmall).FontWeight(wSemibold).TextColor(pal.text)
+							if rep.Unread {
+								// The agent has not read it yet: it waits in
+								// its inbox (council round 3, S3).
+								chip(c, pal, pal.chip, pal.textMuted, func() {
+									ui.Text(c, locales.CockpitQueued()).FontSize(fsSmall).FontWeight(wMedium).SingleLine()
+								}).Shrink(0)
+							}
 							ui.Spacer(c)
 							ui.Text(c, ago(rep.SentAt/int64(time.Millisecond), c.Now())).FontSize(fsSmall).TextColor(pal.textFaint)
 						})
@@ -727,7 +734,7 @@ func (a *App) sendMail(sess, to string, m *ckMail) {
 
 // mailAnswered follows a reply to an agent: the person's unread mail from
 // it is read now, so its count, the badge, its sidebar row and its Inbox
-// item go, and a toast says the reply went out.
+// item go, and a toast says the reply waits in the agent's inbox.
 func (a *App) mailAnswered(sess, from, name string) {
 	cl := a.cockpitClient()
 	m := a.ck.tabs.mail
@@ -744,7 +751,9 @@ func (a *App) mailAnswered(sess, from, name string) {
 			}
 		}
 	}
-	a.toast(locales.CockpitSentTo(name))
+	// Mail waits in the agent's inbox until the agent reads it: it is not
+	// sent to the agent yet, as the TUI's "1 queued" says.
+	a.toast(locales.CockpitQueuedFor(name))
 	go func() {
 		for t := range threads {
 			// Not a peek: the person's inbox read marks the thread read,
