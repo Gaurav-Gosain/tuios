@@ -88,6 +88,10 @@ type termEntry struct {
 // App is the app's state. It lives on the main thread: other goroutines
 // change it through Window.Update.
 type App struct {
+	// diffW is the width each diff's rows were last sized to
+	// (diffWidthSeen).
+	diffW map[uint64]float32
+
 	// leftCrowded says the window is too narrow for the sidebar beside
 	// the panes, which then hides unless leftForced (view.go).
 	leftCrowded, leftForced bool

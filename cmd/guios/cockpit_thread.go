@@ -637,6 +637,22 @@ func (a *App) editItem(c *ui.Context, pal *palette, th *ckThread, it *ckItem, mo
 	})
 }
 
+// diffWidthSeen asks for one more frame when a diff's width differs from
+// the one its rows were last sized to. The width is the last frame's, so
+// a diff's first frame has none: with nothing else to paint, an idle app
+// would keep rows that stop at their text (council round 3, visual S1).
+// A width that holds asks for nothing.
+func (a *App) diffWidthSeen(c *ui.Context, id uint64, w float32) {
+	if prev, ok := a.diffW[id]; ok && prev == w {
+		return
+	}
+	if a.diffW == nil || len(a.diffW) > 256 {
+		a.diffW = map[uint64]float32{}
+	}
+	a.diffW[id] = w
+	c.Invalidate()
+}
+
 func diffLineCount(d *transcriptview.Diff) int {
 	n := 0
 	for _, h := range d.Hunks {
@@ -661,6 +677,7 @@ func (a *App) diffView(c *ui.Context, pal *palette, d *transcriptview.Diff, all 
 	// The lines' colors run the card's width, however short the lines:
 	// a percent of a sideways scroll's content is of the content.
 	view := sc.Bounds().W
+	a.diffWidthSeen(c, sc.ID(), view)
 	sc.Children(func() {
 		ui.Column(c).Padding(0, 0, 6, 0).MinWidth(view).AlignItems(ui.Stretch).Children(func() {
 			for hi, h := range d.Hunks {
