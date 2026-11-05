@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"encoding/json"
 	"image/color"
 	"strconv"
 	"strings"
@@ -35,6 +36,14 @@ import (
 //     1, 2 and 3 answer it, with the same settle time and second press for a
 //     risky allow as in the attention list.
 //   - Under that, the reply editor, opened with r.
+//
+// The reads and the subscription go to the daemon that holds the pane. On a
+// client attached through a host, that is the far daemon, over the link: the
+// session on screen is the far daemon's, and so is the attach nonce. Sent to
+// this machine's daemon, the nonce proves nothing and the read is refused as
+// not_human. The far daemon holds the read to its own rules for a link: the
+// nonce of an attach that came over the link-human socket, and respond in the
+// link policy. See session/verb_agent_transcript.go.
 //
 // Everything the agent wrote is drawn as the agent's: a quiet gutter mark and
 // the dim ink. Nothing in it is a link or a key. At most threadsKept threads
@@ -287,10 +296,29 @@ func (m *OS) InboxThreadFetch() tea.Cmd {
 	return tea.Batch(cmds...)
 }
 
+// threadCaller is how the thread reaches the daemon that holds the pane:
+// the far daemon through the link on a client attached through a host, else
+// what the Inbox calls. Each call dials: a read follows a transcript event,
+// and the events are already coalesced into one read in flight.
+func (m *OS) threadCaller() inboxVerbCall {
+	if m.Inbox.call != nil || m.AttachedHost == "" {
+		return m.inboxCaller()
+	}
+	dial := m.verbDialer()
+	return func(verb string, params map[string]any, timeout time.Duration) (json.RawMessage, error) {
+		client, err := dial()
+		if err != nil {
+			return nil, err
+		}
+		defer func() { _ = client.Close() }()
+		return client.CallWithTimeout(verb, params, timeout)
+	}
+}
+
 // threadPageCmd reads a transcript page: the newest entries, or those after
 // cursor.
 func (m *OS) threadPageCmd(t *agentThread, after string) tea.Cmd {
-	call, nonce := m.inboxCaller(), m.inboxNonce()
+	call, nonce := m.threadCaller(), m.inboxNonce()
 	key, sess, window := t.key, t.session, t.window
 	var stateAt int64
 	if e, ok := m.cockpitAgent(); ok && agentKey(e) == key {
@@ -321,7 +349,7 @@ func (m *OS) threadPageCmd(t *agentThread, after string) tea.Cmd {
 
 // threadRecapCmd reads an agent's recap.
 func (m *OS) threadRecapCmd(t *agentThread, recapKey string) tea.Cmd {
-	call, key, sess, window := m.inboxCaller(), t.key, t.session, t.window
+	call, key, sess, window := m.threadCaller(), t.key, t.session, t.window
 	return func() tea.Msg {
 		rc, err := agentActivityRecapCall(call, sess, window, 0)
 		return threadRecapMsg{key: key, recapKey: recapKey, recap: rc, err: err}
@@ -338,7 +366,7 @@ func (m *OS) applyThreadPage(msg threadPageMsg) tea.Cmd {
 	t.gen++
 	if msg.err != nil {
 		t.read = true
-		t.err = threadReadError(msg.err)
+		t.err = threadReadError(msg.err, m.AttachedHost)
 		if threadNoTranscript(msg.err) && !msg.after {
 			// No file to read for this pane: show the recap, as for a
 			// harness with no reader, until the agent's state changes.
@@ -431,16 +459,35 @@ func threadNoTranscript(err error) bool {
 	return ok && (ce.Code == session.ErrVerbNoTranscript || ce.Code == session.ErrVerbUnsupportedHarness)
 }
 
-// threadReadError is a failed read as the thread says it.
-func threadReadError(err error) string {
+// threadReadError is a failed read as the thread says it. host is the
+// machine the client is attached through, "" for this one.
+func threadReadError(err error, host string) string {
+	daemon := "The daemon"
+	if host != "" {
+		daemon = "tuios on " + printableTitle(host)
+	}
 	if ce, ok := err.(*session.VerbCallError); ok {
 		switch ce.Code {
 		case session.ErrVerbNoTranscript:
 			return "This agent has no transcript to read yet."
 		case session.ErrVerbUnknownVerb:
-			return "This daemon cannot read transcripts. " + restartHintPlain
+			return daemon + " cannot read transcripts. " + restartHintPlain
 		case session.ErrVerbNotHuman:
-			return "Only your own client reads a transcript."
+			// No nonce of a live attach: the daemon restarted under this
+			// client, or the client runs in a pane, or the link did not come
+			// from a person's client.
+			return daemon + " did not accept this client as the person, so it did not send the conversation. Attach again from a terminal outside tuios."
+		case session.ErrVerbForbidden:
+			// The far daemon's link policy. The hint names what is missing
+			// and the table that grants it, on that machine.
+			if h := ce.Hint; host != "" && h != nil && len(h.Missing) > 0 && h.Table != "" {
+				quoted := make([]string, len(h.Missing))
+				for i, c := range h.Missing {
+					quoted[i] = `"` + c + `"`
+				}
+				return daemon + " does not let this machine read agent conversations. To allow it, add " +
+					strings.Join(quoted, ", ") + " to allow in " + h.Table + " in the config on " + printableTitle(host) + "."
+			}
 		}
 	}
 	return "The transcript could not be read: " + err.Error()
@@ -470,10 +517,15 @@ func (m *OS) startThreadWatch(t *agentThread) tea.Cmd {
 	ch := make(chan tea.Msg, 4)
 	ts.watchKey, ts.stop, ts.events = t.key, cancel, ch
 	build := m.DaemonClient.ClientVersion()
+	dial := func() (*session.VerbClient, error) { return session.DialVerbClientAs(build) }
+	if m.AttachedHost != "" {
+		// The far daemon emits the pane's transcript events.
+		dial = m.verbDialer()
+	}
 	key, sess, window := t.key, t.session, t.window
 	go func() {
 		defer close(ch)
-		client, err := session.DialVerbClientAs(build)
+		client, err := dial()
 		if err != nil {
 			return
 		}

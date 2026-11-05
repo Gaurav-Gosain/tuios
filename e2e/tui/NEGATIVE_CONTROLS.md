@@ -13194,3 +13194,27 @@ Run on 2026-11-05 on Linux. The fixed build passes in about 14 s.
 
 Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestSetUpTailnetMachinesOnATerminal$' -v .`.
+## The Thread tab of an agent on a host
+
+`TestThreadReadsAnAgentOnAHost` attaches a client here to a session on build
+over the fake ssh link. A pane on build is joined to a Claude Code transcript
+by the real hook. With build's default policy, the Thread tab must name the
+missing `respond` and the table to change. After `config apply` on build gives
+`respond`, the tab must show build's conversation and a line written to the
+file after that. A caller here through the hub, with no nonce or with a nonce
+build never issued, must get `not_human`.
+
+On main the test fails at the first step: the tab shows `Only your own client
+reads a transcript.`. The read went to this machine's daemon, which logs
+`Verb agent-transcript refused ... not_human`: it holds neither the pane nor
+build's attach nonce.
+
+Run on 2026-11-05 on Linux on the branch fix/far-transcript-read.
+
+| Fix removed | How | Failure | Verdict |
+|---|---|---|---|
+| Thread reads go to the far daemon | `threadCaller` always returns `inboxCaller()` | `the Thread tab of an agent on build does not say that build's policy lacks respond`, with the tab showing `tuios on build did not accept this client as the person` | **caught** |
+| The transcript watch goes to the far daemon | `startThreadWatch` always dials this machine | `the Thread tab never showed build's conversation` | **caught** |
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestThreadReadsAnAgentOnAHost$' -v .`.
