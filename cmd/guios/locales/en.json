@@ -2281,5 +2281,22 @@
   "cockpitAskSnooze": "Snooze {name}?",
   "cockpitAskWake": "Show {name} again?",
   "cockpitNoSnoozeHeld": "A held approval cannot be snoozed. Answer it, or let it go back to the pane.",
-  "spawnMeantToReply": "Meant to reply? Press Esc to move this text to the reply box."
+  "spawnMeantToReply": "Meant to reply? Press Esc to move this text to the reply box.",
+  "sidebarMorePanes": "{count, plural, one {# more pane} other {# more panes}}",
+  "@sidebarMorePanes": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "sidebarPanes": "{count, plural, one {# pane} other {# panes}}",
+  "@sidebarPanes": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "sidebarFilesTip": "Show the files of this session"
 }

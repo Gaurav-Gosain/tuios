@@ -104,6 +104,10 @@ type App struct {
 	// sbNeeds is what needs the person, read once a frame for the
 	// sidebar's agent rows (sidebar_agents.go).
 	sbNeeds []ckNeed
+	// sbLabels are the sidebar's names for sessions that would read the
+	// same, once a frame (sessionLabels).
+	sbLabels map[string]string
+	sbSeen   map[[2]string]int
 	// motion notes what moves the panes from frame to frame (motion.go).
 	motion motionWatch
 	// usage is the last reading of the resource views, usageOpen whether

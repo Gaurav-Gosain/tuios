@@ -127,6 +127,8 @@ func b2f(b bool) float32 {
 }
 
 func (a *App) view(c *ui.Context) {
+	// The names that tell sessions apart, for the sidebar and the palette.
+	a.sbLabels = a.sessionLabels()
 	if a.dbg.on {
 		t0 := time.Now()
 		defer func() { a.debugFrame(time.Since(t0)) }()
@@ -470,7 +472,9 @@ func (a *App) sidebar(c *ui.Context, pal *palette, bar ui.TitleBar) {
 	// The space between and below the rows moves the window, as the top
 	// bar does.
 	ui.Scroll(c.Key("sessions")).Grow(1).Padding(0, 10, 16, 10).DragWindow().Children(func() {
+		a.railSearch(c, pal)
 		a.agentsRow(c, pal)
+		a.needsSection(c, pal)
 		n := 0  // the rows shown, for ⌘1–9 (Ctrl+1–9 elsewhere)
 		gi := 0 // the groups shown, the first of which sits higher
 		// This machine's projects first, unlabeled; then each host's,
@@ -487,9 +491,11 @@ func (a *App) sidebar(c *ui.Context, pal *palette, bar ui.TitleBar) {
 		// Then the machines this machine's daemon links, each with its
 		// sessions under it.
 		a.machinesSection(c, pal, &gi, &n)
+		a.filesRow(c, pal)
 		if a.set.SessionHistory {
 			a.endedSections(c, pal)
 		}
+		a.newSessionRow(c, pal)
 	})
 	// The copies between machines stay in view under the list.
 	ui.Column(c.Key("xfers")).Padding(0, 10, 0, 10).Shrink(0).Children(func() { a.transfersSection(c, pal) })
@@ -614,21 +620,25 @@ func (a *App) groupView(c *ui.Context, pal *palette, g group, gi int, n *int) {
 			}
 		}
 	})
+	ordered, nested := worktreeOrder(g.sessions)
 	if collapsed {
 		// The session shown stays in view.
-		for _, s := range g.sessions {
+		for _, s := range ordered {
 			if s.ID == a.selected {
-				a.sessionRow(c, pal, s, n)
+				a.sessionRow(c, pal, s, n, nested[s.ID])
 			}
 		}
 		return
 	}
-	for _, s := range g.sessions {
-		a.sessionRow(c, pal, s, n)
+	for _, s := range ordered {
+		a.sessionRow(c, pal, s, n, nested[s.ID])
 	}
 }
 
-func (a *App) sessionRow(c *ui.Context, pal *palette, s *proto.Session, n *int) {
+// sessionRow is a session's row. nested is a session in a linked worktree
+// under its repository's session: it sits in by a step, with the branch
+// mark by its name.
+func (a *App) sessionRow(c *ui.Context, pal *palette, s *proto.Session, n *int, nested bool) {
 	*n++
 	index := *n
 	// While the agents view holds the main area, its sidebar entry is
@@ -641,7 +651,11 @@ func (a *App) sessionRow(c *ui.Context, pal *palette, s *proto.Session, n *int) 
 	if detailed {
 		h = rowH2
 	}
-	row := ui.Row(c.Key(s.ID)).Height(h).Padding(0, 10, 0, rowInset).Gap(10).AlignItems(ui.Center).Radius(rRow).Margin(0, 0, 1, 0)
+	inset := float32(rowInset)
+	if nested {
+		inset += 14
+	}
+	row := ui.Row(c.Key(s.ID)).Height(h).Padding(0, 10, 0, inset).Gap(10).AlignItems(ui.Center).Radius(rRow).Margin(0, 0, 1, 0)
 	hovered := row.Hovered()
 	if pal.dark {
 		// Room for the chosen row's edge in every row, so that choosing
@@ -710,7 +724,7 @@ func (a *App) sessionRow(c *ui.Context, pal *palette, s *proto.Session, n *int) 
 		// room is the width the name has: the line's, less what follows
 		// it there, from the last frame; 0 while unknown.
 		name := func(room float32) {
-			full := s.DisplayName(a.set.SessionName)
+			full := a.railName(s)
 			weight := wMedium
 			if s.Unread || lit {
 				weight = wSemibold
@@ -724,6 +738,15 @@ func (a *App) sessionRow(c *ui.Context, pal *palette, s *proto.Session, n *int) 
 			}
 			if s.Status == proto.Exited && !s.Unread {
 				name.TextColor(pal.textMuted)
+			}
+		}
+		// The mark's place, kept when there is no mark, so that one
+		// coming moves no text.
+		mark := func() {
+			if a.sessionMarked(s) {
+				statusIconP(c, pal, s.Status, s.Unread, s.Progress, 14)
+			} else {
+				ui.Box(c).Size(14, 14).Shrink(0)
 			}
 		}
 		whenText := ago(s.Since, c.Now())
@@ -749,13 +772,16 @@ func (a *App) sessionRow(c *ui.Context, pal *palette, s *proto.Session, n *int) 
 					room = b.W - natural(c, whenText, fsSmall, 0) - 14 - 3*sp2
 				}
 				line1.Children(func() {
+					if nested {
+						ui.Icon(c, branchIcon).Size(12, 12).TextColor(pal.textMuted).Shrink(0)
+					}
 					name(room)
 					ui.Spacer(c)
 					when()
-					statusIconP(c, pal, s.Status, s.Unread, s.Progress, 14)
+					mark()
 				})
-				line, msg := rowDetail(s, g, a.hostOf(s.ID).shortDir(s.WorkDir()))
-				if f := s.FocusPane(); !msg && f != nil && f.Shell != "" && line == s.DisplayName(a.set.SessionName) {
+				line, msg := a.sessionDetail(s, g)
+				if f := s.FocusPane(); !msg && f != nil && f.Shell != "" && line == a.railName(s) {
 					// A session named after its folder says its shell
 					// under the name, not the folder again.
 					line = f.Shell
@@ -768,6 +794,9 @@ func (a *App) sessionRow(c *ui.Context, pal *palette, s *proto.Session, n *int) 
 				}
 			})
 		} else {
+			if nested {
+				ui.Icon(c, branchIcon).Size(12, 12).TextColor(pal.textMuted).Shrink(0)
+			}
 			name(0)
 			// A branch of its own, as an agent's in a worktree, by the name.
 			if b := offBranch(g); b != "" {
@@ -775,25 +804,12 @@ func (a *App) sessionRow(c *ui.Context, pal *palette, s *proto.Session, n *int) 
 			}
 			ui.Spacer(c)
 			when()
-			statusIconP(c, pal, s.Status, s.Unread, s.Progress, 14)
+			mark()
 		}
 	})
 	a.workspaceBar(c, pal, s)
+	a.paneRows(c, pal, s)
 	a.agentRows(c, pal, s, a.sbNeeds)
-}
-
-// rowDetail is the second line of a session's detailed row: its program's
-// status message, else its worktree's branch and changes, else its folder,
-// dir. msg tells it is a message, which reads stronger than the others.
-func rowDetail(s *proto.Session, g *proto.GitInfo, dir string) (line string, msg bool) {
-	if s.Message != "" {
-		// A notification's text can run over lines: the row has one.
-		return strings.Join(strings.Fields(s.Message), " "), true
-	}
-	if g != nil {
-		return gitSummary(g), false
-	}
-	return dir, false
 }
 
 // renameStarted keeps a rename from ending in the frame it began in,

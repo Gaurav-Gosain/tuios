@@ -212,7 +212,7 @@ func (a *App) paletteItems() []paletteItem {
 			if detail != "" {
 				detail += " · "
 			}
-			it := paletteItem{session: s, title: s.DisplayName(a.set.SessionName), detail: detail + h.shortDir(s.WorkDir()),
+			it := paletteItem{session: s, title: a.railName(s), detail: detail + h.shortDir(s.WorkDir()),
 				run: func() { delete(a.prefs.Collapsed, s.Project); a.selectSession(id) }}
 			if i := slices.Index(order, id); i >= 0 && i < 9 {
 				it.keys[0] = actions.Glyphs("CmdOrCtrl+" + itoa(i+1))
@@ -239,7 +239,7 @@ func (a *App) paneItems() []paletteItem {
 			if len(s.Panes)+len(s.Others) < 2 {
 				continue
 			}
-			sid, name, h := s.ID, s.DisplayName(a.set.SessionName), a.hostOf(s.ID)
+			sid, name, h := s.ID, a.railName(s), a.hostOf(s.ID)
 			multiWS := len(s.Workspaces) > 1
 			add := func(p *proto.Pane, ws int, keys string) {
 				detail := name

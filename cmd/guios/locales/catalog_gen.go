@@ -12841,3 +12841,33 @@ func SpawnMeantToReply() string { return In(i18n.Locale()).SpawnMeantToReply() }
 func (msgs Messages) SpawnMeantToReply() string {
 	return Catalog.Format(msgs.locale, "spawnMeantToReply", nil)
 }
+
+// SidebarMorePanes says "{count, plural, one {# more pane} other {# more panes}}"
+// in the language the app shows.
+func SidebarMorePanes(count int) string { return In(i18n.Locale()).SidebarMorePanes(count) }
+
+// SidebarMorePanes says "{count, plural, one {# more pane} other {# more panes}}"
+// in the language of msgs.
+func (msgs Messages) SidebarMorePanes(count int) string {
+	return Catalog.Format(msgs.locale, "sidebarMorePanes", map[string]any{"count": count})
+}
+
+// SidebarPanes says "{count, plural, one {# pane} other {# panes}}"
+// in the language the app shows.
+func SidebarPanes(count int) string { return In(i18n.Locale()).SidebarPanes(count) }
+
+// SidebarPanes says "{count, plural, one {# pane} other {# panes}}"
+// in the language of msgs.
+func (msgs Messages) SidebarPanes(count int) string {
+	return Catalog.Format(msgs.locale, "sidebarPanes", map[string]any{"count": count})
+}
+
+// SidebarFilesTip says "Show the files of this session"
+// in the language the app shows.
+func SidebarFilesTip() string { return In(i18n.Locale()).SidebarFilesTip() }
+
+// SidebarFilesTip says "Show the files of this session"
+// in the language of msgs.
+func (msgs Messages) SidebarFilesTip() string {
+	return Catalog.Format(msgs.locale, "sidebarFilesTip", nil)
+}

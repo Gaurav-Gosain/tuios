@@ -1266,5 +1266,8 @@
   "cockpitAskSnooze": "暂缓 {name}?",
   "cockpitAskWake": "再次显示 {name}?",
   "cockpitNoSnoozeHeld": "暂留的审批不能暂缓。请回答它，或让它回到窗格。",
-  "spawnMeantToReply": "是想回复吗?按 Esc 把这段文字移到回复框。"
+  "spawnMeantToReply": "是想回复吗?按 Esc 把这段文字移到回复框。",
+  "sidebarMorePanes": "{count, plural, other {另外 # 个窗格}}",
+  "sidebarPanes": "{count, plural, other {# 个窗格}}",
+  "sidebarFilesTip": "显示此会话的文件"
 }
