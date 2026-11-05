@@ -257,6 +257,11 @@ const ckTabMinH = 120
 func (a *App) ckTab(c *ui.Context, pal *palette, t string, ag client.Agent) {
 	on := a.ck.tab == t
 	b := ui.ButtonBase(c.Key("tab-"+t)).Height(hControl+2).Padding(0, 10).Gap(6).AlignItems(ui.Center).Shrink(0).Radius(rRow).Label(ckTabTitle(t))
+	if b.Pressed() {
+		// The press state, as the other controls have (council round 4,
+		// feel S4).
+		b.Background(pressedQuiet(pal))
+	}
 	b.Draw(func(p *ui.Painter, r ui.Rect) {
 		if on {
 			p.Fill(ui.Rect{X: r.X + 6, Y: r.Y + r.H - 2, W: r.W - 12, H: 2}, pal.accent, 1)

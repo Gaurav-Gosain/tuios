@@ -63,6 +63,10 @@ func (a *App) ckViewButton(c *ui.Context, pal *palette, v int, label string, n i
 	switch {
 	case on:
 		chosen(b.Background(pal.rowSelected), pal)
+	case b.Pressed():
+		// The press state, as the other controls have (council round 4,
+		// feel S4).
+		b.Background(pressedQuiet(pal))
 	case b.Hovered():
 		b.Background(pal.rowHover)
 	}

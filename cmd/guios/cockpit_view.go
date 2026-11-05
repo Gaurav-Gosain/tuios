@@ -914,7 +914,10 @@ func newAgentButton(c *ui.Context, pal *palette, tip string) bool {
 	b := ui.ButtonBase(c.Key("ck-new")).Height(hControlSm).Padding(0, 10, 0, 8).Gap(6).Radius(rControl).AlignItems(ui.Center).Shrink(0).
 		Label(locales.CockpitNewAgent()).Tooltip(tip + " (n)")
 	face(b, pal, pal.control)
-	if b.Hovered() {
+	switch {
+	case b.Pressed():
+		b.Background(pal.control.Mix(pal.text, 0.12))
+	case b.Hovered():
 		b.Background(pal.controlHover)
 	}
 	b.Children(func() {

@@ -711,3 +711,7 @@ func onAttention(pal *palette) ui.Color {
 	}
 	return dark
 }
+
+// pressedQuiet is the ground of a quiet button (a header view, a tab) while
+// the pointer holds it down: a step past its hover ground.
+func pressedQuiet(pal *palette) ui.Color { return pal.rowHover.Mix(pal.text, 0.1) }
