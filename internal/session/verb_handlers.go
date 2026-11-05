@@ -626,6 +626,10 @@ func (d *Daemon) verbPopup(cs *connState, params json.RawMessage) (any, *verbErr
 		Scratch bool `json:"scratch"`
 		// ScratchName names the scratch pane. Empty is the built-in one.
 		ScratchName string `json:"scratch_name"`
+		// CwdFrom names a window whose folder the popup starts in, read
+		// from its process now, in place of cwd: a client's copy of a
+		// window's folder can be a read older than the last cd.
+		CwdFrom string `json:"cwd_from"`
 	}
 	if verr := decodeParams(params, &p); verr != nil {
 		return nil, verr
@@ -662,6 +666,9 @@ func (d *Daemon) verbPopup(cs *connState, params json.RawMessage) (any, *verbErr
 	}
 	if p.Workspace < 0 {
 		return nil, invalidParam("workspace", "workspace is a workspace number, e.g. 2. Omit it for the current one")
+	}
+	if p.Cwd == "" && p.CwdFrom != "" {
+		p.Cwd = sess.cwdFrom(p.CwdFrom)
 	}
 	// The same refusal new-window makes, for the same reason: a directory that
 	// cannot be entered would leave the command running in the wrong place with
