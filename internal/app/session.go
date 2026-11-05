@@ -561,6 +561,12 @@ func (m *OS) ApplyStateSyncFrom(state *session.SessionState, sourceID string) er
 	// A renumber goes first, so everything below reads the windows and the
 	// workspace maps under the numbers the state uses.
 	m.adoptWorkspaceRenumbering(state)
+	// A switch made elsewhere (tuios select-workspace, another client this
+	// one follows) slides like one made here. The workspace being left is
+	// kept before anything below changes it. See workspace_slide.go.
+	if to := clampWorkspace(state.CurrentWorkspace); to != m.CurrentWorkspace {
+		m.beginWorkspaceSlide(m.CurrentWorkspace, to)
+	}
 
 	// The daemon now holds what arrived here, which is not necessarily what
 	// this client last pushed, so the record of that push no longer describes

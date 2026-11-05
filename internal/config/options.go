@@ -325,7 +325,7 @@ var optionSpecs = []Option{
 	},
 	{
 		Path: "appearance.motion", Type: OptionString, Section: "appearance",
-		Description: "How much moves: none, basic (window slides and the copy sweep), or full (also overlay fades and the working-agent shimmer)",
+		Description: "How much moves: none, basic (window slides, workspace slides and the copy sweep), or full (also overlay fades and the working-agent shimmer)",
 		Accepted:    MotionLevels, Default: MotionFull,
 	},
 	{

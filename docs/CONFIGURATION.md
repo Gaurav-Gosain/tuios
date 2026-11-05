@@ -561,7 +561,7 @@ file_drag = false
 ## Animation speed
 
 `appearance.animation_speed` is the percent window animations run at: minimize
-and restore, snap, swap and zoom. 100 is the speed tuios ships with. 200 runs
+and restore, snap, swap, zoom and the workspace slide. 100 is the speed tuios ships with. 200 runs
 them in half the time, and 50 in twice the time.
 
 ```toml

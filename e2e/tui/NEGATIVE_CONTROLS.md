@@ -13103,3 +13103,27 @@ Run on 2026-11-05 on Linux. The control makes `IsRelease` return what
 `release.ParseVersion` says. The test fails with `a pseudo-version build
 offers the release v0.12.2-0.20261105101010-abcdef123456, which does not
 exist`.
+## A workspace switch slides
+
+`TestWorkspaceSwitchSlides` fills workspace 1 with `A` and workspace 2 with
+`B`, and records the host stream. It replays the stream one presented frame at
+a time. At motion full, each switch by alt+N and by `tuios select-workspace`
+must present at least three frames that show both workspaces. The seam must
+move one way: left on the way up and right on the way down. The rail and the
+dock must keep their text. The last frame must be the settled screen, with no
+cell of the old workspace. Keys typed while a mixed frame is on the screen must
+reach the pane on the new workspace and not the old one. A second switch back
+during a slide must turn the seam round with no jump. At motion none, no frame
+may show both workspaces. The settled pane area must be the same at both
+levels.
+
+Run on 2026-11-05 on Linux on the branch feat/workspace-slide.
+
+| Control | Where it fails | Verdict |
+| --- | --- | --- |
+| Main (a3da6ab91) | `full`: "up: only 0 presented frames showed both workspaces; the switch was a cut" | **caught** |
+| The direction flipped in `beginWorkspaceSlide` (`to > from` gives -1) | `full`: "up: frame 1 has the A workspace at column 95, right of the B one at 0" | **caught** |
+
+Frames, the settled screens and PNGs are under `TUIOS_E2E_FRAMES`, in the
+test's folder. Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestWorkspaceSwitchSlides$' -v .`.

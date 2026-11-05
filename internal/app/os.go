@@ -572,6 +572,9 @@ type OS struct {
 	// themeFx is the running theme transition, if any. See
 	// theme_transition.go.
 	themeFx themeTransition
+	// wsSlide is the running workspace slide, if any. See
+	// workspace_slide.go.
+	wsSlide workspaceSlide
 	// lastInteractionRender is when a motion event last produced a frame.
 	// Motion events arrive faster than a frame can be composed, so this
 	// bounds how often they are allowed to redraw.
@@ -637,8 +640,12 @@ type OS struct {
 	separatorMemo separatorMemo
 	// layerCells is each identified layer's string parsed to cells, kept across
 	// frames so an unchanged layer is copied rather than parsed. See compose.go.
-	layerCells     map[string]*cellLayer
-	composeGen     uint64
+	layerCells map[string]*cellLayer
+	composeGen uint64
+	// keepLayerCells skips dropping the cells of layers a compose did not
+	// draw. The workspace slide's snapshot composes the panes alone, and the
+	// rail's and the dock's cells are still wanted on the next frame.
+	keepLayerCells bool
 	composeScratch []composedLayer
 	// railFit is the rail's row budget scratch, reused by every row the rail
 	// draws. See railScratch.

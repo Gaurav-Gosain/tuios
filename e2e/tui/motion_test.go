@@ -3,6 +3,8 @@ package tuie2e
 import (
 	"bytes"
 	"fmt"
+	"image"
+	"image/color"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -12,6 +14,8 @@ import (
 	"time"
 
 	"github.com/Gaurav-Gosain/tuitest"
+	uv "github.com/charmbracelet/ultraviolet"
+	"github.com/charmbracelet/x/ansi"
 	"tuios.dev/vt"
 )
 
@@ -720,4 +724,480 @@ func TestTiledPanesMoveOneWay(t *testing.T) {
 	if msg := oneWay(lefts, slot.X, full.X); msg != "" {
 		t.Errorf("close: the first pane's left edge %s: %v", msg, compactSeq(lefts))
 	}
+}
+
+// The workspace slide: a switch to a higher workspace number moves the
+// workspace being left out to the left while the new one comes in from the
+// right, and a lower number the other way. Read off the host stream the real
+// binary sends, replayed one presented frame at a time.
+//
+// How this could pass wrongly, written down first:
+//   - A frame could show both workspaces for a reason other than a slide, such
+//     as a half drawn frame. Only frames a host presents (the close of a
+//     synchronized update) are read, and every mixed frame has to keep the old
+//     workspace on one side and the new one on the other, with the seam moving
+//     one way.
+//   - The rail and the dock could slide with the panes and still show two
+//     workspaces. The columns left of the pane area and the dock row of every
+//     mixed frame have to match the settled frame's.
+//   - A slide could end one frame short and leave a column of the old
+//     workspace behind. The last presented frame has to equal the settled
+//     screen and hold none of the old workspace's cells.
+//   - Keys typed during the slide could reach the old pane, or wait for the
+//     slide to end. The keys are sent once a mixed frame is on the screen,
+//     and their output has to land in the new pane alone.
+//   - With motion none the slide could still run for one frame. No presented
+//     frame of that run may show both workspaces.
+//
+// Frames, the host stream and PNGs are saved under artifactDir.
+
+const (
+	slideCols, slideRows = 120, 36
+	slideOldMark         = 'A'
+	slideNewMark         = 'B'
+)
+
+// slideScreen is one presented frame, copied out of the replaying emulator so
+// it can be kept and drawn as a PNG.
+type slideScreen struct {
+	cols, rows int
+	cells      []tuitest.Cell
+}
+
+func (s *slideScreen) Size() (int, int) { return s.cols, s.rows }
+func (s *slideScreen) Cell(x, y int) tuitest.Cell {
+	if x < 0 || y < 0 || x >= s.cols || y >= s.rows {
+		return tuitest.Cell{}
+	}
+	return s.cells[y*s.cols+x]
+}
+func (s *slideScreen) Cursor() (int, int, bool) { return 0, 0, false }
+func (s *slideScreen) ExitCode() (int, bool)    { return 0, false }
+func (s *slideScreen) Line(y int) string {
+	var b strings.Builder
+	for x := range s.cols {
+		c := s.Cell(x, y)
+		switch {
+		case c.Width == 0 && c.Content == "":
+		case c.Content == "":
+			b.WriteByte(' ')
+		default:
+			b.WriteString(c.Content)
+		}
+	}
+	return strings.TrimRight(b.String(), " ")
+}
+func (s *slideScreen) Text() string {
+	lines := make([]string, s.rows)
+	for y := range s.rows {
+		lines[y] = s.Line(y)
+	}
+	return strings.TrimRight(strings.Join(lines, "\n"), "\n")
+}
+
+func slideColor(c color.Color) tuitest.Color {
+	switch v := c.(type) {
+	case nil:
+		return tuitest.Color{}
+	case ansi.BasicColor:
+		return tuitest.Color{Kind: tuitest.ColorIndexed, Index: uint8(v)}
+	case ansi.IndexedColor:
+		return tuitest.Color{Kind: tuitest.ColorIndexed, Index: uint8(v)}
+	default:
+		r, g, b, _ := c.RGBA()
+		return tuitest.Color{Kind: tuitest.ColorRGB, R: uint8(r >> 8), G: uint8(g >> 8), B: uint8(b >> 8)}
+	}
+}
+
+// presentedScreens replays the tape and returns the whole screen at the close
+// of every synchronized update that ends after from.
+func presentedScreens(tape []byte, cols, rows, from int) []*slideScreen {
+	emu := vt.NewEmulator(cols, rows)
+	var out []*slideScreen
+	pos := 0
+	for {
+		i := bytes.Index(tape[pos:], syncEnd)
+		if i < 0 {
+			return out
+		}
+		end := pos + i + len(syncEnd)
+		_, _ = emu.Write(tape[pos:end])
+		pos = end
+		if end <= from {
+			continue
+		}
+		s := &slideScreen{cols: cols, rows: rows, cells: make([]tuitest.Cell, cols*rows)}
+		for y := range rows {
+			for x := range cols {
+				c := emu.CellAt(x, y)
+				if c == nil {
+					continue
+				}
+				s.cells[y*cols+x] = tuitest.Cell{
+					Content: c.Content, Width: c.Width,
+					Fg: slideColor(c.Style.Fg), Bg: slideColor(c.Style.Bg),
+					Bold:    c.Style.Attrs&uv.AttrBold != 0,
+					Faint:   c.Style.Attrs&uv.AttrFaint != 0,
+					Reverse: c.Style.Attrs&uv.AttrReverse != 0,
+				}
+			}
+		}
+		out = append(out, s)
+	}
+}
+
+// slideMarks finds the two fills on a row: the last column of the old
+// workspace's mark and the first of the new one's, -1 for either absent.
+func slideMarks(line string, lo, hi int) (lastOld, firstNew int) {
+	lastOld, firstNew = -1, -1
+	for x, r := range []rune(line) {
+		if x < lo || x >= hi {
+			continue
+		}
+		switch r {
+		case slideOldMark:
+			lastOld = x
+		case slideNewMark:
+			if firstNew < 0 {
+				firstNew = x
+			}
+		}
+	}
+	return lastOld, firstNew
+}
+
+// startSlideClient starts a daemon session with workspace 1 filled with A
+// and workspace 2 filled with B, both shells, and attaches a client that
+// records the host stream.
+func startSlideClient(t *testing.T, level string) (*tuitest.Terminal, *hostTape, string) {
+	t.Helper()
+	base := t.TempDir()
+	killDaemon(t, base)
+	useShippedLooks(base)
+	// At half speed the slide runs 400ms, so a loaded machine still presents
+	// enough of its frames to read the direction off.
+	writeConfig(t, base, "[startup]\ntiled = true\n[appearance]\nmotion = \""+level+"\"\nanimation_speed = 50\n")
+	const sess = "e2e-slide"
+	if out, err := tuiosCLI(t, base, "new", sess, "--detach"); err != nil {
+		t.Fatalf("create session: %v\n%s", err, out)
+	}
+	if out, err := tuiosCLI(t, base, "new-window", "-s", sess, "--workspace", "2", "--no-focus", "bee"); err != nil {
+		t.Fatalf("open the pane on workspace 2: %v\n%s", err, out)
+	}
+	fill := func(w string, mark rune) {
+		line := fmt.Sprintf("clear; yes %s | head -n 80\n", strings.Repeat(string(mark), 150))
+		if out, err := tuiosCLI(t, base, "send-text", "-s", sess, "-w", w, line); err != nil {
+			t.Fatalf("fill pane %s: %v\n%s", w, err, out)
+		}
+	}
+	fill("0", slideOldMark)
+	fill("bee", slideNewMark)
+	tape := &hostTape{}
+	term := startIn(t, base, startOpts{args: []string{"attach", sess}, cols: slideCols, rows: slideRows,
+		shippedLooks: true, animations: true, out: tape, env: []string{"TERM=xterm-256color", "COLORTERM=truecolor"}})
+	if err := term.WaitForText(strings.Repeat(string(slideOldMark), 20), bootTimeout); err != nil {
+		t.Fatalf("workspace 1 never showed its fill: %v\n%s", err, term.Snapshot())
+	}
+	if err := term.WaitStable(uiTimeout); err != nil {
+		t.Fatalf("screen never settled: %v", err)
+	}
+	return term, tape, base
+}
+
+// slideResult is one switch as the host presented it.
+type slideResult struct {
+	frames []*slideScreen
+	// mixed are the indexes of frames that show both workspaces on the probe
+	// row, and seams the first column of the new workspace's mark on each.
+	mixed []int
+	seams []int
+	final *slideScreen
+}
+
+// runSlide presses the switch key and reads back every frame presented until
+// the screen settles. During, when set, runs as soon as a frame on the
+// screen shows both workspaces.
+func runSlide(t *testing.T, term *tuitest.Terminal, tape *hostTape, key rune, newMark rune, during func()) slideResult {
+	t.Helper()
+	return runSlideBy(t, term, tape, func() {
+		if err := term.SendKeys(tuitest.Alt(key)); err != nil {
+			t.Fatalf("press alt+%c: %v", key, err)
+		}
+	}, newMark, during)
+}
+
+// runSlideBy is runSlide with the switch made by switchFn.
+func runSlideBy(t *testing.T, term *tuitest.Terminal, tape *hostTape, switchFn func(), newMark rune, during func()) slideResult {
+	t.Helper()
+	mark := tape.len()
+	switchFn()
+	probe := slideRows / 2
+	oldMark := slideOldMark
+	if newMark == slideOldMark {
+		oldMark = slideNewMark
+	}
+	if during != nil {
+		deadline := time.Now().Add(2 * time.Second)
+		for time.Now().Before(deadline) {
+			line := term.Screen().Line(probe)
+			if strings.ContainsRune(line, oldMark) && strings.ContainsRune(line, newMark) {
+				during()
+				during = nil
+				break
+			}
+			time.Sleep(time.Millisecond)
+		}
+		if during != nil {
+			t.Fatalf("no frame on the screen showed both workspaces, so nothing was typed mid-slide")
+		}
+	}
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		return !strings.ContainsRune(s.Line(probe), oldMark)
+	}, uiTimeout); err != nil {
+		t.Fatalf("the old workspace never left the screen: %v\n%s", err, term.Snapshot())
+	}
+	if err := term.WaitStable(uiTimeout); err != nil {
+		t.Fatalf("screen never settled after the switch: %v", err)
+	}
+	raw, full := tape.bytes()
+	if full {
+		t.Fatalf("the host tape filled up")
+	}
+	frames := presentedScreens(raw, slideCols, slideRows, mark)
+	if len(frames) == 0 {
+		t.Fatalf("no frame was presented after the switch")
+	}
+	r := slideResult{frames: frames, final: frames[len(frames)-1]}
+	for i, f := range frames {
+		lastOld, firstNew := slideMarks(f.Line(probe), 0, slideCols)
+		if lastOld >= 0 && firstNew >= 0 {
+			r.mixed = append(r.mixed, i)
+			r.seams = append(r.seams, firstNew)
+		}
+	}
+	return r
+}
+
+// slidePaneArea is the pane area of a settled frame that shows one tiled
+// pane filled with mark: the box from the pane's top left corner to its
+// bottom right one, around every cell of the mark.
+func slidePaneArea(s tuitest.Screen, mark rune) image.Rectangle {
+	cols, rows := s.Size()
+	box := image.Rectangle{}
+	for y := range rows {
+		for x := range cols {
+			switch s.Cell(x, y).Content {
+			case string(mark), "╭", "╯", "╮", "╰":
+				box = box.Union(image.Rect(x, y, x+1, y+1))
+			}
+		}
+	}
+	return box
+}
+
+// chromeOf is the text of every cell outside the pane area: the rail, the
+// dock and anything else that must not move. Colours are left out, since a
+// notice in the dock counts down in colour while the slide runs.
+func chromeOf(s tuitest.Screen, pane image.Rectangle) string {
+	var b strings.Builder
+	cols, rows := s.Size()
+	for y := range rows {
+		for x := range cols {
+			if image.Pt(x, y).In(pane) {
+				continue
+			}
+			b.WriteString(s.Cell(x, y).Content)
+			b.WriteByte(';')
+		}
+		b.WriteByte('\n')
+	}
+	return b.String()
+}
+
+func TestWorkspaceSwitchSlides(t *testing.T) {
+	finals := map[string]string{}
+	for _, level := range []string{"full", "none"} {
+		t.Run(level, func(t *testing.T) {
+			finals[level] = slideRun(t, level)
+		})
+	}
+	if t.Failed() {
+		return
+	}
+	if finals["full"] != finals["none"] {
+		t.Fatalf("the settled pane area after the slides differs from the one after the cuts\nslide:\n%s\ncut:\n%s", finals["full"], finals["none"])
+	}
+}
+
+func slideRun(t *testing.T, level string) string {
+	term, tape, base := startSlideClient(t, level)
+	dir := artifactDir(t)
+	host := hostPalette(t, "")
+	slides := level != "none"
+	// The pane area, from workspace 1's one pane before any switch.
+	pane := slidePaneArea(term.Screen(), slideOldMark)
+	t.Logf("pane area %v", pane)
+
+	check := func(name string, r slideResult, up bool) {
+		t.Helper()
+		_ = os.WriteFile(filepath.Join(dir, name+"-final.txt"), []byte(r.final.Text()), 0o644)
+		savePNG(t, r.final, host, dir, name+"-final")
+		t.Logf("%s: %d presented frames, %d show both workspaces, seams %v", name, len(r.frames), len(r.mixed), r.seams)
+		if !slides {
+			if len(r.mixed) > 0 {
+				t.Fatalf("%s: with motion none %d frames showed both workspaces", name, len(r.mixed))
+			}
+			return
+		}
+		if len(r.mixed) < 3 {
+			t.Fatalf("%s: only %d presented frames showed both workspaces; the switch was a cut", name, len(r.mixed))
+		}
+		// The strip: up to five frames of the slide, evenly picked.
+		for k := range min(5, len(r.mixed)) {
+			i := r.mixed[k*(len(r.mixed)-1)/max(min(5, len(r.mixed))-1, 1)]
+			savePNG(t, r.frames[i], host, dir, fmt.Sprintf("%s-mid-%d", name, k))
+			_ = os.WriteFile(filepath.Join(dir, fmt.Sprintf("%s-mid-%d.txt", name, k)), []byte(r.frames[i].Text()), 0o644)
+		}
+		// Against the first frame of the slide, not the settled one: a
+		// switch from the command line puts a notice in the dock, which is
+		// gone by the time the screen settles.
+		ref := r.frames[r.mixed[0]]
+		chrome := chromeOf(ref, pane)
+		for n, i := range r.mixed {
+			f := r.frames[i]
+			// A is the workspace with the lower number, so it is on the left
+			// both ways: leaving to the left on the way up, coming in from the
+			// left on the way down.
+			lastA, firstB := slideMarks(f.Line(slideRows/2), 0, slideCols)
+			if lastA >= firstB {
+				t.Fatalf("%s: frame %d has the A workspace at column %d, right of the B one at %d\n%s", name, i, lastA, firstB, f.Text())
+			}
+			if n > 0 {
+				prev := r.seams[n-1]
+				if up && r.seams[n] > prev || !up && r.seams[n] < prev {
+					t.Fatalf("%s: the seam went back from column %d to %d at frame %d", name, prev, r.seams[n], i)
+				}
+			}
+			if got := chromeOf(f, pane); got != chrome {
+				gl, wl := strings.Split(got, "\n"), strings.Split(chrome, "\n")
+				for y := range min(len(gl), len(wl)) {
+					if gl[y] != wl[y] {
+						t.Logf("row %d differs:\n got %q\nwant %q", y, f.Line(y), ref.Line(y))
+					}
+				}
+				t.Fatalf("%s: frame %d moved the rail or the dock\n%s", name, i, f.Text())
+			}
+		}
+		distinct := map[int]bool{}
+		for _, s := range r.seams {
+			distinct[s] = true
+		}
+		if len(distinct) < 3 {
+			t.Fatalf("%s: the seam took %d places; want a slide through at least three", name, len(distinct))
+		}
+	}
+
+	// Up: 1 to 2. The A workspace leaves to the left.
+	up := runSlide(t, term, tape, '2', slideNewMark, nil)
+	check("up", up, true)
+	settled := term.Screen()
+	if up.final.Text() != settled.Text() {
+		t.Fatalf("up: the last presented frame is not the settled screen\npresented:\n%s\nscreen:\n%s", up.final.Text(), settled.Text())
+	}
+	if strings.ContainsRune(up.final.Text(), slideOldMark) {
+		t.Fatalf("up: the settled frame still holds the old workspace\n%s", up.final.Text())
+	}
+
+	// Down: 2 to 1. The A workspace comes back in from the left.
+	down := runSlide(t, term, tape, '1', slideOldMark, nil)
+	check("down", down, false)
+	if strings.ContainsRune(down.final.Text(), slideNewMark) {
+		t.Fatalf("down: the settled frame still holds the old workspace\n%s", down.final.Text())
+	}
+
+	// Up again, typing as soon as the slide is on the screen. The keys go to
+	// the pane on workspace 2 at once.
+	const typed = "echo slid-$((6*7))"
+	var during func()
+	if slides {
+		during = func() {
+			if err := term.SendKeys(typed, tuitest.Enter); err != nil {
+				t.Fatalf("type mid-slide: %v", err)
+			}
+		}
+	}
+	again := runSlide(t, term, tape, '2', slideNewMark, during)
+	if !slides {
+		if err := term.SendKeys(typed, tuitest.Enter); err != nil {
+			t.Fatalf("type after the cut: %v", err)
+		}
+	}
+	if err := term.WaitForText("slid-42", uiTimeout); err != nil {
+		t.Fatalf("the keys typed during the switch never reached the new pane: %v\n%s", err, term.Snapshot())
+	}
+	if err := term.WaitStable(uiTimeout); err != nil {
+		t.Fatalf("screen never settled after typing: %v", err)
+	}
+	saveArtifact(t, term, dir, "typed")
+	if out, err := tuiosCLI(t, base, "capture-pane", "-s", "e2e-slide", "-w", "0"); err != nil {
+		t.Fatalf("capture the workspace 1 pane: %v\n%s", err, out)
+	} else if strings.Contains(out, "slid") {
+		t.Fatalf("keys typed during the switch reached the pane on the old workspace:\n%s", out)
+	}
+	if slides {
+		seen := false
+		for _, i := range again.mixed {
+			seen = seen || strings.Contains(again.frames[i].Text(), "slid-42")
+		}
+		t.Logf("typed: the new pane's answer was drawn while it slid in: %v", seen)
+	}
+	// From the command line: the switch reaches the client as a state sync
+	// from the daemon, and slides all the same.
+	cli := runSlideBy(t, term, tape, func() {
+		if out, err := tuiosCLI(t, base, "select-workspace", "-s", "e2e-slide", "1"); err != nil {
+			t.Fatalf("select-workspace: %v\n%s", err, out)
+		}
+	}, slideOldMark, nil)
+	check("cli", cli, false)
+
+	// Back mid-slide: alt+2 and, while it slides, alt+1. The slide turns
+	// round where it is. A slide started again from the edge would move the
+	// seam across most of the pane area in one frame.
+	if slides {
+		back := runSlide(t, term, tape, '2', slideOldMark, func() {
+			if err := term.SendKeys(tuitest.Alt('1')); err != nil {
+				t.Fatalf("press alt+1 mid-slide: %v", err)
+			}
+		})
+		t.Logf("back: %d presented frames, seams %v", len(back.frames), back.seams)
+		turned := false
+		for n := 1; n < len(back.seams); n++ {
+			step := back.seams[n] - back.seams[n-1]
+			if step > 0 {
+				turned = true
+			}
+			if turned && step < 0 {
+				t.Fatalf("back: the seam turned round twice: %v", back.seams)
+			}
+			if abs := max(step, -step); abs > pane.Dx()/3 {
+				t.Fatalf("back: the seam jumped %d columns in one frame: %v", abs, back.seams)
+			}
+		}
+		if !turned {
+			t.Fatalf("back: the seam never turned round: %v", back.seams)
+		}
+		if strings.ContainsRune(back.final.Text(), slideNewMark) {
+			t.Fatalf("back: the settled frame still holds workspace 2\n%s", back.final.Text())
+		}
+	}
+
+	// The pane area alone: the rail names the run's own directory.
+	var b strings.Builder
+	final := term.Screen()
+	for y := pane.Min.Y; y < pane.Max.Y; y++ {
+		line := []rune(final.Line(y) + strings.Repeat(" ", slideCols))
+		b.WriteString(string(line[pane.Min.X:pane.Max.X]))
+		b.WriteByte('\n')
+	}
+	return b.String()
 }

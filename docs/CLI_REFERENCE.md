@@ -2244,7 +2244,7 @@ name alone. Some of them:
 | `sidebar.header_style` | `auto`, `plain`, `rule`, `pill`, `icon` | How a rail section header is drawn (default `auto`) |
 | `sidebar.density` | `normal`, `roomy` | Space between the rail's sections (default `normal`) |
 | `border_style` | `rounded`, `normal`, `thick`, `double`, `block`, `outer-half-block`, `inner-half-block`, `ascii`, `hidden`, `glyphs` | Border style |
-| `motion` | `none`, `basic`, `full` | How much moves: `basic` keeps window slides and the copy sweep, `full` (the default) adds the overlay fade-in and the working-agent shimmer |
+| `motion` | `none`, `basic`, `full` | How much moves: `basic` keeps window slides, workspace slides and the copy sweep, `full` (the default) adds the overlay fade-in and the working-agent shimmer |
 | `theme_transition` | `none`, `circle`, `fade` | How a theme change shows: `circle` grows the new theme from the middle of the screen, `fade` changes all cells at the same time (default `none`) |
 | `theme_transition_duration` | `100` to `2000` | Milliseconds a theme transition takes (default `450`) |
 | `dim_unfocused` | `0` to `90` | Percent the content of a pane you are not in is dimmed (default `0`, off) |

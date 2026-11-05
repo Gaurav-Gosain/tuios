@@ -70,6 +70,11 @@ func (m *OS) snapInFlight(w *terminal.Window) *ui.Animation {
 // It is the one way a layout moves a pane: see addAnimation for what happens
 // to a window that is already sliding.
 func (m *OS) animateWindow(w *terminal.Window, x, y, width, height int, dur time.Duration) *ui.Animation {
+	// While the workspace slides in, the slide is its motion: a pane laid
+	// out now lands at once, so the workspace slides in as it will settle.
+	if m.wsSlide.running() {
+		dur = 0
+	}
 	if a := m.snapInFlight(w); a != nil {
 		if dur > 0 {
 			a.Retarget(x, y, width, height, dur, m.layoutClock())
