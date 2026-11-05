@@ -762,7 +762,12 @@ func (a *App) cockpitHints(c *ui.Context, pal *palette) {
 			hint("⇧H ⇧L", locales.CockpitHintMoveCard())
 			hint("n", locales.CockpitHintAddCard())
 			hint("esc", locales.CockpitHintList())
+		case a.ck.view == viewMail && a.ck.reply.box.FocusWithin(c):
+			hint("↵", locales.CockpitHintSend())
+			hint("esc", locales.CockpitHintBack())
 		case a.ck.view == viewMail:
+			hint("j k", locales.CockpitHintMove())
+			hint("r", locales.CockpitHintReply())
 			hint("esc", locales.CockpitHintList())
 		case a.ck.reply.box.FocusWithin(c):
 			// The keys of the field that has them.

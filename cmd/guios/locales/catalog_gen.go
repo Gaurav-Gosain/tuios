@@ -12613,3 +12613,23 @@ func CockpitTypedNoCommand() string { return In(i18n.Locale()).CockpitTypedNoCom
 func (msgs Messages) CockpitTypedNoCommand() string {
 	return Catalog.Format(msgs.locale, "cockpitTypedNoCommand", nil)
 }
+
+// CockpitHintMove says "move"
+// in the language the app shows.
+func CockpitHintMove() string { return In(i18n.Locale()).CockpitHintMove() }
+
+// CockpitHintMove says "move"
+// in the language of msgs.
+func (msgs Messages) CockpitHintMove() string {
+	return Catalog.Format(msgs.locale, "cockpitHintMove", nil)
+}
+
+// CockpitKeysToMail says "Keys go to the mail list. Press r to reply."
+// in the language the app shows.
+func CockpitKeysToMail() string { return In(i18n.Locale()).CockpitKeysToMail() }
+
+// CockpitKeysToMail says "Keys go to the mail list. Press r to reply."
+// in the language of msgs.
+func (msgs Messages) CockpitKeysToMail() string {
+	return Catalog.Format(msgs.locale, "cockpitKeysToMail", nil)
+}

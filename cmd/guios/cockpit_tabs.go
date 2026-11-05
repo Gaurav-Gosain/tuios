@@ -494,6 +494,22 @@ type ckMail struct {
 	replySess string
 	// focus is the Mail view's focus binding.
 	focus ui.Handle
+	// cur is the message the Mail view's cursor is on, by mailKey: j and
+	// k move it, r and Enter answer it.
+	cur string
+}
+
+// mailKey names a message across sessions: ids are a session's own.
+func mailKey(msg ckMsg) string { return msg.Session + "/" + itoa(int(msg.ID)) }
+
+// mailReplied puts the Mail view's keys back on the message just answered:
+// the reply box that had them is gone (council round 3, S4).
+func (a *App) mailReplied(m *ckMail, sess string, id int64) {
+	if m == nil || a.ck.view != viewMail {
+		return
+	}
+	m.cur = sess + "/" + itoa(int(id))
+	m.focus.Focus()
 }
 
 type ckMsg struct {
@@ -604,9 +620,13 @@ func (a *App) mailView(c *ui.Context, pal *palette, ag client.Agent) {
 func (a *App) mailCard(c *ui.Context, pal *palette, m *ckMail, msg ckMsg, in bool) {
 	mono := a.termFamily()
 	card := ui.Column(c.Key(msg.Session+"/"+itoa(int(msg.ID)))).Gap(6).Padding(10, 14).Radius(rCard).Background(ckGround(pal))
-	if m.replyTo == msg.ID && m.replySess == msg.Session {
+	switch {
+	case m.replyTo == msg.ID && m.replySess == msg.Session:
 		// The message the reply box answers.
 		card.Background(pal.accent.Alpha(0.10)).Border(1, pal.accent.Alpha(0.45))
+	case a.ck.view == viewMail && m.cur == mailKey(msg) && m.replyTo == 0:
+		// The Mail view's cursor.
+		card.Border(2, pal.accent)
 	}
 	card.Children(func() {
 		ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
@@ -662,25 +682,30 @@ func (a *App) mailCard(c *ui.Context, pal *palette, m *ckMail, msg ckMsg, in boo
 		r := ui.Row(c.Key("reply")).Cursor(ui.CursorPointer)
 		if r.Clicked() {
 			c.Invalidate()
-			m.replyTo, m.replySess = msg.ID, msg.Session
-			// The agent's reply box answers it, as mail.
-			switch {
-			case a.ck.view == viewAgents:
-				if ag, ok := a.ckSelectedAgent(); ok {
-					a.ckSendAs(ag, true)
-				}
-				a.ckFocusReply()
-			case a.ck.view == viewMail:
-				if ag, ok := a.ck.agentByWindow(msg.Session, msg.From); ok {
-					a.ckSendAs(ag, true)
-					a.ck.reply.focusNext = true
-				}
-			}
+			a.mailReplyTo(m, msg)
 		}
 		r.Children(func() {
 			ui.Text(c, locales.CockpitReplyAsYou()).FontSize(fsSmall).TextColor(pal.accent)
 		})
 	})
+}
+
+// mailReplyTo starts the person's reply to msg: the agent's reply box
+// answers it, as mail.
+func (a *App) mailReplyTo(m *ckMail, msg ckMsg) {
+	m.replyTo, m.replySess, m.cur = msg.ID, msg.Session, mailKey(msg)
+	switch {
+	case a.ck.view == viewAgents:
+		if ag, ok := a.ckSelectedAgent(); ok {
+			a.ckSendAs(ag, true)
+		}
+		a.ckFocusReply()
+	case a.ck.view == viewMail:
+		if ag, ok := a.ck.agentByWindow(msg.Session, msg.From); ok {
+			a.ckSendAs(ag, true)
+			a.ck.reply.focusNext = true
+		}
+	}
 }
 
 // mailCompose is the line that mails an agent, as the person.
@@ -726,8 +751,12 @@ func (a *App) sendMail(sess, to string, m *ckMail) {
 				a.toast(err.Error())
 				return
 			}
+			id := m.replyTo
 			m.draft, m.replyTo = "", 0
 			a.mailAnswered(sess, to, name)
+			if id != 0 {
+				a.mailReplied(m, sess, id)
+			}
 		})
 	}()
 }

@@ -2,6 +2,7 @@ package main
 
 import (
 	"sort"
+	"time"
 
 	"github.com/Gaurav-Gosain/mygo/ui"
 
@@ -114,15 +115,9 @@ func (a *App) humanMailView(c *ui.Context, pal *palette) {
 		ck.focusView = false
 		m.focus.Focus()
 	}
-	if m.focus.FocusWithin(c) {
-		// Prose typed here takes back the key that opened the view.
-		_, _ = a.guard(c, col, &ck.guard, listKeys{kind: func(ckKey) keyKind { return kindProse }, prose: func(text string) bool {
-			// The key that opened the view was taken back: the text
-			// belongs to the agent the list has.
-			return ck.view == viewAgents && a.ckProse(text)
-		}})
-	}
-	if m.focus.FocusWithin(c) && col.Shortcut(0, ui.KeyEscape) {
+	if m.focus.FocusWithin(c) && m.replyTo == 0 {
+		a.mailKeys(c, col, m, mine)
+	} else if m.focus.FocusWithin(c) && col.Shortcut(0, ui.KeyEscape) {
 		a.ckSetView(viewAgents)
 		c.Invalidate()
 	}
@@ -167,4 +162,72 @@ func (ck *cockpit) agentByWindow(sess, window string) (client.Agent, bool) {
 		}
 	}
 	return client.Agent{}, false
+}
+
+// mailKeys are the Mail view's keys while its list has them: j k and the
+// arrows move between the messages, r and Enter answer the one the cursor
+// is on, Escape goes back to the agents. Other letters are typed text: they
+// take back the key that opened the view, and run nothing.
+func (a *App) mailKeys(c *ui.Context, col ui.Element, m *ckMail, mine []ckMsg) {
+	ck := &a.ck
+	at := -1
+	for i, msg := range mine {
+		if mailKey(msg) == m.cur {
+			at = i
+		}
+	}
+	if at < 0 && len(mine) > 0 {
+		at, m.cur = 0, mailKey(mine[0])
+	}
+	move := func(d int) {
+		if at >= 0 {
+			m.cur = mailKey(mine[min(max(at+d, 0), len(mine)-1)])
+		}
+	}
+	reply := func() {
+		if at >= 0 {
+			a.mailReplyTo(m, mine[at])
+		}
+	}
+	kind := func(k ckKey) keyKind {
+		switch {
+		case !k.shift && (k.key == ui.KeyJ || k.key == ui.KeyK):
+			return kindMove
+		case !k.shift && k.key == ui.KeyR && at >= 0:
+			return kindView
+		}
+		return kindProse
+	}
+	lk := listKeys{kind: kind, prose: func(text string) bool {
+		// The key that opened the view was taken back: the text
+		// belongs to the agent the list has.
+		return ck.view == viewAgents && a.ckProse(text)
+	}, hint: locales.CockpitKeysToMail}
+	if k, ok := a.guard(c, col, &ck.guard, lk); ok {
+		switch k.key {
+		case ui.KeyJ:
+			move(1)
+		case ui.KeyK:
+			move(-1)
+		case ui.KeyR:
+			reply()
+		}
+		c.Invalidate()
+		return
+	}
+	key := func(k ui.Key) bool { return col.Shortcut(0, k) }
+	switch {
+	case key(ui.KeyDown):
+		move(1)
+	case key(ui.KeyUp):
+		move(-1)
+	case key(ui.KeyEnter) && !ck.guard.typing(time.Now()):
+		reply()
+	case key(ui.KeyEscape):
+		a.ckSetView(viewAgents)
+	default:
+		return
+	}
+	ck.guard.boundary()
+	c.Invalidate()
 }
