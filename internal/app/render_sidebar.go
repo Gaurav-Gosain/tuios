@@ -2163,6 +2163,11 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 			}
 		}
 		sessionIdx := m.localSessionIndexes(sessions)
+		// A worktree row swaps its tree mark and number only under a head that
+		// wears no number of its own: a repository's row, or a head session past
+		// the ninth. Under a numbered head the number already put the mark on the
+		// head's name spine, and the swap would move it under the number instead.
+		numberedHead := false
 		for i := range count[sidebarSectionSessions] {
 			idx := start[sidebarSectionSessions] + i
 			s := sessionRows[idx]
@@ -2174,6 +2179,7 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 				continue
 			}
 			if s.Kind == sessiontree.KindRepo {
+				numberedHead = false
 				// A repository's group header. It is a nav row like any other,
 				// and activating it folds the group. The space it is drawn in
 				// rides in the window slot, because a repository whose
@@ -2192,6 +2198,7 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 			dragged := m.SidebarDrag.Dragging && s.ID == m.SidebarDrag.SessionID
 			st := m.railRowState(idx == hoverRow[sidebarSectionSessions], isCursor(sidebarRowSession, s.ID, ""))
 			if s.GroupHead {
+				numberedHead = m.Settings.SidebarShowNumbers && sessionIdx[s.ID] > 0 && sessionIdx[s.ID] <= 9
 				// The fold mark is a control of its own, as the "+" is on a
 				// machine's row: the rest of the row opens the session. It
 				// names the repository the way a repository's row does.
@@ -2199,7 +2206,7 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 				recordToken(sidebarTokenSpan{Kind: sidebarRowRepo, X0: cw - sidebarFoldCells, X1: cw, WindowID: s.Space}, s.Worktree.Repo)
 			}
 			recordHit(sidebarRowSession, s.ID, "", -1, 1)
-			lines = append(lines, compose(st.mark(pal, m.sidebarSessionRow(s, sessionIdx[s.ID], variant, cw, pal, st, dragged, showCounts))))
+			lines = append(lines, compose(st.mark(pal, m.sidebarSessionRow(s, sessionIdx[s.ID], variant, cw, pal, st, dragged, showCounts, numberedHead))))
 		}
 		if h := hidden[sidebarSectionSessions]; h > 0 {
 			lines = append(lines, overflowRow(h, m.sidebarRowIndent()))
@@ -3056,7 +3063,7 @@ func (m *OS) windowIndexByID(id string) int {
 // fewer than that says nothing but an ellipsis.
 const railNoteMin = 4
 
-func (m *OS) sidebarSessionRow(node sessiontree.Node, sessionIdx, variant, cw int, pal overlay.Palette, st sidebarRowState, dragged, showCounts bool) string {
+func (m *OS) sidebarSessionRow(node sessiontree.Node, sessionIdx, variant, cw int, pal overlay.Palette, st sidebarRowState, dragged, showCounts, numberedHead bool) string {
 	rowBg := sidebarRowBg(st, pal)
 	// A repository's row speaks for the rows its fold hides.
 	folded := node.GroupHead && m.SidebarRepoCollapsed(node.Worktree.Repo)
@@ -3213,15 +3220,22 @@ func (m *OS) sidebarSessionRow(node sessiontree.Node, sessionIdx, variant, cw in
 	shown := m.sidebarMarquee("s:"+node.ID, title, max(avail-treeW, 1), st.Cursor)
 	ink := sidebarStyle(rowBg, fg).Bold(sidebarAttention(node.AgentState))
 	name := mark + ink.Render(treeMark+shown) + branch
-	if treeW > 0 && mark != "" {
-		// A numbered worktree row turns the pieces around: the tree mark leads
-		// and the number rides behind it, so the mark keeps hanging from the
-		// parent's name spine and the subtree's depth reads the same numbered
-		// or not. A plain session has no mark and keeps the number leading.
+	// A worktree row under a head with no number turns the pieces around: the
+	// tree mark leads and the number rides behind it, so the mark keeps
+	// hanging from the head's name spine and the subtree's depth reads the
+	// same numbered or not. A plain session has no mark and keeps the number
+	// leading. The current row's marked name takes the same order, so its bar
+	// lines up with its siblings' on the pill and underline row styles.
+	swap := treeW > 0 && mark != "" && !numberedHead
+	if swap {
 		name = ink.Render(treeMark) + mark + ink.Render(shown) + branch
 	}
 	if nameMarked {
-		name = mark + ink.Render(treeMark) + railCurrentName(shown, focusTint, rowBg, pal, &m.Settings) + branch
+		if swap {
+			name = ink.Render(treeMark) + mark + railCurrentName(shown, focusTint, rowBg, pal, &m.Settings) + branch
+		} else {
+			name = mark + ink.Render(treeMark) + railCurrentName(shown, focusTint, rowBg, pal, &m.Settings) + branch
+		}
 	}
 
 	gutter := sidebarGutterTinted(node.IsCurrent, node.AgentState, focusTint, rowBg, pal, &m.Settings)
