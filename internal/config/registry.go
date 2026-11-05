@@ -636,6 +636,7 @@ var ActionDescriptions = map[string]string{
 	"file_edit":           "Files: edit this text file in a new pane",
 	"file_copy_path":      "Files: copy the path of this file or folder",
 	"file_quick_look":     "Files: show a preview of this file or folder",
+	"file_open_system":    "Files: open this file or folder with the system opener",
 	"seek_down":           "Preview: move forward in the file",
 	"seek_up":             "Preview: move back in the file",
 	"half_down":           "Preview: move half a page forward",

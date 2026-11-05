@@ -59,24 +59,32 @@ func linkOpenerArgv(setting, rawURL string) ([]string, error) {
 			return openerCommand(first, rawURL)
 		}
 	}
+	return desktopOpenerArgv(rawURL)
+}
+
+// desktopOpenerArgv is step 3 alone: the desktop's own opener for target, a
+// web address or a local path, or errNoDesktop. The rail's file open starts
+// here, because the first two steps name a browser, and a browser helper that
+// opens a page on the person's machine has no copy of a file on this one.
+func desktopOpenerArgv(target string) ([]string, error) {
 	if viewerIsRemote() {
 		return nil, errNoDesktop
 	}
 	switch runtime.GOOS {
 	case "darwin":
-		return []string{"open", rawURL}, nil
+		return []string{"open", target}, nil
 	case "windows":
-		return []string{"rundll32", "url.dll,FileProtocolHandler", rawURL}, nil
+		return []string{"rundll32", "url.dll,FileProtocolHandler", target}, nil
 	}
 	if os.Getenv("WSL_DISTRO_NAME") != "" {
 		if _, err := exec.LookPath("wslview"); err == nil {
-			return []string{"wslview", rawURL}, nil
+			return []string{"wslview", target}, nil
 		}
 	}
 	if os.Getenv("DISPLAY") == "" && os.Getenv("WAYLAND_DISPLAY") == "" {
 		return nil, errNoDesktop
 	}
-	return []string{"xdg-open", rawURL}, nil
+	return []string{"xdg-open", target}, nil
 }
 
 // openerCommand splits a command the way a shell splits words, without running

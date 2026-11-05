@@ -1703,6 +1703,16 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 	case linkOpenFailedMsg:
 		return m, m.handleLinkOpenFailed(msg)
 
+	case fileOpenSystemMsg:
+		cmd := m.handleFileOpenSystem(msg)
+		m.renderSkipped = false
+		return m, cmd
+
+	case fileOpenFailedMsg:
+		m.handleFileOpenFailed(msg)
+		m.renderSkipped = false
+		return m, nil
+
 	case NotificationMsg:
 		// Guest desktop notification or bell delivered off the PTY goroutine;
 		// apply it here on the Bubble Tea goroutine where notification state is

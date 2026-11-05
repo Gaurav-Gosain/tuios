@@ -202,6 +202,11 @@ question about the screen. Do not change them unless the person asks.
   Markdown, a picture, a PDF page or a folder. `j` and `k` move it to the
   next row. `space` or `esc` closes it. A row of a listing on another machine
   is read on that machine, and needs the `files` grant there.
+- In the rail's files section, `o` opens the row with the system opener
+  (`xdg-open`, `open`, `wslview`, or the Windows handler), or with the
+  command of the first `[[files.open]]` rule that matches. It opens only
+  files on the machine of the client. For a row on another machine, or a
+  remote client, it says so and starts nothing.
 - When the last pane on the workspace on screen closes, the session shows
   the workspace the person came from: the one that ran `xpanes`, else the
   ones shown before, else the lowest with panes. `workspaces.return_when_empty

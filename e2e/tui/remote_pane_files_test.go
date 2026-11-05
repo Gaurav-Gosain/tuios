@@ -314,7 +314,11 @@ func TestQuickLookOnAFarFile(t *testing.T) {
 	writeRemoteConfig(t, remote, relayFilesPolicy)
 	ssh := writeFakeSSHTo(t, base, remote)
 	writeOneHostConfig(t, base, tuiosBin)
-	env := []string{"TUIOS_SSH=" + ssh}
+	// The system opener is a stub that records any start, so the refusal of
+	// o on a far row is checked against a real opener that would have run.
+	record := filepath.Join(base, "opened.txt")
+	stubs, _ := openStubs(t, base, record)
+	env := append([]string{"TUIOS_SSH=" + ssh}, openStubEnv(stubs)...)
 	top, _ := farFolders(t, remote)
 	if err := os.WriteFile(filepath.Join(top, "far.go"), []byte("package far\n\n// Answer is far away.\nconst Answer = 42\n"), 0o600); err != nil {
 		t.Fatal(err)
@@ -360,6 +364,20 @@ func TestQuickLookOnAFarFile(t *testing.T) {
 	}
 	mouseClick(t, term, col, row, tuitest.MouseLeft, 0)
 	clickNoteGone(t, term)
+
+	// o on a far row: the path is on build, so the opener here must not run,
+	// and the note says what to press instead. The two machines share a disk
+	// in this harness, so an opener that ran would find the file.
+	sendKeys(t, term, "o")
+	railLists(t, term, "o on a far file did not say why it did not open",
+		[]string{"tuios did not open the file. It is on build."}, nil)
+	copiesFrame(t, term, "open-system-far-refused")
+	time.Sleep(500 * time.Millisecond)
+	if got := openRecord(record); len(got) > 0 && got[0] != "" {
+		t.Fatalf("o on a far file started the opener here: %q", got)
+	}
+	railLists(t, term, "the note of the refusal stayed", nil, []string{"tuios did not open the file. It is on build."})
+
 	sendKeys(t, term, " ")
 	railLists(t, term, "space did not show the far file",
 		[]string{"far.go ", "package far", "const Answer = 42", "on build"}, []string{"Copied the path."})

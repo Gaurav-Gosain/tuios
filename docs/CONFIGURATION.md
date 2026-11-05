@@ -501,6 +501,42 @@ keep_awake = "agents"
 
 `[path_picker]` sets `show_hidden`. With `true`, the path picker (`Alt+;`) shows the names that start with a dot when it opens. The default is `false`. `Alt+H` in the picker shows or hides them. See [KEYBINDINGS.md](KEYBINDINGS.md#pick-a-path).
 
+## Open files from the sidebar
+
+`o` in the sidebar's files section opens the selected file or folder. tuios uses
+the system opener: `xdg-open` on Linux, `open` on macOS, `wslview` under WSL,
+and the program for the file type on Windows.
+
+Add `[[files.open]]` rules to use another program for some files:
+
+```toml
+[[files.open]]
+match = "*.pdf"
+command = ["zathura", "{path}"]
+
+[[files.open]]
+match = "*/"            # every folder
+command = ["thunar", "{path}"]
+```
+
+- tuios uses the first rule that matches. With no match, it uses the system
+  opener.
+- `match` is a glob. Case does not matter. A pattern with no `/` matches the
+  file name. A pattern with a `/` matches the full path, for example
+  `"/home/me/papers/*.pdf"`.
+- A `/` at the end of the pattern matches folders only. A pattern without it
+  matches files only.
+- `command` is a list of words. tuios starts it directly, with no shell.
+  `{path}` in a word becomes the path. With no `{path}`, the path goes last.
+- tuios starts the command on the machine that runs the client. It does not
+  open a file in a listing of another machine, or for a remote client.
+- When the program stops with an error in the first 3 seconds, a message
+  says so. The log has the reason.
+- tuios skips a rule with no pattern, a pattern that is not a valid glob, or
+  no command, and shows a warning for it when it starts.
+- `appearance.link_opener` and `$BROWSER` do not apply to files. They name a
+  browser for web links.
+
 ## Drag a file into a pane
 
 `appearance.sidebar.file_drag` lets you drag a row of the files section onto a

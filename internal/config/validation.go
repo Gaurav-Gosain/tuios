@@ -253,6 +253,7 @@ func ValidateConfig(cfg *UserConfig) *ValidationResult {
 	validatePanes(cfg, result)
 	validateReview(cfg, result)
 	validateScratch(cfg, result)
+	validateFilesOpen(cfg, result)
 
 	return result
 }

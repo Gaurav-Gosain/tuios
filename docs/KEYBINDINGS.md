@@ -201,6 +201,20 @@ not text. The binding is `file_edit` in `[keybindings.sidebar_files]`.
 of a folder has a Copy path row that does the same. The binding is
 `file_copy_path` in `[keybindings.sidebar_files]`.
 
+`o` opens the selected file or folder with the system opener. On Linux this is
+`xdg-open`. On macOS it is `open`. Under WSL it is `wslview`, and on Windows
+it is the program for the file type. A `[[files.open]]` rule can name another
+program for a pattern. See
+[CONFIGURATION.md](CONFIGURATION.md#open-files-from-the-sidebar). The context
+menu of a row has an Open with system row that does the same. The binding is
+`file_open_system` in `[keybindings.sidebar_files]`. On a row that is not a
+file, `o` keeps its sidebar action, which sorts the agents.
+
+`o` opens only files on the machine that runs the client. For a listing of
+another machine, tuios does not open the file. Press `Space` to preview it, or
+`S` to send it here. A remote client (`tuios ssh`, `tuios-web`) also does not
+open the file.
+
 `I` pastes the path of the selected file or folder into the focused pane. The
 context menu of a row has a Paste path in pane row that does the same. The
 binding is `file_insert_path` in `[keybindings.sidebar_files]`.

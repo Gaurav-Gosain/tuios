@@ -13018,3 +13018,17 @@ on its own.
 
 Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^(TestTMLSurfacesCrossAHostLink|TestTMLSurfaceThroughAHostShowsThePlaceholder)$' -v .`.
+## The rail opens a file with the system opener
+
+`TestSidebarFileOpenSystem` puts a recording `xdg-open` first on PATH, with a
+display set, so `o` takes the real default path. A `[[files.open]]` rule names
+a second recording program for `*.PDF`. `TestQuickLookOnAFarFile` uses the same
+stub and presses `o` on a row of a listing on another machine. The controls
+were run on 2026-11-05 on Linux on the branch feat/rail-open-with-system. Each
+control cuts one piece from the branch head.
+
+| Claim | Control | Where it fails | Verdict |
+| --- | --- | --- | --- |
+| `o` runs the action | the `file_open_system` case cut from `handleSidebarFileAction` | `TestSidebarFileOpenSystem`: "o on the rows of the listing started nothing" | **caught** |
+| A rule wins over the system opener | the `rules.OpenArgv` lookup cut from `startFileOpener` | `TestSidebarFileOpenSystem`: paper.pdf went to `xdg-open`, want `rule --page 1 .../paper.pdf` | **caught** |
+| A far row refuses with the reason | the host check in `fileOpenSystemRefusal` made false | `TestQuickLookOnAFarFile`: "o on a far file did not say why it did not open" | **caught** |

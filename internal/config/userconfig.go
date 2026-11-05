@@ -82,6 +82,10 @@ type UserConfig struct {
 	// review.go.
 	Review ReviewConfig `toml:"review"`
 
+	// Files is the [files] table: the programs the rail's files section opens
+	// a file with. See files_open.go.
+	Files FilesConfig `toml:"files"`
+
 	// YieldedDefaults are the new default bindings left off because the key
 	// was already the user's for another action in the same table. It is
 	// worked out on load and never written. See yieldingDefaults.
@@ -2037,6 +2041,10 @@ func getDefaultSidebarFilesKeybinds() map[string][]string {
 		// space previews the row, as Finder and yazi do. Free in the rail:
 		// nothing else in the rail's scope takes it.
 		"file_quick_look": {"space"},
+		// o opens the row with a program on the desktop, as yazi and ranger
+		// do. The rail binds o to agents_sort, and this one answers first only
+		// on a file row, where sorting the agents has nothing to do.
+		"file_open_system": {"o"},
 	}
 }
 
