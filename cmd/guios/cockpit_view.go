@@ -642,9 +642,15 @@ func (a *App) ckLetter(k ckKey) {
 	defer func() {
 		// The letter that opened a confirm step goes with the text, if
 		// the next key shows the person was typing.
-		if q := ck.question; q != nil && q.opener == 0 {
-			q.opener = keyRune(k)
+		if q := ck.question; q != nil && q.opener == "" {
+			q.opener = string(keyRune(k))
+			if b := ck.guard.before; b != nil {
+				// A move or view letter came first: it is the sentence's
+				// first letter, and is taken back with the step.
+				q.opener, q.openerUndo = string(b.r)+q.opener, b.undo
+			}
 		}
+		ck.guard.before = nil
 	}()
 	// A move or view letter may be the first letter of a sentence: it
 	// notes how to take itself back, and typed text right after it does

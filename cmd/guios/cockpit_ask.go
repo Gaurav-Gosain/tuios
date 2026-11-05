@@ -42,8 +42,10 @@ type ckQuestion struct {
 	word string
 	// decision is the card's button the step asks about, if any.
 	decision string
-	// opener is the letter that opened the step, 0 for the menu.
-	opener rune
+	// opener is the text of the letters that opened the step, "" for the
+	// menu, and openerUndo takes back what the letters before it did.
+	opener     string
+	openerUndo func()
 }
 
 // ckTarget is the \x00 a locale string gets for its target, so that the
@@ -158,8 +160,11 @@ func (a *App) ckQuestionKeys(c *ui.Context, col ui.Element) bool {
 			q := ck.question
 			ck.question = nil
 			text := ""
-			if q != nil && q.opener != 0 {
-				text = string(q.opener)
+			if q != nil {
+				if q.openerUndo != nil {
+					q.openerUndo()
+				}
+				text = q.opener
 			}
 			if ch := keyRune(k); ch != 0 {
 				text += string(ch)

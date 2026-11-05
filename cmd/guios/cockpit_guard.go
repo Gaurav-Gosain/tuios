@@ -52,6 +52,10 @@ type typingGuard struct {
 	// key came after it: the first letter of a sentence, if the next key
 	// is typed text.
 	prev *prevKey
+	// before is prev as it was when the current list key came: a confirm
+	// step that key opens keeps it, for "make", where m showed the Mail
+	// tab and a asked.
+	before *prevKey
 }
 
 // prevKey is a move or view letter that ran: its character, how to take
@@ -136,7 +140,7 @@ func (a *App) guard(el ui.Element, g *typingGuard, lk listKeys) (ckKey, bool) {
 	}
 	if lk.kind(k) != kindProse {
 		g.hinted = false
-		g.prev = nil
+		g.before, g.prev = g.prev, nil
 		return k, true
 	}
 	text := ""
