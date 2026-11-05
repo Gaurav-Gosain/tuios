@@ -102,7 +102,7 @@ type spawnSheet struct {
 	// so n and that text go to the reply box and the sheet closes
 	// (QA-073). A click or another field ends it.
 	byKeyFresh bool
-	open  bool
+	open       bool
 	// task is the task and its images, as the reply box holds a message.
 	task                ckDraft
 	model, branch, base string
@@ -632,6 +632,14 @@ var spawnStopWords = map[string]bool{
 // spawnBranchName is a branch named after the task: agent/ and its first
 // three words that say something, as the TUI's.
 func spawnBranchName(task string) string {
+	if w := spawnTaskWords(task, 3); len(w) > 0 {
+		return "agent/" + strings.Join(w, "-")
+	}
+	return ""
+}
+
+// spawnTaskWords are the first n words of a task that say what it is.
+func spawnTaskWords(task string, n int) []string {
 	var words []string
 	for _, w := range strings.FieldsFunc(strings.ToLower(task), func(r rune) bool {
 		return !(r < unicode.MaxASCII && (unicode.IsLetter(r) || unicode.IsDigit(r)))
@@ -640,14 +648,43 @@ func spawnBranchName(task string) string {
 			continue
 		}
 		words = append(words, w)
-		if len(words) == 3 {
+		if len(words) == n {
 			break
 		}
 	}
-	if len(words) == 0 {
+	return words
+}
+
+// spawnAgentName is the name of an agent started on task: its first three
+// words, more words when an agent here has that name, else a number. Four
+// agents with tasks that start alike got one name (QA-075).
+func (a *App) spawnAgentName(task string) string {
+	taken := map[string]bool{}
+	for _, ag := range a.ck.agents {
+		taken[ag.Name] = true
+	}
+	for n := range a.ck.spawnTasks {
+		taken[n] = true
+	}
+	base := ""
+	for n := 3; n <= 6; n++ {
+		w := spawnTaskWords(task, n)
+		if len(w) < n && n > 3 {
+			break
+		}
+		base = strings.Join(w, "-")
+		if base != "" && !taken[base] {
+			return base
+		}
+	}
+	if base == "" {
 		return ""
 	}
-	return "agent/" + strings.Join(words, "-")
+	for i := 2; ; i++ {
+		if name := base + "-" + strconv.Itoa(i); !taken[name] {
+			return name
+		}
+	}
 }
 
 // spawnClose closes the sheet and keeps it as the draft the next open shows.
@@ -838,7 +875,7 @@ func (a *App) spawnStart() {
 		// Named after the task, as a worktree's branch is: the row says
 		// what it works on from its first frame, not "Terminal 23a8…",
 		// and the agents view selects it as soon as its pane shows.
-		if name := strings.TrimPrefix(spawnBranchName(task), "agent/"); name != "" {
+		if name := a.spawnAgentName(task); name != "" {
 			params["name"] = name
 			if s.session == "" && !a.sessionNamed(name) {
 				// The session the start makes is named after the task
@@ -889,6 +926,11 @@ func (a *App) spawnStart() {
 	}
 	attempts := s.attempts
 	cockpit := a.cockpitClient()
+	// Read here, not in the call's goroutine: it reads the agents.
+	fanStem := ""
+	if verb == "fan" {
+		fanStem = a.spawnAgentName(task)
+	}
 	go func() {
 		if params["task"] != nil && cockpit != nil {
 			// The card is the person's to hand out: the call carries
@@ -935,7 +977,7 @@ func (a *App) spawnStart() {
 		// (council round 3, S2).
 		named := map[string]string{}
 		if err == nil && verb == "fan" {
-			stem := strings.TrimPrefix(spawnBranchName(task), "agent/")
+			stem := fanStem
 			if stem == "" {
 				stem = branch[strings.LastIndex(branch, "/")+1:]
 			}
