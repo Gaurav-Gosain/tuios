@@ -6272,6 +6272,26 @@ func (msgs Messages) ActionQuickTerminal() string {
 	return Catalog.Format(msgs.locale, "actionQuickTerminal", nil)
 }
 
+// ScratchTerminal says "Scratch terminal"
+// in the language the app shows.
+func ScratchTerminal() string { return In(i18n.Locale()).ScratchTerminal() }
+
+// ScratchTerminal says "Scratch terminal"
+// in the language of msgs.
+func (msgs Messages) ScratchTerminal() string {
+	return Catalog.Format(msgs.locale, "scratchTerminal", nil)
+}
+
+// ScratchHide says "Press {keys} to hide it."
+// in the language the app shows.
+func ScratchHide(keys string) string { return In(i18n.Locale()).ScratchHide(keys) }
+
+// ScratchHide says "Press {keys} to hide it."
+// in the language of msgs.
+func (msgs Messages) ScratchHide(keys string) string {
+	return Catalog.Format(msgs.locale, "scratchHide", map[string]any{"keys": keys})
+}
+
 // ToastGlobalShortcutFailed says "Couldn’t use {keys} for the quick terminal: {error}"
 // in the language the app shows.
 func ToastGlobalShortcutFailed(keys string, error string) string {

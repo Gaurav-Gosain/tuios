@@ -616,6 +616,8 @@
   "endedDeleteAllDetail": "guios 会忘记它们；对话历史仍保留在各个智能体中。",
   "endedSetUpSkill": "设置智能体技能后，已结束的智能体对话会显示在这里",
   "actionQuickTerminal": "快速终端",
+  "scratchTerminal": "临时终端",
+  "scratchHide": "按 {keys} 隐藏。",
   "toastGlobalShortcutFailed": "无法将 {keys} 用于快速终端：{error}",
   "setShortcutGlobal": "在任何应用中都可用",
   "menuWorkspace": "工作区",

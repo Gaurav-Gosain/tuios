@@ -33,13 +33,20 @@ const (
 
 // quickTerm is the quick terminal's state, on the main thread.
 type quickTerm struct {
-	win      *mygo.Window // the panel, made as it first shows
-	shown    bool         // shown, or sliding down
-	pane     string       // the pane its terminal shows
-	e        *termEntry   // that terminal, attached
-	ref      ui.Handle
-	creating bool // its session is being made
-	err      string
+	win   *mygo.Window // the panel, made as it first shows
+	shown bool         // shown, or sliding down
+	// drop says the terminal shows as the scratch: a dropdown over the
+	// panes in the main window (the prefix and g), not the panel. inWin
+	// says the attached terminal was made for the main window.
+	drop, inWin bool
+	// focusDrop asks the dropdown's terminal for the keyboard once it is
+	// built.
+	focusDrop bool
+	pane      string     // the pane its terminal shows
+	e         *termEntry // that terminal, attached
+	ref       ui.Handle
+	creating  bool // its session is being made
+	err       string
 	// keys is the global shortcut registered, and asked what the settings
 	// asked for last, which failed when it is not keys.
 	keys, asked string
@@ -83,6 +90,67 @@ func (a *App) toggleQuick() {
 	}
 }
 
+// toggleScratch is the TUI's scratch key (toggle_scratch, the prefix and
+// g): the quick terminal's session as a dropdown over the panes of the
+// main window, shown and hidden by the same key, as the TUI's scratch
+// shows over the workspace.
+func (a *App) toggleScratch() {
+	if a.quick.drop {
+		a.hideDrop()
+	} else {
+		a.showDrop()
+	}
+}
+
+// showDrop shows the scratch dropdown, starting its session first if it
+// has none.
+func (a *App) showDrop() {
+	q := &a.quick
+	if q.shown {
+		a.hideQuick()
+	}
+	if q.e != nil && !q.inWin {
+		// The panel's terminal: the main window makes its own.
+		a.dropQuick()
+	}
+	q.drop, q.err, q.focusDrop = true, "", true
+	a.attachQuick()
+	if a.win != nil {
+		a.win.Invalidate()
+	}
+}
+
+// hideDrop hides the scratch dropdown, and the keyboard goes back to the
+// pane the user was in.
+func (a *App) hideDrop() {
+	q := &a.quick
+	if !q.drop {
+		return
+	}
+	q.drop = false
+	a.defer_(a.focusTerminal)
+	if a.win != nil {
+		a.win.Invalidate()
+	}
+}
+
+// quickPost runs fn on the main thread, through the window the quick
+// terminal shows in.
+func (a *App) quickPost(fn func()) {
+	if q := &a.quick; q.win != nil && !q.drop {
+		q.win.Update(fn)
+		return
+	}
+	a.update(fn)
+}
+
+// listed reports whether the sidebar lists a session, and the session keys
+// go to it: the quick terminal's session is the scratch, which shows only
+// as the dropdown or the panel, as the TUI's scratch is in no list.
+func (a *App) listed(s *proto.Session) bool {
+	return s.ID != a.prefs.QuickSession || a.prefs.QuickSession == ""
+}
+
 // quickSession returns the session the quick terminal shows, nil while it
 // has none: kerod lost it, or the user closed it.
 func (a *App) quickSession() *proto.Session {
@@ -97,6 +165,13 @@ func (a *App) quickSession() *proto.Session {
 // starting its session first if it has none.
 func (a *App) showQuick() {
 	q := &a.quick
+	if q.drop {
+		a.hideDrop()
+	}
+	if q.e != nil && q.inWin {
+		// The dropdown's terminal: the panel makes its own.
+		a.dropQuick()
+	}
 	if q.win == nil {
 		a.makeQuick()
 	}
@@ -211,7 +286,7 @@ func (a *App) attachQuick() {
 		go func() {
 			var s proto.Session
 			err := cl.Call("create", proto.CreateParams{Dir: proto.Home(), Name: locales.ActionQuickTerminal()}, &s)
-			q.win.Update(func() {
+			a.quickPost(func() {
 				q.creating = false
 				if err != nil {
 					q.err = err.Error()
@@ -221,7 +296,7 @@ func (a *App) attachQuick() {
 				a.prefs.QuickSession = s.ID
 				a.savePrefs()
 				a.attachQuick()
-				a.update(func() {}) // the sidebar shows it
+				a.update(func() {}) // the panes and the dropdown show it
 			})
 		}()
 		return
@@ -235,13 +310,15 @@ func (a *App) attachQuick() {
 	}
 	a.dropQuick()
 	e := &termEntry{started: time.Now()}
-	q.e, q.pane = e, p.ID
+	q.e, q.pane, q.inWin = e, p.ID, q.drop
 	id := p.ID
+	inWin := q.drop
 	dialer := h.dialer()
+	post := a.quickPost
 	go func() {
 		stream, err := client.AttachVia(dialer, id)
 		if err != nil {
-			q.win.Update(func() {
+			post(func() {
 				if q.e == e {
 					e.err = err.Error()
 				}
@@ -254,11 +331,13 @@ func (a *App) attachQuick() {
 		// No card under it: the terminal paints its background.
 		o.Transparent = false
 		o.Padding = terminal.Padding{X: 16, Y: 10}
-		o.OnCopy = nil // the window's toast is not in sight
+		if !inWin {
+			o.OnCopy = nil // the window's toast is not in sight
+		}
 		term, err := terminal.New(o)
 		if err != nil {
 			stream.Close()
-			q.win.Update(func() {
+			post(func() {
 				if q.e == e {
 					e.err = err.Error()
 				}
@@ -268,7 +347,7 @@ func (a *App) attachQuick() {
 		term.Resize(stream.Welcome.Cols, stream.Welcome.Rows)
 		stream.OnResized = term.Resize
 		close(g.ready)
-		q.win.Update(func() {
+		post(func() {
 			if q.e != e {
 				term.Close()
 				stream.Close()
@@ -280,10 +359,11 @@ func (a *App) attachQuick() {
 		// The pane ended, as its shell exited: the next show starts
 		// another, or shows the session's next pane.
 		<-term.Done()
-		q.win.Update(func() {
+		post(func() {
 			if q.e == e {
 				a.dropQuick()
 				a.hideQuick()
+				a.hideDrop()
 			}
 		})
 	}()
@@ -301,7 +381,7 @@ func (a *App) dropQuick() {
 	if q.e.stream != nil {
 		q.e.stream.Close()
 	}
-	q.e, q.pane = nil, ""
+	q.e, q.pane, q.inWin = nil, "", false
 }
 
 // quickChanged follows a state of kerod: the quick terminal attaches
@@ -309,7 +389,7 @@ func (a *App) dropQuick() {
 func (a *App) quickChanged() {
 	q := &a.quick
 	if q.e == nil {
-		if q.shown && q.err == "" {
+		if (q.shown || q.drop) && q.err == "" {
 			a.attachQuick()
 		}
 		return
@@ -317,7 +397,7 @@ func (a *App) quickChanged() {
 	s := a.quickSession()
 	if s == nil || s.PaneByID(q.pane) == nil {
 		a.dropQuick()
-		if q.shown {
+		if q.shown || q.drop {
 			a.attachQuick()
 		}
 	}
@@ -325,13 +405,25 @@ func (a *App) quickChanged() {
 
 // quickView is the panel's content: the terminal, or what keeps it.
 func (a *App) quickView(c *ui.Context) {
-	q := &a.quick
 	a.looks()
 	pal := paletteFor(c)
 	c.Root().Background(lookFor(c).term.Background)
+	a.quickBody(c, pal, false)
+}
+
+// quickBody is the quick terminal's terminal, or what keeps it: in the
+// panel and in the dropdown. focus gives the dropdown's terminal the
+// keyboard once, as it comes to rest: a cached layer takes no focus while
+// it slides.
+func (a *App) quickBody(c *ui.Context, pal *palette, focus bool) {
+	q := &a.quick
 	switch {
 	case q.e != nil && q.e.term != nil:
 		terminal.View(c.Key("term"), q.e.term).Fill().Bind(&q.ref)
+		if focus && q.focusDrop {
+			q.focusDrop = false
+			q.ref.Focus()
+		}
 	case q.err != "" || q.e != nil && q.e.err != "":
 		detail := q.err
 		if q.e != nil {
@@ -345,6 +437,63 @@ func (a *App) quickView(c *ui.Context) {
 	default:
 		ui.Column(c).Fill().Center().Children(func() { ui.Spinner(c) })
 	}
+}
+
+// quickDropH is the dropdown's height, of the panes' room, and the least
+// it takes.
+const (
+	quickDropH   = 0.45
+	quickDropMin = 180
+)
+
+// dropView is the scratch dropdown over the panes, h DIPs high: it slides
+// down from the top of the card as it shows and back up as it hides. At
+// rest while hidden it builds nothing.
+func (a *App) dropView(c *ui.Context, pal *palette, stack ui.Element, h float32) {
+	q := &a.quick
+	k := stack.AnimateTo("scratch", b2f(q.drop), motionBase)
+	if k <= 0 {
+		return
+	}
+	dh := max(h*quickDropH, quickDropMin)
+	panel := floating(ui.Column(c.Key("scratch")).Absolute().Left(0).Top(0).Right(0).Height(dh).Radius(rPane).Clip().
+		Background(lookFor(c).term.Background).AlignItems(ui.Stretch).Label(locales.ScratchTerminal()), pal)
+	if k < 1 {
+		// One cached bitmap moves, as the agents view does.
+		panel.Cache().Opacity(k).Translate(0, -dh*(1-k))
+	}
+	if !q.drop {
+		panel.PassThrough()
+	}
+	panel.Children(func() {
+		// A header as a pane's: what it is, and the key that hides it.
+		ui.Row(c.Key("scratch-head")).Height(headerH).Shrink(0).AlignItems(ui.Center).Gap(8).Padding(0, 10, 0, 16).Children(func() {
+			ui.Icon(c, terminalIcon).Size(14, 14).TextColor(pal.textMuted).Shrink(0)
+			ui.Text(c, locales.ScratchTerminal()).FontSize(fsSmall).FontWeight(wSemibold).TextColor(pal.text).SingleLine()
+			if keys := a.scratchKeys(); keys != "" {
+				ui.Text(c, locales.ScratchHide(keys)).FontSize(fsSmall).TextColor(pal.textFaint).SingleLine().Ellipsis("…").MinWidth(0)
+			}
+			ui.Spacer(c)
+			a.controlsRoom(c, 0)
+		})
+		ui.Column(c.Key("scratch-body")).Grow(1).MinHeight(0).AlignItems(ui.Stretch).Children(func() {
+			a.quickBody(c, pal, q.drop && k >= 1)
+		})
+	})
+}
+
+// scratchKeys are the keys that show and hide the scratch, as "Ctrl+B g",
+// "" while the tuios keys are off or the key is not bound.
+func (a *App) scratchKeys() string {
+	tk := &a.tk
+	if !a.keysOn() || tk.reg == nil {
+		return ""
+	}
+	ks := tk.reg.GetKeys("toggle_scratch")
+	if len(ks) == 0 {
+		return ""
+	}
+	return chordLabel(tk.leader) + " " + ks[0]
 }
 
 // quickTermFor returns the quick terminal's terminal when it shows a pane,

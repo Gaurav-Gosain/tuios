@@ -1184,6 +1184,8 @@
   "endedDeleteAllDetail": "guios forgets them. Each agent keeps its own history of the conversation.",
   "endedSetUpSkill": "Set up the tuios integration for your agents to list their ended conversations here",
   "actionQuickTerminal": "Quick terminal",
+  "scratchTerminal": "Scratch terminal",
+  "scratchHide": "Press {keys} to hide it.",
   "toastGlobalShortcutFailed": "Couldn’t use {keys} for the quick terminal: {error}",
   "setShortcutGlobal": "Works in every app",
   "menuWorkspace": "Workspace",

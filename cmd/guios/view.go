@@ -1098,6 +1098,7 @@ func (a *App) card(c *ui.Context, pal *palette, bar ui.TitleBar, shown float32) 
 		move = motionBase
 	}
 	k := stack.AnimateTo("agents", b2f(on), move)
+	h := stack.Bounds().H
 	stack.Children(func() {
 		if k < 1 {
 			ui.Column(c.Key("work")).Absolute().Left(0).Top(0).Right(0).Bottom(0).AlignItems(ui.Stretch).Children(func() {
@@ -1116,6 +1117,7 @@ func (a *App) card(c *ui.Context, pal *palette, bar ui.TitleBar, shown float32) 
 			}
 			over.Children(func() { a.cockpitCard(c, pal, bar, shown) })
 		}
+		a.dropView(c, pal, stack, h)
 	})
 }
 

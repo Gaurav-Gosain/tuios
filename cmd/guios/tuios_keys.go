@@ -523,7 +523,7 @@ func (a *App) runKeyAction(action string) {
 	case "prefix_toggle_other_rail":
 		a.toggleRight()
 	case "toggle_scratch":
-		a.toggleQuick()
+		a.toggleScratch()
 		return
 	case "prefix_agents_settings":
 		a.openSettings("agents")

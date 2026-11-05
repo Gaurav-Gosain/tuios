@@ -616,6 +616,8 @@
   "endedDeleteAllDetail": "guios の一覧から消えます。会話の履歴は各エージェントに残ります。",
   "endedSetUpSkill": "終了したエージェントの会話をここに表示するには、エージェント向けスキルを設定してください",
   "actionQuickTerminal": "クイックターミナル",
+  "scratchTerminal": "スクラッチターミナル",
+  "scratchHide": "{keys} で隠します。",
   "toastGlobalShortcutFailed": "{keys} をクイックターミナルに使えませんでした: {error}",
   "setShortcutGlobal": "どのアプリでも使えます",
   "menuWorkspace": "ワークスペース",

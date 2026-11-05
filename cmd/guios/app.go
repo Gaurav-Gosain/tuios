@@ -660,7 +660,7 @@ func (a *App) hostGroups(h *host) []group {
 		known[p.ID] = true
 		g := group{host: h, project: p}
 		for i := range a.st.Sessions {
-			if a.st.Sessions[i].Project == p.ID {
+			if a.st.Sessions[i].Project == p.ID && a.listed(&a.st.Sessions[i]) {
 				g.sessions = append(g.sessions, &a.st.Sessions[i])
 			}
 		}
@@ -668,7 +668,7 @@ func (a *App) hostGroups(h *host) []group {
 	}
 	other := group{host: h, project: proto.Project{ID: "", Name: locales.SidebarOtherProject()}}
 	for i := range a.st.Sessions {
-		if s := &a.st.Sessions[i]; !known[s.Project] && a.hostOf(s.ID) == h {
+		if s := &a.st.Sessions[i]; !known[s.Project] && a.hostOf(s.ID) == h && a.listed(s) {
 			other.sessions = append(other.sessions, s)
 		}
 	}
