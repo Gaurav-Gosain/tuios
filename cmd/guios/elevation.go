@@ -4,6 +4,8 @@ import (
 	"time"
 
 	"github.com/Gaurav-Gosain/mygo/ui"
+
+	"github.com/Gaurav-Gosain/tuios/internal/guios/roles"
 )
 
 // Surfaces stand out by their color and an edge, crisp, on whole pixels.
@@ -141,7 +143,7 @@ func kindButton(c *ui.Context, key, label, keys string, kind int, height, radius
 	}
 	switch {
 	case b.Pressed() && kind == btnPrimary:
-		bg = awayFrom(bg, fg, 0.14)
+		bg = awayFrom(bg, fg, roles.PressStep)
 	case b.Pressed():
 		bg = bg.Mix(ui.Hex("#000000"), 0.08)
 	case b.Hovered() && kind == btnDanger:
@@ -149,7 +151,7 @@ func kindButton(c *ui.Context, key, label, keys string, kind int, height, radius
 		bg = bg.Mix(ui.Hex("#000000"), 0.08)
 	case b.Hovered() && kind == btnPrimary:
 		// Away from the ink, so the label keeps its 4.5:1.
-		bg = awayFrom(bg, fg, 0.08)
+		bg = awayFrom(bg, fg, roles.HoverStep)
 	case b.Hovered() && kind != btnSecondary:
 		bg = bg.Mix(ui.Hex("#ffffff"), 0.08)
 	case b.Hovered():

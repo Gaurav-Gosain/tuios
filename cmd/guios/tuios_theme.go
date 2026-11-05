@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"image/color"
 	"os"
 	"path/filepath"
 	"sync"
@@ -10,12 +9,12 @@ import (
 
 	"github.com/Gaurav-Gosain/mygo"
 	"github.com/Gaurav-Gosain/mygo/plugins/terminal"
-	"github.com/Gaurav-Gosain/mygo/ui"
 	"tuios.dev/swatch"
 
 	"github.com/Gaurav-Gosain/tuios/cmd/guios/locales"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/guios/client"
+	"github.com/Gaurav-Gosain/tuios/internal/guios/roles"
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
 )
 
@@ -145,33 +144,11 @@ func tuiosLook(id string) *look {
 
 // tuiosTermTheme is a tuios theme as a terminal theme, nil for none.
 func tuiosTermTheme(id string) *terminal.Theme {
-	if id == "" {
+	th, ok := roles.FromTheme(id)
+	if !ok {
 		return nil
 	}
-	theme.EnsureRegistry()
-	pal, fg, bg, cursor, ok := theme.Colors(id)
-	if !ok || fg == nil || bg == nil {
-		return nil
-	}
-	th := &terminal.Theme{Foreground: uiColor(fg), Background: uiColor(bg)}
-	for i, c := range pal {
-		if c != nil {
-			th.Palette[i] = uiColor(c)
-		}
-	}
-	th.Cursor = th.Foreground
-	if cursor != nil {
-		th.Cursor = uiColor(cursor)
-	}
-	th.CursorText = th.Background
-	th.Selection = th.Palette[4].Mix(th.Background, 0.6)
-	th.SelectionText = th.Foreground
-	return th
-}
-
-func uiColor(c color.Color) ui.Color {
-	r, g, b, _ := c.RGBA()
-	return ui.RGB(uint8(r>>8), uint8(g>>8), uint8(b>>8))
+	return toTerm(th)
 }
 
 // previewLooks are the looks Settings previews, by theme id, built once
