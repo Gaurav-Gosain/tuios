@@ -118,7 +118,7 @@ func (a *App) agentRows(c *ui.Context, pal *palette, s *proto.Session, needs []c
 }
 
 // agentRow is one agent: under its session, or in Needs you. Line 1 is
-// its mark, its name and, while it waits or works, how long; line 2 is its
+// its mark, its name and, while it waits for the person, how long; line 2 is its
 // harness and what it is at, or what it asks.
 func (a *App) agentRow(c *ui.Context, pal *palette, ag client.Agent, need *ckNeed) {
 	var it *session.AttentionItem
@@ -159,9 +159,10 @@ func (a *App) agentRow(c *ui.Context, pal *palette, ag client.Agent, need *ckNee
 					name.FontWeight(wSemibold)
 				}
 				ui.Spacer(c)
-				// How long it has waited or worked; ago asks for the frame
-				// its label changes in, and no other.
-				if ag.StateAt > 0 && (need != nil || st == proto.Working) {
+				// How long it has waited, on a row that needs the person
+				// alone: ago asks for a frame each time a label changes,
+				// and every age on screen changes at its own minute.
+				if ag.StateAt > 0 && need != nil {
 					ui.Text(c, ago(ag.StateAt/int64(time.Millisecond), c.Now())).FontSize(fsSmall).TextColor(pal.textFaint).FontFeatures("tnum").SingleLine().Shrink(0)
 				}
 			})
