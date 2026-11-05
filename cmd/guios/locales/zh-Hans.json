@@ -772,7 +772,7 @@
   "cockpitMoveTo": "移到 {stage}",
   "cockpitTakeCard": "交给所选代理",
   "cockpitBlocked": "受阻",
-  "cockpitFree": "空闲",
+  "cockpitFree": "无代理",
   "cockpitTakeNeedsAgent": "请先选择卡片所在会话的代理。",
   "cockpitCardFree": "没有窗格持有此卡片。",
   "cockpitDetails": "详情",

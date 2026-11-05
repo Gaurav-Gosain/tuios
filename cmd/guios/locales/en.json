@@ -1420,7 +1420,7 @@
   "cockpitMoveTo": "Move to {stage}",
   "cockpitTakeCard": "Give to the selected agent",
   "cockpitBlocked": "Blocked",
-  "cockpitFree": "free",
+  "cockpitFree": "No agent",
   "cockpitTakeNeedsAgent": "Select an agent of the card's session first.",
   "cockpitCardFree": "No pane holds this card.",
   "cockpitDetails": "Details",

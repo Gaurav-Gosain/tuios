@@ -772,7 +772,7 @@
   "cockpitMoveTo": "{stage} へ移動",
   "cockpitTakeCard": "選んだエージェントに渡す",
   "cockpitBlocked": "ブロック中",
-  "cockpitFree": "空き",
+  "cockpitFree": "エージェントなし",
   "cockpitTakeNeedsAgent": "先にカードのセッションのエージェントを選んでください。",
   "cockpitCardFree": "このカードを持つペインはありません。",
   "cockpitDetails": "詳細",

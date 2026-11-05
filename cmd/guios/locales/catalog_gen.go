@@ -7840,11 +7840,11 @@ func (msgs Messages) CockpitBlocked() string {
 	return Catalog.Format(msgs.locale, "cockpitBlocked", nil)
 }
 
-// CockpitFree says "free"
+// CockpitFree says "No agent"
 // in the language the app shows.
 func CockpitFree() string { return In(i18n.Locale()).CockpitFree() }
 
-// CockpitFree says "free"
+// CockpitFree says "No agent"
 // in the language of msgs.
 func (msgs Messages) CockpitFree() string {
 	return Catalog.Format(msgs.locale, "cockpitFree", nil)
