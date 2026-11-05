@@ -561,6 +561,7 @@ func oklch(c ui.Color) (l, ch, h float32) {
 	hue := math.Mod(math.Atan2(B, A)*180/math.Pi+360, 360)
 	return float32(L), float32(math.Hypot(A, B)), float32(hue)
 }
+
 // onAttention is the ink of a count on the needs-you amber: the dark ink
 // or white, whichever reads better on it. White on the light theme's amber
 // was 3.42:1 (council round 4, S1); the dark ink is 5:1.
