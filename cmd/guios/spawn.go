@@ -93,10 +93,11 @@ type spawnSheet struct {
 	// failed holds that the draft is a start the daemon refused: its
 	// notice says why when the sheet opens again.
 	failed bool
-	// byKeyAt is when n in a list opened the sheet: text typed into it
-	// within guardWindow was prose, not a task (cockpit_guard.go).
-	byKeyAt time.Time
-	open    bool
+	// byKey holds that a letter in a list opened the sheet: Enter in its
+	// task does not start, since the task may be a sentence meant for a
+	// reply box (cockpit_guard.go). Ctrl+Enter and Start do.
+	byKey bool
+	open  bool
 	// task is the task and its images, as the reply box holds a message.
 	task                ckDraft
 	model, branch, base string
@@ -196,7 +197,7 @@ func (a *App) newAgent() {
 	if !s.failed {
 		s.notice = ""
 	}
-	s.open, s.failed, s.starting, s.listOpen, s.card = true, false, false, false, nil
+	s.open, s.failed, s.starting, s.listOpen, s.card, s.byKey = true, false, false, false, nil, false
 	s.focusField, s.focusAgain = spTask, true
 	s.session = sess
 	ck.spawnGen++

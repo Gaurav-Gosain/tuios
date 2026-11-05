@@ -52,9 +52,8 @@ type ckCompare struct {
 	// again for the keep to run.
 	armed    string
 	armedGen uint64
-	// armedSeq is the typing guard's count at the first Shift+K: the
-	// second counts only as the very next key.
-	armedSeq uint64
+	// askJudge holds that Shift+J asked to start a judge: Enter starts it.
+	askJudge bool
 	confirm  bool
 	keepSig  string
 	// busy is what runs now ("judge", "keep"), note what last ended.
@@ -387,9 +386,10 @@ func compareErr(err error) string {
 	return flat(err.Error())
 }
 
-// compareKeep is Shift+K: the first press says what a keep does, the second
-// keeps the focused attempt and removes the others.
-func (a *App) compareKeep() {
+// compareKeep is Shift+K or the Keep button: the first press says what a
+// keep does; Enter, or a second click, keeps the focused attempt and
+// removes the others (confirmed).
+func (a *App) compareKeep(confirmed bool) {
 	cp := a.ck.cmp
 	if cp == nil || cp.busy != "" {
 		return
@@ -402,13 +402,16 @@ func (a *App) compareKeep() {
 		cp.armed, cp.note = "", locales.CompareNothingToKeep(ckLetter(cp.focus))
 		return
 	}
-	if cp.armed != r.Session || cp.armedSeq+1 != a.ck.guard.cur && !a.ck.clickKeep {
-		cp.armedSeq = a.ck.guard.cur
-		// The first k reads the attempts again: the warning lists the
+	if cp.armed != r.Session {
+		// The first press reads the attempts again: the warning lists the
 		// files a keep deletes as they are now.
-		cp.armed, cp.confirm, cp.note = r.Session, false, ""
+		cp.armed, cp.confirm, cp.note, cp.askJudge = r.Session, false, "", false
 		a.compareFetch()
 		cp.armedGen = cp.gen
+		return
+	}
+	if !confirmed {
+		// Shift+K again does nothing: Enter keeps.
 		return
 	}
 	if cp.loading || cp.confirm || cp.armedGen != cp.gen {
@@ -555,54 +558,55 @@ func (a *App) compareView(c *ui.Context, pal *palette) {
 }
 
 // compareKeys are the comparison's keys. h l j k and the arrows move
-// between the attempts, as j and k move the cursor in every other list;
-// Shift+J judges and Shift+K keeps, twice (council round 3, S6). Letters go
-// through the typing guard: a letter typed as text runs nothing.
+// between the attempts, as j and k move the cursor in every other list.
+// Shift+J asks to start a judge and Shift+K asks to keep (council round 3,
+// S6): Enter does what was asked, Escape drops it, and a letter typed
+// meanwhile drops it too.
 func (a *App) compareKeys(c *ui.Context, panel ui.Element, cp *ckCompare, n int) {
 	g := &a.ck.guard
 	step := func(d int) {
 		if f := min(max(cp.focus+d, 0), n-1); f != cp.focus && f >= 0 {
-			cp.focus, cp.armed = f, ""
+			cp.focus, cp.armed, cp.askJudge = f, "", false
 		}
 	}
+	asking := cp.armed != "" || cp.askJudge
 	kind := func(k ckKey) keyKind {
 		switch {
+		case asking:
+			return kindProse
 		case !k.shift && (k.key == ui.KeyH || k.key == ui.KeyJ || k.key == ui.KeyK || k.key == ui.KeyL):
 			return kindMove
-		case !k.shift && k.key == ui.KeyR:
+		case !k.shift && k.key == ui.KeyR,
+			!k.shift && k.key >= ui.Key1 && k.key <= ui.Key9,
+			k.shift && k.key == ui.KeyJ,
+			k.shift && k.key == ui.KeyK:
 			return kindView
-		case !k.shift && k.key >= ui.Key1 && k.key <= ui.Key9:
-			return kindMove
-		case k.shift && k.key == ui.KeyJ:
-			return kindAct
-		case k.shift && k.key == ui.KeyK:
-			if r, ok := cp.focused(); ok && ckKeepable(r) {
-				return kindAct
-			}
 		}
 		return kindProse
 	}
-	second := func(k ckKey) bool {
-		r, ok := cp.focused()
-		return k.shift && k.key == ui.KeyK && ok && cp.armed == r.Session && cp.armedSeq+1 == g.seq
-	}
-	lk := listKeys{kind: kind, second: second, hint: locales.CompareKeysHere}
-	if k, ok := a.guard(c, panel, g, lk); ok {
+	lk := listKeys{kind: kind, prose: func(string) bool {
+		// A letter drops what was asked, and runs nothing.
+		cp.armed, cp.askJudge = "", false
+		return asking
+	}, hint: locales.CompareKeysHere}
+	if k, ok := a.guard(panel, g, lk); ok {
 		switch {
 		case k.shift && k.key == ui.KeyJ:
-			a.compareJudge()
+			if cp.busy == "" && cp.res != nil {
+				cp.armed, cp.askJudge = "", true
+			}
 		case k.shift && k.key == ui.KeyK:
-			a.compareKeep()
+			a.compareKeep(false)
 		case k.key == ui.KeyH, k.key == ui.KeyK:
 			step(-1)
 		case k.key == ui.KeyL, k.key == ui.KeyJ:
 			step(1)
 		case k.key == ui.KeyR:
-			cp.armed = ""
+			cp.armed, cp.askJudge = "", false
 			a.compareFetch()
 		case k.key >= ui.Key1 && k.key <= ui.Key9:
 			if i := int(k.key - ui.Key1); i < n {
-				cp.focus, cp.armed = i, ""
+				cp.focus, cp.armed, cp.askJudge = i, "", false
 			}
 		}
 		c.Invalidate()
@@ -610,17 +614,20 @@ func (a *App) compareKeys(c *ui.Context, panel ui.Element, cp *ckCompare, n int)
 	}
 	key := func(k ui.Key) bool { return panel.Shortcut(0, k) }
 	switch {
+	case key(ui.KeyEnter) && cp.askJudge:
+		cp.askJudge = false
+		a.compareJudge()
+	case key(ui.KeyEnter) && cp.armed != "":
+		a.compareKeep(true)
+	case key(ui.KeyEnter):
+		a.compareGo()
 	case key(ui.KeyLeft), key(ui.KeyUp), panel.Shortcut(ui.Shift, ui.KeyTab):
 		step(-1)
 	case key(ui.KeyRight), key(ui.KeyDown), key(ui.KeyTab):
 		step(1)
-	case key(ui.KeyEnter) && !g.typing(time.Now()):
-		a.compareGo()
-	case key(ui.KeyEnter):
 	default:
 		return
 	}
-	g.boundary()
 	c.Invalidate()
 }
 
@@ -791,6 +798,8 @@ func compareState(pal *palette, r ckFanAttempt) (string, ui.Color) {
 func (a *App) compareFoot(c *ui.Context, pal *palette, cp *ckCompare) {
 	r, ok := cp.focused()
 	switch {
+	case cp.askJudge:
+		ui.Text(c, locales.CompareAskJudge()).FontSize(fsSmall).TextColor(pal.attention).MaxLines(2).Shrink(0)
 	case cp.armed != "" && ok && cp.res != nil:
 		var others []string
 		ignored := 0
@@ -840,9 +849,7 @@ func (a *App) compareFoot(c *ui.Context, pal *palette, cp *ckCompare) {
 				label = locales.CompareKeepAgain(ckLetter(cp.focus))
 			}
 			if kindButton(c, "cmp-keep", busyLabel(cp.busy == "keep", label), "⇧K", btnDanger, hControl, rControl, pal, false) {
-				a.ck.clickKeep = true
-				a.compareKeep()
-				a.ck.clickKeep = false
+				a.compareKeep(cp.armed == r.Session)
 			}
 		}
 		if button(c, "cmp-open", locales.CockpitOpenPane(), "↵", true, pal) {

@@ -190,7 +190,6 @@ func (a *App) replyBox(c *ui.Context, pal *palette, ag client.Agent) {
 				if insert != "" {
 					n := utf8.RuneCountInString(d.text)
 					in.SetTextSelection(n, n)
-					a.ck.typedAt = time.Now()
 				}
 			}
 			in.OnPaste(func(text string) bool {
@@ -199,9 +198,6 @@ func (a *App) replyBox(c *ui.Context, pal *palette, ag client.Agent) {
 				}
 				return a.pasteImageInto(d)
 			})
-			if in.Changed() {
-				a.ck.typedAt = time.Now()
-			}
 			in.OnTextKey(func(k ui.TextKey) bool {
 				switch {
 				case k.Key == ui.KeyEnter && k.Mods == ui.Cmd && !mail:

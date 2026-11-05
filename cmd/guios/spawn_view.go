@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"slices"
 	"strings"
-	"time"
 
 	"github.com/Gaurav-Gosain/mygo/ui"
 
@@ -64,6 +63,8 @@ func (a *App) spawnView(c *ui.Context, pal *palette) {
 		switch {
 		case c.Shortcut(ui.Cmd, ui.KeyEnter):
 			start = true
+		case c.Shortcut(0, ui.KeyEnter) && s.byKey:
+			s.notice, s.noticeAt = locales.SpawnStartChord(keyName("CmdOrCtrl+Enter")), spTask
 		case c.Shortcut(0, ui.KeyEnter):
 			start = true
 		case c.Shortcut(ui.Cmd, ui.KeyS):
@@ -180,17 +181,7 @@ func (a *App) spawnTask(c *ui.Context, pal *palette, s *spawnSheet, h *spawnHand
 				}
 				return a.pasteImageInto(&s.task)
 			})
-			if in.Changed() && !s.byKeyAt.IsZero() && (time.Since(s.byKeyAt) < guardWindow || time.Since(a.ck.guard.last) < guardWindow) {
-				// n opened the sheet in the middle of typed prose: take
-				// it back, and the rest of the prose goes nowhere.
-				s.task.text, s.byKeyAt = "", time.Time{}
-				a.ck.guard.last = time.Now()
-				a.ck.guard.hinted = true
-				a.spawnClose()
-				a.toast(locales.CockpitKeysToList())
-				c.Invalidate()
-			} else if in.Changed() {
-				s.byKeyAt = time.Time{}
+			if in.Changed() {
 				s.followTask()
 				if s.noticeAt == spTask {
 					s.notice = ""
@@ -202,6 +193,14 @@ func (a *App) spawnTask(c *ui.Context, pal *palette, s *spawnSheet, h *spawnHand
 					// first for itself, and the sheet stayed open.
 					s.task.text = k.Text()
 					a.update(a.spawnClose)
+					return true
+				}
+				if k.Key == ui.KeyEnter && k.Mods == 0 && s.byKey {
+					// A letter in a list opened the sheet: the task may be
+					// a sentence meant for a reply box.
+					s.task.text = k.Text()
+					s.notice, s.noticeAt = locales.SpawnStartChord(keyName("CmdOrCtrl+Enter")), spTask
+					a.update(func() {})
 					return true
 				}
 				if k.Key == ui.KeyEnter && (k.Mods == 0 || k.Mods == ui.Cmd) {

@@ -56,11 +56,7 @@ const ckFoldAt = 8
 // is, before a key or a click answers it (the TUI's inboxAnswerSettle).
 const ckAnswerSettle = 400 * time.Millisecond
 
-// ckTypingQuiet is how long after the person typed in the reply box an
-// answer key is still taken as typing, not as an answer.
-const ckTypingQuiet = 600 * time.Millisecond
-
-// ckRiskWindow is how long the first press of an allow on a risky approval
+// ckRiskWindow is how long the first click of an allow on a risky approval
 // waits for the second (the TUI's inboxRiskPressWindow).
 const ckRiskWindow = 3 * time.Second
 
@@ -102,9 +98,6 @@ type ckShown struct {
 type ckArmed struct {
 	decision, item string
 	at             time.Time
-	// seq is the typing guard's count at the first press: the second
-	// counts only as the very next key.
-	seq uint64
 }
 
 // cockpit is the agent cockpit's state.
@@ -169,11 +162,10 @@ type cockpit struct {
 	// it, for a prompt no hook holds.
 	peek  *ckPeek
 	armed ckArmed
-	// clickKeep holds that Compare's Keep button, not a key, asks to keep:
-	// a click needs no key order.
-	clickKeep bool
-	// typedAt is when the person last typed in the reply box.
-	typedAt time.Time
+	// question is the open confirm step of a list letter (cockpit_ask.go),
+	// and confirmed holds that its Enter is answering now.
+	question  *ckQuestion
+	confirmed bool
 	// reason is the open "reject and say why" line, for the item id.
 	reason, reasonFor string
 	// undo is the last settle, which u takes back for 10 s.
@@ -553,6 +545,7 @@ func (a *App) ckSelect(r ckRow) {
 	ck.selAgt = ""
 	ck.reason = ""
 	ck.armed = ckArmed{}
+	ck.question = nil
 	if r.agent >= 0 {
 		ag := ck.agents[r.agent]
 		ck.selAgt = ag.Key()
@@ -635,22 +628,18 @@ func (a *App) goToAgent(ag client.Agent) {
 }
 
 // ckSettle puts the selected agent on the Settled shelf, or takes it off.
-// It returns how to take that back: the typing guard does, when the key
-// turns out to be the first letter of a word.
-func (a *App) ckSettle() func() {
+func (a *App) ckSettle() {
 	ag, ok := a.ckSelectedAgent()
 	cl := a.cockpitClient()
 	if !ok || cl == nil {
 		a.toast(locales.CockpitSettleOnlyAgent())
-		return nil
+		return
 	}
-	action, back := "settle", "unsettle"
+	action := "settle"
 	if ag.Settled {
-		action, back = "unsettle", "settle"
+		action = "unsettle"
 	}
-	done := make(chan struct{})
 	go func() {
-		defer close(done)
 		var out struct {
 			ID string `json:"id"`
 		}
@@ -667,15 +656,6 @@ func (a *App) ckSettle() func() {
 			a.refreshCockpit()
 		})
 	}()
-	return func() {
-		a.ck.undo = nil
-		go func() {
-			// After the first answer, so that the daemon gets them in order.
-			<-done
-			_, _ = cl.Verb("mark-attention", map[string]any{"session": ag.Session, "window": ag.Window, "action": back}, true)
-			a.update(a.refreshCockpit)
-		}()
-	}
 }
 
 // ckUndoSettle takes back the last settle, within 10 s.
