@@ -2310,5 +2310,8 @@
   "keysGiveCard": "Give the card to the selected agent",
   "keysMoveCardLeft": "Move the card a column left",
   "keysMoveCardRight": "Move the card a column right",
-  "keysKeepAttempt": "Keep the attempt"
+  "keysKeepAttempt": "Keep the attempt",
+  "cockpitQueuedAnswerFirst": "Queued for {name}. Answer the call first.",
+  "cockpitWaitsForAnswer": "Waits until the call is answered.",
+  "cockpitHintQueue": "queue"
 }

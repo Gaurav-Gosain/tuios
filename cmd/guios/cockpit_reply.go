@@ -108,14 +108,20 @@ func (a *App) replyBox(c *ui.Context, pal *palette, ag client.Agent) {
 		a.fetchQueued(ag)
 	}
 	ui.Column(c.Key("reply")).Shrink(0).Margin(0, a.ckSide(24), 12, a.ckSide(24)).Gap(8).Children(func() {
+		cardWaits := a.ckCardWaits(ag)
 		for _, q := range r.queued[ag.Key()] {
 			ui.Row(c.Key("q-"+q.ID)).Gap(8).AlignItems(ui.Center).Padding(6, 10).Radius(rControl).Background(ckGround(pal)).Children(func() {
 				ui.Column(c).Grow(1).MinWidth(0).Gap(2).Children(func() {
 					oneLine(c, q.Text, fsBody, 0).TextColor(pal.text)
-					// Why it waits, from the queue's state.
-					oneLine(c, ckQueuedWhy(q.State), fsSmall, 0).TextColor(pal.textMuted)
+					// Why it waits, from the queue's state; a card that
+					// waits comes first.
+					why := ckQueuedWhy(q.State)
+					if cardWaits {
+						why = locales.CockpitWaitsForAnswer()
+					}
+					oneLine(c, why, fsSmall, 0).TextColor(pal.textMuted)
 				})
-				if full, ok := r.texts[q.ID]; ok && q.State != "delivering" {
+				if full, ok := r.texts[q.ID]; ok && q.State != "delivering" && !cardWaits {
 					if sizedButton(c, "now", locales.CockpitSendNowButton(), "", true, hControlSm, rControl, pal) {
 						a.sendQueuedNow(ag, q.ID, full)
 					}
@@ -240,7 +246,11 @@ func (a *App) replyBox(c *ui.Context, pal *palette, ag client.Agent) {
 				ui.Row(c).Gap(sp3).AlignItems(ui.Center).Grow(1).MinWidth(0).Clip().Children(func() {
 					keyHint(c, pal, keyName("CmdOrCtrl+V"), locales.CockpitHintImage())
 					keyHint(c, pal, "⇧↵", locales.CockpitHintNewLine())
-					keyHint(c, pal, keyName("CmdOrCtrl+Enter"), locales.CockpitHintSendNow())
+					if a.ckCardWaits(ag) {
+						keyHint(c, pal, keyName("CmdOrCtrl+Enter"), locales.CockpitHintQueue())
+					} else {
+						keyHint(c, pal, keyName("CmdOrCtrl+Enter"), locales.CockpitHintSendNow())
+					}
 				})
 				if sizedButton(c, "send", locales.CockpitSend(), "↵", true, hControlSm, rControl, pal) {
 					a.sendBox(ag, d, mail)
@@ -334,6 +344,22 @@ func (a *App) sendBox(ag client.Agent, d *ckDraft, mail bool) {
 			}
 		})
 	}()
+}
+
+// ckCardWaits reports whether an approval, a plan or a question waits on
+// the agent: its pane shows a prompt, and nothing guios types may reach the
+// pane's input until it is answered (council round 5, M1).
+func (a *App) ckCardWaits(ag client.Agent) bool {
+	for _, it := range a.ck.items {
+		if it.Session != ag.Session || it.Window != ag.Window || it.Host != ag.Host {
+			continue
+		}
+		switch it.Kind {
+		case session.AttentionApproval, session.AttentionPlan, session.AttentionQuestion, session.AttentionAsk:
+			return true
+		}
+	}
+	return false
 }
 
 // keyName is a shortcut as this platform writes it.
@@ -453,6 +479,13 @@ func (a *App) sendReply(ag client.Agent, d *ckDraft, now bool) {
 		a.toast(locales.CockpitNowNoImages())
 		return
 	}
+	forCard := now && a.ckCardWaits(ag)
+	if forCard {
+		// The pane shows a permission dialog or a question: an Enter typed
+		// into it would pick the dialog's option. The draft is queued, and
+		// goes in when the agent rests (council round 5, M1).
+		now = false
+	}
 	var verb string
 	var p map[string]any
 	if now {
@@ -491,9 +524,12 @@ func (a *App) sendReply(ag client.Agent, d *ckDraft, now bool) {
 			}
 			d.last = text
 			d.text, d.images = "", nil
-			if now {
+			switch {
+			case now:
 				a.toast(locales.CockpitSentNow(ag.Name))
-			} else {
+			case forCard:
+				a.toast(locales.CockpitQueuedAnswerFirst(ag.Name))
+			default:
 				a.toast(locales.CockpitQueuedFor(ag.Name))
 			}
 			a.fetchQueued(ag)
@@ -542,6 +578,11 @@ func ckQueuedWhy(state string) string {
 func (a *App) sendQueuedNow(ag client.Agent, id, text string) {
 	cl := a.cockpitClient()
 	if cl == nil {
+		return
+	}
+	if a.ckCardWaits(ag) {
+		// Not into a pane at a prompt: the Enter would answer it.
+		a.toast(locales.CockpitWaitsForAnswer())
 		return
 	}
 	go func() {

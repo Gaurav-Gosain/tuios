@@ -12989,3 +12989,35 @@ func KeysKeepAttempt() string { return In(i18n.Locale()).KeysKeepAttempt() }
 func (msgs Messages) KeysKeepAttempt() string {
 	return Catalog.Format(msgs.locale, "keysKeepAttempt", nil)
 }
+
+// CockpitQueuedAnswerFirst says "Queued for {name}. Answer the call first."
+// in the language the app shows.
+func CockpitQueuedAnswerFirst(name string) string {
+	return In(i18n.Locale()).CockpitQueuedAnswerFirst(name)
+}
+
+// CockpitQueuedAnswerFirst says "Queued for {name}. Answer the call first."
+// in the language of msgs.
+func (msgs Messages) CockpitQueuedAnswerFirst(name string) string {
+	return Catalog.Format(msgs.locale, "cockpitQueuedAnswerFirst", map[string]any{"name": name})
+}
+
+// CockpitWaitsForAnswer says "Waits until the call is answered."
+// in the language the app shows.
+func CockpitWaitsForAnswer() string { return In(i18n.Locale()).CockpitWaitsForAnswer() }
+
+// CockpitWaitsForAnswer says "Waits until the call is answered."
+// in the language of msgs.
+func (msgs Messages) CockpitWaitsForAnswer() string {
+	return Catalog.Format(msgs.locale, "cockpitWaitsForAnswer", nil)
+}
+
+// CockpitHintQueue says "queue"
+// in the language the app shows.
+func CockpitHintQueue() string { return In(i18n.Locale()).CockpitHintQueue() }
+
+// CockpitHintQueue says "queue"
+// in the language of msgs.
+func (msgs Messages) CockpitHintQueue() string {
+	return Catalog.Format(msgs.locale, "cockpitHintQueue", nil)
+}

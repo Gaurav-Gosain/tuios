@@ -757,7 +757,11 @@ func (a *App) cockpitHints(c *ui.Context, pal *palette) {
 			// The keys of the field that has them.
 			hint("↵", locales.CockpitHintSend())
 			hint("⇧↵", locales.CockpitHintNewLine())
-			hint(keyName("CmdOrCtrl+Enter"), locales.CockpitHintSendNow())
+			if ag, ok := a.ckSelectedAgent(); ok && a.ckCardWaits(ag) {
+				hint(keyName("CmdOrCtrl+Enter"), locales.CockpitHintQueue())
+			} else {
+				hint(keyName("CmdOrCtrl+Enter"), locales.CockpitHintSendNow())
+			}
 			hint("esc", locales.CockpitHintList())
 		case a.ck.stacked && a.ck.stackFocus:
 			hint("esc", locales.CockpitHintBack())
@@ -790,7 +794,11 @@ func (a *App) ckAllHints(hint func(k, what string)) {
 	r, ok := a.ckSelected()
 	item := ok && r.item != nil
 	answerable := item && ckAnswerable(*r.item)
-	if _, _, waiting := a.ckDraftWaiting(); waiting {
+	if ag, _, waiting := a.ckDraftWaiting(); waiting && a.ckCardWaits(ag) {
+		// A card waits: Ctrl+Enter queues the draft, and types nothing
+		// into the pane.
+		hint(chordName(chAllow), locales.CockpitHintQueue())
+	} else if waiting {
 		// The reply box holds text: Ctrl+Enter sends it.
 		hint(chordName(chAllow), locales.CockpitHintSendNow())
 	} else if answerable {

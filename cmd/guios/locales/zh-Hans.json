@@ -1281,5 +1281,8 @@
   "keysGiveCard": "把卡片交给选中的智能体",
   "keysMoveCardLeft": "把卡片左移一列",
   "keysMoveCardRight": "把卡片右移一列",
-  "keysKeepAttempt": "保留该尝试"
+  "keysKeepAttempt": "保留该尝试",
+  "cockpitQueuedAnswerFirst": "已排队等待 {name}。请先回答这个调用。",
+  "cockpitWaitsForAnswer": "等到调用被回答后再发送。",
+  "cockpitHintQueue": "排队"
 }
