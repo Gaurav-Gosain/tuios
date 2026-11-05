@@ -251,6 +251,11 @@ func (a *App) workspacePill(c *ui.Context, pal *palette, s *proto.Session, w pro
 	switch {
 	case over:
 		bg, fg = pal.rowSelected, pal.text
+	case cur && !pal.dark:
+		// The light theme's selected ground is white, the same as the
+		// card the strip sits on: the current pill takes the accent's
+		// chip there and in the sidebar, its text at 5:1 or more.
+		bg, fg = pal.accent.Alpha(0.16), pal.accentText
 	case cur:
 		bg, fg = pal.rowSelected, pal.text
 	case pill.Hovered():
