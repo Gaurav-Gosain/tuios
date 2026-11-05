@@ -4985,6 +4985,39 @@ the machine, so neither test reads a clock.
   `math.Hypot` can differ in the last bit and move a route.
 - The tuios binary grows by 20 KB (see "Binary size budget").
 
+## 2026-11 the drag label parses its URI list once per list
+
+While a file drag is in flight, every composed frame drew the drag label,
+and the label read the whole URI list the source had sent ahead again to
+name the first three files. The cost grew with the list and was paid on
+every frame of the drag. The label text is now kept for that list and made
+again only when a new list arrives, so a frame's cost no longer grows with
+the list's length. The text is the same.
+
+Measured with a scratch benchmark (`newTestOS(nil)` at 200x60, the pointer
+at 100,30, a started drag whose `text/uri-list` holds `file:///t/f%d.txt`
+lines, one `renderDnDLabel` per iteration), base and branch test binaries
+built with `go test -c` (`go version` checked on both: go1.27.3), alternated
+for 10 rounds under `nice -n 10 taskset -c 0-5`, 0.3 s per run, compared with
+`benchstat`. The machine was busy with other work, so the times carry a
+spread of 20 to 40%; the allocation and memory rows do not move between runs:
+
+| files | time base | time branch | allocs base | allocs branch |
+|---|---:|---:|---:|---:|
+| 60 | 38.5 us | 6.9 us | 277 | 21 |
+| 900 (raw URIs) | 229.7 us | 16.1 us | 2,759 | 30 |
+| 100,000 (raw URIs) | 10.90 ms | 17.0 us | 92 | 30 |
+
+The 900 and 100,000 rows are labelled from the raw URIs: the drop splits a
+list into paths only up to 64 words, so a longer list never reaches the
+paths branch. The 60-file row is the usual drag and takes that branch. The
+branch's cost per frame is the label's drawing; the list is read once, when
+the label first draws, and again only for another list.
+
+The kept text is keyed on the identity of the slice it was made from (first
+byte and length). The source's data is decoded into a fresh slice for every
+list it sends, and the list is not rewritten in place during a drag.
+
 ## 2026-10 the pane read path in live handoff part 1
 
 Part 1 of the live handoff (`docs/design/live-handoff.md`) changes a pane's
