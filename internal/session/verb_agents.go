@@ -1575,7 +1575,9 @@ func (d *Daemon) waitAgentSettled(sess *Session, windowID string, pty *PTY, gate
 				return "window-closed", AgentStateNone.Name()
 			}
 			gate.observe(ev)
-			if !taken && gate.check(sess, pty.LastOutput) {
+			// An event about another pane says nothing about this pane's
+			// screen; the poll still looks.
+			if !taken && ev.Window == windowID && gate.check(sess, pty.LastOutput) {
 				taken = true
 			}
 			// Only a report stamped after the question was sent says anything

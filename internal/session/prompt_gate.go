@@ -215,10 +215,12 @@ func (d *Daemon) watchPromptGate(sess *Session, pty *PTY, g *promptGate, stall, 
 	defer deadline.Stop()
 	tick := time.NewTicker(poll)
 	defer tick.Stop()
+	look := true
 	for {
-		if g.check(sess, pty.LastOutput) {
+		if look && g.check(sess, pty.LastOutput) {
 			return true, false, false
 		}
+		look = true
 		select {
 		case <-deadline.C:
 			return g.check(sess, pty.LastOutput), false, false
@@ -231,6 +233,9 @@ func (d *Daemon) watchPromptGate(sess *Session, pty *PTY, g *promptGate, stall, 
 				return false, true, false
 			}
 			g.observe(ev)
+			// An event about another pane cannot change this pane's state;
+			// skip the look until the next event or tick.
+			look = ev.Window == g.windowID
 		case <-tick.C:
 		}
 	}

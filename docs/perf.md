@@ -5350,6 +5350,58 @@ timer (#787).
 - The `time.AfterFunc` closures (`cockpit.go`, `sixel_symbols.go`), which hold
   no goroutine while they wait.
 
+## 2026-11 prompt gates look only at their own pane
+
+A prompt gate (the wait after a prompt is typed into an agent pane) and the ask
+wait both ran their look at the pane, `GetState` plus the screen verdict, on
+every agent-state event of the whole session, including events about other
+panes. With many agents working in one session, each state change anywhere
+cost every waiting gate a full look. Before the pane has taken the question, an
+event about another pane is now skipped: the gate still reads it, each wait's
+poll and the deadlines are unchanged, and the next tick or an event about its
+own pane looks as before. One consequence: `watchStalledQueue`'s late watch
+(1 s poll) now finds a working screen on its next tick instead of on a foreign
+event, at most 1 s later.
+
+Measured in `internal/session`: N panes with a claude-code report and the
+idle-typed screen, one waiter per pane (a gate with a 1 h poll and stall, or an
+ask wait with a 1 h settle, stall and timeout), a burst of 200 agent-state
+events about another pane published straight to the event bus, waited until
+every subscriber queue was empty (no drops, no waiter returned). The
+same-length quiet window was subtracted, and the least of 3 repeats is shown.
+`nice -n 10 taskset -c 6-11`, Go 1.27.3, base 9bffac8f2 against the branch.
+
+| waiters | allocations per foreign event per waiter, base | after |
+|---|---|---|
+| 1 gate | 136.1 | 0 |
+| 20 gates | 138.0 | 0 |
+| 50 gates | 138.0 | 0 |
+| 1 ask wait | 136.0 | 0 |
+| 20 ask waits | 137.3 | 0 |
+| 50 ask waits | 137.6 | 0 |
+
+Per foreign event the whole session therefore paid about 138 allocations times
+the number of waiters, for example about 6,900 allocations at 50 gates, and now
+pays none beyond reading the event. `TestPromptGateSkipsForeignEvents` (under 2
+per gate) and `TestAskWaitSkipsForeignEvents` (under 20 per ask wait) hold this
+in the package, with `TestPromptGateStillSeesItsPane` and
+`TestAskWaitStillSeesItsPane` as their positive halves.
+
+### Measured and deliberately not changed
+
+- The phase after the pane has taken the question. `waitAgentSettled` still
+  calls `GetState` for an event stamped after the question was sent, whichever
+  pane it is about. It is the rescue when the pane's own rest event was dropped
+  on queue overflow: a later event about any pane ends the wait with
+  `agent-state` instead of waiting for the timeout. Guarding it would change
+  that case, which works today. Cost, same method with panes at working: 12
+  allocations and 11 to 19 us of CPU per foreign event per waiter (it moves
+  from run to run).
+- `waitAgentStart` and `waitAgentRest` read `GetState` on every agent-state
+  event of the session. Same method, 20 waiters on working panes: 12
+  allocations and 14 to 22 us of CPU per foreign event per waiter, each (it
+  moves from run to run). They are open to a follow-up if the cost shows up.
+
 ## 2026-10 the escape-string buffer is given back when a pane is idle
 
 The vt parser keeps one buffer for the payload of an OSC, DCS, SOS, PM or APC
