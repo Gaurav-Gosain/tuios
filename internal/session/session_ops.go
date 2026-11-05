@@ -279,6 +279,10 @@ type NewWindowOptions struct {
 	// as a focus move. See ExecuteCommandPayload.FocusIfShown. It means
 	// nothing with Focus set.
 	FocusIfShown bool
+	// focusAskedBy is the push origin of the client connection that asked
+	// for the window, empty for none. With Focus set, the focus move counts
+	// as that client's own. See pushOwnsFocusLocked.
+	focusAskedBy string
 	// TabKey names the workspace by its tab key, which follows it through a
 	// renumber, when the caller read the workspace's number before one it
 	// may not have seen. Zero names it by Workspace alone. See
@@ -616,6 +620,7 @@ func (s *Session) AddDaemonWindowWith(opts NewWindowOptions, onExit func(ptyID s
 		state.WorkspaceFocus[workspace] = windowID
 		if opts.Focus {
 			s.markFocusIntentLocked()
+			s.focusAskedBy = opts.focusAskedBy
 			state.FocusedWindowID = windowID
 			// A scratch workspace is never the session's current one: a
 			// client shows it over the workspace it is on.

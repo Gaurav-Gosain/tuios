@@ -193,10 +193,19 @@ func (d *Daemon) handleExecuteCommand(cs *connState, msg *Message) error {
 				data = map[string]any{"window_id": win.ID, "name": win.Title}
 			}
 		} else {
-			data, err = d.executeDaemonCommandEnv(session, payload.CommandType, payload.Args, NewWindowOptions{
-				Cwd: payload.Cwd, Workspace: payload.Workspace, Env: newWindowEnv,
-				Cols: payload.Cols, Rows: payload.Rows, keepOpen: keepOpen,
-			}, onExit)
+			cs.mu.Lock()
+			origin := cs.pushOrigin
+			cs.mu.Unlock()
+			if payload.CommandType == "NewWindow" {
+				err = newWindowHoldForTest()
+			}
+			if err == nil {
+				data, err = d.executeDaemonCommandEnv(session, payload.CommandType, payload.Args, NewWindowOptions{
+					Cwd: payload.Cwd, Workspace: payload.Workspace, Env: newWindowEnv,
+					Cols: payload.Cols, Rows: payload.Rows, keepOpen: keepOpen,
+					focusAskedBy: origin,
+				}, onExit)
+			}
 		}
 		if err != nil {
 			return d.sendCommandResult(cs, payload.RequestID, false, err.Error())
@@ -475,10 +484,21 @@ func (d *Daemon) handleGetLogs(cs *connState, msg *Message) error {
 // that holds "refuse" makes each request fail. Messages are read one at a time
 // per connection, so the client's later messages wait behind a held request.
 func paneHoldForTest() error {
+	return holdForTest("TUIOS_E2E_HOLD_PANE")
+}
+
+// newWindowHoldForTest is paneHoldForTest for the window a client's
+// new-window key asks for, read from TUIOS_E2E_HOLD_NEW_WINDOW.
+func newWindowHoldForTest() error {
+	return holdForTest("TUIOS_E2E_HOLD_NEW_WINDOW")
+}
+
+// holdForTest is paneHoldForTest with the variable that names the hold file.
+func holdForTest(variable string) error {
 	if os.Getenv("TUIOS_E2E") != "1" {
 		return nil
 	}
-	path := os.Getenv("TUIOS_E2E_HOLD_PANE")
+	path := os.Getenv(variable)
 	if path == "" {
 		return nil
 	}
