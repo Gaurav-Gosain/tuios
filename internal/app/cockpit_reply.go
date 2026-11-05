@@ -44,6 +44,9 @@ func (m *OS) drawReplyArea(c *ckCanvas, l ckLook, e sidebarAgentEntry, name stri
 		}
 	}
 	send := ckSeg{t: " " + overlay.EnterGlyph + " " + verb + " ", fg: overlay.Readable(pal.Fg, pal.Card), bg: pal.Card, attrs: ckBold}
+	// A hint that does not fit goes whole: a key with its label cut off
+	// says nothing.
+	hints = ckFitHints(hints, right-14-(x+2))
 
 	ed := st.reply.editor
 	if ed == nil || m.cockpitReplyMismatch() {
@@ -188,4 +191,18 @@ func ckImageSize(img *composer.Image) string {
 		x = "x"
 	}
 	return strconv.Itoa(img.Width) + x + strconv.Itoa(img.Height)
+}
+
+// ckFitHints keeps the leading key and label pairs of hints that fit in w
+// cells, trailing spaces of the last one aside.
+func ckFitHints(hints []ckSeg, w int) []ckSeg {
+	used := 0
+	for i := 0; i+1 < len(hints); i += 2 {
+		pair := ckWidth(hints[i], hints[i+1])
+		if used+pair-(len(hints[i+1].t)-len(strings.TrimRight(hints[i+1].t, " "))) > w {
+			return hints[:i]
+		}
+		used += pair
+	}
+	return hints
 }
