@@ -3,6 +3,7 @@ package client
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -621,6 +622,32 @@ func looksLikePrompt(t string) bool {
 
 // ThemeOptions are the session options that choose the tuios theme.
 var ThemeOptions = []string{"appearance.theme", "appearance.theme_light"}
+
+// SetThemeOption gives a theme option (ThemeOptions) value as tuios
+// set-config does, on the session the app shows, or the daemon's default
+// one. applied tells that a TUI on that session took it: the TUI then
+// saved it to config.toml.
+func (c *Client) SetThemeOption(key, value string) (applied bool, err error) {
+	if !slices.Contains(ThemeOptions, key) {
+		return false, fmt.Errorf("%s is not a theme option", key)
+	}
+	c.viewMu.Lock()
+	sid := c.viewing
+	c.viewMu.Unlock()
+	name := ""
+	if sid != "" {
+		name = c.st.nameOf(sid)
+	}
+	raw, err := c.verb("set-option", map[string]any{"session": name, "key": key, "value": value})
+	if err != nil {
+		return false, err
+	}
+	var res struct {
+		Applied bool `json:"applied"`
+	}
+	_ = json.Unmarshal(raw, &res)
+	return res.Applied, nil
+}
 
 // sessionOption is the value set-option gave key on the daemon's default
 // session, and false when no set-option did: a value from config.toml or
