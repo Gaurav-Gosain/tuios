@@ -1,14 +1,16 @@
 package main
 
 import (
-	"math"
 	"sync/atomic"
 
 	"github.com/Gaurav-Gosain/mygo/plugins/terminal"
 	"github.com/Gaurav-Gosain/mygo/ui"
+
+	"github.com/Gaurav-Gosain/tuios/internal/guios/roles"
 )
 
-// palette is kero's colors, for the light and the dark appearance.
+// palette is the chrome's colours for one theme in one appearance: the
+// roles internal/guios/roles makes, as MyGo colours (fromRoles).
 type palette struct {
 	dark bool
 
@@ -86,85 +88,90 @@ type palette struct {
 	kbdBorder ui.Color
 }
 
-var lightPalette = palette{
-	sidebar:      ui.Hex("#eceef4"),
-	text:         ui.Hex("#1d1d1f"),
-	textMuted:    ui.Hex("#6e6e78"),
-	textFaint:    ui.Hex("#a3a3ad"),
-	rowHover:     ui.RGBA(0, 0, 0, 0.04),
-	rowSelected:  ui.Hex("#ffffff"),
-	rowSelBorder: ui.RGBA(0, 0, 0, 0.05),
-	rowShadow:    ui.RGBA(20, 20, 50, 0.08),
-
-	card:          ui.Hex("#ffffff"),
-	cardBorder:    ui.RGBA(0, 0, 0, 0.07),
-	cardShadow:    ui.RGBA(0, 0, 0, 0.07),
-	cardShadow2:   ui.RGBA(0, 0, 0, 0.035),
-	floatShadow:   ui.RGBA(20, 20, 40, 0.14),
-	cardDim:       ui.RGBA(255, 255, 255, 0.58),
-	veil:          ui.RGBA(250, 248, 252, 0.28),
-	buttonBg:      ui.Hex("#ffffff"),
-	control:       ui.Hex("#ffffff"),
-	controlHover:  ui.Hex("#f7f7f9"),
-	controlShadow: true,
-	divider:       ui.RGBA(0, 0, 0, 0.06),
-	chip:          ui.RGBA(0, 0, 0, 0.045),
-
-	attention: ui.Hex("#c27b0f"),
-	attnSoft:  ui.RGBA(232, 154, 40, 0.13),
-	attnChip:  ui.RGB(150, 90, 20),
-	done:      ui.Hex("#1d1d1f"),
-	onDone:    ui.Hex("#ffffff"),
-	danger:    ui.Hex("#d93a35"),
-	accent:    ui.Hex("#3b6cf6"),
-	work:      ui.Hex("#2f5bd8"),
-
-	overlay:   ui.RGBA(10, 10, 30, 0.12),
-	popover:   ui.Hex("#ffffff"),
-	kbd:       ui.RGBA(0, 0, 0, 0.04),
-	kbdBorder: ui.RGBA(0, 0, 0, 0.09),
+// fromRoles is the roles as the views take them.
+func fromRoles(r *roles.Palette) *palette {
+	return &palette{
+		dark:          r.Dark,
+		sidebar:       toUI(r.Sidebar),
+		text:          toUI(r.Text),
+		textMuted:     toUI(r.TextMuted),
+		textFaint:     toUI(r.TextFaint),
+		rowHover:      toUI(r.RowHover),
+		rowSelected:   toUI(r.RowSelected),
+		rowSelBorder:  toUI(r.RowSelBorder),
+		rowShadow:     toUI(r.RowShadow),
+		card:          toUI(r.Card),
+		cardBorder:    toUI(r.CardBorder),
+		cardShadow:    toUI(r.CardShadow),
+		cardShadow2:   toUI(r.CardShadow2),
+		floatShadow:   toUI(r.FloatShadow),
+		cardDim:       toUI(r.CardDim),
+		edge:          toUI(r.Edge),
+		edgeHigh:      toUI(r.EdgeHigh),
+		veil:          toUI(r.Veil),
+		buttonBg:      toUI(r.ButtonBg),
+		control:       toUI(r.Control),
+		controlHover:  toUI(r.ControlHover),
+		controlShadow: r.ControlShadow,
+		controlLight:  toUI(r.ControlLight),
+		divider:       toUI(r.Divider),
+		chip:          toUI(r.Chip),
+		attention:     toUI(r.Attention),
+		attnSoft:      toUI(r.AttnSoft),
+		focusLine:     toUI(r.FocusLine),
+		attnText:      toUI(r.AttnText),
+		attnChip:      toUI(r.AttnChip),
+		done:          toUI(r.Done),
+		onDone:        toUI(r.OnDone),
+		danger:        toUI(r.Danger),
+		dangerText:    toUI(r.DangerText),
+		dangerFill:    toUI(r.DangerFill),
+		accent:        toUI(r.Accent),
+		accentText:    toUI(r.AccentText),
+		accentFill:    toUI(r.AccentFill),
+		accentInk:     toUI(r.AccentInk),
+		attnFill:      toUI(r.AttnFill),
+		attnInk:       toUI(r.AttnInk),
+		work:          toUI(r.Work),
+		overlay:       toUI(r.Overlay),
+		popover:       toUI(r.Popover),
+		kbd:           toUI(r.Kbd),
+		kbdBorder:     toUI(r.KbdBorder),
+	}
 }
 
-var darkPalette = palette{
-	dark:         true,
-	sidebar:      ui.Hex("#141418"),
-	text:         ui.Hex("#ececf0"),
-	textMuted:    ui.Hex("#a9a9b4"),
-	textFaint:    ui.Hex("#83838f"),
-	rowHover:     ui.RGBA(255, 255, 255, 0.05),
-	rowSelected:  ui.RGBA(255, 255, 255, 0.10),
-	rowSelBorder: ui.RGBA(255, 255, 255, 0.06),
-	rowShadow:    ui.RGBA(0, 0, 0, 0.25),
+// toUI is a roles colour as a MyGo one.
+func toUI(c roles.Color) ui.Color { return ui.Color{R: c.R, G: c.G, B: c.B, A: c.A} }
 
-	card:         ui.Hex("#232328"),
-	cardBorder:   ui.RGBA(255, 255, 255, 0.08),
-	cardShadow:   ui.RGBA(0, 0, 0, 0.35),
-	cardShadow2:  ui.RGBA(0, 0, 0, 0.2),
-	floatShadow:  ui.RGBA(0, 0, 0, 0.45),
-	cardDim:      ui.RGBA(35, 35, 40, 0.5),
-	veil:         ui.RGBA(14, 13, 18, 0.42),
-	edge:         ui.RGBA(255, 255, 255, 0.075),
-	edgeHigh:     ui.RGBA(255, 255, 255, 0.11),
-	buttonBg:     ui.Hex("#404047"),
-	control:      ui.Hex("#404047"),
-	controlHover: ui.Hex("#4a4a52"),
-	controlLight: ui.RGBA(255, 255, 255, 0.09),
-	divider:      ui.RGBA(255, 255, 255, 0.07),
-	chip:         ui.RGBA(255, 255, 255, 0.07),
+// fromUI is a MyGo colour as a roles one: its sRGB part.
+func fromUI(c ui.Color) roles.Color { return roles.Color{R: c.R, G: c.G, B: c.B, A: c.A} }
 
-	attention: ui.Hex("#f0a33a"),
-	attnSoft:  ui.RGBA(240, 163, 58, 0.15),
-	attnChip:  ui.RGB(200, 140, 60),
-	done:      ui.Hex("#ececf0"),
-	onDone:    ui.Hex("#161618"),
-	danger:    ui.Hex("#ff6961"),
-	accent:    ui.Hex("#6b93ff"),
-	work:      ui.Hex("#6b9bff"),
+// toTerm is a roles terminal theme as MyGo's.
+func toTerm(t *roles.Term) *terminal.Theme {
+	th := &terminal.Theme{Foreground: toUI(t.Foreground), Background: toUI(t.Background), Cursor: toUI(t.Cursor),
+		CursorText: toUI(t.CursorText), Selection: toUI(t.Selection), SelectionText: toUI(t.SelectionText)}
+	for i, c := range t.Palette {
+		th.Palette[i] = toUI(c)
+	}
+	return th
+}
 
-	overlay:   ui.RGBA(0, 0, 0, 0.35),
-	popover:   ui.Hex("#232327"),
-	kbd:       ui.RGBA(255, 255, 255, 0.06),
-	kbdBorder: ui.RGBA(255, 255, 255, 0.1),
+// fromTerm is MyGo's terminal theme as a roles one.
+func fromTerm(th *terminal.Theme) *roles.Term {
+	t := &roles.Term{Foreground: fromUI(th.Foreground), Background: fromUI(th.Background), Cursor: fromUI(th.Cursor),
+		CursorText: fromUI(th.CursorText), Selection: fromUI(th.Selection), SelectionText: fromUI(th.SelectionText)}
+	for i, c := range th.Palette {
+		t.Palette[i] = fromUI(c)
+	}
+	return t
+}
+
+// contrast is the WCAG contrast ratio of two colours.
+func contrast(a, b ui.Color) float64 { return roles.Contrast(fromUI(a), fromUI(b)) }
+
+// awayFrom is a fill moved by f away from its ink (roles.AwayFrom).
+func awayFrom(fill, ink ui.Color, f float32) ui.Color {
+	return toUI(roles.AwayFrom(fromUI(fill), fromUI(ink), f))
 }
 
 // paletteFor is the colors of the window c draws, from its theme.
@@ -241,20 +248,17 @@ func lookNamed(name string, dark bool) *look {
 	return paperLook(dark)
 }
 
-// paperLooks are guios's own colors, light and dark: white paper on a
-// desk of light gray, in ink, flat and quiet. They show where tuios
-// names no theme.
+// paperLooks are guios's own colors, light and dark (roles.Paper). They
+// show where tuios names no theme.
 var paperLooks = func() [2]*look {
 	var both [2]*look
-	for i, ground := range []string{"#f6f6f7", "#141416"} {
+	for i := range both {
+		th, p, ground := roles.Paper(i == 1)
 		// One flat ground: a gradient of one level steps in bands across
 		// the sidebar (council round 1, visual 21).
-		g := ui.Hex(ground)
-		l := &look{base: ui.LinearGradient{Angle: 180, Oklab: true, Stops: []ui.GradientStop{{Color: g, At: 0}, {Color: g, At: 1}}}, glow: glowOf(g.Alpha(0))}
-		var accent ui.Color
-		l.term, accent = toneTheme(tone{260, 0, 0.9, 262}, i == 1)
-		l.pal = tinted(l.term, accent)
-		both[i] = l
+		g := toUI(ground)
+		both[i] = &look{term: toTerm(th), pal: fromRoles(p), glow: glowOf(g.Alpha(0)),
+			base: ui.LinearGradient{Angle: 180, Oklab: true, Stops: []ui.GradientStop{{Color: g, At: 0}, {Color: g, At: 1}}}}
 	}
 	return both
 }()
@@ -267,355 +271,18 @@ func glowOf(c ui.Color) ui.LinearGradient {
 }
 
 // ghosttyLook washes the window in a terminal theme's background, a shade
-// under its cards, with its cursor's color as its accent, unless that is
-// a gray, as many themes' cursors are, when blue is.
+// under its cards, with the accent roles.Look picks.
 func ghosttyLook(th *terminal.Theme) *look {
-	bl, bc, bh := oklch(th.Background)
-	accent := th.Cursor
-	if accent == (ui.Color{}) {
-		accent = th.Foreground
+	p, accent, ground := roles.Look(fromTerm(th))
+	g := toUI(ground)
+	return &look{term: th, pal: fromRoles(p),
+		// One flat ground, as DESIGN.md section 1 asks: a gradient this
+		// shallow steps in visible bands.
+		base: ui.LinearGradient{Angle: 180, Oklab: true, Stops: []ui.GradientStop{{Color: g, At: 0}, {Color: g, At: 1}}},
+		// No glow: a theme's ground is one surface, so the right sidebar
+		// sits on the same ground as the left (DESIGN.md principle 1).
+		glow: glowOf(toUI(accent).Alpha(0)),
 	}
-	if _, c, _ := oklch(accent); c < 0.05 {
-		accent = th.Palette[4]
-	}
-	l := &look{term: th, pal: tinted(th, accent)}
-	shade := float32(0.03)
-	if l.pal.dark {
-		shade = 0.04
-	}
-	// One flat ground, as DESIGN.md section 1 asks: a gradient this
-	// shallow steps in visible bands.
-	ground := ui.Oklch(max(bl-shade, 0), bc, bh)
-	l.base = ui.LinearGradient{Angle: 180, Oklab: true, Stops: []ui.GradientStop{{Color: ground, At: 0}, {Color: ground, At: 1}}}
-	// No glow: a theme's ground is one surface, so the right sidebar
-	// sits on the same ground as the left (DESIGN.md principle 1).
-	l.glow = glowOf(accent.Alpha(0))
-	return l
-}
-
-// tinted is kero's palette for the light or the dark, as a terminal
-// theme's background is, on the theme's colors: the cards its background,
-// the text its foreground, with the accent.
-func tinted(th *terminal.Theme, accent ui.Color) *palette {
-	p := lightPalette
-	if l, _, _ := oklch(th.Background); l < 0.5 {
-		p = darkPalette
-	}
-	bg, fg, white := th.Background, th.Foreground, ui.Hex("#ffffff")
-	p.card = bg
-	p.cardDim = bg.Alpha(float32(p.cardDim.A) / 255)
-	p.text, p.textMuted, p.textFaint = fg, fg.Mix(bg, 0.38), fg.Mix(bg, 0.56)
-	// The text tiers keep their contrast on the cards whatever the theme:
-	// 4.5:1 for the second, 3:1 for the third (DESIGN.md section 1). A
-	// low-contrast theme moves them toward its foreground until they do.
-	p.textMuted = legible(p.textMuted, fg, bg, 4.5)
-	p.textFaint = legible(p.textFaint, fg, bg, 3)
-	p.done, p.onDone = fg, bg
-	p.accent = accent
-	// The states take the theme's own blue and red, so a theme colors
-	// them too, where they read on its cards: the bright one in the dark
-	// when the plain one is too dim there.
-	p.work = readable(th.Palette[4], th.Palette[12], bg, p.dark)
-	p.danger = readable(th.Palette[1], th.Palette[9], bg, p.dark)
-	if p.dark {
-		p.popover = bg.Mix(white, 0.04)
-	} else {
-		p.rowSelected = bg.Mix(white, 0.5)
-		p.popover = bg.Mix(white, 0.6)
-	}
-	p.finish(fg, bg)
-	return &p
-}
-
-// finish makes the palette's text colors legible on every surface they
-// sit on, not only on the card (council round 1, visual 3 to 5): the
-// selected row, a control's fill (the reply box), a chip and the ground.
-// The worst of those for each tier is the one checked: in the dark the
-// lightest, in the light the darkest. text2 keeps 4.5:1 and text3 3:1
-// there (DESIGN.md section 1), and needs-you and danger text 4.5:1.
-func (p *palette) finish(fg, bg ui.Color) {
-	// The terminals keep the theme's own foreground: the veil reads on it.
-	termFg := fg
-	if p.dark {
-		p.focusLine = fg.Alpha(0.11)
-	} else {
-		p.focusLine = fg.Alpha(0.16)
-	}
-	worst := p.worstSurface(bg)
-	// text3 carries information (ages, labels, hints, counts) on the
-	// cards, the lists and the sidebar, on the ground a shade under the
-	// cards: every tier keeps 4.5:1 there, in every theme (DESIGN.md
-	// section 1). The tiers aim at 5:1: a small regular face draws its
-	// strokes' cores a little lighter than the token, so 5:1 on the token
-	// reads 4.5:1 on the frame's pixels (council round 3, visual M2).
-	grounds := []ui.Color{bg, darker(bg, 0.04), darker(bg, 0.03)}
-	if !p.dark {
-		grounds = append(grounds, bg.Mix(p.sidebar, 0.6))
-	}
-	least := func(c ui.Color) float64 {
-		m := math.Inf(1)
-		for _, g := range grounds {
-			m = min(m, contrast(c, g))
-		}
-		return m
-	}
-	// A theme whose own foreground falls under that gets a text a step
-	// further from its background; the terminals keep the theme's.
-	for _, g := range append(grounds, worst) {
-		p.text = apart(p.text, g, 5)
-	}
-	fg = p.text
-	p.textMuted = legible(fg.Mix(bg, 0.38), fg, worst, 4.5)
-	p.textFaint = legible(fg.Mix(bg, 0.56), fg, worst, 3)
-	// Short of 5:1, a tier moves toward text until it has it, or is text.
-	for i := 0; i < 60 && least(p.textFaint) < 5; i++ {
-		p.textFaint = p.textFaint.Mix(fg, 0.06)
-	}
-	// text2 stays a step stronger than text3, so the tiers hold.
-	for i := 0; i < 60 && (least(p.textMuted) < 5 || contrast(p.textMuted, bg) < contrast(p.textFaint, bg)+1); i++ {
-		p.textMuted = p.textMuted.Mix(fg, 0.06)
-	}
-	p.accentFill, p.accentInk = inkFill(p.accent)
-	p.attnFill, p.attnInk = inkFill(p.attention)
-	p.veil = dimVeil(termFg, bg, p.cardDim.Over(darker(bg, 0.04)), p.veil.A)
-	// An attempt's letter on its accent chip keeps 5:1 (visual M2).
-	p.accentText = deepen(p.accent, p.accent.Alpha(0.16).Over(worst), 5)
-	attnWorst := worst
-	if s := p.attnSoft.Over(bg); p.dark == (luminance(s) > luminance(attnWorst)) {
-		attnWorst = s
-	}
-	p.attnText = deepen(p.attention, attnWorst, 4.5)
-	// On the focused card's ground, or a theme's own, the chip's amber
-	// keeps 4.5:1: it goes deeper (or brighter) until it does.
-	p.attnChip = deepen(p.attnChip, p.attnSoft.Over(bg), 4.5)
-	dangerWorst := worst
-	if s := p.danger.Alpha(0.1).Over(bg); p.dark == (luminance(s) > luminance(dangerWorst)) {
-		dangerWorst = s
-	}
-	p.dangerText = deepen(p.danger, dangerWorst, 4.5)
-	// White on the fill: the fill goes darker until white reads on it.
-	p.dangerFill = deepen(p.danger, ui.Hex("#ffffff"), 4.5)
-}
-
-// worstSurface is the surface text has the least contrast on: the
-// lightest of them in the dark, the darkest in the light.
-func (p *palette) worstSurface(bg ui.Color) ui.Color {
-	surfaces := []ui.Color{bg, p.rowSelected.Over(bg), p.chip.Over(bg), p.rowHover.Over(bg), p.sidebar}
-	if p.dark {
-		surfaces = append(surfaces, p.control.Over(bg), p.rowSelected.Over(p.rowHover.Over(bg)))
-	} else {
-		// The ground is a shade under the cards (ghosttyLook), and a chip
-		// sits on it too.
-		ground := darker(bg, 0.03)
-		surfaces = append(surfaces, ground, p.chip.Over(ground), p.rowHover.Over(ground))
-	}
-	worst := surfaces[0]
-	for _, s := range surfaces[1:] {
-		if p.dark == (luminance(s) > luminance(worst)) {
-			worst = s
-		}
-	}
-	return worst
-}
-
-// darker is c with its OKLCH lightness lowered by d.
-func darker(c ui.Color, d float32) ui.Color {
-	l, ch, h := oklch(c)
-	return ui.Oklch(max(l-d, 0), ch, h)
-}
-
-// deepen is c with its hue and chroma kept and its lightness moved away
-// from bg, in small steps, until it has ratio of contrast on bg: darker on
-// a light ground, lighter on a dark one.
-func deepen(c, bg ui.Color, ratio float64) ui.Color {
-	l, ch, h := oklch(c)
-	down := luminance(bg) > 0.18
-	for i := 0; i < 60 && contrast(c, bg) < ratio; i++ {
-		if down {
-			l -= 0.01
-		} else {
-			l += 0.01
-		}
-		if l <= 0 || l >= 1 {
-			break
-		}
-		c = ui.Oklch(l, ch, h)
-	}
-	return c
-}
-
-// apart is c with its hue and chroma kept and its lightness moved away
-// from bg, the way c already lies from it, until it has ratio of contrast
-// on bg.
-func apart(c, bg ui.Color, ratio float64) ui.Color {
-	l, ch, h := oklch(c)
-	lb, _, _ := oklch(bg)
-	step := float32(0.01)
-	if l < lb {
-		step = -step
-	}
-	for i := 0; i < 100 && contrast(c, bg) < ratio; i++ {
-		if l += step; l <= 0 || l >= 1 {
-			break
-		}
-		c = ui.Oklch(l, ch, h)
-	}
-	return c
-}
-
-// legible is c moved toward fg, in steps, until it has at least ratio of
-// contrast on bg, or fg itself.
-func legible(c, fg, bg ui.Color, ratio float64) ui.Color {
-	for i := 0; i < 10 && contrast(c, bg) < ratio; i++ {
-		c = c.Mix(fg, 0.25)
-	}
-	return c
-}
-
-// luminance is a color's WCAG relative luminance.
-func luminance(c ui.Color) float64 {
-	ch := func(v uint8) float64 {
-		x := float64(v) / 255
-		if x <= 0.04045 {
-			return x / 12.92
-		}
-		return math.Pow((x+0.055)/1.055, 2.4)
-	}
-	return 0.2126*ch(c.R) + 0.7152*ch(c.G) + 0.0722*ch(c.B)
-}
-
-// contrast is the WCAG contrast ratio of two colors.
-func contrast(a, b ui.Color) float64 {
-	la, lb := luminance(a), luminance(b)
-	if la < lb {
-		la, lb = lb, la
-	}
-	return (la + 0.05) / (lb + 0.05)
-}
-
-// readable is c, or alt where c is too close to the background bg to
-// read as a mark: below a lightness gap of 0.3 in OKLCH.
-func readable(c, alt, bg ui.Color, dark bool) ui.Color {
-	l, _, _ := oklch(c)
-	lb, _, _ := oklch(bg)
-	if abs(l-lb) >= 0.3 {
-		return c
-	}
-	if la, _, _ := oklch(alt); abs(la-lb) > abs(l-lb) {
-		return alt
-	}
-	return c
-}
-
-// tone is the hue of a kero theme, how much of it its cards and text
-// take, how vivid the programs' colors are, which lean to its hue, and
-// the hue of its accent: the cursor, selection and controls.
-type tone struct{ hue, tint, vivid, accent float32 }
-
-// toneTheme is a kero theme's terminal colors, and its accent: its cards
-// and text tinted with its hue, and the programs' colors muted to sit
-// with them, the cursor and selection in its hue.
-func toneTheme(t tone, dark bool) (*terminal.Theme, ui.Color) {
-	tint := func(l, c float32) ui.Color { return ui.Oklch(l, c*t.tint, t.hue) }
-	// Red, green, yellow, blue, magenta and cyan.
-	hues := [6]float32{28, 145, 85, 255, 325, 195}
-	ls := [6]float32{0.56, 0.56, 0.62, 0.54, 0.54, 0.56}
-	cs := [6]float32{0.15, 0.13, 0.12, 0.13, 0.14, 0.09}
-	bright := float32(0.05)
-	th := &terminal.Theme{}
-	var accent ui.Color
-	if dark {
-		ls = [6]float32{0.70, 0.74, 0.80, 0.70, 0.72, 0.76}
-		cs = [6]float32{0.14, 0.13, 0.12, 0.12, 0.13, 0.10}
-		bright = 0.06
-		th.Background, th.Foreground = tint(0.255, 0.02), tint(0.92, 0.015)
-		th.Palette[0], th.Palette[7], th.Palette[8], th.Palette[15] = tint(0.36, 0.02), tint(0.82, 0.012), tint(0.5, 0.02), tint(0.96, 0.01)
-		th.Selection = ui.Oklch(0.38, 0.06, t.accent)
-		accent = ui.Oklch(0.74, 0.13, t.accent)
-	} else {
-		// The less tinted, the whiter the paper: an untinted theme's
-		// cards are white.
-		paper := 0.978 + 0.022*max(0, 1-t.tint/0.5)
-		th.Background, th.Foreground = tint(paper, 0.012), tint(0.28, 0.03)
-		th.Palette[0], th.Palette[7], th.Palette[8], th.Palette[15] = th.Foreground, tint(0.7, 0.02), tint(0.52, 0.02), tint(0.8, 0.015)
-		th.Selection = ui.Oklch(0.9, 0.045, t.accent)
-		accent = ui.Oklch(0.55, 0.13, t.accent)
-	}
-	for i := range 6 {
-		// Toward the theme's hue, the less the farther it is, as a far
-		// color turned is a muddy one, and more vivid the nearer to it: a
-		// theme's own color stands out of its palette.
-		d := float32(math.Remainder(float64(t.hue-hues[i]), 360))
-		h := hues[i] + d*0.35*(1-abs(d)/180)
-		c := cs[i] * t.vivid * (1 + 0.45*max(0, 1-abs(d)/60))
-		th.Palette[1+i] = ui.Oklch(ls[i], c, h)
-		th.Palette[9+i] = ui.Oklch(ls[i]+bright, c+0.01, h)
-	}
-	th.Cursor, th.CursorText, th.SelectionText = accent, th.Background, th.Foreground
-	return th, accent
-}
-
-// oklch returns a color's lightness, chroma and hue, as CSS's oklch().
-func oklch(c ui.Color) (l, ch, h float32) {
-	lin := func(v uint8) float64 {
-		x := float64(v) / 255
-		if x <= 0.04045 {
-			return x / 12.92
-		}
-		return math.Pow((x+0.055)/1.055, 2.4)
-	}
-	r, g, b := lin(c.R), lin(c.G), lin(c.B)
-	lc := math.Cbrt(0.4122214708*r + 0.5363325363*g + 0.0514459929*b)
-	mc := math.Cbrt(0.2119034982*r + 0.6806995451*g + 0.1073969566*b)
-	sc := math.Cbrt(0.0883024619*r + 0.2817188376*g + 0.6299787005*b)
-	L := 0.2104542553*lc + 0.7936177850*mc - 0.0040720468*sc
-	A := 1.9779984951*lc - 2.4285922050*mc + 0.4505937099*sc
-	B := 0.0259040371*lc + 0.7827717662*mc - 0.8086757660*sc
-	hue := math.Mod(math.Atan2(B, A)*180/math.Pi+360, 360)
-	return float32(L), float32(math.Hypot(A, B)), float32(hue)
-}
-
-// inkFill is a fill for a control and the ink of its text: dark ink or
-// white, whichever has more contrast on it. When neither reaches 5:1 on
-// the token, which reads 4.5:1 on the frame's pixels, the fill goes
-// deeper in OKLCH, its hue kept, until white does.
-func inkFill(fill ui.Color) (ui.Color, ui.Color) {
-	dark, white := ui.RGB(23, 23, 23), ui.Hex("#ffffff")
-	for range 60 {
-		ink := dark
-		if contrast(white, fill) > contrast(dark, fill) {
-			ink = white
-		}
-		if contrast(ink, fill) >= 5 {
-			return fill, ink
-		}
-		fill = darker(fill, 0.01)
-	}
-	return fill, white
-}
-
-// awayFrom is a fill moved by f away from its ink, for hover and press:
-// the text keeps the contrast the fill gave it, or gains.
-func awayFrom(fill, ink ui.Color, f float32) ui.Color {
-	if luminance(ink) > luminance(fill) {
-		return fill.Mix(ui.Hex("#000000"), f)
-	}
-	return fill.Mix(ui.Hex("#ffffff"), f)
-}
-
-// dimVeil is the veil over a pane the person is not in: the theme's own
-// background at up to alpha, no more than keeps the theme's foreground at
-// 4.8:1 on ground under the veil, which reads 4.5:1 on the frame's pixels
-// (council round 5, visual M3). Dimming toward the theme's background keeps the
-// pane in the theme's hue; a fixed grey turned gruvbox cool.
-func dimVeil(fg, bg, ground ui.Color, alpha uint8) ui.Color {
-	for a := float32(alpha) / 255; a > 0; a -= 0.01 {
-		v := bg.Alpha(a)
-		if contrast(v.Over(fg), v.Over(ground)) >= 4.8 {
-			return v
-		}
-	}
-	return bg.Alpha(0)
 }
 
 // pressedQuiet is the ground of a quiet button (a header view, a tab) while
