@@ -100,6 +100,13 @@ func (a *App) openSettings(page string) {
 		return
 	}
 	a.ss.loginOpen = mygo.App.OpenAtLogin()
+	// tuios's config may have changed since the app started, by hand or
+	// by the TUI: the switches show what the daemon reads now (council
+	// round 3, visual S11).
+	held := a.set
+	loadTuiosSettings(&held)
+	tuiosHeld(&a.set, held)
+	tuiosHeld(&a.applied, held)
 	a.refreshUpdates()
 	offUpdates := updater.OnChange(func() {
 		a.refreshUpdates()
