@@ -81,6 +81,9 @@ type sidebarStateFile struct {
 	// AgentNoticesDismissed lists the integration notices the person
 	// dismissed, by harness, state and version. See agentNoticeKey.
 	AgentNoticesDismissed []string `json:"agent_notices_dismissed,omitempty"`
+	// MachineOffersNever lists the ssh targets the person answered Never
+	// for: tuios does not offer to add them. See machine_offer.go.
+	MachineOffersNever []string `json:"machine_offers_never,omitempty"`
 	// Collapsed is the rail folded to its glyph strip. Absent means expanded,
 	// which is what every file written before the toggle existed says.
 	Collapsed bool `json:"collapsed,omitempty"`
@@ -165,6 +168,12 @@ func (m *OS) loadSidebarState() {
 			m.agentNoticesDismissed[k] = true
 		}
 	}
+	if len(st.MachineOffersNever) > 0 {
+		m.machineOffersNever = make(map[string]bool, len(st.MachineOffersNever))
+		for _, k := range st.MachineOffersNever {
+			m.machineOffersNever[k] = true
+		}
+	}
 	m.SidebarCollapsed = st.Collapsed
 	if st.SectionSplit >= sidebarSplitMin && st.SectionSplit <= sidebarSplitMax {
 		m.SidebarSectionSplit = st.SectionSplit
@@ -229,6 +238,15 @@ func (m *OS) saveSidebarState() {
 				}
 				m.agentNoticesDismissed[k] = true
 			}
+			for _, k := range disk.MachineOffersNever {
+				if m.machineOffersRemoved[k] {
+					continue
+				}
+				if m.machineOffersNever == nil {
+					m.machineOffersNever = map[string]bool{}
+				}
+				m.machineOffersNever[k] = true
+			}
 		}
 	}
 	slots, colors := accentsToFile(m.SidebarAccents)
@@ -254,6 +272,7 @@ func (m *OS) saveSidebarState() {
 		BoardList:             m.Inbox.ck.boardList,
 		AgentsList:            m.Inbox.ck.listMode,
 		AgentNoticesDismissed: collapsedRepoList(m.agentNoticesDismissed),
+		MachineOffersNever:    collapsedRepoList(m.machineOffersNever),
 		Collapsed:             m.SidebarCollapsed,
 		SectionSplit:          m.SidebarSectionSplit,
 		ReposCollapsed:        collapsedRepoList(m.SidebarCollapsedRepos),

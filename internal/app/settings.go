@@ -662,7 +662,11 @@ func (m *OS) settingsCategories() []settingsCategory {
 		opt("notifications.style"),
 		opt("notifications.level"),
 		opt("notifications.log_hidden"),
+		opt("notifications.machine_offer"),
 	}
+	// The machines answered Never, each with a row that takes it off the
+	// list. See machine_offer.go.
+	alertRows = append(alertRows, m.machineOfferNeverItems()...)
 	// The agent alerts, under their heading row. With the agent features
 	// off both go, heading and all.
 	if m.agentsOn() {

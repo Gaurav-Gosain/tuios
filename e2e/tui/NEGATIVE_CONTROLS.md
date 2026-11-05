@@ -13071,3 +13071,23 @@ Run on 2026-11-05 on Linux on the branch feat/agents-view-list-column.
 
 Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestCockpitSideTabs$' -v .`.
+
+## A pane's ssh login offers to add the machine
+
+`TestMachineOfferOnSSHLogin` runs a daemon with `[agents] enabled = false`
+and a script named ssh first on PATH. In one pane it runs `ssh -N
+gaurav@tunnelbox`, then an scp stand-in that runs `ssh -t gaurav@scpbox scp -t
+/tmp`, then `ssh gaurav@buildbox`. The first two must bring up no offer in 9
+s. The login must bring up "buildbox is not a machine here. Add it?" once,
+with Add, Not now and Never. A click on Never must take it away and write
+`gaurav@buildbox:22` to `machine_offers_never` in sidebar.json. A new client
+must not offer buildbox, and must offer otherbox when the pane logs in there.
+
+Run on 2026-11-05 on Linux. The fixed build passes in about 60 s.
+
+| Control | Where it fails | Verdict |
+| --- | --- | --- |
+| The `scanSSHOffers` call cut from the poll's look with the agent features off (`sshOfferScan`) | "the login never brought up the offer": the window state never gets the offer | **caught** |
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestMachineOfferOnSSHLogin$' -v .`.

@@ -1426,6 +1426,7 @@ func (m *OS) updateWindowFromState(w *terminal.Window, ws *session.WindowState) 
 	m.noteQuietLifted(w, fromState, fromQuiet, fromKind)
 	m.markHostProgramStatus()
 	w.ForegroundCmd = ws.ForegroundCmd
+	m.noteMachineOffer(w, ws.SSHOffer)
 	// The shell's pid, as the daemon that spawned it knows it, and the only
 	// second source a daemon-backed pane has for the directory it reports over
 	// OSC 7. A locally spawned pane records its own at spawn time, so the daemon
@@ -1592,6 +1593,7 @@ func (m *OS) newWindowFromState(ws *session.WindowState) *terminal.Window {
 	}
 
 	adoptWindowState(window, *ws)
+	m.noteMachineOffer(window, ws.SSHOffer)
 
 	m.installPassthroughs(window)
 	m.setupCwdWatch(window)

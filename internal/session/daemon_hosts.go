@@ -105,6 +105,9 @@ func (d *Daemon) applyUserConfig(cfg *config.UserConfig, byPerson bool) {
 	// every daemon runs in by default, so neither widens what a pane may do
 	// beyond what the shipped daemon allows.
 	d.SetAgentsEnabled(cfg.Agents.On())
+	// The offer to add a machine changes what the dock shows and nothing a
+	// pane may do, so a file change applies it both ways.
+	d.SetMachineOffer(cfg.Notifications.MachineOfferOn())
 	// It narrows who is attached and widens nothing, so a file change
 	// applies it at once.
 	d.singleClient.Store(cfg.Daemon.SingleClient)

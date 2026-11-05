@@ -353,6 +353,11 @@ type WindowState struct {
 	// so it costs no extra process reads and may be one poll out of date, which
 	// is fine for a label.
 	ForegroundCmd string `json:"foreground_cmd,omitempty"`
+	// SSHOffer is set while the pane's foreground program is an interactive
+	// ssh or mosh login to a machine that no [hosts] entry reaches, so the
+	// client can offer to add it. Nil otherwise. Daemon-owned and refreshed
+	// by the detection poll, like ForegroundCmd. See ssh_offer.go.
+	SSHOffer *SSHOffer `json:"ssh_offer,omitempty"`
 	// ShellPID is the process id of the pane's shell, as the daemon that spawned
 	// it knows it. Zero means the daemon has no live process for the pane, which
 	// is every window with no PTY and every window on a build that predates the
@@ -1220,6 +1225,9 @@ type PTY struct {
 	lastDetectScan atomic.Int64
 	detectSkips    atomic.Int32
 
+	// sshOffer is the check for the offer to add a machine. See ssh_offer.go.
+	sshOffer sshOfferCheck
+
 	// screenSettle is the one-shot that scans the screen after a pane goes quiet.
 	// It is a timer rather than a ticker so a silent pane costs nothing, which is
 	// the rule the whole daemon is built to.
@@ -1564,6 +1572,9 @@ type Session struct {
 	// wakes are the daemon's idle latches, raised by this session's panes
 	// and state. Nil until the daemon adopts the session. See idle_wakes.go.
 	wakes atomic.Pointer[idleWakes]
+	// offerProbe is the daemon's check for the offer to add a machine. Nil
+	// until the daemon adopts the session. See ssh_offer.go.
+	offerProbe atomic.Pointer[sshOfferProbe]
 	// stateWake is closed by noteStateChangeLocked to wake WaitState. Guarded
 	// by stateWakeMu, which is never held with another lock taken after it.
 	stateWake   chan struct{}

@@ -39,6 +39,7 @@ func DaemonConfigFromUser(uc *config.UserConfig) *DaemonConfig {
 	}
 	// [agents] enabled = false turns every agent feature off.
 	cfg.AgentsOff = !uc.Agents.On()
+	cfg.MachineOfferOff = !uc.Notifications.MachineOfferOn()
 	cfg.AgentAutoDetect = uc.Daemon.AgentAutoDetect
 	cfg.AgentDetectInterval = time.Duration(uc.Daemon.AgentDetectSeconds) * time.Second
 	cfg.AgentBinaries = uc.Daemon.AgentBinaries

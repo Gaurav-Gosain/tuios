@@ -135,6 +135,12 @@ type UserConfig struct {
 	Plugins PluginsConfig `toml:"plugins,omitempty"`
 }
 
+// MachineOfferOn reports whether notifications.machine_offer is on. Absent is
+// on.
+func (n NotificationsConfig) MachineOfferOn() bool {
+	return n.MachineOffer == nil || *n.MachineOffer
+}
+
 // NotificationsConfig holds how long a dock message stays up.
 //
 // Durations are in seconds and are a floor, not a cap: a caller that asks for
@@ -170,6 +176,11 @@ type NotificationsConfig struct {
 	// LogHidden keeps a message below Level in the log viewer (default
 	// true). Off, it is dropped. Warnings and errors are logged either way.
 	LogHidden *bool `toml:"log_hidden"`
+
+	// MachineOffer shows a message with Add, Not now and Never when a pane
+	// logs in with ssh or mosh to a machine that no [hosts] entry reaches
+	// (default true).
+	MachineOffer *bool `toml:"machine_offer"`
 
 	// Agent is the [notifications.agent] table: what happens when a pane's
 	// agent state changes. See agent_alerts.go.
@@ -3460,6 +3471,7 @@ func ApplyNotificationConfig(cfg *UserConfig, s *Settings) {
 	if cfg.Notifications.LogHidden != nil {
 		s.NotificationLogHidden = *cfg.Notifications.LogHidden
 	}
+	s.NotificationMachineOffer = cfg.Notifications.MachineOfferOn()
 }
 
 // fillMissingTape fills in any missing tape settings with defaults. An unset or

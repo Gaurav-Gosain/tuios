@@ -420,6 +420,10 @@ type Daemon struct {
 	// written by a config reload, so it is atomic.
 	agentsOff atomic.Bool
 
+	// machineOfferOff is notifications.machine_offer = false: no pane's login
+	// is checked for the offer to add a machine. See ssh_offer.go.
+	machineOfferOff atomic.Bool
+
 	// taskAutoOff is [tasks] auto_stage = false: no card moves on its own.
 	// See task_auto.go. It is read under session state locks and written by
 	// a config reload, so it is atomic.
@@ -1017,6 +1021,9 @@ type DaemonConfig struct {
 	// AgentsOff is [agents] enabled = false: the daemon starts with every
 	// agent feature off. See agents_switch.go.
 	AgentsOff bool
+	// MachineOfferOff is notifications.machine_offer = false. See
+	// ssh_offer.go.
+	MachineOfferOff bool
 	// Notify is the [notify] table: where the Inbox's push notifications go.
 	// The zero value has no provider and sends nothing. See daemon_notify.go.
 	Notify config.NotifyConfig
@@ -1088,6 +1095,7 @@ func NewDaemon(cfg *DaemonConfig) *Daemon {
 	d.SetWorktreePath(cfg.WorktreePath)
 	d.agentDetectInterval = resolveAgentDetectInterval(cfg.AgentAutoDetect, cfg.AgentDetectInterval)
 	d.agentsOff.Store(cfg.AgentsOff)
+	d.machineOfferOff.Store(cfg.MachineOfferOff)
 	d.wakes.init()
 	d.loadHooks(cfg)
 	d.notify = newPushNotifier(d, cfg.Notify)
@@ -1162,6 +1170,7 @@ func (d *Daemon) onSessionCreated(s *Session) {
 	// point somewhere from the start. See ssh_agent_follow.go.
 	d.agentEnsureSession(s.ID)
 	s.setIdleWakes(&d.wakes)
+	s.setSSHOfferProbe(d.sshOfferFor)
 	d.wakes.sessionsChanged()
 	name := s.Name()
 	// Every daemon-side mutation reaches the attached clients from here, so a
@@ -2589,11 +2598,19 @@ func (d *Daemon) agentMonitor() {
 			// With the agent features off the tick reads nothing: no
 			// process table, no transcript. See agents_switch.go. Turning
 			// them on raises the latch.
+			var pending bool
 			if d.agentsOff.Load() {
-				asleep = true
-				continue
+				// The offer to add a machine is not an agent feature, and
+				// reads the foreground alone. Off as well, the tick reads
+				// nothing.
+				if d.machineOfferOff.Load() {
+					asleep = true
+					continue
+				}
+				pending = d.sshOfferScan()
+			} else {
+				pending = d.agentDetectScan()
 			}
-			pending := d.agentDetectScan()
 			if active {
 				quiet = 0
 			} else {
@@ -2618,7 +2635,7 @@ func (d *Daemon) agentDetectScan() bool {
 	for _, sess := range d.manager.AllSessions() {
 		due := func(ptyID string) bool {
 			pty := sess.GetPTY(ptyID)
-			return pty == nil || pty.detectScanDue(now, quietTicks)
+			return pty == nil || pty.sshOffer.waiting() || pty.detectScanDue(now, quietTicks)
 		}
 		sess.scanAgentDetection(d.foregroundResolver(sess), d.agentMatcher.identifyKept, due)
 		// The transcript joins ride this tick rather than one of their
@@ -2630,7 +2647,7 @@ func (d *Daemon) agentDetectScan() bool {
 		if d.noteSessionScanned(sess) {
 			break
 		}
-		if sess.detectPending() {
+		if sess.detectPending() || sess.sshOfferWaiting() {
 			pending = true
 		}
 	}
@@ -2639,6 +2656,26 @@ func (d *Daemon) agentDetectScan() bool {
 	// keeps the tick running until it is done.
 	if d.searchViewTranscripts(reg) {
 		pending = true
+	}
+	return pending
+}
+
+// sshOfferScan is one look of agentMonitor while the agent features are off:
+// the foreground of each pane that printed, for the offer to add a machine
+// and nothing else. It reports whether a login waits to be old enough.
+func (d *Daemon) sshOfferScan() bool {
+	quietTicks := detectQuietTicks(d.agentDetectInterval)
+	now := time.Now().UnixNano()
+	pending := false
+	for _, sess := range d.manager.AllSessions() {
+		due := func(ptyID string) bool {
+			pty := sess.GetPTY(ptyID)
+			return pty == nil || pty.sshOffer.waiting() || pty.detectScanDue(now, quietTicks)
+		}
+		sess.scanSSHOffers(d.foregroundResolver(sess), due)
+		if sess.sshOfferWaiting() {
+			pending = true
+		}
 	}
 	return pending
 }

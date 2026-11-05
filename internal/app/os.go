@@ -1814,6 +1814,13 @@ type OS struct {
 	// agentNoticesDismissed holds the integration notices the person
 	// dismissed, by agentNoticeKey, persisted with the rail's state.
 	agentNoticesDismissed map[string]bool
+	// machineOffersShown holds the machines offered this run, by ssh
+	// target. machineOffersNever is the never list of sidebar.json, and
+	// machineOffersRemoved the targets taken off it this run, which the
+	// merge on save must not bring back. See machine_offer.go.
+	machineOffersShown   map[string]bool
+	machineOffersNever   map[string]bool
+	machineOffersRemoved map[string]bool
 	// settingsAgentsOpen is the Alerts tab's agent group opened or closed by
 	// hand; nil follows agentsSeen.
 	settingsAgentsOpen *bool
@@ -2237,6 +2244,10 @@ type NotifTarget struct {
 	// the target, so a message drawn with one text is not the same message as
 	// one holding another. See clickVisibleNotification.
 	ClipboardVersion uint64
+	// OfferTarget, OfferDest and OfferMachine are the offer to add a
+	// machine: the ssh target Never stores, the destination Add sets up, and
+	// the name the message shows. See machine_offer.go.
+	OfferTarget, OfferDest, OfferMachine string
 }
 
 // LogMessage represents a log entry with timestamp and level.

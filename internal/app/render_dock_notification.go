@@ -61,7 +61,14 @@ type notifBlock struct {
 	// Cut says the message did not fit and the block shows only its start.
 	// A click on a cut message opens it in full (see NotificationClick).
 	Cut bool
+	// Choices are the columns of the choices an offer draws after its text,
+	// from the block's first column, in offerChoices order. See
+	// machine_offer.go.
+	Choices []notifSpan
 }
+
+// notifSpan is a run of columns, X1 past the last.
+type notifSpan struct{ X0, X1 int }
 
 // notifDrawn is what the last composed frame showed of the live message: which
 // message, how many waited behind it, and how many cells of its rule were lit
@@ -392,25 +399,51 @@ func (m *OS) renderNotificationBlock(renderWidth, avail int) (notifBlock, bool) 
 
 	room := budget - chromeW - lipgloss.Width(meta)
 
+	// The offer to add a machine ends in its choices, which are never cut:
+	// the text gives way first. See machine_offer.go.
+	offer := isMachineOffer(s.msg.Target)
+	var choiceText []string
+	if offer {
+		fg := theme.Readable(ground.Fg, bg)
+		for i, label := range offerChoices {
+			st := lipgloss.NewStyle().Foreground(fg).Underline(true)
+			if i == offerAdd {
+				st = st.Foreground(theme.Readable(ground.Accent, bg)).Bold(true)
+			}
+			choiceText = append(choiceText, st.Render(label))
+			room -= 2 + lipgloss.Width(label)
+		}
+	}
+
 	// A message that does not fit says so in a word as well as with the
 	// ellipsis: "more" is what a click on it gives. The word is given up
 	// before the message is, on a block too narrow to hold both.
 	cut := lipgloss.Width(s.msg.Message) > room
 	more := ""
-	if cut && room-notifMoreWidth >= notifMoreMinText {
+	if cut && !offer && room-notifMoreWidth >= notifMoreMinText {
 		room -= notifMoreWidth
 		more = "  " + lipgloss.NewStyle().Foreground(theme.Readable(ground.FgDim, bg)).Render(notifMoreLabel)
 	}
 
 	text := notifFit(s.msg.Message, room)
 	bodyStyle := lipgloss.NewStyle().Foreground(theme.Readable(ground.Fg, bg))
-	if s.msg.Target != nil || cut {
+	if (s.msg.Target != nil || cut) && !offer {
 		// Underline is the one link mark everyone reads without being taught,
 		// costs no columns, and never appears on a message a click does
 		// nothing with, so its absence says something too.
 		bodyStyle = bodyStyle.Underline(true)
 	}
 	body := "  " + bodyStyle.Render(text) + more
+	var choices []notifSpan
+	if offer {
+		x := lipgloss.Width(lead + mark + body)
+		for i, c := range choiceText {
+			w := lipgloss.Width(offerChoices[i])
+			choices = append(choices, notifSpan{X0: x + 2, X1: x + 2 + w})
+			x += 2 + w
+			body += "  " + c
+		}
+	}
 
 	// The last two columns are bare bar: the gap that keeps the message off
 	// whatever holds the right-hand end of the screen.
@@ -423,7 +456,8 @@ func (m *OS) renderNotificationBlock(renderWidth, avail int) (notifBlock, bool) 
 		Rule:     notifBurnRule(s, width, lit, &m.Settings, m.railRule()),
 		Width:    width,
 		DismissW: lipgloss.Width(meta) + 2, // meta and the bar columns after it
-		Cut:      cut,
+		Cut:      cut && !offer,
+		Choices:  choices,
 		drawn: notifDrawn{
 			id:     s.msg.ID,
 			queued: s.queued,

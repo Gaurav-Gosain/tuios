@@ -1225,6 +1225,11 @@ var optionSpecs = []Option{
 		Description: "Put messages below notifications.level in the log viewer. When off, they go nowhere. Warnings and errors always go to the log",
 		Default:     "true",
 	},
+	{
+		Path: "notifications.machine_offer", Type: OptionBool, Section: "notifications",
+		Description: "Offer to add a machine when a pane logs in to it with ssh or mosh and no [hosts] entry reaches it",
+		Default:     "true",
+	},
 
 	// [notifications.agent]. The sounds table is absent: its two keys are paths
 	// to files, which no accepted set or range can check.

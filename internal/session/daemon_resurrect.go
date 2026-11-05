@@ -34,6 +34,7 @@ func clearLiveAgent(w *WindowState) {
 	w.AgentSubagents = 0
 	w.AgentSubagentList = nil
 	w.ForegroundCmd = ""
+	w.SSHOffer = nil
 	// OSC 7501 records live in the pane's emulator, which a restore does
 	// not bring back.
 	w.ProgramStatus = nil
