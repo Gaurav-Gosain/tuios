@@ -281,17 +281,29 @@ func (a *App) tiled(c *ui.Context, pal *palette, bar ui.TitleBar, shown float32,
 			var sp []fracSplit
 			layoutFracs(fit, room, "split-"+s.ID, func(string) bool { return false }, at, map[string]frac{}, &sp)
 			// The smallest pane that does not fit goes, one that needs
-			// the person only when no other is left to go.
-			victim, best := "", [2]float64{2, math.Inf(1)}
+			// the person only when no other is left to go. A kept pane
+			// too small makes room too: the smallest other pane goes,
+			// and its room goes to its neighbours. Kept out of the
+			// count, the focused pane a chip showed kept the corner the
+			// layout gave it, 10 columns wide (QA-080).
+			victim, best := "", [3]float64{2, 2, math.Inf(1)}
+			crowded := false
+			for _, r := range at {
+				crowded = crowded || a.paneTooSmallBy(r, ew, eh, dc, dr)
+			}
 			for id, r := range at {
-				if keep[id] || !a.paneTooSmallBy(r, ew, eh, dc, dr) {
+				if !crowded || keep[id] {
 					continue
+				}
+				fits := 0.0
+				if !a.paneTooSmallBy(r, ew, eh, dc, dr) {
+					fits = 1
 				}
 				waits := 0.0
 				if p := s.PaneByID(id); p != nil && p.Status == proto.Waiting {
 					waits = 1
 				}
-				if k := [2]float64{waits, r.w * r.h}; k[0] < best[0] || (k[0] == best[0] && k[1] < best[1]) {
+				if k := [3]float64{waits, fits, r.w * r.h}; k[0] < best[0] || k[0] == best[0] && (k[1] < best[1] || k[1] == best[1] && k[2] < best[2]) {
 					victim, best = id, k
 				}
 			}
@@ -510,7 +522,9 @@ func (a *App) paneTooSmallBy(f frac, ew, eh, dc, dr float64) bool {
 	if cw <= 0 || ch <= 0 {
 		return false
 	}
-	return (f.w*ew-paneGap)/cw < shownPaneCols+dc || (f.h*eh-paneGap-headerH)/ch < shownPaneRows+dr
+	// The terminal's padding holds no cells: counted as cells, it let
+	// panes of 10 columns show (QA-080).
+	return (f.w*ew-paneGap-2*termPadX)/cw < shownPaneCols+dc || (f.h*eh-paneGap-headerH-2*termPadY)/ch < shownPaneRows+dr
 }
 
 // stripH is the height of the strip that lists the hidden panes.
