@@ -322,6 +322,7 @@ func (a *App) commandItems() []paletteItem {
 			tuiosOf[r.kero] = r.action
 		}
 	}
+	first := len(cmds)
 	for _, act := range actions.All {
 		id := act.ID
 		if id == "palette.open" || id == "pane.restart" {
@@ -384,6 +385,17 @@ func (a *App) commandItems() []paletteItem {
 		}
 	}
 	cmds = append(cmds, paletteItem{title: locales.MachineAdd(), words: en.MachineAdd(), run: func() { a.openSettings("hosts") }})
+	// What ends something comes last, after New session and the rest
+	// (council round 3, visual n1).
+	slices.SortStableFunc(cmds[first:], func(x, y paletteItem) int {
+		switch {
+		case x.danger == y.danger:
+			return 0
+		case x.danger:
+			return 1
+		}
+		return -1
+	})
 	return cmds
 }
 
