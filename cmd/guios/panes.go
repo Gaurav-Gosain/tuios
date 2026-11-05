@@ -480,7 +480,7 @@ func (a *App) dropPreview(c *ui.Context, pal *palette, target string, zone dropZ
 			// pointer carries through its middle.
 			ui.Box(c).HeightPercent(22).Shrink(0)
 			pill := ui.Row(c).Height(30).Padding(0, 12).Gap(7).Radius(15).AlignItems(ui.Center).
-				Background(pal.accent).TextColor(onAccent(pal))
+				Background(pal.accentFill).TextColor(pal.accentInk)
 			floating(pill, pal).Children(func() {
 				ui.Icon(c, glyph).Size(14, 14)
 				ui.Text(c, label).FontSize(fsBody).FontWeight(wSemibold).SingleLine()
@@ -1537,7 +1537,7 @@ func (a *App) paneLabel(c *ui.Context, pal *palette, s *proto.Session, id string
 		return
 	}
 	ui.Box(c.Key("label")).Absolute().Left(0).Top(0).Right(0).Bottom(0).Center().Children(func() {
-		ui.Text(c, strconv.Itoa(n)).FontSize(64).FontWeight(700).TextColor(pal.popover).
-			Padding(4, 28).Radius(18).Background(pal.accent)
+		ui.Text(c, strconv.Itoa(n)).FontSize(64).FontWeight(700).TextColor(pal.accentInk).
+			Padding(4, 28).Radius(18).Background(pal.accentFill)
 	})
 }

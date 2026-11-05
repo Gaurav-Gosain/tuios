@@ -172,7 +172,7 @@ func (cm *copyMode) hintSpans(y int, pal *palette) []ui.Span {
 		live := strings.HasPrefix(label, cm.typed)
 		rest := string(row[h.x+min(len(label), h.n) : h.x+h.n])
 		if live {
-			spans = append(spans, ui.Span{Text: label, Background: pal.accent, Color: pal.popover, Weight: 700})
+			spans = append(spans, ui.Span{Text: label, Background: pal.accentFill, Color: pal.accentInk, Weight: 700})
 			spans = append(spans, ui.Span{Text: rest, Background: pal.attention.Alpha(0.3)})
 		} else {
 			spans = append(spans, ui.Span{Text: string(row[h.x : h.x+h.n])})
@@ -911,7 +911,7 @@ func (a *App) copyView(c *ui.Context, pal *palette) {
 					case 2:
 						sp.Background = pal.accent.Alpha(0.35)
 					case 3:
-						sp.Background, sp.Color = pal.accent, pal.popover
+						sp.Background, sp.Color = pal.accentFill, pal.accentInk
 					}
 					spans = append(spans, sp)
 					x = end

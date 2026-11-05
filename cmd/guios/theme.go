@@ -68,6 +68,14 @@ type palette struct {
 	dangerFill ui.Color
 	accent     ui.Color
 	accentText ui.Color // the accent as text on its own 16 % chip
+	// accentFill is the accent as a control's fill (the primary button,
+	// the selected item of a menu, a selected chip), and accentInk the
+	// text on it: dark ink or white, whichever reads, at 5:1 or more.
+	// A fill neither reaches it on goes deeper until white does (council
+	// round 5, visual M1). attnFill and attnInk are the same for a
+	// needs-you count's badge.
+	accentFill, accentInk ui.Color
+	attnFill, attnInk     ui.Color
 	// work marks what works: an agent's turn, a program's progress. The
 	// accent means only what is selected or primary (DESIGN.md section 1).
 	work ui.Color
@@ -326,6 +334,8 @@ func tinted(th *terminal.Theme, accent ui.Color) *palette {
 // lightest, in the light the darkest. text2 keeps 4.5:1 and text3 3:1
 // there (DESIGN.md section 1), and needs-you and danger text 4.5:1.
 func (p *palette) finish(fg, bg ui.Color) {
+	// The terminals keep the theme's own foreground: the veil reads on it.
+	termFg := fg
 	if p.dark {
 		p.focusLine = fg.Alpha(0.11)
 	} else {
@@ -365,6 +375,9 @@ func (p *palette) finish(fg, bg ui.Color) {
 	for i := 0; i < 60 && (least(p.textMuted) < 5 || contrast(p.textMuted, bg) < contrast(p.textFaint, bg)+1); i++ {
 		p.textMuted = p.textMuted.Mix(fg, 0.06)
 	}
+	p.accentFill, p.accentInk = inkFill(p.accent)
+	p.attnFill, p.attnInk = inkFill(p.attention)
+	p.veil = dimVeil(termFg, bg, p.cardDim.Over(darker(bg, 0.04)), p.veil.A)
 	// An attempt's letter on its accent chip keeps 5:1 (visual M2).
 	p.accentText = deepen(p.accent, p.accent.Alpha(0.16).Over(worst), 5)
 	attnWorst := worst
@@ -562,15 +575,50 @@ func oklch(c ui.Color) (l, ch, h float32) {
 	return float32(L), float32(math.Hypot(A, B)), float32(hue)
 }
 
-// onAttention is the ink of a count on the needs-you amber: the dark ink
-// or white, whichever reads better on it. White on the light theme's amber
-// was 3.42:1 (council round 4, S1); the dark ink is 5:1.
-func onAttention(pal *palette) ui.Color {
-	dark, white := ui.RGB(44, 44, 46), ui.Hex("#ffffff")
-	if contrast(white, pal.attention) > contrast(dark, pal.attention) {
-		return white
+// onAttention is the ink of a count on the needs-you badge (attnFill).
+func onAttention(pal *palette) ui.Color { return pal.attnInk }
+
+// inkFill is a fill for a control and the ink of its text: dark ink or
+// white, whichever has more contrast on it. When neither reaches 5:1 on
+// the token, which reads 4.5:1 on the frame's pixels, the fill goes
+// deeper in OKLCH, its hue kept, until white does.
+func inkFill(fill ui.Color) (ui.Color, ui.Color) {
+	dark, white := ui.RGB(23, 23, 23), ui.Hex("#ffffff")
+	for range 60 {
+		ink := dark
+		if contrast(white, fill) > contrast(dark, fill) {
+			ink = white
+		}
+		if contrast(ink, fill) >= 5 {
+			return fill, ink
+		}
+		fill = darker(fill, 0.01)
 	}
-	return dark
+	return fill, white
+}
+
+// awayFrom is a fill moved by f away from its ink, for hover and press:
+// the text keeps the contrast the fill gave it, or gains.
+func awayFrom(fill, ink ui.Color, f float32) ui.Color {
+	if luminance(ink) > luminance(fill) {
+		return fill.Mix(ui.Hex("#000000"), f)
+	}
+	return fill.Mix(ui.Hex("#ffffff"), f)
+}
+
+// dimVeil is the veil over a pane the person is not in: the theme's own
+// background at up to alpha, no more than keeps the theme's foreground at
+// 4.8:1 on ground under the veil, which reads 4.5:1 on the frame's pixels
+// (council round 5, visual M3). Dimming toward the theme's background keeps the
+// pane in the theme's hue; a fixed grey turned gruvbox cool.
+func dimVeil(fg, bg, ground ui.Color, alpha uint8) ui.Color {
+	for a := float32(alpha) / 255; a > 0; a -= 0.01 {
+		v := bg.Alpha(a)
+		if contrast(v.Over(fg), v.Over(ground)) >= 4.8 {
+			return v
+		}
+	}
+	return bg.Alpha(0)
 }
 
 // pressedQuiet is the ground of a quiet button (a header view, a tab) while

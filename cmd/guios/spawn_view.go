@@ -388,7 +388,7 @@ func (a *App) spawnAgents(c *ui.Context, pal *palette, s *spawnSheet, h *spawnHa
 			fg, bg := pal.text, pal.chip
 			switch {
 			case i == s.agent:
-				fg, bg = onAccent(pal), pal.accent
+				fg, bg = pal.accentInk, pal.accentFill
 			case !x.installed && x.seen == 0:
 				fg = pal.textFaint
 			case b.Hovered():
@@ -438,8 +438,8 @@ func (a *App) spawnAgents(c *ui.Context, pal *palette, s *spawnSheet, h *spawnHa
 				hi := item.Hovered() || item.Focused()
 				fg := pal.text
 				if hi {
-					item.Background(pal.accent)
-					fg = onAccent(pal)
+					item.Background(pal.accentFill)
+					fg = pal.accentInk
 				}
 				if item.Clicked() {
 					s.agent, s.listOpen = i, false
@@ -568,8 +568,8 @@ func (a *App) spawnMachines(c *ui.Context, pal *palette, s *spawnSheet, h *spawn
 func spawnRadio(c *ui.Context, pal *palette, on bool) {
 	b := ui.Box(c).Size(12, 12).Radius(6).Shrink(0).Center()
 	if on {
-		b.Background(pal.accent).Children(func() {
-			ui.Box(c).Size(4, 4).Radius(2).Background(onAccent(pal))
+		b.Background(pal.accentFill).Children(func() {
+			ui.Box(c).Size(4, 4).Radius(2).Background(pal.accentInk)
 		})
 		return
 	}

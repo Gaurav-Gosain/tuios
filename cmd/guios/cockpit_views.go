@@ -78,7 +78,7 @@ func (a *App) ckViewButton(c *ui.Context, pal *palette, v int, label string, n i
 		}
 		ui.Text(c, label).FontSize(fsBody).FontWeight(wMedium).TextColor(col).SingleLine()
 		if n > 0 {
-			countBadge(c, n, pal.attention, onAttention(pal))
+			countBadge(c, n, pal.attnFill, pal.attnInk)
 		}
 	})
 	if b.Clicked() {

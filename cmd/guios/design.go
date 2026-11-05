@@ -230,14 +230,8 @@ func countBadge(c *ui.Context, n int, bg, fg ui.Color) {
 	})
 }
 
-// onAccent is the color of text on the accent: white on a deep accent,
-// the card's color on a light one, as a light accent in the dark is.
-func onAccent(pal *palette) ui.Color {
-	if l, _, _ := oklch(pal.accent); l > 0.68 {
-		return pal.card.Mix(ui.Hex("#000000"), 0.35)
-	}
-	return ui.Hex("#ffffff")
-}
+// onAccent is the color of text on the accent's fill (accentFill).
+func onAccent(pal *palette) ui.Color { return pal.accentInk }
 
 // pathLine is a path on one line, cut at its start so that its file's
 // name stays, with the whole path in a tooltip while it is cut. key
