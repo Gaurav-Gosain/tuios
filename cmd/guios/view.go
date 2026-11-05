@@ -147,8 +147,9 @@ func (a *App) view(c *ui.Context) {
 		// no label would.
 		if !agoDue.IsZero() {
 			// One frame a minute at most, on the minute, for every label
-			// due in it, as the TUI's minute tick: the agents view shows
-			// many ages, each of which would cost a frame of its own.
+			// due in it: the agents view shows many ages, each of which
+			// would cost a frame of its own. ago's steps make it one
+			// frame each 5 minutes, then each hour, as the ages grow.
 			due := agoDue
 			if t := due.Truncate(time.Minute); !t.Equal(due) {
 				due = t.Add(time.Minute)
@@ -986,8 +987,12 @@ func (a *App) footerNote(c *ui.Context, pal *palette, dot ui.Color, label string
 	})
 }
 
-// ago is how long ago a time in Unix milliseconds was, shortly, as
-// proto.Ago writes it, in the language the app shows.
+// ago is how long ago a time in Unix milliseconds was, shortly, in the
+// language the app shows. Its steps grow with the age, so an idle window
+// redraws less as its ages grow: each minute up to 10 minutes, each 5
+// minutes up to an hour, then each hour, day and week. The label rounds
+// down to its step ("12m" shows as "10m" until 15m), so it never says a
+// time the next redraw would not.
 //
 // It moves agoDue to when the label changes, if that is sooner.
 func ago(ms int64, now time.Time) string {
@@ -998,8 +1003,10 @@ func ago(ms int64, now time.Time) string {
 	d := now.Sub(t)
 	unit := 7 * 24 * time.Hour
 	switch {
-	case d < time.Hour:
+	case d < 10*time.Minute:
 		unit = time.Minute
+	case d < time.Hour:
+		unit = 5 * time.Minute
 	case d < 24*time.Hour:
 		unit = time.Hour
 	case d < 7*24*time.Hour:
@@ -1012,7 +1019,7 @@ func ago(ms int64, now time.Time) string {
 	case d < time.Minute:
 		return locales.AgoNow()
 	case d < time.Hour:
-		return locales.AgoMinutes(int(d / time.Minute))
+		return locales.AgoMinutes(int(d / unit * unit / time.Minute))
 	case d < 24*time.Hour:
 		return locales.AgoHours(int(d / time.Hour))
 	case d < 7*24*time.Hour:
