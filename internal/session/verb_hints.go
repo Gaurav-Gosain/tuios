@@ -150,6 +150,7 @@ var errorCodeCatalog = []struct {
 	{ErrVerbInvalidTML, "The TML document does not parse or does not validate. Nothing was opened or changed. The error lists each problem with a JSON Pointer to the node and the fix. Check a document with tuios tml validate."},
 	{ErrVerbNoSurface, "No open TML surface has that id. It closed, or the id is wrong. list-windows names the surface of each TML window."},
 	{ErrVerbTooManySurfaces, "The caller holds as many open TML surfaces as it may: 8 for a pane, and 32 per session for the callers outside the panes. Nothing was opened. Close one with tml-close."},
+	{ErrVerbNoRowIDs, "pane-history was asked of a pane whose emulator gives its history rows no ids. Nothing was read."},
 	{ErrVerbInternal, "Unexpected server-side failure."},
 }
 
