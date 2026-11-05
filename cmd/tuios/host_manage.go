@@ -12,6 +12,7 @@ import (
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/federation"
+	"github.com/Gaurav-Gosain/tuios/internal/hostsync"
 	"github.com/Gaurav-Gosain/tuios/internal/plural"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/units"
@@ -404,7 +405,7 @@ func startHostDaemon(host federation.Host, res *hostTestResult, dryRun bool) err
 		// nothing to start, and the report says what is wrong.
 		return nil
 	}
-	arg, ok := syncCommandArg(res.Command)
+	arg, ok := hostsync.CommandArg(res.Command)
 	if !ok || arg == "-" {
 		return &diagnosticError{
 			What: fmt.Sprintf("The link runs %q on %s, which is not one path, so --start cannot run it.", res.Command, res.Host),
@@ -417,7 +418,7 @@ func startHostDaemon(host federation.Host, res *hostTestResult, dryRun bool) err
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), syncRestartTimeout)
 	defer cancel()
-	if err := startDaemonWith(ctx, sshSyncRunner{host: host}, arg, res.Command); err != nil {
+	if err := hostsync.StartDaemonWith(ctx, hostsync.SSHRunner{Host: host}, arg, res.Command); err != nil {
 		res.Action = testActionStartFail
 		return err
 	}

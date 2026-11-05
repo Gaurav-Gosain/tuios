@@ -1,4 +1,4 @@
-package main
+package hostsync
 
 import (
 	"bufio"
@@ -30,10 +30,10 @@ import (
 // Tailscale asks for an approval on each new connection, so two things are
 // done here:
 //
-//   - The calls of one run share a connection per host (sshShare), so one
+//   - The calls of one run share a connection per host (Share), so one
 //     approval covers the run.
 //   - On a terminal, the run prints every URL at once and offers to wait
-//     (approvalDesk). The waiting connection is the one that goes on when the
+//     (ApprovalDesk). The waiting connection is the one that goes on when the
 //     person approves, so nothing is dialed again. Off a terminal, or with
 //     --json, the run fails the host at once and reports the URL.
 
@@ -44,9 +44,9 @@ const syncApprovalWait = 5 * time.Minute
 // gate before it asks, so the person sees every URL in one list.
 const approvalGather = 3 * time.Second
 
-// approvalDesk decides, once per run, whether to wait for Tailscale
+// ApprovalDesk decides, once per run, whether to wait for Tailscale
 // approvals, and tells the person what to open.
-type approvalDesk struct {
+type ApprovalDesk struct {
 	out         io.Writer
 	in          io.Reader
 	interactive bool
@@ -67,13 +67,13 @@ type approvalRequest struct {
 	host, url string
 }
 
-// newApprovalDesk makes the desk of one run. A desk that is not interactive
+// NewApprovalDesk makes the desk of one run. A desk that is not interactive
 // never waits.
-func newApprovalDesk(out io.Writer, in io.Reader, interactive bool) *approvalDesk {
-	return &approvalDesk{out: out, in: in, interactive: interactive, wait: syncApprovalWait, done: make(chan struct{})}
+func NewApprovalDesk(out io.Writer, in io.Reader, interactive bool) *ApprovalDesk {
+	return &ApprovalDesk{out: out, in: in, interactive: interactive, wait: syncApprovalWait, done: make(chan struct{})}
 }
 
-func (d *approvalDesk) enter() {
+func (d *ApprovalDesk) enter() {
 	if d == nil {
 		return
 	}
@@ -82,7 +82,7 @@ func (d *approvalDesk) enter() {
 	d.mu.Unlock()
 }
 
-func (d *approvalDesk) leave() {
+func (d *ApprovalDesk) leave() {
 	if d == nil {
 		return
 	}
@@ -97,7 +97,7 @@ func (d *approvalDesk) leave() {
 
 // await is called by an ssh call that Tailscale holds. It returns whether the
 // call should keep waiting for the approval.
-func (d *approvalDesk) await(host string, g federation.SSHGate) bool {
+func (d *ApprovalDesk) await(host string, g federation.SSHGate) bool {
 	if d == nil || !d.interactive {
 		return false
 	}
@@ -126,7 +126,7 @@ func (d *approvalDesk) await(host string, g federation.SSHGate) bool {
 }
 
 // decide lists the URLs and asks once.
-func (d *approvalDesk) decide() {
+func (d *ApprovalDesk) decide() {
 	d.mu.Lock()
 	if d.decided {
 		d.mu.Unlock()
@@ -169,7 +169,7 @@ func (d *approvalDesk) decide() {
 }
 
 // approved tells the person a host goes on.
-func (d *approvalDesk) approved(host string) {
+func (d *ApprovalDesk) approved(host string) {
 	if d == nil || !d.interactive {
 		return
 	}
@@ -198,10 +198,10 @@ func (b *gateBuffer) String() string {
 // gatePoll is how often a running ssh call reads its stderr for the gate.
 const gatePoll = 100 * time.Millisecond
 
-// runGatedSSH runs one ssh call and handles a Tailscale check on the way. The
+// RunGatedSSH runs one ssh call and handles a Tailscale check on the way. The
 // context bounds the call. Time spent waiting for an approval does not count
 // against it: the budget starts again when the approval lands.
-func runGatedSSH(ctx context.Context, cmd *exec.Cmd, stdin io.Reader, host string, desk *approvalDesk) (string, string, error) {
+func RunGatedSSH(ctx context.Context, cmd *exec.Cmd, stdin io.Reader, host string, desk *ApprovalDesk) (string, string, error) {
 	var out limitedBuffer
 	errb := &gateBuffer{buf: limitedBuffer{limit: 8 << 10}}
 	out.limit = syncOutputLimit
@@ -284,17 +284,17 @@ func runGatedSSH(ctx context.Context, cmd *exec.Cmd, stdin io.Reader, host strin
 	}
 }
 
-// sshShare is the private folder of one run's shared ssh connections.
-type sshShare struct {
+// Share is the private folder of one run's shared ssh connections.
+type Share struct {
 	dir   string
 	bin   string
 	hosts []federation.Host
 }
 
-// newSSHShare makes the folder, under the user's runtime folder when there is
+// NewShare makes the folder, under the user's runtime folder when there is
 // one. It returns nil where ssh cannot share a connection, and the run then
 // opens one connection per call as before.
-func newSSHShare(bin string) *sshShare {
+func NewShare(bin string) *Share {
 	if runtime.GOOS == "windows" {
 		return nil
 	}
@@ -320,11 +320,11 @@ func newSSHShare(bin string) *sshShare {
 	if bin == "" {
 		bin = "ssh"
 	}
-	return &sshShare{dir: dir, bin: bin}
+	return &Share{dir: dir, bin: bin}
 }
 
-// share gives the host a socket of its own in the folder.
-func (s *sshShare) share(h *federation.Host) {
+// Share gives the host a socket of its own in the folder.
+func (s *Share) Share(h *federation.Host) {
 	if s == nil {
 		return
 	}
@@ -332,8 +332,8 @@ func (s *sshShare) share(h *federation.Host) {
 	s.hosts = append(s.hosts, *h)
 }
 
-// close stops each master connection and removes the folder.
-func (s *sshShare) close() {
+// Close stops each master connection and removes the folder.
+func (s *Share) Close() {
 	if s == nil {
 		return
 	}
@@ -354,8 +354,8 @@ func (s *sshShare) close() {
 	_ = os.RemoveAll(s.dir)
 }
 
-// gateErrorOf is the Tailscale gate that stopped err, or nil.
-func gateErrorOf(err error) *federation.GateError {
+// GateErrorOf is the Tailscale gate that stopped err, or nil.
+func GateErrorOf(err error) *federation.GateError {
 	if ge, ok := errors.AsType[*federation.GateError](err); ok {
 		return ge
 	}

@@ -17,6 +17,7 @@ import (
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/harness"
+	"github.com/Gaurav-Gosain/tuios/internal/hostsync"
 	"github.com/Gaurav-Gosain/tuios/internal/plural"
 	"github.com/Gaurav-Gosain/tuios/internal/release"
 	"github.com/Gaurav-Gosain/tuios/internal/restartplan"
@@ -201,7 +202,7 @@ func planRestart() *restartReport {
 	rep.Binary = bin
 	rep.Version = cmp.Or(ver, version)
 
-	t := &syncTarget{name: "this machine", local: true, runner: localSyncRunner{}}
+	t := &syncTarget{name: "this machine", local: true, runner: hostsync.LocalRunner{}}
 	ctx, cancel := context.WithTimeout(context.Background(), syncProbeTimeout)
 	defer cancel()
 	readLocalDaemon(ctx, t)
@@ -331,7 +332,7 @@ func runTuios(bin string, args ...string) (string, error) {
 // outputTail is the last line a failed command wrote, as a sentence to add
 // to the fix.
 func outputTail(out string) string {
-	line := lastLine(out)
+	line := hostsync.LastLine(out)
 	if line == "" {
 		return ""
 	}
