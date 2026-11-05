@@ -724,18 +724,35 @@ func (a *App) sessionRow(c *ui.Context, pal *palette, s *proto.Session, n *int, 
 		}
 		// room is the width the name has: the line's, less what follows
 		// it there, from the last frame; 0 while unknown.
+		letter := a.railLetter(s)
 		name := func(room float32) {
-			full := a.railName(s)
+			full := a.railTitle(s, nested)
+			if letter != "" {
+				attemptChip(c, pal, letter)
+			}
 			weight := wMedium
 			if s.Unread || lit {
 				weight = wSemibold
 			}
 			// Cut in the middle: the end of a name tells a fan's
 			// attempts apart, as "-2" (council round 3, visual S5).
+			// A branch that does not fit goes by its last part first
+			// ("fan/try-two-ways-2" as "try-two-ways-2"); the full one
+			// is in the tooltip.
+			if nested && room > 0 && natural(c, full, fsBody, weight) > room {
+				if i := strings.LastIndexByte(full, '/'); i >= 0 && i+1 < len(full) {
+					full = full[i+1:]
+				}
+			}
 			shown := midCut(c, full, fsBody, weight, room)
 			name := ui.Text(c, shown).FontSize(fsBody).FontWeight(weight).SingleLine().Ellipsis("…").Shrink(1).MinWidth(0).TextColor(pal.text)
-			if shown != full {
-				name.Tooltip(full)
+			if shown != full || nested {
+				// A nested row's tooltip names the session too.
+				tip := full
+				if nested {
+					tip = a.railTitle(s, true) + "\n" + a.railName(s)
+				}
+				name.Tooltip(tip)
 			}
 			if s.Status == proto.Exited && !s.Unread {
 				name.TextColor(pal.textMuted)
@@ -776,7 +793,19 @@ func (a *App) sessionRow(c *ui.Context, pal *palette, s *proto.Session, n *int, 
 				line1 := ui.Row(c.Key("line1")).Gap(sp2).AlignItems(ui.Center)
 				room := float32(0)
 				if b := line1.Bounds(); b.W > 0 {
+					// Less everything else on the line, so that the
+					// name is cut once, in its middle, and never again
+					// at its end (council round 5, visual M2).
 					room = b.W - natural(c, whenText, fsSmall, 0) - 14 - 3*sp2
+					if nested {
+						room -= 12 + sp2
+					}
+					if letter != "" {
+						room -= attemptChipW + sp2
+					}
+					if m := a.railMark(s); m != "" {
+						room -= natural(c, "· "+m, fsSmall, 0) + sp2
+					}
 				}
 				line1.Children(func() {
 					if nested {
@@ -787,7 +816,11 @@ func (a *App) sessionRow(c *ui.Context, pal *palette, s *proto.Session, n *int, 
 					when()
 					mark()
 				})
-				line, msg := a.sessionDetail(s, g)
+				line, msg := a.sessionDetail(s, g, nested)
+				if nested && !msg {
+					// Its name leads: cut in the middle, as the title.
+					line = midCut(c, flat(line), fsSmall, 0, line1.Bounds().W)
+				}
 				if f := s.FocusPane(); !msg && f != nil && f.Shell != "" && line == a.railName(s) {
 					// A session named after its folder says its shell
 					// under the name, not the folder again.

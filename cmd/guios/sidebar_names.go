@@ -96,13 +96,22 @@ func (a *App) sessionMarked(s *proto.Session) bool {
 // message comes first. Else: the program or agent in the focused pane,
 // the branch (or the folder outside git), and the panes when there are
 // several, so that sessions in one folder read apart (QA-010).
-func (a *App) sessionDetail(s *proto.Session, g *proto.GitInfo) (line string, msg bool) {
-	if s.Message != "" {
+//
+// A row nested under its repository's session goes by its branch
+// (railTitle), so its detail line starts with the session's own name, the
+// one `tuios attach` takes, in place of the branch again (council round 5,
+// visual M2).
+func (a *App) sessionDetail(s *proto.Session, g *proto.GitInfo, nested bool) (line string, msg bool) {
+	// A nested row's agent says the message on its own row, under it.
+	if s.Message != "" && !nested {
 		// A notification's text can run over lines: the row has one.
 		return strings.Join(strings.Fields(s.Message), " "), true
 	}
 	var parts []string
-	if f := s.FocusPane(); f != nil {
+	if nested {
+		parts = append(parts, a.railName(s))
+	}
+	if f := s.FocusPane(); f != nil && !nested {
 		switch {
 		case f.Agent != "":
 			parts = append(parts, harnessName(f.Agent))
@@ -111,6 +120,7 @@ func (a *App) sessionDetail(s *proto.Session, g *proto.GitInfo) (line string, ms
 		}
 	}
 	switch {
+	case nested:
 	case g != nil:
 		parts = append(parts, gitSummary(g))
 	default:
