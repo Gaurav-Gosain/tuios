@@ -472,6 +472,9 @@ window. `docs/ARCHITECTURE.md` draws both sides.
   `pal.Row(content, width, st, base)`. An unfocused list keeps its cursor.
 - Blend with `overlay.MixColors` (OKLab); measure with `overlay.Readable` and
   `ReadableAt`, which measure the colour the depth will actually show.
+- guios takes its chrome colours from `internal/guios/roles`. The `tuioslint`
+  gate checks every tuios theme and Paper against its contrast floors
+  (`internal/lint/themes_test.go`), so a palette change that breaks one fails.
 
 ### Source checks
 
