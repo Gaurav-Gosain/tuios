@@ -449,8 +449,22 @@ const restartBudget = 60 * time.Second
 // restores them with their layout and new shells. The programs in the panes
 // end. Both steps run as binary and inherit this process's server, so the
 // daemon that comes back is binary's and serves the same socket.
+//
+// binary runs by its path three times, so its file is pinned once and checked
+// before each run: a file put there between the runs is never run.
 func restartDaemonWith(say func(string, ...any), binary string, why *notLiveError) (upgradeOutcome, error) {
 	o := upgradeOutcome{Action: upgradeActionFailed, Binary: binary, From: why.from, Reason: why.reason}
+	notRun := func(err error) error {
+		return &diagnosticError{
+			What:  fmt.Sprintf("%s was not run, so the daemon was neither upgraded nor restarted.", binary),
+			Cause: plainLine(err.Error()),
+			Fix:   "pass a tuios with --binary. Nothing was changed.",
+		}
+	}
+	pin, err := session.PinUpgradeBinary(binary)
+	if err != nil {
+		return o, notRun(err)
+	}
 	// A binary that does not run would stop the daemon and start nothing.
 	to, err := runBinary(binary, "--version")
 	if err != nil {
@@ -461,7 +475,14 @@ func restartDaemonWith(say func(string, ...any), binary string, why *notLiveErro
 		}
 	}
 	o.To, _ = hostsync.ParseVersionLine(firstLine(to))
+	var old upgradedDaemon
 	if why.running {
+		if err := pin.Unchanged(); err != nil {
+			return o, notRun(err)
+		}
+		// What the old daemon is, so the one that answers after the restart
+		// can be told from it. A daemon that does not say leaves it empty.
+		old, _ = reachDaemon()
 		say("Restarting the daemon with %s (%s), which ends the programs in its panes...\n", binary, cmp.Or(o.To, "unknown version"))
 		if out, err := runBinary(binary, "kill-server"); err != nil {
 			return o, &diagnosticError{
@@ -473,28 +494,45 @@ func restartDaemonWith(say func(string, ...any), binary string, why *notLiveErro
 	} else {
 		say("Starting the daemon with %s (%s)...\n", binary, cmp.Or(o.To, "unknown version"))
 	}
-	if out, err := runBinary(binary, "start-server"); err != nil {
-		what := "The daemon did not start."
-		if why.running {
-			what = "The old daemon stopped and the new one did not start."
-		}
+	stopped := "The daemon did not start."
+	if why.running {
+		stopped = "The old daemon stopped and the new one did not start."
+	}
+	if err := pin.Unchanged(); err != nil {
 		return o, &diagnosticError{
-			What:  what,
+			What:  stopped,
+			Cause: plainLine(err.Error()) + ", so it was not run.",
+			Fix:   "check the file, then run '" + binary + " start-server'. The sessions come back when a daemon starts.",
+		}
+	}
+	if out, err := runBinary(binary, "start-server"); err != nil {
+		return o, &diagnosticError{
+			What:  stopped,
 			Cause: plainLine(hostsync.LastLine(out)),
 			Fix:   "run '" + binary + " start-server' to see why. The sessions come back when it starts.",
 		}
 	}
+	// start-server returns once its daemon serves. Only an answer from a
+	// daemon other than the old one says the restart happened.
+	h, err := reachDaemon()
+	if err != nil {
+		return o, &diagnosticError{
+			What:  "start-server returned, and no daemon answers.",
+			Cause: plainLine(err.Error()),
+			Fix:   "run 'tuios logs' to see why, then '" + binary + " start-server'. The sessions come back when a daemon starts.",
+		}
+	}
+	if why.running && (old.PID != 0 && h.PID == old.PID || old.Instance != "" && h.Instance == old.Instance) {
+		return o, &diagnosticError{
+			What:  fmt.Sprintf("The daemon that answers after the restart is the old one (pid %d), so it still runs the old build.", h.PID),
+			Cause: "kill-server returned without stopping it.",
+			Fix:   "run '" + killServerCommand() + "' to see why.",
+		}
+	}
+	o.PID, o.Instance, o.To = h.PID, h.Instance, cmp.Or(h.Version, o.To)
 	o.Action = upgradeActionRestarted
 	if !why.running {
 		o.Action = upgradeActionStarted
-	}
-	if client, err := dialVerb(); err == nil {
-		raw, err := client.Call("hello", map[string]any{"client": "tuios", "version": version, "protocol": session.VerbProtocolVersion})
-		_ = client.Close()
-		var h upgradedDaemon
-		if err == nil && jsonx.Unmarshal(raw, &h) == nil {
-			o.PID, o.Instance, o.To = h.PID, h.Instance, cmp.Or(h.Version, o.To)
-		}
 	}
 	if why.running {
 		say("Restarted. The daemon runs %s (pid %d). Its sessions come back with their layout and new shells.\n", cmp.Or(o.To, "unknown version"), o.PID)
@@ -502,6 +540,25 @@ func restartDaemonWith(say func(string, ...any), binary string, why *notLiveErro
 		say("Started. The daemon runs %s (pid %d).\n", cmp.Or(o.To, "unknown version"), o.PID)
 	}
 	return o, nil
+}
+
+// reachDaemon is the pid, instance and version of the daemon this command
+// reaches. A daemon of another control protocol still says its pid.
+func reachDaemon() (upgradedDaemon, error) {
+	client, err := dialVerb()
+	if err != nil {
+		if m, ok := errors.AsType[*session.ProtocolMismatchError](err); ok && m.DaemonPID > 0 {
+			return upgradedDaemon{PID: m.DaemonPID, Version: m.DaemonVersion}, nil
+		}
+		return upgradedDaemon{}, err
+	}
+	defer func() { _ = client.Close() }()
+	raw, err := client.Call("hello", map[string]any{"client": "tuios", "version": version, "protocol": session.VerbProtocolVersion})
+	if err != nil {
+		return upgradedDaemon{}, err
+	}
+	var h upgradedDaemon
+	return h, jsonx.Unmarshal(raw, &h)
 }
 
 // runBinary runs one tuios command as binary and returns what it printed.

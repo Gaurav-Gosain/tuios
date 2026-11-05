@@ -233,6 +233,45 @@ func CheckUpgradeBinary(path string) error {
 	return checkBinaryInfo(path, info)
 }
 
+// UpgradeBinary is a binary that passed the owner and mode check, pinned by
+// its file. The restart of daemon upgrade --or-restart runs it by path three
+// times, and Unchanged before each run holds the path to the file it checked,
+// as a confirmed upgrade's pin does for the live path. Where fileIDOf reads
+// nothing (Windows) only the check holds.
+type UpgradeBinary struct {
+	path string
+	file fileID
+}
+
+// PinUpgradeBinary makes the owner and mode check on the executable at path
+// and pins its file.
+func PinUpgradeBinary(path string) (UpgradeBinary, error) {
+	info, err := os.Stat(path)
+	if err != nil {
+		return UpgradeBinary{}, err
+	}
+	if err := checkBinaryInfo(path, info); err != nil {
+		return UpgradeBinary{}, err
+	}
+	if !info.Mode().IsRegular() || info.Mode().Perm()&0o111 == 0 {
+		return UpgradeBinary{}, errfmt.Errorf("%s is %w", path, errNotAnExecutable)
+	}
+	return UpgradeBinary{path: path, file: fileIDOf(info)}, nil
+}
+
+// Unchanged fails when the path no longer names the pinned file, or the file
+// no longer passes the check.
+func (b UpgradeBinary) Unchanged() error {
+	info, err := os.Stat(b.path)
+	if err != nil {
+		return err
+	}
+	if fileIDOf(info) != b.file {
+		return errfmt.Errorf("%s was replaced or changed after it was checked", b.path)
+	}
+	return checkBinaryInfo(b.path, info)
+}
+
 // checkBinaryInfo refuses a binary someone else could have put there: one
 // owned by neither this user nor root, or one its group or others can write.
 // The daemon runs it with every pane it holds.

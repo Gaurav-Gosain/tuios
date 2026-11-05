@@ -517,3 +517,94 @@ func writeTuiosScript(t *testing.T, body string) string {
 	}
 	return p
 }
+
+// orRestartJSON runs `tuios daemon upgrade --or-restart --json --binary bin`
+// against base and returns its JSON outcome and everything it printed.
+func orRestartJSON(t *testing.T, base, bin string) (map[string]any, string, error) {
+	t.Helper()
+	out, err := handoffCLI(t, base, 150*time.Second, "daemon", "upgrade", "--or-restart", "--json", "--binary", bin)
+	var got map[string]any
+	for line := range strings.SplitSeq(out, "\n") {
+		if strings.HasPrefix(line, "{") {
+			_ = json.Unmarshal([]byte(line), &got)
+		}
+	}
+	return got, out, err
+}
+
+// TestOrRestartSaysRestartedOnlyWhenANewDaemonAnswers: a restart is reported
+// only once a daemon other than the old one answers. Two binaries fail
+// handoff-accepts, so --or-restart restarts with them. One stops the daemon
+// with a real kill-server and starts none, though its start-server exits 0.
+// The other stops nothing and starts nothing, so the old daemon still
+// answers. Each run must fail, and say so: never action "restarted".
+func TestOrRestartSaysRestartedOnlyWhenANewDaemonAnswers(t *testing.T) {
+	fake := func(kill string) string {
+		return writeTuiosScript(t, `case "$1" in
+--version) echo "tuios version v99.0.0" ;;
+kill-server) `+kill+` ;;
+start-server) exit 0 ;;
+*) echo "unknown command" >&2; exit 1 ;;
+esac
+`)
+	}
+	cases := []struct {
+		name, bin, want string
+		stopped         bool
+	}{
+		{"no daemon after the restart", fake(`exec '` + tuiosBin + `' "$@"`), "start-server returned, and no daemon answers.", true},
+		{"the old daemon still answers", fake(`exit 0`), "The daemon that answers after the restart is the old one", false},
+	}
+	art := map[string]any{}
+	for _, c := range cases {
+		base := t.TempDir()
+		startHandoffDaemon(t, base)
+		before := helloImage(t, base)
+		got, out, err := orRestartJSON(t, base, c.bin)
+		after, helloErr := callVerb(t, base, "hello", map[string]any{})
+		art[c.name] = map[string]any{"json": got, "text": out, "error": errString(err), "before": before, "hello_after": after, "hello_error": errString(helloErr)}
+
+		if err == nil || got["action"] == "restarted" || !strings.Contains(out, c.want) {
+			t.Errorf("ASSERTION: %s, --or-restart did not fail with %q, or said restarted (action %v, error %v):\n%s", c.name, c.want, got["action"], err, out)
+		}
+		if c.stopped != (helloErr != nil) {
+			t.Errorf("ASSERTION: %s, the daemon is not in the state the fake left it (stopped %v, hello error %v)", c.name, c.stopped, helloErr)
+		}
+	}
+	writeHandoffArtifact(t, art)
+}
+
+// TestOrRestartNeverRunsAFileSwappedInBetweenItsRuns: the restart runs the
+// binary by path three times, so it pins the file and checks it before each
+// run. This binary fails handoff-accepts, so --or-restart restarts with it,
+// and its --version renames another script over its own path. That script
+// writes a marker when it runs. The restart must refuse before kill-server:
+// the marker must not exist, and the daemon must keep its pid and instance.
+func TestOrRestartNeverRunsAFileSwappedInBetweenItsRuns(t *testing.T) {
+	marker := filepath.Join(t.TempDir(), "swapped-ran")
+	swap := writeTuiosScript(t, `echo ran >>'`+marker+`'
+exit 0
+`)
+	bin := writeTuiosScript(t, `case "$1" in
+--version) echo "tuios version v99.0.0"; mv -f '`+swap+`' "$0" ;;
+*) echo "unknown command" >&2; exit 1 ;;
+esac
+`)
+	base := t.TempDir()
+	startHandoffDaemon(t, base)
+	before := helloImage(t, base)
+	got, out, err := orRestartJSON(t, base, bin)
+	after := helloImage(t, base)
+	_, statErr := os.Stat(marker)
+	writeHandoffArtifact(t, map[string]any{"json": got, "text": out, "error": errString(err), "before": before, "after": after, "swapped_ran": statErr == nil})
+
+	if err == nil || !strings.Contains(out, "was replaced or changed after it was checked") || got["action"] == "restarted" {
+		t.Errorf("ASSERTION: --or-restart did not refuse the file swapped in after its check (action %v, error %v):\n%s", got["action"], err, out)
+	}
+	if statErr == nil {
+		t.Errorf("ASSERTION: --or-restart ran the file swapped in after its check")
+	}
+	if after != before {
+		t.Errorf("ASSERTION: the daemon changed from %+v to %+v", before, after)
+	}
+}
