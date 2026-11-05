@@ -13,9 +13,11 @@ import (
 // palette, as sessions started in one folder (QA-010).
 
 // sessionLabels tells apart the sessions no one named that show the same
-// name, as several shells in one folder: the first keeps the name, the
-// next are "demo 2", "demo 3", in the daemon's order (QA-010). A session's
-// label is its name when it is not in the map.
+// name, as several shells in one folder: the first has no mark, the next
+// get "2", "3", in the daemon's order (QA-010). The mark is drawn after the
+// name, quiet, and is no part of it: the name stays the one the TUI shows
+// and `tuios attach` takes (council round 5, S2). The detail line says
+// what else tells them apart.
 func (a *App) sessionLabels() map[string]string {
 	// The maps live on across frames, cleared, so that a frame allocates
 	// for a label only when two sessions share a name.
@@ -37,18 +39,21 @@ func (a *App) sessionLabels() map[string]string {
 			if out == nil {
 				out = map[string]string{}
 			}
-			out[s.ID] = name + " " + strconv.Itoa(n)
+			out[s.ID] = strconv.Itoa(n)
 		}
 	}
 	return out
 }
 
-// railName is a session's name in the sidebar.
+// railName is a session's name in the sidebar: the one the TUI shows.
 func (a *App) railName(s *proto.Session) string {
-	if l, ok := a.sbLabels[s.ID]; ok {
-		return l
-	}
 	return s.DisplayName(a.set.SessionName)
+}
+
+// railMark is the quiet mark after the name of a session that shows the
+// same name as another, "" for none.
+func (a *App) railMark(s *proto.Session) string {
+	return a.sbLabels[s.ID]
 }
 
 // sessionMarked tells whether a session's row has a state mark: one that

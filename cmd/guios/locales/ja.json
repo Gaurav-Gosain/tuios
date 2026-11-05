@@ -1285,5 +1285,6 @@
   "cockpitQueuedAnswerFirst": "{name} 宛てに待機中です。先に呼び出しに答えてください。",
   "cockpitWaitsForAnswer": "呼び出しに答えるまで待ちます。",
   "cockpitHintQueue": "待機",
-  "cockpitNothingWaits": "あなたを待っているものはありません。"
+  "cockpitNothingWaits": "あなたを待っているものはありません。",
+  "sidebarSameName": "同じ名前のセッションがほかにもあります。下の行で見分けられます。"
 }

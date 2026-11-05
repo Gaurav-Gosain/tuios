@@ -1285,5 +1285,6 @@
   "cockpitQueuedAnswerFirst": "已排队等待 {name}。请先回答这个调用。",
   "cockpitWaitsForAnswer": "等到调用被回答后再发送。",
   "cockpitHintQueue": "排队",
-  "cockpitNothingWaits": "没有等你处理的事。"
+  "cockpitNothingWaits": "没有等你处理的事。",
+  "sidebarSameName": "另有同名会话。下面一行可以区分它们。"
 }

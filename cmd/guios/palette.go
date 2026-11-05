@@ -212,7 +212,7 @@ func (a *App) paletteItems() []paletteItem {
 			if detail != "" {
 				detail += " · "
 			}
-			it := paletteItem{session: s, title: a.railName(s), detail: detail + h.shortDir(s.WorkDir()),
+			it := paletteItem{session: s, title: a.railName(s), detail: detail + h.shortDir(s.WorkDir()) + paletteMark(a.railMark(s)),
 				run: func() { delete(a.prefs.Collapsed, s.Project); a.selectSession(id) }}
 			if i := slices.Index(order, id); i >= 0 && i < 9 {
 				it.keys[0] = actions.Glyphs("CmdOrCtrl+" + itoa(i+1))
@@ -805,4 +805,12 @@ func (a *App) warmPalette(c *ui.Context) {
 			measure(k, fsCaption, wMedium)
 		}
 	}
+}
+
+// paletteMark is a session's same-name mark in the palette's detail.
+func paletteMark(m string) string {
+	if m == "" {
+		return ""
+	}
+	return " · " + m
 }

@@ -740,6 +740,12 @@ func (a *App) sessionRow(c *ui.Context, pal *palette, s *proto.Session, n *int, 
 			if s.Status == proto.Exited && !s.Unread {
 				name.TextColor(pal.textMuted)
 			}
+			if m := a.railMark(s); m != "" {
+				// The mark that tells it from a session of the same
+				// name: faint, apart, and no part of the name.
+				ui.Text(c, "· "+m).FontSize(fsSmall).TextColor(pal.textFaint).SingleLine().Shrink(0).
+					Tooltip(locales.SidebarSameName())
+			}
 		}
 		// The mark's place, kept when there is no mark, so that one
 		// coming moves no text.

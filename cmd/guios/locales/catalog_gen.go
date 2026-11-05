@@ -13031,3 +13031,13 @@ func CockpitNothingWaits() string { return In(i18n.Locale()).CockpitNothingWaits
 func (msgs Messages) CockpitNothingWaits() string {
 	return Catalog.Format(msgs.locale, "cockpitNothingWaits", nil)
 }
+
+// SidebarSameName says "Another session has the same name. The line under it tells them apart."
+// in the language the app shows.
+func SidebarSameName() string { return In(i18n.Locale()).SidebarSameName() }
+
+// SidebarSameName says "Another session has the same name. The line under it tells them apart."
+// in the language of msgs.
+func (msgs Messages) SidebarSameName() string {
+	return Catalog.Format(msgs.locale, "sidebarSameName", nil)
+}

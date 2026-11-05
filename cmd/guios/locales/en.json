@@ -2314,5 +2314,6 @@
   "cockpitQueuedAnswerFirst": "Queued for {name}. Answer the call first.",
   "cockpitWaitsForAnswer": "Waits until the call is answered.",
   "cockpitHintQueue": "queue",
-  "cockpitNothingWaits": "Nothing waits for you."
+  "cockpitNothingWaits": "Nothing waits for you.",
+  "sidebarSameName": "Another session has the same name. The line under it tells them apart."
 }
