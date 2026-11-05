@@ -3,6 +3,8 @@ package app
 import (
 	"time"
 
+	"github.com/Gaurav-Gosain/tuios/internal/config"
+
 	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
@@ -554,10 +556,7 @@ func (m *OS) zoomCoversRegion(w *terminal.Window) bool {
 // resizes the guest once at the destination, and is retired by the same paths
 // that retire any other.
 func (m *OS) zoomAnimation(w *terminal.Window, x, y, width, height int) *ui.Animation {
-	if !m.Settings.ZoomAnimation {
-		return nil
-	}
-	dur := m.Settings.GetFastAnimationDuration()
+	dur := m.Settings.MotionLength(config.AspectZoom, config.FastAnimationDuration)
 	if dur <= 0 {
 		return nil
 	}

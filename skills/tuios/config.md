@@ -406,9 +406,14 @@ panel such as the command palette; 0 turns it off. `appearance.motion` is
 fade-in and the shimmer on a working agent's rail row). The old
 `animations_enabled` still works and maps `false` to `none`.
 
-`appearance.workspace_transition` is `slide` (the default), `fade` or `none`.
-`workspace_transition_ms` is 0 to 1000, default 200, and 0 is a cut.
-`animation_speed` scales it. Motion `none` gives a cut.
+Each motion has its own key under `[motion]`: `workspace` (`slide`, `fade` or
+`none`), and `layout`, `zoom`, `overlays`, `sidebar`, `scroll`, `copy` and
+`confetti` (`on` or `off`). `workspace`, `layout`, `zoom`, `overlays` and
+`scroll` also take `<name>_ms`, 0 to 1000, and 0 is a cut. `appearance.motion`
+`none` stops all of them, and `animation_speed` scales the lengths. The old
+`appearance.workspace_transition`, `workspace_transition_ms` and
+`zoom_animation` fold into `motion.workspace`, `motion.workspace_ms` and
+`motion.zoom` on load.
 
 `appearance.theme_transition` is `none` (the default), `circle` (the new theme
 grows from the middle of the screen) or `fade`. `theme_transition_duration` is

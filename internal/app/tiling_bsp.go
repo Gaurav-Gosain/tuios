@@ -312,7 +312,7 @@ func (m *OS) ApplyBSPLayout() {
 		// one step, so the geometry is left exactly as the un-animated path had
 		// it.
 		dur := m.layoutAnimationDuration()
-		if zoomRetile && !m.Settings.ZoomAnimation {
+		if zoomRetile && !m.Settings.MotionOn(config.AspectZoom) {
 			// The retile a zoom asked for, from somebody who does not want the
 			// zoom to slide.
 			dur = 0

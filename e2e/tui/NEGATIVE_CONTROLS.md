@@ -13141,6 +13141,23 @@ Frames, the settled screens and PNGs are under `TUIOS_E2E_FRAMES`, in the
 test's folder. Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestWorkspaceSwitchSlides$' -v .`.
 
+## Motion aspects: zoom off, workspace slide on
+
+`TestMotionZoomOffKeepsWorkspaceSlide` runs a client with `motion.zoom` on and
+then off. It opens a second pane, zooms it and counts the presented frames of
+the pane region between the split and the zoomed screen. On must give at least
+two. Off must give none, and the workspace switch must still present at least
+two frames with both workspaces.
+
+Run on 2026-11-05 on Linux on the branch feat/motion-per-aspect.
+
+| Control | Where it fails | Verdict |
+| --- | --- | --- |
+| `MotionOn` ignores the aspect's `Off` | "with motion.zoom off, 26 frames fell between the split and the zoom; want a cut" | **caught** |
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestMotionZoomOff' -v .`.
+
 ## tuios hosts setup asks on a terminal
 
 `TestSetUpAMachineOnATerminal` runs `hosts setup someone@buildbox --name

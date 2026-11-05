@@ -592,24 +592,41 @@ Calm mode sits over `appearance.motion`. When you turn calm mode off, the
 motion level you set comes back. See
 [KEYBINDINGS.md](KEYBINDINGS.md#calm-mode) for what calm mode changes.
 
-## Workspace transition
+## Motion
 
-`appearance.workspace_transition` sets how tuios shows a switch between
-workspaces.
+The `[motion]` table turns each motion on or off by itself and sets how long it
+takes. `appearance.motion` and `appearance.animation_speed` stay on top.
+`appearance.motion = "none"` and calm mode stop every motion below. The speed
+divides every length.
 
-- `slide` moves the old workspace out and the new one in. This is the default.
-- `fade` blends the cells of the old workspace into the new workspace. At 16
-  colors it is a cut.
-- `none` shows the new workspace in one frame.
+| Key | Values | Motion |
+|-----|--------|--------|
+| `workspace` | `slide`, `fade`, `none` | The switch between workspaces. `fade` is a cut at 16 colors. |
+| `layout` | `on`, `off` | A pane that opens, closes, splits, swaps, snaps, minimizes or restores. |
+| `zoom` | `on`, `off` | A pane growing to the zoom box and back. |
+| `overlays` | `on`, `off` | A palette or dialog fading in. Needs `appearance.motion = "full"` and truecolor. |
+| `sidebar` | `on`, `off` | The shimmer on a working agent row. Needs `appearance.motion = "full"`. |
+| `scroll` | `on`, `off` | The slide of the scrolling layout. |
+| `copy` | `on`, `off` | The sweep over the cells a copy took. |
+| `confetti` | `on`, `off` | The confetti burst. Needs `appearance.motion = "full"`. |
+
+`workspace`, `layout`, `zoom`, `overlays` and `scroll` also take `<name>_ms`,
+the length in milliseconds at speed 100, from 0 to 1000. 0 is a cut. The
+defaults are 200 for `workspace` and `zoom`, 300 for `layout` and `scroll`, and
+120 for `overlays`. `layout` also sets the snap and swap length, which is
+two thirds of `layout_ms`.
 
 ```toml
-[appearance]
-workspace_transition = "fade"
-workspace_transition_ms = 200   # milliseconds, from 0 to 1000. 0 is a cut.
+[motion]
+workspace = "fade"
+workspace_ms = 250
+zoom = "off"        # zoom is a cut. The workspace switch still fades.
 ```
 
-`appearance.animation_speed` also applies to the length. `appearance.motion =
-"none"` and calm mode always give a cut.
+The old keys `appearance.workspace_transition`, `workspace_transition_ms` and
+`zoom_animation` still read. Tuios folds them into `motion.workspace`,
+`motion.workspace_ms` and `motion.zoom` on load. A `[motion]` key that is set
+wins.
 
 ## Theme transition
 

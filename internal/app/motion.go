@@ -230,11 +230,17 @@ func (m *OS) trackModalOverlays() {
 func (m *OS) retireFades(now time.Time) {
 	mo := &m.motion
 	for i, start := range mo.fadeStart {
-		if !start.IsZero() && now.Sub(start) >= config.OverlayFadeDuration {
+		if !start.IsZero() && now.Sub(start) >= m.fadeLength() {
 			mo.fadeStart[i] = time.Time{}
 			mo.fading--
 		}
 	}
+}
+
+// fadeLength is how long an overlay takes to come up: motion.overlays_ms at
+// animation speed, or zero when overlays may not fade.
+func (m *OS) fadeLength() time.Duration {
+	return m.Settings.MotionLength(config.AspectOverlays, config.OverlayFadeDuration)
 }
 
 // fadeAllowed reports whether an overlay opening now fades in. Truecolor only:
@@ -242,7 +248,7 @@ func (m *OS) retireFades(now time.Time) {
 // terminal has, and a fade that jumps through three unrelated colours is worse
 // than none.
 func (m *OS) fadeAllowed() bool {
-	return m.Settings.MotionAllows(config.MotionFull) &&
+	return m.fadeLength() > 0 &&
 		theme.Depth() == overlay.DepthTrueColor &&
 		!m.screensaver.active
 }
@@ -251,11 +257,11 @@ func (m *OS) fadeAllowed() bool {
 // last of the 16 levels when it has just opened, zero once it has come up.
 // The curve is smoothstep, the one opencode fades its panels with, so the
 // panel starts and settles gently rather than at a constant rate.
-func fadeLevel(start, now time.Time) uint8 {
+func fadeLevel(start, now time.Time, dur time.Duration) uint8 {
 	if start.IsZero() {
 		return 0
 	}
-	p := float64(now.Sub(start)) / float64(config.OverlayFadeDuration)
+	p := float64(now.Sub(start)) / float64(dur)
 	if p >= 1 {
 		return 0
 	}
@@ -272,7 +278,7 @@ func (m *OS) applyFade(canvas *frameCanvas, id string, bounds image.Rectangle, n
 	if !ok {
 		return
 	}
-	level := fadeLevel(m.motion.fadeStart[i], now)
+	level := fadeLevel(m.motion.fadeStart[i], now, m.fadeLength())
 	if level == 0 {
 		return
 	}

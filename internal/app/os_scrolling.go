@@ -123,6 +123,20 @@ func (m *OS) ScrollingSetPositions() {
 func (m *OS) scrollingSetPositionsInstant() {
 	m.scrollingSetPositionsAnimated(false)
 }
+
+// scrollDuration is how long the scrolling layout slides. With appearance.motion
+// off it still slides for 150ms, because a viewport shift with no slide is
+// disorienting. Only motion.scroll = "off" makes it a cut.
+func (m *OS) scrollDuration() time.Duration {
+	if m.Settings.Aspects[config.AspectScroll].Off {
+		return 0
+	}
+	if d := m.Settings.MotionLength(config.AspectScroll, config.DefaultAnimationDuration); d > 0 {
+		return d
+	}
+	return 150 * time.Millisecond
+}
+
 func (m *OS) scrollingSetPositionsAnimated(animate bool) {
 	sl := m.GetOrCreateScrollingLayout()
 	viewW := m.ScrollingViewWidth()
@@ -134,10 +148,7 @@ func (m *OS) scrollingSetPositionsAnimated(animate bool) {
 
 	// Scrolling layout transitions always animate (even with --no-animations)
 	// because the viewport shift is disorienting without the slide.
-	dur := 150 * time.Millisecond
-	if m.Settings.GetAnimationDuration() > 0 {
-		dur = m.Settings.GetAnimationDuration()
-	}
+	dur := m.scrollDuration()
 	if m.layoutInstant {
 		dur = 0
 	}
@@ -156,7 +167,7 @@ func (m *OS) scrollingSetPositionsAnimated(animate bool) {
 	// width opens the same gap between them that this pass exists to avoid,
 	// and resizing first and sliding after is that gap. Someone who turned
 	// animations off gets the cut they asked for.
-	if animate && m.Settings.GetAnimationDuration() <= 0 && m.scrollingPassResizes(layouts) {
+	if animate && m.Settings.MotionLength(config.AspectScroll, config.DefaultAnimationDuration) <= 0 && m.scrollingPassResizes(layouts) {
 		animate = false
 	}
 

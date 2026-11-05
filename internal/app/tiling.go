@@ -1,6 +1,7 @@
 package app
 
 import (
+	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/layout"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
@@ -176,7 +177,7 @@ func (m *OS) tileAllWindows() {
 			// reasoning at length in ApplyBSPLayout.
 			dur = 0
 		}
-		if m.takeZoomRelayout() && !m.Settings.ZoomAnimation {
+		if m.takeZoomRelayout() && !m.Settings.MotionOn(config.AspectZoom) {
 			// The retile a zoom asked for, from somebody who does not want the
 			// zoom to slide.
 			dur = 0

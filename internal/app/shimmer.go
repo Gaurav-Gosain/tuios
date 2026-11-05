@@ -71,7 +71,7 @@ type shimmerSpan struct {
 // shimmer. It reads the spans the last frame's rail recorded.
 func (m *OS) shimmerActive() bool {
 	return len(m.motion.rail) > 0 && !m.screensaver.active &&
-		m.Settings.MotionAllows(config.MotionFull)
+		m.Settings.MotionOn(config.AspectSidebar)
 }
 
 // shimmerIntensity is the band's brightness at column i of a text n columns

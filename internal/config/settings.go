@@ -810,15 +810,6 @@ type Settings struct {
 	// move is the statement of which pane.
 	ZoomFollowsFocus bool
 
-	// ZoomAnimation slides a pane between its tile and the zoom box instead of
-	// swapping the two in one frame.
-	//
-	// Without it, zoom is a cut: the pane is at its tile in one frame and
-	// filling the region in the next, with nothing to say which pane has grown.
-	// That is worst exactly when it matters, which is a zoom that moves from one pane to
-	// another, where two panes change at once and neither says so.
-	ZoomAnimation bool
-
 	// AnimationSpeed is the percent window animations run at: 100 is as
 	// shipped, 200 twice as fast, 50 half as fast.
 	AnimationSpeed int
@@ -837,9 +828,9 @@ type Settings struct {
 	// none. Read it through WorkspaceTransitionStyle, which also honours
 	// appearance.motion.
 	WorkspaceTransition string
-	// WorkspaceTransitionMs is how long it takes at animation speed 100. Zero
-	// is a cut. Read it through WorkspaceTransitionDuration.
-	WorkspaceTransitionMs int
+	// Aspects holds each [motion] aspect. Read them through MotionOn and
+	// MotionLength.
+	Aspects [numAspects]AspectSetting
 
 	// ZoomBorderless makes a zoom the whole pane region with no chrome: the
 	// zoomed pane drops its border and title bar, and its guest is told the
@@ -1101,12 +1092,10 @@ func DefaultSettings() Settings {
 		ScrollColumnWidth:           ScrollColumnWidthDefault,
 		ScrollColumnMax:             ScrollColumnWidthMax,
 		ZoomSize:                    ZoomSizeDefault,
-		ZoomAnimation:               true,
 		AnimationSpeed:              AnimationSpeedDefault,
 		ThemeTransition:             ThemeTransitionNone,
 		ThemeTransitionMs:           ThemeTransitionMsDefault,
 		WorkspaceTransition:         WorkspaceTransitionSlide,
-		WorkspaceTransitionMs:       WorkspaceTransitionMsDefault,
 		ZoomFollowsFocus:            true,
 		WindowButtonZoom:            true,
 		DimUnfocused:                0,

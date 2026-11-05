@@ -200,7 +200,7 @@ func TestOptionDefaultsMatchDefaultConfig(t *testing.T) {
 // writes, since nothing else reads them closely enough to notice a blank one.
 func TestOptionSpecsAreWellFormed(t *testing.T) {
 	sections := []string{
-		"appearance", "sidebar", "dock", "scrollbar", "selection",
+		"appearance", "motion", "sidebar", "dock", "scrollbar", "selection",
 		"startup", "daemon", "notifications", "tape", "debug",
 		"screenshot", "screensaver", "spotlight", "hints", "panes", "scratch", "pip", "mermaid", "launcher",
 		"agents", "workspaces", "worktree", "review",

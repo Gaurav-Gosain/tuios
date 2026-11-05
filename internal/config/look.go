@@ -141,7 +141,7 @@ var lookKeys = []string{
 	// Motion.
 	"appearance.motion",
 	"appearance.animation_speed",
-	"appearance.zoom_animation",
+	"motion.zoom",
 	// The dock.
 	"appearance.dockbar_position",
 	"appearance.dock_background",

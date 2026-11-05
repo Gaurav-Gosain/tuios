@@ -136,6 +136,7 @@ func ValidateConfig(cfg *UserConfig) *ValidationResult {
 
 	// Validate enum appearance options (warn on unknown values; they fall back to defaults)
 	validateAppearanceEnums(cfg, result)
+	validateMotion(cfg, result)
 
 	// Validate the tape section (warn on an unknown autorun mode)
 	validateTapeConfig(cfg, result)
@@ -451,7 +452,6 @@ func validateAppearanceEnums(cfg *UserConfig, result *ValidationResult) {
 	checkEnum("zen_mode", cfg.Appearance.ZenMode, ZenModeModes)
 	checkEnum("motion", cfg.Appearance.Motion, MotionLevels)
 	checkEnum("theme_transition", cfg.Appearance.ThemeTransition, ThemeTransitions)
-	checkEnum("workspace_transition", cfg.Appearance.WorkspaceTransition, WorkspaceTransitions)
 	checkEnum("links", cfg.Appearance.Links, LinkModes)
 	checkEnum("link_click", cfg.Appearance.LinkClick, LinkClickModes)
 	checkEnum("drop_preview", cfg.Appearance.DropPreview, DropPreviewModes)
@@ -1130,4 +1130,29 @@ func defaultKeybindingPairs() map[string]bool {
 		}
 	}
 	return out
+}
+
+// validateMotion warns about a [motion] value outside its set or range. The
+// old appearance.workspace_transition is checked as well, since a file may
+// still carry it.
+func validateMotion(cfg *UserConfig, result *ValidationResult) {
+	warnEnum(result, "appearance", "workspace_transition", cfg.Appearance.WorkspaceTransition, WorkspaceTransitions, "default")
+	sw, ms := cfg.Motion.fields()
+	for i := range sw {
+		ok := MotionSwitches
+		if MotionAspect(i) == AspectWorkspace {
+			ok = WorkspaceTransitions
+		}
+		warnEnum(result, "motion", aspectKeys[i], *sw[i], ok, "default")
+		if ms[i] == nil || *ms[i] == nil {
+			continue
+		}
+		if v := **ms[i]; v < 0 || v > MotionMsMax {
+			result.Warnings = append(result.Warnings, ValidationError{
+				Field:   "motion",
+				Key:     aspectKeys[i] + "_ms",
+				Message: fmt.Sprintf("%d is outside 0 to %d; read as %d", v, MotionMsMax, min(max(v, 0), MotionMsMax)),
+			})
+		}
+	}
 }

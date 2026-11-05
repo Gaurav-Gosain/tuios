@@ -560,8 +560,8 @@ var optionSpecs = []Option{
 	},
 	{
 		Path: "appearance.zoom_animation", Type: OptionBool, Section: "appearance",
-		Description: "Slide a pane between its tile and the zoom box instead of swapping the two in one frame",
-		Default:     "true",
+		Description: "Old name of motion.zoom",
+		Deprecated:  "folded into motion.zoom on load; set motion.zoom",
 	},
 	{
 		Path: "appearance.animation_speed", Type: OptionInt, Section: "appearance",
@@ -583,14 +583,84 @@ var optionSpecs = []Option{
 	},
 	{
 		Path: "appearance.workspace_transition", Type: OptionString, Section: "appearance",
+		Description: "Old name of motion.workspace",
+		Deprecated:  "folded into motion.workspace on load; set motion.workspace",
+	},
+	{
+		Path: "appearance.workspace_transition_ms", Type: OptionInt, Section: "appearance",
+		Description: "Old name of motion.workspace_ms",
+		Min:         0, Max: MotionMsMax,
+		Deprecated: "folded into motion.workspace_ms on load; set motion.workspace_ms",
+	},
+	{
+		Path: "motion.workspace", Type: OptionString, Section: "motion",
 		Description: "How tuios shows a workspace switch: slide, fade or none",
 		Accepted:    WorkspaceTransitions, Default: WorkspaceTransitionSlide,
 	},
 	{
-		Path: "appearance.workspace_transition_ms", Type: OptionInt, Section: "appearance",
-		Description: "Milliseconds a workspace transition takes at animation speed 100. 0 is a cut.",
+		Path: "motion.workspace_ms", Type: OptionInt, Section: "motion",
+		Description: "Milliseconds the workspace motion takes at animation speed 100. 0 is a cut.",
 		Default:     strconv.Itoa(WorkspaceTransitionMsDefault),
-		Min:         0, Max: WorkspaceTransitionMsMax,
+		Min:         0, Max: MotionMsMax,
+	},
+	{
+		Path: "motion.layout", Type: OptionString, Section: "motion",
+		Description: "Panes slide when they open, close, split, swap, snap, minimize or restore: on or off",
+		Accepted:    MotionSwitches, Default: MotionSwitchOn,
+	},
+	{
+		Path: "motion.layout_ms", Type: OptionInt, Section: "motion",
+		Description: "Milliseconds the layout motion takes at animation speed 100. 0 is a cut.",
+		Default:     strconv.Itoa(int(DefaultAnimationDuration.Milliseconds())),
+		Min:         0, Max: MotionMsMax,
+	},
+	{
+		Path: "motion.zoom", Type: OptionString, Section: "motion",
+		Description: "A pane slides between its tile and the zoom box: on or off",
+		Accepted:    MotionSwitches, Default: MotionSwitchOn,
+	},
+	{
+		Path: "motion.zoom_ms", Type: OptionInt, Section: "motion",
+		Description: "Milliseconds the zoom motion takes at animation speed 100. 0 is a cut.",
+		Default:     strconv.Itoa(int(FastAnimationDuration.Milliseconds())),
+		Min:         0, Max: MotionMsMax,
+	},
+	{
+		Path: "motion.overlays", Type: OptionString, Section: "motion",
+		Description: "A palette or dialog fades in as it opens: on or off",
+		Accepted:    MotionSwitches, Default: MotionSwitchOn,
+	},
+	{
+		Path: "motion.overlays_ms", Type: OptionInt, Section: "motion",
+		Description: "Milliseconds the overlays motion takes at animation speed 100. 0 is a cut.",
+		Default:     strconv.Itoa(int(OverlayFadeDuration.Milliseconds())),
+		Min:         0, Max: MotionMsMax,
+	},
+	{
+		Path: "motion.sidebar", Type: OptionString, Section: "motion",
+		Description: "The shimmer on a working agent row of the sidebar: on or off",
+		Accepted:    MotionSwitches, Default: MotionSwitchOn,
+	},
+	{
+		Path: "motion.scroll", Type: OptionString, Section: "motion",
+		Description: "The scrolling layout slides when the view moves: on or off",
+		Accepted:    MotionSwitches, Default: MotionSwitchOn,
+	},
+	{
+		Path: "motion.scroll_ms", Type: OptionInt, Section: "motion",
+		Description: "Milliseconds the scroll motion takes at animation speed 100. 0 is a cut.",
+		Default:     strconv.Itoa(int(DefaultAnimationDuration.Milliseconds())),
+		Min:         0, Max: MotionMsMax,
+	},
+	{
+		Path: "motion.copy", Type: OptionString, Section: "motion",
+		Description: "A sweep crosses the cells a copy took: on or off",
+		Accepted:    MotionSwitches, Default: MotionSwitchOn,
+	},
+	{
+		Path: "motion.confetti", Type: OptionString, Section: "motion",
+		Description: "The confetti burst: on or off",
+		Accepted:    MotionSwitches, Default: MotionSwitchOn,
 	},
 	{
 		Path: "appearance.scroll_column_max", Type: OptionInt, Section: "appearance",

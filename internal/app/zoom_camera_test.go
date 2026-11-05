@@ -152,7 +152,7 @@ func gridZoomOS(t *testing.T, mode string, n, pct int) (*OS, []*terminal.Window)
 		Width: 160, Height: 44, PendingResizes: map[string][2]int{},
 	}
 	m.Settings.ZoomSize = pct
-	m.Settings.ZoomAnimation = false
+	m.Settings.Aspects[config.AspectZoom].Off = true
 	m.AutoTiling = true
 	switch mode {
 	case config.LayoutModeBSP:

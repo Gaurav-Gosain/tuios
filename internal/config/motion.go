@@ -130,7 +130,7 @@ const (
 // ThemeTransitions is what appearance.theme_transition accepts.
 var ThemeTransitions = []string{ThemeTransitionNone, ThemeTransitionCircle, ThemeTransitionFade}
 
-// Workspace transitions. appearance.workspace_transition takes one of these.
+// Workspace transitions. motion.workspace takes one of these.
 const (
 	// WorkspaceTransitionSlide moves the old workspace out and the new one in.
 	// It is the default.
@@ -142,11 +142,11 @@ const (
 	WorkspaceTransitionNone = "none"
 )
 
-// WorkspaceTransitions is what appearance.workspace_transition accepts.
+// WorkspaceTransitions is what motion.workspace accepts.
 var WorkspaceTransitions = []string{WorkspaceTransitionSlide, WorkspaceTransitionFade, WorkspaceTransitionNone}
 
-// WorkspaceTransitionMsDefault and Max bound
-// appearance.workspace_transition_ms, in milliseconds. Zero is a cut.
+// WorkspaceTransitionMsDefault and Max bound motion.workspace_ms, in
+// milliseconds. Zero is a cut.
 const (
 	WorkspaceTransitionMsDefault = 200
 	WorkspaceTransitionMsMax     = 1000
@@ -154,29 +154,22 @@ const (
 
 // WorkspaceTransitionStyle is the transition a workspace switch made now is
 // shown with. It is none whenever motion is: appearance.motion = "none", calm
-// mode, and a tape or remote command that suppressed animations. A switch
-// counts as basic motion.
+// mode, a tape or remote command that suppressed animations, and
+// motion.workspace = "none".
 func (s *Settings) WorkspaceTransitionStyle() string {
-	if !s.MotionAllows(MotionBasic) {
+	if !s.MotionOn(AspectWorkspace) {
 		return WorkspaceTransitionNone
 	}
-	switch s.WorkspaceTransition {
-	case WorkspaceTransitionFade, WorkspaceTransitionNone:
-		return s.WorkspaceTransition
+	if s.WorkspaceTransition == WorkspaceTransitionFade {
+		return WorkspaceTransitionFade
 	}
 	return WorkspaceTransitionSlide
 }
 
 // WorkspaceTransitionDuration is how long a workspace transition runs,
-// scaled by appearance.animation_speed. Zero is a cut. A Settings built by
-// hand with no style set reads as the default length.
+// scaled by appearance.animation_speed. Zero is a cut.
 func (s *Settings) WorkspaceTransitionDuration() time.Duration {
-	ms := s.WorkspaceTransitionMs
-	if ms == 0 && s.WorkspaceTransition == "" {
-		ms = WorkspaceTransitionMsDefault
-	}
-	ms = min(max(ms, 0), WorkspaceTransitionMsMax)
-	return s.scaleAnimation(time.Duration(ms) * time.Millisecond)
+	return s.MotionLength(AspectWorkspace, WorkspaceTransitionMsDefault*time.Millisecond)
 }
 
 // ThemeTransitionMsDefault, Min and Max bound

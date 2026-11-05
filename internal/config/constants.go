@@ -440,24 +440,18 @@ func (s *Settings) GetScrollColumnMax() int {
 	return s.ScrollColumnMax
 }
 
-// GetAnimationDuration returns the animation duration for standard operations.
-// Returns 0 when the motion level is none or animations are suppressed, so
-// the transition is instant.
+// GetAnimationDuration is how long a pane takes to move to a new place in a
+// layout: the layout motion's length, or 0 when it may not run, so the change
+// is instant.
 func (s *Settings) GetAnimationDuration() time.Duration {
-	if !s.MotionAllows(MotionBasic) {
-		return 0
-	}
-	return s.scaleAnimation(DefaultAnimationDuration)
+	return s.MotionLength(AspectLayout, DefaultAnimationDuration)
 }
 
-// GetFastAnimationDuration returns the animation duration for fast operations.
-// Returns 0 when the motion level is none or animations are suppressed, so
-// the transition is instant.
+// GetFastAnimationDuration is GetAnimationDuration for snapping and swapping.
+// It is two thirds of the layout length, which is the built-in 200ms against
+// 300ms.
 func (s *Settings) GetFastAnimationDuration() time.Duration {
-	if !s.MotionAllows(MotionBasic) {
-		return 0
-	}
-	return s.scaleAnimation(FastAnimationDuration)
+	return s.GetAnimationDuration() * 2 / 3
 }
 
 // scaleAnimation divides d by the animation_speed percent. Zero, which a

@@ -150,7 +150,7 @@ func (m *OS) CelebrateAt(x, y int, opts CelebrateOptions) tea.Cmd {
 		return nil
 	}
 	// Confetti is decoration, so it flies only at the full level.
-	if !m.Settings.MotionAllows(config.MotionFull) {
+	if !m.Settings.MotionOn(config.AspectConfetti) {
 		opts.Still = true
 	}
 	x = clampInt(x, 0, width-1)

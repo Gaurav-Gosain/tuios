@@ -1331,3 +1331,71 @@ func slideRun(t *testing.T, level string) string {
 	}
 	return b.String()
 }
+
+// zoomFrames starts a client with the extra config, opens a second pane on
+// workspace 1, zooms it and reports how many presented frames fell between the
+// split and the zoomed screen. Then it unzooms and switches workspace, and
+// reports how many frames showed both workspaces.
+func zoomFrames(t *testing.T, extra string) (zoomMid, slideMid int) {
+	t.Helper()
+	term, tape, base := startSlideClient(t, "full", extra)
+	if out, err := tuiosCLI(t, base, "new-window", "-s", "e2e-slide", "second"); err != nil {
+		t.Fatalf("open the second pane: %v\n%s", err, out)
+	}
+	if err := term.WaitStable(uiTimeout); err != nil {
+		t.Fatalf("screen never settled: %v", err)
+	}
+	time.Sleep(time.Second)
+	// Only the pane region counts. The dock and the rail change for reasons
+	// of their own, such as a notice appearing.
+	body := func(s tuitest.Screen) string {
+		var b strings.Builder
+		for y := 1; y < slideRows-3; y++ {
+			b.WriteString(s.Line(y))
+			b.WriteByte('\n')
+		}
+		return b.String()
+	}
+	split := body(term.Screen())
+	from := tape.len()
+	if err := term.SendKeys(tuitest.Ctrl('b'), "z"); err != nil {
+		t.Fatalf("zoom: %v", err)
+	}
+	if err := term.WaitFor(func(s tuitest.Screen) bool { return body(s) != split }, uiTimeout); err != nil {
+		t.Fatalf("the zoom never changed the screen: %v", err)
+	}
+	time.Sleep(time.Second)
+	if err := term.WaitStable(uiTimeout); err != nil {
+		t.Fatalf("screen never settled: %v", err)
+	}
+	raw, _ := tape.bytes()
+	frames := presentedScreens(raw, slideCols, slideRows, from)
+	zoomed := body(term.Screen())
+	for _, f := range frames {
+		if txt := body(f); txt != split && txt != zoomed {
+			zoomMid++
+		}
+	}
+	if err := term.SendKeys(tuitest.Ctrl('b'), "z"); err != nil {
+		t.Fatalf("unzoom: %v", err)
+	}
+	time.Sleep(time.Second)
+	r := runSlide(t, term, tape, '2', slideNewMark, nil)
+	return zoomMid, len(r.mixed)
+}
+
+// With motion.zoom off the zoom is a cut, and the workspace slide still runs.
+func TestMotionZoomOffKeepsWorkspaceSlide(t *testing.T) {
+	onZoom, onSlide := zoomFrames(t, "[motion]\nzoom = \"on\"")
+	offZoom, offSlide := zoomFrames(t, "[motion]\nzoom = \"off\"")
+	t.Logf("zoom frames in between: on %d, off %d. slide frames: on %d, off %d", onZoom, offZoom, onSlide, offSlide)
+	if onZoom < 2 {
+		t.Fatalf("with motion.zoom on, only %d frames fell between the split and the zoom; the control shows no slide", onZoom)
+	}
+	if offZoom != 0 {
+		t.Errorf("with motion.zoom off, %d frames fell between the split and the zoom; want a cut", offZoom)
+	}
+	if offSlide < 2 {
+		t.Errorf("with motion.zoom off, the workspace switch showed %d mixed frames; want a slide", offSlide)
+	}
+}
