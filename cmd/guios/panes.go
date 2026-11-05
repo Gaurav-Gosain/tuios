@@ -1460,33 +1460,53 @@ const (
 	minPaneRows = client.MinPaneRows
 )
 
+// cellSize is a terminal cell in DIPs, at a text size.
+type cellSize struct{ w, h, font float32 }
+
 // reportGrid tells the session's host the pane area's size in cells, when
 // it changed: the box tuios's layout engine lays the panes out in while no
-// TUI shows the session. A cell is measured once per area size and text
-// size, from the focused terminal: its box changes on every frame of a pane
-// animation while its grid does not, and a grid measured then would change
-// on every frame and rebuild the state each time.
+// TUI shows the session.
+//
+// The cell is measured from the focused terminal, its box over its grid,
+// and only from a box and grid that held for two frames with no pane
+// moving: the grid follows the box a frame or more late (a resize, the
+// leases of a pane animation), and a cell measured in between is wrong.
+// The layouts placed by rectangles size each pane from the grid sent here,
+// so a wrong cell grew them past the window on every resize, a little
+// more each time (QA-072). The cell is the smallest one measured at the
+// text size: a terminal's box holds its grid and less than one cell more.
 func (a *App) reportGrid(c *ui.Context, s *proto.Session) {
 	area := a.paneRef("ws-area").Bounds(c)
 	if area.W <= 0 || area.H <= 0 {
 		return
 	}
-	key := [3]float32{area.W, area.H, a.set.FontSize}
-	if key == a.gridKey {
-		return
+	font := a.set.FontSize * c.Zoom()
+	if a.cell.font != font {
+		a.cell = cellSize{font: font}
 	}
 	id := a.focusOf(s)
-	t := a.termFor(id)
-	if t == nil || panesMoving() {
+	if t := a.termFor(id); t != nil && !panesMoving() {
+		cols, rows := t.Size()
+		tb := a.paneRef(id).Bounds(c)
+		if cols > 0 && rows > 0 && tb.W > 0 && tb.H > 0 {
+			seen := [4]float32{tb.W, tb.H, float32(cols), float32(rows)}
+			if seen == a.cellSeen {
+				cw, ch := tb.W/float32(cols), tb.H/float32(rows)
+				if a.cell.w == 0 {
+					a.cell.w, a.cell.h = cw, ch
+				}
+				a.cell.w, a.cell.h = min(a.cell.w, cw), min(a.cell.h, ch)
+			} else {
+				// Measured in the next frame, once it held.
+				a.cellSeen = seen
+				c.AnimationFrame()
+			}
+		}
+	}
+	if a.cell.w <= 0 || a.cell.h <= 0 {
 		return
 	}
-	cols, rows := t.Size()
-	tb := a.paneRef(id).Bounds(c)
-	if cols <= 0 || rows <= 0 || tb.W <= 0 || tb.H <= 0 {
-		return
-	}
-	a.gridKey = key
-	g := [2]int{int(area.W * float32(cols) / tb.W), int(area.H * float32(rows) / tb.H)}
+	g := [2]int{int(area.W / a.cell.w), int(area.H / a.cell.h)}
 	if g == a.grid {
 		return
 	}
