@@ -279,6 +279,7 @@
   "paneSwap": "Swap panes",
   "paneDragTip": "Drag to move this pane",
   "paneShowAll": "Show all panes",
+  "paneNarrow": "{count, plural, one {# more pane. Make the window larger to see it.} other {# more panes. Make the window larger to see them.}}",
   "paneClose": "Close pane",
   "paneNeedsPermission": "Needs your permission",
   "paneHasQuestion": "Has a question",

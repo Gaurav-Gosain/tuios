@@ -175,6 +175,7 @@
   "paneSwap": "ペインを入れ替え",
   "paneDragTip": "ドラッグしてこのペインを移動",
   "paneShowAll": "すべてのペインを表示",
+  "paneNarrow": "{count, plural, other {ほかに # 個のペインがあります。ウィンドウを大きくすると表示されます。}}",
   "paneClose": "ペインを閉じる",
   "paneNeedsPermission": "許可を求めています",
   "paneHasQuestion": "質問があります",
