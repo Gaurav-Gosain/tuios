@@ -697,7 +697,12 @@ func (a *App) spawnFoot(c *ui.Context, pal *palette, s *spawnSheet, h *spawnHand
 	}
 	ui.Row(c).Gap(sp3).AlignItems(ui.Center).Shrink(0).Children(func() {
 		ui.Row(c).Gap(sp3).AlignItems(ui.Center).Grow(1).MinWidth(0).Clip().Children(func() {
-			keyHint(c, pal, "↵", locales.SpawnHintStart())
+			startKey := "↵"
+			if s.byKey {
+				// Enter does not start a sheet a list letter opened.
+				startKey = keyName("CmdOrCtrl+Enter")
+			}
+			keyHint(c, pal, startKey, locales.SpawnHintStart())
 			keyHint(c, pal, "Tab", locales.SpawnHintNext())
 			keyHint(c, pal, keyName("CmdOrCtrl+S"), locales.SpawnHintPreset())
 		})
