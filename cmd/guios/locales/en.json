@@ -2261,5 +2261,6 @@
   "cockpitKeysToBoard": "Keys go to the board.",
   "cockpitTypedNoCommand": "Typed text runs no command. Pause, then press the key again.",
   "cockpitHintMove": "move",
-  "cockpitKeysToMail": "Keys go to the mail list. Press r to reply."
+  "cockpitKeysToMail": "Keys go to the mail list. Press r to reply.",
+  "setApprovalsNeedsIntegration": "Needs the Claude Code integration. Install it to get the prompts here."
 }

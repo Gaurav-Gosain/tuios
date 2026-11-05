@@ -12633,3 +12633,13 @@ func CockpitKeysToMail() string { return In(i18n.Locale()).CockpitKeysToMail() }
 func (msgs Messages) CockpitKeysToMail() string {
 	return Catalog.Format(msgs.locale, "cockpitKeysToMail", nil)
 }
+
+// SetApprovalsNeedsIntegration says "Needs the Claude Code integration. Install it to get the prompts here."
+// in the language the app shows.
+func SetApprovalsNeedsIntegration() string { return In(i18n.Locale()).SetApprovalsNeedsIntegration() }
+
+// SetApprovalsNeedsIntegration says "Needs the Claude Code integration. Install it to get the prompts here."
+// in the language of msgs.
+func (msgs Messages) SetApprovalsNeedsIntegration() string {
+	return Catalog.Format(msgs.locale, "setApprovalsNeedsIntegration", nil)
+}

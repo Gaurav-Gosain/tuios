@@ -1193,8 +1193,22 @@ func (a *App) notificationsPage(c *ui.Context, pal *palette) {
 
 func (a *App) agentsPage(c *ui.Context, pal *palette) {
 	s := &a.set
+	states := cli.SkillStates()
+	// The prompts reach Agents only through the Claude Code integration:
+	// without it the switch would do nothing (council round 3, S5).
+	claude := slices.IndexFunc(states, func(st cli.SkillState) bool { return st.Agent == "claude-code" })
+	missing := claude >= 0 && states[claude].State == "missing"
 	settingsGroup(c, pal, locales.SetApprovals(), "", func() {
-		settingRow(c, pal, locales.SetApprovalsRow(), locales.SetApprovalsDetail(), func() {
+		detail := locales.SetApprovalsDetail()
+		if missing {
+			detail = locales.SetApprovalsNeedsIntegration()
+		}
+		settingRow(c, pal, locales.SetApprovalsRow(), detail, func() {
+			if missing && button(c, "approvals-install", locales.CommonInstall(), "", true, pal) {
+				if err := cli.InstallSkill("claude-code"); err != nil {
+					a.toastIn(c, err.Error())
+				}
+			}
 			toggle(c.Key("approvals"), &s.Approvals, pal)
 		})
 	})
@@ -1216,7 +1230,7 @@ func (a *App) agentsPage(c *ui.Context, pal *palette) {
 	})
 	codeBlock(c, pal, "tuios new-window\ntuios list-agents\ntuios --help        # every command")
 	settingsGroup(c, pal, locales.SetSkills(), locales.SetSkillsDetail(), func() {
-		for _, st := range cli.SkillStates() {
+		for _, st := range states {
 			name := st.Name
 			detail := map[string]string{"current": locales.SetSkillInstalled(), "outdated": locales.SetSkillOutdated(), "missing": locales.SetSkillMissing()}[st.State] + " · " + proto.ShortDir(st.Dir)
 			settingRow(c, pal, name, detail, func() {

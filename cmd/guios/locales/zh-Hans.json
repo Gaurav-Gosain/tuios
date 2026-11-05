@@ -1246,5 +1246,6 @@
   "cockpitKeysToBoard": "按键发送到看板。",
   "cockpitTypedNoCommand": "输入的文字不会运行命令。请稍等，然后再按一次该键。",
   "cockpitHintMove": "移动",
-  "cockpitKeysToMail": "按键发送到邮件列表。按 r 回复。"
+  "cockpitKeysToMail": "按键发送到邮件列表。按 r 回复。",
+  "setApprovalsNeedsIntegration": "需要 Claude Code 集成。安装它以在这里接收提示。"
 }
