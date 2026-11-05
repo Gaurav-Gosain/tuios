@@ -23,7 +23,8 @@ import (
 // plugin names only the thread id, and the manifest's session_file turns it
 // into the file. Each thread has to show a tool card
 // with a failed command's output, a diff card with its added line, and the
-// harness's error. Gemini writes a message again when a tool call finishes,
+// harness's error. The Codex thread shows each shell command by its program,
+// with bash -lc and cd dir && taken off, and an ESC byte in one as ␛. Gemini writes a message again when a tool call finishes,
 // and the thread has to show that edit once. A Gemini message written again
 // with new text while the thread is open shows the new text.
 //
@@ -32,7 +33,11 @@ import (
 // threads show the recap and the card checks fail. With the decoder's drop of
 // a message written again removed, this test still passes, because the client
 // replaces an entry by its id; TestFormatFixtures in internal/transcriptview
-// catches that one.
+// catches that one. With CommandLabel returning its input, the Codex thread
+// shows "exec_command  bash -lc 'cd /work/project && go test ./...'" and
+// fails both the label and the wrapper checks. With the decoder's
+// ControlPictures removed, the daemon strips the ESC sequence and the
+// printf line check fails.
 func TestCockpitThreadOtherHarnesses(t *testing.T) {
 	cases := []struct {
 		name, harness, fixture, sessionID string
@@ -43,6 +48,9 @@ func TestCockpitThreadOtherHarnesses(t *testing.T) {
 		want []string
 		// once is a line the thread shows exactly once.
 		once string
+		// never is text no screen of the thread shows: a wrapper the
+		// command labels take off.
+		never string
 		// payload is the hook's input, the SessionStart of hookPayload when
 		// empty.
 		payload string
@@ -66,8 +74,13 @@ func TestCockpitThreadOtherHarnesses(t *testing.T) {
 		},
 		{
 			name: "codex", harness: "codex", fixture: "codex-rollout.jsonl", sessionID: "0199aa00-0000-7000-8000-000000000001",
-			file:     filepath.Join(".codex", "sessions", "2026", "10", "18", "rollout-2026-10-18T09-00-00-0199aa00-0000-7000-8000-000000000001.jsonl"),
-			want:     []string{"Run now takes two. One test fails.", "--- FAIL: TestRun", "apply_patch", "run(2)", "The turn stopped: interrupted"},
+			file: filepath.Join(".codex", "sessions", "2026", "10", "18", "rollout-2026-10-18T09-00-00-0199aa00-0000-7000-8000-000000000001.jsonl"),
+			// The rollout runs bash -lc 'cd /work/project && go test ./...'
+			// and an argv whose script prints an ESC byte. The tool lines
+			// show the program, and the ESC as its control picture.
+			want: []string{"Run now takes two. One test fails.", "--- FAIL: TestRun", "apply_patch", "run(2)", "The turn stopped: interrupted",
+				"exec_command  go test ./...", "shell  printf '␛[1m' && grep -n run src/app.go"},
+			never:    "bash -lc",
 			once:     "Make run take two and add notes.",
 			wide:     "실행 함수가 이제 두 값을 받습니다.\n\nTestRun 테스트 1개 실패 (exit 1)\n\n\u1112\u1161\u11ab\u1100\u1173\u11af 자모\n\n中文 漢字 かな 🚀",
 			pane:     "안녕하세요 Live 한글 中文 🚀",
@@ -210,10 +223,13 @@ func TestCockpitThreadOtherHarnesses(t *testing.T) {
 				}
 				saveCockpitFrames(t, term, "thread-"+c.name+"-live")
 			}
-			short := ""
+			short, wrapped := "", ""
 			for range 20 {
 				scr := term.Screen()
 				text := scr.Text()
+				if c.never != "" && strings.Contains(text, c.never) {
+					wrapped = text
+				}
 				// A row of wide text fills the row: its last cell has the
 				// ground of the row under it. A row cut into more cells
 				// than the terminal shows ends short of the edge.
@@ -247,6 +263,9 @@ func TestCockpitThreadOtherHarnesses(t *testing.T) {
 					t.Errorf("ASSERTION: the %s thread never showed %q\n%s", c.name, w, term.Snapshot())
 				}
 			}
+			if wrapped != "" {
+				t.Errorf("ASSERTION: the %s thread showed the wrapper %q of a command\n%s", c.name, c.never, wrapped)
+			}
 			if short != "" {
 				t.Errorf("ASSERTION: the %s thread drew %q short of the right edge\n%s", c.name, short, term.Snapshot())
 			}
@@ -264,6 +283,21 @@ func TestCockpitThreadOtherHarnesses(t *testing.T) {
 				_ = term.WaitStable(uiTimeout)
 			}
 			saveCockpitFrames(t, term, "thread-"+c.name)
+			if c.never != "" {
+				// The frame of the shell tool lines, from the first one
+				// down to the last.
+				kind, _, _ := strings.Cut(c.want[len(c.want)-2], "  ")
+				for range 20 {
+					if strings.Contains(term.Screen().Text(), kind) {
+						break
+					}
+					if err := term.SendKeys("J"); err != nil {
+						t.Fatal(err)
+					}
+					_ = term.WaitStable(uiTimeout)
+				}
+				saveCockpitFrames(t, term, "thread-"+c.name+"-commands")
+			}
 			if c.rewrite != "" {
 				// The message is written again under its id with new text,
 				// and the thread draws the new text, not the card it kept.

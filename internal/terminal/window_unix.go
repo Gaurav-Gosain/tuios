@@ -110,3 +110,13 @@ func (w *Window) ForegroundCommand() string {
 	}
 	return procComm(fgpgrp)
 }
+
+// ForegroundPgrp is the process group that holds the window's terminal, or 0
+// when the window runs no PTY of its own or the kernel gives none.
+func (w *Window) ForegroundPgrp() int {
+	if w == nil || w.Pty == nil {
+		return 0
+	}
+	pgrp, _ := foregroundPgrp(w.Pty.Fd())
+	return pgrp
+}

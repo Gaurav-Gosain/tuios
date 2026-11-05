@@ -4,6 +4,7 @@
 package input
 
 import (
+	"slices"
 	"strings"
 	"time"
 
@@ -290,6 +291,9 @@ func pasteTakenByOverlay(o *app.OS, content string) (tea.Cmd, bool) {
 	switch {
 	case o.ShowInbox && o.InboxReasonOpen():
 		o.InboxReasonPaste(content)
+		return nil, true
+	case o.ShowInbox && o.CockpitNewCardOpen():
+		o.CockpitNewCardPaste(content)
 		return nil, true
 	case o.ShowInbox && o.InboxPeekComposing():
 		o.InboxPeekPaste(content)
@@ -871,10 +875,8 @@ func isConfiguredKey(msg tea.KeyPressMsg, s *config.Settings, base rune, is func
 	if base == 0 {
 		base = msg.BaseCode
 	}
-	for _, chord := range composedChords(msg, base) {
-		if is(chord) {
-			return optionGlyphsApply(msg, s.KeyboardLayout, s.OptionGlyphs)
-		}
+	if slices.ContainsFunc(composedChords(msg, base), is) {
+		return optionGlyphsApply(msg, s.KeyboardLayout, s.OptionGlyphs)
 	}
 	return false
 }

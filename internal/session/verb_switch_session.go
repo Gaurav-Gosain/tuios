@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/Gaurav-Gosain/tuios/internal/federation"
+	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 	"github.com/google/uuid"
 )
 
@@ -81,7 +82,7 @@ func (d *Daemon) verbSwitchSession(cs *connState, params json.RawMessage) (any, 
 		if p.Cwd != "" {
 			args["cwd"] = p.Cwd
 		}
-		raw, _ := json.Marshal(args)
+		raw, _ := jsonx.Marshal(args)
 		if _, verr := d.verbNewSession(cs, raw); verr != nil {
 			if verr.Code != ErrVerbSessionExists {
 				return nil, verr

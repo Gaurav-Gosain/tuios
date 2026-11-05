@@ -1,7 +1,6 @@
 package app
 
 import (
-	"encoding/json"
 	"path"
 	"slices"
 	"strings"
@@ -10,6 +9,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/Gaurav-Gosain/tuios/internal/composer"
+	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 	"github.com/Gaurav-Gosain/tuios/pkg/fuzzy"
 )
 
@@ -241,7 +241,7 @@ func (m *OS) replyMentionCmd() tea.Cmd {
 				LinkKind string `json:"link_kind"`
 			} `json:"entries"`
 		}
-		if json.Unmarshal(raw, &res) == nil {
+		if jsonx.Unmarshal(raw, &res) == nil {
 			for _, e := range res.Entries {
 				dir := e.Kind == "dir" || e.Kind == "symlink" && e.LinkKind == "dir"
 				msg.files = append(msg.files, mentionFile{name: e.Name, dir: dir})

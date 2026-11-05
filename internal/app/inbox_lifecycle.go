@@ -1,7 +1,6 @@
 package app
 
 import (
-	"encoding/json"
 	"errors"
 	"slices"
 	"sort"
@@ -10,6 +9,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 )
@@ -122,7 +122,7 @@ func probeVerb(call func(verb string, params map[string]any) ([]byte, error), na
 			Verb string `json:"verb"`
 		} `json:"verbs"`
 	}
-	if json.Unmarshal(raw, &res) != nil {
+	if jsonx.Unmarshal(raw, &res) != nil {
 		return false, false
 	}
 	for _, v := range res.Verbs {
@@ -380,7 +380,7 @@ func markedID(raw []byte) string {
 	var res struct {
 		ID string `json:"id"`
 	}
-	_ = json.Unmarshal(raw, &res)
+	_ = jsonx.Unmarshal(raw, &res)
 	return res.ID
 }
 

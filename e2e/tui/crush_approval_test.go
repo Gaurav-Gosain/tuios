@@ -65,27 +65,26 @@ func openCrushPeek(t *testing.T, term *tuitest.Terminal, base, summary, shown, f
 	}
 }
 
-// allowFromPeek presses a in the open peek. A risky call takes a second
-// press: the first one must press nothing into the pane, which still shows
-// the dialog a second later, and say what the second press does.
+// allowFromPeek presses a in the open peek, then enter. The key only asks:
+// it must press nothing into the pane, which still shows the dialog a
+// second later, and the peek says what enter does.
 func allowFromPeek(t *testing.T, term *tuitest.Terminal, base, win string, risky bool) {
 	t.Helper()
 	if err := term.SendKeys("a"); err != nil {
 		t.Fatalf("approve: %v", err)
 	}
-	if !risky {
-		return
+	if err := term.WaitForText("Press enter to do it", uiTimeout); err != nil {
+		t.Fatalf("ASSERTION: a in the peek did not ask before it allowed: %v\n%s", err, term.Snapshot())
 	}
-	if err := term.WaitForText("Press a again", uiTimeout); err != nil {
-		t.Fatalf("ASSERTION: the first press on a call that is not all shown did not ask for a second: %v\n%s", err, term.Snapshot())
+	if risky {
+		time.Sleep(time.Second)
+		if out, _ := tuiosCLI(t, base, "capture-pane", "-s", crushSession, "-w", win); !strings.Contains(out, "Permission Required") {
+			t.Fatalf("ASSERTION: the key that asks reached Crush:\n%s", out)
+		}
+		saveFrame(t, term, "crush-risky-armed")
 	}
-	time.Sleep(time.Second)
-	if out, _ := tuiosCLI(t, base, "capture-pane", "-s", crushSession, "-w", win); !strings.Contains(out, "Permission Required") {
-		t.Fatalf("ASSERTION: the first press reached Crush:\n%s", out)
-	}
-	saveFrame(t, term, "crush-risky-armed")
-	if err := term.SendKeys("a"); err != nil {
-		t.Fatalf("second press: %v", err)
+	if err := term.SendKeys(tuitest.Enter); err != nil {
+		t.Fatalf("enter: %v", err)
 	}
 }
 

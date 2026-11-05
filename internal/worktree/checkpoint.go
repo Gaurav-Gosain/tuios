@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/childproc"
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 
 	"github.com/Gaurav-Gosain/tuios/internal/plural"
 	"github.com/Gaurav-Gosain/tuios/internal/sortx"
@@ -138,11 +139,11 @@ const checkpointLabelMax = 120
 // ValidPaneKey refuses a pane id that cannot be one component of a ref name.
 func ValidPaneKey(pane string) error {
 	if pane == "" || len(pane) > 128 {
-		return fmt.Errorf("pane id %q is empty or too long", pane)
+		return errfmt.Errorf("pane id %q is empty or too long", pane)
 	}
 	for _, r := range pane {
 		if !(r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' || r == '-' || r == '_') {
-			return fmt.Errorf("pane id %q holds a character a ref name cannot", pane)
+			return errfmt.Errorf("pane id %q holds a character a ref name cannot", pane)
 		}
 	}
 	return nil
@@ -359,7 +360,7 @@ func SaveCheckpoint(ctx context.Context, root string, m CheckpointMeta, keep int
 	if keep > 0 && len(list)+1 > keep {
 		drop := list[:len(list)+1-keep]
 		if err := DeleteCheckpoints(ctx, root, drop); err != nil {
-			return cp, true, fmt.Errorf("checkpoint %d was saved, and the old ones were not pruned: %w", n, err)
+			return cp, true, errfmt.Errorf("checkpoint %d was saved, and the old ones were not pruned: %w", n, err)
 		}
 	}
 	return cp, true, nil
@@ -373,7 +374,7 @@ func DeleteCheckpoints(ctx context.Context, dir string, cps []Checkpoint) error 
 	var b strings.Builder
 	for _, cp := range cps {
 		if !strings.HasPrefix(cp.Ref, CheckpointRefPrefix) {
-			return fmt.Errorf("%q is not a checkpoint ref", cp.Ref)
+			return errfmt.Errorf("%q is not a checkpoint ref", cp.Ref)
 		}
 		fmt.Fprintf(&b, "delete %s %s\n", cp.Ref, cp.Commit)
 	}
@@ -521,7 +522,7 @@ func RestoreTree(ctx context.Context, root, current, tree string) (RestoreResult
 	for i := 0; i+1 < len(fields); i += 2 {
 		meta, path := strings.Fields(fields[i]), fields[i+1]
 		if len(meta) != 5 {
-			return res, fmt.Errorf("git diff-tree: unexpected line %q", fields[i])
+			return res, errfmt.Errorf("git diff-tree: unexpected line %q", fields[i])
 		}
 		oldMode, newMode, status := strings.TrimPrefix(meta[0], ":"), meta[1], meta[4]
 		if oldMode == "160000" || newMode == "160000" {
@@ -603,7 +604,7 @@ func removeInside(root, path string) error {
 	}
 	rel, err := filepath.Rel(realRoot, realParent)
 	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
-		return fmt.Errorf("%q leaves the work tree", path)
+		return errfmt.Errorf("%q leaves the work tree", path)
 	}
 	if err := os.Remove(full); err != nil && !os.IsNotExist(err) {
 		return err
@@ -646,13 +647,13 @@ func runStdin(ctx context.Context, dir string, env []string, stdin string, args 
 	cmd.Stderr = &stderr
 	if err := cmd.Run(); err != nil {
 		if ctx.Err() != nil {
-			return "", fmt.Errorf("git %s: %w", args[0], ctx.Err())
+			return "", errfmt.Errorf("git %s: %w", args[0], ctx.Err())
 		}
 		msg := strings.TrimSpace(stderr.String())
 		if msg == "" {
 			msg = err.Error()
 		}
-		return "", fmt.Errorf("git %s: %s", args[0], msg)
+		return "", errfmt.Errorf("git %s: %s", args[0], msg)
 	}
 	return stdout.String(), nil
 }

@@ -6,6 +6,8 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+
+	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 )
 
 // progressVersion is the format of tutor.json.
@@ -42,7 +44,7 @@ func loadProgress(path string) *progressStore {
 		return s
 	}
 	var p Progress
-	if json.Unmarshal(raw, &p) != nil || p.Version != progressVersion {
+	if jsonx.Unmarshal(raw, &p) != nil || p.Version != progressVersion {
 		return s
 	}
 	for id, t := range p.Tracks {

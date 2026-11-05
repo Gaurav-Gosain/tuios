@@ -40,6 +40,7 @@ func custom(covers string, item settingItem) settingsRow {
 var settingLabels = map[string]string{
 	"agents.enabled":                      "Agent features",
 	"agents.fold_working":                 "Fold Working",
+	"agents.view_list":                    "Agent list",
 	"tasks.auto_stage":                    "Move task cards",
 	"appearance.sidebar.editor":           "File editor",
 	"appearance.dock_workspace_label_max": "Workspace label cap",
@@ -179,6 +180,7 @@ var settingLabels = map[string]string{
 	"notifications.style":                        "Message style",
 	"notifications.level":                        "Messages shown",
 	"notifications.log_hidden":                   "Log hidden messages",
+	"notifications.machine_offer":                "Offer to add machines",
 	"notifications.agent.enabled":                "Agent alerts",
 	"notifications.agent.notify":                 "Agent alert on the desktop",
 	"notifications.agent.dock":                   "Agent alert in the dock",
@@ -361,6 +363,9 @@ func (m *OS) setOption(path, value string) {
 		m.UserConfig = config.DefaultConfig()
 		m.ConfigReadOnly = true
 	}
+	// The settings page saves every change, so a value held by set-config
+	// --no-save is saved from here on.
+	m.UserConfig.ReleaseOption(path)
 	if err := m.setConfigFromRegistry(path, value); err != nil {
 		m.ShowNotification(err.Error(), "error", m.Settings.NotificationDuration)
 	}

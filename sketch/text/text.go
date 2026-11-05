@@ -9,8 +9,10 @@
 // architecture diagrams, requirement diagrams, C4 diagrams, packet diagrams,
 // radar charts, treemaps, info, treeView, ishikawa, cynefin, eventmodeling,
 // venn, wardley, railroad, swimlane, usecase and agentflow have a text
-// drawing. Other types give ErrUnsupported. A $$...$$ math label shows its TeX
-// source: text drawings never pass a math resolver.
+// drawing. Flowcharts, sequence, state, class and ER diagrams, pie charts,
+// mindmaps and gantt charts draw as they are; the other types draw after Rare
+// is called, and before it give ErrUnsupported. A $$...$$ math label shows its
+// TeX source: text drawings never pass a math resolver.
 package text
 
 import (
@@ -149,7 +151,7 @@ func draw(d *sketch.Diagram, opt Options, ro sketch.RenderOptions, squeeze bool)
 	}
 	var c *canvas
 	switch d.Type {
-	case "flowchart", "block", "architecture", "requirement":
+	case "flowchart":
 		c, err = drawFlowchart(layout, opt, squeeze)
 	case "state":
 		c, err = drawState(layout, opt)
@@ -163,49 +165,7 @@ func draw(d *sketch.Diagram, opt Options, ro sketch.RenderOptions, squeeze bool)
 		c, err = drawMindmap(layout, opt)
 	case "gantt":
 		c, err = drawGantt(layout, opt)
-	case "usecase", "agentflow":
-		c, err = narrower(d, layout, opt, squeeze, drawFlowchart)
-	case "swimlane":
-		c, err = drawSwimlane(layout, opt, squeeze)
-	case "c4":
-		c, err = drawC4(d, layout, opt, ro, squeeze)
-	case "packet":
-		c, err = drawPacket(layout, opt)
-	case "radar":
-		c, err = drawRadar(layout, opt)
-	case "treemap":
-		c, err = drawTreemap(layout, opt)
-	case "info":
-		c, err = drawInfo(layout, opt)
-	case "treeView":
-		c, err = drawTreeView(layout, opt)
-	case "ishikawa":
-		c, err = drawIshikawa(layout, opt)
-	case "cynefin":
-		c, err = drawCynefin(layout, opt)
-	case "eventmodeling":
-		c, err = drawEventModel(layout, opt)
-	case "venn":
-		c, err = drawVenn(layout, opt)
-	case "wardley":
-		c, err = drawWardley(layout, opt)
-	case "railroad":
-		c, err = drawRailroad(layout, opt)
-	case "timeline":
-		c, err = drawTimeline(layout, opt)
-	case "xychart":
-		c, err = drawXY(layout, opt)
-	case "quadrantChart":
-		c, err = drawQuadrant(layout, opt)
-	case "journey":
-		c, err = drawJourney(layout, opt)
-	case "kanban":
-		c, err = drawKanban(layout, opt)
-	case "gitGraph":
-		c, err = drawGit(layout, opt)
-	case "sankey":
-		c, err = drawSankey(layout, opt)
-	default:
+	case "sequence":
 		if squeeze {
 			// pele wraps message labels only when the layout runs past MaxWidth. A label
 			// of 64 characters fits a layout 640 units wide, so at 80 columns it does not
@@ -217,6 +177,11 @@ func draw(d *sketch.Diagram, opt Options, ro sketch.RenderOptions, squeeze bool)
 		} else {
 			c, err = drawSequence(layout, opt)
 		}
+	default:
+		if more == nil {
+			return nil, ErrUnsupported
+		}
+		return more(d, layout, opt, ro, squeeze)
 	}
 	if err != nil {
 		return nil, err

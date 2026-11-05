@@ -11,6 +11,7 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/composer"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/harness"
+	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 )
 
@@ -188,7 +189,7 @@ func (m *OS) inboxPeekRead() tea.Cmd {
 			return InboxPeekMsg{Gen: gen, Err: err}
 		}
 		var pk session.PromptPeek
-		if err := json.Unmarshal(raw, &pk); err != nil {
+		if err := jsonx.Unmarshal(raw, &pk); err != nil {
 			return InboxPeekMsg{Gen: gen, Err: err}
 		}
 		return InboxPeekMsg{Gen: gen, Peek: &pk}
@@ -294,7 +295,7 @@ func (m *OS) InboxAnswer(action, value string) tea.Cmd {
 			return InboxRespondedMsg{Gen: gen, Action: action, Err: err}
 		}
 		var res session.PromptResponse
-		if err := json.Unmarshal(raw, &res); err != nil {
+		if err := jsonx.Unmarshal(raw, &res); err != nil {
 			return InboxRespondedMsg{Gen: gen, Action: action, Err: err}
 		}
 		return InboxRespondedMsg{Gen: gen, Action: action, Res: &res}

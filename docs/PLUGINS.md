@@ -398,7 +398,9 @@ Each tuios release carries its own plugins. `tuios plugins install pr-status`
 takes the plugin from the release of the tuios that runs, and needs no git and
 no build. tuios checks each file against the `checksums.txt` of the release, and
 `plugins.lock` pins the version and a hash of the files. On another machine,
-`tuios plugins install` gets the same files or nothing.
+`tuios plugins install` gets the same files or nothing. On a release build the
+name means the release plugin, also when a folder of that name is in the folder
+you run it in; give that folder as `./pr-status`.
 
 `tuios plugins update` moves these plugins to the release of the tuios that
 runs. `tuios update` does that after it installs a new tuios. A failure keeps
@@ -418,7 +420,8 @@ refuses these updates.
 
 - What the plugin runs or asks for changes. tuios shows the lines that change.
 - The history of the branch was rewritten.
-- The tag that the plugin follows points to a different commit.
+- The tag that the plugin follows points to a different commit, or the tag is
+  gone and a branch of that name now gives the commit.
 
 A change to code alone does not ask again with `--yes`. Read the commits.
 

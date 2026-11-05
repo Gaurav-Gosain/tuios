@@ -39,6 +39,9 @@ import (
 	"io"
 	"strconv"
 	"sync"
+
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
+	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 )
 
 // maxMessage bounds one JSON-RPC message. A diff of a large file arrives in one
@@ -184,8 +187,8 @@ func (c *Conn) Call(ctx context.Context, method string, params, out any) error {
 			return m.Error
 		}
 		if out != nil && len(m.Result) > 0 {
-			if err := json.Unmarshal(m.Result, out); err != nil {
-				return fmt.Errorf("reading the answer to %s: %w", method, err)
+			if err := jsonx.Unmarshal(m.Result, out); err != nil {
+				return errfmt.Errorf("reading the answer to %s: %w", method, err)
 			}
 		}
 		return nil
@@ -205,7 +208,7 @@ func (c *Conn) send(m message) error {
 	if !c.omitVersion {
 		m.JSONRPC = "2.0"
 	}
-	data, err := json.Marshal(m)
+	data, err := jsonx.Marshal(m)
 	if err != nil {
 		return err
 	}
@@ -226,7 +229,7 @@ func (c *Conn) readLoop(r io.Reader) {
 			continue
 		}
 		var m message
-		if json.Unmarshal(line, &m) != nil {
+		if jsonx.Unmarshal(line, &m) != nil {
 			// A line that is not JSON is not a message: some agents print a
 			// banner or a log line on stdout. It is skipped.
 			continue
@@ -270,7 +273,7 @@ func (c *Conn) dispatch(m message) {
 // peer that echoes 7 as "7" is still matched.
 func idKey(raw json.RawMessage) string {
 	var s string
-	if json.Unmarshal(raw, &s) == nil {
+	if jsonx.Unmarshal(raw, &s) == nil {
 		return s
 	}
 	return string(bytes.TrimSpace(raw))
@@ -283,7 +286,7 @@ func mustJSON(v any) json.RawMessage {
 	if raw, ok := v.(json.RawMessage); ok {
 		return raw
 	}
-	data, err := json.Marshal(v)
+	data, err := jsonx.Marshal(v)
 	if err != nil {
 		return nil
 	}

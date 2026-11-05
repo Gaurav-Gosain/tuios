@@ -12,6 +12,8 @@ import (
 	"golang.org/x/term"
 	"tuios.dev/tml"
 
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
+	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
 	"github.com/Gaurav-Gosain/tuios/internal/tmldraw"
 )
@@ -87,7 +89,7 @@ func runTMLRender(name string, o tmlRenderOptions, stdin io.Reader, stdout, stde
 	lim := tml.PersonLimits()
 	doc, err := tml.Parse(src, &tml.ParseOptions{Limits: &lim})
 	if err != nil {
-		return fmt.Errorf("%s: %w", name, err)
+		return errfmt.Errorf("%s: %w", name, err)
 	}
 	draw := tmldraw.Options{
 		Width:     o.width,
@@ -103,8 +105,8 @@ func runTMLRender(name string, o tmlRenderOptions, stdin io.Reader, stdout, stde
 	}
 	if o.state != "" {
 		var probe map[string]any
-		if err := json.Unmarshal([]byte(o.state), &probe); err != nil || probe == nil {
-			return fmt.Errorf("--state is not a JSON object: %s", strings.TrimSpace(o.state))
+		if err := jsonx.Unmarshal([]byte(o.state), &probe); err != nil || probe == nil {
+			return errfmt.Errorf("--state is not a JSON object: %s", strings.TrimSpace(o.state))
 		}
 		draw.State = json.RawMessage(o.state)
 	}
@@ -122,7 +124,7 @@ func runTMLRender(name string, o tmlRenderOptions, stdin io.Reader, stdout, stde
 	}
 	out, err := tmldraw.Draw(doc, draw)
 	if err != nil {
-		return fmt.Errorf("%s: %w", name, err)
+		return errfmt.Errorf("%s: %w", name, err)
 	}
 	if natural {
 		out = trimBlankTail(out)

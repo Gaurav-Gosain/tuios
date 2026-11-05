@@ -1,14 +1,18 @@
 package session
 
 import (
+	"cmp"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"maps"
 	"slices"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/layout"
 	"github.com/google/uuid"
 )
 
@@ -83,6 +87,7 @@ func (d *Daemon) verbFocusWindow(cs *connState, params json.RawMessage) (any, *v
 		if err := sess.FocusDaemonWindow(p.Window); err != nil {
 			return nil, mapResolveErr(err, sess)
 		}
+		d.revealFocus(sess)
 
 	case p.Relative != "":
 		delta := 0
@@ -97,6 +102,7 @@ func (d *Daemon) verbFocusWindow(cs *connState, params json.RawMessage) (any, *v
 		if err := sess.CycleDaemonFocus(delta); err != nil {
 			return nil, mapResolveErr(err, sess)
 		}
+		d.revealFocus(sess)
 
 	default:
 		if !slices.Contains(focusDirections, p.Direction) {
@@ -110,6 +116,22 @@ func (d *Daemon) verbFocusWindow(cs *connState, params json.RawMessage) (any, *v
 	}
 
 	return focusResult(sess), nil
+}
+
+// revealFocus asks the attached client to focus the pane the session's focus
+// is on, so the client shows it as a pane the user asked for: in the
+// scrolling layout that is the whole column, as after a focus key. The state
+// push alone reaches the client as a focus moved for some other reason, and
+// a column partly on screen then stays cut off at the edge.
+//
+// It is best effort. The focus is already the session's, and a session with
+// no client attached has no screen to show it on.
+func (d *Daemon) revealFocus(sess *Session) {
+	st := sess.GetState()
+	if st == nil || st.FocusedWindowID == "" || d.findTUIClient(sess.ID) == nil {
+		return
+	}
+	_ = d.routeTape(sess, "tape_command", "FocusWindow", []string{st.FocusedWindowID})
 }
 
 // focusResult reports where the focus ended up. Naming the pane rather than
@@ -142,9 +164,25 @@ func (d *Daemon) verbMoveWindow(cs *connState, params json.RawMessage) (any, *ve
 		Workspace int    `json:"workspace"`
 		Follow    bool   `json:"follow"`
 		ToSession string `json:"to_session"`
+		Beside    string `json:"beside"`
+		Side      string `json:"side"`
+		Ratio     int    `json:"ratio"`
 	}
 	if verr := decodeParams(params, &p); verr != nil {
 		return nil, verr
+	}
+	if p.Beside != "" {
+		if p.Workspace != 0 || p.ToSession != "" || p.Follow {
+			return nil, invalidParam("beside", "beside moves the window next to a pane of its session, on that pane's workspace. Leave out workspace, to_session and follow")
+		}
+		sess, verr := d.resolveVerbSession(cs, p.Session)
+		if verr != nil {
+			return nil, verr
+		}
+		return d.movePaneBeside(cs, sess, p.Window, p.Beside, p.Side, p.Ratio)
+	}
+	if p.Side != "" || p.Ratio != 0 {
+		return nil, invalidParam("side", "side and ratio go with beside")
 	}
 	if p.Workspace == 0 && p.ToSession == "" {
 		return nil, invalidParam("workspace", "workspace is required and is the workspace number to move the window to, e.g. 2")
@@ -540,19 +578,18 @@ func layoutResult(sess *Session) map[string]any {
 
 // verbSplitWindow divides a pane, putting a new one beside it.
 //
-// This is the placement question in the form the tiling code can answer: the
-// new pane takes half of a pane that already exists, so the caller names which
-// pane and which way to cut rather than trying to describe a box. It is routed,
-// because the division is a geometry, and it goes through the renderer's own
-// splitting path so the new pane lands in the tree the same way one opened from
-// the keyboard does.
+// The new pane is a window like any new-window makes, and takes new-window's
+// params: a command, a directory, the focus. The daemon puts it in the split
+// tree beside the pane in the same change that adds it, so the split works
+// with no client attached, and a client that is attached lays the panes out
+// from the tree like any other change to it.
 func (d *Daemon) verbSplitWindow(cs *connState, params json.RawMessage) (any, *verbError) {
 	var p struct {
-		Session   string `json:"session"`
+		newWindowParams
 		Window    string `json:"window"`
 		Direction string `json:"direction"`
 		Side      string `json:"side"`
-		Name      string `json:"name"`
+		Ratio     int    `json:"ratio"`
 	}
 	if verr := decodeParams(params, &p); verr != nil {
 		return nil, verr
@@ -569,77 +606,352 @@ func (d *Daemon) verbSplitWindow(cs *connState, params json.RawMessage) (any, *v
 	case !slices.Contains(splitDirections, p.Direction):
 		return nil, invalidParam("direction", "unknown split direction "+echoName(p.Direction), splitDirections...)
 	}
+	if p.Ratio < 0 || p.Ratio > 99 {
+		return nil, invalidParam("ratio", "ratio is the new pane's share in percent, from 1 to 99")
+	}
+	ask := &splitAsk{window: p.Window, side: p.Side, share: float64(p.Ratio) / 100}
+	if ask.side == "" {
+		ask.side = map[string]string{"vertical": "right", "horizontal": "down"}[p.Direction]
+	}
+	return d.openWindow(cs, &p.newWindowParams, ask)
+}
+
+// splitAsk is what split-window asks of new-window: the pane to cut, the side
+// the new pane takes, and its share (0 for the tree's default).
+type splitAsk struct {
+	window, side string
+	share        float64
+}
+
+// splitTarget resolves the pane a split cuts, and puts the new window on its
+// workspace. cols and rows are the size the new pane's terminal starts at.
+func (d *Daemon) splitTarget(cs *connState, sess *Session, p *newWindowParams, ask *splitAsk) (*SplitPlacement, int, int, *verbError) {
+	w, verr := d.layoutWindow(cs, sess, ask.window)
+	if verr != nil {
+		return nil, 0, 0, verr
+	}
+	if !tiledPane(&w) {
+		return nil, 0, 0, invalidParam("window", errSplitNotTiled.Error())
+	}
+	if p.Workspace != 0 && p.Workspace != w.Workspace {
+		return nil, 0, 0, invalidParam("workspace", "a split opens on the workspace of the pane it cuts. Leave out workspace")
+	}
+	p.Workspace = w.Workspace
+	side, _ := layout.ParseSide(ask.side)
+	share := ask.share
+	if share == 0 {
+		share = 0.5
+	}
+	cols, rows := w.Width-2, w.Height-2
+	if ask.side == "left" || ask.side == "right" {
+		cols = int(float64(w.Width)*share) - 2
+	} else {
+		rows = int(float64(w.Height)*share) - 2
+	}
+	if cols < 1 || rows < 1 {
+		cols, rows = 0, 0
+	}
+	return &SplitPlacement{Target: w.ID, Side: side, Share: ask.share, Place: !d.hasTUIClient(sess)}, cols, rows, nil
+}
+
+// splitDone finishes split-window's answer. With a client attached it waits,
+// bounded, until the state holds the client's rectangles for the two panes:
+// a caller that reads the layout straight after the answer (herdr's pane
+// swap) otherwise reads the old one.
+func (d *Daemon) splitDone(sess *Session, out map[string]any, placed *SplitPlacement, created string, ask *splitAsk) {
+	out["type"] = "window_split"
+	out["direction"] = splitAxis(ask.side)
+	out["side"] = ask.side
+	if !placed.Place {
+		sess.WaitState(routedVerbTimeout, func(st *SessionState) bool { return splitSettled(st, placed.Target, created) })
+	}
+}
+
+// layoutWindow is the pane a layout verb acts on: the one named, else the
+// caller's own pane when the caller runs in a pane of sess, else the focused
+// one. An agent that splits or zooms without naming a pane means its own, not
+// whichever pane the person has in front of them.
+func (d *Daemon) layoutWindow(cs *connState, sess *Session, target string) (WindowState, *verbError) {
+	st := sess.GetState()
+	if target == "" {
+		if ref := d.callerPaneRef(cs); ref != nil && ref.Session == sess.Name() {
+			target = ref.Window
+		} else {
+			id, err := focusedWindowID(st)
+			if err != nil {
+				return WindowState{}, mapResolveErr(err, sess)
+			}
+			target = id
+		}
+	}
+	i, err := findWindowStateIndex(st.Windows, target)
+	if err != nil {
+		return WindowState{}, mapResolveErr(err, sess)
+	}
+	return st.Windows[i], nil
+}
+
+// daemonArranges reports whether the daemon edits the layout of ws itself.
+// It does for a session no client shows, and for a tiled workspace in the
+// split layout. Another layout (master-stack, scrolling) lays panes out by
+// order, not by the tree, so an attached client does that edit.
+func (d *Daemon) daemonArranges(sess *Session, ws int) bool {
+	if !d.hasTUIClient(sess) {
+		return true
+	}
+	st := sess.GetState()
+	mode := st.LayoutMode
+	if m, ok := st.WorkspaceLayoutModes[ws]; ok {
+		mode = m
+	}
+	return st.AutoTiling && (mode == "" || mode == "bsp")
+}
+
+// errFloating refuses a layout edit in a session that floats its panes.
+func errFloating(param string) *verbError {
+	return invalidParam(param, "the session floats its panes, so there is no layout to change. split-window turns tiling on")
+}
+
+// errLayoutUnchanged is an edit that found nothing to change. The state is
+// left alone, so no client is woken for it.
+var errLayoutUnchanged = errors.New("layout unchanged")
+
+// settleRects waits, bounded, for an attached client to lay out the panes
+// again after a layout edit: until moved reports that the client's rectangles
+// show it.
+func (d *Daemon) settleRects(sess *Session, moved func(st *SessionState) bool) {
+	if d.hasTUIClient(sess) {
+		sess.WaitState(2*time.Second, moved)
+	}
+}
+
+// rectOf is the rectangle of window id in st, and whether it is there.
+func rectOf(st *SessionState, id string) (layout.Rect, bool) {
+	w, ok := findWindowState(st, id)
+	return layout.Rect{X: w.X, Y: w.Y, W: w.Width, H: w.Height}, ok
+}
+
+// layoutParams are the params of zoom-window, swap-window and
+// resize-window.
+type layoutParams struct {
+	Session   string `json:"session"`
+	Window    string `json:"window"`
+	Zoom      *bool  `json:"zoom"`
+	With      string `json:"with"`
+	Direction string `json:"direction"`
+	Amount    int    `json:"amount"`
+}
+
+func (d *Daemon) verbZoomWindow(cs *connState, params json.RawMessage) (any, *verbError) {
+	return d.layoutVerb(cs, params, 'z')
+}
+
+func (d *Daemon) verbSwapWindow(cs *connState, params json.RawMessage) (any, *verbError) {
+	return d.layoutVerb(cs, params, 's')
+}
+
+func (d *Daemon) verbResizeWindow(cs *connState, params json.RawMessage) (any, *verbError) {
+	return d.layoutVerb(cs, params, 'r')
+}
+
+// layoutVerb is zoom-window (z), swap-window (s) and resize-window (r). Each
+// acts on the pane layoutWindow names.
+func (d *Daemon) layoutVerb(cs *connState, params json.RawMessage, verb byte) (any, *verbError) {
+	var p layoutParams
+	if verr := decodeParams(params, &p); verr != nil {
+		return nil, verr
+	}
+	switch {
+	case verb == 's' && p.With == "":
+		return nil, invalidParam("with", "with is required and names the pane to swap with")
+	case verb == 'r' && !slices.Contains(focusDirections, p.Direction):
+		return nil, invalidParam("direction", "direction is required and is the way the border moves", focusDirections...)
+	case verb == 'r' && (p.Amount < 0 || p.Amount > 50):
+		return nil, invalidParam("amount", "amount is a share of the layout in percent, from 1 to 50")
+	}
 	sess, verr := d.resolveVerbSession(cs, p.Session)
 	if verr != nil {
 		return nil, verr
 	}
-
-	// Splitting divides whichever pane has the focus, so a named target is
-	// focused first. Doing it here rather than leaving it to the caller keeps
-	// the two steps under one round trip, which matters because a pane focused
-	// and not yet split is a visible flicker in someone's session.
-	if p.Window != "" {
-		if err := sess.FocusDaemonWindow(p.Window); err != nil {
-			return nil, mapResolveErr(err, sess)
-		}
-		// The client splits the pane it has focused, and the focus above
-		// reaches it as a state push, which can arrive after the split. So
-		// the client is told to focus the same pane first, and waited for:
-		// without it a split of a pane that was not focused cut the one
-		// that was.
-		if st := sess.GetState(); st != nil && st.FocusedWindowID != "" {
-			if verr := d.routeTape(sess, "tape_command", "FocusWindow", []string{st.FocusedWindowID}); verr != nil {
-				return nil, verr
-			}
-		}
-	}
-
-	pre := sess.GetState()
-	before := windowIDSet(pre)
-	target := pre.FocusedWindowID
-	cut := p.Direction
-	if p.Side != "" {
-		cut = p.Side
-	}
-	if verr := d.routeTape(sess, "tape_command", "Split", []string{cut}); verr != nil {
+	w, verr := d.layoutWindow(cs, sess, p.Window)
+	if verr != nil {
 		return nil, verr
 	}
+	out := map[string]any{"window_id": w.ID}
+	switch verb {
+	case 'z':
+		want := !w.Zoomed
+		if p.Zoom != nil {
+			want = *p.Zoom
+		}
+		changed, verr := d.zoomPane(sess, w, want)
+		out["type"], out["zoomed"], out["changed"] = "window_zoomed", want, changed
+		return out, verr
+	case 's':
+		other, verr := d.layoutWindow(cs, sess, p.With)
+		if verr == nil {
+			verr = d.swapPanes(sess, w, other)
+		}
+		out["type"], out["with"] = "windows_swapped", other.ID
+		return out, verr
+	}
+	changed, verr := d.resizePane(sess, w, p.Direction, float64(cmp.Or(p.Amount, 5))/100)
+	out["type"], out["changed"] = "window_resized", changed
+	return out, verr
+}
 
-	// The new pane's id is the whole point of the call: without it the caller
-	// has to diff two list-windows and guess which one it just made. The
-	// client answers once the split is made, and its push of the tiled
-	// rectangles can come after: a caller that reads the layout straight
-	// after the answer (herdr's pane swap) read the old one. So the answer
-	// waits, bounded, until the state holds the new pane beside the one it
-	// was cut from.
-	created := ""
-	sess.WaitState(routedVerbTimeout, func(st *SessionState) bool {
-		created = newWindowID(before, st)
-		return created != "" && splitSettled(st, target, created)
+// zoomPane sets the zoom of w's workspace: on w, or off. A zoomed workspace
+// shows one pane, so zooming a pane on the workspace the session shows
+// focuses it, and the person never types into a pane they cannot see.
+func (d *Daemon) zoomPane(sess *Session, w WindowState, on bool) (bool, *verbError) {
+	if w.Minimized || w.Popup {
+		return false, invalidParam("window", "a minimized pane or a popup cannot be zoomed")
+	}
+	changed := false
+	err := sess.arrangeLayout(!d.hasTUIClient(sess), func(state *SessionState, _ *layoutEdit) (int, error) {
+		for i := range state.Windows {
+			if x := &state.Windows[i]; x.Workspace == w.Workspace {
+				z := on && x.ID == w.ID
+				changed = changed || x.Zoomed != z
+				x.Zoomed = z
+			}
+		}
+		if !changed {
+			return 0, errLayoutUnchanged
+		}
+		if on && w.Workspace == state.CurrentWorkspace && state.FocusedWindowID != w.ID {
+			sess.markFocusIntentLocked()
+			state.FocusedWindowID = w.ID
+			state.FocusHistory = RecordFocus(state.FocusHistory, w.Workspace, w.ID)
+		}
+		if on {
+			if state.WorkspaceFocus == nil {
+				state.WorkspaceFocus = map[int]string{}
+			}
+			state.WorkspaceFocus[w.Workspace] = w.ID
+		}
+		return w.Workspace, nil
 	})
-	out := map[string]any{
-		"type":      "window_split",
-		"direction": splitAxis(cut),
+	if err != nil && !errors.Is(err, errLayoutUnchanged) {
+		return false, mapResolveErr(err, sess)
 	}
-	if p.Side != "" {
-		out["side"] = p.Side
+	return changed, nil
+}
+
+// swapPanes swaps a and b in the split tree. Two panes of one workspace in
+// another layout are swapped by the attached client, which orders them.
+func (d *Daemon) swapPanes(sess *Session, a, b WindowState) *verbError {
+	if a.ID == b.ID {
+		return invalidParam("with", "name another pane to swap with")
 	}
-	if created == "" {
-		// The split reported success but no window appeared. Saying so is better
-		// than returning an empty id that reads as a valid target.
-		out["window_id"] = ""
-		out["note"] = "the split ran but no new window has reached daemon state yet. Call list-windows to find it"
-		return out, nil
+	if !tiledPane(&a) || !tiledPane(&b) {
+		return invalidParam("with", "both panes must be tiled. A floating, minimized or popup pane has no place in the layout to swap")
 	}
-	out["window_id"] = created
-	d.notePaneCreator(cs, created)
-	if p.Name != "" {
-		if err := sess.RenameDaemonWindow(created, p.Name); err != nil {
+	if a.Workspace != b.Workspace {
+		return invalidParam("with", "the panes are on different workspaces. Move one with move-window --beside")
+	}
+	if !sess.GetState().AutoTiling {
+		return errFloating("with")
+	}
+	if !d.daemonArranges(sess, a.Workspace) {
+		return d.routeTape(sess, "swap_windows", "", []string{a.ID, b.ID})
+	}
+	err := sess.arrangeLayout(!d.hasTUIClient(sess), func(_ *SessionState, e *layoutEdit) (int, error) {
+		e.tree(a.Workspace).SwapWindows(e.leaf(a.ID), e.leaf(b.ID))
+		return a.Workspace, nil
+	})
+	if err != nil {
+		return mapResolveErr(err, sess)
+	}
+	if a.X != b.X || a.Y != b.Y {
+		d.settleRects(sess, func(st *SessionState) bool {
+			r, _ := rectOf(st, a.ID)
+			return r.X == b.X && r.Y == b.Y
+		})
+	}
+	return nil
+}
+
+// resizePane moves a border of w by amount, a share of the layout. In
+// another layout than the split one the attached client moves it.
+func (d *Daemon) resizePane(sess *Session, w WindowState, dir string, amount float64) (bool, *verbError) {
+	if !d.daemonArranges(sess, w.Workspace) {
+		data, verr := d.routeData(sess, "resize_window", []string{w.ID, dir, strconv.FormatFloat(amount, 'f', -1, 64)})
+		changed, _ := data["changed"].(bool)
+		return changed, verr
+	}
+	if !tiledPane(&w) || !sess.GetState().AutoTiling {
+		return false, nil
+	}
+	side, _ := layout.ParseSide(dir)
+	err := sess.arrangeLayout(!d.hasTUIClient(sess), func(_ *SessionState, e *layoutEdit) (int, error) {
+		if !e.tree(w.Workspace).NudgeBorder(e.leaf(w.ID), side, amount) {
+			return 0, errLayoutUnchanged
+		}
+		return w.Workspace, nil
+	})
+	if errors.Is(err, errLayoutUnchanged) {
+		return false, nil
+	}
+	if err != nil {
+		return false, mapResolveErr(err, sess)
+	}
+	d.settleRects(sess, func(st *SessionState) bool {
+		r, _ := rectOf(st, w.ID)
+		return r != layout.Rect{X: w.X, Y: w.Y, W: w.Width, H: w.Height}
+	})
+	return true, nil
+}
+
+// movePaneBeside is move-window with beside: the pane leaves its place and
+// splits the pane beside names, toward side, on that pane's workspace.
+func (d *Daemon) movePaneBeside(cs *connState, sess *Session, window, beside, sideName string, ratio int) (any, *verbError) {
+	side, ok := layout.ParseSide(cmp.Or(sideName, "right"))
+	if !ok {
+		return nil, invalidParam("side", "unknown side "+echoName(sideName), splitSides...)
+	}
+	if ratio < 0 || ratio > 99 {
+		return nil, invalidParam("ratio", "ratio is the moved pane's share in percent, from 1 to 99")
+	}
+	src, verr := d.layoutWindow(cs, sess, window)
+	if verr != nil {
+		return nil, verr
+	}
+	dst, verr := d.layoutWindow(cs, sess, beside)
+	if verr != nil {
+		return nil, verr
+	}
+	switch {
+	case src.ID == dst.ID:
+		return nil, invalidParam("beside", "name another pane to move beside")
+	case !tiledPane(&src) || !tiledPane(&dst):
+		return nil, invalidParam("beside", "both panes must be tiled. A floating, minimized or popup pane has no place in the layout")
+	case src.Scratch && src.Workspace != dst.Workspace:
+		return nil, invalidParam("window", errScratchPaneStays.Error())
+	case !sess.GetState().AutoTiling:
+		return nil, errFloating("beside")
+	}
+	// Across workspaces the window moves first. The tree of its new
+	// workspace then holds it, and the edit below puts it beside dst.
+	if src.Workspace != dst.Workspace {
+		if err := sess.MoveDaemonWindowToWorkspace(src.ID, dst.Workspace); err != nil {
 			return nil, mapResolveErr(err, sess)
 		}
-		out["name"] = p.Name
 	}
-	return out, nil
+	err := sess.arrangeLayout(!d.hasTUIClient(sess), func(_ *SessionState, e *layoutEdit) (int, error) {
+		if !e.tree(dst.Workspace).MoveWindowBeside(e.leaf(src.ID), e.leaf(dst.ID), side, float64(ratio)/100) && src.Workspace == dst.Workspace {
+			return 0, errLayoutUnchanged
+		}
+		return dst.Workspace, nil
+	})
+	changed := !errors.Is(err, errLayoutUnchanged)
+	if err != nil && changed {
+		return nil, mapResolveErr(err, sess)
+	}
+	if changed {
+		d.settleRects(sess, func(st *SessionState) bool { return splitSettled(st, dst.ID, src.ID) })
+	}
+	return map[string]any{"type": "window_moved", "window_id": src.ID, "from_workspace": src.Workspace, "workspace": dst.Workspace, "beside": dst.ID, "changed": changed}, nil
 }
 
 // splitAxis is the axis a split cut: a side names its axis too.
@@ -651,25 +963,6 @@ func splitAxis(cut string) string {
 		return "horizontal"
 	}
 	return cut
-}
-
-// windowIDSet snapshots the window ids in a session.
-func windowIDSet(state *SessionState) map[string]bool {
-	ids := make(map[string]bool, len(state.Windows))
-	for i := range state.Windows {
-		ids[state.Windows[i].ID] = true
-	}
-	return ids
-}
-
-// newWindowID returns the one id in state that before did not hold.
-func newWindowID(before map[string]bool, state *SessionState) string {
-	for i := range state.Windows {
-		if !before[state.Windows[i].ID] {
-			return state.Windows[i].ID
-		}
-	}
-	return ""
 }
 
 // verbRunCommand runs one tape command, which is the vocabulary the keybindings
@@ -772,6 +1065,22 @@ func (d *Daemon) routeTape(sess *Session, commandType, command string, args []st
 		return newVerbError(ErrVerbCommandFailed, msg)
 	}
 	return nil
+}
+
+// routeData is routeTape for a command whose answer carries data.
+func (d *Daemon) routeData(sess *Session, command string, args []string) (map[string]any, *verbError) {
+	tui := d.findTUIClient(sess.ID)
+	if tui == nil {
+		return nil, d.routeTape(sess, command, "", args)
+	}
+	res, err := d.routeToTUISync(tui, uuid.New().String(), &RemoteCommandPayload{CommandType: command, TapeArgs: args}, routedVerbTimeout)
+	if err != nil {
+		return nil, newVerbError(ErrVerbCommandFailed, err.Error())
+	}
+	if !res.Success {
+		return nil, newVerbError(ErrVerbCommandFailed, cmp.Or(res.Message, "the attached client refused the request"))
+	}
+	return res.Data, nil
 }
 
 // hasTUIClient reports whether a renderer is attached to the session.

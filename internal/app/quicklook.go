@@ -18,6 +18,7 @@ import (
 
 	"github.com/Gaurav-Gosain/tuios/internal/composer"
 	"github.com/Gaurav-Gosain/tuios/internal/diffview"
+	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 	"github.com/Gaurav-Gosain/tuios/internal/plural"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
@@ -533,7 +534,7 @@ func (m *OS) quickLookFetch(t quickLookTarget) tea.Cmd {
 			out, perr := session.PreviewLocalFile(ctx, t.path, quickLookMaxPx)
 			cancel()
 			if perr == nil {
-				raw, err = json.Marshal(out)
+				raw, err = jsonx.Marshal(out)
 			} else {
 				err = perr
 			}
@@ -579,7 +580,7 @@ func quickLookDecode(t quickLookTarget, raw json.RawMessage, err error, ascii bo
 		return res
 	}
 	var r quickLookReply
-	if json.Unmarshal(raw, &r) != nil {
+	if jsonx.Unmarshal(raw, &r) != nil {
 		res.kind, res.note = "error", "The answer could not be read."
 		return res
 	}

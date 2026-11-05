@@ -13,6 +13,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"github.com/Gaurav-Gosain/tuios/internal/sound"
 	"github.com/adrg/xdg"
 )
@@ -178,7 +179,7 @@ func stillRedirected(tmp string) error {
 		return nil
 	}
 	sort.Strings(escaped)
-	return fmt.Errorf("the run left these pointing outside its own tree %s, so the tests after it reached the developer's files:\n%s",
+	return errfmt.Errorf("the run left these pointing outside its own tree %s, so the tests after it reached the developer's files:\n%s",
 		tmp, strings.Join(escaped, "\n"))
 }
 
@@ -275,5 +276,5 @@ func diffDirs(before, after map[string]string) error {
 		return nil
 	}
 	sort.Strings(lines)
-	return fmt.Errorf("%s", strings.Join(lines, "\n"))
+	return errfmt.Errorf("%s", strings.Join(lines, "\n"))
 }

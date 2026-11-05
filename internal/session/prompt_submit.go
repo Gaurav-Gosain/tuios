@@ -4,10 +4,10 @@ import (
 	"tuios.dev/vt"
 
 	"context"
-	"fmt"
 	"strings"
 	"time"
 
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"github.com/Gaurav-Gosain/tuios/internal/harness"
 )
 
@@ -178,7 +178,7 @@ func submitPastesStamped(ctx context.Context, pane promptPane, pastes []string, 
 	}
 	if in.FocusBeforeSubmit && pane.FocusReportingOn() {
 		if _, err := pane.Write([]byte(focusInReport)); err != nil {
-			return time.Time{}, fmt.Errorf("failed to report focus: %w", err)
+			return time.Time{}, errfmt.Errorf("failed to report focus: %w", err)
 		}
 	}
 	bracket := in.BracketedPaste && pane.BracketedPasteOn()
@@ -199,7 +199,7 @@ func submitPastesStamped(ctx context.Context, pane promptPane, pastes []string, 
 		pastedAt := time.Now()
 		if body != "" {
 			if _, err := pane.Write([]byte(body)); err != nil {
-				return time.Time{}, fmt.Errorf("failed to write the prompt: %w", err)
+				return time.Time{}, errfmt.Errorf("failed to write the prompt: %w", err)
 			}
 		}
 		if err := waitPasteTaken(ctx, pane, pastedAt, quiet, maxWait); err != nil {
@@ -208,12 +208,12 @@ func submitPastesStamped(ctx context.Context, pane promptPane, pastes []string, 
 	}
 	if check, ok := ctx.Value(submitGuardKey{}).(func() *verbError); ok && check != nil {
 		if verr := check(); verr != nil {
-			return time.Time{}, fmt.Errorf("the prompt was pasted and not submitted: %w", verr)
+			return time.Time{}, errfmt.Errorf("the prompt was pasted and not submitted: %w", verr)
 		}
 	}
 	submittedAt := time.Now()
 	if _, err := pane.Write([]byte(in.SubmitKey)); err != nil {
-		return time.Time{}, fmt.Errorf("failed to submit the prompt: %w", err)
+		return time.Time{}, errfmt.Errorf("failed to submit the prompt: %w", err)
 	}
 	return submittedAt, nil
 }
@@ -251,7 +251,7 @@ func waitPasteTaken(ctx context.Context, pane promptPane, pastedAt time.Time, qu
 		}
 		select {
 		case <-ctx.Done():
-			return fmt.Errorf("the prompt was pasted and not submitted: %w", ctx.Err())
+			return errfmt.Errorf("the prompt was pasted and not submitted: %w", ctx.Err())
 		case <-ticker.C:
 		}
 	}
@@ -290,7 +290,7 @@ func waitInputLive(ctx context.Context, pane promptPane, in harness.InputProfile
 		}
 		select {
 		case <-ctx.Done():
-			return fmt.Errorf("the prompt was not typed: %w", ctx.Err())
+			return errfmt.Errorf("the prompt was not typed: %w", ctx.Err())
 		case <-ticker.C:
 		}
 	}

@@ -15,6 +15,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
@@ -70,6 +71,9 @@ type tmlClient struct {
 	// whose host keeps the surfaces in the tab. See learn_tml.go. Set once,
 	// before the program runs.
 	local inboxVerbCall
+	// far carries the TML verbs of a session on another machine. See
+	// tml_host.go.
+	far tmlFar
 }
 
 // TMLClockMsg is the minute tick of the surfaces that call ago().
@@ -236,7 +240,7 @@ func (m *OS) tmlResolve(a tmlPaneAction) (tmlPaneAction, string) {
 // command in one folder in one session, and nothing else.
 func (m *OS) tmlConfirmKey(a tmlPaneAction) string {
 	if a.Verb == "new-window" {
-		raw, _ := json.Marshal(map[string]any{"command": a.Params["command"], "cwd": a.Params["cwd"], "name": a.Params["name"], "session": m.tmlActionSession(a)})
+		raw, _ := jsonx.Marshal(map[string]any{"command": a.Params["command"], "cwd": a.Params["cwd"], "name": a.Params["name"], "session": m.tmlActionSession(a)})
 		return a.Verb + "\x00" + string(raw)
 	}
 	return a.Verb + "\x00" + m.tmlActionSession(a) + "\x00" + tmlParam(a, "window")
@@ -569,19 +573,23 @@ func (m *OS) applyTMLSurface(p *session.TMLSurfacePayload) bool {
 }
 
 // DrawsTML reports whether this client draws w as a TML surface: a window of
-// kind tml, on a client of this machine's daemon or in Learn mode, where the
-// tab holds the surfaces. A client attached through a host shows the
-// window's placeholder line, since what the person does on a surface goes
-// back through this machine's socket.
+// kind tml, in Learn mode, where the tab holds the surfaces, or on a client
+// of a daemon that takes what the person does on it. Through a host that is
+// a far daemon with surfaces over a link. A window of an older one says so
+// instead; see renderTMLHostTooOld.
 func (m *OS) DrawsTML(w *terminal.Window) bool {
 	return w != nil && w.Kind == session.WindowKindTML && (m.tml.local != nil || m.DaemonClient != nil && m.DaemonClient.DrawsTML())
 }
 
 // tmlCaller is how the client half reaches the half that holds the
-// surfaces: Learn mode's host when there is one, else the daemon.
+// surfaces: Learn mode's host when there is one, the far daemon over the
+// link for a session on another machine, else this machine's daemon.
 func (m *OS) tmlCaller() inboxVerbCall {
 	if m.tml.local != nil {
 		return m.tml.local
+	}
+	if m.Inbox.call == nil && m.AttachedHost != "" && m.DaemonClient != nil {
+		return m.tml.far.caller(m.DaemonClient, m.verbDialer())
 	}
 	return m.inboxCaller()
 }
@@ -632,7 +640,7 @@ func (m *OS) tmlRefresh(id string) tea.Cmd {
 			Doc        json.RawMessage `json:"doc"`
 			State      json.RawMessage `json:"state"`
 		}
-		if json.Unmarshal(raw, &res) != nil {
+		if jsonx.Unmarshal(raw, &res) != nil {
 			return nil
 		}
 		m.queueTMLSurface(&session.TMLSurfacePayload{Surface: id, WindowID: res.WindowID, Title: res.Title, Owner: res.Owner,
@@ -990,7 +998,7 @@ func (m *OS) tmlViewChange(v *tmlView, changed bool) (json.RawMessage, tea.Cmd) 
 	}
 	view := v.surface.View()
 	view.Text, view.Caret = nil, nil
-	raw, err := json.Marshal(view)
+	raw, err := jsonx.Marshal(view)
 	if err != nil || bytes.Equal(raw, v.sentView) {
 		v.viewDue = false
 		return nil, nil
@@ -1068,7 +1076,7 @@ func tmlStateOps(state map[string]any, changed []string) []tml.Op {
 			ops = append(ops, tml.Op{Op: "remove", Path: p})
 			continue
 		}
-		raw, err := json.Marshal(val)
+		raw, err := jsonx.Marshal(val)
 		if err != nil {
 			continue
 		}
@@ -1168,7 +1176,7 @@ func (m *OS) tmlInput(v *tmlView, r tmlInputReq) tea.Cmd {
 	if r.closing {
 		params["close"] = true
 		if r.hasValue {
-			raw, err := json.Marshal(r.value)
+			raw, err := jsonx.Marshal(r.value)
 			if err != nil {
 				raw = []byte("null")
 			}
@@ -1204,7 +1212,7 @@ func (m *OS) tmlInput(v *tmlView, r tmlInputReq) tea.Cmd {
 				Error string `json:"error"`
 			} `json:"actions"`
 		}
-		if json.Unmarshal(raw, &res) == nil {
+		if jsonx.Unmarshal(raw, &res) == nil {
 			for _, a := range res.Actions {
 				if !a.OK {
 					return TMLActionFailedMsg{Text: "The surface could not run " + a.Verb + ": " + a.Error}

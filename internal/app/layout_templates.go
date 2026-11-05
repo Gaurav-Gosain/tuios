@@ -6,9 +6,12 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
+	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 	"github.com/Gaurav-Gosain/tuios/internal/layout"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 	"github.com/adrg/xdg"
@@ -98,7 +101,7 @@ func SaveLayoutTemplate(name string, m *OS) error {
 		return errLayoutInScratch
 	}
 	if err := ensureTemplatesDir(); err != nil {
-		return fmt.Errorf("create layouts dir: %w", err)
+		return errfmt.Errorf("create layouts dir: %w", err)
 	}
 
 	tmpl := LayoutTemplate{
@@ -146,7 +149,7 @@ func SaveLayoutTemplate(name string, m *OS) error {
 
 	data, err := json.MarshalIndent(tmpl, "", "  ")
 	if err != nil {
-		return fmt.Errorf("marshal: %w", err)
+		return errfmt.Errorf("marshal: %w", err)
 	}
 	return os.WriteFile(templateFilePath(name), data, 0600)
 }
@@ -173,7 +176,7 @@ func LoadLayoutTemplates() ([]LayoutTemplate, error) {
 			continue
 		}
 		var tmpl LayoutTemplate
-		if err := json.Unmarshal(data, &tmpl); err != nil {
+		if err := jsonx.Unmarshal(data, &tmpl); err != nil {
 			continue
 		}
 		templates = append(templates, tmpl)
@@ -216,6 +219,8 @@ func ApplyLayoutTemplate(tmpl LayoutTemplate, m *OS) {
 
 	// Panes whose folder tuios would not type a cd for. See cdLine.
 	refused := 0
+	// The first pane of the layout that is here now, which takes the focus.
+	var first *terminal.Window
 
 	// Assign existing windows to template slots
 	for i, tw := range templateSlots {
@@ -258,6 +263,9 @@ func ApplyLayoutTemplate(tmpl LayoutTemplate, m *OS) {
 		}
 		if win == nil {
 			continue
+		}
+		if first == nil {
+			first = win
 		}
 
 		// Apply scaled positions
@@ -322,8 +330,14 @@ func ApplyLayoutTemplate(tmpl LayoutTemplate, m *OS) {
 		m.ClampWindowsToView()
 	}
 
-	if len(m.Windows) > 0 {
-		m.FocusWindow(0)
+	// The layout's first pane takes the focus. Window 0 of the session can be
+	// on another workspace, and focusing it switched there. In a daemon
+	// session the new panes are not here yet, and the daemon gives the focus
+	// to the panes it opens, so with no pane here the focus is left alone.
+	if first != nil {
+		if i := slices.Index(m.Windows, first); i >= 0 {
+			m.FocusWindow(i)
+		}
 	}
 
 	m.MarkAllDirty()

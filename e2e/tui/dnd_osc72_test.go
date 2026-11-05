@@ -1,10 +1,13 @@
 package tuie2e
 
 import (
+	"encoding/base64"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -392,6 +395,119 @@ func TestDnDBetweenPanes(t *testing.T) {
 	})
 }
 
+// TestDnDLabelNamesEachPathOfALine drags a text/uri-list that a program wrote
+// by hand, with a raw space in a line ("file:///t/x /t/y"), as a program may.
+// The drop reads such a line as two paths, so the label has to name both, and
+// the person's screen has to stay theirs: the label is drawn while the drag
+// is in flight, and on the desktop route the same names are the drag image
+// the terminal shows.
+//
+// How this could pass wrongly, written down first:
+//   - the names could come from the files on disk, not from the list the
+//     program sent ahead. The paths under /t do not exist; the peer sends the
+//     list as given (DNDPEER_URILIST), and no FILE argument names them.
+//   - the label could be read off a frame drawn before the drag. It names
+//     the pane it comes from ("from "), which only the drag label does.
+//   - the desktop drag could start with no image of tuios's own. The image
+//     the client writes ahead of the start is decoded and must name both
+//     paths.
+//
+// Negative control: with the label naming one entry a line again, the label
+// never shows, the crash overlay does, and the desktop drag never starts.
+// See NEGATIVE_CONTROLS.md.
+func TestDnDLabelNamesEachPathOfALine(t *testing.T) {
+	bin := buildDnDPeer(t)
+
+	for _, tc := range []struct {
+		name, list, label, paste string
+	}{
+		{"a line with a space names both paths", "file:///t/x /t/y", "x, y from ", "\x1b[200~/t/x /t/y \x1b[201~"},
+		{"a line with a space after a plain line", "file:///t/a|file:///t/b /t/c", "a, b, c from ", "\x1b[200~/t/a /t/b /t/c \x1b[201~"},
+		{"a blank line between two paths", "file:///t/a| |file:///t/b", "a, b from ", "\x1b[200~/t/a /t/b \x1b[201~"},
+		{"one path a line names each", "file:///t/a|file:///t/b", "a, b from ", "\x1b[200~/t/a /t/b \x1b[201~"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			term, base, session, left, right := dndBoard(t)
+			dir := t.TempDir()
+			srcLog, out := filepath.Join(dir, "source.log"), filepath.Join(dir, "pasted")
+			runInPane(t, base, session, right, readerPane(out), "SINKREADY")
+			runInPane(t, base, session, left, peerSource(bin, srcLog, "DNDPEER_URILIST='"+tc.list+"' "), "DNDPEER-READY")
+
+			toX, toY := right.X+right.Width/2, right.Y+right.Height/2
+			dragAcross(t, term, left.X+4, left.Y+5, toX, toY, artifactDir(t))
+			deadline := time.Now().Add(uiTimeout)
+			for {
+				s := term.Screen().Text()
+				if strings.Contains(s, tc.label) {
+					if strings.Contains(s, "tuios hit a bug") {
+						t.Errorf("the crash overlay is on screen beside the label\n%s", term.Snapshot())
+					}
+					break
+				}
+				if time.Now().After(deadline) {
+					t.Errorf("the drag label never said %q mid-drag\n%s", tc.label, term.Snapshot())
+					break
+				}
+				time.Sleep(50 * time.Millisecond)
+			}
+
+			dropAt(t, term, toX, toY)
+			pasted := waitFile(t, out, func(s string) bool { return strings.Contains(s, "\x1b[201~") }, "the pane never got the paste")
+			if pasted != tc.paste {
+				t.Errorf("the pane got %q, want %q", pasted, tc.paste)
+			}
+			if s := term.Screen().Text(); strings.Contains(s, "tuios hit a bug") {
+				t.Errorf("the crash overlay is on screen after the drop\n%s", term.Snapshot())
+			}
+		})
+	}
+
+	t.Run("a line with a space starts the desktop drag", func(t *testing.T) {
+		// The emulated terminal of TestDnDBridgeWithAnEmulatedTerminal: the
+		// test answers the probe and sends the gesture as kitty would.
+		term, base, session, left, _ := dndBoardWith(t, deskConfig)
+		srcLog := filepath.Join(t.TempDir(), "source.log")
+		waitHostWrote(t, term, osc72("t=q"), "the probe")
+		if err := term.Type(osc72("t=q")); err != nil {
+			t.Fatal(err)
+		}
+		waitHostWrote(t, term, "\x1b]72;t=o:x=1", "the registration")
+		runInPane(t, base, session, left, peerSource(bin, srcLog, "DNDPEER_URILIST='file:///t/x /t/y' "), "DNDPEER-READY")
+
+		fromX, fromY := left.X+4, left.Y+5
+		dndMouse(t, term, "press", tuitest.MousePress, fromX, fromY)
+		if err := term.Type(osc72(fmt.Sprintf("t=o:x=%d:y=%d", fromX+2, fromY))); err != nil {
+			t.Fatal(err)
+		}
+		waitHostWrote(t, term, "\x1b]72;t=P", "the start of the desktop drag")
+		art := artifactDir(t)
+		saveArtifact(t, term, art, "started")
+		if err := os.WriteFile(filepath.Join(art, "host-wrote.txt"), []byte(hostWrote(term)), 0o644); err != nil {
+			t.Errorf("save host-wrote: %v", err)
+		}
+
+		// The drag image the client wrote ahead of the start: t=p with x=-1,
+		// base64 in chunks.
+		wrote := hostWrote(term)
+		var enc strings.Builder
+		for msg := range strings.SplitSeq(wrote[:strings.Index(wrote, "\x1b]72;t=P")], "\x1b]72;") {
+			msg, _, _ = strings.Cut(msg, "\x1b\\")
+			meta, payload, _ := strings.Cut(msg, ";")
+			keys := strings.Split(meta, ":")
+			if slices.Contains(keys, "t=p") && slices.Contains(keys, "x=-1") {
+				enc.WriteString(payload)
+			}
+		}
+		image, err := base64.RawStdEncoding.DecodeString(strings.TrimRight(enc.String(), "="))
+		if err != nil || !strings.Contains(string(image), "x, y from ") {
+			t.Errorf("the drag image is %q (%v), want it to name x, y from the pane", image, err)
+		}
+		if s := term.Screen().Text(); strings.Contains(s, "tuios hit a bug") {
+			t.Errorf("the crash overlay is on screen\n%s", term.Snapshot())
+		}
+	})
+}
+
 // TestDnDRealPrograms runs yazi as the source and the dnd kitten, then a plain
 // reader, as the target. It needs the binaries, named by TUIOS_E2E_YAZI and
 // TUIOS_E2E_KITTEN, and skips without them: neither is a dependency of the
@@ -757,4 +873,104 @@ func TestDnDRefusesAPaneHostedElsewhere(t *testing.T) {
 	if n := strings.Count(farOut, "recv t=q"); n != 0 {
 		t.Errorf("the hosted program got %d answers to its query, want none:\n%s", n, farOut)
 	}
+}
+
+// TestDnDRegistrationEndsWithItsProgram: a program killed without taking its
+// registration back leaves its pane to whatever runs there next. A reader
+// started in that pane gets a drop as a paste, as any pane without the
+// protocol does, from the client that saw the program register and from a
+// client that attached after it died.
+//
+// How this could pass wrongly, written down first:
+//   - the program could have unregistered after all. It is killed with
+//     SIGKILL, which it cannot catch, and the peer only unregisters on q.
+//   - the paste could come from the reader being a new program the client
+//     somehow told apart. The reader never speaks the protocol; it is the
+//     dead peer's group, not the reader, that ends the registration.
+//   - the late client could take nothing because the daemon never had the
+//     registration. TestDnDRegistrationOutlivesTheClient shows a late client
+//     takes it, and the control on the daemon's check fails this subtest.
+//
+// Negative controls: with dndSweep returning at once, the first subtest
+// fails: the reader gets protocol messages and no paste. With the liveness
+// check in the daemon's fact() cut, the second fails the same way. See
+// NEGATIVE_CONTROLS.md.
+func TestDnDRegistrationEndsWithItsProgram(t *testing.T) {
+	bin := buildDnDPeer(t)
+
+	// doomed starts a target peer in pane whose pid is written to a file, so
+	// the test can kill it, and returns that file.
+	doomed := func(t *testing.T, base, session string, pane winRect, dir string) string {
+		t.Helper()
+		pidFile := filepath.Join(dir, "target.pid")
+		runInPane(t, base, session, pane,
+			"sh -c 'echo $$ > "+pidFile+"; stty raw -echo; exec "+bin+" target "+filepath.Join(dir, "target.log")+"'", "DNDPEER-READY")
+		waitFile(t, pidFile, func(s string) bool { return strings.TrimSpace(s) != "" }, "the target never wrote its pid")
+		return pidFile
+	}
+	kill := func(t *testing.T, pidFile string) {
+		t.Helper()
+		b, _ := os.ReadFile(pidFile)
+		pid, err := strconv.Atoi(strings.TrimSpace(string(b)))
+		if err != nil {
+			t.Fatalf("pid file holds %q", b)
+		}
+		proc, err := os.FindProcess(pid)
+		if err == nil {
+			err = proc.Kill()
+		}
+		if err != nil {
+			t.Fatalf("kill the target: %v", err)
+		}
+	}
+	// dropOnReader starts a reader in the pane the dead peer held, drags a
+	// file from the source on the left onto it and returns what it read.
+	dropOnReader := func(t *testing.T, term *tuitest.Terminal, base, session string, left, right winRect, dir string) string {
+		t.Helper()
+		out := filepath.Join(dir, "pasted")
+		runInPane(t, base, session, right, "stty sane; "+readerPane(out), "SINKREADY")
+		toX, toY := right.X+right.Width/2, right.Y+right.Height/2
+		dragAcross(t, term, left.X+4, left.Y+5, toX, toY, artifactDir(t))
+		dropAt(t, term, toX, toY)
+		return waitFile(t, out, func(s string) bool { return strings.Contains(s, "\x1b[201~") || strings.Contains(s, "\x1b]72;") }, "the reader got nothing")
+	}
+
+	t.Run("the client that saw it register", func(t *testing.T) {
+		term, base, session, left, right := dndBoard(t)
+		dir := t.TempDir()
+		file := filepath.Join(dir, "a.txt")
+		if err := os.WriteFile(file, []byte("a"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		pidFile := doomed(t, base, session, right, dir)
+		runInPane(t, base, session, left, peerSource(bin, filepath.Join(dir, "source.log"), "", file), "DNDPEER-READY")
+		kill(t, pidFile)
+		got := dropOnReader(t, term, base, session, left, right, dir)
+		if want := "\x1b[200~" + file + " \x1b[201~"; got != want {
+			t.Errorf("the pane the dead program held got %q, want the paste %q", got, want)
+		}
+	})
+
+	t.Run("a client that attached after it died", func(t *testing.T) {
+		_, base, session, left, right := dndBoard(t)
+		dir := t.TempDir()
+		file := filepath.Join(dir, "a.txt")
+		if err := os.WriteFile(file, []byte("a"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		pidFile := doomed(t, base, session, right, dir)
+		runInPane(t, base, session, left, peerSource(bin, filepath.Join(dir, "source.log"), "", file), "DNDPEER-READY")
+		kill(t, pidFile)
+		time.Sleep(300 * time.Millisecond)
+		term := dndClient(t, base, nil, "attach", session, "-d")
+		if err := term.WaitFor(func(s tuitest.Screen) bool { return countWindows(s) == 2 }, bootTimeout); err != nil {
+			t.Fatalf("the client never showed the two panes: %v\n%s", err, term.Snapshot())
+		}
+		windowManagementMode(t, term)
+		enterTerminalMode(t, term)
+		got := dropOnReader(t, term, base, session, left, right, dir)
+		if want := "\x1b[200~" + file + " \x1b[201~"; got != want {
+			t.Errorf("the pane the dead program held got %q, want the paste %q", got, want)
+		}
+	})
 }

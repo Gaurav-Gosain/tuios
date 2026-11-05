@@ -9,6 +9,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
@@ -255,7 +256,7 @@ func (m *OS) pipCoversCursor(c *tea.Cursor) bool {
 func (m *OS) PinPiP(windowID string) error {
 	i := m.windowIndexByID(windowID)
 	if i < 0 {
-		return fmt.Errorf("no pane has the id %s", windowID)
+		return errfmt.Errorf("no pane has the id %s", windowID)
 	}
 	if prev := m.pipSource(); prev != nil && prev.ID != windowID {
 		m.UnpinPiP()
@@ -326,7 +327,7 @@ func (m *OS) SetPiP(window string, off bool) (pinned bool, windowID string, err 
 	}
 	if window == "" {
 		if m.FocusedWindow < 0 || m.FocusedWindow >= len(m.Windows) {
-			return false, "", fmt.Errorf("no pane has the focus, so name the pane to pin")
+			return false, "", errfmt.Errorf("no pane has the focus, so name the pane to pin")
 		}
 		window = m.Windows[m.FocusedWindow].ID
 	}

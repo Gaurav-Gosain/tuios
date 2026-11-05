@@ -1,12 +1,12 @@
 package app
 
 import (
-	"encoding/json"
 	"os"
 	"path/filepath"
 	"sort"
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/adrg/xdg"
 )
@@ -61,6 +61,9 @@ type sidebarStateFile struct {
 	// agent pane in front of them (Unix nanoseconds): the start of "while you
 	// were away" for that pane.
 	AgentSeenAt map[string]int64 `json:"agent_seen_at,omitempty"`
+	// AgentViewed holds, by window ID, the agent's state-entry time when its
+	// thread was last on screen: the watermark of the unseen mark.
+	AgentViewed map[string]int64 `json:"agent_viewed,omitempty"`
 	// AgentsFilter and AgentsSort are the agents section's two header controls.
 	// Absent means the default ("all" and "priority"), so a file written before
 	// they existed needs no migration.
@@ -78,6 +81,9 @@ type sidebarStateFile struct {
 	// AgentNoticesDismissed lists the integration notices the person
 	// dismissed, by harness, state and version. See agentNoticeKey.
 	AgentNoticesDismissed []string `json:"agent_notices_dismissed,omitempty"`
+	// MachineOffersNever lists the ssh targets the person answered Never
+	// for: tuios does not offer to add them. See machine_offer.go.
+	MachineOffersNever []string `json:"machine_offers_never,omitempty"`
 	// Collapsed is the rail folded to its glyph strip. Absent means expanded,
 	// which is what every file written before the toggle existed says.
 	Collapsed bool `json:"collapsed,omitempty"`
@@ -94,6 +100,12 @@ type sidebarStateFile struct {
 	// group absent here takes its default, which [agents] fold_working sets
 	// for Working.
 	AgentsFolds map[string]bool `json:"agents_folds,omitempty"`
+	// BoardList says the person chose the task board's list over its
+	// columns (B in the agents view).
+	BoardList bool `json:"board_list,omitempty"`
+	// AgentsList is the agents view's list layout the person chose with the
+	// list key, "column" or "strip". Absent means [agents] view_list decides.
+	AgentsList string `json:"agents_list,omitempty"`
 	// HostsOrder is the user's drag-defined order of the other machines' groups
 	// in the sessions section, and HostsCollapsed names the machines whose
 	// group is folded shut, sorted for the same reason ReposCollapsed is.
@@ -121,7 +133,7 @@ func (m *OS) loadSidebarState() {
 		return
 	}
 	var st sidebarStateFile
-	if json.Unmarshal(data, &st) != nil {
+	if jsonx.Unmarshal(data, &st) != nil {
 		return
 	}
 	if len(st.Order) > 0 {
@@ -139,14 +151,27 @@ func (m *OS) loadSidebarState() {
 	if len(st.AgentSeenAt) > 0 {
 		m.SidebarAgentSeenAt = st.AgentSeenAt
 	}
+	if len(st.AgentViewed) > 0 {
+		m.SidebarAgentViewed = st.AgentViewed
+	}
 	m.SidebarAgentFilter, m.SidebarAgentSort = st.AgentsFilter, st.AgentsSort
 	m.SidebarAgentsSeen = st.AgentsSeen
 	m.Inbox.ck.spawnPreset = st.SpawnPreset
 	m.Inbox.ck.ckFoldsFromFile(st.AgentsFolds)
+	m.Inbox.ck.boardList = st.BoardList
+	if st.AgentsList == config.AgentsViewListColumn || st.AgentsList == config.AgentsViewListStrip {
+		m.Inbox.ck.listMode = st.AgentsList
+	}
 	if len(st.AgentNoticesDismissed) > 0 {
 		m.agentNoticesDismissed = make(map[string]bool, len(st.AgentNoticesDismissed))
 		for _, k := range st.AgentNoticesDismissed {
 			m.agentNoticesDismissed[k] = true
+		}
+	}
+	if len(st.MachineOffersNever) > 0 {
+		m.machineOffersNever = make(map[string]bool, len(st.MachineOffersNever))
+		for _, k := range st.MachineOffersNever {
+			m.machineOffersNever[k] = true
 		}
 	}
 	m.SidebarCollapsed = st.Collapsed
@@ -206,12 +231,21 @@ func (m *OS) saveSidebarState() {
 	// stored a dismissal would write its own older set over it.
 	if data, err := os.ReadFile(filepath.Join(dir, sidebarStateFileName)); err == nil {
 		var disk sidebarStateFile
-		if json.Unmarshal(data, &disk) == nil {
+		if jsonx.Unmarshal(data, &disk) == nil {
 			for _, k := range disk.AgentNoticesDismissed {
 				if m.agentNoticesDismissed == nil {
 					m.agentNoticesDismissed = map[string]bool{}
 				}
 				m.agentNoticesDismissed[k] = true
+			}
+			for _, k := range disk.MachineOffersNever {
+				if m.machineOffersRemoved[k] {
+					continue
+				}
+				if m.machineOffersNever == nil {
+					m.machineOffersNever = map[string]bool{}
+				}
+				m.machineOffersNever[k] = true
 			}
 		}
 	}
@@ -220,7 +254,7 @@ func (m *OS) saveSidebarState() {
 	// nobody had dragged made it look like a choice on the next load, so a
 	// change to the shipped width never reached a rail that had saved any state
 	// at all.
-	data, err := json.Marshal(sidebarStateFile{
+	data, err := jsonx.Marshal(sidebarStateFile{
 		Order:                 m.SidebarOrder,
 		Width:                 m.SidebarWidthPref,
 		DragWidth:             true,
@@ -229,12 +263,16 @@ func (m *OS) saveSidebarState() {
 		AgentSeen:             m.SidebarAgentSeen,
 		AgentSeenSeq:          m.SidebarAgentSeenSeq,
 		AgentSeenAt:           m.SidebarAgentSeenAt,
+		AgentViewed:           m.SidebarAgentViewed,
 		AgentsFilter:          m.SidebarAgentFilter,
 		AgentsSort:            m.SidebarAgentSort,
 		AgentsSeen:            m.SidebarAgentsSeen,
 		SpawnPreset:           m.Inbox.ck.spawnPreset,
 		AgentsFolds:           m.Inbox.ck.ckFoldsToFile(),
+		BoardList:             m.Inbox.ck.boardList,
+		AgentsList:            m.Inbox.ck.listMode,
 		AgentNoticesDismissed: collapsedRepoList(m.agentNoticesDismissed),
+		MachineOffersNever:    collapsedRepoList(m.machineOffersNever),
 		Collapsed:             m.SidebarCollapsed,
 		SectionSplit:          m.SidebarSectionSplit,
 		ReposCollapsed:        collapsedRepoList(m.SidebarCollapsedRepos),
@@ -290,7 +328,7 @@ func (m *OS) ownsSidebarState() bool {
 // every start; the rail's signature folds every unread bit on every frame, so
 // the map's size is also a per-frame cost.
 func (m *OS) pruneWindowKeyedState() {
-	if len(m.SidebarAccents) == 0 && len(m.SidebarAgentSeen) == 0 && len(m.SidebarAgentSeenSeq) == 0 && len(m.SidebarAgentSeenAt) == 0 {
+	if len(m.SidebarAccents) == 0 && len(m.SidebarAgentSeen) == 0 && len(m.SidebarAgentSeenSeq) == 0 && len(m.SidebarAgentSeenAt) == 0 && len(m.SidebarAgentViewed) == 0 {
 		return
 	}
 	known, ok := m.knownWindowIDs()
@@ -319,6 +357,12 @@ func (m *OS) pruneWindowKeyedState() {
 	for id := range m.SidebarAgentSeenAt {
 		if !known[id] {
 			delete(m.SidebarAgentSeenAt, id)
+			changed = true
+		}
+	}
+	for id := range m.SidebarAgentViewed {
+		if !known[id] {
+			delete(m.SidebarAgentViewed, id)
 			changed = true
 		}
 	}

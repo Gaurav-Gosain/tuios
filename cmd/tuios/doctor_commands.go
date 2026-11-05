@@ -10,6 +10,7 @@ import (
 
 	"github.com/Gaurav-Gosain/tuios/internal/harness"
 	"github.com/Gaurav-Gosain/tuios/internal/integration"
+	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/spf13/cobra"
 )
@@ -22,7 +23,7 @@ func newDoctorCommand() *cobra.Command {
 
 'tuios keybinds doctor' checks the keybindings. The checks here cover the rest.`,
 	}
-	cmd.AddCommand(newDoctorAgentsCommand(), newDoctorShellCommand())
+	cmd.AddCommand(newDoctorAgentsCommand(), newDoctorShellCommand(), newDoctorKeepAwakeCommand())
 	return cmd
 }
 
@@ -153,7 +154,7 @@ func livePanes() ([]agentPane, bool) {
 			Name string `json:"name"`
 		} `json:"sessions"`
 	}
-	if json.Unmarshal(raw, &sessions) != nil {
+	if jsonx.Unmarshal(raw, &sessions) != nil {
 		return nil, true
 	}
 	var out []agentPane
@@ -169,7 +170,7 @@ func livePanes() ([]agentPane, bool) {
 				Harness  string `json:"harness_id"`
 			} `json:"agents"`
 		}
-		if json.Unmarshal(raw, &res) != nil {
+		if jsonx.Unmarshal(raw, &res) != nil {
 			continue
 		}
 		remote, ok := remoteWindows(client, s.Name)
@@ -205,7 +206,7 @@ func remoteWindows(client *session.VerbClient, sessionName string) (map[string]b
 			Host string `json:"host"`
 		} `json:"windows"`
 	}
-	if json.Unmarshal(raw, &res) != nil {
+	if jsonx.Unmarshal(raw, &res) != nil {
 		return nil, false
 	}
 	out := map[string]bool{}

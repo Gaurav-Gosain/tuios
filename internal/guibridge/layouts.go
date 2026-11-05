@@ -2,10 +2,10 @@ package guibridge
 
 import (
 	"errors"
-	"fmt"
 	"strings"
 
 	"github.com/Gaurav-Gosain/tuios/internal/app"
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 )
 
 // Saved layouts: tuios's layout templates (Save layout, Load layout), for
@@ -72,7 +72,7 @@ func (m *model) layoutTemplate(op, name string) error {
 				return nil
 			}
 		}
-		return fmt.Errorf("no saved layout %q", name)
+		return errfmt.Errorf("no saved layout %q", name)
 	}
-	return fmt.Errorf("%s is not a layout command", op)
+	return errfmt.Errorf("%s is not a layout command", op)
 }

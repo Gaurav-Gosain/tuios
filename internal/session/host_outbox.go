@@ -12,6 +12,7 @@ import (
 
 	"github.com/Gaurav-Gosain/tuios/internal/atomicfile"
 	"github.com/Gaurav-Gosain/tuios/internal/federation"
+	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 	"github.com/Gaurav-Gosain/tuios/internal/plural"
 )
 
@@ -174,7 +175,7 @@ func outboxPath() string {
 func (o *hostOutbox) load(path string) {
 	var f outboxFile
 	if data, err := os.ReadFile(path); err == nil {
-		if err := json.Unmarshal(data, &f); err != nil || f.Version != 1 {
+		if err := jsonx.Unmarshal(data, &f); err != nil || f.Version != 1 {
 			LogError("Discarding the saved outbox, it could not be read: %v", err)
 			f = outboxFile{}
 		}
@@ -218,7 +219,7 @@ func (o *hostOutbox) saveLocked() {
 		return
 	}
 	f := outboxFile{Version: 1, NextID: o.nextID, Entries: o.entries, Failures: o.failures}
-	data, err := json.Marshal(f)
+	data, err := jsonx.Marshal(f)
 	if err != nil {
 		return
 	}
@@ -458,7 +459,7 @@ func (d *Daemon) sendAgentMessageToHost(cs *connState, host, sessionName, to, fr
 		return nil, humanForbiddenError("send-agent-message")
 	}
 	var fields map[string]json.RawMessage
-	if err := json.Unmarshal(params, &fields); err != nil {
+	if err := jsonx.Unmarshal(params, &fields); err != nil {
 		return nil, newVerbError(ErrVerbInvalidParams, "params: "+err.Error())
 	}
 	delete(fields, "host")
@@ -466,7 +467,7 @@ func (d *Daemon) sendAgentMessageToHost(cs *connState, host, sessionName, to, fr
 	if self := linkSelfName(d.hostedPaneHostName()); self != "" {
 		fields["from_host"] = mustJSON(self)
 	}
-	out, err := json.Marshal(fields)
+	out, err := jsonx.Marshal(fields)
 	if err != nil {
 		return nil, newVerbError(ErrVerbInternal, "could not encode the message")
 	}
@@ -482,7 +483,7 @@ func (d *Daemon) sendAgentMessageToHost(cs *connState, host, sessionName, to, fr
 	switch {
 	case err == nil:
 		var res map[string]any
-		if json.Unmarshal(raw, &res) != nil {
+		if jsonx.Unmarshal(raw, &res) != nil {
 			res = map[string]any{"type": "agent_message_sent"}
 		}
 		res["host"] = host

@@ -1,10 +1,11 @@
 package harness
 
 import (
-	"fmt"
 	"regexp"
 	"strings"
 	"unicode"
+
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 )
 
 // Drafts: whether the person has text waiting in the agent's input box.
@@ -43,19 +44,19 @@ type BoxRule struct {
 func (b *BoxRule) check(lines int, screenOn bool) error {
 	if len(b.Empty) == 0 {
 		if strings.TrimSpace(b.Region) != "" {
-			return fmt.Errorf("region without empty patterns")
+			return errfmt.Errorf("region without empty patterns")
 		}
 		return nil
 	}
 	if !screenOn {
-		return fmt.Errorf("needs [screen] enabled, which reads the box")
+		return errfmt.Errorf("needs [screen] enabled, which reads the box")
 	}
 	region, bottom, err := normalizeScreenRegion(b.Region)
 	if err != nil {
 		return err
 	}
 	if bottom > lines {
-		return fmt.Errorf("region %s reads past the %d lines the manifest reads; raise [screen] lines", region, lines)
+		return errfmt.Errorf("region %s reads past the %d lines the manifest reads; raise [screen] lines", region, lines)
 	}
 	b.Region = region
 	res, err := compilePatterns(b.Empty)

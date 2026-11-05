@@ -6,7 +6,6 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"errors"
-	"fmt"
 	"io"
 	"net"
 	"os"
@@ -17,6 +16,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 )
 
@@ -106,7 +106,7 @@ const (
 
 // errClipboardTooLarge is a clipboard image over the paste limit. The tool
 // that was writing it is killed, and nothing past the limit is read.
-var errClipboardTooLarge = fmt.Errorf("the image is larger than %d MB", session.PasteImageMaxBytes>>20)
+var errClipboardTooLarge = errfmt.Errorf("the image is larger than %d MB", session.PasteImageMaxBytes>>20)
 
 // runClipTool runs one helper and returns at most limit bytes of its output.
 //
@@ -160,7 +160,7 @@ func runClipTool(ctx context.Context, limit int64, name string, args ...string) 
 		return nil, rerr
 	case werr != nil:
 		if msg := strings.TrimSpace(cmd.Stderr.(*capWriter).String()); msg != "" {
-			return nil, fmt.Errorf("%w: %s", werr, msg)
+			return nil, errfmt.Errorf("%w: %s", werr, msg)
 		}
 		return nil, werr
 	}

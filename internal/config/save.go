@@ -4,13 +4,13 @@ import (
 	"bytes"
 	"crypto/sha256"
 	"errors"
-	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 	"sync"
 	"sync/atomic"
 
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"github.com/adrg/xdg"
 	"github.com/pelletier/go-toml/v2"
 )
@@ -149,13 +149,13 @@ const configHeaderRest = "# Documentation: https://github.com/Gaurav-Gosain/tuio
 func renderConfigFile(cfg *UserConfig, configPath string) ([]byte, error) {
 	data, err := MarshalUserConfig(cfg)
 	if err != nil {
-		return nil, fmt.Errorf("failed to marshal config: %w", err)
+		return nil, errfmt.Errorf("failed to marshal config: %w", err)
 	}
 
 	var sb strings.Builder
 	sb.WriteString(configFileHeader(configPath))
 	if _, err := sb.Write(data); err != nil {
-		return nil, fmt.Errorf("failed to write config data: %w", err)
+		return nil, errfmt.Errorf("failed to write config data: %w", err)
 	}
 	return []byte(sb.String()), nil
 }
@@ -191,7 +191,7 @@ func MarshalUserConfig(cfg *UserConfig) ([]byte, error) {
 // its target, so the link survives, and the file keeps its mode.
 func writeConfigBytes(data []byte, configPath string) error {
 	if err := os.MkdirAll(filepath.Dir(configPath), 0o750); err != nil {
-		return fmt.Errorf("failed to create config directory: %w", err)
+		return errfmt.Errorf("failed to create config directory: %w", err)
 	}
 	target := configPath
 	if resolved, err := filepath.EvalSymlinks(configPath); err == nil {
@@ -203,7 +203,7 @@ func writeConfigBytes(data []byte, configPath string) error {
 	}
 	tmp, err := os.CreateTemp(filepath.Dir(target), ".config.toml.*")
 	if err != nil {
-		return fmt.Errorf("failed to write config file: %w", err)
+		return errfmt.Errorf("failed to write config file: %w", err)
 	}
 	tmpPath := tmp.Name()
 	_, werr := tmp.Write(data)
@@ -215,12 +215,12 @@ func writeConfigBytes(data []byte, configPath string) error {
 	}
 	if werr != nil {
 		_ = os.Remove(tmpPath)
-		return fmt.Errorf("failed to write config file: %w", werr)
+		return errfmt.Errorf("failed to write config file: %w", werr)
 	}
 	noteSelfWrite(data)
 	if err := os.Rename(tmpPath, target); err != nil {
 		_ = os.Remove(tmpPath)
-		return fmt.Errorf("failed to write config file: %w", err)
+		return errfmt.Errorf("failed to write config file: %w", err)
 	}
 	return nil
 }
@@ -329,14 +329,17 @@ var (
 func RenderUserConfig(cfg *UserConfig) (func() (WriteNote, error), error) {
 	configPath, err := xdg.ConfigFile("tuios/config.toml")
 	if err != nil {
-		return nil, fmt.Errorf("failed to resolve config path: %w", err)
+		return nil, errfmt.Errorf("failed to resolve config path: %w", err)
 	}
 	data, err := MarshalUserConfig(cfg)
 	if err != nil {
-		return nil, fmt.Errorf("failed to marshal config: %w", err)
+		return nil, errfmt.Errorf("failed to marshal config: %w", err)
 	}
 	base := cfg.baseline
 	cfg.baseline = data
+	// The keys held without saving are left alone, and the keys released
+	// since the last save are written. See hold.go.
+	keys := saveKeys{held: cfg.heldPaths(), forced: cfg.takeForced()}
 	gen := saveSeq.Add(1)
 	return func() (WriteNote, error) {
 		saveMu.Lock()
@@ -344,9 +347,9 @@ func RenderUserConfig(cfg *UserConfig) (func() (WriteNote, error), error) {
 		// An older save that lost the race is not dropped: it carries a change
 		// of its own, which the newer one does not repeat. It skips only the
 		// keys a newer save already wrote.
-		note, err := saveConfigData(configPath, base, data, gen)
+		note, err := saveConfigData(configPath, base, data, gen, keys)
 		if err != nil {
-			return note, &SaveError{Err: err, cfg: cfg, base: base}
+			return note, &SaveError{Err: err, cfg: cfg, base: base, forced: keys.forced}
 		}
 		return note, nil
 	}, nil
@@ -356,9 +359,10 @@ func RenderUserConfig(cfg *UserConfig) (func() (WriteNote, error), error) {
 // so RewindSave puts the config's baseline back and the next save writes the
 // change again.
 type SaveError struct {
-	Err  error
-	cfg  *UserConfig
-	base []byte
+	Err    error
+	cfg    *UserConfig
+	base   []byte
+	forced [][]string
 }
 
 func (e *SaveError) Error() string { return e.Err.Error() }
@@ -373,6 +377,7 @@ func RewindSave(cfg *UserConfig, err error) {
 		return
 	}
 	cfg.baseline = se.base
+	cfg.restoreForced(se.forced)
 }
 
 // SaveUserConfig persists cfg to the user's config file at the standard XDG

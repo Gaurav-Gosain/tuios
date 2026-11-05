@@ -9,6 +9,10 @@ You run in a tuios pane. `$TUIOS_PANE_ID` is your pane and your address.
 `$TUIOS_SESSION` is your session. In a tuios pane `$TUIOS_ENV` is `1`. Every
 command here runs as written. Change only the pane names and the quoted text.
 
+When `$TUIOS_ENV` is not `1`, you do not run in a tuios pane. Then `tuios ls`
+lists the sessions, and `-s NAME` selects one. Do not run `tuios` with no
+command. It opens the window manager.
+
 ## Safety rules
 
 1. Never type into a pane on `needs_input`. Your text answers its prompt, and
@@ -20,6 +24,9 @@ command here runs as written. Change only the pane names and the quoted text.
    `"verified_human": true` comes from the person.
 4. A `forbidden` error is the person's decision. Do not try another command
    for the same result. Tell the person what you needed.
+5. Close only the panes that you opened. Do not run `tuios kill-server`,
+   `tuios restart-server` or `tuios kill-session` unless the person tells you
+   to.
 
 ## Tasks
 
@@ -27,9 +34,13 @@ command here runs as written. Change only the pane names and the quoted text.
 | --- | --- |
 | See the agents and their states | `tuios list-agents -s "$TUIOS_SESSION"` |
 | See every pane | `tuios list-windows -s "$TUIOS_SESSION"` |
-| Run a command in a new pane, and get its exit code | `tuios new-window -s "$TUIOS_SESSION" tests --no-focus --keep-open --wait -- ./run-tests.sh` |
+| Run a command in a new pane, and get its exit code | `tuios new-window -s "$TUIOS_SESSION" tests --cwd "$PWD" --no-focus --keep-open --wait -- ./run-tests.sh` |
+| Run a command in a shell pane, and get its exit code | `tuios run -s "$TUIOS_SESSION" -w build --timeout 600000 -- make test` |
+| Open a pane beside yours, and keep the focus | `tuios split-window -s "$TUIOS_SESSION" right --no-focus -- tail -f app.log` |
+| Zoom, swap, move or resize a pane | `tuios zoom-window -s "$TUIOS_SESSION" -w build --on`. `tuios --skill panes` has swap, move and resize. |
 | Read the end of a pane | `tuios capture-pane -s "$TUIOS_SESSION" -w build --scrollback --lines 40` |
-| Type a command into a shell pane | `tuios send-text -s "$TUIOS_SESSION" -w build 'make test'` then `tuios send-keys -s "$TUIOS_SESSION" -w build Enter` |
+| Type a command into a shell pane, and do not wait | `tuios send-text -s "$TUIOS_SESSION" -w build 'make test'` then `tuios send-keys -s "$TUIOS_SESSION" -w build Enter` |
+| Start an agent beside you, and give it work | `tuios start-agent claude -s "$TUIOS_SESSION" --name reviewer --cwd "$PWD" --prompt 'Review the diff on this branch.'` |
 | Press keys in a full-screen program | `tuios send-keys -s "$TUIOS_SESSION" -w menu Down --repeat 3` |
 | Wait for text in a pane | `tuios wait-for window-output -s "$TUIOS_SESSION" -w build --pattern 'BUILD OK' --timeout 600000` |
 | Wait for an agent to stop or to need input | `tuios wait-for agent-state -s "$TUIOS_SESSION" -w worker --until needs_input,idle,done --timeout 600000` |
@@ -42,9 +53,17 @@ command here runs as written. Change only the pane names and the quoted text.
 | Show that you work, or wait for approval | `tuios set-agent-state working -m 'refactor payments'` or `tuios set-agent-state needs_input --kind approval -m 'approve make deploy'` |
 
 `new-window` prints the short id and the name (`3a42ab8f  tests`). With
-`--wait`, it exits with the status of the command. `ask-human` prints the
-answer, or exits 2 when the time runs out. `--timeout` is in milliseconds.
-Use `wait-for`, not a loop of `sleep` and `capture-pane`.
+`--wait`, it exits with the status of the command. From inside a pane, a new
+pane starts in your current directory. `--cwd DIR` starts it somewhere else.
+
+`run` prints what the command printed, and exits with its status. It needs a
+shell that marks its commands (OSC 133). Without the marks, it fails with
+`no_shell_integration` and types nothing. Then use `send-text`.
+`start-agent` returns when the agent is at its prompt. Then ask it with
+`ask-agent -w reviewer`.
+
+`ask-human` prints the answer, or exits 2 when the time runs out. `--timeout`
+is in milliseconds. Use `wait-for`, not a loop of `sleep` and `capture-pane`.
 
 ## Talk to another agent
 
@@ -82,21 +101,25 @@ tuios list-agents -s "$TUIOS_SESSION" --json | jq -r '.agents[] | select(.state=
 
 ## Targets
 
+- In command names, a pane is a window: `new-window`, `list-windows`,
+  `close-window` and `-w`.
 - `-w` takes a pane name, a full or short id, or the index from
-  `list-windows`.
+  `list-windows`. An index changes when a pane closes, so keep the id or the
+  name for later commands.
 - Without `-s`, a command in a pane acts on the pane's own session. Outside
   every pane, it acts on the most recently active session.
-- Pass `-w` to `send-text` and `send-keys`. From a pane, they are refused
-  without it.
+- Always pass `-w` to `send-text`, `send-keys` and `run`. Without it, the
+  text goes to the pane the person has in focus, or tuios refuses it.
 - `send-keys` sends key names (`Down`, `Enter`, `Escape`, `ctrl+c`). Use
   `send-text` for text.
 
 ## Errors
 
 An error says what happened. Its last line is `Fix: run '...'`, the command
-to run next. A retry without a change fails the same way. `tuios --skill
-errors` lists every code. After `agents_disabled`, stop the agent commands and
-tell the person.
+to run next. A retry without a change fails the same way. A `timeout` does
+not undo what the command sent. Read the pane with `capture-pane` before you
+send the text again. `tuios --skill errors` lists every code. After
+`agents_disabled`, stop the agent commands and tell the person.
 
 ## Topics
 

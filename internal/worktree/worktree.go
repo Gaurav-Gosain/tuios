@@ -20,13 +20,13 @@ import (
 	"bytes"
 	"context"
 	"errors"
-	"fmt"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
 
 	"github.com/Gaurav-Gosain/tuios/internal/childproc"
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 
 	"github.com/Gaurav-Gosain/tuios/internal/gitstate"
 	"github.com/Gaurav-Gosain/tuios/internal/lazyre"
@@ -74,6 +74,10 @@ func DetectEither(dir string) (info Info, main, ok bool) {
 	dir = filepath.Clean(dir)
 	if dir == "" || dir == "." {
 		return Info{}, false, false
+	}
+	if r := gitstate.Find(dir); r.JJ {
+		info, ok := jjDetect(r.Root, r.Main)
+		return info, ok && r.Root == r.Main, ok
 	}
 	gitdir, commonDir, root, found := gitstate.Locate(dir)
 	if !found {
@@ -140,7 +144,7 @@ func readHead(gitdir, commonDir, root string) string {
 func Root(dir string) (string, error) {
 	out, err := run(dir, "rev-parse", "--git-common-dir")
 	if err != nil {
-		return "", fmt.Errorf("%s is not inside a git repository: %w", dir, err)
+		return "", errfmt.Errorf("%s is not inside a git repository: %w", dir, err)
 	}
 	common := strings.TrimSpace(out)
 	if !filepath.IsAbs(common) {
@@ -181,7 +185,7 @@ func ValidBranch(name string) error {
 	}
 	cmd := childproc.Git(context.Background(), "", "check-ref-format", "--branch", name)
 	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("%q is not a valid branch name", name)
+		return errfmt.Errorf("%q is not a valid branch name", name)
 	}
 	return nil
 }
@@ -200,7 +204,7 @@ func BranchExists(repoRoot, branch string) bool {
 // is already there is somebody's, and git would refuse it too.
 func Add(repoRoot, path, branch, base string) (created bool, err error) {
 	if _, err := os.Lstat(path); err == nil {
-		return false, fmt.Errorf("%s already exists", path)
+		return false, errfmt.Errorf("%s already exists", path)
 	}
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil { //nolint:gosec // a folder in the user's own tree, with ordinary permissions
 		return false, err
@@ -214,7 +218,7 @@ func Add(repoRoot, path, branch, base string) (created bool, err error) {
 		return false, nil
 	}
 	if strings.HasPrefix(base, "-") {
-		return false, fmt.Errorf("base %q starts with -, which git would read as an option", base)
+		return false, errfmt.Errorf("base %q starts with -, which git would read as an option", base)
 	}
 	args := []string{"worktree", "add", "-b", branch, "--", path}
 	if base != "" {
@@ -450,7 +454,7 @@ func runEnv(dir string, env []string, args ...string) (string, error) {
 		if msg == "" {
 			msg = err.Error()
 		}
-		return "", fmt.Errorf("git %s: %s", args[0], msg)
+		return "", errfmt.Errorf("git %s: %s", args[0], msg)
 	}
 	return stdout.String(), nil
 }

@@ -3,9 +3,11 @@ package tuie2e
 import (
 	"bufio"
 	"context"
+	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -13,14 +15,18 @@ import (
 
 // These tests hold the scripting surface to what a script reads from it: a
 // subscribe filter naming a type no event has is refused instead of
-// streaming nothing, and close-window closes one pane by name with no client
-// attached.
+// streaming nothing, subscribe --format text --state --once prints one
+// readable line for the first matching state and exits, and close-window
+// closes one pane by name with no client attached.
 //
 // The output of each command is saved under artifactDir.
 //
 // Negative controls (NEGATIVE_CONTROLS.md):
 //   - TestSubscribeRefusesUnknownTypes: the checkEventTypes call cut from
 //     verbSubscribe: subscribe --types window-creted runs and prints nothing.
+//   - TestSubscribeRefusesUnknownTypes, the text half: the --state check in
+//     runSubscribe always true: the idle report prints a line and --once
+//     exits on it, so the line is "working -> idle".
 //   - TestCloseWindowClosesOnePane: the window passed to dialSessionTarget's
 //     params instead of dialTarget, which sends an empty window: the focused
 //     pane, keep, is closed instead of build.
@@ -32,6 +38,20 @@ func startDetached(t *testing.T, base, name string) {
 	if out, err := tuiosCLI(t, base, "new", name, "--detach"); err != nil {
 		t.Fatalf("new %s --detach: %v\n%s", name, err, out)
 	}
+}
+
+// subscribeCmd is a tuios command against the daemon under base, for a
+// test that reads its output while it runs.
+func subscribeCmd(ctx context.Context, t *testing.T, base string, args ...string) *exec.Cmd {
+	t.Helper()
+	pinPreV080Looks(t, base)
+	cmd := exec.CommandContext(ctx, tuiosBin, args...)
+	cmd.Dir = workDirIn(t, base)
+	cmd.Env = append(os.Environ(), "SHELL=/bin/sh")
+	for _, key := range xdgKeys {
+		cmd.Env = append(cmd.Env, key+"="+xdgDir(base, key))
+	}
+	return cmd
 }
 
 // subscribeWithin is splitCLI with a deadline, for a command that may not exit.
@@ -83,13 +103,7 @@ func TestSubscribeRefusesUnknownTypes(t *testing.T) {
 	// The positive half: a real type still streams its event.
 	ctx, cancel := context.WithTimeout(context.Background(), shellTimeout)
 	defer cancel()
-	pinPreV080Looks(t, base)
-	sub := exec.CommandContext(ctx, tuiosBin, "subscribe", "-s", "events", "--types", "window-created", "--count", "1")
-	sub.Dir = workDirIn(t, base)
-	sub.Env = append(os.Environ(), "SHELL=/bin/sh")
-	for _, key := range xdgKeys {
-		sub.Env = append(sub.Env, key+"="+xdgDir(base, key))
-	}
+	sub := subscribeCmd(ctx, t, base, "subscribe", "-s", "events", "--types", "window-created", "--count", "1")
 	pipe, err := sub.StdoutPipe()
 	if err != nil {
 		t.Fatal(err)
@@ -119,6 +133,66 @@ func TestSubscribeRefusesUnknownTypes(t *testing.T) {
 	transcript.WriteString("\n")
 	if !strings.Contains(event, `"type":"window-created"`) {
 		t.Errorf("subscribe --types window-created printed %q, want a window-created event", event)
+	}
+
+	// The text half. The pane reports working before the subscription, then
+	// idle, which --state drops, then needs_input. The one line printed
+	// must name the state the agent came from and the message it gave, and
+	// --once must end the run with status 0.
+	report := func(args ...string) {
+		t.Helper()
+		args = append([]string{"set-agent-state"}, args...)
+		if out, err := tuiosCLI(t, base, append(args, "-s", "events", "-w", "probe")...); err != nil {
+			t.Fatalf("%v: %v\n%s", args, err, out)
+		}
+	}
+	report("working", "-m", "Reading files")
+	textArgs := []string{"subscribe", "-s", "events", "--format", "text", "--state", "needs_input", "--once"}
+	text := subscribeCmd(ctx, t, base, textArgs...)
+	var textOut strings.Builder
+	text.Stdout = &textOut
+	ackPipe, err := text.StderrPipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := text.Start(); err != nil {
+		t.Fatal(err)
+	}
+	// In text mode the ack goes to standard error. The reports come after it.
+	ackLines := bufio.NewScanner(ackPipe)
+	if !ackLines.Scan() || !strings.HasPrefix(ackLines.Text(), "Subscribed at seq ") {
+		t.Fatalf("subscribe --format text did not acknowledge on standard error: %q", ackLines.Text())
+	}
+	textAck := ackLines.Text()
+	report("idle")
+	report("needs_input", "-m", "Allow Bash?")
+	for ackLines.Scan() {
+		textAck += "\n" + ackLines.Text()
+	}
+	if err := ackLines.Err(); err != nil {
+		t.Errorf("read the standard error of subscribe: %v", err)
+	}
+	textErr := text.Wait()
+	for _, part := range []string{"$ tuios ", strings.Join(textArgs, " "), "\n", textOut.String(), "[stderr] ", textAck, "\n"} {
+		transcript.WriteString(part)
+	}
+	if textErr != nil {
+		t.Errorf("subscribe --once did not exit 0 after its event: %v", textErr)
+	}
+	want := regexp.MustCompile(`^\d\d:\d\d:\d\d  events probe  idle -> needs_input  Allow Bash\?\n$`)
+	if !want.MatchString(textOut.String()) {
+		t.Errorf("subscribe --format text printed %q, want one line matching %s", textOut.String(), want)
+	}
+
+	// A --timeout that ends before --once is met fails the run.
+	timeoutArgs := []string{"subscribe", "-s", "events", "--format", "text", "--state", "errored", "--once", "--timeout", "500"}
+	out, errOut, err := subscribeWithin(t, base, uiTimeout, timeoutArgs...)
+	for _, part := range []string{"$ tuios ", strings.Join(timeoutArgs, " "), "\n", out, errOut} {
+		transcript.WriteString(part)
+	}
+	var exit *exec.ExitError
+	if !errors.As(err, &exit) || exit.ExitCode() != 1 || !strings.Contains(errOut, "no event matched in 500 ms") {
+		t.Errorf("subscribe --timeout 500 --once: err %v, stderr %q, want exit 1 and the timeout named", err, errOut)
 	}
 	if err := os.WriteFile(filepath.Join(artifactDir(t), "transcript.txt"), []byte(transcript.String()), 0o644); err != nil {
 		t.Fatal(err)

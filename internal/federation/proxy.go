@@ -45,6 +45,12 @@ func ServeProxyFor(in io.Reader, out io.Writer, dial func(StreamOpen) (net.Conn,
 	return err
 }
 
+// PurposeCloser is a daemon connection that can tell the daemon its stream was
+// closed on purpose by the far side, before the connection ends.
+type PurposeCloser interface {
+	NoteClosedOnPurpose()
+}
+
 // serveStream connects one link stream to one daemon socket connection.
 func serveStream(s *Stream, dial func(StreamOpen) (net.Conn, error)) {
 	defer func() { _ = s.Close() }()
@@ -62,6 +68,15 @@ func serveStream(s *Stream, dial func(StreamOpen) (net.Conn, error)) {
 	go func() {
 		defer close(done)
 		_, _ = io.Copy(conn, s)
+		// The far side closed the stream on purpose, and the daemon hears
+		// that before it sees the end of the connection. A connection that
+		// can say so says it now. One that ends without it ended because the
+		// link dropped, which the daemon treats as a viewer coming back.
+		if s.ClosedByPeer() {
+			if n, ok := conn.(PurposeCloser); ok {
+				n.NoteClosedOnPurpose()
+			}
+		}
 		if cw, ok := conn.(interface{ CloseWrite() error }); ok {
 			_ = cw.CloseWrite()
 		}

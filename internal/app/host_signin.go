@@ -1,7 +1,6 @@
 package app
 
 import (
-	"encoding/json"
 	"errors"
 	"net/url"
 	"strings"
@@ -9,6 +8,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/federation"
+	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 )
 
@@ -214,7 +214,7 @@ func retryHostCmd(host string) tea.Cmd {
 			ApprovalURL     string `json:"approval_url"`
 			ApprovalRefused bool   `json:"approval_refused"`
 		}
-		_ = json.Unmarshal(raw, &res)
+		_ = jsonx.Unmarshal(raw, &res)
 		return hostRetryMsg{Host: host, URL: res.ApprovalURL, Refused: res.ApprovalRefused}
 	}
 }

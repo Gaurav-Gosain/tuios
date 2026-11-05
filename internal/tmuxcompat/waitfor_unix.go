@@ -14,6 +14,8 @@ import (
 	"strings"
 	"syscall"
 	"time"
+
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 )
 
 // wait-for: tmux's channels, between calls of the shim.
@@ -125,7 +127,7 @@ func (s *Shim) waitFor(name string, args []string) (string, []string, error) {
 	}
 	unlock, err := lockChannel(dir)
 	if err != nil {
-		return OutcomeError, nil, fmt.Errorf("wait-for: %w", err)
+		return OutcomeError, nil, errfmt.Errorf("wait-for: %w", err)
 	}
 	woken := filepath.Join(dir, "woken")
 	locked := filepath.Join(dir, "locked")
@@ -145,7 +147,7 @@ func (s *Shim) waitFor(name string, args []string) (string, []string, error) {
 	case p.Has('U'):
 		defer unlock()
 		if _, err := os.Stat(locked); err != nil {
-			return OutcomeError, nil, fmt.Errorf("channel %s not locked", channel)
+			return OutcomeError, nil, errfmt.Errorf("channel %s not locked", channel)
 		}
 		if slices.ContainsFunc(sockets(dir, 'l'), wake) {
 			// The lock passes to that locker and stays taken.
@@ -176,7 +178,7 @@ func block(dir string, kind byte, unlock func()) (string, []string, error) {
 	l, path, err := listenIn(dir, kind)
 	unlock()
 	if err != nil {
-		return OutcomeError, nil, fmt.Errorf("wait-for: %w", err)
+		return OutcomeError, nil, errfmt.Errorf("wait-for: %w", err)
 	}
 	defer func() {
 		_ = l.Close()
@@ -184,7 +186,7 @@ func block(dir string, kind byte, unlock func()) (string, []string, error) {
 	}()
 	c, err := l.Accept()
 	if err != nil {
-		return OutcomeError, nil, fmt.Errorf("wait-for: %w", err)
+		return OutcomeError, nil, errfmt.Errorf("wait-for: %w", err)
 	}
 	_ = c.Close()
 	return OutcomeOK, nil, nil

@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"sync"
 	"time"
+
+	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 )
 
 // A shared server's hooks can name a pane that closed.
@@ -45,7 +47,7 @@ func (d *Daemon) noteSharedServerHook(params json.RawMessage, verr *verbError) {
 		Harness        string `json:"harness"`
 		AgentSessionID string `json:"agent_session_id"`
 	}
-	if json.Unmarshal(params, &p) != nil {
+	if jsonx.Unmarshal(params, &p) != nil {
 		return
 	}
 	reg := d.agentMatcher.registry

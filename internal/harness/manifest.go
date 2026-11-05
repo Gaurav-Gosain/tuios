@@ -11,12 +11,12 @@ package harness
 
 import (
 	"cmp"
-	"fmt"
 	"regexp"
 	"slices"
 	"strings"
 	"unicode"
 
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"github.com/pelletier/go-toml/v2"
 )
 
@@ -346,18 +346,18 @@ const genericNameLimit = 5
 func parseManifest(name string, data []byte) (*Manifest, error) {
 	var m Manifest
 	if err := toml.Unmarshal(data, &m); err != nil {
-		return nil, fmt.Errorf("%s: %w", name, err)
+		return nil, errfmt.Errorf("%s: %w", name, err)
 	}
 	if m.SchemaVersion != SchemaVersion {
-		return nil, fmt.Errorf("%s: schema_version %d, this build understands %d",
+		return nil, errfmt.Errorf("%s: schema_version %d, this build understands %d",
 			name, m.SchemaVersion, SchemaVersion)
 	}
 	if m.ID = strings.TrimSpace(m.ID); m.ID == "" {
-		return nil, fmt.Errorf("%s: no id", name)
+		return nil, errfmt.Errorf("%s: no id", name)
 	}
 	m.Detect.normalize()
 	if !m.Detect.any() {
-		return nil, fmt.Errorf("%s: manifest %q matches nothing", name, m.ID)
+		return nil, errfmt.Errorf("%s: manifest %q matches nothing", name, m.ID)
 	}
 	if err := m.Detect.checkGenericNames(name, m.ID); err != nil {
 		return nil, err
@@ -366,7 +366,7 @@ func parseManifest(name string, data []byte) (*Manifest, error) {
 		m.Screen.Lines = defaultScreenLines
 	}
 	if m.Screen.Lines > maxRegionLines {
-		return nil, fmt.Errorf("%s: manifest %q screen lines %d, limit %d", name, m.ID, m.Screen.Lines, maxRegionLines)
+		return nil, errfmt.Errorf("%s: manifest %q screen lines %d, limit %d", name, m.ID, m.Screen.Lines, maxRegionLines)
 	}
 	// Title and notify rules are the same shape as screen rules and are checked
 	// the same way, so a mistake in one is reported in the same words as a
@@ -374,30 +374,30 @@ func parseManifest(name string, data []byte) (*Manifest, error) {
 	var budget gateBudget
 	for i := range m.Screen.Rule {
 		if err := m.Screen.Rule[i].check("screen", screenStates, m.Screen.FoldCase, m.Screen.Lines, &budget); err != nil {
-			return nil, fmt.Errorf("%s: manifest %q screen rule %d: %w", name, m.ID, i, err)
+			return nil, errfmt.Errorf("%s: manifest %q screen rule %d: %w", name, m.ID, i, err)
 		}
 	}
 	for i := range m.Title.Rule {
 		if err := m.Title.Rule[i].check("title", screenStates, m.Title.FoldCase, 0, &budget); err != nil {
-			return nil, fmt.Errorf("%s: manifest %q title rule %d: %w", name, m.ID, i, err)
+			return nil, errfmt.Errorf("%s: manifest %q title rule %d: %w", name, m.ID, i, err)
 		}
 	}
 	for i := range m.Notify.Rule {
 		if err := m.Notify.Rule[i].check("notify", notifyStates, m.Notify.FoldCase, 0, &budget); err != nil {
-			return nil, fmt.Errorf("%s: manifest %q notify rule %d: %w", name, m.ID, i, err)
+			return nil, errfmt.Errorf("%s: manifest %q notify rule %d: %w", name, m.ID, i, err)
 		}
 	}
 	m.Screen.order = priorityOrder(m.Screen.Rule)
 	m.Title.order = priorityOrder(m.Title.Rule)
 	m.Notify.order = priorityOrder(m.Notify.Rule)
 	if err := m.Input.normalize(); err != nil {
-		return nil, fmt.Errorf("%s: manifest %q input: %w", name, m.ID, err)
+		return nil, errfmt.Errorf("%s: manifest %q input: %w", name, m.ID, err)
 	}
 	if err := m.Resume.normalize(); err != nil {
-		return nil, fmt.Errorf("%s: manifest %q resume: %w", name, m.ID, err)
+		return nil, errfmt.Errorf("%s: manifest %q resume: %w", name, m.ID, err)
 	}
 	if err := m.Box.check(m.Screen.Lines, m.Screen.Enabled); err != nil {
-		return nil, fmt.Errorf("%s: manifest %q prompt_box: %w", name, m.ID, err)
+		return nil, errfmt.Errorf("%s: manifest %q prompt_box: %w", name, m.ID, err)
 	}
 	if err := checkTranscript(name, m.ID, &m.Transcript); err != nil {
 		return nil, err
@@ -413,43 +413,43 @@ func parseManifest(name string, data []byte) (*Manifest, error) {
 // is how far up a screen rule may read, and b counts the file's predicates.
 func (r *ScreenRule) check(block string, states map[string]struct{}, foldCase bool, lines int, b *gateBudget) error {
 	if _, ok := states[r.State]; !ok {
-		return fmt.Errorf("unknown state %q", r.State)
+		return errfmt.Errorf("unknown state %q", r.State)
 	}
 	if err := r.Gate.compile(foldCase, 0, b); err != nil {
 		return err
 	}
 	if r.Kind = strings.ToLower(strings.TrimSpace(r.Kind)); r.Kind != "" && !promptKinds[r.Kind] {
-		return fmt.Errorf("unknown kind %q (approval or question)", r.Kind)
+		return errfmt.Errorf("unknown kind %q (approval or question)", r.Kind)
 	}
 	if err := r.Answers.check(block, r.State); err != nil {
 		return err
 	}
 	if r.Show = strings.ToLower(strings.TrimSpace(r.Show)); r.Show != "" {
 		if r.Show != ShowDialog {
-			return fmt.Errorf("unknown show %q (%s)", r.Show, ShowDialog)
+			return errfmt.Errorf("unknown show %q (%s)", r.Show, ShowDialog)
 		}
 		if block != "screen" || r.State != "needs_input" {
-			return fmt.Errorf("show: only a needs_input screen rule shows a prompt")
+			return errfmt.Errorf("show: only a needs_input screen rule shows a prompt")
 		}
 	}
 	if len(r.HintFields) > 0 && r.ToolField == "" {
-		return fmt.Errorf("hint_fields needs tool_field")
+		return errfmt.Errorf("hint_fields needs tool_field")
 	}
 	if r.ToolField != "" || len(r.WhatFields) > 0 {
 		if r.Show != ShowDialog {
-			return fmt.Errorf("tool_field and what_fields need show = %q", ShowDialog)
+			return errfmt.Errorf("tool_field and what_fields need show = %q", ShowDialog)
 		}
 		if len(r.WhatFields) > maxWhatFields {
-			return fmt.Errorf("what_fields: %d labels, limit %d", len(r.WhatFields), maxWhatFields)
+			return errfmt.Errorf("what_fields: %d labels, limit %d", len(r.WhatFields), maxWhatFields)
 		}
 		if len(r.WhatFields)+len(r.HintFields) > maxWhatFields {
-			return fmt.Errorf("what_fields and hint_fields: %d labels, limit %d", len(r.WhatFields)+len(r.HintFields), maxWhatFields)
+			return errfmt.Errorf("what_fields and hint_fields: %d labels, limit %d", len(r.WhatFields)+len(r.HintFields), maxWhatFields)
 		}
 		labels := append(append([]string{r.ToolField}, r.WhatFields...), r.HintFields...)
 		for i, f := range labels {
 			f = strings.ToLower(strings.TrimSpace(f))
 			if f == "" || strings.ContainsFunc(f, unicode.IsSpace) {
-				return fmt.Errorf("tool_field and what_fields: %q is not one word", labels[i])
+				return errfmt.Errorf("tool_field and what_fields: %q is not one word", labels[i])
 			}
 			labels[i] = f
 		}
@@ -460,7 +460,7 @@ func (r *ScreenRule) check(block string, states map[string]struct{}, foldCase bo
 	switch block {
 	case "notify":
 		if strings.TrimSpace(r.Region) != "" {
-			return fmt.Errorf("region %q: a notify rule reads the notification and takes no region", r.Region)
+			return errfmt.Errorf("region %q: a notify rule reads the notification and takes no region", r.Region)
 		}
 		return nil
 	case "title":
@@ -476,7 +476,7 @@ func (r *ScreenRule) check(block string, states map[string]struct{}, foldCase bo
 		return err
 	}
 	if bottom > lines {
-		return fmt.Errorf("region %s reads past the %d lines the manifest reads; raise [screen] lines", region, lines)
+		return errfmt.Errorf("region %s reads past the %d lines the manifest reads; raise [screen] lines", region, lines)
 	}
 	r.Region = region
 	// An idle rule has to prove the agent is at rest, and the proof is an input
@@ -485,7 +485,7 @@ func (r *ScreenRule) check(block string, states map[string]struct{}, foldCase bo
 	// rule resting on a loose substring would call a pane idle because a word
 	// appeared in its output.
 	if r.State == "idle" && r.Region != RegionPromptBox && !r.provesShape() {
-		return fmt.Errorf("an idle rule must read region = %q or carry a regex that pins the input box", RegionPromptBox)
+		return errfmt.Errorf("an idle rule must read region = %q or carry a regex that pins the input box", RegionPromptBox)
 	}
 	return nil
 }
@@ -500,11 +500,11 @@ func compilePatterns(patterns []string) ([]*regexp.Regexp, error) {
 	out := make([]*regexp.Regexp, len(patterns))
 	for i, p := range patterns {
 		if len(p) > maxScreenPattern {
-			return nil, fmt.Errorf("pattern %d is %d bytes, limit %d", i, len(p), maxScreenPattern)
+			return nil, errfmt.Errorf("pattern %d is %d bytes, limit %d", i, len(p), maxScreenPattern)
 		}
 		re, err := regexp.Compile("(?m)" + p)
 		if err != nil {
-			return nil, fmt.Errorf("pattern %q: %w", p, err)
+			return nil, errfmt.Errorf("pattern %q: %w", p, err)
 		}
 		out[i] = re
 	}
@@ -569,7 +569,7 @@ func (d *Detect) checkGenericNames(file, id string) error {
 	}
 	for _, n := range append(append([]string{}, d.Comm...), d.Argv0...) {
 		if len(n) < genericNameLimit {
-			return fmt.Errorf(
+			return errfmt.Errorf(
 				"%s: manifest %q matches on the generic name %q alone; add a [detect.require] block",
 				file, id, n)
 		}

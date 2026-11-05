@@ -91,13 +91,6 @@ func hintsWidth(hints []Hint, sep int, truncated bool) int {
 	return w
 }
 
-// HintsFit reports whether hints fit across width cells as written, with no
-// tier applied. A host that would rather drop a hint of its own choosing than
-// see every label shortened asks this first.
-func HintsFit(hints []Hint, width int) bool {
-	return hintsWidth(hints, footerSep, false) <= width
-}
-
 // identity is 0..n-1.
 func identity(n int) []int {
 	idx := make([]int, n)

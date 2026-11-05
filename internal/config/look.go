@@ -14,6 +14,8 @@ import (
 
 	"github.com/pelletier/go-toml/v2"
 
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
+	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
 )
 
@@ -353,25 +355,25 @@ var lookMeta = map[string]bool{"look": true, "name": true, "author": true, "desc
 // and named in Left. A value that fails its check fails the whole look.
 func ParseLook(data []byte) (*Look, error) {
 	if len(data) > MaxLookBytes {
-		return nil, fmt.Errorf("the look is larger than %d KiB", MaxLookBytes>>10)
+		return nil, errfmt.Errorf("the look is larger than %d KiB", MaxLookBytes>>10)
 	}
 	raw := map[string]any{}
 	if err := toml.Unmarshal(data, &raw); err != nil {
 		// The error can quote a key, and a stranger names the keys.
-		return nil, fmt.Errorf("the look is not valid TOML: %s", lookOneLine(err.Error()))
+		return nil, errfmt.Errorf("the look is not valid TOML: %s", lookOneLine(err.Error()))
 	}
 	switch v := raw["look"].(type) {
 	case nil:
 		return nil, errors.New("the file has no look = 1 line, so it is not a look")
 	case int64:
 		if v > LookVersion {
-			return nil, fmt.Errorf("the look is version %d. This tuios reads version %d. Update tuios", v, LookVersion)
+			return nil, errfmt.Errorf("the look is version %d. This tuios reads version %d. Update tuios", v, LookVersion)
 		}
 		if v != LookVersion {
-			return nil, fmt.Errorf("look = %d is not a look version. Use look = %d", v, LookVersion)
+			return nil, errfmt.Errorf("look = %d is not a look version. Use look = %d", v, LookVersion)
 		}
 	default:
-		return nil, fmt.Errorf("look must be a whole number. Use look = %d", LookVersion)
+		return nil, errfmt.Errorf("look must be a whole number. Use look = %d", LookVersion)
 	}
 	lk := &Look{}
 	var err error
@@ -444,7 +446,7 @@ func ParseLook(data []byte) (*Look, error) {
 	}
 	if res := ValidateConfig(cfg); res.HasErrors() {
 		e := res.Errors[0]
-		return nil, fmt.Errorf("%s: %s", e.Key, e.Message)
+		return nil, errfmt.Errorf("%s: %s", e.Key, e.Message)
 	}
 	return lk, nil
 }
@@ -457,10 +459,10 @@ func lookText(raw map[string]any, key string) (string, error) {
 	}
 	s, ok := v.(string)
 	if !ok {
-		return "", fmt.Errorf("%s must be text", key)
+		return "", errfmt.Errorf("%s must be text", key)
 	}
 	if len(s) > maxLookString || hasControlChar(s) {
-		return "", fmt.Errorf("%s must be one line of at most %d bytes", key, maxLookString)
+		return "", errfmt.Errorf("%s must be one line of at most %d bytes", key, maxLookString)
 	}
 	return s, nil
 }
@@ -474,26 +476,26 @@ func (lk *Look) readAsset(raw map[string]any, key string, glyphs bool) (string, 
 	}
 	table, ok := v.(map[string]any)
 	if !ok {
-		return "", fmt.Errorf("%s must be a table, such as [%s]", key, key)
+		return "", errfmt.Errorf("%s must be a table, such as [%s]", key, key)
 	}
 	own, _ := table["id"].(string)
 	if own == "" {
-		return "", fmt.Errorf("[%s] needs an id", key)
+		return "", errfmt.Errorf("[%s] needs an id", key)
 	}
 	own = strings.TrimPrefix(own, LookAssetPrefix)
 	id := LookAssetPrefix + own
 	if !theme.ValidThemeID(own) || !theme.ValidThemeID(id) {
-		return "", fmt.Errorf("[%s] id %q cannot be a file name. Use a-z, 0-9, '-', '_' and '.'", key, own)
+		return "", errfmt.Errorf("[%s] id %q cannot be a file name. Use a-z, 0-9, '-', '_' and '.'", key, own)
 	}
-	data, err := json.Marshal(table)
+	data, err := jsonx.Marshal(table)
 	if err != nil {
-		return "", fmt.Errorf("[%s]: %w", key, err)
+		return "", errfmt.Errorf("[%s]: %w", key, err)
 	}
 	asset := &LookAsset{ID: id}
 	if glyphs {
 		out, notes, err := theme.CheckLookGlyphs(id, data)
 		if err != nil {
-			return "", fmt.Errorf("[%s]: %w", key, err)
+			return "", errfmt.Errorf("[%s]: %w", key, err)
 		}
 		asset.Data = out
 		lk.Notes = append(lk.Notes, notes...)
@@ -501,7 +503,7 @@ func (lk *Look) readAsset(raw map[string]any, key string, glyphs bool) (string, 
 	} else {
 		out, err := theme.CheckLookTheme(id, data)
 		if err != nil {
-			return "", fmt.Errorf("[%s]: %w", key, err)
+			return "", errfmt.Errorf("[%s]: %w", key, err)
 		}
 		asset.Data = out
 		lk.Theme = asset
@@ -523,7 +525,7 @@ func (lk *Look) bindAsset(values map[string]any, path, own string, asset *LookAs
 	case v == own || v == asset.ID:
 		values[path] = asset.ID
 	default:
-		return fmt.Errorf("the look carries %s %q, but %s names %q. Remove %s or set it to %q", path[strings.LastIndex(path, ".")+1:], own, path, lookValueText(v), path, own)
+		return errfmt.Errorf("the look carries %s %q, but %s names %q. Remove %s or set it to %q", path[strings.LastIndex(path, ".")+1:], own, path, lookValueText(v), path, own)
 	}
 	return nil
 }
@@ -626,17 +628,17 @@ func (lk *Look) fragment() ([]byte, error) {
 		switch v := s.Value.(type) {
 		case string:
 			if len(v) > maxLookString || hasControlChar(v) {
-				return nil, fmt.Errorf("%s must be one line of at most %d bytes", s.Path, maxLookString)
+				return nil, errfmt.Errorf("%s must be one line of at most %d bytes", s.Path, maxLookString)
 			}
 		case []string:
 			for _, item := range v {
 				if len(item) > maxLookString || hasControlChar(item) {
-					return nil, fmt.Errorf("each item of %s must be one line of at most %d bytes", s.Path, maxLookString)
+					return nil, errfmt.Errorf("each item of %s must be one line of at most %d bytes", s.Path, maxLookString)
 				}
 			}
 		case bool, int64:
 		default:
-			return nil, fmt.Errorf("%s: %v is not a value this option takes", s.Path, v)
+			return nil, errfmt.Errorf("%s: %v is not a value this option takes", s.Path, v)
 		}
 		parts := strings.Split(s.Path, ".")
 		t := root
@@ -714,7 +716,7 @@ func ReadInstalledLook(mainPath string) (*InstalledLook, error) {
 		return nil, err
 	}
 	if !strings.HasPrefix(string(data), lookHeadMark) {
-		return nil, fmt.Errorf("%s is your own file, not a look tuios applied. tuios does not change it. Rename it to use tuios look", filepath.Join(DropInDirName, LookFileName))
+		return nil, errfmt.Errorf("%s is your own file, not a look tuios applied. tuios does not change it. Rename it to use tuios look", filepath.Join(DropInDirName, LookFileName))
 	}
 	il := &InstalledLook{Path: path}
 	for line := range strings.Lines(string(data)) {
@@ -734,7 +736,7 @@ func ReadInstalledLook(mainPath string) (*InstalledLook, error) {
 	}
 	values, err := parseLayer(data)
 	if err != nil {
-		return nil, fmt.Errorf("failed to parse %s: %w", path, err)
+		return nil, errfmt.Errorf("failed to parse %s: %w", path, err)
 	}
 	var walk func(m map[string]any, prefix string)
 	walk = func(m map[string]any, prefix string) {
@@ -896,7 +898,7 @@ func planLook(mainPath string, lk *Look, source string) (*LookPlan, error) {
 		return p, nil
 	}
 	if !fileWritable(LookPath(lc.Main)) {
-		return nil, fmt.Errorf("tuios cannot write %s. The config is read-only, so tuios cannot change the look", displayPath(lc.Main, filepath.Dir(LookPath(lc.Main))))
+		return nil, errfmt.Errorf("tuios cannot write %s. The config is read-only, so tuios cannot change the look", displayPath(lc.Main, filepath.Dir(LookPath(lc.Main))))
 	}
 
 	// A theme or glyph set of the person's own may already have the id the
@@ -911,7 +913,7 @@ func planLook(mainPath string, lk *Look, source string) (*LookPlan, error) {
 				continue
 			}
 			if theme.LookAssetThere(a.glyphs, a.asset.ID) {
-				return nil, fmt.Errorf("a %s named %s is there already, and no look installed it. tuios does not replace it. Rename it to apply this look", a.kind, a.asset.ID)
+				return nil, errfmt.Errorf("a %s named %s is there already, and no look installed it. tuios does not replace it. Rename it to apply this look", a.kind, a.asset.ID)
 			}
 		}
 	}

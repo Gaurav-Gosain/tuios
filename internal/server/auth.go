@@ -14,6 +14,7 @@ import (
 	"github.com/adrg/xdg"
 	gossh "golang.org/x/crypto/ssh"
 
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"github.com/Gaurav-Gosain/tuios/internal/netutil"
 )
 
@@ -92,22 +93,22 @@ func LoadAuthorizedKeys(explicit string) (*AuthorizedKeys, error) {
 		case err == nil:
 		case errors.Is(err, fs.ErrNotExist):
 			if explicit != "" {
-				return nil, fmt.Errorf("no authorized keys file at %s. Create the file, or drop --authorized-keys", path)
+				return nil, errfmt.Errorf("no authorized keys file at %s. Create the file, or drop --authorized-keys", path)
 			}
 			continue
 		default:
-			return nil, fmt.Errorf("cannot read the authorized keys file %s: %w. Fix the file permissions, or move the file away", path, err)
+			return nil, errfmt.Errorf("cannot read the authorized keys file %s: %w. Fix the file permissions, or move the file away", path, err)
 		}
 		keys, restricted, err := parseAuthorizedKeys(path, data)
 		if err != nil {
 			return nil, err
 		}
 		if len(keys) == 0 && len(restricted) > 0 {
-			return nil, fmt.Errorf("every key in %s has options (lines %s). TUIOS cannot apply options such as command=, from= or restrict, so it does not accept these keys. Add a key with no options, or name a different file with --authorized-keys",
+			return nil, errfmt.Errorf("every key in %s has options (lines %s). TUIOS cannot apply options such as command=, from= or restrict, so it does not accept these keys. Add a key with no options, or name a different file with --authorized-keys",
 				path, joinLines(restricted))
 		}
 		if len(keys) == 0 {
-			return nil, fmt.Errorf("the authorized keys file %s holds no keys. Add a public key to it, or move the file away", path)
+			return nil, errfmt.Errorf("the authorized keys file %s holds no keys. Add a public key to it, or move the file away", path)
 		}
 		if len(restricted) > 0 {
 			log.Printf("[SSH] auth: TUIOS does not accept the keys with options in %s (lines %s). It cannot apply options such as command=, from= or restrict.",
@@ -141,7 +142,7 @@ func parseAuthorizedKeys(path string, data []byte) (keys []ssh.PublicKey, restri
 		}
 		key, _, options, _, err := ssh.ParseAuthorizedKey([]byte(line))
 		if err != nil {
-			return nil, nil, fmt.Errorf("line %d of %s is not a public key: %w. Fix the line, or delete it", i+1, path, err)
+			return nil, nil, errfmt.Errorf("line %d of %s is not a public key: %w. Fix the line, or delete it", i+1, path, err)
 		}
 		if len(options) > 0 {
 			restricted = append(restricted, i+1)
@@ -245,7 +246,7 @@ func PlanSSHAuth(host, authorizedKeysPath string, noAuth bool) (*SSHAuthPlan, er
 	if keys.Enabled() {
 		return &SSHAuthPlan{Keys: keys}, nil
 	}
-	return nil, fmt.Errorf("%w on %s: there is no %s. Add your public key to it, pass --authorized-keys, or pass --no-auth",
+	return nil, errfmt.Errorf("%w on %s: there is no %s. Add your public key to it, pass --authorized-keys, or pass --no-auth",
 		ErrNoSSHAuth, host, defaultAuthorizedKeysPath())
 }
 

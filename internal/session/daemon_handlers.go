@@ -6,12 +6,14 @@ import (
 	"log"
 	"sync/atomic"
 	"time"
+
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 )
 
 func (d *Daemon) handleHello(cs *connState, msg *Message) error {
 	var payload HelloPayload
 	if err := msg.ParsePayload(&payload); err != nil {
-		return fmt.Errorf("invalid hello payload: %w", err)
+		return errfmt.Errorf("invalid hello payload: %w", err)
 	}
 
 	payload.Term, payload.ColorTerm = helloTermValue(payload.Term), helloTermValue(payload.ColorTerm)
@@ -27,6 +29,7 @@ func (d *Daemon) handleHello(cs *connState, msg *Message) error {
 	cs.scratchWS = payload.ScratchWorkspaces
 	sizeCapChanged := cs.windowSizeCap != payload.WindowSize
 	cs.windowSizeCap = payload.WindowSize
+	cs.holdOptions = payload.HoldOptions
 	cs.machine, cs.kind = helloMachine(payload.Machine), helloKind(payload.ClientKind)
 	cs.viewChrome = payload.ViewChrome
 	attachedTo := cs.sessionID
@@ -106,6 +109,8 @@ func (d *Daemon) handleHello(cs *connState, msg *Message) error {
 		ListingPush: true,
 		// See pane_marks.go.
 		PaneMarks: true,
+		// See tml_surface.go, "Surfaces over a link".
+		TMLLink: !legacyTMLLink(),
 	})
 }
 
@@ -124,7 +129,7 @@ var attachReplied atomic.Pointer[func()]
 func (d *Daemon) handleAttach(cs *connState, msg *Message) error {
 	var payload AttachPayload
 	if err := msg.ParsePayload(&payload); err != nil {
-		return fmt.Errorf("invalid attach payload: %w", err)
+		return errfmt.Errorf("invalid attach payload: %w", err)
 	}
 
 	cfg := &SessionConfig{}
@@ -166,7 +171,7 @@ func (d *Daemon) handleAttach(cs *connState, msg *Message) error {
 	}
 
 	if err != nil {
-		return fmt.Errorf("failed to get/create session: %w", err)
+		return errfmt.Errorf("failed to get/create session: %w", err)
 	}
 	// Only a session this attach made takes the directory: an attach to one
 	// that exists must not move where its windows start.
@@ -206,7 +211,7 @@ func (d *Daemon) handleAttach(cs *connState, msg *Message) error {
 	if d.mayActAsHuman(cs) {
 		var err error
 		if humanNonce, err = newHumanNonce(); err != nil {
-			return fmt.Errorf("failed to issue the attach nonce: %w", err)
+			return errfmt.Errorf("failed to issue the attach nonce: %w", err)
 		}
 	}
 	// Attaches to one session are serialised from here through the reply, so
@@ -563,7 +568,7 @@ func (d *Daemon) detachClientFrom(cs *connState, want string) bool {
 func (d *Daemon) handleNew(cs *connState, msg *Message) error {
 	var payload NewPayload
 	if err := msg.ParsePayload(&payload); err != nil {
-		return fmt.Errorf("invalid new payload: %w", err)
+		return errfmt.Errorf("invalid new payload: %w", err)
 	}
 
 	cfg := &SessionConfig{Global: payload.Global}
@@ -583,7 +588,7 @@ func (d *Daemon) handleNew(cs *connState, msg *Message) error {
 		if err.Error() == fmt.Sprintf("session '%s' already exists", name) {
 			return d.replyError(cs, msg, ErrCodeSessionExists, err.Error())
 		}
-		return fmt.Errorf("failed to create session: %w", err)
+		return errfmt.Errorf("failed to create session: %w", err)
 	}
 	// Checked after the create, as the attach does: the client checked the
 	// directory already, and one that has gone since leaves the shell in the
@@ -618,7 +623,7 @@ func (d *Daemon) handleList(cs *connState, msg *Message) error {
 func (d *Daemon) handleKill(cs *connState, msg *Message) error {
 	var payload KillPayload
 	if err := msg.ParsePayload(&payload); err != nil {
-		return fmt.Errorf("invalid kill payload: %w", err)
+		return errfmt.Errorf("invalid kill payload: %w", err)
 	}
 
 	if err := d.manager.DeleteSession(payload.SessionName); err != nil {
@@ -634,7 +639,7 @@ func (d *Daemon) handleKill(cs *connState, msg *Message) error {
 func (d *Daemon) handleResurrect(cs *connState, msg *Message) error {
 	var payload ResurrectPayload
 	if err := msg.ParsePayload(&payload); err != nil {
-		return fmt.Errorf("invalid resurrect payload: %w", err)
+		return errfmt.Errorf("invalid resurrect payload: %w", err)
 	}
 
 	if payload.SessionName == "" {
@@ -721,7 +726,7 @@ func (d *Daemon) handleInput(cs *connState, msg *Message) error {
 func (d *Daemon) handleResize(cs *connState, msg *Message) error {
 	var payload ResizePTYPayload
 	if err := msg.ParsePayload(&payload); err != nil {
-		return fmt.Errorf("invalid resize payload: %w", err)
+		return errfmt.Errorf("invalid resize payload: %w", err)
 	}
 
 	if cs.sessionID == "" {
@@ -774,7 +779,7 @@ func (d *Daemon) handleCreatePTY(cs *connState, msg *Message) error {
 	var payload CreatePTYPayload
 	if err := msg.ParsePayload(&payload); err != nil {
 		debugLog("[DEBUG] handleCreatePTY: invalid payload: %v", err)
-		return fmt.Errorf("invalid create PTY payload: %w", err)
+		return errfmt.Errorf("invalid create PTY payload: %w", err)
 	}
 
 	width := payload.Width
@@ -827,7 +832,7 @@ func (d *Daemon) handleClosePTY(cs *connState, msg *Message) error {
 
 	var payload ClosePTYPayload
 	if err := msg.ParsePayload(&payload); err != nil {
-		return fmt.Errorf("invalid close PTY payload: %w", err)
+		return errfmt.Errorf("invalid close PTY payload: %w", err)
 	}
 
 	// Unsubscribe first
@@ -957,7 +962,7 @@ func (d *Daemon) handleUpdateState(cs *connState, msg *Message) error {
 
 	var state SessionState
 	if err := msg.ParsePayload(&state); err != nil {
-		return fmt.Errorf("invalid state payload: %w", err)
+		return errfmt.Errorf("invalid state payload: %w", err)
 	}
 	// Counted before anything can refuse or rewrite the push: the client
 	// counts every push it sends, and PushSeen has to agree with it. See
@@ -1085,7 +1090,7 @@ func (d *Daemon) handleSubscribePTY(cs *connState, msg *Message) error {
 
 	var payload SubscribePTYPayload
 	if err := msg.ParsePayload(&payload); err != nil {
-		return fmt.Errorf("invalid subscribe PTY payload: %w", err)
+		return errfmt.Errorf("invalid subscribe PTY payload: %w", err)
 	}
 
 	debugLog("[DEBUG] Subscribing to PTY %s", payload.PTYID)
@@ -1162,7 +1167,7 @@ func (d *Daemon) handleUnsubscribePTY(cs *connState, msg *Message) error {
 
 	var payload UnsubscribePTYPayload
 	if err := msg.ParsePayload(&payload); err != nil {
-		return fmt.Errorf("invalid unsubscribe PTY payload: %w", err)
+		return errfmt.Errorf("invalid unsubscribe PTY payload: %w", err)
 	}
 
 	debugLog("[DEBUG] Unsubscribing from PTY %s", payload.PTYID)
@@ -1202,7 +1207,7 @@ func (d *Daemon) handleGetTerminalState(cs *connState, msg *Message) error {
 
 	var payload GetTerminalStatePayload
 	if err := msg.ParsePayload(&payload); err != nil {
-		return fmt.Errorf("invalid get terminal state payload: %w", err)
+		return errfmt.Errorf("invalid get terminal state payload: %w", err)
 	}
 
 	pty := session.GetPTY(payload.PTYID)

@@ -7,6 +7,8 @@ import (
 	"os"
 	"runtime"
 	"strings"
+
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 )
 
 // NotifyConfig is the [notify] table: push notifications the daemon sends to
@@ -339,7 +341,7 @@ func ResolveSecret(inline Secret, env, file string) (string, error) {
 	if env != "" {
 		v, ok := os.LookupEnv(env)
 		if !ok || strings.TrimSpace(v) == "" {
-			return "", fmt.Errorf("the environment variable %s is not set in this process", env)
+			return "", errfmt.Errorf("the environment variable %s is not set in this process", env)
 		}
 		return strings.TrimSpace(v), nil
 	}
@@ -347,18 +349,18 @@ func ResolveSecret(inline Secret, env, file string) (string, error) {
 		path := ExpandHome(file)
 		info, err := os.Stat(path)
 		if err != nil {
-			return "", fmt.Errorf("cannot read the secret file %s: %w", file, errors.Unwrap(err))
+			return "", errfmt.Errorf("cannot read the secret file %s: %w", file, errors.Unwrap(err))
 		}
 		if runtime.GOOS != "windows" && info.Mode().Perm()&0o077 != 0 {
-			return "", fmt.Errorf("other users can read the secret file %s. Run chmod 600 on it", file)
+			return "", errfmt.Errorf("other users can read the secret file %s. Run chmod 600 on it", file)
 		}
 		data, err := os.ReadFile(path)
 		if err != nil {
-			return "", fmt.Errorf("cannot read the secret file %s", file)
+			return "", errfmt.Errorf("cannot read the secret file %s", file)
 		}
 		v := strings.TrimSpace(string(data))
 		if v == "" {
-			return "", fmt.Errorf("the secret file %s is empty", file)
+			return "", errfmt.Errorf("the secret file %s is empty", file)
 		}
 		return v, nil
 	}

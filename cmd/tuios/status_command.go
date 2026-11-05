@@ -5,9 +5,11 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"strings"
+	"time"
 	"unicode/utf8"
 
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
+	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/spf13/cobra"
 	"tuios.dev/progstatus"
 )
@@ -25,8 +27,9 @@ type statusOptions struct {
 }
 
 // newStatusCommand is tuios status: it writes one OSC 7501 report (the
-// Program Status Protocol) for a script. It needs no daemon and works in any
-// terminal that reads the protocol, tuios or not.
+// Program Status Protocol) for a script. It works in any terminal that reads
+// the protocol, tuios or not, and needs the daemon only in a tuios pane with
+// no terminal to write to.
 func newStatusCommand() *cobra.Command {
 	var o statusOptions
 	cmd := &cobra.Command{
@@ -36,7 +39,7 @@ func newStatusCommand() *cobra.Command {
 
 The command writes one report to the terminal. tuios shows it as the pane's
 agent state, in the rail and in the Inbox. Other terminals that read the
-protocol show it too. The command needs no daemon.
+protocol show it too.
 
 Each report replaces the record it addresses. Send --app and --title in every
 report that should keep them. A working or blocked record ends at the next
@@ -45,7 +48,12 @@ you type in the pane.
 
 The report goes to the controlling terminal, so it is not lost when the output
 of the script goes to a file or a pipe. Use --stdout to write it to standard
-output.`,
+output.
+
+Some processes have no controlling terminal, such as the shell tool of an
+agent. In a tuios pane, such a process sends the report to the tuios daemon
+for its pane. Outside tuios, or when the daemon does not take the report, the
+report goes to standard output.`,
 		Example: `  # A build that reports its progress
   tuios status working --app build --msg 'Compiling' --progress 40
   tuios status done --app build --msg 'Built 12 crates'
@@ -69,7 +77,7 @@ output.`,
 			if err != nil {
 				return err
 			}
-			return writeStatusSequence(cmd.OutOrStdout(), seq, o.stdout)
+			return writeStatusSequence(cmd.OutOrStdout(), cmd.ErrOrStderr(), seq, o.stdout)
 		},
 	}
 	f := cmd.Flags()
@@ -100,11 +108,11 @@ func statusSequence(state string, o statusOptions) (string, error) {
 		case progstatus.Idle, progstatus.Working, progstatus.Done, progstatus.Blocked, progstatus.Error:
 			r.State = s
 		default:
-			return "", fmt.Errorf("%q is not a state. Use idle, working, done, blocked or error", state)
+			return "", errfmt.Errorf("%q is not a state. Use idle, working, done, blocked or error", state)
 		}
 	}
 	if o.id != "" && !progstatus.ValidID(o.id) {
-		return "", fmt.Errorf("--id %q is not valid. Use up to %d parts of 1 to %d letters, digits, '.', '_', '+' or '-', joined with '/'", o.id, progstatus.MaxDepth, progstatus.MaxSegment)
+		return "", errfmt.Errorf("--id %q is not valid. Use up to %d parts of 1 to %d letters, digits, '.', '_', '+' or '-', joined with '/'", o.id, progstatus.MaxDepth, progstatus.MaxSegment)
 	}
 	if r.State == progstatus.Clear {
 		return progstatus.Sequence(r), nil
@@ -117,7 +125,7 @@ func statusSequence(state string, o statusOptions) (string, error) {
 		case progstatus.Permission, progstatus.Question, progstatus.Auth:
 			r.Kind = k
 		default:
-			return "", fmt.Errorf("--kind %q is not valid. Use permission, question or auth", o.kind)
+			return "", errfmt.Errorf("--kind %q is not valid. Use permission, question or auth", o.kind)
 		}
 	}
 	if o.progress != progstatus.NoProgress {
@@ -131,7 +139,7 @@ func statusSequence(state string, o statusOptions) (string, error) {
 	}
 	if o.app != "" {
 		if !progstatus.ValidApp(o.app) {
-			return "", fmt.Errorf("--app %q is not valid. Use 1 to %d letters, digits, '.', '_', '+' or '-'", o.app, progstatus.MaxApp)
+			return "", errfmt.Errorf("--app %q is not valid. Use 1 to %d letters, digits, '.', '_', '+' or '-'", o.app, progstatus.MaxApp)
 		}
 		r.App = o.app
 	}
@@ -145,8 +153,7 @@ func statusSequence(state string, o statusOptions) (string, error) {
 	seq := progstatus.Sequence(r)
 	// The terminal reads it back with the same parser; a report it would
 	// discard is refused here instead.
-	body := strings.TrimSuffix(strings.TrimPrefix(seq, "\x1b]7501;"), "\x1b\\")
-	if _, ok := progstatus.Parse([]byte(body), len(seq)); !ok {
+	if _, ok := progstatus.Parse([]byte(session.ProgramStatusBody(seq)), len(seq)); !ok {
 		return "", errors.New("the report is not valid")
 	}
 	return seq, nil
@@ -156,29 +163,60 @@ func statusSequence(state string, o statusOptions) (string, error) {
 // limit bytes.
 func statusText(flag, s string, limit int) (string, error) {
 	if !utf8.ValidString(s) {
-		return "", fmt.Errorf("%s is not valid UTF-8", flag)
+		return "", errfmt.Errorf("%s is not valid UTF-8", flag)
 	}
 	for _, r := range s {
 		if progstatus.IsControl(r) {
-			return "", fmt.Errorf("%s has a control character, such as a tab or a new line. Remove it", flag)
+			return "", errfmt.Errorf("%s has a control character, such as a tab or a new line. Remove it", flag)
 		}
 	}
 	if len(s) > limit {
-		return "", fmt.Errorf("%s is %d bytes. The limit is %d", flag, len(s), limit)
+		return "", errfmt.Errorf("%s is %d bytes. The limit is %d", flag, len(s), limit)
 	}
 	return s, nil
 }
 
-// writeStatusSequence writes the report to the controlling terminal, or to w
-// when toStdout is set or there is no terminal to open.
-func writeStatusSequence(w io.Writer, seq string, toStdout bool) error {
+// writeStatusSequence writes the report to the controlling terminal. With no
+// terminal to open, a process in a tuios pane sends it to the daemon for its
+// pane (TUIOS_PANE_ID): an agent's shell tool has no terminal and captures
+// standard output, so a sequence written there never reaches the pane. The
+// report goes to w when toStdout is set, outside every pane, and when the
+// daemon does not take it.
+func writeStatusSequence(w, errw io.Writer, seq string, toStdout bool) error {
 	if !toStdout {
 		if tty, err := os.OpenFile("/dev/tty", os.O_WRONLY, 0); err == nil {
 			_, werr := io.WriteString(tty, seq)
 			cerr := tty.Close()
 			return errors.Join(werr, cerr)
 		}
+		if pane := os.Getenv("TUIOS_PANE_ID"); pane != "" {
+			err := reportStatusToDaemon(pane, os.Getenv("TUIOS_SESSION"), seq)
+			if err == nil {
+				return nil
+			}
+			_, _ = fmt.Fprintf(errw, "tuios status: the daemon did not take the report: %v. The report goes to standard output.\n", err)
+		}
 	}
 	_, err := io.WriteString(w, seq)
+	return err
+}
+
+// statusDaemonTimeout bounds the call to the daemon, so a script never waits
+// long on a report.
+const statusDaemonTimeout = 5 * time.Second
+
+// reportStatusToDaemon sends one report to the daemon for the caller's pane,
+// with report-program-status. The daemon holds a pane to reports about itself.
+func reportStatusToDaemon(pane, sessionName, seq string) error {
+	client, err := session.DialVerbClientAs(version)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = client.Close() }()
+	_, err = client.CallWithTimeout("report-program-status", map[string]any{
+		"session": sessionName,
+		"window":  pane,
+		"report":  session.ProgramStatusBody(seq),
+	}, statusDaemonTimeout)
 	return err
 }

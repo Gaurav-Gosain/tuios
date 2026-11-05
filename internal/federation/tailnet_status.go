@@ -5,7 +5,6 @@ package federation
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
 	"net/netip"
 	"os/exec"
@@ -15,6 +14,8 @@ import (
 	"strings"
 
 	"github.com/Gaurav-Gosain/tuios/internal/childproc"
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
+	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 )
 
 // The half of tailnet discovery that talks to tailscaled. It is left out of
@@ -90,7 +91,7 @@ func tailscaleCommands() []string {
 func TailnetMachines(ctx context.Context, opt TailnetOptions) ([]TailnetMachine, error) {
 	st, err := readTailnetStatus(ctx, opt.Socket)
 	if err != nil {
-		return nil, fmt.Errorf("%w: %w", ErrNoTailnet, err)
+		return nil, errfmt.Errorf("%w: %w", ErrNoTailnet, err)
 	}
 	return tailnetMachinesFrom(st, opt), nil
 }
@@ -113,17 +114,17 @@ func readTailnetStatus(ctx context.Context, socket string) (*tailnetStatus, erro
 		cmd.Stdout, cmd.Stderr = &stdout, &stderr
 		runErr := cmd.Run()
 		var st tailnetStatus
-		if jsonErr := json.Unmarshal(stdout.Bytes(), &st); jsonErr == nil {
+		if jsonErr := jsonx.Unmarshal(stdout.Bytes(), &st); jsonErr == nil {
 			return &st, nil
 		}
 		if ctx.Err() != nil {
 			return nil, ctx.Err()
 		}
 		if runErr == nil {
-			runErr = fmt.Errorf("tailscale status printed no status")
+			runErr = errfmt.Errorf("tailscale status printed no status")
 		}
 		if msg := strings.TrimSpace(stderr.String()); msg != "" {
-			runErr = fmt.Errorf("%w: %s", runErr, msg)
+			runErr = errfmt.Errorf("%w: %s", runErr, msg)
 		}
 		lastErr = runErr
 	}

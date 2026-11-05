@@ -307,6 +307,9 @@ func (m *OS) switchToWorkspaceHeld(workspace, focusTarget int) {
 		m.Animations = m.Animations[:0]
 		m.LogInfo("Landed and cancelled animations during workspace switch")
 	}
+	// The workspace being left is kept for the slide now, with its panes
+	// landed and before anything below changes what is drawn.
+	m.beginWorkspaceSlide(oldWorkspace, workspace)
 
 	// Save current workspace focus and layout
 	if m.FocusedWindow >= 0 && m.FocusedWindow < len(m.Windows) {

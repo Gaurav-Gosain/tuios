@@ -12,6 +12,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
@@ -152,7 +153,7 @@ func (m *OS) CockpitArtifactsWanted() tea.Cmd {
 			var res struct {
 				Artifacts []ckArtifact `json:"artifacts"`
 			}
-			msg.err = json.Unmarshal(raw, &res)
+			msg.err = jsonx.Unmarshal(raw, &res)
 			msg.items = res.Artifacts
 		}
 		return msg

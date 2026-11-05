@@ -1,13 +1,13 @@
 package theme
 
 import (
-	"fmt"
 	"image/color"
 	"strconv"
 	"strings"
 	"sync"
 
 	"charm.land/tone"
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 	"github.com/charmbracelet/x/ansi"
 	tint "github.com/lrstanley/bubbletint/v2"
@@ -259,7 +259,7 @@ func ParseColor(s string) (ColorSpec, error) {
 			return ColorSpec{kind: kindRGB, rgb: c}, nil
 		}
 	}
-	return ColorSpec{}, fmt.Errorf("%q is not a colour. %s", s, ColorHelp)
+	return ColorSpec{}, errfmt.Errorf("%q is not a colour. %s", s, ColorHelp)
 }
 
 // colorName is s in lower case with a dash or a space as the underscore.

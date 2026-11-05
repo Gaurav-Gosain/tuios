@@ -146,7 +146,13 @@ const (
 	// client applied it, so a client that draws the session without being
 	// its TUI (guios follows appearance.theme by it) sees the change. It
 	// reaches only a subscriber that names it in types.
-	EventOptionSet  = "option-set"
+	EventOptionSet = "option-set"
+	// EventKeepAwake says the daemon took or dropped its hold that keeps the
+	// machine awake, or [daemon] keep_awake changed (keep_awake.go). Mode is
+	// off, on or agents, State is held or released, Working is the number of
+	// working agent panes on this machine, and Reason says why the machine
+	// could not be held awake, when it could not. It names no session.
+	EventKeepAwake  = "keep-awake"
 	EventSubscribed = "subscribed" // subscribe ack result type
 )
 
@@ -154,6 +160,13 @@ const (
 // full the hub drops the event and records the drop as a gap rather than blocking
 // the publisher (and thus the daemon).
 const defaultEventQueue = 256
+
+// maxEventQueue caps the queue a subscriber may ask for. The size comes from
+// the client, and the channel is allocated whole at subscribe: an event is
+// about 400 bytes, so an uncapped queue of 50,000,000 asks for 19 GB. A larger
+// ask gets this size. A reader that falls further behind gets a gap marker
+// and resumes from the ring, which holds defaultEventRing events.
+const maxEventQueue = 4096
 
 // defaultEventRing bounds how many events the hub keeps for replay. Output
 // events are not kept (see eventHub.retain), so this counts lifecycle, agent
@@ -250,6 +263,8 @@ type streamEvent struct {
 	// Key and Value are an option-set event's option path and value.
 	Key   string `json:"key,omitempty"`
 	Value string `json:"value,omitempty"`
+	// Working is a keep-awake event's count of working agent panes.
+	Working *int `json:"working,omitempty"`
 
 	// relayed marks an event copied from a linked host's own stream. It is
 	// delivered only to a subscriber that asked for other machines' events,
@@ -550,7 +565,8 @@ func (e errResumeAhead) Error() string {
 }
 
 // subscribe registers a new subscription with the given filter and queue size
-// (bufSize <= 0 uses the default). The returned sub must be released with
+// (bufSize <= 0 uses the default, and a size above maxEventQueue is
+// lowered to it). The returned sub must be released with
 // unsubscribe.
 func (h *eventHub) subscribe(filter eventFilter, bufSize int) *eventSub {
 	sub, _, _ := h.subscribeFrom(filter, bufSize, nil)
@@ -569,6 +585,7 @@ func (h *eventHub) subscribeFrom(filter eventFilter, bufSize int, from *resumePo
 	if bufSize <= 0 {
 		bufSize = defaultEventQueue
 	}
+	bufSize = min(bufSize, maxEventQueue)
 	sub := &eventSub{
 		ch:     make(chan streamEvent, bufSize),
 		filter: filter,

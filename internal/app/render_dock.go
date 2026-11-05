@@ -589,6 +589,11 @@ func (m *OS) renderDockString() (string, int) {
 		Y:         m.GetDockbarContentYPosition(),
 		Cut:       hasNotif && notif.Cut,
 	}
+	if hasNotif {
+		for _, c := range notif.Choices {
+			m.notifHit.Choices = append(m.notifHit.Choices, notifSpan{X0: notifX0 + c.X0, X1: notifX0 + c.X1})
+		}
+	}
 	if hasNotif && len(m.Notifications) > 0 {
 		m.notifHit.Drawn = m.drawnCopy(m.Notifications[len(m.Notifications)-1])
 		// A message this dock had to cut is one prefix+N can reopen, even a

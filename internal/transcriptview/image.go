@@ -11,6 +11,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 	"github.com/Gaurav-Gosain/tuios/internal/transcript"
 )
 
@@ -84,7 +85,7 @@ func ReadImage(path, format, id string) (string, []byte, error) {
 			Content json.RawMessage `json:"content"`
 		} `json:"message"`
 	}
-	if json.Unmarshal(bytes.TrimSpace(line), &rec) != nil || rec.IsSidechain || rec.IsMeta ||
+	if jsonx.Unmarshal(bytes.TrimSpace(line), &rec) != nil || rec.IsSidechain || rec.IsMeta ||
 		rec.Type != "user" && rec.Type != "assistant" || len(rec.Message.Content) == 0 || rec.Message.Content[0] != '[' {
 		return "", nil, ErrNoImage
 	}
@@ -96,7 +97,7 @@ func ReadImage(path, format, id string) (string, []byte, error) {
 			Data      string `json:"data"`
 		} `json:"source"`
 	}
-	if json.Unmarshal(rec.Message.Content, &blocks) != nil || idx >= len(blocks) {
+	if jsonx.Unmarshal(rec.Message.Content, &blocks) != nil || idx >= len(blocks) {
 		return "", nil, ErrNoImage
 	}
 	b := blocks[idx]

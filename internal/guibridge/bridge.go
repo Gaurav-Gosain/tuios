@@ -34,9 +34,7 @@ package guibridge
 import (
 	"bufio"
 	"encoding/binary"
-	"encoding/json"
 	"errors"
-	"fmt"
 	"io"
 	"log"
 	"os"
@@ -49,8 +47,10 @@ import (
 
 	"github.com/Gaurav-Gosain/tuios/internal/app"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"github.com/Gaurav-Gosain/tuios/internal/gitstate"
 	"github.com/Gaurav-Gosain/tuios/internal/input"
+	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
@@ -423,10 +423,10 @@ func Run(opts Options) error {
 	client.SSHAuthSock = os.Getenv("SSH_AUTH_SOCK")
 	if opts.Host == "" {
 		if err := client.ConnectWithCapabilities(opts.Version, opts.Cols, opts.Rows, hello); err != nil {
-			return fmt.Errorf("failed to connect to daemon: %w", err)
+			return errfmt.Errorf("failed to connect to daemon: %w", err)
 		}
 	} else if _, err := client.ConnectThroughHost(opts.Host, opts.Version, opts.Cols, opts.Rows, hello); err != nil {
-		return fmt.Errorf("failed to connect to %s: %w", opts.Host, err)
+		return errfmt.Errorf("failed to connect to %s: %w", opts.Host, err)
 	}
 	cached := client.CachedSessions()
 	if opts.SessionID != "" {
@@ -439,7 +439,7 @@ func Run(opts Options) error {
 	state, err := client.AttachSession(name, true, opts.Cols, opts.Rows)
 	if err != nil {
 		_ = client.Close()
-		return fmt.Errorf("failed to attach to session %q: %w", name, err)
+		return errfmt.Errorf("failed to attach to session %q: %w", name, err)
 	}
 	if name == "" && state != nil {
 		name = state.Name
@@ -1026,7 +1026,7 @@ func (m *model) export() {
 			st.Occupied = append(st.Occupied, ws)
 		}
 	}
-	b, err := json.Marshal(Event{Type: "state", State: st})
+	b, err := jsonx.Marshal(Event{Type: "state", State: st})
 	if err != nil || string(b) == string(m.last) {
 		return
 	}
@@ -1157,7 +1157,7 @@ func readCommands(r io.Reader, client *atomic.Pointer[session.TUIClient], p *tea
 		}
 		n := binary.BigEndian.Uint32(hdr[:4])
 		if n < 1 || n > maxFrame {
-			return fmt.Errorf("bad frame length %d", n)
+			return errfmt.Errorf("bad frame length %d", n)
 		}
 		body := make([]byte, n-1)
 		if _, err := io.ReadFull(br, body); err != nil {
@@ -1166,7 +1166,7 @@ func readCommands(r io.Reader, client *atomic.Pointer[session.TUIClient], p *tea
 		switch hdr[4] {
 		case KindJSON:
 			var c Command
-			if err := json.Unmarshal(body, &c); err != nil {
+			if err := jsonx.Unmarshal(body, &c); err != nil {
 				log.Printf("gui-bridge: bad command: %v", err)
 				continue
 			}
@@ -1335,7 +1335,7 @@ func (f *frameWriter) endResync() {
 }
 
 func (f *frameWriter) JSON(v any) {
-	b, err := json.Marshal(v)
+	b, err := jsonx.Marshal(v)
 	if err == nil {
 		f.Frame(KindJSON, b)
 	}

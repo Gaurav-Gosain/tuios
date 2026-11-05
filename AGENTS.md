@@ -149,9 +149,11 @@ does not apply under `-race`.
 
 The binary-size job builds tuios as the release does (`CGO_ENABLED=0`,
 `-trimpath`, `-ldflags "-s -w"`) for linux/amd64 and darwin/arm64. It fails
-when either is over the 47 MB ceiling in `scripts/binary-size.sh`, and it
+when either is over the 50 MB ceiling in `scripts/binary-size.sh`, and it
 comments the size change against main on the pull request. `just size` runs
 the same check. State the size cost of a change in the pull request body.
+The room under the ceiling is not a budget to spend: each pull request still
+reports its size delta and trims what it can.
 Raise the ceiling only on purpose, in its own commit, with `docs/perf.md`
 ("Binary size budget").
 
@@ -494,7 +496,13 @@ their package's tests.
 
 ### Error Handling
 
-- Wrap errors with context: `fmt.Errorf("failed to X: %w", err)`
+- Wrap errors with context: `errfmt.Errorf("failed to X: %w", err)`. It is
+  `fmt.Errorf` kept out of line, which saves about 115 bytes of binary per
+  call. `internal/lint` rejects `fmt.Errorf` in the binary's packages, and
+  holds the `errfmt.Errorf` strings to staticcheck's ST1005, which only sees
+  `fmt.Errorf`
+- Encode and decode JSON with `jsonx.Marshal` and `jsonx.Unmarshal`, for the
+  same reason. `internal/lint` rejects `json.Marshal` and `json.Unmarshal`
 - Log warnings for non-fatal issues: `log.Printf("Warning: ...")`
 - Return early on errors
 

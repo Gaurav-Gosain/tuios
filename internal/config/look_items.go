@@ -1,13 +1,13 @@
 package config
 
 import (
-	"encoding/json"
-	"fmt"
 	"reflect"
 	"slices"
 	"strconv"
 	"strings"
 
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
+	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
 )
 
@@ -139,7 +139,7 @@ func lookItems(path string, v any) (kept any, dropped []string, err error) {
 	if path == "appearance.sidebar.sections" {
 		s, ok := v.(string)
 		if !ok {
-			return nil, nil, fmt.Errorf("%s must be text, such as \"sessions,files\"", path)
+			return nil, nil, errfmt.Errorf("%s must be text, such as \"sessions,files\"", path)
 		}
 		return lookSections(s)
 	}
@@ -176,19 +176,19 @@ func lookTextList(path string, v any, spec lookFileKey) ([]string, error) {
 			raw = append(raw, s)
 		}
 	default:
-		return nil, fmt.Errorf("%s must be a list of text, such as [\"a\", \"b\"]", path)
+		return nil, errfmt.Errorf("%s must be a list of text, such as [\"a\", \"b\"]", path)
 	}
 	if len(raw) > spec.MaxItems {
-		return nil, fmt.Errorf("%s has %d items. A look may list at most %d", path, len(raw), spec.MaxItems)
+		return nil, errfmt.Errorf("%s has %d items. A look may list at most %d", path, len(raw), spec.MaxItems)
 	}
 	out := make([]string, 0, len(raw))
 	for _, item := range raw {
 		s, ok := item.(string)
 		if !ok {
-			return nil, fmt.Errorf("%s must be a list of text, such as [\"a\", \"b\"]", path)
+			return nil, errfmt.Errorf("%s must be a list of text, such as [\"a\", \"b\"]", path)
 		}
 		if len(s) > spec.MaxBytes || hasControlChar(s) {
-			return nil, fmt.Errorf("each item of %s must be one line of at most %d bytes", path, spec.MaxBytes)
+			return nil, errfmt.Errorf("each item of %s must be one line of at most %d bytes", path, spec.MaxBytes)
 		}
 		out = append(out, s)
 	}
@@ -200,7 +200,7 @@ func lookTextList(path string, v any, spec lookFileKey) ([]string, error) {
 // is left out whole, since the rail would fall back to its default.
 func lookSections(s string) (any, []string, error) {
 	if len(s) > maxLookString || hasControlChar(s) {
-		return nil, nil, fmt.Errorf("appearance.sidebar.sections must be one line of at most %d bytes", maxLookString)
+		return nil, nil, errfmt.Errorf("appearance.sidebar.sections must be one line of at most %d bytes", maxLookString)
 	}
 	allowed := lookSectionItems()
 	var keep, dropped []string
@@ -234,26 +234,26 @@ func checkLookFileValue(path string, v any) error {
 	switch spec.Type {
 	case OptionBool:
 		if _, ok := v.(bool); !ok {
-			return fmt.Errorf("%s must be true or false", path)
+			return errfmt.Errorf("%s must be true or false", path)
 		}
 	case LookList:
 		if _, ok := v.([]string); !ok {
-			return fmt.Errorf("%s must be a list of text, such as [\"a\", \"b\"]", path)
+			return errfmt.Errorf("%s must be a list of text, such as [\"a\", \"b\"]", path)
 		}
 	case OptionString:
 		s, ok := v.(string)
 		if !ok {
-			return fmt.Errorf("%s must be text", path)
+			return errfmt.Errorf("%s must be text", path)
 		}
 		if len(s) > spec.MaxBytes || hasControlChar(s) {
-			return fmt.Errorf("%s must be one line of at most %d bytes", path, spec.MaxBytes)
+			return errfmt.Errorf("%s must be one line of at most %d bytes", path, spec.MaxBytes)
 		}
 		if spec.Color {
 			if s != "" && !theme.IsColor(s) {
-				return fmt.Errorf("%s: %s. Use an empty value to unset it", path, ColourProblem(s))
+				return errfmt.Errorf("%s: %s. Use an empty value to unset it", path, ColourProblem(s))
 			}
 		} else if spec.Accepted != nil && !slices.Contains(spec.Accepted, s) {
-			return fmt.Errorf("%s: %q is not one of %s", path, s, strings.Join(spec.Accepted[1:], ", "))
+			return errfmt.Errorf("%s: %q is not one of %s", path, s, strings.Join(spec.Accepted[1:], ", "))
 		}
 	}
 	return nil
@@ -291,10 +291,10 @@ func lookFileValueText(cfg *UserConfig, path string) string {
 // that the look file would not give.
 func SetLookValue(cfg *UserConfig, path, text string) error {
 	if cfg == nil {
-		return fmt.Errorf("cannot set %s: no configuration is loaded", path)
+		return errfmt.Errorf("cannot set %s: no configuration is loaded", path)
 	}
 	if !IsLookKey(path) {
-		return fmt.Errorf("a look cannot set %s", path)
+		return errfmt.Errorf("a look cannot set %s", path)
 	}
 	if err := CheckLookItems(path, text); err != nil {
 		return err
@@ -308,13 +308,13 @@ func SetLookValue(cfg *UserConfig, path, text string) error {
 	case OptionBool:
 		b, err := parseOptionBool(text)
 		if err != nil {
-			return fmt.Errorf("%s: %w", path, err)
+			return errfmt.Errorf("%s: %w", path, err)
 		}
 		v = b
 	case LookList:
 		var items []string
-		if err := json.Unmarshal([]byte(text), &items); err != nil {
-			return fmt.Errorf("%s must be a JSON list of text, such as [\"a\",\"b\"]", path)
+		if err := jsonx.Unmarshal([]byte(text), &items); err != nil {
+			return errfmt.Errorf("%s must be a JSON list of text, such as [\"a\",\"b\"]", path)
 		}
 		kept, _, err := lookItems(path, items)
 		if err != nil {
@@ -327,7 +327,7 @@ func SetLookValue(cfg *UserConfig, path, text string) error {
 	}
 	field, ok := resolveOptionField(cfg, path)
 	if !ok {
-		return fmt.Errorf("unknown config option %q", path)
+		return errfmt.Errorf("unknown config option %q", path)
 	}
 	target := optionTarget(field)
 	switch v := v.(type) {
@@ -350,8 +350,8 @@ func CheckLookItems(path, text string) error {
 	var v any = text
 	if path != "appearance.sidebar.sections" {
 		var items []string
-		if err := json.Unmarshal([]byte(text), &items); err != nil {
-			return fmt.Errorf("%s must be a JSON list of text, such as [\"a\",\"b\"]", path)
+		if err := jsonx.Unmarshal([]byte(text), &items); err != nil {
+			return errfmt.Errorf("%s must be a JSON list of text, such as [\"a\",\"b\"]", path)
 		}
 		v = items
 	}
@@ -360,10 +360,10 @@ func CheckLookItems(path, text string) error {
 		return err
 	}
 	if len(dropped) > 0 {
-		return fmt.Errorf("%s names %s, which a look cannot set. A look names built-ins only", path, lookKeyShown(strings.Join(dropped, ", ")))
+		return errfmt.Errorf("%s names %s, which a look cannot set. A look names built-ins only", path, lookKeyShown(strings.Join(dropped, ", ")))
 	}
 	if kept == nil {
-		return fmt.Errorf("%s names no section", path)
+		return errfmt.Errorf("%s names no section", path)
 	}
 	return nil
 }

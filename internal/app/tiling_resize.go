@@ -1,10 +1,10 @@
 package app
 
 import (
-	"fmt"
 	"math"
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"github.com/Gaurav-Gosain/tuios/internal/layout"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
@@ -674,7 +674,7 @@ func abs(x int) int {
 func (m *OS) ResizeWindowByID(id, dir string, amount float64) (bool, error) {
 	idx := m.windowIndexByID(id)
 	if idx < 0 {
-		return false, fmt.Errorf("no pane %s to resize", id)
+		return false, errfmt.Errorf("no pane %s to resize", id)
 	}
 	w := m.Windows[idx]
 	if !m.AutoTiling || m.UseScrollingLayout || w.Workspace != m.CurrentWorkspace || w.Minimized || w.IsPopup {

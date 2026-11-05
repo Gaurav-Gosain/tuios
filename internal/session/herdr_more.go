@@ -3,14 +3,11 @@ package session
 import (
 	"fmt"
 	"math"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
 	"unicode"
 	"unicode/utf8"
-
-	"github.com/google/uuid"
 )
 
 // herdr's methods beyond the ones herdr_panes.go answers: resizing a pane,
@@ -36,9 +33,8 @@ const (
 // herdrPaneResize moves one border of a pane, as herdr's pane.resize does:
 // right and down move a border right or down, left and up move it left or
 // up. The border is the one on that side of the pane, or the other one when
-// the pane is at the edge of the tab there. The layout lives in the client,
-// so the move is routed to the attached client, as a swap is. It needs what
-// set-layout needs.
+// the pane is at the edge of the tab there, as resize-window does. It needs
+// what set-layout needs.
 func (d *Daemon) herdrPaneResize(cs *connState, in *herdrIn) (*herdrResult, *herdrError) {
 	if herr := herdrDirection(in.Direction); herr != nil {
 		return nil, herr
@@ -56,12 +52,11 @@ func (d *Daemon) herdrPaneResize(cs *connState, in *herdrIn) (*herdrResult, *her
 	}
 	res := &herdrResize{PaneID: site.pane.PaneID}
 	if amount > 0 {
-		data, herr := d.herdrRouteClientData(site.sess, "resize_window", "pane_resize_failed",
-			site.win.ID, in.Direction, strconv.FormatFloat(amount, 'f', -1, 64))
-		if herr != nil {
-			return nil, herr
+		changed, verr := d.resizePane(site.sess, site.win, in.Direction, amount)
+		if verr != nil {
+			return nil, herdrFromVerb(verr, "pane_resize_failed")
 		}
-		res.Changed, _ = data["changed"].(bool)
+		res.Changed = changed
 	}
 	if !res.Changed {
 		res.Reason = "unchanged"
@@ -76,25 +71,11 @@ func (d *Daemon) herdrPaneResize(cs *connState, in *herdrIn) (*herdrResult, *her
 // herdrRouteClientData is herdrRouteClient for a command whose answer
 // carries data.
 func (d *Daemon) herdrRouteClientData(sess *Session, command, fail string, args ...string) (map[string]any, *herdrError) {
-	tui := d.findTUIClient(sess.ID)
-	if tui == nil {
-		// routeTape words the no_client error.
-		return nil, herdrFromVerb(d.routeTape(sess, command, "", args), fail)
+	data, verr := d.routeData(sess, command, args)
+	if verr != nil {
+		return nil, herdrFromVerb(verr, fail)
 	}
-	res, err := d.routeToTUISync(tui, uuid.New().String(), &RemoteCommandPayload{
-		CommandType: command, TapeArgs: args,
-	}, routedVerbTimeout)
-	if err != nil {
-		return nil, herdrErr(fail, err.Error())
-	}
-	if !res.Success {
-		msg := res.Message
-		if msg == "" {
-			msg = "the attached client refused the request"
-		}
-		return nil, herdrErr(fail, msg)
-	}
-	return res.Data, nil
+	return data, nil
 }
 
 // herdrReloadConfig answers server.reload_config. herdr reads its own
@@ -207,8 +188,9 @@ type herdrMove struct {
 // session, so a tab of another workspace is a workspace of another session:
 // the pane moves there with its process running (move-window's to_session),
 // and its pane id changes with its workspace. A new workspace fails with
-// unsupported. tuios places the pane in the tab's layout itself:
-// target_pane_id, split and ratio are not followed.
+// unsupported. In the same workspace the pane goes beside target_pane_id,
+// on the side split names. Across workspaces tuios places it itself. ratio
+// is not followed.
 func (d *Daemon) herdrPaneMove(cs *connState, in *herdrIn) (*herdrResult, *herdrError) {
 	dest := in.Destination
 	switch dest.Type {
@@ -296,6 +278,12 @@ func (d *Daemon) herdrPaneMove(cs *connState, in *herdrIn) (*herdrResult, *herdr
 		args.Workspace = ws
 		if across {
 			args.ToSession = to.Name()
+		} else if dest.TargetPaneID != "" {
+			// In this session the pane goes beside the target, on the
+			// side split names.
+			if _, tw, ierr := d.herdrFindPane(dest.TargetPaneID); ierr == nil && tw.Workspace == ws {
+				args.Workspace, args.Beside, args.Side = 0, tw.ID, dest.Split
+			}
 		}
 		if _, herr := d.herdrVerb(cs, "move-window", args, fail); herr != nil {
 			return nil, herr

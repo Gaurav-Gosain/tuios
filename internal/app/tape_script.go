@@ -10,6 +10,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"github.com/Gaurav-Gosain/tuios/internal/plural"
 	"github.com/Gaurav-Gosain/tuios/internal/tape"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
@@ -48,9 +49,9 @@ func (m *OS) RunAction(name string) error {
 	handled, cmd := (*r)(name, m)
 	if !handled {
 		if _, known := config.ActionDescriptions[name]; known {
-			return fmt.Errorf("%s is a key of its own view, such as the agents view, mail or the rail, and runs only there. Open the view, then use Press", name)
+			return errfmt.Errorf("%s is a key of its own view, such as the agents view, mail or the rail, and runs only there. Open the view, then use Press", name)
 		}
-		return fmt.Errorf("%q is not an action. Run 'tuios keybinds list' for the action names", name)
+		return errfmt.Errorf("%q is not an action. Run 'tuios keybinds list' for the action names", name)
 	}
 	m.queueScriptCmd(cmd)
 	m.MarkAllDirty()
@@ -66,7 +67,7 @@ func (m *OS) PressKeys(keys []string) error {
 		msgs = append(msgs, m.parseKeysToMessages(k)...)
 	}
 	if len(msgs) == 0 {
-		return fmt.Errorf("no keys in %q", strings.Join(keys, " "))
+		return errfmt.Errorf("no keys in %q", strings.Join(keys, " "))
 	}
 	handler := getInputHandler()
 	if handler == nil {
@@ -101,7 +102,7 @@ func (m *OS) CheckCondition(c tape.Condition) error {
 			return err
 		}
 		if w.Terminal == nil {
-			return fmt.Errorf("pane %s has no screen yet", m.paneLabel(w))
+			return errfmt.Errorf("pane %s has no screen yet", m.paneLabel(w))
 		}
 		w.RLockIO()
 		content := w.Terminal.String()
@@ -109,15 +110,15 @@ func (m *OS) CheckCondition(c tape.Condition) error {
 		if c.Pattern.MatchString(content) {
 			return nil
 		}
-		return fmt.Errorf("pane %s does not show it", m.paneLabel(w))
+		return errfmt.Errorf("pane %s does not show it", m.paneLabel(w))
 	case "pane":
 		if len(m.windowsNamed(c.Value)) > 0 {
 			return nil
 		}
-		return fmt.Errorf("no pane is named %q", c.Value)
+		return errfmt.Errorf("no pane is named %q", c.Value)
 	case "gone":
 		if n := len(m.windowsNamed(c.Value)); n > 0 {
-			return fmt.Errorf("%s %s still named %q", plural.Count(n, "pane"), plural.Word(n, "is", "are"), c.Value)
+			return errfmt.Errorf("%s %s still named %q", plural.Count(n, "pane"), plural.Word(n, "is", "are"), c.Value)
 		}
 		return nil
 	case "focus":
@@ -128,10 +129,10 @@ func (m *OS) CheckCondition(c tape.Condition) error {
 		if w.ID == c.Value || m.getWindowDisplayName(w) == c.Value {
 			return nil
 		}
-		return fmt.Errorf("the focused pane is %s", m.paneLabel(w))
+		return errfmt.Errorf("the focused pane is %s", m.paneLabel(w))
 	case "panes":
 		if n := m.GetWorkspaceWindowCount(m.CurrentWorkspace); n != c.Count {
-			return fmt.Errorf("workspace %d has %s", m.CurrentWorkspace, plural.Count(n, "pane"))
+			return errfmt.Errorf("workspace %d has %s", m.CurrentWorkspace, plural.Count(n, "pane"))
 		}
 		return nil
 	case "agent":
@@ -146,10 +147,10 @@ func (m *OS) CheckCondition(c tape.Condition) error {
 		if state == "" {
 			state = "none"
 		}
-		return fmt.Errorf("the agent state of pane %s is %s", m.paneLabel(w), state)
+		return errfmt.Errorf("the agent state of pane %s is %s", m.paneLabel(w), state)
 	case "workspace":
 		if m.CurrentWorkspace != c.Count {
-			return fmt.Errorf("workspace %d is on screen", m.CurrentWorkspace)
+			return errfmt.Errorf("workspace %d is on screen", m.CurrentWorkspace)
 		}
 		return nil
 	case "mode":
@@ -158,11 +159,11 @@ func (m *OS) CheckCondition(c tape.Condition) error {
 			mode = "terminal"
 		}
 		if mode != c.Value {
-			return fmt.Errorf("tuios is in %s mode", mode)
+			return errfmt.Errorf("tuios is in %s mode", mode)
 		}
 		return nil
 	}
-	return fmt.Errorf("%q is not a condition", c.Kind)
+	return errfmt.Errorf("%q is not a condition", c.Kind)
 }
 
 // conditionPane is the pane a condition reads: the one named, or the focused
@@ -176,11 +177,11 @@ func (m *OS) conditionPane(name string) (*terminal.Window, error) {
 	}
 	switch matches := m.windowsNamed(name); len(matches) {
 	case 0:
-		return nil, fmt.Errorf("no pane is named %q", name)
+		return nil, errfmt.Errorf("no pane is named %q", name)
 	case 1:
 		return matches[0], nil
 	default:
-		return nil, fmt.Errorf("%d panes are named %q", len(matches), name)
+		return nil, errfmt.Errorf("%d panes are named %q", len(matches), name)
 	}
 }
 
@@ -254,7 +255,7 @@ func (m *OS) checkScriptWait() bool {
 		return false
 	}
 	m.ScriptWait = nil
-	m.failScript(&w.cmd, fmt.Errorf("the wait for %s timed out after %s: %w", w.cond, w.cond.Timeout, err))
+	m.failScript(&w.cmd, errfmt.Errorf("the wait for %s timed out after %s: %w", w.cond, w.cond.Timeout, err))
 	return true
 }
 
@@ -312,7 +313,7 @@ func (m *OS) scriptBusy() bool {
 func (m *OS) executeTapeScript(script string, requestID string) (tea.Cmd, error) {
 	commands, errs := tape.ParseFile(script)
 	if len(errs) > 0 {
-		return nil, fmt.Errorf("the tape has %s. The first is at %s", plural.Count(len(errs), "error"), errs[0])
+		return nil, errfmt.Errorf("the tape has %s. The first is at %s", plural.Count(len(errs), "error"), errs[0])
 	}
 	if len(commands) == 0 {
 		return nil, errors.New("the tape has no commands")

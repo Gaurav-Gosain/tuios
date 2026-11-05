@@ -1,7 +1,6 @@
 package session
 
 import (
-	"encoding/json"
 	"log"
 	"os"
 	"path/filepath"
@@ -12,6 +11,7 @@ import (
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/herdrplugin"
+	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 )
 
 // The herdr plugin host.
@@ -337,7 +337,7 @@ func (h *pluginHost) run(p *herdrplugin.Plugin, actionID, event string, argv []s
 	if err := dirs.EnsureUserDirs(p.PluginID); err != nil {
 		return herdrplugin.LogEntry{}, &herdrplugin.Error{Code: "plugin_user_dir_create_failed", Msg: err.Error()}
 	}
-	ctxJSON, _ := json.Marshal(ctx)
+	ctxJSON, _ := jsonx.Marshal(ctx)
 	env := h.baseEnv(p, dirs)
 	env = append(env, "HERDR_PLUGIN_CONTEXT_JSON="+string(ctxJSON))
 	if p.Format == herdrplugin.FormatTuios {
@@ -531,7 +531,7 @@ func herdrHookJSON(e herdrEvent) string {
 	kind := strings.ReplaceAll(e.sub, ".", "_")
 	data := *e.Data
 	data.Type = kind
-	out, _ := json.Marshal(struct {
+	out, _ := jsonx.Marshal(struct {
 		Event string          `json:"event"`
 		Data  *herdrEventData `json:"data"`
 	}{kind, &data})

@@ -144,13 +144,16 @@ func openCockpitClient(t *testing.T, base string, cols, rows int, env []string) 
 // come in the order of what each needs from the person, the approval's row
 // says the verb and the command, a click selects a row and leaves the cockpit
 // open, a answers the approval from the card, D settles an agent (see
-// cockpitSettleRoundTrip), and a double-click goes to the pane.
+// cockpitSettleRoundTrip), and a double-click goes to the pane. The rows of
+// agents that finished or failed since their thread was viewed wear the
+// unseen mark (see cockpitUnseenMarks).
 //
 // Negative controls, each recorded in NEGATIVE_CONTROLS.md: with the groups
 // drawn in the rail's state order the order check fails; with a click going
 // to the pane (the agents view's old rule) the click check fails; with the
 // daemon's wake of a settled agent cut, the agent goes back on the shelf;
-// with the settle's carry across a client push cut, the push clears it.
+// with the settle's carry across a client push cut, the push clears it;
+// with markAgentViewed doing nothing, the unseen mark stays after a view.
 func TestCockpitGroupsTheFleet(t *testing.T) {
 	term, base, hookOut, exited := startCockpitFleet(t, 200, 55, nil)
 	s := term.Screen()
@@ -178,6 +181,8 @@ func TestCockpitGroupsTheFleet(t *testing.T) {
 	_ = term.WaitFor(func(s tuitest.Screen) bool { return !strings.Contains(s.Text(), "Reading...") }, uiTimeout)
 	saveCockpitFrames(t, term, "cockpit-200x55")
 
+	cockpitUnseenMarks(t, term, base)
+
 	// A click on a working agent selects it: the focus shows it, and the
 	// cockpit stays open.
 	row, col := findText(t, term, "bench-idle")
@@ -197,7 +202,8 @@ func TestCockpitGroupsTheFleet(t *testing.T) {
 	row, col = findText(t, term, "api-auth")
 	mouseClick(t, term, col, row, tuitest.MouseLeft, 0)
 	time.Sleep(1500 * time.Millisecond)
-	if err := term.SendKeys("a"); err != nil {
+	// The key asks, and enter answers.
+	if err := term.SendKeys("a", tuitest.Enter); err != nil {
 		t.Fatalf("press a: %v", err)
 	}
 	select {
@@ -220,6 +226,64 @@ func TestCockpitGroupsTheFleet(t *testing.T) {
 		t.Fatalf("ASSERTION: a double-click did not go to the pane: %v\n%s", err, term.Snapshot())
 	}
 	alive(t, term, "after the cockpit round trip")
+}
+
+// unseenOn reports whether the fleet row of name draws the unseen mark after
+// the name.
+func unseenOn(s tuitest.Screen, name string) bool {
+	r := fleetRowWith(s, name)
+	if r < 0 {
+		return false
+	}
+	line := []rune(s.Line(r))
+	return strings.Contains(string(line[:min(len(line), 56)]), "•")
+}
+
+// cockpitUnseenMarks checks the unseen mark. The turns ready for review were
+// never viewed, so their rows wear it, and an agent that fails wears it too.
+// A working agent and the approval do not. Viewing a thread clears its row's
+// mark and only that one, and a new client reads the same marks from the
+// state file.
+func cockpitUnseenMarks(t *testing.T, term *tuitest.Terminal, base string) {
+	t.Helper()
+	if out, err := tuiosCLI(t, base, "set-agent-state", "errored", "-s", "misc", "-w", "release-notes", "--harness", "goose", "-m", "the build failed"); err != nil {
+		t.Fatalf("report release-notes errored: %v\n%s", err, out)
+	}
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		return unseenOn(s, "docs-cli") && unseenOn(s, "vt-sixel") && unseenOn(s, "release-not")
+	}, uiTimeout); err != nil {
+		t.Fatalf("ASSERTION: the finished and failed agents do not wear the unseen mark: %v\n%s", err, term.Snapshot())
+	}
+	if s := term.Screen(); unseenOn(s, "bench-idle") || unseenOn(s, "api-auth") {
+		t.Fatalf("ASSERTION: a working agent or the approval wears the unseen mark\n%s", term.Snapshot())
+	}
+	saveCockpitFrames(t, term, "cockpit-unseen")
+
+	// The thread on screen is viewed.
+	for _, name := range []string{"docs-cli", "release-not"} {
+		row, col := findText(t, term, name)
+		mouseClick(t, term, col, row, tuitest.MouseLeft, 0)
+		if err := term.WaitFor(func(s tuitest.Screen) bool { return !unseenOn(s, name) }, uiTimeout); err != nil {
+			t.Fatalf("ASSERTION: viewing the thread of %s did not clear its mark: %v\n%s", name, err, term.Snapshot())
+		}
+	}
+	row, col := findText(t, term, "cache-1")
+	mouseClick(t, term, col, row, tuitest.MouseLeft, 0)
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		return !unseenOn(s, "docs-cli") && !unseenOn(s, "release-not") && unseenOn(s, "vt-sixel") && unseenOn(s, "rail-tokens")
+	}, uiTimeout); err != nil {
+		t.Fatalf("ASSERTION: after the views the marks are not on the unviewed rows alone: %v\n%s", err, term.Snapshot())
+	}
+	saveCockpitFrames(t, term, "cockpit-unseen-viewed")
+
+	// A new client keeps the watermark.
+	again := openCockpitClient(t, base, 200, 55, nil)
+	if err := again.WaitFor(func(s tuitest.Screen) bool {
+		return unseenOn(s, "vt-sixel") && !unseenOn(s, "docs-cli") && !unseenOn(s, "release-not")
+	}, uiTimeout); err != nil {
+		t.Fatalf("ASSERTION: a new client does not keep the viewed marks: %v\n%s", err, again.Snapshot())
+	}
+	_ = again.Close()
 }
 
 // TestCockpitNarrowFoldsRows opens the cockpit at 100x30: the fleet's rows are
@@ -639,16 +703,27 @@ func saveCockpitFrames(t *testing.T, term *tuitest.Terminal, name string, pics .
 // lit, the todo list is a plan with its count, and the failed command shows
 // its output. The agent's Markdown is drawn: strong, lists, a highlighted
 // code block and a link. A click on the diff's header folds it, and ] shows
-// the last turn's changes alone.
+// the last turn's changes alone. While the agent works, a live activity row
+// under the thread says what it does now (cockpitActivityRow). Then the
+// transcript grows, and the thread scrolls by its rules (threadFollowAndRuler).
+// Then cockpitTurnFolds grows the thread to 30 turns and checks that finished
+// turns fold to a summary line.
 //
 // Negative controls, recorded in NEGATIVE_CONTROLS.md: with the changed
 // range left out of the diff lines the word check fails; with the todos
-// drawn as one line the plan check fails.
+// drawn as one line the plan check fails; with no turn finished the turn
+// fold check fails (see cockpitTurnFolds); with the activity row never
+// hidden by the transcript's newest call, the row stays under the call's
+// card (see cockpitActivityRow); with a held thread followed as if it were
+// at the bottom, the hold check fails; with { and } doing nothing, the jump
+// check fails (see threadFollowAndRuler).
 func TestCockpitThreadCards(t *testing.T) {
 	base := t.TempDir()
 	killDaemon(t, base)
 	useShippedLooks(base)
-	for _, s := range []string{"home200", "home100", "api"} {
+	// The cards below are read in a focus as wide as the screen.
+	writeConfig(t, base, "[agents]\nview_list = \"strip\"\n")
+	for _, s := range []string{"home200", "home100", "home160", "api"} {
 		if out, err := tuiosCLI(t, base, "new", s, "--detach"); err != nil {
 			t.Fatalf("create session %s: %v\n%s", s, err, out)
 		}
@@ -782,6 +857,474 @@ func TestCockpitThreadCards(t *testing.T) {
 		}
 		alive(t, term, "after the thread cards")
 	}
+	cockpitActivityRow(t, base, path)
+	// cockpitActivityRow leaves the agent at rest, and the steps after it
+	// read a thread whose last turn is still at work.
+	if out, err := tuiosCLI(t, base, "set-agent-state", "working", "-s", "api", "-w", "api-auth", "--harness", "claude-code"); err != nil {
+		t.Fatalf("set-agent-state working: %v\n%s", err, out)
+	}
+	threadFollowAndRuler(t, base, path)
+	cockpitTurnFolds(t, base, path)
+}
+
+// threadFollowAndRuler appends to the transcript of TestCockpitThreadCards
+// and checks the thread's three scroll rules and its prompt ruler: a new
+// prompt goes to the top of the thread while it follows; once its reply fills
+// the thread, the bottom is followed; the ruler marks each prompt and { and }
+// put the previous and next prompt at the top; a thread scrolled up holds
+// still while entries arrive and counts them on its last row; G shows them
+// and follows again.
+func threadFollowAndRuler(t *testing.T, base, path string) {
+	t.Helper()
+	n := 100
+	appendEntries := func(entries ...[2]string) {
+		t.Helper()
+		f, err := os.OpenFile(path, os.O_APPEND|os.O_WRONLY, 0o600)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer func() { _ = f.Close() }()
+		for _, e := range entries {
+			n++
+			var content any = e[1]
+			if e[0] == "assistant" {
+				content = []map[string]string{{"type": "text", "text": e[1]}}
+			}
+			line, _ := json.Marshal(map[string]any{
+				"type": e[0], "uuid": "f" + strconv.Itoa(n), "sessionId": "9a1f0c2e-0000-4000-8000-00000000c0c0",
+				"timestamp": fmt.Sprintf("2026-10-18T10:%02d:00.000Z", n-100),
+				"message":   map[string]any{"role": e[0], "content": content},
+			})
+			if _, err := f.Write(append(line, '\n')); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	notes := func(prefix string, k int) string {
+		var b strings.Builder
+		for i := 1; i <= k; i++ {
+			fmt.Fprintf(&b, "- %s note %d\n", prefix, i)
+		}
+		return b.String()
+	}
+	term := startIn(t, base, startOpts{args: []string{"attach", "home160"}, cols: 160, rows: 45, shippedLooks: true, env: []string{"TERM=xterm-256color", "COLORTERM=truecolor"}})
+	if err := term.WaitFor(func(s tuitest.Screen) bool { return countWindows(s) == 1 }, bootTimeout); err != nil {
+		t.Fatalf("client never attached: %v\n%s", err, term.Snapshot())
+	}
+	windowManagementMode(t, term)
+	if err := term.SendKeys(tuitest.Ctrl('b'), "i"); err != nil {
+		t.Fatalf("open the cockpit: %v", err)
+	}
+	if err := term.WaitForText("Running the auth tests.", uiTimeout); err != nil {
+		t.Fatalf("the thread never showed: %v\n%s", err, term.Snapshot())
+	}
+	// The thread's first row is three under the tabs: the rule, then a gap.
+	s := term.Screen()
+	tabs := rowWith(s, "Checkpoints")
+	if tabs < 0 {
+		t.Fatalf("no focus tabs\n%s", term.Snapshot())
+	}
+	first := tabs + 3
+	// 1. A new prompt goes to the top, and the reply fills under it.
+	appendEntries([2]string{"user", "Now cover the boundary at exactly 30 s."},
+		[2]string{"assistant", "Adding a table test for the boundary."})
+	if err := term.WaitForText("Adding a table test for the boundary.", uiTimeout); err != nil {
+		t.Fatalf("the new prompt never showed: %v\n%s", err, term.Snapshot())
+	}
+	_ = term.WaitStable(uiTimeout)
+	s = term.Screen()
+	if r := rowWith(s, "turn 2"); r != first {
+		t.Fatalf("ASSERTION: the new prompt is not at the top of the thread: its label is on row %d, the thread starts on row %d\n%s", r, first, term.Snapshot())
+	}
+	if rowWith(s, "Adding a table test") <= rowWith(s, "Now cover the boundary") {
+		t.Fatalf("ASSERTION: the reply is not under the prompt\n%s", term.Snapshot())
+	}
+	saveCockpitFrames(t, term, "follow-anchor")
+	// Once the reply fills the thread, the bottom is followed.
+	appendEntries([2]string{"assistant", notes("boundary", 40)})
+	if err := term.WaitForText("boundary note 40", uiTimeout); err != nil {
+		t.Fatalf("ASSERTION: the thread did not follow the reply past its height: %v\n%s", err, term.Snapshot())
+	}
+	appendEntries([2]string{"user", "Run the whole suite once more."},
+		[2]string{"assistant", notes("suite", 40)})
+	if err := term.WaitForText("suite note 40", uiTimeout); err != nil {
+		t.Fatalf("ASSERTION: the thread did not follow the third reply: %v\n%s", err, term.Snapshot())
+	}
+	_ = term.WaitStable(uiTimeout)
+	// 2. The ruler marks the three prompts, beside the view's thumb.
+	s = term.Screen()
+	cols, rows := s.Size()
+	marks, thumb := 0, 0
+	for x := cols / 2; x < cols; x++ {
+		mk, th := 0, 0
+		for y := first; y < rows-2; y++ {
+			switch s.Cell(x, y).Content {
+			case "━":
+				mk++
+			case "┃":
+				th++
+			}
+		}
+		if mk > marks {
+			marks, thumb = mk, th
+		}
+	}
+	if marks != 3 || thumb == 0 {
+		t.Fatalf("ASSERTION: the ruler shows %d prompt marks and %d thumb cells, want 3 marks and a thumb\n%s", marks, thumb, term.Snapshot())
+	}
+	saveCockpitFrames(t, term, "follow-ruler")
+	// { puts the previous prompt at the top, and } the next one.
+	jump := func(key, label string, row int) {
+		t.Helper()
+		if err := term.SendKeys(key); err != nil {
+			t.Fatal(err)
+		}
+		if err := term.WaitFor(func(s tuitest.Screen) bool { return rowWith(s, label) == row }, uiTimeout); err != nil {
+			t.Fatalf("ASSERTION: %s did not put %q on the thread's first rows (row %d): %v\n%s", key, label, row, err, term.Snapshot())
+		}
+	}
+	jump("{", "turn 3", first)
+	jump("{", "turn 2", first)
+	jump("{", "Tokens expire mid-request", first+2)
+	jump("}", "turn 2", first)
+	// 3. G follows again; a scroll up holds the thread while entries
+	// arrive, and its last row counts them.
+	if err := term.SendKeys("G"); err != nil {
+		t.Fatal(err)
+	}
+	if err := term.WaitForText("suite note 40", uiTimeout); err != nil {
+		t.Fatalf("ASSERTION: G did not show the newest lines: %v\n%s", err, term.Snapshot())
+	}
+	if err := term.SendKeys("K"); err != nil {
+		t.Fatal(err)
+	}
+	if err := term.WaitFor(func(s tuitest.Screen) bool { return !strings.Contains(s.Text(), "suite note 40") }, uiTimeout); err != nil {
+		t.Fatalf("K did not scroll the thread up: %v\n%s", err, term.Snapshot())
+	}
+	_ = term.WaitStable(uiTimeout)
+	x0 := cellColumnOf(term.Screen(), tabs, "Thread")
+	before := threadRows(term.Screen(), x0, first, rows-4)
+	appendEntries([2]string{"assistant", "First late entry."}, [2]string{"assistant", "Second late entry."},
+		[2]string{"assistant", "Third late entry."})
+	if err := term.WaitForText("3 new entries", uiTimeout); err != nil {
+		t.Fatalf("ASSERTION: the held thread does not count the new entries: %v\n%s", err, term.Snapshot())
+	}
+	_ = term.WaitStable(uiTimeout)
+	s = term.Screen()
+	after := threadRows(s, x0, first, rows-4)
+	// The rows above the one that counts the new entries are as they were.
+	moved := strings.Contains(s.Text(), "Third late entry.")
+	for i := range after {
+		if strings.Contains(after[i], "new entr") {
+			break
+		}
+		if after[i] != before[i] {
+			moved = true
+		}
+	}
+	if moved {
+		t.Fatalf("ASSERTION: the held thread moved when entries arrived\nbefore:\n%s\nafter:\n%s", strings.Join(before, "\n"), strings.Join(after, "\n"))
+	}
+	saveCockpitFrames(t, term, "follow-new-entries")
+	if err := term.SendKeys("G"); err != nil {
+		t.Fatal(err)
+	}
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		return strings.Contains(s.Text(), "Third late entry.") && !strings.Contains(s.Text(), "new entries")
+	}, uiTimeout); err != nil {
+		t.Fatalf("ASSERTION: G did not show the new entries and remove the line: %v\n%s", err, term.Snapshot())
+	}
+	alive(t, term, "after the thread follow")
+}
+
+// threadRows is the text of rows y0 to y1 from column x0 on, without the
+// ruler, whose thumb and marks move as the thread grows.
+func threadRows(s tuitest.Screen, x0, y0, y1 int) []string {
+	cols, _ := s.Size()
+	var out []string
+	for y := y0; y <= y1; y++ {
+		var b strings.Builder
+		for x := max(x0, 0); x < cols; x++ {
+			c := s.Cell(x, y).Content
+			if c == "━" || c == "┃" || c == "" {
+				c = " "
+			}
+			b.WriteString(c)
+		}
+		out = append(out, b.String())
+	}
+	return out
+}
+
+// cockpitActivityRow checks the live activity row under the thread of the
+// agent TestCockpitThreadCards joined to cockpit-auth.jsonl. A PreToolUse
+// hook for a command the transcript does not have yet shows the row with the
+// command. When the transcript gains the call's card, the row goes, so the
+// row never repeats a card. A second tool shows the row again, and at rest
+// there is no row.
+func cockpitActivityRow(t *testing.T, base, path string) {
+	t.Helper()
+	hook := func(payload map[string]any) {
+		t.Helper()
+		payload["session_id"], payload["transcript_path"] = "9a1f0c2e", path
+		b, _ := json.Marshal(payload)
+		cmd := exec.Command(tuiosBin, "agent-hook", "claude-code", "--session", "api", "--window", "api-auth")
+		cmd.Dir = workDirIn(t, base)
+		cmd.Env = append(os.Environ(), "SHELL=/bin/sh")
+		for _, key := range xdgKeys {
+			cmd.Env = append(cmd.Env, key+"="+xdgDir(base, key))
+		}
+		cmd.Stdin = bytes.NewReader(b)
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("agent-hook %v: %v\n%s", payload["hook_event_name"], err, out)
+		}
+	}
+	term := startIn(t, base, startOpts{args: []string{"attach", "home200"}, cols: 200, rows: 55, shippedLooks: true, env: []string{"TERM=xterm-256color", "COLORTERM=truecolor"}})
+	if err := term.WaitFor(func(s tuitest.Screen) bool { return countWindows(s) == 1 }, bootTimeout); err != nil {
+		t.Fatalf("client never attached: %v\n%s", err, term.Snapshot())
+	}
+	windowManagementMode(t, term)
+	if err := term.SendKeys(tuitest.Ctrl('b'), "i"); err != nil {
+		t.Fatalf("open the cockpit: %v", err)
+	}
+	if err := term.WaitForText("Running the auth tests.", uiTimeout); err != nil {
+		t.Fatalf("the thread never showed: %v\n%s", err, term.Snapshot())
+	}
+	const cmdText = "go test -run TestRefreshSkew ./internal/auth/"
+	row := "Running " + cmdText
+	hook(map[string]any{"hook_event_name": "PreToolUse", "tool_name": "Bash", "tool_input": map[string]any{"command": cmdText}})
+	if err := term.WaitForText(row, uiTimeout); err != nil {
+		t.Fatalf("ASSERTION: the thread shows no activity row while the agent runs a command: %v\n%s", err, term.Snapshot())
+	}
+	saveCockpitFrames(t, term, "activity-row-200x55")
+
+	// The transcript catches up: the call's card shows, and the row goes.
+	f, err := os.OpenFile(path, os.O_APPEND|os.O_WRONLY, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rec, _ := json.Marshal(map[string]any{
+		"type": "assistant", "uuid": "c18", "timestamp": "2026-10-18T09:52:05.000Z", "sessionId": "9a1f0c2e-0000-4000-8000-00000000c0c0",
+		"message": map[string]any{"role": "assistant", "stop_reason": "tool_use",
+			"content": []any{map[string]any{"type": "tool_use", "id": "b2", "name": "Bash", "input": map[string]any{"command": cmdText}}}},
+	})
+	if _, err := f.Write(append(rec, '\n')); err != nil {
+		t.Fatal(err)
+	}
+	_ = f.Close()
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		text := s.Text()
+		return strings.Contains(text, "Bash  "+cmdText) && !strings.Contains(text, row)
+	}, uiTimeout); err != nil {
+		t.Fatalf("ASSERTION: the activity row stays when the transcript shows the call's card: %v\n%s", err, term.Snapshot())
+	}
+	saveCockpitFrames(t, term, "activity-caught-up-200x55")
+
+	// The next tool shows the row again, and a pane at rest has none.
+	hook(map[string]any{"hook_event_name": "PreToolUse", "tool_name": "Read", "tool_input": map[string]any{"file_path": "internal/auth/refresh.go"}})
+	if err := term.WaitForText("Reading internal/auth/refresh.go", uiTimeout); err != nil {
+		t.Fatalf("ASSERTION: the thread shows no activity row for the next tool: %v\n%s", err, term.Snapshot())
+	}
+	if out, err := tuiosCLI(t, base, "set-agent-state", "idle", "-s", "api", "-w", "api-auth", "--harness", "claude-code"); err != nil {
+		t.Fatalf("set-agent-state idle: %v\n%s", err, out)
+	}
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		return !strings.Contains(s.Text(), "Reading internal/auth/refresh.go")
+	}, uiTimeout); err != nil {
+		t.Fatalf("ASSERTION: the activity row stays when the agent rests: %v\n%s", err, term.Snapshot())
+	}
+	alive(t, term, "after the activity row")
+}
+
+// claudeTurns writes turns 2 to n of a Claude Code transcript, after the
+// fixture's first turn. Each turn reads two files, searches, edits one or two
+// files and runs go test, then answers. Turn failed runs a command that
+// fails. The last turn is still at work: it reads and runs a command that has
+// no result yet.
+func claudeTurns(n, failed int) []byte {
+	var b bytes.Buffer
+	at := time.Date(2026, 10, 18, 10, 0, 0, 0, time.UTC)
+	rec := func(typ string, content any) {
+		line, _ := json.Marshal(map[string]any{"type": typ, "isSidechain": false, "sessionId": "9a1f0c2e-0000-4000-8000-00000000c0c0",
+			"uuid": fmt.Sprintf("u%d", b.Len()), "timestamp": at.Format("2006-01-02T15:04:05.000Z"),
+			"message": map[string]any{"role": typ, "content": content}})
+		b.Write(line)
+		b.WriteByte('\n')
+		at = at.Add(13 * time.Second)
+	}
+	call := func(id, name string, input map[string]any) {
+		rec("assistant", []any{map[string]any{"type": "tool_use", "id": id, "name": name, "input": input}})
+	}
+	result := func(id, text string, failed bool) {
+		rec("user", []any{map[string]any{"type": "tool_result", "tool_use_id": id, "content": text, "is_error": failed}})
+	}
+	for k := 2; k <= n; k++ {
+		at = time.Date(2026, 10, 18, 10, 0, 0, 0, time.UTC).Add(time.Duration(k) * 10 * time.Minute)
+		pkg := fmt.Sprintf("pkg%d", k)
+		rec("user", fmt.Sprintf("Task %d: make %s handle an empty token.", k, pkg))
+		rec("assistant", []any{map[string]any{"type": "thinking", "thinking": "Read " + pkg + " first.", "signature": "s"}})
+		for f, name := range []string{"token.go", "refresh.go"} {
+			id := fmt.Sprintf("r%d-%d", k, f)
+			call(id, "Read", map[string]any{"file_path": "/src/api/" + pkg + "/" + name})
+			result(id, "package "+pkg, false)
+		}
+		call(fmt.Sprintf("g%d", k), "Grep", map[string]any{"pattern": "Expired", "path": "/src/api/" + pkg})
+		result(fmt.Sprintf("g%d", k), "token.go", false)
+		for f := range 1 + k%2 {
+			id := fmt.Sprintf("e%d-%d", k, f)
+			call(id, "Edit", map[string]any{"file_path": fmt.Sprintf("/src/api/%s/edit%d.go", pkg, f), "old_string": "return false", "new_string": "return tok == \"\""})
+			result(id, "ok", false)
+		}
+		id := fmt.Sprintf("b%d", k)
+		call(id, "Bash", map[string]any{"command": "go test ./" + pkg + "/...", "description": "Test"})
+		if k == n {
+			break
+		}
+		if k == failed {
+			result(id, "--- FAIL: TestEmpty"+pkg+"\nexit status 1", true)
+		} else {
+			result(id, "ok  "+pkg, false)
+		}
+		rec("assistant", []any{map[string]any{"type": "text", "text": fmt.Sprintf("Task %d is done.", k)}})
+	}
+	return b.Bytes()
+}
+
+// cockpitTurnFolds grows the thread to 30 turns and reads it: each finished
+// turn folds its work to one summary line under its prompt, a turn with a
+// failed command stays open and says so, the live last turn stays open, e
+// opens every turn, and a click on a summary line opens that turn alone.
+//
+// Negative control, recorded in NEGATIVE_CONTROLS.md: with no turn finished
+// (Turns in internal/transcriptview), the finished turns show their work and
+// the summary check fails.
+func cockpitTurnFolds(t *testing.T, base, path string) {
+	t.Helper()
+	f, err := os.OpenFile(path, os.O_APPEND|os.O_WRONLY, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.Write(claudeTurns(30, 26)); err != nil {
+		t.Fatal(err)
+	}
+	f.Close()
+	if out, err := tuiosCLI(t, base, "new", "home140", "--detach"); err != nil {
+		t.Fatalf("create session home140: %v\n%s", err, out)
+	}
+	term := startIn(t, base, startOpts{args: []string{"attach", "home140"}, cols: 140, rows: 45, shippedLooks: true, env: []string{"TERM=xterm-256color", "COLORTERM=truecolor"}})
+	if err := term.WaitFor(func(s tuitest.Screen) bool { return countWindows(s) == 1 }, bootTimeout); err != nil {
+		t.Fatalf("client never attached: %v\n%s", err, term.Snapshot())
+	}
+	windowManagementMode(t, term)
+	if err := term.SendKeys(tuitest.Ctrl('b'), "i"); err != nil {
+		t.Fatalf("open the cockpit: %v", err)
+	}
+	// The live last turn shows its work: the command still runs.
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		return containsAll(s.Text(), "Task 30: make pkg30", "go test ./pkg30/...", "Task 29 is done.")
+	}, uiTimeout); err != nil {
+		t.Fatalf("ASSERTION: the thread never showed the live last turn: %v\n%s", err, term.Snapshot())
+	}
+	_ = term.WaitStable(uiTimeout)
+	saveCockpitFrames(t, term, "turns-140x45")
+	// Four actions: two are named, and the rest are counted. The span runs
+	// from the prompt to the answer, 13 s a record.
+	summary := func(k int) string {
+		if k%2 == 1 {
+			return "Edited 2 files, ran 1 command and 3 other actions · 3m 2s"
+		}
+		return "Edited 1 file, ran 1 command and 3 other actions · 2m 36s"
+	}
+	scrollTo := func(key, want string) {
+		t.Helper()
+		for range 60 {
+			if strings.Contains(term.Screen().Text(), want) {
+				return
+			}
+			if err := term.SendKeys(key); err != nil {
+				t.Fatal(err)
+			}
+			_ = term.WaitStable(uiTimeout)
+		}
+	}
+	// find scrolls down, then up, until want shows.
+	find := func(want string) {
+		t.Helper()
+		scrollTo("J", want)
+		scrollTo("K", want)
+	}
+	for k := 28; k <= 29; k++ {
+		find(fmt.Sprintf("Task %d: make", k))
+		_ = term.WaitStable(uiTimeout)
+		if k == 28 {
+			saveCockpitFrames(t, term, "turns-folded-140x45")
+		}
+		// A finished turn is its prompt, one summary line and its answer:
+		// no read, edit or command of it shows.
+		s := term.Screen()
+		if text := s.Text(); strings.Contains(text, fmt.Sprintf("go test ./pkg%d/", k)) || strings.Contains(text, fmt.Sprintf("pkg%d/edit0.go", k)) {
+			t.Fatalf("ASSERTION: the finished turn %d shows its work\n%s", k, term.Snapshot())
+		}
+		row := rowWith(s, fmt.Sprintf("Task %d: make", k))
+		if row < 0 || row+3 >= 45 {
+			t.Fatalf("ASSERTION: the prompt of turn %d is not on screen\n%s", k, term.Snapshot())
+		}
+		found := false
+		for r := row + 1; r < min(row+5, 45); r++ {
+			found = found || strings.Contains(s.Line(r), summary(k))
+		}
+		if !found {
+			t.Fatalf("ASSERTION: turn %d has no summary line under its prompt\n%s", k, term.Snapshot())
+		}
+	}
+	// The turn with the failed command stays open, and its summary says so.
+	find("Task 26: make")
+	find("TestEmptypkg26")
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		return containsAll(s.Text(), "go test ./pkg26/...", "--- FAIL: TestEmptypkg26", "(1 failed)")
+	}, uiTimeout); err != nil {
+		t.Fatalf("ASSERTION: the turn with the failed command is not open with its failure: %v\n%s", err, term.Snapshot())
+	}
+	// A click on a summary line opens that turn, and another closes it.
+	find("Task 27: make")
+	find(summary(27))
+	hr, hc := findText(t, term, summary(27))
+	mouseClick(t, term, hc, hr, tuitest.MouseLeft, 0)
+	// A thread scrolled up holds still, so the turn opens under the line
+	// that was clicked, and its last command can be past the bottom.
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		return containsAll(s.Text(), "Read pkg27 first.", "Read 2")
+	}, uiTimeout); err != nil {
+		t.Fatalf("ASSERTION: a click on the summary line did not open the turn: %v\n%s", err, term.Snapshot())
+	}
+	_ = term.WaitStable(uiTimeout)
+	saveCockpitFrames(t, term, "turn-opened-140x45")
+	find("go test ./pkg27/...")
+	find(summary(27))
+	hr, hc = findText(t, term, summary(27))
+	mouseClick(t, term, hc, hr, tuitest.MouseLeft, 0)
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		return !strings.Contains(s.Text(), "go test ./pkg27/...")
+	}, uiTimeout); err != nil {
+		t.Fatalf("ASSERTION: a second click did not close the turn: %v\n%s", err, term.Snapshot())
+	}
+	// e opens every turn, and again folds them.
+	if err := term.SendKeys("e"); err != nil {
+		t.Fatal(err)
+	}
+	find("go test ./pkg28/...")
+	if err := term.WaitForText("go test ./pkg28/...", uiTimeout); err != nil {
+		t.Fatalf("ASSERTION: e did not open the finished turns: %v\n%s", err, term.Snapshot())
+	}
+	if err := term.SendKeys("e"); err != nil {
+		t.Fatal(err)
+	}
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		return !strings.Contains(s.Text(), "go test ./pkg28/...")
+	}, uiTimeout); err != nil {
+		t.Fatalf("ASSERTION: a second e did not fold the turns again: %v\n%s", err, term.Snapshot())
+	}
+	alive(t, term, "after the turn folds")
 }
 
 // cockpitMarkdown checks the agent's Markdown message of cockpit-auth.jsonl
@@ -1640,6 +2183,11 @@ func waitSpawnRead(t *testing.T, term *tuitest.Terminal) {
 
 // TestCockpitSideTabs is the side column's pieces as focus tabs on a screen
 // narrower than it: Checkpoints lists them, and Pane shows the live pane.
+// Then cockpitListLayouts checks the list column and the strip on the same
+// one-agent fleet.
+//
+// Negative control, recorded in NEGATIVE_CONTROLS.md: with the strip chosen
+// for two agents or fewer again, the list column check fails at 160x40.
 func TestCockpitSideTabs(t *testing.T) {
 	base := t.TempDir()
 	killDaemon(t, base)
@@ -1673,6 +2221,55 @@ func TestCockpitSideTabs(t *testing.T) {
 	waitText(t, term, "the pane tab", "TAB-marker-3")
 	saveCockpitFrames(t, term, "pane-tab-100x30")
 	alive(t, term, "after the side tabs")
+	cockpitListLayouts(t, term)
+}
+
+// cockpitListLayouts reads the list layouts of a one-agent fleet. At 160x40
+// the agent is in the list column, beside the focus. \ folds the list into
+// the strip of chips above the focus, and \ again opens the column. Under 80
+// columns the list fills the screen, also with the strip chosen.
+func cockpitListLayouts(t *testing.T, term *tuitest.Terminal) {
+	t.Helper()
+	column := func(s tuitest.Screen) bool {
+		r := lineWith(s, "Working  1")
+		// The long search label shows only once the view draws at 160.
+		return r >= 0 && strings.Contains(s.Line(r), "worker") && containsAll(s.Text(), `\ strip`, "Search agents, sessions, machines")
+	}
+	strip := func(s tuitest.Screen) bool {
+		return !strings.Contains(s.Text(), "Working  1") && strings.Contains(s.Text(), "Thread") && strings.Contains(s.Text(), `\ list`)
+	}
+	wait := func(what string, cond func(tuitest.Screen) bool) {
+		t.Helper()
+		if err := term.WaitFor(cond, uiTimeout); err != nil {
+			t.Fatalf("ASSERTION: %s: %v\n%s", what, err, term.Snapshot())
+		}
+	}
+	if err := term.Resize(160, 40); err != nil {
+		t.Fatal(err)
+	}
+	wait("one agent at 160x40 is not in the list column", column)
+	saveCockpitFrames(t, term, "list-column-160x40")
+	if err := term.SendKeys(`\`); err != nil {
+		t.Fatal(err)
+	}
+	wait(`\ did not fold the list into the strip`, strip)
+	saveCockpitFrames(t, term, "list-strip-160x40")
+	if err := term.SendKeys(`\`); err != nil {
+		t.Fatal(err)
+	}
+	wait(`\ did not open the list column again`, column)
+	if err := term.SendKeys(`\`); err != nil {
+		t.Fatal(err)
+	}
+	wait(`\ did not fold the list into the strip a second time`, strip)
+	if err := term.Resize(70, 30); err != nil {
+		t.Fatal(err)
+	}
+	wait("the list does not fill a 70-column screen", func(s tuitest.Screen) bool {
+		return strings.Contains(s.Text(), "Working  1") && !strings.Contains(s.Text(), "Thread")
+	})
+	saveCockpitFrames(t, term, "list-narrow-70x30")
+	alive(t, term, "after the list layouts")
 }
 
 // TestCockpitSpawnSheet starts an agent from the New agent sheet, the way a

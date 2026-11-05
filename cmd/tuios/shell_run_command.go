@@ -9,6 +9,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
+	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 	"github.com/spf13/cobra"
 )
 
@@ -67,8 +69,8 @@ func runInPane(sessionName, windowTarget string, args []string, timeout, lines i
 // exits 0.
 func printRunResult(out, errs io.Writer, raw json.RawMessage) error {
 	var res runResult
-	if err := json.Unmarshal(raw, &res); err != nil {
-		return fmt.Errorf("failed to parse response: %w", err)
+	if err := jsonx.Unmarshal(raw, &res); err != nil {
+		return errfmt.Errorf("failed to parse response: %w", err)
 	}
 	if res.Output != "" {
 		fmt.Fprintln(out, res.Output)
@@ -102,6 +104,9 @@ fish 4 and newer send them by themselves. zsh, and bash 4.4 or newer, need a
 few lines in their startup file. 'tuios doctor shell' prints those lines for
 your shell. A pane whose shell sends no marks is refused with
 no_shell_integration, and nothing is typed.
+
+From inside a pane, -w is required. Without it the command would go to the
+pane the person has in focus.
 
 It types only at a prompt. A pane already running a command is refused with
 not_at_prompt, and nothing is typed. The words after -- are joined with spaces

@@ -20,6 +20,7 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/federation"
 	"github.com/Gaurav-Gosain/tuios/internal/harness"
 	"github.com/Gaurav-Gosain/tuios/internal/integration"
+	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 	"github.com/Gaurav-Gosain/tuios/internal/transcriptview"
 	"github.com/google/uuid"
 	"tuios.dev/vt"
@@ -35,7 +36,7 @@ func decodeParams(params json.RawMessage, v any) *verbError {
 	if len(params) == 0 {
 		return nil
 	}
-	if err := json.Unmarshal(params, v); err != nil {
+	if err := jsonx.Unmarshal(params, v); err != nil {
 		return hintedVerbError(ErrVerbInvalidParams, "could not decode params: "+err.Error(), &VerbHint{
 			Verb:   "list-verbs",
 			Detail: "Call list-verbs to get this verb's parameter schema, including each parameter's type.",
@@ -306,43 +307,53 @@ func (d *Daemon) verbGetWindow(cs *connState, params json.RawMessage) (any, *ver
 }
 
 func (d *Daemon) verbNewWindow(cs *connState, params json.RawMessage) (any, *verbError) {
-	var p struct {
-		Session   string   `json:"session"`
-		Name      string   `json:"name"`
-		Workspace int      `json:"workspace"`
-		Cwd       string   `json:"cwd"`
-		Focus     *bool    `json:"focus"`
-		Command   []string `json:"command"`
-		Host      string   `json:"host"`
-		Grants    []string `json:"grants"`
-		// Env is set in the new pane's process, checked as start-agent
-		// checks its env.
-		Env map[string]string `json:"env"`
-		// CloseOnExit closes the window when its process exits, also with no
-		// client attached. An attached client closes a command window on
-		// exit already. A detached session keeps it until something closes
-		// it, which is right for a shell and wrong for tuios xpanes -ss.
-		CloseOnExit bool `json:"close_on_exit"`
-		// KeepOpen keeps the window after its process exits, with a line
-		// that shows the exit status. See keep_open.go.
-		KeepOpen bool `json:"keep_open"`
-		// Wait holds the call until the process exits and answers with its
-		// exit status. Timeout bounds the wait in milliseconds, 0 for none.
-		Wait    bool `json:"wait"`
-		Timeout int  `json:"timeout"`
-		// Kind and URI make a window a renderer draws natively.
-		Kind string `json:"kind"`
-		URI  string `json:"uri"`
-		// Cols and Rows are the size the caller will give the pane, so its
-		// program starts at it: a shell that printed its prompt at the
-		// session's nominal size and was then narrowed redrew it, and the
-		// reflowed prompt stayed on the screen twice (QA-011).
-		Cols int `json:"cols"`
-		Rows int `json:"rows"`
-	}
+	var p newWindowParams
 	if verr := decodeParams(params, &p); verr != nil {
 		return nil, verr
 	}
+	return d.openWindow(cs, &p, nil)
+}
+
+// newWindowParams are new-window's params. split-window takes them too.
+type newWindowParams struct {
+	Session   string   `json:"session"`
+	Name      string   `json:"name"`
+	Workspace int      `json:"workspace"`
+	Cwd       string   `json:"cwd"`
+	Focus     *bool    `json:"focus"`
+	Command   []string `json:"command"`
+	Host      string   `json:"host"`
+	Grants    []string `json:"grants"`
+	// Env is set in the new pane's process, checked as start-agent
+	// checks its env.
+	Env map[string]string `json:"env"`
+	// CloseOnExit closes the window when its process exits, also with no
+	// client attached. An attached client closes a command window on
+	// exit already. A detached session keeps it until something closes
+	// it, which is right for a shell and wrong for tuios xpanes -ss.
+	CloseOnExit bool `json:"close_on_exit"`
+	// KeepOpen keeps the window after its process exits, with a line
+	// that shows the exit status. See keep_open.go.
+	KeepOpen bool `json:"keep_open"`
+	// Wait holds the call until the process exits and answers with its
+	// exit status. Timeout bounds the wait in milliseconds, 0 for none.
+	Wait    bool `json:"wait"`
+	Timeout int  `json:"timeout"`
+	// Kind and URI make a window a renderer draws natively.
+	Kind string `json:"kind"`
+	URI  string `json:"uri"`
+	// Cols and Rows are the size the caller will give the pane, so its
+	// program starts at it: a shell that printed its prompt at the
+	// session's nominal size and was then narrowed redrew it, and the
+	// reflowed prompt stayed on the screen twice (QA-011). A split takes
+	// its own estimate when they are 0.
+	Cols int `json:"cols"`
+	Rows int `json:"rows"`
+}
+
+// openWindow is new-window. With split, the window goes beside a pane in the
+// split tree, on the pane's workspace (see verbSplitWindow).
+func (d *Daemon) openWindow(cs *connState, p *newWindowParams, split *splitAsk) (any, *verbError) {
 	if p.Kind != "" && !slices.Contains(WindowKinds, p.Kind) {
 		return nil, invalidParam("kind", "kind is terminal, view, web or app")
 	}
@@ -378,6 +389,17 @@ func (d *Daemon) verbNewWindow(cs *connState, params json.RawMessage) (any, *ver
 	}
 	// From inside a pane of this session, the default is the pane's own
 	// workspace (#1494). Outside every pane it stays the one the session shows.
+	var placement *SplitPlacement
+	cols, rows := p.Cols, p.Rows
+	if split != nil {
+		var splitCols, splitRows int
+		if placement, splitCols, splitRows, verr = d.splitTarget(cs, sess, p, split); verr != nil {
+			return nil, verr
+		}
+		if cols == 0 && rows == 0 {
+			cols, rows = splitCols, splitRows
+		}
+	}
 	if p.Workspace == 0 {
 		p.Workspace = d.callerWorkspaceIn(cs, sess)
 	}
@@ -440,6 +462,7 @@ func (d *Daemon) verbNewWindow(cs *connState, params json.RawMessage) (any, *ver
 		closeOnExit: p.CloseOnExit,
 		Title:       p.Name,
 		Cwd:         p.Cwd,
+		CallerCwd:   d.callerCwd(cs),
 		Workspace:   p.Workspace,
 		Focus:       focus,
 		Command:     p.Command,
@@ -449,11 +472,15 @@ func (d *Daemon) verbNewWindow(cs *connState, params json.RawMessage) (any, *ver
 		Env:         env,
 		Kind:        p.Kind,
 		URI:         p.URI,
-		Cols:        p.Cols,
-		Rows:        p.Rows,
+		Split:       placement,
+		Cols:        cols,
+		Rows:        rows,
 	}, onExit)
 	if bverr != nil {
 		return nil, bverr
+	}
+	if errors.Is(err, errSplitNotTiled) {
+		return nil, invalidParam("window", err.Error())
 	}
 	if errors.Is(err, ErrScratchExists) {
 		return nil, invalidParam("scratch", err.Error())
@@ -522,20 +549,7 @@ func (d *Daemon) verbNewWindow(cs *connState, params json.RawMessage) (any, *ver
 	//
 	// keep_open is echoed only when set: a caller that asked for it and does
 	// not see it back is talking to a daemon that does not know it.
-	if p.KeepOpen {
-		return map[string]any{
-			"type":      "window_created",
-			"window_id": win.ID,
-			"name":      displayName,
-			"workspace": win.Workspace,
-			"pty_id":    win.PTYID,
-			"focused":   focus,
-			"unplaced":  win.Unplaced,
-			"host":      win.Host,
-			"keep_open": true,
-		}, nil
-	}
-	return map[string]any{
+	out := map[string]any{
 		"type":      "window_created",
 		"window_id": win.ID,
 		"name":      displayName,
@@ -546,7 +560,14 @@ func (d *Daemon) verbNewWindow(cs *connState, params json.RawMessage) (any, *ver
 		// Omitted for a window on this machine, so the ordinary result keeps
 		// the shape it has always had.
 		"host": win.Host,
-	}, nil
+	}
+	if p.KeepOpen {
+		out["keep_open"] = true
+	}
+	if split != nil {
+		d.splitDone(sess, out, placement, win.ID, split)
+	}
+	return out, nil
 }
 
 // newWindowPlaceWait bounds how long new-window waits for an attached client
@@ -627,8 +648,9 @@ func (d *Daemon) verbPopup(cs *connState, params json.RawMessage) (any, *verbErr
 		// ScratchName names the scratch pane. Empty is the built-in one.
 		ScratchName string `json:"scratch_name"`
 		// CwdFrom names a window whose folder the popup starts in, read
-		// from its process now, in place of cwd: a client's copy of a
-		// window's folder can be a read older than the last cd.
+		// from its process now: a client's copy of a window's folder can be
+		// a read older than the last cd. Cwd is the folder when that read
+		// gives none, and what a daemon that predates CwdFrom uses.
 		CwdFrom string `json:"cwd_from"`
 	}
 	if verr := decodeParams(params, &p); verr != nil {
@@ -667,8 +689,18 @@ func (d *Daemon) verbPopup(cs *connState, params json.RawMessage) (any, *verbErr
 	if p.Workspace < 0 {
 		return nil, invalidParam("workspace", "workspace is a workspace number, e.g. 2. Omit it for the current one")
 	}
-	if p.Cwd == "" && p.CwdFrom != "" {
-		p.Cwd = sess.cwdFrom(p.CwdFrom)
+	if p.CwdFrom != "" {
+		if win, ok := findWindowState(sess.GetState(), p.CwdFrom); ok && win.Host == "" {
+			if cwd := sess.windowCwd(p.CwdFrom); cwd != "" {
+				p.Cwd = cwd
+			}
+		}
+		// A caller that names only cwd_from (guios's scratch) gets the
+		// session's start directory when the read gives none, as a new
+		// window from cwd_from does.
+		if p.Cwd == "" {
+			p.Cwd = sess.StartDir()
+		}
 	}
 	// The same refusal new-window makes, for the same reason: a directory that
 	// cannot be entered would leave the command running in the wrong place with

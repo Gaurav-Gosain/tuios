@@ -1,13 +1,13 @@
 package tmuxcompat
 
 import (
-	"encoding/json"
 	"os"
 	"path/filepath"
 	"time"
 
 	"github.com/adrg/xdg"
 
+	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 	"github.com/Gaurav-Gosain/tuios/internal/serverscope"
 )
 
@@ -87,7 +87,7 @@ func (l *Logger) Record(argv []string, outcome string, detail []string) {
 	if !l.All && (outcome == OutcomeOK || outcome == OutcomeIgnored) {
 		return
 	}
-	line, err := json.Marshal(LogEntry{
+	line, err := jsonx.Marshal(LogEntry{
 		Time:    time.Now().UTC().Format(time.RFC3339),
 		Argv:    argv,
 		Outcome: outcome,

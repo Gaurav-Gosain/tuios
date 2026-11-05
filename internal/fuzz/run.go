@@ -3,6 +3,8 @@ package fuzz
 import (
 	"fmt"
 	"strings"
+
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 )
 
 // Violation is one broken invariant. Rule names the property, and it is what
@@ -196,7 +198,7 @@ func Run(newTarget func() (Target, error), cfg Config) (Result, error) {
 		}
 		for i, a := range as {
 			if err := t.Apply(a); err != nil {
-				return -1, nil, fmt.Errorf("step %d %s: %w", i, a, err)
+				return -1, nil, errfmt.Errorf("step %d %s: %w", i, a, err)
 			}
 			vs := t.Check()
 			if watch {

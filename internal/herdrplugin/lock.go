@@ -14,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"github.com/adrg/xdg"
 	"github.com/pelletier/go-toml/v2"
 )
@@ -49,6 +50,8 @@ type LockEntry struct {
 	// Ref is what the person asked for: a branch, a tag or a commit. ""
 	// is the remote's default branch.
 	Ref string `toml:"ref,omitempty" json:"ref,omitempty"`
+	// Tag is set when Ref named a tag when it was installed or last updated.
+	Tag bool `toml:"tag,omitempty" json:"tag,omitempty"`
 	// Commit is the full commit the ref resolved to. It is the pin.
 	Commit string `toml:"commit,omitempty" json:"commit,omitempty"`
 	// Tree is git's id of the plugin folder at Commit.
@@ -161,10 +164,10 @@ func ReadLock(p string) (*Lock, error) {
 	}
 	var l Lock
 	if err := toml.Unmarshal(data, &l); err != nil {
-		return nil, fmt.Errorf("%s is not a valid lock file: %w", p, err)
+		return nil, errfmt.Errorf("%s is not a valid lock file: %w", p, err)
 	}
 	if l.Version > lockVersion {
-		return nil, fmt.Errorf("%s has version %d. This tuios reads version %d. Update tuios", p, l.Version, lockVersion)
+		return nil, errfmt.Errorf("%s has version %d. This tuios reads version %d. Update tuios", p, l.Version, lockVersion)
 	}
 	return &l, nil
 }
@@ -195,20 +198,20 @@ func CheckLockEntry(e LockEntry) error {
 	// An id that starts with . or % could name a file tuios keeps beside
 	// the build folders, such as %install.lock.
 	if n, ok := NormalizeID(e.ID); !ok || n != e.ID || e.ID[0] == '.' || e.ID[0] == '%' {
-		return fmt.Errorf("the plugin id %q is not valid here", e.ID)
+		return errfmt.Errorf("the plugin id %q is not valid here", e.ID)
 	}
 	if e.Local() {
 		if !filepath.IsAbs(strings.TrimPrefix(e.Source, LocalPrefix)) {
-			return fmt.Errorf("the lock file entry %s names a folder that is not absolute", e.ID)
+			return errfmt.Errorf("the lock file entry %s names a folder that is not absolute", e.ID)
 		}
 		return nil
 	}
 	if !IsCommit(e.Commit) {
-		return fmt.Errorf("the lock file entry %s has no full commit", e.ID)
+		return errfmt.Errorf("the lock file entry %s has no full commit", e.ID)
 	}
 	if name, ok := strings.CutPrefix(e.Source, ReleasePrefix); ok {
 		if n, ok := NormalizeLocalID(name); !ok || n != name || e.Subdir != "" || !strings.HasPrefix(e.Ref, "v") || hasControl(e.Ref) {
-			return fmt.Errorf("the lock file entry %s names a release plugin that is not valid", e.ID)
+			return errfmt.Errorf("the lock file entry %s names a release plugin that is not valid", e.ID)
 		}
 		return nil
 	}
@@ -247,7 +250,7 @@ func CheckSource(s string) error {
 		return errors.New("tuios does not get plugins over plain http. Use https")
 	}
 	if s == "" || s[0] == '-' || strings.Contains(s, "::") || hasControl(s) {
-		return fmt.Errorf("%q is not a valid plugin source", s)
+		return errfmt.Errorf("%q is not a valid plugin source", s)
 	}
 	return nil
 }
@@ -265,7 +268,7 @@ func CheckSubdir(s string) error {
 // character no ref can hold.
 func CheckRef(s string) error {
 	if s != "" && (s[0] == '-' || strings.Contains(s, "..") || strings.Contains(s, "@{") || strings.ContainsAny(s, " ~^:?*[\\") || hasControl(s)) {
-		return fmt.Errorf("%q is not a valid git ref", s)
+		return errfmt.Errorf("%q is not a valid git ref", s)
 	}
 	return nil
 }

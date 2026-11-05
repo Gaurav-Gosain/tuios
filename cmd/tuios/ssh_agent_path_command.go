@@ -1,10 +1,11 @@
 package main
 
 import (
-	"encoding/json"
 	"fmt"
 	"os"
 
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
+	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 	"github.com/spf13/cobra"
 )
 
@@ -39,7 +40,7 @@ with -s. The command fails when ssh_agent is not "follow".`,
 				name = os.Getenv("TUIOS_SESSION")
 			}
 			if name == "" {
-				return fmt.Errorf("name the session with -s. Outside a pane there is no session to use")
+				return errfmt.Errorf("name the session with -s. Outside a pane there is no session to use")
 			}
 			return runSSHAgentPath(name, jsonOut)
 		},
@@ -67,8 +68,8 @@ func runSSHAgentPath(name string, jsonOut bool) error {
 		Follow  bool   `json:"follow"`
 		Target  string `json:"target,omitempty"`
 	}
-	if err := json.Unmarshal(raw, &res); err != nil {
-		return fmt.Errorf("failed to parse response: %w", err)
+	if err := jsonx.Unmarshal(raw, &res); err != nil {
+		return errfmt.Errorf("failed to parse response: %w", err)
 	}
 	if jsonOut {
 		return printJSON(res)

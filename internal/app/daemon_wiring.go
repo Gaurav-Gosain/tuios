@@ -1,11 +1,11 @@
 package app
 
 import (
-	"fmt"
 	"log"
 	"maps"
 	"sync"
 
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
@@ -64,7 +64,7 @@ func (m *OS) WireSidebarSessionClient(client *session.TUIClient, edge sidebarEdg
 		queueSidebarSessionState(states, stateMu, sidebarSessionEvent{edge: edge, generation: generation, kind: "state", state: state})
 	})
 	client.OnSessionEnded(func(_, reason string) {
-		queueTerminal(sidebarSessionEvent{edge: edge, generation: generation, kind: "ended", err: fmt.Errorf("session ended: %s", reason)})
+		queueTerminal(sidebarSessionEvent{edge: edge, generation: generation, kind: "ended", err: errfmt.Errorf("session ended: %s", reason)})
 	})
 	client.OnDisconnect(func(err error) {
 		queueTerminal(sidebarSessionEvent{edge: edge, generation: generation, kind: "ended", err: err})
@@ -156,6 +156,9 @@ func (m *OS) WireDaemonClient(client *session.TUIClient) {
 	// tml.go.
 	m.initTML()
 	client.OnTMLSurface(m.queueTMLSurface)
+	// The TML calls of the connection this one replaces went on a
+	// connection of their own. See tml_host.go.
+	m.tml.far.drop()
 	// A paste the daemon refused twice, or one too large to send. The person
 	// is told, so a paste never vanishes. See session/paste_retry.go.
 	client.OnPasteRefused(func(_, message string) {

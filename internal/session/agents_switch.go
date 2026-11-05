@@ -3,10 +3,13 @@ package session
 import (
 	"encoding/json"
 	"errors"
+	"os"
 	"slices"
 	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
+	"github.com/Gaurav-Gosain/tuios/internal/ptyspawn"
 )
 
 // The agent switch: [agents] enabled = false.
@@ -98,14 +101,14 @@ func AgentOnlyCall(verb string, params any) bool {
 	if verb != "wait-for" {
 		return false
 	}
-	raw, err := json.Marshal(params)
+	raw, err := jsonx.Marshal(params)
 	if err != nil {
 		return false
 	}
 	var p struct {
 		Condition string `json:"condition"`
 	}
-	return json.Unmarshal(raw, &p) == nil && slices.Contains(agentWaitConditions, p.Condition)
+	return jsonx.Unmarshal(raw, &p) == nil && slices.Contains(agentWaitConditions, p.Condition)
 }
 
 // agentsEnabled reports whether the agent features are on.
@@ -141,6 +144,8 @@ func (d *Daemon) SetAgentsEnabled(on bool) {
 	if d.agentsOff.Swap(!on) == !on {
 		return
 	}
+	// With the features off no agent works, so none keeps the machine awake.
+	defer d.awake.agentEvent()
 	if on {
 		LogBasic("Agent features are on")
 		d.wakes.detect.Set()
@@ -244,6 +249,29 @@ func (d *Daemon) callerWorkspaceIn(cs *connState, sess *Session) int {
 		return ws
 	}
 	return 0
+}
+
+// callerCwd is the folder of the process on cs, when it runs in a pane of
+// this machine: the folder the caller would pass as --cwd "$PWD". It falls
+// back to the folder of the caller's pane, where the process cannot be read
+// (native Windows). It is "" for a caller in no pane, which keeps the focused
+// pane's folder as the default.
+func (d *Daemon) callerCwd(cs *connState) string {
+	ref := d.callerPaneRef(cs)
+	if ref == nil {
+		return ""
+	}
+	if cs.peerPID > 0 {
+		if dir, ok := ptyspawn.ProcessCwd(cs.peerPID); ok && !d.peerChanged(cs) {
+			if fi, err := os.Stat(dir); err == nil && fi.IsDir() {
+				return dir
+			}
+		}
+	}
+	if sess := d.sessionHoldingWindow(ref.Window); sess != nil {
+		return sess.windowCwd(ref.Window)
+	}
+	return ""
 }
 
 // noteStartedBy records on window the pane the caller on cs runs in, as the

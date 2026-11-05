@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 )
 
 // printWriteNote tells the person when a save went to another file than the
@@ -40,11 +41,11 @@ type configFilesReport struct {
 func loadConfigLayers() (*config.LayeredConfig, error) {
 	path, err := config.GetConfigPath()
 	if err != nil {
-		return nil, fmt.Errorf("could not determine config path: %w", err)
+		return nil, errfmt.Errorf("could not determine config path: %w", err)
 	}
 	lc, err := config.LoadLayered(path)
 	if errors.Is(err, fs.ErrNotExist) {
-		return nil, fmt.Errorf("there is no config file at %s. tuios uses the defaults", path)
+		return nil, errfmt.Errorf("there is no config file at %s. tuios uses the defaults", path)
 	}
 	return lc, err
 }
@@ -108,11 +109,11 @@ type pruneOptions struct {
 func runConfigPrune(w io.Writer, opts pruneOptions) error {
 	path, err := config.GetConfigPath()
 	if err != nil {
-		return fmt.Errorf("could not determine config path: %w", err)
+		return errfmt.Errorf("could not determine config path: %w", err)
 	}
 	plan, err := config.PruneConfig(path, true)
 	if errors.Is(err, fs.ErrNotExist) {
-		return fmt.Errorf("there is no config file at %s. tuios uses the defaults", path)
+		return errfmt.Errorf("there is no config file at %s. tuios uses the defaults", path)
 	}
 	if err != nil {
 		return err
@@ -129,7 +130,7 @@ func runConfigPrune(w io.Writer, opts pruneOptions) error {
 	}
 	if !opts.dryRun && len(plan.Uncovered) > 0 && !opts.yes {
 		if !opts.tty {
-			return fmt.Errorf("the prune changes %d keys. Run tuios config prune --dry-run to see them, then run it again with --yes", len(plan.Uncovered))
+			return errfmt.Errorf("the prune changes %d keys. Run tuios config prune --dry-run to see them, then run it again with --yes", len(plan.Uncovered))
 		}
 		fmt.Fprint(w, "Remove the keys? (yes/no): ")
 		var answer string

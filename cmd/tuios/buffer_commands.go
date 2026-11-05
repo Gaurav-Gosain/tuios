@@ -11,6 +11,8 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
+	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 	"github.com/Gaurav-Gosain/tuios/internal/pastebuf"
 	"github.com/Gaurav-Gosain/tuios/internal/plural"
 	"github.com/spf13/cobra"
@@ -130,10 +132,10 @@ is yours. A buffer a pane without admin sets is that pane's own.
 				// is refused and never stored cut short.
 				data, err := io.ReadAll(io.LimitReader(os.Stdin, maxSetBufferInput+1))
 				if err != nil {
-					return fmt.Errorf("read the standard input: %w", err)
+					return errfmt.Errorf("read the standard input: %w", err)
 				}
 				if len(data) > maxSetBufferInput {
-					return fmt.Errorf("set-buffer: the standard input is longer than %d MiB. Nothing was stored", maxSetBufferInput>>20)
+					return errfmt.Errorf("set-buffer: the standard input is longer than %d MiB. Nothing was stored", maxSetBufferInput>>20)
 				}
 				text = string(data)
 			}
@@ -238,7 +240,7 @@ func completeBufferNames(_ *cobra.Command, _ []string, _ string) ([]string, cobr
 		return nil, cobra.ShellCompDirectiveNoFileComp
 	}
 	var res bufferListing
-	if json.Unmarshal(raw, &res) != nil {
+	if jsonx.Unmarshal(raw, &res) != nil {
 		return nil, cobra.ShellCompDirectiveNoFileComp
 	}
 	names := make([]string, 0, len(res.Buffers))
@@ -279,8 +281,8 @@ func runListBuffers(jsonOutput bool) error {
 		return printVerbResult(raw, true)
 	}
 	var res bufferListing
-	if err := json.Unmarshal(raw, &res); err != nil {
-		return fmt.Errorf("failed to parse response: %w", err)
+	if err := jsonx.Unmarshal(raw, &res); err != nil {
+		return errfmt.Errorf("failed to parse response: %w", err)
 	}
 	if len(res.Buffers) == 0 {
 		fmt.Println("There are no paste buffers. A yank in copy mode adds one.")
@@ -306,14 +308,14 @@ func bufferContent(raw json.RawMessage) (name, data string, version uint64, err 
 		DataB64 string `json:"data_b64"`
 		Version uint64 `json:"version"`
 	}
-	if err := json.Unmarshal(raw, &res); err != nil {
-		return "", "", 0, fmt.Errorf("failed to parse response: %w", err)
+	if err := jsonx.Unmarshal(raw, &res); err != nil {
+		return "", "", 0, errfmt.Errorf("failed to parse response: %w", err)
 	}
 	data = res.Data
 	if res.DataB64 != "" {
 		b, err := base64.StdEncoding.DecodeString(res.DataB64)
 		if err != nil {
-			return "", "", 0, fmt.Errorf("failed to parse response: %w", err)
+			return "", "", 0, errfmt.Errorf("failed to parse response: %w", err)
 		}
 		data = string(b)
 	}

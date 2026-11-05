@@ -2,6 +2,8 @@ package session
 
 import (
 	"bufio"
+	"crypto/rand"
+	"crypto/subtle"
 	"encoding/json"
 	"fmt"
 	"maps"
@@ -105,6 +107,8 @@ var verbCapabilities = map[string]linkCaps{
 	"session-info":         {config.LinkAllowList},
 	"ssh-agent-path":       {config.LinkAllowList},
 	"display-env":          {config.LinkAllowList},
+	"get-keep-awake":       {config.LinkAllowList},
+	"set-keep-awake":       {config.LinkAllowWrite},
 	"list-windows":         {config.LinkAllowList},
 	"search-panes":         {config.LinkAllowList},
 	"command-history":      {config.LinkAllowList},
@@ -192,18 +196,24 @@ var verbCapabilities = map[string]linkCaps{
 	"new-window":   {config.LinkAllowOpen},
 	"split-window": {config.LinkAllowOpen},
 	"popup":        {config.LinkAllowOpen},
-	// A link needs every relay capability for the TML verbs, which the
-	// default policy does not give: a surface names its owner on its frame,
-	// and a surface opened from another machine would need that machine's
-	// name there. tml-input acts as the person on this machine.
-	"tml-open":      {capRelay},
-	"tml-close":     {capRelay},
-	"tml-input":     {capRelay},
-	"tml-place":     {capRelay},
-	"tml-patch":     {capRelay},
-	"tml-replace":   {capRelay},
-	"tml-get":       {capRelay},
-	"tml-list":      {capRelay},
+	// A link needs every relay capability to open or change a surface,
+	// which the default policy does not give: a surface names its owner on
+	// its frame, and a surface opened from another machine would need that
+	// machine's name there.
+	"tml-open":    {capRelay},
+	"tml-close":   {capRelay},
+	"tml-patch":   {capRelay},
+	"tml-replace": {capRelay},
+	// A client attached over a link draws this machine's surfaces (see
+	// tml_surface.go, "Surfaces over a link"). Reading one is reading a
+	// screen. What the person does on one, and where it sits, is what the
+	// attach already does to a pane: tml-input and tml-place also need the
+	// attach nonce of a client on the link-human socket. A pane() action a
+	// tml-input carries is held to the verb it runs as well.
+	"tml-input":     {config.LinkAllowWrite},
+	"tml-place":     {config.LinkAllowWrite},
+	"tml-get":       {config.LinkAllowList},
+	"tml-list":      {config.LinkAllowList},
 	"artifact-list": {capRelay},
 	"tml-validate":  {},
 	"open-pane":     {config.LinkAllowOpen},
@@ -243,6 +253,9 @@ var verbCapabilities = map[string]linkCaps{
 	"set-layout":       {config.LinkAllowWrite},
 	"set-layout-tree":  {config.LinkAllowWrite},
 	"set-layout-state": {config.LinkAllowWrite},
+	"zoom-window":      {config.LinkAllowWrite},
+	"swap-window":      {config.LinkAllowWrite},
+	"resize-window":    {config.LinkAllowWrite},
 	"run-command":      {config.LinkAllowWrite},
 	"switch-session":   {config.LinkAllowWrite},
 	"detach-client":    {config.LinkAllowWrite},
@@ -277,6 +290,8 @@ var verbCapabilities = map[string]linkCaps{
 	"run":                 {config.LinkAllowWrite},
 	// set-agent-state's activity with no state, so the same capability.
 	"report-agent-activity": {config.LinkAllowWrite},
+	// An OSC 7501 report, which sets the pane's agent state as set-agent-state does.
+	"report-program-status": {config.LinkAllowWrite},
 	// ask-human's own handler refuses every link caller as well.
 	"ask-human": {config.LinkAllowWrite},
 
@@ -567,12 +582,18 @@ func (d *Daemon) verbLinkPeer(cs *connState, params json.RawMessage) (any, *verb
 		// agent the link's ssh forwards, when it forwards one. See
 		// ssh_agent_follow.go.
 		SSHAuthSock string `json:"ssh_auth_sock"`
+		// Closes is the close token of another link connection whose
+		// stream the far side closed on purpose. See linkClosedOnPurpose.
+		Closes string `json:"closes"`
 	}
 	if verr := decodeParams(params, &p); verr != nil {
 		return nil, verr
 	}
 	if cs == nil || !cs.viaLink {
 		return nil, newVerbError(ErrVerbForbidden, "link-peer is only for a connection that arrived over a link")
+	}
+	if p.Closes != "" {
+		d.noteLinkClosedOnPurpose(p.Closes)
 	}
 	peer := strings.TrimSpace(p.Peer)
 	if peer != "" && (len(peer) > 64 || !linkPeerPattern().MatchString(peer)) {
@@ -587,11 +608,35 @@ func (d *Daemon) verbLinkPeer(cs *connState, params json.RawMessage) (any, *verb
 	cs.linkPeer = peer
 	cs.linkPinned = p.Pinned
 	cs.linkAgentSock = p.SSHAuthSock
+	cs.linkCloseToken = rand.Text()
 	// The connection goes back to being read from its first byte, JSON or
 	// binary, so an attach can follow the handshake on the same connection.
 	cs.takeover = func(br *bufio.Reader) { d.serveConnection(cs, br) }
 	LogBasic("Link %s names its peer %q (pinned %v)", cs.clientID, peer, p.Pinned)
-	return map[string]any{"type": "link_peer", "peer": peer}, nil
+	return map[string]any{"type": "link_peer", "peer": peer, "close_token": cs.linkCloseToken}, nil
+}
+
+// noteLinkClosedOnPurpose marks the link connection that holds token as
+// closed on purpose by the far side. An unknown token does nothing: the
+// connection may already be gone.
+func (d *Daemon) noteLinkClosedOnPurpose(token string) {
+	d.clientsMu.Lock()
+	defer d.clientsMu.Unlock()
+	for _, c := range d.clients {
+		c.mu.Lock()
+		if c.viaLink && c.linkCloseToken != "" && subtle.ConstantTimeCompare([]byte(c.linkCloseToken), []byte(token)) == 1 {
+			c.linkClosedOnPurpose = true
+		}
+		c.mu.Unlock()
+	}
+}
+
+// linkClosedOnPurposeNow reports whether the far side of a link connection
+// closed it on purpose. See noteLinkClosedOnPurpose.
+func (cs *connState) linkClosedOnPurposeNow() bool {
+	cs.mu.Lock()
+	defer cs.mu.Unlock()
+	return cs.linkClosedOnPurpose
 }
 
 // linkPeerPattern is what a peer name may be: the same shape as a host name,

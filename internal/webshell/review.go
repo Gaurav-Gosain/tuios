@@ -1,9 +1,9 @@
 package webshell
 
 import (
-	"fmt"
 	"sort"
 
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"github.com/Gaurav-Gosain/tuios/internal/review"
 	"github.com/Gaurav-Gosain/tuios/internal/worktree"
 )
@@ -36,7 +36,7 @@ func ReviewDiff(dir, base string, uncommitted bool) (Review, error) {
 	defer fsMu.RUnlock()
 	c := checkoutAt(dir)
 	if c == nil {
-		return Review{}, fmt.Errorf("no git repository under %s", prettyPath(dir))
+		return Review{}, errfmt.Errorf("no git repository under %s", prettyPath(dir))
 	}
 	r := Review{Root: c.root, RepoRoot: repo.root, Branch: c.branch, Session: baseName(repo.root)}
 	if c != repo {
@@ -58,7 +58,7 @@ func ReviewDiff(dir, base string, uncommitted bool) (Review, error) {
 			}
 		}
 		if other == nil {
-			return Review{}, fmt.Errorf("%q is not a commit here", base)
+			return Review{}, errfmt.Errorf("%q is not a commit here", base)
 		}
 		// The merge base of two branches of this repository: where the
 		// worktree left the main branch.

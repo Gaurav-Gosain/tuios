@@ -1,7 +1,6 @@
 package main
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -10,6 +9,8 @@ import (
 	"strings"
 	"text/tabwriter"
 
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
+	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 	"github.com/Gaurav-Gosain/tuios/internal/plural"
 	"github.com/Gaurav-Gosain/tuios/internal/review"
 	"github.com/spf13/cobra"
@@ -179,8 +180,8 @@ func runReview(w io.Writer, sessionName, window string, o reviewOptions, jsonOut
 		return printVerbResultOn(t, raw, true)
 	}
 	var res reviewDiffResult
-	if err := json.Unmarshal(raw, &res); err != nil {
-		return fmt.Errorf("failed to parse response: %w", err)
+	if err := jsonx.Unmarshal(raw, &res); err != nil {
+		return errfmt.Errorf("failed to parse response: %w", err)
 	}
 	return printReview(w, res, t.on(), o.stat)
 }
@@ -335,11 +336,11 @@ func parseNoteTarget(spec string, hunk bool) (string, int, error) {
 	}
 	i := strings.LastIndexByte(spec, ':')
 	if i <= 0 {
-		return "", 0, fmt.Errorf("%q is not FILE:LINE", spec)
+		return "", 0, errfmt.Errorf("%q is not FILE:LINE", spec)
 	}
 	line, err := strconv.Atoi(spec[i+1:])
 	if err != nil || line < 1 {
-		return "", 0, fmt.Errorf("%q is not FILE:LINE with a line from 1", spec)
+		return "", 0, errfmt.Errorf("%q is not FILE:LINE with a line from 1", spec)
 	}
 	return spec[:i], line, nil
 }
@@ -472,8 +473,8 @@ func runReviewNote(w io.Writer, sessionName, window string, params map[string]an
 		Removed int           `json:"removed"`
 		Notes   []review.Note `json:"notes"`
 	}
-	if err := json.Unmarshal(raw, &res); err != nil {
-		return fmt.Errorf("failed to parse response: %w", err)
+	if err := jsonx.Unmarshal(raw, &res); err != nil {
+		return errfmt.Errorf("failed to parse response: %w", err)
 	}
 	switch params["action"] {
 	case "add":
@@ -587,8 +588,8 @@ func runReviewSend(w io.Writer, sessionName, window string, ids []string, now, j
 		Withheld   []string `json:"withheld"`
 		Reason     string   `json:"withheld_reason"`
 	}
-	if err := json.Unmarshal(raw, &res); err != nil {
-		return fmt.Errorf("failed to parse response: %w", err)
+	if err := jsonx.Unmarshal(raw, &res); err != nil {
+		return errfmt.Errorf("failed to parse response: %w", err)
 	}
 	fmt.Fprintf(w, "%d review %s in one message. %s\n", res.Notes, plural.Word(res.Notes, "note", "notes"),
 		describeQueued(res.QueuedID, window, res.Position, res.Delivering)+t.on())

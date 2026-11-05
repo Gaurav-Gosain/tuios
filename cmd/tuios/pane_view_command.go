@@ -1,7 +1,6 @@
 package main
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -16,6 +15,8 @@ import (
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
 
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
+	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 )
 
@@ -99,10 +100,10 @@ and 1 for an error.`,
 		Args: cobra.NoArgs,
 		RunE: func(_ *cobra.Command, _ []string) error {
 			if window == "" {
-				return fmt.Errorf("pane-view needs a pane: pass -w with its id or name")
+				return errfmt.Errorf("pane-view needs a pane: pass -w with its id or name")
 			}
 			if size != "follow" && size != "pane" {
-				return fmt.Errorf("--size takes follow or pane, not %q", size)
+				return errfmt.Errorf("--size takes follow or pane, not %q", size)
 			}
 			return runPaneView(sessionName, window, size == "follow")
 		},
@@ -139,14 +140,14 @@ type paneView struct {
 func runPaneView(sessionName, window string, follow bool) error {
 	in, out := os.Stdin, os.Stdout
 	if !term.IsTerminal(int(in.Fd())) || !term.IsTerminal(int(out.Fd())) {
-		return fmt.Errorf("pane-view needs a terminal on its input and output")
+		return errfmt.Errorf("pane-view needs a terminal on its input and output")
 	}
 	v := &paneView{session: sessionName, window: window, follow: follow, in: in, out: out}
 	v.cols, v.rows = v.termSize()
 
 	old, err := term.MakeRaw(int(in.Fd()))
 	if err != nil {
-		return fmt.Errorf("failed to put the terminal in raw mode: %w", err)
+		return errfmt.Errorf("failed to put the terminal in raw mode: %w", err)
 	}
 	var restoreOnce sync.Once
 	restore := func() {
@@ -199,7 +200,7 @@ func runPaneView(sessionName, window string, follow bool) error {
 		// The connection dropped. Resume from the last seq the terminal got.
 		if rerr := v.reconnect(); rerr != nil {
 			restore()
-			return fmt.Errorf("lost the pane stream (%v) and could not resume it: %w", err, rerr)
+			return errfmt.Errorf("lost the pane stream (%v) and could not resume it: %w", err, rerr)
 		}
 	}
 }
@@ -225,7 +226,7 @@ func paneViewExit(end string) error {
 	if end == "closed" {
 		return &statusError{code: paneViewClosed}
 	}
-	return fmt.Errorf("the pane stream ended: %s", end)
+	return errfmt.Errorf("the pane stream ended: %s", end)
 }
 
 func (v *paneView) termSize() (int, int) {
@@ -452,7 +453,7 @@ func (v *paneView) pumpOutput() (string, error) {
 			var e struct {
 				Code string `json:"code"`
 			}
-			if json.Unmarshal(payload, &e) == nil && e.Code == "lease_expired" {
+			if jsonx.Unmarshal(payload, &e) == nil && e.Code == "lease_expired" {
 				cols, rows := v.size()
 				_ = stream.Lease(cols, rows)
 			}

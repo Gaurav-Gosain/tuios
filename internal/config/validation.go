@@ -144,6 +144,7 @@ func ValidateConfig(cfg *UserConfig) *ValidationResult {
 	validateSSHAgent(cfg, result)
 	validateSSH(cfg, result)
 	validateDisplay(cfg, result)
+	validateKeepAwake(cfg, result)
 	validateLinkPolicies(cfg, result)
 	validatePanePermissions(cfg, result)
 	validateAgentWork(cfg, result)
@@ -252,6 +253,7 @@ func ValidateConfig(cfg *UserConfig) *ValidationResult {
 	validatePanes(cfg, result)
 	validateReview(cfg, result)
 	validateScratch(cfg, result)
+	validateFilesOpen(cfg, result)
 
 	return result
 }
@@ -316,6 +318,13 @@ func validateSSHAgent(cfg *UserConfig, result *ValidationResult) {
 // set. An unknown value is off.
 func validateDisplay(cfg *UserConfig, result *ValidationResult) {
 	warnEnum(result, "daemon", "display", cfg.Daemon.Display, DisplayModes, DisplayOff)
+}
+
+// validateKeepAwake warns when daemon.keep_awake holds a value outside its
+// allowed set. An unknown value is off, so a typo of "agents" would otherwise
+// let the machine sleep with no word about why.
+func validateKeepAwake(cfg *UserConfig, result *ValidationResult) {
+	warnEnum(result, "daemon", "keep_awake", cfg.Daemon.KeepAwake, KeepAwakeModes, KeepAwakeOff)
 }
 
 // validateNotificationsConfig warns about a message lifetime tuios cannot use.

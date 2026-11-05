@@ -2,7 +2,6 @@ package main
 
 import (
 	"encoding/base64"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -17,6 +16,8 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/app"
 	"github.com/Gaurav-Gosain/tuios/internal/atomicfile"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
+	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 	"github.com/Gaurav-Gosain/tuios/internal/lookshare"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 )
@@ -61,7 +62,7 @@ The author is your GitHub login when gh is signed in. Use --author to set it.`,
 				return err
 			}
 			if err := atomicfile.Write(out, ex.Text, 0o644, false); err != nil {
-				return fmt.Errorf("failed to write the look: %w", err)
+				return errfmt.Errorf("failed to write the look: %w", err)
 			}
 			fmt.Fprintf(cmd.OutOrStdout(), "tuios wrote the look to %s.\n", out)
 			return nil
@@ -133,7 +134,7 @@ Use --print to write the comment to stdout. tuios then opens nothing.`,
 func loadLookConfig() (*config.UserConfig, error) {
 	mainPath, err := config.GetConfigPath()
 	if err != nil {
-		return nil, fmt.Errorf("could not determine config path: %w", err)
+		return nil, errfmt.Errorf("could not determine config path: %w", err)
 	}
 	return config.LoadLookConfig(mainPath)
 }
@@ -207,7 +208,7 @@ func routeLookShare(sessionName, name, author string) (lookShareResult, error) {
 	}
 	resp, err := client.SendControlMessage(msg)
 	if err != nil {
-		return lookShareResult{}, fmt.Errorf("failed to share the look: %w", err)
+		return lookShareResult{}, errfmt.Errorf("failed to share the look: %w", err)
 	}
 	var result session.CommandResultPayload
 	if resp.Type != session.MsgCommandResult || resp.ParsePayload(&result) != nil {
@@ -219,12 +220,12 @@ func routeLookShare(sessionName, name, author string) (lookShareResult, error) {
 		if strings.Contains(result.Message, "requires an attached client") || result.Message == "session not found" {
 			return lookShareResult{}, errNoShareClient
 		}
-		return lookShareResult{}, fmt.Errorf("tuios cannot share the look: %s", result.Message)
+		return lookShareResult{}, errfmt.Errorf("tuios cannot share the look: %s", result.Message)
 	}
 	var res lookShareResult
-	data, err := json.Marshal(result.Data)
+	data, err := jsonx.Marshal(result.Data)
 	if err == nil {
-		err = json.Unmarshal(data, &res)
+		err = jsonx.Unmarshal(data, &res)
 	}
 	return res, err
 }
@@ -291,7 +292,7 @@ func shotHere() string {
 	var res struct {
 		Path string `json:"path"`
 	}
-	if json.Unmarshal(raw, &res) != nil {
+	if jsonx.Unmarshal(raw, &res) != nil {
 		return ""
 	}
 	return res.Path

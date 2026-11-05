@@ -1,7 +1,6 @@
 package app
 
 import (
-	"encoding/json"
 	"image/color"
 	"slices"
 	"strconv"
@@ -13,6 +12,7 @@ import (
 
 	"github.com/Gaurav-Gosain/tuios/internal/composer"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
@@ -682,7 +682,7 @@ func (m *OS) resumeOffers(offers []session.AttentionItem) tea.Cmd {
 			var res struct {
 				Command string `json:"command"`
 			}
-			_ = json.Unmarshal(raw, &res)
+			_ = jsonx.Unmarshal(raw, &res)
 			command = res.Command
 			msg.Resumed++
 		}

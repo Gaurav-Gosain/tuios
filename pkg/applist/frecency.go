@@ -1,13 +1,13 @@
 package applist
 
 import (
-	"encoding/json"
 	"os"
 	"path/filepath"
 	"sort"
 	"sync"
 	"time"
 
+	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 	"github.com/adrg/xdg"
 )
 
@@ -66,7 +66,7 @@ func LoadFrecency(path string) *Frecency {
 		return f
 	}
 	var parsed frecencyFile
-	if json.Unmarshal(data, &parsed) != nil || parsed.Version > frecencyVersion {
+	if jsonx.Unmarshal(data, &parsed) != nil || parsed.Version > frecencyVersion {
 		return f
 	}
 	for name, r := range parsed.Apps {
@@ -149,7 +149,7 @@ func (f *Frecency) encodeLocked() ([]byte, error) {
 		apps = f.pruneLocked()
 		f.recs = apps
 	}
-	return json.Marshal(frecencyFile{Version: frecencyVersion, Apps: apps})
+	return jsonx.Marshal(frecencyFile{Version: frecencyVersion, Apps: apps})
 }
 
 // pruneLocked keeps the strongest maxRecords entries, which is the set a person

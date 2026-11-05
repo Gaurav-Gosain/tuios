@@ -12,6 +12,8 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 )
 
 // Source is a filter list kero downloads: one of Catalog, by its ID, or
@@ -81,7 +83,7 @@ func Load(ctx context.Context, dir string, sources []Source) ([]string, error) {
 				since = info.ModTime()
 			}
 			if err := download(ctx, s.URL, path, since); err != nil {
-				errs = append(errs, fmt.Errorf("%s: %w", s.ID, err))
+				errs = append(errs, errfmt.Errorf("%s: %w", s.ID, err))
 			}
 		}
 		b, err := os.ReadFile(path)
@@ -119,7 +121,7 @@ func download(ctx context.Context, rawURL, path string, since time.Time) error {
 		return os.Chtimes(path, now, now)
 	case http.StatusOK:
 	default:
-		return fmt.Errorf("%s: %s", rawURL, resp.Status)
+		return errfmt.Errorf("%s: %s", rawURL, resp.Status)
 	}
 	body, err := io.ReadAll(io.LimitReader(resp.Body, 64<<20))
 	if err != nil {
@@ -128,7 +130,7 @@ func download(ctx context.Context, rawURL, path string, since time.Time) error {
 	// Not a captive portal's page, say: lists start with a header, as
 	// "[Adblock Plus 2.0]", or a comment.
 	if t := strings.TrimSpace(string(body[:min(len(body), 64)])); !strings.HasPrefix(t, "[") && !strings.HasPrefix(t, "!") {
-		return fmt.Errorf("%s is no filter list", rawURL)
+		return errfmt.Errorf("%s is no filter list", rawURL)
 	}
 	tmp, err := os.CreateTemp(filepath.Dir(path), ".download-*")
 	if err != nil {

@@ -3,6 +3,7 @@ package tuie2e
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -120,11 +121,15 @@ func TestLiveAppearanceKeepsTheScreen(t *testing.T) {
 //
 //   - the reply says the next client applies the value;
 //   - the client that attaches draws the value and writes it to config.toml;
-//   - get-config reads the value back.
+//   - get-config reads the value back;
+//   - set-config --no-save hides the rail, and a later save of another
+//     option leaves the sidebar's enabled key out of config.toml while the
+//     rail stays hidden.
 //
 // set-config with no client said "It applies when a client attaches", and a
 // client that attached later never applied it. Reported by josephsintum on
-// #1454.
+// #1454. Every set-config was saved, and a value set by a hook dirtied a
+// dotfiles repository. Reported on #1582.
 func TestSetConfigWithNoClientAppliesOnAttach(t *testing.T) {
 	const path, value, shows = "appearance.sidebar.row_style", "pill", "\ue0b6home\ue0b4"
 	base := t.TempDir()
@@ -164,6 +169,62 @@ func TestSetConfigWithNoClientAppliesOnAttach(t *testing.T) {
 	if o, err := tuiosCLI(t, base, "get-config", path); err != nil || !strings.Contains(o, value) {
 		t.Fatalf("get-config %s: %v\n%s", path, err, o)
 	}
+
+	// --no-save: the rail hides now, and no file learns it.
+	if o, err := tuiosCLI(t, base, "set-config", "--no-save", "appearance.sidebar.enabled", "false"); err != nil {
+		t.Fatalf("set-config --no-save: %v\n%s", err, o)
+	}
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		return !strings.Contains(s.Text(), shows)
+	}, uiTimeout); err != nil {
+		t.Fatalf("set-config --no-save did not hide the rail: %v\n%s", err, term.Snapshot())
+	}
+	// A save of another option. It writes config.toml again, and it must
+	// leave the sidebar's enabled key out.
+	setLive(t, base, "appearance.border_style", "double")
+	deadline = time.Now().Add(uiTimeout)
+	var data []byte
+	for {
+		data, _ = os.ReadFile(file)
+		if strings.Contains(string(data), `border_style = "double"`) {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("the client did not save border_style:\n%s", data)
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	if keys := tableKeys(string(data), "appearance.sidebar"); slices.Contains(keys, "enabled") {
+		t.Fatalf("ASSERTION: a save of border_style wrote the sidebar value set with --no-save:\n%s", data)
+	}
+	if strings.Contains(string(data), "sidebar_enabled") {
+		t.Fatalf("ASSERTION: a save of border_style wrote sidebar_enabled:\n%s", data)
+	}
+	text := stableText(t, term)
+	if strings.Contains(text, shows) {
+		t.Fatalf("ASSERTION: the rail came back after the save:\n%s", term.Snapshot())
+	}
+	dir := artifactDir(t)
+	saveArtifact(t, term, dir, "no-save-rail-hidden")
+	saveSyncArtifact(t, "config.toml", string(data))
+}
+
+// tableKeys are the keys set directly under [table] in a config file, by
+// line. It is enough for the plain files tuios writes.
+func tableKeys(data, table string) []string {
+	var keys []string
+	in := false
+	for line := range strings.SplitSeq(data, "\n") {
+		line = strings.TrimSpace(line)
+		if strings.HasPrefix(line, "[") {
+			in = line == "["+table+"]"
+			continue
+		}
+		if k, _, ok := strings.Cut(line, "="); in && ok && !strings.HasPrefix(line, "#") {
+			keys = append(keys, strings.TrimSpace(k))
+		}
+	}
+	return keys
 }
 
 // setLive runs `tuios set-config path value` against the daemon under base.

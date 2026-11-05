@@ -1,7 +1,6 @@
 package app
 
 import (
-	"encoding/json"
 	"errors"
 	"slices"
 	"strconv"
@@ -10,6 +9,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 	"github.com/Gaurav-Gosain/tuios/internal/review"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
@@ -235,6 +235,11 @@ type reviewState struct {
 	// the file it was scrolled in: another file starts at the left edge.
 	xOff  int
 	xPath string
+	// listBack is how far the file list's paths are scrolled back from
+	// their ends, in cells. A long path shows its end, the part that tells
+	// files apart, so the keys scroll back towards its start. It is read
+	// only while the list has the keys, and tab sets it to zero.
+	listBack int
 	// look is the overlay's colours, and hunks what it keeps of each hunk
 	// drawn. Both are made while drawing, so a closed review costs nothing.
 	look  *reviewLook
@@ -279,6 +284,7 @@ func (r *reviewState) clearDiff(listFocus bool) {
 // the file list for listFocus and on the diff otherwise.
 func (r *reviewState) resetPlace(listFocus bool) {
 	r.file, r.cursor, r.scroll, r.listScroll, r.listFocus = 0, 0, 0, 0, listFocus
+	r.listBack = 0
 }
 
 // reviewOpensOnFiles reports whether a review opens with the file list
@@ -537,7 +543,7 @@ func (m *OS) reviewLoadCmd(q reviewQuery, probeFan bool) tea.Cmd {
 			// only that there is nothing to compare.
 			if raw, err := call("compare-fan", map[string]any{"session": res.Session, "changes": false}, reviewVerbTimeout); err == nil {
 				var fan reviewFanResult
-				if json.Unmarshal(raw, &fan) == nil && fan.Group != "" {
+				if jsonx.Unmarshal(raw, &fan) == nil && fan.Group != "" {
 					msg.Fan = &fan
 				}
 			}
@@ -554,7 +560,7 @@ func reviewDiffCall(call inboxVerbCall, params map[string]any) (*reviewDiffResul
 		return nil, err
 	}
 	var res reviewDiffResult
-	if err := json.Unmarshal(raw, &res); err != nil {
+	if err := jsonx.Unmarshal(raw, &res); err != nil {
 		return nil, err
 	}
 	return &res, nil
@@ -728,6 +734,7 @@ func (m *OS) ReviewReload() tea.Cmd {
 // ReviewToggleFocus moves the keys between the file list and the diff.
 func (m *OS) ReviewToggleFocus() {
 	m.review.listFocus = !m.review.listFocus
+	m.review.listBack = 0
 }
 
 // ReviewMove moves the cursor by delta: through the files with the list
@@ -992,7 +999,7 @@ func (m *OS) reviewNoteCmd(action string, params map[string]any) tea.Cmd {
 		var res struct {
 			Notes []review.Note `json:"notes"`
 		}
-		if err := json.Unmarshal(raw, &res); err != nil {
+		if err := jsonx.Unmarshal(raw, &res); err != nil {
 			msg.Err = err
 			return msg
 		}
@@ -1062,7 +1069,7 @@ func (m *OS) ReviewSend() tea.Cmd {
 			Withheld       []string `json:"withheld"`
 			WithheldReason string   `json:"withheld_reason"`
 		}
-		if err := json.Unmarshal(raw, &res); err != nil {
+		if err := jsonx.Unmarshal(raw, &res); err != nil {
 			msg.Err = err
 			return msg
 		}
@@ -1298,10 +1305,20 @@ func (m *OS) ReviewToggleSplit() {
 // reviewScrollStep is how far one sideways key scrolls the code.
 const reviewScrollStep = 8
 
-// ReviewScrollX scrolls the code sideways by dir steps, left for dir < 0,
-// no further than the longest line of the file needs.
+// ReviewScrollX scrolls the focused panel sideways by dir steps, left for
+// dir < 0: the code, no further than the longest line of the file needs, or
+// with the file list focused, the list's paths.
 func (m *OS) ReviewScrollX(dir int) {
 	r := &m.review
+	if r.listFocus {
+		_, _, listW, _, _ := m.reviewLayout()
+		over := 0
+		for _, e := range r.files {
+			over = max(over, reviewPathOverflow(*r, e, listW))
+		}
+		r.listBack = min(max(r.listBack-dir*reviewScrollStep, 0), over)
+		return
+	}
 	e := r.currentFile()
 	if e == nil || e.file == nil {
 		return

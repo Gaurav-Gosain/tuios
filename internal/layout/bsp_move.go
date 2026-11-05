@@ -171,3 +171,101 @@ func (t *BSPTree) SetSplitRatio(id uint64, ratio float64, bounds Rect, gap int) 
 func SplitBounds(node *TileNode, bounds Rect, gap int) (near, far Rect) {
 	return childBounds(node, bounds, gap)
 }
+
+// shareRatio is the ratio of a split that gives the pane on side share of the
+// space: the near child's share, so a pane on the far side takes the rest.
+// share outside (0, 1) takes the tree's default.
+func (t *BSPTree) shareRatio(side Side, share float64) float64 {
+	if share <= 0 || share >= 1 {
+		return t.splitRatio()
+	}
+	share = clampSplitRatio(share)
+	if side.near() {
+		return share
+	}
+	return 1 - share
+}
+
+// SplitWindowAt puts windowID beside targetID, on side of it, under a new
+// split in targetID's place. share is the new pane's share of the target's
+// space, and 0 takes the tree's default. It reports false and changes nothing
+// when the target is not in the tree or the window already is.
+func (t *BSPTree) SplitWindowAt(windowID, targetID int, side Side, share float64) bool {
+	target := t.WindowToNode[targetID]
+	if target == nil || t.HasWindow(windowID) {
+		return false
+	}
+	t.splitLeaf(target, NewLeafNode(windowID), side.split(), side.near(), t.shareRatio(side, share))
+	return true
+}
+
+// MoveWindowBeside is MoveWindow toward side, with share as the moved pane's
+// share of the split (0 for the tree's default). A window already beside the
+// target on that side only takes the share. It reports whether the tree
+// changed.
+func (t *BSPTree) MoveWindowBeside(windowID, targetID int, side Side, share float64) bool {
+	moved := t.MoveWindow(windowID, targetID, side.Preselection())
+	leaf, target := t.WindowToNode[windowID], t.WindowToNode[targetID]
+	if share <= 0 || leaf == nil || target == nil || leaf.Parent == nil || leaf.Parent != target.Parent {
+		return moved
+	}
+	p := leaf.Parent
+	if p.SplitType != side.split() || (p.Left == leaf) != side.near() {
+		return moved
+	}
+	r := t.shareRatio(side, share)
+	changed := moved || p.SplitRatio != r
+	p.SplitRatio = r
+	return changed
+}
+
+// NudgeBorder moves one border of windowID's pane toward side by amount, a
+// share of the whole layout's width (left, right) or height (up, down). The
+// border is the one on that side of the pane, or the one on the other side
+// when the pane is at the edge there. So right grows a pane with a neighbour
+// on its right, and shrinks a pane at the right edge from its left. The split
+// keeps to the tiler's ratio range. It reports whether a ratio changed.
+func (t *BSPTree) NudgeBorder(windowID int, side Side, amount float64) bool {
+	leaf := t.WindowToNode[windowID]
+	if leaf == nil || amount <= 0 {
+		return false
+	}
+	axis, far := side.split(), !side.near()
+	border := func(onLeft bool) *TileNode {
+		for c := leaf; c.Parent != nil; c = c.Parent {
+			if p := c.Parent; p.SplitType == axis && (p.Left == c) == onLeft {
+				return p
+			}
+		}
+		return nil
+	}
+	p := border(far)
+	if p == nil {
+		p = border(!far)
+	}
+	if p == nil {
+		return false
+	}
+	// The split's own extent along the axis, as a share of the layout, turns
+	// the layout share into a change of the split's ratio.
+	span := 1.0
+	for c := p; c.Parent != nil; c = c.Parent {
+		if q := c.Parent; q.SplitType == axis {
+			if q.Left == c {
+				span *= q.SplitRatio
+			} else {
+				span *= 1 - q.SplitRatio
+			}
+		}
+	}
+	delta := amount / max(span, 0.01)
+	if !far {
+		delta = -delta
+	}
+	r := clampSplitRatio(p.SplitRatio + delta)
+	if r == p.SplitRatio {
+		return false
+	}
+	p.SplitRatio = r
+	return true
+}

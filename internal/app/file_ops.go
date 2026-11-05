@@ -9,6 +9,8 @@ import (
 	"path/filepath"
 	"strings"
 	"syscall"
+
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 )
 
 // # The file operations
@@ -62,7 +64,7 @@ func createPath(cwd, raw string) (string, error) {
 	}
 	full := filepath.Join(cwd, clean)
 	if _, err := os.Lstat(full); err == nil {
-		return "", fmt.Errorf("already exists: %s", clean)
+		return "", errfmt.Errorf("already exists: %s", clean)
 	} else if !os.IsNotExist(err) {
 		return "", err
 	}
@@ -116,7 +118,7 @@ func renameEntry(cwd, oldName, newName string) (string, error) {
 		return "", err
 	}
 	if _, err := os.Lstat(dst); err == nil {
-		return "", fmt.Errorf("destination already exists: %s", clean)
+		return "", errfmt.Errorf("destination already exists: %s", clean)
 	} else if !os.IsNotExist(err) {
 		return "", err
 	}
@@ -227,7 +229,7 @@ func copyTree(src, dst string) error {
 		_, err = io.Copy(out, in)
 		return err
 	default:
-		return fmt.Errorf("cannot copy special file: %s", src)
+		return errfmt.Errorf("cannot copy special file: %s", src)
 	}
 }
 
@@ -276,7 +278,7 @@ func pasteOne(cwd, src string, move bool, renamed *int) error {
 	// the move fails halfway on some kernels and the copy recurses for as long
 	// as the disk lasts. Refused by name rather than discovered.
 	if withinTree(src, cwd) {
-		return fmt.Errorf("%s: cannot paste a folder into itself", filepath.Base(src))
+		return errfmt.Errorf("%s: cannot paste a folder into itself", filepath.Base(src))
 	}
 	dst := filepath.Join(cwd, filepath.Base(src))
 	unique, err := uniqueLocalDst(dst)
@@ -333,7 +335,7 @@ func uniqueLocalDst(dst string) (string, error) {
 			return "", err
 		}
 	}
-	return "", fmt.Errorf("%s: 1000 renames exhausted", dst)
+	return "", errfmt.Errorf("%s: 1000 renames exhausted", dst)
 }
 
 // fileOpError turns a failure into one short sentence for the rail.

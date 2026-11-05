@@ -274,9 +274,8 @@ func (d *Daemon) herdrPaneFocusDirection(cs *connState, in *herdrIn) (*herdrResu
 }
 
 // herdrPaneSwap swaps a pane with its neighbour, or two named panes of one
-// tab. The split tree lives in the client, so the swap is routed to the
-// attached client, which swaps the pair and leaves the focus on the source,
-// as herdr does. A swap that cannot happen answers with a reason and changes
+// tab, as swap-window does, and leaves the focus on the source, as herdr
+// does. A swap that cannot happen answers with a reason and changes
 // nothing, as in herdr.
 func (d *Daemon) herdrPaneSwap(cs *connState, in *herdrIn) (*herdrResult, *herdrError) {
 	directional := in.Direction != ""
@@ -336,8 +335,12 @@ func (d *Daemon) herdrPaneSwap(cs *connState, in *herdrIn) (*herdrResult, *herdr
 		if ierr != nil {
 			return nil, ierr.herdr()
 		}
-		if herr := d.herdrRouteClient(site.sess, "swap_windows", "pane_swap_failed", src.ID, dst.ID); herr != nil {
-			return nil, herr
+		if verr := d.swapPanes(site.sess, src, dst); verr != nil {
+			return nil, herdrFromVerb(verr, "pane_swap_failed")
+		}
+		// herdr leaves the focus on the source pane.
+		if site.sess.GetState().FocusedWindowID != src.ID {
+			_ = site.sess.FocusDaemonWindow(src.ID)
 		}
 		res.Changed = true
 	}
@@ -358,10 +361,8 @@ func (d *Daemon) herdrRouteClient(sess *Session, command, fail string, args ...s
 }
 
 // herdrPaneZoom zooms a pane, the way herdr zooms a tab: the pane is focused,
-// and a tab is zoomed on its focused pane or not at all. The client does both
-// in one routed command that names the pane, so the zoom can never land on
-// the pane that had the focus before. The answer waits until the session's
-// state shows the zoom on that pane, or no zoom for off.
+// and a tab is zoomed on its focused pane or not at all. The daemon focuses
+// the pane and sets the zoom, as zoom-window does.
 func (d *Daemon) herdrPaneZoom(cs *connState, in *herdrIn) (*herdrResult, *herdrError) {
 	mode := in.Mode
 	switch mode {
@@ -401,12 +402,13 @@ func (d *Daemon) herdrPaneZoom(cs *connState, in *herdrIn) (*herdrResult, *herdr
 			}
 		}
 	} else {
-		arg := "off"
-		if want {
-			arg = "on"
+		if res.FocusChanged {
+			if _, herr := d.herdrFocusPane(cs, site.pane.PaneID); herr != nil {
+				return nil, herr
+			}
 		}
-		if herr := d.herdrRouteClient(site.sess, "zoom_window", "pane_zoom_failed", site.win.ID, arg); herr != nil {
-			return nil, herr
+		if _, verr := d.zoomPane(site.sess, site.win, want); verr != nil {
+			return nil, herdrFromVerb(verr, "pane_zoom_failed")
 		}
 		res.ZoomChanged = true
 	}
@@ -449,25 +451,42 @@ func (d *Daemon) herdrWorkspaceFocus(cs *connState, in *herdrIn) (*herdrResult, 
 	if herr := d.herdrAdmit(cs, "select-workspace", sess); herr != nil {
 		return nil, herr
 	}
-	if d.findTUIClient(sess.ID) == nil {
-		var from *Session
-		if fromPane, window := d.peerPane(cs); fromPane {
-			from = d.sessionHoldingWindow(window)
-		}
-		if from == nil || d.findTUIClient(from.ID) == nil {
-			from = d.herdrFocusedSession(d.herdrSessions(cs))
-		}
-		if from == nil || d.findTUIClient(from.ID) == nil {
-			return nil, herdrErr("no_client", "no tuios client is attached to show the workspace on. Attach one with tuios attach "+sess.Name())
-		}
-		if herr := d.herdrRouteClient(from, "switch_session", "workspace_focus_failed", sess.Name()); herr != nil {
-			return nil, herr
-		}
-		// The client answers before it switches, so the answer below waits
-		// for the switch to show.
-		sess.waitChange(routedVerbTimeout, func() bool { return d.findTUIClient(sess.ID) != nil })
+	shown, herr := d.herdrShowSession(cs, sess, "workspace_focus_failed")
+	if herr != nil {
+		return nil, herr
+	}
+	if !shown {
+		return nil, herdrErr("no_client", "no tuios client is attached to show the workspace on. Attach one with tuios attach "+sess.Name())
 	}
 	return d.herdrWorkspaceInfo(cs, in.WorkspaceID)
+}
+
+// herdrShowSession has an attached client show sess, as herdr's active
+// workspace follows workspace.focus and pane.focus. The client moved is the
+// one that shows the caller's own session, else the one that shows the
+// active workspace, and it switches the way the session switcher does. It
+// reports whether a client shows sess afterwards: false when none is
+// attached to move.
+func (d *Daemon) herdrShowSession(cs *connState, sess *Session, fail string) (bool, *herdrError) {
+	if d.findTUIClient(sess.ID) != nil {
+		return true, nil
+	}
+	var from *Session
+	if fromPane, window := d.peerPane(cs); fromPane {
+		from = d.sessionHoldingWindow(window)
+	}
+	if from == nil || d.findTUIClient(from.ID) == nil {
+		from = d.herdrFocusedSession(d.herdrSessions(cs))
+	}
+	if from == nil || d.findTUIClient(from.ID) == nil {
+		return false, nil
+	}
+	if herr := d.herdrRouteClient(from, "switch_session", fail, sess.Name()); herr != nil {
+		return false, herr
+	}
+	// The client answers before it switches, so wait for the switch to show.
+	sess.waitChange(routedVerbTimeout, func() bool { return d.findTUIClient(sess.ID) != nil })
+	return true, nil
 }
 
 // herdrAgentNameOK is herdr's rule for an agent name.

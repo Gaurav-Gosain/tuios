@@ -3,12 +3,12 @@ package worktree
 import (
 	"context"
 	"errors"
-	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 
 	"github.com/Gaurav-Gosain/tuios/internal/childproc"
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"github.com/Gaurav-Gosain/tuios/internal/lazyre"
 	"github.com/adrg/xdg"
 )
@@ -54,7 +54,7 @@ func RenderPath(template, repoRoot, branch string) (string, error) {
 	// a branch such as a}}b, or a folder with {{ in its name, is a value and
 	// not a mistake in the template.
 	if rest := pathTag().ReplaceAllString(template, ""); strings.Contains(rest, "{{") || strings.Contains(rest, "}}") {
-		return "", fmt.Errorf("%q has a {{ or }} that is not part of a {{ name }} or {{ name | slug }}", template)
+		return "", errfmt.Errorf("%q has a {{ or }} that is not part of a {{ name }} or {{ name | slug }}", template)
 	}
 	var bad error
 	usesBranch := false
@@ -70,7 +70,7 @@ func RenderPath(template, repoRoot, branch string) (string, error) {
 			v = branch
 			usesBranch = true
 		default:
-			bad = errors.Join(bad, fmt.Errorf("unknown variable %q: use repo_path, repo or branch", m[1]))
+			bad = errors.Join(bad, errfmt.Errorf("unknown variable %q: use repo_path, repo or branch", m[1]))
 			return ""
 		}
 		switch m[2] {
@@ -78,7 +78,7 @@ func RenderPath(template, repoRoot, branch string) (string, error) {
 		case "slug", "sanitize":
 			v = Slug(v)
 		default:
-			bad = errors.Join(bad, fmt.Errorf("unknown filter %q: use slug, or sanitize, its worktrunk name", m[2]))
+			bad = errors.Join(bad, errfmt.Errorf("unknown filter %q: use slug, or sanitize, its worktrunk name", m[2]))
 		}
 		return v
 	})
@@ -86,7 +86,7 @@ func RenderPath(template, repoRoot, branch string) (string, error) {
 		return "", bad
 	}
 	if !usesBranch {
-		return "", fmt.Errorf("%q does not use {{ branch }}, so every branch would get the same directory", template)
+		return "", errfmt.Errorf("%q does not use {{ branch }}, so every branch would get the same directory", template)
 	}
 	if rest, ok := strings.CutPrefix(out, "~/"); ok {
 		home, err := os.UserHomeDir()

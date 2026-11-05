@@ -3,6 +3,8 @@ package tmuxcompat
 import (
 	"fmt"
 	"strings"
+
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 )
 
 // Global holds the options tmux takes before the command.
@@ -44,7 +46,7 @@ func ParseGlobal(args []string) (Global, []string, error) {
 				val := a[j+1:]
 				if val == "" {
 					if i+1 >= len(args) {
-						return g, nil, fmt.Errorf("option requires an argument: -%c", c)
+						return g, nil, errfmt.Errorf("option requires an argument: -%c", c)
 					}
 					i++
 					val = args[i]
@@ -59,7 +61,7 @@ func ParseGlobal(args []string) (Global, []string, error) {
 				case 'c':
 					// -c shell-command runs a command in the default shell,
 					// the way sh -c does. It is not a tmux command.
-					return g, nil, fmt.Errorf("-c is not supported by the tuios tmux shim")
+					return g, nil, errfmt.Errorf("-c is not supported by the tuios tmux shim")
 				case 'T':
 					g.Ignored = append(g.Ignored, "-T")
 				}
@@ -74,7 +76,7 @@ func ParseGlobal(args []string) (Global, []string, error) {
 				g.Control = min(g.Control+1, 2)
 				j++
 			default:
-				return g, nil, fmt.Errorf("unknown option: -%c", c)
+				return g, nil, errfmt.Errorf("unknown option: -%c", c)
 			}
 		}
 		i++
@@ -177,7 +179,7 @@ func parseFlags(cmd string, sp spec, args []string) (Parsed, error) {
 				val := a[j+1:]
 				if val == "" {
 					if i+1 >= len(args) {
-						return p, fmt.Errorf("%s: -%c needs a value", cmd, c)
+						return p, errfmt.Errorf("%s: -%c needs a value", cmd, c)
 					}
 					i++
 					val = args[i]

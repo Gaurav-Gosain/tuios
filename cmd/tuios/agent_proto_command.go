@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/agentproto"
+	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
@@ -334,7 +335,7 @@ func listsParam(raw json.RawMessage, verb, param string) bool {
 			} `json:"params"`
 		} `json:"verbs"`
 	}
-	if json.Unmarshal(raw, &res) != nil {
+	if jsonx.Unmarshal(raw, &res) != nil {
 		return false
 	}
 	for _, v := range res.Verbs {
@@ -384,7 +385,7 @@ func (r *paneReporter) Hold(ctx context.Context, line string, options []string) 
 		Decision   string `json:"decision"`
 		AnsweredBy string `json:"answered_by"`
 	}
-	if err := json.Unmarshal(raw, &res); err != nil {
+	if err := jsonx.Unmarshal(raw, &res); err != nil {
 		return "", "", err
 	}
 	if res.Decision == "" {

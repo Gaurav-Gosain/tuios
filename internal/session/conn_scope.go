@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 )
 
 // Restricted connections: the minimal form of scoped callers.
@@ -121,6 +122,9 @@ var verbScopes = map[string]scopeKind{
 	"daemon-upgrade": scopeDeny,
 	// apply-config is for the person, outside every pane.
 	"apply-config": scopeDeny,
+	// It changes what the person's machine does and saves config.toml.
+	"set-keep-awake": scopeDeny,
+	"get-keep-awake": scopeGlobal,
 
 	"list-sessions":      scopeGlobal,
 	"list-clients":       scopeGlobal,
@@ -175,6 +179,8 @@ var verbScopes = map[string]scopeKind{
 	"report-agent-activity": scopeSelf,
 	// It marks the pane's own mail announced, so it is the pane's record.
 	"agent-mail-notice": scopeSelf,
+	// An OSC 7501 report the pane's process could not write to its terminal.
+	"report-program-status": scopeSelf,
 
 	"send-agent-message": scopeMail,
 	"stash-put":          scopeMail,
@@ -268,6 +274,9 @@ var verbScopes = map[string]scopeKind{
 	// tml-validate reads only the document it is given.
 	"tml-validate":         scopeOpen,
 	"split-window":         scopeDeny,
+	"zoom-window":          scopeDeny,
+	"swap-window":          scopeDeny,
+	"resize-window":        scopeDeny,
 	"focus-window":         scopeDeny,
 	"move-window":          scopeDeny,
 	"set-window":           scopeDeny,
@@ -773,7 +782,7 @@ func (d *Daemon) checkScope(cs *connState, verb string, params json.RawMessage) 
 func (d *Daemon) holdToPane(verb string, kind scopeKind, params json.RawMessage, own, window, bound string, reach func(target string) string, deny func(why string) *verbError) (json.RawMessage, *verbError) {
 	var m map[string]json.RawMessage
 	if len(strings.TrimSpace(string(params))) > 0 {
-		if err := json.Unmarshal(params, &m); err != nil {
+		if err := jsonx.Unmarshal(params, &m); err != nil {
 			// Not an object: the handler reports it as invalid_params. The
 			// session cannot be checked, so the call is refused here instead.
 			return nil, invalidParam("params", "params must be an object")
@@ -789,19 +798,19 @@ func (d *Daemon) holdToPane(verb string, kind scopeKind, params json.RawMessage,
 	str := func(name string) string {
 		var s string
 		if raw, ok := m[name]; ok {
-			_ = json.Unmarshal(raw, &s)
+			_ = jsonx.Unmarshal(raw, &s)
 		}
 		return s
 	}
 	flag := func(name string) bool {
 		var b bool
 		if raw, ok := m[name]; ok {
-			_ = json.Unmarshal(raw, &b)
+			_ = jsonx.Unmarshal(raw, &b)
 		}
 		return b
 	}
 	set := func(name, value string) {
-		raw, _ := json.Marshal(value)
+		raw, _ := jsonx.Marshal(value)
 		m[name] = raw
 	}
 
@@ -879,7 +888,7 @@ func (d *Daemon) holdToPane(verb string, kind scopeKind, params json.RawMessage,
 		}
 	}
 
-	out, err := json.Marshal(m)
+	out, err := jsonx.Marshal(m)
 	if err != nil {
 		return nil, newVerbError(ErrVerbInternal, "could not encode params")
 	}

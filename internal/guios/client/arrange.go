@@ -1,7 +1,6 @@
 package client
 
 import (
-	"encoding/json"
 	"errors"
 	"math"
 	"os"
@@ -13,6 +12,7 @@ import (
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/guios/proto"
+	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 	"github.com/Gaurav-Gosain/tuios/internal/layout"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 )
@@ -1006,7 +1006,7 @@ func (e *engine) minimize(p proto.ArrangeParams) error {
 		var wl struct {
 			Windows []windowRow `json:"windows"`
 		}
-		_ = json.Unmarshal(raw, &wl)
+		_ = jsonx.Unmarshal(raw, &wl)
 		for _, w := range wl.Windows {
 			if w.Minimized && w.Workspace == e.ti.ws {
 				mins = append(mins, w.ID)

@@ -1,6 +1,8 @@
 package federation
 
-import "encoding/json"
+import (
+	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
+)
 
 // StreamOpen is what the hub says about a connection when it opens the stream
 // for it, carried in the open frame's payload. An empty payload decodes to the
@@ -49,7 +51,7 @@ func (o StreamOpen) encode() []byte {
 	if o == (StreamOpen{}) {
 		return nil
 	}
-	b, err := json.Marshal(o)
+	b, err := jsonx.Marshal(o)
 	if err != nil {
 		return nil
 	}
@@ -64,7 +66,7 @@ func decodeStreamOpen(payload []byte) StreamOpen {
 	if len(payload) == 0 || len(payload) > maxStreamOpenPayload {
 		return o
 	}
-	if err := json.Unmarshal(payload, &o); err != nil {
+	if err := jsonx.Unmarshal(payload, &o); err != nil {
 		return StreamOpen{}
 	}
 	return o

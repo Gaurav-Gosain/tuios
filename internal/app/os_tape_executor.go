@@ -12,6 +12,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"github.com/Gaurav-Gosain/tuios/internal/layout"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/tape"
@@ -99,10 +100,10 @@ func (m *OS) findWindowsByName(name string) []*terminal.Window {
 func (m *OS) findSingleWindowByName(name string) (*terminal.Window, error) {
 	matches := m.findWindowsByName(name)
 	if len(matches) == 0 {
-		return nil, fmt.Errorf("no window found with name: %s", name)
+		return nil, errfmt.Errorf("no window found with name: %s", name)
 	}
 	if len(matches) > 1 {
-		return nil, fmt.Errorf("multiple windows (%d) found with name: %s", len(matches), name)
+		return nil, errfmt.Errorf("multiple windows (%d) found with name: %s", len(matches), name)
 	}
 	return matches[0], nil
 }
@@ -130,7 +131,7 @@ func (m *OS) resolveWindowTarget(target string) (string, error) {
 	if target == "" {
 		windowID := m.GetFocusedWindowID()
 		if windowID == "" {
-			return "", fmt.Errorf("no focused window")
+			return "", errfmt.Errorf("no focused window")
 		}
 		return windowID, nil
 	}
@@ -155,7 +156,7 @@ func (m *OS) resolveWindowTarget(target string) (string, error) {
 		return matches[0].ID, nil
 	}
 	if len(matches) > 1 {
-		return "", fmt.Errorf("ambiguous window name %q matches %d windows", target, len(matches))
+		return "", errfmt.Errorf("ambiguous window name %q matches %d windows", target, len(matches))
 	}
 
 	// Try unique ID prefix match
@@ -171,10 +172,10 @@ func (m *OS) resolveWindowTarget(target string) (string, error) {
 		return prefixMatch.ID, nil
 	}
 	if prefixCount > 1 {
-		return "", fmt.Errorf("ambiguous window ID prefix %q matches %d windows", target, prefixCount)
+		return "", errfmt.Errorf("ambiguous window ID prefix %q matches %d windows", target, prefixCount)
 	}
 
-	return "", fmt.Errorf("no window found matching %q", target)
+	return "", errfmt.Errorf("no window found matching %q", target)
 }
 
 // SendToWindow sends bytes to a window's PTY.
@@ -185,7 +186,7 @@ func (m *OS) SendToWindow(windowID string, data []byte) error {
 			return w.SendInput(data)
 		}
 	}
-	return fmt.Errorf("window not found: %s", windowID)
+	return errfmt.Errorf("window not found: %s", windowID)
 }
 
 // scriptWindowWait is how long tape playback will wait for a pane it asked for
@@ -436,10 +437,10 @@ func (m *OS) GetWindowData(identifier string) (map[string]any, error) {
 	// Then try by name
 	matches := m.findWindowsByName(identifier)
 	if len(matches) == 0 {
-		return nil, fmt.Errorf("no window found with ID or name: %s", identifier)
+		return nil, errfmt.Errorf("no window found with ID or name: %s", identifier)
 	}
 	if len(matches) > 1 {
-		return nil, fmt.Errorf("multiple windows (%d) found with name: %s", len(matches), identifier)
+		return nil, errfmt.Errorf("multiple windows (%d) found with name: %s", len(matches), identifier)
 	}
 
 	// Find the index to check if focused
@@ -455,7 +456,7 @@ func (m *OS) GetWindowData(identifier string) (map[string]any, error) {
 // GetFocusedWindowData returns data about the currently focused window.
 func (m *OS) GetFocusedWindowData() (map[string]any, error) {
 	if m.FocusedWindow < 0 || m.FocusedWindow >= len(m.Windows) {
-		return nil, fmt.Errorf("no window is focused")
+		return nil, errfmt.Errorf("no window is focused")
 	}
 	return m.getWindowInfo(m.Windows[m.FocusedWindow], true), nil
 }
@@ -476,7 +477,7 @@ func (m *OS) CloseWindow(windowID string) error {
 func (m *OS) CloseWindowByName(name string) error {
 	matches := m.findWindowsByName(name)
 	if len(matches) == 0 {
-		return fmt.Errorf("no window found with name: %s", name)
+		return errfmt.Errorf("no window found with name: %s", name)
 	}
 
 	// Close in reverse order to avoid index shifting issues
@@ -495,7 +496,7 @@ func (m *OS) CloseWindowByName(name string) error {
 // nine-workspace session says so instead of appearing to work.
 func (m *OS) SwitchWorkspace(workspace int) error {
 	if workspace < 1 || workspace > m.NumWorkspaces {
-		return fmt.Errorf("workspace %d is out of range (1-%d)", workspace, m.NumWorkspaces)
+		return errfmt.Errorf("workspace %d is out of range (1-%d)", workspace, m.NumWorkspaces)
 	}
 	recorder := m.TapeRecorder
 	m.TapeRecorder = nil
@@ -554,10 +555,14 @@ func (m *OS) PrevWindow() error {
 }
 
 // FocusWindowByID focuses a specific window by ID.
+//
+// A command that names the pane to focus asks to be taken there, so the
+// scrolling strip shows the whole column. See RevealFocusedColumn.
 func (m *OS) FocusWindowByID(windowID string) error {
 	for i, w := range m.Windows {
 		if w.ID == windowID {
 			m.FocusWindow(i)
+			m.RevealFocusedColumn()
 			m.MarkAllDirty()
 			return nil
 		}
@@ -671,7 +676,7 @@ func (m *OS) SnapByDirection(direction string) error {
 		case "left", "right":
 			return m.focusTiledNeighbour(direction)
 		}
-		return fmt.Errorf("cannot snap windows while tiling mode is enabled")
+		return errfmt.Errorf("cannot snap windows while tiling mode is enabled")
 	}
 
 	if m.FocusedWindow < 0 || m.FocusedWindow >= len(m.Windows) {
@@ -693,7 +698,7 @@ func (m *OS) SnapByDirection(direction string) error {
 		m.MarkAllDirty()
 		return nil
 	default:
-		return fmt.Errorf("invalid snap direction: %s (use: left, right, fullscreen)", direction)
+		return errfmt.Errorf("invalid snap direction: %s (use: left, right, fullscreen)", direction)
 	}
 
 	m.Snap(m.FocusedWindow, quarter)
@@ -704,7 +709,7 @@ func (m *OS) SnapByDirection(direction string) error {
 // MoveWindowToWorkspaceByID moves a window to a workspace.
 func (m *OS) MoveWindowToWorkspaceByID(windowID string, workspace int) error {
 	if workspace < 1 || workspace > m.NumWorkspaces {
-		return fmt.Errorf("workspace %d out of range (1-%d)", workspace, m.NumWorkspaces)
+		return errfmt.Errorf("workspace %d out of range (1-%d)", workspace, m.NumWorkspaces)
 	}
 
 	for i, w := range m.Windows {
@@ -714,13 +719,13 @@ func (m *OS) MoveWindowToWorkspaceByID(windowID string, workspace int) error {
 		}
 	}
 
-	return fmt.Errorf("window not found: %s", windowID)
+	return errfmt.Errorf("window not found: %s", windowID)
 }
 
 // MoveAndFollowWorkspaceByID moves a window to a workspace and switches to it.
 func (m *OS) MoveAndFollowWorkspaceByID(windowID string, workspace int) error {
 	if workspace < 1 || workspace > m.NumWorkspaces {
-		return fmt.Errorf("workspace %d out of range (1-%d)", workspace, m.NumWorkspaces)
+		return errfmt.Errorf("workspace %d out of range (1-%d)", workspace, m.NumWorkspaces)
 	}
 
 	for i, w := range m.Windows {
@@ -730,7 +735,7 @@ func (m *OS) MoveAndFollowWorkspaceByID(windowID string, workspace int) error {
 		}
 	}
 
-	return fmt.Errorf("window not found: %s", windowID)
+	return errfmt.Errorf("window not found: %s", windowID)
 }
 
 // errTilingOff is what the BSP commands report when tiling is off. Returning
@@ -794,7 +799,7 @@ func (m *OS) SplitToward(side string) error {
 	case "down":
 		dir = layout.PreselectionDown
 	default:
-		return fmt.Errorf("unknown split side %q (use left, right, up or down)", side)
+		return errfmt.Errorf("unknown split side %q (use left, right, up or down)", side)
 	}
 	before := len(m.Windows)
 	m.splitFocused(dir, false)
@@ -869,7 +874,7 @@ func (m *OS) remember(path, value string) {
 // chose after starting outranks the flag they started with.
 func (m *OS) SetMotion(level string) error {
 	if !slices.Contains(config.MotionLevels, level) {
-		return fmt.Errorf("unknown motion level: %s (want %s)", level, strings.Join(config.MotionLevels, ", "))
+		return errfmt.Errorf("unknown motion level: %s (want %s)", level, strings.Join(config.MotionLevels, ", "))
 	}
 	m.Settings.NoAnimationsFlag = false
 	m.Settings.Motion = level
@@ -934,7 +939,7 @@ func (m *OS) SetConfig(path, value string) error {
 		return nil
 	case "appearance.window_button_style", "window_button_style":
 		if !slices.Contains(config.WindowButtonStyles, value) {
-			return fmt.Errorf("unknown window button style: %s (want %s)",
+			return errfmt.Errorf("unknown window button style: %s (want %s)",
 				value, strings.Join(config.WindowButtonStyles, " or "))
 		}
 		m.Settings.WindowButtonStyle = value
@@ -943,7 +948,7 @@ func (m *OS) SetConfig(path, value string) error {
 		return nil
 	case "appearance.window_button_position", "window_button_position":
 		if !slices.Contains(config.WindowButtonPositions, value) {
-			return fmt.Errorf("unknown window button position: %s (want %s)",
+			return errfmt.Errorf("unknown window button position: %s (want %s)",
 				value, strings.Join(config.WindowButtonPositions, " or "))
 		}
 		m.Settings.WindowButtonPosition = value
@@ -974,10 +979,10 @@ func (m *OS) setConfigFromRegistry(path, value string) error {
 		if msg, retired := config.RetiredOption(path); retired {
 			return errors.New(msg)
 		}
-		return fmt.Errorf("unknown config path: %s", path)
+		return errfmt.Errorf("unknown config path: %s", path)
 	}
 	if m.UserConfig == nil {
-		return fmt.Errorf("cannot set %s: no configuration is loaded", path)
+		return errfmt.Errorf("cannot set %s: no configuration is loaded", path)
 	}
 	if err := config.SetOptionValue(m.UserConfig, path, value); err != nil {
 		return err
@@ -1015,7 +1020,7 @@ func (m *OS) setConfigFromRegistry(path, value string) error {
 func (m *OS) SetTheme(themeName string) error {
 	// Initialize the new theme
 	if err := theme.Initialize(themeName); err != nil {
-		return fmt.Errorf("failed to set theme: %w", err)
+		return errfmt.Errorf("failed to set theme: %w", err)
 	}
 
 	// Update terminal colors for all windows
@@ -1050,7 +1055,7 @@ func (m *OS) SetDockbarPosition(position string) error {
 	// Checked against config.DockbarPositions, the list set-config, the
 	// config validator and 'run-command --list' all read.
 	if !slices.Contains(config.DockbarPositions, position) {
-		return fmt.Errorf("invalid dockbar position: %s (use: %s)",
+		return errfmt.Errorf("invalid dockbar position: %s (use: %s)",
 			position, strings.Join(config.DockbarPositions, ", "))
 	}
 	m.Settings.DockbarPosition = position
@@ -1066,7 +1071,7 @@ func (m *OS) SetBorderStyle(style string) error {
 	// set-config takes every style the config file takes, and refuses only a
 	// style that does not exist.
 	if !slices.Contains(config.BorderStyles, style) {
-		return fmt.Errorf("invalid border style: %s (use: %s)",
+		return errfmt.Errorf("invalid border style: %s (use: %s)",
 			style, strings.Join(config.BorderStyles, ", "))
 	}
 	m.Settings.BorderStyle = style
@@ -1105,13 +1110,14 @@ func (m *OS) FocusDirection(direction string) error {
 	}
 	side, ok := layout.ParseSide(direction)
 	if !ok {
-		return fmt.Errorf("invalid direction: %s (use: left, right, up, down)", direction)
+		return errfmt.Errorf("invalid direction: %s (use: left, right, up, down)", direction)
 	}
 	targetIndex := m.findWindowInDirection(m.Windows[m.FocusedWindow], side)
 	if targetIndex < 0 {
-		return fmt.Errorf("no window %s of the focused one", direction)
+		return errfmt.Errorf("no window %s of the focused one", direction)
 	}
 	m.FocusWindow(targetIndex)
+	m.RevealFocusedColumn()
 	m.MarkAllDirty()
 
 	return nil
@@ -1122,17 +1128,17 @@ func (m *OS) FocusDirection(direction string) error {
 // shows it to the caller.
 func (m *OS) MasterLayoutExec(command tape.CommandType, args []string) error {
 	if !m.AutoTiling {
-		return fmt.Errorf("%s needs tiling. Turn tiling on first", command)
+		return errfmt.Errorf("%s needs tiling. Turn tiling on first", command)
 	}
 	switch command {
 	case tape.CommandTypeSetMasterPosition:
 		if !m.SetMasterPosition(args[0]) {
-			return fmt.Errorf("%q is not a master position. Use %s", args[0], strings.Join(config.MasterPositions, ", "))
+			return errfmt.Errorf("%q is not a master position. Use %s", args[0], strings.Join(config.MasterPositions, ", "))
 		}
 	case tape.CommandTypeSetMasterCount:
 		n, err := strconv.Atoi(args[0])
 		if err != nil || !config.ValidMasterCount(n) {
-			return fmt.Errorf("%q is not a master count. Use a number from %d to %d", args[0], config.MasterCountMin, config.MasterCountMax)
+			return errfmt.Errorf("%q is not a master count. Use a number from %d to %d", args[0], config.MasterCountMin, config.MasterCountMax)
 		}
 		m.SetMasterCount(n)
 	case tape.CommandTypeCycleMasterPosition:
@@ -1143,11 +1149,11 @@ func (m *OS) MasterLayoutExec(command tape.CommandType, args []string) error {
 		m.RemoveMaster()
 	case tape.CommandTypeSwapWithMaster:
 		if !m.SwapWithMaster() {
-			return fmt.Errorf("%s needs the master-stack layout and a pane to swap with", command)
+			return errfmt.Errorf("%s needs the master-stack layout and a pane to swap with", command)
 		}
 	case tape.CommandTypeFocusMaster:
 		if !m.FocusMaster() {
-			return fmt.Errorf("%s needs the master-stack layout and a pane", command)
+			return errfmt.Errorf("%s needs the master-stack layout and a pane", command)
 		}
 	}
 	m.MarkAllDirty()
@@ -1211,7 +1217,7 @@ func (m *OS) SaveLayoutExec(name string) error {
 func (m *OS) LoadLayoutExec(name string) error {
 	templates, err := LoadLayoutTemplates()
 	if err != nil {
-		return fmt.Errorf("failed to load layout templates: %w", err)
+		return errfmt.Errorf("failed to load layout templates: %w", err)
 	}
 	for _, t := range templates {
 		if t.Name == name {
@@ -1219,7 +1225,7 @@ func (m *OS) LoadLayoutExec(name string) error {
 			return nil
 		}
 	}
-	return fmt.Errorf("layout template not found: %s", name)
+	return errfmt.Errorf("layout template not found: %s", name)
 }
 
 // startRemoteSendKeys initiates sequential key processing for remote send-keys.
@@ -1265,7 +1271,7 @@ func (m *OS) startRemoteSendKeys(keys string, literal bool, raw bool, windowTarg
 		keyMsgs = m.parseKeysToMessages(keys)
 	}
 	if len(keyMsgs) == 0 {
-		return nil, fmt.Errorf("no valid keys in sequence: %s", keys)
+		return nil, errfmt.Errorf("no valid keys in sequence: %s", keys)
 	}
 
 	// Disable animations during remote key processing

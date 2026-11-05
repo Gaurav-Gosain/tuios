@@ -591,6 +591,11 @@ type detectReading struct {
 	running bool
 	det     detection
 	isAgent bool
+	// offer is the machine the pane's login may add, read on the same
+	// poll. offerRead is false when nothing checked it, and then the
+	// window keeps what it holds. See ssh_offer.go.
+	offer     *SSHOffer
+	offerRead bool
 }
 
 // detectOutcome counts what a detection pass changes. changed is agent states,
@@ -683,7 +688,8 @@ func (s *Session) scanAgentDetection(
 		at := time.Now().UnixNano()
 		info, running := resolve(t.ptyID)
 		det, isAgent := identify(info)
-		readings[t.windowID] = detectReading{at: at, ptyID: t.ptyID, info: info, running: running, det: det, isAgent: isAgent}
+		offer, offerRead := s.probeSSHOffer(t.ptyID, info, running)
+		readings[t.windowID] = detectReading{at: at, ptyID: t.ptyID, info: info, running: running, det: det, isAgent: isAgent, offer: offer, offerRead: offerRead}
 	}
 
 	shell := agentBaseName(s.getShell())
@@ -768,6 +774,10 @@ func (s *Session) detectionPass(st *SessionState, readings map[string]detectRead
 		// labels rather than the agent states because it is not one, but it
 		// still has to reach the clients, which is what a pane needs before
 		// its reported directory can be checked. See WindowState.ShellPID.
+		// The offer to add a machine rides the same read. See ssh_offer.go.
+		if syncSSHOffer(w, r, write) {
+			out.labels++
+		}
 		if info.shellPID != w.ShellPID {
 			if write {
 				w.ShellPID = info.shellPID

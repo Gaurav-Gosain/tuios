@@ -637,6 +637,7 @@ func (m *OS) settingsCategories() []settingsCategory {
 			custom("appearance.max_fps", m.maxFPSItem()),
 			opt("appearance.preferred_shell"),
 			opt("agents.fold_working"),
+			opt("agents.view_list"),
 			opt("review.focus"),
 			opt("review.scope"),
 			opt("pip.width"),
@@ -661,7 +662,11 @@ func (m *OS) settingsCategories() []settingsCategory {
 		opt("notifications.style"),
 		opt("notifications.level"),
 		opt("notifications.log_hidden"),
+		opt("notifications.machine_offer"),
 	}
+	// The machines answered Never, each with a row that takes it off the
+	// list. See machine_offer.go.
+	alertRows = append(alertRows, m.machineOfferNeverItems()...)
 	// The agent alerts, under their heading row. With the agent features
 	// off both go, heading and all.
 	if m.agentsOn() {
@@ -725,6 +730,7 @@ func (m *OS) settingsCategories() []settingsCategory {
 		Items: m.resolveRows([]settingsRow{
 			opt("daemon.log_level"),
 			opt("daemon.window_size"),
+			opt("daemon.keep_awake"),
 			opt("daemon.persist_scrollback"),
 			opt("daemon.persist_scrollback_lines"),
 			opt("daemon.persist_scrollback_kb"),

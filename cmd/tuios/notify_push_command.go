@@ -1,7 +1,6 @@
 package main
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -9,6 +8,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
+	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/spf13/cobra"
 )
@@ -123,7 +124,7 @@ func runPushVerb(w io.Writer, verb string, params map[string]any, nonce string, 
 		var pres struct {
 			Nonce string `json:"human_nonce"`
 		}
-		if err := json.Unmarshal(raw, &pres); err != nil {
+		if err := jsonx.Unmarshal(raw, &pres); err != nil {
 			return reportVerbError(err, jsonOutput)
 		}
 		nonce = pres.Nonce
@@ -138,7 +139,7 @@ func runPushVerb(w io.Writer, verb string, params map[string]any, nonce string, 
 		return err
 	}
 	var res map[string]any
-	if err := json.Unmarshal(raw, &res); err != nil {
+	if err := jsonx.Unmarshal(raw, &res); err != nil {
 		return err
 	}
 	text(w, res)
@@ -178,21 +179,21 @@ func readPushSubscription(stdin io.Reader, path string) (pushSubscription, error
 	if path != "-" {
 		f, err := os.Open(path)
 		if err != nil {
-			return pushSubscription{}, fmt.Errorf("cannot read the subscription: %w", err)
+			return pushSubscription{}, errfmt.Errorf("cannot read the subscription: %w", err)
 		}
 		defer func() { _ = f.Close() }()
 		src = f
 	}
 	data, err := io.ReadAll(io.LimitReader(src, pushSubscriptionMax+1))
 	if err != nil {
-		return pushSubscription{}, fmt.Errorf("cannot read the subscription: %w", err)
+		return pushSubscription{}, errfmt.Errorf("cannot read the subscription: %w", err)
 	}
 	if len(data) > pushSubscriptionMax {
 		return pushSubscription{}, errors.New("the subscription is longer than 16 KiB")
 	}
 	var sub pushSubscription
-	if err := json.Unmarshal(data, &sub); err != nil {
-		return pushSubscription{}, fmt.Errorf("the subscription is not JSON: %w", err)
+	if err := jsonx.Unmarshal(data, &sub); err != nil {
+		return pushSubscription{}, errfmt.Errorf("the subscription is not JSON: %w", err)
 	}
 	if sub.P256dh == "" {
 		sub.P256dh = sub.Keys.P256dh

@@ -1,11 +1,11 @@
 package client
 
 import (
-	"encoding/json"
 	"strconv"
 	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/guios/proto"
+	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 	"github.com/Gaurav-Gosain/tuios/internal/layout"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 )
@@ -49,7 +49,7 @@ func (k *stateKeeper) readTree(name string, ws int) treeInfo {
 			WSOrder []int             `json:"workspace_order"`
 			Current int               `json:"current_workspace"`
 		}
-		if json.Unmarshal(raw, &si) == nil {
+		if jsonx.Unmarshal(raw, &si) == nil {
 			ti.tui, ti.wsOrder = si.TUI, si.WSOrder
 			if si.NumWS > 0 {
 				ti.numWS = si.NumWS
@@ -67,8 +67,8 @@ func (k *stateKeeper) readTree(name string, ws int) treeInfo {
 			Tree   *session.SerializedBSPTree `json:"tree"`
 			Leaves map[string]string          `json:"leaves"`
 		}
-		if json.Unmarshal(raw, &lt) == nil {
-			_ = json.Unmarshal(raw, &ti.ls)
+		if jsonx.Unmarshal(raw, &lt) == nil {
+			_ = jsonx.Unmarshal(raw, &ti.ls)
 			ti.tree = lt.Tree
 			ti.leaves = make(map[int]string, len(lt.Leaves))
 			for k, v := range lt.Leaves {

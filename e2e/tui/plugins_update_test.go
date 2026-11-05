@@ -193,6 +193,36 @@ func TestPluginsUpdate(t *testing.T) {
 		t.Fatalf("update of a moved tag under --yes: %v\n%s", err, out)
 	}
 
+	// A tag that is gone, with a branch of its name on a descendant that
+	// keeps the approved manifest, asks again too.
+	testutil.Git(t, work, "reset", "-q", "--hard", first)
+	replaced := commit("replaced", map[string]string{"out": "replaced\n"})
+	testutil.Git(t, work, "tag", "-d", "v1")
+	push(":refs/tags/v1", replaced+":refs/heads/v1")
+	if out, err := update("--yes"); err == nil || !strings.Contains(out, "The tag v1 is gone") || pin() != before {
+		t.Fatalf("update of a tag replaced by a branch under --yes: %v\n%s", err, out)
+	}
+
+	// A moved tag installed by its full name asks again too.
+	if out, err := tuiosCLI(t, base, "plugins", "uninstall", id, "--yes"); err != nil {
+		t.Fatalf("uninstall: %v\n%s", err, out)
+	}
+	testutil.Git(t, work, "tag", "v1", first)
+	push("v1")
+	if out, err := tuiosCLI(t, base, "plugins", "install", url+"@refs/tags/v1", "--subdir", "plug", "--yes"); err != nil {
+		t.Fatalf("install of the tag by its full name: %v\n%s", err, out)
+	}
+	if ref := field(pin)("ref"); ref != "refs/tags/v1" || !strings.Contains(pin(), first) {
+		t.Fatalf("the tag by its full name does not pin the first commit:\n%s", pin())
+	}
+	moved := commit("moved", map[string]string{"out": "moved\n"})
+	testutil.Git(t, work, "tag", "-f", "v1", moved)
+	push("--force", "v1")
+	before = pin()
+	if out, err := update("--yes"); err == nil || !strings.Contains(out, "now points to a different commit") || pin() != before {
+		t.Fatalf("update of a moved tag by its full name under --yes: %v\n%s", err, out)
+	}
+
 	// Offline: exit 3, and the pin stays.
 	if err := os.Rename(bare, bare+".gone"); err != nil {
 		t.Fatal(err)

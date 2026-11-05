@@ -7,6 +7,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/Gaurav-Gosain/tuios/internal/app"
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 )
 
 // The palette event: tuios's own command palette, so the renderer's palette
@@ -147,17 +148,17 @@ func (m *model) sendPalette() {
 // runPalette runs one row of the palette by its name.
 func (m *model) runPalette(name string) (tea.Cmd, error) {
 	if name == "" {
-		return nil, fmt.Errorf("palette needs name, a row of the palette event")
+		return nil, errfmt.Errorf("palette needs name, a row of the palette event")
 	}
 	if a, ok := paletteActions[name]; ok {
-		return nil, fmt.Errorf("%q is the action %s: run that action", name, a)
+		return nil, errfmt.Errorf("%q is the action %s: run that action", name, a)
 	}
 	for _, it := range m.os.BridgePaletteItems() {
 		if it.Name != name {
 			continue
 		}
 		if !paletteRunnable(it) || it.Action == nil {
-			return nil, fmt.Errorf("%q shows something only a screen can show, so the bridge does not run it", name)
+			return nil, errfmt.Errorf("%q shows something only a screen can show, so the bridge does not run it", name)
 		}
 		next, cmd := it.Action(m.os)
 		if next != nil {
@@ -165,5 +166,5 @@ func (m *model) runPalette(name string) (tea.Cmd, error) {
 		}
 		return cmd, nil
 	}
-	return nil, fmt.Errorf("no palette row %q", strings.TrimSpace(name))
+	return nil, errfmt.Errorf("no palette row %q", strings.TrimSpace(name))
 }

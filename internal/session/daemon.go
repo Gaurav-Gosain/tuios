@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"github.com/Gaurav-Gosain/tuios/internal/federation"
 	"github.com/Gaurav-Gosain/tuios/internal/herdrcli"
 	"github.com/Gaurav-Gosain/tuios/internal/hooks"
@@ -251,6 +252,9 @@ type Daemon struct {
 	// session event sinks and the mailbox, and saved beside the session state.
 	// See attention.go.
 	attention *attentionStore
+	// awake holds the machine awake as [daemon] keep_awake says. See
+	// keep_awake.go.
+	awake *awakeKeeper
 
 	// queueDedup answers a queue-prompt sent again with the same client_id.
 	queueDedup queueDedup
@@ -419,6 +423,10 @@ type Daemon struct {
 	// agents_switch.go. It is read on every tick, verb and output event, and
 	// written by a config reload, so it is atomic.
 	agentsOff atomic.Bool
+
+	// machineOfferOff is notifications.machine_offer = false: no pane's login
+	// is checked for the offer to add a machine. See ssh_offer.go.
+	machineOfferOff atomic.Bool
 
 	// taskAutoOff is [tasks] auto_stage = false: no card moves on its own.
 	// See task_auto.go. It is read under session state locks and written by
@@ -632,6 +640,9 @@ type connState struct {
 	// activity and can draw a session larger than itself. Set at hello,
 	// read under mu. See window_size.go.
 	windowSizeCap bool
+	// holdOptions says the client's hello offered HoldOptions: it applies a
+	// set_config with ConfigNoSave without saving it. Guarded by mu.
+	holdOptions bool
 	// machine is the host name the client's hello gave, a label for the
 	// leftover hint, and kind its ClientKind. viewChrome is the hello's
 	// ViewChrome. Guarded by mu. See Daemon.clientLabel and
@@ -715,6 +726,13 @@ type connState struct {
 	// link-peer handshake, "" when the link forwards none.
 	linkAgentSock string
 	linkServed    bool
+	// linkCloseToken is the token the link-peer reply gave stdio-proxy for
+	// this connection. The proxy sends it back on a connection of its own,
+	// as link-peer's closes, when the far side closed the stream on purpose,
+	// and linkClosedOnPurpose records that. A stream that ends without it
+	// ended because the link dropped. Guarded by mu. See paneStream.close.
+	linkCloseToken      string
+	linkClosedOnPurpose bool
 
 	// peerPID is the pid of the process on the other end, as the kernel
 	// recorded it at connect time, or 0 where the platform does not say. For
@@ -985,6 +1003,10 @@ type DaemonConfig struct {
 	// with no display of its own the display of the session's newest local
 	// client. See display_follow.go.
 	Display string
+	// KeepAwake is [daemon] keep_awake: "on" holds the machine awake while
+	// the daemon runs, "agents" while an agent pane on this machine works,
+	// and "off", the default, never. See keep_awake.go.
+	KeepAwake string
 	// SSHAgent is [daemon] ssh_agent: "follow" keeps a link per session to
 	// the agent socket of the client that attached or used it last, and
 	// gives new panes SSH_AUTH_SOCK naming it. See ssh_agent_follow.go.
@@ -1005,6 +1027,9 @@ type DaemonConfig struct {
 	// AgentsOff is [agents] enabled = false: the daemon starts with every
 	// agent feature off. See agents_switch.go.
 	AgentsOff bool
+	// MachineOfferOff is notifications.machine_offer = false. See
+	// ssh_offer.go.
+	MachineOfferOff bool
 	// Notify is the [notify] table: where the Inbox's push notifications go.
 	// The zero value has no provider and sends nothing. See daemon_notify.go.
 	Notify config.NotifyConfig
@@ -1046,6 +1071,8 @@ func NewDaemon(cfg *DaemonConfig) *Daemon {
 	d.manager.cellSource.Store(&cellSource)
 	d.SetDisplay(cfg.Display)
 	d.attention = newAttentionStore(d.events.publish, d.events.currentSeq)
+	d.awake = newAwakeKeeper(d.workingAgents, d.events.publish)
+	d.awake.setMode(cfg.KeepAwake)
 	d.SetApprovalPolicy(cfg.Approvals)
 	d.activity = newActivityStore(d.events.publish)
 	d.SetRecapTestPatterns(cfg.RecapTestPatterns)
@@ -1074,6 +1101,7 @@ func NewDaemon(cfg *DaemonConfig) *Daemon {
 	d.SetWorktreePath(cfg.WorktreePath)
 	d.agentDetectInterval = resolveAgentDetectInterval(cfg.AgentAutoDetect, cfg.AgentDetectInterval)
 	d.agentsOff.Store(cfg.AgentsOff)
+	d.machineOfferOff.Store(cfg.MachineOfferOff)
 	d.wakes.init()
 	d.loadHooks(cfg)
 	d.notify = newPushNotifier(d, cfg.Notify)
@@ -1148,6 +1176,7 @@ func (d *Daemon) onSessionCreated(s *Session) {
 	// point somewhere from the start. See ssh_agent_follow.go.
 	d.agentEnsureSession(s.ID)
 	s.setIdleWakes(&d.wakes)
+	s.setSSHOfferProbe(d.sshOfferFor)
 	d.wakes.sessionsChanged()
 	name := s.Name()
 	// Every daemon-side mutation reaches the attached clients from here, so a
@@ -1356,6 +1385,12 @@ func (d *Daemon) onSessionCreated(s *Session) {
 		if !d.agentsOff.Load() {
 			d.noteCheckpointEvent(s, ev)
 		}
+		// A pane that starts or stops working, or closes, can move the
+		// machine's keep awake hold. It only wakes the keeper's goroutine,
+		// and only when keep_awake is agents.
+		if ev.Type == EventAgentState || ev.Type == EventWindowClosed {
+			d.awake.agentEvent()
+		}
 		// Hooks run before the fan-out because a hook is a side effect of the
 		// fact and a subscriber is a reader of it. Fire itself only starts
 		// goroutines, so nothing here waits on a command.
@@ -1449,6 +1484,8 @@ func (d *Daemon) onSessionDeleted(s *Session) {
 	d.forgetLatest(s.ID)
 	d.herdrWorkspaceMeta.forget(s.ID)
 	d.events.publish(streamEvent{Type: EventSessionClosed, Session: s.Name()})
+	// Its working agents no longer keep the machine awake.
+	d.awake.agentEvent()
 	// A session with no windows has no inboxes, so its ring is dropped with it.
 	d.agents.forget(s.Name())
 	// And so are its panes' activity rings.
@@ -1494,16 +1531,16 @@ func (d *Daemon) Start() error {
 
 	if _, err := os.Stat(socketPath); err == nil {
 		if isDaemonRunningAt(socketPath) {
-			return fmt.Errorf("daemon already running at %s", socketPath)
+			return errfmt.Errorf("daemon already running at %s", socketPath)
 		}
 		if err := os.Remove(socketPath); err != nil {
-			return fmt.Errorf("failed to remove stale socket: %w", err)
+			return errfmt.Errorf("failed to remove stale socket: %w", err)
 		}
 	}
 
 	listener, err := net.Listen("unix", socketPath)
 	if err != nil {
-		return fmt.Errorf("failed to listen on socket: %w", err)
+		return errfmt.Errorf("failed to listen on socket: %w", err)
 	}
 	// A *net.UnixListener unlinks its socket file on Close by default, and
 	// shutdown closes the listener first, which silently unlinked the socket
@@ -1521,7 +1558,7 @@ func (d *Daemon) Start() error {
 	if err := os.Chmod(socketPath, 0700); err != nil { //nolint:gosec // a socket, owner only; the execute bit means nothing on it
 		_ = listener.Close()
 		_ = os.Remove(socketPath) // Close no longer unlinks; a failed start must not leave a stale socket
-		return fmt.Errorf("failed to set socket permissions: %w", err)
+		return errfmt.Errorf("failed to set socket permissions: %w", err)
 	}
 
 	// The link socket. It is optional: a daemon that cannot bind it still
@@ -1543,7 +1580,7 @@ func (d *Daemon) Start() error {
 	if err := d.writePidFile(); err != nil {
 		_ = listener.Close()
 		_ = os.Remove(socketPath) // Close no longer unlinks; a failed start must not leave a stale socket
-		return fmt.Errorf("failed to write PID file: %w", err)
+		return errfmt.Errorf("failed to write PID file: %w", err)
 	}
 
 	log.Printf("TUIOS daemon started on %s (PID %d)", socketPath, os.Getpid())
@@ -1649,6 +1686,10 @@ func (d *Daemon) serve() {
 	// The enabled plugins' startup commands run once the daemon is up, and
 	// their event hooks follow the stream from here on.
 	d.plugins.start()
+	// The machine is held awake from here on when keep_awake asks for it.
+	// After a live upgrade this is the new image taking the hold its
+	// predecessor dropped before the exec.
+	d.awake.start(d.ctx)
 
 	go d.handleSignals()
 	d.startAccepting()
@@ -1805,6 +1846,9 @@ func (d *Daemon) shutdown() error {
 		log.Println("Shutting down daemon...")
 		// The clients hear why before anything closes under them.
 		d.sayGoodbye()
+
+		// The machine may sleep once the daemon has gone.
+		d.awake.stop()
 
 		// A daemon stopped on purpose before a handoff's new image was up is
 		// not a crash: the keeper stands down rather than bring it back.
@@ -2372,7 +2416,7 @@ func (d *Daemon) handleMessage(cs *connState, msg *Message) error {
 		// every frame before the ping has been. See paste_retry.go.
 		return d.reply(cs, msg, MsgPong, nil)
 	default:
-		return fmt.Errorf("unknown message type: %d", msg.Type)
+		return errfmt.Errorf("unknown message type: %d", msg.Type)
 	}
 }
 
@@ -2568,11 +2612,19 @@ func (d *Daemon) agentMonitor() {
 			// With the agent features off the tick reads nothing: no
 			// process table, no transcript. See agents_switch.go. Turning
 			// them on raises the latch.
+			var pending bool
 			if d.agentsOff.Load() {
-				asleep = true
-				continue
+				// The offer to add a machine is not an agent feature, and
+				// reads the foreground alone. Off as well, the tick reads
+				// nothing.
+				if d.machineOfferOff.Load() {
+					asleep = true
+					continue
+				}
+				pending = d.sshOfferScan()
+			} else {
+				pending = d.agentDetectScan()
 			}
-			pending := d.agentDetectScan()
 			if active {
 				quiet = 0
 			} else {
@@ -2597,7 +2649,7 @@ func (d *Daemon) agentDetectScan() bool {
 	for _, sess := range d.manager.AllSessions() {
 		due := func(ptyID string) bool {
 			pty := sess.GetPTY(ptyID)
-			return pty == nil || pty.detectScanDue(now, quietTicks)
+			return pty == nil || pty.sshOffer.waiting() || pty.detectScanDue(now, quietTicks)
 		}
 		sess.scanAgentDetection(d.foregroundResolver(sess), d.agentMatcher.identifyKept, due)
 		// The transcript joins ride this tick rather than one of their
@@ -2609,7 +2661,7 @@ func (d *Daemon) agentDetectScan() bool {
 		if d.noteSessionScanned(sess) {
 			break
 		}
-		if sess.detectPending() {
+		if sess.detectPending() || sess.sshOfferWaiting() {
 			pending = true
 		}
 	}
@@ -2618,6 +2670,26 @@ func (d *Daemon) agentDetectScan() bool {
 	// keeps the tick running until it is done.
 	if d.searchViewTranscripts(reg) {
 		pending = true
+	}
+	return pending
+}
+
+// sshOfferScan is one look of agentMonitor while the agent features are off:
+// the foreground of each pane that printed, for the offer to add a machine
+// and nothing else. It reports whether a login waits to be old enough.
+func (d *Daemon) sshOfferScan() bool {
+	quietTicks := detectQuietTicks(d.agentDetectInterval)
+	now := time.Now().UnixNano()
+	pending := false
+	for _, sess := range d.manager.AllSessions() {
+		due := func(ptyID string) bool {
+			pty := sess.GetPTY(ptyID)
+			return pty == nil || pty.sshOffer.waiting() || pty.detectScanDue(now, quietTicks)
+		}
+		sess.scanSSHOffers(d.foregroundResolver(sess), due)
+		if sess.sshOfferWaiting() {
+			pending = true
+		}
 	}
 	return pending
 }

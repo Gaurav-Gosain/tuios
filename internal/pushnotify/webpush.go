@@ -14,10 +14,8 @@ import (
 	"crypto/x509"
 	"encoding/base64"
 	"encoding/binary"
-	"encoding/json"
 	"encoding/pem"
 	"errors"
-	"fmt"
 	"io"
 	"net"
 	"net/http"
@@ -27,6 +25,9 @@ import (
 	"strings"
 	"syscall"
 	"time"
+
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
+	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 )
 
 // Web Push: an encrypted message to a push service the phone's operating
@@ -373,7 +374,7 @@ const vapidTTL = 12 * time.Hour
 func (k *VAPIDKey) Token(audience, subject string, now time.Time) (string, error) {
 	enc := base64.RawURLEncoding
 	header := enc.EncodeToString([]byte(`{"typ":"JWT","alg":"ES256"}`))
-	claims, err := json.Marshal(struct {
+	claims, err := jsonx.Marshal(struct {
 		Aud string `json:"aud"`
 		Exp int64  `json:"exp"`
 		Sub string `json:"sub"`
@@ -501,7 +502,7 @@ func (c *Client) SendWebPush(ctx context.Context, key *VAPIDKey, p Push, allowIn
 	case code >= 300 && code < 400:
 		return errors.New("the push service answered with a redirect, and a push follows none. Register the phone again")
 	default:
-		return fmt.Errorf("the push service answered %s", statusText(code))
+		return errfmt.Errorf("the push service answered %s", statusText(code))
 	}
 }
 

@@ -10,6 +10,8 @@ import (
 	"io"
 	"path"
 	"strings"
+
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 )
 
 // ChecksumFile is the name goreleaser gives the digest list attached to every
@@ -85,7 +87,7 @@ type Checksums map[string]string
 func ParseChecksums(r io.Reader) (Checksums, error) {
 	data, err := io.ReadAll(io.LimitReader(r, 1<<20))
 	if err != nil {
-		return nil, fmt.Errorf("failed to read %s: %w", ChecksumFile, err)
+		return nil, errfmt.Errorf("failed to read %s: %w", ChecksumFile, err)
 	}
 	out := Checksums{}
 	for line := range strings.SplitSeq(string(data), "\n") {
@@ -97,7 +99,7 @@ func ParseChecksums(r io.Reader) (Checksums, error) {
 		out[strings.TrimPrefix(fields[1], "*")] = strings.ToLower(fields[0])
 	}
 	if len(out) == 0 {
-		return nil, fmt.Errorf("%s held no digests", ChecksumFile)
+		return nil, errfmt.Errorf("%s held no digests", ChecksumFile)
 	}
 	return out, nil
 }
@@ -122,7 +124,7 @@ var ErrNoChecksum = errors.New("the release publishes no checksum for this file"
 func (c Checksums) Verify(name string, data []byte) error {
 	want, ok := c[name]
 	if !ok {
-		return fmt.Errorf("%w: %s", ErrNoChecksum, name)
+		return errfmt.Errorf("%w: %s", ErrNoChecksum, name)
 	}
 	sum := sha256.Sum256(data)
 	got := hex.EncodeToString(sum[:])
@@ -141,7 +143,7 @@ func (c Checksums) Verify(name string, data []byte) error {
 func BinaryFromArchive(r io.Reader, binary string) ([]byte, error) {
 	gz, err := gzip.NewReader(r)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read the archive: %w", err)
+		return nil, errfmt.Errorf("failed to read the archive: %w", err)
 	}
 	defer func() { _ = gz.Close() }()
 
@@ -149,20 +151,20 @@ func BinaryFromArchive(r io.Reader, binary string) ([]byte, error) {
 	for {
 		hdr, err := tr.Next()
 		if errors.Is(err, io.EOF) {
-			return nil, fmt.Errorf("%w: %s", ErrNotInArchive, binary)
+			return nil, errfmt.Errorf("%w: %s", ErrNotInArchive, binary)
 		}
 		if err != nil {
-			return nil, fmt.Errorf("failed to read the archive: %w", err)
+			return nil, errfmt.Errorf("failed to read the archive: %w", err)
 		}
 		if hdr.Typeflag != tar.TypeReg || path.Base(hdr.Name) != binary {
 			continue
 		}
 		data, err := io.ReadAll(io.LimitReader(tr, maxBinarySize+1))
 		if err != nil {
-			return nil, fmt.Errorf("failed to read %s from the archive: %w", binary, err)
+			return nil, errfmt.Errorf("failed to read %s from the archive: %w", binary, err)
 		}
 		if int64(len(data)) > maxBinarySize {
-			return nil, fmt.Errorf("%s in the archive is larger than %d bytes", binary, int64(maxBinarySize))
+			return nil, errfmt.Errorf("%s in the archive is larger than %d bytes", binary, int64(maxBinarySize))
 		}
 		return data, nil
 	}

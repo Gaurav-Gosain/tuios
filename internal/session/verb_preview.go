@@ -26,6 +26,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/Gaurav-Gosain/tuios/internal/childproc"
+	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 	"tuios.dev/shot"
 )
 
@@ -748,7 +749,7 @@ func videoFacts(ctx context.Context, f *os.File, out map[string]any) int64 {
 			Rate   string `json:"avg_frame_rate"`
 		} `json:"streams"`
 	}
-	if json.Unmarshal(b, &probe) != nil {
+	if jsonx.Unmarshal(b, &probe) != nil {
 		return 0
 	}
 	for _, s := range probe.Streams {

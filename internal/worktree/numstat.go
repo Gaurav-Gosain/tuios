@@ -3,13 +3,13 @@ package worktree
 import (
 	"bytes"
 	"context"
-	"fmt"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
 
 	"github.com/Gaurav-Gosain/tuios/internal/childproc"
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 )
 
 // Comparing the attempts of a fan: how much each one changed against its
@@ -182,7 +182,7 @@ func StageAll(ctx context.Context, dir string, env, specs, exclude []string) err
 // files larger than maxUntracked bytes are not counted, as in SnapshotTree.
 func WorkingNumstat(ctx context.Context, path, base string, maxUntracked int64) (Numstat, error) {
 	if strings.HasPrefix(base, "-") {
-		return Numstat{}, fmt.Errorf("base %q is not a ref", base)
+		return Numstat{}, errfmt.Errorf("base %q is not a ref", base)
 	}
 	tree, _, err := SnapshotTree(ctx, path, maxUntracked)
 	if err != nil {
@@ -249,7 +249,7 @@ func HeadCommitCtx(ctx context.Context, path string) (string, error) {
 // MergeBaseCtx is MergeBase bounded by ctx.
 func MergeBaseCtx(ctx context.Context, path, a, b string) (string, error) {
 	if strings.HasPrefix(a, "-") || strings.HasPrefix(b, "-") {
-		return "", fmt.Errorf("merge-base of %q and %q: not a ref", a, b)
+		return "", errfmt.Errorf("merge-base of %q and %q: not a ref", a, b)
 	}
 	out, err := runCtx(ctx, path, nil, "merge-base", a, b)
 	if err != nil {
@@ -292,13 +292,13 @@ func runCtx(ctx context.Context, dir string, env []string, args ...string) (stri
 	cmd.Stderr = &stderr
 	if err := cmd.Run(); err != nil {
 		if ctx.Err() != nil {
-			return "", fmt.Errorf("git %s: %w", args[0], ctx.Err())
+			return "", errfmt.Errorf("git %s: %w", args[0], ctx.Err())
 		}
 		msg := strings.TrimSpace(stderr.String())
 		if msg == "" {
 			msg = err.Error()
 		}
-		return "", fmt.Errorf("git %s: %s", args[0], msg)
+		return "", errfmt.Errorf("git %s: %s", args[0], msg)
 	}
 	return stdout.String(), nil
 }

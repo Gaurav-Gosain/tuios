@@ -35,6 +35,7 @@ import (
 
 	"github.com/Gaurav-Gosain/tuios/internal/app"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"github.com/Gaurav-Gosain/tuios/internal/input"
 	"github.com/Gaurav-Gosain/tuios/internal/learn"
 	"github.com/Gaurav-Gosain/tuios/internal/learn/lessons"
@@ -108,7 +109,7 @@ func Run(opts Options) error {
 			}
 		}
 		if first == nil {
-			return fmt.Errorf("the tutor has no track %q. Run tuios tutor --list to see the tracks", opts.Track)
+			return errfmt.Errorf("the tutor has no track %q. Run tuios tutor --list to see the tracks", opts.Track)
 		}
 	}
 
@@ -117,7 +118,7 @@ func Run(opts Options) error {
 	nested := os.Getenv("TUIOS_PANE_ID") != "" || os.Getenv("TUIOS_WINDOW_ID") != "" || os.Getenv("TUIOS_SESSION") != ""
 	box, err := enterSandbox()
 	if err != nil {
-		return fmt.Errorf("make the tutor's temp dir: %w", err)
+		return errfmt.Errorf("make the tutor's temp dir: %w", err)
 	}
 	defer box.remove()
 	store := loadProgress(progressPath)
@@ -226,7 +227,7 @@ func Run(opts Options) error {
 	box.remove()
 	terminal.ResetTerminal()
 	if err != nil && !errors.Is(err, tea.ErrProgramKilled) {
-		return fmt.Errorf("tutor: %w", err)
+		return errfmt.Errorf("tutor: %w", err)
 	}
 	return nil
 }

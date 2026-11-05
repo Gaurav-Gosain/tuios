@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"github.com/Gaurav-Gosain/tuios/internal/guios/actions"
 	"github.com/Gaurav-Gosain/tuios/internal/guios/adblock"
 	"github.com/Gaurav-Gosain/tuios/internal/guios/proto"
@@ -50,7 +51,7 @@ func boolKey(name, doc string, f func(*Settings) *bool) key {
 		set: func(s *Settings, v []string) error {
 			b, err := strconv.ParseBool(v[len(v)-1])
 			if err != nil {
-				return fmt.Errorf("%q is not true or false", v[len(v)-1])
+				return errfmt.Errorf("%q is not true or false", v[len(v)-1])
 			}
 			*f(s) = b
 			return nil
@@ -63,7 +64,7 @@ func choiceKey(name, doc string, f func(*Settings) *string, choices ...string) k
 		set: func(s *Settings, v []string) error {
 			c := v[len(v)-1]
 			if !slices.Contains(choices, c) {
-				return fmt.Errorf("%q is none of %s", c, strings.Join(choices, ", "))
+				return errfmt.Errorf("%q is none of %s", c, strings.Join(choices, ", "))
 			}
 			*f(s) = c
 			return nil
@@ -82,7 +83,7 @@ func numberKey(name, doc string, get func(*Settings) float64, set func(*Settings
 		set: func(s *Settings, v []string) error {
 			n, err := strconv.ParseFloat(v[len(v)-1], 64)
 			if err != nil {
-				return fmt.Errorf("%q is not a number", v[len(v)-1])
+				return errfmt.Errorf("%q is not a number", v[len(v)-1])
 			}
 			set(s, n)
 			return nil
@@ -96,7 +97,7 @@ func mapChoice(name, doc string, f func(*Settings) *string, file, ours []string)
 		set: func(s *Settings, v []string) error {
 			i := slices.Index(file, v[len(v)-1])
 			if i < 0 {
-				return fmt.Errorf("%q is none of %s", v[len(v)-1], strings.Join(file, ", "))
+				return errfmt.Errorf("%q is none of %s", v[len(v)-1], strings.Join(file, ", "))
 			}
 			*f(s) = ours[i]
 			return nil
@@ -151,7 +152,7 @@ var keys = []key{
 				case ok && k == "dark":
 					s.DarkTheme = strings.TrimSpace(t)
 				default:
-					return fmt.Errorf("%q: write light:<theme>,dark:<theme>", val)
+					return errfmt.Errorf("%q: write light:<theme>,dark:<theme>", val)
 				}
 			}
 			return nil
@@ -175,7 +176,7 @@ var keys = []key{
 			n := func(t string) (float32, error) {
 				f, err := strconv.ParseFloat(strings.TrimSpace(t), 32)
 				if err != nil {
-					return 0, fmt.Errorf("%q is not a number", strings.TrimSpace(t))
+					return 0, errfmt.Errorf("%q is not a number", strings.TrimSpace(t))
 				}
 				return float32(min(max(f, MinScrollMultiplier), MaxScrollMultiplier)), nil
 			}
@@ -196,7 +197,7 @@ var keys = []key{
 				case "discrete":
 					dst = &s.ScrollDiscrete
 				default:
-					return fmt.Errorf("%q: write precision:<n>,discrete:<n>", val)
+					return errfmt.Errorf("%q: write precision:<n>,discrete:<n>", val)
 				}
 				f, err := n(t)
 				if err != nil {
@@ -213,7 +214,7 @@ var keys = []key{
 			s.Env = nil
 			for _, kv := range v {
 				if !strings.Contains(kv, "=") {
-					return fmt.Errorf("%q is not NAME=value", kv)
+					return errfmt.Errorf("%q is not NAME=value", kv)
 				}
 				s.Env = append(s.Env, kv)
 			}
@@ -246,7 +247,7 @@ var keys = []key{
 			for _, line := range v {
 				h, err := ParseHost(line)
 				if err == nil && s.Host(h.Name) != nil {
-					err = fmt.Errorf("%q is named twice", h.Name)
+					err = errfmt.Errorf("%q is named twice", h.Name)
 				}
 				if err != nil {
 					bad = append(bad, err.Error())
@@ -255,7 +256,7 @@ var keys = []key{
 				s.Hosts = append(s.Hosts, h)
 			}
 			if bad != nil {
-				return fmt.Errorf("%s", strings.Join(bad, "; "))
+				return errfmt.Errorf("%s", strings.Join(bad, "; "))
 			}
 			return nil
 		}},
@@ -272,7 +273,7 @@ var keys = []key{
 				s.Listen = append(s.Listen, strings.TrimSpace(l))
 			}
 			if bad != nil {
-				return fmt.Errorf("%s", strings.Join(bad, "; "))
+				return errfmt.Errorf("%s", strings.Join(bad, "; "))
 			}
 			return nil
 		}},
@@ -314,7 +315,7 @@ var keys = []key{
 				}
 			}
 			if bad != nil {
-				return fmt.Errorf("%s", strings.Join(bad, "; "))
+				return errfmt.Errorf("%s", strings.Join(bad, "; "))
 			}
 			return nil
 		}},
@@ -367,7 +368,7 @@ var keys = []key{
 				s.Shortcuts = sc
 			}
 			if bad != nil {
-				return fmt.Errorf("%s", strings.Join(bad, "; "))
+				return errfmt.Errorf("%s", strings.Join(bad, "; "))
 			}
 			return nil
 		}},

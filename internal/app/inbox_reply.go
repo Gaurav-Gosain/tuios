@@ -1,7 +1,6 @@
 package app
 
 import (
-	"encoding/json"
 	"errors"
 	"slices"
 	"strconv"
@@ -13,6 +12,7 @@ import (
 
 	"github.com/Gaurav-Gosain/tuios/internal/composer"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 )
@@ -95,6 +95,9 @@ type inboxReplyState struct {
 	sending map[uint64]*composer.Model
 	// sendSeq numbers the sends.
 	sendSeq uint64
+	// holdSeq numbers the typing hold's release redraws, so one from an
+	// editor since closed does not arm again.
+	holdSeq uint64
 }
 
 // inboxReplyDraftsMax is how many closed drafts the client keeps. They live
@@ -130,6 +133,13 @@ type inboxReplyEditor struct {
 	// draftWires is the previewer's, the @ list's and the history's state.
 	// See draft_wiring.go.
 	draftWires
+	// typing is when the person typed into the draft, arrived is when each
+	// approval or question arrived or changed while the editor was open, and
+	// holdArmed is set while a redraw for the release is out. See
+	// inbox_typing_hold.go.
+	typing    composer.TypingHold
+	arrived   map[string]inboxArrival
+	holdArmed bool
 }
 
 // inboxSentReply is a reply this client queued, kept so a drop of it can be
@@ -171,7 +181,10 @@ type InboxRepliedMsg struct {
 	Send uint64
 	// Parts is the reply in parts, nil for one sent as text.
 	Parts []composer.Part
-	Err   error
+	// Now marks a reply typed into the pane at once with send-text, not
+	// queued. See inbox_reply_now.go.
+	Now bool
+	Err error
 }
 
 // InboxQueueDroppedMsg is the answer to the x on a rail row.
@@ -236,7 +249,7 @@ func (m *OS) openInboxReply(sessionID, windowID, who, context string, closeAfter
 	m.Inbox.approvals.armed = inboxArmed{}
 	comp := m.takeInboxDraft(sessionID, windowID)
 	if comp == nil {
-		comp = composer.New(composer.Options{MaxRows: inboxReplyRows, Placeholder: "Type your reply.", Images: true})
+		comp = composer.New(composer.Options{MaxRows: inboxReplyRows, Placeholder: "Type your reply.", Images: true, SendNow: true})
 	}
 	m.Inbox.reply.editor = &inboxReplyEditor{
 		draftWires: m.wireDraft(comp, sessionID, windowID, true),
@@ -387,6 +400,7 @@ func (m *OS) InboxReplyOpen() bool {
 // InboxReplyType types text into the reply at the cursor.
 func (m *OS) InboxReplyType(text string) {
 	if ed := m.Inbox.reply.editor; ed != nil {
+		m.noteInboxTyped()
 		ed.comp.Insert(text, m.ProcessingRemoteKeys)
 	}
 }
@@ -400,7 +414,8 @@ func (m *OS) InboxReplyPaste(text string) tea.Cmd {
 	if ed == nil {
 		return nil
 	}
-	return m.inboxReplyPasteCmd(ed, text)
+	m.noteInboxTyped()
+	return tea.Batch(m.inboxReplyPasteCmd(ed, text), m.armInboxTypingRelease())
 }
 
 // InboxReplyKey gives a key to the reply editor and does what it asks.
@@ -409,10 +424,13 @@ func (m *OS) InboxReplyKey(msg tea.KeyPressMsg) tea.Cmd {
 	if ed == nil {
 		return nil
 	}
+	m.noteInboxTyped()
 	var cmd tea.Cmd
 	switch ed.comp.Update(msg, m.ProcessingRemoteKeys) {
 	case composer.EventSend:
 		cmd = m.InboxReplySend()
+	case composer.EventSendNow:
+		cmd = m.InboxReplySendNow()
 	case composer.EventClose:
 		m.InboxReplyCancel()
 	case composer.EventPaste:
@@ -435,7 +453,7 @@ func (m *OS) InboxReplyKey(msg tea.KeyPressMsg) tea.Cmd {
 	// A view that closed takes its copy for the desktop viewer with it,
 	// and one that opened, or a strip that changed, may need pictures.
 	m.replyPreviewClosed()
-	return tea.Batch(cmd, m.replyPreviewCmd(), m.replyMentionCmd())
+	return tea.Batch(cmd, m.replyPreviewCmd(), m.replyMentionCmd(), m.armInboxTypingRelease())
 }
 
 // InboxReplyCancel closes the editor. A draft with text in it is kept for
@@ -542,6 +560,7 @@ func (m *OS) InboxReplySend() tea.Cmd {
 	}
 	st.sendSeq++
 	st.sending[st.sendSeq] = ed.comp
+	m.threadFollowOnSend(ed.host, ed.session, ed.window)
 	return m.inboxQueueCmdOn(ed.host, ed.session, ed.window, ed.who, text, nonce, false, st.sendSeq, parts)
 }
 
@@ -629,7 +648,7 @@ func (m *OS) inboxQueueCmdOn(host, sessionID, windowID, who, text, nonce string,
 			Queued     int    `json:"queued"`
 			Delivering bool   `json:"delivering"`
 		}
-		if err := json.Unmarshal(raw, &res); err != nil {
+		if err := jsonx.Unmarshal(raw, &res); err != nil {
 			msg.Err = err
 			return msg
 		}
@@ -673,6 +692,10 @@ func (m *OS) applyInboxReplied(msg InboxRepliedMsg) {
 			m.restoreInboxDraft(msg.Session, msg.Window, comp)
 		}
 	}
+	if msg.Err != nil && msg.Now {
+		m.ShowNotification("The reply to "+msg.Who+" was not sent: "+msg.Err.Error()+". Your draft is kept", "error", m.Settings.NotificationDuration*2)
+		return
+	}
 	if msg.Err != nil {
 		if callErr, ok := errors.AsType[*session.VerbCallError](msg.Err); ok {
 			switch callErr.Code {
@@ -709,6 +732,8 @@ func (m *OS) applyInboxReplied(msg InboxRepliedMsg) {
 	}
 	m.rememberInboxReply(msg.ID, inboxSentReply{text: msg.Text, parts: msg.Parts})
 	switch {
+	case msg.Now:
+		m.ShowNotification("Sent your reply to "+msg.Who+" now", "success", m.Settings.NotificationDuration)
 	case msg.Delivering:
 		m.ShowNotification("Typing your reply to "+msg.Who, "success", m.Settings.NotificationDuration)
 	case msg.Queued <= 1:
@@ -815,7 +840,7 @@ func (m *OS) SidebarAgentCancelQueued(sessionID, windowID string) (tea.Cmd, bool
 				State string `json:"state"`
 			} `json:"entries"`
 		}
-		if err := json.Unmarshal(raw, &list); err != nil {
+		if err := jsonx.Unmarshal(raw, &list); err != nil {
 			msg.Err = err
 			return msg
 		}
@@ -839,7 +864,7 @@ func (m *OS) SidebarAgentCancelQueued(sessionID, windowID string) (tea.Cmd, bool
 		var res struct {
 			Queued int `json:"queued"`
 		}
-		_ = json.Unmarshal(raw, &res)
+		_ = jsonx.Unmarshal(raw, &res)
 		msg.ID, msg.Left = id, res.Queued
 		return msg
 	}, true

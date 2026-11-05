@@ -4,9 +4,10 @@
 package cli
 
 import (
-	"encoding/json"
 	"errors"
 	"os/exec"
+
+	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 )
 
 // Tuios is the tuios binary the app found, set at start.
@@ -41,7 +42,7 @@ func SkillStates() []SkillState {
 		Installed bool   `json:"installed"`
 		Current   bool   `json:"current"`
 	}
-	if json.Unmarshal(out, &rows) != nil {
+	if jsonx.Unmarshal(out, &rows) != nil {
 		return nil
 	}
 	var states []SkillState

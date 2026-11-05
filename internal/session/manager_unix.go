@@ -3,11 +3,11 @@
 package session
 
 import (
-	"fmt"
 	"os"
 	"path/filepath"
 	"syscall"
 
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"github.com/Gaurav-Gosain/tuios/internal/sockpath"
 )
 
@@ -65,21 +65,21 @@ func GetPidFilePath() (string, error) {
 // owns that is open is closed rather than refused.
 func ensureSocketDir(dir string) error {
 	if err := os.MkdirAll(dir, 0o700); err != nil {
-		return fmt.Errorf("failed to create socket directory: %w", err)
+		return errfmt.Errorf("failed to create socket directory: %w", err)
 	}
 	st, err := os.Lstat(dir)
 	if err != nil {
-		return fmt.Errorf("failed to check socket directory: %w", err)
+		return errfmt.Errorf("failed to check socket directory: %w", err)
 	}
 	if !st.Mode().IsDir() {
-		return fmt.Errorf("socket directory %s is not a directory; remove it or set XDG_RUNTIME_DIR to a directory you own", dir)
+		return errfmt.Errorf("socket directory %s is not a directory; remove it or set XDG_RUNTIME_DIR to a directory you own", dir)
 	}
 	if sys, ok := st.Sys().(*syscall.Stat_t); ok && int(sys.Uid) != os.Getuid() {
-		return fmt.Errorf("socket directory %s belongs to another user; set XDG_RUNTIME_DIR to a directory you own", dir)
+		return errfmt.Errorf("socket directory %s belongs to another user; set XDG_RUNTIME_DIR to a directory you own", dir)
 	}
 	if st.Mode().Perm()&0o077 != 0 {
 		if err := os.Chmod(dir, 0o700); err != nil { //nolint:gosec // a directory, which needs the execute bit to be entered
-			return fmt.Errorf("socket directory %s is open to other users and could not be closed: %w", dir, err)
+			return errfmt.Errorf("socket directory %s is open to other users and could not be closed: %w", dir, err)
 		}
 	}
 	return nil

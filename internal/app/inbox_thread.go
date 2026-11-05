@@ -2,7 +2,6 @@ package app
 
 import (
 	"context"
-	"encoding/json"
 	"image/color"
 	"strconv"
 	"strings"
@@ -11,9 +10,11 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/x/ansi"
 
+	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
+	"github.com/Gaurav-Gosain/tuios/internal/transcriptview"
 )
 
 // The agent thread: what the selected agent in the agents view said and did,
@@ -111,14 +112,28 @@ type agentThread struct {
 	bodyAt threadBodyKey
 	// hits are what a click on each line of body does, "" for nothing.
 	hits []string
-	// folded are the cards whose fold the person flipped, by entry id;
-	// expandAll shows every line of every card (e); scroll is how many
-	// lines the thread is scrolled up from its newest.
+	// folded are the cards whose fold the person flipped, by entry id, and
+	// the turns, by "turn:" and the id of the turn's first entry;
+	// expandAll shows every line of every card (e).
 	folded    map[string]bool
 	expandAll bool
-	scroll    int
+	// follow is where the person reads the thread: how far up from the
+	// newest line, and what arrived while it held still. taken counts the
+	// entries that arrived after the first page, for its count of unseen
+	// ones, and prompts are the lines of body each prompt starts on.
+	follow  transcriptview.Follow
+	taken   int
+	prompts []int
 	// cards are the entries' cards as last built, by entry id.
 	cards map[string]ckCard
+	// act is the activity row's text as last drawn, "" for no row, and
+	// actAt when it changed to that. actTimed says the thread saw that
+	// activity start, so actAt is when it started, to within one redraw: an
+	// activity already under way when the thread was first drawn (actSeen
+	// false) has no time.
+	act               string
+	actAt             time.Time
+	actTimed, actSeen bool
 }
 
 // threadBodyKey is what a thread's drawn lines depend on.
@@ -130,6 +145,8 @@ type threadBodyKey struct {
 	ascii               bool
 	title, message      string
 	expand, changes     bool
+	// working is the agent's state: the last turn folds once it rests.
+	working bool
 }
 
 // threadsState is the threads kept and the transcript subscription.
@@ -229,6 +246,12 @@ func (m *OS) InboxThreadFetch() tea.Cmd {
 	if m.ShowInbox {
 		m.cockpitSync()
 	}
+	// The thread on screen is viewed: its row's unseen mark goes.
+	if m.threadShown() {
+		if e, ok := m.cockpitAgent(); ok {
+			m.markAgentViewed(e)
+		}
+	}
 	if !m.threadShown() || (m.DaemonClient == nil && m.Inbox.call == nil) {
 		m.stopThreadWatch()
 		return nil
@@ -289,7 +312,7 @@ func (m *OS) threadPageCmd(t *agentThread, after string) tea.Cmd {
 			Reset   bool          `json:"reset"`
 			More    bool          `json:"more"`
 		}
-		if msg.err = json.Unmarshal(raw, &res); msg.err == nil {
+		if msg.err = jsonx.Unmarshal(raw, &res); msg.err == nil {
 			msg.entries, msg.cursor, msg.reset, msg.more = res.Entries, res.Cursor, res.Reset, res.More
 		}
 		return msg
@@ -346,6 +369,10 @@ func (m *OS) applyThreadPage(msg threadPageMsg) tea.Cmd {
 		}
 		at[e.ID] = len(t.entries)
 		t.entries = append(t.entries, e)
+		if msg.after && !msg.reset && e.Kind != "tool_result" {
+			// A result finishes a call the thread already counted.
+			t.taken++
+		}
 	}
 	// A result can arrive on a later page than the call it finishes. Fold it
 	// into retained calls too, otherwise a cached running card hides failures.
@@ -540,11 +567,12 @@ func (m *OS) threadBody(e sidebarAgentEntry, width, room int, now time.Time) []s
 		width: width, minute: m.threadMinute(e, now), ascii: overlay.UseASCII(),
 		title: e.Title + "\x00" + e.Host, message: e.Message,
 		expand: t.expandAll, changes: m.cockpitTab() == "Changes",
+		working: e.State == string(session.AgentStateWorking),
 	}
 	if t.body != nil && t.bodyAt == key {
 		return t.body
 	}
-	t.hits = nil
+	t.hits, t.prompts = nil, nil
 	t.body, t.bodyAt = m.threadBodyLines(e, t, width, room, now), key
 	return t.body
 }

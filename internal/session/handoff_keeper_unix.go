@@ -4,13 +4,13 @@ package session
 
 import (
 	"errors"
-	"fmt"
 	"io"
 	"os"
 	"strconv"
 	"strings"
 	"syscall"
 
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"golang.org/x/sys/unix"
 )
 
@@ -33,7 +33,7 @@ func startKeeper(bin string, hold []int, argv []string) (*handoffKeeper, error) 
 	}
 	syscall.ForkLock.RUnlock()
 	if err != nil {
-		return nil, fmt.Errorf("a socket pair for the keeper: %w", err)
+		return nil, errfmt.Errorf("a socket pair for the keeper: %w", err)
 	}
 	null, err := os.Open(os.DevNull)
 	if err != nil {
@@ -59,7 +59,7 @@ func startKeeper(bin string, hold []int, argv []string) (*handoffKeeper, error) 
 	_ = unix.Close(pair[1])
 	if err != nil {
 		_ = unix.Close(pair[0])
-		return nil, fmt.Errorf("starting %s: %w", bin, err)
+		return nil, errfmt.Errorf("starting %s: %w", bin, err)
 	}
 	return &handoffKeeper{pid: pid, conn: os.NewFile(uintptr(pair[0]), "handoff-keeper")}, nil //nolint:gosec // a descriptor number
 }

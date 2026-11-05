@@ -4,12 +4,13 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"slices"
 	"strings"
 	"time"
 	"unicode"
 	"unicode/utf8"
+
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 )
 
 // Agent metadata is a short list of key and value pairs a pane reports about
@@ -74,7 +75,7 @@ type AgentMetaUpdate struct {
 }
 
 // errAgentMetaFull is the per-pane limit, reported to the caller.
-var errAgentMetaFull = fmt.Errorf("a pane holds at most %d metadata keys", AgentMetaMaxPerPane)
+var errAgentMetaFull = errfmt.Errorf("a pane holds at most %d metadata keys", AgentMetaMaxPerPane)
 
 // errNoAgentMetaChange tells mutateState a prune found nothing to drop, or a
 // write found nothing to change, so it neither bumps the version nor pushes to
@@ -345,7 +346,7 @@ func decodeAgentMetaTokens(raw json.RawMessage) ([]string, []*string, error) {
 		key, _ := kt.(string)
 		var v *string
 		if err := dec.Decode(&v); err != nil {
-			return nil, nil, fmt.Errorf("tokens.%s must be a string or null", key)
+			return nil, nil, errfmt.Errorf("tokens.%s must be a string or null", key)
 		}
 		if i, ok := seen[key]; ok {
 			values[i] = v

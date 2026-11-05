@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/tmuxcompat"
 	"github.com/spf13/cobra"
@@ -120,7 +121,7 @@ func (l *lazyCaller) CallWithTimeout(verb string, params any, timeout time.Durat
 			// tmux's words for a server that is not there, which tools
 			// driving tmux read as "not reachable".
 			if de, ok := errors.AsType[*diagnosticError](err); ok && de.Status == noDaemonStatus && l.socket != "" {
-				return nil, fmt.Errorf("no server running on %s", l.socket)
+				return nil, errfmt.Errorf("no server running on %s", l.socket)
 			}
 			return nil, err
 		}
@@ -321,7 +322,7 @@ available on Windows.`,
 				return errors.New("cannot find the tuios binary to link as tmux. Run tuios tmux-shim by its full path")
 			}
 			if err := tmuxcompat.InstallLink(dir, exe); err != nil {
-				return fmt.Errorf("install the tmux link: %w", err)
+				return errfmt.Errorf("install the tmux link: %w", err)
 			}
 			if logPath != "" {
 				if abs, err := filepath.Abs(logPath); err == nil {

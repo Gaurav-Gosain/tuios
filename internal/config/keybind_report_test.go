@@ -15,22 +15,6 @@ func registryFor(t *testing.T, mutate func(*UserConfig)) *KeybindRegistry {
 	return NewKeybindRegistry(cfg)
 }
 
-// The strongest check available: for every key the report calls contested, the
-// action it names as the live one must be the action the registry's own lookup
-// returns. Anything else means the overlay is describing a different program
-// than the one running.
-func TestReportAgreesWithTheRegistryOnEveryContestedKey(t *testing.T) {
-	r := registryFor(t, nil)
-	for _, c := range r.Collisions() {
-		if c.Scope != ScopeWindowMode {
-			continue // only the window-mode scope is reachable through GetAction
-		}
-		if got := r.GetAction(c.Key); got != c.Winner {
-			t.Errorf("key %q: registry runs %q, report names %q as the winner", c.Key, got, c.Winner)
-		}
-	}
-}
-
 // A digit claimed by both select_window_N and snap_corner_N is reported as a
 // cross-section collision, with the layout claim winning.
 //

@@ -2,9 +2,10 @@ package tmuxcompat
 
 import (
 	"errors"
-	"fmt"
 	"slices"
 	"strings"
+
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 )
 
 // Commands that move the focus or a pane: the directions of select-pane,
@@ -141,7 +142,7 @@ func (s *Shim) stepWindow(name string, args []string, step int) (string, []strin
 		word = "previous"
 	}
 	if len(used) == 0 || len(used) == 1 && i >= 0 {
-		return OutcomeError, nil, fmt.Errorf("no %s window", word)
+		return OutcomeError, nil, errfmt.Errorf("no %s window", word)
 	}
 	var ws int
 	switch {
@@ -207,7 +208,7 @@ func (s *Shim) breakPane(name string, args []string) (string, []string, error) {
 			return OutcomeError, nil, err
 		}
 		if sv.wsCount[n] > 0 {
-			return OutcomeError, nil, fmt.Errorf("index in use: %d", n)
+			return OutcomeError, nil, errfmt.Errorf("index in use: %d", n)
 		}
 		ws = n
 	} else {
@@ -226,7 +227,7 @@ func (s *Shim) breakPane(name string, args []string) (string, []string, error) {
 	}
 	if n, ok := p.Value('n'); ok {
 		if _, err := s.Caller.Call("set-workspace-name", map[string]any{"session": sv.name, "workspace": ws, "name": n}); err != nil {
-			return OutcomeError, nil, fmt.Errorf("name window failed: %w", err)
+			return OutcomeError, nil, errfmt.Errorf("name window failed: %w", err)
 		}
 	}
 	if !p.Has('P') {
@@ -328,7 +329,7 @@ func (s *Shim) renameSession(name string, args []string) (string, []string, erro
 	}
 	newName := p.Args[0]
 	if v.isSession(newName) && newName != sv.name {
-		return OutcomeError, nil, fmt.Errorf("duplicate session: %s", newName)
+		return OutcomeError, nil, errfmt.Errorf("duplicate session: %s", newName)
 	}
 	if _, err := s.Caller.Call("rename-session", map[string]any{"session": sv.name, "name": newName}); err != nil {
 		return OutcomeError, nil, err

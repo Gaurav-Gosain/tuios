@@ -2,11 +2,11 @@ package client
 
 import (
 	"encoding/binary"
-	"encoding/json"
 	"math"
 	"sync"
 
 	"github.com/Gaurav-Gosain/mygo/plugins/terminal"
+	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 )
 
 // historyFetch is how many rows one pane-history call asks for.
@@ -95,7 +95,7 @@ func (s *Stream) FetchHistory(t *terminal.Terminal) {
 		Count int    `json:"count"`
 	}
 	if err == nil {
-		err = json.Unmarshal(raw, &r)
+		err = jsonx.Unmarshal(raw, &r)
 	}
 	switch {
 	case err != nil:
@@ -132,7 +132,7 @@ func (s *Stream) heldOldest(t *terminal.Terminal) int64 {
 	var r struct {
 		First int64 `json:"first"`
 	}
-	if json.Unmarshal(raw, &r) != nil {
+	if jsonx.Unmarshal(raw, &r) != nil {
 		return 0
 	}
 	return r.First - int64(n) + 1

@@ -1,8 +1,34 @@
 # Other machines
 
-The person names other machines with `tuios hosts add`. The daemon then holds an
-ssh link to each one, and sessions, panes, agents, mail and the Inbox reach
-across it.
+The person names other machines with `tuios hosts add`, or sets one up from
+nothing with `tuios hosts setup`. The daemon then holds an ssh link to each
+one, and sessions, panes, agents, mail and the Inbox reach across it.
+
+## Set up a machine
+
+`tuios hosts setup DEST` tests ssh, installs tuios when it is missing, starts
+the daemon, adds the machine and tests the link. Run the dry run first and show
+the person the plan. Then run it with the choices they made:
+
+```sh
+tuios hosts setup gaurav@buildbox --dry-run
+tuios hosts setup gaurav@buildbox --name build --install copy --yes --json
+tuios hosts setup gaurav@buildbox --install copy --service --both-ways --yes --json
+tuios hosts setup --tailnet --dry-run
+tuios hosts setup --tailnet --only nas,gpu --install copy --yes --json
+```
+
+- `--install` is `copy` (this tuios, or the release of this version for
+  another platform), `release`, `pkg` (with `--pkg yay`, `paru`, `brew`, `nix`
+  or `go`) or `script`. It is the one choice the setup cannot make. Without it
+  the command exits 2 and names the flag.
+- `--service` (start at boot) and `--both-ways` (add this machine on the other
+  one too) are off unless passed. Pass them only when the person asked.
+- Exit 3 means a step needs the person: a password, a host key to check, a
+  Tailscale sign-in. The JSON has `person` or `failure.fix_command`. Give it to
+  them. Never type a password or accept a host key yourself.
+- `--json` prints `ok`, `steps` (each `step` and `state`), `failure`, `host`
+  (the final link report) and `both_ways`.
 
 ## Hosts and links
 
@@ -18,6 +44,7 @@ tuios hosts signin build --print        # the Tailscale sign-in page build waits
 tuios hosts sync --dry-run --json      # which hosts run another tuios version
 tuios hosts sync --dev                  # install a build of this checkout on each host
 tuios hosts sync build --start          # install tuios if missing, then start the daemon
+tuios hosts sync build --service        # start the daemon at boot on build
 tuios ls --all-hosts
 tuios list-agents --all-hosts
 ```
@@ -45,12 +72,25 @@ or on the host's `tailscale_login`. Any other is reported as
 refuses has `"error_kind": "tailscale_policy"`, and the fix is the user in the
 host's `addr`.
 
+A host that ssh cannot reach reports `unreachable`, and its row in
+`tuios hosts --json` and `hosts test NAME --json` names the cause in
+`failure`: `host_key_new`, `host_key_changed`, `auth`, `dns`, `refused` or
+`timeout`, with `fix` and, for some, `fix_command`. `host_key_new` and `auth`
+need the person: a host key to check, or a password for `ssh-copy-id`. Give
+them the `fix_command`. Never accept a host key or type a password yourself.
+
 A host with tuios and no daemon reports `no_daemon`. `hosts test NAME --start`
 starts the daemon there over ssh. It does nothing on a host that already runs
 one, and it starts nothing on a host with no tuios. `hosts sync NAME --start`
 installs tuios first on such a host, then starts the daemon. Both take
 `--dry-run` and `--json`. Starting a daemon ends nothing, so it needs no
 question.
+
+A daemon on a host ends when the host restarts, unless the daemon service is
+installed there. A `hosts sync --json` row has `"service": "none"` for such a
+host. `hosts sync NAME --service` installs it (`tuios daemon install-service`
+on that host). It ends nothing. On this machine, `tuios daemon
+service-status` shows it.
 
 The daemon follows each host's agents and Inbox over the link as they change, so
 `list-attention` and the person's Inbox cover every machine, and
@@ -92,6 +132,13 @@ name; the rest is passed as written. An unknown host is refused by name
 
 The person attaches with `tuios attach --host build api`, or `tuios new --host
 build`. The session is drawn in this client, with this machine's theme and keys.
+
+TML surfaces in that session work in this client too: the sidebars, popups and
+panes a program on build shows with `tuios tml show`. The daemon on build holds
+them, and what the person does on one goes back to the program on build. To
+show a surface in a session on build, run `tuios tml show` on build. A daemon on
+build that is too old shows a line that says so in the window. Update it with
+`tuios hosts sync build`.
 
 ## Mail and files across a link
 
@@ -173,7 +220,7 @@ tuios wait-for agent-message -w "$TUIOS_PANE_ID" --timeout 600000
 ```
 
 Only `set-agent-state`, `set-agent-meta`, `set-agent-session`,
-`report-agent-activity`, `agent-mail-notice`, `read-agent-messages`, `send-agent-message` and
+`report-agent-activity`, `report-program-status`, `agent-mail-notice`, `read-agent-messages`, `send-agent-message` and
 `wait-for agent-message` cross,
 and always as your own window. A wait there runs at most an hour. Everything
 else you run talks to the machine you are on.

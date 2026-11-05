@@ -21,7 +21,9 @@ import (
 	"sync"
 	"time"
 
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"github.com/Gaurav-Gosain/tuios/internal/guios/proto"
+	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 )
 
@@ -94,7 +96,7 @@ func Connect(noStart bool) (*Client, error) {
 	vc, err := session.DialVerbClientAs(Version)
 	if err != nil && !noStart && StartDaemon != nil {
 		if serr := StartDaemon(); serr != nil {
-			return nil, fmt.Errorf("could not start the tuios daemon: %w", serr)
+			return nil, errfmt.Errorf("could not start the tuios daemon: %w", serr)
 		}
 		vc, err = session.DialVerbClientAs(Version)
 	}
@@ -213,11 +215,11 @@ func (c *Client) Call(method string, params, out any) error {
 	if out == nil || res == nil {
 		return nil
 	}
-	b, err := json.Marshal(res)
+	b, err := jsonx.Marshal(res)
 	if err != nil {
 		return err
 	}
-	return json.Unmarshal(b, out)
+	return jsonx.Unmarshal(b, out)
 }
 
 // Go calls a method without waiting for its result, reporting an error to
@@ -240,11 +242,11 @@ func decode[T any](params any) (T, error) {
 	if v, ok := params.(T); ok {
 		return v, nil
 	}
-	b, err := json.Marshal(params)
+	b, err := jsonx.Marshal(params)
 	if err != nil {
 		return out, err
 	}
-	err = json.Unmarshal(b, &out)
+	err = jsonx.Unmarshal(b, &out)
 	return out, err
 }
 

@@ -1,6 +1,8 @@
 package session
 
-import "fmt"
+import (
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
+)
 
 // ClientGraphicsPayload is the body of MsgClientGraphics: what the client's
 // terminal draws, as the hello would have said had it known then.
@@ -19,7 +21,7 @@ type ClientGraphicsPayload struct {
 func (d *Daemon) handleClientGraphics(cs *connState, msg *Message) error {
 	var p ClientGraphicsPayload
 	if err := msg.ParsePayload(&p); err != nil {
-		return fmt.Errorf("invalid client graphics payload: %w", err)
+		return errfmt.Errorf("invalid client graphics payload: %w", err)
 	}
 	cs.mu.Lock()
 	cs.sixelGraphics = p.SixelGraphics

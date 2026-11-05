@@ -3,15 +3,15 @@ package session
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"errors"
-	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
 	"time"
 
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
+	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 	"tuios.dev/vt"
 )
 
@@ -125,23 +125,23 @@ func preflightBinary(path string, opts preflightOpts) (handoffBinary, error) {
 		if detail := clip(bytes.TrimSpace(errOut.Bytes()), 200); len(detail) > 0 {
 			why += " " + string(detail)
 		}
-		return handoffBinary{}, fmt.Errorf("%s does not run as a tuios that can take this daemon's state: %s. Check that the path names a tuios binary that runs on this machine", abs, why)
+		return handoffBinary{}, errfmt.Errorf("%s does not run as a tuios that can take this daemon's state: %s. Check that the path names a tuios binary that runs on this machine", abs, why)
 	}
 	took := time.Since(started)
 	var acc HandoffAccepts
-	if err := json.Unmarshal(bytes.TrimSpace(out.Bytes()), &acc); err != nil {
-		return handoffBinary{}, fmt.Errorf("%s ran, but did not say which live upgrades it accepts (it printed %q), so it is not a tuios this daemon can upgrade to. Check the path names a tuios binary", abs, clip(bytes.TrimSpace(out.Bytes()), 200))
+	if err := jsonx.Unmarshal(bytes.TrimSpace(out.Bytes()), &acc); err != nil {
+		return handoffBinary{}, errfmt.Errorf("%s ran, but did not say which live upgrades it accepts (it printed %q), so it is not a tuios this daemon can upgrade to. Check the path names a tuios binary", abs, clip(bytes.TrimSpace(out.Bytes()), 200))
 	}
 	if acc.OS != runtime.GOOS {
-		return handoffBinary{}, fmt.Errorf("%s is built for %s, and this daemon runs on %s. Upgrade to a tuios built for %s", abs, acc.OS, runtime.GOOS, runtime.GOOS)
+		return handoffBinary{}, errfmt.Errorf("%s is built for %s, and this daemon runs on %s. Upgrade to a tuios built for %s", abs, acc.OS, runtime.GOOS, runtime.GOOS)
 	}
 	if HandoffVersion < acc.Handoff[0] || HandoffVersion > acc.Handoff[1] {
-		return handoffBinary{}, fmt.Errorf("%s (%s) cannot read this daemon's state. This daemon writes handoff v%d, and that binary reads v%d to v%d. Upgrade live to a tuios that reads v%d. %s",
+		return handoffBinary{}, errfmt.Errorf("%s (%s) cannot read this daemon's state. This daemon writes handoff v%d, and that binary reads v%d to v%d. Upgrade live to a tuios that reads v%d. %s",
 			abs, acc.Version, HandoffVersion, acc.Handoff[0], acc.Handoff[1], HandoffVersion, restartAdvice())
 	}
 	after, err := bin.current()
 	if err != nil || after != before {
-		return handoffBinary{}, fmt.Errorf("%s was replaced while it was being checked. Run the upgrade again when the install has finished", abs)
+		return handoffBinary{}, errfmt.Errorf("%s was replaced while it was being checked. Run the upgrade again when the install has finished", abs)
 	}
 	if err := bin.copy.verify(); err != nil {
 		return handoffBinary{}, err
@@ -161,7 +161,7 @@ func preflightOpen(abs string, copyRoute bool) (handoffBinary, error) {
 	}
 	f, err := open(abs)
 	if err != nil {
-		return handoffBinary{}, fmt.Errorf("%s: %w", abs, err)
+		return handoffBinary{}, errfmt.Errorf("%s: %w", abs, err)
 	}
 	bin := handoffBinary{path: abs, open: f}
 	var info os.FileInfo
@@ -175,7 +175,7 @@ func preflightOpen(abs string, copyRoute bool) (handoffBinary, error) {
 	}
 	if err != nil {
 		bin.close()
-		return handoffBinary{}, fmt.Errorf("%s: %w", abs, err)
+		return handoffBinary{}, errfmt.Errorf("%s: %w", abs, err)
 	}
 	if err := checkBinaryInfo(abs, info); err != nil {
 		bin.close()
@@ -238,10 +238,10 @@ func CheckUpgradeBinary(path string) error {
 // The daemon runs it with every pane it holds.
 func checkBinaryInfo(path string, info os.FileInfo) error {
 	if uid, ok := fileUID(info); ok && uid != 0 && uid != os.Getuid() {
-		return fmt.Errorf("%s is owned by user %d, not by you or root, so this daemon will not run it. Install it as yourself or as root", path, uid)
+		return errfmt.Errorf("%s is owned by user %d, not by you or root, so this daemon will not run it. Install it as yourself or as root", path, uid)
 	}
 	if perm := info.Mode().Perm(); perm&0o022 != 0 {
-		return fmt.Errorf("%s can be written by its group or by others (mode %04o), so this daemon will not run it. Make it writable only by its owner: chmod go-w %s", path, perm, path)
+		return errfmt.Errorf("%s can be written by its group or by others (mode %04o), so this daemon will not run it. Make it writable only by its owner: chmod go-w %s", path, perm, path)
 	}
 	return nil
 }
@@ -258,7 +258,7 @@ var errNotAnExecutable = errors.New("not a regular executable file")
 // errBinaryReplaced refuses a confirmed binary whose file changed after the
 // person said yes to it.
 func errBinaryReplaced(path string) error {
-	return fmt.Errorf("%s was changed after the upgrade to it was confirmed. Ask again to upgrade to the file there now", path)
+	return errfmt.Errorf("%s was changed after the upgrade to it was confirmed. Ask again to upgrade to the file there now", path)
 }
 
 // statFileID is the identity of the executable at path.

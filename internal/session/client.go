@@ -1,7 +1,6 @@
 package session
 
 import (
-	"fmt"
 	"net"
 	"os"
 	"sync"
@@ -9,6 +8,7 @@ import (
 
 	"golang.org/x/term"
 
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"github.com/Gaurav-Gosain/tuios/internal/guestenv"
 )
 
@@ -47,12 +47,12 @@ func NewClient(cfg *ClientConfig) *Client {
 func (c *Client) Connect() error {
 	socketPath, err := GetSocketPath()
 	if err != nil {
-		return fmt.Errorf("failed to get socket path: %w", err)
+		return errfmt.Errorf("failed to get socket path: %w", err)
 	}
 
 	conn, err := net.DialTimeout("unix", socketPath, 5*time.Second)
 	if err != nil {
-		return fmt.Errorf("failed to connect to daemon: %w", err)
+		return errfmt.Errorf("failed to connect to daemon: %w", err)
 	}
 	c.conn = conn
 
@@ -62,7 +62,7 @@ func (c *Client) Connect() error {
 	// Send hello
 	if err := c.sendHello(); err != nil {
 		_ = conn.Close()
-		return fmt.Errorf("handshake failed: %w", err)
+		return errfmt.Errorf("handshake failed: %w", err)
 	}
 
 	return nil
@@ -98,7 +98,7 @@ func (c *Client) ListSessions() ([]SessionInfo, error) {
 	}
 
 	if resp.Type != MsgSessionList {
-		return nil, fmt.Errorf("unexpected response type: %d", resp.Type)
+		return nil, errfmt.Errorf("unexpected response type: %d", resp.Type)
 	}
 
 	var payload SessionListPayload
@@ -154,12 +154,12 @@ func (c *Client) createSession(name string, width, height int, global bool, cwd 
 	case MsgError:
 		var errPayload ErrorPayload
 		if err := resp.ParsePayload(&errPayload); err != nil {
-			return fmt.Errorf("create failed")
+			return errfmt.Errorf("create failed")
 		}
-		return fmt.Errorf("create failed: %s", errPayload.Message)
+		return errfmt.Errorf("create failed: %s", errPayload.Message)
 
 	default:
-		return fmt.Errorf("unexpected response type: %d", resp.Type)
+		return errfmt.Errorf("unexpected response type: %d", resp.Type)
 	}
 }
 
@@ -189,12 +189,12 @@ func (c *Client) ResurrectSession(name string) error {
 	case MsgError:
 		var errPayload ErrorPayload
 		if err := resp.ParsePayload(&errPayload); err != nil {
-			return fmt.Errorf("resurrect failed")
+			return errfmt.Errorf("resurrect failed")
 		}
-		return fmt.Errorf("resurrect failed: %s", errPayload.Message)
+		return errfmt.Errorf("resurrect failed: %s", errPayload.Message)
 
 	default:
-		return fmt.Errorf("unexpected response type: %d", resp.Type)
+		return errfmt.Errorf("unexpected response type: %d", resp.Type)
 	}
 }
 
@@ -252,7 +252,7 @@ func (c *Client) sendHello() error {
 		if errPayload.Code == ErrCodeBusy {
 			return ErrTooManyConnections
 		}
-		return fmt.Errorf("the daemon refused this client: %s", errPayload.Message)
+		return errfmt.Errorf("the daemon refused this client: %s", errPayload.Message)
 	}
 	if resp.Type != MsgWelcome {
 		// See TUIClient.ConnectWithCapabilities: a reply of another type means
@@ -262,7 +262,7 @@ func (c *Client) sendHello() error {
 
 	var welcome WelcomePayload
 	if err := resp.ParsePayload(&welcome); err != nil {
-		return fmt.Errorf("failed to parse welcome: %w", err)
+		return errfmt.Errorf("failed to parse welcome: %w", err)
 	}
 
 	if protocolMismatch(welcome.Protocol) {
@@ -301,14 +301,14 @@ func (c *Client) getTerminalSize() (width, height int) {
 // is done: a tape answers when it ends.
 func (c *Client) SendControlMessageWait(msg *Message, wait time.Duration) (*Message, error) {
 	if err := c.send(msg); err != nil {
-		return nil, fmt.Errorf("failed to send message: %w", err)
+		return nil, errfmt.Errorf("failed to send message: %w", err)
 	}
 	c.recvMu.Lock()
 	defer c.recvMu.Unlock()
 	_ = c.conn.SetReadDeadline(time.Now().Add(wait))
 	resp, err := ReadMessage(c.conn)
 	if err != nil {
-		return nil, fmt.Errorf("failed to receive response: %w", err)
+		return nil, errfmt.Errorf("failed to receive response: %w", err)
 	}
 	return resp, nil
 }
@@ -317,13 +317,13 @@ func (c *Client) SendControlMessageWait(msg *Message, wait time.Duration) (*Mess
 // This is used for CLI commands that need to send messages without attaching to a session.
 func (c *Client) SendControlMessage(msg *Message) (*Message, error) {
 	if err := c.send(msg); err != nil {
-		return nil, fmt.Errorf("failed to send message: %w", err)
+		return nil, errfmt.Errorf("failed to send message: %w", err)
 	}
 
 	// Wait for response
 	resp, err := c.recv()
 	if err != nil {
-		return nil, fmt.Errorf("failed to receive response: %w", err)
+		return nil, errfmt.Errorf("failed to receive response: %w", err)
 	}
 
 	return resp, nil

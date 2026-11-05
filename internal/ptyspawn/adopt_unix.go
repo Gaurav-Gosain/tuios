@@ -3,9 +3,9 @@
 package ptyspawn
 
 import (
-	"fmt"
 	"os"
 
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"golang.org/x/sys/unix"
 )
 
@@ -48,7 +48,7 @@ type AdoptedPty struct {
 // terminal the program runs on, which the descriptor cannot tell.
 func Adopt(fd int, slaveName string) (*AdoptedPty, error) {
 	if _, err := unix.FcntlInt(uintptr(fd), unix.F_GETFD, 0); err != nil {
-		return nil, fmt.Errorf("adopt pty fd %d: %w", fd, err)
+		return nil, errfmt.Errorf("adopt pty fd %d: %w", fd, err)
 	}
 	// The descriptor stops being inherited by anything this process starts
 	// from here on, as every descriptor Go opens does.

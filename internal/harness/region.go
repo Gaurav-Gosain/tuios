@@ -1,13 +1,13 @@
 package harness
 
 import (
-	"fmt"
 	"slices"
 	"strconv"
 	"strings"
 	"unicode"
 	"unicode/utf8"
 
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"github.com/charmbracelet/x/ansi"
 )
 
@@ -78,9 +78,9 @@ func normalizeScreenRegion(name string) (region string, bottom int, err error) {
 		return regionBottomPrefix + strconv.Itoa(n) + regionBottomSuffix, n, nil
 	}
 	if name == RegionOSCTitle || name == RegionOSCProgress {
-		return "", 0, fmt.Errorf("region %q is read by a title rule, not a screen rule", name)
+		return "", 0, errfmt.Errorf("region %q is read by a title rule, not a screen rule", name)
 	}
-	return "", 0, fmt.Errorf("unknown region %q (%s)", name, screenRegionNamesForMessages)
+	return "", 0, errfmt.Errorf("unknown region %q (%s)", name, screenRegionNamesForMessages)
 }
 
 // parseBottomRegion reads N out of bottom_non_empty_lines(N). N is a plain
@@ -110,7 +110,7 @@ func normalizeTitleRegion(name string) (string, error) {
 	case RegionOSCProgress:
 		return RegionOSCProgress, nil
 	}
-	return "", fmt.Errorf("region %q: a title rule reads osc_title or osc_progress", name)
+	return "", errfmt.Errorf("region %q: a title rule reads osc_title or osc_progress", name)
 }
 
 // boxCorners are the runes that may open a border line before its dashes: the

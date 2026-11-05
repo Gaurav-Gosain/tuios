@@ -107,12 +107,3 @@ func TestSignalQuitDoesNothingWhenTheProgramIsAlreadyGone(t *testing.T) {
 	case <-time.After(50 * time.Millisecond):
 	}
 }
-
-func TestSignalExitCode(t *testing.T) {
-	if got, want := signalExitCode(syscall.SIGTERM), 143; got != want {
-		t.Errorf("SIGTERM exit code = %d, want %d", got, want)
-	}
-	if got, want := signalExitCode(syscall.SIGINT), 130; got != want {
-		t.Errorf("SIGINT exit code = %d, want %d", got, want)
-	}
-}

@@ -10,6 +10,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/composer"
+	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 )
@@ -202,7 +203,7 @@ func quickLookWantReply(ctx context.Context, call func(host, verb string, params
 		if err != nil {
 			return nil, err
 		}
-		return json.Marshal(out)
+		return jsonx.Marshal(out)
 	}
 	params := map[string]any{"path": t.path, "max_px": want.MaxPx}
 	if want.Page > 0 {

@@ -96,7 +96,7 @@ func (m *OS) sidebarAgentTokenValue(name string, e sidebarAgentEntry, variant in
 		// pane blocked on a prompt says what it asks in its need and message,
 		// so it draws only while the agent works.
 		if e.State == "working" {
-			tk.Text = printableTitle(sidebarAgentMetaValue(e.Meta, "now"))
+			tk.Text = printableTitle(toolLineLabel(sidebarAgentMetaValue(e.Meta, "now")))
 		}
 	case "prompt":
 		tk.Text = printableTitle(sidebarAgentMetaValue(e.Meta, "prompt"))

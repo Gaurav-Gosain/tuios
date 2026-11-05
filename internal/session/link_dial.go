@@ -4,12 +4,13 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"net"
 	"os"
 	"time"
 
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"github.com/Gaurav-Gosain/tuios/internal/federation"
+	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 )
 
 // The proxy's half of a link connection: `tuios stdio-proxy` calls
@@ -85,18 +86,22 @@ func dialLinkSocket(path, peer string, pinned bool, agent string) (net.Conn, err
 	if err != nil {
 		return nil, err
 	}
-	verr, err := linkHandshake(conn, peer, pinned, agent)
+	token, verr, err := linkHandshake(conn, linkPeerParams(peer, pinned, agent))
 	if err == nil && agent != "" && refusesParam(verr, "ssh_auth_sock") {
 		// A daemon from before ssh_agent follow. It refused before it
 		// named the peer, so the handshake is sent again without the socket.
-		verr, err = linkHandshake(conn, peer, pinned, "")
+		token, verr, err = linkHandshake(conn, linkPeerParams(peer, pinned, ""))
 	}
 	switch {
 	case err != nil:
 		_ = conn.Close()
 		return nil, err
 	case verr == nil:
-		return conn, nil
+		if token == "" {
+			// A daemon from before close tokens: it cannot be told.
+			return conn, nil
+		}
+		return &linkConn{Conn: conn, path: path, peer: peer, pinned: pinned, token: token}, nil
 	case verr.Code == ErrVerbUnknownVerb:
 		// A daemon from before link policies. It has no policy to hold the
 		// link to, so the connection is made again without the handshake.
@@ -112,31 +117,68 @@ func dialLinkSocket(path, peer string, pinned bool, agent string) (net.Conn, err
 // a byte at a time, so no byte past the reply line is taken from the
 // connection: the daemon may start the next reply only after the hub's first
 // request, but a read-ahead buffer here would still be the wrong owner of it.
-func linkHandshake(conn net.Conn, peer string, pinned bool, agent string) (*verbError, error) {
-	req, err := json.Marshal(verbRequest{
+func linkHandshake(conn net.Conn, params map[string]any) (string, *verbError, error) {
+	req, err := jsonx.Marshal(verbRequest{
 		ID:     json.RawMessage(`0`),
 		Verb:   linkPolicyVerb,
-		Params: mustJSON(linkPeerParams(peer, pinned, agent)),
+		Params: mustJSON(params),
 	})
 	if err != nil {
-		return nil, err
+		return "", nil, err
 	}
 	_ = conn.SetDeadline(time.Now().Add(linkDialTimeout))
 	defer func() { _ = conn.SetDeadline(time.Time{}) }()
 	if _, err := conn.Write(append(req, '\n')); err != nil {
-		return nil, err
+		return "", nil, err
 	}
 	line, err := readLineUnbuffered(conn, maxLinkHandshakeReply)
 	if err != nil {
-		return nil, err
+		return "", nil, err
 	}
 	var resp struct {
-		Error *verbError `json:"error"`
+		Error  *verbError `json:"error"`
+		Result struct {
+			CloseToken string `json:"close_token"`
+		} `json:"result"`
 	}
-	if err := json.Unmarshal(line, &resp); err != nil {
-		return nil, fmt.Errorf("the daemon's answer to link-peer cannot be read: %w", err)
+	if err := jsonx.Unmarshal(line, &resp); err != nil {
+		return "", nil, errfmt.Errorf("the daemon's answer to link-peer cannot be read: %w", err)
 	}
-	return resp.Error, nil
+	return resp.Result.CloseToken, resp.Error, nil
+}
+
+// linkConn is a link connection whose daemon gave it a close token. When the
+// far side closes the stream on purpose, the proxy says so on a connection of
+// its own before this one ends, so the daemon can tell that close from a
+// dropped link. See federation.PurposeCloser.
+type linkConn struct {
+	net.Conn
+	path   string
+	peer   string
+	pinned bool
+	token  string
+}
+
+// NoteClosedOnPurpose sends the close token back as link-peer's closes. A
+// failure is not reported: the daemon then treats the end as a dropped link,
+// which costs a lease that lingers, not a wrong answer.
+func (c *linkConn) NoteClosedOnPurpose() {
+	conn, err := net.DialTimeout("unix", c.path, linkDialTimeout)
+	if err != nil {
+		return
+	}
+	defer func() { _ = conn.Close() }()
+	params := linkPeerParams(c.peer, c.pinned, "")
+	params["closes"] = c.token
+	_, _, _ = linkHandshake(conn, params)
+}
+
+// CloseWrite passes the half close through to the socket under the wrapper.
+func (c *linkConn) CloseWrite() error {
+	if cw, ok := c.Conn.(interface{ CloseWrite() error }); ok {
+		return cw.CloseWrite()
+	}
+	return nil
 }
 
 // linkPeerParams are the link-peer parameters. ssh_auth_sock is left out when
@@ -176,7 +218,7 @@ func daemonHoldsLinkPolicy(socketPath string) bool {
 		return false
 	}
 	defer func() { _ = conn.Close() }()
-	req, _ := json.Marshal(verbRequest{ID: json.RawMessage(`0`), Verb: "hello"})
+	req, _ := jsonx.Marshal(verbRequest{ID: json.RawMessage(`0`), Verb: "hello"})
 	_ = conn.SetDeadline(time.Now().Add(linkDialTimeout))
 	if _, err := conn.Write(append(req, '\n')); err != nil {
 		return false
@@ -190,14 +232,14 @@ func daemonHoldsLinkPolicy(socketPath string) bool {
 			LinkPolicy bool `json:"link_policy"`
 		} `json:"result"`
 	}
-	return json.Unmarshal(line, &resp) == nil && resp.Result.LinkPolicy
+	return jsonx.Unmarshal(line, &resp) == nil && resp.Result.LinkPolicy
 }
 
 // ValidLinkPeerName reports whether name can be a peer name, for stdio-proxy's
 // --as flag.
 func ValidLinkPeerName(name string) error {
 	if name == "" || len(name) > 64 || !linkPeerPattern().MatchString(name) {
-		return fmt.Errorf("%q is not a machine name: use letters, digits, dot, dash and underscore", name)
+		return errfmt.Errorf("%q is not a machine name: use letters, digits, dot, dash and underscore", name)
 	}
 	return nil
 }

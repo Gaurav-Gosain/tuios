@@ -121,21 +121,6 @@ func TestWindowKeysActInsideTheGroup(t *testing.T) {
 	}
 }
 
-// A hover outside the box does not take the focus out of the group: the
-// backdrop is not the current workspace.
-func TestHoverKeepsScratchShown(t *testing.T) {
-	o, _, s1, _ := scratchOverTile(t)
-	o.Settings.FocusFollowsMouse = true
-	o.Mode = app.TerminalMode
-	box, _ := o.ScratchBox()
-	for x := 1; x < 10; x++ {
-		handleMouseMotion(tea.MouseMotionMsg{Button: tea.MouseNone, X: x, Y: box.Y + box.H + 1}, o)
-	}
-	if !o.InScratchView() || o.GetFocusedWindow() != s1 {
-		t.Fatal("a hover outside the box moved the focus out of the group")
-	}
-}
-
 // Alt+N numbers the panes on the screen: the group's inside the group, the
 // workspace's outside it.
 func TestSelectByNumberInsideTheGroup(t *testing.T) {

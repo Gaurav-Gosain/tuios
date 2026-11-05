@@ -5,7 +5,6 @@ import (
 	"bytes"
 	"cmp"
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -17,6 +16,8 @@ import (
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/harness"
+	"github.com/Gaurav-Gosain/tuios/internal/hostsync"
+	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 	"github.com/Gaurav-Gosain/tuios/internal/plural"
 	"github.com/Gaurav-Gosain/tuios/internal/release"
 	"github.com/Gaurav-Gosain/tuios/internal/restartplan"
@@ -201,11 +202,11 @@ func planRestart() *restartReport {
 	rep.Binary = bin
 	rep.Version = cmp.Or(ver, version)
 
-	t := &syncTarget{name: "this machine", local: true, runner: localSyncRunner{}}
+	t := &syncTarget{Name: "this machine", Local: true, Runner: hostsync.LocalRunner{}}
 	ctx, cancel := context.WithTimeout(context.Background(), syncProbeTimeout)
 	defer cancel()
 	readLocalDaemon(ctx, t)
-	d := t.res.Daemon
+	d := t.Res.Daemon
 	rep.Daemon = &restartplan.Daemon{State: d.State, Version: d.Version, PID: d.PID, SessionCount: d.SessionCount, Sessions: d.Sessions, Unread: d.Unread}
 
 	cfg := session.DaemonConfigFromUser(nil)
@@ -331,7 +332,7 @@ func runTuios(bin string, args ...string) (string, error) {
 // outputTail is the last line a failed command wrote, as a sentence to add
 // to the fix.
 func outputTail(out string) string {
-	line := lastLine(out)
+	line := hostsync.LastLine(out)
 	if line == "" {
 		return ""
 	}
@@ -350,7 +351,7 @@ func readRestartedDaemon() (string, []string, error) {
 		var hs struct {
 			DaemonVersion string `json:"daemon_version"`
 		}
-		if json.Unmarshal(raw, &hs) == nil {
+		if jsonx.Unmarshal(raw, &hs) == nil {
 			after = hs.DaemonVersion
 		}
 	}
@@ -363,7 +364,7 @@ func readRestartedDaemon() (string, []string, error) {
 			Name string `json:"name"`
 		} `json:"sessions"`
 	}
-	if err := json.Unmarshal(raw, &list); err != nil {
+	if err := jsonx.Unmarshal(raw, &list); err != nil {
 		return after, nil, err
 	}
 	names := make([]string, 0, len(list.Sessions))
@@ -394,7 +395,7 @@ func confirmRestart(opts restartOptions) error {
 
 // writeRestartJSON writes one report as one line.
 func writeRestartJSON(w io.Writer, rep *restartReport) {
-	data, err := json.Marshal(rep)
+	data, err := jsonx.Marshal(rep)
 	if err != nil {
 		return
 	}

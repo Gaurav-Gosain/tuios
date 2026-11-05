@@ -2,12 +2,12 @@ package guibridge
 
 import (
 	"bytes"
-	"encoding/json"
 	"log"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 )
 
@@ -222,7 +222,7 @@ func hostSessions(raw []byte) []HostSession {
 			LastActive  int64  `json:"last_active"`
 		} `json:"sessions"`
 	}
-	if json.Unmarshal(raw, &out) != nil {
+	if jsonx.Unmarshal(raw, &out) != nil {
 		return nil
 	}
 	rows := make([]HostSession, 0, len(out.Sessions))
@@ -327,7 +327,7 @@ func watchHosts(stop <-chan struct{}, wake <-chan struct{}, out *frameWriter, ve
 				probers.Delete(name)
 			}
 		}
-		if b, err := json.Marshal(Event{Type: "hosts", Hosts: &ev}); err == nil && !bytes.Equal(b, last) {
+		if b, err := jsonx.Marshal(Event{Type: "hosts", Hosts: &ev}); err == nil && !bytes.Equal(b, last) {
 			last = b
 			out.Frame(KindJSON, b)
 		}
@@ -369,7 +369,7 @@ func hostRows(raw []byte) []HostRow {
 			ApprovalURL string `json:"approval_url"`
 		} `json:"hosts"`
 	}
-	if json.Unmarshal(raw, &out) != nil {
+	if jsonx.Unmarshal(raw, &out) != nil {
 		return []HostRow{}
 	}
 	rows := make([]HostRow, 0, len(out.Hosts))

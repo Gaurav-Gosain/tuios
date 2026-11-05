@@ -23,30 +23,11 @@ func typeInto(o *app.OS, s string) *app.OS {
 	return o
 }
 
-// TestRenameTakesASpace is the reported bug: the space key is named "space"
-// rather than delivered as a one-character string, so the old length test threw
-// it away and no name could hold a space.
-func TestRenameTakesASpace(t *testing.T) {
-	o := twoPaneOS(t)
-	w := o.Windows[0]
-
-	o.BeginRenameWindow(w)
-	o.RenameBuffer = ""
-	o = typeInto(o, "build v2")
-
-	if o.RenameBuffer != "build v2" {
-		t.Fatalf("rename buffer = %q, want %q", o.RenameBuffer, "build v2")
-	}
-
-	_, _ = HandleKeyPress(tea.KeyPressMsg{Code: tea.KeyEnter}, o)
-	if w.CustomName != "build v2" {
-		t.Fatalf("committed name = %q, want the spaced name", w.CustomName)
-	}
-}
-
-// TestRenameTakesNonASCII covers the other half of the same filter: it compared
-// bytes, so every rune above 127 was silently dropped and a user could not spell
-// their own project's name.
+// TestRenameTakesNonASCII covers the rename editor's character filter. It
+// compared bytes, so every rune above 127 was silently dropped and a user could
+// not spell their own project's name. The filter's other half, a space the key
+// names "space", is held end to end by
+// TestOptionBackspaceDeletesAWordInTheRenameEditor in e2e/tui.
 func TestRenameTakesNonASCII(t *testing.T) {
 	for _, name := range []string{"café", "日本語", "über builds"} {
 		o := twoPaneOS(t)

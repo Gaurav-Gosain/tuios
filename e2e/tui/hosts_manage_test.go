@@ -1,6 +1,8 @@
 package tuie2e
 
 import (
+	"encoding/json"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -138,6 +140,84 @@ func TestHostTestReportsWhatSSHSaid(t *testing.T) {
 		t.Errorf("ASSERTION: what ssh said never reached the user:\n%s", out)
 	}
 	t.Logf("tuios hosts test against a refused host:\n%s", out)
+
+	// The refused key is one of six ways ssh fails, and each needs another
+	// fix. Every class gets the words a real OpenSSH 10 printed for it, and
+	// the report must name the class and its fix, not "did not answer".
+	classes := writeFailingSSH(t, filepath.Join(base, "bin"))
+	env = []string{"TUIOS_SSH=" + classes}
+	for _, c := range sshFailureCases {
+		name := strings.ReplaceAll(c.kind, "_", "-")
+		if out, err := tuiosCLIEnv(t, base, env, "hosts", "add", name, "someone@"+name, "--connect-timeout", "2"); err != nil {
+			t.Fatalf("tuios hosts add %s: %v\n%s", name, err, out)
+		}
+		out, _ := tuiosCLIEnv(t, base, env, "hosts", "test", name, "--json")
+		var r struct {
+			Status     string `json:"status"`
+			Reason     string `json:"reason"`
+			Failure    string `json:"failure"`
+			Fix        string `json:"fix"`
+			FixCommand string `json:"fix_command"`
+		}
+		// The output is the JSON, then the error line the command fails with.
+		if err := json.NewDecoder(strings.NewReader(out)).Decode(&r); err != nil {
+			t.Fatalf("tuios hosts test %s --json printed no JSON: %v\n%s", name, err, out)
+		}
+		if r.Failure != c.kind {
+			t.Errorf("ASSERTION: ssh said %q and the report named the failure %q, want %q", c.stderr, r.Failure, c.kind)
+		}
+		if !strings.Contains(r.Reason, c.reason) || !strings.Contains(r.Fix, c.fix) {
+			t.Errorf("ASSERTION: %s: reason %q and fix %q, want them to say %q and %q", c.kind, r.Reason, r.Fix, c.reason, c.fix)
+		}
+		if r.FixCommand != c.command {
+			t.Errorf("ASSERTION: %s: the fix command is %q, want %q", c.kind, r.FixCommand, c.command)
+		}
+		plain, _ := tuiosCLIEnv(t, base, env, "hosts", "test", name)
+		if !strings.Contains(plain, c.fix) {
+			t.Errorf("ASSERTION: tuios hosts test %s does not print the fix:\n%s", name, plain)
+		}
+		t.Logf("tuios hosts test %s:\n%s", name, plain)
+	}
+}
+
+// sshFailureCases are the six classes of ssh failure, each with what OpenSSH
+// 10.6 wrote on stderr for it (captured against real servers, addresses
+// changed), and what the report must say.
+var sshFailureCases = []struct {
+	kind, stderr, reason, fix, command string
+}{
+	{"host_key_new", "No ED25519 host key is known for 10.0.0.12 and you have requested strict checking.\nHost key verification failed.",
+		"does not know the host key", "check the key", "ssh someone@host-key-new true"},
+	{"host_key_changed", "@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@\n@    WARNING: REMOTE HOST IDENTIFICATION HAS CHANGED!     @\n@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@\nHost key for 10.0.0.12 has changed and you have requested strict checking.\nHost key verification failed.",
+		"This can be an attack", "does not accept a changed key", ""},
+	{"auth", "someone@10.0.0.12: Permission denied (publickey,password).",
+		"refused your ssh key", "Copy your ssh key", "ssh-copy-id someone@auth"},
+	{"dns", "ssh: Could not resolve hostname nobox: Name or service not known",
+		"cannot find the address", "Check the address", ""},
+	{"refused", "ssh: connect to host 10.0.0.12 port 22: Connection refused",
+		"refused the connection", "Start the ssh server", ""},
+	{"timeout", "ssh: connect to host 10.0.0.12 port 22: Connection timed out",
+		"does not answer", "Turn on the host", ""},
+}
+
+// writeFailingSSH puts an ssh stand-in in dir that fails, for each address in
+// sshFailureCases, with the words ssh printed for that class and exit 255.
+func writeFailingSSH(t *testing.T, dir string) string {
+	t.Helper()
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	var b strings.Builder
+	b.WriteString("#!/bin/sh\nwhile [ $# -gt 0 ]; do\n  case \"$1\" in\n    -o) shift 2 ;;\n    -T) shift ;;\n    --) shift; break ;;\n    *) break ;;\n  esac\ndone\ncase \"$1\" in\n")
+	for _, c := range sshFailureCases {
+		fmt.Fprintf(&b, "  someone@%s) cat >&2 <<'EOF'\n%s\nEOF\n  ;;\n", strings.ReplaceAll(c.kind, "_", "-"), c.stderr)
+	}
+	b.WriteString("esac\nexit 255\n")
+	ssh := filepath.Join(dir, "failing-ssh-classes")
+	if err := os.WriteFile(ssh, []byte(b.String()), 0o700); err != nil { //nolint:gosec // an ssh stand-in this test runs
+		t.Fatalf("write the ssh stand-in: %v", err)
+	}
+	return ssh
 }
 
 // writeRefusingSSH puts an ssh stand-in in dir that fails the way ssh does

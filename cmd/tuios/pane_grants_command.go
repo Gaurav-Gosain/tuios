@@ -1,12 +1,13 @@
 package main
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
+	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 	"github.com/spf13/cobra"
 )
 
@@ -134,8 +135,8 @@ func runPaneGrants(jsonOutput bool) error {
 		RestartNeeded bool     `json:"restart_needed"`
 		WidenedNote   string   `json:"widened_note"`
 	}
-	if err := json.Unmarshal(raw, &res); err != nil {
-		return fmt.Errorf("failed to parse response: %w", err)
+	if err := jsonx.Unmarshal(raw, &res); err != nil {
+		return errfmt.Errorf("failed to parse response: %w", err)
 	}
 	fmt.Print(describePaneGrants(res.Pane, res.Window, res.Session, res.Grants, res.Explicit, res.Mode, res.DefaultGrants))
 	if res.RestartNeeded {
@@ -207,8 +208,8 @@ func runSetPaneGrants(sessionName, window string, grants []string, reset, jsonOu
 		Explicit bool     `json:"explicit"`
 		Previous []string `json:"previous"`
 	}
-	if err := json.Unmarshal(raw, &res); err != nil {
-		return fmt.Errorf("failed to parse response: %w", err)
+	if err := jsonx.Unmarshal(raw, &res); err != nil {
+		return errfmt.Errorf("failed to parse response: %w", err)
 	}
 	what := grantList(res.Grants)
 	if !res.Explicit {

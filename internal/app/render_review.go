@@ -733,13 +733,11 @@ func (m *OS) reviewListLines(width, paneH int, pal overlay.Palette) []string {
 				mark = overlay.SigilMark()
 			}
 		}
-		pathW := max(width-4-ansi.StringWidth(counts), 1)
-		path := reviewText(e.path)
-		if ansi.StringWidth(path) > pathW {
-			// The end of a path is the part that tells files apart.
-			ell := overlay.Ellipsis()
-			path = ell + ansi.TruncateLeft(path, ansi.StringWidth(path)-pathW+ansi.StringWidth(ell), "")
+		back := 0
+		if r.listFocus {
+			back = r.listBack
 		}
+		path := reviewListPath(reviewText(e.path), reviewListPathWidth(width, counts), back)
 		pad := max(width-3-ansi.StringWidth(path)-ansi.StringWidth(counts), 1)
 		out[i] = pal.Row(reviewPaint([]reviewSeg{
 			{pal.AccentBright, mark, false},
@@ -749,6 +747,44 @@ func (m *OS) reviewListLines(width, paneH int, pal overlay.Palette) []string {
 		}, width, bg), width, st, pal.Surface)
 	}
 	return out
+}
+
+// reviewListPathWidth is the room a list row of width cells has for its path.
+func reviewListPathWidth(width int, counts string) int {
+	return max(width-4-ansi.StringWidth(counts), 1)
+}
+
+// reviewPathOverflow is how many cells of e's path a list of width cells
+// cuts off.
+func reviewPathOverflow(r reviewState, e reviewFileEntry, width int) int {
+	return max(ansi.StringWidth(reviewText(e.path))-reviewListPathWidth(width, reviewFileCounts(r, e)), 0)
+}
+
+// reviewListPath fits path into pathW cells. A path too long shows its end,
+// the part that tells files apart, or with back > 0 the part that many cells
+// before the end. An ellipsis marks each side that is cut.
+func reviewListPath(path string, pathW, back int) string {
+	w := ansi.StringWidth(path)
+	if w <= pathW {
+		return path
+	}
+	ell := overlay.Ellipsis()
+	ellW := ansi.StringWidth(ell)
+	start := max(w-pathW-back, 0)
+	end := start + pathW
+	head, tail := "", ""
+	if start > 0 {
+		head = ell
+		start += ellW
+	}
+	if end < w {
+		tail = ell
+		end -= ellW
+	}
+	if end <= start {
+		return ansi.Truncate(path, pathW, ell)
+	}
+	return head + ansi.Cut(path, start, end) + tail
 }
 
 // reviewStatusColor colours a file's status letter.

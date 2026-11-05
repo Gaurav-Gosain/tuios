@@ -112,6 +112,16 @@ func TestHidingTheRailGrowsThePanes(t *testing.T) {
 			base := t.TempDir()
 			const name = "rail"
 			term := railSession(t, base, name, layout, startOpts{})
+			if layout == "scrolling" {
+				// The strip shows the pane it just opened whole, which
+				// scrolls the first column under the rail. Focus the first
+				// column so the strip starts at the edge of the box, which
+				// is the edge this test measures.
+				first := stripOrder(waitForSettledGeometryIn(t, base, name, 2))[0]
+				if out, err := tuiosCLI(t, base, "focus-window", "-s", name, first); err != nil {
+					t.Fatalf("focus the first column: %v\n%s", err, out)
+				}
+			}
 			// The scrolling strip is longer than the screen by design, so its
 			// far edge says nothing. Its near edge is where the box starts.
 			reaches := func(s paneSpan) bool { return layout == "scrolling" || s.right == bigCols }

@@ -9,6 +9,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 )
 
 // What another machine may do here when it links in.
@@ -195,7 +197,7 @@ func ParseFilesMinFree(s string) (int64, error) {
 	}
 	n, err := strconv.ParseInt(num, 10, 64)
 	if err != nil || n < 0 || n > (1<<62)/mul {
-		return 0, fmt.Errorf("%q is not a size such as \"2GiB\" or \"500MB\"", s)
+		return 0, errfmt.Errorf("%q is not a size such as \"2GiB\" or \"500MB\"", s)
 	}
 	return n * mul, nil
 }
@@ -353,10 +355,10 @@ func ParseHostedGrace(s string) (time.Duration, error) {
 	}
 	d, err := time.ParseDuration(s)
 	if err != nil {
-		return 0, fmt.Errorf("%q is not a duration such as \"10m\" or \"0\"", s)
+		return 0, errfmt.Errorf("%q is not a duration such as \"10m\" or \"0\"", s)
 	}
 	if d < 0 {
-		return 0, fmt.Errorf("%q is negative", s)
+		return 0, errfmt.Errorf("%q is negative", s)
 	}
 	return min(d, MaxHostedGrace), nil
 }

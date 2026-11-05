@@ -18,6 +18,7 @@ import (
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/crashexit"
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"github.com/Gaurav-Gosain/tuios/internal/invisible"
 )
 
@@ -525,13 +526,13 @@ func (e *dockEngine) NotifyEvent(eventType string) {
 // hook, from cron, and from an agent.
 func (e *dockEngine) Refresh(name string) error {
 	if e == nil {
-		return fmt.Errorf("no dock components are loaded")
+		return errfmt.Errorf("no dock components are loaded")
 	}
 	e.mu.Lock()
 	c, ok := e.comps[name]
 	if !ok {
 		e.mu.Unlock()
-		return fmt.Errorf("no dock component named %q", name)
+		return errfmt.Errorf("no dock component named %q", name)
 	}
 	c.stopped, c.failures, c.reported = false, 0, false
 	builtin, push := c.Builtin, c.Refresh.Kind == config.DockRefreshPush

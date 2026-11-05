@@ -7,6 +7,58 @@ below. Two of them are **not** caught here; that is written down rather than
 papered over, because a suite whose real coverage is unknown is worse than no
 suite.
 
+## The daemon service keeps what outlives the daemon, and stays stopped after kill-server
+
+`TestDaemonRunsAsAService` installs the daemon as a systemd user unit under a
+scratch server name, with every folder under the test's root. A pane starts a
+program with `setsid`. After `kill-server` the unit must be inactive (a clean
+stop does not restart it) and the program must still run. Then `start-server`
+must start the daemon through the unit, a SIGKILL must make systemd start it
+again, a live upgrade must keep the unit's main pid, and `uninstall-service`
+must remove the file and leave the daemon.
+
+Run on 2026-11-04 on Linux (systemd user manager). The two controls are this
+branch with one unit line changed, and the test's text check on that line
+taken out, so the behaviour is what fails:
+
+| Change | Failure |
+| --- | --- |
+| `KillMode=control-group` | `the pane program <pid> died with the daemon: the unit killed what outlived the daemon` |
+| `Restart=always` | `after kill-server the unit is "active", want inactive (a clean stop must not restart it)` |
+
+With the text check in place, the first control fails earlier with
+`the unit lacks "KillMode=process"`. Each step is in `transcript.txt` under
+`TUIOS_E2E_FRAMES`, in the test's folder. Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestDaemonRunsAsAService$' -v .`.
+## tuios status reports without a terminal
+
+Step 9 of `TestProgramStatusDrivesTheRailAndInbox` runs `tuios status working`
+under `setsid`, with standard input from `/dev/null` and standard output into a
+pipe that ends in a file. An agent's shell tool runs it the same way. The step
+first proves that `/dev/tty` does not open there. The pane must then hold one
+`working` record from app `notty`, with source `program`, and standard output
+and standard error must stay empty.
+
+Run on 2026-11-04 on Linux. The fixed build passes. The control is a binary of
+main (57150e1ef), where `tuios status` writes the report to standard output
+when it cannot open `/dev/tty`. Steps 1 to 8 pass, and step 9 fails.
+
+| Control | Where it fails | Verdict |
+| --- | --- | --- |
+| Main without the fix | Step 9: "the report without a terminal: never held; last state {State:none ... Program:[]}" | **caught** |
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestProgramStatusDrivesTheRailAndInbox$' -v .`.
+
+The test waits until the pane program leads a session of its own before it
+runs `kill-server`. The shell writes `$!` before the child runs `setsid`. A
+child that has not run it yet is still in the pane's session, and the hangup
+kills it with the same message as the `KillMode=control-group` control. That
+was a flake on CI. Run on 2026-11-05: with the pane command changed to
+`(sleep 1; exec setsid sleep 600) &`, the test without the wait failed 3 of 3
+runs with that message, and the test with the wait passed 3 of 3. With the
+wait in place, `KillMode=control-group` still fails it.
+
 ## A pasted path reads back in fish behind tmux
 
 `TestPastedPathReadsBackBehindTmux` types names with the path picker into fish
@@ -36,6 +88,31 @@ The frames are `sh-read-back`, `fish-read-back`, `dragged` and
 `bash-read-back` under `TUIOS_E2E_FRAMES`, in the test's folder. Repeat from
 `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestPastedPathReadsBackBehindTmux$' -v .`.
+## herdr's pane.focus shows the pane's session
+
+`TestHerdrFocusShowsThePanesSession` holds `pane.focus` and `agent.focus` to
+herdr 0.9.5, where focusing a pane makes its workspace the active one. With a
+client on one session, a `pane.focus` on a pane in another session must move
+the client there with the pane focused, and `agent.focus` must move it back. A
+`pane.focus` in the session the client shows must leave the client where it is.
+The stream must say `workspace_focused`, `tab_focused` and `pane_focused` for
+the move, once each and in that order, also when the pane was not the focused
+one in its session.
+
+Run on 2026-11-04 on macOS (darwin/arm64). The test passes on the fixed build.
+Each control was built into its own binary.
+
+| Control: what was cut | Where it fails | Verdict |
+| --- | --- | --- |
+| Main without the fix (c606b6b2d) | "pane.focus on a pane in another session: the stream ended before workspace_focused and pane_focused" (the subscription times out, as the client never moves) | **caught** |
+| The `herdrShowSession` call in `herdrFocusPane` | The same message as main | **caught** |
+| The `client-session-changed` case in the herdr translator | "the stream ended before workspace_focused and pane_focused" (the subscription times out) | **caught** |
+| The check in the herdr translator that drops `pane_focused` for a session no client shows (b97aa1467) | "the focus events read pane_focused workspace_focused tab_focused pane_focused, want workspace_focused tab_focused pane_focused" | **caught** |
+
+The frames are `herdr-focus-other-session` and `herdr-focus-back`, and the
+events `herdr-focus-events`, under
+`TUIOS_E2E_FRAMES`.
+
 ## The herdr socket reports a seen done pane as idle
 
 `TestHerdrSeenDoneIsIdle` holds the herdr socket to herdr 0.9.5's
@@ -6330,6 +6407,44 @@ is `~/.cache/agent-tmp/gui-port/proof/nc-preview-review.txt`.
 | The decoder's coefficients not counted | `decodeCost`: the progressive term cut | `TestFilePreviewHoldsItsDecodeCap` (353 MB for the progressive JPEG, 421 MB after the grey one) | **caught** |
 | The CatmullRom scale | `fit`: `draw.CatmullRom` in place of `ApproxBiLinear` | `TestFilePreviewHoldsItsDecodeCap` (542 MB scaling the grey JPEG) | **caught** |
 | No ffmpeg whitelists | `previewVideo`, `videoDuration`: the whitelist flags cut | `TestFilePreviewOpensOnlyFilmContainers` (a frame of 6460 bytes, 2000 ms) | **caught** |
+
+### File previews hold to their bounds on crafted files
+
+`TestFilePreviewHoldsCraftedFilesToItsBounds` previews crafted files on the
+daemon socket, each subtest in a daemon of its own. `zip`: four previews at
+once of a zip64 that names a million files are listed capped at 2000, first
+and 2000th names checked, the daemon under 256 MB; a small zip lists its three
+names in its own order, and so does the same zip behind a 100-byte prefix,
+with and without the prefix counted in its offsets; a zip of 2000 files is not
+capped and one of 2001 is. `gif`: a GIF of two 1 x 1 frames on a 10000 x 10000
+screen is not stepped; a 40 x 40 GIF of 3 frames steps to frame 2 of 3.
+`json`: JSON nested 10000 deep comes back not laid out; 900 KB of ordinary
+JSON comes back laid out. `names`: in a tar.gz and a zip, a name over 4096
+bytes is listed as its start, cut at a character, and "...", 4096 bytes at
+most; a name of 4096 bytes and `src/a/b/c.txt` are listed whole.
+`TestQuickLookArchiveRowsStayBounded` (`internal/app`) builds the tree of 200
+paths 1990 folders deep within 32 MB of allocation, shows a path 70 folders
+deep as 64 folders and one row with the rest, and `a/b/c.txt` as it was.
+
+Run on 2026-11-04 on Linux. Each control was built into its own binary and fails
+the test below; the clean build passes all of them.
+
+| Control | How | Tests that fail | Verdict |
+| --- | --- | --- | --- |
+| The GIF check counts only the frames | `previewGIFFrame`: `int64(frames+previewGIFCanvases)` back to `int64(frames)` | `TestFilePreviewHoldsCraftedFilesToItsBounds/gif` (`file_preview_test.go:876`) ("a GIF of two 1 x 1 frames on a 10000 x 10000 screen was stepped to frame 2 of 2") | **caught** |
+| No JSON layout bound | `previewFormatJSON`: the layout size check cut | `TestFilePreviewHoldsCraftedFilesToItsBounds/json` (`file_preview_test.go:900`) ("JSON nested 10000 deep was laid out, 200040001 bytes of text") | **caught** |
+| The whole zip directory read | `previewArchive`: `previewZip` back to a `zip.NewReader` listing, name cut kept | `TestFilePreviewHoldsCraftedFilesToItsBounds/zip` (`file_preview_test.go:730`) ("four previews of a zip of a million files took the daemon to 1035 MB") | **caught** |
+| No name cut | `previewTar`, `previewZip`: both `previewArchiveClip` calls cut | `TestFilePreviewHoldsCraftedFilesToItsBounds/names` (`file_preview_test.go:993` tar.gz, `:1009` zip) ("names of 4097, 6002 and 921609 bytes listed whole, and the zip's 5000-byte name") | **caught** |
+| No depth cap on the tree | `quickLookArchiveRows`: `quickLookArchiveDepth = 1<<30` | `TestQuickLookArchiveRowsStayBounded` (`quicklook_archive_budget_test.go:38`, `:52`) ("the tree of 200 paths 1990 folders deep allocated 2064 MB, want under 32 MB") | **caught** |
+| A depth cap one too high | `quickLookArchiveRows`: `quickLookArchiveDepth = 65` | `TestQuickLookArchiveRowsStayBounded` (`quicklook_archive_budget_test.go:52`) ("a path 70 folders deep gives the rows") | **caught** |
+| Zip names in reverse order | `previewZip`: the entries reversed before return | `TestFilePreviewHoldsCraftedFilesToItsBounds/zip` (`file_preview_test.go:726`) ("lists "e0001999.txt" first and "e0000000.txt" 2000th") | **caught** |
+| The tail row without the file name | `quickLookArchiveRows`: the tail row drops the name of a path deeper than the cap | `TestQuickLookArchiveRowsStayBounded` (`quicklook_archive_budget_test.go:52`) ("a path 70 folders deep gives the rows") | **caught** |
+| A folder listed as a file | `previewZip`: `Dir: h.FileInfo().IsDir()` to `Dir: false` | `TestFilePreviewHoldsCraftedFilesToItsBounds/zip` (`file_preview_test.go:757`) ("small.zip lists app/ as folder false, 0 bytes, want folder true, 0 bytes") | **caught** |
+| A capped zip not marked capped | `previewZip`: `capped = true` to `capped = uint16(records) > previewArchiveItems` | `TestFilePreviewHoldsCraftedFilesToItsBounds/zip` (`file_preview_test.go:817`) ("a zip of 65537 files whose end record says 1 is archive with 2000 entries, capped false") | **caught** |
+| A name cut inside a character | `previewArchiveClip`: the rune-boundary loop cut | `TestFilePreviewHoldsCraftedFilesToItsBounds/names` (`file_preview_test.go:993`) ("in the tar.gz a name of 6002 bytes is listed as 4100 bytes") | **caught** |
+| Offsets taken from the file start | `previewZipEnd`: the base offset of a zip behind a prefix ignored | `TestFilePreviewHoldsCraftedFilesToItsBounds/zip` (`file_preview_test.go:751`) ("prefixed.zip is binary [], capped false, want archive") | **caught** |
+| A zip with a wrong entry count read | `previewZip`: the `uint16(len(entries)) != uint16(records)` check cut | `TestFilePreviewHoldsCraftedFilesToItsBounds/zip` (`file_preview_test.go:776`) ("a zip of 3 headers whose end record says 5 is archive with 3 entries, capped false, want binary") | **caught** |
+
 ## The bridge's output path (replaces #598)
 
 An output frame is now queued as two entries, its head and the daemon's own
@@ -7709,6 +7824,31 @@ Run on 2026-10-18.
 | A tool result between two reads breaks the run | n/a, injected | the run stops at a `tool_result` entry | `TestCockpitThreadCards` ("the reads did not fold to one line") | **caught** |
 | The changed words are lit three cells early per tab | `ckCodeOffset`: the word offsets mapped on the raw text | the offsets taken on the text after the tab became four spaces | `TestCockpitThreadCards` ("the cell before the changed words is lit too") | **caught** |
 
+Turn folds, run on 2026-11-04: `cockpitTurnFolds` adds 29 turns to the
+transcript (reads, a search, edits and a command each, a failed command in
+turn 26, the last turn still at work) and reads it at 140x45.
+
+| Bug | Fix removed | How | Tests that fail | Verdict |
+|---|---|---|---|---|
+| A finished turn does not fold its work | `transcriptview.Turns` | `Finished` set to false for every turn | `TestCockpitThreadCards` ("the finished turn 28 shows its work") | **caught** |
+| A finished turn does not fold its work | the whole change | a build of origin/main at 2c03bb3c0 | `TestCockpitThreadCards` ("the finished turn 28 shows its work") | **caught** |
+The live activity row (`cockpitActivityRow`, run from the same test on
+2026-11-04) sends a PreToolUse hook for a command the transcript does not have,
+then appends the call to the transcript, then sends a second tool and rests the
+pane.
+
+| Bug | Fix removed | How | Tests that fail | Verdict |
+|---|---|---|---|---|
+| The activity row repeats a card the transcript already shows | The newest tool call check in `transcriptview.ActivityShown` | The check never taken, so the row shows while the agent works | `TestCockpitThreadCards` ("the activity row stays when the transcript shows the call's card") | **caught** |
+`threadFollowAndRuler`, the end of `TestCockpitThreadCards`, appends prompts
+and replies to the transcript in a third client at 160x45. Run on 2026-11-04.
+
+| Bug | Fix removed | How | Tests that fail | Verdict |
+|---|---|---|---|---|
+| A held thread moves when entries arrive | the hold rule in `transcriptview.Follow.Apply` | the held case keeps `Up` and does not add the new lines | `TestCockpitThreadCards` ("the held thread moved when entries arrived") | **caught** |
+| `{` and `}` do nothing | `transcriptview.Follow.Jump` | `Jump` returns at once | `TestCockpitThreadCards` ("{ did not put \"turn 3\" on the thread's first rows") | **caught** |
+| A new prompt stays at the bottom | the anchor rule in `transcriptview.Follow.Apply` | the anchor case never taken | `TestCockpitThreadCards` ("the new prompt is not at the top of the thread: its label is on row 28, the thread starts on row 13") | **caught** |
+
 ## The agents cockpit: reply area and image view
 
 `TestCockpitReplyAreaAndImageView` opens the reply area by a click, types,
@@ -8300,7 +8440,7 @@ A control that sets a TML window's output flag on each render does not fail the 
 | `movableRefusal` lets a TML pane move to another session | `TestTMLProgramCloseIsNotThePersons` ("a TML pane moved to another session") | **caught** |
 | `tml-close` reports its value as the person's (`closed`) | `TestTMLProgramCloseIsNotThePersons` ("ended with <nil> after a program's close, want exit status 2") | **caught** |
 | `--name` stored with its control characters | `TestTMLProgramCloseIsNotThePersons` ("the window name kept its control characters") | **caught** |
-| A client attached through a host draws TML windows itself | `TestTMLSurfaceThroughAHostShowsThePlaceholder` ("the far surface did not show its placeholder line") | **caught** |
+| A client attached through a host draws TML windows itself | `TestTMLSurfaceThroughAHostShowsThePlaceholder` ("the far surface did not show its placeholder line") | **caught** (superseded: see "TML surfaces over a host link") |
 | A client attached through a host claims `tml_surfaces` in its hello | none: the client still does not draw the window, so the pushes it gets go unused | not caught |
 | The placeholder ends on any byte after an esc, not only on a lone esc | `TestTMLSurfaceThroughAHostShowsThePlaceholder` ("a click closed the far surface") | **caught** |
 
@@ -10015,6 +10155,14 @@ Run on 2026-10-24 against a build of origin/main (c5e6439de).
 |---|---|---|---|---|
 | A pane's `send-text` and `send-keys` without `-w` typed into the person's focused pane | `typingNeedsWindow` | Build of origin/main | `TestAPaneTypesOnlyWhereItAimsAndNotIntoAPrompt` ("a call without -w typed into the focused pane": `NOWIN_TEXTNOWIN` in the plain pane) | **caught** |
 | A pane with respond typed into a pane on needs_input with no sign it read the prompt | `typingBlocked` | Build of origin/main | `TestAPaneTypesOnlyWhereItAimsAndNotIntoAPrompt` (`REFUSED_TEXT`, `QZ` and `BUFFER_TEXT` in the waiting pane's log), `TestAPaneCannotMarkAnotherPaneToAnswerItsPrompt` (`SK3_EXIT=0`, `ANSWERED:y`) | **caught** |
+
+The plain pane is now a bash that marks its commands, and the probe also
+calls `run` with no `-w`. Run on 2026-11-04 against a build of origin/main
+(23003ac3a) with `run` taken out of the `-w` check in `holdTypingTarget`.
+
+| Bug | Fix removed | How | Tests that fail | Verdict |
+|---|---|---|---|---|
+| A pane's `run` without `-w` ran the command in the person's focused shell | `run` in the `typingNeedsWindow` check | One-line revert | `TestAPaneTypesOnlyWhereItAimsAndNotIntoAPrompt` ("nowin-run from a pane without -w was not refused", and `$ echo NOWIN_RUN` in the plain pane) | **caught** |
 ## wait-for window-output --new ignores old output
 
 `TestWaitForWindowOutputNewIgnoresOldOutput` prints `DONE-7` in a pane and
@@ -11553,6 +11701,54 @@ Repeat with `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run
 'TestDnD' -v .` from `e2e/tui`. `TUIOS_E2E_YAZI` and `TUIOS_E2E_KITTEN` add
 the runs with the real programs.
 
+## Drag and drop: a registration ends with its program
+
+`TestDnDRegistrationEndsWithItsProgram` starts a `dndpeer` target in a pane,
+kills it with SIGKILL so it never unregisters, starts a reader with bracketed
+paste on in the same pane, and drags a file onto it from a `dndpeer` source.
+The reader must get the path as a paste: once in the client that saw the
+target register, once in a client attached with `attach -d` after it died,
+which knows the registration only from the daemon. On the build before the
+fix both subtests fail: the reader gets OSC 72 moves and no paste. Run on
+2026-11-03 on Linux with Go 1.27.3, based on `7505f49`.
+
+| Control: what was cut | Test failure | Verdict |
+| --- | --- | --- |
+| `internal/app/dnd.go`, `dndSweep` returns at once, so the client keeps the dead program's registration | `.../the_client_that_saw_it_register`: "the pane the dead program held got `\x1b]72;t=m:o=3:…`, want the paste" | **caught** |
+| `internal/session/dnd_registration.go`, the liveness check in `fact`, so the daemon hands the dead program's registration to a client that attaches later | `.../a_client_that_attached_after_it_died`: the same | **caught** |
+
+Under each control the other subtest passes, and on the build with the code
+in place both pass, with every other `TestDnD` test.
+
+## Drag and drop: a file list line with a space
+
+`TestDnDLabelNamesEachPathOfALine` drags from a `dndpeer` source that sends
+its text/uri-list ahead as written (`DNDPEER_URILIST`), each dropped on a
+reader with bracketed paste on. The lists are a line with a raw space
+(`file:///t/x /t/y`), the same after a plain line, a blank line between two
+paths, and a well-formed two-line list. The label must name every path the
+drop delivers with no crash overlay on screen, and the paste must be those
+paths. On the emulated terminal of `TestDnDBridgeWithAnEmulatedTerminal` the
+same line must start the desktop drag, with a drag image that names both
+paths. Run on 2026-11-04 on Linux.
+
+| Control: what was cut | Test failure | Verdict |
+| --- | --- | --- |
+| `internal/app/dnd_drag.go`, the `names = make([]string, len(paths))` line in `dndLabelWhat` (the label indexes the line count again) | `a_line_with_a_space_names_both_paths`: "the drag label never said \"x, y from \" mid-drag", then "the crash overlay is on screen after the drop"; `a_line_with_a_space_after_a_plain_line`: the same with \"a, b, c from \"; `a_blank_line_between_two_paths`: "the drag label never said \"a, b from \" mid-drag" (the screen shows `a, b, file:///t/b from pane`); `a_line_with_a_space_starts_the_desktop_drag`: "the start of the desktop drag: the client never wrote \"\\x1b]72;t=P\"" | **caught** |
+| `internal/app/dnd_drag.go`, the same line replaced by `if len(paths) != len(names) { paths = nil }` (the raw lines are kept on a count mismatch) | `a_line_with_a_space_names_both_paths`: "the drag label never said \"x, y from \" mid-drag"; `a_line_with_a_space_after_a_plain_line`: "the drag label never said \"a, b, c from \" mid-drag"; `a_blank_line_between_two_paths`: "the drag label never said \"a, b from \" mid-drag"; `a_line_with_a_space_starts_the_desktop_drag`: "the drag image is \"file:///t/x /t/y from pane cc2c4223\" (<nil>), want it to name x, y from the pane" | **caught** |
+
+Under both controls `one_path_a_line_names_each` passes, and on the build with
+the code in place all five subtests pass. Run with `-run TestDnD -v` on a host
+with neither kitty under Xvfb nor yazi, the build with the code in place passes
+`TestDnDBridgeWithAnEmulatedTerminal`, `TestDnDBetweenPanes`,
+`TestDnDRegistrationOutlivesTheClient`, `TestDnDRefusesPanesOnAnotherMachine`,
+`TestDnDRefusesAPaneHostedElsewhere` and `TestDnDRegistrationEndsWithItsProgram`
+beside it. `TestDnDDesktopBridge` (needs `TUIOS_E2E_KITTY`) and
+`TestDnDRealPrograms` (needs `TUIOS_E2E_YAZI`) skipped there.
+
+Repeat with `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test
+-count=1 -run 'TestDnDLabelNamesEachPathOfALine' -v .` from `e2e/tui`.
+
 ## Drag and drop with the desktop
 
 `TestDnDDesktopBridge` runs tuios in a real kitty under Xvfb, with
@@ -11958,6 +12154,24 @@ Run on 2026-10-31 on Linux against builds from this branch, on `0e1679cfb`. Each
 | `ckStageTitle(r.group)` in `drawFoldFocus` becomes `ckStageTitle(0)`, so there is no crash and the title is wrong | "the focus title is \"   Todo  1\", want Done and its count" | **caught** |
 
 The frame is `task-board-done-focus-200x55` under `TUIOS_E2E_FRAMES`, in the test's folder. Repeat from `e2e/tui` with `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestTaskBoardGroupsCardsByStage$' -v .`.
+
+## The task board as columns
+
+`TestTaskBoardGroupsCardsByStage` opens the board as columns, moves t4 with
+`L` and `H`, moves t2 with `h`, `shift+right` and `shift+left`, and drags t6
+onto the Review column and back onto Todo. Each move is read back from
+`tuios task ls --json`, so a screen that only looks moved does not pass. Run
+on 2026-11-04 on Linux against builds of `feat/task-kanban-board` on
+`57150e1ef`. Each control is a text replacement, built and put back before
+the next.
+
+| Control: what was changed | Where it fails | Verdict |
+| --- | --- | --- |
+| `kanbanStep` returns at once, so `H` and `L` move nothing | "after L on t4, t4 is in \"verify\", want \"review\"" | **caught** |
+| `CockpitRelease` takes the drop and does not call `set-task-stage` | "after the drag of t6 onto Review, t6 is in \"todo\", want \"review\"" | **caught** |
+
+The fixed build passes. The frames are `task-board-columns-*` under
+`TUIOS_E2E_FRAMES`, in the test's folder.
 ## A dock cell watching agent state hears every transition
 
 `TestDockAgentCellClearsWhenTheAnswerMovesThePaneOn` draws a dock cell that counts the session's panes on `needs_input`, refreshed on `event:after-agent-state`, with `working` left out of `[notifications.agent.states]`. The pane goes to `needs_input` and the cell has to read `WAIT1`, then the pane goes to `working` and the cell has to read `WAIT0` again.
@@ -12160,6 +12374,17 @@ Run on 2026-11-02, each control against the branch head with one change:
 | `--check` changes nothing | the check return cut | "update --check changed plugins.lock" | **caught** |
 | A source that is gone exits 3 | the fetch failure is not marked | "update with the source gone" | **caught** |
 
+### A followed tag replaced or moved
+
+The tag check is now the fetch's tag kind, kept in plugins.lock; it replaces the `ls-remote` check that the 2026-11-02
+row "`updateReason` skips the tag check" cut.
+Run on 2026-11-04 on Linux, each control against the branch head with one change:
+
+| Claim | Control | Where it fails | Verdict |
+|---|---|---|---|
+| A tag replaced by a branch of its name asks again under `--yes` | the gone-tag case cut from `updateReason` | "update of a tag replaced by a branch under --yes: <nil>" | **caught** |
+| A moved tag installed as `refs/tags/NAME` asks again under `--yes` | `updateReason` asks `ls-remote` for the tag instead of the fetch's tag kind | "update of a moved tag by its full name under --yes: exit status 1" | **caught** |
+
 ## Quick look shows each kind of file
 
 | Control: what was cut | Where it fails | Verdict |
@@ -12188,6 +12413,13 @@ control against the branch head with one change:
 | A cell goes when its plugin stops | `dropCells` cut from `apply` | "the cell of a stopped plugin stays" | **caught** |
 | A cell must be in the manifest | the manifest check cut | "other with the ui grant" | **caught** |
 | A notice arrives after a cell | the client listener not armed again | "the notice did not show" | **caught** |
+
+Added on 2026-11-04, each control against the branch head:
+
+| Claim | Control | Where it fails | Verdict |
+|---|---|---|---|
+| A plugin does not read a form a hook opened | the `tmlReach` call in `verbTMLGet` cut (`internal/session/tml_surface.go:1136`), run on 2026-11-04 | "hook with the ui grant: exit 0, want a refusal with "refused for plugin e2e.ui"", and the form comes back with the person's typed value | **caught** |
+| A plugin reads its own panel | the plugin half of the owner match in `tmlReach` cut (`internal/session/tml_surface.go:1230`), run on 2026-11-04 | "the plugin's tml get of its own panel: exit 1, want 0 and the panel", with "tml-get is refused for plugin e2e.ui" | **caught** |
 
 ## A Claude Code notification prompt clears when the prompt goes
 
@@ -12297,6 +12529,26 @@ each control against the branch head with one change:
 | The person hears once per type | the check of the told types cut | "a second panel of the same type told the person again" | **caught** |
 | tuios mermaid says what to run, and runs the plugin | `notBuiltIn` returns "" | "a timeline with no plugin" | **caught** |
 | A panel shows what to do | the `MissingDiagram` call cut | "no notice for the timeline" | **caught** |
+
+### The plan names the sketch program, and a release name is the release
+
+`TestSketchPluginPlanNamesItsProgram` installs a plugin with the sketch
+plugin's manifest and one with another id, and reads both plans.
+`TestPluginsReleaseNameBeatsAFolder` types `tuios plugins install pr-status`
+on a build stamped as a release in a folder that holds `pr-status/`, installs
+that folder as `./pr-status`, uninstalls it by name there, and installs it by
+name on a dev build. Run on 2026-11-04 on Linux, each control against the
+branch head with one change:
+
+| Claim | Control | Where it fails | Verdict |
+|---|---|---|---|
+| The plan of the sketch plugin names its program | the sketch line cut from `RunsLines` | `TestSketchPluginPlanNamesItsProgram`: "the plan of the sketch plugin does not name its program" | **caught** |
+| Only the sketch plugin's plan names it | the sketch line written for every plugin | `TestSketchPluginPlanNamesItsProgram`: "the plan of another plugin", the plan of `e2e.quiet` naming `mermaid  bin/sketch` | **caught** |
+| A release name on a release build is the release | the release return cut from `parsePluginSource` | `TestPluginsReleaseNameBeatsAFolder`: "install pr-status in a folder that holds pr-status/" and "install pr-status built the folder pr-status/" | **caught** |
+| Uninstall by the name in that folder removes the folder install | the folder fallback cut from `lockBySource` | `TestPluginsReleaseNameBeatsAFolder`: "uninstall pr-status in that folder: exit status 1", tuios printing "plugins.lock has no plugin with the id or the source pr-status" | **caught** |
+| The release name is read before the folder | the release check put after the folder check, as before | `TestPluginsReleaseNameBeatsAFolder`: "install pr-status in a folder that holds pr-status/" and "install pr-status built the folder pr-status/" | **caught** |
+| The plan names the program tuios runs | the line names `bin/sketch2` | `TestSketchPluginPlanNamesItsProgram`: "the plan of the sketch plugin does not name its program" | **caught** |
+| A dev build keeps installing the folder | the release name taken on every build (the `runningTag` check cut) | `TestPluginsReleaseNameBeatsAFolder`: "install pr-status on a dev build: exit status 1", tuios printing "this tuios is a dev build, which no release made, so it has no plugin assets" | **caught** |
 
 ## Native event hooks
 
@@ -12516,3 +12768,433 @@ was a build of the branch base (ee08a49cf), which has no `set-layout-state`.
 | Control: what was put back | Test | Result |
 | --- | --- | --- |
 | A daemon with no `set-layout-state` verb | `TestLayoutChangedFollowsASplit` | **caught**: "set-layout-state: exit status 1", `unknown verb set-layout-state` |
+## The rail in a jj workspace
+
+`TestRailGitJJ` and `TestRailGitJJProblems` read the git section on a pane in a
+colocated jj workspace. `TestRailJJRepoRow` draws the repository's row for a
+session in the main jj workspace, with a second workspace's session under it,
+colocated and not, and folds it. Run on 2026-11-02 on macOS with jj 0.46.0:
+
+| Control | Test | Where it fails | Verdict |
+|---|---|---|---|
+| A build of main at 2efd8ca0d575 | `TestRailGitJJ` | "the git section never showed repo, and feat with +2 above it and ↑3 ahead of trunk()" | **caught** |
+| A build of main at 2efd8ca0d575 | `TestRailGitJJProblems` | "the repository row never showed the divergent commit (◇)" | **caught** |
+| A build of main at 2efd8ca0d575 | `TestRailJJRepoRow/plain`, `/colocated` | "the rows are not \"mainsess main\" with \"featsess feat\" under it" | **caught** |
+| `gitstate.Branch` as on main: git's HEAD only | `TestRailJJRepoRow/plain`, `/colocated` | the same: the main workspace's row shows nothing when not colocated and a bare hash when colocated | **caught** |
+| Run on 2026-11-03: jj's `*` marker kept in the bookmark name, as before the review of #1470 | `TestRailGitJJ` | "the git section never showed repo, and feat with +2 above it and ↑3 ahead of trunk()": the row shows `feat*` | **caught** |
+| Run on 2026-11-03: `childproc.OwnGroup` and `WaitDelay` cut from `readJJ` | `TestJJTimeoutHoldsWithAHungChild` (unit, `internal/gitstate`) | readJJ returned after about 20 s, the fake jj's child, not within `countTimeout` | **caught** |
+
+The frames are `rail-jj-repo-row-*` under the test's artifact folder.
+
+## Shell commands show their program in the thread
+
+The codex case of `TestCockpitThreadOtherHarnesses` reads a rollout whose
+`exec_command` runs `bash -lc 'cd /work/project && go test ./...'` and whose
+`shell` argv runs a script that prints an ESC byte. The thread must show
+`exec_command  go test ./...` and `shell  printf '␛[1m' && grep -n run src/app.go`,
+and no screen of it may show `bash -lc`. Run on 2026-11-04 on Linux, each
+control against the branch head with one change:
+
+| Control | Where it fails | Verdict |
+| --- | --- | --- |
+| A build of main at b1d5a5163 | the thread shows `exec_command  bash -lc 'cd /work/project && go test ./...'` and `shell  printf '' && grep -n run src/app.go`: "never showed" both labels, and "showed the wrapper \"bash -lc\"" | **caught** |
+| `transcriptview.CommandLabel` returns its input | "never showed \"exec_command  go test ./...\"" and "showed the wrapper \"bash -lc\" of a command" | **caught** |
+| The decoder's `ControlPictures` on a shell target taken out | the daemon strips the ESC sequence whole: "never showed \"shell  printf '␛[1m' && grep -n run src/app.go\"" | **caught** |
+
+The frames are `thread-codex-commands` under `TUIOS_E2E_FRAMES`. Repeat from
+`e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestCockpitThreadOtherHarnesses$/codex' -v .`.
+## Unseen marks and the alert baseline
+
+`TestCockpitGroupsTheFleet` (through `cockpitUnseenMarks`) checks that the rows
+of agents that finished or failed since their thread was viewed wear the unseen
+mark, that viewing a thread clears only that row's mark, and that a new client
+reads the same marks. `TestHostFocusHoldsAlertsForThePaneYouAreLookingAt`
+checks that a client attached after a turn alerted does not alert for the same
+turn's done again. Run on 2026-11-04 on Linux, each control against the branch
+head with one change:
+
+| Control | Where it fails | Verdict |
+|---|---|---|
+| `markAgentViewed` returns before it moves the watermark | `TestCockpitGroupsTheFleet`: "viewing the thread of docs-cli did not clear its mark" | **caught** |
+| The `Baseline` call cut from `considerAgentAlert` | `TestHostFocusHoldsAlertsForThePaneYouAreLookingAt`: "the new client alerted again for a run that had alerted: [\"AGENT done\"]" | **caught** |
+
+The frames are `cockpit-unseen` and `cockpit-unseen-viewed` under the test's
+artifact folder.
+## Send now or queue in the reply box
+
+`TestCockpitReplyEditorStdout` (its `replySendNowOrQueue` half) opens the
+reply box on an agent at rest, then sets it working. enter queues a reply.
+alt+enter types a second reply into the pane while the agent still works, and
+the queue keeps only the first. Run on 2026-11-04:
+
+| Control | Test | Where it fails | Verdict |
+|---|---|---|---|
+| `composer.EventSendNow` routed to `InboxReplySend`, the queue path | `TestCockpitReplyEditorStdout` | "ASSERTION: alt+enter did not type the reply into the working agent's pane" | **caught** |
+
+The frames are `reply-send-*` under the test's artifact folder.
+## The scrolling layout shows a pane the user asked for (issue #1507)
+
+`TestScrollingRevealsANewPane` starts a client at 120x40 in the scrolling
+layout with `scroll_column_width = 50` and three columns. Before each route,
+Alt+P walks the focus onto the middle column, which leaves the next column as
+a peek at the right edge. Each route then focuses that column, and the pane
+must be wholly on screen:
+
+- Ctrl+B c opens a pane, which goes in the column after the focused one.
+- `tuios focus-window` names that pane.
+- The navigator finds that pane by its name, and Enter goes to it.
+
+Run on 2026-11-04 on Linux. The control is a binary of main (23003ac3a). All
+three routes fail on it, each with the pane at x=64 and 60 cells wide on a
+screen 120 cells wide. The fixed build passes in 9 s.
+
+| Route | Control | Where it fails | Verdict |
+| --- | --- | --- | --- |
+| A new pane | main at 23003ac3a | "a new pane: the focused pane is not wholly on screen: {X:64 Width:60}" | **caught** |
+| `tuios focus-window` | main at 23003ac3a | "focus-window: the focused pane is not wholly on screen: {X:64 Width:60}" | **caught** |
+| The navigator | main at 23003ac3a | "the navigator: the focused pane is not wholly on screen: {X:64 Width:60}" | **caught** |
+
+The frames are `before-new-pane`, `after-new-pane` and `after-navigator`
+under `TUIOS_E2E_FRAMES`, in the test's folder. Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestScrollingRevealsANewPane$' -v .`.
+## The review's file list scrolls its own paths
+
+`TestReviewListKeysScrollThePaths` opens a review on the file list, with one
+file whose path is wider than the list and whose line is wider than the diff
+column. `l` must leave the line's start on screen, `h` must show the start of
+the path, and with the diff focused `l` must scroll the code. Run on
+2026-11-04 on Linux:
+
+| Control | Where it fails | Verdict |
+|---|---|---|
+| A build of main at 91a743c5a | "l scrolled the diff while the file list had the keys" | **caught** |
+
+The frame is `review-list-scrolled` under `TUIOS_E2E_FRAMES`.
+## A new pane starts in the calling pane's folder
+
+`TestNewWindowFromAPaneStartsInThatPanesFolder` opens two panes in two
+folders, with the focus on the second. The first pane runs
+`tuios new-window probe --no-focus`. The probe must start in the first pane's
+folder, and a window opened outside every pane must start in the focused
+pane's folder.
+
+Run on 2026-11-04 on Linux. The fixed build passes in 0.6 s.
+
+| Claim | Control | Where it fails | Verdict |
+| --- | --- | --- | --- |
+| new-window from a pane starts in the caller's folder | the `CallerCwd` line cut from `verbNewWindow` | "the window a pane in `<dir>/agent-dir` opened starts in `<dir>/person-dir`" | **caught** |
+## The daemon keeps the machine awake while an agent works
+
+`TestKeepAwakeHoldsWhileAnAgentWorks` sets `keep_awake = "agents"` and reads
+logind's inhibitor list. A lock counts only when its `systemd-inhibit` is a
+child of the test's daemon. The lock must come when a pane works, stay while
+any pane works, and go when the panes go idle, when the working pane closes,
+and when `keep-awake off` is set. After a SIGKILL of the daemon, its holder
+must be gone. Run on 2026-11-04 on Linux (systemd 262) against the branch
+head with one change each:
+
+| Control | Where it fails | Verdict |
+| --- | --- | --- |
+| The event sink does not wake the keeper on `agent-state` and `window-closed` | "an agent works: 0 tuios inhibitor locks under daemon N, want 1" | **caught** |
+| The holder runs `sleep infinity` in place of `cat` on the daemon's pipe | "systemd-inhibit N outlived its daemon M (its parent is now 1)" | **caught** |
+
+The steps and lock counts are in `keep-awake.txt` under `TUIOS_E2E_FRAMES`,
+in the test's folder. Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestKeepAwakeHoldsWhileAnAgentWorks$' -v .`.
+
+## A link stream's lease: closed on purpose or dropped
+
+`TestStreamPaneLeaseOutlivesADroppedLink` checks that a stream whose link
+drops keeps its lease for 15 s, and then lets it go.
+`TestStreamPaneLeaseOnTheDesktop` and `TestPhoneStreamsAPaneAndAnswersTheInbox`
+check that a stream the far side closes on purpose gives its lease back at
+once. Run on 2026-11-04 on Linux, each control against the branch head with
+one change:
+
+| Control | Where it fails | Verdict |
+|---|---|---|
+| `linkConn.NoteClosedOnPurpose` returns before it sends the close token | `TestStreamPaneLeaseOnTheDesktop`: "the pane stayed at the leased size after the stream closed"; `TestPhoneStreamsAPaneAndAnswersTheInbox`: "the pane did not go back to the size asked for when the stream closed" | **caught** |
+| `paneStream.close` releases every lease at once, with no linger | `TestStreamPaneLeaseOutlivesADroppedLink`: "1.102s after the link dropped the pane is 22x78, want 6x30" | **caught** |
+## set-config --no-save keeps a value out of every save
+
+`TestSetConfigWithNoClientAppliesOnAttach` ends with `set-config --no-save
+appearance.sidebar.enabled false`, then a saved `set-config
+appearance.border_style double`. The rail must be hidden, config.toml must
+get `border_style = "double"`, and `[appearance.sidebar]` in config.toml must
+not get `enabled`. Run on 2026-11-04 on Linux, each control against the
+branch head with one change:
+
+| Control | Where it fails | Verdict |
+| --- | --- | --- |
+| A build of main at 536b1b9eb | `set-config --no-save`: "unknown flag: --no-save" | **caught** |
+| `skipHeld` cut from `saveConfigData`, so a save writes the held key | "a save of border_style wrote the sidebar value set with --no-save", with `enabled = false` under `[appearance.sidebar]` | **caught** |
+| The client takes the saving branch for every `set_config`, so `ConfigNoSave` is ignored | the same assertion, with `enabled = false` | **caught** |
+
+The frame is `no-save-rail-hidden` and the file is `config.toml` under the
+test's artifact folder.
+## Hold an approval while the person types a reply
+
+`TestInboxAnswersAHeldApproval` opens the reply editor on the agent's pane and
+types one key every 150 ms. The hook asks for a Bash call during the typing.
+The card must show "Paused while you type" in place of its buttons, and a click
+there, past the 400 ms settle, must answer nothing. When the typing stops, the
+hold must end within 2.5 s with no other key or event, and a click on Allow
+once must answer the approval. Run on 2026-11-04 on Linux:
+
+| Control | Where it fails | Verdict |
+|---|---|---|
+| `composer.TypingHold.Held` always returns false | "a click answered an approval that arrived while the person typed", and the hook printed the allow decision | **caught** |
+
+The frames are `inbox-approval-typing-held` and `inbox-approval-typing-released`
+under the test's artifact folder.
+
+## A spinner frame sends no listing push
+
+`TestIdleCostStaysLow/agent_spinner_in_a_watched_pane` runs an agent whose
+title spinner moves every 0.3 s. The daemon looks at the listing every 3 s.
+The old spinner took 1 s for its four frames, so each look saw the same frame,
+and the test could not see a push for each frame. Run on 2026-11-05 on Linux
+against the branch head:
+
+| Control | Where it fails | Verdict |
+| --- | --- | --- |
+| `listingNotifier` hashes `d.listSessions()` with the titles as they are (main before the fix) | "3 ticks ran the full scans (budget 1): the idle gate is not holding", twice in two runs | **caught** |
+
+With the fix the window measured work=0 in five of five runs, and about 650
+context switches against about 790 before.
+
+## An agent arranges panes with no client attached
+
+`TestAgentArrangesPanesWithNoClient` runs a script in a pane of a detached
+session: two `split-window` calls, then `swap-window`, `resize-window` and
+`zoom-window`, each naming the pane by the id the split printed. With no
+client, list-windows must show the agent's pane on the left at 60 percent,
+tests above logs on the right, and tests zoomed. A client then attaches and
+shows the zoomed pane alone. After `zoom-window --off` it draws tests above
+logs on the right, and list-windows reports its rectangles in that order.
+
+Run on 2026-11-04 on Linux. The fixed build passes in 0.5 s. Each control
+cuts one call site from the branch head:
+
+| Claim | Control | Where it fails | Verdict |
+| --- | --- | --- | --- |
+| split-window puts the pane in the tree | `Split: placement` cut from `openWindow` | the script stops at `swap-window`: "the session floats its panes" | **caught** |
+| swap-window swaps the leaves | the `SwapWindows` call cut from `swapPanes` | "logs is at ... want it ... in the lower half (the swap)", and on the attached client | **caught** |
+| resize-window moves the border | the `NudgeBorder` call cut from `resizePane` | "the agent's pane has 0.70 of the width, want 0.60" | **caught** |
+| zoom-window sets the zoom | `x.Zoomed = z` cut from `zoomPane` | "tests is not zoomed with no client attached", and the client shows logs | **caught** |
+| A client lays out the daemon's tree | `e.commit()` cut from `arrangeLayout` | headless and attached layouts both lack the swap and the resize | **caught** |
+| A client reports the layout it took from the daemon | the `SyncStateToDaemon` call cut from `ApplyStateSyncFrom` | "the client's layout is not the agent's": list-windows keeps the zoomed rectangles | **caught** |
+## A switch made before the new pane arrives
+
+`TestScreenPresetLeaderTwiceAndSend` holds the pane that ctrl+a c asks for
+in the daemon for one second (`TUIOS_E2E_HOLD_NEW_WINDOW`). ctrl+a ctrl+a
+then reaches the daemon before the client has seen the pane, as on a slow CI
+runner. The control was run on 2026-11-05 on Linux on the branch
+fix/workspace-switch-during-new-pane.
+
+| Bug | Fix removed | How | Tests that fail | Verdict |
+|---|---|---|---|---|
+| A switch after a new-window key went back to the new pane's workspace | the new window's `focusAskedBy` | passed `""` in `handleExecuteCommand`, with the hold kept | `TestScreenPresetLeaderTwiceAndSend` ("screenkeys is on workspace 2, want 1"), 5 of 5 runs | **caught** |
+
+## A failed link names the ssh failure and its fix
+
+`TestHostTestReportsWhatSSHSaid` adds one host for each class of ssh failure:
+an unknown host key, a changed host key, a refused key, a name that does not
+resolve, a refused port and a machine that does not answer. The ssh stand-in
+prints the words OpenSSH 10.6 printed for each class and exits 255.
+`tuios hosts test NAME --json` must name the class in `failure`, say it in
+`reason`, and carry the fix in `fix` and `fix_command`. The plain output must
+print the fix.
+
+Run on 2026-11-05 on Linux. The control is this branch with
+`ClassifySSHFailure` made to return no class. Every case fails, the first with
+`ssh said "No ED25519 host key is known ..." and the report named the failure
+"", want "host_key_new"`, and the reason reads `The host did not answer.` for
+all six. Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestHostTestReportsWhatSSHSaid$' -v .`.
+## TML surfaces over a host link
+
+`TestTMLSurfacesCrossAHostLink` runs a task program in a pane on a second
+daemon, reached over the fake ssh link. The program opens a sidebar as a pane,
+opens a review popup when the person clicks Review, and answers Approve and
+Send back with a patch to the sidebar and a close of the popup. This machine's
+client must draw both surfaces, a click here must reach the far program, and
+the far program's patch must be drawn here. The link then drops twice. A patch
+on the far machine while it is down must be drawn when it is back, and a click
+after that must still reach the far program. A value the person sets while it
+is down, which the far daemon never got, must give way to the far daemon's
+value when it is back.
+
+`TestTMLSurfaceThroughAHostShowsThePlaceholder` now starts the far daemon with
+`TUIOS_TML_LINK_LEGACY=1`, which leaves `tml_link` out of its welcome as an
+older build does. The client must say the far daemon is too old and name
+`tuios hosts sync build`, and q, esc and a click on the window must still reach
+the placeholder program.
+
+Run on 2026-11-05 on Linux. The fixed build passes both, in 11.5 s and 1.3 s.
+
+| Control | Where it fails | Verdict |
+| --- | --- | --- |
+| Main (43b372c23) | `TestTMLSurfacesCrossAHostLink` step 1: "the far program's sidebar is not drawn here" (the placeholder line shows) | **caught** |
+| Main (43b372c23) | `TestTMLSurfaceThroughAHostShowsThePlaceholder`: "the far surface did not say its daemon is too old" | **caught** |
+| `tml-input` back on `capRelay` in the link policy | step 2: "the click on Review never reached the far program" | **caught** |
+| The client sends its TML calls to its own daemon, not through the host | step 2: "the click on Review never reached the far program" | **caught** |
+| No `tmlResync` in `resumeOnHost` | step 6: "after the link came back, the client kept a value the far daemon never got" | **caught** |
+| The welcome sets `TMLLink` whatever `TUIOS_TML_LINK_LEGACY` says | `TestTMLSurfaceThroughAHostShowsThePlaceholder`: "the far surface did not say its daemon is too old" | **caught** |
+
+The far session's panes are made by the far daemon with no client, and this
+client leaves them floating. The test turns tiling on before it clicks: in the
+floating cascade a click on the top TML window did not reach it. That is filed
+on its own.
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^(TestTMLSurfacesCrossAHostLink|TestTMLSurfaceThroughAHostShowsThePlaceholder)$' -v .`.
+## The rail opens a file with the system opener
+
+`TestSidebarFileOpenSystem` puts a recording `xdg-open` first on PATH, with a
+display set, so `o` takes the real default path. A `[[files.open]]` rule names
+a second recording program for `*.PDF`. `TestQuickLookOnAFarFile` uses the same
+stub and presses `o` on a row of a listing on another machine. The controls
+were run on 2026-11-05 on Linux on the branch feat/rail-open-with-system. Each
+control cuts one piece from the branch head.
+
+| Claim | Control | Where it fails | Verdict |
+| --- | --- | --- | --- |
+| `o` runs the action | the `file_open_system` case cut from `handleSidebarFileAction` | `TestSidebarFileOpenSystem`: "o on the rows of the listing started nothing" | **caught** |
+| A rule wins over the system opener | the `rules.OpenArgv` lookup cut from `startFileOpener` | `TestSidebarFileOpenSystem`: paper.pdf went to `xdg-open`, want `rule --page 1 .../paper.pdf` | **caught** |
+| A far row refuses with the reason | the host check in `fileOpenSystemRefusal` made false | `TestQuickLookOnAFarFile`: "o on a far file did not say why it did not open" | **caught** |
+
+## tuios hosts setup sets up a machine both ways
+
+`TestSetUpAMachineBothWays` starts with a daemon here and a far machine with
+no tuios: its own HOME, and a PATH with no tuios on it. One ssh stand-in
+routes both directions. With no terminal and no `--install`, the setup must
+exit 2, name the flag and install nothing. A dry run must print every command
+and write nothing. Then `hosts setup someone@buildbox --name build --install
+copy --both-ways --address someone@laptopbox --yes --json` must report a copy,
+a link up each way and this machine added on buildbox. The daemon here must
+list build up with no restart, and an agent that errors on buildbox must reach
+the Inbox here.
+
+Run on 2026-11-05 on Linux. The fixed build passes in about 1 s.
+
+| Control | Where it fails | Verdict |
+| --- | --- | --- |
+| The shared install path of hostsync is never run for the copy | "the setup failed: exit status 1": the probe after the install finds no tuios | **caught** |
+| The setup writes `[hosts.build]` and does not ask the daemon here to apply it | "the daemon here never reported build up after the setup" | **caught** |
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestSetUpAMachineBothWays$' -v .`.
+## The agents view keeps the list column
+
+`TestCockpitSideTabs` ends with `cockpitListLayouts`. It resizes the
+one-agent view to 160x40 and wants the agent in the list column, beside the
+focus. `\` must fold the list into the strip and open the column again. At
+70x30, with the strip chosen, the list must fill the screen.
+
+Run on 2026-11-05 on Linux on the branch feat/agents-view-list-column.
+
+| Bug | Fix removed | How | Tests that fail | Verdict |
+|---|---|---|---|---|
+| One or two agents fold into the strip on a wide screen | the whole change | the binary built from main | `TestCockpitSideTabs` ("one agent at 160x40 is not in the list column") | **caught** |
+| The strip is the default for two agents or fewer | `view_list` default | `NormalizeAgentsViewList` returns `auto` | `TestCockpitSideTabs` ("one agent at 160x40 is not in the list column") | **caught** |
+| The list key does nothing | the toggle | `CockpitToggleList` returns at once | `TestCockpitSideTabs` ("\ did not fold the list into the strip") | **caught** |
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestCockpitSideTabs$' -v .`.
+
+## A pane's ssh login offers to add the machine
+
+`TestMachineOfferOnSSHLogin` runs a daemon with `[agents] enabled = false`
+and a script named ssh first on PATH. In one pane it runs `ssh -N
+gaurav@tunnelbox`, then an scp stand-in that runs `ssh -t gaurav@scpbox scp -t
+/tmp`, then `ssh gaurav@buildbox`. The first two must bring up no offer in 9
+s. The login must bring up "buildbox is not a machine here. Add it?" once,
+with Add, Not now and Never. A click on Never must take it away and write
+`gaurav@buildbox:22` to `machine_offers_never` in sidebar.json. A new client
+must not offer buildbox, and must offer otherbox when the pane logs in there.
+
+Run on 2026-11-05 on Linux. The fixed build passes in about 60 s.
+
+| Control | Where it fails | Verdict |
+| --- | --- | --- |
+| The `scanSSHOffers` call cut from the poll's look with the agent features off (`sshOfferScan`) | "the login never brought up the offer": the window state never gets the offer | **caught** |
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestMachineOfferOnSSHLogin$' -v .`.
+## A dev build never offers a release
+
+`TestSetUpOffersNoReleaseForADevBuild` builds tuios at a Go pseudo-version,
+`v0.12.2-0.20261105101010-abcdef123456`, and runs `hosts setup --dry-run
+--json`. The install options must hold an available copy and no release: a
+pseudo-version parses as a version with a prerelease, and no release of that
+name exists.
+
+Run on 2026-11-05 on Linux. The control makes `IsRelease` return what
+`release.ParseVersion` says. The test fails with `a pseudo-version build
+offers the release v0.12.2-0.20261105101010-abcdef123456, which does not
+exist`.
+## A workspace switch slides
+
+`TestWorkspaceSwitchSlides` fills workspace 1 with `A` and workspace 2 with
+`B`, and records the host stream. It replays the stream one presented frame at
+a time. At motion full, each switch by alt+N and by `tuios select-workspace`
+must present at least three frames that show both workspaces. The seam must
+move one way: left on the way up and right on the way down. The rail and the
+dock must keep their text. The last frame must be the settled screen, with no
+cell of the old workspace. Keys typed while a mixed frame is on the screen must
+reach the pane on the new workspace and not the old one. A second switch back
+during a slide must turn the seam round with no jump. At motion none, no frame
+may show both workspaces. The settled pane area must be the same at both
+levels.
+
+Run on 2026-11-05 on Linux on the branch feat/workspace-slide.
+
+| Control | Where it fails | Verdict |
+| --- | --- | --- |
+| Main (a3da6ab91) | `full`: "up: only 0 presented frames showed both workspaces; the switch was a cut" | **caught** |
+| The direction flipped in `beginWorkspaceSlide` (`to > from` gives -1) | `full`: "up: frame 1 has the A workspace at column 95, right of the B one at 0" | **caught** |
+
+Frames, the settled screens and PNGs are under `TUIOS_E2E_FRAMES`, in the
+test's folder. Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestWorkspaceSwitchSlides$' -v .`.
+
+## tuios hosts setup asks on a terminal
+
+`TestSetUpAMachineOnATerminal` runs `hosts setup someone@buildbox --name
+build --address someone@laptopbox --as laptop` in a pty, against the same two
+machines.
+First, ctrl+c at the install list must print "Stopped. Nothing was added.",
+write no `[hosts.build]` and install nothing on buildbox. Then the install
+list must take enter (a copy is the first choice), start at boot must take n
+when it is asked, and both ways must take y. The end must be the done summary,
+with the path on buildbox as `~/.local/bin/tuios`, `[hosts.build]` here,
+`[hosts.laptop]` on buildbox, and build up in the daemon here. Frames of the install list, the both-ways question and the
+done summary go under artifactDir.
+
+Run on 2026-11-05 on Linux, on the shared step model (Flow, Prompt and Bridge in `internal/hostsetup`). The fixed build passes in about 5 s.
+
+| Control | Where it fails | Verdict |
+| --- | --- | --- |
+| The drawer finishes a yes or no Prompt with its default as soon as it comes, before any key | "waiting for the next question: child exited (code 1)": no question is shown, and the setup goes on with answers the person never gave | **caught** |
+| A terminal run goes to the flag mode (`setupInteractive` returns false) | "waiting for the install list: child exited (code 2)": the flag mode stops and names `--install` | **caught** |
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestSetUpAMachineOnATerminal$' -v .`.
+
+## A key in the agents view asks before it answers a held approval
+
+`TestInboxRiskyApprovalTakesTwoPresses` holds a risky `rm -rf build/` through
+the real hook. `1` must ask ("Press enter to allow") and send nothing. Then
+`2` and "please also", one key every 400 ms, must answer nothing and leave no
+answer waiting. `1` and enter must allow it.
+
+Run on 2026-11-05 on Linux. The fixed build passes.
+
+| Control | Where it fails | Verdict |
+| --- | --- | --- |
+| origin/main before the change, where a key answers at once | "the key did not ask before it allowed": the first `1` arms the old second press and nothing asks | **caught** |
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestInboxRiskyApprovalTakesTwoPresses$' -v .`.

@@ -32,6 +32,10 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
+	"github.com/Gaurav-Gosain/tuios/internal/hostsetup"
+	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
+
 	"github.com/spf13/cobra"
 	"golang.org/x/crypto/ssh"
 	"golang.org/x/term"
@@ -250,7 +254,7 @@ type pairAddr struct {
 
 func runPair(ctx context.Context, o pairOptions, stdout, stderr io.Writer, stdin io.Reader) error {
 	if o.timeout <= 0 || o.timeout > pairMaxTimeout {
-		return fmt.Errorf("--timeout must be more than 0 and at most %s", pairMaxTimeout)
+		return errfmt.Errorf("--timeout must be more than 0 and at most %s", pairMaxTimeout)
 	}
 	if o.name != "" {
 		if err := pairDeviceNameOK(o.name); err != nil {
@@ -266,7 +270,7 @@ func runPair(ctx context.Context, o pairOptions, stdout, stderr io.Writer, stdin
 	}
 	configPath, err := config.GetConfigPath()
 	if err != nil {
-		return fmt.Errorf("cannot find config.toml, where the policy of the device goes: %w", err)
+		return errfmt.Errorf("cannot find config.toml, where the policy of the device goes: %w", err)
 	}
 	hosts, err := pairHosts(configPath)
 	if err != nil {
@@ -276,7 +280,7 @@ func runPair(ctx context.Context, o pairOptions, stdout, stderr io.Writer, stdin
 	if keysPath == "" {
 		home, err := os.UserHomeDir()
 		if err != nil {
-			return fmt.Errorf("cannot find your home folder: %w. Use --authorized-keys", err)
+			return errfmt.Errorf("cannot find your home folder: %w. Use --authorized-keys", err)
 		}
 		keysPath = filepath.Join(home, ".ssh", "authorized_keys")
 	}
@@ -296,12 +300,12 @@ func runPair(ctx context.Context, o pairOptions, stdout, stderr io.Writer, stdin
 	}
 	me, err := user.Current()
 	if err != nil {
-		return fmt.Errorf("cannot find your user name: %w", err)
+		return errfmt.Errorf("cannot find your user name: %w", err)
 	}
 	machine := o.machine
 	if machine != "" {
 		if err := session.ValidLinkPeerName(machine); err != nil {
-			return fmt.Errorf("--machine: %w", err)
+			return errfmt.Errorf("--machine: %w", err)
 		}
 	} else {
 		machine, _ = os.Hostname()
@@ -329,7 +333,7 @@ func runPair(ctx context.Context, o pairOptions, stdout, stderr io.Writer, stdin
 	}
 	if o.name != "" {
 		if why := pairNameInUse(o.name, hosts, keysPath, ownNames); why != "" {
-			return fmt.Errorf("--name %s: %s. Give the device another name", o.name, why)
+			return errfmt.Errorf("--name %s: %s. Give the device another name", o.name, why)
 		}
 	}
 	peers := pairPeerAddrs(ctx, hosts, tailnet)
@@ -352,13 +356,13 @@ func runPair(ctx context.Context, o pairOptions, stdout, stderr io.Writer, stdin
 	}
 	for _, a := range append(slices.Clone(sshAddrs), o.advertisePair...) {
 		if _, _, err := net.SplitHostPort(a); err != nil || strings.ContainsAny(a, ",&#?/ ") {
-			return fmt.Errorf("%q is not an address. Write HOST:PORT", a)
+			return errfmt.Errorf("%q is not an address. Write HOST:PORT", a)
 		}
 	}
 
 	if listensEverywhere(o.listen) {
 		if !o.listenAll {
-			return fmt.Errorf("--listen %s listens on every interface. Give one address of this machine, or add --listen-all", o.listen)
+			return errfmt.Errorf("--listen %s listens on every interface. Give one address of this machine, or add --listen-all", o.listen)
 		}
 		fmt.Fprintf(stderr, "Warning: the pairing listener listens on every interface of this machine (%s).\n", o.listen)
 	}
@@ -377,7 +381,7 @@ func runPair(ctx context.Context, o pairOptions, stdout, stderr io.Writer, stdin
 
 	tokenBytes := make([]byte, 16)
 	if _, err := rand.Read(tokenBytes); err != nil {
-		return fmt.Errorf("cannot make a pairing token: %w", err)
+		return errfmt.Errorf("cannot make a pairing token: %w", err)
 	}
 	token := base64.RawURLEncoding.EncodeToString(tokenBytes)
 	link := pairURL(machine, me.Username, sshAddrs, pairAddrs, hostKey.fingerprint, token)
@@ -483,7 +487,7 @@ func pairHosts(path string) (map[string]config.HostConfig, error) {
 		return map[string]config.HostConfig{}, nil
 	}
 	if err != nil {
-		return nil, fmt.Errorf("cannot read %s, where the policy of the device goes: %w. Correct the file and run tuios pair again", path, err)
+		return nil, errfmt.Errorf("cannot read %s, where the policy of the device goes: %w. Correct the file and run tuios pair again", path, err)
 	}
 	return hosts, nil
 }
@@ -629,7 +633,7 @@ func pairAllowList(in []string) ([]string, error) {
 			continue
 		}
 		if !slices.Contains(config.LinkCapabilities, c) {
-			return nil, fmt.Errorf("--allow: %q is not a capability. Use %s", c, strings.Join(config.LinkCapabilities, ", "))
+			return nil, errfmt.Errorf("--allow: %q is not a capability. Use %s", c, strings.Join(config.LinkCapabilities, ", "))
 		}
 		if !slices.Contains(out, c) {
 			out = append(out, c)
@@ -655,11 +659,11 @@ func loadPairHostKey(path string) (pairHostKey, error) {
 			if path == "" && errors.Is(err, os.ErrNotExist) {
 				continue
 			}
-			return pairHostKey{}, fmt.Errorf("cannot read the host key: %w", err)
+			return pairHostKey{}, errfmt.Errorf("cannot read the host key: %w", err)
 		}
 		pub, _, _, _, err := ssh.ParseAuthorizedKey(data)
 		if err != nil {
-			return pairHostKey{}, fmt.Errorf("%s is not an ssh public key: %w", p, err)
+			return pairHostKey{}, errfmt.Errorf("%s is not an ssh public key: %w", p, err)
 		}
 		return pairHostKey{
 			line:        strings.TrimSpace(string(ssh.MarshalAuthorizedKey(pub))),
@@ -689,7 +693,7 @@ func pairTuiosPath(given string, stderr io.Writer) (string, error) {
 	if p == "" {
 		exe, err := os.Executable()
 		if err != nil {
-			return "", fmt.Errorf("cannot find the path of tuios: %w. Use --command", err)
+			return "", errfmt.Errorf("cannot find the path of tuios: %w. Use --command", err)
 		}
 		p = exe
 		onPath, err := exec.LookPath("tuios")
@@ -710,11 +714,11 @@ func pairTuiosPath(given string, stderr io.Writer) (string, error) {
 		return "", err
 	}
 	if strings.ContainsAny(p, "\"\\\n\r\t'") {
-		return "", fmt.Errorf("the path %q holds a quote, a backslash or a control character. Use --command with another path", p)
+		return "", errfmt.Errorf("the path %q holds a quote, a backslash or a control character. Use --command with another path", p)
 	}
 	for _, r := range p {
 		if r < 0x20 || r == 0x7f {
-			return "", fmt.Errorf("the path %q holds a control character. Use --command with another path", p)
+			return "", errfmt.Errorf("the path %q holds a control character. Use --command with another path", p)
 		}
 	}
 	plain := true
@@ -776,11 +780,11 @@ func listensEverywhere(listen string) bool {
 func openPairListeners(listen string, listenAll bool, found []pairAddr, discover func() []pairAddr, stderr io.Writer) ([]net.Listener, []string, error) {
 	if listen != "" {
 		if host, _, err := net.SplitHostPort(listen); err == nil && !listenAll && federation.PublicIP(net.ParseIP(host)) {
-			return nil, nil, fmt.Errorf("--listen %s is a public address. Give a private or tailnet address of this machine, or add --listen-all", listen)
+			return nil, nil, errfmt.Errorf("--listen %s is a public address. Give a private or tailnet address of this machine, or add --listen-all", listen)
 		}
 		l, err := net.Listen("tcp", listen)
 		if err != nil {
-			return nil, nil, fmt.Errorf("cannot listen on %s: %w", listen, err)
+			return nil, nil, errfmt.Errorf("cannot listen on %s: %w", listen, err)
 		}
 		host, port, _ := net.SplitHostPort(l.Addr().String())
 		var adv []string
@@ -790,12 +794,12 @@ func openPairListeners(listen string, listenAll bool, found []pairAddr, discover
 		// and a name can resolve to a public address.
 		if !listenAll && federation.PublicIP(ip) {
 			_ = l.Close()
-			return nil, nil, fmt.Errorf("--listen %s is a public address. Give a private or tailnet address of this machine, or add --listen-all", listen)
+			return nil, nil, errfmt.Errorf("--listen %s is a public address. Give a private or tailnet address of this machine, or add --listen-all", listen)
 		}
 		if ip != nil && ip.IsUnspecified() {
 			if !listenAll {
 				_ = l.Close()
-				return nil, nil, fmt.Errorf("--listen %s listens on every interface. Give one address of this machine, or add --listen-all", listen)
+				return nil, nil, errfmt.Errorf("--listen %s listens on every interface. Give one address of this machine, or add --listen-all", listen)
 			}
 			if !listensEverywhere(listen) {
 				fmt.Fprintf(stderr, "Warning: the pairing listener listens on every interface of this machine (%s).\n", listen)
@@ -1171,7 +1175,7 @@ func (s *pairServer) handle(r pairHTTP) (int, pairReply, *pairResult) {
 		return refuse(http.StatusBadRequest, "The request is not a complete HTTP request.")
 	}
 	var req pairRequest
-	if err := json.Unmarshal(r.body, &req); err != nil || req.Device == "" || req.Key == "" || req.MAC == "" {
+	if err := jsonx.Unmarshal(r.body, &req); err != nil || req.Device == "" || req.Key == "" || req.MAC == "" {
 		return refuse(http.StatusBadRequest, "The request must be JSON with device, key and mac.")
 	}
 	want := pairMAC(s.token, pairProtocol+"\n"+req.Device+"\n"+req.Key)
@@ -1257,8 +1261,8 @@ func (s *pairServer) handle(r pairHTTP) (int, pairReply, *pairResult) {
 
 	command := s.tuiosPath + " stdio-proxy --as " + device
 	line := `command="` + command + `",restrict ` + strings.TrimSpace(string(ssh.MarshalAuthorizedKey(pub))) + " tuios-pair:" + device
-	if err := appendAuthorizedKey(s.keysPath, line); err != nil {
-		s.finish(nil, fmt.Errorf("cannot add the key to %s: %w. config.toml has a new [hosts.%s] table. Remove it before you pair this device again", s.keysPath, err, device))
+	if err := hostsetup.AppendAuthorizedKey(s.keysPath, line); err != nil {
+		s.finish(nil, errfmt.Errorf("cannot add the key to %s: %w. config.toml has a new [hosts.%s] table. Remove it before you pair this device again", s.keysPath, err, device))
 		return http.StatusInternalServerError, pairReply{Error: "The computer cannot save the key."}, nil
 	}
 
@@ -1362,19 +1366,19 @@ func (s *pairServer) confirm(device, keyType, fp, check, from string) (bool, str
 func (s *pairServer) writePolicy(device string) (string, error) {
 	note, err := config.AddLinkPolicyInFile(s.config, device, s.allow)
 	if errors.Is(err, config.ErrHostTableExists) {
-		return "", fmt.Errorf("config.toml got a [hosts.%s] table while tuios waited. tuios did not change it and did not add the key. Run tuios pair again with another name", device)
+		return "", errfmt.Errorf("config.toml got a [hosts.%s] table while tuios waited. tuios did not change it and did not add the key. Run tuios pair again with another name", device)
 	}
 	if err != nil {
-		return "", fmt.Errorf("cannot write [hosts.%s] to %s: %w. tuios did not add the key", device, s.config, err)
+		return "", errfmt.Errorf("cannot write [hosts.%s] to %s: %w. tuios did not add the key", device, s.config, err)
 	}
 	printWriteNote(note)
 	hosts, err := config.HostsInFile(s.config)
 	if err != nil {
-		return "", fmt.Errorf("config.toml does not read after tuios wrote [hosts.%s]: %w. tuios did not add the key. Correct the file", device, err)
+		return "", errfmt.Errorf("config.toml does not read after tuios wrote [hosts.%s]: %w. tuios did not add the key. Correct the file", device, err)
 	}
 	got := config.LinkPolicyFor(hosts, device)
 	if got.Source != "hosts."+device || !sameCapabilities(got.Allow, s.allow) {
-		return "", fmt.Errorf("after the write, the policy of %s comes from %s with allow = %s, not from [hosts.%s] with allow = %s. tuios did not add the key", device, got.Source, strings.Join(got.Allow, ", "), device, strings.Join(s.allow, ", "))
+		return "", errfmt.Errorf("after the write, the policy of %s comes from %s with allow = %s, not from [hosts.%s] with allow = %s. tuios did not add the key", device, got.Source, strings.Join(got.Allow, ", "), device, strings.Join(s.allow, ", "))
 	}
 	msg := fmt.Sprintf("config.toml now has [hosts.%s] with allow = %s.", tomlHostKey(device), strings.Join(s.allow, ", "))
 	if slices.Contains(s.allow, config.LinkAllowRespond) {
@@ -1485,10 +1489,10 @@ func checkAuthorizedKeysModes(path string, stderr io.Writer) error {
 		}
 		mode := fi.Mode().Perm()
 		if mode&0o002 != 0 {
-			return fmt.Errorf("anyone can write to %s (mode %04o). sshd does not use keys under it. Run chmod o-w %s", p, mode, p)
+			return errfmt.Errorf("anyone can write to %s (mode %04o). sshd does not use keys under it. Run chmod o-w %s", p, mode, p)
 		}
 		if owner, ok := fileOwner(fi); ok && owner != 0 && int(owner) != uid {
-			return fmt.Errorf("another user owns %s. sshd does not use keys under it. Make it yours or use another --authorized-keys file", p)
+			return errfmt.Errorf("another user owns %s. sshd does not use keys under it. Make it yours or use another --authorized-keys file", p)
 		}
 		if mode&0o020 != 0 {
 			fmt.Fprintf(stderr, "Warning: the group can write to %s (mode %04o). sshd does not use keys under it unless the group holds only you. Run chmod g-w %s\n", p, mode, p)
@@ -1497,32 +1501,10 @@ func checkAuthorizedKeysModes(path string, stderr io.Writer) error {
 	return nil
 }
 
-// appendAuthorizedKey adds one line to the file. It makes the folder (0700)
-// and the file (0600) when they are missing, and leaves the modes of ones
-// that exist alone.
-func appendAuthorizedKey(path, line string) error {
-	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
-		return err
-	}
-	prefix := ""
-	if data, err := os.ReadFile(path); err == nil && len(data) > 0 && data[len(data)-1] != '\n' { //nolint:gosec // the file the person names
-		prefix = "\n"
-	}
-	f, err := os.OpenFile(path, os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0o600) //nolint:gosec // the file the person names
-	if err != nil {
-		return err
-	}
-	if _, err := f.WriteString(prefix + line + "\n"); err != nil {
-		_ = f.Close()
-		return err
-	}
-	return f.Close()
-}
-
 // writePairReply writes the reply and its status line. The connection
 // closes after it.
 func writePairReply(w io.Writer, status int, reply pairReply) {
-	body, _ := json.Marshal(reply)
+	body, _ := jsonx.Marshal(reply)
 	body = append(body, '\n')
 	_, _ = fmt.Fprintf(w, "HTTP/1.1 %d %s\r\nContent-Type: application/json\r\nCache-Control: no-store\r\nContent-Length: %d\r\nConnection: close\r\n\r\n",
 		status, http.StatusText(status), len(body))

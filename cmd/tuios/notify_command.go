@@ -8,6 +8,7 @@ import (
 	"io"
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"github.com/Gaurav-Gosain/tuios/internal/pushnotify"
 	"github.com/spf13/cobra"
 )
@@ -60,7 +61,7 @@ func runNotifyTest(ctx context.Context, w io.Writer, jsonOutput bool) error {
 	}
 	cfg, err := config.LoadUserConfig()
 	if err != nil {
-		return fmt.Errorf("cannot read config.toml: %w", err)
+		return errfmt.Errorf("cannot read config.toml: %w", err)
 	}
 	n := &cfg.Notify
 	providers := pushnotify.Providers(n)

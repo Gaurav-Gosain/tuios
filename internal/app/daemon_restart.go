@@ -4,9 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"cmp"
-	"encoding/json"
 	"errors"
-	"fmt"
 	"image/color"
 	"io"
 	"os/exec"
@@ -16,6 +14,8 @@ import (
 	"time"
 
 	tea "charm.land/bubbletea/v2"
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
+	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 	"github.com/Gaurav-Gosain/tuios/internal/release"
 	"github.com/Gaurav-Gosain/tuios/internal/restartplan"
@@ -236,7 +236,7 @@ func readRestartPlan() (restartReport, error) {
 	out, err := exec.Command(bin, "restart-server", "--dry-run", "--json").Output()
 	line, _, _ := strings.Cut(string(out), "\n")
 	var plan restartReport
-	if jerr := json.Unmarshal([]byte(line), &plan); jerr != nil || plan.Step != restartplan.StepPlan {
+	if jerr := jsonx.Unmarshal([]byte(line), &plan); jerr != nil || plan.Step != restartplan.StepPlan {
 		if err == nil {
 			err = errors.New("its answer could not be read")
 		}
@@ -279,7 +279,7 @@ func runRestartCommand(bin, digest string, gen int, ch chan<- tea.Msg) {
 	sc := bufio.NewScanner(out)
 	for sc.Scan() {
 		var rep restartReport
-		if json.Unmarshal(sc.Bytes(), &rep) == nil {
+		if jsonx.Unmarshal(sc.Bytes(), &rep) == nil {
 			ch <- restartStepMsg{gen: gen, rep: rep}
 		}
 	}
@@ -291,7 +291,7 @@ func runRestartCommand(bin, digest string, gen int, ch chan<- tea.Msg) {
 	}
 	err = cmd.Wait()
 	if err == nil && scanErr != nil {
-		err = fmt.Errorf("read restart-server output: %w", scanErr)
+		err = errfmt.Errorf("read restart-server output: %w", scanErr)
 	}
 	ch <- restartEndMsg{gen: gen, err: err, stderr: stderr.String()}
 }

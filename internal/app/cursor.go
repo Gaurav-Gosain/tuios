@@ -41,6 +41,11 @@ func (m *OS) paneCursor() (cur *tea.Cursor, hidden bool) {
 	if m.ShowScrollbackBrowser || m.review.open || m.hints != nil || m.paneLabels != nil {
 		return nil, false
 	}
+	// While a workspace slides in, its panes are drawn away from where they
+	// are, so the cursor would sit over the wrong cells.
+	if m.wsSlide.running() {
+		return nil, false
+	}
 
 	// An overlay covers the pane, so the pane's cursor has nothing to point at.
 	// The panels that take typing draw their own caret as a character, which is
@@ -70,7 +75,7 @@ func (m *OS) paneCursor() (cur *tea.Cursor, hidden bool) {
 	// A TML window shows its surface, not its PTY: the guest's cursor sits
 	// in a screen nobody sees, so it would point at nothing. A surface's text
 	// field has no caret of its own yet, and takes no typing (queue 0v).
-	if m.DrawsTML(window) {
+	if m.DrawsTML(window) || m.tmlHostTooOld(window) {
 		return nil, false
 	}
 

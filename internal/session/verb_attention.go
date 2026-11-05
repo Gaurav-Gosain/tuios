@@ -3,6 +3,8 @@ package session
 import (
 	"encoding/json"
 	"strings"
+
+	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 )
 
 // The Inbox verbs: list-attention reads the queue, dismiss-attention closes an
@@ -231,7 +233,7 @@ func (d *Daemon) markHumanThreadRead(sess *Session, thread uint64) {
 	if thread == 0 {
 		return
 	}
-	raw, err := json.Marshal(map[string]any{
+	raw, err := jsonx.Marshal(map[string]any{
 		"session": sess.Name(),
 		"to":      AgentInboxHuman,
 		"thread":  thread,

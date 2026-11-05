@@ -72,7 +72,8 @@ func answerPlan(t *testing.T, base string, term *tuitest.Terminal, hook *heldHoo
 	}
 	// The Inbox takes no answer until the item has been shown a moment.
 	time.Sleep(answerSettle)
-	if err := term.SendKeys(key); err != nil {
+	// The key asks, and enter answers.
+	if err := term.SendKeys(key, tuitest.Enter); err != nil {
 		t.Fatalf("answer the plan: %v", err)
 	}
 	select {

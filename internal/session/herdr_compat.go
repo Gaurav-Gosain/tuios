@@ -78,6 +78,7 @@ import (
 
 	"github.com/Gaurav-Gosain/tuios/internal/herdrplugin"
 	"github.com/Gaurav-Gosain/tuios/internal/integration"
+	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 	"github.com/Gaurav-Gosain/tuios/internal/procinfo"
 )
 
@@ -355,12 +356,12 @@ func (d *Daemon) serveHerdr(conn net.Conn) {
 		return
 	}
 	var req herdrRequest
-	if err := json.Unmarshal(line, &req); err != nil {
+	if err := jsonx.Unmarshal(line, &req); err != nil {
 		// herdr answers with the id only when it is a string it can read.
 		var idOnly struct {
 			ID string `json:"id"`
 		}
-		_ = json.Unmarshal(line, &idOnly)
+		_ = jsonx.Unmarshal(line, &idOnly)
 		writeHerdr(conn, idOnly.ID, nil, "invalid_request", "invalid request: "+err.Error())
 		return
 	}
@@ -394,7 +395,7 @@ func herdrRequestID(conn net.Conn) string {
 	var idOnly struct {
 		ID string `json:"id"`
 	}
-	_ = json.Unmarshal(line, &idOnly)
+	_ = jsonx.Unmarshal(line, &idOnly)
 	return idOnly.ID
 }
 
@@ -406,7 +407,7 @@ func writeHerdr(w io.Writer, id string, result any, code, msg string) {
 	} else {
 		out = map[string]any{"id": id, "result": result}
 	}
-	data, err := json.Marshal(out)
+	data, err := jsonx.Marshal(out)
 	if err != nil {
 		return
 	}
@@ -447,7 +448,7 @@ func (d *Daemon) herdrCall(cs *connState, req herdrRequest) (any, string, string
 	}
 	var p herdrParams
 	if len(req.Params) > 0 {
-		if err := json.Unmarshal(req.Params, &p); err != nil {
+		if err := jsonx.Unmarshal(req.Params, &p); err != nil {
 			return nil, "invalid_params", "params: " + err.Error()
 		}
 	}
@@ -528,7 +529,7 @@ func (d *Daemon) herdrCall(cs *connState, req herdrRequest) (any, string, string
 		if harness == "" || p.AgentSessionID == nil || *p.AgentSessionID == "" {
 			return nil, "invalid_params", "a session report needs an agent and an agent_session_id"
 		}
-		raw, _ := json.Marshal(map[string]any{"session": sess, "window": window, "harness": harness, "agent_session_id": *p.AgentSessionID})
+		raw, _ := jsonx.Marshal(map[string]any{"session": sess, "window": window, "harness": harness, "agent_session_id": *p.AgentSessionID})
 		if _, verr := d.verbSetAgentSession(nil, raw); verr != nil {
 			return nil, "report_failed", verr.Message
 		}
@@ -613,7 +614,7 @@ func (d *Daemon) herdrPane(cs *connState, method, paneID string) (window string,
 		if ierr != nil {
 			return "", false, "pane_not_found", "no pane " + echoName(paneID)
 		}
-		raw, _ := json.Marshal(map[string]string{"session": sess.Name(), "window": win.ID})
+		raw, _ := jsonx.Marshal(map[string]string{"session": sess.Name(), "window": win.ID})
 		if _, _, verr := d.admitVerb(cs, herdrReportVerb(method), raw); verr != nil {
 			return "", false, "forbidden", verr.Message
 		}
@@ -820,7 +821,7 @@ func (d *Daemon) herdrMetadata(sessName, window string, p herdrParams) (any, str
 	tokens := map[string]*string{}
 	if len(p.Tokens) > 0 && string(p.Tokens) != "null" {
 		var raw map[string]*string
-		if err := json.Unmarshal(p.Tokens, &raw); err != nil {
+		if err := jsonx.Unmarshal(p.Tokens, &raw); err != nil {
 			return nil, "invalid_params", "tokens: " + err.Error()
 		}
 		for k, v := range raw {
@@ -854,12 +855,12 @@ func (d *Daemon) herdrMetadata(sessName, window string, p herdrParams) (any, str
 	if p.TTLMs < 0 || time.Duration(p.TTLMs)*time.Millisecond > AgentMetaMaxTTL {
 		return nil, "invalid_params", "ttl_ms must be between 1 and 86400000"
 	}
-	rawTokens, _ := json.Marshal(tokens)
+	rawTokens, _ := jsonx.Marshal(tokens)
 	params := map[string]any{"session": sessName, "window": window, "tokens": json.RawMessage(rawTokens), "source": herdrMetaSource(p.Source)}
 	if p.TTLMs > 0 {
 		params["ttl_ms"] = p.TTLMs
 	}
-	raw, _ := json.Marshal(params)
+	raw, _ := jsonx.Marshal(params)
 	if _, verr := d.verbSetAgentMeta(nil, raw); verr != nil {
 		return nil, "report_failed", verr.Message
 	}
@@ -1015,7 +1016,7 @@ func (d *Daemon) herdrSetStateKind(sess, window, harness, state, kind, msg, sid,
 	if ifState != "" {
 		params["if_state"] = ifState
 	}
-	raw, _ := json.Marshal(params)
+	raw, _ := jsonx.Marshal(params)
 	out, verr := d.setAgentState(nil, raw, own)
 	if verr != nil {
 		return "", "report_failed", verr.Message

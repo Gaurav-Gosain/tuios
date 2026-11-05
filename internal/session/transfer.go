@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"github.com/Gaurav-Gosain/tuios/internal/federation"
 )
 
@@ -387,7 +388,7 @@ func (m *transferManager) start(src, dst Endpoint, o transferOptions) (*transfer
 		other := m.jobs[id]
 		if key != "" && other.dst.Host == dst.Host && (busyKey(other.dst.Host, other.dst.Path) == key || busyKey(other.dst.Host, other.getTarget()) == key) && !transferEnded(other.getState()) {
 			m.mu.Unlock()
-			return nil, fmt.Errorf("%w: copy %s writes %s", errTransferBusy, other.id, dst)
+			return nil, errfmt.Errorf("%w: copy %s writes %s", errTransferBusy, other.id, dst)
 		}
 	}
 	m.jobs[j.id] = j

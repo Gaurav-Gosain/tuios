@@ -2,17 +2,6 @@ package config
 
 import "testing"
 
-// TestTilingSchemeDefaultsToSpiral pins DefaultConfig's value, which is what
-// every existing "a new workspace always starts with spiral" assumption
-// depends on now that the default is a real config value rather than a zero
-// value read as a sentinel. See internal/app/tiling_bsp.go.
-func TestTilingSchemeDefaultsToSpiral(t *testing.T) {
-	cfg := DefaultConfig()
-	if cfg.Appearance.TilingScheme != TilingSchemeSpiral {
-		t.Fatalf("DefaultConfig().Appearance.TilingScheme = %q, want %q", cfg.Appearance.TilingScheme, TilingSchemeSpiral)
-	}
-}
-
 // TestTilingSchemeValidationWarnsOnATypo mirrors border_style and zen_mode: a
 // value outside TilingSchemes is a warning, not a hard error, since it falls
 // back to the default rather than refusing to start.

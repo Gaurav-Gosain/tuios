@@ -1,9 +1,9 @@
 package client
 
 import (
-	"encoding/json"
 	"time"
 
+	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 )
 
@@ -28,7 +28,7 @@ func (c *Client) StartTransfer(src, dst Endpoint) (Transfer, error) {
 	var res struct {
 		Transfer Transfer `json:"transfer"`
 	}
-	_ = json.Unmarshal(raw, &res)
+	_ = jsonx.Unmarshal(raw, &res)
 	return res.Transfer, nil
 }
 
@@ -41,7 +41,7 @@ func (c *Client) Transfers() ([]Transfer, error) {
 	var res struct {
 		Transfers []Transfer `json:"transfers"`
 	}
-	err = json.Unmarshal(raw, &res)
+	err = jsonx.Unmarshal(raw, &res)
 	return res.Transfers, err
 }
 

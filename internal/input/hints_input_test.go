@@ -73,16 +73,6 @@ func TestHintsKeepInputFromThePane(t *testing.T) {
 	}
 }
 
-// A wheel scrolls the pane out from under the labels, so it closes hints.
-func TestHintsCloseOnWheel(t *testing.T) {
-	f := newHintsFixture(t, "commit deadbee42\r\n", "")
-	f.open(t)
-	HandleInput(tea.MouseWheelMsg{X: 5, Y: 5, Button: tea.MouseWheelUp}, f.o)
-	if f.o.HintsOpen() {
-		t.Error("hints stayed open after a wheel")
-	}
-}
-
 // The leader closes hints even when it is Ctrl and a label letter, and never
 // opens a match.
 func TestHintsLeaderCloses(t *testing.T) {

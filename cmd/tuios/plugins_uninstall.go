@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"github.com/Gaurav-Gosain/tuios/internal/herdrplugin"
 	"github.com/spf13/cobra"
 )
@@ -128,7 +129,7 @@ func uninstallPlugin(out io.Writer, arg string, yes bool) error {
 	// "" for it.
 	if real != "" {
 		if err := os.RemoveAll(real); err != nil {
-			return fmt.Errorf("tuios could not remove all of %s: %w. Close the programs that use it, then run the command again", folder, err)
+			return errfmt.Errorf("tuios could not remove all of %s: %w. Close the programs that use it, then run the command again", folder, err)
 		}
 		fmt.Fprintf(out, "The folder %s is removed.\n", folder)
 	}
@@ -161,11 +162,11 @@ func installedID(arg string, lock *herdrplugin.Lock, state *herdrplugin.State, e
 	if e := herdrplugin.Find(entries, arg); e != nil {
 		switch e.Origin {
 		case herdrplugin.OriginConfig:
-			return "", fmt.Errorf("tuios did not install the plugin %s. Its folder is in [plugins] dirs in config.toml. Nothing was changed. Run tuios plugins unlink %s", arg, arg)
+			return "", errfmt.Errorf("tuios did not install the plugin %s. Its folder is in [plugins] dirs in config.toml. Nothing was changed. Run tuios plugins unlink %s", arg, arg)
 		case herdrplugin.OriginTuios:
-			return "", fmt.Errorf("tuios did not install the plugin %s. Its folder is in the tuios plugins folder: %s. Nothing was changed. Run tuios plugins disable %s, then remove the folder", arg, filepath.Dir(e.Path), arg)
+			return "", errfmt.Errorf("tuios did not install the plugin %s. Its folder is in the tuios plugins folder: %s. Nothing was changed. Run tuios plugins disable %s, then remove the folder", arg, filepath.Dir(e.Path), arg)
 		case herdrplugin.OriginHerdr, herdrplugin.OriginHerdrManaged:
-			return "", fmt.Errorf("herdr installed the plugin %s, not tuios. Nothing was changed. Remove it with herdr. To stop it in tuios, run tuios plugins disable %s", arg, arg)
+			return "", errfmt.Errorf("herdr installed the plugin %s, not tuios. Nothing was changed. Remove it with herdr. To stop it in tuios, run tuios plugins disable %s", arg, arg)
 		}
 	}
 	// What a killed uninstall left: no lock entry, and a state entry or a
@@ -173,7 +174,7 @@ func installedID(arg string, lock *herdrplugin.Lock, state *herdrplugin.State, e
 	if id, ok := herdrplugin.NormalizeID(arg); ok && id == arg && state.Find(id) != nil {
 		return id, nil
 	}
-	return "", fmt.Errorf("plugins.lock has no plugin with the id or the source %s. Run tuios plugins list to see the ids", arg)
+	return "", errfmt.Errorf("plugins.lock has no plugin with the id or the source %s. Run tuios plugins list to see the ids", arg)
 }
 
 // lockBySource is the lock entry installed from arg, a SOURCE as tuios
@@ -183,6 +184,15 @@ func lockBySource(arg string, lock *herdrplugin.Lock) (*herdrplugin.LockEntry, e
 	src, err := parsePluginSource(arg, installOpts{})
 	if err != nil {
 		return nil, nil
+	}
+	// A release name typed beside a folder of that name also finds the
+	// install of that folder.
+	if src.release != "" {
+		if _, err := os.Stat(arg); err == nil {
+			if abs, err := filepath.Abs(arg); err == nil {
+				src.local = abs
+			}
+		}
 	}
 	want := src.url
 	if src.local != "" {
@@ -207,7 +217,7 @@ func lockBySource(arg string, lock *herdrplugin.Lock) (*herdrplugin.LockEntry, e
 		for i, le := range same {
 			ids[i] = le.ID
 		}
-		return nil, fmt.Errorf("plugins.lock has more than one plugin from %s: %s. Give the plugin id", shownSource(want), strings.Join(ids, ", "))
+		return nil, errfmt.Errorf("plugins.lock has more than one plugin from %s: %s. Give the plugin id", shownSource(want), strings.Join(ids, ", "))
 	}
 	return nil, nil
 }
@@ -230,7 +240,7 @@ func disableForUninstall(out io.Writer, configPath, id string) error {
 		// The daemon does not list it, so it runs nothing of it.
 		running = false
 	case err != nil:
-		return fmt.Errorf("tuios could not disable the plugin %s: %w. Nothing was removed", id, err)
+		return errfmt.Errorf("tuios could not disable the plugin %s: %w. Nothing was removed", id, err)
 	}
 	if !running {
 		if _, err := config.SetPluginEnabledInFile(configPath, id, false); err != nil {
@@ -260,7 +270,7 @@ func disableForUninstall(out io.Writer, configPath, id string) error {
 // folder, so the caller never removes anything outside it.
 func pluginCheckout(dirs herdrplugin.Dirs, id string) (folder, real string, err error) {
 	if n, ok := herdrplugin.NormalizeID(id); !ok || n != id {
-		return "", "", fmt.Errorf("the plugin id %q is not valid", id)
+		return "", "", errfmt.Errorf("the plugin id %q is not valid", id)
 	}
 	folder = dirs.PluginDir(id)
 	info, err := os.Lstat(folder)
@@ -270,7 +280,7 @@ func pluginCheckout(dirs herdrplugin.Dirs, id string) (folder, real string, err 
 	if err != nil {
 		return folder, "", err
 	}
-	refuse := fmt.Errorf("tuios does not remove %s, because it is not a plugin folder in %s. Nothing was changed. Remove it yourself", folder, dirs.ManagedDir())
+	refuse := errfmt.Errorf("tuios does not remove %s, because it is not a plugin folder in %s. Nothing was changed. Remove it yourself", folder, dirs.ManagedDir())
 	if !info.IsDir() {
 		return folder, "", refuse
 	}

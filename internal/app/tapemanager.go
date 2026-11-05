@@ -11,6 +11,7 @@ import (
 	"unicode/utf8"
 
 	"charm.land/lipgloss/v2"
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"github.com/Gaurav-Gosain/tuios/internal/listnav"
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 	"github.com/Gaurav-Gosain/tuios/internal/plural"
@@ -64,12 +65,12 @@ type TapeManagerState struct {
 func GetTapeDirectory() (string, error) {
 	tapeDir, err := xdg.DataFile("tuios/tapes")
 	if err != nil {
-		return "", fmt.Errorf("failed to get tape directory: %w", err)
+		return "", errfmt.Errorf("failed to get tape directory: %w", err)
 	}
 
 	// Create directory if it doesn't exist
 	if err := os.MkdirAll(filepath.Dir(tapeDir), 0750); err != nil {
-		return "", fmt.Errorf("failed to create tape directory: %w", err)
+		return "", errfmt.Errorf("failed to create tape directory: %w", err)
 	}
 
 	// Return the directory path (not the file path)
@@ -85,12 +86,12 @@ func LoadTapeFiles() ([]TapeFile, error) {
 
 	// Ensure directory exists
 	if err := os.MkdirAll(tapeDir, 0750); err != nil {
-		return nil, fmt.Errorf("failed to create tape directory: %w", err)
+		return nil, errfmt.Errorf("failed to create tape directory: %w", err)
 	}
 
 	entries, err := os.ReadDir(tapeDir)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read tape directory: %w", err)
+		return nil, errfmt.Errorf("failed to read tape directory: %w", err)
 	}
 
 	var files []TapeFile
@@ -139,7 +140,7 @@ func SaveTape(name string, content string) (string, error) {
 
 	// Ensure directory exists
 	if err := os.MkdirAll(tapeDir, 0750); err != nil {
-		return "", fmt.Errorf("failed to create tape directory: %w", err)
+		return "", errfmt.Errorf("failed to create tape directory: %w", err)
 	}
 
 	// Clean the name and add extension
@@ -153,7 +154,7 @@ func SaveTape(name string, content string) (string, error) {
 
 	path := filepath.Join(tapeDir, name)
 	if err := os.WriteFile(path, []byte(content), 0600); err != nil {
-		return "", fmt.Errorf("failed to write tape file: %w", err)
+		return "", errfmt.Errorf("failed to write tape file: %w", err)
 	}
 
 	return path, nil

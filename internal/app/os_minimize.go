@@ -1,9 +1,9 @@
 package app
 
 import (
-	"fmt"
 	"time"
 
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 	"github.com/Gaurav-Gosain/tuios/internal/ui"
@@ -712,7 +712,7 @@ func (m *OS) HasMinimizedWindows() bool {
 func (m *OS) ZoomWindowByID(id string, on bool) error {
 	idx := m.windowIndexByID(id)
 	if idx < 0 {
-		return fmt.Errorf("no pane %s to zoom", id)
+		return errfmt.Errorf("no pane %s to zoom", id)
 	}
 	if m.Windows[idx].Workspace != m.CurrentWorkspace {
 		m.SwitchToWorkspace(m.Windows[idx].Workspace)
@@ -737,7 +737,7 @@ func (m *OS) ZoomWindowByID(id string, on bool) error {
 		if on {
 			state = "on"
 		}
-		return fmt.Errorf("the pane could not be zoomed %s", state)
+		return errfmt.Errorf("the pane could not be zoomed %s", state)
 	}
 	return nil
 }

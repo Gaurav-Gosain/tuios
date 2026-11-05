@@ -8,6 +8,8 @@ import (
 	"image/color"
 	"strings"
 
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
+	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 	tint "github.com/lrstanley/bubbletint/v2"
 )
@@ -46,7 +48,7 @@ func (d themeDoc) encode(indent bool) []byte {
 		key   string
 		value []byte
 	}
-	quote := func(v any) []byte { b, _ := json.Marshal(v); return b }
+	quote := func(v any) []byte { b, _ := jsonx.Marshal(v); return b }
 	var fields []field
 	add := func(key string, v any) { fields = append(fields, field{key, quote(v)}) }
 	add("id", d.ID)
@@ -178,7 +180,7 @@ func exportDoc(id string, full bool) (themeDoc, error) {
 	if !custom {
 		t, ok := tint.GetTint(id)
 		if !ok || t == nil {
-			return themeDoc{}, fmt.Errorf("%q is not a theme. Run tuios list-themes for the names", id)
+			return themeDoc{}, errfmt.Errorf("%q is not a theme. Run tuios list-themes for the names", id)
 		}
 		return fullDoc(t, builtinTheme(id, t).chrome), nil
 	}
@@ -263,7 +265,7 @@ func ExportBase16(id string) ([]byte, error) {
 	ReloadCustomThemes()
 	t, ok := tint.GetTint(id)
 	if !ok || t == nil {
-		return nil, fmt.Errorf("%q is not a theme. Run tuios list-themes for the names", id)
+		return nil, errfmt.Errorf("%q is not a theme. Run tuios list-themes for the names", id)
 	}
 	chromeRegistry.RLock()
 	c := chromeRegistry.byID[id]
@@ -305,7 +307,7 @@ func ExportBase16(id string) ([]byte, error) {
 		overlay.MixColors(red, bg, 0.4),
 	}
 	var b strings.Builder
-	name, _ := json.Marshal(t.DisplayName)
+	name, _ := jsonx.Marshal(t.DisplayName)
 	fmt.Fprintf(&b, "system: \"base16\"\nname: %s\nauthor: \"\"\nvariant: %q\npalette:\n", name, variantOf(t.Dark))
 	for i, col := range rows {
 		fmt.Fprintf(&b, "  base%02X: \"%s\"\n", i, ColorToString(col))

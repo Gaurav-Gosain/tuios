@@ -2,7 +2,6 @@ package app
 
 import (
 	"cmp"
-	"encoding/json"
 	"errors"
 	"image/color"
 	"slices"
@@ -15,6 +14,7 @@ import (
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/sortx"
@@ -138,10 +138,10 @@ func (m *OS) ckStageShows(stage string) bool {
 	return m.UserConfig == nil || m.UserConfig.Tasks.Shows(stage)
 }
 
-// buildBoardRows groups the cards by stage. A card shows when its holder is
-// in list, which the selector and the search have narrowed, or with no
-// selector when the search matches its own words.
-func (m *OS) buildBoardRows(list []sidebarAgentEntry) []ckRow {
+// boardStageItems groups the cards by stage, each stage in its order. A card
+// shows when its holder is in list, which the selector and the search have
+// narrowed, or with no selector when the search matches its own words.
+func (m *OS) boardStageItems(list []sidebarAgentEntry) [][]ckRow {
 	ck := &m.Inbox.ck
 	st := &m.Inbox
 	byKey := make(map[string]int, len(list))
@@ -202,15 +202,24 @@ func (m *OS) buildBoardRows(list []sidebarAgentEntry) []ckRow {
 		}
 		return 2
 	}
-	var rows []ckRow
-	ck.tall = 0
-	for g, items := range stages {
-		if len(items) == 0 {
-			continue
-		}
+	for _, items := range stages {
 		sortx.ShortStableFunc(items, func(a, b ckRow) int {
 			return cmp.Or(cmp.Compare(rank(a), rank(b)), cmp.Compare(ck.cards[a.card].StageAt, ck.cards[b.card].StageAt))
 		})
+	}
+	return stages
+}
+
+// buildBoardRows lays the stages out as one list: a head per stage that has a
+// card, then its cards.
+func (m *OS) buildBoardRows(list []sidebarAgentEntry) []ckRow {
+	ck := &m.Inbox.ck
+	var rows []ckRow
+	ck.tall = 0
+	for g, items := range m.boardStageItems(list) {
+		if len(items) == 0 {
+			continue
+		}
 		stage := session.TaskStages[g]
 		if len(rows) > 0 {
 			rows = append(rows, ckRow{kind: ckRowGap, group: g, lines: 1, key: "bg:" + stage})
@@ -247,6 +256,7 @@ func (m *OS) CockpitToggleBoard() {
 	ck := &m.Inbox.ck
 	ck.board = !ck.board
 	ck.scroll, ck.idx, ck.key, ck.akey, ck.follow = 0, 0, "", "", true
+	ck.kb.add, ck.kb.drag = nil, nil
 	m.cockpitTouchRows()
 }
 
@@ -294,7 +304,7 @@ func (m *OS) CockpitTake() tea.Cmd {
 		raw, err := call("claim-task", map[string]any{"session": c.Session, "id": c.ID, "window": win, "human_nonce": nonce}, 5*time.Second)
 		msg := ckTakeMsg{err: err}
 		if err == nil {
-			msg.err = json.Unmarshal(raw, &msg.row)
+			msg.err = jsonx.Unmarshal(raw, &msg.row)
 		}
 		return msg
 	}
@@ -387,7 +397,7 @@ func (m *OS) cockpitCardFetch() tea.Cmd {
 				Prompt  string              `json:"prompt"`
 				History []session.TaskEvent `json:"history"`
 			}
-			msg.err = json.Unmarshal(raw, &res)
+			msg.err = jsonx.Unmarshal(raw, &res)
 			msg.prompt, msg.history = res.Prompt, res.History
 		}
 		return msg
@@ -444,6 +454,13 @@ func (m *OS) cockpitCardGo(r ckRow, c session.TaskRow) tea.Cmd {
 		m.CloseInbox()
 		m.inboxJump(session.AttentionItem{Session: c.Session, Window: c.Holder.Window})
 		return nil
+	case m.kanbanOn():
+		// The columns have no focus area: a free card starts an agent on
+		// it, as n does on the list.
+		if c.Stage == session.TaskStageDone || c.Blocked != nil {
+			return nil
+		}
+		return m.CockpitNewAgentFor(c)
 	}
 	return m.CockpitOpenFocus(true)
 }

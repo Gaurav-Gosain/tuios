@@ -3,13 +3,14 @@ package childproc
 import (
 	"bytes"
 	"context"
-	"fmt"
 	"os"
 	"os/exec"
 	"slices"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 )
 
 // tuios runs git in folders a pane controls, and a repository can name
@@ -167,7 +168,7 @@ func repoOverrides(ctx context.Context, dir string, env []string) ([][2]string, 
 		if msg == "" {
 			msg = err.Error()
 		}
-		return nil, fmt.Errorf("git config: %s", msg)
+		return nil, errfmt.Errorf("git config: %s", msg)
 	}
 	return overridesFrom(stdout.Bytes()), nil
 }

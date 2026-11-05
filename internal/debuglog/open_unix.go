@@ -3,9 +3,10 @@
 package debuglog
 
 import (
-	"fmt"
 	"os"
 	"syscall"
+
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 )
 
 // openPrivate refuses a symlink at path (O_NOFOLLOW) and a file another user
@@ -22,11 +23,11 @@ func openPrivate(path string) (*os.File, error) {
 	}
 	if sys, ok := st.Sys().(*syscall.Stat_t); ok && int(sys.Uid) != os.Getuid() {
 		_ = f.Close()
-		return nil, fmt.Errorf("%s belongs to another user", path)
+		return nil, errfmt.Errorf("%s belongs to another user", path)
 	}
 	if !st.Mode().IsRegular() {
 		_ = f.Close()
-		return nil, fmt.Errorf("%s is not a regular file", path)
+		return nil, errfmt.Errorf("%s is not a regular file", path)
 	}
 	if st.Mode().Perm()&0o077 != 0 {
 		if err := f.Chmod(0o600); err != nil {

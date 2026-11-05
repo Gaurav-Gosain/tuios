@@ -1,11 +1,11 @@
 package app
 
 import (
-	"encoding/json"
 	"slices"
 
 	tea "charm.land/bubbletea/v2"
 
+	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 )
 
@@ -220,7 +220,7 @@ func setWorkspaceOrderCmd(dial agentMailDial, sessionName string, order []int) t
 		var res struct {
 			Renumbered map[string]int `json:"renumbered"`
 		}
-		_ = json.Unmarshal(raw, &res)
+		_ = jsonx.Unmarshal(raw, &res)
 		return WorkspaceRenumberedMsg{Order: order, Legacy: res.Renumbered == nil, Moved: len(res.Renumbered) > 0}
 	}
 }

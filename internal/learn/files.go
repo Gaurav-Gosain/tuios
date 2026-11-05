@@ -8,6 +8,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 	"github.com/Gaurav-Gosain/tuios/internal/review"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/webshell"
@@ -44,7 +45,7 @@ func (m *Model) callVerb(verb string, params map[string]any, timeout time.Durati
 	if err != nil {
 		return nil, err
 	}
-	return json.Marshal(res)
+	return jsonx.Marshal(res)
 }
 
 // notes are the review notes left in the tab, by the session the checkout's

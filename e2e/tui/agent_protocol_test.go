@@ -127,7 +127,8 @@ func TestProtocolPaneTurnAndInboxApproval(t *testing.T) {
 	}
 	saveFrame(t, term, "protocol-pane-approval-held")
 	time.Sleep(answerSettle)
-	if err := term.SendKeys("1"); err != nil {
+	// The key asks, and enter answers.
+	if err := term.SendKeys("1", tuitest.Enter); err != nil {
 		t.Fatalf("answer: %v", err)
 	}
 	waitCapture(t, base, "e2e-agent", "helper", "answered: Allow (from the Inbox", "PERMISSION: allow", "[done] execute: go test ./...")

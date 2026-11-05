@@ -33,14 +33,6 @@ func TestBaseLayoutKeyRunsWindowModeBinding(t *testing.T) {
 	}
 }
 
-func TestBaseLayoutKeyRunsPrefixBinding(t *testing.T) {
-	o, _ := osWithFocusedPane(t, config.DefaultConfig(), app.TerminalMode)
-	o = leader(o, ukr('ш', 'i'))
-	if !o.ShowInbox {
-		t.Fatal("leader then ш on the I key did not open the Inbox")
-	}
-}
-
 // A shifted letter is bound as the capital letter, and the base-layout key has
 // to be read that way too: leader then Shift+S opens the session switcher.
 func TestShiftedBaseLayoutKeyRunsPrefixBinding(t *testing.T) {

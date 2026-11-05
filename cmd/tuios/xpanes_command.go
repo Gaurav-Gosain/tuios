@@ -2,7 +2,6 @@ package main
 
 import (
 	"bufio"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -13,6 +12,8 @@ import (
 	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/app"
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
+	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 	"github.com/Gaurav-Gosain/tuios/internal/layout"
 	"github.com/Gaurav-Gosain/tuios/internal/lazyre"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
@@ -152,7 +153,7 @@ func xpanesItems(args []string, stdin io.Reader) ([]string, error) {
 			}
 		}
 		if err := sc.Err(); err != nil {
-			return nil, fmt.Errorf("could not read the items from stdin: %w", err)
+			return nil, errfmt.Errorf("could not read the items from stdin: %w", err)
 		}
 	}
 	if len(items) == 0 {
@@ -178,7 +179,7 @@ func xpanesLayout(name string) (string, error) {
 	case "ev", layout.ArrangeEvenVertical:
 		return layout.ArrangeEvenVertical, nil
 	}
-	return "", fmt.Errorf("the layout %q is not known. Use tiled, even-horizontal or even-vertical", name)
+	return "", errfmt.Errorf("the layout %q is not known. Use tiled, even-horizontal or even-vertical", name)
 }
 
 // xpanesPane is one pane to open.
@@ -418,7 +419,7 @@ func runXpanes(o xpanesOptions, items []string) error {
 	// the pane's name.
 	panes := xpanesPanes(items, o.perPane, command, o.placeholder, xpanesShell(host, os.Getenv("SHELL")), speedy)
 	if len(panes) > xpanesMaxPanes && !o.force {
-		return fmt.Errorf("this opens %d panes, and the limit is %d. Add --force to open them all", len(panes), xpanesMaxPanes)
+		return errfmt.Errorf("this opens %d panes, and the limit is %d. Add --force to open them all", len(panes), xpanesMaxPanes)
 	}
 
 	t, err := dialSessionTarget(sessionName)
@@ -488,15 +489,15 @@ func runXpanes(o xpanesOptions, items []string) error {
 		raw, err := t.client.Call("new-window", t.params(params))
 		if err != nil {
 			if len(res.Windows) > 0 {
-				err = fmt.Errorf("%w (%d of %d panes are open)", t.explain("new-window", err), len(res.Windows), len(panes))
+				err = errfmt.Errorf("%w (%d of %d panes are open)", t.explain("new-window", err), len(res.Windows), len(panes))
 			}
 			return reportVerbError(err, o.jsonOutput)
 		}
 		var w struct {
 			WindowID string `json:"window_id"`
 		}
-		if err := json.Unmarshal(raw, &w); err != nil || w.WindowID == "" {
-			return fmt.Errorf("the daemon did not return the id of the new window")
+		if err := jsonx.Unmarshal(raw, &w); err != nil || w.WindowID == "" {
+			return errfmt.Errorf("the daemon did not return the id of the new window")
 		}
 		res.Windows = append(res.Windows, w.WindowID)
 	}
@@ -553,8 +554,8 @@ func xpanesWorkspace(t *verbTarget, asked int) (int, string, int, error) {
 		} `json:"workspaces"`
 		CurrentWorkspace int `json:"current_workspace"`
 	}
-	if err := json.Unmarshal(raw, &list); err != nil {
-		return 0, "", 0, fmt.Errorf("could not read the workspaces: %w", err)
+	if err := jsonx.Unmarshal(raw, &list); err != nil {
+		return 0, "", 0, errfmt.Errorf("could not read the workspaces: %w", err)
 	}
 	current := list.CurrentWorkspace
 	name := t.session
@@ -562,7 +563,7 @@ func xpanesWorkspace(t *verbTarget, asked int) (int, string, int, error) {
 		var s struct {
 			Name string `json:"session_name"`
 		}
-		if json.Unmarshal(info, &s) == nil && s.Name != "" {
+		if jsonx.Unmarshal(info, &s) == nil && s.Name != "" {
 			name = s.Name
 		}
 	}
@@ -572,11 +573,11 @@ func xpanesWorkspace(t *verbTarget, asked int) (int, string, int, error) {
 				continue
 			}
 			if w.WindowCount > 0 {
-				return 0, "", 0, fmt.Errorf("workspace %d has %d windows. Use an empty workspace, or leave out --workspace", asked, w.WindowCount)
+				return 0, "", 0, errfmt.Errorf("workspace %d has %d windows. Use an empty workspace, or leave out --workspace", asked, w.WindowCount)
 			}
 			return asked, name, current, nil
 		}
-		return 0, "", 0, fmt.Errorf("workspace %d does not exist. Use a number from 1 to %d", asked, len(list.Workspaces))
+		return 0, "", 0, errfmt.Errorf("workspace %d does not exist. Use a number from 1 to %d", asked, len(list.Workspaces))
 	}
 	for _, w := range list.Workspaces {
 		if w.WindowCount == 0 && !w.Current {
@@ -649,7 +650,7 @@ func xpanesPaneWorkspace(t *verbTarget, paneID string) (int, bool) {
 			Scratch   bool   `json:"scratch"`
 		} `json:"windows"`
 	}
-	if json.Unmarshal(raw, &list) != nil {
+	if jsonx.Unmarshal(raw, &list) != nil {
 		return 0, false
 	}
 	for _, w := range list.Windows {

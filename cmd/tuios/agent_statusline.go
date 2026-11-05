@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"cmp"
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -21,6 +20,7 @@ import (
 
 	"github.com/Gaurav-Gosain/tuios/internal/atomicfile"
 	"github.com/Gaurav-Gosain/tuios/internal/integration"
+	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
@@ -201,7 +201,7 @@ func runAgentStatusLine(o agentStatusLineOptions, harness string, sio agentStatu
 		out = statusLineOutcome{Harness: harness, Error: "gave up after " + timeout.String()}
 	}
 	if o.explain && sio.stderr != nil {
-		line, _ := json.Marshal(out)
+		line, _ := jsonx.Marshal(out)
 		fmt.Fprintln(sio.stderr, string(line))
 	}
 	return <-thenDone
@@ -454,7 +454,7 @@ func readStatusLineStamp(path string) *statusLineStamp {
 		return nil
 	}
 	var st statusLineStamp
-	if json.Unmarshal(data, &st) != nil {
+	if jsonx.Unmarshal(data, &st) != nil {
 		return nil
 	}
 	return &st
@@ -546,7 +546,7 @@ func flushStatusLine(client verbCaller, sessionName, window, dir string, now tim
 
 // saveStatusLineStamp writes a stamp file, 0600, replaced whole.
 func saveStatusLineStamp(path string, st statusLineStamp) {
-	data, err := json.Marshal(st)
+	data, err := jsonx.Marshal(st)
 	if err != nil {
 		return
 	}

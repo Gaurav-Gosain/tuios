@@ -27,7 +27,7 @@ import (
 //	e, x             edit or resolve the note under the cursor
 //	S                send the unsent notes to the pane's agent
 //	s                one column, or the two sides next to each other
-//	h l, left right  scroll the code sideways
+//	h l, left right  scroll the focused panel sideways: the code, or the paths
 //	u                since the base, or the uncommitted changes only
 //	b                change the base
 //	w                the compare view, for a pane in a fan

@@ -7,6 +7,8 @@ import (
 	"os/exec"
 	"strconv"
 	"time"
+
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 )
 
 // run-shell and if-shell.
@@ -107,7 +109,7 @@ func (s *Shim) runShell(name string, args []string) (string, []string, error) {
 	if d, ok := p.Value('d'); ok {
 		secs, err := strconv.ParseFloat(d, 64)
 		if err != nil || secs < 0 {
-			return OutcomeError, nil, fmt.Errorf("invalid delay time: %s", d)
+			return OutcomeError, nil, errfmt.Errorf("invalid delay time: %s", d)
 		}
 		time.Sleep(time.Duration(secs * float64(time.Second)))
 	}
@@ -127,7 +129,7 @@ func (s *Shim) runShell(name string, args []string) (string, []string, error) {
 	c := s.shellCommand(line, cwd)
 	if p.Has('b') {
 		if err := c.Start(); err != nil {
-			return OutcomeError, detail, fmt.Errorf("run-shell: %w", err)
+			return OutcomeError, detail, errfmt.Errorf("run-shell: %w", err)
 		}
 		_ = c.Process.Release()
 		return outcomeFor(detail), detail, nil
@@ -143,7 +145,7 @@ func (s *Shim) runShell(name string, args []string) (string, []string, error) {
 		return OutcomeOK, detail, statusError{code: max(ee.ExitCode(), 1), msg: msg}
 	}
 	if err != nil {
-		return OutcomeError, detail, fmt.Errorf("run-shell: %w", err)
+		return OutcomeError, detail, errfmt.Errorf("run-shell: %w", err)
 	}
 	return outcomeFor(detail), detail, nil
 }

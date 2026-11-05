@@ -907,6 +907,11 @@ func (m *OS) fullscreenFastWindow() (*terminal.Window, bool) {
 	if m.themeFx.running() {
 		return nil, false
 	}
+	// And the workspace slide, which shifts the panes and keeps the old
+	// workspace's cells beside them.
+	if m.wsSlide.running() {
+		return nil, false
+	}
 	// A hover label is a layer the fast path does not compose. The dock's
 	// labels are drawn over a lone fullscreen pane like any other, so while
 	// one is pending or up the compositor draws the frame.
@@ -1180,7 +1185,10 @@ func (m *OS) View() tea.View {
 		m.FlushPendingBSPSync()
 		composeStart := time.Now()
 		content, ok := m.safeComposeFrame()
-		m.chargeRenderCost(time.Since(composeStart))
+		cost := time.Since(composeStart)
+		m.chargeRenderCost(cost)
+		// A client this slow to compose draws a workspace switch as a cut.
+		m.wsSlide.noteFrameCost(cost)
 		if !ok {
 			// The frame could not be drawn and the barrier has armed the crash
 			// overlay. Draw that instead of this frame rather than waiting for

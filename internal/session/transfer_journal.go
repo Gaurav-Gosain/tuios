@@ -1,7 +1,6 @@
 package session
 
 import (
-	"encoding/json"
 	"errors"
 	"io/fs"
 	"os"
@@ -12,6 +11,7 @@ import (
 	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/atomicfile"
+	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 	"github.com/Gaurav-Gosain/tuios/internal/sortx"
 )
 
@@ -138,7 +138,7 @@ func (m *transferManager) save(j *transferJob) {
 		}
 		return
 	}
-	data, err := json.Marshal(rec)
+	data, err := jsonx.Marshal(rec)
 	if err != nil {
 		return
 	}
@@ -279,7 +279,7 @@ func (m *transferManager) load() {
 			continue
 		}
 		var rec transferRecord
-		if err := json.Unmarshal(data, &rec); err != nil || rec.Version != 1 || rec.ID == "" || checkPartID(rec.ID) != nil || rec.ID+".json" != name {
+		if err := jsonx.Unmarshal(data, &rec); err != nil || rec.Version != 1 || rec.ID == "" || checkPartID(rec.ID) != nil || rec.ID+".json" != name {
 			LogError("Transfer journal entry %s could not be read, so it was removed: %v", name, err)
 			_ = os.Remove(path)
 			continue
@@ -401,7 +401,7 @@ func (p *partDirs) readLocked() {
 		return
 	}
 	var saved map[string]int64
-	if json.Unmarshal(data, &saved) == nil {
+	if jsonx.Unmarshal(data, &saved) == nil {
 		for dir, at := range saved {
 			if filepath.IsAbs(dir) {
 				p.dirs[dir] = at
@@ -425,7 +425,7 @@ func (p *partDirs) saveLocked() {
 			delete(p.dirs, a.dir)
 		}
 	}
-	data, err := json.Marshal(p.dirs)
+	data, err := jsonx.Marshal(p.dirs)
 	if err != nil {
 		return
 	}

@@ -15,6 +15,7 @@ import (
 
 	"github.com/Gaurav-Gosain/tuios/internal/atomicfile"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 	"github.com/Gaurav-Gosain/tuios/internal/pushnotify"
 	"github.com/Gaurav-Gosain/tuios/internal/sortx"
 )
@@ -189,7 +190,7 @@ func (w *webPusher) loadLocked() {
 		return
 	}
 	var list []*pushDevice
-	if err := json.Unmarshal(data, &list); err != nil {
+	if err := jsonx.Unmarshal(data, &list); err != nil {
 		// The next register would write over it with only the new phone.
 		// Keep it beside, so the phones in it can be got back by hand.
 		bad := pushDevicesPath() + ".bad"

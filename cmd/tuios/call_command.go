@@ -12,6 +12,8 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
+	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 )
 
@@ -125,19 +127,19 @@ func runCall(out io.Writer, in io.Reader, verb, rawParams string, o callOptions)
 			how = "Use " + use
 		}
 		return callFail(out, o, callExitInput, "invalid_input",
-			fmt.Errorf("%s holds the connection open after its reply, so call cannot send it. %s", verb, how))
+			errfmt.Errorf("%s holds the connection open after its reply, so call cannot send it. %s", verb, how))
 	}
 	var params map[string]any
 	if rawParams == "-" {
 		b, err := io.ReadAll(io.LimitReader(in, 16<<20))
 		if err != nil {
-			return callFail(out, o, callExitInput, "invalid_input", fmt.Errorf("failed to read params from standard input: %w", err))
+			return callFail(out, o, callExitInput, "invalid_input", errfmt.Errorf("failed to read params from standard input: %w", err))
 		}
 		rawParams = string(b)
 	}
 	if strings.TrimSpace(rawParams) != "" {
-		if err := json.Unmarshal([]byte(rawParams), &params); err != nil {
-			return callFail(out, o, callExitInput, "invalid_input", fmt.Errorf("params must be a JSON object: %w", err))
+		if err := jsonx.Unmarshal([]byte(rawParams), &params); err != nil {
+			return callFail(out, o, callExitInput, "invalid_input", errfmt.Errorf("params must be a JSON object: %w", err))
 		}
 	}
 
@@ -194,7 +196,7 @@ func writeCallJSON(out io.Writer, v any, pretty bool) {
 	if pretty {
 		b, _ = json.MarshalIndent(v, "", "  ")
 	} else {
-		b, _ = json.Marshal(v)
+		b, _ = jsonx.Marshal(v)
 	}
 	_, _ = fmt.Fprintln(out, string(b))
 }

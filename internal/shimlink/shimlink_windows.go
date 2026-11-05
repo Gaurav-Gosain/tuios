@@ -3,16 +3,17 @@
 package shimlink
 
 import (
-	"fmt"
 	"os"
 	"path/filepath"
 	"strconv"
+
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 )
 
 // EnsureDir creates a runtime directory.
 func EnsureDir(dir string) error {
 	if err := os.MkdirAll(dir, 0o700); err != nil {
-		return fmt.Errorf("create %s: %w", dir, err)
+		return errfmt.Errorf("create %s: %w", dir, err)
 	}
 	return nil
 }

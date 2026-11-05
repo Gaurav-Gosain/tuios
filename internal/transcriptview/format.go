@@ -1,12 +1,13 @@
 package transcriptview
 
 import (
-	"encoding/json"
 	"hash/fnv"
 	"io"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 )
 
 // Format names. Each is the reader a harness manifest names in its
@@ -266,7 +267,7 @@ type jobj map[string]any
 //go:noinline
 func parseObj(b []byte) (jobj, bool) {
 	var v any
-	if json.Unmarshal(b, &v) != nil {
+	if jsonx.Unmarshal(b, &v) != nil {
 		return nil, false
 	}
 	return asObj(v), true
@@ -346,6 +347,46 @@ func command(a jobj) string {
 	return ""
 }
 
+// commandLine is the command a shell call runs as one line a shell would
+// read: an argv has each word that needs it quoted, so sudo bash -lc 'cd x
+// && ls' keeps its script one word and CommandLabel can find it. Codex's
+// ["bash", "-lc", "script"] is the script, as command gives it.
+//
+//go:noinline
+func commandLine(a jobj) string {
+	for _, k := range []string{"command", "cmd"} {
+		v, ok := a[k].([]any)
+		if !ok {
+			continue
+		}
+		argv := make([]string, 0, len(v))
+		for _, x := range v {
+			if s, ok := x.(string); ok {
+				argv = append(argv, s)
+			}
+		}
+		if len(argv) == 3 && (argv[1] == "-lc" || argv[1] == "-c") || len(argv) == 0 {
+			break
+		}
+		for i, w := range argv {
+			argv[i] = shellQuote(w)
+		}
+		return strings.Join(argv, " ")
+	}
+	return command(a)
+}
+
+// shellQuote is w as one shell word: as it is when it holds nothing a shell
+// reads, else in single quotes.
+func shellQuote(w string) string {
+	if w != "" && strings.IndexFunc(w, func(r rune) bool {
+		return !(r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' || strings.ContainsRune("_@%+=:,./-", r))
+	}) < 0 {
+		return w
+	}
+	return "'" + strings.ReplaceAll(w, "'", `'\''`) + "'"
+}
+
 // fileOf is the file a call acts on.
 //
 //go:noinline
@@ -360,7 +401,7 @@ func targetOf(a jobj) string {
 	if s := fileOf(a); s != "" {
 		return s
 	}
-	if s := command(a); s != "" {
+	if s := commandLine(a); s != "" {
 		return s
 	}
 	return a.str("pattern", "url", "query", "search_term", "skill", "description", "objective", "prompt")

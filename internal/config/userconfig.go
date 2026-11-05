@@ -2,7 +2,6 @@ package config
 
 import (
 	"cmp"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -15,6 +14,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
+	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 	"github.com/Gaurav-Gosain/tuios/internal/sortx"
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
@@ -82,6 +83,10 @@ type UserConfig struct {
 	// review.go.
 	Review ReviewConfig `toml:"review"`
 
+	// Files is the [files] table: the programs the rail's files section opens
+	// a file with. See files_open.go.
+	Files FilesConfig `toml:"files"`
+
 	// YieldedDefaults are the new default bindings left off because the key
 	// was already the user's for another action in the same table. It is
 	// worked out on load and never written. See yieldingDefaults.
@@ -100,6 +105,9 @@ type UserConfig struct {
 	// baseline is this config as TOML when it was parsed, or when it was last
 	// saved. A save writes the difference from it to now and nothing else.
 	baseline []byte
+	// holds are the options set without saving, which every save leaves
+	// alone. See hold.go.
+	holds *optionHolds
 	// Dock is the [dock] table: the bar as ordered lists of named components.
 	// It sits outside the option registry for the same reason [hooks] and
 	// [keybindings] do, being file-plane config rather than a settable option.
@@ -126,6 +134,12 @@ type UserConfig struct {
 	// Plugins is the [plugins] table: the herdr plugins tuios runs. Outside
 	// the option registry for the same reason as [hosts]. See plugins.go.
 	Plugins PluginsConfig `toml:"plugins,omitempty"`
+}
+
+// MachineOfferOn reports whether notifications.machine_offer is on. Absent is
+// on.
+func (n NotificationsConfig) MachineOfferOn() bool {
+	return n.MachineOffer == nil || *n.MachineOffer
 }
 
 // NotificationsConfig holds how long a dock message stays up.
@@ -163,6 +177,11 @@ type NotificationsConfig struct {
 	// LogHidden keeps a message below Level in the log viewer (default
 	// true). Off, it is dropped. Warnings and errors are logged either way.
 	LogHidden *bool `toml:"log_hidden"`
+
+	// MachineOffer shows a message with Add, Not now and Never when a pane
+	// logs in with ssh or mosh to a machine that no [hosts] entry reaches
+	// (default true).
+	MachineOffer *bool `toml:"machine_offer"`
 
 	// Agent is the [notifications.agent] table: what happens when a pane's
 	// agent state changes. See agent_alerts.go.
@@ -324,6 +343,11 @@ type DaemonConfig struct {
 	// panes with the daemon's environment. See
 	// internal/session/display_follow.go.
 	Display string `toml:"display"`
+	// KeepAwake keeps the machine from sleeping: "on" while the daemon runs,
+	// "agents" while an agent pane on this machine works, and "off", the
+	// default, never. The display can still dim and lock. See
+	// internal/session/keep_awake.go.
+	KeepAwake string `toml:"keep_awake"`
 }
 
 // Resume modes. See DaemonConfig.ResumeAgents.
@@ -360,6 +384,27 @@ var DisplayModes = []string{DisplayFollow, DisplayOff}
 func DisplayFollows(value string) bool {
 	v := strings.TrimSpace(value)
 	return v == "" || v == DisplayFollow
+}
+
+// Keep awake modes. See DaemonConfig.KeepAwake.
+const (
+	KeepAwakeOff    = "off"
+	KeepAwakeOn     = "on"
+	KeepAwakeAgents = "agents"
+)
+
+// KeepAwakeModes lists the valid values for daemon.keep_awake.
+var KeepAwakeModes = []string{KeepAwakeOff, KeepAwakeAgents, KeepAwakeOn}
+
+// ResolveKeepAwake is the mode a daemon.keep_awake value means. Empty is the
+// default, off, and so is an unknown value, so a typo never keeps a machine
+// awake.
+func ResolveKeepAwake(value string) string {
+	v := strings.TrimSpace(value)
+	if slices.Contains(KeepAwakeModes, v) {
+		return v
+	}
+	return KeepAwakeOff
 }
 
 // Window size policies. See DaemonConfig.WindowSize.
@@ -1217,6 +1262,7 @@ func DefaultConfig() *UserConfig {
 			ResumeAgents: ResumeAgentsAsk,
 			WindowSize:   WindowSizeLatest,
 			Display:      DisplayFollow,
+			KeepAwake:    KeepAwakeOff,
 		},
 		Startup: StartupConfig{
 			OpenDefaultWindow:   false,
@@ -1240,6 +1286,7 @@ func DefaultConfig() *UserConfig {
 		Panes:        defaultPanesConfig(),
 		PasteBuffers: defaultPasteBuffersConfig(),
 		Review:       defaultReviewConfig(),
+		Agents:       AgentsConfig{ViewList: AgentsViewListColumn},
 		Keybindings: KeybindingsConfig{
 			LeaderKey: "ctrl+b",
 			WindowManagement: map[string][]string{
@@ -1760,6 +1807,15 @@ const (
 	// focused pane.
 	ActionInboxBoard = "inbox_board"
 	ActionInboxTake  = "inbox_take"
+	// ActionInboxStagePrev and ActionInboxStageNext move the card under the
+	// cursor to the stage before or after its own. ActionInboxBoardLayout
+	// switches the board between its columns and the list.
+	ActionInboxStagePrev   = "inbox_stage_prev"
+	ActionInboxStageNext   = "inbox_stage_next"
+	ActionInboxBoardLayout = "inbox_board_layout"
+	// ActionInboxViewList folds the list column into a strip of chips above
+	// the focus, or opens it into the column again ([agents] view_list).
+	ActionInboxViewList = "inbox_view_list"
 	// ActionInboxArtifact opens what the agent under the cursor has shown,
 	// such as a TML form, on its Artifacts tab, and gives it the keys.
 	ActionInboxArtifact   = "inbox_artifact"
@@ -1775,10 +1831,13 @@ const (
 	ActionInboxMark        = "inbox_mark"
 	ActionInboxMarkAll     = "inbox_mark_all"
 	// The focus\'s tabs, every line of every thread card, and the group fold.
-	ActionInboxTabPrev      = "inbox_tab_prev"
-	ActionInboxTabNext      = "inbox_tab_next"
-	ActionInboxExpand       = "inbox_expand"
-	ActionInboxFold         = "inbox_fold"
+	ActionInboxTabPrev = "inbox_tab_prev"
+	ActionInboxTabNext = "inbox_tab_next"
+	ActionInboxExpand  = "inbox_expand"
+	ActionInboxFold    = "inbox_fold"
+	// The thread's previous and next prompt, the marks on its ruler.
+	ActionInboxPromptPrev   = "inbox_prompt_prev"
+	ActionInboxPromptNext   = "inbox_prompt_next"
 	ActionAgentUnread       = "agent_unread"
 	ActionAgentSnooze       = "agent_snooze"
 	ActionAgentReply        = "agent_reply"
@@ -1851,6 +1910,10 @@ func getDefaultInboxKeybinds() map[string][]string {
 		ActionInboxCompare:     {"c"},
 		ActionInboxBoard:       {"b"},
 		ActionInboxTake:        {"t"},
+		ActionInboxStagePrev:   {"H", "shift+left"},
+		ActionInboxStageNext:   {"L", "shift+right"},
+		ActionInboxBoardLayout: {"B"},
+		ActionInboxViewList:    {"\\"},
 		ActionInboxArtifact:    {"o"},
 		ActionInboxDetailDown:  {"J", "ctrl+d"},
 		ActionInboxDetailUp:    {"K", "ctrl+u"},
@@ -1865,6 +1928,9 @@ func getDefaultInboxKeybinds() map[string][]string {
 		ActionInboxTabNext:     {"]"},
 		ActionInboxExpand:      {"e"},
 		ActionInboxFold:        {"F"},
+		// [ and ] step the tabs, so the prompt jumps take the braces.
+		ActionInboxPromptPrev: {"{"},
+		ActionInboxPromptNext: {"}"},
 	}
 }
 
@@ -1992,6 +2058,10 @@ func getDefaultSidebarFilesKeybinds() map[string][]string {
 		// space previews the row, as Finder and yazi do. Free in the rail:
 		// nothing else in the rail's scope takes it.
 		"file_quick_look": {"space"},
+		// o opens the row with a program on the desktop, as yazi and ranger
+		// do. The rail binds o to agents_sort, and this one answers first only
+		// on a file row, where sorting the agents has nothing to do.
+		"file_open_system": {"o"},
 	}
 }
 
@@ -2265,7 +2335,7 @@ func LoadUserConfig() (*UserConfig, error) {
 	cfg, lc, err := loadConfigFile(configPath)
 	if err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
-			return nil, fmt.Errorf("failed to read config file: %w", err)
+			return nil, errfmt.Errorf("failed to read config file: %w", err)
 		}
 		return nil, err
 	}
@@ -2318,7 +2388,7 @@ func ParseUserConfig(data []byte) (*UserConfig, error) {
 func parseUserConfigOnce(data []byte) (*UserConfig, error) {
 	var cfg UserConfig
 	if err := toml.Unmarshal(data, &cfg); err != nil {
-		return nil, fmt.Errorf("failed to parse config file: %w", err)
+		return nil, errfmt.Errorf("failed to parse config file: %w", err)
 	}
 	// go-toml sets a quoted max_fps straight into the string field, past
 	// UnmarshalText, so the spelling is settled here for both forms.
@@ -2444,7 +2514,7 @@ func seedDefaults(data []byte, parsed *UserConfig) ([]byte, bool) {
 func createDefaultConfig() (*UserConfig, error) {
 	configPath, err := xdg.ConfigFile("tuios/config.toml")
 	if err != nil {
-		return nil, fmt.Errorf("failed to get config path: %w", err)
+		return nil, errfmt.Errorf("failed to get config path: %w", err)
 	}
 	first := FirstRunConfig(configPath, "")
 	if err := writeConfigBytes(first, configPath); err != nil {
@@ -3329,7 +3399,7 @@ func (f FPSLimit) MarshalTOML() ([]byte, error) {
 	}
 	// A JSON string is a TOML basic string: the same quotes and escapes, and
 	// encoding/json never writes the one escape TOML lacks (\/).
-	return json.Marshal(string(f))
+	return jsonx.Marshal(string(f))
 }
 
 // IsAuto reports whether the value is "auto", in any case.
@@ -3402,6 +3472,7 @@ func ApplyNotificationConfig(cfg *UserConfig, s *Settings) {
 	if cfg.Notifications.LogHidden != nil {
 		s.NotificationLogHidden = *cfg.Notifications.LogHidden
 	}
+	s.NotificationMachineOffer = cfg.Notifications.MachineOfferOn()
 }
 
 // fillMissingTape fills in any missing tape settings with defaults. An unset or
@@ -3959,6 +4030,9 @@ var yieldingDefaults = map[string]bool{
 	"send_to_workspace_9": true,
 	// c, new with the fan comparison.
 	"inbox_compare": true,
+	// { and }, new with the thread's prompt ruler.
+	"inbox_prompt_prev": true,
+	"inbox_prompt_next": true,
 }
 
 // windowModeTables is every binding the user's config holds in the tables

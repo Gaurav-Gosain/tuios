@@ -3,12 +3,13 @@ package integration
 import (
 	"bytes"
 	"errors"
-	"fmt"
 	"io/fs"
 	"os"
 	"path/filepath"
 	"slices"
 	"strings"
+
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 )
 
 // BackupSuffix is appended to a file's name for the copy kept before tuios
@@ -37,14 +38,14 @@ func resolveWriteTarget(path string) (string, error) {
 		return path, nil
 	}
 	if err != nil {
-		return "", fmt.Errorf("failed to read %s: %w", path, err)
+		return "", errfmt.Errorf("failed to read %s: %w", path, err)
 	}
 	if fi.Mode()&fs.ModeSymlink == 0 {
 		return path, nil
 	}
 	real, err := filepath.EvalSymlinks(path)
 	if err != nil {
-		return "", fmt.Errorf("%s is a symlink tuios cannot follow, so it was left unchanged: %w", path, err)
+		return "", errfmt.Errorf("%s is a symlink tuios cannot follow, so it was left unchanged: %w", path, err)
 	}
 	return real, nil
 }
@@ -87,7 +88,7 @@ func retryChanged(op func() (Result, error)) (Result, error) {
 		}
 	}
 	if err != nil && len(res.Paths) > 0 {
-		err = fmt.Errorf("%w. tuios already changed %s. It did not change %s",
+		err = errfmt.Errorf("%w. tuios already changed %s. It did not change %s",
 			err, strings.Join(res.Paths, ", "), strings.Join(res.notWritten, ", "))
 	}
 	return res, err
@@ -118,13 +119,13 @@ func writeAtomic(path string, have, data []byte) error {
 		return err
 	}
 	if same, err := sameAsRead(target, have); err != nil {
-		return fmt.Errorf("failed to read %s: %w", path, err)
+		return errfmt.Errorf("failed to read %s: %w", path, err)
 	} else if !same {
-		return fmt.Errorf("%s: %w", path, ErrFileChanged)
+		return errfmt.Errorf("%s: %w", path, ErrFileChanged)
 	}
 	dir := filepath.Dir(target)
 	if err := os.MkdirAll(dir, 0o755); err != nil { //nolint:gosec // another tool's config directory, made the way that tool makes it
-		return fmt.Errorf("failed to create %s: %w", dir, err)
+		return errfmt.Errorf("failed to create %s: %w", dir, err)
 	}
 	mode := fs.FileMode(0o644)
 	if old, err := os.ReadFile(target); err == nil {
@@ -134,44 +135,44 @@ func writeAtomic(path string, have, data []byte) error {
 		backup := path + BackupSuffix
 		if _, err := os.Lstat(backup); errors.Is(err, fs.ErrNotExist) {
 			if err := os.WriteFile(backup, old, mode); err != nil {
-				return fmt.Errorf("failed to back up %s: %w", path, err)
+				return errfmt.Errorf("failed to back up %s: %w", path, err)
 			}
 		} else if err != nil {
-			return fmt.Errorf("failed to back up %s: %w", path, err)
+			return errfmt.Errorf("failed to back up %s: %w", path, err)
 		}
 	} else if !errors.Is(err, fs.ErrNotExist) {
-		return fmt.Errorf("failed to read %s: %w", path, err)
+		return errfmt.Errorf("failed to read %s: %w", path, err)
 	}
 	tmp, err := os.CreateTemp(dir, "."+filepath.Base(target)+".tuios-*")
 	if err != nil {
-		return fmt.Errorf("failed to write %s: %w", path, err)
+		return errfmt.Errorf("failed to write %s: %w", path, err)
 	}
 	name := tmp.Name()
 	defer func() { _ = os.Remove(name) }()
 	if _, err := tmp.Write(data); err != nil {
 		_ = tmp.Close()
-		return fmt.Errorf("failed to write %s: %w", path, err)
+		return errfmt.Errorf("failed to write %s: %w", path, err)
 	}
 	if err := tmp.Sync(); err != nil {
 		_ = tmp.Close()
-		return fmt.Errorf("failed to write %s: %w", path, err)
+		return errfmt.Errorf("failed to write %s: %w", path, err)
 	}
 	if err := tmp.Close(); err != nil {
-		return fmt.Errorf("failed to write %s: %w", path, err)
+		return errfmt.Errorf("failed to write %s: %w", path, err)
 	}
 	if err := os.Chmod(name, mode); err != nil {
-		return fmt.Errorf("failed to write %s: %w", path, err)
+		return errfmt.Errorf("failed to write %s: %w", path, err)
 	}
 	if beforeRename != nil {
 		beforeRename(target)
 	}
 	if same, err := sameAsRead(target, have); err != nil {
-		return fmt.Errorf("failed to read %s: %w", path, err)
+		return errfmt.Errorf("failed to read %s: %w", path, err)
 	} else if !same {
-		return fmt.Errorf("%s: %w", path, ErrFileChanged)
+		return errfmt.Errorf("%s: %w", path, ErrFileChanged)
 	}
 	if err := os.Rename(name, target); err != nil {
-		return fmt.Errorf("failed to replace %s: %w", path, err)
+		return errfmt.Errorf("failed to replace %s: %w", path, err)
 	}
 	return nil
 }

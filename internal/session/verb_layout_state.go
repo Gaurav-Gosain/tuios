@@ -8,6 +8,7 @@ import (
 	"slices"
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"github.com/Gaurav-Gosain/tuios/internal/layout"
 )
 
@@ -169,7 +170,7 @@ func (s *Session) ApplyLayoutState(p *LayoutStatePayload) (bool, error) {
 	snap, err := s.mutateStateLocked(func(state *SessionState) error {
 		ws := p.Workspace
 		if ws < 1 || ws > state.workspaceBound() {
-			return fmt.Errorf("workspace %d is out of range", ws)
+			return errfmt.Errorf("workspace %d is out of range", ws)
 		}
 		on := make(map[string]int, len(state.Windows))
 		for i := range state.Windows {
@@ -179,10 +180,10 @@ func (s *Session) ApplyLayoutState(p *LayoutStatePayload) (bool, error) {
 		}
 		for _, r := range p.Windows {
 			if _, ok := on[r.Window]; !ok {
-				return fmt.Errorf("window %s is not on workspace %d", r.Window, ws)
+				return errfmt.Errorf("window %s is not on workspace %d", r.Window, ws)
 			}
 			if r.Width < 1 || r.Height < 1 || r.Width > 10000 || r.Height > 10000 || r.X < -10000 || r.Y < -10000 || r.X > 10000 || r.Y > 10000 {
-				return fmt.Errorf("window %s has no usable rectangle", r.Window)
+				return errfmt.Errorf("window %s has no usable rectangle", r.Window)
 			}
 		}
 		if p.ScrollColumns != nil {
@@ -190,14 +191,14 @@ func (s *Session) ApplyLayoutState(p *LayoutStatePayload) (bool, error) {
 			for _, c := range *p.ScrollColumns {
 				for _, id := range c.Windows {
 					if _, ok := on[id]; !ok || seen[id] {
-						return fmt.Errorf("column window %s is not on workspace %d, or is in two columns", id, ws)
+						return errfmt.Errorf("column window %s is not on workspace %d, or is in two columns", id, ws)
 					}
 					seen[id] = true
 				}
 			}
 		}
 		if _, ok := state.WorkspaceMasterLayout[ws]; !ok && (p.MasterPosition != "" || p.MasterCount != 0) && len(state.WorkspaceMasterLayout) >= maxMasterLayouts {
-			return fmt.Errorf("the session already holds %d master layouts", maxMasterLayouts)
+			return errfmt.Errorf("the session already holds %d master layouts", maxMasterLayouts)
 		}
 		before := *state
 		before.Windows = slices.Clone(state.Windows)

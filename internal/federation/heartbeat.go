@@ -2,10 +2,11 @@ package federation
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"sync"
 	"time"
+
+	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 )
 
 // The link's own heartbeat.
@@ -214,7 +215,7 @@ func (p *pinger) ping(ctx context.Context, m *mux) (bool, *Load, time.Duration) 
 			var shake struct {
 				Load *Load `json:"load"`
 			}
-			if err == nil && json.Unmarshal(raw, &shake) == nil {
+			if err == nil && jsonx.Unmarshal(raw, &shake) == nil {
 				a.load = shake.Load
 			}
 			done <- a

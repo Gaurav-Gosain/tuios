@@ -340,6 +340,28 @@ func TestProgramStatusDrivesTheRailAndInbox(t *testing.T) {
 	if st.State != "none" {
 		t.Errorf("ASSERTION: with no record left the state is %q, want none", st.State)
 	}
+
+	// 9. tuios status with no controlling terminal, as an agent's shell tool
+	// runs it: setsid drops the terminal, and standard input and output are
+	// a file and a pipe. The report reaches the pane through the daemon, and
+	// nothing goes to standard output. The first line proves /dev/tty does
+	// not open there. The pipe ends in a file, so a report written to
+	// standard output never reaches the pane's emulator.
+	sendText(`sh -c 'if setsid -w sh -c ": >/dev/tty" </dev/null 2>/dev/null; then echo TTY""-OPEN; else echo TTY""-NONE; fi; ` +
+		`setsid -w "` + tuiosBin + `" status working --app notty --msg "No tty here" </dev/null 2>notty.err | cat >notty.out; echo NOTTY""-SENT; sleep 8'` + "\n")
+	if text := waitCapture(t, base, session, pane, "NOTTY-SENT"); !strings.Contains(text, "TTY-NONE") {
+		t.Fatalf("setsid did not drop the terminal, so this step proves nothing:\n%s", text)
+	}
+	st = waitPSStateWithin(t, base, session, pane, "the report without a terminal", 5*time.Second, func(s psState) bool { return len(s.Program) == 1 })
+	if st.records() != "-=working" || st.Program[0].App != "notty" || st.Message != "No tty here" || st.Source != "program" {
+		t.Errorf("ASSERTION: the report without a terminal = %+v, want one working record from app notty", st)
+	}
+	if out, err := os.ReadFile(filepath.Join(work, "notty.out")); err != nil || len(out) != 0 {
+		t.Errorf("ASSERTION: standard output got %q (%v), want nothing", out, err)
+	}
+	if errOut, _ := os.ReadFile(filepath.Join(work, "notty.err")); len(errOut) != 0 {
+		t.Errorf("ASSERTION: standard error got %q, want nothing", errOut)
+	}
 	alive(t, term, "after the program status run")
 }
 

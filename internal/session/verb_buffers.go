@@ -5,13 +5,14 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"os"
 	"strconv"
 	"strings"
 	"time"
 	"unicode"
 
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
+	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 	"github.com/Gaurav-Gosain/tuios/internal/pastebuf"
 	"tuios.dev/vt"
 )
@@ -333,7 +334,7 @@ func (d *Daemon) uploadPart(cs *connState, id string, part []byte, last bool, ma
 	u.touched = now
 	if len(u.data)+len(part) > maxBytes {
 		delete(d.uploads, cs)
-		return nil, d.bufferError("set-buffer", fmt.Errorf("%w: more than %d bytes", pastebuf.ErrTooLarge, maxBytes))
+		return nil, d.bufferError("set-buffer", errfmt.Errorf("%w: more than %d bytes", pastebuf.ErrTooLarge, maxBytes))
 	}
 	if total+len(u.data)+len(part) > maxBytes {
 		delete(d.uploads, cs)
@@ -376,7 +377,7 @@ func (b *b64Bytes) UnmarshalJSON(data []byte) error {
 		return nil
 	}
 	var s string
-	if err := json.Unmarshal(data, &s); err != nil {
+	if err := jsonx.Unmarshal(data, &s); err != nil {
 		return err
 	}
 	out, err := base64.StdEncoding.DecodeString(s)
@@ -407,7 +408,7 @@ func (d *Daemon) verbSetBuffer(cs *connState, params json.RawMessage) (any, *ver
 		More    bool     `json:"more"`
 	}
 	if len(params) > 0 {
-		if err := json.Unmarshal(params, &p); errors.Is(err, errNotBase64) {
+		if err := jsonx.Unmarshal(params, &p); errors.Is(err, errNotBase64) {
 			return nil, invalidParam("data_b64", "set-buffer: data_b64 is not base64")
 		} else if err != nil {
 			return nil, decodeParams(params, &p)

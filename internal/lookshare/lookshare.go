@@ -23,6 +23,7 @@ import (
 	"github.com/adrg/xdg"
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"github.com/Gaurav-Gosain/tuios/internal/ghpr"
 )
 
@@ -148,7 +149,7 @@ func ShotPath(now time.Time) (string, error) {
 	}
 	cache, err := os.UserCacheDir()
 	if err != nil {
-		return "", fmt.Errorf("tuios cannot find a folder for the screenshot: %w", err)
+		return "", errfmt.Errorf("tuios cannot find a folder for the screenshot: %w", err)
 	}
 	dir := filepath.Join(cache, "tuios", "share")
 	if err := os.MkdirAll(dir, 0o700); err != nil {

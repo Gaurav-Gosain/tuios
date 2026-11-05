@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/harness"
+	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 )
 
 // Resuming an agent's conversation after the daemon restarts.
@@ -460,7 +461,7 @@ func (d *Daemon) resumeConversation(cs *connState, sess *Session, harnessID, id 
 	if dryRun {
 		return plan, nil
 	}
-	admit, _ := json.Marshal(map[string]any{"session": sess.Name(), "cwd": c.Cwd})
+	admit, _ := jsonx.Marshal(map[string]any{"session": sess.Name(), "cwd": c.Cwd})
 	if _, _, verr := d.admitVerb(cs, "new-window", admit); verr != nil {
 		return plan, verr
 	}

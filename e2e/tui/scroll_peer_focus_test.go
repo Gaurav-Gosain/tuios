@@ -255,3 +255,102 @@ func focusAndName(t *testing.T, base, id, name string) {
 		t.Fatalf("name %s: %v\n%s", name, err, out)
 	}
 }
+
+// rectByID is the placed rectangle of one pane.
+func rectByID(t *testing.T, rects []winRect, id string) winRect {
+	t.Helper()
+	for _, r := range rects {
+		if r.ID == id {
+			return r
+		}
+	}
+	t.Fatalf("no pane %s in %v", id, rects)
+	return winRect{}
+}
+
+// TestScrollingRevealsANewPane is issue 1507: with columns narrower than the
+// screen, a pane opened beside a column that was itself revealed with a peek
+// of its neighbour lands in that peek. It took the focus, but the strip only
+// moved for a column with nothing on screen, so the pane the user had just
+// opened was cut off at the right edge.
+//
+// The same rule left a pane cut off when it was focused by name: the
+// focus-window verb and the navigator. Each route starts from the same strip,
+// with the target pane in the peek at the right edge.
+//
+// NEGATIVE CONTROL: see NEGATIVE_CONTROLS.md, issue 1507.
+func TestScrollingRevealsANewPane(t *testing.T) {
+	base := t.TempDir()
+	writeConfig(t, base, "[startup]\nopen_default_window = true\ntiled = true\nlayout = \"scrolling\"\n\n[appearance]\nscroll_column_width = 50\n")
+	term := startIn(t, base, startOpts{cols: 120, rows: 40, args: []string{"new", "strip"}})
+	waitWindowCount(t, term, 1, "first column")
+	for n := 2; n <= 3; n++ {
+		if out, err := tuiosCLI(t, base, "run-command", "NewWindow"); err != nil {
+			t.Fatalf("NewWindow: %v\n%s", err, out)
+		}
+		waitWindowCount(t, term, n, "another column")
+	}
+	start := stripOrder(waitForSettledGeometry(t, base, 3))
+	for i, id := range start {
+		focusAndName(t, base, id, []string{"ONE", "TWO", "THREE"}[i])
+	}
+
+	// stepToTwo walks one column left onto TWO with the keyboard, which
+	// shows TWO whole with a peek of the next column at the right edge.
+	stepToTwo := func(when string) {
+		t.Helper()
+		if err := term.SendKeys(tuitest.Alt("p")); err != nil {
+			t.Fatalf("step the focus left: %v", err)
+		}
+		waitStripFocus(t, base, start[1], when)
+		if err := term.WaitStable(uiTimeout); err != nil {
+			t.Fatalf("the screen never settled: %v", err)
+		}
+	}
+	// wholeOnScreen fails unless pane id is focused and wholly on screen.
+	wholeOnScreen := func(id string, n int, route string) {
+		t.Helper()
+		waitStripFocus(t, base, id, "after "+route)
+		rects := waitForSettledGeometry(t, base, n)
+		if err := term.WaitStable(uiTimeout); err != nil {
+			t.Fatalf("the screen never settled: %v", err)
+		}
+		if r := rectByID(t, rects, id); r.X < 0 || r.X+r.Width > 120 {
+			t.Errorf("%s: the focused pane is not wholly on screen: %+v\n%s", route, r, term.Snapshot())
+		}
+	}
+
+	// The report: step to the middle column and open a pane with the leader
+	// chord. It goes in the column after TWO, where the peek is.
+	stepToTwo("after stepping to the middle column")
+	railShot(t, term, "before-new-pane")
+	if err := term.SendKeys(tuitest.Ctrl('b'), "c"); err != nil {
+		t.Fatalf("open a pane: %v", err)
+	}
+	waitWindowCount(t, term, 4, "the new pane")
+	added := newPaneIn(t, start, waitForSettledGeometry(t, base, 4))
+	wholeOnScreen(added, 4, "a new pane")
+	railShot(t, term, "after-new-pane")
+	if out, err := tuiosCLI(t, base, "run-command", "RenameWindow", "NEW"); err != nil {
+		t.Fatalf("name the new pane: %v\n%s", err, out)
+	}
+
+	// The focus-window verb, which is what `tuios focus-window` sends.
+	stepToTwo("before focus-window")
+	if out, err := tuiosCLI(t, base, "focus-window", "-s", "strip", added); err != nil {
+		t.Fatalf("focus-window: %v\n%s", err, out)
+	}
+	wholeOnScreen(added, 4, "focus-window")
+
+	// The navigator: search for the pane by name and press Enter.
+	stepToTwo("before the navigator")
+	openNavigator(t, term)
+	sendKeys(t, term, "/")
+	if err := term.SendKeys("NEW"); err != nil {
+		t.Fatalf("type the query: %v", err)
+	}
+	waitText(t, term, "the pane in the navigator", "› NEW")
+	sendKeys(t, term, tuitest.Enter)
+	wholeOnScreen(added, 4, "the navigator")
+	railShot(t, term, "after-navigator")
+}

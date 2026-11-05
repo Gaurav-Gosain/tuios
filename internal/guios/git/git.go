@@ -18,6 +18,8 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 )
 
 // ErrNoGit: git isn't installed, or on macOS only as the stub that asks to
@@ -70,13 +72,13 @@ func runInput(ctx context.Context, dir string, env []string, stdin []byte, args 
 	out, err := cmd.Output()
 	if err != nil {
 		if ctx.Err() != nil {
-			return out, fmt.Errorf("git %s: %w", args[0], ctx.Err())
+			return out, errfmt.Errorf("git %s: %w", args[0], ctx.Err())
 		}
 		msg := strings.TrimSpace(stderr.String())
 		if i := strings.IndexByte(msg, '\n'); i >= 0 {
 			msg = msg[:i]
 		}
-		return out, fmt.Errorf("git %s: %w: %s", args[0], err, msg)
+		return out, errfmt.Errorf("git %s: %w: %s", args[0], err, msg)
 	}
 	return out, nil
 }

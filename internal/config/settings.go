@@ -58,6 +58,10 @@ type Settings struct {
 	// NotificationLogHidden is notifications.log_hidden: whether an info or
 	// success message below NotificationLevel still goes to the log viewer.
 	NotificationLogHidden bool
+	// NotificationMachineOffer is notifications.machine_offer: whether a
+	// pane's ssh login to a machine with no [hosts] entry brings up the
+	// offer to add it.
+	NotificationMachineOffer bool
 
 	// NormalFPS is the normal refresh rate during regular operation.
 	// Set via appearance.max_fps config (default 60, up to MaxFPSCap).
@@ -977,6 +981,7 @@ func DefaultSettings() Settings {
 		NotificationStyle:           NotificationStyleFull,
 		NotificationLevel:           NotificationLevelInfo,
 		NotificationLogHidden:       true,
+		NotificationMachineOffer:    true,
 		NormalFPS:                   DefaultFPS,
 		UseASCIIOnly:                false,
 		Motion:                      MotionFull,

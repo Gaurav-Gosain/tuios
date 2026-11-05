@@ -1,4 +1,4 @@
-package main
+package hostsync
 
 import (
 	"bytes"
@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/childproc"
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"github.com/Gaurav-Gosain/tuios/internal/release"
 )
 
@@ -26,33 +27,38 @@ import (
 // syncBuildTimeout bounds one cross-compile.
 const syncBuildTimeout = 10 * time.Minute
 
-func newSyncBinary(data []byte, ver string) *syncBinary {
+// networkTimeout bounds one release lookup or download. It is the bound of
+// tuios update (networkTimeout in cmd/tuios/update.go).
+const networkTimeout = 3 * time.Minute
+
+// NewBinary is data as a Binary that reports the version ver.
+func NewBinary(data []byte, ver string) *Binary {
 	sum := sha256.Sum256(data)
-	return &syncBinary{data: data, sha: hex.EncodeToString(sum[:]), version: ver}
+	return &Binary{Data: data, SHA: hex.EncodeToString(sum[:]), Version: ver}
 }
 
-// loadBinary reads a --binary file and the platform it is for.
-func (s *syncSource) loadBinary(p string) error {
-	s.kind = sourceBinary
+// LoadBinary reads a --binary file and the platform it is for.
+func (s *Source) LoadBinary(p string) error {
+	s.Kind = KindBinary
 	abs, err := filepath.Abs(p)
 	if err != nil {
 		return err
 	}
-	s.binPath = abs
+	s.BinPath = abs
 	data, err := os.ReadFile(abs)
 	if err != nil {
 		return err
 	}
-	goos, goarch, err := binaryPlatform(data)
+	goos, goarch, err := BinaryPlatform(data)
 	if err != nil {
-		return fmt.Errorf("%s: %w", p, err)
+		return errfmt.Errorf("%s: %w", p, err)
 	}
 	// The module path is in every Go binary built from the tuios main
 	// package, stripped or not.
 	if !bytes.Contains(data, []byte("github.com/"+release.Repo+"/cmd/tuios")) {
-		return fmt.Errorf("%s is not a tuios binary", p)
+		return errfmt.Errorf("%s is not a tuios binary", p)
 	}
-	s.platform = goos + "/" + goarch
+	s.Platform = goos + "/" + goarch
 	// The version is read by running it, which only works for this
 	// machine's own system.
 	if goos == runtime.GOOS && goarch == runtime.GOARCH {
@@ -60,22 +66,22 @@ func (s *syncSource) loadBinary(p string) error {
 		defer cancel()
 		out, err := exec.CommandContext(ctx, abs, "--version").Output()
 		if err != nil {
-			return fmt.Errorf("%s did not run: %w", p, err)
+			return errfmt.Errorf("%s did not run: %w", p, err)
 		}
 		line, _, _ := strings.Cut(string(out), "\n")
-		s.version, _ = parseVersionLine(line)
+		s.Version, _ = ParseVersionLine(line)
 	}
-	s.built[s.platform] = newSyncBinary(data, s.version)
+	s.built[s.Platform] = NewBinary(data, s.Version)
 	return nil
 }
 
-// initDev reads the version a build of the checkout in dir reports:
+// InitDev reads the version a build of the checkout in dir reports:
 // dev+COMMIT, and for a tree with changes dev+COMMIT-dirty.HASH, where HASH
 // is of the changes. Two different sets of changes give two versions, so a
 // host with the last build is not taken to be up to date.
-func (s *syncSource) initDev(dir string) error {
-	s.kind = sourceDev
-	s.srcDir = dir
+func (s *Source) InitDev(dir string) error {
+	s.Kind = KindDev
+	s.SrcDir = dir
 	git := func(args ...string) (string, error) {
 		cmd := childproc.Git(context.Background(), dir, args...)
 		out, err := cmd.Output()
@@ -83,17 +89,17 @@ func (s *syncSource) initDev(dir string) error {
 	}
 	rev, err := git("rev-parse", "HEAD")
 	if err != nil {
-		return fmt.Errorf("could not read the commit of %s: %w", dir, err)
+		return errfmt.Errorf("could not read the commit of %s: %w", dir, err)
 	}
 	rev = strings.TrimSpace(rev)
 	s.commit = rev
-	s.version = "dev+" + rev[:min(12, len(rev))]
+	s.Version = "dev+" + rev[:min(12, len(rev))]
 	if when, err := git("log", "-1", "--format=%cI"); err == nil {
 		s.date = strings.TrimSpace(when)
 	}
 	status, err := git("status", "--porcelain")
 	if err != nil {
-		return fmt.Errorf("could not read the state of %s: %w", dir, err)
+		return errfmt.Errorf("could not read the state of %s: %w", dir, err)
 	}
 	if strings.TrimSpace(status) == "" {
 		return nil
@@ -101,7 +107,7 @@ func (s *syncSource) initDev(dir string) error {
 	h := sha256.New()
 	diff, err := git("diff", "HEAD", "--binary")
 	if err != nil {
-		return fmt.Errorf("could not read the changes in %s: %w", dir, err)
+		return errfmt.Errorf("could not read the changes in %s: %w", dir, err)
 	}
 	_, _ = io.WriteString(h, diff)
 	untracked, _ := git("ls-files", "--others", "--exclude-standard", "-z")
@@ -116,58 +122,58 @@ func (s *syncSource) initDev(dir string) error {
 		}
 	}
 	s.commit += "-dirty"
-	s.version += "-dirty." + hex.EncodeToString(h.Sum(nil))[:8]
+	s.Version += "-dirty." + hex.EncodeToString(h.Sum(nil))[:8]
 	return nil
 }
 
-// buildDev cross-compiles the checkout for one platform with the release
+// BuildDev cross-compiles the checkout for one platform with the release
 // flags.
-func (s *syncSource) buildDev(platform string) (*syncBinary, error) {
+func (s *Source) BuildDev(platform string) (*Binary, error) {
 	goos, goarch, _ := strings.Cut(platform, "/")
 	out := filepath.Join(s.tmpDir, "tuios-"+goos+"-"+goarch)
-	fmt.Fprintf(s.errOut, "Building tuios %s for %s...\n", s.version, platform)
-	ldflags := "-s -w -X main.version=" + s.version + " -X main.commit=" + s.commit + " -X main.builtBy=hosts-sync"
+	fmt.Fprintf(s.errOut, "Building tuios %s for %s...\n", s.Version, platform)
+	ldflags := "-s -w -X main.version=" + s.Version + " -X main.commit=" + s.commit + " -X main.builtBy=hosts-sync"
 	if s.date != "" {
 		ldflags += " -X main.date=" + s.date
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), syncBuildTimeout)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, "go", "build", "-trimpath", "-ldflags", ldflags, "-o", out, "./cmd/tuios")
-	cmd.Dir = s.srcDir
+	cmd.Dir = s.SrcDir
 	cmd.Env = append(os.Environ(), "CGO_ENABLED=0", "GOOS="+goos, "GOARCH="+goarch)
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
 	if err := cmd.Run(); err != nil {
-		return nil, fmt.Errorf("the build for %s failed: %v: %s", platform, err, lastLine(stderr.String()))
+		return nil, errfmt.Errorf("the build for %s failed: %v: %s", platform, err, LastLine(stderr.String()))
 	}
 	data, err := os.ReadFile(out)
 	if err != nil {
 		return nil, err
 	}
-	return newSyncBinary(data, s.version), nil
+	return NewBinary(data, s.Version), nil
 }
 
-// lookupRelease reads the release of this version and its checksums.
-func (s *syncSource) lookupRelease() error {
+// LookupRelease reads the release of this version and its checksums.
+func (s *Source) LookupRelease() error {
 	if s.rel != nil {
 		return nil
 	}
-	tag := "v" + strings.TrimPrefix(s.version, "v")
+	tag := "v" + strings.TrimPrefix(s.Version, "v")
 	ctx, cancel := context.WithTimeout(context.Background(), networkTimeout)
 	defer cancel()
 	gh := release.NewGitHub()
 	rel, err := gh.Tag(ctx, tag)
 	if err != nil {
 		if errors.Is(err, release.ErrNoRelease) {
-			return &diagnosticError{
+			return &Problem{
 				What:  fmt.Sprintf("GitHub has no release %s.", tag),
 				Cause: "sync installs the release that matches this build.",
 				Fix:   "run the command in a tuios checkout with --dev, or pass --binary PATH",
 			}
 		}
-		return explainLookupError(err, false)
+		return s.Releases.ExplainLookupError(err)
 	}
-	sums, err := fetchChecksums(ctx, gh, rel)
+	sums, err := s.Releases.FetchChecksums(ctx, gh, rel)
 	if err != nil {
 		return err
 	}
@@ -175,39 +181,39 @@ func (s *syncSource) lookupRelease() error {
 	return nil
 }
 
-// fetchRelease downloads and checks the archive for one platform.
-func (s *syncSource) fetchRelease(platform string) (*syncBinary, error) {
+// FetchRelease downloads and checks the archive for one platform.
+func (s *Source) FetchRelease(platform string) (*Binary, error) {
 	goos, goarch, _ := strings.Cut(platform, "/")
 	name, err := release.AssetName("tuios", s.rel.Tag, goos, goarch)
 	if err != nil {
-		return nil, fmt.Errorf("no release archive fits %s: %w", platform, err)
+		return nil, errfmt.Errorf("no release archive fits %s: %w", platform, err)
 	}
 	asset, ok := s.rel.AssetNamed(name)
 	if !ok {
-		return nil, fmt.Errorf("%s publishes no %s", s.rel.Tag, name)
+		return nil, errfmt.Errorf("%s publishes no %s", s.rel.Tag, name)
 	}
 	fmt.Fprintf(s.errOut, "Downloading %s...\n", name)
 	ctx, cancel := context.WithTimeout(context.Background(), networkTimeout)
 	defer cancel()
-	archive, err := readAsset(ctx, release.NewGitHub(), asset)
+	archive, err := s.Releases.ReadAsset(ctx, release.NewGitHub(), asset)
 	if err != nil {
 		return nil, err
 	}
 	if err := s.sums.Verify(name, archive); err != nil {
-		return nil, explainChecksumError(err, *s.rel)
+		return nil, s.Releases.ExplainChecksumError(err, *s.rel)
 	}
 	data, err := release.BinaryFromArchive(bytes.NewReader(archive), "tuios")
 	if err != nil {
-		return nil, fmt.Errorf("%s did not hold tuios: %w", name, err)
+		return nil, errfmt.Errorf("%s did not hold tuios: %w", name, err)
 	}
-	return newSyncBinary(data, s.version), nil
+	return NewBinary(data, s.Version), nil
 }
 
-// binaryPlatform reads the system and architecture an executable is for from
+// BinaryPlatform reads the system and architecture an executable is for from
 // its header. It knows the ELF and Mach-O builds that sync can install, and
 // is kept to a few header fields: debug/elf and debug/macho would add their
 // whole parsers to the binary for two numbers.
-func binaryPlatform(data []byte) (goos, goarch string, err error) {
+func BinaryPlatform(data []byte) (goos, goarch string, err error) {
 	switch {
 	case len(data) >= 20 && bytes.HasPrefix(data, []byte("\x7fELF")):
 		if data[5] != 1 {

@@ -26,6 +26,7 @@ import (
 	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/atomicfile"
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"github.com/adrg/xdg"
 	"github.com/pelletier/go-toml/v2"
 )
@@ -144,7 +145,7 @@ const trustFileBaseName = "tape-trust.toml"
 func Load() (*Store, error) {
 	path, err := DefaultPath()
 	if err != nil {
-		return nil, fmt.Errorf("resolving tape trust store path: %w", err)
+		return nil, errfmt.Errorf("resolving tape trust store path: %w", err)
 	}
 	return LoadFromPath(path)
 }
@@ -165,7 +166,7 @@ func LoadFromPath(path string) (*Store, error) {
 	}
 
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
-		return s, fmt.Errorf("creating tape trust store directory: %w", err)
+		return s, errfmt.Errorf("creating tape trust store directory: %w", err)
 	}
 
 	info, err := os.Stat(path)
@@ -178,7 +179,7 @@ func LoadFromPath(path string) (*Store, error) {
 		return s, nil
 	}
 	if err != nil {
-		return s, fmt.Errorf("stat tape trust store: %w", err)
+		return s, errfmt.Errorf("stat tape trust store: %w", err)
 	}
 
 	if !ownedByCurrentUser(info) || isGroupOrWorldAccessible(info) {
@@ -196,7 +197,7 @@ func LoadFromPath(path string) (*Store, error) {
 	// regular file: a FIFO or a device would block the read or never end it.
 	f, err := openNoBlock(path)
 	if err != nil {
-		return s, fmt.Errorf("reading tape trust store: %w", err)
+		return s, errfmt.Errorf("reading tape trust store: %w", err)
 	}
 	defer func() { _ = f.Close() }()
 	if fi, err := f.Stat(); err != nil || !fi.Mode().IsRegular() {
@@ -205,7 +206,7 @@ func LoadFromPath(path string) (*Store, error) {
 	}
 	data, err := io.ReadAll(f)
 	if err != nil {
-		return s, fmt.Errorf("reading tape trust store: %w", err)
+		return s, errfmt.Errorf("reading tape trust store: %w", err)
 	}
 
 	var file trustFile
@@ -249,7 +250,7 @@ func (s *Store) Check(tapePath string) (Result, error) {
 			Status: StatusIneligible,
 			Path:   tapePath,
 			Reason: "cannot resolve path",
-		}, fmt.Errorf("resolving tape path: %w", err)
+		}, errfmt.Errorf("resolving tape path: %w", err)
 	}
 	if abs, aerr := filepath.Abs(real); aerr == nil {
 		real = abs
@@ -273,7 +274,7 @@ func (s *Store) Check(tapePath string) (Result, error) {
 			Status: StatusIneligible,
 			Path:   real,
 			Reason: "cannot open file",
-		}, fmt.Errorf("opening tape: %w", err)
+		}, errfmt.Errorf("opening tape: %w", err)
 	}
 	defer func() { _ = f.Close() }()
 
@@ -283,7 +284,7 @@ func (s *Store) Check(tapePath string) (Result, error) {
 			Status: StatusIneligible,
 			Path:   real,
 			Reason: "cannot stat file",
-		}, fmt.Errorf("stat tape: %w", err)
+		}, errfmt.Errorf("stat tape: %w", err)
 	}
 
 	if reason, ok := hygieneReason(info); !ok {
@@ -298,7 +299,7 @@ func (s *Store) Check(tapePath string) (Result, error) {
 			Status: StatusIneligible,
 			Path:   real,
 			Reason: "cannot read file",
-		}, fmt.Errorf("reading tape: %w", err)
+		}, errfmt.Errorf("reading tape: %w", err)
 	}
 	if int64(len(content)) > MaxTapeSize {
 		return Result{
@@ -332,7 +333,7 @@ func (s *Store) Check(tapePath string) (Result, error) {
 // no "trust without seeing it" path.
 func (s *Store) Trust(path, hash string) error {
 	if path == "" || hash == "" {
-		return fmt.Errorf("trust requires a path and a hash")
+		return errfmt.Errorf("trust requires a path and a hash")
 	}
 	s.mu.Lock()
 	s.trusted[path] = trustEntry{Path: path, SHA256: hash, TrustedAt: time.Now().UTC()}
@@ -345,7 +346,7 @@ func (s *Store) Trust(path, hash string) error {
 // Deny records "never for this path", clearing any trust entry, then persists.
 func (s *Store) Deny(path string) error {
 	if path == "" {
-		return fmt.Errorf("deny requires a path")
+		return errfmt.Errorf("deny requires a path")
 	}
 	s.mu.Lock()
 	s.denied[path] = denyEntry{Path: path, DeniedAt: time.Now().UTC()}
@@ -400,11 +401,11 @@ func (s *Store) saveLocked() error {
 
 	data, err := toml.Marshal(file)
 	if err != nil {
-		return fmt.Errorf("encoding tape trust store: %w", err)
+		return errfmt.Errorf("encoding tape trust store: %w", err)
 	}
 
 	if err := atomicfile.WritePrivate(s.path, data, false); err != nil {
-		return fmt.Errorf("writing tape trust store: %w", err)
+		return errfmt.Errorf("writing tape trust store: %w", err)
 	}
 	return nil
 }

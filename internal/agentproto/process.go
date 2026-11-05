@@ -2,7 +2,6 @@ package agentproto
 
 import (
 	"errors"
-	"fmt"
 	"io"
 	"os"
 	"os/exec"
@@ -11,6 +10,7 @@ import (
 	"sync"
 
 	"github.com/Gaurav-Gosain/tuios/internal/childproc"
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 )
 
 // Protocols the package speaks, by the name start-agent --protocol takes.
@@ -27,7 +27,7 @@ func CheckProtocol(protocol string) error {
 	if slices.Contains(Protocols, protocol) {
 		return nil
 	}
-	return fmt.Errorf("unknown protocol %q: use %s", protocol, strings.Join(Protocols, " or "))
+	return errfmt.Errorf("unknown protocol %q: use %s", protocol, strings.Join(Protocols, " or "))
 }
 
 // NewAgent makes the client for protocol over an agent whose stdout is r and

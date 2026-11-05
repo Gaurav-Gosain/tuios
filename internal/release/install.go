@@ -2,10 +2,11 @@ package release
 
 import (
 	"errors"
-	"fmt"
 	"os"
 	"path/filepath"
 	"runtime"
+
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 )
 
 // Replacing a binary that is running.
@@ -40,31 +41,31 @@ func Stage(target string, data []byte, mode os.FileMode) (*Staged, error) {
 	dir := filepath.Dir(target)
 	f, err := os.CreateTemp(dir, "."+filepath.Base(target)+".update-*")
 	if err != nil {
-		return nil, fmt.Errorf("failed to write next to %s: %w", target, err)
+		return nil, errfmt.Errorf("failed to write next to %s: %w", target, err)
 	}
 	name := f.Name()
 	cleanup := func() { _ = f.Close(); _ = os.Remove(name) }
 
 	if _, err := f.Write(data); err != nil {
 		cleanup()
-		return nil, fmt.Errorf("failed to write %s: %w", name, err)
+		return nil, errfmt.Errorf("failed to write %s: %w", name, err)
 	}
 	// Flushed before the rename, so a machine that loses power between the two
 	// is left with either the old binary or a complete new one, never a
 	// truncated file under the real name.
 	if err := f.Sync(); err != nil {
 		cleanup()
-		return nil, fmt.Errorf("failed to flush %s: %w", name, err)
+		return nil, errfmt.Errorf("failed to flush %s: %w", name, err)
 	}
 	if err := f.Close(); err != nil {
 		_ = os.Remove(name)
-		return nil, fmt.Errorf("failed to close %s: %w", name, err)
+		return nil, errfmt.Errorf("failed to close %s: %w", name, err)
 	}
 	// CreateTemp makes the file 0600. The mode is set explicitly rather than
 	// left to it, or the replacement would be a binary only its owner can run.
 	if err := os.Chmod(name, mode); err != nil {
 		_ = os.Remove(name)
-		return nil, fmt.Errorf("failed to set the mode on %s: %w", name, err)
+		return nil, errfmt.Errorf("failed to set the mode on %s: %w", name, err)
 	}
 	return &Staged{Target: target, temp: name}, nil
 }
@@ -77,7 +78,7 @@ func (s *Staged) Commit() error {
 	if err := os.Rename(s.temp, s.Target); err != nil {
 		_ = os.Remove(s.temp)
 		s.temp = ""
-		return fmt.Errorf("failed to move the new binary onto %s: %w", s.Target, err)
+		return errfmt.Errorf("failed to move the new binary onto %s: %w", s.Target, err)
 	}
 	s.temp = ""
 	return nil

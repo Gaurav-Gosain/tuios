@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 	"github.com/Gaurav-Gosain/tuios/internal/linediff"
 )
 
@@ -59,14 +60,14 @@ func (c *ccContent) UnmarshalJSON(b []byte) error {
 		return nil
 	case b[0] == '"':
 		var s string
-		if err := json.Unmarshal(b, &s); err != nil {
+		if err := jsonx.Unmarshal(b, &s); err != nil {
 			return err
 		}
 		*c = ccContent{{Type: "text", Text: s}}
 		return nil
 	}
 	var blocks []ccBlock
-	err := json.Unmarshal(b, &blocks)
+	err := jsonx.Unmarshal(b, &blocks)
 	*c = blocks
 	return err
 }
@@ -82,7 +83,7 @@ func (c *ccResultContent) UnmarshalJSON(b []byte) error {
 		return nil
 	case b[0] == '"':
 		var s string
-		err := json.Unmarshal(b, &s)
+		err := jsonx.Unmarshal(b, &s)
 		*c = ccResultContent(s)
 		return err
 	case b[0] != '[':
@@ -92,7 +93,7 @@ func (c *ccResultContent) UnmarshalJSON(b []byte) error {
 		Type string `json:"type"`
 		Text string `json:"text"`
 	}
-	_ = json.Unmarshal(b, &parts)
+	_ = jsonx.Unmarshal(b, &parts)
 	var sb strings.Builder
 	for _, p := range parts {
 		if sb.Len() > 0 {
@@ -131,7 +132,7 @@ func (t *ccToolUseResult) UnmarshalJSON(b []byte) error {
 	}
 	type plain ccToolUseResult
 	var p plain
-	_ = json.Unmarshal(b, &p)
+	_ = jsonx.Unmarshal(b, &p)
 	*t = ccToolUseResult(p)
 	return nil
 }
@@ -166,7 +167,7 @@ type ccInput struct {
 func toolInput(raw json.RawMessage) ccInput {
 	var in ccInput
 	if len(raw) > 0 && raw[0] == '{' {
-		_ = json.Unmarshal(raw, &in)
+		_ = jsonx.Unmarshal(raw, &in)
 	}
 	return in
 }
@@ -174,7 +175,7 @@ func toolInput(raw json.RawMessage) ccInput {
 // unmarshalRecord decodes a line. A field of an unexpected type leaves that
 // field empty rather than dropping the record.
 func unmarshalRecord(line []byte, rec *ccRecord) error {
-	err := json.Unmarshal(line, rec)
+	err := jsonx.Unmarshal(line, rec)
 	if _, ok := errors.AsType[*json.UnmarshalTypeError](err); ok {
 		return nil
 	}

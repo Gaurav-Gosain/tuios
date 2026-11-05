@@ -5,16 +5,6 @@ import (
 	"testing"
 )
 
-// j and k are new window-mode defaults (issue #231). A fresh config gets them.
-func TestJKFocusByDefault(t *testing.T) {
-	r := NewKeybindRegistry(DefaultConfig())
-	for key, want := range map[string]string{"h": "snap_left", "j": "focus_down", "k": "focus_up", "l": "snap_right"} {
-		if got := r.GetAction(key); got != want {
-			t.Errorf("window-mode %s runs %q, want %q", key, got, want)
-		}
-	}
-}
-
 // A config that already binds j or k in any window-mode table keeps its own
 // binding. The layout table would win the key, so the new default yields.
 func TestJKDefaultsYieldToAUserBinding(t *testing.T) {

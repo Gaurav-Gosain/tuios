@@ -2,10 +2,11 @@ package session
 
 import (
 	"errors"
-	"fmt"
 	"maps"
 	"strconv"
 	"strings"
+
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 )
 
 // The BSP tree as an op.
@@ -83,7 +84,7 @@ func (s *Session) ApplyLayoutTree(p *LayoutTreePayload) (bool, error) {
 		// Counted with the change it makes. See notePushLocked.
 		s.notePushLocked(p.PushOrigin, p.PushSeq)
 		if p.Workspace < 0 || (p.Workspace > state.workspaceBound() && !IsScratchWorkspace(p.Workspace)) {
-			return fmt.Errorf("workspace %d is out of range", p.Workspace)
+			return errfmt.Errorf("workspace %d is out of range", p.Workspace)
 		}
 		if p.BaseVersion != 0 && s.peerTreeChangedLocked(p.PushOrigin, p.Workspace, p.BaseVersion, state.Version) {
 			return errLayoutTreeStale
@@ -448,7 +449,7 @@ func (d *Daemon) handleLayoutTree(cs *connState, msg *Message) error {
 	}
 	var p LayoutTreePayload
 	if err := msg.ParsePayload(&p); err != nil {
-		return fmt.Errorf("invalid layout tree payload: %w", err)
+		return errfmt.Errorf("invalid layout tree payload: %w", err)
 	}
 	d.notePushOrigin(cs, session, p.PushOrigin)
 	nodes := 0

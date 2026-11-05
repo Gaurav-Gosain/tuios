@@ -5,10 +5,11 @@ package remote
 
 import (
 	"errors"
-	"fmt"
 	"net"
 	"net/url"
 	"strings"
+
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 )
 
 // DefaultPort is the port kerod's tailnet listener takes when it names
@@ -36,7 +37,7 @@ func ParseAddr(s string) (Addr, error) {
 		return Addr{}, errors.New("no address")
 	}
 	if strings.ContainsFunc(s, func(r rune) bool { return r <= ' ' || r == 0x7f }) {
-		return Addr{}, fmt.Errorf("%q: an address has no spaces", s)
+		return Addr{}, errfmt.Errorf("%q: an address has no spaces", s)
 	}
 	raw := s
 	if !strings.Contains(s, "://") {
@@ -44,52 +45,52 @@ func ParseAddr(s string) (Addr, error) {
 	}
 	u, err := url.Parse(s)
 	if err != nil {
-		return Addr{}, fmt.Errorf("%q is not an address: %v", raw, err)
+		return Addr{}, errfmt.Errorf("%q is not an address: %v", raw, err)
 	}
 	a := Addr{Scheme: strings.ToLower(u.Scheme), Host: u.Hostname(), Port: u.Port()}
 	if u.User != nil {
 		a.User = u.User.Username()
 		if _, has := u.User.Password(); has {
-			return Addr{}, fmt.Errorf("%q: Kero takes no password in an address", raw)
+			return Addr{}, errfmt.Errorf("%q: Kero takes no password in an address", raw)
 		}
 	}
 	a.Kero = u.Query().Get("kero")
 	switch a.Scheme {
 	case "ssh":
 		if a.Host == "" {
-			return Addr{}, fmt.Errorf("%q names no host", raw)
+			return Addr{}, errfmt.Errorf("%q names no host", raw)
 		}
 	case "wsl":
 		a.Port, a.User = "", ""
 	case "http", "https":
 		if a.Host == "" {
-			return Addr{}, fmt.Errorf("%q names no host", raw)
+			return Addr{}, errfmt.Errorf("%q names no host", raw)
 		}
 		if a.Kero != "" {
-			return Addr{}, fmt.Errorf("%q: kero= is for ssh:// and wsl:// addresses", raw)
+			return Addr{}, errfmt.Errorf("%q: kero= is for ssh:// and wsl:// addresses", raw)
 		}
 	default:
-		return Addr{}, fmt.Errorf("%q: Kero reaches hosts over ssh://, wsl://, http:// or https://", raw)
+		return Addr{}, errfmt.Errorf("%q: Kero reaches hosts over ssh://, wsl://, http:// or https://", raw)
 	}
 	if u.Path != "" && u.Path != "/" {
-		return Addr{}, fmt.Errorf("%q: an address has no path", raw)
+		return Addr{}, errfmt.Errorf("%q: an address has no path", raw)
 	}
 	// Names of hosts and users as DNS and accounts have them, which no
 	// shell, and no ssh_config's %h or %r in a ProxyCommand, reads as
 	// anything else; nothing ssh(1) would take for one of its options.
 	if a.Host != "" && net.ParseIP(a.Host) == nil && !plainName(a.Host, "._-") || strings.HasPrefix(a.Host, "-") {
-		return Addr{}, fmt.Errorf("%q: a host is a name of letters, digits, dots and dashes, or an IP address", raw)
+		return Addr{}, errfmt.Errorf("%q: a host is a name of letters, digits, dots and dashes, or an IP address", raw)
 	}
 	if a.User != "" && (!plainName(a.User, "._+-") || strings.HasPrefix(a.User, "-")) {
-		return Addr{}, fmt.Errorf("%q: a user is a name of letters, digits, dots and dashes", raw)
+		return Addr{}, errfmt.Errorf("%q: a user is a name of letters, digits, dots and dashes", raw)
 	}
 	if a.Kero != "" && !absPath(a.Kero) {
-		return Addr{}, fmt.Errorf("%q: kero= is an absolute path of letters, digits, dots, dashes and slashes, as /opt/kero/kero or C:/kero/kero.exe", raw)
+		return Addr{}, errfmt.Errorf("%q: kero= is an absolute path of letters, digits, dots, dashes and slashes, as /opt/kero/kero or C:/kero/kero.exe", raw)
 	}
 	if a.Port != "" {
 		for _, r := range a.Port {
 			if r < '0' || r > '9' {
-				return Addr{}, fmt.Errorf("%q: bad port", raw)
+				return Addr{}, errfmt.Errorf("%q: bad port", raw)
 			}
 		}
 	}

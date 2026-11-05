@@ -13,6 +13,11 @@
 // unanswered, as a program does when the press was on nothing it drags.
 // DNDPEER_OFFER=text makes a source offer text/plain alone, two lines of
 // text sent ahead, and no files.
+// DNDPEER_URILIST=LIST makes a source send LIST ahead as its text/uri-list,
+// as written, with | between lines, in place of the URIs of FILE...: a
+// program that writes its list by hand can leave a raw space in a line.
+// FILE may be empty then: LIST replaces the encoded list for the text/uri-list
+// sent ahead only, and text/plain still names FILE....
 //
 // Both read a message as yazi reads it: a move, a drop or a gesture without
 // x and y (and a move or drop without o), and an event without the key its
@@ -135,6 +140,9 @@ func main() {
 			names = append(names, filepath.Base(abs))
 		}
 		uriList = strings.Join(uris, "\r\n")
+		if list := os.Getenv("DNDPEER_URILIST"); list != "" {
+			uriList = strings.ReplaceAll(list, "|", "\r\n")
+		}
 		plain = strings.Join(names, " ")
 		if textOnly {
 			plain = "line one\nline two"

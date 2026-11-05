@@ -4,12 +4,16 @@ import (
 	"bufio"
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net"
 	"os"
 	"path/filepath"
 	"sync"
 	"time"
+
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
+	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 )
 
 // VerbClient is a minimal client for the line-delimited JSON verb protocol. It
@@ -38,7 +42,22 @@ type VerbClient struct {
 
 // ErrVerbClientBroken is wrapped by every call on a connection an earlier
 // call left out of step. Dial again.
-var ErrVerbClientBroken = fmt.Errorf("the verb connection is out of step after an earlier failed call; dial again")
+var ErrVerbClientBroken = errfmt.Errorf("the verb connection is out of step after an earlier failed call; dial again")
+
+// verbNotSentError is a call this client did not write whole: the connection
+// was broken before it, or the write failed. Its text is the cause's.
+type verbNotSentError struct{ err error }
+
+func (e *verbNotSentError) Error() string { return e.err.Error() }
+func (e *verbNotSentError) Unwrap() error { return e.err }
+
+// VerbNotSent reports whether a call failed before its request reached the
+// daemon, so the daemon did not run it. Such a call may go again on a new
+// connection. A call that failed later may have run.
+func VerbNotSent(err error) bool {
+	_, ok := errors.AsType[*verbNotSentError](err)
+	return ok
+}
 
 // VerbCallError is returned by VerbClient.Call when the daemon answers with an
 // error envelope. It exposes the stable string code and the structured hint
@@ -82,7 +101,7 @@ func DialVerbClient() (*VerbClient, error) {
 func DialVerbClientAs(clientVersion string) (*VerbClient, error) {
 	socketPath, err := GetSocketPath()
 	if err != nil {
-		return nil, fmt.Errorf("failed to get socket path: %w", err)
+		return nil, errfmt.Errorf("failed to get socket path: %w", err)
 	}
 	return DialVerbClientAt(socketPath, clientVersion)
 }
@@ -92,7 +111,7 @@ func DialVerbClientAs(clientVersion string) (*VerbClient, error) {
 func DialVerbClientAt(socketPath, clientVersion string) (*VerbClient, error) {
 	conn, err := net.DialTimeout("unix", socketPath, 5*time.Second)
 	if err != nil {
-		return nil, fmt.Errorf("failed to connect to daemon: %w", err)
+		return nil, errfmt.Errorf("failed to connect to daemon: %w", err)
 	}
 	c := &VerbClient{conn: conn, r: bufio.NewReader(conn)}
 
@@ -129,7 +148,7 @@ func (c *VerbClient) presentPaneToken(kernelPlaces bool, getenv func(string) str
 	// call there with --server must not fail for it.
 	if id, tok := getenv("TUIOS_PLUGIN_ID"), getenv("TUIOS_PLUGIN_TOKEN"); (id != "" || tok != "") && sameSocket(getenv("TUIOS_SOCKET"), socketPath) {
 		if _, err := c.Call("pane-grants", map[string]any{"plugin_id": id, "plugin_token": tok}); err != nil {
-			return fmt.Errorf("this process belongs to plugin %s, and the daemon did not take its token: %w", id, err)
+			return errfmt.Errorf("this process belongs to plugin %s, and the daemon did not take its token: %w", id, err)
 		}
 	}
 	if kernelPlaces {
@@ -159,11 +178,11 @@ func sameSocket(a, b string) bool {
 func DialVerbClientThroughHost(host, clientVersion string) (*VerbClient, HostConnectionInfo, error) {
 	socketPath, err := GetSocketPath()
 	if err != nil {
-		return nil, HostConnectionInfo{}, fmt.Errorf("failed to get socket path: %w", err)
+		return nil, HostConnectionInfo{}, errfmt.Errorf("failed to get socket path: %w", err)
 	}
 	conn, err := net.DialTimeout("unix", socketPath, 5*time.Second)
 	if err != nil {
-		return nil, HostConnectionInfo{}, fmt.Errorf("failed to connect to daemon: %w", err)
+		return nil, HostConnectionInfo{}, errfmt.Errorf("failed to connect to daemon: %w", err)
 	}
 	c := &VerbClient{conn: conn, r: bufio.NewReader(conn)}
 
@@ -175,7 +194,7 @@ func DialVerbClientThroughHost(host, clientVersion string) (*VerbClient, HostCon
 	hs, err := c.handshake(clientVersion)
 	if err != nil {
 		_ = c.Close()
-		return nil, info, fmt.Errorf("tuios on %s did not accept this client: %w", host, err)
+		return nil, info, errfmt.Errorf("tuios on %s did not accept this client: %w", host, err)
 	}
 	c.daemon = hs
 	c.host = host
@@ -247,7 +266,7 @@ func (c *VerbClient) CallWithTimeout(verb string, params any, timeout time.Durat
 	c.callMu.Lock()
 	defer c.callMu.Unlock()
 	if c.broken != nil {
-		return nil, fmt.Errorf("%w (%v)", ErrVerbClientBroken, c.broken)
+		return nil, &verbNotSentError{errfmt.Errorf("%w (%v)", ErrVerbClientBroken, c.broken)}
 	}
 
 	c.nextID++
@@ -255,9 +274,9 @@ func (c *VerbClient) CallWithTimeout(verb string, params any, timeout time.Durat
 
 	var rawParams json.RawMessage
 	if params != nil {
-		p, err := json.Marshal(params)
+		p, err := jsonx.Marshal(params)
 		if err != nil {
-			return nil, fmt.Errorf("failed to encode params: %w", err)
+			return nil, errfmt.Errorf("failed to encode params: %w", err)
 		}
 		rawParams = p
 	}
@@ -267,36 +286,36 @@ func (c *VerbClient) CallWithTimeout(verb string, params any, timeout time.Durat
 		Verb:   verb,
 		Params: rawParams,
 	}
-	line, err := json.Marshal(req)
+	line, err := jsonx.Marshal(req)
 	if err != nil {
-		return nil, fmt.Errorf("failed to encode request: %w", err)
+		return nil, errfmt.Errorf("failed to encode request: %w", err)
 	}
 	line = append(line, '\n')
 
 	_ = c.conn.SetWriteDeadline(time.Now().Add(10 * time.Second))
 	if _, err := c.conn.Write(line); err != nil {
 		c.broken = err
-		return nil, fmt.Errorf("failed to send request: %w", err)
+		return nil, &verbNotSentError{errfmt.Errorf("failed to send request: %w", err)}
 	}
 
 	_ = c.conn.SetReadDeadline(time.Now().Add(timeout))
 	respLine, err := c.r.ReadBytes('\n')
 	if err != nil {
 		c.broken = err
-		return nil, fmt.Errorf("failed to read response: %w", err)
+		return nil, errfmt.Errorf("failed to read response: %w", err)
 	}
 
 	var resp verbResponse
-	if err := json.Unmarshal(respLine, &resp); err != nil {
+	if err := jsonx.Unmarshal(respLine, &resp); err != nil {
 		c.broken = err
-		return nil, fmt.Errorf("failed to decode response: %w", err)
+		return nil, errfmt.Errorf("failed to decode response: %w", err)
 	}
 	// A reply that names another request is one an earlier call gave up
 	// on. Taking it would hand this caller an answer to a different
 	// question.
 	if len(resp.ID) > 0 && string(bytes.TrimSpace(resp.ID)) != fmt.Sprintf("%d", id) {
-		c.broken = fmt.Errorf("reply %s to request %d", resp.ID, id)
-		return nil, fmt.Errorf("%w (%v)", ErrVerbClientBroken, c.broken)
+		c.broken = errfmt.Errorf("reply %s to request %d", resp.ID, id)
+		return nil, errfmt.Errorf("%w (%v)", ErrVerbClientBroken, c.broken)
 	}
 	if resp.Error != nil {
 		return nil, &VerbCallError{
@@ -306,9 +325,9 @@ func (c *VerbClient) CallWithTimeout(verb string, params any, timeout time.Durat
 		}
 	}
 
-	rawResult, err := json.Marshal(resp.Result)
+	rawResult, err := jsonx.Marshal(resp.Result)
 	if err != nil {
-		return nil, fmt.Errorf("failed to re-encode result: %w", err)
+		return nil, errfmt.Errorf("failed to re-encode result: %w", err)
 	}
 	return rawResult, nil
 }

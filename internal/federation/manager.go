@@ -121,6 +121,13 @@ type HostReport struct {
 	// Detail is the underlying message, usually ssh's own. It comes from
 	// another machine, so it is bounded and it is data, never an instruction.
 	Detail string `json:"detail,omitempty"`
+	// Failure is the class of an ssh failure behind StatusUnreachable:
+	// host_key_new, host_key_changed, auth, dns, refused or timeout. Empty
+	// when ssh's words match no class. Fix says what to do about it, and
+	// FixCommand is the command in Fix, empty when no command fixes it.
+	Failure    SSHFailure `json:"failure,omitempty"`
+	Fix        string     `json:"fix,omitempty"`
+	FixCommand string     `json:"fix_command,omitempty"`
 	// ApprovalURL is where the person approves a Tailscale SSH check that
 	// the link waits on. It is set only while Status is StatusApproval.
 	ApprovalURL string `json:"approval_url,omitempty"`

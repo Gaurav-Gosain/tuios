@@ -5,6 +5,8 @@ import (
 	"encoding/gob"
 	"hash/fnv"
 	"time"
+
+	"github.com/Gaurav-Gosain/tuios/internal/harness"
 )
 
 // The session listing push.
@@ -90,7 +92,7 @@ func (d *Daemon) listingNotifier() {
 				continue
 			}
 			buf.Reset()
-			if err := gob.NewEncoder(&buf).Encode(d.listSessions()); err != nil {
+			if err := gob.NewEncoder(&buf).Encode(listingForPush(d.listSessions())); err != nil {
 				continue
 			}
 			h := fnv.New64a()
@@ -101,6 +103,24 @@ func (d *Daemon) listingNotifier() {
 			}
 		}
 	}
+}
+
+// listingForPush is the listing as the notifier compares it: each pane's title
+// without its state marks. An agent's spinner changes its title several times
+// a second, and the rail and the Inbox label a row by railWindowLabel, which
+// trims the marks, so a new frame changes nothing they draw. With the frame in
+// the hash, each look found a new listing: a running agent sent every client a
+// push every listingPushGap, and each push made the client ask for the listing
+// and run its full scans. A listing a client asks for still carries the title
+// as it is. sessions is a fresh listing, and is changed in place.
+func listingForPush(sessions []SessionInfo) []SessionInfo {
+	for i := range sessions {
+		for j := range sessions[i].Windows {
+			w := &sessions[i].Windows[j]
+			w.Title = harness.TrimTitleMarks(w.Title)
+		}
+	}
+	return sessions
 }
 
 // listingReader reports whether cs reads MsgSessionsChanged. A client that

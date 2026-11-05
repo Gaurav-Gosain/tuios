@@ -270,7 +270,21 @@ func (m *OS) composeLayersIn(canvas *frameCanvas, layers []*lipgloss.Layer, pane
 	// The Compositor's root: an empty layer at the origin that never draws
 	// but does sort.
 	ordered = append(ordered, composedLayer{bounds: image.Rect(0, 0, 0, 1)})
+	now := time.Now()
 	view := m.sessionView
+	// A workspace slide draws the panes through the same shift and clip a
+	// view of a larger session does, and the old workspace's kept cells in
+	// the part of the pane area the new one has not reached yet. See
+	// workspace_slide.go.
+	slide, sliding := m.slideAt(now)
+	if sliding {
+		if !view.on {
+			view = sessionView{on: true, clip: slide.area}
+		}
+		view.dx += slide.newShift
+		view.clip = view.clip.Intersect(slide.newClip)
+	}
+	slideDrawn := !sliding
 	for i, l := range layers {
 		if l == nil {
 			continue
@@ -305,7 +319,6 @@ func (m *OS) composeLayersIn(canvas *frameCanvas, layers []*lipgloss.Layer, pane
 	// after the rail. Each is a pass over cells already on the canvas, in draw
 	// order, so none of them reaches a layer drawn above it. See scrim.go,
 	// motion.go and shimmer.go.
-	now := time.Now()
 	popup, popupDim := m.popupScrimTarget()
 	scrimmed := m.Settings.ModalDim <= 0 && popupDim <= 0
 	// The dock and the rails sit above the panes, so they take the popup's
@@ -354,6 +367,12 @@ func (m *OS) composeLayersIn(canvas *frameCanvas, layers []*lipgloss.Layer, pane
 		if !cl.bounds.Overlaps(area) {
 			continue
 		}
+		// The old workspace goes in under the first piece of chrome that
+		// covers any of the pane area, so the chrome stays on top of it.
+		if !slideDrawn && cl.bounds.Overlaps(slide.area) {
+			m.drawSlideOld(canvas, slide)
+			slideDrawn = true
+		}
 		if !scrimmed && (popup != "" && cl.layer.GetID() == popup) {
 			m.drawImageSymbols(canvas)
 			m.applyScrim(canvas, popupDim)
@@ -398,12 +417,18 @@ func (m *OS) composeLayersIn(canvas *frameCanvas, layers []*lipgloss.Layer, pane
 		}
 	}
 
+	if !slideDrawn {
+		m.drawSlideOld(canvas, slide)
+	}
+
 	// A cached layer that was not on this frame is dropped. A pane on another
 	// workspace parses again when it comes back, which is the price of not
 	// holding every pane's cells for as long as the pane lives.
-	for id, cl := range m.layerCells {
-		if cl.gen != m.composeGen {
-			delete(m.layerCells, id)
+	if !m.keepLayerCells {
+		for id, cl := range m.layerCells {
+			if cl.gen != m.composeGen {
+				delete(m.layerCells, id)
+			}
 		}
 	}
 	clear(ordered)

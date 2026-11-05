@@ -1,11 +1,11 @@
 package theme
 
 import (
-	"fmt"
 	"image/color"
 	"strings"
 	"sync"
 
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 	tint "github.com/lrstanley/bubbletint/v2"
 )
@@ -247,9 +247,9 @@ func chromeSlot(i int, t *tint.Tint) color.Color {
 // that names it back.
 func chromeLoopError(loop []Role) error {
 	if len(loop) == 1 {
-		return fmt.Errorf("chrome.%s names itself. Set it to a colour", loop[0])
+		return errfmt.Errorf("chrome.%s names itself. Set it to a colour", loop[0])
 	}
-	return fmt.Errorf("chrome.%s and chrome.%s name each other in a loop. Set one of them to a colour",
+	return errfmt.Errorf("chrome.%s and chrome.%s name each other in a loop. Set one of them to a colour",
 		loop[0], loop[len(loop)-1])
 }
 

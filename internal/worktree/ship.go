@@ -9,6 +9,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"github.com/Gaurav-Gosain/tuios/internal/plural"
 )
 
@@ -135,10 +136,10 @@ func MergeBranch(ctx context.Context, repoRoot, branch, into string, mode MergeM
 		res.Mode = "merge"
 	}
 	if branch == "" || into == "" || strings.HasPrefix(branch, "-") || strings.HasPrefix(into, "-") {
-		return res, fmt.Errorf("merge of %q into %q: not a branch", branch, into)
+		return res, errfmt.Errorf("merge of %q into %q: not a branch", branch, into)
 	}
 	if branch == into {
-		return res, fmt.Errorf("%s cannot be merged into itself", branch)
+		return res, errfmt.Errorf("%s cannot be merged into itself", branch)
 	}
 	head, err := CurrentBranch(repoRoot)
 	if err != nil {
@@ -149,7 +150,7 @@ func MergeBranch(ctx context.Context, repoRoot, branch, into string, mode MergeM
 		if on == "" {
 			on = "a detached HEAD"
 		}
-		return res, fmt.Errorf("the main checkout %s is on %s, not %s", repoRoot, on, into)
+		return res, errfmt.Errorf("the main checkout %s is on %s, not %s", repoRoot, on, into)
 	}
 	if err := checkClean(ctx, repoRoot); err != nil {
 		return res, err
@@ -182,7 +183,7 @@ func MergeBranch(ctx context.Context, repoRoot, branch, into string, mode MergeM
 		args = []string{"merge", "--squash"}
 	case MergeFFOnly:
 		if !canFF {
-			return res, fmt.Errorf("%s has commits %s does not, so it cannot be fast-forwarded", into, branch)
+			return res, errfmt.Errorf("%s has commits %s does not, so it cannot be fast-forwarded", into, branch)
 		}
 		args = append(args, "--ff-only")
 	default:
@@ -244,7 +245,7 @@ func checkClean(ctx context.Context, dir string) error {
 	}
 	for _, name := range []string{"MERGE_HEAD", "CHERRY_PICK_HEAD", "REVERT_HEAD", "rebase-merge", "rebase-apply"} {
 		if _, err := os.Stat(filepath.Join(strings.TrimSpace(gitdir), name)); err == nil {
-			return fmt.Errorf("the main checkout %s has a merge, rebase or cherry-pick in progress", dir)
+			return errfmt.Errorf("the main checkout %s has a merge, rebase or cherry-pick in progress", dir)
 		}
 	}
 	return nil
@@ -264,7 +265,7 @@ func abortMerge(ctx context.Context, dir, before string, cause error) error {
 		}
 	}
 	if _, err := runCtx(bg, dir, nil, "reset", "-q", "--merge", before); err != nil {
-		return fmt.Errorf("%w, and undoing it failed: %v", cause, err)
+		return errfmt.Errorf("%w, and undoing it failed: %v", cause, err)
 	}
 	if len(files) > 0 {
 		slices.Sort(files)
@@ -312,10 +313,10 @@ func ResolvePush(ctx context.Context, dir, branch, remote string) (PushTarget, e
 	case slices.Contains(remotes, "origin"):
 		t.Remote = "origin"
 	default:
-		return t, fmt.Errorf("the repository has %d remotes (%s) and branch %s follows none of them", len(remotes), strings.Join(remotes, ", "), branch)
+		return t, errfmt.Errorf("the repository has %d remotes (%s) and branch %s follows none of them", len(remotes), strings.Join(remotes, ", "), branch)
 	}
 	if !slices.Contains(remotes, t.Remote) {
-		return t, fmt.Errorf("the repository has no remote %q", t.Remote)
+		return t, errfmt.Errorf("the repository has no remote %q", t.Remote)
 	}
 	url, err := runCtx(ctx, dir, nil, "remote", "get-url", "--push", t.Remote)
 	if err != nil {
@@ -336,10 +337,10 @@ func ResolvePush(ctx context.Context, dir, branch, remote string) (PushTarget, e
 // so.
 func Push(ctx context.Context, dir string, t PushTarget, commit string) error {
 	if strings.HasPrefix(t.Remote, "-") || strings.HasPrefix(t.Branch, "-") || strings.HasPrefix(commit, "-") {
-		return fmt.Errorf("push of %q to %q: not a branch", t.Branch, t.Remote)
+		return errfmt.Errorf("push of %q to %q: not a branch", t.Branch, t.Remote)
 	}
 	if commit == "" {
-		return fmt.Errorf("push of %q to %q: no commit to push", t.Branch, t.Remote)
+		return errfmt.Errorf("push of %q to %q: no commit to push", t.Branch, t.Remote)
 	}
 	if _, err := runCtx(ctx, dir, nil, "push", "--porcelain", t.Remote, commit+":refs/heads/"+t.Branch); err != nil {
 		return err

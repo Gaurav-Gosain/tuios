@@ -2,10 +2,11 @@ package tmuxcompat
 
 import (
 	"encoding/base64"
-	"encoding/json"
 	"errors"
 	"strconv"
 	"time"
+
+	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 )
 
 // The paste buffers in the daemon.
@@ -75,7 +76,7 @@ func (s *Shim) daemonBufferList() ([]buffer, error) {
 			Automatic bool   `json:"automatic"`
 		} `json:"buffers"`
 	}
-	if err := json.Unmarshal(raw, &res); err != nil {
+	if err := jsonx.Unmarshal(raw, &res); err != nil {
 		return nil, err
 	}
 	out := make([]buffer, 0, len(res.Buffers))
@@ -105,7 +106,7 @@ func (s *Shim) daemonBufferRead(name string) (string, bool, error) {
 		DataB64 string `json:"data_b64"`
 		Version uint64 `json:"version"`
 	}
-	if err := json.Unmarshal(raw, &res); err != nil {
+	if err := jsonx.Unmarshal(raw, &res); err != nil {
 		return "", false, err
 	}
 	data := res.Data

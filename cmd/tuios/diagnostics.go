@@ -13,6 +13,7 @@ import (
 	"charm.land/lipgloss/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/fang"
+	"github.com/Gaurav-Gosain/tuios/internal/hostsync"
 	"github.com/Gaurav-Gosain/tuios/internal/plural"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/charmbracelet/colorprofile"
@@ -128,7 +129,9 @@ func diagnosticErrorHandler(w io.Writer, styles fang.Styles, err error) {
 
 	var diag *diagnosticError
 	var mismatch *session.ProtocolMismatchError
-	if !errors.As(err, &diag) && !errors.As(err, &mismatch) {
+	// A hostsync.Problem has the same what/why/fix lines.
+	var problem *hostsync.Problem
+	if !errors.As(err, &diag) && !errors.As(err, &mismatch) && !errors.As(err, &problem) {
 		fang.DefaultErrorHandler(w, styles, err)
 		return
 	}

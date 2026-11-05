@@ -158,6 +158,10 @@ type dndPane struct {
 	// id is the multiplexer id (i key) the program used, echoed back on
 	// everything sent to it.
 	id int
+	// owner is the process group the registration is bound to, 0 while it
+	// is not known: the pane's own when this client runs its PTY, the
+	// daemon's word for a daemon's pane. See dndSweep.
+	owner int
 	// streams are the data streams in progress from this pane, by type and
 	// index: pre-sent data (p), item data for a request (e), and the text
 	// drag image (p with a negative index, keyed by it).
@@ -260,14 +264,27 @@ func dndFmt(cmd dnd.Command) string {
 // Once the client has a record of its own, the stream it reads is fresher
 // than any state push. See session/dnd_registration.go.
 func (m *OS) takeDaemonDnD(w *terminal.Window, ws *session.WindowState) {
-	if w == nil || ws == nil || (!ws.DnDAccepts && !ws.DnDOffers) || !m.dndPaneLocal(w) {
+	if w == nil || ws == nil || !m.dndPaneLocal(w) {
 		return
 	}
-	if _, seen := m.dndPanes[w.ID]; seen {
+	// The group the daemon bound the registration to. Only a live one is
+	// taken: a state sent before the program died and read after its
+	// successor registered would otherwise end the successor's.
+	owner := 0
+	if ws.DnDOwner > 0 && session.ProcessGroupAlive(ws.DnDOwner) {
+		owner = ws.DnDOwner
+	}
+	if p, seen := m.dndPanes[w.ID]; seen {
+		if owner != 0 {
+			p.owner = owner
+		}
+		return
+	}
+	if !ws.DnDAccepts && !ws.DnDOffers {
 		return
 	}
 	p := m.dndPaneFor(w.ID)
-	p.accepts, p.offers, p.id = ws.DnDAccepts, ws.DnDOffers, ws.DnDID
+	p.accepts, p.offers, p.id, p.owner = ws.DnDAccepts, ws.DnDOffers, ws.DnDID, owner
 	dndLog("took registration of %s from the daemon: accepts=%v offers=%v", shortID(w.ID), p.accepts, p.offers)
 }
 
@@ -362,6 +379,7 @@ func (m *OS) onDnD(msg DnDMsg) {
 		// x=1 carries a machine id. Every pane of this client is local.
 		if cmd.X != 1 {
 			p.accepts = true
+			p.owner = dndForeground(m.windowByID(id))
 		}
 	case 'A':
 		p.accepts = false
@@ -382,5 +400,39 @@ func (m *OS) onDnD(msg DnDMsg) {
 		m.onDnDTargetStatus(id, cmd)
 	case 'r':
 		m.onDnDRequest(id, cmd)
+	}
+}
+
+// dndForeground is the process group holding w's terminal: read off the PTY
+// when this client runs it, else through the shell's pid, which a pane on
+// this machine has. 0 when neither answers.
+func dndForeground(w *terminal.Window) int {
+	if w == nil {
+		return 0
+	}
+	if pgrp := w.ForegroundPgrp(); pgrp > 0 {
+		return pgrp
+	}
+	return session.ForegroundGroup(w.ShellPgid)
+}
+
+// dndSweep ends the registrations whose process group is gone: a program
+// that crashed or was killed never unregistered, and the shell its pane went
+// back to would be sent drops it cannot read, where it should get them as a
+// paste. It runs when a gesture begins, so every pane a drag can reach is
+// judged by what holds it now. A registration whose group is not known yet
+// stands.
+func (m *OS) dndSweep() {
+	for id, p := range m.dndPanes {
+		if p.owner <= 0 || (!p.accepts && !p.offers) || session.ProcessGroupAlive(p.owner) {
+			continue
+		}
+		dndLog("registration of %s ended: process group %d is gone", shortID(id), p.owner)
+		if d := m.dndDrag; d != nil && (d.source == id || d.target == id || d.dropTarget == id) {
+			m.dndCancel("the program in a pane of the drag is gone")
+		}
+		p.accepts, p.offers, p.owner = false, false, 0
+		p.asm.Reset()
+		clear(p.streams)
 	}
 }

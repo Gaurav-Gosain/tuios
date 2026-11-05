@@ -39,6 +39,7 @@ func DaemonConfigFromUser(uc *config.UserConfig) *DaemonConfig {
 	}
 	// [agents] enabled = false turns every agent feature off.
 	cfg.AgentsOff = !uc.Agents.On()
+	cfg.MachineOfferOff = !uc.Notifications.MachineOfferOn()
 	cfg.AgentAutoDetect = uc.Daemon.AgentAutoDetect
 	cfg.AgentDetectInterval = time.Duration(uc.Daemon.AgentDetectSeconds) * time.Second
 	cfg.AgentBinaries = uc.Daemon.AgentBinaries
@@ -48,6 +49,7 @@ func DaemonConfigFromUser(uc *config.UserConfig) *DaemonConfig {
 	cfg.SingleClient = uc.Daemon.SingleClient
 	cfg.SSHAgent = uc.Daemon.SSHAgent
 	cfg.Display = uc.Daemon.Display
+	cfg.KeepAwake = uc.Daemon.KeepAwake
 	cfg.History = ResolveHistoryPolicy(uc.Daemon.PersistScrollback, uc.Daemon.PersistScrollbackLines, uc.Daemon.PersistScrollbackKB)
 	cfg.Hosts = HostsFromConfig(uc)
 	// The same table says what each machine linked to this one may do here.

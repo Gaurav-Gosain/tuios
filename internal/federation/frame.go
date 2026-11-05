@@ -25,6 +25,8 @@ import (
 	"errors"
 	"fmt"
 	"io"
+
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 )
 
 // The wire is a stream of frames. Each frame is a 9 byte header followed by its
@@ -129,12 +131,12 @@ func readFrame(r io.Reader) (frame, error) {
 	switch t {
 	case frameOpen, frameData, frameClose, frameCredit:
 	default:
-		return frame{}, fmt.Errorf("%w: %d", ErrBadFrameType, hdr[0])
+		return frame{}, errfmt.Errorf("%w: %d", ErrBadFrameType, hdr[0])
 	}
 	stream := binary.BigEndian.Uint32(hdr[1:5])
 	n := binary.BigEndian.Uint32(hdr[5:9])
 	if n > MaxFramePayload {
-		return frame{}, fmt.Errorf("%w: %d bytes", ErrFrameTooLarge, n)
+		return frame{}, errfmt.Errorf("%w: %d bytes", ErrFrameTooLarge, n)
 	}
 	f := frame{Type: t, Stream: stream}
 	if n > 0 {

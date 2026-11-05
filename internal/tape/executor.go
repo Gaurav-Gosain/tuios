@@ -6,6 +6,8 @@ import (
 	"strconv"
 	"strings"
 	"unicode"
+
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 )
 
 // Executor executes tape commands by directly manipulating the app state
@@ -260,7 +262,7 @@ func (ce *CommandExecutor) Execute(cmd *Command) error {
 		case "left", "right", "up", "down":
 			return ce.executor.SplitToward(strings.ToLower(cmd.Args[0]))
 		default:
-			return fmt.Errorf("unknown Split direction %q (use horizontal, vertical, left, right, up or down)", cmd.Args[0])
+			return errfmt.Errorf("unknown Split direction %q (use horizontal, vertical, left, right, up or down)", cmd.Args[0])
 		}
 
 	case CommandTypeRotateSplit:
@@ -446,7 +448,7 @@ func (ce *CommandExecutor) Execute(cmd *Command) error {
 			return err
 		}
 		if err := ce.executor.CheckCondition(cond); err != nil {
-			return fmt.Errorf("the condition %s does not hold: %w", cond, err)
+			return errfmt.Errorf("the condition %s does not hold: %w", cond, err)
 		}
 		return nil
 
@@ -454,7 +456,7 @@ func (ce *CommandExecutor) Execute(cmd *Command) error {
 		// The player waits across ticks and never hands WaitFor to Execute.
 		// Anything that does is running one command on its own, with nothing
 		// to wait in.
-		return fmt.Errorf("a WaitFor line works only in a tape. From a shell, use tuios wait-for")
+		return errfmt.Errorf("a WaitFor line works only in a tape. From a shell, use tuios wait-for")
 
 	case CommandTypeSet:
 		if len(cmd.Args) < 2 {
@@ -466,7 +468,7 @@ func (ce *CommandExecutor) Execute(cmd *Command) error {
 		// A tape loaded from a file has its Source lines replaced by the file
 		// they name (see LoadFile). One that reaches here came as text, with
 		// no directory to find the file in.
-		return fmt.Errorf("a Source line works only in a tape file run with tuios tape play or tuios tape exec")
+		return errfmt.Errorf("a Source line works only in a tape file run with tuios tape play or tuios tape exec")
 
 	case CommandTypeSleep, CommandTypeComment:
 		return nil
@@ -474,7 +476,7 @@ func (ce *CommandExecutor) Execute(cmd *Command) error {
 	default:
 		// Every command the parser produces has a case above. A new one
 		// that does not is reported, never run as nothing.
-		return fmt.Errorf("%s cannot run here", cmd.Type)
+		return errfmt.Errorf("%s cannot run here", cmd.Type)
 	}
 }
 
@@ -491,7 +493,7 @@ func enterBytes() []byte {
 // and report nothing, which is indistinguishable from the command having
 // worked.
 func errMissingArg(command, want string) error {
-	return fmt.Errorf("%s needs %s", command, want)
+	return errfmt.Errorf("%s needs %s", command, want)
 }
 
 // workspaceArg parses a workspace number argument. It returns the parse error
@@ -503,7 +505,7 @@ func workspaceArg(command string, cmd *Command) (int, error) {
 	}
 	ws, err := strconv.Atoi(strings.TrimSpace(cmd.Args[0]))
 	if err != nil {
-		return 0, fmt.Errorf("%s: %q is not a workspace number", command, cmd.Args[0])
+		return 0, errfmt.Errorf("%s: %q is not a workspace number", command, cmd.Args[0])
 	}
 	return ws, nil
 }
