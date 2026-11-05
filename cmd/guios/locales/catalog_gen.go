@@ -13073,3 +13073,13 @@ func CockpitNothingToSnooze(name string) string {
 func (msgs Messages) CockpitNothingToSnooze(name string) string {
 	return Catalog.Format(msgs.locale, "cockpitNothingToSnooze", map[string]any{"name": name})
 }
+
+// CockpitQuestionTypeReply says "This is a question. Pick an answer, or type to reply."
+// in the language the app shows.
+func CockpitQuestionTypeReply() string { return In(i18n.Locale()).CockpitQuestionTypeReply() }
+
+// CockpitQuestionTypeReply says "This is a question. Pick an answer, or type to reply."
+// in the language of msgs.
+func (msgs Messages) CockpitQuestionTypeReply() string {
+	return Catalog.Format(msgs.locale, "cockpitQuestionTypeReply", nil)
+}

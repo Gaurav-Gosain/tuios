@@ -173,7 +173,8 @@ type cockpit struct {
 	placedFree map[string]bool
 	// nothingAt is when a chord found nothing to answer: the key line says
 	// so for 1.5 s.
-	nothingAt time.Time
+	nothingAt       time.Time
+	nothingQuestion bool
 	// reason is the open "reject and say why" line, for the item id.
 	reason, reasonFor string
 	// undo is the last settle, which u takes back for 10 s.

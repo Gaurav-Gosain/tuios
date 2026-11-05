@@ -1289,5 +1289,6 @@
   "sidebarSameName": "另有同名会话。下面一行可以区分它们。",
   "cockpitTypeToReply": "输入即可回复",
   "cockpitTypeToAddCard": "输入即可添加卡片",
-  "cockpitNothingToSnooze": "{name} 没有可暂缓的内容。"
+  "cockpitNothingToSnooze": "{name} 没有可暂缓的内容。",
+  "cockpitQuestionTypeReply": "这是一个问题。请选择一个回答，或输入回复。"
 }

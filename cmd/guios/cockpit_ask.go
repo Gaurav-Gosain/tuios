@@ -7,6 +7,7 @@ import (
 	"github.com/Gaurav-Gosain/mygo/ui"
 
 	"github.com/Gaurav-Gosain/tuios/internal/guios/client"
+	"github.com/Gaurav-Gosain/tuios/internal/session"
 
 	"github.com/Gaurav-Gosain/tuios/cmd/guios/locales"
 )
@@ -169,9 +170,11 @@ func (a *App) ckAllowChord() {
 		return
 	}
 	r, ok := a.ckSelected()
-	if !ok || r.item == nil || !ckAnswerable(*r.item) {
-		// A press with nothing to answer says so, in the key line.
+	if !ok || r.item == nil || !ckAnswerable(*r.item) || ckIsQuestion(*r.item) {
+		// A press with nothing to allow says so, in the key line: a
+		// question is answered by its buttons or a reply.
 		a.ck.nothingAt = time.Now()
+		a.ck.nothingQuestion = ok && r.item != nil && ckIsQuestion(*r.item)
 		return
 	}
 	rules := r.item.Risk
@@ -221,4 +224,10 @@ func (a *App) ckQuestionLine(c *ui.Context, pal *palette) {
 	ui.RichText(c, spans...).FontSize(fsSmall).SingleLine().Ellipsis("…").MinWidth(0).Shrink(1)
 	keyHint(c, pal, "↵", q.word)
 	keyHint(c, pal, "Esc", locales.CommonCancel())
+}
+
+// ckIsQuestion reports whether an item is a question, which the card
+// answers with its own answers or a reply, never an allow.
+func ckIsQuestion(it session.AttentionItem) bool {
+	return it.Kind == session.AttentionQuestion || it.Kind == session.AttentionAsk
 }

@@ -1289,5 +1289,6 @@
   "sidebarSameName": "同じ名前のセッションがほかにもあります。下の行で見分けられます。",
   "cockpitTypeToReply": "入力して返信",
   "cockpitTypeToAddCard": "入力してカードを追加",
-  "cockpitNothingToSnooze": "{name} にはスヌーズするものがありません。"
+  "cockpitNothingToSnooze": "{name} にはスヌーズするものがありません。",
+  "cockpitQuestionTypeReply": "これは質問です。答えを選ぶか、入力して返信してください。"
 }

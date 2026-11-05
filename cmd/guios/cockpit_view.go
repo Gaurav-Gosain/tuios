@@ -743,7 +743,11 @@ func (a *App) cockpitHints(c *ui.Context, pal *palette) {
 		if d := c.Now().Sub(a.ck.nothingAt); d < 1500*time.Millisecond && a.ck.view == viewAgents {
 			// A chord found nothing to answer.
 			c.After(1500*time.Millisecond - d)
-			ui.Text(c, locales.CockpitNothingWaits()).FontSize(fsSmall).FontWeight(wSemibold).TextColor(pal.text).SingleLine()
+			msg := locales.CockpitNothingWaits()
+			if a.ck.nothingQuestion {
+				msg = locales.CockpitQuestionTypeReply()
+			}
+			ui.Text(c, msg).FontSize(fsSmall).FontWeight(wSemibold).TextColor(pal.text).SingleLine()
 			return
 		}
 		if a.ck.question != nil && a.ck.view == viewAgents {
@@ -816,7 +820,10 @@ func (a *App) cockpitHints(c *ui.Context, pal *palette) {
 func (a *App) ckAllHints(hint func(k, what string)) {
 	r, ok := a.ckSelected()
 	item := ok && r.item != nil
-	answerable := item && ckAnswerable(*r.item)
+	// A question gets only its answers and reply: nothing to allow, reject
+	// or snooze (council round 5, visual S4).
+	question := item && ckIsQuestion(*r.item)
+	answerable := item && ckAnswerable(*r.item) && !question
 	if ag, _, waiting := a.ckDraftWaiting(); waiting && a.ckCardWaits(ag) {
 		// A card waits: Ctrl+Enter queues the draft, and types nothing
 		// into the pane.
@@ -839,7 +846,7 @@ func (a *App) ckAllHints(hint func(k, what string)) {
 	if ag, ok := a.ckSelectedAgent(); ok && (ag.Settled || ag.State != "working") {
 		hint(chordName(chSettle), locales.CockpitHintSettle())
 	}
-	if item && !ckHeld(*r.item) {
+	if item && !ckHeld(*r.item) && !question {
 		hint(chordName(chSnooze), locales.CockpitHintSnooze())
 	}
 	hint(chordName(chNewAgent), locales.CockpitHintNewAgent())

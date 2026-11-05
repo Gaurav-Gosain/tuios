@@ -2318,5 +2318,6 @@
   "sidebarSameName": "Another session has the same name. The line under it tells them apart.",
   "cockpitTypeToReply": "Type to reply",
   "cockpitTypeToAddCard": "Type to add a card",
-  "cockpitNothingToSnooze": "{name} has nothing to snooze."
+  "cockpitNothingToSnooze": "{name} has nothing to snooze.",
+  "cockpitQuestionTypeReply": "This is a question. Pick an answer, or type to reply."
 }
