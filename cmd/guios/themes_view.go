@@ -80,9 +80,10 @@ func (a *App) themePreview(c *ui.Context, l *look) {
 		})
 		ui.Column(c).Absolute().Top(8).Left(78).Right(8).Bottom(8).Radius(rControl).Background(th.Background).
 			Padding(7, 8).Gap(3).Children(func() {
-			ui.Row(c).AlignItems(ui.Center).Children(func() {
-				ui.Text(c, "~ ").Font(mono).FontSize(fsCaption).TextColor(th.Palette[4]).SingleLine().Shrink(0)
-				ui.Text(c, "$ ls ").Font(mono).FontSize(fsCaption).TextColor(th.Foreground).SingleLine().Shrink(0)
+			ui.Row(c).Gap(6).AlignItems(ui.Center).Children(func() {
+				// No breakable space: a line of the preview never wraps.
+				ui.Text(c, "~").Font(mono).FontSize(fsCaption).TextColor(th.Palette[4])
+				ui.Text(c, "$\u00a0ls").Font(mono).FontSize(fsCaption).TextColor(th.Foreground)
 				ui.Box(c).Size(6, 12).Radius(1).Background(th.Cursor)
 			})
 			ui.Row(c).Gap(6).Children(func() {
