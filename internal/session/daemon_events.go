@@ -141,6 +141,12 @@ const (
 	// for each attempt's session, with Title the session the verdict picks.
 	// See fan_judge.go.
 	EventFanVerdict = "fan-verdict"
+	// EventOptionSet says set-option recorded a value for a session: Key is
+	// the option's path and Value the value. It fires whether or not a
+	// client applied it, so a client that draws the session without being
+	// its TUI (guios follows appearance.theme by it) sees the change. It
+	// reaches only a subscriber that names it in types.
+	EventOptionSet  = "option-set"
 	EventSubscribed = "subscribed" // subscribe ack result type
 )
 
@@ -241,6 +247,9 @@ type streamEvent struct {
 	TML *TMLEvent `json:"tml,omitempty"`
 	// Task is a task event's card, as list-tasks gives its row.
 	Task *TaskRow `json:"task,omitempty"`
+	// Key and Value are an option-set event's option path and value.
+	Key   string `json:"key,omitempty"`
+	Value string `json:"value,omitempty"`
 
 	// relayed marks an event copied from a linked host's own stream. It is
 	// delivered only to a subscriber that asked for other machines' events,
@@ -428,7 +437,7 @@ func (f eventFilter) match(ev streamEvent) bool {
 // optInEventTypes are the event types a subscription receives only when its
 // types filter names them. They arrive at the speed an agent works rather
 // than the speed a person does.
-var optInEventTypes = map[string]bool{EventLayoutChanged: true, EventWindowForeground: true, EventAgentActivity: true, EventTranscript: true, EventTransferProgress: true, EventTransferFile: true, EventTML: true}
+var optInEventTypes = map[string]bool{EventLayoutChanged: true, EventWindowForeground: true, EventAgentActivity: true, EventTranscript: true, EventTransferProgress: true, EventTransferFile: true, EventTML: true, EventOptionSet: true}
 
 // admitsOutput reports whether the filter lets output events through, which
 // decides whether a resume can be exact: output events are not kept for replay.

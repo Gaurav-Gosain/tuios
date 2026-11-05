@@ -259,6 +259,7 @@ func (d *Daemon) verbSetOption(cs *connState, params json.RawMessage) (any, *ver
 
 	// Record the option in daemon-owned state so get-option can read it back.
 	sess.SetOption(path, p.Value)
+	d.events.publish(streamEvent{Type: EventOptionSet, Session: sess.Name(), Key: path, Value: p.Value})
 
 	// daemon.window_size is the daemon's to apply: it decides the session's
 	// size, and no client draws anything from the value itself.

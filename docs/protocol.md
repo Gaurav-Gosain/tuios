@@ -7666,6 +7666,7 @@ Event types:
 | `task-changed` | A task card was `added`, `staged`, `blocked`, `unblocked`, `released` or `removed` (`action`). A release tuios made on its own carries `reason`: `pane closed`, `agent left` or `restart`; a stage move it made on its own carries the fact (see [Task verbs](#task-verbs)); a block carries its reason too. `removed` carries the card's last row. | `session`, `action`, `reason`, `task` |
 | `fan-verdict` | A judge recorded its verdict on a fan with `set-fan-verdict`. One event for each attempt: `session` is the attempt, `title` the session the verdict picks. Read it with `compare-fan`. | `session`, `title` |
 | `tml-event` | What a person did on a TML surface that its owner hears: an `emit` action in the document, or the close, which is the surface's last event. `tml` has `surface`, `name` (the emit's name, or `close`), `value` (absent when null), `reason` (on a close: `closed`, `program` or `dismissed`) and `version`. `window` is the TML window. Opt-in: only a subscription whose `types` names it receives it, and a `tml-open` with `events` gets the events of its own surface. | `tml` |
+| `option-set` | `set-option` recorded a value for a session. `key` is the option's path and `value` the value. It fires whether or not an attached client applied the value. Opt-in: only a subscription whose `types` names it receives it. | `session`, `key`, `value` |
 
 ### What fires when
 

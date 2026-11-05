@@ -384,6 +384,8 @@ var EventTypes = []string{
 	"task-claimed", "task-finished", "task-changed",
 	// A judge's verdict on a fan.
 	"fan-verdict",
+	// A session option set-option recorded. Opt-in.
+	"option-set",
 }
 
 // defaultEventTypes are the types a call that names none gets: what an agent
