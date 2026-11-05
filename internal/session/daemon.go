@@ -22,6 +22,7 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/herdrcli"
 	"github.com/Gaurav-Gosain/tuios/internal/hooks"
 	"github.com/Gaurav-Gosain/tuios/internal/memtrim"
+	"github.com/Gaurav-Gosain/tuios/internal/openedcopy"
 	"github.com/Gaurav-Gosain/tuios/internal/pastebuf"
 	"github.com/Gaurav-Gosain/tuios/internal/procinfo"
 	"github.com/google/uuid"
@@ -429,6 +430,8 @@ type Daemon struct {
 	// See task_auto.go. It is read under session state locks and written by
 	// a config reload, so it is atomic.
 	taskAutoOff atomic.Bool
+	// openedKeep is DaemonConfig.OpenedCopyKeep.
+	openedKeep time.Duration
 
 	// wakes are the latches the background loops sleep on at idle. See
 	// idle_wakes.go.
@@ -1017,6 +1020,10 @@ type DaemonConfig struct {
 	// TaskAutoStageOff is [tasks] auto_stage = false: the daemon moves no
 	// card on its own. See task_auto.go.
 	TaskAutoStageOff bool
+	// OpenedCopyKeep is [files] open_copy_keep_days: how long a copy the
+	// rail's o made of a far file stays when it is not opened again. Zero
+	// keeps them all. See internal/openedcopy.
+	OpenedCopyKeep time.Duration
 	// Checkpoints is [agents.checkpoints]: whether a pane's work tree is
 	// saved when its agent finishes a turn, and how many are kept. The zero
 	// value is on with the default keep. See checkpoints.go.
@@ -1080,6 +1087,7 @@ func NewDaemon(cfg *DaemonConfig) *Daemon {
 	d.silent.ns.Store(int64(resolveSilentAfter(cfg.AgentSilentAfter)))
 	d.SetMailWake(!cfg.MailWakeOff)
 	d.taskAutoOff.Store(cfg.TaskAutoStageOff)
+	d.openedKeep = cfg.OpenedCopyKeep
 	d.SetCheckpoints(cfg.Checkpoints)
 	d.outbox = newHostOutbox(d)
 	// The socket path is read through a closure rather than copied, because the
@@ -1688,6 +1696,23 @@ func (d *Daemon) serve() {
 	go d.silentMonitor()
 	go d.agentMonitor()
 	go d.listingNotifier()
+	// The copies o made of far files that nobody opened for a while go,
+	// once per start. The client sweeps too, each time it makes one. No
+	// timer: a daemon that sits idle does no work for them.
+	go sweepOpenedCopies(d.openedKeep)
+}
+
+// sweepOpenedCopies removes the old copies of far files under the user cache.
+func sweepOpenedCopies(keep time.Duration) {
+	root, err := openedcopy.Root()
+	if err != nil {
+		return
+	}
+	if n, err := openedcopy.Sweep(root, keep, time.Now()); err != nil {
+		LogBasic("Could not remove the old copies of far files: %v", err)
+	} else if n > 0 {
+		LogBasic("Removed %d old copies of far files from %s", n, root)
+	}
 }
 
 // startAccepting starts a loop on each listening socket. pauseAccepting

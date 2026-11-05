@@ -209,9 +209,13 @@ question about the screen. Do not change them unless the person asks.
   is read on that machine, and needs the `files` grant there.
 - In the rail's files section, `o` opens the row with the system opener
   (`xdg-open`, `open`, `wslview`, or the Windows handler), or with the
-  command of the first `[[files.open]]` rule that matches. It opens only
-  files on the machine of the client. For a row on another machine, or a
-  remote client, it says so and starts nothing.
+  command of the first `[[files.open]]` rule that matches. For a row on
+  another machine it offers to copy the row to
+  `~/.cache/tuios/opened/HOST/HASH/NAME` and open the copy, after a click on
+  the message. A copy of an unchanged file opens at once. Changes stay here.
+  `[files] open_copy_ask_mb`, `open_copy_max_mb` and `open_copy_keep_days`
+  set the limits, and `tuios transfers clear-opened` deletes the copies. For
+  a remote client it says so and starts nothing.
 - When the last pane on the workspace on screen closes, the session shows
   the workspace the person came from: the one that ran `xpanes`, else the
   ones shown before, else the lowest with panes. `workspaces.return_when_empty

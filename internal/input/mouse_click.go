@@ -134,6 +134,13 @@ func handleMouseClick(msg tea.MouseClickMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		return o, o.TakeSidebarCmd()
 	}
 
+	// A click on an offer to open a copy of a far file takes it and leaves
+	// the rail as it was: the person pressed o there a moment ago and goes on
+	// in the rail.
+	if o.SidebarFocused && o.FarOpenOfferAt(X, Y) && o.NotificationClick(X, Y) {
+		return o, o.TakeSidebarCmd()
+	}
+
 	// A click outside the rail is intent to leave it: the pane the user clicked
 	// wins over keyboard rail focus. Rail focus is cleared here so the click below
 	// focuses the pane normally.
@@ -179,7 +186,7 @@ func handleMouseClick(msg tea.MouseClickMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		// ahead of the dock items: its body jumps to the pane the message came
 		// from, its right-hand end dismisses.
 		if o.NotificationClick(X, Y) {
-			return o, nil
+			return o, o.TakeSidebarCmd()
 		}
 		// The spotlight chip turns the beam off. It is the way out a person
 		// who does not know the key can see.

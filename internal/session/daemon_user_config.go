@@ -107,6 +107,8 @@ func DaemonConfigFromUser(uc *config.UserConfig) *DaemonConfig {
 	cfg.MailWakeOff = !uc.Agents.Mail.WakeOn()
 	// The daemon moves the task cards, so it reads whether to.
 	cfg.TaskAutoStageOff = !uc.Tasks.AutoStageOn()
+	// The daemon removes the old copies of far files at its start.
+	cfg.OpenedCopyKeep = uc.Files.OpenCopyKeep()
 	// The daemon takes every checkpoint, so it reads whether to.
 	cfg.Checkpoints = uc.Agents.Checkpoints
 	// The daemon runs the herdr plugins, so it reads which ones.

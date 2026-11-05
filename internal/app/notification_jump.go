@@ -95,6 +95,12 @@ func (m *OS) jumpToNotifTarget(t NotifTarget) {
 		m.installFromNotice(t.AgentInstall)
 		return
 	}
+	// An offer to open a copy of a far file is taken. The command it makes
+	// is parked for the click or key handler.
+	if t.FarOpen != 0 {
+		m.acceptFarOpen(t.FarOpen)
+		return
+	}
 	// A message about mail lands on the thread, where the reply is, rather than
 	// on the pane that wrote. The marking read it may need is queued, since
 	// this runs inside handlers that return no command.
@@ -216,7 +222,7 @@ func (m *OS) clickVisibleNotification() {
 		return
 	}
 	m.Notifications = m.Notifications[:n-1]
-	if m.notifHit.Cut && !isClipboardAsk(visible.Target) && !isRestartNotice(visible.Target) && !isInstallNotice(visible.Target) {
+	if m.notifHit.Cut && !isClipboardAsk(visible.Target) && !isRestartNotice(visible.Target) && !isInstallNotice(visible.Target) && !isFarOpenAsk(visible.Target) {
 		m.notifHoverEnd()
 		m.openMessageView(m.notificationEntry(visible))
 		return

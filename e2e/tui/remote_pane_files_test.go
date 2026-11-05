@@ -342,6 +342,7 @@ func TestQuickLookOnAFarFile(t *testing.T) {
 	if _, err := exec.LookPath("ffmpeg"); err == nil {
 		quickLookMakeFilm(t, filepath.Join(top, "zfilm.mp4"))
 	}
+	farCopyFixture(t, base, top)
 
 	if out, err := tuiosCLI(t, remote, "new", "far-shell", "--detach"); err != nil {
 		t.Fatalf("create the far session: %v\n%s", err, out)
@@ -365,18 +366,19 @@ func TestQuickLookOnAFarFile(t *testing.T) {
 	mouseClick(t, term, col, row, tuitest.MouseLeft, 0)
 	clickNoteGone(t, term)
 
-	// o on a far row: the path is on build, so the opener here must not run,
-	// and the note says what to press instead. The two machines share a disk
-	// in this harness, so an opener that ran would find the file.
+	// o on a far row: the path is on build, so the opener here must not run
+	// on it. The dock offers a copy instead, and nothing starts before the
+	// offer is taken. The two machines share a disk in this harness, so an
+	// opener that ran on the far path would find the file.
 	sendKeys(t, term, "o")
-	railLists(t, term, "o on a far file did not say why it did not open",
-		[]string{"tuios did not open the file. It is on build."}, nil)
-	copiesFrame(t, term, "open-system-far-refused")
+	railLists(t, term, "o on a far file did not offer a copy",
+		[]string{"far.go is on build. Click to open a copy here."}, nil)
+	copiesFrame(t, term, "open-system-far-offer")
 	time.Sleep(500 * time.Millisecond)
 	if got := openRecord(record); len(got) > 0 && got[0] != "" {
-		t.Fatalf("o on a far file started the opener here: %q", got)
+		t.Fatalf("o on a far file started the opener before the offer was taken: %q", got)
 	}
-	railLists(t, term, "the note of the refusal stayed", nil, []string{"tuios did not open the file. It is on build."})
+	railLists(t, term, "the offer stayed", nil, []string{"far.go is on build. Click to open a copy here."})
 
 	sendKeys(t, term, " ")
 	railLists(t, term, "space did not show the far file",
@@ -451,5 +453,6 @@ func TestQuickLookOnAFarFile(t *testing.T) {
 		sendKeys(t, term, " ")
 		railLists(t, term, "space did not close the far preview", nil, []string{"on build"})
 	}
+	openFarCopies(t, term, base, env, top, record)
 	alive(t, term, "after quick look on a far file")
 }

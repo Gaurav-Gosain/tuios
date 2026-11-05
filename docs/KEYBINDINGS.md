@@ -210,10 +210,13 @@ menu of a row has an Open with system row that does the same. The binding is
 `file_open_system` in `[keybindings.sidebar_files]`. On a row that is not a
 file, `o` keeps its sidebar action, which sorts the agents.
 
-`o` opens only files on the machine that runs the client. For a listing of
-another machine, tuios does not open the file. Press `Space` to preview it, or
-`S` to send it here. A remote client (`tuios ssh`, `tuios-web`) also does not
-open the file.
+For a listing of another machine, `o` offers to open a copy here. Click the
+message, or press the prefix and then `j`, to copy the file or folder to this
+machine and open the copy. Press `esc` to say not now. The copy shows in the
+Copies panel. See
+[CONFIGURATION.md](CONFIGURATION.md#open-a-file-of-another-machine). A remote
+client (`tuios ssh`, `tuios-web`) does not open the file. Press `Space` to
+preview it, or `S` to send it here.
 
 `I` pastes the path of the selected file or folder into the focused pane. The
 context menu of a row has a Paste path in pane row that does the same. The

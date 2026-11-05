@@ -530,14 +530,49 @@ command = ["thunar", "{path}"]
   matches files only.
 - `command` is a list of words. tuios starts it directly, with no shell.
   `{path}` in a word becomes the path. With no `{path}`, the path goes last.
-- tuios starts the command on the machine that runs the client. It does not
-  open a file in a listing of another machine, or for a remote client.
+- tuios starts the command on the machine that runs the client. For a file in
+  a listing of another machine, it opens a copy here. See the next section. It
+  does not open a file for a remote client.
 - When the program stops with an error in the first 3 seconds, a message
   says so. The log has the reason.
 - tuios skips a rule with no pattern, a pattern that is not a valid glob, or
   no command, and shows a warning for it when it starts.
 - `appearance.link_opener` and `$BROWSER` do not apply to files. They name a
   browser for web links.
+
+### Open a file of another machine
+
+`o` on a row of a listing of another machine shows a message: "notes.md is on
+build. Click to open a copy here." Click it, or press the prefix and then `j`,
+to copy the file or folder here and open the copy. Press `esc` to say not now.
+
+- The copy goes to `~/.cache/tuios/opened/HOST/HASH/NAME`, or under
+  `$XDG_CACHE_HOME` when it is set. The hash is of the host and the far path,
+  so the same file always goes to the same place.
+- The copy uses the same engine as `S` and `tuios cp`. It shows in the Copies
+  panel.
+- When the far file did not change since the last copy, `o` opens the copy
+  here at once. When it changed, tuios copies it again. When the copy here
+  changed too, tuios keeps it and opens it. Run
+  `tuios transfers clear-opened` to get a new copy.
+- tuios does not send changes back. Changes to the copy stay here.
+- A folder is copied with all it holds. tuios does not copy links, so a link
+  cannot bring in a file from outside the folder.
+- Above 200 MiB, or above 1000 files, tuios shows the size and asks again.
+  Above 4096 MiB, or above 20000 files, it does not copy. Press `S` to send
+  it to a folder here instead.
+- tuios replaces each character that a file name cannot hold with `_`. A
+  name such as `..\..\x` stays in the folder of its copy.
+- tuios deletes a copy that nobody opened for 7 days when the daemon starts,
+  and each time `o` makes a copy. `tuios transfers clear-opened` deletes them
+  all now.
+
+```toml
+[files]
+open_copy_ask_mb = 200      # ask first above this size, in MiB
+open_copy_max_mb = 4096     # do not copy above this size, in MiB
+open_copy_keep_days = 7     # -1 keeps every copy
+```
 
 ## Drag a file into a pane
 

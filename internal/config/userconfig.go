@@ -1304,6 +1304,11 @@ func DefaultConfig() *UserConfig {
 		Review:       defaultReviewConfig(),
 		Agents:       AgentsConfig{ViewList: AgentsViewListColumn},
 		Shell:        ShellConfig{Integration: ShellIntegrationAuto},
+		Files: FilesConfig{
+			OpenCopyAskMB:    DefaultOpenCopyAskMB,
+			OpenCopyMaxMB:    DefaultOpenCopyMaxMB,
+			OpenCopyKeepDays: DefaultOpenCopyKeepDays,
+		},
 		Keybindings: KeybindingsConfig{
 			LeaderKey: "ctrl+b",
 			WindowManagement: map[string][]string{

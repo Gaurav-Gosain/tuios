@@ -1766,6 +1766,23 @@ var optionSpecs = []Option{
 		Accepted:    ReviewScopes,
 		Default:     ReviewScopeBase,
 	},
+	// [files]: o on a file of another machine. Read each time o is pressed;
+	// the daemon reads the keep at its start.
+	{
+		Path: "files.open_copy_ask_mb", Type: OptionInt, Section: "files",
+		Description: "Above this size in MiB, o on a file of another machine shows the size and asks again before it copies the file here. 0 uses 200",
+		Default:     "200", Min: 0, Max: 1 << 20,
+	},
+	{
+		Path: "files.open_copy_max_mb", Type: OptionInt, Section: "files",
+		Description: "Above this size in MiB, o on a file of another machine does not copy it here. 0 uses 4096",
+		Default:     "4096", Min: 0, Max: 1 << 20,
+	},
+	{
+		Path: "files.open_copy_keep_days", Type: OptionInt, Section: "files",
+		Description: "Days a copy of a far file stays when nobody opens it again. 0 uses 7, and -1 keeps every copy",
+		Default:     "7", Min: -1, Max: 3650,
+	},
 	// Read by the client on each switch, so a change applies at once.
 	{
 		Path: "workspaces.new_window_when_empty", Type: OptionBool, Section: "workspaces",

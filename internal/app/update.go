@@ -1711,6 +1711,16 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		m.renderSkipped = false
 		return m, cmd
 
+	case farOpenPreparedMsg:
+		cmd := m.handleFarOpenPrepared(msg)
+		m.renderSkipped = false
+		return m, cmd
+
+	case farOpenEndedMsg:
+		cmd := m.handleFarOpenEnded(msg)
+		m.renderSkipped = false
+		return m, cmd
+
 	case fileOpenFailedMsg:
 		m.handleFileOpenFailed(msg)
 		m.renderSkipped = false

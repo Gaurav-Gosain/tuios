@@ -1421,6 +1421,9 @@ type OS struct {
 	// transfers is the mirror of the daemon's copies between machines, the
 	// Copies panel and its dialogs. See transfers.go.
 	transfers transfersState
+	// farOpen is o on a file of another machine: the offers in the dock and
+	// the copies that open when they end. See sidebar_file_open_far.go.
+	farOpen farOpenState
 	// agentsSwitchedOff is the agent switch as applyAgentsSwitch last saw
 	// it, so a config change that did not touch it does nothing.
 	agentsSwitchedOff bool
@@ -2240,6 +2243,10 @@ type NotifTarget struct {
 	// the message asks to install or update that integration, then does it
 	// the way the Agents tab's action row does. See installFromNotice.
 	AgentInstall string
+	// FarOpen names an offer to copy a file of another machine here and
+	// open it: activating the message takes it. See
+	// sidebar_file_open_far.go.
+	FarOpen uint64
 	// ClipboardVersion counts the changes to that ask's text. It is part of
 	// the target, so a message drawn with one text is not the same message as
 	// one holding another. See clickVisibleNotification.

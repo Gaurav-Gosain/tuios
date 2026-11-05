@@ -10,6 +10,8 @@ import (
 	"charm.land/lipgloss/v2"
 	"charm.land/lipgloss/v2/table"
 	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
+	"github.com/Gaurav-Gosain/tuios/internal/openedcopy"
+	"github.com/Gaurav-Gosain/tuios/internal/plural"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
 	"github.com/Gaurav-Gosain/tuios/internal/units"
@@ -97,6 +99,21 @@ and differs always gives exit 3, as with the default policy of tuios cp.`,
 		},
 	}
 	clear.Flags().BoolVar(&clearJSON, "json", false, "Print the result as JSON")
+	clearOpened := &cobra.Command{
+		Use:   "clear-opened",
+		Short: "Delete the copies that o in the rail made of files on other machines",
+		Long: `Delete the copies that o in the rail made of files on other machines.
+
+o on a file of another machine copies it to the user cache, then opens the copy.
+tuios deletes a copy that nobody opened for 7 days when the daemon starts, or
+after the days in [files] open_copy_keep_days. This command deletes all of them
+now. Close the programs that have a copy open first.`,
+		Args: cobra.NoArgs,
+		RunE: func(_ *cobra.Command, _ []string) error {
+			return runClearOpened()
+		},
+	}
+	cmd.AddCommand(clearOpened)
 	cmd.AddCommand(
 		control("transfer-pause", "pause", "Pause copies. What they copied stays", "is paused"),
 		control("transfer-resume", "resume", "Go on with paused copies, try waiting ones now, or try failed ones again", "goes on"),
@@ -308,5 +325,22 @@ func runTransfersClear(ids []string, jsonOut bool) error {
 		return nil
 	}
 	fmt.Printf("%s %s that ended %s removed from the list.\n", commas(r.Cleared), pluralWord(r.Cleared, "copy", "copies"), pluralWord(r.Cleared, "was", "were"))
+	return nil
+}
+
+func runClearOpened() error {
+	root, err := openedcopy.Root()
+	if err != nil {
+		return fmt.Errorf("tuios has no cache folder: %w", err)
+	}
+	copies, size, err := openedcopy.Clear(root)
+	if err != nil {
+		return fmt.Errorf("tuios could not delete the copies in %s: %w", root, err)
+	}
+	if copies == 0 && size == 0 {
+		fmt.Println("There are no copies of far files.")
+		return nil
+	}
+	fmt.Printf("Deleted %s of far files, %s.\n", plural.CountAs(copies, "copy", "copies"), units.Bytes(size))
 	return nil
 }

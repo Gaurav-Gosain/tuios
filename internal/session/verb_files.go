@@ -1178,9 +1178,9 @@ func (d *Daemon) verbFileAbort(cs *connState, params json.RawMessage) (any, *ver
 // bound is the memory of the copy, not the size of one answer.
 const fileWalkMax = 1_000_000
 
-// fileWalkReplyMax bounds the entries of a walk answered in one JSON reply,
+// FileWalkReplyMax bounds the entries of a walk answered in one JSON reply,
 // which a reader takes as one line.
-const fileWalkReplyMax = 20000
+const FileWalkReplyMax = 20000
 
 // fileWalkSkippedMax bounds the skipped items a walk names. It counts all of
 // them.
@@ -1385,7 +1385,7 @@ func (d *Daemon) verbFileWalk(cs *connState, params json.RawMessage) (any, *verb
 		}
 		return map[string]any{"path": path, "stream": true}, nil
 	}
-	w, err := walkTree(root, fileWalkReplyMax, d.linkWalkDenied(cs))
+	w, err := walkTree(root, FileWalkReplyMax, d.linkWalkDenied(cs))
 	if isWalkTooLarge(err) {
 		return nil, newVerbError(ErrVerbInvalidParams, "copy: "+err.Error()+". Ask with stream for a larger folder")
 	}

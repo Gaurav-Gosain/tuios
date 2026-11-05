@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"path/filepath"
 	"strings"
+	"time"
 )
 
 // FilesConfig is the [files] table: what the rail's files section does with a
@@ -13,6 +14,57 @@ type FilesConfig struct {
 	// match. The first rule that matches wins. With no match, the system
 	// opener runs (xdg-open, open, or the Windows handler).
 	Open []FileOpenRule `toml:"open"`
+
+	// OpenCopyAskMB is the size in MiB above which o on a file of another
+	// machine asks before it copies the file here. 0 or absent is 200.
+	OpenCopyAskMB int `toml:"open_copy_ask_mb"`
+	// OpenCopyMaxMB is the size in MiB above which o refuses to copy the
+	// file. 0 or absent is 4096.
+	OpenCopyMaxMB int `toml:"open_copy_max_mb"`
+	// OpenCopyKeepDays is how many days a copy that was not opened again
+	// stays. 0 or absent is 7, and a negative number keeps every copy until
+	// tuios transfers clear-opened.
+	OpenCopyKeepDays int `toml:"open_copy_keep_days"`
+}
+
+// The defaults of the open-a-copy limits, and the counts of files a folder
+// copy asks above and refuses above. The refusal is the most a folder walk
+// answers in one reply.
+const (
+	DefaultOpenCopyAskMB    = 200
+	DefaultOpenCopyMaxMB    = 4096
+	DefaultOpenCopyKeepDays = 7
+	OpenCopyAskFiles        = 1000
+	OpenCopyMaxFiles        = 20000
+)
+
+// OpenCopyAskBytes is the size above which o on a far file asks first.
+func (c FilesConfig) OpenCopyAskBytes() int64 {
+	return mib(c.OpenCopyAskMB, DefaultOpenCopyAskMB)
+}
+
+// OpenCopyMaxBytes is the size above which o on a far file refuses.
+func (c FilesConfig) OpenCopyMaxBytes() int64 {
+	return mib(c.OpenCopyMaxMB, DefaultOpenCopyMaxMB)
+}
+
+// OpenCopyKeep is how long a copy that was not opened again stays. Zero
+// keeps every copy.
+func (c FilesConfig) OpenCopyKeep() time.Duration {
+	switch {
+	case c.OpenCopyKeepDays < 0:
+		return 0
+	case c.OpenCopyKeepDays == 0:
+		return DefaultOpenCopyKeepDays * 24 * time.Hour
+	}
+	return time.Duration(c.OpenCopyKeepDays) * 24 * time.Hour
+}
+
+func mib(n, def int) int64 {
+	if n <= 0 {
+		n = def
+	}
+	return int64(n) << 20
 }
 
 // FileOpenRule is one [[files.open]] entry.

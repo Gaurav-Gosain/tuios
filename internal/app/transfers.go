@@ -510,6 +510,9 @@ func (m *OS) applyTransferRow(row session.TransferRow, progress bool) tea.Cmd {
 		return nil
 	}
 	m.transfers.lastEnd = time.Now()
+	if cmd, taken := m.farOpenCopyEnded(row); taken {
+		return cmd
+	}
 	if cmd, taken := m.dropCopyEnded(row); taken {
 		return cmd
 	}
