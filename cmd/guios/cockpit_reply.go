@@ -160,7 +160,10 @@ func (a *App) queuedRows(c *ui.Context, pal *palette, ag client.Agent, queued []
 // replyBoxBody draws the box a reply is written in, under the queue.
 func (a *App) replyBoxBody(c *ui.Context, pal *palette, ag client.Agent, d *ckDraft) {
 	r := &a.ck.reply
-	box := ui.Column(c).Radius(rCard).Padding(10, 12, 8, 12).Gap(8).Background(pal.control)
+	// Keyed: the queue comes and goes above the box, and an unkeyed box
+	// became another element each time, which took the keyboard focus from
+	// the field. A reply typed after Enter queued the last one went nowhere.
+	box := ui.Column(c.Key("reply-box")).Radius(rCard).Padding(10, 12, 8, 12).Gap(8).Background(pal.control)
 	focused := r.box.FocusWithin(c)
 	if focused {
 		box.Border(1, pal.accent.Alpha(0.6))
