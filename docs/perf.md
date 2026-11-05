@@ -2427,14 +2427,15 @@ The compiler inlines some standard library calls at every call site.
 `fmt.Errorf` carries the `errors.New` it falls back to, and `json.Marshal` and
 `json.Unmarshal` carry the default options they pass to encoding/json/v2.
 `internal/errfmt` and `internal/jsonx` hold the same functions behind
-`//go:noinline`, and `internal/lint` rejects the direct calls. Main at
-e263524e (Go 1.27.3) measured 46,903,456 bytes on linux/amd64 and 43,688,482
-on darwin/arm64. The Errorf move saved 208,896 bytes on linux/amd64, and the
-JSON move saved 65,536. The calls are on error paths and on paths that encode
-or decode, where one more call does not show. To find more of these, run
-`go tool objdump` on a build without `-s -w`, add up the bytes per source line
-inside tuios functions, and look for a standard library line with a large
-total over hundreds of functions.
+`//go:noinline`, and `internal/lint` rejects the direct calls. On main at
+dc6d566f (Go 1.27.3) the move of about 2,390 calls saved 278,528 bytes on
+linux/amd64, 247,440 on darwin/arm64 and 268,288 on windows/amd64. The calls
+are on error paths and on paths that encode or decode, where one more call
+does not show. staticcheck's ST1005 checks error strings by the name of the
+call, so it no longer sees these calls. `internal/lint` applies the same rule to
+`errfmt.Errorf`. To find more of these, run `go tool objdump` on a build without
+`-s -w`, add up the bytes per source line inside tuios functions, and look for
+a standard library line with a large total over hundreds of functions.
 
 The per-target budgets below are history. Every pull request had to edit them,
 so every landing made the open pull requests rebase on a conflict in
