@@ -13254,3 +13254,12 @@ Run on 2026-11-05 on Linux. The fixed build passes both in about 8 s.
 
 Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestAddMachineSheet' -v .`.
+
+## The ssh offer's Add opens the add-a-machine sheet
+
+`TestMachineOfferOnSSHLogin` ends by clicking Add on the offer for
+`gaurav@otherbox`. The add-a-machine sheet must open and go straight to its
+test step, and the offer must leave the dock.
+
+Run on 2026-11-05 on Linux. The control makes Add do nothing. The test fails
+with `Add did not open the sheet at its test step`.

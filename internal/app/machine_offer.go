@@ -2,7 +2,6 @@ package app
 
 import (
 	"maps"
-	"os"
 	"slices"
 
 	tea "charm.land/bubbletea/v2"
@@ -20,7 +19,7 @@ import (
 //
 //	buildbox is not a machine here. Add it?  Add  Not now  Never
 //
-//   - Add opens a new pane that runs tuios hosts setup with the destination.
+//   - Add opens the add-a-machine sheet with the destination filled in.
 //   - Not now takes the message away. The machine is not offered again until
 //     tuios starts again.
 //   - Never stores the target in sidebar.json (machine_offers_never), and the
@@ -81,15 +80,9 @@ func (m *OS) answerMachineOffer(t NotifTarget, choice int) tea.Cmd {
 	})
 	switch choice {
 	case offerAdd:
-		exe, err := os.Executable()
-		if err != nil {
-			m.ShowNotification("tuios cannot find its own program. Run tuios hosts setup "+t.OfferDest+" in a pane.", "error", m.Settings.NotificationDuration*2)
-			return nil
-		}
-		// The destination came from a process's command line. It is one
-		// argument after --, so it can be neither a flag nor a command.
-		m.AddWindow("Add "+t.OfferMachine, exe, "hosts", "setup", "--", t.OfferDest)
-		m.EnterTerminalMode()
+		// The destination came from a process's command line. The sheet
+		// passes it to ssh as an address only, never as an option.
+		return m.OpenMachineSheet(t.OfferDest)
 	case offerNever:
 		m.setMachineOfferNever(t.OfferTarget, true)
 	}
