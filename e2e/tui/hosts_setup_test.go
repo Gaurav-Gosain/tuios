@@ -427,3 +427,70 @@ func TestSetUpAMachineOnATerminal(t *testing.T) {
 		return containsAll(s, "build", "up")
 	}, "the daemon here never reported build up after the setup")
 }
+
+// TestSetUpTailnetMachinesOnATerminal runs tuios hosts setup --tailnet on a
+// terminal: the checklist lists buildbox and the offline machine sleepy, the
+// person ticks buildbox with space, and enter sets it up with the shared
+// answers. The flags give the answers that would change this test's own
+// machine: no service, and one way. The end is the summary box with one
+// machine ready, tuios on buildbox, and sleepy never dialed.
+//
+// Frames of the checklist and the summary go under artifactDir.
+func TestSetUpTailnetMachinesOnATerminal(t *testing.T) {
+	here := remoteMachine(t)
+	far := remoteMachine(t)
+	farBin := filepath.Join(xdgDir(far, "HOME"), ".local", "bin", "tuios")
+	ssh := writeSetupSSH(t, here, far)
+	data, err := os.ReadFile(ssh)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The tailnet address of buildbox reaches the same far machine, and a
+	// dial of sleepy leaves a mark.
+	routed := strings.Replace(string(data), "  someone@buildbox)", "  someone@buildbox|buildbox.example.ts.net)", 1)
+	routed = strings.Replace(routed, "case \"$addr\" in", "case \"$addr\" in\n  sleepy*) echo dialed >"+filepath.Join(here, "sleepy-dialed")+"; exit 255 ;;", 1)
+	if err := os.WriteFile(ssh, []byte(routed), 0o700); err != nil { //nolint:gosec // an ssh stand-in this test runs
+		t.Fatal(err)
+	}
+	tsDir := filepath.Join(here, "tsbin")
+	writeFakeTailscale(t, tsDir)
+	env := []string{"TUIOS_SSH=" + ssh, "PATH=" + tsDir + ":" + os.Getenv("PATH"), "COLORTERM=truecolor"}
+	if out, err := tuiosCLIEnv(t, here, env, "new", "home", "--detach"); err != nil {
+		t.Fatalf("start the daemon here: %v\n%s", err, out)
+	}
+	frames := artifactDir(t)
+	frame := func(term *tuitest.Terminal, name string) {
+		t.Helper()
+		saveArtifact(t, term, frames, name)
+		savePNG(t, term.Screen(), shot.XTermPalette(), frames, name)
+		t.Logf("frame %s saved under %s", name, frames)
+	}
+	const slow = 90 * time.Second
+	term := startIn(t, here, startOpts{cols: 110, rows: 40, animations: true, env: env,
+		args: []string{"hosts", "setup", "--tailnet", "--no-service", "--one-way"}})
+	waitFor(t, term, "the checklist", func(s tuitest.Screen) bool {
+		return screenHas(s, "Pick the machines to set up.", "0 ticked", "> [ ] buildbox", "sleepy", "offline", "space tick")
+	}, slow)
+	if err := term.SendKeys(" "); err != nil {
+		t.Fatal(err)
+	}
+	waitFor(t, term, "buildbox ticked", func(s tuitest.Screen) bool { return screenHas(s, "1 ticked", "[x] buildbox") }, slow)
+	frame(term, "tailnet-checklist")
+	if err := term.SendKeys(tuitest.Enter); err != nil {
+		t.Fatal(err)
+	}
+	waitFor(t, term, "the summary box", func(s tuitest.Screen) bool {
+		return screenHas(s, "1 machine is ready.", "buildbox", "ready, link up")
+	}, slow)
+	frame(term, "tailnet-summary")
+
+	if _, statErr := os.Stat(farBin); statErr != nil {
+		t.Fatalf("ASSERTION: tuios is not installed on buildbox: %v", statErr)
+	}
+	if _, statErr := os.Stat(filepath.Join(here, "sleepy-dialed")); statErr == nil {
+		t.Fatalf("ASSERTION: the offline machine was dialed")
+	}
+	waitForHostListing(t, here, func(s string) bool {
+		return containsAll(s, "buildbox", "up")
+	}, "the daemon here never reported buildbox up after the tailnet setup")
+}

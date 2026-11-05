@@ -13166,3 +13166,21 @@ Run on 2026-11-05 on Linux. The fixed build passes.
 
 Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestInboxRiskyApprovalTakesTwoPresses$' -v .`.
+## tuios hosts setup --tailnet asks on a terminal
+
+`TestSetUpTailnetMachinesOnATerminal` runs `hosts setup --tailnet --no-service
+--one-way` in a pty, with a fake `tailscale` that lists buildbox (online) and
+sleepy (offline). The checklist must show both, with sleepy dimmed. Space must
+tick buildbox ("1 ticked"), and enter must set it up. The end must be the
+summary box "1 machine is ready.", tuios on buildbox, buildbox up in the daemon
+here, and no dial of sleepy. Frames of the checklist and the summary go under
+artifactDir.
+
+Run on 2026-11-05 on Linux. The fixed build passes in about 6 s.
+
+| Control | Where it fails | Verdict |
+| --- | --- | --- |
+| Space in the checklist (`Prompt.Key` of `AskPeers`) does not tick the row | "waiting for buildbox ticked: timed out": the row stays unticked, and enter has nothing to set up | **caught** |
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestSetUpTailnetMachinesOnATerminal$' -v .`.

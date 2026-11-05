@@ -128,12 +128,18 @@ type Prompt struct {
 	All    bool
 	Peers  []Peer
 	Ticked []bool
-	reply  chan error
+	// Own is the row of Peers that asked for its own answers with o, -1
+	// when none did. The front end opens the install list for that
+	// machine, and sets Own back to -1.
+	Own int
+	// Skip says the person skipped this machine at its fix, in a bulk run.
+	Skip  bool
+	reply chan error
 }
 
 // PeersPrompt is the checklist of a tailnet, with nothing ticked.
 func PeersPrompt(peers []Peer) *Prompt {
-	p := &Prompt{Kind: AskPeers, Peers: peers, Ticked: make([]bool, len(peers)), Cursor: -1}
+	p := &Prompt{Kind: AskPeers, Peers: peers, Ticked: make([]bool, len(peers)), Cursor: -1, Own: -1}
 	p.move(1)
 	return p
 }
@@ -155,21 +161,28 @@ func (p *Prompt) Hints() [][2]string {
 	case AskPick:
 		return [][2]string{{"↑↓", "move"}, {"enter", "pick"}, {"d", "show every command"}, {"ctrl+c", "stop"}}
 	case AskFix:
+		h := [][2]string{{"t", "test again"}}
 		if p.Failure.FixCommand != "" && p.Failure.NeedsPerson {
-			return [][2]string{{"enter", "run it here"}, {"t", "test again"}, {"ctrl+c", "stop"}}
+			h = [][2]string{{"enter", "run it here"}, {"t", "test again"}}
 		}
+		if p.Machine != "" {
+			h = append(h, [2]string{"s", "skip " + p.Machine})
+		}
+		return append(h, [2]string{"ctrl+c", "stop"})
+	case AskPerson:
 		return [][2]string{{"t", "test again"}, {"ctrl+c", "stop"}}
 	case AskConfirm:
 		return [][2]string{{"y", "yes"}, {"n", "no"}, {"enter", "pick"}, {"ctrl+c", "stop"}}
 	case AskPeers:
-		return [][2]string{{"space", "tick"}, {"a", "all"}, {"enter", "go on"}, {"ctrl+c", "stop"}}
+		return [][2]string{{"space", "tick"}, {"a", "all"}, {"o", "own answers"}, {"enter", "go on"}, {"ctrl+c", "stop"}}
 	}
 	return nil
 }
 
 // Key moves the prompt or answers it. It reports whether the question is
 // answered, which also wakes the engine. A front end sends the person's
-// key by name: "up", "down", "left", "right", "enter", "y", "n", "t", "d".
+// key by name: "up", "down", "left", "right", "enter", "y", "n", "t", "d",
+// "s", "o".
 func (p *Prompt) Key(k string) bool {
 	switch p.Kind {
 	case AskPeers:
@@ -185,6 +198,11 @@ func (p *Prompt) Key(k string) bool {
 		case "a":
 			for i, peer := range p.Peers {
 				p.Ticked[i] = peer.CanSetUp
+			}
+		case "o":
+			// The row gets its own answers, and is ticked.
+			if p.Cursor >= 0 {
+				p.Own, p.Ticked[p.Cursor] = p.Cursor, true
 			}
 		case "enter":
 			return true
@@ -219,8 +237,17 @@ func (p *Prompt) Key(k string) bool {
 			p.Yes = true
 			p.Finish(nil)
 			return true
-		case "t":
-			p.Yes = false
+		case "t", "s":
+			if k == "s" && p.Machine == "" {
+				return false
+			}
+			p.Yes, p.Skip = false, k == "s"
+			p.Finish(nil)
+			return true
+		}
+	case AskPerson:
+		// The person ran the step elsewhere, or signed in: test again.
+		if k == "t" {
 			p.Finish(nil)
 			return true
 		}
@@ -299,10 +326,11 @@ func (b *Bridge) Confirm(ctx context.Context, q Question) (bool, error) {
 }
 
 // Fix shows the failure. A yes on a fix that needs the person runs it as a
-// person step first. Either way the engine tests again.
+// person step first. Either way the engine tests again, unless the person
+// skipped the machine.
 func (b *Bridge) Fix(ctx context.Context, f *Failure) (bool, error) {
 	p := &Prompt{Kind: AskFix, Failure: f}
-	if err := b.ask(ctx, p); err != nil {
+	if err := b.ask(ctx, p); err != nil || p.Skip {
 		return false, err
 	}
 	if p.Yes && f.NeedsPerson && (f.FixCommand != "" || f.URL != "") {

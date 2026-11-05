@@ -4786,11 +4786,17 @@ command). Answer start at boot and both ways with `y` or `n`. A fix or a step
 that needs you, such as `ssh-copy-id`, runs in the same terminal, and the setup
 tests again when it ends. Press ctrl+c at any step to stop. The setup stops at
 the end of that step and says what it left: "Stopped. Nothing was added." A
-choice that a flag gives is not asked. `--json`, `--dry-run` and `--tailnet`
-never ask.
+choice that a flag gives is not asked. `--json` and `--dry-run` never ask.
 
 `--as NAME` is the name this machine gets on the other machine in the both-ways
 step. Without it, the name comes from this machine's tailnet name or host name.
+
+With `--tailnet` on a terminal, a checklist shows each machine. `space` ticks
+a machine, and `a` ticks all that can be set up. `o` gives one machine its own
+answers: how to install, start at boot, and both ways. `enter` starts the setup
+with the answers under the list. Each machine then gets one line with its step,
+and a summary follows at the end. At a fix, `s` skips that machine, and the
+others go on. `--all` or `--only` skips the checklist.
 
 `--tailnet` lists the machines on your tailnet with their state: tuios and its
 version, no tuios, a Tailscale sign-in first, no ssh, offline, or already
