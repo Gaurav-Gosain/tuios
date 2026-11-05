@@ -2,6 +2,8 @@ package tuie2e
 
 import (
 	"encoding/json"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -235,15 +237,34 @@ func TestScratchTerminalShowsOneShell(t *testing.T) {
 		t.Fatalf("the show after the reattach lost the text: %v\n%s", err, term.Snapshot())
 	}
 
-	// The shell exits. The pane goes, and the next press starts a new one.
+	// The shell exits. The pane goes, and the next press starts a new one,
+	// in the folder the pane under it is in now. The pane moves there with
+	// a cd, which tells the daemon nothing: the folder must be read from the
+	// pane's process when the scratch starts, not from a client's copy.
 	typeUntilGone(t, term, "exit", base)
 	waitGone(t, term, "after exit", "SCRATCH-42")
+	here := filepath.Join(base, "scratch-here")
+	if err := os.MkdirAll(here, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	// The keyboard is not in the pane after the scratch's exit, so the cd
+	// goes in as a script's would. The pane is window 0.
+	if out, err := tuiosCLI(t, base, "send-text", "-s", "work", "-w", "0", "cd "+here+" && echo MOVED-$((3*3))\n"); err != nil {
+		t.Fatalf("send the cd: %v\n%s", err, out)
+	}
+	if err := term.WaitForText("MOVED-9", uiTimeout); err != nil {
+		t.Fatalf("the pane did not run the cd: %v\n%s", err, term.Snapshot())
+	}
 	toggleScratch(t, term)
 	fresh := waitScratch(t, term, base, false, false, "the show after exit")
 	if fresh.ID == first.ID {
 		t.Fatalf("the show after exit kept pane %s", fresh.ID)
 	}
 	typeUntil(t, term, "echo FRESH-$((5*5))", "FRESH-25")
+	typeUntil(t, term, `echo "AT-$(pwd)-END"`, "-END")
+	if pane, err := tuiosCLI(t, base, "capture-pane", "-s", "work", "-w", fresh.ID); err != nil || !strings.Contains(pane, "AT-"+here+"-END") {
+		t.Fatalf("the new scratch shell did not start in %s, the pane's folder after its cd: %v\n%s", here, err, pane)
+	}
 	if strings.Contains(term.Screen().Text(), "SCRATCH-42") {
 		t.Errorf("the new scratch shell shows the old one's text\n%s", term.Snapshot())
 	}

@@ -496,7 +496,7 @@ func (m *OS) createScratch(spec scratchSpec) tea.Cmd {
 		m.createLocalScratch(m.scratchDir(), spec)
 		return nil
 	}
-	var dir string
+	var dir, from string
 	if m.AttachedHost != "" {
 		// The pane starts on the session's machine, so the folder is the
 		// focused pane's path there. Empty lets that daemon pick its own.
@@ -504,6 +504,12 @@ func (m *OS) createScratch(spec scratchSpec) tea.Cmd {
 		dir = m.remotePaneDir()
 	} else {
 		dir = m.scratchDir()
+		// The daemon reads the focused pane's folder when the scratch
+		// starts. This client's copy of it is from the last state the
+		// daemon sent, which a cd does not send.
+		if w := m.GetFocusedWindow(); w != nil && w.Host == "" {
+			from = w.ID
+		}
 	}
 	m.scratchPending = spec.Name
 	m.scratchPendingAt = time.Now()
@@ -513,6 +519,7 @@ func (m *OS) createScratch(spec scratchSpec) tea.Cmd {
 		Title:     spec.Title,
 		Command:   spec.Command,
 		Dir:       dir,
+		DirFrom:   from,
 		Width:     spec.Width,
 		Height:    spec.Height,
 		Workspace: m.CurrentWorkspace,
@@ -581,10 +588,13 @@ func (m *OS) newLocalPopup(dir, title, widthSpec, heightSpec string, command []s
 // scratchRequest is what the daemon call needs, copied off the model so the
 // call can run off the update goroutine.
 type scratchRequest struct {
-	Session       string
-	Name, Title   string
-	Command       []string
-	Dir           string
+	Session     string
+	Name, Title string
+	Command     []string
+	Dir         string
+	// DirFrom is the window whose folder the daemon reads now, which wins
+	// over Dir when it can be read.
+	DirFrom       string
 	Width, Height string
 	Workspace     int
 	// Host is the machine the session is on, "" for this one. Build is this
@@ -616,6 +626,9 @@ func openScratchPopup(req scratchRequest) error {
 	}
 	if req.Dir != "" {
 		params["cwd"] = req.Dir
+	}
+	if req.DirFrom != "" {
+		params["cwd_from"] = req.DirFrom
 	}
 	// Wait a moment for the command to exit. One that exits at once (a typo,
 	// a program that is not installed) is reported with its code, and the
