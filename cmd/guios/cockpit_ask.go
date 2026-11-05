@@ -2,6 +2,7 @@ package main
 
 import (
 	"strings"
+	"time"
 
 	"github.com/Gaurav-Gosain/mygo/ui"
 
@@ -169,6 +170,8 @@ func (a *App) ckAllowChord() {
 	}
 	r, ok := a.ckSelected()
 	if !ok || r.item == nil || !ckAnswerable(*r.item) {
+		// A press with nothing to answer says so, in the key line.
+		a.ck.nothingAt = time.Now()
 		return
 	}
 	rules := r.item.Risk

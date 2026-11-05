@@ -1284,5 +1284,6 @@
   "keysKeepAttempt": "試行を残す",
   "cockpitQueuedAnswerFirst": "{name} 宛てに待機中です。先に呼び出しに答えてください。",
   "cockpitWaitsForAnswer": "呼び出しに答えるまで待ちます。",
-  "cockpitHintQueue": "待機"
+  "cockpitHintQueue": "待機",
+  "cockpitNothingWaits": "あなたを待っているものはありません。"
 }

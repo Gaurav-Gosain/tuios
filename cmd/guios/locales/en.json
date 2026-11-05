@@ -2313,5 +2313,6 @@
   "keysKeepAttempt": "Keep the attempt",
   "cockpitQueuedAnswerFirst": "Queued for {name}. Answer the call first.",
   "cockpitWaitsForAnswer": "Waits until the call is answered.",
-  "cockpitHintQueue": "queue"
+  "cockpitHintQueue": "queue",
+  "cockpitNothingWaits": "Nothing waits for you."
 }

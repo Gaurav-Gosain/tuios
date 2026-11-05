@@ -13021,3 +13021,13 @@ func CockpitHintQueue() string { return In(i18n.Locale()).CockpitHintQueue() }
 func (msgs Messages) CockpitHintQueue() string {
 	return Catalog.Format(msgs.locale, "cockpitHintQueue", nil)
 }
+
+// CockpitNothingWaits says "Nothing waits for you."
+// in the language the app shows.
+func CockpitNothingWaits() string { return In(i18n.Locale()).CockpitNothingWaits() }
+
+// CockpitNothingWaits says "Nothing waits for you."
+// in the language of msgs.
+func (msgs Messages) CockpitNothingWaits() string {
+	return Catalog.Format(msgs.locale, "cockpitNothingWaits", nil)
+}

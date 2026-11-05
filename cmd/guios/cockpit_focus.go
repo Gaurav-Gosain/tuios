@@ -680,10 +680,13 @@ func (a *App) ckSend(it session.AttentionItem, ag client.Agent, decision, messag
 		}
 	}
 	name := ag.Name
+	a.ckAnswered(it, ag)
 	go func() {
 		raw, err := cl.Verb(verb, p, true)
 		a.update(func() {
 			if err != nil {
+				// Not answered: the item shows again.
+				delete(a.ck.answered, it.ID)
 				a.toast(ckAnswerError(err))
 				a.ck.peek = nil
 				a.refreshCockpit()

@@ -164,6 +164,15 @@ type cockpit struct {
 	// and confirmed holds that its Enter is answering now.
 	question  *ckQuestion
 	confirmed bool
+	// answered holds the items the person answered that the daemon may
+	// still list, by item id, with their agent's key and when: they stay
+	// out of the list (ckAnswered). placedFree lets those agents leave
+	// Needs you without the row hold.
+	answered   map[string]ckAnsweredItem
+	placedFree map[string]bool
+	// nothingAt is when a chord found nothing to answer: the key line says
+	// so for 1.5 s.
+	nothingAt time.Time
 	// reason is the open "reject and say why" line, for the item id.
 	reason, reasonFor string
 	// undo is the last settle, which u takes back for 10 s.
@@ -308,6 +317,7 @@ func (a *App) refreshCockpit() {
 			} else {
 				a.ck.err = ""
 				a.ck.agents, a.ck.items, a.ck.loaded = agents, items, true
+				a.ckKeepAnswered()
 				a.ck.letters = ckFanLetters(agents)
 				if a.ck.undo != nil && time.Now().After(a.ck.undo.until) {
 					a.ck.undo = nil
@@ -363,6 +373,11 @@ func (a *App) ckHoldGroup(c *ui.Context, key string, want int, now time.Time) in
 	case p.want != want:
 		p.want, p.since = want, now
 	}
+	if p.shown == ckNeeds && p.want != ckNeeds && ck.placedFree[key] {
+		// The person just answered it: out of Needs you in this frame, so
+		// the next fast answer finds the next agent (council round 5, S1).
+		p.shown = p.want
+	}
 	if p.shown != p.want && p.want == ckNeeds {
 		// Into Needs you at once: the badge counts the agent from the
 		// moment it needs the person, and the row must say so too.
@@ -374,6 +389,9 @@ func (a *App) ckHoldGroup(c *ui.Context, key string, want int, now time.Time) in
 		} else {
 			p.shown = p.want
 		}
+	}
+	if p.shown != ckNeeds {
+		delete(ck.placedFree, key)
 	}
 	ck.placed[key] = p
 	return p.shown
@@ -810,6 +828,101 @@ func (a *App) ckTakeAdvance(c *ui.Context) {
 		if n.group == ckNeeds && (n.kind == ckRowAgent || n.kind == ckRowItem) {
 			a.ckSelect(n)
 			return
+		}
+	}
+}
+
+// ckAnswered takes the answered item out of the list at once, moves its
+// agent out of Needs you, and puts the cursor on the next agent that needs
+// the person, all in this frame: a fast run of answers finds the next card
+// each time (council round 5, S1). The daemon's refresh confirms it.
+func (a *App) ckAnswered(it session.AttentionItem, ag client.Agent) {
+	ck := &a.ck
+	key := ag.Key()
+	// The next row that needs the person after this one, else before it.
+	var after, before *ckRow
+	past := false
+	for i := range ck.rows {
+		r := &ck.rows[i]
+		if r.key == ck.sel {
+			past = true
+			continue
+		}
+		if r.group != ckNeeds || !r.selectable() || r.agent >= 0 && ck.agents[r.agent].Key() == key {
+			continue
+		}
+		switch {
+		case past && after == nil:
+			after = r
+		case !past && before == nil:
+			before = r
+		}
+	}
+	next := after
+	if next == nil {
+		next = before
+	}
+	var nextRow ckRow
+	if next != nil {
+		nextRow = *next
+	}
+	if ck.answered == nil {
+		ck.answered = map[string]ckAnsweredItem{}
+	}
+	ck.answered[it.ID] = ckAnsweredItem{agent: key, at: time.Now()}
+	a.ckKeepAnswered()
+	ck.advance = ""
+	if next != nil {
+		a.ckSelect(nextRow)
+	}
+}
+
+// ckAnsweredItem is an item the person answered.
+type ckAnsweredItem struct {
+	agent string
+	at    time.Time
+}
+
+// ckKeepAnswered keeps the answered items out of the list, and their
+// agents out of Needs you, until the daemon stops listing them, for at
+// most 10 s. A new prompt of the same agent has its own id: it shows.
+func (a *App) ckKeepAnswered() {
+	ck := &a.ck
+	if len(ck.answered) == 0 {
+		return
+	}
+	listed := map[string]bool{}
+	for _, it := range ck.items {
+		listed[it.ID] = true
+	}
+	for id, x := range ck.answered {
+		if !listed[id] || time.Since(x.at) > 10*time.Second {
+			delete(ck.answered, id)
+		}
+	}
+	ck.items = slices.DeleteFunc(ck.items, func(x session.AttentionItem) bool {
+		_, gone := ck.answered[x.ID]
+		return gone
+	})
+	still := map[string]bool{}
+	for _, it := range ck.items {
+		switch it.Kind {
+		case session.AttentionApproval, session.AttentionPlan, session.AttentionQuestion, session.AttentionAsk:
+			still[client.Agent{Host: it.Host, Session: it.Session, Window: it.Window}.Key()] = true
+		}
+	}
+	if ck.placedFree == nil {
+		ck.placedFree = map[string]bool{}
+	}
+	for _, x := range ck.answered {
+		ck.placedFree[x.agent] = true
+		if still[x.agent] {
+			continue
+		}
+		for i := range ck.agents {
+			if ck.agents[i].Key() == x.agent && ck.agents[i].State == "needs_input" {
+				ck.agents[i].State = "working"
+			}
 		}
 	}
 }

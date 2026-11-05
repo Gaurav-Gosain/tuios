@@ -723,6 +723,12 @@ func (a *App) cockpitHints(c *ui.Context, pal *palette) {
 			room -= need
 			keyHint(c, pal, k, what)
 		}
+		if d := c.Now().Sub(a.ck.nothingAt); d < 1500*time.Millisecond && a.ck.view == viewAgents {
+			// A chord found nothing to answer.
+			c.After(1500*time.Millisecond - d)
+			ui.Text(c, locales.CockpitNothingWaits()).FontSize(fsSmall).FontWeight(wSemibold).TextColor(pal.text).SingleLine()
+			return
+		}
 		if a.ck.question != nil && a.ck.view == viewAgents {
 			// The open confirm step takes the key line: what Enter does.
 			a.ckQuestionLine(c, pal)
