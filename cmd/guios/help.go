@@ -50,13 +50,13 @@ func (a *App) helpRows() []helpRow {
 			for _, g := range config.PrefixMenuGroups(tk.reg, m, config.MenuState{Daemon: true, Minimized: -1}) {
 				title := keysTitle(m)
 				if g.Title != "" {
-					title += " · " + g.Title
+					title += " · " + groupWords(g.Title)
 				}
 				for _, b := range g.Bindings {
 					if !nativeActions[b.Action] && !daemonActions[b.Action] {
 						continue
 					}
-					what := b.Description
+					what := paneWords(b)
 					if b.Submenu {
 						what += " …"
 					}
@@ -73,6 +73,61 @@ func (a *App) helpRows() []helpRow {
 		rows = append(rows, helpRow{"guios · " + menuTitle(act.Menu), k, strings.TrimSuffix(actionTitle(act.ID), "…")})
 	}
 	return rows
+}
+
+// paneWords is a tuios key's description in guios's words. The TUI names
+// a pane a window and says "Split horizontal" for the split below. guios
+// says pane and "Split down" on every other screen, so its keys say so too.
+// A key binding names the first action of its row.
+func paneWords(b config.Keybinding) string {
+	switch b.Action {
+	case "prefix_new_window", "window_prefix_new":
+		return locales.ActionNewPane()
+	case "prefix_close_window", "window_prefix_close":
+		return locales.PaneClose()
+	case "prefix_rename_window", "window_prefix_rename":
+		return locales.KeysRenamePane()
+	case "prefix_next_window":
+		return locales.KeysNextPrevPane()
+	case "window_prefix_next":
+		return locales.ActionNextPane()
+	case "window_prefix_prev":
+		return locales.ActionPreviousPane()
+	case "prefix_select_0":
+		return locales.KeysJumpPane()
+	case "prefix_split_horizontal", "split_horizontal":
+		return locales.ActionSplitDown()
+	case "prefix_split_vertical", "split_vertical":
+		return locales.ActionSplitRight()
+	case "workspace_prefix_move_1":
+		return locales.MenuMovePaneToWorkspace()
+	case "minimize_window", "minimize_prefix_focused":
+		return locales.KeysMinimizePane()
+	case "minimize_prefix_restore_1":
+		// The TUI adds the count of minimized panes: "Restore window (2 minimized)".
+		if i := strings.IndexByte(b.Description, '('); i > 0 {
+			return locales.KeysRestorePane() + " " + b.Description[i:]
+		}
+		return locales.KeysRestorePane()
+	case "snap_corner_1":
+		return locales.KeysSnapPane()
+	case "prefix_window":
+		return locales.KeysMenuWindow()
+	case "resize_width_50":
+		return locales.KeysPaneWidth()
+	case "resize_height_50":
+		return locales.KeysPaneHeight()
+	}
+	return b.Description
+}
+
+// groupWords is a tuios menu group's title in guios's words: its Windows
+// are guios's panes.
+func groupWords(title string) string {
+	if title == "Windows" {
+		return locales.KeysGroupPanes()
+	}
+	return title
 }
 
 func (a *App) openHelp() {

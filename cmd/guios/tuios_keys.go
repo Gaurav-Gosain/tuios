@@ -836,12 +836,12 @@ func (a *App) keysCard(c *ui.Context, pal *palette) {
 						}
 						ui.Column(c.Key("g" + strconv.Itoa(i))).Gap(3).Children(func() {
 							if g.Title != "" {
-								ui.Text(c, g.Title).FontSize(fsCaption).FontWeight(wSemibold).TextColor(pal.textFaint).Margin(0, 0, 2, 0)
+								ui.Text(c, groupWords(g.Title)).FontSize(fsCaption).FontWeight(wSemibold).TextColor(pal.textFaint).Margin(0, 0, 2, 0)
 							}
 							for j, b := range g.Bindings {
 								ui.Row(c.Key("b" + strconv.Itoa(j))).Gap(8).AlignItems(ui.Center).Children(func() {
 									ui.Row(c).Width(58).Shrink(0).Children(func() { kbd(c, pal, b.Key) })
-									desc := b.Description
+									desc := paneWords(b)
 									if b.Submenu {
 										desc += " …"
 									}

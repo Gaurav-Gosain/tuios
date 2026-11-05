@@ -8212,11 +8212,11 @@ func (msgs Messages) KeysMenuWorkspace() string {
 	return Catalog.Format(msgs.locale, "keysMenuWorkspace", nil)
 }
 
-// KeysMenuWindow says "Window"
+// KeysMenuWindow says "Pane"
 // in the language the app shows.
 func KeysMenuWindow() string { return In(i18n.Locale()).KeysMenuWindow() }
 
-// KeysMenuWindow says "Window"
+// KeysMenuWindow says "Pane"
 // in the language of msgs.
 func (msgs Messages) KeysMenuWindow() string {
 	return Catalog.Format(msgs.locale, "keysMenuWindow", nil)
@@ -8240,6 +8240,96 @@ func KeysMenuMinimize() string { return In(i18n.Locale()).KeysMenuMinimize() }
 // in the language of msgs.
 func (msgs Messages) KeysMenuMinimize() string {
 	return Catalog.Format(msgs.locale, "keysMenuMinimize", nil)
+}
+
+// KeysNextPrevPane says "Next/prev pane"
+// in the language the app shows.
+func KeysNextPrevPane() string { return In(i18n.Locale()).KeysNextPrevPane() }
+
+// KeysNextPrevPane says "Next/prev pane"
+// in the language of msgs.
+func (msgs Messages) KeysNextPrevPane() string {
+	return Catalog.Format(msgs.locale, "keysNextPrevPane", nil)
+}
+
+// KeysJumpPane says "Jump to pane"
+// in the language the app shows.
+func KeysJumpPane() string { return In(i18n.Locale()).KeysJumpPane() }
+
+// KeysJumpPane says "Jump to pane"
+// in the language of msgs.
+func (msgs Messages) KeysJumpPane() string {
+	return Catalog.Format(msgs.locale, "keysJumpPane", nil)
+}
+
+// KeysRenamePane says "Rename pane"
+// in the language the app shows.
+func KeysRenamePane() string { return In(i18n.Locale()).KeysRenamePane() }
+
+// KeysRenamePane says "Rename pane"
+// in the language of msgs.
+func (msgs Messages) KeysRenamePane() string {
+	return Catalog.Format(msgs.locale, "keysRenamePane", nil)
+}
+
+// KeysMinimizePane says "Minimize pane"
+// in the language the app shows.
+func KeysMinimizePane() string { return In(i18n.Locale()).KeysMinimizePane() }
+
+// KeysMinimizePane says "Minimize pane"
+// in the language of msgs.
+func (msgs Messages) KeysMinimizePane() string {
+	return Catalog.Format(msgs.locale, "keysMinimizePane", nil)
+}
+
+// KeysRestorePane says "Restore pane"
+// in the language the app shows.
+func KeysRestorePane() string { return In(i18n.Locale()).KeysRestorePane() }
+
+// KeysRestorePane says "Restore pane"
+// in the language of msgs.
+func (msgs Messages) KeysRestorePane() string {
+	return Catalog.Format(msgs.locale, "keysRestorePane", nil)
+}
+
+// KeysSnapPane says "Snap pane to a corner"
+// in the language the app shows.
+func KeysSnapPane() string { return In(i18n.Locale()).KeysSnapPane() }
+
+// KeysSnapPane says "Snap pane to a corner"
+// in the language of msgs.
+func (msgs Messages) KeysSnapPane() string {
+	return Catalog.Format(msgs.locale, "keysSnapPane", nil)
+}
+
+// KeysPaneWidth says "Resize pane width (%)"
+// in the language the app shows.
+func KeysPaneWidth() string { return In(i18n.Locale()).KeysPaneWidth() }
+
+// KeysPaneWidth says "Resize pane width (%)"
+// in the language of msgs.
+func (msgs Messages) KeysPaneWidth() string {
+	return Catalog.Format(msgs.locale, "keysPaneWidth", nil)
+}
+
+// KeysPaneHeight says "Resize pane height (%)"
+// in the language the app shows.
+func KeysPaneHeight() string { return In(i18n.Locale()).KeysPaneHeight() }
+
+// KeysPaneHeight says "Resize pane height (%)"
+// in the language of msgs.
+func (msgs Messages) KeysPaneHeight() string {
+	return Catalog.Format(msgs.locale, "keysPaneHeight", nil)
+}
+
+// KeysGroupPanes says "Panes"
+// in the language the app shows.
+func KeysGroupPanes() string { return In(i18n.Locale()).KeysGroupPanes() }
+
+// KeysGroupPanes says "Panes"
+// in the language of msgs.
+func (msgs Messages) KeysGroupPanes() string {
+	return Catalog.Format(msgs.locale, "keysGroupPanes", nil)
 }
 
 // KeysEscape says "Press Esc to close."
