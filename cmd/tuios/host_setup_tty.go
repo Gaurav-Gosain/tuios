@@ -20,6 +20,7 @@ import (
 
 	"github.com/Gaurav-Gosain/tuios/internal/app"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"github.com/Gaurav-Gosain/tuios/internal/federation"
 	"github.com/Gaurav-Gosain/tuios/internal/hostsetup"
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
@@ -293,7 +294,7 @@ func (m *setupModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.execing = false
 		err := msg.err
 		if err != nil {
-			err = fmt.Errorf("%s ended with an error: %w", msg.p.Person.Line, err)
+			err = errfmt.Errorf("%s ended with an error: %w", msg.p.Person.Line, err)
 		}
 		return m, m.done(err)
 	case setupEndMsg:
