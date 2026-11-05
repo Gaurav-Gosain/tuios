@@ -59,8 +59,12 @@ func TestEveryProgramTakesTheSharedOptions(t *testing.T) {
 			// model, and keep Bubble Tea's signal handler, so a kill still
 			// gives the terminal back. ProgramOptions removes that handler,
 			// because a client's command owns its signals. The look list of
-			// tuios look pick is the same kind of program.
-			if path == "internal/explore/explore.go" || path == "cmd/tuios/look_pick.go" {
+			// tuios look pick is the same kind of program. So is tuios hosts
+			// setup on a terminal: an inline program that asks for the
+			// choices the flags did not make. A kill must end it, so the
+			// setup stops at a step boundary and gives the terminal back.
+			switch path {
+			case "internal/explore/explore.go", "cmd/tuios/look_pick.go", "cmd/tuios/host_setup_tty.go":
 				return
 			}
 			sites++
