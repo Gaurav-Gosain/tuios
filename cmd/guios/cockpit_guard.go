@@ -256,13 +256,16 @@ func (a *App) ownedKeys(el ui.Element) bool {
 	return true
 }
 
-// keysRing draws a 2 DIP ring inside el while on: the list has the keys,
-// so that a person sees where the letters they type go (council round 3,
-// M1). The ring paints over the children and takes no room.
-func keysRing(el ui.Element, on bool, pal *palette) {
+// keysRing draws a 2 DIP accent ring 1 DIP inside el, the selected row or
+// card, while its list has the keys: a person sees where the letters they
+// type go (council round 3, M1). It marks the row, not the column (council
+// round 4, M3). The ring paints over the children and takes no room.
+func keysRing(el ui.Element, on bool, pal *palette, radius float32) {
 	if !on {
 		return
 	}
 	col := pal.accent
-	el.DrawOver(func(p *ui.Painter, r ui.Rect) { p.Stroke(r, col, 0, 2) })
+	el.DrawOver(func(p *ui.Painter, r ui.Rect) {
+		p.Stroke(ui.Rect{X: r.X + 1, Y: r.Y + 1, W: r.W - 2, H: r.H - 2}, col, radius, 2)
+	})
 }

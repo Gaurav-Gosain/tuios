@@ -264,7 +264,6 @@ func (a *App) cockpitFleet(c *ui.Context, pal *palette, width float32, shown boo
 	if !shown {
 		return
 	}
-	keysRing(col, ck.fleetFocus.FocusWithin(c) && ck.lightbox == nil && !a.keysOwned(), pal)
 	col.Children(func() {
 		if !ck.loaded {
 			ui.Column(c).Grow(1).Center().Children(func() { ui.Spinner(c) })
@@ -389,6 +388,7 @@ func (a *App) ckRowView(c *ui.Context, pal *palette, r ckRow) {
 	h := float32(ckRowH)
 	sel := r.key == ck.sel
 	row := ui.Row(c.Key(r.key)).Height(h).Padding(0, 10, 0, 8).Gap(10).AlignItems(ui.Center).Radius(rControl).Margin(0, 0, 1, 0)
+	keysRing(row, sel && ck.fleetFocus.FocusWithin(c) && ck.lightbox == nil && !a.keysOwned(), pal, rControl)
 	if pal.dark {
 		row.Border(1, ui.Transparent)
 	}

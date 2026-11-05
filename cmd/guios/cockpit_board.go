@@ -170,7 +170,6 @@ func (a *App) boardView(c *ui.Context, pal *palette, sess string) {
 	if a.boardKeys(c, root, b) {
 		c.Invalidate()
 	}
-	keysRing(root, b.focus.FocusWithin(c) && !a.keysOwned(), pal)
 	root.Children(func() {
 		box := ui.Row(c.Key("cols")).Grow(1).MinHeight(0).AlignItems(ui.Stretch).Gap(boardGap).Padding(14, 16)
 		w := box.Bounds().W
@@ -505,6 +504,7 @@ func (a *App) boardCard(c *ui.Context, pal *palette, b *ckBoard, t session.TaskR
 		// takes no click, so a click selects it first.
 		card.Drag(t.ID)
 	}
+	keysRing(card, on && b.focus.FocusWithin(c) && !a.keysOwned(), pal, rControl)
 	switch {
 	case on:
 		card.Border(1, pal.accent)
