@@ -40,6 +40,13 @@ type sessionRow struct {
 	LastActive  int64  `json:"last_active"`
 	Width       int    `json:"width"`
 	Height      int    `json:"height"`
+	Worktree    *struct {
+		Repo     string `json:"repo"`
+		RepoRoot string `json:"repo_root"`
+		Branch   string `json:"branch"`
+		Path     string `json:"path"`
+		Main     bool   `json:"main"`
+	} `json:"worktree"`
 }
 
 type windowRow struct {
@@ -206,6 +213,9 @@ func (k *stateKeeper) build() (*proto.State, error) {
 			ws = 1
 		}
 		ks := proto.Session{ID: s.ID, Project: project, Name: userName(s.Name), Focus: wl.Focus, Workspace: ws}
+		if w := s.Worktree; w != nil && w.Repo != "" {
+			ks.Checkout = &proto.Checkout{Repo: w.Repo, RepoRoot: w.RepoRoot, Branch: w.Branch, Path: w.Path, Linked: !w.Main}
+		}
 		ti := k.readTree(s.Name, ws)
 		// A pane whose program exited goes, unless it stays (keep_open):
 		// guios closes it, as a TUI client does (exits.go).

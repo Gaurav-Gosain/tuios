@@ -325,6 +325,10 @@ type Session struct {
 	// Worktree is the linked git worktree kero made for the session to
 	// work in, nil for none.
 	Worktree *Worktree `json:"worktree,omitempty"`
+	// Checkout is the git checkout the session's folder is in, as the
+	// daemon groups sessions by (tuios ls --json's worktree), nil outside
+	// git or from a daemon that does not say.
+	Checkout *Checkout `json:"checkout,omitempty"`
 	// Workspace is the tuios workspace the session shows (1 to 9), whose
 	// panes Panes are; Workspaces are those that hold panes, and the shown
 	// one, in the session's order.
@@ -474,6 +478,17 @@ type Worktree struct {
 	Branch string `json:"branch"`
 	Base   string `json:"base,omitempty"`
 	Main   string `json:"main"`
+}
+
+// Checkout is a session's git checkout: its repository's name and main
+// checkout, its branch, its own root, and whether it is a linked worktree
+// (a checkout of the repository made apart from its main one).
+type Checkout struct {
+	Repo     string `json:"repo"`
+	RepoRoot string `json:"repoRoot"`
+	Branch   string `json:"branch"`
+	Path     string `json:"path"`
+	Linked   bool   `json:"linked,omitempty"`
 }
 
 // Losses writes what removing the worktree would lose, in English, as
