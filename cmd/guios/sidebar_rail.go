@@ -1,7 +1,10 @@
 package main
 
 import (
+	"path/filepath"
+	"slices"
 	"strconv"
+	"strings"
 
 	"github.com/Gaurav-Gosain/mygo/ui"
 
@@ -122,13 +125,32 @@ func (a *App) paneRows(c *ui.Context, pal *palette, s *proto.Session) {
 		agents[a.ck.agents[r.i].Window] = true
 	}
 	var panes []*proto.Pane
+	var nums []int // each pane's number in the session, from 1
 	for i := range s.Panes {
 		if p := &s.Panes[i]; !agents[p.ID] && p.Agent == "" {
 			panes = append(panes, p)
+			nums = append(nums, i+1)
 		}
 	}
 	if len(panes) == 0 {
 		return
+	}
+	// Panes that would read the same, as three shells, get a detail:
+	// their folder within the session's, else their number, as the
+	// palette's Ctrl+B 1, 2, 3 (council round 5, visual M2).
+	details := make([]string, len(panes))
+	seen := map[string]int{}
+	for k, p := range panes {
+		details[k] = paneFolder(s, p)
+		seen[p.PaneName()+"\x00"+details[k]]++
+	}
+	for k, p := range panes {
+		if seen[p.PaneName()+"\x00"+details[k]] > 1 {
+			if details[k] != "" {
+				details[k] += " · "
+			}
+			details[k] += strconv.Itoa(nums[k])
+		}
 	}
 	focus := s.Focus
 	if f := a.focus[s.ID]; f != "" {
@@ -142,14 +164,28 @@ func (a *App) paneRows(c *ui.Context, pal *palette, s *proto.Session) {
 				a.moreRow(c, pal, "panes-more", locales.SidebarMorePanes(len(panes)-sbPanesMax), func() { a.selectSession(sid) })
 				return
 			}
-			a.paneRow(c, pal, s, p, p.ID == focus && s.ID == a.selected, h)
+			a.paneRow(c, pal, s, p, details[k], p.ID == focus && s.ID == a.selected, h)
 		}
 	})
 }
 
+// paneFolder is a pane's folder within its session's, as "docs" or
+// "src/api", "" for the session's own; a folder outside it goes by its
+// last name.
+func paneFolder(s *proto.Session, p *proto.Pane) string {
+	d, root := p.WorkDir(), s.WorkDir()
+	if d == "" || d == root {
+		return ""
+	}
+	if r, err := filepath.Rel(root, d); err == nil && root != "" && !strings.HasPrefix(r, "..") {
+		return filepath.ToSlash(r)
+	}
+	return proto.DirName(d)
+}
+
 // paneRow is one pane under its session: a mark of its state, what runs
-// in it, and its folder.
-func (a *App) paneRow(c *ui.Context, pal *palette, s *proto.Session, p *proto.Pane, focused bool, h *host) {
+// in it, and detail, what tells it from the others (paneRows).
+func (a *App) paneRow(c *ui.Context, pal *palette, s *proto.Session, p *proto.Pane, detail string, focused bool, h *host) {
 	row := ui.Row(c.Key("pn-"+p.ID)).Height(sbPaneH).Padding(0, 10, 0, rowInset+4).Gap(8).AlignItems(ui.Center).Radius(rRow).
 		Cursor(ui.CursorPointer).Label(p.PaneName())
 	if row.Hovered() {
@@ -166,10 +202,6 @@ func (a *App) paneRow(c *ui.Context, pal *palette, s *proto.Session, p *proto.Pa
 			a.focusTerminal()
 		}
 	}
-	dir := ""
-	if d := p.WorkDir(); d != "" && d != s.WorkDir() {
-		dir = proto.DirName(d)
-	}
 	rowTooltip(c, row, "pn-tip-"+p.ID, h.shortDir(p.WorkDir()))
 	row.Children(func() {
 		ui.Row(c).Width(12).Shrink(0).Justify(ui.Center).Children(func() {
@@ -184,8 +216,8 @@ func (a *App) paneRow(c *ui.Context, pal *palette, s *proto.Session, p *proto.Pa
 			name.TextColor(pal.text)
 		}
 		ui.Spacer(c)
-		if dir != "" {
-			ui.Text(c, dir).FontSize(fsSmall).TextColor(pal.textFaint).SingleLine().Ellipsis("…").MinWidth(0).Shrink(2).MaxWidth(110)
+		if detail != "" {
+			ui.Text(c, detail).FontSize(fsSmall).TextColor(pal.textFaint).SingleLine().Ellipsis("…").MinWidth(0).Shrink(2).MaxWidth(110)
 		}
 	})
 }
@@ -245,7 +277,10 @@ func (a *App) filesRow(c *ui.Context, pal *palette) {
 // worktreeOrder puts each session in a linked worktree under the session
 // of its repository's main checkout, as the TUI rail nests them, and says
 // which are nested. A linked one with no such session keeps its place.
-func worktreeOrder(in []*proto.Session) (out []*proto.Session, nested map[string]bool) {
+//
+// letter names a fan attempt's letter: a fan's attempts sit in its order,
+// A before B, as the agents list has them (council round 5, visual M2).
+func worktreeOrder(in []*proto.Session, letter func(*proto.Session) string) (out []*proto.Session, nested map[string]bool) {
 	mains := map[string]bool{}
 	for _, s := range in {
 		if s.Checkout != nil && !s.Checkout.Linked {
@@ -260,6 +295,15 @@ func worktreeOrder(in []*proto.Session) (out []*proto.Session, nested map[string
 	}
 	if len(under) == 0 {
 		return in, nil
+	}
+	for _, ss := range under {
+		slices.SortStableFunc(ss, func(x, y *proto.Session) int {
+			lx, ly := letter(x), letter(y)
+			if lx == "" || ly == "" {
+				return 0
+			}
+			return strings.Compare(lx, ly)
+		})
 	}
 	nested = map[string]bool{}
 	out = make([]*proto.Session, 0, len(in))

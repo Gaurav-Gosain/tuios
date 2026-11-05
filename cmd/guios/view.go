@@ -621,7 +621,7 @@ func (a *App) groupView(c *ui.Context, pal *palette, g group, gi int, n *int) {
 			}
 		}
 	})
-	ordered, nested := worktreeOrder(g.sessions)
+	ordered, nested := worktreeOrder(g.sessions, a.railLetter)
 	if collapsed {
 		// The session shown stays in view.
 		for _, s := range ordered {

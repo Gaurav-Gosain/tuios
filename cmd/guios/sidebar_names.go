@@ -50,6 +50,26 @@ func (a *App) railName(s *proto.Session) string {
 	return s.DisplayName(a.set.SessionName)
 }
 
+// railTitle is a session row's title: its name, or for a row nested
+// under its repository's session, its branch, as the TUI rail nests a
+// worktree ("└ feature/login"). A fan's attempts differ in their branch's
+// end ("fan/try-two-ways-2"), which a long session name loses to a cut.
+func (a *App) railTitle(s *proto.Session, nested bool) string {
+	if k := s.Checkout; nested && k != nil && k.Branch != "" {
+		return k.Branch
+	}
+	return a.railName(s)
+}
+
+// railLetter is a fan attempt's letter for its session, "" for a session
+// that is no attempt of a fan.
+func (a *App) railLetter(s *proto.Session) string {
+	if s.Name == "" || a.hostOf(s.ID).remote() {
+		return ""
+	}
+	return a.ck.letters[s.Name]
+}
+
 // railMark is the quiet mark after the name of a session that shows the
 // same name as another, "" for none.
 func (a *App) railMark(s *proto.Session) string {
