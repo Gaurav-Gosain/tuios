@@ -479,7 +479,7 @@ const attemptChipW = 16
 func attemptChip(c *ui.Context, pal *palette, letter string) {
 	ui.Row(c).Size(attemptChipW, attemptChipW).Shrink(0).Radius(rChip).Background(pal.accent.Alpha(0.16)).Center().
 		Label(locales.CockpitAttempt(letter)).Children(func() {
-		ui.Text(c, letter).FontSize(fsCaption).FontWeight(wSemibold).TextColor(pal.accent).SingleLine()
+		ui.Text(c, letter).FontSize(fsCaption).FontWeight(wSemibold).TextColor(pal.accentText).SingleLine()
 	})
 }
 

@@ -67,6 +67,7 @@ type palette struct {
 	dangerText ui.Color
 	dangerFill ui.Color
 	accent     ui.Color
+	accentText ui.Color // the accent as text on its own 16 % chip
 	// work marks what works: an agent's turn, a program's progress. The
 	// accent means only what is selected or primary (DESIGN.md section 1).
 	work ui.Color
@@ -442,6 +443,24 @@ func (p *palette) finish(fg, bg ui.Color) {
 	worst := p.worstSurface(bg)
 	p.textMuted = legible(fg.Mix(bg, 0.38), fg, worst, 4.5)
 	p.textFaint = legible(fg.Mix(bg, 0.56), fg, worst, 3)
+	if !p.dark {
+		// In the light text3 carries information (ages, labels, hints,
+		// counts) on the cards, the lists and the sidebar, a shade under
+		// the cards (the agents view's ckGround): it keeps 4.5:1 there
+		// (council round 3, visual M2). The token aims at 5:1: a small
+		// regular face draws its strokes' cores a little lighter than the
+		// token, so 5:1 on the token reads 4.5:1 on the frame's pixels.
+		// text2 stays darker, so the tiers hold.
+		ground := bg.Mix(p.sidebar, 0.6)
+		for i := 0; i < 40 && (contrast(p.textFaint, ground) < 5 || contrast(p.textFaint, bg) < 5); i++ {
+			p.textFaint = p.textFaint.Mix(fg, 0.04)
+		}
+		for i := 0; i < 20 && contrast(p.textMuted, bg) < contrast(p.textFaint, bg)+1; i++ {
+			p.textMuted = p.textMuted.Mix(fg, 0.08)
+		}
+	}
+	// An attempt's letter on its accent chip keeps 5:1 (visual M2).
+	p.accentText = deepen(p.accent, p.accent.Alpha(0.16).Over(worst), 5)
 	attnWorst := worst
 	if s := p.attnSoft.Over(bg); p.dark == (luminance(s) > luminance(attnWorst)) {
 		attnWorst = s
