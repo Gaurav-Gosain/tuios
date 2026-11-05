@@ -1463,12 +1463,13 @@ type Session struct {
 	// Version, so a move by one client is invisible to focusMovedVersion, and a
 	// stale push from another client built at that version may predate it.
 	clientFocusMoved map[string]int
-	// askedFocusMoved is, by push origin, the last daemon mutation that
-	// moved the focus because that client asked for it (a new window with
-	// focus), guarded by stateMu. The client sent the request before any
+	// askedFocusMoved is, by push origin, the daemon mutations that moved
+	// the focus because that client asked for it (a new window with focus)
+	// and that the client's pushes have not yet shown it has seen, oldest
+	// first, guarded by stateMu. The client sent each request before any
 	// push it sends next, so such a push may keep a focus it moved since. See
 	// pushOwnsFocusLocked.
-	askedFocusMoved map[string]askedFocusMove
+	askedFocusMoved map[string]*askedFocusMoves
 	// workspaceTrail is the workspaces the session has shown, oldest first,
 	// each at most once, guarded by stateMu. When the workspace on screen
 	// loses its last pane the session goes back along it. See
@@ -3644,6 +3645,12 @@ func (s *Session) updateStateFrom(state *SessionState, seen bool) (accepted, beh
 		// client's tree after the older client had already taken the current
 		// one. A pair with a v0.8.0 client stays last-writer-wins.
 	}
+	if moves := s.askedFocusMoved[origin]; moves != nil && state.BaseVersion != 0 {
+		moves.seen(state.BaseVersion)
+		if moves.last() == 0 {
+			delete(s.askedFocusMoved, origin)
+		}
+	}
 	state.BaseVersion = 0
 
 	before := snapshotLifecycle(prev)
@@ -3708,11 +3715,20 @@ func (s *Session) pushOwnsFocusLocked(origin string, base int, mine focusView) b
 			return false
 		}
 	}
-	for o, m := range s.askedFocusMoved {
-		if base >= m.version {
+	for o, moves := range s.askedFocusMoved {
+		if o != origin {
+			if moves.last() > base {
+				return false
+			}
 			continue
 		}
-		if o != origin || (mine.window == m.before.window && mine.workspace == m.before.workspace) {
+		// The focus the push would show had it not moved is the one from
+		// before the first move it has not seen.
+		m, ok := moves.firstAfter(base)
+		if !ok {
+			continue
+		}
+		if m.version == 0 || (mine.window == m.before.window && mine.workspace == m.before.workspace) {
 			return false
 		}
 	}
@@ -3724,6 +3740,60 @@ func (s *Session) pushOwnsFocusLocked(origin string, base int, mine focusView) b
 type askedFocusMove struct {
 	version int
 	before  focusView
+}
+
+// maxAskedFocusMoves bounds askedFocusMoves. A client that has more requests
+// in flight than this keeps the session's focus on a stale push.
+const maxAskedFocusMoves = 16
+
+// askedFocusMoves is one client's askedFocusMove records, oldest first.
+// dropped is the newest version let go to stay in bound.
+type askedFocusMoves struct {
+	moves   []askedFocusMove
+	dropped int
+}
+
+func (a *askedFocusMoves) add(m askedFocusMove) {
+	if len(a.moves) == maxAskedFocusMoves {
+		a.dropped = a.moves[0].version
+		a.moves = a.moves[1:]
+	}
+	a.moves = append(a.moves, m)
+}
+
+// last is the version of the newest record, zero for none.
+func (a *askedFocusMoves) last() int {
+	if len(a.moves) == 0 {
+		return max(a.dropped, 0)
+	}
+	return a.moves[len(a.moves)-1].version
+}
+
+// firstAfter returns the oldest record a push built at base has not seen.
+// ok is false when it has seen them all. A record with version zero means
+// the oldest unseen one was let go, and its focus is not known.
+func (a *askedFocusMoves) firstAfter(base int) (askedFocusMove, bool) {
+	if base < a.dropped {
+		return askedFocusMove{}, true
+	}
+	for _, m := range a.moves {
+		if m.version > base {
+			return m, true
+		}
+	}
+	return askedFocusMove{}, false
+}
+
+// seen drops the records a push built at base has seen.
+func (a *askedFocusMoves) seen(base int) {
+	if base >= a.dropped {
+		a.dropped = 0
+	}
+	i := 0
+	for i < len(a.moves) && a.moves[i].version <= base {
+		i++
+	}
+	a.moves = a.moves[i:]
 }
 
 // markFocusIntentLocked records, from inside a mutateState function, that the
@@ -3780,9 +3850,14 @@ func (s *Session) mutateStateLocked(fn func(state *SessionState) error) (*Sessio
 	if !s.focusNeutral && (s.focusIntent || !focusBefore.sameFocus(focusViewOf(s.state))) {
 		if s.focusAskedBy != "" {
 			if s.askedFocusMoved == nil {
-				s.askedFocusMoved = make(map[string]askedFocusMove)
+				s.askedFocusMoved = make(map[string]*askedFocusMoves)
 			}
-			s.askedFocusMoved[s.focusAskedBy] = askedFocusMove{version: s.state.Version, before: focusBefore}
+			moves := s.askedFocusMoved[s.focusAskedBy]
+			if moves == nil {
+				moves = &askedFocusMoves{}
+				s.askedFocusMoved[s.focusAskedBy] = moves
+			}
+			moves.add(askedFocusMove{version: s.state.Version, before: focusBefore})
 		} else {
 			s.focusMovedVersion = s.state.Version
 		}
