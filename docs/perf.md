@@ -5544,6 +5544,29 @@ both encoders.
   against 31.3 ms bare (+7.8%) and 33.4 ms against 36.4 ms framed (+8.8%).
   Sub makes the file larger and the encode slower, so unfiltered rows stay.
 
+## 2026-11 quick look lights search matches in one walk
+
+With wrap on and a search active, every drawn row lit its matches by measuring
+the whole line before each one, so a long line cost the square of its matches
+on every redraw (a scroll step or a typed character). The walk now resumes
+where the last match stopped, one grapheme cluster at a time, so the line is
+measured once. The lit cells are the same.
+
+Measured with a scratch benchmark (`keystrokeOS(b, 1, 200, 60)`, a keybind
+registry, quick look open on a text result whose target is the shown one, wrap
+on, the kept panel cleared before each iteration, one `renderQuickLook` per
+iteration), base and branch test binaries built with `go test -c` (`go version`
+checked on both: go1.27.3), alternated for 10 rounds, benchstat. Each input is
+one held line:
+
+| line | search | base | branch |
+|---|---|---|---|
+| 2 KiB of English prose | e | 31.7 ms ± 26% | 3.0 ms ± 54% |
+| 8 KiB of English prose | e | 257 ms ± 16% | 10.3 ms ± 49% |
+| 64 KiB of English prose | e | 308 ms ± 17% | 69.1 ms ± 31% |
+| 64 KiB of `a` | a | 2.62 s ± 11% | 67.7 ms ± 43% |
+| 64 KiB of CJK | 字 | 653 ms ± 23% | 162 ms ± 24% |
+
 ## 2026-11 quick look keeps its drawn panel
 
 While quick look is open, every overlay compose drew the whole panel again,

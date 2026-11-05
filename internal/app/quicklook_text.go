@@ -666,6 +666,11 @@ func quickLookLightMatches(c *ckCanvas, pal overlay.Palette, q, line string, x, 
 		cell.Style.Bg = pal.Accent
 		cell.Style.Fg = pal.PillFg
 	}
+	// p is the start of a grapheme cluster at or before the match and w the
+	// width of line[:p]. Matches come in order, so the walk resumes where the
+	// last one stopped, as ansi.StringWidth steps a string, and a long line is
+	// measured once instead of once per match.
+	p, w := 0, 0
 	for at := 0; ; {
 		i := strings.Index(hay[at:], q)
 		if i < 0 {
@@ -676,7 +681,24 @@ func quickLookLightMatches(c *ckCanvas, pal overlay.Palette, q, line string, x, 
 		if i >= len(line) {
 			return
 		}
-		col := ansi.StringWidth(line[:i]) - xOff
+		var col int
+		if utf8.RuneStart(line[i]) {
+			for p < i {
+				g, gw := ansi.FirstGraphemeCluster(line[p:], ansi.GraphemeWidth)
+				if g == "" || p+len(g) > i {
+					break
+				}
+				p += len(g)
+				w += gw
+			}
+			col = w + ansi.StringWidth(line[p:i]) - xOff
+		} else {
+			// The match starts inside a rune. That happens only on a line
+			// whose lower-cased copy has another length than the line, so
+			// the offset found in the copy is not a boundary of the line;
+			// measure the text before it as a whole.
+			col = ansi.StringWidth(line[:i]) - xOff
+		}
 		cols := ansi.StringWidth(line[i:end])
 		if col >= width {
 			return
