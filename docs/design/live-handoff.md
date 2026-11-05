@@ -113,7 +113,7 @@ $ tuios daemon upgrade
 Checking /opt/homebrew/bin/tuios (v0.10.1) accepts this daemon's state (handoff v1)... ok
 Pausing 58 panes, saving their screens (1.1 MB)...
 Starting v0.10.1 in place (pid 41213 kept)...
-Upgraded in 0.31 s. 58 panes and their programs kept. 2 attached clients were asked to reattach.
+Upgraded in 0.31 s. 58 panes and their programs kept. 2 attached clients were dropped; tuios clients on this machine reattach by themselves.
 ```
 
 What an attached client sees:

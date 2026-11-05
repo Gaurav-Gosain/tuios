@@ -337,7 +337,7 @@ func buildVerbRegistry() map[string]verbEntry {
 				{Name: "handoff", Type: "int", Description: "The version of the state handed over."},
 				{Name: "panes", Type: "int", Description: "How many panes are handed over."},
 				{Name: "manifest_bytes", Type: "int", Description: "The size of the state handed over."},
-				{Name: "clients", Type: "int", Description: "The attached TUI clients, which are told to attach again."},
+				{Name: "clients", Type: "int", Description: "The attached TUI clients the upgrade dropped. A tuios client on this machine attaches again by itself."},
 				{Name: "preflight_ms", Type: "int", Description: "How long the binary took to answer the preflight."},
 			},
 			examples: []string{`{"id":1,"verb":"daemon-upgrade","params":{"binary":"/usr/local/bin/tuios"}}`},

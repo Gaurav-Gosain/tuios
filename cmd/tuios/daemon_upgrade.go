@@ -434,7 +434,7 @@ func upgradeLive(say func(string, ...any), binary string) (upgradeOutcome, error
 	}
 	say("Upgraded in %.2f s. %d %s and their programs kept.", o.Seconds, o.Panes, plural.Word(o.Panes, "pane", "panes"))
 	if o.Clients > 0 {
-		say(" %d attached %s told to attach again.", o.Clients, plural.Word(o.Clients, "client was", "clients were"))
+		say(" %d attached %s dropped; tuios clients on this machine reattach by themselves.", o.Clients, plural.Word(o.Clients, "client was", "clients were"))
 	}
 	say("\n")
 	return o, nil

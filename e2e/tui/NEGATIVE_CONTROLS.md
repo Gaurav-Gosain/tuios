@@ -13783,3 +13783,16 @@ The first version of the fix failed this test by itself: the dimension check in 
 Unit `TestNativePlacementCrop` pins the pixel numbers of a crop off each side.
 
 Measured by hand on macOS 27.0.1 with the browser's native module from the branch, in a pane: a tuios with this change gets patches, 137 MB read in 22 s. tuios v0.12.0 answers no and gets whole frames, 13.9 GB, as before. No variable was set.
+
+## A live upgrade says its clients reattach by themselves
+
+`TestAttachedClientFollowsDaemonUpgrade` and `TestAttachedClientIsToldToReattach` hold `tuios daemon upgrade` to saying an attached client was dropped and that tuios clients on this machine reattach by themselves, such as ` 1 attached client was dropped; tuios clients on this machine reattach by themselves.` The old line said the client was told to attach again, which read as work left for the person.
+
+Run on 2026-11-06 on macOS (darwin/arm64). The fixed build passes both in about 16 s.
+
+| Control | Where it fails | Verdict |
+| --- | --- | --- |
+| A build that prints the old line (integ-2026-11-05a, `034aa1cff`) | "the upgrade did not count the attached client", in both tests | **caught** |
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^(TestAttachedClientFollowsDaemonUpgrade|TestAttachedClientIsToldToReattach)$' -v .`.

@@ -199,7 +199,7 @@ func TestAttachedClientFollowsDaemonUpgrade(t *testing.T) {
 		"panes_before": pids, "panes_after": afterPIDs, "client_exited": exited, "client_exit": code,
 		"screen_after_follow": afterFollow, "pane_after_typing": typed, "typing_error": errString(typedErr)})
 
-	if !strings.Contains(text, "1 attached client was told to attach again") {
+	if !strings.Contains(text, "1 attached client was dropped") {
 		t.Errorf("ASSERTION: the upgrade did not count the attached client:\n%s", text)
 	}
 	if after.Instance == img.Instance {
@@ -264,7 +264,7 @@ func TestAttachedClientIsToldToReattach(t *testing.T) {
 	}
 	writeHandoffArtifact(t, map[string]any{"upgrade": text, "client_said": said, "client_exited": exited, "client_exit": code, "seconds_to_exit": took.Seconds()})
 
-	if !strings.Contains(text, "1 attached client was told to attach again") {
+	if !strings.Contains(text, "1 attached client was dropped") {
 		t.Errorf("ASSERTION: the upgrade did not count the attached client:\n%s", text)
 	}
 	if !exited {
