@@ -215,6 +215,24 @@ func writeFakeTailscale(t *testing.T, dir string) {
 	}
 }
 
+// writeTailnetSetupSSH is writeSetupSSH where the tailnet name of buildbox
+// reaches the same far machine, and a dial of sleepy, the offline machine,
+// leaves a mark in here.
+func writeTailnetSetupSSH(t *testing.T, here, far string) string {
+	t.Helper()
+	ssh := writeSetupSSH(t, here, far)
+	data, err := os.ReadFile(ssh)
+	if err != nil {
+		t.Fatal(err)
+	}
+	routed := strings.Replace(string(data), "  someone@buildbox)", "  someone@buildbox|buildbox.example.ts.net)", 1)
+	routed = strings.Replace(routed, "case \"$addr\" in", "case \"$addr\" in\n  sleepy*) echo dialed >"+filepath.Join(here, "sleepy-dialed")+"; exit 255 ;;", 1)
+	if err := os.WriteFile(ssh, []byte(routed), 0o700); err != nil { //nolint:gosec // an ssh stand-in this test runs
+		t.Fatal(err)
+	}
+	return ssh
+}
+
 // TestSetUpTailnetMachines lists the tailnet with each machine's state, and
 // sets up only the machine that was named. The offline one is listed and
 // never dialed.
@@ -222,18 +240,7 @@ func TestSetUpTailnetMachines(t *testing.T) {
 	here := remoteMachine(t)
 	far := remoteMachine(t)
 	farBin := filepath.Join(xdgDir(far, "HOME"), ".local", "bin", "tuios")
-	ssh := writeSetupSSH(t, here, far)
-	// The tailnet address of buildbox reaches the same far machine.
-	data, err := os.ReadFile(ssh)
-	if err != nil {
-		t.Fatal(err)
-	}
-	routed := strings.Replace(string(data), "  someone@buildbox)", "  someone@buildbox|buildbox.example.ts.net)", 1)
-	// A dial of sleepy fails the test: an offline machine is never dialed.
-	routed = strings.Replace(routed, "case \"$addr\" in", "case \"$addr\" in\n  sleepy*) echo dialed >"+filepath.Join(here, "sleepy-dialed")+"; exit 255 ;;", 1)
-	if err := os.WriteFile(ssh, []byte(routed), 0o700); err != nil { //nolint:gosec // an ssh stand-in this test runs
-		t.Fatal(err)
-	}
+	ssh := writeTailnetSetupSSH(t, here, far)
 	tsDir := filepath.Join(here, "tsbin")
 	writeFakeTailscale(t, tsDir)
 	env := []string{"TUIOS_SSH=" + ssh, "PATH=" + tsDir + ":" + os.Getenv("PATH")}

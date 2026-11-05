@@ -808,14 +808,15 @@ type OS struct {
 	// none. It is daemon-owned and comes down with the session state, like
 	// SessionGlobal; every other session's arrives with the cached listing.
 	SessionSpace string
-	// The machines on this user's tailnet, offered as addresses on the Hosts
-	// settings page. Filled once by a goroutine, because the call behind it is
-	// a round trip and the row that shows them is drawn in the render path.
-	// See tailnetAddrCandidates.
 	// markStyleCache holds the selection, search and copy mode cursor styles
 	// so they are built once rather than per matching cell per frame. See
 	// marks() in render_terminal.go.
 	markStyleCache *markStyles
+
+	// machineSheet is the add-a-machine sheet while it is open, or nil, and
+	// msCanvas the grid it is drawn on. See machine_sheet.go.
+	machineSheet *machineSheet
+	msCanvas     *ckCanvas
 
 	// copyFlash is the band of light crossing text that was just copied, or
 	// nil. It is dropped the moment it has run its course, so an idle client
@@ -860,15 +861,6 @@ type OS struct {
 	// ArmPrefixRepeat.
 	prefixRepeatUntil time.Time
 
-	tailnetMu         sync.Mutex
-	tailnetAskedAt    time.Time
-	tailnetCandidates []string
-	// The [tailscale] table as last read, and the version of the config file
-	// it was read from. See tailnetOptionsCached.
-	tailnetOpt        federation.TailnetOptions
-	tailnetOptEnabled bool
-	tailnetOptKey     tailnetFileKey
-	tailnetOptValid   bool
 	// SessionWorktree is the attached session's daemon-owned worktree record,
 	// nil when its directory is not a linked git worktree. Every other
 	// session's arrives with the cached listing; this one comes down with the

@@ -13233,3 +13233,24 @@ build of main, which has no fix:
 |---|---|---|---|
 | the next pane is zoomed (daemon) | the fix removed | "the pane after the close is 48x26, want the zoomed 100x28" | **caught** |
 | the next pane is zoomed (--standalone) | the fix removed | same message | **caught** |
+
+## The add sheet sets up a machine from the app
+
+`TestAddMachineSheet` drives the real app over the two machines of
+`TestSetUpAMachineBothWays`. It runs "Add a machine" from the palette, types
+someone@buildbox and this machine's address someone@laptopbox, picks "Copy
+this tuios", says no to start at boot and yes to both ways, and must reach
+Done with `[hosts.buildbox]` here, an entry for this machine on buildbox, and
+the daemon here listing buildbox up. Before the person picks how to install,
+tuios must not be on buildbox. `TestAddMachineSheetTailnet` ticks buildbox on
+the Tailnet tab and must reach Done, and the offline peer must never be
+dialed.
+
+Run on 2026-11-05 on Linux. The fixed build passes both in about 8 s.
+
+| Control | Where it fails | Verdict |
+| --- | --- | --- |
+| The sheet answers the install prompt with its first choice when it arrives, before the person presses a key | `TestAddMachineSheet`: "the sheet never showed \"Pick how to install tuios on buildbox.\" at sheet-2-test" | **caught** |
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestAddMachineSheet' -v .`.

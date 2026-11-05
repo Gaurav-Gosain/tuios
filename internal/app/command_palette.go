@@ -1059,6 +1059,15 @@ func GetCommandPaletteItems(s *config.Settings) []CommandPaletteItem {
 			},
 		},
 		{
+			// The add sheet: test a machine over ssh, install tuios there,
+			// and add it. See machine_sheet.go.
+			Name:     "Add a machine",
+			Category: "Session",
+			Action: func(m *OS) (*OS, tea.Cmd) {
+				return m, m.OpenMachineSheet("")
+			},
+		},
+		{
 			// The machines in the rail's order, as next_host and prev_host
 			// step through them. Neither has a default key, so the palette
 			// is where a person finds them before binding one.

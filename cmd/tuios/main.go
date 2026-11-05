@@ -68,6 +68,9 @@ func main() {
 	herdrplugin.RunningVersion = version
 	theme.ExtraFiles = pluginThemeFiles
 	app.PluginSavers = pluginSaverFiles
+	// The add sheet installs the release of this version with the helpers
+	// tuios update and hosts sync use.
+	app.MachineReleases = updateReleases{}
 	app.SketchProgram = func() string {
 		prog, err := sketchPluginProgram()
 		if err != nil {
