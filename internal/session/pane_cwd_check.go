@@ -115,8 +115,20 @@ func (s *Session) checkPaneCwd(p *PTY) {
 	c.seen = cwd
 	c.mu.Unlock()
 	if moved {
-		s.publishPlaceMove()
+		s.noteCwdMove(p, cwd)
 	}
+}
+
+// noteCwdMove tells the clients that p's shell moved to cwd: a state push
+// for an attached client, and window-cwd for a subscription. A subscriber
+// that reads list-windows on the event must see the new folder, so the
+// cached read goes first.
+func (s *Session) noteCwdMove(p *PTY, cwd string) {
+	s.forgetCwdCache()
+	if p.emit != nil {
+		p.emit(SessionEvent{Type: EventWindowCwd, Title: cwd})
+	}
+	s.publishPlaceMove()
 }
 
 // publishPlaceMove pushes the session's state because a pane moved. It runs on

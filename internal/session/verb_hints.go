@@ -56,7 +56,7 @@ var (
 	// exported so the CLI completes exactly this set.
 	EventTypeNames = []string{
 		EventWindowCreated, EventWindowClosed, EventWindowExit, EventWindowRetitled,
-		EventWindowFocused, EventWindowForeground, EventWindowMoved, EventWindowMinimized, EventWindowRestored,
+		EventWindowFocused, EventWindowForeground, EventWindowCwd, EventWindowMoved, EventWindowMinimized, EventWindowRestored,
 		EventWorkspaceSwitched, EventWorkspaceRenamed, EventLayoutChanged, EventAgentState, EventAgentSeen, EventAgentMessage,
 		EventOutput, EventBell, EventNotification, EventModeChanged,
 		EventSessionCreated, EventSessionClosed, EventClientSessionChanged, EventGap, EventAttention,

@@ -490,6 +490,10 @@ func (k *stateKeeper) watch() {
 		// A command starting or ending in a pane: its name in the panes'
 		// headers and the sidebar.
 		"window-foreground",
+		// A shell that moved to another folder: the folder in the panes'
+		// headers and the sidebar. A cd changes no title in a shell that
+		// sets none, so nothing else would say so.
+		"window-cwd",
 		// For the agent cockpit only: they change no pane.
 		"transcript", "agent-message", "task-claimed", "task-finished", "task-changed", "agent-activity",
 		// A judge's verdict, which the fan comparison reads again on.

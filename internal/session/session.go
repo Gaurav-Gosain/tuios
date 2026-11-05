@@ -2752,7 +2752,7 @@ func (s *Session) installPTY(ctx context.Context, cancel context.CancelFunc, id 
 				return
 			}
 			if pty.place.announce(raw) {
-				pty.owner().publishPlaceMove()
+				pty.owner().noteCwdMove(pty, pty.place.Cwd())
 			}
 		},
 		// Parked rather than applied: this fires with the terminal lock held, and
