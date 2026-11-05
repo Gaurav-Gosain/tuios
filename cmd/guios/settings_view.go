@@ -1222,7 +1222,9 @@ func (a *App) agentsPage(c *ui.Context, pal *palette) {
 			if a.ss.cliPath != "" {
 				label = locales.CommonReinstall()
 			}
-			if button(c, "cli", label, "", a.ss.cliPath == "", pal) {
+			// One primary on the page: the Approvals row's Install when
+			// that row needs it, else this one (council round 4, S10).
+			if button(c, "cli", label, "", a.ss.cliPath == "" && !missing, pal) {
 				a.installCLI()
 				time.AfterFunc(1500*time.Millisecond, func() { a.update(a.refreshAgents) })
 			}
@@ -1245,7 +1247,9 @@ func (a *App) agentsPage(c *ui.Context, pal *palette) {
 					if st.State == "outdated" {
 						label = locales.CommonUpdate()
 					}
-					if button(c, "in-"+agent, label, "", true, pal) {
+					// The Claude Code row's Install repeats the Approvals
+					// row's: one primary is enough.
+					if button(c, "in-"+agent, label, "", false, pal) {
 						if err := cli.InstallSkill(agent); err != nil {
 							a.toastIn(c, err.Error())
 						}
