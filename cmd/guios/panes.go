@@ -519,12 +519,12 @@ func (a *App) movePane(sid, pane, target string, zone dropZone) {
 // being dragged.
 func (a *App) paneHeader(c *ui.Context, pal *palette, bar ui.TitleBar, shown float32, s *proto.Session, p *proto.Pane, top, left, right, multi, focused, hovered bool) (dragging bool) {
 	pad := float32(16)
-	strip := float32(0)
+	strip, compact := float32(0), false
 	if top && left {
 		// With the sidebar hidden, the header at the window's top left
 		// starts after the traffic lights, the sidebar's buttons and the
 		// workspace strip, which come here.
-		strip = a.stripRoom(c, s, p.ID)
+		strip, compact = a.stripRoom(c, s, p.ID)
 		pad = a.chrome.headerPad + strip
 	}
 	// A lone pane is titled as split ones are, by what runs in it: the
@@ -567,7 +567,7 @@ func (a *App) paneHeader(c *ui.Context, pal *palette, bar ui.TitleBar, shown flo
 	}
 	h.Children(func() {
 		if top && left {
-			a.sidebarButtons(c, pal, bar, shown, s, strip > 0)
+			a.sidebarButtons(c, pal, bar, shown, s, strip > 0, compact)
 		}
 		// The title is the pane's handle: dragged, it takes the pane to
 		// another place in the session.
@@ -736,7 +736,7 @@ func (a *App) cornerW(corner bool) float32 {
 
 // sidebarButtons are the sidebar's buttons, which the header at the
 // window's top left holds while the sidebar hides.
-func (a *App) sidebarButtons(c *ui.Context, pal *palette, bar ui.TitleBar, shown float32, s *proto.Session, strip bool) {
+func (a *App) sidebarButtons(c *ui.Context, pal *palette, bar ui.TitleBar, shown float32, s *proto.Session, strip, compact bool) {
 	if shown >= 0.5 {
 		return
 	}
@@ -744,23 +744,24 @@ func (a *App) sidebarButtons(c *ui.Context, pal *palette, bar ui.TitleBar, shown
 		iconButton(c, "show-sidebar", sidebarIcon, a.tip(locales.SidebarShow(), "sidebar.toggle"), pal, a.toggleSidebar)
 		iconButton(c, "new-session-2", plusIcon, a.tip(locales.ActionNewSession(), "session.new"), pal, func() { a.newSession("") })
 		if strip {
-			a.workspaceStrip(c, pal, s)
+			a.workspaceStrip(c, pal, s, compact)
 		}
 	})
 }
 
 // stripRoom is the room the workspace strip takes in the header of the
 // top left pane, pane: it grows as the sidebar hides, in whole pixels.
-func (a *App) stripRoom(c *ui.Context, s *proto.Session, pane string) float32 {
+// compact tells that the strip keeps its pills alone (wsStripW).
+func (a *App) stripRoom(c *ui.Context, s *proto.Session, pane string) (room float32, compact bool) {
 	if a.chrome.shown >= 1 {
-		return 0
+		return 0, false
 	}
 	card, ok := a.motion.width[pane]
 	if !ok {
 		card = a.paneRef("card-" + pane).Bounds(c).W
 	}
-	w := a.wsStripW(c, s, card)
-	return float32(math.Round(float64(w * (1 - a.chrome.shown))))
+	w, compact := a.wsStripW(c, s, card)
+	return float32(math.Round(float64(w * (1 - a.chrome.shown)))), compact
 }
 
 // paneControls are a header's buttons acting on its pane, which show while
@@ -1540,10 +1541,10 @@ func (a *App) emptyWorkspace(c *ui.Context, pal *palette, bar ui.TitleBar, shown
 	card := paned(ui.Column(c.Key("ws-empty")).Grow(1).MinHeight(0).Radius(rPane).Background(pal.card), pal).Clip().Bind(a.paneRef("card-ws-empty"))
 	// With the sidebar hidden, its buttons and the workspace strip are the
 	// way out of an empty workspace, as in a pane's header.
-	strip := a.stripRoom(c, s, "ws-empty")
+	strip, compact := a.stripRoom(c, s, "ws-empty")
 	card.Children(func() {
 		ui.Row(c).Height(headerH).Shrink(0).AlignItems(ui.Center).Padding(0, 10, 0, a.chrome.headerPad+strip).DragWindow().Children(func() {
-			a.sidebarButtons(c, pal, bar, shown, s, strip > 0)
+			a.sidebarButtons(c, pal, bar, shown, s, strip > 0, compact)
 			oneLine(c, s.DisplayName(a.set.SessionName), fsBody, wSemibold).TextColor(pal.text)
 			ui.Spacer(c)
 			a.controlsRoom(c, 0)

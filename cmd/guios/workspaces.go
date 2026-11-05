@@ -310,34 +310,45 @@ const (
 	stripRule     = 14 // from the pane count to the rule before the title
 )
 
-// wsStripW is the room the strip takes at its full width, 0 when it does
-// not show: a header narrower than card for it and a title keeps none.
-func (a *App) wsStripW(c *ui.Context, s *proto.Session, card float32) float32 {
+// wsStripW is the room the strip takes, 0 when it does not show. At its
+// full width it holds the pills, the new-workspace button and the pane
+// count. In a header too narrow for that it keeps the pills alone
+// (compact), so the workspaces still show; a header too narrow for the
+// pills and a title keeps no strip.
+func (a *App) wsStripW(c *ui.Context, s *proto.Session, card float32) (w float32, compact bool) {
 	if s == nil || len(s.Workspaces) == 0 {
-		return 0
+		return 0, false
 	}
-	w := float32(stripLead)
+	pills := float32(stripLead)
 	for i, ws := range s.Workspaces {
 		weight := wMedium
 		if ws.N == s.Workspace {
 			weight = wSemibold
 		}
-		w += max(26, 2*8+min(natural(c, workspaceName(ws), fsSmall, weight), 96)+5+6)
+		pills += max(26, 2*8+min(natural(c, workspaceName(ws), fsSmall, weight), 96)+5+6)
 		if i > 0 {
-			w += 2
+			pills += 2
 		}
 	}
+	full := pills
 	if freeWorkspace(s) > 0 {
-		w += 2 + 22
+		full += 2 + 22
 	}
-	w += stripCountGap + natural(c, locales.SidebarPanes(stripPanes(s)), fsSmall, 0)
-	w += stripRule + 1
-	// The header keeps its buttons, its title's least and its state
-	// mark beside the strip; below that the strip goes whole.
-	if card > 0 && card < a.chrome.headerPad+w+titleKeep+120 {
-		return 0
+	full += stripCountGap + natural(c, locales.SidebarPanes(stripPanes(s)), fsSmall, 0)
+	full += stripRule + 1
+	pills += stripRule + 1
+	// At its full width the strip leaves the header its buttons, the
+	// title's first titleKeep DIPs and its state mark. The pills alone
+	// leave the mark and a title cut down to titleLeast with room to
+	// spare (planHeader), as the TUI's bar keeps its tabs in a narrow
+	// pane.
+	switch {
+	case card <= 0 || card >= a.chrome.headerPad+full+titleKeep+120:
+		return full, false
+	case card >= a.chrome.headerPad+pills+120:
+		return pills, true
 	}
-	return w
+	return 0, false
 }
 
 // stripPanes is the number of panes the shown workspace holds.
@@ -350,17 +361,20 @@ func stripPanes(s *proto.Session) int {
 	return len(s.Panes)
 }
 
-// workspaceStrip draws the strip, in the row of the sidebar's buttons.
-func (a *App) workspaceStrip(c *ui.Context, pal *palette, s *proto.Session) {
+// workspaceStrip draws the strip, in the row of the sidebar's buttons;
+// compact draws the pills alone (wsStripW).
+func (a *App) workspaceStrip(c *ui.Context, pal *palette, s *proto.Session, compact bool) {
 	ui.Row(c.Key("ws-strip")).AlignItems(ui.Center).Gap(2).Margin(0, 0, 0, stripLead-2).Shrink(0).Children(func() {
 		for _, w := range s.Workspaces {
 			a.workspacePill(c, pal, s, w)
 		}
-		if freeWorkspace(s) > 0 {
+		if !compact && freeWorkspace(s) > 0 {
 			a.newWorkspaceButton(c, pal, s)
 		}
-		ui.Text(c, locales.SidebarPanes(stripPanes(s))).FontSize(fsSmall).TextColor(pal.textFaint).FontFeatures("tnum").
-			SingleLine().Shrink(0).Margin(0, 0, 0, stripCountGap-2)
+		if !compact {
+			ui.Text(c, locales.SidebarPanes(stripPanes(s))).FontSize(fsSmall).TextColor(pal.textFaint).FontFeatures("tnum").
+				SingleLine().Shrink(0).Margin(0, 0, 0, stripCountGap-2)
+		}
 		// A rule ends the strip, so that the pane's title after it does
 		// not read as one of the strip's labels.
 		ui.Box(c).Size(1, 14).Shrink(0).Margin(0, 0, 0, stripRule-2).Background(pal.kbdBorder)
