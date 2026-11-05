@@ -6936,11 +6936,11 @@ func (msgs Messages) CockpitPlan() string {
 	return Catalog.Format(msgs.locale, "cockpitPlan", nil)
 }
 
-// CockpitPressAgain says "This command is risky. Press {key} again within 3 seconds to allow it."
+// CockpitPressAgain says "This command is risky. Press {key} again to allow it. Another key cancels it."
 // in the language the app shows.
 func CockpitPressAgain(key string) string { return In(i18n.Locale()).CockpitPressAgain(key) }
 
-// CockpitPressAgain says "This command is risky. Press {key} again within 3 seconds to allow it."
+// CockpitPressAgain says "This command is risky. Press {key} again to allow it. Another key cancels it."
 // in the language of msgs.
 func (msgs Messages) CockpitPressAgain(key string) string {
 	return Catalog.Format(msgs.locale, "cockpitPressAgain", map[string]any{"key": key})
@@ -12602,4 +12602,24 @@ func SetApprovalsDetail() string { return In(i18n.Locale()).SetApprovalsDetail()
 // in the language of msgs.
 func (msgs Messages) SetApprovalsDetail() string {
 	return Catalog.Format(msgs.locale, "setApprovalsDetail", nil)
+}
+
+// CockpitKeysToBoard says "Keys go to the board."
+// in the language the app shows.
+func CockpitKeysToBoard() string { return In(i18n.Locale()).CockpitKeysToBoard() }
+
+// CockpitKeysToBoard says "Keys go to the board."
+// in the language of msgs.
+func (msgs Messages) CockpitKeysToBoard() string {
+	return Catalog.Format(msgs.locale, "cockpitKeysToBoard", nil)
+}
+
+// CockpitTypedNoCommand says "Typed text runs no command. Pause, then press the key again."
+// in the language the app shows.
+func CockpitTypedNoCommand() string { return In(i18n.Locale()).CockpitTypedNoCommand() }
+
+// CockpitTypedNoCommand says "Typed text runs no command. Pause, then press the key again."
+// in the language of msgs.
+func (msgs Messages) CockpitTypedNoCommand() string {
+	return Catalog.Format(msgs.locale, "cockpitTypedNoCommand", nil)
 }

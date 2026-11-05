@@ -170,6 +170,7 @@ func (a *App) boardView(c *ui.Context, pal *palette, sess string) {
 	if a.boardKeys(c, root, b) {
 		c.Invalidate()
 	}
+	keysRing(root, b.focus.FocusWithin(c) && !a.keysOwned(), pal)
 	root.Children(func() {
 		box := ui.Row(c.Key("cols")).Grow(1).MinHeight(0).AlignItems(ui.Stretch).Gap(boardGap).Padding(14, 16)
 		w := box.Bounds().W
@@ -600,18 +601,24 @@ func (a *App) boardKeys(c *ui.Context, root ui.Element, b *ckBoard) (handled boo
 		b.sel = cards[min(max(ri, 0), len(cards)-1)].ID
 	}
 	// Letters go through the typing guard (cockpit_guard.go): h j k l
-	// only move the cursor and run at once, the others wait.
-	moves := func(k ckKey) bool {
-		switch k.key {
-		case ui.KeyH, ui.KeyJ, ui.KeyK, ui.KeyL:
-			return !k.shift
+	// only move the cursor and run at once, the others wait. A letter the
+	// board has no use for is typed text, and runs nothing.
+	kind := func(k ckKey) keyKind {
+		_, onCard := b.card(b.sel)
+		switch {
+		case !k.shift && (k.key == ui.KeyH || k.key == ui.KeyJ || k.key == ui.KeyK || k.key == ui.KeyL):
+			return kindMove
+		case k.shift && (k.key == ui.KeyH || k.key == ui.KeyL) && onCard:
+			return kindAct
+		case !k.shift && k.key == ui.KeyN:
+			return kindAct
+		case !k.shift && k.key == ui.KeyT && onCard:
+			return kindAct
 		}
-		return false
+		return kindProse
 	}
-	if b.adding < 0 && a.ownedKeys(root) {
-		return false
-	}
-	if k, ok := a.guard(c, root, &a.ck.guard, moves); ok {
+	lk := listKeys{kind: kind, hint: locales.CockpitKeysToBoard}
+	if k, ok := a.guard(c, root, &a.ck.guard, lk); ok {
 		switch {
 		case k.shift && k.key == ui.KeyH:
 			if t, ok := b.card(b.sel); ok && ci > 0 {
@@ -647,6 +654,7 @@ func (a *App) boardKeys(c *ui.Context, root ui.Element, b *ckBoard) (handled boo
 	}
 	if a.ck.guard.typing(time.Now()) && key(0, ui.KeyEnter) {
 		// Enter after typed text ends a sentence; it is no command.
+		a.ck.guard.boundary()
 		return true
 	}
 	switch {
@@ -674,6 +682,10 @@ func (a *App) boardKeys(c *ui.Context, root ui.Element, b *ckBoard) (handled boo
 		a.ckSetView(viewAgents)
 	default:
 		handled = false
+	}
+	if handled {
+		// A key that is no letter ends the run of letters.
+		a.ck.guard.boundary()
 	}
 	return handled
 }

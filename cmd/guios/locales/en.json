@@ -1257,7 +1257,7 @@
   "cockpitPickAgent": "Select an agent",
   "cockpitPickAgentDetail": "Its conversation, changes and mail show here.",
   "cockpitPlan": "Plan",
-  "cockpitPressAgain": "This command is risky. Press {key} again within 3 seconds to allow it.",
+  "cockpitPressAgain": "This command is risky. Press {key} again to allow it. Another key cancels it.",
   "cockpitReasonPlaceholder": "Type the reason, then press Enter to reject",
   "cockpitReject": "Reject",
   "cockpitRejectWhy": "Reject and say why",
@@ -2265,5 +2265,7 @@
   },
   "setApprovals": "Approvals",
   "setApprovalsRow": "Answer Claude Code's permission prompts in Agents",
-  "setApprovalsDetail": "A prompt waits in Agents until you allow or reject it, for up to 2 minutes. Then Claude Code asks in its pane. tuios saves this in its config.toml."
+  "setApprovalsDetail": "A prompt waits in Agents until you allow or reject it, for up to 2 minutes. Then Claude Code asks in its pane. tuios saves this in its config.toml.",
+  "cockpitKeysToBoard": "Keys go to the board.",
+  "cockpitTypedNoCommand": "Typed text runs no command. Pause, then press the key again."
 }

@@ -8,6 +8,7 @@ import (
 	"runtime"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/Gaurav-Gosain/mygo"
 	"github.com/Gaurav-Gosain/mygo/ui"
@@ -40,6 +41,9 @@ type ckReply struct {
 	// focusNext puts the keys in the box once it is built: the Mail view
 	// builds it only when a reply starts.
 	focusNext bool
+	// insert is text typed while a list had the keys, which the typing
+	// guard found to be prose: the box adds it at its end.
+	insert string
 	// asMail holds, by agent, that the box sends mail to the agent's
 	// inbox rather than a prompt typed into its pane.
 	asMail map[string]bool
@@ -173,11 +177,21 @@ func (a *App) replyBox(c *ui.Context, pal *palette, ag client.Agent) {
 					}
 				})
 			}
+			insert := r.insert
+			if insert != "" && !d.sending {
+				d.text += insert
+			}
+			r.insert = ""
 			in := ui.TextAreaBase(c.Key("text-"+ag.Key()), &d.text).Bind(&r.box).Lines(2, 8).
 				FontSize(fsProse).LineHeight(1.5).TextColor(pal.text).Placeholder(locales.CockpitReplyPlaceholder()).PlaceholderColor(pal.textMuted).ReadOnly(d.sending)
 			if r.focusNext {
 				r.focusNext = false
 				r.box.Focus()
+				if insert != "" {
+					n := utf8.RuneCountInString(d.text)
+					in.SetTextSelection(n, n)
+					a.ck.typedAt = time.Now()
+				}
 			}
 			in.OnPaste(func(text string) bool {
 				if text != "" {
