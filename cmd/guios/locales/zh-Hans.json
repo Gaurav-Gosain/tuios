@@ -1286,5 +1286,7 @@
   "cockpitWaitsForAnswer": "等到调用被回答后再发送。",
   "cockpitHintQueue": "排队",
   "cockpitNothingWaits": "没有等你处理的事。",
-  "sidebarSameName": "另有同名会话。下面一行可以区分它们。"
+  "sidebarSameName": "另有同名会话。下面一行可以区分它们。",
+  "cockpitTypeToReply": "输入即可回复",
+  "cockpitTypeToAddCard": "输入即可添加卡片"
 }

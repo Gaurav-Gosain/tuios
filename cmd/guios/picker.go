@@ -229,7 +229,7 @@ func (a *App) pickerView(c *ui.Context, pal *palette) {
 		})
 		ui.Row(c).Height(52).Shrink(0).Padding(0, 16).Gap(10).AlignItems(ui.Center).Children(func() {
 			ui.Text(c, locales.PickerHint(actions.Glyphs("CmdOrCtrl+Enter"))).FontSize(fsSmall).TextColor(pal.textFaint).SingleLine().Ellipsis("…").Grow(1).MinWidth(0)
-			if button(c, "cancel", locales.CommonCancel(), "esc", false, pal) {
+			if button(c, "cancel", locales.CommonCancel(), "Esc", false, pal) {
 				p.open = false
 			}
 			if button(c, "open", locales.CommonOpen(), "", true, pal) {

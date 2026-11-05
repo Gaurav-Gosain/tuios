@@ -808,7 +808,7 @@ func (a *App) compareFoot(c *ui.Context, pal *palette, cp *ckCompare) {
 		ui.Row(c).Gap(sp3).AlignItems(ui.Center).Grow(1).MinWidth(0).Clip().Children(func() {
 			keyHint(c, pal, "← →", locales.CompareHintPick())
 			keyHint(c, pal, "↵", locales.CockpitHintOpen())
-			keyHint(c, pal, "esc", locales.CockpitHintBack())
+			keyHint(c, pal, "Esc", locales.CockpitHintBack())
 		})
 		if button(c, "cmp-read", locales.CompareReadAgain(), "", false, pal) {
 			cp.armed, cp.askJudge = "", false

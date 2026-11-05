@@ -103,7 +103,7 @@ func (a *App) promptView(c *ui.Context, pal *palette) {
 		})
 		field(c, frame, in.Focused(), pal)
 		ui.Row(c).Gap(8).Justify(ui.End).Margin(12, 0, 0, 0).Children(func() {
-			if button(c, "cancel", locales.CommonCancel(), "esc", false, pal) {
+			if button(c, "cancel", locales.CommonCancel(), "Esc", false, pal) {
 				pr.open = false
 			}
 			if button(c, "ok", locales.PromptSave(), "↵", true, pal) {

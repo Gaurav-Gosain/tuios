@@ -696,7 +696,7 @@ func (a *App) spawnFoot(c *ui.Context, pal *palette, s *spawnSheet, h *spawnHand
 			keyHint(c, pal, "Tab", locales.SpawnHintNext())
 			keyHint(c, pal, keyName("CmdOrCtrl+S"), locales.SpawnHintPreset())
 		})
-		if button(c, "spawn-cancel", locales.CommonCancel(), "esc", false, pal) {
+		if button(c, "spawn-cancel", locales.CommonCancel(), "Esc", false, pal) {
 			s.open = false
 		}
 		label := locales.SpawnStartOne()

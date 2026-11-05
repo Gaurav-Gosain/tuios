@@ -721,6 +721,11 @@ func (a *App) cockpitHints(c *ui.Context, pal *palette) {
 				return
 			}
 			room -= need
+			if k == "" {
+				// Not a key: plain text, as "Type to reply".
+				ui.Text(c, what).FontSize(fsSmall).TextColor(pal.textMuted).SingleLine()
+				return
+			}
 			keyHint(c, pal, k, what)
 		}
 		if d := c.Now().Sub(a.ck.nothingAt); d < 1500*time.Millisecond && a.ck.view == viewAgents {
@@ -741,7 +746,7 @@ func (a *App) cockpitHints(c *ui.Context, pal *palette) {
 			ag, _ := a.ckSelectedAgent()
 			ui.Text(c, locales.CockpitAskGive(t.Title, ag.Name)).FontSize(fsSmall).FontWeight(wSemibold).TextColor(pal.text).SingleLine().Ellipsis("…").MinWidth(0).Shrink(1)
 			keyHint(c, pal, "↵", locales.CockpitGiveWord())
-			keyHint(c, pal, "esc", locales.CommonCancel())
+			keyHint(c, pal, "Esc", locales.CommonCancel())
 			return
 		}
 		switch {
@@ -750,29 +755,29 @@ func (a *App) cockpitHints(c *ui.Context, pal *palette) {
 			hint(chordName(chCardLeft)+" "+chordName(chCardRight), locales.CockpitHintMoveCard())
 			hint(chordName(chClaim), locales.CockpitHintClaim())
 			hint(chordName(chNewAgent), locales.CockpitHintNewAgent())
-			hint(locales.CockpitHintTypeKey(), locales.CockpitHintAddCard())
-			hint("esc", locales.CockpitHintList())
+			hint("", locales.CockpitTypeToAddCard())
+			hint("Esc", locales.CockpitHintList())
 		case a.ck.view == viewMail && a.ck.reply.box.FocusWithin(c):
 			hint("↵", locales.CockpitHintSend())
-			hint("esc", locales.CockpitHintBack())
+			hint("Esc", locales.CockpitHintBack())
 		case a.ck.view == viewMail:
 			hint("↑ ↓", locales.CockpitHintMove())
-			hint(locales.CockpitHintTypeKey(), locales.CockpitHintReply())
-			hint("esc", locales.CockpitHintList())
+			hint("", locales.CockpitTypeToReply())
+			hint("Esc", locales.CockpitHintList())
 		case a.ck.reply.box.FocusWithin(c):
 			// The keys of the field that has them.
 			hint("↵", locales.CockpitHintSend())
 			hint("⇧↵", locales.CockpitHintNewLine())
-			if ag, ok := a.ckSelectedAgent(); ok && a.ckCardWaits(ag) {
+			if ag, d, ok := a.ckDraftWaiting(); ok && d != nil && a.ckCardWaits(ag) {
 				hint(keyName("CmdOrCtrl+Enter"), locales.CockpitHintQueue())
-			} else {
+			} else if ok {
 				hint(keyName("CmdOrCtrl+Enter"), locales.CockpitHintSendNow())
 			}
-			hint("esc", locales.CockpitHintList())
+			hint("Esc", locales.CockpitHintList())
 		case a.ck.stacked && a.ck.stackFocus:
-			hint("esc", locales.CockpitHintBack())
+			hint("Esc", locales.CockpitHintBack())
 			hint(chordName(chAllow), locales.CockpitHintAllow())
-			hint(locales.CockpitHintTypeKey(), locales.CockpitHintReply())
+			hint("", locales.CockpitTypeToReply())
 		case a.ck.stacked:
 			hint("↵", locales.CockpitHintOpen())
 			hint("→", locales.CockpitHintDetails())
@@ -817,7 +822,7 @@ func (a *App) ckAllHints(hint func(k, what string)) {
 	}
 	if a.ckOnAgent() {
 		hint("↵", locales.CockpitHintOpen())
-		hint(locales.CockpitHintTypeKey(), locales.CockpitHintReply())
+		hint("", locales.CockpitTypeToReply())
 	}
 	if ag, ok := a.ckSelectedAgent(); ok && (ag.Settled || ag.State != "working") {
 		hint(chordName(chSettle), locales.CockpitHintSettle())

@@ -220,5 +220,5 @@ func (a *App) ckQuestionLine(c *ui.Context, pal *palette) {
 	spans = append(spans, t, ui.Span{Text: after, Color: pal.text, Weight: wSemibold})
 	ui.RichText(c, spans...).FontSize(fsSmall).SingleLine().Ellipsis("…").MinWidth(0).Shrink(1)
 	keyHint(c, pal, "↵", q.word)
-	keyHint(c, pal, "esc", locales.CommonCancel())
+	keyHint(c, pal, "Esc", locales.CommonCancel())
 }

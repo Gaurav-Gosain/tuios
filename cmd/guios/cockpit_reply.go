@@ -246,9 +246,13 @@ func (a *App) replyBox(c *ui.Context, pal *palette, ag client.Agent) {
 				ui.Row(c).Gap(sp3).AlignItems(ui.Center).Grow(1).MinWidth(0).Clip().Children(func() {
 					keyHint(c, pal, keyName("CmdOrCtrl+V"), locales.CockpitHintImage())
 					keyHint(c, pal, "⇧↵", locales.CockpitHintNewLine())
-					if a.ckCardWaits(ag) {
+					// Ctrl+↵ sends now only while the box has text: empty, it
+					// allows (cockpit_ask.go).
+					switch {
+					case strings.TrimSpace(d.text) == "" && len(d.images) == 0:
+					case a.ckCardWaits(ag):
 						keyHint(c, pal, keyName("CmdOrCtrl+Enter"), locales.CockpitHintQueue())
-					} else {
+					default:
 						keyHint(c, pal, keyName("CmdOrCtrl+Enter"), locales.CockpitHintSendNow())
 					}
 				})
@@ -363,12 +367,16 @@ func (a *App) ckCardWaits(ag client.Agent) bool {
 }
 
 // keyName is a shortcut as this platform writes it.
+//
+// Keys are written one way on every cap: Ctrl+↵, ⇧↵, Esc (council round 5,
+// visual S3). Prose spells them out: "Press Ctrl+Enter".
 func keyName(keys string) string {
-	if strings.HasPrefix(keys, "CmdOrCtrl+") {
+	keys = strings.Replace(keys, "Enter", "↵", 1)
+	if rest, ok := strings.CutPrefix(keys, "CmdOrCtrl+"); ok {
 		if runtime.GOOS == "darwin" {
-			return "⌘" + strings.TrimPrefix(keys, "CmdOrCtrl+")
+			return "⌘" + rest
 		}
-		return "Ctrl+" + strings.TrimPrefix(keys, "CmdOrCtrl+")
+		return "Ctrl+" + rest
 	}
 	return keys
 }

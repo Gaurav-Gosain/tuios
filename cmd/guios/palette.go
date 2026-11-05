@@ -706,7 +706,7 @@ func confirmDialog(c *ui.Context, pal *palette, pending **confirmation) bool {
 		ui.Text(c, cf.title).FontSize(fsTitle).FontWeight(wSemibold).TextColor(pal.text).MaxLines(2)
 		ui.Text(c, cf.detail).FontSize(fsBody).TextColor(pal.textMuted).LineHeight(1.45).MaxLines(5)
 		ui.Row(c).Gap(sp2).Justify(ui.End).Margin(sp3, 0, 0, 0).Wrap().Children(func() {
-			if button(c, "cancel", locales.CommonCancel(), "esc", false, pal) {
+			if button(c, "cancel", locales.CommonCancel(), "Esc", false, pal) {
 				cf.open = false
 			}
 			if cf.alt != "" && button(c, "alt", cf.alt, "", false, pal) {

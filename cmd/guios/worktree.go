@@ -64,7 +64,7 @@ func (a *App) worktreeView(c *ui.Context, pal *palette) {
 			}
 		})
 		ui.Row(c).Gap(8).Justify(ui.End).Margin(14, 0, 0, 0).Children(func() {
-			if button(c, "cancel", locales.CommonCancel(), "esc", false, pal) {
+			if button(c, "cancel", locales.CommonCancel(), "Esc", false, pal) {
 				w.open = false
 			}
 			if button(c, "ok", locales.WorktreeCreate(), "↵", true, pal) {

@@ -13041,3 +13041,23 @@ func SidebarSameName() string { return In(i18n.Locale()).SidebarSameName() }
 func (msgs Messages) SidebarSameName() string {
 	return Catalog.Format(msgs.locale, "sidebarSameName", nil)
 }
+
+// CockpitTypeToReply says "Type to reply"
+// in the language the app shows.
+func CockpitTypeToReply() string { return In(i18n.Locale()).CockpitTypeToReply() }
+
+// CockpitTypeToReply says "Type to reply"
+// in the language of msgs.
+func (msgs Messages) CockpitTypeToReply() string {
+	return Catalog.Format(msgs.locale, "cockpitTypeToReply", nil)
+}
+
+// CockpitTypeToAddCard says "Type to add a card"
+// in the language the app shows.
+func CockpitTypeToAddCard() string { return In(i18n.Locale()).CockpitTypeToAddCard() }
+
+// CockpitTypeToAddCard says "Type to add a card"
+// in the language of msgs.
+func (msgs Messages) CockpitTypeToAddCard() string {
+	return Catalog.Format(msgs.locale, "cockpitTypeToAddCard", nil)
+}
