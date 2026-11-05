@@ -223,8 +223,8 @@ func (a *App) tiled(c *ui.Context, pal *palette, bar ui.TitleBar, shown float32,
 		target[z.ID] = whole
 		a.motion.top = z.ID
 	}
-	// A window too small for every pane at the smallest pane size (20 by 5
-	// cells, the TUI's) hides the panes that do not fit and lists them in
+	// A window too small for every pane at the smallest pane shown
+	// (shownPaneCols by shownPaneRows) hides the panes that do not fit and lists them in
 	// a strip of chips under the others, until it grows again (QA-006;
 	// council round 4, visual M1). It never hides attention: the panes
 	// that need the person go last, and the first of them stays in view
@@ -491,15 +491,26 @@ func (a *App) tooSmallBy(target map[string]frac, ew, eh, dc, dr float64) bool {
 	return false
 }
 
+// shownPaneCols and shownPaneRows are the smallest pane the window shows.
+// They are below the smallest pane a split makes (minPaneCols by
+// minPaneRows): the TUI keeps showing a pane its layout made smaller than
+// that, and at 1440 DIPs a session of six panes has panes of 16 columns,
+// as in the TUI at 170 columns. Hiding those panes, and the sidebar
+// before them, showed less than the TUI does in a smaller terminal.
+const (
+	shownPaneCols = 12
+	shownPaneRows = 3
+)
+
 // paneTooSmallBy reports whether a pane at f has fewer cells than the
-// smallest pane (minPaneCols by minPaneRows) and dc columns and dr rows
-// more, measured with the cell reportGrid keeps.
+// smallest pane shown (shownPaneCols by shownPaneRows) and dc columns and
+// dr rows more, measured with the cell reportGrid keeps.
 func (a *App) paneTooSmallBy(f frac, ew, eh, dc, dr float64) bool {
 	cw, ch := float64(a.cell.w), float64(a.cell.h)
 	if cw <= 0 || ch <= 0 {
 		return false
 	}
-	return (f.w*ew-paneGap)/cw < minPaneCols+dc || (f.h*eh-paneGap-headerH)/ch < minPaneRows+dr
+	return (f.w*ew-paneGap)/cw < shownPaneCols+dc || (f.h*eh-paneGap-headerH)/ch < shownPaneRows+dr
 }
 
 // stripH is the height of the strip that lists the hidden panes.
