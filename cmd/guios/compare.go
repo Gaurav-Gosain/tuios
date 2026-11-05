@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
+	"strconv"
 	"strings"
 	"time"
 
@@ -105,6 +107,60 @@ type ckFanAttempt struct {
 
 // ckLetter is an attempt's letter: A, B, C.
 func ckLetter(i int) string { return string(rune('A' + i%26)) }
+
+// ckFanLetters are the letters of the fans' attempts by session: A for
+// the fan's first session, B for its -2, as the TUI and the comparison
+// name them. A session alone in its group has no letter.
+func ckFanLetters(agents []client.Agent) map[string]string {
+	groups := map[string][]string{}
+	for _, ag := range agents {
+		if ckFanOf(ag) && !slices.Contains(groups[ag.Group], ag.Session) {
+			groups[ag.Group] = append(groups[ag.Group], ag.Session)
+		}
+	}
+	var out map[string]string
+	for _, ss := range groups {
+		if len(ss) < 2 {
+			continue
+		}
+		slices.SortFunc(ss, ckFanOrder)
+		if out == nil {
+			out = map[string]string{}
+		}
+		for i, s := range ss {
+			out[s] = ckLetter(i)
+		}
+	}
+	return out
+}
+
+// ckFanOrder sorts a fan's sessions the way fan numbers them: the stem,
+// then -2, -3 and on.
+func ckFanOrder(a, b string) int {
+	num := func(s string) (string, int) {
+		if i := strings.LastIndexByte(s, '-'); i > 0 {
+			if n, err := strconv.Atoi(s[i+1:]); err == nil && n > 1 {
+				return s[:i], n
+			}
+		}
+		return s, 1
+	}
+	sa, na := num(a)
+	sb, nb := num(b)
+	if sa != sb {
+		return strings.Compare(a, b)
+	}
+	return na - nb
+}
+
+// ckAttemptLetter is the agent's letter in its fan, "" when it is not an
+// attempt of one.
+func (a *App) ckAttemptLetter(ag client.Agent) string {
+	if !ckFanOf(ag) {
+		return ""
+	}
+	return a.ck.letters[ag.Session]
+}
 
 // ckFanOf reports whether the agent is an attempt of a fan on this machine.
 func ckFanOf(ag client.Agent) bool { return ag.Group != "" && ag.Host == "" && ag.Session != "" }

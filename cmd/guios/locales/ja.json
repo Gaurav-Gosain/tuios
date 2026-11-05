@@ -765,6 +765,7 @@
   "cockpitStageReview": "レビュー",
   "cockpitStageShipped": "出荷済み",
   "cockpitStageDone": "完了",
+  "cockpitAttempt": "試行 {letter}",
   "cockpitNoBoard": "タスクボードはありません",
   "cockpitAddCard": "カードを追加",
   "cockpitMoreColumns": "他の列を表示",

@@ -7772,6 +7772,16 @@ func (msgs Messages) CockpitStageDone() string {
 	return Catalog.Format(msgs.locale, "cockpitStageDone", nil)
 }
 
+// CockpitAttempt says "Attempt {letter}"
+// in the language the app shows.
+func CockpitAttempt(letter string) string { return In(i18n.Locale()).CockpitAttempt(letter) }
+
+// CockpitAttempt says "Attempt {letter}"
+// in the language of msgs.
+func (msgs Messages) CockpitAttempt(letter string) string {
+	return Catalog.Format(msgs.locale, "cockpitAttempt", map[string]any{"letter": letter})
+}
+
 // CockpitNoBoard says "No task board"
 // in the language the app shows.
 func CockpitNoBoard() string { return In(i18n.Locale()).CockpitNoBoard() }

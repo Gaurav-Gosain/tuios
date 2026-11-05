@@ -128,6 +128,9 @@ func (a *App) agentRow(c *ui.Context, pal *palette, ag client.Agent, need *ckNee
 	}
 	row.Children(func() {
 		ckMark(c, pal, st, unread, 12)
+		if l := a.ckAttemptLetter(ag); l != "" {
+			attemptChip(c, pal, l)
+		}
 		name := oneLine(c, ag.Name, fsSmall, wMedium).TextColor(pal.text).Shrink(0).MaxWidth(130)
 		if need != nil {
 			name.FontWeight(wSemibold)

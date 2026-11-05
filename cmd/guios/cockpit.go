@@ -130,9 +130,11 @@ type cockpit struct {
 	lightbox *ckThreadImage
 
 	agents []client.Agent
-	items  []session.AttentionItem
-	loaded bool
-	err    string
+	// letters are the fans' attempts' letters by session (ckFanLetters).
+	letters map[string]string
+	items   []session.AttentionItem
+	loaded  bool
+	err     string
 	// fetching says a read of the lists runs, and again that an event came
 	// during it, so another follows.
 	fetching, again bool
@@ -310,6 +312,7 @@ func (a *App) refreshCockpit() {
 			} else {
 				a.ck.err = ""
 				a.ck.agents, a.ck.items, a.ck.loaded = agents, items, true
+				a.ck.letters = ckFanLetters(agents)
 				if a.ck.undo != nil && time.Now().After(a.ck.undo.until) {
 					a.ck.undo = nil
 				}

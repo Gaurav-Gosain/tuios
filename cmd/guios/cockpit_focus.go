@@ -155,6 +155,9 @@ func (a *App) cockpitFocus(c *ui.Context, pal *palette) {
 				iconButton(c, "ck-back", chevronLeftIcon, a.tip(locales.CockpitBack(), ""), pal, func() { ck.stackFocus = false })
 			}
 			ui.Icon(c, harnessIcon(ag.Harness)).Size(16, 16).TextColor(pal.textMuted).Shrink(0)
+			if l := a.ckAttemptLetter(ag); l != "" {
+				attemptChip(c, pal, l)
+			}
 			name := oneLine(c, ag.Name, fsTitle, wSemibold).TextColor(pal.text).Cursor(ui.CursorPointer)
 			pointerTooltip(c, name, "ck-name", locales.CockpitOpenPane())
 			if name.Clicked() && ag.Window != "" {

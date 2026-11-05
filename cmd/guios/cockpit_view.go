@@ -432,13 +432,20 @@ func (a *App) ckRowView(c *ui.Context, pal *palette, r ckRow) {
 	// the age alone: the session is the focus column's to say. The row's
 	// content: the column less the list's and the row's padding and edge,
 	// then the mark, the name, the age and four gaps.
+	letter := a.ckAttemptLetter(ag)
 	room := ck.fleetW - 16 - 18 - 2 - 14 - 4*7 - natural(c, age, fsSmall, 0) - natural(c, name, fsBody, weight)
+	if letter != "" {
+		room -= attemptChipW + 7
+	}
 	harnessW := 12 + 4 + natural(c, harnessName(harness), fsSmall, 0)
 	showHarness := room >= harnessW
 	row.Children(func() {
 		ui.Column(c).Grow(1).MinWidth(0).Gap(3).Children(func() {
 			ui.Row(c).Gap(7).AlignItems(ui.Center).Children(func() {
 				ckMark(c, pal, st, unread, 14)
+				if letter != "" {
+					attemptChip(c, pal, letter)
+				}
 				oneLine(c, name, fsBody, weight).TextColor(pal.text)
 				ui.Row(c).Gap(4).AlignItems(ui.Center).Shrink(0).Children(func() {
 					ic := ui.Icon(c, harnessIcon(harness)).Size(12, 12).TextColor(pal.textFaint).Shrink(0)
@@ -461,6 +468,18 @@ func (a *App) ckRowView(c *ui.Context, pal *palette, r ckRow) {
 				ui.Text(c, locales.CockpitNoActivity()).FontSize(fsSmall).TextColor(pal.textFaint).SingleLine().Margin(0, 0, 0, 21)
 			}
 		})
+	})
+}
+
+// attemptChipW is the width of an attempt's letter chip.
+const attemptChipW = 16
+
+// attemptChip is an attempt's letter, A, B, C, in a chip before its name:
+// the attempts of a fan run the same agent, so the letter tells them apart.
+func attemptChip(c *ui.Context, pal *palette, letter string) {
+	ui.Row(c).Size(attemptChipW, attemptChipW).Shrink(0).Radius(rChip).Background(pal.accent.Alpha(0.16)).Center().
+		Label(locales.CockpitAttempt(letter)).Children(func() {
+		ui.Text(c, letter).FontSize(fsCaption).FontWeight(wSemibold).TextColor(pal.accent).SingleLine()
 	})
 }
 

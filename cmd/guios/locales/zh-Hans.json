@@ -765,6 +765,7 @@
   "cockpitStageReview": "审查",
   "cockpitStageShipped": "已发布",
   "cockpitStageDone": "完成",
+  "cockpitAttempt": "尝试 {letter}",
   "cockpitNoBoard": "没有任务看板",
   "cockpitAddCard": "添加卡片",
   "cockpitMoreColumns": "显示更多列",

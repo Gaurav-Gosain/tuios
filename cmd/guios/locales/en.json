@@ -1420,6 +1420,7 @@
   "cockpitStageReview": "Review",
   "cockpitStageShipped": "Shipped",
   "cockpitStageDone": "Done",
+  "cockpitAttempt": "Attempt {letter}",
   "cockpitNoBoard": "No task board",
   "cockpitAddCard": "Add a card",
   "cockpitMoreColumns": "Show more columns",
