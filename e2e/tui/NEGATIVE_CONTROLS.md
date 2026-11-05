@@ -13198,11 +13198,13 @@ Repeat from `e2e/tui` with
 
 `TestThreadReadsAnAgentOnAHost` attaches a client here to a session on build
 over the fake ssh link. A pane on build is joined to a Claude Code transcript
-by the real hook. With build's default policy, the Thread tab must name the
-missing `respond` and the table to change. After `config apply` on build gives
-`respond`, the tab must show build's conversation and a line written to the
-file after that. A caller here through the hub, with no nonce or with a nonce
-build never issued, must get `not_human`.
+by the real hook. With build's default policy, the Thread tab must show
+build's conversation and a line written to the file after it opened, and the
+Checkpoints panel must show build's answer for the pane. A caller here
+through the hub, with no nonce or with a nonce build never issued, must get
+`not_human`. After `config apply` on build sets an allow list without
+`transcripts`, the next read must be refused, and the tab must name
+`transcripts` and the table to change.
 
 On main the test fails at the first step: the tab shows `Only your own client
 reads a transcript.`. The read went to this machine's daemon, which logs
@@ -13213,8 +13215,11 @@ Run on 2026-11-05 on Linux on the branch fix/far-transcript-read.
 
 | Fix removed | How | Failure | Verdict |
 |---|---|---|---|
-| Thread reads go to the far daemon | `threadCaller` always returns `inboxCaller()` | `the Thread tab of an agent on build does not say that build's policy lacks respond`, with the tab showing `tuios on build did not accept this client as the person` | **caught** |
-| The transcript watch goes to the far daemon | `startThreadWatch` always dials this machine | `the Thread tab never showed build's conversation` | **caught** |
+| Thread reads go to the far daemon | `agentCaller` always returns `inboxCaller()` | `the Thread tab never showed build's conversation` | **caught** |
+| The transcript watch goes to the far daemon | `startThreadWatch` always dials this machine | `the Thread tab never showed a line build's agent wrote after it opened` | **caught** |
+| The default policy has `transcripts` | `transcripts` taken out of `DefaultLinkAllow` | `the Thread tab never showed build's conversation` | **caught** |
+| The Checkpoints panel asks the far daemon | `CockpitSideFetch` calls `inboxCaller()` | `the Checkpoints panel never showed build's answer` | **caught** |
+| `respond` includes `transcripts` | `LinkPolicy.Allows` stops treating `respond` as `transcripts` | `TestPersonReadsAgentTranscript`, whose phone link allows `respond`: `a pane with no join: want no_transcript, got forbidden` | **caught** |
 
 Repeat from `e2e/tui` with
-`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestThreadReadsAnAgentOnAHost$' -v .`.
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^(TestThreadReadsAnAgentOnAHost|TestPersonReadsAgentTranscript)$' -v .`.

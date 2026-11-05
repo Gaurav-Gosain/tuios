@@ -511,7 +511,8 @@ func (m *OS) CockpitSideFetch() tea.Cmd {
 		cp.list, cp.off = prev.list, prev.off
 	}
 	ck.cps[akey] = cp
-	call, sess, win := m.inboxCaller(), e.SessionID, e.WindowID
+	// The far daemon holds the pane of a session attached through a host.
+	call, sess, win := m.agentCaller(), e.SessionID, e.WindowID
 	return tea.Batch(follow, func() tea.Msg {
 		raw, err := call("list-checkpoints", map[string]any{"session": sess, "window": win}, threadReadTimeout)
 		msg := ckCheckpointsMsg{agent: akey, key: key, err: err}

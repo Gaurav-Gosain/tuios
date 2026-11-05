@@ -554,17 +554,18 @@ func TestMailboxFollowsTheSessionAcrossTheLink(t *testing.T) {
 	alive(t, term, "after replying through build")
 }
 
-// TestThreadReadsAnAgentOnAHost opens the Thread tab of an agent on build from
-// a client here attached to build's session. The report this exists for: the
-// tab stayed empty with "Only your own client reads a transcript.", because
-// the client sent build's attach nonce to this machine's daemon, which holds
-// neither the pane nor the nonce.
+// TestThreadReadsAnAgentOnAHost opens the agents view on a client here
+// attached to a session on build, with an agent on build selected. The
+// report this exists for: the Thread tab stayed empty with "Only your own
+// client reads a transcript.", because the client sent build's attach nonce
+// to this machine's daemon, which holds neither the pane nor the nonce. The
+// Checkpoints panel said "session far not found" for the same reason.
 //
-// build's default policy does not give respond, which a link needs to read a
-// conversation. The tab has to say so and name the table to change. Once
-// respond is given on build, the tab reads build's transcript over the link,
-// and a line build's agent writes after that shows too. A caller here with no
-// attach nonce, or one build never issued, still reads nothing.
+// With build's default policy, the tab reads build's transcript over the
+// link, and the Checkpoints panel shows build's answer. A caller here with no
+// attach nonce, or one build never issued, still reads nothing. Once build's
+// policy names an allow list without transcripts, the next read is refused,
+// and the tab names the capability and the table to change.
 //
 // NEGATIVE CONTROL in NEGATIVE_CONTROLS.md, "The Thread tab of an agent on a
 // host".
@@ -613,43 +614,44 @@ func TestThreadReadsAnAgentOnAHost(t *testing.T) {
 		t.Fatalf("open the agents view: %v", err)
 	}
 
-	// --- build's default policy: the tab says what is missing and where.
-	if err := term.WaitFor(func(s tuitest.Screen) bool {
-		return containsAll(strings.Join(strings.Fields(s.Text()), " "), `add "respond"`, "[hosts.", "config on build")
-	}, uiTimeout); err != nil {
-		dumpLinkLogs(t, base, remote)
-		t.Fatalf("ASSERTION: the Thread tab of an agent on build does not say that build's policy lacks respond: %v\n%s", err, term.Snapshot())
+	// appendLine writes one line of build's agent to its transcript. Its
+	// transcript event comes over the link and the tab reads again.
+	appendLine := func(uuid, text string) {
+		t.Helper()
+		f, err := os.OpenFile(path, os.O_APPEND|os.O_WRONLY, 0o600)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer func() { _ = f.Close() }()
+		line, _ := json.Marshal(map[string]any{
+			"type": "assistant", "uuid": uuid, "sessionId": "9a1f0c2e-0000-4000-8000-00000000c0c0",
+			"timestamp": "2026-10-18T09:53:00.000Z",
+			"message":   map[string]any{"role": "assistant", "content": []map[string]string{{"type": "text", "text": text}}},
+		})
+		if _, err := f.Write(append(line, '\n')); err != nil {
+			t.Fatal(err)
+		}
 	}
-	if strings.Contains(term.Screen().Text(), "Only your own client") {
-		t.Fatalf("ASSERTION: the Thread tab still shows the old refusal:\n%s", term.Snapshot())
-	}
-	saveCockpitFrames(t, term, "thread-host-no-respond")
 
-	// --- The person on build gives respond.
-	writeRemoteConfig(t, remote, "[hosts.\"*\"]\nallow = [\"list\", \"mail\", \"open\", \"write\", \"files\", \"respond\"]\n")
-	if out, err := tuiosCLI(t, remote, "config", "apply"); err != nil {
-		t.Fatalf("config apply on build: %v\n%s", err, out)
-	}
-	// build's agent writes a line. Its transcript event comes over the link
-	// and the tab reads again.
-	f, err := os.OpenFile(path, os.O_APPEND|os.O_WRONLY, 0o600)
-	if err != nil {
-		t.Fatal(err)
-	}
-	line, _ := json.Marshal(map[string]any{
-		"type": "assistant", "uuid": "c18", "sessionId": "9a1f0c2e-0000-4000-8000-00000000c0c0",
-		"timestamp": "2026-10-18T09:53:00.000Z",
-		"message":   map[string]any{"role": "assistant", "content": []map[string]string{{"type": "text", "text": "The auth tests pass on build."}}},
-	})
-	if _, err := f.Write(append(line, '\n')); err != nil {
-		t.Fatal(err)
-	}
-	_ = f.Close()
-	if err := term.WaitFor(func(s tuitest.Screen) bool {
-		return containsAll(s.Text(), "go vet ./internal/auth/...", "The auth tests pass on build.")
-	}, uiTimeout); err != nil {
+	// --- build's default policy: the tab shows build's conversation, and a
+	// line written after it opened.
+	if err := term.WaitForText("go vet ./internal/auth/...", uiTimeout); err != nil {
 		dumpLinkLogs(t, base, remote)
 		t.Fatalf("ASSERTION: the Thread tab never showed build's conversation: %v\n%s", err, term.Snapshot())
+	}
+	appendLine("c18", "The auth tests pass on build.")
+	if err := term.WaitForText("The auth tests pass on build.", uiTimeout); err != nil {
+		dumpLinkLogs(t, base, remote)
+		t.Fatalf("ASSERTION: the Thread tab never showed a line build's agent wrote after it opened: %v\n%s", err, term.Snapshot())
+	}
+	// The Checkpoints panel asks build too. The pane on build is not in a
+	// git work tree, and build says so.
+	// The panel wraps it, and its rows share the screen with the thread.
+	if err := term.WaitForText("Checkpoints need the pane in a git work", uiTimeout); err != nil {
+		t.Fatalf("ASSERTION: the Checkpoints panel never showed build's answer: %v\n%s", err, term.Snapshot())
+	}
+	if strings.Contains(term.Screen().Text(), "not found") {
+		t.Fatalf("ASSERTION: the agents view asked this machine's daemon about build's session:\n%s", term.Snapshot())
 	}
 	saveCockpitFrames(t, term, "thread-host")
 
@@ -678,5 +680,20 @@ func TestThreadReadsAnAgentOnAHost(t *testing.T) {
 			t.Errorf("ASSERTION: a caller here with %s read build's transcript: want not_human, got %v", name, err)
 		}
 	}
+
+	// --- build's person names an allow list without transcripts. The next
+	// read is refused, and the tab says what is missing and where.
+	writeRemoteConfig(t, remote, "[hosts.\"*\"]\nallow = [\"list\", \"mail\", \"open\", \"write\", \"files\"]\n")
+	if out, err := tuiosCLI(t, remote, "config", "apply"); err != nil {
+		t.Fatalf("config apply on build: %v\n%s", err, out)
+	}
+	appendLine("c19", "One more line.")
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		return containsAll(strings.Join(strings.Fields(s.Text()), " "), `add "transcripts"`, `[hosts."*"]`, "config on build")
+	}, uiTimeout); err != nil {
+		dumpLinkLogs(t, base, remote)
+		t.Fatalf("ASSERTION: the Thread tab does not say that build's policy lacks transcripts: %v\n%s", err, term.Snapshot())
+	}
+	saveCockpitFrames(t, term, "thread-host-no-transcripts")
 	alive(t, term, "after reading build's thread")
 }

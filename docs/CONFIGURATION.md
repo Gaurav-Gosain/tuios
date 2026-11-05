@@ -3130,11 +3130,11 @@ allow = ["list", "mail"]
 | `open` | Start processes: sessions, windows, worktrees, fans, `start-agent`, clones of a repository by its URL, and panes this machine runs for it. |
 | `write` | Change what is here: type into panes, `run` a line at a prompt, close and move windows, set options, layouts and names, report agent state, and attach. Also read a worktree's work out with `bundle-worktree` (`tuios worktree pull`), since a machine that may type into a shell here can read those files already. |
 | `respond` | Answer for the person: prompts, held approvals, `ask-human` questions, dismissing Inbox items, and passing on held mail. Also type into a pane that waits on a prompt, from a pane on the other machine. The person on the other machine, outside every pane, needs only `write` for that. |
+| `transcripts` | Read the conversation of an agent here, from the person's own client attached over the link. The client must send the nonce of its attach: an agent in a pane, a link the other machine did not vouch for, and a caller with no nonce are refused. `respond` includes it. |
 | `files` | Read and write files here with the file verbs: a file's bytes, copies in and out (`transfer-start` on the other machine), new folders, moves and removes. It is apart from `write`, so you can stop one machine's copies and keep its typing. A write that arrives over the link lands only in the folders of `files_roots` (the receive folder unless you add more, see below), and the drop folder for dropped files, never in `~/.ssh`, `~/.gnupg`, credentials, shell start files, login items or tuios's own config, whatever `allow` and `files_roots` say. A read never returns keys or credentials. It also lets a window here that the other machine draws show kitty images that a program names by path (`kitten icat --transfer-mode=file`): this machine reads the file under the same read rules and `files_read_roots`, and sends the bytes. See [protocol.md](protocol.md#files-and-transfers). |
 
-With no table, a machine may `list`, `mail`, `open`, `write` and `files`,
-which is what every link could do before the policy existed. `respond` is
-opt-in. Relaying on to this machine's own hosts needs the five capabilities a
+With no table, a machine may `list`, `mail`, `open`, `write`, `files` and
+`transcripts`. `respond` is opt-in. Relaying on to this machine's own hosts needs the five capabilities a
 link had before `files` (`list`, `mail`, `open`, `write`, `respond`), because
 the next machine sees the relay as coming from this one; a table written for an
 older tuios that allows those five still relays. A copy this machine runs for

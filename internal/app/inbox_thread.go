@@ -42,7 +42,7 @@ import (
 // session on screen is the far daemon's, and so is the attach nonce. Sent to
 // this machine's daemon, the nonce proves nothing and the read is refused as
 // not_human. The far daemon holds the read to its own rules for a link: the
-// nonce of an attach that came over the link-human socket, and respond in the
+// nonce of an attach that came over the link-human socket, and transcripts in the
 // link policy. See session/verb_agent_transcript.go.
 //
 // Everything the agent wrote is drawn as the agent's: a quiet gutter mark and
@@ -296,11 +296,11 @@ func (m *OS) InboxThreadFetch() tea.Cmd {
 	return tea.Batch(cmds...)
 }
 
-// threadCaller is how the thread reaches the daemon that holds the pane:
-// the far daemon through the link on a client attached through a host, else
-// what the Inbox calls. Each call dials: a read follows a transcript event,
+// agentCaller is how the agents view reaches the daemon that holds an
+// agent's pane, for the thread and the checkpoints: the far daemon through
+// the link on a client attached through a host, else what the Inbox calls. Each call dials: a read follows a transcript event,
 // and the events are already coalesced into one read in flight.
-func (m *OS) threadCaller() inboxVerbCall {
+func (m *OS) agentCaller() inboxVerbCall {
 	if m.Inbox.call != nil || m.AttachedHost == "" {
 		return m.inboxCaller()
 	}
@@ -318,7 +318,7 @@ func (m *OS) threadCaller() inboxVerbCall {
 // threadPageCmd reads a transcript page: the newest entries, or those after
 // cursor.
 func (m *OS) threadPageCmd(t *agentThread, after string) tea.Cmd {
-	call, nonce := m.threadCaller(), m.inboxNonce()
+	call, nonce := m.agentCaller(), m.inboxNonce()
 	key, sess, window := t.key, t.session, t.window
 	var stateAt int64
 	if e, ok := m.cockpitAgent(); ok && agentKey(e) == key {
@@ -349,7 +349,7 @@ func (m *OS) threadPageCmd(t *agentThread, after string) tea.Cmd {
 
 // threadRecapCmd reads an agent's recap.
 func (m *OS) threadRecapCmd(t *agentThread, recapKey string) tea.Cmd {
-	call, key, sess, window := m.threadCaller(), t.key, t.session, t.window
+	call, key, sess, window := m.agentCaller(), t.key, t.session, t.window
 	return func() tea.Msg {
 		rc, err := agentActivityRecapCall(call, sess, window, 0)
 		return threadRecapMsg{key: key, recapKey: recapKey, recap: rc, err: err}
