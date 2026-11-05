@@ -49,8 +49,13 @@ func (a *App) helpRows() []helpRow {
 			}
 			for _, g := range config.PrefixMenuGroups(tk.reg, m, config.MenuState{Daemon: true, Minimized: -1}) {
 				title := keysTitle(m)
-				if g.Title != "" {
+				switch {
+				case g.Title != "":
 					title += " · " + groupWords(g.Title)
+				case m != "":
+					// A menu with no groups is a prefix group too, and says
+					// so as the others do: "Prefix · Minimize".
+					title = locales.KeysMenuPrefix() + " · " + title
 				}
 				for _, b := range g.Bindings {
 					if !nativeActions[b.Action] && !daemonActions[b.Action] {
@@ -70,7 +75,20 @@ func (a *App) helpRows() []helpRow {
 		if k == "" {
 			continue
 		}
-		rows = append(rows, helpRow{"guios · " + menuTitle(act.Menu), k, strings.TrimSuffix(actionTitle(act.ID), "…")})
+		what := strings.TrimSuffix(actionTitle(act.ID), "…")
+		if act.ID == "pane.close" {
+			// The menu's "Close" is the pane's on this sheet, as the
+			// prefix's Close pane is.
+			what = locales.PaneClose()
+		}
+		rows = append(rows, helpRow{"guios · " + menuTitle(act.Menu), k, what})
+	}
+	// The splits go right, then down, in every group, as guios's own
+	// menu lists them.
+	for i := 0; i+1 < len(rows); i++ {
+		if rows[i].what == locales.ActionSplitDown() && rows[i+1].what == locales.ActionSplitRight() && rows[i].group == rows[i+1].group {
+			rows[i], rows[i+1] = rows[i+1], rows[i]
+		}
 	}
 	return rows
 }
@@ -154,12 +172,11 @@ func (a *App) helpView(c *ui.Context, pal *palette) {
 	}
 	ww, wh := c.Size()
 	two := ww >= 1440 && len(rows) > 12
-	width := float32(760)
-	if two {
-		width = 980
-	}
+	// One width, whatever the query finds: the sheet does not jump as
+	// the user types (council round 3, visual S7).
+	width := float32(980)
 	if ww > 0 {
-		width = min(width, ww-2*sp4)
+		width = min(width, ww-160)
 	}
 	// The cap column is as wide as its widest cap, and the labels follow.
 	capW := float32(0)

@@ -8240,11 +8240,11 @@ func (msgs Messages) KeysMenuMinimize() string {
 	return Catalog.Format(msgs.locale, "keysMenuMinimize", nil)
 }
 
-// KeysNextPrevPane says "Next/prev pane"
+// KeysNextPrevPane says "Prev/next pane"
 // in the language the app shows.
 func KeysNextPrevPane() string { return In(i18n.Locale()).KeysNextPrevPane() }
 
-// KeysNextPrevPane says "Next/prev pane"
+// KeysNextPrevPane says "Prev/next pane"
 // in the language of msgs.
 func (msgs Messages) KeysNextPrevPane() string {
 	return Catalog.Format(msgs.locale, "keysNextPrevPane", nil)
@@ -10544,11 +10544,11 @@ func (msgs Messages) HelpPlaceholder() string {
 	return Catalog.Format(msgs.locale, "helpPlaceholder", nil)
 }
 
-// HelpFooter says "Your tuios config.toml sets the tuios keys. Settings, Keyboard sets the guios keys. Press Esc to close."
+// HelpFooter says "Your tuios config.toml sets the tuios keys. Settings > Keyboard sets the guios keys. Press Esc to close."
 // in the language the app shows.
 func HelpFooter() string { return In(i18n.Locale()).HelpFooter() }
 
-// HelpFooter says "Your tuios config.toml sets the tuios keys. Settings, Keyboard sets the guios keys. Press Esc to close."
+// HelpFooter says "Your tuios config.toml sets the tuios keys. Settings > Keyboard sets the guios keys. Press Esc to close."
 // in the language of msgs.
 func (msgs Messages) HelpFooter() string {
 	return Catalog.Format(msgs.locale, "helpFooter", nil)
