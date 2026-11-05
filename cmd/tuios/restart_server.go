@@ -202,11 +202,11 @@ func planRestart() *restartReport {
 	rep.Binary = bin
 	rep.Version = cmp.Or(ver, version)
 
-	t := &syncTarget{name: "this machine", local: true, runner: hostsync.LocalRunner{}}
+	t := &syncTarget{Name: "this machine", Local: true, Runner: hostsync.LocalRunner{}}
 	ctx, cancel := context.WithTimeout(context.Background(), syncProbeTimeout)
 	defer cancel()
 	readLocalDaemon(ctx, t)
-	d := t.res.Daemon
+	d := t.Res.Daemon
 	rep.Daemon = &restartplan.Daemon{State: d.State, Version: d.Version, PID: d.PID, SessionCount: d.SessionCount, Sessions: d.Sessions, Unread: d.Unread}
 
 	cfg := session.DaemonConfigFromUser(nil)

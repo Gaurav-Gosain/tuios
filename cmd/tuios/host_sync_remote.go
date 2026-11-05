@@ -19,42 +19,6 @@ import (
 // the reading of its daemon. The scripts and the runner that carries them are
 // in internal/hostsync.
 
-// probeHostBinary runs the probe script and fills in what it found.
-func probeHostBinary(ctx context.Context, t *syncTarget) error {
-	arg, plain := hostsync.CommandArg(t.host.Command)
-	if !plain {
-		t.note("The host has a command set in the config that is not one path. Sync looks for tuios the way the link does without one.")
-	}
-	out, stderr, err := t.runner.Run(ctx, hostsync.ProbeScript(), []string{arg}, nil)
-	if err != nil {
-		return hostsync.RemoteRunError("could not read the host", stderr, err)
-	}
-	f := hostsync.ParseFacts(out)
-	goos, goarch, err := hostsync.GoPlatform(f.Get("os"), f.Get("arch"))
-	t.res.OS, t.res.Arch = goos, goarch
-	if t.res.OS == "" {
-		t.res.OS = strings.ToLower(f.Get("os"))
-		t.res.Arch = f.Get("arch")
-	}
-	if err != nil {
-		return err
-	}
-	t.home = f.Get("home")
-	t.configured = f.Get("configured")
-	t.res.Path = f.Get("path")
-	t.symlink = f.Has("symlink")
-	t.dirWritable = f.Has("dirw")
-	t.sha = f.Get("sha")
-	t.res.Service = f.Get("svc")
-	if vers := f["ver"]; len(vers) > 0 {
-		t.res.Before, t.res.BeforeBackend = hostsync.ParseVersionLine(vers[0])
-	}
-	if t.res.Path != "" && t.res.Before == "" {
-		t.note("The tuios on the host did not report a version.")
-	}
-	return nil
-}
-
 // daemonCaller runs one verb on the machine's daemon.
 type daemonCaller func(ctx context.Context, verb string, params any) (json.RawMessage, error)
 
@@ -62,7 +26,7 @@ type daemonCaller func(ctx context.Context, verb string, params any) (json.RawMe
 // the way 'tuios hosts test' does. The link runs the host's own tuios, so
 // nothing here starts a daemon there.
 func readHostDaemon(ctx context.Context, t *syncTarget) {
-	table, _ := federation.NewTable([]federation.Host{t.host})
+	table, _ := federation.NewTable([]federation.Host{t.Host})
 	m := federation.New(table, federation.Options{
 		Dial:            federation.SSHDialer(os.Getenv("TUIOS_SSH")),
 		ClientName:      "tuios-hosts-sync",
@@ -70,43 +34,43 @@ func readHostDaemon(ctx context.Context, t *syncTarget) {
 		VerbProtocol:    session.VerbProtocolVersion,
 		MinVerbProtocol: session.MinVerbProtocolVersion,
 	})
-	dialCtx, cancel := context.WithTimeout(ctx, linkSettleBudget(t.host))
+	dialCtx, cancel := context.WithTimeout(ctx, linkSettleBudget(t.Host))
 	defer cancel()
 	m.Start(dialCtx)
 	defer m.Stop()
 	reports := m.Reports(dialCtx)
 	if len(reports) == 0 {
-		t.res.Daemon.State = daemonUnknown
-		t.daemonNote = "The link to the host did not report a state."
+		t.Res.Daemon.State = daemonUnknown
+		t.DaemonNote = "The link to the host did not report a state."
 		return
 	}
 	r := reports[0]
 	switch r.Status {
 	case federation.StatusUp:
-		t.res.Daemon.State = daemonRunning
-		t.res.Daemon.Version = r.DaemonVersion
-		t.res.Daemon.PID = r.PID
-		t.res.Daemon.SessionCount = r.Sessions
+		t.Res.Daemon.State = daemonRunning
+		t.Res.Daemon.Version = r.DaemonVersion
+		t.Res.Daemon.PID = r.PID
+		t.Res.Daemon.SessionCount = r.Sessions
 		call := func(ctx context.Context, verb string, params any) (json.RawMessage, error) {
-			return m.Call(ctx, t.name, verb, params)
+			return m.Call(ctx, t.Name, verb, params)
 		}
 		readDaemonSessions(ctx, t, call)
 	case federation.StatusNoDaemon, federation.StatusNoBinary:
-		t.res.Daemon.State = daemonStopped
+		t.Res.Daemon.State = daemonStopped
 	case federation.StatusIncompatible:
-		t.res.Daemon.State = daemonRunning
-		t.res.Daemon.Version = r.DaemonVersion
-		t.res.Daemon.PID = r.PID
-		t.res.Daemon.SessionCount = r.Sessions
-		t.res.Daemon.Unread = true
-		t.note("The daemon speaks a control protocol this build does not serve, so its sessions could not be read.")
+		t.Res.Daemon.State = daemonRunning
+		t.Res.Daemon.Version = r.DaemonVersion
+		t.Res.Daemon.PID = r.PID
+		t.Res.Daemon.SessionCount = r.Sessions
+		t.Res.Daemon.Unread = true
+		t.Note("The daemon speaks a control protocol this build does not serve, so its sessions could not be read.")
 	default:
-		t.res.Daemon.State = daemonUnknown
+		t.Res.Daemon.State = daemonUnknown
 		reason := r.Reason
 		if reason == "" {
 			reason = "The link did not come up."
 		}
-		t.daemonNote = "The daemon could not be read. " + reason
+		t.DaemonNote = "The daemon could not be read. " + reason
 	}
 }
 
@@ -122,22 +86,22 @@ func linkSettleBudget(h federation.Host) time.Duration {
 // readLocalDaemon reads this machine's daemon over its socket.
 func readLocalDaemon(ctx context.Context, t *syncTarget) {
 	if !session.IsDaemonRunning() {
-		t.res.Daemon.State = daemonStopped
+		t.Res.Daemon.State = daemonStopped
 		return
 	}
-	t.res.Daemon.State = daemonRunning
+	t.Res.Daemon.State = daemonRunning
 	client, err := session.DialVerbClientAs(version)
 	if err != nil {
 		if mismatch, ok := errors.AsType[*session.ProtocolMismatchError](err); ok {
-			t.res.Daemon.Version = mismatch.DaemonVersion
-			t.res.Daemon.PID = mismatch.DaemonPID
-			t.res.Daemon.SessionCount = mismatch.Sessions
-			t.res.Daemon.Unread = true
-			t.note("The daemon speaks a control protocol this build does not serve, so its sessions could not be read.")
+			t.Res.Daemon.Version = mismatch.DaemonVersion
+			t.Res.Daemon.PID = mismatch.DaemonPID
+			t.Res.Daemon.SessionCount = mismatch.Sessions
+			t.Res.Daemon.Unread = true
+			t.Note("The daemon speaks a control protocol this build does not serve, so its sessions could not be read.")
 			return
 		}
-		t.res.Daemon.State = daemonUnknown
-		t.note("The daemon could not be read: " + err.Error())
+		t.Res.Daemon.State = daemonUnknown
+		t.Note("The daemon could not be read: " + err.Error())
 		return
 	}
 	defer func() { _ = client.Close() }()
@@ -152,9 +116,9 @@ func readLocalDaemon(ctx context.Context, t *syncTarget) {
 			Sessions      int    `json:"sessions"`
 		}
 		if json.Unmarshal(raw, &hs) == nil {
-			t.res.Daemon.Version = hs.DaemonVersion
-			t.res.Daemon.PID = hs.PID
-			t.res.Daemon.SessionCount = hs.Sessions
+			t.Res.Daemon.Version = hs.DaemonVersion
+			t.Res.Daemon.PID = hs.PID
+			t.Res.Daemon.SessionCount = hs.Sessions
 		}
 	}
 	readDaemonSessions(ctx, t, call)
@@ -167,8 +131,8 @@ func readLocalDaemon(ctx context.Context, t *syncTarget) {
 func readDaemonSessions(ctx context.Context, t *syncTarget, call daemonCaller) {
 	raw, err := call(ctx, "list-sessions", nil)
 	if err != nil {
-		t.res.Daemon.Unread = true
-		t.note("The daemon did not list its sessions: " + plainLine(err.Error()))
+		t.Res.Daemon.Unread = true
+		t.Note("The daemon did not list its sessions: " + plainLine(err.Error()))
 		return
 	}
 	var list struct {
@@ -177,7 +141,7 @@ func readDaemonSessions(ctx context.Context, t *syncTarget, call daemonCaller) {
 		} `json:"sessions"`
 	}
 	if err := json.Unmarshal(raw, &list); err != nil {
-		t.res.Daemon.Unread = true
+		t.Res.Daemon.Unread = true
 		return
 	}
 	type paneRef struct {
@@ -227,7 +191,7 @@ func readDaemonSessions(ctx context.Context, t *syncTarget, call daemonCaller) {
 				}
 				// A daemon of another build may not mark the panes, so the
 				// saved files answer for it.
-				if t.local && t.res.Daemon.Version != version {
+				if t.Local && t.Res.Daemon.Version != version {
 					ss.Resume = append(ss.Resume, resumableAgents(s.Name, live)...)
 				}
 			}
@@ -236,7 +200,7 @@ func readDaemonSessions(ctx context.Context, t *syncTarget, call daemonCaller) {
 	}
 	procs := map[int]paneProc{}
 	if len(pids) > 0 {
-		out, _, err := t.runner.Run(ctx, hostsync.PaneScript(), pids, nil)
+		out, _, err := t.Runner.Run(ctx, hostsync.PaneScript(), pids, nil)
 		if err == nil {
 			procs = parsePaneProcs(out)
 		}
@@ -246,8 +210,8 @@ func readDaemonSessions(ctx context.Context, t *syncTarget, call daemonCaller) {
 			sessions[r.session].Busy = append(sessions[r.session].Busy, syncPane{Window: r.window, Program: program})
 		}
 	}
-	t.res.Daemon.Sessions = sessions
-	t.res.Daemon.SessionCount = len(sessions)
+	t.Res.Daemon.Sessions = sessions
+	t.Res.Daemon.SessionCount = len(sessions)
 }
 
 // paneFacts is what the daemon said about one pane.
