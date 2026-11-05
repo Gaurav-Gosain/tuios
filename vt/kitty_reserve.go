@@ -76,14 +76,33 @@ func (e *Emulator) ReserveKittyPlacement(cmd *KittyCommand) {
 	if rows <= 0 || cols <= 0 {
 		return
 	}
-	// A marker states at most SixelMaxCells rows and columns; a picture
-	// past a full screen cannot be shown anyway.
-	rows, cols = min(rows, SixelMaxCells), min(cols, SixelMaxCells)
+	e.layOutKittyImage(rows, cols, true)
+}
+
+// ReserveKittyImageSpace moves the cursor past an image rows by cols cells at
+// the cursor, as a kitty terminal does and as ReserveKittyPlacement does,
+// without marking the cells. A client that draws the image itself (the TUI's
+// passthrough) lays its grid out with it, so its rows agree with the daemon's
+// grid, which a reattach or a resize snapshot brings back.
+func (e *Emulator) ReserveKittyImageSpace(rows, cols int) {
+	if rows <= 0 || cols <= 0 {
+		return
+	}
+	e.layOutKittyImage(rows, cols, false)
+}
+
+// layOutKittyImage scrolls so the image's rows fit under the cursor, marks
+// its cells when mark is set, and leaves the cursor on the image's last row,
+// right after its last column.
+func (e *Emulator) layOutKittyImage(rows, cols int, mark bool) {
 	startX, startY := e.scr.CursorPosition()
 	height, width := e.scr.Height(), e.scr.Width()
 	scroll := 0
 	if startY+rows > height {
-		scroll = min(startY+rows-height, height)
+		// Bounded as in ReserveImageSpace: a hostile r= could otherwise
+		// drive a very long scroll loop. A picture taller than the screen
+		// runs into the scrollback, as in kitty.
+		scroll = min(startY+rows-height, maxReserveScroll)
 		// A blank pen, as in placeSixel: the guest printed no text.
 		e.scr.withBlankPen(func() {
 			for range scroll {
@@ -92,21 +111,24 @@ func (e *Emulator) ReserveKittyPlacement(cmd *KittyCommand) {
 		})
 	}
 	top := startY - scroll
-	for r := range rows {
-		y := top + r
-		if y < 0 || y >= height {
-			continue
-		}
-		for c := range cols {
-			x := startX + c
-			if x >= width {
-				break
+	if mark {
+		// A marker states at most SixelMaxCells rows and columns.
+		for r := range min(rows, SixelMaxCells) {
+			y := top + r
+			if y < 0 || y >= height {
+				continue
 			}
-			cell := uv.Cell{Content: SixelMarker(0, r, c), Width: 1}
-			if old := e.scr.CellAt(x, y); old != nil {
-				cell.Style.Bg = old.Style.Bg
+			for c := range min(cols, SixelMaxCells) {
+				x := startX + c
+				if x >= width {
+					break
+				}
+				cell := uv.Cell{Content: SixelMarker(0, r, c), Width: 1}
+				if old := e.scr.CellAt(x, y); old != nil {
+					cell.Style.Bg = old.Style.Bg
+				}
+				e.scr.SetCell(x, y, &cell)
 			}
-			e.scr.SetCell(x, y, &cell)
 		}
 	}
 	// The last row of the image, right after its last column. At the right
