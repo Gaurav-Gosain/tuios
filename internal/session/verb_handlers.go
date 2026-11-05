@@ -675,7 +675,10 @@ func (d *Daemon) verbPopup(cs *connState, params json.RawMessage) (any, *verbErr
 			return nil, invalidParam("cwd", echoName(p.Cwd)+" is not a directory")
 		}
 	}
-	if !d.hasTUIClient(sess) {
+	// A scratch terminal on a scratch workspace is a tiled pane, not a box
+	// on a screen: it waits for a client to show it, as a pane on another
+	// workspace does. guios opens one with no TUI attached.
+	if !d.hasTUIClient(sess) && (!p.Scratch || !sess.scratchWorkspacesOn()) {
 		return nil, hintedVerbError(ErrVerbNeedsClient,
 			"a popup is drawn on a screen, so it needs an attached client",
 			&VerbHint{
