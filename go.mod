@@ -8,7 +8,7 @@ require (
 	charm.land/ssh v0.4.3
 	charm.land/tone v0.1.0
 	charm.land/wish/v2 v2.0.5
-	github.com/Gaurav-Gosain/mygo v0.7.4-tuios.7
+	github.com/Gaurav-Gosain/mygo v0.7.4-tuios.10
 	github.com/Gaurav-Gosain/sip v0.10.0
 	github.com/Gaurav-Gosain/tuiffects v0.7.1
 	github.com/adrg/xdg v0.5.3
