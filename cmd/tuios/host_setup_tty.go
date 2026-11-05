@@ -123,8 +123,6 @@ type setupModel struct {
 
 	dest string
 	flow hostsetup.Flow
-	// home is the far HOME the probe read, so a path under it shows as ~.
-	home string
 
 	ask     *hostsetup.Prompt
 	queue   []*hostsetup.Prompt
@@ -285,9 +283,6 @@ func (m *setupModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.spin++
 	case hostsetup.BridgeEvent:
 		m.flow.Apply(msg.Event)
-		if msg.Probe != nil {
-			m.home = msg.Probe.Home
-		}
 	case *hostsetup.Prompt:
 		m.queue = append(m.queue, msg)
 		if m.stopped {
@@ -491,15 +486,6 @@ func (m *setupModel) hints(h [][2]string) {
 	m.b.WriteString("\n")
 }
 
-// text is a line's text for the screen: one line, and the far HOME as ~.
-func (m *setupModel) text(s string) string {
-	s = plainLine(s)
-	if m.home != "" && m.home != "/" {
-		s = strings.ReplaceAll(s, m.home+"/", "~/")
-	}
-	return s
-}
-
 // line writes one step of a Flow. w is the width of the label column.
 func (m *setupModel) line(l hostsetup.Line, w int) {
 	name := mText
@@ -509,9 +495,9 @@ func (m *setupModel) line(l hostsetup.Line, w int) {
 	case hostsetup.StateSkip:
 		name = mMute
 	}
-	text := m.text(l.Text)
+	text := plainLine(l.Text)
 	if l.State == hostsetup.StateFailed && l.Detail != "" {
-		text += " What ssh said: " + m.text(l.Detail)
+		text += " What ssh said: " + plainLine(l.Detail)
 	}
 	bar := ""
 	if l.Total > 0 {
@@ -589,7 +575,7 @@ func (m *setupModel) boxView() {
 
 // cmdLine writes one command of a question block, and where it runs.
 func (m *setupModel) cmdLine(bar int, c hostsetup.Command, indent string) {
-	m.ln(bar, indent, mMute, pad(c.Where+":", 11), mDim, m.text(c.Line))
+	m.ln(bar, indent, mMute, pad(c.Where+":", 11), mDim, plainLine(c.Line))
 }
 
 // askView writes the open question and its key hints.
@@ -638,24 +624,24 @@ func (m *setupModel) askView(p *hostsetup.Prompt) {
 		m.ln(inkAccent)
 		m.ln(inkAccent, yes, "  Yes  ", mText, "  ", no, "  No  ")
 	case hostsetup.AskPerson:
-		m.ln(inkAttn, mBold, m.text(p.Person.Why))
+		m.ln(inkAttn, mBold, plainLine(p.Person.Why))
 		if p.Person.URL != "" {
-			m.ln(inkAttn, m.text(p.Person.URL))
+			m.ln(inkAttn, plainLine(p.Person.URL))
 			m.ln(inkAttn, mDim, m.note)
 		}
 		m.hints([][2]string{{"t", "test again"}, {"ctrl+c", "stop"}})
 		return
 	case hostsetup.AskFix:
 		f := p.Failure
-		m.ln(inkFail, mBold, m.text(f.Reason))
-		m.ln(inkFail, mDim, m.text(f.Fix))
+		m.ln(inkFail, mBold, plainLine(f.Reason))
+		m.ln(inkFail, mDim, plainLine(f.Fix))
 		if f.FixCommand != "" || f.URL != "" {
 			m.ln(inkFail)
-			m.ln(inkFail, mChip, " $ ", m.text(cmp.Or(f.FixCommand, f.URL))+" ")
+			m.ln(inkFail, mChip, " $ ", plainLine(cmp.Or(f.FixCommand, f.URL))+" ")
 		}
 		if f.SSHSaid != "" {
 			m.ln(inkFail)
-			m.ln(inkFail, mMute, "What ssh said: ", m.text(f.SSHSaid))
+			m.ln(inkFail, mMute, "What ssh said: ", plainLine(f.SSHSaid))
 		}
 	}
 	m.hints(p.Hints())
