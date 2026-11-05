@@ -32,13 +32,11 @@ func TestRailMotionResetsPointerShape(t *testing.T) {
 // chrome offers are unchanged by the rail fix.
 func TestPaneMotionStillShapesThePointer(t *testing.T) {
 	o := hoverOS(t)
-	o.SetPointerShape(app.PointerGrab)
 
-	// The editor pane's top border row: grab again by geometry, but through
-	// the pass the rail fix did not touch.
+	// The editor pane's top border row: the geometry pass offers grab there.
 	handleMouseMotion(tea.MouseMotionMsg{X: 40, Y: 1}, o)
 
-	if got := o.CurrentPointer(); got != app.PointerDefault && got != app.PointerGrab {
-		t.Fatalf("pointer over a pane is %q; the geometry pass must keep owning pane chrome", got)
+	if got := o.CurrentPointer(); got != app.PointerGrab {
+		t.Fatalf("pointer over a pane title bar is %q, want grab: the geometry pass must keep owning pane chrome", got)
 	}
 }
