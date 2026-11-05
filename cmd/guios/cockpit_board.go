@@ -66,6 +66,9 @@ type ckBoard struct {
 	// heads are the widths the columns' headings need: the title, the
 	// count and the add button, measured in the last frame.
 	heads []float32
+	// rail tells that the window is under boardRailBelow wide: an empty
+	// column is a rail with its count and its title on its side.
+	rail bool
 }
 
 func (a *App) fetchBoard() {
@@ -171,6 +174,8 @@ func (a *App) boardView(c *ui.Context, pal *palette, sess string) {
 		box := ui.Row(c.Key("cols")).Grow(1).MinHeight(0).AlignItems(ui.Stretch).Gap(boardGap).Padding(14, 16)
 		w := box.Bounds().W
 		b.heads = boardHeads(c, b)
+		ww, _ := c.Size()
+		b.rail = ww > 0 && ww < boardRailBelow
 		first, last, widths := b.run(w)
 		if w != b.width {
 			// The run is worked out from the last frame's width: build
@@ -193,17 +198,22 @@ func (a *App) boardView(c *ui.Context, pal *palette, sess string) {
 }
 
 // Board column widths: a column with cards is at least boardColMin wide
-// and grows to boardColMax with room to spare, an empty or folded one is
-// boardColNarrow. An edge button for hidden columns is boardEdgeW.
-// The board takes the whole card, so its seven stages fit a 1440 px
-// window beside the sidebar.
+// (boardColMinRail in a narrow window) and grows to boardColMax with room
+// to spare, then past it. An empty or folded one is boardColNarrow, all of
+// one width, or a boardColRail rail in a window under boardRailBelow: the
+// empty columns give way first, so no column with cards hides behind the
+// edge button while an empty one keeps its room (council round 3, visual
+// S6). An edge button for hidden columns is boardEdgeW.
 const (
-	boardColMin    = 140
-	boardColMax    = 300
-	boardColNarrow = 104
-	boardEdgeW     = 34
-	boardGap       = 10
-	boardPadX      = 32
+	boardColMin     = 200
+	boardColMinRail = 140
+	boardColMax     = 300
+	boardColNarrow  = 120
+	boardColRail    = 40
+	boardRailBelow  = 1280
+	boardEdgeW      = 34
+	boardGap        = 10
+	boardPadX       = 32
 )
 
 // boardHeadPad is what a column's heading takes beside its title and
@@ -232,12 +242,19 @@ func (b *ckBoard) run(w float32) (first, last int, widths []float32) {
 	wide := make([]bool, n)
 	for i, st := range ckStages {
 		need[i] = boardColNarrow
+		if b.rail {
+			need[i] = boardColRail
+		}
 		if !b.folded(st) && len(b.column(st)) > 0 {
 			need[i], wide[i] = boardColMin, true
+			if b.rail {
+				need[i] = boardColMinRail
+			}
 		}
 		// A column is never narrower than its heading: an empty column
-		// shows its whole title, as "Shipped 0".
-		if i < len(b.heads) {
+		// shows its whole title, as "Shipped 0". A rail shows it on its
+		// side.
+		if i < len(b.heads) && (wide[i] || !b.rail) {
 			need[i] = max(need[i], b.heads[i])
 		}
 	}
@@ -309,11 +326,14 @@ func (b *ckBoard) run(w float32) (first, last int, widths []float32) {
 			}
 		}
 	}
-	if spare > 0 {
-		// What the columns with cards cannot take goes to all of them.
-		add := spare / float32(last-first+1)
+	if spare > 0 && nwide > 0 {
+		// What is left goes to the columns with cards too: the empty
+		// ones keep one width.
+		add := spare / float32(nwide)
 		for k := first; k <= last; k++ {
-			widths[k] += add
+			if wide[k] {
+				widths[k] += add
+			}
 		}
 	}
 	return first, last, widths
@@ -402,6 +422,10 @@ func (a *App) boardColumn(c *ui.Context, pal *palette, b *ckBoard, ci int, st st
 	if id, ok := ui.Drop[string](col); ok {
 		a.moveCard(b, id, st)
 	}
+	if b.rail && (folded || len(cards) == 0) {
+		a.boardRail(c, pal, b, col, ci, st, len(cards))
+		return
+	}
 	col.Children(func() {
 		head := ui.Row(c.Key("h")).Gap(6).AlignItems(ui.Center).Padding(2, 4).Cursor(ui.CursorPointer)
 		if head.Clicked() {
@@ -444,6 +468,29 @@ func (a *App) boardColumn(c *ui.Context, pal *palette, b *ckBoard, ci int, st st
 					a.boardCard(c, pal, b, t)
 				}
 			})
+		})
+	})
+}
+
+// boardRail is an empty column in a narrow window: its count, and its
+// title read from the top down. A click puts the cursor in it, where n
+// adds a card.
+func (a *App) boardRail(c *ui.Context, pal *palette, b *ckBoard, col ui.Element, ci int, st string, n int) {
+	col.Padding(8, 0).AlignItems(ui.Center).Gap(10).Cursor(ui.CursorPointer).Tooltip(ckStageTitle(st) + " " + itoa(n))
+	if col.Clicked() {
+		c.Invalidate()
+		if st == "done" {
+			b.opened[st+"-folded"] = !b.opened[st+"-folded"]
+		}
+		b.col = ci
+	}
+	title := ckStageTitle(st)
+	tw := natural(c, title, fsSmall, wSemibold) + 2
+	col.Children(func() {
+		ui.Text(c, itoa(n)).FontSize(fsSmall).TextColor(pal.textMuted).FontFeatures("tnum").Padding(2, 0)
+		ui.Box(c).Size(20, tw).Shrink(0).Children(func() {
+			ui.Text(c, title).FontSize(fsSmall).FontWeight(wSemibold).TextColor(pal.textMuted).SingleLine().
+				Absolute().Left((20 - tw) / 2).Top((tw - 20) / 2).Width(tw).Height(20).Rotate(90)
 		})
 	})
 }
