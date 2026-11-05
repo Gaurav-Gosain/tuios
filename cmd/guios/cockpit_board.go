@@ -72,7 +72,7 @@ type ckBoard struct {
 	// heads are the widths the columns' headings need: the title, the
 	// count and the add button, measured in the last frame.
 	heads []float32
-	// rail tells that the window is under boardRailBelow wide: an empty
+	// rail tells that the columns do not all fit at their own width: an empty
 	// column is a rail with its count and its title on its side.
 	rail bool
 }
@@ -180,8 +180,16 @@ func (a *App) boardView(c *ui.Context, pal *palette, sess string) {
 		box := ui.Row(c.Key("cols")).Grow(1).MinHeight(0).AlignItems(ui.Stretch).Gap(boardGap).Padding(14, 16)
 		w := box.Bounds().W
 		b.heads = boardHeads(c, b)
-		ww, _ := c.Size()
-		b.rail = ww > 0 && ww < boardRailBelow
+		// Rails by fit, not by window width: the empty columns fold to
+		// rails when, at their own width, the columns would not all fit,
+		// so no column with cards hides behind the edge as a stub
+		// (council round 5, visual S6).
+		b.rail = false
+		saved := b.first
+		if f, l, _ := b.run(w); f > 0 || l < len(ckStages)-1 {
+			b.rail = true
+		}
+		b.first = saved
 		first, last, widths := b.run(w)
 		if w != b.width {
 			// The run is worked out from the last frame's width: build
@@ -206,7 +214,7 @@ func (a *App) boardView(c *ui.Context, pal *palette, sess string) {
 // Board column widths: a column with cards is at least boardColMin wide
 // (boardColMinRail in a narrow window) and grows to boardColMax with room
 // to spare, then past it. An empty or folded one is boardColNarrow, all of
-// one width, or a boardColRail rail in a window under boardRailBelow: the
+// one width, or a boardColRail rail when they would not all fit so: the
 // empty columns give way first, so no column with cards hides behind the
 // edge button while an empty one keeps its room (council round 3, visual
 // S6). An edge button for hidden columns is boardEdgeW.
@@ -216,7 +224,6 @@ const (
 	boardColMax     = 300
 	boardColNarrow  = 120
 	boardColRail    = 40
-	boardRailBelow  = 1280
 	boardEdgeW      = 34
 	boardGap        = 10
 	boardPadX       = 32
@@ -418,10 +425,10 @@ func (a *App) boardColumn(c *ui.Context, pal *palette, b *ckBoard, ci int, st st
 	folded := b.folded(st)
 	col := ui.Column(c.Key(st)).Gap(8).Padding(8).Radius(rCard).Background(ckGround(pal)).AlignItems(ui.Stretch)
 	col.Width(width).Shrink(0)
-	if b.sel == "" && b.col == ci && b.focus.Focused(c) {
-		// The cursor in a column without a card to show it.
-		col.Border(1, pal.accent.Alpha(0.6))
-	}
+	// Nothing rings a column: the selected card has the ring, as the
+	// list's row does (council round 5, visual S2). In a column with no
+	// card, the cursor shows as its title in the accent.
+	cursorHere := b.sel == "" && b.col == ci && b.focus.FocusWithin(c)
 	if _, over := ui.DragOver[string](col); over {
 		col.Border(2, pal.accent)
 	}
@@ -442,7 +449,11 @@ func (a *App) boardColumn(c *ui.Context, pal *palette, b *ckBoard, ci int, st st
 			b.col = ci
 		}
 		head.Children(func() {
-			ui.Text(c, ckStageTitle(st)).FontSize(fsSmall).FontWeight(wSemibold).TextColor(pal.textMuted).SingleLine()
+			title := pal.textMuted
+			if cursorHere {
+				title = pal.accentText
+			}
+			ui.Text(c, ckStageTitle(st)).FontSize(fsSmall).FontWeight(wSemibold).TextColor(title).SingleLine()
 			ui.Text(c, itoa(len(cards))).FontSize(fsSmall).TextColor(pal.textFaint).FontFeatures("tnum")
 			ui.Spacer(c)
 			add := ui.ButtonBase(c.Key("add")).Size(20, 20).Radius(rChip).Center().Label(locales.CockpitAddCard()).Tooltip(locales.CockpitAddCard())
