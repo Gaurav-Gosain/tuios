@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"testing"
+	"time"
 )
 
 // previewSearchText is size bytes of 'x' with a newline every 80 bytes, with
@@ -41,9 +42,11 @@ func previewLogText(size int) []byte {
 // memory budget. A caseless search lowered each 1 MiB chunk into a new slice,
 // so it allocated about as many bytes as it read: 21 MiB for a 20 MiB log. A
 // query of digits was lowered too, though lowering cannot change what it
-// matches. The budget is in bytes, which do not depend on the machine's speed.
-// The table after it holds the answers the search gives across a chunk's edge,
-// at the end of the file, in non-ASCII text and going back.
+// matches. A search or a line seek in a 4 KiB file took a whole 1 MiB chunk
+// all the same. The budget is in bytes, which do not depend on the machine's
+// speed. The table after it holds the answers the search gives across a
+// chunk's edge, at the end of the file, in non-ASCII text, going back and in
+// an empty file.
 func TestPreviewSearchAllocatesLittle(t *testing.T) {
 	dir := t.TempDir()
 	write := func(name string, size int, plants map[int]string) string {
@@ -64,6 +67,12 @@ func TestPreviewSearchAllocatesLittle(t *testing.T) {
 	if err := os.WriteFile(logFile, previewLogText(big), 0o600); err != nil {
 		t.Fatal(err)
 	}
+	smallLog := filepath.Join(dir, "small-log.txt")
+	if err := os.WriteFile(smallLog, previewLogText(4*ki), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	empty := write("empty.txt", 0, nil)
+	overChunk := write("over-chunk.txt", mi+1, map[int]string{0: "edge", mi - 5: "needle"})
 	lowerEdge := write("lower-edge.txt", 2*mi, map[int]string{edge: "needle"})
 	mixedEdge := write("mixed-edge.txt", 2*mi, map[int]string{edge: "NeEdLe"})
 	lowerOnly := write("lower-only.txt", 64*ki, map[int]string{10 * ki: "needle"})
@@ -78,9 +87,24 @@ func TestPreviewSearchAllocatesLittle(t *testing.T) {
 
 	seek := func(t *testing.T, path string, s PreviewSeek) (offset, reached int64) {
 		t.Helper()
-		out, err := PreviewLocalSeek(context.Background(), path, s)
-		if err != nil {
-			t.Fatal(err)
+		type answer struct {
+			out map[string]any
+			err error
+		}
+		done := make(chan answer, 1)
+		go func() {
+			out, err := PreviewLocalSeek(context.Background(), path, s)
+			done <- answer{out, err}
+		}()
+		var out map[string]any
+		select {
+		case a := <-done:
+			if a.err != nil {
+				t.Fatal(a.err)
+			}
+			out = a.out
+		case <-time.After(10 * time.Second):
+			t.Fatalf("%+v did not return in 10 s", s)
 		}
 		offset, ok := out["offset"].(int64)
 		if !ok {
@@ -99,27 +123,33 @@ func TestPreviewSearchAllocatesLittle(t *testing.T) {
 		return ms.TotalAlloc
 	}
 	for _, c := range []struct {
-		find   string
+		name   string
+		path   string
+		size   int64
+		seek   PreviewSeek
 		budget uint64
 	}{
-		{"zebra", 4 * mi},
-		{"4242", 3 * mi / 2},
+		{"zebra", logFile, big, PreviewSeek{Find: "zebra"}, 4 * mi},
+		{"4242", logFile, big, PreviewSeek{Find: "4242"}, 3 * mi / 2},
+		{"zebra, small file", smallLog, 4 * ki, PreviewSeek{Find: "zebra"}, 64 * ki},
+		{"4242, small file", smallLog, 4 * ki, PreviewSeek{Find: "4242"}, 64 * ki},
+		{"line, small file", smallLog, 4 * ki, PreviewSeek{Line: 1000}, 64 * ki},
 	} {
-		t.Run("budget "+c.find, func(t *testing.T) {
+		t.Run("budget "+c.name, func(t *testing.T) {
 			least := uint64(math.MaxUint64)
 			for range 3 {
 				runtime.GC()
 				before := allocated()
-				offset, reached := seek(t, logFile, PreviewSeek{Find: c.find})
+				offset, reached := seek(t, c.path, c.seek)
 				used := allocated() - before
-				if offset != -1 || reached != big {
-					t.Fatalf("%q in a file without it: offset %d, reached %d, want -1 and %d", c.find, offset, reached, int64(big))
+				if offset != -1 || reached != c.size {
+					t.Fatalf("%+v in a file without it: offset %d, reached %d, want -1 and %d", c.seek, offset, reached, c.size)
 				}
 				least = min(least, used)
 			}
 			if least > c.budget {
-				t.Fatalf("searching %d MiB for %q allocated %.1f MiB, the budget is %.1f MiB",
-					big/mi, c.find, float64(least)/mi, float64(c.budget)/mi)
+				t.Fatalf("seeking %+v in %d KiB allocated %.1f KiB, the budget is %.1f KiB",
+					c.seek, c.size/ki, float64(least)/ki, float64(c.budget)/ki)
 			}
 		})
 	}
@@ -146,6 +176,11 @@ func TestPreviewSearchAllocatesLittle(t *testing.T) {
 		{"back, apart, capitals", pair, PreviewSeek{Find: "AB", From: 3 * mi / 2, Back: true}, -1, 0},
 		{"back, the later one", pair, PreviewSeek{Find: "b", From: 3 * mi / 2, Back: true}, mi + 1, 0},
 		{"back, the earlier one", pair, PreviewSeek{Find: "a", From: 3 * mi / 2, Back: true}, 512 * ki, 0},
+		{"one byte over a chunk, across the edge", overChunk, PreviewSeek{Find: "needle"}, mi - 5, 0},
+		{"one byte over a chunk, across the edge, back", overChunk, PreviewSeek{Find: "edge", From: mi + 1, Back: true}, 0, 0},
+		{"an empty file", empty, PreviewSeek{Find: "zebra"}, -1, 0},
+		{"an empty file, back", empty, PreviewSeek{Find: "zebra", Back: true}, -1, 0},
+		{"an empty file, a line", empty, PreviewSeek{Line: 3}, -1, 0},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			offset, reached := seek(t, c.path, c.seek)

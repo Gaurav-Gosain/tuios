@@ -844,13 +844,15 @@ func previewWindow(f *os.File, size, offset int64, limit int, out map[string]any
 }
 
 // previewSeek looks in a text one chunk at a time, for at most previewSeekBudget.
-// It holds one chunk, whatever the size of the file. offset is the start of the
-// line it found, or -1. reached is how far it read, so a later call can go on
-// from there, and counted is the lines it passed on the way to a line number.
+// It holds at most one chunk, and a file smaller than a chunk gets a buffer of
+// its own size. offset is the start of the line it found, or -1. reached is how
+// far it read, so a later call can go on from there, and counted is the lines it
+// passed on the way to a line number.
 func previewSeek(ctx context.Context, f *os.File, size int64, seek PreviewSeek, out map[string]any) {
 	out["kind"] = "text"
 	out["offset"] = int64(-1)
-	buf := make([]byte, previewSeekChunk)
+	// The buffer is a chunk at most, and the size of a smaller file.
+	buf := make([]byte, int(min(previewSeekChunk, size)))
 	if seek.Line > 0 {
 		previewSeekLine(ctx, f, size, seek.Line, buf, out)
 		return
@@ -878,10 +880,11 @@ func previewSeek(ctx context.Context, f *os.File, size int64, seek PreviewSeek, 
 		}
 		hay := chunk
 		if fold {
-			// An ASCII chunk is lowered into the one buffer, in place of its own
-			// length. A chunk with a byte past ASCII takes bytes.ToLower, which
-			// allocates that chunk, and its offsets are read as they always were
-			// (a chunk whose lowering changes its length keeps that shift).
+			// An ASCII chunk is lowered into the one buffer (as long as buf), in
+			// place of its own length. A chunk with a byte past ASCII takes
+			// bytes.ToLower, which allocates that chunk, and its offsets are read
+			// as they always were (a chunk whose lowering changes its length keeps
+			// that shift).
 			hay = lower[:len(chunk)]
 			if !lowerASCII(hay, chunk) {
 				hay = bytes.ToLower(chunk)
