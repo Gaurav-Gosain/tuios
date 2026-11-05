@@ -234,30 +234,24 @@ func (a *App) cockpitFocus(c *ui.Context, pal *palette) {
 	if !card && ck.tab != tabThread && ck.tab != tabMail {
 		return
 	}
-	// The card and the reply box take what the window leaves the tab's
-	// content beyond its least, and scroll past it: in a short window they
-	// would push past the card's foot over the key line.
-	_, winH := c.Size()
-	bottom := max(140, winH-ckFocusChromeH-ckTabMinH)
-	ui.Scroll(c.Key("ck-bottom")).Shrink(0).MaxHeight(bottom).Children(func() {
-		ui.Column(c).AlignItems(ui.Stretch).Children(func() {
-			if card {
+	// The reply box is pinned above the key line: the approval card
+	// above it scrolls in what the window leaves, so a card that grows
+	// (a long command, risk lines) never pushes the box under the key
+	// line (council round 4, M4).
+	if card {
+		ui.Scroll(c.Key("ck-card")).Shrink(1).MinHeight(64).Children(func() {
+			ui.Column(c).AlignItems(ui.Stretch).Children(func() {
 				a.approvalCard(c, pal, ag, *r.item)
-			}
-			if ck.tab == tabThread || ck.tab == tabMail {
-				a.replyBox(c, pal, ag)
-			}
+			})
 		})
-	})
+	}
+	if ck.tab == tabThread || ck.tab == tabMail {
+		a.replyBox(c, pal, ag)
+	}
 }
 
-// ckFocusChromeH is the height around the focus area's tab content: the
-// window's header, the agent's header and tabs, the key line. ckTabMinH
-// is the least the tab's content keeps.
-const (
-	ckFocusChromeH = 250
-	ckTabMinH      = 120
-)
+// ckTabMinH is the least height the tab's content keeps above the card.
+const ckTabMinH = 120
 
 // ckTab is one tab, with its count where it has one.
 func (a *App) ckTab(c *ui.Context, pal *palette, t string, ag client.Agent) {

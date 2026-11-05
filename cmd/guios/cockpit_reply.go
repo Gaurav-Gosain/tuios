@@ -107,7 +107,7 @@ func (a *App) replyBox(c *ui.Context, pal *palette, ag client.Agent) {
 		r.asked[ag.Key()] = true
 		a.fetchQueued(ag)
 	}
-	ui.Column(c.Key("reply")).Shrink(0).Margin(0, a.ckSide(24), 16, a.ckSide(24)).Gap(8).Children(func() {
+	ui.Column(c.Key("reply")).Shrink(0).Margin(0, a.ckSide(24), 12, a.ckSide(24)).Gap(8).Children(func() {
 		for _, q := range r.queued[ag.Key()] {
 			ui.Row(c.Key("q-"+q.ID)).Gap(8).AlignItems(ui.Center).Padding(6, 10).Radius(rControl).Background(ckGround(pal)).Children(func() {
 				ui.Column(c).Grow(1).MinWidth(0).Gap(2).Children(func() {
