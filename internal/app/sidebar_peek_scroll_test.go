@@ -2,6 +2,7 @@ package app
 
 import (
 	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/Gaurav-Gosain/tuios/internal/sessiontree"
@@ -77,5 +78,46 @@ func TestRailPeekKeepsTheSessionsViewport(t *testing.T) {
 	railPlain(t, m, tree)
 	if m.SidebarScrollS != scrolled {
 		t.Fatalf("a second peek switch moved the sessions scroll from %d to %d", scrolled, m.SidebarScrollS)
+	}
+}
+
+// TestRailPeekThatFitsListsEveryPane is the second half of the pin: with the
+// terminals section below the sessions one and room on the rail, a peek with
+// more panes than the attached session has lists every one of them. Held at the
+// attached session's resting height, the same peek draws as a single "… +N" row.
+func TestRailPeekThatFitsListsEveryPane(t *testing.T) {
+	windows := func(n int, prefix string) []sessiontree.WindowInput {
+		out := make([]sessiontree.WindowInput, 0, n)
+		for i := range n {
+			out = append(out, sessiontree.WindowInput{ID: fmt.Sprintf("%s-%d", prefix, i), Title: fmt.Sprintf("%s pane %d", prefix, i)})
+		}
+		return out
+	}
+	tree := sessiontree.Build([]sessiontree.SessionInput{
+		{Name: "main", Attached: true, IsCurrent: true, CurrentWorkspace: 1, Windows: windows(1, "main")},
+		{Name: "pk-six", CurrentWorkspace: 1, Windows: windows(6, "six")},
+	})
+	m := sidebarTestOS(t, 120, 40, "left")
+	m.SessionName = "main"
+
+	railPlain(t, m, tree)
+	m.SidebarPeek = "pk-six"
+	lines := railPlain(t, m, tree)
+	hdr := lineOf(lines, "terminals")
+	if hdr < 0 {
+		t.Fatalf("the rail never drew the terminals header:\n%v", lines)
+	}
+	if !strings.Contains(lines[hdr], "pk-six") {
+		t.Fatalf("the terminals header does not name the peeked session: %q", lines[hdr])
+	}
+	for i := range 6 {
+		name := fmt.Sprintf("six pane %d", i)
+		text := lines[hdr+1+i]
+		if !strings.Contains(text, name) {
+			t.Fatalf("the peek's line %d is %q, want %s: a peek whose panes fit the rail lists every one of them\n%v", i, text, name, lines[hdr:hdr+8])
+		}
+		if fields := strings.Fields(text); strings.HasPrefix(fields[len(fields)-1], "+") {
+			t.Fatalf("the peek's line %d is %q, which ends in a +N row\n%v", i, text, lines[hdr:hdr+8])
+		}
 	}
 }
