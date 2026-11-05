@@ -840,6 +840,48 @@ If the restore fails, the command says which of the reasons applies: there is no
 saved state under that name, the state is corrupt, or the state was written by a
 newer TUIOS. In the last two cases it also prints where the file was archived.
 
+## Setting Up a Machine
+
+`tuios hosts setup` sets up another machine from nothing: it tests ssh,
+installs tuios there when it is missing, starts the daemon, adds the machine to
+the `[hosts]` table here and tests the link. Then the agents on that machine
+reach the Inbox here.
+
+```bash
+tuios hosts setup gaurav@buildbox                  # on a terminal: each choice is asked in place
+tuios hosts setup gaurav@buildbox --dry-run        # test ssh and print every command
+tuios hosts setup --tailnet                        # pick machines on your tailnet
+```
+
+In tuios, the palette row "Add a machine" and the Hosts page of the settings
+open the same steps in a sheet. When a pane runs `ssh` to a machine that is not
+added, tuios offers to add it (`notifications.machine_offer`).
+
+What each step does:
+
+- **Test ssh.** ssh runs with BatchMode, so it never asks. A failure gets its
+  class and its one fix (see [`tuios hosts test`](CLI_REFERENCE.md#tuios-hosts-test)).
+  A fix that needs you, such as `ssh-copy-id` or a host key to check, runs where
+  you can answer it. tuios never takes a password and never accepts a changed
+  host key.
+- **Install tuios.** A copy of this tuios, the release of this version checked
+  with its sha256, the package manager there, or the install script. Each
+  choice shows its commands first. The install writes a temp file in the target
+  folder and renames it only after it runs, so a stop leaves the old state.
+  This is the same install path as `tuios hosts sync`.
+- **Start the daemon**, at boot when you say yes (`tuios daemon install-service`
+  there).
+- **Add and test.** `[hosts.NAME]` is written only after the daemon there
+  answers. A link that does not come up is removed again.
+- **Both ways.** Optional. The other machine tests its way back to this one
+  first, then adds this machine. When it cannot reach back, for example behind
+  a NAT, nothing is added there. On one tailnet, both ways work. A key that the
+  step allows in `~/.ssh/authorized_keys` here is tagged, and
+  `tuios hosts remove NAME` takes it out again.
+
+Every choice can come from a flag, for scripts and agents. See
+[`tuios hosts setup`](CLI_REFERENCE.md#tuios-hosts-setup).
+
 ## Windows on Another Machine
 
 A window's process does not have to run on the machine the session is on.
