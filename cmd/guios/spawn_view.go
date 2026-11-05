@@ -102,10 +102,24 @@ func (a *App) spawnView(c *ui.Context, pal *palette) {
 		a.spawnFoot(c, pal, s, h, &start)
 	})
 	if s.focusAgain {
-		s.focusAgain = false
 		// At once, in the frame the sheet opens: its fields are bound
 		// now, and a key typed before the next frame lands in the field.
-		h.of(s.focusField).Focus()
+		// The route that opened the sheet may take the focus back after
+		// this frame: the palette gives it back to the field it came
+		// from as it closes, the agents view to its list as it opens. So
+		// the sheet asks again each frame until the field has it, for a
+		// few frames (QA-064).
+		f := h.of(s.focusField)
+		s.focusTries++
+		switch {
+		case s.focusTries > 10 || f.FocusWithin(c) && s.focusTries > 3:
+			s.focusAgain, s.focusTries = false, 0
+		default:
+			if !f.FocusWithin(c) {
+				f.Focus()
+			}
+			c.Invalidate()
+		}
 	}
 	if start && s.open {
 		a.spawnStart()

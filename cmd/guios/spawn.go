@@ -128,6 +128,7 @@ type spawnSheet struct {
 	session          string // the session start-agent opens the pane in
 	focusField       spawnField
 	focusAgain       bool
+	focusTries       int
 	whereSeen        string
 	// card is the task card the sheet opened on, nil for none: Start
 	// hands it to the daemon, which claims it for the new pane.
@@ -198,7 +199,7 @@ func (a *App) newAgent() {
 		s.notice = ""
 	}
 	s.open, s.failed, s.starting, s.listOpen, s.card, s.byKey = true, false, false, false, nil, false
-	s.focusField, s.focusAgain = spTask, true
+	s.focusField, s.focusAgain, s.focusTries = spTask, true, 0
 	s.session = sess
 	ck.spawnGen++
 	s.gen = ck.spawnGen
