@@ -727,6 +727,7 @@
   "cockpitImageTooBig": "{name} 超过 8 MB。",
   "cockpitNowNoImages": "图片只能随排队消息发送。按 Enter 排队。",
   "cockpitSentNow": "已发送给 {name}。",
+  "cockpitQueueFull": "{name} 的队列已满。请删除一条消息，或等待 {name} 取走一条。",
   "cockpitQueuedFor": "已排队等待 {name}。它空闲时会收到。",
   "cockpitSendNotes": "把备注发给代理",
   "cockpitNoChanges": "没有更改",

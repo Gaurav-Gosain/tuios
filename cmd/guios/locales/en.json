@@ -1340,6 +1340,7 @@
   "cockpitImageTooBig": "{name} is larger than 8 MB.",
   "cockpitNowNoImages": "Images go only with a queued message. Press Enter to queue it.",
   "cockpitSentNow": "Sent to {name}.",
+  "cockpitQueueFull": "The queue for {name} is full. Drop a message, or wait until {name} takes one.",
   "cockpitQueuedFor": "Queued for {name}. It gets it when it rests.",
   "cockpitSendNotes": "Send notes to the agent",
   "cockpitNoChanges": "No changes",

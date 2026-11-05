@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -550,7 +551,7 @@ func (a *App) sendReply(ag client.Agent, d *ckDraft, now bool) {
 		a.update(func() {
 			d.sending = false
 			if err != nil {
-				a.toast(err.Error())
+				a.toast(ckQueueError(err, ag.Name))
 				return
 			}
 			var q struct {
@@ -577,6 +578,16 @@ func (a *App) sendReply(ag client.Agent, d *ckDraft, now bool) {
 			a.ckAdvanceAfter(ag)
 		})
 	}()
+}
+
+// ckQueueError is a failed send in words: the daemon's message names the
+// window by its id and ends in an error code.
+func ckQueueError(err error, name string) string {
+	var ve *session.VerbCallError
+	if errors.As(err, &ve) && ve.Code == session.ErrVerbQueueFull {
+		return locales.CockpitQueueFull(name)
+	}
+	return err.Error()
 }
 
 // fetchQueued reads the agent's queue.

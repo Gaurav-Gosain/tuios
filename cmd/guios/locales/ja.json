@@ -727,6 +727,7 @@
   "cockpitImageTooBig": "{name} は 8 MB を超えています。",
   "cockpitNowNoImages": "画像は待機メッセージでのみ送れます。Enter で待機させてください。",
   "cockpitSentNow": "{name} に送りました。",
+  "cockpitQueueFull": "{name} の待機キューがいっぱいです。メッセージを削除するか、{name} が受け取るまで待ってください。",
   "cockpitQueuedFor": "{name} 宛てに待機中です。休止したときに受け取ります。",
   "cockpitSendNotes": "メモをエージェントに送る",
   "cockpitNoChanges": "変更はありません",

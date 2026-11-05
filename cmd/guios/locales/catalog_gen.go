@@ -7390,6 +7390,16 @@ func (msgs Messages) CockpitSentNow(name string) string {
 	return Catalog.Format(msgs.locale, "cockpitSentNow", map[string]any{"name": name})
 }
 
+// CockpitQueueFull says "The queue for {name} is full. Drop a message, or wait until {name} takes one."
+// in the language the app shows.
+func CockpitQueueFull(name string) string { return In(i18n.Locale()).CockpitQueueFull(name) }
+
+// CockpitQueueFull says "The queue for {name} is full. Drop a message, or wait until {name} takes one."
+// in the language of msgs.
+func (msgs Messages) CockpitQueueFull(name string) string {
+	return Catalog.Format(msgs.locale, "cockpitQueueFull", map[string]any{"name": name})
+}
+
 // CockpitQueuedFor says "Queued for {name}. It gets it when it rests."
 // in the language the app shows.
 func CockpitQueuedFor(name string) string { return In(i18n.Locale()).CockpitQueuedFor(name) }
