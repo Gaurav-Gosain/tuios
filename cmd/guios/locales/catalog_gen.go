@@ -2854,14 +2854,34 @@ func (msgs Messages) SetThickenDetail() string {
 	return Catalog.Format(msgs.locale, "setThickenDetail", nil)
 }
 
-// SetColorsDetail says "The theme colors the window, the sidebar, the panes and the terminals. Same as tuios changes when you change the them…"
+// SetColorsDetail says "The theme colors the window, the sidebar, the panes and the terminals. A theme you choose here is saved in tuios, so …"
 // in the language the app shows.
 func SetColorsDetail() string { return In(i18n.Locale()).SetColorsDetail() }
 
-// SetColorsDetail says "The theme colors the window, the sidebar, the panes and the terminals. Same as tuios changes when you change the them…"
+// SetColorsDetail says "The theme colors the window, the sidebar, the panes and the terminals. A theme you choose here is saved in tuios, so …"
 // in the language of msgs.
 func (msgs Messages) SetColorsDetail() string {
 	return Catalog.Format(msgs.locale, "setColorsDetail", nil)
+}
+
+// SetThemeShared says "tuios and guios use this theme."
+// in the language the app shows.
+func SetThemeShared() string { return In(i18n.Locale()).SetThemeShared() }
+
+// SetThemeShared says "tuios and guios use this theme."
+// in the language of msgs.
+func (msgs Messages) SetThemeShared() string {
+	return Catalog.Format(msgs.locale, "setThemeShared", nil)
+}
+
+// ToastThemeNotSaved says "Couldn’t save the theme: {error}"
+// in the language the app shows.
+func ToastThemeNotSaved(error string) string { return In(i18n.Locale()).ToastThemeNotSaved(error) }
+
+// ToastThemeNotSaved says "Couldn’t save the theme: {error}"
+// in the language of msgs.
+func (msgs Messages) ToastThemeNotSaved(error string) string {
+	return Catalog.Format(msgs.locale, "toastThemeNotSaved", map[string]any{"error": error})
 }
 
 // SetThemeSameAsTuios says "Same as tuios"
@@ -2872,16 +2892,6 @@ func SetThemeSameAsTuios() string { return In(i18n.Locale()).SetThemeSameAsTuios
 // in the language of msgs.
 func (msgs Messages) SetThemeSameAsTuios() string {
 	return Catalog.Format(msgs.locale, "setThemeSameAsTuios", nil)
-}
-
-// SetThemeFollows says "tuios uses {theme}."
-// in the language the app shows.
-func SetThemeFollows(theme string) string { return In(i18n.Locale()).SetThemeFollows(theme) }
-
-// SetThemeFollows says "tuios uses {theme}."
-// in the language of msgs.
-func (msgs Messages) SetThemeFollows(theme string) string {
-	return Catalog.Format(msgs.locale, "setThemeFollows", map[string]any{"theme": theme})
 }
 
 // SetThemeFollowsNone says "tuios uses no theme. guios uses its own colors."

@@ -13,7 +13,9 @@ import (
 	"github.com/Gaurav-Gosain/mygo/ui"
 	"tuios.dev/swatch"
 
+	"github.com/Gaurav-Gosain/tuios/cmd/guios/locales"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/guios/client"
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
 )
 
@@ -215,6 +217,47 @@ func (a *App) tuiosOptionSet(key, value string) {
 	tuiosSrc.told[i] = &v
 	tuiosSrc.mu.Unlock()
 	a.retheme()
+}
+
+// shareTheme makes id the tuios theme of windows of an appearance:
+// appearance.theme for dark ones, theme_light for light ones, as the
+// TUI's picker writes a pair. It goes to the daemon as tuios set-config
+// does, so a TUI on the session takes it and saves it to config.toml.
+// With no TUI there, guios saves it to config.toml itself, as the TUI's
+// settings page would, and the TUI that attaches next reads it there.
+// guios follows the change as it follows any (option-set and the file).
+func (a *App) shareTheme(id string, dark bool) {
+	key := client.ThemeOptions[0]
+	if !dark {
+		key = client.ThemeOptions[1]
+	}
+	cl := a.local().cl
+	go func() {
+		applied := false
+		if cl != nil {
+			applied, _ = cl.SetThemeOption(key, id)
+		}
+		if applied {
+			return
+		}
+		if err := saveTuiosTheme(key, id); err != nil {
+			a.update(func() { a.toast(locales.ToastThemeNotSaved(err.Error())) })
+		}
+	}()
+}
+
+// saveTuiosTheme writes one theme option to config.toml, only that key,
+// as the TUI's settings page saves.
+func saveTuiosTheme(key, value string) error {
+	cfg, err := config.LoadUserConfig()
+	if err != nil {
+		return err
+	}
+	if err := config.SetOptionValue(cfg, key, value); err != nil {
+		return err
+	}
+	_, err = config.SaveUserConfig(cfg)
+	return err
 }
 
 // followTuiosTheme watches config.toml's folder, and the applied Omarchy

@@ -8,28 +8,36 @@ import (
 )
 
 // themeGroup is Settings > Appearance's theme: for light windows and for
-// dark ones, the tuios theme guios shows. The choices are "Same as tuios"
-// and every tuios theme by its id, as tuios set-config takes it. A
-// preview beside each draws the theme in its own colors, the chrome's
-// text tiers included: the one chosen, or the one the open menu
-// highlights.
+// dark ones, the tuios theme guios and tuios share. A pick goes to tuios
+// (shareTheme), as a pick on the TUI's settings page does, so the TUI on
+// the session and config.toml have it too. The choices are every tuios
+// theme by its id, as tuios set-config takes it. A preview beside each
+// draws the theme in its own colors, the chrome's text tiers included:
+// the one in force, or the one the open menu highlights.
 func (a *App) themeGroup(c *ui.Context, pal *palette) {
-	same := locales.SetThemeSameAsTuios()
-	options := append([]string{same}, theme.AvailableThemes()...)
+	themes := theme.AvailableThemes()
 	settingsGroup(c, pal, locales.SetBackground(), locales.SetColorsDetail(), func() {
 		for _, dark := range []bool{false, true} {
-			a.themeRow(c, pal, options, same, dark)
+			a.themeRow(c, pal, themes, dark)
 		}
 	})
 }
 
-func (a *App) themeRow(c *ui.Context, pal *palette, options []string, same string, dark bool) {
+func (a *App) themeRow(c *ui.Context, pal *palette, themes []string, dark bool) {
 	slot, key, label := &a.set.LightTheme, "theme-light", locales.SetLightWindows()
 	if dark {
 		slot, key, label = &a.set.DarkTheme, "theme-dark", locales.SetDarkWindows()
 	}
-	value := *slot
-	if !tuiosThemeExists(value) {
+	same := locales.SetThemeSameAsTuios()
+	tuiosID := tuiosThemeID(dark)
+	// A theme for guios alone comes from an older setting: the row offers
+	// Same as tuios to end it. guios offers no such choice of its own.
+	pinned := tuiosThemeExists(*slot)
+	value, options := tuiosID, themes
+	switch {
+	case pinned:
+		value, options = *slot, append([]string{same}, themes...)
+	case tuiosID == "":
 		value = same
 	}
 	// The preview shows the highlighted choice while the menu is open.
@@ -39,24 +47,24 @@ func (a *App) themeRow(c *ui.Context, pal *palette, options []string, same strin
 	}
 	id := shown
 	if shown == same {
-		id = tuiosThemeID(dark)
+		id = tuiosID
 	}
-	detail := locales.SetThemeOwn()
+	detail := locales.SetThemeShared()
 	switch {
-	case value == same && tuiosThemeID(dark) == "":
+	case pinned:
+		detail = locales.SetThemeOwn()
+	case tuiosID == "":
 		detail = locales.SetThemeFollowsNone()
-	case value == same:
-		detail = locales.SetThemeFollows(tuiosThemeID(dark))
 	}
 	settingRowWith(c, pal, label, func() {
 		ui.Text(c, detail).FontSize(fsSmall).TextColor(pal.textMuted).LineHeight(1.4)
 		a.themePreview(c, previewLook(id, dark))
 	}, func() {
 		a.searchPopup(c, key, value, options, 240, nil, pal, func(v string) {
-			if v == same {
-				v = tuiosThemeName
+			*slot = tuiosThemeName
+			if v != same {
+				a.shareTheme(v, dark)
 			}
-			*slot = v
 		})
 	})
 }
