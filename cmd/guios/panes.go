@@ -338,7 +338,7 @@ func (a *App) paneCard(c *ui.Context, pal *palette, bar ui.TitleBar, shown float
 			// ones not typed in, and their titles and needs-you chips keep
 			// their contrast. The edge, the ground and the shadow show
 			// focus (council round 3, visual M1).
-			v := ui.Box(c.Key("veil")).Absolute().Top(headerH).Left(0).Right(0).Bottom(0).PassThrough().Background(pal.veil)
+			v := ui.Box(c.Key("veil")).Absolute().Top(paneHeaderH(top)).Left(0).Right(0).Bottom(0).PassThrough().Background(pal.veil)
 			v.Opacity(v.Animate("on", b2f(!focused), dFade))
 		}
 		if zone != zoneNone {
@@ -540,13 +540,25 @@ func (a *App) paneHeader(c *ui.Context, pal *palette, bar ui.TitleBar, shown flo
 	}
 	dir := hostOf.shortDir(p.WorkDir())
 	showDir := dir != title || hostOf.remote()
+	// In a session of several panes, a pane names its folder and branch
+	// only where they differ from the ones its neighbours share: the TUI's
+	// titles carry the name alone, and the same "../demo  main" in every
+	// header said nothing new. A lone pane keeps both, as it has room.
+	sameGit := false
+	if multi && !hostOf.remote() {
+		sdir, sbranch := sharedPlace(s)
+		if sdir != "" && p.WorkDir() == sdir {
+			showDir = false
+		}
+		sameGit = p.Git != nil && sbranch != "" && branchName(p.Git) == sbranch
+	}
 	planDir := dir
 	if hostOf.remote() {
 		// The machine's chip comes before the folder: room for both.
 		planDir = hostOf.name + "\u2003\u2003" + dir
 	}
-	plan := a.planHeader(c, p, title, planDir, showDir, pad, multi, top && right)
-	h := ui.Row(c.Key("hdr")).Height(headerH).Shrink(0).AlignItems(ui.Center).Padding(0, headerEnd, 0, pad).Gap(sp2)
+	plan := a.planHeader(c, p, title, planDir, showDir, sameGit, pad, multi, top && right)
+	h := ui.Row(c.Key("hdr")).Height(paneHeaderH(top)).Shrink(0).AlignItems(ui.Center).Padding(0, headerEnd, 0, pad).Gap(sp2)
 	if h.Pressed() && !focused {
 		a.setFocus(s, p.ID)
 		a.paneRef(p.ID).Focus()
@@ -815,6 +827,44 @@ type headerPlan struct {
 // headerEnd is a pane header's padding at its end.
 const headerEnd = 12
 
+// paneHeaderH is the height of a pane's header. In the top row it is the
+// window's title bar, centered on barMid with the traffic lights and the
+// window controls. Below, it is one row: the TUI gives a pane's title no
+// row of its own, and 44 DIPs a header cost a pane of a grid about a line
+// of text.
+func paneHeaderH(top bool) float32 {
+	if top {
+		return headerH
+	}
+	return hRow
+}
+
+// sharedPlace is the folder and the branch that two or more of the
+// session's panes work in, the most of them, "" for none.
+func sharedPlace(s *proto.Session) (dir, branch string) {
+	dirs, branches := map[string]int{}, map[string]int{}
+	bestD, bestB := 1, 1
+	for i := range s.Panes {
+		p := &s.Panes[i]
+		if p.Browser() || p.Host != "" {
+			continue
+		}
+		if d := p.WorkDir(); d != "" {
+			if dirs[d]++; dirs[d] > bestD {
+				dir, bestD = d, dirs[d]
+			}
+		}
+		if p.Git != nil {
+			if b := branchName(p.Git); b != "" {
+				if branches[b]++; branches[b] > bestB {
+					branch, bestB = b, branches[b]
+				}
+			}
+		}
+	}
+	return dir, branch
+}
+
 // titleLeast is the least of a title worth showing; below it the header
 // shows the status mark alone.
 const titleLeast = 28
@@ -901,7 +951,7 @@ func (a *App) gitWidths(c *ui.Context, g *proto.GitInfo) (full, least, compact f
 	return full, least, compact
 }
 
-func (a *App) planHeader(c *ui.Context, p *proto.Pane, title, dir string, showDir bool, pad float32, multi, corner bool) headerPlan {
+func (a *App) planHeader(c *ui.Context, p *proto.Pane, title, dir string, showDir, sameGit bool, pad float32, multi, corner bool) headerPlan {
 	titleN := natural(c, title, fsBody, wSemibold)
 	folderN := float32(0)
 	if showDir {
@@ -934,6 +984,11 @@ func (a *App) planHeader(c *ui.Context, p *proto.Pane, title, dir string, showDi
 	gitN, gitMin, gitCompact := float32(0), float32(0), float32(0)
 	if p.Git != nil {
 		gitN, gitMin, gitCompact = a.gitWidths(c, p.Git)
+		if sameGit {
+			// The branch the session shares goes: the chip keeps the
+			// pane's changes alone, or goes too.
+			gitN, gitMin = gitCompact, gitCompact
+		}
 	}
 
 	// The width the tiles give the card in this frame, while they move
@@ -945,7 +1000,7 @@ func (a *App) planHeader(c *ui.Context, p *proto.Pane, title, dir string, showDi
 	}
 	if w <= 0 {
 		return headerPlan{titleW: titleN, folderW: folderN, gitW: gitN, stateW: stateN, processW: processN,
-			state: msg != "", git: p.Git != nil, process: process, controls: true}
+			state: msg != "", git: gitN > 0, gitCompact: sameGit, process: process, controls: true}
 	}
 	plan := headerPlan{sized: true}
 	// The header's own room: its padding, the grip's status mark and gap,
@@ -978,9 +1033,9 @@ func (a *App) planHeader(c *ui.Context, p *proto.Pane, title, dir string, showDi
 	if plan.state = take(stateMin); plan.state {
 		plan.stateW = stateMin
 	}
-	if p.Git != nil && w >= 320 {
+	if gitN > 0 && w >= 320 {
 		if plan.git = take(gitMin); plan.git {
-			plan.gitW = gitMin
+			plan.gitW, plan.gitCompact = gitMin, sameGit
 		} else if plan.git = take(gitCompact); plan.git {
 			plan.gitW, plan.gitCompact = gitCompact, true
 		}
