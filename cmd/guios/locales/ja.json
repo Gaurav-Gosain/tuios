@@ -533,7 +533,7 @@
   "hostUpdateAppDetail": "{host} の guios アプリがアップデートして再起動し、そのサービスを再起動します。そこでのセッションは履歴とともに元の場所から再開し、実行中のプログラムは終了します。",
   "hostUpdating": "{host} の tuios を更新中…",
   "hostUpdated": "{host} は tuios {version} を実行中",
-  "hostUpdateDev": "開発ビルドの guios ではホストをアップデートできません。リリース版の guios を使うか、ホスト上で tuios daemon update を実行してアップデートしてください。",
+  "hostUpdateDev": "開発ビルドの guios ではホストをアップデートできません。リリース版の guios を使うか、ホスト上で tuios update を実行してアップデートしてください。",
   "hostVersionTitle": "{host} の tuios は別のバージョンです",
   "hostVersionDetail": "{host} は tuios {version}、このコンピュータは tuios {app} を実行しています。ここでセッションを見るには、{host} の tuios を更新してください。",
   "hostDesktopDetail": "{host} は guios アプリのバージョン {version} を実行していて、このアプリは guios {app} です。{host} の guios をアップデートするか、そちらで“ここの guios のアップデートを許可”（設定 › ホスト）をオンにすると、ここからアップデートできます。",

@@ -1191,12 +1191,6 @@ func (a *App) agentsPage(c *ui.Context, pal *palette) {
 			toggle(c.Key("approvals"), &s.Approvals, pal)
 		})
 	})
-	settingsGroup(c, pal, locales.SetRemoteControl(), "", func() {
-		settingRow(c, pal, locales.SetRemoteControlRow(), locales.SetRemoteControlDetail(), func() {
-			toggle(c.Key("remote"), &s.RemoteControl, pal)
-		})
-	})
-	codeBlock(c, pal, "tuios new-window\ntuios list-agents\ntuios --help        # every command")
 	settingsGroup(c, pal, locales.SetCli(), locales.SetCliDetail(), func() {
 		detail := locales.SetCliNotInstalled()
 		if a.ss.cliPath != "" {
@@ -1213,6 +1207,7 @@ func (a *App) agentsPage(c *ui.Context, pal *palette) {
 			}
 		})
 	})
+	codeBlock(c, pal, "tuios new-window\ntuios list-agents\ntuios --help        # every command")
 	settingsGroup(c, pal, locales.SetSkills(), locales.SetSkillsDetail(), func() {
 		for _, st := range cli.SkillStates() {
 			name := st.Name

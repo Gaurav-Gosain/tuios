@@ -883,7 +883,7 @@
       }
     }
   },
-  "hostUpdateDev": "A development build of guios can't update a host. Run a released guios, or update the host with tuios daemon update there.",
+  "hostUpdateDev": "A development build of guios can't update a host. Run a released guios, or run tuios update on the host.",
   "hostVersionTitle": "tuios on {host} is another version",
   "@hostVersionTitle": {
     "placeholders": {

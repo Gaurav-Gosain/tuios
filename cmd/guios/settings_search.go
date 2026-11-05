@@ -71,19 +71,16 @@ func settingsIndex() []searchEntry {
 		{"notifications", locales.SetNotifyFailed(), "notify-on-error error"},
 		{"notifications", locales.SetPlaySound(), "notify-sound audio"},
 
-		{"agents", locales.SetRemoteControlRow(), "remote-control kero do focus browser automation"},
 		{"agents", locales.SetCliRow(), "cli command line tool install path"},
 		{"agents", "Claude Code", "skill agents install"},
 		{"agents", "Codex, OpenCode, Pi", "skill agents install"},
 		{"agents", locales.SetProgramStatus(), "osc 7501 report progress"},
 
-		{"hosts", locales.SetHosts(), "host hosts remote server ssh tailscale tailnet wsl machine linux devbox -H kero hosts"},
-		{"hosts", locales.SetHostAdd(), "add host address ssh wsl https"},
-		{"hosts", locales.SetHostRemoteControl(), "remote-control host kero do focus"},
-		{"hosts", locales.SetListen(), "listen tailnet tailscale share this computer host port 7373 listen-allow"},
+		{"hosts", locales.SetHosts(), "host hosts remote server ssh tailscale tailnet machine linux devbox hosts"},
+		{"hosts", locales.SetHostAdd(), "add host address ssh"},
 
 		{"advanced", locales.SetConfigFile(), "configuration ghostty edit file dotfiles"},
-		{"advanced", "kerod", "daemon background service restart sessions"},
+		{"advanced", locales.SetDaemon(), "kerod daemon background service restart sessions"},
 		{"advanced", locales.SetLog(), "kerod log debug"},
 		{"advanced", locales.SetFolder(), "data directory finder"},
 		{"advanced", locales.SetReset(), "defaults reset"},
@@ -162,8 +159,8 @@ var pageWords = map[string]string{
 	"browser":       "web ad block adblock trackers privacy",
 	"notifications": "alerts sound badge dock notify",
 	"keyboard":      "shortcuts keybindings keys hotkeys",
-	"agents":        "claude codex ai skill cli remote control",
-	"hosts":         "remote ssh server machine tailscale wsl",
+	"agents":        "claude codex ai skill cli",
+	"hosts":         "remote ssh server machine tailscale",
 	"advanced":      "config file daemon kerod log reset",
 }
 

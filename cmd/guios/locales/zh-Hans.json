@@ -533,7 +533,7 @@
   "hostUpdateAppDetail": "{host} 上的 guios 应用会更新并重新启动，然后重启它的服务。那里的会话会在原处重新开始，保留历史，其中运行的程序会结束。",
   "hostUpdating": "正在更新 {host} 上的 tuios…",
   "hostUpdated": "{host} 运行 tuios {version}",
-  "hostUpdateDev": "开发版的 guios 无法更新主机。请使用正式版 guios，或在主机上运行 tuios daemon update。",
+  "hostUpdateDev": "开发版的 guios 无法更新主机。请使用正式版 guios，或在主机上运行 tuios update。",
   "hostVersionTitle": "{host} 上的 tuios 版本不同",
   "hostVersionDetail": "{host} 运行 tuios {version}，这台电脑运行 tuios {app}。更新那里的 tuios 后，即可在此查看其会话。",
   "hostDesktopDetail": "{host} 运行的是 guios 应用 {version}，而这里是 guios {app}。请更新 {host} 上的 guios，或在那里打开“允许它们更新这里的 guios”（设置 › 主机），即可从这里更新。",

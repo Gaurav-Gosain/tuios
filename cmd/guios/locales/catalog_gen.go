@@ -5418,11 +5418,11 @@ func (msgs Messages) HostUpdated(host string, version string) string {
 	return Catalog.Format(msgs.locale, "hostUpdated", map[string]any{"host": host, "version": version})
 }
 
-// HostUpdateDev says "A development build of guios can't update a host. Run a released guios, or update the host with tuios daemon update t…"
+// HostUpdateDev says "A development build of guios can't update a host. Run a released guios, or run tuios update on the host."
 // in the language the app shows.
 func HostUpdateDev() string { return In(i18n.Locale()).HostUpdateDev() }
 
-// HostUpdateDev says "A development build of guios can't update a host. Run a released guios, or update the host with tuios daemon update t…"
+// HostUpdateDev says "A development build of guios can't update a host. Run a released guios, or run tuios update on the host."
 // in the language of msgs.
 func (msgs Messages) HostUpdateDev() string {
 	return Catalog.Format(msgs.locale, "hostUpdateDev", nil)
