@@ -1234,6 +1234,7 @@ func buildVerbRegistry() map[string]verbEntry {
 				{Name: "dim", Type: "int", Description: "Percent to dim the screen behind this popup, 0 to 90. Omit to inherit appearance.popup_dim (default 0); explicit 0 disables it. Scratch panes are unchanged."},
 				{Name: "name", Type: "string", Description: "Name for the popup. Omit to use the program's title."},
 				{Name: "cwd", Type: "string", Description: "Directory to run the command in. Omit to inherit the daemon's."},
+				{Name: "cwd_from", Type: "string", Description: "A window whose folder the command runs in, read from its process when the call comes. It wins over cwd, which is the folder when the read gives none."},
 				{Name: "workspace", Type: "int", Description: "Workspace to open the popup on. Omit for the current one."},
 				{Name: "wait", Type: "bool", Description: "Keep the call open until the command exits, and return its exit_code in a popup_result.", Default: "false"},
 				{Name: "capture_stdout", Type: "bool", Description: "With wait: send the command's standard output to a pipe the daemon reads instead of the popup, and return it as stdout. A picker such as fzf draws on the terminal and prints only the choice, so the choice comes back. Not on Windows.", Default: "false"},
