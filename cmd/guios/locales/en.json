@@ -2274,5 +2274,7 @@
   "cockpitAskPass": "Pass the held mail on to {name}? Press Enter to pass it on. Press Esc to cancel.",
   "cockpitClickAgain": "This command is risky. Click again to allow it.",
   "spawnStartChord": "Press {keys} to start. A letter in the list opened this sheet, so Enter does not start it.",
-  "compareAskJudge": "Start a judge that reads the attempts? Press Enter to start it. Press Esc to cancel."
+  "compareAskJudge": "Start a judge that reads the attempts? Press Enter to start it. Press Esc to cancel.",
+  "cockpitAskSnooze": "Snooze this item of {name}? Press Enter to snooze. Press Esc to cancel.",
+  "cockpitAskWake": "Wake this item of {name}? Press Enter to wake it. Press Esc to cancel."
 }

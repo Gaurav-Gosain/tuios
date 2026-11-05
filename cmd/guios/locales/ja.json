@@ -1259,5 +1259,7 @@
   "cockpitAskPass": "保留中のメールを {name} に渡しますか? 渡すには Enter を押してください。取り消すには Esc を押してください。",
   "cockpitClickAgain": "このコマンドは危険です。許可するにはもう一度クリックしてください。",
   "spawnStartChord": "開始するには {keys} を押してください。一覧の文字キーでこのシートを開いたため、Enter では開始しません。",
-  "compareAskJudge": "試行を読む判定役を開始しますか? 開始するには Enter を押してください。取り消すには Esc を押してください。"
+  "compareAskJudge": "試行を読む判定役を開始しますか? 開始するには Enter を押してください。取り消すには Esc を押してください。",
+  "cockpitAskSnooze": "{name} のこの項目をスヌーズしますか? スヌーズするには Enter を押してください。取り消すには Esc を押してください。",
+  "cockpitAskWake": "{name} のこの項目を戻しますか? 戻すには Enter を押してください。取り消すには Esc を押してください。"
 }

@@ -7,8 +7,8 @@ import (
 )
 
 // The confirm step. A letter in the agents list that would change
-// something (allow, allow always, reject, settle, dismiss, pass mail on)
-// asks first: the card and the key line say what will happen, Enter does
+// something (allow, allow always, reject, settle, snooze, dismiss, pass
+// mail on) asks first: the card and the key line say what will happen, Enter does
 // it and Escape drops it. A letter typed meanwhile drops it too and goes to
 // the reply box, so a sentence typed into the list never answers anything
 // (council round 3, M1).
@@ -24,6 +24,7 @@ const (
 	askSettle
 	askDismiss
 	askPass
+	askSnooze
 )
 
 // ckQuestion is the open confirm step.
@@ -90,6 +91,15 @@ func (a *App) ckAskFor(what askWhat) {
 			return
 		}
 		q.text = locales.CockpitAskPass(name)
+	case askSnooze:
+		if r.item == nil {
+			a.toast(locales.CockpitSnoozeOnlyItem())
+			return
+		}
+		q.text = locales.CockpitAskSnooze(name)
+		if r.item.SnoozedUntil != 0 {
+			q.text = locales.CockpitAskWake(name)
+		}
 	}
 	ck.question = q
 	ck.armed = ckArmed{}
@@ -174,6 +184,8 @@ func (a *App) ckQuestionRun() {
 		if r.item != nil {
 			a.ckPassHeld(*r.item)
 		}
+	case askSnooze:
+		a.ckSnooze()
 	}
 }
 

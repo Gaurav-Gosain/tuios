@@ -1259,5 +1259,7 @@
   "cockpitAskPass": "把暂留的邮件转给 {name}?按 Enter 转交。按 Esc 取消。",
   "cockpitClickAgain": "此命令有风险。再点击一次来允许。",
   "spawnStartChord": "按 {keys} 开始。此面板由列表中的字母键打开，所以 Enter 不会开始。",
-  "compareAskJudge": "启动一个评审来阅读这些尝试?按 Enter 启动。按 Esc 取消。"
+  "compareAskJudge": "启动一个评审来阅读这些尝试?按 Enter 启动。按 Esc 取消。",
+  "cockpitAskSnooze": "暂缓 {name} 的此项?按 Enter 暂缓。按 Esc 取消。",
+  "cockpitAskWake": "唤醒 {name} 的此项?按 Enter 唤醒。按 Esc 取消。"
 }

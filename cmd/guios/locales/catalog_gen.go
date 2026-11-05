@@ -12771,3 +12771,23 @@ func CompareAskJudge() string { return In(i18n.Locale()).CompareAskJudge() }
 func (msgs Messages) CompareAskJudge() string {
 	return Catalog.Format(msgs.locale, "compareAskJudge", nil)
 }
+
+// CockpitAskSnooze says "Snooze this item of {name}? Press Enter to snooze. Press Esc to cancel."
+// in the language the app shows.
+func CockpitAskSnooze(name string) string { return In(i18n.Locale()).CockpitAskSnooze(name) }
+
+// CockpitAskSnooze says "Snooze this item of {name}? Press Enter to snooze. Press Esc to cancel."
+// in the language of msgs.
+func (msgs Messages) CockpitAskSnooze(name string) string {
+	return Catalog.Format(msgs.locale, "cockpitAskSnooze", map[string]any{"name": name})
+}
+
+// CockpitAskWake says "Wake this item of {name}? Press Enter to wake it. Press Esc to cancel."
+// in the language the app shows.
+func CockpitAskWake(name string) string { return In(i18n.Locale()).CockpitAskWake(name) }
+
+// CockpitAskWake says "Wake this item of {name}? Press Enter to wake it. Press Esc to cancel."
+// in the language of msgs.
+func (msgs Messages) CockpitAskWake(name string) string {
+	return Catalog.Format(msgs.locale, "cockpitAskWake", map[string]any{"name": name})
+}

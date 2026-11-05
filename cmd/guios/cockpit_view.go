@@ -680,7 +680,7 @@ func (a *App) ckLetter(k ckKey) {
 	case ui.KeyU:
 		a.ckUndoSettle()
 	case ui.KeyZ:
-		a.ckSnooze()
+		a.ckAskFor(askSnooze)
 	case ui.KeyX:
 		a.ckAskFor(askDismiss)
 	case ui.KeyP:
