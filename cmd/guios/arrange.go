@@ -84,6 +84,7 @@ func (a *App) arranged(c *ui.Context, pal *palette, bar ui.TitleBar, shown float
 			a.fdrag.px, a.fdrag.py = x, y
 		}
 	}
+	shownRects := a.cascade(s, b, fl)
 	area.Children(func() {
 		if s.Layout != nil {
 			// The split tree under the panes floating over it.
@@ -98,11 +99,50 @@ func (a *App) arranged(c *ui.Context, pal *palette, bar ui.TitleBar, shown float
 			if !ok {
 				continue // drawn by the tree
 			}
+			if sr, moved := shownRects[id]; moved {
+				r = sr
+			}
 			a.arrangedPane(c, pal, bar, shown, s, p, r, b, floats[id], right)
 		}
 		a.masterLine(c, pal, s, b)
 		a.snapPreview(c, pal, s, b)
 	})
+}
+
+// cascadeStep is how far each floating pane the area moved sits down and
+// right of the one before it.
+const cascadeStep = 24
+
+// cascade places the floating panes, in fl's order, that do not fit the
+// area b whole: each one cascadeStep further down and right from the
+// area's top left, and cut to the area if it must be. A smaller window
+// then shows every pane, none stacked at one edge (council round 4, visual
+// M2). The session keeps their rectangles, so they go back as the window
+// grows. It answers the cells each moved pane shows at.
+func (a *App) cascade(s *proto.Session, b ui.Rect, fl []string) map[string]proto.Rect {
+	if b.W <= 0 || b.H <= 0 {
+		return nil
+	}
+	box := s.Arrange.Box
+	out := map[string]proto.Rect{}
+	k := float32(0)
+	for _, id := range fl {
+		r, ok := s.Arrange.Rects[id]
+		if !ok {
+			continue
+		}
+		x, y, w, h := pxRect(box, r, b)
+		if x >= -0.5 && y >= -0.5 && x+w <= b.W+0.5 && y+h <= b.H+0.5 {
+			continue
+		}
+		cx, cy := k*cascadeStep, k*cascadeStep
+		if cx+cascadeStep*4 > b.W || cy+cascadeStep*4 > b.H {
+			k, cx, cy = 0, 0, 0
+		}
+		out[id] = cellRect(box, b, cx, cy, min(w, b.W-cx), min(h, b.H-cy))
+		k++
+	}
+	return out
 }
 
 // pxRect is a rectangle of cells in the area's pixels.
@@ -155,7 +195,21 @@ func (a *App) arrangedPane(c *ui.Context, pal *palette, bar ui.TitleBar, shown f
 		}
 		wrap.Padding(t, rr, bb, l)
 	} else {
-		wrap.Radius(14).Shadow(0, 1, 3, 0, pal.cardShadow).Shadow(0, 14, 36, 0, pal.floatShadow)
+		// The gap tiled cards keep, on the right and below, as the
+		// tiles do, so floating panes made from a tiling do not touch;
+		// an opaque ground, so the pane under one does not show through
+		// it; and the shadow of a card that floats (council round 4,
+		// visual M2).
+		if r.X+r.W < box.X+box.W {
+			w = max(w-paneGap, 0)
+		}
+		if r.Y+r.H < box.Y+box.H {
+			h = max(h-paneGap, 0)
+		}
+		if b.W > 0 {
+			wrap.Width(w).Height(h)
+		}
+		wrap.Radius(rPane).Background(pal.card).Shadow(0, 1, 3, 0, pal.cardShadow).Shadow(0, 14, 36, 0, pal.floatShadow)
 	}
 	// A pane the area cuts, as the scrolling strip's are, touches no edge
 	// of the window.
@@ -208,6 +262,11 @@ func (a *App) dragFloat(c *ui.Context, el string, e ui.Element, s *proto.Session
 			r, has := s.Arrange.Rects[p.ID]
 			if !has {
 				return false
+			}
+			if sr, moved := a.cascade(s, a.paneRef("arrange-"+s.ID).Bounds(c), s.Arrange.Float)[p.ID]; moved {
+				// From where the area moved it to, not from where the
+				// session keeps it.
+				r = sr
 			}
 			*d = floatDrag{session: s.ID, pane: p.ID, el: el, edges: edges, start: r}
 			a.setFocus(s, p.ID)

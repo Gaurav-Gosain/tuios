@@ -258,7 +258,9 @@ func (a *App) paneCard(c *ui.Context, pal *palette, bar ui.TitleBar, shown float
 	bg := pal.card
 	// A browser's page stays opaque, so its toolbar does too, and neither
 	// fades: a page is read, not typed into, from beside it.
-	if multi && !focused && !p.Browser() && a.set.DimUnfocused {
+	// A floating pane keeps an opaque ground: the panes under it must not
+	// show through (council round 4, visual M2).
+	if multi && !focused && !p.Browser() && a.set.DimUnfocused && !(a.floatHere[p.ID] && s.Arrange != nil) {
 		bg = pal.cardDim
 	}
 	// The spotlight (the prefix and B): the other panes all but go.
