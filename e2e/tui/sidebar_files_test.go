@@ -2116,6 +2116,71 @@ func TestQuickLookMovesInsideAFile(t *testing.T) {
 	alive(t, term, "after moving inside a file")
 }
 
+// TestQuickLookEndShowsALongLastLine goes to the end of wrapped texts. Where the
+// last line alone wraps to more rows than the panel holds, the end shows that
+// line's first rows, and j past the end and k back keep real rows on screen.
+// Where the last lines are short, the end shows as many of them as fit.
+//
+// How this could pass wrongly: the start of a file shows rows too, so each end
+// must hold the last line and not the first. And an end that showed only the
+// last line would pass on the long one, so the short rows must show more than
+// one line at the end.
+func TestQuickLookEndShowsALongLastLine(t *testing.T) {
+	term := quickLookWrapStart(t)
+
+	// The short rows first, then the long line on a new open. w holds for the
+	// rest of an open, and only closing it gives the next file its own default
+	// (wrap, for a .txt), so the wrap-off half comes last.
+	sendKeys(t, term, " ")
+	railLists(t, term, "space did not show zzzmany.txt", []string{"zzzmany.txt ", "row 001"}, nil)
+	sendKeys(t, term, tuitest.Tab)
+	railLists(t, term, "tab did not go inside with wrap on", []string{"Inside the file", "cut lines"}, nil)
+	sendKeys(t, term, "G")
+	quickLookShows(t, term, "quick-look-wrap-rows-end", "G on short rows did not show the last rows",
+		[]string{"row 080", "row 070"}, nil)
+
+	sendKeys(t, term, tuitest.Esc)
+	railLists(t, term, "esc did not come back to the list", []string{"go inside"}, []string{"Inside the file"})
+	sendKeys(t, term, " ")
+	railLists(t, term, "space did not close the preview", nil, []string{"row 080"})
+	sendKeys(t, term, "k", " ")
+	railLists(t, term, "space did not show zzwide.txt", []string{"zzwide.txt ", "alpha one"}, nil)
+	sendKeys(t, term, tuitest.Tab)
+	railLists(t, term, "tab did not go inside with wrap on", []string{"Inside the file", "cut lines"}, nil)
+
+	// The last line is 4, its first characters W00000.
+	sendKeys(t, term, "G")
+	quickLookShows(t, term, "quick-look-wrap-long-end", "G did not show the long last line",
+		[]string{"4  W00000"}, []string{"alpha one"})
+	sendKeys(t, term, "j")
+	railLists(t, term, "j past the end did not keep the long last line", []string{"4  W00000"}, []string{"alpha one"})
+	// k waits for the picture to hold the line before the last, so it needs the
+	// redraw bubbletea does after the j above, which moves nothing.
+	sendKeys(t, term, "k")
+	railLists(t, term, "k from the end did not show the line before the last", []string{"charlie three"}, []string{"bravo two"})
+
+	// Wrap off: the four lines fit, the long one cut.
+	cut := func(why string) {
+		t.Helper()
+		if err := term.WaitFor(func(s tuitest.Screen) bool {
+			text := s.Text()
+			for line := range strings.SplitSeq(text, "\n") {
+				if _, after, ok := strings.Cut(line, "4  W00000"); ok && strings.Contains(after, "…") && strings.Contains(text, "alpha one") {
+					return true
+				}
+			}
+			return false
+		}, uiTimeout); err != nil {
+			t.Fatalf("ASSERTION: %s: want \"alpha one\" and line 4 cut on screen: %v\n%s", why, err, term.Snapshot())
+		}
+	}
+	sendKeys(t, term, "w")
+	cut("w did not cut the long line")
+	sendKeys(t, term, "G")
+	cut("G with the lines cut did not show the whole file")
+	alive(t, term, "after the end of a long last line")
+}
+
 // quickLookOnHost waits for the stream after mark to hold want, then for the
 // host to show one picture that place accepts, and returns it. A nil place
 // accepts any. hostPictures replays the stream by the rules a real kitty keeps:
@@ -2299,6 +2364,31 @@ func TestRailQuickLookKittyPicture(t *testing.T) {
 		t.Fatalf("ASSERTION: closing the preview did not take the picture down: %v", err)
 	}
 	alive(t, term, "after the kitty picture")
+}
+
+// quickLookWrapStart lists two texts in the rail, with the keyboard on the
+// second: zzwide.txt, three short lines and a last line of about 20 KB, taller
+// than the panel when it wraps, and zzzmany.txt, 80 short rows, more than the
+// panel holds.
+func quickLookWrapStart(t *testing.T) *tuitest.Terminal {
+	t.Helper()
+	term, dir := quickLookListed(t, []string{"TUIOS_KITTY_GRAPHICS=0"}, nil)
+	var wide, many strings.Builder
+	wide.WriteString("alpha one\nbravo two\ncharlie three\n")
+	for i := 0; wide.Len() < 20<<10; i++ {
+		fmt.Fprintf(&wide, "W%05d", i)
+	}
+	for i := range 80 {
+		fmt.Fprintf(&many, "row %03d\n", i+1)
+	}
+	for name, body := range map[string]string{"zzwide.txt": wide.String() + "\n", "zzzmany.txt": many.String()} {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(body), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	railLists(t, term, "the rail did not list the new texts", []string{"zzwide.txt", "zzzmany.txt"}, nil)
+	quickLookFocusRail(t, term, "zzzmany.txt")
+	return term
 }
 
 // quickLookPDFStart lists a PDF of six pages in the rail, with the keyboard on it.

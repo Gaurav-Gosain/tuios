@@ -627,13 +627,14 @@ func quickLookWrapRows(line string, width int) int {
 }
 
 // quickLookLastWrapped is the last top line that still fills the rows, walking up
-// from the end of the held text, so the end of a file comes wholly into view.
+// from the end of the held text, so the end of a file comes wholly into view. A
+// last line taller than the rows cannot fit: it stays the top line, never past it.
 func quickLookLastWrapped(lines []string, rows, width int) int {
 	used := 0
 	for i := len(lines) - 1; i >= 0; i-- {
 		used += quickLookWrapRows(lines[i], width)
 		if used > rows {
-			return i + 1
+			return min(i+1, len(lines)-1)
 		}
 	}
 	return 0

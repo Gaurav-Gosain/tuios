@@ -260,6 +260,19 @@ Run on 2026-11-02 on Linux. The test passes on the change. Each control was buil
 
 The frames are `quick-look-log-start`, `-far`, `-inside`, `-end`, `-full` and `quick-look-far-log-end` under `TUIOS_E2E_FRAMES`.
 
+### The end of a wrapped file whose last line is taller than the panel
+
+`TestQuickLookEndShowsALongLastLine` goes to the end of two `.txt` files with wrap on. One has 80 short rows, and `G` must show `row 080` and `row 070`. The other has three short lines and a last line of about 20 KB, and `G` must show that line's number and first characters, `4  W00000`, and not `alpha one`. `j` past the end must keep it, and `k` must show `charlie three` and not `bravo two`. With wrap off (`w`) all four lines show, the last one cut, before and after `G`.
+
+Run on 2026-11-05 on Linux. The test passes on the change. Each control was built into its own binary. The control is main's `quickLookLastWrapped`, which returns one past the last line when that line alone is taller than the panel.
+
+| Control: what was cut | Where it fails | Verdict |
+| --- | --- | --- |
+| `quickLookLastWrapped` returns `i + 1` (main) | "G did not show the long last line: want ["4  W00000"] on screen and ["alpha one"] off it". The panel's body is empty under its header | **caught** |
+
+The frames are `quick-look-wrap-rows-end` and `quick-look-wrap-long-end` under `TUIOS_E2E_FRAMES`. Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestQuickLookEndShowsALongLastLine$' -v .`.
+
 ## Quick look searches a file
 
 `TestQuickLookMovesInsideAFile` searches in a log of 6000 rows, past what is held in both directions, goes to a line, goes past the last line, and wraps. `TestQuickLookLightsAMatchAtEachDepth` checks every cell of a match at truecolor, 256 and 16 colours. `TestQuickLookOnAFarFile` searches and goes to a line over the link. `TestQuickLookSearchGoesOnFromWhereItStopped` is a kept unit test, since the suite has no way to run a search out of its 5 seconds.
