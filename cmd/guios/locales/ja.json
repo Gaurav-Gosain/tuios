@@ -1249,5 +1249,7 @@
   "cockpitKeysToMail": "キーはメール一覧に送られます。返信するには r を押してください。",
   "setApprovalsNeedsIntegration": "Claude Code 連携が必要です。プロンプトをここで受け取るにはインストールしてください。",
   "compareKeysHere": "キーは比較に送られます。閉じるには Escape を押してください。",
-  "compareNothingToKeep": "{letter} にはまだ残すものがありません。試行が変更ありで止まると残せます。"
+  "compareNothingToKeep": "{letter} にはまだ残すものがありません。試行が変更ありで止まると残せます。",
+  "cockpitThreadUnsupported": "tuios はまだ {harness} の会話を表示できません",
+  "cockpitThreadUnsupportedDetail": "表示するにはペインを開いてください。"
 }

@@ -332,7 +332,7 @@ func ckIgnoredFailed(rows []ckFanAttempt, keep int) string {
 	return strings.Join(parts, " · ")
 }
 
-// compareJudge is j: an agent that judges the attempts.
+// compareJudge is Shift+J: an agent that judges the attempts.
 func (a *App) compareJudge() {
 	cp := a.ck.cmp
 	cl := a.cockpitClient()
@@ -387,7 +387,7 @@ func compareErr(err error) string {
 	return flat(err.Error())
 }
 
-// compareKeep is k: the first press says what a keep does, the second
+// compareKeep is Shift+K: the first press says what a keep does, the second
 // keeps the focused attempt and removes the others.
 func (a *App) compareKeep() {
 	cp := a.ck.cmp

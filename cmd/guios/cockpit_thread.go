@@ -50,7 +50,10 @@ type ckThread struct {
 	// failed says the last read failed for a cause a retry can fix, not
 	// for want of a transcript.
 	failed bool
-	usedAt time.Time
+	// unsupported says tuios cannot read this harness's transcripts: a
+	// retry cannot change that (council round 3, S7).
+	unsupported bool
+	usedAt      time.Time
 
 	items []ckItem
 	list  ui.ListState
@@ -144,10 +147,11 @@ func (a *App) fetchThread(ag client.Agent, fresh bool) {
 			th.loading = false
 			if err != nil {
 				th.err = ckTranscriptError(err)
-				th.failed = th.err != locales.CockpitNoTranscript()
+				th.unsupported = ckUnsupported(err)
+				th.failed = th.err != locales.CockpitNoTranscript() && !th.unsupported
 				return
 			}
-			th.err, th.failed = "", false
+			th.err, th.failed, th.unsupported = "", false, false
 			if page.Reset || p["after"] == nil {
 				th.entries = page.Entries
 				th.older, th.more = page.Older, page.More
@@ -212,6 +216,13 @@ func ckTranscriptError(err error) string {
 		}
 	}
 	return err.Error()
+}
+
+// ckUnsupported reports whether a transcript read failed because tuios
+// cannot read the harness's transcripts.
+func ckUnsupported(err error) bool {
+	ve, ok := errors.AsType[*session.VerbCallError](err)
+	return ok && ve.Code == session.ErrVerbUnsupportedHarness
 }
 
 // dropOldThreads keeps the ckThreadKeep threads used last.
@@ -349,6 +360,16 @@ func (a *App) threadView(c *ui.Context, pal *palette, ag client.Agent) {
 		// Look again when the read would count as stuck.
 		c.After(ckReadStuck - time.Since(th.loadedAt))
 		ui.Column(c).Grow(1).Center().Children(func() { ui.Spinner(c) })
+		return
+	case len(th.items) == 0 && th.unsupported:
+		// No retry: the harness's transcripts are not read at all.
+		ui.Column(c.Key("thread-empty")).Grow(1).MinHeight(0).Children(func() {
+			emptyBlock(c, pal, threadIcon, locales.CockpitThreadUnsupported(harnessName(ag.Harness)), locales.CockpitThreadUnsupportedDetail(), false, func() {
+				if button(c, "open-pane", locales.CockpitOpenPane(), "↵", true, pal) {
+					a.goToAgent(ag)
+				}
+			})
+		})
 		return
 	case len(th.items) == 0 && (th.failed || th.loading):
 		// A read that failed says so, and offers another.
