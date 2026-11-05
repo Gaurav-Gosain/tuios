@@ -610,7 +610,11 @@ func (a *App) groupView(c *ui.Context, pal *palette, g group, gi int, n *int) {
 func (a *App) sessionRow(c *ui.Context, pal *palette, s *proto.Session, n *int) {
 	*n++
 	index := *n
+	// While the agents view holds the main area, its sidebar entry is
+	// the one selected: the session's row shows none (council round 3,
+	// visual S6 of round 2).
 	selected := s.ID == a.selected
+	lit := selected && !(a.ck.open && a.loaded)
 	detailed := a.set.SidebarRows != "compact"
 	h := float32(rowH)
 	if detailed {
@@ -629,7 +633,7 @@ func (a *App) sessionRow(c *ui.Context, pal *palette, s *proto.Session, n *int) 
 		row.Border(1.5, pal.accent)
 	}
 	switch {
-	case selected:
+	case lit:
 		bg = pal.rowSelected
 		chosen(row, pal)
 	case hovered:
@@ -743,7 +747,7 @@ func (a *App) sessionRow(c *ui.Context, pal *palette, s *proto.Session, n *int) 
 				}
 			})
 		} else {
-			name()
+			name(0)
 			// A branch of its own, as an agent's in a worktree, by the name.
 			if b := offBranch(g); b != "" {
 				ui.Text(c, b).FontSize(fsSmall).TextColor(pal.textFaint).SingleLine().Ellipsis("…").Shrink(3).MinWidth(24).MaxWidth(120)
