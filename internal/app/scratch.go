@@ -1,7 +1,6 @@
 package app
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -11,6 +10,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 	"github.com/Gaurav-Gosain/tuios/internal/layout"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
@@ -634,7 +634,7 @@ func openScratchPopup(req scratchRequest) error {
 		ExitCode int    `json:"exit_code"`
 		WindowID string `json:"window_id"`
 	}
-	if json.Unmarshal(raw, &res) == nil && res.Type == "popup_result" {
+	if jsonx.Unmarshal(raw, &res) == nil && res.Type == "popup_result" {
 		return ScratchStoppedError{Code: res.ExitCode, WindowID: res.WindowID}
 	}
 	return nil

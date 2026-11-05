@@ -23,6 +23,7 @@ import (
 	"net"
 	"strings"
 
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"github.com/Gaurav-Gosain/tuios/internal/federation"
 	"github.com/Gaurav-Gosain/tuios/internal/hostsync"
 )
@@ -85,7 +86,7 @@ func New(opts Options) (*Setup, error) {
 		return nil, errors.New("give the machine to set up, as ssh takes it: user@machine, or an ssh config name")
 	}
 	if strings.HasPrefix(opts.Dest, "-") {
-		return nil, fmt.Errorf("the address %q starts with a dash, which ssh reads as an option", opts.Dest)
+		return nil, errfmt.Errorf("the address %q starts with a dash, which ssh reads as an option", opts.Dest)
 	}
 	if err := federation.CheckSSHOptions(opts.SSHOptions); err != nil {
 		return nil, err
@@ -104,7 +105,7 @@ func New(opts Options) (*Setup, error) {
 	s := &Setup{opts: opts, name: name}
 	if h, ok := hosts[name]; ok {
 		if h.Addr != opts.Dest {
-			return nil, fmt.Errorf("a machine called %s is already added, at %s. Pass another name with --name", name, h.Addr)
+			return nil, errfmt.Errorf("a machine called %s is already added, at %s. Pass another name with --name", name, h.Addr)
 		}
 		s.existing = h.Addr
 	}

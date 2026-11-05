@@ -38,7 +38,6 @@ import (
 	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
-	"encoding/json"
 	"errors"
 	"io"
 	"os"
@@ -46,6 +45,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 	"github.com/Gaurav-Gosain/tuios/internal/transcript"
 )
 
@@ -734,7 +734,7 @@ func (r *reader) decode(lines []byte, base int64, b decodeBounds) []Entry {
 // colours of its diff.
 func (r *reader) entrySize(e *Entry) int {
 	r.finish(e)
-	b, err := json.Marshal(e)
+	b, err := jsonx.Marshal(e)
 	if err != nil {
 		return 0
 	}

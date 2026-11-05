@@ -14,6 +14,7 @@ import (
 	"time"
 
 	tea "charm.land/bubbletea/v2"
+	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 	"github.com/Gaurav-Gosain/tuios/internal/plural"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
@@ -288,7 +289,7 @@ func quickLookDecodeDetails(t quickLookTarget, raw json.RawMessage, err error, a
 	switch {
 	case err != nil:
 		d.failed = quickLookErrorText(t, err)
-	case json.Unmarshal(raw, &r) != nil:
+	case jsonx.Unmarshal(raw, &r) != nil:
 		d.failed = "The answer could not be read."
 	case !r.Details:
 		d.failed = "This machine runs an older tuios. It sends no details."

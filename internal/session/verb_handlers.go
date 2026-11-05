@@ -20,6 +20,7 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/federation"
 	"github.com/Gaurav-Gosain/tuios/internal/harness"
 	"github.com/Gaurav-Gosain/tuios/internal/integration"
+	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 	"github.com/Gaurav-Gosain/tuios/internal/transcriptview"
 	"github.com/google/uuid"
 	"tuios.dev/vt"
@@ -35,7 +36,7 @@ func decodeParams(params json.RawMessage, v any) *verbError {
 	if len(params) == 0 {
 		return nil
 	}
-	if err := json.Unmarshal(params, v); err != nil {
+	if err := jsonx.Unmarshal(params, v); err != nil {
 		return hintedVerbError(ErrVerbInvalidParams, "could not decode params: "+err.Error(), &VerbHint{
 			Verb:   "list-verbs",
 			Detail: "Call list-verbs to get this verb's parameter schema, including each parameter's type.",

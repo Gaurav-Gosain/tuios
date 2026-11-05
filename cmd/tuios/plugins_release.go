@@ -17,6 +17,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"github.com/Gaurav-Gosain/tuios/internal/herdrplugin"
 	"github.com/Gaurav-Gosain/tuios/internal/release"
 )
@@ -73,7 +74,7 @@ func releaseSource() *release.GitHub {
 // that came from none.
 func runningTag() (string, error) {
 	if _, ok := release.ParseVersion(version); !ok {
-		return "", fmt.Errorf("this tuios is a %s build, which no release made, so it has no plugin assets. Install the plugin from its folder: tuios plugins install Gaurav-Gosain/tuios/plugins/NAME", version)
+		return "", errfmt.Errorf("this tuios is a %s build, which no release made, so it has no plugin assets. Install the plugin from its folder: tuios plugins install Gaurav-Gosain/tuios/plugins/NAME", version)
 	}
 	return "v" + strings.TrimPrefix(version, "v"), nil
 }
@@ -87,7 +88,7 @@ func fetchFirstParty(name, tag, dir string) (string, error) {
 	src := releaseSource()
 	rel, err := src.Tag(ctx, tag)
 	if err != nil {
-		return "", fmt.Errorf("%w %s %s: %v", errFetchFailed, "the release", tag, err)
+		return "", errfmt.Errorf("%w %s %s: %v", errFetchFailed, "the release", tag, err)
 	}
 	sums, err := fetchChecksums(ctx, src, rel)
 	if err != nil {
@@ -96,7 +97,7 @@ func fetchFirstParty(name, tag, dir string) (string, error) {
 	get := func(asset string) ([]byte, error) {
 		a, ok := rel.AssetNamed(asset)
 		if !ok {
-			return nil, fmt.Errorf("the release %s has no %s. Install the plugin from its folder: tuios plugins install Gaurav-Gosain/tuios/plugins/%s", tag, asset, name)
+			return nil, errfmt.Errorf("the release %s has no %s. Install the plugin from its folder: tuios plugins install Gaurav-Gosain/tuios/plugins/%s", tag, asset, name)
 		}
 		data, err := readAsset(ctx, src, a)
 		if err != nil {
@@ -149,7 +150,7 @@ const maxPluginFile = 16 << 20
 func extractPluginFolder(data []byte, name, dir string) error {
 	gz, err := gzip.NewReader(bytes.NewReader(data))
 	if err != nil {
-		return fmt.Errorf("the plugin archive cannot be read: %w", err)
+		return errfmt.Errorf("the plugin archive cannot be read: %w", err)
 	}
 	tr := tar.NewReader(gz)
 	found := false
@@ -159,7 +160,7 @@ func extractPluginFolder(data []byte, name, dir string) error {
 			break
 		}
 		if err != nil {
-			return fmt.Errorf("the plugin archive cannot be read: %w", err)
+			return errfmt.Errorf("the plugin archive cannot be read: %w", err)
 		}
 		rel, ok := strings.CutPrefix(path.Clean(hdr.Name), name+"/")
 		if !ok || !filepath.IsLocal(rel) {
@@ -174,7 +175,7 @@ func extractPluginFolder(data []byte, name, dir string) error {
 			var body []byte
 			body, err = io.ReadAll(io.LimitReader(tr, maxPluginFile+1))
 			if err == nil && len(body) > maxPluginFile {
-				err = fmt.Errorf("%s in the plugin archive is too large", hdr.Name)
+				err = errfmt.Errorf("%s in the plugin archive is too large", hdr.Name)
 			}
 			if err == nil {
 				err = os.MkdirAll(filepath.Dir(target), 0o700)
@@ -188,7 +189,7 @@ func extractPluginFolder(data []byte, name, dir string) error {
 		}
 	}
 	if !found {
-		return fmt.Errorf("the plugin archive has no plugin %s", name)
+		return errfmt.Errorf("the plugin archive has no plugin %s", name)
 	}
 	return nil
 }
@@ -223,7 +224,7 @@ func (in *installer) firstPartyAt(name, tag string, old *herdrplugin.LockEntry) 
 	e := herdrplugin.LockEntry{ID: p.PluginID, Source: herdrplugin.ReleasePrefix + name, Ref: tag, Commit: sum[:40], Tree: sum}
 	if old != nil {
 		if old.ID != e.ID {
-			return fmt.Errorf("the release names the plugin %s, not %s", e.ID, old.ID)
+			return errfmt.Errorf("the release names the plugin %s, not %s", e.ID, old.ID)
 		}
 		e.Approved = old.Approved
 	}
@@ -243,14 +244,14 @@ func (in *installer) pinnedRelease(e herdrplugin.LockEntry) error {
 	defer os.RemoveAll(work)
 	name := strings.TrimPrefix(e.Source, herdrplugin.ReleasePrefix)
 	if _, ok := firstParty[name]; !ok {
-		return fmt.Errorf("this tuios has no plugin %s in its release. Update tuios first", name)
+		return errfmt.Errorf("this tuios has no plugin %s in its release. Update tuios first", name)
 	}
 	sum, err := fetchFirstParty(name, e.Ref, work)
 	if err != nil {
 		return err
 	}
 	if sum != e.Tree {
-		return fmt.Errorf("the files of %s %s are different from the ones plugins.lock pins. Nothing was installed", name, e.Ref)
+		return errfmt.Errorf("the files of %s %s are different from the ones plugins.lock pins. Nothing was installed", name, e.Ref)
 	}
 	p, err := loadInside(work, work)
 	if err != nil {

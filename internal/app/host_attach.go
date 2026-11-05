@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"github.com/Gaurav-Gosain/tuios/internal/federation"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/sessiontree"
@@ -35,7 +36,7 @@ import (
 // session keeps running where it is.
 func (m *OS) SwitchToHostSession(host, name string, create bool) error {
 	if m.DaemonClient == nil {
-		return fmt.Errorf("not in daemon mode")
+		return errfmt.Errorf("not in daemon mode")
 	}
 	m.cancelHostOpen()
 	if host == "" || host == federation.LocalHostName {
@@ -137,9 +138,9 @@ func (d hostDial) open() (*session.TUIClient, *session.SessionState, error) {
 	if err != nil {
 		_ = client.Close()
 		if d.host == federation.LocalHostName {
-			return nil, nil, fmt.Errorf("could not attach %q on this machine: %w", name, err)
+			return nil, nil, errfmt.Errorf("could not attach %q on this machine: %w", name, err)
 		}
-		return nil, nil, fmt.Errorf("tuios on %s could not attach %q: %w", d.host, name, err)
+		return nil, nil, errfmt.Errorf("tuios on %s could not attach %q: %w", d.host, name, err)
 	}
 	client.StartReadLoop()
 	return client, state, nil
@@ -166,7 +167,7 @@ func (m *OS) applyStartupToUnarranged() {
 // finishHostSwitch adopts the result and answers requestID.
 func (m *OS) switchToHostAsync(host, name string, create bool, cwd, requestID string) error {
 	if m.DaemonClient == nil {
-		return fmt.Errorf("not in daemon mode")
+		return errfmt.Errorf("not in daemon mode")
 	}
 	if !m.hostIsUp(host) {
 		return &hostUnavailableError{host: host}

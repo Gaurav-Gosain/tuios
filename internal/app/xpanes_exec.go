@@ -2,11 +2,11 @@ package app
 
 import (
 	"errors"
-	"fmt"
 	"slices"
 	"strconv"
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
 
@@ -32,16 +32,16 @@ func (m *OS) lookUpWindows(targets []string) ([]*terminal.Window, error) {
 	for _, t := range targets {
 		id, err := m.resolveWindowTarget(t)
 		if err != nil {
-			return nil, fmt.Errorf("window %s %s: %w", t, ErrNotHereYet, err)
+			return nil, errfmt.Errorf("window %s %s: %w", t, ErrNotHereYet, err)
 		}
 		w := m.windowByID(id)
 		switch {
 		case w == nil:
-			return nil, fmt.Errorf("window %s %s", t, ErrNotHereYet)
+			return nil, errfmt.Errorf("window %s %s", t, ErrNotHereYet)
 		case w.Workspace != m.CurrentWorkspace:
-			return nil, fmt.Errorf("window %s is on workspace %d, and workspace %d is showing. The window %s on the showing workspace", t, w.Workspace, m.CurrentWorkspace, ErrNotHereYet)
+			return nil, errfmt.Errorf("window %s is on workspace %d, and workspace %d is showing. The window %s on the showing workspace", t, w.Workspace, m.CurrentWorkspace, ErrNotHereYet)
 		case w.Minimized:
-			return nil, fmt.Errorf("window %s is minimized", t)
+			return nil, errfmt.Errorf("window %s is minimized", t)
 		}
 		out = append(out, w)
 	}
@@ -59,15 +59,15 @@ func (m *OS) ArrangePanesExec(kind string, args []string) error {
 		return errTilingOff
 	}
 	if mode := m.LayoutModeName(); mode != config.LayoutModeBSP {
-		return fmt.Errorf("ArrangePanes needs the bsp layout, and this session uses %s", mode)
+		return errfmt.Errorf("ArrangePanes needs the bsp layout, and this session uses %s", mode)
 	}
 	if len(args) > 0 {
 		ws, err := strconv.Atoi(args[0])
 		if err != nil || ws < 1 {
-			return fmt.Errorf("ArrangePanes takes a workspace number before the windows, not %q", args[0])
+			return errfmt.Errorf("ArrangePanes takes a workspace number before the windows, not %q", args[0])
 		}
 		if ws != m.CurrentWorkspace {
-			return fmt.Errorf("workspace %d is not showing: the switch to it %s, or you switched away", ws, ErrNotHereYet)
+			return errfmt.Errorf("workspace %d is not showing: the switch to it %s, or you switched away", ws, ErrNotHereYet)
 		}
 		args = args[1:]
 	}
@@ -110,7 +110,7 @@ func (m *OS) SetMultifocusExec(windows []string) error {
 	set := make(map[string]bool, len(named))
 	for _, w := range named {
 		if w.IsPopup {
-			return fmt.Errorf("window %s is a popup, and a popup cannot join multifocus", w.ID)
+			return errfmt.Errorf("window %s is a popup, and a popup cannot join multifocus", w.ID)
 		}
 		set[w.ID] = true
 	}

@@ -10,6 +10,7 @@ import (
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/federation"
+	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 	"github.com/Gaurav-Gosain/tuios/internal/sessiontree"
 )
 
@@ -426,7 +427,7 @@ func decodeHostSessions(raw json.RawMessage) ([]remoteSessionListRow, error) {
 	var decoded struct {
 		Sessions []remoteSessionListRow `json:"sessions"`
 	}
-	if err := json.Unmarshal(raw, &decoded); err != nil {
+	if err := jsonx.Unmarshal(raw, &decoded); err != nil {
 		return nil, errHostAnswerUnreadable
 	}
 	return decoded.Sessions, nil
@@ -509,7 +510,7 @@ func decodeHostAgents(raw json.RawMessage, session string) ([]remoteAgentRow, er
 		Session string           `json:"session"`
 		Agents  []remoteAgentRow `json:"agents"`
 	}
-	if err := json.Unmarshal(raw, &decoded); err != nil {
+	if err := jsonx.Unmarshal(raw, &decoded); err != nil {
 		return nil, errHostAnswerUnreadable
 	}
 	fallback := firstNonEmpty(decoded.Session, session)
@@ -574,7 +575,7 @@ func (d *Daemon) verbListHostAgents(cs *connState, params json.RawMessage) (any,
 		// Rebuilt rather than forwarded: this verb's params carry a host field
 		// list-agents does not declare, and the local half must be called with
 		// exactly the parameters list-agents takes.
-		localParams, _ := json.Marshal(map[string]any{"all": p.All, "all_sessions": true})
+		localParams, _ := jsonx.Marshal(map[string]any{"all": p.All, "all_sessions": true})
 		result, verr := d.verbListAgents(cs, localParams)
 		switch {
 		case verr != nil:
@@ -741,7 +742,7 @@ func localSessionRows(infos []SessionInfo) []remoteSessionRow {
 // through JSON rather than reaching into the handler's map so the local rows
 // and the remote rows are decoded by one piece of code.
 func localAgentRows(result any) []remoteAgentRow {
-	raw, err := json.Marshal(result)
+	raw, err := jsonx.Marshal(result)
 	if err != nil {
 		return nil
 	}

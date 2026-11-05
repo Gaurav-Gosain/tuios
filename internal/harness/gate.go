@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"regexp"
 	"strings"
+
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 )
 
 // Gate is the predicate set a rule tests its region against.
@@ -72,13 +74,13 @@ func (g *Gate) empty() bool {
 // its patterns, and checks every nested gate, counting all of it against b.
 func (g *Gate) compile(foldCase bool, depth int, b *gateBudget) error {
 	if depth > maxGateDepth {
-		return fmt.Errorf("gates nest deeper than %d", maxGateDepth)
+		return errfmt.Errorf("gates nest deeper than %d", maxGateDepth)
 	}
 	if b.gates++; b.gates > maxGatesPerFile {
-		return fmt.Errorf("more than %d gates in one manifest", maxGatesPerFile)
+		return errfmt.Errorf("more than %d gates in one manifest", maxGatesPerFile)
 	}
 	if b.predicates += len(g.All) + len(g.Any) + len(g.Not) + len(g.Regex) + len(g.NotRegex); b.predicates > maxPredicates {
-		return fmt.Errorf("more than %d predicates in one manifest", maxPredicates)
+		return errfmt.Errorf("more than %d predicates in one manifest", maxPredicates)
 	}
 	// substringText keeps a region's lines and their joined form apart with a
 	// NUL, so a substring holding one could match across the two. No screen
@@ -86,7 +88,7 @@ func (g *Gate) compile(foldCase bool, depth int, b *gateBudget) error {
 	for _, list := range [][]string{g.All, g.Any, g.Not} {
 		for _, s := range list {
 			if strings.IndexByte(s, 0) >= 0 {
-				return fmt.Errorf("substring %q holds a NUL, which tuios never reads", s)
+				return errfmt.Errorf("substring %q holds a NUL, which tuios never reads", s)
 			}
 		}
 	}
@@ -115,13 +117,13 @@ func (g *Gate) compile(foldCase bool, depth int, b *gateBudget) error {
 			// be vetoes all the way down, but not nothing.
 			if set.name == "none_of" {
 				if nested.empty() {
-					return fmt.Errorf("%s group %d is empty", set.name, i)
+					return errfmt.Errorf("%s group %d is empty", set.name, i)
 				}
 			} else if !nested.positive() {
-				return fmt.Errorf("%s group %d names nothing that must be present", set.name, i)
+				return errfmt.Errorf("%s group %d names nothing that must be present", set.name, i)
 			}
 			if err := nested.compile(foldCase, depth+1, b); err != nil {
-				return fmt.Errorf("%s group %d: %w", set.name, i, err)
+				return errfmt.Errorf("%s group %d: %w", set.name, i, err)
 			}
 			g.substrings = g.substrings || nested.substrings
 		}

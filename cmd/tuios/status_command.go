@@ -8,6 +8,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/spf13/cobra"
 	"tuios.dev/progstatus"
@@ -107,11 +108,11 @@ func statusSequence(state string, o statusOptions) (string, error) {
 		case progstatus.Idle, progstatus.Working, progstatus.Done, progstatus.Blocked, progstatus.Error:
 			r.State = s
 		default:
-			return "", fmt.Errorf("%q is not a state. Use idle, working, done, blocked or error", state)
+			return "", errfmt.Errorf("%q is not a state. Use idle, working, done, blocked or error", state)
 		}
 	}
 	if o.id != "" && !progstatus.ValidID(o.id) {
-		return "", fmt.Errorf("--id %q is not valid. Use up to %d parts of 1 to %d letters, digits, '.', '_', '+' or '-', joined with '/'", o.id, progstatus.MaxDepth, progstatus.MaxSegment)
+		return "", errfmt.Errorf("--id %q is not valid. Use up to %d parts of 1 to %d letters, digits, '.', '_', '+' or '-', joined with '/'", o.id, progstatus.MaxDepth, progstatus.MaxSegment)
 	}
 	if r.State == progstatus.Clear {
 		return progstatus.Sequence(r), nil
@@ -124,7 +125,7 @@ func statusSequence(state string, o statusOptions) (string, error) {
 		case progstatus.Permission, progstatus.Question, progstatus.Auth:
 			r.Kind = k
 		default:
-			return "", fmt.Errorf("--kind %q is not valid. Use permission, question or auth", o.kind)
+			return "", errfmt.Errorf("--kind %q is not valid. Use permission, question or auth", o.kind)
 		}
 	}
 	if o.progress != progstatus.NoProgress {
@@ -138,7 +139,7 @@ func statusSequence(state string, o statusOptions) (string, error) {
 	}
 	if o.app != "" {
 		if !progstatus.ValidApp(o.app) {
-			return "", fmt.Errorf("--app %q is not valid. Use 1 to %d letters, digits, '.', '_', '+' or '-'", o.app, progstatus.MaxApp)
+			return "", errfmt.Errorf("--app %q is not valid. Use 1 to %d letters, digits, '.', '_', '+' or '-'", o.app, progstatus.MaxApp)
 		}
 		r.App = o.app
 	}
@@ -162,15 +163,15 @@ func statusSequence(state string, o statusOptions) (string, error) {
 // limit bytes.
 func statusText(flag, s string, limit int) (string, error) {
 	if !utf8.ValidString(s) {
-		return "", fmt.Errorf("%s is not valid UTF-8", flag)
+		return "", errfmt.Errorf("%s is not valid UTF-8", flag)
 	}
 	for _, r := range s {
 		if progstatus.IsControl(r) {
-			return "", fmt.Errorf("%s has a control character, such as a tab or a new line. Remove it", flag)
+			return "", errfmt.Errorf("%s has a control character, such as a tab or a new line. Remove it", flag)
 		}
 	}
 	if len(s) > limit {
-		return "", fmt.Errorf("%s is %d bytes. The limit is %d", flag, len(s), limit)
+		return "", errfmt.Errorf("%s is %d bytes. The limit is %d", flag, len(s), limit)
 	}
 	return s, nil
 }

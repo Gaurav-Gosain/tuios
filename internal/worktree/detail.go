@@ -4,10 +4,11 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
-	"fmt"
 	"slices"
 	"strconv"
 	"strings"
+
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 )
 
 // FileStat is one file a worktree changed against a base.
@@ -35,7 +36,7 @@ const diffLineMax = 200
 // untracked files larger than maxUntracked bytes left out.
 func WorkingDetail(ctx context.Context, path, base string, maxFiles, maxLines int, maxUntracked int64) ([]FileStat, []DiffLine, error) {
 	if strings.HasPrefix(base, "-") {
-		return nil, nil, fmt.Errorf("base %q is not a ref", base)
+		return nil, nil, errfmt.Errorf("base %q is not a ref", base)
 	}
 	tree, _, err := SnapshotTree(ctx, path, maxUntracked)
 	if err != nil {

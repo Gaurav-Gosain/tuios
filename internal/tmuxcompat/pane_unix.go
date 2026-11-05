@@ -4,7 +4,6 @@ package tmuxcompat
 
 import (
 	"bufio"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -18,6 +17,8 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
+	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 	"github.com/Gaurav-Gosain/tuios/internal/procinfo"
 	"github.com/Gaurav-Gosain/tuios/internal/shimlink"
 	"golang.org/x/term"
@@ -70,7 +71,7 @@ func lookPathIn(name string, env []string) (string, error) {
 			return p, nil
 		}
 	}
-	return "", fmt.Errorf("%s: command not found", name)
+	return "", errfmt.Errorf("%s: command not found", name)
 }
 
 // start starts one command of the pane on the holder's terminal.
@@ -291,12 +292,12 @@ func acceptRespawns(ln net.Listener, window string, authorize func(int, uint64) 
 				return
 			}
 			var req RespawnRequest
-			if err := json.Unmarshal(line, &req); err != nil {
+			if err := jsonx.Unmarshal(line, &req); err != nil {
 				writeReply(conn, errors.New("the request is not JSON"))
 				return
 			}
 			if req.Window != window {
-				writeReply(conn, fmt.Errorf("this holder runs window %s, not %s", window, req.Window))
+				writeReply(conn, errfmt.Errorf("this holder runs window %s, not %s", window, req.Window))
 				return
 			}
 			if authorize != nil {
@@ -329,7 +330,7 @@ func writeReply(w io.Writer, err error) {
 	if err != nil {
 		r.Error = err.Error()
 	}
-	line, _ := json.Marshal(r)
+	line, _ := jsonx.Marshal(r)
 	_, _ = w.Write(append(line, '\n'))
 }
 

@@ -1,6 +1,8 @@
 package session
 
-import "fmt"
+import (
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
+)
 
 // Host terminal focus, per client.
 //
@@ -43,7 +45,7 @@ const focusOutReport = "\x1b[O"
 func (d *Daemon) handleClientFocus(cs *connState, msg *Message) error {
 	var p ClientFocusPayload
 	if err := msg.ParsePayload(&p); err != nil {
-		return fmt.Errorf("invalid client focus payload: %w", err)
+		return errfmt.Errorf("invalid client focus payload: %w", err)
 	}
 	f := focusOut
 	if p.Focused {

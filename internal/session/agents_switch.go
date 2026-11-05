@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 	"github.com/Gaurav-Gosain/tuios/internal/ptyspawn"
 )
 
@@ -99,14 +100,14 @@ func AgentOnlyCall(verb string, params any) bool {
 	if verb != "wait-for" {
 		return false
 	}
-	raw, err := json.Marshal(params)
+	raw, err := jsonx.Marshal(params)
 	if err != nil {
 		return false
 	}
 	var p struct {
 		Condition string `json:"condition"`
 	}
-	return json.Unmarshal(raw, &p) == nil && slices.Contains(agentWaitConditions, p.Condition)
+	return jsonx.Unmarshal(raw, &p) == nil && slices.Contains(agentWaitConditions, p.Condition)
 }
 
 // agentsEnabled reports whether the agent features are on.

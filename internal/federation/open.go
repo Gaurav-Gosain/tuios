@@ -2,10 +2,10 @@ package federation
 
 import (
 	"errors"
-	"fmt"
 	"os"
 	"strconv"
 
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"github.com/Gaurav-Gosain/tuios/internal/lazyre"
 )
 
@@ -58,7 +58,7 @@ func QuoteRemoteArg(arg string) (string, error) {
 	}
 	for _, r := range arg {
 		if r == '\'' || r == '\\' || r < 0x20 || r == 0x7f {
-			return "", fmt.Errorf("%q %w: rename it on the host to a name without quotes or backslashes", arg, ErrUnsafeRemoteArg)
+			return "", errfmt.Errorf("%q %w: rename it on the host to a name without quotes or backslashes", arg, ErrUnsafeRemoteArg)
 		}
 	}
 	return "'" + arg + "'", nil

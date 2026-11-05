@@ -9,6 +9,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"github.com/Gaurav-Gosain/tuios/internal/federation"
 )
 
@@ -38,7 +39,7 @@ func SetHostInFile(path, name string, h HostConfig) (WriteNote, error) {
 		return WriteNote{}, err
 	}
 	if strings.TrimSpace(h.Addr) == "" {
-		return WriteNote{}, fmt.Errorf("host %q needs an address. Give the name ssh uses, for example user@machine", name)
+		return WriteNote{}, errfmt.Errorf("host %q needs an address. Give the name ssh uses, for example user@machine", name)
 	}
 	h.Addr = strings.TrimSpace(h.Addr)
 
@@ -55,7 +56,7 @@ func SetHostInFile(path, name string, h HostConfig) (WriteNote, error) {
 func writeTargetFor(path string, key []string) (string, WriteNote, error) {
 	lc, err := loadLayered(path, true)
 	if err != nil {
-		return "", WriteNote{}, fmt.Errorf("%s: %w", errSaveFailed, err)
+		return "", WriteNote{}, errfmt.Errorf("%s: %w", errSaveFailed, err)
 	}
 	return lc.WriteTarget(key)
 }
@@ -98,7 +99,7 @@ func RemoveHostFromFile(path, name string) (bool, error) {
 		return false, nil
 	}
 	if err != nil {
-		return false, fmt.Errorf("the config files have an error, so tuios did not save: %w", err)
+		return false, errfmt.Errorf("the config files have an error, so tuios did not save: %w", err)
 	}
 	if !lc.Layered {
 		return removeHostFromOneFile(path, name)
@@ -106,7 +107,7 @@ func RemoveHostFromFile(path, name string) (bool, error) {
 	holders := lc.Holders([]string{"hosts", name})
 	for _, h := range holders {
 		if !h.Writable() {
-			return false, fmt.Errorf("host %q is set in %s, and tuios cannot write that file. Remove the host there", name, lc.DisplayPath(h.Path))
+			return false, errfmt.Errorf("host %q is set in %s, and tuios cannot write that file. Remove the host there", name, lc.DisplayPath(h.Path))
 		}
 	}
 	removed := false
@@ -179,14 +180,14 @@ func TailscaleInFile(path string) (TailscaleConfig, error) {
 // must work.
 func readConfigForEdit(path string) ([]byte, error) {
 	if path == "" {
-		return nil, fmt.Errorf("no config file path is set")
+		return nil, errfmt.Errorf("no config file path is set")
 	}
 	data, err := os.ReadFile(path) //nolint:gosec // the path is the user's own config file
 	if os.IsNotExist(err) {
 		return nil, nil
 	}
 	if err != nil {
-		return nil, fmt.Errorf("failed to read config file: %w", err)
+		return nil, errfmt.Errorf("failed to read config file: %w", err)
 	}
 	return data, nil
 }

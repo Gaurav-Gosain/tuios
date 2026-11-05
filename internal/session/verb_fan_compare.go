@@ -13,6 +13,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 	"github.com/Gaurav-Gosain/tuios/internal/sessiontree"
 	"github.com/Gaurav-Gosain/tuios/internal/worktree"
 )
@@ -842,7 +843,7 @@ func (d *Daemon) verbKeepFan(cs *connState, params json.RawMessage) (any, *verbE
 		if s == kept {
 			continue
 		}
-		raw, _ := json.Marshal(map[string]any{"session": s.Name(), "stash": p.Stash, "force": p.Force})
+		raw, _ := jsonx.Marshal(map[string]any{"session": s.Name(), "stash": p.Stash, "force": p.Force})
 		res, verr := d.verbRemoveWorktree(cs, raw)
 		if verr != nil {
 			left++

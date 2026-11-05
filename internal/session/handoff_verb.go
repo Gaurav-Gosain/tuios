@@ -4,9 +4,10 @@ import (
 	"bufio"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"os"
 	"path/filepath"
+
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 )
 
 // verbDaemonUpgrade starts a live upgrade to another binary. See
@@ -52,7 +53,7 @@ func (d *Daemon) verbDaemonUpgrade(cs *connState, params json.RawMessage) (any, 
 		// preflight ran must be it.
 		pin, err := statFileID(p.Binary)
 		if err != nil {
-			return nil, upgradeRefusal(fmt.Errorf("%s: %w", p.Binary, err))
+			return nil, upgradeRefusal(errfmt.Errorf("%s: %w", p.Binary, err))
 		}
 		if why := d.upgradeDialogRefusal(); why != "" {
 			LogBasic("Live upgrade from a pane refused: %s", why)
@@ -66,7 +67,7 @@ func (d *Daemon) verbDaemonUpgrade(cs *connState, params json.RawMessage) (any, 
 		}
 		bin.close()
 		if bin.file != pin {
-			return nil, upgradeRefusal(fmt.Errorf("%s was replaced while it was being checked. Run the upgrade again when the install has finished", bin.path))
+			return nil, upgradeRefusal(errfmt.Errorf("%s was replaced while it was being checked. Run the upgrade again when the install has finished", bin.path))
 		}
 		if why := d.confirmUpgrade(cs, bin); why != "" {
 			return nil, notPerson(why)

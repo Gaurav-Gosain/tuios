@@ -1,7 +1,6 @@
 package session
 
 import (
-	"encoding/json"
 	"os"
 	"path/filepath"
 	"slices"
@@ -11,6 +10,7 @@ import (
 	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/atomicfile"
+	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 	"github.com/Gaurav-Gosain/tuios/internal/review"
 )
 
@@ -357,7 +357,7 @@ func (s *reviewNoteStore) encodeLocked() []byte {
 			f.Panes = append(f.Panes, p)
 		}
 	}
-	data, err := json.Marshal(f)
+	data, err := jsonx.Marshal(f)
 	if err != nil {
 		return nil
 	}
@@ -402,7 +402,7 @@ func (s *reviewNoteStore) saveNowAndFreeze() {
 func (s *reviewNoteStore) load(path string, live func(window string) bool) {
 	var f reviewNotesFile
 	if data, err := os.ReadFile(path); err == nil {
-		if err := json.Unmarshal(data, &f); err != nil || f.Version != 1 {
+		if err := jsonx.Unmarshal(data, &f); err != nil || f.Version != 1 {
 			LogError("Discarding the saved review notes, they could not be read: %v", err)
 			f = reviewNotesFile{}
 		}

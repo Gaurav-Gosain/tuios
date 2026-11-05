@@ -19,6 +19,7 @@ import (
 	"charm.land/lipgloss/v2"
 	"charm.land/lipgloss/v2/table"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"github.com/Gaurav-Gosain/tuios/internal/federation"
 	"github.com/Gaurav-Gosain/tuios/internal/hostsync"
 	"github.com/Gaurav-Gosain/tuios/internal/plural"
@@ -354,7 +355,7 @@ func runHostsSync(opts syncOptions) error {
 		if opts.json {
 			return &diagnosticError{What: plural.Count(failed, "host") + " failed.", Status: 1}
 		}
-		return fmt.Errorf("%d of %s failed. The rows above say why", failed, plural.Count(len(targets), "host"))
+		return errfmt.Errorf("%d of %s failed. The rows above say why", failed, plural.Count(len(targets), "host"))
 	}
 	return nil
 }
@@ -378,7 +379,7 @@ func forEachTarget(targets []*syncTarget, fn func(*syncTarget)) {
 func resolveSyncTargets(opts syncOptions) ([]*syncTarget, error) {
 	cfgPath, err := config.GetConfigPath()
 	if err != nil {
-		return nil, fmt.Errorf("cannot find the config file: %w", err)
+		return nil, errfmt.Errorf("cannot find the config file: %w", err)
 	}
 	hosts, err := config.HostsInFile(cfgPath)
 	if err != nil {
@@ -401,7 +402,7 @@ func resolveSyncTargets(opts syncOptions) ([]*syncTarget, error) {
 				continue
 			}
 			if _, ok := hosts[n]; !ok {
-				return nil, fmt.Errorf("no host is named %q in the config. Run 'tuios hosts' to see the names", n)
+				return nil, errfmt.Errorf("no host is named %q in the config. Run 'tuios hosts' to see the names", n)
 			}
 			if !slices.Contains(names, n) {
 				names = append(names, n)
@@ -467,7 +468,7 @@ func chooseSyncSource(opts syncOptions) (*hostsync.Source, error) {
 			}
 			found, ok := hostsync.FindTuiosCheckout(abs)
 			if !ok || found != abs {
-				return nil, fmt.Errorf("%s is not a tuios checkout. --src names the folder that holds its go.mod", dir)
+				return nil, errfmt.Errorf("%s is not a tuios checkout. --src names the folder that holds its go.mod", dir)
 			}
 			dir = found
 		}

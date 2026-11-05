@@ -7,6 +7,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"github.com/Gaurav-Gosain/tuios/internal/herdrplugin"
 	"github.com/spf13/cobra"
 )
@@ -72,7 +73,7 @@ func updatePlugins(cmd *cobra.Command, ids []string, o installOpts, check bool) 
 		for _, id := range ids {
 			e := lock.Find(id)
 			if e == nil {
-				return fmt.Errorf("plugins.lock has no plugin with the id %s. Run tuios plugins list to see the ids", id)
+				return errfmt.Errorf("plugins.lock has no plugin with the id %s. Run tuios plugins list to see the ids", id)
 			}
 			todo = append(todo, *e)
 		}
@@ -97,10 +98,10 @@ func updatePlugins(cmd *cobra.Command, ids []string, o installOpts, check bool) 
 		}
 	}
 	if len(failed) > 0 {
-		return fmt.Errorf("these plugins are not updated: %s", strings.Join(failed, ", "))
+		return errfmt.Errorf("these plugins are not updated: %s", strings.Join(failed, ", "))
 	}
 	if len(unreachable) > 0 {
-		return &callError{status: 3, err: fmt.Errorf("tuios could not reach the source of %s. These plugins stay at their commits. Check the network, then try again", strings.Join(unreachable, ", "))}
+		return &callError{status: 3, err: errfmt.Errorf("tuios could not reach the source of %s. These plugins stay at their commits. Check the network, then try again", strings.Join(unreachable, ", "))}
 	}
 	return nil
 }
@@ -133,7 +134,7 @@ func (in *installer) updateOne(e herdrplugin.LockEntry, check bool) error {
 		return nil
 	}
 	if p.PluginID != e.ID {
-		return fmt.Errorf("the new commit names the plugin %s, not %s. Run tuios plugins uninstall %s, then install it again", p.PluginID, e.ID, e.ID)
+		return errfmt.Errorf("the new commit names the plugin %s, not %s. Run tuios plugins uninstall %s, then install it again", p.PluginID, e.ID, e.ID)
 	}
 	reason := updateReason(fetched, e, got)
 	fmt.Fprintf(in.out, "\n%s: %.12s to %.12s\n", e.ID, e.Commit, got.Commit)

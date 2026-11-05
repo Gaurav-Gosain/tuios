@@ -11,6 +11,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"github.com/Gaurav-Gosain/tuios/internal/federation"
 	"github.com/Gaurav-Gosain/tuios/internal/hooks"
 	"github.com/Gaurav-Gosain/tuios/internal/plural"
@@ -3334,14 +3335,14 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 			// herdr's pane.swap: the daemon names the pair. TapeArgs are the
 			// source and the target window ids.
 			if len(msg.TapeArgs) != 2 {
-				err = fmt.Errorf("swap_windows needs two window ids")
+				err = errfmt.Errorf("swap_windows needs two window ids")
 			} else {
 				err = m.SwapWindowsByID(msg.TapeArgs[0], msg.TapeArgs[1])
 			}
 		case "zoom_window":
 			// herdr's pane.zoom: TapeArgs are the window id and on or off.
 			if len(msg.TapeArgs) != 2 {
-				err = fmt.Errorf("zoom_window needs a window id and on or off")
+				err = errfmt.Errorf("zoom_window needs a window id and on or off")
 			} else {
 				err = m.ZoomWindowByID(msg.TapeArgs[0], msg.TapeArgs[1] == "on")
 			}
@@ -3350,12 +3351,12 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 			// border moves, and the share of the pane region it moves by.
 			// The answer says whether the pane changed.
 			if len(msg.TapeArgs) != 3 {
-				err = fmt.Errorf("resize_window needs a window id, a direction and an amount")
+				err = errfmt.Errorf("resize_window needs a window id, a direction and an amount")
 				break
 			}
 			amount, perr := strconv.ParseFloat(msg.TapeArgs[2], 64)
 			if perr != nil {
-				err = fmt.Errorf("resize_window: bad amount %q", msg.TapeArgs[2])
+				err = errfmt.Errorf("resize_window: bad amount %q", msg.TapeArgs[2])
 				break
 			}
 			var changed bool
@@ -3377,7 +3378,7 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 			// another machine the host, "create" or "", and the directory
 			// of a session create makes there.
 			if len(msg.TapeArgs) < 1 || msg.TapeArgs[0] == "" {
-				err = fmt.Errorf("switch_session needs a session name")
+				err = errfmt.Errorf("switch_session needs a session name")
 				break
 			}
 			name := msg.TapeArgs[0]
@@ -3440,7 +3441,7 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 				return m, tea.Batch(cmd, relisten)
 			}
 		default:
-			err = fmt.Errorf("unknown remote command type: %s", msg.CommandType)
+			err = errfmt.Errorf("unknown remote command type: %s", msg.CommandType)
 		}
 
 		m.MarkAllDirty()

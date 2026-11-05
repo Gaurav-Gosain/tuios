@@ -11,6 +11,7 @@ import (
 	"unicode/utf16"
 
 	"github.com/Gaurav-Gosain/tuios/internal/childproc"
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 )
 
 // On Windows the daemon runs as a task of the user in Task Scheduler,
@@ -109,7 +110,7 @@ func utf16File(s string) []byte {
 func schtasks(args ...string) error {
 	out, err := childproc.Command("schtasks.exe", args...).CombinedOutput()
 	if err != nil {
-		return fmt.Errorf("schtasks %s: %s", args[0], strings.TrimSpace(string(out)))
+		return errfmt.Errorf("schtasks %s: %s", args[0], strings.TrimSpace(string(out)))
 	}
 	return nil
 }

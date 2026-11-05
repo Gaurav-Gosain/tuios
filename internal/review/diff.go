@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/childproc"
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 
 	"github.com/Gaurav-Gosain/tuios/internal/worktree"
 )
@@ -49,14 +50,14 @@ func ValidRef(ref string) error {
 		return errors.New("empty ref")
 	}
 	if strings.HasPrefix(ref, "-") {
-		return fmt.Errorf("%q starts with a dash", ref)
+		return errfmt.Errorf("%q starts with a dash", ref)
 	}
 	if len(ref) > 256 {
 		return errors.New("ref is longer than 256 bytes")
 	}
 	for _, r := range ref {
 		if r < 0x20 || r == 0x7f || r == ' ' {
-			return fmt.Errorf("%q holds a space or a control character", ref)
+			return errfmt.Errorf("%q holds a space or a control character", ref)
 		}
 	}
 	return nil
@@ -170,7 +171,7 @@ func Build(ctx context.Context, opt Options) (*Diff, error) {
 	if opt.AgainstDir != "" {
 		from, _, err = worktree.SnapshotTree(ctx, opt.AgainstDir, opt.MaxUntracked)
 		if err != nil {
-			return nil, fmt.Errorf("the other worktree: %w", err)
+			return nil, errfmt.Errorf("the other worktree: %w", err)
 		}
 		d.AgainstTree = from
 	} else {
@@ -307,13 +308,13 @@ func streamUnified(ctx context.Context, dir string, args []string, files []File,
 	}
 	if werr != nil {
 		if ctx.Err() != nil {
-			return false, fmt.Errorf("git diff: %w", ctx.Err())
+			return false, errfmt.Errorf("git diff: %w", ctx.Err())
 		}
 		msg := strings.TrimSpace(stderr.String())
 		if msg == "" {
 			msg = werr.Error()
 		}
-		return false, fmt.Errorf("git diff: %s", msg)
+		return false, errfmt.Errorf("git diff: %s", msg)
 	}
 	return truncated, nil
 }
@@ -334,10 +335,10 @@ func FileLines(root, path string) ([]string, error) {
 		return nil, err
 	}
 	if !info.Mode().IsRegular() {
-		return nil, fmt.Errorf("%s is not a regular file", path)
+		return nil, errfmt.Errorf("%s is not a regular file", path)
 	}
 	if info.Size() > maxAnchorFile {
-		return nil, fmt.Errorf("%s is larger than %d bytes", path, maxAnchorFile)
+		return nil, errfmt.Errorf("%s is larger than %d bytes", path, maxAnchorFile)
 	}
 	data, err := os.ReadFile(full)
 	if err != nil {
@@ -356,7 +357,7 @@ func BlobLines(ctx context.Context, dir, rev, path string) ([]string, error) {
 		return nil, err
 	}
 	if len(out) > maxAnchorFile {
-		return nil, fmt.Errorf("%s is larger than %d bytes", path, maxAnchorFile)
+		return nil, errfmt.Errorf("%s is larger than %d bytes", path, maxAnchorFile)
 	}
 	return SplitLines(out), nil
 }
@@ -385,10 +386,10 @@ func ValidPath(path string) error {
 	case strings.ContainsRune(path, 0):
 		return errors.New("path holds a NUL byte")
 	case filepath.IsAbs(path) || strings.HasPrefix(path, "/") || strings.HasPrefix(path, "\\"):
-		return fmt.Errorf("%q is absolute; name it relative to the repository root", path)
+		return errfmt.Errorf("%q is absolute; name it relative to the repository root", path)
 	}
 	if slices.Contains(strings.FieldsFunc(path, func(r rune) bool { return r == '/' || r == '\\' }), "..") {
-		return fmt.Errorf("%q leaves the repository", path)
+		return errfmt.Errorf("%q leaves the repository", path)
 	}
 	return nil
 }
@@ -410,7 +411,7 @@ func InsideRoot(root, path string) (string, error) {
 	}
 	rel, err := filepath.Rel(realRoot, real)
 	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
-		return "", fmt.Errorf("%q leaves the repository", path)
+		return "", errfmt.Errorf("%q leaves the repository", path)
 	}
 	return real, nil
 }
@@ -423,7 +424,7 @@ func revParse(ctx context.Context, dir, rev string) (string, error) {
 	}
 	sha := strings.TrimSpace(out)
 	if sha == "" {
-		return "", fmt.Errorf("%s does not resolve", rev)
+		return "", errfmt.Errorf("%s does not resolve", rev)
 	}
 	return sha, nil
 }
@@ -435,7 +436,7 @@ func emptyTree(ctx context.Context, dir string) (string, error) {
 	cmd.Stdin = strings.NewReader("")
 	out, err := cmd.Output()
 	if err != nil {
-		return "", fmt.Errorf("git hash-object: %w", err)
+		return "", errfmt.Errorf("git hash-object: %w", err)
 	}
 	return strings.TrimSpace(string(out)), nil
 }
@@ -508,13 +509,13 @@ func gitHead(ctx context.Context, dir string, extra []string, limit int, args ..
 	cmd.Stderr = &stderr
 	if err := cmd.Run(); err != nil && (head == nil || !head.full) {
 		if ctx.Err() != nil {
-			return "", fmt.Errorf("git %s: %w", args[0], ctx.Err())
+			return "", errfmt.Errorf("git %s: %w", args[0], ctx.Err())
 		}
 		msg := strings.TrimSpace(stderr.String())
 		if msg == "" {
 			msg = err.Error()
 		}
-		return "", fmt.Errorf("git %s: %s", firstArg(args), msg)
+		return "", errfmt.Errorf("git %s: %s", firstArg(args), msg)
 	}
 	if head != nil {
 		return string(head.buf), nil

@@ -1,9 +1,9 @@
 package federation
 
 import (
-	"fmt"
 	"strings"
 
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"github.com/Gaurav-Gosain/tuios/internal/lazyre"
 )
 
@@ -99,7 +99,7 @@ func CheckSSHOptions(opts []string) error {
 	for i := 0; i < len(opts); i++ {
 		arg := opts[i]
 		if len(arg) < 2 || arg[0] != '-' || arg == "--" {
-			return fmt.Errorf("ssh_options: %q is not an ssh option", arg)
+			return errfmt.Errorf("ssh_options: %q is not an ssh option", arg)
 		}
 		// Flags can be combined, as in -vo Key=value. A flag that takes a
 		// value takes the rest of the argument, or the next argument.
@@ -109,12 +109,12 @@ func CheckSSHOptions(opts []string) error {
 				continue
 			}
 			if strings.IndexByte(sshSafeArgFlags, flag) < 0 {
-				return fmt.Errorf("ssh_options: -%c is not accepted here. Put it in ~/.ssh/config", flag)
+				return errfmt.Errorf("ssh_options: -%c is not accepted here. Put it in ~/.ssh/config", flag)
 			}
 			value := arg[j+1:]
 			if value == "" {
 				if i+1 >= len(opts) {
-					return fmt.Errorf("ssh_options: -%c has no value", flag)
+					return errfmt.Errorf("ssh_options: -%c has no value", flag)
 				}
 				i++
 				value = opts[i]
@@ -133,29 +133,29 @@ func checkSSHFlagValue(flag byte, value string) error {
 	switch flag {
 	case 'J':
 		if !validJump(value) {
-			return fmt.Errorf("ssh_options: -J %q is not a list of hosts", value)
+			return errfmt.Errorf("ssh_options: -J %q is not a list of hosts", value)
 		}
 	case 'o':
 		m := plainSSHOption().FindStringSubmatch(value)
 		if m == nil {
-			return fmt.Errorf("ssh_options: -o %q is not written as Keyword=value with plain text", value)
+			return errfmt.Errorf("ssh_options: -o %q is not written as Keyword=value with plain text", value)
 		}
 		key := strings.ToLower(m[1])
 		if !sshSafeOptions[key] {
-			return fmt.Errorf("ssh_options: %s is refused, because it can run code or write files here. Put it in ~/.ssh/config", m[1])
+			return errfmt.Errorf("ssh_options: %s is refused, because it can run code or write files here. Put it in ~/.ssh/config", m[1])
 		}
 		return checkSSHOptionValue(m[1], key, m[2])
 	case 'l':
 		if !sshNameValue().MatchString(value) {
-			return fmt.Errorf("ssh_options: -l %q is not a user name", value)
+			return errfmt.Errorf("ssh_options: -l %q is not a user name", value)
 		}
 	case 'p':
 		if !sshPortValue().MatchString(value) {
-			return fmt.Errorf("ssh_options: -p %q is not a port", value)
+			return errfmt.Errorf("ssh_options: -p %q is not a port", value)
 		}
 	default:
 		if !plainSSHValue().MatchString(value) {
-			return fmt.Errorf("ssh_options: -%c %q is not one plain value", flag, value)
+			return errfmt.Errorf("ssh_options: -%c %q is not one plain value", flag, value)
 		}
 	}
 	return nil
@@ -166,23 +166,23 @@ func checkSSHOptionValue(name, key, value string) error {
 	switch {
 	case key == "proxyjump":
 		if !validJump(value) {
-			return fmt.Errorf("ssh_options: ProxyJump %q is not a list of hosts", value)
+			return errfmt.Errorf("ssh_options: ProxyJump %q is not a list of hosts", value)
 		}
 	case sshYesNoOptions[key]:
 		if v := strings.ToLower(value); v != "yes" && v != "no" {
-			return fmt.Errorf("ssh_options: %s takes yes or no", name)
+			return errfmt.Errorf("ssh_options: %s takes yes or no", name)
 		}
 	case key == "port":
 		if !sshPortValue().MatchString(value) {
-			return fmt.Errorf("ssh_options: Port %q is not a port", value)
+			return errfmt.Errorf("ssh_options: Port %q is not a port", value)
 		}
 	case sshNameOptions[key]:
 		if !sshNameValue().MatchString(value) {
-			return fmt.Errorf("ssh_options: %s %q is not a plain name: use letters, digits, dot, dash, underscore, @ and colon", name, value)
+			return errfmt.Errorf("ssh_options: %s %q is not a plain name: use letters, digits, dot, dash, underscore, @ and colon", name, value)
 		}
 	default:
 		if !plainSSHValue().MatchString(value) {
-			return fmt.Errorf("ssh_options: %s %q is not one plain value", name, value)
+			return errfmt.Errorf("ssh_options: %s %q is not one plain value", name, value)
 		}
 	}
 	return nil

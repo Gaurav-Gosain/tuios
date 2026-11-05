@@ -10,7 +10,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"github.com/Gaurav-Gosain/tuios/internal/integration"
+	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
@@ -280,7 +282,7 @@ func runAgentHook(o agentHookOptions, args []string, hio agentHookIO) {
 		out.Hold = holdForAnswer(out, hio)
 	}
 	if o.explain {
-		line, _ := json.Marshal(out)
+		line, _ := jsonx.Marshal(out)
 		fmt.Fprintln(hio.stderr, string(line))
 	}
 }
@@ -317,7 +319,7 @@ func commitMailNotice(out agentHookOutcome, hio agentHookIO) bool {
 		var res struct {
 			Committed bool `json:"committed"`
 		}
-		done <- err == nil && json.Unmarshal(raw, &res) == nil && res.Committed
+		done <- err == nil && jsonx.Unmarshal(raw, &res) == nil && res.Committed
 	}()
 	select {
 	case ok := <-done:
@@ -391,7 +393,7 @@ func fetchMailNotice(out *agentHookOutcome, client verbCaller) {
 		Lease  uint64 `json:"lease"`
 		Reason string `json:"reason"`
 	}
-	if err := json.Unmarshal(raw, &res); err != nil {
+	if err := jsonx.Unmarshal(raw, &res); err != nil {
 		out.MailError = err.Error()
 		return
 	}
@@ -544,7 +546,7 @@ func requestAnswer(out agentHookOutcome, hio agentHookIO, limit time.Duration) (
 		Message   string `json:"message"`
 		Reason    string `json:"reason"`
 	}
-	if err := json.Unmarshal(raw, &res); err != nil {
+	if err := jsonx.Unmarshal(raw, &res); err != nil {
 		trace.Error = "reading the answer: " + err.Error()
 		return "", "", trace
 	}
@@ -709,7 +711,7 @@ func reportHookActivity(client verbCaller, sess, window, harness string, harness
 		return hookActivityResult{}, err
 	}
 	var res hookActivityResult
-	if err := json.Unmarshal(raw, &res); err != nil {
+	if err := jsonx.Unmarshal(raw, &res); err != nil {
 		return hookActivityResult{}, err
 	}
 	return res, nil
@@ -757,14 +759,14 @@ func resolveHookPane(o agentHookOptions, hio agentHookIO, client verbCaller, sid
 	}
 	raw, err := client.Call("resolve-pane", map[string]any{"sid": sid, "pids": ancestors})
 	if err != nil {
-		return "", "", "", fmt.Errorf("no pane: TUIOS_PANE_ID is unset and %w", err)
+		return "", "", "", errfmt.Errorf("no pane: TUIOS_PANE_ID is unset and %w", err)
 	}
 	var res struct {
 		Session  string `json:"session"`
 		WindowID string `json:"window_id"`
 		By       string `json:"by"`
 	}
-	if err := json.Unmarshal(raw, &res); err != nil {
+	if err := jsonx.Unmarshal(raw, &res); err != nil {
 		return "", "", "", err
 	}
 	return res.Session, res.WindowID, res.By, nil
@@ -815,7 +817,7 @@ func verbParams(client verbCaller, verb string) (map[string]bool, error) {
 			} `json:"params"`
 		} `json:"verbs"`
 	}
-	if err := json.Unmarshal(raw, &res); err != nil {
+	if err := jsonx.Unmarshal(raw, &res); err != nil {
 		return nil, err
 	}
 	known := map[string]bool{}
@@ -835,7 +837,7 @@ func verbParams(client verbCaller, verb string) (map[string]bool, error) {
 func requireIfState(client verbCaller) error {
 	known, err := setAgentStateParams(client)
 	if err != nil {
-		return fmt.Errorf("could not ask the daemon whether it supports --if-state: %w", err)
+		return errfmt.Errorf("could not ask the daemon whether it supports --if-state: %w", err)
 	}
 	if !known["if_state"] {
 		return errors.New("the running daemon predates --if-state, so the report was not sent. It works once the daemon restarts")
@@ -896,7 +898,7 @@ func reportHook(client verbCaller, sess, window, harness string, harnessPID int,
 	if len(extra) > 0 {
 		known, err := setAgentStateParams(client)
 		if err != nil {
-			return hookReportResult{}, nil, fmt.Errorf("could not ask the daemon what set-agent-state takes: %w", err)
+			return hookReportResult{}, nil, errfmt.Errorf("could not ask the daemon what set-agent-state takes: %w", err)
 		}
 		for _, k := range hookFields {
 			if _, ok := extra[k]; !ok {
@@ -922,7 +924,7 @@ func reportHook(client verbCaller, sess, window, harness string, harnessPID int,
 		return hookReportResult{}, dropped, err
 	}
 	var res hookReportResult
-	if err := json.Unmarshal(raw, &res); err != nil {
+	if err := jsonx.Unmarshal(raw, &res); err != nil {
 		return hookReportResult{}, dropped, err
 	}
 	return res, dropped, nil
@@ -935,7 +937,7 @@ func reportHook(client verbCaller, sess, window, harness string, harnessPID int,
 func reportHookSession(client verbCaller, sess, window, harness string, harnessPID int, r integration.Report) (hookReportResult, []string, error) {
 	raw, err := client.Call("list-verbs", map[string]any{"verb": "set-agent-session"})
 	if err != nil {
-		return hookReportResult{}, nil, fmt.Errorf("could not ask the daemon whether it has set-agent-session: %w", err)
+		return hookReportResult{}, nil, errfmt.Errorf("could not ask the daemon whether it has set-agent-session: %w", err)
 	}
 	var verbs struct {
 		Verbs []struct {
@@ -945,7 +947,7 @@ func reportHookSession(client verbCaller, sess, window, harness string, harnessP
 			} `json:"params"`
 		} `json:"verbs"`
 	}
-	if err := json.Unmarshal(raw, &verbs); err != nil {
+	if err := jsonx.Unmarshal(raw, &verbs); err != nil {
 		return hookReportResult{}, nil, err
 	}
 	known := false
@@ -993,7 +995,7 @@ func reportHookSession(client verbCaller, sess, window, harness string, harnessP
 		return hookReportResult{}, dropped, err
 	}
 	var res hookReportResult
-	if err := json.Unmarshal(raw, &res); err != nil {
+	if err := jsonx.Unmarshal(raw, &res); err != nil {
 		return hookReportResult{}, dropped, err
 	}
 	return res, dropped, nil

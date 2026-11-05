@@ -1,13 +1,13 @@
 package session
 
 import (
-	"encoding/json"
 	"errors"
 	"slices"
 	"strconv"
 	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/ghpr"
+	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 )
 
 // Cards that move on their own, and the cards a fan works on.
@@ -273,7 +273,7 @@ func (d *Daemon) admitTaskParam(cs *connState, verb, session, id, nonce string, 
 	if verr := d.checkLinkVerb(cs, "claim-task"); verr != nil {
 		return nil, refused(verr)
 	}
-	raw, err := json.Marshal(map[string]string{"session": session})
+	raw, err := jsonx.Marshal(map[string]string{"session": session})
 	if err != nil {
 		return nil, newVerbError(ErrVerbInternal, "could not encode the task's session")
 	}
@@ -288,7 +288,7 @@ func (d *Daemon) admitTaskParam(cs *connState, verb, session, id, nonce string, 
 	var sp struct {
 		Session string `json:"session"`
 	}
-	if err := json.Unmarshal(scoped, &sp); err != nil {
+	if err := jsonx.Unmarshal(scoped, &sp); err != nil {
 		return nil, newVerbError(ErrVerbInternal, "could not read the task's session")
 	}
 	sess, verr := d.resolveVerbSession(cs, sp.Session)

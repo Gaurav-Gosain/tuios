@@ -2,12 +2,12 @@ package app
 
 import (
 	"errors"
-	"fmt"
 	"strings"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"github.com/Gaurav-Gosain/tuios/internal/herdrcli"
 	"github.com/Gaurav-Gosain/tuios/internal/herdrplugin"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
@@ -34,7 +34,7 @@ func callPluginMethod(method string, params map[string]any) error {
 		return errors.New("the daemon cannot be reached")
 	}
 	if e, ok := resp["error"].(map[string]any); ok {
-		return fmt.Errorf("%v", e["message"])
+		return errfmt.Errorf("%v", e["message"])
 	}
 	return nil
 }

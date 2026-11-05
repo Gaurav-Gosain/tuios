@@ -11,6 +11,8 @@ import (
 	"text/tabwriter"
 	"time"
 
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
+	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 	"github.com/Gaurav-Gosain/tuios/internal/plural"
 	"github.com/Gaurav-Gosain/tuios/internal/review"
 	"github.com/Gaurav-Gosain/tuios/internal/worktree"
@@ -101,7 +103,7 @@ func callCheckpointVerb(f checkpointFlags, verb string, params map[string]any) (
 func checkpointN(arg string) (int, error) {
 	n, err := strconv.Atoi(arg)
 	if err != nil || n < 1 {
-		return 0, fmt.Errorf("%q is not a checkpoint number. Give a number from 1, as tuios checkpoint list shows it", arg)
+		return 0, errfmt.Errorf("%q is not a checkpoint number. Give a number from 1, as tuios checkpoint list shows it", arg)
 	}
 	return n, nil
 }
@@ -145,8 +147,8 @@ as it was before a restore.`,
 				Enabled     bool                  `json:"enabled"`
 				Checkpoints []worktree.Checkpoint `json:"checkpoints"`
 			}
-			if err := json.Unmarshal(raw, &res); err != nil {
-				return fmt.Errorf("failed to parse response: %w", err)
+			if err := jsonx.Unmarshal(raw, &res); err != nil {
+				return errfmt.Errorf("failed to parse response: %w", err)
 			}
 			return printCheckpointList(os.Stdout, res.Session, res.Window, res.Worktree, on, res.Enabled, res.Checkpoints)
 		},
@@ -247,8 +249,8 @@ N out for the newest checkpoint. Nothing in the repository changes.`,
 				Files      []review.File       `json:"files"`
 				Totals     review.Totals       `json:"totals"`
 			}
-			if err := json.Unmarshal(raw, &res); err != nil {
-				return fmt.Errorf("failed to parse response: %w", err)
+			if err := jsonx.Unmarshal(raw, &res); err != nil {
+				return errfmt.Errorf("failed to parse response: %w", err)
 			}
 			fmt.Printf("Checkpoint %d of %s, pane %s%s, against %s: %d %s, +%d -%d\n",
 				res.Checkpoint.N, plainLine(res.Session), shortWindowID(res.Window), on, plainLine(res.Base),
@@ -304,8 +306,8 @@ prompt. Use --force to restore then.`,
 				Written  []string            `json:"written"`
 				Removed  []string            `json:"removed"`
 			}
-			if err := json.Unmarshal(raw, &res); err != nil {
-				return fmt.Errorf("failed to parse response: %w", err)
+			if err := jsonx.Unmarshal(raw, &res); err != nil {
+				return errfmt.Errorf("failed to parse response: %w", err)
 			}
 			fmt.Printf("Restored checkpoint %d in %s, pane %s%s: %d %s written, %d removed.\n",
 				res.Restored.N, plainLine(res.Session), shortWindowID(res.Window), on,

@@ -23,6 +23,7 @@ import (
 
 	"github.com/Gaurav-Gosain/tuios/internal/atomicfile"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
 	"tuios.dev/shot"
@@ -332,7 +333,7 @@ func cleanLabel(s string) string {
 // read nothing. A capture that fails part way leaves no half-written file.
 func Save(path string, data []byte) error {
 	if path == "" {
-		return fmt.Errorf("no output path")
+		return errfmt.Errorf("no output path")
 	}
 	// The name's claim goes once the capture is in place, or when it could not
 	// be written and holds nothing. An explicit path was never claimed, and
@@ -340,10 +341,10 @@ func Save(path string, data []byte) error {
 	defer func() { _ = os.Remove(claimPath(path)) }()
 	dir := filepath.Dir(path)
 	if err := os.MkdirAll(dir, 0o750); err != nil {
-		return fmt.Errorf("could not create %s: %w", dir, err)
+		return errfmt.Errorf("could not create %s: %w", dir, err)
 	}
 	if err := atomicfile.Write(path, data, 0o600, false); err != nil {
-		return fmt.Errorf("could not write %s: %w", path, err)
+		return errfmt.Errorf("could not write %s: %w", path, err)
 	}
 	return nil
 }
@@ -362,7 +363,7 @@ func ResolvePath(out, dir, label string, format shot.Format, now time.Time) (str
 	if out != "" {
 		abs, err := filepath.Abs(out)
 		if err != nil {
-			return "", fmt.Errorf("could not resolve %s: %w", out, err)
+			return "", errfmt.Errorf("could not resolve %s: %w", out, err)
 		}
 		return abs, nil
 	}
@@ -370,7 +371,7 @@ func ResolvePath(out, dir, label string, format shot.Format, now time.Time) (str
 		dir = config.ScreenshotConfig{}.ResolveDirectory()
 	}
 	if err := os.MkdirAll(dir, 0o750); err != nil {
-		return "", fmt.Errorf("could not create %s: %w", dir, err)
+		return "", errfmt.Errorf("could not create %s: %w", dir, err)
 	}
 	return freeName(dir, FileName(label, format, now)), nil
 }

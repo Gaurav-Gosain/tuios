@@ -1,11 +1,12 @@
 package session
 
 import (
-	"fmt"
 	"log"
 	"maps"
 	"slices"
 	"time"
+
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 )
 
 // hasWindow reports whether id names one of these windows.
@@ -101,7 +102,7 @@ func (d *Daemon) restoreSession(state *SessionState) (*Session, error) {
 // resumed. A session that was already live has none.
 func (d *Daemon) restoreSessionOffers(state *SessionState) (*Session, []resumeOffer, error) {
 	if state == nil || state.Name == "" {
-		return nil, nil, fmt.Errorf("cannot restore session from empty state")
+		return nil, nil, errfmt.Errorf("cannot restore session from empty state")
 	}
 
 	if existing := d.manager.GetSession(state.Name); existing != nil {
@@ -122,7 +123,7 @@ func (d *Daemon) restoreSessionOffers(state *SessionState) (*Session, []resumeOf
 	// 'tuios resurrect' alike. Checked after the live lookup above, which is
 	// about the session that already exists rather than about what was saved.
 	if len(state.Windows) == 0 {
-		return nil, nil, fmt.Errorf("saved state for session %q has no windows, there is nothing to restore", state.Name)
+		return nil, nil, errfmt.Errorf("saved state for session %q has no windows, there is nothing to restore", state.Name)
 	}
 
 	width, height := state.Width, state.Height

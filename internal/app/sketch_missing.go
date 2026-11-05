@@ -2,16 +2,16 @@ package app
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
-	"fmt"
 	"os/exec"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"github.com/Gaurav-Gosain/tuios/internal/herdrplugin"
+	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 	"github.com/Gaurav-Gosain/tuios/internal/tmldraw"
 	"tuios.dev/loom"
 	sketchtext "tuios.dev/sketch/text"
@@ -74,8 +74,8 @@ func drawWithSketchPlugin(src string, cols int) ([][]sketchtext.Cell, bool, erro
 		Rows [][][3]int `json:"rows"`
 		Cut  bool       `json:"cut"`
 	}
-	if err := json.Unmarshal(data, &got); err != nil {
-		return nil, false, fmt.Errorf("the sketch plugin gave no cells: %w", err)
+	if err := jsonx.Unmarshal(data, &got); err != nil {
+		return nil, false, errfmt.Errorf("the sketch plugin gave no cells: %w", err)
 	}
 	rows := make([][]sketchtext.Cell, len(got.Rows))
 	for y, row := range got.Rows {

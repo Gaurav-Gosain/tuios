@@ -2,8 +2,9 @@ package session
 
 import (
 	"errors"
-	"fmt"
 	"os"
+
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 )
 
 // ErrDaemonStarting reports that another process holds the start lock, so it is
@@ -38,7 +39,7 @@ func startLockPath(socketPath string) string {
 func acquireStartLock(socketPath string) (*os.File, error) {
 	f, err := os.OpenFile(startLockPath(socketPath), os.O_CREATE|os.O_RDWR, 0600)
 	if err != nil {
-		return nil, fmt.Errorf("failed to open daemon start lock: %w", err)
+		return nil, errfmt.Errorf("failed to open daemon start lock: %w", err)
 	}
 	if err := lockFileExclusive(f); err != nil {
 		_ = f.Close()

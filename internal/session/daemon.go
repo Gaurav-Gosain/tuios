@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"github.com/Gaurav-Gosain/tuios/internal/federation"
 	"github.com/Gaurav-Gosain/tuios/internal/herdrcli"
 	"github.com/Gaurav-Gosain/tuios/internal/hooks"
@@ -1517,16 +1518,16 @@ func (d *Daemon) Start() error {
 
 	if _, err := os.Stat(socketPath); err == nil {
 		if isDaemonRunningAt(socketPath) {
-			return fmt.Errorf("daemon already running at %s", socketPath)
+			return errfmt.Errorf("daemon already running at %s", socketPath)
 		}
 		if err := os.Remove(socketPath); err != nil {
-			return fmt.Errorf("failed to remove stale socket: %w", err)
+			return errfmt.Errorf("failed to remove stale socket: %w", err)
 		}
 	}
 
 	listener, err := net.Listen("unix", socketPath)
 	if err != nil {
-		return fmt.Errorf("failed to listen on socket: %w", err)
+		return errfmt.Errorf("failed to listen on socket: %w", err)
 	}
 	// A *net.UnixListener unlinks its socket file on Close by default, and
 	// shutdown closes the listener first, which silently unlinked the socket
@@ -1544,7 +1545,7 @@ func (d *Daemon) Start() error {
 	if err := os.Chmod(socketPath, 0700); err != nil { //nolint:gosec // a socket, owner only; the execute bit means nothing on it
 		_ = listener.Close()
 		_ = os.Remove(socketPath) // Close no longer unlinks; a failed start must not leave a stale socket
-		return fmt.Errorf("failed to set socket permissions: %w", err)
+		return errfmt.Errorf("failed to set socket permissions: %w", err)
 	}
 
 	// The link socket. It is optional: a daemon that cannot bind it still
@@ -1566,7 +1567,7 @@ func (d *Daemon) Start() error {
 	if err := d.writePidFile(); err != nil {
 		_ = listener.Close()
 		_ = os.Remove(socketPath) // Close no longer unlinks; a failed start must not leave a stale socket
-		return fmt.Errorf("failed to write PID file: %w", err)
+		return errfmt.Errorf("failed to write PID file: %w", err)
 	}
 
 	log.Printf("TUIOS daemon started on %s (PID %d)", socketPath, os.Getpid())
@@ -2402,7 +2403,7 @@ func (d *Daemon) handleMessage(cs *connState, msg *Message) error {
 		// every frame before the ping has been. See paste_retry.go.
 		return d.reply(cs, msg, MsgPong, nil)
 	default:
-		return fmt.Errorf("unknown message type: %d", msg.Type)
+		return errfmt.Errorf("unknown message type: %d", msg.Type)
 	}
 }
 

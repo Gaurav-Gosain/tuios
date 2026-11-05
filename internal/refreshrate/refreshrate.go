@@ -17,7 +17,6 @@ import (
 	"bufio"
 	"bytes"
 	"context"
-	"encoding/json"
 	"math"
 	"os"
 	"os/exec"
@@ -26,6 +25,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 	"github.com/Gaurav-Gosain/tuios/internal/lazyre"
 )
 
@@ -148,7 +148,7 @@ func parseHyprctl(out []byte) float64 {
 		RefreshRate float64 `json:"refreshRate"`
 		Disabled    bool    `json:"disabled"`
 	}
-	if json.Unmarshal(out, &monitors) != nil {
+	if jsonx.Unmarshal(out, &monitors) != nil {
 		return 0
 	}
 	best := 0.0
@@ -170,7 +170,7 @@ func parseNiri(out []byte) float64 {
 		} `json:"modes"`
 		CurrentMode *int `json:"current_mode"`
 	}
-	if json.Unmarshal(out, &outputs) != nil {
+	if jsonx.Unmarshal(out, &outputs) != nil {
 		return 0
 	}
 	best := 0.0

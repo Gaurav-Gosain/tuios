@@ -15,6 +15,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/agentseen"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"github.com/Gaurav-Gosain/tuios/internal/federation"
 	"github.com/Gaurav-Gosain/tuios/internal/hooks"
 	"github.com/Gaurav-Gosain/tuios/internal/layout"
@@ -2298,10 +2299,10 @@ func (e *nestedSwitchError) Error() string {
 // that only goes one way.
 func (m *OS) SwitchToSession(targetSession string) error {
 	if m.DaemonClient == nil {
-		return fmt.Errorf("not in daemon mode")
+		return errfmt.Errorf("not in daemon mode")
 	}
 	if targetSession == "" {
-		return fmt.Errorf("session name cannot be empty")
+		return errfmt.Errorf("session name cannot be empty")
 	}
 	// A switch the person made ends a rail click that waits for another
 	// machine. See host_open.go.
@@ -2334,7 +2335,7 @@ func (m *OS) SwitchToSession(targetSession string) error {
 		}
 		// The detach never landed, so nothing was given up: this client is still
 		// on its own session with every pane streaming.
-		return fmt.Errorf("switch to %q failed: %w; still on %q", targetSession, err, m.SessionName)
+		return errfmt.Errorf("switch to %q failed: %w; still on %q", targetSession, err, m.SessionName)
 	}
 	from := lastSession{host: m.attachedMachine(), name: m.SessionName}
 	m.SessionName = m.DaemonClient.SessionName()

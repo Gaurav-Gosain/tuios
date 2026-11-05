@@ -7,6 +7,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/Gaurav-Gosain/tuios/internal/invisible"
+	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 )
 
 // Answering a permission prompt from the Inbox.
@@ -180,7 +181,7 @@ func claudeAnswer(decision, message string, suggestions json.RawMessage) (string
 // permissionRequestOutput wraps a decision the way Claude Code reads a
 // PermissionRequest hook's stdout.
 func permissionRequestOutput(inner map[string]any) (string, bool) {
-	out, err := json.Marshal(map[string]any{
+	out, err := jsonx.Marshal(map[string]any{
 		"hookSpecificOutput": map[string]any{
 			"hookEventName": "PermissionRequest",
 			"decision":      inner,
@@ -246,7 +247,7 @@ func openCodeAnswer(decision, message string) (string, bool) {
 	default:
 		return "", false
 	}
-	out, err := json.Marshal(reply)
+	out, err := jsonx.Marshal(reply)
 	if err != nil {
 		return "", false
 	}
@@ -382,7 +383,7 @@ func claudePlanApproval(p fields) *Approval {
 		}
 		return nil
 	}
-	raw, err := json.Marshal(map[string]any(input))
+	raw, err := jsonx.Marshal(map[string]any(input))
 	if err != nil {
 		return nil
 	}
@@ -487,7 +488,7 @@ func claudeScope(raw any) ([]string, json.RawMessage, bool) {
 	if !scopeShowable(scope) {
 		return nil, nil, false
 	}
-	data, err := json.Marshal(rebuilt)
+	data, err := jsonx.Marshal(rebuilt)
 	if err != nil {
 		return nil, nil, false
 	}

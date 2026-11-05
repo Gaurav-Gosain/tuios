@@ -2,7 +2,8 @@ package session
 
 import (
 	"errors"
-	"fmt"
+
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 )
 
 // A bound on how deeply any gob payload nests, checked on the raw bytes
@@ -60,8 +61,8 @@ const (
 // Errors for what the scan refuses. errGobNested and errGobTypes are the
 // bounds; errGobMalformed is a stream the scan cannot follow.
 var (
-	errGobNested    = fmt.Errorf("payload nests deeper than %d levels", maxGobNesting)
-	errGobTypes     = fmt.Errorf("payload defines more than %d types", maxGobTypes)
+	errGobNested    = errfmt.Errorf("payload nests deeper than %d levels", maxGobNesting)
+	errGobTypes     = errfmt.Errorf("payload defines more than %d types", maxGobTypes)
 	errGobMalformed = errors.New("payload is not a well-formed gob value")
 )
 

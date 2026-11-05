@@ -17,6 +17,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"github.com/Gaurav-Gosain/tuios/internal/federation"
 	"github.com/Gaurav-Gosain/tuios/internal/plural"
 	"github.com/Gaurav-Gosain/tuios/internal/sockpath"
@@ -279,7 +280,7 @@ func RunGatedSSH(ctx context.Context, cmd *exec.Cmd, stdin io.Reader, host strin
 			if err == nil {
 				err = context.DeadlineExceeded
 			}
-			return out.String(), stderr(), fmt.Errorf("%w: %w", context.DeadlineExceeded, err)
+			return out.String(), stderr(), errfmt.Errorf("%w: %w", context.DeadlineExceeded, err)
 		}
 	}
 }

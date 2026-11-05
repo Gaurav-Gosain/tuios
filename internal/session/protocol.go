@@ -5,12 +5,13 @@ package session
 
 import (
 	"encoding/binary"
-	"fmt"
 	"io"
 	"net"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 )
 
 // MessageType identifies the type of protocol message.
@@ -1095,12 +1096,12 @@ func WriteMessage(w io.Writer, msg *Message) error {
 
 	if len(msg.Payload) == 0 {
 		if _, err := w.Write(head); err != nil {
-			return fmt.Errorf("failed to write message header: %w", err)
+			return errfmt.Errorf("failed to write message header: %w", err)
 		}
 	} else {
 		bufs := net.Buffers{head, msg.Payload}
 		if _, err := bufs.WriteTo(w); err != nil {
-			return fmt.Errorf("failed to write message: %w", err)
+			return errfmt.Errorf("failed to write message: %w", err)
 		}
 	}
 
@@ -1118,7 +1119,7 @@ func ReadMessage(r io.Reader) (*Message, error) {
 		if err == io.EOF {
 			return nil, err
 		}
-		return nil, fmt.Errorf("failed to read message length: %w", err)
+		return nil, errfmt.Errorf("failed to read message length: %w", err)
 	}
 	return readMessageBody(r, totalLen, nil)
 }
@@ -1153,7 +1154,7 @@ func readFrameLength(conn net.Conn, r io.Reader, boundaryTimeout, bodyTimeout ti
 		if err == io.EOF {
 			return 0, err
 		}
-		return 0, fmt.Errorf("failed to read message length: %w", err)
+		return 0, errfmt.Errorf("failed to read message length: %w", err)
 	}
 
 	if bodyTimeout > 0 {
@@ -1195,18 +1196,18 @@ func readFrameHeader(r io.Reader, totalLen uint32) (frameHeader, error) {
 	// Sanity check length (max 16MB). A frame past this is not skipped: a
 	// length that large is more likely a stream out of step than a frame.
 	if totalLen > maxFrameBytes {
-		return frameHeader{}, fmt.Errorf("message too large: %d bytes (raw: 0x%08x)", totalLen, totalLen)
+		return frameHeader{}, errfmt.Errorf("message too large: %d bytes (raw: 0x%08x)", totalLen, totalLen)
 	}
 
 	if totalLen < 2 {
-		return frameHeader{}, fmt.Errorf("message too small: %d bytes", totalLen)
+		return frameHeader{}, errfmt.Errorf("message too small: %d bytes", totalLen)
 	}
 
 	// Read type and codec. The codec byte is gob, with or without a request
 	// id in front of the payload.
 	var header [2]byte
 	if _, err := io.ReadFull(r, header[:]); err != nil {
-		return frameHeader{}, fmt.Errorf("failed to read message header (after len=%d): %w", totalLen, err)
+		return frameHeader{}, errfmt.Errorf("failed to read message header (after len=%d): %w", totalLen, err)
 	}
 
 	h := frameHeader{Type: MessageType(header[0]), PayloadLen: totalLen - 2, TotalLen: totalLen}
@@ -1214,13 +1215,13 @@ func readFrameHeader(r io.Reader, totalLen uint32) (frameHeader, error) {
 	if tagged && h.PayloadLen < reqIDLen {
 		// Too short to hold the id it says it carries, which no sender writes:
 		// the same fault as a frame too small for its header.
-		return frameHeader{}, fmt.Errorf("tagged message too small: %d bytes", totalLen)
+		return frameHeader{}, errfmt.Errorf("tagged message too small: %d bytes", totalLen)
 	}
 
 	if tagged {
 		var id [reqIDLen]byte
 		if _, err := io.ReadFull(r, id[:]); err != nil {
-			return frameHeader{}, fmt.Errorf("failed to read request id (len=%d, type=%d): %w", h.PayloadLen, h.Type, err)
+			return frameHeader{}, errfmt.Errorf("failed to read request id (len=%d, type=%d): %w", h.PayloadLen, h.Type, err)
 		}
 		h.ReqID = binary.BigEndian.Uint64(id[:])
 		if h.ReqID == 0 {
@@ -1228,7 +1229,7 @@ func readFrameHeader(r io.Reader, totalLen uint32) (frameHeader, error) {
 			// message goes out untagged. A tagged zero would read as the
 			// same Message as an untagged frame, so the frame a relay writes
 			// back would not be the one it read. No sender writes one.
-			return frameHeader{}, fmt.Errorf("tagged message with request id 0 (type=%d)", h.Type)
+			return frameHeader{}, errfmt.Errorf("tagged message with request id 0 (type=%d)", h.Type)
 		}
 		h.PayloadLen -= reqIDLen
 	}
@@ -1239,7 +1240,7 @@ func readFrameHeader(r io.Reader, totalLen uint32) (frameHeader, error) {
 // stream stays in step.
 func skipPayload(r io.Reader, h frameHeader) error {
 	if _, err := io.CopyN(io.Discard, r, int64(h.PayloadLen)); err != nil {
-		return fmt.Errorf("failed to skip a refused message payload (len=%d, type=%d): %w", h.PayloadLen, h.Type, err)
+		return errfmt.Errorf("failed to skip a refused message payload (len=%d, type=%d): %w", h.PayloadLen, h.Type, err)
 	}
 	return nil
 }
@@ -1273,7 +1274,7 @@ func readMessageBody(r io.Reader, totalLen uint32, limit func(MessageType) uint3
 func readFramePayloadOf(r io.Reader, h frameHeader) (*Message, error) {
 	payload, err := readFramePayload(r, int(h.PayloadLen))
 	if err != nil {
-		return nil, fmt.Errorf("failed to read message payload (len=%d, type=%d): %w", h.PayloadLen, h.Type, err)
+		return nil, errfmt.Errorf("failed to read message payload (len=%d, type=%d): %w", h.PayloadLen, h.Type, err)
 	}
 
 	msg := &Message{
@@ -1330,7 +1331,7 @@ func NewMessage(msgType MessageType, payload any) (*Message, error) {
 	if payload != nil {
 		data, err = encodePayload(payload)
 		if err != nil {
-			return nil, fmt.Errorf("failed to encode payload: %w", err)
+			return nil, errfmt.Errorf("failed to encode payload: %w", err)
 		}
 	}
 
@@ -1409,7 +1410,7 @@ func WritePTYInput(w io.Writer, ptyID string, data []byte) error {
 // Returns ptyID and data.
 func ParseBinaryPTYMessage(payload []byte) (ptyID string, data []byte, err error) {
 	if len(payload) < 36 {
-		return "", nil, fmt.Errorf("payload too short for PTY message: %d bytes", len(payload))
+		return "", nil, errfmt.Errorf("payload too short for PTY message: %d bytes", len(payload))
 	}
 	// Trim the NUL padding from the ID. The loop this replaces stopped at the
 	// first byte that was not NUL, so an ID of nothing but padding came back

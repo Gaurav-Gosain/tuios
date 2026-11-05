@@ -10,7 +10,6 @@ package tmldraw
 import (
 	"cmp"
 	"encoding/json"
-	"fmt"
 	"image/color"
 	"maps"
 	"slices"
@@ -23,6 +22,7 @@ import (
 	sketchtext "tuios.dev/sketch/text"
 	"tuios.dev/tml"
 
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 )
 
@@ -274,14 +274,14 @@ func openTab(s *loom.Surface, doc *tml.Node, view *loom.View, id string) (*loom.
 	})
 	if tabs == nil {
 		if len(ids) == 0 {
-			return nil, fmt.Errorf("the document has no tabs, so it has no tab %q", id)
+			return nil, errfmt.Errorf("the document has no tabs, so it has no tab %q", id)
 		}
 		slices.Sort(ids)
-		return nil, fmt.Errorf("the document has no tab %q. The tabs are: %s", id, strings.Join(slices.Compact(ids), ", "))
+		return nil, errfmt.Errorf("the document has no tab %q. The tabs are: %s", id, strings.Join(slices.Compact(ids), ", "))
 	}
 	if path := tabs.AttrString("value"); path != "" {
 		if err := s.Set(path, id); err != nil {
-			return nil, fmt.Errorf("open tab %q: %w", id, err)
+			return nil, errfmt.Errorf("open tab %q: %w", id, err)
 		}
 		return view, nil
 	}

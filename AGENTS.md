@@ -496,7 +496,11 @@ their package's tests.
 
 ### Error Handling
 
-- Wrap errors with context: `fmt.Errorf("failed to X: %w", err)`
+- Wrap errors with context: `errfmt.Errorf("failed to X: %w", err)`. It is
+  `fmt.Errorf` kept out of line, which saves about 115 bytes of binary per
+  call. `internal/lint` rejects `fmt.Errorf` in the binary's packages
+- Encode and decode JSON with `jsonx.Marshal` and `jsonx.Unmarshal`, for the
+  same reason. `internal/lint` rejects `json.Marshal` and `json.Unmarshal`
 - Log warnings for non-fatal issues: `log.Printf("Warning: ...")`
 - Return early on errors
 

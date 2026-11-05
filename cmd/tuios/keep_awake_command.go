@@ -1,13 +1,14 @@
 package main
 
 import (
-	"encoding/json"
 	"fmt"
 	"io"
 	"os"
 	"slices"
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
+	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/spf13/cobra"
 )
@@ -51,7 +52,7 @@ SetThreadExecutionState.`,
 		ValidArgs: config.KeepAwakeModes,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if len(args) == 1 && !slices.Contains(config.KeepAwakeModes, args[0]) {
-				return fmt.Errorf("%q is not a mode. Use off, on or agents", args[0])
+				return errfmt.Errorf("%q is not a mode. Use off, on or agents", args[0])
 			}
 			return runKeepAwake(cmd.OutOrStdout(), args, jsonOut)
 		},
@@ -75,8 +76,8 @@ func runKeepAwake(w io.Writer, args []string, jsonOut bool) error {
 		return explainVerbError(verb, err)
 	}
 	var st keepAwakeStatus
-	if err := json.Unmarshal(raw, &st); err != nil {
-		return fmt.Errorf("failed to parse response: %w", err)
+	if err := jsonx.Unmarshal(raw, &st); err != nil {
+		return errfmt.Errorf("failed to parse response: %w", err)
 	}
 	if jsonOut {
 		return printJSON(st)
@@ -144,8 +145,8 @@ func runDoctorKeepAwake(w io.Writer) error {
 		return explainVerbError("get-keep-awake", err)
 	}
 	var st keepAwakeStatus
-	if err := json.Unmarshal(raw, &st); err != nil {
-		return fmt.Errorf("failed to parse response: %w", err)
+	if err := jsonx.Unmarshal(raw, &st); err != nil {
+		return errfmt.Errorf("failed to parse response: %w", err)
 	}
 	writeKeepAwake(w, st)
 	if st.Mode == config.KeepAwakeOff {

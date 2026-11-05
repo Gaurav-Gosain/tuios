@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/Gaurav-Gosain/tuios/internal/childproc"
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 )
 
 // label is the agent's launchd label.
@@ -32,7 +33,7 @@ func domain() string { return fmt.Sprintf("gui/%d", os.Getuid()) }
 func launchctl(args ...string) error {
 	out, err := childproc.Command("/bin/launchctl", args...).CombinedOutput()
 	if err != nil {
-		return fmt.Errorf("launchctl %s: %s", strings.Join(args, " "), strings.TrimSpace(string(out)))
+		return errfmt.Errorf("launchctl %s: %s", strings.Join(args, " "), strings.TrimSpace(string(out)))
 	}
 	return nil
 }

@@ -3,12 +3,12 @@ package session
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"maps"
 	"strconv"
 	"time"
 	"unicode"
 
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"github.com/Gaurav-Gosain/tuios/internal/harness"
 )
 
@@ -58,7 +58,7 @@ func (d *Daemon) resolveWindowPTY(sess *Session, target string) (WindowState, *P
 	w := state.Windows[idx]
 	pty := sess.GetPTY(w.PTYID)
 	if pty == nil {
-		return WindowState{}, nil, mapResolveErr(fmt.Errorf("PTY for window %q is gone", target), sess)
+		return WindowState{}, nil, mapResolveErr(errfmt.Errorf("PTY for window %q is gone", target), sess)
 	}
 	return w, pty, nil
 }

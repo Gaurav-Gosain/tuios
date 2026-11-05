@@ -2,9 +2,10 @@ package harness
 
 import (
 	"errors"
-	"fmt"
 	"slices"
 	"strings"
+
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 )
 
 // Resume is how a conversation of this harness is reopened in a new process:
@@ -115,7 +116,7 @@ func (r *Resume) normalize() error {
 		return nil
 	}
 	if len(r.Argv) > maxResumeTokens {
-		return fmt.Errorf("argv has %d tokens, limit %d", len(r.Argv), maxResumeTokens)
+		return errfmt.Errorf("argv has %d tokens, limit %d", len(r.Argv), maxResumeTokens)
 	}
 	if strings.Contains(r.Argv[0], ResumePlaceholder) {
 		return errors.New("argv[0] is the program and cannot hold " + ResumePlaceholder)
@@ -130,7 +131,7 @@ func (r *Resume) normalize() error {
 			continue
 		}
 		if !safeResumeToken(rest) {
-			return fmt.Errorf("argv token %d %q: a token may hold only letters, digits, _ . / : = + - and %s, so every shell reads it unquoted", i, tok, ResumePlaceholder)
+			return errfmt.Errorf("argv token %d %q: a token may hold only letters, digits, _ . / : = + - and %s, so every shell reads it unquoted", i, tok, ResumePlaceholder)
 		}
 	}
 	if !holds {
@@ -138,7 +139,7 @@ func (r *Resume) normalize() error {
 	}
 	r.KeepSource = strings.TrimSpace(r.KeepSource)
 	if n := len(r.KeepFlags) + len(r.KeepOptions); n > maxKeepNames {
-		return fmt.Errorf("keep_flags and keep_options name %d flags, limit %d", n, maxKeepNames)
+		return errfmt.Errorf("keep_flags and keep_options name %d flags, limit %d", n, maxKeepNames)
 	}
 	seen := map[string]bool{}
 	for _, name := range slices.Concat(r.KeepFlags, r.KeepOptions) {
@@ -150,9 +151,9 @@ func (r *Resume) normalize() error {
 		name, value, withValue := strings.Cut(mark, "=")
 		switch {
 		case withValue && (!slices.Contains(r.KeepOptions, name) || !keptValue(value)):
-			return fmt.Errorf("keep_risky %q: %s is not in keep_options, or the value is not one plain token", mark, name)
+			return errfmt.Errorf("keep_risky %q: %s is not in keep_options, or the value is not one plain token", mark, name)
 		case !withValue && !seen[name]:
-			return fmt.Errorf("keep_risky %q is not in keep_flags or keep_options", mark)
+			return errfmt.Errorf("keep_risky %q is not in keep_flags or keep_options", mark)
 		}
 	}
 	return nil
@@ -163,15 +164,15 @@ func (r *Resume) normalize() error {
 // would name a second conversation.
 func (r *Resume) checkKeepName(name string, seen map[string]bool) error {
 	if len(name) < 2 || name[0] != '-' || name == "--" || strings.Contains(name, "=") || !safeResumeToken(name) {
-		return fmt.Errorf("kept flag %q: a flag is - or -- and then letters, digits and _ . / : + -", name)
+		return errfmt.Errorf("kept flag %q: a flag is - or -- and then letters, digits and _ . / : + -", name)
 	}
 	if seen[name] {
-		return fmt.Errorf("kept flag %q is listed twice", name)
+		return errfmt.Errorf("kept flag %q is listed twice", name)
 	}
 	seen[name] = true
 	for _, tok := range r.Argv {
 		if flag, _, _ := strings.Cut(tok, "="); flag == name {
-			return fmt.Errorf("kept flag %q is the resume command's own flag", name)
+			return errfmt.Errorf("kept flag %q is the resume command's own flag", name)
 		}
 	}
 	return nil

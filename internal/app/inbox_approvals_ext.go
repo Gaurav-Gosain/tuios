@@ -1,13 +1,13 @@
 package app
 
 import (
-	"encoding/json"
 	"slices"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/composer"
+	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
 
 	tea "charm.land/bubbletea/v2"
@@ -348,7 +348,7 @@ func (m *OS) InboxApprovalFetch() tea.Cmd {
 			return InboxApprovalDetailMsg{RequestID: id, Err: err}
 		}
 		var d session.ApprovalDetail
-		if err := json.Unmarshal(raw, &d); err != nil {
+		if err := jsonx.Unmarshal(raw, &d); err != nil {
 			return InboxApprovalDetailMsg{RequestID: id, Err: err}
 		}
 		return InboxApprovalDetailMsg{RequestID: id, Detail: &d}

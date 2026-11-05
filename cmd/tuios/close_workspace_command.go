@@ -1,11 +1,12 @@
 package main
 
 import (
-	"encoding/json"
 	"fmt"
 	"os"
 	"strconv"
 
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
+	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 	"github.com/spf13/cobra"
 )
 
@@ -36,7 +37,7 @@ A pane that runs this command needs the admin grant.`,
 			if len(args) == 1 {
 				n, err := strconv.Atoi(args[0])
 				if err != nil || n < 1 {
-					return fmt.Errorf("the workspace must be a number from 1, not %q", args[0])
+					return errfmt.Errorf("the workspace must be a number from 1, not %q", args[0])
 				}
 				ws = n
 			}
@@ -73,8 +74,8 @@ func runCloseWorkspace(sessionName string, ws int, jsonOutput bool) error {
 		Workspace int      `json:"workspace"`
 		Closed    []string `json:"closed"`
 	}
-	if err := json.Unmarshal(raw, &res); err != nil {
-		return fmt.Errorf("failed to parse response: %w", err)
+	if err := jsonx.Unmarshal(raw, &res); err != nil {
+		return errfmt.Errorf("failed to parse response: %w", err)
 	}
 	fmt.Println(closeWorkspaceSummary(res.Workspace, len(res.Closed)))
 	return nil

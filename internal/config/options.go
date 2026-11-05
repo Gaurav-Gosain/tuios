@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"github.com/Gaurav-Gosain/tuios/internal/hints"
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 	"github.com/Gaurav-Gosain/tuios/internal/sortx"
@@ -1736,37 +1737,37 @@ func (o Option) checkValue(value string) error {
 		if value == "" || slices.Contains(o.Accepted, value) || theme.IsColor(value) {
 			return nil
 		}
-		return fmt.Errorf("%s: %s. Use an empty value to unset it", o.Path, ColourProblem(value, o.Accepted...))
+		return errfmt.Errorf("%s: %s. Use an empty value to unset it", o.Path, ColourProblem(value, o.Accepted...))
 	}
 	if o.Theme && !theme.Exists(value) {
 		// Exists re-reads the custom themes directory before it says no, so a
 		// theme file written a moment ago resolves here rather than on the next
 		// restart.
-		return fmt.Errorf("%s: no theme named %q; call list-themes for the ones there are, "+
+		return errfmt.Errorf("%s: no theme named %q; call list-themes for the ones there are, "+
 			"or write %s.json in the themes directory first", o.Path, value, value)
 	}
 	if o.GlyphSet && !theme.GlyphSetExists(value) {
 		// GlyphSetExists re-reads the glyphs directory before it says no, for
 		// the reason Exists does: a set written a moment ago has to resolve on
 		// this call rather than on the next restart.
-		return fmt.Errorf("%s: no glyph set named %q; call list-glyphs for the ones there are, "+
+		return errfmt.Errorf("%s: no glyph set named %q; call list-glyphs for the ones there are, "+
 			"or write %s.json in the glyphs directory first", o.Path, value, value)
 	}
 	if o.Icon && value != o.Default && !DockModeIconUsable(value) {
-		return fmt.Errorf("%s: %q is not a usable icon; use at most %d cells and no control characters",
+		return errfmt.Errorf("%s: %q is not a usable icon; use at most %d cells and no control characters",
 			o.Path, value, DockModeIconMaxWidth)
 	}
 	if o.BoxSize && strings.TrimSpace(value) != "" {
 		if _, _, err := ParseBoxSize(value); err != nil {
-			return fmt.Errorf("%s: %w", o.Path, err)
+			return errfmt.Errorf("%s: %w", o.Path, err)
 		}
 	}
 	if len(o.Accepted) > 0 && !slices.Contains(o.Accepted, value) {
-		return fmt.Errorf("%s: %q is not one of %s", o.Path, value, strings.Join(o.Accepted, ", "))
+		return errfmt.Errorf("%s: %q is not one of %s", o.Path, value, strings.Join(o.Accepted, ", "))
 	}
 	if o.Check != nil {
 		if err := o.Check(value); err != nil {
-			return fmt.Errorf("%s: %w", o.Path, err)
+			return errfmt.Errorf("%s: %w", o.Path, err)
 		}
 	}
 	return nil
@@ -1780,14 +1781,14 @@ func SetOptionValue(cfg *UserConfig, path, value string) error {
 		if msg, retired := RetiredOption(path); retired {
 			return errors.New(msg)
 		}
-		return fmt.Errorf("unknown config option %q", path)
+		return errfmt.Errorf("unknown config option %q", path)
 	}
 	if err := opt.checkValue(value); err != nil {
 		return err
 	}
 	field, ok := resolveOptionField(cfg, path)
 	if !ok {
-		return fmt.Errorf("unknown config option %q", path)
+		return errfmt.Errorf("unknown config option %q", path)
 	}
 	// An option that follows another clears on the empty string, back to
 	// following it.
@@ -1806,16 +1807,16 @@ func SetOptionValue(cfg *UserConfig, path, value string) error {
 	case OptionBool:
 		parsed, err := parseOptionBool(value)
 		if err != nil {
-			return fmt.Errorf("%s: %w", path, err)
+			return errfmt.Errorf("%s: %w", path, err)
 		}
 		if optionKind(field) != reflect.Bool {
-			return fmt.Errorf("%s: registry says bool, config field is %s", path, optionKind(field))
+			return errfmt.Errorf("%s: registry says bool, config field is %s", path, optionKind(field))
 		}
 		optionTarget(field).SetBool(parsed)
 	case OptionInt:
 		if opt.Auto && strings.EqualFold(strings.TrimSpace(value), FPSAuto) {
 			if optionKind(field) != reflect.String {
-				return fmt.Errorf("%s: registry says int or auto, config field is %s", path, optionKind(field))
+				return errfmt.Errorf("%s: registry says int or auto, config field is %s", path, optionKind(field))
 			}
 			optionTarget(field).SetString(FPSAuto)
 			return nil
@@ -1823,12 +1824,12 @@ func SetOptionValue(cfg *UserConfig, path, value string) error {
 		parsed, err := strconv.Atoi(strings.TrimSpace(value))
 		if err != nil {
 			if opt.Auto {
-				return fmt.Errorf("%s: %q is not a whole number or auto", path, value)
+				return errfmt.Errorf("%s: %q is not a whole number or auto", path, value)
 			}
-			return fmt.Errorf("%s: %q is not a whole number", path, value)
+			return errfmt.Errorf("%s: %q is not a whole number", path, value)
 		}
 		if opt.Max > 0 && (parsed < opt.Min || parsed > opt.Max) {
-			return fmt.Errorf("%s: %d is outside %d..%d", path, parsed, opt.Min, opt.Max)
+			return errfmt.Errorf("%s: %d is outside %d..%d", path, parsed, opt.Min, opt.Max)
 		}
 		if opt.Auto && optionKind(field) == reflect.String {
 			// 0 is stored as the empty value, the one spelling a reload gives.
@@ -1840,16 +1841,16 @@ func SetOptionValue(cfg *UserConfig, path, value string) error {
 			return nil
 		}
 		if optionKind(field) != reflect.Int {
-			return fmt.Errorf("%s: registry says int, config field is %s", path, optionKind(field))
+			return errfmt.Errorf("%s: registry says int, config field is %s", path, optionKind(field))
 		}
 		optionTarget(field).SetInt(int64(parsed))
 	case OptionString:
 		if optionKind(field) != reflect.String {
-			return fmt.Errorf("%s: registry says string, config field is %s", path, optionKind(field))
+			return errfmt.Errorf("%s: registry says string, config field is %s", path, optionKind(field))
 		}
 		optionTarget(field).SetString(value)
 	default:
-		return fmt.Errorf("%s: registry carries no type", path)
+		return errfmt.Errorf("%s: registry carries no type", path)
 	}
 	return nil
 }
@@ -1969,7 +1970,7 @@ var optionBoolWords = map[string]bool{
 func parseOptionBool(value string) (bool, error) {
 	parsed, ok := optionBoolWords[strings.ToLower(strings.TrimSpace(value))]
 	if !ok {
-		return false, fmt.Errorf("%q is not a true or false value", value)
+		return false, errfmt.Errorf("%q is not a true or false value", value)
 	}
 	return parsed, nil
 }

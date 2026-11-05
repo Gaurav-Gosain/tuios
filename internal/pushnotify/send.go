@@ -6,9 +6,7 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/base64"
-	"encoding/json"
 	"errors"
-	"fmt"
 	"io"
 	"net"
 	"net/http"
@@ -19,6 +17,8 @@ import (
 	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
+	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 )
 
 // Every request goes through one dedicated http.Client, never
@@ -180,9 +180,9 @@ func describeTransport(ctx context.Context, err error) error {
 	case errors.Is(err, errRedirectHost):
 		return errors.New("the server redirected to another host, and tuios sends a notification only to the host in the url. Set the url to the address the server redirects to")
 	case errors.Is(err, errRedirectLimit):
-		return fmt.Errorf("the server redirected more than %d times. Check the url", maxRedirects)
+		return errfmt.Errorf("the server redirected more than %d times. Check the url", maxRedirects)
 	case ctx.Err() != nil, errors.Is(err, context.DeadlineExceeded), errors.As(err, &netErr) && netErr.Timeout():
-		return fmt.Errorf("no answer in %s. Check that the server is up and this machine can reach it", SendTimeout)
+		return errfmt.Errorf("no answer in %s. Check that the server is up and this machine can reach it", SendTimeout)
 	case errors.As(err, &dnsErr):
 		return errors.New("the host name does not resolve. Check the url")
 	case errors.Is(err, syscall.ECONNREFUSED):
@@ -226,17 +226,17 @@ func describeStatus(code int) error {
 	text := statusText(code)
 	switch {
 	case code == 401 || code == 403:
-		return fmt.Errorf("the server answered %s. Check the token", text)
+		return errfmt.Errorf("the server answered %s. Check the token", text)
 	case code == 404:
-		return fmt.Errorf("the server answered %s. Check the url", text)
+		return errfmt.Errorf("the server answered %s. Check the url", text)
 	case code == 429:
-		return fmt.Errorf("the server answered %s. Send fewer notifications, or wait", text)
+		return errfmt.Errorf("the server answered %s. Send fewer notifications, or wait", text)
 	case code >= 500:
-		return fmt.Errorf("the server answered %s. The problem is on the server. Try again later", text)
+		return errfmt.Errorf("the server answered %s. The problem is on the server. Try again later", text)
 	case code >= 300 && code < 400:
-		return fmt.Errorf("the server answered %s and gave no address to follow. Check the url", text)
+		return errfmt.Errorf("the server answered %s and gave no address to follow. Check the url", text)
 	}
-	return fmt.Errorf("the server answered %s. Check the provider settings", text)
+	return errfmt.Errorf("the server answered %s. Check the provider settings", text)
 }
 
 // headerText makes a header value safe: a line break would end the header,
@@ -331,7 +331,7 @@ func sendWebhook(ctx context.Context, c *Client, p config.WebhookConfig, m Messa
 	if err != nil {
 		return err
 	}
-	data, err := json.Marshal(WebhookBody{
+	data, err := jsonx.Marshal(WebhookBody{
 		Event: "tuios.inbox", Test: m.Test, Kind: m.Item.Kind,
 		Title: m.Title, Body: m.Body, Link: m.Link, Urgent: m.Urgent,
 		ItemID: m.Item.ID, Session: m.Item.Session, Window: m.Item.Window, Harness: m.Item.Harness,

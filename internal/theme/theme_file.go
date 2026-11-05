@@ -1,8 +1,6 @@
 package theme
 
 import (
-	"encoding/json"
-	"fmt"
 	"image/color"
 	"os"
 	"path/filepath"
@@ -10,6 +8,8 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
+	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 	tint "github.com/lrstanley/bubbletint/v2"
 )
 
@@ -40,8 +40,8 @@ type themeFile struct {
 // when the file names none.
 func readThemeFile(path string, data []byte) (*themeFile, error) {
 	f := &themeFile{path: path}
-	if err := json.Unmarshal(data, f); err != nil {
-		return nil, fmt.Errorf("failed to parse theme JSON: %w", err)
+	if err := jsonx.Unmarshal(data, f); err != nil {
+		return nil, errfmt.Errorf("failed to parse theme JSON: %w", err)
 	}
 	f.Base = strings.TrimSpace(f.Base)
 	if f.ID == "" {
@@ -49,7 +49,7 @@ func readThemeFile(path string, data []byte) (*themeFile, error) {
 		f.ID = strings.ToLower(strings.TrimSuffix(base, filepath.Ext(base)))
 	}
 	if f.ID == "" {
-		return nil, fmt.Errorf("theme has no ID")
+		return nil, errfmt.Errorf("theme has no ID")
 	}
 	if f.DisplayName == "" {
 		f.DisplayName = f.ID
@@ -165,7 +165,7 @@ func mergeBase(f *themeFile) (resolvedTheme, error) {
 	if f.Base != "" {
 		base, ok := baseTheme(f.Base, f.ID)
 		if !ok {
-			return resolvedTheme{}, fmt.Errorf("base %q is not a theme. Run tuios list-themes for the names", f.Base)
+			return resolvedTheme{}, errfmt.Errorf("base %q is not a theme. Run tuios list-themes for the names", f.Base)
 		}
 		from := themeColours(base.tint)
 		for i, c := range themeColours(&t) {
@@ -219,7 +219,7 @@ func loadThemeFiles(files map[string]*themeFile) (map[string]resolvedTheme, map[
 			delete(files, id)
 			progress = true
 			if berr, bad := failed[f.Base]; bad && f.Base != id {
-				failed[id] = fmt.Errorf("base %q does not load: %w", f.Base, berr)
+				failed[id] = errfmt.Errorf("base %q does not load: %w", f.Base, berr)
 				continue
 			}
 			r, err := mergeBase(f)
@@ -236,7 +236,7 @@ func loadThemeFiles(files map[string]*themeFile) (map[string]resolvedTheme, map[
 		}
 	}
 	for id, f := range files {
-		failed[id] = fmt.Errorf("base %q does not load: a base is missing or the bases name each other in a loop", f.Base)
+		failed[id] = errfmt.Errorf("base %q does not load: a base is missing or the bases name each other in a loop", f.Base)
 	}
 	return done, failed
 }
@@ -289,7 +289,7 @@ func DeleteThemeFile(id string) error {
 	}
 	themeBases.Unlock()
 	if !ok || r.path == "" {
-		return fmt.Errorf("%s is not a theme file", id)
+		return errfmt.Errorf("%s is not a theme file", id)
 	}
 	if err := os.Remove(r.path); err != nil {
 		return err

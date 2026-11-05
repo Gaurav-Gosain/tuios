@@ -1,7 +1,6 @@
 package app
 
 import (
-	"encoding/json"
 	"io"
 	"os"
 	"os/exec"
@@ -12,6 +11,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/Gaurav-Gosain/tuios/internal/composer"
+	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 )
 
 // The reply editor's history and its external editor.
@@ -86,7 +86,7 @@ func (m *OS) replyHistoryFetch() tea.Cmd {
 				Dropped []string    `json:"dropped"`
 			} `json:"entries"`
 		}
-		if json.Unmarshal(raw, &res) != nil {
+		if jsonx.Unmarshal(raw, &res) != nil {
 			return nil
 		}
 		msg := replyHistoryMsg{comp: comp}

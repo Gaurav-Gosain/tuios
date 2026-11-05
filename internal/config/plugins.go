@@ -6,6 +6,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"github.com/pelletier/go-toml/v2"
 )
 
@@ -38,7 +39,7 @@ func PluginsInFile(path string) (PluginsConfig, error) {
 		Plugins PluginsConfig `toml:"plugins"`
 	}
 	if err := toml.Unmarshal(data, &doc); err != nil {
-		return PluginsConfig{}, fmt.Errorf("config.toml has an error: %w", err)
+		return PluginsConfig{}, errfmt.Errorf("config.toml has an error: %w", err)
 	}
 	return doc.Plugins, nil
 }
@@ -148,14 +149,14 @@ func writePluginsEdit(lines []string, path, key string, values []string) error {
 		Plugins PluginsConfig `toml:"plugins"`
 	}
 	if err := toml.Unmarshal(data, &doc); err != nil {
-		return fmt.Errorf("config.toml sets [plugins] in a form tuios cannot edit. Edit the [plugins] table in %s by hand: %w", path, err)
+		return errfmt.Errorf("config.toml sets [plugins] in a form tuios cannot edit. Edit the [plugins] table in %s by hand: %w", path, err)
 	}
 	got := doc.Plugins.Enabled
 	if key == "dirs" {
 		got = doc.Plugins.Dirs
 	}
 	if !slices.Equal(got, values) && !(len(got) == 0 && len(values) == 0) {
-		return fmt.Errorf("config.toml sets [plugins] in a form tuios cannot edit. Edit the [plugins] table in %s by hand", path)
+		return errfmt.Errorf("config.toml sets [plugins] in a form tuios cannot edit. Edit the [plugins] table in %s by hand", path)
 	}
 	return writeConfigBytes(data, path)
 }

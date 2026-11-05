@@ -6,6 +6,8 @@ import (
 	"slices"
 	"strings"
 	"time"
+
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 )
 
 // The tables of the agent review, triage, queue and approval work:
@@ -298,7 +300,7 @@ func ParseAgentRestFold(v string) (d time.Duration, ok bool) {
 // neither a duration nor off.
 func checkAgentRestFold(v string) error {
 	if _, ok := ParseAgentRestFold(v); !ok {
-		return fmt.Errorf("%q is not a duration such as 1h, or off", v)
+		return errfmt.Errorf("%q is not a duration such as 1h, or off", v)
 	}
 	return nil
 }

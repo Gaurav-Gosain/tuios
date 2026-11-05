@@ -18,6 +18,8 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 )
 
 // Kind is one action in the alphabet. The set covers what a user does and, more
@@ -136,7 +138,7 @@ func ParseAction(line string) (Action, error) {
 		}
 	}
 	if kind == kindCount {
-		return Action{}, fmt.Errorf("unknown action %q", name)
+		return Action{}, errfmt.Errorf("unknown action %q", name)
 	}
 	a := Action{Kind: kind}
 	rest = strings.TrimSpace(rest)
@@ -144,7 +146,7 @@ func ParseAction(line string) (Action, error) {
 	case Key, Chord, Text, Rename, Guest:
 		s, err := strconv.Unquote(rest)
 		if err != nil {
-			return Action{}, fmt.Errorf("%s: %w", name, err)
+			return Action{}, errfmt.Errorf("%s: %w", name, err)
 		}
 		a.S = s
 	default:
@@ -156,7 +158,7 @@ func ParseAction(line string) (Action, error) {
 			}
 			n, err := strconv.Atoi(f)
 			if err != nil {
-				return Action{}, fmt.Errorf("%s: %w", name, err)
+				return Action{}, errfmt.Errorf("%s: %w", name, err)
 			}
 			*dst[i] = n
 		}
@@ -164,7 +166,7 @@ func ParseAction(line string) (Action, error) {
 	return a, nil
 }
 
-var errSkip = fmt.Errorf("blank line")
+var errSkip = errfmt.Errorf("blank line")
 
 // Script renders a whole run as a pasteable repro.
 func Script(as []Action) string {
@@ -186,7 +188,7 @@ func ParseScript(s string) ([]Action, error) {
 			continue
 		}
 		if err != nil {
-			return nil, fmt.Errorf("line %d: %w", i+1, err)
+			return nil, errfmt.Errorf("line %d: %w", i+1, err)
 		}
 		out = append(out, a)
 	}

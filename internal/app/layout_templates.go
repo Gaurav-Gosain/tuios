@@ -10,6 +10,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
+	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 	"github.com/Gaurav-Gosain/tuios/internal/layout"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 	"github.com/adrg/xdg"
@@ -99,7 +101,7 @@ func SaveLayoutTemplate(name string, m *OS) error {
 		return errLayoutInScratch
 	}
 	if err := ensureTemplatesDir(); err != nil {
-		return fmt.Errorf("create layouts dir: %w", err)
+		return errfmt.Errorf("create layouts dir: %w", err)
 	}
 
 	tmpl := LayoutTemplate{
@@ -147,7 +149,7 @@ func SaveLayoutTemplate(name string, m *OS) error {
 
 	data, err := json.MarshalIndent(tmpl, "", "  ")
 	if err != nil {
-		return fmt.Errorf("marshal: %w", err)
+		return errfmt.Errorf("marshal: %w", err)
 	}
 	return os.WriteFile(templateFilePath(name), data, 0600)
 }
@@ -174,7 +176,7 @@ func LoadLayoutTemplates() ([]LayoutTemplate, error) {
 			continue
 		}
 		var tmpl LayoutTemplate
-		if err := json.Unmarshal(data, &tmpl); err != nil {
+		if err := jsonx.Unmarshal(data, &tmpl); err != nil {
 			continue
 		}
 		templates = append(templates, tmpl)

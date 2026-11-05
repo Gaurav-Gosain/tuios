@@ -2,7 +2,6 @@ package herdrplugin
 
 import (
 	"bytes"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -13,6 +12,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 	"github.com/Gaurav-Gosain/tuios/internal/winpath"
 	"github.com/pelletier/go-toml/v2"
 
@@ -91,7 +91,7 @@ type Size string
 // UnmarshalJSON reads a number of cells or a percentage string.
 func (s *Size) UnmarshalJSON(b []byte) error {
 	var v any
-	if err := json.Unmarshal(b, &v); err != nil {
+	if err := jsonx.Unmarshal(b, &v); err != nil {
 		return err
 	}
 	out, err := sizeOf(v)
@@ -105,9 +105,9 @@ func (s *Size) UnmarshalJSON(b []byte) error {
 // MarshalJSON writes cells as a number and a share as a string.
 func (s Size) MarshalJSON() ([]byte, error) {
 	if n, err := strconv.Atoi(string(s)); err == nil {
-		return json.Marshal(n)
+		return jsonx.Marshal(n)
 	}
-	return json.Marshal(string(s))
+	return jsonx.Marshal(string(s))
 }
 
 // ParseSize reads a size as herdr's CLI does: "120" is cells, "80%" a share

@@ -7,6 +7,8 @@ import (
 	"slices"
 	"strings"
 	"time"
+
+	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 )
 
 // herdr's event stream, from tuios's.
@@ -506,7 +508,7 @@ type herdrLine struct {
 
 // herdrWriteLine writes one JSON line, and reports whether it went.
 func (d *Daemon) herdrWriteLine(cs *connState, v any) bool {
-	data, err := json.Marshal(v)
+	data, err := jsonx.Marshal(v)
 	if err != nil {
 		return false
 	}

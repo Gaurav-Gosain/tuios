@@ -1,8 +1,9 @@
 package session
 
 import (
-	"fmt"
 	"sync"
+
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 )
 
 // What a live handoff refuses, and why, in one place.
@@ -117,7 +118,7 @@ func (d *Daemon) handoffRefusal() error {
 	for _, sess := range d.manager.AllSessions() {
 		for _, p := range sess.allPTYs() {
 			if p.host != "" {
-				return fmt.Errorf("session %s has a pane running on %s, and a pane on another machine cannot be handed over. Close it first", sess.Name(), p.host)
+				return errfmt.Errorf("session %s has a pane running on %s, and a pane on another machine cannot be handed over. Close it first", sess.Name(), p.host)
 			}
 		}
 	}
@@ -129,14 +130,14 @@ func (d *Daemon) handoffRefusal() error {
 
 // pipeRefusal is the refusal while what reads a pipe.
 func pipeRefusal(what string) error {
-	return fmt.Errorf("%s, and the upgrade would close the pipe it reports on. Try again when it has finished", what)
+	return errfmt.Errorf("%s, and the upgrade would close the pipe it reports on. Try again when it has finished", what)
 }
 
 // hostedRefusal is the refusal while n panes run here for another machine. A
 // hosted pane's master is not among the descriptors the exec keeps, so the
 // exec would close its terminal and end the pane on the machine that opened it.
 func hostedRefusal(n int) error {
-	return fmt.Errorf("%d %s here for another machine, and those cannot be handed over yet. Close them first", n, pluralWord(n, "pane runs", "panes run"))
+	return errfmt.Errorf("%d %s here for another machine, and those cannot be handed over yet. Close them first", n, pluralWord(n, "pane runs", "panes run"))
 }
 
 // pluralWord is one or many.

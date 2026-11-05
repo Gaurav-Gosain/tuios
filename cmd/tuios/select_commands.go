@@ -10,6 +10,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
+	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 	"github.com/Gaurav-Gosain/tuios/internal/plural"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"golang.org/x/term"
@@ -143,8 +145,8 @@ func runSendAgentMessageSelect(selector, from, subject, text string, attachments
 		Sent   int `json:"sent"`
 		Failed int `json:"failed"`
 	}
-	if err := json.Unmarshal(raw, &res); err != nil {
-		return fmt.Errorf("failed to parse response: %w", err)
+	if err := jsonx.Unmarshal(raw, &res); err != nil {
+		return errfmt.Errorf("failed to parse response: %w", err)
 	}
 	for _, r := range res.Results {
 		if r.OK {
@@ -214,8 +216,8 @@ func printSelectReplies(w io.Writer, raw json.RawMessage) (int, error) {
 		Answered int `json:"answered"`
 		Failed   int `json:"failed"`
 	}
-	if err := json.Unmarshal(raw, &res); err != nil {
-		return 0, fmt.Errorf("failed to parse response: %w", err)
+	if err := jsonx.Unmarshal(raw, &res); err != nil {
+		return 0, errfmt.Errorf("failed to parse response: %w", err)
 	}
 	for _, r := range res.Replies {
 		if !r.OK {

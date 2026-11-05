@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 )
 
 // keybindsPreset prints the preset in use, or sets one. Setting a preset
@@ -42,7 +43,7 @@ func keybindsPreset(name string) error {
 	cfg.Keybindings.LeaderKey = ""
 	note, err := config.SaveUserConfig(cfg)
 	if err != nil {
-		return fmt.Errorf("failed to save config: %w", err)
+		return errfmt.Errorf("failed to save config: %w", err)
 	}
 	printWriteNote(note)
 	leader := config.DefaultKeybindingsFor(name).LeaderKey

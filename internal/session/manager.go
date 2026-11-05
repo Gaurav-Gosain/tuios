@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"github.com/Gaurav-Gosain/tuios/internal/guestenv"
 	"github.com/google/uuid"
 )
@@ -287,7 +288,7 @@ func (m *Manager) CreateSession(name string, cfg *SessionConfig, width, height i
 	if name != "" {
 		if _, exists := m.sessions[name]; exists {
 			m.mu.Unlock()
-			return nil, fmt.Errorf("session '%s' already exists", name)
+			return nil, errfmt.Errorf("session '%s' already exists", name)
 		}
 	}
 
@@ -426,7 +427,7 @@ func (m *Manager) dropAliasesLocked(id string) {
 // session takes that name.
 func (m *Manager) RenameSession(old, newName string) (*Session, error) {
 	if newName == "" {
-		return nil, fmt.Errorf("a session name cannot be empty")
+		return nil, errfmt.Errorf("a session name cannot be empty")
 	}
 	if err := ValidateSessionName(newName); err != nil {
 		return nil, err
@@ -434,7 +435,7 @@ func (m *Manager) RenameSession(old, newName string) (*Session, error) {
 
 	sess := m.GetSession(old)
 	if sess == nil {
-		return nil, fmt.Errorf("session '%s' not found", old)
+		return nil, errfmt.Errorf("session '%s' not found", old)
 	}
 	if old == newName {
 		return sess, nil
@@ -451,18 +452,18 @@ func (m *Manager) RenameSession(old, newName string) (*Session, error) {
 	if path, err := getResurrectionPath(newName); err != nil {
 		return nil, err
 	} else if _, err := os.Stat(path); err == nil && m.GetSession(newName) == nil {
-		return nil, fmt.Errorf("a saved session is named '%s'. Restore it with 'tuios resurrect %s', or pick another name", newName, newName)
+		return nil, errfmt.Errorf("a saved session is named '%s'. Restore it with 'tuios resurrect %s', or pick another name", newName, newName)
 	}
 
 	m.mu.Lock()
 	if m.sessions[old] != sess {
 		// Renamed or killed while this call waited for the save.
 		m.mu.Unlock()
-		return nil, fmt.Errorf("session '%s' not found", old)
+		return nil, errfmt.Errorf("session '%s' not found", old)
 	}
 	if _, exists := m.sessions[newName]; exists {
 		m.mu.Unlock()
-		return nil, fmt.Errorf("session '%s' already exists", newName)
+		return nil, errfmt.Errorf("session '%s' already exists", newName)
 	}
 	delete(m.sessions, old)
 	m.sessions[newName] = sess
@@ -542,7 +543,7 @@ func (m *Manager) DeleteSession(name string) error {
 	session, exists := m.sessions[name]
 	if !exists {
 		m.mu.Unlock()
-		return fmt.Errorf("session '%s' not found", name)
+		return errfmt.Errorf("session '%s' not found", name)
 	}
 	delete(m.sessions, name)
 	delete(m.byID, session.ID)

@@ -2,7 +2,6 @@ package app
 
 import (
 	"context"
-	"encoding/json"
 	"image/color"
 	"strconv"
 	"strings"
@@ -11,6 +10,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/x/ansi"
 
+	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
@@ -312,7 +312,7 @@ func (m *OS) threadPageCmd(t *agentThread, after string) tea.Cmd {
 			Reset   bool          `json:"reset"`
 			More    bool          `json:"more"`
 		}
-		if msg.err = json.Unmarshal(raw, &res); msg.err == nil {
+		if msg.err = jsonx.Unmarshal(raw, &res); msg.err == nil {
 			msg.entries, msg.cursor, msg.reset, msg.more = res.Entries, res.Cursor, res.Reset, res.More
 		}
 		return msg

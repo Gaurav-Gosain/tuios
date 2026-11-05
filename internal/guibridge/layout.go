@@ -2,10 +2,10 @@ package guibridge
 
 import (
 	"errors"
-	"fmt"
 	"strconv"
 
 	"github.com/Gaurav-Gosain/tuios/internal/app"
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"github.com/Gaurav-Gosain/tuios/internal/layout"
 )
 
@@ -119,7 +119,7 @@ func parseSide(s string) (layout.Side, error) {
 	case "bottom":
 		return layout.SideDown, nil
 	}
-	return 0, fmt.Errorf("side %q is not left, right, top or bottom", s)
+	return 0, errfmt.Errorf("side %q is not left, right, top or bottom", s)
 }
 
 // runLayout runs one layout command. The result says what changed, for the
@@ -199,5 +199,5 @@ func runLayout(o *app.OS, c Command) (*Result, error) {
 	case "":
 		return nil, errors.New("layout needs op")
 	}
-	return nil, fmt.Errorf("layout op %q is not known", c.Op)
+	return nil, errfmt.Errorf("layout op %q is not known", c.Op)
 }

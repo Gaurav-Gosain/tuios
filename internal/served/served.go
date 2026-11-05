@@ -8,12 +8,12 @@
 package served
 
 import (
-	"fmt"
 	"io"
 	"log"
 
 	"github.com/Gaurav-Gosain/tuios/internal/app"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"github.com/Gaurav-Gosain/tuios/internal/input"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 )
@@ -81,7 +81,7 @@ func Attach(opts app.OSOptions, ov config.Overrides, version string, caps *sessi
 		}
 	}
 	if err := client.ConnectWithCapabilities(version, opts.Width, opts.Height, caps); err != nil {
-		return nil, fmt.Errorf("failed to connect to daemon: %w", err)
+		return nil, errfmt.Errorf("failed to connect to daemon: %w", err)
 	}
 
 	name := opts.SessionName
@@ -92,7 +92,7 @@ func Attach(opts app.OSOptions, ov config.Overrides, version string, caps *sessi
 	state, err := client.AttachSession(name, true, opts.Width, opts.Height)
 	if err != nil {
 		_ = client.Close()
-		return nil, fmt.Errorf("failed to attach to session: %w", err)
+		return nil, errfmt.Errorf("failed to attach to session: %w", err)
 	}
 
 	client.StartReadLoop()

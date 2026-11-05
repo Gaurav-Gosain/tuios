@@ -2,13 +2,13 @@ package hostsync
 
 import (
 	"context"
-	"fmt"
 	"io"
 	"os"
 	"path/filepath"
 	"strings"
 	"sync"
 
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"github.com/Gaurav-Gosain/tuios/internal/release"
 )
 
@@ -128,7 +128,7 @@ func (s *Source) ErrFor(platform string) error {
 		return err
 	}
 	if s.built[platform] == nil {
-		return fmt.Errorf("no binary was made for %s", platform)
+		return errfmt.Errorf("no binary was made for %s", platform)
 	}
 	return nil
 }

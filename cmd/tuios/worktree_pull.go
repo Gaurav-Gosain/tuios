@@ -5,12 +5,13 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
-	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
 	"time"
 
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
+	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 	"github.com/Gaurav-Gosain/tuios/internal/plural"
 	"github.com/Gaurav-Gosain/tuios/internal/worktree"
 )
@@ -57,8 +58,8 @@ func openTransfer(t *verbTarget, session string, full bool) (bundleReply, error)
 	if err != nil {
 		return first, t.explain("bundle-worktree", err)
 	}
-	if err := json.Unmarshal(raw, &first); err != nil {
-		return first, fmt.Errorf("failed to parse response: %w", err)
+	if err := jsonx.Unmarshal(raw, &first); err != nil {
+		return first, errfmt.Errorf("failed to parse response: %w", err)
 	}
 	return first, nil
 }
@@ -80,12 +81,12 @@ func readTransfer(t *verbTarget, first bundleReply) ([]byte, error) {
 		chunk, err := base64.StdEncoding.DecodeString(reply.Content)
 		if err != nil {
 			releaseTransfer(t, reply)
-			return nil, fmt.Errorf("the transfer from %s is not base64: %w", t.host, err)
+			return nil, errfmt.Errorf("the transfer from %s is not base64: %w", t.host, err)
 		}
 		data.Write(chunk)
 		if int64(data.Len()) > first.Size {
 			releaseTransfer(t, reply)
-			return nil, fmt.Errorf("%s sent more than the %d bytes it said the transfer holds", t.host, first.Size)
+			return nil, errfmt.Errorf("%s sent more than the %d bytes it said the transfer holds", t.host, first.Size)
 		}
 		if reply.Done {
 			break
@@ -95,16 +96,16 @@ func readTransfer(t *verbTarget, first bundleReply) ([]byte, error) {
 			return nil, t.explain("bundle-worktree", err)
 		}
 		reply = bundleReply{}
-		if err := json.Unmarshal(raw, &reply); err != nil {
-			return nil, fmt.Errorf("failed to parse response: %w", err)
+		if err := jsonx.Unmarshal(raw, &reply); err != nil {
+			return nil, errfmt.Errorf("failed to parse response: %w", err)
 		}
 	}
 	if int64(data.Len()) != first.Size || first.BundleBytes+first.PatchBytes != first.Size || first.BundleBytes < 0 || first.PatchBytes < 0 {
-		return nil, fmt.Errorf("the transfer from %s is %d bytes and was said to be %d", t.host, data.Len(), first.Size)
+		return nil, errfmt.Errorf("the transfer from %s is %d bytes and was said to be %d", t.host, data.Len(), first.Size)
 	}
 	sum := sha256.Sum256(data.Bytes())
 	if hex.EncodeToString(sum[:]) != first.SHA256 {
-		return nil, fmt.Errorf("the transfer from %s does not match its checksum. Nothing was changed here. Run the pull again", t.host)
+		return nil, errfmt.Errorf("the transfer from %s does not match its checksum. Nothing was changed here. Run the pull again", t.host)
 	}
 	return data.Bytes(), nil
 }
@@ -167,7 +168,7 @@ func runWorktreePull(target, repo, branch, name string, detach, jsonOutput bool)
 	// either is used, and the size is held to the cap the far side keeps.
 	if err := checkTransferShape(first); err != nil {
 		releaseTransfer(t, first)
-		return reportVerbError(fmt.Errorf("%s answered with a transfer this tuios will not use: %w", host, err), jsonOutput)
+		return reportVerbError(errfmt.Errorf("%s answered with a transfer this tuios will not use: %w", host, err), jsonOutput)
 	}
 	localBranch := branch
 	if localBranch == "" {
@@ -211,14 +212,14 @@ func runWorktreePull(target, repo, branch, name string, detach, jsonOutput bool)
 	raw, err := client.CallWithTimeout("new-worktree", params, 60*time.Second)
 	_ = client.Close()
 	if err != nil {
-		return reportVerbError(fmt.Errorf("branch %s is here with the commits from %s, and its worktree could not be made: %w", localBranch, host, explainVerbError("new-worktree", err)), jsonOutput)
+		return reportVerbError(errfmt.Errorf("branch %s is here with the commits from %s, and its worktree could not be made: %w", localBranch, host, explainVerbError("new-worktree", err)), jsonOutput)
 	}
 	var made struct {
 		Session string `json:"session"`
 		Path    string `json:"path"`
 	}
-	if err := json.Unmarshal(raw, &made); err != nil {
-		return fmt.Errorf("failed to parse response: %w", err)
+	if err := jsonx.Unmarshal(raw, &made); err != nil {
+		return errfmt.Errorf("failed to parse response: %w", err)
 	}
 
 	patchNote := ""
@@ -286,13 +287,13 @@ func landBranch(root, tmp, host, localBranch string, first bundleReply, data []b
 			return err
 		}
 		if err := worktree.FetchBundle(root, bundlePath, first.Branch, localBranch); err != nil {
-			return fmt.Errorf("could not fetch the commits from %s: %w", host, err)
+			return errfmt.Errorf("could not fetch the commits from %s: %w", host, err)
 		}
 	} else if err := worktree.CreateBranch(root, localBranch, first.Head); err != nil {
-		return fmt.Errorf("could not make branch %s at %s: %w", localBranch, first.Head, err)
+		return errfmt.Errorf("could not make branch %s at %s: %w", localBranch, first.Head, err)
 	}
 	if got, err := worktree.BranchCommit(root, localBranch); err != nil || got != first.Head {
-		return fmt.Errorf("branch %s is at %s here and %s on %s, so the pull did not carry the commits it said it would. Branch %s was removed again", localBranch, got, first.Head, host, localBranch)
+		return errfmt.Errorf("branch %s is at %s here and %s on %s, so the pull did not carry the commits it said it would. Branch %s was removed again", localBranch, got, first.Head, host, localBranch)
 	}
 	return nil
 }
@@ -308,16 +309,16 @@ func checkTransferShape(r bundleReply) error {
 		return err
 	}
 	if !isCommitHash(r.Head) {
-		return fmt.Errorf("the head %q is not a commit hash", r.Head)
+		return errfmt.Errorf("the head %q is not a commit hash", r.Head)
 	}
 	if r.BaseCommit != "" && !isCommitHash(r.BaseCommit) {
-		return fmt.Errorf("the base commit %q is not a commit hash", r.BaseCommit)
+		return errfmt.Errorf("the base commit %q is not a commit hash", r.BaseCommit)
 	}
 	if r.Size < 0 || r.Size > pullMaxBytes || r.BundleBytes < 0 || r.PatchBytes < 0 || r.BundleBytes+r.PatchBytes != r.Size {
-		return fmt.Errorf("the sizes %d, %d and %d do not add up or are past the %d MB cap", r.BundleBytes, r.PatchBytes, r.Size, pullMaxBytes>>20)
+		return errfmt.Errorf("the sizes %d, %d and %d do not add up or are past the %d MB cap", r.BundleBytes, r.PatchBytes, r.Size, pullMaxBytes>>20)
 	}
 	if r.Token == "" && !r.Done {
-		return fmt.Errorf("there is no token to read the rest with")
+		return errfmt.Errorf("there is no token to read the rest with")
 	}
 	return nil
 }

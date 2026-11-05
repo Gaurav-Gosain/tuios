@@ -1,7 +1,6 @@
 package app
 
 import (
-	"encoding/json"
 	"errors"
 	"os"
 	"sort"
@@ -12,6 +11,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/composer"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/sound"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
@@ -592,7 +592,7 @@ func agentMailLoadCmd(dial agentMailDial, sessionName string) tea.Cmd {
 			Evicted       uint64                 `json:"evicted"`
 			EvictedUnread uint64                 `json:"evicted_unread"`
 		}
-		if err := json.Unmarshal(raw, &res); err != nil {
+		if err := jsonx.Unmarshal(raw, &res); err != nil {
 			return AgentMailLoadedMsg{Err: err}
 		}
 		return AgentMailLoadedMsg{Messages: res.Messages, Evicted: res.Evicted, EvictedUnread: res.EvictedUnread}

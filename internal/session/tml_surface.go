@@ -17,6 +17,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 	"tuios.dev/tml"
 )
 
@@ -280,7 +281,7 @@ func (s *tmlSurface) payload(withDoc bool, ops []byte) *TMLSurfacePayload {
 		p.Ops = ops
 		return p
 	}
-	p.State, _ = json.Marshal(s.store.State())
+	p.State, _ = jsonx.Marshal(s.store.State())
 	return p
 }
 
@@ -309,7 +310,7 @@ func tmlDocSource(raw json.RawMessage) ([]byte, *verbError) {
 	}
 	if raw[0] == '"' {
 		var s string
-		if err := json.Unmarshal(raw, &s); err != nil {
+		if err := jsonx.Unmarshal(raw, &s); err != nil {
 			return nil, invalidParam("doc", "doc is not a valid JSON string: "+err.Error())
 		}
 		return []byte(s), nil
@@ -723,7 +724,7 @@ func (d *Daemon) verbTMLClose(cs *connState, params json.RawMessage) (any, *verb
 	var value any
 	has := len(bytes.TrimSpace(p.Value)) > 0
 	if has {
-		if err := json.Unmarshal(p.Value, &value); err != nil {
+		if err := jsonx.Unmarshal(p.Value, &value); err != nil {
 			return nil, invalidParam("value", "value is not JSON: "+err.Error())
 		}
 		value = tml.SanitizeValue(value)
@@ -819,7 +820,7 @@ func (d *Daemon) verbTMLInput(cs *connState, params json.RawMessage) (any, *verb
 	for _, e := range p.Events {
 		var value any
 		if len(bytes.TrimSpace(e.Value)) > 0 {
-			if err := json.Unmarshal(e.Value, &value); err != nil {
+			if err := jsonx.Unmarshal(e.Value, &value); err != nil {
 				return nil, invalidParam("events", "an event value is not JSON: "+err.Error())
 			}
 			value = tml.SanitizeValue(value)
@@ -843,7 +844,7 @@ func (d *Daemon) verbTMLInput(cs *connState, params json.RawMessage) (any, *verb
 		var value any
 		has := len(bytes.TrimSpace(p.Value)) > 0
 		if has {
-			if err := json.Unmarshal(p.Value, &value); err != nil {
+			if err := jsonx.Unmarshal(p.Value, &value); err != nil {
 				return nil, invalidParam("value", "value is not JSON: "+err.Error())
 			}
 			value = tml.SanitizeValue(value)
@@ -1174,7 +1175,7 @@ func (d *Daemon) verbTMLReplace(cs *connState, params json.RawMessage) (any, *ve
 	if p.KeepState {
 		// The kept state goes into the new tree, so the store checks it
 		// against the new tree's limits on each, list and rows.
-		raw, _ := json.Marshal(s.store.State())
+		raw, _ := jsonx.Marshal(s.store.State())
 		withState := doc.Clone()
 		withState.SetAttr("state", tml.Value{Kind: tml.KindObject, Raw: raw})
 		store, err = tml.StoreFor(withState, &limits)
@@ -1215,7 +1216,7 @@ func (d *Daemon) verbTMLGet(cs *connState, params json.RawMessage) (any, *verbEr
 	}
 	d.tml.mu.Lock()
 	defer d.tml.mu.Unlock()
-	state, _ := json.Marshal(s.store.State())
+	state, _ := jsonx.Marshal(s.store.State())
 	return map[string]any{
 		"type": "tml_surface", "surface": s.id, "window_id": s.windowID, "title": s.title, "owner": s.owner,
 		"version": s.version, "doc_version": s.docVersion, "doc": json.RawMessage(s.docJSON), "state": json.RawMessage(state),

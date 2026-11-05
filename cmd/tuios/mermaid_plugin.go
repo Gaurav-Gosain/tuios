@@ -3,12 +3,12 @@ package main
 import (
 	"bytes"
 	"errors"
-	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strconv"
 
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"github.com/Gaurav-Gosain/tuios/internal/herdrplugin"
 	"github.com/Gaurav-Gosain/tuios/internal/release"
 	sketch "tuios.dev/sketch/core"
@@ -45,11 +45,11 @@ func sketchPluginProgram() (string, error) {
 	case e == nil || e.Plugin == nil:
 		return "", &callError{status: 3, err: errors.New(errNeedsSketchPlugin)}
 	case !e.Runnable():
-		return "", &callError{status: 3, err: fmt.Errorf("the sketch plugin is installed and does not run: %s. Run tuios plugins list to see why", entryState(*e))}
+		return "", &callError{status: 3, err: errfmt.Errorf("the sketch plugin is installed and does not run: %s. Run tuios plugins list to see why", entryState(*e))}
 	}
 	prog := filepath.Join(e.Plugin.PluginRoot, "bin", release.ExecutableName("sketch"))
 	if _, err := os.Stat(prog); err != nil {
-		return "", &callError{status: 3, err: fmt.Errorf("the sketch plugin has no program at %s. Run tuios plugins update %s", prog, herdrplugin.SketchID)}
+		return "", &callError{status: 3, err: errfmt.Errorf("the sketch plugin has no program at %s. Run tuios plugins update %s", prog, herdrplugin.SketchID)}
 	}
 	return prog, nil
 }
@@ -63,7 +63,7 @@ func delegateSketch(name string, data []byte, typ string, o mermaidOptions, stdo
 	}
 	switch {
 	case o.scale != 2, o.rows != 0, o.fit, o.background != "":
-		return fmt.Errorf("the sketch plugin draws the %s diagram, and it does not take --scale, --rows, --fit or --background. Run the command again without them", typ)
+		return errfmt.Errorf("the sketch plugin draws the %s diagram, and it does not take --scale, --rows, --fit or --background. Run the command again without them", typ)
 	}
 	var args []string
 	for _, f := range [][2]string{{"-f", o.format}, {"-o", o.out}, {"-theme", o.theme}} {
@@ -81,7 +81,7 @@ func delegateSketch(name string, data []byte, typ string, o mermaidOptions, stdo
 	cmd := exec.Command(prog, args...) //nolint:gosec // the program of the plugin the person installed
 	cmd.Stdin, cmd.Stdout, cmd.Stderr = bytes.NewReader(data), stdout, os.Stderr
 	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("the sketch plugin could not draw %s: %w", name, err)
+		return errfmt.Errorf("the sketch plugin could not draw %s: %w", name, err)
 	}
 	return nil
 }

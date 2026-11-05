@@ -6,7 +6,6 @@ import (
 	"compress/gzip"
 	_ "embed"
 	"errors"
-	"fmt"
 	"io"
 	"os"
 	"path"
@@ -14,6 +13,8 @@ import (
 	"slices"
 	"sort"
 	"strings"
+
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 )
 
 //go:generate go run gen.go
@@ -42,7 +43,7 @@ const maxBundledBytes = 4 << 20
 func bundledFiles() ([]bundledFile, error) {
 	zr, err := gzip.NewReader(bytes.NewReader(bundledArchive))
 	if err != nil {
-		return nil, fmt.Errorf("bundled manifests: %w", err)
+		return nil, errfmt.Errorf("bundled manifests: %w", err)
 	}
 	// The archive is built into the binary, so these limits guard against a
 	// bad gen.go or a corrupt commit, not an attacker: the whole stream stops
@@ -55,15 +56,15 @@ func bundledFiles() ([]bundledFile, error) {
 			return out, nil
 		}
 		if err != nil {
-			return out, fmt.Errorf("bundled manifests: %w", err)
+			return out, errfmt.Errorf("bundled manifests: %w", err)
 		}
 		if h.Typeflag != tar.TypeReg || h.Size < 0 || h.Size > maxBundledBytes ||
 			h.Name != path.Base(h.Name) || strings.ContainsAny(h.Name, `/\`) || !strings.HasSuffix(h.Name, ".toml") {
-			return out, fmt.Errorf("bundled manifests: unexpected entry %q", h.Name)
+			return out, errfmt.Errorf("bundled manifests: unexpected entry %q", h.Name)
 		}
 		data := make([]byte, h.Size)
 		if _, err := io.ReadFull(tr, data); err != nil {
-			return out, fmt.Errorf("bundled manifests: %s: %w", h.Name, err)
+			return out, errfmt.Errorf("bundled manifests: %s: %w", h.Name, err)
 		}
 		out = append(out, bundledFile{name: "manifests/" + h.Name, data: data})
 	}

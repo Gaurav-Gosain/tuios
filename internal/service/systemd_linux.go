@@ -2,7 +2,6 @@ package service
 
 import (
 	"errors"
-	"fmt"
 	"os"
 	"os/exec"
 	"os/user"
@@ -11,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/Gaurav-Gosain/tuios/internal/childproc"
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 )
 
 // unitFile is the unit's file name.
@@ -76,7 +76,7 @@ func systemctl(args ...string) (string, error) {
 	out, err := cmd.CombinedOutput()
 	s := strings.TrimSpace(string(out))
 	if err != nil && s != "" {
-		return s, fmt.Errorf("systemctl --user %s: %s", strings.Join(args, " "), s)
+		return s, errfmt.Errorf("systemctl --user %s: %s", strings.Join(args, " "), s)
 	}
 	return s, err
 }
@@ -89,7 +89,7 @@ func ManagerEnv() (map[string]string, error) {
 	}
 	out, err := systemctl("show-environment")
 	if err != nil {
-		return nil, fmt.Errorf("no systemd user manager answers: %w", err)
+		return nil, errfmt.Errorf("no systemd user manager answers: %w", err)
 	}
 	env := map[string]string{}
 	for line := range strings.SplitSeq(out, "\n") {

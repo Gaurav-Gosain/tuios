@@ -2,13 +2,13 @@ package app
 
 import (
 	"errors"
-	"fmt"
 	"slices"
 	"strings"
 	"time"
 
 	"charm.land/lipgloss/v2"
 
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"github.com/Gaurav-Gosain/tuios/internal/layout"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
@@ -64,13 +64,13 @@ func (m *OS) stackRows(w *terminal.Window) (above, below int) {
 func (m *OS) stackTiled(id string) (*terminal.Window, error) {
 	w := m.windowByID(id)
 	if w == nil {
-		return nil, fmt.Errorf("%w %s", errNoStackPane, id)
+		return nil, errfmt.Errorf("%w %s", errNoStackPane, id)
 	}
 	if w.Workspace != m.CurrentWorkspace {
-		return nil, fmt.Errorf("pane %s is on workspace %d, not on the workspace on screen", id, w.Workspace)
+		return nil, errfmt.Errorf("pane %s is on workspace %d, not on the workspace on screen", id, w.Workspace)
 	}
 	if w.IsFloating || w.IsPopup || w.IsScratch {
-		return nil, fmt.Errorf("pane %s floats; only tiled panes stack", id)
+		return nil, errfmt.Errorf("pane %s floats; only tiled panes stack", id)
 	}
 	return w, nil
 }
@@ -98,10 +98,10 @@ func (m *OS) StackPanes(a, b string) error {
 		return nil
 	}
 	if wb.Stack != "" {
-		return fmt.Errorf("pane %s is in another stack; take it out first", b)
+		return errfmt.Errorf("pane %s is in another stack; take it out first", b)
 	}
 	if wb.Minimized {
-		return fmt.Errorf("pane %s is minimized", b)
+		return errfmt.Errorf("pane %s is minimized", b)
 	}
 	if wa.Stack == "" {
 		wa.Stack = wa.ID
@@ -116,7 +116,7 @@ func (m *OS) StackPanes(a, b string) error {
 	// a title row), b takes a's place in the order and a stays where it is.
 	open := m.stackOpen(wa.Stack, wa.Workspace)
 	if open == nil {
-		return fmt.Errorf("the stack of %s has no open pane", a)
+		return errfmt.Errorf("the stack of %s has no open pane", a)
 	}
 	focused := m.GetFocusedWindow()
 	tree.RemoveWindow(m.GetWindowIntID(wb.ID))
@@ -159,10 +159,10 @@ func (m *OS) OpenStacked(id string) error {
 	}
 	w := m.windowByID(id)
 	if w == nil {
-		return fmt.Errorf("%w %s", errNoStackPane, id)
+		return errfmt.Errorf("%w %s", errNoStackPane, id)
 	}
 	if w.Stack == "" {
-		return fmt.Errorf("pane %s is not in a stack", id)
+		return errfmt.Errorf("pane %s is not in a stack", id)
 	}
 	if !w.Minimized {
 		_ = m.FocusWindowByID(id)
@@ -171,10 +171,10 @@ func (m *OS) OpenStacked(id string) error {
 	}
 	open := m.stackOpen(w.Stack, w.Workspace)
 	if open == nil || !tree.HasWindow(m.GetWindowIntID(open.ID)) {
-		return fmt.Errorf("the stack of %s has no open pane", id)
+		return errfmt.Errorf("the stack of %s has no open pane", id)
 	}
 	if !tree.ReplaceWindow(m.GetWindowIntID(open.ID), m.GetWindowIntID(w.ID)) {
-		return fmt.Errorf("the stack of %s has no tile", id)
+		return errfmt.Errorf("the stack of %s has no tile", id)
 	}
 	m.collapse(open)
 	w.Minimized = false
@@ -193,10 +193,10 @@ func (m *OS) Unstack(id string) error {
 	}
 	w := m.windowByID(id)
 	if w == nil {
-		return fmt.Errorf("%w %s", errNoStackPane, id)
+		return errfmt.Errorf("%w %s", errNoStackPane, id)
 	}
 	if w.Stack == "" {
-		return fmt.Errorf("pane %s is not in a stack", id)
+		return errfmt.Errorf("pane %s is not in a stack", id)
 	}
 	if !w.Minimized && !m.handOverStack(w, tree) {
 		// The only member: it already has a tile of its own.

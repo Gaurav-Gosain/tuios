@@ -31,12 +31,14 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"io"
 	"maps"
 	"slices"
 	"sync"
 	"time"
+
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
+	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 )
 
 // Conn is one connection to the daemon.
@@ -205,7 +207,7 @@ func (s *Server) Serve(ctx context.Context, in io.Reader, out io.Writer) error {
 // request in the stateless era has been seen.
 func (s *Server) handleBatch(ctx context.Context, msg []byte) {
 	var items []json.RawMessage
-	if err := json.Unmarshal(msg, &items); err != nil || len(items) == 0 {
+	if err := jsonx.Unmarshal(msg, &items); err != nil || len(items) == 0 {
 		s.write(&rpcResponse{JSONRPC: "2.0", ID: json.RawMessage("null"), Error: &rpcError{Code: rpcInvalidRequest, Message: "invalid batch"}})
 		return
 	}
@@ -245,19 +247,19 @@ func requestVersion(msg []byte) (version string, hasCaps bool) {
 			Meta map[string]json.RawMessage `json:"_meta"`
 		} `json:"params"`
 	}
-	if json.Unmarshal(msg, &r) != nil {
+	if jsonx.Unmarshal(msg, &r) != nil {
 		return "", false
 	}
-	_ = json.Unmarshal(r.Params.Meta[metaVersionKey], &version)
+	_ = jsonx.Unmarshal(r.Params.Meta[metaVersionKey], &version)
 	var caps map[string]any
-	hasCaps = json.Unmarshal(r.Params.Meta[metaCapsKey], &caps) == nil && caps != nil
+	hasCaps = jsonx.Unmarshal(r.Params.Meta[metaCapsKey], &caps) == nil && caps != nil
 	return version, hasCaps
 }
 
 func (s *Server) write(resp *rpcResponse) { s.writeAny(resp) }
 
 func (s *Server) writeAny(v any) {
-	data, err := json.Marshal(v)
+	data, err := jsonx.Marshal(v)
 	if err != nil {
 		s.logf("could not encode a response: %v", err)
 		data = []byte(`{"jsonrpc":"2.0","id":null,"error":{"code":-32603,"message":"could not encode the response"}}`)
@@ -273,7 +275,7 @@ func (s *Server) writeAny(v any) {
 // cancel, and writes its own response; handle then returns nil for it.
 func (s *Server) handle(ctx context.Context, msg []byte, inBatch bool) *rpcResponse {
 	var req rpcRequest
-	if err := json.Unmarshal(msg, &req); err != nil {
+	if err := jsonx.Unmarshal(msg, &req); err != nil {
 		return &rpcResponse{JSONRPC: "2.0", ID: json.RawMessage("null"), Error: &rpcError{Code: rpcParseError, Message: "parse error: " + err.Error()}}
 	}
 	notification := len(req.ID) == 0 || string(req.ID) == "null"
@@ -321,7 +323,7 @@ func (s *Server) handle(ctx context.Context, msg []byte, inBatch bool) *rpcRespo
 		var p struct {
 			RequestID json.RawMessage `json:"requestId"`
 		}
-		_ = json.Unmarshal(req.Params, &p)
+		_ = jsonx.Unmarshal(req.Params, &p)
 		s.mu.Lock()
 		if cancel, ok := s.inflight[string(p.RequestID)]; ok {
 			cancel()
@@ -347,7 +349,7 @@ func (s *Server) handle(ctx context.Context, msg []byte, inBatch bool) *rpcRespo
 			Name      string          `json:"name"`
 			Arguments json.RawMessage `json:"arguments"`
 		}
-		if err := json.Unmarshal(req.Params, &p); err != nil || p.Name == "" {
+		if err := jsonx.Unmarshal(req.Params, &p); err != nil || p.Name == "" {
 			return reply(nil, &rpcError{Code: rpcInvalidParams, Message: "tools/call needs a tool name"})
 		}
 		t, ok := s.byNm[p.Name]
@@ -417,7 +419,7 @@ func (s *Server) initialize(params json.RawMessage) map[string]any {
 	var p struct {
 		ProtocolVersion string `json:"protocolVersion"`
 	}
-	_ = json.Unmarshal(params, &p)
+	_ = jsonx.Unmarshal(params, &p)
 	version := protocolVersions[0]
 	if slices.Contains(protocolVersions, p.ProtocolVersion) {
 		version = p.ProtocolVersion
@@ -460,7 +462,7 @@ func fail(msg string, detail any) map[string]any {
 	if detail != nil {
 		body["detail"] = detail
 	}
-	text, _ := json.Marshal(body)
+	text, _ := jsonx.Marshal(body)
 	return map[string]any{
 		"content": []any{map[string]any{"type": "text", "text": string(text)}},
 		"isError": true,
@@ -477,7 +479,7 @@ func (s *Server) success(t *tool, raw json.RawMessage) map[string]any {
 	res := map[string]any{"content": content}
 	if s.structured() {
 		var obj map[string]any
-		if json.Unmarshal(raw, &obj) == nil {
+		if jsonx.Unmarshal(raw, &obj) == nil {
 			res["structuredContent"] = obj
 		}
 	}
@@ -534,12 +536,12 @@ func (s *Server) connect() (Conn, caller, error) {
 		_ = c.Close()
 		var ce *CallError
 		if errors.As(err, &ce) && ce.Code == "unknown_verb" {
-			return nil, caller{}, fmt.Errorf("the tuios daemon is older than this tuios mcp and cannot restrict a connection, so nothing was run. Restart it with tuios kill-server (every pane closes), then retry")
+			return nil, caller{}, errfmt.Errorf("the tuios daemon is older than this tuios mcp and cannot restrict a connection, so nothing was run. Restart it with tuios kill-server (every pane closes), then retry")
 		}
 		return nil, caller{}, err
 	}
 	var me caller
-	_ = json.Unmarshal(raw, &me)
+	_ = jsonx.Unmarshal(raw, &me)
 	return c, me, nil
 }
 
@@ -547,7 +549,7 @@ func (s *Server) connect() (Conn, caller, error) {
 func (s *Server) callTool(ctx context.Context, t *tool, args json.RawMessage) map[string]any {
 	var in map[string]any
 	if len(bytes.TrimSpace(args)) > 0 && string(bytes.TrimSpace(args)) != "null" {
-		if err := json.Unmarshal(args, &in); err != nil {
+		if err := jsonx.Unmarshal(args, &in); err != nil {
 			return fail("arguments must be a JSON object", nil)
 		}
 	}
@@ -592,11 +594,11 @@ func (s *Server) callTool(ctx context.Context, t *tool, args json.RawMessage) ma
 // markUntrusted adds untrusted: true to a result object that lacks it.
 func markUntrusted(raw json.RawMessage) json.RawMessage {
 	var obj map[string]any
-	if json.Unmarshal(raw, &obj) != nil {
+	if jsonx.Unmarshal(raw, &obj) != nil {
 		return raw
 	}
 	obj["untrusted"] = true
-	out, err := json.Marshal(obj)
+	out, err := jsonx.Marshal(obj)
 	if err != nil {
 		return raw
 	}

@@ -3,7 +3,6 @@ package app
 import (
 	"cmp"
 	"context"
-	"encoding/json"
 	"errors"
 	"maps"
 	"slices"
@@ -12,6 +11,7 @@ import (
 	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/composer"
+	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 	"github.com/Gaurav-Gosain/tuios/internal/sortx"
 
 	tea "charm.land/bubbletea/v2"
@@ -345,7 +345,7 @@ func inboxWatchOnce(ctx context.Context, dial inboxDial, out chan<- tea.Msg) (bo
 		Seq    uint64                  `json:"seq"`
 		BootID string                  `json:"boot_id"`
 	}
-	if err := json.Unmarshal(raw, &listing); err != nil {
+	if err := jsonx.Unmarshal(raw, &listing); err != nil {
 		return false, err
 	}
 	// The cards are listed after the items: list-tasks has no seq, so every
@@ -411,7 +411,7 @@ func inboxWatchOnce(ctx context.Context, dial inboxDial, out chan<- tea.Msg) (bo
 				Type string `json:"type"`
 				InboxEvent
 			}
-			if json.Unmarshal(line, &ev) != nil {
+			if jsonx.Unmarshal(line, &ev) != nil {
 				continue
 			}
 			switch {
@@ -489,7 +489,7 @@ func inboxListCards(client *session.VerbClient) (cards []session.TaskRow, noBoar
 		AllSessions bool              `json:"all_sessions"`
 		Tasks       []session.TaskRow `json:"tasks"`
 	}
-	if err := json.Unmarshal(raw, &res); err != nil {
+	if err := jsonx.Unmarshal(raw, &res); err != nil {
 		return nil, false, "", err
 	}
 	if !res.AllSessions {
@@ -1484,7 +1484,7 @@ func (m *OS) inboxAnswerAskCmd(it session.AttentionItem, answer string, upgradeD
 			Applied bool   `json:"applied"`
 			Reason  string `json:"reason"`
 		}
-		if err := json.Unmarshal(raw, &res); err != nil {
+		if err := jsonx.Unmarshal(raw, &res); err != nil {
 			return InboxAskAnsweredMsg{Name: name, Answer: answer, Err: err}
 		}
 		return InboxAskAnsweredMsg{Name: name, Answer: answer, Standing: res.Answer, Applied: res.Applied, Reason: res.Reason}
@@ -1664,7 +1664,7 @@ func (m *OS) inboxReplyCmdWith(it session.AttentionItem, decision, message strin
 			Applied  bool   `json:"applied"`
 			Reason   string `json:"reason"`
 		}
-		if err := json.Unmarshal(raw, &res); err != nil {
+		if err := jsonx.Unmarshal(raw, &res); err != nil {
 			return InboxApprovalRepliedMsg{Name: name, Decision: decision, Err: err}
 		}
 		return InboxApprovalRepliedMsg{Name: name, Decision: decision, Standing: res.Decision, Applied: res.Applied, Reason: res.Reason}

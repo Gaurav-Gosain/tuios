@@ -3,7 +3,6 @@ package app
 import (
 	"bytes"
 	"errors"
-	"fmt"
 	"os"
 	"os/exec"
 	"runtime"
@@ -11,6 +10,7 @@ import (
 	"time"
 
 	tea "charm.land/bubbletea/v2"
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"github.com/anmitsu/go-shlex"
 )
 
@@ -92,7 +92,7 @@ func desktopOpenerArgv(target string) ([]string, error) {
 func openerCommand(cmd, rawURL string) ([]string, error) {
 	argv, err := shlex.Split(cmd, true)
 	if err != nil {
-		return nil, fmt.Errorf("read the link opener %q: %w", cmd, err)
+		return nil, errfmt.Errorf("read the link opener %q: %w", cmd, err)
 	}
 	if len(argv) == 0 {
 		return nil, errors.New("the link opener is empty")
@@ -195,7 +195,7 @@ func OpenWebLink(setting, rawURL string) error {
 		return err
 	}
 	if failed, ok := watch().(linkOpenFailedMsg); ok {
-		return fmt.Errorf("%s failed: %s", argv[0], failed.Detail)
+		return errfmt.Errorf("%s failed: %s", argv[0], failed.Detail)
 	}
 	return nil
 }

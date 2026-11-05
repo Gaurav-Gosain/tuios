@@ -11,6 +11,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"github.com/Gaurav-Gosain/tuios/internal/pathroot"
 	"github.com/pelletier/go-toml/v2"
 )
@@ -148,14 +149,14 @@ func parseLayered(lc *LayeredConfig) (*UserConfig, error) {
 // as an empty one.
 func readConfigMerged(path string) ([]byte, error) {
 	if path == "" {
-		return nil, fmt.Errorf("no config file path is set")
+		return nil, errfmt.Errorf("no config file path is set")
 	}
 	data, err := ReadConfigFile(path)
 	if errors.Is(err, fs.ErrNotExist) {
 		return nil, nil
 	}
 	if err != nil {
-		return nil, fmt.Errorf("failed to read config file: %w", err)
+		return nil, errfmt.Errorf("failed to read config file: %w", err)
 	}
 	return data, nil
 }
@@ -191,11 +192,11 @@ type saveKeys struct {
 func saveConfigData(path string, base, next []byte, gen uint64, keys saveKeys) (WriteNote, error) {
 	lc, err := loadLayered(path, true)
 	if err != nil {
-		return WriteNote{}, fmt.Errorf("%s: %w", errSaveFailed, err)
+		return WriteNote{}, errfmt.Errorf("%s: %w", errSaveFailed, err)
 	}
 	cur, err := effectiveTable(lc)
 	if err != nil {
-		return WriteNote{}, fmt.Errorf("%s: %w", errSaveFailed, err)
+		return WriteNote{}, errfmt.Errorf("%s: %w", errSaveFailed, err)
 	}
 	from := cur
 	if base != nil {
@@ -375,7 +376,7 @@ func (w *layerWriter) target(path []string, note *WriteNote) (int, error) {
 		return -1, errNoWritableFile
 	}
 	if len(holders) > 0 && t < holders[len(holders)-1] {
-		return -1, fmt.Errorf("tuios cannot save %s. %s sets it, and tuios cannot write that file. Change it there", displayKey(path), displayPath(w.lc.Main, w.lc.Layers[holders[len(holders)-1]].Path))
+		return -1, errfmt.Errorf("tuios cannot save %s. %s sets it, and tuios cannot write that file. Change it there", displayKey(path), displayPath(w.lc.Main, w.lc.Layers[holders[len(holders)-1]].Path))
 	}
 	if owner >= 0 {
 		note.addRedirected(w.lc.Layers[owner].Path, w.lc.Layers[t].Path)
@@ -406,7 +407,7 @@ func (w *layerWriter) planDelete(ch configChange, note *WriteNote) error {
 	entry := tombstoneFor(ch.path[len(ch.path)-1])
 	t := w.lastWritable()
 	if t < 0 || t < holders[len(holders)-1] {
-		return fmt.Errorf("tuios cannot remove %s. A file that tuios cannot write sets it. Remove it there", displayKey(ch.path))
+		return errfmt.Errorf("tuios cannot remove %s. A file that tuios cannot write sets it. Remove it there", displayKey(ch.path))
 	}
 	w.add(t, configChange{path: ch.path, value: entry})
 	return nil
@@ -441,7 +442,7 @@ func (w *layerWriter) flush(note *WriteNote) error {
 		layer := w.lc.Layers[i]
 		out, _, ok, err := editFile(layer.Data, w.changes[i])
 		if err != nil {
-			return fmt.Errorf("failed to parse %s: %w", layer.Path, err)
+			return errfmt.Errorf("failed to parse %s: %w", layer.Path, err)
 		}
 		if ok {
 			ready = append(ready, planned{i, out})
@@ -485,11 +486,11 @@ func (w *layerWriter) moveToMain(i int, note *WriteNote) error {
 	for _, ch := range w.changes[i] {
 		keys = append(keys, displayKey(ch.path))
 		if ch.deleted {
-			return fmt.Errorf("tuios cannot remove %s from %s without writing the whole file again, and it does not rewrite a file you wrote. Remove it there by hand", displayKey(ch.path), displayPath(w.lc.Main, layer.Path))
+			return errfmt.Errorf("tuios cannot remove %s from %s without writing the whole file again, and it does not rewrite a file you wrote. Remove it there by hand", displayKey(ch.path), displayPath(w.lc.Main, layer.Path))
 		}
 	}
 	if !w.writable(main) {
-		return fmt.Errorf("tuios cannot change %s in %s without writing the whole file again, and it cannot write config.toml. Change it there by hand", strings.Join(keys, ", "), displayPath(w.lc.Main, layer.Path))
+		return errfmt.Errorf("tuios cannot change %s in %s without writing the whole file again, and it cannot write config.toml. Change it there by hand", strings.Join(keys, ", "), displayPath(w.lc.Main, layer.Path))
 	}
 	for _, ch := range w.changes[i] {
 		ch.shadow = w.needsShadow(main, ch.path, ch.value)
@@ -507,7 +508,7 @@ func (w *layerWriter) moveToMain(i int, note *WriteNote) error {
 func editMain(data []byte, changes []configChange, path string) ([]byte, error) {
 	out, want, ok, err := editFile(data, changes)
 	if err != nil {
-		return nil, fmt.Errorf("failed to parse %s: %w", path, err)
+		return nil, errfmt.Errorf("failed to parse %s: %w", path, err)
 	}
 	if ok {
 		return out, nil
@@ -515,7 +516,7 @@ func editMain(data []byte, changes []configChange, path string) ([]byte, error) 
 	log.Printf("Config: tuios could not edit the lines of %s, so it wrote the whole file again", path)
 	full, err := marshalTable(want)
 	if err != nil {
-		return nil, fmt.Errorf("failed to write %s: %w", path, err)
+		return nil, errfmt.Errorf("failed to write %s: %w", path, err)
 	}
 	return append([]byte(configFileHeader(path)), full...), nil
 }
@@ -777,7 +778,7 @@ func PruneConfig(path string, dryRun bool) (PruneResult, error) {
 		return res, nil
 	}
 	if !main.Writable() {
-		return res, fmt.Errorf("tuios cannot write %s", main.Path)
+		return res, errfmt.Errorf("tuios cannot write %s", main.Path)
 	}
 	changes := make([]configChange, 0, len(drop))
 	for _, p := range drop {

@@ -10,6 +10,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
+	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/spf13/cobra"
 )
@@ -184,7 +186,7 @@ func runSubscribe(opts subscribeOptions, out io.Writer) error {
 			var res struct {
 				Agents []agentRow `json:"agents"`
 			}
-			_ = json.Unmarshal(raw, &res)
+			_ = jsonx.Unmarshal(raw, &res)
 			return res.Agents
 		}
 	}
@@ -214,7 +216,7 @@ func runSubscribe(opts subscribeOptions, out io.Writer) error {
 			BootID   string `json:"boot_id"`
 			Replayed int    `json:"replayed"`
 		}
-		_ = json.Unmarshal(raw, &ack)
+		_ = jsonx.Unmarshal(raw, &ack)
 		msg := fmt.Sprintf("Subscribed at seq %d, boot id %s.", ack.Seq, plainLine(ack.BootID))
 		if ack.Replayed > 0 {
 			msg += fmt.Sprintf(" %d events from before follow.", ack.Replayed)
@@ -251,11 +253,11 @@ func runSubscribe(opts subscribeOptions, out io.Writer) error {
 			if errors.Is(err, io.EOF) {
 				return errors.New("the daemon closed the event stream. Resubscribe with --after-seq and --boot-id to pick up where it stopped")
 			}
-			return fmt.Errorf("failed to read the event stream: %w", err)
+			return errfmt.Errorf("failed to read the event stream: %w", err)
 		}
 		var ev subscribeEvent
 		if text || len(states) > 0 {
-			_ = json.Unmarshal(line, &ev)
+			_ = jsonx.Unmarshal(line, &ev)
 		}
 		keep := len(states) == 0 || ev.Type != session.EventAgentState || states[ev.State]
 		if text {
@@ -290,9 +292,9 @@ func subscribeTimeout(ms, printed, limit int) error {
 		return nil
 	}
 	if limit == 1 {
-		return fmt.Errorf("no event matched in %d ms", ms)
+		return errfmt.Errorf("no event matched in %d ms", ms)
 	}
-	return fmt.Errorf("the timeout of %d ms ended after %d of %d events", ms, printed, limit)
+	return errfmt.Errorf("the timeout of %d ms ended after %d of %d events", ms, printed, limit)
 }
 
 // checkSubscribeFlags checks the flags that work together and fills in what
@@ -301,7 +303,7 @@ func checkSubscribeFlags(cmd *cobra.Command, opts *subscribeOptions) error {
 	switch opts.format {
 	case "json", "text":
 	default:
-		return fmt.Errorf("--format takes json or text, not %q", opts.format)
+		return errfmt.Errorf("--format takes json or text, not %q", opts.format)
 	}
 	if opts.once && cmd.Flags().Changed("count") {
 		return errors.New("--once is the same as --count 1. Use one of them")
@@ -312,7 +314,7 @@ func checkSubscribeFlags(cmd *cobra.Command, opts *subscribeOptions) error {
 	for i, s := range opts.states {
 		s = strings.TrimSpace(s)
 		if !slices.Contains(session.AgentStateNames, s) {
-			return fmt.Errorf("--state %q is not an agent state. The states are %s", s, strings.Join(session.AgentStateNames, ", "))
+			return errfmt.Errorf("--state %q is not an agent state. The states are %s", s, strings.Join(session.AgentStateNames, ", "))
 		}
 		opts.states[i] = s
 	}

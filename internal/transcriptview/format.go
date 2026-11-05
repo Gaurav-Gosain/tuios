@@ -1,12 +1,13 @@
 package transcriptview
 
 import (
-	"encoding/json"
 	"hash/fnv"
 	"io"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 )
 
 // Format names. Each is the reader a harness manifest names in its
@@ -266,7 +267,7 @@ type jobj map[string]any
 //go:noinline
 func parseObj(b []byte) (jobj, bool) {
 	var v any
-	if json.Unmarshal(b, &v) != nil {
+	if jsonx.Unmarshal(b, &v) != nil {
 		return nil, false
 	}
 	return asObj(v), true

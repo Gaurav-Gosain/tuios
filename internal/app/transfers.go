@@ -3,7 +3,6 @@ package app
 import (
 	"cmp"
 	"context"
-	"encoding/json"
 	"errors"
 	"slices"
 	"strings"
@@ -14,6 +13,7 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/crashexit"
 	"github.com/Gaurav-Gosain/tuios/internal/federation"
+	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/sortx"
 )
@@ -266,7 +266,7 @@ func transfersWatchOnce(ctx context.Context, dial inboxDial, out chan<- tea.Msg)
 				Action   string               `json:"action"`
 				Transfer *session.TransferRow `json:"transfer"`
 			}
-			if json.Unmarshal(line, &ev) != nil {
+			if jsonx.Unmarshal(line, &ev) != nil {
 				continue
 			}
 			switch {
@@ -293,7 +293,7 @@ func transfersWatchOnce(ctx context.Context, dial inboxDial, out chan<- tea.Msg)
 	var listing struct {
 		Transfers []session.TransferRow `json:"transfers"`
 	}
-	if err := json.Unmarshal(raw, &listing); err != nil {
+	if err := jsonx.Unmarshal(raw, &listing); err != nil {
 		return false, err
 	}
 	// What came while the list was read.
@@ -675,7 +675,7 @@ func (m *OS) transferCallCmd(verb, name string, params map[string]any) tea.Cmd {
 		msg := transferCallMsg{Verb: verb, Name: name, Err: err}
 		if err == nil {
 			var row session.TransferRow
-			if json.Unmarshal(raw, &row) == nil && row.ID != "" {
+			if jsonx.Unmarshal(raw, &row) == nil && row.ID != "" {
 				msg.Row = &row
 			}
 		}

@@ -11,6 +11,8 @@ import (
 	"strconv"
 	"sync"
 	"time"
+
+	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 )
 
 // stream-pane: one pane as a byte stream, for a client that is not tuios.
@@ -529,7 +531,7 @@ func (ps *paneStream) stream(gone <-chan struct{}) error {
 func (ps *paneStream) recheck() *verbError {
 	ps.admitMu.Lock()
 	defer ps.admitMu.Unlock()
-	params, _ := json.Marshal(map[string]string{"session": ps.home().Name(), "window": ps.window})
+	params, _ := jsonx.Marshal(map[string]string{"session": ps.home().Name(), "window": ps.window})
 	_, _, verr := ps.d.admitVerb(ps.cs, "stream-pane", params)
 	return verr
 }
@@ -623,7 +625,7 @@ func (ps *paneStream) write(parts ...[]byte) error {
 
 // writeError tells the client a frame it sent was refused.
 func (ps *paneStream) writeError(verr *verbError) {
-	body, _ := json.Marshal(map[string]string{"code": verr.Code, "message": verr.Message})
+	body, _ := jsonx.Marshal(map[string]string{"code": verr.Code, "message": verr.Message})
 	_ = ps.writeFrame(paneFrameError, body)
 }
 
@@ -682,7 +684,7 @@ func (ps *paneStream) admitInput() *verbError {
 	ps.admitMu.Lock()
 	defer ps.admitMu.Unlock()
 	home := ps.home()
-	params, _ := json.Marshal(map[string]string{"session": home.Name(), "window": ps.window})
+	params, _ := jsonx.Marshal(map[string]string{"session": home.Name(), "window": ps.window})
 	if _, _, verr := ps.d.admitVerb(ps.cs, "send-text", params); verr != nil {
 		return verr
 	}
@@ -734,7 +736,7 @@ func (ps *paneStream) lease(payload []byte) *verbError {
 func (ps *paneStream) admitLease(cols, rows int) *verbError {
 	ps.admitMu.Lock()
 	defer ps.admitMu.Unlock()
-	params, _ := json.Marshal(map[string]any{"session": ps.home().Name(), "window": ps.window, "width": cols, "height": rows})
+	params, _ := jsonx.Marshal(map[string]any{"session": ps.home().Name(), "window": ps.window, "width": cols, "height": rows})
 	_, _, verr := ps.d.admitVerb(ps.cs, "resize", params)
 	return verr
 }

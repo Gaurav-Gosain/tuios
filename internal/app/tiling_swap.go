@@ -1,9 +1,9 @@
 package app
 
 import (
-	"fmt"
 	"time"
 
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 	"github.com/Gaurav-Gosain/tuios/internal/ui"
 )
@@ -287,10 +287,10 @@ func (m *OS) SwapWindowDown() {
 func (m *OS) SwapWindowsByID(source, target string) error {
 	si, ti := m.windowIndexByID(source), m.windowIndexByID(target)
 	if si < 0 {
-		return fmt.Errorf("no pane %s to swap", source)
+		return errfmt.Errorf("no pane %s to swap", source)
 	}
 	if ti < 0 {
-		return fmt.Errorf("no pane %s to swap", target)
+		return errfmt.Errorf("no pane %s to swap", target)
 	}
 	if si == ti {
 		return nil

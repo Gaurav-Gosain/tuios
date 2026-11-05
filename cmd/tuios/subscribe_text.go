@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 )
 
@@ -105,7 +106,7 @@ func (p *textPrinter) seed(raw json.RawMessage) {
 	var res struct {
 		Agents []agentRow `json:"agents"`
 	}
-	if json.Unmarshal(raw, &res) != nil {
+	if jsonx.Unmarshal(raw, &res) != nil {
 		return
 	}
 	for _, a := range res.Agents {
@@ -296,7 +297,7 @@ func (p *textPrinter) what(ev *subscribeEvent) string {
 		}
 		value := ""
 		if ev.TML.Value != nil {
-			if b, err := json.Marshal(ev.TML.Value); err == nil {
+			if b, err := jsonx.Marshal(ev.TML.Value); err == nil {
 				value = string(b)
 			}
 		}

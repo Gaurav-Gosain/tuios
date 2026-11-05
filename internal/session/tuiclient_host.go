@@ -6,6 +6,7 @@ import (
 	"net"
 	"time"
 
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"github.com/Gaurav-Gosain/tuios/internal/tape"
 )
 
@@ -36,11 +37,11 @@ import (
 func (c *TUIClient) ConnectThroughHost(host, version string, width, height int, caps *ClientCapabilities) (HostConnectionInfo, error) {
 	socketPath, err := GetSocketPath()
 	if err != nil {
-		return HostConnectionInfo{}, fmt.Errorf("failed to get socket path: %w", err)
+		return HostConnectionInfo{}, errfmt.Errorf("failed to get socket path: %w", err)
 	}
 	conn, err := net.DialTimeout("unix", socketPath, 5*time.Second)
 	if err != nil {
-		return HostConnectionInfo{}, fmt.Errorf("failed to connect to daemon: %w", err)
+		return HostConnectionInfo{}, errfmt.Errorf("failed to connect to daemon: %w", err)
 	}
 	c.conn = conn
 	c.br = nil

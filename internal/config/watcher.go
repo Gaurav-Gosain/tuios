@@ -3,7 +3,6 @@ package config
 import (
 	"crypto/sha256"
 	"errors"
-	"fmt"
 	"io/fs"
 	"maps"
 	"os"
@@ -13,6 +12,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"github.com/fsnotify/fsnotify"
 )
 
@@ -625,7 +625,7 @@ func ReloadConfig(path string) (*UserConfig, error) {
 	lc, err := LoadLayered(path)
 	if err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
-			return nil, fmt.Errorf("failed to read config file: %w", err)
+			return nil, errfmt.Errorf("failed to read config file: %w", err)
 		}
 		return nil, err
 	}

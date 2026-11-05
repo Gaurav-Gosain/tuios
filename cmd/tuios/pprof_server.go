@@ -16,6 +16,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 )
 
 // The --pprof server. It answers the requests net/http/pprof answers that
@@ -100,11 +102,11 @@ func startCPUProfile() error {
 	}
 	f, err := os.Create(cpuProfile)
 	if err != nil {
-		return fmt.Errorf("could not create CPU profile: %w", err)
+		return errfmt.Errorf("could not create CPU profile: %w", err)
 	}
 	if err := pprof.StartCPUProfile(f); err != nil {
 		_ = f.Close()
-		return fmt.Errorf("could not start CPU profile: %w", err)
+		return errfmt.Errorf("could not start CPU profile: %w", err)
 	}
 	cpuProfileFile = f
 	return nil

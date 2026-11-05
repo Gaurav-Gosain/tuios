@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"runtime"
 
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"github.com/Gaurav-Gosain/tuios/internal/serverscope"
 	"github.com/Gaurav-Gosain/tuios/internal/service"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
@@ -31,15 +32,15 @@ func serviceSpec(binary string) (service.Spec, error) {
 	if binary == "" {
 		b, err := stableTuiosPath()
 		if err != nil {
-			return service.Spec{}, fmt.Errorf("find the tuios binary: %w", err)
+			return service.Spec{}, errfmt.Errorf("find the tuios binary: %w", err)
 		}
 		binary = b
 	}
 	if !filepath.IsAbs(binary) {
-		return service.Spec{}, fmt.Errorf("--binary must be an absolute path, not %q", binary)
+		return service.Spec{}, errfmt.Errorf("--binary must be an absolute path, not %q", binary)
 	}
 	if _, err := os.Stat(binary); err != nil {
-		return service.Spec{}, fmt.Errorf("--binary: %w", err)
+		return service.Spec{}, errfmt.Errorf("--binary: %w", err)
 	}
 	socket, err := session.GetSocketPath()
 	if err != nil {
@@ -157,7 +158,7 @@ func newDaemonUninstallServiceCommand() *cobra.Command {
 				return nil
 			}
 			if err := service.Uninstall(name); err != nil {
-				return fmt.Errorf("remove the service %s: %w", name, err)
+				return errfmt.Errorf("remove the service %s: %w", name, err)
 			}
 			fmt.Fprintf(out, "Removed the service %s.\n", name)
 			fmt.Fprintln(out, "A daemon that runs now continues. New daemons start without the service.")

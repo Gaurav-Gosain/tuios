@@ -1,12 +1,13 @@
 package main
 
 import (
-	"encoding/json"
 	"fmt"
 	"maps"
 	"os"
 	"slices"
 
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
+	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 	"github.com/spf13/cobra"
 )
 
@@ -46,7 +47,7 @@ with -s.`,
 				name = os.Getenv("TUIOS_SESSION")
 			}
 			if name == "" {
-				return fmt.Errorf("name the session with -s. Outside a pane there is no session to use")
+				return errfmt.Errorf("name the session with -s. Outside a pane there is no session to use")
 			}
 			return runDisplayEnv(name, jsonOut)
 		},
@@ -76,8 +77,8 @@ func runDisplayEnv(name string, jsonOut bool) error {
 		Target  string            `json:"target,omitempty"`
 		Env     map[string]string `json:"env"`
 	}
-	if err := json.Unmarshal(raw, &res); err != nil {
-		return fmt.Errorf("failed to parse response: %w", err)
+	if err := jsonx.Unmarshal(raw, &res); err != nil {
+		return errfmt.Errorf("failed to parse response: %w", err)
 	}
 	if jsonOut {
 		return printJSON(res)

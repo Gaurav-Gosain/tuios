@@ -7,6 +7,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 	"github.com/Gaurav-Gosain/tuios/internal/review"
 )
 
@@ -334,7 +335,7 @@ func (m *OS) reviewStageCmd(params map[string]any, hunk *review.Hunk, done strin
 			Undo reviewUndo `json:"undo"`
 		}
 		if err == nil {
-			err = json.Unmarshal(raw, &res)
+			err = jsonx.Unmarshal(raw, &res)
 		}
 		msg.Err = err
 		if err == nil {

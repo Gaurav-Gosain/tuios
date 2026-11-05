@@ -5,6 +5,8 @@ import (
 	"reflect"
 	"strconv"
 	"unicode/utf8"
+
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 )
 
 // Bounds on the gob payloads a client or a linked peer can send the daemon.
@@ -181,9 +183,9 @@ func (e *FrameTooLargeError) Error() string {
 // errLayoutTooDeep, errLayoutTooLarge and errResultTooDeep refuse what no
 // real session or command produces.
 var (
-	errLayoutTooDeep  = fmt.Errorf("layout tree is deeper than %d levels", maxBSPDepth)
-	errLayoutTooLarge = fmt.Errorf("layout trees hold more than %d nodes", maxBSPNodes)
-	errResultTooDeep  = fmt.Errorf("result data nests deeper than %d levels", maxResultDataDepth)
+	errLayoutTooDeep  = errfmt.Errorf("layout tree is deeper than %d levels", maxBSPDepth)
+	errLayoutTooLarge = errfmt.Errorf("layout trees hold more than %d nodes", maxBSPNodes)
+	errResultTooDeep  = errfmt.Errorf("result data nests deeper than %d levels", maxResultDataDepth)
 )
 
 // validateSessionState checks the layout trees of a state that came off the
@@ -198,7 +200,7 @@ func validateSessionState(s *SessionState) error {
 			continue
 		}
 		if err := checkBSPTree(tree.Root, &nodes); err != nil {
-			return fmt.Errorf("workspace %d: %w", ws, err)
+			return errfmt.Errorf("workspace %d: %w", ws, err)
 		}
 	}
 	return nil

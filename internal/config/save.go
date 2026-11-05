@@ -4,13 +4,13 @@ import (
 	"bytes"
 	"crypto/sha256"
 	"errors"
-	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 	"sync"
 	"sync/atomic"
 
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"github.com/adrg/xdg"
 	"github.com/pelletier/go-toml/v2"
 )
@@ -149,13 +149,13 @@ const configHeaderRest = "# Documentation: https://github.com/Gaurav-Gosain/tuio
 func renderConfigFile(cfg *UserConfig, configPath string) ([]byte, error) {
 	data, err := MarshalUserConfig(cfg)
 	if err != nil {
-		return nil, fmt.Errorf("failed to marshal config: %w", err)
+		return nil, errfmt.Errorf("failed to marshal config: %w", err)
 	}
 
 	var sb strings.Builder
 	sb.WriteString(configFileHeader(configPath))
 	if _, err := sb.Write(data); err != nil {
-		return nil, fmt.Errorf("failed to write config data: %w", err)
+		return nil, errfmt.Errorf("failed to write config data: %w", err)
 	}
 	return []byte(sb.String()), nil
 }
@@ -191,7 +191,7 @@ func MarshalUserConfig(cfg *UserConfig) ([]byte, error) {
 // its target, so the link survives, and the file keeps its mode.
 func writeConfigBytes(data []byte, configPath string) error {
 	if err := os.MkdirAll(filepath.Dir(configPath), 0o750); err != nil {
-		return fmt.Errorf("failed to create config directory: %w", err)
+		return errfmt.Errorf("failed to create config directory: %w", err)
 	}
 	target := configPath
 	if resolved, err := filepath.EvalSymlinks(configPath); err == nil {
@@ -203,7 +203,7 @@ func writeConfigBytes(data []byte, configPath string) error {
 	}
 	tmp, err := os.CreateTemp(filepath.Dir(target), ".config.toml.*")
 	if err != nil {
-		return fmt.Errorf("failed to write config file: %w", err)
+		return errfmt.Errorf("failed to write config file: %w", err)
 	}
 	tmpPath := tmp.Name()
 	_, werr := tmp.Write(data)
@@ -215,12 +215,12 @@ func writeConfigBytes(data []byte, configPath string) error {
 	}
 	if werr != nil {
 		_ = os.Remove(tmpPath)
-		return fmt.Errorf("failed to write config file: %w", werr)
+		return errfmt.Errorf("failed to write config file: %w", werr)
 	}
 	noteSelfWrite(data)
 	if err := os.Rename(tmpPath, target); err != nil {
 		_ = os.Remove(tmpPath)
-		return fmt.Errorf("failed to write config file: %w", err)
+		return errfmt.Errorf("failed to write config file: %w", err)
 	}
 	return nil
 }
@@ -329,11 +329,11 @@ var (
 func RenderUserConfig(cfg *UserConfig) (func() (WriteNote, error), error) {
 	configPath, err := xdg.ConfigFile("tuios/config.toml")
 	if err != nil {
-		return nil, fmt.Errorf("failed to resolve config path: %w", err)
+		return nil, errfmt.Errorf("failed to resolve config path: %w", err)
 	}
 	data, err := MarshalUserConfig(cfg)
 	if err != nil {
-		return nil, fmt.Errorf("failed to marshal config: %w", err)
+		return nil, errfmt.Errorf("failed to marshal config: %w", err)
 	}
 	base := cfg.baseline
 	cfg.baseline = data

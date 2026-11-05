@@ -14,6 +14,8 @@ import (
 	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/atomicfile"
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
+	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 	"github.com/adrg/xdg"
 )
 
@@ -85,11 +87,11 @@ func getResurrectionPath(sessionName string) (string, error) {
 func stateJoin(dir, name, suffix string) (string, error) {
 	if name == "" || strings.Trim(name, ".") == "" || strings.HasSuffix(name, ".") || strings.HasSuffix(name, " ") ||
 		strings.ContainsAny(name, "/\\\x00") || (runtime.GOOS == "windows" && windowsDeviceName(name)) {
-		return "", fmt.Errorf("the name %q cannot name a saved state file", name)
+		return "", errfmt.Errorf("the name %q cannot name a saved state file", name)
 	}
 	path := filepath.Join(dir, name+suffix)
 	if filepath.Dir(path) != filepath.Clean(dir) {
-		return "", fmt.Errorf("the name %q cannot name a saved state file", name)
+		return "", errfmt.Errorf("the name %q cannot name a saved state file", name)
 	}
 	return path, nil
 }
@@ -106,25 +108,25 @@ func ValidateSessionName(name string) error {
 		return nil
 	}
 	if strings.TrimSpace(name) != name {
-		return fmt.Errorf("session name %q has leading or trailing whitespace", name)
+		return errfmt.Errorf("session name %q has leading or trailing whitespace", name)
 	}
 	if strings.Trim(name, ".") == "" {
-		return fmt.Errorf("session name %q is reserved. Use a name with a letter or a digit", name)
+		return errfmt.Errorf("session name %q is reserved. Use a name with a letter or a digit", name)
 	}
 	if strings.ContainsAny(name, `/\`) {
-		return fmt.Errorf("session name %q contains a path separator. A session name is also the name of its state file", name)
+		return errfmt.Errorf("session name %q contains a path separator. A session name is also the name of its state file", name)
 	}
 	// Windows drops a dot at the end of a file name, so "foo." and "foo"
 	// would share one state folder there. The rule holds on every system, so
 	// a saved session keeps its name when it moves to another machine.
 	if strings.HasSuffix(name, ".") {
-		return fmt.Errorf("session name %q ends in a dot. Remove the dot", name)
+		return errfmt.Errorf("session name %q ends in a dot. Remove the dot", name)
 	}
 	if windowsDeviceName(name) {
-		return fmt.Errorf("session name %q is a device name on Windows. Use a different name", name)
+		return errfmt.Errorf("session name %q is a device name on Windows. Use a different name", name)
 	}
 	if strings.ContainsFunc(name, func(r rune) bool { return r < 0x20 || r == 0x7f }) {
-		return fmt.Errorf("session name %q contains a control character", name)
+		return errfmt.Errorf("session name %q contains a control character", name)
 	}
 	return nil
 }
@@ -268,12 +270,12 @@ func SaveSessionForResurrection(state *SessionState) error {
 
 	dir := getResurrectionDir()
 	if err := os.MkdirAll(dir, 0700); err != nil {
-		return fmt.Errorf("failed to create resurrection dir: %w", err)
+		return errfmt.Errorf("failed to create resurrection dir: %w", err)
 	}
 
 	data, err := json.MarshalIndent(state, "", "  ")
 	if err != nil {
-		return fmt.Errorf("failed to marshal session state: %w", err)
+		return errfmt.Errorf("failed to marshal session state: %w", err)
 	}
 
 	path, err := getResurrectionPath(state.Name)
@@ -281,7 +283,7 @@ func SaveSessionForResurrection(state *SessionState) error {
 		return err
 	}
 	if err := atomicfile.Write(path, data, 0o600, false); err != nil {
-		return fmt.Errorf("failed to write resurrection file: %w", err)
+		return errfmt.Errorf("failed to write resurrection file: %w", err)
 	}
 
 	return nil
@@ -297,19 +299,19 @@ func LoadResurrectionState(sessionName string) (*SessionState, error) {
 	}
 	data, err := os.ReadFile(path) // #nosec G304
 	if err != nil {
-		return nil, fmt.Errorf("no resurrection data for session %q: %w", sessionName, err)
+		return nil, errfmt.Errorf("no resurrection data for session %q: %w", sessionName, err)
 	}
 
 	var state SessionState
-	if err := json.Unmarshal(data, &state); err != nil {
+	if err := jsonx.Unmarshal(data, &state); err != nil {
 		dest := archiveResurrectionFile(path)
-		return nil, fmt.Errorf("saved state for session %q is corrupt and cannot be restored (%s): %w",
+		return nil, errfmt.Errorf("saved state for session %q is corrupt and cannot be restored (%s): %w",
 			sessionName, archivedNote(dest), err)
 	}
 
 	if state.ResurrectionVersion > ResurrectionVersion {
 		dest := archiveResurrectionFile(path)
-		return nil, fmt.Errorf("saved state for session %q was written by a newer TUIOS (state version %d, this build reads up to %d) and cannot be restored (%s)",
+		return nil, errfmt.Errorf("saved state for session %q was written by a newer TUIOS (state version %d, this build reads up to %d) and cannot be restored (%s)",
 			sessionName, state.ResurrectionVersion, ResurrectionVersion, archivedNote(dest))
 	}
 

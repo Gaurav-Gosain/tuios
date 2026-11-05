@@ -12,6 +12,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 	"github.com/charmbracelet/x/ansi"
 )
 
@@ -307,7 +308,7 @@ func (d *Daemon) streamEvents(cs *connState, sub *eventSub) {
 // writeEventLine serializes ev as one newline-terminated JSON line and writes it
 // under the connection's send mutex with a write deadline.
 func (d *Daemon) writeEventLine(cs *connState, ev streamEvent) error {
-	data, err := json.Marshal(ev)
+	data, err := jsonx.Marshal(ev)
 	if err != nil {
 		return err
 	}

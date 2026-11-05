@@ -3,10 +3,12 @@ package agentproto
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"io"
 	"strings"
 	"sync"
+
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
+	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 )
 
 // The ACP client, protocol version 1.
@@ -81,10 +83,10 @@ func (a *ACP) Start(ctx context.Context, cwd string) (Info, error) {
 		"clientInfo": map[string]string{"name": "tuios", "title": "tuios", "version": a.version},
 	}, &init)
 	if err != nil {
-		return Info{}, fmt.Errorf("initialize: %w", err)
+		return Info{}, errfmt.Errorf("initialize: %w", err)
 	}
 	if init.ProtocolVersion != acpProtocolVersion {
-		return Info{}, fmt.Errorf("the agent speaks ACP version %d, and tuios speaks version %d", init.ProtocolVersion, acpProtocolVersion)
+		return Info{}, errfmt.Errorf("the agent speaks ACP version %d, and tuios speaks version %d", init.ProtocolVersion, acpProtocolVersion)
 	}
 	var info Info
 	if ai := init.AgentInfo; ai != nil {
@@ -104,12 +106,12 @@ func (a *ACP) Start(ctx context.Context, cwd string) (Info, error) {
 			for _, m := range init.AuthMethods {
 				names = append(names, firstOf(m.Name, m.ID))
 			}
-			return info, fmt.Errorf("session/new: %w. The agent may need a login (%s): log in by running it in a shell, then start it here again", err, strings.Join(names, ", "))
+			return info, errfmt.Errorf("session/new: %w. The agent may need a login (%s): log in by running it in a shell, then start it here again", err, strings.Join(names, ", "))
 		}
-		return info, fmt.Errorf("session/new: %w", err)
+		return info, errfmt.Errorf("session/new: %w", err)
 	}
 	if created.SessionID == "" {
-		return info, fmt.Errorf("session/new: the agent returned no sessionId")
+		return info, errfmt.Errorf("session/new: the agent returned no sessionId")
 	}
 	a.mu.Lock()
 	a.session = created.SessionID
@@ -129,7 +131,7 @@ func acpModel(raw json.RawMessage) string {
 			Name    string `json:"name"`
 		} `json:"availableModels"`
 	}
-	if len(raw) == 0 || json.Unmarshal(raw, &m) != nil || m.CurrentModelID == "" {
+	if len(raw) == 0 || jsonx.Unmarshal(raw, &m) != nil || m.CurrentModelID == "" {
 		return ""
 	}
 	for _, am := range m.AvailableModels {
@@ -226,13 +228,13 @@ func (a *ACP) onNotify(method string, params json.RawMessage) {
 		SessionID string          `json:"sessionId"`
 		Update    json.RawMessage `json:"update"`
 	}
-	if json.Unmarshal(params, &p) != nil {
+	if jsonx.Unmarshal(params, &p) != nil {
 		return
 	}
 	var kind struct {
 		SessionUpdate string `json:"sessionUpdate"`
 	}
-	if json.Unmarshal(p.Update, &kind) != nil {
+	if jsonx.Unmarshal(p.Update, &kind) != nil {
 		return
 	}
 	switch kind.SessionUpdate {
@@ -240,14 +242,14 @@ func (a *ACP) onNotify(method string, params json.RawMessage) {
 		var u struct {
 			Content acpContent `json:"content"`
 		}
-		if json.Unmarshal(p.Update, &u) == nil {
+		if jsonx.Unmarshal(p.Update, &u) == nil {
 			if s := u.Content.String(); s != "" {
 				a.emit(Text{Text: s, Thought: kind.SessionUpdate == "agent_thought_chunk"})
 			}
 		}
 	case "tool_call", "tool_call_update":
 		var u acpToolFields
-		if json.Unmarshal(p.Update, &u) == nil && u.ToolCallID != "" {
+		if jsonx.Unmarshal(p.Update, &u) == nil && u.ToolCallID != "" {
 			a.emit(a.mergeTool(u, kind.SessionUpdate == "tool_call"))
 		}
 	case "plan":
@@ -257,7 +259,7 @@ func (a *ACP) onNotify(method string, params json.RawMessage) {
 				Status  string `json:"status"`
 			} `json:"entries"`
 		}
-		if json.Unmarshal(p.Update, &u) == nil {
+		if jsonx.Unmarshal(p.Update, &u) == nil {
 			plan := Plan{}
 			for _, e := range u.Entries {
 				plan.Entries = append(plan.Entries, PlanEntry{Content: e.Content, Status: e.Status})
@@ -274,19 +276,19 @@ func (a *ACP) onNotify(method string, params json.RawMessage) {
 			Size json.RawMessage `json:"size"`
 			Cost json.RawMessage `json:"cost"`
 		}
-		if json.Unmarshal(p.Update, &u) != nil {
+		if jsonx.Unmarshal(p.Update, &u) != nil {
 			return
 		}
 		var usage Usage
 		var used, size int64
-		if json.Unmarshal(u.Used, &used) == nil && json.Unmarshal(u.Size, &size) == nil && size > 0 && used >= 0 {
+		if jsonx.Unmarshal(u.Used, &used) == nil && jsonx.Unmarshal(u.Size, &size) == nil && size > 0 && used >= 0 {
 			usage.ContextUsed, usage.ContextSize = used, size
 		}
 		var cost struct {
 			Amount   *float64 `json:"amount"`
 			Currency string   `json:"currency"`
 		}
-		if json.Unmarshal(u.Cost, &cost) == nil && cost.Amount != nil {
+		if jsonx.Unmarshal(u.Cost, &cost) == nil && cost.Amount != nil {
 			usage.Cost, usage.HasCost, usage.Currency = *cost.Amount, true, cost.Currency
 		}
 		if usage.ContextSize > 0 || usage.HasCost {
@@ -358,14 +360,14 @@ func acpToolStatus(s string) string {
 // it holds anything else, or is not an object.
 func flatInput(raw json.RawMessage) (map[string]string, bool) {
 	var obj map[string]json.RawMessage
-	if json.Unmarshal(raw, &obj) != nil {
+	if jsonx.Unmarshal(raw, &obj) != nil {
 		return nil, true
 	}
 	out := make(map[string]string, len(obj))
 	other := false
 	for k, v := range obj {
 		var s string
-		if json.Unmarshal(v, &s) == nil {
+		if jsonx.Unmarshal(v, &s) == nil {
 			out[k] = s
 			continue
 		}
@@ -389,7 +391,7 @@ func (a *ACP) onRequest(r *Request) {
 			Kind     string `json:"kind"`
 		} `json:"options"`
 	}
-	if json.Unmarshal(r.Params, &p) != nil || len(p.Options) == 0 {
+	if jsonx.Unmarshal(r.Params, &p) != nil || len(p.Options) == 0 {
 		r.ReplyError(codeInvalidParams, "a permission request needs options")
 		return
 	}

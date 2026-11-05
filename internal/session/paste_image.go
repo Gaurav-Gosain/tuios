@@ -20,6 +20,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
+	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 	"github.com/Gaurav-Gosain/tuios/internal/sortx"
 )
 
@@ -183,7 +185,7 @@ func (s *pasteStore) save(data []byte) (string, error) {
 		return "", errors.New("this daemon has no store for pasted images")
 	}
 	if len(data) > pasteImageMaxBytes {
-		return "", fmt.Errorf("the image is %d bytes and the limit is %d bytes", len(data), pasteImageMaxBytes)
+		return "", errfmt.Errorf("the image is %d bytes and the limit is %d bytes", len(data), pasteImageMaxBytes)
 	}
 	ext := sniffImage(data)
 	if ext == "" {
@@ -242,7 +244,7 @@ func (s *pasteStore) write(data []byte, prefix, ext string, held map[string]bool
 		return "", err
 	}
 	if !info.IsDir() {
-		return "", fmt.Errorf("%s: %w", dir, errPasteDirLink)
+		return "", errfmt.Errorf("%s: %w", dir, errPasteDirLink)
 	}
 	root, err := os.OpenRoot(dir)
 	if err != nil {
@@ -252,7 +254,7 @@ func (s *pasteStore) write(data []byte, prefix, ext string, held map[string]bool
 	// The root must be the directory that was checked, not one swapped in
 	// for it since.
 	if opened, err := root.Stat("."); err != nil || !os.SameFile(opened, info) {
-		return "", fmt.Errorf("%s: %w", dir, errPasteDirLink)
+		return "", errfmt.Errorf("%s: %w", dir, errPasteDirLink)
 	}
 	// Mkdir leaves an existing directory's mode alone. This one is ours, so
 	// it is put back to the owner's alone.
@@ -636,7 +638,7 @@ func (p *remotePane) pasteImage(ctx context.Context, data []byte) (string, error
 		_ = stream.Close()
 	}()
 
-	params, err := json.Marshal(map[string]string{
+	params, err := jsonx.Marshal(map[string]string{
 		"pane":    p.id,
 		"token":   p.callsToken,
 		"content": base64.StdEncoding.EncodeToString(data),
@@ -644,12 +646,12 @@ func (p *remotePane) pasteImage(ctx context.Context, data []byte) (string, error
 	if err != nil {
 		return "", err
 	}
-	req, err := json.Marshal(verbRequest{ID: json.RawMessage(`1`), Verb: "paste-pane-image", Params: params})
+	req, err := jsonx.Marshal(verbRequest{ID: json.RawMessage(`1`), Verb: "paste-pane-image", Params: params})
 	if err != nil {
 		return "", err
 	}
 	if _, err := stream.Write(append(req, '\n')); err != nil {
-		return "", fmt.Errorf("cannot send the image: %w", err)
+		return "", errfmt.Errorf("cannot send the image: %w", err)
 	}
 	line, err := readLimitedLine(bufio.NewReader(stream), maxPasteReply)
 	if err != nil {
@@ -667,8 +669,8 @@ func (p *remotePane) pasteImage(ctx context.Context, data []byte) (string, error
 		} `json:"result"`
 		Error *verbError `json:"error"`
 	}
-	if err := json.Unmarshal(line, &resp); err != nil {
-		return "", fmt.Errorf("the reply cannot be read by this build: %w", err)
+	if err := jsonx.Unmarshal(line, &resp); err != nil {
+		return "", errfmt.Errorf("the reply cannot be read by this build: %w", err)
 	}
 	if resp.Error != nil {
 		if resp.Error.Code == ErrVerbUnknownVerb {

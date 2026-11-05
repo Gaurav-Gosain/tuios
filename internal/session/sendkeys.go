@@ -8,6 +8,7 @@ import (
 	"unicode"
 	"unicode/utf8"
 
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"github.com/charmbracelet/x/ansi"
 	"tuios.dev/vt"
 )
@@ -351,14 +352,14 @@ func (e errUnknownKey) Error() string {
 // each token. repeat sends the whole sequence that many times; 0 means once.
 func parseSendKeys(keys string, repeat int) ([]sendKey, error) {
 	if repeat < 0 || repeat > maxSendKeysRepeat {
-		return nil, fmt.Errorf("repeat must be between 1 and %d, got %d", maxSendKeysRepeat, repeat)
+		return nil, errfmt.Errorf("repeat must be between 1 and %d, got %d", maxSendKeysRepeat, repeat)
 	}
 	if repeat == 0 {
 		repeat = 1
 	}
 	tokens := strings.Fields(strings.ReplaceAll(keys, ",", " "))
 	if len(tokens) == 0 {
-		return nil, fmt.Errorf("no valid keys in sequence: %s", keys)
+		return nil, errfmt.Errorf("no valid keys in sequence: %s", keys)
 	}
 	one := make([]sendKey, 0, len(tokens))
 	for _, tok := range tokens {
@@ -481,7 +482,7 @@ func modifiedChar(r rune, mods keyMods, tok string) ([]byte, error) {
 	if mods.ctrl {
 		c, ok := controlByte(r)
 		if !ok {
-			return nil, fmt.Errorf("unsupported ctrl combination %q: ctrl works on a letter or one of @ [ \\ ] ^ _ ? and space", tok)
+			return nil, errfmt.Errorf("unsupported ctrl combination %q: ctrl works on a letter or one of @ [ \\ ] ^ _ ? and space", tok)
 		}
 		out = string([]byte{c})
 	}
@@ -566,7 +567,7 @@ func splitKeyMods(tok string) (mods keyMods, rest string, hasMods bool, err erro
 		}
 	}
 	if key == "" {
-		return keyMods{}, tok, false, fmt.Errorf("unsupported ctrl combination %q: a modifier needs a key after it, as in ctrl+c", tok)
+		return keyMods{}, tok, false, errfmt.Errorf("unsupported ctrl combination %q: a modifier needs a key after it, as in ctrl+c", tok)
 	}
 	return mods, key, true, nil
 }
@@ -665,21 +666,21 @@ func decodeEscapeToken(tok string) (b []byte, ok bool, err error) {
 			out = append(out, '\\')
 		case 'x':
 			if i+2 >= len(tok) {
-				return nil, true, fmt.Errorf("bad escape in %q: \\x needs two hex digits", tok)
+				return nil, true, errfmt.Errorf("bad escape in %q: \\x needs two hex digits", tok)
 			}
 			v, perr := strconv.ParseUint(tok[i+1:i+3], 16, 8)
 			if perr != nil {
-				return nil, true, fmt.Errorf("bad escape in %q: \\x needs two hex digits", tok)
+				return nil, true, errfmt.Errorf("bad escape in %q: \\x needs two hex digits", tok)
 			}
 			out = append(out, byte(v))
 			i += 2
 		case 'u':
 			if i+4 >= len(tok) {
-				return nil, true, fmt.Errorf("bad escape in %q: \\u needs four hex digits", tok)
+				return nil, true, errfmt.Errorf("bad escape in %q: \\u needs four hex digits", tok)
 			}
 			v, perr := strconv.ParseUint(tok[i+1:i+5], 16, 32)
 			if perr != nil {
-				return nil, true, fmt.Errorf("bad escape in %q: \\u needs four hex digits", tok)
+				return nil, true, errfmt.Errorf("bad escape in %q: \\u needs four hex digits", tok)
 			}
 			out = utf8.AppendRune(out, rune(v))
 			i += 4
@@ -690,7 +691,7 @@ func decodeEscapeToken(tok string) (b []byte, ok bool, err error) {
 			}
 			v, perr := strconv.ParseUint(tok[i:j], 8, 8)
 			if perr != nil {
-				return nil, true, fmt.Errorf("bad escape in %q: %v", tok, perr)
+				return nil, true, errfmt.Errorf("bad escape in %q: %v", tok, perr)
 			}
 			out = append(out, byte(v))
 			i = j - 1
@@ -707,10 +708,10 @@ func sendKeysBytes(keys []sendKey, modes paneKeyModes) ([]byte, error) {
 	var out []byte
 	for _, k := range keys {
 		if k.prefix {
-			return nil, fmt.Errorf("the prefix key only works with an attached client. Attach one and retry")
+			return nil, errfmt.Errorf("the prefix key only works with an attached client. Attach one and retry")
 		}
 		if k.mods.super {
-			return nil, fmt.Errorf("unsupported modifier in %q: a terminal has no encoding for super. Use ctrl, alt or shift", k.token)
+			return nil, errfmt.Errorf("unsupported modifier in %q: a terminal has no encoding for super. Use ctrl, alt or shift", k.token)
 		}
 		out = append(out, k.encode(modes)...)
 	}
@@ -724,7 +725,7 @@ func sendKeysCanonical(keys []sendKey) (string, error) {
 	parts := make([]string, 0, len(keys))
 	for _, k := range keys {
 		if k.canonical == "" {
-			return "", fmt.Errorf("the escape sequence %q is not a key the window manager reads. Pass a window to write it to that window's terminal", k.token)
+			return "", errfmt.Errorf("the escape sequence %q is not a key the window manager reads. Pass a window to write it to that window's terminal", k.token)
 		}
 		parts = append(parts, k.canonical)
 	}

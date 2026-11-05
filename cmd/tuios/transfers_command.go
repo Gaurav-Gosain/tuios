@@ -9,6 +9,7 @@ import (
 
 	"charm.land/lipgloss/v2"
 	"charm.land/lipgloss/v2/table"
+	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
 	"github.com/Gaurav-Gosain/tuios/internal/units"
@@ -113,7 +114,7 @@ func listCopies(ctl *session.VerbClient) ([]copyRow, json.RawMessage, error) {
 	var out struct {
 		Transfers []copyRow `json:"transfers"`
 	}
-	if err := json.Unmarshal(raw, &out); err != nil {
+	if err := jsonx.Unmarshal(raw, &out); err != nil {
 		return nil, nil, err
 	}
 	return out.Transfers, raw, nil
@@ -131,7 +132,7 @@ func runTransfersList(jsonOut bool) error {
 	}
 	if jsonOut {
 		var v any
-		_ = json.Unmarshal(raw, &v)
+		_ = jsonx.Unmarshal(raw, &v)
 		outputJSON(v)
 		return nil
 	}
@@ -214,7 +215,7 @@ func runTransfersControl(verb, done string, ids []string, jsonOut bool) error {
 		out = append(out, raw)
 		if !jsonOut {
 			var r copyRow
-			_ = json.Unmarshal(raw, &r)
+			_ = jsonx.Unmarshal(raw, &r)
 			fmt.Printf("The copy %s of %s %s.\n", r.ID, r.shownName(), doneWord(done, r))
 		}
 	}
@@ -301,7 +302,7 @@ func runTransfersClear(ids []string, jsonOut bool) error {
 	var r struct {
 		Cleared int `json:"cleared"`
 	}
-	_ = json.Unmarshal(raw, &r)
+	_ = jsonx.Unmarshal(raw, &r)
 	if jsonOut {
 		outputJSON(r)
 		return nil

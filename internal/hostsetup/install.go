@@ -2,10 +2,10 @@ package hostsetup
 
 import (
 	"context"
-	"fmt"
 	"runtime"
 	"strings"
 
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"github.com/Gaurav-Gosain/tuios/internal/hostsync"
 	"github.com/Gaurav-Gosain/tuios/internal/release"
 )
@@ -173,7 +173,7 @@ func (s *Setup) runRemote(ctx context.Context, remote string) (string, error) {
 		if tail == "" {
 			tail = said(stderr)
 		}
-		return out, fmt.Errorf("%s failed on %s: %s", remote, s.name, tail)
+		return out, errfmt.Errorf("%s failed on %s: %s", remote, s.name, tail)
 	}
 	return out, nil
 }

@@ -8,6 +8,7 @@ import (
 	"sync"
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"github.com/Gaurav-Gosain/tuios/internal/layout"
 	"github.com/Gaurav-Gosain/tuios/internal/worktree"
 	"github.com/google/uuid"
@@ -49,7 +50,7 @@ func (s *SessionState) workspaceBound() int {
 // when there is no match, and an error when a name or prefix is ambiguous.
 func findWindowStateIndex(windows []WindowState, target string) (int, error) {
 	if target == "" {
-		return -1, fmt.Errorf("empty window target")
+		return -1, errfmt.Errorf("empty window target")
 	}
 
 	// Exact ID.
@@ -93,7 +94,7 @@ func findWindowStateIndex(windows []WindowState, target string) (int, error) {
 			return nameIdx, nil
 		}
 		if nameCount > 1 {
-			return -1, fmt.Errorf("ambiguous window name %q matches %d windows: %s. Use the id, or rename one with set-window --name", target, nameCount,
+			return -1, errfmt.Errorf("ambiguous window name %q matches %d windows: %s. Use the id, or rename one with set-window --name", target, nameCount,
 				describeWindows(windows, byName))
 		}
 	}
@@ -110,11 +111,11 @@ func findWindowStateIndex(windows []WindowState, target string) (int, error) {
 		return prefixIdx, nil
 	}
 	if prefixCount > 1 {
-		return -1, fmt.Errorf("ambiguous window ID prefix %q matches %d windows: %s. Use more of the id", target, prefixCount,
+		return -1, errfmt.Errorf("ambiguous window ID prefix %q matches %d windows: %s. Use more of the id", target, prefixCount,
 			describeWindows(windows, func(w WindowState) bool { return strings.HasPrefix(w.ID, target) }))
 	}
 
-	return -1, fmt.Errorf("no window found matching %q", target)
+	return -1, errfmt.Errorf("no window found matching %q", target)
 }
 
 // WindowIndexTarget reports whether a window target is an all-digit position
@@ -394,7 +395,7 @@ func (s *Session) AddDaemonWindowWith(opts NewWindowOptions, onExit func(ptyID s
 	// that then fails to be placed is a process nothing owns.
 	if opts.Workspace != 0 {
 		if st := s.GetState(); !st.workspaceAccepts(opts.Workspace) {
-			return WindowState{}, fmt.Errorf("workspace %d out of range (1-%d)", opts.Workspace, st.workspaceBound())
+			return WindowState{}, errfmt.Errorf("workspace %d out of range (1-%d)", opts.Workspace, st.workspaceBound())
 		}
 	}
 
@@ -752,7 +753,7 @@ func (s *Session) FocusDaemonWindow(target string) error {
 		win := state.Windows[idx]
 		// No focus goes to a scratch workspace a client cannot show.
 		if IsScratchWorkspace(win.Workspace) && s.scratchWSOff {
-			return fmt.Errorf("an older tuios client is attached to this session, so a scratch pane cannot take the focus")
+			return errfmt.Errorf("an older tuios client is attached to this session, so a scratch pane cannot take the focus")
 		}
 		s.markFocusIntentLocked()
 		state.FocusedWindowID = win.ID
@@ -793,7 +794,7 @@ func (s *Session) CycleDaemonFocus(delta int) error {
 			order = append(order, i)
 		}
 		if len(order) == 0 {
-			return fmt.Errorf("no windows on workspace %d", state.CurrentWorkspace)
+			return errfmt.Errorf("no windows on workspace %d", state.CurrentWorkspace)
 		}
 		if current == -1 {
 			current = 0
@@ -868,7 +869,7 @@ func (s *Session) RenameDaemonWindow(target, name string) error {
 func (s *Session) MoveDaemonWindowToWorkspace(target string, ws int) error {
 	return s.mutateState(func(state *SessionState) error {
 		if ws < 1 || ws > state.workspaceBound() {
-			return fmt.Errorf("workspace %d out of range (1-%d)", ws, state.workspaceBound())
+			return errfmt.Errorf("workspace %d out of range (1-%d)", ws, state.workspaceBound())
 		}
 		idx, err := findWindowStateIndex(state.Windows, target)
 		if err != nil {
@@ -897,7 +898,7 @@ func (s *Session) MoveDaemonWindowToWorkspace(target string, ws int) error {
 func (s *Session) SetDaemonWorkspaceName(ws int, name string) error {
 	return s.mutateState(func(state *SessionState) error {
 		if ws < 1 || ws > state.workspaceBound() {
-			return fmt.Errorf("workspace %d out of range (1-%d)", ws, state.workspaceBound())
+			return errfmt.Errorf("workspace %d out of range (1-%d)", ws, state.workspaceBound())
 		}
 		if name == "" {
 			delete(state.WorkspaceNames, ws)
@@ -916,7 +917,7 @@ func (s *Session) SetDaemonWorkspaceName(ws int, name string) error {
 func (s *Session) SwitchDaemonWorkspace(ws int) error {
 	return s.mutateState(func(state *SessionState) error {
 		if ws < 1 || ws > state.workspaceBound() {
-			return fmt.Errorf("workspace %d out of range (1-%d)", ws, state.workspaceBound())
+			return errfmt.Errorf("workspace %d out of range (1-%d)", ws, state.workspaceBound())
 		}
 		s.markFocusIntentLocked()
 		state.CurrentWorkspace = ws

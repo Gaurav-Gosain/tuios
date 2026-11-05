@@ -5,13 +5,13 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
-	"fmt"
 	"io/fs"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
 
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"github.com/Gaurav-Gosain/tuios/internal/lazyre"
 	"github.com/Gaurav-Gosain/tuios/skills"
 )
@@ -196,14 +196,14 @@ func (t *Target) InstallSkill(env Env) (Result, error) {
 		return res, err
 	}
 	if link {
-		return res, fmt.Errorf("%s: %w", res.Path, ErrSkillNotOurs)
+		return res, errfmt.Errorf("%s: %w", res.Path, ErrSkillNotOurs)
 	}
 	want := SkillStub()
 	if have != nil {
 		owner, version := classifySkill(have)
 		switch {
 		case owner != skillOurs:
-			return res, fmt.Errorf("%s: %w", res.Path, ErrSkillNotOurs)
+			return res, errfmt.Errorf("%s: %w", res.Path, ErrSkillNotOurs)
 		case version > SkillVersion:
 			res.Notes = append(res.Notes, "a newer tuios wrote the skill in "+res.Path+", so it stays")
 			return res, nil
@@ -241,7 +241,7 @@ func (t *Target) UninstallSkill(env Env) (Result, error) {
 		}
 	}
 	if err := os.Remove(res.Path); err != nil && !errors.Is(err, fs.ErrNotExist) {
-		return res, fmt.Errorf("failed to remove %s: %w", res.Path, err)
+		return res, errfmt.Errorf("failed to remove %s: %w", res.Path, err)
 	}
 	// Only removes an empty directory; one holding anything else stays.
 	_ = os.Remove(filepath.Dir(res.Path))
@@ -256,11 +256,11 @@ func (t *Target) UninstallSkill(env Env) (Result, error) {
 func writeOwned(path string, data []byte) error {
 	dir := filepath.Dir(path)
 	if err := os.MkdirAll(dir, 0o755); err != nil { //nolint:gosec // a skills directory, made the way the harness makes it
-		return fmt.Errorf("failed to create %s: %w", dir, err)
+		return errfmt.Errorf("failed to create %s: %w", dir, err)
 	}
 	tmp, err := os.CreateTemp(dir, "."+filepath.Base(path)+".tuios-*")
 	if err != nil {
-		return fmt.Errorf("failed to write %s: %w", path, err)
+		return errfmt.Errorf("failed to write %s: %w", path, err)
 	}
 	name := tmp.Name()
 	defer func() { _ = os.Remove(name) }()
@@ -275,7 +275,7 @@ func writeOwned(path string, data []byte) error {
 		werr = os.Rename(name, path)
 	}
 	if werr != nil {
-		return fmt.Errorf("failed to write %s: %w", path, werr)
+		return errfmt.Errorf("failed to write %s: %w", path, werr)
 	}
 	return nil
 }

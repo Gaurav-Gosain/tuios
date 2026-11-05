@@ -6,13 +6,13 @@
 package hints
 
 import (
-	"fmt"
 	"net/netip"
 	"regexp"
 	"slices"
 	"strings"
 	"sync"
 
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"github.com/Gaurav-Gosain/tuios/internal/sortx"
 )
 
@@ -113,7 +113,7 @@ func CompilePattern(expr string) (*regexp.Regexp, int, error) {
 		return nil, 0, err
 	}
 	if re.MatchString("") {
-		return nil, 0, fmt.Errorf("pattern %q matches empty text", expr)
+		return nil, 0, errfmt.Errorf("pattern %q matches empty text", expr)
 	}
 	return re, max(re.SubexpIndex("match"), 0), nil
 }

@@ -1,12 +1,12 @@
 package app
 
 import (
-	"encoding/json"
 	"os"
 	"path/filepath"
 	"sort"
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/adrg/xdg"
 )
@@ -133,7 +133,7 @@ func (m *OS) loadSidebarState() {
 		return
 	}
 	var st sidebarStateFile
-	if json.Unmarshal(data, &st) != nil {
+	if jsonx.Unmarshal(data, &st) != nil {
 		return
 	}
 	if len(st.Order) > 0 {
@@ -231,7 +231,7 @@ func (m *OS) saveSidebarState() {
 	// stored a dismissal would write its own older set over it.
 	if data, err := os.ReadFile(filepath.Join(dir, sidebarStateFileName)); err == nil {
 		var disk sidebarStateFile
-		if json.Unmarshal(data, &disk) == nil {
+		if jsonx.Unmarshal(data, &disk) == nil {
 			for _, k := range disk.AgentNoticesDismissed {
 				if m.agentNoticesDismissed == nil {
 					m.agentNoticesDismissed = map[string]bool{}
@@ -254,7 +254,7 @@ func (m *OS) saveSidebarState() {
 	// nobody had dragged made it look like a choice on the next load, so a
 	// change to the shipped width never reached a rail that had saved any state
 	// at all.
-	data, err := json.Marshal(sidebarStateFile{
+	data, err := jsonx.Marshal(sidebarStateFile{
 		Order:                 m.SidebarOrder,
 		Width:                 m.SidebarWidthPref,
 		DragWidth:             true,

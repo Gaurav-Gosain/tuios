@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 )
 
 // ScratchConfig is the [scratch] section: the size of the scratch terminal,
@@ -69,7 +71,7 @@ func scratchSpec(spec, fallback string) string {
 func ParseBoxSize(spec string) (value int, percent bool, err error) {
 	text := strings.TrimSpace(spec)
 	if text == "" {
-		return 0, false, fmt.Errorf("size is empty")
+		return 0, false, errfmt.Errorf("size is empty")
 	}
 	if rest, ok := strings.CutSuffix(text, "%"); ok {
 		percent = true
@@ -77,13 +79,13 @@ func ParseBoxSize(spec string) (value int, percent bool, err error) {
 	}
 	value, err = strconv.Atoi(text)
 	if err != nil {
-		return 0, percent, fmt.Errorf("%q is not a number of cells or a percentage, e.g. 60 or 60%%", spec)
+		return 0, percent, errfmt.Errorf("%q is not a number of cells or a percentage, e.g. 60 or 60%%", spec)
 	}
 	if value <= 0 {
-		return 0, percent, fmt.Errorf("%q is not a size, ask for at least 1", spec)
+		return 0, percent, errfmt.Errorf("%q is not a size, ask for at least 1", spec)
 	}
 	if percent && value > 100 {
-		return 0, percent, fmt.Errorf("%q is more than the whole region, ask for 100%% or less", spec)
+		return 0, percent, errfmt.Errorf("%q is more than the whole region, ask for 100%% or less", spec)
 	}
 	return value, percent, nil
 }

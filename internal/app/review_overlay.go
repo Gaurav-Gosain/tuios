@@ -1,7 +1,6 @@
 package app
 
 import (
-	"encoding/json"
 	"errors"
 	"slices"
 	"strconv"
@@ -10,6 +9,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 	"github.com/Gaurav-Gosain/tuios/internal/review"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
@@ -543,7 +543,7 @@ func (m *OS) reviewLoadCmd(q reviewQuery, probeFan bool) tea.Cmd {
 			// only that there is nothing to compare.
 			if raw, err := call("compare-fan", map[string]any{"session": res.Session, "changes": false}, reviewVerbTimeout); err == nil {
 				var fan reviewFanResult
-				if json.Unmarshal(raw, &fan) == nil && fan.Group != "" {
+				if jsonx.Unmarshal(raw, &fan) == nil && fan.Group != "" {
 					msg.Fan = &fan
 				}
 			}
@@ -560,7 +560,7 @@ func reviewDiffCall(call inboxVerbCall, params map[string]any) (*reviewDiffResul
 		return nil, err
 	}
 	var res reviewDiffResult
-	if err := json.Unmarshal(raw, &res); err != nil {
+	if err := jsonx.Unmarshal(raw, &res); err != nil {
 		return nil, err
 	}
 	return &res, nil
@@ -999,7 +999,7 @@ func (m *OS) reviewNoteCmd(action string, params map[string]any) tea.Cmd {
 		var res struct {
 			Notes []review.Note `json:"notes"`
 		}
-		if err := json.Unmarshal(raw, &res); err != nil {
+		if err := jsonx.Unmarshal(raw, &res); err != nil {
 			msg.Err = err
 			return msg
 		}
@@ -1069,7 +1069,7 @@ func (m *OS) ReviewSend() tea.Cmd {
 			Withheld       []string `json:"withheld"`
 			WithheldReason string   `json:"withheld_reason"`
 		}
-		if err := json.Unmarshal(raw, &res); err != nil {
+		if err := jsonx.Unmarshal(raw, &res); err != nil {
 			msg.Err = err
 			return msg
 		}

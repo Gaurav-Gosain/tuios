@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/Gaurav-Gosain/tuios/internal/childproc"
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"github.com/Gaurav-Gosain/tuios/internal/worktree"
 )
 
@@ -76,7 +77,7 @@ func IndexOptions(ctx context.Context, dir, mode string) (Options, error) {
 		}
 		return Options{Dir: dir, Base: Base{Name: "HEAD", SHA: head, From: "index"}, Tree: index}, nil
 	}
-	return Options{}, fmt.Errorf("index mode %q is not unstaged or staged", mode)
+	return Options{}, errfmt.Errorf("index mode %q is not unstaged or staged", mode)
 }
 
 // IndexChange reads one file of an index diff of dir again, with its hunks,
@@ -175,7 +176,7 @@ func SelectionPatch(f *File, h *Hunk, sel []int, unstage bool) (string, error) {
 	picked := map[int]bool{}
 	for _, i := range sel {
 		if i < 0 || i >= len(h.Lines) {
-			return "", fmt.Errorf("line %d is outside the hunk, which has %d lines", i, len(h.Lines))
+			return "", errfmt.Errorf("line %d is outside the hunk, which has %d lines", i, len(h.Lines))
 		}
 		if h.Lines[i].Op != OpContext {
 			picked[i] = true
@@ -361,7 +362,7 @@ func IndexEntries(ctx context.Context, dir string, paths []string) ([]IndexEntry
 		meta, path, ok := strings.Cut(rec, "\t")
 		fields := strings.Fields(meta)
 		if !ok || len(fields) != 3 {
-			return nil, fmt.Errorf("unexpected ls-files line %q", rec)
+			return nil, errfmt.Errorf("unexpected ls-files line %q", rec)
 		}
 		if fields[2] != "0" {
 			return nil, &ConflictError{Path: path}
@@ -387,28 +388,28 @@ func ValidEntry(ctx context.Context, dir string, e IndexEntry) error {
 	}
 	if e.Absent {
 		if e.Mode != "" || e.SHA != "" {
-			return fmt.Errorf("%s is absent and carries a mode or a sha", e.Path)
+			return errfmt.Errorf("%s is absent and carries a mode or a sha", e.Path)
 		}
 		return nil
 	}
 	switch e.Mode {
 	case "100644", "100755", "120000", "160000":
 	default:
-		return fmt.Errorf("%s has mode %q, which is not a file, a link or a submodule", e.Path, e.Mode)
+		return errfmt.Errorf("%s has mode %q, which is not a file, a link or a submodule", e.Path, e.Mode)
 	}
 	empty, err := emptyTree(ctx, dir)
 	if err != nil {
 		return err
 	}
 	if len(e.SHA) != len(empty) || strings.Trim(e.SHA, "0123456789abcdef") != "" {
-		return fmt.Errorf("%s has sha %q, which is not an object name here", e.Path, e.SHA)
+		return errfmt.Errorf("%s has sha %q, which is not an object name here", e.Path, e.SHA)
 	}
 	if e.Mode == "160000" {
 		// A submodule's commit lives in the submodule, not here.
 		return nil
 	}
 	if _, err := git(ctx, dir, nil, "cat-file", "-e", e.SHA+"^{blob}"); err != nil {
-		return fmt.Errorf("%s names blob %s, which this repository does not have", e.Path, e.SHA)
+		return errfmt.Errorf("%s names blob %s, which this repository does not have", e.Path, e.SHA)
 	}
 	return nil
 }
@@ -443,13 +444,13 @@ func gitInput(ctx context.Context, dir, stdin string, args ...string) (string, e
 	cmd.Stderr = &stderr
 	if err := cmd.Run(); err != nil {
 		if ctx.Err() != nil {
-			return "", fmt.Errorf("git %s: %w", args[0], ctx.Err())
+			return "", errfmt.Errorf("git %s: %w", args[0], ctx.Err())
 		}
 		msg := strings.TrimSpace(stderr.String())
 		if msg == "" {
 			msg = err.Error()
 		}
-		return "", fmt.Errorf("git %s: %s", firstArg(args), msg)
+		return "", errfmt.Errorf("git %s: %s", firstArg(args), msg)
 	}
 	return stdout.String(), nil
 }

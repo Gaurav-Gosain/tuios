@@ -15,6 +15,7 @@ import (
 	"tuios.dev/tml"
 
 	"github.com/Gaurav-Gosain/tuios/internal/app"
+	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/webshell"
 )
@@ -220,14 +221,14 @@ func (s *tmlSurface) payload(withDoc bool, ops []byte) *session.TMLSurfacePayloa
 		p.Ops = ops
 		return p
 	}
-	p.State, _ = json.Marshal(s.store.State())
+	p.State, _ = jsonx.Marshal(s.store.State())
 	return p
 }
 
 // call answers the client half's TML verbs in place of the daemon. It runs
 // off the program's goroutine.
 func (h *surfaceHost) call(verb string, params map[string]any, _ time.Duration) (json.RawMessage, error) {
-	raw, err := json.Marshal(params)
+	raw, err := jsonx.Marshal(params)
 	if err != nil {
 		return nil, err
 	}
@@ -264,7 +265,7 @@ func (h *surfaceHost) input(raw []byte) (json.RawMessage, error) {
 			Verb string `json:"verb"`
 		} `json:"actions"`
 	}
-	if err := json.Unmarshal(raw, &p); err != nil {
+	if err := jsonx.Unmarshal(raw, &p); err != nil {
 		return nil, err
 	}
 	s, err := h.surface(p.Surface)
@@ -283,7 +284,7 @@ func (h *surfaceHost) input(raw []byte) (json.RawMessage, error) {
 		}
 		s.version++
 		push := s.payload(false, ops)
-		state, _ := json.Marshal(s.store.State())
+		state, _ := jsonx.Marshal(s.store.State())
 		h.mu.Unlock()
 		h.m.OS.LearnPushTMLSurface(push)
 		h.m.emit(Event{Type: EventTMLInput, WindowID: s.windowID, Data: map[string]any{
@@ -299,10 +300,10 @@ func (h *surfaceHost) input(raw []byte) (json.RawMessage, error) {
 		reason := tmlDismissed
 		if v := bytes.TrimSpace(p.Value); len(v) > 0 {
 			var decoded any
-			if err := json.Unmarshal(v, &decoded); err != nil {
+			if err := jsonx.Unmarshal(v, &decoded); err != nil {
 				return nil, err
 			}
-			value, _ = json.Marshal(tml.SanitizeValue(decoded))
+			value, _ = jsonx.Marshal(tml.SanitizeValue(decoded))
 			reason = tmlClosed
 		}
 		h.close(s.id, reason, value)
@@ -314,7 +315,7 @@ func (h *surfaceHost) input(raw []byte) (json.RawMessage, error) {
 	if len(results) > 0 {
 		res["actions"] = results
 	}
-	return json.Marshal(res)
+	return jsonx.Marshal(res)
 }
 
 // get is tml-get: the surface whole, for a client that missed a version.
@@ -322,7 +323,7 @@ func (h *surfaceHost) get(raw []byte) (json.RawMessage, error) {
 	var p struct {
 		Surface string `json:"surface"`
 	}
-	if err := json.Unmarshal(raw, &p); err != nil {
+	if err := jsonx.Unmarshal(raw, &p); err != nil {
 		return nil, err
 	}
 	s, err := h.surface(p.Surface)
@@ -331,8 +332,8 @@ func (h *surfaceHost) get(raw []byte) (json.RawMessage, error) {
 	}
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	state, _ := json.Marshal(s.store.State())
-	return json.Marshal(map[string]any{
+	state, _ := jsonx.Marshal(s.store.State())
+	return jsonx.Marshal(map[string]any{
 		"window_id": s.windowID, "title": s.title, "owner": s.owner,
 		"version": s.version, "doc_version": s.docVersion,
 		"doc": json.RawMessage(s.docJSON), "state": json.RawMessage(state),
@@ -346,7 +347,7 @@ func (h *surfaceHost) place(raw []byte) (json.RawMessage, error) {
 		Surface string `json:"surface"`
 		Target  string `json:"target"`
 	}
-	if err := json.Unmarshal(raw, &p); err != nil {
+	if err := jsonx.Unmarshal(raw, &p); err != nil {
 		return nil, err
 	}
 	s, err := h.surface(p.Surface)
@@ -362,7 +363,7 @@ func (h *surfaceHost) place(raw []byte) (json.RawMessage, error) {
 	h.m.emit(Event{Type: EventTMLPlace, WindowID: s.windowID, Data: map[string]any{
 		"surface": s.id, "windowId": s.windowID, "target": p.Target,
 	}})
-	return json.Marshal(map[string]any{"type": "tml_placed", "surface": s.id, "target": p.Target})
+	return jsonx.Marshal(map[string]any{"type": "tml_placed", "surface": s.id, "target": p.Target})
 }
 
 // close ends a surface: it tells the client to forget it, answers a waiting
@@ -439,12 +440,12 @@ func (h *surfaceHost) update(msg tea.Msg) (tea.Cmd, bool) {
 
 func decodeObject(raw []byte) map[string]any {
 	var out map[string]any
-	_ = json.Unmarshal(raw, &out)
+	_ = jsonx.Unmarshal(raw, &out)
 	return out
 }
 
 func decodeAny(raw []byte) any {
 	var out any
-	_ = json.Unmarshal(raw, &out)
+	_ = jsonx.Unmarshal(raw, &out)
 	return out
 }

@@ -1,14 +1,15 @@
 package integration
 
 import (
-	"encoding/json"
 	"errors"
-	"fmt"
 	"math"
 	"os"
 	"slices"
 	"strconv"
 	"strings"
+
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
+	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 )
 
 // Status line feed: the model, context use and cost a harness shows the
@@ -86,15 +87,15 @@ func (v StatusLineValues) Empty() bool { return v.Model == "" && v.Context == ""
 func ParseStatusLine(harness string, payload []byte) (StatusLineValues, error) {
 	id, ok := Canonical(harness)
 	if !ok || !slices.Contains(StatusLineHarnesses(), id) {
-		return StatusLineValues{}, fmt.Errorf("no status line feed for %s. Available: %s", harness, strings.Join(StatusLineHarnesses(), ", "))
+		return StatusLineValues{}, errfmt.Errorf("no status line feed for %s. Available: %s", harness, strings.Join(StatusLineHarnesses(), ", "))
 	}
 	trimmed := strings.TrimSpace(string(payload))
 	if !strings.HasPrefix(trimmed, "{") {
 		return StatusLineValues{}, errors.New("payload is not a JSON object")
 	}
 	payloadMap := map[string]any{}
-	if err := json.Unmarshal([]byte(trimmed), &payloadMap); err != nil {
-		return StatusLineValues{}, fmt.Errorf("payload is not a JSON object: %w", err)
+	if err := jsonx.Unmarshal([]byte(trimmed), &payloadMap); err != nil {
+		return StatusLineValues{}, errfmt.Errorf("payload is not a JSON object: %w", err)
 	}
 	p := fields(payloadMap)
 	var v StatusLineValues
@@ -324,10 +325,10 @@ func readStatusLineSlot(root *orderedObject) statusLineSlot {
 	s := statusLineSlot{present: true, obj: obj}
 	var typ, cmd string
 	if v, ok := obj.get("type"); ok {
-		_ = json.Unmarshal(v, &typ)
+		_ = jsonx.Unmarshal(v, &typ)
 	}
 	if v, ok := obj.get("command"); ok {
-		_ = json.Unmarshal(v, &cmd)
+		_ = jsonx.Unmarshal(v, &cmd)
 	}
 	s.command = cmd
 	s.isCmd = (typ == "" || typ == "command") && cmd != ""
@@ -406,10 +407,10 @@ func renderIfChanged(root *orderedObject, have []byte) ([]byte, error) {
 func (t *Target) InstallStatusLine(env Env, tuios, then string) (Result, error) {
 	res := Result{Harness: t.ID, Path: t.Path(env)}
 	if !t.SupportsStatusLine() {
-		return res, fmt.Errorf("%s has no status line command tuios can feed from. Only Claude Code does", t.Name)
+		return res, errfmt.Errorf("%s has no status line command tuios can feed from. Only Claude Code does", t.Name)
 	}
 	if st, err := os.Stat(t.ConfigDir(env)); err != nil || !st.IsDir() {
-		return res, fmt.Errorf("%w: %s. Install %s and run it once, then try again", ErrNoConfigDir, t.ConfigDir(env), t.Name)
+		return res, errfmt.Errorf("%w: %s. Install %s and run it once, then try again", ErrNoConfigDir, t.ConfigDir(env), t.Name)
 	}
 	return retryChanged(func() (Result, error) { r := res; return t.writeStatusLine(env, &r, tuios, then, true) })
 }
@@ -438,7 +439,7 @@ func (t *Target) writeStatusLine(env Env, res *Result, tuios, then string, insta
 		if _, ok := errors.AsType[*StatusLineOwnedError](err); ok {
 			return *res, err
 		}
-		return *res, fmt.Errorf("%s: %w. It was left unchanged", path, err)
+		return *res, errfmt.Errorf("%s: %w. It was left unchanged", path, err)
 	}
 	if string(out) == string(have) {
 		return *res, nil

@@ -1,7 +1,6 @@
 package app
 
 import (
-	"encoding/json"
 	"errors"
 	"slices"
 	"strconv"
@@ -12,6 +11,7 @@ import (
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
@@ -520,7 +520,7 @@ func (m *OS) CockpitSideFetch() tea.Cmd {
 				Enabled     *bool          `json:"enabled"`
 				Checkpoints []ckCheckpoint `json:"checkpoints"`
 			}
-			msg.err = json.Unmarshal(raw, &res)
+			msg.err = jsonx.Unmarshal(raw, &res)
 			msg.list = res.Checkpoints
 			msg.off = res.Enabled != nil && !*res.Enabled
 		}

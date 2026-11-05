@@ -2,7 +2,6 @@ package app
 
 import (
 	"errors"
-	"fmt"
 	"os/exec"
 	"path/filepath"
 	"strings"
@@ -10,6 +9,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"github.com/Gaurav-Gosain/tuios/internal/tape"
 )
 
@@ -210,10 +210,10 @@ func (m *OS) PlayTape(name, script string) (tea.Cmd, error) {
 	}
 	commands, errs := tape.ParseFile(script)
 	if len(errs) > 0 {
-		return nil, fmt.Errorf("tape %s: %s", name, errs[0])
+		return nil, errfmt.Errorf("tape %s: %s", name, errs[0])
 	}
 	if len(commands) == 0 {
-		return nil, fmt.Errorf("tape %s is empty", name)
+		return nil, errfmt.Errorf("tape %s is empty", name)
 	}
 	m.startTapePlayback(commands, 0)
 	if name != "" {

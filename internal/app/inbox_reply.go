@@ -1,7 +1,6 @@
 package app
 
 import (
-	"encoding/json"
 	"errors"
 	"slices"
 	"strconv"
@@ -13,6 +12,7 @@ import (
 
 	"github.com/Gaurav-Gosain/tuios/internal/composer"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 )
@@ -648,7 +648,7 @@ func (m *OS) inboxQueueCmdOn(host, sessionID, windowID, who, text, nonce string,
 			Queued     int    `json:"queued"`
 			Delivering bool   `json:"delivering"`
 		}
-		if err := json.Unmarshal(raw, &res); err != nil {
+		if err := jsonx.Unmarshal(raw, &res); err != nil {
 			msg.Err = err
 			return msg
 		}
@@ -840,7 +840,7 @@ func (m *OS) SidebarAgentCancelQueued(sessionID, windowID string) (tea.Cmd, bool
 				State string `json:"state"`
 			} `json:"entries"`
 		}
-		if err := json.Unmarshal(raw, &list); err != nil {
+		if err := jsonx.Unmarshal(raw, &list); err != nil {
 			msg.Err = err
 			return msg
 		}
@@ -864,7 +864,7 @@ func (m *OS) SidebarAgentCancelQueued(sessionID, windowID string) (tea.Cmd, bool
 		var res struct {
 			Queued int `json:"queued"`
 		}
-		_ = json.Unmarshal(raw, &res)
+		_ = jsonx.Unmarshal(raw, &res)
 		msg.ID, msg.Left = id, res.Queued
 		return msg
 	}, true

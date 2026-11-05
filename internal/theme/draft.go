@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"charm.land/tone"
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 	tint "github.com/lrstanley/bubbletint/v2"
 )
@@ -90,7 +91,7 @@ func DraftOf(id string) (*Draft, error) {
 	themeBases.RUnlock()
 	if !custom {
 		if _, ok := tint.GetTint(id); !ok {
-			return nil, fmt.Errorf("%q is not a theme", id)
+			return nil, errfmt.Errorf("%q is not a theme", id)
 		}
 		return &Draft{ID: id, Base: id, src: &draftSource{}}, nil
 	}
@@ -120,7 +121,7 @@ func DraftOf(id string) (*Draft, error) {
 func NewDraft(base string) (*Draft, error) {
 	EnsureRegistry()
 	if _, ok := tint.GetTint(base); !ok {
-		return nil, fmt.Errorf("%q is not a theme", base)
+		return nil, errfmt.Errorf("%q is not a theme", base)
 	}
 	stem := strings.TrimSuffix(base, "-custom")
 	id := stem + "-custom"
@@ -154,7 +155,7 @@ func (d *Draft) file() (*themeFile, error) {
 		if v := d.Colours[i]; v != "" {
 			col := tint.FromHex(v)
 			if col == nil {
-				return nil, fmt.Errorf("%s: %q is not a #rrggbb colour", colourKeys[i], v)
+				return nil, errfmt.Errorf("%s: %q is not a #rrggbb colour", colourKeys[i], v)
 			}
 			*c = col
 		}
@@ -238,7 +239,7 @@ func (d *Draft) SaveOver() (string, error) { return d.save(true) }
 
 func (d *Draft) save(force bool) (string, error) {
 	if !ValidThemeID(d.ID) {
-		return "", fmt.Errorf("%q cannot name a theme file. Use lower-case letters, digits, dots, dashes and underscores", d.ID)
+		return "", errfmt.Errorf("%q cannot name a theme file. Use lower-case letters, digits, dots, dashes and underscores", d.ID)
 	}
 	if _, _, err := d.Resolve(); err != nil {
 		return "", err
@@ -272,11 +273,11 @@ func (d *Draft) save(force bool) (string, error) {
 	body := doc.encode(true)
 	tmp := path + ".tmp"
 	if err := os.WriteFile(tmp, body, 0o600); err != nil {
-		return "", fmt.Errorf("write %s: %w", path, err)
+		return "", errfmt.Errorf("write %s: %w", path, err)
 	}
 	if err := os.Rename(tmp, path); err != nil {
 		_ = os.Remove(tmp)
-		return "", fmt.Errorf("write %s: %w", path, err)
+		return "", errfmt.Errorf("write %s: %w", path, err)
 	}
 	d.src.path, d.src.disk = path, body
 	ReloadCustomThemes()

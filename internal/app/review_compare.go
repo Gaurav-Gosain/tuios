@@ -1,7 +1,6 @@
 package app
 
 import (
-	"encoding/json"
 	"image/color"
 	"slices"
 	"strconv"
@@ -9,6 +8,7 @@ import (
 	"time"
 
 	tea "charm.land/bubbletea/v2"
+	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/charmbracelet/x/ansi"
@@ -88,7 +88,7 @@ func (m *OS) reviewCompareCmd(changes bool, tickGen uint64) tea.Cmd {
 			return msg
 		}
 		var fan reviewFanResult
-		if err := json.Unmarshal(raw, &fan); err != nil {
+		if err := jsonx.Unmarshal(raw, &fan); err != nil {
 			msg.Err = err
 			return msg
 		}
@@ -334,7 +334,7 @@ func (m *OS) reviewVerifyCmd(command string) tea.Cmd {
 		var res struct {
 			Sessions []string `json:"sessions"`
 		}
-		if err := json.Unmarshal(raw, &res); err != nil {
+		if err := jsonx.Unmarshal(raw, &res); err != nil {
 			msg.Err = err
 			return msg
 		}
@@ -421,7 +421,7 @@ func (m *OS) ReviewCompareConfirm(yes bool) tea.Cmd {
 			Kept    string          `json:"kept"`
 			Removed []reviewKeepRow `json:"removed"`
 		}
-		if err := json.Unmarshal(raw, &res); err != nil {
+		if err := jsonx.Unmarshal(raw, &res); err != nil {
 			msg.Err = err
 			return msg
 		}

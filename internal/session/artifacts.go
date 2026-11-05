@@ -6,6 +6,8 @@ import (
 	"slices"
 	"sync"
 	"time"
+
+	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 )
 
 // Artifacts: what a pane has shown the person, kept per pane so the agents
@@ -113,7 +115,7 @@ func (d *Daemon) recordTMLClosed(s *tmlSurface) {
 	if s.caller == "" {
 		return
 	}
-	state, _ := json.Marshal(s.store.State())
+	state, _ := jsonx.Marshal(s.store.State())
 	d.artifacts.update(s.caller, s.id, func(r *artifactRec) {
 		r.open, r.reason, r.value, r.hasValue = false, s.reason, s.value, s.hasValue
 		r.title, r.doc, r.state = s.title, s.docJSON, state
@@ -167,7 +169,7 @@ func (d *Daemon) verbArtifactList(cs *connState, params json.RawMessage) (any, *
 				d.tml.mu.Lock()
 				if s := d.tml.surfaces[r.id]; s != nil && !s.closed {
 					doc = s.docJSON
-					state, _ = json.Marshal(s.store.State())
+					state, _ = jsonx.Marshal(s.store.State())
 					item["title"] = s.title
 				} else {
 					item["open"] = false

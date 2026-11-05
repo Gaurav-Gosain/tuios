@@ -14,6 +14,7 @@ import (
 	"syscall"
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"github.com/Gaurav-Gosain/tuios/internal/hostsetup"
 	"github.com/Gaurav-Gosain/tuios/internal/hostsync"
 	"github.com/spf13/cobra"
@@ -106,7 +107,7 @@ tuios never takes a password. It never accepts a changed host key.`,
 			}
 			if len(args) == 2 {
 				if o.name != "" && o.name != args[1] {
-					return fmt.Errorf("the name is %s and --name says %s. Pass one", args[1], o.name)
+					return errfmt.Errorf("the name is %s and --name says %s. Pass one", args[1], o.name)
 				}
 				o.name = args[1]
 			}
@@ -158,7 +159,7 @@ func (o hostSetupOptions) choices() hostsetup.Choices {
 func setupBase(o hostSetupOptions) (hostsetup.Options, error) {
 	path, err := config.GetConfigPath()
 	if err != nil {
-		return hostsetup.Options{}, fmt.Errorf("cannot find the config file: %w", err)
+		return hostsetup.Options{}, errfmt.Errorf("cannot find the config file: %w", err)
 	}
 	exe, _ := os.Executable()
 	if resolved, err := filepath.EvalSymlinks(exe); err == nil {
@@ -366,7 +367,7 @@ func runTailnetSetup(o hostSetupOptions) error {
 	var skipped []hostsetup.Skip
 	for _, n := range o.only {
 		if !slices.ContainsFunc(peers, func(p hostsetup.Peer) bool { return p.Name == n }) {
-			return fmt.Errorf("no machine called %s is on your tailnet. Run tuios hosts setup --tailnet --dry-run to see the names", n)
+			return errfmt.Errorf("no machine called %s is on your tailnet. Run tuios hosts setup --tailnet --dry-run to see the names", n)
 		}
 	}
 	for _, p := range peers {

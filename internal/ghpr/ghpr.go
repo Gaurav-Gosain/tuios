@@ -13,7 +13,6 @@ package ghpr
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -22,6 +21,8 @@ import (
 	"strings"
 
 	"github.com/Gaurav-Gosain/tuios/internal/childproc"
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
+	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 )
 
 // PR states, lower case.
@@ -139,7 +140,7 @@ func run(ctx context.Context, dir string, args ...string) (string, error) {
 	cmd.Stderr = &stderr
 	if err := cmd.Run(); err != nil {
 		if ctx.Err() != nil {
-			return "", fmt.Errorf("gh %s: %w", args[0], ctx.Err())
+			return "", errfmt.Errorf("gh %s: %w", args[0], ctx.Err())
 		}
 		msg := strings.TrimSpace(stderr.String())
 		if len(msg) > 400 {
@@ -171,7 +172,7 @@ const viewFields = "state,statusCheckRollup,url,number"
 // View reads the pull request of branch in the repository at dir.
 func View(ctx context.Context, dir, branch string) (PR, error) {
 	if strings.HasPrefix(branch, "-") {
-		return PR{}, fmt.Errorf("%q is not a branch", branch)
+		return PR{}, errfmt.Errorf("%q is not a branch", branch)
 	}
 	out, err := run(ctx, dir, "pr", "view", branch, "--json", viewFields)
 	if err != nil {
@@ -202,8 +203,8 @@ func Parse(data []byte) (PR, error) {
 			State      string `json:"state"`
 		} `json:"statusCheckRollup"`
 	}
-	if err := json.Unmarshal(data, &raw); err != nil {
-		return PR{}, fmt.Errorf("gh printed no pull request: %w", err)
+	if err := jsonx.Unmarshal(data, &raw); err != nil {
+		return PR{}, errfmt.Errorf("gh printed no pull request: %w", err)
 	}
 	if raw.Number <= 0 {
 		return PR{}, errors.New("gh printed a pull request with no number")
@@ -287,7 +288,7 @@ func CreateArgs(o CreateOptions) []string {
 // gh printed.
 func Create(ctx context.Context, dir string, o CreateOptions) (string, error) {
 	if strings.HasPrefix(o.Head, "-") || strings.HasPrefix(o.Base, "-") {
-		return "", fmt.Errorf("%q or %q is not a branch", o.Head, o.Base)
+		return "", errfmt.Errorf("%q or %q is not a branch", o.Head, o.Base)
 	}
 	out, err := run(ctx, dir, CreateArgs(o)...)
 	if err != nil {
@@ -319,7 +320,7 @@ func Login(ctx context.Context) (string, error) {
 	}
 	login := strings.TrimSpace(out)
 	if !githubLogin.MatchString(login) {
-		return "", fmt.Errorf("gh answered %q, which is not a GitHub login", login)
+		return "", errfmt.Errorf("gh answered %q, which is not a GitHub login", login)
 	}
 	return login, nil
 }

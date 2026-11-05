@@ -2,11 +2,11 @@ package federation
 
 import (
 	"errors"
-	"fmt"
 	"sort"
 	"strings"
 	"time"
 
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"github.com/Gaurav-Gosain/tuios/internal/lazyre"
 )
 
@@ -109,32 +109,32 @@ func NewTable(hosts []Host) (*Table, []error) {
 			problems = append(problems, errors.New("a host with no name was ignored"))
 			continue
 		case name == LocalHostName:
-			problems = append(problems, fmt.Errorf("host %q was ignored, because %q is the reserved name for this machine", name, LocalHostName))
+			problems = append(problems, errfmt.Errorf("host %q was ignored, because %q is the reserved name for this machine", name, LocalHostName))
 			continue
 		case !hostNamePattern().MatchString(name):
-			problems = append(problems, fmt.Errorf("host %q was ignored, because a host name accepts only letters, digits, dot, dash and underscore", name))
+			problems = append(problems, errfmt.Errorf("host %q was ignored, because a host name accepts only letters, digits, dot, dash and underscore", name))
 			continue
 		case strings.TrimSpace(h.Addr) == "":
-			problems = append(problems, fmt.Errorf("host %q was ignored, because it has no addr", name))
+			problems = append(problems, errfmt.Errorf("host %q was ignored, because it has no addr", name))
 			continue
 		case strings.HasPrefix(strings.TrimSpace(h.Addr), "-"):
 			// The addr is an ssh argument, and one that starts with a dash
 			// is read as an option, which can run a command locally.
-			problems = append(problems, fmt.Errorf("host %q was ignored, because its addr starts with a dash", name))
+			problems = append(problems, errfmt.Errorf("host %q was ignored, because its addr starts with a dash", name))
 			continue
 		case strings.HasPrefix(strings.TrimSpace(h.Command), "-"):
 			// The command follows the addr on ssh's command line, and ssh
 			// reads options there too. The argv ends ssh's options with --,
 			// and a command that is an option is refused as well.
-			problems = append(problems, fmt.Errorf("host %q was ignored, because its command starts with a dash", name))
+			problems = append(problems, errfmt.Errorf("host %q was ignored, because its command starts with a dash", name))
 			continue
 		}
 		if err := CheckSSHOptions(h.SSHOptions); err != nil {
-			problems = append(problems, fmt.Errorf("host %q was ignored: %w", name, err))
+			problems = append(problems, errfmt.Errorf("host %q was ignored: %w", name, err))
 			continue
 		}
 		if _, dup := t.hosts[name]; dup {
-			problems = append(problems, fmt.Errorf("host %q was ignored, because the name is already used", name))
+			problems = append(problems, errfmt.Errorf("host %q was ignored, because the name is already used", name))
 			continue
 		}
 		h.Name = name
@@ -169,11 +169,11 @@ func (t *Table) Len() int {
 // near miss.
 func (t *Table) Lookup(name string) (Host, error) {
 	if t == nil || len(t.hosts) == 0 {
-		return Host{}, fmt.Errorf("%w %q: no hosts are configured. Add a [hosts.%s] table to the config file", ErrUnknownHost, name, name)
+		return Host{}, errfmt.Errorf("%w %q: no hosts are configured. Add a [hosts.%s] table to the config file", ErrUnknownHost, name, name)
 	}
 	h, ok := t.hosts[name]
 	if !ok {
-		return Host{}, fmt.Errorf("%w %q. Configured hosts: %s", ErrUnknownHost, name, strings.Join(t.names, ", "))
+		return Host{}, errfmt.Errorf("%w %q. Configured hosts: %s", ErrUnknownHost, name, strings.Join(t.names, ", "))
 	}
 	return h, nil
 }

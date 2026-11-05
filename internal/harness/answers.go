@@ -1,13 +1,13 @@
 package harness
 
 import (
-	"fmt"
 	"slices"
 	"strconv"
 	"strings"
 	"unicode"
 	"unicode/utf8"
 
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"github.com/Gaurav-Gosain/tuios/internal/lazyre"
 )
 
@@ -98,10 +98,10 @@ func (a *Answers) check(block, state string) error {
 		return nil
 	}
 	if block == "notify" {
-		return fmt.Errorf("answers: a notify rule reads a notification, which has nothing on the screen to answer")
+		return errfmt.Errorf("answers: a notify rule reads a notification, which has nothing on the screen to answer")
 	}
 	if state != "needs_input" {
-		return fmt.Errorf("answers: only a needs_input rule reads a prompt, and this rule says %s", state)
+		return errfmt.Errorf("answers: only a needs_input rule reads a prompt, and this rule says %s", state)
 	}
 	for _, e := range []struct {
 		name string
@@ -111,16 +111,16 @@ func (a *Answers) check(block, state string) error {
 			continue
 		}
 		if err := e.ans.check(block); err != nil {
-			return fmt.Errorf("answers.%s: %w", e.name, err)
+			return errfmt.Errorf("answers.%s: %w", e.name, err)
 		}
 	}
 	switch a.Choose = strings.ToLower(strings.TrimSpace(a.Choose)); a.Choose {
 	case "", ChooseDigit:
 	default:
-		return fmt.Errorf("answers.choose %q (digit, or leave it out)", a.Choose)
+		return errfmt.Errorf("answers.choose %q (digit, or leave it out)", a.Choose)
 	}
 	if a.Choose != "" && block == "title" {
-		return fmt.Errorf("answers.choose: a title rule has no options on the screen to choose from")
+		return errfmt.Errorf("answers.choose: a title rule has no options on the screen to choose from")
 	}
 	return nil
 }
@@ -129,13 +129,13 @@ func (a *Answers) check(block, state string) error {
 func (a *Answer) check(block string) error {
 	a.Option = strings.ToLower(strings.TrimSpace(a.Option))
 	if len(a.Keys) == 0 && a.Option == "" {
-		return fmt.Errorf("names neither keys nor an option")
+		return errfmt.Errorf("names neither keys nor an option")
 	}
 	if a.Option != "" && block == "title" {
-		return fmt.Errorf("option: a title rule has no options on the screen to match")
+		return errfmt.Errorf("option: a title rule has no options on the screen to match")
 	}
 	if len(a.Keys) > maxAnswerKeys {
-		return fmt.Errorf("%d keys, limit %d", len(a.Keys), maxAnswerKeys)
+		return errfmt.Errorf("%d keys, limit %d", len(a.Keys), maxAnswerKeys)
 	}
 	if _, err := a.keyBytes(); err != nil {
 		return err
@@ -149,7 +149,7 @@ func (a *Answer) keyBytes() ([]byte, error) {
 	for _, k := range a.Keys {
 		b, ok := AnswerKeyBytes(k)
 		if !ok {
-			return nil, fmt.Errorf("unknown key %q (enter, esc, tab, space, up, down, left, right, backspace, or one printable character)", k)
+			return nil, errfmt.Errorf("unknown key %q (enter, esc, tab, space, up, down, left, right, backspace, or one printable character)", k)
 		}
 		out = append(out, b...)
 	}

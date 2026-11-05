@@ -3,7 +3,8 @@ package session
 import (
 	"bytes"
 	"encoding/gob"
-	"fmt"
+
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 )
 
 // wireCodecGob is the value of the codec byte in every frame header. gob is
@@ -36,7 +37,7 @@ func encodePayload(v any) ([]byte, error) {
 	var buf bytes.Buffer
 	enc := gob.NewEncoder(&buf)
 	if err := enc.Encode(v); err != nil {
-		return nil, fmt.Errorf("gob encode: %w", err)
+		return nil, errfmt.Errorf("gob encode: %w", err)
 	}
 	return buf.Bytes(), nil
 }
@@ -49,11 +50,11 @@ func decodePayload(data []byte, v any) error {
 		return nil
 	}
 	if err := checkGobNesting(data); err != nil {
-		return fmt.Errorf("gob decode: %w", err)
+		return errfmt.Errorf("gob decode: %w", err)
 	}
 	dec := gob.NewDecoder(bytes.NewReader(data))
 	if err := dec.Decode(v); err != nil {
-		return fmt.Errorf("gob decode: %w", err)
+		return errfmt.Errorf("gob decode: %w", err)
 	}
 	return nil
 }

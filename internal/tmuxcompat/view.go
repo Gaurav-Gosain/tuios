@@ -1,14 +1,15 @@
 package tmuxcompat
 
 import (
-	"encoding/json"
 	"errors"
-	"fmt"
 	"os"
 	"path/filepath"
 	"slices"
 	"strconv"
 	"strings"
+
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
+	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 )
 
 // pane is one tuios window seen as a tmux pane.
@@ -95,8 +96,8 @@ func (s *Shim) daemonSessions() ([]listedSession, error) {
 	var ls struct {
 		Sessions []listedSession `json:"sessions"`
 	}
-	if err := json.Unmarshal(raw, &ls); err != nil {
-		return nil, fmt.Errorf("read list-sessions: %w", err)
+	if err := jsonx.Unmarshal(raw, &ls); err != nil {
+		return nil, errfmt.Errorf("read list-sessions: %w", err)
 	}
 	return ls.Sessions, nil
 }
@@ -173,7 +174,7 @@ func (s *Shim) sessionInfo() listedSession {
 		Height   int    `json:"height"`
 		Attached bool   `json:"tui_attached"`
 	}
-	if json.Unmarshal(raw, &si) == nil {
+	if jsonx.Unmarshal(raw, &si) == nil {
 		info.ID, info.Width, info.Height, info.Attached = si.ID, si.Width, si.Height, si.Attached
 	}
 	return info
@@ -205,8 +206,8 @@ func (s *Shim) loadSession(info listedSession, server bool) (*sessionView, error
 		Focused string `json:"focused_window_id"`
 		Current int    `json:"current_workspace"`
 	}
-	if err := json.Unmarshal(raw, &wl); err != nil {
-		return nil, fmt.Errorf("read list-windows: %w", err)
+	if err := jsonx.Unmarshal(raw, &wl); err != nil {
+		return nil, errfmt.Errorf("read list-windows: %w", err)
 	}
 	sv := &sessionView{
 		name:      info.Name,
@@ -273,8 +274,8 @@ func (s *Shim) loadSession(info listedSession, server bool) (*sessionView, error
 			History   []string `json:"focus_history"`
 		} `json:"workspaces"`
 	}
-	if err := json.Unmarshal(raw, &ws); err != nil {
-		return nil, fmt.Errorf("read list-workspaces: %w", err)
+	if err := jsonx.Unmarshal(raw, &ws); err != nil {
+		return nil, errfmt.Errorf("read list-workspaces: %w", err)
 	}
 	for _, w := range ws.Workspaces {
 		if w.Workspace >= windowStride {
@@ -368,32 +369,32 @@ func (sv *sessionView) workspaceOf(ref string) (int, error) {
 	if num, ok := strings.CutPrefix(ref, "@"); ok {
 		n, err := strconv.ParseUint(num, 10, 32)
 		if err != nil {
-			return 0, fmt.Errorf("can't find window: %s", ref)
+			return 0, errfmt.Errorf("can't find window: %s", ref)
 		}
 		ws := int(n)
 		if sv.server {
 			if uint32(n/windowStride) != sv.num {
-				return 0, fmt.Errorf("can't find window: %s", ref)
+				return 0, errfmt.Errorf("can't find window: %s", ref)
 			}
 			ws = int(n % windowStride)
 		}
 		if sv.hasWorkspace(ws) {
 			return ws, nil
 		}
-		return 0, fmt.Errorf("can't find window: %s", ref)
+		return 0, errfmt.Errorf("can't find window: %s", ref)
 	}
 	if n, err := strconv.Atoi(ref); err == nil {
 		if sv.hasWorkspace(n) {
 			return n, nil
 		}
-		return 0, fmt.Errorf("can't find window: %s", ref)
+		return 0, errfmt.Errorf("can't find window: %s", ref)
 	}
 	for ws, name := range sv.wsName {
 		if name == ref {
 			return ws, nil
 		}
 	}
-	return 0, fmt.Errorf("can't find window: %s", ref)
+	return 0, errfmt.Errorf("can't find window: %s", ref)
 }
 
 func (sv *sessionView) hasWorkspace(ws int) bool {
@@ -531,7 +532,7 @@ func (v *view) paneByID(ref string) (*pane, error) {
 		for _, p := range all {
 			if strings.HasPrefix(p.ID, ref) {
 				if hit != nil {
-					return nil, fmt.Errorf("can't find pane: %%%s (it matches more than one)", ref)
+					return nil, errfmt.Errorf("can't find pane: %%%s (it matches more than one)", ref)
 				}
 				hit = p
 			}
@@ -540,7 +541,7 @@ func (v *view) paneByID(ref string) (*pane, error) {
 			return hit, nil
 		}
 	}
-	return nil, fmt.Errorf("can't find pane: %%%s", ref)
+	return nil, errfmt.Errorf("can't find pane: %%%s", ref)
 }
 
 // splitTarget cuts a target ("session:window.pane") into its parts. hasSess
@@ -564,7 +565,7 @@ func (v *view) targetSession(sessRef string, hasSess bool, dflt *pane) (*session
 	if hasSess && sessRef != "" {
 		sv, ok := v.sessionOf(sessRef)
 		if !ok {
-			return nil, fmt.Errorf("can't find session: %s", sessRef)
+			return nil, errfmt.Errorf("can't find session: %s", sessRef)
 		}
 		return sv, nil
 	}
@@ -572,7 +573,7 @@ func (v *view) targetSession(sessRef string, hasSess bool, dflt *pane) (*session
 		return dflt.sess, nil
 	}
 	if v.def == nil {
-		return nil, fmt.Errorf("no current session")
+		return nil, errfmt.Errorf("no current session")
 	}
 	return v.def, nil
 }
@@ -581,7 +582,7 @@ func (v *view) targetSession(sessRef string, hasSess bool, dflt *pane) (*session
 func (v *view) resolvePane(t string, dflt *pane) (*pane, error) {
 	if t == "" {
 		if dflt == nil {
-			return nil, fmt.Errorf("no current pane")
+			return nil, errfmt.Errorf("no current pane")
 		}
 		return dflt, nil
 	}
@@ -614,7 +615,7 @@ func (v *view) resolvePane(t string, dflt *pane) (*pane, error) {
 		n, err := sv.workspaceOf(win)
 		if err != nil {
 			if !hasSess && !hasPane {
-				return nil, fmt.Errorf("can't find pane: %s", t)
+				return nil, errfmt.Errorf("can't find pane: %s", t)
 			}
 			return nil, err
 		}
@@ -627,21 +628,21 @@ func (v *view) resolvePane(t string, dflt *pane) (*pane, error) {
 		if p := sv.active(ws); p != nil {
 			return p, nil
 		}
-		return nil, fmt.Errorf("can't find pane: %s", t)
+		return nil, errfmt.Errorf("can't find pane: %s", t)
 	}
 	if strings.HasPrefix(pn, "%") {
 		return v.paneByID(pn[1:])
 	}
 	idx, err := strconv.Atoi(pn)
 	if err != nil {
-		return nil, fmt.Errorf("can't find pane: %s", pn)
+		return nil, errfmt.Errorf("can't find pane: %s", pn)
 	}
 	for _, p := range sv.panesOn(ws) {
 		if p.Index == idx {
 			return p, nil
 		}
 	}
-	return nil, fmt.Errorf("can't find pane: %s", pn)
+	return nil, errfmt.Errorf("can't find pane: %s", pn)
 }
 
 // resolveWindow resolves a window target to a session and a workspace number.
@@ -651,7 +652,7 @@ func (v *view) resolveWindow(t string, dflt *pane) (*sessionView, int, error) {
 			return dflt.sess, dflt.Workspace, nil
 		}
 		if v.def == nil {
-			return nil, 0, fmt.Errorf("no current window")
+			return nil, 0, errfmt.Errorf("no current window")
 		}
 		return v.def, v.def.current, nil
 	}
@@ -797,7 +798,7 @@ func (s *Shim) serverVar(name string) (string, bool) {
 				var h struct {
 					PID int `json:"pid"`
 				}
-				if json.Unmarshal(raw, &h) == nil {
+				if jsonx.Unmarshal(raw, &h) == nil {
 					s.daemonPID = h.PID
 				}
 			}

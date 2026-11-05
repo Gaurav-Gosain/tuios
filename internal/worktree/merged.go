@@ -5,6 +5,8 @@ import (
 	"os"
 	"strings"
 	"sync"
+
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 )
 
 // Whether a worktree's branch has landed in its base.
@@ -214,7 +216,7 @@ func isAncestor(dir, a, b string) bool {
 func revParse(dir string, revs ...string) ([]string, error) {
 	for _, r := range revs {
 		if strings.HasPrefix(r, "-") {
-			return nil, fmt.Errorf("%q is not a revision", r)
+			return nil, errfmt.Errorf("%q is not a revision", r)
 		}
 	}
 	out, err := run(dir, append([]string{"rev-parse"}, revs...)...)
@@ -223,7 +225,7 @@ func revParse(dir string, revs ...string) ([]string, error) {
 	}
 	hashes := strings.Fields(out)
 	if len(hashes) != len(revs) {
-		return nil, fmt.Errorf("git rev-parse: %d hashes for %d revisions", len(hashes), len(revs))
+		return nil, errfmt.Errorf("git rev-parse: %d hashes for %d revisions", len(hashes), len(revs))
 	}
 	return hashes, nil
 }

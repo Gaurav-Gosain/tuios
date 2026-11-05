@@ -6,6 +6,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 )
 
 // The judge of a fan: an agent judge-fan starts to read the attempts and
@@ -250,7 +252,7 @@ func (d *Daemon) verbJudgeFan(cs *connState, params json.RawMessage) (any, *verb
 			Detail: "Nothing was started. Close the judge sessions named " + base + " and try again.",
 		})
 	}
-	raw, _ := json.Marshal(map[string]any{
+	raw, _ := jsonx.Marshal(map[string]any{
 		"session": name, "agent": agent, "name": "judge", "cwd": info.RepoRoot,
 		"env": p.Env, "grants": fanJudgeGrants, "ready_timeout": p.ReadyTimeout,
 	})
@@ -270,7 +272,7 @@ func (d *Daemon) verbJudgeFan(cs *connState, params json.RawMessage) (any, *verb
 		// Another caller made a session of that name first. Its panes get
 		// nothing, and the agent just started there is closed.
 		if judge != nil && window != "" {
-			closeRaw, _ := json.Marshal(map[string]any{"session": judge.Name(), "window": window})
+			closeRaw, _ := jsonx.Marshal(map[string]any{"session": judge.Name(), "window": window})
 			_, _ = d.verbCloseWindow(cs, closeRaw)
 		}
 		return nil, newVerbError(ErrVerbInternal, "the judge's session was made by another caller first, so no judge was started")

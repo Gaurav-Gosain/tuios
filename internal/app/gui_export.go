@@ -1,11 +1,11 @@
 package app
 
 import (
-	"fmt"
 	"slices"
 	"sort"
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"github.com/Gaurav-Gosain/tuios/pkg/applist"
 )
 
@@ -64,13 +64,13 @@ func (m *OS) MultifocusIDs() []string {
 func (m *OS) SetMultifocus(id string, on bool) error {
 	w := m.windowByID(id)
 	if w == nil {
-		return fmt.Errorf("no pane %s", id)
+		return errfmt.Errorf("no pane %s", id)
 	}
 	if m.MultifocusSet[id] == on {
 		return nil
 	}
 	if on && w.IsPopup {
-		return fmt.Errorf("a popup cannot join the group")
+		return errfmt.Errorf("a popup cannot join the group")
 	}
 	for i, x := range m.Windows {
 		if x == w {
@@ -78,7 +78,7 @@ func (m *OS) SetMultifocus(id string, on bool) error {
 			return nil
 		}
 	}
-	return fmt.Errorf("no pane %s", id)
+	return errfmt.Errorf("no pane %s", id)
 }
 
 // PiPWindow is the pane pinned as this client's picture in picture, and the

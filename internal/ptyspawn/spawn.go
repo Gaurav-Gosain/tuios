@@ -23,12 +23,12 @@ package ptyspawn
 
 import (
 	"errors"
-	"fmt"
 	"os"
 	"os/exec"
 	"syscall"
 	"time"
 
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"github.com/charmbracelet/x/xpty"
 )
 
@@ -104,7 +104,7 @@ func SpawnTTY(width, height, cellWidth, cellHeight int, build func(tty string) *
 	for attempt := 1; ; attempt++ {
 		pty, err := newPty(width, height, logf)
 		if err != nil {
-			return nil, nil, fmt.Errorf("failed to create PTY: %w", err)
+			return nil, nil, errfmt.Errorf("failed to create PTY: %w", err)
 		}
 		// The new pty has no pixel size, and the guest can read its size
 		// before the first resize gives it one. It starts with the cell the
@@ -139,6 +139,6 @@ func SpawnTTY(width, height, cellWidth, cellHeight int, build func(tty string) *
 		}
 		// Name the process that failed: with a command this is the program the
 		// user picked, and "shell" would send them looking at the wrong config.
-		return nil, nil, fmt.Errorf("failed to start %s: %w", cmd.Path, err)
+		return nil, nil, errfmt.Errorf("failed to start %s: %w", cmd.Path, err)
 	}
 }

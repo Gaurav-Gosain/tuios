@@ -11,6 +11,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 )
 
 // Status is what the hub currently knows about one host.
@@ -826,7 +828,7 @@ func handshake(ctx context.Context, c *caller, opts Options) (Handshake, *handsh
 	}
 
 	var shake Handshake
-	if err := json.Unmarshal(raw, &shake); err != nil {
+	if err := jsonx.Unmarshal(raw, &shake); err != nil {
 		return Handshake{}, &handshakeError{
 			status: StatusIncompatible,
 			reason: "The remote daemon sent a handshake this build cannot read.",

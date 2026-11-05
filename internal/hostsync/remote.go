@@ -16,6 +16,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"github.com/Gaurav-Gosain/tuios/internal/federation"
 )
 
@@ -43,7 +44,7 @@ type SSHRunner struct {
 func (r SSHRunner) Run(ctx context.Context, script string, args []string, stdin io.Reader) (string, string, error) {
 	for _, a := range args {
 		if !federation.SafeRemoteArg(a) {
-			return "", "", fmt.Errorf("the argument %q is not safe to send to the remote shell", a)
+			return "", "", errfmt.Errorf("the argument %q is not safe to send to the remote shell", a)
 		}
 	}
 	cmd := exec.Command(federation.SSHBinary(), federation.SSHArgs(r.Host, federation.ShellCommand(script, args...))...)
@@ -249,7 +250,7 @@ func StartDaemonWith(ctx context.Context, runner Runner, arg, shown string) erro
 	case f.Has("started"):
 		return nil
 	case f.Has("startfail"):
-		return fmt.Errorf("the daemon did not start. Run '%s start-server' on the host to see why", shown)
+		return errfmt.Errorf("the daemon did not start. Run '%s start-server' on the host to see why", shown)
 	}
 	if err == nil {
 		return errors.New("the start of the daemon did not finish")
@@ -316,7 +317,7 @@ func GoPlatform(unameS, unameM string) (goos, goarch string, err error) {
 	case "freebsd":
 		goos = "freebsd"
 	default:
-		return "", "", fmt.Errorf("the host runs %q. tuios hosts sync supports Linux, macOS and FreeBSD hosts", unameS)
+		return "", "", errfmt.Errorf("the host runs %q. tuios hosts sync supports Linux, macOS and FreeBSD hosts", unameS)
 	}
 	switch strings.TrimSpace(unameM) {
 	case "x86_64", "amd64":
@@ -328,7 +329,7 @@ func GoPlatform(unameS, unameM string) (goos, goarch string, err error) {
 	case "riscv64":
 		goarch = "riscv64"
 	default:
-		return "", "", fmt.Errorf("the host has the architecture %q, which tuios hosts sync does not support", unameM)
+		return "", "", errfmt.Errorf("the host has the architecture %q, which tuios hosts sync does not support", unameM)
 	}
 	return goos, goarch, nil
 }
@@ -354,9 +355,9 @@ func RemoteRunError(what, stderr string, err error) error {
 		what += ": it did not answer in time"
 	}
 	if stderr != "" {
-		return fmt.Errorf("%s. ssh reported: %s", what, plainLine(LastLine(stderr)))
+		return errfmt.Errorf("%s. ssh reported: %s", what, plainLine(LastLine(stderr)))
 	}
-	return fmt.Errorf("%s: %v", what, err)
+	return errfmt.Errorf("%s: %v", what, err)
 }
 
 // SSHFailError is a script that ssh could not run, for a reason ssh named.

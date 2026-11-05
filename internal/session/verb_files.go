@@ -20,6 +20,8 @@ import (
 	"time"
 	"unicode"
 	"unicode/utf8"
+
+	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 )
 
 // The file verbs: what an explorer needs from the machine the files are on.
@@ -841,7 +843,7 @@ func (d *Daemon) verbOpenFileStream(cs *connState, params json.RawMessage) (any,
 				if now, serr := f.Stat(); n < size-p.Offset || serr != nil || now.Size() != size || !now.ModTime().Equal(fi.ModTime()) {
 					t = map[string]any{"error": echoName(path) + " changed while it was copied. Copy it again when it is not being written."}
 				}
-				line, _ := json.Marshal(t)
+				line, _ := jsonx.Marshal(t)
 				_, _ = bw.Write(append(line, '\n'))
 			}
 			_ = bw.Flush()
@@ -946,7 +948,7 @@ func (d *Daemon) verbOpenFileStream(cs *connState, params json.RawMessage) (any,
 					d.transfers.sums.put(confined, f, hex.EncodeToString(h.Sum(nil)))
 				}
 			}
-			line, _ := json.Marshal(reply)
+			line, _ := jsonx.Marshal(reply)
 			_ = cs.conn.SetWriteDeadline(time.Now().Add(10 * time.Second))
 			_, _ = cs.conn.Write(append(line, '\n'))
 			_ = cs.conn.Close()

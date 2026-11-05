@@ -9,6 +9,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/stopevent"
 	"golang.org/x/sys/windows"
@@ -74,14 +75,14 @@ func stopDaemon(pid int, socketPath string) error {
 func terminateDaemon(pid int) error {
 	h, err := windows.OpenProcess(windows.PROCESS_TERMINATE|windows.SYNCHRONIZE, false, uint32(pid)) //nolint:gosec // a process id fits
 	if err != nil {
-		return fmt.Errorf("failed to find daemon process: %w", err)
+		return errfmt.Errorf("failed to find daemon process: %w", err)
 	}
 	defer func() { _ = windows.CloseHandle(h) }()
 	if err := windows.TerminateProcess(h, 1); err != nil {
-		return fmt.Errorf("failed to stop daemon: %w", err)
+		return errfmt.Errorf("failed to stop daemon: %w", err)
 	}
 	if ev, err := windows.WaitForSingleObject(h, uint32((5 * time.Second).Milliseconds())); err != nil || ev != windows.WAIT_OBJECT_0 {
-		return fmt.Errorf("the daemon (PID %d) did not end after it was terminated", pid)
+		return errfmt.Errorf("the daemon (PID %d) did not end after it was terminated", pid)
 	}
 	return nil
 }

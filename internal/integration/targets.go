@@ -3,7 +3,6 @@ package integration
 import (
 	"bytes"
 	_ "embed"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -16,6 +15,8 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
+	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 	"github.com/Gaurav-Gosain/tuios/internal/tarpack"
 )
 
@@ -164,7 +165,7 @@ func (t *Target) files(env Env) []extraFile {
 // and for the opencode template, which Kilo shares, the harness.
 func renderTemplate(name string) func(t *Target, tuios string) []byte {
 	return func(t *Target, tuios string) []byte {
-		cmd, _ := json.Marshal(tuios)
+		cmd, _ := jsonx.Marshal(tuios)
 		out := strings.ReplaceAll(string(assets()[name]), "__TUIOS_COMMAND__", string(cmd))
 		out = strings.ReplaceAll(out, "__TUIOS_VERSION__", strconv.Itoa(t.Version))
 		out = strings.ReplaceAll(out, "__TUIOS_HARNESS__", t.ID)
@@ -571,9 +572,9 @@ func (t *Target) plan(env Env, tuios string, install bool) ([]filePlan, error) {
 		out, changed, remove, err := f.format.apply(t, have, tuios, install)
 		switch {
 		case errors.Is(err, errNotOurs):
-			return nil, fmt.Errorf("%s %w", path, err)
+			return nil, errfmt.Errorf("%s %w", path, err)
 		case err != nil:
-			return nil, fmt.Errorf("failed to read %s: %w. It was left unchanged", path, err)
+			return nil, errfmt.Errorf("failed to read %s: %w. It was left unchanged", path, err)
 		}
 		plans = append(plans, filePlan{path: path, have: have, out: out, changed: changed, remove: remove, owned: f.format.owned()})
 	}
@@ -625,7 +626,7 @@ func (t *Target) install(env Env, tuios string) (Result, error) {
 	dir := t.ConfigDir(env)
 	res := Result{Harness: t.ID, Path: t.Path(env)}
 	if st, err := os.Stat(dir); err != nil || !st.IsDir() {
-		return res, fmt.Errorf("%w: %s. Install %s and run it once, then try again", ErrNoConfigDir, dir, t.Name)
+		return res, errfmt.Errorf("%w: %s. Install %s and run it once, then try again", ErrNoConfigDir, dir, t.Name)
 	}
 	// Both Pi and OMP honour this variable. Inside an OMP profile it names
 	// OMP's directory even when someone asks to install Pi. A second
@@ -644,7 +645,7 @@ func (t *Target) install(env Env, tuios string) (Result, error) {
 		_, ompConfigErr := os.Stat(filepath.Join(dir, "config.yml"))
 		if owner == other || strings.HasPrefix(filepath.Clean(dir)+string(os.PathSeparator), foreignDir) ||
 			foreignErr == nil || (t.ID == Pi && ompConfigErr == nil) {
-			return res, fmt.Errorf("%s is %s's agent directory. Refusing to install %s there. Unset PI_CODING_AGENT_DIR or choose the intended agent directory", dir, foreign.Name, t.Name)
+			return res, errfmt.Errorf("%s is %s's agent directory. Refusing to install %s there. Unset PI_CODING_AGENT_DIR or choose the intended agent directory", dir, foreign.Name, t.Name)
 		}
 	}
 	plans, err := t.plan(env, tuios, true)
@@ -800,7 +801,7 @@ func (t *Target) stateOf(env Env, files [][]byte, tuios string) (installed, curr
 	for i, f := range t.files(env) {
 		ins, cur, v, err := f.format.state(t, files[i], tuios)
 		if err != nil {
-			return false, false, 0, fmt.Errorf("cannot parse %s: %w", filepath.Join(t.ConfigDir(env), f.file), err)
+			return false, false, 0, errfmt.Errorf("cannot parse %s: %w", filepath.Join(t.ConfigDir(env), f.file), err)
 		}
 		if i == 0 {
 			version = v
@@ -826,13 +827,13 @@ func installedPrograms(t *Target, files [][]byte) []string {
 	for _, data := range files {
 		for _, m := range pluginProgramRe.FindAllSubmatch(data, -1) {
 			var p string
-			if json.Unmarshal(m[1], &p) == nil {
+			if jsonx.Unmarshal(m[1], &p) == nil {
 				add(p)
 			}
 		}
 		for _, m := range hook.FindAllSubmatch(data, -1) {
 			var p string
-			if json.Unmarshal([]byte(`"`+string(m[1])+`"`), &p) == nil {
+			if jsonx.Unmarshal([]byte(`"`+string(m[1])+`"`), &p) == nil {
 				add(p)
 			}
 		}

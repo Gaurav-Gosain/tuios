@@ -3,7 +3,6 @@ package tmuxcompat
 import (
 	"bufio"
 	"bytes"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -11,6 +10,9 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
+	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 )
 
 // Control mode (tmux -C and -CC).
@@ -252,7 +254,7 @@ func (c *control) attach(args []string) (string, error) {
 			return OutcomeError, err
 		}
 	} else {
-		return OutcomeError, fmt.Errorf("can't find session: %s", tv)
+		return OutcomeError, errfmt.Errorf("can't find session: %s", tv)
 	}
 	c.sessID, c.sessName, c.prev = sv.id, sv.name, v
 	c.attaches++
@@ -415,7 +417,7 @@ func (c *control) loop() {
 				Session string `json:"session"`
 				Window  string `json:"window"`
 			}
-			if json.Unmarshal(ev, &e) != nil || e.Type != "output" || e.Window == "" {
+			if jsonx.Unmarshal(ev, &e) != nil || e.Type != "output" || e.Window == "" {
 				continue
 			}
 			c.pending[e.Window] = true

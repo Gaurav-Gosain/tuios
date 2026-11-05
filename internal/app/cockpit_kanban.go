@@ -1,7 +1,6 @@
 package app
 
 import (
-	"encoding/json"
 	"image/color"
 	"slices"
 	"strconv"
@@ -13,6 +12,7 @@ import (
 
 	"github.com/Gaurav-Gosain/tuios/internal/composer"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 )
@@ -254,7 +254,7 @@ func (m *OS) kanbanSetStage(c session.TaskRow, stage string) tea.Cmd {
 		raw, err := call("set-task-stage", map[string]any{"session": c.Session, "id": c.ID, "stage": stage, "human_nonce": nonce}, 5*time.Second)
 		msg := ckCardMsg{err: err, failed: "The card did not move: "}
 		if err == nil {
-			msg.err = json.Unmarshal(raw, &msg.row)
+			msg.err = jsonx.Unmarshal(raw, &msg.row)
 		}
 		return msg
 	}
@@ -362,7 +362,7 @@ func (m *OS) kanbanAddSend() tea.Cmd {
 		raw, err := call("add-task", map[string]any{"session": a.session, "title": title, "stage": a.stage, "human_nonce": nonce}, 5*time.Second)
 		msg := ckCardMsg{err: err, failed: "The card was not added: ", focus: true}
 		if err == nil {
-			msg.err = json.Unmarshal(raw, &msg.row)
+			msg.err = jsonx.Unmarshal(raw, &msg.row)
 		}
 		return msg
 	}

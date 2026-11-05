@@ -11,6 +11,8 @@ import (
 	"os"
 	"path/filepath"
 	"time"
+
+	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 )
 
 // Timeouts for one request. A report must never hold its reporter up, which
@@ -182,7 +184,7 @@ func send(path, id, method string, params map[string]any, timeout time.Duration)
 	if timeout > 0 {
 		_ = conn.SetDeadline(time.Now().Add(timeout))
 	}
-	line, err := json.Marshal(map[string]any{"id": id, "method": method, "params": params})
+	line, err := jsonx.Marshal(map[string]any{"id": id, "method": method, "params": params})
 	if err != nil {
 		return nil, connError(errorResponse(id, "invalid_request", err.Error()))
 	}

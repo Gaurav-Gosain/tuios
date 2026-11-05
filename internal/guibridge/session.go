@@ -1,12 +1,12 @@
 package guibridge
 
 import (
-	"encoding/json"
 	"errors"
-	"fmt"
 	"strings"
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
+	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 )
 
@@ -33,7 +33,7 @@ func (m *model) switchSession(c Command) error {
 			return err
 		}
 	} else if !c.Create && !m.sessionExists(name) {
-		return fmt.Errorf("no session %q", name)
+		return errfmt.Errorf("no session %q", name)
 	}
 	if name == m.os.SessionName {
 		return nil
@@ -70,7 +70,7 @@ func (m *model) sessionExists(name string) bool {
 			Name string `json:"name"`
 		} `json:"sessions"`
 	}
-	if json.Unmarshal(raw, &out) != nil {
+	if jsonx.Unmarshal(raw, &out) != nil {
 		return false
 	}
 	for _, s := range out.Sessions {
@@ -86,11 +86,11 @@ func (m *model) sessionExists(name string) bool {
 func resurrect(version, name string) error {
 	c := session.NewClient(&session.ClientConfig{Version: version})
 	if err := c.Connect(); err != nil {
-		return fmt.Errorf("failed to reach the daemon: %w", err)
+		return errfmt.Errorf("failed to reach the daemon: %w", err)
 	}
 	defer func() { _ = c.Close() }()
 	if err := c.ResurrectSession(name); err != nil {
-		return fmt.Errorf("failed to restore %s: %w", name, err)
+		return errfmt.Errorf("failed to restore %s: %w", name, err)
 	}
 	return nil
 }
@@ -129,7 +129,7 @@ func writeOption(key, value string) error {
 	}
 	cfg, err := config.LoadUserConfig()
 	if err != nil {
-		return fmt.Errorf("failed to read the config: %w", err)
+		return errfmt.Errorf("failed to read the config: %w", err)
 	}
 	if err := config.SetOptionValue(cfg, key, value); err != nil {
 		return err
@@ -139,7 +139,7 @@ func writeOption(key, value string) error {
 		return err
 	}
 	if _, err := write(); err != nil {
-		return fmt.Errorf("failed to save the config: %w", err)
+		return errfmt.Errorf("failed to save the config: %w", err)
 	}
 	return nil
 }

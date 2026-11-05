@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 )
 
 // Restricted connections: the minimal form of scoped callers.
@@ -774,7 +775,7 @@ func (d *Daemon) checkScope(cs *connState, verb string, params json.RawMessage) 
 func (d *Daemon) holdToPane(verb string, kind scopeKind, params json.RawMessage, own, window, bound string, reach func(target string) string, deny func(why string) *verbError) (json.RawMessage, *verbError) {
 	var m map[string]json.RawMessage
 	if len(strings.TrimSpace(string(params))) > 0 {
-		if err := json.Unmarshal(params, &m); err != nil {
+		if err := jsonx.Unmarshal(params, &m); err != nil {
 			// Not an object: the handler reports it as invalid_params. The
 			// session cannot be checked, so the call is refused here instead.
 			return nil, invalidParam("params", "params must be an object")
@@ -790,19 +791,19 @@ func (d *Daemon) holdToPane(verb string, kind scopeKind, params json.RawMessage,
 	str := func(name string) string {
 		var s string
 		if raw, ok := m[name]; ok {
-			_ = json.Unmarshal(raw, &s)
+			_ = jsonx.Unmarshal(raw, &s)
 		}
 		return s
 	}
 	flag := func(name string) bool {
 		var b bool
 		if raw, ok := m[name]; ok {
-			_ = json.Unmarshal(raw, &b)
+			_ = jsonx.Unmarshal(raw, &b)
 		}
 		return b
 	}
 	set := func(name, value string) {
-		raw, _ := json.Marshal(value)
+		raw, _ := jsonx.Marshal(value)
 		m[name] = raw
 	}
 
@@ -880,7 +881,7 @@ func (d *Daemon) holdToPane(verb string, kind scopeKind, params json.RawMessage,
 		}
 	}
 
-	out, err := json.Marshal(m)
+	out, err := jsonx.Marshal(m)
 	if err != nil {
 		return nil, newVerbError(ErrVerbInternal, "could not encode params")
 	}

@@ -4,9 +4,9 @@ package session
 
 import (
 	"errors"
-	"fmt"
 	"os"
 
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"github.com/Gaurav-Gosain/tuios/internal/ptyspawn"
 	"golang.org/x/sys/unix"
 )
@@ -87,7 +87,7 @@ func (g *readGate) wait(pty paneIO) (bool, error) {
 		})
 	})
 	if waitErr != nil {
-		return false, fmt.Errorf("waiting for the pane's output: %w", waitErr)
+		return false, errfmt.Errorf("waiting for the pane's output: %w", waitErr)
 	}
 	return ran && !woken, nil
 }

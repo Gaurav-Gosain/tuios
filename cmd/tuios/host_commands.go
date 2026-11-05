@@ -12,7 +12,9 @@ import (
 
 	"charm.land/lipgloss/v2"
 	"charm.land/lipgloss/v2/table"
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"github.com/Gaurav-Gosain/tuios/internal/federation"
+	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 	"github.com/Gaurav-Gosain/tuios/internal/plural"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"golang.org/x/term"
@@ -74,8 +76,8 @@ func printHostList(w io.Writer, raw json.RawMessage) error {
 		Total          int          `json:"total"`
 		ConfigProblems []string     `json:"config_problems"`
 	}
-	if err := json.Unmarshal(raw, &res); err != nil {
-		return fmt.Errorf("failed to parse response: %w", err)
+	if err := jsonx.Unmarshal(raw, &res); err != nil {
+		return errfmt.Errorf("failed to parse response: %w", err)
 	}
 
 	if len(res.Hosts) == 0 {
@@ -272,8 +274,8 @@ func runListSessionsAllHosts(host string, jsonOutput bool) error {
 	var res struct {
 		Hosts []hostSessionsEntry `json:"hosts"`
 	}
-	if err := json.Unmarshal(raw, &res); err != nil {
-		return fmt.Errorf("failed to parse response: %w", err)
+	if err := jsonx.Unmarshal(raw, &res); err != nil {
+		return errfmt.Errorf("failed to parse response: %w", err)
 	}
 
 	total, reachable := 0, 0
@@ -376,8 +378,8 @@ func runListAgentsAllHosts(host string, all bool, selector string, jsonOutput bo
 	var res struct {
 		Hosts []hostAgentsEntry `json:"hosts"`
 	}
-	if err := json.Unmarshal(raw, &res); err != nil {
-		return fmt.Errorf("failed to parse response: %w", err)
+	if err := jsonx.Unmarshal(raw, &res); err != nil {
+		return errfmt.Errorf("failed to parse response: %w", err)
 	}
 
 	total := 0
@@ -465,7 +467,7 @@ var stdioProxyAs string
 // session.DialForLink.
 func runStdioProxy(pinnedPeer string) error {
 	if term.IsTerminal(int(os.Stdin.Fd())) {
-		return fmt.Errorf("stdio-proxy is not meant to be run by hand. " +
+		return errfmt.Errorf("stdio-proxy is not meant to be run by hand. " +
 			"The tuios daemon runs it over ssh to read another machine's listings")
 	}
 	if pinnedPeer != "" {

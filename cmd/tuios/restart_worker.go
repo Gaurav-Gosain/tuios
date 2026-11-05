@@ -2,7 +2,6 @@ package main
 
 import (
 	"bufio"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -15,6 +14,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 	"github.com/Gaurav-Gosain/tuios/internal/restartplan"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 )
@@ -59,7 +59,7 @@ func runDetachedRestart(plan *restartReport, step func(string)) *restartReport {
 		return fail("The restart log could not be written: "+err.Error()+".", "check that "+filepath.Dir(logPath)+" can be written.")
 	}
 	writeRestartJSON(logFile, plan)
-	data, _ := json.Marshal(plan)
+	data, _ := jsonx.Marshal(plan)
 	cmd := exec.Command(workerExecutable(), "restart-server", "--worker", string(data))
 	cmd.Stdin = nil
 	cmd.Stdout, cmd.Stderr = logFile, logFile
@@ -103,7 +103,7 @@ func followRestartLog(path string, exited <-chan struct{}, step func(string), fa
 		partial += line
 		if err == nil {
 			var rep restartReport
-			if json.Unmarshal([]byte(partial), &rep) == nil {
+			if jsonx.Unmarshal([]byte(partial), &rep) == nil {
 				switch rep.Step {
 				case restartplan.StepStopping, restartplan.StepStarting:
 					step(rep.Step)
@@ -131,7 +131,7 @@ func followRestartLog(path string, exited <-chan struct{}, step func(string), fa
 func runRestartWorker(planJSON string) error {
 	signal.Ignore(syscall.SIGHUP)
 	var plan restartReport
-	if err := json.Unmarshal([]byte(planJSON), &plan); err != nil {
+	if err := jsonx.Unmarshal([]byte(planJSON), &plan); err != nil {
 		return err
 	}
 	out := os.Stdout
@@ -166,7 +166,7 @@ func showLastRestart(w io.Writer) error {
 	var plan *restartReport
 	for line := range strings.SplitSeq(string(data), "\n") {
 		var rep restartReport
-		if json.Unmarshal([]byte(line), &rep) != nil {
+		if jsonx.Unmarshal([]byte(line), &rep) != nil {
 			if line = strings.TrimSpace(line); line != "" {
 				fmt.Fprintln(w, line)
 			}

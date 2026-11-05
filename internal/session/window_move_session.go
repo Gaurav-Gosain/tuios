@@ -3,12 +3,14 @@ package session
 import (
 	"encoding/json"
 	"errors"
-	"fmt"
 	"os"
 	"path/filepath"
 	"slices"
 	"sync"
 	"time"
+
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
+	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 )
 
 // Moving a window to another session.
@@ -288,7 +290,7 @@ func (s *Session) adoptWindow(t *paneTransfer, workspace int, focus bool) (Windo
 	var metaAt, subagentsAt int64
 	err := s.mutateState(func(state *SessionState) error {
 		if !state.workspaceAccepts(workspace) || IsScratchWorkspace(workspace) {
-			return fmt.Errorf("workspace %d out of range (1-%d)", workspace, state.workspaceBound())
+			return errfmt.Errorf("workspace %d out of range (1-%d)", workspace, state.workspaceBound())
 		}
 		win = t.win
 		win.Workspace = workspace
@@ -420,7 +422,7 @@ func (d *Daemon) moveWindowToSession(src, dst *Session, windowID string, workspa
 	// Checked before anything leaves the source: a refusal here moves
 	// nothing.
 	if st := dst.GetState(); !st.workspaceAccepts(workspace) || IsScratchWorkspace(workspace) {
-		return WindowState{}, fmt.Errorf("workspace %d out of range (1-%d)", workspace, st.workspaceBound())
+		return WindowState{}, errfmt.Errorf("workspace %d out of range (1-%d)", workspace, st.workspaceBound())
 	}
 
 	srcLabel, dstLabel := sessionLabel(src), sessionLabel(dst)
@@ -548,14 +550,14 @@ func (d *Daemon) followMovedWindow(params json.RawMessage) json.RawMessage {
 		return params
 	}
 	var m map[string]json.RawMessage
-	if err := json.Unmarshal(params, &m); err != nil {
+	if err := jsonx.Unmarshal(params, &m); err != nil {
 		return params
 	}
 	var session, window string
-	if raw, ok := m["session"]; !ok || json.Unmarshal(raw, &session) != nil || session == "" {
+	if raw, ok := m["session"]; !ok || jsonx.Unmarshal(raw, &session) != nil || session == "" {
 		return params
 	}
-	if raw, ok := m["window"]; !ok || json.Unmarshal(raw, &window) != nil || window == "" {
+	if raw, ok := m["window"]; !ok || jsonx.Unmarshal(raw, &window) != nil || window == "" {
 		return params
 	}
 	v, ok := movedWindows.Load(window)
@@ -575,8 +577,8 @@ func (d *Daemon) followMovedWindow(params json.RawMessage) json.RawMessage {
 	if holder == nil || holder == named {
 		return params
 	}
-	m["session"], _ = json.Marshal(holder.Name())
-	out, err := json.Marshal(m)
+	m["session"], _ = jsonx.Marshal(holder.Name())
+	out, err := jsonx.Marshal(m)
 	if err != nil {
 		return params
 	}

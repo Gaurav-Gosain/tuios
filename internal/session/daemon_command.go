@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"github.com/Gaurav-Gosain/tuios/internal/tape"
 )
 
@@ -93,7 +94,7 @@ func unknownCommandMessage(name string) string {
 func (d *Daemon) handleExecuteCommand(cs *connState, msg *Message) error {
 	var payload ExecuteCommandPayload
 	if err := msg.ParsePayload(&payload); err != nil {
-		return fmt.Errorf("invalid execute command payload: %w", err)
+		return errfmt.Errorf("invalid execute command payload: %w", err)
 	}
 
 	LogBasic("Received execute command: %s (session=%s, args=%v)", payload.CommandType, payload.SessionName, payload.Args)
@@ -280,7 +281,7 @@ func (d *Daemon) handleExecuteCommand(cs *connState, msg *Message) error {
 func (d *Daemon) handleCommandResult(cs *connState, msg *Message) error {
 	var payload CommandResultPayload
 	if err := msg.ParsePayload(&payload); err != nil {
-		return fmt.Errorf("invalid command result payload: %w", err)
+		return errfmt.Errorf("invalid command result payload: %w", err)
 	}
 
 	// Data is map[string]any and can nest to any depth. Everything below
@@ -358,7 +359,7 @@ func (d *Daemon) routeToTUISync(tui *connState, requestID string, cmd *RemoteCom
 
 	if err := d.sendMessage(tui, MsgRemoteCommand, cmd); err != nil {
 		clearPending()
-		return nil, fmt.Errorf("failed to reach the attached client: %w", err)
+		return nil, errfmt.Errorf("failed to reach the attached client: %w", err)
 	}
 
 	select {
@@ -366,10 +367,10 @@ func (d *Daemon) routeToTUISync(tui *connState, requestID string, cmd *RemoteCom
 		return res, nil
 	case <-time.After(timeout):
 		clearPending()
-		return nil, fmt.Errorf("timed out waiting for the attached client")
+		return nil, errfmt.Errorf("timed out waiting for the attached client")
 	case <-d.ctx.Done():
 		clearPending()
-		return nil, fmt.Errorf("daemon shutting down")
+		return nil, errfmt.Errorf("daemon shutting down")
 	}
 }
 
@@ -459,7 +460,7 @@ func (d *Daemon) sendCommandResult(cs *connState, requestID string, success bool
 func (d *Daemon) handleGetLogs(cs *connState, msg *Message) error {
 	var payload GetLogsPayload
 	if err := msg.ParsePayload(&payload); err != nil {
-		return fmt.Errorf("invalid get logs payload: %w", err)
+		return errfmt.Errorf("invalid get logs payload: %w", err)
 	}
 
 	entries := GetLogEntries(payload.Count)

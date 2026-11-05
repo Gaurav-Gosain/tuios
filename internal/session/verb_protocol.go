@@ -18,6 +18,7 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/guestenv"
 	"github.com/Gaurav-Gosain/tuios/internal/harness"
+	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 )
 
 // This file implements the typed, line-delimited JSON verb protocol layered
@@ -3016,7 +3017,7 @@ func (d *Daemon) dispatchVerbLine(cs *connState, line []byte, release func()) er
 	// A verb can change what the session listing shows.
 	d.wakes.listing.Set()
 	var req verbRequest
-	err := json.Unmarshal(line, &req)
+	err := jsonx.Unmarshal(line, &req)
 	if release != nil {
 		release()
 	}
@@ -3142,7 +3143,7 @@ func (d *Daemon) admitVerb(cs *connState, verb string, params json.RawMessage) (
 // daemon (the herdr socket) reuses a verb rather than doing its work again.
 // A verb that streams (subscribe) is not called this way.
 func (d *Daemon) callVerb(cs *connState, verb string, params any) (any, *verbError) {
-	raw, err := json.Marshal(params)
+	raw, err := jsonx.Marshal(params)
 	if err != nil {
 		return nil, newVerbError(ErrVerbInternal, "could not encode params")
 	}
@@ -3178,7 +3179,7 @@ func checkParamNames(verb string, entry verbEntry, params json.RawMessage) *verb
 	var got map[string]json.RawMessage
 	// A params value that is not an object at all is left to the handler's
 	// decode, which already reports it as invalid_params with the decode error.
-	if err := json.Unmarshal(params, &got); err != nil {
+	if err := jsonx.Unmarshal(params, &got); err != nil {
 		return nil
 	}
 
@@ -3235,7 +3236,7 @@ func (d *Daemon) writeVerbError(cs *connState, id json.RawMessage, verb string, 
 // writeVerbResponse serializes resp as one newline-terminated JSON line and
 // writes it under the connection's send mutex with a write deadline.
 func (d *Daemon) writeVerbResponse(cs *connState, resp *verbResponse) error {
-	data, err := json.Marshal(resp)
+	data, err := jsonx.Marshal(resp)
 	if err != nil {
 		// Should not happen; fall back to a minimal internal error line.
 		data = []byte(`{"error":{"code":"internal","message":"failed to encode response"}}`)

@@ -13,6 +13,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 )
 
@@ -116,7 +117,7 @@ func readDaemonAppEnvFile(path string) ([]string, error) {
 	}
 	st, ok := info.Sys().(*syscall.Stat_t)
 	if !info.Mode().IsRegular() || !ok || int(st.Uid) != os.Getuid() || info.Mode().Perm()&0o077 != 0 {
-		return nil, fmt.Errorf("%s is not a private file of this user", path)
+		return nil, errfmt.Errorf("%s is not a private file of this user", path)
 	}
 	data, err := os.ReadFile(path)
 	_ = os.Remove(path)

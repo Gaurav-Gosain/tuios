@@ -13,6 +13,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/x/ansi"
 
+	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 	"github.com/Gaurav-Gosain/tuios/internal/pastebuf"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
@@ -271,7 +272,7 @@ func (m *OS) pasteBufferNamed(name, window string, version uint64) tea.Cmd {
 			Data    string `json:"data"`
 			DataB64 string `json:"data_b64"`
 		}
-		if err := json.Unmarshal(raw, &res); err != nil {
+		if err := jsonx.Unmarshal(raw, &res); err != nil {
 			return PasteBufferFetchedMsg{Name: name, Window: window, Err: err, asked: name, held: true}
 		}
 		data := res.Data
@@ -466,7 +467,7 @@ func (m *OS) OpenBufferChooser() tea.Cmd {
 		var res struct {
 			Buffers []PasteBufferItem `json:"buffers"`
 		}
-		if err := json.Unmarshal(raw, &res); err != nil {
+		if err := jsonx.Unmarshal(raw, &res); err != nil {
 			return PasteBuffersLoadedMsg{Gen: gen, Err: err}
 		}
 		return PasteBuffersLoadedMsg{Gen: gen, Items: res.Buffers}

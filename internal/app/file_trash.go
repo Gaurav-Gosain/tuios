@@ -10,6 +10,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"github.com/adrg/xdg"
 )
 
@@ -128,7 +129,7 @@ func trashOne(filesDir, infoDir, path string, now time.Time) error {
 	}
 	base := filepath.Base(abs)
 	if base == "" || base == "." || base == string(os.PathSeparator) {
-		return fmt.Errorf("cannot trash %s", path)
+		return errfmt.Errorf("cannot trash %s", path)
 	}
 
 	name, infoFile, err := claimTrashName(infoDir, base)
@@ -175,7 +176,7 @@ func claimTrashName(infoDir, base string) (string, *os.File, error) {
 			return "", nil, err
 		}
 	}
-	return "", nil, fmt.Errorf("%s: the trash already holds 1000 of these", base)
+	return "", nil, errfmt.Errorf("%s: the trash already holds 1000 of these", base)
 }
 
 // trashInfoPath percent-encodes an absolute path for the Path line, which the

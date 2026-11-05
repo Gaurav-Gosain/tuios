@@ -3,8 +3,9 @@
 package app
 
 import (
-	"fmt"
 	"os/exec"
+
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 )
 
 // The pixel tier and the OS viewer off unix. The preview's text tier is the
@@ -33,7 +34,7 @@ func buildScreenshotTransmit(png []byte) []byte { return nil }
 func openInOSViewer(path string) error {
 	cmd := exec.Command("rundll32", "url.dll,FileProtocolHandler", path)
 	if err := cmd.Start(); err != nil {
-		return fmt.Errorf("could not open %s: %w", path, err)
+		return errfmt.Errorf("could not open %s: %w", path, err)
 	}
 	go func() { _ = cmd.Wait() }()
 	return nil

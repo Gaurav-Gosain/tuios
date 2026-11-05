@@ -22,6 +22,7 @@ import (
 	"golang.org/x/term"
 	sketch "tuios.dev/sketch/core"
 
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"github.com/Gaurav-Gosain/tuios/internal/mermaid"
 )
 
@@ -291,7 +292,7 @@ func kittyFileMedium(out *os.File) bool {
 // runMermaidLive runs the full-screen view until q, Esc or Ctrl+C.
 func runMermaidLive(name string, o mermaidOptions, lo liveOptions, th *sketch.Theme, stdout *os.File) error {
 	if !term.IsTerminal(int(stdout.Fd())) || !term.IsTerminal(int(os.Stdin.Fd())) {
-		return fmt.Errorf("--watch and --demo need a terminal")
+		return errfmt.Errorf("--watch and --demo need a terminal")
 	}
 	// The terminal is given back on every way out: q, Ctrl+C, a signal, a
 	// panic in any goroutine, an error. termios is restored first, because it
@@ -455,11 +456,11 @@ func runMermaidLive(name string, o mermaidOptions, lo liveOptions, th *sketch.Th
 			data, err := mermaid.ReadSource(name)
 			if err != nil {
 				cleanup()
-				return fmt.Errorf("cannot read %s: %w", name, err)
+				return errfmt.Errorf("cannot read %s: %w", name, err)
 			}
 			if steps = mermaid.Sources(name, data); len(steps) == 0 {
 				cleanup()
-				return fmt.Errorf("%s has no Mermaid diagram", name)
+				return errfmt.Errorf("%s has no Mermaid diagram", name)
 			}
 			if !strings.HasSuffix(strings.ToLower(name), ".md") {
 				// One diagram: type it from nothing, a line at a time.
@@ -470,7 +471,7 @@ func runMermaidLive(name string, o mermaidOptions, lo liveOptions, th *sketch.Th
 			for _, st := range steps {
 				if len(st) > mermaid.MaxDemoStep {
 					cleanup()
-					return fmt.Errorf("%s: --demo types at most %d characters a diagram", name, mermaid.MaxDemoStep)
+					return errfmt.Errorf("%s: --demo types at most %d characters a diagram", name, mermaid.MaxDemoStep)
 				}
 			}
 		}

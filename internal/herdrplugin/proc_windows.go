@@ -3,13 +3,13 @@
 package herdrplugin
 
 import (
-	"fmt"
 	"os/exec"
 	"sync"
 	"syscall"
 
 	"golang.org/x/sys/windows"
 
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"github.com/Gaurav-Gosain/tuios/internal/winjob"
 )
 
@@ -48,7 +48,7 @@ func track(cmd *exec.Cmd) (*procGroup, error) {
 	pid := uint32(cmd.Process.Pid) //nolint:gosec // a process id fits
 	h, err := windows.OpenProcess(windows.PROCESS_SET_QUOTA|windows.PROCESS_TERMINATE|windows.PROCESS_SUSPEND_RESUME, false, pid)
 	if err != nil {
-		return g, fmt.Errorf("could not open the plugin process: %w", err)
+		return g, errfmt.Errorf("could not open the plugin process: %w", err)
 	}
 	defer func() { _ = windows.CloseHandle(h) }()
 	if useJobs {
@@ -63,7 +63,7 @@ func track(cmd *exec.Cmd) (*procGroup, error) {
 		}
 	}
 	if err := winjob.Resume(h); err != nil {
-		return g, fmt.Errorf("could not resume the plugin process: %w", err)
+		return g, errfmt.Errorf("could not resume the plugin process: %w", err)
 	}
 	return g, nil
 }

@@ -26,6 +26,8 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
+	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 	"github.com/Gaurav-Gosain/tuios/internal/tarpack"
 )
 
@@ -129,15 +131,15 @@ type Key struct {
 // UnmarshalJSON reads "ctrl+b" or {"text": "ls"}.
 func (k *Key) UnmarshalJSON(b []byte) error {
 	var s string
-	if err := json.Unmarshal(b, &s); err == nil {
+	if err := jsonx.Unmarshal(b, &s); err == nil {
 		k.Chord = s
 		return nil
 	}
 	var t struct {
 		Text string `json:"text"`
 	}
-	if err := json.Unmarshal(b, &t); err != nil || t.Text == "" {
-		return fmt.Errorf(`a key is a chord string or {"text": ...}`)
+	if err := jsonx.Unmarshal(b, &t); err != nil || t.Text == "" {
+		return errfmt.Errorf(`a key is a chord string or {"text": ...}`)
 	}
 	k.Text = t.Text
 	return nil
@@ -146,9 +148,9 @@ func (k *Key) UnmarshalJSON(b []byte) error {
 // MarshalJSON writes the form UnmarshalJSON reads.
 func (k Key) MarshalJSON() ([]byte, error) {
 	if k.Text != "" {
-		return json.Marshal(map[string]string{"text": k.Text})
+		return jsonx.Marshal(map[string]string{"text": k.Text})
 	}
-	return json.Marshal(k.Chord)
+	return jsonx.Marshal(k.Chord)
 }
 
 // Explainer is a step about something the tour cannot run. It is done when
@@ -255,24 +257,24 @@ func JSON() ([]byte, error) {
 func build() (*File, []byte, error) {
 	files, err := tarpack.Unpack(archive)
 	if err != nil {
-		return nil, nil, fmt.Errorf("lessons.tar.gz: %w", err)
+		return nil, nil, errfmt.Errorf("lessons.tar.gz: %w", err)
 	}
 	raw, ok := files["tracks.json"]
 	if !ok {
 		return nil, nil, errors.New("lessons.tar.gz: no tracks.json")
 	}
 	var idx index
-	if err := json.Unmarshal(raw, &idx); err != nil {
-		return nil, nil, fmt.Errorf("tracks.json: %w", err)
+	if err := jsonx.Unmarshal(raw, &idx); err != nil {
+		return nil, nil, errfmt.Errorf("tracks.json: %w", err)
 	}
 	if idx.Version != Version {
-		return nil, nil, fmt.Errorf("tracks.json: version %d, want %d", idx.Version, Version)
+		return nil, nil, errfmt.Errorf("tracks.json: version %d, want %d", idx.Version, Version)
 	}
 	parts := make([]json.RawMessage, 0, len(idx.Tracks))
 	for _, id := range idx.Tracks {
 		b, ok := files["tracks/"+id+".json"]
 		if !ok {
-			return nil, nil, fmt.Errorf("track %s: not in lessons.tar.gz", id)
+			return nil, nil, errfmt.Errorf("track %s: not in lessons.tar.gz", id)
 		}
 		parts = append(parts, b)
 	}
@@ -283,8 +285,8 @@ func build() (*File, []byte, error) {
 // checking each. It is Load's work on files from anywhere, for the lint.
 func Assemble(indexJSON []byte, trackJSON []json.RawMessage) (*File, []byte, error) {
 	var idx index
-	if err := json.Unmarshal(indexJSON, &idx); err != nil {
-		return nil, nil, fmt.Errorf("tracks.json: %w", err)
+	if err := jsonx.Unmarshal(indexJSON, &idx); err != nil {
+		return nil, nil, errfmt.Errorf("tracks.json: %w", err)
 	}
 	f := &File{Version: idx.Version, Groups: idx.Groups, Coach: idx.Coach}
 	var out bytes.Buffer
@@ -294,7 +296,7 @@ func Assemble(indexJSON []byte, trackJSON []json.RawMessage) (*File, []byte, err
 		name string
 		v    any
 	}{{"groups", idx.Groups}, {"coach", idx.Coach}} {
-		b, err := json.Marshal(part.v)
+		b, err := jsonx.Marshal(part.v)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -310,13 +312,13 @@ func Assemble(indexJSON []byte, trackJSON []json.RawMessage) (*File, []byte, err
 			Schema string `json:"$schema"`
 			*Track
 		}{Track: &t}); err != nil {
-			return nil, nil, fmt.Errorf("track %d: %w", i, err)
+			return nil, nil, errfmt.Errorf("track %d: %w", i, err)
 		}
 		if i < len(idx.Tracks) && t.ID != idx.Tracks[i] {
-			return nil, nil, fmt.Errorf("track file %s holds track %q", idx.Tracks[i], t.ID)
+			return nil, nil, errfmt.Errorf("track file %s holds track %q", idx.Tracks[i], t.ID)
 		}
 		if err := t.check(); err != nil {
-			return nil, nil, fmt.Errorf("track %s: %w", t.ID, err)
+			return nil, nil, errfmt.Errorf("track %s: %w", t.ID, err)
 		}
 		f.Tracks = append(f.Tracks, &t)
 		if i > 0 {
@@ -352,10 +354,10 @@ func dropSchema(b []byte) []byte {
 // event types, setup commands and key chords.
 func (t *Track) check() error {
 	if t.ID == "" || t.Title == "" {
-		return fmt.Errorf("a track needs an id and a title")
+		return errfmt.Errorf("a track needs an id and a title")
 	}
 	if len(t.Surfaces) == 0 {
-		return fmt.Errorf("no surfaces")
+		return errfmt.Errorf("no surfaces")
 	}
 	if err := checkSetup(t.Setup); err != nil {
 		return err
@@ -363,35 +365,35 @@ func (t *Track) check() error {
 	ids := map[string]bool{}
 	for _, s := range t.Steps {
 		if s.ID == "" || ids[s.ID] {
-			return fmt.Errorf("step id %q is empty or used twice", s.ID)
+			return errfmt.Errorf("step id %q is empty or used twice", s.ID)
 		}
 		ids[s.ID] = true
 		if len(s.Keys) == 0 {
-			return fmt.Errorf("step %s: no keys", s.ID)
+			return errfmt.Errorf("step %s: no keys", s.ID)
 		}
 		if err := checkSetup(s.Setup); err != nil {
-			return fmt.Errorf("step %s: %w", s.ID, err)
+			return errfmt.Errorf("step %s: %w", s.ID, err)
 		}
 		switch {
 		case s.Explainer != nil && s.Done != nil:
-			return fmt.Errorf("step %s: an explainer has no done rule", s.ID)
+			return errfmt.Errorf("step %s: an explainer has no done rule", s.ID)
 		case s.Explainer == nil && s.Done == nil:
-			return fmt.Errorf("step %s: no done rule", s.ID)
+			return errfmt.Errorf("step %s: no done rule", s.ID)
 		case s.Explainer == nil && strings.TrimSpace(s.Hint) == "":
-			return fmt.Errorf("step %s: no hint", s.ID)
+			return errfmt.Errorf("step %s: no hint", s.ID)
 		}
 		if s.Done != nil {
 			if err := s.Done.compile(); err != nil {
-				return fmt.Errorf("step %s: %w", s.ID, err)
+				return errfmt.Errorf("step %s: %w", s.ID, err)
 			}
 		}
 		for _, r := range s.After {
 			if err := r.compile(); err != nil {
-				return fmt.Errorf("step %s after: %w", s.ID, err)
+				return errfmt.Errorf("step %s after: %w", s.ID, err)
 			}
 		}
 		if (len(s.After) > 0) != (strings.TrimSpace(s.Waiting) != "") {
-			return fmt.Errorf("step %s: after and waiting go together", s.ID)
+			return errfmt.Errorf("step %s: after and waiting go together", s.ID)
 		}
 	}
 	return nil
@@ -400,11 +402,11 @@ func (t *Track) check() error {
 func checkSetup(list []Setup) error {
 	for _, s := range list {
 		if (s.Command == "") == (s.Input == "") {
-			return fmt.Errorf("a setup entry needs a command or input, not both")
+			return errfmt.Errorf("a setup entry needs a command or input, not both")
 		}
 		if s.Until != nil {
 			if err := s.Until.compile(); err != nil {
-				return fmt.Errorf("setup until: %w", err)
+				return errfmt.Errorf("setup until: %w", err)
 			}
 		}
 	}

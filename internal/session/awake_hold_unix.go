@@ -5,7 +5,6 @@ package session
 import (
 	"bytes"
 	"errors"
-	"fmt"
 	"os"
 	"os/exec"
 	"runtime"
@@ -14,6 +13,7 @@ import (
 	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/childproc"
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 )
 
 // awakeHolder holds the machine awake with a child process: on Linux
@@ -63,7 +63,7 @@ func (h *awakeHolder) take(why string, lost chan<- error) error {
 	name, args := awakeCommand(why)
 	path, err := exec.LookPath(name)
 	if err != nil {
-		return fmt.Errorf("%s is not installed", name)
+		return errfmt.Errorf("%s is not installed", name)
 	}
 	cat, err := exec.LookPath("cat")
 	if err != nil {
@@ -96,7 +96,7 @@ func (h *awakeHolder) take(why string, lost chan<- error) error {
 		if msg == "" {
 			msg = "exited"
 		}
-		waitErr <- fmt.Errorf("%s stopped: %s", name, msg)
+		waitErr <- errfmt.Errorf("%s stopped: %s", name, msg)
 	}()
 	// A holder the system refuses exits at once. Wait a short time for that,
 	// so the caller can say why instead of reporting a hold that is not

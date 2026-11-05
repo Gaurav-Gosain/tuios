@@ -15,6 +15,7 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/app"
 	"github.com/Gaurav-Gosain/tuios/internal/cliflags"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"github.com/Gaurav-Gosain/tuios/internal/fang"
 	"github.com/Gaurav-Gosain/tuios/internal/guestenv"
 	"github.com/Gaurav-Gosain/tuios/internal/herdrplugin"
@@ -363,10 +364,10 @@ sessions that 'tuios ls' and the sidebar list together.`,
 			}
 			if newHost != "" {
 				if newCwd != "" {
-					return fmt.Errorf("--cwd is a directory on this machine, so it cannot be used with --host")
+					return errfmt.Errorf("--cwd is a directory on this machine, so it cannot be used with --host")
 				}
 				if newSpace != "" {
-					return fmt.Errorf("--space cannot be used with --host. Run 'tuios set-session-space' on the host after you create the session")
+					return errfmt.Errorf("--space cannot be used with --host. Run 'tuios set-session-space' on the host after you create the session")
 				}
 				return runNewOnHost(newHost, name, newDetach, newHold, newSSH)
 			}
@@ -888,7 +889,7 @@ exists: get-window and list-windows read windows with the read grant.`,
 				return nil
 			}
 			if len(args) == 0 {
-				return fmt.Errorf("command name required (use --list to see available commands)")
+				return errfmt.Errorf("command name required (use --list to see available commands)")
 			}
 			return runCommand(runCommandSession, args[0], args[1:], runCommandJSON)
 		},
@@ -1073,7 +1074,7 @@ activity the harness hooks report, and are refused here.`,
   tuios set-agent-meta --source statusline --clear`,
 		Args: func(_ *cobra.Command, args []string) error {
 			if len(args) == 0 && !setAgentMetaClear {
-				return fmt.Errorf("give at least one key=value, or --clear")
+				return errfmt.Errorf("give at least one key=value, or --clear")
 			}
 			return nil
 		},
@@ -1539,7 +1540,7 @@ focused pane outside every pane.`,
 			if len(args) == 1 {
 				n, err := strconv.Atoi(args[0])
 				if err != nil || n < 1 {
-					return fmt.Errorf("workspace must be a number from 1, got %q", args[0])
+					return errfmt.Errorf("workspace must be a number from 1, got %q", args[0])
 				}
 				workspace = n
 			}
@@ -1595,7 +1596,7 @@ sets as the title.`,
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			if setWindowMinimize && setWindowRestore {
-				return fmt.Errorf("--minimize and --restore ask for opposite things. Pass one")
+				return errfmt.Errorf("--minimize and --restore ask for opposite things. Pass one")
 			}
 			// An unset flag has to stay unset rather than send its zero value:
 			// --name "" is a request to clear the name, which is not the same as
@@ -1638,7 +1639,7 @@ This changes which workspace is displayed. To label one use
 		RunE: func(_ *cobra.Command, args []string) error {
 			workspace, err := strconv.Atoi(args[0])
 			if err != nil {
-				return fmt.Errorf("workspace must be a number, got %q", args[0])
+				return errfmt.Errorf("workspace must be a number, got %q", args[0])
 			}
 			return runSelectWorkspace(selectWorkspaceSession, workspace, selectWorkspaceJSON)
 		},
@@ -1710,7 +1711,7 @@ only mean something while the panes are tiled.`,
 			if cmd.Flags().Changed("tiling") {
 				parsed, err := strconv.ParseBool(setLayoutTiling)
 				if err != nil {
-					return fmt.Errorf("--tiling takes true or false, got %q", setLayoutTiling)
+					return errfmt.Errorf("--tiling takes true or false, got %q", setLayoutTiling)
 				}
 				tiling = &parsed
 			}
@@ -2311,7 +2312,7 @@ number. The number stays the workspace's identity. Pass no name to clear it.`,
 		RunE: func(_ *cobra.Command, args []string) error {
 			workspace, err := strconv.Atoi(args[0])
 			if err != nil {
-				return fmt.Errorf("workspace must be a number, got %q", args[0])
+				return errfmt.Errorf("workspace must be a number, got %q", args[0])
 			}
 			name := ""
 			if len(args) > 1 {
@@ -2698,12 +2699,12 @@ would accept a question right now.`,
 		RunE: func(_ *cobra.Command, _ []string) error {
 			if listAgentsAllHosts || listAgentsHost != "" {
 				if listAgentsSession != "" {
-					return fmt.Errorf("--session names one machine's session, so it cannot be used with --all-hosts or --host. Every session on each host is listed, and each row names its session")
+					return errfmt.Errorf("--session names one machine's session, so it cannot be used with --all-hosts or --host. Every session on each host is listed, and each row names its session")
 				}
 				return runListAgentsAllHosts(listAgentsHost, listAgentsAll, listAgentsSelect, listAgentsJSON)
 			}
 			if listAgentsAllSessions && listAgentsSession != "" {
-				return fmt.Errorf("--all-sessions lists every session, so it takes no --session")
+				return errfmt.Errorf("--all-sessions lists every session, so it takes no --session")
 			}
 			return runListAgents(listAgentsSession, listAgentsAll, listAgentsAllSessions, listAgentsSelect, listAgentsJSON)
 		},
@@ -2784,13 +2785,13 @@ list-agents printed for the same selector.`,
 			sendMsgFrom = senderPane(sendMsgFrom)
 			if sendMsgSelect != "" {
 				if sendMsgTo != "" || sendMsgSession != "" || sendMsgReplyTo != 0 {
-					return fmt.Errorf("--select names the recipients in every session, so it takes no --window, --session or --reply-to")
+					return errfmt.Errorf("--select names the recipients in every session, so it takes no --window, --session or --reply-to")
 				}
 				return runSendAgentMessageSelect(sendMsgSelect, sendMsgFrom, sendMsgSubject, args[0], sendMsgAttach,
 					stdinConfirm(sendMsgYes, sendMsgConfirm), sendMsgJSON)
 			}
 			if sendMsgYes || sendMsgConfirm != "" {
-				return fmt.Errorf("--yes and --confirm go with --select")
+				return errfmt.Errorf("--yes and --confirm go with --select")
 			}
 			return runSendAgentMessage(sendMsgSession, sendMsgTo, sendMsgFrom,
 				sendMsgSubject, args[0], sendMsgReplyTo, sendMsgAttach, sendMsgJSON)
@@ -2920,13 +2921,13 @@ others still answer.`,
 			askFrom = senderPane(askFrom)
 			if askSelect != "" {
 				if askWindow != "" || askSession != "" {
-					return fmt.Errorf("--select names the agents in every session, so it takes no --window or --session")
+					return errfmt.Errorf("--select names the agents in every session, so it takes no --window or --session")
 				}
 				return runAskAgentSelect(askSelect, askFrom, args[0], askReadyTimeout, askSettle, askTimeout, askLines,
 					askStallTimeout, askForce, askAllowBlocked, stdinConfirm(askYes, askConfirm), askJSON)
 			}
 			if askYes || askConfirm != "" {
-				return fmt.Errorf("--yes and --confirm go with --select")
+				return errfmt.Errorf("--yes and --confirm go with --select")
 			}
 			return runAskAgent(askSession, askWindow, askFrom, args[0],
 				askReadyTimeout, askSettle, askTimeout, askLines, askStallTimeout, askForce, askAllowBlocked, askJSON)
@@ -3175,5 +3176,5 @@ func findLayoutTemplate(name string) (app.LayoutTemplate, error) {
 			return t, nil
 		}
 	}
-	return app.LayoutTemplate{}, fmt.Errorf("no layout named %q. Run 'tuios layout list' to see the saved layouts", name)
+	return app.LayoutTemplate{}, errfmt.Errorf("no layout named %q. Run 'tuios layout list' to see the saved layouts", name)
 }

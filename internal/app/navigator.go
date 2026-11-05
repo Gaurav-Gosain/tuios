@@ -2,7 +2,6 @@ package app
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"maps"
 	"os"
@@ -18,6 +17,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/federation"
+	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 	"github.com/Gaurav-Gosain/tuios/pkg/fuzzy"
@@ -710,7 +710,7 @@ func navLoadSession(ctx context.Context, c *session.VerbClient, host, name strin
 			AgentState string `json:"agent_state"`
 		} `json:"windows"`
 	}
-	if json.Unmarshal(raw, &list) != nil {
+	if jsonx.Unmarshal(raw, &list) != nil {
 		return navSession{}, false, true
 	}
 	s = navSession{Host: host, Name: name, WorkspaceNames: map[int]string{}, Shell: list.Shell}
@@ -737,7 +737,7 @@ func navLoadSession(ctx context.Context, c *session.VerbClient, host, name strin
 		var info struct {
 			Names map[string]string `json:"workspace_names"`
 		}
-		if json.Unmarshal(raw, &info) == nil {
+		if jsonx.Unmarshal(raw, &info) == nil {
 			for k, v := range info.Names {
 				if n, err := strconv.Atoi(k); err == nil {
 					s.WorkspaceNames[n] = v
@@ -769,7 +769,7 @@ func navCapture(ctx context.Context, c *session.VerbClient, sessionName, window 
 	var res struct {
 		Content string `json:"content"`
 	}
-	if json.Unmarshal(raw, &res) != nil {
+	if jsonx.Unmarshal(raw, &res) != nil {
 		return nil, nil, true
 	}
 	plain, styled = parser.parse(res.Content, navTextLines)

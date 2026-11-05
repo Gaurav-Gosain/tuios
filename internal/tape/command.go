@@ -6,6 +6,8 @@ import (
 	"strings"
 	"time"
 	"unicode"
+
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 )
 
 // CommandType represents the type of a tape command
@@ -385,7 +387,7 @@ func ParseKeyCombo(s string) (*KeyCombo, error) {
 	parts := strings.FieldsFunc(s, func(r rune) bool { return r == '+' })
 
 	if len(parts) == 0 {
-		return nil, fmt.Errorf("empty key combo")
+		return nil, errfmt.Errorf("empty key combo")
 	}
 
 	// Last part is always the key
@@ -401,7 +403,7 @@ func ParseKeyCombo(s string) (*KeyCombo, error) {
 		case "shift":
 			kc.Shift = true
 		default:
-			return nil, fmt.Errorf("unknown modifier: %s", parts[i])
+			return nil, errfmt.Errorf("unknown modifier: %s", parts[i])
 		}
 	}
 

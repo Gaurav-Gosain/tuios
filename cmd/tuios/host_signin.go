@@ -11,7 +11,9 @@ import (
 
 	"github.com/Gaurav-Gosain/tuios/internal/app"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"github.com/Gaurav-Gosain/tuios/internal/federation"
+	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/spf13/cobra"
 )
@@ -108,7 +110,7 @@ func runHostSignin(w io.Writer, name string, printOnly, asJSON bool) error {
 		}
 	}
 	if name != "" && !found {
-		return fmt.Errorf("no host named %q is configured. Run 'tuios hosts' to see the hosts", name)
+		return errfmt.Errorf("no host named %q is configured. Run 'tuios hosts' to see the hosts", name)
 	}
 
 	rows := make([]signInRow, 0, len(waiting))
@@ -189,8 +191,8 @@ func signInReports(client *session.VerbClient) ([]federation.HostReport, error) 
 	var res struct {
 		Hosts []federation.HostReport `json:"hosts"`
 	}
-	if err := json.Unmarshal(raw, &res); err != nil {
-		return nil, fmt.Errorf("failed to parse response: %w", err)
+	if err := jsonx.Unmarshal(raw, &res); err != nil {
+		return nil, errfmt.Errorf("failed to parse response: %w", err)
 	}
 	return res.Hosts, nil
 }

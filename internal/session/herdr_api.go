@@ -10,6 +10,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 	"github.com/Gaurav-Gosain/tuios/internal/worktree"
 )
 
@@ -403,7 +404,7 @@ func herdrDecode(params json.RawMessage, p any, required ...string) *herdrError 
 		params = json.RawMessage("{}")
 	}
 	var fields map[string]json.RawMessage
-	if err := json.Unmarshal(params, &fields); err != nil {
+	if err := jsonx.Unmarshal(params, &fields); err != nil {
 		return herdrErr("invalid_request", "invalid request: params must be an object")
 	}
 	for _, name := range required {
@@ -411,7 +412,7 @@ func herdrDecode(params json.RawMessage, p any, required ...string) *herdrError 
 			return herdrErr("invalid_request", "invalid request: missing field `"+name+"`")
 		}
 	}
-	if err := json.Unmarshal(params, p); err != nil {
+	if err := jsonx.Unmarshal(params, p); err != nil {
 		return herdrErr("invalid_request", "invalid request: "+err.Error())
 	}
 	return nil
@@ -1284,7 +1285,7 @@ func (d *Daemon) herdrWaitAgent(cs *connState, id string, until []string, timeou
 	}
 	args := herdrWin(sess, win.ID)
 	args.Condition, args.Until, args.Timeout = "agent-state", states, timeoutMS
-	raw, err := json.Marshal(args)
+	raw, err := jsonx.Marshal(args)
 	if err != nil {
 		return herdrErr("internal_error", "could not encode params")
 	}

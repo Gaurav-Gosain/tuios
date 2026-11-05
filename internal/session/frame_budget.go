@@ -3,7 +3,6 @@ package session
 import (
 	"bufio"
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
@@ -11,6 +10,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 	"golang.org/x/sync/semaphore"
 )
 
@@ -305,7 +305,7 @@ func (d *Daemon) refuseConnection(conn net.Conn) {
 		n, _ := conn.Read(first[:])
 		_ = conn.SetWriteDeadline(time.Now().Add(time.Second))
 		if n == 1 && isJSONStart(first[0]) {
-			line, err := json.Marshal(verbResponse{Error: newVerbError(ErrVerbTooManyConnections, errTooManyConnections)})
+			line, err := jsonx.Marshal(verbResponse{Error: newVerbError(ErrVerbTooManyConnections, errTooManyConnections)})
 			if err == nil {
 				_, _ = conn.Write(append(line, '\n'))
 			}

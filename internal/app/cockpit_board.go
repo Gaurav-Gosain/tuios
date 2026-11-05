@@ -2,7 +2,6 @@ package app
 
 import (
 	"cmp"
-	"encoding/json"
 	"errors"
 	"image/color"
 	"slices"
@@ -15,6 +14,7 @@ import (
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/sortx"
@@ -304,7 +304,7 @@ func (m *OS) CockpitTake() tea.Cmd {
 		raw, err := call("claim-task", map[string]any{"session": c.Session, "id": c.ID, "window": win, "human_nonce": nonce}, 5*time.Second)
 		msg := ckTakeMsg{err: err}
 		if err == nil {
-			msg.err = json.Unmarshal(raw, &msg.row)
+			msg.err = jsonx.Unmarshal(raw, &msg.row)
 		}
 		return msg
 	}
@@ -397,7 +397,7 @@ func (m *OS) cockpitCardFetch() tea.Cmd {
 				Prompt  string              `json:"prompt"`
 				History []session.TaskEvent `json:"history"`
 			}
-			msg.err = json.Unmarshal(raw, &res)
+			msg.err = jsonx.Unmarshal(raw, &res)
 			msg.prompt, msg.history = res.Prompt, res.History
 		}
 		return msg

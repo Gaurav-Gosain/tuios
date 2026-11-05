@@ -9,6 +9,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 )
 
 // VerbDoc is one verb as list-verbs describes it. The json tags match the
@@ -477,7 +479,7 @@ func runEvents(s *Server, c Conn, in map[string]any) map[string]any {
 		// daemon did not say.
 		Replayed *int `json:"replayed"`
 	}
-	_ = json.Unmarshal(raw, &ack)
+	_ = jsonx.Unmarshal(raw, &ack)
 	boot := ack.BootID
 
 	// The stream is at the ack's baseline once the replay is drained. The
@@ -518,7 +520,7 @@ func runEvents(s *Server, c Conn, in map[string]any) map[string]any {
 			Seq    uint64 `json:"seq"`
 			BootID string `json:"boot_id"`
 		}
-		if json.Unmarshal(line, &ev) != nil {
+		if jsonx.Unmarshal(line, &ev) != nil {
 			continue
 		}
 		if ev.Seq > seen {
@@ -542,7 +544,7 @@ func runEvents(s *Server, c Conn, in map[string]any) map[string]any {
 	if drained {
 		last = max(ack.Seq, seen)
 	}
-	out, _ := json.Marshal(map[string]any{
+	out, _ := jsonx.Marshal(map[string]any{
 		"type":      "events",
 		"events":    events,
 		"total":     len(events),

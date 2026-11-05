@@ -1,11 +1,12 @@
 package main
 
 import (
-	"encoding/json"
 	"fmt"
 	"path/filepath"
 	"strconv"
 
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
+	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 	"github.com/spf13/cobra"
 )
 
@@ -35,7 +36,7 @@ outside every pane. Works with no client attached, and turns tiling on.`,
 			if cwd != "" {
 				abs, err := filepath.Abs(cwd)
 				if err != nil {
-					return fmt.Errorf("--cwd %s: %w", cwd, err)
+					return errfmt.Errorf("--cwd %s: %w", cwd, err)
 				}
 				cwd = abs
 			}
@@ -107,7 +108,7 @@ func newLayoutCommands() []*cobra.Command {
 			off, _ := c.Flags().GetBool("off")
 			switch {
 			case on && off:
-				return nil, fmt.Errorf("--on and --off ask for opposite things. Pass one")
+				return nil, errfmt.Errorf("--on and --off ask for opposite things. Pass one")
 			case on, off:
 				return map[string]any{"zoom": on}, nil
 			}
@@ -129,7 +130,7 @@ func newLayoutCommands() []*cobra.Command {
 			if len(args) > 1 {
 				n, err := strconv.Atoi(args[1])
 				if err != nil {
-					return nil, fmt.Errorf("percent must be a number from 1 to 50, got %q", args[1])
+					return nil, errfmt.Errorf("percent must be a number from 1 to 50, got %q", args[1])
 				}
 				p["amount"] = n
 			}
@@ -169,8 +170,8 @@ func runLayoutVerb(verb, sessionName, window string, params map[string]any, json
 		return printVerbResultOn(t, raw, jsonOutput)
 	}
 	var res map[string]any
-	if err := json.Unmarshal(raw, &res); err != nil {
-		return fmt.Errorf("failed to parse response: %w", err)
+	if err := jsonx.Unmarshal(raw, &res); err != nil {
+		return errfmt.Errorf("failed to parse response: %w", err)
 	}
 	id, _ := res["window_id"].(string)
 	fmt.Printf("%s  %s%s\n", shortWindowID(id), line(res), t.on())

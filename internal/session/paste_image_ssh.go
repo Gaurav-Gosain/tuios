@@ -3,7 +3,6 @@ package session
 import (
 	"cmp"
 	"context"
-	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
@@ -12,6 +11,7 @@ import (
 	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/federation"
+	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 )
 
 // Pasting an image into a pane of this daemon whose shell is on another
@@ -207,7 +207,7 @@ func (d *Daemon) pasteToHost(ctx context.Context, host string, data []byte) (str
 		select {
 		case <-tick.C:
 		case <-ctx.Done():
-			params, _ := json.Marshal(map[string]string{"id": j.id})
+			params, _ := jsonx.Marshal(map[string]string{"id": j.id})
 			_, _ = transferControl("cancel")(d, nil, params)
 			return "", ctx.Err()
 		}

@@ -1,10 +1,11 @@
 package session
 
 import (
-	"fmt"
 	"maps"
 	"slices"
 	"time"
+
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 )
 
 // A workspace's number is its position. Moving a workspace, by the move keys, by
@@ -136,7 +137,7 @@ func workspacePlaces(order []int, bound int) (map[int]int, error) {
 		clean = append(clean, ws)
 	}
 	if len(clean) == 0 && len(order) > 0 {
-		return nil, fmt.Errorf("no workspace in the order is in range (1-%d)", bound)
+		return nil, errfmt.Errorf("no workspace in the order is in range (1-%d)", bound)
 	}
 	slots := slices.Sorted(slices.Values(clean))
 	newOf := make(map[int]int)

@@ -1,6 +1,10 @@
 package session
 
-import "fmt"
+import (
+	"fmt"
+
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
+)
 
 // This is the binary protocol's half of what verb_compat.go does for the JSON
 // verb protocol: both sides announce a version in the handshake, and a peer
@@ -73,7 +77,7 @@ func numberingMismatch(clientVersion string, got MessageType) *ProtocolMismatchE
 		ClientVersion:  clientVersion,
 		DaemonPID:      GetDaemonPID(),
 		ClientProtocol: ProtocolVersion,
-		Cause:          fmt.Errorf("the daemon answered the handshake with message type %d, which this build does not read as a welcome", got),
+		Cause:          errfmt.Errorf("the daemon answered the handshake with message type %d, which this build does not read as a welcome", got),
 	}
 }
 

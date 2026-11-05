@@ -3,12 +3,12 @@ package config
 import (
 	"bytes"
 	"embed"
-	"fmt"
 	"maps"
 	"slices"
 	"sort"
 	"strings"
 
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"github.com/pelletier/go-toml/v2"
 )
 
@@ -88,13 +88,13 @@ func Presets() []string {
 func loadPreset(name string) (*keybindPreset, error) {
 	data, err := presetFiles.ReadFile("presets/" + name + ".toml")
 	if err != nil {
-		return nil, fmt.Errorf("%q is not a keybind preset. Use one of: %s", name, strings.Join(Presets(), ", "))
+		return nil, errfmt.Errorf("%q is not a keybind preset. Use one of: %s", name, strings.Join(Presets(), ", "))
 	}
 	var p keybindPreset
 	dec := toml.NewDecoder(bytes.NewReader(data))
 	dec.DisallowUnknownFields()
 	if err := dec.Decode(&p); err != nil {
-		return nil, fmt.Errorf("keybind preset %s: %w", name, err)
+		return nil, errfmt.Errorf("keybind preset %s: %w", name, err)
 	}
 	return &p, nil
 }
@@ -116,7 +116,7 @@ func PresetInfo(name string) (PresetAbout, error) {
 // preset show.
 func PresetSource(name string) ([]byte, error) {
 	if name == "" || name == PresetTuios {
-		return nil, fmt.Errorf("the tuios preset is the defaults themselves. Run tuios keybinds list")
+		return nil, errfmt.Errorf("the tuios preset is the defaults themselves. Run tuios keybinds list")
 	}
 	if _, err := loadPreset(name); err != nil {
 		return nil, err

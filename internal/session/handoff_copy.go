@@ -4,13 +4,14 @@ import (
 	"bytes"
 	"crypto/sha256"
 	"errors"
-	"fmt"
 	"io"
 	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
+
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 )
 
 // The copy route: how a live upgrade runs the binary it checked where there
@@ -90,7 +91,7 @@ func (b *handoffBinary) makeCopy(info os.FileInfo) error {
 	after, err := b.open.Stat()
 	if err != nil || fileIDOf(after) != b.file {
 		c.remove()
-		return fmt.Errorf("%s was replaced while it was being checked. Run the upgrade again when the install has finished", b.path)
+		return errfmt.Errorf("%s was replaced while it was being checked. Run the upgrade again when the install has finished", b.path)
 	}
 	b.copy = c
 	return nil
@@ -155,13 +156,13 @@ func checkPrivateDir(dir string) error {
 		return err
 	}
 	if !info.IsDir() {
-		return fmt.Errorf("%s is not a folder", dir)
+		return errfmt.Errorf("%s is not a folder", dir)
 	}
 	if uid, ok := fileUID(info); ok && uid != os.Getuid() {
-		return fmt.Errorf("%s is owned by user %d", dir, uid)
+		return errfmt.Errorf("%s is owned by user %d", dir, uid)
 	}
 	if perm := info.Mode().Perm(); perm&0o022 != 0 {
-		return fmt.Errorf("%s can be written by its group or by others (mode %04o)", dir, perm)
+		return errfmt.Errorf("%s can be written by its group or by others (mode %04o)", dir, perm)
 	}
 	return nil
 }
@@ -172,7 +173,7 @@ func (c *binaryCopy) verify() error {
 	if c == nil {
 		return nil
 	}
-	changed := fmt.Errorf("the private copy %s changed after it was made, so the upgrade is refused. Run the upgrade again", c.path)
+	changed := errfmt.Errorf("the private copy %s changed after it was made, so the upgrade is refused. Run the upgrade again", c.path)
 	if !c.unchanged() {
 		return changed
 	}

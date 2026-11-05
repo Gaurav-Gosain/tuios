@@ -1,9 +1,10 @@
 package review
 
 import (
-	"fmt"
 	"strconv"
 	"strings"
+
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 )
 
 // ParseRawNumstat reads the output of git diff --raw --numstat -z: every
@@ -25,14 +26,14 @@ func ParseRawNumstat(out string) ([]File, error) {
 			// rename or copy the old path and the new.
 			fields := strings.Fields(tok)
 			if len(fields) < 5 || i+1 >= len(tokens) {
-				return nil, fmt.Errorf("unexpected raw diff line %q", tok)
+				return nil, errfmt.Errorf("unexpected raw diff line %q", tok)
 			}
 			letter := fields[4][:1]
 			f := File{oldMode: strings.TrimPrefix(fields[0], ":"), newMode: fields[1]}
 			switch letter {
 			case "R", "C":
 				if i+2 >= len(tokens) {
-					return nil, fmt.Errorf("unexpected raw diff line %q", tok)
+					return nil, errfmt.Errorf("unexpected raw diff line %q", tok)
 				}
 				f.OldPath, f.Path = tokens[i+1], tokens[i+2]
 				i += 2
@@ -64,12 +65,12 @@ func ParseRawNumstat(out string) ([]File, error) {
 		// with the two paths in the next tokens.
 		parts := strings.SplitN(tok, "\t", 3)
 		if len(parts) < 3 {
-			return nil, fmt.Errorf("unexpected numstat line %q", tok)
+			return nil, errfmt.Errorf("unexpected numstat line %q", tok)
 		}
 		path := parts[2]
 		if path == "" {
 			if i+2 >= len(tokens) {
-				return nil, fmt.Errorf("unexpected numstat line %q", tok)
+				return nil, errfmt.Errorf("unexpected numstat line %q", tok)
 			}
 			path = tokens[i+2]
 			i += 2
@@ -100,15 +101,15 @@ func ParseRawNumstat(out string) ([]File, error) {
 func ParseHunkHeader(header string) (oldStart, oldLines, newStart, newLines int, err error) {
 	rest, ok := strings.CutPrefix(header, "@@ -")
 	if !ok {
-		return 0, 0, 0, 0, fmt.Errorf("not a hunk header: %q", header)
+		return 0, 0, 0, 0, errfmt.Errorf("not a hunk header: %q", header)
 	}
 	before, _, ok0 := strings.Cut(rest, " @@")
 	if !ok0 {
-		return 0, 0, 0, 0, fmt.Errorf("not a hunk header: %q", header)
+		return 0, 0, 0, 0, errfmt.Errorf("not a hunk header: %q", header)
 	}
 	oldPart, newPart, ok := strings.Cut(before, " +")
 	if !ok {
-		return 0, 0, 0, 0, fmt.Errorf("not a hunk header: %q", header)
+		return 0, 0, 0, 0, errfmt.Errorf("not a hunk header: %q", header)
 	}
 	if oldStart, oldLines, err = parseRange(oldPart); err != nil {
 		return 0, 0, 0, 0, err
@@ -123,12 +124,12 @@ func parseRange(s string) (int, int, error) {
 	startText, countText, has := strings.Cut(s, ",")
 	start, err := strconv.Atoi(startText)
 	if err != nil || start < 0 {
-		return 0, 0, fmt.Errorf("bad hunk range %q", s)
+		return 0, 0, errfmt.Errorf("bad hunk range %q", s)
 	}
 	count := 1
 	if has {
 		if count, err = strconv.Atoi(countText); err != nil || count < 0 {
-			return 0, 0, fmt.Errorf("bad hunk range %q", s)
+			return 0, 0, errfmt.Errorf("bad hunk range %q", s)
 		}
 	}
 	return start, count, nil

@@ -14,6 +14,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"github.com/Gaurav-Gosain/tuios/internal/federation"
 	"github.com/Gaurav-Gosain/tuios/internal/plural"
 	"github.com/Gaurav-Gosain/tuios/internal/restartplan"
@@ -152,7 +153,7 @@ func (t *Target) Fail(err error) {
 func Plan(t *Target, src *Source, opts PlanOptions) {
 	t.Platform = t.Res.OS + "/" + t.Res.Arch
 	if src.Kind == KindBinary && t.Platform != src.Platform {
-		t.Fail(fmt.Errorf("the binary is for %s and %s runs %s", src.Platform, t.Name, t.Platform))
+		t.Fail(errfmt.Errorf("the binary is for %s and %s runs %s", src.Platform, t.Name, t.Platform))
 		return
 	}
 	t.NewVersion = src.Version
@@ -276,7 +277,7 @@ func Apply(t *Target, src *Source) {
 	if t.Install {
 		b := src.BinaryFor(t.Platform)
 		if b == nil {
-			t.Fail(fmt.Errorf("no binary was made for %s", t.Platform))
+			t.Fail(errfmt.Errorf("no binary was made for %s", t.Platform))
 			return
 		}
 		if t.NewVersion == "" {
@@ -305,7 +306,7 @@ func Apply(t *Target, src *Source) {
 		after, _ := ParseVersionLine(f.Get("after"))
 		t.Res.After = after
 		if after == "" || after != staged {
-			t.Fail(fmt.Errorf("the installed binary did not run after the install. It reported %q", f.Get("after")))
+			t.Fail(errfmt.Errorf("the installed binary did not run after the install. It reported %q", f.Get("after")))
 			return
 		}
 		if t.NewVersion == "" {
@@ -443,7 +444,7 @@ func installError(f Facts, stderr string, err error) error {
 		return errors.New("the binary that arrived is not the one that was sent. Nothing was changed")
 	case "run":
 		out := strings.Join(f["out"], " ")
-		return fmt.Errorf("the new binary did not run on the host, so it was not installed. It said: %s", plainLine(out))
+		return errfmt.Errorf("the new binary did not run on the host, so it was not installed. It said: %s", plainLine(out))
 	case "move":
 		return errors.New("the new binary could not be renamed into place. The old one is still there")
 	}

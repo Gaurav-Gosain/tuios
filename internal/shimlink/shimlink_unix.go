@@ -7,6 +7,8 @@ import (
 	"os"
 	"path/filepath"
 	"syscall"
+
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 )
 
 // EnsureDir creates a runtime directory, or checks an existing one: it must
@@ -14,21 +16,21 @@ import (
 // else, since what is in it runs as this user or accepts requests from it.
 func EnsureDir(dir string) error {
 	if err := os.MkdirAll(dir, 0o700); err != nil {
-		return fmt.Errorf("create %s: %w", dir, err)
+		return errfmt.Errorf("create %s: %w", dir, err)
 	}
 	st, err := os.Lstat(dir)
 	if err != nil {
 		return err
 	}
 	if !st.IsDir() {
-		return fmt.Errorf("%s is not a directory", dir)
+		return errfmt.Errorf("%s is not a directory", dir)
 	}
 	if sys, ok := st.Sys().(*syscall.Stat_t); ok && int(sys.Uid) != os.Getuid() {
-		return fmt.Errorf("%s belongs to another user", dir)
+		return errfmt.Errorf("%s belongs to another user", dir)
 	}
 	if st.Mode().Perm()&0o077 != 0 {
 		if err := os.Chmod(dir, 0o700); err != nil { //nolint:gosec // a directory, which needs the execute bit to be entered
-			return fmt.Errorf("%s is open to other users and could not be closed: %w", dir, err)
+			return errfmt.Errorf("%s is open to other users and could not be closed: %w", dir, err)
 		}
 	}
 	return nil
