@@ -328,8 +328,12 @@ func (a *App) paneCard(c *ui.Context, pal *palette, bar ui.TitleBar, shown float
 			a.paneTerminal(c, pal, s, p)
 		}
 		if multi && !p.Browser() && a.set.DimUnfocused {
-			// The terminals the user is not in fade, text and all.
-			v := ui.Box(c.Key("veil")).Absolute().Top(0).Left(0).Right(0).Bottom(0).PassThrough().Background(pal.veil)
+			// The terminals the user is not in fade, text and all. The
+			// header does not: in a grid of agents the panes read are the
+			// ones not typed in, and their titles and needs-you chips keep
+			// their contrast. The edge, the ground and the shadow show
+			// focus (council round 3, visual M1).
+			v := ui.Box(c.Key("veil")).Absolute().Top(headerH).Left(0).Right(0).Bottom(0).PassThrough().Background(pal.veil)
 			v.Opacity(v.Animate("on", b2f(!focused), dFade))
 		}
 		if zone != zoneNone {
@@ -592,9 +596,6 @@ func (a *App) paneHeader(c *ui.Context, pal *palette, bar ui.TitleBar, shown flo
 			} else {
 				name.MinWidth(min(plan.titleW, titleKeep))
 			}
-			if multi && !focused && !dragging {
-				name.TextColor(pal.textMuted)
-			}
 			// The home directory names itself "~", which the title may
 			// already say; another machine's, as scp writes it: devbox:~/api.
 			if showDir && plan.folderW > 0 {
@@ -604,7 +605,7 @@ func (a *App) paneHeader(c *ui.Context, pal *palette, bar ui.TitleBar, shown flo
 					// under the chips after it.
 					cut := startCut(c, dir, fsSmall, plan.folderW)
 					ui.Box(c.Key("folder")).Width(plan.folderW).Shrink(0).Clip().Children(func() {
-						t := ui.Text(c, cut).FontSize(fsSmall).TextColor(pal.textFaint).SingleLine()
+						t := ui.Text(c, cut).FontSize(fsSmall).TextColor(pal.textMuted).SingleLine()
 						if cut != dir {
 							t.Tooltip(dir)
 						}
@@ -618,7 +619,7 @@ func (a *App) paneHeader(c *ui.Context, pal *palette, bar ui.TitleBar, shown flo
 						chip(c, pal, pal.chip, pal.hostColor(hostOf), func() {
 							oneLine(c, hostOf.name, fsSmall, wMedium)
 						}).Shrink(0.5).MinWidth(0).Margin(0, sp1, 0, 0)
-						oneLine(c, dir, fsSmall, 0).TextColor(pal.textFaint)
+						oneLine(c, dir, fsSmall, 0).TextColor(pal.textMuted)
 					})
 				}
 			}
@@ -751,7 +752,7 @@ func (a *App) stateChip(c *ui.Context, pal *palette, p *proto.Pane, multi bool, 
 	bg, fg := pal.chip, pal.textMuted
 	switch p.Status {
 	case proto.Waiting:
-		bg, fg = pal.attnSoft, pal.attnText
+		bg, fg = pal.attnSoft, pal.attnChip
 	case proto.Failed, proto.Exited:
 		bg, fg = pal.danger.Alpha(0.1), pal.dangerText
 	case proto.Working:

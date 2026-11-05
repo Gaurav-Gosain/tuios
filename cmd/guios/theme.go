@@ -55,6 +55,10 @@ type palette struct {
 	// bright enough (dark) to read at 4.5:1 on every surface it sits on,
 	// its soft chip fill included. The bright amber stays for marks.
 	attnText ui.Color
+	// attnChip is needs-you as text on its own soft fill, the pane
+	// header's chip, at 5:1 or more on an unfocused card and 4.5:1 on the
+	// focused one (council round 3, visual M1).
+	attnChip ui.Color
 	done     ui.Color // the filled check
 	onDone   ui.Color
 	danger   ui.Color
@@ -99,6 +103,7 @@ var lightPalette = palette{
 
 	attention: ui.Hex("#c27b0f"),
 	attnSoft:  ui.RGBA(232, 154, 40, 0.13),
+	attnChip:  ui.RGB(150, 90, 20),
 	done:      ui.Hex("#1d1d1f"),
 	onDone:    ui.Hex("#ffffff"),
 	danger:    ui.Hex("#d93a35"),
@@ -140,6 +145,7 @@ var darkPalette = palette{
 
 	attention: ui.Hex("#f0a33a"),
 	attnSoft:  ui.RGBA(240, 163, 58, 0.15),
+	attnChip:  ui.RGB(200, 140, 60),
 	done:      ui.Hex("#ececf0"),
 	onDone:    ui.Hex("#161618"),
 	danger:    ui.Hex("#ff6961"),
@@ -441,6 +447,9 @@ func (p *palette) finish(fg, bg ui.Color) {
 		attnWorst = s
 	}
 	p.attnText = deepen(p.attention, attnWorst, 4.5)
+	// On the focused card's ground, or a theme's own, the chip's amber
+	// keeps 4.5:1: it goes deeper (or brighter) until it does.
+	p.attnChip = deepen(p.attnChip, p.attnSoft.Over(bg), 4.5)
 	dangerWorst := worst
 	if s := p.danger.Alpha(0.1).Over(bg); p.dark == (luminance(s) > luminance(dangerWorst)) {
 		dangerWorst = s
