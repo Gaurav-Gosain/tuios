@@ -630,6 +630,13 @@ func (a *App) cockpitKeys(c *ui.Context, col ui.Element) {
 // the confirm step does it on Enter (cockpit_ask.go).
 func (a *App) ckLetter(k ckKey) {
 	ck := &a.ck
+	defer func() {
+		// The letter that opened a confirm step goes with the text, if
+		// the next key shows the person was typing.
+		if q := ck.question; q != nil && q.opener == 0 {
+			q.opener = keyRune(k)
+		}
+	}()
 	if k.shift {
 		switch k.key {
 		case ui.KeyA:

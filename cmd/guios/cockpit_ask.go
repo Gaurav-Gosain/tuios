@@ -42,6 +42,8 @@ type ckQuestion struct {
 	word string
 	// decision is the card's button the step asks about, if any.
 	decision string
+	// opener is the letter that opened the step, 0 for the menu.
+	opener rune
 }
 
 // ckTarget is the \x00 a locale string gets for its target, so that the
@@ -149,9 +151,20 @@ func (a *App) ckQuestionKeys(c *ui.Context, col ui.Element) bool {
 		ck.question = nil
 	default:
 		if k, ok := takeProse(col); ok {
-			// Typed text: never an answer. It goes to the reply box.
+			// Typed text: never an answer. It goes to the reply box with
+			// the letter that opened the step, which was its first letter:
+			// "ask it" lands whole, not as "sk it" (council round 4, feel
+			// S1).
+			q := ck.question
 			ck.question = nil
-			if ch := keyRune(k); ch == 0 || !a.ckProse(string(ch)) {
+			text := ""
+			if q != nil && q.opener != 0 {
+				text = string(q.opener)
+			}
+			if ch := keyRune(k); ch != 0 {
+				text += string(ch)
+			}
+			if text == "" || !a.ckProse(text) {
 				a.toast(locales.CockpitKeysToList())
 			}
 		} else {
