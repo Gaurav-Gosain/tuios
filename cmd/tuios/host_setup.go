@@ -24,7 +24,8 @@ import (
 // internal/hostsetup's. This file is the flag mode, for scripts and agents:
 // every choice comes from a flag, nothing waits on a prompt, and a choice
 // that is missing stops the command before it changes anything, with the
-// flag to pass.
+// flag to pass. On a terminal, host_setup_tty.go asks for each missing
+// choice instead.
 
 // Exit statuses of a setup that stopped.
 const (
@@ -73,6 +74,9 @@ The steps:
      come up is removed again.
   5. With --both-ways, add this machine on that one too. That machine tests
      its way back first. Nothing is added there when it cannot connect.
+
+On a terminal, tuios asks for each choice the flags do not make. Press
+ctrl+c at any step to stop. The setup stops at the end of that step.
 
 Without a terminal every choice comes from a flag. A choice that is missing
 stops the command before it changes anything (exit 2). A fix that needs you,
@@ -203,6 +207,9 @@ func runHostSetup(dest string, o hostSetupOptions) error {
 		return err
 	}
 	defer s.Close()
+	if setupInteractive(o) {
+		return runHostSetupTTY(s, dest, o)
+	}
 	ctx, cancel := setupContext()
 	defer cancel()
 	res, runErr := s.Run(ctx, o.choices(), &flagAsker{out: os.Stdout, quiet: o.json || o.dryRun, yes: o.yes, name: s.Name()})

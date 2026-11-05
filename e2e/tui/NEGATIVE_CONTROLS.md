@@ -13127,3 +13127,26 @@ Run on 2026-11-05 on Linux on the branch feat/workspace-slide.
 Frames, the settled screens and PNGs are under `TUIOS_E2E_FRAMES`, in the
 test's folder. Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestWorkspaceSwitchSlides$' -v .`.
+
+## tuios hosts setup asks on a terminal
+
+`TestSetUpAMachineOnATerminal` runs `hosts setup someone@buildbox --name
+build --address someone@laptopbox --as laptop` in a pty, against the same two
+machines.
+First, ctrl+c at the install list must print "Stopped. Nothing was added.",
+write no `[hosts.build]` and install nothing on buildbox. Then the install
+list must take enter (a copy is the first choice), start at boot must take n
+when it is asked, and both ways must take y. The end must be the done summary,
+with the path on buildbox as `~/.local/bin/tuios`, `[hosts.build]` here,
+`[hosts.laptop]` on buildbox, and build up in the daemon here. Frames of the install list, the both-ways question and the
+done summary go under artifactDir.
+
+Run on 2026-11-05 on Linux, on the shared step model (Flow, Prompt and Bridge in `internal/hostsetup`). The fixed build passes in about 5 s.
+
+| Control | Where it fails | Verdict |
+| --- | --- | --- |
+| The drawer finishes a yes or no Prompt with its default as soon as it comes, before any key | "waiting for the next question: child exited (code 1)": no question is shown, and the setup goes on with answers the person never gave | **caught** |
+| A terminal run goes to the flag mode (`setupInteractive` returns false) | "waiting for the install list: child exited (code 2)": the flag mode stops and names `--install` | **caught** |
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestSetUpAMachineOnATerminal$' -v .`.

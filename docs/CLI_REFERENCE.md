@@ -4780,6 +4780,18 @@ that needs the person, such as a password or a host key to check, stops it with
 exit status 3 and the command to run. tuios never takes a password, and it
 never accepts a changed host key.
 
+On a terminal, the command asks for each choice the flags do not make. Pick
+how to install tuios from a list that shows each command (`d` shows every
+command). Answer start at boot and both ways with `y` or `n`. A fix or a step
+that needs you, such as `ssh-copy-id`, runs in the same terminal, and the setup
+tests again when it ends. Press ctrl+c at any step to stop. The setup stops at
+the end of that step and says what it left: "Stopped. Nothing was added." A
+choice that a flag gives is not asked. `--json`, `--dry-run` and `--tailnet`
+never ask.
+
+`--as NAME` is the name this machine gets on the other machine in the both-ways
+step. Without it, the name comes from this machine's tailnet name or host name.
+
 `--tailnet` lists the machines on your tailnet with their state: tuios and its
 version, no tuios, a Tailscale sign-in first, no ssh, offline, or already
 added. An offline machine is never dialed. `--all` or `--only a,b` sets up the

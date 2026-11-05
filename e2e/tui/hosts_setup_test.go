@@ -9,6 +9,10 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
+
+	"github.com/Gaurav-Gosain/tuitest"
+	"tuios.dev/shot"
 )
 
 // tuios hosts setup, the whole way, against two real daemons.
@@ -325,4 +329,101 @@ func TestSetUpOffersNoReleaseForADevBuild(t *testing.T) {
 	if !copyOK {
 		t.Errorf("ASSERTION: a pseudo-version build does not offer a copy of itself: %+v", r.Options)
 	}
+}
+
+// TestSetUpAMachineOnATerminal runs tuios hosts setup on a terminal, where it
+// asks for each choice the flags did not make, and answers with the keys a
+// person presses. The install list takes enter (a copy is the first choice),
+// start at boot takes n, and both ways takes y; --address comes as a flag, so
+// it is not asked, and --as names this machine on buildbox. The end is the
+// done summary, with the path there under ~ and [hosts.laptop] on buildbox,
+// and a link that is up.
+//
+// Before that, ctrl+c at the install list stops the setup: no [hosts.build]
+// here, and no tuios on buildbox.
+//
+// Frames of the install list and the done summary go under artifactDir as
+// PNGs in the frame font.
+func TestSetUpAMachineOnATerminal(t *testing.T) {
+	here := remoteMachine(t)
+	far := remoteMachine(t)
+	farBin := filepath.Join(xdgDir(far, "HOME"), ".local", "bin", "tuios")
+	hereCfg := filepath.Join(xdgDir(here, "XDG_CONFIG_HOME"), "tuios", "config.toml")
+	env := []string{"TUIOS_SSH=" + writeSetupSSH(t, here, far), "COLORTERM=truecolor"}
+	if out, err := tuiosCLIEnv(t, here, env, "new", "home", "--detach"); err != nil {
+		t.Fatalf("start the daemon here: %v\n%s", err, out)
+	}
+	frames := artifactDir(t)
+	frame := func(term *tuitest.Terminal, name string) {
+		t.Helper()
+		saveArtifact(t, term, frames, name)
+		savePNG(t, term.Screen(), shot.XTermPalette(), frames, name)
+		t.Logf("frame %s saved under %s", name, frames)
+	}
+	setup := func() *tuitest.Terminal {
+		return startIn(t, here, startOpts{cols: 110, rows: 44, animations: true, env: env,
+			args: []string{"hosts", "setup", "someone@buildbox", "--name", "build", "--address", "someone@laptopbox", "--as", "laptop"}})
+	}
+	press := func(term *tuitest.Terminal, keys ...any) {
+		t.Helper()
+		if err := term.SendKeys(keys...); err != nil {
+			t.Fatalf("send %q: %v", keys, err)
+		}
+	}
+	installList := func(s tuitest.Screen) bool {
+		return screenHas(s, "tuios is not installed on build. Pick how to install it.", "> Copy this tuios", "enter pick")
+	}
+	const slow = 90 * time.Second
+
+	// 1. ctrl+c at the install list.
+	term := setup()
+	waitFor(t, term, "the install list", installList, slow)
+	press(term, tuitest.Ctrl('c'))
+	waitFor(t, term, "the stop line", func(s tuitest.Screen) bool { return screenHas(s, "Stopped. Nothing was added.") }, slow)
+	if cfg, _ := os.ReadFile(hereCfg); strings.Contains(string(cfg), "[hosts.build]") {
+		t.Fatalf("ASSERTION: the stopped setup wrote [hosts.build]:\n%s", cfg)
+	}
+	if _, err := os.Stat(farBin); err == nil {
+		t.Fatalf("ASSERTION: the stopped setup installed tuios on buildbox")
+	}
+
+	// 2. The whole setup, with the keys a person presses.
+	term = setup()
+	waitFor(t, term, "the install list", installList, slow)
+	frame(term, "setup-install-list")
+	press(term, tuitest.Enter)
+	boot, both := "Start tuios on build when it boots?", "Add this machine on build too?"
+	waitFor(t, term, "the next question", func(s tuitest.Screen) bool {
+		return screenHas(s, both, "y yes") || screenHas(s, boot, "y yes")
+	}, slow)
+	if screenHas(term.Screen(), boot, "y yes") {
+		press(term, "n")
+		waitFor(t, term, "the boot answer", func(s tuitest.Screen) bool { return screenHas(s, "tuios does not start at boot on build.") }, slow)
+	}
+	waitFor(t, term, "the both-ways question", func(s tuitest.Screen) bool { return screenHas(s, both, "y yes") }, slow)
+	frame(term, "setup-both-ways")
+	press(term, "y")
+	waitFor(t, term, "the done summary", func(s tuitest.Screen) bool {
+		return screenHas(s, "build is ready. Its agents reach your Inbox.", "[hosts.build]", "tuios attach --host build")
+	}, slow)
+	frame(term, "setup-done")
+	for _, want := range []string{"is installed at ~/.local/bin/tuios.", "The link to build is up.", "copied to ~/.local/bin/tuios", "Added on build", "[hosts.laptop]"} {
+		if !screenHas(term.Screen(), want) {
+			t.Errorf("ASSERTION: the done screen does not say %q:\n%s", want, term.Snapshot())
+		}
+	}
+
+	if cfg, _ := os.ReadFile(hereCfg); !strings.Contains(string(cfg), "[hosts.build]") {
+		t.Fatalf("ASSERTION: the setup did not write [hosts.build]:\n%s", cfg)
+	}
+	if _, err := os.Stat(farBin); err != nil {
+		t.Fatalf("ASSERTION: tuios is not at ~/.local/bin/tuios on buildbox: %v", err)
+	}
+	farCfg, _ := os.ReadFile(filepath.Join(xdgDir(far, "XDG_CONFIG_HOME"), "tuios", "config.toml"))
+	if !strings.Contains(string(farCfg), "[hosts.laptop]") {
+		t.Fatalf("ASSERTION: buildbox has no entry for this machine, after yes to both ways:\n%s", farCfg)
+	}
+	waitForHostListing(t, here, func(s string) bool {
+		return containsAll(s, "build", "up")
+	}, "the daemon here never reported build up after the setup")
 }
