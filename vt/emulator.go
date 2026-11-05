@@ -56,6 +56,9 @@ type Emulator struct {
 	// rather than on a Screen.
 	cursorStyle  CursorStyle
 	cursorSteady bool
+	// cursorStyled says a guest has sent DECSCUSR, or a snapshot restored a
+	// shape one sent. See CursorStyleSet.
+	cursorStyled bool
 
 	// Character sets, and the designator byte each was selected by. The sets
 	// themselves are maps and cannot be compared back to the set they came
@@ -1095,6 +1098,14 @@ func (e *Emulator) CursorStyle() (CursorStyle, bool) {
 // without this the pane comes back as a block whatever the guest asked for.
 func (e *Emulator) RestoreCursorStyle(style CursorStyle, steady bool) {
 	e.cursorStyle, e.cursorSteady = style, steady
+	e.cursorStyled = true
+}
+
+// CursorStyleSet reports whether a guest has asked for a cursor shape. A pane
+// no program styled shows the default, and a client that has a cursor setting
+// of its own (guios's blink) applies that setting instead of the default.
+func (e *Emulator) CursorStyleSet() bool {
+	return e.cursorStyled
 }
 
 // GetModes returns a copy of the current terminal DEC private modes.

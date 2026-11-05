@@ -1077,6 +1077,7 @@ func (e *Emulator) registerDefaultCsiHandlers() {
 			style--
 		}
 		e.cursorStyle, e.cursorSteady = CursorStyle(style), !blink
+		e.cursorStyled = true
 		return true
 	})
 

@@ -100,7 +100,13 @@ func capture(t vt.Terminal, width, height, maxScrollback, have int, packed bool)
 	// changing mode, and is long out of the output buffer's reach by the time
 	// anyone reattaches. Without it here a pane that asked for a bar comes back
 	// as a block, because that is what a fresh emulator is.
-	state.CursorShape = decscusrParam(t.CursorStyle())
+	// A pane no program styled carries no shape, so a client that restores
+	// it keeps its own default (guios applies the user's blink setting to
+	// it). Sending the default as a shape made it look like a program's
+	// request for a steady block.
+	if t.CursorStyleSet() {
+		state.CursorShape = decscusrParam(t.CursorStyle())
+	}
 
 	// Set once and read later, like the modes: the tab stops a program
 	// lines its columns up on, the title stack a program pops when it

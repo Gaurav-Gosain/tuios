@@ -217,6 +217,14 @@ func (t *GhosttyTerminal) RestoreCursorStyle(style CursorStyle, steady bool) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	t.cursorStyle, t.cursorSteady = style, steady
+	t.cursorStyled = true
+}
+
+// CursorStyleSet implements [Terminal.CursorStyleSet].
+func (t *GhosttyTerminal) CursorStyleSet() bool {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	return t.cursorStyled
 }
 
 // RestoreKittyKeyboardState implements [Terminal.RestoreKittyKeyboardState].

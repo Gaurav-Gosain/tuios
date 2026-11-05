@@ -194,6 +194,7 @@ func (t *GhosttyTerminal) observeCSI(prefix, inter, final byte, params []byte) {
 			style--
 		}
 		t.cursorStyle, t.cursorSteady = CursorStyle(style), !blink
+		t.cursorStyled = true
 	case final == 'u' && prefix == 0 && inter == 0 && len(params) == 0:
 		// SCORC restores the cursor as DECRC does.
 		t.restoreCursorShadowLocked(t.liveScreenLocked())
