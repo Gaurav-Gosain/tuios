@@ -272,9 +272,15 @@ func (a *App) spawnApplyPreset(s *spawnSheet, pr spawnPreset) {
 }
 
 // spawnFolder is the folder "this folder" means, and the session a pane
-// started there goes in: the selected session's focused pane, when it is on
-// this machine, else home.
+// started there goes in. In the agents view it is the selected agent's
+// folder and session (council round 3, S1); else the selected session's
+// focused pane, when it is on this machine, else home.
 func (a *App) spawnFolder() (string, string) {
+	if a.ck.open {
+		if ag, ok := a.ckSelectedAgent(); ok && ag.Host == "" && ag.Cwd != "" && filepath.IsAbs(ag.Cwd) {
+			return filepath.Clean(ag.Cwd), ag.Session
+		}
+	}
 	if s := a.session(a.selected); s != nil && !a.hostOf(s.ID).remote() {
 		if dir := s.WorkDir(); dir != "" && filepath.IsAbs(dir) {
 			return filepath.Clean(dir), s.Name
