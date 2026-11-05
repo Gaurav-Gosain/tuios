@@ -966,6 +966,11 @@ func ago(ms int64, now time.Time) string {
 // touches it.
 var agoDue time.Time
 
+// statusDone is an agent that finished and was seen: a check in text2,
+// where idle keeps its hollow ring (council round 3, visual S4). The
+// daemon has no such pane state; the agents' marks alone draw it.
+const statusDone proto.Status = "done"
+
 // statusIcon draws a session's status, as the sidebar shows it: a ring
 // turning while it works, an amber ring when it needs the user, a filled
 // check when it finished unseen, a faint check once seen.
@@ -986,7 +991,7 @@ func statusIconP(c *ui.Context, pal *palette, st proto.Status, unread bool, prog
 		box.Label(locales.StatusExited())
 	case st == proto.Failed:
 		box.Label(locales.StatusFailed())
-	case unread:
+	case unread, st == statusDone:
 		box.Label(locales.StatusDone())
 	}
 	box.Draw(func(p *ui.Painter, r ui.Rect) {
@@ -1053,6 +1058,9 @@ func statusIconP(c *ui.Context, pal *palette, st proto.Status, unread bool, prog
 			p.FillPath(&disc, pal.done)
 			check := (&ui.Path{}).MoveTo(cx-rad*0.42, cy+0.2).LineTo(cx-rad*0.08, cy+rad*0.36).LineTo(cx+rad*0.46, cy-rad*0.34)
 			p.StrokePath(check, 1.6, pal.onDone)
+		case st == statusDone:
+			check := (&ui.Path{}).MoveTo(cx-rad*0.62, cy+0.3).LineTo(cx-rad*0.14, cy+rad*0.52).LineTo(cx+rad*0.66, cy-rad*0.48)
+			p.StrokePath(check, 1.6, pal.textMuted)
 		default:
 			// Idle is a hollow dot: the check means done, to review
 			// (council round 1, visual 24).

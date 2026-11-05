@@ -122,6 +122,8 @@ func ckStatePill(pal *palette, ag client.Agent, it *session.AttentionItem) (stri
 		return locales.StatusFailed(), pal.dangerText
 	case unread:
 		return locales.CockpitToReview(), pal.done
+	case st == statusDone:
+		return locales.StatusDone(), pal.textMuted
 	}
 	return locales.CockpitIdle(), pal.textMuted
 }

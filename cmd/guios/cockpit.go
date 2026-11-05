@@ -766,7 +766,10 @@ func ckStatus(ag client.Agent, it *session.AttentionItem) (proto.Status, bool) {
 	case "errored":
 		return proto.Failed, true
 	case "done":
-		return proto.Idle, ag.FinishedUnread
+		if ag.FinishedUnread {
+			return proto.Idle, true
+		}
+		return statusDone, false
 	}
 	return proto.Idle, false
 }
