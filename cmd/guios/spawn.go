@@ -89,6 +89,9 @@ type spawnMachine struct {
 
 // spawnSheet is the open sheet, or a closed one kept as the draft.
 type spawnSheet struct {
+	// failed holds that the draft is a start the daemon refused: its
+	// notice says why when the sheet opens again.
+	failed bool
 	// byKeyAt is when n in a list opened the sheet: text typed into it
 	// within guardWindow was prose, not a task (cockpit_guard.go).
 	byKeyAt time.Time
@@ -189,7 +192,10 @@ func (a *App) newAgent() {
 		s = &spawnSheet{attempts: 1, where: "folder", folder: folder}
 		a.spawnApplyPreset(s, a.prefs.Spawn[folder])
 	}
-	s.open, s.notice, s.starting, s.listOpen, s.card = true, "", false, false, nil
+	if !s.failed {
+		s.notice = ""
+	}
+	s.open, s.failed, s.starting, s.listOpen, s.card = true, false, false, false, nil
 	s.focusField, s.focusAgain = spTask, true
 	s.session = sess
 	ck.spawnGen++
@@ -684,8 +690,8 @@ type spawnStarted struct {
 }
 
 // spawnStart checks the sheet and starts the agents. The sheet closes at once
-// and is kept as the draft until the daemon says the start worked, so a
-// refused start loses nothing.
+// and the next one opens empty; a refused start puts its task back as the
+// draft, with the error, so it loses nothing.
 func (a *App) spawnStart() {
 	s := a.ck.spawn
 	if s == nil {
@@ -828,6 +834,13 @@ func (a *App) spawnStart() {
 	a.spawnSavePreset(s, false)
 	s.starting, s.notice = true, ""
 	a.spawnClose()
+	// The next sheet starts empty, though the daemon has not answered:
+	// start-agent can take two minutes, and a person starts the next agent
+	// meanwhile (council round 3, M2). The choices are in the preset; the
+	// task comes back only if the start fails.
+	if a.ck.spawnDraft == s {
+		a.ck.spawnDraft = nil
+	}
 	agentCmd := s.agents[s.agent].cmd
 	switch {
 	case !s.worktree():
@@ -896,7 +909,14 @@ func (a *App) spawnStart() {
 		a.update(func() {
 			s.starting = false
 			if err != nil {
-				a.toast(locales.SpawnFailed(strings.TrimSuffix(strings.TrimSpace(err.Error()), ".")))
+				why := locales.SpawnFailed(strings.TrimSuffix(strings.TrimSpace(err.Error()), "."))
+				a.toast(why)
+				// The task comes back with the error, in the next sheet,
+				// unless the person has a sheet of their own now.
+				if ck := &a.ck; ck.spawn == nil && ck.spawnDraft == nil {
+					s.notice, s.noticeAt, s.failed = why, spStart, true
+					ck.spawnDraft = s
+				}
 				return
 			}
 			var out spawnStarted
