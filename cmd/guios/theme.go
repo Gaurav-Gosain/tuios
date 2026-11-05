@@ -50,8 +50,8 @@ type palette struct {
 
 	attention ui.Color // needs you: marks, edges, counts' pills
 	attnSoft  ui.Color
-	// focusLine is the focused card's edge (line.focus): ink 16 % in
-	// the light, 11 % in the dark.
+	// focusLine is the focused card's edge (line.focus): the accent at
+	// 80 % in the light, 70 % in the dark.
 	focusLine ui.Color
 	// attnText is needs-you as text: the amber made deep enough (light) or
 	// bright enough (dark) to read at 4.5:1 on every surface it sits on,

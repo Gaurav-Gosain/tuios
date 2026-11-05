@@ -49,8 +49,8 @@ type Palette struct {
 
 	Attention Color // needs you: marks, edges, counts' pills
 	AttnSoft  Color
-	// focusLine is the focused card's edge (line.focus): ink 16 % in
-	// the light, 11 % in the dark.
+	// focusLine is the focused card's edge (line.focus): the accent at
+	// 80 % in the light, 70 % in the dark.
 	FocusLine Color
 	// attnText is needs-you as text: the amber made deep enough (light) or
 	// bright enough (dark) to read at 4.5:1 on every surface it sits on,
@@ -211,10 +211,13 @@ func Tinted(th *Term, accent Color) *Palette {
 func (p *Palette) finish(fg, bg Color) {
 	// The terminals keep the theme's own foreground: the veil reads on it.
 	termFg := fg
+	// The focused pane's edge is the accent, as the TUI draws the focused
+	// pane's border: a grey edge at 11 % ink left focus to the cursor
+	// alone in a grid of panes.
 	if p.Dark {
-		p.FocusLine = fg.Alpha(0.11)
+		p.FocusLine = p.Accent.Alpha(0.7)
 	} else {
-		p.FocusLine = fg.Alpha(0.16)
+		p.FocusLine = p.Accent.Alpha(0.8)
 	}
 	worst := p.worstSurface(bg)
 	// text3 carries information (ages, labels, hints, counts) on the
