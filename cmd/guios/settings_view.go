@@ -733,45 +733,7 @@ func (a *App) appearancePage(c *ui.Context, pal *palette) {
 			toggle(c.Key("vibrancy"), &s.Vibrancy, pal)
 		})
 	})
-	ui.Column(c).Gap(8).Children(func() {
-		groupTitle(c, pal, locales.SetBackground())
-		// A theme for each appearance: the tiles of one show its colors.
-		for _, dark := range []bool{false, true} {
-			label := locales.SetLightWindows()
-			if dark {
-				label = locales.SetDarkWindows()
-			}
-			ui.Text(c, label).FontSize(fsSmall).TextColor(pal.textFaint).Padding(4, 4, 0, 4)
-			ui.Row(c).Gap(12).Wrap().Children(func() {
-				for _, t := range settings.KeroThemes {
-					a.backgroundTile(c, pal, t.ID, backgroundName(t.ID, t.Name), dark)
-				}
-			})
-		}
-	})
-	// A Ghostty theme in place of kero's: none goes back to kero's default.
-	none := locales.SetThemeNone()
-	// tuios: the theme the TUI has, Omarchy's while it follows Omarchy.
-	themes := append([]string{none, tuiosThemeName}, terminal.GhosttyThemes()...)
-	ghostty := func(key, value string, choose func(string)) {
-		if keroID(value) != "" {
-			value = none
-		}
-		a.searchPopup(c, key, value, themes, 240, nil, pal, func(v string) {
-			if v == none {
-				v = settings.Default().LightTheme
-			}
-			choose(v)
-		})
-	}
-	settingsGroup(c, pal, locales.SetColors(), locales.SetColorsDetail(), func() {
-		settingRow(c, pal, locales.SetLightWindows(), "", func() {
-			ghostty("light", s.LightTheme, func(v string) { a.set.LightTheme = v })
-		})
-		settingRow(c, pal, locales.SetDarkWindows(), "", func() {
-			ghostty("dark", s.DarkTheme, func(v string) { a.set.DarkTheme = v })
-		})
-	})
+	a.themeGroup(c, pal)
 }
 
 // languageName names a language in itself, as "简体中文", so that whoever
@@ -801,66 +763,6 @@ func localeTag(language string) string {
 		return ""
 	}
 	return language
-}
-
-// backgroundName is a wash's name in the language the app shows.
-func backgroundName(id, name string) string {
-	if t, ok := map[string]func() string{"rex": locales.BgPetal, "mist": locales.BgMist, "meadow": locales.BgMeadow, "dusk": locales.BgDusk,
-		"tide": locales.BgTide, "apricot": locales.BgApricot, "aurora": locales.BgAurora, "dune": locales.BgDune, "paper": locales.BgPaper, "plain": locales.BgPlain}[id]; ok {
-		return t()
-	}
-	return name
-}
-
-// backgroundTile previews one of kero's themes as windows of an
-// appearance show it, choosing it for them on a click: a card of its
-// colors on its wash, with text, a prompt, the cursor and the programs'
-// colors.
-func (a *App) backgroundTile(c *ui.Context, pal *palette, id, name string, dark bool) {
-	slot, key, windows := &a.set.LightTheme, "bg-light-", locales.SetLightWindows()
-	if dark {
-		slot, key, windows = &a.set.DarkTheme, "bg-dark-", locales.SetDarkWindows()
-	}
-	sel := keroID(*slot) == id || *slot == tuiosThemeName && id == "paper" && tuiosNamesNone[b2i(dark)].Load()
-	tile := ui.ButtonBase(c.Key(key + id)).Column().Width(124).Gap(8).AlignItems(ui.Stretch).Label(name + ", " + windows)
-	if tile.Clicked() {
-		*slot = keroName(id)
-	}
-	tile.Children(func() {
-		l := keroLook(id, dark)
-		th := l.term
-		ui.Box(c).Children(func() {
-			sw := raised(ui.Box(c).Size(124, 80).Radius(rCard), pal).Clip()
-			sw.LinearGradient(l.base)
-			sw.Children(func() {
-				ui.Box(c).Absolute().Top(0).Left(0).Right(0).Bottom(0).LinearGradient(l.glow)
-				ui.Column(c).Absolute().Top(8).Left(8).Right(8).Bottom(8).Radius(rControl).Background(th.Background).
-					Padding(8, 9).Justify(ui.SpaceBetween).Children(func() {
-					ui.Row(c).AlignItems(ui.Center).Gap(4).Children(func() {
-						ui.Text(c, "Aa").FontSize(17).TextColor(th.Foreground).Grow(1)
-						ui.Box(c).Radius(rChip).Padding(1, 4).Background(th.Selection).Children(func() {
-							ui.Text(c, "~/").Font(a.termFamily()).FontSize(fsCaption).TextColor(th.Foreground)
-						})
-						ui.Box(c).Size(6, 13).Radius(1.5).Background(th.Cursor)
-					})
-					ui.Row(c).Gap(3).Children(func() {
-						for i := range 8 {
-							ui.Box(c).Size(8, 8).Radius(4).Background(th.Palette[i])
-						}
-					})
-				})
-			})
-			if sel {
-				// The ring, a gap off the tile and around it, so that
-				// nothing in the tile moves for it.
-				ui.Box(c).Absolute().Top(-5).Left(-5).Right(-5).Bottom(-5).Radius(rCard+5).Border(2, l.pal.accent)
-			}
-		})
-		lbl := ui.Text(c, name).FontSize(fsSmall).TextColor(pal.textMuted).TextAlign(ui.Center)
-		if sel {
-			lbl.TextColor(pal.text).FontWeight(wSemibold)
-		}
-	})
 }
 
 // fontChoices are the fonts the picker offers: kero's own first, then

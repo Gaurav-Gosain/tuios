@@ -152,6 +152,7 @@ type searchMenu struct {
 	query   string
 	hi      int
 	hovered string  // the item the pointer came to last
+	lit     string  // the item highlighted as the menu was last built
 	reveal  bool    // the highlighted item scrolls into view, once
 	at      ui.Rect // the button's bounds as the menu opened
 }
@@ -219,6 +220,12 @@ func (a *App) searchPopup(c *ui.Context, key, value string, options []string, wi
 			labels = append(labels, custom(strings.TrimSpace(m.query)))
 		}
 		m.hi = min(max(m.hi, 0), max(len(shown)-1, 0))
+		if lit := shownAt(shown, m.hi); lit != m.lit {
+			// What shows the highlighted item, built before the menu, builds
+			// again with it.
+			m.lit = lit
+			c.After(0)
+		}
 		pick := func(i int) {
 			if i >= 0 && i < len(shown) {
 				m.open = false
@@ -271,6 +278,13 @@ func (a *App) searchPopup(c *ui.Context, key, value string, options []string, wi
 			c.After(0)
 		}
 	})
+}
+
+func shownAt(shown []string, i int) string {
+	if i < 0 || i >= len(shown) {
+		return ""
+	}
+	return shown[i]
 }
 
 // field styles a text field's frame, around its input.

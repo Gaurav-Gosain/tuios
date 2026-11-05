@@ -56,7 +56,7 @@ type Settings struct {
 	DimUnfocused bool    `json:"dimUnfocusedTerminals"` // the terminals the user is not in fade
 	Cursor       string  `json:"cursor"`                // "block", "bar" or "underline"
 	CursorBlink  bool    `json:"cursorBlink"`
-	LightTheme   string  `json:"lightTheme"` // one of KeroThemes by its Name, or a Ghostty theme's
+	LightTheme   string  `json:"lightTheme"` // "tuios" for the TUI's, or a tuios theme's id
 	DarkTheme    string  `json:"darkTheme"`
 	OptionAsAlt  bool    `json:"optionAsAlt"`
 	CopyOnSelect bool    `json:"copyOnSelect"`

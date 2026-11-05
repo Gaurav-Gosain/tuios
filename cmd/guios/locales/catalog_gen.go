@@ -2672,106 +2672,6 @@ func (msgs Messages) SetBackground() string {
 	return Catalog.Format(msgs.locale, "setBackground", nil)
 }
 
-// BgPetal says "Petal"
-// in the language the app shows.
-func BgPetal() string { return In(i18n.Locale()).BgPetal() }
-
-// BgPetal says "Petal"
-// in the language of msgs.
-func (msgs Messages) BgPetal() string {
-	return Catalog.Format(msgs.locale, "bgPetal", nil)
-}
-
-// BgMist says "Mist"
-// in the language the app shows.
-func BgMist() string { return In(i18n.Locale()).BgMist() }
-
-// BgMist says "Mist"
-// in the language of msgs.
-func (msgs Messages) BgMist() string {
-	return Catalog.Format(msgs.locale, "bgMist", nil)
-}
-
-// BgMeadow says "Meadow"
-// in the language the app shows.
-func BgMeadow() string { return In(i18n.Locale()).BgMeadow() }
-
-// BgMeadow says "Meadow"
-// in the language of msgs.
-func (msgs Messages) BgMeadow() string {
-	return Catalog.Format(msgs.locale, "bgMeadow", nil)
-}
-
-// BgDusk says "Dusk"
-// in the language the app shows.
-func BgDusk() string { return In(i18n.Locale()).BgDusk() }
-
-// BgDusk says "Dusk"
-// in the language of msgs.
-func (msgs Messages) BgDusk() string {
-	return Catalog.Format(msgs.locale, "bgDusk", nil)
-}
-
-// BgTide says "Tide"
-// in the language the app shows.
-func BgTide() string { return In(i18n.Locale()).BgTide() }
-
-// BgTide says "Tide"
-// in the language of msgs.
-func (msgs Messages) BgTide() string {
-	return Catalog.Format(msgs.locale, "bgTide", nil)
-}
-
-// BgApricot says "Apricot"
-// in the language the app shows.
-func BgApricot() string { return In(i18n.Locale()).BgApricot() }
-
-// BgApricot says "Apricot"
-// in the language of msgs.
-func (msgs Messages) BgApricot() string {
-	return Catalog.Format(msgs.locale, "bgApricot", nil)
-}
-
-// BgAurora says "Aurora"
-// in the language the app shows.
-func BgAurora() string { return In(i18n.Locale()).BgAurora() }
-
-// BgAurora says "Aurora"
-// in the language of msgs.
-func (msgs Messages) BgAurora() string {
-	return Catalog.Format(msgs.locale, "bgAurora", nil)
-}
-
-// BgDune says "Dune"
-// in the language the app shows.
-func BgDune() string { return In(i18n.Locale()).BgDune() }
-
-// BgDune says "Dune"
-// in the language of msgs.
-func (msgs Messages) BgDune() string {
-	return Catalog.Format(msgs.locale, "bgDune", nil)
-}
-
-// BgPaper says "Paper"
-// in the language the app shows.
-func BgPaper() string { return In(i18n.Locale()).BgPaper() }
-
-// BgPaper says "Paper"
-// in the language of msgs.
-func (msgs Messages) BgPaper() string {
-	return Catalog.Format(msgs.locale, "bgPaper", nil)
-}
-
-// BgPlain says "Plain"
-// in the language the app shows.
-func BgPlain() string { return In(i18n.Locale()).BgPlain() }
-
-// BgPlain says "Plain"
-// in the language of msgs.
-func (msgs Messages) BgPlain() string {
-	return Catalog.Format(msgs.locale, "bgPlain", nil)
-}
-
 // SetText says "Text"
 // in the language the app shows.
 func SetText() string { return In(i18n.Locale()).SetText() }
@@ -2954,24 +2854,54 @@ func (msgs Messages) SetThickenDetail() string {
 	return Catalog.Format(msgs.locale, "setThickenDetail", nil)
 }
 
-// SetColors says "Ghostty themes"
-// in the language the app shows.
-func SetColors() string { return In(i18n.Locale()).SetColors() }
-
-// SetColors says "Ghostty themes"
-// in the language of msgs.
-func (msgs Messages) SetColors() string {
-	return Catalog.Format(msgs.locale, "setColors", nil)
-}
-
-// SetColorsDetail says "One of Ghostty’s themes, or your own in ~/.config/ghostty/themes, colors the window, its panes and terminals in pla…"
+// SetColorsDetail says "The theme colors the window, the sidebar, the panes and the terminals. Same as tuios changes when you change the them…"
 // in the language the app shows.
 func SetColorsDetail() string { return In(i18n.Locale()).SetColorsDetail() }
 
-// SetColorsDetail says "One of Ghostty’s themes, or your own in ~/.config/ghostty/themes, colors the window, its panes and terminals in pla…"
+// SetColorsDetail says "The theme colors the window, the sidebar, the panes and the terminals. Same as tuios changes when you change the them…"
 // in the language of msgs.
 func (msgs Messages) SetColorsDetail() string {
 	return Catalog.Format(msgs.locale, "setColorsDetail", nil)
+}
+
+// SetThemeSameAsTuios says "Same as tuios"
+// in the language the app shows.
+func SetThemeSameAsTuios() string { return In(i18n.Locale()).SetThemeSameAsTuios() }
+
+// SetThemeSameAsTuios says "Same as tuios"
+// in the language of msgs.
+func (msgs Messages) SetThemeSameAsTuios() string {
+	return Catalog.Format(msgs.locale, "setThemeSameAsTuios", nil)
+}
+
+// SetThemeFollows says "tuios uses {theme}."
+// in the language the app shows.
+func SetThemeFollows(theme string) string { return In(i18n.Locale()).SetThemeFollows(theme) }
+
+// SetThemeFollows says "tuios uses {theme}."
+// in the language of msgs.
+func (msgs Messages) SetThemeFollows(theme string) string {
+	return Catalog.Format(msgs.locale, "setThemeFollows", map[string]any{"theme": theme})
+}
+
+// SetThemeFollowsNone says "tuios uses no theme. guios uses its own colors."
+// in the language the app shows.
+func SetThemeFollowsNone() string { return In(i18n.Locale()).SetThemeFollowsNone() }
+
+// SetThemeFollowsNone says "tuios uses no theme. guios uses its own colors."
+// in the language of msgs.
+func (msgs Messages) SetThemeFollowsNone() string {
+	return Catalog.Format(msgs.locale, "setThemeFollowsNone", nil)
+}
+
+// SetThemeOwn says "Only guios uses this theme. tuios keeps its own theme."
+// in the language the app shows.
+func SetThemeOwn() string { return In(i18n.Locale()).SetThemeOwn() }
+
+// SetThemeOwn says "Only guios uses this theme. tuios keeps its own theme."
+// in the language of msgs.
+func (msgs Messages) SetThemeOwn() string {
+	return Catalog.Format(msgs.locale, "setThemeOwn", nil)
 }
 
 // SetLightWindows says "Light windows"
@@ -2992,16 +2922,6 @@ func SetDarkWindows() string { return In(i18n.Locale()).SetDarkWindows() }
 // in the language of msgs.
 func (msgs Messages) SetDarkWindows() string {
 	return Catalog.Format(msgs.locale, "setDarkWindows", nil)
-}
-
-// SetThemeNone says "None"
-// in the language the app shows.
-func SetThemeNone() string { return In(i18n.Locale()).SetThemeNone() }
-
-// SetThemeNone says "None"
-// in the language of msgs.
-func (msgs Messages) SetThemeNone() string {
-	return Catalog.Format(msgs.locale, "setThemeNone", nil)
 }
 
 // SetCursor says "Cursor"
