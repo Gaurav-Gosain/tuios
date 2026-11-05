@@ -39,6 +39,10 @@ const (
 	// EventWorkspaceRenamed: a workspace's name was set, changed or cleared.
 	// Workspace is the workspace, and Title its new name, absent when cleared.
 	EventWorkspaceRenamed = "workspace-renamed"
+	// EventWindowForeground: the program a pane runs changed, as a command
+	// starting at the shell's prompt or ending. Title is the program's name,
+	// absent when the shell is back. It is opt-in.
+	EventWindowForeground = "window-foreground"
 	// EventLayoutChanged: the panes on a workspace now sit differently. A
 	// pane opened, closed, moved, was minimized, zoomed or resized, or the
 	// session changed size. Workspace names it. It carries no rectangles: a
@@ -424,7 +428,7 @@ func (f eventFilter) match(ev streamEvent) bool {
 // optInEventTypes are the event types a subscription receives only when its
 // types filter names them. They arrive at the speed an agent works rather
 // than the speed a person does.
-var optInEventTypes = map[string]bool{EventLayoutChanged: true, EventAgentActivity: true, EventTranscript: true, EventTransferProgress: true, EventTransferFile: true, EventTML: true}
+var optInEventTypes = map[string]bool{EventLayoutChanged: true, EventWindowForeground: true, EventAgentActivity: true, EventTranscript: true, EventTransferProgress: true, EventTransferFile: true, EventTML: true}
 
 // admitsOutput reports whether the filter lets output events through, which
 // decides whether a resume can be exact: output events are not kept for replay.

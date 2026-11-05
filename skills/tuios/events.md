@@ -85,6 +85,7 @@ Every type, and what it reports:
 | `window-exit` | A pane's program exits |
 | `window-retitled`, `window-moved`, `window-focused` | A pane's title, workspace or focus changes |
 | `window-minimized`, `window-restored` | A pane is minimized or restored |
+| `window-foreground` | The program a pane runs changes. Opt-in |
 | `workspace-switched`, `workspace-renamed` | The workspace on screen, or a workspace name, changes |
 | `layout-changed` | The panes on a workspace sit differently. Opt-in |
 | `mode-changed` | A client switches between window and terminal mode |

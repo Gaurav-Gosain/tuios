@@ -7635,6 +7635,7 @@ Event types:
 | `window-moved` | A window moved to another workspace. | `session`, `window`, `pty_id`, `workspace` |
 | `window-minimized` | A window was minimized. | `session`, `window`, `pty_id` |
 | `window-restored` | A minimized window was restored. | `session`, `window`, `pty_id` |
+| `window-foreground` | The program a window runs changed: a command started at the shell's prompt, or ended. `title` is the program's name, absent when the shell is back. Sent only to a subscription that names it in `types`. | `session`, `window`, `pty_id`, `title` |
 | `workspace-switched` | The session's current workspace changed. | `session`, `workspace` |
 | `workspace-renamed` | A workspace's name was set, changed or cleared. `title` is the new name, absent when the name was cleared. | `session`, `workspace`, `title` |
 | `layout-changed` | The panes on a workspace sit differently: a pane opened, closed, moved, was minimized, zoomed or resized, or the session changed size. Call `list-windows` to read the new rectangles. Sent only to a subscription that names it in `types`, and not kept for replay. | `session`, `workspace` |

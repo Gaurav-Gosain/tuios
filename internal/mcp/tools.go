@@ -368,7 +368,7 @@ const (
 // does not import). A test in cmd/tuios holds the two lists equal.
 var EventTypes = []string{
 	"window-created", "window-closed", "window-exit", "window-retitled",
-	"window-focused", "window-moved", "window-minimized", "window-restored",
+	"window-focused", "window-foreground", "window-moved", "window-minimized", "window-restored",
 	"workspace-switched", "workspace-renamed", "layout-changed", "agent-state", "agent-seen", "agent-message",
 	"output", "bell", "notification", "mode-changed",
 	"session-created", "session-closed", "client-session-changed", "gap", "attention",

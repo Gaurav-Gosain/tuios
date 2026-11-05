@@ -28,6 +28,8 @@ type lifecycleWindow struct {
 	ptyID      string
 	title      string
 	customName string
+	// foreground is the program the pane runs, for window-foreground.
+	foreground string
 	workspace  int
 	minimized  bool
 	agentState AgentState
@@ -112,6 +114,7 @@ func snapshotLifecycle(state *SessionState) lifecycleSnapshot {
 			ptyID:         w.PTYID,
 			title:         w.Title,
 			customName:    w.CustomName,
+			foreground:    w.ForegroundCmd,
 			workspace:     w.Workspace,
 			minimized:     w.Minimized,
 			agentState:    w.AgentState,
@@ -194,6 +197,14 @@ func diffLifecycle(before, after lifecycleSnapshot) []SessionEvent {
 				Type:   EventWindowRetitled,
 				Window: w.id,
 				Title:  w.customName,
+			})
+		}
+		if w.foreground != prev.foreground {
+			events = append(events, SessionEvent{
+				Type:   EventWindowForeground,
+				Window: w.id,
+				PTYID:  w.ptyID,
+				Title:  w.foreground,
 			})
 		}
 		if w.workspace != prev.workspace {
