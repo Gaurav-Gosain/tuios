@@ -397,9 +397,7 @@ func (a *App) approvalCard(c *ui.Context, pal *palette, ag client.Agent, it sess
 			}
 			ui.Text(c, locales.CockpitRiskLine(name, why)).FontSize(fsSmall).TextColor(pal.dangerText).MaxLines(2)
 		}
-		if q := ck.question; q != nil && q.item == key {
-			a.ckQuestionLine(c, pal)
-		} else if ck.armed.decision != "" && ck.armed.item == key && now.Sub(ck.armed.at) <= ckRiskWindow {
+		if ck.armed.decision != "" && ck.armed.item == key && now.Sub(ck.armed.at) <= ckRiskWindow {
 			ui.Text(c, locales.CockpitClickAgain()).FontSize(fsSmall).FontWeight(wSemibold).TextColor(pal.attnText)
 			c.After(ck.armed.at.Add(ckRiskWindow).Sub(now))
 		}
@@ -442,12 +440,30 @@ func (a *App) approvalCard(c *ui.Context, pal *palette, ag client.Agent, it sess
 					a.goToAgent(ag)
 				}
 			}
+			// While the confirm step asks about one of them, that button is
+			// the primary one with Enter on it, and the others fade
+			// (council round 4, S2).
+			asked := ""
+			if q := ck.question; q != nil && q.item == key {
+				asked = q.decision
+			}
 			for _, o := range opts {
-				// A risky command gets no primary button to allow it.
-				if sizedButton(c, "ans-"+o, ckDecisionWords(o), ckDecisionKey(o), o == "once" && !risky, hControl, rControl, pal) {
-					a.ckAnswer(o)
-					ck.fleetFocus.Focus()
+				primary, keys := o == "once" && !risky, ckDecisionKey(o)
+				fade := float32(1)
+				switch {
+				case asked == o:
+					primary, keys = true, "↵"
+				case asked != "":
+					primary, fade = false, 0.55
 				}
+				ui.Row(c).Opacity(fade).Children(func() {
+					// A risky command gets no primary button to allow it,
+					// until the confirm step asks about it.
+					if sizedButton(c, "ans-"+o, ckDecisionWords(o), keys, primary, hControl, rControl, pal) {
+						a.ckAnswer(o)
+						ck.fleetFocus.Focus()
+					}
+				})
 			}
 			ui.Spacer(c)
 			if !held && len(opts) > 0 {

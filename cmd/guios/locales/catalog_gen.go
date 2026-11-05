@@ -12670,83 +12670,83 @@ func (msgs Messages) CockpitThreadUnsupportedDetail() string {
 	return Catalog.Format(msgs.locale, "cockpitThreadUnsupportedDetail", nil)
 }
 
-// CockpitAskAllow says "Allow {target}? Press Enter to allow. Press Esc to cancel."
+// CockpitAskAllow says "Allow {target}?"
 // in the language the app shows.
 func CockpitAskAllow(target string) string { return In(i18n.Locale()).CockpitAskAllow(target) }
 
-// CockpitAskAllow says "Allow {target}? Press Enter to allow. Press Esc to cancel."
+// CockpitAskAllow says "Allow {target}?"
 // in the language of msgs.
 func (msgs Messages) CockpitAskAllow(target string) string {
 	return Catalog.Format(msgs.locale, "cockpitAskAllow", map[string]any{"target": target})
 }
 
-// CockpitAskAllowAlways says "Always allow {target}? Press Enter to allow it always. Press Esc to cancel."
+// CockpitAskAllowAlways says "Always allow {target}?"
 // in the language the app shows.
 func CockpitAskAllowAlways(target string) string {
 	return In(i18n.Locale()).CockpitAskAllowAlways(target)
 }
 
-// CockpitAskAllowAlways says "Always allow {target}? Press Enter to allow it always. Press Esc to cancel."
+// CockpitAskAllowAlways says "Always allow {target}?"
 // in the language of msgs.
 func (msgs Messages) CockpitAskAllowAlways(target string) string {
 	return Catalog.Format(msgs.locale, "cockpitAskAllowAlways", map[string]any{"target": target})
 }
 
-// CockpitAskReject says "Reject {target}? Press Enter to reject. Press Esc to cancel."
+// CockpitAskReject says "Reject {target}?"
 // in the language the app shows.
 func CockpitAskReject(target string) string { return In(i18n.Locale()).CockpitAskReject(target) }
 
-// CockpitAskReject says "Reject {target}? Press Enter to reject. Press Esc to cancel."
+// CockpitAskReject says "Reject {target}?"
 // in the language of msgs.
 func (msgs Messages) CockpitAskReject(target string) string {
 	return Catalog.Format(msgs.locale, "cockpitAskReject", map[string]any{"target": target})
 }
 
-// CockpitAskRejectWhy says "Reject {target} with this reason? Press Enter to reject. Press Esc to cancel."
+// CockpitAskRejectWhy says "Reject {target} with this reason?"
 // in the language the app shows.
 func CockpitAskRejectWhy(target string) string { return In(i18n.Locale()).CockpitAskRejectWhy(target) }
 
-// CockpitAskRejectWhy says "Reject {target} with this reason? Press Enter to reject. Press Esc to cancel."
+// CockpitAskRejectWhy says "Reject {target} with this reason?"
 // in the language of msgs.
 func (msgs Messages) CockpitAskRejectWhy(target string) string {
 	return Catalog.Format(msgs.locale, "cockpitAskRejectWhy", map[string]any{"target": target})
 }
 
-// CockpitAskSettle says "Settle {name}? Press Enter to settle. Press Esc to cancel."
+// CockpitAskSettle says "Settle {name}?"
 // in the language the app shows.
 func CockpitAskSettle(name string) string { return In(i18n.Locale()).CockpitAskSettle(name) }
 
-// CockpitAskSettle says "Settle {name}? Press Enter to settle. Press Esc to cancel."
+// CockpitAskSettle says "Settle {name}?"
 // in the language of msgs.
 func (msgs Messages) CockpitAskSettle(name string) string {
 	return Catalog.Format(msgs.locale, "cockpitAskSettle", map[string]any{"name": name})
 }
 
-// CockpitAskUnsettle says "Take {name} off the shelf? Press Enter to do it. Press Esc to cancel."
+// CockpitAskUnsettle says "Take {name} off the shelf?"
 // in the language the app shows.
 func CockpitAskUnsettle(name string) string { return In(i18n.Locale()).CockpitAskUnsettle(name) }
 
-// CockpitAskUnsettle says "Take {name} off the shelf? Press Enter to do it. Press Esc to cancel."
+// CockpitAskUnsettle says "Take {name} off the shelf?"
 // in the language of msgs.
 func (msgs Messages) CockpitAskUnsettle(name string) string {
 	return Catalog.Format(msgs.locale, "cockpitAskUnsettle", map[string]any{"name": name})
 }
 
-// CockpitAskDismiss says "Dismiss this item of {name}? Press Enter to dismiss. Press Esc to cancel."
+// CockpitAskDismiss says "Dismiss this item of {name}?"
 // in the language the app shows.
 func CockpitAskDismiss(name string) string { return In(i18n.Locale()).CockpitAskDismiss(name) }
 
-// CockpitAskDismiss says "Dismiss this item of {name}? Press Enter to dismiss. Press Esc to cancel."
+// CockpitAskDismiss says "Dismiss this item of {name}?"
 // in the language of msgs.
 func (msgs Messages) CockpitAskDismiss(name string) string {
 	return Catalog.Format(msgs.locale, "cockpitAskDismiss", map[string]any{"name": name})
 }
 
-// CockpitAskPass says "Pass the held mail on to {name}? Press Enter to pass it on. Press Esc to cancel."
+// CockpitAskPass says "Pass the held mail on to {name}?"
 // in the language the app shows.
 func CockpitAskPass(name string) string { return In(i18n.Locale()).CockpitAskPass(name) }
 
-// CockpitAskPass says "Pass the held mail on to {name}? Press Enter to pass it on. Press Esc to cancel."
+// CockpitAskPass says "Pass the held mail on to {name}?"
 // in the language of msgs.
 func (msgs Messages) CockpitAskPass(name string) string {
 	return Catalog.Format(msgs.locale, "cockpitAskPass", map[string]any{"name": name})
@@ -12782,21 +12782,21 @@ func (msgs Messages) CompareAskJudge() string {
 	return Catalog.Format(msgs.locale, "compareAskJudge", nil)
 }
 
-// CockpitAskSnooze says "Snooze this item of {name}? Press Enter to snooze. Press Esc to cancel."
+// CockpitAskSnooze says "Snooze {name}?"
 // in the language the app shows.
 func CockpitAskSnooze(name string) string { return In(i18n.Locale()).CockpitAskSnooze(name) }
 
-// CockpitAskSnooze says "Snooze this item of {name}? Press Enter to snooze. Press Esc to cancel."
+// CockpitAskSnooze says "Snooze {name}?"
 // in the language of msgs.
 func (msgs Messages) CockpitAskSnooze(name string) string {
 	return Catalog.Format(msgs.locale, "cockpitAskSnooze", map[string]any{"name": name})
 }
 
-// CockpitAskWake says "Wake this item of {name}? Press Enter to wake it. Press Esc to cancel."
+// CockpitAskWake says "Show {name} again?"
 // in the language the app shows.
 func CockpitAskWake(name string) string { return In(i18n.Locale()).CockpitAskWake(name) }
 
-// CockpitAskWake says "Wake this item of {name}? Press Enter to wake it. Press Esc to cancel."
+// CockpitAskWake says "Show {name} again?"
 // in the language of msgs.
 func (msgs Messages) CockpitAskWake(name string) string {
 	return Catalog.Format(msgs.locale, "cockpitAskWake", map[string]any{"name": name})

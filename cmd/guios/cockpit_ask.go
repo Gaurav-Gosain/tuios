@@ -1,6 +1,8 @@
 package main
 
 import (
+	"strings"
+
 	"github.com/Gaurav-Gosain/mygo/ui"
 
 	"github.com/Gaurav-Gosain/tuios/cmd/guios/locales"
@@ -32,8 +34,19 @@ type ckQuestion struct {
 	what askWhat
 	row  string // the row the cursor was on
 	item string // ckShownKey of the prompt it answers, if any
-	text string // what the step says
+	// ask is the question as the locale writes it, with \x00 where the
+	// target goes; target is the command (mono) or the agent's name.
+	ask, target string
+	mono        bool
+	// word is the key cap's label for Enter: "Allow once", "Snooze".
+	word string
+	// decision is the card's button the step asks about, if any.
+	decision string
 }
+
+// ckTarget is the \x00 a locale string gets for its target, so that the
+// key line draws the target in its own font where the language puts it.
+const ckTarget = "\x00"
 
 // ckAskFor opens the confirm step for what on the row the cursor is on.
 func (a *App) ckAskFor(what askWhat) {
@@ -42,15 +55,15 @@ func (a *App) ckAskFor(what askWhat) {
 	if !ok {
 		return
 	}
-	q := &ckQuestion{what: what, row: r.key}
-	target := ""
+	q := &ckQuestion{what: what, row: r.key, ask: "", target: ""}
+	command := ""
 	if r.item != nil {
 		q.item = ckShownKey(*r.item)
-		target = r.item.Summary
-		if _, t, ok := ckAsk(target); ok && t != "" {
-			target = t
+		command = r.item.Summary
+		if _, t, ok := ckAsk(command); ok && t != "" {
+			command = t
 		}
-		target = ckClip(flat(target), 60)
+		command = ckClipMiddle(flat(command), 48)
 	}
 	name := ""
 	if r.agent >= 0 {
@@ -58,6 +71,7 @@ func (a *App) ckAskFor(what askWhat) {
 	} else if r.item != nil {
 		name = r.item.Name
 	}
+	q.target = name
 	switch what {
 	case askOnce, askAlways, askDeny:
 		if r.item == nil || !ckAnswerable(*r.item) {
@@ -66,52 +80,60 @@ func (a *App) ckAskFor(what askWhat) {
 		if what == askDeny && !a.ckCanReject() {
 			return
 		}
-		q.text = map[askWhat]func(string) string{
+		q.target, q.mono = command, true
+		q.decision = map[askWhat]string{askOnce: "once", askAlways: "always", askDeny: "deny"}[what]
+		q.word = ckDecisionWords(q.decision)
+		q.ask = map[askWhat]func(string) string{
 			askOnce: locales.CockpitAskAllow, askAlways: locales.CockpitAskAllowAlways, askDeny: locales.CockpitAskReject,
-		}[what](target)
+		}[what](ckTarget)
 	case askReason:
-		q.text = locales.CockpitAskRejectWhy(target)
+		q.target, q.mono, q.decision = command, true, "reason"
+		q.word = locales.CockpitReject()
+		q.ask = locales.CockpitAskRejectWhy(ckTarget)
 	case askSettle:
 		ag, ok := a.ckSelectedAgent()
 		if !ok {
 			a.toast(locales.CockpitSettleOnlyAgent())
 			return
 		}
-		q.text = locales.CockpitAskSettle(ag.Name)
+		q.target = ag.Name
+		q.ask, q.word = locales.CockpitAskSettle(ckTarget), locales.CockpitSettle()
 		if ag.Settled {
-			q.text = locales.CockpitAskUnsettle(ag.Name)
+			q.ask, q.word = locales.CockpitAskUnsettle(ckTarget), locales.CockpitUnsettle()
 		}
 	case askDismiss:
 		if r.item == nil {
 			return
 		}
-		q.text = locales.CockpitAskDismiss(name)
+		q.ask, q.word = locales.CockpitAskDismiss(ckTarget), locales.CockpitDismiss()
 	case askPass:
 		if r.item == nil || r.item.HeldID == 0 {
 			return
 		}
-		q.text = locales.CockpitAskPass(name)
+		q.ask, q.word = locales.CockpitAskPass(ckTarget), locales.CockpitPassMail()
 	case askSnooze:
 		if r.item == nil {
 			a.toast(locales.CockpitSnoozeOnlyItem())
 			return
 		}
-		q.text = locales.CockpitAskSnooze(name)
+		q.ask, q.word = locales.CockpitAskSnooze(ckTarget), locales.CockpitSnooze()
 		if r.item.SnoozedUntil != 0 {
-			q.text = locales.CockpitAskWake(name)
+			q.ask, q.word = locales.CockpitAskWake(ckTarget), locales.CockpitWake()
 		}
 	}
 	ck.question = q
 	ck.armed = ckArmed{}
 }
 
-// ckClip cuts s to n runes, with an ellipsis.
-func ckClip(s string, n int) string {
+// ckClipMiddle cuts s to n runes in its middle, as a long command keeps
+// its start and its end.
+func ckClipMiddle(s string, n int) string {
 	r := []rune(s)
 	if len(r) <= n {
 		return s
 	}
-	return string(r[:n-1]) + "…"
+	head := (n - 1) / 2
+	return string(r[:head]) + "…" + string(r[len(r)-(n-1-head):])
 }
 
 // ckQuestionKeys are the keys while a confirm step is open: Enter does it,
@@ -210,11 +232,23 @@ func (a *App) ckAllowChord() {
 	a.ck.confirmed = false
 }
 
-// ckQuestionLine draws the open confirm step: what Enter does, and Escape.
+// ckQuestionLine draws the open confirm step in the key line: the
+// question, its target in the code font when it is a command, and the key
+// caps for Enter and Escape (council round 4, S2).
 func (a *App) ckQuestionLine(c *ui.Context, pal *palette) {
 	q := a.ck.question
 	if q == nil {
 		return
 	}
-	ui.Text(c, q.text).FontSize(fsSmall).FontWeight(wSemibold).TextColor(pal.attnText).MaxLines(3)
+	before, after, _ := strings.Cut(q.ask, ckTarget)
+	spans := []ui.Span{{Text: before, Color: pal.text, Weight: wSemibold}}
+	t := ui.Span{Text: q.target, Color: pal.text, Weight: wSemibold}
+	if q.mono {
+		t.Font = a.termFamily()
+		t.Weight = 0
+	}
+	spans = append(spans, t, ui.Span{Text: after, Color: pal.text, Weight: wSemibold})
+	ui.RichText(c, spans...).FontSize(fsSmall).SingleLine().Ellipsis("…").MinWidth(0).Shrink(1)
+	keyHint(c, pal, "↵", q.word)
+	keyHint(c, pal, "esc", locales.CommonCancel())
 }
