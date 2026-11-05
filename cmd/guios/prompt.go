@@ -2,6 +2,7 @@ package main
 
 import (
 	"strconv"
+	"unicode/utf8"
 
 	"github.com/Gaurav-Gosain/mygo/ui"
 
@@ -22,6 +23,9 @@ type promptState struct {
 	value       string
 	placeholder string
 	run         func(string)
+	// selected tells that the field's text was selected once it took
+	// the focus: typing replaces the old name (council round 3, S12).
+	selected bool
 }
 
 // rename pane, rename workspace and the session's note, as the prefix's
@@ -89,6 +93,10 @@ func (a *App) promptView(c *ui.Context, pal *palette) {
 		var in ui.Element
 		frame.Children(func() {
 			in = ui.TextInputBase(c.Key("in"), &pr.value).Grow(1).FontSize(14).Placeholder(pr.placeholder).AutoFocus()
+			if !pr.selected && in.Focused() {
+				pr.selected = true
+				in.SetTextSelection(0, utf8.RuneCountInString(pr.value))
+			}
 			if in.Submitted() {
 				done = true
 			}
