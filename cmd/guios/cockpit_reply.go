@@ -256,7 +256,13 @@ func (a *App) replyBox(c *ui.Context, pal *palette, ag client.Agent) {
 						keyHint(c, pal, keyName("CmdOrCtrl+Enter"), locales.CockpitHintSendNow())
 					}
 				})
-				if sizedButton(c, "send", locales.CockpitSend(), "↵", true, hControlSm, rControl, pal) {
+				// While the confirm step is open, its button owns Enter:
+				// Send drops its cap and its accent.
+				keys, primary := "↵", true
+				if a.ck.question != nil {
+					keys, primary = "", false
+				}
+				if sizedButton(c, "send", locales.CockpitSend(), keys, primary, hControlSm, rControl, pal) {
 					a.sendBox(ag, d, mail)
 				}
 			})
