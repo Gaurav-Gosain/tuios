@@ -421,7 +421,7 @@ func (s *Setup) install(ctx context.Context, c Choices, a Asker, res *Result) er
 		s.say(StepInstall, StateFailed, err.Error())
 		return err
 	}
-	s.say(StepInstall, StateOK, "tuios "+s.probe.TuiosVersion+" is installed at "+s.probe.Tuios+".")
+	s.say(StepInstall, StateOK, "tuios "+s.probe.TuiosVersion+" is installed at "+s.probe.Short(s.probe.Tuios)+".")
 	return nil
 }
 
