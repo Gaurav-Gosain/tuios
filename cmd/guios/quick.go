@@ -57,8 +57,9 @@ type quickTerm struct {
 	// shows or hides the scratch.
 	seen      string
 	seenFocus bool
-	// pressed is when the key last showed or hid the dropdown (quickHold).
-	pressed time.Time
+	// pressed is when the key last showed or hid the dropdown (quickHold),
+	// and focusAt when the dropdown last asked for the keyboard.
+	pressed, focusAt time.Time
 	// route sends what is typed to the scratch from the frame of the key
 	// that shows it, and back to the pane from the key that hides it, until
 	// the terminal that should have the keyboard has it (since routeAt).
@@ -110,6 +111,10 @@ func (a *App) toggleQuick() {
 		a.showQuick()
 	}
 }
+
+// keysOn is the pane whose terminal had the keyboard in the main window's
+// last frame, "" for none: for the QA probe's "keys".
+var keysOn atomic.Value
 
 // keyRoute is where the terminals' typed bytes go for a moment: the
 // keyboard moves in the frame of a key, and a view that is not built yet
@@ -239,7 +244,7 @@ func (a *App) showDrop() {
 	if q.shown {
 		a.hideQuick()
 	}
-	q.drop, q.focusDrop, q.session = true, true, s.ID
+	q.drop, q.focusDrop, q.session, q.focusAt = true, true, s.ID, time.Now()
 	q.pressed = time.Now()
 	a.openScratch(s)
 	// The keys go to the scratch from this frame on, though its view is
@@ -376,7 +381,7 @@ func (a *App) quickChanged() {
 	case f != q.seenFocus:
 		q.seenFocus = f
 		if !q.shown && q.drop != f && time.Since(q.pressed) > quickHold {
-			q.drop, q.focusDrop, q.session = f, f, s.ID
+			q.drop, q.focusDrop, q.session, q.focusAt = f, f, s.ID, time.Now()
 			if !f {
 				a.defer_(a.focusTerminal)
 			}
@@ -685,12 +690,21 @@ func (a *App) dropPanel(c *ui.Context, pal *palette, p *proto.Pane, k, dh, shado
 			case e != nil && e.term != nil:
 				ref := a.paneRef(p.ID)
 				terminal.View(c.Key("term-"+p.ID), e.term).Fill().Bind(ref)
-				if q.focusDrop && q.drop {
-					// The keyboard comes here in the first frame that
-					// builds the view; until then the route takes the keys.
+				switch {
+				case ref.Focused(c):
 					q.focusDrop = false
+					keysOn.Store(p.ID)
+				case q.focusDrop && q.drop && time.Since(q.focusAt) > quickHold:
+					q.focusDrop = false // the person moved the keyboard on
+				case q.focusDrop && q.drop:
+					// The keyboard comes here from the first frame that
+					// builds the view, and the ask stands until the view
+					// has it: an ask in a frame the view is not laid out
+					// in yet goes nowhere. Until then the route takes the
+					// keys.
 					a.touch(p.ID)
 					ref.Focus()
+					c.Invalidate()
 				}
 			case e != nil && e.err != "":
 				a.message(c, pal, locales.PaneCantShow(), e.err, "", nil)
@@ -711,7 +725,7 @@ func (a *App) focusScratch() bool {
 	}
 	p := scratchPane(a.session(q.session))
 	if p == nil {
-		q.focusDrop = true // once its view is built
+		q.focusDrop, q.focusAt = true, time.Now() // once its view is built
 		return true
 	}
 	a.paneRef(p.ID).Focus()

@@ -1047,6 +1047,9 @@ func (a *App) paneTerminal(c *ui.Context, pal *palette, s *proto.Session, p *pro
 			} else if ref.Focused(c) && a.focusOf(s) != p.ID && s.PaneByID(a.wantFocus) == nil {
 				a.setFocus(s, p.ID)
 			}
+			if ref.Focused(c) {
+				keysOn.Store(p.ID)
+			}
 			if a.find.pane == p.ID {
 				a.findBar(c, pal, p, e.term)
 			}

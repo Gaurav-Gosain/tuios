@@ -158,6 +158,7 @@ func (a *App) view(c *ui.Context) {
 		}
 	}()
 	a.looks()
+	keysOn.Store("")
 	pal := paletteFor(c)
 	c.SetTheme(borderless(c, pal))
 

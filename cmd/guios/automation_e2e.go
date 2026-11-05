@@ -176,6 +176,27 @@ func startProbe(a *App) {
 						conn.Write([]byte("ok\n"))
 						continue
 					}
+					// "keys" answers the pane whose terminal had the
+					// keyboard in the last frame, and whether the scratch
+					// dropdown showed: "PANE drop" or "PANE -".
+					if sc.Text() == "keys" {
+						got := make(chan string, 1)
+						a.update(func() {
+							k, _ := keysOn.Load().(string)
+							d := "-"
+							if a.quick.drop {
+								d = "drop:" + func() string {
+									if p := scratchPane(a.session(a.quick.session)); p != nil {
+										return p.ID
+									}
+									return ""
+								}()
+							}
+							got <- k + " " + d
+						})
+						conn.Write([]byte(<-got + "\n"))
+						continue
+					}
 					// "texts" answers each pane's terminal text, by pane
 					// id, as one JSON line: the QA's check that a pane
 					// shows the daemon's screen.
