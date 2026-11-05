@@ -215,3 +215,74 @@ func TestKittenIcatDrawsInAPane(t *testing.T) {
 		})
 	}
 }
+
+// TestKittyImageRowsSurviveAReattach: the line printed after a kitty image
+// stays on its row when a client attaches again and when the client resizes.
+//
+// The client moved the cursor to column 0 under the image, and the daemon's
+// emulator moved it as kitty does, to the image's last row after its last
+// column. A reattach takes the daemon's grid, so the text under every image
+// came up one row. Both now take kitty's rule (vt.Emulator.ReserveKittyImageSpace
+// and ReserveKittyPlacement). kitten icat is the real program, a printf with
+// c= and r= the fixture when it is not installed.
+func TestKittyImageRowsSurviveAReattach(t *testing.T) {
+	base := t.TempDir()
+	killDaemon(t, base)
+	if out, err := tuiosCLI(t, base, "new", "krows", "--detach"); err != nil {
+		t.Fatalf("create the session: %v\n%s", err, out)
+	}
+	attach := func() *tuitest.Terminal {
+		host := newKittyHost()
+		term := attachIn(t, base, "krows", startOpts{
+			cols: 120, rows: 40,
+			env: []string{"TUIOS_SIXEL_GRAPHICS=0"},
+			out: host,
+		})
+		host.answerProbe(t, term)
+		if err := term.WaitFor(func(s tuitest.Screen) bool { return countWindows(s) >= 1 }, bootTimeout); err != nil {
+			t.Fatalf("the pane never showed: %v\n%s", err, term.Snapshot())
+		}
+		return term
+	}
+	// rows is the row of the line before the image and of the line after it.
+	rows := func(term *tuitest.Terminal) (int, int) {
+		_ = term.WaitStable(uiTimeout)
+		s := term.Screen()
+		return findRow(s, "BEFORE-IMG"), findRow(s, "AFTER-IMG")
+	}
+	first := attach()
+	enterTerminalMode(t, first)
+	path, img := writeIcatPNG(t, t.TempDir())
+	draw := fmt.Sprintf(`printf '\033_Ga=T,q=2,f=100,c=8,r=4;%s\033\\'`, base64.StdEncoding.EncodeToString(img))
+	if kitten, err := exec.LookPath("kitten"); err == nil {
+		draw = kitten + " icat --stdin=no --transfer-mode=stream " + path
+	}
+	runInShell(t, first, `printf 'BEF%s\n' ORE-IMG; `+draw+`; printf 'AFT%s\n' ER-IMG`, "AFTER-IMG", shellTimeout)
+	time.Sleep(time.Second)
+	before, after := rows(first)
+	if before < 0 || after <= before+1 {
+		t.Fatalf("the image took no rows (before %d, after %d), so this tests nothing\n%s", before, after, first.Snapshot())
+	}
+
+	if err := first.SendKeys(tuitest.Alt(tuitest.Esc)); err != nil {
+		t.Fatalf("to window mode: %v", err)
+	}
+	time.Sleep(insertGuard)
+	if err := first.SendKeys(tuitest.Ctrl('b'), "d"); err != nil {
+		t.Fatalf("detach: %v", err)
+	}
+	waitExit(t, first, "after leader d")
+
+	second := attach()
+	time.Sleep(time.Second)
+	if b, a := rows(second); b != before || a != after {
+		t.Fatalf("after the reattach the lines are on rows %d and %d, want %d and %d\n%s", b, a, before, after, second.Snapshot())
+	}
+	if err := second.Resize(100, 34); err != nil {
+		t.Fatalf("resize: %v", err)
+	}
+	time.Sleep(2 * time.Second)
+	if b, a := rows(second); a-b != after-before {
+		t.Fatalf("after the resize the lines are %d rows apart, want %d\n%s", a-b, after-before, second.Snapshot())
+	}
+}
