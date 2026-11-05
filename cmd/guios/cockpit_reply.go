@@ -139,7 +139,10 @@ func (a *App) replyBox(c *ui.Context, pal *palette, ag client.Agent) {
 			ui.Row(c).Gap(6).AlignItems(ui.Center).Children(func() {
 				// One box, two ways to reach the agent: a prompt typed
 				// into its pane, or mail to its inbox.
-				ui.Text(c, locales.CockpitSendAs()).FontSize(fsSmall).TextColor(pal.textFaint).SingleLine().Shrink(0)
+				// The hints sit on the control's fill, the lightest surface
+				// in the dark: text2 keeps them at 4.5:1 there (council
+				// round 3, visual S3).
+				ui.Text(c, locales.CockpitSendAs()).FontSize(fsSmall).TextColor(pal.textMuted).SingleLine().Shrink(0)
 				// A segmented control, as Settings draws them: the chosen
 				// segment raised on a soft track, so that it shows on the
 				// light theme's white box too (council round 2, S5).
@@ -161,7 +164,7 @@ func (a *App) replyBox(c *ui.Context, pal *palette, ag client.Agent) {
 						note = locales.CockpitMailReplyTo(ag.Name)
 					}
 				}
-				oneLine(c, note, fsSmall, 0).TextColor(pal.textFaint).Shrink(2)
+				oneLine(c, note, fsSmall, 0).TextColor(pal.textMuted).Shrink(2)
 			})
 			if len(d.images) > 0 {
 				ui.Row(c).Gap(8).Wrap().Children(func() {
@@ -171,7 +174,7 @@ func (a *App) replyBox(c *ui.Context, pal *palette, ag client.Agent) {
 				})
 			}
 			in := ui.TextAreaBase(c.Key("text-"+ag.Key()), &d.text).Bind(&r.box).Lines(2, 8).
-				FontSize(fsProse).LineHeight(1.5).TextColor(pal.text).Placeholder(locales.CockpitReplyPlaceholder()).ReadOnly(d.sending)
+				FontSize(fsProse).LineHeight(1.5).TextColor(pal.text).Placeholder(locales.CockpitReplyPlaceholder()).PlaceholderColor(pal.textMuted).ReadOnly(d.sending)
 			if r.focusNext {
 				r.focusNext = false
 				r.box.Focus()
