@@ -68,7 +68,7 @@ type windowRow struct {
 	AgentKind   string           `json:"agent_kind"`
 	AgentAt     int64            `json:"agent_state_at"`
 	Harness     string           `json:"agent_harness"`
-	Foreground  string           `json:"foreground"`
+	Foreground  string           `json:"foreground_cmd"`
 	Host        string           `json:"host"`
 	Program     []map[string]any `json:"program_status"`
 	// Exited and its exit status say the window's process ended; KeepOpen
