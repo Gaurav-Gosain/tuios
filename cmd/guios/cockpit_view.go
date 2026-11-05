@@ -406,6 +406,7 @@ func (a *App) ckRowView(c *ui.Context, pal *palette, r ckRow) {
 	if row.Pressed() || row.Clicked() {
 		a.ckSelect(r)
 		ck.fleetFocus.Focus()
+		ck.guard.prev = nil
 	}
 	if row.Clicked() && ck.stacked {
 		ck.stackFocus = true
@@ -610,8 +611,14 @@ func (a *App) cockpitKeys(c *ui.Context, col ui.Element) {
 		}
 	case key(0, ui.KeyBracketRight):
 		a.ckStepTab(1)
+		ck.guard.setPrev(']', func() { a.ckStepTab(-1) }, a.ckProse)
+		c.Invalidate()
+		return
 	case key(0, ui.KeyBracketLeft):
 		a.ckStepTab(-1)
+		ck.guard.setPrev('[', func() { a.ckStepTab(1) }, a.ckProse)
+		c.Invalidate()
+		return
 	case key(0, ui.KeyEscape):
 		if ck.view != viewAgents {
 			a.ckSetView(viewAgents)
@@ -621,6 +628,8 @@ func (a *App) cockpitKeys(c *ui.Context, col ui.Element) {
 	default:
 		return
 	}
+	// A key that is no letter: what ran before it was no sentence's start.
+	ck.guard.prev = nil
 	// The key came in this build: build again to show what it did.
 	c.Invalidate()
 }
@@ -637,6 +646,20 @@ func (a *App) ckLetter(k ckKey) {
 			q.opener = keyRune(k)
 		}
 	}()
+	// A move or view letter may be the first letter of a sentence: it
+	// notes how to take itself back, and typed text right after it does
+	// (cockpit_guard.go).
+	g := &ck.guard
+	prev := func(undo func()) { g.setPrev(keyRune(k), undo, a.ckProse) }
+	sel := ck.sel
+	backSel := func() {
+		if i := ck.index(sel); i >= 0 {
+			a.ckSelect(ck.rows[i])
+		}
+	}
+	view, tab := ck.view, ck.tab
+	backView := func() { a.ckSetView(view); ck.fleetFocus.Focus() }
+	backTab := func() { a.ckSetTab(tab) }
 	if k.shift {
 		switch k.key {
 		case ui.KeyA:
@@ -647,28 +670,35 @@ func (a *App) ckLetter(k ckKey) {
 			a.ckAskFor(askSettle)
 		case ui.KeyM:
 			a.ckSetView(viewMail)
+			prev(backView)
 		}
 		return
 	}
 	switch k.key {
 	case ui.KeyJ:
 		a.ckMove(1)
+		prev(backSel)
 	case ui.KeyK:
 		a.ckMove(-1)
+		prev(backSel)
 	case ui.KeyH:
 		if ck.stacked && ck.stackFocus {
 			ck.stackFocus = false
+			prev(func() { ck.stackFocus = true })
 		}
 	case ui.KeyL:
 		if ck.stacked && !ck.stackFocus && a.ckOnAgent() {
 			ck.stackFocus = true
+			prev(func() { ck.stackFocus = false })
 		}
 	case ui.KeySpace:
 		if r, ok := a.ckSelected(); ok && r.kind == ckRowHead {
 			a.ckToggleFold(r.group)
+			prev(func() { a.ckToggleFold(r.group) })
 		} else if im := a.ckNewestImage(); im != nil {
 			// Space shows the agent's newest image whole.
 			ck.lightbox = im
+			prev(func() { ck.lightbox = nil })
 		}
 	case ui.KeyA:
 		a.ckAskFor(askOnce)
@@ -694,12 +724,16 @@ func (a *App) ckLetter(k ckKey) {
 		a.ckAskFor(askPass)
 	case ui.KeyM:
 		a.ckSetTab(tabMail)
+		prev(backTab)
 	case ui.KeyB:
 		a.ckSetView(viewBoard)
+		prev(backView)
 	case ui.KeyV:
 		a.ckSetTab(tabChanges)
+		prev(backTab)
 	case ui.KeyF:
 		ck.needsOnly = !ck.needsOnly
+		prev(func() { ck.needsOnly = !ck.needsOnly })
 	case ui.KeyN:
 		// A sheet a letter opened starts only on Ctrl+Enter or a click:
 		// typed text that lands in its task never starts an agent.

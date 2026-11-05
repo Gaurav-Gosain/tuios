@@ -48,6 +48,24 @@ const (
 // typingGuard is the lists' guard state.
 type typingGuard struct {
 	hinted bool // the hint was shown since the last list key
+	// prev is the move or view letter the list ran last, when no other
+	// key came after it: the first letter of a sentence, if the next key
+	// is typed text.
+	prev *prevKey
+}
+
+// prevKey is a move or view letter that ran: its character, how to take
+// back what it did, and where its text goes if prose follows.
+type prevKey struct {
+	r     rune
+	undo  func()
+	prose func(string) bool
+}
+
+// setPrev notes the letter that just ran, so that typed text right after
+// it takes it back and keeps it (council round 4: "make" lost its m).
+func (g *typingGuard) setPrev(r rune, undo func(), prose func(string) bool) {
+	g.prev = &prevKey{r: r, undo: undo, prose: prose}
 }
 
 // proseKeys are the keys typing makes, besides Shift.
@@ -118,13 +136,29 @@ func (a *App) guard(el ui.Element, g *typingGuard, lk listKeys) (ckKey, bool) {
 	}
 	if lk.kind(k) != kindProse {
 		g.hinted = false
+		g.prev = nil
 		return k, true
 	}
 	text := ""
-	if ch := keyRune(k); ch != 0 {
-		text = string(ch)
+	prose := lk.prose
+	if p := g.prev; p != nil {
+		// The letter before this one was the sentence's first: it moved
+		// the cursor or showed something. Take that back, and the letter
+		// goes with the text. The take back may change the view, so the
+		// text goes where the letter's list sends it.
+		g.prev = nil
+		if p.undo != nil {
+			p.undo()
+		}
+		text = string(p.r)
+		if p.prose != nil {
+			prose = p.prose
+		}
 	}
-	if lk.prose != nil && lk.prose(text) {
+	if ch := keyRune(k); ch != 0 {
+		text += string(ch)
+	}
+	if prose != nil && prose(text) {
 		return ckKey{}, false
 	}
 	if !g.hinted {
