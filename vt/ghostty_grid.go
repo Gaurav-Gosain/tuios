@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"image/color"
 	"strings"
+	"unsafe"
 
 	uv "github.com/charmbracelet/ultraviolet"
 	"github.com/charmbracelet/x/ansi"
@@ -640,22 +641,54 @@ func (t *GhosttyTerminal) TailText(n int) []string {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	t.syncLocked()
-	buf := t.bufs[t.active]
-	out := make([]string, 0, n)
-	var b strings.Builder
-	for y := t.height - 1; y >= 0 && len(out) < n; y-- {
-		b.Reset()
-		for x := 0; x < t.width; x++ {
-			if c := buf.CellAt(x, y); c != nil {
-				b.WriteString(CellText(c.Content))
+	w, h := t.width, t.height
+	if w <= 0 || h <= 0 {
+		return nil
+	}
+	grid := t.bufs[t.active]
+
+	// The same one-pass loop as Emulator.TailText; see there for why the rows
+	// can be cut from the buffer with unsafe.String.
+	m := min(n, h)
+	var endsStack [64]int
+	ends := endsStack[:0]
+	if m > len(endsStack) {
+		ends = make([]int, 0, m)
+	}
+	buf := make([]byte, 0, m*w)
+	last := w
+	for y := h - 1; y >= 0 && len(ends) < n; y-- {
+		start := len(buf)
+		if cap(buf)-start < last {
+			nb := make([]byte, start, start+min(n-len(ends), y+1)*last)
+			copy(nb, buf)
+			buf = nb
+		}
+		for x := range w {
+			if c := grid.CellAt(x, y); c != nil {
+				buf = append(buf, CellText(c.Content)...)
 			}
 		}
-		if line := strings.TrimRight(b.String(), " \t"); line != "" {
-			out = append(out, line)
+		last = max(last, len(buf)-start)
+		i := len(buf)
+		for i > start && (buf[i-1] == ' ' || buf[i-1] == '\t') {
+			i--
+		}
+		buf = buf[:i]
+		if i > start {
+			ends = append(ends, i)
 		}
 	}
-	for i, j := 0, len(out)-1; i < j; i, j = i+1, j-1 {
-		out[i], out[j] = out[j], out[i]
+	k := len(ends)
+	out := make([]string, k)
+	if k == 0 {
+		return out
+	}
+	s := unsafe.String(unsafe.SliceData(buf), len(buf))
+	prev := 0
+	for i, end := range ends {
+		out[k-1-i] = s[prev:end]
+		prev = end
 	}
 	return out
 }
