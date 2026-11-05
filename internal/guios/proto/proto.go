@@ -610,18 +610,20 @@ func (p *Pane) WorkDir() string {
 }
 
 // What names a session the user or an agent didn't (settings'
-// session-name).
+// session-name): the folder of which pane.
 const (
-	// NameFocused: the program in the pane the user is in, else the
-	// lead's: a shell alone names nothing its directory doesn't.
+	// NameFocused: the pane the user is in, else the lead.
 	NameFocused = "focused"
-	NameLead    = "lead"   // the program in the pane that most needs the user
-	NameFolder  = "folder" // the first pane's directory, whatever runs
+	NameLead    = "lead"   // the pane that most needs the user
+	NameFolder  = "folder" // the first pane
 )
 
 // DisplayName is the name to show for a session: the user's or an agent's,
-// else the title a program in the foreground set, else its directory's
-// name; from, one of the Name constants, picks the pane it comes from.
+// else its folder's name; from, one of the Name constants, picks the pane
+// the folder comes from. A program's title or name never names a session
+// (QA-071): it shows in the session's detail line, and a title that
+// changes as a program runs (an editor's file) would rename the session
+// under the person.
 func (s *Session) DisplayName(from string) string {
 	if s.Name != "" {
 		return s.Name
@@ -632,23 +634,10 @@ func (s *Session) DisplayName(from string) string {
 		if len(s.Panes) > 0 {
 			p = &s.Panes[0]
 		}
-		p = &Pane{Dir: p.Dir}
 	case NameLead:
 	default:
-		if f := s.FocusPane(); f != nil && f.Process != "" {
+		if f := s.FocusPane(); f != nil {
 			p = f
-		}
-	}
-	// A pane's own name, as start-agent gives an agent's pane, names the
-	// pane, not the session: a start into a session that was there keeps
-	// the session's name (QA-071). A session a start made carries the
-	// name the start gave it.
-	if p.Process != "" && !p.Named {
-		if t := CleanTitle(p.Title); t != "" && !looksLikePath(t) {
-			return t
-		}
-		if p.Agent != "" {
-			return p.Agent
 		}
 	}
 	// A session of browsers alone goes by its page: beside a terminal,

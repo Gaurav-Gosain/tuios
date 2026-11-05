@@ -694,7 +694,7 @@ func (a *App) own(h *host, s proto.Session) {
 // a notification and the window's title say it, so that a host cannot
 // pass for this machine.
 func (a *App) hostedName(s *proto.Session) string {
-	name := s.DisplayName(a.set.SessionName)
+	name := a.railName(s)
 	if h := a.hostOf(s.ID); h.remote() {
 		return name + " · " + h.name
 	}

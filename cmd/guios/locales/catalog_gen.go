@@ -2170,21 +2170,21 @@ func (msgs Messages) SetDirHome() string {
 	return Catalog.Format(msgs.locale, "setDirHome", nil)
 }
 
-// SetSessionName says "Name sessions after"
+// SetSessionName says "Name sessions after the folder of"
 // in the language the app shows.
 func SetSessionName() string { return In(i18n.Locale()).SetSessionName() }
 
-// SetSessionName says "Name sessions after"
+// SetSessionName says "Name sessions after the folder of"
 // in the language of msgs.
 func (msgs Messages) SetSessionName() string {
 	return Catalog.Format(msgs.locale, "setSessionName", nil)
 }
 
-// SetSessionNameDetail says "Until you or an agent name one. With Pane you’re in, a pane running only its shell defers to the pane that needs yo…"
+// SetSessionNameDetail says "Until you or an agent name a session. A program in a pane never renames it."
 // in the language the app shows.
 func SetSessionNameDetail() string { return In(i18n.Locale()).SetSessionNameDetail() }
 
-// SetSessionNameDetail says "Until you or an agent name one. With Pane you’re in, a pane running only its shell defers to the pane that needs yo…"
+// SetSessionNameDetail says "Until you or an agent name a session. A program in a pane never renames it."
 // in the language of msgs.
 func (msgs Messages) SetSessionNameDetail() string {
 	return Catalog.Format(msgs.locale, "setSessionNameDetail", nil)
@@ -2210,11 +2210,11 @@ func (msgs Messages) SetNameLead() string {
 	return Catalog.Format(msgs.locale, "setNameLead", nil)
 }
 
-// SetNameFolder says "Folder"
+// SetNameFolder says "First pane"
 // in the language the app shows.
 func SetNameFolder() string { return In(i18n.Locale()).SetNameFolder() }
 
-// SetNameFolder says "Folder"
+// SetNameFolder says "First pane"
 // in the language of msgs.
 func (msgs Messages) SetNameFolder() string {
 	return Catalog.Format(msgs.locale, "setNameFolder", nil)
