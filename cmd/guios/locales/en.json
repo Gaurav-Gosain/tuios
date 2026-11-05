@@ -2264,5 +2264,7 @@
   "cockpitKeysToMail": "Keys go to the mail list. Press r to reply.",
   "setApprovalsNeedsIntegration": "Needs the Claude Code integration. Install it to get the prompts here.",
   "compareKeysHere": "Keys go to Compare. Press Escape to close it.",
-  "compareNothingToKeep": "{letter} has nothing to keep yet. Keep works when the attempt stops with changes."
+  "compareNothingToKeep": "{letter} has nothing to keep yet. Keep works when the attempt stops with changes.",
+  "cockpitThreadUnsupported": "tuios cannot show {harness} conversations yet",
+  "cockpitThreadUnsupportedDetail": "Open the pane to see it."
 }

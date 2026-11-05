@@ -12665,3 +12665,27 @@ func CompareNothingToKeep(letter string) string {
 func (msgs Messages) CompareNothingToKeep(letter string) string {
 	return Catalog.Format(msgs.locale, "compareNothingToKeep", map[string]any{"letter": letter})
 }
+
+// CockpitThreadUnsupported says "tuios cannot show {harness} conversations yet"
+// in the language the app shows.
+func CockpitThreadUnsupported(harness string) string {
+	return In(i18n.Locale()).CockpitThreadUnsupported(harness)
+}
+
+// CockpitThreadUnsupported says "tuios cannot show {harness} conversations yet"
+// in the language of msgs.
+func (msgs Messages) CockpitThreadUnsupported(harness string) string {
+	return Catalog.Format(msgs.locale, "cockpitThreadUnsupported", map[string]any{"harness": harness})
+}
+
+// CockpitThreadUnsupportedDetail says "Open the pane to see it."
+// in the language the app shows.
+func CockpitThreadUnsupportedDetail() string {
+	return In(i18n.Locale()).CockpitThreadUnsupportedDetail()
+}
+
+// CockpitThreadUnsupportedDetail says "Open the pane to see it."
+// in the language of msgs.
+func (msgs Messages) CockpitThreadUnsupportedDetail() string {
+	return Catalog.Format(msgs.locale, "cockpitThreadUnsupportedDetail", nil)
+}

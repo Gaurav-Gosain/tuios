@@ -1249,5 +1249,7 @@
   "cockpitKeysToMail": "按键发送到邮件列表。按 r 回复。",
   "setApprovalsNeedsIntegration": "需要 Claude Code 集成。安装它以在这里接收提示。",
   "compareKeysHere": "按键发送到比较。按 Escape 关闭。",
-  "compareNothingToKeep": "{letter} 还没有可保留的内容。尝试停止且有更改后才能保留。"
+  "compareNothingToKeep": "{letter} 还没有可保留的内容。尝试停止且有更改后才能保留。",
+  "cockpitThreadUnsupported": "tuios 还不能显示 {harness} 的对话",
+  "cockpitThreadUnsupportedDetail": "打开窗格查看。"
 }
