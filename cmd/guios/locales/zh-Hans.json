@@ -1183,7 +1183,7 @@
   "compareNoChanges": "还没有更改。",
   "compareGone": "已消失",
   "compareDone": "完成",
-  "compareKeepWarn": "再按 k 保留 {letter}。这会删除 {others}。它们的更改会被暂存,分支保留。",
+  "compareKeepWarn": "再按 ⇧K 保留 {letter}。这会删除 {others}。它们的更改会被暂存,分支保留。",
   "compareKeepIgnored": "这也会删除其中 git 忽略的 {count} 个文件。",
   "compareIgnoredFailed": "tuios 无法列出 {list} 中被忽略的文件。按 k 重新读取。",
   "compareHintPick": "选择",
@@ -1247,5 +1247,7 @@
   "cockpitTypedNoCommand": "输入的文字不会运行命令。请稍等，然后再按一次该键。",
   "cockpitHintMove": "移动",
   "cockpitKeysToMail": "按键发送到邮件列表。按 r 回复。",
-  "setApprovalsNeedsIntegration": "需要 Claude Code 集成。安装它以在这里接收提示。"
+  "setApprovalsNeedsIntegration": "需要 Claude Code 集成。安装它以在这里接收提示。",
+  "compareKeysHere": "按键发送到比较。按 Escape 关闭。",
+  "compareNothingToKeep": "{letter} 还没有可保留的内容。尝试停止且有更改后才能保留。"
 }
