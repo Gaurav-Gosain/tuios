@@ -97,6 +97,11 @@ type spawnSheet struct {
 	// task does not start, since the task may be a sentence meant for a
 	// reply box (cockpit_guard.go). Ctrl+Enter and Start do.
 	byKey bool
+	// byKeyFresh holds that the sheet n opened has had no key yet: the
+	// first text typed into its empty task is a sentence's second letter,
+	// so n and that text go to the reply box and the sheet closes
+	// (QA-073). A click or another field ends it.
+	byKeyFresh bool
 	open  bool
 	// task is the task and its images, as the reply box holds a message.
 	task                ckDraft
@@ -198,7 +203,7 @@ func (a *App) newAgent() {
 	if !s.failed {
 		s.notice = ""
 	}
-	s.open, s.failed, s.starting, s.listOpen, s.card, s.byKey = true, false, false, false, nil, false
+	s.open, s.failed, s.starting, s.listOpen, s.card, s.byKey, s.byKeyFresh = true, false, false, false, nil, false, false
 	s.focusField, s.focusAgain, s.focusTries = spTask, true, 0
 	s.session = sess
 	ck.spawnGen++

@@ -60,6 +60,10 @@ func (a *App) spawnView(c *ui.Context, pal *palette) {
 		ww, wh := c.Size()
 		w := min(float32(spawnW), ww-2*sp4)
 		floating(panel.Width(w).MaxHeight(wh-2*sp4).Padding(sp5).Gap(sp4).Radius(rSheet).Background(pal.popover), pal).Label(locales.SpawnTitle())
+		if s.byKeyFresh && !s.focusAgain && (!h.task.FocusWithin(c) || panel.Pressed()) {
+			// A click, or another field: the person works in the sheet.
+			s.byKeyFresh = false
+		}
 		switch {
 		case c.Shortcut(ui.Cmd, ui.KeyEnter):
 			start = true
@@ -195,6 +199,20 @@ func (a *App) spawnTask(c *ui.Context, pal *palette, s *spawnSheet, h *spawnHand
 				}
 				return a.pasteImageInto(&s.task)
 			})
+			if in.Changed() && s.byKeyFresh {
+				// n opened the sheet, and text came at once: typed prose,
+				// not a task. n and the text go to the reply box.
+				text := s.task.text
+				s.byKeyFresh = false
+				s.task.text = ""
+				a.spawnClose()
+				a.ck.spawnDraft = nil
+				if !a.ckProse("n" + text) {
+					a.toast(locales.CockpitKeysToList())
+				}
+				c.Invalidate()
+				return
+			}
 			if in.Changed() {
 				s.followTask()
 				if s.noticeAt == spTask {

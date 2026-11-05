@@ -746,6 +746,7 @@ func (a *App) ckLetter(k ckKey) {
 		a.newAgent()
 		if sp := ck.spawn; sp != nil {
 			sp.byKey = true
+			sp.byKeyFresh = strings.TrimSpace(sp.task.text) == ""
 		}
 	case ui.KeyC:
 		a.openCompare()
