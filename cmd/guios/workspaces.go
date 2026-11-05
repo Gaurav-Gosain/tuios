@@ -190,9 +190,22 @@ func (a *App) workspaceBar(c *ui.Context, pal *palette, s *proto.Session) {
 		}
 		if selected && freeWorkspace(s) > 0 {
 			b := ui.ButtonBase(c.Key("ws-new")).Size(22, 22).Radius(rRow).Center().TextColor(pal.textFaint).Label(locales.WorkspaceNew())
-			pointerTooltip(c, b, "ws-new-tip", locales.WorkspaceNew())
-			if b.Hovered() {
+			pointerTooltip(c, b, "ws-new-tip", locales.WorkspaceNewTip())
+			// An empty workspace has no pill: a pane dropped on the
+			// button goes to the first free workspace, as one dropped on
+			// a pill goes to that pill's.
+			if d, ok := ui.DragOver[paneDrag](b); ok && d.session == sid {
+				b.Background(pal.rowSelected).Border(1, pal.accent).TextColor(pal.text)
+			} else if b.Hovered() {
 				b.Background(pal.rowHover).TextColor(pal.text)
+			}
+			if d, ok := ui.Drop[paneDrag](b); ok && d.session == sid {
+				pane := d.pane
+				a.defer_(func() {
+					if s := a.session(sid); s != nil {
+						a.movePaneTo(s, pane, freeWorkspace(s))
+					}
+				})
 			}
 			b.Children(func() { ui.Icon(c, plusIcon).Size(12, 12) })
 			if b.Clicked() {

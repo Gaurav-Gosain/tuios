@@ -6366,6 +6366,16 @@ func (msgs Messages) WorkspaceNew() string {
 	return Catalog.Format(msgs.locale, "workspaceNew", nil)
 }
 
+// WorkspaceNewTip says "New workspace. Drop a pane here to move it to a new workspace."
+// in the language the app shows.
+func WorkspaceNewTip() string { return In(i18n.Locale()).WorkspaceNewTip() }
+
+// WorkspaceNewTip says "New workspace. Drop a pane here to move it to a new workspace."
+// in the language of msgs.
+func (msgs Messages) WorkspaceNewTip() string {
+	return Catalog.Format(msgs.locale, "workspaceNewTip", nil)
+}
+
 // WorkspaceTip says "{count, plural, one {Workspace {name}: # pane} other {Workspace {name}: # panes}}"
 // in the language the app shows.
 func WorkspaceTip(count int, name string) string { return In(i18n.Locale()).WorkspaceTip(count, name) }

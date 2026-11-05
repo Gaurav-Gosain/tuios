@@ -625,6 +625,7 @@
   "actionGoToWorkspace": "转到工作区 {n}",
   "actionMovePaneToWorkspace": "将窗格移到工作区 {n}",
   "workspaceNew": "新建工作区",
+  "workspaceNewTip": "新建工作区。将窗格拖放到这里，即可将它移到新的工作区。",
   "workspaceTip": "工作区 {name}：{count} 个窗格",
   "actionAgents": "代理",
   "cockpitTitle": "代理",

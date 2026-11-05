@@ -1193,6 +1193,7 @@
   "actionGoToWorkspace": "Go to workspace {n}",
   "actionMovePaneToWorkspace": "Move pane to workspace {n}",
   "workspaceNew": "New workspace",
+  "workspaceNewTip": "New workspace. Drop a pane here to move it to a new workspace.",
   "workspaceTip": "{count, plural, one {Workspace {name}: # pane} other {Workspace {name}: # panes}}",
   "actionAgents": "Agents",
   "cockpitTitle": "Agents",

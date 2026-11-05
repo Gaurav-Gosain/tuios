@@ -625,6 +625,7 @@
   "actionGoToWorkspace": "ワークスペース {n} へ移動",
   "actionMovePaneToWorkspace": "ペインをワークスペース {n} へ移動",
   "workspaceNew": "新しいワークスペース",
+  "workspaceNewTip": "新しいワークスペース。ペインをここにドロップすると、新しいワークスペースに移動します。",
   "workspaceTip": "ワークスペース {name}: {count} 個のペイン",
   "actionAgents": "エージェント",
   "cockpitTitle": "エージェント",
