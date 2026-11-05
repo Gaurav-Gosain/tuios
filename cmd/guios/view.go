@@ -821,7 +821,7 @@ func (a *App) sessionRow(c *ui.Context, pal *palette, s *proto.Session, n *int, 
 					// Its name leads: cut in the middle, as the title.
 					line = midCut(c, flat(line), fsSmall, 0, line1.Bounds().W)
 				}
-				if f := s.FocusPane(); !msg && f != nil && f.Shell != "" && line == a.railName(s) {
+				if f := s.FocusPane(); !msg && !nested && f != nil && f.Shell != "" && line == a.railName(s) {
 					// A session named after its folder says its shell
 					// under the name, not the folder again.
 					line = f.Shell
