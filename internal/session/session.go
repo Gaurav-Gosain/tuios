@@ -2817,6 +2817,14 @@ func (s *Session) installPTY(ctx context.Context, cancel context.CancelFunc, id 
 		if response := kittyAnimationRefusal(cmd, remotePane, pty.owner().kittyAnimation.Load()); response != nil {
 			terminal.WriteResponse(response)
 		}
+		// The daemon's grid makes room for the image as the client's
+		// terminal does, so a snapshot of it (an attach, a guios resize)
+		// keeps the text under the picture where the client drew it, and
+		// shows where the picture is. The ghostty backend has no such
+		// method and keeps its grid as before.
+		if r, ok := terminal.(interface{ ReserveKittyPlacement(*vt.KittyCommand) }); ok {
+			r.ReserveKittyPlacement(cmd)
+		}
 		// With no client attached to this pane, nothing will read the object
 		// a shared memory frame names. See kitty_medium.go.
 		if !remotePane && pty.subscriberCount.Load() == 0 {
