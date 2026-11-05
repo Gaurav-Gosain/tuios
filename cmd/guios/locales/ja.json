@@ -1264,5 +1264,6 @@
   "spawnStartChord": "開始するには {keys} を押してください。一覧の文字キーでこのシートを開いたため、Enter では開始しません。",
   "compareAskJudge": "試行を読む判定役を開始しますか? 開始するには Enter を押してください。取り消すには Esc を押してください。",
   "cockpitAskSnooze": "{name} をスヌーズしますか?",
-  "cockpitAskWake": "{name} をもう一度表示しますか?"
+  "cockpitAskWake": "{name} をもう一度表示しますか?",
+  "cockpitNoSnoozeHeld": "保留中の承認はスヌーズできません。答えるか、ペインに戻してください。"
 }

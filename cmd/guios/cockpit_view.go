@@ -546,7 +546,8 @@ func (a *App) ckRowMenu(m *ui.Menu, r ckRow) {
 		if r.item.SnoozedUntil != 0 {
 			label = locales.CockpitWake()
 		}
-		if m.Item(label).Chosen() {
+		// A held approval waits on its hook and cannot be snoozed.
+		if !ckHeld(*r.item) && m.Item(label).Chosen() {
 			a.ckSelect(r)
 			a.ckSnooze()
 		}

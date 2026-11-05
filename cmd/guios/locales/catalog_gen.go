@@ -12821,3 +12821,13 @@ func CockpitAskWake(name string) string { return In(i18n.Locale()).CockpitAskWak
 func (msgs Messages) CockpitAskWake(name string) string {
 	return Catalog.Format(msgs.locale, "cockpitAskWake", map[string]any{"name": name})
 }
+
+// CockpitNoSnoozeHeld says "A held approval cannot be snoozed. Answer it, or let it go back to the pane."
+// in the language the app shows.
+func CockpitNoSnoozeHeld() string { return In(i18n.Locale()).CockpitNoSnoozeHeld() }
+
+// CockpitNoSnoozeHeld says "A held approval cannot be snoozed. Answer it, or let it go back to the pane."
+// in the language of msgs.
+func (msgs Messages) CockpitNoSnoozeHeld() string {
+	return Catalog.Format(msgs.locale, "cockpitNoSnoozeHeld", nil)
+}

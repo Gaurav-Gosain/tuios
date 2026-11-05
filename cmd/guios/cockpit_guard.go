@@ -219,7 +219,13 @@ func (a *App) ckKind(k ckKey) keyKind {
 		if ck.undo != nil && time.Now().Before(ck.undo.until) {
 			return kindView
 		}
-	case ui.KeyZ, ui.KeyX:
+	case ui.KeyZ:
+		// A held approval waits on its hook: it cannot be snoozed, and z
+		// does not offer to (QA-074).
+		if item && !ckHeld(*r.item) {
+			return kindView
+		}
+	case ui.KeyX:
 		if item {
 			return kindView
 		}

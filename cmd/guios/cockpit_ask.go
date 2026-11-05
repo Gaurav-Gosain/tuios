@@ -116,6 +116,10 @@ func (a *App) ckAskFor(what askWhat) {
 		}
 		q.ask, q.word = locales.CockpitAskPass(ckTarget), locales.CockpitPassMail()
 	case askSnooze:
+		if r.item != nil && ckHeld(*r.item) {
+			a.toast(locales.CockpitNoSnoozeHeld())
+			return
+		}
 		if r.item == nil {
 			a.toast(locales.CockpitSnoozeOnlyItem())
 			return
