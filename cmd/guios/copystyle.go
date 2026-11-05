@@ -192,22 +192,23 @@ func indexColor(i int, th *terminal.Theme) ui.Color {
 }
 
 // wrapStyled cuts styled lines into rows of cols, as wrapRows does.
-func wrapStyled(lines [][]rune, styles [][]cellStyle, cols int) ([][]rune, [][]cellStyle) {
+func wrapStyled(lines [][]rune, styles [][]cellStyle, cols int) ([][]rune, [][]cellStyle, []bool) {
 	cols = max(cols, 1)
 	var rows [][]rune
 	var rs [][]cellStyle
+	var wraps []bool
 	for k, l := range lines {
 		s := styles[k]
 		for len(l) > cols {
-			rows, rs = append(rows, l[:cols]), append(rs, s[:cols])
+			rows, rs, wraps = append(rows, l[:cols]), append(rs, s[:cols]), append(wraps, true)
 			l, s = l[cols:], s[cols:]
 		}
-		rows, rs = append(rows, l), append(rs, s)
+		rows, rs, wraps = append(rows, l), append(rs, s), append(wraps, false)
 	}
 	if len(rows) == 0 {
-		rows, rs = [][]rune{{}}, [][]cellStyle{{}}
+		rows, rs, wraps = [][]rune{{}}, [][]cellStyle{{}}, []bool{false}
 	}
-	return rows, rs
+	return rows, rs, wraps
 }
 
 // span is the cell style as a span of text, on the theme's default

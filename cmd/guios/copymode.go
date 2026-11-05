@@ -40,6 +40,9 @@ const (
 type copyMode struct {
 	pane string
 	rows [][]rune
+	// wraps[y] is true when row y is cut from a longer line and carries on
+	// in row y+1: a copy joins the two without a newline, as the TUI does.
+	wraps []bool
 	// hist is the terminal's rows as VT sequences, read as copy mode
 	// opened; styles are the style of each rune of rows, read from it in
 	// the theme of the window's darkness (dark), nil where the terminal
@@ -201,9 +204,9 @@ func (a *App) openCopyMode() {
 	if cm.hist = e.term.History(); len(cm.hist) > 0 {
 		light, _ := a.termThemes()
 		lines, styles := styledLines(cm.hist, light)
-		cm.rows, cm.styles = wrapStyled(lines, styles, cols)
+		cm.rows, cm.styles, cm.wraps = wrapStyled(lines, styles, cols)
 	} else {
-		cm.rows = wrapRows(e.term.Text(), cols)
+		cm.rows, cm.wraps = wrapRows(e.term.Text(), cols)
 	}
 	// The cursor starts on the last row with text, as the shell's prompt.
 	cm.cy = len(cm.rows) - 1
@@ -219,22 +222,23 @@ func (a *App) openCopyMode() {
 
 // wrapRows cuts the terminal's text into the rows the screen shows at
 // cols columns: a long line takes as many rows as the screen gives it.
-func wrapRows(text string, cols int) [][]rune {
+func wrapRows(text string, cols int) ([][]rune, []bool) {
 	cols = max(cols, 1)
 	lines := strings.Split(strings.TrimRight(text, "\n"), "\n")
 	var rows [][]rune
+	var wraps []bool
 	for _, l := range lines {
 		r := []rune(strings.TrimRight(l, " "))
 		for len(r) > cols {
-			rows = append(rows, r[:cols])
+			rows, wraps = append(rows, r[:cols]), append(wraps, true)
 			r = r[cols:]
 		}
-		rows = append(rows, r)
+		rows, wraps = append(rows, r), append(wraps, false)
 	}
 	if len(rows) == 0 {
-		rows = [][]rune{{}}
+		rows, wraps = [][]rune{{}}, []bool{false}
 	}
-	return rows
+	return rows, wraps
 }
 
 // copyKey takes a key in copy mode, as the keymap spells it ("j",
@@ -763,7 +767,7 @@ func (cm *copyMode) span(y int) (from, to int, ok bool) {
 // selected is the selection's text: rows joined by newlines, the block's
 // rows each cut to its columns.
 func (cm *copyMode) selected() string {
-	var lines []string
+	var b strings.Builder
 	for y := range cm.rows {
 		from, to, ok := cm.span(y)
 		if !ok {
@@ -771,9 +775,19 @@ func (cm *copyMode) selected() string {
 		}
 		row := cm.rows[y]
 		from, to = min(from, len(row)), min(to, len(row))
-		lines = append(lines, strings.TrimRight(string(row[from:to]), " "))
+		part := string(row[from:to])
+		if cm.visual != visualBlock && y < len(cm.wraps) && cm.wraps[y] && y < max(cm.ay, cm.cy) {
+			// A row cut from a longer line carries on in the next: no
+			// newline, and its spaces at the edge are text.
+			b.WriteString(part)
+			continue
+		}
+		b.WriteString(strings.TrimRight(part, " "))
+		b.WriteByte('\n')
 	}
-	return strings.Join(lines, "\n")
+	// Rows under the last text are padding: a selection that runs into
+	// the empty screen adds no empty lines, as in the TUI.
+	return strings.TrimRight(b.String(), "\n")
 }
 
 // copyView draws copy mode over a pane: its rows of text in the
@@ -822,12 +836,12 @@ func (a *App) copyView(c *ui.Context, pal *palette) {
 			th = dark
 		}
 		lines, styles := styledLines(cm.hist, th)
-		if _, st := wrapStyled(lines, styles, cm.cols); len(st) == len(cm.rows) {
+		if _, st, _ := wrapStyled(lines, styles, cm.cols); len(st) == len(cm.rows) {
 			cm.styles = st
 		}
 		cm.dark = pal.dark
 	}
-	var tfg, tbg ui.Color
+	var tfg, tbg, selBg, selFg ui.Color
 	{
 		light, dark := a.termThemes()
 		th := light
@@ -835,6 +849,12 @@ func (a *App) copyView(c *ui.Context, pal *palette) {
 			th = dark
 		}
 		tfg, tbg = th.Foreground, th.Background
+		// The theme's selection colours, as the pane draws a selection;
+		// unset, the foreground a third opaque.
+		selBg, selFg = th.Selection, th.SelectionText
+		if selBg == (ui.Color{}) {
+			selBg = tfg.Alpha(0.33)
+		}
 	}
 	q := []rune(cm.query)
 	fold := strings.ToLower(cm.query) == cm.query
@@ -909,7 +929,10 @@ func (a *App) copyView(c *ui.Context, pal *palette) {
 					case 1:
 						sp.Background = pal.attention.Alpha(0.35)
 					case 2:
-						sp.Background = pal.accent.Alpha(0.35)
+						sp.Background = selBg
+						if selFg != (ui.Color{}) {
+							sp.Color = selFg
+						}
 					case 3:
 						sp.Background, sp.Color = pal.accentFill, pal.accentInk
 					}
