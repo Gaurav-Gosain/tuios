@@ -755,7 +755,7 @@ type gated struct {
 // Write takes what the terminal writes as the tuios prefix's next key
 // while the prefix is armed, and sends the rest to the pane.
 func (g *gated) Write(p []byte) (int, error) {
-	if g.app != nil && g.app.takeTyped(p) {
+	if g.app != nil && (g.app.takeTyped(p) || g.app.quick.route.take(g.Stream, p)) {
 		return len(p), nil
 	}
 	return g.Stream.Write(p)

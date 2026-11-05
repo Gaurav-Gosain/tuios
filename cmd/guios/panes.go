@@ -94,6 +94,9 @@ func (a *App) setFocus(s *proto.Session, pane string) {
 
 // focusTerminal gives the keyboard to the pane the user is in.
 func (a *App) focusTerminal() {
+	if a.focusScratch() {
+		return
+	}
 	if s := a.session(a.selected); s != nil {
 		if id := a.focusOf(s); id != "" {
 			a.paneRef(id).Focus()
