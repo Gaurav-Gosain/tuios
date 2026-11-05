@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"net/http"
 	"os"
 	"os/exec"
@@ -899,6 +900,28 @@ func (a *App) spawnStart() {
 		if err == nil {
 			_ = json.Unmarshal(raw, &res)
 		}
+		// A fan's panes are named after the task, as one agent's is, with
+		// the attempt's letter: "add-jitter-test-a", not "Terminal 8178…"
+		// (council round 3, S2).
+		named := map[string]string{}
+		if err == nil && verb == "fan" {
+			stem := strings.TrimPrefix(spawnBranchName(task), "agent/")
+			if stem == "" {
+				stem = branch[strings.LastIndex(branch, "/")+1:]
+			}
+			for i, ss := range res.Sessions {
+				if ss.WindowID == "" {
+					continue
+				}
+				n := stem
+				if len(res.Sessions) > 1 {
+					n += "-" + strings.ToLower(ckLetter(i))
+				}
+				if _, verr := cl.Verb("set-window", map[string]any{"session": ss.Session, "window": ss.WindowID, "name": n}, true); verr == nil {
+					named[n] = flat(task)
+				}
+			}
+		}
 		// What became of the card, said after the start's own words.
 		held := ""
 		switch {
@@ -924,6 +947,12 @@ func (a *App) spawnStart() {
 					ck.spawnDraft = s
 				}
 				return
+			}
+			if len(named) > 0 {
+				if a.ck.spawnTasks == nil {
+					a.ck.spawnTasks = map[string]string{}
+				}
+				maps.Copy(a.ck.spawnTasks, named)
 			}
 			var out spawnStarted
 			hostKey := host
