@@ -82,7 +82,7 @@ func (a *App) agentRows(c *ui.Context, pal *palette, s *proto.Session, needs []c
 	ui.Column(c.Key("agents-"+s.ID)).Margin(0, 0, 4, 0).Children(func() {
 		for k, r := range rows {
 			if k == sbAgentsMax {
-				more := ui.Row(c.Key("more")).Height(sbAgentH).Padding(0, 10, 0, rowInset+22).AlignItems(ui.Center).Radius(rRow).Cursor(ui.CursorPointer)
+				more := ui.Row(c.Key("more")).Height(sbAgentH).Padding(0, 10, 0, rowInset+24).AlignItems(ui.Center).Radius(rRow).Cursor(ui.CursorPointer)
 				if more.Hovered() {
 					more.Background(pal.rowHover)
 				}
