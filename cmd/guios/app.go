@@ -197,8 +197,13 @@ type App struct {
 	// drawn.
 	wantFocus string
 	// grid is the pane area in cells, as last told to the host.
-	grid    [2]int
-	gridKey [3]float32 // the area's size and the text size it was measured at
+	grid [2]int
+	// cell is a terminal cell's size in DIPs (reportGrid), and cellSeen
+	// the focused terminal's box and grid in the last frame.
+	cell     cellSize
+	cellSeen [4]float32
+	// winSeen is the window's size in the last frame (view.go).
+	winSeen [2]float32
 	// early are the keys typed into panes whose terminal is attaching
 	// (typeahead.go).
 	early map[string][]byte

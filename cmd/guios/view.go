@@ -171,7 +171,14 @@ func (a *App) view(c *ui.Context) {
 	// A curve, not a spring: a spring's long tail crawls under a pixel a
 	// frame, which whole pixels turn into hops and holds, a shake as it
 	// settles. This one lands in 200 ms, moving in every frame.
-	winW0, _ := c.Size()
+	winW0, winH0 := c.Size()
+	if ws := [2]float32{winW0, winH0}; ws != a.winSeen {
+		// A frame laid out at a new window size places the panes from the
+		// boxes of the frame before it (Bounds): one more frame places
+		// them in this one's (QA-072).
+		a.winSeen = ws
+		c.AnimationFrame()
+	}
 	// In a narrow window the sidebar gets out of the panes' way, as the
 	// right one does, until the person shows it there (toggleSidebar).
 	a.leftCrowded = winW0 > 0 && winW0 < narrowWindow
