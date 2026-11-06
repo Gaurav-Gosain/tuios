@@ -1,6 +1,10 @@
 package integration
 
-import "strings"
+import (
+	"strings"
+
+	"github.com/Gaurav-Gosain/tuios/internal/oneline"
+)
 
 // The Qwen Code event map. Source: the hooks reference in the Qwen Code
 // repository (docs/users/features/hooks.md), and the code that runs the
@@ -64,7 +68,7 @@ func translateQwen(in Input, p fields) Decision {
 	case "Notification":
 		switch p.str("notification_type") {
 		case "permission_prompt":
-			return send(Qwen, event, identity(Report{State: "needs_input", Kind: "approval", Message: Clip(p.str("message"))}, p))
+			return send(Qwen, event, identity(Report{State: "needs_input", Kind: "approval", Message: oneline.Clip(p.str("message"))}, p))
 		case "idle_prompt":
 			return send(Qwen, event, identity(Report{State: "idle", IfState: "working,unknown"}, p))
 		default:
@@ -75,7 +79,7 @@ func translateQwen(in Input, p fields) Decision {
 	case "StopFailure":
 		msg := "stopped on an error"
 		if t := p.first("error", "error_type"); t != "" {
-			msg = "stopped on " + Clip(t)
+			msg = "stopped on " + oneline.Clip(t)
 		}
 		return send(Qwen, event, identity(Report{State: "errored", Message: msg}, p))
 	case "SessionEnd":
@@ -96,7 +100,7 @@ const qwenQuestionTool = "ask_user_question"
 func qwenQuestion(input fields) string {
 	if list, ok := input["questions"].([]any); ok && len(list) > 0 {
 		if q, ok := list[0].(map[string]any); ok {
-			if text := Clip(fields(q).first("question", "header")); text != "" {
+			if text := oneline.Clip(fields(q).first("question", "header")); text != "" {
 				return text
 			}
 		}

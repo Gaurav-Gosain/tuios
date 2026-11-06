@@ -1,5 +1,7 @@
 package integration
 
+import "github.com/Gaurav-Gosain/tuios/internal/oneline"
+
 // The opencode event map. opencode has no command hooks. It loads JavaScript
 // plugins from its plugins directory (https://opencode.ai/docs/plugins/), and
 // the plugin tuios installs (assets/opencode/tuios-agent-state.js) runs
@@ -54,7 +56,7 @@ func translateOpenCode(id string, in Input, p fields) Decision {
 			r.State = "working"
 		case "retry":
 			r.State = "working"
-			if msg := Clip(p.str("retry_message")); msg != "" {
+			if msg := oneline.Clip(p.str("retry_message")); msg != "" {
 				r.Message = "retrying: " + msg
 			}
 		case "idle":
@@ -70,19 +72,19 @@ func translateOpenCode(id string, in Input, p fields) Decision {
 			// about, which says more than opencode's permission name.
 			r.Message = "approve " + ToolSummary(p.str("tool"), p.obj("tool_input"))
 		case p.str("title") != "":
-			r.Message = "approve " + Clip(p.str("title"))
+			r.Message = "approve " + oneline.Clip(p.str("title"))
 		default:
 			r.Message = "approve a tool call"
 		}
 	case "question.asked":
-		r.State, r.Kind, r.Message = "needs_input", "question", Clip(p.str("title"))
+		r.State, r.Kind, r.Message = "needs_input", "question", oneline.Clip(p.str("title"))
 	case "permission.replied", "question.replied", "question.rejected":
 		r.State, r.IfState = "working", claudeClearsBlock
 	case "session.idle":
 		r.State, r.IfState = "done", openCodeTurnStates
 	case "session.error":
 		r.State = "errored"
-		r.Message = Clip(p.str("error"))
+		r.Message = oneline.Clip(p.str("error"))
 	case "session.deleted":
 		r.State = "none"
 	case "":

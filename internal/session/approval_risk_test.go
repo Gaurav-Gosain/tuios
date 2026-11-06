@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
-	"github.com/Gaurav-Gosain/tuios/internal/integration"
+	"github.com/Gaurav-Gosain/tuios/internal/oneline"
 	"github.com/Gaurav-Gosain/tuios/internal/risk"
 )
 
@@ -162,8 +162,8 @@ func TestUnheldApprovalIsMarkedFromItsLine(t *testing.T) {
 		// The hooks clip a long line, and what was cut may be the risky
 		// part: a clipped line is marked cut short, beside any rule it
 		// matched before the cut.
-		{integration.Clip("approve Bash: echo " + strings.Repeat("x", integration.MaxMessage) + " && rm -rf ~"), []string{risk.RuleCutShort}},
-		{integration.Clip("approve Bash: git push -f && echo " + strings.Repeat("x", integration.MaxMessage)), []string{risk.RuleForcePush, risk.RuleCutShort}},
+		{oneline.Clip("approve Bash: echo " + strings.Repeat("x", oneline.MaxMessage) + " && rm -rf ~"), []string{risk.RuleCutShort}},
+		{oneline.Clip("approve Bash: git push -f && echo " + strings.Repeat("x", oneline.MaxMessage)), []string{risk.RuleForcePush, risk.RuleCutShort}},
 		{"approve Bash: echo wait...", nil},
 	} {
 		// The pane goes back to work between cases, so each is a new prompt.

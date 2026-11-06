@@ -5,6 +5,8 @@ import (
 	"slices"
 	"strings"
 	"testing"
+
+	"github.com/Gaurav-Gosain/tuios/internal/oneline"
 )
 
 func translatePayload(t *testing.T, harness string, payload any) Decision {
@@ -172,7 +174,7 @@ func TestClaudeHookOutlivesTheLongestHold(t *testing.T) {
 // call is only offered when that line is the whole of it. Each case here is a
 // way the line could show less than the call does.
 func TestOnlyWholeCallsAreHeld(t *testing.T) {
-	long := "echo harmless && " + strings.Repeat("x", MaxMessage) + " && rm -rf ~"
+	long := "echo harmless && " + strings.Repeat("x", oneline.MaxMessage) + " && rm -rf ~"
 	for _, tc := range []struct {
 		name  string
 		tool  string
@@ -247,7 +249,7 @@ func TestAlwaysOnlyWithShownRules(t *testing.T) {
 		{"an unknown field", []any{map[string]any{"type": "addRules", "behavior": "allow", "destination": "session", "rules": []any{rule("Bash", "ls")}, "mode": "acceptEdits"}}, nil},
 		{"an unknown rule field", []any{add("session", map[string]any{"toolName": "Bash", "ruleContent": "ls", "extra": true})}, nil},
 		{"too many rules", []any{add("session", rule("Bash", "a"), rule("Bash", "b"), rule("Bash", "c"), rule("Bash", "d"), rule("Bash", "e"))}, nil},
-		{"a rule too long to show", []any{add("session", rule("Bash", strings.Repeat("y", MaxMessage)))}, nil},
+		{"a rule too long to show", []any{add("session", rule("Bash", strings.Repeat("y", oneline.MaxMessage)))}, nil},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			d := translatePayload(t, "claude", map[string]any{

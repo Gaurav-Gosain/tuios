@@ -1,5 +1,7 @@
 package integration
 
+import "github.com/Gaurav-Gosain/tuios/internal/oneline"
+
 // The Gemini CLI event map. Source: the hooks reference at
 // https://geminicli.com/docs/hooks/reference/, read for this change. It lists
 // the events (BeforeTool, AfterTool, BeforeAgent, AfterAgent, BeforeModel,
@@ -32,7 +34,7 @@ func translateGemini(in Input, p fields) Decision {
 		return send(GeminiCLI, event, identity(Report{State: "working"}, p))
 	case "BeforeTool":
 		r := identity(Report{State: "working"}, p)
-		if tool := Clip(p.str("tool_name")); tool != "" {
+		if tool := oneline.Clip(p.str("tool_name")); tool != "" {
 			r.Activity = &Activity{Event: ActivityTool, Tool: tool}
 		}
 		return send(GeminiCLI, event, r)
@@ -42,7 +44,7 @@ func translateGemini(in Input, p fields) Decision {
 		if p.str("notification_type") != "ToolPermission" {
 			return skip(GeminiCLI, event, "notification type "+p.str("notification_type")+" is not a state change")
 		}
-		msg := Clip(p.str("message"))
+		msg := oneline.Clip(p.str("message"))
 		if msg == "" {
 			msg = "approve a tool call"
 		}

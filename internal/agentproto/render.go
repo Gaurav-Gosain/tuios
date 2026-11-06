@@ -7,8 +7,8 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"github.com/Gaurav-Gosain/tuios/internal/integration"
 	"github.com/Gaurav-Gosain/tuios/internal/invisible"
+	"github.com/Gaurav-Gosain/tuios/internal/oneline"
 )
 
 // The transcript: what the pane shows of the conversation.
@@ -422,7 +422,7 @@ func InboxLine(p *Permission) string {
 		kind = "tool"
 	}
 	line := "approve " + kind + ": " + t.Title
-	if integration.Clip(line) != line || !invisible.Printable(line) {
+	if oneline.Clip(line) != line || !invisible.Printable(line) {
 		return ""
 	}
 	return line
@@ -439,5 +439,5 @@ func StateLine(p *Permission) string {
 	if kind == "" {
 		kind = "tool"
 	}
-	return integration.Clip("approve " + kind + ": " + oneLine(firstOf(p.Tool.Title, p.Tool.ID)))
+	return oneline.Clip("approve " + kind + ": " + oneLine(firstOf(p.Tool.Title, p.Tool.ID)))
 }

@@ -8,6 +8,7 @@ import (
 
 	"github.com/Gaurav-Gosain/tuios/internal/invisible"
 	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
+	"github.com/Gaurav-Gosain/tuios/internal/oneline"
 )
 
 // Answering a permission prompt from the Inbox.
@@ -420,7 +421,7 @@ func PlanTitle(plan string) string {
 	for line := range strings.SplitSeq(plan, "\n") {
 		line = strings.TrimSpace(strings.TrimLeft(strings.TrimSpace(line), "#"))
 		if line != "" {
-			return Clip(line)
+			return oneline.Clip(line)
 		}
 	}
 	return "a plan"
@@ -502,7 +503,7 @@ func scopeShowable(scope []string) bool {
 		return false
 	}
 	for _, line := range scope {
-		if utf8.RuneCountInString(line) > MaxMessage || !invisible.Printable(line) || Clip(line) != line {
+		if utf8.RuneCountInString(line) > oneline.MaxMessage || !invisible.Printable(line) || oneline.Clip(line) != line {
 			return false
 		}
 	}

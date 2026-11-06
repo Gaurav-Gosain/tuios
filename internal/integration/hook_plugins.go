@@ -1,5 +1,7 @@
 package integration
 
+import "github.com/Gaurav-Gosain/tuios/internal/oneline"
+
 // The maps for Amp, Kimi Code CLI and Pi, the three harnesses outside the
 // first four whose hooks cover the whole turn, so tuios takes the pane's state
 // from them.
@@ -41,7 +43,7 @@ func translateAmp(in Input, p fields) Decision {
 		if p.str("tool") != "ask_user_choice" {
 			return skip(Amp, event, "tool "+p.str("tool")+" is not a question")
 		}
-		msg := Clip(p.str("question"))
+		msg := oneline.Clip(p.str("question"))
 		if msg == "" {
 			msg = "a question"
 		}
@@ -102,7 +104,7 @@ func translateKimi(in Input, p fields) Decision {
 		return send(Kimi, event, id(Report{State: "working"}))
 	case "PreToolUse":
 		if p.str("tool_name") == "AskUserQuestion" {
-			msg := Clip(p.obj("tool_input").first("question", "prompt"))
+			msg := oneline.Clip(p.obj("tool_input").first("question", "prompt"))
 			return send(Kimi, event, id(Report{State: "needs_input", Kind: "question", Message: msg}))
 		}
 		return send(Kimi, event, id(Report{State: "working"}))
@@ -116,7 +118,7 @@ func translateKimi(in Input, p fields) Decision {
 	case "StopFailure":
 		msg := "stopped on an error"
 		if t := p.first("error_type", "error"); t != "" {
-			msg = "stopped on " + Clip(t)
+			msg = "stopped on " + oneline.Clip(t)
 		}
 		return send(Kimi, event, id(Report{State: "errored", Message: msg}))
 	case "Interrupt":
@@ -198,7 +200,7 @@ func translatePi(in Input, p fields) Decision {
 		if p.str("kind") == "confirm" {
 			r.Kind = "approval"
 		}
-		r.Message = Clip(p.str("title"))
+		r.Message = oneline.Clip(p.str("title"))
 		if r.Message == "" {
 			r.Message = "waits for an answer"
 		}
@@ -229,10 +231,10 @@ func translateOMP(in Input, p fields) Decision {
 		r.State = "done"
 	case "tool_approval_requested":
 		r.State, r.Kind = "needs_input", "approval"
-		r.Message = Clip(p.str("reason"))
+		r.Message = oneline.Clip(p.str("reason"))
 		if r.Message == "" {
 			r.Message = "approve a tool call"
-			if tool := Clip(p.str("tool_name")); tool != "" {
+			if tool := oneline.Clip(p.str("tool_name")); tool != "" {
 				r.Message = "approve " + tool
 			}
 		}
