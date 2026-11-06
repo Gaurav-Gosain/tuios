@@ -34,6 +34,8 @@ var emojiSourceAllowed = map[string]string{
 	"internal/scrollback/parser.go": "matches icons other programs print",
 	// The browser tour's fake Claude Code draws Claude Code's own spinner.
 	"internal/webshell/agent.go": "imitates another program's screen",
+	// Quick look maps the arrow glyphs a drawn diagram uses to ASCII.
+	"internal/app/quicklook_markdown.go": "maps diagram arrow glyphs to ASCII",
 	// macOS Option-key output is what the keyboard sends, not what we show.
 	"internal/config/keynormalizer.go": "macOS Option-key character map",
 }
