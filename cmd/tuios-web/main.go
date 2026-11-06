@@ -182,13 +182,9 @@ Client features:
 }
 
 func main() {
-	// A `go install ...@vX` build has no ldflags; its module version stands in
-	// for them before anything below reads the stamps.
-	applyModuleVersion()
-
-	// See cmd/tuios/main.go: a crash report names the build it came from, and
-	// internal/app cannot read these vars itself.
-	app.SetBuildStamp(version, commit)
+	// The build identity, the same call cmd/tuios makes: crash reports, and the
+	// in-process panes of --ephemeral, name this build.
+	applyBuildIdentity()
 
 	// The server TUIOS_SERVER names, as tuios applies it, so tuios-web started
 	// from a pane of a named server serves that server's daemon.
@@ -808,9 +804,10 @@ func webAppearanceOverrides() config.Overrides {
 	return interfaceFlags.Overrides()
 }
 
-// applyModuleVersion replaces the placeholder stamps of a `go install` build
-// with its module version. See release.Stamps.WithModuleVersion.
-func applyModuleVersion() {
-	s := release.Stamps{Version: version, Commit: commit, Date: date, BuiltBy: builtBy}.WithModuleVersion()
+// applyBuildIdentity settles the build stamps (a `go install` build takes its
+// module version) and hands them to every package that reports them. See
+// app.SetBuildIdentity.
+func applyBuildIdentity() {
+	s := app.SetBuildIdentity(release.Stamps{Version: version, Commit: commit, Date: date, BuiltBy: builtBy})
 	version, commit, date, builtBy = s.Version, s.Commit, s.Date, s.BuiltBy
 }

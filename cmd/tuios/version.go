@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"runtime/debug"
 
+	"github.com/Gaurav-Gosain/tuios/internal/app"
 	"github.com/Gaurav-Gosain/tuios/internal/release"
 	"tuios.dev/vt"
 )
@@ -57,9 +58,10 @@ func vcsBuildInfo() (rev, when string, dirty bool) {
 	return rev, when, dirty
 }
 
-// applyModuleVersion replaces the placeholder stamps of a `go install` build
-// with its module version. See release.Stamps.WithModuleVersion.
-func applyModuleVersion() {
-	s := release.Stamps{Version: version, Commit: commit, Date: date, BuiltBy: builtBy}.WithModuleVersion()
+// applyBuildIdentity settles the build stamps (a `go install` build takes its
+// module version) and hands them to every package that reports them. See
+// app.SetBuildIdentity.
+func applyBuildIdentity() {
+	s := app.SetBuildIdentity(release.Stamps{Version: version, Commit: commit, Date: date, BuiltBy: builtBy})
 	version, commit, date, builtBy = s.Version, s.Commit, s.Date, s.BuiltBy
 }

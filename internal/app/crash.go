@@ -12,6 +12,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/Gaurav-Gosain/tuios/internal/guestenv"
+	"github.com/Gaurav-Gosain/tuios/internal/herdrplugin"
 	"github.com/Gaurav-Gosain/tuios/internal/release"
 	"github.com/adrg/xdg"
 	"tuios.dev/vt"
@@ -73,7 +75,7 @@ type CrashFact struct {
 // buildStamp is the version this binary was linked with. internal/app cannot
 // read main.version, and a report that cannot say which build produced it
 // cannot be placed against a commit, so the main package hands it over at
-// startup through SetBuildStamp.
+// startup through SetBuildIdentity.
 //
 // Atomic because the SSH server builds a model per connection while other
 // sessions run. It is written once before any of them start; the atomic is for
@@ -85,10 +87,26 @@ type buildFacts struct {
 	commit  string
 }
 
-// SetBuildStamp records the build identity for crash reports. The main package
-// calls it once at startup with the ldflag values.
-func SetBuildStamp(version, commit string) {
-	buildStamp.Store(&buildFacts{version: version, commit: commit})
+// SetBuildIdentity hands the build identity to every package that reports it,
+// and returns the stamps it settled on. Each main package calls it once at
+// startup with its ldflag values, before anything can crash or open a pane.
+//
+// It is one call so that a second binary cannot set some of the setters and
+// miss others: tuios-web once set only the crash stamp, and its in-process
+// panes said "dev" in TERM_PROGRAM_VERSION and nothing in XTVERSION.
+//
+// A `go install ...@vX` build has no ldflags; its module version stands in for
+// them first (release.Stamps.WithModuleVersion).
+func SetBuildIdentity(s release.Stamps) release.Stamps {
+	s = s.WithModuleVersion()
+	buildStamp.Store(&buildFacts{version: s.Version, commit: s.Commit})
+	// herdr plugins are told which tuios runs them.
+	herdrplugin.RunningVersion = s.Version
+	// XTVERSION names the build to the programs in a pane.
+	vt.SetBuildVersion(s.Version)
+	// TERM_PROGRAM_VERSION names it to the programs in a pane too.
+	guestenv.SetBuildVersion(s.Version)
+	return s
 }
 
 // buildIdentity is the version and commit a report should name. It prefers the

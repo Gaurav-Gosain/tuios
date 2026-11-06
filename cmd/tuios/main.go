@@ -17,14 +17,12 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"github.com/Gaurav-Gosain/tuios/internal/fang"
-	"github.com/Gaurav-Gosain/tuios/internal/guestenv"
 	"github.com/Gaurav-Gosain/tuios/internal/herdrplugin"
 	"github.com/Gaurav-Gosain/tuios/internal/serverscope"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
 	"github.com/spf13/cobra"
 	"tuios.dev/shot"
-	"tuios.dev/vt"
 )
 
 // Version information (set by goreleaser)
@@ -62,10 +60,10 @@ func main() {
 		os.Exit(runDaemonAppLauncher())
 	}
 	session.PluginReaper = pluginReaper()
-	// A `go install ...@vX` build has no ldflags; its module version stands in
-	// for them before anything below reads the stamps.
-	applyModuleVersion()
-	herdrplugin.RunningVersion = version
+	// The build identity, handed to every package that reports it before
+	// anything can crash or open a pane. A crash report that cannot say which
+	// build produced it cannot be placed against a commit.
+	applyBuildIdentity()
 	theme.ExtraFiles = pluginThemeFiles
 	app.PluginSavers = pluginSaverFiles
 	// The add sheet installs the release of this version with the helpers
@@ -78,15 +76,6 @@ func main() {
 		}
 		return prog
 	}
-
-	// The build identity, handed to internal/app before anything can crash.
-	// A crash report that cannot say which build produced it cannot be placed
-	// against a commit, and internal/app cannot read these vars itself.
-	app.SetBuildStamp(version, commit)
-	// XTVERSION names the build to the programs in a pane.
-	vt.SetBuildVersion(version)
-	// TERM_PROGRAM_VERSION names it to the programs in a pane too.
-	guestenv.SetBuildVersion(version)
 
 	// The server a pane's daemon was started for reaches every tuios run in
 	// that pane through TUIOS_SERVER, the tmux and herdr links included, so it
