@@ -804,13 +804,17 @@ func (a *App) copyView(c *ui.Context, pal *palette) {
 	// The terminal's rows: its cell's height, as the view last sized it.
 	rowH := float32(math.Ceil(float64(size * a.set.LineHeight * 1.32)))
 	cellW := float32(math.Ceil(float64(size * 0.6)))
-	if e := a.terms[cm.pane]; e != nil && e.stream != nil {
+	// The stream's cell is in device pixels (the lease the view sent),
+	// copy mode's rows in DIPs: on a 2x display a row in pixels is two
+	// in DIPs. Until copy mode drew once the scale is unknown, and the
+	// row is the font's.
+	if e := a.terms[cm.pane]; e != nil && e.stream != nil && a.cmScale > 0 {
 		w, h := e.stream.CellSize()
 		if h > 0 {
-			rowH = float32(h)
+			rowH = float32(h) / a.cmScale
 		}
 		if w > 0 {
-			cellW = float32(w)
+			cellW = float32(w) / a.cmScale
 		}
 	}
 	box := ui.Column(c.Key("copymode")).Fill().Padding(copyPadY, copyPadX).Focusable().FocusRing(false).AutoFocus().Bind(&cm.ref).Clip().Label(locales.CopyModeLabel())
@@ -857,6 +861,12 @@ func (a *App) copyView(c *ui.Context, pal *palette) {
 		return false
 	})
 	box.TextCaret(ui.Rect{})
+	box.Draw(func(p *ui.Painter, _ ui.Rect) {
+		if s := p.Scale(); s > 0 && s != a.cmScale {
+			a.cmScale = s
+			a.win.Invalidate()
+		}
+	})
 	if b := cm.ref.Bounds(c); b.H > 0 {
 		if n := int((b.H - 12 - rowH) / rowH); n > 0 && n != cm.shown {
 			cm.shown = n

@@ -237,6 +237,10 @@ type App struct {
 	help helpState
 	// cm is copy mode, on one pane, nil while off (copymode.go).
 	cm *copyMode
+	// cmScale is the display's scale as copy mode last drew: the
+	// terminal's cell size is in device pixels, copy mode's rows in DIPs.
+	// 0 until copy mode drew once.
+	cmScale float32
 	// refocused is the pane keepKeyboard last gave the keyboard back to.
 	refocused string
 
