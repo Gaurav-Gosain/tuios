@@ -1220,6 +1220,27 @@ once. The settings page has it under Daemon, and
 `tuios set-config workspaces.new_window_when_empty true` changes it while
 tuios runs.
 
+## Paste preview
+
+An image paste (`Ctrl+B V`, the paste key when the clipboard holds only an
+image, or the empty paste some terminals send for an image) writes the image
+to a file and pastes the file's path. tuios then shows
+the image in a small card at the pane's cursor, so you can see what the path
+holds:
+
+- The picture is drawn with kitty graphics when your terminal has them, and
+  with block glyphs when it does not.
+- The line under it names the size, the type and the file.
+- The card takes no input. The next key or click takes it down and still goes
+  where it was going, and so does a key sent with `tuios send-keys`. A panel
+  opened over it, or the pane leaving the screen, takes it down too.
+  Otherwise it goes after six seconds.
+
+```toml
+[appearance]
+paste_preview = false   # paste the path alone; the default is true
+```
+
 ## Paste buffers
 
 tuios keeps your recent yanks as paste buffers. `Ctrl+B ]` pastes the newest,

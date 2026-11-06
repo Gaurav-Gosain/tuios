@@ -274,6 +274,11 @@ var optionSpecs = []Option{
 		Accepted:    FocusFollowsMousePauseKeys, Default: FocusFollowsMousePauseOff,
 	},
 	{
+		Path: "appearance.paste_preview", Type: OptionBool, Section: "appearance",
+		Description: "Show a pasted image in a card at the cursor for a few seconds",
+		Default:     "true",
+	},
+	{
 		Path: "appearance.alt_drag", Type: OptionBool, Section: "appearance",
 		Description: "Alt plus left-drag moves a pane",
 		Default:     "true",

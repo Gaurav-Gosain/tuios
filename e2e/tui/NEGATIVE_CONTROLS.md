@@ -13798,3 +13798,31 @@ Run on 2026-11-06 on macOS (darwin/arm64). The fixed build passes both in about 
 
 Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^(TestAttachedClientFollowsDaemonUpgrade|TestAttachedClientIsToldToReattach)$' -v .`.
+## The paste preview
+
+`paste_preview_test.go` pastes an image through a fake clipboard (the
+`wl-paste` stand-in of `paste_image_test.go`, holding a real PNG). On a host
+with kitty graphics the card comes up, its picture is placed on the host in
+the card's first row, and the next key takes both down and still reaches the
+pane. Without graphics the picture is block glyphs in the card's cells. In one
+client, a paste with the card on puts it up, and a paste after
+`set-config appearance.paste_preview false` pastes the path alone.
+
+Run on 2026-11-06 on macOS (arm64). The branch passes all three tests. Four
+controls, each this branch with one change.
+
+| Control | Test | Failure | Verdict |
+| --- | --- | --- | --- |
+| `applyImagePasted` returns without `showPastePreview` | `TestAnImagePasteShowsTheImageInACard` | `no card, or no picture placed in it` | **caught** |
+| The card's clause in the fullscreen fast path (`fullscreenFastWindow`) removed | `TestAnImagePasteShowsTheImageInACard` | `no card, or no picture placed in it` | **caught** |
+| The key's `hidePastePreview` in `Update` removed | `TestAnImagePasteShowsTheImageInACard` | `the card or its picture outlived the next key, or the key did not reach the pane` (3 s, inside the card's own 6 s) | **caught** |
+| `showPastePreview` ignores `Settings.PastePreview` | `TestPastePreviewCanBeTurnedOff` | `paste_preview = false still put a card up` | **caught** |
+
+The second control is the bug the first test found: a paste into the only
+pane on screen took the fast path, which draws no overlay, so the card was up
+and never drawn.
+
+The frames, with the host's picture drawn in, are under `TUIOS_E2E_FRAMES`, in
+each test's folder. Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run 'Paste(Preview|ShowsTheImage|WithoutGraphics)' -v .`.
+

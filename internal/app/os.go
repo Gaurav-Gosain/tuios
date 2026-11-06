@@ -1376,6 +1376,9 @@ type OS struct {
 	// replyPreview draws the images of a reply's draft, nil until one does.
 	// See inbox_reply_preview.go.
 	replyPreview *replyPreview
+	// pastePreview is the card that shows an image just pasted as a path.
+	// See paste_preview.go.
+	pastePreview pastePreviewState
 
 	// quickLook is the rail's preview of the file under the files cursor.
 	// See quicklook.go.

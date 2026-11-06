@@ -125,6 +125,8 @@ type ImagePastedMsg struct {
 	Path   string
 	Host   string
 	Err    error
+	// Data is the image that was pasted, for the paste preview.
+	Data []byte
 }
 
 // RequestPaste is the paste key. It pastes the clipboard's image when the
@@ -297,7 +299,7 @@ func (m *OS) deliverImageCmd(window string, data []byte) tea.Cmd {
 		}
 		return func() tea.Msg {
 			path, err := save(data)
-			return ImagePastedMsg{Window: window, Path: path, Err: err}
+			return ImagePastedMsg{Window: window, Path: path, Err: err, Data: data}
 		}
 	}
 
@@ -343,46 +345,48 @@ func (m *OS) deliverImageCmd(window string, data []byte) tea.Cmd {
 		if res.Path == "" {
 			return ImagePastedMsg{Window: window, Err: errors.New("the daemon named no file")}
 		}
-		return ImagePastedMsg{Window: window, Path: res.Path, Host: res.Host}
+		return ImagePastedMsg{Window: window, Path: res.Path, Host: res.Host, Data: data}
 	}
 }
 
-// applyImagePasted pastes the image's path into the window it was for.
-func (m *OS) applyImagePasted(msg ImagePastedMsg) {
+// applyImagePasted pastes the image's path into the window it was for, and
+// shows the image in the paste preview.
+func (m *OS) applyImagePasted(msg ImagePastedMsg) tea.Cmd {
 	if msg.Err != nil {
 		if callErr, ok := errors.AsType[*session.VerbCallError](msg.Err); ok && callErr.Code == session.ErrVerbUnknownVerb {
 			m.ShowNotification("This daemon cannot take a pasted image. "+m.restartHint(), "error", m.Settings.NotificationDuration*2)
-			return
+			return nil
 		}
 		if callErr, ok := errors.AsType[*session.VerbCallError](msg.Err); ok && callErr.Code == session.ErrVerbUnknownHost && callErr.Hint != nil && callErr.Hint.Detail != "" {
 			m.ShowNotification("Cannot paste the image. "+callErr.Hint.Detail, "error", m.Settings.NotificationDuration*3)
-			return
+			return nil
 		}
 		if text := m.imagePasteRefusal(msg.Window, msg.Err); text != "" {
 			m.ShowNotification(text, "error", m.Settings.NotificationDuration*3)
-			return
+			return nil
 		}
 		m.ShowNotification("The image was not pasted: "+msg.Err.Error(), "error", m.Settings.NotificationDuration*2)
-		return
+		return nil
 	}
 	w := m.windowByID(msg.Window)
 	if w == nil {
 		m.ShowNotification("The pane closed before the image was pasted.", "warning", m.Settings.NotificationDuration)
-		return
+		return nil
 	}
 	if w.CopyModeVisible() {
 		m.ShowNotification("Cannot paste in copy mode. Exit copy mode first.", "warning", m.Settings.NotificationDuration)
-		return
+		return nil
 	}
 	if err := w.Paste(pastePathText(msg.Path)); err != nil {
 		m.ShowNotification("The image was saved but its path was not pasted: "+err.Error(), "error", m.Settings.NotificationDuration*2)
-		return
+		return nil
 	}
 	where := thisMachineLabel()
 	if msg.Host != "" {
 		where = msg.Host
 	}
 	m.ShowNotification("Pasted the image as a file on "+where+".", "success", m.Settings.NotificationDuration)
+	return m.showPastePreview(msg.Window, msg.Path, msg.Data)
 }
 
 // pastePathText is the text pasted for a path: the path itself, quoted only

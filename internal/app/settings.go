@@ -623,6 +623,7 @@ func (m *OS) settingsCategories() []settingsCategory {
 			opt("appearance.wrap_lists"),
 			opt("appearance.focus_follows_mouse"),
 			opt("appearance.focus_follows_mouse_pause"),
+			opt("appearance.paste_preview"),
 			opt("appearance.click_to_type"),
 			opt("appearance.auto_enter_terminal_on_focus"),
 			opt("appearance.nvim_navigation"),

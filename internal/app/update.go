@@ -929,6 +929,9 @@ func (m *OS) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	if qc := m.quickLookPicture(); qc != nil {
 		cmd = tea.Batch(cmd, qc)
 	}
+	if pc := m.pastePreviewPicture(); pc != nil {
+		cmd = tea.Batch(cmd, pc)
+	}
 	if qc := m.quickLookWindow(); qc != nil {
 		cmd = tea.Batch(cmd, qc)
 	}
@@ -1208,7 +1211,10 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		return m, m.applyImageProbe(msg)
 
 	case ImagePastedMsg:
-		m.applyImagePasted(msg)
+		return m, m.applyImagePasted(msg)
+
+	case pastePreviewExpireMsg:
+		m.applyPastePreviewExpire(msg)
 		return m, nil
 
 	case replyImageMsg:
@@ -2087,9 +2093,12 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 			m.NotifHoldEnd()
 			// And from a finished worktree setup's card.
 			m.hideSetupCard()
+			// And from the image it just pasted.
+			m.hidePastePreview()
 		case tea.MouseWheelMsg:
 			m.notePointerEvent(time.Now())
 		case tea.MouseClickMsg:
+			m.hidePastePreview()
 			m.notePointerEvent(time.Now())
 			m.dndHostMouseSeen()
 			m.pointerDown = true
@@ -3460,6 +3469,10 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 	case RemoteKeyMsg:
 		// Process a single key from a remote send-keys command
 		var cmd tea.Cmd
+
+		// A key sent from outside has moved on from a pasted image as much
+		// as a typed one, so it takes the paste preview down the same way.
+		m.hidePastePreview()
 
 		// Process this key through the input handler
 		if handler := getInputHandler(); handler != nil {

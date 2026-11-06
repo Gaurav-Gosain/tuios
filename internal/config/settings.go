@@ -575,6 +575,9 @@ type Settings struct {
 	// window-manager habit, so it defaults off and users opt in.
 	// Set via appearance.focus_follows_mouse config.
 	FocusFollowsMouse bool
+	// PastePreview shows the image an image paste turned into a path, in a
+	// card at the pane's cursor for a few seconds.
+	PastePreview bool
 
 	// FocusFollowsMousePause is the modifier, "ctrl" or "alt", that pauses
 	// FocusFollowsMouse while it is held. Empty never pauses. tuios learns the
@@ -1079,6 +1082,7 @@ func DefaultSettings() Settings {
 		CopyOnSelect:                true,
 		NvimNavigation:              false,
 		FocusFollowsMouse:           false,
+		PastePreview:                true,
 		AltDrag:                     true,
 		ClickToType:                 ClickToTypeDouble,
 		NewWindowInheritCwd:         true,

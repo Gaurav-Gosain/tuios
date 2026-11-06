@@ -448,6 +448,7 @@ type AppearanceConfig struct {
 	FocusWrap                *bool                   `toml:"focus_wrap"`                   // A focus key at the edge of a tiled layout moves to the pane on the far side (default: false)
 	FocusFollowsMouse        *bool                   `toml:"focus_follows_mouse"`          // Focus the pane under the cursor as the mouse moves (default: false)
 	FocusFollowsMousePause   string                  `toml:"focus_follows_mouse_pause"`    // The key that pauses focus_follows_mouse while held: ctrl, alt, off (default: off)
+	PastePreview             *bool                   `toml:"paste_preview"`                // Show a pasted image in a card at the cursor for a few seconds (default: true)
 	AltDrag                  *bool                   `toml:"alt_drag"`                     // Alt + left-drag moves a pane (default: true)
 	RightClickOpensMenu      *bool                   `toml:"right_click_opens_menu"`       // A plain right-click on a pane in terminal mode opens the pane menu (default: false)
 	KittyPlaceholders        string                  `toml:"kitty_placeholders"`           // Draw kitty Unicode placeholder images: auto, on, off (default: auto)
@@ -3215,6 +3216,10 @@ func ApplyAppearanceConfig(cfg *UserConfig, s *Settings) {
 	// settings page survives a reload just as turning it on does.
 	if cfg.Appearance.FocusFollowsMouse != nil {
 		s.FocusFollowsMouse = *cfg.Appearance.FocusFollowsMouse
+	}
+	// PastePreview defaults to true; a pointer so turning it off survives.
+	if cfg.Appearance.PastePreview != nil {
+		s.PastePreview = *cfg.Appearance.PastePreview
 	}
 	// The pause key keeps only ctrl or alt. Off, empty and a typo all leave
 	// hover focus unpaused, which is what the validator warns a typo becomes.
