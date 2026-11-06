@@ -133,8 +133,9 @@ func (l *link) heartbeat(ctx context.Context, m *mux, closed <-chan struct{}, te
 			}
 		}
 		start := time.Now().UnixNano()
-		ok, load, rtt := p.ping(ctx, m)
+		ok, load, version, rtt := p.ping(ctx, m)
 		l.noteHello(load, rtt)
+		l.noteVersion(version)
 		if ok || m.readSince(start) {
 			misses = 0
 			t.Reset(heartbeatInterval)
@@ -183,11 +184,12 @@ type pinger struct {
 // answer came within heartbeatTimeout, with the load the answer carried and
 // its round trip. The hello names no client, so the far daemon does not log
 // it.
-func (p *pinger) ping(ctx context.Context, m *mux) (bool, *Load, time.Duration) {
+func (p *pinger) ping(ctx context.Context, m *mux) (bool, *Load, string, time.Duration) {
 	type answer struct {
-		ok   bool
-		load *Load
-		rtt  time.Duration
+		ok      bool
+		load    *Load
+		version string
+		rtt     time.Duration
 	}
 	done := make(chan answer, 1)
 	go func() {
@@ -213,10 +215,11 @@ func (p *pinger) ping(ctx context.Context, m *mux) (bool, *Load, time.Duration) 
 		if err == nil || errors.As(err, &remote) {
 			a := answer{ok: true, rtt: time.Since(at)}
 			var shake struct {
-				Load *Load `json:"load"`
+				Load    *Load  `json:"load"`
+				Version string `json:"daemon_version"`
 			}
 			if err == nil && jsonx.Unmarshal(raw, &shake) == nil {
-				a.load = shake.Load
+				a.load, a.version = shake.Load, shake.Version
 			}
 			done <- a
 			return
@@ -231,9 +234,9 @@ func (p *pinger) ping(ctx context.Context, m *mux) (bool, *Load, time.Duration) 
 	defer t.Stop()
 	select {
 	case a := <-done:
-		return a.ok, a.load, a.rtt
+		return a.ok, a.load, a.version, a.rtt
 	case <-t.C:
-		return false, nil, 0
+		return false, nil, "", 0
 	}
 }
 

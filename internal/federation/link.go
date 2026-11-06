@@ -272,6 +272,19 @@ func (l *link) noteHello(load *Load, rtt time.Duration) {
 	l.mu.Unlock()
 }
 
+// noteVersion keeps the version a heartbeat's hello named. A live upgrade
+// on the far side swaps its daemon under the link: the ssh pipe and the
+// proxy stay, the link is never dialed again, and the version the
+// handshake named would go on being reported.
+func (l *link) noteVersion(v string) {
+	if v == "" {
+		return
+	}
+	l.mu.Lock()
+	l.shake.DaemonVersion = v
+	l.mu.Unlock()
+}
+
 // loadStale reports whether the load is older than loadMaxAge, so the
 // heartbeat pings a busy link for a new one.
 func (l *link) loadStale() bool {
