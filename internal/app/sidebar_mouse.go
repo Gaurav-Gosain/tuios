@@ -136,7 +136,7 @@ func (m *OS) applySidebarFlag(on bool) bool {
 		return false
 	}
 	m.Settings.SidebarEnabled = on
-	m.SidebarScrollS, m.SidebarScrollT, m.SidebarScrollA, m.SidebarScrollF = 0, 0, 0, 0
+	m.SidebarScroll = [sidebarSectionCount]int{}
 	m.sidebarClearPeek()
 	m.tooltipClear()
 	// The listing the rail labels sessions from is polled slowly, or not at

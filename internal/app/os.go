@@ -1685,13 +1685,9 @@ type OS struct {
 	sidebarSessionStateMu     [2]sync.Mutex               // serialize replacements from old/new clients
 	sidebarSessionDone        chan struct{}
 	sidebarSessionFocus       int // 0 none, 1 left, 2 right, 3 the rail pane (railPaneFocus)
-	SidebarScrollS            int
-	SidebarScrollT            int
-	SidebarScrollA            int
-	SidebarScrollF            int
-	SidebarScrollG            int
-	SidebarScrollC            int
-	SidebarScrollP            int
+	// SidebarScroll is each rail section's own scroll offset, indexed by
+	// section, so a reset or a swap covers every section at once.
+	SidebarScroll [sidebarSectionCount]int
 
 	// stopCh is closed by Cleanup. Every listener command takes it when it is
 	// armed, so a session that ends leaves none of them parked on a channel

@@ -187,11 +187,11 @@ func railWheelOS(t *testing.T) *app.OS {
 // keeps the test off the unexported placement table, and the files section is
 // covered by the same sweep as the rest.
 func railScrolls(o *app.OS, button tea.MouseButton) bool {
-	o.SidebarScrollS, o.SidebarScrollT, o.SidebarScrollA, o.SidebarScrollF = 0, 0, 0, 0
+	clear(o.SidebarScroll[:])
 	for y := range o.Height {
 		_, _ = handleMouseWheel(tea.MouseWheelMsg{X: 1, Y: y, Button: button}, o)
 	}
-	return o.SidebarScrollS|o.SidebarScrollT|o.SidebarScrollA|o.SidebarScrollF != 0
+	return o.SidebarScroll != [len(o.SidebarScroll)]int{}
 }
 
 // A trackpad reports a little sideways drift on almost every vertical scroll and
@@ -217,9 +217,9 @@ func TestSidewaysDriftDoesNotScrollTheRail(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			o := railWheelOS(t)
 			if got := railScrolls(o, tc.button); got != tc.want {
-				t.Fatalf("a %v sweep over the rail scrolled=%v, want %v (offsets s=%d t=%d a=%d f=%d)",
+				t.Fatalf("a %v sweep over the rail scrolled=%v, want %v (offsets %v)",
 					tc.button, got, tc.want,
-					o.SidebarScrollS, o.SidebarScrollT, o.SidebarScrollA, o.SidebarScrollF)
+					o.SidebarScroll)
 			}
 		})
 	}

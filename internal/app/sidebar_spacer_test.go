@@ -157,11 +157,11 @@ func TestWheelOverASpacerScrollsTheSectionAboveIt(t *testing.T) {
 	row := (top + at) / 2
 	y := m.GetTopMargin() + row
 
-	before := m.SidebarScrollS
+	before := m.SidebarScroll[sidebarSectionSessions]
 	if !m.SidebarWheel(1, y, false) {
 		t.Fatal("the rail did not take a wheel event inside its own band")
 	}
-	if m.SidebarScrollS == before {
+	if m.SidebarScroll[sidebarSectionSessions] == before {
 		t.Errorf("a wheel on the gap at row %d scrolled nothing; bands are %v", row, m.sidebarSectionY)
 	}
 }

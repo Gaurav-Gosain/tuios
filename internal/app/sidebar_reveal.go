@@ -51,17 +51,17 @@ func (m *OS) sidebarRevealFocus(sessions, sessionRows []sessiontree.Node, termin
 	r := m.sidebarReveal
 	focused := m.sidebarFocusedWindowID()
 	attached := m.sidebarCurrentSessionID()
-	if focused != "" && (!r.Valid || focused != r.WindowID) && (!r.Valid || m.SidebarScrollT == r.ScrollT) {
+	if focused != "" && (!r.Valid || focused != r.WindowID) && (!r.Valid || m.SidebarScroll[sidebarSectionTerminals] == r.ScrollT) {
 		for i, e := range terminals {
 			if e.WindowID == focused {
-				m.SidebarScrollT = sidebarRevealOffset(m.SidebarScrollT, i, rowsT, len(terminals))
+				m.SidebarScroll[sidebarSectionTerminals] = sidebarRevealOffset(m.SidebarScroll[sidebarSectionTerminals], i, rowsT, len(terminals))
 				break
 			}
 		}
 	}
-	if (!r.Valid || attached != r.SessionID) && (!r.Valid || m.SidebarScrollS == r.ScrollS) {
+	if (!r.Valid || attached != r.SessionID) && (!r.Valid || m.SidebarScroll[sidebarSectionSessions] == r.ScrollS) {
 		idx := m.sidebarAttachedRow(sessions, sessionRows, attached)
-		m.SidebarScrollS = sidebarRevealOffset(m.SidebarScrollS, idx, rowsS, len(sessionRows))
+		m.SidebarScroll[sidebarSectionSessions] = sidebarRevealOffset(m.SidebarScroll[sidebarSectionSessions], idx, rowsS, len(sessionRows))
 	}
 }
 
@@ -106,8 +106,8 @@ func (m *OS) sidebarRecordReveal() {
 	m.sidebarReveal = sidebarRevealState{
 		WindowID:  m.sidebarFocusedWindowID(),
 		SessionID: m.sidebarCurrentSessionID(),
-		ScrollT:   m.SidebarScrollT,
-		ScrollS:   m.SidebarScrollS,
+		ScrollT:   m.SidebarScroll[sidebarSectionTerminals],
+		ScrollS:   m.SidebarScroll[sidebarSectionSessions],
 		Valid:     true,
 	}
 }

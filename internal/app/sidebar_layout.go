@@ -462,15 +462,9 @@ func sidebarBudgetLines(avail int, plans []sidebarSectionPlan, rows, rowH []int)
 // cursor auto-scroll and the render each need it, and a fourth section added to
 // two of the three is how a section ends up unable to scroll.
 func (m *OS) sidebarScrollOffsets() [sidebarSectionCount]*int {
-	return [sidebarSectionCount]*int{
-		sidebarSectionSessions:  &m.SidebarScrollS,
-		sidebarSectionTerminals: &m.SidebarScrollT,
-		sidebarSectionAgents:    &m.SidebarScrollA,
-		sidebarSectionFiles:     &m.SidebarScrollF,
-		sidebarSectionGit:       &m.SidebarScrollG,
-		sidebarSectionCustom:    &m.SidebarScrollC,
-		// The pane never scrolls the rail's way: it is sized to its lines.
-		// The offset is here so every section has one.
-		sidebarSectionPane: &m.SidebarScrollP,
+	out := [sidebarSectionCount]*int{}
+	for i := range out {
+		out[i] = &m.SidebarScroll[i]
 	}
+	return out
 }

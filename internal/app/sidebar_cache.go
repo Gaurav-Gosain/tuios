@@ -159,9 +159,9 @@ func (m *OS) sidebarSignature() uint64 {
 
 	// View state: scroll, focus, and hover all restyle rows. Each section holds
 	// its own offset, so all three are folded.
-	mixI(m.SidebarScrollS)
-	mixI(m.SidebarScrollT)
-	mixI(m.SidebarScrollA)
+	mixI(m.SidebarScroll[sidebarSectionSessions])
+	mixI(m.SidebarScroll[sidebarSectionTerminals])
+	mixI(m.SidebarScroll[sidebarSectionAgents])
 	// The agents offset is derived from the anchor on any frame whose sort has
 	// moved, so the anchor picks the rows that are drawn just as directly as the
 	// offset does, and a frame drawn under one anchor cannot be served from an
@@ -202,7 +202,7 @@ func (m *OS) sidebarSignature() uint64 {
 	mixS(m.filesView.Host)
 	mixS(m.filesView.Err)
 	mixB(m.filesView.Loading)
-	mixI(m.SidebarScrollF)
+	mixI(m.SidebarScroll[sidebarSectionFiles])
 	mixU(m.filesView.Gen)
 	// The row a drag carries is drawn picked up.
 	mixS(m.fileDragHeldKey())
@@ -219,7 +219,7 @@ func (m *OS) sidebarSignature() uint64 {
 	} else {
 		mixU(m.railCustom.gen)
 	}
-	mixI(m.SidebarScrollC)
+	mixI(m.SidebarScroll[sidebarSectionCustom])
 	// The pane section: its output, which is the generation, whether it has
 	// the keyboard (the dim and the cursor change), and the line it draws
 	// when there is no pane.
@@ -236,7 +236,7 @@ func (m *OS) sidebarSignature() uint64 {
 	}
 	// The git section scrolls like the others once it is given fewer lines
 	// than its two rows.
-	mixI(m.SidebarScrollG)
+	mixI(m.SidebarScroll[sidebarSectionGit])
 
 	// The agents section's two controls decide which rows it holds and in what
 	// order, so both are drawn state and both are folded. The tokens themselves

@@ -482,7 +482,7 @@ func (m *OS) clearFileView() {
 func (m *OS) requestFileList(dir, origin string, pinned bool) tea.Cmd {
 	// A listing the user asked for starts at its top. A quiet re-read of the
 	// same folder goes through readFileList and keeps the scroll.
-	m.SidebarScrollF = 0
+	m.SidebarScroll[sidebarSectionFiles] = 0
 	return m.readFileList(dir, origin, pinned)
 }
 
