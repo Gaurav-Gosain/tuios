@@ -62,7 +62,7 @@ func TestRailPeekKeepsTheSessionsViewport(t *testing.T) {
 		m.SidebarWheel(x, sessionsY[0]+1, false)
 	}
 	railPlain(t, m, tree)
-	scrolled := m.SidebarScrollS
+	scrolled := m.SidebarScroll[sidebarSectionSessions]
 	if scrolled == 0 {
 		t.Fatalf("the wheel moved no offset; the test cannot reach the folded rows")
 	}
@@ -71,13 +71,13 @@ func TestRailPeekKeepsTheSessionsViewport(t *testing.T) {
 	// a session whose peek takes more lines, and the viewport must hold.
 	m.SidebarPeek = "filler-03"
 	railPlain(t, m, tree)
-	if m.SidebarScrollS != scrolled {
-		t.Fatalf("a peek switch moved the sessions scroll from %d to %d: the list jumped under the pointer", scrolled, m.SidebarScrollS)
+	if m.SidebarScroll[sidebarSectionSessions] != scrolled {
+		t.Fatalf("a peek switch moved the sessions scroll from %d to %d: the list jumped under the pointer", scrolled, m.SidebarScroll[sidebarSectionSessions])
 	}
 	m.SidebarPeek = "filler-10"
 	railPlain(t, m, tree)
-	if m.SidebarScrollS != scrolled {
-		t.Fatalf("a second peek switch moved the sessions scroll from %d to %d", scrolled, m.SidebarScrollS)
+	if m.SidebarScroll[sidebarSectionSessions] != scrolled {
+		t.Fatalf("a second peek switch moved the sessions scroll from %d to %d", scrolled, m.SidebarScroll[sidebarSectionSessions])
 	}
 }
 
