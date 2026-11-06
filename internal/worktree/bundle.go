@@ -3,10 +3,11 @@ package worktree
 import (
 	"context"
 	"errors"
-	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 )
 
 // Moving a worktree's work to another machine: the commits as a git bundle,
@@ -73,7 +74,7 @@ func DeleteBranchAt(dir, branch, sha string) error {
 		return err
 	}
 	if sha == "" {
-		return fmt.Errorf("no commit to check %s against", branch)
+		return errfmt.Errorf("no commit to check %s against", branch)
 	}
 	_, err := run(dir, "update-ref", "-d", "refs/heads/"+branch, sha)
 	return err
