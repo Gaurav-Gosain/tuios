@@ -334,46 +334,25 @@ func (m *model) key(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			}
 		case "enter", "down", "tab":
 			m.focus = focusList
-		case "backspace":
-			if r := []rune(m.query); len(r) > 0 {
-				m.query = string(r[:len(r)-1])
-				m.refilter()
-			}
-		case "ctrl+u":
-			m.query = ""
-			m.refilter()
 		case "ctrl+c":
 			return m, tea.Quit
 		default:
-			if t := k.Key().Text; t != "" {
-				m.query += t
+			if changed, _ := textedit.EditLine(&m.query, s, k.Key().Text, true); changed {
 				m.refilter()
 			}
 		}
 		return m, nil
 	case focusEdit:
-		if textedit.IsWordDeleteKey(s) {
-			m.input = textedit.DropLastWord(m.input)
-			return m, nil
-		}
 		switch s {
 		case "esc":
 			m.focus, m.status = focusList, "Nothing was changed."
 			m.failed = false
 		case "enter":
 			m.applyEdit()
-		case "backspace":
-			if r := []rune(m.input); len(r) > 0 {
-				m.input = string(r[:len(r)-1])
-			}
-		case "ctrl+u":
-			m.input = ""
 		case "ctrl+c":
 			return m, tea.Quit
 		default:
-			if t := k.Key().Text; t != "" {
-				m.input += t
-			}
+			textedit.EditLine(&m.input, s, k.Key().Text, true)
 		}
 		return m, nil
 	}

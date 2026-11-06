@@ -179,29 +179,11 @@ func (m *OS) CopyDialogKey(key, text string) tea.Cmd {
 		return nil
 	}
 	if d.kind == copyDialogSendDir {
-		if textedit.IsWordDeleteKey(key) {
-			d.input = textedit.DropLastWord(d.input)
-			d.err = ""
-			return nil
-		}
 		switch key {
 		case "enter":
 			return m.CopyDialogActivate(0)
-		case "backspace":
-			if r := []rune(d.input); len(r) > 0 {
-				d.input = string(r[:len(r)-1])
-			}
-			d.err = ""
-		case "ctrl+u":
-			d.input, d.err = "", ""
-		case "space":
-			d.input += " "
 		default:
-			if text != "" {
-				d.input += printableRunes(text)
-			} else if len(key) == 1 && key[0] >= 32 && key[0] <= 126 {
-				d.input += key
-			}
+			textedit.EditLine(&d.input, key, printableRunes(text), true)
 			d.err = ""
 		}
 		return nil

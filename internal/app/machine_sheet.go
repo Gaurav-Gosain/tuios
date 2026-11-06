@@ -8,7 +8,6 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
-	"unicode/utf8"
 
 	tea "charm.land/bubbletea/v2"
 
@@ -17,6 +16,7 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/hostsetup"
 	"github.com/Gaurav-Gosain/tuios/internal/hostsync"
 	"github.com/Gaurav-Gosain/tuios/internal/listnav"
+	"github.com/Gaurav-Gosain/tuios/internal/textedit"
 )
 
 // The add-a-machine sheet: one modal sheet in five steps (Pick, Test, Set up
@@ -627,13 +627,11 @@ func (m *OS) msPickKey(msg tea.KeyPressMsg) tea.Cmd {
 
 // msEdit applies an editing key to f.
 func msEdit(f *string, msg tea.KeyPressMsg) {
-	switch msg.String() {
-	case "backspace", "ctrl+h":
-		_, n := utf8.DecodeLastRuneInString(*f)
-		*f = (*f)[:len(*f)-n]
-	default:
-		if msg.Text != "" && msg.Mod&^tea.ModShift == 0 {
-			*f += msg.Text
-		}
+	// A key with a modifier other than shift types nothing here, so alt+x
+	// does not add an x.
+	text := msg.Text
+	if msg.Mod&^tea.ModShift != 0 {
+		text = ""
 	}
+	textedit.EditLine(f, msg.String(), text, true)
 }
