@@ -402,11 +402,21 @@ func validateNotificationsConfig(cfg *UserConfig, result *ValidationResult) {
 // outside its allowed set. Such values silently fall back to defaults, so a
 // typo would otherwise go unnoticed. Empty values are left to the defaults.
 func validateAppearanceEnums(cfg *UserConfig, result *ValidationResult) {
-	checkEnum := func(key, value string, allowed []string) {
-		warnEnum(result, "appearance", key, value, allowed, "default")
+	// Every closed set of [appearance] comes from the option spec, so an
+	// option that gains Accepted is checked here with no line of its own.
+	// Colour options take a keyword or a literal, and deprecated ones are
+	// folded into their new name on load, so neither is a closed set here.
+	// focus_follows_mouse_pause falls back to off and is checked below.
+	for _, o := range Options() {
+		key, ok := strings.CutPrefix(o.Path, "appearance.")
+		if !ok || len(o.Accepted) == 0 || o.Color || o.Type != OptionString || o.Deprecated != "" || key == "focus_follows_mouse_pause" {
+			continue
+		}
+		if value, ok := GetOptionValue(cfg, o.Path); ok {
+			warnEnum(result, "appearance", key, value, o.Accepted, "default")
+		}
 	}
 
-	checkEnum("border_style", cfg.Appearance.BorderStyle, BorderStyles)
 	if !cfg.Appearance.MaxFPS.Valid() {
 		result.Warnings = append(result.Warnings, ValidationError{
 			Field:   "appearance",
@@ -414,10 +424,6 @@ func validateAppearanceEnums(cfg *UserConfig, result *ValidationResult) {
 			Message: fmt.Sprintf("'%s' is not a number or auto; read as %d", cfg.Appearance.MaxFPS, DefaultFPS),
 		})
 	}
-	checkEnum("dockbar_position", cfg.Appearance.DockbarPosition, DockbarPositions)
-	checkEnum("dock_prefix_indicator", cfg.Appearance.DockPrefixIndicator, DockPrefixIndicators)
-	checkEnum("dock_mode_pill", cfg.Appearance.DockModePill, DockModePills)
-	checkEnum("sidebar.position", cfg.Appearance.Sidebar.Position, SidebarPositions)
 	for _, problem := range SidebarSectionProblems(cfg.Appearance.Sidebar.Sections) {
 		result.Warnings = append(result.Warnings, ValidationError{
 			Field:   "appearance.sidebar.sections",
@@ -437,9 +443,6 @@ func validateAppearanceEnums(cfg *UserConfig, result *ValidationResult) {
 			Message: fmt.Sprintf("'%s' is not a duration such as 1h, or off; read as 1h", cfg.Appearance.Sidebar.AgentRestFold),
 		})
 	}
-	checkEnum("sidebar.folder_click", cfg.Appearance.Sidebar.FolderClick, SidebarFolderClicks)
-	checkEnum("sidebar.files_style", cfg.Appearance.Sidebar.FilesStyle, SidebarFilesStyles)
-	checkEnum("sidebar.file_delete", cfg.Appearance.Sidebar.FileDelete, SidebarFileDeletes)
 	validateSidebarSubagents(cfg.Appearance.Sidebar, result)
 	if cfg.Appearance.Sidebar.Workspaces != "" {
 		result.Warnings = append(result.Warnings, ValidationError{
@@ -447,15 +450,7 @@ func validateAppearanceEnums(cfg *UserConfig, result *ValidationResult) {
 			Message: "no longer used: panes name their own workspace, and switching lives on the dock and alt+1..9",
 		})
 	}
-	checkEnum("click_to_type", cfg.Appearance.ClickToType, ClickToTypeModes)
 	warnEnum(result, "appearance", "focus_follows_mouse_pause", cfg.Appearance.FocusFollowsMousePause, FocusFollowsMousePauseKeys, "off")
-	checkEnum("auto_enter_terminal_on_focus", string(cfg.Appearance.AutoEnterTerminalOnFocus), AutoEnterTerminalModes)
-	checkEnum("zen_mode", cfg.Appearance.ZenMode, ZenModeModes)
-	checkEnum("motion", cfg.Appearance.Motion, MotionLevels)
-	checkEnum("theme_transition", cfg.Appearance.ThemeTransition, ThemeTransitions)
-	checkEnum("links", cfg.Appearance.Links, LinkModes)
-	checkEnum("link_click", cfg.Appearance.LinkClick, LinkClickModes)
-	checkEnum("drop_preview", cfg.Appearance.DropPreview, DropPreviewModes)
 	if _, ok := ParseDropPreviewDelay(cfg.Appearance.DropPreviewDelay); !ok {
 		result.Warnings = append(result.Warnings, ValidationError{
 			Field:   "appearance",
@@ -463,15 +458,6 @@ func validateAppearanceEnums(cfg *UserConfig, result *ValidationResult) {
 			Message: fmt.Sprintf("'%s' is not a duration such as 120ms, or 0; read as %s", cfg.Appearance.DropPreviewDelay, DefaultDropPreviewDelay),
 		})
 	}
-	checkEnum("window_button_style", cfg.Appearance.WindowButtonStyle, WindowButtonStyles)
-	checkEnum("tiling_scheme", cfg.Appearance.TilingScheme, TilingSchemes)
-	checkEnum("master_position", cfg.Appearance.MasterPosition, MasterPositions)
-	checkEnum("window_button_position", cfg.Appearance.WindowButtonPosition, WindowButtonPositions)
-	checkEnum("scrollbar.style", cfg.Appearance.Scrollbar.Style, ScrollbarStyles)
-	checkEnum("whichkey_position", cfg.Appearance.WhichKeyPosition, WhichKeyPositions)
-	checkEnum("window_title_position", cfg.Appearance.WindowTitlePosition, WindowTitlePositions)
-	checkEnum("window_title_style", cfg.Appearance.WindowTitleStyle, WindowTitleStyles)
-	checkEnum("window_title_align", cfg.Appearance.WindowTitleAlign, WindowTitleAligns)
 	validateTitleFormat("window_title_format", cfg.Appearance.WindowTitleFormat, knownTitlePlaceholders, result)
 	validateTitleFormat("host_title", cfg.Appearance.HostTitle, knownHostTitlePlaceholders, result)
 	validateGlyphSet(cfg, result)
