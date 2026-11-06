@@ -69,7 +69,7 @@ func DaemonConfigFromUser(uc *config.UserConfig) *DaemonConfig {
 	cfg.ScrollbackLines = uc.Appearance.ScrollbackLines
 	// The daemon spawns every pane, so where a new one starts is its decision
 	// to make. Absent from the file means the default, which is to inherit.
-	cfg.NewWindowInheritCwd = uc.Appearance.NewWindowInheritCwd == nil || *uc.Appearance.NewWindowInheritCwd
+	cfg.NewWindowInheritCwd = newWindowInheritCwd(uc)
 	// The daemon spawns every pane, so the shell the user asked for has to
 	// reach it, not only standalone panes.
 	cfg.PreferredShell = uc.Appearance.PreferredShell
@@ -147,4 +147,11 @@ func HostsFromConfig(cfg *config.UserConfig) []federation.Host {
 		})
 	}
 	return out
+}
+
+// newWindowInheritCwd is appearance.new_window_inherit_cwd as the daemon reads
+// it, at start and at reload: absent from the file means the default, which is
+// to inherit.
+func newWindowInheritCwd(uc *config.UserConfig) bool {
+	return uc.Appearance.NewWindowInheritCwd == nil || *uc.Appearance.NewWindowInheritCwd
 }

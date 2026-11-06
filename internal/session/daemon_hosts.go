@@ -132,6 +132,19 @@ func (d *Daemon) applyUserConfig(cfg *config.UserConfig, byPerson bool) {
 	d.manager.SetHerdrProtocol(cfg.Agents.HerdrProtocol)
 	d.manager.SetReturnWhenEmpty(cfg.Workspaces.ReturnsWhenEmpty())
 	d.manager.SetDragAndDrop(cfg.Panes.DragAndDrop)
+	// The history depth and where a new pane starts shape only the panes made
+	// from now on, and widen nothing a pane may do, so a file change applies
+	// both ways.
+	d.manager.SetScrollbackLines(cfg.Appearance.ScrollbackLines)
+	d.manager.SetNewWindowInheritCwd(newWindowInheritCwd(cfg))
+	// These are fixed when the daemon starts and wait for a restart:
+	//   - agent_auto_detect, agent_detect_seconds and agent_binaries set up
+	//     the agent detector.
+	//   - resume_agents, window_size and files.open_copy_keep_days.
+	//   - respond_from_shell lets a shell answer for an agent, and
+	//     persist_scrollback keeps what panes printed on disk. Both widen
+	//     what is kept or allowed, so neither may follow a file that a
+	//     process in a pane can write.
 	// Where a new worktree goes widens nothing a pane may do: a pane that can
 	// write the file can already run git worktree add itself.
 	d.SetWorktreePath(cfg.Worktree.Path)
