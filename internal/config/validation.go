@@ -821,38 +821,9 @@ type keySection struct {
 
 // keySections are the keybinding tables ValidateConfig checks key by key.
 func keySections(kb *KeybindingsConfig) []keySection {
-	sections := []keySection{
-		{"window_management", kb.WindowManagement},
-		{"workspaces", kb.Workspaces},
-		{"layout", kb.Layout},
-		{"mode_control", kb.ModeControl},
-		{"system", kb.System},
-		{"navigation", kb.Navigation},
-		{"restore_minimized", kb.RestoreMinimized},
-		{"prefix_mode", kb.PrefixMode},
-		{"window_prefix", kb.WindowPrefix},
-		{"minimize_prefix", kb.MinimizePrefix},
-		{"workspace_prefix", kb.WorkspacePrefix},
-		{"debug_prefix", kb.DebugPrefix},
-		{"tape_prefix", kb.TapePrefix},
-		{"layout_prefix", kb.LayoutPrefix},
-		{"tuios_prefix", kb.TuiosPrefix},
-		{"terminal_mode", kb.TerminalMode},
-		{"sidebar", kb.Sidebar},
-		{"sidebar_files", kb.SidebarFiles},
-		{"sidebar_agents", kb.SidebarAgents},
-		{"quick_look", kb.QuickLook},
-		{"quick_look_inside", kb.QuickLookInside},
-		{"inbox", kb.Inbox},
-		{"inbox_peek", kb.InboxPeek},
-		{"mail", kb.Mail},
-		{"transfers", kb.Transfers},
-		{"copy_mode", kb.CopyMode},
-		{"review", kb.Review},
-		{"global", kb.Global},
-		{"script", kb.Script},
-		{"lists", kb.Lists},
-		{"gui", kb.GUI},
+	sections := make([]keySection, 0, len(keybindTables)+len(kb.Menus))
+	for _, t := range keybindTables {
+		sections = append(sections, keySection{t.name, *t.field(kb)})
 	}
 	for _, name := range kb.MenuNames() {
 		sections = append(sections, keySection{MenuSectionPrefix + name, kb.Menus[name].Keys})

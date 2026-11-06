@@ -3756,98 +3756,10 @@ func fillMissingKeybinds(cfg, defaultCfg *UserConfig) {
 	}
 
 	// Initialize nil maps
-	if cfg.Keybindings.WindowManagement == nil {
-		cfg.Keybindings.WindowManagement = make(map[string][]string)
-	}
-	if cfg.Keybindings.Workspaces == nil {
-		cfg.Keybindings.Workspaces = make(map[string][]string)
-	}
-	if cfg.Keybindings.Layout == nil {
-		cfg.Keybindings.Layout = make(map[string][]string)
-	}
-	if cfg.Keybindings.ModeControl == nil {
-		cfg.Keybindings.ModeControl = make(map[string][]string)
-	}
-	if cfg.Keybindings.System == nil {
-		cfg.Keybindings.System = make(map[string][]string)
-	}
-	if cfg.Keybindings.Navigation == nil {
-		cfg.Keybindings.Navigation = make(map[string][]string)
-	}
-	if cfg.Keybindings.RestoreMinimized == nil {
-		cfg.Keybindings.RestoreMinimized = make(map[string][]string)
-	}
-	if cfg.Keybindings.PrefixMode == nil {
-		cfg.Keybindings.PrefixMode = make(map[string][]string)
-	}
-	if cfg.Keybindings.WindowPrefix == nil {
-		cfg.Keybindings.WindowPrefix = make(map[string][]string)
-	}
-	if cfg.Keybindings.MinimizePrefix == nil {
-		cfg.Keybindings.MinimizePrefix = make(map[string][]string)
-	}
-	if cfg.Keybindings.WorkspacePrefix == nil {
-		cfg.Keybindings.WorkspacePrefix = make(map[string][]string)
-	}
-	if cfg.Keybindings.DebugPrefix == nil {
-		cfg.Keybindings.DebugPrefix = make(map[string][]string)
-	}
-	if cfg.Keybindings.TapePrefix == nil {
-		cfg.Keybindings.TapePrefix = make(map[string][]string)
-	}
-	if cfg.Keybindings.LayoutPrefix == nil {
-		cfg.Keybindings.LayoutPrefix = make(map[string][]string)
-	}
-	if cfg.Keybindings.TuiosPrefix == nil {
-		cfg.Keybindings.TuiosPrefix = make(map[string][]string)
-	}
-	if cfg.Keybindings.TerminalMode == nil {
-		cfg.Keybindings.TerminalMode = make(map[string][]string)
-	}
-	if cfg.Keybindings.Global == nil {
-		cfg.Keybindings.Global = make(map[string][]string)
-	}
-	if cfg.Keybindings.Script == nil {
-		cfg.Keybindings.Script = make(map[string][]string)
-	}
-	if cfg.Keybindings.Lists == nil {
-		cfg.Keybindings.Lists = make(map[string][]string)
-	}
-	if cfg.Keybindings.Sidebar == nil {
-		cfg.Keybindings.Sidebar = make(map[string][]string)
-	}
-	if cfg.Keybindings.SidebarFiles == nil {
-		cfg.Keybindings.SidebarFiles = make(map[string][]string)
-	}
-	if cfg.Keybindings.QuickLook == nil {
-		cfg.Keybindings.QuickLook = make(map[string][]string)
-	}
-	if cfg.Keybindings.QuickLookInside == nil {
-		cfg.Keybindings.QuickLookInside = make(map[string][]string)
-	}
-	if cfg.Keybindings.SidebarAgents == nil {
-		cfg.Keybindings.SidebarAgents = make(map[string][]string)
-	}
-	if cfg.Keybindings.Inbox == nil {
-		cfg.Keybindings.Inbox = make(map[string][]string)
-	}
-	if cfg.Keybindings.InboxPeek == nil {
-		cfg.Keybindings.InboxPeek = make(map[string][]string)
-	}
-	if cfg.Keybindings.Mail == nil {
-		cfg.Keybindings.Mail = make(map[string][]string)
-	}
-	if cfg.Keybindings.Transfers == nil {
-		cfg.Keybindings.Transfers = make(map[string][]string)
-	}
-	if cfg.Keybindings.GUI == nil {
-		cfg.Keybindings.GUI = make(map[string][]string)
-	}
-	if cfg.Keybindings.CopyMode == nil {
-		cfg.Keybindings.CopyMode = make(map[string][]string)
-	}
-	if cfg.Keybindings.Review == nil {
-		cfg.Keybindings.Review = make(map[string][]string)
+	for _, t := range keybindTables {
+		if f := t.field(&cfg.Keybindings); *f == nil {
+			*f = make(map[string][]string)
+		}
 	}
 
 	migrateLegacyKeybinds(cfg)
@@ -4205,39 +4117,11 @@ type keybindSection struct {
 
 func keybindSectionPairs(cfg, defaultCfg *UserConfig) []keybindSection {
 	c, d := &cfg.Keybindings, &defaultCfg.Keybindings
-	return []keybindSection{
-		{"window_management", c.WindowManagement, d.WindowManagement},
-		{"workspaces", c.Workspaces, d.Workspaces},
-		{"layout", c.Layout, d.Layout},
-		{"mode_control", c.ModeControl, d.ModeControl},
-		{"system", c.System, d.System},
-		{"navigation", c.Navigation, d.Navigation},
-		{"restore_minimized", c.RestoreMinimized, d.RestoreMinimized},
-		{"prefix_mode", c.PrefixMode, d.PrefixMode},
-		{"window_prefix", c.WindowPrefix, d.WindowPrefix},
-		{"minimize_prefix", c.MinimizePrefix, d.MinimizePrefix},
-		{"workspace_prefix", c.WorkspacePrefix, d.WorkspacePrefix},
-		{"debug_prefix", c.DebugPrefix, d.DebugPrefix},
-		{"tape_prefix", c.TapePrefix, d.TapePrefix},
-		{"layout_prefix", c.LayoutPrefix, d.LayoutPrefix},
-		{"tuios_prefix", c.TuiosPrefix, d.TuiosPrefix},
-		{"terminal_mode", c.TerminalMode, d.TerminalMode},
-		{"sidebar", c.Sidebar, d.Sidebar},
-		{"sidebar_files", c.SidebarFiles, d.SidebarFiles},
-		{"sidebar_agents", c.SidebarAgents, d.SidebarAgents},
-		{"quick_look", c.QuickLook, d.QuickLook},
-		{"quick_look_inside", c.QuickLookInside, d.QuickLookInside},
-		{"inbox", c.Inbox, d.Inbox},
-		{"inbox_peek", c.InboxPeek, d.InboxPeek},
-		{"mail", c.Mail, d.Mail},
-		{"transfers", c.Transfers, d.Transfers},
-		{"copy_mode", c.CopyMode, d.CopyMode},
-		{"review", c.Review, d.Review},
-		{"gui", c.GUI, d.GUI},
-		{"global", c.Global, d.Global},
-		{"script", c.Script, d.Script},
-		{"lists", c.Lists, d.Lists},
+	pairs := make([]keybindSection, 0, len(keybindTables))
+	for _, t := range keybindTables {
+		pairs = append(pairs, keybindSection{t.name, *t.field(c), *t.field(d)})
 	}
+	return pairs
 }
 
 // dropStaleDuplicateKeys resolves a key that two actions in the same section
