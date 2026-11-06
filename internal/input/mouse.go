@@ -95,7 +95,7 @@ func findClickedWindow(x, y int, o *app.OS) int {
 		if x >= window.X && x < window.X+window.Width &&
 			y >= window.Y && y < window.Y+window.Height {
 			// This window contains the click: check if it's the topmost so far
-			if z := app.HitZ(window); z > topZ {
+			if z := app.HitZ(window); z >= topZ {
 				topZ = z
 				topWindow = i
 			}
