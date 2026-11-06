@@ -35,14 +35,8 @@ type NotificationMsg struct {
 	Bell bool
 }
 
-// ListenForNotification creates a command that waits for the next guest
-// notification and delivers it to the Update loop as a NotificationMsg.
-func ListenForNotification(ch chan NotificationMsg) tea.Cmd {
-	return listenNotificationUntil(nil, ch)
-}
-
-// listenNotificationUntil is ListenForNotification for a session that ends: the
-// command returns nil once stop is closed.
+// listenNotificationUntil waits for the next message on its channel and returns nil once
+// stop is closed, so a session that ends leaves no listener parked.
 func listenNotificationUntil(stop <-chan struct{}, ch chan NotificationMsg) tea.Cmd {
 	return listenOnce(stop, ch, func(notif NotificationMsg) tea.Msg { return notif })
 }

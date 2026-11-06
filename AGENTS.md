@@ -353,7 +353,7 @@ tuios/
 │   └── ui/                 # Animation system
 │                           # (plus cliflags, debuglog, fang, listnav, sound,
 │                           #  transcript, guestenv, perf, fuzz, testutil,
-│                           #  atomicfile, cellsize, lazyre, linediff, pathroot,
+│                           #  atomicfile, lazyre, linediff, pathroot,
 │                           #  plural, sortx, units, winacl, winjob, winpath)
 ├── loom/                   # tuios.dev/loom, a Go module of its own: draws TML into cells; flex layout, retained tree, palettes per depth, keys and mouse
 ├── plot/                   # tuios.dev/plot, a Go module of its own: eleven chart kinds (bar, line, area, heatmap, pie, world map and more) as cells with theme roles

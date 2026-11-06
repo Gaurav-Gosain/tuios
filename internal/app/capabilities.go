@@ -17,9 +17,9 @@ import (
 	"github.com/adrg/xdg"
 	"golang.org/x/term"
 
-	"github.com/Gaurav-Gosain/tuios/internal/cellsize"
 	"github.com/Gaurav-Gosain/tuios/internal/lazyre"
 	"github.com/Gaurav-Gosain/tuios/internal/serverscope"
+	"tuios.dev/vt"
 )
 
 // HostCapabilities holds information about the host terminal's capabilities.
@@ -867,9 +867,9 @@ func setDefaultCellSize(caps *HostCapabilities) {
 	}
 
 	if caps.CellWidth == 0 {
-		caps.CellWidth = cellsize.FallbackWidth
+		caps.CellWidth = vt.FallbackCellWidth
 	}
 	if caps.CellHeight == 0 {
-		caps.CellHeight = cellsize.FallbackHeight
+		caps.CellHeight = vt.FallbackCellHeight
 	}
 }

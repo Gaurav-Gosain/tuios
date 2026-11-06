@@ -16,7 +16,7 @@ import (
 // scheduler, listen on its channel, and fold each update into the model.
 //
 // The listener is the same shape every other off-goroutine source in this
-// package uses (ListenForPTYData and friends): a command that blocks on a
+// package uses (listenPTYDataUntil and friends): a command that blocks on a
 // channel and is re-armed by whoever handles its message. A blocked receive is
 // not a timer, which is why a dock with nothing to poll still costs nothing.
 
