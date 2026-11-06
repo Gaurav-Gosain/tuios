@@ -804,16 +804,8 @@ func applyEnvironmentOverrides(caps *HostCapabilities) {
 // assertion about a placement box is arithmetic rather than a guess about the
 // terminal running them.
 func applyCellSizeOverride(caps *HostCapabilities, spec string) {
-	w, h, ok := strings.Cut(strings.ToLower(spec), "x")
+	cw, ch, ok := ParseCellSize(spec)
 	if !ok {
-		return
-	}
-	cw, err := strconv.Atoi(strings.TrimSpace(w))
-	if err != nil || cw <= 0 {
-		return
-	}
-	ch, err := strconv.Atoi(strings.TrimSpace(h))
-	if err != nil || ch <= 0 {
 		return
 	}
 	caps.CellWidth, caps.CellHeight = cw, ch
@@ -872,4 +864,23 @@ func setDefaultCellSize(caps *HostCapabilities) {
 	if caps.CellHeight == 0 {
 		caps.CellHeight = vt.FallbackCellHeight
 	}
+}
+
+// ParseCellSize reads a WIDTHxHEIGHT cell size in pixels, as TUIOS_CELL_SIZE
+// gives it, for this client and for the SSH server alike. ok is false unless
+// both numbers are positive.
+func ParseCellSize(spec string) (w, h int, ok bool) {
+	left, right, cut := strings.Cut(strings.ToLower(spec), "x")
+	if !cut {
+		return 0, 0, false
+	}
+	w, err := strconv.Atoi(strings.TrimSpace(left))
+	if err != nil || w <= 0 {
+		return 0, 0, false
+	}
+	h, err = strconv.Atoi(strings.TrimSpace(right))
+	if err != nil || h <= 0 {
+		return 0, 0, false
+	}
+	return w, h, true
 }

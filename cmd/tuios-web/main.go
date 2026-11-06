@@ -29,6 +29,7 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/charmbracelet/colorprofile"
 	"github.com/spf13/cobra"
+	"tuios.dev/vt"
 )
 
 // Version information (set by goreleaser)
@@ -770,8 +771,8 @@ func webHostCaps(cellWidth, cellHeight int) *app.HostCapabilities {
 // older client does. They are a guess at a typical monospace cell and nothing
 // more; every connection that reports its canvas gets its real measurement.
 const (
-	webFallbackCellWidth  = 10
-	webFallbackCellHeight = 20
+	webFallbackCellWidth  = vt.FallbackCellWidth
+	webFallbackCellHeight = vt.FallbackCellHeight
 )
 
 // cellSize works out what one cell measures in the browser's pixels, from the

@@ -1,7 +1,6 @@
 package server
 
 import (
-	"strconv"
 	"strings"
 
 	"charm.land/ssh"
@@ -85,7 +84,7 @@ func buildClientCapabilities(term string, environ []string, win ssh.Window) *ses
 	// is for the many SSH clients that forward no pixel dimensions at all. It
 	// is the same TUIOS_CELL_SIZE a local client reads, so the variable means
 	// one thing wherever it is set.
-	if cw, ch, ok := parseCellSize(env["TUIOS_CELL_SIZE"]); ok {
+	if cw, ch, ok := app.ParseCellSize(env["TUIOS_CELL_SIZE"]); ok {
 		caps.CellWidth, caps.CellHeight = cw, ch
 	}
 
@@ -98,23 +97,6 @@ func buildClientCapabilities(term string, environ []string, win ssh.Window) *ses
 		colorprofile.Env(append(environ, "TERM="+term)))
 
 	return caps
-}
-
-// parseCellSize reads a WIDTHxHEIGHT cell size in pixels.
-func parseCellSize(spec string) (w, h int, ok bool) {
-	left, right, cut := strings.Cut(strings.ToLower(spec), "x")
-	if !cut {
-		return 0, 0, false
-	}
-	cw, err := strconv.Atoi(strings.TrimSpace(left))
-	if err != nil || cw <= 0 {
-		return 0, 0, false
-	}
-	ch, err := strconv.Atoi(strings.TrimSpace(right))
-	if err != nil || ch <= 0 {
-		return 0, 0, false
-	}
-	return cw, ch, true
 }
 
 // cellSizeFromWindow derives a cell's pixel size from the pty-req window, which
