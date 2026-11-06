@@ -2,8 +2,6 @@ package layout
 
 import (
 	"sync/atomic"
-
-	"github.com/Gaurav-Gosain/tuios/internal/config"
 )
 
 // nodeIDCounter is used to generate unique node IDs
@@ -597,8 +595,8 @@ func lineBounds(node *TileNode, rect Rect, gap int, vertical bool) (lo, hi int) 
 }
 
 // CanSplit reports whether splitting windowID's pane along dir at ratio leaves
-// both halves at least the smallest pane size (config.DefaultWindowWidth by
-// config.DefaultWindowHeight). A window that is not in the tree has no tile to
+// both halves at least the smallest pane size (DefaultWindowWidth by
+// DefaultWindowHeight). A window that is not in the tree has no tile to
 // split, so it reports true and leaves the decision to the caller.
 func (t *BSPTree) CanSplit(windowID int, dir SplitType, ratio float64, bounds Rect, gap int) bool {
 	leaf := t.WindowToNode[windowID]
@@ -614,9 +612,9 @@ func (t *BSPTree) CanSplit(windowID int, dir SplitType, ratio float64, bounds Re
 	}
 	near, far := childBounds(&TileNode{SplitType: dir, SplitRatio: ratio}, rect, gap)
 	if dir == SplitVertical {
-		return near.W >= config.DefaultWindowWidth && far.W >= config.DefaultWindowWidth
+		return near.W >= DefaultWindowWidth && far.W >= DefaultWindowWidth
 	}
-	return near.H >= config.DefaultWindowHeight && far.H >= config.DefaultWindowHeight
+	return near.H >= DefaultWindowHeight && far.H >= DefaultWindowHeight
 }
 
 // minExtent is the smallest width (or height) a subtree can be laid out in
@@ -627,9 +625,9 @@ func minExtent(node *TileNode, vertical bool, gap int) int {
 	}
 	if node.IsLeaf() {
 		if vertical {
-			return config.DefaultWindowWidth
+			return DefaultWindowWidth
 		}
-		return config.DefaultWindowHeight
+		return DefaultWindowHeight
 	}
 
 	left := minExtent(node.Left, vertical, gap)

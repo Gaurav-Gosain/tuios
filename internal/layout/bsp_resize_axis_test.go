@@ -3,8 +3,6 @@ package layout
 import (
 	"maps"
 	"testing"
-
-	"github.com/Gaurav-Gosain/tuios/internal/config"
 )
 
 // edge identifies which side of a pane a resize drags.
@@ -89,8 +87,12 @@ func deepNest() *BSPTree {
 	})
 }
 
+// sharedBorders stands for the shared_borders setting in these tests: the
+// gap between panes the drags expect.
+var sharedBorders bool
+
 func sharedGap() int {
-	if config.Global.SharedBorders {
+	if sharedBorders {
 		return 1
 	}
 	return 0
@@ -126,7 +128,7 @@ func dragEdge(geo map[int]Rect, target int, e edge, delta int) (map[int]Rect, bo
 			default:
 				continue
 			}
-			if g.W < config.DefaultWindowWidth {
+			if g.W < DefaultWindowWidth {
 				return nil, false
 			}
 			out[id] = g
@@ -149,7 +151,7 @@ func dragEdge(geo map[int]Rect, target int, e edge, delta int) (map[int]Rect, bo
 		default:
 			continue
 		}
-		if g.H < config.DefaultWindowHeight {
+		if g.H < DefaultWindowHeight {
 			return nil, false
 		}
 		out[id] = g
@@ -178,12 +180,12 @@ func assertAxisIsolated(t *testing.T, label string, e edge, before, after map[in
 	}
 }
 
-// withSharedBorders runs fn with config.SharedBorders set, restoring it after.
+// withSharedBorders runs fn with sharedBorders set, restoring it after.
 func withSharedBorders(t *testing.T, shared bool, fn func()) {
 	t.Helper()
-	prev := config.Global.SharedBorders
-	config.Global.SharedBorders = shared
-	defer func() { config.Global.SharedBorders = prev }()
+	prev := sharedBorders
+	sharedBorders = shared
+	defer func() { sharedBorders = prev }()
 	fn()
 }
 

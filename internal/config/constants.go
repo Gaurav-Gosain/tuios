@@ -10,6 +10,7 @@ import (
 	"unicode/utf8"
 
 	"charm.land/lipgloss/v2"
+	"github.com/Gaurav-Gosain/tuios/internal/layout"
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
 	"github.com/lrstanley/go-nf/glyphs/fa"
@@ -22,10 +23,10 @@ import (
 
 const (
 	// DefaultWindowWidth is the default width for new terminal windows
-	DefaultWindowWidth = 20
+	DefaultWindowWidth = layout.DefaultWindowWidth
 
 	// DefaultWindowHeight is the default height for new terminal windows
-	DefaultWindowHeight = 5
+	DefaultWindowHeight = layout.DefaultWindowHeight
 
 	// MinWindowWidth is the minimum width a window can be resized to
 	MinWindowWidth = 10
@@ -703,9 +704,9 @@ var LayoutModes = []string{LayoutModeBSP, LayoutModeMasterStack, LayoutModeScrol
 // and it matches the resize_width_N actions, which go from 10 to 90 percent, so
 // a percentage resize the tiler keeps is one the settings row can show.
 const (
-	MasterRatioMin     = 10
-	MasterRatioMax     = 90
-	MasterRatioDefault = 50
+	MasterRatioMin     = layout.MasterRatioMin
+	MasterRatioMax     = layout.MasterRatioMax
+	MasterRatioDefault = layout.MasterRatioDefault
 )
 
 // MasterRatioFraction is the configured master ratio as the fraction the tilers
@@ -720,22 +721,16 @@ func (s *Settings) MasterRatioFraction() float64 {
 // column and deals the stack to the right and the left in turn, the way
 // xmonad's ThreeColMid and Hyprland's center orientation do.
 const (
-	MasterPositionLeft   = "left"
-	MasterPositionRight  = "right"
-	MasterPositionTop    = "top"
-	MasterPositionBottom = "bottom"
-	MasterPositionCenter = "center"
+	MasterPositionLeft   = layout.MasterPositionLeft
+	MasterPositionRight  = layout.MasterPositionRight
+	MasterPositionTop    = layout.MasterPositionTop
+	MasterPositionBottom = layout.MasterPositionBottom
+	MasterPositionCenter = layout.MasterPositionCenter
 )
 
 // MasterPositions is the accepted set, in the order cycle_master_position
 // steps through them.
-var MasterPositions = []string{
-	MasterPositionLeft,
-	MasterPositionRight,
-	MasterPositionTop,
-	MasterPositionBottom,
-	MasterPositionCenter,
-}
+var MasterPositions = layout.MasterPositions
 
 // The master count's range and its default. Nine is as many panes as a
 // workspace can hold before most terminals run out of rows for them.
@@ -747,17 +742,10 @@ const (
 
 // ValidMasterPosition returns pos when it is one of MasterPositions and left
 // otherwise, so a typo lays the panes out as they always were.
-func ValidMasterPosition(pos string) string {
-	if IsMasterPosition(pos) {
-		return pos
-	}
-	return MasterPositionLeft
-}
+func ValidMasterPosition(pos string) string { return layout.ValidMasterPosition(pos) }
 
 // IsMasterPosition reports whether pos is one of MasterPositions.
-func IsMasterPosition(pos string) bool {
-	return slices.Contains(MasterPositions, pos)
-}
+func IsMasterPosition(pos string) bool { return layout.IsMasterPosition(pos) }
 
 // ValidMasterCount reports whether n is inside the master count's range.
 func ValidMasterCount(n int) bool {

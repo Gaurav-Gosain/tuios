@@ -3,8 +3,6 @@ package layout
 
 import (
 	"math"
-
-	"github.com/Gaurav-Gosain/tuios/internal/config"
 )
 
 // TileLayout represents the position and size for a tiled window
@@ -127,8 +125,8 @@ func splitByRatio(origin, total int, ratio float64, gap int) (span, span) {
 // the master-stack tiler accepts. They are the appearance.master_ratio range,
 // so the settings row, a percentage resize and the tiler agree on one range.
 var (
-	MinSplitRatio = float64(config.MasterRatioMin) / 100
-	MaxSplitRatio = float64(config.MasterRatioMax) / 100
+	MinSplitRatio = float64(MasterRatioMin) / 100
+	MaxSplitRatio = float64(MasterRatioMax) / 100
 )
 
 // clampSplitRatio keeps a ratio inside MinSplitRatio..MaxSplitRatio.
@@ -187,7 +185,7 @@ func MasterStackSideBySide(screenWidth, usableHeight int) bool {
 // could give them seventeen, and the frame showed panes on top of each other.
 func CalculateMasterStackLayout(n int, screenWidth int, usableHeight int, topMargin int, masterRatio, stackRatio float64, gap int) []TileLayout {
 	return CalculateMasterLayout(n, screenWidth, usableHeight, topMargin, MasterParams{
-		Position:   config.MasterPositionLeft,
+		Position:   MasterPositionLeft,
 		Count:      1,
 		Ratio:      masterRatio,
 		StackRatio: stackRatio,

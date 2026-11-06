@@ -2,8 +2,6 @@ package layout
 
 import (
 	"testing"
-
-	"github.com/Gaurav-Gosain/tuios/internal/config"
 )
 
 // outside reports the rectangles that leave the region, and overlapping reports
@@ -36,8 +34,8 @@ func overlapping(layouts []TileLayout) [][2]TileLayout {
 }
 
 // TestPanesShrinkRatherThanOverlap is the regression for the fixed pane minimum
-// this tiler used to enforce. Every tile was grown to config.DefaultWindowWidth
-// by config.DefaultWindowHeight and then shoved back inside the screen, so a
+// this tiler used to enforce. Every tile was grown to DefaultWindowWidth
+// by DefaultWindowHeight and then shoved back inside the screen, so a
 // region that could not give every pane that much drew them on top of each
 // other.
 //
@@ -65,10 +63,10 @@ func TestPanesShrinkRatherThanOverlap(t *testing.T) {
 		for _, r := range layouts {
 			narrowest, shortest = min(narrowest, r.Width), min(shortest, r.Height)
 		}
-		if narrowest >= config.DefaultWindowWidth && shortest >= config.DefaultWindowHeight {
+		if narrowest >= DefaultWindowWidth && shortest >= DefaultWindowHeight {
 			t.Errorf("%d panes on %dx%d leave the smallest at %dx%d, which the old minimum of %dx%d "+
 				"could have satisfied; this size no longer demonstrates anything",
-				c.n, c.w, c.h, narrowest, shortest, config.DefaultWindowWidth, config.DefaultWindowHeight)
+				c.n, c.w, c.h, narrowest, shortest, DefaultWindowWidth, DefaultWindowHeight)
 		}
 	}
 }
