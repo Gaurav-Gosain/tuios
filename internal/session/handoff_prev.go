@@ -65,7 +65,7 @@ func keepRunningBinary(dir string) (*prevBinary, error) {
 		if err != nil {
 			return nil, err
 		}
-		return &prevBinary{path: "/proc/self/fd/" + strconv.Itoa(int(f.Fd())), open: f}, nil //nolint:gosec // a descriptor number
+		return &prevBinary{path: "/proc/self/fd/" + strconv.Itoa(fdNum(f)), open: f}, nil
 	}
 	exe, err := os.Executable()
 	if err != nil {
@@ -147,7 +147,7 @@ func (p *prevBinary) fd() int {
 	if p.open == nil {
 		return -1
 	}
-	return int(p.open.Fd()) //nolint:gosec // a descriptor number
+	return fdNum(p.open)
 }
 
 // restartAdvice is what to do when a live upgrade is not possible.

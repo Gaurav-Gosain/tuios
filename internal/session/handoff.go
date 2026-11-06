@@ -329,7 +329,7 @@ func (r *handoffRun) prepare() error {
 	r.undo = append(r.undo, func() { _ = f.Close() })
 	hold := r.keptDescriptors(refs)
 	bin := keeperBinary(r.prev, hold)
-	restore := append([]string{bin}, d.handoffArgs(int(f.Fd()))...) //nolint:gosec // a descriptor number
+	restore := append([]string{bin}, d.handoffArgs(fdNum(f))...)
 	k, err := startKeeper(bin, hold, restore)
 	if err != nil {
 		return errfmt.Errorf("starting the handoff keeper: %w", err)
@@ -456,7 +456,7 @@ func (r *handoffRun) writeManifest(sessions []*Session, refs []handoffPaneRef) e
 		r.fds = append(r.fds, fd)
 	}
 	if d.startLock != nil {
-		dr.LockFD = int(d.startLock.Fd()) //nolint:gosec // a descriptor number
+		dr.LockFD = fdNum(d.startLock)
 		r.fds = append(r.fds, dr.LockFD)
 	}
 	// The daemon's end of the keeper's socket crosses the exec: it closes
@@ -478,7 +478,7 @@ func (r *handoffRun) writeManifest(sessions []*Session, refs []handoffPaneRef) e
 	if _, err := r.file.Seek(0, 0); err != nil {
 		return err
 	}
-	r.fds = append(r.fds, int(r.file.Fd())) //nolint:gosec // a descriptor number
+	r.fds = append(r.fds, fdNum(r.file))
 	return nil
 }
 
@@ -508,7 +508,7 @@ func (d *Daemon) openHostedPanes() {
 // lock and, last, the previous binary where it is a descriptor.
 func (r *handoffRun) keptDescriptors(refs []handoffPaneRef) []int {
 	d := r.d
-	out := []int{int(r.file.Fd())} //nolint:gosec // a descriptor number
+	out := []int{fdNum(r.file)}
 	for _, ref := range refs {
 		ptyspawn.ControlMaster(ref.pty.pty, func(fd int) { out = append(out, fd) })
 	}
@@ -516,7 +516,7 @@ func (r *handoffRun) keptDescriptors(refs []handoffPaneRef) []int {
 		listenerFD(l, func(fd int) { out = append(out, fd) })
 	}
 	if d.startLock != nil {
-		out = append(out, int(d.startLock.Fd())) //nolint:gosec // a descriptor number
+		out = append(out, fdNum(d.startLock))
 	}
 	if fd := r.prev.fd(); fd >= 0 {
 		out = append(out, fd)
@@ -574,7 +574,7 @@ func (r *handoffRun) commit() error {
 	}
 	d.closeClientsForHandoff(r.bin.accepts.Version)
 
-	argv := append([]string{r.bin.path}, d.handoffArgs(int(r.file.Fd()))...) //nolint:gosec // a descriptor number
+	argv := append([]string{r.bin.path}, d.handoffArgs(fdNum(r.file))...)
 	log.Printf("Live upgrade: exec %s with %d panes (manifest %d bytes, stopped %s)", r.bin.path, r.panes, r.manifestBytes, time.Since(r.started).Round(time.Millisecond))
 	// A binary runs from the file the preflight ran: on Linux its
 	// descriptor, which stays close-on-exec, and elsewhere its private copy.

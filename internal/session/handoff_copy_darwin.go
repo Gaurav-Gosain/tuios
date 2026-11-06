@@ -36,12 +36,12 @@ const quarantineAttr = "com.apple.quarantine"
 // downloaded binary would run through the copy with no check at all.
 func copyQuarantine(src, dst *os.File) error {
 	buf := make([]byte, 1024)
-	n, err := unix.Fgetxattr(int(src.Fd()), quarantineAttr, buf) //nolint:gosec // a descriptor number
+	n, err := unix.Fgetxattr(fdNum(src), quarantineAttr, buf)
 	if errors.Is(err, unix.ENOATTR) {
 		return nil
 	}
 	if err != nil {
 		return err
 	}
-	return unix.Fsetxattr(int(dst.Fd()), quarantineAttr, buf[:n], 0) //nolint:gosec // a descriptor number
+	return unix.Fsetxattr(fdNum(dst), quarantineAttr, buf[:n], 0)
 }
