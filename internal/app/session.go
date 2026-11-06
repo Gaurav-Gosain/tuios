@@ -1397,22 +1397,8 @@ func (m *OS) updateWindowFromState(w *terminal.Window, ws *session.WindowState) 
 		w.SetAltScreen(ws.IsAltScreen)
 	}
 	fromState, fromQuiet, fromKind := w.AgentState, w.AgentQuiet, w.AgentKind
-	w.AgentMessage = ws.AgentMessage
-	w.AgentReason = ws.AgentReason
-	w.AgentKind = ws.AgentKind
-	w.AgentHarness = ws.AgentHarness
-	w.StartedBySession, w.StartedByWindow = startedByFromWire(ws.StartedBy)
-	w.AgentMeta = agentMetaFromWire(w.AgentMeta, ws.AgentMeta)
-	w.AgentQueued = ws.AgentQueued
-	w.AgentDraftHeld = ws.AgentDraftHeld
-	w.AgentSettled = ws.AgentSettled
-	w.AgentQuiet = ws.AgentQuiet
-	w.AgentSubagents = ws.AgentSubagents
-	w.AgentSubagentList = subagentsFromWire(w.AgentSubagentList, ws.AgentSubagentList)
-	w.ProgramStatus = programStatusFromWire(w.ProgramStatus, ws.ProgramStatus)
-	w.AgentStateAt = ws.AgentStateAt
 	prevSeq := w.AgentCompletionSeq
-	w.AgentCompletionSeq = ws.CompletionSeq
+	copyAgentWire(w, ws)
 	// A silent pane is drawn as unknown, the state it is shown as. See
 	// session.WindowState.ShownAgentState.
 	shown := string(ws.ShownAgentState())
@@ -1539,21 +1525,7 @@ func adoptWindowState(window *terminal.Window, ws session.WindowState) {
 	window.PreMinimizeHeight = ws.PreMinimizeH
 	window.SetAltScreen(ws.IsAltScreen) // also drives mouse event forwarding
 	window.AgentState = string(ws.ShownAgentState())
-	window.AgentMessage = ws.AgentMessage
-	window.AgentReason = ws.AgentReason
-	window.AgentKind = ws.AgentKind
-	window.AgentHarness = ws.AgentHarness
-	window.StartedBySession, window.StartedByWindow = startedByFromWire(ws.StartedBy)
-	window.AgentMeta = agentMetaFromWire(nil, ws.AgentMeta)
-	window.AgentQueued = ws.AgentQueued
-	window.AgentDraftHeld = ws.AgentDraftHeld
-	window.AgentSettled = ws.AgentSettled
-	window.AgentQuiet = ws.AgentQuiet
-	window.AgentSubagents = ws.AgentSubagents
-	window.AgentSubagentList = subagentsFromWire(nil, ws.AgentSubagentList)
-	window.ProgramStatus = programStatusFromWire(nil, ws.ProgramStatus)
-	window.AgentStateAt = ws.AgentStateAt
-	window.AgentCompletionSeq = ws.CompletionSeq
+	copyAgentWire(window, &ws)
 	window.ForegroundCmd = ws.ForegroundCmd
 	// The shell's pid, as the daemon that spawned it knows it, and the only
 	// second source a daemon-backed pane has for the directory it reports over
@@ -2621,4 +2593,27 @@ func startedByFromWire(ref *session.PaneRef) (sessionName, window string) {
 		return "", ""
 	}
 	return ref.Session, ref.Window
+}
+
+// copyAgentWire copies a pane's agent fields from the daemon's state onto w,
+// for a pane made from the state and for one the state updates. AgentState is
+// left to the caller: a new pane takes the shown state as it is, and an update
+// first checks for a turn that fell between two snapshots. The slices and maps
+// w already holds are reused where the values match.
+func copyAgentWire(w *terminal.Window, ws *session.WindowState) {
+	w.AgentMessage = ws.AgentMessage
+	w.AgentReason = ws.AgentReason
+	w.AgentKind = ws.AgentKind
+	w.AgentHarness = ws.AgentHarness
+	w.StartedBySession, w.StartedByWindow = startedByFromWire(ws.StartedBy)
+	w.AgentMeta = agentMetaFromWire(w.AgentMeta, ws.AgentMeta)
+	w.AgentQueued = ws.AgentQueued
+	w.AgentDraftHeld = ws.AgentDraftHeld
+	w.AgentSettled = ws.AgentSettled
+	w.AgentQuiet = ws.AgentQuiet
+	w.AgentSubagents = ws.AgentSubagents
+	w.AgentSubagentList = subagentsFromWire(w.AgentSubagentList, ws.AgentSubagentList)
+	w.ProgramStatus = programStatusFromWire(w.ProgramStatus, ws.ProgramStatus)
+	w.AgentStateAt = ws.AgentStateAt
+	w.AgentCompletionSeq = ws.CompletionSeq
 }
