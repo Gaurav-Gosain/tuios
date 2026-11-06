@@ -753,6 +753,7 @@ func TestNoLowClassVerbTakesAPathOrReturnsAFile(t *testing.T) {
 		"peek-prompt.lines":              "pane text, which list reaches",
 		"show-buffer.data":               "a paste buffer, which list reaches as it reaches the panes",
 		"show-buffer.data_b64":           "a paste buffer, which list reaches as it reaches the panes",
+		"agent-transcript.data":          "an image pasted into the conversation, read from its base64 in the transcript record, which transcripts reaches",
 	}
 	pathy := []string{"path", "paths", "dir", "file", "files", "out", "output", "cwd", "sock", "attachments", "dest", "src", "root"}
 	carries := []string{"content", "data", "data_b64", "lines"}
