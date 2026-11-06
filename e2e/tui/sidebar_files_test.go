@@ -1885,12 +1885,20 @@ func quickLookMenuPreview(t *testing.T, term *tuitest.Terminal, name string) {
 // keyboard with the panes, in window mode. The rail has not had it yet.
 func quickLookListed(t *testing.T, env []string, out *lockedBuffer) (*tuitest.Terminal, string) {
 	t.Helper()
+	term, dir, _ := quickLookListedBase(t, env, out)
+	return term, dir
+}
+
+// quickLookListedBase is quickLookListed that also returns the client's config
+// base, for a test that installs a plugin.
+func quickLookListedBase(t *testing.T, env []string, out *lockedBuffer) (*tuitest.Terminal, string, string) {
+	t.Helper()
 	dir := quickLookFixture(t)
 	opts := startOpts{cols: 140, rows: 40, env: env}
 	if out != nil {
 		opts.out = out
 	}
-	term, _ := start(t, opts)
+	term, base := start(t, opts)
 	waitBoot(t, term)
 	newWindow(t, term)
 	waitWindowCount(t, term, 1, "opening a shell for the listing")
@@ -1899,7 +1907,7 @@ func quickLookListed(t *testing.T, env []string, out *lockedBuffer) (*tuitest.Te
 	leaveTerminalMode(t, term)
 	toggleSidebarViaPalette(t, term)
 	waitForAll(t, term, uiTimeout, "the listing", "main.go", "notes.md", "pic.png")
-	return term, dir
+	return term, dir, base
 }
 
 // quickLookFocusRail gives the rail the keyboard and puts its cursor on the
@@ -2913,8 +2921,34 @@ func TestQuickLookShowsADiff(t *testing.T) {
 //
 // How this could pass wrongly: the words would be there as raw source too. So the test
 // also checks that no tag, no marker and no fence reaches the panel.
+//
+// The diagram is drawn by the sketch plugin, so the renderer stays out of the
+// tuios binary. A stand-in plugin answers with fakeCells, which spell PLUGIN-DREW.
 func TestQuickLookReadsRichMarkdown(t *testing.T) {
-	term, dir := quickLookListed(t, nil, nil)
+	term, dir, base := quickLookListedBase(t, nil, nil)
+	plug := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(plug, "bin"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	manifest, err := os.ReadFile(filepath.Join("..", "..", "plugins", "sketch", "tuios-plugin.toml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	writeFiles(t, plug, map[string]string{"tuios-plugin.toml": string(manifest)})
+	if err := os.WriteFile(filepath.Join(plug, "bin", "sketch"), []byte("#!/bin/sh\ncat >/dev/null\necho '"+fakeCells+"'\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if out, err := tuiosCLI(t, base, "plugins", "install", plug, "--yes"); err != nil {
+		t.Fatalf("install the plugin: %v\n%s", err, out)
+	}
+	// The install writes config.toml, and the reload puts the rail back as the
+	// file has it, so the rail is opened again.
+	waitFor(t, term, "the reload to hide the rail", func(s tuitest.Screen) bool {
+		_, _, ok := findOnGrid(s, "main.go")
+		return !ok
+	})
+	toggleSidebarViaPalette(t, term)
+	waitForAll(t, term, uiTimeout, "the listing after the install", "main.go", "notes.md")
 	doc := `<!-- a hidden comment -->
 <h2 align="center">Rich title</h2>
 
@@ -2947,13 +2981,8 @@ The secret body.
 	quickLookFocusRail(t, term, "zrich.md")
 	sendKeys(t, term, " ")
 	railLists(t, term, "the document did not read as Markdown",
-		[]string{"Rich title", "bold", "Warning", "Mind the step.", "[1]", "1. The note text.", "More words", "[Image: a logo]", "Start", "Stop"},
+		[]string{"Rich title", "bold", "Warning", "Mind the step.", "[1]", "1. The note text.", "More words", "[Image: a logo]", "PLUGIN-DREW"},
 		[]string{"<h2", "<b>", "</", "[!WARNING]", "[^one]", "[site]", "hidden", "The secret body.", "```", "flowchart", "-->"})
-	// The arrow head stays, as a glyph the code block keeps, so the box after it
-	// keeps its column.
-	if !strings.Contains(term.Snapshot(), "─>│ Stop") {
-		t.Errorf("ASSERTION: the diagram lost its arrow head:\n%s", term.Snapshot())
-	}
 	saveCockpitFrames(t, term, "quick-look-rich-markdown")
 	sendKeys(t, term, tuitest.Tab, tuitest.Enter)
 	railLists(t, term, "enter did not open the section", []string{"The secret body."}, nil)

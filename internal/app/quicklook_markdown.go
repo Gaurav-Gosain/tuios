@@ -3,9 +3,6 @@ package app
 import (
 	"strings"
 	"time"
-
-	"tuios.dev/sketch"
-	sketchtext "tuios.dev/sketch/text"
 )
 
 const (
@@ -86,22 +83,31 @@ func quickLookMermaidGlyphs(line string, ascii bool) string {
 	}, line)
 }
 
-// quickLookMermaidText draws one diagram, under the time limit.
+// quickLookMermaidText draws one diagram as text with the sketch plugin, under
+// the time limit. The renderer stays out of this binary: without the plugin a
+// diagram stays as its source.
 func quickLookMermaidText(src string, drawn int) ([]string, bool) {
 	if drawn >= quickLookMermaidMax || len(src) > quickLookMermaidBytes {
 		return nil, false
 	}
 	done := make(chan []string, 1)
 	go func() {
-		d, err := sketch.Parse(src, sketch.ParseOptions{})
+		cells, _, err := drawWithSketchPlugin(src, quickLookMermaidCols)
 		if err != nil {
 			done <- nil
 			return
 		}
-		lines, err := sketchtext.Draw(d, sketchtext.Options{Cols: quickLookMermaidCols})
-		if err != nil {
-			done <- nil
-			return
+		lines := make([]string, len(cells))
+		var b strings.Builder
+		for i, row := range cells {
+			b.Reset()
+			for _, c := range row {
+				// 0 is the cell a wide character covers.
+				if c.Rune != 0 {
+					b.WriteRune(c.Rune)
+				}
+			}
+			lines[i] = strings.TrimRight(b.String(), " ")
 		}
 		done <- lines
 	}()
