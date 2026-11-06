@@ -1,14 +1,14 @@
 //go:build !windows
 
-package main
+package hostsetup
 
 import (
 	"os"
 	"syscall"
 )
 
-// fileOwner is the user id that owns the file, for the StrictModes check of
-// tuios pair.
+// fileOwner is the user id that owns the file, for the StrictModes check in
+// CheckAuthorizedKeysModes.
 func fileOwner(fi os.FileInfo) (uint32, bool) {
 	st, ok := fi.Sys().(*syscall.Stat_t)
 	if !ok {
