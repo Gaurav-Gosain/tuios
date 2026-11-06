@@ -1088,6 +1088,8 @@ func (m *OS) drawQuickLook(c *ckCanvas, l ckLook, dv *diffview.Theme, w, h int) 
 		}
 		quickLookBar(c, pal, w-1, bodyTop, bodyRows, r, from)
 		row := 0
+		// The spans of a windowed row, kept for the rows of this frame.
+		var cut []diffview.Span
 		for n := from; row < bodyRows && n < len(r.lines); n++ {
 			if r.firstLine > 0 {
 				num := strconv.Itoa(r.firstLine + n)
@@ -1101,6 +1103,7 @@ func (m *OS) drawQuickLook(c *ckCanvas, l ckLook, dv *diffview.Theme, w, h int) 
 			if ql.wrap {
 				rows = quickLookWrapRows(r.lines[n], codeW)
 			}
+			walk := quickLookWalk{line: r.lines[n]}
 			for k := 0; k < rows && row < bodyRows; k++ {
 				// One cell more than the row, so a wrapped row ends in text and
 				// not in the ellipsis of a cut line.
@@ -1108,7 +1111,20 @@ func (m *OS) drawQuickLook(c *ckCanvas, l ckLook, dv *diffview.Theme, w, h int) 
 				if ql.wrap {
 					width = codeW + 1
 				}
-				c.draw(codeX, bodyTop+row, codeW, dv.Code(r.lines[n], sp, diffview.Range{}, diffview.Context, false, k*codeW, width))
+				text, spans, off := r.lines[n], sp, k*codeW
+				if quickLookWindowed(text, width) {
+					b0, o, end := walk.window(off, width, off+codeW)
+					// A window that reaches the line's end after a cut start is
+					// drawn from the whole line, as the whole line draws it, so
+					// the last row of a line matches (Code's decision on the
+					// last cell reads grapheme widths, the walk counts truncate
+					// units). The span slice is built only when a window is drawn.
+					if end < len(text) || b0 == 0 {
+						cut = walk.clip(cut, sp, b0, end)
+						text, spans, off = text[b0:end], cut, o
+					}
+				}
+				c.draw(codeX, bodyTop+row, codeW, dv.Code(text, spans, diffview.Range{}, diffview.Context, false, off, width))
 				quickLookLightMatches(c, pal, ql.query, r.lines[n], codeX, bodyTop+row, codeW, k*codeW)
 				row++
 			}
