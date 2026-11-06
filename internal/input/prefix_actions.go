@@ -83,13 +83,13 @@ func (d *ActionDispatcher) registerPrefixHandlers() {
 
 	// Sub-prefixes: each keeps the prefix active so the which-key overlay stays
 	// up for the second key.
-	d.Register("prefix_workspace", makeSubPrefixHandler(func(o *app.OS) { o.WorkspacePrefixActive = true }))
-	d.Register("prefix_minimize", makeSubPrefixHandler(func(o *app.OS) { o.MinimizePrefixActive = true }))
-	d.Register("prefix_window", makeSubPrefixHandler(func(o *app.OS) { o.TilingPrefixActive = true }))
-	d.Register("prefix_debug", makeSubPrefixHandler(func(o *app.OS) { o.DebugPrefixActive = true }))
-	d.Register("prefix_tape", makeSubPrefixHandler(func(o *app.OS) { o.TapePrefixActive = true }))
-	d.Register("prefix_layout", makeSubPrefixHandler(func(o *app.OS) { o.LayoutPrefixActive = true }))
-	d.Register("prefix_tuios", makeSubPrefixHandler(func(o *app.OS) { o.TuiosPrefixActive = true }))
+	d.Register("prefix_workspace", makeSubPrefixHandler(func(o *app.OS) { o.SubMenu = app.SubMenuWorkspace }))
+	d.Register("prefix_minimize", makeSubPrefixHandler(func(o *app.OS) { o.SubMenu = app.SubMenuMinimize }))
+	d.Register("prefix_window", makeSubPrefixHandler(func(o *app.OS) { o.SubMenu = app.SubMenuTiling }))
+	d.Register("prefix_debug", makeSubPrefixHandler(func(o *app.OS) { o.SubMenu = app.SubMenuDebug }))
+	d.Register("prefix_tape", makeSubPrefixHandler(func(o *app.OS) { o.SubMenu = app.SubMenuTape }))
+	d.Register("prefix_layout", makeSubPrefixHandler(func(o *app.OS) { o.SubMenu = app.SubMenuLayout }))
+	d.Register("prefix_tuios", makeSubPrefixHandler(func(o *app.OS) { o.SubMenu = app.SubMenuTuios }))
 
 	// Window prefix (leader, t, ...)
 	d.Register("window_prefix_new", handleNewWindow)

@@ -385,22 +385,21 @@ type OS struct {
 	// new pane is not built locally; it arrives later through a state sync. These
 	// remember which side of which pane the split was meant for so the sync path
 	// can honor the direction instead of falling back to the spiral scheme.
-	pendingSplitDir       layout.PreselectionDir
-	pendingSplitTarget    string
-	WindowToBSPID         map[string]int // Maps window UUID to stable BSP integer ID
-	BSPIDToWindowID       map[int]string // Reverse of WindowToBSPID: BSP integer ID to window UUID (speed-up for GetWindowByIntID)
-	NextBSPWindowID       int            // Next BSP window ID to assign (starts at 1)
-	RenameKind            RenameKind     // What the open rename editor targets (RenameNone when closed)
-	RenameBuffer          string         // Buffer for new window name
-	RenameTargetID        string         // Window the rename in flight applies to
-	renameHit             overlay.Rect   // Where the dialog was drawn, in screen cells
-	renameClearHit        overlay.Rect   // Where its clear hint was drawn, in screen cells
-	PrefixActive          bool           // True when prefix key was pressed (tmux-style)
-	WorkspacePrefixActive bool           // True when Ctrl+B, w was pressed (workspace sub-prefix)
-	MinimizePrefixActive  bool           // True when Ctrl+B, m was pressed (minimize sub-prefix)
-	TilingPrefixActive    bool           // True when Ctrl+B, t was pressed (tiling/window sub-prefix)
-	DebugPrefixActive     bool           // True when Ctrl+B, D was pressed (debug sub-prefix)
-	LastPrefixTime        time.Time      // Time when prefix was activated
+	pendingSplitDir    layout.PreselectionDir
+	pendingSplitTarget string
+	WindowToBSPID      map[string]int // Maps window UUID to stable BSP integer ID
+	BSPIDToWindowID    map[int]string // Reverse of WindowToBSPID: BSP integer ID to window UUID (speed-up for GetWindowByIntID)
+	NextBSPWindowID    int            // Next BSP window ID to assign (starts at 1)
+	RenameKind         RenameKind     // What the open rename editor targets (RenameNone when closed)
+	RenameBuffer       string         // Buffer for new window name
+	RenameTargetID     string         // Window the rename in flight applies to
+	renameHit          overlay.Rect   // Where the dialog was drawn, in screen cells
+	renameClearHit     overlay.Rect   // Where its clear hint was drawn, in screen cells
+	PrefixActive       bool           // True when prefix key was pressed (tmux-style)
+	// SubMenu is the leader sub-menu open now (leader, then w, m, t, D, T, L
+	// or the tuios menu key), SubMenuNone when none is.
+	SubMenu        SubMenu
+	LastPrefixTime time.Time // Time when prefix was activated
 	// LockHeld is true while lock mode keeps a menu open after a repeatable
 	// action, until esc. See lock_mode.go.
 	LockHeld bool
@@ -1217,11 +1216,8 @@ type OS struct {
 	TapeManager       *TapeManagerState // Tape manager state
 	TapeRecorder      *tape.Recorder    // Tape recorder for recording sessions
 	TapeRecordingName string            // Name of current recording
-	TapePrefixActive  bool              // True when Ctrl+B, T was pressed (tape sub-prefix)
-	TuiosPrefixActive bool              // True when the tuios menu is open (leader, then prefix_tuios's key)
 	// Menu is the declared menu open now (see config.MenuConfig), "" when none is.
-	Menu               string
-	LayoutPrefixActive bool // True when Ctrl+B, L was pressed (layout sub-prefix)
+	Menu string
 	// MouseOff is set by toggle_mouse: the client stops asking the host for
 	// mouse reports, so the host terminal selects text itself, as tmux's
 	// mouse off does.

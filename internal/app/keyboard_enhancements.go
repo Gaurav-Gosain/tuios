@@ -108,9 +108,7 @@ func (m *OS) KeysGoToBindings() bool {
 	if m.Mode != TerminalMode {
 		return true
 	}
-	if m.PrefixActive || m.WorkspacePrefixActive || m.MinimizePrefixActive ||
-		m.TilingPrefixActive || m.DebugPrefixActive || m.TapePrefixActive ||
-		m.LayoutPrefixActive || m.TuiosPrefixActive || m.Menu != "" || m.PrefixRepeatLive() {
+	if m.PrefixActive || m.SubMenu != SubMenuNone || m.Menu != "" || m.PrefixRepeatLive() {
 		return true
 	}
 	if m.OverlayOwnsKeyboard() {
