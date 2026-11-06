@@ -5574,6 +5574,71 @@ it; it is not built.
   backslash never came) keeps its grown buffer. The release needs the ground
   state, because dropping the buffer mid-sequence would cut the payload.
 
+## 2026-11 quick look draws a text row from its window
+
+Quick look drew each text row by handing the whole line to the diff view, which
+styles all of it and then cuts the row out, so every row paid two or three
+walks of the line to draw about 100 cells. A 64 KiB line that wraps into about
+640 rows cost every drawn row of it a walk of 64 KiB; with wrap off (the default
+for `.json`, `.js`, `.log` and `.csv`) every drawn row is a different long line
+and pays the same. A row is now drawn from the part of the line it needs: the
+line is walked in the units `ansi.Truncate` uses, from the column the row starts
+at to the unit where three times the row's draw width plus one cell is covered,
+and only that part is styled, with the spans that touch it clipped and moved to
+it. The walk is carried from row to row of one line, so a wrapped line is walked
+once to its last drawn cell. A window that reaches the line's end after a cut
+start is drawn from the whole line, so the last row of a line draws as it did.
+
+The margin is three times and not one because a unit the walk counts can be
+wider than its grapheme width by up to two cells (a skin-tone modifier after an
+ASCII byte is 3 cells to the walk and 1 to `StringWidth`), and the diff view
+decides whether a line goes on, and so whether it ends in an ellipsis, from
+grapheme widths.
+
+A line is drawn whole when it has no more than max(128, 3*(width+1)) bytes,
+`width` being the draw width given to the diff view (the panel's code width plus
+one with wrap on, the code width with wrap off). Every unit takes at least as
+many bytes as the cells the walk counts for it, so such a line's first window is
+all of it and every later row reaches its end: the walk would cost and change
+nothing. On the default panel that is about 327 bytes with wrap on and 324 with
+wrap off, so a small file draws exactly as before.
+
+Measured with a scratch benchmark (`keystrokeOS(b, 1, 200, 60)`, a keybind
+registry, quick look open on a text result, the kept panel reset before each
+`renderQuickLook`, scroll one line down), base and branch test binaries
+alternated for 10 rounds on one core (`taskset -c 7`, `-test.cpu 1`,
+`-test.benchtime 15x`), benchstat, Go 1.27.3 (`go version` checked on both
+binaries). Wrap on is a short first line, the long line, a short last line;
+wrap off is 60 lines of the long line. A 64 KiB line, wrap on: ASCII 48.2 ms to
+3.50 ms and 6,519 KiB to 747 KiB a frame, CJK 112.2 ms to 4.13 ms and
+6,542 KiB to 791 KiB; wrap off: ASCII 47.0 ms to 1.55 ms and 3,831 KiB to
+752 KiB, CJK 111.6 ms to 2.55 ms and 3,841 KiB to 769 KiB. A 2 KiB line is 18
+to 51% faster, and an 8 KiB line 69 to 84%. Lines of 80 and 300 bytes (ASCII,
+CJK, mixed, both wrap modes) take the same path as before and show no row
+slower and no more bytes or allocations at p < 0.05.
+
+A cut can still differ from the whole-line draw, in a narrow case. With wrap
+off nothing differs. With wrap on, a row can differ only when many over-counting
+pairs (an ASCII byte followed by U+1F3FB to U+1F3FF, or by U+FF9E or U+FF9F)
+sit both before the row's start and inside its window. The fewest pairs in a
+differing case, at the three-times margin: skin tone 45 (47x20), 51 (60x30) and
+115 (200x60); U+FF9E and U+FF9F 93 (47x20), 99 (60x30) and none up to 160 at
+200x60. The reason is that the whole-line draw decides on an ellipsis from
+grapheme widths but cuts in truncate units, so its own decision mixes the two.
+The whole-line draw itself shows a stray ellipsis on such lines (after four to
+six keycaps at a wrapped line's end, about 36 cells into a wrap-off row of "q"
+and U+1F3FD pairs, and in the middle of a wrapped row of "q" and U+FF9F pairs),
+and the window draws what the whole line draws there; it is not changed here.
+A full sweep of 1,170,312 panels (units, positions, three panel sizes, both
+wrap modes, two scroll offsets) and 6,000 random screens (33,110 panels) found
+0 differing cells.
+
+### Measured and deliberately not changed
+
+- `quickLookWrapRows` and `quickLookLastWrapped` each walk a whole line once a
+  frame (about 2 ms on a 64 KiB line). They are one walk and not one per row,
+  against the 45 ms or more the rows cost on the same line before this change.
+
 ## 2026-10 tuios.dev/shot opaque PNG encode
 
 A screenshot with no transparent pixel encodes in well under half the time,
