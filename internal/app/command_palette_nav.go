@@ -170,11 +170,20 @@ func (m *OS) ActivateCommandPalette() tea.Cmd {
 		}
 		return nil
 	}
-	action := filtered[m.CommandPaletteSelected].Action
+	item := filtered[m.CommandPaletteSelected]
 	m.CloseCommandPalette()
-	if action != nil {
-		_, cmd := action(m)
+	if item.Action != nil {
+		_, cmd := item.Action(m)
 		return cmd
+	}
+	// A row that names its action and keeps no handler of its own runs the
+	// action itself, so the row and the key do the same thing.
+	if item.Bind != "" {
+		if err := m.RunAction(item.Bind); err != nil {
+			m.ShowNotification(err.Error(), "error", m.Settings.NotificationDuration)
+			return nil
+		}
+		return m.takeScriptCmds()
 	}
 	return nil
 }

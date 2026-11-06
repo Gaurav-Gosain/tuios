@@ -341,13 +341,6 @@ func GetCommandPaletteItems(s *config.Settings) []CommandPaletteItem {
 			Shortcut: "prefix+-",
 			Bind:     "prefix_split_horizontal",
 			Category: "Layout",
-			Action: func(m *OS) (*OS, tea.Cmd) {
-				if m.AutoTiling {
-					m.splitFocused(layout.PreselectionDown, m.FollowSSHOnNewWindow())
-					m.ShowNotification("Split horizontal", "info", s.NotificationDuration)
-				}
-				return m, nil
-			},
 		},
 		{
 			Name:     "Split horizontal, and run the focused pane's ssh",
@@ -366,13 +359,6 @@ func GetCommandPaletteItems(s *config.Settings) []CommandPaletteItem {
 			Shortcut: "prefix+|",
 			Bind:     "prefix_split_vertical",
 			Category: "Layout",
-			Action: func(m *OS) (*OS, tea.Cmd) {
-				if m.AutoTiling {
-					m.splitFocused(layout.PreselectionRight, m.FollowSSHOnNewWindow())
-					m.ShowNotification("Split vertical", "info", s.NotificationDuration)
-				}
-				return m, nil
-			},
 		},
 		{
 			Name:     "Split vertical, and run the focused pane's ssh",
@@ -1119,6 +1105,7 @@ func GetCommandPaletteItems(s *config.Settings) []CommandPaletteItem {
 			// The copies between machines: the Copies panel.
 			Name:     "Copies between machines",
 			Shortcut: "prefix+u",
+			Bind:     "prefix_transfers",
 			Category: "Files",
 			Action: func(m *OS) (*OS, tea.Cmd) {
 				return m, m.OpenTransfers()
