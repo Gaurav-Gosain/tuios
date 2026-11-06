@@ -25,7 +25,7 @@ import (
 // rather than as an error. The connection stays open and the client closes it.
 //
 // Taking another person's client away is an admin action. From a pane the
-// verb needs the admin grant (scopeDeny in verbScopes), and an attach from a
+// verb needs the admin grant (scopeDeny on its verb entry), and an attach from a
 // pane already needs it for the binary protocol (checkGrantMessage).
 //
 // Ordering. Two clients that attach -d at the same moment must end with one

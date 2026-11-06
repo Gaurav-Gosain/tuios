@@ -97,6 +97,12 @@ func shipVerbs() map[string]verbEntry {
 	}
 	return map[string]verbEntry{
 		"ship-commit": {
+			// From the ship work (verb_ship.go). A commit and a merge write the
+			// files a pane's agent works on, as a restore does. A push and a pull
+			// request send work off this machine: they are writes here, and the
+			// handler also asks the person in the Inbox for any caller on a
+			// restricted connection. The status is a read.
+			scope:       scopeWrite,
 			description: "Stage every change in a pane's git work tree, untracked files included and ignored ones not, and commit it on the branch checked out there. git runs with the person's own identity, signing and hooks, and the message is used as given. Refused while the pane's agent is working or waiting on a prompt, unless force is given.",
 			params: []verbParam{
 				sessionParam,
@@ -118,6 +124,7 @@ func shipVerbs() map[string]verbEntry {
 			handler: (*Daemon).verbShipCommit,
 		},
 		"ship-merge": {
+			scope:       scopeWrite,
 			description: "Merge a worktree pane's branch into its base branch in the repository's main checkout. The main checkout must have that branch checked out and no uncommitted change. A merge that conflicts is aborted, the main checkout is left as it was, and the conflicting files are reported. Uncommitted changes in the worktree are not merged. Nothing is forced.",
 			params: []verbParam{
 				sessionParam,
@@ -134,6 +141,7 @@ func shipVerbs() map[string]verbEntry {
 			handler: (*Daemon).verbShipMerge,
 		},
 		"ship-push": {
+			scope:       scopeWrite,
 			description: "Push a pane's branch to a remote and set it as the branch's upstream. Never forced. The first call answers confirm_required with what would be pushed and a token. Call again with that token to push. A caller inside a pane, or on a restricted connection, also needs the person to allow it in the Inbox, and the call waits for that answer.",
 			params:      pushParams,
 			returns: []verbParam{
@@ -152,6 +160,7 @@ func shipVerbs() map[string]verbEntry {
 			handler: (*Daemon).verbShipPush,
 		},
 		"ship-pr": {
+			scope:       scopeWrite,
 			description: "Push a pane's branch and open a pull request for it with the gh CLI, as the person is logged in to gh. tuios holds no GitHub token. When the branch already has an open pull request, the push updates it and no new one is opened. The first call answers confirm_required with what would happen and a token. Call again with that token. A caller inside a pane, or on a restricted connection, also needs the person to allow it in the Inbox.",
 			params: append(append([]verbParam{}, pushParams...),
 				verbParam{Name: "base", Type: "string", Description: "The branch the pull request merges into. Omit for the base the worktree was made from, else the repository's default branch."},
@@ -176,6 +185,7 @@ func shipVerbs() map[string]verbEntry {
 			handler: (*Daemon).verbShipPR,
 		},
 		"ship-status": {
+			scope:       scopeRead,
 			description: "Read the pull request of a pane's branch as tuios last saw it, and with refresh ask gh now. A worktree session with an open pull request is polled in the background while a client is attached. Off when gh is not installed.",
 			params: []verbParam{
 				sessionParam,

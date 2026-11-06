@@ -73,8 +73,12 @@ var scopeNames = []string{ScopeOwn, ScopeAll}
 type scopeKind int
 
 const (
+	// scopeUnset is a verb entry that names no scope. It is refused as
+	// scopeDeny is, and TestEveryVerbNamesItsScope fails on it, so adding a
+	// verb is a decision about what a restricted caller may do with it.
+	scopeUnset scopeKind = iota
 	// scopeDeny: refused on any restricted connection.
-	scopeDeny scopeKind = iota
+	scopeDeny
 	// scopeOpen touches no session: always allowed.
 	scopeOpen
 	// scopeGlobal reads across sessions. Allowed under read_only alone,
@@ -105,306 +109,12 @@ const (
 	scopeTask
 )
 
-// verbScopes classifies every verb. A verb missing here is treated as
-// scopeDeny, and TestVerbScopesNameEveryVerb fails until it is added.
-var verbScopes = map[string]scopeKind{
-	"hello":               scopeOpen,
-	"list-verbs":          scopeOpen,
-	"list-keys":           scopeOpen,
-	"unsubscribe":         scopeOpen,
-	"restrict-connection": scopeOpen,
-	// pane-grants reports the caller's own grants and touches no session.
-	// set-pane-grants changes what a pane may do, which is not for a
-	// restricted caller.
-	"pane-grants":     scopeOpen,
-	"set-pane-grants": scopeDeny,
-	// daemon-upgrade replaces the daemon every session runs under.
-	"daemon-upgrade": scopeDeny,
-	// apply-config is for the person, outside every pane.
-	"apply-config": scopeDeny,
-	// It changes what the person's machine does and saves config.toml.
-	"set-keep-awake": scopeDeny,
-	"get-keep-awake": scopeGlobal,
-
-	"list-sessions":      scopeGlobal,
-	"list-clients":       scopeGlobal,
-	"list-attention":     scopeGlobal,
-	"list-worktrees":     scopeGlobal,
-	"list-hosts":         scopeGlobal,
-	"list-routes":        scopeGlobal,
-	"list-host-sessions": scopeGlobal,
-	"list-host-agents":   scopeGlobal,
-	"list-themes":        scopeGlobal,
-	"list-glyphs":        scopeGlobal,
-	"list-hooks":         scopeGlobal,
-	// search-panes takes a list of sessions, and every session without one.
-	"search-panes": scopeGlobal,
-
-	"session-info":    scopeRead,
-	"list-windows":    scopeRead,
-	"command-history": scopeRead,
-	"list-ports":      scopeRead,
-	"get-window":      scopeRead,
-	"list-workspaces": scopeRead,
-	"capture-pane":    scopeRead,
-	"stream-pane":     scopeRead,
-	// A restricted connection is automation, never the person.
-	"attach-presence": scopeDeny,
-	// The phones for Web Push are the person's, like attach-presence.
-	"register-push":        scopeDeny,
-	"list-push":            scopeDeny,
-	"remove-push":          scopeDeny,
-	"get-agent-state":      scopeRead,
-	"list-agents":          scopeRead,
-	"wait-for":             scopeRead,
-	"subscribe":            scopeRead,
-	"peek-prompt":          scopeRead,
-	"ssh-agent-path":       scopeRead,
-	"display-env":          scopeRead,
-	"read-agent-messages":  scopeRead,
-	"explain-agent-screen": scopeRead,
-	"list-options":         scopeRead,
-	"get-option":           scopeRead,
-	"stash-list":           scopeRead,
-	"stash-get":            scopeRead,
-
-	"set-agent-state":   scopeSelf,
-	"set-agent-meta":    scopeSelf,
-	"set-agent-session": scopeSelf,
-	// set-agent-state's activity with no state: the same record.
-	"report-agent-activity": scopeSelf,
-	// It marks the pane's own mail announced, so it is the pane's record.
-	"agent-mail-notice": scopeSelf,
-	// An OSC 7501 report the pane's process could not write to its terminal.
-	"report-program-status": scopeSelf,
-
-	"send-agent-message": scopeMail,
-	"stash-put":          scopeMail,
-
-	"send-text": scopeWrite,
-	"send-keys": scopeWrite,
-	// Clearing a pane's history changes what every viewer of it sees.
-	"clear-history": scopeWrite,
-	"ask-agent":     scopeWrite,
-	"respond":       scopeWrite,
-
-	"fan":         scopeLaunch,
-	"start-agent": scopeLaunch,
-
-	// A plugin's own verbs. checkPluginGrants holds them to the ui grant.
-	"plugin-cell":   scopeDeny,
-	"plugin-notify": scopeDeny,
-
-	"list-dock-components": scopeDeny,
-	"refresh-dock":         scopeDeny,
-	"pip":                  scopeDeny,
-	"rail-pane":            scopeDeny,
-	"new-session":          scopeDeny,
-	// switch-session moves a client and detach-client takes clients off
-	// their sessions: client-level actions, like attach.
-	"switch-session":       scopeDeny,
-	"detach-client":        scopeDeny,
-	"new-worktree":         scopeDeny,
-	"remove-worktree":      scopeDeny,
-	"open-host-connection": scopeDeny,
-	// retry-host is the person's act from the rail or from 'tuios hosts
-	// signin'. A restricted caller has no reason to make a link dial.
-	"retry-host":        scopeDeny,
-	"open-pane":         scopeDeny,
-	"resize-pane":       scopeDeny,
-	"pane-cwd":          scopeDeny,
-	"pane-agent":        scopeDeny,
-	"pane-calls":        scopeDeny,
-	"pane-kitty-medium": scopeDeny,
-	// paste-image is the person's act and paste-pane-image the owning
-	// daemon's. Neither is for a restricted caller.
-	"paste-image":      scopeDeny,
-	"paste-pane-image": scopeDeny,
-	"read-dir":         scopeDeny,
-	"wait-dir":         scopeDeny,
-	// The file verbs, transfers and drops are the person's explorer, not a
-	// restricted caller's. A pane's own shell already reaches its files.
-	"file-stat":        scopeDeny,
-	"file-list":        scopeDeny,
-	"file-read":        scopeDeny,
-	"file-hash":        scopeDeny,
-	"file-walk":        scopeDeny,
-	"file-preview":     scopeDeny,
-	"open-file-stream": scopeDeny,
-	"file-mkdir":       scopeDeny,
-	"file-rename":      scopeDeny,
-	"file-remove":      scopeDeny,
-	"file-commit":      scopeDeny,
-	"file-abort":       scopeDeny,
-	"file-drop-dir":    scopeDeny,
-	"transfer-start":   scopeDeny,
-	"transfer-list":    scopeDeny,
-	"transfer-cancel":  scopeDeny,
-	"transfer-pause":   scopeDeny,
-	"transfer-resume":  scopeDeny,
-	"transfer-answer":  scopeDeny,
-	"transfer-clear":   scopeDeny,
-	"file-check":       scopeDeny,
-	"open-tree-stream": scopeDeny,
-	"speed-test":       scopeDeny,
-	"host-speed-test":  scopeDeny,
-	"drop-files":       scopeDeny,
-	"new-window":       scopeDeny,
-	"popup":            scopeDeny,
-	// A pane opens, changes and closes a TML surface with the write grant,
-	// in its own session, and only its own surfaces (tmlOwnerCheck). The
-	// input verb acts as the person.
-	"tml-open":    scopeWrite,
-	"tml-close":   scopeWrite,
-	"tml-input":   scopeDeny,
-	"tml-place":   scopeDeny,
-	"tml-patch":   scopeWrite,
-	"tml-replace": scopeWrite,
-	// tml-get checks the surface's session and the read grant itself
-	// (tmlReach), so the pane that opened a surface reads it with write.
-	"tml-get":  scopeOpen,
-	"tml-list": scopeRead,
-	// artifact-list checks the pane and the read grant itself, so a pane
-	// reads its own artifacts with no grant.
-	"artifact-list": scopeOpen,
-	// tml-validate reads only the document it is given.
-	"tml-validate":         scopeOpen,
-	"split-window":         scopeDeny,
-	"zoom-window":          scopeDeny,
-	"swap-window":          scopeDeny,
-	"resize-window":        scopeDeny,
-	"focus-window":         scopeDeny,
-	"move-window":          scopeDeny,
-	"set-window":           scopeDeny,
-	"set-agent-quiet":      scopeDeny,
-	"select-workspace":     scopeDeny,
-	"set-layout":           scopeDeny,
-	"run-command":          scopeDeny,
-	"close-window":         scopeDeny,
-	"close-workspace":      scopeDeny,
-	"screenshot":           scopeDeny,
-	"resize":               scopeDeny,
-	"kill-session":         scopeDeny,
-	"set-option":           scopeDeny,
-	"set-session-name":     scopeDeny,
-	"rename-session":       scopeDeny,
-	"set-session-accent":   scopeDeny,
-	"set-session-space":    scopeDeny,
-	"set-session-order":    scopeDeny,
-	"set-workspace-name":   scopeDeny,
-	"set-workspace-order":  scopeDeny,
-	"resume-agent":         scopeDeny,
-	"resolve-pane":         scopeDeny,
-	"explain-agent-detect": scopeDeny,
-	"dismiss-attention":    scopeDeny,
-	"request-approval":     scopeDeny,
-	"reply-approval":       scopeDeny,
-	// The conversation is the person's to read. A restricted connection is
-	// automation, never the person.
-	"agent-transcript":  scopeDeny,
-	"reply-history":     scopeDeny,
-	"add-reply-history": scopeDeny,
-
-	// From the host policy and dropped-link work: the link handshake,
-	// ending a hosted pane, and passing on held mail are for a link
-	// connection or the person's client, never a restricted caller.
-	"link-peer":             scopeDeny,
-	"close-pane":            scopeDeny,
-	"release-agent-message": scopeDeny,
-
-	// From the shell command and ask-human work. run types a line at a
-	// prompt. ask-human asks the person as the caller's own pane, which
-	// is a report about that pane, like set-agent-state. answer-ask
-	// answers for the person, which no restricted caller does.
-	"run":        scopeWrite,
-	"ask-human":  scopeSelf,
-	"answer-ask": scopeDeny,
-
-	// From the host targeting work: reading a worktree's files out is for
-	// the person's own CLI (worktree pull), not a restricted caller.
-	"bundle-worktree": scopeDeny,
-
-	// From the agent review, triage, queue and approval work
-	// (verb_protocol_agents.go). Reads of one session and its fan group: a
-	// pane's diff, a fan's comparison, an agent's activity, its queue and a
-	// held approval. Writes: review notes, the queue, and sending notes,
-	// which types. verify-fan starts a window in each attempt, which is a
-	// launch. keep-fan removes worktrees and mark-attention is the person's
-	// act on the Inbox, so neither is for a restricted caller.
-	"review-diff":    scopeRead,
-	"compare-fan":    scopeRead,
-	"agent-activity": scopeRead,
-	"list-queued":    scopeRead,
-	"get-approval":   scopeRead,
-	"review-note":    scopeWrite,
-	// set-fan-verdict writes a judge's pick on the fan's attempts. It needs
-	// the fan grant, and the handler takes it only from the fan's judge pane
-	// or from outside every pane.
-	"set-fan-verdict": scopeLaunch,
-	// judge-fan starts an agent, which is a launch.
-	"judge-fan":     scopeLaunch,
-	"send-review":   scopeWrite,
-	"queue-prompt":  scopeWrite,
-	"cancel-queued": scopeWrite,
-
-	// The task cards (task.go). The listing and one card read the session;
-	// every change is the task grant's.
-	"list-tasks":     scopeRead,
-	"get-task":       scopeRead,
-	"add-task":       scopeTask,
-	"claim-task":     scopeTask,
-	"finish-task":    scopeTask,
-	"set-task-stage": scopeTask,
-	"block-task":     scopeTask,
-	"release-task":   scopeTask,
-	"remove-task":    scopeTask,
-	"verify-fan":     scopeLaunch,
-	"keep-fan":       scopeDeny,
-	"mark-attention": scopeDeny,
-	// review-stage writes the index of a pane's worktree. It is the person's
-	// tool, so a restricted caller has no use for it.
-	"review-stage": scopeDeny,
-
-	// From the checkpoint work (verb_checkpoint.go). Listing and reading a
-	// pane's checkpoints are reads of its session. A restore writes the
-	// files the pane's agent works on, which the handler holds to the panes
-	// the caller could type into.
-	"list-checkpoints":   scopeRead,
-	"checkpoint-diff":    scopeRead,
-	"restore-checkpoint": scopeWrite,
-
-	// From the ship work (verb_ship.go). A commit and a merge write the
-	// files a pane's agent works on, as a restore does. A push and a pull
-	// request send work off this machine: they are writes here, and the
-	// handler also asks the person in the Inbox for any caller on a
-	// restricted connection. The status is a read.
-	"ship-commit": scopeWrite,
-	"ship-merge":  scopeWrite,
-	"ship-push":   scopeWrite,
-	"ship-pr":     scopeWrite,
-	"ship-status": scopeRead,
-
-	// The paste buffers (verb_buffers.go). They are shared by every session,
-	// so a caller restricted to its own session reaches none of them.
-	// paste-buffer types into a pane, and it also reads a buffer: see
-	// readsBuffers.
-	"list-buffers":  scopeBufferRead,
-	"show-buffer":   scopeBufferRead,
-	"set-buffer":    scopeBufferWrite,
-	"delete-buffer": scopeBufferWrite,
-	"paste-buffer":  scopeWrite,
-
-	// The return notes (verb_note.go): a line of text on a session or a
-	// pane, written in the caller's own session. Nothing is typed.
-	"set-note": scopeWrite,
-	"get-note": scopeRead,
-}
-
 // readsBuffers reports whether a verb reads the paste buffers. paste-buffer
 // does: it types a buffer's text into a pane, and the caller can read that
 // pane back.
 func readsBuffers(verb string) bool {
-	return verbScopes[verb] == scopeBufferRead || verb == "paste-buffer"
+	kind, _ := verbScope(verb)
+	return kind == scopeBufferRead || verb == "paste-buffer"
 }
 
 // verbRestrictConnection narrows what this connection may do from now on.
@@ -724,7 +434,7 @@ func (d *Daemon) checkScope(cs *connState, verb string, params json.RawMessage) 
 	if sc == nil {
 		return params, nil
 	}
-	kind, ok := verbScopes[verb]
+	kind, ok := verbScope(verb)
 	if !ok || kind == scopeDeny {
 		return nil, scopeForbidden(verb, "a restricted connection may not call it")
 	}
@@ -901,4 +611,14 @@ func (d *Daemon) forgetLauncher(s *Session) {
 		moved.LaunchedFrom, moved.LaunchedFromID = "", ""
 		_ = o.SetWorktree(&moved)
 	}
+}
+
+// verbScope is what verb does, for a restricted connection, from its entry in
+// the verb registry. ok is false for a name that is not a verb.
+func verbScope(verb string) (kind scopeKind, ok bool) {
+	e, ok := verbRegistry()[verb]
+	if e.scope == scopeUnset {
+		return scopeDeny, ok
+	}
+	return e.scope, ok
 }

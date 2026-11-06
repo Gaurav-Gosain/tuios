@@ -24,6 +24,7 @@ func taskVerbs() map[string]verbEntry {
 	ownership := " A pane changes only the card it holds unless it holds admin; the person, a shell, a link and a plugin change any card."
 	return map[string]verbEntry{
 		"add-task": {
+			scope:       scopeTask,
 			description: "Add a task card to a session: one unit of work, with a title, the prompt for the pane that takes it, and a stage. The card is kept by the daemon and saved with the session, so it survives the pane that added it and a restart. Who added it (by) comes from the connection.",
 			params: []verbParam{
 				sessionParam,
@@ -39,6 +40,9 @@ func taskVerbs() map[string]verbEntry {
 			handler: (*Daemon).verbAddTask,
 		},
 		"list-tasks": {
+			// The task cards (task.go). The listing and one card read the session;
+			// every change is the task grant's.
+			scope:       scopeRead,
 			description: "List a session's task cards, oldest first.",
 			params: []verbParam{
 				sessionParam,
@@ -59,6 +63,7 @@ func taskVerbs() map[string]verbEntry {
 			handler: (*Daemon).verbListTasks,
 		},
 		"get-task": {
+			scope:       scopeRead,
 			description: "Read one task card whole: its row, its prompt and its history.",
 			params:      []verbParam{sessionParam, id},
 			returns: slices.Concat(row, []verbParam{
@@ -71,6 +76,7 @@ func taskVerbs() map[string]verbEntry {
 			handler: (*Daemon).verbGetTask,
 		},
 		"claim-task": {
+			scope:       scopeTask,
 			description: "Take a task card for a pane: the card id, or with next the oldest card no pane holds that is not blocked or done, and that no fan of another session works on (fan with task). A card in todo or plan moves to doing. The pick and the take are one step, so two panes claiming next at once take two cards. A pane claims only for itself unless it holds admin; outside a pane, name the window. The card is released when its pane closes, its agent leaves the pane, or the daemon restarts.",
 			params: []verbParam{
 				sessionParam,
@@ -87,6 +93,7 @@ func taskVerbs() map[string]verbEntry {
 			handler: (*Daemon).verbClaimTask,
 		},
 		"finish-task": {
+			scope:       scopeTask,
 			description: "Mark a task card done. Its holder lets it go and its block, if any, is lifted. Finishing a card that is done already changes nothing." + ownership,
 			params:      []verbParam{sessionParam, id, humanNonce},
 			returns:     row,
@@ -96,6 +103,7 @@ func taskVerbs() map[string]verbEntry {
 			handler: (*Daemon).verbFinishTask,
 		},
 		"set-task-stage": {
+			scope:       scopeTask,
 			description: "Move a task card to a stage by hand. The daemon also moves cards on its own ([tasks] auto_stage), only from the stages each fact moves a card from, so a card put in another stage by hand stays there. A move to done is a finish: the holder lets the card go, its block is lifted, and task-finished is sent. A move to the stage the card is in changes nothing." + ownership,
 			params: []verbParam{
 				sessionParam,
@@ -110,6 +118,7 @@ func taskVerbs() map[string]verbEntry {
 			handler: (*Daemon).verbSetTaskStage,
 		},
 		"block-task": {
+			scope:       scopeTask,
 			description: "Mark a task card stuck, saying what it waits on, or with clear lift the mark. A blocked card keeps its holder and its stage, and claim-task next skips it. To let a card go, use release-task." + ownership,
 			params: []verbParam{
 				sessionParam,
@@ -126,6 +135,7 @@ func taskVerbs() map[string]verbEntry {
 			handler: (*Daemon).verbBlockTask,
 		},
 		"release-task": {
+			scope:       scopeTask,
 			description: "Let a task card go without finishing it. It keeps its stage, and another pane can claim it." + ownership,
 			params:      []verbParam{sessionParam, id, humanNonce},
 			returns:     row,
@@ -135,6 +145,7 @@ func taskVerbs() map[string]verbEntry {
 			handler: (*Daemon).verbReleaseTask,
 		},
 		"remove-task": {
+			scope:       scopeTask,
 			description: "Remove a task card and its history. A pane needs the admin grant; the person and a shell remove any card.",
 			params:      []verbParam{sessionParam, id, humanNonce},
 			returns: []verbParam{

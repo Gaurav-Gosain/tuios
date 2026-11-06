@@ -42,6 +42,9 @@ func agentWorkVerbs() map[string]verbEntry {
 	return map[string]verbEntry{
 		// verb_agent_transcript.go
 		"agent-transcript": {
+			// The conversation is the person's to read. A restricted connection is
+			// automation, never the person.
+			scope:       scopeDeny,
 			description: "Read the conversation of the agent in a pane, for a client that shows it to the person: prompts, answers, thinking, tool calls with their status, diffs of edits, plans and todo lists, decoded from the transcript the pane is joined to. Readers include Claude Code, Codex, Gemini CLI, Qwen Code, Copilot CLI, Amp, OpenCode, Cursor Agent and Pi. Only the person can read it, with a live human_nonce, as reply-approval checks it. Every string is the agent's or its tools', with control characters removed and likely secrets masked, so the reply is marked untrusted.",
 			params: []verbParam{
 				sessionParam,
@@ -71,6 +74,14 @@ func agentWorkVerbs() map[string]verbEntry {
 		},
 		// verb_review.go
 		"review-diff": {
+			// From the agent review, triage, queue and approval work
+			// (verb_protocol_agents.go). Reads of one session and its fan group: a
+			// pane's diff, a fan's comparison, an agent's activity, its queue and a
+			// held approval. Writes: review notes, the queue, and sending notes,
+			// which types. verify-fan starts a window in each attempt, which is a
+			// launch. keep-fan removes worktrees and mark-attention is the person's
+			// act on the Inbox, so neither is for a restricted caller.
+			scope:       scopeRead,
 			description: "Read what the agent in a pane changed: the diff of its worktree against the base it was made from, or for a plain repository against the upstream merge base, untracked files included (one larger than max_untracked_mb is listed as skipped and not read) and ignored files left out. Nothing in the repository, its index or its working tree is changed. The text is the repository's, so it is marked untrusted.",
 			params: []verbParam{
 				sessionParam,
@@ -111,6 +122,9 @@ func agentWorkVerbs() map[string]verbEntry {
 		},
 		// verb_review_stage.go
 		"review-stage": {
+			// review-stage writes the index of a pane's worktree. It is the person's
+			// tool, so a restricted caller has no use for it.
+			scope:       scopeDeny,
 			description: "Stage or unstage a change in the worktree of a pane. Name a whole file, one hunk, or some lines of a hunk. Only the index changes. The working files do not change. Every result carries an undo object. Send it back with action undo to undo the call. The undo result carries its own undo object, which redoes the call.",
 			params: []verbParam{
 				{Name: "action", Type: "string", Required: true, Description: "What to do.", Accepted: reviewStageActions},
@@ -139,6 +153,7 @@ func agentWorkVerbs() map[string]verbEntry {
 			handler: (*Daemon).verbReviewStage,
 		},
 		"review-note": {
+			scope:       scopeWrite,
 			description: "Keep the review notes on a pane's changes: add one on a line or a hunk, edit, remove, list or clear them. Notes are held by the daemon per worktree, so every client and the CLI see the same ones, and follow their line as the diff moves. A note is the person's only with a live human_nonce, and a pane without admin adds or edits notes only on panes it could type into.",
 			params: []verbParam{
 				{Name: "action", Type: "string", Required: true, Description: "What to do.", Accepted: reviewNoteActions},
@@ -169,6 +184,7 @@ func agentWorkVerbs() map[string]verbEntry {
 			handler: (*Daemon).verbReviewNote,
 		},
 		"send-review": {
+			scope:       scopeWrite,
 			description: "Send a pane's unsent review notes to its agent as one message, through the delivery queue: typed now when the agent is at rest, else when it next comes to rest. The message says it is from the person only with a live human_nonce, and labels each note written by someone other than the sender with its author. It types into the pane, so a pane may send only to a pane that holds nothing it does not, and a note whose author may not type there now is withheld.",
 			params: []verbParam{
 				sessionParam,
@@ -195,6 +211,7 @@ func agentWorkVerbs() map[string]verbEntry {
 
 		// verb_fan_compare.go
 		"compare-fan": {
+			scope:       scopeRead,
 			description: "Compare the attempts of a fan: one row per sibling session with its branch, agent, state, changed files and lines against the base (committed and uncommitted work, untracked files included), the last verify-fan check and the last command its shells finished. A sibling the caller could not name itself is left out.",
 			params: []verbParam{
 				{Name: "session", Type: "string", Description: "Any session of the fan. Omit for the most recently active session."},
@@ -217,6 +234,7 @@ func agentWorkVerbs() map[string]verbEntry {
 			handler: (*Daemon).verbCompareFan,
 		},
 		"verify-fan": {
+			scope:       scopeLaunch,
 			description: "Run one check in every attempt of a fan: a window named verify in each sibling session runs the command with sh -c and records whether it passed. The window holds no grants, so the check cannot call tuios. It closes when the check passes and stays open, so the output can be read, when it fails. The command is always the caller's; none is read from the repository. A check still running in a sibling is stopped first.",
 			params: []verbParam{
 				{Name: "session", Type: "string", Description: "Any session of the fan. Omit for the most recently active session."},
@@ -236,6 +254,10 @@ func agentWorkVerbs() map[string]verbEntry {
 			handler: (*Daemon).verbVerifyFan,
 		},
 		"set-fan-verdict": {
+			// set-fan-verdict writes a judge's pick on the fan's attempts. It needs
+			// the fan grant, and the handler takes it only from the fan's judge pane
+			// or from outside every pane.
+			scope:       scopeLaunch,
 			description: "Record a judge's pick among the attempts of a fan: the attempt it recommends, the verdict, its reasons and notes on each attempt. Only the judge pane judge-fan started for the fan, or a call from outside every pane, records one: a pane of an attempt is refused. The daemon records which of the two it was as by. It is written on every attempt, and compare-fan and the agents view show it. A later call replaces it. Nothing is kept or removed: keep-fan does that.",
 			params: []verbParam{
 				{Name: "session", Type: "string", Required: true, Description: "Any session of the fan."},
@@ -256,6 +278,8 @@ func agentWorkVerbs() map[string]verbEntry {
 			handler: (*Daemon).verbSetFanVerdict,
 		},
 		"judge-fan": {
+			// judge-fan starts an agent, which is a launch.
+			scope:       scopeLaunch,
 			description: "Start an agent that judges the attempts of a fan. It runs in a new session of its own, named after the fan with -judge, in the repository's main checkout, with the read grant alone. Once its pane exists, the attempts name that pane, and that pane alone reads them: it cannot type into them, run commands in their sessions or start agents there. Its first prompt, typed then, asks it to read the attempts and report its pick with set-fan-verdict. Only the person or a pane with admin starts a judge. The record is cleared when the judge's session ends. It answers once the agent is ready, as start-agent does.",
 			params: []verbParam{
 				{Name: "session", Type: "string", Required: true, Description: "Any session of the fan."},
@@ -274,6 +298,7 @@ func agentWorkVerbs() map[string]verbEntry {
 			handler: (*Daemon).verbJudgeFan,
 		},
 		"keep-fan": {
+			scope:       scopeDeny,
 			description: "Keep one attempt of a fan and remove the others: each sibling's worktree and session go, the way remove-worktree removes them, each on its own. A sibling with uncommitted changes is left in place unless stash or force says what to do with them. Files git ignores are deleted with a worktree and never stashed: compare-fan with detail lists them. Branches are never deleted. With merge, the kept attempt's branch is first merged into its base, as ship-merge does.",
 			params: []verbParam{
 				{Name: "session", Type: "string", Required: true, Description: "The attempt to keep."},
@@ -306,6 +331,7 @@ func agentWorkVerbs() map[string]verbEntry {
 
 		// attention_lifecycle.go
 		"mark-attention": {
+			scope:       scopeDeny,
 			description: "Snooze an Inbox item, wake it, mark a finished pane unread, restore an item closed a moment ago, or settle an agent, for the person. Only a client attached right now can, with the nonce from its attach reply: an agent cannot hide or reorder what the person reads.",
 			params: []verbParam{
 				{Name: "id", Type: "string", Description: "The item. Or name it with session, window and kind. With unsettle: the id settle returned, to put that item back in the Inbox."},
@@ -333,6 +359,7 @@ func agentWorkVerbs() map[string]verbEntry {
 
 		// agent_activity.go
 		"agent-activity": {
+			scope:       scopeRead,
 			description: "Read what the agent in a pane has been doing, from the ring of hook events the daemon keeps for it: prompts, tool calls and their results, finished turns, subagents starting and stopping, conversations starting, and the commands its shell ran, the newest 256 of them. A pane gets a ring on the first hook report that carries activity, and loses it when it closes; the ring is daemon memory only. With recap, a summary of it since a time. The text is the agent's, cleaned and masked, and marked untrusted.",
 			params: []verbParam{
 				sessionParam,
@@ -357,6 +384,7 @@ func agentWorkVerbs() map[string]verbEntry {
 
 		// verb_queue.go
 		"queue-prompt": {
+			scope:       scopeWrite,
 			description: "Queue a message for the agent in a pane, typed as a prompt once the agent has been at rest for a second, and never over a prompt it is waiting on. One entry is typed per rest, and the prompt gate waits for the agent to show it took it; an entry it did not take is marked stalled, never typed again, and opens an Inbox question. A queue holds at most [agents.queue] max messages, and dies with the daemon, the pane, or the agent leaving the pane. It types into the pane, so a pane may queue only for a pane that holds nothing it does not, and its entry is checked against its grants again when it is typed. Who queued it (by) comes from the connection: human only with a live human_nonce, the pane's id for a pane, link:HOST over a link, shell otherwise.",
 			params: []verbParam{
 				sessionParam,
@@ -384,6 +412,7 @@ func agentWorkVerbs() map[string]verbEntry {
 		},
 		// reply_history.go
 		"reply-history": {
+			scope:       scopeDeny,
 			description: "Read what the person sent to an agent, oldest first, for the reply editor's up and ctrl+r. It is kept in the daemon's memory only and ends with it: 100 messages a target, 64 targets, the least used going first. Only the person reads it, with a live human_nonce.",
 			params: []verbParam{
 				{Name: "target", Type: "string", Required: true, Description: "The key the client keeps the history under, such as the agent's harness and folder. At most 512 bytes."},
@@ -397,6 +426,7 @@ func agentWorkVerbs() map[string]verbEntry {
 			handler:  (*Daemon).verbReplyHistory,
 		},
 		"add-reply-history": {
+			scope:       scopeDeny,
 			description: "Keep a message the person sent to an agent in the reply history. The same message again moves to the end. A message keeps at most 256 KiB of pastes and images: past that the largest are dropped and named. Only the person adds to it, with a live human_nonce.",
 			params: []verbParam{
 				{Name: "target", Type: "string", Required: true, Description: "The key the client keeps the history under."},
@@ -410,6 +440,7 @@ func agentWorkVerbs() map[string]verbEntry {
 			handler:  (*Daemon).verbAddReplyHistory,
 		},
 		"list-queued": {
+			scope:       scopeRead,
 			description: "List the messages waiting in a pane's delivery queue, or in every pane of the session.",
 			params: []verbParam{
 				sessionParam,
@@ -425,6 +456,7 @@ func agentWorkVerbs() map[string]verbEntry {
 			handler: (*Daemon).verbListQueued,
 		},
 		"cancel-queued": {
+			scope:       scopeWrite,
 			description: "Drop messages from a pane's delivery queue before they are typed. The person, with a live human_nonce, may drop any entry; a pane only the entries it queued; a linked machine only the entries it queued; a caller outside every pane every entry but the person's. An entry being typed cannot be dropped. Dropping a stalled entry closes its Inbox question; the entries behind it are typed at the pane's next rest, one reached after the stalled entry was typed. A linked machine that gave no name drops only what it queued on the same connection.",
 			params: []verbParam{
 				sessionParam,
@@ -446,6 +478,7 @@ func agentWorkVerbs() map[string]verbEntry {
 
 		// verb_approval_ext.go
 		"get-approval": {
+			scope:       scopeRead,
 			description: "Read a held approval or plan whole: the summary, the tool and its target, the answers it takes, the plan text of a plan, and the risk rules its command matched with why. Served only while the hook holds it. The text is the agent's, so it is marked untrusted.",
 			params: []verbParam{
 				{Name: "request_id", Type: "string", Required: true, Description: "The request_id of the Inbox item."},

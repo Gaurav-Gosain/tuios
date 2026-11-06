@@ -8,19 +8,14 @@ import (
 	"time"
 )
 
-// TestVerbScopesNameEveryVerb holds the scope table to the registry. A verb the
-// table does not name is refused on every restricted connection, which is the
-// safe default and also a silent one: this makes adding a verb a decision about
-// what a restricted caller may do with it.
-func TestVerbScopesNameEveryVerb(t *testing.T) {
-	for name := range verbRegistry() {
-		if _, ok := verbScopes[name]; !ok {
-			t.Errorf("verb %q has no entry in verbScopes", name)
-		}
-	}
-	for name := range verbScopes {
-		if _, ok := verbRegistry()[name]; !ok {
-			t.Errorf("verbScopes names %q, which is not a verb", name)
+// TestEveryVerbNamesItsScope: a verb entry that names no scope is refused on
+// every restricted connection, which is the safe default and also a silent
+// one. This makes adding a verb a decision about what a restricted caller may
+// do with it.
+func TestEveryVerbNamesItsScope(t *testing.T) {
+	for name, e := range verbRegistry() {
+		if e.scope == scopeUnset {
+			t.Errorf("verb %q names no scope in its verbEntry", name)
 		}
 	}
 }

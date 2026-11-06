@@ -975,6 +975,7 @@ func describeBinary(f *os.File, out map[string]any, note string) {
 func previewVerbs() map[string]verbEntry {
 	return map[string]verbEntry{
 		"file-preview": {
+			scope:       scopeDeny,
 			description: "Make the preview of a file on this machine. An image comes scaled to max_px on its long side, a PDF page and a film frame as an image (with pdftoppm and ffmpeg there), text as its first 256 KiB, and anything else as its type and size.",
 			params: []verbParam{
 				{Name: "path", Type: "string", Required: true, Description: "The file. An absolute path, or one that starts with ~."},

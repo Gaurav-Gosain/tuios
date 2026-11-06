@@ -56,7 +56,7 @@ func TestAgentWorkVerbsAreClassifiedAsThePlanSays(t *testing.T) {
 			t.Errorf("%s is not registered", row.verb)
 			continue
 		}
-		if got, ok := verbScopes[row.verb]; !ok || got != row.scope {
+		if got, ok := verbScope(row.verb); !ok || got != row.scope {
 			t.Errorf("%s has scope %v (listed %v), want %v", row.verb, got, ok, row.scope)
 		}
 		if got := grantKind(row.verb); got != row.scope {

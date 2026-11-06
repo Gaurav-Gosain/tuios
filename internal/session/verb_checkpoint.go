@@ -36,6 +36,11 @@ func checkpointVerbs() map[string]verbEntry {
 	checkpointFields := "n, ref, commit, tree, head, kind (turn or safety), pane, session, turn, state, label, worktree, at (Unix nanoseconds), and skipped and skipped_count (the untracked files left out as larger than max_untracked_mb, omitted when none)"
 	return map[string]verbEntry{
 		"list-checkpoints": {
+			// From the checkpoint work (verb_checkpoint.go). Listing and reading a
+			// pane's checkpoints are reads of its session. A restore writes the
+			// files the pane's agent works on, which the handler holds to the panes
+			// the caller could type into.
+			scope:       scopeRead,
 			description: "List the checkpoints of a pane: the state of its git work tree, saved each time its agent finished a turn that changed a file, and before each restore. Oldest first. The labels are the agent's prompts, so the result is marked untrusted.",
 			params: []verbParam{
 				sessionParam,
@@ -56,6 +61,7 @@ func checkpointVerbs() map[string]verbEntry {
 			handler: (*Daemon).verbListCheckpoints,
 		},
 		"checkpoint-diff": {
+			scope:       scopeRead,
 			description: "Read what one turn changed: the diff of a checkpoint against the pane's checkpoint before it, or against HEAD when it was taken for the first one. Nothing in the repository, its index or its working tree is changed. The text is the repository's, so it is marked untrusted.",
 			params: []verbParam{
 				sessionParam,
@@ -82,6 +88,7 @@ func checkpointVerbs() map[string]verbEntry {
 			handler: (*Daemon).verbCheckpointDiff,
 		},
 		"restore-checkpoint": {
+			scope:       scopeWrite,
 			description: "Put a pane's git work tree back to a checkpoint. The work tree is first saved as a safety checkpoint, so the restore can be undone by restoring that one. Only files that differ are written or removed. The index, HEAD, the branch and ignored files are not changed. Refused while the pane's agent is working or waiting on a prompt, unless force is given.",
 			params: []verbParam{
 				sessionParam,

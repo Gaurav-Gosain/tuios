@@ -644,7 +644,7 @@ func (d *Daemon) placePaneWindow(cs *connState) (window, via string) {
 }
 
 // grantKind is what a verb needs from a pane: its restricted-connection class
-// (verbScopes), except for the verbs a pane calls about itself that a
+// (the scope on its verb entry), except for the verbs a pane calls about itself that a
 // restricted connection is not given.
 func grantKind(verb string) scopeKind {
 	switch verb {
@@ -658,7 +658,7 @@ func grantKind(verb string) scopeKind {
 		// its handler.
 		return scopeOpen
 	}
-	kind, ok := verbScopes[verb]
+	kind, ok := verbScope(verb)
 	if !ok {
 		return scopeDeny
 	}
