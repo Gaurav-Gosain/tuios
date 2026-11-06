@@ -356,12 +356,20 @@ func (s *Session) yieldNoneClaim(windowID string) {
 	s.stateMu.Lock()
 	defer s.stateMu.Unlock()
 	claim, held := s.agentClaims[windowID]
-	if !held || claim.source.rank() <= AgentSourceProgram.rank() || claim.auto {
+	if !held || claim.source.rank() <= AgentSourceProgram.rank() {
 		return
 	}
 	if idx, err := findWindowStateIndex(s.state.Windows, windowID); err == nil &&
 		s.state.Windows[idx].AgentState == AgentStateNone {
-		delete(s.agentClaims, windowID)
+		if claim.auto || claim.sawProcess {
+			// Keep process tracking, but a hook that ended must no longer
+			// outrank the program that is reporting in the pane now.
+			s.setAgentClaim(windowID, agentClaim{
+				source: AgentSourceDetect, auto: claim.auto, sawProcess: claim.sawProcess,
+			})
+		} else {
+			delete(s.agentClaims, windowID)
+		}
 	}
 }
 
