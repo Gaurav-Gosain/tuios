@@ -157,10 +157,10 @@ func (m *model) runPalette(name string) (tea.Cmd, error) {
 		if it.Name != name {
 			continue
 		}
-		if !paletteRunnable(it) || it.Action == nil {
+		if !paletteRunnable(it) || (it.Action == nil && it.Bind == "") {
 			return nil, errfmt.Errorf("%q shows something only a screen can show, so the bridge does not run it", name)
 		}
-		next, cmd := it.Action(m.os)
+		next, cmd := it.Run(m.os)
 		if next != nil {
 			m.os = next
 		}
