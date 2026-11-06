@@ -2742,37 +2742,17 @@ func ApplyAppearanceConfig(cfg *UserConfig, s *Settings) {
 
 	// ZenMode only takes one of its three values, so a typo in the config lands
 	// on the default the validator warned it would fall back to.
-	if slices.Contains(ZenModeModes, cfg.Appearance.ZenMode) {
-		s.ZenMode = cfg.Appearance.ZenMode
-	} else if cfg.Appearance.ZenMode != "" {
-		s.ZenMode = ZenModeDisabled
-	}
+	s.ZenMode = closedSetValue(cfg.Appearance.ZenMode, ZenModeModes, s.ZenMode, ZenModeDisabled)
 
 	// TilingScheme takes the same shape: a typo falls back to spiral, which is
 	// what a new workspace already defaulted to before this setting existed.
-	if slices.Contains(TilingSchemes, cfg.Appearance.TilingScheme) {
-		s.TilingScheme = cfg.Appearance.TilingScheme
-	} else if cfg.Appearance.TilingScheme != "" {
-		s.TilingScheme = TilingSchemeSpiral
-	}
+	s.TilingScheme = closedSetValue(cfg.Appearance.TilingScheme, TilingSchemes, s.TilingScheme, TilingSchemeSpiral)
 
 	// Links takes the same shape: a typo falls back to the default rather than
 	// leaving the pointer with no policy at all.
-	if slices.Contains(LinkModes, cfg.Appearance.Links) {
-		s.Links = cfg.Appearance.Links
-	} else if cfg.Appearance.Links != "" {
-		s.Links = LinksAll
-	}
-	if slices.Contains(LinkClickModes, cfg.Appearance.LinkClick) {
-		s.LinkClick = cfg.Appearance.LinkClick
-	} else if cfg.Appearance.LinkClick != "" {
-		s.LinkClick = LinkClickBoth
-	}
-	if slices.Contains(LinkHoverModes, cfg.Appearance.LinkHover) {
-		s.LinkHover = cfg.Appearance.LinkHover
-	} else if cfg.Appearance.LinkHover != "" {
-		s.LinkHover = LinkHoverSafe
-	}
+	s.Links = closedSetValue(cfg.Appearance.Links, LinkModes, s.Links, LinksAll)
+	s.LinkClick = closedSetValue(cfg.Appearance.LinkClick, LinkClickModes, s.LinkClick, LinkClickBoth)
+	s.LinkHover = closedSetValue(cfg.Appearance.LinkHover, LinkHoverModes, s.LinkHover, LinkHoverSafe)
 	s.LinkOpener = strings.TrimSpace(cfg.Appearance.LinkOpener)
 	// A typo lands on the default, which is what the validator says.
 	if slices.Contains(DropPreviewModes, cfg.Appearance.DropPreview) {
@@ -2785,11 +2765,7 @@ func ApplyAppearanceConfig(cfg *UserConfig, s *Settings) {
 	// DockbarPosition defaults to top. A typo lands on that default, which is
 	// what the validator says it falls back to; left as written, the renderer
 	// would treat it as bottom.
-	if slices.Contains(DockbarPositions, cfg.Appearance.DockbarPosition) {
-		s.DockbarPosition = cfg.Appearance.DockbarPosition
-	} else if cfg.Appearance.DockbarPosition != "" {
-		s.DockbarPosition = DefaultDockbarPosition
-	}
+	s.DockbarPosition = closedSetValue(cfg.Appearance.DockbarPosition, DockbarPositions, s.DockbarPosition, DefaultDockbarPosition)
 
 	// Sidebar. Also runs for a config that never went through LoadUserConfig (the
 	// settings page builds one in memory), so an old flat key reaches the globals
@@ -2839,11 +2815,7 @@ func ApplyAppearanceConfig(cfg *UserConfig, s *Settings) {
 	if sb.Enabled != nil {
 		s.SidebarEnabled = *sb.Enabled
 	}
-	if slices.Contains(SidebarPositions, sb.Position) {
-		s.SidebarPosition = sb.Position
-	} else if sb.Position != "" {
-		s.SidebarPosition = DefaultSidebarPosition
-	}
+	s.SidebarPosition = closedSetValue(sb.Position, SidebarPositions, s.SidebarPosition, DefaultSidebarPosition)
 	if sb.Width > 0 {
 		s.SidebarWidth = sb.Width
 	}
@@ -2895,11 +2867,7 @@ func ApplyAppearanceConfig(cfg *UserConfig, s *Settings) {
 	}
 	// A typo reads as the default, the same contract the other enum options
 	// keep.
-	if slices.Contains(RailHeaderCases, sb.HeaderCase) {
-		s.RailHeaderCase = sb.HeaderCase
-	} else if sb.HeaderCase != "" {
-		s.RailHeaderCase = RailHeaderLowercase
-	}
+	s.RailHeaderCase = closedSetValue(sb.HeaderCase, RailHeaderCases, s.RailHeaderCase, RailHeaderLowercase)
 	s.RailRowStyle = RailRowBar
 	if slices.Contains(RailRowStyles, sb.RowStyle) {
 		s.RailRowStyle = sb.RowStyle
@@ -2992,11 +2960,7 @@ func ApplyAppearanceConfig(cfg *UserConfig, s *Settings) {
 	}
 	// A typo lands on the default, as the validator says; left as written, the
 	// renderer would draw it as thin.
-	if slices.Contains(ScrollbarStyles, cfg.Appearance.Scrollbar.Style) {
-		s.ScrollbarStyle = cfg.Appearance.Scrollbar.Style
-	} else if cfg.Appearance.Scrollbar.Style != "" {
-		s.ScrollbarStyle = ScrollbarStyleTrack
-	}
+	s.ScrollbarStyle = closedSetValue(cfg.Appearance.Scrollbar.Style, ScrollbarStyles, s.ScrollbarStyle, ScrollbarStyleTrack)
 	// The glyph and tint keys are assigned as written, empty included: empty is
 	// the "use the style's default" state, and the getters below resolve it. A
 	// value that does not measure one cell is rejected there too, so an edit
@@ -3197,11 +3161,7 @@ func ApplyAppearanceConfig(cfg *UserConfig, s *Settings) {
 
 	// WindowTitlePosition defaults to top, and a typo lands there too; left as
 	// written, the renderer would draw it at the bottom.
-	if slices.Contains(WindowTitlePositions, cfg.Appearance.WindowTitlePosition) {
-		s.WindowTitlePosition = cfg.Appearance.WindowTitlePosition
-	} else if cfg.Appearance.WindowTitlePosition != "" {
-		s.WindowTitlePosition = DefaultWindowTitlePosition
-	}
+	s.WindowTitlePosition = closedSetValue(cfg.Appearance.WindowTitlePosition, WindowTitlePositions, s.WindowTitlePosition, DefaultWindowTitlePosition)
 
 	s.WindowTitleStyle = DefaultWindowTitleStyle
 	if slices.Contains(WindowTitleStyles, cfg.Appearance.WindowTitleStyle) {
@@ -3299,11 +3259,7 @@ func ApplyAppearanceConfig(cfg *UserConfig, s *Settings) {
 
 	// ClickToType only takes one of its three values, so a typo in the config
 	// lands on the default the validator warned it would fall back to.
-	if slices.Contains(ClickToTypeModes, cfg.Appearance.ClickToType) {
-		s.ClickToType = cfg.Appearance.ClickToType
-	} else if cfg.Appearance.ClickToType != "" {
-		s.ClickToType = ClickToTypeDouble
-	}
+	s.ClickToType = closedSetValue(cfg.Appearance.ClickToType, ClickToTypeModes, s.ClickToType, ClickToTypeDouble)
 
 	// WordCharacters is a pointer so an explicitly empty string can mean "no
 	// punctuation is part of a word", which is different from "unset".
@@ -4224,5 +4180,19 @@ func (a *AppearanceConfig) BorderOverrides() theme.BorderOverrides {
 		FocusedWindow:   a.BorderFocusedColorWindow,
 		FocusedTerminal: a.BorderFocusedColorTerminal,
 		Unfocused:       a.BorderUnfocusedColor,
+	}
+}
+
+// closedSetValue is value when it is one of set, current when value is empty
+// (the file leaves the option alone), and fallback for anything else: a typo
+// reads as the default, and validation warns about it.
+func closedSetValue[T ~string](value T, set []T, current, fallback T) T {
+	switch {
+	case slices.Contains(set, value):
+		return value
+	case value == "":
+		return current
+	default:
+		return fallback
 	}
 }
