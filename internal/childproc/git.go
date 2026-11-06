@@ -52,6 +52,9 @@ func AsPerson(ctx context.Context) context.Context {
 	return context.WithValue(ctx, personKey{}, true)
 }
 
+// gitWaitDelay is how long git's output is still read after its context ends.
+const gitWaitDelay = 2 * time.Second
+
 func isPerson(ctx context.Context) bool {
 	if ctx == nil {
 		return false
@@ -74,6 +77,12 @@ func Git(ctx context.Context, dir string, args ...string) *exec.Cmd {
 		cmd = exec.Command("git", args...) //tuios:allow-exec the one place that builds git
 	} else {
 		cmd = exec.CommandContext(ctx, "git", args...) //tuios:allow-exec the one place that builds git
+		// A child of git, such as git-remote-https on a remote that stopped
+		// answering, keeps the output pipes open after the context ends git.
+		// Ending git's whole process group, and bounding the wait for the
+		// pipes, makes the context's deadline hold for every caller.
+		ownGroup(cmd)
+		cmd.WaitDelay = gitWaitDelay
 	}
 	Hide(cmd)
 	cmd.Dir = dir
