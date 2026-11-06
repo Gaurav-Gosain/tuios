@@ -630,10 +630,16 @@ func generateListBindings() []HelpBinding {
 // generateCopyModeBindings lists copy mode's fixed keys, then the keys the
 // [keybindings.copy_mode] section binds, read from the config.
 func generateCopyModeBindings(registry *config.KeybindRegistry, s *config.Settings) []HelpBinding {
-	fixed := copyModeKeys(s.LeaderKey)
 	if registry == nil {
-		return fixed
+		return copyModeKeys(s.LeaderKey + ", [")
 	}
+	// The row that enters copy mode shows the keys prefix_selection is bound
+	// to now, not the default "[", and goes when nothing binds it.
+	var enter []string
+	for _, key := range registry.GetConfig().Keybindings.PrefixMode["prefix_selection"] {
+		enter = append(enter, s.LeaderKey+", "+key)
+	}
+	fixed := copyModeKeys(enter...)
 	var bound []HelpBinding
 	for _, row := range []struct{ action, desc string }{
 		{config.ActionCopyModeLineStart, "Line start"},
@@ -662,11 +668,15 @@ func generateCopyModeBindings(registry *config.KeybindRegistry, s *config.Settin
 // copyModeLineKeys is the row of copy mode's fixed line motions.
 const copyModeLineKeys = "0, ^, $"
 
-// copyModeKeys are copy mode's keys. They are not bindings: copy mode reads
-// them itself (see internal/input/copymode_handlers.go).
-func copyModeKeys(leader string) []HelpBinding {
-	return []HelpBinding{
-		{Keys: []string{leader + ", ["}, Description: "Enter copy mode", Category: "Copy Mode"},
+// copyModeKeys are copy mode's keys. When enter names the keys that open copy
+// mode, a row for them comes first. The others are not bindings: copy mode
+// reads them itself (see internal/input/copymode_handlers.go).
+func copyModeKeys(enter ...string) []HelpBinding {
+	var out []HelpBinding
+	if len(enter) > 0 {
+		out = append(out, HelpBinding{Keys: enter, Description: "Enter copy mode", Category: "Copy Mode"})
+	}
+	return append(out, []HelpBinding{
 		{Keys: []string{"h, j, k, l"}, Description: "Move cursor", Category: "Copy Mode"},
 		{Keys: []string{"w, b, e"}, Description: "Word fwd/back/end", Category: "Copy Mode"},
 		{Keys: []string{"f, F, t, T"}, Description: "Jump to a character on the line", Category: "Copy Mode"},
@@ -682,7 +692,7 @@ func copyModeKeys(leader string) []HelpBinding {
 		{Keys: []string{"y, c"}, Description: "Yank to clipboard", Category: "Copy Mode"},
 		{Keys: []string{"i, q, Esc"}, Description: "Exit copy mode", Category: "Copy Mode"},
 		{Keys: []string{"ctrl+c"}, Description: "Exit copy mode from any state. Nothing is copied", Category: "Copy Mode"},
-	}
+	}...)
 }
 
 // HelpCategoryCopyMode is the section listing copy mode's keys and hints
@@ -820,7 +830,7 @@ func FixedKeyGroups(leader string) []FixedKeyGroup {
 		leader = config.DefaultLeaderKey
 	}
 	return []FixedKeyGroup{
-		{ID: "copy_mode", Name: "Copy mode", Bindings: copyModeKeys(leader)},
+		{ID: "copy_mode", Name: "Copy mode", Bindings: copyModeKeys(leader + ", [")},
 		{ID: "hints_mode", Name: "Hints mode", Bindings: hintsModeKeys(leader)},
 		{ID: "message_view", Name: "Message view", Bindings: messageViewKeys()},
 		{ID: "spotlight", Name: "Spotlight", Bindings: spotlightOffKeys()},
