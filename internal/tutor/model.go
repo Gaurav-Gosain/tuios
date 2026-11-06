@@ -13,6 +13,7 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/app"
 	"github.com/Gaurav-Gosain/tuios/internal/learn"
 	"github.com/Gaurav-Gosain/tuios/internal/learn/lessons"
+	"github.com/Gaurav-Gosain/tuios/internal/plural"
 )
 
 // screen is what the tutor shows. The lesson screen is tuios with the card
@@ -325,11 +326,11 @@ func (m *Model) rows() []row {
 	for _, t := range m.tracks {
 		if m.inProgress(t) {
 			done := m.store.doneCount(t.ID)
-			out = append(out, row{label: "Continue " + midSentence(t.Title), detail: plural(done, "step") + " of " + itoa(len(t.Steps)) + " done", do: func() tea.Cmd { return m.start(t) }})
+			out = append(out, row{label: "Continue " + midSentence(t.Title), detail: plural.Count(done, "step") + " of " + itoa(len(t.Steps)) + " done", do: func() tea.Cmd { return m.start(t) }})
 		}
 	}
 	for _, t := range m.tracks {
-		detail := plural(len(t.Steps), "step") + "   " + itoa(t.Minutes) + " min"
+		detail := plural.Count(len(t.Steps), "step") + "   " + itoa(t.Minutes) + " min"
 		if t.Audience != "" {
 			detail += "   " + t.Audience
 		}

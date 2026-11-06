@@ -17,6 +17,7 @@ import (
 
 	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
+	"github.com/Gaurav-Gosain/tuios/internal/plural"
 	"github.com/Gaurav-Gosain/tuios/internal/serverscope"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/spf13/cobra"
@@ -276,7 +277,7 @@ func runDaemonUpgrade(out io.Writer, binary string, asJSON bool) error {
 	}
 	_ = jsonx.Unmarshal(raw, &accepted)
 	say("ok\n")
-	say("Paused %d %s, saved their screens (%s).\n", accepted.Panes, pluralize(accepted.Panes, "pane", "panes"), humanBytes(accepted.ManifestBytes))
+	say("Paused %d %s, saved their screens (%s).\n", accepted.Panes, plural.Word(accepted.Panes, "pane", "panes"), humanBytes(accepted.ManifestBytes))
 	say("Starting %s in place (pid %d kept)...\n", accepted.To, before.PID)
 
 	after, err := awaitUpgradedDaemon(before.Instance, daemonUpgradeWait)
@@ -312,9 +313,9 @@ func runDaemonUpgrade(out io.Writer, binary string, asJSON bool) error {
 	if after.PID != before.PID {
 		return errfmt.Errorf("the daemon's pid changed from %d to %d: it was restarted, not upgraded", before.PID, after.PID)
 	}
-	say("Upgraded in %.2f s. %d %s and their programs kept.", o.Seconds, o.Panes, pluralize(o.Panes, "pane", "panes"))
+	say("Upgraded in %.2f s. %d %s and their programs kept.", o.Seconds, o.Panes, plural.Word(o.Panes, "pane", "panes"))
 	if o.Clients > 0 {
-		say(" %d attached %s told to attach again.", o.Clients, pluralize(o.Clients, "client was", "clients were"))
+		say(" %d attached %s told to attach again.", o.Clients, plural.Word(o.Clients, "client was", "clients were"))
 	}
 	say("\n")
 	return nil
@@ -384,14 +385,6 @@ func handoffAcceptsOf(binary string) (session.HandoffAccepts, error) {
 		return acc, errfmt.Errorf("it reads handoff v%d to v%d, and this daemon writes v%d", acc.Handoff[0], acc.Handoff[1], session.HandoffVersion)
 	}
 	return acc, nil
-}
-
-// pluralize is one or many.
-func pluralize(n int, one, many string) string {
-	if n == 1 {
-		return one
-	}
-	return many
 }
 
 // humanBytes is n bytes for a person.

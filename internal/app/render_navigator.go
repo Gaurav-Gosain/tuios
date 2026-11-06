@@ -12,6 +12,7 @@ import (
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
+	"github.com/Gaurav-Gosain/tuios/internal/plural"
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
 	"github.com/Gaurav-Gosain/tuios/pkg/fuzzy"
 )
@@ -539,7 +540,7 @@ func (m *OS) navSessionFacts(s *navSession) string {
 	if s.Note != "" {
 		return "  " + s.Note
 	}
-	return "  " + panePlural(s.Count)
+	return "  " + plural.Count(s.Count, "pane")
 }
 
 // navWorkspaceLabel is "workspace 2" and the workspace's name, if it has one.
@@ -696,7 +697,7 @@ func (m *OS) navigatorPreview(r navRow, width, height int, bg color.Color, pal o
 			if m.navigator.loading {
 				out = append(out, line("Reading its panes…", pal.FgMute))
 			} else {
-				out = append(out, line(panePlural(s.Count)+".", pal.FgDim))
+				out = append(out, line(plural.Count(s.Count, "pane")+".", pal.FgDim))
 			}
 		}
 		// The session's panes as the tree draws them, under their

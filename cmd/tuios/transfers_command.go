@@ -325,7 +325,7 @@ func runTransfersClear(ids []string, jsonOut bool) error {
 		outputJSON(r)
 		return nil
 	}
-	fmt.Printf("%s %s that ended %s removed from the list.\n", commas(r.Cleared), pluralWord(r.Cleared, "copy", "copies"), pluralWord(r.Cleared, "was", "were"))
+	fmt.Printf("%s %s that ended %s removed from the list.\n", commas(r.Cleared), plural.Word(r.Cleared, "copy", "copies"), plural.Word(r.Cleared, "was", "were"))
 	return nil
 }
 

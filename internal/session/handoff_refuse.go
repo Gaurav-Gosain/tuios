@@ -4,6 +4,7 @@ import (
 	"sync"
 
 	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
+	"github.com/Gaurav-Gosain/tuios/internal/plural"
 )
 
 // What a live handoff refuses, and why, in one place.
@@ -137,13 +138,5 @@ func pipeRefusal(what string) error {
 // hosted pane's master is not among the descriptors the exec keeps, so the
 // exec would close its terminal and end the pane on the machine that opened it.
 func hostedRefusal(n int) error {
-	return errfmt.Errorf("%d %s here for another machine, and those cannot be handed over yet. Close them first", n, pluralWord(n, "pane runs", "panes run"))
-}
-
-// pluralWord is one or many.
-func pluralWord(n int, one, many string) string {
-	if n == 1 {
-		return one
-	}
-	return many
+	return errfmt.Errorf("%d %s here for another machine, and those cannot be handed over yet. Close them first", n, plural.Word(n, "pane runs", "panes run"))
 }

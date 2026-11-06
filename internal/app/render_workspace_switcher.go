@@ -5,6 +5,7 @@ import (
 	"strconv"
 
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
+	"github.com/Gaurav-Gosain/tuios/internal/plural"
 )
 
 const (
@@ -48,7 +49,7 @@ func (m *OS) renderWorkspaceSwitcher() (string, overlay.Geometry, []overlayRowHi
 // workspace's identity and the key its jump bindings use, so it has to be
 // readable whether or not the workspace has been named.
 func workspaceSwitcherRow(w WorkspaceItem, selected bool, rowBg color.Color, pal overlay.Palette, width int) string {
-	right := overlay.Style(rowBg).Foreground(pal.FgMute).Render(panePlural(w.Panes))
+	right := overlay.Style(rowBg).Foreground(pal.FgMute).Render(plural.Count(w.Panes, "pane"))
 	if w.IsCurrent {
 		right = overlay.Style(rowBg).Foreground(pal.Success).Render("current  ") + right
 	}

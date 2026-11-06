@@ -3,6 +3,8 @@ package transcriptview
 import (
 	"strconv"
 	"strings"
+
+	"github.com/Gaurav-Gosain/tuios/internal/plural"
 )
 
 // Turns: a thread read as the person's prompts and the work each one set
@@ -194,7 +196,7 @@ func (t *Turn) Summary() string {
 		for _, p := range parts[:2] {
 			words = append(words, actionWords(p.a, p.n))
 		}
-		words = append(words, plural(rest, "other action", "other actions"))
+		words = append(words, plural.CountAs(rest, "other action", "other actions"))
 	} else {
 		for _, p := range parts {
 			words = append(words, actionWords(p.a, p.n))
@@ -227,23 +229,15 @@ func (t *Turn) Summary() string {
 func actionWords(a Action, n int) string {
 	switch a {
 	case ActionEdit:
-		return "edited " + plural(n, "file", "files")
+		return "edited " + plural.CountAs(n, "file", "files")
 	case ActionCommand:
-		return "ran " + plural(n, "command", "commands")
+		return "ran " + plural.CountAs(n, "command", "commands")
 	case ActionRead:
-		return "read " + plural(n, "file", "files")
+		return "read " + plural.CountAs(n, "file", "files")
 	case ActionSearch:
 		return "searched " + times(n)
 	}
-	return "used " + plural(n, "tool", "tools")
-}
-
-// plural is n and the word for n.
-func plural(n int, one, many string) string {
-	if n == 1 {
-		return "1 " + one
-	}
-	return strconv.Itoa(n) + " " + many
+	return "used " + plural.CountAs(n, "tool", "tools")
 }
 
 // times is "once" or "n times".
