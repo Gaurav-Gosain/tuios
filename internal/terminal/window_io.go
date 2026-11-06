@@ -5,10 +5,8 @@ import (
 	"fmt"
 	"io"
 	"log"
-	"os"
 	"runtime/debug"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/crashexit"
@@ -25,9 +23,7 @@ import (
 // time.Now().Format, a string(input) and a hex rendering were being made on
 // every keystroke and every terminal response for a log line that was then
 // thrown away.
-var debugInternal = sync.OnceValue(func() bool {
-	return os.Getenv("TUIOS_DEBUG_INTERNAL") == "1"
-})
+var debugInternal = debuglog.Enabled
 
 // debugLogf appends one formatted line to /tmp/tuios-debug.log when
 // TUIOS_DEBUG_INTERNAL=1, and is a no-op otherwise. One helper instead of a

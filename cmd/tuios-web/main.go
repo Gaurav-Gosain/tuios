@@ -20,6 +20,7 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/app"
 	"github.com/Gaurav-Gosain/tuios/internal/cliflags"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/debuglog"
 	"github.com/Gaurav-Gosain/tuios/internal/fang"
 	"github.com/Gaurav-Gosain/tuios/internal/netutil"
 	"github.com/Gaurav-Gosain/tuios/internal/release"
@@ -284,7 +285,7 @@ func runWebServer() error {
 	pinGuestTerminalEnv()
 
 	if debugMode {
-		_ = os.Setenv("TUIOS_DEBUG_INTERNAL", "1")
+		debuglog.Enable()
 	}
 
 	// Store server config for handler

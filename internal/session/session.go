@@ -7,6 +7,7 @@ import (
 	"image/color"
 	"io"
 
+	"github.com/Gaurav-Gosain/tuios/internal/debuglog"
 	"github.com/Gaurav-Gosain/tuios/internal/dnd"
 	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 
@@ -40,7 +41,7 @@ import (
 
 // debugEnabled returns true if debug logging is enabled via TUIOS_DEBUG_INTERNAL env var
 func debugEnabled() bool {
-	return os.Getenv("TUIOS_DEBUG_INTERNAL") == "1"
+	return debuglog.Enabled()
 }
 
 // debugLog logs a message only if debug mode is enabled

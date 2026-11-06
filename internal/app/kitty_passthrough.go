@@ -14,7 +14,7 @@ import (
 )
 
 func kittyPassthroughLog(format string, args ...any) {
-	if os.Getenv("TUIOS_DEBUG_INTERNAL") != "1" {
+	if !debuglog.Enabled() {
 		return
 	}
 	f, err := debuglog.Open(debuglog.Path)

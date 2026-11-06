@@ -14,6 +14,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/Gaurav-Gosain/tuios/internal/debuglog"
 	"tuios.dev/vt"
 )
 
@@ -78,7 +79,7 @@ func (kp *KittyPassthrough) ForwardCommand(
 	kp.mu.Lock()
 	defer kp.mu.Unlock()
 
-	if os.Getenv("TUIOS_DEBUG_INTERNAL") == "1" {
+	if debuglog.Enabled() {
 		log.Printf("[KP] ForwardCommand action=%c enabled=%v inline=%v imageID=%d more=%v dataLen=%d",
 			cmd.Action, kp.enabled, kp.inlineGraphics, cmd.ImageID, cmd.More, len(cmd.Data))
 	}

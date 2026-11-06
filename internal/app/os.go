@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"image"
 	"image/color"
-	"os"
 	"regexp"
 	"sync"
 	"sync/atomic"
@@ -15,6 +14,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/agentseen"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/debuglog"
 	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"github.com/Gaurav-Gosain/tuios/internal/federation"
 	"github.com/Gaurav-Gosain/tuios/internal/hooks"
@@ -2276,12 +2276,13 @@ func createID() string {
 	return uuid.New().String()
 }
 
-// verboseLog controls whether INFO-level logs are formatted and recorded.
+// verboseLog reports whether INFO-level logs are formatted and recorded.
 // It is off by default so hot paths (retile traces) pay nothing in production,
-// and is enabled by setting TUIOS_DEBUG_INTERNAL=1, the same switch that gates
-// the internal kitty/sixel passthrough trace logs. WARN and ERROR are always
-// recorded regardless of this flag.
-var verboseLog = os.Getenv("TUIOS_DEBUG_INTERNAL") == "1"
+// and is on with the internal debug switch (debuglog.Enabled), the same switch
+// that gates the kitty and sixel passthrough trace logs. It is read at each
+// use, so a --debug flag read after startup turns it on. WARN and ERROR are
+// always recorded regardless of this flag.
+var verboseLog = debuglog.Enabled
 
 // nestedSwitchError is a switch the daemon refused because this client runs in
 // a pane of the target session. The client is back on its own session.

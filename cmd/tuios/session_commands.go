@@ -15,6 +15,7 @@ import (
 	"charm.land/lipgloss/v2/table"
 	"github.com/Gaurav-Gosain/tuios/internal/app"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/debuglog"
 	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"github.com/Gaurav-Gosain/tuios/internal/hooks"
 	"github.com/Gaurav-Gosain/tuios/internal/input"
@@ -333,7 +334,7 @@ func generateUniqueSessionName(existingNames []string) string {
 // and an attach the daemon refuses leaves the terminal to the refusal, so
 // these steps are logged only when debugging is on.
 func clientLogf(format string, args ...any) {
-	if debugMode || os.Getenv("TUIOS_DEBUG_INTERNAL") == "1" {
+	if debugMode || debuglog.Enabled() {
 		log.Printf(format, args...)
 	}
 }
@@ -418,7 +419,7 @@ func runDaemonSessionOn(host, sessionName string, createNew bool) error {
 	defer stopCPUProfile()
 
 	if debugMode {
-		_ = os.Setenv("TUIOS_DEBUG_INTERNAL", "1")
+		debuglog.Enable()
 		fmt.Println("Debug mode enabled")
 	}
 

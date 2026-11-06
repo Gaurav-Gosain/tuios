@@ -271,7 +271,7 @@ func (m *OS) tileAllWindows() {
 		for _, win := range visibleWindows {
 			intID := m.GetWindowIntID(win.ID)
 			visibleIDs[intID] = true
-			if verboseLog {
+			if verboseLog() {
 				m.LogInfo("BSP: Visible window %s has int ID %d", shortID(win.ID), intID)
 			}
 		}

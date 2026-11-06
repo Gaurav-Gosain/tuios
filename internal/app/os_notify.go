@@ -62,7 +62,7 @@ func (m *OS) appendLog(entry LogMessage) {
 //
 //go:noinline
 func (m *OS) LogInfo(format string, args ...any) {
-	if !verboseLog {
+	if !verboseLog() {
 		return
 	}
 	m.Log("INFO", format, args...)
