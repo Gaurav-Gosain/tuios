@@ -2,12 +2,13 @@ package hints
 
 import (
 	"bytes"
-	"fmt"
 	"regexp"
 	"regexp/syntax"
 	"slices"
 	"strings"
 	"unicode/utf8"
+
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 )
 
 // Link rules turn plain text that is not a URL, such as a ticket ID, into a
@@ -136,17 +137,17 @@ type LinkRules struct {
 // CompileLinkRule compiles one rule and reports why it cannot be used.
 func CompileLinkRule(spec LinkRuleSpec) (*regexp.Regexp, error) {
 	if strings.TrimSpace(spec.Regex) == "" {
-		return nil, fmt.Errorf("link rule has no regex")
+		return nil, errfmt.Errorf("link rule has no regex")
 	}
 	if strings.TrimSpace(spec.URL) == "" {
-		return nil, fmt.Errorf("link rule %q has no url", spec.Regex)
+		return nil, errfmt.Errorf("link rule %q has no url", spec.Regex)
 	}
 	re, err := regexp.Compile(spec.Regex)
 	if err != nil {
 		return nil, err
 	}
 	if re.MatchString("") {
-		return nil, fmt.Errorf("link rule %q matches empty text", spec.Regex)
+		return nil, errfmt.Errorf("link rule %q matches empty text", spec.Regex)
 	}
 	return re, nil
 }

@@ -1,13 +1,14 @@
 package main
 
 import (
-	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 	"time"
 
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
+	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 	"github.com/spf13/cobra"
 )
 
@@ -70,10 +71,10 @@ From outside every pane, name the parent agent with --parent, or pass --wait.`,
 				positional, extra = args[:dash], args[dash:]
 			}
 			if len(positional) != 1 {
-				return fmt.Errorf("delegate takes one task, got %d arguments. Quote the task, and put arguments for the agent after --", len(positional))
+				return errfmt.Errorf("delegate takes one task, got %d arguments. Quote the task, and put arguments for the agent after --", len(positional))
 			}
 			if wait < 0 || wait > delegateMaxWait {
-				return fmt.Errorf("--wait is at most 10m. For a longer task, omit --wait: the answer comes by mail")
+				return errfmt.Errorf("--wait is at most 10m. For a longer task, omit --wait: the answer comes by mail")
 			}
 			callerEnv, err := fanCallerEnv(env, os.Getenv, os.Environ())
 			if err != nil {
@@ -176,8 +177,8 @@ func runDelegate(session string, params map[string]any, wait time.Duration, read
 		return reportVerbError(explainHostedVerb(t, "delegate", err), jsonOutput)
 	}
 	var res delegateResult
-	if err := json.Unmarshal(raw, &res); err != nil {
-		return fmt.Errorf("failed to parse response: %w", err)
+	if err := jsonx.Unmarshal(raw, &res); err != nil {
+		return errfmt.Errorf("failed to parse response: %w", err)
 	}
 	if jsonOutput {
 		if err := printVerbResultOn(t, raw, true); err != nil {

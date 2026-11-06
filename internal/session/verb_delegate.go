@@ -11,6 +11,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 	"github.com/Gaurav-Gosain/tuios/internal/transcriptview"
 	"github.com/Gaurav-Gosain/tuios/internal/worktree"
 )
@@ -619,7 +620,7 @@ func (d *Daemon) verbDelegate(cs *connState, params json.RawMessage) (any, *verb
 	if p.ReadyTimeout > 0 {
 		start["ready_timeout"] = p.ReadyTimeout
 	}
-	raw, _ := json.Marshal(start)
+	raw, _ := jsonx.Marshal(start)
 	res, verr := d.verbStartAgent(cs, raw)
 	if verr != nil {
 		wt.undo(d)
