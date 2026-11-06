@@ -223,7 +223,7 @@ func translatePi(in Input, p fields) Decision {
 			// The update's tool and target ride top-level payload keys, not
 			// tool_input, so the target is taken and clipped directly instead
 			// of through ToolTarget's tool_input lookup.
-			a.Tool, a.Target = p.str("tool"), Clip(p.str("target"))
+			a.Tool, a.Target = p.str("tool"), oneline.Clip(p.str("target"))
 			switch p.str("outcome") {
 			case "stopping":
 				a.Outcome = OutcomeStopping
