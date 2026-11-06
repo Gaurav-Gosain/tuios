@@ -1410,7 +1410,13 @@ func fileVerbs() map[string]verbEntry {
 		"file-stat": {
 			// The file verbs, transfers and drops are the person's explorer, not a
 			// restricted caller's. A pane's own shell already reaches its files.
-			scope:       scopeDeny,
+			scope: scopeDeny,
+			// The file verbs. A listing is a listing. Reading a file's bytes out and
+			// changing a file are files, a capability apart from write, so a person
+			// can stop one machine's copies without stopping its typing. Every write
+			// that arrives over a link is also confined to the home folder and kept
+			// out of the deny list (verb_files_confine.go). See verb_files.go.
+			link:        needList,
 			description: "Describe one path on this machine. With part, describe the part file a copy to the path is writing.",
 			params: []verbParam{
 				pathParam("The path."),
@@ -1428,6 +1434,7 @@ func fileVerbs() map[string]verbEntry {
 		},
 		"file-list": {
 			scope:       scopeDeny,
+			link:        needList,
 			description: "List a folder on this machine a page at a time, folders first, then names in natural order (file2 before file10), with size, time and mode.",
 			params: []verbParam{
 				{Name: "dir", Type: "string", Description: "The folder. Omit for the home folder."},
@@ -1449,6 +1456,7 @@ func fileVerbs() map[string]verbEntry {
 		},
 		"file-read": {
 			scope:       scopeDeny,
+			link:        needFiles,
 			description: "Read up to 4 MiB of a file on this machine, base64.",
 			params: []verbParam{
 				pathParam("The file."),
@@ -1465,6 +1473,7 @@ func fileVerbs() map[string]verbEntry {
 		},
 		"file-mkdir": {
 			scope:       scopeDeny,
+			link:        needFiles,
 			description: "Make a folder on this machine, with its parents.",
 			params: []verbParam{
 				pathParam("The folder."),
@@ -1476,6 +1485,7 @@ func fileVerbs() map[string]verbEntry {
 		},
 		"file-rename": {
 			scope:       scopeDeny,
+			link:        needFiles,
 			description: "Move or rename a path on this machine. It does not replace a path that is there unless replace is set. A move to another disk answers cross_device: copy it with transfer-start and move set.",
 			params: []verbParam{
 				{Name: "from", Type: "string", Required: true, Description: "The path to move."},
@@ -1491,6 +1501,7 @@ func fileVerbs() map[string]verbEntry {
 		},
 		"file-remove": {
 			scope:       scopeDeny,
+			link:        needFiles,
 			description: "Delete a path on this machine. A folder that holds files needs recursive. The home folder and / are refused.",
 			params: []verbParam{
 				pathParam("The path."),
@@ -1502,6 +1513,7 @@ func fileVerbs() map[string]verbEntry {
 		},
 		"file-hash": {
 			scope:       scopeDeny,
+			link:        needFiles,
 			description: "The sha256 of a file on this machine, of a range of it, or of the part a copy to it is writing.",
 			params: []verbParam{
 				pathParam("The file."),
@@ -1519,6 +1531,7 @@ func fileVerbs() map[string]verbEntry {
 		},
 		"file-walk": {
 			scope:       scopeDeny,
+			link:        needFiles,
 			description: "List every file and folder under a folder on this machine, for a folder copy. At most 20000 entries in one reply; with stream, up to 1000000 entries, one JSON line each after the reply, and a last line {end, bytes, skipped, skipped_count, denied} or {end, code, error}. Links are not followed: a link, a named pipe, a socket and a device are not copied, and skipped names them. Over a link, an entry in the read deny list is left out and not named, and denied counts it.",
 			params: []verbParam{
 				pathParam("The folder."),
@@ -1536,6 +1549,7 @@ func fileVerbs() map[string]verbEntry {
 		},
 		"open-file-stream": {
 			scope:       scopeDeny,
+			link:        needFiles,
 			description: "Turn this connection into the bytes of one file. mode read: after the reply the connection carries the file from offset to size, then closes. mode write: the part file beside path is cut to offset, then the connection takes length bytes into it, answers one line {part_size, written, error} and closes. file-commit puts the part in place.",
 			params: []verbParam{
 				pathParam("The file to read, or the file a write is for."),
@@ -1561,6 +1575,7 @@ func fileVerbs() map[string]verbEntry {
 		},
 		"file-commit": {
 			scope:       scopeDeny,
+			link:        needFiles,
 			description: "Finish a copy written with open-file-stream: check the part's sha256 against the sender's, then rename it into place. A part that does not match is removed.",
 			params: []verbParam{
 				pathParam("The file the copy is for."),
@@ -1581,6 +1596,7 @@ func fileVerbs() map[string]verbEntry {
 		},
 		"file-abort": {
 			scope:       scopeDeny,
+			link:        needFiles,
 			description: "Remove the part a copy to a path left on this machine.",
 			params:      []verbParam{pathParam("The file the copy was for."), partIDParam},
 			returns:     []verbParam{{Name: "path", Type: "string", Description: "The path."}},

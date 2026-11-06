@@ -234,6 +234,7 @@ func dropVerbs() map[string]verbEntry {
 	return map[string]verbEntry{
 		"file-drop-dir": {
 			scope:       scopeDeny,
+			link:        needFiles,
 			description: "Make a private folder on this machine for files dropped on a pane, and answer its path. Drops are kept for 24 hours and 256 MiB together, oldest removed first.",
 			params:      []verbParam{{Name: "bytes", Type: "int", Description: "The size of the drop, so older drops make room for it."}},
 			returns: []verbParam{
@@ -246,6 +247,7 @@ func dropVerbs() map[string]verbEntry {
 		},
 		"drop-files": {
 			scope:       scopeDeny,
+			link:        needRelay | needFiles,
 			description: "Give a pane on a machine the paths of files on this machine. For this machine the answer is the paths. For a host, the files are copied into a new private drop folder there, and the answer has their paths there and the transfers that copy them. Paste a path once its transfer is done.",
 			params: []verbParam{
 				{Name: "host", Type: "string", Description: "The machine the pane is on. Omit for this machine."},

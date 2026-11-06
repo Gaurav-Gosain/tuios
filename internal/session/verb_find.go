@@ -435,6 +435,7 @@ func findVerbs() map[string]verbEntry {
 		"search-panes": {
 			// search-panes takes a list of sessions, and every session without one.
 			scope:       scopeGlobal,
+			link:        needList,
 			description: "Find text in the history and the screen of panes on this machine. The newest match in a pane comes first, and the pane with the newest output comes first. Each pane gets 50 ms. A pane that takes longer is cut off, and truncated is then true.",
 			params: []verbParam{
 				{Name: "query", Type: "string", Required: true, Description: "The text to find, at most 512 bytes. It is literal text unless regex is true."},
@@ -457,6 +458,7 @@ func findVerbs() map[string]verbEntry {
 		},
 		"command-history": {
 			scope:       scopeRead,
+			link:        needList,
 			description: "List the commands that shells in panes on this machine ran, newest first. Only a shell that sends OSC 133 marks reports its commands. A pane keeps its last 200 commands. A command that ran again in the same pane is listed once, at its newest run.",
 			params: []verbParam{
 				{Name: "session", Type: "string", Description: "List only this session's panes. Omit to list every session."},
@@ -475,6 +477,7 @@ func findVerbs() map[string]verbEntry {
 		},
 		"list-ports": {
 			scope:       scopeRead,
+			link:        needList,
 			description: "List the TCP ports that processes in panes on this machine listen on. A pane's processes are its program and every process under it. A process that left the pane's process tree is not listed. Linux and macOS only. The answer can be up to 1 second old.",
 			params: []verbParam{
 				{Name: "session", Type: "string", Description: "List only this session's panes. Omit to list every session."},

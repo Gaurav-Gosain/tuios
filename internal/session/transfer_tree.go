@@ -1098,6 +1098,7 @@ func treeVerbs() map[string]verbEntry {
 	return map[string]verbEntry{
 		"file-check": {
 			scope:       scopeDeny,
+			link:        needFiles,
 			description: "Describe many files under a folder on this machine at once, for a copy that leaves out what is there already: whether each is there, its kind, size and time, and with hash its sha256. At most 2000 files, and 512 MiB hashed, in one call.",
 			params: []verbParam{
 				{Name: "root", Type: "string", Required: true, Description: "The folder. An absolute path, or one that starts with ~."},
@@ -1112,6 +1113,7 @@ func treeVerbs() map[string]verbEntry {
 		},
 		"open-tree-stream": {
 			scope:       scopeDeny,
+			link:        needFiles,
 			description: "Turn this connection into a tree stream: many files of a folder in one stream. mode read: the caller writes one line {rel, size, mtime} per file and {end}, and gets one record per file and {end}. mode write: the caller writes records, and gets one ack {rel, path, sha256, skipped} or {rel, code, error} per file and {end}. A record is a header line {rel, kind, size, perm, mtime, z, conflict, label}, the bytes (one flate stream when z), and a trailer line {sha256}. docs/protocol.md has the whole format.",
 			params: []verbParam{
 				{Name: "root", Type: "string", Required: true, Description: "The folder the paths are under. An absolute path, or one that starts with ~."},

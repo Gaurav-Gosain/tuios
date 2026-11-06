@@ -208,7 +208,10 @@ func (d *Daemon) speedDown(ctx context.Context, host string, n int64) (time.Dura
 func speedVerbs() map[string]verbEntry {
 	return map[string]verbEntry{
 		"speed-test": {
-			scope:       scopeDeny,
+			scope: scopeDeny,
+			// A speed test moves bytes that are no file's, and it is how a person
+			// learns what a copy would get.
+			link:        needFiles,
 			description: "The far end of a link speed test. ping answers at once. sink takes bytes after the reply and drops them, then answers one line {bytes, ms}. source sends bytes of random data after the reply, then closes.",
 			params: []verbParam{
 				{Name: "mode", Type: "string", Required: true, Description: "ping, sink or source.", Accepted: []string{"ping", "sink", "source"}},
@@ -220,6 +223,7 @@ func speedVerbs() map[string]verbEntry {
 		},
 		"host-speed-test": {
 			scope:       scopeDeny,
+			link:        needRelay | needFiles,
 			description: "Measure the link to a host the way a copy uses it: the round trip of a small call, then bytes up and down on bulk streams. The bytes are random, so compression does not help them.",
 			params: []verbParam{
 				{Name: "host", Type: "string", Required: true, Description: "A name from [hosts]."},

@@ -558,6 +558,7 @@ func bufferVerbs() map[string]verbEntry {
 			// paste-buffer types into a pane, and it also reads a buffer: see
 			// readsBuffers.
 			scope:       scopeBufferRead,
+			link:        needList,
 			description: "List the paste buffers, newest first. A yank in copy mode adds one, and so does set-buffer. From a pane this needs the read grant, and a pane without admin sees only the buffers it set. Every total counts only the buffers listed.",
 			params:      []verbParam{sampleWidth},
 			returns: []verbParam{
@@ -572,6 +573,7 @@ func bufferVerbs() map[string]verbEntry {
 		},
 		"show-buffer": {
 			scope:       scopeBufferRead,
+			link:        needList,
 			description: "Return the content of one paste buffer. A buffer can hold any bytes: data_b64 carries them all, and data carries them as text. From a pane this needs the read grant, and reaches only the buffers of the sessions the pane may read.",
 			params: []verbParam{nameParam("show"), version,
 				{Name: "encoding", Type: "string", Description: "base64 to get data_b64 alone, without the text in data.", Accepted: []string{"base64"}},
@@ -587,6 +589,7 @@ func bufferVerbs() map[string]verbEntry {
 		},
 		"set-buffer": {
 			scope:       scopeBufferWrite,
+			link:        needWrite,
 			description: "Store content in a paste buffer and put it on top. With no name a new buffer is made, append or not, as tmux does; a name makes the buffer a named one. Empty content stores nothing and is no error. When the buffers tuios named pass the limit, the oldest of them go; past the byte cap the oldest go whatever their name. A set from outside every pane, or from a pane with admin, makes the person's buffer; a set from a pane without admin makes that pane's own. From a pane this needs the write grant, and a pane without admin may set only its own buffers, or make a new one with no name.",
 			params: []verbParam{
 				{Name: "data", Type: "string", Description: "The content as text. Give data or data_b64. It may not be empty or larger than the byte cap."},
@@ -606,6 +609,7 @@ func bufferVerbs() map[string]verbEntry {
 		},
 		"delete-buffer": {
 			scope:       scopeBufferWrite,
+			link:        needWrite,
 			description: "Delete a paste buffer. From a pane this needs the write grant, and a pane without admin may delete only its own buffers.",
 			params: []verbParam{
 				nameParam("delete"),
@@ -618,7 +622,11 @@ func bufferVerbs() map[string]verbEntry {
 			handler:  (*Daemon).verbDeleteBuffer,
 		},
 		"paste-buffer": {
-			scope:       scopeWrite,
+			scope: scopeWrite,
+			// The paste buffers hold what the person copied on this machine. A
+			// link reads them only where it may also capture a pane, and changes
+			// or pastes them only where it may type.
+			link:        needWrite,
 			description: "Type a paste buffer into a window's PTY as a paste. Each line feed becomes a carriage return unless raw, as in tmux. Control characters other than tab, line feed and carriage return are removed, and the text is wrapped in the bracketed paste delimiters when the program in the pane turned bracketed paste on. From a pane this needs the read and write grants.",
 			params: []verbParam{
 				sessionParam,

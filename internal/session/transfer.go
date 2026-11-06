@@ -2245,7 +2245,11 @@ func transferVerbs() map[string]verbEntry {
 	idParam := verbParam{Name: "id", Type: "string", Required: true, Description: "The transfer's id."}
 	return map[string]verbEntry{
 		"transfer-start": {
-			scope:       scopeDeny,
+			scope: scopeDeny,
+			// A transfer and a drop make this daemon open connections on its own
+			// links, as open-host-connection does, so they need what a relay needs,
+			// and files, because they move file bytes.
+			link:        needRelay | needFiles,
 			description: "Copy a file or a folder between this machine and a host, or between two hosts. The daemon runs the copy, so a client may quit, and a daemon restart goes on with it. A machine that goes away pauses it, and it goes on from where it stopped when the machine is back. Every file's sha256 is checked before it is put in place, and it keeps the original's permission bits and modification time. A file that arrives over a link gets the receiving machine's umask and never group or world write. A file that is there with the same sha256 is not copied again. A destination that exists answers file_exists unless conflict says what to do. A destination another copy writes now answers busy. Each change is a transfer event on the event stream.",
 			params: []verbParam{
 				endpoint("src", "What to copy"),
@@ -2266,6 +2270,7 @@ func transferVerbs() map[string]verbEntry {
 		},
 		"transfer-list": {
 			scope:       scopeDeny,
+			link:        needRelay | needFiles,
 			description: "List the transfers, newest first, with byte progress, rate and time left. Finished ones stay for 30 minutes. A pane with the files grant sees only the copies it started.",
 			params:      []verbParam{{Name: "id", Type: "string", Description: "Only this transfer."}},
 			returns: []verbParam{
@@ -2277,6 +2282,7 @@ func transferVerbs() map[string]verbEntry {
 		},
 		"transfer-cancel": {
 			scope:       scopeDeny,
+			link:        needRelay | needFiles,
 			description: "Stop a transfer and remove what it copied so far of the file in flight.",
 			params:      []verbParam{idParam},
 			returns:     rowReturn,
@@ -2285,6 +2291,7 @@ func transferVerbs() map[string]verbEntry {
 		},
 		"transfer-pause": {
 			scope:       scopeDeny,
+			link:        needRelay | needFiles,
 			description: "Pause a transfer. What it copied stays, and transfer-resume goes on from there.",
 			params:      []verbParam{idParam},
 			returns:     rowReturn,
@@ -2293,6 +2300,7 @@ func transferVerbs() map[string]verbEntry {
 		},
 		"transfer-resume": {
 			scope:       scopeDeny,
+			link:        needRelay | needFiles,
 			description: "Go on with a paused transfer, try a waiting one now, or try a failed one again from where it stopped.",
 			params:      []verbParam{idParam},
 			returns:     rowReturn,
@@ -2301,6 +2309,7 @@ func transferVerbs() map[string]verbEntry {
 		},
 		"transfer-answer": {
 			scope:       scopeDeny,
+			link:        needRelay | needFiles,
 			description: "Answer a copy in state conflict: what to do with files that are there and differ. Answer one file, several, or every file with all. The copy goes on when every file it waits on has an answer.",
 			params: []verbParam{
 				idParam,
@@ -2315,6 +2324,7 @@ func transferVerbs() map[string]verbEntry {
 		},
 		"transfer-clear": {
 			scope:       scopeDeny,
+			link:        needRelay | needFiles,
 			description: "Remove the transfers that ended (done, failed, cancelled) from the list. A failed one takes its parts with it.",
 			params:      []verbParam{{Name: "ids", Type: "[]string", Description: "Only these transfers. Omit for every one that ended."}},
 			returns:     []verbParam{{Name: "cleared", Type: "int", Description: "How many left the list."}},

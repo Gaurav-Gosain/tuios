@@ -4,7 +4,7 @@ import "slices"
 
 // How each herdr socket method is held to what its caller may do.
 //
-// The JSON verbs are classified by the scope on their verb entry and in verbCapabilities, and a
+// The JSON verbs are classified by the scope and link policy on their verb entry, and a
 // verb missing there is refused. The herdr socket gets the same rule here:
 // every method it answers names its check, a method with none is refused
 // before its handler runs, and TestHerdrMethodsNameTheirCheck fails until a
