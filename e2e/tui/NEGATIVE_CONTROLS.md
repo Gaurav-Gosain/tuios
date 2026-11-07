@@ -14457,3 +14457,20 @@ Run on 2026-11-07 on macOS (arm64):
 
 Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestCockpitMachineChip$' -v .`.
+
+## TestSuperKeysTypeNothingInAPlainPane
+
+A kitty host sends Cmd+K as CSI 107 ; 9 u. The legacy encoder masked Super off
+and sent a bare k, so an unbound Cmd chord typed its letter into a shell. The
+test types `echo A`, super+k, hyper+k, `B` into a plain shell and reads the
+output line, then turns the kitty protocol on in `cat -v` and checks super+k
+still arrives as CSI 107 ; 9 u.
+
+Run on 2026-11-07 on macOS (arm64):
+
+| Removed | The test fails with | Result |
+|---------|---------------------|--------|
+| The `legacyDropsKey` check in `paneKeyBytes` (the main binary at 175501997) | "ASSERTION: super+k or hyper+k typed a k into a plain shell". The screen shows `$ echo AkkB` and `AkkB` | **caught** |
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestSuperKeysTypeNothingInAPlainPane$' -v .`.

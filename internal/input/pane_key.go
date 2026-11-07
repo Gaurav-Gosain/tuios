@@ -1,6 +1,8 @@
 package input
 
 import (
+	"unicode"
+
 	tea "charm.land/bubbletea/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/app"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
@@ -34,6 +36,9 @@ func paneKeyBytes(host tea.KeyPressMsg, w *terminal.Window, o *app.OS, focused b
 	if encoded := vt.EncodePaneKey(key, flags, modifyOtherKeys); encoded != "" {
 		raw = []byte(encoded)
 	}
+	if len(raw) == 0 && legacyDropsKey(host) {
+		return nil, false
+	}
 	if len(raw) == 0 {
 		// Only the legacy encoding reads the cursor key mode, and on the
 		// ghostty backend reading it takes the emulator's lock.
@@ -53,4 +58,19 @@ func paneKeyBytes(host tea.KeyPressMsg, w *terminal.Window, o *app.OS, focused b
 		return raw, false
 	}
 	return append(raw, release...), true
+}
+
+// legacyDropsKey reports whether a pane that reads legacy keys must get
+// nothing for this key: a character key held with Super or Hyper.
+//
+// The legacy encoding can say Shift, Alt and Ctrl only. With Super or Hyper
+// masked off, Cmd+K became a bare k, and an unbound Cmd chord typed its letter
+// into the shell. A pane that wants these keys asks for the kitty protocol
+// or modifyOtherKeys, which encode them before this is asked.
+// Named keys (arrows, Enter, Tab) keep their legacy bytes.
+func legacyDropsKey(k tea.KeyPressMsg) bool {
+	if k.Mod&(tea.ModSuper|tea.ModHyper) == 0 {
+		return false
+	}
+	return k.Code == tea.KeySpace || (k.Code > 0x20 && k.Code != 0x7f && k.Code <= unicode.MaxRune)
 }
