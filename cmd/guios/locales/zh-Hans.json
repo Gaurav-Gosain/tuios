@@ -221,7 +221,7 @@
   "setNameLead": "需要你的窗格",
   "setNameFolder": "第一个窗格",
   "setSidebarRows": "侧边栏行",
-  "setSidebarRowsDetail": "详细模式会在每个会话名称下多显示一行：其状态消息，没有时显示分支和改动。",
+  "setSidebarRowsDetail": "详细行在每个会话名称下加两行：其智能体最后说的话（没有时为正在运行的内容），以及其分支和改动。",
   "setRowsDetailed": "详细",
   "setRowsCompact": "紧凑",
   "setFocusFollowsMouse": "焦点跟随鼠标",

@@ -221,7 +221,7 @@
   "setNameLead": "対応が必要なペイン",
   "setNameFolder": "最初のペイン",
   "setSidebarRows": "サイドバーの行",
-  "setSidebarRowsDetail": "詳細では、各セッション名の下にもう 1 行表示します。ステータスメッセージ、なければブランチと変更です。",
+  "setSidebarRowsDetail": "詳細な行では、各セッション名の下に 2 行を加えます。エージェントの最後の発言 (なければ実行中のもの) と、ブランチと変更です。",
   "setRowsDetailed": "詳細",
   "setRowsCompact": "コンパクト",
   "setFocusFollowsMouse": "マウスでフォーカスを移動",

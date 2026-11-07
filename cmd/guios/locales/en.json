@@ -369,7 +369,7 @@
   "setNameLead": "Pane that needs you",
   "setNameFolder": "First pane",
   "setSidebarRows": "Sidebar rows",
-  "setSidebarRowsDetail": "Detailed rows add a line under each session’s name: its status message, else its branch and changes.",
+  "setSidebarRowsDetail": "Detailed rows add two lines under each session’s name: what its agent said last, else what runs; and its branch and changes.",
   "setRowsDetailed": "Detailed",
   "setRowsCompact": "Compact",
   "setFocusFollowsMouse": "Focus follows mouse",

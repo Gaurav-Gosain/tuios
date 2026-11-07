@@ -2270,11 +2270,11 @@ func (msgs Messages) SetSidebarRows() string {
 	return Catalog.Format(msgs.locale, "setSidebarRows", nil)
 }
 
-// SetSidebarRowsDetail says "Detailed rows add a line under each session’s name: its status message, else its branch and changes."
+// SetSidebarRowsDetail says "Detailed rows add two lines under each session’s name: what its agent said last, else what runs; and its branch and…"
 // in the language the app shows.
 func SetSidebarRowsDetail() string { return In(i18n.Locale()).SetSidebarRowsDetail() }
 
-// SetSidebarRowsDetail says "Detailed rows add a line under each session’s name: its status message, else its branch and changes."
+// SetSidebarRowsDetail says "Detailed rows add two lines under each session’s name: what its agent said last, else what runs; and its branch and…"
 // in the language of msgs.
 func (msgs Messages) SetSidebarRowsDetail() string {
 	return Catalog.Format(msgs.locale, "setSidebarRowsDetail", nil)
