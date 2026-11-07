@@ -183,6 +183,7 @@ func TestCockpitThreadCopyMode(t *testing.T) {
 		t.Fatal(err)
 	}
 	waitRegion(t, term, "Focus", 0, 120, "tab from the list")
+	saveCockpitFrames(t, term, "cockpit-copy-focus")
 	if err := term.SendKeys("y"); err != nil {
 		t.Fatal(err)
 	}
