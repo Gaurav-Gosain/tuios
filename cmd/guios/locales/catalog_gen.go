@@ -10462,11 +10462,11 @@ func (msgs Messages) LookViewPage() string {
 	return Catalog.Format(msgs.locale, "lookViewPage", nil)
 }
 
-// CockpitReadingPrompt says "tuios is still reading the prompt. Press the key again."
+// CockpitReadingPrompt says "Reading the prompt on the pane’s screen…"
 // in the language the app shows.
 func CockpitReadingPrompt() string { return In(i18n.Locale()).CockpitReadingPrompt() }
 
-// CockpitReadingPrompt says "tuios is still reading the prompt. Press the key again."
+// CockpitReadingPrompt says "Reading the prompt on the pane’s screen…"
 // in the language of msgs.
 func (msgs Messages) CockpitReadingPrompt() string {
 	return Catalog.Format(msgs.locale, "cockpitReadingPrompt", nil)

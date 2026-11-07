@@ -1033,7 +1033,7 @@
   "actionNewPane": "新しいペイン",
   "lookKindHTML": "HTML ページ",
   "lookViewPage": "ページ",
-  "cockpitReadingPrompt": "tuios はまだ確認を読んでいます。もう一度キーを押してください。",
+  "cockpitReadingPrompt": "ペインの画面のプロンプトを読み取り中…",
   "cockpitAnswerFailed": "tuios は答えを送れませんでした。ペインを開いて答えてください。",
   "toastPaneTooSmall": "このペインは小さすぎて分割できません。ペインを閉じるか、ウィンドウを広げてください。",
   "toastLayoutTooSmall": "このレイアウトではペインが小さくなりすぎます。ペインを閉じるか、ウィンドウを大きくしてください。",

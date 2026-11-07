@@ -1033,7 +1033,7 @@
   "actionNewPane": "新建窗格",
   "lookKindHTML": "HTML 页面",
   "lookViewPage": "页面",
-  "cockpitReadingPrompt": "tuios 仍在读取提示。请再按一次键。",
+  "cockpitReadingPrompt": "正在读取窗格屏幕上的提示…",
   "cockpitAnswerFailed": "tuios 无法发送回答。请打开窗格回答。",
   "toastPaneTooSmall": "此窗格太小,无法拆分。请关闭一个窗格或加宽窗口。",
   "toastLayoutTooSmall": "此布局会使窗格太小。请关闭一个窗格或放大窗口。",
