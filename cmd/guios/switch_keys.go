@@ -1,6 +1,7 @@
 package main
 
 import (
+	"slices"
 	"time"
 
 	"github.com/Gaurav-Gosain/mygo/ui"
@@ -47,9 +48,8 @@ type switchKey struct {
 // keyboard into the sink.
 func (a *App) switchStarted(sid string) {
 	sw := &a.sw
-	if sw.sid != sid {
-		sw.queue = nil
-	}
+	// The queue stays: keys a replay has not sent yet belong to the new
+	// switch (replaySwitchKeys).
 	sw.sid, sw.since, sw.landed = sid, time.Now(), false
 	if a.win != nil {
 		a.win.Invalidate()
@@ -114,26 +114,68 @@ func (a *App) switchSink(c *ui.Context) {
 }
 
 // replaySwitchKeys sends what the sink kept to the pane that now has the
-// keyboard, in the order it was typed. A key the prefix takes goes to the
-// prefix, as in the pane's terminal (keyDown, and takeTyped in gated.Write).
+// keyboard, in the order it was typed, through the router a key typed
+// there goes through: the leader and the prefix's keys and text to the
+// prefix (keyDown, takeTyped), the rest to the pane. The prefix decides
+// here, on the main thread, so the bytes it lets go are sent past it
+// (gated.sendPast): a leader later in the queue must not take text that
+// came before it (Mac round 3, F3-M1).
+//
+// A key that runs a prefix action stops the replay: the action runs on a
+// later turn of the main thread and can start a switch of its own, which
+// must take the rest of the queue. The rest goes on from focusTerminal
+// once the action ran.
 func (a *App) replaySwitchKeys(pane string) {
 	q := a.sw.queue
 	a.sw.queue = nil
 	t := a.termFor(pane)
-	for _, k := range q {
-		if k.text != "" {
-			if t != nil {
-				t.Send([]byte(k.text))
-			}
-			continue
-		}
-		if a.keyDown(pane, k.mods, k.key) || t == nil {
-			continue
-		}
-		if b := switchKeyBytes(k.mods, k.key); b != nil {
+	var g *gated
+	if e := a.terms[pane]; e != nil {
+		g = e.gate
+	}
+	send := func(b []byte) {
+		switch {
+		case t == nil:
+		case g != nil:
+			g.sendPast(t, b)
+		default:
 			t.Send(b)
 		}
 	}
+	for i, k := range q {
+		armed := a.tk.live()
+		var took bool
+		if k.text != "" {
+			took = a.takeTyped([]byte(k.text))
+		} else {
+			took = a.keyDown(pane, k.mods, k.key)
+		}
+		if !took {
+			if k.text != "" {
+				send([]byte(k.text))
+			} else if b := switchKeyBytes(k.mods, k.key); b != nil {
+				send(b)
+			}
+			continue
+		}
+		if armed && !a.prefixInMenu() && i+1 < len(q) {
+			// The key ran an action: the rest waits for it.
+			a.sw.queue = append(slices.Clone(q[i+1:]), a.sw.queue...)
+			a.update(a.focusTerminal)
+			return
+		}
+	}
+}
+
+// prefixInMenu reports whether the prefix waits for a sub-prefix's key.
+func (a *App) prefixInMenu() bool {
+	tk := &a.tk
+	if !tk.live() {
+		return false
+	}
+	tk.mu.Lock()
+	defer tk.mu.Unlock()
+	return tk.menu != ""
 }
 
 // switchKeyBytes are the bytes a key that types no text sends, in the

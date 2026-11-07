@@ -82,6 +82,7 @@ const (
 type termEntry struct {
 	term    *terminal.Terminal
 	stream  *client.Stream
+	gate    *gated
 	err     string
 	started time.Time
 }
@@ -803,15 +804,44 @@ type gated struct {
 	*client.Stream
 	ready chan struct{}
 	app   *App
+
+	// past are writes the prefix already saw, in the order they were
+	// sent (sendPast): they go to the pane as they are.
+	mu   sync.Mutex
+	past [][]byte
 }
 
 // Write takes what the terminal writes as the tuios prefix's next key
 // while the prefix is armed, and sends the rest to the pane.
 func (g *gated) Write(p []byte) (int, error) {
+	if g.passed(p) {
+		return g.Stream.Write(p)
+	}
 	if g.app != nil && (g.app.takeTyped(p) || g.app.quick.route.take(g.Stream, p)) {
 		return len(p), nil
 	}
 	return g.Stream.Write(p)
+}
+
+// sendPast sends bytes the prefix already saw through the terminal, in
+// its order with the rest of the terminal's input, so that a prefix armed
+// in the meantime does not see them a second time.
+func (g *gated) sendPast(t *terminal.Terminal, p []byte) {
+	g.mu.Lock()
+	g.past = append(g.past, p)
+	g.mu.Unlock()
+	t.Send(p)
+}
+
+// passed reports whether p is the next write sendPast sent.
+func (g *gated) passed(p []byte) bool {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	if len(g.past) == 0 || string(g.past[0]) != string(p) {
+		return false
+	}
+	g.past = g.past[1:]
+	return true
 }
 
 func (g *gated) Read(p []byte) (int, error) {
@@ -879,7 +909,7 @@ func (a *App) ensureTerm(id string) {
 				stream.Close()
 				return
 			}
-			e.term, e.stream = term, stream
+			e.term, e.stream, e.gate = term, stream, g
 			a.flushTypeahead(id, e)
 			if a.selected == id {
 				a.focusTerminal()
