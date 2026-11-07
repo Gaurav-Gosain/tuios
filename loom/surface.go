@@ -75,6 +75,8 @@ type Surface struct {
 	cache map[*tml.Node]*compiled
 	// sketches keeps the Mermaid diagrams drawn, by source and width.
 	sketches *sketchCache
+	// hooks are what the surface tells its host about its diagrams.
+	hooks Hooks
 
 	root  *box
 	byPtr map[string][]*box
