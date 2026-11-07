@@ -2135,6 +2135,7 @@ func getDefaultQuickLookInsideKeybinds() map[string][]string {
 		"go_to":        {":"},
 		"wrap":         {"w"},
 		"filmstrip":    {"t"},
+		ActionCopyMode: {"["},
 	}
 }
 

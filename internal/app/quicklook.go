@@ -207,6 +207,11 @@ type quickLookState struct {
 	// rowSpans is the syntax spans of the wrapped row being drawn, kept so a
 	// frame allocates no spans slice per row.
 	rowSpans []diffview.Span
+	// copy is copy mode over the text, nil when it is off. codeW and bodyRows
+	// are the code column and the rows of the last text drawn, where copy
+	// mode lays the text out. See quicklook_copy.go.
+	copy            *quickLookCopy
+	codeW, bodyRows int
 	// hostOlder holds the machines whose file-preview verb has no windows, and
 	// hostAsked those it was asked of, once per link.
 	hostOlder map[string]bool
@@ -395,6 +400,7 @@ func (m *OS) CloseQuickLook() {
 func (m *OS) dropQuickLook() {
 	ql := &m.quickLook
 	ql.open = false
+	ql.copy = nil
 	ql.target = quickLookTarget{}
 	ql.borrowed = false
 	ql.res = nil
@@ -936,7 +942,8 @@ func (m *OS) renderQuickLook() (string, int, int) {
 	var content string
 	var geo overlay.Geometry
 	var pic quickLookPic
-	if k := &ql.framed; k.ok && k.look == f.look && k.res == f.res && k.target == f.target && k.scroll == f.scroll && k.inside == f.inside &&
+	// Copy mode moves something on every key, so its frames are not kept.
+	if k := &ql.framed; ql.copy == nil && k.ok && k.look == f.look && k.res == f.res && k.target == f.target && k.scroll == f.scroll && k.inside == f.inside &&
 		k.prompt == f.prompt && k.input == f.input && k.query == f.query && k.status == f.status && k.wrap == f.wrap && k.view == f.view && k.mdOpen == f.mdOpen && k.viewScroll == f.viewScroll && k.column == f.column && k.details == f.details &&
 		k.innerW == f.innerW && k.bodyH == f.bodyH && k.key == f.key && k.seekKey == f.seekKey && k.insideKey == f.insideKey && k.border == f.border &&
 		k.canvas == f.canvas && k.fgMute == f.fgMute && k.frame == f.frame && k.accent == f.accent &&
@@ -955,7 +962,7 @@ func (m *OS) renderQuickLook() (string, int, int) {
 		// Only a finished text, markdown, folder, binary or error body is kept;
 		// a picture's cells arrive later.
 		ql.framed = quickLookFrame{}
-		if r := ql.res; r != nil && r.target == ql.target && r.kind != "image" && r.kind != "pdf" && r.kind != "video" {
+		if r := ql.res; ql.copy == nil && r != nil && r.target == ql.target && r.kind != "image" && r.kind != "pdf" && r.kind != "video" {
 			f.scroll = ql.scroll // after the draw clamped it
 			f.viewScroll = ql.viewScroll
 			f.content, f.geo = content, geo
@@ -1095,6 +1102,16 @@ func (m *OS) drawQuickLook(c *ckCanvas, l ckLook, dv *diffview.Theme, w, h int) 
 		}
 		if ql.scroll < 0 && (r.startOff == 0 || r.older || r.stopped) {
 			ql.scroll = 0
+		}
+		ql.codeW, ql.bodyRows = codeW, bodyRows
+		if q := ql.copy; q != nil {
+			if q.w == codeW && q.h == bodyRows {
+				m.drawQuickLookCopy(c, pal, dv, r, q, codeX, gutter, bodyTop)
+				break
+			}
+			// The panel changed size under copy mode, so its rows no longer
+			// fit. It ends, and the text is drawn as before.
+			m.QuickLookCopyEnd()
 		}
 		quickLookBar(c, pal, w-1, bodyTop, bodyRows, r, from)
 		row := 0
@@ -1368,6 +1385,10 @@ func (m *OS) quickLookHints(closeKey string) []overlay.Hint {
 		}
 		return keys[0]
 	}
+	if ql.copy != nil {
+		// Copy mode over the text has the keys it has over a pane.
+		return copyModeLegend(ql.copy.cm.State)
+	}
 	if ql.inside {
 		in := func(action string) []string { return reg.Keys(config.TableQuickLookInside, action) }
 		h := add(nil, first(in("go_back")), "back to files")
@@ -1408,6 +1429,9 @@ func (m *OS) quickLookHints(closeKey string) []overlay.Hint {
 				wrap = "cut lines"
 			}
 			h = add(h, first(in("wrap")), wrap)
+			if ql.res.kind == "text" {
+				h = add(h, first(in(config.ActionCopyMode)), "select")
+			}
 		}
 		h = add(h, pair(in, "line_down", "line_up"), "line")
 		h = add(h, pair(in, "half_down", "half_up"), "half page")

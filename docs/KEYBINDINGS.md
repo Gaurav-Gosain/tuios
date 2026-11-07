@@ -340,12 +340,19 @@ Inside the file, every key acts on the preview:
 | `n` `N` | Go to the next match, or the one before |
 | `:` | Go to a line number, or a page of a PDF |
 | `w` | Wrap long lines, or cut them |
+| `[` | Start copy mode on the text |
 | `f` | Fill the area of the panes, or go back |
 | `Esc` or `Tab` | Move the keyboard back to the list |
 | `Space` | Close the preview |
 
 Change these keys in `[keybindings.quick_look]` and
 `[keybindings.quick_look_inside]`.
+
+`[` in a text file starts [copy mode](#copy-mode) on the text, with the cursor
+on the first line in view. All copy mode keys work: move, select with `v`,
+`V` or `Ctrl+V`, search with `/`, and copy with `y`. Long lines wrap while
+copy mode is on. A selection across a wrapped line copies the line whole. `q`
+or `Esc` goes back to the preview keys.
 
 For a listing on another machine, that machine reads the file and sends the
 preview. Its host policy must allow `files`. The binding is `file_quick_look`

@@ -106,11 +106,15 @@ func copyModeAction(msg tea.KeyPressMsg, o *app.OS) string {
 // pane's I/O read lock, and records what it wants done in fx. action is the
 // [keybindings.copy_mode] action the key is bound to, or "".
 func dispatchCopyModeKey(msg tea.KeyPressMsg, action string, window *terminal.Window, fx *copyModeEffects, s *config.Settings) {
-	cm := window.CopyMode
 	window.RLockIO()
 	defer window.RUnlockIO()
+	runCopyModeKey(msg, action, window.CopyMode, window, fx, s)
+}
 
-	if action != "" && runCopyModeAction(action, cm, window, fx) {
+// runCopyModeKey runs one copy-mode key against grid and records what it
+// wants done in fx. The caller holds whatever lock the grid needs.
+func runCopyModeKey(msg tea.KeyPressMsg, action string, cm *terminal.CopyMode, grid terminal.CopyGrid, fx *copyModeEffects, s *config.Settings) {
+	if action != "" && runCopyModeAction(action, cm, grid, fx) {
 		return
 	}
 
@@ -125,11 +129,11 @@ func dispatchCopyModeKey(msg tea.KeyPressMsg, action string, window *terminal.Wi
 
 	switch cm.State {
 	case terminal.CopyModeSearch:
-		handleSearchInput(msg, cm, window, fx, s)
+		handleSearchInput(msg, cm, grid, fx, s)
 	case terminal.CopyModeVisualChar, terminal.CopyModeVisualLine, terminal.CopyModeVisualBlock:
-		handleVisualInput(msg, cm, window, fx, s)
+		handleVisualInput(msg, cm, grid, fx, s)
 	case terminal.CopyModeNormal:
-		handleNormalInput(msg, cm, window, fx, s)
+		handleNormalInput(msg, cm, grid, fx, s)
 	}
 }
 

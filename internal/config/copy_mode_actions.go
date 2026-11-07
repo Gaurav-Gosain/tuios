@@ -34,6 +34,11 @@ const ActionEditScrollback = "edit_scrollback"
 // view the person is reading.
 const ActionHints = "hints"
 
+// ActionCopyMode starts copy mode over the text in the quick look preview,
+// inside the file. It is the quick_look_inside binding for what the leader
+// and [ do for a pane.
+const ActionCopyMode = "copy_mode"
+
 // ActionClearScrollback clears the focused pane's scrollback and the rows
 // above its prompt, as cmd+k does in Ghostty and iTerm2. It has no default
 // key: the host terminal takes cmd+k for itself unless told not to. Bind it

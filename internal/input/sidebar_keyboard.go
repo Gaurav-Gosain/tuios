@@ -63,6 +63,10 @@ func handleSidebarKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		}
 		return o, nil
 	}
+	// Copy mode over the preview takes every key, as it does over a pane.
+	if cm, grid := o.QuickLookCopy(); cm != nil {
+		return handleQuickLookCopyKey(msg, o, cm, grid)
+	}
 	// Quick look first. Its key opens the preview on a row of the listing and
 	// closes it from any row, and esc closes it before esc leaves the rail.
 	// Every other key goes on to the rail, so the preview takes nothing from
@@ -117,6 +121,8 @@ func handleSidebarKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 			o.QuickLookColumn(true)
 		case "next_view":
 			return o, o.QuickLookNextView()
+		case "copy_mode":
+			o.QuickLookCopyStart()
 		}
 		return o, nil
 	}

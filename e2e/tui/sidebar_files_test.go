@@ -3657,3 +3657,53 @@ func TestQuickLookWrapKeepsColours(t *testing.T) {
 		}
 	}
 }
+
+// TestQuickLookCopyModeSelectsAndCopies goes inside a text preview, presses [
+// for copy mode, and copies with the keys copy mode has over a pane: w v e y
+// copies a word, and V j y copies a line the panel wraps over two rows as one
+// line, with no newline where the row breaks. q and esc go back to the
+// preview's own keys.
+func TestQuickLookCopyModeSelectsAndCopies(t *testing.T) {
+	long := strings.Repeat("abcdefghij", 12)
+	text := "alpha beta gamma\nsecond line here\n" + long + "\nafter\n"
+	out := &lockedBuffer{}
+	term, dir := quickLookListed(t, []string{"TUIOS_KITTY_GRAPHICS=0"}, out)
+	if err := os.WriteFile(filepath.Join(dir, "zzcopy.txt"), []byte(text), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	railLists(t, term, "the rail did not list zzcopy.txt", []string{"zzcopy.txt"}, nil)
+	quickLookFocusRail(t, term, "zzcopy.txt")
+	sendKeys(t, term, " ")
+	railLists(t, term, "space did not show zzcopy.txt", []string{"zzcopy.txt ", "go inside"}, nil)
+	sendKeys(t, term, tuitest.Tab)
+	railLists(t, term, "tab did not go inside", []string{"Inside the file", "select"}, nil)
+
+	enter := func(why string) {
+		t.Helper()
+		sendKeys(t, term, "[")
+		railLists(t, term, why, []string{"yank", "visual"}, nil)
+	}
+	enter("[ did not start copy mode in the preview")
+	sendKeys(t, term, "w", "v", "e")
+	time.Sleep(200 * time.Millisecond)
+	saveArtifact(t, term, artifactDir(t), "quicklook-copy-select")
+	from := len(clipboardWrites(out))
+	sendKeys(t, term, "y")
+	if got := rawWrite(t, term, out, from, "w v e y"); got != "beta" {
+		t.Fatalf("w v e y copied %q, want %q", got, "beta")
+	}
+	// A yank keeps copy mode, as over a pane, and q leaves it.
+	sendKeys(t, term, "q")
+	railLists(t, term, "q did not end copy mode", []string{"Inside the file", "select"}, nil)
+
+	enter("[ did not start copy mode again")
+	from = len(clipboardWrites(out))
+	sendKeys(t, term, "j", "j", "V", "j", "y")
+	if got := strings.TrimRight(rawWrite(t, term, out, from, "j j V j y"), "\n"); got != long {
+		t.Fatalf("V over the two rows of a wrapped line copied %q, want the line whole: %q", got, long)
+	}
+
+	sendKeys(t, term, tuitest.Esc)
+	railLists(t, term, "esc did not end copy mode", []string{"Inside the file", "select"}, nil)
+	alive(t, term, "after copy mode in the preview")
+}
