@@ -1462,9 +1462,9 @@ func (m *OS) inboxAnswerAskCmd(it session.AttentionItem, answer string, upgradeD
 		m.ShowNotification("Answering needs a client attached to this machine's daemon", "warning", m.Settings.NotificationDuration)
 		return nil
 	}
-	nonce := m.DaemonClient.HumanNonce()
+	nonce := m.inboxNonce()
 	if nonce == "" {
-		m.ShowNotification("This daemon issued no attach nonce, so it cannot tell you from an agent. Update the daemon", "error", m.Settings.NotificationDuration*2)
+		m.ShowNotification(m.noNonceText(), "error", m.Settings.NotificationDuration*2)
 		return nil
 	}
 	if m.Inbox.replied == nil {
@@ -1651,7 +1651,7 @@ func (m *OS) inboxReplyCmdWith(it session.AttentionItem, decision, message strin
 	}
 	nonce := m.inboxNonce()
 	if nonce == "" {
-		m.ShowNotification("This daemon issued no attach nonce, so it cannot tell you from an agent. Update the daemon", "error", m.Settings.NotificationDuration*2)
+		m.ShowNotification(m.noNonceText(), "error", m.Settings.NotificationDuration*2)
 		return nil
 	}
 	if m.Inbox.replied == nil {
@@ -1906,7 +1906,7 @@ func (m *OS) inboxDismissCmd(id string, silent bool) tea.Cmd {
 	nonce := m.inboxNonce()
 	if nonce == "" {
 		if !silent {
-			m.ShowNotification("This daemon issued no attach nonce, so it cannot tell you from an agent. Update the daemon", "error", m.Settings.NotificationDuration*2)
+			m.ShowNotification(m.noNonceText(), "error", m.Settings.NotificationDuration*2)
 		}
 		return nil
 	}
@@ -1938,9 +1938,9 @@ func (m *OS) InboxRelease() tea.Cmd {
 		m.ShowNotification("That mail is held on another machine; attach there to pass it on", "info", m.Settings.NotificationDuration)
 		return nil
 	}
-	nonce := m.DaemonClient.HumanNonce()
+	nonce := m.inboxNonce()
 	if nonce == "" {
-		m.ShowNotification("This daemon issued no attach nonce, so it cannot tell you from an agent. Update the daemon", "error", m.Settings.NotificationDuration*2)
+		m.ShowNotification(m.noNonceText(), "error", m.Settings.NotificationDuration*2)
 		return nil
 	}
 	build := m.DaemonClient.ClientVersion()

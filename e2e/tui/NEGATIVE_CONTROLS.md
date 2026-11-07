@@ -14163,3 +14163,31 @@ keeps the messages between those keys (the results of the commands a key
 starts) marked until the last chain ends. Repeat from
 `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=4 -run '^TestOverlappingSendKeysDoNotAnswerAnApproval$' -v .`.
+
+## Signed calls from send-keys
+
+The client signs a call with its attach nonce (`human_nonce`), and the daemon
+takes a signed call as the person's. Some signed calls never asked whether the
+key that made them was the person's. `inboxNonce` is now the one source of the
+nonce, and it is empty while the client handles a key from send-keys or a
+tape's Press, so no such key makes a signed call.
+
+`TestSendKeysDoNotDismissAnInboxItem`: an agent pane is on `errored`. The
+person opens the Inbox, send-keys presses `d`, and the item must stay in
+`list-attention`. The person's own `d` must then dismiss it.
+
+`TestSignedCallsRefuseKeysThePersonDidNotPress` (internal/app) makes each
+signed call from a key handler: tml-input, tml-place, dismiss-attention (also
+the silent seen dismiss), mark-attention, set-task-stage, add-task,
+agent-transcript, add-reply-history, and start-agent with a card. A key from
+the person must sign it, and a RemoteKeyMsg or a tape's Press must not.
+
+Run on 2026-11-07 on macOS (arm64):
+
+| Removed | Test | Failure | Result |
+|---------|------|---------|--------|
+| The whole fix (the binary of the commit before) | `TestSendKeysDoNotDismissAnInboxItem` | "a d from send-keys dismissed the item as the person"; the frame shows "Dismissed Terminal ... u undoes." | **caught** |
+| The `notThePersonsKey` check in `inboxNonce` | `TestSignedCallsRefuseKeysThePersonDidNotPress` | all 10 cases: "a key from send-keys made signed calls" and the same for the tape | **caught** |
+
+The fixed build passes the e2e test 3 of 3. Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=3 -run '^TestSendKeysDoNotDismissAnInboxItem$' -v .`.

@@ -114,8 +114,16 @@ func (m *OS) SetInboxVerbCaller(call func(verb string, params map[string]any, ti
 	m.Inbox.call, m.Inbox.nonce = call, nonce
 }
 
-// inboxNonce is this client's attach nonce.
+// inboxNonce is this client's attach nonce, which signs a call as the
+// person's. Every call that carries human_nonce takes it from here. It is
+// empty while the client handles a key that send-keys or a tape's Press
+// typed: the daemon takes a signed call as the person's and cannot see who
+// pressed the key, so nothing such a key starts is signed. noNonceText says
+// why a call that needs it was not sent.
 func (m *OS) inboxNonce() string {
+	if m.notThePersonsKey() {
+		return ""
+	}
 	if m.Inbox.nonce != nil {
 		return m.Inbox.nonce()
 	}
@@ -123,6 +131,43 @@ func (m *OS) inboxNonce() string {
 		return ""
 	}
 	return m.DaemonClient.HumanNonce()
+}
+
+// notThePersonsKey reports whether the key being handled came from send-keys
+// or a tape's Press, not from the person's keyboard.
+func (m *OS) notThePersonsKey() bool {
+	return m.ProcessingRemoteKeys || m.pressingTapeKeys
+}
+
+// noNonceText is why a call that must be signed as the person's was not sent:
+// the key that asked for it was not theirs, or the daemon gave no nonce.
+func (m *OS) noNonceText() string {
+	if m.notThePersonsKey() {
+		return "A key that send-keys or a tape typed does not act for you. Only keys from your keyboard do"
+	}
+	return "This daemon issued no attach nonce, so it cannot tell you from an agent. Update the daemon"
+}
+
+// signedNonce is inboxNonce for a call that acts as the person. When there
+// is no nonce to sign with, it shows why, and the call is not made.
+func (m *OS) signedNonce() (string, bool) {
+	nonce := m.inboxNonce()
+	if nonce == "" {
+		m.ShowNotification(m.noNonceText(), "error", m.Settings.NotificationDuration*2)
+		return "", false
+	}
+	return nonce, true
+}
+
+// tmlNonce is signedNonce for a TML surface. A key that send-keys or a tape
+// typed does not act on a surface for the person, and the notice says what a
+// program uses instead.
+func (m *OS) tmlNonce() (string, bool) {
+	if m.notThePersonsKey() {
+		m.ShowNotification("A key that send-keys or a tape typed does not act on a surface for you. A program changes its own surface with tuios tml patch and closes it with tuios tml close", "error", m.Settings.NotificationDuration*2)
+		return "", false
+	}
+	return m.signedNonce()
 }
 
 // inboxPeekable reports whether an item has a prompt to peek at.
@@ -262,7 +307,7 @@ func (m *OS) InboxAnswer(action, value string) tea.Cmd {
 	}
 	nonce := m.inboxNonce()
 	if nonce == "" {
-		p.Err = "This daemon issued no attach nonce, so it cannot tell you from an agent. Update the daemon."
+		p.Err = m.noNonceText() + "."
 		return nil
 	}
 	// An allow of a risky call takes a second press of the same key, and

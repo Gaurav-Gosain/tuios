@@ -299,7 +299,11 @@ func (m *OS) CockpitTake() tea.Cmd {
 		m.ShowNotification("The pane already holds "+c.ID+".", "info", m.Settings.NotificationDuration)
 		return nil
 	}
-	call, nonce := m.inboxCaller(), m.inboxNonce()
+	nonce, ok := m.signedNonce()
+	if !ok {
+		return nil
+	}
+	call := m.inboxCaller()
 	return func() tea.Msg {
 		raw, err := call("claim-task", map[string]any{"session": c.Session, "id": c.ID, "window": win, "human_nonce": nonce}, 5*time.Second)
 		msg := ckTakeMsg{err: err}

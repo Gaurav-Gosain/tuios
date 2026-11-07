@@ -249,7 +249,11 @@ func (m *OS) kanbanSetStage(c session.TaskRow, stage string) tea.Cmd {
 	if c.Stage == stage {
 		return nil
 	}
-	call, nonce := m.inboxCaller(), m.inboxNonce()
+	nonce, ok := m.signedNonce()
+	if !ok {
+		return nil
+	}
+	call := m.inboxCaller()
 	return func() tea.Msg {
 		raw, err := call("set-task-stage", map[string]any{"session": c.Session, "id": c.ID, "stage": stage, "human_nonce": nonce}, 5*time.Second)
 		msg := ckCardMsg{err: err, failed: "The card did not move: "}
@@ -347,6 +351,11 @@ func (m *OS) CockpitNewCardPaste(text string) {
 func (m *OS) kanbanAddSend() tea.Cmd {
 	ck := &m.Inbox.ck
 	a := ck.kb.add
+	nonce, signed := m.signedNonce()
+	if !signed {
+		// The draft stays open, so the person can add it with their own key.
+		return nil
+	}
 	text, ok := a.ed.Submit()
 	if !ok {
 		// Invisible characters were removed; the line says so.
@@ -357,7 +366,7 @@ func (m *OS) kanbanAddSend() tea.Cmd {
 	if title == "" {
 		return nil
 	}
-	call, nonce := m.inboxCaller(), m.inboxNonce()
+	call := m.inboxCaller()
 	return func() tea.Msg {
 		raw, err := call("add-task", map[string]any{"session": a.session, "title": title, "stage": a.stage, "human_nonce": nonce}, 5*time.Second)
 		msg := ckCardMsg{err: err, failed: "The card was not added: ", focus: true}

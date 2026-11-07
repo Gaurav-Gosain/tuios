@@ -290,7 +290,7 @@ func (m *OS) inboxMarkCmd(params map[string]any, who, words string) tea.Cmd {
 	nonce := m.inboxNonce()
 	action, _ := params["action"].(string)
 	if nonce == "" {
-		m.ShowNotification("This daemon issued no attach nonce, so it cannot tell you from an agent. Update the daemon", "error", m.Settings.NotificationDuration*2)
+		m.ShowNotification(m.noNonceText(), "error", m.Settings.NotificationDuration*2)
 		return nil
 	}
 	params["human_nonce"] = nonce

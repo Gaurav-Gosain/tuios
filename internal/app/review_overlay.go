@@ -974,7 +974,7 @@ func (m *OS) ReviewResolveNote() tea.Cmd {
 func (m *OS) reviewNonce() (string, bool) {
 	nonce := m.inboxNonce()
 	if nonce == "" {
-		m.reviewNotify("This daemon issued no attach nonce, so it cannot tell you from an agent. Update the daemon", "error", m.Settings.NotificationDuration*2)
+		m.reviewNotify(m.noNonceText(), "error", m.Settings.NotificationDuration*2)
 		return "", false
 	}
 	return nonce, true

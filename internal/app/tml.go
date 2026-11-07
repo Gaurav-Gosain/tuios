@@ -1159,7 +1159,11 @@ type TMLActionFailedMsg struct{ Text string }
 // tmlInput sends what the person did to the daemon, off the UI goroutine:
 // the state, the emits for the owner, the pane() actions, and a close.
 func (m *OS) tmlInput(v *tmlView, r tmlInputReq) tea.Cmd {
-	call, nonce := m.tmlCaller(), m.inboxNonce()
+	nonce, ok := m.tmlNonce()
+	if !ok {
+		return nil
+	}
+	call := m.tmlCaller()
 	params := map[string]any{"surface": v.id, "human_nonce": nonce}
 	if len(r.ops) > 0 {
 		params["ops"] = r.ops
