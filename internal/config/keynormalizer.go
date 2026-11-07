@@ -621,6 +621,11 @@ func (kn *KeyNormalizer) ValidateKey(key string) (bool, string) {
 	// Note: We return true (valid) but will add a warning in validation
 	// This is handled separately in validation.go as a warning, not an error
 
+	// The plus key on its own is a key, not a combination with nothing
+	// after it: ctrl+b + adds a task card.
+	if keyLower == "+" {
+		return true, ""
+	}
 	// Check for invalid modifier combinations
 	parts := strings.Split(keyLower, "+")
 	if len(parts) > 1 {

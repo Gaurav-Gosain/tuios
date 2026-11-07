@@ -817,6 +817,13 @@ type OS struct {
 	machineSheet *machineSheet
 	msCanvas     *ckCanvas
 
+	// taskCapture is the task capture sheet, open or kept as the draft,
+	// taskCaptureClosed says it is kept and not shown, and tcCanvas the
+	// grid it is drawn on. See task_capture.go.
+	taskCapture       *taskCapture
+	taskCaptureClosed bool
+	tcCanvas          *ckCanvas
+
 	// copyFlash is the band of light crossing text that was just copied, or
 	// nil. It is dropped the moment it has run its course, so an idle client
 	// holds nothing. See copy_flash.go.

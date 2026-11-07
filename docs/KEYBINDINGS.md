@@ -516,6 +516,19 @@ click on a session or a workspace opens or closes it.
 `tuios list-windows --all --text 40 --json` prints the same rows for a script.
 See [CLI_REFERENCE.md](CLI_REFERENCE.md#tuios-list-windows).
 
+### New task
+
+`Ctrl+B +` opens the task capture sheet from any mode. Write the task: the
+first line is the card's title, and the rest, with any image you paste (its
+path, or `ctrl+v`), is its prompt. Under it, `Session` picks the session the
+card goes to, `Stage` is Todo or Plan first, and `Agent to start` is the agent
+`ctrl+enter` starts. `tab` steps through them and the arrows change one.
+`enter` adds the card and closes. `ctrl+enter` adds it and starts the agent on
+it, which holds the card from the start; with Plan first it starts in the
+agent's own plan mode where it has one. `esc` closes and keeps the draft for
+the next open. The action is `prefix_new_task`, and the command palette has it
+as "New task".
+
 ### Go to anything
 
 `Ctrl+B G` opens the go-to picker. It lists every place you can go in one list: agents, sessions, the workspaces of each session, and panes. The action is `goto_picker`. The command palette has it as "Go to: an agent, session, workspace or pane".

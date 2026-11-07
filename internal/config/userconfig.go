@@ -1507,8 +1507,11 @@ func DefaultConfig() *UserConfig {
 				// B turns the spotlight on and off from either mode. In
 				// terminal mode it is the way out of the beam, since esc
 				// belongs to the program in the pane there.
-				"prefix_toggle_spotlight":   {"B"},
-				"prefix_session_switcher":   {"S"},
+				"prefix_toggle_spotlight": {"B"},
+				"prefix_session_switcher": {"S"},
+				// + adds a task card from anywhere. N, the design's first
+				// pick, is the last message.
+				"prefix_new_task":           {"+"},
 				"prefix_workspace_switcher": {"W"},
 				// G for go to, one shift from the g that shows the scratch
 				// terminal.

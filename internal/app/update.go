@@ -2029,6 +2029,14 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		// were up.
 		return m, tea.Batch(refreshFederationCmd(), listenClientEventsUntil(m.stopSignal(), m.ClientEventChan))
 
+	case tcAgentsMsg:
+		m.applyTCAgents(msg)
+		return m, nil
+
+	case tcFiledMsg:
+		m.applyTCFiled(msg)
+		return m, nil
+
 	case machineSheetMsg:
 		// The add sheet's engine ran in a Cmd. This stores what it said.
 		return m, m.applyMachineSheetMsg(msg)

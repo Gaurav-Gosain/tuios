@@ -67,6 +67,10 @@ func (m *OS) openDraft() (openDraft, bool) {
 	if m.ShowAgentMail && st.Composing && st.Comp != nil {
 		return openDraft{comp: st.Comp, wires: &st.wires, kind: "agentmail"}, true
 	}
+	// The task capture sheet's editor, while it has the keys.
+	if tc := m.taskCapture; tc != nil && m.TaskCaptureOpen() && tc.field == tcTask {
+		return openDraft{comp: tc.ed, wires: &tc.wires, kind: overlayKindTaskCapture}, true
+	}
 	// The New agent sheet's task, while it has the keys: the sheet is drawn
 	// over the reply area, so its draft comes first.
 	if sp := m.Inbox.ck.spawn; sp != nil && m.ShowInbox && sp.field == spTask && !sp.list {

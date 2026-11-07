@@ -891,6 +891,15 @@ func GetCommandPaletteItems(s *config.Settings) []CommandPaletteItem {
 			Category: "Session",
 		},
 		{
+			// A task card from anywhere. See task_capture.go.
+			Name:     "New task",
+			Category: "Session",
+			Bind:     "prefix_new_task",
+			Action: func(m *OS) (*OS, tea.Cmd) {
+				return m, m.OpenTaskCapture()
+			},
+		},
+		{
 			// The add sheet: test a machine over ssh, install tuios there,
 			// and add it. See machine_sheet.go.
 			Name:     "Add a machine",

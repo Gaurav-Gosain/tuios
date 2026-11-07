@@ -14079,3 +14079,23 @@ Run on 2026-11-07 on macOS (arm64):
 The frames and `sheet-start.txt` (argv and first prompt) are under the test's
 artifact folder. Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestNewAgentSheetChoicesAndReadiness$' -v .`.
+
+## A task card from anywhere
+
+`TestTaskCaptureFromAnywhere` opens the capture sheet with `ctrl+b +` in
+terminal mode and window management mode and from the palette, keeps a draft
+across esc, files a card with a second line and a pasted image into another
+session, and files a Plan first card with ctrl+enter. Each card is read back
+with `list-tasks` and `get-task`; the image's stored file must hold its bytes,
+and the started agent must hold the card, run in its plan mode, and get the
+"Take task" prompt.
+
+Run on 2026-11-07 on macOS (arm64):
+
+| Removed | The test fails with | Result |
+|---------|---------------------|--------|
+| The sheet (the build before it, agents-view/new-agent-sheet) | "waiting for the capture sheet from terminal mode": `ctrl+b +` opens nothing | **caught** |
+
+Frames `capture-filled`, `capture-plan` and `capture-cards.txt` are under the
+test's artifact folder. Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestTaskCaptureFromAnywhere$' -v .`.

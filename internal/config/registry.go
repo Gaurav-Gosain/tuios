@@ -869,6 +869,7 @@ var ActionDescriptions = map[string]string{
 	"prefix_next_finished":      "Jump to the newest unseen finished turn",
 	"prefix_agents_settings":    "Open the Agents settings",
 	"prefix_session_switcher":   "Open the session switcher",
+	"prefix_new_task":           "Write a new task card",
 	"prefix_workspace_switcher": "Open the workspace switcher",
 	"choose_tree":               "Find a pane in every session and go to it",
 	"goto_picker":               "Go to an agent, session, workspace or pane",

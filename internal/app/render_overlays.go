@@ -442,6 +442,11 @@ func (m *OS) renderOverlays() []*lipgloss.Layer {
 		layers = m.placeOverlayPanel(layers, overlayKindMachineSheet, content, geo, nil)
 	}
 
+	if m.TaskCaptureOpen() {
+		content, geo := m.renderTaskCapture()
+		layers = m.placeOverlayPanel(layers, overlayKindTaskCapture, content, geo, nil)
+	}
+
 	if m.UpgradeConfirmOpen() {
 		content, geo, rows := m.renderUpgradeConfirm()
 		layers = m.placeOverlayPanel(layers, overlayKindUpgradeConfirm, content, geo, rows)

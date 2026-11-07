@@ -53,6 +53,7 @@ func (d *ActionDispatcher) registerPrefixHandlers() {
 	d.Register("prefix_toggle_sidebar", handlePrefixToggleSidebar)
 	d.Register("prefix_toggle_other_rail", handlePrefixToggleOtherSidebar)
 	d.Register("prefix_session_switcher", handlePrefixSessionSwitcher)
+	d.Register("prefix_new_task", handlePrefixNewTask)
 	d.Register("prefix_workspace_switcher", handlePrefixWorkspaceSwitcher)
 	d.Register("choose_tree", handleChooseTree)
 	d.Register("goto_picker", handleGotoPicker)
@@ -467,6 +468,10 @@ func handlePrefixNextFinished(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 func handlePrefixSessionSwitcher(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	o.OpenSessionSwitcher()
 	return o, nil
+}
+
+func handlePrefixNewTask(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+	return o, o.OpenTaskCapture()
 }
 
 func handlePrefixWorkspaceSwitcher(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {

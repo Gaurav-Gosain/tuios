@@ -81,6 +81,9 @@ func (m *OS) composerLive(comp *composer.Model) bool {
 	if sp := m.Inbox.ck.spawn; sp != nil && sp.task == comp {
 		return true
 	}
+	if tc := m.taskCapture; tc != nil && tc.ed == comp && m.TaskCaptureOpen() {
+		return true
+	}
 	return m.AgentMail.Composing && m.AgentMail.Comp == comp
 }
 
