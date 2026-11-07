@@ -126,7 +126,31 @@ func (a *App) paneRows(c *ui.Context, pal *palette, s *proto.Session) {
 	}
 	var panes []*proto.Pane
 	var nums []int // each pane's number in the session, from 1
+	// In the order the tiles show them, left to right and top down, so
+	// the pane second on screen is second here too, not under "more"
+	// (QM-006). A pane the layout does not hold keeps its place after.
+	at := map[string]int{}
+	for k, id := range paneOrder(s) {
+		at[id] = k
+	}
+	idx := make([]int, 0, len(s.Panes))
 	for i := range s.Panes {
+		idx = append(idx, i)
+	}
+	slices.SortStableFunc(idx, func(x, y int) int {
+		px, okx := at[s.Panes[x].ID]
+		py, oky := at[s.Panes[y].ID]
+		switch {
+		case okx && oky:
+			return px - py
+		case okx:
+			return -1
+		case oky:
+			return 1
+		}
+		return x - y
+	})
+	for _, i := range idx {
 		if p := &s.Panes[i]; !agents[p.ID] && p.Agent == "" {
 			panes = append(panes, p)
 			nums = append(nums, i+1)
