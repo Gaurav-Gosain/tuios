@@ -589,9 +589,14 @@ func (m *OS) drawCockpitHeader(c *ckCanvas, l ckLook, y, top int) {
 		q := strings.TrimSpace(st.Select + " " + st.agents.query)
 		c.text(sx+1, y, sx+sw, ckSeg{t: "/  ", fg: pal.FgMute}, ckSeg{t: ckTrunc(q, sw-5), fg: pal.Fg})
 	default:
+		// The hint gives up words as the header fills, and keeps "agents"
+		// while it fits, so the box still says what it searches.
 		words := "Search agents, sessions, machines"
-		if sw < 36 {
+		switch {
+		case sw < 18:
 			words = "Search"
+		case sw < 36:
+			words = "Search agents"
 		}
 		c.text(sx+1, y, sx+sw, ckSeg{t: "/  ", fg: pal.FgMute}, ckSeg{t: words, fg: pal.FgMute})
 	}
