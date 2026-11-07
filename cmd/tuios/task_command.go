@@ -52,7 +52,7 @@ for itself, and it changes only the card it holds unless it holds admin.`,
 	cmd.AddCommand(
 		newTaskAddCommand(), newTaskListCommand(), newTaskGetCommand(), newTaskClaimCommand(),
 		newTaskDoneCommand(), newTaskStageCommand(), newTaskBlockCommand(), newTaskReleaseCommand(),
-		newTaskRemoveCommand(),
+		newTaskRemoveCommand(), newTaskDispatchCommand(),
 	)
 	return cmd
 }
@@ -216,9 +216,10 @@ func projectFlag(v string) (string, error) {
 // newTaskAddCommand builds `tuios task add`.
 func newTaskAddCommand() *cobra.Command {
 	var f taskFlags
-	var prompt, stage, project string
+	var prompt, stage, project, harnessID string
+	var askFirst bool
 	cmd := &cobra.Command{
-		Use:   "add [-p PROMPT] [--stage S] [--project URL] TITLE...",
+		Use:   "add [-p PROMPT] [--stage S] [--project URL] [--harness ID] [--ask-first] TITLE...",
 		Short: "Add a task card",
 		Long: `Add a task card. The words are joined with spaces into its title. -p gives the
 prompt for the pane that takes it, at most 16 KiB; '-p -' reads it from
@@ -227,7 +228,11 @@ standard input. The card starts in todo unless --stage says otherwise.
 --project names the repository the card is for, by its origin URL, or . for
 the repository of the current folder. The card then shows on that
 repository's board in every session and on linked machines, and a pane on
-another machine can claim it.`,
+another machine can claim it.
+
+--harness names the agent the card is for, such as claude-code: pull dispatch
+gives it only to that agent. --ask-first keeps it for a person to start:
+dispatch never gives it to an agent (tuios task dispatch).`,
 		Args: cobra.MinimumNArgs(1),
 		RunE: func(_ *cobra.Command, args []string) error {
 			if prompt == "-" {
@@ -251,6 +256,12 @@ another machine can claim it.`,
 				}
 				params["project"] = url
 			}
+			if harnessID != "" {
+				params["harness"] = harnessID
+			}
+			if askFirst {
+				params["ask_first"] = true
+			}
 			return callTask(f, "", "add-task", params, func(r taskRow, on string) string {
 				return fmt.Sprintf("Added %s%s: %s", plainLine(r.ID), on, plainLine(r.Title))
 			})
@@ -260,6 +271,8 @@ another machine can claim it.`,
 	cmd.Flags().StringVarP(&prompt, "prompt", "p", "", "What the pane that takes the card is to do, or - for standard input")
 	cmd.Flags().StringVar(&stage, "stage", "", "The stage it starts in: "+strings.Join(session.TaskStages, ", "))
 	cmd.Flags().StringVar(&project, "project", "", "The repository the card is for, by origin URL, or . for this folder's")
+	cmd.Flags().StringVar(&harnessID, "harness", "", "The agent the card is for, such as claude-code (default: any agent)")
+	cmd.Flags().BoolVar(&askFirst, "ask-first", false, "Keep the card for a person to start: dispatch never gives it to an agent")
 	_ = cmd.RegisterFlagCompletionFunc("stage", cobra.FixedCompletions(session.TaskStages, cobra.ShellCompDirectiveNoFileComp))
 	return cmd
 }

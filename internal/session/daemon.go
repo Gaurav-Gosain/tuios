@@ -180,6 +180,9 @@ type Daemon struct {
 	// remoteHolds are the task cards this daemon's panes hold on other
 	// machines (task_project.go).
 	remoteHolds remoteHoldSet
+	// dispatch holds the boards' dispatch modes and the switches that stop
+	// dispatch (task_dispatch.go).
+	dispatch dispatchStore
 	// hostDial is DaemonConfig.HostDial, kept for setupFederation.
 	hostDial federation.Dialer
 	// fleet follows the agents and the Inbox of every linked host over the
@@ -1403,6 +1406,11 @@ func (d *Daemon) onSessionCreated(s *Session) {
 		// A pane with an activity ring gets its shell's commands and its
 		// state changes added to it. A pane without one costs a map lookup.
 		d.activity.noteSessionEvent(s, ev)
+		// A pane whose agent is done or errored may finish, put back or
+		// pull a card (task_dispatch.go).
+		if ev.Type == EventAgentState {
+			d.noteDispatchAgentState(s, ev.Window, ev.State)
+		}
 		// A finished turn in a git work tree gets a checkpoint, taken off
 		// this path. With the agent features off no turn finishes.
 		if !d.agentsOff.Load() {
@@ -1654,6 +1662,7 @@ func (d *Daemon) Start() error {
 	// and goes when that machine's link comes up.
 	d.outbox.load(outboxPath())
 	// Review notes come back for the panes that came back.
+	d.dispatch.load(dispatchPath())
 	d.reviewNotes.load(reviewNotesPath(), func(window string) bool { return d.sessionOfWindow(window) != "" })
 
 	// The resume offers the restore found are opened only now, after the saved

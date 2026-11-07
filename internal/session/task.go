@@ -107,6 +107,16 @@ type TaskState struct {
 	// Project is the repository the card is for, its normalised origin URL
 	// (task_project.go). Empty for a card of its session only.
 	Project string `json:"project,omitempty"`
+	// Harness is the agent the card is for, such as claude-code. Pull
+	// dispatch offers it only to that agent; empty is any agent.
+	Harness string `json:"harness,omitempty"`
+	// AskFirst marks a card that waits for a person to start it: dispatch
+	// never offers it (task_dispatch.go).
+	AskFirst bool `json:"ask_first,omitempty"`
+	// Dispatched says the card's last claim was made by dispatch. It stays
+	// on after a release or a finish, so the event says how a dispatched
+	// card ended.
+	Dispatched bool `json:"dispatched,omitempty"`
 	// By is who added the card (see taskCaller), and At when.
 	By      string     `json:"by"`
 	At      int64      `json:"at"`
@@ -208,7 +218,7 @@ func (tk *TaskState) take(window, by string, now int64) (bool, *verbError) {
 	if verr := tk.workable(window); verr != nil {
 		return false, verr
 	}
-	tk.Holder, tk.HeldAt = window, now
+	tk.Holder, tk.HeldAt, tk.Dispatched = window, now, false
 	if tk.Stage == TaskStageTodo || tk.Stage == TaskStagePlan {
 		tk.setStage(TaskStageDoing, now)
 	}

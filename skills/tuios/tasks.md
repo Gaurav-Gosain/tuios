@@ -117,6 +117,23 @@ daemon passes it to the owner and lets the card go there when your pane
 closes. If a claim fails with a lost answer, run it again: a claim by the pane
 that holds the card succeeds. A card without a project stays on its machine.
 
+## Dispatch: work that comes to you
+
+On a board in pull mode, finishing your card (`tuios task done ID`, or your
+agent state going to done) gives you the board's next open card. It comes as
+mail from tuios: read it with `tuios read-agent-messages -w "$TUIOS_PANE_ID"`.
+It names the card, its prompt, and the command that finishes it. You hold the
+card already, so do not claim it. If you cannot do it, `tuios task release ID`.
+
+| Command | What it does |
+| --- | --- |
+| `tuios task dispatch` | The boards' modes and the switches |
+| `tuios task dispatch pause` | Stop all dispatch at once. Any pane may pause |
+| `tuios set-agent-state errored --kind usage_limit -m TEXT` | Say you hit a usage limit: all dispatch stops |
+
+A mode, `resume` and quiet hours are the person's. Dispatch never answers an
+approval and never gives a card to a pane that waits for the person.
+
 ## Grants
 
 Changing a card needs the `task` grant (`tuios --skill grants`). `admin`

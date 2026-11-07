@@ -688,6 +688,9 @@ func harnessAfterReport(w *WindowState, r AgentReport) string {
 // neither leaves the kind empty, which blocked_by reports as the source not
 // having said.
 func agentKindOf(r AgentReport) string {
+	if r.State == AgentStateErrored && r.Kind == AgentKindUsageLimit {
+		return r.Kind
+	}
 	if r.State != AgentStateNeedsInput {
 		return ""
 	}

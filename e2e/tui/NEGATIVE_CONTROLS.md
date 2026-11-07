@@ -14601,3 +14601,32 @@ function level. Run on 2026-11-08 on macOS (arm64), each control its own binary:
 | `withFileImages` not called in `verbAgentTranscript` | "no image card for the pasted file" | **caught** |
 | The paste folder check in `fileImagePaths` | "a PNG outside the paste folder got a card" (with the outside file first named header.png the prefix check refused it, so the test passed; it now has a paste name) | **caught** |
 | The magic byte sniff in `openFileImage` | e2e passes: the client's decoder refuses the text bytes too. `TestFileImageBoundary` fails at p2 and c5 ("the read gave <nil>, want ErrNoImage") | **caught by the unit test** |
+
+## TestPullDispatchGivesTheNextCard
+
+A session board in pull mode and two fake agents. Both finish their card at
+the same moment from their own panes, and each must be given a different
+card, skipping the ask-first card and the card for codex. An agent that goes
+to done must finish its card and get the next. After pause a finish gives no
+card, and a usage limit stops all dispatch and puts the agent's card back.
+
+Run on 2026-11-08 on macOS (arm64). The branch passes 5 runs in a row. Four
+controls, each a change to `internal/session/task_dispatch.go`:
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| The pick made from a state snapshot outside the claim's state change, 200 ms before it, and the card taken with no holder check | "the two agents were not each given one of t5 and t6" (3 runs of 3) | **caught** |
+| `!tk.AskFirst` dropped from the pick | "the two agents were not each given one of t5 and t6" (t3 taken) | **caught** |
+| The `Paused` case dropped from `blocked` | "the daemon never held b's offer for the pause" | **caught** |
+| `usageLimited` never checked on errored | "dispatch did not stop for the usage limit" | **caught** |
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestPullDispatchGivesTheNextCard$' -v .`.
+
+## TestPullDispatchStopsAfterThreeFailures
+
+Three dispatched cards in a row are let go without a finish. The board must
+stop, and the next finish must give no card while a free card is there.
+
+Run on 2026-11-08 on macOS (arm64). With `noteOutcome` never stopping the
+board: "the board did not stop after three failures". **caught**

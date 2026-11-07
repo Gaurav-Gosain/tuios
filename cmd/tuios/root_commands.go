@@ -380,7 +380,7 @@ every pane, it is about the focused pane.`,
 				setAgentStateMessage, setAgentStateSource, setAgentStateHarness, setAgentStateExtra)
 		},
 	}
-	setAgentStateCmd.Flags().StringVar(&setAgentStateExtra.kind, "kind", "", "What a needs_input state waits for: approval, question or auth")
+	setAgentStateCmd.Flags().StringVar(&setAgentStateExtra.kind, "kind", "", "What a needs_input state waits for: approval, question or auth; or usage_limit with errored, which stops task dispatch")
 	setAgentStateCmd.Flags().StringVar(&setAgentStateExtra.sessionID, "agent-session-id", "", "The harness's own conversation id, stored on the pane for a later resume")
 	setAgentStateCmd.Flags().StringVar(&setAgentStateExtra.transcriptPath, "transcript-path", "", "The transcript file the harness writes, joined exactly instead of searched for")
 	setAgentStateCmd.Flags().StringVar(&setAgentStateExtra.ifState, "if-state", "", "Apply only when the pane is in one of these comma-separated states")

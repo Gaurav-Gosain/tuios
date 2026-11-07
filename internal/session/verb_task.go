@@ -111,6 +111,12 @@ type TaskRow struct {
 	// owns the card, set on a row another machine gave; empty is this one.
 	Project string `json:"project,omitempty"`
 	Host    string `json:"host,omitempty"`
+	// Harness is the agent the card is for, AskFirst marks a card that
+	// waits for a person, and Dispatched says dispatch made its last claim
+	// (task_dispatch.go).
+	Harness    string `json:"harness,omitempty"`
+	AskFirst   bool   `json:"ask_first,omitempty"`
+	Dispatched bool   `json:"dispatched,omitempty"`
 }
 
 // TaskHolder is the pane that holds a card. Name, Harness and State are read
@@ -152,6 +158,7 @@ func taskRow(sess *Session, st *SessionState, tk *TaskState) TaskRow {
 		Blocked: tk.Blocked,
 	}
 	row.Project = tk.Project
+	row.Harness, row.AskFirst, row.Dispatched = tk.Harness, tk.AskFirst, tk.Dispatched
 	if host, window, ok := splitRemoteHolder(tk.Holder); ok {
 		row.Holder = &TaskHolder{Window: window, Host: host, HeldAt: tk.HeldAt, Name: tk.HolderName, Harness: tk.HolderHarness}
 	} else if tk.Holder != "" {
@@ -222,6 +229,7 @@ func (d *Daemon) changeTask(sess *Session, id string, fn func(st *SessionState, 
 // publishTask sends a task event for row.
 func (d *Daemon) publishTask(sess *Session, typ, action, window, reason string, row TaskRow) {
 	d.events.publish(streamEvent{Type: typ, Session: sess.Name(), Window: window, Action: action, Reason: reason, Task: &row})
+	d.afterTaskEvent(sess, action, window, reason, row)
 }
 
 // taskStageParam checks a stage parameter.
@@ -244,6 +252,8 @@ type addTaskParams struct {
 	Stage      string `json:"stage"`
 	HumanNonce string `json:"human_nonce"`
 	Project    string `json:"project"`
+	Harness    string `json:"harness"`
+	AskFirst   bool   `json:"ask_first"`
 }
 
 // verbAddTask answers add-task.
@@ -266,6 +276,10 @@ func (d *Daemon) verbAddTask(cs *connState, params json.RawMessage) (any, *verbE
 	if verr != nil {
 		return nil, verr
 	}
+	harnessName := printableClaim(p.Harness, 64)
+	if harnessName != p.Harness || strings.ContainsAny(harnessName, " /") {
+		return nil, invalidParam("harness", "harness is one agent's id, such as claude-code")
+	}
 	sess, verr := d.resolveVerbSession(cs, p.Session)
 	if verr != nil {
 		return nil, verr
@@ -285,14 +299,16 @@ func (d *Daemon) verbAddTask(cs *connState, params json.RawMessage) (any, *verbE
 		}
 		now := time.Now().UnixNano()
 		tk := TaskState{
-			ID:      newTaskID(st),
-			Title:   title,
-			Prompt:  p.Prompt,
-			Stage:   firstNonEmpty(p.Stage, TaskStageTodo),
-			StageAt: now,
-			By:      caller.by,
-			At:      now,
-			Project: project,
+			ID:       newTaskID(st),
+			Title:    title,
+			Prompt:   p.Prompt,
+			Stage:    firstNonEmpty(p.Stage, TaskStageTodo),
+			StageAt:  now,
+			By:       caller.by,
+			At:       now,
+			Project:  project,
+			Harness:  harnessName,
+			AskFirst: p.AskFirst,
 		}
 		if wt := st.Worktree; wt != nil && wt.Group != "" {
 			tk.Fan, tk.FanID = wt.Group, wt.FanID

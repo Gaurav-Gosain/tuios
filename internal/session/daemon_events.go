@@ -250,6 +250,8 @@ type streamEvent struct {
 	TML *TMLEvent `json:"tml,omitempty"`
 	// Task is a task event's card, as list-tasks gives its row.
 	Task *TaskRow `json:"task,omitempty"`
+	// Dispatch is a task-dispatch event's status (task_dispatch.go).
+	Dispatch *DispatchStatus `json:"dispatch,omitempty"`
 	// Working is a keep-awake event's count of working agent panes.
 	Working *int `json:"working,omitempty"`
 

@@ -2518,7 +2518,7 @@ func buildVerbRegistry() map[string]verbEntry {
 				{Name: "message", Type: "string", Description: "Optional short note reported with the state, e.g. what the agent is waiting for."},
 				{Name: "source", Type: "string", Description: "Where the state came from. A source ranked below the one that last set the window is refused. The result then reports applied false and the state that stands.", Accepted: AgentSourceNames, Default: "report"},
 				{Name: "harness", Type: "string", Description: "Optional id of the harness the state is about, reported back by get-agent-state."},
-				{Name: "kind", Type: "string", Description: "What a needs_input state waits for: approval for a tool call waiting to be allowed, question for anything else. Only valid with needs_input. Omitted, it is guessed from message. Reported back by get-agent-state and list-agents as blocked_by.", Accepted: agentKindNames},
+				{Name: "kind", Type: "string", Description: "What a needs_input state waits for: approval for a tool call waiting to be allowed, question for anything else. Only valid with needs_input, except usage_limit, which is only valid with errored and stops task dispatch. Omitted, it is guessed from message. Reported back by get-agent-state and list-agents as blocked_by.", Accepted: agentKindNames},
 				{Name: "agent_session_id", Type: "string", Description: "The harness's own id for the conversation, as a hook reports it. It is stored on the window for a later resume. It also turns on the nested-session guard: while the pane's harness is working or needs_input by its own report, a report for a different conversation or from a different harness is refused with reason foreign_session or foreign_harness."},
 				{Name: "transcript_path", Type: "string", Description: "The transcript file the harness is writing, as a hook reports it. For a harness whose manifest has a transcript reader, the window is joined to this exact file instead of a searched one. It must be a regular file under the harness's transcript folder, and a process in a pane may name one only for its own pane. Kept in daemon memory only."},
 				{Name: "transcript_leaf", Type: "string", Description: "Pi's selected tree entry id, at most 128 letters, digits, '-' or '_'. A present empty string selects the empty branch; omission preserves the previous selection or uses the last complete entry for an old hook. Requires harness pi and transcript_path. Kept in daemon memory only."},
@@ -3307,6 +3307,7 @@ func buildVerbRegistry() map[string]verbEntry {
 	// a file of their own. See verb_protocol_agents.go.
 	maps.Copy(table, agentWorkVerbs())
 	maps.Copy(table, taskVerbs())
+	maps.Copy(table, taskDispatchVerbs(verbParam{Name: "human_nonce", Type: "string", Description: "The attached client's nonce, to act as the person (by human). One that does not verify is refused with not_human."}))
 	// The checkpoint verbs. See verb_checkpoint.go.
 	maps.Copy(table, checkpointVerbs())
 	// The ship verbs. See verb_ship.go.

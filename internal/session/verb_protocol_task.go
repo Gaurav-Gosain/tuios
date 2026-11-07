@@ -41,6 +41,8 @@ func taskVerbs() map[string]verbEntry {
 				{Name: "prompt", Type: "string", Description: "What the pane that takes the card is to do, at most 16 KiB."},
 				{Name: "stage", Type: "string", Description: "The stage it starts in.", Accepted: TaskStages, Default: TaskStageTodo},
 				{Name: "project", Type: "string", Description: "The repository the card is for, by its origin URL. It then shows on that repository's board in every session and on linked machines, and a pane on another machine can claim it with host. Omit for a card of the session only."},
+				{Name: "harness", Type: "string", Description: "The agent the card is for, such as claude-code. Pull dispatch gives it only to that agent. Omit for any agent."},
+				{Name: "ask_first", Type: "bool", Description: "The card waits for a person to start it: dispatch never gives it to an agent.", Default: "false"},
 				humanNonce,
 			},
 			returns: row,

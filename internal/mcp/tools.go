@@ -389,7 +389,7 @@ var EventTypes = []string{
 	// What a person did on a TML surface. Opt-in.
 	"tml-event",
 	// A session's task cards.
-	"task-claimed", "task-finished", "task-changed",
+	"task-claimed", "task-finished", "task-changed", "task-dispatch",
 	// The daemon took or dropped its hold that keeps the machine awake.
 	"keep-awake",
 }

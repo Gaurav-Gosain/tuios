@@ -7643,6 +7643,16 @@ they make anything: a refusal names `task` in its hint.
 | `block-task` | Mark the card stuck with `reason`, or lift it with `clear` | `task`; only the card it holds | `write` | `task_changed` |
 | `release-task` | Let the card go and keep its stage | `task`; only the card it holds | `write` | `task_changed` |
 | `remove-task` | Remove the card and its history | refused | `write` | `task_removed` with `id` |
+| `get-task-dispatch` | The dispatch settings: `paused`, `stopped` (why all dispatch stopped on its own), `quiet`, `quiet_now`, `boards` (each with `board`, `project` or `session`, `mode`, `failures`, `stopped`), and `board` for the board `project` or `session` names | `read` | `list` | `task_dispatch` |
+| `set-task-dispatch` | `action`: `mode` (with `mode` `manual` or `pull`, for the board `project` or `session` names), `pause`, `resume` (lifts the pause and every stop) or `quiet` (with `quiet`, such as `22:00-07:00`, or `off`) | `pause` only; the rest need `admin` | refused | `task_dispatch` |
+
+`add-task` also takes `harness`, the agent the card is for, and `ask_first`,
+which keeps the card for a person. A row carries them, and `dispatched` when
+dispatch made the card's last claim. On a board in pull mode, an agent that
+finishes its card is given the board's next open card in the same state change
+as the claim, and mail from `tuios` tells it. A board stops after 3 dispatched
+cards in a row end without a finish; all dispatch stops when an agent reports
+`errored` with `kind` `usage_limit`. See [`tuios task`](CLI_REFERENCE.md#tuios-task).
 
 Every verb but `list-tasks` and `remove-task` answers with the card's row at
 the top level of the result: `id`, `session`, `title`, `preview` (the first
@@ -7759,6 +7769,7 @@ Event types:
 | `task-claimed` | A pane took a task card. `task` is the card's row as `list-tasks` gives it, and `window` the pane that took it. See [Task verbs](#task-verbs). | `session`, `window`, `task` |
 | `task-finished` | A task card was marked done. `window` is the pane that held it, empty when none did. | `session`, `window`, `task` |
 | `task-changed` | A task card was `added`, `staged`, `blocked`, `unblocked`, `released` or `removed` (`action`). A release tuios made on its own carries `reason`: `pane closed`, `agent left` or `restart`; a stage move it made on its own carries the fact (see [Task verbs](#task-verbs)); a block carries its reason too. `removed` carries the card's last row. | `session`, `action`, `reason`, `task` |
+| `task-dispatch` | A board's dispatch mode or a switch changed, or dispatch stopped on its own (`action` `stopped`, `reason` such as `3 failures in a row` or `usage limit reported by claude-code`). `dispatch` is the whole status as `get-task-dispatch` gives it. It names no session. | `action`, `reason`, `dispatch` |
 | `keep-awake` | The daemon took or dropped its hold that keeps the machine awake, the number of working agent panes changed while `keep_awake` is `agents`, or `keep_awake` changed. `mode` is `off`, `on` or `agents`, `state` is `held` or `released`, `working` counts the working agent panes on this machine, and `reason` says why the machine could not be held awake, when it could not. See [get-keep-awake](#get-keep-awake). It names no session. | `mode`, `state`, `working`, `reason` |
 | `tml-event` | What a person did on a TML surface that its owner hears: an `emit` action in the document, or the close, which is the surface's last event. `tml` has `surface`, `name` (the emit's name, or `close`), `value` (absent when null), `reason` (on a close: `closed`, `program` or `dismissed`) and `version`. `window` is the TML window. Opt-in: only a subscription whose `types` names it receives it, and a `tml-open` with `events` gets the events of its own surface. | `tml` |
 

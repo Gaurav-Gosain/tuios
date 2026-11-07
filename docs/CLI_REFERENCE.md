@@ -2852,6 +2852,7 @@ tuios task stage ID STAGE [flags]
 tuios task block ID REASON... | --clear [flags]
 tuios task release ID [flags]
 tuios task rm ID [flags]
+tuios task dispatch [status | pause | resume | mode manual|pull | quiet SPAN|off] [--project URL] [flags]
 ```
 
 **Flags:**
@@ -2887,6 +2888,31 @@ From inside a pane, changing a card needs the `task` grant. A pane claims
 only for itself and finishes, stages, blocks or releases only the card it
 holds, unless it holds `admin`. `rm` from a pane needs `admin`.
 
+`add` also takes `--harness ID`, the agent the card is for, and `--ask-first`,
+which keeps the card for a person to start.
+
+`dispatch` shows and changes how cards go to agents. A board is a project's
+cards (`--project`) or a session's own cards. In `manual` mode, the default,
+a person starts each card. In `pull` mode, an agent that finishes its card
+(`tuios task done`, or its agent state going to done while it holds a card of
+the board) is given the board's next open card: the oldest card in todo, plan
+or doing that no pane holds, that is not blocked, not `--ask-first`, and names
+no harness or the agent's own. The claim is made in one state change of the
+session, so two agents that finish at once take two cards. The agent hears of
+it as mail from tuios, which names the card, its prompt and the command that
+finishes it. Dispatch types nothing into a pane, and gives no card to a pane
+that waits for the person. In v1 the agent and the card are on one machine
+and in one session.
+
+The safety switches: `pause` stops all dispatch at once, and any pane may
+pause. `quiet 22:00-07:00` gives no card in those hours, local time (`off`
+clears it). A board stops after 3 dispatched cards in a row end without being
+finished (let go, blocked, or put back because the agent errored). All
+dispatch stops when an agent reports a usage limit (`tuios set-agent-state
+errored --kind usage_limit`, or an errored message that says "usage limit").
+`resume` lifts the pause and every stop. From inside a pane, every action but
+`pause` needs `admin`. The settings are saved, so they survive a restart.
+
 **Examples:**
 ```bash
 # A conductor adds the work
@@ -2910,6 +2936,10 @@ tuios task ls --project . --hosts
 # A worker on this machine takes a card that build owns
 tuios task claim t3 -s build:api
 tuios task done t3 -s build:api
+
+# Agents that finish take the next card of this repository; stop it all at once
+tuios task dispatch mode pull --project .
+tuios task dispatch pause
 ```
 
 ### `tuios review`
