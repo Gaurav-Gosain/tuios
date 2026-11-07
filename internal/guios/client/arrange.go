@@ -152,7 +152,12 @@ func (ti *treeInfo) bounds() layout.Rect {
 		return ti.grid
 	}
 	b := ti.ls.Box
-	if b.W < 4 || b.H < 2 {
+	if b.W < 4 || b.H < 2 || !ti.tui {
+		// With no TUI the box is the daemon's own 80 by 24, no client's:
+		// before guios measured its grid (a window not drawn yet, or out
+		// of sight), new panes went into it, where no split fits, and the
+		// layout came out by timing (QM-009). A pane area of a common
+		// window is closer.
 		return layout.Rect{W: 160, H: 45}
 	}
 	return layout.Rect{X: b.X, Y: b.Y, W: b.W, H: b.H}
@@ -1063,6 +1068,13 @@ func (e *engine) toggleFloat() error {
 		wr.X, wr.Y, wr.Width, wr.Height = r.X, r.Y, r.W, r.H
 	}
 	w.Floating = on
+	if on && e.ti.useTree && e.ti.tree != nil {
+		if slot, ok := slotOf(e.ti.tree.Root, e.ti.leaves, w.ID); ok {
+			e.c.st.mu.Lock()
+			e.c.st.floated[w.ID] = slot
+			e.c.st.mu.Unlock()
+		}
+	}
 	e.set("windows", []session.WindowRect{wr})
 	if e.ti.mode() == modeScroll {
 		sl, ids := e.ti.strip(tiled(e.wins), e.focus)
@@ -1071,7 +1083,8 @@ func (e *engine) toggleFloat() error {
 	if err := e.flush(); err != nil {
 		return err
 	}
-	// A pane put back goes into the layout where the TUI puts it: the
-	// state build places a pane the tree lacks (layoutOf).
+	// A pane put back goes where it tiled before it floated, or else where
+	// the TUI puts a pane: the state build places a pane the tree lacks
+	// (layoutOf).
 	return nil
 }

@@ -3139,9 +3139,19 @@ or invisible character. The calls held are Claude Code's `Bash` (not with
 `dangerouslyDisableSandbox`), `Read`, `Glob` and `Grep` without a `path`,
 `WebFetch` and `WebSearch`, opencode's `bash` (not with `workdir`), `read`
 and `webfetch`, and Qwen Code's `run_shell_command` (not with `directory`),
-`read_file` and `web_fetch`. Everything else is answered in the pane as before: `Write`,
-`Edit`, `MultiEdit` and `NotebookEdit`, whose body the line cannot show, MCP
-tools, and a command too long for the line. The daemon checks the line again
+`read_file` and `web_fetch`. Claude Code's `Edit`, `MultiEdit` and `Write`
+are held with their whole body beside the line: at most 32 KiB of printable
+text, tabs and newlines, with no field the body does not show. Their item
+carries `held_edit`, an allow must name the `edit_sha` that `get-approval`
+serves with the body, and "always" is never offered, so
+only a client that draws the diff allows one; the TUI offers reject and the
+pane. Everything else is answered in the pane as before: `NotebookEdit`, an
+edit over the bound or with other characters, MCP tools, and a command too
+long for the line. See docs/protocol.md, "Edits". An allow names the request
+Claude Code made; Claude Code applies the edit itself, so the file can differ
+from the body in details such as loose quote matching or kept line endings.
+Another PermissionRequest hook of your own that answers first, with input of
+its own, is not something tuios sees. The daemon checks the line again
 before it holds, and the Inbox does not answer a line it would draw with
 characters left out.
 

@@ -22,7 +22,7 @@ Over the socket every failure carries a stable code in the error envelope:
 `whole_file_only`, `no_checkpoint`, `nothing_to_commit`,
 `merge_conflict`, `checkout_dirty`, `no_remote`, `gh_unavailable`, `queue_full`,
 `task_held`, `no_task`,
-`no_buffer`, `risk_unacknowledged`, `agents_disabled`, `busy`, `too_many_connections`,
+`no_buffer`, `risk_unacknowledged`, `edit_unreviewed`, `agents_disabled`, `busy`, `too_many_connections`,
 `no_file`, `file_exists`, `no_permission`, `hash_mismatch`, `source_changed`,
 `cross_device`, `disk_full`, `no_transfer`, `same_session`, `pane_not_movable`,
 `upgrade_refused`, `daemon_upgrading`, `invalid_tml`, `no_surface`, `too_many_surfaces`,
@@ -45,6 +45,7 @@ A retry without a change fails the same way, except for `busy`, `too_many_connec
 | `pty_not_found` | The pane's program has exited, so nothing can read or type there. Close the pane, or open a new one. |
 | `command_failed` | The attached client could not do what the verb asked. The message says why. |
 | `timeout` | A `wait-for` condition did not match in time. Read the pane with `capture-pane` before you wait again, then wait with a larger `--timeout`. |
+| `edit_unreviewed` | An allow for a held edit did not name in `edit_sha` the digest of the body the hold serves. Nothing was answered. Only the person allows an edit, from a client that shows its diff. |
 | `risk_unacknowledged` | An allow for an approval that matches a risk rule did not name those rules in `risk_ack`. Nothing was answered. Read the rules with `get-approval`, or let the person answer. |
 | `internal` | The daemon failed in a way no other code names. The message says what went wrong. Run `tuios logs`, and tell the person. |
 | `invalid_params` | The daemon does not take a parameter you sent. If you believed in it, the daemon is older than you think: ask `list-verbs`. |

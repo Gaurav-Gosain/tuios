@@ -2,8 +2,12 @@ package session
 
 import (
 	"encoding/json"
+	"errors"
 	"slices"
+	"strconv"
+	"strings"
 
+	"github.com/Gaurav-Gosain/tuios/internal/integration"
 	"github.com/Gaurav-Gosain/tuios/internal/risk"
 )
 
@@ -21,6 +25,60 @@ import (
 // Nothing was answered.
 const ErrVerbRiskUnacknowledged = "risk_unacknowledged"
 
+// ErrVerbEditUnreviewed reports an allow for a held edit sent without
+// edit_sha naming the digest of the body the hold serves. Nothing was
+// answered and the hold runs on.
+const ErrVerbEditUnreviewed = "edit_unreviewed"
+
+// errEditUnreviewed is an allow of an edit without the digest of its body.
+var errEditUnreviewed = errors.New("edit not reviewed")
+
+// editUnreviewedError is the refusal for an allow of an edit whose body the
+// reply does not name.
+//
+// It does not carry the digest: a refusal that named it would let a client
+// allow the edit without ever fetching its body.
+func editUnreviewedError() *verbError {
+	return hintedVerbError(ErrVerbEditUnreviewed, "an allow of an edit must name in edit_sha the digest of the body that was shown", &VerbHint{
+		Param:  "edit_sha",
+		Verb:   "get-approval",
+		Detail: "Nothing was answered and the hold runs on. Read the body with get-approval, show it, and send its edit_sha with the allow. A client that draws no diff answers the edit in the pane. A deny needs no edit_sha.",
+	})
+}
+
+// fileToolCall reports whether a request is for a tool that writes a file,
+// by the tool it names or by the tool its line names: the person reads the
+// line, so a line that says Edit is an edit whatever tool rides beside it.
+func fileToolCall(tool, summary string) bool {
+	lineTool, _ := risk.ParseSummary(summary)
+	for _, name := range []string{tool, lineTool} {
+		if name != "" && slices.ContainsFunc(risk.FileTools, func(t string) bool { return strings.EqualFold(t, name) }) {
+			return true
+		}
+	}
+	return false
+}
+
+// checkEditRequest checks an edit request-approval holds: a body the Inbox can
+// show as it is (integration.EditBody.Showable), on an approval, not a plan,
+// and the same call the risk rules and the line read: tool and target are the
+// body's tool and path, and summary is the line the hook reports for it.
+func checkEditRequest(e *integration.EditBody, isPlan bool, tool, target, summary string) *verbError {
+	switch {
+	case isPlan:
+		return invalidParam("edit", "edit is only taken with kind approval")
+	case !e.Showable():
+		return invalidParam("edit", "edit must be an Edit, MultiEdit or Write of at most "+strconv.Itoa(integration.MaxEdit)+" bytes of printable UTF-8 text, tabs and newlines")
+	case tool != e.Tool:
+		return invalidParam("tool", "tool must be the edit's tool")
+	case target != e.Path:
+		return invalidParam("target", "target must be the edit's path")
+	case summary != "approve "+e.Tool+": "+e.Path:
+		return invalidParam("summary", "summary must be the edit's line: approve, its tool, a colon and its path")
+	}
+	return nil
+}
+
 // getApprovalParams are what get-approval takes.
 type getApprovalParams struct {
 	RequestID string `json:"request_id"`
@@ -30,20 +88,24 @@ type getApprovalParams struct {
 // ApprovalDetail is the get-approval result as a client decodes it. The
 // daemon writes the same fields in verbGetApproval.
 type ApprovalDetail struct {
-	RequestID   string     `json:"request_id"`
-	Kind        string     `json:"kind"`
-	Session     string     `json:"session"`
-	Window      string     `json:"window"`
-	Summary     string     `json:"summary"`
-	Tool        string     `json:"tool"`
-	Target      string     `json:"target"`
-	Options     []string   `json:"options"`
-	AlwaysScope []string   `json:"always_scope"`
-	Plan        string     `json:"plan"`
-	PlanSHA     string     `json:"plan_sha"`
-	Risk        []risk.Hit `json:"risk"`
-	DenyMessage bool       `json:"deny_message"`
-	Untrusted   bool       `json:"untrusted"`
+	RequestID   string   `json:"request_id"`
+	Kind        string   `json:"kind"`
+	Session     string   `json:"session"`
+	Window      string   `json:"window"`
+	Summary     string   `json:"summary"`
+	Tool        string   `json:"tool"`
+	Target      string   `json:"target"`
+	Options     []string `json:"options"`
+	AlwaysScope []string `json:"always_scope"`
+	Plan        string   `json:"plan"`
+	PlanSHA     string   `json:"plan_sha"`
+	// Edit is a held edit's whole body, nil for any other hold. EditSHA is
+	// the digest an allow of it must name.
+	Edit        *integration.EditBody `json:"edit,omitempty"`
+	EditSHA     string                `json:"edit_sha,omitempty"`
+	Risk        []risk.Hit            `json:"risk"`
+	DenyMessage bool                  `json:"deny_message"`
+	Untrusted   bool                  `json:"untrusted"`
 }
 
 // holdDetail copies a running hold and the scope its item shows.
@@ -94,7 +156,7 @@ func (d *Daemon) verbGetApproval(cs *connState, params json.RawMessage) (any, *v
 	if scope == nil {
 		scope = []string{}
 	}
-	return map[string]any{
+	res := map[string]any{
 		"type":         "approval",
 		"request_id":   h.id,
 		"kind":         h.kind,
@@ -109,7 +171,12 @@ func (d *Daemon) verbGetApproval(cs *connState, params json.RawMessage) (any, *v
 		"plan_sha":     h.planSHA,
 		"risk":         hits,
 		"deny_message": h.denyMessage,
-		// The summary, the target and the plan are the agent's text.
+		// The summary, the target, the plan and the edit are the agent's
+		// text.
 		"untrusted": true,
-	}, nil
+	}
+	if h.edit != nil {
+		res["edit"], res["edit_sha"] = h.edit, h.editSHA
+	}
+	return res, nil
 }

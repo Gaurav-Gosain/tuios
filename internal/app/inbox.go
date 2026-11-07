@@ -1524,7 +1524,11 @@ func (m *OS) InboxReplyApproval(decision string) tea.Cmd {
 		m.ShowNotification(inboxNotHeldWords, "warning", m.Settings.NotificationDuration)
 		return nil
 	}
-	if !slices.Contains(it.Options, decision) {
+	if decision != session.ApprovalDeny && inboxIsEdit(it) {
+		m.ShowNotification(inboxEditWords, "info", m.Settings.NotificationDuration)
+		return nil
+	}
+	if !slices.Contains(inboxOptions(it), decision) {
 		m.ShowNotification("This prompt does not offer "+inboxDecisionWords(decision), "warning", m.Settings.NotificationDuration)
 		return nil
 	}
@@ -1585,7 +1589,7 @@ func inboxShownKey(it session.AttentionItem) string {
 	return strings.Join([]string{
 		it.ID, it.RequestID, it.Summary,
 		strings.Join(it.Options, ","), strings.Join(it.AlwaysScope, "\n"),
-		it.Kind, strings.Join(it.Risk, ","), it.PlanSHA,
+		it.Kind, strings.Join(it.Risk, ","), it.PlanSHA, strconv.FormatBool(it.HeldEdit),
 	}, "\x00")
 }
 
@@ -1630,6 +1634,12 @@ func (m *OS) inboxReplyCmd(it session.AttentionItem, decision string) tea.Cmd {
 // a risky call carries the rules the person saw, and an allow of a plan the
 // digest of the plan they read (inboxReplyExtras).
 func (m *OS) inboxReplyCmdWith(it session.AttentionItem, decision, message string) tea.Cmd {
+	// The one place a reply leaves this client: an allow of an edit never
+	// does, whatever key or click asked for it.
+	if inboxIsEdit(it) && decision != session.ApprovalDeny && decision != session.ApprovalAsk {
+		m.ShowNotification(inboxEditWords, "info", m.Settings.NotificationDuration)
+		return nil
+	}
 	if (m.DaemonClient == nil && m.Inbox.call == nil) || m.AttachedHost != "" {
 		m.ShowNotification("Answering needs a client attached to this machine's daemon", "warning", m.Settings.NotificationDuration)
 		return nil

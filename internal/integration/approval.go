@@ -24,9 +24,10 @@ import (
 // Inbox when that line is the whole request (see shownWhole): a tool whose
 // effect is decided by one argument, with that argument shown in full, nothing
 // redacted, clipped or collapsed, and no other argument that changes what the
-// call does. A Write or Edit, whose body the line cannot show, an MCP tool, a
-// command too long for the line, or a call with an argument the line leaves
-// out is answered in the pane as before. "Always" is only offered with the
+// call does. An MCP tool, a command too long for the line, or a call with an
+// argument the line leaves out is answered in the pane as before. An Edit,
+// MultiEdit or Write is decided by its body, not its path, so it is offered
+// only with the whole body beside the line (approval_edit.go). "Always" is only offered with the
 // exact rules it adds, which the Inbox shows beside its key (Approval.Scope).
 //
 // Answer is the only place a decision becomes output, and it prints one only
@@ -108,6 +109,9 @@ type Approval struct {
 	Cwd string `json:"cwd,omitempty"`
 	// Plan is a plan's text, whole. Set only for KindPlan.
 	Plan string `json:"plan,omitempty"`
+	// Edit is an edit's whole body, set for an Edit, MultiEdit or Write.
+	// Tool and Target are its tool and path.
+	Edit *EditBody `json:"edit,omitempty"`
 	// DenyMessage says the harness hands the model a reason with a deny, so
 	// the Inbox may offer to type one.
 	DenyMessage bool `json:"deny_message,omitempty"`
@@ -263,9 +267,10 @@ type toolShape struct {
 	others []string
 }
 
-// claudeWholeTools are the Claude Code tools the Inbox may answer. Write, Edit,
-// MultiEdit and NotebookEdit are not here because their body is what matters
-// and the line shows only the path. Bash's dangerouslyDisableSandbox is not an
+// claudeWholeTools are the Claude Code tools the Inbox may answer from their
+// line. Write, Edit, MultiEdit and NotebookEdit are not here because their
+// body is what matters and the line shows only the path: the first three are
+// offered with their body (claudeEditApproval), NotebookEdit never. Bash's dangerouslyDisableSandbox is not an
 // ignorable argument, so a call that sets it is answered in the pane. Glob and
 // Grep are only here without a path, since the line shows one argument.
 var claudeWholeTools = map[string]toolShape{
@@ -329,6 +334,9 @@ func claudeApproval(p fields) *Approval {
 	}
 	if slices.Contains(claudeHeldTools, tool) {
 		return nil
+	}
+	if slices.Contains(EditTools, tool) {
+		return claudeEditApproval(p)
 	}
 	input := p.obj("tool_input")
 	if !shownWhole(claudeWholeTools, tool, input) {

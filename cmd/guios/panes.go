@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Gaurav-Gosain/mygo"
 	"github.com/Gaurav-Gosain/mygo/plugins/terminal"
 	"github.com/Gaurav-Gosain/mygo/ui"
 
@@ -123,7 +124,7 @@ func (a *App) panes(c *ui.Context, pal *palette, bar ui.TitleBar, shown float32,
 	// One parent for each session and workspace: another one shown comes
 	// at once, while panes opened, closed or moved within it animate
 	// (paneTransition).
-	a.reportGrid(c, s)
+	a.reportGrid(c, a.hostOf(s.ID), a.paneRef("ws-area").Bounds(c))
 	// The area holds the workspace's panes, and the panes of the one left
 	// as they slide out (slide.go).
 	area := ui.Column(c.Key("ws-slide")).Grow(1).Basis(0).MinWidth(0).MinHeight(0).AlignItems(ui.Stretch)
@@ -1608,66 +1609,116 @@ const (
 	minPaneRows = client.MinPaneRows
 )
 
-// cellSize is a terminal cell in DIPs, at a text size.
-type cellSize struct{ w, h, font float32 }
+// cellSize is a terminal cell in DIPs, for the font, text size and display
+// scale it was worked out for (fontCell).
+type cellSize struct {
+	w, h  float32
+	key   ui.Font
+	line  float32
+	scale float32
+}
 
-// reportGrid tells the session's host the pane area's size in cells, when
-// it changed: the box tuios's layout engine lays the panes out in while no
-// TUI shows the session.
-//
-// The cell is measured from the focused terminal, its box over its grid,
-// and only from a box and grid that held for two frames with no pane
-// moving: the grid follows the box a frame or more late (a resize, the
-// leases of a pane animation), and a cell measured in between is wrong.
-// The layouts placed by rectangles size each pane from the grid sent here,
-// so a wrong cell grew them past the window on every resize, a little
-// more each time (QA-072). The cell is the smallest one measured at the
-// text size: a terminal's box holds its grid and less than one cell more.
-func (a *App) reportGrid(c *ui.Context, s *proto.Session) {
-	area := a.paneRef("ws-area").Bounds(c)
-	if area.W <= 0 || area.H <= 0 {
-		return
+// fontCell is a terminal cell in DIPs, worked out from the font as the
+// terminal sizes its own cells (the terminal plugin's view.layout): the
+// widest advance of printable ASCII, and the font's line height times the
+// line height setting, each rounded up to whole device pixels.
+func (a *App) fontCell(size, scale float32) (float32, float32) {
+	f := ui.Font{Family: a.termFamily(), Size: size, Weight: a.set.FontWeight}
+	if strings.TrimSpace(f.Family) == "" {
+		f.Family = "monospace"
 	}
-	font := a.set.FontSize * c.Zoom()
-	if a.cell.font != font {
-		a.cell = cellSize{font: font}
+	if f.Size <= 0 {
+		f.Size = 13
 	}
-	id := a.focusOf(s)
-	if t := a.termFor(id); t != nil && !panesMoving() {
-		cols, rows := t.Size()
-		tb := a.paneRef(id).Bounds(c)
-		if cols > 0 && rows > 0 && tb.W > 0 && tb.H > 0 {
-			seen := [4]float32{tb.W, tb.H, float32(cols), float32(rows)}
-			if seen == a.cellSeen {
-				cw, ch := tb.W/float32(cols), tb.H/float32(rows)
-				if a.cell.w == 0 {
-					a.cell.w, a.cell.h = cw, ch
-				}
-				a.cell.w, a.cell.h = min(a.cell.w, cw), min(a.cell.h, ch)
-			} else {
-				// Measured in the next frame, once it held.
-				a.cellSeen = seen
-				c.AnimationFrame()
+	if f.Weight <= 0 {
+		f.Weight = 400
+	}
+	f.Weight = min(max(f.Weight, 100), 900)
+	line := a.set.LineHeight
+	if line <= 0 {
+		line = 1
+	}
+	if scale <= 0 {
+		scale = 1
+	}
+	if a.cell.key == f && a.cell.line == line && a.cell.scale == scale {
+		return a.cell.w, a.cell.h
+	}
+	adv := float32(0)
+	for _, g := range ui.Shape(asciiPrintable, f) {
+		adv = max(adv, g.Advance)
+	}
+	m := f.Metrics()
+	cw := float32(max(math.Ceil(float64(adv*scale-0.05)), 1)) / scale
+	ch := float32(max(math.Ceil(float64((m.Ascent+m.Descent+m.LineGap)*line*scale-0.05)), 1)) / scale
+	a.cell = cellSize{w: cw, h: ch, key: f, line: line, scale: scale}
+	return cw, ch
+}
+
+// asciiPrintable is the text the terminal measures its cell's width over.
+const asciiPrintable = " !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~"
+
+// displayScale is the display's scale: as the app last painted, or before
+// it painted, that of the display the window is on.
+func (a *App) displayScale() float32 {
+	if a.paintScale > 0 {
+		return a.paintScale
+	}
+	if a.screenScale == 0 {
+		a.screenScale = 1
+		x, y := a.win.Position()
+		for i, d := range mygo.Screen.Displays() {
+			b := d.Bounds
+			if i == 0 || x >= b.X && x < b.X+b.Width && y >= b.Y && y < b.Y+b.Height {
+				a.screenScale = float32(d.ScaleFactor)
 			}
 		}
 	}
-	if a.cell.w <= 0 || a.cell.h <= 0 {
+	return a.screenScale
+}
+
+// reportGrid tells host the pane area's size in cells, when it changed: the
+// box tuios's layout engine lays the panes out in while no TUI shows the
+// session. area is the pane area, in DIPs.
+//
+// The cell comes from the font (fontCell), the same in every frame and in
+// every run, so the grid is known from the first frame, before any pane
+// shows. Measured from a terminal's box over its grid, it waited for two
+// still frames: panes a script opened before that went into the daemon's
+// 80 by 24 box, and the cell measured varied with the frames (8.3 to 8.8
+// DIPs for one window), so a layout came out by timing (QM-009). A cell
+// measured between a resize and the grid that follows it also grew the
+// layouts placed by rectangles past the window (QA-072).
+func (a *App) reportGrid(c *ui.Context, h *host, area ui.Rect) {
+	if area.W <= 0 || area.H <= 0 || h == nil {
 		return
 	}
-	g := [2]int{int(area.W / a.cell.w), int(area.H / a.cell.h)}
-	if g == a.grid {
+	cw, ch := a.fontCell(a.set.FontSize*c.Zoom(), a.displayScale())
+	g := [2]int{int(area.W / cw), int(area.H / ch)}
+	a.gridSeen = g
+	if g == a.grid || h.cl == nil {
+		// Before its host connects, the grid goes as it does (sendGrid).
+		return
+	}
+	a.sendGrid(h, g)
+}
+
+// sendGrid tells host the grid g, as reportGrid last worked it out, or
+// that one for a zero g: as the host connects, which no frame may follow
+// while the window is out of sight.
+func (a *App) sendGrid(h *host, g [2]int) {
+	if g == ([2]int{}) {
+		g = a.gridSeen
+	}
+	if g == ([2]int{}) || h.cl == nil {
 		return
 	}
 	a.grid = g
-	a.call(s.ID, "grid", proto.GridParams{Cols: g[0], Rows: g[1]}, nil)
-}
-
-// panesMoving reports whether a pane animation holds the leases now: the
-// terminals' boxes are between two sizes.
-func panesMoving() bool {
-	leaseHold.mu.Lock()
-	defer leaseHold.mu.Unlock()
-	return time.Now().Before(leaseHold.until)
+	a.callOn(h, "grid", proto.GridParams{Cols: g[0], Rows: g[1]}, func(err error) {
+		if err != nil && a.grid == g {
+			a.grid = [2]int{}
+		}
+	})
 }
 
 // paneLabel is a pane's number over it while the labels show (the prefix

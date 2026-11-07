@@ -107,6 +107,8 @@ type cockpit struct {
 	// the views drawn above it this frame.
 	cardShown bool
 	open      bool
+	// edit is the body of the held edit the card shows (cockpit_edit.go).
+	edit *ckEdit
 	// view is what the card shows: the agents, the board or the mail for
 	// the person.
 	view int
