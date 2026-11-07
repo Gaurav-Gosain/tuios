@@ -1012,6 +1012,9 @@ func (d *Daemon) tmlDrain(cs *connState) {
 		if err != nil {
 			continue
 		}
+		if delay := tmlPushDelay(); delay > 0 {
+			time.Sleep(delay)
+		}
 		if err := d.sendEncoded(cs, msg); err != nil {
 			ob.mu.Lock()
 			ob.pending, ob.order, ob.sending = nil, nil, false
@@ -1020,6 +1023,16 @@ func (d *Daemon) tmlDrain(cs *connState) {
 		}
 	}
 }
+
+// tmlPushDelay holds each TML push back after it is built, by
+// TUIOS_E2E_TML_PUSH_DELAY (a Go duration), as a loaded machine or a slow
+// link does. It exists for the end-to-end test of a push that lands after
+// inputs the client already had answered (TestTMLInputKeepsTypingOverALatePush).
+// Ordinary runs never set it.
+var tmlPushDelay = sync.OnceValue(func() time.Duration {
+	d, _ := time.ParseDuration(os.Getenv("TUIOS_E2E_TML_PUSH_DELAY"))
+	return max(d, 0)
+})
 
 // sendTMLSurfaces sends a client that just attached every open surface of
 // its session, behind the attach reply.

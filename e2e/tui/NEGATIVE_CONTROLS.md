@@ -14234,3 +14234,20 @@ Run on 2026-11-07 on macOS (arm64), each control its own binary:
 The frames are `showkeys-super` and `showkeys-modifiers` under the test's
 artifact folder. Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestShowKeysSkipsModifierPresses$' -v .`.
+
+## TestTMLInputKeepsTypingOverALatePush
+
+The daemon holds each TML push back one second after it builds it
+(`TUIOS_E2E_TML_PUSH_DELAY`), so the push for the first key typed into a field
+lands after the client has the tml-input answers for all the others. The test
+types "draft", reads the screen every 20 ms for three seconds, types "!",
+submits, and checks the agent's --wait prints "draft!".
+
+Run on 2026-11-07 on macOS (arm64), each control its own binary:
+
+| Removed | The test fails with | Result |
+|---------|---------------------|--------|
+| The check in `applyTMLSurface` that drops state older than the last answered input (`p.Version < v.acked`) | "ASSERTION: a late push took the typed text back: the field no longer shows \"draft\"". The frame `taken-back` shows the field as "d" | **caught** |
+
+The frames are under the test's artifact folder. Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestTMLInputKeepsTypingOverALatePush$' -v .`.
