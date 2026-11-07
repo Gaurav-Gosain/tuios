@@ -170,6 +170,12 @@ type cockpitState struct {
 	// needsOnly is the f filter: the Needs you group alone, which is the
 	// old flat Inbox.
 	needsOnly bool
+	// chip is the header count a click chose: its state group alone in the
+	// list (1 + the group, 0 for none). Idle keeps Settled with it.
+	chip int
+	// groupN is each group's count of rows before the chip filters them,
+	// which the header's counts say, so every chip stays to click.
+	groupN [ckGroups]int
 	// The layout the rows were last built for.
 	colH    int
 	oneLine bool
@@ -578,6 +584,7 @@ func (m *OS) buildCockpitRows(list []sidebarAgentEntry, now time.Time) []ckRow {
 	}
 	by := m.ckGroupBy()
 	var bands []ckBand
+	ck.groupN = [ckGroups]int{}
 	for g := range ckGroups {
 		items := m.ckGatherFans(groups[g], list)
 		if len(items) == 0 || itemsOnly && g != ckNeeds && g != ckSnoozed && g != ckReview {
@@ -589,7 +596,8 @@ func (m *OS) buildCockpitRows(list []sidebarAgentEntry, now time.Time) []ckRow {
 				n++
 			}
 		}
-		if n == 0 {
+		ck.groupN[g] = n
+		if n == 0 || !ck.chipKeeps(g) {
 			continue
 		}
 		if by != "" && g != ckNeeds {
@@ -1113,6 +1121,25 @@ func (m *OS) CockpitFold() {
 	m.cockpitReplyFollow()
 }
 
+// chipKeeps reports whether the header chip in force keeps group g in the
+// list.
+func (ck *cockpitState) chipKeeps(g int) bool {
+	return ck.chip == 0 || ck.chip == g+1 || ck.chip == ckIdle+1 && g == ckSettled
+}
+
+// cockpitChip is a click on a header count: the list keeps that state group
+// alone, and a second click on the same count gives the whole list back.
+func (m *OS) cockpitChip(g int) {
+	ck := &m.Inbox.ck
+	if ck.chip == g+1 {
+		ck.chip = 0
+	} else {
+		ck.chip = g + 1
+	}
+	ck.scroll, ck.follow = 0, true
+	m.cockpitTouchRows()
+}
+
 // CockpitCycleFilter is f: the whole fleet, then every item alone (the old
 // flat Inbox), then each kind of item there is, then the whole fleet again.
 func (m *OS) CockpitCycleFilter() {
@@ -1335,6 +1362,9 @@ func (m *OS) cockpitAction(action string) tea.Cmd {
 		m.cockpitNextScope()
 	case "needs":
 		m.CockpitCycleFilter()
+	case "chip:0", "chip:1", "chip:2", "chip:3":
+		g, _ := strconv.Atoi(strings.TrimPrefix(action, "chip:"))
+		m.cockpitChip(g)
 	case "follow":
 		m.CockpitThreadBottom()
 	case "a", "A", "r":

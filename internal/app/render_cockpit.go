@@ -379,7 +379,7 @@ func (m *OS) drawCockpit(c *ckCanvas, l ckLook, top int, now time.Time) {
 	// [agents] view_list and the list key choose between the column and
 	// the strip; auto folds a fleet of two or fewer. The strip takes only a
 	// fleet whose chips fit on its row.
-	strip := c.w >= ckOneColumn && !folded && !ck.board && !ck.needsOnly && st.Filter == "" && st.Select == "" && st.agents.query == ""
+	strip := c.w >= ckOneColumn && !folded && !ck.board && !ck.needsOnly && ck.chip == 0 && st.Filter == "" && st.Select == "" && st.agents.query == ""
 	switch m.ckListMode() {
 	case config.AgentsViewListStrip:
 		strip = strip && m.ckStripWidth(l) <= c.w-4
@@ -488,29 +488,23 @@ func (m *OS) drawCockpitHeader(c *ckCanvas, l ckLook, y, top int) {
 	if ck.board {
 		counts = m.ckAgentCounts()
 	} else {
-		banded := m.ckGroupBy() != ckGroupState
-		for _, r := range ck.rows {
-			switch {
-			case r.kind == ckRowHead:
-				counts[r.group] = r.count
-			case banded && r.group != ckNeeds && r.selectable():
-				// Grouped by session, machine or project, the rows keep
-				// their state group, which the counts still say.
-				counts[r.group]++
-			}
-		}
+		// The counts before a chip filters the list, so every chip stays
+		// drawn to click. Grouped by session, machine or project, the rows
+		// keep their state group, which the counts still say.
+		counts = ck.groupN
 	}
 	type cnt struct {
 		g     string
 		ink   color.Color
 		n     int
 		words string
+		group int
 	}
 	cnts := []cnt{
-		{l.ckStateMark("needs_input", ckGlyphNeeds), pal.Attention, counts[ckNeeds], "needs you"},
-		{l.ckStateMark("working", ckGlyphWorking), pal.Busy, counts[ckWorking], "working"},
-		{l.ckStateMark("done", ckGlyphReview), pal.Success, counts[ckReview], "to review"},
-		{l.ckStateMark("idle", ckGlyphIdle), pal.FgMute, counts[ckIdle] + counts[ckSettled], "idle"},
+		{l.ckStateMark("needs_input", ckGlyphNeeds), pal.Attention, counts[ckNeeds], "needs you", ckNeeds},
+		{l.ckStateMark("working", ckGlyphWorking), pal.Busy, counts[ckWorking], "working", ckWorking},
+		{l.ckStateMark("done", ckGlyphReview), pal.Success, counts[ckReview], "to review", ckReview},
+		{l.ckStateMark("idle", ckGlyphIdle), pal.FgMute, counts[ckIdle] + counts[ckSettled], "idle", ckIdle},
 	}
 	// The counts say their words when the row has room for them beside the
 	// search and the button, and only their marks otherwise.
@@ -522,7 +516,8 @@ func (m *OS) drawCockpitHeader(c *ckCanvas, l ckLook, y, top int) {
 	}
 	compact := full > c.w-2-ckWidth(ckSeg{t: " + New agent "})-16
 	for i, k := range cnts {
-		if k.n == 0 && i > 0 {
+		on := !ck.board && ck.chip == k.group+1
+		if k.n == 0 && i > 0 && !on {
 			continue
 		}
 		segs := []ckSeg{{t: k.g + " ", fg: k.ink}, {t: strconv.Itoa(k.n), fg: pal.Fg, attrs: ckBold}}
@@ -530,10 +525,23 @@ func (m *OS) drawCockpitHeader(c *ckCanvas, l ckLook, y, top int) {
 			segs = append(segs, ckSeg{t: " " + k.words, fg: pal.FgDim})
 		}
 		x0 := x
-		x = c.text(x, y, 0, segs...) + 3
-		if i == 0 {
-			ck.hits = append(ck.hits, ckHit{x0: x0, y0: top + y, x1: x - 3, y1: top + y + 1, kind: ckHitAction, action: "needs"})
+		if on {
+			// The chip that filters the list wears the selected ground, and
+			// the mark where a depth has no grounds.
+			w := ckWidth(segs...) + 2
+			c.fill(x0-1, y, w, 1, pal.Ground(ckOn, l.panel))
+			c.mark(pal, x0-1, y, w, 1, ckOn)
 		}
+		x = c.text(x, y, 0, segs...) + 3
+		action := "chip:" + strconv.Itoa(k.group)
+		if ck.board {
+			// The board has no list to filter: needs you keeps its f.
+			if i > 0 {
+				continue
+			}
+			action = "needs"
+		}
+		ck.hits = append(ck.hits, ckHit{x0: x0, y0: top + y, x1: x - 3, y1: top + y + 1, kind: ckHitAction, action: action})
 	}
 	if ck.needsOnly || st.Filter != "" {
 		what := "items only"
@@ -1706,6 +1714,8 @@ func (m *OS) cockpitEmptyLines(rows []ckRow) []string {
 		return []string{"No unread mail for you.", "m opens the mailbox, with every thread between agents too."}
 	case st.Select != "" || st.agents.query != "":
 		return []string{"No agent matches the search.", "/ changes the search. Clear the line and press enter to show everything."}
+	case st.ck.chip > 0:
+		return []string{"No agent is in this state now.", "Click the count again, or press esc, to show every agent."}
 	case st.Filter != "" || st.ck.needsOnly:
 		return []string{"Nothing needs you now.", "f shows every agent."}
 	}

@@ -135,7 +135,7 @@ func (m *OS) CockpitEscape() tea.Cmd {
 		m.cockpitTouch()
 		return nil
 	case m.cockpitNarrowed():
-		st.Select, st.Filter, st.agents.query, ck.needsOnly = "", "", "", false
+		st.Select, st.Filter, st.agents.query, ck.needsOnly, ck.chip = "", "", "", false, 0
 		m.cockpitTouchRows()
 		m.cockpitRows()
 		m.cockpitClamp()
@@ -149,7 +149,12 @@ func (m *OS) CockpitEscape() tea.Cmd {
 // cockpitNarrowed reports whether a search or a filter narrows the list.
 func (m *OS) cockpitNarrowed() bool {
 	st := &m.Inbox
-	return st.Select != "" || st.Filter != "" || st.agents.query != "" || st.ck.needsOnly
+	return st.Select != "" || st.Filter != "" || st.agents.query != "" || st.ck.needsOnly || st.ck.chip > 0
+}
+
+// cockpitSearched reports whether a search line narrows the list.
+func (m *OS) cockpitSearched() bool {
+	return m.Inbox.Select != "" || m.Inbox.agents.query != ""
 }
 
 // cockpitEscapeLabel is what esc does now, for the key bar.
@@ -161,6 +166,8 @@ func (m *OS) cockpitEscapeLabel() string {
 		return "back"
 	case m.CockpitRegion() != ckRegionList:
 		return "list"
+	case m.Inbox.ck.chip > 0 && !m.cockpitSearched():
+		return "clear filter"
 	case m.cockpitNarrowed():
 		return "clear search"
 	}
