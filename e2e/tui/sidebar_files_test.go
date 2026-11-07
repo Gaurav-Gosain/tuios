@@ -3250,11 +3250,18 @@ func TestRailFilesOpenOnDemand(t *testing.T) {
 		terminals, listing, agents := railRowOf(s, "terminals"), railRowOf(s, "alpha/"), railRowOf(s, "agents")
 		return terminals >= 0 && terminals < listing && listing < agents
 	}
+	// The header is left out: a section the switch opened carries a close
+	// control there, which a section the layout names does not, and the path
+	// beside it is cut to the room that leaves. Both are checked on their own
+	// below.
 	railText := func(s tuitest.Screen) string {
 		_, rows := s.Size()
+		header := filesHeaderRow(s)
 		var b strings.Builder
 		for r := range rows {
-			b.WriteString(railLine(s, r))
+			if r != header {
+				b.WriteString(railLine(s, r))
+			}
 			b.WriteByte('\n')
 		}
 		return b.String()
@@ -3284,6 +3291,9 @@ func TestRailFilesOpenOnDemand(t *testing.T) {
 	}
 	time.Sleep(insertGuard + 150*time.Millisecond)
 	opened := railText(term.Screen())
+	if filesHeaderClose(term.Screen()) < 0 {
+		t.Errorf("the section the switch opened has no close control:\n%s", term.Snapshot())
+	}
 	railShot(t, term, "files-open-short")
 	setLayout := func(sections string) {
 		t.Helper()
@@ -3300,6 +3310,9 @@ func TestRailFilesOpenOnDemand(t *testing.T) {
 	setLayout("sessions:25,terminals,files:25,agents:34")
 	if err := term.WaitFor(func(s tuitest.Screen) bool { return railText(s) == opened }, uiTimeout); err != nil {
 		t.Fatalf("the opened section differs from a section the layout names: %v\nopened:\n%s\nnamed:\n%s", err, opened, railText(term.Screen()))
+	}
+	if filesHeaderClose(term.Screen()) >= 0 {
+		t.Errorf("a section the layout names offers a close control:\n%s", term.Snapshot())
 	}
 	setLayout(layout)
 	if err := term.Resize(120, 40); err != nil {

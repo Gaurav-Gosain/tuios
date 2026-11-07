@@ -12227,6 +12227,33 @@ rules has no test.
 The frames are `files-shut`, `files-open`, `files-open-short`, `files-search` and
 `files-no-terminals` under `TUIOS_E2E_FRAMES`, in the test's folder.
 
+Since the files control shows its state (below), a section the control opened
+has a close control in its header that a section the layout names does not. The
+line-for-line comparison leaves the header out, and the test checks the close
+control on its own: there on the opened section, absent on the named one.
+
+## The files control shows that it is on
+
+`TestRailFilesSwitchShowsItsState` uses the layout `sessions:20,terminals,agents`
+on a rail 28 columns wide. Before the fix the footer's `files` control drew the
+same muted word whether the section was on or off, so one stray click put the
+files section on the rail with no sign of why. The test clicks the control and
+waits for three things: the files header, every cell of the footer's `files`
+underlined, and an `x` at the right end of the header. A second click must take
+the section off and the underline away. A third click turns it on again, and a
+click on the header's `x` must take it off.
+
+Run on 2026-11-07 on macOS (arm64), each control its own binary:
+
+| Removed | The test fails with | Result |
+|---------|---------------------|--------|
+| The whole fix (a build of `284853b80`) | "after the first click on the footer control: the section, the on control or the close control is missing" | **caught** |
+| Only the on state in `sidebarFooter` (`filesOn` forced false), the close control kept | The same line | **caught** |
+
+The frames are `rail-files-switch-off` and `rail-files-switch-on` under
+`TUIOS_E2E_FRAMES`. Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestRailFilesSwitchShowsItsState$' -v .`.
+
 ## The files menu's Preview from any focus
 
 `TestRailQuickLook` now starts with the keyboard in a pane, before the rail has had it. It right-clicks `main.go` and picks Preview. The preview must show `main.go` and stay open, `j` must move it to `notes.md`, and after `esc` the keys must reach the shell. Later in the test, Preview runs from the focused rail, where `esc` must leave the keyboard with the rail. This replaces the check in "The files menu previews the row it was opened on", where `j` went on from the old cursor row. Each control was built into its own binary. Run on 2026-10-30 on Linux.

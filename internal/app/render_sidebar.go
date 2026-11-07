@@ -85,6 +85,11 @@ const (
 	// sidebarRowFileCd is the header control that sends a cd to the pane the
 	// listing is tied to. It is drawn only when there is such a pane.
 	sidebarRowFileCd
+	// sidebarRowFileClose is the header control that takes the section off the
+	// rail. It is drawn only while this client's switch put the section there
+	// and the layout leaves it out, which is when nothing else on the rail
+	// says how to take it off.
+	sidebarRowFileClose
 	// sidebarRowFileUp is the ".." row, drawn everywhere but at the root.
 	sidebarRowFileUp
 	// sidebarRowFileEntry is one name in the listing. It carries the entry's
@@ -2307,12 +2312,21 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 	}
 
 	drawFiles := func() {
-		cdTok, cdSpan, hasCd := m.sidebarFilesHeaderCd(cw, pal, headerHoverX[sidebarSectionFiles],
+		closeTok, closeSpan, hasClose := m.sidebarFilesHeaderClose(cw, pal, headerHoverX[sidebarSectionFiles],
+			isCursor(sidebarRowFileClose, "", ""))
+		closeW := 0
+		if hasClose {
+			closeW = closeSpan.X1 - closeSpan.X0 + 1
+		}
+		cdTok, cdSpan, hasCd := m.sidebarFilesHeaderCd(cw-closeW, pal, headerHoverX[sidebarSectionFiles],
 			isCursor(sidebarRowFileCd, "", ""))
 		if hasCd {
 			recordToken(cdSpan, "")
 		}
-		lines = append(lines, compose(m.sidebarFilesHeaderRow(cdTok, hasCd, cw, pal)))
+		if hasClose {
+			recordToken(closeSpan, "")
+		}
+		lines = append(lines, compose(m.sidebarFilesHeaderRow(cdTok, hasCd, closeTok, hasClose, cw, pal)))
 		if len(files) == 0 {
 			if count[sidebarSectionFiles] > 0 {
 				lines = append(lines, compose(sidebarFilesEmptyRow(cw, pal)))
@@ -3050,14 +3064,24 @@ func (m *OS) sidebarFooter(variant, cw int, pal overlay.Palette,
 	// before the inner one's on a left-hand rail.
 	sortx.ShortStableFunc(items, func(a, b placed) int { return a.zone.X0 - b.zone.X0 })
 
+	// The files control is a switch, so it shows which way it is set: on, it
+	// is drawn in the accent and underlined. The underline is what carries the
+	// state at 16 colours, where the accent can be the same ink as the label.
+	// A switch drawn the same both ways put a section on the rail with no sign
+	// of what had put it there.
+	filesOn := m.filesOn()
 	zones := make([]sidebarFooterZone, 0, len(items))
 	for _, it := range items {
 		fg := pal.FgMute
 		if (it.zone.Line == hoverLine && hoverX >= it.zone.X0 && hoverX < it.zone.X1) || isCursor(it.zone.Kind) {
 			fg = pal.Fg
 		}
+		style := sidebarStyle(nil, fg)
+		if it.zone.Kind == sidebarRowFiles && filesOn {
+			style = sidebarStyle(nil, pal.Accent).Underline(true)
+		}
 		row := cells[it.zone.Line]
-		row[it.zone.X0] = sidebarStyle(nil, fg).Render(it.label)
+		row[it.zone.X0] = style.Render(it.label)
 		for c := it.zone.X0 + 1; c < it.zone.X1 && c < cw; c++ {
 			row[c] = ""
 		}
