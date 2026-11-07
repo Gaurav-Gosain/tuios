@@ -195,6 +195,8 @@ type OS struct {
 	Width         int
 	Height        int
 	Mode          Mode
+	// mode is the choice beneath the borrows open now; see mode.go.
+	mode modeState
 	// terminalMu guards the m.Windows slice and the per-window dirty flags and
 	// render caches against the UI goroutine's render pass. It does NOT guard
 	// emulator cell data; that is Window.ioMu.

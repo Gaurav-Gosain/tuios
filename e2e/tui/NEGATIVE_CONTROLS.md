@@ -14314,7 +14314,8 @@ presses esc, in both orders. The shell must answer after both. The rail saved
 the mode in effect when it opened, which was the hold's borrowed window mode.
 When the release came first, the hold handed terminal mode back, and esc
 then put the saved window mode back over it. The rail now saves the mode
-beneath any borrow (`modeBeneathBorrows`).
+chosen beneath any borrow (`chosenMode` in `internal/app/mode.go`, which
+replaced `modeBeneathBorrows`).
 
 Run on 2026-11-07 on macOS (arm64):
 
@@ -14662,3 +14663,32 @@ Run on 2026-11-08 on macOS (arm64):
 
 The fixed build passes 3 of 3. The saved tape is under `TUIOS_E2E_FRAMES` as
 `recording.tape`.
+
+## The hold key as a mode lease
+
+The tests are in `hold_lease_mode_test.go`. The hold key is bound to left
+Option. The hold saved the mode it saw when pressed and handed it back on
+release unless the mode had changed while held, so a choice of window
+management while held was lost, and a borrow that ended while held moved the
+mode under it. The hold is now a lease (`internal/app/mode.go`): a choice made
+while held spends it, a lease that ends on terminal mode with no pane chooses
+window management, and the other borrowers cannot move the mode while it is
+open.
+
+- `TestHoldReleaseAfterTheLastPaneClosedStaysInWindowMode`: terminal mode,
+  hold, x closes the only pane, release, then n. n must open a pane.
+- `TestHoldOutlastsADividerDrag`: terminal mode, a divider drag begins, hold,
+  the mouse is let go while held, then alt+n. It must open a pane (n in
+  window mode), not move to the next one (alt+n in terminal mode). The dock
+  shows HOLD in both builds.
+
+Run on 2026-11-08 on macOS (arm64):
+
+| Removed | Test | Failure | Result |
+|---------|------|---------|--------|
+| The change (its parent, "write the client mode in one place") | `TestHoldReleaseAfterTheLastPaneClosedStaysInWindowMode` | "n after the release opens a pane: window count never reached 1 (last 0)" | **caught** |
+| The change (main at c4e977d25) | `TestHoldReleaseAfterTheLastPaneClosedStaysInWindowMode` | the same | **caught** |
+| The change (its parent) | `TestHoldOutlastsADividerDrag` | "n struck while held after the drag ended: window count never reached 3 (last 2)" | **caught** |
+
+The fixed build passes each 3 of 3. `TestHoldThenRailHandsBackTerminalMode`
+passes on both builds.

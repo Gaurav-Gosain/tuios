@@ -17,11 +17,11 @@ const HoldModeAction = "hold_window_mode"
 // release disarms it. Nothing polls and nothing is scheduled, so an idle tick
 // costs exactly what it did before.
 type holdMode struct {
+	// active is the key held down. The mode itself is the hold's lease on
+	// window management (mode.go), which a choice made while held spends, so
+	// an action taken while held (the point of the mode) keeps the mode it
+	// chose.
 	active bool
-	// returnMode is where the release goes back to. Only used when the hold's
-	// own mode is still the one in effect, so an action taken while held (which
-	// is the point of the mode) keeps whatever mode it chose.
-	returnMode Mode
 	// strip is the modifier the trigger key stands for, taken off every chord
 	// struck while it is held. Holding Option and tapping n has to run the
 	// window-mode action bound to n, not the one bound to alt+n.
@@ -108,8 +108,8 @@ func (m *OS) PressHoldKey(key tea.KeyPressMsg) bool {
 	}
 	switch {
 	case !m.hold.active:
-		m.hold = holdMode{active: true, returnMode: m.Mode, strip: modifierKeyMods[trigger]}
-		m.SetBorrowedMode(WindowManagementMode)
+		m.hold = holdMode{active: true, strip: modifierKeyMods[trigger]}
+		m.borrowMode(leaseHold, WindowManagementMode)
 	case key.IsRepeat:
 		// The key is still down; the terminal is just repeating it.
 	default:
@@ -136,18 +136,15 @@ func (m *OS) ReleaseHoldKey(key tea.KeyPressMsg) bool {
 	return true
 }
 
-// EndHold leaves the momentary mode and restores the mode the hold interrupted.
-// Restoring is skipped when something done while held has already chosen a mode
-// of its own, which is the point of being able to act while holding.
+// EndHold leaves the momentary mode and ends its lease, which hands back the
+// mode chosen beneath it: the one the hold began over, or the one an action
+// taken while held chose.
 func (m *OS) EndHold() {
 	if !m.hold.active {
 		return
 	}
-	returnMode := m.hold.returnMode
 	m.hold = holdMode{}
-	if m.Mode == WindowManagementMode {
-		m.SetBorrowedMode(returnMode)
-	}
+	m.returnMode(leaseHold)
 }
 
 // StripHoldModifier takes the trigger's own modifier off a chord struck while it
