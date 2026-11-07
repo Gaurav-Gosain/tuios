@@ -1755,21 +1755,36 @@ func (m *OS) drawCockpitHints(c *ckCanvas, l ckLook, y int, now time.Time) {
 		}
 		return n
 	}
+	fit := func(hs []overlay.Hint, room int) []overlay.Hint {
+		hs = slices.Clone(hs)
+		for len(hs) > 1 && width(hs) > room {
+			hs = slices.Delete(hs, len(hs)-2, len(hs)-1)
+		}
+		return hs
+	}
+	required := func(hs []overlay.Hint) int {
+		n := 0
+		for _, h := range hs {
+			if h.Priority != overlay.HintOptional {
+				n++
+			}
+		}
+		return n
+	}
 	// The region that has the keys is named first, when the frame shows
-	// more than one and there is room for it beside the first hint.
+	// more than one region and the name costs no hint but an optional one:
+	// the name goes before any key the bar must show.
 	name := ""
 	if m.Inbox.ck.regionBox[ckRegionFocus].shown() {
 		name = ckRegionNames[m.CockpitRegion()]
-		if len(hints) > 0 && width(hints[:1])+ansi.StringWidth(name)+5 > room {
+		if nw := ansi.StringWidth(name) + 5; required(fit(hints, room-nw)) < required(fit(hints, room)) {
 			name = ""
 		}
 	}
 	if name != "" {
 		room -= ansi.StringWidth(name) + 5
 	}
-	for len(hints) > 1 && width(hints) > room {
-		hints = slices.Delete(hints, len(hints)-2, len(hints)-1)
-	}
+	hints = fit(hints, room)
 	x := 2
 	if name != "" {
 		// A heading, not a key: the mark after it keeps it apart from the

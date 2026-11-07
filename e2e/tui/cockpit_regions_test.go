@@ -47,12 +47,35 @@ func waitRegion(t *testing.T, term *tuitest.Terminal, region string, lo, hi int,
 	t.Helper()
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
 		x0, _, ok := ckMarkSpan(s)
-		return strings.HasPrefix(ckKeyBar(s), region+" ") && ok && x0 >= lo && x0 < hi
+		return ckBarNames(ckKeyBar(s), region) && ok && x0 >= lo && x0 < hi
 	}, uiTimeout); err != nil {
 		x0, x1, ok := ckMarkSpan(term.Screen())
 		t.Fatalf("ASSERTION: %s: want region %s marked from a column in [%d,%d); key bar %q, mark %d..%d (%v): %v\n%s",
 			when, region, lo, hi, ckKeyBar(term.Screen()), x0, x1, ok, err, term.Snapshot())
 	}
+}
+
+// ckBarNames reports whether the key bar is region's: it names region, or,
+// on a bar too full for the name (the bar gives the name up before a key),
+// it names no other region and shows a key only region's bar has.
+func ckBarNames(bar, region string) bool {
+	if strings.HasPrefix(bar, region+" ") {
+		return true
+	}
+	for _, other := range []string{"List ", "Focus ", "Reply ", "Side "} {
+		if strings.HasPrefix(bar, other) {
+			return false
+		}
+	}
+	switch region {
+	case "Focus":
+		return strings.Contains(bar, "scroll")
+	case "Reply":
+		return strings.Contains(bar, "undo")
+	case "Side":
+		return false
+	}
+	return !strings.Contains(bar, "scroll") && !strings.Contains(bar, "undo")
 }
 
 // ckPress sends keys and gives the frame a beat.
@@ -131,7 +154,7 @@ func TestCockpitRegions(t *testing.T) {
 	waitText(t, term, "the draft", "keep this draft")
 	ckPress(t, term, tuitest.Esc)
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
-		return strings.HasPrefix(ckKeyBar(s), "List ") && strings.Contains(s.Text(), "keep this draft")
+		return ckBarNames(ckKeyBar(s), "List") && strings.Contains(s.Text(), "keep this draft")
 	}, uiTimeout); err != nil {
 		t.Fatalf("ASSERTION: esc in the reply did not give the list the keys and keep the draft: %v\n%s", err, term.Snapshot())
 	}
