@@ -65,8 +65,8 @@ func HandleInput(msg tea.Msg, o *app.OS) (tea.Model, tea.Cmd) {
 	case tea.MouseClickMsg:
 		// Help mode reads the pointer: a click picks the component under it
 		// and does nothing else, so a click cannot focus or move a pane while
-		// the user is inspecting it.
-		if o.HelpMode {
+		// the user is inspecting it. A panel above it takes the pointer.
+		if o.HelpMode && helpOwnsPointer(o) {
 			o.HelpHoverAt(msg.X, msg.Y)
 			return o, nil
 		}
@@ -96,8 +96,9 @@ func HandleInput(msg tea.Msg, o *app.OS) (tea.Model, tea.Cmd) {
 		}
 	case tea.MouseMotionMsg:
 		// Help mode reads the pointer as its cursor. Motion never moves,
-		// resizes or hovers anything else while it is on.
-		if o.HelpMode {
+		// resizes or hovers anything else while it is on, unless a panel above
+		// it is open.
+		if o.HelpMode && helpOwnsPointer(o) {
 			o.HelpHoverAt(msg.X, msg.Y)
 			return o, nil
 		}
@@ -120,7 +121,7 @@ func HandleInput(msg tea.Msg, o *app.OS) (tea.Model, tea.Cmd) {
 		// Don't sync on motion: too frequent
 		return handleMouseMotion(msg, o)
 	case tea.MouseReleaseMsg:
-		if o.HelpMode {
+		if o.HelpMode && helpOwnsPointer(o) {
 			return o, nil
 		}
 		if o.CaptureActive() {
@@ -137,7 +138,14 @@ func HandleInput(msg tea.Msg, o *app.OS) (tea.Model, tea.Cmd) {
 		// tick.
 		o.ReleaseGestureAnnouncements()
 	case tea.MouseWheelMsg:
-		if o.HelpMode {
+		if o.HelpMode && helpOwnsPointer(o) {
+			// The wheel scrolls the explanation the way Up and Down do. It
+			// turns nothing else: no pane, no list, no review.
+			step := -3
+			if msg.Button == tea.MouseWheelDown {
+				step = 3
+			}
+			o.HelpScroll(step)
 			return o, nil
 		}
 		// A wheel scrolls the pane out from under the labels, so it ends
@@ -425,10 +433,14 @@ func HandleKeyPress(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		o.CaptureKeyEvent(msg)
 	}
 
-	// Help mode owns the keyboard while it is up: every key is either one of
-	// its own or swallowed, and no letter reaches a pane or a leader menu.
-	if o.HelpMode {
-		return handleHelpModeKey(msg, o)
+	// Help mode reads the keys it binds and leaves the rest to the app. Its
+	// pane is a view of the layout, not a mode over it: the chords it lists
+	// run while it is up, so pressing the rail's toggle beside the explanation
+	// changes what the next frame explains.
+	if o.HelpMode && helpOwnsKey(msg, o) {
+		if result, cmd, handled := handleHelpModeKey(msg, o); handled {
+			return result, cmd
+		}
 	}
 
 	// Hold-to-window-mode. The trigger is consumed here, before any mode routing,

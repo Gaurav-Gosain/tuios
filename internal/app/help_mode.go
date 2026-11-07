@@ -1,25 +1,28 @@
 package app
 
 import (
+	"fmt"
 	"image"
 	"slices"
-	"sort"
 	"strings"
 
 	"charm.land/lipgloss/v2"
+	"github.com/Gaurav-Gosain/tuios/internal/app/helptext"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
 
 // Help mode is the hover help the leader then h opens. It is not the help
-// overlay: nothing is listed up front and no key is taken from the pane. The
-// pointer, or Tab and Shift+Tab, moves between the components on screen; Up
-// and Down move into and out of a component that has parts; h shows the whole
-// keybinding set of the component selected; esc leaves. The pane that explains
-// the component is drawn above or below it, never over it where the screen has
-// room, and its border is the error ink, so it reads as an inspection surface
-// rather than as one more dock or rail.
+// overlay: nothing is listed up front, and it reads only the keys it binds.
+// The pointer, or Shift+Tab, moves between the components on screen;
+// Shift+Up and Shift+Down move into and out of a component that has parts; h
+// shows the whole keybinding set of the component selected; esc leaves. The
+// rest of the keyboard is the app's, so a chord the pane lists runs while the
+// pane explains it, and the pane follows the layout that chord leaves. The
+// pane that explains the component is drawn above or below it, never over it
+// where the screen has room, and its border is the error ink, so it reads as
+// an inspection surface rather than as one more dock or rail.
 
 // helpKey is one binding as the pane shows it: the whole press, chord
 // included, and what it does.
@@ -36,6 +39,16 @@ type helpComponent struct {
 	parent  string
 	title   string
 	purpose string
+	// moves are the keys that act on the whole component rather than on one
+	// of its rows, drawn in their own section ahead of the rest.
+	moves []helpKey
+	// values are the labels a readout can show, drawn in their own section
+	// after the purpose. The mode pill's states are not keys, so they are
+	// listed here rather than among the bindings.
+	values []helpKey
+	// rows are the current members of a group, drawn as a list under their own
+	// heading: the pills the centre drew, and the entries it had no room for.
+	rows    []helpKey
 	keys    []helpKey
 	allKeys []helpKey
 	cli     []string
@@ -43,7 +56,7 @@ type helpComponent struct {
 }
 
 // EnterHelpMode turns help mode on and selects the first component on screen.
-// The leader chord that reaches it has already closed every menu.
+// The leader chord that reaches it, or Shift+F1, has already closed every menu.
 func (m *OS) EnterHelpMode() {
 	m.ShowHelp = false
 	m.CloseContextMenu()
@@ -51,6 +64,7 @@ func (m *OS) EnterHelpMode() {
 	m.ClosePaneLabels()
 	m.HelpMode = true
 	m.helpShowKeys = false
+	m.helpScroll = 0
 	m.helpTarget = ""
 	m.helpPaneRect = image.Rectangle{}
 	m.helpComps = nil
@@ -62,10 +76,11 @@ func (m *OS) EnterHelpMode() {
 }
 
 // ExitHelpMode leaves help mode. A leader chord after it opens the ordinary
-// leader menu again, and esc goes back to the pane.
+// leader menu again, and esc or Shift+F1 goes back to the pane.
 func (m *OS) ExitHelpMode() {
 	m.HelpMode = false
 	m.helpShowKeys = false
+	m.helpScroll = 0
 	m.helpTarget = ""
 	m.helpPaneRect = image.Rectangle{}
 	m.helpComps = nil
@@ -90,7 +105,7 @@ func (m *OS) helpComponents() []helpComponent {
 }
 
 // HelpNext moves to the next top-level component, or the one delta places
-// back. Tab and Shift+Tab call it.
+// back. Shift+Tab calls it.
 func (m *OS) HelpNext(delta int) {
 	comps := m.helpComponents()
 	tops := helpTopLevel(comps)
@@ -118,11 +133,12 @@ func (m *OS) HelpNext(delta int) {
 		}
 	}
 	m.helpTarget = tops[idx].id
+	m.helpScroll = 0
 	m.helpInvalidate()
 }
 
-// HelpDeeper moves Down: into the selected component's first part, or to its
-// next sibling once inside one.
+// HelpDeeper moves Shift+Down: into the selected component's first part, or to
+// its next sibling once inside one.
 func (m *OS) HelpDeeper() {
 	comps := m.helpComponents()
 	cur := helpIndex(comps, m.helpTarget)
@@ -132,6 +148,7 @@ func (m *OS) HelpDeeper() {
 	}
 	if kids := helpChildren(comps, comps[cur].id); len(kids) > 0 {
 		m.helpTarget = kids[0].id
+		m.helpScroll = 0
 		m.helpInvalidate()
 		return
 	}
@@ -140,12 +157,13 @@ func (m *OS) HelpDeeper() {
 	}
 	if next, ok := helpSibling(comps, comps[cur], 1); ok {
 		m.helpTarget = next.id
+		m.helpScroll = 0
 		m.helpInvalidate()
 	}
 }
 
-// HelpShallower moves Up: to the previous sibling inside a component, or back
-// out to the component itself from its first part.
+// HelpShallower moves Shift+Up: to the previous sibling inside a component, or
+// back out to the component itself from its first part.
 func (m *OS) HelpShallower() {
 	comps := m.helpComponents()
 	cur := helpIndex(comps, m.helpTarget)
@@ -158,45 +176,23 @@ func (m *OS) HelpShallower() {
 	}
 	if prev, ok := helpSibling(comps, comps[cur], -1); ok {
 		m.helpTarget = prev.id
+		m.helpScroll = 0
 		m.helpInvalidate()
 		return
 	}
 	m.helpTarget = comps[cur].parent
+	m.helpScroll = 0
 	m.helpInvalidate()
 }
 
-// HelpToggleRail shows or hides a rail from inside help mode, so a hidden rail
-// can be brought back, looked at, and put away again without leaving the mode.
-// other picks the rail on the opposite edge. A rail that was hidden has no
-// rectangle to hover, so it is still listed as a component; this is the key
-// that gives it one.
-func (m *OS) HelpToggleRail(other bool) {
-	if m.NoRail {
+// HelpScroll moves the explanation by delta lines. The pane's title and the
+// navigation footer do not move: only the part of the box that can overflow
+// scrolls. Up, Down and the wheel call it.
+func (m *OS) HelpScroll(delta int) {
+	if !m.HelpMode || delta == 0 {
 		return
 	}
-	if other {
-		m.ToggleOtherSidebar()
-	} else {
-		m.ToggleSidebar()
-	}
-	m.helpComps = nil
-	comps := m.helpComponents()
-	wanted := "rail:left"
-	if other || m.legacySidebarEdge() == sidebarRight {
-		wanted = "rail:right"
-	}
-	switch {
-	case helpIndex(comps, wanted) >= 0:
-		m.helpTarget = wanted
-	case helpIndex(comps, m.helpTarget) >= 0:
-		// Keep the selection when the rail that went away was not it.
-	default:
-		if tops := helpTopLevel(comps); len(tops) > 0 {
-			m.helpTarget = tops[0].id
-		} else {
-			m.helpTarget = ""
-		}
-	}
+	m.helpScroll = max(m.helpScroll+delta, 0)
 	m.helpInvalidate()
 }
 
@@ -207,6 +203,7 @@ func (m *OS) HelpToggleKeys() {
 		return
 	}
 	m.helpShowKeys = !m.helpShowKeys
+	m.helpScroll = 0
 	m.helpInvalidate()
 }
 
@@ -234,6 +231,7 @@ func (m *OS) HelpHoverAt(x, y int) {
 	}
 	if best != "" && best != m.helpTarget {
 		m.helpTarget = best
+		m.helpScroll = 0
 		m.helpInvalidate()
 	}
 }
@@ -324,6 +322,37 @@ func (m *OS) helpKeys(actions ...string) []helpKey {
 	return out
 }
 
+// helpRailWideKeys are the moves that act on a rail as a whole rather than on
+// one row: putting the rail away and putting the keyboard into it. They are the
+// rail's own keys, live with help mode up as well, so every rail component
+// gives them their own section rather than folding them into its focused keys.
+func (m *OS) helpRailWideKeys(other bool) []helpKey {
+	action := "prefix_toggle_sidebar"
+	toggleDesc := "Toggle this rail"
+	if other {
+		action = "prefix_toggle_other_rail"
+		toggleDesc = "Toggle the opposite rail"
+	}
+	keys := m.helpKeys(action)
+	for i := range keys {
+		keys[i].desc = toggleDesc
+	}
+	for _, k := range m.helpKeys("prefix_explore") {
+		k.desc = "Focus this rail, or leave it for the panes"
+		keys = append(keys, k)
+	}
+	return keys
+}
+
+// helpRailToggleLabel is the rail toggle as the rail's own help spells it, for
+// a sentence that has to name it.
+func helpRailToggleLabel(wide []helpKey) string {
+	if len(wide) == 0 || wide[0].press == "" {
+		return "the rail toggle"
+	}
+	return wide[0].press
+}
+
 // helpScopedKeys is helpKeys for a section that is read in its own scope
 // rather than through the prefix map, such as the rail's keys.
 func (m *OS) helpScopedKeys(scope string, actions ...string) []helpKey {
@@ -407,8 +436,8 @@ func (m *OS) buildHelpComponents() []helpComponent {
 
 // helpRailComponents adds the legacy rail and, when the opposite edge is
 // configured, its rail. A hidden rail still gets a component: it has no
-// rectangle to hover, but Tab can reach it, and s (or S for the opposite edge)
-// shows it from inside help mode.
+// rectangle to hover, but Shift+Tab can reach it, and its toggle chord works
+// from inside help mode, which is how the rail comes back with the pane open.
 func (m *OS) helpRailComponents() []helpComponent {
 	if m.NoRail {
 		return nil
@@ -456,12 +485,7 @@ func (m *OS) helpRailComponent(edge sidebarEdge, width int, shown, other bool) [
 	if other {
 		title = "Opposite rail"
 	}
-	toggle := "s"
-	toggleDesc := "Show or hide this rail from help mode"
-	if other {
-		toggle = "S"
-		toggleDesc = "Show or hide the opposite rail from help mode"
-	}
+	wide := m.helpRailWideKeys(other)
 	if !shown {
 		title += " (hidden)"
 	}
@@ -475,27 +499,25 @@ func (m *OS) helpRailComponent(edge sidebarEdge, width int, shown, other bool) [
 
 	purpose := "The session rail is the column beside the panes. It lists the sessions on this machine and on other hosts, the panes of the session it is following, the agents that need a person, the files below the focused pane, and the controls that add and collapse."
 	if !shown {
-		purpose = "This rail is hidden, so it has no rectangle to hover. Press " + toggle + " in help mode to show it, look at it, and press " + toggle + " again to put it away. " + purpose
+		// Help mode reads only its navigation keys, so the toggle it lists
+		// works from here; the pane stays up and redraws around the rail.
+		purpose = "This rail is hidden, so it has no rectangle to hover. Press " + helpRailToggleLabel(wide) + " to show it, and the pane follows the layout as it changes. " + purpose
 	}
-	keys := append([]helpKey{{press: toggle, desc: toggleDesc}},
-		m.helpScopedKeys(config.ScopeSidebar, "activate", "cursor_down", "cursor_up", "collapse", "expand", "section", "new_session", "new_window")...)
-	railAction := "prefix_toggle_sidebar"
-	if other {
-		railAction = "prefix_toggle_other_rail"
-	}
-	keys = append(keys, m.helpKeys(railAction, "prefix_explore")...)
+	keys := m.helpScopedKeys(config.ScopeSidebar, "activate", "cursor_down", "cursor_up", "collapse", "expand", "section", "new_session", "new_window")
 	keys = helpCap(keys, 7)
 
-	all := append([]helpKey{{press: toggle, desc: toggleDesc}}, m.helpAllScopedKeys(
+	all := append([]helpKey{}, wide...)
+	all = append(all, m.helpAllScopedKeys(
 		config.ScopeSidebar, config.ScopeSidebarFiles, config.ScopeSidebarAgents)...)
 	all = append(all, m.helpKeys(
-		railAction, "prefix_toggle_spotlight",
-		"prefix_explore", "prefix_session_switcher", "prefix_inbox", "prefix_mail")...)
+		"prefix_toggle_spotlight",
+		"prefix_session_switcher", "prefix_inbox", "prefix_mail")...)
 
 	parent := helpComponent{
 		id:      id,
 		title:   title,
 		purpose: purpose,
+		moves:   wide,
 		keys:    keys,
 		allKeys: all,
 		cli: []string{
@@ -532,7 +554,7 @@ func (m *OS) helpRailComponent(edge sidebarEdge, width int, shown, other bool) [
 		if !ok {
 			continue
 		}
-		out = append(out, m.helpRailChild(group, id, r))
+		out = append(out, m.helpRailChild(group, id, r, other))
 	}
 	return out
 }
@@ -558,7 +580,7 @@ func helpRailGroup(kind sidebarRowKind) string {
 }
 
 // helpRailChild explains one section of a rail.
-func (m *OS) helpRailChild(group, parent string, rect image.Rectangle) helpComponent {
+func (m *OS) helpRailChild(group, parent string, rect image.Rectangle, other bool) helpComponent {
 	c := helpComponent{id: parent + "/" + group, parent: parent, rect: rect}
 	switch group {
 	case "sessions":
@@ -592,12 +614,15 @@ func (m *OS) helpRailChild(group, parent string, rect image.Rectangle) helpCompo
 	case "controls":
 		c.title = "Rail controls"
 		c.purpose = "The rail's own controls: collapse it to a strip, widen or narrow it, put the files section on and off, and move keyboard focus into the rail."
-		c.keys = append(m.helpScopedKeys(config.ScopeSidebar,
-			"collapse", "expand", "narrow", "widen", "file_search"), m.helpKeys(
-			"prefix_toggle_sidebar", "prefix_toggle_other_rail", "prefix_explore")...)
-		c.keys = helpCap(c.keys, 7)
+		c.keys = m.helpScopedKeys(config.ScopeSidebar,
+			"collapse", "expand", "narrow", "widen", "file_search")
 		c.cli = []string{"tuios set-config appearance.sidebar.width 30", "tuios set-config appearance.sidebar.position left"}
 	}
+	// A rail section is read from the rail's pane, and both of these moves act
+	// on the whole rail, so they get their own section rather than competing
+	// with the section's own keys for the cap.
+	wide := m.helpRailWideKeys(other)
+	c.moves = wide
 	switch group {
 	case "agents":
 		c.allKeys = m.helpAllScopedKeys(config.ScopeSidebarAgents)
@@ -606,6 +631,7 @@ func (m *OS) helpRailChild(group, parent string, rect image.Rectangle) helpCompo
 	default:
 		c.allKeys = m.helpAllScopedKeys(config.ScopeSidebar)
 	}
+	c.allKeys = append(append([]helpKey{}, wide...), c.allKeys...)
 	if group == "panes" {
 		c.allKeys = append(c.allKeys, m.helpKeys(
 			"prefix_next_window", "prefix_prev_window", "prefix_close_window",
@@ -653,11 +679,11 @@ func (m *OS) helpDockComponents() []helpComponent {
 			image.Rect(m.dockOverflowHit.X0, m.dockOverflowHit.Y, m.dockOverflowHit.X1, m.dockOverflowHit.Y+1)))
 	}
 
-	names := make([]string, 0, len(m.dockCustomHits))
-	for _, hit := range m.dockCustomHits {
-		names = append(names, hit.Name)
-	}
-	sort.Strings(names)
+	// Every named cell the dock drew becomes one part, in draw order, so the
+	// count in the header is the number of parts a hover or Shift+Up reaches.
+	// The grouped parts above were recorded from their own unions; a cell that
+	// belongs to one of them (the workspace strip, a minimized entry) is
+	// skipped here rather than explaining the same thing twice.
 	seen := map[string]bool{
 		"workspaces":       true,
 		"windows":          true,
@@ -665,19 +691,13 @@ func (m *OS) helpDockComponents() []helpComponent {
 		"session-controls": true,
 		"overflow":         true,
 	}
-	for _, name := range names {
-		if seen[name] {
+	for _, hit := range m.dockHelpHits {
+		if seen[hit.Name] || hit.X1 <= hit.X0 {
 			continue
 		}
-		seen[name] = true
-		for _, hit := range m.dockCustomHits {
-			if hit.Name != name {
-				continue
-			}
-			out = append(out, m.helpDockCellComponent(name, dock.id,
-				image.Rect(hit.X0, hit.Y, hit.X1, hit.Y+1)))
-			break
-		}
+		seen[hit.Name] = true
+		out = append(out, m.helpDockCellComponent(hit.Name, dock.id,
+			image.Rect(hit.X0, hit.Y, hit.X1, hit.Y+1)))
 	}
 	return out
 }
@@ -699,7 +719,7 @@ func (m *OS) helpDockComponent() helpComponent {
 	if position == "" {
 		position = "top"
 	}
-	purpose := "The dock is the status bar: the mode pill, the workspace strip, minimized panes, session controls, notifications and whatever cells the configuration puts on it. Clicking a cell acts on the row it names."
+	purpose := dockText(helptext.IDDock, "Dock").Purpose
 	if hidden {
 		purpose = "The dock is hidden, so it has no rectangle to hover. Show it with the CLI line below and it becomes a component here again. " + purpose
 	}
@@ -718,7 +738,7 @@ func (m *OS) helpDockComponent() helpComponent {
 	}
 	return helpComponent{
 		id:      "dock",
-		title:   "Dock",
+		title:   dockText(helptext.IDDock, "Dock").Title,
 		purpose: purpose,
 		keys:    helpCap(keys, 7),
 		allKeys: m.helpKeys(
@@ -730,6 +750,16 @@ func (m *OS) helpDockComponent() helpComponent {
 		cli:  cli,
 		rect: rect,
 	}
+}
+
+// dockText reads a dock page's text from the table, and falls back to the
+// title the caller would have given it when the table has no entry yet: a
+// cell added before its text exists still opens a page.
+func dockText(id, fallback string) helptext.Entry {
+	if e, ok := helptext.DockEntry(id); ok {
+		return e
+	}
+	return helptext.Entry{Title: fallback}
 }
 
 // helpDockCellComponent explains one dock cell. Custom and plugin cells carry
@@ -757,73 +787,122 @@ func (m *OS) helpDockCellComponent(name, parent string, rect image.Rectangle) he
 		c.purpose = "A cell supplied by a plugin. The plugin owns what it draws and what a click does; its manifest and cells are described in the plugin's own documentation."
 		c.cli = []string{"tuios plugins list", "tuios config edit  # [dock] lists", "tuios list-dock-components"}
 	case name == "workspaces":
-		c.title = "Workspaces"
-		c.purpose = "The workspace strip. Each pill is a workspace and its panes; clicking one switches to it, and the arrows step a strip too long for the dock."
+		text := dockText(helptext.DockCell("workspaces"), "Workspaces")
+		c.title = text.Title
+		c.purpose = text.Purpose
 		c.keys = helpCap(m.helpKeys("prefix_workspace", "prefix_workspace_switcher", "next_workspace", "prev_workspace"), 6)
 		c.cli = []string{"tuios select-workspace 2", "tuios set-workspace-name 2 work", "tuios set-config appearance.dock_workspace_tabs true"}
 	case name == "windows":
-		c.title = "Minimized panes"
-		c.purpose = "One entry per minimized pane. Clicking an entry restores that pane; the overflow marker opens the list of entries the dock had no room for."
+		text := dockText(helptext.DockCell("windows"), "Minimized panes")
+		c.title = text.Title
+		c.purpose = text.Purpose
+		if len(m.dockCenterLabels) == 0 {
+			c.rows = append(c.rows, helpKey{press: "none", desc: "No pane is minimized, so the centre draws no pills."})
+		}
+		for i, label := range m.dockCenterLabels {
+			c.rows = append(c.rows, helpKey{press: fmt.Sprintf("%d", i+1), desc: label})
+		}
+		if n := m.dockOverflowHit.Overflowed; n > 0 {
+			c.rows = append(c.rows, helpKey{press: "...", desc: fmt.Sprintf("%d more did not fit; the marker opens them", n)})
+		}
+		if len(m.dockCenterParts) > 0 {
+			c.rows = append(c.rows, helpKey{press: "centre", desc: strings.Join(m.dockCenterParts, ", ")})
+		}
 		c.keys = helpCap(append(m.helpKeys("prefix_minimize", "minimize_prefix_restore_all"),
 			m.helpScopedKeys(config.ScopeSidebar, "activate")...), 6)
 		c.cli = []string{"tuios list-windows", "tuios restore-window <name>", "tuios set-config appearance.dock_compact true"}
 	case name == "session-controls":
-		c.title = "Session controls"
-		c.purpose = "The client controls: open the session list, leave this client (detach), close the session, or start a new one. They act on the daemon session, not on one pane."
+		text := dockText(helptext.DockCell("session-controls"), "Session controls")
+		c.title = text.Title
+		c.purpose = text.Purpose
 		c.keys = helpCap(m.helpKeys("prefix_session_switcher", "prefix_detach", "prefix_close_session", "prefix_quit"), 6)
 		c.cli = []string{"tuios ls", "tuios detach-client", "tuios kill-session <name>", "tuios new"}
 	case name == "messages":
-		c.title = "Messages"
-		c.purpose = "The newest notification. Enter or a click acts on it, esc dismisses it, and a cut message can be held to read the rest. Notifications also carry agent asks."
+		text := dockText(helptext.DockCell("messages"), "Messages")
+		c.title = text.Title
+		c.purpose = text.Purpose
 		c.keys = helpCap(m.helpKeys("prefix_jump_notif", "prefix_last_message", "prefix_inbox", "prefix_mail"), 6)
 		c.cli = []string{"tuios notify test", "tuios set-config notifications.duration 4", "tuios set-config notifications.error_sticky true"}
 	case name == "overflow":
-		c.title = "Minimized overflow"
-		c.purpose = "The marker for minimized panes the dock could not fit. It opens the aggregate list, which names every one of them."
+		text := dockText(helptext.DockCell("overflow"), "Minimized overflow")
+		c.title = text.Title
+		c.purpose = text.Purpose
 		c.cli = []string{"tuios list-windows", "tuios set-config appearance.dock_compact true"}
 	case name == "clock":
-		c.title = "Clock"
-		c.purpose = "The current time, drawn by the dock. Its format and whether it appears are both appearance settings."
+		text := dockText(helptext.DockCell("clock"), "Clock")
+		c.title = text.Title
+		c.purpose = text.Purpose
 		c.cli = []string{"tuios set-config appearance.show_clock true", "tuios set-config appearance.clock_format 15:04"}
 	case name == "cpu":
-		c.title = "CPU"
-		c.purpose = "The CPU readout. It samples the machine while the dock is shown; turn it off when the dock is not the place you watch load."
+		text := dockText(helptext.DockCell("cpu"), "CPU")
+		c.title = text.Title
+		c.purpose = text.Purpose
 		c.cli = []string{"tuios set-config appearance.show_cpu true"}
 	case name == "ram":
-		c.title = "RAM"
-		c.purpose = "The memory readout, in the same units the dock uses for the machine's total. It is a dock cell, not a per-pane figure."
+		text := dockText(helptext.DockCell("ram"), "RAM")
+		c.title = text.Title
+		c.purpose = text.Purpose
 		c.cli = []string{"tuios set-config appearance.show_ram true"}
 	case name == "transfers":
-		c.title = "Transfers"
-		c.purpose = "The copy and paste buffer strip: what is held, and whether a transfer is in flight. Clicking it opens the buffer list."
+		text := dockText(helptext.DockCell("transfers"), "Transfers")
+		c.title = text.Title
+		c.purpose = text.Purpose
 		c.keys = helpCap(m.helpKeys("prefix_transfers", "paste_buffer", "choose_buffer"), 6)
 		c.cli = []string{"tuios list-buffers", "tuios set-config appearance.dock_compact true"}
 	case name == "session":
-		c.title = "Session name"
-		c.purpose = "The daemon session this client is showing, its accent, and whether other clients are attached. Clicking it opens the session switcher."
+		text := dockText(helptext.DockCell("session"), "Session name")
+		c.title = text.Title
+		c.purpose = text.Purpose
 		c.keys = helpCap(m.helpKeys("prefix_session_switcher", "prefix_close_session"), 6)
 		c.cli = []string{"tuios rename-session <name>", "tuios set-session-accent <colour>", "tuios ls"}
 	case name == "mode":
-		c.title = "Mode"
-		c.purpose = "The input mode: window management or terminal. It is the dock's answer to where a key will go, and it changes as the prefix menu opens."
-		c.keys = helpCap(m.helpKeys("prefix_window", "prefix_help"), 4)
-		c.cli = []string{"tuios set-config appearance.dock_mode_pill true", "tuios keybinds list"}
+		text := dockText(helptext.DockCell("mode"), "Mode")
+		c.title = text.Title
+		c.purpose = text.Purpose
+		c.values = []helpKey{
+			{press: "H", desc: "Tiling is on and the next split is stacked: the new pane takes a row, above or below."},
+			{press: "V", desc: "Tiling is on and the next split is side by side: the new pane takes a column, left or right."},
+			{press: "HOLD", desc: "The hold key has borrowed window mode, so window-mode keys act while it is held."},
+			{press: "HINTS", desc: "Hints mode owns the keyboard; the legend at the dock's other end lists its keys."},
+			{press: "SIDEBAR", desc: "The rail owns the keyboard, so the prefix and its keys act on the rail."},
+			{press: "NEST ...", desc: "Nest mode: keys go to the pane, and the named key turns tuios back on."},
+			{press: "MULTI", desc: "Multi-copy drives several panes; after a search it reads MULTI matched/total."},
+			{press: "row:col", desc: "The focused pane is in copy mode; the pill shows the cursor's row and column."},
+			{press: "lock glyph", desc: "Lock mode: every key but the leader goes to the focused pane."},
+			{press: "leader glyph", desc: "A prefix is armed and waits for its key; the pill takes the warning colour."},
+			{press: "Z", desc: "The workspace has a zoomed pane: one pane fills the box and the others are off screen."},
+		}
+		c.keys = helpCap(m.helpKeys("prefix_window", "prefix_help", "prefix_toggle_tiling"), 4)
+		c.cli = []string{
+			"tuios set-config appearance.dock_mode_pill input  # the mode icon while tiling",
+			"tuios set-config appearance.dock_mode_split_letter false",
+			"tuios set-config appearance.dock_prefix_indicator badge",
+			"tuios keybinds list",
+		}
 	case name == "trail":
-		c.title = "Trail"
-		c.purpose = "The trail cell records where this client has been: the panes and workspaces it visited, newest first. It is built into the dock and is not a command runner."
-		c.cli = []string{"tuios list-dock-components", "tuios config edit  # [dock] lists"}
+		text := dockText(helptext.DockCell("trail"), "Workspace counter")
+		c.title = text.Title
+		c.purpose = text.Purpose
+		c.rows = []helpKey{
+			{press: "1:1", desc: "Workspace 1 holds one pane."},
+			{press: "2:3", desc: "Workspace 2 holds three panes."},
+		}
+		c.cli = []string{"tuios list-workspaces", "tuios list-dock-components", "tuios config edit  # [dock] lists"}
 	case name == "tape":
-		c.title = "Tape"
-		c.purpose = "The tape cell reports a tape playing in this session, with its status. It is drawn only while a tape is running."
+		text := dockText(helptext.DockCell("tape"), "Tape")
+		c.title = text.Title
+		c.purpose = text.Purpose
 		c.keys = helpCap(m.helpKeys("prefix_tape"), 3)
 		c.cli = []string{"tuios tape list", "tuios tape play <file>"}
 	case name == "notifications":
-		c.title = "Notifications"
-		c.purpose = "The notification cell carries the newest message and its level. Its duration and whether errors stay until dismissed are notification settings."
+		text := dockText(helptext.DockCell("notifications"), "Notifications")
+		c.title = text.Title
+		c.purpose = text.Purpose
 		c.cli = []string{"tuios notify test", "tuios set-config notifications.duration 4", "tuios set-config notifications.error_sticky true"}
 	case name == "copy-help":
-		c.title = "Copy help"
-		c.purpose = "The copy-help cell is the dock's reminder of the copy-mode chord while copy mode is available. It is documentation, not a control."
+		text := dockText(helptext.DockCell("copy-help"), "Copy help")
+		c.title = text.Title
+		c.purpose = text.Purpose
 		c.cli = []string{"tuios keybinds list"}
 	default:
 		c.title = "Dock cell: " + name
@@ -1029,16 +1108,37 @@ func (m *OS) renderHelpMode() *lipgloss.Layer {
 	}
 
 	pal := m.overlayUI()
-	width := m.helpPaneWidth()
-	lines := m.helpBodyLines(comps, cur, width, pal)
+	width := m.helpPaneWidth(cur)
+	header := m.helpHeaderLines(comps, cur, width, pal)
+	body := m.helpSectionLines(cur, width, pal)
 
-	// The pane cannot be taller than the screen it is drawn on. Losing the
-	// tail is better than a box whose bottom is off screen.
-	limit := max(m.GetRenderHeight()-3, 2)
-	if len(lines) > limit {
-		lines = lines[:limit]
-		lines = append(lines, overlay.Style(pal.Surface).Foreground(pal.FgMute).Render("…"))
+	// The pane cannot be taller than the screen it is drawn on. The title and
+	// the navigation footer stay where they are, and the explanation between
+	// them scrolls rather than losing its tail. The footer says so when it can.
+	limit := max(m.GetRenderHeight()-3, 3)
+	footer := m.helpFooterLines(comps, cur, width, pal, false)
+	room := limit - len(header) - 1 - len(footer)
+	if room < 1 {
+		// A screen this short has no use for the title; the footer is the part
+		// that has to stay.
+		header = nil
+		room = max(limit-1-len(footer), 1)
 	}
+	if len(body) > room {
+		footer = m.helpFooterLines(comps, cur, width, pal, true)
+		// A short screen fills the footer first, so the marker that says the
+		// body continues sits with the title, which stays put while it scrolls.
+		room = max(limit-len(header)-1-len(footer)-1, 1)
+		header = append(header, m.helpScrollLine(len(body), room, width, pal))
+	}
+	m.helpScroll = min(max(m.helpScroll, 0), max(len(body)-room, 0))
+	visible := body[m.helpScroll:min(m.helpScroll+room, len(body))]
+
+	lines := make([]string, 0, len(header)+len(visible)+1+len(footer))
+	lines = append(lines, header...)
+	lines = append(lines, visible...)
+	lines = append(lines, "")
+	lines = append(lines, footer...)
 
 	border := lipgloss.RoundedBorder()
 	box := lipgloss.NewStyle().
@@ -1051,26 +1151,126 @@ func (m *OS) renderHelpMode() *lipgloss.Layer {
 	boxW, boxH := lipgloss.Width(box), lipgloss.Height(box)
 	x, y := m.placeHelpPane(cur.rect, boxW, boxH)
 	m.helpPaneRect = image.Rect(x, y, x+boxW, y+boxH)
-	return lipgloss.NewLayer(box).X(x).Y(y).Z(config.ZIndexWhichKey + 1).ID("help-mode")
+	return lipgloss.NewLayer(box).X(x).Y(y).Z(config.ZIndexWhichKey + 1).ID(helpLayerID)
 }
 
+// helpScrollLine is the marker that says the explanation continues past the
+// fold and that the wheel and the arrow keys move it. It carries the range on
+// screen, so the reader knows how much is left without counting.
+func (m *OS) helpScrollLine(total, room, width int, pal overlay.Palette) string {
+	from := min(m.helpScroll+1, total)
+	to := min(m.helpScroll+room, total)
+	text := fmt.Sprintf("lines %d-%d of %d · Up/Down or the wheel", from, to, total)
+	return overlay.Style(pal.Surface).Foreground(pal.FgMute).
+		Render(overlay.Truncate(text, max(width-4, 8)))
+}
+
+// helpLayerID is the compositor id of the help pane.
+const helpLayerID = "help-mode"
+
 // helpPaneWidth is the pane's target width: wide enough for a key, its
-// description and a CLI line, never wider than the screen keeps room for.
-func (m *OS) helpPaneWidth() int {
+// description and a CLI line, never wider than the screen keeps room for. A
+// rail is a column the pane is placed beside rather than over, so a rail target
+// also has to leave the rails their columns; on a narrow screen that narrows
+// the pane instead of covering the rail it is explaining.
+func (m *OS) helpPaneWidth(cur *helpComponent) int {
 	width := min(60, m.GetRenderWidth()-4)
 	if width < 20 {
 		width = m.GetRenderWidth() - 2
 	}
-	return max(width, 10)
+	width = max(width, 10)
+	if rail, ok := m.helpRailBand(cur.rect); ok {
+		room := m.GetRenderWidth() - rail.Dx() - 2
+		if other := m.helpOtherRailBand(rail); !other.Empty() {
+			room = min(room, m.GetRenderWidth()-rail.Dx()-other.Dx()-2)
+		}
+		width = min(width, max(room, 10))
+	}
+	return width
 }
 
-// helpBodyLines lays out the pane's text. The styles carry the pane's ground,
-// so every line fills the box rather than leaving the terminal's own background
-// showing through.
-func (m *OS) helpBodyLines(comps []helpComponent, cur *helpComponent, width int, pal overlay.Palette) []string {
+// helpHeaderLines is the pane's fixed top: the component's name, the number of
+// parts it has, and where it sits. It stays put while the body scrolls.
+func (m *OS) helpHeaderLines(comps []helpComponent, cur *helpComponent, width int, pal overlay.Palette) []string {
 	inner := max(width-4, 8)
 	bg := pal.Surface
 	title := overlay.Style(bg).Foreground(pal.Fg).Bold(true)
+	muted := overlay.Style(bg).Foreground(pal.FgMute)
+
+	var lines []string
+	// Name how many parts Shift+Down can reach, so a component worth walking
+	// into says so before the key is pressed.
+	heading := cur.title
+	if kids := len(helpChildren(comps, cur.id)); kids > 0 {
+		noun := "parts"
+		if kids == 1 {
+			noun = "part"
+		}
+		heading += fmt.Sprintf(" (%d %s)", kids, noun)
+	}
+	lines = append(lines, title.Render(overlay.Truncate(heading, inner)))
+	if path := m.helpPath(comps, cur); path != "" && path != cur.title {
+		lines = append(lines, muted.Render(overlay.Truncate(path, inner)))
+	}
+	lines = append(lines, m.helpStateLine(cur, pal))
+	return lines
+}
+
+// helpStateLine says which mode the keys are read in and whether the component
+// the pane explains is the one holding the keyboard. A hotkey list is only
+// worth reading against the state it will run in: the rail's keys do nothing
+// while a pane has the keyboard, and a window-mode key typed in terminal mode
+// is text for the shell. A rail reads its keys in either mode, so its line
+// gives only whether it holds the keyboard: the mode would be noise the
+// reader has to discard on every visit.
+func (m *OS) helpStateLine(cur *helpComponent, pal overlay.Palette) string {
+	mode := "window mode"
+	if m.Mode == TerminalMode {
+		mode = "terminal mode"
+	}
+	muted := overlay.Style(pal.Surface).Foreground(pal.FgMute)
+	focused, focusable := m.helpFocus(cur)
+	if strings.HasPrefix(cur.id, "rail:") {
+		if focused {
+			return overlay.Style(pal.Surface).Foreground(pal.Success).Render("focused")
+		}
+		return overlay.Style(pal.Surface).Foreground(pal.FgDim).Render("not focused")
+	}
+	switch {
+	case focused:
+		return muted.Render(mode+" · ") +
+			overlay.Style(pal.Surface).Foreground(pal.Success).Render("focused")
+	case focusable:
+		return muted.Render(mode+" · ") +
+			overlay.Style(pal.Surface).Foreground(pal.FgDim).Render("not focused")
+	default:
+		return muted.Render(mode + " · takes no focus")
+	}
+}
+
+// helpFocus reports whether the component holds the keyboard and whether it can
+// hold it at all. The rail is the one component that takes the keyboard from
+// the panes without unmapping them, so a pane is focused only while the rail is
+// not; the dock and the desktop never take it.
+func (m *OS) helpFocus(cur *helpComponent) (focused, focusable bool) {
+	switch {
+	case strings.HasPrefix(cur.id, "rail:"):
+		return m.SidebarFocused, true
+	case strings.HasPrefix(cur.id, "pane:"):
+		id, _, _ := strings.Cut(strings.TrimPrefix(cur.id, "pane:"), "/")
+		win := m.GetFocusedWindow()
+		return !m.SidebarFocused && win != nil && win.ID == id, true
+	}
+	return false, false
+}
+
+// helpSectionLines is the scrollable part of the pane: what the component is
+// for, the keys that act on it, and the CLI that changes it. The styles carry
+// the pane's ground, so every line fills the box rather than leaving the
+// terminal's own background showing through.
+func (m *OS) helpSectionLines(cur *helpComponent, width int, pal overlay.Palette) []string {
+	inner := max(width-4, 8)
+	bg := pal.Surface
 	muted := overlay.Style(bg).Foreground(pal.FgMute)
 	dim := overlay.Style(bg).Foreground(pal.FgDim)
 	body := overlay.Style(bg).Foreground(pal.Fg)
@@ -1078,11 +1278,6 @@ func (m *OS) helpBodyLines(comps []helpComponent, cur *helpComponent, width int,
 	note := overlay.Style(bg).Foreground(pal.FgMute)
 
 	var lines []string
-	lines = append(lines, title.Render(overlay.Truncate(cur.title, inner)))
-	if path := m.helpPath(comps, cur); path != "" && path != cur.title {
-		lines = append(lines, muted.Render(overlay.Truncate(path, inner)))
-	}
-
 	if m.helpShowKeys {
 		lines = append(lines, "")
 		lines = append(lines, dim.Bold(true).Render("Available keybindings"))
@@ -1091,43 +1286,100 @@ func (m *OS) helpBodyLines(comps []helpComponent, cur *helpComponent, width int,
 		} else {
 			lines = append(lines, helpKeyLines(cur.allKeys, inner, key, body)...)
 		}
-	} else {
-		if cur.purpose != "" {
-			lines = append(lines, "")
-			for _, line := range wrapPlain(cur.purpose, inner) {
-				lines = append(lines, body.Render(line))
-			}
+		return lines
+	}
+	if cur.purpose != "" {
+		lines = append(lines, "")
+		for _, line := range wrapPlain(cur.purpose, inner) {
+			lines = append(lines, body.Render(line))
 		}
-		if len(cur.keys) > 0 {
-			lines = append(lines, "")
-			lines = append(lines, dim.Bold(true).Render("Hotkeys"))
-			lines = append(lines, helpKeyLines(cur.keys, inner, key, body)...)
+	}
+	if len(cur.moves) > 0 {
+		lines = append(lines, "")
+		lines = append(lines, dim.Bold(true).Render("Toggle/focus"))
+		lines = append(lines, helpKeyLines(cur.moves, inner, key, body)...)
+	}
+	if len(cur.values) > 0 {
+		lines = append(lines, "")
+		lines = append(lines, dim.Bold(true).Render("Possible values"))
+		lines = append(lines, helpKeyLines(cur.values, inner, key, body)...)
+	}
+	if len(cur.rows) > 0 {
+		lines = append(lines, "")
+		lines = append(lines, dim.Bold(true).Render("On the bar"))
+		lines = append(lines, helpKeyLines(cur.rows, inner, key, body)...)
+	}
+	if len(cur.keys) > 0 {
+		lines = append(lines, "")
+		// The rail's keys are live only while the rail holds the keyboard,
+		// and its sections share that scope.
+		heading := "Hotkeys"
+		if strings.HasPrefix(cur.id, "rail:") {
+			heading = "Hotkeys when focused"
 		}
-		if len(cur.cli) > 0 {
-			lines = append(lines, "")
-			lines = append(lines, dim.Bold(true).Render("CLI"))
-			for _, command := range cur.cli {
-				for i, line := range wrapPlain(command, inner-2) {
-					if i == 0 {
-						lines = append(lines, muted.Render("$ ")+note.Render(line))
-					} else {
-						lines = append(lines, "  "+note.Render(line))
-					}
+		lines = append(lines, dim.Bold(true).Render(heading))
+		lines = append(lines, helpKeyLines(cur.keys, inner, key, body)...)
+	}
+	if len(cur.cli) > 0 {
+		lines = append(lines, "")
+		lines = append(lines, dim.Bold(true).Render("CLI"))
+		for _, command := range cur.cli {
+			for i, line := range wrapPlain(command, inner-2) {
+				if i == 0 {
+					lines = append(lines, muted.Render("$ ")+note.Render(line))
+				} else {
+					lines = append(lines, note.Render("  "+line))
 				}
 			}
 		}
 	}
-
-	footer := "Tab components    Up/Down in and out    h all keys"
-	if helpIndex(comps, "rail:left") >= 0 || helpIndex(comps, "rail:right") >= 0 {
-		footer += "    s rail    S other rail"
-	}
-	footer += "    Esc exit"
-	lines = append(lines, "")
-	for _, line := range wrapPlain(footer, inner) {
-		lines = append(lines, muted.Render(line))
-	}
 	return lines
+}
+
+// helpFooterLines is the navigation help under the body. It never scrolls: the
+// keys stay in view however long the explanation is. The keys are drawn in the
+// palette's on/enabled green, the one colour that reads as "press this", and
+// the words they run are muted.
+func (m *OS) helpFooterLines(comps []helpComponent, cur *helpComponent, width int, pal overlay.Palette, scrollable bool) []string {
+	inner := max(width-4, 8)
+	bg := pal.Surface
+	key := overlay.Style(bg).Foreground(pal.Success).Bold(true)
+	muted := overlay.Style(bg).Foreground(pal.FgMute)
+	title := overlay.Style(bg).Foreground(pal.FgDim).Bold(true)
+
+	type hint struct{ press, desc string }
+	hints := []hint{{"Shift+Tab", "components"}}
+	// Shift+Down and Shift+Up do nothing on a top-level component with no
+	// parts: there is nowhere deeper to go and nothing to come back out of.
+	// Naming them there promises a move the keys cannot make.
+	if cur.parent != "" || len(helpChildren(comps, cur.id)) > 0 {
+		hints = append(hints, hint{"Shift+Up/Down", "in and out"})
+	}
+	if scrollable {
+		hints = append(hints, hint{"Up/Down", "scroll, or the wheel"})
+	}
+	hints = append(hints, hint{"h", "all keys"}, hint{"Esc", "exit"})
+
+	const gap = "    "
+	lines := []string{title.Render("Navigating help")}
+	var line strings.Builder
+	lineWidth := 0
+	for _, h := range hints {
+		w := lipgloss.Width(h.press) + 1 + lipgloss.Width(h.desc)
+		if lineWidth > 0 && lineWidth+len(gap)+w > inner {
+			lines = append(lines, line.String())
+			line.Reset()
+			lineWidth = 0
+		}
+		if lineWidth > 0 {
+			line.WriteString(muted.Render(gap))
+			lineWidth += len(gap)
+		}
+		line.WriteString(key.Render(h.press))
+		line.WriteString(muted.Render(" " + h.desc))
+		lineWidth += w
+	}
+	return append(lines, line.String())
 }
 
 // helpKeyLines draws a key column and its descriptions, wrapping a long
@@ -1148,9 +1400,12 @@ func helpKeyLines(keys []helpKey, width int, keyStyle, descStyle lipgloss.Style)
 		if len(desc) == 0 {
 			desc = []string{""}
 		}
-		lines = append(lines, keyStyle.Render(press+pad)+"  "+descStyle.Render(desc[0]))
+		// The gap between the two columns is drawn with the description's
+		// ground: an unstyled space loses the pane's fill and shows the
+		// terminal's own background through it.
+		lines = append(lines, keyStyle.Render(press+pad)+descStyle.Render("  "+desc[0]))
 		for _, line := range desc[1:] {
-			lines = append(lines, strings.Repeat(" ", keyWidth+2)+descStyle.Render(line))
+			lines = append(lines, descStyle.Render(strings.Repeat(" ", keyWidth+2)+line))
 		}
 	}
 	return lines
@@ -1173,6 +1428,10 @@ func (m *OS) helpPath(comps []helpComponent, cur *helpComponent) string {
 // placeHelpPane puts the pane below the component, then above it, then beside
 // it. Only when none of those fits does it clamp into the screen, which is the
 // one case where it can cover the component it explains.
+//
+// A rail and the parts of a rail are the exception: a rail is a column of
+// rows, so there is no above or below a section that is not the rail itself.
+// Those go beside their rail, which `placeHelpPaneBesideRail` keeps visible.
 func (m *OS) placeHelpPane(anchor image.Rectangle, w, h int) (int, int) {
 	screenW, screenH := m.GetRenderWidth(), m.GetRenderHeight()
 	if screenW < 1 || screenH < 1 {
@@ -1185,6 +1444,9 @@ func (m *OS) placeHelpPane(anchor image.Rectangle, w, h int) (int, int) {
 	}
 	if anchor.Empty() {
 		return clamp((screenW-w)/2, (screenH-h)/2)
+	}
+	if rail, ok := m.helpRailBand(anchor); ok {
+		return m.placeHelpPaneBesideRail(rail, anchor, w, h)
 	}
 
 	dock := m.helpDockBand()
@@ -1222,6 +1484,64 @@ func (m *OS) placeHelpPane(anchor image.Rectangle, w, h int) (int, int) {
 		return clamp(centerX, anchor.Max.Y)
 	}
 	return clamp(centerX, anchor.Max.Y)
+}
+
+// placeHelpPaneBesideRail puts the pane on the side of the rail with room for
+// it, level with the section it explains and kept off the dock. The pane is
+// sized by helpPaneWidth to fit beside the rails, so the side away from the
+// screen edge is the one that fits; the clamp is for a screen too narrow even
+// for that, where something has to be covered and the pane at least stays on
+// screen.
+func (m *OS) placeHelpPaneBesideRail(rail, anchor image.Rectangle, w, h int) (int, int) {
+	screenW, screenH := m.GetRenderWidth(), m.GetRenderHeight()
+	x := rail.Max.X
+	if x+w > screenW {
+		x = rail.Min.X - w
+	}
+	x = min(max(x, 0), max(screenW-w, 0))
+	y := anchor.Min.Y + (anchor.Dy()-h)/2
+	if dock := m.helpDockBand(); !dock.Empty() && !anchor.Overlaps(dock) {
+		if dock.Min.Y == 0 {
+			y = max(y, dock.Max.Y)
+		} else {
+			y = min(y, dock.Min.Y-h)
+		}
+	}
+	return x, min(max(y, 0), max(screenH-h, 0))
+}
+
+// helpRailBand is the rail containing anchor, when the anchor is a rail or a
+// part of one. Placement asks this to put the pane beside the rail instead of
+// over it.
+func (m *OS) helpRailBand(anchor image.Rectangle) (image.Rectangle, bool) {
+	if anchor.Empty() {
+		return image.Rectangle{}, false
+	}
+	for _, id := range []string{"rail:left", "rail:right"} {
+		rail := helpComponentByID(m.helpComps, id)
+		if rail == nil || rail.rect.Empty() {
+			continue
+		}
+		if anchor.Min.X >= rail.rect.Min.X && anchor.Max.X <= rail.rect.Max.X &&
+			anchor.Min.Y >= rail.rect.Min.Y && anchor.Max.Y <= rail.rect.Max.Y {
+			return rail.rect, true
+		}
+	}
+	return image.Rectangle{}, false
+}
+
+// helpOtherRailBand is the rail on the other edge, when one is shown. Sizing
+// the pane for a rail target leaves that rail its columns too, so both rails
+// stay visible.
+func (m *OS) helpOtherRailBand(band image.Rectangle) image.Rectangle {
+	for _, id := range []string{"rail:left", "rail:right"} {
+		rail := helpComponentByID(m.helpComps, id)
+		if rail == nil || rail.rect.Empty() || rail.rect == band {
+			continue
+		}
+		return rail.rect
+	}
+	return image.Rectangle{}
 }
 
 // helpDockBand is the dock's rows on this frame, or the zero rectangle when
