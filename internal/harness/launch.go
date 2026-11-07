@@ -193,4 +193,4 @@ func (l *Launch) SignedIn(output []byte) (signedIn, ok bool) {
 }
 
 // RiskyPermission reports whether mode turns approvals off.
-func (l *Launch) RiskyPermission(mode string) bool { return slices.Contains(l.RiskyPermissions, mode) }
+func (l Launch) RiskyPermission(mode string) bool { return slices.Contains(l.RiskyPermissions, mode) }

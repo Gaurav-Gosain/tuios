@@ -91,7 +91,7 @@ func spawnPlan(s *spawnSheet, cw, ch int) spawnLayout {
 		chips = 2
 	}
 	height := func() int {
-		fields := 10 + 4*p.gap
+		fields := 12 + 5*p.gap
 		machines := 1 + p.shown
 		if p.twoLine {
 			machines = 1 + p.shown*(2+p.gap) + 2
@@ -163,11 +163,15 @@ func (m *OS) drawSpawnSheet(c *ckCanvas, l ckLook, top int) {
 	hit(x, y, right, y+1+box, "field:"+strconv.Itoa(int(spTask)))
 	if s.field == spTask {
 		lines := s.task.Render(w-2, spawnStyles(pal, t.field), t.field)
-		lines = lines[max(len(lines)-p.taskH, 0):]
-		for i, ln := range lines {
+		cut := max(len(lines)-p.taskH, 0)
+		for i, ln := range lines[cut:] {
 			c.draw(x+1, y+1+i, w-2, ln)
 		}
+		// Where the editor's first line is, for its pictures and caret.
+		at := &s.taskWires.at
+		at.x, at.y, at.ok, at.drawn, at.top = x+1, y+1-cut, cut == 0, true, cut
 	} else {
+		s.taskWires.at.ok, s.taskWires.at.drawn = false, false
 		text, ink := s.task.Text(), pal.Fg
 		if strings.TrimSpace(text) == "" {
 			// The editor holds its own placeholder to text contrast; the
@@ -430,17 +434,56 @@ func (m *OS) drawSpawnFields(c *ckCanvas, l ckLook, t spawnTone, p spawnLayout, 
 	hit(x, y, x+w, y+1, "field:"+strconv.Itoa(int(spAgent)))
 	y += step
 
-	// The model: typed, or picked from the models running agents report.
+	// The model: typed, or picked from the models the agent takes and the
+	// running agents report. An agent with no model flag takes none.
+	launch := s.launch()
 	m.spawnLabel(c, l, s, spModel, x, y, "Model")
 	iw := min(28, w)
 	models := len(s.listItems(spModel)) > 0
-	m.spawnInput(c, l, t, s, spModel, s.model, x, y+1, iw, "The agent's default", "", true, models, top)
-	hintW := x + w - (x + iw + 2)
-	switch {
-	case models && hintW >= 14:
-		c.text(x+iw+2, y+1, x+w, ckSeg{t: "from the agent", fg: pal.FgMute})
-	case hintW >= 17:
-		c.text(x+iw+2, y+1, x+w, ckSeg{t: "passed as --model", fg: pal.FgMute})
+	if launch.ModelFlag == "" && s.read {
+		c.text(x, y+1, x+w, ckSeg{t: "This agent takes no model choice.", fg: pal.FgMute})
+	} else {
+		m.spawnInput(c, l, t, s, spModel, s.model, x, y+1, iw, "The agent's default", "", true, models, top)
+		if hintW := x + w - (x + iw + 2); hintW >= 17 && launch.ModelFlag != "" {
+			c.text(x+iw+2, y+1, x+w, ckSeg{t: "passed as " + launch.ModelFlag, fg: pal.FgMute})
+		}
+	}
+	y += step
+
+	// The effort and the permission mode: a pill each, which opens its
+	// list. A mode that turns approvals off says so beside it.
+	px := x
+	for _, f := range []spawnField{spEffort, spPermission} {
+		label, flag := "Effort", launch.EffortFlag
+		if f == spPermission {
+			label, flag = "Permissions", launch.PermissionFlag
+		}
+		if flag == "" {
+			continue
+		}
+		m.spawnLabel(c, l, s, f, px, y, label)
+		v := s.choice(f)
+		if f == spPermission && launch.RiskyPermission(v) {
+			// On the label's row, where it has room beside a long mode.
+			c.text(px+len(label)+2, y, x+w, ckSeg{t: "approvals off", fg: overlay.ReadableAt(pal.Warning, t.sheet, overlay.MarkFloor), attrs: ckBold})
+		}
+		shown := v
+		if shown == "" {
+			shown = "default"
+		}
+		seg := ckSeg{t: " " + shown + " " + expand + " ", fg: pal.Fg, bg: t.field}
+		x0 := px
+		s.at[f], s.atX[f] = y+1, px
+		px = c.text(px, y+1, x+w, seg)
+		if s.field == f {
+			c.mark(pal, x0, y+1, px-x0, 1, overlay.RowState{Cursor: true, Focused: true})
+		}
+		hit(x0, y, px, y+1, "field:"+strconv.Itoa(int(f)))
+		hit(x0, y+1, px, y+2, "list:"+strconv.Itoa(int(f)))
+		px = max(px+3, x0+len(label)+3)
+	}
+	if px == x && s.read && s.agent < len(s.agents) {
+		c.text(x, y+1, x+w, ckSeg{t: "This agent takes no effort or permission choice.", fg: pal.FgMute})
 	}
 	y += step
 
@@ -540,7 +583,9 @@ func (m *OS) drawSpawnMachines(c *ckCanvas, l ckLook, t spawnTone, p spawnLayout
 	if s.agent < len(s.agents) {
 		agent = s.agents[s.agent].cmd
 	}
-	missing := false
+	// missing is what the picked machine says when the agent cannot start
+	// there.
+	missing := ""
 	for i, mc := range s.machines[:p.shown] {
 		picked := i == s.machine
 		ground := t.field
@@ -604,13 +649,18 @@ func (m *OS) drawSpawnMachines(c *ckCanvas, l ckLook, t spawnTone, p spawnLayout
 		if p.twoLine {
 			c.textR(right-2, y, load...)
 			end := right - 2
-			if mc.host == "" && agent != "" && s.read {
-				if s.agents[s.agent].installed {
-					end = c.textR(right-2, y+1, ckSeg{t: agent + " ready", fg: pal.FgDim})
-				} else {
-					end = c.textR(right-2, y+1, ckSeg{t: agent + " not found", fg: overlay.ReadableAt(pal.Warning, ground, overlay.MarkFloor)})
-					missing = true
+			// What the machine's own daemon says of the agent: installed
+			// and signed in there, not what this client finds.
+			if agent != "" && mc.up {
+				words, ok := spawnReadyWords(mc, s.agents[s.agent].id, agent)
+				ink := overlay.ReadableAt(pal.FgDim, ground, overlay.ContrastFloor)
+				if !ok {
+					ink = overlay.ReadableAt(pal.Warning, ground, overlay.MarkFloor)
+					if picked {
+						missing = words
+					}
 				}
+				end = c.textR(right-2, y+1, ckSeg{t: words, fg: ink})
 			}
 			c.text(x+5, y+1, end-2, ckSeg{t: ckTrunc(sub, end-2-x-5), fg: quiet})
 		} else {
@@ -629,10 +679,13 @@ func (m *OS) drawSpawnMachines(c *ckCanvas, l ckLook, t spawnTone, p spawnLayout
 		}
 	}
 	if p.twoLine {
-		c.text(x, y, right, ckSeg{t: "The order holds still while this sheet is open.", fg: pal.FgMute})
-		if missing {
-			c.text(x, y+1, right, ckSeg{t: s.machines[0].name + ": " + agent + " is not installed there.", fg: pal.FgMute})
+		// Why the order is what it is, and that it stays.
+		c.text(x, y, right, ckSeg{t: "Most free cores first, then fewest agents working.", fg: pal.FgMute})
+		second, ink := "The order holds still while this sheet is open.", pal.FgMute
+		if missing != "" && s.machine < len(s.machines) {
+			second, ink = s.machines[s.machine].name+": "+missing+".", pal.Warning
 		}
+		c.text(x, y+1, right, ckSeg{t: second, fg: ink})
 		y += 2
 	}
 	return y

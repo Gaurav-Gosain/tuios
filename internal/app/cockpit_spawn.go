@@ -3,6 +3,7 @@ package app
 import (
 	"cmp"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -50,6 +51,8 @@ const (
 	spTask spawnField = iota
 	spAgent
 	spModel
+	spEffort
+	spPermission
 	spWhere
 	spBranch
 	spBase
@@ -76,6 +79,9 @@ type spawnAgent struct {
 	seen int
 	// installed says cmd is on this client's PATH.
 	installed bool
+	// launch is the manifest's [launch] table: the model, effort and
+	// permission flags the agent takes. The daemon checks the choice again.
+	launch harness.Launch
 }
 
 // spawnMachine is one machine the sheet offers.
@@ -87,6 +93,11 @@ type spawnMachine struct {
 	loadOK     bool
 	working    int
 	up         bool
+	// ready is what the machine's daemon said of each harness, by id:
+	// agent-readiness. Nil until it answers; an old daemon answers nothing.
+	ready map[string]session.AgentReadiness
+	// readyErr says the daemon could not answer agent-readiness.
+	readyErr bool
 }
 
 // spawnSheet is the open sheet, or a closed one kept as a draft.
@@ -114,6 +125,13 @@ type spawnSheet struct {
 	at, atX [spFields]int
 	// worktree is where the agent works: a new worktree, or this folder.
 	worktree bool
+	// taskWires tie the task's editor to the @ list of the folder's files
+	// and to the picture previews, as the reply's editor is tied.
+	taskWires draftWires
+	// effort and permission are the picked effort and permission mode,
+	// empty for the agent's own default. A value the picked agent does not
+	// list counts as empty (choice).
+	effort, permission string
 	// branchAuto is the branch the task last named. The branch field
 	// follows the task while it still holds that name.
 	branchAuto string
@@ -138,9 +156,11 @@ type spawnSheet struct {
 	card *spawnCard
 }
 
-// spawnInfoMsg carries what the sheet's opening command read.
+// spawnInfoMsg carries what the sheet's opening command read, or, with ready
+// set, one machine's agent-readiness answer.
 type spawnInfoMsg struct {
 	gen                uint64
+	ready              *spawnReady
 	agents             []spawnAgent
 	repo, head, origin string
 	dirty              int
@@ -150,11 +170,15 @@ type spawnInfoMsg struct {
 // spawnPreset is what ctrl+s keeps for the next new sheet: every choice but
 // the task and the branch. It is saved with the rail's state.
 type spawnPreset struct {
-	Agent    string `json:"agent,omitempty"`
-	Model    string `json:"model,omitempty"`
-	Folder   bool   `json:"this_folder,omitempty"`
-	Attempts int    `json:"attempts,omitempty"`
-	Host     string `json:"host,omitempty"`
+	Agent  string `json:"agent,omitempty"`
+	Model  string `json:"model,omitempty"`
+	Effort string `json:"effort,omitempty"`
+	// Permission is never a mode that turns approvals off: a preset never
+	// picks one for the person.
+	Permission string `json:"permission,omitempty"`
+	Folder     bool   `json:"this_folder,omitempty"`
+	Attempts   int    `json:"attempts,omitempty"`
+	Host       string `json:"host,omitempty"`
 }
 
 // spawnStartedMsg is the daemon's answer to a Start.
@@ -185,7 +209,7 @@ func (m *OS) CockpitNewAgent() tea.Cmd {
 	ck.spawnDraft = nil
 	if s == nil {
 		s = &spawnSheet{
-			task:     composer.New(composer.Options{MaxRows: 3, Placeholder: "What should the agent do?"}),
+			task:     composer.New(composer.Options{MaxRows: spawnTaskRows, Placeholder: "What should the agent do?", Images: true}),
 			model:    composer.New(composer.Options{MaxRows: 1, SingleLine: true, Placeholder: "The agent's default"}),
 			branch:   composer.New(composer.Options{MaxRows: 1, SingleLine: true}),
 			base:     composer.New(composer.Options{MaxRows: 1, SingleLine: true}),
@@ -194,6 +218,7 @@ func (m *OS) CockpitNewAgent() tea.Cmd {
 		}
 		if pr := ck.spawnPreset; pr != nil {
 			s.model.SetText(pr.Model)
+			s.effort, s.permission = pr.Effort, pr.Permission
 			s.worktree = !pr.Folder
 			s.attempts = min(max(pr.Attempts, 1), spawnMaxAttempts)
 			s.machines = []spawnMachine{{host: pr.Host}}
@@ -208,6 +233,7 @@ func (m *OS) CockpitNewAgent() tea.Cmd {
 	ck.spawnGen++
 	s.gen = ck.spawnGen
 	s.folder = m.spawnFolder()
+	m.spawnWireTask(s)
 	m.spawnSeen(s)
 	m.spawnRank(s)
 	ck.spawn = s
@@ -219,7 +245,168 @@ func (m *OS) CockpitNewAgent() tea.Cmd {
 		s.folder = info.Folder
 		return m.learnSpawnInfoCmd(s.gen, info)
 	}
-	return spawnInfoCmd(s.gen, s.folder)
+	return tea.Batch(spawnInfoCmd(s.gen, s.folder), m.spawnReadyCmd(s))
+}
+
+// spawnWireTask ties the task's editor to the @ list of the folder the agent
+// starts in, and to the picture previews. It is done at each opening, since
+// the folder is read again.
+func (m *OS) spawnWireTask(s *spawnSheet) {
+	s.task.SetPreviewer(m.replyPreviewer())
+	c := m.newReplyMentions("", "")
+	if !m.BrowserClient && (!m.RemoteClient || m.SSHIsLoopback) {
+		c.dir = s.folder
+	}
+	s.task.SetCompleter(c)
+	s.taskWires = draftWires{mentions: c}
+}
+
+// spawnStashImages puts each image of the task into session's file store
+// and returns the task with each image as its stored path, or "" when the
+// task holds no image.
+func spawnStashImages(call inboxVerbCall, sess string, parts []composer.Part) (string, error) {
+	if !slices.ContainsFunc(parts, func(p composer.Part) bool { return p.Kind == composer.PartImage && p.Image != nil }) {
+		return "", nil
+	}
+	var b strings.Builder
+	for i, p := range parts {
+		if p.Kind != composer.PartImage || p.Image == nil {
+			b.WriteString(p.Text)
+			continue
+		}
+		name := p.Image.Name
+		if name == "" {
+			name = "image-" + strconv.Itoa(i+1) + "." + cmp.Or(p.Image.Format, "png")
+		}
+		raw, err := call("stash-put", map[string]any{"session": sess, "path": name, "content": base64.StdEncoding.EncodeToString(p.Image.Data)}, 30*time.Second)
+		if err != nil {
+			return "", errfmt.Errorf("keep the image %s for the agent: %w", name, err)
+		}
+		var res struct {
+			Path string `json:"path"`
+		}
+		if err := jsonx.Unmarshal(raw, &res); err != nil || res.Path == "" {
+			return "", errfmt.Errorf("keep the image %s for the agent: no stored path", name)
+		}
+		// The path is a word of its own in the task.
+		if t := b.String(); t != "" && !strings.HasSuffix(t, " ") && !strings.HasSuffix(t, "\n") {
+			b.WriteByte(' ')
+		}
+		b.WriteString(res.Path)
+		b.WriteByte(' ')
+	}
+	return strings.TrimSpace(b.String()), nil
+}
+
+// spawnReady is one machine's agent-readiness answer.
+type spawnReady struct {
+	host   string
+	agents map[string]session.AgentReadiness
+	// err says the daemon gave no answer: an old daemon has no such verb.
+	err bool
+}
+
+// spawnReadyTimeout bounds one machine's answer. The daemon bounds each
+// check to 2 seconds and runs them at once.
+const spawnReadyTimeout = 5 * time.Second
+
+// spawnReadyCmd asks each machine's daemon which harnesses are installed
+// and signed in there, off the update loop, one command a machine. A row
+// says "checking" until its answer lands.
+func (m *OS) spawnReadyCmd(s *spawnSheet) tea.Cmd {
+	call, gen := m.inboxCaller(), s.gen
+	build := ""
+	if m.DaemonClient != nil {
+		build = m.DaemonClient.ClientVersion()
+	}
+	// The PATH goes only to the daemon this client runs beside, as Start
+	// sends it.
+	local := m.AttachedHost == ""
+	var cmds []tea.Cmd
+	for _, mc := range s.machines {
+		if !mc.up && mc.host != "" {
+			continue
+		}
+		host := mc.host
+		cmds = append(cmds, func() tea.Msg {
+			params := map[string]any{}
+			ask := call
+			if host == "" && local {
+				params["env"] = map[string]string{"PATH": os.Getenv("PATH")}
+			}
+			if host != "" {
+				ask = func(verb string, params map[string]any, timeout time.Duration) (json.RawMessage, error) {
+					c, err := dialSessionDaemon(host, build)
+					if err != nil {
+						return nil, err
+					}
+					defer func() { _ = c.Close() }()
+					return c.CallWithTimeout(verb, params, timeout)
+				}
+			}
+			r := &spawnReady{host: host}
+			var res struct {
+				Agents []session.AgentReadiness `json:"agents"`
+			}
+			raw, err := ask("agent-readiness", params, spawnReadyTimeout)
+			if err != nil || jsonx.Unmarshal(raw, &res) != nil {
+				r.err = true
+				return spawnInfoMsg{gen: gen, ready: r}
+			}
+			r.agents = make(map[string]session.AgentReadiness, len(res.Agents))
+			for _, a := range res.Agents {
+				r.agents[a.Harness] = a
+			}
+			return spawnInfoMsg{gen: gen, ready: r}
+		})
+	}
+	return tea.Batch(cmds...)
+}
+
+// installedThere reports whether the picked agent is on the picked
+// machine: as its daemon said, or, before it answers, as this client finds
+// it for this machine. A far daemon that has not answered checks it itself.
+func (s *spawnSheet) installedThere() bool {
+	if s.agent >= len(s.agents) {
+		return false
+	}
+	a := s.agents[s.agent]
+	if s.machine < len(s.machines) {
+		if mc := s.machines[s.machine]; mc.ready != nil {
+			return mc.ready[a.id].Installed
+		}
+	}
+	return s.host() != "" || a.installed
+}
+
+// machineName is the picked machine as a person reads it.
+func (s *spawnSheet) machineName() string {
+	if h := s.host(); h != "" {
+		return h
+	}
+	return "this machine"
+}
+
+// spawnReadyWords is what machine mc says of the agent with id and cmd:
+// "claude ready", "claude not signed in", "claude not installed", or
+// "checking" until it answers. ok is false for a word that warns.
+func spawnReadyWords(mc spawnMachine, id, cmd string) (words string, ok bool) {
+	switch {
+	case mc.readyErr:
+		return cmd + " not known", false
+	case mc.ready == nil:
+		return "checking " + cmd, true
+	}
+	r, found := mc.ready[id]
+	switch {
+	case !found || !r.Installed:
+		return cmd + " not installed", false
+	case r.SignedIn == session.SignedInNo:
+		return cmd + " not signed in", false
+	case r.SignedIn == session.SignedInUnknown:
+		return cmd + " installed", true
+	}
+	return cmd + " ready", true
 }
 
 // spawnFolder is the directory "this folder" means: the folder the focused
@@ -423,9 +610,10 @@ func spawnInfoCmd(gen uint64, folder string) tea.Cmd {
 		msg := spawnInfoMsg{gen: gen}
 		if reg, _ := harness.Load(harness.UserDir()); reg != nil {
 			for _, id := range reg.IDs() {
-				cmd := reg.Lookup(id).Command()
+				mf := reg.Lookup(id)
+				cmd := mf.Command()
 				_, err := exec.LookPath(cmd)
-				msg.agents = append(msg.agents, spawnAgent{id: id, cmd: cmd, installed: err == nil})
+				msg.agents = append(msg.agents, spawnAgent{id: id, cmd: cmd, installed: err == nil, launch: mf.Launch})
 			}
 		}
 		if st, ok := gitstate.Read(folder); ok {
@@ -460,6 +648,14 @@ func spawnBranches(root string) []string {
 func (m *OS) applySpawnInfo(msg spawnInfoMsg) {
 	s := m.Inbox.ck.spawn
 	if s == nil || s.gen != msg.gen {
+		return
+	}
+	if r := msg.ready; r != nil {
+		for i := range s.machines {
+			if s.machines[i].host == r.host {
+				s.machines[i].ready, s.machines[i].readyErr = r.agents, r.err
+			}
+		}
 		return
 	}
 	seen := map[string]int{}
@@ -514,6 +710,11 @@ func (s *spawnSheet) stops() []spawnField {
 		if (f == spBranch || f == spBase) && !s.worktree {
 			continue
 		}
+		// A choice the picked agent cannot take has no stop.
+		l := s.launch()
+		if (f == spModel && l.ModelFlag == "") || (f == spEffort && l.EffortFlag == "") || (f == spPermission && l.PermissionFlag == "") {
+			continue
+		}
 		out = append(out, f)
 	}
 	return out
@@ -542,16 +743,23 @@ func (s *spawnSheet) editor() *composer.Model {
 	return nil
 }
 
-// CockpitSpawnPaste puts a paste into the text field that has the keys.
-func (m *OS) CockpitSpawnPaste(text string) {
+// CockpitSpawnPaste puts a paste into the text field that has the keys. In
+// the task, a pasted image path becomes the image, as in a reply.
+func (m *OS) CockpitSpawnPaste(text string) tea.Cmd {
 	s := m.Inbox.ck.spawn
 	if s == nil {
-		return
+		return nil
 	}
-	if ed := s.editor(); ed != nil {
-		ed.Paste(text, m.ProcessingRemoteKeys)
-		m.spawnFollowTask(s)
+	ed := s.editor()
+	if ed == nil {
+		return nil
 	}
+	defer m.spawnFollowTask(s)
+	if ed == s.task {
+		return m.composerPasteCmd(ed, "", text)
+	}
+	ed.Paste(text, m.ProcessingRemoteKeys)
+	return nil
 }
 
 // CockpitSpawnKey handles a key while the sheet is up.
@@ -601,6 +809,13 @@ func (m *OS) CockpitSpawnKey(msg tea.KeyPressMsg) tea.Cmd {
 			return m.spawnStart()
 		case composer.EventClose:
 			m.spawnClose()
+		case composer.EventPaste:
+			// ctrl+v: the clipboard's image into the task, as in a
+			// reply, or its text into any field.
+			if ed == s.task {
+				return m.composerClipboardCmd(ed, "")
+			}
+			return m.RequestHostPaste()
 		}
 		m.spawnFollowTask(s)
 		return nil
@@ -615,6 +830,16 @@ func (m *OS) CockpitSpawnKey(msg tea.KeyPressMsg) tea.Cmd {
 			s.agent = (s.agent + 1) % max(len(s.agents), 1)
 		case key == "space" || key == "down" || key == "j":
 			s.openList(spAgent)
+		}
+	case spEffort, spPermission:
+		switch {
+		case left:
+			s.cycleChoice(s.field, -1)
+		case right:
+			s.cycleChoice(s.field, 1)
+		case key == "space" || key == "down" || key == "j":
+			s.openList(s.field)
+			return nil
 		}
 	case spWhere:
 		if left || right || key == "space" {
@@ -664,7 +889,7 @@ func (m *OS) CockpitSpawnKey(msg tea.KeyPressMsg) tea.Cmd {
 			s.step(-1)
 		}
 	case "down", "j":
-		if s.field != spMachine && s.field != spAgent {
+		if s.field != spMachine && s.field != spAgent && s.field != spEffort && s.field != spPermission {
 			s.step(1)
 		}
 	}
@@ -695,12 +920,30 @@ func (s *spawnSheet) listItems(f spawnField) []spawnItem {
 		}
 	case spModel:
 		if s.agent < len(s.agents) {
-			if models := s.models[s.agents[s.agent].id]; len(models) > 0 {
-				out = append(out, spawnItem{label: "The agent's default", note: "no --model"})
-				for _, mod := range models {
+			running := s.models[s.agents[s.agent].id]
+			known := s.agents[s.agent].launch.Models
+			if len(running)+len(known) > 0 {
+				out = append(out, spawnItem{label: "The agent's default", note: "no model flag"})
+				for _, mod := range running {
 					out = append(out, spawnItem{label: mod, value: mod, note: "from a running agent"})
 				}
+				for _, mod := range known {
+					if !slices.Contains(running, mod) {
+						out = append(out, spawnItem{label: mod, value: mod, note: "the agent takes it"})
+					}
+				}
 			}
+		}
+	case spEffort, spPermission:
+		values, def, note := s.choices(f)
+		out = append(out, spawnItem{label: def, note: note})
+		l := s.launch()
+		for _, v := range values {
+			it := spawnItem{label: v, value: v}
+			if f == spPermission && l.RiskyPermission(v) {
+				it.note = "approvals off"
+			}
+			out = append(out, it)
 		}
 	case spBase:
 		for _, b := range s.branches {
@@ -728,6 +971,8 @@ func (s *spawnSheet) openList(f spawnField) {
 		return
 	case spModel:
 		cur = strings.TrimSpace(s.model.Text())
+	case spEffort, spPermission:
+		cur = s.choice(f)
 	case spBase:
 		cur = strings.TrimSpace(s.base.Text())
 	}
@@ -750,9 +995,70 @@ func (m *OS) pickList(s *spawnSheet, i int) {
 		s.agent = i
 	case spModel:
 		s.model.SetText(items[i].value)
+	case spEffort:
+		s.effort = items[i].value
+	case spPermission:
+		s.permission = items[i].value
 	case spBase:
 		s.base.SetText(items[i].value)
 	}
+}
+
+// spawnTaskRows is how many rows the task's editor shows before it scrolls.
+const spawnTaskRows = 6
+
+// launch is the picked agent's [launch] table.
+func (s *spawnSheet) launch() harness.Launch {
+	if s.agent < len(s.agents) {
+		return s.agents[s.agent].launch
+	}
+	return harness.Launch{}
+}
+
+// choices are the values field f offers for the picked agent, with the
+// label and note of its default, the value that passes no flag.
+func (s *spawnSheet) choices(f spawnField) (values []string, def, note string) {
+	l := s.launch()
+	if f == spEffort {
+		return l.Efforts, "default", "the agent's own"
+	}
+	return l.Permissions, "default", "your settings for the agent"
+}
+
+// choice is the picked value of field f, empty when the picked agent does
+// not list it: a value picked for another agent passes no flag to this one.
+func (s *spawnSheet) choice(f spawnField) string {
+	values, _, _ := s.choices(f)
+	v := s.effort
+	if f == spPermission {
+		v = s.permission
+	}
+	if !slices.Contains(values, v) {
+		return ""
+	}
+	return v
+}
+
+// cycleChoice steps field f's value d places, the default first.
+func (s *spawnSheet) cycleChoice(f spawnField, d int) {
+	values, _, _ := s.choices(f)
+	all := append([]string{""}, values...)
+	i := max(slices.Index(all, s.choice(f)), 0)
+	v := all[(i+d+len(all))%len(all)]
+	if f == spEffort {
+		s.effort = v
+	} else {
+		s.permission = v
+	}
+}
+
+// launchChoice is attempt A's choice as harness.LaunchArgs takes it.
+func (s *spawnSheet) launchChoice() harness.LaunchChoice {
+	model := ""
+	if s.launch().ModelFlag != "" {
+		model = strings.TrimSpace(s.model.Text())
+	}
+	return harness.LaunchChoice{Model: model, Effort: s.choice(spEffort), Permission: s.choice(spPermission)}
 }
 
 // spawnListKey handles a key while a field's list is open.
@@ -774,7 +1080,11 @@ func (m *OS) spawnListKey(s *spawnSheet, key string) tea.Cmd {
 // spawnSavePreset keeps the sheet's choices, but not the task or the
 // branch, for the next new sheet.
 func (m *OS) spawnSavePreset(s *spawnSheet) {
-	pr := &spawnPreset{Model: strings.TrimSpace(s.model.Text()), Folder: !s.worktree, Attempts: s.attempts, Host: s.host()}
+	pr := &spawnPreset{Model: strings.TrimSpace(s.model.Text()), Effort: s.choice(spEffort), Permission: s.choice(spPermission),
+		Folder: !s.worktree, Attempts: s.attempts, Host: s.host()}
+	if s.launch().RiskyPermission(pr.Permission) {
+		pr.Permission = ""
+	}
 	if s.agent < len(s.agents) {
 		pr.Agent = s.agents[s.agent].id
 	}
@@ -791,11 +1101,26 @@ func (m *OS) spawnFollowTask(s *spawnSheet) {
 	if cur != "" && cur != s.branchAuto {
 		return
 	}
-	b := spawnBranchName(s.task.Text())
+	b := spawnFreeBranch(spawnBranchName(s.task.Text()), s.branches)
 	if b != cur {
 		s.branch.SetText(b)
 	}
 	s.branchAuto = b
+}
+
+// spawnFreeBranch is name, or name-2, name-3 and on when the repository has
+// a branch of that name already: a worktree cannot check out a branch that
+// exists, so the name the task gives would fail at Start.
+func spawnFreeBranch(name string, have []string) string {
+	if name == "" || !slices.Contains(have, name) {
+		return name
+	}
+	for n := 2; n < 100; n++ {
+		if c := name + "-" + strconv.Itoa(n); !slices.Contains(have, c) {
+			return c
+		}
+	}
+	return name
 }
 
 // spawnStopWords are left out of a branch named after a task.
@@ -920,21 +1245,28 @@ func (m *OS) spawnClose() {
 }
 
 // modelOf is the model attempt i runs: the sheet's model for an attempt
-// of the sheet's agent, none for an attempt of another agent.
+// of the sheet's agent, none for an attempt of another agent or for an
+// agent that takes no model.
 func (s *spawnSheet) modelOf(i int) string {
 	if s.attemptAgent(i) != s.agent {
 		return ""
 	}
-	return strings.TrimSpace(s.model.Text())
+	return s.launchChoice().Model
 }
 
 // spec is the agent command of attempt i as fan reads it: the program, and
-// the model as one shell word. fan splits the string the way a shell does
-// and expands nothing.
+// for attempt A's agent the model, effort and permission mode in the flags
+// its manifest names, each as one shell word. The other attempts run other
+// agents, which take their own defaults. fan splits the string the way a
+// shell does and expands nothing; spawnStart checked the choice already.
 func (s *spawnSheet) spec(i int) string {
 	cmd := s.agents[s.attemptAgent(i)].cmd
-	if model := s.modelOf(i); model != "" {
-		return cmd + " --model " + spawnShellWord(model)
+	if s.attemptAgent(i) != s.agent {
+		return cmd
+	}
+	args, _ := harness.LaunchArgs(&harness.Manifest{DisplayName: cmd, Launch: s.launch()}, s.launchChoice())
+	for _, a := range args {
+		cmd += " " + spawnShellWord(a)
 	}
 	return cmd
 }
@@ -970,12 +1302,16 @@ func (m *OS) spawnStart() tea.Cmd {
 		return fail(spStart, "Reading the folder and the agents. Try again in a moment.")
 	case task == "":
 		return fail(spTask, "Write the task first.")
+	case len(ckDraftImages(s.task)) > 0 && s.host() != "":
+		return fail(spTask, "An image goes only to an agent on this machine. Remove the image, or pick this machine.")
+	case len(ckDraftImages(s.task)) > 0 && m.SessionName == "":
+		return fail(spTask, "An image needs a session to keep it in. Remove the image.")
 	case len(s.agents) == 0:
 		return fail(spAgent, "No agent is known on this machine.")
-	case s.host() == "" && !s.agents[s.agent].installed:
-		return fail(spAgent, s.agents[s.agent].cmd+" is not installed on this machine.")
-	case strings.HasPrefix(model, "-"):
-		return fail(spModel, "A model name cannot start with -.")
+	case !s.installedThere():
+		return fail(spAgent, s.agents[s.agent].cmd+" is not installed on "+s.machineName()+".")
+	case s.launch().ModelFlag != "" && model != "" && !harness.LaunchValueOK(model):
+		return fail(spModel, "A model name is one word and cannot start with -.")
 	case s.worktree && !s.spawnCanWorktree():
 		return fail(spWhere, spawnNoWorktree(s))
 	case s.worktree && branch == "":
@@ -1017,10 +1353,14 @@ func (m *OS) spawnStart() tea.Cmd {
 		}
 		what = branch
 	} else {
-		// start-agent takes the model as an argv: no shell word to quote.
+		// start-agent maps each choice to the agent's own flag, and
+		// refuses one the agent cannot take.
 		params["agent"] = s.agents[s.agent].cmd
-		if model != "" {
-			params["args"] = []string{"--model", model}
+		ch := s.launchChoice()
+		for k, v := range map[string]string{"model": ch.Model, "effort": ch.Effort, "permission_mode": ch.Permission} {
+			if v != "" {
+				params[k] = v
+			}
 		}
 		if s.folder != "" {
 			params["cwd"] = s.folder
@@ -1045,6 +1385,7 @@ func (m *OS) spawnStart() tea.Cmd {
 		m.ShowNotification("Starting "+s.agents[s.agent].cmd+" in a new worktree"+where+".", "info", m.Settings.NotificationDuration)
 	}
 	call, nonce, card := m.inboxCaller(), m.inboxNonce(), s.card
+	parts, stashIn := s.task.Parts(), m.SessionName
 	if host != "" {
 		card = nil
 	}
@@ -1081,6 +1422,13 @@ func (m *OS) spawnStart() tea.Cmd {
 				defer func() { _ = c.Close() }()
 				return c.CallWithTimeout(verb, params, timeout)
 			}
+		}
+		// Each image goes to the session's file store first, and the task
+		// names it by the stored path, which the agent reads as a file.
+		if prompt, err := spawnStashImages(call, stashIn, parts); err != nil {
+			return spawnStartedMsg{sheet: s, err: err}
+		} else if prompt != "" {
+			params["prompt"] = prompt
 		}
 		raw, err := call(verb, params, spawnStartTimeout)
 		// A daemon from before the task parameter refuses it by name, and a

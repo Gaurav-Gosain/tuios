@@ -167,8 +167,7 @@ func HandleInput(msg tea.Msg, o *app.OS) (tea.Model, tea.Cmd) {
 			return o, o.InboxReplyPaste(msg.Content)
 		}
 		if o.CockpitSpawnOpen() {
-			o.CockpitSpawnPaste(msg.Content)
-			return o, nil
+			return o, o.CockpitSpawnPaste(msg.Content)
 		}
 		if cmd, taken := pasteTakenByOverlay(o, msg.Content); taken {
 			return o, cmd
@@ -224,8 +223,7 @@ func HandleInput(msg tea.Msg, o *app.OS) (tea.Model, tea.Cmd) {
 			return o, o.InboxReplyPaste(msg.Content)
 		}
 		if o.CockpitSpawnOpen() {
-			o.CockpitSpawnPaste(msg.Content)
-			return o, nil
+			return o, o.CockpitSpawnPaste(msg.Content)
 		}
 		if cmd, taken := pasteTakenByOverlay(o, msg.Content); taken {
 			return o, cmd

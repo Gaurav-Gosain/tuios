@@ -2383,8 +2383,10 @@ func TestCockpitSpawnSheet(t *testing.T) {
 		t.Fatal(err)
 	}
 	waitText(t, term, "the second task", "Read the README.", "agent/read-readme")
-	// A branch typed by the person stops following the task.
-	for range 4 {
+	// A branch typed by the person stops following the task. The stops
+	// are the agent, the model, the effort and the permission mode, where
+	// it works, then the branch.
+	for range 6 {
 		if err := term.SendKeys(tuitest.Tab); err != nil {
 			t.Fatal(err)
 		}
@@ -2418,7 +2420,7 @@ func TestCockpitSpawnSheet(t *testing.T) {
 			t.Fatalf("the ending %s did not come off: %v\n%s", c.end, err, term.Snapshot())
 		}
 	}
-	for range 4 {
+	for range 6 {
 		if err := term.SendKeys(tuitest.Key("\x1b[Z")); err != nil {
 			t.Fatal(err)
 		}
@@ -2522,8 +2524,9 @@ func TestCockpitSpawnSheet(t *testing.T) {
 		}
 		waitText(t, small, "the task on "+v.name, want...)
 		if v.fan {
-			// Three attempts, each with its own agent.
-			for range 7 {
+			// Three attempts, each with its own agent. Attempts is the
+			// ninth stop, after the effort and the permission mode.
+			for range 9 {
 				if err := small.SendKeys(tuitest.Tab); err != nil {
 					t.Fatal(err)
 				}

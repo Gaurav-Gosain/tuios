@@ -14041,3 +14041,22 @@ with
 folded its copy, so the plan showed whole nowhere ("the thread has no plan
 card"). `ThreadPinnedLines` now makes the one decision and records it for the
 thread.
+
+## The New agent sheet asks each machine, and passes the agent's own flags
+
+`TestNewAgentSheetChoicesAndReadiness` opens the sheet with a fake Claude Code
+that is signed out, then one that is signed in. It steps the Effort and
+Permissions pills, checks that `bypassPermissions` shows `approvals off`,
+starts the agent with `opus`, `high` and `plan`, and reads the argv and the
+first prompt the agent got. An image pasted into the task must reach the
+agent as a stored file with the same bytes.
+
+Run on 2026-11-07 on macOS (arm64):
+
+| Removed | The test fails with | Result |
+|---------|---------------------|--------|
+| The sheet change (the 7a build, agents-view/new-agent) | "waiting for the signed-out row": the signed-out claude's row says `claude ready`, from the client's PATH lookup | **caught** |
+
+The frames and `sheet-start.txt` (argv and first prompt) are under the test's
+artifact folder. Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestNewAgentSheetChoicesAndReadiness$' -v .`.

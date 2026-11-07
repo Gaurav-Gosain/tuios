@@ -2408,9 +2408,24 @@ the keys refuse.
 A click on a row selects it and leaves the view open. A double-click, or
 `enter`, goes to the agent's pane and closes the view. `n` and the
 `+ New agent` button open the New agent sheet: the task, the agent, the
-model, a new worktree or this folder, the machine and the attempts. `enter`
-starts the agent through `fan` (a new worktree) or `start-agent` (this
-folder), and the task is typed once the agent is ready. `f` shows only the items, the old
+model, the effort and the permission mode, a new worktree or this folder, the
+machine and the attempts. `enter` starts the agent through `fan` (a new
+worktree) or `start-agent` (this folder), and the task is typed once the
+agent is ready.
+
+The task is the reply's editor: `@` names a file of the folder or an agent, a
+pasted image path or `ctrl+v` adds an image, and `ctrl+j` starts a new line.
+An image goes to the session's file store when the agent starts, and the task
+names it by its stored path. Only an agent on this machine takes an image.
+The model, effort and permission choices are the agent's own, from the
+`[launch]` table of its manifest, and a choice the agent does not have is not
+shown. `default` passes no flag, so the agent keeps its own settings. A mode
+that turns approvals off, such as Claude Code's `bypassPermissions`, says
+`approvals off` beside it and is never kept in a preset. Each machine row says
+what that machine's daemon finds: `claude ready`, `claude not signed in`,
+`claude not installed`, or `claude not known` for a daemon too old to say. The
+branch is named after the task (`agent/` and its first words), with `-2` added
+when the repository has that branch. `f` shows only the items, the old
 flat Inbox with Needs you and Ready for review; `f` again shows one kind of
 item at a time, and after the last kind every agent again. `s` steps the order inside the
 groups: needs you first and then the longest wait, name, most recent change,
