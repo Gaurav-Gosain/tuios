@@ -314,6 +314,13 @@ type cockpitState struct {
 	// kb is the columns' own state. See cockpit_kanban.go.
 	boardList bool
 	kb        ckKanban
+	// dispatch is the task dispatch status, read when the board opens and
+	// kept by the task-dispatch events; dispatchBoard is the board the
+	// header names, and dispatchBusy a change in flight. See
+	// cockpit_dispatch.go.
+	dispatch      *session.DispatchStatus
+	dispatchBoard string
+	dispatchBusy  bool
 	// listMode is the list layout the person chose with the list key: one
 	// of the [agents] view_list values, and "" for no choice, where the
 	// config decides. It is kept in the state file. stripShown says the last
@@ -1359,6 +1366,10 @@ func (m *OS) cockpitAction(action string) tea.Cmd {
 		return nil
 	case "board":
 		return m.CockpitToggleBoard()
+	case "dispatch-mode":
+		return m.CockpitDispatchMode()
+	case "dispatch-pause":
+		return m.CockpitDispatchPause()
 	case "search":
 		m.InboxStartSelect()
 	case "scope":
@@ -1715,6 +1726,10 @@ func (m *OS) CockpitKey(action string) (tea.Cmd, bool) {
 		return m.CockpitNewAgent(), true
 	case config.ActionInboxBoard:
 		return m.CockpitToggleBoard(), true
+	case config.ActionInboxDispatchMode:
+		return m.CockpitDispatchMode(), true
+	case config.ActionInboxDispatchPause:
+		return m.CockpitDispatchPause(), true
 	case config.ActionInboxViewList:
 		m.CockpitToggleList()
 		return nil, true

@@ -571,6 +571,13 @@ func (m *OS) kanbanHints() []overlay.Hint {
 	}
 	hints = append(hints, m.keyHints(config.ActionInboxNewAgent, "new card", config.ActionInboxBoardLayout, "list",
 		config.ActionInboxBoard, "agents", config.ActionInboxSelect, "search")...)
+	if ck.dispatch != nil && ck.dispatch.Board != nil {
+		pause := "pause"
+		if h := dispatchHeld(ck.dispatch); h != "" && h != "Quiet hours" {
+			pause = "resume"
+		}
+		hints = append(hints, m.keyHints(config.ActionInboxDispatchMode, "dispatch", config.ActionInboxDispatchPause, pause)...)
+	}
 	hints = append(hints, overlay.Hint{Key: "?", Label: "all keys"})
 	return append(hints, m.cockpitEscHints()...)
 }
@@ -926,6 +933,10 @@ func (m *OS) drawKanbanCard(c *ckCanvas, l ckLook, r ckRow, title []string, x, y
 		}
 	}
 	free := "free"
+	if card.AskFirst {
+		// Dispatch never gives it to an agent: a person starts it.
+		free = "free, ask first"
+	}
 	if card.Host != "" {
 		free += " on " + printableTitle(card.Host)
 	}

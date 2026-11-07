@@ -324,7 +324,7 @@ func (m *OS) CockpitToggleBoard() tea.Cmd {
 	ck.kb.add, ck.kb.drag = nil, nil
 	m.cockpitTouchRows()
 	if ck.board {
-		return m.cockpitFarCardsCmd()
+		return tea.Batch(m.cockpitFarCardsCmd(), m.cockpitDispatchCmd())
 	}
 	return nil
 }
@@ -613,6 +613,9 @@ func (m *OS) drawCardRow(c *ckCanvas, l ckLook, r ckRow, cursor, hover bool, x, 
 		tw := max(min(rx-1-nx-10, 30), 8)
 		c.text(nx, y, nx+tw, ckSeg{t: ckTrunc(title, tw-1), fg: ink(pal.Fg), attrs: ckBold})
 		who, whoInk := "free", pal.FgMute
+		if card.AskFirst {
+			who = "ask first"
+		}
 		switch {
 		case card.Blocked != nil:
 			who, whoInk = "blocked", pal.Warn
@@ -662,6 +665,9 @@ func (m *OS) drawCardRow(c *ckCanvas, l ckLook, r ckRow, cursor, hover bool, x, 
 		c.text(nx, y+1, rx2, ckSeg{t: "done", fg: ink(pal.FgMute)})
 	default:
 		free := "free"
+		if card.AskFirst {
+			free = "free, ask first"
+		}
 		if card.Host != "" {
 			free = "free on " + printableTitle(card.Host)
 		}

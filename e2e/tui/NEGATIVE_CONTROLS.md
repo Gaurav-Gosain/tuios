@@ -14630,3 +14630,14 @@ stop, and the next finish must give no card while a free card is there.
 
 Run on 2026-11-08 on macOS (arm64). With `noteOutcome` never stopping the
 board: "the board did not stop after three failures". **caught**
+
+## TestTheBoardTurnsDispatchOnAndPausesIt
+
+The board in a session with a fake agent that holds a card. ctrl+t must turn
+the board to pull on the daemon, the agent's finish must give it the next
+card, and ctrl+x must pause and start dispatch again, each read back with
+tuios task dispatch.
+
+Run on 2026-11-08 on macOS (arm64). The branch passes. With the
+`ActionInboxDispatchMode` case dropped from the cockpit's keys: "waiting for
+the board in pull mode: timed out". **caught**

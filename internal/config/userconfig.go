@@ -1843,6 +1843,12 @@ const (
 	ActionInboxStagePrev   = "inbox_stage_prev"
 	ActionInboxStageNext   = "inbox_stage_next"
 	ActionInboxBoardLayout = "inbox_board_layout"
+	// ActionInboxDispatchMode turns the shown board's task dispatch between
+	// manual and pull. ActionInboxDispatchPause pauses all dispatch, or
+	// starts it again after a pause or a stop. Both are chords, so a
+	// printable key never changes what agents are given.
+	ActionInboxDispatchMode  = "inbox_dispatch_mode"
+	ActionInboxDispatchPause = "inbox_dispatch_pause"
 	// ActionInboxViewList folds the list column into a strip of chips above
 	// the focus, or opens it into the column again ([agents] view_list).
 	ActionInboxViewList = "inbox_view_list"
@@ -1958,34 +1964,36 @@ func getDefaultInboxKeybinds() map[string][]string {
 		// approval card, where 3 stays the plain reject; n starts a new
 		// agent; J and K scroll a long detail such as a plan. On a held
 		// approval r rejects: inbox_reply answers it.
-		ActionInboxReview:      {"v"},
-		ActionInboxSnooze:      {"z"},
-		ActionInboxUndo:        {"u"},
-		ActionInboxShowSnoozed: {"S"},
-		ActionInboxSettle:      {"D"},
-		ActionInboxDenyReason:  {"R"},
-		ActionInboxNewAgent:    {"n"},
-		ActionInboxCompare:     {"c"},
-		ActionInboxBoard:       {"b"},
-		ActionInboxTake:        {"t"},
-		ActionInboxStagePrev:   {"H", "shift+left"},
-		ActionInboxStageNext:   {"L", "shift+right"},
-		ActionInboxBoardLayout: {"B"},
-		ActionInboxViewList:    {"\\"},
-		ActionInboxArtifact:    {"o"},
-		ActionInboxDetailDown:  {"J", "ctrl+d"},
-		ActionInboxDetailUp:    {"K", "ctrl+u"},
-		ActionInboxAllow:       {"a"},
-		ActionInboxAllowAlways: {"A"},
-		ActionInboxOpen:        {"l", "right"},
-		ActionInboxBack:        {"h", "left"},
-		ActionInboxHelp:        {"?"},
-		ActionInboxMark:        {"x"},
-		ActionInboxMarkAll:     {"*"},
-		ActionInboxTabPrev:     {"["},
-		ActionInboxTabNext:     {"]"},
-		ActionInboxExpand:      {"e"},
-		ActionInboxFold:        {"F"},
+		ActionInboxReview:        {"v"},
+		ActionInboxSnooze:        {"z"},
+		ActionInboxUndo:          {"u"},
+		ActionInboxShowSnoozed:   {"S"},
+		ActionInboxSettle:        {"D"},
+		ActionInboxDenyReason:    {"R"},
+		ActionInboxNewAgent:      {"n"},
+		ActionInboxCompare:       {"c"},
+		ActionInboxBoard:         {"b"},
+		ActionInboxTake:          {"t"},
+		ActionInboxStagePrev:     {"H", "shift+left"},
+		ActionInboxStageNext:     {"L", "shift+right"},
+		ActionInboxBoardLayout:   {"B"},
+		ActionInboxDispatchMode:  {"ctrl+t"},
+		ActionInboxDispatchPause: {"ctrl+x"},
+		ActionInboxViewList:      {"\\"},
+		ActionInboxArtifact:      {"o"},
+		ActionInboxDetailDown:    {"J", "ctrl+d"},
+		ActionInboxDetailUp:      {"K", "ctrl+u"},
+		ActionInboxAllow:         {"a"},
+		ActionInboxAllowAlways:   {"A"},
+		ActionInboxOpen:          {"l", "right"},
+		ActionInboxBack:          {"h", "left"},
+		ActionInboxHelp:          {"?"},
+		ActionInboxMark:          {"x"},
+		ActionInboxMarkAll:       {"*"},
+		ActionInboxTabPrev:       {"["},
+		ActionInboxTabNext:       {"]"},
+		ActionInboxExpand:        {"e"},
+		ActionInboxFold:          {"F"},
 		// [ and ] step the tabs, so the prompt jumps take the braces.
 		ActionInboxPromptPrev: {"{"},
 		ActionInboxPromptNext: {"}"},

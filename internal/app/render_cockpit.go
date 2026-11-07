@@ -570,6 +570,24 @@ func (m *OS) drawCockpitHeader(c *ckCanvas, l ckLook, y, top int) {
 		ck.hits = append(ck.hits, ckHit{x0: gx0, y0: top + y, x1: x, y1: top + y + 1, kind: ckHitAction, action: "group"})
 		x += 3
 	}
+	if ck.board && ck.dispatch != nil && ck.dispatch.Board != nil {
+		// The board's dispatch: its mode, a click turns it, and what holds
+		// it, a click pauses or starts it again (cockpit_dispatch.go).
+		mode, ink := "Manual", pal.FgDim
+		if ck.dispatch.Board.Mode == session.DispatchPull {
+			mode, ink = "Pull", pal.AccentBright
+		}
+		mx0 := x
+		x = c.text(x, y, 0, ckSeg{t: "Dispatch ", fg: pal.FgMute}, ckSeg{t: mode, fg: ink, attrs: ckBold})
+		ck.hits = append(ck.hits, ckHit{x0: mx0, y0: top + y, x1: x, y1: top + y + 1, kind: ckHitAction, action: "dispatch-mode"})
+		if held := dispatchHeld(ck.dispatch); held != "" {
+			x += 2
+			hx0 := x
+			x = c.text(x, y, 0, ckSeg{t: ckTrunc(printableTitle(held), 28), fg: pal.Warning, attrs: ckBold})
+			ck.hits = append(ck.hits, ckHit{x0: hx0, y0: top + y, x1: x, y1: top + y + 1, kind: ckHitAction, action: "dispatch-pause"})
+		}
+		x += 3
+	}
 	if !st.Live {
 		x = c.text(x, y, 0, ckSeg{t: "not connected", fg: pal.Warning}) + 3
 	}

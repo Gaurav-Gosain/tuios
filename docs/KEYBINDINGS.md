@@ -1903,6 +1903,8 @@ Inside it:
 | `t` | On a card: take it for the pane behind the agents view. `n` on a card in the board's list opens the New agent sheet on it |
 | `H` `L`, `shift+left` `shift+right` | On a card: move it to the stage before or after |
 | `B` | Show the task board as columns or as a list |
+| `Ctrl+T` | On the board: turn task dispatch between manual and pull. In pull, an agent that finishes its card is given the board's next open card. The header says which |
+| `Ctrl+X` | On the board: pause all task dispatch, or start it again after a pause or a stop. The palette has "Agents: pause all task dispatch" too |
 | `\` | Show the agents as a column beside the focus, or as a strip of chips above it. tuios keeps the choice. See `view_list` in [CONFIGURATION.md](CONFIGURATION.md#the-agent-list) |
 | `o` | Open what the agent has shown, such as a TML form, on its Artifacts tab, and use it. `esc` goes back to the list |
 | `f` | Show only what needs you, then each kind of item, then every agent |
@@ -2059,7 +2061,7 @@ These keys are in three sections of their own, rebindable like any other:
 `inbox_help`, `inbox_mark`, `inbox_mark_all`, `inbox_tab_prev`,
 `inbox_tab_next`, `inbox_expand`, `inbox_fold`, `inbox_prompt_prev`,
 `inbox_prompt_next`, `inbox_child`, `inbox_compare`, `inbox_artifact`, `inbox_board`,
-`inbox_board_layout`, `inbox_view_list`, `inbox_take`, `inbox_stage_prev`, `inbox_stage_next`,
+`inbox_board_layout`, `inbox_dispatch_mode`, `inbox_dispatch_pause`, `inbox_view_list`, `inbox_take`, `inbox_stage_prev`, `inbox_stage_next`,
 `inbox_region_next`, `inbox_region_prev`, `inbox_escape`, `inbox_next_needs`),
 `[keybindings.inbox_peek]` (the prompt: `peek_approve`, `peek_approve_always`,
 `peek_deny`, `peek_type`, `peek_read_again`, `peek_go`, `peek_back`) and

@@ -187,6 +187,10 @@ type InboxEvent struct {
 	Item   *session.AttentionItem `json:"attention"`
 	// Task is the card of a task event.
 	Task *session.TaskRow `json:"task"`
+	// Dispatch is a task-dispatch event's status, and Reason why dispatch
+	// stopped on its own.
+	Dispatch *session.DispatchStatus `json:"dispatch"`
+	Reason   string                  `json:"reason"`
 }
 
 // InboxDownMsg says the watcher lost the daemon. Unsupported says the daemon
@@ -359,6 +363,13 @@ func inboxWatchOnce(ctx context.Context, dial inboxDial, out chan<- tea.Msg) (bo
 	}
 	if !noBoard && boardErr == "" {
 		types = append(types, session.EventTaskClaimed, session.EventTaskFinished, session.EventTaskChanged)
+		// A daemon from before dispatch refuses a subscription that names
+		// its event.
+		if ok, _ := probeVerb(func(verb string, params map[string]any) ([]byte, error) {
+			return client.CallWithTimeout(verb, params, 5*time.Second)
+		}, "get-task-dispatch"); ok {
+			types = append(types, session.EventTaskDispatch)
+		}
 	}
 	if _, err := client.CallWithTimeout("subscribe", map[string]any{
 		"types":     types,
@@ -420,7 +431,7 @@ func inboxWatchOnce(ctx context.Context, dial inboxDial, out chan<- tea.Msg) (bo
 			case ev.Type == session.EventGap:
 				put(read{gap: true})
 				return
-			case ev.Type == session.EventAttention && ev.Item != nil, ev.Task != nil:
+			case ev.Type == session.EventAttention && ev.Item != nil, ev.Task != nil, ev.Dispatch != nil:
 				if !put(read{ev: ev.InboxEvent}) {
 					return
 				}
@@ -642,6 +653,10 @@ func (m *OS) applyInboxEvents(msg InboxEventsMsg) tea.Cmd {
 	for _, ev := range msg.Events {
 		if ev.Task != nil {
 			m.applyTaskEvent(ev.Action, *ev.Task)
+			continue
+		}
+		if ev.Dispatch != nil {
+			m.applyDispatchEvent(ev.Action, ev.Reason, ev.Dispatch)
 			continue
 		}
 		it := ev.Item

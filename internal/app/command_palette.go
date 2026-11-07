@@ -945,6 +945,22 @@ func GetCommandPaletteItems(s *config.Settings) []CommandPaletteItem {
 			Category: paletteCategoryAgents,
 		},
 		{
+			// Task dispatch: stop every card going to agents at once, or
+			// start it again (cockpit_dispatch.go).
+			Name:     "Agents: pause all task dispatch",
+			Category: paletteCategoryAgents,
+			Action: func(m *OS) (*OS, tea.Cmd) {
+				return m, m.DispatchSet("pause")
+			},
+		},
+		{
+			Name:     "Agents: start task dispatch again",
+			Category: paletteCategoryAgents,
+			Action: func(m *OS) (*OS, tea.Cmd) {
+				return m, m.DispatchSet("resume")
+			},
+		},
+		{
 			// The copies between machines: the Copies panel.
 			Name:     "Copies between machines",
 			Shortcut: "prefix+u",
