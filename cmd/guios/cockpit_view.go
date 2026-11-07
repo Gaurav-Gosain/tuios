@@ -462,7 +462,9 @@ func (a *App) ckRowView(c *ui.Context, pal *palette, r ckRow) {
 		room -= attemptChipW + 7
 	}
 	harnessW := 12 + 4 + natural(c, harnessName(harness), fsSmall, 0)
-	showHarness := room >= harnessW
+	// A row with no harness reported shows its terminal icon alone, not
+	// the word "agent" (Mac round 1, visual S3).
+	showHarness := room >= harnessW && harness != ""
 	row.Children(func() {
 		ui.Column(c).Grow(1).MinWidth(0).Gap(3).Children(func() {
 			ui.Row(c).Gap(7).AlignItems(ui.Center).Children(func() {
@@ -475,7 +477,7 @@ func (a *App) ckRowView(c *ui.Context, pal *palette, r ckRow) {
 					ic := ui.Icon(c, harnessIcon(harness)).Size(12, 12).TextColor(pal.textFaint).Shrink(0)
 					if showHarness {
 						ui.Text(c, harnessName(harness)).FontSize(fsSmall).TextColor(pal.textMuted).SingleLine().Shrink(0)
-					} else {
+					} else if harness != "" {
 						ic.Tooltip(harnessName(harness))
 					}
 				})
