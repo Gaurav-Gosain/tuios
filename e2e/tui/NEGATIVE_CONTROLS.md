@@ -13944,6 +13944,7 @@ Run on 2026-11-07 on macOS (arm64), each control its own binary:
 |---------|---------------------|--------|
 | The whole fix (main at 3497aaab0) | every run: "Reply to", "mention", "image", "new line" at 3.71:1 (dark, rose_pine) and 3.04:1 (latte) on the panel; the picked machine row's text at 2.35 to 2.45:1 on the accent tint; at 256 colours the default theme's accent at 2.77:1 on the sheet | **caught** |
 | The reply area's labels in `FgMute` again (`label` in `drawReplyArea`) | "49 glyphs in the reply area miss their floor": `"R" at (53,30) 3.71:1 under 4.5` in "Reply to docs-cli" | **caught** |
+| The not-installed agent chip and "not found" held to nothing (9ba3e5e4e, with the client's PATH holding no agent) | the chip "claude" at 2.28:1 (truecolor) and 2.41:1 (256) on the card; "claude not found" at 2.33 to 2.62:1 on the picked machine's tint. CI failed the same way on Linux, where no agent is installed | **caught** |
 
 Frames are under the test's artifact folder (`reply-closed`, `reply-placeholder`,
 `reply-draft`, `new-agent`). Repeat from `e2e/tui` with

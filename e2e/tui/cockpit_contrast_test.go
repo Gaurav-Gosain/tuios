@@ -33,6 +33,8 @@ import (
 //   - At 256 colours the ink is a palette entry, not the truecolor value
 //     Derive measured. The cells hold the entry, and the entry's RGB is what
 //     is measured.
+//   - Which agents are installed changes what the sheet draws. The client
+//     runs with a PATH that holds none, as CI's runner has none.
 //   - At 16 colours there is no RGB to measure. Those runs are not in the
 //     matrix; chrome_depth_test holds the 16-colour chrome.
 //
@@ -72,7 +74,10 @@ func agentsViewContrast(t *testing.T, run chromeRun) {
 		}
 	}
 	term := startIn(t, base, startOpts{args: []string{"attach", "home"}, cols: run.cols, rows: run.rows, shippedLooks: true,
-		env: append([]string{"TUIOS_KITTY_GRAPHICS=0"}, run.depth.env...)})
+		// No agent on the PATH: the sheet draws an agent that is not
+		// installed in its quiet ink, and the machine row warns. A machine
+		// with claude installed showed neither, and CI, with none, did.
+		env: append([]string{"TUIOS_KITTY_GRAPHICS=0", "PATH=/usr/bin:/bin"}, run.depth.env...)})
 	if err := term.WaitFor(func(s tuitest.Screen) bool { return countWindows(s) == 1 }, bootTimeout); err != nil {
 		t.Fatalf("client never attached: %v\n%s", err, term.Snapshot())
 	}

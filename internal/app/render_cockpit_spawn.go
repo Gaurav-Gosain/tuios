@@ -409,7 +409,9 @@ func (m *OS) drawSpawnFields(c *ckCanvas, l ckLook, t spawnTone, p spawnLayout, 
 		case i == s.agent:
 			seg = ckSeg{t: " " + a.cmd + " ", fg: pal.PillFg, bg: pal.Accent, attrs: ckBold}
 		case s.read && a.seen == 0 && !a.installed:
-			seg.fg = pal.FgMute
+			// Not installed: the quiet ink, held to the mark floor on the
+			// chip's card, where it is not promised.
+			seg.fg = overlay.ReadableAt(pal.FgMute, pal.Card, overlay.MarkFloor)
 		}
 		x0 := sx
 		sx = c.text(sx, y+1, limit, seg)
@@ -606,7 +608,7 @@ func (m *OS) drawSpawnMachines(c *ckCanvas, l ckLook, t spawnTone, p spawnLayout
 				if s.agents[s.agent].installed {
 					end = c.textR(right-2, y+1, ckSeg{t: agent + " ready", fg: pal.FgDim})
 				} else {
-					end = c.textR(right-2, y+1, ckSeg{t: agent + " not found", fg: pal.Warning})
+					end = c.textR(right-2, y+1, ckSeg{t: agent + " not found", fg: overlay.ReadableAt(pal.Warning, ground, overlay.MarkFloor)})
 					missing = true
 				}
 			}
