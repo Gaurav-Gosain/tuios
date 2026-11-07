@@ -82,6 +82,12 @@ func (a *App) needsSection(c *ui.Context, pal *palette) {
 	}
 	ui.Column(c.Key("needs")).Margin(0, 0, 12, 0).Children(func() {
 		railHeader(c, pal, "needs-hdr", locales.StatusNeedsYou(), shown, pal.attnText)
+		if a.ck.open {
+			// The Agents view lists the same rows beside the rail: the
+			// group keeps its header and count alone (Mac round 2, visual
+			// S1).
+			return
+		}
 		n := 0
 		for k := range a.sbNeeds {
 			nd := &a.sbNeeds[k]
