@@ -177,8 +177,15 @@ func (a *App) cockpitFocus(c *ui.Context, pal *palette) {
 			}
 			ui.Spacer(c)
 			word, col := ckStatePill(pal, ag, r.item)
-			chip(c, pal, col.Alpha(0.15), col, func() {
-				ui.Box(c).Size(6, 6).Radius(3).Background(col).Shrink(0)
+			ground, ink := col.Alpha(0.15), col
+			if st, _ := ckStatus(ag, r.item); st == proto.Waiting {
+				// Needs you is the pane chip's solid need (attnFill, its
+				// ink at 5:1): on its own amber tint the deepened amber
+				// read 4.55:1 in light themes (Mac round 3, visual S1).
+				ground, ink = pal.attnFill, pal.attnInk
+			}
+			chip(c, pal, ground, ink, func() {
+				ui.Box(c).Size(6, 6).Radius(3).Background(ink).Shrink(0)
 				ui.Text(c, word).FontSize(fsSmall).FontWeight(wMedium).SingleLine()
 			}).Shrink(0)
 			if a.ckHasSiblings(ag) && !ck.narrow {
