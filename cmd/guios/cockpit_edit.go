@@ -269,7 +269,10 @@ func (a *App) ckEditBlock(c *ui.Context, pal *palette, it session.AttentionItem)
 				a.ckEditShown(it, view.SHA, width, from, min(to, n))
 			}
 			sc.Children(func() {
-				ui.Column(c).Padding(0, sp3, 0, sp3).Children(func() {
+				// The rows take the box's padding inside their wash, so a
+				// changed line's colour runs to the box's edges (Mac round
+				// 2, visual S5).
+				ui.Column(c).Children(func() {
 					for i := range view.Lines {
 						l := view.Lines[i]
 						ckEditRow(c, pal, mono, rowH, l)
@@ -309,7 +312,7 @@ func ckEditRow(c *ui.Context, pal *palette, mono string, rowH float32, l editrev
 	case editreview.KindNote:
 		fg = pal.textFaint
 	}
-	ui.Row(c).Height(rowH).AlignItems(ui.Center).Background(bg).Children(func() {
+	ui.Row(c).Height(rowH).Padding(0, sp3).AlignItems(ui.Center).Background(bg).Children(func() {
 		ui.Box(c).Width(ckEditGutter).Shrink(0).Children(func() {
 			if l.Cont {
 				ui.Text(c, "↪").FontSize(fsCaption).TextColor(pal.textFaint)
