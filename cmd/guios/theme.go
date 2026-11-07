@@ -232,7 +232,7 @@ func lookFor(c *ui.Context) *look {
 	l := currentLooks.Load()
 	switch {
 	case l == nil:
-		return paperLook(dark)
+		return ownLook(dark)
 	case dark:
 		return l.dark
 	}
@@ -245,15 +245,15 @@ func lookNamed(name string, dark bool) *look {
 	if l := tuiosLook(themeID(name, dark)); l != nil {
 		return l
 	}
-	return paperLook(dark)
+	return ownLook(dark)
 }
 
-// paperLooks are guios's own colors, light and dark (roles.Paper). They
+// ownLooks are guios's own colors, light and dark (roles.Tilly). They
 // show where tuios names no theme.
-var paperLooks = func() [2]*look {
+var ownLooks = func() [2]*look {
 	var both [2]*look
 	for i := range both {
-		th, p, ground := roles.Paper(i == 1)
+		th, p, ground := roles.Tilly(i == 1)
 		// One flat ground: a gradient of one level steps in bands across
 		// the sidebar (council round 1, visual 21).
 		g := toUI(ground)
@@ -263,8 +263,8 @@ var paperLooks = func() [2]*look {
 	return both
 }()
 
-// paperLook is guios's own look for windows of an appearance.
-func paperLook(dark bool) *look { return paperLooks[b2i(dark)] }
+// ownLook is guios's own look for windows of an appearance.
+func ownLook(dark bool) *look { return ownLooks[b2i(dark)] }
 
 func glowOf(c ui.Color) ui.LinearGradient {
 	return ui.LinearGradient{Angle: 225, Oklab: true, Stops: []ui.GradientStop{{Color: c, At: 0}, {Color: c.Alpha(0), At: 0.5}}}

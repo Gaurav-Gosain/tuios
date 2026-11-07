@@ -63,9 +63,9 @@ const (
 	rChip    = 4  // chips, badges, key caps, inline code, menu items
 	rRow     = 6  // rows, icon buttons, tooltips, tabs
 	rControl = 8  // buttons, fields, segmented controls, code blocks, menus
-	rPane    = 10 // pane cards
-	rCard    = 12 // cards in a view, the reply box, approval cards
-	rSheet   = 14 // dialogs, the palette, the agents view, settings
+	rPane    = 12 // pane cards
+	rCard    = 14 // cards in a view, the reply box, approval cards
+	rSheet   = 18 // dialogs, the palette, the agents view, settings
 )
 
 // Motion lengths for state changes in place: fills, glows, a card's

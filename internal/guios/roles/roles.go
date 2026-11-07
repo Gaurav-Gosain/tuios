@@ -85,6 +85,11 @@ type Palette struct {
 	Popover   Color
 	Kbd       Color
 	KbdBorder Color
+
+	// tiers, when set, are text2 and text3 as a theme gives them by hand
+	// (Tilly): finish starts from them rather than from the foreground
+	// mixed toward the background.
+	tiers [2]Color
 }
 
 var lightPalette = Palette{
@@ -243,8 +248,12 @@ func (p *Palette) finish(fg, bg Color) {
 		p.Text = apart(p.Text, g, 5)
 	}
 	fg = p.Text
-	p.TextMuted = legible(fg.Mix(bg, 0.38), fg, worst, 4.5)
-	p.TextFaint = legible(fg.Mix(bg, 0.56), fg, worst, 3)
+	muted, faint := fg.Mix(bg, 0.38), fg.Mix(bg, 0.56)
+	if p.tiers[0] != (Color{}) {
+		muted, faint = p.tiers[0], p.tiers[1]
+	}
+	p.TextMuted = legible(muted, fg, worst, 4.5)
+	p.TextFaint = legible(faint, fg, worst, 3)
 	// Short of 5:1, a tier moves toward text until it has it, or is text.
 	for i := 0; i < 60 && least(p.TextFaint) < 5; i++ {
 		p.TextFaint = p.TextFaint.Mix(fg, 0.06)

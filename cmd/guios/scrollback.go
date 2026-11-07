@@ -204,7 +204,7 @@ func (a *App) scrollbackView(c *ui.Context, pal *palette) {
 		if b.loading || len(list) == 0 {
 			h = 120
 		}
-		floating(panel.Width(width).Height(h).Padding(14).Gap(8).Radius(14).Background(pal.popover), pal).Label(locales.ScrollbackTitle())
+		floating(panel.Width(width).Height(h).Padding(14).Gap(8).Radius(rSheet).Background(pal.popover), pal).Label(locales.ScrollbackTitle())
 		keys := ui.Box(c.Key("keys")).Width(0).Height(0).Focusable().FocusRing(false).AutoFocus()
 		keys.HandleInput(func(ev ui.InputEvent) bool {
 			switch ev.Kind {

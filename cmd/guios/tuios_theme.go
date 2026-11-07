@@ -27,7 +27,7 @@ import (
 // palette derives from the theme's terminal colors (ghosttyLook), so the
 // theme reaches the sidebar, the chips, the menus and the agents view as
 // well as the terminals (DESIGN.md section 1). Where tuios names no theme,
-// guios shows its own (paperLook).
+// guios shows its own (ownLook).
 //
 // The theme follows three things live, and none of them polls: a change
 // of config.toml (one inotify watch on its folder), an option-set event of
@@ -179,7 +179,7 @@ func swatchTheme(id string) *terminal.Theme {
 	return th
 }
 
-// previewLook is the look of a tuios theme for a preview, paper's for
+// previewLook is the look of a tuios theme for a preview, guios's own for
 // none.
 func previewLook(id string, dark bool) *look {
 	gen := omarchyGen.Load()
@@ -197,7 +197,7 @@ func previewLook(id string, dark bool) *look {
 	}
 	l := tuiosLook(id)
 	if l == nil {
-		l = paperLook(dark)
+		l = ownLook(dark)
 	}
 	previewLooks.looks[key] = l
 	return l

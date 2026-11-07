@@ -19,7 +19,7 @@ const (
 )
 
 // TestThemesKeepTheirContrast is the theme contrast lint. It builds the
-// colour roles of every look guios draws, every tuios theme and Paper in
+// colour roles of every look guios draws, every tuios theme and Tilly in
 // the light and the dark, and checks:
 //
 //   - text, text2 and text3 on the card and on the window's ground, at
@@ -48,10 +48,10 @@ func TestThemesKeepTheirContrast(t *testing.T) {
 		looks = append(looks, look{id, th, p, ground})
 	}
 	for _, dark := range []bool{false, true} {
-		th, p, ground := roles.Paper(dark)
-		name := "paper light"
+		th, p, ground := roles.Tilly(dark)
+		name := "tilly light"
 		if dark {
-			name = "paper dark"
+			name = "tilly dark"
 		}
 		looks = append(looks, look{name, th, p, ground})
 	}

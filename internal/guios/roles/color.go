@@ -147,14 +147,61 @@ func Look(th *Term) (p *Palette, accent, ground Color) {
 	return p, accent, Oklch(max(bl-shade, 0), bc, bh)
 }
 
-// Paper is guios's own theme, light or dark: white paper on a desk of
-// light grey, in ink, flat and quiet. It shows where tuios names no theme.
-func Paper(dark bool) (th *Term, p *Palette, ground Color) {
-	var accent Color
-	th, accent = toneTheme(tone{260, 0, 0.9, 262}, dark)
-	ground = Hex("#f6f6f7")
+// Tilly is guios's own theme, light or dark, after tuios's mascot: lilac
+// on a deep violet ground in the dark, and on white cards over a pale
+// lilac ground in the light (direction A of the 2026-11-07 research). The
+// roles are set by hand, not derived: the text tiers, the accent, the
+// raised surfaces and the four state colours. It shows where tuios names
+// no theme.
+func Tilly(dark bool) (th *Term, p *Palette, ground Color) {
+	t := tillyLight
 	if dark {
-		ground = Hex("#141416")
+		t = tillyDark
 	}
-	return th, Tinted(th, accent), ground
+	th = &Term{Foreground: t.text, Background: t.card, Cursor: t.accent, CursorText: t.card, SelectionText: t.text}
+	for i, h := range t.ansi {
+		th.Palette[i] = Hex(h)
+	}
+	th.Selection = t.accent.Mix(t.card, 0.7)
+	p = Tinted(th, t.accent)
+	p.Sidebar = t.ground
+	p.Popover = t.raised
+	p.Work = t.work
+	p.Attention = t.need
+	p.AttnChip = t.need
+	p.Done = t.done
+	p.Danger = t.err
+	if dark {
+		p.AttnSoft = t.need.Alpha(0.15)
+	} else {
+		p.AttnSoft = t.need.Alpha(0.12)
+	}
+	p.tiers = [2]Color{t.text2, t.text3}
+	p.finish(t.text, t.card)
+	return th, p, t.ground
+}
+
+// tillyLook is the colours of one appearance of Tilly.
+type tillyLook struct {
+	ground, card, raised, text, text2, text3 Color
+	accent, work, need, done, err            Color
+	// ansi is the terminal's 16 colours, Catppuccin's (Mocha in the
+	// dark, Latte in the light) as tuios's banner uses them.
+	ansi [16]string
+}
+
+var tillyDark = tillyLook{
+	ground: Hex("#14131c"), card: Hex("#1b1a25"), raised: Hex("#24222f"),
+	text: Hex("#ece9f5"), text2: Hex("#a8a3ba"), text3: Hex("#8a85a0"),
+	accent: Hex("#b99cf5"), work: Hex("#89dceb"), need: Hex("#f9cf7a"), done: Hex("#a6e3a1"), err: Hex("#f38ba8"),
+	ansi: [16]string{"#45475a", "#f38ba8", "#a6e3a1", "#f9e2af", "#89b4fa", "#cba6f7", "#94e2d5", "#bac2de",
+		"#585b70", "#f38ba8", "#a6e3a1", "#f9e2af", "#89b4fa", "#cba6f7", "#94e2d5", "#a6adc8"},
+}
+
+var tillyLight = tillyLook{
+	ground: Hex("#f6f4fb"), card: Hex("#ffffff"), raised: Hex("#ffffff"),
+	text: Hex("#1d1a29"), text2: Hex("#5d5870"), text3: Hex("#6f6a82"),
+	accent: Hex("#7a4fd6"), work: Hex("#17768c"), need: Hex("#93600f"), done: Hex("#25733a"), err: Hex("#c4314b"),
+	ansi: [16]string{"#5c5f77", "#d20f39", "#40a02b", "#c27b0f", "#1e66f5", "#8839ef", "#179299", "#acb0be",
+		"#6c6f85", "#d20f39", "#40a02b", "#c27b0f", "#1e66f5", "#8839ef", "#179299", "#bcc0cc"},
 }

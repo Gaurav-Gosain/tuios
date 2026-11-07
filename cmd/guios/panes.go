@@ -473,7 +473,7 @@ func (a *App) dropPreview(c *ui.Context, pal *palette, target string, zone dropZ
 	o.LeftPercent(o.AnimateTo("l", r[0], spring)).TopPercent(o.AnimateTo("t", r[1], spring)).
 		WidthPercent(o.AnimateTo("w", r[2], spring)).HeightPercent(o.AnimateTo("h", r[3], spring))
 	o.Children(func() {
-		room := ui.Column(c).Grow(1).Radius(10).AlignItems(ui.Center).
+		room := ui.Column(c).Grow(1).Radius(rPane).AlignItems(ui.Center).
 			Background(pal.accent.Alpha(0.10)).InsetShadow(0, 0, 28, 0, pal.accent.Alpha(0.22))
 		room.Children(func() {
 			// The label sits high in the room, clear of the title the
