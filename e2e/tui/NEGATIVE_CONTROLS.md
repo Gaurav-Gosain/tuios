@@ -14191,3 +14191,26 @@ Run on 2026-11-07 on macOS (arm64):
 
 The fixed build passes the e2e test 3 of 3. Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=3 -run '^TestSendKeysDoNotDismissAnInboxItem$' -v .`.
+
+## TestPaneCloseEndsItsJobs
+
+The test starts five jobs from the interactive shell of a pane: a plain
+background job, a stopped one, an orphan whose parent exited but which stays
+in the pane's session, a nohup job, and a child that left the session with
+setsid while its parent waits. It then closes the pane with close-window,
+kill-session and kill-server in turn. The first three must end, the nohup and
+setsid jobs must still run (as in tmux), and so must a process the test
+started outside every pane.
+
+Run on 2026-11-07 on macOS (arm64), each control its own binary:
+
+| Removed | The test fails with | Result |
+|---------|---------------------|--------|
+| The hangup: `killPaneTree` back to `proc.Kill()` alone, as before the fix | "background" and "orphan in the session" "STILL RUNS, want it hung up", on all three paths | **caught** |
+| The session scan (`SessionMembers`), which also stands for the macOS `SessionMembers` that returned nothing before this change | the same six failures: only the shell's own group is hung up | **caught** |
+| Added: SIGKILL to each group after the hangup (kills too much) | "nohup" "ENDED, want it running", on all three paths | **caught** |
+| The SIGCONT after SIGHUP | passes: when the shell dies, the stopped job's group is orphaned, and the kernel sends it SIGHUP and SIGCONT itself | **not caught**; SIGCONT stays for a stopped group that is not orphaned |
+
+The steps are in `pane-close-jobs.txt` under the test's artifact folder. Repeat
+from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestPaneCloseEndsItsJobs$' -v .`.

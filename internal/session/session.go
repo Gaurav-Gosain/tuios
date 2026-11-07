@@ -5285,10 +5285,9 @@ func (p *PTY) Close() error {
 	p.subscriberCount.Store(0)
 	p.subscribersMu.Unlock()
 
-	// Kill process
-	if p.proc != nil {
-		_ = p.proc.Kill()
-	}
+	// Hang up the pane's jobs, as a terminal that goes away does, and kill
+	// the shell. See killPaneTree.
+	killPaneTree(p.proc)
 	// A reader waiting for output is in poll, which closing the master does
 	// not end.
 	if p.gate != nil {
