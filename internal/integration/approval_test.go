@@ -190,8 +190,9 @@ func TestOnlyWholeCallsAreHeld(t *testing.T) {
 		{"a command outside the sandbox", "Bash", map[string]any{"command": "ls", "dangerouslyDisableSandbox": true}, false},
 		// An edit is held with its whole body beside the line
 		// (approval_edit_test.go has the rest).
-		{"a write, with its body", "Write", map[string]any{"file_path": "notes.md", "content": "anything"}, true},
-		{"an edit, with its body", "Edit", map[string]any{"file_path": "a.go", "old_string": "a", "new_string": "b"}, true},
+		{"a write, with its body", "Write", map[string]any{"file_path": "/repo/notes.md", "content": "anything"}, true},
+		{"an edit, with its body", "Edit", map[string]any{"file_path": "/repo/a.go", "old_string": "a", "new_string": "b"}, true},
+		{"an edit of a relative path", "Edit", map[string]any{"file_path": "a.go", "old_string": "a", "new_string": "b"}, false},
 		{"a multi edit with no edits", "MultiEdit", map[string]any{"file_path": "a.go", "edits": []any{}}, false},
 		{"a notebook edit", "NotebookEdit", map[string]any{"notebook_path": "a.ipynb", "new_source": "x"}, false},
 		{"an MCP tool", "mcp__github__merge", map[string]any{"query": "pr 12"}, false},

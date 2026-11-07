@@ -12,12 +12,12 @@ import (
 	"testing"
 )
 
-// editApprovalAgent asks to edit notes.txt through the Claude Code hook, as
-// the installed integration does, and writes the hook's answer.
-func editApprovalAgent(out string) string {
+// editApprovalAgent asks to edit path through the Claude Code hook, as the
+// installed integration does, and writes the hook's answer.
+func editApprovalAgent(path, out string) string {
 	return `#!/bin/bash
 echo "asking to edit notes.txt"
-printf '%s' '{"hook_event_name":"PermissionRequest","session_id":"s-1","tool_name":"Edit","tool_input":{"file_path":"notes.txt","old_string":"retries = 3\n","new_string":"retries = 5\n"}}' \
+printf '%s' '{"hook_event_name":"PermissionRequest","session_id":"s-1","tool_name":"Edit","tool_input":{"file_path":"` + path + `","old_string":"retries = 3\n","new_string":"retries = 5\n"}}' \
   | TUIOS_AGENT=claude-code "` + tuiosBin + `" agent-hook claude-code > ` + out + `.tmp 2>&1
 mv ` + out + `.tmp ` + out + `
 sleep 600
@@ -89,7 +89,10 @@ func TestGUIBridgeEditApprovalNeedsItsDigest(t *testing.T) {
 
 	b := startBridge(t, base, "edit", 160, 48)
 	hook := filepath.Join(workDirIn(t, base), "hook.json")
-	agent := newPaneRunning(t, base, "edit", "editor", writeAgentScript(t, base, "edit.sh", editApprovalAgent(hook)))
+	// A short absolute path: nothing writes it, and a long temporary folder
+	// would be masked on the line, which keeps the edit in the pane.
+	const path = "/tmp/tuios-e2e/notes.txt"
+	agent := newPaneRunning(t, base, "edit", "editor", writeAgentScript(t, base, "edit.sh", editApprovalAgent(path, hook)))
 
 	var steps []map[string]any
 	step := func(name string, r wireVerbResult) {
@@ -129,7 +132,7 @@ func TestGUIBridgeEditApprovalNeedsItsDigest(t *testing.T) {
 	if err := json.Unmarshal(r.Result, &detail); err != nil || detail.Edit == nil {
 		t.Fatalf("get-approval served no edit: %s", r.Result)
 	}
-	if detail.Edit.Path != "notes.txt" || len(detail.Edit.Hunks) != 1 || detail.Edit.Hunks[0].Old != "retries = 3\n" || detail.Edit.Hunks[0].New != "retries = 5\n" {
+	if detail.Edit.Path != path || len(detail.Edit.Hunks) != 1 || detail.Edit.Hunks[0].Old != "retries = 3\n" || detail.Edit.Hunks[0].New != "retries = 5\n" {
 		t.Fatalf("get-approval served %+v", *detail.Edit)
 	}
 	sha := editDigest(*detail.Edit)
@@ -147,8 +150,8 @@ func TestGUIBridgeEditApprovalNeedsItsDigest(t *testing.T) {
 		t.Fatalf("always is offered on an edit: %v", detail.Options)
 	}
 
-	// The pane here has no root, so the rules read the path as outside the
-	// worktree, and every allow acknowledges that as a GUI would.
+	// The rules may read the path as outside the pane's worktree, and then
+	// every allow acknowledges that as a GUI would.
 	for _, tc := range []struct {
 		name  string
 		extra map[string]any

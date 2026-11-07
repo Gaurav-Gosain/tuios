@@ -26,6 +26,20 @@ var (
 	}}
 )
 
+// editsIn is testEdit and testOtherEdit on a path in the folder of the pane
+// window runs in, the absolute path a harness sends.
+func editsIn(t *testing.T, sess *Session, window string) (integration.EditBody, integration.EditBody) {
+	t.Helper()
+	w, _ := findWindowState(sess.GetState(), window)
+	dir := sess.paneRunDir(w.PTYID)
+	if dir == "" {
+		t.Fatalf("window %s has no folder", window)
+	}
+	e, other := testEdit, testOtherEdit
+	e.Path, other.Path = filepath.Join(dir, e.Path), filepath.Join(dir, other.Path)
+	return e, other
+}
+
 func editLine(e integration.EditBody) string {
 	return "approve " + e.Tool + ": " + e.Path
 }
@@ -69,7 +83,8 @@ func stillHeld(t *testing.T, pending <-chan map[string]any, why string) {
 func TestEditIsHeldAndAnsweredByDigest(t *testing.T) {
 	d, sp := startTestDaemon(t)
 	enableRiskyApprovals(t, d, 30*time.Second, nil)
-	_, a, b := riskSession(t, d)
+	sess, a, b := riskSession(t, d)
+	testEdit, testOtherEdit := editsIn(t, sess, a)
 	makeSessionWithWindow(t, d, "other")
 	c := dialVerb(t, sp)
 	tui := attachTUI(t, sp, "other")
@@ -108,7 +123,7 @@ func TestEditIsHeldAndAnsweredByDigest(t *testing.T) {
 	got := result(t, callP(c, t, "get-approval", map[string]any{"request_id": id}))
 	edit, _ := got["edit"].(map[string]any)
 	hunks, _ := edit["hunks"].([]any)
-	if got["edit_sha"] != sha || edit["tool"] != "Edit" || edit["path"] != "notes.txt" || len(hunks) != 1 || got["untrusted"] != true {
+	if got["edit_sha"] != sha || edit["tool"] != "Edit" || edit["path"] != testEdit.Path || len(hunks) != 1 || got["untrusted"] != true {
 		t.Fatalf("get-approval answered %v", got)
 	}
 	if h, _ := hunks[0].(map[string]any); h["old"] != "retries = 3\n" || h["new"] != "retries = 5\n" {
@@ -154,7 +169,8 @@ func TestEditIsHeldAndAnsweredByDigest(t *testing.T) {
 func TestEditCannotBeSwappedWhileHeld(t *testing.T) {
 	d, sp := startTestDaemon(t)
 	enableRiskyApprovals(t, d, 30*time.Second, nil)
-	_, a, _ := riskSession(t, d)
+	sess, a, _ := riskSession(t, d)
+	testEdit, testOtherEdit := editsIn(t, sess, a)
 	makeSessionWithWindow(t, d, "other")
 	c := dialVerb(t, sp)
 	tui := attachTUI(t, sp, "other")
@@ -230,7 +246,8 @@ func TestRiskyEditNeedsTheAcknowledgement(t *testing.T) {
 func TestEditRequestRefusals(t *testing.T) {
 	d, sp := startTestDaemon(t)
 	enableRiskyApprovals(t, d, 30*time.Second, nil)
-	_, a, _ := riskSession(t, d)
+	sess, a, _ := riskSession(t, d)
+	testEdit, _ := editsIn(t, sess, a)
 	c := dialVerb(t, sp)
 	setAgentState(t, c, "work", a, "needs_input", "approval", editLine(testEdit))
 
@@ -252,8 +269,15 @@ func TestEditRequestRefusals(t *testing.T) {
 		{"a Hangul filler", editParams(a, with(func(e *integration.EditBody) { e.Hunks[0].New = "exec(\u3164)" }), nil)},
 		{"invalid UTF-8", editParams(a, with(func(e *integration.EditBody) { e.Hunks[0].New = "\xff" }), nil)},
 		{"no hunks", editParams(a, with(func(e *integration.EditBody) { e.Hunks = nil }), nil)},
-		{"a tool that is not an edit", editParams(a, with(func(e *integration.EditBody) { e.Tool = "Read" }), map[string]any{"summary": "approve Read: notes.txt"})},
-		{"a write that replaces text", editParams(a, with(func(e *integration.EditBody) { e.Tool = "Write" }), map[string]any{"summary": "approve Write: notes.txt"})},
+		{"a tool that is not an edit", editParams(a, with(func(e *integration.EditBody) { e.Tool = "Read" }), map[string]any{"summary": "approve Read: " + testEdit.Path})},
+		{"a write that replaces text", editParams(a, with(func(e *integration.EditBody) { e.Tool = "Write" }), map[string]any{"summary": "approve Write: " + testEdit.Path})},
+		{"a relative path", editParams(a, with(func(e *integration.EditBody) { e.Path = "notes.txt" }), map[string]any{"summary": "approve Edit: notes.txt", "target": "notes.txt"})},
+		{"too many hunks", editParams(a, with(func(e *integration.EditBody) {
+			e.Tool = "MultiEdit"
+			for range integration.MaxEditHunks {
+				e.Hunks = append(e.Hunks, e.Hunks[0])
+			}
+		}), map[string]any{"summary": "approve MultiEdit: " + testEdit.Path, "tool": "MultiEdit"})},
 		{"a target that is not the edit's path", editParams(a, testEdit, map[string]any{"target": "other.txt"})},
 		{"a tool that is not the edit's tool", editParams(a, testEdit, map[string]any{"tool": "Write"})},
 		{"a line that is not the edit's", editParams(a, testEdit, map[string]any{"summary": "approve Edit: other.txt"})},

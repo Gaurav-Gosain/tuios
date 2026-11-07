@@ -62,8 +62,8 @@ func TestEditsAreOfferedWithTheirBody(t *testing.T) {
 			map[string]any{"old_string": "a", "new_string": "b"},
 			map[string]any{"old_string": "c", "new_string": "d\te", "replace_all": false},
 		}}, EditBody{Tool: "MultiEdit", Path: "/w/a.go", Hunks: []EditHunk{{Old: "a", New: "b"}, {Old: "c", New: "d\te"}}}, 4},
-		{"write", "Write", map[string]any{"file_path": "rel/new.go", "content": "package x\n\nfunc f() {}\n"},
-			EditBody{Tool: "Write", Path: "rel/new.go", Hunks: []EditHunk{{New: "package x\n\nfunc f() {}\n"}}}, 3},
+		{"write", "Write", map[string]any{"file_path": "/w/new.go", "content": "package x\n\nfunc f() {}\n"},
+			EditBody{Tool: "Write", Path: "/w/new.go", Hunks: []EditHunk{{New: "package x\n\nfunc f() {}\n"}}}, 3},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			d := translatePayload(t, "claude", editPayload(tc.tool, tc.input, suggest))
@@ -115,6 +115,10 @@ func TestEditsTheInboxDoesNotHold(t *testing.T) {
 		{"a braille blank", "Write", map[string]any{"file_path": "/w/a", "content": "x\u2800y"}},
 		{"a stack of combining marks", "Write", map[string]any{"file_path": "/w/a", "content": "e" + strings.Repeat("\u0301", 200)}},
 		{"a Hangul filler in the path", "Write", map[string]any{"file_path": "/w/a\u3164", "content": "x"}},
+		{"a relative path, which names a file only with the cwd beside it", "Write", map[string]any{"file_path": "rel/a.go", "content": "x"}},
+		{"too many hunks", "MultiEdit", map[string]any{"file_path": "/w/a", "edits": manyHunks(MaxEditHunks + 1)}},
+		{"a hunk with nothing on either side", "MultiEdit", map[string]any{"file_path": "/w/a", "edits": []any{
+			map[string]any{"old_string": "a", "new_string": "b"}, map[string]any{"old_string": "", "new_string": ""}}}},
 		{"invalid UTF-8", "Write", map[string]any{"file_path": "/w/a", "content": "ok\xffno"}},
 		{"a NUL", "Write", map[string]any{"file_path": "/w/a", "content": "a\x00b"}},
 		{"a newline in the path", "Write", map[string]any{"file_path": "/w/a\nb", "content": "x"}},
@@ -139,9 +143,20 @@ func TestEditsTheInboxDoesNotHold(t *testing.T) {
 			}
 		})
 	}
-	// Exactly the bound is still offered.
+	// Exactly the bounds are still offered.
+	if d := translatePayload(t, "claude", editPayload("MultiEdit", map[string]any{"file_path": "/w/a", "edits": manyHunks(MaxEditHunks)}, nil)); d.Approval == nil {
+		t.Errorf("%d hunks were not offered", MaxEditHunks)
+	}
 	d := translatePayload(t, "claude", editPayload("Write", map[string]any{"file_path": "/w/a", "content": big[:MaxEdit-len("/w/a")]}, nil))
 	if d.Approval == nil || d.Approval.Edit == nil {
 		t.Error("a body at the bound was not offered")
 	}
+}
+
+func manyHunks(n int) []any {
+	out := make([]any, n)
+	for i := range out {
+		out[i] = map[string]any{"old_string": "a", "new_string": "b"}
+	}
+	return out
 }

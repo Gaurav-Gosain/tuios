@@ -6512,19 +6512,25 @@ While the hold runs the pane's item is of kind `plan`, with `plan_lines` and
 its path, so `request-approval` holds one only with its whole body in `edit`:
 
 ```json
-{"tool": "Edit", "path": "notes.txt", "hunks": [{"old": "retries = 3\n", "new": "retries = 5\n", "replace_all": false}]}
+{"tool": "Edit", "path": "/w/notes.txt", "hunks": [{"old": "retries = 3\n", "new": "retries = 5\n", "replace_all": false}]}
 ```
 
 A MultiEdit has one hunk per edit, in order. A Write is one hunk whose `old`
 is empty and whose `new` is the whole content. `kind` stays `approval`. The
 daemon refuses the request with `invalid_params`, and holds nothing, when:
 
-- the body is over 32 KiB, counted over `path` and every `old` and `new`;
+- the body is over 32 KiB, counted over `path` and every `old` and `new`,
+  or has more than 256 hunks;
+- `path` is not absolute: the digest does not hold the folder a relative path
+  is read from, so the same body would name two files in two panes;
 - a string is not valid UTF-8, or has a character other than a printable one,
   a tab or a newline (a carriage return, an escape, a bidi override, a zero
-  width space and U+FFFD are all refused), or `path` has a tab or newline;
+  width space, a character that draws as a blank such as U+3164, more than 4
+  combining marks on one character, and U+FFFD are all refused), or `path`
+  has a tab or newline;
 - `tool` is not Edit, MultiEdit or Write, it has no hunk, an Edit or a Write
-  has more than one, or a Write's hunk has `old` text or `replace_all`;
+  has more than one, a MultiEdit hunk has both `old` and `new` empty, or a
+  Write's hunk has `old` text or `replace_all`;
 - `tool` and `target` are not the body's `tool` and `path`, or `summary` is
   not `approve <tool>: <path>`;
 - it comes with `kind: plan`;
@@ -6549,8 +6555,8 @@ of hunks in decimal, then for each hunk `old`, `new`, and `replace_all` as
 `1` or `0`. For the body above:
 
 ```
-printf 'tuios-edit-v1\n4:Edit,9:notes.txt,1:1,12:retries = 3\n,12:retries = 5\n,1:0,' | shasum -a 256
-9538f37b607471f0a27f1c7bca931d9b18b113d0abf8d5fd29687cfc526da6f5  -
+printf 'tuios-edit-v1\n4:Edit,12:/w/notes.txt,1:1,12:retries = 3\n,12:retries = 5\n,1:0,' | shasum -a 256
+149e5495724a4cfda0fad28eef42d013e20dbfc5bc0ae41948000a685f3f830a  -
 ```
 
 - `reply-approval` with `once` on an edit must carry `edit_sha`, the digest
@@ -6563,6 +6569,11 @@ printf 'tuios-edit-v1\n4:Edit,9:notes.txt,1:1,12:retries = 3\n,12:retries = 5\n,
 - The Claude Code hook keeps an edit in the pane, as before, when its body
   would be refused above, when `tool_input` has a field the body does not
   show, and for NotebookEdit always.
+- The digest names the request the harness made, not the bytes it writes.
+  Claude Code applies the edit itself, and may for example match quotes
+  loosely or keep a file's line endings, so the file can differ from the body
+  in such details. Another PermissionRequest hook of the person's own can also
+  answer first, with input of its own, which tuios does not see.
 
 **Deny reasons.** `deny_message: true` on `request-approval` says the harness
 passes a deny's reason to its model (Claude Code, opencode, Kilo), and the item
@@ -6600,7 +6611,7 @@ For a held edit the result also has `edit` (the body, as `request-approval`
 took it) and `edit_sha`; both are absent for any other hold:
 
 ```json
-{"result": {"type": "approval", "request_id": "4e07408562bedb8b", "kind": "approval", "session": "web", "window": "3f2a9c1e", "summary": "approve Edit: notes.txt", "tool": "Edit", "target": "notes.txt", "options": ["once", "deny"], "always_scope": [], "plan": "", "plan_sha": "", "edit": {"tool": "Edit", "path": "notes.txt", "hunks": [{"old": "retries = 3\n", "new": "retries = 5\n"}]}, "edit_sha": "9538f37b607471f0a27f1c7bca931d9b18b113d0abf8d5fd29687cfc526da6f5", "risk": [], "deny_message": true, "untrusted": true}}
+{"result": {"type": "approval", "request_id": "4e07408562bedb8b", "kind": "approval", "session": "web", "window": "3f2a9c1e", "summary": "approve Edit: /w/notes.txt", "tool": "Edit", "target": "/w/notes.txt", "options": ["once", "deny"], "always_scope": [], "plan": "", "plan_sha": "", "edit": {"tool": "Edit", "path": "/w/notes.txt", "hunks": [{"old": "retries = 3\n", "new": "retries = 5\n"}]}, "edit_sha": "149e5495724a4cfda0fad28eef42d013e20dbfc5bc0ae41948000a685f3f830a", "risk": [], "deny_message": true, "untrusted": true}}
 ```
 
 `risk` is `[{"rule": "...", "why": "..."}]` for each rule the call matched. The

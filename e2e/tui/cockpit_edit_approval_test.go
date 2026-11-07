@@ -27,7 +27,7 @@ func TestCockpitHeldEditIsReviewedInThePane(t *testing.T) {
 		}
 	}
 	payload := `{"hook_event_name":"PermissionRequest","session_id":"e2e-edit","tool_name":"Edit","tool_input":` +
-		`{"file_path":"notes.txt","old_string":"retries = 3\n","new_string":"retries = 5\n"}}`
+		`{"file_path":"/tmp/tuios-e2e/notes.txt","old_string":"retries = 3\n","new_string":"retries = 5\n"}}`
 	startHookIn(t, base, "api", "0", payload)
 
 	term := startIn(t, base, startOpts{args: []string{"attach", "home"}, cols: 160, rows: 40, shippedLooks: true})

@@ -3,6 +3,7 @@ package integration
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"path/filepath"
 	"slices"
 	"strconv"
 	"strings"
@@ -29,6 +30,10 @@ import (
 // MaxEdit bounds an edit's body, in bytes: the path and every old and new
 // string together. It is the plan bound.
 const MaxEdit = MaxPlan
+
+// MaxEditHunks bounds a MultiEdit's hunks. Each one is a head and lines on
+// the card, and a person does not read thousands of them before an allow.
+const MaxEditHunks = 256
 
 // EditHunk is one replacement in an edit. A Write is one hunk with an empty
 // Old and the whole new content as New.
@@ -116,22 +121,25 @@ func textLines(s string) int {
 }
 
 // Showable reports whether the Inbox can show the body exactly as it is: an
-// edit tool, a printable path, at least one hunk, a Write as one hunk with no
-// old text, the whole within MaxEdit, and every string valid UTF-8 of
-// printable characters, tabs and newlines only. The hook checks it before it
+// edit tool, a printable absolute path, one to MaxEditHunks hunks, none of a
+// MultiEdit's with both sides empty, a Write as one hunk with no old text,
+// the whole within MaxEdit, and every string valid UTF-8 of printable
+// characters, tabs and newlines only. A relative path is refused: the digest
+// does not hold the folder it is read from, so the same body would name two
+// files in two panes. The hook checks it before it
 // offers an edit and the daemon again before it holds one.
 func (e EditBody) Showable() bool {
-	if !slices.Contains(EditTools, e.Tool) || e.Path == "" || !invisible.Printable(e.Path) {
+	if !slices.Contains(EditTools, e.Tool) || !filepath.IsAbs(e.Path) || !invisible.Printable(e.Path) {
 		return false
 	}
-	if len(e.Hunks) == 0 || (e.Tool != "MultiEdit" && len(e.Hunks) != 1) || e.Size() > MaxEdit {
+	if len(e.Hunks) == 0 || len(e.Hunks) > MaxEditHunks || (e.Tool != "MultiEdit" && len(e.Hunks) != 1) || e.Size() > MaxEdit {
 		return false
 	}
 	if e.Tool == "Write" && (e.Hunks[0].Old != "" || e.Hunks[0].ReplaceAll) {
 		return false
 	}
 	for _, h := range e.Hunks {
-		if !editTextShown(h.Old) || !editTextShown(h.New) {
+		if !editTextShown(h.Old) || !editTextShown(h.New) || (e.Tool == "MultiEdit" && h.Old == "" && h.New == "") {
 			return false
 		}
 	}
