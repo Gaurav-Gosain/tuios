@@ -34,6 +34,9 @@ const riskyLine = "approve Bash: rm -rf build/"
 func replyWith(c *verbConn, t *testing.T, requestID, decision, nonce string, extra map[string]any) map[string]any {
 	t.Helper()
 	params := map[string]any{"request_id": requestID, "decision": decision, "human_nonce": nonce}
+	if line := heldLine(c, t, requestID); line != "" {
+		params["summary"] = line
+	}
 	maps.Copy(params, extra)
 	return callP(c, t, "reply-approval", params)
 }

@@ -3058,7 +3058,7 @@ func buildVerbRegistry() map[string]verbEntry {
 				{Name: "decision", Type: "string", Description: "once, always or deny, whichever the item's options offer, or ask to give the prompt back to the pane.", Accepted: approvalReplies},
 				{Name: "message", Type: "string", Description: "The reason for a deny, which the harness passes to the model. One line, at most 500 bytes."},
 				{Name: "human_nonce", Type: "string", Description: "The nonce the daemon issued in an attach reply, for a client attached now over the same kind of connection. The TUI sends its own."},
-				{Name: "summary", Type: "string", Description: "The item's summary the decision was made from. When given and the hold is now on another line, nothing is answered: applied is false with reason changed, and the hold runs on. The TUI always sends it."},
+				{Name: "summary", Type: "string", Description: "The item's summary the decision was made from. Required for once and always: an allow without it is refused with invalid_params and nothing is answered. When the hold is now on another line, nothing is answered: applied is false with reason changed, and the hold runs on. A deny may leave it out."},
 				{Name: "risk_ack", Type: "[]string", Description: "For once or always on an item that matched risk rules: exactly the item's risk list, which says the person saw them. Without it such an allow is refused with risk_unacknowledged. A deny needs none."},
 				{Name: "plan_sha", Type: "string", Description: "For a plan item: the plan_sha of the plan that was shown. An answer without it, or for another plan, is not applied."},
 			},
