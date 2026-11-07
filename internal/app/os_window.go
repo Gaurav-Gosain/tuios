@@ -1046,7 +1046,7 @@ func (m *OS) DeleteWindow(i int) *OS {
 		m.FocusedWindow = -1
 		m.LogInfo("No windows remaining, switching to window management mode")
 		// Reset to window management mode when no windows are left
-		m.Mode = WindowManagementMode
+		m.ChooseMode(WindowManagementMode, ModeCauseNoPane)
 	} else if i < m.FocusedWindow {
 		m.FocusedWindow--
 	} else if i == m.FocusedWindow {

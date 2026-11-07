@@ -109,7 +109,7 @@ func (m *OS) PressHoldKey(key tea.KeyPressMsg) bool {
 	switch {
 	case !m.hold.active:
 		m.hold = holdMode{active: true, returnMode: m.Mode, strip: modifierKeyMods[trigger]}
-		m.Mode = WindowManagementMode
+		m.SetBorrowedMode(WindowManagementMode)
 	case key.IsRepeat:
 		// The key is still down; the terminal is just repeating it.
 	default:
@@ -146,7 +146,7 @@ func (m *OS) EndHold() {
 	returnMode := m.hold.returnMode
 	m.hold = holdMode{}
 	if m.Mode == WindowManagementMode {
-		m.Mode = returnMode
+		m.SetBorrowedMode(returnMode)
 	}
 }
 

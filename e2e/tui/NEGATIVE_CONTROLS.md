@@ -14641,3 +14641,24 @@ tuios task dispatch.
 Run on 2026-11-08 on macOS (arm64). The branch passes. With the
 `ActionInboxDispatchMode` case dropped from the cockpit's keys: "waiting for
 the board in pull mode: timed out". **caught**
+
+## One writer of the client mode
+
+`TestTapeRecordingKeepsEveryModeChoice` (`mode_record_test.go`) starts a tape
+recording, which puts the client in terminal mode, runs a line in the shell,
+leaves with alt+esc, and stops. The saved tape must hold a `TerminalMode` line
+before the typed line and a `WindowManagementMode` line after it. Played back
+from terminal mode, it must end in window management, where `,` opens the
+settings panel. Both switches assigned `OS.Mode` directly and did not tell the
+recorder. Every write of the mode now goes through `internal/app/mode.go`,
+and `TestOnlyModeGoWritesTheClientMode` in `internal/lint` rejects any other.
+
+Run on 2026-11-08 on macOS (arm64):
+
+| Removed | Test | Failure | Result |
+|---------|------|---------|--------|
+| The change (main at c4e977d25) | `TestTapeRecordingKeepsEveryModeChoice` | "the tape has no TerminalMode line for the start of the recording" | **caught** |
+| A direct `m.Mode =` put back in `os_minimize.go` | `TestOnlyModeGoWritesTheClientMode` | "internal/app/os_minimize.go:130: m.Mode =" | **caught** |
+
+The fixed build passes 3 of 3. The saved tape is under `TUIOS_E2E_FRAMES` as
+`recording.tape`.

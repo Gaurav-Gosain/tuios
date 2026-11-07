@@ -1880,7 +1880,7 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		}
 		// Ensure we're in window management mode if no windows remain
 		if len(m.Windows) == 0 {
-			m.Mode = WindowManagementMode
+			m.ChooseMode(WindowManagementMode, ModeCauseNoPane)
 		}
 		return m, listenWindowExitsUntil(m.stopSignal(), m.WindowExitChan)
 

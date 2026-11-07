@@ -519,7 +519,7 @@ func (m *OS) ToggleTiling() error {
 func (m *OS) SetMode(mode string) error {
 	switch mode {
 	case "terminal", "Terminal", "TerminalMode":
-		m.Mode = TerminalMode
+		m.ChooseMode(TerminalMode, ModeCauseTape)
 		if m.FocusedWindow < 0 || m.FocusedWindow >= len(m.Windows) {
 			for i, w := range m.Windows {
 				if w.Workspace == m.CurrentWorkspace && !w.Minimized {
@@ -529,7 +529,7 @@ func (m *OS) SetMode(mode string) error {
 			}
 		}
 	case "window", "Window", "WindowManagementMode":
-		m.Mode = WindowManagementMode
+		m.ChooseMode(WindowManagementMode, ModeCauseTape)
 	}
 	return nil
 }

@@ -226,7 +226,7 @@ func handleCloseWindow(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		refreshFocusedWindow(o)
 	} else if o.Mode == app.TerminalMode {
 		// Nothing left to type into.
-		o.Mode = app.WindowManagementMode
+		o.ChooseMode(app.WindowManagementMode, app.ModeCauseNoPane)
 	}
 	return o, nil
 }
@@ -247,7 +247,7 @@ func startRename(o *app.OS) {
 	if focused == nil {
 		return
 	}
-	o.Mode = app.WindowManagementMode
+	o.ChooseMode(app.WindowManagementMode, app.ModeCauseAction)
 	o.BeginRenameWindow(focused)
 }
 
@@ -272,7 +272,7 @@ func handleWindowPrefixRename(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd)
 // from which: the pill the menu was opened on, or the workspace in view.
 // Renaming is a window-management activity, like renaming a pane.
 func handleWorkspaceRename(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
-	o.Mode = app.WindowManagementMode
+	o.ChooseMode(app.WindowManagementMode, app.ModeCauseAction)
 	o.BeginRenameCurrentWorkspace()
 	return o, nil
 }
@@ -489,7 +489,7 @@ func leaveTerminalMode(o *app.OS) {
 	if o.Mode != app.TerminalMode {
 		return
 	}
-	o.Mode = app.WindowManagementMode
+	o.ChooseMode(app.WindowManagementMode, app.ModeCauseKey)
 	o.ShowNotification("Window management mode", "info", o.Settings.NotificationDuration)
 	refreshFocusedWindow(o)
 }

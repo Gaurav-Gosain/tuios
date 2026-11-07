@@ -19,7 +19,7 @@ package app
 func (m *OS) BeginPointerGesture() {
 	if m.Mode == TerminalMode {
 		m.pointerGestureWasTerminal = true
-		m.Mode = WindowManagementMode
+		m.SetBorrowedMode(WindowManagementMode)
 	}
 }
 
@@ -28,6 +28,6 @@ func (m *OS) BeginPointerGesture() {
 func (m *OS) EndPointerGesture() {
 	if m.pointerGestureWasTerminal {
 		m.pointerGestureWasTerminal = false
-		m.Mode = TerminalMode
+		m.SetBorrowedMode(TerminalMode)
 	}
 }

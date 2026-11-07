@@ -507,7 +507,7 @@ func (m *OS) RestoreFromState(state *session.SessionState) error {
 	// and mouse events are forwarded to it. Staying in window management mode
 	// meant typing did nothing until a click.
 	if len(m.Windows) > 0 && m.FocusedWindow >= 0 {
-		m.Mode = TerminalMode
+		m.ChooseMode(TerminalMode, ModeCauseRestore)
 	}
 
 	return nil
@@ -817,7 +817,7 @@ func (m *OS) ApplyStateSyncFrom(state *session.SessionState, sourceID string) er
 	// terminal to reach. Closing is the daemon's job, so the drop back to window
 	// management after the last window closes happens here.
 	if m.FocusedWindow < 0 && m.Mode == TerminalMode {
-		m.Mode = WindowManagementMode
+		m.ChooseMode(WindowManagementMode, ModeCauseNoPane)
 	}
 
 	// Update workspace focus map

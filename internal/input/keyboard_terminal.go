@@ -253,7 +253,7 @@ func typeIntoPane(msg tea.KeyPressMsg, o *app.OS, nvimNavigation bool) (*app.OS,
 			}
 			if err := focusedWindow.SendInput(rawInput); err != nil {
 				// Terminal unavailable, switch back to window mode
-				o.Mode = app.WindowManagementMode
+				o.ChooseMode(app.WindowManagementMode, app.ModeCauseNoPane)
 				focusedWindow.InvalidateCache()
 			}
 			// Forward keystrokes to the multifocus set's panes on screen.
@@ -270,7 +270,7 @@ func typeIntoPane(msg tea.KeyPressMsg, o *app.OS, nvimNavigation bool) (*app.OS,
 		}
 	} else {
 		// No focused window, switch back to window mode
-		o.Mode = app.WindowManagementMode
+		o.ChooseMode(app.WindowManagementMode, app.ModeCauseNoPane)
 	}
 	return o, nil
 }

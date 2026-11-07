@@ -154,7 +154,7 @@ func handleMouseRelease(msg tea.MouseReleaseMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	// the drop leaves through several returns, all of which retile first.
 	if o.CtrlDragWasTerminal {
 		o.CtrlDragWasTerminal = false
-		defer func() { o.Mode = app.TerminalMode }()
+		defer o.SetBorrowedMode(app.TerminalMode)
 	}
 
 	// A plain right press on a pane arms a resize. Below the drag threshold it

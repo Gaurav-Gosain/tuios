@@ -84,7 +84,7 @@ func (m *OS) endSidebarReturn() {
 	id := m.sidebarReturnWindow
 	m.clearSidebarReturn()
 
-	m.Mode = m.sidebarReturnMode
+	m.SetBorrowedMode(m.sidebarReturnMode)
 	if id == "" {
 		return
 	}
@@ -98,6 +98,6 @@ func (m *OS) endSidebarReturn() {
 	// management is the mode that can go find another one, so a terminal mode
 	// with nothing to type into is not handed back.
 	if m.Mode == TerminalMode && m.GetFocusedWindow() == nil {
-		m.Mode = WindowManagementMode
+		m.SetBorrowedMode(WindowManagementMode)
 	}
 }

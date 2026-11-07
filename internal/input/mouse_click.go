@@ -564,7 +564,7 @@ func handleMouseClick(msg tea.MouseClickMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	}
 	o.FocusWindowFromClick(clickedWindowIndex, X, Y)
 	if o.Mode == app.TerminalMode {
-		o.Mode = app.WindowManagementMode
+		o.SetBorrowedMode(app.WindowManagementMode)
 	}
 
 	// A left press on the content area in window-management mode arms
@@ -687,7 +687,7 @@ func beginWindowDrag(o *app.OS, idx, x, y int) {
 	win := o.Windows[idx]
 	o.FocusWindowFromClick(idx, x, y)
 	if o.Mode == app.TerminalMode {
-		o.Mode = app.WindowManagementMode
+		o.SetBorrowedMode(app.WindowManagementMode)
 	}
 	o.SetPointerShape(app.PointerGrabbing)
 	o.InteractionMode = true

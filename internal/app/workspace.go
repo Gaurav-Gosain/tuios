@@ -387,11 +387,7 @@ func (m *OS) switchToWorkspaceHeld(workspace, focusTarget int) {
 		m.LogInfo("No visible windows in workspace %d", workspace)
 		// Exit terminal mode when switching to empty workspace
 		if m.Mode == TerminalMode {
-			// Record mode switch for tape recording
-			if m.TapeRecorder != nil && m.TapeRecorder.IsRecording() {
-				m.TapeRecorder.RecordModeSwitch(tape.CommandTypeWindowManagementMode)
-			}
-			m.Mode = WindowManagementMode
+			m.ChooseMode(WindowManagementMode, ModeCauseNoPane)
 			m.LogInfo("Switched to window management mode (empty workspace)")
 		}
 	} else {
@@ -613,7 +609,7 @@ func (m *OS) FocusNextVisibleWindowInWorkspace() {
 	// No visible windows in workspace
 	m.FocusedWindow = -1
 	if m.Mode == TerminalMode {
-		m.Mode = WindowManagementMode
+		m.ChooseMode(WindowManagementMode, ModeCauseNoPane)
 	}
 }
 

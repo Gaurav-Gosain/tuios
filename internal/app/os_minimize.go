@@ -127,7 +127,7 @@ func (m *OS) RestoreWindow(i int) {
 		// Bring the window to front and focus it
 		m.FocusWindow(i)
 		// Enter window management mode to interact with the restored window
-		m.Mode = WindowManagementMode
+		m.ChooseMode(WindowManagementMode, ModeCauseClick)
 	}
 }
 
