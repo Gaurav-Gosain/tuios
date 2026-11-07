@@ -308,7 +308,10 @@ func TestPhoneStreamsAPaneAndAnswersTheInbox(t *testing.T) {
 	if _, verr := ctl.call(t, "reply-approval", map[string]any{"request_id": id, "decision": "once", "human_nonce": "0000"}); verr == nil || verr.Code != "not_human" {
 		t.Fatalf("a made-up nonce: want not_human, got %v", verr)
 	}
-	res, verr := ctl.call(t, "reply-approval", map[string]any{"request_id": id, "decision": "once", "human_nonce": nonce})
+	// The line the phone showed: an allow names it (reply-approval refuses one
+	// without it).
+	res, verr := ctl.call(t, "reply-approval", map[string]any{"request_id": id, "decision": "once", "human_nonce": nonce,
+		"summary": heldApprovalLine(t, ctl, streamSession, id)})
 	if verr != nil || res["applied"] != true || res["answered_by"] != pres["client_id"] {
 		t.Fatalf("the presence nonce did not answer the held approval: %v %v", res, verr)
 	}
@@ -833,6 +836,25 @@ func spApproval(t *testing.T, ctl *linkStream, window string) string {
 		time.Sleep(100 * time.Millisecond)
 	}
 	t.Fatalf("no held approval for %s showed in the Inbox", window)
+	return ""
+}
+
+// heldApprovalLine is the line the Inbox item of request id shows, which a
+// client that answers it sends back as summary.
+func heldApprovalLine(t *testing.T, ctl *linkStream, session, id string) string {
+	t.Helper()
+	res, verr := ctl.call(t, "list-attention", map[string]any{"session": session})
+	if verr != nil {
+		t.Fatalf("list-attention: %v", verr)
+	}
+	items, _ := res["items"].([]any)
+	for _, it := range items {
+		if m := it.(map[string]any); m["request_id"] == id {
+			line, _ := m["summary"].(string)
+			return line
+		}
+	}
+	t.Fatalf("no Inbox item holds request %s", id)
 	return ""
 }
 

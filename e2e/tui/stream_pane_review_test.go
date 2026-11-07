@@ -80,7 +80,8 @@ func TestPresenceNonceScope(t *testing.T) {
 	if _, verr := anyConn.call(t, "respond", map[string]any{"session": otherSession, "window": ow, "action": "deny", "human_nonce": unscoped["human_nonce"]}); verr != nil && verr.Code == "not_human" {
 		t.Fatalf("a presence with no session was refused by respond in session %s: %v", otherSession, verr)
 	}
-	r, verr := anyConn.call(t, "reply-approval", map[string]any{"request_id": id, "decision": "once", "human_nonce": unscoped["human_nonce"]})
+	r, verr := anyConn.call(t, "reply-approval", map[string]any{"request_id": id, "decision": "once", "human_nonce": unscoped["human_nonce"],
+		"summary": heldApprovalLine(t, ctl, otherSession, id)})
 	if verr != nil || r["applied"] != true {
 		t.Fatalf("a presence with no session did not answer the approval in session %s: %v %v", otherSession, r, verr)
 	}
