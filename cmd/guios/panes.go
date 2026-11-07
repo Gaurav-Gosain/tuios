@@ -652,6 +652,9 @@ func (a *App) paneHeader(c *ui.Context, pal *palette, bar ui.TitleBar, shown flo
 		// The chips follow the folder and the branch, packed left with the
 		// same gap in every pane (council round 1, visual 13).
 		a.paneChips(c, pal, p, multi, plan)
+		if s.Zoomed == p.ID && len(s.Panes) > 1 {
+			a.zoomChip(c, pal, s, p)
+		}
 		// The header's empty stretch moves the window, as a title bar
 		// does, and zooms it on a double click: the header around it
 		// takes clicks, which focus the pane.
@@ -809,6 +812,26 @@ func (a *App) paneChips(c *ui.Context, pal *palette, p *proto.Pane, multi bool, 
 		if plan.sized {
 			pc.MaxWidth(plan.processW)
 		}
+	}
+}
+
+// zoomChip says that the pane is zoomed and how many panes that hides,
+// and ends the zoom on a click (QM-012): with the others gone and nothing
+// saying so, the way back was the keys alone.
+func (a *App) zoomChip(c *ui.Context, pal *palette, s *proto.Session, p *proto.Pane) {
+	b := ui.ButtonBase(c.Key("zoomed")).Height(hChip).Padding(0, 7).Gap(5).Radius(rRow).AlignItems(ui.Center).Shrink(0).
+		Label(locales.PaneZoomedEnd()).Tooltip(a.tip(locales.PaneZoomedEnd(), "pane.zoom"))
+	bg := pal.accent.Alpha(0.14)
+	if b.Hovered() {
+		bg = pal.accent.Alpha(0.22)
+	}
+	b.Background(bg).TextColor(pal.accentText).Children(func() {
+		ui.Icon(c, unzoomIcon).Size(12, 12)
+		oneLine(c, locales.PaneZoomedHides(len(s.Panes)-1), fsSmall, wMedium)
+	})
+	if b.Clicked() {
+		sid, pid := s.ID, p.ID
+		a.defer_(func() { a.zoomPane(a.session(sid), pid) })
 	}
 }
 

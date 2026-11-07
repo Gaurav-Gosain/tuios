@@ -1304,5 +1304,7 @@
   "cockpitTypeToReply": "入力して返信",
   "cockpitTypeToAddCard": "入力してカードを追加",
   "cockpitNothingToSnooze": "{name} にはスヌーズするものがありません。",
-  "cockpitQuestionTypeReply": "これは質問です。答えを選ぶか、入力して返信してください。"
+  "cockpitQuestionTypeReply": "これは質問です。答えを選ぶか、入力して返信してください。",
+  "paneZoomedHides": "ズーム中 · {count, plural, other {# 個のペインを非表示}}",
+  "paneZoomedEnd": "すべてのペインを表示"
 }

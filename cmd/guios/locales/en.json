@@ -2333,5 +2333,7 @@
   "cockpitTypeToReply": "Type to reply",
   "cockpitTypeToAddCard": "Type to add a card",
   "cockpitNothingToSnooze": "{name} has nothing to snooze.",
-  "cockpitQuestionTypeReply": "This is a question. Pick an answer, or type to reply."
+  "cockpitQuestionTypeReply": "This is a question. Pick an answer, or type to reply.",
+  "paneZoomedHides": "Zoomed · {count, plural, one {# pane hidden} other {# panes hidden}}",
+  "paneZoomedEnd": "Show all panes"
 }

@@ -1304,5 +1304,7 @@
   "cockpitTypeToReply": "输入即可回复",
   "cockpitTypeToAddCard": "输入即可添加卡片",
   "cockpitNothingToSnooze": "{name} 没有可暂缓的内容。",
-  "cockpitQuestionTypeReply": "这是一个问题。请选择一个回答，或输入回复。"
+  "cockpitQuestionTypeReply": "这是一个问题。请选择一个回答，或输入回复。",
+  "paneZoomedHides": "已缩放 · {count, plural, other {隐藏了 # 个窗格}}",
+  "paneZoomedEnd": "显示所有窗格"
 }

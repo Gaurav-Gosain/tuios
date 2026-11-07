@@ -13223,3 +13223,23 @@ func CockpitQuestionTypeReply() string { return In(i18n.Locale()).CockpitQuestio
 func (msgs Messages) CockpitQuestionTypeReply() string {
 	return Catalog.Format(msgs.locale, "cockpitQuestionTypeReply", nil)
 }
+
+// PaneZoomedHides says "Zoomed · {count, plural, one {# pane hidden} other {# panes hidden}}"
+// in the language the app shows.
+func PaneZoomedHides(count int) string { return In(i18n.Locale()).PaneZoomedHides(count) }
+
+// PaneZoomedHides says "Zoomed · {count, plural, one {# pane hidden} other {# panes hidden}}"
+// in the language of msgs.
+func (msgs Messages) PaneZoomedHides(count int) string {
+	return Catalog.Format(msgs.locale, "paneZoomedHides", map[string]any{"count": count})
+}
+
+// PaneZoomedEnd says "Show all panes"
+// in the language the app shows.
+func PaneZoomedEnd() string { return In(i18n.Locale()).PaneZoomedEnd() }
+
+// PaneZoomedEnd says "Show all panes"
+// in the language of msgs.
+func (msgs Messages) PaneZoomedEnd() string {
+	return Catalog.Format(msgs.locale, "paneZoomedEnd", nil)
+}
