@@ -13430,3 +13430,107 @@ rule, not the digest, refused the allow. That run proved nothing about
 
 Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestGUIBridgeEditApprovalNeedsItsDigest$' -v .`.
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^(TestAttachedClientFollowsDaemonUpgrade|TestAttachedClientIsToldToReattach)$' -v .`.
+## The paste preview
+
+`paste_preview_test.go` pastes an image through a fake clipboard (the
+`wl-paste` stand-in of `paste_image_test.go`, holding a real PNG). On a host
+with kitty graphics the card comes up, its picture is placed on the host in
+the card's first row, and the next key takes both down and still reaches the
+pane. Without graphics the picture is block glyphs in the card's cells. In one
+client, a paste with the card on puts it up, and a paste after
+`set-config appearance.paste_preview false` pastes the path alone.
+
+Run on 2026-11-06 on macOS (arm64). The branch passes all three tests. Four
+controls, each this branch with one change.
+
+| Control | Test | Failure | Verdict |
+| --- | --- | --- | --- |
+| `applyImagePasted` returns without `showPastePreview` | `TestAnImagePasteShowsTheImageInACard` | `no card, or no picture placed in it` | **caught** |
+| The card's clause in the fullscreen fast path (`fullscreenFastWindow`) removed | `TestAnImagePasteShowsTheImageInACard` | `no card, or no picture placed in it` | **caught** |
+| The key's `hidePastePreview` in `Update` removed | `TestAnImagePasteShowsTheImageInACard` | `the card or its picture outlived the next key, or the key did not reach the pane` (3 s, inside the card's own 6 s) | **caught** |
+| `showPastePreview` ignores `Settings.PastePreview` | `TestPastePreviewCanBeTurnedOff` | `paste_preview = false still put a card up` | **caught** |
+
+The second control is the bug the first test found: a paste into the only
+pane on screen took the fast path, which draws no overlay, so the card was up
+and never drawn.
+
+The frames, with the host's picture drawn in, are under `TUIOS_E2E_FRAMES`, in
+each test's folder. Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run 'Paste(Preview|ShowsTheImage|WithoutGraphics)' -v .`.
+
+
+## Quick look wraps a row at whole characters
+
+`TestQuickLookWrapsWideCharactersWhole` and `TestQuickLookWrapsSoundMarksWhole` open `zzwrap.txt` with wrap on, at 140x40, where the code column is 81 cells. Line 1 is 321 wide characters: its rows must hold each of them once and in order, 40 to a row, and no row may end in "…". With `w` the line is cut to one row that does end in "…". Line 2 is sixty Latin letters, each with a halfwidth sound mark, then 140 ASCII characters: its rows must hold all of its ASCII in order, none may end in "…" or be empty, and each row but the last fills the code column. Line 3, ASCII alone, must show whole, and does on main. `TestQuickLookWrapKeepsColours` wraps a Go line with `w`: the `return` on its third row must have the colour of the `return` on line 1, which differs from the identifier `s`.
+
+Run on 2026-11-07 on Linux. Main (52fd515a9) is the control for the first two.
+
+| Control: what was cut | Test | Where it fails | Verdict |
+| --- | --- | --- | --- |
+| Main's draw: the whole line handed to each row, cut at `k*codeW` | `TestQuickLookWrapsWideCharactersWhole` | "line 1 does not wrap whole: 8 rows holding [41 41 41 41 41 41 41 38] characters, rows [0 1 2 3 4 5 6] end in "…", characters [80 161 242] of 321 are on no row" | **caught** |
+| Main's draw: the whole line handed to each row, cut at `k*codeW` | `TestQuickLookWrapsSoundMarksWhole` | "line 2 does not wrap whole: its rows hold 183 of its 200 ASCII characters (...k028k029k03), rows [0 1] end in "…", rows [] are empty, rows [0 1] stop before the last cell" | **caught** |
+| The branch with the row given the whole line's spans (`sp` for `ql.rowSpans`) | `TestQuickLookWrapKeepsColours` | "cell 0 of the return on row 2 of line 2 is {Kind:1 Index:105 R:0 G:0 B:0}, want the keyword's {Kind:1 Index:171 R:0 G:0 B:0} (the identifier s is {Kind:1 Index:255 R:0 G:0 B:0})" | **caught** |
+
+`TestQuickLookWrapKeepsColours` passes on main, which keeps the whole line's colours when it cuts a row. Its control is the branch with one change: the row given the whole line's spans.
+
+The frames are `quick-look-wrap-wide`, `quick-look-wrap-marks` and `quick-look-wrap-colours` under `TUIOS_E2E_FRAMES`. Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestQuickLookWrap' -v .`.
+## The setup tail before the first output event
+
+`TestWorktreeSetupSyncHoldsAgent` waits for the setup record to show the
+setup's last lines while the setup waits on a gate. The setup prints its
+lines and then prints nothing until the gate opens. On CI the record showed no
+lines at all for 30 s, now and then: `followSetupTail` read the screen only
+after an output event, and it subscribed after the setup had started. Lines
+printed before the subscription brought no event, and the quiet wait brought
+none either. The fix reads the screen once when the follower starts.
+
+Run on 2026-11-07 on Linux (amd64). To make the race certain, both builds wait
+one second at the top of `followSetupTail` before they subscribe.
+
+| Control | Test | Failure | Verdict |
+| --- | --- | --- | --- |
+| The read on start removed (main), subscribe delayed 1 s | `TestWorktreeSetupSyncHoldsAgent` | `running with its last lines: the setup of repo-feat-sync never got there` | **caught** |
+
+The fixed build with the same delay passes. Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestWorktreeSetupSyncHoldsAgent$' -v .`.
+
+## The terminals section stays when every pane is an agent
+
+`TestRailTerminalsKeepsItsHeaderWhenAllPanesAreAgents` uses the layout
+`sessions:20,terminals,agents` on a rail 28 columns wide. At 30 columns or less
+the rail lists an agent pane under agents and not under terminals. Before the
+fix, a session whose panes all ran agents had no terminals rows, so the section
+was dropped with its header and its "+", and the rail had no way to open a
+plain terminal. The test makes two panes, sets one as an agent and reads the
+other under terminals with no note. It then sets the second as an agent and
+waits for the terminals header with its "+" and the row "2 in agents" under it.
+A click on the "+" must open a pane and take the note away.
+
+Run on 2026-11-07 on macOS (arm64), each control its own binary:
+
+| Removed | The test fails with | Result |
+|---------|---------------------|--------|
+| `movedToAgents` in `sidebarPanelLinesForTree` left at 0, as before the fix | "with every pane an agent, the terminals header, its + or the \"2 in agents\" row is missing"; the rail shows sessions and agents only | **caught** |
+
+The frame is `terminals-all-agents` under the test's artifact folder. Repeat from
+`e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestRailTerminalsKeepsItsHeaderWhenAllPanesAreAgents$' -v .`.
+
+## TestMailFromAPaneOfAnotherSession
+
+The test makes two sessions on one daemon and mails between their first panes
+with `--from` set to the sender's full window id, both ways. Before the fix the
+sender had to be a window of the recipient's session, so a lead in one session
+and its workers in another could not mail each other. It also checks that a
+window name from another session is still refused.
+
+Run on 2026-11-07 on macOS (arm64), each control its own binary:
+
+| Removed | The test fails with | Result |
+|---------|---------------------|--------|
+| `true` passed to `sendAgentMessage` in `verbSendAgentMessage`, back to `false` | "a worker in team could not mail the lead in lead: exit status 1" | **caught** |
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestMailFromAPaneOfAnotherSession$' -v .`.
