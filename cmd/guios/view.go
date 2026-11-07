@@ -608,7 +608,10 @@ func (a *App) groupView(c *ui.Context, pal *palette, g group, gi int, n *int) {
 		if g.first && g.host.remote() {
 			a.hostState(c, pal, g.host)
 		}
-		if needs > 0 {
+		// The count shows while the group is folded: open, its rows and
+		// the rail's Needs you say it, and a fourth count on one screen
+		// was noise (Mac round 1, visual S1).
+		if needs > 0 && collapsed {
 			ui.Text(c, locales.SidebarNeedsYou(needs)).FontSize(fsSmall).FontWeight(wMedium).TextColor(pal.attnText).FontFeatures("tnum").SingleLine().Shrink(0)
 		}
 		if hovered {
@@ -934,7 +937,11 @@ func (a *App) sidebarFooter(c *ui.Context, pal *palette) {
 			waiting := func(s *proto.Session) bool { return s.Status == proto.Waiting }
 			working := func(s *proto.Session) bool { return s.Status == proto.Working }
 			done := func(s *proto.Session) bool { return s.Status == proto.Idle && s.Unread }
-			a.footerChip(c, pal, proto.Waiting, false, waiting, pal.attnText, locales.FooterNeedsYou, a.tip(locales.FooterGoToIt(), "session.attention"), a.jumpToAttention)
+			// The rail's Needs you lists the waits already: the chip is for
+			// a session that waits with no agent in that list.
+			if len(a.sbNeeds) == 0 {
+				a.footerChip(c, pal, proto.Waiting, false, waiting, pal.attnText, locales.FooterNeedsYou, a.tip(locales.FooterGoToIt(), "session.attention"), a.jumpToAttention)
+			}
 			a.footerChip(c, pal, proto.Working, false, working, pal.textMuted, locales.FooterWorking, locales.FooterGoToIt(), nil)
 			a.footerChip(c, pal, proto.Idle, true, done, pal.textMuted, locales.FooterDone, locales.FooterGoToIt(), nil)
 		case connConnecting:
