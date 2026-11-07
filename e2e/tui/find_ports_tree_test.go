@@ -143,7 +143,12 @@ func TestFindPortsAndStartedBy(t *testing.T) {
 		return out
 	}
 	run(`printf 'FIND%s\n' ME-one`)
-	run(`for i in $(seq 1 80); do echo filler $i; done`)
+	// The filler ends in a word longer than any pane is wide, so the shell's
+	// line soft-wraps inside a word, and command-history must read it back
+	// as one line. It used to put a space at every wrap ("f iller"), and
+	// only narrow panes wrapped, so CI saw it now and then.
+	filler := `for i in $(seq 1 80); do echo filler $i; done; : ` + strings.Repeat("wrapped", 40)
+	run(filler)
 	if out := run(`printf 'FIND%s\n' ME-two; false`); out["exit_code"] != float64(1) {
 		t.Fatalf("the failing command ran with %v, want exit 1", out)
 	}
@@ -231,7 +236,7 @@ func TestFindPortsAndStartedBy(t *testing.T) {
 	for _, h := range hist.Commands {
 		got = append(got, h.Cmdline)
 	}
-	want := []string{`pwd`, `cd sub`, `printf 'FIND%s\n' ME-one`, `printf 'FIND%s\n' ME-two; false`, `for i in $(seq 1 80); do echo filler $i; done`}
+	want := []string{`pwd`, `cd sub`, `printf 'FIND%s\n' ME-one`, `printf 'FIND%s\n' ME-two; false`, filler}
 	if strings.Join(got, " | ") != strings.Join(want, " | ") {
 		t.Fatalf("command-history lists\n  %q\nwant\n  %q", got, want)
 	}
@@ -242,10 +247,18 @@ func TestFindPortsAndStartedBy(t *testing.T) {
 	if h := byCmd[want[3]]; h.Exit == nil || *h.Exit != 1 {
 		t.Errorf("the failing command has exit %v, want 1", h.Exit)
 	}
-	if h := byCmd["pwd"]; h.Exit == nil || *h.Exit != 0 || h.Cwd != sub {
+	// The shell reports the folder with symlinks resolved. On macOS the
+	// temporary folder is under /var, a link to /private/var, so both sides
+	// are compared resolved.
+	samePath := func(a, b string) bool {
+		ra, errA := filepath.EvalSymlinks(a)
+		rb, errB := filepath.EvalSymlinks(b)
+		return errA == nil && errB == nil && ra == rb
+	}
+	if h := byCmd["pwd"]; h.Exit == nil || *h.Exit != 0 || !samePath(h.Cwd, sub) {
 		t.Errorf("pwd: exit %v, cwd %q; want 0 and %q", h.Exit, h.Cwd, sub)
 	}
-	if h := byCmd["cd sub"]; h.Cwd != work {
+	if h := byCmd["cd sub"]; !samePath(h.Cwd, work) {
 		t.Errorf("cd sub started in %q, want %q", h.Cwd, work)
 	}
 	if h := byCmd[want[2]]; h.Seq != 4 {

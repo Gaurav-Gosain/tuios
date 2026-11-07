@@ -283,4 +283,14 @@ func (r ghosttyLockedReader) CellAt(x, y int) *uv.Cell {
 	return r.t.bufs[r.t.active].CellAt(x, y)
 }
 
+func (r ghosttyLockedReader) lineSoftWrapped(absLine int) bool {
+	if sbLen := r.t.scrollbackLenLocked(); absLine < sbLen {
+		wrapped, _ := r.t.scrollbackSoftWrappedLocked(absLine)
+		return wrapped
+	} else {
+		wrapped, _ := r.t.rowSoftWrappedLocked(absLine - sbLen)
+		return wrapped
+	}
+}
+
 func (t *GhosttyTerminal) readerNoLock() markerGridReader { return ghosttyLockedReader{t} }
