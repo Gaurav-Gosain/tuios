@@ -1169,8 +1169,11 @@ func statusIconP(c *ui.Context, pal *palette, st proto.Status, unread bool, prog
 			check := (&ui.Path{}).MoveTo(cx-rad*0.42, cy+0.2).LineTo(cx-rad*0.08, cy+rad*0.36).LineTo(cx+rad*0.46, cy-rad*0.34)
 			p.StrokePath(check, 1.6, pal.onDone)
 		case st == statusDone:
+			// The done green, as the filled mark of a result not seen yet:
+			// a grey check read as a third mark for done (Mac round 1,
+			// visual S8).
 			check := (&ui.Path{}).MoveTo(cx-rad*0.62, cy+0.3).LineTo(cx-rad*0.14, cy+rad*0.52).LineTo(cx+rad*0.66, cy-rad*0.48)
-			p.StrokePath(check, 1.6, pal.textMuted)
+			p.StrokePath(check, 1.6, pal.done)
 		default:
 			// Idle is a hollow dot: the check means done, to review
 			// (council round 1, visual 24).
