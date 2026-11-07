@@ -188,7 +188,7 @@ func runTerminalModeBinds(msg tea.KeyPressMsg, o *app.OS) (tea.Cmd, bool) {
 		return nil, false
 	}
 	action = lookupAction(o, msg, o.KeybindRegistry.GetAction)
-	if !isTerminalSafeAction(action) {
+	if !config.TerminalSafeAction(action) {
 		return nil, false
 	}
 	_, cmd, ok := dispatchAction(action, msg, o)
@@ -215,22 +215,6 @@ func isReservedTerminalChord(msg tea.KeyPressMsg) bool {
 	// only applies on darwin (macOptionChord enforces that).
 	_, ok := macOptionChord(msg)
 	return ok
-}
-
-// isTerminalSafeAction reports whether a main-section action may be triggered
-// from terminal mode. Only navigation between workspaces, sessions and agent
-// panes qualifies:
-// everything else in that section is a window-management verb whose keys must
-// reach the shell.
-func isTerminalSafeAction(action string) bool {
-	return strings.HasPrefix(action, "switch_workspace_") ||
-		strings.HasPrefix(action, "move_and_follow_") ||
-		strings.HasPrefix(action, "send_to_workspace_") ||
-		strings.HasPrefix(action, "switch_session_") ||
-		action == "next_workspace" || action == "prev_workspace" ||
-		action == "next_session" || action == "prev_session" ||
-		action == "next_host" || action == "prev_host" ||
-		action == "next_agent" || action == "prev_agent"
 }
 
 // forwardKeyToFocusedWindow sends a key to the focused window's PTY, using CSI u

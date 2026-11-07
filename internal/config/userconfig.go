@@ -1359,7 +1359,7 @@ func DefaultConfig() *UserConfig {
 				// Enter the sidebar rail's keyboard scope; s is free in window mode.
 				"focus_sidebar": {"s"},
 				// Walking sessions is a chord, not a letter, so it also works while
-				// typing in a shell (see isTerminalSafeAction). Spell the shift out:
+				// typing in a shell (see TerminalSafeAction). Spell the shift out:
 				// "alt+N" normalizes to alt+n, which is already next-window.
 				"next_session": {"alt+shift+n"},
 				"prev_session": {"alt+shift+p"},

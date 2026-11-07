@@ -6,6 +6,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/app"
+	"github.com/Gaurav-Gosain/tuios/internal/config"
 )
 
 // handleFocusSidebar enters the rail's keyboard scope. Bound to "s" in window
@@ -198,7 +199,7 @@ func handleSidebarKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		// reserved chord, and only a terminal-safe action. The rail is where
 		// a person reads the order they walk, and it was swallowing them.
 		if isReservedTerminalChord(msg) {
-			if act := lookupAction(o, msg, o.KeybindRegistry.GetAction); isTerminalSafeAction(act) {
+			if act := lookupAction(o, msg, o.KeybindRegistry.GetAction); config.TerminalSafeAction(act) {
 				if m, cmd, ok := dispatchAction(act, msg, o); ok {
 					return m, cmd
 				}

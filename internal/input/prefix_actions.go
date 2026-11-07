@@ -29,7 +29,7 @@ import (
 func (d *ActionDispatcher) registerPrefixHandlers() {
 	// Main prefix (leader, ...)
 	d.Register("prefix_new_window", handleNewWindow)
-	d.Register("prefix_close_window", handlePrefixCloseWindow)
+	d.Register("prefix_close_window", handleCloseWindow)
 	d.Register("prefix_rename_window", handlePrefixRenameWindow)
 	d.Register("prefix_settings", handleOpenSettings)
 	d.Register("prefix_keybinds", handlePrefixKeybinds)
@@ -93,7 +93,7 @@ func (d *ActionDispatcher) registerPrefixHandlers() {
 
 	// Window prefix (leader, t, ...)
 	d.Register("window_prefix_new", handleNewWindow)
-	d.Register("window_prefix_close", handlePrefixCloseWindow)
+	d.Register("window_prefix_close", handleCloseWindow)
 	d.Register("window_prefix_rename", handleWindowPrefixRename)
 	d.Register("window_prefix_next", handlePrefixNextWindow)
 	d.Register("window_prefix_prev", handlePrefixPrevWindow)
@@ -201,7 +201,10 @@ func handlePrefixCancel(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	return o, nil
 }
 
-func handlePrefixCloseWindow(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+// handleCloseWindow closes the pane that has focus: the session pane in the
+// rail when it has focus, else the focused window. A scratch pane closes by
+// hand. Terminal mode ends when no window is left to type into.
+func handleCloseWindow(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	if o.SidebarSessionFocused() {
 		if w := o.SidebarSessionWindow(); w != nil {
 			o.SidebarSessionIntent("CloseWindow", w.ID)
