@@ -110,7 +110,7 @@ func (l *searchLine) end(next int) {
 var space = []byte{' '}
 
 // fromScreen reads row y of the active screen.
-func (l *searchLine) fromScreen(term vt.Terminal, y int, fold bool) {
+func (l *searchLine) fromScreen(term terminal.CopyText, y int, fold bool) {
 	l.reset(fold)
 	width := term.Width()
 	for x := range width {
@@ -197,17 +197,17 @@ func narrowedLines(cm *terminal.CopyMode, gen uint64, sbLen int) ([]int, bool) {
 }
 
 // executeSearch performs a search operation and updates matches
-func executeSearch(cm *terminal.CopyMode, window *terminal.Window) {
+func executeSearch(cm *terminal.CopyMode, grid terminal.CopyGrid) {
 	// Check cache
 	if cm.SearchQuery != "" && cm.SearchQuery == cm.SearchCache.Query && cm.SearchCache.Valid {
 		cm.SearchMatches = cm.SearchCache.Matches
-		jumpFromOrigin(cm, window)
+		jumpFromOrigin(cm, grid)
 		return
 	}
 
 	cm.SearchMatches = nil
 	if cm.SearchQuery == "" {
-		restoreSearchOrigin(cm, window)
+		restoreSearchOrigin(cm, grid)
 		return
 	}
 
@@ -218,8 +218,8 @@ func executeSearch(cm *terminal.CopyMode, window *terminal.Window) {
 	}
 	q := []byte(query)
 
-	term := window.Terminal
-	scrollbackLen := window.ScrollbackLen()
+	term := grid.Text()
+	scrollbackLen := grid.ScrollbackLen()
 	screenHeight := term.Height()
 	gen := term.ScrollbackGeneration()
 
@@ -293,7 +293,7 @@ func executeSearch(cm *terminal.CopyMode, window *terminal.Window) {
 		HistoryLen:    scrollbackLen,
 	}
 
-	jumpFromOrigin(cm, window)
+	jumpFromOrigin(cm, grid)
 }
 
 // jumpFromOrigin moves the cursor to the match the typed query picks. The
@@ -301,31 +301,31 @@ func executeSearch(cm *terminal.CopyMode, window *terminal.Window) {
 // character refines the match instead of skipping past it. / takes the first
 // match after the origin and ? the last one before it, each wrapping round the
 // buffer. With no match the cursor goes back to the origin, as vim does.
-func jumpFromOrigin(cm *terminal.CopyMode, window *terminal.Window) {
+func jumpFromOrigin(cm *terminal.CopyMode, grid terminal.CopyGrid) {
 	o := cm.SearchOrigin
 	idx, _ := searchFrom(cm.SearchMatches, o.Line, o.CursorX, cm.SearchBackward)
 	if idx < 0 {
-		restoreSearchOrigin(cm, window)
+		restoreSearchOrigin(cm, grid)
 		return
 	}
 	cm.CurrentMatch = idx
-	jumpToMatch(cm, window, idx)
+	jumpToMatch(cm, grid, idx)
 }
 
 // restoreSearchOrigin puts the cursor and the view back where they were when
 // the search prompt opened. The origin is an absolute line, so output that
 // arrived while the prompt was open does not move it. The cursor goes back to
 // the same viewport row when the scrollback allows it.
-func restoreSearchOrigin(cm *terminal.CopyMode, window *terminal.Window) {
+func restoreSearchOrigin(cm *terminal.CopyMode, grid terminal.CopyGrid) {
 	o := cm.SearchOrigin
-	sb := window.ScrollbackLen()
-	last := window.LastContentRow()
+	sb := grid.ScrollbackLen()
+	last := grid.LastContentRow()
 	row := min(max(o.Row, 0), last)
 	offset := min(max(sb-o.Line+row, 0), sb)
 	cm.CursorX = o.CursorX
 	cm.CursorY = min(max(o.Line-sb+offset, 0), last)
 	cm.ScrollOffset = offset
-	window.ScrollbackOffset = offset
+	grid.SetScrollOffset(offset)
 }
 
 // searchFrom returns the index of the match a search from (absY, x) lands on.
@@ -359,36 +359,36 @@ func searchFrom(matches []terminal.SearchMatch, absY, x int, backward bool) (idx
 // last search and N the opposite one, so after ? the n key goes up. It runs
 // from the cursor rather than from the last match, so a match is found from
 // wherever the cursor was moved to in between.
-func stepMatch(cm *terminal.CopyMode, window *terminal.Window, backward bool) (wrapped bool) {
-	idx, wrapped := searchFrom(cm.SearchMatches, getAbsoluteY(cm, window), cm.CursorX, backward)
+func stepMatch(cm *terminal.CopyMode, grid terminal.CopyGrid, backward bool) (wrapped bool) {
+	idx, wrapped := searchFrom(cm.SearchMatches, getAbsoluteY(cm, grid), cm.CursorX, backward)
 	if idx < 0 {
 		return false
 	}
 	cm.CurrentMatch = idx
-	jumpToMatch(cm, window, idx)
+	jumpToMatch(cm, grid, idx)
 	return wrapped
 }
 
 // jumpToMatch jumps cursor to a specific match
-func jumpToMatch(cm *terminal.CopyMode, window *terminal.Window, matchIdx int) {
+func jumpToMatch(cm *terminal.CopyMode, grid terminal.CopyGrid, matchIdx int) {
 	if matchIdx < 0 || matchIdx >= len(cm.SearchMatches) {
 		return
 	}
 
 	match := cm.SearchMatches[matchIdx]
-	scrollbackLen := window.ScrollbackLen()
+	scrollbackLen := grid.ScrollbackLen()
 
 	if match.Line < scrollbackLen {
 		// Match is in scrollback
 		cm.ScrollOffset = scrollbackLen - match.Line
-		window.ScrollbackOffset = cm.ScrollOffset // Sync for rendering
+		grid.SetScrollOffset(cm.ScrollOffset) // Sync for rendering
 		cm.CursorY = 0
 	} else {
 		// Match is in current screen
 		screenLine := match.Line - scrollbackLen
 		cm.ScrollOffset = 0
-		window.ScrollbackOffset = cm.ScrollOffset // Sync for rendering
-		cm.CursorY = min(screenLine, window.LastContentRow())
+		grid.SetScrollOffset(cm.ScrollOffset) // Sync for rendering
+		cm.CursorY = min(screenLine, grid.LastContentRow())
 	}
 
 	cm.CursorX = match.StartX

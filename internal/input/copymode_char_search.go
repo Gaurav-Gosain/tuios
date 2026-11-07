@@ -8,13 +8,13 @@ import (
 
 // convertColumnToRuneIndex converts a column position to a rune index in the text
 // accounting for wide characters (emoji, nerd fonts, CJK, etc.)
-func convertColumnToRuneIndex(window *terminal.Window, absY int, col int) int {
-	scrollbackLen := window.ScrollbackLen()
+func convertColumnToRuneIndex(grid terminal.CopyGrid, absY int, col int) int {
+	scrollbackLen := grid.ScrollbackLen()
 	runeIndex := 0
 	currentCol := 0
 
 	if absY < scrollbackLen {
-		line := window.ScrollbackLine(absY)
+		line := grid.ScrollbackLine(absY)
 		for _, cell := range line {
 			if currentCol >= col {
 				break
@@ -29,11 +29,11 @@ func convertColumnToRuneIndex(window *terminal.Window, absY int, col int) int {
 		}
 	} else {
 		screenY := absY - scrollbackLen
-		for x := range window.Terminal.Width() {
+		for x := range grid.Text().Width() {
 			if currentCol >= col {
 				break
 			}
-			cell := window.Terminal.CellAt(x, screenY)
+			cell := grid.Text().CellAt(x, screenY)
 			if cell != nil && cell.Width > 0 { // Skip continuation cells
 				// Count runes in this cell's content
 				for range cell.Content {
@@ -50,10 +50,10 @@ func convertColumnToRuneIndex(window *terminal.Window, absY int, col int) int {
 // findCharOnLine searches for a character across multiple lines
 // direction: 1 for forward, -1 for backward
 // till: true to stop before the character, false to land on it
-func findCharOnLine(cm *terminal.CopyMode, window *terminal.Window, char rune, direction int, till bool) {
-	startAbsY := getAbsoluteY(cm, window)
-	scrollbackLen := window.ScrollbackLen()
-	screenHeight := window.Terminal.Height()
+func findCharOnLine(cm *terminal.CopyMode, grid terminal.CopyGrid, char rune, direction int, till bool) {
+	startAbsY := getAbsoluteY(cm, grid)
+	scrollbackLen := grid.ScrollbackLen()
+	screenHeight := grid.Text().Height()
 	totalLines := scrollbackLen + screenHeight
 
 	maxIterations := 1000 // Prevent infinite loops
@@ -66,7 +66,7 @@ func findCharOnLine(cm *terminal.CopyMode, window *terminal.Window, char rune, d
 				break
 			}
 
-			lineText := getLineText(cm, window, absY)
+			lineText := getLineText(cm, grid, absY)
 			if lineText == "" {
 				continue
 			}
@@ -78,7 +78,7 @@ func findCharOnLine(cm *terminal.CopyMode, window *terminal.Window, char rune, d
 			startCharIdx := 0
 			if lineOffset == 0 {
 				// On current line, get cursor's rune position and start from next rune
-				currentRuneIdx := convertColumnToRuneIndex(window, absY, cm.CursorX)
+				currentRuneIdx := convertColumnToRuneIndex(grid, absY, cm.CursorX)
 				startCharIdx = currentRuneIdx + 1
 			}
 
@@ -98,11 +98,11 @@ func findCharOnLine(cm *terminal.CopyMode, window *terminal.Window, char rune, d
 					// This ensures scroll offset is handled correctly
 					linesToMove := absY - startAbsY
 					for range linesToMove {
-						moveDown(cm, window)
+						moveDown(cm, grid)
 					}
 
 					// Set cursor X position
-					cm.CursorX = convertRuneIndexToColumn(window, absY, targetCharIdx)
+					cm.CursorX = convertRuneIndexToColumn(grid, absY, targetCharIdx)
 					return
 				}
 			}
@@ -115,7 +115,7 @@ func findCharOnLine(cm *terminal.CopyMode, window *terminal.Window, char rune, d
 				break
 			}
 
-			lineText := getLineText(cm, window, absY)
+			lineText := getLineText(cm, grid, absY)
 			if lineText == "" {
 				continue
 			}
@@ -127,7 +127,7 @@ func findCharOnLine(cm *terminal.CopyMode, window *terminal.Window, char rune, d
 			endCharIdx := len(runes) - 1
 			if lineOffset == 0 {
 				// On current line, get cursor's rune position and start from previous rune
-				currentRuneIdx := convertColumnToRuneIndex(window, absY, cm.CursorX)
+				currentRuneIdx := convertColumnToRuneIndex(grid, absY, cm.CursorX)
 				endCharIdx = currentRuneIdx - 1
 			}
 
@@ -147,11 +147,11 @@ func findCharOnLine(cm *terminal.CopyMode, window *terminal.Window, char rune, d
 					// This ensures scroll offset is handled correctly
 					linesToMove := startAbsY - absY
 					for range linesToMove {
-						moveUp(cm, window)
+						moveUp(cm, grid)
 					}
 
 					// Set cursor X position
-					cm.CursorX = convertRuneIndexToColumn(window, absY, targetCharIdx)
+					cm.CursorX = convertRuneIndexToColumn(grid, absY, targetCharIdx)
 					return
 				}
 			}
@@ -161,7 +161,7 @@ func findCharOnLine(cm *terminal.CopyMode, window *terminal.Window, char rune, d
 }
 
 // repeatCharSearch repeats the last character search
-func repeatCharSearch(cm *terminal.CopyMode, window *terminal.Window, reverse bool) {
+func repeatCharSearch(cm *terminal.CopyMode, grid terminal.CopyGrid, reverse bool) {
 	if cm.LastCharSearch == 0 {
 		return // No previous character search
 	}
@@ -171,13 +171,13 @@ func repeatCharSearch(cm *terminal.CopyMode, window *terminal.Window, reverse bo
 		direction = -direction
 	}
 
-	findCharOnLine(cm, window, cm.LastCharSearch, direction, cm.LastCharSearchTill)
+	findCharOnLine(cm, grid, cm.LastCharSearch, direction, cm.LastCharSearchTill)
 }
 
 // convertRuneIndexToColumn converts a rune index in the text string to a column position
 // accounting for wide characters (emoji, nerd fonts, CJK, etc.)
-func convertRuneIndexToColumn(window *terminal.Window, absY int, runeIndex int) int {
-	scrollbackLen := window.ScrollbackLen()
+func convertRuneIndexToColumn(grid terminal.CopyGrid, absY int, runeIndex int) int {
+	scrollbackLen := grid.ScrollbackLen()
 
 	if runeIndex < 0 {
 		return 0
@@ -188,7 +188,7 @@ func convertRuneIndexToColumn(window *terminal.Window, absY int, runeIndex int) 
 	runeCount := 0
 
 	if absY < scrollbackLen {
-		line := window.ScrollbackLine(absY)
+		line := grid.ScrollbackLine(absY)
 		for _, cell := range line {
 			if runeCount >= runeIndex {
 				break
@@ -207,8 +207,8 @@ func convertRuneIndexToColumn(window *terminal.Window, absY int, runeIndex int) 
 		}
 	} else {
 		screenY := absY - scrollbackLen
-		for x := range window.Terminal.Width() {
-			cell := window.Terminal.CellAt(x, screenY)
+		for x := range grid.Text().Width() {
+			cell := grid.Text().CellAt(x, screenY)
 			if cell != nil && cell.Width > 0 { // Skip continuation cells
 				// Count runes in this cell's content
 				for range cell.Content {

@@ -10,21 +10,21 @@ import (
 // Visual selection-related functions for copy mode (v/V/y and text extraction)
 
 // enterVisualChar enters visual character selection mode
-func enterVisualChar(cm *terminal.CopyMode, window *terminal.Window) {
+func enterVisualChar(cm *terminal.CopyMode, grid terminal.CopyGrid) {
 	cm.State = terminal.CopyModeVisualChar
-	absY := getAbsoluteY(cm, window)
+	absY := getAbsoluteY(cm, grid)
 	cm.VisualStart = terminal.Position{X: cm.CursorX, Y: absY}
 	cm.VisualEnd = cm.VisualStart
 }
 
 // enterVisualLine enters visual line selection mode
-func enterVisualLine(cm *terminal.CopyMode, window *terminal.Window) {
+func enterVisualLine(cm *terminal.CopyMode, grid terminal.CopyGrid) {
 	cm.State = terminal.CopyModeVisualLine
-	absY := getAbsoluteY(cm, window)
+	absY := getAbsoluteY(cm, grid)
 
 	// A line selection starts at the first column, so a line's indent is
 	// part of it, and ends at the line's last printed cell.
-	_, endX := getLineContentBounds(cm, window, absY)
+	_, endX := getLineContentBounds(cm, grid, absY)
 
 	cm.VisualStart = terminal.Position{X: 0, Y: absY}
 	cm.VisualEnd = terminal.Position{X: endX, Y: absY}
@@ -32,15 +32,15 @@ func enterVisualLine(cm *terminal.CopyMode, window *terminal.Window) {
 
 // enterVisualBlock enters a rectangular selection. The anchor is one corner and
 // the cursor is the opposite corner.
-func enterVisualBlock(cm *terminal.CopyMode, window *terminal.Window) {
+func enterVisualBlock(cm *terminal.CopyMode, grid terminal.CopyGrid) {
 	cm.State = terminal.CopyModeVisualBlock
-	cm.VisualStart = terminal.Position{X: cm.CursorX, Y: getAbsoluteY(cm, window)}
+	cm.VisualStart = terminal.Position{X: cm.CursorX, Y: getAbsoluteY(cm, grid)}
 	cm.VisualEnd = cm.VisualStart
 }
 
 // updateVisualEnd updates the visual selection end position
-func updateVisualEnd(cm *terminal.CopyMode, window *terminal.Window) {
-	absY := getAbsoluteY(cm, window)
+func updateVisualEnd(cm *terminal.CopyMode, grid terminal.CopyGrid) {
+	absY := getAbsoluteY(cm, grid)
 
 	switch cm.State {
 	case terminal.CopyModeVisualChar, terminal.CopyModeVisualBlock:
@@ -56,7 +56,7 @@ func updateVisualEnd(cm *terminal.CopyMode, window *terminal.Window) {
 		// The upper line is taken from its first column, indent included,
 		// and the lower line to its last printed cell.
 		const startLineStartX = 0
-		_, endLineEndX := getLineContentBounds(cm, window, endY)
+		_, endLineEndX := getLineContentBounds(cm, grid, endY)
 
 		// If moving upwards (current Y < original start Y), we want:
 		// - Start to be at beginning of the upper line (current position)
@@ -86,9 +86,9 @@ func updateVisualEnd(cm *terminal.CopyMode, window *terminal.Window) {
 // A row the emulator soft-wrapped is a full row of printed text that carries
 // on to the next, so it is kept whole, spaces at its edge included, and joined
 // to the next row without a newline.
-func extractVisualText(cm *terminal.CopyMode, window *terminal.Window) string {
+func extractVisualText(cm *terminal.CopyMode, grid terminal.CopyGrid) string {
 	if cm.State == terminal.CopyModeVisualBlock {
-		return extractBlockText(cm, window)
+		return extractBlockText(cm, grid)
 	}
 	start, end := cm.VisualStart, cm.VisualEnd
 
@@ -99,9 +99,9 @@ func extractVisualText(cm *terminal.CopyMode, window *terminal.Window) string {
 
 	var text strings.Builder
 	for y := start.Y; y <= end.Y; y++ {
-		cells := selectionRowCells(window, y)
-		wraps := y < end.Y && selectionRowWraps(window, y)
-		if wraps && selectionRowPadded(window, y) && len(cells) > 0 {
+		cells := selectionRowCells(grid, y)
+		wraps := y < end.Y && selectionRowWraps(grid, y)
+		if wraps && selectionRowPadded(grid, y) && len(cells) > 0 {
 			// The last column is the pad left by a wide character that
 			// did not fit, not a printed space.
 			cells = cells[:len(cells)-1]
@@ -138,11 +138,11 @@ func extractVisualText(cm *terminal.CopyMode, window *terminal.Window) string {
 // the emulator soft-wrapped still ends its line here: a block is rows on the
 // screen, and tmux joins them only when the block touches the wrap column, which
 // makes the line count depend on where the block's edge fell.
-func extractBlockText(cm *terminal.CopyMode, window *terminal.Window) string {
+func extractBlockText(cm *terminal.CopyMode, grid terminal.CopyGrid) string {
 	topLeft, bottomRight := terminal.BlockCorners(cm.VisualStart, cm.VisualEnd)
 	var text strings.Builder
 	for y := topLeft.Y; y <= bottomRight.Y; y++ {
-		cells := selectionRowCells(window, y)
+		cells := selectionRowCells(grid, y)
 		lo, hi := terminal.BlockRowSpan(topLeft.X, bottomRight.X, func(x int) *uv.Cell {
 			if x < 0 || x >= len(cells) {
 				return nil
@@ -161,15 +161,15 @@ func extractBlockText(cm *terminal.CopyMode, window *terminal.Window) string {
 
 // selectionRowCells returns the cells of absolute row y, from the scrollback
 // or the screen. A missing screen cell reads as a blank.
-func selectionRowCells(window *terminal.Window, y int) []uv.Cell {
-	scrollbackLen := window.ScrollbackLen()
+func selectionRowCells(grid terminal.CopyGrid, y int) []uv.Cell {
+	scrollbackLen := grid.ScrollbackLen()
 	if y < scrollbackLen {
-		return window.ScrollbackLine(y)
+		return grid.ScrollbackLine(y)
 	}
 	screenY := y - scrollbackLen
-	cells := make([]uv.Cell, window.Terminal.Width())
+	cells := make([]uv.Cell, grid.Text().Width())
 	for x := range cells {
-		if cell := window.Terminal.CellAt(x, screenY); cell != nil {
+		if cell := grid.Text().CellAt(x, screenY); cell != nil {
 			cells[x] = *cell
 		} else {
 			cells[x] = uv.EmptyCell
@@ -181,29 +181,29 @@ func selectionRowCells(window *terminal.Window, y int) []uv.Cell {
 // selectionRowWraps reports whether absolute row y carries on to the next row
 // because the emulator wrapped it. A backend that cannot tell reads as a row
 // that ends, which copies a newline rather than joining two lines.
-func selectionRowWraps(window *terminal.Window, y int) bool {
-	if window.Terminal == nil {
+func selectionRowWraps(grid terminal.CopyGrid, y int) bool {
+	if grid.Text() == nil {
 		return false
 	}
 	var wrapped, known bool
-	if scrollbackLen := window.ScrollbackLen(); y < scrollbackLen {
-		wrapped, known = window.Terminal.ScrollbackSoftWrapped(y)
+	if scrollbackLen := grid.ScrollbackLen(); y < scrollbackLen {
+		wrapped, known = grid.Text().ScrollbackSoftWrapped(y)
 	} else {
-		wrapped, known = window.Terminal.RowSoftWrapped(y - scrollbackLen)
+		wrapped, known = grid.Text().RowSoftWrapped(y - scrollbackLen)
 	}
 	return known && wrapped
 }
 
 // selectionRowPadded reports whether absolute row y wrapped a column early,
 // because a wide character did not fit in its last column.
-func selectionRowPadded(window *terminal.Window, y int) bool {
-	if window.Terminal == nil {
+func selectionRowPadded(grid terminal.CopyGrid, y int) bool {
+	if grid.Text() == nil {
 		return false
 	}
-	if scrollbackLen := window.ScrollbackLen(); y < scrollbackLen {
-		return window.Terminal.ScrollbackPadded(y)
+	if scrollbackLen := grid.ScrollbackLen(); y < scrollbackLen {
+		return grid.Text().ScrollbackPadded(y)
 	}
-	return window.Terminal.RowPadded(y - window.ScrollbackLen())
+	return grid.Text().RowPadded(y - grid.ScrollbackLen())
 }
 
 // lastPrintedCell is the index of the last cell in cells that holds more than
@@ -249,16 +249,16 @@ func writeSelectionCells(text *strings.Builder, cells []uv.Cell, lo, hi int) {
 }
 
 // getLineContentBounds returns the X positions of the first and last non-empty characters on a line
-func getLineContentBounds(_ *terminal.CopyMode, window *terminal.Window, absY int) (int, int) {
-	scrollbackLen := window.ScrollbackLen()
+func getLineContentBounds(_ *terminal.CopyMode, grid terminal.CopyGrid, absY int) (int, int) {
+	scrollbackLen := grid.ScrollbackLen()
 
 	// Get cells for this line
 	var cells []uv.Cell
 	if absY < scrollbackLen {
-		cells = window.ScrollbackLine(absY)
+		cells = grid.ScrollbackLine(absY)
 	} else {
 		screenY := absY - scrollbackLen
-		cells = getScreenLineCells(window.Terminal, screenY)
+		cells = getScreenLineCells(grid.Text(), screenY)
 	}
 
 	if len(cells) == 0 {
@@ -292,17 +292,17 @@ func getLineContentBounds(_ *terminal.CopyMode, window *terminal.Window, absY in
 }
 
 // getLineText retrieves the text content of a line
-func getLineText(_ *terminal.CopyMode, window *terminal.Window, absY int) string {
-	scrollbackLen := window.ScrollbackLen()
+func getLineText(_ *terminal.CopyMode, grid terminal.CopyGrid, absY int) string {
+	scrollbackLen := grid.ScrollbackLen()
 
 	if absY < scrollbackLen {
-		line := window.ScrollbackLine(absY)
+		line := grid.ScrollbackLine(absY)
 		if line != nil {
 			return extractLineTextFromCells(line)
 		}
 	} else {
 		screenY := absY - scrollbackLen
-		return extractScreenLineText(window.Terminal, screenY)
+		return extractScreenLineText(grid.Text(), screenY)
 	}
 
 	return ""
@@ -313,30 +313,30 @@ func getLineText(_ *terminal.CopyMode, window *terminal.Window, absY int) string
 // end change places, so the selected text stays the same and the next motion
 // moves the end that was the anchor. The view scrolls only as far as it must
 // to show the cursor.
-func swapVisualEnds(cm *terminal.CopyMode, window *terminal.Window) {
+func swapVisualEnds(cm *terminal.CopyMode, grid terminal.CopyGrid) {
 	cm.VisualStart, cm.VisualEnd = cm.VisualEnd, cm.VisualStart
 	if cm.State == terminal.CopyModeVisualChar || cm.State == terminal.CopyModeVisualBlock {
 		cm.CursorX = cm.VisualEnd.X
 	}
 	// A line selection keeps the cursor column: its ends are whole lines.
-	showAbsoluteRow(cm, window, cm.VisualEnd.Y)
+	showAbsoluteRow(cm, grid, cm.VisualEnd.Y)
 	// In a line selection this sets the X of each end again for the new
 	// direction, which covers the same lines.
-	updateVisualEnd(cm, window)
+	updateVisualEnd(cm, grid)
 }
 
 // showAbsoluteRow puts the copy cursor on the absolute row absY. When the row
 // is outside the view, the view scrolls the least that shows it.
-func showAbsoluteRow(cm *terminal.CopyMode, window *terminal.Window, absY int) {
-	scrollbackLen := window.ScrollbackLen()
+func showAbsoluteRow(cm *terminal.CopyMode, grid terminal.CopyGrid, absY int) {
+	scrollbackLen := grid.ScrollbackLen()
 	top := scrollbackLen - cm.ScrollOffset
 	switch {
 	case absY < top:
 		top = absY
-	case absY >= top+window.Height:
-		top = absY - window.Height + 1
+	case absY >= top+grid.ViewHeight():
+		top = absY - grid.ViewHeight() + 1
 	}
 	cm.ScrollOffset = max(scrollbackLen-top, 0)
-	window.ScrollbackOffset = cm.ScrollOffset // Sync for rendering
+	grid.SetScrollOffset(cm.ScrollOffset) // Sync for rendering
 	cm.CursorY = absY - (scrollbackLen - cm.ScrollOffset)
 }
