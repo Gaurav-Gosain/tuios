@@ -6434,6 +6434,36 @@ func (msgs Messages) CockpitAlwaysAllows(scope string) string {
 	return Catalog.Format(msgs.locale, "cockpitAlwaysAllows", map[string]any{"scope": scope})
 }
 
+// CockpitApprovalsOff says "guios can answer Claude Code prompts here. Turn on approvals, and the next prompt shows Allow and Reject."
+// in the language the app shows.
+func CockpitApprovalsOff() string { return In(i18n.Locale()).CockpitApprovalsOff() }
+
+// CockpitApprovalsOff says "guios can answer Claude Code prompts here. Turn on approvals, and the next prompt shows Allow and Reject."
+// in the language of msgs.
+func (msgs Messages) CockpitApprovalsOff() string {
+	return Catalog.Format(msgs.locale, "cockpitApprovalsOff", nil)
+}
+
+// CockpitApprovalsTurnOn says "Turn on"
+// in the language the app shows.
+func CockpitApprovalsTurnOn() string { return In(i18n.Locale()).CockpitApprovalsTurnOn() }
+
+// CockpitApprovalsTurnOn says "Turn on"
+// in the language of msgs.
+func (msgs Messages) CockpitApprovalsTurnOn() string {
+	return Catalog.Format(msgs.locale, "cockpitApprovalsTurnOn", nil)
+}
+
+// CockpitApprovalsOn says "Approvals are on. The next prompt shows here with Allow and Reject."
+// in the language the app shows.
+func CockpitApprovalsOn() string { return In(i18n.Locale()).CockpitApprovalsOn() }
+
+// CockpitApprovalsOn says "Approvals are on. The next prompt shows here with Allow and Reject."
+// in the language of msgs.
+func (msgs Messages) CockpitApprovalsOn() string {
+	return Catalog.Format(msgs.locale, "cockpitApprovalsOn", nil)
+}
+
 // CockpitAnswered says "{name}: {answer}"
 // in the language the app shows.
 func CockpitAnswered(name string, answer string) string {

@@ -463,6 +463,7 @@ func (a *App) approvalCard(c *ui.Context, pal *palette, ag client.Agent, it sess
 			} else if len(opts) == 0 && (pk == nil || !pk.loading) {
 				// Nothing here can answer it: say so, and offer the pane.
 				ui.Text(c, locales.CockpitAnswerInPane()).FontSize(fsSmall).TextColor(pal.textMuted).MaxLines(2).MinWidth(0)
+				a.ckApprovalsOffLine(c, pal, it, ag)
 				// The view's one primary is Send: this one is secondary.
 				if ag.Window != "" && sizedButton(c, "ans-open", locales.CockpitOpenPane(), "↵", false, hControl, rControl, pal) {
 					a.goToAgent(ag)
