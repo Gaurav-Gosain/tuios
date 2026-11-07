@@ -739,7 +739,7 @@ func (a *App) shortcuts(c *ui.Context) {
 	// What a dialog or a mode copied goes to the clipboard, open or not.
 	if a.copyText != "" {
 		c.WriteClipboard(a.copyText)
-		c.Toast(locales.ToastCopied())
+		showToast(c, locales.ToastCopied())
 		a.copyText = ""
 	}
 	if a.pal.open || a.help.open || a.xp.open || a.sbr.open || a.sb.on || a.prompt != nil || a.picker.open || a.confirm != nil || a.wtAsk != nil {

@@ -162,8 +162,9 @@ func (a *App) view(c *ui.Context) {
 	pal := paletteFor(c)
 	c.SetTheme(borderless(c, pal))
 
+	a.ck.cardKey = "" // the approval card sets it as it draws
 	if a.pendingToast != "" {
-		c.Toast(a.pendingToast)
+		showToast(c, a.pendingToast)
 		a.pendingToast = ""
 	}
 	a.shortcuts(c)
@@ -284,6 +285,7 @@ func (a *App) view(c *ui.Context) {
 	a.keepKeyboard(row)
 	a.mainControls(c, pal, rightPad)
 	keepOverlay(c)
+	a.dropStalePromptToasts(c)
 	toastsAt(c, a.toastBox())
 	a.spawnView(c, pal)
 	a.compareView(c, pal)
