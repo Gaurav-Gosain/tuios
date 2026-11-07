@@ -12898,6 +12898,16 @@ func (msgs Messages) SidebarMorePanes(count int) string {
 	return Catalog.Format(msgs.locale, "sidebarMorePanes", map[string]any{"count": count})
 }
 
+// SidebarPaneNumber says "pane {n}"
+// in the language the app shows.
+func SidebarPaneNumber(n string) string { return In(i18n.Locale()).SidebarPaneNumber(n) }
+
+// SidebarPaneNumber says "pane {n}"
+// in the language of msgs.
+func (msgs Messages) SidebarPaneNumber(n string) string {
+	return Catalog.Format(msgs.locale, "sidebarPaneNumber", map[string]any{"n": n})
+}
+
 // SidebarPanes says "{count, plural, one {# pane} other {# panes}}"
 // in the language the app shows.
 func SidebarPanes(count int) string { return In(i18n.Locale()).SidebarPanes(count) }

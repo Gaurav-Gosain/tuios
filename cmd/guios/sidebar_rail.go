@@ -150,7 +150,9 @@ func (a *App) paneRows(c *ui.Context, pal *palette, s *proto.Session) {
 			if details[k] != "" {
 				details[k] += " · "
 			}
-			details[k] += strconv.Itoa(nums[k])
+			// The number alone said nothing (QM-005): it is the pane's
+			// number, as Ctrl+B and the palette count them.
+			details[k] += locales.SidebarPaneNumber(strconv.Itoa(nums[k]))
 		}
 	}
 	focus := s.Focus

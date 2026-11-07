@@ -1273,6 +1273,7 @@
   "cockpitNoSnoozeHeld": "保留中の承認はスヌーズできません。答えるか、ペインに戻してください。",
   "spawnMeantToReply": "返信のつもりでしたか? Esc を押すと、このテキストを返信欄に移します。",
   "sidebarMorePanes": "{count, plural, other {ほか # 個のペイン}}",
+  "sidebarPaneNumber": "ペイン {n}",
   "sidebarPanes": "{count, plural, other {# 個のペイン}}",
   "sidebarFilesTip": "このセッションのファイルを表示",
   "cockpitKeysNeedAgent": "書き込むエージェントを選んでください。",
