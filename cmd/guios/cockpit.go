@@ -469,6 +469,31 @@ func (a *App) buildCockpitRows(c *ui.Context) []ckRow {
 		if len(items) == 0 || ck.needsOnly && g != ckNeeds {
 			continue
 		}
+		if g == ckNeeds {
+			// The order of ck.needs, which the rail and the next-agent
+			// keys follow too: one "next" in every place (Mac round 1,
+			// workflow S3).
+			rank := map[string]int{}
+			for n, nd := range ck.needs() {
+				switch {
+				case nd.agent >= 0:
+					rank["a"+strconv.Itoa(nd.agent)] = n
+				case nd.item != nil:
+					rank["i"+nd.item.ID] = n
+				}
+			}
+			at := func(r ckRow) int {
+				k := "a" + strconv.Itoa(r.agent)
+				if r.agent < 0 && r.item != nil {
+					k = "i" + r.item.ID
+				}
+				if n, ok := rank[k]; ok {
+					return n
+				}
+				return len(rank)
+			}
+			sort.SliceStable(items, func(i, j int) bool { return at(items[i]) < at(items[j]) })
+		}
 		if g != ckNeeds && g != ckSnoozed {
 			// The oldest wait first, as the TUI's: by the time the state
 			// came, and then by name for a stable order.
