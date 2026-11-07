@@ -1,6 +1,7 @@
 package client
 
 import (
+	"slices"
 	"strconv"
 	"time"
 
@@ -212,7 +213,27 @@ func (k *stateKeeper) layoutOf(sid, name string, wins []windowRow, focus string,
 		}
 	}
 	bounds, gap := ti.bounds(), ti.ls.Gap
+	restored := false
 	if len(missing) == 1 && !tree.IsEmpty() {
+		// A pane tiled again after it floated goes back where it tiled.
+		// Split off as a new pane, it split itself: a leaf the tree lacks,
+		// so the last leaf, and the person lost the layout they had
+		// (QM-003).
+		id := leaves[missing[0]]
+		k.mu.Lock()
+		slot, ok := k.floated[id]
+		delete(k.floated, id)
+		k.mu.Unlock()
+		if ok {
+			if t, ok := slot.restore(tree, leaves, missing[0]); ok {
+				tree, restored, changed = t, true, true
+			}
+		}
+	}
+	switch {
+	case restored:
+		// In place: no other rule moves it.
+	case len(missing) == 1 && !tree.IsEmpty():
 		// One new pane: it splits the pane the focus was on before it came,
 		// as the TUI's insertSyncedWindow does.
 		target, dir := prev, layout.PreselectionNone
@@ -224,7 +245,7 @@ func (k *stateKeeper) layoutOf(sid, name string, wins []windowRow, focus string,
 		}
 		tree.AddWindow(missing[0], nums[target], dir, bounds, gap)
 		changed = true
-	} else if tree.InsertMissing(ids, bounds, gap) {
+	case tree.InsertMissing(ids, bounds, gap):
 		changed = true
 	}
 	if len(missing) > 0 {
@@ -247,6 +268,106 @@ func (k *stateKeeper) layoutOf(sid, name string, wins []windowRow, focus string,
 	k.layouts[sid] = l
 	k.mu.Unlock()
 	return l.Clone()
+}
+
+// floatSlot is where a pane tiled as it floated out of the split tree:
+// beside the panes of the other side of its split (beside), on the split's
+// first side or its second (first), left and right or top and bottom (row),
+// with the split's ratio.
+type floatSlot struct {
+	beside []string
+	row    bool
+	first  bool
+	ratio  float64
+}
+
+// slotOf is the slot pane tiles in, in the tree of root.
+func slotOf(root *session.SerializedBSPNode, leaves map[int]string, pane string) (floatSlot, bool) {
+	var found floatSlot
+	ok := false
+	var walk func(n *session.SerializedBSPNode)
+	walk = func(n *session.SerializedBSPNode) {
+		if n == nil || ok || n.Left == nil || n.Right == nil {
+			return
+		}
+		for i, side := range []*session.SerializedBSPNode{n.Left, n.Right} {
+			if side.Left == nil && side.Right == nil && leaves[side.WindowID] == pane {
+				other := n.Right
+				if i == 1 {
+					other = n.Left
+				}
+				found = floatSlot{beside: paneSet(other, leaves), row: n.SplitType != splitHorizontal, first: i == 0, ratio: n.SplitRatio}
+				ok = len(found.beside) > 0
+				return
+			}
+		}
+		walk(n.Left)
+		walk(n.Right)
+	}
+	walk(root)
+	return found, ok
+}
+
+// paneSet is the panes of the leaves under n, sorted.
+func paneSet(n *session.SerializedBSPNode, leaves map[int]string) []string {
+	var out []string
+	var walk func(n *session.SerializedBSPNode)
+	walk = func(n *session.SerializedBSPNode) {
+		if n == nil {
+			return
+		}
+		if n.Left == nil && n.Right == nil {
+			if id := leaves[n.WindowID]; id != "" {
+				out = append(out, id)
+			}
+			return
+		}
+		walk(n.Left)
+		walk(n.Right)
+	}
+	walk(n)
+	slices.Sort(out)
+	return out
+}
+
+// restore puts leaf num back in its slot: it splits the subtree that holds
+// exactly the panes it tiled beside, as it did. It reports false when no
+// subtree holds those panes now, as after one of them closed or moved: the
+// pane then goes in by the rules for a new pane.
+func (s floatSlot) restore(t *layout.BSPTree, leaves map[int]string, num int) (*layout.BSPTree, bool) {
+	st := sessionTree(t)
+	if st == nil {
+		return nil, false
+	}
+	done := false
+	var walk func(n *session.SerializedBSPNode) *session.SerializedBSPNode
+	walk = func(n *session.SerializedBSPNode) *session.SerializedBSPNode {
+		if n == nil || done {
+			return n
+		}
+		if slices.Equal(paneSet(n, leaves), s.beside) {
+			done = true
+			leaf := &session.SerializedBSPNode{WindowID: num}
+			split := &session.SerializedBSPNode{SplitType: splitHorizontal, SplitRatio: s.ratio, Left: n, Right: leaf}
+			if s.row {
+				split.SplitType = splitVertical
+			}
+			if s.first {
+				split.Left, split.Right = leaf, n
+			}
+			if split.SplitRatio <= 0 || split.SplitRatio >= 1 {
+				split.SplitRatio = 0.5
+			}
+			return split
+		}
+		n.Left, n.Right = walk(n.Left), walk(n.Right)
+		return n
+	}
+	st.Root = walk(st.Root)
+	if !done {
+		return nil, false
+	}
+	return (&layout.SerializedBSPTree{Root: toLayoutNode(st.Root), AutoScheme: st.AutoScheme, DefaultRatio: st.DefaultRatio}).Deserialize(), true
 }
 
 // pendingSplit is a split guios asked the daemon for and has not seen the
