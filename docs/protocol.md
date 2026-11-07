@@ -7622,8 +7622,8 @@ they make anything: a refusal names `task` in its hint.
 
 | Verb | What it does | A pane without `admin` | Over a link | Result `type` |
 | --- | --- | --- | --- | --- |
-| `add-task` | Add a card: `title` (required, at most 200 bytes), `prompt` (at most 16 KiB), `stage` (default `todo`) | `task`, own session | `write` | `task_added` |
-| `list-tasks` | The session's cards, oldest first. `stage`, `holder` and `open` (leave out `done`) narrow it. `all_sessions` lists every session's, in session name order, and takes no `session` or `holder` | `read` | `list` | `task_list` |
+| `add-task` | Add a card: `title` (required, at most 200 bytes), `prompt` (at most 16 KiB), `stage` (default `todo`), `project` (the repository's origin URL) | `task`, own session | `write` | `task_added` |
+| `list-tasks` | The session's cards, oldest first. `stage`, `holder` and `open` (leave out `done`) narrow it. `all_sessions` lists every session's, in session name order, and takes no `session` or `holder`. `project` lists one repository's cards from every session; `hosts` with it also asks each linked machine for its own, and `hosts` with `all_sessions` adds every linked machine's project cards | `read` | `list` | `task_list` |
 | `get-task` | One card with its `prompt` and `history` | `read` | `list` | `task` |
 | `claim-task` | Take the card `id`, or with `next` the oldest card no pane holds that is not blocked or done, for `window` | `task`; for itself only | `write` | `task_claimed` |
 | `finish-task` | Mark the card done | `task`; only the card it holds | `write` | `task_finished` |
@@ -7655,6 +7655,26 @@ finishes, stages, blocks or releases only the card it holds. A pane holding
 and change any card; outside a pane `window` is required. The pick and the
 take of a claim happen in one state change, so two panes that claim `next` at
 once take two cards.
+
+A card with a `project` is on that repository's board. `project` is the
+normalised origin URL (host and path, no user, port or `.git`), so two
+spellings of one repository match, and a local path is `invalid_params`.
+`list-tasks` with `project` answers `project` and `tasks`; with `hosts` the
+rows from another machine carry `host`, and machines that did not answer are
+in `hosts_down` (`host`, `error`). A `list-tasks` that came over a link lists
+that daemon's own cards only and never asks its links, so two machines that
+link each other list each card once.
+
+The daemon that made a card owns it. `claim-task`, `release-task` and
+`finish-task` with `host` and the owner's `session` are for a pane working on
+a card another machine owns: its daemon checks the calling pane, then calls
+the owner with `remote_window`, `remote_name` and `remote_harness`. The owner
+records the holder as that window on the link's peer name (`holder.host`),
+never a name from a param, and refuses `remote_window` outside a link and on a
+card without a project. A claim by the pane that holds the card already
+succeeds, so a retry after a lost answer is safe. The worker's daemon releases
+the card on the owner when the pane closes or its agent leaves, best effort.
+A refusal from the owner keeps its code, with the message prefixed `on HOST:`.
 
 `claim-task` of a card another pane holds is `task_held`. An unknown `id`, or
 `next` with nothing open to take, is `no_task`. Claiming a card that is done

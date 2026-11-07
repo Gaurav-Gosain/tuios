@@ -1,6 +1,7 @@
 package main
 
 import (
+	"cmp"
 	"errors"
 	"fmt"
 	"io"
@@ -9,8 +10,10 @@ import (
 	"text/tabwriter"
 
 	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
+	"github.com/Gaurav-Gosain/tuios/internal/federation"
 	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
+	"github.com/Gaurav-Gosain/tuios/internal/worktree"
 	"github.com/spf13/cobra"
 )
 
@@ -76,9 +79,12 @@ type taskRow struct {
 	StageAt int64  `json:"stage_at"`
 	Holder  *struct {
 		Window string `json:"window"`
+		Host   string `json:"host"`
 		Name   string `json:"name"`
 		State  string `json:"state"`
 	} `json:"holder"`
+	Project string `json:"project"`
+	Host    string `json:"host"`
 	By      string `json:"by"`
 	At      int64  `json:"at"`
 	Blocked *struct {
@@ -101,10 +107,14 @@ func (r taskRow) holderLabel() string {
 	if r.Holder == nil {
 		return "-"
 	}
+	label := shortWindowID(r.Holder.Window)
 	if r.Holder.Name != "" {
-		return plainLine(r.Holder.Name)
+		label = plainLine(r.Holder.Name)
 	}
-	return shortWindowID(r.Holder.Window)
+	if r.Holder.Host != "" {
+		label += " on " + plainLine(r.Holder.Host)
+	}
+	return label
 }
 
 // byLabel shortens a pane's window id, as queue ls does.
@@ -119,6 +129,15 @@ func byLabel(by string) string {
 // the JSON result, or hands the card's row to describe. window is the pane a
 // claim names, resolved with the session, and empty for the other verbs.
 func callTask(f taskFlags, window, verb string, params map[string]any, describe func(taskRow, string) string) error {
+	host, sess, _, err := resolveTarget(f.session, window)
+	if err != nil {
+		return err
+	}
+	if host != "" && window == "" && heldOverLink(verb) && os.Getenv("TUIOS_PANE_ID") != "" {
+		// A pane takes or lets go of a card another machine owns through
+		// its own daemon, which records the hold for the pane.
+		return forwardTaskCall(f, host, sess, verb, params, describe)
+	}
 	t, err := dialTarget(f.session, window)
 	if err != nil {
 		return err
@@ -143,16 +162,72 @@ func callTask(f taskFlags, window, verb string, params map[string]any, describe 
 	return nil
 }
 
+// heldOverLink reports whether verb changes who holds a card, so a pane on
+// another machine than the card's sends it through its own daemon.
+func heldOverLink(verb string) bool {
+	return verb == "claim-task" || verb == "release-task" || verb == "finish-task"
+}
+
+// forwardTaskCall sends verb to this machine's daemon with host, for the
+// pane the command runs in. The daemon passes it to host over the link.
+func forwardTaskCall(f taskFlags, host, sess, verb string, params map[string]any, describe func(taskRow, string) string) error {
+	if sess == "" {
+		return errfmt.Errorf("name the session of the card on %s: -s %s:SESSION (tuios task ls --project . --hosts lists them)", host, host)
+	}
+	client, err := dialVerb()
+	if err != nil {
+		return err
+	}
+	defer client.Close()
+	params["host"], params["session"] = host, sess
+	raw, err := client.Call(verb, params)
+	if err != nil {
+		return reportVerbError(explainVerbError(verb, err), f.json)
+	}
+	if f.json {
+		_, err := os.Stdout.Write(append(raw, '\n'))
+		return err
+	}
+	var row taskRow
+	if err := jsonx.Unmarshal(raw, &row); err != nil {
+		return errfmt.Errorf("failed to parse response: %w", err)
+	}
+	fmt.Println(describe(row, " on "+plainLine(host)))
+	return nil
+}
+
+// projectFlag is the project a --project flag names: "." is the origin of
+// the repository the command runs in.
+func projectFlag(v string) (string, error) {
+	if v != "." {
+		return v, nil
+	}
+	dir, err := os.Getwd()
+	if err != nil {
+		return "", errfmt.Errorf("failed to read the current folder: %w", err)
+	}
+	url, err := worktree.OriginURL(dir)
+	if err != nil || url == "" {
+		return "", errfmt.Errorf("--project . names this folder's repository, and it has no origin remote. Pass the remote URL")
+	}
+	return url, nil
+}
+
 // newTaskAddCommand builds `tuios task add`.
 func newTaskAddCommand() *cobra.Command {
 	var f taskFlags
-	var prompt, stage string
+	var prompt, stage, project string
 	cmd := &cobra.Command{
-		Use:   "add [-p PROMPT] [--stage S] TITLE...",
+		Use:   "add [-p PROMPT] [--stage S] [--project URL] TITLE...",
 		Short: "Add a task card",
 		Long: `Add a task card. The words are joined with spaces into its title. -p gives the
 prompt for the pane that takes it, at most 16 KiB; '-p -' reads it from
-standard input. The card starts in todo unless --stage says otherwise.`,
+standard input. The card starts in todo unless --stage says otherwise.
+
+--project names the repository the card is for, by its origin URL, or . for
+the repository of the current folder. The card then shows on that
+repository's board in every session and on linked machines, and a pane on
+another machine can claim it.`,
 		Args: cobra.MinimumNArgs(1),
 		RunE: func(_ *cobra.Command, args []string) error {
 			if prompt == "-" {
@@ -169,6 +244,13 @@ standard input. The card starts in todo unless --stage says otherwise.`,
 			if stage != "" {
 				params["stage"] = stage
 			}
+			if project != "" {
+				url, err := projectFlag(project)
+				if err != nil {
+					return err
+				}
+				params["project"] = url
+			}
 			return callTask(f, "", "add-task", params, func(r taskRow, on string) string {
 				return fmt.Sprintf("Added %s%s: %s", plainLine(r.ID), on, plainLine(r.Title))
 			})
@@ -177,6 +259,7 @@ standard input. The card starts in todo unless --stage says otherwise.`,
 	f.register(cmd)
 	cmd.Flags().StringVarP(&prompt, "prompt", "p", "", "What the pane that takes the card is to do, or - for standard input")
 	cmd.Flags().StringVar(&stage, "stage", "", "The stage it starts in: "+strings.Join(session.TaskStages, ", "))
+	cmd.Flags().StringVar(&project, "project", "", "The repository the card is for, by origin URL, or . for this folder's")
 	_ = cmd.RegisterFlagCompletionFunc("stage", cobra.FixedCompletions(session.TaskStages, cobra.ShellCompDirectiveNoFileComp))
 	return cmd
 }
@@ -184,17 +267,35 @@ standard input. The card starts in todo unless --stage says otherwise.`,
 // newTaskListCommand builds `tuios task ls`.
 func newTaskListCommand() *cobra.Command {
 	var f taskFlags
-	var stage string
-	var open, allSessions bool
+	var stage, project string
+	var open, allSessions, hosts bool
 	cmd := &cobra.Command{
 		Use:   "ls",
 		Short: "List the task cards",
 		Long: `List the session's task cards, oldest first: each card's id, stage, the pane
-that holds it, its age, and its title. A blocked card is marked with !.`,
+that holds it, its age, and its title. A blocked card is marked with !.
+
+--project lists one repository's cards from every session (. is the
+repository of the current folder), and --hosts also asks each linked machine
+for its own cards of it. A row from another machine names it in HOST; claim,
+release or finish that card with -s HOST:SESSION.`,
 		Args: cobra.NoArgs,
 		RunE: func(_ *cobra.Command, _ []string) error {
 			if allSessions && f.session != "" {
 				return errfmt.Errorf("--all-sessions lists every session, so it takes no --session")
+			}
+			if hosts && project == "" {
+				return errfmt.Errorf("--hosts asks the linked machines for one repository's cards: pass --project too")
+			}
+			if project != "" {
+				if allSessions || f.session != "" {
+					return errfmt.Errorf("--project lists every session of the repository, so it takes no --session or --all-sessions")
+				}
+				url, err := projectFlag(project)
+				if err != nil {
+					return err
+				}
+				return runProjectTaskList(os.Stdout, f, url, stage, open, hosts)
 			}
 			return runTaskList(os.Stdout, f, stage, open, allSessions)
 		},
@@ -203,6 +304,8 @@ that holds it, its age, and its title. A blocked card is marked with !.`,
 	cmd.Flags().StringVar(&stage, "stage", "", "Only the cards in this stage")
 	cmd.Flags().BoolVar(&open, "open", false, "Leave out the cards that are done")
 	cmd.Flags().BoolVar(&allSessions, "all-sessions", false, "List the cards of every session on this machine")
+	cmd.Flags().StringVar(&project, "project", "", "List one repository's cards, by origin URL, or . for this folder's")
+	cmd.Flags().BoolVar(&hosts, "hosts", false, "With --project: also list the cards of the linked machines")
 	_ = cmd.RegisterFlagCompletionFunc("stage", cobra.FixedCompletions(session.TaskStages, cobra.ShellCompDirectiveNoFileComp))
 	return cmd
 }
@@ -243,6 +346,72 @@ func runTaskList(w io.Writer, f taskFlags, stage string, open, allSessions bool)
 		return printTaskRows(w, "any session"+t.on(), res.Tasks, true)
 	}
 	return printTaskRows(w, "session "+res.Session+t.on(), res.Tasks, false)
+}
+
+// runProjectTaskList lists one project's cards from every session here, and
+// with hosts from every linked machine.
+func runProjectTaskList(w io.Writer, f taskFlags, project, stage string, open, hosts bool) error {
+	client, err := dialVerb()
+	if err != nil {
+		return err
+	}
+	defer client.Close()
+	params := map[string]any{"project": project}
+	if stage != "" {
+		params["stage"] = stage
+	}
+	if open {
+		params["open"] = true
+	}
+	if hosts {
+		params["hosts"] = true
+	}
+	raw, err := client.Call("list-tasks", params)
+	if err != nil {
+		return reportVerbError(explainVerbError("list-tasks", err), f.json)
+	}
+	if f.json {
+		_, err := w.Write(append(raw, '\n'))
+		return err
+	}
+	var res struct {
+		Project   string    `json:"project"`
+		Tasks     []taskRow `json:"tasks"`
+		HostsDown []struct {
+			Host  string `json:"host"`
+			Error string `json:"error"`
+		} `json:"hosts_down"`
+	}
+	if err := jsonx.Unmarshal(raw, &res); err != nil {
+		return errfmt.Errorf("failed to parse response: %w", err)
+	}
+	if err := printProjectRows(w, res.Project, res.Tasks); err != nil {
+		return err
+	}
+	for _, d := range res.HostsDown {
+		fmt.Fprintf(w, "%s did not answer: %s\n", plainLine(d.Host), plainLine(d.Error))
+	}
+	return nil
+}
+
+// printProjectRows is printTaskRows with the machine and the session of each
+// card, since a project's cards come from many of both.
+func printProjectRows(w io.Writer, project string, rows []taskRow) error {
+	if len(rows) == 0 {
+		_, err := fmt.Fprintf(w, "No task cards for %s.\n", plainLine(project))
+		return err
+	}
+	tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
+	fmt.Fprintln(tw, "HOST\tSESSION\tID\tSTAGE\tHOLDER\tAGE\tTITLE")
+	for _, r := range rows {
+		stage := plainLine(r.Stage)
+		if r.Blocked != nil {
+			stage += " !"
+		}
+		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\t%s\t%s\n", plainLine(cmp.Or(r.Host, federation.LocalHostName)), plainLine(r.Session),
+			plainLine(r.ID), stage, r.holderLabel(), agoOf(r.At), plainLine(r.Title))
+	}
+	return tw.Flush()
 }
 
 // printTaskRows writes list-tasks' cards as a table. Every field but the id,

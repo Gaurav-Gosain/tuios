@@ -177,6 +177,9 @@ type Daemon struct {
 	// never gets a channel into it (federation package, section 1 of the design
 	// document).
 	federation *federation.Manager
+	// remoteHolds are the task cards this daemon's panes hold on other
+	// machines (task_project.go).
+	remoteHolds remoteHoldSet
 	// hostDial is DaemonConfig.HostDial, kept for setupFederation.
 	hostDial federation.Dialer
 	// fleet follows the agents and the Inbox of every linked host over the
@@ -1391,6 +1394,11 @@ func (d *Daemon) onSessionCreated(s *Session) {
 		if ev.Type == eventTaskReleased {
 			d.publishReleased(s, []TaskRow{*ev.taskRow}, ev.taskReason)
 			return
+		}
+		// A pane that closed, or whose agent left, lets go of the cards it
+		// held on other machines (task_project.go).
+		if ev.Type == EventWindowClosed || (ev.Type == EventAgentState && ev.State == AgentStateNone.Name()) {
+			d.releaseRemoteHolds(ev.Window)
 		}
 		// A pane with an activity ring gets its shell's commands and its
 		// state changes added to it. A pane without one costs a map lookup.

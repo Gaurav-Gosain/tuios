@@ -2843,8 +2843,8 @@ moves it back to `doing` while another may still be open.
 
 **Usage:**
 ```bash
-tuios task add [-p PROMPT] [--stage STAGE] TITLE... [flags]
-tuios task ls [--stage STAGE] [--open] [--all-sessions] [flags]
+tuios task add [-p PROMPT] [--stage STAGE] [--project URL] TITLE... [flags]
+tuios task ls [--stage STAGE] [--open] [--all-sessions | --project URL [--hosts]] [flags]
 tuios task get ID [flags]
 tuios task claim ID | --next [-w <window>] [flags]
 tuios task done ID [flags]
@@ -2860,6 +2860,8 @@ tuios task rm ID [flags]
 - `--stage <stage>` (`add`, `ls`): The stage it starts in; for `ls`, only the cards in it
 - `--open` (`ls`): Leave out the cards that are done
 - `--all-sessions` (`ls`): List the cards of every session on this machine, with a SESSION column first. Takes no `--session`
+- `--project <url>` (`add`, `ls`): The repository the card is for, by its origin URL, or `.` for the repository of the current folder. For `ls`, list that repository's cards from every session, with HOST and SESSION columns. Takes no `--session`. Two spellings of one URL (`git@host:a/b.git`, `https://host/a/b`) name one project; a local path is refused
+- `--hosts` (`ls`): With `--project`, also list the project's cards on each linked machine. A machine that does not answer is named under the table
 - `--next` (`claim`): Take the oldest card no pane holds that is not blocked or done, and that no fan of another session works on
 - `-w, --window <target>` (`claim`): The pane that takes the card (default: this pane; required outside a pane)
 - `--clear` (`block`): Lift the block
@@ -2870,6 +2872,16 @@ per card: its id, stage (with `!` when it is blocked), the pane that holds it,
 its age, and its title. `claim` prints the card's id and title on its first
 line, so a script can read the id with `cut -d' ' -f1`; with nothing to take it
 fails with `no_task`, and a card another pane holds fails with `task_held`.
+
+A card with a project shows on that repository's board in every session and on
+every linked machine. The machine where it was added owns it. A pane on
+another machine claims, releases and finishes it with `-s HOST:SESSION`: its
+own daemon passes the call over the link, and the owner records the holder as
+that pane on the link's peer. The card is let go on the owner when the pane
+closes or its agent leaves. If the link is down then, the card stays held
+until `tuios task release` frees it on either machine. A retried claim by the
+pane that holds the card succeeds, so a claim whose answer was lost to a
+dropped link can be run again. A card without a project stays on its machine.
 
 From inside a pane, changing a card needs the `task` grant. A pane claims
 only for itself and finishes, stages, blocks or releases only the card it
@@ -2890,6 +2902,14 @@ tuios task block t1 --clear
 
 # What is open
 tuios task ls --open
+
+# A card for the repository, and every machine's cards of it
+tuios task add --project . add retries to the client
+tuios task ls --project . --hosts
+
+# A worker on this machine takes a card that build owns
+tuios task claim t3 -s build:api
+tuios task done t3 -s build:api
 ```
 
 ### `tuios review`

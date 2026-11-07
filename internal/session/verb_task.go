@@ -106,12 +106,19 @@ type TaskRow struct {
 	At      int64       `json:"at"`
 	Blocked *TaskBlock  `json:"blocked"`
 	Fan     *TaskFan    `json:"fan,omitempty"`
+	// Project is the repository the card is for, its normalised origin
+	// URL, empty for a card of its session only. Host is the machine that
+	// owns the card, set on a row another machine gave; empty is this one.
+	Project string `json:"project,omitempty"`
+	Host    string `json:"host,omitempty"`
 }
 
 // TaskHolder is the pane that holds a card. Name, Harness and State are read
 // from the pane now, and left out when the session no longer has it.
 type TaskHolder struct {
-	Window  string `json:"window"`
+	Window string `json:"window"`
+	// Host is the machine the holding pane is on, empty for this one.
+	Host    string `json:"host,omitempty"`
 	Name    string `json:"name,omitempty"`
 	Harness string `json:"harness,omitempty"`
 	State   string `json:"state,omitempty"`
@@ -144,7 +151,10 @@ func taskRow(sess *Session, st *SessionState, tk *TaskState) TaskRow {
 		At:      tk.At,
 		Blocked: tk.Blocked,
 	}
-	if tk.Holder != "" {
+	row.Project = tk.Project
+	if host, window, ok := splitRemoteHolder(tk.Holder); ok {
+		row.Holder = &TaskHolder{Window: window, Host: host, HeldAt: tk.HeldAt, Name: tk.HolderName, Harness: tk.HolderHarness}
+	} else if tk.Holder != "" {
 		row.Holder = &TaskHolder{Window: tk.Holder, HeldAt: tk.HeldAt}
 		if w, ok := findWindowState(st, tk.Holder); ok {
 			row.Holder.Name, row.Holder.Harness, row.Holder.State = windowLabelOf(w), w.AgentHarness, w.AgentState.Name()
@@ -233,6 +243,7 @@ type addTaskParams struct {
 	Prompt     string `json:"prompt"`
 	Stage      string `json:"stage"`
 	HumanNonce string `json:"human_nonce"`
+	Project    string `json:"project"`
 }
 
 // verbAddTask answers add-task.
@@ -249,6 +260,10 @@ func (d *Daemon) verbAddTask(cs *connState, params json.RawMessage) (any, *verbE
 		return nil, invalidParam("prompt", "prompt is longer than "+strconv.Itoa(taskMaxPrompt)+" bytes")
 	}
 	if verr := taskStageParam("stage", p.Stage); verr != nil {
+		return nil, verr
+	}
+	project, verr := projectParam("project", p.Project)
+	if verr != nil {
 		return nil, verr
 	}
 	sess, verr := d.resolveVerbSession(cs, p.Session)
@@ -277,6 +292,7 @@ func (d *Daemon) verbAddTask(cs *connState, params json.RawMessage) (any, *verbE
 			StageAt: now,
 			By:      caller.by,
 			At:      now,
+			Project: project,
 		}
 		if wt := st.Worktree; wt != nil && wt.Group != "" {
 			tk.Fan, tk.FanID = wt.Group, wt.FanID
@@ -304,6 +320,10 @@ type listTasksParams struct {
 	Holder      string `json:"holder"`
 	Open        bool   `json:"open"`
 	AllSessions bool   `json:"all_sessions"`
+	// Project lists the cards of one repository from every session; Hosts
+	// also asks each linked machine for its own (task_project.go).
+	Project string `json:"project"`
+	Hosts   bool   `json:"hosts"`
 }
 
 // verbListTasks answers list-tasks: the session's cards, oldest first. With
@@ -315,6 +335,29 @@ func (d *Daemon) verbListTasks(cs *connState, params json.RawMessage) (any, *ver
 	}
 	if verr := taskStageParam("stage", p.Stage); verr != nil {
 		return nil, verr
+	}
+	project, verr := projectParam("project", p.Project)
+	if verr != nil {
+		return nil, verr
+	}
+	p.Project = project
+	if p.Hosts && p.Project == "" && !p.AllSessions {
+		return nil, invalidParam("hosts", "hosts asks the linked machines for project cards: pass project or all_sessions too")
+	}
+	if p.Project != "" {
+		if p.Session != "" || p.Holder != "" {
+			return nil, invalidParam("project", "project lists the cards of every session of the repository, so it takes no session or holder")
+		}
+		res := map[string]any{"type": "task_list", "project": p.Project, "tasks": d.projectRows(p)}
+		// A call that came over the link lists this machine's cards only.
+		if p.Hosts && (cs == nil || !cs.viaLink) {
+			rows, down := d.hostTaskRows(p)
+			res["tasks"] = append(res["tasks"].([]TaskRow), rows...)
+			if len(down) > 0 {
+				res["hosts_down"] = down
+			}
+		}
+		return res, nil
 	}
 	if p.AllSessions {
 		if p.Session != "" {
@@ -329,11 +372,22 @@ func (d *Daemon) verbListTasks(cs *connState, params json.RawMessage) (any, *ver
 		for _, sess := range sessions {
 			rows = append(rows, listedTasks(sess, sess.GetState(), p, "")...)
 		}
-		return map[string]any{
-			"type":         "task_list",
-			"all_sessions": true,
-			"tasks":        rows,
-		}, nil
+		res := map[string]any{"type": "task_list", "all_sessions": true}
+		// With hosts, every linked machine's project cards too. A call
+		// that came over the link lists this machine's cards only.
+		if p.Hosts && (cs == nil || !cs.viaLink) {
+			far, down := d.hostTaskRows(p)
+			for _, r := range far {
+				if r.Project != "" {
+					rows = append(rows, r)
+				}
+			}
+			if len(down) > 0 {
+				res["hosts_down"] = down
+			}
+		}
+		res["tasks"] = rows
+		return res, nil
 	}
 	sess, verr := d.resolveVerbSession(cs, p.Session)
 	if verr != nil {
@@ -380,6 +434,20 @@ type taskIDParams struct {
 	Session    string `json:"session"`
 	ID         string `json:"id"`
 	HumanNonce string `json:"human_nonce"`
+	// Host is the machine that owns the card, for release-task and
+	// finish-task from the pane that holds it there (task_project.go).
+	Host string `json:"host"`
+	remoteClaim
+}
+
+// taskCallerFor is taskCallerOf, or the pane of a linked machine a call over
+// the link names with remote_window.
+func (d *Daemon) taskCallerFor(cs *connState, verb string, sess *Session, nonce string, rc remoteClaim) (taskCaller, *verbError) {
+	if rc.RemoteWindow != "" {
+		c, _, verr := remoteCaller(cs, verb, rc)
+		return c, verr
+	}
+	return d.taskCallerOf(cs, verb, sess, nonce)
 }
 
 // sessionForTaskID checks the card id a verb names and resolves the session
@@ -417,6 +485,10 @@ type claimTaskParams struct {
 	Next       bool   `json:"next"`
 	Window     string `json:"window"`
 	HumanNonce string `json:"human_nonce"`
+	// Host is the machine that owns the card: the claim is passed on to it
+	// for the calling pane (task_project.go).
+	Host string `json:"host"`
+	remoteClaim
 }
 
 // verbClaimTask answers claim-task: the card id, or with next the oldest card
@@ -429,6 +501,15 @@ func (d *Daemon) verbClaimTask(cs *connState, params json.RawMessage) (any, *ver
 	}
 	if p.Next == (p.ID != "") {
 		return nil, invalidParam("id", "name the card with id, or pass next to take the oldest open card, not both")
+	}
+	if p.Host != "" {
+		if p.Next {
+			return nil, invalidParam("next", "a card on another machine is claimed by its id: tuios task ls --project lists them")
+		}
+		return d.forwardTask(cs, "claim-task", p.Host, p.Session, p.ID)
+	}
+	if p.RemoteWindow != "" {
+		return d.claimForRemote(cs, p)
 	}
 	sess, verr := d.resolveVerbSession(cs, p.Session)
 	if verr != nil {
@@ -515,11 +596,14 @@ func (d *Daemon) verbFinishTask(cs *connState, params json.RawMessage) (any, *ve
 	if verr := decodeParams(params, &p); verr != nil {
 		return nil, verr
 	}
+	if p.Host != "" {
+		return d.forwardTask(cs, "finish-task", p.Host, p.Session, p.ID)
+	}
 	sess, verr := d.sessionForTaskID(cs, p.Session, p.ID)
 	if verr != nil {
 		return nil, verr
 	}
-	caller, verr := d.taskCallerOf(cs, "finish-task", sess, p.HumanNonce)
+	caller, verr := d.taskCallerFor(cs, "finish-task", sess, p.HumanNonce, p.remoteClaim)
 	if verr != nil {
 		return nil, verr
 	}
@@ -667,11 +751,14 @@ func (d *Daemon) verbReleaseTask(cs *connState, params json.RawMessage) (any, *v
 	if verr := decodeParams(params, &p); verr != nil {
 		return nil, verr
 	}
+	if p.Host != "" {
+		return d.forwardTask(cs, "release-task", p.Host, p.Session, p.ID)
+	}
 	sess, verr := d.sessionForTaskID(cs, p.Session, p.ID)
 	if verr != nil {
 		return nil, verr
 	}
-	caller, verr := d.taskCallerOf(cs, "release-task", sess, p.HumanNonce)
+	caller, verr := d.taskCallerFor(cs, "release-task", sess, p.HumanNonce, p.remoteClaim)
 	if verr != nil {
 		return nil, verr
 	}

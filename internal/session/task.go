@@ -99,6 +99,14 @@ type TaskState struct {
 	// when it took it. Empty when no pane holds it.
 	Holder string `json:"holder,omitempty"`
 	HeldAt int64  `json:"held_at,omitempty"`
+	// HolderName and HolderHarness are how a holder on another machine
+	// reads there, as its daemon said when it claimed the card. A local
+	// holder is read from the pane instead.
+	HolderName    string `json:"holder_name,omitempty"`
+	HolderHarness string `json:"holder_harness,omitempty"`
+	// Project is the repository the card is for, its normalised origin URL
+	// (task_project.go). Empty for a card of its session only.
+	Project string `json:"project,omitempty"`
 	// By is who added the card (see taskCaller), and At when.
 	By      string     `json:"by"`
 	At      int64      `json:"at"`
@@ -165,7 +173,7 @@ func (tk *TaskState) finish(by string, now int64) (string, bool) {
 // release lets the card go, recording why.
 func (tk *TaskState) release(by, reason string, now int64) {
 	holder := tk.Holder
-	tk.Holder, tk.HeldAt = "", 0
+	tk.Holder, tk.HeldAt, tk.HolderName, tk.HolderHarness = "", 0, "", ""
 	tk.note(TaskEvent{Action: TaskActionReleased, By: by, At: now, Holder: holder, Stage: tk.Stage, Reason: reason})
 }
 
@@ -174,7 +182,7 @@ func (tk *TaskState) release(by, reason string, now int64) {
 func (tk *TaskState) workable(window string) *verbError {
 	switch {
 	case tk.Holder != "" && tk.Holder != window:
-		return hintedVerbError(ErrVerbTaskHeld, "task card "+tk.ID+" is held by window "+shortWindowID(tk.Holder), &VerbHint{
+		return hintedVerbError(ErrVerbTaskHeld, "task card "+tk.ID+" is held by window "+holderLabel(tk.Holder), &VerbHint{
 			Command: "tuios task claim --next",
 			Detail:  "Nothing was claimed. Take another card with next, or wait for task-changed released.",
 		})

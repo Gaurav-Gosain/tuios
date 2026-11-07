@@ -14515,3 +14515,25 @@ g and G again. Run on 2026-11-08 on macOS (arm64), each control its own binary:
 The first control of the turn label passed in an early version of the test,
 which looked at labels only after every turn was drawn. The test now checks
 the newest prompt's label first.
+
+## TestProjectCardsAreClaimedFromAnotherMachine
+
+Two daemons that link each other, home and build. build owns project cards in
+two sessions under two spellings of one origin URL, and home owns one. A pane
+on home claims build's card, retries the claim, is refused a card another
+pane holds and a session card, loses the link, claims again when it is back,
+and closes, which must let the card go on build.
+
+Run on 2026-11-08 on macOS (arm64). The branch passes. Four controls, each
+this branch with one change:
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| A listing over the link asks its own links too (`hosts` sent on, the `viaLink` guard dropped) | "ASSERTION: the links never came up" (each listing asks the other machine back until the budget runs out) | **caught** |
+| A claim by the pane that holds the card is refused | "ASSERTION: a retried claim by the holder was refused: claim-task failed: on build: held." | **caught** |
+| A closed pane does not release its holds on other machines | "ASSERTION: far t1 is still held after its pane on home closed" | **caught** |
+| The holder is the window param, not the link peer's window | "ASSERTION: build says far t1 is held by \"83ebe36a-...\" on \"\", want window 83ebe36a-... on home's link name" | **caught** |
+
+The steps are in `task-project-hosts.txt` under the test's artifact folder.
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestProjectCardsAreClaimedFromAnotherMachine$' -v .`.

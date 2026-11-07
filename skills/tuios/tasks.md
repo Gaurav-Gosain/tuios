@@ -103,6 +103,20 @@ each stage, with each holder's state on its card. The person moves a card
 there by key or by drag, and the move is a `task-changed` event with action
 `staged`, like `tuios task stage`.
 
+## Cards for a repository, across machines
+
+| Command | What it does |
+| --- | --- |
+| `tuios task add --project . TITLE` | Add a card for this folder's repository (by its origin URL). It shows in every session of the repository and on linked machines |
+| `tuios task ls --project . --hosts` | Every card of the repository, here and on each linked machine. HOST names the owner |
+| `tuios task claim t3 -s build:api` | From your pane, take card t3 of session api, which machine build owns |
+| `tuios task done t3 -s build:api` | Finish it there. `release` the same way |
+
+The machine that added a card owns it. Run the claim in your own pane: your
+daemon passes it to the owner and lets the card go there when your pane
+closes. If a claim fails with a lost answer, run it again: a claim by the pane
+that holds the card succeeds. A card without a project stays on its machine.
+
 ## Grants
 
 Changing a card needs the `task` grant (`tuios --skill grants`). `admin`
