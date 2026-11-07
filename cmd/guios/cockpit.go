@@ -116,6 +116,10 @@ type cockpit struct {
 	// tabH is the tab's height above the card in the last frame: with the
 	// card's, the room the card may grow into (ckEditBlock).
 	tabH float32
+	// tabMin is the least height the tab keeps in this frame, and
+	// cardH the approval card's whole height in the last frame, which
+	// with the body's gives the room around the body (ckEditBlock).
+	tabMin, cardH float32
 	// editLast is the body's and the card's bounds when the body last
 	// counted its rows.
 	editLast [2]ui.Rect

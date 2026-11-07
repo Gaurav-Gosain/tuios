@@ -222,9 +222,16 @@ func (a *App) ckEditBlock(c *ui.Context, pal *palette, it session.AttentionItem)
 			// head and answers: the tab above gives way down to its least
 			// height. The body then scrolls inside the card rather than the
 			// card around a body taller than it.
+			// The room around the body is the card's, less the body, as the
+			// last frame laid them out: a guess at it gave a MultiEdit at
+			// 1100x700 four rows and hid Allow under a card that had room.
 			rows := ckEditRows
-			if room := ck.tabH + ck.cardView.H - ckTabMinH; ck.cardView.H > 0 {
-				rows = max(ckEditMinRows, min(ckEditRows, int((room-ckEditChrome)/rowH)))
+			if room := ck.tabH + ck.cardView.H - ck.tabMin; ck.cardView.H > 0 {
+				chrome := float32(ckEditChrome)
+				if lb := ck.editLast[0]; ck.cardH > 0 && lb.H > 0 && ck.cardH > lb.H {
+					chrome = ck.cardH - lb.H
+				}
+				rows = max(ckEditMinRows, min(ckEditRows, int((room-chrome)/rowH)))
 			}
 			sc := ui.Scroll(c.Key("edit-body")).TrackScroll(&ck.editScroll).Height(float32(min(n, rows)) * rowH)
 			// The rows on screen: inside the body's viewport, and inside
@@ -264,6 +271,11 @@ func (a *App) ckEditBlock(c *ui.Context, pal *palette, it session.AttentionItem)
 					}
 				})
 			})
+			if n > rows && ck.editScroll.Y < ck.editScroll.MaxY-0.5 {
+				// More below: the cut edge fades, so it reads as cut.
+				ui.Box(c.Key("edit-fade")).Absolute().Left(0).Right(0).Bottom(0).Height(24).PassThrough().
+					LinearGradient(ui.LinearGradient{Angle: 180, From: ckCodeBg(pal).Alpha(0), To: ckCodeBg(pal)})
+			}
 		}
 	})
 	// The count after this frame's rows were reported, as the answers

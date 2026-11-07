@@ -232,7 +232,14 @@ func (a *App) cockpitFocus(c *ui.Context, pal *palette) {
 	})
 	ui.Box(c).Height(1).Shrink(0).Background(pal.divider)
 	ck.cardShown = r.item != nil && ckAnswerable(*r.item)
-	tabCol := ui.Column(c.Key("tab-" + ck.tab)).Grow(1).MinHeight(ckTabMinH)
+	// A held edit is answered from its whole body: the tab gives way to
+	// it down to a line, so the body grows into the room an empty thread
+	// left above it (Mac round 2, V2-M2).
+	ck.tabMin = ckTabMinH
+	if r.item != nil && ckIsEdit(*r.item) {
+		ck.tabMin = ckTabMinEdit
+	}
+	tabCol := ui.Column(c.Key("tab-" + ck.tab)).Grow(1).MinHeight(ck.tabMin)
 	ck.tabH = tabCol.Bounds().H
 	tabCol.ClipY().AlignItems(ui.Stretch).Children(func() {
 		switch ck.tab {
@@ -260,7 +267,9 @@ func (a *App) cockpitFocus(c *ui.Context, pal *palette) {
 		// too: only rows inside both count as shown (ckEditBlock).
 		ck.cardView = outer.Bounds()
 		outer.Children(func() {
-			ui.Column(c).AlignItems(ui.Stretch).Children(func() {
+			inner := ui.Column(c.Key("ck-card-in")).AlignItems(ui.Stretch)
+			ck.cardH = inner.Bounds().H
+			inner.Children(func() {
 				a.approvalCard(c, pal, ag, *r.item)
 			})
 		})
@@ -270,8 +279,12 @@ func (a *App) cockpitFocus(c *ui.Context, pal *palette) {
 	}
 }
 
-// ckTabMinH is the least height the tab's content keeps above the card.
-const ckTabMinH = 120
+// ckTabMinH is the least height the tab's content keeps above the card,
+// and ckTabMinEdit the least while the card holds an edit.
+const (
+	ckTabMinH    = 120
+	ckTabMinEdit = 32
+)
 
 // ckTab is one tab, with its count where it has one.
 func (a *App) ckTab(c *ui.Context, pal *palette, t string, ag client.Agent) {
