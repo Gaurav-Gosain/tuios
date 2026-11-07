@@ -3083,12 +3083,14 @@ func (m *OS) sidebarFooter(variant, cw int, pal overlay.Palette,
 	// before the inner one's on a left-hand rail.
 	sortx.ShortStableFunc(items, func(a, b placed) int { return a.zone.X0 - b.zone.X0 })
 
-	// The files control is a switch, so it shows which way it is set: on, it
-	// is drawn in the accent and underlined. The underline is what carries the
-	// state at 16 colours, where the accent can be the same ink as the label.
-	// A switch drawn the same both ways put a section on the rail with no sign
-	// of what had put it there.
-	filesOn := m.filesOn()
+	// The files control is a switch, so it shows when it is what put the
+	// section on the rail: then it is drawn in the accent and underlined. The
+	// underline is what carries the state at 16 colours, where the accent can
+	// be the same ink as the label. A switch drawn the same both ways put a
+	// section on the rail with no sign of what had put it there. A layout that
+	// names the section has it on by itself, and the control stays plain, so a
+	// default rail carries no mark beside its cursor's.
+	filesOn := m.filesView.Show > 0 && !sidebarLayoutHas(sidebarSectionFiles, &m.Settings)
 	zones := make([]sidebarFooterZone, 0, len(items))
 	for _, it := range items {
 		fg := pal.FgMute
