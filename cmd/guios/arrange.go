@@ -194,6 +194,7 @@ func (a *App) arrangedPane(c *ui.Context, pal *palette, bar ui.TitleBar, shown f
 			bb = half
 		}
 		wrap.Padding(t, rr, bb, l)
+		a.arrangedWidth(p.ID, b, w-l-rr)
 	} else {
 		// The gap tiled cards keep, on the right and below, as the
 		// tiles do, so floating panes made from a tiling do not touch;
@@ -209,6 +210,7 @@ func (a *App) arrangedPane(c *ui.Context, pal *palette, bar ui.TitleBar, shown f
 		if b.W > 0 {
 			wrap.Width(w).Height(h)
 		}
+		a.arrangedWidth(p.ID, b, w)
 		wrap.Radius(rPane).Background(pal.card).Shadow(0, 1, 3, 0, pal.cardShadow).Shadow(0, 14, 36, 0, pal.floatShadow)
 	}
 	// A pane the area cuts, as the scrolling strip's are, touches no edge
@@ -513,4 +515,18 @@ func (a *App) arrange(s *proto.Session, op string, set func(*proto.ArrangeParams
 			}
 		})
 	}()
+}
+
+// arrangedWidth notes the width an arranged card has in this frame, for
+// its header's plan (planHeader), as the tiles note theirs. Before the
+// area has a size there is none: one left from a frame the tiles drew, at
+// another window size, planned the header for that width, and at 1100
+// DIPs the need chip ran under the card's edge, cut mid letter (Mac round
+// 3, V3-M1).
+func (a *App) arrangedWidth(pane string, area ui.Rect, w float32) {
+	if area.W <= 0 {
+		delete(a.motion.width, pane)
+		return
+	}
+	a.motion.width[pane] = max(w, 0)
 }
