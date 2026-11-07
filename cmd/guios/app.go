@@ -726,11 +726,19 @@ func (a *App) selectSession(id string) {
 }
 
 // watching tells whether the user looks at the session: it's selected,
-// and the main window has the keyboard. Only macOS says when the app
-// stops being the active one, so the window's focus has to tell
-// elsewhere.
+// the main window has the keyboard, and the Agents view does not cover
+// its panes. Only macOS says when the app stops being the active one, so
+// the window's focus has to tell elsewhere.
+//
+// The daemon takes a session watched as its focused pane in front of the
+// person: a finished turn there counts as seen, and a move to the pane ends
+// an approval hold on it, so the harness asks in the pane. While the Agents
+// view is open the pane is not on screen. Counted as watched, a window that
+// lost the focus and got it back ended the hold of the agent the view
+// showed, and the card's Allow then found nothing to answer (Mac round 2,
+// W2-M1).
 func (a *App) watching(id string) bool {
-	return id != "" && id == a.selected && a.active && a.focused
+	return id != "" && id == a.selected && a.active && a.focused && !a.ck.open
 }
 
 // reportView tells each host's kerod which of its sessions the user looks

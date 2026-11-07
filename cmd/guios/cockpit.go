@@ -248,6 +248,7 @@ func (a *App) toggleCockpit() {
 	}
 	a.ck.open = true
 	a.ck.fleetFocus.Focus()
+	a.reportView()
 	a.refreshCockpit()
 	// A pane the cockpit zoomed to open it goes back into the layout.
 	if sid, pane, ok := strings.Cut(a.ck.zoomed, "\x00"); ok {
@@ -262,6 +263,7 @@ func (a *App) closeCockpit() {
 	a.ck.open = false
 	a.ck.reason = ""
 	a.focusTerminal()
+	a.reportView()
 }
 
 // cockpitEvent takes a daemon event: the lists are read again, open or not,
@@ -671,6 +673,7 @@ func (a *App) goToAgent(ag client.Agent) {
 	a.focus[sid] = ag.Window
 	a.selectSession(sid)
 	a.ck.open = false
+	a.reportView()
 	// A tile too small to read opens zoomed; the agents key shows the
 	// layout again with the agents (toggleCockpit).
 	// The size is the terminal's grid here: the daemon's is its own.
