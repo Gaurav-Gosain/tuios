@@ -5,9 +5,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
 	"slices"
+	"strconv"
 	"strings"
 	"syscall"
 	"testing"
@@ -399,33 +401,62 @@ func TestGUIBridgeKeepsItsChromeAcrossAReload(t *testing.T) {
 	}
 }
 
-// farProxy finds the far side of the link to the remote machine at
-// remoteBase: the stdio-proxy whose runtime folder is that machine's.
-// farProxies is every stdio-proxy that serves the far machine. A link can
-// have more than one: the daemon's link and a dial a client made through it.
-// Which one /proc lists first is not fixed, so a test that cuts the link
-// stops or kills them all.
+// farProxies is every stdio-proxy that serves the far machine at
+// remoteBase. A link can have more than one: the daemon's link and a dial a
+// client made through it. Which one is listed first is not fixed, so a test
+// that cuts the link stops or kills them all.
+//
+// The ssh stand-in for that machine (writeFakeSSHTo) records its pid in
+// fakeSSHPids before it runs the far command, so the proxies are that pid and
+// its descendants whose command runs stdio-proxy. This reads ps, which Linux
+// and macOS both have. It used to read each process's environment under
+// /proc, which macOS does not have, so the tests that cut a link failed there
+// before they cut anything.
 func farProxies(remoteBase string) []int {
-	want := "XDG_RUNTIME_DIR=" + xdgDir(remoteBase, "XDG_RUNTIME_DIR")
-	entries, _ := os.ReadDir("/proc")
-	var pids []int
-	for _, e := range entries {
-		pid := 0
-		if _, err := fmt.Sscan(e.Name(), &pid); err != nil {
-			continue
-		}
-		cmd, _ := os.ReadFile(filepath.Join("/proc", e.Name(), "cmdline"))
-		if !bytes.Contains(cmd, []byte("stdio-proxy")) {
-			continue
-		}
-		env, _ := os.ReadFile(filepath.Join("/proc", e.Name(), "environ"))
-		for kv := range bytes.SplitSeq(env, []byte{0}) {
-			if string(kv) == want {
-				pids = append(pids, pid)
-				break
-			}
+	data, _ := os.ReadFile(fakeSSHPids(remoteBase))
+	var roots []int
+	for _, f := range strings.Fields(string(data)) {
+		if pid, err := strconv.Atoi(f); err == nil {
+			roots = append(roots, pid)
 		}
 	}
+	if len(roots) == 0 {
+		return nil
+	}
+	out, err := exec.Command("ps", "-A", "-o", "pid=,ppid=,command=").Output()
+	if err != nil {
+		return nil
+	}
+	command := map[int]string{}
+	children := map[int][]int{}
+	for line := range strings.SplitSeq(string(out), "\n") {
+		f := strings.Fields(line)
+		if len(f) < 3 {
+			continue
+		}
+		pid, err1 := strconv.Atoi(f[0])
+		ppid, err2 := strconv.Atoi(f[1])
+		if err1 != nil || err2 != nil {
+			continue
+		}
+		command[pid] = strings.Join(f[2:], " ")
+		children[ppid] = append(children[ppid], pid)
+	}
+	var pids []int
+	seen := map[int]bool{}
+	for len(roots) > 0 {
+		pid := roots[0]
+		roots = roots[1:]
+		if seen[pid] {
+			continue
+		}
+		seen[pid] = true
+		if cmd, ok := command[pid]; ok && strings.Contains(cmd, "stdio-proxy") {
+			pids = append(pids, pid)
+		}
+		roots = append(roots, children[pid]...)
+	}
+	slices.Sort(pids)
 	return pids
 }
 

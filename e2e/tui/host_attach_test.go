@@ -48,11 +48,20 @@ func writeFakeSSHTo(t *testing.T, dir, remoteBase string) string {
 		b.WriteString(xdgDir(remoteBase, key))
 		b.WriteString("\n")
 	}
+	// Its pid is the far command's, after the exec: farProxies finds the
+	// link's proxy under it.
+	b.WriteString("echo $$ >> " + posixQuote(fakeSSHPids(remoteBase)) + "\n")
 	b.WriteString("exec /bin/sh -c \"$*\"\n")
 	if err := os.WriteFile(path, []byte(b.String()), 0o700); err != nil {
 		t.Fatalf("write the ssh stand-in: %v", err)
 	}
 	return path
+}
+
+// fakeSSHPids is the file the ssh stand-in for the machine at remoteBase
+// writes its pid to, one line for each link it carries.
+func fakeSSHPids(remoteBase string) string {
+	return filepath.Join(remoteBase, "fake-ssh.pids")
 }
 
 // remoteMachine is the second daemon: its isolation root, with the XDG
