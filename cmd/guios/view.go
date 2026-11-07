@@ -1334,23 +1334,70 @@ func (a *App) message(c *ui.Context, pal *palette, title, detail, action string,
 }
 
 func (a *App) emptyState(c *ui.Context, pal *palette) {
-	ui.Column(c).Fill().Center().Children(func() {
-		ui.Column(c).Shrink(0).AlignItems(ui.Center).Children(func() {
-			emptyBlock(c, pal, terminalIcon, locales.EmptyTitle(), locales.EmptyDetail(), true, func() {
-				if button(c, "empty-new", locales.ActionNewSession(), a.keys("session.new"), true, pal) {
-					a.newSession("")
-				}
-				if button(c, "empty-open", locales.ActionOpenProject(), a.keys("project.open"), false, pal) {
-					a.openProject()
-				}
-			})
-		})
-		ui.Column(c).Margin(sp6, sp6, 0, sp6).Padding(sp3, sp4).Gap(6).Radius(rCard).Background(pal.chip).MaxWidth(measure).Children(func() {
-			ui.Text(c, locales.EmptyForAgents()).FontSize(fsSmall).FontWeight(wMedium).TextColor(pal.textMuted).SingleLine()
-			ui.Text(c, "tuios start-agent claude\ntuios send-text \"run the tests and fix them\"\ntuios list-agents").
-				Font(a.termFamily()).FontSize(fsCode).TextColor(pal.text).LineHeight(1.5).NoWrap().Selectable()
+	// No session yet (DESIGN.md section 6): Tilly, one question, one line
+	// under it, and the four ways to start, each with its keys.
+	ui.Column(c).Fill().Center().Padding(sp6).Children(func() {
+		a.tilly(c, pal, "empty-tilly", 96, nil)
+		ui.Text(c, locales.EmptyTitle()).FontSize(fsDisplay).FontWeight(wSemibold).TextColor(pal.text).
+			TextAlign(ui.Center).MaxWidth(measure).MaxLines(2).Margin(sp4, 0, 0, 0)
+		ui.Text(c, locales.EmptyDetail()).FontSize(fsBody).TextColor(pal.textMuted).TextAlign(ui.Center).
+			MaxWidth(measure).LineHeight(1.45).MaxLines(2).Margin(sp2, 0, 0, 0)
+		cards := []struct {
+			key, label, action string
+			icon               *ui.SVG
+		}{
+			{"empty-agent", locales.EmptyCardAgent(), "agents.new", agentsIcon},
+			{"empty-folder", locales.EmptyCardFolder(), "project.open", folderIcon},
+			{"empty-machine", locales.EmptyCardMachine(), "host.add", machineIcon},
+			{"empty-resume", locales.EmptyCardResume(), "conversation.resume", revertIcon},
+		}
+		ui.Column(c).Gap(sp2).Margin(sp6, 0, 0, 0).Width(emptyGridW).MaxWidthPercent(100).Shrink(1).Children(func() {
+			for row := 0; row < 2; row++ {
+				ui.Row(c).Gap(sp2).Children(func() {
+					for _, cd := range cards[row*2 : row*2+2] {
+						if startCard(c, pal, cd.key, cd.label, a.keys(cd.action), cd.icon) {
+							a.run(cd.action, nil)
+						}
+					}
+				})
+			}
 		})
 	})
+}
+
+// emptyGridW is the width of the empty state's grid of cards.
+const emptyGridW = 600
+
+// startCard is one way to start, in the empty state's grid: an icon, a
+// label and its keys, on a card that lifts under the pointer.
+func startCard(c *ui.Context, pal *palette, key, label, keys string, icon *ui.SVG) bool {
+	b := ui.ButtonBase(c.Key(key)).Grow(1).Basis(0).MinWidth(0).Height(hRow2+sp4).Padding(0, sp4).Gap(sp3).
+		Radius(rCard).AlignItems(ui.Center).Label(label)
+	// Raised in the dark; on the window's lilac ground in the light,
+	// where a raised white card would not show on the white one.
+	base := pal.popover
+	if !pal.dark {
+		base = pal.sidebar
+	}
+	bg := base
+	switch {
+	case b.Pressed():
+		bg = pressedQuiet(pal).Over(base)
+	case b.Hovered():
+		bg = pal.rowHover.Over(base)
+	}
+	b.Background(b.AnimateColor("bg", bg, ui.Animation{Duration: dHoverOut})).Border(1, pal.cardBorder)
+	b.Children(func() {
+		ui.Box(c).Size(hControl, hControl).Radius(rControl).Center().Background(pal.accent.Alpha(0.14)).TextColor(pal.accentText).Shrink(0).Children(func() {
+			ui.Icon(c, icon).Size(16, 16)
+		})
+		oneLine(c, label, fsBody, wMedium).TextColor(pal.text)
+		ui.Spacer(c)
+		if keys != "" {
+			kbd(c, pal, keys)
+		}
+	})
+	return b.Clicked()
 }
 
 // cmdHintDelay is how long Cmd (Ctrl elsewhere) must be held alone before

@@ -106,6 +106,16 @@ func (msgs Messages) ActionOpenProject() string {
 	return Catalog.Format(msgs.locale, "actionOpenProject", nil)
 }
 
+// ActionAttachMachine says "Attach to a machine…"
+// in the language the app shows.
+func ActionAttachMachine() string { return In(i18n.Locale()).ActionAttachMachine() }
+
+// ActionAttachMachine says "Attach to a machine…"
+// in the language of msgs.
+func (msgs Messages) ActionAttachMachine() string {
+	return Catalog.Format(msgs.locale, "actionAttachMachine", nil)
+}
+
 // ActionGoToSession says "Command palette…"
 // in the language the app shows.
 func ActionGoToSession() string { return In(i18n.Locale()).ActionGoToSession() }
@@ -1426,34 +1436,64 @@ func (msgs Messages) ConnCantReach() string {
 	return Catalog.Format(msgs.locale, "connCantReach", nil)
 }
 
-// EmptyTitle says "Start a session"
+// EmptyTitle says "What should we work on?"
 // in the language the app shows.
 func EmptyTitle() string { return In(i18n.Locale()).EmptyTitle() }
 
-// EmptyTitle says "Start a session"
+// EmptyTitle says "What should we work on?"
 // in the language of msgs.
 func (msgs Messages) EmptyTitle() string {
 	return Catalog.Format(msgs.locale, "emptyTitle", nil)
 }
 
-// EmptyDetail says "Sessions run in the tuios daemon. Quit guios and come back to everything as you left it."
+// EmptyDetail says "Your sessions keep running when guios is closed."
 // in the language the app shows.
 func EmptyDetail() string { return In(i18n.Locale()).EmptyDetail() }
 
-// EmptyDetail says "Sessions run in the tuios daemon. Quit guios and come back to everything as you left it."
+// EmptyDetail says "Your sessions keep running when guios is closed."
 // in the language of msgs.
 func (msgs Messages) EmptyDetail() string {
 	return Catalog.Format(msgs.locale, "emptyDetail", nil)
 }
 
-// EmptyForAgents says "For agents"
+// EmptyCardAgent says "New agent"
 // in the language the app shows.
-func EmptyForAgents() string { return In(i18n.Locale()).EmptyForAgents() }
+func EmptyCardAgent() string { return In(i18n.Locale()).EmptyCardAgent() }
 
-// EmptyForAgents says "For agents"
+// EmptyCardAgent says "New agent"
 // in the language of msgs.
-func (msgs Messages) EmptyForAgents() string {
-	return Catalog.Format(msgs.locale, "emptyForAgents", nil)
+func (msgs Messages) EmptyCardAgent() string {
+	return Catalog.Format(msgs.locale, "emptyCardAgent", nil)
+}
+
+// EmptyCardFolder says "Open folder"
+// in the language the app shows.
+func EmptyCardFolder() string { return In(i18n.Locale()).EmptyCardFolder() }
+
+// EmptyCardFolder says "Open folder"
+// in the language of msgs.
+func (msgs Messages) EmptyCardFolder() string {
+	return Catalog.Format(msgs.locale, "emptyCardFolder", nil)
+}
+
+// EmptyCardMachine says "Attach to a machine"
+// in the language the app shows.
+func EmptyCardMachine() string { return In(i18n.Locale()).EmptyCardMachine() }
+
+// EmptyCardMachine says "Attach to a machine"
+// in the language of msgs.
+func (msgs Messages) EmptyCardMachine() string {
+	return Catalog.Format(msgs.locale, "emptyCardMachine", nil)
+}
+
+// EmptyCardResume says "Resume a conversation"
+// in the language the app shows.
+func EmptyCardResume() string { return In(i18n.Locale()).EmptyCardResume() }
+
+// EmptyCardResume says "Resume a conversation"
+// in the language of msgs.
+func (msgs Messages) EmptyCardResume() string {
+	return Catalog.Format(msgs.locale, "emptyCardResume", nil)
 }
 
 // PaletteSettingsPage says "Settings: {page}"

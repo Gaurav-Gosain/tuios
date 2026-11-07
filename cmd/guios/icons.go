@@ -39,6 +39,7 @@ var (
 	chevronUpIcon    = glyph("f7-chevron-up")
 	chevronDownIcon  = glyph("f7-chevron-down")
 	folderIcon       = glyph("f7-folder")
+	machineIcon      = glyph("f7-desktopcomputer")
 	searchIcon       = glyph("f7-search")
 	terminalIcon     = glyph("meteor-terminal")
 	returnIcon       = glyph("f7-return")
