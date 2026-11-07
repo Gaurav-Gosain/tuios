@@ -348,15 +348,16 @@ func (a *App) paneCard(c *ui.Context, pal *palette, bar ui.TitleBar, shown float
 		// The card's edge says its state: the focus line on the pane the
 		// keyboard is in (council round 1, visual 11 and 12), and over it a
 		// 2 px need ring while the pane needs the person, as cmux rings a
-		// pane. Each comes over dArrive and then stays still.
-		edge := ui.Transparent
+		// pane. Both change in the frame that changes the state, as the
+		// header's need chip does: a fade put the ring and the chip in
+		// different frames, and the focus line came after the click that
+		// moved it (council mac-1, feel S3).
 		if multi && focused {
-			edge = pal.focusLine
+			ui.Box(c.Key("edge")).Absolute().Top(0).Left(0).Right(0).Bottom(0).PassThrough().Radius(rPane).Border(1, pal.focusLine)
 		}
-		e := ui.Box(c.Key("edge")).Absolute().Top(0).Left(0).Right(0).Bottom(0).PassThrough().Radius(rPane)
-		e.Border(1, e.AnimateColor("c", edge, ui.Animation{Duration: dArrive}))
-		ring := ui.Box(c.Key("need-ring")).Absolute().Top(0).Left(0).Right(0).Bottom(0).PassThrough().Radius(rPane).Border(2, pal.attention)
-		ring.Opacity(ring.Animate("on", b2f(p.Status == proto.Waiting), dArrive))
+		if p.Status == proto.Waiting {
+			ui.Box(c.Key("need-ring")).Absolute().Top(0).Left(0).Right(0).Bottom(0).PassThrough().Radius(rPane).Border(2, pal.attention)
+		}
 	})
 	if multi && focused && !pal.dark {
 		// The focused card stands a level up from the others in the light.
