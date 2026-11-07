@@ -1,7 +1,6 @@
 package app
 
 import (
-	"errors"
 	"strconv"
 	"strings"
 	"time"
@@ -491,7 +490,7 @@ func (m *OS) applyFanAct(msg ckFanActMsg) tea.Cmd {
 			what = "keep the attempt"
 		}
 		text := printableTitle(msg.err.Error())
-		if verr, ok := errors.AsType[*session.VerbCallError](msg.err); ok && verr.Code == session.ErrVerbUnknownVerb {
+		if session.VerbErrCode(msg.err) == session.ErrVerbUnknownVerb {
 			text = "this daemon is older than the view. " + m.restartHint()
 		}
 		cp.note = "tuios could not " + what + ": " + text

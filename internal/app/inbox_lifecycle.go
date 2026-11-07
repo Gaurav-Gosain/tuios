@@ -1,7 +1,6 @@
 package app
 
 import (
-	"errors"
 	"slices"
 	"sort"
 	"strconv"
@@ -111,8 +110,7 @@ func probeMarkAttention(call func(verb string, params map[string]any) ([]byte, e
 func probeVerb(call func(verb string, params map[string]any) ([]byte, error), name string) (supported, known bool) {
 	raw, err := call("list-verbs", map[string]any{"verb": name})
 	if err != nil {
-		var callErr *session.VerbCallError
-		if errors.As(err, &callErr) && (callErr.Code == session.ErrVerbUnknownVerb || callErr.Code == session.ErrVerbInvalidParams) {
+		if code := session.VerbErrCode(err); code == session.ErrVerbUnknownVerb || code == session.ErrVerbInvalidParams {
 			return false, true
 		}
 		return false, false
@@ -326,8 +324,7 @@ func (m *OS) inboxMarkCmd(params map[string]any, who, words string) tea.Cmd {
 // applyInboxMarked says what happened, and keeps a snooze for u.
 func (m *OS) applyInboxMarked(msg InboxMarkedMsg) {
 	if msg.Err != nil {
-		var callErr *session.VerbCallError
-		if errors.As(msg.Err, &callErr) && callErr.Code == session.ErrVerbUnknownVerb {
+		if session.VerbErrCode(msg.Err) == session.ErrVerbUnknownVerb {
 			m.Inbox.life.noMark = true
 			m.ShowNotification("This daemon cannot snooze or mark items. "+m.restartHint(), "error", m.Settings.NotificationDuration*2)
 			return

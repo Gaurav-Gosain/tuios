@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"image/color"
 	"strconv"
 	"strings"
@@ -460,8 +461,8 @@ func (m *OS) applyThreadPage(msg threadPageMsg) tea.Cmd {
 // threadNoTranscript reports an error that says the pane has no transcript
 // the daemon can read, so the thread shows the recap instead.
 func threadNoTranscript(err error) bool {
-	ce, ok := err.(*session.VerbCallError)
-	return ok && (ce.Code == session.ErrVerbNoTranscript || ce.Code == session.ErrVerbUnsupportedHarness)
+	code := session.VerbErrCode(err)
+	return code == session.ErrVerbNoTranscript || code == session.ErrVerbUnsupportedHarness
 }
 
 // threadReadError is a failed read as the thread says it. host is the
@@ -471,7 +472,7 @@ func threadReadError(err error, host string) string {
 	if host != "" {
 		daemon = "tuios on " + printableTitle(host)
 	}
-	if ce, ok := err.(*session.VerbCallError); ok {
+	if ce, ok := errors.AsType[*session.VerbCallError](err); ok {
 		switch ce.Code {
 		case session.ErrVerbNoTranscript:
 			return "This agent has no transcript to read yet."

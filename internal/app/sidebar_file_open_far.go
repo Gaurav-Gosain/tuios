@@ -198,8 +198,7 @@ func prepareFarOpen(ask farOpenAsk, files config.FilesConfig, hint string, onHos
 		far = openedcopy.FileFingerprint(st.Info.Size, st.Info.MTime)
 	case "dir":
 		raw, err := onHost(ask.host, "file-walk", map[string]any{"path": ask.path})
-		var verr *session.VerbCallError
-		if errors.As(err, &verr) && verr.Code == session.ErrVerbInvalidParams {
+		if session.VerbErrCode(err) == session.ErrVerbInvalidParams {
 			return note("warning", name+" on "+host+" holds more than "+strconv.Itoa(config.OpenCopyMaxFiles)+
 				" files. tuios does not open a copy of it."+hint)
 		}

@@ -353,7 +353,7 @@ func (m *OS) deliverImageCmd(window string, data []byte) tea.Cmd {
 // shows the image in the paste preview.
 func (m *OS) applyImagePasted(msg ImagePastedMsg) tea.Cmd {
 	if msg.Err != nil {
-		if callErr, ok := errors.AsType[*session.VerbCallError](msg.Err); ok && callErr.Code == session.ErrVerbUnknownVerb {
+		if session.VerbErrCode(msg.Err) == session.ErrVerbUnknownVerb {
 			m.ShowNotification("This daemon cannot take a pasted image. "+m.restartHint(), "error", m.Settings.NotificationDuration*2)
 			return nil
 		}

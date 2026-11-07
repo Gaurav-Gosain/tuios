@@ -878,8 +878,7 @@ func (m *OS) SidebarAgentCancelQueued(sessionID, windowID string) (tea.Cmd, bool
 // this client queued for u.
 func (m *OS) applyInboxQueueDropped(msg InboxQueueDroppedMsg) {
 	if msg.Err != nil {
-		var callErr *session.VerbCallError
-		if errors.As(msg.Err, &callErr) && callErr.Code == session.ErrVerbUnknownVerb {
+		if session.VerbErrCode(msg.Err) == session.ErrVerbUnknownVerb {
 			m.Inbox.reply.noQueue = true
 			m.ShowNotification("This daemon has no queue. "+m.restartHint(), "error", m.Settings.NotificationDuration*2)
 			return

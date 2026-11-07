@@ -2,7 +2,6 @@ package app
 
 import (
 	"encoding/json"
-	"errors"
 	"strconv"
 	"strings"
 	"time"
@@ -346,8 +345,7 @@ func (m *OS) applyInboxResponded(msg InboxRespondedMsg) tea.Cmd {
 	}
 	p.Sending = false
 	if msg.Err != nil {
-		var callErr *session.VerbCallError
-		if errors.As(msg.Err, &callErr) && callErr.Code == session.ErrVerbPromptChanged {
+		if session.VerbErrCode(msg.Err) == session.ErrVerbPromptChanged {
 			p.Note = "The prompt changed before your answer, or another client answered it, so nothing was pressed. This is the prompt now."
 			p.Composing, p.Answer = false, nil
 			return m.inboxPeekRead()

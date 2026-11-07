@@ -585,8 +585,7 @@ func (m *OS) applyReviewDiff(msg ReviewDiffMsg) {
 	if msg.Err != nil {
 		r.pending = false
 		text := reviewErrorText(msg.Err)
-		var callErr *session.VerbCallError
-		if errors.As(msg.Err, &callErr) && callErr.Code == session.ErrVerbUnknownVerb {
+		if session.VerbErrCode(msg.Err) == session.ErrVerbUnknownVerb {
 			// An older daemon than the probe found, or one the probe could
 			// not ask: the review keys stop being offered from here on.
 			m.Inbox.noReview = true

@@ -636,7 +636,7 @@ func openScratchPopup(req scratchRequest) error {
 	params["wait"] = true
 	params["timeout"] = int(scratchStoppedWait / time.Millisecond)
 	raw, err := c.CallWithTimeout("popup", params, scratchStoppedWait+5*time.Second)
-	if call, ok := errors.AsType[*session.VerbCallError](err); ok && call.Code == session.ErrVerbTimeout {
+	if session.VerbErrCode(err) == session.ErrVerbTimeout {
 		return nil
 	}
 	if err != nil {

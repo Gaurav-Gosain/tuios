@@ -290,8 +290,7 @@ func runInboxWatch(ctx context.Context, dial inboxDial, out chan<- tea.Msg) {
 		if ctx.Err() != nil {
 			return
 		}
-		var callErr *session.VerbCallError
-		if errors.As(err, &callErr) && callErr.Code == session.ErrVerbUnknownVerb {
+		if session.VerbErrCode(err) == session.ErrVerbUnknownVerb {
 			inboxSend(ctx, out, InboxDownMsg{Err: err, Unsupported: true})
 			return
 		}
@@ -337,8 +336,7 @@ func inboxWatchOnce(ctx context.Context, dial inboxDial, out chan<- tea.Msg) (bo
 	// Snoozed group. A daemon from before snoozing refuses the parameter,
 	// and has nothing snoozed, so it is asked without it.
 	raw, err := client.CallWithTimeout("list-attention", map[string]any{"include_snoozed": true}, 5*time.Second)
-	var callErr *session.VerbCallError
-	if errors.As(err, &callErr) && callErr.Code == session.ErrVerbInvalidParams {
+	if session.VerbErrCode(err) == session.ErrVerbInvalidParams {
 		raw, err = client.CallWithTimeout("list-attention", map[string]any{}, 5*time.Second)
 	}
 	if err != nil {

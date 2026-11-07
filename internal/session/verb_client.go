@@ -85,6 +85,15 @@ func (e *VerbCallError) Error() string {
 	return fmt.Sprintf("%s (%s)", e.Message, e.Code)
 }
 
+// VerbErrCode is the code of err when it is, or wraps, a VerbCallError, and
+// "" otherwise.
+func VerbErrCode(err error) string {
+	if ce, ok := errors.AsType[*VerbCallError](err); ok {
+		return ce.Code
+	}
+	return ""
+}
+
 // DialVerbClient connects to the running daemon's socket for JSON verb calls,
 // without announcing a client version.
 func DialVerbClient() (*VerbClient, error) {
