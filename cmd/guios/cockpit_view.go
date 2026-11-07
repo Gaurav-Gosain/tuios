@@ -612,6 +612,16 @@ func (a *App) cockpitKeys(c *ui.Context, col ui.Element) {
 		c.Invalidate()
 		return
 	}
+	if key(0, ui.KeyTab) {
+		// Tab goes on to the reply box, the next stop in the view, as a
+		// form's Tab does; it was a second Down that stopped at the last
+		// row (council round 5, feel S3). Shift+Tab in the box comes back.
+		if ag, ok := a.ckSelectedAgent(); ok && ag.Window != "" && ag.Host == "" {
+			a.ckFocusReply()
+			c.Invalidate()
+			return
+		}
+	}
 	if d, to, ok := listMove(col); ok {
 		a.ckMoveBy(d, to)
 		c.Invalidate()

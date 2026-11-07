@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"time"
 
 	"github.com/Gaurav-Gosain/mygo/ui"
 
@@ -29,15 +30,25 @@ func (a *App) cockpitSide(c *ui.Context, pal *palette) {
 				oneLine(c, v, fsSmall, 0).TextColor(pal.text)
 			})
 		}
-		if ag.Harness != "" {
-			row(locales.CockpitDetailAgent(), harnessName(ag.Harness))
-		}
+		// What the header does not say: the header names the agent, its
+		// session and folder in short, and the pill its state (Mac round
+		// 1, visual S9).
 		if m, ok := ag.Meta["model"].(string); ok {
 			row(locales.CockpitDetailModel(), m)
 		}
-		row(locales.CockpitDetailSession(), ag.Session)
-		word, _ := ckStatePill(pal, ag, nil)
-		row(locales.CockpitDetailState(), word)
+		if s := a.sessionOfPane(ag.Window); s != nil && ag.Host == "" {
+			g := sessionGit(s)
+			if p := s.PaneByID(ag.Window); p != nil && p.Git != nil {
+				g = p.Git
+			}
+			if g != nil {
+				row(locales.CockpitDetailBranch(), gitShort(g))
+			}
+		}
+		row(locales.CockpitDetailFolder(), ag.Cwd)
+		if ag.StateAt > 0 {
+			row(locales.CockpitDetailSince(), time.Unix(0, ag.StateAt).Format("15:04"))
+		}
 		// Where the state came from matters only when it is not the
 		// agent's own report, as the row's tooltip says.
 		if ckSourceShown(ag.Source) {

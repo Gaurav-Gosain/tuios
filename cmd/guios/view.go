@@ -608,7 +608,10 @@ func (a *App) groupView(c *ui.Context, pal *palette, g group, gi int, n *int) {
 		if g.first && g.host.remote() {
 			a.hostState(c, pal, g.host)
 		}
-		if needs > 0 {
+		// The count shows while the group is folded: open, its rows and
+		// the rail's Needs you say it, and a fourth count on one screen
+		// was noise (Mac round 1, visual S1).
+		if needs > 0 && collapsed {
 			ui.Text(c, locales.SidebarNeedsYou(needs)).FontSize(fsSmall).FontWeight(wMedium).TextColor(pal.attnText).FontFeatures("tnum").SingleLine().Shrink(0)
 		}
 		if hovered {
@@ -934,7 +937,11 @@ func (a *App) sidebarFooter(c *ui.Context, pal *palette) {
 			waiting := func(s *proto.Session) bool { return s.Status == proto.Waiting }
 			working := func(s *proto.Session) bool { return s.Status == proto.Working }
 			done := func(s *proto.Session) bool { return s.Status == proto.Idle && s.Unread }
-			a.footerChip(c, pal, proto.Waiting, false, waiting, pal.attnText, locales.FooterNeedsYou, a.tip(locales.FooterGoToIt(), "session.attention"), a.jumpToAttention)
+			// The rail's Needs you lists the waits already: the chip is for
+			// a session that waits with no agent in that list.
+			if len(a.sbNeeds) == 0 {
+				a.footerChip(c, pal, proto.Waiting, false, waiting, pal.attnText, locales.FooterNeedsYou, a.tip(locales.FooterGoToIt(), "session.attention"), a.jumpToAttention)
+			}
 			a.footerChip(c, pal, proto.Working, false, working, pal.textMuted, locales.FooterWorking, locales.FooterGoToIt(), nil)
 			a.footerChip(c, pal, proto.Idle, true, done, pal.textMuted, locales.FooterDone, locales.FooterGoToIt(), nil)
 		case connConnecting:
@@ -1162,8 +1169,11 @@ func statusIconP(c *ui.Context, pal *palette, st proto.Status, unread bool, prog
 			check := (&ui.Path{}).MoveTo(cx-rad*0.42, cy+0.2).LineTo(cx-rad*0.08, cy+rad*0.36).LineTo(cx+rad*0.46, cy-rad*0.34)
 			p.StrokePath(check, 1.6, pal.onDone)
 		case st == statusDone:
+			// The done green, as the filled mark of a result not seen yet:
+			// a grey check read as a third mark for done (Mac round 1,
+			// visual S8).
 			check := (&ui.Path{}).MoveTo(cx-rad*0.62, cy+0.3).LineTo(cx-rad*0.14, cy+rad*0.52).LineTo(cx+rad*0.66, cy-rad*0.48)
-			p.StrokePath(check, 1.6, pal.textMuted)
+			p.StrokePath(check, 1.6, pal.done)
 		default:
 			// Idle is a hollow dot: the check means done, to review
 			// (council round 1, visual 24).
