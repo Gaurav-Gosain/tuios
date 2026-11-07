@@ -6504,6 +6504,36 @@ func (msgs Messages) CockpitThreadEmptyLine() string {
 	return Catalog.Format(msgs.locale, "cockpitThreadEmptyLine", nil)
 }
 
+// CockpitDetailBranch says "Branch"
+// in the language the app shows.
+func CockpitDetailBranch() string { return In(i18n.Locale()).CockpitDetailBranch() }
+
+// CockpitDetailBranch says "Branch"
+// in the language of msgs.
+func (msgs Messages) CockpitDetailBranch() string {
+	return Catalog.Format(msgs.locale, "cockpitDetailBranch", nil)
+}
+
+// CockpitDetailFolder says "Folder"
+// in the language the app shows.
+func CockpitDetailFolder() string { return In(i18n.Locale()).CockpitDetailFolder() }
+
+// CockpitDetailFolder says "Folder"
+// in the language of msgs.
+func (msgs Messages) CockpitDetailFolder() string {
+	return Catalog.Format(msgs.locale, "cockpitDetailFolder", nil)
+}
+
+// CockpitDetailSince says "Since"
+// in the language the app shows.
+func CockpitDetailSince() string { return In(i18n.Locale()).CockpitDetailSince() }
+
+// CockpitDetailSince says "Since"
+// in the language of msgs.
+func (msgs Messages) CockpitDetailSince() string {
+	return Catalog.Format(msgs.locale, "cockpitDetailSince", nil)
+}
+
 // CockpitAnswered says "{name}: {answer}"
 // in the language the app shows.
 func CockpitAnswered(name string, answer string) string {
@@ -8040,16 +8070,6 @@ func (msgs Messages) CockpitDetails() string {
 	return Catalog.Format(msgs.locale, "cockpitDetails", nil)
 }
 
-// CockpitDetailAgent says "Agent"
-// in the language the app shows.
-func CockpitDetailAgent() string { return In(i18n.Locale()).CockpitDetailAgent() }
-
-// CockpitDetailAgent says "Agent"
-// in the language of msgs.
-func (msgs Messages) CockpitDetailAgent() string {
-	return Catalog.Format(msgs.locale, "cockpitDetailAgent", nil)
-}
-
 // CockpitDetailModel says "Model"
 // in the language the app shows.
 func CockpitDetailModel() string { return In(i18n.Locale()).CockpitDetailModel() }
@@ -8058,26 +8078,6 @@ func CockpitDetailModel() string { return In(i18n.Locale()).CockpitDetailModel()
 // in the language of msgs.
 func (msgs Messages) CockpitDetailModel() string {
 	return Catalog.Format(msgs.locale, "cockpitDetailModel", nil)
-}
-
-// CockpitDetailSession says "Session"
-// in the language the app shows.
-func CockpitDetailSession() string { return In(i18n.Locale()).CockpitDetailSession() }
-
-// CockpitDetailSession says "Session"
-// in the language of msgs.
-func (msgs Messages) CockpitDetailSession() string {
-	return Catalog.Format(msgs.locale, "cockpitDetailSession", nil)
-}
-
-// CockpitDetailState says "State"
-// in the language the app shows.
-func CockpitDetailState() string { return In(i18n.Locale()).CockpitDetailState() }
-
-// CockpitDetailState says "State"
-// in the language of msgs.
-func (msgs Messages) CockpitDetailState() string {
-	return Catalog.Format(msgs.locale, "cockpitDetailState", nil)
 }
 
 // CockpitDetailSource says "From"
