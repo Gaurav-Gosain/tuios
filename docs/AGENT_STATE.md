@@ -2557,6 +2557,15 @@ conversation, read from its transcript and drawn as cards:
   shows its first 8 lines. `e` shows every line of every card, and a click on
   a card's header folds it.
 - A command that failed shows the end of its output and a `failed` mark.
+- A call you declined has a `declined` mark, not `failed`, and shows what you
+  said with it. Where you stopped the agent, the thread shows one quiet line,
+  `You stopped the agent`, not a prompt.
+- Thinking is one line, `Thought for 12s`, with how long it took.
+- An image that a read gave back counts on the read's line, as in `Read 1 ·
+  1 image`.
+- A finished turn starts with one line that says what it did and how long it
+  took, such as `Ran 1 command and read 1 file · 45s`. A turn you stopped or
+  declined in says so: `(stopped)`, `(declined)`.
 - A todo list is a plan: done rows struck through, the running row bold, and
   a rule that fills as rows are done. Older lists fold to their count.
 

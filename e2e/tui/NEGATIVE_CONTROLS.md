@@ -13969,3 +13969,32 @@ Run on 2026-11-07 on macOS (arm64), each control its own binary:
 The argv is saved as `start-agent-argv.txt` under the test's artifact folder.
 Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestStartAgentLaunchChoiceAndReadiness$' -v .`.
+
+## Interrupts, declines and the images of tool results in a transcript
+
+`transcript_stops_test.go` reads the fixture `testdata/transcript/claude-stops.jsonl`:
+two turns with a thinking block that has only a signature, a Read whose result
+is a PNG image block, a Bash call the person declined with a reason, an
+AskUserQuestion declined with none, and Claude Code's
+"[Request interrupted by user for tool use]" mark as the last record.
+`TestTranscriptStopsOnTheWire` reads it with agent-transcript and reads the
+image by its id. `TestCockpitThreadStops` reads it in the agents view. Before
+the fix (main, 3497aaab0), the view drew the interrupt as a "You" prompt and
+"turn 3", both declines as "failed" with Claude Code's canned text, no line for
+the empty thinking block, "Read 1" with no image, and no summary or time for
+the second turn.
+
+Run on 2026-11-07 on macOS (arm64), each control its own binary:
+
+| Removed | The test fails with | Result |
+|---------|---------------------|--------|
+| Main (3497aaab0) | wire: "the entries are"; view: "the thread does not show \"You stopped the agent\"" | **caught** |
+| `InterruptText` returns false | wire: "the entries are"; view: "You stopped the agent" missing | **caught** |
+| `declined` returns false | wire: "Claude Code's own words reached the page"; view: the "(declined) · 45s" summary missing | **caught** |
+| The `resultImages` call cut from `recordEntries` | wire: "the entries are"; view: "Read 1 · 1 image" missing | **caught** |
+| The nested branch of `ReadImage` cut | wire: "the image data: ... no image has the id hx-0.0" | **caught** |
+| The interrupt and decline cases cut from the Finished rule in `Turns` | view: "Ran 1 command and used 1 tool (stopped) · 1m 42s" missing | **caught** |
+
+The frame is `cockpit-stops` under the test's artifact folder. Repeat from
+`e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^(TestTranscriptStopsOnTheWire|TestCockpitThreadStops)$' -v .`.

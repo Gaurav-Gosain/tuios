@@ -19,7 +19,9 @@ import (
 // data. A page names it with an Image on its "[image]" entry, and a client
 // that draws it asks for the data by the entry's ID. The ID holds the byte
 // offset of the record and the place of the block in it, so the read is one
-// record, not the file.
+// record, not the file. An image in a tool result, such as a Read of a PNG,
+// has the place of the result and its place in the result's content,
+// "off-i.j".
 
 // ImageMax bounds the data of one image, decoded.
 const ImageMax = 10 << 20
@@ -50,9 +52,16 @@ func ReadImage(path, format, id string) (string, []byte, error) {
 	if err != nil || off < 0 {
 		return "", nil, ErrNoImage
 	}
+	idxs, subs, nested := strings.Cut(idxs, ".")
 	idx, err := strconv.Atoi(idxs)
 	if err != nil || idx < 0 {
 		return "", nil, ErrNoImage
+	}
+	sub := -1
+	if nested {
+		if sub, err = strconv.Atoi(subs); err != nil || sub < 0 {
+			return "", nil, ErrNoImage
+		}
 	}
 	f, err := transcript.OpenRegular(path)
 	if err != nil {
@@ -90,17 +99,25 @@ func ReadImage(path, format, id string) (string, []byte, error) {
 		return "", nil, ErrNoImage
 	}
 	var blocks []struct {
-		Type   string `json:"type"`
-		Source struct {
-			Type      string `json:"type"`
-			MediaType string `json:"media_type"`
-			Data      string `json:"data"`
-		} `json:"source"`
+		imageBlock
+		// Content is a tool result's content, read for an image in it.
+		Content json.RawMessage `json:"content"`
 	}
 	if jsonx.Unmarshal(rec.Message.Content, &blocks) != nil || idx >= len(blocks) {
 		return "", nil, ErrNoImage
 	}
-	b := blocks[idx]
+	b := blocks[idx].imageBlock
+	if nested {
+		inner := blocks[idx].Content
+		if blocks[idx].Type != "tool_result" || len(inner) == 0 || inner[0] != '[' {
+			return "", nil, ErrNoImage
+		}
+		var parts []imageBlock
+		if jsonx.Unmarshal(inner, &parts) != nil || sub >= len(parts) {
+			return "", nil, ErrNoImage
+		}
+		b = parts[sub]
+	}
 	if b.Type != "image" || b.Source.Type != "base64" || !imageType(b.Source.MediaType) ||
 		base64.StdEncoding.DecodedLen(len(b.Source.Data)) > ImageMax+2 {
 		return "", nil, ErrNoImage
@@ -110,4 +127,14 @@ func ReadImage(path, format, id string) (string, []byte, error) {
 		return "", nil, ErrNoImage
 	}
 	return b.Source.MediaType, data, nil
+}
+
+// imageBlock is a content block as far as an image in it is read.
+type imageBlock struct {
+	Type   string `json:"type"`
+	Source struct {
+		Type      string `json:"type"`
+		MediaType string `json:"media_type"`
+		Data      string `json:"data"`
+	} `json:"source"`
 }

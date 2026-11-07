@@ -14,6 +14,7 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/diffview"
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
+	"github.com/Gaurav-Gosain/tuios/internal/plural"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
 	"github.com/Gaurav-Gosain/tuios/internal/transcriptview"
@@ -124,7 +125,7 @@ func (m *OS) threadCardLines(e sidebarAgentEntry, t *agentThread, width int, cha
 	if changes {
 		last := 0
 		for i, en := range entries {
-			if en.Kind == "text" && en.Role == "user" {
+			if en.Kind == "text" && en.Role == "user" && !transcriptview.InterruptText(en.Text) {
 				last = i
 			}
 		}
@@ -205,6 +206,8 @@ func (m *OS) threadCardLines(e sidebarAgentEntry, t *agentThread, width int, cha
 			}
 		}
 		switch {
+		case en.Kind == "text" && en.Role == "tool" || transcriptview.Interrupt(en.Role, en.Kind, en.Text):
+			add(ckQuietLine(l, en))
 		case en.Kind == "text" && en.Role == "user":
 			turn++
 			prompts = append(prompts, len(items))
@@ -235,9 +238,7 @@ func (m *OS) threadCardLines(e sidebarAgentEntry, t *agentThread, width int, cha
 			prevText = true
 			continue
 		case en.Kind == "thinking":
-			first, _, _ := strings.Cut(strings.TrimSpace(en.Text), "\n")
-			add(ckLine{segs: []ckSeg{{t: l.g(ckGlyphFold) + " ", fg: pal.FgMute}, {t: "Thought", fg: pal.FgDim, attrs: ckItalic},
-				{t: "  " + ckTrunc(printableTitle(first), width-14), fg: pal.FgMute, attrs: ckItalic}}})
+			add(ckThoughtLine(l, en, steps, i, width))
 		case en.Kind == "todos":
 			last := i == m.ckLastTodos(entries)
 			variant := 0
@@ -256,8 +257,13 @@ func (m *OS) threadCardLines(e sidebarAgentEntry, t *agentThread, width int, cha
 			counts := map[string]int{}
 			var order []string
 			worst := "ok"
-			for ; j < len(entries) && (entries[j].Kind == "tool_result" || entries[j].Kind == "tool_call" && ckReadTool(entries[j].Tool) != ""); j++ {
-				if entries[j].Kind == "tool_result" {
+			images := 0
+			for ; j < len(entries) && (entries[j].Kind == "tool_result" || entries[j].Role == "tool" || entries[j].Kind == "tool_call" && ckReadTool(entries[j].Tool) != ""); j++ {
+				if entries[j].Role == "tool" {
+					// A result, or an image a read gave.
+					if entries[j].Kind == "text" {
+						images++
+					}
 					continue
 				}
 				k := ckReadTool(entries[j].Tool)
@@ -273,6 +279,9 @@ func (m *OS) threadCardLines(e sidebarAgentEntry, t *agentThread, width int, cha
 			for _, k := range order {
 				what = append(what, k+" "+strconv.Itoa(counts[k]))
 			}
+			if images > 0 {
+				what = append(what, plural.CountAs(images, "image", "images"))
+			}
 			add(m.ckToolLine(l, strings.Join(what, sepWord()), strings.Join(targets, ", "), worst, width))
 		case en.Kind == "error":
 			ls := []ckLine{m.ckToolLine(l, "Error", "", "error", width)}
@@ -282,6 +291,10 @@ func (m *OS) threadCardLines(e sidebarAgentEntry, t *agentThread, width int, cha
 			add(ls...)
 		case en.Kind == "tool_call":
 			ls := []ckLine{m.ckToolLine(l, printableTitle(en.Tool), printableTitle(ckToolTarget(en.Tool, en.Target)), en.Status, width)}
+			if en.Status == transcriptview.StatusDeclined {
+				// What the person said when they declined, if anything.
+				ls = ckSaidLines(l, ls, results[en.ToolID].Text, width)
+			}
 			if en.Status == "error" {
 				if res, ok := results[en.ToolID]; ok && res.Text != "" {
 					out := threadWrap(res.Text, max(width-6, 8))
@@ -356,7 +369,7 @@ func (m *OS) ckTurnLine(l ckLook, tn *transcriptview.Turn, id, what, span string
 		mark = ckGlyphOpen
 	}
 	var fail string
-	if k := strings.LastIndex(what, " ("); k > 0 && (tn.Failed > 0 || tn.Interrupted) {
+	if k := strings.LastIndex(what, " ("); k > 0 && (tn.Failed > 0 || tn.Interrupted || tn.Declined > 0) {
 		what, fail = what[:k], what[k:]
 	}
 	if span != "" {
@@ -365,7 +378,13 @@ func (m *OS) ckTurnLine(l ckLook, tn *transcriptview.Turn, id, what, span string
 	room := max(width-ansi.StringWidth(fail+span)-4, 8)
 	segs := []ckSeg{{t: l.g(mark) + " ", fg: pal.FgMute}, {t: ckTrunc(what, room), fg: pal.FgDim}}
 	if fail != "" {
-		segs = append(segs, ckSeg{t: fail, fg: pal.Warn, attrs: ckBold})
+		// A failure is lit. A stop or a decline is the person's own call,
+		// so it is only named.
+		if tn.Failed > 0 {
+			segs = append(segs, ckSeg{t: fail, fg: pal.Warn, attrs: ckBold})
+		} else {
+			segs = append(segs, ckSeg{t: fail, fg: pal.FgDim})
+		}
 	}
 	if span != "" {
 		segs = append(segs, ckSeg{t: span, fg: pal.FgMute})
@@ -425,11 +444,74 @@ func (m *OS) ckLastTodos(entries []threadEntry) int {
 	return -1
 }
 
+// ckQuietLine is a line of the thread that is not a card: where the person
+// stopped the agent, or an image a tool result holds, under its call. Kept
+// out of line, as ckAddItem is.
+//
+//go:noinline
+func ckQuietLine(l ckLook, en threadEntry) ckLine {
+	pal := l.pal
+	if en.Role == "tool" {
+		return ckLine{indent: 4, segs: []ckSeg{{t: ckImageWhat(en), fg: pal.FgMute}}}
+	}
+	return ckLine{indent: 2, segs: []ckSeg{{t: "You stopped the agent", fg: pal.FgDim, attrs: ckItalic}, {t: "  " + ckClock(en.At), fg: pal.FgMute}}}
+}
+
+// ckThoughtLine is a thinking entry folded to one line: how long the agent
+// thought, and the first line of the thought when it has text.
+//
+//go:noinline
+func ckThoughtLine(l ckLook, en threadEntry, steps []transcriptview.Step, i, width int) ckLine {
+	pal := l.pal
+	what := "Thought"
+	if steps != nil {
+		if span := transcriptview.ThoughtFor(steps, i); span != "" {
+			what += " for " + span
+		}
+	}
+	segs := []ckSeg{{t: l.g(ckGlyphFold) + " ", fg: pal.FgMute}, {t: what, fg: pal.FgDim, attrs: ckItalic}}
+	if first, _, _ := strings.Cut(strings.TrimSpace(en.Text), "\n"); first != "" {
+		segs = append(segs, ckSeg{t: "  " + ckTrunc(printableTitle(first), width-ansi.StringWidth(what)-8), fg: pal.FgMute, attrs: ckItalic})
+	}
+	return ckLine{segs: segs}
+}
+
+// ckSaidLines appends what the person said when they declined a call.
+//
+//go:noinline
+func ckSaidLines(l ckLook, ls []ckLine, said string, width int) []ckLine {
+	if said == "" {
+		return ls
+	}
+	out := threadWrap(said, max(width-6, 8))
+	for _, s := range out[:min(len(out), ckFailShown)] {
+		ls = append(ls, ckLine{indent: 4, segs: []ckSeg{{t: s, fg: l.pal.FgDim}}})
+	}
+	return ls
+}
+
+// ckImageWhat names an image a tool result holds: its type and, when the
+// transcript says it, its size.
+func ckImageWhat(en threadEntry) string {
+	what := "image"
+	if img := en.Image; img != nil {
+		if _, sub, ok := strings.Cut(img.MediaType, "/"); ok {
+			what = strings.ToUpper(sub) + " image"
+		}
+		if img.Width > 0 && img.Height > 0 {
+			what += sepWord() + strconv.Itoa(img.Width) + "x" + strconv.Itoa(img.Height)
+		}
+	}
+	return what
+}
+
 // ckWorse is the worse of two tool statuses: an error, then a run, then ok.
 func ckWorse(a, b string) string {
 	rank := func(s string) int {
 		switch s {
 		case "error":
+			return 3
+		case "declined":
 			return 2
 		case "running":
 			return 1
@@ -494,6 +576,10 @@ func (m *OS) ckToolLine(l ckLook, kind, target, status string, width int) ckLine
 	case "running":
 		mark, ink = l.g(ckGlyphWorking), pal.Busy
 		right = []ckSeg{{t: "running ", fg: pal.FgMute}}
+	case transcriptview.StatusDeclined:
+		// The person's choice, not a failure: no warning colour.
+		mark, ink = l.g(ckGlyphIdle), pal.FgMute
+		right = []ckSeg{{t: "declined ", fg: pal.FgDim}}
 	}
 	right = append(right, ckSeg{t: " " + mark, fg: ink})
 	room := max(width-ansi.StringWidth(kind)-ckWidth(right...)-8, 4)

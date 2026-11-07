@@ -73,6 +73,8 @@ type threadEntry struct {
 	At     int64       `json:"at"`
 	ToolID string      `json:"tool_id"`
 	Diff   *threadDiff `json:"diff"`
+	// Image is set on an image entry the daemon can serve.
+	Image *transcriptview.Image `json:"image"`
 	// sum is a hash of the text and the plan, set when the entry is taken
 	// in, for the key of its card: a message written again, or still being
 	// written, keeps its id and changes its text.

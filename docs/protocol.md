@@ -7201,6 +7201,12 @@ Params:
   `after` and `before` together.
 - `limit` (optional int): the most entries to return, 1 to 1000. The default
   is 200. Leave it out for the default. A `limit` of 0 is `invalid_params`.
+- `image` (optional): the `id` of an entry that has `image`. The reply is
+  then that image alone: `{"type": "agent_transcript_image", "session",
+  "window", "image", "media_type", "data", "untrusted": true}`, with `data`
+  the image bytes as base64. The daemon reads only the one record the id
+  names, in the file the pane is joined to. An id that names no image is
+  `invalid_params`. Only Claude Code transcripts carry images.
 
 Without `after` and `before`, the reply holds the newest `limit` entries.
 With `after`, it holds the entries after that cursor. With `before`, it holds
@@ -7254,16 +7260,17 @@ Each entry has:
 | `id` | A stable id. A read of the same record gives the same id. An entry with an id that the client holds replaces it. |
 | `at` | When the agent wrote the record, unix milliseconds. |
 | `role` | `user`, `assistant` or `tool`. |
-| `kind` | `text`, `thinking`, `tool_call`, `tool_result`, `plan` or `todos`. |
+| `kind` | `text`, `thinking`, `tool_call`, `tool_result`, `plan`, `todos`, `error` or `interrupt`. A `thinking` entry can have no `text`: Claude Code keeps most thinking as a signature only, and the entry still says the agent thought. Its time less the time of the entry before it is how long. `interrupt` marks where the person stopped the agent, with `role` `user` and no `text`. It is not a prompt. `error` is an error the harness wrote, such as a failed request. |
 | `text` | The text. For a `tool_result`, the first 20 lines. |
 | `truncated` | `true` when `text` or `plan` was cut, or a tool result had more lines. |
 | `tool` | The tool name of a call: `Bash`, `Edit`, `TodoWrite`. |
 | `target` | One line that says what the call acts on: the command, the file path, the URL or the pattern. |
-| `status` | `ok`, `error` or `running`. A call gets the status of its result when the result is in the same reply, and `running` when it is not. |
+| `status` | `ok`, `error`, `running` or `declined`. A call gets the status of its result when the result is in the same reply, and `running` when it is not. `declined` says the person declined the call. The result's `text` is then what they said with it, or empty, not the harness's own words. |
 | `tool_id` | Joins a call to its result. When a result arrives in a later reply, update the call with that `tool_id` from it. |
 | `diff` | For `Edit`, `MultiEdit` and `Write`: `file`, `added`, `removed`, `truncated`, `plain`, `whole_replace` and `hunks`. Each hunk has `old_start`, `new_start` and `lines`, and each line has `op` (`" "`, `"+"` or `"-"`), `text`, `spans` and `words`. See [Diff colours](#diff-colours). A `Write` of a new file is all `+`. When the result carries the file's own line numbers (Claude Code's `structuredPatch`), the result has the diff too, and a call in the same reply takes those hunks. Without them, the line numbers count from the start of the edited text. |
 | `plan` | For `ExitPlanMode`: the plan, as markdown. |
 | `todos` | For `TodoWrite`: the list, each item with `text` and `status`. |
+| `image` | On an image the person pasted, or one a tool result holds: `media_type` (`image/png`, `image/jpeg`, `image/gif` or `image/webp`), and `width` and `height` in pixels when the transcript says them. The entry's `text` is `[image]`. An image of a tool result, such as a Read of a PNG, is an entry of `role` `tool` right after the result, with its `tool_id`, at most 8 for one result. Read its bytes with the `image` param. |
 
 #### Diff colours
 

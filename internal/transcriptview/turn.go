@@ -69,10 +69,16 @@ type Step struct {
 }
 
 // interrupted reports whether a user entry marks an interrupt rather than a
-// prompt. Claude Code writes the interrupt into the conversation as the
-// person's words.
+// prompt.
 func (s *Step) interrupted() bool {
-	return s.Role == RoleUser && s.Kind == KindText && strings.HasPrefix(strings.TrimSpace(s.Text), "[Request interrupted by user")
+	return Interrupt(s.Role, s.Kind, s.Text)
+}
+
+// Interrupt reports whether an entry marks where the person stopped the
+// agent: an interrupt entry, or, from a daemon older than that kind, the text
+// Claude Code writes for it as the person's words.
+func Interrupt(role, kind, text string) bool {
+	return kind == KindInterrupt || role == RoleUser && kind == KindText && InterruptText(text)
 }
 
 // prompt reports whether the step starts a turn.
@@ -91,9 +97,10 @@ type Turn struct {
 	// rests and the turn ends on its answer.
 	Finished bool
 	// Failed counts the failed calls and the errors. Interrupted says the
-	// person stopped the turn.
+	// person stopped the turn, and Declined counts the calls they declined.
 	Failed      int
 	Interrupted bool
+	Declined    int
 	// Counts are the tool calls by action, and Thoughts the thinking.
 	Counts   [NumActions]int
 	Thoughts int
@@ -105,7 +112,7 @@ type Turn struct {
 // Folds reports whether the turn folds when the person has not opened or
 // closed it: it is finished, nothing in it failed, and it has work to fold.
 func (t *Turn) Folds() bool {
-	return t.Finished && t.Failed == 0 && !t.Interrupted && t.Work() > 0
+	return t.Finished && t.Failed == 0 && !t.Interrupted && t.Declined == 0 && t.Work() > 0
 }
 
 // Work is how many tool calls and thoughts the turn holds.
@@ -147,8 +154,11 @@ func Turns(steps []Step, resting bool) []Turn {
 				t.Thoughts++
 			case s.Kind == KindToolCall:
 				t.Counts[ToolAction(s.Tool, s.Edit)]++
-				if s.Status == StatusError {
+				switch s.Status {
+				case StatusError:
 					t.Failed++
+				case StatusDeclined:
+					t.Declined++
 				}
 			case s.Kind == KindText && s.Role == RoleAssistant:
 				t.Answer = j
@@ -159,12 +169,14 @@ func Turns(steps []Step, resting bool) []Turn {
 			t.Finished = true
 		} else if resting {
 			// The last turn is over when its last entry, results aside, is
-			// the answer.
+			// the answer, or the person stopped the agent or declined its
+			// call there.
 			last := j - 1
 			for last > i && steps[last].Kind == KindToolResult {
 				last--
 			}
-			t.Finished = t.Answer == last && last > i
+			s := &steps[last]
+			t.Finished = last > i && (t.Answer == last || s.interrupted() || s.Kind == KindToolCall && s.Status == StatusDeclined)
 		}
 		out = append(out, t)
 		i = j
@@ -221,6 +233,8 @@ func (t *Turn) Summary() string {
 		s += " (" + strconv.Itoa(t.Failed) + " failed)"
 	case t.Interrupted:
 		s += " (stopped)"
+	case t.Declined > 0:
+		s += " (declined)"
 	}
 	return s
 }
@@ -251,10 +265,26 @@ func times(n int) string {
 // Span is how long the turn took, as "42s", "3m 12s" or "1h 5m", "" when the
 // steps carry no times.
 func (t *Turn) Span() string {
-	if t.StartAt <= 0 || t.EndAt <= t.StartAt {
+	return spanText(t.StartAt, t.EndAt)
+}
+
+// ThoughtFor is how long the agent thought before thinking step i, as Span
+// says it: from the step before it. It is "" when a time is missing, and for
+// a thought right after another, which the first one's time covers.
+func ThoughtFor(steps []Step, i int) string {
+	if i <= 0 || i >= len(steps) || steps[i].Kind != KindThinking || steps[i-1].Kind == KindThinking {
 		return ""
 	}
-	sec := (t.EndAt - t.StartAt) / 1000
+	return spanText(steps[i-1].At, steps[i].At)
+}
+
+// spanText says the time from one Unix millisecond to another, at least a
+// second, "" when either is missing.
+func spanText(from, to int64) string {
+	if from <= 0 || to-from < 1000 {
+		return ""
+	}
+	sec := (to - from) / 1000
 	switch {
 	case sec < 60:
 		return strconv.FormatInt(sec, 10) + "s"
