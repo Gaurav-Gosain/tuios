@@ -68,6 +68,15 @@ const (
 	rSheet   = 18 // dialogs, the palette, the agents view, settings
 )
 
+// Tilly's screen keeps the mark's own colours in every theme, as her body
+// does (brand/tilly.svg): the tiles of a dark CRT, and the sky edge of the
+// focused one. These are brand colours, not roles.
+var (
+	tillyTileFill  = ui.Hex("#262637")
+	tillyTileEdge  = ui.Hex("#45475a")
+	tillyFocusEdge = ui.Hex("#74c7ec")
+)
+
 // Motion lengths for state changes in place: fills, glows, a card's
 // ground. What comes and goes (dialogs, toasts, panes) moves by
 // motion.go's motionQuick, motionBase and motionLayout. MyGo's animations

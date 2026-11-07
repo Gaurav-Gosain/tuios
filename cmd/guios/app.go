@@ -88,6 +88,9 @@ type termEntry struct {
 // App is the app's state. It lives on the main thread: other goroutines
 // change it through Window.Update.
 type App struct {
+	// tillyS is what Tilly's screen saw last, for her blink (tilly.go).
+	tillyS tillyState
+
 	// diffW is the width each diff's rows were last sized to
 	// (diffWidthSeen).
 	diffW map[uint64]float32

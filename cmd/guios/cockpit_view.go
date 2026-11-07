@@ -179,7 +179,11 @@ func (a *App) cockpitHeader(c *ui.Context, pal *palette, bar ui.TitleBar, shown 
 				iconButton(c, "show-sidebar", sidebarIcon, a.tip(locales.SidebarShow(), "sidebar.toggle"), pal, a.toggleSidebar)
 			})
 		}
-		ui.Text(c, locales.CockpitTitle()).FontSize(fsTitle).FontWeight(wSemibold).TextColor(pal.text).SingleLine().Shrink(0)
+		ui.Row(c).Gap(sp2).AlignItems(ui.Center).Shrink(0).Children(func() {
+			// Tilly, with the selected session on her screen (tilly.go).
+			a.tilly(c, pal, "tilly", 24, a.session(a.selected))
+			ui.Text(c, locales.CockpitTitle()).FontSize(fsTitle).FontWeight(wSemibold).TextColor(pal.text).SingleLine().Shrink(0)
+		})
 		count := func(key string, g int, st proto.Status, unread bool, label string) {
 			if n[g] == 0 || ck.narrow {
 				// A narrow card has no room: the groups' heads count them.
