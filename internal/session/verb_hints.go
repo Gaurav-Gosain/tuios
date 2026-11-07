@@ -132,6 +132,7 @@ var errorCodeCatalog = []struct {
 	{ErrVerbTaskHeld, "claim-task named a card another pane holds. Nothing changed. Claim another with next, or wait for task-changed released."},
 	{ErrVerbNoTask, "The task card named does not exist in the session, or claim-task next found no card to take: every open card is held or blocked. The hint points at tuios task ls."},
 	{ErrVerbQueueFull, "The pane's delivery queue holds as many messages as [agents.queue] max allows. Nothing was queued. Wait for the agent to take one, or drop one with cancel-queued."},
+	{ErrVerbEditUnreviewed, "An allow for a held edit was refused because edit_sha did not name the digest of the body the hold serves. Nothing was answered and the hold runs on. Read the body with get-approval, or answer in the pane."},
 	{ErrVerbRiskUnacknowledged, "An allow for an approval that matches a risk rule was refused because risk_ack did not name exactly the rules it matched. Nothing was answered. Read the rules with get-approval, or answer in the pane."},
 	{ErrVerbAgentsDisabled, "The verb is an agent feature, and the agent features are off: [agents] enabled = false. Nothing was done. Set agents.enabled = true in the config to use it."},
 	{ErrVerbBusy, "The daemon had no room for the request now: other large requests held its memory, the pane has not read the last large input, or another copy writes the path a transfer-start names. Nothing was done. Try again when the other work ends."},

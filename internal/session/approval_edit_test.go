@@ -233,6 +233,13 @@ func TestEditRequestRefusals(t *testing.T) {
 		{"a tool that is not the edit's tool", editParams(a, testEdit, map[string]any{"tool": "Write"})},
 		{"a line that is not the edit's", editParams(a, testEdit, map[string]any{"summary": "approve Edit: other.txt"})},
 		{"an edit on a plan", editParams(a, testEdit, map[string]any{"kind": "plan", "plan": "# x"})},
+		// A file tool with no body would be held as a plain approval,
+		// allowed from its path alone.
+		{"an edit tool with no body", editParams(a, testEdit, map[string]any{"edit": nil})},
+		{"a notebook edit", map[string]any{"session": "work", "window": a, "harness": "claude", "summary": "approve NotebookEdit: a.ipynb", "tool": "NotebookEdit", "target": "a.ipynb"}},
+		{"an edit line with no tool and no body", map[string]any{"session": "work", "window": a, "harness": "claude", "summary": editLine(testEdit)}},
+		{"an edit line beside another tool", map[string]any{"session": "work", "window": a, "harness": "claude", "summary": editLine(testEdit), "tool": "Bash", "target": "ls"}},
+		{"another harness's file tool with no body", map[string]any{"session": "work", "window": a, "harness": "claude", "summary": "approve write: a.go", "tool": "write", "target": "a.go"}},
 	} {
 		mustRefuse(t, callP(c, t, "request-approval", tc.params), ErrVerbInvalidParams, tc.why)
 	}

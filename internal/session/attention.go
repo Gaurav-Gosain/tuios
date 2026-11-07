@@ -259,6 +259,13 @@ type AttentionItem struct {
 	// digest an answer names so it applies only to the plan that was shown.
 	PlanLines int    `json:"plan_lines,omitempty"`
 	PlanSHA   string `json:"plan_sha,omitempty"`
+	// EditLines and EditSHA describe a held edit's body, which is served by
+	// get-approval rather than carried here: how many lines its hunks hold,
+	// and the digest an allow must name (integration.EditBody.Digest). Set
+	// only while a hook holds an Edit, MultiEdit or Write. A client that
+	// draws no diff shows such an item without an allow.
+	EditLines int    `json:"edit_lines,omitempty"`
+	EditSHA   string `json:"edit_sha,omitempty"`
 	// Upgrade is set on the ask a live upgrade from a pane puts to the person
 	// (upgrade_confirm.go). A client shows it as a dialog of its own, not as
 	// an Inbox question.
