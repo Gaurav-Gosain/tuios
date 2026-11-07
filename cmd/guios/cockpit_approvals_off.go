@@ -52,5 +52,5 @@ func (a *App) ckTurnOnApprovals() {
 	s := a.set.Clone()
 	s.Approvals = true
 	a.applySettings(s)
-	a.toast(locales.CockpitApprovalsOn())
+	a.ckPromptToast(locales.CockpitApprovalsOn())
 }

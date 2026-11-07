@@ -356,6 +356,7 @@ func (a *App) approvalCard(c *ui.Context, pal *palette, ag client.Agent, it sess
 	ck := &a.ck
 	now := c.Now()
 	key := ckShownKey(it)
+	ck.cardKey = key
 	if ck.shown.key != key {
 		ck.shown = ckShown{key: key, since: now}
 		ck.armed = ckArmed{}
@@ -710,10 +711,10 @@ func (a *App) ckAnswer(decision string) bool {
 		pk := ck.peek
 		switch {
 		case pk == nil || pk.window != ag.Window || pk.loading:
-			a.toast(locales.CockpitReadingPrompt())
+			a.ckPromptToast(locales.CockpitReadingPrompt())
 			return true
 		case !slices.Contains(a.ckOptions(it, pk), decision):
-			a.toast(locales.CockpitAnswerInPane())
+			a.ckPromptToast(locales.CockpitAnswerInPane())
 			return true
 		}
 	}
@@ -743,7 +744,7 @@ func (a *App) ckOpenReason() {
 		return
 	}
 	if !r.item.DenyMessage {
-		a.toast(locales.CockpitNoReason())
+		a.ckPromptToast(locales.CockpitNoReason())
 		return
 	}
 	a.ck.reasonFor, a.ck.reason = r.item.ID, ""
@@ -774,7 +775,7 @@ func (a *App) ckSend(it session.AttentionItem, ag client.Agent, decision, messag
 		if allow && ckIsEdit(it) {
 			sha, ok := a.ckEditAllowSHA(it)
 			if !ok || decision != "once" {
-				a.toast(locales.CockpitAnswerInPane())
+				a.ckPromptToast(locales.CockpitAnswerInPane())
 				return
 			}
 			p["edit_sha"] = sha

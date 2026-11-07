@@ -213,7 +213,7 @@ func (a *App) settingsView(c *ui.Context) {
 	pal := paletteFor(c)
 	c.SetTheme(borderless(c, pal))
 	if a.ss.toast != "" {
-		c.Toast(a.ss.toast)
+		showToast(c, a.ss.toast)
 		a.ss.toast = ""
 	}
 	found := a.searchSettings()
@@ -1263,7 +1263,7 @@ func (a *App) openConfig() {
 }
 
 // toastIn shows a short message in the window c is of.
-func (a *App) toastIn(c *ui.Context, msg string) { c.Toast(msg) }
+func (a *App) toastIn(c *ui.Context, msg string) { showToast(c, msg) }
 
 // --- keyboard ---
 

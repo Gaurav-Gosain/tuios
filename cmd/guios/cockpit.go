@@ -176,6 +176,11 @@ type cockpit struct {
 	fleetW, focusW float32
 
 	shown ckShown
+	// cardKey is the key of the approval card this frame drew, "" for
+	// none; promptToasts are the toasts about a card, by the card's key
+	// (ckPromptToast).
+	cardKey      string
+	promptToasts map[string]string
 	// peek is the prompt on the selected pane's screen, as peek-prompt read
 	// it, for a prompt no hook holds.
 	peek  *ckPeek
