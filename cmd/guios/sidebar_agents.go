@@ -156,10 +156,13 @@ func (a *App) agentRow(c *ui.Context, pal *palette, ag client.Agent, need *ckNee
 			})
 			ui.Row(c).Gap(4).AlignItems(ui.Center).Children(func() {
 				if ag.Harness != "" {
-					ui.Icon(c, harnessIcon(ag.Harness)).Size(12, 12).TextColor(pal.textMuted).Shrink(0)
-					ui.Text(c, harnessName(ag.Harness)).FontSize(fsSmall).TextColor(pal.textMuted).SingleLine().Shrink(0)
-					if verb != "" || rest != "" {
-						ui.Text(c, "·").FontSize(fsSmall).TextColor(pal.textFaint).Shrink(0)
+					// The program's mark; its name only when the line says
+					// nothing else. "claude" on every row of a fleet of one
+					// program said nothing (Mac round 2, visual S2). The
+					// detail header names it.
+					ui.Icon(c, harnessIcon(ag.Harness)).Size(12, 12).TextColor(pal.textMuted).Shrink(0).Tooltip(harnessName(ag.Harness))
+					if verb == "" && rest == "" {
+						ui.Text(c, harnessName(ag.Harness)).FontSize(fsSmall).TextColor(pal.textMuted).SingleLine().Shrink(0)
 					}
 				}
 				if verb != "" {
