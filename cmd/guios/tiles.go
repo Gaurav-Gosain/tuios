@@ -458,8 +458,30 @@ func (a *App) tiled(c *ui.Context, pal *palette, bar ui.TitleBar, shown float32,
 			t := target[id]
 			wrap := ui.Column(c.Key("tile-" + id)).Absolute().AlignItems(ui.Stretch)
 			if b.W <= 0 || b.H <= 0 {
-				// Before the area has a size: in percent of it, gaps aside.
+				// Before the area has a size: in percent of it, with half
+				// the gap on each side a neighbour is on, which is where
+				// px puts the card once the size is known. Without the
+				// gap the first layout stayed until the next full build,
+				// a theme change, which then took a column off every
+				// terminal (council mac-1, feel S1).
 				wrap.LeftPercent(float32(t.x * 100)).TopPercent(float32(t.y * 100)).WidthPercent(float32(t.w * 100)).HeightPercent(float32(t.h * 100))
+				half := float32(paneGap) / 2
+				var l, tp, r, bm float32
+				if t.x > eps {
+					l = half
+				}
+				if t.y > eps {
+					tp = half
+				}
+				if t.x+t.w < 1-eps {
+					r = half
+				}
+				if t.y+t.h < 1-eps {
+					bm = half
+				}
+				wrap.Padding(tp, r, bm, l)
+				// Place it in pixels in the next frame.
+				c.AnimationFrame()
 			} else {
 				x, y, w, h := px(shownAt[id])
 				wrap.Left(x).Top(y).Width(w).Height(h)

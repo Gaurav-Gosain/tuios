@@ -67,6 +67,11 @@ func startAudit() {
 		W     float32 `json:"w"`
 		H     float32 `json:"h"`
 		Chars int     `json:"chars"`
+		// Cols is the terminal's width in cells, and TW the width of the
+		// view that draws it: a change of theme must change neither.
+		Cols int     `json:"cols"`
+		TW   float32 `json:"tw"`
+		X    float32 `json:"x"`
 	}
 	var panes []paneAudit
 	auditPane = func(id, mode string, t *terminal.Terminal) {
@@ -78,12 +83,17 @@ func startAudit() {
 				}
 			}
 		}
-		panes = append(panes, paneAudit{ID: id, Mode: mode, Chars: n})
+		cols := 0
+		if t != nil {
+			cols, _ = t.Size()
+		}
+		panes = append(panes, paneAudit{ID: id, Mode: mode, Chars: n, Cols: cols})
 	}
 	auditFrame = func(a *App, c *ui.Context) {
 		for i := range panes {
 			b := a.paneRef("card-" + panes[i].ID).Bounds(c)
-			panes[i].W, panes[i].H = b.W, b.H
+			panes[i].W, panes[i].H, panes[i].X = b.W, b.H, b.X
+			panes[i].TW = a.paneRef(panes[i].ID).Bounds(c).W
 		}
 		line, _ := json.Marshal(map[string]any{"t": c.Now().UnixNano(), "panes": panes})
 		w.Write(append(line, '\n'))
