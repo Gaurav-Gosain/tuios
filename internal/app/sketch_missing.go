@@ -28,8 +28,8 @@ type missingDiagramMsg struct{ typ string }
 // renderSurface renders s for this client. Every loom.Surface.Render in this
 // package goes through it, so a missing diagram type, and a drawing of the
 // sketch plugin that comes in, reach this client's program as messages, and
-// the work is done in Update. See tmldraw.Render for why the hooks are set
-// per render.
+// the work is done in Update. The hooks are the surface's own, so another
+// client's surfaces never call this client's program.
 func (m *OS) renderSurface(s *loom.Surface, w, h int) *loom.Buffer {
 	hooks := tmldraw.Hooks{External: drawWithSketchPlugin}
 	if p := m.frameRate.program; p != nil {
