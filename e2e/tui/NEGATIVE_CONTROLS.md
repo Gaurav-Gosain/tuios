@@ -14279,6 +14279,7 @@ Run on 2026-11-07 on macOS (arm64), each control its own binary:
 | A click on the view under a panel goes to the view | "a click on the view under the palette: the view did not come back as it was" | **caught** |
 | A palette row that moves the focus leaves the view open | "a palette row that left for another workspace kept the view over it" | **caught** |
 | `shadowInboxByGlobal` does nothing | "the doctor does not say ctrl+d is dead in the agents view" | **caught** |
+| The palette takes ctrl+p while the reply's @ list is open (`TestCockpitReplyMentions`, which also checks that ctrl+p opens the palette once the list is closed) | "ctrl+p did not move the marker back up" | **caught** |
 
 The frames are `global-keys-*` under the test's artifact folder. Repeat from
 `e2e/tui` with

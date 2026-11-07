@@ -1740,7 +1740,8 @@ func hostPictures(t *testing.T, stream []byte) []shot.Image {
 // The selected entry carries a marker and the lit ground, and the draft line
 // gives up its own ground while the list is open. The arrows move the
 // selection, typing filters, enter puts the entry in and sends nothing, esc
-// closes the list and keeps the text, deleting the @ closes it, and a click
+// closes the list and keeps the text, deleting the @ closes it, ctrl+p moves
+// in the open list and opens the palette once it is closed, and a click
 // on an entry puts it in. The list leaves out the agent the reply is for,
 // and a pane name with a space goes in quoted as a shell word that -w takes.
 // Around the list: ? opens the help and esc on it comes back to the agents
@@ -1906,11 +1907,11 @@ func replyMentions(t *testing.T, plain bool, env []string) {
 	if plain {
 		return
 	}
-	// up, not ctrl+p: ctrl+p opens the palette over the agents view, the
-	// reply included.
-	send(tuitest.Up)
+	// ctrl+p is the list's while it is open, though it opens the palette
+	// over the agents view everywhere else.
+	send(tuitest.Ctrl('p'))
 	if err := term.WaitFor(selectedIs(0), uiTimeout); err != nil {
-		t.Fatalf("ASSERTION: up did not move the marker back up: %v\n%s", err, term.Snapshot())
+		t.Fatalf("ASSERTION: ctrl+p did not move the marker back up: %v\n%s", err, term.Snapshot())
 	}
 
 	// Typing filters, and enter puts the entry in without sending.
@@ -1935,6 +1936,13 @@ func replyMentions(t *testing.T, plain bool, env []string) {
 	waitText(t, term, "the list on a new @", "agent web/web-ui")
 	send(tuitest.Backspace)
 	waitGone(t, term, "the list after the @ is deleted", "agent web/web-ui")
+	// With the list closed, ctrl+p opens the palette over the editor, and
+	// esc gives the editor back with its text.
+	send(tuitest.Ctrl('p'))
+	waitText(t, term, "the palette over the reply", paletteTitle)
+	send(tuitest.Esc)
+	waitGone(t, term, "the palette after esc", paletteTitle)
+	waitText(t, term, "the text after the palette", "Ask api/api-auth and")
 
 	// A click on an entry puts it in. The pane's name has a space, so it
 	// goes in quoted, and -w takes the name inside the quotes.

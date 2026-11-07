@@ -1673,3 +1673,11 @@ func (m *OS) leaveInboxForPane() {
 	key := m.sidebarAgentKeyOr("prefix_inbox", "ctrl+b i")
 	m.ShowNotification("Press "+key+" to go back to the agents.", "info", m.Settings.NotificationDuration*2)
 }
+
+// InboxMentionListOpen reports whether the reply editor's @ list is open.
+// ctrl+p and ctrl+n move in that list, so the palette does not take ctrl+p
+// while it is open.
+func (m *OS) InboxMentionListOpen() bool {
+	ed := m.Inbox.reply.editor
+	return ed != nil && ed.comp != nil && ed.comp.MentionOpen()
+}

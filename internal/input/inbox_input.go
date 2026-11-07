@@ -31,8 +31,9 @@ func handleInboxInput(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	}
 	// The global keys (the palette, the launcher) act over the view and
 	// over every sheet and field in it, and open on top of it. A plain
-	// character stays the view's: it is a list key, or text in a field.
-	if !plainTextKey(msg) {
+	// character stays the view's: it is a list key, or text in a field. The
+	// reply's @ list keeps ctrl+p and ctrl+n, its up and down.
+	if !plainTextKey(msg) && !(o.InboxMentionListOpen() && listMoveKey(msg)) {
 		if out, cmd, ok := handleGlobalBinds(msg, o); ok {
 			return out, cmd
 		}
@@ -279,4 +280,10 @@ func noteInboxAction(o *app.OS, action string) {
 // or super held: a letter, a digit, a mark or space.
 func plainTextKey(msg tea.KeyPressMsg) bool {
 	return msg.Text != "" && msg.Mod&(tea.ModCtrl|tea.ModAlt|tea.ModSuper|tea.ModHyper|tea.ModMeta) == 0
+}
+
+// listMoveKey reports whether the key is ctrl+p or ctrl+n, the up and down of
+// a pop-up list.
+func listMoveKey(msg tea.KeyPressMsg) bool {
+	return msg.Mod&tea.ModCtrl != 0 && (msg.Code == 'p' || msg.Code == 'n')
 }

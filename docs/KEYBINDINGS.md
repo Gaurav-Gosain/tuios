@@ -2049,7 +2049,8 @@ undoes, and a paste keeps to one line.
 
 The global keys work over the view, and over every line and sheet in it: `ctrl+p`
 opens the command palette and `opt+space` (`alt+space` off macOS) the launcher on
-top of the view, the reply included. The leader works too, in window mode and in
+top of the view, the reply included. While the reply's `@` list is open,
+`ctrl+p` and `ctrl+n` move in the list. The leader works too, in window mode and in
 terminal mode, so `ctrl+b ,` opens settings over the view. Each one closes back
 to the view as you left it: the same agent, the same scroll, the same draft. A
 key that types a character stays the view's even when `[keybindings.global]`
