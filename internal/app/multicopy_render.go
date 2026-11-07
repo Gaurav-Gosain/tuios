@@ -42,7 +42,7 @@ func (m *OS) copyModeHelp(focused *terminal.Window) []overlay.Hint {
 				edit := overlay.Hint{Key: keys[0], Label: "edit", Priority: overlay.HintOptional}
 				legend = slices.Insert(legend, len(legend)-1, edit)
 			}
-			if keys := m.KeybindRegistry.GetCopyModeKeys(config.ActionHints); len(keys) > 0 {
+			if keys := m.KeybindRegistry.Keys(config.TableCopyMode, config.ActionHints); len(keys) > 0 {
 				hints := overlay.Hint{Key: keys[0], Label: "hints", Priority: overlay.HintOptional}
 				legend = slices.Insert(legend, len(legend)-1, hints)
 			}
