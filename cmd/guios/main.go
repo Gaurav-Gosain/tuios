@@ -168,7 +168,18 @@ func (a *App) openWindow() {
 	a.winOpen = true
 	a.updateTitle()
 	a.win.OnFocus(func() { a.update(func() { a.focused = true; a.reportView(); a.loadKeys() }) })
-	a.win.OnBlur(func() { a.update(func() { a.focused = false; a.reportView() }) })
+	a.win.OnBlur(func() {
+		a.update(func() {
+			a.focused = false
+			a.reportView()
+			// A prefix waiting for its next key ends with the focus: the
+			// person went to another app, and the card must not wait there.
+			if a.tk.live() {
+				a.tk.disarm()
+				a.focusTerminal()
+			}
+		})
+	})
 	a.win.OnClosed(a.windowClosed)
 }
 

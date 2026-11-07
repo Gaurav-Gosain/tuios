@@ -64,6 +64,9 @@ type tuiosKeys struct {
 	menu   string    // "" the leader's menu, else a sub-prefix's
 	since  time.Time // when the prefix was pressed
 	pane   string    // the pane whose terminal took the leader, "" none
+	// card is the which-key card, which takes the keys while no terminal
+	// has them.
+	card ui.Handle
 }
 
 // loadKeys reads tuios's keymap, again only when config.toml changed. It
@@ -301,6 +304,15 @@ func (a *App) arm(pane string) {
 	if a.win != nil {
 		a.win.Invalidate()
 	}
+}
+
+// disarm ends the prefix, wherever it is.
+func (tk *tuiosKeys) disarm() {
+	tk.mu.Lock()
+	tk.armed.Store(false)
+	tk.repeat.Store(0)
+	tk.menu, tk.pane = "", ""
+	tk.mu.Unlock()
 }
 
 // takeTyped is gated.Write's: text a terminal writes while the prefix is
@@ -767,11 +779,18 @@ func (a *App) keysCard(c *ui.Context, pal *palette) {
 	tk.mu.Lock()
 	menu, since, pane := tk.menu, tk.since, tk.pane
 	tk.mu.Unlock()
-	viaCard := pane == ""
+	// The card takes the keys when no terminal has them: the prefix came
+	// where no pane is, or the pane it came in has lost the keyboard since.
+	// A workspace switch that lands while the prefix waits hides that pane,
+	// and the next keys, Escape too, would then reach nothing and leave the
+	// prefix armed (Mac round 1, F-M1).
+	viaCard := pane == "" || !a.paneRef(pane).FocusWithin(c)
 	if !viaCard && !tk.whichKey {
 		return
 	}
-	shown := viaCard || menu != "" || c.Now().Sub(since) >= whichKeyDelay
+	// The card shows after the which-key delay wherever the prefix came, so
+	// a person who knows the keys never sees it, also on an empty workspace.
+	shown := menu != "" || c.Now().Sub(since) >= whichKeyDelay
 	if !shown {
 		c.After(whichKeyDelay - c.Now().Sub(since))
 	}
@@ -795,7 +814,11 @@ func (a *App) keysCard(c *ui.Context, pal *palette) {
 	}
 	if viaCard {
 		// No terminal has the keyboard: the card takes it, and the keys.
-		card.Focusable().FocusRing(false).AutoFocus().HandleInput(func(ev ui.InputEvent) bool {
+		card.Focusable().FocusRing(false).Bind(&tk.card)
+		if !tk.card.Focused(c) {
+			tk.card.Focus()
+		}
+		card.HandleInput(func(ev ui.InputEvent) bool {
 			switch ev.Kind {
 			case ui.InputKeyDown:
 				if k, ok := keyString(ev.Mods, ev.Key); ok && !typesText(ev.Mods, ev.Key) {
