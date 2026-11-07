@@ -709,7 +709,7 @@ func (a *App) paneMark(p *proto.Pane) (st proto.Status, unread, mark bool) {
 	if a.ck.loaded && !a.hostOf(p.ID).remote() {
 		for _, ag := range a.ck.agents {
 			if ag.Host == "" && ag.Window == p.ID {
-				st, unread = ckStatus(ag, nil)
+				st, unread = ckStatus(ag, a.ckItemOf(ag))
 				return st, unread, true
 			}
 		}

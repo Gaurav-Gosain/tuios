@@ -361,31 +361,41 @@ func (a *App) refreshCockpit() {
 	}()
 }
 
-// ckGroupOf is the group an agent's state asks for, as the TUI's fleet.
-func ckGroupOf(ag client.Agent, now time.Time) int {
+// ckShownGroup is the group an agent's row is in, from the state it shows
+// (ckStatus) with the item that stands for it: the section and the
+// header's counts say what the row's mark and the pill say.
+func ckShownGroup(ag client.Agent, it *session.AttentionItem, now time.Time) int {
+	st, unread := ckStatus(ag, it)
 	g := ckIdle
-	switch ag.State {
-	case "needs_input":
+	switch {
+	case st == proto.Waiting || st == proto.Failed:
 		g = ckNeeds
-	case "errored":
-		g = ckNeeds
-	case "working":
+	case st == proto.Working:
 		g = ckWorking
-	case "done":
-		if ag.FinishedUnread {
-			g = ckReview
-		} else if ag.StateAt > 0 && now.Sub(time.Unix(0, ag.StateAt)) > ckSettleAfter {
-			g = ckSettled
-		}
-	default:
-		if ag.StateAt > 0 && now.Sub(time.Unix(0, ag.StateAt)) > ckSettleAfter {
-			g = ckSettled
-		}
+	case unread:
+		g = ckReview
+	case ag.StateAt > 0 && now.Sub(time.Unix(0, ag.StateAt)) > ckSettleAfter:
+		g = ckSettled
 	}
 	if ag.Settled && g != ckNeeds {
 		g = ckSettled
 	}
 	return g
+}
+
+// ckItemOf is the Inbox item that stands for an agent, as its row in the
+// agents view has it: its first one, nil for none.
+func (a *App) ckItemOf(ag client.Agent) *session.AttentionItem {
+	if ag.Host != "" {
+		return nil
+	}
+	for i := range a.ck.items {
+		it := &a.ck.items[i]
+		if it.Kind != session.AttentionOutbox && it.Host == "" && it.Session == ag.Session && it.Window == ag.Window {
+			return it
+		}
+	}
+	return nil
 }
 
 // ckHoldGroup is the group an agent's row is drawn in: the group its state
@@ -461,8 +471,8 @@ func (a *App) buildCockpitRows(c *ui.Context) []ckRow {
 			continue
 		}
 		if g == ckReview && idx >= 0 {
-			switch ck.agents[idx].State {
-			case "working", "needs_input":
+			if st, unread := ckStatus(ck.agents[idx], it); !unread || st != proto.Idle {
+				// It went on: its row is the agent's, by its state.
 				continue
 			}
 		}
@@ -483,7 +493,7 @@ func (a *App) buildCockpitRows(c *ui.Context) []ckRow {
 		if used[i] {
 			continue
 		}
-		g := a.ckHoldGroup(c, ag.Key(), ckGroupOf(ag, now), now)
+		g := a.ckHoldGroup(c, ag.Key(), ckShownGroup(ag, nil, now), now)
 		groups[g] = append(groups[g], ckRow{kind: ckRowAgent, group: g, agent: i, key: "a:" + ag.Key()})
 	}
 	var rows []ckRow
@@ -819,8 +829,17 @@ func (a *App) ckOpenMore(g int) {
 	a.ck.opened[g] = true
 }
 
-// ckStatus is an agent's state as the sidebar's status mark draws it.
+// ckStatus is the one state an agent shows, with it the item that stands
+// for it (ckItemOf): every view reads it, the row's mark, the state pill,
+// the rail's mark, the pane's mark and, through ckShownGroup, the section
+// and the header's counts (Mac round 4, workflow M2). A state the daemon
+// no longer knows (unknown, after a report aged out) is idle everywhere.
 func ckStatus(ag client.Agent, it *session.AttentionItem) (proto.Status, bool) {
+	if it != nil && it.Kind == session.AttentionFinished && (ag.State == "working" || ag.State == "needs_input") {
+		// The agent went on after it finished: the item no longer says
+		// what it does, as its row's group says too.
+		it = nil
+	}
 	switch {
 	case it != nil && it.Kind == session.AttentionFinished:
 		return proto.Idle, true

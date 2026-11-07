@@ -9,7 +9,6 @@ import (
 
 	"github.com/Gaurav-Gosain/tuios/internal/guios/client"
 	"github.com/Gaurav-Gosain/tuios/internal/guios/proto"
-	"github.com/Gaurav-Gosain/tuios/internal/session"
 
 	"github.com/Gaurav-Gosain/tuios/cmd/guios/locales"
 )
@@ -112,7 +111,7 @@ func (a *App) agentRows(c *ui.Context, pal *palette, s *proto.Session, needs []c
 // its mark, its name and, while it waits for the person, how long; line 2 is its
 // harness and what it is at, or what it asks.
 func (a *App) agentRow(c *ui.Context, pal *palette, ag client.Agent, need *ckNeed) {
-	var it *session.AttentionItem
+	it := a.ckItemOf(ag)
 	if need != nil {
 		it = need.item
 	}
