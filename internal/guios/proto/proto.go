@@ -583,7 +583,7 @@ func (p *Pane) PaneName() string {
 		return URLHost(p.URL)
 	}
 	if p.Process != "" {
-		if t := CleanTitle(p.Title); t != "" && !looksLikePath(t) {
+		if t := CleanTitle(p.Title); t != "" && !looksLikePath(t) && !p.defaultTitle(t) {
 			return t
 		}
 		return p.Process
@@ -598,6 +598,13 @@ func (p *Pane) PaneName() string {
 		return DirName(p.Dir)
 	}
 	return "shell"
+}
+
+// defaultTitle reports whether t is the title tuios gives a window that set
+// none, "Terminal " and its id's first eight characters: an id, not a name
+// (QM-016). The process names the pane then.
+func (p *Pane) defaultTitle(t string) bool {
+	return len(p.ID) >= 8 && t == "Terminal "+p.ID[:8]
 }
 
 // Browser reports whether the pane is a browser's, not a terminal's.
