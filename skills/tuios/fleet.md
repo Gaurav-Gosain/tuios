@@ -89,6 +89,16 @@ A merge commit, a fast-forward, a rebase and a squash all count. No fetch runs.
 A person makes the same from the client: `Ctrl+B U` (action `new_worktree`)
 asks for a branch name and uses the repository of the focused pane's folder.
 
+In a jj repository the worktree is a jj workspace, and the branch is a
+bookmark made on its working copy (`--base` defaults to `trunk()`). The rail
+also groups jj workspaces made outside tuios. `worktree rm` runs
+`jj workspace forget`: the work stays in the workspace's commit, so nothing
+is stashed and nothing is lost. `tuios review` of a jj workspace covers the
+whole stack from `fork_point(trunk() | @)`, and `--base` also takes a jj
+revset. `worktree ls` counts from the commit that holds the work (`@`, or
+`@-` when `@` is empty), and a workspace made without `--base` reads as
+merged into `trunk()`; its own commits are the ones its bookmark is on.
+
 ### Setup before the agent
 
 `[worktree] setup` in config.toml, or `--setup` on `worktree new` and `fan`,

@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
+	"github.com/Gaurav-Gosain/tuios/internal/gitstate"
 )
 
 // Moving a worktree's work to another machine: the commits as a git bundle,
@@ -24,13 +25,10 @@ import (
 // commits past the ones the receiver is assumed to have.
 var ErrEmptyBundle = errors.New("no commits to bundle")
 
-// HeadCommit is the full hash of HEAD in the worktree at path.
+// HeadCommit is the full hash of HEAD in the worktree at path, @- in a jj
+// workspace.
 func HeadCommit(path string) (string, error) {
-	out, err := run(path, "rev-parse", "--verify", "HEAD^{commit}")
-	if err != nil {
-		return "", err
-	}
-	return strings.TrimSpace(out), nil
+	return HeadCommitCtx(context.Background(), path)
 }
 
 // CurrentBranch is the branch HEAD points at in the worktree at path, read
@@ -38,6 +36,9 @@ func HeadCommit(path string) (string, error) {
 // it was made on, and the agent in it can switch branch or detach since, so
 // anything that carries the worktree's work reads this instead.
 func CurrentBranch(path string) (string, error) {
+	if r := gitstate.Find(path); r.JJ {
+		return jjBranch(context.Background(), r.Root)
+	}
 	out, err := run(path, "symbolic-ref", "-q", "HEAD")
 	if err != nil {
 		// symbolic-ref -q exits 1 with no output on a detached HEAD. Any

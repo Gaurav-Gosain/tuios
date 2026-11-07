@@ -29,6 +29,10 @@ Tracked and untracked files. Ignored files are left out, and so is an
 untracked file larger than `max_untracked_mb` (50 by default). `checkpoint
 list` names the files it left out, and a restore does not change them.
 
+In a jj workspace a checkpoint holds jj's working-copy commit as jj records
+it: sparse patterns are kept, and jj's `snapshot.max-new-file-size` decides
+which new files are left out. Its parent is `@-`.
+
 ## When a restore is refused
 
 Every refusal changes nothing in the work tree.
