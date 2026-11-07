@@ -1213,6 +1213,11 @@ var optionSpecs = []Option{
 		Accepted:    AgentsViewLists,
 		Default:     AgentsViewListColumn,
 	},
+	{
+		Path: "agents.list_width", Type: OptionString, Section: "agents",
+		Description: "The width of the agents view's list: a number of cells, such as 52, or a share of the view, such as 30%. Empty follows the screen. The < and > keys and a drag on the edge of the list change it, and the view keeps that choice.",
+		Default:     "",
+	},
 
 	// [tasks]. The daemon reads it when it starts and when the file changes.
 	{
