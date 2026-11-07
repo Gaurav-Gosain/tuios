@@ -472,6 +472,16 @@ func (a *App) setState(h *host, st proto.State) {
 		}
 	}
 	a.quickChanged()
+	// The panes the selected session shows attach as the state names them,
+	// not at the frame that first builds them: a window out of sight builds
+	// no frames (mygo holds them while it is occluded), and a pane split
+	// off then had no terminal, and so no text, until the window showed
+	// again (QM-001).
+	if s := a.session(a.selected); s != nil {
+		for _, id := range shownPanes(s) {
+			a.ensureTerm(id)
+		}
+	}
 	switch s := a.session(a.selected); {
 	case s == nil:
 		// The session ended: the next one in the sidebar takes its place,
