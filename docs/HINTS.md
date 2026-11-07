@@ -50,8 +50,8 @@ You can also open hints mode from the command palette: search for `hints`.
 ## From copy mode
 
 Press `s` in copy mode to put labels on the text you see. Scroll back to the
-text first, then press `s`. A label copies the text and closes copy mode, as
-`y` does. `Esc` closes hints and keeps copy mode where it was.
+text first, then press `s`. A label copies the text and closes copy mode.
+`Esc` closes hints and keeps copy mode where it was.
 
 `Ctrl+B F` does not work in copy mode, because `Ctrl+B` is page up there. To
 use another key, set `hints` in the `copy_mode` section:
