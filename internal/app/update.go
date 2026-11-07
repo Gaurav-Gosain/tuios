@@ -986,6 +986,20 @@ func (m *OS) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.ProcessingRemoteKeys = false
 		defer func() { m.ProcessingRemoteKeys = true }()
 	}
+	// A focus move a command makes is marked on the push that carries it,
+	// so the daemon does not read it as the person turning to the pane.
+	if isPersonInput(msg) {
+		m.commandFocusMoved = false
+	} else if _, routed := msg.(RemoteCommandMsg); routed || m.ProcessingRemoteKeys {
+		before := m.focusedWindowID()
+		m.commandDriving = true
+		defer func() {
+			m.commandDriving = false
+			if m.focusedWindowID() != before {
+				m.commandFocusMoved = true
+			}
+		}()
+	}
 	m.msgClock = time.Now()
 	m.quietFrame = false
 	m.reportActivity(msg)

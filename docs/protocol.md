@@ -6268,8 +6268,16 @@ Response:
 
 Wire compatibility: both verbs are new, and the item fields are additive. An
 older daemon answers `unknown_verb`, which the hook reads as no decision.
-`reply-approval` without `summary` answers as before, with no check of the
-line.
+`reply-approval` must carry `summary` for an allow (`once` or `always`): an
+allow without it answers nothing and is refused with `invalid_params`, so a
+caller cannot approve a call by not saying which line it read. A `deny` may
+leave it out. The TUI Inbox and guios have always sent it.
+
+A client's push that moves the focus to a held pane ends the hold as `viewed`
+only when the person moved it. A push made while the client ran a routed
+`run-command`, or keys from `send-keys` or a tape, carries
+`focus_by_command`, and the hold runs on. `focus-window`, which the daemon
+carries out itself, never ended a hold.
 
 ### Risky approvals and plans
 

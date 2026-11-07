@@ -14345,3 +14345,21 @@ Run on 2026-11-07 on macOS (arm64), each control its own binary:
 The last screen is in `copy-mode-counts.txt` under the test's artifact folder.
 Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestCopyModeCounts$' -v .`.
+
+## TestApprovalHoldOutlastsACommandFocusMove
+
+The person's client is on another pane of the agent's session while the real
+hook holds a PermissionRequest on the agent's pane. `tuios run-command
+NextWindow`, which every pane may run by default, moves the focus to the held
+pane, and the hold must run on. Then the person presses tab, which focuses
+the same pane, and the hold must end.
+
+Run on 2026-11-07 on macOS (arm64):
+
+| Binary | The test fails with | Result |
+|--------|---------------------|--------|
+| origin/main (56316191b), with no `focus_by_command` | "ASSERTION: run-command NextWindow ended the person's hold (hook exited <nil>, printed \"\")" | **caught** |
+
+The steps are in `approval-command-focus.txt` under the test's artifact
+folder. Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestApprovalHoldOutlastsACommandFocusMove$' -v .`.

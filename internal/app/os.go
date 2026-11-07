@@ -1008,6 +1008,13 @@ type OS struct {
 	// last push named. A session resize newer than the last push is pushed.
 	// See session/layout_gen.go.
 	layoutGenApplied, layoutGenPushed uint64
+	// commandDriving is set while Update handles a message a command sent
+	// this client (a routed run-command, or a key of send-keys or a tape),
+	// and commandFocusMoved when such a message moved the focus and no push
+	// has said so yet. A push made under either is marked FocusByCommand. A
+	// key or click of the person's clears commandFocusMoved: the focus they
+	// move is theirs.
+	commandDriving, commandFocusMoved bool
 	// focusGiven is the focus (focusKey) this client last pushed or was
 	// given by a sync. A push that still shows it is marked FocusUnmoved.
 	focusGiven    string

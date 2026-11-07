@@ -653,6 +653,14 @@ type SessionState struct {
 	// back for everyone. False from an older client, whose push is taken as
 	// sent. Read and cleared by the daemon, never stored.
 	FocusUnmoved bool `json:"focus_unmoved,omitempty"`
+	// FocusByCommand marks a push whose focus a command moved, not the
+	// person at the client: a routed run-command, or keys sent to the client
+	// with send-keys or a tape. Every pane may run run-command by default, so
+	// a move like that is an agent's, and it must not end the person's
+	// approval hold as if they had turned to the pane (approvals.go,
+	// noteFocused). False from an older client. Read and cleared by the
+	// daemon, never stored.
+	FocusByCommand bool `json:"focus_by_command,omitempty"`
 
 	MasterRatio float64 `json:"master_ratio"`
 	AutoTiling  bool    `json:"auto_tiling"`
@@ -3700,6 +3708,8 @@ func (s *Session) updateStateFrom(state *SessionState, seen bool) (accepted, beh
 	accepted = true
 	unmoved := state.FocusUnmoved
 	state.FocusUnmoved = false
+	byCommand := state.FocusByCommand
+	state.FocusByCommand = false
 	prev := s.state
 	if prev != nil && unmoved && keepSessionFocus(state, prev) {
 		// The push's focus was stale and the session's stands, so the
@@ -3771,8 +3781,9 @@ func (s *Session) updateStateFrom(state *SessionState, seen bool) (accepted, beh
 		s.markCompletionSeenLocked(state.FocusedWindowID)
 		// A move of the focus is the person turning to a pane, which ends an
 		// approval hold on it (see approvals.go). Only a move: a push that
-		// keeps the focus says nothing new.
-		if state.FocusedWindowID != "" && (prev == nil || prev.FocusedWindowID != state.FocusedWindowID) {
+		// keeps the focus says nothing new. A move a command made is not the
+		// person turning to the pane.
+		if !byCommand && state.FocusedWindowID != "" && (prev == nil || prev.FocusedWindowID != state.FocusedWindowID) {
 			s.emit(SessionEvent{Type: eventPaneFocused, Window: state.FocusedWindowID})
 		}
 	}
