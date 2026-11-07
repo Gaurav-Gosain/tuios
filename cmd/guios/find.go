@@ -95,6 +95,13 @@ func (a *App) findTerm() *terminal.Terminal {
 	return nil
 }
 
+// findBarW is the find bar's width with its field at full width: padding,
+// icon, field, count, three buttons and the gaps between them.
+const findBarW = 12 + 4 + 14 + 180 + 56 + 4 + 3*hControl + 5*4
+
+// findFieldMin is the narrowest the find field gets, about six characters.
+const findFieldMin = 56
+
 // findBar floats over the top right of the pane searched: the query, how
 // many matches it has, and the buttons going through them.
 func (a *App) findBar(c *ui.Context, pal *palette, p *proto.Pane, t *terminal.Terminal) {
@@ -105,9 +112,30 @@ func (a *App) findBar(c *ui.Context, pal *palette, p *proto.Pane, t *terminal.Te
 	}
 	bar := ui.Row(c.Key("find")).Absolute().Top(8).Right(12).Height(36).Padding(0, 4, 0, 12).Gap(4).
 		AlignItems(ui.Center).Radius(rCard).Background(pal.popover).Label(locales.FindLabel())
+	// In a pane narrower than the bar, the bar's left end, the query,
+	// went past the pane's edge and the pane clipped it (QM-013). There
+	// the bar spans the pane and the field and the count give up room.
+	// In a narrower pane still the next and previous buttons go (Enter
+	// and Shift+Enter still step through the matches), then the icon:
+	// the query and the close button always show.
+	narrow, arrows, icon := false, true, true
+	if w := a.paneRef(p.ID).Bounds(c).W; w > 0 && w-24 < findBarW {
+		narrow = true
+		bar.Left(12)
+		room := w - 24
+		arrows = room >= findBarW-180-56+findFieldMin
+		icon = room >= 12+4+14+findFieldMin+4+hControl+3*4
+	}
 	floating(bar, pal).Children(func() {
-		ui.Icon(c, searchIcon).Size(14, 14).TextColor(pal.textMuted).Shrink(0)
-		in := ui.TextInputBase(c.Key("q"), &f.query).Width(180).FontSize(fsBody).Placeholder(locales.FindPlaceholder()).Bind(&f.input)
+		if icon {
+			ui.Icon(c, searchIcon).Size(14, 14).TextColor(pal.textMuted).Shrink(0)
+		}
+		in := ui.TextInputBase(c.Key("q"), &f.query).FontSize(fsBody).Placeholder(locales.FindPlaceholder()).Bind(&f.input)
+		if narrow {
+			in.Basis(180).Shrink(1).MinWidth(findFieldMin)
+		} else {
+			in.Width(180)
+		}
 		if f.focus {
 			f.focus, f.focused = false, true
 			in.Focus().SetTextSelection(0, utf8.RuneCountInString(f.query))
@@ -130,10 +158,15 @@ func (a *App) findBar(c *ui.Context, pal *palette, p *proto.Pane, t *terminal.Te
 		case st.Total > 0:
 			count = locales.FindCount(itoa(st.Selected), itoa(st.Total))
 		}
-		ui.Text(c, count).FontSize(fsSmall).FontFeatures("tnum").TextColor(pal.textFaint).SingleLine().MinWidth(56).TextAlign(ui.End).Margin(0, 4, 0, 0)
+		ct := ui.Text(c, count).FontSize(fsSmall).FontFeatures("tnum").TextColor(pal.textFaint).SingleLine().MinWidth(56).TextAlign(ui.End).Margin(0, 4, 0, 0)
+		if narrow {
+			ct.Ellipsis("…").MinWidth(0).Shrink(1)
+		}
 		// Up goes back through the output, as Enter does, as in Ghostty.
-		iconButton(c, "next", chevronUpIcon, a.tip(locales.ActionFindNext(), "find.next"), pal, t.SearchNext)
-		iconButton(c, "previous", chevronDownIcon, a.tip(locales.ActionFindPrevious(), "find.previous"), pal, t.SearchPrevious)
+		if arrows {
+			iconButton(c, "next", chevronUpIcon, a.tip(locales.ActionFindNext(), "find.next"), pal, t.SearchNext)
+			iconButton(c, "previous", chevronDownIcon, a.tip(locales.ActionFindPrevious(), "find.previous"), pal, t.SearchPrevious)
+		}
 		iconButton(c, "close", closeIcon, locales.FindClose(), pal, func() { a.defer_(a.closeFind) })
 	})
 	// Escape closes it from its field and its buttons alike.
