@@ -104,6 +104,8 @@ type ckArmed struct {
 // cockpit is the agent cockpit's state.
 type cockpit struct {
 	open bool
+	// edit is the body of the held edit the card shows (cockpit_edit.go).
+	edit *ckEdit
 	// view is what the card shows: the agents, the board or the mail for
 	// the person.
 	view int

@@ -304,7 +304,7 @@ func ckAnswerable(it session.AttentionItem) bool {
 // inboxShownKey.
 func ckShownKey(it session.AttentionItem) string {
 	return strings.Join([]string{it.ID, it.RequestID, it.Summary, strings.Join(it.Options, ","),
-		strings.Join(it.AlwaysScope, "\n"), it.Kind, strings.Join(it.Risk, ","), it.PlanSHA}, "\x00")
+		strings.Join(it.AlwaysScope, "\n"), it.Kind, strings.Join(it.Risk, ","), it.PlanSHA, it.EditSHA}, "\x00")
 }
 
 // ckPeek is a pane's prompt as peek-prompt read it.
@@ -480,7 +480,13 @@ func (a *App) approvalCard(c *ui.Context, pal *palette, ag client.Agent, it sess
 func (a *App) ckOptions(it session.AttentionItem, pk *ckPeek) []string {
 	if ckHeld(it) {
 		var out []string
+		// An edit is allowed only once the card drew its body
+		// (cockpit_edit.go), and never always.
+		_, editShown := a.ckEditAllowSHA(it)
 		for _, o := range []string{"once", "always", "deny"} {
+			if ckIsEdit(it) && o != "deny" && (o == "always" || !editShown) {
+				continue
+			}
 			if slices.Contains(it.Options, o) {
 				out = append(out, o)
 			}
@@ -665,6 +671,14 @@ func (a *App) ckSend(it session.AttentionItem, ag client.Agent, decision, messag
 		}
 		if allow && it.Kind == session.AttentionPlan && it.PlanSHA != "" {
 			p["plan_sha"] = it.PlanSHA
+		}
+		if allow && ckIsEdit(it) {
+			sha, ok := a.ckEditAllowSHA(it)
+			if !ok || decision != "once" {
+				a.toast(locales.CockpitAnswerInPane())
+				return
+			}
+			p["edit_sha"] = sha
 		}
 	} else {
 		verb = "respond"

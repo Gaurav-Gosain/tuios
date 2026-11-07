@@ -1,0 +1,134 @@
+package main
+
+import (
+	"github.com/Gaurav-Gosain/tuios/internal/integration"
+	"github.com/Gaurav-Gosain/tuios/internal/session"
+)
+
+// Held edits: the data path behind the edit card.
+//
+// A held Edit, MultiEdit or Write carries edit_sha on its item
+// (session.AttentionItem.EditSHA), and the daemon allows it only when the
+// reply names that digest (edit_unreviewed otherwise). The body is served by
+// get-approval while the hold runs. This file fetches it, checks that its
+// digest is the item's, and keeps it for the card to draw.
+//
+// An allow of an edit is sent only after the card has drawn that exact body
+// and said so with ckEditDrawn. Until a card calls it, an edit offers reject
+// and the pane, and never an allow: fail closed.
+//
+// The card calls, on each frame it shows an edit item:
+//
+//	view := a.ckEditView(it) // fetches on the first call for a hold
+//	switch {
+//	case view.Loading: // draw "Reading the edit..."
+//	case view.Err != "": // draw view.Err and offer the pane
+//	default: // draw view.Body (tool, path, hunks), then:
+//		a.ckEditDrawn(it, view.SHA)
+//	}
+
+// ckEdit is the body get-approval served for one hold.
+type ckEdit struct {
+	requestID string
+	// sha is the item's edit_sha the fetch was for.
+	sha     string
+	loading bool
+	body    *integration.EditBody
+	err     string
+	// drawn says the card drew body whole. Only then may an allow go.
+	drawn bool
+}
+
+// CkEditView is what the card draws for a held edit.
+type CkEditView struct {
+	Loading bool
+	// Err is why there is no body to draw. The card then sends the person
+	// to the pane.
+	Err string
+	// Body is the edit, whole, with SHA its digest, which is the item's
+	// edit_sha.
+	Body *integration.EditBody
+	SHA  string
+}
+
+// ckIsEdit reports whether an item is a held edit.
+func ckIsEdit(it session.AttentionItem) bool {
+	return ckHeld(it) && it.Kind == session.AttentionApproval && it.EditSHA != ""
+}
+
+// ckEditView is the held edit it as the card should draw it, and starts the
+// fetch the first time it is asked about a hold. It must be called on the UI
+// goroutine.
+func (a *App) ckEditView(it session.AttentionItem) CkEditView {
+	if !ckIsEdit(it) {
+		return CkEditView{Err: "not a held edit"}
+	}
+	e := a.ck.edit
+	if e == nil || e.requestID != it.RequestID || e.sha != it.EditSHA {
+		a.ckFetchEdit(it)
+		e = a.ck.edit
+	}
+	switch {
+	case e.loading:
+		return CkEditView{Loading: true}
+	case e.err != "":
+		return CkEditView{Err: e.err}
+	}
+	return CkEditView{Body: e.body, SHA: e.sha}
+}
+
+// ckEditDrawn records that the card drew the body of it whose digest is sha,
+// whole: every hunk, nothing clipped. It is the one call that lets an allow
+// of the edit go. A sha that is not the fetched body's is ignored.
+func (a *App) ckEditDrawn(it session.AttentionItem, sha string) {
+	if e := a.ck.edit; e != nil && e.body != nil && e.requestID == it.RequestID && e.sha == it.EditSHA && sha == e.sha {
+		e.drawn = true
+	}
+}
+
+// ckEditAllowSHA is the edit_sha an allow of it carries, and false when no
+// allow may go: the body was not fetched, its digest is not the item's, or the
+// card has not drawn it.
+func (a *App) ckEditAllowSHA(it session.AttentionItem) (string, bool) {
+	e := a.ck.edit
+	if e == nil || !e.drawn || e.body == nil || e.requestID != it.RequestID || e.sha != it.EditSHA {
+		return "", false
+	}
+	return e.sha, true
+}
+
+// ckFetchEdit reads the body of a held edit with get-approval. The body is
+// kept only when its digest is the item's edit_sha, so the card never draws
+// a body the allow would not name.
+func (a *App) ckFetchEdit(it session.AttentionItem) {
+	e := &ckEdit{requestID: it.RequestID, sha: it.EditSHA, loading: true}
+	a.ck.edit = e
+	cl := a.cockpitClient()
+	if cl == nil {
+		e.loading, e.err = false, "Not connected to the daemon."
+		return
+	}
+	params := map[string]any{"request_id": it.RequestID, "session": it.Session}
+	go func() {
+		raw, err := cl.Verb("get-approval", params, true)
+		var d session.ApprovalDetail
+		if err == nil {
+			err = jsonUnmarshal(raw, &d)
+		}
+		a.update(func() {
+			if a.ck.edit != e {
+				return
+			}
+			e.loading = false
+			switch {
+			case err != nil:
+				e.err = "Could not read the edit. Open the pane to answer it."
+			case d.Edit == nil || d.EditSHA != e.sha || d.Edit.Digest() != e.sha || !d.Edit.Showable():
+				e.err = "The edit changed. Open the pane to answer it."
+			default:
+				e.body = d.Edit
+			}
+			a.refreshCockpit()
+		})
+	}()
+}
