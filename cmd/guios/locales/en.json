@@ -1201,7 +1201,7 @@
   "cockpitAllowOnce": "Allow once",
   "cockpitAllowSession": "Allow for this session",
   "cockpitAlwaysAllows": "Always allows: {scope}",
-  "cockpitApprovalsOff": "guios can answer Claude Code prompts here. Turn on approvals, and the next prompt shows Allow and Reject.",
+  "cockpitApprovalsOff": "Turn on approvals to answer Claude Code prompts here. Until then, answer in the pane.",
   "cockpitApprovalsTurnOn": "Turn on",
   "cockpitApprovalsOn": "Approvals are on. The next prompt shows here with Allow and Reject.",
   "cockpitKindApproval": "Approval",
@@ -1332,7 +1332,7 @@
     }
   },
   "cockpitYou": "You",
-  "cockpitAnswerInPane": "tuios cannot read this prompt on the screen. Open the pane to answer it.",
+  "cockpitAnswerInPane": "guios cannot read this prompt on the screen. Open the pane to answer it.",
   "cockpitAllowTool": "Allow {tool}",
   "cockpitQuestion": "Answer the agent",
   "cockpitQueued": "Queued",

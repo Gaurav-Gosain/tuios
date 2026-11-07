@@ -6444,11 +6444,11 @@ func (msgs Messages) CockpitAlwaysAllows(scope string) string {
 	return Catalog.Format(msgs.locale, "cockpitAlwaysAllows", map[string]any{"scope": scope})
 }
 
-// CockpitApprovalsOff says "guios can answer Claude Code prompts here. Turn on approvals, and the next prompt shows Allow and Reject."
+// CockpitApprovalsOff says "Turn on approvals to answer Claude Code prompts here. Until then, answer in the pane."
 // in the language the app shows.
 func CockpitApprovalsOff() string { return In(i18n.Locale()).CockpitApprovalsOff() }
 
-// CockpitApprovalsOff says "guios can answer Claude Code prompts here. Turn on approvals, and the next prompt shows Allow and Reject."
+// CockpitApprovalsOff says "Turn on approvals to answer Claude Code prompts here. Until then, answer in the pane."
 // in the language of msgs.
 func (msgs Messages) CockpitApprovalsOff() string {
 	return Catalog.Format(msgs.locale, "cockpitApprovalsOff", nil)
@@ -7450,11 +7450,11 @@ func (msgs Messages) CockpitYou() string {
 	return Catalog.Format(msgs.locale, "cockpitYou", nil)
 }
 
-// CockpitAnswerInPane says "tuios cannot read this prompt on the screen. Open the pane to answer it."
+// CockpitAnswerInPane says "guios cannot read this prompt on the screen. Open the pane to answer it."
 // in the language the app shows.
 func CockpitAnswerInPane() string { return In(i18n.Locale()).CockpitAnswerInPane() }
 
-// CockpitAnswerInPane says "tuios cannot read this prompt on the screen. Open the pane to answer it."
+// CockpitAnswerInPane says "guios cannot read this prompt on the screen. Open the pane to answer it."
 // in the language of msgs.
 func (msgs Messages) CockpitAnswerInPane() string {
 	return Catalog.Format(msgs.locale, "cockpitAnswerInPane", nil)
