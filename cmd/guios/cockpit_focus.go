@@ -177,8 +177,15 @@ func (a *App) cockpitFocus(c *ui.Context, pal *palette) {
 			}
 			ui.Spacer(c)
 			word, col := ckStatePill(pal, ag, r.item)
-			chip(c, pal, col.Alpha(0.15), col, func() {
-				ui.Box(c).Size(6, 6).Radius(3).Background(col).Shrink(0)
+			ground, ink := col.Alpha(0.15), col
+			if st, _ := ckStatus(ag, r.item); st == proto.Waiting {
+				// Needs you is the pane chip's solid need (attnFill, its
+				// ink at 5:1): on its own amber tint the deepened amber
+				// read 4.55:1 in light themes (Mac round 3, visual S1).
+				ground, ink = pal.attnFill, pal.attnInk
+			}
+			chip(c, pal, ground, ink, func() {
+				ui.Box(c).Size(6, 6).Radius(3).Background(ink).Shrink(0)
 				ui.Text(c, word).FontSize(fsSmall).FontWeight(wMedium).SingleLine()
 			}).Shrink(0)
 			if a.ckHasSiblings(ag) && !ck.narrow {
@@ -524,7 +531,12 @@ func (a *App) approvalCard(c *ui.Context, pal *palette, ag client.Agent, it sess
 				ui.Box(c).Size(0, hControl).Shrink(0)
 			} else if len(opts) == 0 && (pk == nil || !pk.loading) {
 				// Nothing here can answer it: say so, and offer the pane.
-				ui.Text(c, locales.CockpitAnswerInPane()).FontSize(fsSmall).TextColor(pal.textMuted).MaxLines(2).MinWidth(0)
+				// With approvals off the offer says it all, in one line:
+				// "cannot read" beside it named a second app and said the
+				// same twice (Mac round 3, workflow S2).
+				if !a.ckApprovalsOff(it, ag) {
+					ui.Text(c, locales.CockpitAnswerInPane()).FontSize(fsSmall).TextColor(pal.textMuted).MaxLines(2).MinWidth(0)
+				}
 				a.ckApprovalsOffLine(c, pal, it, ag)
 				// The view's one primary is Send: this one is secondary.
 				if ag.Window != "" && sizedButton(c, "ans-open", locales.CockpitOpenPane(), "↵", false, hControl, rControl, pal) {

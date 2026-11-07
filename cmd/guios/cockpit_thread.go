@@ -10,6 +10,7 @@ import (
 	"github.com/Gaurav-Gosain/mygo/ui"
 
 	"github.com/Gaurav-Gosain/tuios/internal/diffview"
+	"github.com/Gaurav-Gosain/tuios/internal/guios/cli"
 	"github.com/Gaurav-Gosain/tuios/internal/guios/client"
 	"github.com/Gaurav-Gosain/tuios/internal/markdown"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
@@ -515,6 +516,12 @@ func (a *App) threadView(c *ui.Context, pal *palette, ag client.Agent) {
 			}
 		})
 		return
+	case len(th.items) == 0 && th.err == locales.CockpitNoTranscript() && !a.integrationMissing(c, ag.Harness):
+		// The integration is in: the transcript comes with the agent's
+		// first turn, and the thread says what it said before the
+		// state changed (Mac round 3, workflow S3).
+		a.ckEmptyThread(c, pal, locales.CockpitThreadEmpty(), "")
+		return
 	case len(th.items) == 0 && th.err != "":
 		a.ckEmptyThread(c, pal, th.err, locales.CockpitNoTranscriptDetail())
 		return
@@ -1017,4 +1024,23 @@ func detab(runs []ui.Span) []ui.Span {
 		}
 	}
 	return runs
+}
+
+// integrationMissing reports whether the harness's integration is known
+// to be missing on this machine, from tuios integration status, read off
+// the main thread at most every 30 seconds. Until the first read it is
+// not known, and reports false.
+func (a *App) integrationMissing(c *ui.Context, harness string) bool {
+	in := &a.integ
+	if now := c.Now(); !in.reading && now.Sub(in.at) > 30*time.Second {
+		in.at, in.reading = now, true
+		go func() {
+			missing := map[string]bool{}
+			for _, st := range cli.SkillStates() {
+				missing[st.Agent] = st.State == "missing"
+			}
+			a.update(func() { in.missing, in.reading = missing, false })
+		}()
+	}
+	return in.missing[harness]
 }

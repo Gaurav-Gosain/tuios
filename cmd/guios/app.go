@@ -271,6 +271,13 @@ type App struct {
 	// of skillsAt, that no kind of agent has Kero's skill (ended.go).
 	endedAll     bool
 	skillMissing bool
+	// integ is which harnesses' integrations are missing, for the
+	// thread's empty state (integrationMissing).
+	integ struct {
+		missing map[string]bool
+		at      time.Time
+		reading bool
+	}
 	skillsAt     time.Time
 	sideDrag     float32 // the width as a drag of the sidebar's edge began
 	pendingToast string
