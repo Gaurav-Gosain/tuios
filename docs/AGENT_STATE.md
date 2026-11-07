@@ -2601,6 +2601,16 @@ The newest card is at the bottom. The wheel over the thread, or `J` and `K`,
 scrolls it. `[` and `]` switch between the Thread and Changes tabs: Changes
 shows every edit of the last turn whole.
 
+`ctrl+b` `[` starts copy mode over the thread, with the keys of a pane's copy
+mode: the motions, `/` and `?` to search, `v`, `V` and `ctrl+v` to select,
+and `y` to copy. A copy is the text as the agent wrote it: a paragraph the
+thread wraps is one line, and the card edges, the marks and the indent of the
+card are left out. Code keeps its own indent. `Y` copies the entries under
+the selection, or under the cursor, as Markdown: an answer as the agent wrote
+it, a prompt as a quote, and an edit as a `diff` block. The thread holds
+still while copy mode runs, and new entries show when it ends. `esc` ends it
+and keeps the view open. A change of width, tab or agent ends it too.
+
 The thread follows the newest card while it shows the bottom. A new prompt
 goes to the top of the thread, and the reply fills the space under it. When
 you scroll up, the thread stays where it is. A line at the bottom counts the

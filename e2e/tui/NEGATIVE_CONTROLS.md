@@ -14474,3 +14474,25 @@ Run on 2026-11-07 on macOS (arm64):
 
 Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestSuperKeysTypeNothingInAPlainPane$' -v .`.
+
+## Copy mode in the agents view's thread
+
+`TestCockpitThreadCopyMode` starts copy mode with ctrl+b [ over a thread, and
+reads each yank back with `tuios show-buffer`: a wrapped paragraph (one line,
+no indent), a code block (its own indent), a prompt (no card edge) and Y on an
+edit (a diff block). It waits for the selection to be drawn, and checks that
+esc leaves copy mode and the next esc closes the view.
+
+Run on 2026-11-07 on macOS (arm64), each control its own binary:
+
+| Removed | The test fails with | Result |
+|---------|---------------------|--------|
+| `CockpitCopyText` not called (the pane's yank text kept) | "the paragraph's yank is" | **caught** |
+| The `CockpitCopyOn` hook cut from `handleInboxInput` | "rows of ... -1" (the keys reach the view, / opens its search) | **caught** |
+| The wrap flag left off `ckMD.text`'s lines | "the paragraph's yank is" | **caught** |
+| The `cockpitTouch` cut from `CockpitCopy` | "the selection is not drawn" (a bug of an early build: a key did not redraw the view) | **caught** |
+| `ckGlyphSet` empty | passes | **not caught** |
+
+The glyph set is not caught: the card edge is drawn from a field of its own
+and is never text, and no row this test yanks starts with a fold or state
+glyph. A yank of a tool line would need it.

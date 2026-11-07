@@ -85,6 +85,9 @@ type ckLine struct {
 	hit string
 	// label marks a speaker's label, which starts after a blank line.
 	label bool
+	// wrap says the next line goes on with the same paragraph, so copy mode
+	// joins them.
+	wrap bool
 }
 
 // blank reports whether the line draws nothing.
@@ -155,7 +158,9 @@ func (m *OS) threadCardLines(e sidebarAgentEntry, t *agentThread, width int, cha
 	}
 	c = c.reset(width, 1, l.canvas)
 	blank := c.render()
-	add := func(ls ...ckLine) { items = ckAddItem(items, ckItem{lines: ls, out: draw(ls)}, blank) }
+	// cur is the entry the loop draws, for copy mode's Markdown yank.
+	cur := ""
+	add := func(ls ...ckLine) { items = ckAddItem(items, ckItem{lines: ls, out: draw(ls), id: cur}, blank) }
 	// cached draws an entry's card once per width, fold and theme: a diff's
 	// highlighting and a long text's wrapping are the costly part, and a
 	// thread that grows by one entry draws only that one.
@@ -171,7 +176,7 @@ func (m *OS) threadCardLines(e sidebarAgentEntry, t *agentThread, width int, cha
 		if t.cards == nil {
 			t.cards = make(map[string]ckCard)
 		}
-		it := ckItem{lines: ls, out: draw(ls)}
+		it := ckItem{lines: ls, out: draw(ls), id: en.ID}
 		t.cards[en.ID] = ckCard{key: key, item: it}
 		items = ckAddItem(items, it, blank)
 	}
@@ -190,6 +195,7 @@ func (m *OS) threadCardLines(e sidebarAgentEntry, t *agentThread, width int, cha
 	pinned := !changes && t.pinned
 	for i := 0; i < len(entries); i++ {
 		en := entries[i]
+		cur = en.ID
 		isEdit := en.Kind == "tool_call" && en.Diff != nil
 		if changes && !isEdit {
 			continue
@@ -225,8 +231,9 @@ func (m *OS) threadCardLines(e sidebarAgentEntry, t *agentThread, width int, cha
 					label = append(label, ckSeg{t: sepWord() + "turn " + strconv.Itoa(turn), fg: pal.FgMute})
 				}
 				ls := []ckLine{{segs: label, label: true}, {bg: l.panel, bar: "▎", barInk: pal.AccentBright}}
-				for _, s := range threadWrap(en.Text, max(width-6, 8)) {
-					ls = append(ls, ckLine{bg: l.panel, bar: "▎", barInk: pal.AccentBright, indent: 3, segs: []ckSeg{{t: s, fg: pal.Fg}}})
+				rows, more := threadWrapMore(en.Text, max(width-6, 8))
+				for k, s := range rows {
+					ls = append(ls, ckLine{bg: l.panel, bar: "▎", barInk: pal.AccentBright, indent: 3, wrap: more[k], segs: []ckSeg{{t: s, fg: pal.Fg}}})
 				}
 				return append(ls, ckLine{bg: l.panel, bar: "▎", barInk: pal.AccentBright}, ckLine{})
 			})
@@ -334,8 +341,10 @@ func (m *OS) threadCardLines(e sidebarAgentEntry, t *agentThread, width int, cha
 			t.prompts = append(t.prompts, len(out))
 		}
 		out = append(out, it.out...)
+		t.lines = append(t.lines, it.lines...)
 		for _, ln := range it.lines {
 			hits = append(hits, ln.hit)
+			t.lineIDs = append(t.lineIDs, it.id)
 		}
 	}
 	return out, hits
@@ -405,10 +414,11 @@ func (m *OS) ckTurnLine(l ckLook, tn *transcriptview.Turn, id, what, span string
 	return ckLine{segs: segs, hit: "fold:" + id}
 }
 
-// ckItem is a card's lines and the lines drawn.
+// ckItem is a card's lines and the lines drawn, and the entry they draw.
 type ckItem struct {
 	lines []ckLine
 	out   []string
+	id    string
 }
 
 // ckCard is an entry's card as last built, and what it was built from.
@@ -440,7 +450,7 @@ func ckAddItem(items []ckItem, it ckItem, blank string) []ckItem {
 	if n := len(items); n > 0 && len(it.lines) > 0 && (it.lines[0].bg != nil || it.lines[0].label) {
 		if prev := items[n-1]; len(prev.lines) > 0 && !prev.lines[len(prev.lines)-1].blank() {
 			// Clipped, so a card the thread keeps is never written into.
-			items[n-1] = ckItem{lines: append(slices.Clip(prev.lines), ckLine{}), out: append(slices.Clip(prev.out), blank)}
+			items[n-1] = ckItem{lines: append(slices.Clip(prev.lines), ckLine{}), out: append(slices.Clip(prev.out), blank), id: prev.id}
 		}
 	}
 	return append(items, it)

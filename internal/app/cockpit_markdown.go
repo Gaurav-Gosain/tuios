@@ -247,12 +247,13 @@ func ckLinkTarget(u string) string {
 // text wraps segments to avail cells and adds them as lines, the first
 // with first before it and the rest with rest.
 func (md *ckMD) text(segs []ckSeg, first, rest []ckSeg, avail int) {
-	for i, ln := range ckWrapSegs(segs, avail) {
+	lines := ckWrapSegs(segs, avail)
+	for i, ln := range lines {
 		pre := rest
 		if i == 0 {
 			pre = first
 		}
-		md.lines = append(md.lines, ckLine{segs: append(slicesClone(pre), ln...)})
+		md.lines = append(md.lines, ckLine{segs: append(slicesClone(pre), ln...), wrap: i < len(lines)-1})
 	}
 }
 

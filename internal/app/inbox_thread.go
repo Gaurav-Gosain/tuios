@@ -156,6 +156,12 @@ type agentThread struct {
 	// pinned says the last frame pinned the todo list above the thread
 	// (ThreadPinnedLines), so the thread folds its copy.
 	pinned bool
+	// lines are body's lines as laid out, and lineIDs the entry each one
+	// belongs to, for copy mode. viewW and viewH are the thread's view in
+	// the last frame.
+	lines        []ckLine
+	lineIDs      []string
+	viewW, viewH int
 }
 
 // threadBodyKey is what a thread's drawn lines depend on.
@@ -185,6 +191,9 @@ type threadsState struct {
 	events   chan tea.Msg
 	// open is the thread shown in place of the list on a narrow screen.
 	open bool
+	// copy is copy mode over the shown thread, nil when it is off. See
+	// cockpit_copy.go.
+	copy *ckThreadCopy
 }
 
 // threadPageMsg is an agent-transcript reply.
@@ -651,7 +660,7 @@ func (m *OS) threadBody(e sidebarAgentEntry, width, room int, now time.Time) []s
 	if t.body != nil && t.bodyAt == key {
 		return t.body
 	}
-	t.hits, t.prompts = nil, nil
+	t.hits, t.prompts, t.lines, t.lineIDs = nil, nil, nil, nil
 	t.body, t.bodyAt = m.threadBodyLines(e, t, width, room, now), key
 	return t.body
 }
@@ -772,20 +781,7 @@ func firstNonEmptyStr(a, b string) string {
 // own line breaks, then at spaces. Blank lines are kept, at most one in a
 // row, and every line is made printable.
 func threadWrap(text string, width int) []string {
-	var out []string
-	blank := false
-	for line := range strings.SplitSeq(strings.TrimSpace(text), "\n") {
-		line = printableTitle(line)
-		if strings.TrimSpace(line) == "" {
-			if !blank && len(out) > 0 {
-				out = append(out, "")
-			}
-			blank = true
-			continue
-		}
-		blank = false
-		out = append(out, wrapPlain(line, width)...)
-	}
+	out, _ := threadWrapMore(text, width)
 	return out
 }
 
