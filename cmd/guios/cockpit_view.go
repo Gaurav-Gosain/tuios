@@ -945,7 +945,9 @@ func ckAsk(summary string) (tool, target string, ok bool) {
 	if t, r, found := strings.Cut(rest, " "); found {
 		return t, r, true
 	}
-	return rest, "", true
+	// A screen rule's "Allow Bash?" names the tool and asks: the row and
+	// the button already ask, so the mark goes.
+	return strings.TrimSuffix(rest, "?"), "", true
 }
 
 // ckToolName reports whether s reads as a tool's name: one word of letters,

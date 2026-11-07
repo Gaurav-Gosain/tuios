@@ -108,7 +108,16 @@ func (a *App) sessionLines(s *proto.Session, g *proto.GitInfo, nested bool) (lin
 		line3 = a.hostOf(s.ID).shortDir(s.WorkDir())
 	}
 	if s.Message != "" && !nested {
-		return strings.Join(strings.Fields(s.Message), " "), true, line3
+		m := strings.Join(strings.Fields(s.Message), " ")
+		// An approval in the daemon's own words ("approve Bash: go test
+		// ./...") reads as the agent rows read it: "Allow Bash go test
+		// ./..." (Mac round 1, workflow S2). Other messages stay as sent.
+		if v, _, _ := strings.Cut(m, " "); strings.EqualFold(v, "approve") || strings.EqualFold(v, "allow") {
+			if tool, target, ok := ckAsk(m); ok {
+				m = strings.TrimSpace(locales.CockpitAllowTool(tool) + " " + target)
+			}
+		}
+		return m, true, line3
 	}
 	var parts []string
 	if nested {
