@@ -120,6 +120,11 @@ anyone answer me". A reply to a message the ring already dropped is stored
 anyway and says `reply_to_missing`. A thread means something in one session
 only.
 
+Mail crosses sessions on one daemon: `--from "$TUIOS_PANE_ID"` (your full
+window id) names you from any session, and the message's `from_label` says
+which session you are in. A name or a short id is looked up only in the
+recipient's session. A reply goes to the sender's own session with `-s`.
+
 ### Being reachable yourself
 
 tuios tells you about new mail, in a line that starts `You have 1 unread tuios

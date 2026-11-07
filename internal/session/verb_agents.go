@@ -360,7 +360,11 @@ func (d *Daemon) verbSendAgentMessage(cs *connState, params json.RawMessage) (an
 	if p.Confirm != "" {
 		return nil, invalidParam("confirm", "confirm goes with select: it is the token for the panes a selector matched")
 	}
-	return d.sendAgentMessage(cs, p, false)
+	// from may name a window of another session by its full id, as a send by
+	// selector already does: a lead in one session and its workers in another
+	// could not mail each other, though from is a claim either way (only human
+	// is checked). A name or a short id still resolves only in this session.
+	return d.sendAgentMessage(cs, p, true)
 }
 
 // sendAgentMessageParams are send-agent-message's parameters.
@@ -1020,7 +1024,9 @@ func (d *Daemon) verbAskAgent(cs *connState, params json.RawMessage) (any, *verb
 	target := state.Windows[idx]
 	gone, stop := askCancel(cs)
 	defer stop()
-	res, verr := d.askAgent(cs, sess, state, target, p, false, gone)
+	// from may name a window of another session by its full id, as for
+	// send-agent-message.
+	res, verr := d.askAgent(cs, sess, state, target, p, true, gone)
 	if verr != nil {
 		return nil, verr
 	}

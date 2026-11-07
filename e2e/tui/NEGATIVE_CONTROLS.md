@@ -13911,3 +13911,20 @@ Run on 2026-11-07 on macOS (arm64), each control its own binary:
 The frame is `terminals-all-agents` under the test's artifact folder. Repeat from
 `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestRailTerminalsKeepsItsHeaderWhenAllPanesAreAgents$' -v .`.
+
+## TestMailFromAPaneOfAnotherSession
+
+The test makes two sessions on one daemon and mails between their first panes
+with `--from` set to the sender's full window id, both ways. Before the fix the
+sender had to be a window of the recipient's session, so a lead in one session
+and its workers in another could not mail each other. It also checks that a
+window name from another session is still refused.
+
+Run on 2026-11-07 on macOS (arm64), each control its own binary:
+
+| Removed | The test fails with | Result |
+|---------|---------------------|--------|
+| `true` passed to `sendAgentMessage` in `verbSendAgentMessage`, back to `false` | "a worker in team could not mail the lead in lead: exit status 1" | **caught** |
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestMailFromAPaneOfAnotherSession$' -v .`.
