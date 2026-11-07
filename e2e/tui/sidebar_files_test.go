@@ -3359,3 +3359,301 @@ func TestRailFilesOpenOnDemand(t *testing.T) {
 	railShot(t, term, "files-no-terminals")
 	alive(t, term, "after opening the files section on demand")
 }
+
+// quickLookWrapOpen writes name into its own listing of the quick look fixture,
+// opens it with space and goes inside with tab. It returns the file's lines.
+//
+// zzwrap.txt wraps when it opens. Its line 1 is wide characters, 2 cells each.
+// Its line 2 is a Latin letter with a halfwidth sound mark, one cell to the
+// panel, sixty times, then ASCII to 200 cells. Its line 3 is ASCII alone. Lines
+// 4 to 102 are short, so the gutter takes 3 digits.
+//
+// zzwrap.go does not wrap when it opens. Its line 2 wraps at least twice with w,
+// and its return is on a later row.
+func quickLookWrapOpen(t *testing.T, name string) (*tuitest.Terminal, []string) {
+	t.Helper()
+	var text strings.Builder
+	// 321 characters, 642 cells: at the code column of 81 cells that is 8 rows
+	// by cells, but 9 rows of whole characters, 40 to a row.
+	text.WriteString(strings.Repeat("〇一二三四五六七八九", 32))
+	text.WriteString("〇\n")
+	text.WriteString(strings.Repeat("qﾟ", 60))
+	for i := range 35 {
+		fmt.Fprintf(&text, "k%03d", i)
+	}
+	text.WriteString("\n")
+	for i := range 50 {
+		fmt.Fprintf(&text, "a%03d", i)
+	}
+	text.WriteString("\n")
+	for i := 4; i <= 102; i++ {
+		fmt.Fprintf(&text, "end %d\n", i)
+	}
+	files := map[string]string{
+		"zzwrap.txt": text.String(),
+		"zzwrap.go": "func f() int { return 1 }\n" +
+			`func g() string { s := "` + strings.Repeat("x", 150) + `"; return s }` + "\n" +
+			"func h() {}\nfunc k() {}\nfunc m() {}\n",
+	}
+	term, dir := quickLookListed(t, []string{"TUIOS_KITTY_GRAPHICS=0"}, nil)
+	if err := os.WriteFile(filepath.Join(dir, name), []byte(files[name]), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	railLists(t, term, "the rail did not list "+name, []string{name}, nil)
+	quickLookFocusRail(t, term, name)
+	sendKeys(t, term, " ")
+	railLists(t, term, "space did not show "+name, []string{name + " ", "go inside"}, nil)
+	sendKeys(t, term, tuitest.Tab)
+	railLists(t, term, "tab did not go inside "+name, []string{"Inside the file"}, nil)
+	return term, strings.Split(strings.TrimSuffix(files[name], "\n"), "\n")
+}
+
+// quickLookLineRows returns the code cells of line n's rows in the quick look
+// panel: the screen rows from the row whose gutter shows n to the row before the
+// next numbered row, each cut to the code column. It is nil until line n and
+// the number after it are on screen.
+func quickLookLineRows(s tuitest.Screen, n int) [][]tuitest.Cell {
+	cols, rows := s.Size()
+	num := strconv.Itoa(n) + "  "
+	for r := range rows {
+		for b := range cols {
+			// The panel's left frame, blanks, the number and two blanks.
+			if s.Cell(b, r).Content != "│" {
+				continue
+			}
+			d := b + 1
+			for d < cols && s.Cell(d, r).Content == " " {
+				d++
+			}
+			if d == b+1 || !gridMatchesAt(s, d, r, num) {
+				continue
+			}
+			x := d + len(num)
+			// The code column ends two cells before the right frame: a blank
+			// and the scroll bar's column sit between them.
+			top := r
+			for top > 0 && s.Cell(b, top).Content != "╭" {
+				top--
+			}
+			right := b + 1
+			for right < cols && s.Cell(right, top).Content != "╮" {
+				right++
+			}
+			var out [][]tuitest.Cell
+			for k := r; k < rows && s.Cell(b, k).Content == "│"; k++ {
+				if c := s.Cell(x-3, k).Content; k > r && c >= "0" && c <= "9" {
+					return out
+				}
+				row := make([]tuitest.Cell, 0, right-2-x)
+				for c := x; c < right-2; c++ {
+					row = append(row, s.Cell(c, k))
+				}
+				out = append(out, row)
+			}
+			return nil
+		}
+	}
+	return nil
+}
+
+// TestQuickLookWrapsWideCharactersWhole wraps a line of wide characters. Each
+// row holds whole characters, so every character is on a row once, and no row
+// ends in the ellipsis of a cut line. With wrap off the line is cut, and then
+// it does end in one.
+//
+// How this could pass wrongly: a row that lost a character at its edge still
+// shows a full row, so the test reads every character of the line in order.
+func TestQuickLookWrapsWideCharactersWhole(t *testing.T) {
+	term, lines := quickLookWrapOpen(t, "zzwrap.txt")
+	if err := term.WaitFor(func(s tuitest.Screen) bool { return quickLookLineRows(s, 3) != nil }, uiTimeout); err != nil {
+		t.Fatalf("lines 1 to 3 are not on screen: %v\n%s", err, term.Snapshot())
+	}
+	copiesFrame(t, term, "quick-look-wrap-wide")
+
+	want := []rune(lines[0])
+	var shown []string
+	var counts, ellipses []int
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		shown, counts, ellipses = nil, nil, nil
+		for i, row := range quickLookLineRows(s, 1) {
+			n, last := 0, ""
+			for _, c := range row {
+				if c.Width != 0 && c.Content != " " {
+					shown = append(shown, c.Content)
+					n, last = n+1, c.Content
+				}
+			}
+			counts = append(counts, n)
+			if last == "…" {
+				ellipses = append(ellipses, i)
+			}
+		}
+		if len(counts) == 0 || len(ellipses) > 0 || strings.Join(shown, "") != lines[0] {
+			return false
+		}
+		// 40 characters are 80 cells; a 41st would cross the code column's 81.
+		for _, n := range counts[:len(counts)-1] {
+			if n != 40 {
+				return false
+			}
+		}
+		return true
+	}, uiTimeout); err != nil {
+		var missing []int
+		j := 0
+		for i, r := range want {
+			for j < len(shown) && shown[j] == "…" {
+				j++
+			}
+			if j < len(shown) && shown[j] == string(r) {
+				j++
+			} else {
+				missing = append(missing, i)
+			}
+		}
+		t.Errorf("ASSERTION: line 1 does not wrap whole: %d rows holding %v characters, rows %v end in \"…\", characters %v of %d are on no row: %v\n%s",
+			len(counts), counts, ellipses, missing, len(want), err, term.Snapshot())
+	}
+
+	// Wrap off: the line is cut at the edge, and the lines after it show.
+	sendKeys(t, term, "w")
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		rows := quickLookLineRows(s, 1)
+		return len(rows) == 1 && len(rows[0]) > 0 && rows[0][len(rows[0])-1].Content == "…" && strings.Contains(s.Text(), "end 4")
+	}, uiTimeout); err != nil {
+		t.Errorf("ASSERTION: w did not cut line 1 to one row ending in \"…\" with \"end 4\" on screen: %v\n%s", err, term.Snapshot())
+	}
+}
+
+// TestQuickLookWrapsSoundMarksWhole wraps a line of Latin letters, each with a
+// halfwidth sound mark, then ASCII. Every ASCII character of the line is on a
+// row in order, no row ends in the ellipsis of a cut line, and no row is empty.
+// The ASCII line after it wraps whole too, which shows the rows are read right.
+func TestQuickLookWrapsSoundMarksWhole(t *testing.T) {
+	term, lines := quickLookWrapOpen(t, "zzwrap.txt")
+	if err := term.WaitFor(func(s tuitest.Screen) bool { return quickLookLineRows(s, 3) != nil }, uiTimeout); err != nil {
+		t.Fatalf("lines 1 to 3 are not on screen: %v\n%s", err, term.Snapshot())
+	}
+	copiesFrame(t, term, "quick-look-wrap-marks")
+
+	var want strings.Builder
+	for _, r := range lines[1] {
+		if r < 0x80 {
+			want.WriteRune(r)
+		}
+	}
+	var got strings.Builder
+	var ellipses, empty, short []int
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		got.Reset()
+		ellipses, empty, short = nil, nil, nil
+		rows := quickLookLineRows(s, 2)
+		for i, row := range rows {
+			last := ""
+			for _, c := range row {
+				if c.Width != 0 && c.Content != " " {
+					last = c.Content
+					for _, r := range c.Content {
+						if r < 0x80 {
+							got.WriteRune(r)
+						}
+					}
+				}
+			}
+			switch {
+			case last == "":
+				empty = append(empty, i)
+			case last == "…":
+				ellipses = append(ellipses, i)
+			}
+			// Row 0 is the sixty letters with their marks and 21 ASCII, 81
+			// cells; row 1 is 81 ASCII. Each fills the code column to its
+			// last cell.
+			if i < len(rows)-1 && len(row) > 0 && strings.TrimSpace(row[len(row)-1].Content) == "" {
+				short = append(short, i)
+			}
+		}
+		return len(rows) > 0 && got.String() == want.String() && len(ellipses)+len(empty)+len(short) == 0
+	}, uiTimeout); err != nil {
+		t.Errorf("ASSERTION: line 2 does not wrap whole: its rows hold %d of its %d ASCII characters (%q), rows %v end in \"…\", rows %v are empty, rows %v stop before the last cell: %v\n%s",
+			got.Len(), want.Len(), got.String(), ellipses, empty, short, err, term.Snapshot())
+	}
+
+	// The ASCII line wraps whole.
+	var line3 string
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		var b strings.Builder
+		for _, row := range quickLookLineRows(s, 3) {
+			for _, c := range row {
+				if c.Width != 0 && c.Content != " " {
+					b.WriteString(c.Content)
+				}
+			}
+		}
+		line3 = b.String()
+		return line3 == lines[2]
+	}, uiTimeout); err != nil {
+		t.Errorf("ASSERTION: line 3's rows hold %q, want %q: %v\n%s", line3, lines[2], err, term.Snapshot())
+	}
+}
+
+// TestQuickLookWrapKeepsColours wraps a Go line whose return is on its third
+// row. That return keeps the keyword's colour, the same as the return of line 1.
+//
+// How this could pass wrongly: two plain cells have the same colour too, so the
+// keyword's colour must differ from the plain identifier s's.
+func TestQuickLookWrapKeepsColours(t *testing.T) {
+	term, _ := quickLookWrapOpen(t, "zzwrap.go")
+	// at is the cells of word on the rows, after the rows before from: its row
+	// and its first cell, or -1.
+	at := func(rows [][]tuitest.Cell, from int, word string) (int, int) {
+		for i := from; i < len(rows); i++ {
+			for c := 0; c+len(word) <= len(rows[i]); c++ {
+				var b strings.Builder
+				for _, cell := range rows[i][c : c+len(word)] {
+					b.WriteString(cell.Content)
+				}
+				if b.String() == word {
+					return i, c
+				}
+			}
+		}
+		return -1, -1
+	}
+	// The highlight is there before w: line 1's return is not drawn plain.
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		one, two := quickLookLineRows(s, 1), quickLookLineRows(s, 2)
+		kr, kc := at(one, 0, "return")
+		sr, sc := at(two, 0, "s :=")
+		return kr >= 0 && sr >= 0 && one[kr][kc].Fg != two[sr][sc].Fg
+	}, uiTimeout); err != nil {
+		t.Fatalf("line 1's return is not highlighted: %v\n%s", err, term.Snapshot())
+	}
+
+	sendKeys(t, term, "w")
+	var one, two [][]tuitest.Cell
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		one, two = quickLookLineRows(s, 1), quickLookLineRows(s, 2)
+		r, _ := at(two, 1, "return")
+		return len(two) >= 3 && r >= 1
+	}, uiTimeout); err != nil {
+		t.Fatalf("w did not wrap line 2 with its return on a later row: %v\n%s", err, term.Snapshot())
+	}
+	copiesFrame(t, term, "quick-look-wrap-colours")
+
+	kr, kc := at(one, 0, "return")
+	sr, sc := at(two, 0, "s :=")
+	rr, rc := at(two, 1, "return")
+	if kr < 0 || sr < 0 {
+		t.Fatalf("line 1's return or line 2's s is not on screen:\n%s", term.Snapshot())
+	}
+	keyword, plain := one[kr][kc].Fg, two[sr][sc].Fg
+	if keyword == plain {
+		t.Errorf("ASSERTION: line 1's return and the identifier s are the same colour %+v: the code is not highlighted", keyword)
+	}
+	for i, c := range two[rr][rc : rc+len("return")] {
+		if c.Fg != keyword {
+			t.Errorf("ASSERTION: cell %d of the return on row %d of line 2 is %+v, want the keyword's %+v (the identifier s is %+v)\n%s", i, rr, c.Fg, keyword, plain, term.Snapshot())
+		}
+	}
+}

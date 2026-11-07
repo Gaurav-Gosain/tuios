@@ -13826,3 +13826,20 @@ The frames, with the host's picture drawn in, are under `TUIOS_E2E_FRAMES`, in
 each test's folder. Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run 'Paste(Preview|ShowsTheImage|WithoutGraphics)' -v .`.
 
+
+## Quick look wraps a row at whole characters
+
+`TestQuickLookWrapsWideCharactersWhole` and `TestQuickLookWrapsSoundMarksWhole` open `zzwrap.txt` with wrap on, at 140x40, where the code column is 81 cells. Line 1 is 321 wide characters: its rows must hold each of them once and in order, 40 to a row, and no row may end in "…". With `w` the line is cut to one row that does end in "…". Line 2 is sixty Latin letters, each with a halfwidth sound mark, then 140 ASCII characters: its rows must hold all of its ASCII in order, none may end in "…" or be empty, and each row but the last fills the code column. Line 3, ASCII alone, must show whole, and does on main. `TestQuickLookWrapKeepsColours` wraps a Go line with `w`: the `return` on its third row must have the colour of the `return` on line 1, which differs from the identifier `s`.
+
+Run on 2026-11-07 on Linux. Main (52fd515a9) is the control for the first two.
+
+| Control: what was cut | Test | Where it fails | Verdict |
+| --- | --- | --- | --- |
+| Main's draw: the whole line handed to each row, cut at `k*codeW` | `TestQuickLookWrapsWideCharactersWhole` | "line 1 does not wrap whole: 8 rows holding [41 41 41 41 41 41 41 38] characters, rows [0 1 2 3 4 5 6] end in "…", characters [80 161 242] of 321 are on no row" | **caught** |
+| Main's draw: the whole line handed to each row, cut at `k*codeW` | `TestQuickLookWrapsSoundMarksWhole` | "line 2 does not wrap whole: its rows hold 183 of its 200 ASCII characters (...k028k029k03), rows [0 1] end in "…", rows [] are empty, rows [0 1] stop before the last cell" | **caught** |
+| The branch with the row given the whole line's spans (`sp` for `ql.rowSpans`) | `TestQuickLookWrapKeepsColours` | "cell 0 of the return on row 2 of line 2 is {Kind:1 Index:105 R:0 G:0 B:0}, want the keyword's {Kind:1 Index:171 R:0 G:0 B:0} (the identifier s is {Kind:1 Index:255 R:0 G:0 B:0})" | **caught** |
+
+`TestQuickLookWrapKeepsColours` passes on main, which keeps the whole line's colours when it cuts a row. Its control is the branch with one change: the row given the whole line's spans.
+
+The frames are `quick-look-wrap-wide`, `quick-look-wrap-marks` and `quick-look-wrap-colours` under `TUIOS_E2E_FRAMES`. Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestQuickLookWrap' -v .`.

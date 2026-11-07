@@ -623,7 +623,22 @@ func quickLookWrapsByDefault(name string) bool {
 
 // quickLookWrapRows is how many rows a line takes when it wraps.
 func quickLookWrapRows(line string, width int) int {
-	return max((ansi.StringWidth(line)+width-1)/max(width, 1), 1)
+	width = max(width, 1)
+	plain := true
+	for i := 0; i < len(line); i++ {
+		if line[i] < 0x20 || line[i] >= 0x7f {
+			plain = false
+			break
+		}
+	}
+	if plain {
+		return max((len(line)+width-1)/width, 1)
+	}
+	rows := 0
+	for at := 0; at < len(line); rows++ {
+		at, _ = quickLookWrapNext(line, at, width)
+	}
+	return max(rows, 1)
 }
 
 // quickLookLastWrapped is the last top line that still fills the rows, walking up

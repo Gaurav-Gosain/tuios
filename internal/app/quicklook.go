@@ -204,6 +204,9 @@ type quickLookState struct {
 	statusLine bool
 	wrap       bool
 	wrapSet    bool
+	// rowSpans is the syntax spans of the wrapped row being drawn, kept so a
+	// frame allocates no spans slice per row.
+	rowSpans []diffview.Span
 	// hostOlder holds the machines whose file-preview verb has no windows, and
 	// hostAsked those it was asked of, once per link.
 	hostOlder map[string]bool
@@ -1104,19 +1107,21 @@ func (m *OS) drawQuickLook(c *ckCanvas, l ckLook, dv *diffview.Theme, w, h int) 
 			if n < len(r.spans) {
 				sp = r.spans[n]
 			}
-			rows := 1
-			if ql.wrap {
-				rows = quickLookWrapRows(r.lines[n], codeW)
+			if !ql.wrap {
+				c.draw(codeX, bodyTop+row, codeW, dv.Code(r.lines[n], sp, diffview.Range{}, diffview.Context, false, 0, codeW))
+				quickLookLightMatches(c, pal, ql.query, r.lines[n], codeX, bodyTop+row, codeW, 0)
+				row++
+				continue
 			}
+			rows := quickLookWrapRows(r.lines[n], codeW)
+			// A row holds its own whole characters, so none is cut at the edge.
+			at, col := 0, 0
 			for k := 0; k < rows && row < bodyRows; k++ {
-				// One cell more than the row, so a wrapped row ends in text and
-				// not in the ellipsis of a cut line.
-				width := codeW
-				if ql.wrap {
-					width = codeW + 1
-				}
-				c.draw(codeX, bodyTop+row, codeW, dv.Code(r.lines[n], sp, diffview.Range{}, diffview.Context, false, k*codeW, width))
-				quickLookLightMatches(c, pal, ql.query, r.lines[n], codeX, bodyTop+row, codeW, k*codeW)
+				end, cells := quickLookWrapNext(r.lines[n], at, codeW)
+				ql.rowSpans = quickLookRowSpans(ql.rowSpans, sp, at, end)
+				c.draw(codeX, bodyTop+row, codeW, dv.Code(r.lines[n][at:end], ql.rowSpans, diffview.Range{}, diffview.Context, false, 0, codeW))
+				quickLookLightMatches(c, pal, ql.query, r.lines[n], codeX, bodyTop+row, cells, col)
+				at, col = end, col+cells
 				row++
 			}
 		}
