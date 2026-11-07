@@ -98,6 +98,21 @@ func (a *App) focusTerminal() {
 	if a.focusScratch() {
 		return
 	}
+	if a.switching() {
+		// The switch keeps the keys until its panes show (switch_keys.go).
+		a.sw.ref.Focus()
+		return
+	}
+	defer func() {
+		if len(a.sw.queue) == 0 {
+			return
+		}
+		pane := ""
+		if s := a.session(a.selected); s != nil {
+			pane = a.focusOf(s)
+		}
+		a.replaySwitchKeys(pane)
+	}()
 	if s := a.session(a.selected); s != nil {
 		if id := a.focusOf(s); id != "" {
 			a.paneRef(id).Focus()

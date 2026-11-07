@@ -59,6 +59,7 @@ func (a *App) holdSwitches(before map[string]proto.Session) {
 		if _, held := a.holds[s.ID]; !held {
 			a.holds[s.ID] = &wsHold{s: old, since: time.Now()}
 		}
+		a.switchLanded(s.ID)
 		a.leaveWorkspace(old)
 		a.startSlide(old, s.Workspace)
 		for _, id := range shownPanes(&s) {
@@ -129,6 +130,7 @@ func (a *App) showWorkspace(s *proto.Session, n int) {
 		return
 	}
 	a.slideNow(s, n)
+	a.switchStarted(s.ID)
 	a.call(s.ID, "workspace", proto.WorkspaceParams{Session: s.ID, Workspace: n}, nil)
 }
 

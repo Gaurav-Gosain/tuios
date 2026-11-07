@@ -296,6 +296,7 @@ type App struct {
 	picker folderPicker // the folders of a host, to open a project in
 	side   sideState    // the side panel, beside a session's panes
 	quick  quickTerm    // the terminal the global shortcut drops down
+	sw     switchKeys   // the keys of a workspace switch on its way
 }
 
 // confirmation is a question the app asks before something it cannot undo.
