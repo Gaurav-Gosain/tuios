@@ -6494,6 +6494,16 @@ func (msgs Messages) CockpitStopped(message string) string {
 	return Catalog.Format(msgs.locale, "cockpitStopped", map[string]any{"message": message})
 }
 
+// CockpitThreadEmptyLine says "No messages yet. The agent's messages show here."
+// in the language the app shows.
+func CockpitThreadEmptyLine() string { return In(i18n.Locale()).CockpitThreadEmptyLine() }
+
+// CockpitThreadEmptyLine says "No messages yet. The agent's messages show here."
+// in the language of msgs.
+func (msgs Messages) CockpitThreadEmptyLine() string {
+	return Catalog.Format(msgs.locale, "cockpitThreadEmptyLine", nil)
+}
+
 // CockpitAnswered says "{name}: {answer}"
 // in the language the app shows.
 func CockpitAnswered(name string, answer string) string {

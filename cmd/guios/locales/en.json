@@ -1206,6 +1206,7 @@
   "cockpitKindApproval": "Approval",
   "cockpitKindQuestion": "Question",
   "cockpitStopped": "Stopped · {message}",
+  "cockpitThreadEmptyLine": "No messages yet. The agent's messages show here.",
   "cockpitAnswered": "{name}: {answer}",
   "cockpitStoppedWaiting": "{name} stopped waiting. Open the pane to answer it.",
   "cockpitStillWaits": "{name} still waits. Open the pane to answer it.",
