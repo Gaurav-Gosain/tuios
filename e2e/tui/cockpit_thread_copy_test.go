@@ -178,6 +178,23 @@ func TestCockpitThreadCopyMode(t *testing.T) {
 	if !strings.Contains(term.Screen().Text(), "Why does the retry loop stop") {
 		t.Fatalf("ASSERTION: esc in copy mode closed the agents view\n%s", term.Snapshot())
 	}
+	// In the focus region y starts copy mode too, and y in it copies.
+	if err := term.SendKeys(tuitest.Tab); err != nil {
+		t.Fatal(err)
+	}
+	waitRegion(t, term, "Focus", 0, 120, "tab from the list")
+	if err := term.SendKeys("y"); err != nil {
+		t.Fatal(err)
+	}
+	if got := lineSelect("gave up after the third", "from the server.", "y"); got != copyParagraph {
+		t.Fatalf("ASSERTION: y in the focus region did not start copy mode; the yank is\n%q", got)
+	}
+	// esc leaves copy mode, the next esc goes back to the list.
+	ckPress(t, term, tuitest.Esc)
+	ckPress(t, term, tuitest.Esc)
+	if err := term.WaitFor(func(s tuitest.Screen) bool { return strings.Contains(ckKeyBar(s), "esc close") }, uiTimeout); err != nil {
+		t.Fatalf("ASSERTION: esc did not leave copy mode and then the focus: %v\n%s", err, term.Snapshot())
+	}
 	if err := term.SendKeys(tuitest.Esc); err != nil {
 		t.Fatal(err)
 	}

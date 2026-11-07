@@ -211,8 +211,11 @@ func (m *OS) cockpitRegionKey(action string) (tea.Cmd, bool) {
 }
 
 // cockpitFocusKey scrolls the thread with the moves: j k a line, the page
-// keys a screen, g G the ends.
+// keys a screen, g G the ends. y starts copy mode over the thread.
 func (m *OS) cockpitFocusKey(action string) (tea.Cmd, bool) {
+	if action == config.ActionInboxResume && m.CockpitCopyStart() {
+		return nil, true
+	}
 	t := m.cockpitThread()
 	if t == nil || len(t.entries) == 0 {
 		switch action {
@@ -277,6 +280,9 @@ func (m *OS) cockpitFocusHints() []overlay.Hint {
 	hints = append(hints, pair(config.ActionInboxPromptPrev, config.ActionInboxPromptNext, "prompts")...)
 	hints = append(hints, pair(config.ActionInboxTabPrev, config.ActionInboxTabNext, "tabs")...)
 	hints = append(hints, m.keyHints(config.ActionInboxExpand, "expand")...)
+	if m.cockpitTab() == "Thread" {
+		hints = append(hints, m.keyHints(config.ActionInboxResume, "copy")...)
+	}
 	if m.inboxReplySupported() {
 		hints = append(hints, m.keyHints(config.ActionInboxWrite, "reply")...)
 	}

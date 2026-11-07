@@ -14481,7 +14481,8 @@ Repeat from `e2e/tui` with
 reads each yank back with `tuios show-buffer`: a wrapped paragraph (one line,
 no indent), a code block (its own indent), a prompt (no card edge) and Y on an
 edit (a diff block). It waits for the selection to be drawn, and checks that
-esc leaves copy mode and the next esc closes the view.
+esc leaves copy mode and the next esc closes the view. In the focus region, y
+starts copy mode too.
 
 Run on 2026-11-07 on macOS (arm64), each control its own binary:
 
@@ -14492,6 +14493,7 @@ Run on 2026-11-07 on macOS (arm64), each control its own binary:
 | The wrap flag left off `ckMD.text`'s lines | "the paragraph's yank is" | **caught** |
 | The `cockpitTouch` cut from `CockpitCopy` | "the selection is not drawn" (a bug of an early build: a key did not redraw the view) | **caught** |
 | `ckGlyphSet` empty | passes | **not caught** |
+| y in the focus region not sent to `CockpitCopyStart` (2026-11-08, after the regions landed) | "y in the focus region did not start copy mode" | **caught** |
 
 The glyph set is not caught: the card edge is drawn from a field of its own
 and is never text, and no row this test yanks starts with a fold or state

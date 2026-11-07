@@ -2601,7 +2601,8 @@ The newest card is at the bottom. The wheel over the thread, or `J` and `K`,
 scrolls it. `[` and `]` switch between the Thread and Changes tabs: Changes
 shows every edit of the last turn whole.
 
-`ctrl+b` `[` starts copy mode over the thread, with the keys of a pane's copy
+`ctrl+b` `[` starts copy mode over the thread, and so does `y` in the focus
+region. It has the keys of a pane's copy
 mode: the motions, `/` and `?` to search, `v`, `V` and `ctrl+v` to select,
 and `y` to copy. A copy is the text as the agent wrote it: a paragraph the
 thread wraps is one line, and the card edges, the marks and the indent of the

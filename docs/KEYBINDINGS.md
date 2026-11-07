@@ -1915,7 +1915,7 @@ Inside it:
 | `J` `K` | Scroll the thread, or a long plan waiting for a yes. On the Artifacts tab, move between the artifacts |
 | `{` `}` | Show the thread's previous or next prompt at the top. The ruler at the right of the thread marks each prompt |
 | `e` | Show every line of every card in the thread |
-| `ctrl+b` `[` | Copy mode over the thread: the pane's copy mode keys, and `Y` copies the selected entries as Markdown |
+| `ctrl+b` `[` | Copy mode over the thread (`y` in the focus region too): the pane's copy mode keys, and `Y` copies the selected entries as Markdown |
 | `F` | Fold or open the group of the row under the cursor. On a folded heading, `enter` also opens it |
 | `v` | Review the agent's changes |
 | `ctrl+]` | Go to the agent's pane and zoom it. `ctrl+b i` comes back to the same agent |
