@@ -501,6 +501,10 @@ func (a *App) approvalCard(c *ui.Context, pal *palette, ag client.Agent, it sess
 				// Say what the card waits for, rather than show nothing
 				// (QM-004): the header's Open pane stays until it knows.
 				ui.Text(c, locales.CockpitReadingPrompt()).FontSize(fsSmall).TextColor(pal.textMuted).MaxLines(2).MinWidth(0)
+				// The row keeps a button's height while it reads, so the
+				// card does not grow under the pointer when the answers
+				// come (Mac round 1, feel S4).
+				ui.Box(c).Size(0, hControl).Shrink(0)
 			} else if len(opts) == 0 && (pk == nil || !pk.loading) {
 				// Nothing here can answer it: say so, and offer the pane.
 				ui.Text(c, locales.CockpitAnswerInPane()).FontSize(fsSmall).TextColor(pal.textMuted).MaxLines(2).MinWidth(0)

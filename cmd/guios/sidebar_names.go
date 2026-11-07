@@ -114,7 +114,7 @@ func (a *App) sessionLines(s *proto.Session, g *proto.GitInfo, nested bool) (lin
 		// ./..." (Mac round 1, workflow S2). Other messages stay as sent.
 		if v, _, _ := strings.Cut(m, " "); strings.EqualFold(v, "approve") || strings.EqualFold(v, "allow") {
 			if tool, target, ok := ckAsk(m); ok {
-				m = strings.TrimSpace(locales.CockpitAllowTool(tool) + " " + target)
+				m = strings.TrimSpace(locales.CockpitAllowTool(tool) + " " + ckShortTarget(tool, target, s.WorkDir()))
 			}
 		}
 		return m, true, line3

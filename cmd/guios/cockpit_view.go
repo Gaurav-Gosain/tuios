@@ -11,6 +11,7 @@ import (
 
 	"github.com/Gaurav-Gosain/tuios/internal/guios/client"
 	"github.com/Gaurav-Gosain/tuios/internal/guios/proto"
+	"github.com/Gaurav-Gosain/tuios/internal/integration"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 
 	"github.com/Gaurav-Gosain/tuios/cmd/guios/locales"
@@ -360,7 +361,7 @@ func ckLine2(ag client.Agent, it *session.AttentionItem) (verb, rest string) {
 		switch it.Kind {
 		case session.AttentionApproval, session.AttentionPlan:
 			if tool, target, ok := ckAsk(s); ok {
-				return locales.CockpitAllowTool(tool), target
+				return locales.CockpitAllowTool(tool), ckShortTarget(tool, target, ag.Cwd)
 			}
 			return locales.CockpitKindApproval(), s
 		case session.AttentionQuestion, session.AttentionAsk:
@@ -379,6 +380,20 @@ func ckLine2(ag client.Agent, it *session.AttentionItem) (verb, rest string) {
 		return "", ag.Message
 	}
 	return "", ""
+}
+
+// ckShortTarget is what a row shows of an approval's target: an edit's path
+// relative to the agent's folder ("retry/backoff.go"), or from home when it
+// is outside it, so the file name is not cut off behind a long folder
+// (Mac round 1, workflow S1). Any other tool's target is shown as sent.
+func ckShortTarget(tool, target, cwd string) string {
+	if !slices.Contains(integration.EditTools, tool) || !filepath.IsAbs(target) {
+		return target
+	}
+	if cwd = strings.TrimSuffix(cwd, "/"); cwd != "" && strings.HasPrefix(target, cwd+"/") {
+		return strings.TrimPrefix(target, cwd+"/")
+	}
+	return proto.ShortDir(target)
 }
 
 // ckStopped reports whether a row's text is old: the agent is at rest or
