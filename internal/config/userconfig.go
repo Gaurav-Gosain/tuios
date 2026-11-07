@@ -1134,7 +1134,7 @@ type KeybindingsConfig struct {
 	// into. See getDefaultListsKeybinds.
 	Lists map[string][]string `toml:"lists"`
 	// Sidebar binds are looked up only while the rail owns the keyboard
-	// (SidebarFocused), through GetSidebarAction. They are deliberately kept out
+	// (SidebarFocused), through Action(TableSidebar). They are deliberately kept out
 	// of buildMappings: that flattens sections into the global keymap, which would
 	// leak rail keys (j/k/h/l/enter) onto panes.
 	Sidebar map[string][]string `toml:"sidebar"`
@@ -1151,7 +1151,7 @@ type KeybindingsConfig struct {
 	QuickLook       map[string][]string `toml:"quick_look"`
 	QuickLookInside map[string][]string `toml:"quick_look_inside"`
 	// Inbox binds are live while the Inbox is open and its selector line is
-	// not, through GetInboxAction. The digits 1 to 9 are not in it: they
+	// not, through Action(TableInbox). The digits 1 to 9 are not in it: they
 	// answer a held approval or a question by its number, which is the number
 	// the prompt itself shows. See getDefaultInboxKeybinds.
 	Inbox map[string][]string `toml:"inbox"`

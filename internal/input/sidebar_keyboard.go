@@ -68,7 +68,7 @@ func handleSidebarKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	// Every other key goes on to the rail, so the preview takes nothing from
 	// it: j and k still move the cursor, and the preview follows them (see
 	// QuickLookSync, run after every input).
-	if act := lookupAction(o, msg, o.KeybindRegistry.GetSidebarFilesAction); act == sidebarActFileQuickLook &&
+	if act := tableAction(o, msg, o.KeybindRegistry, config.TableSidebarFiles); act == sidebarActFileQuickLook &&
 		(o.QuickLookOpen() || o.SidebarCursorOnListing()) {
 		noteRailAction(o, act)
 		return o, o.SidebarQuickLook()
@@ -76,7 +76,7 @@ func handleSidebarKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	// Inside the file the scope takes every key, so a key that deletes on the
 	// list cannot reach the rail from here.
 	if o.QuickLookInside() {
-		act := lookupAction(o, msg, o.KeybindRegistry.GetQuickLookInsideAction)
+		act := tableAction(o, msg, o.KeybindRegistry, config.TableQuickLookInside)
 		if act != "" {
 			noteRailAction(o, act)
 		}
@@ -126,7 +126,7 @@ func handleSidebarKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	}
 	if o.QuickLookOpen() {
 		handled := false
-		act := lookupAction(o, msg, o.KeybindRegistry.GetQuickLookAction)
+		act := tableAction(o, msg, o.KeybindRegistry, config.TableQuickLook)
 		switch act {
 		case "seek_down", "half_down":
 			handled = o.QuickLookHalfPage(true)
@@ -158,7 +158,7 @@ func handleSidebarKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	// under the cursor is what decides which of the two answers. On every other
 	// row the lookup finds nothing and the rail's own binding runs, unchanged.
 	if o.SidebarCursorOnFile() {
-		if act := lookupAction(o, msg, o.KeybindRegistry.GetSidebarFilesAction); act != "" {
+		if act := tableAction(o, msg, o.KeybindRegistry, config.TableSidebarFiles); act != "" {
 			noteRailAction(o, act)
 			if o.LearnBlocksAction(act) {
 				return o, nil
@@ -172,7 +172,7 @@ func handleSidebarKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	// the rail's binding for it, so r and x keep renaming and opening the menu
 	// until reply and cancel are built.
 	if o.SidebarCursorOnAgent() {
-		if act := lookupAction(o, msg, o.KeybindRegistry.GetSidebarAgentsAction); act != "" {
+		if act := tableAction(o, msg, o.KeybindRegistry, config.TableSidebarAgents); act != "" {
 			if cmd, handled := o.SidebarAgentAction(act); handled {
 				noteRailAction(o, act)
 				return o, cmd
@@ -180,7 +180,7 @@ func handleSidebarKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		}
 	}
 
-	action := lookupAction(o, msg, o.KeybindRegistry.GetSidebarAction)
+	action := tableAction(o, msg, o.KeybindRegistry, config.TableSidebar)
 	if action == "" {
 		// A global bind, on a key the rail does not bind itself.
 		//
@@ -208,7 +208,7 @@ func handleSidebarKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 
 		// A terminal focus key pointing back at the panes leaves the rail, so
 		// the key that walked into it from the outermost pane walks back out.
-		focus := lookupAction(o, msg, o.KeybindRegistry.GetTerminalModeAction)
+		focus := tableAction(o, msg, o.KeybindRegistry, config.TableTerminalMode)
 		if dir, ok := strings.CutPrefix(focus, "terminal_focus_"); ok && o.LeaveRailToward(dir) {
 			return o, nil
 		}

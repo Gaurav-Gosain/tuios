@@ -153,7 +153,7 @@ func (m *OS) transfersKeyHint(action, label string) (overlay.Hint, bool) {
 	if reg == nil {
 		reg = defaultInboxKeys()
 	}
-	keys := reg.GetTransfersKeys(action)
+	keys := reg.Keys(config.TableTransfers, action)
 	if len(keys) == 0 {
 		return overlay.Hint{}, false
 	}
@@ -171,7 +171,7 @@ func (m *OS) transfersKey(action string) string {
 	if reg == nil {
 		reg = defaultInboxKeys()
 	}
-	for _, k := range reg.GetTransfersKeys(action) {
+	for _, k := range reg.Keys(config.TableTransfers, action) {
 		if k = strings.TrimSpace(k); k != "" {
 			return k
 		}
@@ -195,7 +195,7 @@ func (m *OS) railSendKey() string {
 	if reg == nil {
 		reg = defaultInboxKeys()
 	}
-	for _, k := range reg.GetSidebarFilesKeys("file_send") {
+	for _, k := range reg.Keys(config.TableSidebarFiles, "file_send") {
 		if k = strings.TrimSpace(k); k != "" {
 			return k
 		}

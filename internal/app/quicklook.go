@@ -17,6 +17,7 @@ import (
 	"charm.land/lipgloss/v2"
 
 	"github.com/Gaurav-Gosain/tuios/internal/composer"
+	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/diffview"
 	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 	"github.com/Gaurav-Gosain/tuios/internal/markdown"
@@ -912,14 +913,14 @@ func (m *OS) renderQuickLook() (string, int, int) {
 	innerW, bodyH := m.quickLookSize()
 	l, dv := m.quickLookLook(pal)
 	key := "space"
-	if keys := m.KeybindRegistry.GetSidebarFilesKeys("file_quick_look"); len(keys) > 0 {
+	if keys := m.KeybindRegistry.Keys(config.TableSidebarFiles, "file_quick_look"); len(keys) > 0 {
 		key = keys[0]
 	}
 	var seekKey, insideKey string
-	if keys := m.KeybindRegistry.GetQuickLookKeys("seek_down"); len(keys) > 0 {
+	if keys := m.KeybindRegistry.Keys(config.TableQuickLook, "seek_down"); len(keys) > 0 {
 		seekKey = keys[0]
 	}
-	if keys := m.KeybindRegistry.GetQuickLookKeys("go_inside"); len(keys) > 0 {
+	if keys := m.KeybindRegistry.Keys(config.TableQuickLook, "go_inside"); len(keys) > 0 {
 		insideKey = keys[0]
 	}
 	// The border is in the key: the frame glyphs are a package global set from
@@ -1363,7 +1364,7 @@ func (m *OS) quickLookHints(closeKey string) []overlay.Hint {
 		return keys[0]
 	}
 	if ql.inside {
-		in := reg.GetQuickLookInsideKeys
+		in := func(action string) []string { return reg.Keys(config.TableQuickLookInside, action) }
 		h := add(nil, first(in("go_back")), "back to files")
 		if ql.quickLookOffMain() {
 			h = add(h, first(in("next_view")), "next view")
@@ -1409,7 +1410,7 @@ func (m *OS) quickLookHints(closeKey string) []overlay.Hint {
 		h = add(h, first(in("full_size")), "full size")
 		return add(h, closeKey, "close")
 	}
-	out := reg.GetQuickLookKeys
+	out := func(action string) []string { return reg.Keys(config.TableQuickLook, action) }
 	h := add(nil, closeKey, "close")
 	if quickLookMoves(ql.res) {
 		label := "half page"

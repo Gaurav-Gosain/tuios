@@ -18,17 +18,17 @@ func TestLayoutPrefixDefaultsYieldToUserKeys(t *testing.T) {
 	r := config.NewKeybindRegistry(cfg)
 
 	for range 50 {
-		if got := r.GetLayoutPrefixAction("o"); got != "toggle_tiling" {
+		if got := r.Action(config.TableLayoutPrefix, "o"); got != "toggle_tiling" {
 			t.Fatalf("layout prefix o = %q, want the user's toggle_tiling", got)
 		}
-		if got := r.GetLayoutPrefixAction("enter"); got != "restore_all" {
+		if got := r.Action(config.TableLayoutPrefix, "enter"); got != "restore_all" {
 			t.Fatalf("layout prefix enter = %q, want the user's restore_all", got)
 		}
 	}
 	if keys, ok := cfg.Keybindings.LayoutPrefix["cycle_master_position"]; ok {
 		t.Errorf("cycle_master_position was filled with %v over the user's o", keys)
 	}
-	if got := r.GetLayoutPrefixAction("m"); got != "focus_master" {
+	if got := r.Action(config.TableLayoutPrefix, "m"); got != "focus_master" {
 		t.Errorf("layout prefix m = %q, want the default focus_master", got)
 	}
 }

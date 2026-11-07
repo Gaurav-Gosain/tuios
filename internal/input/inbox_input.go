@@ -83,7 +83,7 @@ func handleInboxInput(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	}
 	key := msg.String()
 	marks := o.InboxAgentsMarks() > 0
-	action := lookupAction(o, msg, overlayKeys(o).GetInboxAction)
+	action := tableAction(o, msg, overlayKeys(o), config.TableInbox)
 	switch action {
 	case config.ActionInboxMark:
 		noteInboxAction(o, action)
@@ -198,7 +198,7 @@ func handleInboxReplyInput(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	// In the agents view the key that views the pane works while the editor
 	// is open: the draft is kept, as esc keeps it. The composer binds no
 	// ctrl+] of its own.
-	if o.InboxAgentsOn() && lookupAction(o, msg, overlayKeys(o).GetInboxAction) == config.ActionInboxViewPane {
+	if o.InboxAgentsOn() && tableAction(o, msg, overlayKeys(o), config.TableInbox) == config.ActionInboxViewPane {
 		o.InboxReplyCancel()
 		return o, o.InboxAgentsViewPane()
 	}
@@ -233,7 +233,7 @@ func handleInboxPeekInput(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		o.InboxPeekAsk(harness.ActionChoose, key)
 		return o, nil
 	}
-	action := lookupAction(o, msg, overlayKeys(o).GetInboxPeekAction)
+	action := tableAction(o, msg, overlayKeys(o), config.TableInboxPeek)
 	if action == "" {
 		return o, nil
 	}

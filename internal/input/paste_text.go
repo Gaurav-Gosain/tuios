@@ -249,7 +249,7 @@ func pasteKeyIntoTextField(msg tea.KeyPressMsg, o *app.OS) (tea.Cmd, bool) {
 	if o.ProcessingRemoteKeys {
 		return nil, false
 	}
-	if msg.String() != "ctrl+v" && sectionAction(msg, o, (*config.KeybindRegistry).GetTerminalModeAction) != terminalPasteHost {
+	if msg.String() != "ctrl+v" && sectionAction(msg, o, config.TableTerminalMode) != terminalPasteHost {
 		return nil, false
 	}
 	if textFieldPaste(o) == nil {

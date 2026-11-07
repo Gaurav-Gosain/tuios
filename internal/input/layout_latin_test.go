@@ -69,7 +69,7 @@ func TestUnboundLatinLetterDoesNothing(t *testing.T) {
 			if got := lookupAction(nil, tc.msg, o.KeybindRegistry.GetAction); got != "" {
 				t.Fatalf("%s resolves to %q in window mode", tc.msg.Text, got)
 			}
-			if got := lookupAction(nil, tc.msg, o.KeybindRegistry.GetPrefixAction); got != "" {
+			if got := tableAction(nil, tc.msg, o.KeybindRegistry, config.TablePrefixMode); got != "" {
 				t.Fatalf("%s resolves to %q after the leader", tc.msg.Text, got)
 			}
 			before := len(o.Windows)

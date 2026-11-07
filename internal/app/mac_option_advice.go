@@ -50,7 +50,7 @@ func (m *OS) noteOptionProblem(bound, named string) {
 	// Only worth saying for a chord that is bound to something. A stray µ typed
 	// into a shell is not a misfiring keybinding.
 	if m.KeybindRegistry.GetAction(bound) == "" &&
-		m.KeybindRegistry.GetTerminalModeAction(bound) == "" {
+		m.KeybindRegistry.Action(config.TableTerminalMode, bound) == "" {
 		return
 	}
 	chord := named

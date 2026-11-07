@@ -290,7 +290,7 @@ func prepareFarOpen(ask farOpenAsk, files config.FilesConfig, hint string, onHos
 // as it is bound.
 func (m *OS) farSendHint() string {
 	if m.KeybindRegistry != nil {
-		if keys := m.KeybindRegistry.GetSidebarFilesKeys("file_send"); len(keys) > 0 {
+		if keys := m.KeybindRegistry.Keys(config.TableSidebarFiles, "file_send"); len(keys) > 0 {
 			return " Press " + keys[0] + " to send it to a folder here."
 		}
 	}

@@ -33,14 +33,14 @@ func TestOlderConfigStillResolvesTheWorkspaceRenameKey(t *testing.T) {
 	// And the registry the workspace prefix handler asks resolves the key.
 	r := NewKeybindRegistry(cfg)
 	for _, k := range keys {
-		if got := r.GetWorkspacePrefixAction(k); got != "workspace_prefix_rename" {
+		if got := r.Action(TableWorkspacePrefix, k); got != "workspace_prefix_rename" {
 			t.Errorf("the workspace prefix key %q resolved to %q, want workspace_prefix_rename", k, got)
 		}
 	}
 
 	// The chord must not have taken a key the numbers need.
 	for _, digit := range []string{"1", "2", "3", "9"} {
-		if r.GetWorkspacePrefixAction(digit) == "workspace_prefix_rename" {
+		if r.Action(TableWorkspacePrefix, digit) == "workspace_prefix_rename" {
 			t.Errorf("rename swallowed the workspace key %q", digit)
 		}
 	}

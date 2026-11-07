@@ -17,13 +17,11 @@ import (
 // lock modifiers never appear in either spelling, so Num Lock (on by default on
 // most keyboards) does not hide the binding the way an exact Mod comparison
 // would. TestGlobalBindsAcrossEncodings pins all of it.
-func sectionAction(msg tea.KeyPressMsg, o *app.OS, lookup sectionLookup) string {
+func sectionAction(msg tea.KeyPressMsg, o *app.OS, table config.Table) string {
 	if o.KeybindRegistry == nil {
 		return ""
 	}
-	return lookupAction(o, msg, func(key string) string {
-		return lookup(o.KeybindRegistry, key)
-	})
+	return tableAction(o, msg, o.KeybindRegistry, table)
 }
 
 // handleGlobalBinds runs the global-scope binds, the ones that act in window
@@ -39,5 +37,5 @@ func handleGlobalBinds(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd, bool) 
 	// action that goes through the dispatcher. These two do not, so without the
 	// line here the one probe that says whether a key reached its action is
 	// blind to the whole global section. See NoteAction.
-	return dispatchAction(sectionAction(msg, o, (*config.KeybindRegistry).GetGlobalAction), msg, o)
+	return dispatchAction(sectionAction(msg, o, config.TableGlobal), msg, o)
 }

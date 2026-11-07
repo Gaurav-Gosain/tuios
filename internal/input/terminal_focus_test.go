@@ -246,12 +246,12 @@ func TestAltArrowsResolveInAConfigPredatingThem(t *testing.T) {
 		"up":    "terminal_focus_up",
 		"down":  "terminal_focus_down",
 	} {
-		if got := r.GetTerminalModeAction("alt+" + dir); got != want {
+		if got := r.Action(config.TableTerminalMode, "alt+"+dir); got != want {
 			t.Errorf("alt+%s resolved to %q, want %q", dir, got, want)
 		}
 	}
 	// The user's own binding survives the fill.
-	if got := r.GetTerminalModeAction("alt+n"); got != "terminal_next_window" {
+	if got := r.Action(config.TableTerminalMode, "alt+n"); got != "terminal_next_window" {
 		t.Errorf("alt+n resolved to %q, want terminal_next_window", got)
 	}
 }

@@ -58,8 +58,8 @@ func TestAltShiftKeysSpellWhatTheTerminalSends(t *testing.T) {
 		key, want string
 		lookup    func(string) string
 	}{
-		{"alt+n", "terminal_next_window", registry.GetTerminalModeAction},
-		{"alt+p", "terminal_prev_window", registry.GetTerminalModeAction},
+		{"alt+n", "terminal_next_window", func(k string) string { return registry.Action(config.TableTerminalMode, k) }},
+		{"alt+p", "terminal_prev_window", func(k string) string { return registry.Action(config.TableTerminalMode, k) }},
 		{"alt+1", "switch_workspace_1", registry.GetAction},
 		{"alt+9", "switch_workspace_9", registry.GetAction},
 	} {

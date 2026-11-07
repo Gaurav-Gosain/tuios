@@ -109,7 +109,7 @@ func HandleTerminalModeKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	// compositor) gets the key itself: it has no scrollback to show, and
 	// Shift+Up is a key it uses. A pane already in copy mode keeps scrolling.
 	if focusedWindow != nil && keyScrollsPane(focusedWindow) && !o.Locked() {
-		action := sectionAction(msg, o, (*config.KeybindRegistry).GetTerminalModeAction)
+		action := sectionAction(msg, o, config.TableTerminalMode)
 		if handleTerminalScrollBinding(action, o, focusedWindow) {
 			return o, nil
 		}
@@ -247,7 +247,7 @@ func HandleTerminalModeKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	}
 	// The key's terminal-mode action, looked up once for the checks below.
 	// It depends on the key and the registry alone.
-	terminalAction := sectionAction(msg, o, (*config.KeybindRegistry).GetTerminalModeAction)
+	terminalAction := sectionAction(msg, o, config.TableTerminalMode)
 	nvimNavigation := false
 	if isTerminalFocusAction(terminalAction) {
 		nvimNavigation = o.NvimNavigationForwarding(nvimNavigationDirection(terminalAction))
@@ -385,7 +385,7 @@ func recordTerminalKey(o *app.OS, msg tea.KeyPressMsg) {
 // to the table stayed invisible until someone added a case, and the key it was
 // bound to silently dismissed the chord instead. One route, one table.
 func handleTerminalLayoutPrefix(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
-	return runPrefix(msg, o, (*config.KeybindRegistry).GetLayoutPrefixAction)
+	return runPrefix(msg, o, config.TableLayoutPrefix)
 }
 
 // handleLayoutPrefixLoad opens the layout picker on the saved layouts.

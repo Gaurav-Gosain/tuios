@@ -3,6 +3,7 @@ package input
 import (
 	tea "charm.land/bubbletea/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/app"
+	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
 
@@ -89,7 +90,7 @@ func handleTerminalMouseBinding(msg tea.MouseClickMsg, o *app.OS, clicked int) (
 	if msg.Mod == 0 && win.Terminal != nil && win.Terminal.HasMouseMode() {
 		return o, nil, false
 	}
-	action := o.KeybindRegistry.GetTerminalModeAction(msg.String())
+	action := o.KeybindRegistry.Action(config.TableTerminalMode, msg.String())
 	if !terminalMouseActionCanRun(action, win) {
 		return o, nil, false
 	}

@@ -26,7 +26,7 @@ func TestHintsDefaultYieldsToAUserBinding(t *testing.T) {
 			if keys, ok := pm["hints"]; ok {
 				t.Errorf("hints was filled in with %q over the user's %s", keys, spelling)
 			}
-			if got := NewKeybindRegistry(cfg).GetPrefixAction("F"); got != "prefix_fullscreen" {
+			if got := NewKeybindRegistry(cfg).Action(TablePrefixMode, "F"); got != "prefix_fullscreen" {
 				t.Errorf("leader F runs %q, want prefix_fullscreen", got)
 			}
 			want := []YieldedDefault{{Section: "prefix_mode", Action: "hints", Key: "F", TakenBy: "prefix_fullscreen"}}
@@ -84,7 +84,7 @@ func TestHintsDefaultFillsAFreeKey(t *testing.T) {
 	if got := cfg.Keybindings.PrefixMode["hints"]; !slices.Equal(got, []string{"F"}) {
 		t.Errorf("hints = %q, want [F]", got)
 	}
-	if got := NewKeybindRegistry(cfg).GetPrefixAction("F"); got != "hints" {
+	if got := NewKeybindRegistry(cfg).Action(TablePrefixMode, "F"); got != "hints" {
 		t.Errorf("leader F runs %q, want hints", got)
 	}
 	if len(cfg.YieldedDefaults) != 0 {

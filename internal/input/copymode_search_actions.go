@@ -41,12 +41,12 @@ func copyModeSearchActionKey(msg tea.KeyPressMsg, o *app.OS, window *terminal.Wi
 		return a == config.ActionCopyModeSearchForward || a == config.ActionCopyModeSearchBackward ||
 			a == config.ActionClearScrollback
 	}
-	action := sectionAction(msg, o, (*config.KeybindRegistry).GetGlobalAction)
+	action := sectionAction(msg, o, config.TableGlobal)
 	if !isSearchAction(action) {
 		if o.Mode == app.TerminalMode {
-			action = sectionAction(msg, o, (*config.KeybindRegistry).GetTerminalModeAction)
-		} else {
-			action = sectionAction(msg, o, (*config.KeybindRegistry).GetAction)
+			action = sectionAction(msg, o, config.TableTerminalMode)
+		} else if o.KeybindRegistry != nil {
+			action = lookupAction(o, msg, o.KeybindRegistry.GetAction)
 		}
 	}
 	if !isSearchAction(action) {

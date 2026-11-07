@@ -83,7 +83,7 @@ func copyModeFocusKey(msg tea.KeyPressMsg, o *app.OS, window *terminal.Window) (
 	}
 	var action string
 	if o.Mode == app.TerminalMode {
-		action = lookupAction(o, msg, o.KeybindRegistry.GetTerminalModeAction)
+		action = tableAction(o, msg, o.KeybindRegistry, config.TableTerminalMode)
 		if !isTerminalFocusAction(action) {
 			return nil, false
 		}
@@ -99,7 +99,7 @@ func copyModeFocusKey(msg tea.KeyPressMsg, o *app.OS, window *terminal.Window) (
 
 // copyModeAction is the [keybindings.copy_mode] action msg is bound to, or "".
 func copyModeAction(msg tea.KeyPressMsg, o *app.OS) string {
-	return lookupAction(o, msg, overlayKeys(o).GetCopyModeAction)
+	return tableAction(o, msg, overlayKeys(o), config.TableCopyMode)
 }
 
 // dispatchCopyModeKey runs one copy-mode key against one pane, under that

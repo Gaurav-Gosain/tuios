@@ -68,7 +68,7 @@ func TestMacOptionChordsReachTheirBinding(t *testing.T) {
 			}
 			continue
 		}
-		lookup := registry.GetTerminalModeAction
+		lookup := func(key string) string { return registry.Action(config.TableTerminalMode, key) }
 		if tc.main {
 			lookup = registry.GetAction
 		}
@@ -130,7 +130,7 @@ func TestBareOptionGlyphsFollowTheConfig(t *testing.T) {
 			if runs {
 				want = k.want
 			}
-			lookup := registry.GetTerminalModeAction
+			lookup := func(key string) string { return registry.Action(config.TableTerminalMode, key) }
 			if k.main {
 				lookup = registry.GetAction
 			}
@@ -180,7 +180,7 @@ func TestComposedGlyphsAreNotChordsOffDarwin(t *testing.T) {
 		{Code: 'π', Text: "π"},
 		{Code: '¬', Text: "¬"},
 	} {
-		if got := lookupAction(nil, msg, registry.GetTerminalModeAction); got != "" {
+		if got := tableAction(nil, msg, registry, config.TableTerminalMode); got != "" {
 			t.Errorf("%q resolved to %q off darwin, want no action", msg.String(), got)
 		}
 	}

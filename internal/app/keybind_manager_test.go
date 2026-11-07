@@ -38,7 +38,7 @@ func TestBindingTakesEffectWithoutARestart(t *testing.T) {
 	if len(keys) < 2 {
 		t.Error("binding must append an alternative, not replace what was there")
 	}
-	if got := m.KeybindRegistry.GetTerminalModeAction("ctrl+alt+f9"); got != "terminal_next_window" {
+	if got := m.KeybindRegistry.Action(config.TableTerminalMode, "ctrl+alt+f9"); got != "terminal_next_window" {
 		t.Errorf("the registry resolves the new key to %q; it was not reloaded", got)
 	}
 	// And the freshly bound key is now in the report's swallow set, because

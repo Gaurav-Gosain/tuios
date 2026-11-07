@@ -708,7 +708,7 @@ func routeKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	// script finishes ScriptMode is left (see maybeExitFinishedScript) and the
 	// palette has the key back.
 	if o.ScriptMode &&
-		sectionAction(msg, o, (*config.KeybindRegistry).GetScriptAction) == "script_pause" {
+		sectionAction(msg, o, config.TableScript) == "script_pause" {
 		// Recorded here for the same reason the global binds record theirs: this
 		// route does not go through Dispatch, and an unrecorded route is one the
 		// reachability table cannot see. See NoteAction.
@@ -898,7 +898,7 @@ func isConfiguredKey(msg tea.KeyPressMsg, s *config.Settings, base rune, is func
 // without one the leader pressed two times keeps its leader_twice meaning.
 func leaderBoundInPrefix(msg tea.KeyPressMsg, o *app.OS) bool {
 	return o.PrefixActive && o.KeybindRegistry != nil &&
-		lookupAction(o, msg, o.KeybindRegistry.GetPrefixAction) != ""
+		tableAction(o, msg, o.KeybindRegistry, config.TablePrefixMode) != ""
 }
 
 // handlePrefixKey handles Ctrl+B prefix key activation

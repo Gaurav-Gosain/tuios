@@ -3,6 +3,7 @@ package input
 import (
 	tea "charm.land/bubbletea/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/app"
+	"github.com/Gaurav-Gosain/tuios/internal/config"
 )
 
 // armIfRepeatable keeps the prefix live when the command just run is one worth
@@ -38,7 +39,7 @@ func tryPrefixRepeat(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd, bool) {
 		o.ClearPrefixRepeat()
 		return o, nil, false
 	}
-	action := lookupAction(o, msg, o.KeybindRegistry.GetPrefixAction)
+	action := tableAction(o, msg, o.KeybindRegistry, config.TablePrefixMode)
 	if !prefixRepeats(o, action) {
 		o.ClearPrefixRepeat()
 		return o, nil, false

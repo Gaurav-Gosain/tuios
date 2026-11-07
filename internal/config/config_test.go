@@ -202,23 +202,23 @@ func TestSidebarKeybindsFilledForOlderConfig(t *testing.T) {
 		t.Fatal("an older config loaded with an empty rail keymap; every rail key would be swallowed")
 	}
 	for key, want := range map[string]string{"j": "cursor_down", "enter": "activate", "esc": "exit"} {
-		if got := r.GetSidebarAction(key); got != want {
-			t.Fatalf("GetSidebarAction(%q) = %q, want %q", key, got, want)
+		if got := r.Action(config.TableSidebar, key); got != want {
+			t.Fatalf("Action(TableSidebar, %q) = %q, want %q", key, got, want)
 		}
 	}
 }
 
 // TestSidebarKeybindsDoNotLeakToPanes checks the rail scope is exclusive by
-// construction: its keys resolve through GetSidebarAction but never through the
+// construction: its keys resolve through Action(TableSidebar) but never through the
 // global keymap, so j/k/h/l/enter cannot fire on a pane.
 func TestSidebarKeybindsDoNotLeakToPanes(t *testing.T) {
 	r := config.NewKeybindRegistry(config.DefaultConfig())
 
-	if got := r.GetSidebarAction("j"); got != "cursor_down" {
-		t.Fatalf("GetSidebarAction(j) = %q, want cursor_down", got)
+	if got := r.Action(config.TableSidebar, "j"); got != "cursor_down" {
+		t.Fatalf("Action(TableSidebar, j) = %q, want cursor_down", got)
 	}
-	if got := r.GetSidebarAction("J"); got != "reorder_down" {
-		t.Fatalf("GetSidebarAction(J) = %q, want reorder_down (case matters)", got)
+	if got := r.Action(config.TableSidebar, "J"); got != "reorder_down" {
+		t.Fatalf("Action(TableSidebar, J) = %q, want reorder_down (case matters)", got)
 	}
 	// The rail's cursor keys must not resolve to a rail action through the global
 	// keymap; if they did, pressing j on a pane would run a rail action.
@@ -249,20 +249,20 @@ func TestAgentsKeybindsFilledForAPreExistingSidebarSection(t *testing.T) {
 	// the half of the fixture the defaults cannot imitate, so it is what says
 	// the file was loaded rather than skipped over.
 	for key, gone := range map[string]string{"down": "cursor_down", "s": "exit"} {
-		if got := r.GetSidebarAction(key); got == gone {
-			t.Fatalf("GetSidebarAction(%q) still answers %q, so the fixture was never loaded", key, gone)
+		if got := r.Action(config.TableSidebar, key); got == gone {
+			t.Fatalf("Action(TableSidebar, %q) still answers %q, so the fixture was never loaded", key, gone)
 		}
 	}
 	// Filling is per key, not per section: a section the file already names
 	// still gains the keys it predates.
 	for key, want := range map[string]string{"f": "agents_filter", "o": "agents_sort"} {
-		if got := r.GetSidebarAction(key); got != want {
-			t.Fatalf("GetSidebarAction(%q) = %q, want %q: the new keys never reached an existing section", key, got, want)
+		if got := r.Action(config.TableSidebar, key); got != want {
+			t.Fatalf("Action(TableSidebar, %q) = %q, want %q: the new keys never reached an existing section", key, got, want)
 		}
 	}
 	// The keys the file did set are still its own.
-	if got := r.GetSidebarAction("j"); got != "cursor_down" {
-		t.Fatalf("GetSidebarAction(j) = %q, want cursor_down", got)
+	if got := r.Action(config.TableSidebar, "j"); got != "cursor_down" {
+		t.Fatalf("Action(TableSidebar, j) = %q, want cursor_down", got)
 	}
 }
 
@@ -289,18 +289,18 @@ func TestSidebarFileKeybindsFilledForOlderConfig(t *testing.T) {
 		"x": "file_cut",
 		"p": "file_paste",
 	} {
-		if got := r.GetSidebarFilesAction(key); got != want {
-			t.Errorf("GetSidebarFilesAction(%q) = %q, want %q", key, got, want)
+		if got := r.Action(config.TableSidebarFiles, key); got != want {
+			t.Errorf("Action(TableSidebarFiles, %q) = %q, want %q", key, got, want)
 		}
 	}
 
 	// And the rail's own keys still mean what they meant. The two sections share
 	// r and x, and the rail's meaning is what a row outside the listing gets.
-	if got := r.GetSidebarAction("r"); got != "rename" {
-		t.Errorf("GetSidebarAction(r) = %q, want rename", got)
+	if got := r.Action(config.TableSidebar, "r"); got != "rename" {
+		t.Errorf("Action(TableSidebar, r) = %q, want rename", got)
 	}
-	if got := r.GetSidebarAction("x"); got != "kill" {
-		t.Errorf("GetSidebarAction(x) = %q, want kill", got)
+	if got := r.Action(config.TableSidebar, "x"); got != "kill" {
+		t.Errorf("Action(TableSidebar, x) = %q, want kill", got)
 	}
 	// The file keys must not leak onto a pane either.
 	if got := r.GetAction("d"); got == "file_delete" {

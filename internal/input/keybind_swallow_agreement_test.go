@@ -89,7 +89,7 @@ func TestBuiltInSwallowsAreNotConfigurable(t *testing.T) {
 		if s.Origin != "built-in" || s.Action == "leader" {
 			continue
 		}
-		if action := registry.GetTerminalModeAction(s.Key); action != "" {
+		if action := registry.Action(config.TableTerminalMode, s.Key); action != "" {
 			t.Errorf("%s is reported as built-in but the terminal_mode table binds it to %q",
 				s.Key, action)
 		}

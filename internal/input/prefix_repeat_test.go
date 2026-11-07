@@ -116,7 +116,7 @@ func prefixKeyFor(t *testing.T, m *app.OS, action string) (tea.KeyPressMsg, bool
 		"left", "right", "up", "down", "h", "j", "k", "l",
 		"n", "p", "a", "c", "z", "s", "w", "q", "ctrl+p",
 	} {
-		if m.KeybindRegistry.GetPrefixAction(k) == action {
+		if m.KeybindRegistry.Action(config.TablePrefixMode, k) == action {
 			if len(k) == 1 {
 				return tea.KeyPressMsg{Code: rune(k[0]), Text: k}, true
 			}
