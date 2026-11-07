@@ -117,12 +117,20 @@ func (a *App) openSettings(page string) {
 	a.ss.draft = map[string]string{}
 	a.refreshAgents()
 	a.refreshService()
-	a.setWin = mygo.NewWindow(framed(mygo.WindowOptions{
+	opts := mygo.WindowOptions{
 		Title: locales.SettingsTitle(), Width: 820, Height: 620, MinWidth: 700, MinHeight: 480,
 		StateKey: "settings",
 		Vibrancy: vibrancyFor(a.set),
 		Content:  ui.View(a.settingsView),
-	}))
+	}
+	if a.win != nil && a.win.IsFullScreen() {
+		// Over a main window in full screen, Settings opened as a full
+		// screen Space of its own, with its page spread across the
+		// display (Mac round 2, feel S4). As the main window's child that
+		// cannot go full screen, it shows over it there at its own size.
+		opts.Parent, opts.DisableFullScreen = a.win, true
+	}
+	a.setWin = mygo.NewWindow(framed(opts))
 	a.setWin.OnClosed(func() {
 		offUpdates()
 		a.setWin = nil
