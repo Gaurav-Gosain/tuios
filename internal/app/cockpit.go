@@ -82,6 +82,9 @@ const (
 	ckRowFan
 	// ckRowCard is a task card on the board (cockpit_board.go).
 	ckRowCard
+	// ckRowBand heads the rows of one session, machine or project when
+	// the list is grouped by one (cockpit_groupby.go).
+	ckRowBand
 )
 
 // ckRow is one row of the fleet.
@@ -110,6 +113,8 @@ type ckRow struct {
 	// rows the fold hides, for the marks on the heading and the focus.
 	folded bool
 	hidden []ckRow
+	// title names a band's heading.
+	title string
 	// rest lets the cursor rest on a heading: a column of the board's
 	// columns that shows no card.
 	rest bool
@@ -139,8 +144,12 @@ type cockpitState struct {
 	// cockpit_layout.go.
 	listWidth  int
 	sideHidden bool
-	zoom       bool
-	div        ckDivider
+	// groupBy groups the list by session, machine or project, "" by state,
+	// and groupMenu is the picker s opens. See cockpit_groupby.go.
+	groupBy   string
+	groupMenu bool
+	zoom      bool
+	div       ckDivider
 	// key is the selected row, and akey its agent, so the cursor stays on
 	// an agent whose approval was answered and whose row key changed.
 	key, akey string
@@ -326,6 +335,7 @@ type ckRowsKey struct {
 	arts    uint64
 	colH    int
 	oneLine bool
+	groupBy string
 	minute  int64
 	// foldWorking is [agents] fold_working, which a set-option can change.
 	foldWorking bool
@@ -391,6 +401,7 @@ func (m *OS) cockpitRows() []ckRow {
 		list: m.Inbox.agents.listAt, inbox: m.Inbox.Gen, gen: ck.rowsGen, colH: ck.colH, arts: m.tml.setGen<<20 + ck.art.gen,
 		oneLine: ck.oneLine, minute: now.Unix() / 60, foldWorking: m.ckFoldWorking(),
 		cards: ck.cardsGen, board: ck.board, stages: m.ckStagesShown(), kanban: m.kanbanOn(),
+		groupBy: m.ckGroupBy(),
 	}
 	if ck.rows != nil && ck.rowsAt == key {
 		return ck.rows
@@ -529,9 +540,46 @@ func (m *OS) buildCockpitRows(list []sidebarAgentEntry, now time.Time) []ckRow {
 
 	var rows []ckRow
 	ck.tall = 0
+	itemsOnly := ck.needsOnly || kindFilter
+	// add puts one row of group g in the list, with the subagent rows under
+	// it, and works out how many lines it takes.
+	add := func(g int, r ckRow) {
+		if r.kind == ckRowFan {
+			r.lines = 1
+			if m.ckWorktreeOf(list[r.agent]).prompt != "" {
+				r.lines = 2
+			}
+			ck.tall += r.lines
+			if ck.oneLine {
+				r.lines = 1
+			}
+			rows = append(rows, r)
+			return
+		}
+		r.lines = 2
+		var e sidebarAgentEntry
+		if r.agent >= 0 {
+			e = list[r.agent]
+		}
+		// An idle or settled row is one line, unless its chain has
+		// something waiting for the person: the second line says so.
+		chainWaits := r.agent >= 0 && m.childrenWaiting(e) > 0
+		if (g == ckIdle || g == ckSettled) && !chainWaits || g == ckSnoozed || r.kind == ckRowNote || r.attempt || !m.ckHasLine2(r, e) {
+			r.lines = 1
+		}
+		ck.tall += r.lines
+		if ck.oneLine {
+			r.lines = 1
+		}
+		rows = append(rows, r)
+		if r.kind == ckRowAgent && !r.hasItem && !r.attempt && !ck.oneLine {
+			rows = append(rows, ckChildRows(list[r.agent], g)...)
+		}
+	}
+	by := m.ckGroupBy()
+	var bands []ckBand
 	for g := range ckGroups {
 		items := m.ckGatherFans(groups[g], list)
-		itemsOnly := ck.needsOnly || kindFilter
 		if len(items) == 0 || itemsOnly && g != ckNeeds && g != ckSnoozed && g != ckReview {
 			continue
 		}
@@ -542,6 +590,12 @@ func (m *OS) buildCockpitRows(list []sidebarAgentEntry, now time.Time) []ckRow {
 			}
 		}
 		if n == 0 {
+			continue
+		}
+		if by != "" && g != ckNeeds {
+			// Grouped by session, machine or project: Needs you stays on
+			// top as it is, and the other rows go to their band.
+			bands = m.ckBandAdd(bands, by, g, items, itemsOnly, list)
 			continue
 		}
 		if len(rows) > 0 {
@@ -572,41 +626,19 @@ func (m *OS) buildCockpitRows(list []sidebarAgentEntry, now time.Time) []ckRow {
 			if r.selectable() {
 				shown++
 			}
-			if r.kind == ckRowFan {
-				r.lines = 1
-				if m.ckWorktreeOf(list[r.agent]).prompt != "" {
-					r.lines = 2
-				}
-				ck.tall += r.lines
-				if ck.oneLine {
-					r.lines = 1
-				}
-				rows = append(rows, r)
-				continue
-			}
-			r.lines = 2
-			var e sidebarAgentEntry
-			if r.agent >= 0 {
-				e = list[r.agent]
-			}
-			// An idle or settled row is one line, unless its chain has
-			// something waiting for the person: the second line says so.
-			chainWaits := r.agent >= 0 && m.childrenWaiting(e) > 0
-			if (g == ckIdle || g == ckSettled) && !chainWaits || g == ckSnoozed || r.kind == ckRowNote || r.attempt || !m.ckHasLine2(r, e) {
-				r.lines = 1
-			}
-			ck.tall += r.lines
-			if ck.oneLine {
-				r.lines = 1
-			}
-
-			rows = append(rows, r)
-			if r.kind == ckRowAgent && !r.hasItem && !r.attempt && !ck.oneLine {
-				rows = append(rows, ckChildRows(list[r.agent], g)...)
-			}
+			add(g, r)
 		}
 		if hidden := n - shown; hidden > 0 {
 			rows = append(rows, ckRow{kind: ckRowMore, group: g, count: hidden, lines: 1, key: "m:" + strconv.Itoa(g)})
+		}
+	}
+	for _, b := range bands {
+		if len(rows) > 0 {
+			rows = append(rows, ckRow{kind: ckRowGap, group: ckIdle, lines: 1, key: "bg:" + b.key})
+		}
+		rows = append(rows, ckRow{kind: ckRowBand, group: ckIdle, agent: -1, count: b.count, title: b.title, lines: 1, key: "b:" + b.key})
+		for _, br := range b.rows {
+			add(br.group, br.row)
 		}
 	}
 	return rows
@@ -1292,6 +1324,9 @@ func (m *OS) cockpitAction(action string) tea.Cmd {
 	switch action {
 	case "new":
 		return m.CockpitNewAgent()
+	case "group":
+		m.cockpitOpenGroupMenu()
+		return nil
 	case "board":
 		m.CockpitToggleBoard()
 	case "search":
@@ -1548,6 +1583,12 @@ func (m *OS) CockpitKey(action string) (tea.Cmd, bool) {
 		return cmd, true
 	}
 	switch action {
+	case config.ActionInboxSort:
+		if m.Inbox.ck.board {
+			return nil, false
+		}
+		m.cockpitOpenGroupMenu()
+		return nil, true
 	case config.ActionInboxRegionNext, config.ActionInboxRegionPrev:
 		d := 1
 		if action == config.ActionInboxRegionPrev {

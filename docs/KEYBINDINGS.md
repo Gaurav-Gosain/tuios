@@ -1903,7 +1903,7 @@ Inside it:
 | `\` | Show the agents as a column beside the focus, or as a strip of chips above it. tuios keeps the choice. See `view_list` in [CONFIGURATION.md](CONFIGURATION.md#the-agent-list) |
 | `o` | Open what the agent has shown, such as a TML form, on its Artifacts tab, and use it. `esc` goes back to the list |
 | `f` | Show only what needs you, then each kind of item, then every agent |
-| `s` | Step the order inside each group |
+| `s` | Group and sort: `1` groups by state (Needs you, Ready for review, Working, Idle, Settled), `2` by session, `3` by machine, `4` by project, and `s` again steps the order inside each group. Needs you stays on top in every grouping, and the header counts the agents by state in every one. tuios keeps the grouping. A click on Group in the header opens the same choice |
 | `/` | Search. A `key:value` term is a selector, such as `harness:codex` |
 | `d` `z` `u` `S` | Dismiss, snooze, undo, show the snoozed items |
 | `D` | Settle the agent: put it away until it needs you. It goes to Settled, and its finished turn closes. `D` on a settled agent takes it off the shelf, and `u` undoes a settle within 10 seconds. With marks, settle every marked agent. The Settle button in the focus header does the same |

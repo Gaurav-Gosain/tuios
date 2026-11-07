@@ -488,9 +488,15 @@ func (m *OS) drawCockpitHeader(c *ckCanvas, l ckLook, y, top int) {
 	if ck.board {
 		counts = m.ckAgentCounts()
 	} else {
+		banded := m.ckGroupBy() != ckGroupState
 		for _, r := range ck.rows {
-			if r.kind == ckRowHead {
+			switch {
+			case r.kind == ckRowHead:
 				counts[r.group] = r.count
+			case banded && r.group != ckNeeds && r.selectable():
+				// Grouped by session, machine or project, the rows keep
+				// their state group, which the counts still say.
+				counts[r.group]++
 			}
 		}
 	}
@@ -549,6 +555,13 @@ func (m *OS) drawCockpitHeader(c *ckCanvas, l ckLook, y, top int) {
 	x = c.text(x, y, 0, ckSeg{t: view + " ", fg: pal.FgDim}, ckSeg{t: l.g(ckGlyphOpen), fg: pal.FgMute})
 	ck.hits = append(ck.hits, ckHit{x0: bx0, y0: top + y, x1: x, y1: top + y + 1, kind: ckHitAction, action: "board"})
 	x += 3
+	if !ck.board {
+		// The list's grouping, which a click or s changes.
+		gx0 := x
+		x = c.text(x, y, 0, ckSeg{t: "Group: " + m.ckGroupingName() + " ", fg: pal.FgDim}, ckSeg{t: l.g(ckGlyphOpen), fg: pal.FgMute})
+		ck.hits = append(ck.hits, ckHit{x0: gx0, y0: top + y, x1: x, y1: top + y + 1, kind: ckHitAction, action: "group"})
+		x += 3
+	}
 	if !st.Live {
 		x = c.text(x, y, 0, ckSeg{t: "not connected", fg: pal.Warning}) + 3
 	}
@@ -927,6 +940,10 @@ func (m *OS) drawFleetRow(c *ckCanvas, l ckLook, r ckRow, cursor, hover bool, x,
 		}
 		c.hline(end+2, y, right-end-2, hzGlyph(), l.edgePanel)
 		ck.hits = append(ck.hits, ckHit{x0: x, y0: top + y, x1: x + w, y1: top + y + 1, kind: ckHitHead, group: r.group})
+		return
+	case ckRowBand:
+		end := c.text(x+2, y, right, ckSeg{t: r.title, fg: pal.FgDim, attrs: ckBold}, ckSeg{t: "  " + strconv.Itoa(r.count), fg: pal.FgMute})
+		c.hline(end+2, y, right-end-2, hzGlyph(), l.edgePanel)
 		return
 	case ckRowMore:
 		words := "+" + strconv.Itoa(r.count) + " more"
@@ -1838,6 +1855,8 @@ func (m *OS) cockpitHints(now time.Time) []overlay.Hint {
 		return hints
 	case st.selectEditing:
 		return []overlay.Hint{{Key: overlay.EnterKey(), Label: "apply"}, {Key: "esc", Label: "cancel"}}
+	case m.CockpitGroupMenuOpen():
+		return m.cockpitGroupMenuHints()
 	case m.InboxSnoozePicking():
 		return inboxSnoozeHints()
 	case st.agents.sheet != nil:

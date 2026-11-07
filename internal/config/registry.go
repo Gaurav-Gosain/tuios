@@ -517,7 +517,7 @@ var ActionDescriptions = map[string]string{
 	"inbox_side":          "Agents view: hide the side column, or show it again",
 	"inbox_zoom":          "Agents view: show the focused region alone, or the whole view again",
 	"inbox_write":         "Agents view: write a reply to the selected agent",
-	"inbox_sort":          "Agents view: step the sort",
+	"inbox_sort":          "Agents view: group by state, session, machine or project, or step the sort",
 	"inbox_view_pane":     "Agents view: zoom the selected agent's pane, and come back with the same key",
 	"inbox_review":        "Agents view: review the changes in the agent's pane",
 	"inbox_snooze":        "Agents view: snooze what needs you on the row, then 1 to 4 for how long",

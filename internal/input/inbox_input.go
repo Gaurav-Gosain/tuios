@@ -82,6 +82,11 @@ func handleInboxInput(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	}
 	// The snooze picker takes the next key: a digit from 1 to 4 is how long,
 	// anything else closes it.
+	// The group and sort picker takes the next key: a digit chooses the
+	// grouping, s steps the sort, anything else closes it.
+	if o.CockpitGroupMenuOpen() {
+		return o, o.CockpitGroupMenuKey(msg.String())
+	}
 	if o.InboxSnoozePicking() {
 		return o, o.InboxSnoozeKey(msg.String())
 	}

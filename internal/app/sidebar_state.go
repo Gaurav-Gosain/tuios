@@ -112,6 +112,9 @@ type sidebarStateFile struct {
 	// AgentsSideHidden says the person hid the agents view's side column
 	// with w.
 	AgentsSideHidden bool `json:"agents_side_hidden,omitempty"`
+	// AgentsGroup is how the person grouped the agents view's list:
+	// "session", "machine" or "project". Absent means by state.
+	AgentsGroup string `json:"agents_group,omitempty"`
 	// HostsOrder is the user's drag-defined order of the other machines' groups
 	// in the sessions section, and HostsCollapsed names the machines whose
 	// group is folded shut, sorted for the same reason ReposCollapsed is.
@@ -170,6 +173,10 @@ func (m *OS) loadSidebarState() {
 	}
 	m.Inbox.ck.listWidth = max(st.AgentsListWidth, 0)
 	m.Inbox.ck.sideHidden = st.AgentsSideHidden
+	switch st.AgentsGroup {
+	case ckGroupSession, ckGroupMachine, ckGroupProject:
+		m.Inbox.ck.groupBy = st.AgentsGroup
+	}
 	if len(st.AgentNoticesDismissed) > 0 {
 		m.agentNoticesDismissed = make(map[string]bool, len(st.AgentNoticesDismissed))
 		for _, k := range st.AgentNoticesDismissed {
@@ -281,6 +288,7 @@ func (m *OS) saveSidebarState() {
 		AgentsList:            m.Inbox.ck.listMode,
 		AgentsListWidth:       m.Inbox.ck.listWidth,
 		AgentsSideHidden:      m.Inbox.ck.sideHidden,
+		AgentsGroup:           m.Inbox.ck.groupBy,
 		AgentNoticesDismissed: collapsedRepoList(m.agentNoticesDismissed),
 		MachineOffersNever:    collapsedRepoList(m.machineOffersNever),
 		Collapsed:             m.SidebarCollapsed,

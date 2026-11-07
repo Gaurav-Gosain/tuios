@@ -14407,3 +14407,22 @@ Run on 2026-11-07 on macOS (arm64), each control its own binary:
 | The drag not followed | "a drag of the edge to column 71: the list ends at 52, want 70" | **caught** |
 | `w` does nothing | "w did not hide the side column" | **caught** |
 | `Z` does nothing | "Z did not show the focus alone" | **caught** |
+
+## The agents view's list grouped by session, machine and project
+
+`TestCockpitGroupBy` at 200x50: `s` opens the picker with `1 state`, `2
+session`, `3 machine`, `4 project`; `2` groups by session, with Needs you on
+top holding api-auth, then api, cache, docs and misc in name order, each
+holding its own agents, no Working heading, the header saying `Group:
+session` and still counting `6 working`, `3 to review`, `2 idle`. A new client
+keeps the grouping. `3` and `4` group by machine and by project (No
+repository), `1` gives the state groups back, and a click on Group in the
+header opens the picker.
+
+Run on 2026-11-07 on macOS (arm64), each control its own binary:
+
+| Removed | The test fails with | Result |
+|---------|---------------------|--------|
+| The bands never built | "2 did not group the list by session under Needs you" | **caught** |
+| The header counts only the state headings | "2 did not group the list by session under Needs you"; the header shows 1 needs you only | **caught** |
+| The grouping not read from the state file | "a new client did not keep the session grouping" | **caught** |
