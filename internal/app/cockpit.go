@@ -1355,6 +1355,9 @@ func (m *OS) cockpitAction(action string) tea.Cmd {
 		if ids, ok := strings.CutPrefix(action, "kid:"); ok {
 			return m.cockpitChildClick(ids)
 		}
+		if img, ok := strings.CutPrefix(action, "timg:"); ok {
+			return m.cockpitOpenThreadImage(img)
+		}
 		if id, ok := strings.CutPrefix(action, "fold:"); ok {
 			if t := m.cockpitThread(); t != nil {
 				if t.folded == nil {
