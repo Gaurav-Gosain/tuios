@@ -29,9 +29,11 @@ var (
 	ckGlyphUnload = ckGlyph{"■", "■", "-"}
 )
 
-// spawnTone is the sheet's grounds, from the cockpit's look.
+// spawnTone is the sheet's grounds, from the cockpit's look, and the key
+// ink held to the mark floor on the sheet.
 type spawnTone struct {
 	sheet, field, pick color.Color
+	key                color.Color
 }
 
 func spawnTones(l ckLook) spawnTone {
@@ -44,6 +46,9 @@ func spawnTones(l ckLook) spawnTone {
 	case overlay.Depth16:
 		t.pick = overlay.NoColor
 	}
+	// The accent is a theme's own colour: at 256 colours the default
+	// theme's lands under 3:1 on the sheet's grey.
+	t.key = overlay.ReadableAt(pal.AccentBright, t.sheet, overlay.MarkFloor)
 	return t
 }
 
@@ -146,7 +151,7 @@ func (m *OS) drawSpawnSheet(c *ckCanvas, l ckLook, top int) {
 	case s.folder != "":
 		from = "in " + s.folder
 	}
-	ex := c.textR(right, y, ckSeg{t: "esc", fg: pal.AccentBright, attrs: ckBold}, ckSeg{t: " close", fg: pal.FgMute})
+	ex := c.textR(right, y, ckSeg{t: "esc", fg: t.key, attrs: ckBold}, ckSeg{t: " close", fg: pal.FgMute})
 	hit(ex, y, right, y+1, "close")
 	c.text(x, y, ex-2, ckSeg{t: "New agent", fg: pal.Fg, attrs: ckBold}, ckSeg{t: "   " + ckTrunc(from, ex-x-16), fg: pal.FgMute})
 	y += 2
@@ -165,7 +170,9 @@ func (m *OS) drawSpawnSheet(c *ckCanvas, l ckLook, top int) {
 	} else {
 		text, ink := s.task.Text(), pal.Fg
 		if strings.TrimSpace(text) == "" {
-			text, ink = "What should the agent do?", pal.FgMute
+			// The editor holds its own placeholder to text contrast; the
+			// closed field shows it the same.
+			text, ink = "What should the agent do?", pal.FgDim
 		}
 		var rows []string
 		for para := range strings.SplitSeq(text, "\n") {
@@ -175,7 +182,7 @@ func (m *OS) drawSpawnSheet(c *ckCanvas, l ckLook, top int) {
 			c.text(x+3, y+1+i, right-2, ckSeg{t: r, fg: ink})
 		}
 	}
-	c.textR(right-2, y+box, ckSeg{t: "ctrl+j", fg: pal.AccentBright, attrs: ckBold}, ckSeg{t: " new line", fg: pal.FgMute})
+	c.textR(right-2, y+box, ckSeg{t: "ctrl+j", fg: t.key, attrs: ckBold}, ckSeg{t: " new line", fg: pal.FgMute})
 	if pal.Depth == overlay.Depth16 {
 		spawnBrackets(c, l, x, y+1, w, box)
 	}
@@ -246,11 +253,11 @@ func (m *OS) drawSpawnSheet(c *ckCanvas, l ckLook, top int) {
 	cx := c.textR(sx-2, fy, btn("Cancel", spCancel, pal.Fg, pal.Card, 0))
 	c.mark(pal, cx, fy, sx-2-cx, 1, overlay.RowState{Cursor: true})
 	hit(cx, fy, sx-2, fy+1, "cancel")
-	keys := []ckSeg{{t: overlay.EnterKey(), fg: pal.AccentBright, attrs: ckBold}, {t: " start   ", fg: pal.FgMute},
-		{t: "tab", fg: pal.AccentBright, attrs: ckBold}, {t: " next field   ", fg: pal.FgMute}}
+	keys := []ckSeg{{t: overlay.EnterKey(), fg: t.key, attrs: ckBold}, {t: " start   ", fg: pal.FgMute},
+		{t: "tab", fg: t.key, attrs: ckBold}, {t: " next field   ", fg: pal.FgMute}}
 	for _, k := range [][2]string{{"ctrl+s", " save as preset   "}, {"esc", " close"}} {
 		if ckWidth(keys...)+ckWidth(ckSeg{t: k[0] + k[1]}) < cx-x-2 {
-			keys = append(keys, ckSeg{t: k[0], fg: pal.AccentBright, attrs: ckBold}, ckSeg{t: k[1], fg: pal.FgMute})
+			keys = append(keys, ckSeg{t: k[0], fg: t.key, attrs: ckBold}, ckSeg{t: k[1], fg: pal.FgMute})
 		}
 	}
 	c.text(x, fy, cx-2, keys...)
@@ -293,7 +300,7 @@ func (m *OS) drawSpawnChips(c *ckCanvas, l ckLook, t spawnTone, s *spawnSheet, x
 			break
 		}
 		x0 := cx
-		segs := []ckSeg{{t: " " + string(rune('A'+i)) + " ", fg: pal.AccentBright, bg: pal.Card, attrs: ckBold},
+		segs := []ckSeg{{t: " " + string(rune('A'+i)) + " ", fg: overlay.ReadableAt(pal.AccentBright, pal.Card, overlay.MarkFloor), bg: pal.Card, attrs: ckBold},
 			{t: " " + name + " ", fg: pal.Fg, bg: t.field}}
 		if where != "" {
 			segs = append(segs, ckSeg{t: where, fg: pal.FgMute, bg: t.field})
@@ -346,7 +353,7 @@ func spawnStyles(pal overlay.Palette, field color.Color) composer.Styles {
 func (m *OS) spawnLabel(c *ckCanvas, l ckLook, s *spawnSheet, f spawnField, x, y int, text string) {
 	ink := l.pal.FgDim
 	if s.field == f {
-		ink = l.pal.AccentBright
+		ink = overlay.ReadableAt(l.pal.AccentBright, l.pal.Surface, overlay.MarkFloor)
 	}
 	c.text(x, y, 0, ckSeg{t: text, fg: ink, attrs: ckBold})
 }
@@ -443,7 +450,7 @@ func (m *OS) drawSpawnFields(c *ckCanvas, l ckLook, t spawnTone, p spawnLayout, 
 		on := s.worktree == (i == 0)
 		mark, mc, ink := l.g(ckGlyphIdle), pal.FgMute, pal.FgDim
 		if on {
-			mark, mc, ink = l.g(ckGlyphPicked), pal.AccentBright, pal.Fg
+			mark, mc, ink = l.g(ckGlyphPicked), t.key, pal.Fg
 		}
 		if (i == 0 && !s.spawnCanWorktree() && s.read) || (i == 1 && s.host() != "") {
 			mc, ink = pal.FgMute, pal.FgMute
@@ -501,7 +508,7 @@ func (m *OS) spawnInput(c *ckCanvas, l ckLook, t spawnTone, s *spawnSheet, f spa
 			c.draw(x, y, w-sw, lines[0])
 		}
 	case strings.TrimSpace(ed.Text()) == "":
-		c.text(x+2, y, x+w-sw, ckSeg{t: placeholder, fg: pal.FgMute})
+		c.text(x+2, y, x+w-sw, ckSeg{t: placeholder, fg: pal.FgDim})
 	default:
 		ink := pal.Fg
 		if !live {
@@ -548,14 +555,18 @@ func (m *OS) drawSpawnMachines(c *ckCanvas, l ckLook, t spawnTone, p spawnLayout
 				c.text(x, y+r, 0, ckSeg{t: l.g(ckGlyphBar), fg: pal.Accent})
 			}
 		}
-		mark, mk, ink := l.g(ckGlyphIdle), pal.FgMute, pal.Fg
+		// The picked row's ground is the accent's tint, which the quiet
+		// ink and the accent itself are not measured on: each is held to
+		// the mark floor on the row's own ground.
+		quiet := overlay.ReadableAt(pal.FgMute, ground, overlay.MarkFloor)
+		mark, mk, ink := l.g(ckGlyphIdle), quiet, pal.Fg
 		if picked {
-			mark, mk = l.g(ckGlyphPicked), pal.AccentBright
+			mark, mk = l.g(ckGlyphPicked), overlay.ReadableAt(pal.AccentBright, ground, overlay.MarkFloor)
 		}
 		if !mc.up {
-			ink = pal.FgMute
+			ink = quiet
 		}
-		nx := c.text(x+2, y, 0, ckSeg{t: mark, fg: mk}, ckSeg{t: "  " + l.g(ckGlyphHost) + " ", fg: pal.FgMute},
+		nx := c.text(x+2, y, 0, ckSeg{t: mark, fg: mk}, ckSeg{t: "  " + l.g(ckGlyphHost) + " ", fg: quiet},
 			ckSeg{t: ckTrunc(mc.name, 16), fg: ink, attrs: ckBold})
 		// The load: a bar of ten, or a word when the machine does not say.
 		var load []ckSeg
@@ -576,7 +587,7 @@ func (m *OS) drawSpawnMachines(c *ckCanvas, l ckLook, t spawnTone, p spawnLayout
 			load = []ckSeg{{t: strings.Repeat(l.g(ckGlyphLoad), n), fg: bar}, {t: strings.Repeat(empty, 10-n), fg: l.edgePanel},
 				{t: " " + strconv.Itoa(int(math.Round(frac*100))) + "%", fg: pal.FgDim}}
 		} else {
-			load = []ckSeg{{t: "no load report", fg: pal.FgMute}}
+			load = []ckSeg{{t: "no load report", fg: quiet}}
 		}
 		sub := strconv.Itoa(mc.working) + " working"
 		if mc.cores > 0 {
@@ -599,10 +610,10 @@ func (m *OS) drawSpawnMachines(c *ckCanvas, l ckLook, t spawnTone, p spawnLayout
 					missing = true
 				}
 			}
-			c.text(x+5, y+1, end-2, ckSeg{t: ckTrunc(sub, end-2-x-5), fg: pal.FgMute})
+			c.text(x+5, y+1, end-2, ckSeg{t: ckTrunc(sub, end-2-x-5), fg: quiet})
 		} else {
 			lx := c.text(nx+2, y, right, load...)
-			c.text(lx+2, y, right, ckSeg{t: strconv.Itoa(mc.working) + " working", fg: pal.FgMute})
+			c.text(lx+2, y, right, ckSeg{t: strconv.Itoa(mc.working) + " working", fg: quiet})
 		}
 		if picked {
 			c.mark(pal, x, y, w, rows, ckOn)

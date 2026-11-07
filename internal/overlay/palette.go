@@ -178,11 +178,23 @@ func (p *Palette) checkContrast() {
 		p.FgDim = ReadableAt(p.FgDim, g, ContrastFloor)
 	}
 	p.Fg = ReadableAt(p.Fg, p.Card, ContrastFloor)
+	// The secondary ink is text on the grounds an editor sits in too: the
+	// panel around a composer and the card of its field, where the hints
+	// say what a key does and the placeholder says what to type.
+	for _, g := range [...]color.Color{p.Panel, p.Card} {
+		p.FgDim = ReadableAt(p.FgDim, g, ContrastFloor)
+	}
 	// The quiet ink labels rows too, a row's age or its session, and those
 	// labels ride the cursor row with it. On the constant ramp it clears the
 	// floor there already; on a light ramp the cursor row is the darker step
 	// and it did not.
-	for _, g := range [...]color.Color{p.Surface, p.RowSel, p.RowSelQuiet} {
+	// It marks the panel and the canvas too (a caret, a count, a rule's
+	// label). At truecolor every shipped theme clears 3:1 there; the grey
+	// ramp at 256 colours can land a step short. The card is not on the
+	// list: lifting the quiet ink to 3:1 on the lightest neutral brings it
+	// next to the secondary ink on the surface, and no text in it goes on
+	// a card.
+	for _, g := range [...]color.Color{p.Surface, p.RowSel, p.RowSelQuiet, p.Panel, p.Canvas} {
 		p.FgMute = ReadableAt(p.FgMute, g, MarkFloor)
 	}
 }

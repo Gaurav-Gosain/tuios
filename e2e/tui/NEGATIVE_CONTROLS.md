@@ -13928,3 +13928,23 @@ Run on 2026-11-07 on macOS (arm64), each control its own binary:
 
 Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestMailFromAPaneOfAnotherSession$' -v .`.
+
+## The agents view's reply area and New agent sheet hold text to its floor
+
+`TestAgentsViewTextMeetsItsFloor` opens the reply area closed, open and with a
+draft, then the New agent sheet, under the dark look, rose_pine and
+catppuccin_latte at 256 colours and truecolor. It measures every glyph on
+screen against the cell ground it is drawn on. In the reply area a key clears
+3:1, other text 4.5:1 and the draft 7:1. In the sheet every glyph clears 3:1
+and the task placeholder 4.5:1.
+
+Run on 2026-11-07 on macOS (arm64), each control its own binary:
+
+| Removed | The test fails with | Result |
+|---------|---------------------|--------|
+| The whole fix (main at 3497aaab0) | every run: "Reply to", "mention", "image", "new line" at 3.71:1 (dark, rose_pine) and 3.04:1 (latte) on the panel; the picked machine row's text at 2.35 to 2.45:1 on the accent tint; at 256 colours the default theme's accent at 2.77:1 on the sheet | **caught** |
+| The reply area's labels in `FgMute` again (`label` in `drawReplyArea`) | "49 glyphs in the reply area miss their floor": `"R" at (53,30) 3.71:1 under 4.5` in "Reply to docs-cli" | **caught** |
+
+Frames are under the test's artifact folder (`reply-closed`, `reply-placeholder`,
+`reply-draft`, `new-agent`). Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestAgentsViewTextMeetsItsFloor$' -v .`.
