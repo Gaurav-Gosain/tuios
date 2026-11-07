@@ -883,6 +883,15 @@ func (a *App) stateChip(c *ui.Context, pal *palette, p *proto.Pane, multi bool, 
 		width -= sp2 + hControl
 	}
 	ch := chip(c, pal, bg, fg, func() {
+		if verb, rest := paneNeedWords(p); p.Status == proto.Waiting && verb != "" {
+			// The row's own two parts: the verb in the need weight, then
+			// what it names.
+			oneLine(c, verb, fsSmall, wSemibold).Shrink(0)
+			if rest != "" {
+				oneLine(c, rest, fsSmall, wRegular)
+			}
+			return
+		}
 		t := oneLine(c, msg, fsSmall, weight)
 		if p.Status == proto.Working {
 			t.FontFeatures("tnum")
@@ -985,9 +994,33 @@ func sixChars(c *ui.Context, s string, size float32, weight int) float32 {
 }
 
 // stateText is what the state chip says, and its weight; "" for no chip.
+// paneNeedWords is a waiting pane's approval in the words its row in the
+// rail and the Agents view uses: "Allow Edit" and the path from the pane's
+// folder ("retry/backoff.go"). The hook's own line, "approve Edit:
+// /Users/.../retry/backoff.go", gave the header chip another verb and only
+// the start of the absolute path (Mac round 2, V2-M1). A message that names
+// no tool gives "", "".
+func paneNeedWords(p *proto.Pane) (verb, rest string) {
+	if p.Status != proto.Waiting || p.Message == "" {
+		return "", ""
+	}
+	tool, target, ok := ckAsk(p.Message)
+	if !ok {
+		return "", ""
+	}
+	dir := p.ProcessDir
+	if dir == "" {
+		dir = p.Dir
+	}
+	return locales.CockpitAllowTool(tool), ckShortTarget(tool, target, dir)
+}
+
 func stateText(p *proto.Pane) (string, int) {
 	switch p.Status {
 	case proto.Waiting:
+		if verb, rest := paneNeedWords(p); verb != "" {
+			return strings.TrimSpace(verb + " " + rest), wMedium
+		}
 		msg := p.Message
 		if msg == "" {
 			msg = map[string]string{"permission": locales.PaneNeedsPermission(), "question": locales.PaneHasQuestion(), "auth": locales.PaneNeedsSignIn()}[p.Kind]
