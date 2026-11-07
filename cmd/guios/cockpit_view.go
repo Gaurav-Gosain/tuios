@@ -615,17 +615,13 @@ func (a *App) cockpitKeys(c *ui.Context, col ui.Element) {
 	if a.ownedKeys(col) {
 		return
 	}
-	if a.keysHeld() && a.ownListKey(col) {
+	if a.keysHeld() && a.ownListKey(c, col) {
 		// The owner has the keys: they wait for where they go
 		// (key_owner.go). Typed text goes on to the reply box.
 		c.Invalidate()
 		return
 	}
 	if ck.question != nil && a.ckQuestionKeys(c, col) {
-		return
-	}
-	if a.retriedIn(col) {
-		// A key a terminal had, offered again: it went where the keys go.
 		return
 	}
 	if text, ok := typedText(col); ok {
@@ -1115,27 +1111,17 @@ func newAgentButton(c *ui.Context, pal *palette, tip string) bool {
 	return b.Clicked()
 }
 
-// retriedIn reports whether the key the list got in this build is the
-// copy of a key the owner took from a terminal (key_owner.go), and takes it.
-func (a *App) retriedIn(col ui.Element) bool {
-	if len(a.ko.taken) == 0 {
-		return false
-	}
-	t := a.ko.taken[0]
-	return col.Shortcut(t.mods, t.key) && a.retried(t.heldKey)
-}
-
 // ownListKey gives the key the list got in this build to the owner while it
 // has the keys, and reports whether one came.
-func (a *App) ownListKey(col ui.Element) bool {
+func (a *App) ownListKey(c *ui.Context, col ui.Element) bool {
 	if text, ok := typedText(col); ok {
 		if !a.ckProse(text) {
-			a.keepKey(heldKey{text: text})
+			a.keepKey(heldKey{text: text, seq: c.ShortcutSeq()})
 		}
 		return true
 	}
 	if m, k, ok := listKeyIn(col); ok {
-		a.keepKey(heldKey{mods: m, key: k})
+		a.keepKey(heldKey{mods: m, key: k, seq: c.ShortcutSeq()})
 		return true
 	}
 	return false

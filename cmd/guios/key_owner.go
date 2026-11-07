@@ -55,8 +55,11 @@ type keyOwner struct {
 	reply bool
 	seen  string // the key audit's last focus (auditFocus)
 	pass  int    // counts the passes the owner ran
-	taken []takenKey
-	sink  bool // the frame builds the sink (keySink)
+	sink  bool   // the frame builds the sink (keySink)
+	// kept are the numbers of the last presses kept (ui.InputEvent.Seq),
+	// keptN how many were: a press comes to the queue once (keepKey).
+	kept  [32]uint64
+	keptN int
 	// has is the target that had the keys in the last frame built: a
 	// change whose target has them already lands at once (tryLand), with
 	// no frame in between, which a window out of sight does not build.
@@ -75,6 +78,9 @@ type heldKey struct {
 	mods ui.Modifiers
 	key  ui.Key
 	text string
+	// seq is the number of the press (ui.InputEvent.Seq), 0 when it is not
+	// known.
+	seq uint64
 	// slot waits for the text of a key the owner cannot spell: the
 	// terminal of pane writes it (fillSlot).
 	slot bool
@@ -152,17 +158,18 @@ func (a *App) keysHeld() bool {
 //
 // The pane the keys land in keeps its keys when nothing waits: no hold
 // that is not done, and nothing kept before them.
-func (a *App) ownKey(pane string, mods ui.Modifiers, key ui.Key) bool {
+func (a *App) ownKey(pane string, ev ui.InputEvent) bool {
 	if !a.keysPending(pane) {
 		return false
 	}
-	return a.takeKey(pane, mods, key)
+	return a.takeKey(pane, ev)
 }
 
 // takeKey keeps a key press for the owner, and reports whether it took
 // it: a key that types text with its text, which then does not come.
-func (a *App) takeKey(pane string, mods ui.Modifiers, key ui.Key) bool {
-	k := heldKey{mods: mods, key: key}
+func (a *App) takeKey(pane string, ev ui.InputEvent) bool {
+	mods, key := ev.Mods, ev.Key
+	k := heldKey{mods: mods, key: key, seq: ev.Seq}
 	switch {
 	case key == ui.KeySpace && mods&^ui.Shift == 0:
 		k.text = " "
@@ -178,39 +185,7 @@ func (a *App) takeKey(pane string, mods ui.Modifiers, key ui.Key) bool {
 		return false
 	}
 	a.keepKey(k)
-	// MyGo offers the key again to the shortcuts of a later frame, which
-	// the agents list reads its keys by: that copy is this key's
-	// (ownListKey).
-	ko := &a.ko
-	now := time.Now()
-	ko.taken = slices.DeleteFunc(ko.taken, func(t takenKey) bool { return now.Sub(t.at) > time.Second })
-	ko.taken = append(ko.taken, takenKey{heldKey: k, at: now})
 	return true
-}
-
-// takenKey is a key the owner took from a terminal, which the list may see
-// again (retried).
-type takenKey struct {
-	heldKey
-	at time.Time
-}
-
-// retried reports whether the key the list got in this build is the copy
-// of one the owner took from a terminal, and drops that copy.
-func (a *App) retried(k heldKey) bool {
-	ko := &a.ko
-	now := time.Now()
-	ko.taken = slices.DeleteFunc(ko.taken, func(t takenKey) bool { return now.Sub(t.at) > time.Second })
-	if len(ko.taken) == 0 {
-		return false
-	}
-	t := ko.taken[0]
-	if t.text != "" && t.text == k.text || t.text == "" && t.mods == k.mods && t.key == k.key {
-		ko.taken = ko.taken[1:]
-		keyAudit("retried", k.name(), "")
-		return true
-	}
-	return false
 }
 
 // keysPending reports whether a key the terminal of pane got must go to the
@@ -255,9 +230,21 @@ func (a *App) fillSlot(pane string, p []byte) bool {
 // keepKey adds one input to the owner's queue.
 func (a *App) keepKey(k heldKey) {
 	a.ko.mu.Lock()
+	if k.seq != 0 && slices.Contains(a.ko.kept[:], k.seq) {
+		// The same press again, as the text of a key down kept with its
+		// text: one press types once. Two presses of one key have two
+		// numbers, so a double letter stays.
+		a.ko.mu.Unlock()
+		keyAudit("copy", k.name(), seqNote(k.seq))
+		return
+	}
+	if k.seq != 0 {
+		a.ko.kept[a.ko.keptN%len(a.ko.kept)] = k.seq
+		a.ko.keptN++
+	}
 	a.ko.queue = append(a.ko.queue, k)
 	a.ko.mu.Unlock()
-	keyAudit("keep", k.name(), "")
+	keyAudit("keep", k.name(), seqNote(k.seq))
 	if !k.slot && a.tryLand() {
 		return
 	}
@@ -362,9 +349,9 @@ func (a *App) keySink(c *ui.Context) {
 		case ui.InputKeyDown:
 			// As a terminal's key (takeKey): a key the owner cannot
 			// spell goes on, and its text comes as InputText.
-			return a.takeKey("", ev.Mods, ev.Key)
+			return a.takeKey("", ev)
 		case ui.InputText:
-			a.keepKey(heldKey{text: ev.Text})
+			a.keepKey(heldKey{text: ev.Text, seq: ev.Seq})
 			return true
 		}
 		return false
@@ -679,4 +666,12 @@ func (a *App) auditFocus(c *ui.Context) {
 		a.ko.seen = at
 		keyAudit("focus", at, "")
 	}
+}
+
+// seqNote is the key audit's note of press seq.
+func seqNote(seq uint64) string {
+	if seq == 0 {
+		return ""
+	}
+	return "seq " + strconv.FormatUint(seq, 10)
 }

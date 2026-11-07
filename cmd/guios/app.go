@@ -1003,8 +1003,9 @@ func (a *App) termOptions(id string, conn *gated) terminal.Options {
 		// start and end, as in Ghostty: they send Control+U, Control+A and
 		// Control+E, which shells take as kill-line, beginning-of-line and
 		// end-of-line.
-		OnKey: func(mods ui.Modifiers, key ui.Key) bool {
-			if a.ownKey(id, mods, key) || a.keyDown(id, mods, key) {
+		OnKeyEvent: func(ev ui.InputEvent) bool {
+			mods, key := ev.Mods, ev.Key
+			if a.ownKey(id, ev) || a.keyDown(id, mods, key) {
 				return true
 			}
 			if runtime.GOOS != "darwin" || mods != ui.Super {
