@@ -101,7 +101,11 @@ func (a *App) sessionMarked(s *proto.Session) bool {
 // A row nested under its repository's session goes by its branch
 // (railTitle), so its second line starts with the session's own name, the
 // one `tuios attach` takes (council round 5, visual M2).
-func (a *App) sessionLines(s *proto.Session, g *proto.GitInfo, nested bool) (line2 string, msg bool, line3 string) {
+//
+// An approval's verb comes apart in verb, so the row draws it as the agent
+// rows do: "Allow Bash" in the need colour, then what it names (Mac round
+// 2, visual S4).
+func (a *App) sessionLines(s *proto.Session, g *proto.GitInfo, nested bool) (verb, line2 string, msg bool, line3 string) {
 	if g != nil {
 		line3 = gitShort(g)
 	} else {
@@ -114,10 +118,10 @@ func (a *App) sessionLines(s *proto.Session, g *proto.GitInfo, nested bool) (lin
 		// ./..." (Mac round 1, workflow S2). Other messages stay as sent.
 		if v, _, _ := strings.Cut(m, " "); strings.EqualFold(v, "approve") || strings.EqualFold(v, "allow") {
 			if tool, target, ok := ckAsk(m); ok {
-				m = strings.TrimSpace(locales.CockpitAllowTool(tool) + " " + ckShortTarget(tool, target, s.WorkDir()))
+				return locales.CockpitAllowTool(tool), ckShortTarget(tool, target, s.WorkDir()), true, line3
 			}
 		}
-		return m, true, line3
+		return "", m, true, line3
 	}
 	var parts []string
 	if nested {
@@ -136,5 +140,5 @@ func (a *App) sessionLines(s *proto.Session, g *proto.GitInfo, nested bool) (lin
 	if n := len(s.Panes) + len(s.Others); n > 1 {
 		parts = append(parts, locales.SidebarPanes(n))
 	}
-	return strings.Join(parts, " · "), false, line3
+	return "", strings.Join(parts, " · "), false, line3
 }

@@ -823,13 +823,22 @@ func (a *App) sessionRow(c *ui.Context, pal *palette, s *proto.Session, n *int, 
 					when()
 				})
 				// Lines 2 and 3 start under the name, past the mark.
-				line2, msg, line3 := a.sessionLines(s, g, nested)
+				verb, line2, msg, line3 := a.sessionLines(s, g, nested)
 				ui.Column(c).Gap(2).Padding(0, 0, 0, 14+sp2).MinWidth(0).Children(func() {
-					// text2, 4.5:1 on every ground (DESIGN.md section 6): a
-					// message reads stronger by its weight.
-					t := ui.Text(c, flat(line2)).FontSize(fsSmall).TextColor(pal.textMuted).SingleLine().Ellipsis("…").MinWidth(0)
-					if msg {
-						t.FontWeight(wMedium)
+					if verb != "" {
+						// The agent rows' two parts: the verb in the need
+						// colour, then what it names in text2.
+						ui.Row(c).Gap(4).MinWidth(0).Children(func() {
+							ui.Text(c, verb).FontSize(fsSmall).FontWeight(wMedium).TextColor(pal.attnText).SingleLine().Shrink(0)
+							ui.Text(c, flat(line2)).FontSize(fsSmall).TextColor(pal.textMuted).SingleLine().Ellipsis("…").MinWidth(0).Shrink(1)
+						})
+					} else {
+						// text2, 4.5:1 on every ground (DESIGN.md section 6): a
+						// message reads stronger by its weight.
+						t := ui.Text(c, flat(line2)).FontSize(fsSmall).TextColor(pal.textMuted).SingleLine().Ellipsis("…").MinWidth(0)
+						if msg {
+							t.FontWeight(wMedium)
+						}
 					}
 					ui.Text(c, flat(line3)).FontSize(fsSmall).TextColor(pal.textFaint).FontFeatures("tnum").SingleLine().Ellipsis("…").MinWidth(0)
 				})
