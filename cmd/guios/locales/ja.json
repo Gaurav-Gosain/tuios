@@ -1306,5 +1306,7 @@
   "cockpitNothingToSnooze": "{name} にはスヌーズするものがありません。",
   "cockpitQuestionTypeReply": "これは質問です。答えを選ぶか、入力して返信してください。",
   "paneZoomedHides": "ズーム中 · {count, plural, other {# 個のペインを非表示}}",
-  "paneZoomedEnd": "すべてのペインを表示"
+  "paneZoomedEnd": "すべてのペインを表示",
+  "cockpitEditReading": "編集を読み込み中…",
+  "cockpitEditLeft": "{count, plural, other {許可するには編集を最後までスクロールしてください。あと # 行あります。}}"
 }

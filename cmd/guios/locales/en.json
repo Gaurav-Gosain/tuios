@@ -2335,5 +2335,7 @@
   "cockpitNothingToSnooze": "{name} has nothing to snooze.",
   "cockpitQuestionTypeReply": "This is a question. Pick an answer, or type to reply.",
   "paneZoomedHides": "Zoomed · {count, plural, one {# pane hidden} other {# panes hidden}}",
-  "paneZoomedEnd": "Show all panes"
+  "paneZoomedEnd": "Show all panes",
+  "cockpitEditReading": "Reading the edit…",
+  "cockpitEditLeft": "{count, plural, one {Scroll through the edit to allow it: # line is not shown yet.} other {Scroll through the edit to allow it: # lines are not shown yet.}}"
 }

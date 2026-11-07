@@ -221,7 +221,9 @@ func (a *App) cockpitFocus(c *ui.Context, pal *palette) {
 	})
 	ui.Box(c).Height(1).Shrink(0).Background(pal.divider)
 	ck.cardShown = r.item != nil && ckAnswerable(*r.item)
-	ui.Column(c.Key("tab-" + ck.tab)).Grow(1).MinHeight(ckTabMinH).ClipY().AlignItems(ui.Stretch).Children(func() {
+	tabCol := ui.Column(c.Key("tab-" + ck.tab)).Grow(1).MinHeight(ckTabMinH)
+	ck.tabH = tabCol.Bounds().H
+	tabCol.ClipY().AlignItems(ui.Stretch).Children(func() {
 		switch ck.tab {
 		case tabChanges:
 			a.changesView(c, pal, ag)
@@ -242,7 +244,11 @@ func (a *App) cockpitFocus(c *ui.Context, pal *palette) {
 	// (a long command, risk lines) never pushes the box under the key
 	// line (council round 4, M4).
 	if card {
-		ui.Scroll(c.Key("ck-card")).Shrink(1).MinHeight(64).Children(func() {
+		outer := ui.Scroll(c.Key("ck-card")).Shrink(1).MinHeight(64)
+		// The card's own viewport, which a held edit's body is clipped by
+		// too: only rows inside both count as shown (ckEditBlock).
+		ck.cardView = outer.Bounds()
+		outer.Children(func() {
 			ui.Column(c).AlignItems(ui.Stretch).Children(func() {
 				a.approvalCard(c, pal, ag, *r.item)
 			})
@@ -384,7 +390,9 @@ func (a *App) approvalCard(c *ui.Context, pal *palette, ag client.Agent, it sess
 			target = t
 		}
 		mono := a.termFamily()
-		if !held && pk != nil && len(pk.lines) > 0 && (!question || len(pk.actions) > 0) {
+		if ckIsEdit(it) {
+			a.ckEditBlock(c, pal, it)
+		} else if !held && pk != nil && len(pk.lines) > 0 && (!question || len(pk.actions) > 0) {
 			ui.Column(c).Radius(rControl).Background(ckCodeBg(pal)).Padding(8, 12).Gap(1).Clip().Children(func() {
 				for _, l := range pk.lines {
 					ui.Text(c, l).Font(mono).FontSize(fsCode).TextColor(pal.text).SingleLine()
@@ -424,20 +432,18 @@ func (a *App) approvalCard(c *ui.Context, pal *palette, ag client.Agent, it sess
 		// allows, at its right: the card keeps one row of answers, and fits
 		// over the reply box at 1100x700.
 		reason := !question && slices.Contains(a.ckOptions(it, pk), "reason")
-		if len(it.AlwaysScope) > 0 || reason {
+		if len(it.AlwaysScope) > 0 {
 			ui.Row(c).Gap(sp2).AlignItems(ui.Center).Children(func() {
-				if len(it.AlwaysScope) > 0 {
-					ui.Text(c, locales.CockpitAlwaysAllows(strings.Join(it.AlwaysScope, ", "))).FontSize(fsSmall).TextColor(pal.textMuted).
-						Grow(1).MinWidth(0).MaxLines(2)
-				} else {
-					ui.Spacer(c)
-				}
+				ui.Text(c, locales.CockpitAlwaysAllows(strings.Join(it.AlwaysScope, ", "))).FontSize(fsSmall).TextColor(pal.textMuted).
+					Grow(1).MinWidth(0).MaxLines(2)
 				if reason && ghostButton(c, "ans-reason", ckDecisionWords("reason"), pal) {
 					a.ckAnswer("reason")
 					ck.fleetFocus.Focus()
 				}
 			})
 		}
+		// With no scope line, it sits after the answers instead.
+		reasonInRow := reason && len(it.AlwaysScope) == 0
 		if ck.reasonFor == it.ID {
 			in := textField(c, "reason", &ck.reason, locales.CockpitReasonPlaceholder(), 0, pal).AutoFocus()
 			if in.Submitted() && strings.TrimSpace(ck.reason) != "" {
@@ -499,6 +505,10 @@ func (a *App) approvalCard(c *ui.Context, pal *palette, ag client.Agent, it sess
 						ck.fleetFocus.Focus()
 					}
 				})
+			}
+			if reasonInRow && ghostButton(c, "ans-reason", ckDecisionWords("reason"), pal) {
+				a.ckAnswer("reason")
+				ck.fleetFocus.Focus()
 			}
 			ui.Spacer(c)
 			if !held && len(opts) > 0 {

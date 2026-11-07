@@ -1306,5 +1306,7 @@
   "cockpitNothingToSnooze": "{name} 没有可暂缓的内容。",
   "cockpitQuestionTypeReply": "这是一个问题。请选择一个回答，或输入回复。",
   "paneZoomedHides": "已缩放 · {count, plural, other {隐藏了 # 个窗格}}",
-  "paneZoomedEnd": "显示所有窗格"
+  "paneZoomedEnd": "显示所有窗格",
+  "cockpitEditReading": "正在读取编辑…",
+  "cockpitEditLeft": "{count, plural, other {请滚动查看完整编辑后再允许：还有 # 行未显示。}}"
 }

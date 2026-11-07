@@ -13243,3 +13243,23 @@ func PaneZoomedEnd() string { return In(i18n.Locale()).PaneZoomedEnd() }
 func (msgs Messages) PaneZoomedEnd() string {
 	return Catalog.Format(msgs.locale, "paneZoomedEnd", nil)
 }
+
+// CockpitEditReading says "Reading the edit…"
+// in the language the app shows.
+func CockpitEditReading() string { return In(i18n.Locale()).CockpitEditReading() }
+
+// CockpitEditReading says "Reading the edit…"
+// in the language of msgs.
+func (msgs Messages) CockpitEditReading() string {
+	return Catalog.Format(msgs.locale, "cockpitEditReading", nil)
+}
+
+// CockpitEditLeft says "{count, plural, one {Scroll through the edit to allow it: # line is not shown yet.} other {Scroll through the edit to…"
+// in the language the app shows.
+func CockpitEditLeft(count int) string { return In(i18n.Locale()).CockpitEditLeft(count) }
+
+// CockpitEditLeft says "{count, plural, one {Scroll through the edit to allow it: # line is not shown yet.} other {Scroll through the edit to…"
+// in the language of msgs.
+func (msgs Messages) CockpitEditLeft(count int) string {
+	return Catalog.Format(msgs.locale, "cockpitEditLeft", map[string]any{"count": count})
+}

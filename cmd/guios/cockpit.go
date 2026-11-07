@@ -109,6 +109,16 @@ type cockpit struct {
 	open      bool
 	// edit is the body of the held edit the card shows (cockpit_edit.go).
 	edit *ckEdit
+	// editScroll is where the edit's body is scrolled to, and cardView
+	// the approval card's viewport in the last frame (ckEditBlock).
+	editScroll ui.ScrollState
+	cardView   ui.Rect
+	// tabH is the tab's height above the card in the last frame: with the
+	// card's, the room the card may grow into (ckEditBlock).
+	tabH float32
+	// editLast is the body's and the card's bounds when the body last
+	// counted its rows.
+	editLast [2]ui.Rect
 	// view is what the card shows: the agents, the board or the mail for
 	// the person.
 	view int
