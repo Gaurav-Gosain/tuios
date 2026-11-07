@@ -3147,7 +3147,11 @@ serves with the body, and "always" is never offered, so
 only a client that draws the diff allows one; the TUI offers reject and the
 pane. Everything else is answered in the pane as before: `NotebookEdit`, an
 edit over the bound or with other characters, MCP tools, and a command too
-long for the line. See docs/protocol.md, "Edits". The daemon checks the line again
+long for the line. See docs/protocol.md, "Edits". An allow names the request
+Claude Code made; Claude Code applies the edit itself, so the file can differ
+from the body in details such as loose quote matching or kept line endings.
+Another PermissionRequest hook of your own that answers first, with input of
+its own, is not something tuios sees. The daemon checks the line again
 before it holds, and the Inbox does not answer a line it would draw with
 characters left out.
 

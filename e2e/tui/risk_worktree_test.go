@@ -23,8 +23,9 @@ type riskItem struct {
 }
 
 // fireEditHook runs Claude Code's PermissionRequest hook for an Edit of path
-// in window 0 of session. An Edit is never held (its body does not fit the
-// line), so the hook reports needs_input and returns.
+// in window 0 of session. The Edit carries a field the Inbox would not show,
+// so it is not held for the Inbox: the hook reports needs_input and returns,
+// and the item is marked from its line, which is what these tests read.
 func fireEditHook(t *testing.T, base, session, path string) {
 	t.Helper()
 	fireEditHookIn(t, base, session, "0", path)
@@ -37,7 +38,7 @@ func fireEditHookIn(t *testing.T, base, session, window, path string) {
 		"hook_event_name": "PermissionRequest",
 		"session_id":      "e2e-" + session,
 		"tool_name":       "Edit",
-		"tool_input":      map[string]string{"file_path": path, "old_string": "hi", "new_string": "hello"},
+		"tool_input":      map[string]string{"file_path": path, "old_string": "hi", "new_string": "hello", "e2e_not_shown": "1"},
 	})
 	if err != nil {
 		t.Fatal(err)

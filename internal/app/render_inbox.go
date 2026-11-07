@@ -304,7 +304,11 @@ func inboxApprovalDetail(it session.AttentionItem, width int) []string {
 		lines = append(lines, "  "+l)
 	}
 	if inboxIsEdit(it) {
-		for _, l := range wrapPlain(inboxEditWords+" 3 rejects it.", width) {
+		words := inboxEditWords
+		if keys := inboxAnswerKeys(it); keys != "" {
+			words += " " + keys + " rejects it."
+		}
+		for _, l := range wrapPlain(words, width) {
 			lines = append(lines, "  "+l)
 		}
 		return lines
