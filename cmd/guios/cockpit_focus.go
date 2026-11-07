@@ -191,7 +191,13 @@ func (a *App) cockpitFocus(c *ui.Context, pal *palette) {
 			case ck.narrow:
 				iconButton(c, "ck-open", openFileIcon, locales.CockpitOpenPane()+" (↵)", pal, func() { a.goToAgent(ag) })
 			default:
-				if sizedButton(c, "ck-open", locales.CockpitOpenPane(), "↵", false, hControlSm, rControl, pal) {
+				// The ↵ cap goes on the card's own Open pane when it has one,
+				// and on Send while the reply box has the keys.
+				cap := "↵"
+				if ck.cardShown || ck.reply.box.FocusWithin(c) {
+					cap = ""
+				}
+				if sizedButton(c, "ck-open", locales.CockpitOpenPane(), cap, false, hControlSm, rControl, pal) {
 					a.goToAgent(ag)
 				}
 			}

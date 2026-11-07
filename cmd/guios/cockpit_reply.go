@@ -297,6 +297,11 @@ func (a *App) replyBoxBody(c *ui.Context, pal *palette, ag client.Agent, d *ckDr
 			keys, primary := "↵", true
 			if a.ck.question != nil {
 				keys, primary = "", false
+			} else if !a.ck.reply.box.FocusWithin(c) {
+				// Enter goes to the list while the box has no focus:
+				// one ↵ cap on screen, on what Enter does (Mac round 1,
+				// feel S5).
+				keys = ""
 			}
 			if sizedButton(c, "send", locales.CockpitSend(), keys, primary, hControlSm, rControl, pal) {
 				a.sendBox(ag, d, mail)
