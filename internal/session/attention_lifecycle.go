@@ -371,7 +371,7 @@ func (a *attentionStore) rememberUndoLocked(it AttentionItem, reason string) {
 			it.Kind = AttentionApproval
 		}
 		it.DenyMessage, it.PlanLines, it.PlanSHA = false, 0, ""
-		it.EditLines, it.EditSHA = 0, ""
+		it.HeldEdit, it.EditLines = false, 0
 	}
 	it.Closed = ""
 	a.undo = append(a.undo, attentionUndo{item: it, reason: reason, at: now})

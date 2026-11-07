@@ -64,7 +64,8 @@ func editDigest(e editBody) string {
 
 // TestGUIBridgeEditApprovalNeedsItsDigest: a Claude Code Edit sent through
 // the real hook is held with its body. The bridge, the path guios reads,
-// carries edit_sha on the item and get-approval serves the body. An allow
+// marks the item held_edit, without the digest, and get-approval serves the
+// body with edit_sha. An allow
 // with no edit_sha, or a wrong one, is refused with edit_unreviewed and the
 // hook waits on; always is not offered; the allow that names the digest of
 // the body served reaches the hook as allow.
@@ -132,8 +133,12 @@ func TestGUIBridgeEditApprovalNeedsItsDigest(t *testing.T) {
 		t.Fatalf("get-approval served %+v", *detail.Edit)
 	}
 	sha := editDigest(*detail.Edit)
-	if detail.EditSHA != sha || item.EditSHA != sha || item.EditLines != 2 {
-		t.Fatalf("edit_sha %q on get-approval, %q on the item (%d lines); the documented encoding gives %q", detail.EditSHA, item.EditSHA, item.EditLines, sha)
+	if detail.EditSHA != sha || !item.HeldEdit || item.EditLines != 2 {
+		t.Fatalf("edit_sha %q on get-approval, held_edit %v and %d lines on the item; the documented encoding gives %q", detail.EditSHA, item.HeldEdit, item.EditLines, sha)
+	}
+	// The digest comes only with the body: the item does not carry it.
+	if item.EditSHA != "" {
+		t.Fatalf("ASSERTION: the item carries edit_sha %q", item.EditSHA)
 	}
 	if slices.Contains(item.Options, "always") {
 		t.Fatalf("always is offered on the item: %v", item.Options)

@@ -35,12 +35,14 @@ var errEditUnreviewed = errors.New("edit not reviewed")
 
 // editUnreviewedError is the refusal for an allow of an edit whose body the
 // reply does not name.
-func editUnreviewedError(sha string) *verbError {
+//
+// It does not carry the digest: a refusal that named it would let a client
+// allow the edit without ever fetching its body.
+func editUnreviewedError() *verbError {
 	return hintedVerbError(ErrVerbEditUnreviewed, "an allow of an edit must name in edit_sha the digest of the body that was shown", &VerbHint{
-		Param:    "edit_sha",
-		Verb:     "get-approval",
-		Accepted: []string{sha},
-		Detail:   "Nothing was answered and the hold runs on. Read the body with get-approval, show it, and send its edit_sha with the allow. A client that draws no diff answers the edit in the pane. A deny needs no edit_sha.",
+		Param:  "edit_sha",
+		Verb:   "get-approval",
+		Detail: "Nothing was answered and the hold runs on. Read the body with get-approval, show it, and send its edit_sha with the allow. A client that draws no diff answers the edit in the pane. A deny needs no edit_sha.",
 	})
 }
 

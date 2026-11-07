@@ -3142,7 +3142,8 @@ and `webfetch`, and Qwen Code's `run_shell_command` (not with `directory`),
 `read_file` and `web_fetch`. Claude Code's `Edit`, `MultiEdit` and `Write`
 are held with their whole body beside the line: at most 32 KiB of printable
 text, tabs and newlines, with no field the body does not show. Their item
-carries `edit_sha`, an allow must name it, and "always" is never offered, so
+carries `held_edit`, an allow must name the `edit_sha` that `get-approval`
+serves with the body, and "always" is never offered, so
 only a client that draws the diff allows one; the TUI offers reject and the
 pane. Everything else is answered in the pane as before: `NotebookEdit`, an
 edit over the bound or with other characters, MCP tools, and a command too

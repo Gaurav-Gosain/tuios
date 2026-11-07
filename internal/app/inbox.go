@@ -1589,7 +1589,7 @@ func inboxShownKey(it session.AttentionItem) string {
 	return strings.Join([]string{
 		it.ID, it.RequestID, it.Summary,
 		strings.Join(it.Options, ","), strings.Join(it.AlwaysScope, "\n"),
-		it.Kind, strings.Join(it.Risk, ","), it.PlanSHA, it.EditSHA,
+		it.Kind, strings.Join(it.Risk, ","), it.PlanSHA, strconv.FormatBool(it.HeldEdit),
 	}, "\x00")
 }
 

@@ -1414,7 +1414,7 @@ caller that sends nothing new is answered as before:
   lists what the plain call lists. `kinds` accepts the new kind `plan`, which
   sorts right after `approval`.
 - Attention items gain `snoozed_until`, `marked_unread`, `risk`,
-  `deny_message`, `plan_lines`, `plan_sha`, `edit_lines` and `edit_sha`,
+  `deny_message`, `plan_lines`, `plan_sha`, `held_edit` and `edit_lines`,
   each omitted when unset, and a
   close may carry the new reason `snoozed`. An item mirrored from a linked
   host keeps that host's `risk` and `plan_lines`, display only.
@@ -1620,7 +1620,7 @@ caller of the older verbs and for a subscriber:
   held approval or plan comes back without `request_id`, since the dismiss
   ended its hold, and a plan comes back as kind `approval`, without
   `plan_sha`, `plan_lines` or `deny_message`, and an edit without
-  `edit_sha` or `edit_lines`.
+  `held_edit` or `edit_lines`.
 - A hold that `request-approval` starts on a pane whose approval the person
   snoozed wakes the approval first, so the Inbox can answer it.
 - The saved queue holds snoozed `finished` and `errored` items with
@@ -6529,11 +6529,14 @@ daemon refuses the request with `invalid_params`, and holds nothing, when:
   its path.
 
 `always` is never offered for an edit: it is dropped from `options`, with
-`always_scope`. While the hold runs the item carries `edit_sha` and
+`always_scope`. While the hold runs the item carries `held_edit: true` and
 `edit_lines` (the lines of every `old` and `new` together, each without a
-final newline), and `get-approval` serves `edit` and `edit_sha`. The hold
+final newline), and `get-approval` serves `edit` and `edit_sha`. The item
+never carries `edit_sha`, and an `edit_unreviewed` refusal does not name it,
+so an allow needs a fetch of the body. The hold
 keeps its own copy of the body. A newer request for the pane ends the hold as
-`superseded`, and its item has the new body's `edit_sha`.
+`superseded`, and `get-approval` on the new hold serves the new body's
+`edit_sha`.
 
 `edit_sha` is the SHA-256, in lower-case hex, of this encoding of the body:
 the bytes `tuios-edit-v1` and a newline, then each field as a netstring,
@@ -6548,11 +6551,10 @@ printf 'tuios-edit-v1\n4:Edit,9:notes.txt,1:1,12:retries = 3\n,12:retries = 5\n,
 
 - `reply-approval` with `once` on an edit must carry `edit_sha`, the digest
   of the body that was shown. Without it, or with another body's, the call is
-  refused with `edit_unreviewed` (the hint's `accepted` holds the hold's
-  `edit_sha`), nothing is answered and the hold runs on. A deny needs none.
+  refused with `edit_unreviewed`, nothing is answered and the hold runs on. A deny needs none.
   A risky path still needs `risk_ack` as well: the risk rules read the edit's
   `path` as they read any file tool's.
-- A client that draws no diff offers no allow on an item with `edit_sha`. The
+- A client that draws no diff offers no allow on an item with `held_edit`. The
   TUI says "Review this edit in the pane" and offers reject and the pane.
 - The Claude Code hook keeps an edit in the pane, as before, when its body
   would be refused above, when `tool_input` has a field the body does not

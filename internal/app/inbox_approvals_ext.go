@@ -246,9 +246,9 @@ type InboxApprovalDetailMsg struct {
 const inboxEditWords = "Review this edit in the pane. Enter opens the pane."
 
 // inboxIsEdit reports whether an item holds an edit, whose body only a client
-// that draws the diff may allow (session.AttentionItem.EditSHA).
+// that draws the diff may allow (session.AttentionItem.HeldEdit).
 func inboxIsEdit(it session.AttentionItem) bool {
-	return it.Kind == session.AttentionApproval && it.EditSHA != ""
+	return it.Kind == session.AttentionApproval && it.HeldEdit
 }
 
 // inboxOptions is the answers this client offers on it: the item's options,

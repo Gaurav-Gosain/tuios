@@ -78,8 +78,14 @@ func TestEditIsHeldAndAnsweredByDigest(t *testing.T) {
 	})
 	id := it["request_id"].(string)
 	sha := testEdit.Digest()
-	if it["kind"] != AttentionApproval || it["edit_sha"] != sha || it["edit_lines"] != float64(2) || it["deny_message"] != true {
+	// The item says an edit is held and how long it is, never its digest:
+	// edit_sha comes only from get-approval, with the body, so an allow
+	// cannot be made from the item alone.
+	if it["kind"] != AttentionApproval || it["held_edit"] != true || it["edit_lines"] != float64(2) || it["deny_message"] != true {
 		t.Fatalf("the held edit is %v", it)
+	}
+	if _, ok := it["edit_sha"]; ok {
+		t.Fatalf("ASSERTION: the item carries edit_sha: %v", it)
 	}
 	if fmt.Sprint(it["options"]) != "[once deny]" || it["always_scope"] != nil || it["risk"] != nil {
 		t.Fatalf("the held edit is %v, want once and deny with no scope and no risk", it)
@@ -93,7 +99,7 @@ func TestEditIsHeldAndAnsweredByDigest(t *testing.T) {
 			it = x
 		}
 	}
-	if it["edit_sha"] != sha || it["edit_lines"] != float64(2) || it["request_id"] != id {
+	if it["held_edit"] != true || it["edit_lines"] != float64(2) || it["request_id"] != id {
 		t.Fatalf("ASSERTION: after a report the held edit is %v", it)
 	}
 
@@ -110,6 +116,10 @@ func TestEditIsHeldAndAnsweredByDigest(t *testing.T) {
 	for _, extra := range []map[string]any{{}, {"edit_sha": ""}, {"edit_sha": "0123"}, {"edit_sha": testOtherEdit.Digest()}, {"plan_sha": sha}} {
 		resp := replyWith(c, t, id, ApprovalOnce, tui.HumanNonce(), extra)
 		mustRefuse(t, resp, ErrVerbEditUnreviewed, fmt.Sprintf("an allow with %v", extra))
+		// The refusal does not hand out the digest it asks for.
+		if raw := fmt.Sprint(resp); strings.Contains(raw, sha) {
+			t.Fatalf("ASSERTION: the refusal carries the edit's digest: %s", raw)
+		}
 	}
 	mustRefuse(t, replyWith(c, t, id, ApprovalAlways, tui.HumanNonce(), map[string]any{"edit_sha": sha}), ErrVerbInvalidParams, "always on an edit")
 	stillHeld(t, pending, "an allow without the digest")
@@ -148,7 +158,7 @@ func TestEditCannotBeSwappedWhileHeld(t *testing.T) {
 	tui := attachTUI(t, sp, "other")
 
 	first, it := holdEdit(t, c, sp, a, testEdit, nil)
-	oldID, oldSHA := it["request_id"].(string), it["edit_sha"].(string)
+	oldID, oldSHA := it["request_id"].(string), testEdit.Digest()
 
 	second, _ := requestApprovalWith(t, sp, editParams(a, testOtherEdit, nil))
 	if got := awaitResult(t, first); got["reason"] != approvalEndSuperseded || got["decision"] != "" {
@@ -165,7 +175,7 @@ func TestEditCannotBeSwappedWhileHeld(t *testing.T) {
 		}
 	}
 	newID := it["request_id"].(string)
-	if it["edit_sha"] != testOtherEdit.Digest() {
+	if got := result(t, callP(c, t, "get-approval", map[string]any{"request_id": it["request_id"]})); got["edit_sha"] != testOtherEdit.Digest() {
 		t.Fatalf("the second hold is %v", it)
 	}
 

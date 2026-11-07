@@ -47,6 +47,7 @@ type wireAttentionItem struct {
 	RequestID string   `json:"request_id"`
 	Risk      []string `json:"risk"`
 	EditSHA   string   `json:"edit_sha"`
+	HeldEdit  bool     `json:"held_edit"`
 	EditLines int      `json:"edit_lines"`
 }
 

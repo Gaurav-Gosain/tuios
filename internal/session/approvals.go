@@ -366,7 +366,7 @@ func (a *attentionStore) startHold(spec holdSpec) (*approvalHold, string) {
 	if kind == AttentionPlan {
 		it.PlanLines = planLineCount(h.plan)
 	}
-	it.EditLines, it.EditSHA = 0, h.editSHA
+	it.HeldEdit, it.EditLines = h.edit != nil, 0
 	if h.edit != nil {
 		it.EditLines = h.edit.Lines()
 	}
@@ -407,7 +407,7 @@ func (a *attentionStore) endHoldLocked(requestID string, out approvalOutcome, cl
 		// reason for, so the item is the pane's approval again, marked by
 		// what its line says now.
 		it.Kind, it.DenyMessage, it.PlanLines, it.PlanSHA = AttentionApproval, false, 0, ""
-		it.EditLines, it.EditSHA = 0, ""
+		it.HeldEdit, it.EditLines = false, 0
 		it.Risk = stickyRisk(it.Risk, risk.Names(a.riskOfLine(it.Summary, h.root, h.runDir)))
 		it.Seq = a.rev
 		a.publish(attentionEvent(AttentionUpdated, *it))
@@ -823,7 +823,7 @@ func (d *Daemon) verbReplyApproval(cs *connState, params json.RawMessage) (any, 
 	case errors.Is(err, errBadDecision):
 		return nil, invalidParam("decision", "this prompt does not offer "+echoName(p.Decision), append(slices.Clone(hold.options), ApprovalAsk)...)
 	case errors.Is(err, errEditUnreviewed):
-		return nil, editUnreviewedError(hold.editSHA)
+		return nil, editUnreviewedError()
 	case errors.Is(err, errRiskUnacknowledged):
 		return nil, riskUnacknowledgedError(risk.Names(hold.risk), "Nothing was answered and the hold runs on. The Inbox allows a risky call on a second press of the same key; a client that predates that answers it in the pane.")
 	}

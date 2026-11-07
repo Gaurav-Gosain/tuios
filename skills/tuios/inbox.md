@@ -14,8 +14,8 @@ the prompts only the person may answer.
   approval. The `get-approval` verb reads the plan text
   while it is held. Only the person approves it, from the Inbox
 - an edit (Edit, MultiEdit or Write) held with its whole body: an approval
-  with `edit_lines` and `edit_sha`. `get-approval` serves the body while it is
-  held. Only the person allows it, from a client that draws the diff
+  with `held_edit` and `edit_lines`. `get-approval` serves the body and its
+  `edit_sha` while it is held. Only the person allows it, from a client that draws the diff
 - an approval whose command matched a risk rule carries `risk`, the rule
   names. The person allows it in the Inbox with a key and `enter`; an agent with the `respond`
   grant may deny it and never allow it
