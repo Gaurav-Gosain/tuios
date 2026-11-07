@@ -104,6 +104,10 @@ type queueOrigin struct {
 	// hosted marks a pane this machine runs for another machine. It holds
 	// this machine's default grants and no session here.
 	hosted bool
+	// outside marks a process the daemon started outside every pane, such as
+	// a hook, that held admin through the default grants. Like a hosted pane
+	// it has no session, and it is held to the default grants as they are now.
+	outside bool
 	// peer is the linked machine, for kind link, as its link-peer handshake
 	// named it; empty for a link that gave no name.
 	peer string
@@ -817,6 +821,12 @@ func (d *Daemon) queueOriginRefusal(e *queueEntry, sess *Session, target WindowS
 		if o.hosted {
 			if !d.manager.grants.defaults().Has(GrantAdmin) {
 				return "the pane that queued it runs here for another machine, and the default grants no longer reach any session"
+			}
+			return ""
+		}
+		if o.outside {
+			if !d.manager.grants.defaults().Has(GrantAdmin) {
+				return "the process outside every pane that queued it holds the default grants, and they no longer reach any session"
 			}
 			return ""
 		}

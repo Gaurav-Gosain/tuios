@@ -224,7 +224,7 @@ func (d *Daemon) newQueueEntry(cs *connState, sess *Session, state *SessionState
 			if pa.hosted {
 				e.origin = queueOrigin{kind: "pane", window: pa.window, hosted: true}
 			} else {
-				e.origin = queueOrigin{kind: "pane", window: pa.window, session: pa.session}
+				e.origin = queueOrigin{kind: "pane", window: pa.window, session: pa.session, outside: pa.outsideWithAdmin()}
 			}
 			e.by = pa.window
 			if from != "" && from != pa.window {
