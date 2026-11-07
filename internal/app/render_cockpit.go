@@ -1786,13 +1786,16 @@ func (m *OS) cockpitHints(now time.Time) []overlay.Hint {
 			if it.Kind == session.AttentionPlan {
 				words = [4]string{"approve", "accept edits", "keep planning", "say why"}
 			}
-			if slices.Contains(it.Options, session.ApprovalOnce) {
+			if inboxIsEdit(it) {
+				hints = append(hints, m.keyHints(config.ActionInboxGo, "open pane")...)
+			}
+			if slices.Contains(inboxOptions(it), session.ApprovalOnce) {
 				hints = append(hints, m.keyHints(config.ActionInboxAllow, words[0])...)
 			}
-			if slices.Contains(it.Options, session.ApprovalAlways) {
+			if slices.Contains(inboxOptions(it), session.ApprovalAlways) {
 				hints = append(hints, m.keyHints(config.ActionInboxAllowAlways, words[1])...)
 			}
-			if slices.Contains(it.Options, session.ApprovalDeny) {
+			if slices.Contains(inboxOptions(it), session.ApprovalDeny) {
 				hints = append(hints, m.keyHints(config.ActionInboxReply, words[2])...)
 			}
 			if it.DenyMessage {
@@ -2369,6 +2372,16 @@ func (m *OS) drawItemCard(c *ckCanvas, l ckLook, r ckRow, x, w, y0, y1, top int,
 			}
 			btns = append(btns, btn{strconv.Itoa(i + 1), ckTrunc(printableTitle(o), 24), strconv.Itoa(i + 1)})
 		}
+	case held && inboxIsEdit(it):
+		// This client draws no diff, so an edit is read in the pane: the
+		// card offers that and a reject, never an allow.
+		btns = append(btns, btn{m.inboxKeyOr(config.ActionInboxGo, "enter"), "Open the pane", "go"})
+		if slices.Contains(inboxOptions(it), session.ApprovalDeny) {
+			btns = append(btns, btn{m.inboxKeyOr(config.ActionInboxReply, "r"), "Reject", "r"})
+		}
+		if it.DenyMessage {
+			btns = append(btns, btn{m.inboxKeyOr(config.ActionInboxDenyReason, "R"), "Reject and say why", "R"})
+		}
 	case held:
 		labels := [4]string{"Allow once", "Always", "Reject", "Reject and say why"}
 		if it.Kind == session.AttentionPlan {
@@ -2377,7 +2390,7 @@ func (m *OS) drawItemCard(c *ckCanvas, l ckLook, r ckRow, x, w, y0, y1, top int,
 			labels[1] = "Always for " + ckTrunc(ckRuleWords(it.AlwaysScope[0]), 20)
 		}
 		for i, d := range [3]string{session.ApprovalOnce, session.ApprovalAlways, session.ApprovalDeny} {
-			if !slices.Contains(it.Options, d) {
+			if !slices.Contains(inboxOptions(it), d) {
 				continue
 			}
 			// The button names the key the config binds; its action is the

@@ -283,7 +283,7 @@ func inboxAnswerKeys(it session.AttentionItem) string {
 	}
 	var keys []string
 	for _, a := range inboxAnswerOrder {
-		if slices.Contains(it.Options, a.decision) {
+		if slices.Contains(inboxOptions(it), a.decision) {
 			keys = append(keys, a.key)
 		}
 	}
@@ -302,6 +302,12 @@ func inboxApprovalDetail(it session.AttentionItem, width int) []string {
 	var lines []string
 	for _, l := range wrapPlain(printableTitle(it.Summary), width) {
 		lines = append(lines, "  "+l)
+	}
+	if inboxIsEdit(it) {
+		for _, l := range wrapPlain(inboxEditWords+" 3 rejects it.", width) {
+			lines = append(lines, "  "+l)
+		}
+		return lines
 	}
 	if slices.Contains(it.Options, session.ApprovalAlways) && len(it.AlwaysScope) > 0 {
 		for _, l := range wrapPlain("2 (always) also allows from now on:", width) {
