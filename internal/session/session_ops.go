@@ -268,10 +268,10 @@ type NewWindowOptions struct {
 	// the parent agent's (clampChildMode), so addWindowFor does not read it
 	// again. start-agent sets it.
 	modeChecked bool
-	// closeOnExit is new-window's close_on_exit: the daemon closes the
-	// window when its process exits. It is unexported, like keepOpen: the
-	// caller's onExit does the closing, and this only tells the PTY that its
-	// exit is not a person's close (see PTY.ownShell).
+	// closeOnExit says the caller's onExit closes the window. It is recorded
+	// on the pane so a live handoff can give the pane the same onExit in the
+	// next image, and it tells the PTY that its exit is not a person's close
+	// (see PTY.ownShell).
 	closeOnExit bool
 	// Env is KEY=VALUE pairs the process gets on top of the daemon's own
 	// environment, from a caller that passed its own (fan, start-agent). The

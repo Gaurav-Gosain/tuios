@@ -137,7 +137,8 @@ Result:
   "link_policy": true,
   "pane_grants": true,
   "load": {"cores": 8, "load1": 0.84, "mem_pct": 41.5, "agents_working": 3},
-  "os": "linux"
+  "os": "linux",
+  "handoff": 3
 }}
 ```
 
@@ -162,6 +163,8 @@ the hello its heartbeat sends, so `list-hosts` can report each host's load
 with no call of its own. It is absent from an older daemon.
 
 `instance` is an id for the running daemon image. It changes when a live upgrade execs another binary, while `pid` stays the same.
+
+`handoff` is the live handoff manifest version this image writes: a binary that `daemon-upgrade` names must read it, which `<binary> daemon handoff-accepts` says. `tuios daemon upgrade` checks it before it calls the verb, since the CLI may be another build than the daemon. It is absent from an older daemon, which writes version 2 or 3.
 
 `upgrade` is present only on an image that took its panes over in a live upgrade (see [daemon-upgrade](#daemon-upgrade)), and says what the handoff measured: `from` (the build the panes came from), `panes`, `manifest_bytes`, `preflight_ms`, `quiesce_ms`, `capture_ms`, `pending_max`, `pending_total` (bytes the programs wrote while their panes were stopped), `stopped_at` (Unix nanoseconds), `apply_ms`, `apply_heap_start`, `apply_peak_heap_inuse`, `apply_heap_end`, `paused_ms`, `fallback`, set when the new binary could not take the panes over and the binary that was running took them back, and `recovered`, set with `fallback` when the new image died before it was up and the handoff's keeper started the binary that was running in its place, under the keeper's pid.
 
@@ -1949,7 +1952,7 @@ The daemon first runs `<binary> daemon handoff-accepts`, which prints the handof
 
 ```json
 {"id": 1, "result": {"type": "daemon_upgrading", "pid": 8615, "instance": "5b0e9c1f2a7d4e83",
- "from": "v0.10.0", "to": "v0.10.1", "binary": "/usr/local/bin/tuios", "handoff": 1,
+ "from": "v0.10.0", "to": "v0.10.1", "binary": "/usr/local/bin/tuios", "handoff": 3,
  "panes": 4, "manifest_bytes": 35123, "clients": 2, "preflight_ms": 41}}
 ```
 
@@ -7897,8 +7900,9 @@ Conditions:
 - `window-exit` resolves when the target window's shell process exits. The
   result carries `exit_code` (-1 when a signal stopped the process) and
   `signal` when a signal stopped it. Both are omitted when the status is not
-  known, such as for a window on another machine. An older client ignores
-  them.
+  known, such as for a window on another machine, or on Linux before 6.15 for
+  a program whose parent died before a live upgrade's keeper brought the
+  daemon back. An older client ignores them.
 - `window-idle` resolves after the target window produces no output for `idle`
   milliseconds.
 - `session-exists` resolves when a session named `session` exists.

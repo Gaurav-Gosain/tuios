@@ -331,6 +331,7 @@ func upgradeLive(say func(string, ...any), binary string) (upgradeOutcome, error
 		PID      int    `json:"pid"`
 		Instance string `json:"instance"`
 		Version  string `json:"daemon_version"`
+		Handoff  int    `json:"handoff"`
 	}
 	_ = jsonx.Unmarshal(raw, &before)
 	o.From = before.Version
@@ -338,7 +339,7 @@ func upgradeLive(say func(string, ...any), binary string) (upgradeOutcome, error
 	// The same run the daemon makes, made here first: it says what the
 	// binary is, and it pays a new file's first exec before the daemon
 	// pauses anything.
-	acc, err := handoffAcceptsOf(binary)
+	acc, err := handoffAcceptsOf(binary, before.Handoff)
 	if err != nil {
 		_ = client.Close()
 		return o, &notLiveError{
@@ -353,7 +354,11 @@ func upgradeLive(say func(string, ...any), binary string) (upgradeOutcome, error
 	if os.Getenv("TUIOS_PANE_ID") != "" {
 		say("Asking you to confirm the upgrade in the tuios dialog...\n")
 	}
-	say("Checking %s (%s) accepts this daemon's state (handoff v%d)... ", binary, acc.Version, session.HandoffVersion)
+	if before.Handoff > 0 {
+		say("Checking %s (%s) accepts this daemon's state (handoff v%d)... ", binary, acc.Version, before.Handoff)
+	} else {
+		say("Checking %s (%s) accepts this daemon's state... ", binary, acc.Version)
+	}
 
 	started := time.Now()
 	// From a pane the daemon waits for the person's answer before it starts.
@@ -417,7 +422,7 @@ func upgradeLive(say func(string, ...any), binary string) (upgradeOutcome, error
 		return o, &diagnosticError{
 			What:  fmt.Sprintf("%s died before it was up, so the daemon was started again from %s, as pid %d (was %d).", binary, o.To, after.PID, before.PID),
 			Cause: "the new binary crashed or was killed while it took the panes over. The keeper the upgrade left holding them brought the previous binary back. The daemon log says what it saw.",
-			Fix:   "every program is still running, with the same pid. The daemon is no longer their parent: on Linux the exit status of a program that ends from now on is not known. Run 'tuios logs' to see what failed.",
+			Fix:   "every program is still running, with the same pid. The daemon is no longer their parent: on Linux before 6.15 the exit status of a program that ends from now on is not known. Run 'tuios logs' to see what failed.",
 		}
 	}
 	if o.Fallback {
@@ -621,8 +626,11 @@ func awaitUpgradedDaemon(old string, wait time.Duration) (upgradedDaemon, error)
 	}
 }
 
-// handoffAcceptsOf runs binary's handoff-accepts.
-func handoffAcceptsOf(binary string) (session.HandoffAccepts, error) {
+// handoffAcceptsOf runs binary's handoff-accepts, and checks it reads the
+// manifest version the daemon writes. The daemon's version is its hello's,
+// not this build's: the CLI may be newer or older than the daemon. A daemon
+// whose hello names none leaves the check to its own preflight.
+func handoffAcceptsOf(binary string, writes int) (session.HandoffAccepts, error) {
 	var acc session.HandoffAccepts
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -636,8 +644,8 @@ func handoffAcceptsOf(binary string) (session.HandoffAccepts, error) {
 	if err := jsonx.Unmarshal(bytes.TrimSpace(stdout.Bytes()), &acc); err != nil {
 		return acc, errors.New("it answered handoff-accepts with something that is not its answer")
 	}
-	if session.HandoffVersion < acc.Handoff[0] || session.HandoffVersion > acc.Handoff[1] {
-		return acc, errfmt.Errorf("it reads handoff v%d to v%d, and this daemon writes v%d", acc.Handoff[0], acc.Handoff[1], session.HandoffVersion)
+	if writes > 0 && (writes < acc.Handoff[0] || writes > acc.Handoff[1]) {
+		return acc, errfmt.Errorf("it reads handoff v%d to v%d, and this daemon writes v%d", acc.Handoff[0], acc.Handoff[1], writes)
 	}
 	return acc, nil
 }

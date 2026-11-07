@@ -730,7 +730,7 @@ func (d *Daemon) herdrPluginPaneOpen(cs *connState, params json.RawMessage) (any
 	focus := in.Focus || popup || placement == herdrplugin.PlacementZoomed
 	opts := NewWindowOptions{
 		Title: pane.Title, Name: pane.Title, Cwd: cwd, Workspace: workspace, Focus: focus,
-		Command: argv, Env: env, Grants: grants,
+		Command: argv, Env: env, Grants: grants, closeOnExit: true,
 	}
 	if popup {
 		opts.Popup = true

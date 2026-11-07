@@ -162,6 +162,8 @@ func exitNoteText(p *PTY) string {
 		msg = "The program ended."
 	case sig > 0:
 		msg = fmt.Sprintf("The program stopped on signal %d.", sig)
+	case exitStatusLost(code, sig):
+		msg = "The program ended. Its exit status is not known."
 	default:
 		msg = fmt.Sprintf("The program exited with status %d.", code)
 	}
@@ -169,18 +171,27 @@ func exitNoteText(p *PTY) string {
 }
 
 // exitResult adds a pane's exit status to a verb result: exit_code, and signal
-// when a signal ended the process. It adds nothing while the process runs, or
-// for a pane on another machine, whose status does not cross the link.
+// when a signal ended the process. It adds nothing while the process runs, for
+// a pane on another machine, whose status does not cross the link, or when the
+// status is lost.
 func exitResult(p *PTY, res map[string]any) {
 	if p == nil || p.host != "" {
 		return
 	}
 	code, exited := p.ExitStatus()
-	if !exited {
+	sig := p.ExitSignal()
+	if !exited || exitStatusLost(code, sig) {
 		return
 	}
 	res["exit_code"] = code
-	if sig := p.ExitSignal(); sig > 0 {
+	if sig > 0 {
 		res["signal"] = sig
 	}
 }
+
+// exitStatusLost says a process's recorded end carries no status: a code of
+// -1 with no signal, which a signal never leaves. It is what a process this
+// daemon cannot reap records when the kernel does not say how it ended. On
+// Linux before 6.15 that is a pane whose parent died in a keeper's recovery
+// (handoff_keeper.go): see waitForeignExit.
+func exitStatusLost(code, sig int) bool { return code < 0 && sig == 0 }
