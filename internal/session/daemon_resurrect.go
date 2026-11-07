@@ -159,6 +159,14 @@ func (d *Daemon) restoreSessionOffers(state *SessionState) (*Session, []resumeOf
 	// yet) would otherwise be saved as empty on the next save and lost. A
 	// shell asked to start in a missing folder starts in the daemon's.
 	sess.SetStartDir(state.StartDir)
+	// The graphics of the last client come back before any shell starts, so
+	// the shells are told the TERM_PROGRAM they were told before. See
+	// SessionState.KittyGraphics. State that names none (written before the
+	// field, or by a session no client drew) leaves the session to follow
+	// the daemon's most recent client.
+	if state.KittyGraphics || state.SixelGraphics {
+		sess.SetGraphicsCapabilities(state.KittyGraphics, state.SixelGraphics)
+	}
 	// When the person last used it comes back too. Without it every restored
 	// session looked unused, and a bare attach fell to the restore order.
 	// Nothing below touches it: restoring panes is not the person.
