@@ -734,6 +734,7 @@
   "cockpitWorkspace": "工作区 {n}",
   "cockpitYou": "你",
   "cockpitAnswerInPane": "guios 无法从屏幕读取此提示。请打开窗格来回答。",
+  "cockpitHoldEnded": "保留已结束。请在窗格中回答。",
   "cockpitAllowTool": "允许 {tool}",
   "cockpitQuestion": "回答代理",
   "cockpitQueued": "已排队",

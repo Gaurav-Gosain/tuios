@@ -1333,6 +1333,7 @@
   },
   "cockpitYou": "You",
   "cockpitAnswerInPane": "guios cannot read this prompt on the screen. Open the pane to answer it.",
+  "cockpitHoldEnded": "The hold ended. Answer it in the pane.",
   "cockpitAllowTool": "Allow {tool}",
   "cockpitQuestion": "Answer the agent",
   "cockpitQueued": "Queued",

@@ -734,6 +734,7 @@
   "cockpitWorkspace": "ワークスペース {n}",
   "cockpitYou": "あなた",
   "cockpitAnswerInPane": "guios はこの確認を画面から読めません。答えるにはペインを開いてください。",
+  "cockpitHoldEnded": "保留は終わりました。ペインで答えてください。",
   "cockpitAllowTool": "{tool} を許可",
   "cockpitQuestion": "エージェントに答える",
   "cockpitQueued": "待機中",

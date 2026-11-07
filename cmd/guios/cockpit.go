@@ -181,6 +181,8 @@ type cockpit struct {
 	// (ckPromptToast).
 	cardKey      string
 	promptToasts map[string]string
+	// wasHeld are the prompts the card drew held (ckHoldEnded).
+	wasHeld map[string]bool
 	// peek is the prompt on the selected pane's screen, as peek-prompt read
 	// it, for a prompt no hook holds.
 	peek  *ckPeek

@@ -364,6 +364,7 @@ func (a *App) approvalCard(c *ui.Context, pal *palette, ag client.Agent, it sess
 	now := c.Now()
 	key := ckShownKey(it)
 	ck.cardKey = key
+	a.ckNoteHeld(it)
 	if ck.shown.key != key {
 		ck.shown = ckShown{key: key, since: now}
 		ck.armed = ckArmed{}
@@ -534,7 +535,12 @@ func (a *App) approvalCard(c *ui.Context, pal *palette, ag client.Agent, it sess
 				// With approvals off the offer says it all, in one line:
 				// "cannot read" beside it named a second app and said the
 				// same twice (Mac round 3, workflow S2).
-				if !a.ckApprovalsOff(it, ag) {
+				switch {
+				case a.ckHoldEnded(it):
+					// tuios read it: the hold ended, and "cannot read"
+					// said what was not so (Mac round 3, workflow S1).
+					ui.Text(c, locales.CockpitHoldEnded()).FontSize(fsSmall).TextColor(pal.textMuted).MaxLines(2).MinWidth(0)
+				case !a.ckApprovalsOff(it, ag):
 					ui.Text(c, locales.CockpitAnswerInPane()).FontSize(fsSmall).TextColor(pal.textMuted).MaxLines(2).MinWidth(0)
 				}
 				a.ckApprovalsOffLine(c, pal, it, ag)
@@ -1032,4 +1038,27 @@ func (a *App) ckCardOpensPane(it session.AttentionItem) bool {
 // so the key line offers its chord only then (council mac-1, W-M2).
 func (a *App) ckCardAllows(it session.AttentionItem) bool {
 	return ckAnswerable(it) && !ckIsQuestion(it) && slices.Contains(a.ckOptions(it, a.ck.peek), "once")
+}
+
+// ckPromptKey names a prompt across its hold: the agent's pane and what it
+// asks. A held prompt and the same prompt once its hold ends are two items.
+func ckPromptKey(it session.AttentionItem) string {
+	return it.Session + "\x00" + it.Window + "\x00" + it.Summary
+}
+
+// ckNoteHeld notes the prompts the card drew held, for ckHoldEnded.
+func (a *App) ckNoteHeld(it session.AttentionItem) {
+	if !ckHeld(it) {
+		return
+	}
+	if a.ck.wasHeld == nil {
+		a.ck.wasHeld = map[string]bool{}
+	}
+	a.ck.wasHeld[ckPromptKey(it)] = true
+}
+
+// ckHoldEnded reports whether the card drew the prompt held before, and
+// its hold has ended: the prompt waits in the pane.
+func (a *App) ckHoldEnded(it session.AttentionItem) bool {
+	return !ckHeld(it) && a.ck.wasHeld[ckPromptKey(it)]
 }

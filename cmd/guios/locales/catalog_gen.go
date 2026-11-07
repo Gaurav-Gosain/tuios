@@ -7460,6 +7460,16 @@ func (msgs Messages) CockpitAnswerInPane() string {
 	return Catalog.Format(msgs.locale, "cockpitAnswerInPane", nil)
 }
 
+// CockpitHoldEnded says "The hold ended. Answer it in the pane."
+// in the language the app shows.
+func CockpitHoldEnded() string { return In(i18n.Locale()).CockpitHoldEnded() }
+
+// CockpitHoldEnded says "The hold ended. Answer it in the pane."
+// in the language of msgs.
+func (msgs Messages) CockpitHoldEnded() string {
+	return Catalog.Format(msgs.locale, "cockpitHoldEnded", nil)
+}
+
 // CockpitAllowTool says "Allow {tool}"
 // in the language the app shows.
 func CockpitAllowTool(tool string) string { return In(i18n.Locale()).CockpitAllowTool(tool) }
