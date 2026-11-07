@@ -133,6 +133,14 @@ type cockpitState struct {
 	// the last frame drew each region.
 	region    ckRegion
 	regionBox [ckRegions]ckRegionBox
+	// listWidth is the list width in cells the person chose (0: none),
+	// sideHidden hides the side column, zoom shows the focused region
+	// alone, and div is the edge of the list a drag resizes. See
+	// cockpit_layout.go.
+	listWidth  int
+	sideHidden bool
+	zoom       bool
+	div        ckDivider
 	// key is the selected row, and akey its agent, so the cursor stays on
 	// an agent whose approval was answered and whose row key changed.
 	key, akey string
@@ -1231,6 +1239,9 @@ func (m *OS) CockpitClick(x, y int) (tea.Cmd, bool) {
 		ck.art.focus = false
 		m.cockpitTouch()
 	}
+	if m.cockpitDividerPress(x, y) {
+		return nil, true
+	}
 	m.cockpitFocusRegionAt(x, y)
 	for _, h := range ck.hits {
 		if x < h.x0 || x >= h.x1 || y < h.y0 || y >= h.y1 {
@@ -1401,6 +1412,9 @@ func (m *OS) CockpitHover(x, y int) {
 	if ck.spawn != nil {
 		return
 	}
+	if m.cockpitDividerMotion(x, y) {
+		return
+	}
 	if m.kanbanDragTo(x, y) {
 		return
 	}
@@ -1528,6 +1542,9 @@ func (m *OS) CockpitKey(action string) (tea.Cmd, bool) {
 		return cmd, true
 	}
 	if cmd, ok := m.cockpitRegionKey(action); ok {
+		return cmd, true
+	}
+	if cmd, ok := m.cockpitLayoutKey(action); ok {
 		return cmd, true
 	}
 	switch action {

@@ -106,6 +106,12 @@ type sidebarStateFile struct {
 	// AgentsList is the agents view's list layout the person chose with the
 	// list key, "column" or "strip". Absent means [agents] view_list decides.
 	AgentsList string `json:"agents_list,omitempty"`
+	// AgentsListWidth is the agents view's list width in cells the person
+	// chose with < > or a drag. Absent means [agents] list_width decides.
+	AgentsListWidth int `json:"agents_list_width,omitempty"`
+	// AgentsSideHidden says the person hid the agents view's side column
+	// with w.
+	AgentsSideHidden bool `json:"agents_side_hidden,omitempty"`
 	// HostsOrder is the user's drag-defined order of the other machines' groups
 	// in the sessions section, and HostsCollapsed names the machines whose
 	// group is folded shut, sorted for the same reason ReposCollapsed is.
@@ -162,6 +168,8 @@ func (m *OS) loadSidebarState() {
 	if st.AgentsList == config.AgentsViewListColumn || st.AgentsList == config.AgentsViewListStrip {
 		m.Inbox.ck.listMode = st.AgentsList
 	}
+	m.Inbox.ck.listWidth = max(st.AgentsListWidth, 0)
+	m.Inbox.ck.sideHidden = st.AgentsSideHidden
 	if len(st.AgentNoticesDismissed) > 0 {
 		m.agentNoticesDismissed = make(map[string]bool, len(st.AgentNoticesDismissed))
 		for _, k := range st.AgentNoticesDismissed {
@@ -271,6 +279,8 @@ func (m *OS) saveSidebarState() {
 		AgentsFolds:           m.Inbox.ck.ckFoldsToFile(),
 		BoardList:             m.Inbox.ck.boardList,
 		AgentsList:            m.Inbox.ck.listMode,
+		AgentsListWidth:       m.Inbox.ck.listWidth,
+		AgentsSideHidden:      m.Inbox.ck.sideHidden,
 		AgentNoticesDismissed: collapsedRepoList(m.agentNoticesDismissed),
 		MachineOffersNever:    collapsedRepoList(m.machineOffersNever),
 		Collapsed:             m.SidebarCollapsed,

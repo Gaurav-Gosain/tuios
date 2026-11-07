@@ -14389,3 +14389,21 @@ Run on 2026-11-07 on macOS (arm64), each control its own binary:
 The frames are `regions-*` under the test's artifact folder. Repeat from
 `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestCockpitRegions$' -v .`.
+
+## The agents view's list width, side column and zoom
+
+`TestCockpitLayout` at 200x50: the list is 56 cells, `>` makes it 60, `<` twice
+52; the pointer on its edge lights a bar and the key bar says "drag to resize";
+a drag to column 71 makes it 70 and leaves the cursor; a new client keeps 70; a
+double click on the edge gives back 56. `w` hides the side column and shows it
+again. `Z` on the focus shows it alone and `esc` gives the view back on the
+focus. A fleet with `[agents] list_width = "30"` draws a 30 cell list.
+
+Run on 2026-11-07 on macOS (arm64), each control its own binary:
+
+| Removed | The test fails with | Result |
+|---------|---------------------|--------|
+| The width not read from the state file | "a new client after the drag: the list ends at 56, want 70" | **caught** |
+| The drag not followed | "a drag of the edge to column 71: the list ends at 52, want 70" | **caught** |
+| `w` does nothing | "w did not hide the side column" | **caught** |
+| `Z` does nothing | "Z did not show the focus alone" | **caught** |

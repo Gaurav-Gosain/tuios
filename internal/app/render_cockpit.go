@@ -338,6 +338,7 @@ func (m *OS) drawCockpit(c *ckCanvas, l ckLook, top int, now time.Time) {
 	ck := &st.ck
 	ck.stripShown = false
 	ck.regionBox = [ckRegions]ckRegionBox{}
+	ck.div.x0, ck.div.x1 = 0, 0
 	hdrY := 0
 	if c.h >= 32 {
 		hdrY = 1
@@ -372,15 +373,7 @@ func (m *OS) drawCockpit(c *ckCanvas, l ckLook, top int, now time.Time) {
 	}
 
 	// The layout by width: the fleet beside the focus, or one of them.
-	fleetW := 56
-	switch {
-	case c.w < ckOneColumn:
-		fleetW = c.w
-	case c.w < ckTwoLine:
-		fleetW = 38
-	case c.w < ckWide:
-		fleetW = 48
-	}
+	fleetW := m.cockpitFleetWidth(c.w)
 	// The strip draws no headings, so a folded group keeps the fleet
 	// column: it shows the fold, and the cursor can open it there.
 	// [agents] view_list and the list key choose between the column and
@@ -405,9 +398,34 @@ func (m *OS) drawCockpit(c *ckCanvas, l ckLook, top int, now time.Time) {
 	case c.w < ckOneColumn:
 		focusW = 0
 	}
-	if !strip && (c.w >= ckOneColumn || !st.threads.open) {
+	// A zoom shows the focused region alone over the body.
+	zoom := ckRegionList
+	if ck.zoom && c.w >= ckOneColumn && !strip {
+		zoom = ck.region
+		if m.InboxReplyOpen() {
+			zoom = ckRegionReply
+		}
+		switch zoom {
+		case ckRegionList:
+			fleetW, focusW = c.w, 0
+		case ckRegionSide:
+			if e, ok := m.cockpitAgent(); ok {
+				m.drawSide(c, l, e, 2, colTop, c.w-4, colBot)
+				ck.regionBox[ckRegionSide] = ckRegionBox{2, c.w - 2, top + colTop, top + colBot}
+			}
+			m.drawCockpitHints(c, l, hintsY, now)
+			return
+		default:
+			focusX, focusW = 2, c.w-4
+		}
+	}
+	zoomed := ck.zoom && zoom != ckRegionList
+	if !strip && !zoomed && (c.w >= ckOneColumn || !st.threads.open) {
 		m.drawFleet(c, l, fleetW, colTop, colBot, top)
 		ck.regionBox[ckRegionList] = ckRegionBox{0, fleetW, top + colTop, top + colBot}
+		if focusW > 0 && c.w >= ckOneColumn {
+			m.drawCockpitDivider(c, l, fleetW, colTop, colBot, top)
+		}
 	}
 	// The comparison of a fan takes the focus and the side column.
 	if ck.cmp != nil && c.w >= ckOneColumn && !strip {
@@ -416,7 +434,7 @@ func (m *OS) drawCockpit(c *ckCanvas, l ckLook, top int, now time.Time) {
 		return
 	}
 	// At 170 columns and wider the side column sits beside the focus.
-	if focusW > 0 && c.w >= ckWide {
+	if focusW > 0 && !zoomed && m.cockpitSideShown(c.w, focusW) {
 		if e, ok := m.cockpitAgent(); ok {
 			focusW -= ckSideWidth + 1
 			m.drawSide(c, l, e, c.w-ckSideWidth, colTop, ckSideWidth, colBot)
@@ -1723,7 +1741,7 @@ func (m *OS) drawCockpitEmpty(c *ckCanvas, l ckLook, y0, y1, top int, lines []st
 // on the right.
 func (m *OS) drawCockpitHints(c *ckCanvas, l ckLook, y int, now time.Time) {
 	pal := l.pal
-	hints := m.cockpitHints(now)
+	hints := append(m.cockpitLayoutHints(), m.cockpitHints(now)...)
 	right := ""
 	if n := len(m.Inbox.ck.agents); n > 0 {
 		right = strconv.Itoa(n) + " agent"

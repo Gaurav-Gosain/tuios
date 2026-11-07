@@ -2917,6 +2917,7 @@ of agents as a column beside the focus. `view_list` sets that layout:
 ```toml
 [agents]
 view_list = "column"   # default; "strip" or "auto"
+list_width = ""        # cells ("52") or a share ("30%"); empty follows the screen
 ```
 
 | Value | What the view shows |

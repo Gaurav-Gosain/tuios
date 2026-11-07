@@ -124,6 +124,10 @@ func (m *OS) CockpitEscape() tea.Cmd {
 	st := &m.Inbox
 	ck := &st.ck
 	switch {
+	case ck.zoom:
+		ck.zoom = false
+		m.cockpitTouch()
+		return nil
 	case st.threads.open:
 		return m.CockpitOpenFocus(false)
 	case m.CockpitRegion() != ckRegionList:
@@ -151,6 +155,8 @@ func (m *OS) cockpitNarrowed() bool {
 // cockpitEscapeLabel is what esc does now, for the key bar.
 func (m *OS) cockpitEscapeLabel() string {
 	switch {
+	case m.Inbox.ck.zoom:
+		return "unzoom"
 	case m.Inbox.threads.open:
 		return "back"
 	case m.CockpitRegion() != ckRegionList:

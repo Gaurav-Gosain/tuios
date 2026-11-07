@@ -484,6 +484,9 @@ func (m *OS) kanbanDragTo(x, y int) bool {
 // card to its stage. handled is false when no drag was under way, and the
 // release goes on as before.
 func (m *OS) CockpitRelease(x, y int) (tea.Cmd, bool) {
+	if m.cockpitDividerRelease() {
+		return nil, true
+	}
 	ck := &m.Inbox.ck
 	d := ck.kb.drag
 	if d == nil {

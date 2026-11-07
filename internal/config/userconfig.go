@@ -1874,10 +1874,16 @@ const (
 	// column. tab and shift+tab step them, esc goes one step back (out of
 	// a region, then a search, then the view), and N goes to the next
 	// agent that needs the person.
-	ActionInboxRegionNext   = "inbox_region_next"
-	ActionInboxRegionPrev   = "inbox_region_prev"
-	ActionInboxEscape       = "inbox_escape"
-	ActionInboxNextNeeds    = "inbox_next_needs"
+	ActionInboxRegionNext = "inbox_region_next"
+	ActionInboxRegionPrev = "inbox_region_prev"
+	ActionInboxEscape     = "inbox_escape"
+	ActionInboxNextNeeds  = "inbox_next_needs"
+	// The layout keys: the list's width, the side column, and the zoom of
+	// the focused region.
+	ActionInboxListNarrower = "inbox_list_narrower"
+	ActionInboxListWider    = "inbox_list_wider"
+	ActionInboxSide         = "inbox_side"
+	ActionInboxZoom         = "inbox_zoom"
 	ActionAgentUnread       = "agent_unread"
 	ActionAgentSnooze       = "agent_snooze"
 	ActionAgentReply        = "agent_reply"
@@ -1934,14 +1940,18 @@ func getDefaultInboxKeybinds() map[string][]string {
 		ActionInboxMailbox:  {"m"},
 		// esc goes back one step, q closes at once. tab steps the
 		// regions; i and r open the reply.
-		ActionInboxClose:      {"q"},
-		ActionInboxEscape:     {"esc"},
-		ActionInboxWrite:      {"i"},
-		ActionInboxRegionNext: {"tab"},
-		ActionInboxRegionPrev: {"shift+tab"},
-		ActionInboxNextNeeds:  {"N"},
-		ActionInboxSort:       {"s"},
-		ActionInboxViewPane:   {"ctrl+]"},
+		ActionInboxClose:        {"q"},
+		ActionInboxEscape:       {"esc"},
+		ActionInboxWrite:        {"i"},
+		ActionInboxRegionNext:   {"tab"},
+		ActionInboxRegionPrev:   {"shift+tab"},
+		ActionInboxNextNeeds:    {"N"},
+		ActionInboxListNarrower: {"<"},
+		ActionInboxListWider:    {">"},
+		ActionInboxSide:         {"w"},
+		ActionInboxZoom:         {"Z"},
+		ActionInboxSort:         {"s"},
+		ActionInboxViewPane:     {"ctrl+]"},
 		// Review, triage and approvals. z snoozes and waits for a digit; u
 		// undoes a dismiss or snooze made a moment ago; S shows what is
 		// snoozed; R rejects with a reason, after the a A r R of the

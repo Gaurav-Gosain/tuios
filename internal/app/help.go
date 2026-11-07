@@ -256,6 +256,7 @@ func generateAgentBindings(registry *config.KeybindRegistry, s *config.Settings)
 		config.ActionInboxPromptPrev, config.ActionInboxPromptNext, config.ActionInboxChild,
 		config.ActionInboxDetailDown, config.ActionInboxDetailUp,
 		config.ActionInboxRegionNext, config.ActionInboxRegionPrev, config.ActionInboxEscape, config.ActionInboxNextNeeds,
+		config.ActionInboxListNarrower, config.ActionInboxListWider, config.ActionInboxSide, config.ActionInboxZoom,
 	} {
 		inbox(action, config.ActionDescriptions[action])
 	}

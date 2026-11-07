@@ -1922,6 +1922,9 @@ Inside it:
 | `?` | All keys. Help opens over the view, and `esc` gives the view back as it was |
 | `esc` | Go back one step: on a narrow screen from the focus to the list, then from a region to the list, then clear the search and the filter, then close the view. The key bar says what the next `esc` does |
 | `q` | Close the view at once |
+| `<` `>` | Make the list narrower or wider by 4 cells. A drag on the edge of the list sets it, and a double click there resets it. tuios keeps the width. See `list_width` in [CONFIGURATION.md](CONFIGURATION.md) |
+| `w` | Hide the side column, or show it again |
+| `Z` | Show the focused region alone. `Z` or `esc` gives the whole view back |
 
 The region that has the keys wears an accent rule along its top edge, and
 the key bar names it at the left and shows its keys. In the focus, `j` `k`

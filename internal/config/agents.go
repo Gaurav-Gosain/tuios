@@ -1,6 +1,7 @@
 package config
 
 import (
+	"strconv"
 	"strings"
 	"time"
 )
@@ -75,6 +76,28 @@ type AgentsConfig struct {
 	// list key (\ by default) switches it, and the choice is kept in the
 	// client's state file, where it wins over this value. See ViewListMode.
 	ViewList string `toml:"view_list,omitempty"`
+	// ListWidth is the width of the agents view's list column: a number of
+	// cells ("52") or a share of the view ("30%"). Empty keeps the width
+	// that follows the screen: 38, 48 or 56 cells. < and > and a drag on
+	// the edge of the list change it, and that width is kept in the
+	// client's state file, where it wins over this value. The list keeps 28
+	// cells and the focus 40. See ListWidthCells.
+	ListWidth string `toml:"list_width,omitempty"`
+}
+
+// ListWidthCells is list_width for a view total cells wide, and 0 when it
+// is empty or does not parse.
+func (a AgentsConfig) ListWidthCells(total int) int {
+	v := strings.TrimSpace(a.ListWidth)
+	pct := strings.HasSuffix(v, "%")
+	n, err := strconv.Atoi(strings.TrimSpace(strings.TrimSuffix(v, "%")))
+	if err != nil || n <= 0 {
+		return 0
+	}
+	if pct {
+		return total * min(n, 100) / 100
+	}
+	return n
 }
 
 // DefaultSilentAfter is the default of silent_after. A hooked harness reports
