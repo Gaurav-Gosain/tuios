@@ -66,6 +66,10 @@ type modeOwner uint8
 const (
 	// leaseHold is the hold key, held down.
 	leaseHold modeOwner = iota + 1
+	// leaseGesture is a pointer gesture: a resize, a divider drag, an alt-drag.
+	leaseGesture
+	// leaseCtrlDrag is a committed ctrl-drag of a pane.
+	leaseCtrlDrag
 )
 
 // modeLease is one borrow open now.
@@ -86,14 +90,9 @@ type modeState struct {
 }
 
 // chosenMode is the mode the person chose, beneath every borrow open now.
-// A pointer gesture and a ctrl drag borrow window management only from
-// terminal mode, and are not leases yet.
 func (m *OS) chosenMode() Mode {
-	switch {
-	case len(m.mode.leases) > 0:
+	if len(m.mode.leases) > 0 {
 		return m.mode.base
-	case m.pointerGestureWasTerminal || m.CtrlDragWasTerminal:
-		return TerminalMode
 	}
 	return m.Mode
 }
@@ -135,7 +134,6 @@ func (m *OS) dropLease(owner modeOwner) bool {
 }
 
 // settleMode sets OS.Mode to the mode in effect: the newest unspent lease's,
-// else window management while a borrower that is not a lease yet holds it,
 // else the choice.
 func (m *OS) settleMode() {
 	for i := len(m.mode.leases) - 1; i >= 0; i-- {
@@ -143,10 +141,6 @@ func (m *OS) settleMode() {
 			m.Mode = lease.want
 			return
 		}
-	}
-	if m.pointerGestureWasTerminal || m.CtrlDragWasTerminal {
-		m.Mode = WindowManagementMode
-		return
 	}
 	m.Mode = m.mode.base
 }
@@ -178,11 +172,11 @@ func (m *OS) ChooseMode(to Mode, cause ModeCause) {
 }
 
 // SetBorrowedMode is the write a borrower that is not a lease makes when it
-// takes a mode and when it hands one back. It is not a choice: the recorder
-// does not hear it, and nest mode waits for the borrow to end (see
-// settleNest). While a lease is open the lease decides the mode, and its end
-// hands back the choice beneath both: a pointer gesture that ends under a
-// held hold key leaves window management in effect until the release.
+// takes a mode and when it hands one back: the rail, and a press that grabs a
+// pane's title bar or focuses it. It is not a choice: the recorder does not
+// hear it, and nest mode waits for the borrow to end (see settleNest). While a
+// lease is open the lease decides the mode, and its end hands back the choice
+// beneath both.
 func (m *OS) SetBorrowedMode(to Mode) {
 	if len(m.mode.leases) > 0 {
 		m.settleMode()

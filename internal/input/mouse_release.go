@@ -14,8 +14,9 @@ func handleMouseRelease(msg tea.MouseReleaseMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	// event. Every branch below can return early, and each one that fired while
 	// a resize was live left it running. Deferred so it covers all of them, and
 	// idempotent so the cleanup at the bottom stays the normal way a gesture
-	// ends. See OS.EndStrayGesture. The mode the gesture borrowed goes back the
-	// same way, for the same reason.
+	// ends. See OS.EndStrayGesture. The mode the gesture or a ctrl-drag
+	// borrowed goes back the same way, for the same reason, once the drop has
+	// retiled.
 	//
 	// The announcement hold the press armed ends here too, and last of all: the
 	// drop has been laid out by then, so what each pane is told is the size it
@@ -23,6 +24,7 @@ func handleMouseRelease(msg tea.MouseReleaseMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	// it left tells it nothing, which is the point.
 	defer func() {
 		o.EndStrayGesture()
+		o.EndCtrlDrag()
 		o.EndPointerGesture()
 		o.ReleaseGestureAnnouncements()
 		// Last, because it moves the strip: everything above has to have
@@ -149,13 +151,6 @@ func handleMouseRelease(msg tea.MouseReleaseMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		return o, nil
 	}
 	o.CtrlDragging = false
-	// A ctrl-drag that started in terminal mode gives typing back when the pane
-	// lands: moving a window is not a request to stop typing. Deferred because
-	// the drop leaves through several returns, all of which retile first.
-	if o.CtrlDragWasTerminal {
-		o.CtrlDragWasTerminal = false
-		defer o.SetBorrowedMode(app.TerminalMode)
-	}
 
 	// A plain right press on a pane arms a resize. Below the drag threshold it
 	// was a click: cancel the resize (restoring the few cells of jitter it may

@@ -109,10 +109,7 @@ func (m *OS) CancelWindowDrag() bool {
 	m.CtrlDragPending = false
 	m.ClickToTypePending = false
 	m.RightClickPending = false
-	if m.CtrlDragWasTerminal {
-		m.CtrlDragWasTerminal = false
-		m.SetBorrowedMode(TerminalMode)
-	}
+	m.EndCtrlDrag()
 	m.endLostGesture()
 	m.DragOffsetX, m.DragOffsetY = 0, 0
 	m.DragStartX, m.DragStartY = 0, 0

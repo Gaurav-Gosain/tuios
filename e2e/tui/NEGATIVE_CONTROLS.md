@@ -14692,3 +14692,25 @@ Run on 2026-11-08 on macOS (arm64):
 
 The fixed build passes each 3 of 3. `TestHoldThenRailHandsBackTerminalMode`
 passes on both builds.
+
+## Pointer gestures as mode leases
+
+The tests are in `gesture_lease_mode_test.go`. They are guards for a change
+that fixes nothing on its own: the pointer gesture and the ctrl-drag kept a
+flag each (`pointerGestureWasTerminal`, `CtrlDragWasTerminal`) and are now
+leases on window management. Each test begins in terminal mode, ends the
+gesture, and asks the shell to answer.
+
+- `TestDividerDragHandsBackTerminalMode`: a divider drag between two tiles.
+- `TestHoldReleasedDuringADividerDragHandsBackTerminalMode`: hold, a divider
+  drag begins, the key is let go during the drag, the drag drops.
+- `TestCtrlDragHandsBackTerminalMode`: a ctrl-drag swaps the two tiles. The
+  test fails first if the screen did not change.
+
+Run on 2026-11-08 on macOS (arm64):
+
+| Removed | Test | Failure | Result |
+|---------|------|---------|--------|
+| `EndPointerGesture` and `EndCtrlDrag` made to do nothing | all three | "command \"echo back-$((3+4))\" never produced \"back-7\"" | **caught** |
+
+All three pass on the parent commit and on main.

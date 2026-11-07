@@ -2105,13 +2105,6 @@ type OS struct {
 	// was on one and link_click allows ctrl. A release before the drag
 	// threshold opens it; a drag clears it. See handleMouseRelease.
 	CtrlClickLink string
-	// CtrlDragWasTerminal remembers that the grab started in terminal mode, so
-	// dropping the window puts the user back where they were instead of leaving
-	// them in window management. Moving a pane is not a request to stop typing.
-	CtrlDragWasTerminal bool
-	// pointerGestureWasTerminal is the same bargain for a resize or an alt-drag
-	// move: see BeginPointerGesture.
-	pointerGestureWasTerminal bool
 
 	// ContextMenu is the open shift+right-click menu, or nil. It is deliberately
 	// not one of the draggable overlay kinds: a context menu is anchored to the
