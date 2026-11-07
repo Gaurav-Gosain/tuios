@@ -605,7 +605,14 @@ func (a *App) paneHeader(c *ui.Context, pal *palette, bar ui.TitleBar, shown flo
 			}
 			// The title gives way last: it keeps its first titleKeep DIPs
 			// while the chips and the folder go before it.
-			name := oneLine(c, title, fsBody, wSemibold).TextColor(pal.text)
+			// The pane the keyboard is in says so in its title too, in the
+			// accent, as its edge does: from across the room the edge is a
+			// hairline, the title is not.
+			titleColor := pal.text
+			if multi && focused {
+				titleColor = pal.accentText
+			}
+			name := oneLine(c, title, fsBody, wSemibold).TextColor(titleColor)
 			if plan.sized {
 				name.Width(plan.titleW).Shrink(0)
 			} else {
@@ -815,7 +822,10 @@ func (a *App) stateChip(c *ui.Context, pal *palette, p *proto.Pane, multi bool, 
 	bg, fg := pal.chip, pal.textMuted
 	switch p.Status {
 	case proto.Waiting:
-		bg, fg = pal.attnSoft, pal.attnChip
+		// What the agent asks is the one solid chip in a header: need
+		// filled, its ink on it at 5:1, so it reads from across the room
+		// and nothing else in the header looks like it.
+		bg, fg = pal.attnFill, pal.attnInk
 	case proto.Failed, proto.Exited:
 		bg, fg = pal.danger.Alpha(0.1), pal.dangerText
 	case proto.Working:
