@@ -5,6 +5,7 @@ import (
 	"slices"
 	"strings"
 	"time"
+	"unicode"
 
 	"github.com/Gaurav-Gosain/mygo/ui"
 
@@ -349,8 +350,10 @@ func (a *App) ckMore(c *ui.Context, pal *palette, r ckRow) {
 	})
 }
 
-// ckLine2 is what a row's second line says, and whether it is an ask, whose
-// verb takes the attention colour.
+// ckLine2 is what a row's second line says: a verb that names what the
+// person is asked, in the attention colour, and the text. The verb comes
+// from the item's kind, never from the agent's own words: a message's first
+// word is not a state, and bolding it read as one (Mac round 1, V-M2).
 func ckLine2(ag client.Agent, it *session.AttentionItem) (verb, rest string) {
 	if it != nil {
 		s := it.Summary
@@ -359,9 +362,9 @@ func ckLine2(ag client.Agent, it *session.AttentionItem) (verb, rest string) {
 			if tool, target, ok := ckAsk(s); ok {
 				return locales.CockpitAllowTool(tool), target
 			}
-			return locales.CockpitAsks(), s
+			return locales.CockpitKindApproval(), s
 		case session.AttentionQuestion, session.AttentionAsk:
-			return locales.CockpitAsks(), s
+			return locales.CockpitKindQuestion(), s
 		case session.AttentionMail:
 			return locales.CockpitMail(), s
 		case session.AttentionErrored:
@@ -370,12 +373,24 @@ func ckLine2(ag client.Agent, it *session.AttentionItem) (verb, rest string) {
 		return "", s
 	}
 	if ag.Message != "" {
-		if t, r, ok := strings.Cut(ag.Message, " "); ok && len(t) < 14 && t[0] >= 'A' && t[0] <= 'Z' {
-			return "", t + "\x00" + r
+		if ckStopped(ag, it) {
+			return "", locales.CockpitStopped(ag.Message)
 		}
 		return "", ag.Message
 	}
 	return "", ""
+}
+
+// ckStopped reports whether a row's text is old: the agent is at rest or
+// went silent (the daemon shows a hooked pane that stopped reporting as
+// unknown) and said nothing since, so its last message ("Running the retry
+// tests") no longer says what it does. The line then reads "Stopped · ..."
+// in text3.
+func ckStopped(ag client.Agent, it *session.AttentionItem) bool {
+	if it != nil || ag.Message == "" {
+		return false
+	}
+	return ag.State == string(session.AgentStateIdle) || ag.State == string(session.AgentStateUnknown)
 }
 
 // ckRowView is one agent's or item's row.
@@ -472,7 +487,7 @@ func (a *App) ckRowView(c *ui.Context, pal *palette, r ckRow) {
 				rest = ck.spawnTasks[ag.Name]
 			}
 			if verb != "" || rest != "" {
-				ui.RichText(c, ckLine2Spans(pal, verb, flat(rest))...).FontSize(fsSmall).SingleLine().Ellipsis("…").MinWidth(0).Margin(0, 0, 0, 21)
+				ui.RichText(c, ckLine2Spans(pal, verb, flat(rest), ckStopped(ag, r.item))...).FontSize(fsSmall).SingleLine().Ellipsis("…").MinWidth(0).Margin(0, 0, 0, 21)
 			} else {
 				ui.Text(c, locales.CockpitNoActivity()).FontSize(fsSmall).TextColor(pal.textFaint).SingleLine().Margin(0, 0, 0, 21)
 			}
@@ -493,18 +508,17 @@ func attemptChip(c *ui.Context, pal *palette, letter string) {
 }
 
 // ckLine2Spans draws a second line: an ask's verb in the attention colour,
-// a tool's name in bold, the rest muted.
-func ckLine2Spans(pal *palette, verb, rest string) []ui.Span {
+// the rest muted, or faint when it is old (ckStopped).
+func ckLine2Spans(pal *palette, verb, rest string, stopped bool) []ui.Span {
 	var out []ui.Span
 	if verb != "" {
-		out = append(out, ui.Span{Text: verb + "  ", Color: pal.attnText, Weight: wSemibold})
+		out = append(out, ui.Span{Text: verb + " ", Color: pal.attnText, Weight: wSemibold})
 	}
-	if t, r, ok := strings.Cut(rest, "\x00"); ok {
-		out = append(out, ui.Span{Text: t + "  ", Color: pal.text, Weight: wMedium}, ui.Span{Text: r, Color: pal.textMuted})
-	} else {
-		out = append(out, ui.Span{Text: rest, Color: pal.textMuted})
+	col := pal.textMuted
+	if stopped {
+		col = pal.textFaint
 	}
-	return out
+	return append(out, ui.Span{Text: rest, Color: col})
 }
 
 // ckRowMenu is a row's context menu: every action the row has.
@@ -908,9 +922,9 @@ func (a *App) agentsRow(c *ui.Context, pal *palette) {
 	})
 }
 
-// ckAsk reads an approval's summary, as a hook or a screen rule writes it
-// ("approve Bash: go test ./...", "Allow Bash go test ./..."), into the
-// tool and what it acts on.
+// ckAsk reads an approval's summary, as a hook, a screen rule or a report
+// writes it ("approve Bash: go test ./...", "Allow Bash go test ./...",
+// "Bash: rm -rf build/"), into the tool and what it acts on.
 func ckAsk(summary string) (tool, target string, ok bool) {
 	v, rest, found := strings.Cut(summary, " ")
 	if !found {
@@ -919,6 +933,10 @@ func ckAsk(summary string) (tool, target string, ok bool) {
 	switch strings.ToLower(v) {
 	case "allow", "approve":
 	default:
+		// "Tool: target", a tool's name as one word before the colon.
+		if t, ok := strings.CutSuffix(v, ":"); ok && ckToolName(t) {
+			return t, rest, true
+		}
 		return "", "", false
 	}
 	if t, r, found := strings.Cut(rest, ": "); found && !strings.Contains(t, " ") {
@@ -928,6 +946,20 @@ func ckAsk(summary string) (tool, target string, ok bool) {
 		return t, r, true
 	}
 	return rest, "", true
+}
+
+// ckToolName reports whether s reads as a tool's name: one word of letters,
+// digits, _ . and -, that starts with a letter ("Bash", "mcp__fs__read").
+func ckToolName(s string) bool {
+	if s == "" || !unicode.IsLetter(rune(s[0])) {
+		return false
+	}
+	for _, r := range s {
+		if !unicode.IsLetter(r) && !unicode.IsDigit(r) && r != '_' && r != '.' && r != '-' {
+			return false
+		}
+	}
+	return true
 }
 
 // ckMessage is a quiet centred message in the focus area.

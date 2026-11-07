@@ -6464,6 +6464,36 @@ func (msgs Messages) CockpitApprovalsOn() string {
 	return Catalog.Format(msgs.locale, "cockpitApprovalsOn", nil)
 }
 
+// CockpitKindApproval says "Approval"
+// in the language the app shows.
+func CockpitKindApproval() string { return In(i18n.Locale()).CockpitKindApproval() }
+
+// CockpitKindApproval says "Approval"
+// in the language of msgs.
+func (msgs Messages) CockpitKindApproval() string {
+	return Catalog.Format(msgs.locale, "cockpitKindApproval", nil)
+}
+
+// CockpitKindQuestion says "Question"
+// in the language the app shows.
+func CockpitKindQuestion() string { return In(i18n.Locale()).CockpitKindQuestion() }
+
+// CockpitKindQuestion says "Question"
+// in the language of msgs.
+func (msgs Messages) CockpitKindQuestion() string {
+	return Catalog.Format(msgs.locale, "cockpitKindQuestion", nil)
+}
+
+// CockpitStopped says "Stopped · {message}"
+// in the language the app shows.
+func CockpitStopped(message string) string { return In(i18n.Locale()).CockpitStopped(message) }
+
+// CockpitStopped says "Stopped · {message}"
+// in the language of msgs.
+func (msgs Messages) CockpitStopped(message string) string {
+	return Catalog.Format(msgs.locale, "cockpitStopped", map[string]any{"message": message})
+}
+
 // CockpitAnswered says "{name}: {answer}"
 // in the language the app shows.
 func CockpitAnswered(name string, answer string) string {
@@ -6504,16 +6534,6 @@ func CockpitCallChanged(name string) string { return In(i18n.Locale()).CockpitCa
 // in the language of msgs.
 func (msgs Messages) CockpitCallChanged(name string) string {
 	return Catalog.Format(msgs.locale, "cockpitCallChanged", map[string]any{"name": name})
-}
-
-// CockpitAsks says "Asks"
-// in the language the app shows.
-func CockpitAsks() string { return In(i18n.Locale()).CockpitAsks() }
-
-// CockpitAsks says "Asks"
-// in the language of msgs.
-func (msgs Messages) CockpitAsks() string {
-	return Catalog.Format(msgs.locale, "cockpitAsks", nil)
 }
 
 // CockpitClose says "Close agents"

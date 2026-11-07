@@ -142,9 +142,6 @@ func (a *App) agentRow(c *ui.Context, pal *palette, ag client.Agent, need *ckNee
 	if need != nil && st != proto.Failed {
 		st, unread = proto.Waiting, true
 	}
-	if t, r, ok := cutTool(rest); ok {
-		rest = t + " " + r
-	}
 	row.Children(func() {
 		ui.Column(c).Width(12).Shrink(0).AlignSelf(ui.Start).Padding(4, 0, 0, 0).Children(func() {
 			ckMark(c, pal, st, unread, 12)
@@ -178,7 +175,11 @@ func (a *App) agentRow(c *ui.Context, pal *palette, ag client.Agent, need *ckNee
 					ui.Text(c, verb).FontSize(fsSmall).FontWeight(wMedium).TextColor(pal.attnText).SingleLine().Shrink(0)
 				}
 				if rest != "" {
-					ui.Text(c, flat(rest)).FontSize(fsSmall).TextColor(pal.textMuted).SingleLine().Ellipsis("…").MinWidth(0).Shrink(1)
+					col := pal.textMuted
+					if ckStopped(ag, it) {
+						col = pal.textFaint
+					}
+					ui.Text(c, flat(rest)).FontSize(fsSmall).TextColor(col).SingleLine().Ellipsis("…").MinWidth(0).Shrink(1)
 				}
 			})
 		})
