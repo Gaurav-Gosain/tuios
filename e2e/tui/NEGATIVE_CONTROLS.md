@@ -14426,3 +14426,18 @@ Run on 2026-11-07 on macOS (arm64), each control its own binary:
 | The bands never built | "2 did not group the list by session under Needs you" | **caught** |
 | The header counts only the state headings | "2 did not group the list by session under Needs you"; the header shows 1 needs you only | **caught** |
 | The grouping not read from the state file | "a new client did not keep the session grouping" | **caught** |
+
+## TestCockpitHeaderChipsFilter
+
+A click on a header count keeps that state group alone in the agents view's
+list. The test clicks "6 working", then "3 to review" twice, turns on session
+grouping with the working chip on, and presses esc.
+
+Run on 2026-11-07 on macOS (arm64):
+
+| Removed | The test fails with | Result |
+|---------|---------------------|--------|
+| The counts taken before the filter (`ck.groupN`): the header reads the heading rows of the filtered list again | "ASSERTION: a click on 6 working did not keep the Working group alone with every count drawn" | **caught** |
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestCockpitHeaderChipsFilter$' -v .`.
