@@ -13392,3 +13392,31 @@ rule, which `file-walk` states. The test checks it and no control cuts it.
 
 Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestQuickLookOnAFarFile$' -v .`.
+
+## An edit is allowed from the Inbox only by the digest of its body
+
+`TestGUIBridgeEditApprovalNeedsItsDigest` (`gui_bridge_edit_approval_test.go`)
+sends a Claude Code Edit through the real `tuios agent-hook`. The daemon holds
+it with its body, and the gui-bridge, which guios reads, carries `edit_sha` on
+the item. The test reads the body with `get-approval`, computes `edit_sha`
+itself from the encoding in docs/protocol.md, and checks that an allow with no
+`edit_sha` or a wrong one is refused with `edit_unreviewed` while the hook
+waits, and that the allow with the digest reaches the hook as a plain allow.
+Every allow carries `risk_ack`, because the test pane has no root and the path
+reads as outside the worktree, so `edit_sha` is the only thing the refused
+allows lack.
+
+Run on 2026-11-07 on macOS, branch guios/s1-edit-approvals. The steps and the
+hook's answer are saved as `edit-approval.json` under `TUIOS_E2E_FRAMES`.
+
+| Claim | Control | Where it fails | Verdict |
+| --- | --- | --- | --- |
+| An allow of a held edit needs its `edit_sha` | the `hold.edit` check in `attentionStore.answer` made false | `ASSERTION: an allow with no edit_sha: ok=true code=""` | **caught** |
+
+A first version of the test sent no `risk_ack` on the refused allows. Under
+the same control it still failed, but with `risk_unacknowledged`: the risk
+rule, not the digest, refused the allow. That run proved nothing about
+`edit_sha`, so the test now acknowledges the risk on every allow.
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestGUIBridgeEditApprovalNeedsItsDigest$' -v .`.

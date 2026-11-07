@@ -46,6 +46,8 @@ type wireAttentionItem struct {
 	Options   []string `json:"options"`
 	RequestID string   `json:"request_id"`
 	Risk      []string `json:"risk"`
+	EditSHA   string   `json:"edit_sha"`
+	EditLines int      `json:"edit_lines"`
 }
 
 type wireInboxEvent struct {
