@@ -1,6 +1,7 @@
 package main
 
 import (
+	"runtime"
 	"strings"
 
 	"github.com/Gaurav-Gosain/mygo/ui"
@@ -18,7 +19,13 @@ import (
 // the one in force, or the one the open menu highlights.
 func (a *App) themeGroup(c *ui.Context, pal *palette) {
 	themes := theme.AvailableThemes()
-	settingsGroup(c, pal, locales.SetBackground(), locales.SetColorsDetail(), func() {
+	// Omarchy is a Linux desktop: only there does guios say it follows it
+	// (QM-018).
+	detail := locales.SetColorsDetail()
+	if runtime.GOOS == "linux" {
+		detail += locales.SetColorsOmarchy()
+	}
+	settingsGroup(c, pal, locales.SetBackground(), detail, func() {
 		for _, dark := range []bool{false, true} {
 			a.themeRow(c, pal, themes, dark)
 		}

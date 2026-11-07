@@ -2270,11 +2270,11 @@ func (msgs Messages) SetSidebarRows() string {
 	return Catalog.Format(msgs.locale, "setSidebarRows", nil)
 }
 
-// SetSidebarRowsDetail says "Detailed rows add a line under each session’s name: its status message, else its branch and changes."
+// SetSidebarRowsDetail says "Detailed rows add two lines under each session’s name: what its agent said last, else what runs; and its branch and…"
 // in the language the app shows.
 func SetSidebarRowsDetail() string { return In(i18n.Locale()).SetSidebarRowsDetail() }
 
-// SetSidebarRowsDetail says "Detailed rows add a line under each session’s name: its status message, else its branch and changes."
+// SetSidebarRowsDetail says "Detailed rows add two lines under each session’s name: what its agent said last, else what runs; and its branch and…"
 // in the language of msgs.
 func (msgs Messages) SetSidebarRowsDetail() string {
 	return Catalog.Format(msgs.locale, "setSidebarRowsDetail", nil)
@@ -2902,6 +2902,16 @@ func SetColorsDetail() string { return In(i18n.Locale()).SetColorsDetail() }
 // in the language of msgs.
 func (msgs Messages) SetColorsDetail() string {
 	return Catalog.Format(msgs.locale, "setColorsDetail", nil)
+}
+
+// SetColorsOmarchy says " guios follows Omarchy when tuios does."
+// in the language the app shows.
+func SetColorsOmarchy() string { return In(i18n.Locale()).SetColorsOmarchy() }
+
+// SetColorsOmarchy says " guios follows Omarchy when tuios does."
+// in the language of msgs.
+func (msgs Messages) SetColorsOmarchy() string {
+	return Catalog.Format(msgs.locale, "setColorsOmarchy", nil)
 }
 
 // SetThemeShared says "tuios and guios use this theme."
@@ -7360,16 +7370,6 @@ func (msgs Messages) CockpitWaits(name string, age string) string {
 	return Catalog.Format(msgs.locale, "cockpitWaits", map[string]any{"name": name, "age": age})
 }
 
-// CockpitWaitsFor says "waits {age}"
-// in the language the app shows.
-func CockpitWaitsFor(age string) string { return In(i18n.Locale()).CockpitWaitsFor(age) }
-
-// CockpitWaitsFor says "waits {age}"
-// in the language of msgs.
-func (msgs Messages) CockpitWaitsFor(age string) string {
-	return Catalog.Format(msgs.locale, "cockpitWaitsFor", map[string]any{"age": age})
-}
-
 // CockpitRunEdited says "{count, plural, one {edited # file} other {edited # files}}"
 // in the language the app shows.
 func CockpitRunEdited(count int) string { return In(i18n.Locale()).CockpitRunEdited(count) }
@@ -10562,11 +10562,11 @@ func (msgs Messages) LookViewPage() string {
 	return Catalog.Format(msgs.locale, "lookViewPage", nil)
 }
 
-// CockpitReadingPrompt says "tuios is still reading the prompt. Press the key again."
+// CockpitReadingPrompt says "Reading the prompt on the pane’s screen…"
 // in the language the app shows.
 func CockpitReadingPrompt() string { return In(i18n.Locale()).CockpitReadingPrompt() }
 
-// CockpitReadingPrompt says "tuios is still reading the prompt. Press the key again."
+// CockpitReadingPrompt says "Reading the prompt on the pane’s screen…"
 // in the language of msgs.
 func (msgs Messages) CockpitReadingPrompt() string {
 	return Catalog.Format(msgs.locale, "cockpitReadingPrompt", nil)
@@ -13008,6 +13008,16 @@ func (msgs Messages) SidebarMorePanes(count int) string {
 	return Catalog.Format(msgs.locale, "sidebarMorePanes", map[string]any{"count": count})
 }
 
+// SidebarPaneNumber says "pane {n}"
+// in the language the app shows.
+func SidebarPaneNumber(n string) string { return In(i18n.Locale()).SidebarPaneNumber(n) }
+
+// SidebarPaneNumber says "pane {n}"
+// in the language of msgs.
+func (msgs Messages) SidebarPaneNumber(n string) string {
+	return Catalog.Format(msgs.locale, "sidebarPaneNumber", map[string]any{"n": n})
+}
+
 // SidebarPanes says "{count, plural, one {# pane} other {# panes}}"
 // in the language the app shows.
 func SidebarPanes(count int) string { return In(i18n.Locale()).SidebarPanes(count) }
@@ -13312,4 +13322,44 @@ func CockpitQuestionTypeReply() string { return In(i18n.Locale()).CockpitQuestio
 // in the language of msgs.
 func (msgs Messages) CockpitQuestionTypeReply() string {
 	return Catalog.Format(msgs.locale, "cockpitQuestionTypeReply", nil)
+}
+
+// PaneZoomedHides says "Zoomed · {count, plural, one {# pane hidden} other {# panes hidden}}"
+// in the language the app shows.
+func PaneZoomedHides(count int) string { return In(i18n.Locale()).PaneZoomedHides(count) }
+
+// PaneZoomedHides says "Zoomed · {count, plural, one {# pane hidden} other {# panes hidden}}"
+// in the language of msgs.
+func (msgs Messages) PaneZoomedHides(count int) string {
+	return Catalog.Format(msgs.locale, "paneZoomedHides", map[string]any{"count": count})
+}
+
+// PaneZoomedEnd says "Show all panes"
+// in the language the app shows.
+func PaneZoomedEnd() string { return In(i18n.Locale()).PaneZoomedEnd() }
+
+// PaneZoomedEnd says "Show all panes"
+// in the language of msgs.
+func (msgs Messages) PaneZoomedEnd() string {
+	return Catalog.Format(msgs.locale, "paneZoomedEnd", nil)
+}
+
+// CockpitEditReading says "Reading the edit…"
+// in the language the app shows.
+func CockpitEditReading() string { return In(i18n.Locale()).CockpitEditReading() }
+
+// CockpitEditReading says "Reading the edit…"
+// in the language of msgs.
+func (msgs Messages) CockpitEditReading() string {
+	return Catalog.Format(msgs.locale, "cockpitEditReading", nil)
+}
+
+// CockpitEditLeft says "{count, plural, one {Scroll through the edit to allow it: # line is not shown yet.} other {Scroll through the edit to…"
+// in the language the app shows.
+func CockpitEditLeft(count int) string { return In(i18n.Locale()).CockpitEditLeft(count) }
+
+// CockpitEditLeft says "{count, plural, one {Scroll through the edit to allow it: # line is not shown yet.} other {Scroll through the edit to…"
+// in the language of msgs.
+func (msgs Messages) CockpitEditLeft(count int) string {
+	return Catalog.Format(msgs.locale, "cockpitEditLeft", map[string]any{"count": count})
 }

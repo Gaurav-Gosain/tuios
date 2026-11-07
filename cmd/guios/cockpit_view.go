@@ -854,6 +854,8 @@ func (a *App) ckAllHints(hint func(k, what string)) {
 	// or snooze (council round 5, visual S4).
 	question := item && ckIsQuestion(*r.item)
 	answerable := item && ckAnswerable(*r.item) && !question
+	// The chord to allow only where the card has the button for it.
+	allows := item && a.ckCardAllows(*r.item)
 	if ag, _, waiting := a.ckDraftWaiting(); waiting && a.ckCardWaits(ag) {
 		// A card waits: Ctrl+Enter queues the draft, and types nothing
 		// into the pane.
@@ -861,7 +863,7 @@ func (a *App) ckAllHints(hint func(k, what string)) {
 	} else if waiting {
 		// The reply box holds text: Ctrl+Enter sends it.
 		hint(chordName(chAllow), locales.CockpitHintSendNow())
-	} else if answerable {
+	} else if allows {
 		hint(chordName(chAllow), locales.CockpitHintAllow())
 	}
 	if answerable {

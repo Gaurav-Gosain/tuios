@@ -188,6 +188,9 @@ func (a *App) cockpitFocus(c *ui.Context, pal *palette) {
 			}
 			switch {
 			case ag.Window == "":
+			case r.item != nil && a.ckCardOpensPane(*r.item):
+				// The card under it has the one Open pane (council mac-1,
+				// V-M1): two of them read as two different actions.
 			case ck.narrow:
 				iconButton(c, "ck-open", openFileIcon, locales.CockpitOpenPane()+" (↵)", pal, func() { a.goToAgent(ag) })
 			default:
@@ -229,7 +232,9 @@ func (a *App) cockpitFocus(c *ui.Context, pal *palette) {
 	})
 	ui.Box(c).Height(1).Shrink(0).Background(pal.divider)
 	ck.cardShown = r.item != nil && ckAnswerable(*r.item)
-	ui.Column(c.Key("tab-" + ck.tab)).Grow(1).MinHeight(ckTabMinH).ClipY().AlignItems(ui.Stretch).Children(func() {
+	tabCol := ui.Column(c.Key("tab-" + ck.tab)).Grow(1).MinHeight(ckTabMinH)
+	ck.tabH = tabCol.Bounds().H
+	tabCol.ClipY().AlignItems(ui.Stretch).Children(func() {
 		switch ck.tab {
 		case tabChanges:
 			a.changesView(c, pal, ag)
@@ -250,7 +255,11 @@ func (a *App) cockpitFocus(c *ui.Context, pal *palette) {
 	// (a long command, risk lines) never pushes the box under the key
 	// line (council round 4, M4).
 	if card {
-		ui.Scroll(c.Key("ck-card")).Shrink(1).MinHeight(64).Children(func() {
+		outer := ui.Scroll(c.Key("ck-card")).Shrink(1).MinHeight(64)
+		// The card's own viewport, which a held edit's body is clipped by
+		// too: only rows inside both count as shown (ckEditBlock).
+		ck.cardView = outer.Bounds()
+		outer.Children(func() {
 			ui.Column(c).AlignItems(ui.Stretch).Children(func() {
 				a.approvalCard(c, pal, ag, *r.item)
 			})
@@ -359,7 +368,10 @@ func (a *App) approvalCard(c *ui.Context, pal *palette, ag client.Agent, it sess
 	card := ui.Column(c.Key("approval")).Shrink(0).Margin(0, a.ckSide(24), 10, a.ckSide(24)).Padding(14, 16).Gap(10).Radius(rCard).
 		Background(pal.card).Border(1, pal.attention.Alpha(0.7))
 	if fresh {
-		card.Border(2, pal.accent)
+		// A new prompt shows by its edge going to 2 px, in the same need
+		// amber: the card's colour never changes with no change of state
+		// (council mac-1, V-M1).
+		card.Border(2, pal.attention)
 	}
 	card.Children(func() {
 		ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
@@ -369,13 +381,16 @@ func (a *App) approvalCard(c *ui.Context, pal *palette, ag client.Agent, it sess
 				// "{name} asks", and how long it waits.
 				oneLine(c, locales.CockpitNameAsks(ag.Name), fsBody, wSemibold).TextColor(pal.text)
 				ui.Text(c, ago(it.Since/int64(time.Millisecond), now)).FontSize(fsSmall).TextColor(pal.textMuted).SingleLine().Shrink(0)
-			} else if tool, target, ok := ckAsk(it.Summary); ok {
-				// The tool and what it acts on, as the call names them:
-				// "Bash  go test ./retry/...", "Read  internal/auth/token.go".
-				// The whole call is in the code block under it.
+			} else if tool, _, ok := ckAsk(it.Summary); ok {
+				// The tool and who waits: "Bash · review waits now". What
+				// the call acts on is in the code box under it, once.
 				ui.Text(c, tool).FontSize(fsBody).FontWeight(wSemibold).TextColor(pal.text).SingleLine().Shrink(0)
-				ckTargetLine(c, pal, a.termFamily(), tool, target)
-				oneLine(c, locales.CockpitWaitsFor(ago(it.Since/int64(time.Millisecond), now)), fsSmall, 0).TextColor(pal.textFaint).Shrink(0)
+				ui.Text(c, "·").FontSize(fsSmall).TextColor(pal.textFaint).Shrink(0)
+				oneLine(c, locales.CockpitWaits(ag.Name, ago(it.Since/int64(time.Millisecond), now)), fsSmall, 0).TextColor(pal.textMuted).Shrink(2)
+			} else if it.Kind == session.AttentionApproval || it.Kind == session.AttentionPlan {
+				// No tool to name: who waits is the title, as a sentence,
+				// not "Asks?" (council mac-1, V-M1).
+				oneLine(c, locales.CockpitWaits(ag.Name, ago(it.Since/int64(time.Millisecond), now)), fsBody, wSemibold).TextColor(pal.text)
 			} else {
 				oneLine(c, verb+"?", fsBody, wSemibold).TextColor(pal.text)
 				oneLine(c, locales.CockpitWaits(ag.Name, ago(it.Since/int64(time.Millisecond), now)), fsSmall, 0).TextColor(pal.textMuted).Shrink(2)
@@ -393,7 +408,9 @@ func (a *App) approvalCard(c *ui.Context, pal *palette, ag client.Agent, it sess
 			target = t
 		}
 		mono := a.termFamily()
-		if !held && pk != nil && len(pk.lines) > 0 && (!question || len(pk.actions) > 0) {
+		if ckIsEdit(it) {
+			a.ckEditBlock(c, pal, it)
+		} else if !held && pk != nil && len(pk.lines) > 0 && (!question || len(pk.actions) > 0) {
 			ui.Column(c).Radius(rControl).Background(ckCodeBg(pal)).Padding(8, 12).Gap(1).Clip().Children(func() {
 				for _, l := range pk.lines {
 					ui.Text(c, l).Font(mono).FontSize(fsCode).TextColor(pal.text).SingleLine()
@@ -433,20 +450,18 @@ func (a *App) approvalCard(c *ui.Context, pal *palette, ag client.Agent, it sess
 		// allows, at its right: the card keeps one row of answers, and fits
 		// over the reply box at 1100x700.
 		reason := !question && slices.Contains(a.ckOptions(it, pk), "reason")
-		if len(it.AlwaysScope) > 0 || reason {
+		if len(it.AlwaysScope) > 0 {
 			ui.Row(c).Gap(sp2).AlignItems(ui.Center).Children(func() {
-				if len(it.AlwaysScope) > 0 {
-					ui.Text(c, locales.CockpitAlwaysAllows(strings.Join(it.AlwaysScope, ", "))).FontSize(fsSmall).TextColor(pal.textMuted).
-						Grow(1).MinWidth(0).MaxLines(2)
-				} else {
-					ui.Spacer(c)
-				}
+				ui.Text(c, locales.CockpitAlwaysAllows(strings.Join(it.AlwaysScope, ", "))).FontSize(fsSmall).TextColor(pal.textMuted).
+					Grow(1).MinWidth(0).MaxLines(2)
 				if reason && ghostButton(c, "ans-reason", ckDecisionWords("reason"), pal) {
 					a.ckAnswer("reason")
 					ck.fleetFocus.Focus()
 				}
 			})
 		}
+		// With no scope line, it sits after the answers instead.
+		reasonInRow := reason && len(it.AlwaysScope) == 0
 		if ck.reasonFor == it.ID {
 			in := textField(c, "reason", &ck.reason, locales.CockpitReasonPlaceholder(), 0, pal).AutoFocus()
 			if in.Submitted() && strings.TrimSpace(ck.reason) != "" {
@@ -468,6 +483,10 @@ func (a *App) approvalCard(c *ui.Context, pal *palette, ag client.Agent, it sess
 					a.ckFocusReply()
 				}
 				oneLine(c, locales.CockpitAnswerByReply(), fsSmall, 0).TextColor(pal.textMuted).Shrink(2)
+			} else if len(opts) == 0 && pk != nil && pk.loading && !held {
+				// Say what the card waits for, rather than show nothing
+				// (QM-004): the header's Open pane stays until it knows.
+				ui.Text(c, locales.CockpitReadingPrompt()).FontSize(fsSmall).TextColor(pal.textMuted).MaxLines(2).MinWidth(0)
 			} else if len(opts) == 0 && (pk == nil || !pk.loading) {
 				// Nothing here can answer it: say so, and offer the pane.
 				ui.Text(c, locales.CockpitAnswerInPane()).FontSize(fsSmall).TextColor(pal.textMuted).MaxLines(2).MinWidth(0)
@@ -509,6 +528,10 @@ func (a *App) approvalCard(c *ui.Context, pal *palette, ag client.Agent, it sess
 						ck.fleetFocus.Focus()
 					}
 				})
+			}
+			if reasonInRow && ghostButton(c, "ans-reason", ckDecisionWords("reason"), pal) {
+				a.ckAnswer("reason")
+				ck.fleetFocus.Focus()
 			}
 			ui.Spacer(c)
 			if !held && len(opts) > 0 {
@@ -894,22 +917,6 @@ func ckSessionScope(scope []string) bool {
 	return true
 }
 
-// ckTargetLine is what a call acts on, in the code font, in the header:
-// a path cut at its start so its file stays, a command cut at its end.
-func ckTargetLine(c *ui.Context, pal *palette, mono, tool, target string) {
-	target = flat(target)
-	box := ui.Box(c.Key("target")).Shrink(1).MinWidth(0).Clip()
-	w := box.Bounds().W
-	box.Children(func() {
-		t := target
-		if strings.Contains(target, "/") && !strings.Contains(target, " ") {
-			t = startCut(c, target, fsCode, w)
-		}
-		ui.Text(c, t).Font(mono).FontSize(fsCode).TextColor(pal.textMuted).SingleLine().Ellipsis("…").Tooltip(target)
-	})
-	_ = tool
-}
-
 // capButton is a card's answer: a button with its chord as key caps, so the
 // keys read as keys (DESIGN.md section 6). The caps take the label's colour
 // on a faint ground of it, so they read on the accent fill and on a
@@ -962,4 +969,20 @@ func ghostButton(c *ui.Context, key, label string, pal *palette) bool {
 		ui.Text(c, label).FontSize(fsBody).FontWeight(wMedium).SingleLine()
 	})
 	return b.Clicked()
+}
+
+// ckCardOpensPane reports whether the approval card offers only Open pane
+// for it: nothing here can answer the prompt.
+func (a *App) ckCardOpensPane(it session.AttentionItem) bool {
+	if !ckAnswerable(it) || ckIsQuestion(it) {
+		return false
+	}
+	pk := a.ck.peek
+	return len(a.ckOptions(it, pk)) == 0 && (pk == nil || !pk.loading)
+}
+
+// ckCardAllows reports whether the approval card for it offers Allow once,
+// so the key line offers its chord only then (council mac-1, W-M2).
+func (a *App) ckCardAllows(it session.AttentionItem) bool {
+	return ckAnswerable(it) && !ckIsQuestion(it) && slices.Contains(a.ckOptions(it, a.ck.peek), "once")
 }

@@ -198,21 +198,24 @@ func (a *App) paletteItems() []paletteItem {
 			id := s.ID
 			// The project's name, unless it is the group's own word
 			// ("Sessions"), which the header over the rows says already.
-			detail := names[s.Project]
-			if detail == paletteGroups[paletteSession]() {
-				detail = ""
-			}
-			if s.Process != "" {
-				detail += " · " + s.Process
-			}
+			// The parts that are there, joined: a part left empty adds no
+			// separator, so no row starts with " · " (QM-011).
+			var parts []string
 			h := a.hostOf(id)
 			if h.remote() {
-				detail = h.name + " · " + detail
+				parts = append(parts, h.name)
 			}
-			if detail != "" {
-				detail += " · "
+			if p := names[s.Project]; p != "" && p != paletteGroups[paletteSession]() {
+				parts = append(parts, p)
 			}
-			it := paletteItem{session: s, title: a.railName(s), detail: detail + h.shortDir(s.WorkDir()) + paletteMark(a.railMark(s)),
+			if s.Process != "" {
+				parts = append(parts, s.Process)
+			}
+			if d := h.shortDir(s.WorkDir()); d != "" {
+				parts = append(parts, d)
+			}
+			detail := strings.Join(parts, " · ")
+			it := paletteItem{session: s, title: a.railName(s), detail: detail + paletteMark(a.railMark(s)),
 				run: func() { delete(a.prefs.Collapsed, s.Project); a.selectSession(id) }}
 			if i := slices.Index(order, id); i >= 0 && i < 9 {
 				it.keys[0] = actions.Glyphs("CmdOrCtrl+" + itoa(i+1))

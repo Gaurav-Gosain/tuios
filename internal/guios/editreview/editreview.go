@@ -46,11 +46,19 @@ const TabWidth = 4
 // would otherwise draw as nothing.
 const TrailingSpace = "·"
 
+// TrailingTab stands for a tab at the end of a line. Expanded to spaces it
+// would read as trailing spaces, and the two are different edits.
+const TrailingTab = "→"
+
 // Line is one line of the card, at most the width Lines was given, in cells.
+// Cont marks a row that goes on from the row above: the line was wider than
+// the card and wrapped there, so the card draws a mark beside it and a
+// person does not read one line as two.
 type Line struct {
 	Hunk int
 	Kind Kind
 	Text string
+	Cont bool
 }
 
 // Lines is the body as a card of width cells draws it, or nil when width is
@@ -67,8 +75,14 @@ func Lines(e integration.EditBody, width int) []Line {
 			// The words are tuios's own, so they wrap between words.
 			wrapped = ansi.Wrap(text, width-len(prefix), "")
 		}
-		for _, part := range strings.Split(wrapped, "\n") {
-			out = append(out, Line{Hunk: hunk, Kind: kind, Text: prefix + part})
+		for k, part := range strings.Split(wrapped, "\n") {
+			lead := prefix
+			if k > 0 && (kind == KindOld || kind == KindNew) {
+				// A wrapped row of code keeps the column under the text,
+				// so the "- " or "+ " is said once, on its first row.
+				lead = strings.Repeat(" ", len(prefix))
+			}
+			out = append(out, Line{Hunk: hunk, Kind: kind, Text: lead + part, Cont: k > 0})
 		}
 	}
 	for i, h := range e.Hunks {
@@ -115,11 +129,12 @@ func side(add func(int, Kind, string, string), hunk int, kind Kind, prefix, s st
 }
 
 // visible is one line with its tabs as spaces to the next tab stop and its
-// trailing spaces marked.
+// trailing spaces and tabs marked, each by its own mark.
 func visible(l string) string {
+	body := strings.TrimRight(l, " \t")
 	var b strings.Builder
 	col := 0
-	for _, r := range l {
+	for _, r := range body {
 		if r == '\t' {
 			n := TabWidth - col%TabWidth
 			b.WriteString(strings.Repeat(" ", n))
@@ -129,9 +144,14 @@ func visible(l string) string {
 		b.WriteRune(r)
 		col += ansi.StringWidth(string(r))
 	}
-	s := b.String()
-	trimmed := strings.TrimRight(s, " ")
-	return trimmed + strings.Repeat(TrailingSpace, len(s)-len(trimmed))
+	for _, r := range l[len(body):] {
+		if r == '\t' {
+			b.WriteString(TrailingTab)
+		} else {
+			b.WriteString(TrailingSpace)
+		}
+	}
+	return b.String()
 }
 
 // Review is which lines of a card the person was shown, at one width.
@@ -166,6 +186,14 @@ func (r *Review) Shown(width, from, to int) {
 // is.
 func (r *Review) Complete() bool {
 	return r != nil && len(r.seen) > 0 && r.left == 0
+}
+
+// Left is how many lines were not shown yet.
+func (r *Review) Left() int {
+	if r == nil {
+		return 0
+	}
+	return r.left
 }
 
 // Width is the width the review counts lines at.

@@ -369,7 +369,7 @@
   "setNameLead": "Pane that needs you",
   "setNameFolder": "First pane",
   "setSidebarRows": "Sidebar rows",
-  "setSidebarRowsDetail": "Detailed rows add a line under each session’s name: its status message, else its branch and changes.",
+  "setSidebarRowsDetail": "Detailed rows add two lines under each session’s name: what its agent said last, else what runs; and its branch and changes.",
   "setRowsDetailed": "Detailed",
   "setRowsCompact": "Compact",
   "setFocusFollowsMouse": "Focus follows mouse",
@@ -431,7 +431,8 @@
   "setLigaturesDetail": "Join characters as the font draws them, as => and !=.",
   "setThicken": "Thicken text",
   "setThickenDetail": "A heavier stroke, as Ghostty’s font-thicken.",
-  "setColorsDetail": "The theme colors the window, the sidebar, the panes and the terminals. A theme you choose here is saved in tuios, so tuios uses it too. guios follows Omarchy when tuios does.",
+  "setColorsDetail": "The theme colors the window, the sidebar, the panes and the terminals. A theme you choose here is saved in tuios, so tuios uses it too.",
+  "setColorsOmarchy": " guios follows Omarchy when tuios does.",
   "setThemeShared": "tuios and guios use this theme.",
   "toastThemeNotSaved": "Couldn’t save the theme: {error}",
   "setThemeSameAsTuios": "Same as tuios",
@@ -1316,7 +1317,6 @@
   },
   "cockpitUnnamed": "unnamed",
   "cockpitWaits": "{name} waits {age}",
-  "cockpitWaitsFor": "waits {age}",
   "cockpitRunEdited": "{count, plural, one {edited # file} other {edited # files}}",
   "cockpitRunRan": "{count, plural, one {ran # command} other {ran # commands}}",
   "cockpitRunRead": "{count, plural, one {read or searched # time} other {read or searched # times}}",
@@ -1888,7 +1888,7 @@
   "actionNewPane": "New pane",
   "lookKindHTML": "HTML page",
   "lookViewPage": "Page",
-  "cockpitReadingPrompt": "tuios is still reading the prompt. Press the key again.",
+  "cockpitReadingPrompt": "Reading the prompt on the pane’s screen…",
   "cockpitAnswerFailed": "tuios could not send the answer. Open the pane to answer it.",
   "toastPaneTooSmall": "This pane is too small to split. Close a pane or make the window wider.",
   "toastLayoutTooSmall": "The panes would be too small for this layout. Close a pane or make the window larger.",
@@ -2299,6 +2299,7 @@
   "cockpitNoSnoozeHeld": "A held approval cannot be snoozed. Answer it, or let it go back to the pane.",
   "spawnMeantToReply": "Meant to reply? Press Esc to move this text to the reply box.",
   "sidebarMorePanes": "{count, plural, one {# more pane} other {# more panes}}",
+  "sidebarPaneNumber": "pane {n}",
   "@sidebarMorePanes": {
     "placeholders": {
       "count": {
@@ -2342,5 +2343,9 @@
   "cockpitTypeToReply": "Type to reply",
   "cockpitTypeToAddCard": "Type to add a card",
   "cockpitNothingToSnooze": "{name} has nothing to snooze.",
-  "cockpitQuestionTypeReply": "This is a question. Pick an answer, or type to reply."
+  "cockpitQuestionTypeReply": "This is a question. Pick an answer, or type to reply.",
+  "paneZoomedHides": "Zoomed · {count, plural, one {# pane hidden} other {# panes hidden}}",
+  "paneZoomedEnd": "Show all panes",
+  "cockpitEditReading": "Reading the edit…",
+  "cockpitEditLeft": "{count, plural, one {Scroll through the edit to allow it: # line is not shown yet.} other {Scroll through the edit to allow it: # lines are not shown yet.}}"
 }
