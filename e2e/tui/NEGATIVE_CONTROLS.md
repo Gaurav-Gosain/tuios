@@ -14498,3 +14498,20 @@ Run on 2026-11-07 on macOS (arm64), each control its own binary:
 The glyph set is not caught: the card edge is drawn from a field of its own
 and is never text, and no row this test yanks starts with a fold or state
 glyph. A yank of a tool line would need it.
+
+## The agents view draws a long thread's newest turns first
+
+`TestCockpitThreadLongScroll` opens a thread of 40 turns, of which the view
+first draws the newest 8. It checks the turn number of the newest prompt,
+pages up to the first prompt (each page at most four turns older), then G,
+g and G again. Run on 2026-11-08 on macOS (arm64), each control its own binary:
+
+| Removed | The test fails with | Result |
+|---------|---------------------|--------|
+| `Follow.Older` not called when older turns are drawn | "a page up jumped from question 39 to 29" | **caught** |
+| The growth in `threadBody` (keep stays at 8 turns) | "pages up never reached the first prompt; the oldest shown is question 33" | **caught** |
+| The prompt count before the kept turns | "the prompt of question 40 is labelled "You  14:40 · turn 8", want turn 40" | **caught** |
+
+The first control of the turn label passed in an early version of the test,
+which looked at labels only after every turn was drawn. The test now checks
+the newest prompt's label first.

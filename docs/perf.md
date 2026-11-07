@@ -5642,6 +5642,29 @@ both encoders.
   against 31.3 ms bare (+7.8%) and 33.4 ms against 36.4 ms framed (+8.8%).
   Sub makes the file larger and the encode slower, so unfiltered rows stay.
 
+## 2026-11 the agents view draws a thread's newest turns first
+
+The thread reads the newest 200 entries of a transcript. It built and drew
+the card of every one of them when the cursor came to the agent, though the
+view shows about 45 rows. It now draws the newest 8 turns, and twice as many
+whenever the lines drawn are fewer than the view needs and a page more. The
+view stays on the lines it showed when older ones are drawn above it
+(`Follow.Older`). `g` draws every turn and goes to the first line.
+
+Measured with `go test -bench 'CockpitThread(Open|Scroll|Append)' ./internal/app/`,
+200 entries of prompts, Markdown answers with code, reads and edits at 200x50,
+GOMAXPROCS=4, Apple M-series, the fastest of three runs:
+
+| Frame | Before | After |
+|-------|--------|-------|
+| First frame of the thread | 130.5 ms, 1,535,621 allocs | 26.8 ms, 313,437 allocs |
+| After one new answer | 1.38 ms, 8,817 allocs | 0.93 ms, 6,112 allocs |
+| One line of scroll | 0.83 ms | 0.81 ms |
+
+The diff highlighting of the drawn edits is most of what is left in the first
+frame. `TestCockpitThreadOpenBudget` holds the allocations of the first frame
+under 600,000 and of a frame after one new answer under 7,500.
+
 ## 2026-11 quick look lights search matches in one walk
 
 With wrap on and a search active, every drawn row lit its matches by measuring

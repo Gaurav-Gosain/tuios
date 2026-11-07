@@ -54,6 +54,11 @@ func (m *OS) CockpitPromptJump(next bool) {
 	}
 	if t.follow.Jump(t.prompts, d) {
 		m.cockpitTouch()
+	} else if !next && t.older {
+		// The previous prompt is in a turn not drawn yet: draw more, so
+		// the next press reaches it.
+		t.keep *= 2
+		m.cockpitTouch()
 	}
 }
 

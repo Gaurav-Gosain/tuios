@@ -239,6 +239,7 @@ func (m *OS) cockpitFocusKey(action string) (tea.Cmd, bool) {
 	case config.ActionInboxPageUp:
 		t.follow.Scroll(page)
 	case config.ActionInboxFirst:
+		threadKeepAll(t)
 		t.follow.Scroll(1 << 20)
 	case config.ActionInboxLast:
 		t.follow.Bottom()

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"image/color"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -162,6 +163,15 @@ type agentThread struct {
 	lines        []ckLine
 	lineIDs      []string
 	viewW, viewH int
+	// keep is how many of the newest turns the thread draws, 0 for every
+	// turn, and older says turns older than those are left out. A long
+	// conversation is drawn only as far up as the view needs: its oldest
+	// cards cost the most to open and are the least read.
+	keep  int
+	older bool
+	// toTop says a key asked for the first line before every turn was
+	// drawn.
+	toTop bool
 }
 
 // threadBodyKey is what a thread's drawn lines depend on.
@@ -179,6 +189,8 @@ type threadBodyKey struct {
 	kids uint64
 	// pics is the previews' version: an image card's picture arrived.
 	pics uint64
+	// keep is agentThread.keep.
+	keep int
 }
 
 // threadsState is the threads kept and the transcript subscription.
@@ -354,7 +366,7 @@ func (m *OS) threadPageCmd(t *agentThread, after string) tea.Cmd {
 		stateAt = e.StateAt
 	}
 	return func() tea.Msg {
-		params := map[string]any{"session": sess, "window": window, "human_nonce": nonce, "limit": 200}
+		params := map[string]any{"session": sess, "window": window, "human_nonce": nonce, "limit": threadReadLimit}
 		if after != "" {
 			params["after"] = after
 		}
@@ -657,12 +669,54 @@ func (m *OS) threadBody(e sidebarAgentEntry, width, room int, now time.Time) []s
 		kids:    m.ckKidsSig(e, t),
 		pics:    m.threadPicsVersion(t),
 	}
-	if t.body != nil && t.bodyAt == key {
-		return t.body
+	if t.keep == 0 && m.threadReadsTranscript(e) {
+		t.keep = ckKeepTurns
 	}
-	t.hits, t.prompts, t.lines, t.lineIDs = nil, nil, nil, nil
-	t.body, t.bodyAt = m.threadBodyLines(e, t, width, room, now), key
-	return t.body
+	for {
+		key.keep = t.keep
+		if t.body != nil && t.bodyAt == key {
+			// The view needs room lines and a page more to scroll into.
+			// Short of that, the thread takes twice the turns.
+			if !t.older || len(t.body) >= room+ckKeepMargin {
+				t.toTop = false
+				return t.body
+			}
+			t.keep *= 2
+			continue
+		}
+		first, kept := "", t.bodyAt.keep
+		if len(t.lineIDs) > 0 {
+			first = t.lineIDs[0]
+		}
+		t.hits, t.prompts, t.lines, t.lineIDs = nil, nil, nil, nil
+		t.body, t.bodyAt = m.threadBodyLines(e, t, width, room, now), key
+		// More turns drawn: the view stays on the lines it showed, or goes
+		// to the first line for a key that asked for it.
+		if at := slices.Index(t.lineIDs, first); kept != 0 && kept != key.keep && at > 0 {
+			t.follow.Older(at)
+			if t.toTop {
+				t.follow.Scroll(1 << 30)
+			}
+		}
+	}
+}
+
+// threadReadLimit is how many of the newest entries a thread reads.
+const threadReadLimit = 200
+
+// ckKeepTurns is how many of the newest turns a thread draws first, and
+// ckKeepMargin how many lines past the view it keeps drawn.
+const (
+	ckKeepTurns  = 8
+	ckKeepMargin = 60
+)
+
+// threadKeepAll makes the thread draw every turn, for a key that goes to its
+// first line.
+func threadKeepAll(t *agentThread) {
+	if t.older {
+		t.keep, t.toTop = 1<<30, true
+	}
 }
 
 // threadMinute is the minute a thread's lines depend on: a recap says how

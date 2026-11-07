@@ -188,12 +188,23 @@ func (m *OS) threadCardLines(e sidebarAgentEntry, t *agentThread, width int, cha
 	if !changes {
 		steps, turns, turnOf = ckTurns(e, entries)
 	}
+	from := 0
+	t.older = false
+	if turnOf != nil && t.keep > 0 && t.keep < len(turns) {
+		from = turns[len(turns)-t.keep].Start
+		t.older = from > 0
+		for _, en := range entries[:from] {
+			if ckPrompt(en) {
+				turn++
+			}
+		}
+	}
 	prevText := false
 	working := e.State == string(session.AgentStateWorking)
 	// While the agent works its newest todo list is pinned above the
 	// thread, so in the thread it is folded to its count.
 	pinned := !changes && t.pinned
-	for i := 0; i < len(entries); i++ {
+	for i := from; i < len(entries); i++ {
 		en := entries[i]
 		cur = en.ID
 		isEdit := en.Kind == "tool_call" && en.Diff != nil
@@ -348,6 +359,11 @@ func (m *OS) threadCardLines(e sidebarAgentEntry, t *agentThread, width int, cha
 		}
 	}
 	return out, hits
+}
+
+// ckPrompt reports whether en is drawn as a prompt of the person's.
+func ckPrompt(en threadEntry) bool {
+	return en.Image == nil && en.Kind == "text" && en.Role == "user" && !transcriptview.Interrupt(en.Role, en.Kind, en.Text)
 }
 
 // ckTurns splits a thread's entries into turns, and gives each entry its
