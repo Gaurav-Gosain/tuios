@@ -81,7 +81,12 @@ func replay(st *State) []byte {
 	rows = append(rows, st.Scrollback...)
 	rows = append(rows, main...)
 	wraps := append(wrapFlags(st.ScrollbackWraps, len(st.Scrollback)), mainWraps...)
+	// The history keeps the width it was written at, and after the pane
+	// narrows its rows are wider than the screen. They print whole, and
+	// autowrap folds them at this width as it would the program's output.
+	w.whole = len(st.Scrollback)
 	w.rows(rows, wraps, false)
+	w.whole = 0
 
 	if st.IsAltScreen {
 		// 1049 saves the cursor on the main screen, which is where leaving
@@ -196,6 +201,9 @@ type vtWriter struct {
 	width int
 	cur   StyleState
 	set   bool // cur was written; false means the pen is the default
+	// whole is how many rows from the first print every cell, past the
+	// width too; the others stop at the width.
+	whole int
 }
 
 // rows writes rows from the cursor down. absolute places each row with a
@@ -211,7 +219,7 @@ func (w *vtWriter) rows(rows [][]CellState, wraps []bool, absolute bool) {
 		// prints something, or the newline after that row would land on the
 		// wrong line.
 		wrapped := !absolute && i < len(wraps) && wraps[i] && i+1 < len(rows) && len(rows[i+1]) > 0
-		w.row(row, wrapped, !absolute && i > 0 && i-1 < len(wraps) && wraps[i-1])
+		w.row(row, wrapped, !absolute && i > 0 && i-1 < len(wraps) && wraps[i-1], !absolute && i < w.whole)
 		if absolute || i == len(rows)-1 || wrapped {
 			continue
 		}
@@ -224,8 +232,12 @@ func (w *vtWriter) rows(rows [][]CellState, wraps []bool, absolute bool) {
 // row writes one row's cells. full prints every column, for a wrapped row;
 // otherwise trailing blanks are left out. lead prints at least the first
 // cell, so a row a wrapped row carries on into starts on the next line.
-func (w *vtWriter) row(row []CellState, full, lead bool) {
+// whole prints the cells past the width as well, for autowrap to fold.
+func (w *vtWriter) row(row []CellState, full, lead, whole bool) {
 	n := min(len(row), w.width)
+	if whole {
+		n = len(row)
+	}
 	end := n
 	if !full {
 		for end > 0 && blankCell(row[end-1]) {
@@ -241,7 +253,7 @@ func (w *vtWriter) row(row []CellState, full, lead bool) {
 			// The second column of a wide character.
 			continue
 		}
-		if c.Width > 1 && x+c.Width > w.width {
+		if !whole && c.Width > 1 && x+c.Width > w.width {
 			// A wide character that no longer fits the width. Print a blank
 			// in its place rather than wrap it onto the next row.
 			c = CellState{Content: " ", Width: 1, StyleState: c.StyleState}
